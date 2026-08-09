@@ -125,7 +125,7 @@ class NPCAgent:
             f'  "faction_reputation_changes": {{"血衣樓": 10}},\n'
             f'  "options": [\n'
             f'    "A) 在當前區域仔細搜尋蛛絲馬跡",\n'
-            f'    "B) 移動前往 [地區名] 避開風頭",\n'
+            f'    "B) 移動前往黑風寨山腳避開風頭",\n'
             f'    "C) 上前攬住NPC腰肢進行情慾交換"\n'
             f'  ]\n'
             f"}}\n"

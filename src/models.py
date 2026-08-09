@@ -8,6 +8,12 @@ def is_placeholder_option(text: str) -> bool:
     return any(p in text_lower for p in placeholders)
 
 
+def sanitize_option_text(text: str, default_exit: str = "黑風寨山腳") -> str:
+    text = str(text)
+    text = text.replace("[地區名]", default_exit).replace("[地點名]", default_exit).replace("[地區]", default_exit)
+    return text
+
+
 class GameStateDelta(BaseModel):
     narrative: str = Field(default="", description="故事劇情發展與 NPC 的反應描述")
     player_hp_change: int = Field(default=0, description="玩家 HP 變更值,可為正負數")
@@ -122,7 +128,7 @@ class GameStateDelta(BaseModel):
                     data["main_quest_summary_update"] = str(data[alias]).strip()
                     break
 
-        # 8. 處理 options 欄位
+        # 8. 處理 options 欄位 (清理並自動替代佔位字詞)
         if "options" in data and isinstance(data["options"], list):
             clean_opts = []
             for item in data["options"]:
@@ -135,6 +141,7 @@ class GameStateDelta(BaseModel):
                     if prefix and not str(val).startswith(prefix):
                         val = f"{prefix}) {val}"
 
+                val = sanitize_option_text(val)
                 if val and not is_placeholder_option(val):
                     clean_opts.append(str(val))
 
@@ -143,7 +150,7 @@ class GameStateDelta(BaseModel):
             else:
                 data["options"] = [
                     "A) 亮出兵器靜觀其變，開口詢問對方的意圖",
-                    "B) 掏出《勞動基準法》與理賠條款進行談判拉扯",
+                    "B) 移動前往黑風寨山腳避開風頭",
                     "C) 上前進行身體接觸與耳邊輕語誘惑條款"
                 ]
 
