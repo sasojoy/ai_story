@@ -94,7 +94,7 @@ def main():
         print(f"[!] 警告: 無法連線至 Ollama ({engine.game_config.ollama_url})！")
         print("請確認 Ollama 服務已啟動 (例如: ollama run qwen2.5:1.5b)")
 
-    print("\n提示指令: [/switch 切換NPC] [/status 玩家狀態] [/reset 重置對話] [/exit 退出遊戲]")
+    print("\n提示指令: [/switch 切換NPC] [/save 1 快速存檔] [/load 1 讀取存檔] [/status 玩家狀態] [/reset 重置對話] [/exit 退出遊戲]")
 
     last_options = [
         "A) 亮出兵器靜觀其變，開口詢問對方的意圖",
@@ -124,7 +124,24 @@ def main():
             elif user_input.upper() == "C" and last_options and len(last_options) >= 3:
                 user_input = last_options[2]
 
-            if user_input.lower() in ["/exit", "exit", "quit", "q"]:
+            if user_input.lower().startswith("/save"):
+                parts = user_input.split()
+                slot = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 1
+                msg = engine.save_slot(slot)
+                print(f"\n>>> {msg}")
+                continue
+
+            elif user_input.lower().startswith("/load"):
+                parts = user_input.split()
+                slot = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 1
+                success = engine.load_slot(slot)
+                if success:
+                    print(f"\n>>> 成功讀取 Slot {slot} 存檔！")
+                else:
+                    print(f"\n>>> 讀取 Slot {slot} 失敗 (找不到存檔)")
+                continue
+
+            elif user_input.lower() in ["/exit", "exit", "quit", "q"]:
                 print("感謝遊玩，遊戲結束！")
                 break
 
