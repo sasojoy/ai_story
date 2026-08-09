@@ -1,0 +1,62 @@
+{
+  "slot_id": 1,
+  "timestamp": "2026-08-09 23:06:09",
+  "summary": "[無名俠客] 龍門客棧 (第 1 回合) - 重傷甦醒，於龍門客棧尋求療傷與避難，...",
+  "player_state": {
+    "name": "無名俠客",
+    "hp": 100,
+    "max_hp": 100,
+    "stamina": 100,
+    "max_stamina": 100,
+    "charm": 15,
+    "gold": 50,
+    "cultivation_level": 1,
+    "cultivation_exp": 0,
+    "cultivation_arts": [
+      "吐納基礎心法"
+    ],
+    "inventory": [
+      "鏽蝕鐵劍",
+      "止血草"
+    ]
+  },
+  "current_location": "龍門客棧",
+  "unlocked_locations": [
+    "黑風寨山腳",
+    "龍門客棧",
+    "龍門錢莊",
+    "少林寺下鎮"
+  ],
+  "main_quest_summary": "重傷甦醒，於龍門客棧尋求療傷與避難，同時查明懷中血秘卷與自身體內毒詛的真相。",
+  "game_turn": 1,
+  "factions": {
+    "正派武林盟": -30,
+    "血衣樓": -50,
+    "合歡宗": 0,
+    "朝廷禁衛": -80
+  },
+  "world_flags": {},
+  "current_npc_name": "風騷老闆娘",
+  "npcs_data": {
+    "殺手阿福": {
+      "intimacy": 0,
+      "current_status_tag": "正常",
+      "history": []
+    },
+    "錢莊老王": {
+      "intimacy": 0,
+      "current_status_tag": "正常",
+      "history": []
+    },
+    "合歡宗聖女": {
+      "intimacy": 0,
+      "current_status_tag": "正常",
+      "history": []
+    },
+    "風騷老闆娘": {
+      "intimacy": 0,
+      "current_status_tag": "正常",
+      "history": []
+    }
+  }
+}
