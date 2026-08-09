@@ -20,43 +20,78 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import gradio as gr
 from src.game_engine import GameEngine
-from src.models import GameStateDelta
+from src.models import GameStateDelta, is_placeholder_option
 from src.save_manager import list_saves
 
 # 初始化全局遊戲引擎
 engine = GameEngine()
 
 
-def get_npc_initial_options(npc_name: str) -> list:
-    if npc_name == "殺手阿福":
-        return [
-            "A) 抱拳拱手詢問阿福今日工時進度",
-            "B) 掏出《勞動基準法》提醒他超時工作可申訴賠償",
-            "C) 拔出利刃冷不防割向阿福右手動脈"
-        ]
-    elif npc_name == "錢莊老王":
-        return [
-            "A) 詢問錢莊當前存款年化利率",
-            "B) 拿出資產證券化 (MBS) 方案要求槓桿加碼",
-            "C) 亮出沾血的匕首逼老王交出總庫房鑰匙"
-        ]
-    elif npc_name == "合歡宗聖女":
-        return [
-            "A) 抱拳向聖女質問師門祕辛",
-            "B) 掏出勞動基準法要求聖女為超時工作提供理賠",
-            "C) 伸手攬住聖女纖腰在耳邊輕語情慾條件"
-        ]
+def generate_dynamic_options(npc_name: str, location_name: str, intimacy: int, turn: int) -> list:
+    if npc_name == "合歡宗聖女":
+        if intimacy >= 40 or turn >= 3:
+            return [
+                f"A) 眼神深情凝視聖女柳如煙，詢問合歡宗雙修功法的絕密心法",
+                f"B) 提議與柳如煙聯手對付前來追殺的正派武林盟聯軍",
+                f"C) 溫柔地將柳如煙攬入懷中，在耳畔低語運轉雙修靈氣"
+            ]
+        else:
+            return [
+                f"A) 抱拳拱手向聖女柳如煙詢問懷中血秘卷與解毒線索",
+                f"B) 掏出《勞動基準法》質疑合歡宗深夜出診違規要求補償",
+                f"C) 湊近柳如煙身旁，眼神挑逗並嘗試進行身體接觸試探"
+            ]
     elif npc_name == "風騷老闆娘":
-        return [
-            "A) 點一壺上等竹葉青向老闆娘打聽江湖消息",
-            "B) 拿出客棧餐飲衛生評鑑表要求老闆娘打折",
-            "C) 湊近老闆娘耳畔輕吟調情話語並摸索衣角"
-        ]
+        if intimacy >= 40 or turn >= 3:
+            return [
+                f"A) 詢問老闆娘賽金花龍門客棧密道與各方勢力的核心情報",
+                f"B) 提議將龍門客棧打包上市進行資本股權劃轉",
+                f"C) 伸手環住賽金花豐滿的細腰，低聲討要天字房鑰匙"
+            ]
+        else:
+            return [
+                f"A) 點一壺上等竹葉青向老闆娘賽金花打聽龍門關最新消息",
+                f"B) 拿出客棧餐飲評鑑表要求賽金花打八折",
+                f"C) 湊近賽金花耳畔輕吟調情話語並撫摸其手背"
+            ]
+    elif npc_name == "殺手阿福":
+        if turn % 2 == 0:
+            return [
+                f"A) 詢問阿福血衣樓黑榜殺手最新的懸賞名單",
+                f"B) 開出《一例一休超時加班理賠單》逼阿福簽字",
+                f"C) 將劇毒匕首架在阿福脖子上逼他透露分舵地圖"
+            ]
+        else:
+            return [
+                f"A) 亮出武器防備阿福突襲，詢問血衣樓的接單規則",
+                f"B) 提醒阿福現在已過下班時間，打卡下班可避免工傷",
+                f"C) 拔出利刃冷不防割向阿福右手動脈進行強襲"
+            ]
+    elif npc_name == "錢莊老王":
+        if turn % 2 == 0:
+            return [
+                f"A) 詢問老王少林與武當鎮派武學的拍賣行情",
+                f"B) 提議成立『龍門對沖基金』進行高槓桿做空",
+                f"C) 捏住老王手腕將劇毒滲入其脈搏脅迫劃轉銀票"
+            ]
+        else:
+            return [
+                f"A) 詢問老王錢莊當前存款與借貸年化利率",
+                f"B) 拿出不良資產包證券化 (MBS) 方案要求槓桿加碼",
+                f"C) 亮出沾血匕首逼老王交出總庫房鑰匙"
+            ]
     return [
-        "A) 亮出兵器靜觀其變，開口詢問對方的意圖",
-        "B) 掏出《勞動基準法》與理賠條款進行談判拉扯",
-        "C) 上前進行身體接觸與耳邊輕語誘惑條款"
+        f"A) 在當前地區 [{location_name}] 仔細搜尋蛛絲馬跡",
+        f"B) 掏出《勞動基準法》與理賠條款進行談判拉扯",
+        f"C) 上前進行身體接觸與耳邊輕語誘惑條款"
     ]
+
+
+def get_npc_initial_options(npc_name: str) -> list:
+    loc = engine.current_location
+    agent = engine.agents.get(npc_name)
+    intimacy = agent.profile.intimacy if agent else 0
+    return generate_dynamic_options(npc_name, loc, intimacy, engine.game_turn)
 
 
 initial_npc_name = engine.current_agent.profile.name if engine.current_agent else ""
@@ -313,7 +348,7 @@ def enter_jianghu(custom_name: str):
     )
 
 
-def process_player_choice(user_input: str, history: list):
+def process_player_choice(user_input: str, history: list, prev_opt_a: str = "", prev_opt_b: str = "", prev_opt_c: str = ""):
     clean_history = parse_history(history)
 
     if not user_input or not user_input.strip():
@@ -332,7 +367,8 @@ def process_player_choice(user_input: str, history: list):
 
     # 與 NPC 互動
     npc_name = engine.current_agent.profile.name if engine.current_agent else ""
-    fallback_opts = get_npc_initial_options(npc_name)
+    intimacy = engine.current_agent.profile.intimacy if engine.current_agent else 0
+    fallback_opts = generate_dynamic_options(npc_name, engine.current_location, intimacy, engine.game_turn + 1)
 
     try:
         delta = engine.interact(user_input)
@@ -348,6 +384,20 @@ def process_player_choice(user_input: str, history: list):
             options=fallback_opts
         )
         engine.apply_delta(delta)
+
+    # 檢查 LLM 回傳的故事短句，若過短或僅重複玩家行動，進行小說文風擴充與情節描繪
+    narrative_text = delta.narrative.strip()
+    if len(narrative_text) < 35 or narrative_text in [user_input.strip(), f"{engine.player_state.name}對{npc_name}說：{user_input}"]:
+        p_name = engine.player_state.name
+        if npc_name == "風騷老闆娘":
+            narrative_text = f"{p_name}身形前傾，靠近風騷老闆娘賽金花。賽金花眼波盈盈，嬌笑了一聲，冰涼的手指順勢挑起{p_name}的下巴，吐息如蘭道：『大俠這般勾人，莫不是真當老娘這龍門客棧是吃素的地方？』燭光搖曳下，她的嬌軀微顫，眼神中透著幾分性感與深層試探。"
+        elif npc_name == "合歡宗聖女":
+            narrative_text = f"{p_name}步步逼近合歡宗聖女柳如煙。柳如煙修長的雙眸微眯，薄紗下的肌膚在暗光中泛著迷人的乳白光澤。她並未退縮，反倒輕輕呼出一口帶有淡香的溫熱輕氣：『少俠心跳得這般急，難不成合歡宗的雙修媚術，已經勾動了少俠的心神？』"
+        elif npc_name == "殺手阿福":
+            narrative_text = f"{p_name}眼神冷冽，直視著面前的殺手阿福。阿福握緊了手中冰冷的鐵劍，雙眼銳利如鷹，冷哼一聲：『少廢話！過了下班時辰，多待一刻鐘便是一刻鐘的工資。你要麼掏錢理賠，要麼亮招！』空氣中頓時瀰漫開一股肅殺之氣。"
+        elif npc_name == "錢莊老王":
+            narrative_text = f"{p_name}大步踏前，逼視著錢莊老王。老王算盤撥得飛快，金光熠熠的雙眼射出精光：『客官此言差矣！在龍門錢莊，只要資本與槓桿足夠，連天上的月亮老夫也能幫你打包證券化！』"
+        delta.narrative = narrative_text
 
     # 組合顯示內容
     changes = []
@@ -387,8 +437,15 @@ def process_player_choice(user_input: str, history: list):
         "content": [{"type": "text", "text": str(bot_msg)}]
     })
 
-    # 動態獲取新生成的 3 個選項
-    opts = delta.options if (delta.options and len(delta.options) >= 3) else fallback_opts
+    # 校驗選項是否重複，若重複或包含佔位符則自動刷新動態選項
+    raw_opts = delta.options if (delta.options and len(delta.options) >= 3) else fallback_opts
+    is_repeated = any(opt == prev_opt_a or opt == prev_opt_b for opt in raw_opts) or any(is_placeholder_option(opt) for opt in raw_opts)
+
+    if is_repeated:
+        opts = generate_dynamic_options(npc_name, engine.current_location, intimacy, engine.game_turn)
+    else:
+        opts = raw_opts
+
     opt_a = opts[0]
     opt_b = opts[1]
     opt_c = opts[2]
@@ -569,20 +626,20 @@ with gr.Blocks(title="Local Blade RPG Engine") as demo:
     # 點擊選項 A / B / C 直接推進劇情
     btn_opt_a.click(
         fn=process_player_choice,
-        inputs=[state_opt_a, chatbot],
+        inputs=[state_opt_a, chatbot, state_opt_a, state_opt_b, state_opt_c],
         outputs=[input_box, chatbot, status_box, map_box, btn_opt_a, btn_opt_b, btn_opt_c, state_opt_a, state_opt_b, state_opt_c]
     )
 
     btn_opt_b.click(
         fn=process_player_choice,
-        inputs=[state_opt_b, chatbot],
-        outputs=[input_box, chatbot, status_box, btn_opt_a, btn_opt_b, btn_opt_c, state_opt_a, state_opt_b, state_opt_c]
+        inputs=[state_opt_b, chatbot, state_opt_a, state_opt_b, state_opt_c],
+        outputs=[input_box, chatbot, status_box, map_box, btn_opt_a, btn_opt_b, btn_opt_c, state_opt_a, state_opt_b, state_opt_c]
     )
 
     btn_opt_c.click(
         fn=process_player_choice,
-        inputs=[state_opt_c, chatbot],
-        outputs=[input_box, chatbot, status_box, btn_opt_a, btn_opt_b, btn_opt_c, state_opt_a, state_opt_b, state_opt_c]
+        inputs=[state_opt_c, chatbot, state_opt_a, state_opt_b, state_opt_c],
+        outputs=[input_box, chatbot, status_box, map_box, btn_opt_a, btn_opt_b, btn_opt_c, state_opt_a, state_opt_b, state_opt_c]
     )
 
     # 點擊 [其他] 展開自由輸入框
@@ -595,13 +652,13 @@ with gr.Blocks(title="Local Blade RPG Engine") as demo:
     # 發送自訂行動
     submit_btn.click(
         fn=process_player_choice,
-        inputs=[input_box, chatbot],
+        inputs=[input_box, chatbot, state_opt_a, state_opt_b, state_opt_c],
         outputs=[input_box, chatbot, status_box, map_box, btn_opt_a, btn_opt_b, btn_opt_c, state_opt_a, state_opt_b, state_opt_c]
     )
 
     input_box.submit(
         fn=process_player_choice,
-        inputs=[input_box, chatbot],
+        inputs=[input_box, chatbot, state_opt_a, state_opt_b, state_opt_c],
         outputs=[input_box, chatbot, status_box, map_box, btn_opt_a, btn_opt_b, btn_opt_c, state_opt_a, state_opt_b, state_opt_c]
     )
 
