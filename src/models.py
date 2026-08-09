@@ -47,7 +47,54 @@ class GameStateDelta(BaseModel):
         if not isinstance(data, dict):
             return data
 
-        # 處理 narrative 欄位別名
+        # 1. 處理數值欄位為 None 的情況
+        for int_field in [
+            "player_hp_change", "player_stamina_change", "player_gold_change",
+            "player_charm_change", "intimacy_change", "cultivation_exp_gained"
+        ]:
+            if data.get(int_field) is None:
+                data[int_field] = 0
+
+        # 2. 處理容器欄位為 None 或非目標型態的情況
+        if data.get("faction_reputation_changes") is None or not isinstance(data.get("faction_reputation_changes"), dict):
+            data["faction_reputation_changes"] = {}
+
+        for list_field in ["inventory_added", "inventory_removed", "unlocked_locations", "available_exits"]:
+            if data.get(list_field) is None or not isinstance(data.get(list_field), list):
+                data[list_field] = []
+
+        # 3. 處理 world_flag_set 欄位型態過濾與相容
+        if "world_flag_set" in data and isinstance(data["world_flag_set"], dict):
+            clean_flags = {}
+            for k, v in data["world_flag_set"].items():
+                if k in ["current_location", "location"] and isinstance(v, str):
+                    data["current_location"] = str(v)
+                else:
+                    if isinstance(v, bool):
+                        clean_flags[str(k)] = v
+                    elif isinstance(v, (int, float)):
+                        clean_flags[str(k)] = bool(v != 0)
+                    elif isinstance(v, str):
+                        v_str = v.lower().strip()
+                        if v_str in ["true", "1", "yes"]:
+                            clean_flags[str(k)] = True
+                        elif v_str in ["false", "0", "no"]:
+                            clean_flags[str(k)] = False
+                        else:
+                            clean_flags[str(k)] = bool(v_str)
+            data["world_flag_set"] = clean_flags
+        elif data.get("world_flag_set") is None or not isinstance(data.get("world_flag_set"), dict):
+            data["world_flag_set"] = {}
+
+        # 4. 處理 current_location (若 LLM 回傳 dict 如 {'name': '龍門客棧'})
+        if "current_location" in data and data["current_location"]:
+            if isinstance(data["current_location"], dict):
+                loc_val = data["current_location"].get("name") or data["current_location"].get("location") or str(data["current_location"])
+                data["current_location"] = str(loc_val)
+            elif not isinstance(data["current_location"], str):
+                data["current_location"] = str(data["current_location"])
+
+        # 5. 處理 narrative 欄位別名
         if not data.get("narrative") or str(data.get("narrative")).strip() in ["...", ""]:
             for alias in [
                 "content", "story", "description", "response", "answer",
@@ -59,7 +106,7 @@ class GameStateDelta(BaseModel):
         if not data.get("narrative"):
             data["narrative"] = "..."
 
-        # 處理 npc_status_tag 別名
+        # 6. 處理 npc_status_tag 別名
         if "npc_status_tag" not in data or not data["npc_status_tag"]:
             for alias in ["status", "npc_status", "tag", "emotion"]:
                 if alias in data and data[alias]:
@@ -68,14 +115,14 @@ class GameStateDelta(BaseModel):
         if "npc_status_tag" not in data or not data["npc_status_tag"]:
             data["npc_status_tag"] = "正常"
 
-        # 處理 main_quest_summary_update 別名
+        # 7. 處理 main_quest_summary_update 別名
         if not data.get("main_quest_summary_update"):
             for alias in ["main_quest_update", "quest_update", "main_quest", "quest_summary"]:
                 if alias in data and data[alias] and isinstance(data[alias], str):
                     data["main_quest_summary_update"] = str(data[alias]).strip()
                     break
 
-        # 處理 options 欄位
+        # 8. 處理 options 欄位
         if "options" in data and isinstance(data["options"], list):
             clean_opts = []
             for item in data["options"]:
