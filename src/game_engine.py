@@ -37,6 +37,7 @@ class GameEngine:
 
         self.current_location: str = "龍門客棧"
         self.unlocked_locations: Set[str] = set()
+        self.recent_world_events: List[str] = []
 
         for reg_name, reg_info in self.world_map.get("regions", {}).items():
             if reg_info.get("is_unlocked"):
@@ -243,6 +244,14 @@ class GameEngine:
             current_rep = self.factions.get(faction_name, 0)
             self.factions[faction_name] = current_rep + reputation_change
 
+        # 記錄近期江湖動態 (故事動態鏈)
+        if delta.narrative and delta.narrative.strip() and delta.narrative.strip() != "...":
+            npc_n = self.current_agent.profile.name if self.current_agent else "NPC"
+            event_summary = f"[{npc_n} - {self.current_location}] {delta.narrative[:40]}..."
+            self.recent_world_events.append(event_summary)
+            if len(self.recent_world_events) > 5:
+                self.recent_world_events = self.recent_world_events[-5:]
+
     def interact(self, player_action: str) -> GameStateDelta:
         """與當前 NPC 互動"""
         if not self.current_agent:
@@ -259,7 +268,8 @@ class GameEngine:
             factions=self.factions,
             current_location=self.current_location,
             current_region_desc=reg_info.get("description", ""),
-            available_exits=self.get_available_exits()
+            available_exits=self.get_available_exits(),
+            recent_world_events=self.recent_world_events
         )
 
         self.apply_delta(delta)

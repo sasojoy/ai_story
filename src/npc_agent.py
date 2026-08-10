@@ -40,12 +40,14 @@ class NPCAgent:
         factions: Optional[Dict[str, int]] = None,
         current_location: str = "龍門客棧",
         current_region_desc: str = "",
-        available_exits: Optional[List[str]] = None
+        available_exits: Optional[List[str]] = None,
+        recent_world_events: Optional[List[str]] = None
     ) -> str:
         inventory_str = ", ".join(player_state.inventory) if player_state.inventory else "無"
         factions_str = json.dumps(factions, ensure_ascii=False) if factions else "無"
         arts_str = ", ".join(player_state.cultivation_arts) if player_state.cultivation_arts else "無"
         exits_str = ", ".join(available_exits) if available_exits else "無"
+        recent_events_str = " -> ".join(recent_world_events[-3:]) if recent_world_events else "無"
 
         npc_name = self.profile.name
 
@@ -66,9 +68,10 @@ class NPCAgent:
                 f"\n\n{status_header}\n"
                 f"【當前動態遊戲狀態 (回合={game_turn})】\n"
                 f"當前主線摘要: {main_quest_summary or '重傷逃亡，尋求解毒與秘卷真相'}\n"
+                f"近期江湖動態: {recent_events_str}\n"
                 f"勢力聲望: {factions_str}\n"
-                f"【動態主線、地圖、劇情與選項要求】\n"
-                f"1. 【narrative 長度與細節要求】: 絕不許僅重複玩家輸入的語句！必須編寫 150~300 字生動、官能且富含感情/衝突細節的 GM 小說故事描述，詳述 {npc_name} 的神情、語氣對談、眼神博弈與肢體微反應！\n"
+                f"【前後文承上啟下與選項硬性要求】\n"
+                f"1. 【劇情連貫性】: 必須承接上一輪劇情結局與玩家最新行動，編寫 150~300 字情節緊密連貫、承上啟下的長篇故事，詳述 {npc_name} 的即時反應！\n"
                 f"2. 【選項禁止使用『NPC』通用字】: 嚴禁在選項中使用『NPC』字眼，必須使用 {npc_name} 的稱呼或名字！\n"
                 f"3. 請根據玩家最新行動在 main_quest_summary_update 欄位中改寫主線故事摘要。\n"
                 f"4. 評估玩家【魅力】與【親密度】：若進行色誘、情感博弈或雙修，於 intimacy_change 回傳好感度變更，於 player_stamina_change 回傳體力消耗，於 cultivation_exp_gained 回傳經驗。\n"
@@ -97,13 +100,14 @@ class NPCAgent:
             f"{status_header}\n"
             f"【當前動態遊戲狀態 (回合 {game_turn})】\n"
             f"當前主線摘要: {main_quest_summary or '重傷逃亡，尋求解毒與秘卷真相'}\n"
+            f"近期江湖動態: {recent_events_str}\n"
             f"勢力聲望: {factions_str}\n\n"
             f"【核心原則】\n"
-            f"1. 【narrative 長度與細節硬性要求】: 絕不允許僅重複玩家輸入的行動或語句！必須編寫 150~300 字豐富生動且具官能細節的小說段落，詳細描寫 {npc_name} 的表情變化、對談心聲、肢體反應與環境張力！\n"
+            f"1. 【前後文連貫性硬性要求】: 必須承接【上一輪劇情結局】與玩家最新行動，撰寫 150~300 字情節緊密連貫、承上啟下的小說段落，詳細描寫 {npc_name} 的表情變化、對談心聲與肢體反應！\n"
             f"2. 【選項禁止使用『NPC』通用字】: 嚴禁在選項中使用『NPC』字眼，必須統一使用 {npc_name} 的稱呼或名字！\n"
             f"3. 允許玩家進行任何荒謬、賣友投敵、現代科學、法律檢舉、極端物理攻擊、情色誘惑、雙修合練、區域移動探索或金融資本操作。\n"
             f"4. 結合玩家【魅力={player_state.charm}】與對當前 {npc_name} 的【親密度={self.profile.intimacy}】推演感情發展：若進行色誘拉扯或雙修，於 intimacy_change 回傳好感度增長，於 player_stamina_change 回傳體力變更，於 cultivation_exp_gained 回傳修為經驗。\n"
-            f"5. 請根據玩家最新選擇，於 main_quest_summary_update 欄位中自動改寫最新的主線故事摘要（如: 從『重傷逃亡』改寫為『已加入血衣樓，準備反殺正派』）。\n"
+            f"5. 請根據玩家最新選擇，於 main_quest_summary_update 欄位中自動改寫最新的主線故事摘要。\n"
             f"6. 若影響勢力，於 faction_reputation_changes 欄位回傳聲望變更 (如 {{\"血衣樓\": +20, \"正派武林盟\": -30}})。\n"
             f"7. 每輪輸出 JSON 時，必須在 options 欄位中根據當前最新劇情與地理位置即興創作 3 個具體動態選項：\n"
             f"   - 選項 A (正派/常規/探索): 符合傳統武俠邏輯應對或當前區域搜尋\n"
@@ -147,7 +151,8 @@ class NPCAgent:
         factions: Optional[Dict[str, int]] = None,
         current_location: str = "龍門客棧",
         current_region_desc: str = "",
-        available_exits: Optional[List[str]] = None
+        available_exits: Optional[List[str]] = None,
+        recent_world_events: Optional[List[str]] = None
     ) -> GameStateDelta:
         system_prompt = self.build_system_prompt(
             player_state=player_state,
@@ -156,16 +161,30 @@ class NPCAgent:
             factions=factions,
             current_location=current_location,
             current_region_desc=current_region_desc,
-            available_exits=available_exits
+            available_exits=available_exits,
+            recent_world_events=recent_world_events
         )
 
         messages = [{"role": "system", "content": system_prompt}]
-        for msg in self.history:
+
+        # 僅保留最近 6 條歷史對話 (近 3 回合滑動視窗) 避免舊內容干擾連貫性
+        recent_history = self.history[-6:]
+        for msg in recent_history:
             messages.append(msg)
 
+        # 獲取上一輪劇情結局作為故事錨點 (Bridge Anchor)
+        last_narrative = ""
+        for msg in reversed(self.history):
+            if msg.get("role") == "assistant" and msg.get("content"):
+                last_narrative = str(msg["content"]).strip()
+                break
+
+        context_bridge = f"【上一輪劇情結局】: 「{last_narrative}」\n" if last_narrative else ""
+
         action_prompt = (
+            f"{context_bridge}"
             f"【玩家 ({player_state.name}) 最新行動 (地點={current_location}, 回合={game_turn})】: 「{player_action}」\n"
-            f"請立即針對此行動撰寫 150~300 字具備小說情節與官能張力的長篇劇情 (narrative)，詳細描述 {self.profile.name} 的反應與對白！"
+            f"請緊扣【上一輪劇情結局】與最新行動「{player_action}」，撰寫 150~300 字情節緊密連貫、承上啟下的長篇故事，詳述 {self.profile.name} 的反應與對白！"
             f"同時推演親密度變更 (intimacy_change)、雙修經驗 (cultivation_exp_gained)、主線更新與 3 個具體動態選項 (options A/B/C)。"
         )
         messages.append({"role": "user", "content": action_prompt})
@@ -175,7 +194,7 @@ class NPCAgent:
             response_model=GameStateDelta
         )
 
-        # 紀錄歷史對話
+        # 紀錄歷史對話 (僅記錄純故事敘事)
         self.history.append({"role": "user", "content": player_action})
         self.history.append({"role": "assistant", "content": delta.narrative})
         self.current_status_tag = delta.npc_status_tag
