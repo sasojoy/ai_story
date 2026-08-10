@@ -492,6 +492,7 @@ def toggle_custom_input():
 with gr.Blocks(title="Local Blade RPG Engine") as demo:
     gr.Markdown("# 🗡️ Local Blade RPG Engine - 暗黑武俠動態沙盒")
     gr.Markdown("使用 Ollama 本地端 LLM 驅動的高自由度文字 RPG 遊戲引擎 (v1.0.0)")
+    gr.Markdown("📱 **[手機與跨裝置連線網址]**: 請確保手機與電腦連接同一個 Wi-Fi 網路，於手機瀏覽器輸入 `http://192.168.1.123:7860` 即可跨裝置遊玩！")
 
     state_opt_a = gr.State(DEFAULT_OPTIONS[0])
     state_opt_b = gr.State(DEFAULT_OPTIONS[1])
