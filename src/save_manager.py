@@ -1,6 +1,7 @@
 import os
 import json
 import datetime
+import re
 from typing import Dict, Any, List, Optional
 from src.models import PlayerState
 
@@ -14,16 +15,26 @@ def ensure_saves_dir():
         os.makedirs(SAVES_DIR, exist_ok=True)
 
 
+def sanitize_account_name(name: str) -> str:
+    cleaned = re.sub(r'[^\w\u4e00-\u9fff]', '_', name.strip())
+    return cleaned if cleaned else "guest_user"
+
+
 def get_save_path(slot_id: int) -> str:
     ensure_saves_dir()
     return os.path.join(SAVES_DIR, f"save_slot_{slot_id}.json")
+
+
+def get_account_save_path(account_name: str) -> str:
+    ensure_saves_dir()
+    safe_name = sanitize_account_name(account_name)
+    return os.path.join(SAVES_DIR, f"account_{safe_name}.json")
 
 
 def save_game(slot_id: int, engine: Any) -> str:
     ensure_saves_dir()
     now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    # 收集所有 NPC 的狀態與對話歷史
     npcs_data = {}
     for name, agent in engine.agents.items():
         npcs_data[name] = {
@@ -57,8 +68,59 @@ def save_game(slot_id: int, engine: Any) -> str:
     return f"存檔成功！(Slot {slot_id} - {now_str})"
 
 
+def save_account_game(account_name: str, engine: Any) -> str:
+    ensure_saves_dir()
+    now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    npcs_data = {}
+    for name, agent in engine.agents.items():
+        npcs_data[name] = {
+            "intimacy": agent.profile.intimacy,
+            "current_status_tag": agent.current_status_tag,
+            "history": agent.history
+        }
+
+    quest_short = engine.main_quest_summary[:18] + "..." if len(engine.main_quest_summary) > 18 else engine.main_quest_summary
+    summary = f"[{engine.player_state.name}] {engine.current_location} (第 {engine.game_turn} 回合) - {quest_short}"
+
+    save_data = {
+        "account_name": account_name,
+        "timestamp": now_str,
+        "summary": summary,
+        "player_state": engine.player_state.model_dump(),
+        "current_location": engine.current_location,
+        "unlocked_locations": list(engine.unlocked_locations),
+        "main_quest_summary": engine.main_quest_summary,
+        "game_turn": engine.game_turn,
+        "factions": engine.factions,
+        "world_flags": engine.world_flags,
+        "current_npc_name": engine.current_agent.profile.name if engine.current_agent else "",
+        "npcs_data": npcs_data
+    }
+
+    save_path = get_account_save_path(account_name)
+    with open(save_path, "w", encoding="utf-8") as f:
+        json.dump(save_data, f, ensure_ascii=False, indent=2)
+
+    return f"帳號 [{account_name}] 即時自動存檔成功！({now_str})"
+
+
 def load_game(slot_id: int, engine: Any) -> bool:
     save_path = get_save_path(slot_id)
+    return load_game_from_file(save_path, engine)
+
+
+def load_account_game(account_name: str, engine: Any) -> bool:
+    save_path = get_account_save_path(account_name)
+    return load_game_from_file(save_path, engine)
+
+
+def has_account_save(account_name: str) -> bool:
+    save_path = get_account_save_path(account_name)
+    return os.path.exists(save_path)
+
+
+def load_game_from_file(save_path: str, engine: Any) -> bool:
     if not os.path.exists(save_path):
         return False
 
@@ -95,7 +157,7 @@ def load_game(slot_id: int, engine: Any) -> bool:
 
         return True
     except Exception as e:
-        print(f"載入存檔 Slot {slot_id} 失敗: {e}")
+        print(f"載入存檔檔 {save_path} 失敗: {e}")
         return False
 
 
@@ -139,6 +201,5 @@ def get_latest_save_slot_id() -> Optional[int]:
     existing_saves = [s for s in saves if s["exists"] and s["summary"] != "無法讀取"]
     if not existing_saves:
         return None
-    # Sort by timestamp descending
     existing_saves.sort(key=lambda s: s["timestamp"], reverse=True)
     return existing_saves[0]["slot_id"]

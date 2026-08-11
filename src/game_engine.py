@@ -163,10 +163,21 @@ class GameEngine:
         from src.save_manager import save_game
         return save_game(slot_id, self)
 
+    def auto_save(self, account_name: str = None) -> str:
+        """帳號即時自動存檔"""
+        from src.save_manager import save_account_game
+        target_account = account_name or self.player_state.name
+        return save_account_game(target_account, self)
+
     def load_slot(self, slot_id: int = 1) -> bool:
         """讀取指定 Slot (1~5) 存檔"""
         from src.save_manager import load_game
         return load_game(slot_id, self)
+
+    def load_account(self, account_name: str) -> bool:
+        """讀取指定帳號即時存檔"""
+        from src.save_manager import load_account_game
+        return load_account_game(account_name, self)
 
     def load_latest_slot(self) -> bool:
         """讀取最新一次存檔"""
