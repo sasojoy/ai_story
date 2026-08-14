@@ -44,7 +44,9 @@ class NPCAgent:
         current_location: str = "龍門客棧",
         current_region_desc: str = "",
         available_exits: Optional[List[str]] = None,
-        recent_world_events: Optional[List[str]] = None
+        recent_world_events: Optional[List[str]] = None,
+        story_chapter_title: str = "第一章：血夜甦醒與龍門破局",
+        story_chapter_goal: str = "在龍門客棧尋求療傷與生存，查明懷中血秘卷的第一層真相。"
     ) -> str:
         inventory_str = ", ".join(player_state.inventory) if player_state.inventory else "無"
         factions_str = json.dumps(factions, ensure_ascii=False) if factions else "無"
@@ -74,17 +76,22 @@ class NPCAgent:
         examples_dict = intimate_guide.get("style_examples", {})
         example_text = "\n".join([f"- {v}" for v in examples_dict.values()])
 
+        chapter_context = (
+            f"\n【故事章節進度】: {story_chapter_title} (第 {game_turn} 回合)\n"
+            f"【本章節劇情推演目標】: {story_chapter_goal}\n"
+        )
+
         if self.profile.system_prompt_override:
             base_prompt = self.profile.system_prompt_override
             context_addon = (
                 f"\n\n{status_header}\n"
-                f"【當前動態遊戲狀態 (回合={game_turn})】\n"
+                f"{chapter_context}\n"
                 f"當前主線摘要: {main_quest_summary or '重傷逃亡，尋求解毒與秘卷真相'}\n"
                 f"近期江湖動態: {recent_events_str}\n"
                 f"勢力聲望: {factions_str}\n"
-                f"【感情互動、微表情與選項去重要求】\n"
+                f"【章節推進與選項去重要求】\n"
                 f"1. 【微表情與情感細節描寫要求】: 必須以半文半白武俠風格，注重描寫 {npc_name} 的『瞳孔震動、眼神博弈、雙頰酡紅、指尖輕觸與呼吸微溫』，撰寫 150~300 字情節生動、感染力極強的小說段落！\n"
-                f"2. 【選項禁止重複與使用『NPC』通用字】: 嚴禁使用『NPC』字眼，且選項 A~E 【絕對禁止與歷史已使用選項重複】！必須根據最新劇情推演全新的下一步行動！\n"
+                f"2. 【章節單向推進與選項去重】: 劇情必須配合當前【{story_chapter_title}】目標單向向前演進！選項 A~E 【絕對禁止與歷史選項重複】，必須緊扣當前章節高潮與最新局勢！\n"
                 f"3. 請根據玩家最新行動在 main_quest_summary_update 欄位中改寫主線故事摘要。\n"
                 f"4. 評估玩家【魅力】與【親密度】：若進行色誘、情感博弈或雙修，於 intimacy_change 回傳好感度變更，於 player_stamina_change 回傳體力消耗，於 cultivation_exp_gained 回傳經驗。\n"
                 f"5. 必須在 options 欄位中生成 5 個具體動態選項 (A: 正派/常規, B: 智取/搞笑, C: 情慾/色誘/親密, D: 混亂/背叛/暗黑, E: 地圖探索/轉移)。\n"
@@ -101,13 +108,13 @@ class NPCAgent:
             f"你是這個高自由度暗黑搞笑武俠 RPG 的 GM (Game Master)。\n"
             f"目前互動 NPC:{npc_name}(身份:{self.profile.identity},性格:{self.profile.personality})。\n"
             f"{status_header}\n"
-            f"【當前動態遊戲狀態 (回合 {game_turn})】\n"
+            f"{chapter_context}\n"
             f"當前主線摘要: {main_quest_summary or '重傷逃亡，尋求解毒與秘卷真相'}\n"
             f"近期江湖動態: {recent_events_str}\n"
             f"勢力聲望: {factions_str}\n\n"
             f"【核心原則】\n"
-            f"1. 【微表情與情感細節硬性要求】: 必須承接上一輪劇情結局，以半文半白武俠風格，注重描寫 {npc_name} 的瞳孔微震、雙頰酡紅、眼波流轉、心跳與呼吸微溫，撰寫 150~300 字感染力極強的小說段落！\n"
-            f"2. 【選項絕對去重要求】: 嚴禁使用『NPC』通用字，且 options 欄位生成的 5 個選項【絕對禁止與歷史已選選項重複】！必須根據最新劇情推演全新的下一個行動！\n"
+            f"1. 【章節單向推進與細節硬性要求】: 必須承接上一輪劇情結局，配合當前【{story_chapter_title}】推演目標，以半文半白武俠風格，注重描寫 {npc_name} 的瞳孔微震、雙頰酡紅、眼波流轉、心跳與呼吸微溫，撰寫 150~300 字感染力極強的小說段落！\n"
+            f"2. 【選項絕對去重與禁止『NPC』通用字】: 嚴禁使用『NPC』字眼，且 options 欄位生成的 5 個選項【絕對禁止與歷史已選選項重複】！必須根據最新劇情推演全新的下一個行動！\n"
             f"3. 允許玩家進行任何荒謬、賣友投敵、現代科學、法律檢舉、極端物理攻擊、情色誘惑、雙修合練、區域移動探索或金融資本操作。\n"
             f"4. 結合玩家【魅力={player_state.charm}】與對當前 {npc_name} 的【親密度={self.profile.intimacy}】推演感情發展：若進行色誘拉扯或雙修，於 intimacy_change 回傳好感度增長，於 player_stamina_change 回傳體力變更，於 cultivation_exp_gained 回傳修為經驗。\n"
             f"5. 請根據玩家最新選擇，於 main_quest_summary_update 欄位中自動改寫最新的主線故事摘要。\n"
@@ -251,7 +258,9 @@ class NPCAgent:
         current_location: str = "龍門客棧",
         current_region_desc: str = "",
         available_exits: Optional[List[str]] = None,
-        recent_world_events: Optional[List[str]] = None
+        recent_world_events: Optional[List[str]] = None,
+        story_chapter_title: str = "第一章：血夜甦醒與龍門破局",
+        story_chapter_goal: str = "在龍門客棧尋求療傷與生存，查明懷中血秘卷的第一層真相。"
     ) -> GameStateDelta:
         system_prompt = self.build_system_prompt(
             player_state=player_state,
@@ -261,7 +270,9 @@ class NPCAgent:
             current_location=current_location,
             current_region_desc=current_region_desc,
             available_exits=available_exits,
-            recent_world_events=recent_world_events
+            recent_world_events=recent_world_events,
+            story_chapter_title=story_chapter_title,
+            story_chapter_goal=story_chapter_goal
         )
 
         messages = [{"role": "system", "content": system_prompt}]
@@ -280,7 +291,7 @@ class NPCAgent:
 
         action_prompt = (
             f"{context_bridge}"
-            f"【玩家 ({player_state.name}) 最新行動 (地點={current_location}, 回合={game_turn})】: 「{player_action}」\n"
+            f"【玩家 ({player_state.name}) 最新行動 (地點={current_location}, 回合={game_turn}, 章節={story_chapter_title})】: 「{player_action}」\n"
             f"請緊扣【上一輪劇情結局】與最新行動「{player_action}」，以半文半白武俠風格撰寫 150~300 字富含微表情、動作張力與官能氣氛的小說段落，詳細描述 {self.profile.name} 的反應與對白！"
             f"同時推演親密度變更 (intimacy_change)、雙修經驗 (cultivation_exp_gained)、主線更新與 5 個【完全不重複】的具體動態選項 (options A/B/C/D/E)。"
             f"\n重要：請直接輸出 JSON 物件，嚴禁包含 Markdown 標記或額外文字！"

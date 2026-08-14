@@ -203,6 +203,10 @@ def get_status_markdown(engine: GameEngine) -> str:
     inv_str = ", ".join(p.inventory) if p.inventory else "無"
     arts_str = ", ".join(p.cultivation_arts) if p.cultivation_arts else "無"
 
+    ch_info = engine.get_current_chapter_info()
+    ch_title = ch_info.get("title", "第一章：血夜甦醒與龍門破局")
+    ch_goal = ch_info.get("goal", "尋求療傷與避難，查明懷中血秘卷真相")
+
     current_npc_info = "無"
     intimacy_info = "0/100"
     if engine.current_agent:
@@ -213,10 +217,13 @@ def get_status_markdown(engine: GameEngine) -> str:
 
     factions_str = " | ".join([f"{k}: `{v}`" for k, v in engine.factions.items()]) if engine.factions else "無"
 
-    md = f"""### 🗺️ [當前世界動態與主線看板]
-- **當前回合**: `第 {engine.game_turn} 回合`
-- **主線任務狀態**: `{engine.main_quest_summary}`
-- **勢力聲望**: {factions_str}
+    ending_info = engine.evaluate_ending()
+    ending_md = f"\n\n🏆 **[觸發終局結局]**: **{ending_info['name']}**\n*{ending_info['description']}*" if ending_info else ""
+
+    md = f"""### 📜 [{ch_title}] (第 {engine.game_turn} 回合)
+- **本章目標**: `{ch_goal}`
+- **動態主線摘要**: `{engine.main_quest_summary}`
+- **勢力聲望**: {factions_str}{ending_md}
 
 ---
 ### 🗡️ [{p.name} 狀態板]

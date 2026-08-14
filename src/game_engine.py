@@ -15,12 +15,14 @@ class GameEngine:
         config_path: str = "config/game_config.json",
         npcs_path: str = "config/npcs.json",
         world_intro_path: str = "config/world_intro.json",
-        world_map_path: str = "config/world_map.json"
+        world_map_path: str = "config/world_map.json",
+        story_outline_path: str = "config/story_outline.json"
     ):
         self.config_path = config_path if os.path.isabs(config_path) else os.path.join(BASE_DIR, config_path)
         self.npcs_path = npcs_path if os.path.isabs(npcs_path) else os.path.join(BASE_DIR, npcs_path)
         self.world_intro_path = world_intro_path if os.path.isabs(world_intro_path) else os.path.join(BASE_DIR, world_intro_path)
         self.world_map_path = world_map_path if os.path.isabs(world_map_path) else os.path.join(BASE_DIR, world_map_path)
+        self.story_outline_path = story_outline_path if os.path.isabs(story_outline_path) else os.path.join(BASE_DIR, story_outline_path)
 
         self.game_config = self._load_game_config()
         self.client = OllamaClient(
@@ -34,6 +36,7 @@ class GameEngine:
 
         self.world_intro = self._load_world_intro()
         self.world_map = self._load_world_map()
+        self.story_outline = self._load_story_outline()
 
         self.current_location: str = "龍門客棧"
         self.unlocked_locations: Set[str] = set()
@@ -110,6 +113,48 @@ class GameEngine:
             }
         }
 
+    def _load_story_outline(self) -> Dict[str, Any]:
+        if os.path.exists(self.story_outline_path):
+            try:
+                with open(self.story_outline_path, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except Exception as e:
+                print(f"讀取故事大綱失敗，使用預設值: {e}")
+        return {
+            "chapters": [
+                {
+                    "chapter_id": 1,
+                    "title": "第一章：血夜甦醒與龍門破局",
+                    "turns_range": [1, 3],
+                    "goal": "尋求療傷與避難，查明血秘卷第一層真相。"
+                },
+                {
+                    "chapter_id": 2,
+                    "title": "第二章：地圖拓展與勢力抉擇",
+                    "turns_range": [4, 7],
+                    "goal": "探索周邊區域，決定勢力靠攏。"
+                },
+                {
+                    "chapter_id": 3,
+                    "title": "第三章：雙修解毒與陰謀真相",
+                    "turns_range": [8, 11],
+                    "goal": "進行深層雙修合練驅毒，揭發武林盟陰謀。"
+                },
+                {
+                    "chapter_id": 4,
+                    "title": "第四章：四方決裂與龍門之巔",
+                    "turns_range": [12, 14],
+                    "goal": "四大勢力決戰於龍門關。"
+                },
+                {
+                    "chapter_id": 5,
+                    "title": "第五章：江湖大終局與命運審判",
+                    "turns_range": [15, 999],
+                    "goal": "導向四大終局之一並頒發終局稱號。"
+                }
+            ]
+        }
+
     def _load_npcs(self):
         if os.path.exists(self.npcs_path):
             try:
@@ -120,6 +165,42 @@ class GameEngine:
                         self.agents[profile.name] = NPCAgent(profile)
             except Exception as e:
                 print(f"讀取 NPC 載入失敗: {e}")
+
+    def get_current_chapter_info(self) -> Dict[str, Any]:
+        chapters = self.story_outline.get("chapters", [])
+        for ch in chapters:
+            t_min, t_max = ch.get("turns_range", [1, 999])
+            if t_min <= self.game_turn <= t_max:
+                return ch
+        return chapters[-1] if chapters else {
+            "chapter_id": 5,
+            "title": "第五章：江湖大終局與命運審判",
+            "goal": "導向四大終局之一並頒發終局稱號。"
+        }
+
+    def evaluate_ending(self) -> Optional[Dict[str, Any]]:
+        endings = self.story_outline.get("endings", {})
+        
+        # 結局 1: 暗黑巨擘
+        if self.factions.get("血衣樓", 0) >= 50 and self.world_flags.get("joined_xueyilou"):
+            return endings.get("ending_1")
+
+        # 結局 2: 雙宿雙飛
+        sh_intimacy = self.agents.get("合歡宗聖女", NPCAgent(NPCProfile(name="", identity="", personality="", location=""))).profile.intimacy
+        boss_intimacy = self.agents.get("風騷老闆娘", NPCAgent(NPCProfile(name="", identity="", personality="", location=""))).profile.intimacy
+        if (sh_intimacy >= 70 or boss_intimacy >= 70) and self.player_state.cultivation_level >= 3:
+            return endings.get("ending_2")
+
+        # 結局 3: 金融霸主
+        wang_intimacy = self.agents.get("錢莊老王", NPCAgent(NPCProfile(name="", identity="", personality="", location=""))).profile.intimacy
+        if self.player_state.gold >= 1000 and wang_intimacy >= 50:
+            return endings.get("ending_3")
+
+        # 結局 4: 回合數達 15 以上觸發龍門傳奇終局
+        if self.game_turn >= 15:
+            return endings.get("ending_4")
+
+        return None
 
     def get_current_region(self) -> Dict[str, Any]:
         regions = self.world_map.get("regions", {})
@@ -332,6 +413,7 @@ class GameEngine:
             raise ValueError("目前沒有選擇任何 NPC 進行互動！")
 
         reg_info = self.get_current_region()
+        ch_info = self.get_current_chapter_info()
 
         delta = self.current_agent.process_action(
             client=self.client,
@@ -343,10 +425,11 @@ class GameEngine:
             current_location=self.current_location,
             current_region_desc=reg_info.get("description", ""),
             available_exits=self.get_available_exits(),
-            recent_world_events=self.recent_world_events
+            recent_world_events=self.recent_world_events,
+            story_chapter_title=ch_info.get("title", "第一章：血夜甦醒與龍門破局"),
+            story_chapter_goal=ch_info.get("goal", "尋求療傷與避難，查明懷中血秘卷真相。")
         )
 
         self.apply_delta(delta)
-        self.game_turn += 1
         self.simulate_npc_autonomous_actions()
         return delta
