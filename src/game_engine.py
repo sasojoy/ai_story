@@ -40,6 +40,7 @@ class GameEngine:
 
         self.current_location: str = "龍門客棧"
         self.unlocked_locations: Set[str] = set()
+        self.story_milestones: List[str] = ["客棧甦醒與初入龍門"]
         self.recent_world_events: List[str] = []
         self.world_news: List[str] = [
             "【江湖動態】[殺手阿福] 正在暗巷按《勞基法》精算工時，拒絕了血衣樓的無償加班指令。",
@@ -334,9 +335,14 @@ class GameEngine:
         for flag_key, flag_value in delta.world_flag_set.items():
             self.world_flags[flag_key] = flag_value
 
-        # 動態更新主線故事摘要
+        # 動態更新主線故事摘要與里程碑
         if delta.main_quest_summary_update and delta.main_quest_summary_update.strip():
             self.main_quest_summary = delta.main_quest_summary_update.strip()
+
+        if delta.milestone_unlocked and delta.milestone_unlocked.strip():
+            ms = delta.milestone_unlocked.strip()
+            if ms not in self.story_milestones:
+                self.story_milestones.append(ms)
 
         # 動態更新勢力聲望
         for faction_name, reputation_change in delta.faction_reputation_changes.items():

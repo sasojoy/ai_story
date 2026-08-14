@@ -34,6 +34,10 @@ class GameStateDelta(BaseModel):
         default=None,
         description="根據玩家最新選擇動態改寫的主線故事摘要"
     )
+    milestone_unlocked: Optional[str] = Field(
+        default=None,
+        description="新觸發解鎖的故事里程碑狀態鎖 (例如: '第一層毒詛解開', '獲得龍門密道地圖')"
+    )
     faction_reputation_changes: Dict[str, int] = Field(
         default_factory=dict,
         description="各勢力聲望變更值 (例如: {'正派武林盟': -20, '合歡宗': +30})"
@@ -154,14 +158,20 @@ class GameStateDelta(BaseModel):
         if not data.get("npc_status_tag") or data.get("npc_status_tag") in ["靜默", "None", "null", ""]:
             data["npc_status_tag"] = "凝視"
 
-        # 8. 處理 main_quest_summary_update 別名
+        # 8. 處理 main_quest_summary_update 與 milestone_unlocked 別名
         if not data.get("main_quest_summary_update"):
             for alias in ["main_quest_update", "quest_update", "main_quest", "quest_summary"]:
                 if alias in data and data[alias] and isinstance(data[alias], str):
                     data["main_quest_summary_update"] = str(data[alias]).strip()
                     break
 
-        # 9. 處理 options 欄位 (支援 dict, string 與 list，自動處理 5 個選項)
+        if not data.get("milestone_unlocked"):
+            for alias in ["milestone", "milestone_update", "story_milestone", "unlocked_milestone"]:
+                if alias in data and data[alias] and isinstance(data[alias], str):
+                    data["milestone_unlocked"] = str(data[alias]).strip()
+                    break
+
+        # 9. 處理 options 欄位
         raw_options = data.get("options")
         clean_opts = []
 
