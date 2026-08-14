@@ -44,7 +44,7 @@ engine = get_engine_for_user("楚留香")
 
 def generate_dynamic_options(npc_name: str, location_name: str, intimacy: int, turn: int) -> list:
     if npc_name == "合歡宗聖女":
-        if turn % 3 == 1:
+        if turn <= 1:
             return [
                 "A) 抱拳拱手向聖女柳如煙詢問懷中血秘卷與解毒線索",
                 "B) 掏出《勞動基準法》質疑合歡宗深夜出診違規要求補償",
@@ -52,7 +52,7 @@ def generate_dynamic_options(npc_name: str, location_name: str, intimacy: int, t
                 "D) 眼神一冷搜刮柳如煙隨身攜帶的合歡宗毒藥令牌",
                 "E) 移動前往亂葬崗搜尋古老功法殘頁"
             ]
-        elif turn % 3 == 2:
+        elif turn == 2:
             return [
                 "A) 眼神深情凝視聖女柳如煙，詢問合歡宗雙修心法的絕密要訣",
                 "B) 提議與柳如煙聯手對付前來追殺的正派武林盟聯軍",
@@ -60,7 +60,7 @@ def generate_dynamic_options(npc_name: str, location_name: str, intimacy: int, t
                 "D) 亮出冷刃逼問柳如煙是否有意背叛正派武林盟",
                 "E) 轉移陣地前往少林寺下鎮避開風頭"
             ]
-        else:
+        elif turn == 3:
             return [
                 "A) 向柳如煙打聽少林與武當鎮派武學的江湖隱情",
                 "B) 開出龍門對沖基金股權協議邀請柳如煙技術入股",
@@ -68,8 +68,25 @@ def generate_dynamic_options(npc_name: str, location_name: str, intimacy: int, t
                 "D) 暗中調動內力戒備，隨時準備強行壓制對方",
                 "E) 移動前往血衣樓分舵探索情報"
             ]
+        elif turn == 4:
+            return [
+                "A) 邀請柳如煙一同解開血秘卷上的雙修陣法封印",
+                "B) 出示勞基法勞資協議，約定雙修後的修為分潤比例",
+                "C) 擁緊柳如煙嬌軀，探尋其心口處師門詛咒印記",
+                "D) 脅迫柳如煙交出合歡宗鎮派解毒聖藥",
+                "E) 移動前往黑風寨山腳設伏反擊正派盟主"
+            ]
+        else:
+            return [
+                f"A) 與柳如煙商討血夜龍門局勢的最終反殺計畫 (回合 {turn})",
+                f"B) 提議將合歡宗與龍門客棧產業重組進行資產打包",
+                f"C) 與柳如煙緊緊相擁，深度運轉太上陰陽心法突破修為瓶頸",
+                f"D) 亮出毒刃威脅周邊埋伏的黑衣刺客保護柳如煙",
+                f"E) 轉移陣地前往 [{location_name}] 核心密室"
+            ]
+
     elif npc_name == "風騷老闆娘":
-        if turn % 3 == 1:
+        if turn <= 1:
             return [
                 "A) 點一壺上等竹葉青向老闆娘賽金花打聽龍門關最新消息",
                 "B) 拿出客棧餐飲評鑑表要求賽金花打八折",
@@ -77,7 +94,7 @@ def generate_dynamic_options(npc_name: str, location_name: str, intimacy: int, t
                 "D) 亮出血滴子逼問賽金花關於血衣樓黑榜的幕後主使",
                 "E) 移動前往龍門錢莊查詢存款行情"
             ]
-        elif turn % 3 == 2:
+        elif turn == 2:
             return [
                 "A) 詢問老闆娘賽金花龍門客棧密道與各方勢力的核心情報",
                 "B) 提議將龍門客棧打包上市進行資本股權劃轉",
@@ -85,7 +102,7 @@ def generate_dynamic_options(npc_name: str, location_name: str, intimacy: int, t
                 "D) 冷聲逼問賽金花龍門客棧地下庫房位置",
                 "E) 移動前往黑風寨山腳避開風頭"
             ]
-        else:
+        elif turn == 3:
             return [
                 "A) 詢問賽金花關於血衣樓刺殺懸賞榜的幕後主使",
                 "B) 開出《一例一休管理公約》幫賽金花理順客棧夥計工時",
@@ -93,8 +110,33 @@ def generate_dynamic_options(npc_name: str, location_name: str, intimacy: int, t
                 "D) 突然發難扣住賽金花手腕質問其真實來歷",
                 "E) 在龍門客棧內仔細搜尋蛛絲馬跡與密道"
             ]
+        elif turn == 4:
+            return [
+                "A) 要求賽金花引薦黑市兵器商購買上等寶劍",
+                "B) 拿出龍門客棧股權轉讓協議要求賽金花簽字入股",
+                "C) 隨賽金花進入天字房秘室，共飲合歡美酒試探心意",
+                "D) 掏出暗器威脅客棧酒保搜刮當日營業銀票",
+                "E) 移動前往少林寺下鎮避開朝廷搜捕"
+            ]
+        else:
+            return [
+                f"A) 與賽金花密謀掌控龍門關黑市情報網 (回合 {turn})",
+                f"B) 發起龍門連鎖客棧 IPO 計劃發行江湖債券",
+                f"C) 攬住賽金花嬌軀在紅燭下傾聽其紅塵身世心聲",
+                f"D) 拔劍除掉暗中監視客棧的正派武林盟眼線",
+                f"E) 移動前往區域 [{location_name}] 尋找機緣"
+            ]
+
     elif npc_name == "殺手阿福":
-        if turn % 2 == 0:
+        if turn <= 1:
+            return [
+                "A) 亮出武器防備阿福突襲，詢問血衣樓的接單規則",
+                "B) 提醒阿福現在已過下班時間，打卡下班可避免工傷",
+                "C) 湊近阿福耳邊輕語利益交換誘惑條款",
+                "D) 拔出利刃冷不防割向阿福右手動脈進行強襲",
+                "E) 移動前往亂葬崗搜尋避難點"
+            ]
+        elif turn == 2:
             return [
                 "A) 詢問阿福血衣樓黑榜殺手最新的懸賞名單",
                 "B) 開出《一例一休超時加班理賠單》逼阿福簽字",
@@ -104,22 +146,15 @@ def generate_dynamic_options(npc_name: str, location_name: str, intimacy: int, t
             ]
         else:
             return [
-                "A) 亮出武器防備阿福突襲，詢問血衣樓的接單規則",
-                "B) 提醒阿福現在已過下班時間，打卡下班可避免工傷",
-                "C) 湊近阿福耳邊輕語利益交換誘惑條款",
-                "D) 拔出利刃冷不防割向阿福右手動脈進行強襲",
-                "E) 移動前往亂葬崗搜尋避難點"
+                f"A) 重金雇傭阿福作為個人私人護衛 (回合 {turn})",
+                f"B) 協助阿福向血衣樓樓主申訴超時加班精神損害賠償",
+                f"C) 向阿福展露魅力邀請其退出血衣樓共闖江湖",
+                f"D) 聯手阿福發動伏擊殺死血衣樓前來督戰的執法長老",
+                f"E) 移動前往地點 [{location_name}] 探索暗道"
             ]
+
     elif npc_name == "錢莊老王":
-        if turn % 2 == 0:
-            return [
-                "A) 詢問老王少林與武當鎮派武學的拍賣行情",
-                "B) 提議成立『龍門對沖基金』進行高槓桿做空",
-                "C) 上前對老王展露魅力試圖減免貸款利息",
-                "D) 捏住老王手腕將劇毒滲入其脈搏脅迫劃轉銀票",
-                "E) 移動前往少林寺下鎮聽取梵音淨化心神"
-            ]
-        else:
+        if turn <= 1:
             return [
                 "A) 詢問老王錢莊當前存款與借貸年化利率",
                 "B) 拿出不良資產包證券化 (MBS) 方案要求槓桿加碼",
@@ -127,6 +162,23 @@ def generate_dynamic_options(npc_name: str, location_name: str, intimacy: int, t
                 "D) 亮出沾血匕首逼老王交出總庫房鑰匙",
                 "E) 在錢莊櫃檯周邊仔細搜尋帳簿與地圖"
             ]
+        elif turn == 2:
+            return [
+                "A) 詢問老王少林與武當鎮派武學的拍賣行情",
+                "B) 提議成立『龍門對沖基金』進行高槓桿做空",
+                "C) 捏住老王手腕將劇毒滲入其脈搏脅迫劃轉銀票",
+                "D) 強行搶走錢莊櫃檯上的最新銀票票據",
+                "E) 移動前往少林寺下鎮聽取梵音淨化心神"
+            ]
+        else:
+            return [
+                f"A) 與老王商討收購少林武當地產股權計劃 (回合 {turn})",
+                f"B) 聯合老王發行『血秘卷衍生期貨槓桿商品』",
+                f"C) 展示高超魅力說服老王為自己開立無限額度金卡",
+                f"D) 威脅老王將朝廷懸賞金暗中劃入自己帳戶",
+                f"E) 移動前往區域 [{location_name}] 尋找投資標的"
+            ]
+
     return [
         f"A) 在當前地區 [{location_name}] 仔細搜尋蛛絲馬跡",
         "B) 掏出《勞動基準法》與理賠條款進行談判拉扯",
@@ -586,11 +638,18 @@ def process_player_choice(custom_name: str, user_input: str, history: list, prev
         "content": [{"type": "text", "text": str(bot_msg)}]
     })
 
-    # 校驗選項是否重複，若重複或包含佔位符則自動刷新動態選項
+    # 檢查歷史使用過的選項，進行嚴格去重
+    used_history = engine.current_agent.used_options_history if engine.current_agent else set()
     raw_opts = delta.options if (delta.options and len(delta.options) >= 5) else fallback_opts
-    is_repeated = any(opt == prev_opt_a or opt == prev_opt_b for opt in raw_opts) or any(is_placeholder_option(opt) for opt in raw_opts)
 
-    if is_repeated or len(raw_opts) < 5:
+    # 檢查是否有重複選項
+    has_dup = (
+        any(opt in used_history for opt in raw_opts) or
+        any(opt == prev_opt_a or opt == prev_opt_b or opt == prev_opt_c for opt in raw_opts) or
+        any(is_placeholder_option(opt) for opt in raw_opts)
+    )
+
+    if has_dup or len(raw_opts) < 5:
         opts = generate_dynamic_options(npc_name, engine.current_location, intimacy, engine.game_turn)
     else:
         opts = raw_opts

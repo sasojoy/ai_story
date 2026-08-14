@@ -1,6 +1,6 @@
 import json
 import os
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Set
 from src.models import NPCProfile, PlayerState, GameStateDelta
 from src.ollama_client import OllamaClient
 
@@ -32,6 +32,7 @@ class NPCAgent:
         self.profile = profile
         self.lorebook_path = lorebook_path
         self.history: List[Dict[str, str]] = []
+        self.used_options_history: Set[str] = set()
         self.current_status_tag: str = "正常"
 
     def build_system_prompt(
@@ -50,6 +51,7 @@ class NPCAgent:
         arts_str = ", ".join(player_state.cultivation_arts) if player_state.cultivation_arts else "無"
         exits_str = ", ".join(available_exits) if available_exits else "無"
         recent_events_str = " -> ".join(recent_world_events[-3:]) if recent_world_events else "無"
+        used_opts_str = ", ".join([f"「{opt}」" for opt in list(self.used_options_history)[-10:]]) if self.used_options_history else "無"
 
         npc_name = self.profile.name
 
@@ -62,6 +64,7 @@ class NPCAgent:
             f"修為等級: Level {player_state.cultivation_level} (經驗={player_state.cultivation_exp}) | 雙修功法/武學: [{arts_str}]\n"
             f"金幣={player_state.gold} | 背包=[{inventory_str}]\n"
             f"對當前 NPC ({npc_name}) 的親密度/好感度: {self.profile.intimacy}/100\n"
+            f"【歷史已被選過與使用過之選項】: [{used_opts_str}]\n"
         )
 
         lorebook = load_lorebook(self.lorebook_path)
@@ -79,17 +82,12 @@ class NPCAgent:
                 f"當前主線摘要: {main_quest_summary or '重傷逃亡，尋求解毒與秘卷真相'}\n"
                 f"近期江湖動態: {recent_events_str}\n"
                 f"勢力聲望: {factions_str}\n"
-                f"【感情互動、微表情與選項要求】\n"
+                f"【感情互動、微表情與選項去重要求】\n"
                 f"1. 【微表情與情感細節描寫要求】: 必須以半文半白武俠風格，注重描寫 {npc_name} 的『瞳孔震動、眼神博弈、雙頰酡紅、指尖輕觸與呼吸微溫』，撰寫 150~300 字情節生動、感染力極強的小說段落！\n"
-                f"2. 【選項禁止使用『NPC』通用字】: 嚴禁在選項中使用『NPC』字眼，必須統一使用 {npc_name} 的稱呼或名字！\n"
+                f"2. 【選項禁止重複與使用『NPC』通用字】: 嚴禁使用『NPC』字眼，且選項 A~E 【絕對禁止與歷史已使用選項重複】！必須根據最新劇情推演全新的下一步行動！\n"
                 f"3. 請根據玩家最新行動在 main_quest_summary_update 欄位中改寫主線故事摘要。\n"
                 f"4. 評估玩家【魅力】與【親密度】：若進行色誘、情感博弈或雙修，於 intimacy_change 回傳好感度變更，於 player_stamina_change 回傳體力消耗，於 cultivation_exp_gained 回傳經驗。\n"
-                f"5. 必須在 options 欄位中生成 5 個具體動態選項：\n"
-                f"   - 選項 A (正派/常規): 符合一般武俠邏輯應對\n"
-                f"   - 選項 B (智取/搞笑): 運用現代法律檢舉、金融套路或搞笑行動\n"
-                f"   - 選項 C (情慾/色誘/親密): 利用美色、身體接觸、情感控制對 {npc_name} 進行行動\n"
-                f"   - 選項 D (混亂/背叛/暗黑): 賣友求榮、加入敵陣或極端物理攻擊\n"
-                f"   - 選項 E (地圖探索/轉移): 在當前區域搜尋或移動前往鄰近區域\n"
+                f"5. 必須在 options 欄位中生成 5 個具體動態選項 (A: 正派/常規, B: 智取/搞笑, C: 情慾/色誘/親密, D: 混亂/背叛/暗黑, E: 地圖探索/轉移)。\n"
             )
             return base_prompt + context_addon
 
@@ -109,7 +107,7 @@ class NPCAgent:
             f"勢力聲望: {factions_str}\n\n"
             f"【核心原則】\n"
             f"1. 【微表情與情感細節硬性要求】: 必須承接上一輪劇情結局，以半文半白武俠風格，注重描寫 {npc_name} 的瞳孔微震、雙頰酡紅、眼波流轉、心跳與呼吸微溫，撰寫 150~300 字感染力極強的小說段落！\n"
-            f"2. 【選項禁止使用『NPC』通用字】: 嚴禁在選項中使用『NPC』字眼，必須統一使用 {npc_name} 的稱呼或名字！\n"
+            f"2. 【選項絕對去重要求】: 嚴禁使用『NPC』通用字，且 options 欄位生成的 5 個選項【絕對禁止與歷史已選選項重複】！必須根據最新劇情推演全新的下一個行動！\n"
             f"3. 允許玩家進行任何荒謬、賣友投敵、現代科學、法律檢舉、極端物理攻擊、情色誘惑、雙修合練、區域移動探索或金融資本操作。\n"
             f"4. 結合玩家【魅力={player_state.charm}】與對當前 {npc_name} 的【親密度={self.profile.intimacy}】推演感情發展：若進行色誘拉扯或雙修，於 intimacy_change 回傳好感度增長，於 player_stamina_change 回傳體力變更，於 cultivation_exp_gained 回傳修為經驗。\n"
             f"5. 請根據玩家最新選擇，於 main_quest_summary_update 欄位中自動改寫最新的主線故事摘要。\n"
@@ -284,7 +282,7 @@ class NPCAgent:
             f"{context_bridge}"
             f"【玩家 ({player_state.name}) 最新行動 (地點={current_location}, 回合={game_turn})】: 「{player_action}」\n"
             f"請緊扣【上一輪劇情結局】與最新行動「{player_action}」，以半文半白武俠風格撰寫 150~300 字富含微表情、動作張力與官能氣氛的小說段落，詳細描述 {self.profile.name} 的反應與對白！"
-            f"同時推演親密度變更 (intimacy_change)、雙修經驗 (cultivation_exp_gained)、主線更新與 5 個具體動態選項 (options A/B/C/D/E)。"
+            f"同時推演親密度變更 (intimacy_change)、雙修經驗 (cultivation_exp_gained)、主線更新與 5 個【完全不重複】的具體動態選項 (options A/B/C/D/E)。"
             f"\n重要：請直接輸出 JSON 物件，嚴禁包含 Markdown 標記或額外文字！"
         )
         messages.append({"role": "user", "content": action_prompt})
@@ -304,12 +302,19 @@ class NPCAgent:
                 err_msg=str(e)
             )
 
-        # 紀錄歷史對話
+        # 紀錄歷史對話與已使用選項
         self.history.append({"role": "user", "content": player_action})
         self.history.append({"role": "assistant", "content": delta.narrative})
+        self.used_options_history.add(player_action.strip())
+
+        if delta.options:
+            for opt in delta.options:
+                self.used_options_history.add(opt.strip())
+
         self.current_status_tag = delta.npc_status_tag
 
         return delta
 
     def reset_history(self):
         self.history.clear()
+        self.used_options_history.clear()
