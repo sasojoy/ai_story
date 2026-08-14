@@ -144,7 +144,7 @@ class TestEngine(unittest.TestCase):
         self.assertEqual(delta.player_hp_change, -10)
         self.assertEqual(delta.inventory_added, ["銀兩"])
         self.assertEqual(delta.npc_status_tag, "凝視")  # 轉置靜默標籤
-        self.assertEqual(len(delta.options), 3)
+        self.assertGreaterEqual(len(delta.options), 3)
 
     @patch("src.ollama_client.OllamaClient.chat_structured")
     def test_npc_fallback_on_exception(self, mock_chat):
@@ -162,7 +162,7 @@ class TestEngine(unittest.TestCase):
         self.assertIsNotNone(delta)
         self.assertNotEqual(delta.npc_status_tag, "靜默")
         self.assertIn("殺手阿福", delta.narrative)
-        self.assertEqual(len(delta.options), 3)
+        self.assertGreaterEqual(len(delta.options), 3)
 
 
 if __name__ == "__main__":

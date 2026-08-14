@@ -4,7 +4,7 @@ from typing import List, Dict, Any, Optional
 
 def is_placeholder_option(text: str) -> bool:
     text_lower = str(text).lower()
-    placeholders = ["選項文字", "常規選項", "搞笑選項", "暗黑選項", "正派選項", "選項a", "選項b", "選項c"]
+    placeholders = ["選項文字", "常規選項", "搞笑選項", "暗黑選項", "正派選項", "選項a", "選項b", "選項c", "選項d", "選項e"]
     return any(p in text_lower for p in placeholders)
 
 
@@ -42,9 +42,11 @@ class GameStateDelta(BaseModel):
         default_factory=lambda: [
             "A) 亮出兵器靜觀其變，開口詢問對方的意圖",
             "B) 掏出《勞動基準法》與理賠條款進行談判拉扯",
-            "C) 上前進行身體接觸與耳邊輕語誘惑條款"
+            "C) 上前進行身體接觸與耳邊輕語試探",
+            "D) 眼神一冷出其不意搜刮對方的隨身密卷",
+            "E) 在當前區域仔細搜尋蛛絲馬跡與周邊通道"
         ],
-        description="提供給玩家選擇的 3 個劇情選項"
+        description="提供給玩家選擇的 5 個動態劇情選項 (A: 正派/常規, B: 智取/搞笑, C: 情慾/色誘/親密, D: 混亂/背叛/暗黑, E: 地圖探索/轉移)"
     )
 
     @model_validator(mode="before")
@@ -159,7 +161,7 @@ class GameStateDelta(BaseModel):
                     data["main_quest_summary_update"] = str(data[alias]).strip()
                     break
 
-        # 9. 處理 options 欄位 (支援 dict, string 與 list)
+        # 9. 處理 options 欄位 (支援 dict, string 與 list，自動處理 5 個選項)
         raw_options = data.get("options")
         clean_opts = []
 
@@ -183,16 +185,18 @@ class GameStateDelta(BaseModel):
                 if val and not is_placeholder_option(val):
                     clean_opts.append(str(val))
 
-        if len(clean_opts) >= 3:
-            data["options"] = clean_opts[:3]
+        if len(clean_opts) >= 5:
+            data["options"] = clean_opts[:5]
+        elif len(clean_opts) >= 3:
+            data["options"] = clean_opts
         else:
             data["options"] = [
                 "A) 亮出兵器靜觀其變，開口詢問對方的意圖",
-                "B) 移動前往周邊安全區域避開風頭",
-                "C) 上前進行身體接觸與耳邊輕語試探"
+                "B) 掏出《勞動基準法》與理賠條款進行談判拉扯",
+                "C) 上前進行身體接觸與耳邊輕語試探",
+                "D) 眼神一冷出其不意搜刮對方的隨身密卷",
+                "E) 移動前往周邊安全區域避開風頭"
             ]
-
-        return data
 
         return data
 
@@ -243,7 +247,7 @@ class NPCProfile(BaseModel):
         unlocked = {}
         unlocked["hp"] = self.hp
         unlocked["location"] = self.location
-        
+
         if self.intimacy < 25:
             unlocked["realm"] = "???"
             unlocked["attack"] = "???"

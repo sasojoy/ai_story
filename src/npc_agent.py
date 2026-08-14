@@ -62,8 +62,6 @@ class NPCAgent:
             f"修為等級: Level {player_state.cultivation_level} (經驗={player_state.cultivation_exp}) | 雙修功法/武學: [{arts_str}]\n"
             f"金幣={player_state.gold} | 背包=[{inventory_str}]\n"
             f"對當前 NPC ({npc_name}) 的親密度/好感度: {self.profile.intimacy}/100\n"
-            f"NPC 當前自主行動: {self.profile.current_activity}\n"
-            f"NPC 人際社交關係: {self.profile.relationships}\n"
         )
 
         lorebook = load_lorebook(self.lorebook_path)
@@ -86,10 +84,12 @@ class NPCAgent:
                 f"2. 【選項禁止使用『NPC』通用字】: 嚴禁在選項中使用『NPC』字眼，必須統一使用 {npc_name} 的稱呼或名字！\n"
                 f"3. 請根據玩家最新行動在 main_quest_summary_update 欄位中改寫主線故事摘要。\n"
                 f"4. 評估玩家【魅力】與【親密度】：若進行色誘、情感博弈或雙修，於 intimacy_change 回傳好感度變更，於 player_stamina_change 回傳體力消耗，於 cultivation_exp_gained 回傳經驗。\n"
-                f"5. 必須在 options 欄位中生成 3 個具體動態選項：\n"
-                f"   - 選項 A (正派/常規/探索): 符合一般武俠邏輯應對或地區探索\n"
-                f"   - 選項 B (混亂邪惡/背叛/搞笑): 賣友求榮、投敵、轉移陣地或現代套路\n"
-                f"   - 選項 C (情慾/色誘/暗黑): 利用美色、身體接觸、情感控制對 {npc_name} 進行情感/雙修行動\n"
+                f"5. 必須在 options 欄位中生成 5 個具體動態選項：\n"
+                f"   - 選項 A (正派/常規): 符合一般武俠邏輯應對\n"
+                f"   - 選項 B (智取/搞笑): 運用現代法律檢舉、金融套路或搞笑行動\n"
+                f"   - 選項 C (情慾/色誘/親密): 利用美色、身體接觸、情感控制對 {npc_name} 進行行動\n"
+                f"   - 選項 D (混亂/背叛/暗黑): 賣友求榮、加入敵陣或極端物理攻擊\n"
+                f"   - 選項 E (地圖探索/轉移): 在當前區域搜尋或移動前往鄰近區域\n"
             )
             return base_prompt + context_addon
 
@@ -114,10 +114,12 @@ class NPCAgent:
             f"4. 結合玩家【魅力={player_state.charm}】與對當前 {npc_name} 的【親密度={self.profile.intimacy}】推演感情發展：若進行色誘拉扯或雙修，於 intimacy_change 回傳好感度增長，於 player_stamina_change 回傳體力變更，於 cultivation_exp_gained 回傳修為經驗。\n"
             f"5. 請根據玩家最新選擇，於 main_quest_summary_update 欄位中自動改寫最新的主線故事摘要。\n"
             f"6. 若影響勢力，於 faction_reputation_changes 欄位回傳聲望變更 (如 {{\"血衣樓\": +20, \"正派武林盟\": -30}})。\n"
-            f"7. 每輪輸出 JSON 時，必須在 options 欄位中根據當前最新劇情與地理位置即興創作 3 個具體動態選項：\n"
-            f"   - 選項 A (正派/常規/探索): 符合傳統武俠邏輯應對或當前區域搜尋\n"
-            f"   - 選項 B (混亂邪惡/背叛/搞笑): 賣友求榮、加入敵陣、移動轉移陣地、或運用現代法律/金融套路\n"
-            f"   - 選項 C (情慾/色誘/暗黑): 利用美色、身體接觸、情感控制對 {npc_name} 發動行動\n"
+            f"7. 每輪輸出 JSON 時，必須在 options 欄位中根據當前最新劇情與地理位置即興創作 5 個具體動態選項：\n"
+            f"   - 選項 A (正派/常規): 符合傳統武俠邏輯應對\n"
+            f"   - 選項 B (智取/搞笑/現代): 運用現代法律/金融套路或搞笑行動\n"
+            f"   - 選項 C (情慾/色誘/親密): 利用美色、身體接觸、情感控制、雙修合練對 {npc_name} 發動行動\n"
+            f"   - 選項 D (混亂邪惡/背叛/暗黑): 賣友求榮、加入敵陣、強行脅迫或極端物理強襲\n"
+            f"   - 選項 E (地圖探索/轉移): 在當前區域搜尋或移動前往鄰近區域\n"
             f"8. 必須且僅能輸出符合 Pydantic Schema 的合法 JSON 物件。\n\n"
             f"【JSON 格式規範】\n"
             f"{{\n"
@@ -140,7 +142,9 @@ class NPCAgent:
             f'  "options": [\n'
             f'    "A) 抱拳向{npc_name}質問真實來歷",\n'
             f'    "B) 掏出勞動基準法要求補償精神損失",\n'
-            f'    "C) 上前攬住{npc_name}腰肢進行情慾交換"\n'
+            f'    "C) 上前攬住{npc_name}腰肢進行情慾交換",\n'
+            f'    "D) 眼神一冷出其不意搜刮隨身密卷",\n'
+            f'    "E) 移動前往黑風寨山腳避開風頭"\n'
             f'  ]\n'
             f"}}\n"
         )
@@ -153,7 +157,7 @@ class NPCAgent:
         current_location: str = "龍門客棧",
         err_msg: str = ""
     ) -> GameStateDelta:
-        """當 Ollama 連線失敗或解析異常時，智慧推演符合 NPC 個性的保底劇情，絕不無情靜默"""
+        """當 Ollama 連線失敗或解析異常時，智慧推演符合 NPC 個性的保底劇情與 5 個動態選項"""
         p_name = player_state.name
         npc_name = self.profile.name
 
@@ -167,7 +171,9 @@ class NPCAgent:
             opts = [
                 "A) 探聽龍門客棧密道與黑市秘寶情報",
                 "B) 掏出商業合同提議將客棧資產打包上市",
-                "C) 湊近老闆娘耳畔撫摸其手背討要天字房鑰匙"
+                "C) 湊近賽金花耳畔撫摸其手背討要天字房鑰匙",
+                "D) 眼神一冷亮出血滴子逼問老闆娘關於血衣樓黑榜",
+                "E) 移動前往龍門錢莊查詢存款行情"
             ]
         elif npc_name == "合歡宗聖女":
             narrative = (
@@ -176,9 +182,11 @@ class NPCAgent:
             )
             tag = "魅惑"
             opts = [
-                "A) 詢問合歡宗雙修心法與師門詛咒真相",
+                "A) 詢問柳如煙合歡宗雙修心法與師門詛咒真相",
                 "B) 質疑合歡宗深夜出診違反勞動基準法要求補償",
-                "C) 溫柔將聖女攬入懷中在耳邊輕語運轉雙修靈氣"
+                "C) 溫柔將柳如煙攬入懷中在耳邊輕語運轉雙修靈氣",
+                "D) 亮出冷刃逼問柳如煙是否有意背叛正派武林盟",
+                "E) 移動前往亂葬崗搜尋古老功法殘頁"
             ]
         elif npc_name == "殺手阿福":
             narrative = (
@@ -187,9 +195,11 @@ class NPCAgent:
             )
             tag = "算計工時"
             opts = [
-                "A) 詢問血衣樓黑榜殺手最新的懸賞名單",
+                "A) 詢問阿福血衣樓黑榜殺手最新的懸賞名單",
                 "B) 出示勞動基準法條文要求開具加班費理賠單",
-                "C) 亮出利刃架在阿福脖子上逼問血衣樓分舵線索"
+                "C) 湊近阿福身旁掏出雙修秘笈試圖私下交易",
+                "D) 亮出利刃架在阿福脖子上逼他透露分舵地圖",
+                "E) 移動前往黑風寨山腳察看埋伏陷阱"
             ]
         elif npc_name == "錢莊老王":
             narrative = (
@@ -198,9 +208,11 @@ class NPCAgent:
             )
             tag = "精算"
             opts = [
-                "A) 詢問錢莊存款利率與少林武當抵押貸款行情",
-                "B) 拿出不良資產證券化 (MBS) 方案要求槓桿加碼",
-                "C) 亮出沾血匕首逼老王交出總庫房鑰匙與銀票"
+                "A) 詢問老王錢莊存款利率與少林武當抵押貸款行情",
+                "B) 拿出不良資產包證券化 (MBS) 方案要求槓桿加碼",
+                "C) 上前對老王展露魅力試圖減免貸款利息",
+                "D) 亮出沾血匕首逼老王交出總庫房鑰匙與銀票",
+                "E) 移動前往少林寺下鎮聽取梵音淨化心神"
             ]
         else:
             narrative = (
@@ -211,7 +223,9 @@ class NPCAgent:
             opts = [
                 f"A) 抱拳向{npc_name}詢問當前地區 [{current_location}] 的傳聞",
                 f"B) 掏出勞動基準法條文與{npc_name}進行談判拉扯",
-                f"C) 上前對{npc_name}進行身體接觸與耳邊輕語試探"
+                f"C) 上前對{npc_name}進行身體接觸與耳邊輕語試探",
+                f"D) 亮出暗器戒備，冷聲威脅{npc_name}",
+                f"E) 在當前區域 [{current_location}] 仔細搜尋線索"
             ]
 
         return GameStateDelta(
@@ -270,7 +284,7 @@ class NPCAgent:
             f"{context_bridge}"
             f"【玩家 ({player_state.name}) 最新行動 (地點={current_location}, 回合={game_turn})】: 「{player_action}」\n"
             f"請緊扣【上一輪劇情結局】與最新行動「{player_action}」，以半文半白武俠風格撰寫 150~300 字富含微表情、動作張力與官能氣氛的小說段落，詳細描述 {self.profile.name} 的反應與對白！"
-            f"同時推演親密度變更 (intimacy_change)、雙修經驗 (cultivation_exp_gained)、主線更新與 3 個具體動態選項 (options A/B/C)。"
+            f"同時推演親密度變更 (intimacy_change)、雙修經驗 (cultivation_exp_gained)、主線更新與 5 個具體動態選項 (options A/B/C/D/E)。"
             f"\n重要：請直接輸出 JSON 物件，嚴禁包含 Markdown 標記或額外文字！"
         )
         messages.append({"role": "user", "content": action_prompt})

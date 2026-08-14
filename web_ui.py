@@ -46,71 +46,93 @@ def generate_dynamic_options(npc_name: str, location_name: str, intimacy: int, t
     if npc_name == "合歡宗聖女":
         if turn % 3 == 1:
             return [
-                f"A) 抱拳拱手向聖女柳如煙詢問懷中血秘卷與解毒線索",
-                f"B) 掏出《勞動基準法》質疑合歡宗深夜出診違規要求補償",
-                f"C) 湊近柳如煙身旁，眼神挑逗並嘗試進行身體接觸試探"
+                "A) 抱拳拱手向聖女柳如煙詢問懷中血秘卷與解毒線索",
+                "B) 掏出《勞動基準法》質疑合歡宗深夜出診違規要求補償",
+                "C) 湊近柳如煙身旁，眼神挑逗並嘗試進行身體接觸試探",
+                "D) 眼神一冷搜刮柳如煙隨身攜帶的合歡宗毒藥令牌",
+                "E) 移動前往亂葬崗搜尋古老功法殘頁"
             ]
         elif turn % 3 == 2:
             return [
-                f"A) 眼神深情凝視聖女柳如煙，詢問合歡宗雙修心法的絕密要訣",
-                f"B) 提議與柳如煙聯手對付前來追殺的正派武林盟聯軍",
-                f"C) 溫柔地將柳如煙攬入懷中，在耳畔低語運轉雙修靈氣"
+                "A) 眼神深情凝視聖女柳如煙，詢問合歡宗雙修心法的絕密要訣",
+                "B) 提議與柳如煙聯手對付前來追殺的正派武林盟聯軍",
+                "C) 溫柔地將柳如煙攬入懷中，在耳畔低語運轉雙修靈氣",
+                "D) 亮出冷刃逼問柳如煙是否有意背叛正派武林盟",
+                "E) 轉移陣地前往少林寺下鎮避開風頭"
             ]
         else:
             return [
-                f"A) 向柳如煙打聽少林與武當鎮派武學的江湖隱情",
-                f"B) 開出龍門對沖基金股權協議邀請柳如煙技術入股",
-                f"C) 順勢牽起柳如煙冰涼柔嫩的纖手，運轉雙修心法導入靈氣"
+                "A) 向柳如煙打聽少林與武當鎮派武學的江湖隱情",
+                "B) 開出龍門對沖基金股權協議邀請柳如煙技術入股",
+                "C) 順勢牽起柳如煙冰涼柔嫩的纖手，運轉雙修心法導入靈氣",
+                "D) 暗中調動內力戒備，隨時準備強行壓制對方",
+                "E) 移動前往血衣樓分舵探索情報"
             ]
     elif npc_name == "風騷老闆娘":
         if turn % 3 == 1:
             return [
-                f"A) 點一壺上等竹葉青向老闆娘賽金花打聽龍門關最新消息",
-                f"B) 拿出客棧餐飲評鑑表要求賽金花打八折",
-                f"C) 湊近賽金花耳畔輕吟調情話語並撫摸其手背"
+                "A) 點一壺上等竹葉青向老闆娘賽金花打聽龍門關最新消息",
+                "B) 拿出客棧餐飲評鑑表要求賽金花打八折",
+                "C) 湊近賽金花耳畔輕吟調情話語並撫摸其手背",
+                "D) 亮出血滴子逼問賽金花關於血衣樓黑榜的幕後主使",
+                "E) 移動前往龍門錢莊查詢存款行情"
             ]
         elif turn % 3 == 2:
             return [
-                f"A) 詢問老闆娘賽金花龍門客棧密道與各方勢力的核心情報",
-                f"B) 提議將龍門客棧打包上市進行資本股權劃轉",
-                f"C) 伸手環住賽金花豐滿的細腰，低聲討要天字房鑰匙"
+                "A) 詢問老闆娘賽金花龍門客棧密道與各方勢力的核心情報",
+                "B) 提議將龍門客棧打包上市進行資本股權劃轉",
+                "C) 伸手環住賽金花豐滿的細腰，低聲討要天字房鑰匙",
+                "D) 冷聲逼問賽金花龍門客棧地下庫房位置",
+                "E) 移動前往黑風寨山腳避開風頭"
             ]
         else:
             return [
-                f"A) 詢問賽金花關於血衣樓刺殺懸賞榜的幕後主使",
-                f"B) 開出《一例一休管理公約》幫賽金花理順客棧夥計工時",
-                f"C) 凝視賽金花嬌艷的雙唇，輕握其柔荑許下江湖護花承諾"
+                "A) 詢問賽金花關於血衣樓刺殺懸賞榜的幕後主使",
+                "B) 開出《一例一休管理公約》幫賽金花理順客棧夥計工時",
+                "C) 凝視賽金花嬌艷的雙唇，輕握其柔荑許下江湖護花承諾",
+                "D) 突然發難扣住賽金花手腕質問其真實來歷",
+                "E) 在龍門客棧內仔細搜尋蛛絲馬跡與密道"
             ]
     elif npc_name == "殺手阿福":
         if turn % 2 == 0:
             return [
-                f"A) 詢問阿福血衣樓黑榜殺手最新的懸賞名單",
-                f"B) 開出《一例一休超時加班理賠單》逼阿福簽字",
-                f"C) 將劇毒匕首架在阿福脖子上逼他透露分舵地圖"
+                "A) 詢問阿福血衣樓黑榜殺手最新的懸賞名單",
+                "B) 開出《一例一休超時加班理賠單》逼阿福簽字",
+                "C) 掏出合歡宗雙修秘笈試圖與阿福私下交易",
+                "D) 將劇毒匕首架在阿福脖子上逼他透露分舵地圖",
+                "E) 移動前往黑風寨山腳察看埋伏陷阱"
             ]
         else:
             return [
-                f"A) 亮出武器防備阿福突襲，詢問血衣樓的接單規則",
-                f"B) 提醒阿福現在已過下班時間，打卡下班可避免工傷",
-                f"C) 拔出利刃冷不防割向阿福右手動脈進行強襲"
+                "A) 亮出武器防備阿福突襲，詢問血衣樓的接單規則",
+                "B) 提醒阿福現在已過下班時間，打卡下班可避免工傷",
+                "C) 湊近阿福耳邊輕語利益交換誘惑條款",
+                "D) 拔出利刃冷不防割向阿福右手動脈進行強襲",
+                "E) 移動前往亂葬崗搜尋避難點"
             ]
     elif npc_name == "錢莊老王":
         if turn % 2 == 0:
             return [
-                f"A) 詢問老王少林與武當鎮派武學的拍賣行情",
-                f"B) 提議成立『龍門對沖基金』進行高槓桿做空",
-                f"C) 捏住老王手腕將劇毒滲入其脈搏脅迫劃轉銀票"
+                "A) 詢問老王少林與武當鎮派武學的拍賣行情",
+                "B) 提議成立『龍門對沖基金』進行高槓桿做空",
+                "C) 上前對老王展露魅力試圖減免貸款利息",
+                "D) 捏住老王手腕將劇毒滲入其脈搏脅迫劃轉銀票",
+                "E) 移動前往少林寺下鎮聽取梵音淨化心神"
             ]
         else:
             return [
-                f"A) 詢問老王錢莊當前存款與借貸年化利率",
-                f"B) 拿出不良資產包證券化 (MBS) 方案要求槓桿加碼",
-                f"C) 亮出沾血匕首逼老王交出總庫房鑰匙"
+                "A) 詢問老王錢莊當前存款與借貸年化利率",
+                "B) 拿出不良資產包證券化 (MBS) 方案要求槓桿加碼",
+                "C) 湊近老王耳邊低語財色交易條款",
+                "D) 亮出沾血匕首逼老王交出總庫房鑰匙",
+                "E) 在錢莊櫃檯周邊仔細搜尋帳簿與地圖"
             ]
     return [
         f"A) 在當前地區 [{location_name}] 仔細搜尋蛛絲馬跡",
-        f"B) 掏出《勞動基準法》與理賠條款進行談判拉扯",
-        f"C) 上前進行身體接觸與耳邊輕語誘惑條款"
+        "B) 掏出《勞動基準法》與理賠條款進行談判拉扯",
+        "C) 上前進行身體接觸與耳邊輕語誘惑條款",
+        "D) 眼神一冷搜刮隨身帶有的密卷與銀票",
+        "E) 移動前往周邊安全區域避開風頭"
     ]
 
 
@@ -265,9 +287,13 @@ def restore_web_state_after_load(engine: GameEngine, msg_text: str):
         gr.update(value=opts[0]),
         gr.update(value=opts[1]),
         gr.update(value=opts[2]),
+        gr.update(value=opts[3]),
+        gr.update(value=opts[4]),
         opts[0],
         opts[1],
-        opts[2]
+        opts[2],
+        opts[3],
+        opts[4]
     )
 
 
@@ -304,9 +330,12 @@ def continue_game(custom_name: str):
         return (
             gr.update(visible=False),
             gr.update(visible=True),
-            res[0], res[1], res[2], res[3], res[4], res[5], res[6], res[7], res[8], res[9], res[10], res[11], res[12], res[13], res[14]
+            res[0], res[1], res[2], res[3], res[4], res[5], res[6], res[7], res[8],
+            res[9], res[10], res[11], res[12], res[13],
+            res[14], res[15], res[16], res[17], res[18]
         )
     else:
+        opts = DEFAULT_OPTIONS
         return (
             gr.update(visible=True),
             gr.update(visible=False),
@@ -319,8 +348,8 @@ def continue_game(custom_name: str):
             engine.current_location,
             engine.current_agent.profile.name if engine.current_agent else None,
             get_saves_markdown(),
-            gr.update(), gr.update(), gr.update(),
-            DEFAULT_OPTIONS[0], DEFAULT_OPTIONS[1], DEFAULT_OPTIONS[2]
+            gr.update(value=opts[0]), gr.update(value=opts[1]), gr.update(value=opts[2]), gr.update(value=opts[3]), gr.update(value=opts[4]),
+            opts[0], opts[1], opts[2], opts[3], opts[4]
         )
 
 
@@ -338,9 +367,13 @@ def on_select_npc(custom_name: str, npc_name: str):
         gr.update(value=opts[0]),
         gr.update(value=opts[1]),
         gr.update(value=opts[2]),
+        gr.update(value=opts[3]),
+        gr.update(value=opts[4]),
         opts[0],
         opts[1],
-        opts[2]
+        opts[2],
+        opts[3],
+        opts[4]
     )
 
 
@@ -369,9 +402,13 @@ def on_select_location(custom_name: str, location_name: str, history: list):
             gr.update(value=opts[0]),
             gr.update(value=opts[1]),
             gr.update(value=opts[2]),
+            gr.update(value=opts[3]),
+            gr.update(value=opts[4]),
             opts[0],
             opts[1],
-            opts[2]
+            opts[2],
+            opts[3],
+            opts[4]
         )
     return (
         clean_history,
@@ -386,6 +423,10 @@ def on_select_location(custom_name: str, location_name: str, history: list):
         gr.update(),
         gr.update(),
         gr.update(),
+        gr.update(),
+        gr.update(),
+        gr.update(),
+        gr.update(),
         gr.update()
     )
 
@@ -394,14 +435,15 @@ def enter_jianghu(custom_name: str):
     clean_name = custom_name.strip() if custom_name else "楚留香"
     engine = get_engine_for_user(clean_name)
 
-    # 檢查該帳號是否有歷史存檔
     if has_account_save(clean_name):
         engine.load_account(clean_name)
         res = restore_web_state_after_load(engine, f"帳號 [{clean_name}] 已成功連線載入上次進度！")
         return (
             gr.update(visible=False),
             gr.update(visible=True),
-            res[0], res[1], res[2], res[3], res[4], res[5], res[6], res[7], res[8], res[9], res[10], res[11], res[12], res[13], res[14]
+            res[0], res[1], res[2], res[3], res[4], res[5], res[6], res[7], res[8],
+            res[9], res[10], res[11], res[12], res[13],
+            res[14], res[15], res[16], res[17], res[18]
         )
 
     engine.set_player_name(clean_name)
@@ -424,27 +466,38 @@ def enter_jianghu(custom_name: str):
         get_map_markdown(engine),
         get_npc_dossier_markdown(engine),
         get_world_news_markdown(engine),
+        f"歡迎大俠 [{clean_name}] 踏入江湖！",
+        engine.current_location,
+        engine.current_agent.profile.name if engine.current_agent else None,
+        get_saves_markdown(),
         gr.update(value=opts[0]),
         gr.update(value=opts[1]),
         gr.update(value=opts[2]),
+        gr.update(value=opts[3]),
+        gr.update(value=opts[4]),
         opts[0],
         opts[1],
-        opts[2]
+        opts[2],
+        opts[3],
+        opts[4]
     )
 
 
-def process_player_choice(custom_name: str, user_input: str, history: list, prev_opt_a: str = "", prev_opt_b: str = "", prev_opt_c: str = ""):
+def process_player_choice(custom_name: str, user_input: str, history: list, prev_opt_a: str = "", prev_opt_b: str = "", prev_opt_c: str = "", prev_opt_d: str = "", prev_opt_e: str = ""):
     engine = get_engine_for_user(custom_name)
     clean_history = parse_history(history)
 
     if not user_input or not user_input.strip():
         return (
-            "",
             clean_history,
             get_status_markdown(engine),
             get_map_markdown(engine),
             get_npc_dossier_markdown(engine),
             get_world_news_markdown(engine),
+            gr.update(),
+            gr.update(),
+            gr.update(),
+            gr.update(),
             gr.update(),
             gr.update(),
             gr.update(),
@@ -534,10 +587,10 @@ def process_player_choice(custom_name: str, user_input: str, history: list, prev
     })
 
     # 校驗選項是否重複，若重複或包含佔位符則自動刷新動態選項
-    raw_opts = delta.options if (delta.options and len(delta.options) >= 3) else fallback_opts
+    raw_opts = delta.options if (delta.options and len(delta.options) >= 5) else fallback_opts
     is_repeated = any(opt == prev_opt_a or opt == prev_opt_b for opt in raw_opts) or any(is_placeholder_option(opt) for opt in raw_opts)
 
-    if is_repeated:
+    if is_repeated or len(raw_opts) < 5:
         opts = generate_dynamic_options(npc_name, engine.current_location, intimacy, engine.game_turn)
     else:
         opts = raw_opts
@@ -545,12 +598,12 @@ def process_player_choice(custom_name: str, user_input: str, history: list, prev
     opt_a = opts[0]
     opt_b = opts[1]
     opt_c = opts[2]
+    opt_d = opts[3]
+    opt_e = opts[4]
 
-    # 每一輪推進劇情後自動為帳號存檔 (自動即時存檔)
     engine.auto_save()
 
     return (
-        "",
         clean_history,
         get_status_markdown(engine),
         get_map_markdown(engine),
@@ -559,9 +612,13 @@ def process_player_choice(custom_name: str, user_input: str, history: list, prev
         gr.update(value=opt_a),
         gr.update(value=opt_b),
         gr.update(value=opt_c),
+        gr.update(value=opt_d),
+        gr.update(value=opt_e),
         opt_a,
         opt_b,
-        opt_c
+        opt_c,
+        opt_d,
+        opt_e
     )
 
 
@@ -582,15 +639,14 @@ def reset_chat(custom_name: str):
         gr.update(value=opts[0]),
         gr.update(value=opts[1]),
         gr.update(value=opts[2]),
+        gr.update(value=opts[3]),
+        gr.update(value=opts[4]),
         opts[0],
         opts[1],
         opts[2],
-        gr.update(visible=False)
+        opts[3],
+        opts[4]
     )
-
-
-def toggle_custom_input():
-    return gr.update(visible=True)
 
 
 # 建立 Gradio Web UI 介面
@@ -602,6 +658,8 @@ with gr.Blocks(title="Local Blade RPG Engine") as demo:
     state_opt_a = gr.State(DEFAULT_OPTIONS[0])
     state_opt_b = gr.State(DEFAULT_OPTIONS[1])
     state_opt_c = gr.State(DEFAULT_OPTIONS[2])
+    state_opt_d = gr.State(DEFAULT_OPTIONS[3])
+    state_opt_e = gr.State(DEFAULT_OPTIONS[4])
 
     # 1. 序幕的故事、自由取名與背景衝突展示區
     with gr.Column(visible=True) as prologue_group:
@@ -665,29 +723,24 @@ with gr.Blocks(title="Local Blade RPG Engine") as demo:
             with gr.Column(scale=2):
                 chatbot = gr.Chatbot(label="遊戲對話紀錄", height=450)
 
-                gr.Markdown("### 🎯 劇情動態選項")
-                with gr.Row():
+                gr.Markdown("### 🎯 劇情動態選項 (請選擇要發動的行動)")
+                with gr.Column():
                     btn_opt_a = gr.Button(DEFAULT_OPTIONS[0], variant="primary")
                     btn_opt_b = gr.Button(DEFAULT_OPTIONS[1], variant="secondary")
                     btn_opt_c = gr.Button(DEFAULT_OPTIONS[2], variant="stop")
-
-                with gr.Row():
-                    btn_other = gr.Button("✏️ [其它/自由打字]", variant="secondary")
-
-                with gr.Row(visible=False) as custom_input_row:
-                    input_box = gr.Textbox(
-                        show_label=False,
-                        placeholder="輸入自訂行動或對話...",
-                        lines=2,
-                        scale=4
-                    )
-                    submit_btn = gr.Button("發送自訂行動", variant="primary", scale=1)
+                    btn_opt_d = gr.Button(DEFAULT_OPTIONS[3], variant="secondary")
+                    btn_opt_e = gr.Button(DEFAULT_OPTIONS[4], variant="secondary")
 
     # 踏入江湖點擊事件
     btn_enter_game.click(
         fn=enter_jianghu,
         inputs=[player_name_input],
-        outputs=[prologue_group, main_game_group, chatbot, status_box, map_box, dossier_box, news_box, btn_opt_a, btn_opt_b, btn_opt_c, state_opt_a, state_opt_b, state_opt_c]
+        outputs=[
+            prologue_group, main_game_group, chatbot, status_box, map_box, dossier_box, news_box,
+            system_msg, location_dropdown, npc_dropdown, save_list_box,
+            btn_opt_a, btn_opt_b, btn_opt_c, btn_opt_d, btn_opt_e,
+            state_opt_a, state_opt_b, state_opt_c, state_opt_d, state_opt_e
+        ]
     )
 
     # 繼續遊戲點擊事件
@@ -697,7 +750,8 @@ with gr.Blocks(title="Local Blade RPG Engine") as demo:
         outputs=[
             prologue_group, main_game_group, chatbot, status_box, map_box, dossier_box, news_box,
             system_msg, location_dropdown, npc_dropdown, save_list_box,
-            btn_opt_a, btn_opt_b, btn_opt_c, state_opt_a, state_opt_b, state_opt_c
+            btn_opt_a, btn_opt_b, btn_opt_c, btn_opt_d, btn_opt_e,
+            state_opt_a, state_opt_b, state_opt_c, state_opt_d, state_opt_e
         ]
     )
 
@@ -713,8 +767,8 @@ with gr.Blocks(title="Local Blade RPG Engine") as demo:
         inputs=[player_name_input, slot_dropdown],
         outputs=[
             chatbot, status_box, map_box, dossier_box, news_box, system_msg, location_dropdown,
-            npc_dropdown, save_list_box, btn_opt_a, btn_opt_b, btn_opt_c,
-            state_opt_a, state_opt_b, state_opt_c
+            npc_dropdown, save_list_box, btn_opt_a, btn_opt_b, btn_opt_c, btn_opt_d, btn_opt_e,
+            state_opt_a, state_opt_b, state_opt_c, state_opt_d, state_opt_e
         ]
     )
 
@@ -722,59 +776,83 @@ with gr.Blocks(title="Local Blade RPG Engine") as demo:
     location_dropdown.change(
         fn=on_select_location,
         inputs=[player_name_input, location_dropdown, chatbot],
-        outputs=[chatbot, status_box, map_box, dossier_box, news_box, system_msg, npc_dropdown, btn_opt_a, btn_opt_b, btn_opt_c, state_opt_a, state_opt_b, state_opt_c]
+        outputs=[
+            chatbot, status_box, map_box, dossier_box, news_box, system_msg, npc_dropdown,
+            btn_opt_a, btn_opt_b, btn_opt_c, btn_opt_d, btn_opt_e,
+            state_opt_a, state_opt_b, state_opt_c, state_opt_d, state_opt_e
+        ]
     )
 
     # 事件繫結
     npc_dropdown.change(
         fn=on_select_npc,
         inputs=[player_name_input, npc_dropdown],
-        outputs=[status_box, dossier_box, system_msg, btn_opt_a, btn_opt_b, btn_opt_c, state_opt_a, state_opt_b, state_opt_c]
+        outputs=[
+            status_box, dossier_box, system_msg,
+            btn_opt_a, btn_opt_b, btn_opt_c, btn_opt_d, btn_opt_e,
+            state_opt_a, state_opt_b, state_opt_c, state_opt_d, state_opt_e
+        ]
     )
 
-    # 點擊選項 A / B / C 直接推進劇情
+    # 點擊選項 A / B / C / D / E 直接推進劇情
     btn_opt_a.click(
         fn=process_player_choice,
-        inputs=[player_name_input, state_opt_a, chatbot, state_opt_a, state_opt_b, state_opt_c],
-        outputs=[input_box, chatbot, status_box, map_box, dossier_box, news_box, btn_opt_a, btn_opt_b, btn_opt_c, state_opt_a, state_opt_b, state_opt_c]
+        inputs=[player_name_input, state_opt_a, chatbot, state_opt_a, state_opt_b, state_opt_c, state_opt_d, state_opt_e],
+        outputs=[
+            chatbot, status_box, map_box, dossier_box, news_box,
+            btn_opt_a, btn_opt_b, btn_opt_c, btn_opt_d, btn_opt_e,
+            state_opt_a, state_opt_b, state_opt_c, state_opt_d, state_opt_e
+        ]
     )
 
     btn_opt_b.click(
         fn=process_player_choice,
-        inputs=[player_name_input, state_opt_b, chatbot, state_opt_a, state_opt_b, state_opt_c],
-        outputs=[input_box, chatbot, status_box, map_box, dossier_box, news_box, btn_opt_a, btn_opt_b, btn_opt_c, state_opt_a, state_opt_b, state_opt_c]
+        inputs=[player_name_input, state_opt_b, chatbot, state_opt_a, state_opt_b, state_opt_c, state_opt_d, state_opt_e],
+        outputs=[
+            chatbot, status_box, map_box, dossier_box, news_box,
+            btn_opt_a, btn_opt_b, btn_opt_c, btn_opt_d, btn_opt_e,
+            state_opt_a, state_opt_b, state_opt_c, state_opt_d, state_opt_e
+        ]
     )
 
     btn_opt_c.click(
         fn=process_player_choice,
-        inputs=[player_name_input, state_opt_c, chatbot, state_opt_a, state_opt_b, state_opt_c],
-        outputs=[input_box, chatbot, status_box, map_box, dossier_box, news_box, btn_opt_a, btn_opt_b, btn_opt_c, state_opt_a, state_opt_b, state_opt_c]
+        inputs=[player_name_input, state_opt_c, chatbot, state_opt_a, state_opt_b, state_opt_c, state_opt_d, state_opt_e],
+        outputs=[
+            chatbot, status_box, map_box, dossier_box, news_box,
+            btn_opt_a, btn_opt_b, btn_opt_c, btn_opt_d, btn_opt_e,
+            state_opt_a, state_opt_b, state_opt_c, state_opt_d, state_opt_e
+        ]
     )
 
-    # 點擊 [其他] 展開自由輸入框
-    btn_other.click(
-        fn=toggle_custom_input,
-        inputs=[],
-        outputs=[custom_input_row]
-    )
-
-    # 發送自訂行動
-    submit_btn.click(
+    btn_opt_d.click(
         fn=process_player_choice,
-        inputs=[player_name_input, input_box, chatbot, state_opt_a, state_opt_b, state_opt_c],
-        outputs=[input_box, chatbot, status_box, map_box, dossier_box, news_box, btn_opt_a, btn_opt_b, btn_opt_c, state_opt_a, state_opt_b, state_opt_c]
+        inputs=[player_name_input, state_opt_d, chatbot, state_opt_a, state_opt_b, state_opt_c, state_opt_d, state_opt_e],
+        outputs=[
+            chatbot, status_box, map_box, dossier_box, news_box,
+            btn_opt_a, btn_opt_b, btn_opt_c, btn_opt_d, btn_opt_e,
+            state_opt_a, state_opt_b, state_opt_c, state_opt_d, state_opt_e
+        ]
     )
 
-    input_box.submit(
+    btn_opt_e.click(
         fn=process_player_choice,
-        inputs=[player_name_input, input_box, chatbot, state_opt_a, state_opt_b, state_opt_c],
-        outputs=[input_box, chatbot, status_box, map_box, dossier_box, news_box, btn_opt_a, btn_opt_b, btn_opt_c, state_opt_a, state_opt_b, state_opt_c]
+        inputs=[player_name_input, state_opt_e, chatbot, state_opt_a, state_opt_b, state_opt_c, state_opt_d, state_opt_e],
+        outputs=[
+            chatbot, status_box, map_box, dossier_box, news_box,
+            btn_opt_a, btn_opt_b, btn_opt_c, btn_opt_d, btn_opt_e,
+            state_opt_a, state_opt_b, state_opt_c, state_opt_d, state_opt_e
+        ]
     )
 
     reset_btn.click(
         fn=reset_chat,
         inputs=[player_name_input],
-        outputs=[chatbot, system_msg, status_box, map_box, dossier_box, news_box, btn_opt_a, btn_opt_b, btn_opt_c, state_opt_a, state_opt_b, state_opt_c, custom_input_row]
+        outputs=[
+            chatbot, system_msg, status_box, map_box, dossier_box, news_box,
+            btn_opt_a, btn_opt_b, btn_opt_c, btn_opt_d, btn_opt_e,
+            state_opt_a, state_opt_b, state_opt_c, state_opt_d, state_opt_e
+        ]
     )
 
 
