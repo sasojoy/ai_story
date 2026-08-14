@@ -5,7 +5,7 @@ from unittest.mock import patch, MagicMock
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from src.ollama_client import OllamaClient, clean_json_text
+from src.ollama_client import OllamaClient, clean_json_text, repair_truncated_json, parse_json_robustly
 from src.models import GameStateDelta
 
 
@@ -15,6 +15,13 @@ class TestOllamaClient(unittest.TestCase):
         raw_markdown = "```json\n{\"narrative\": \"test\", \"npc_status_tag\": \"normal\"}\n```"
         cleaned = clean_json_text(raw_markdown)
         self.assertEqual(cleaned, "{\"narrative\": \"test\", \"npc_status_tag\": \"normal\"}")
+
+    def test_repair_truncated_json(self):
+        truncated_raw = '{"narrative": "殺手阿福擦拭著鐵劍", "options": ["A) 詢問意圖"'
+        repaired = repair_truncated_json(truncated_raw)
+        parsed = parse_json_robustly(repaired)
+        self.assertEqual(parsed["narrative"], "殺手阿福擦拭著鐵劍")
+        self.assertEqual(parsed["options"], ["A) 詢問意圖"])
 
     @patch("requests.get")
     def test_check_health_success(self, mock_get):

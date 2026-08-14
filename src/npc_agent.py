@@ -62,6 +62,8 @@ class NPCAgent:
             f"修為等級: Level {player_state.cultivation_level} (經驗={player_state.cultivation_exp}) | 雙修功法/武學: [{arts_str}]\n"
             f"金幣={player_state.gold} | 背包=[{inventory_str}]\n"
             f"對當前 NPC ({npc_name}) 的親密度/好感度: {self.profile.intimacy}/100\n"
+            f"NPC 當前自主行動: {self.profile.current_activity}\n"
+            f"NPC 人際社交關係: {self.profile.relationships}\n"
         )
 
         lorebook = load_lorebook(self.lorebook_path)
@@ -144,6 +146,88 @@ class NPCAgent:
         )
         return prompt
 
+    def _generate_fallback_delta(
+        self,
+        player_action: str,
+        player_state: PlayerState,
+        current_location: str = "龍門客棧",
+        err_msg: str = ""
+    ) -> GameStateDelta:
+        """當 Ollama 連線失敗或解析異常時，智慧推演符合 NPC 個性的保底劇情，絕不無情靜默"""
+        p_name = player_state.name
+        npc_name = self.profile.name
+
+        if npc_name == "風騷老闆娘":
+            narrative = (
+                f"{p_name}身形前傾，直視著風騷老闆娘賽金花。賽金花眼波盈盈，纖手順勢撫過酒櫃上的古藤酒壺，"
+                f"朱唇微啟笑道：『大俠這般氣勢洶洶，莫非嫌老娘這龍門客棧的酒不夠濃，還是嫌今夜的天字房不夠熱鬧？』"
+                f"燭光搖曳下，她的嬌軀微傾，眼神中透著幾分動情與深層試探。"
+            )
+            tag = "嬌笑"
+            opts = [
+                "A) 探聽龍門客棧密道與黑市秘寶情報",
+                "B) 掏出商業合同提議將客棧資產打包上市",
+                "C) 湊近老闆娘耳畔撫摸其手背討要天字房鑰匙"
+            ]
+        elif npc_name == "合歡宗聖女":
+            narrative = (
+                f"{p_name}步步逼近。合歡宗聖女柳如煙修長的美腿在紅燭微光下若隱若現，七情魔音鈴發出清脆叮噹聲。"
+                f"她輕按胸口，微醺的眼波流轉，吐息如蘭道：『少俠心跳得這般急，莫非我合歡宗的太上陰陽心法，已經勾動了少俠的心神？』"
+            )
+            tag = "魅惑"
+            opts = [
+                "A) 詢問合歡宗雙修心法與師門詛咒真相",
+                "B) 質疑合歡宗深夜出診違反勞動基準法要求補償",
+                "C) 溫柔將聖女攬入懷中在耳邊輕語運轉雙修靈氣"
+            ]
+        elif npc_name == "殺手阿福":
+            narrative = (
+                f"{p_name}靠近暗巷中的殺手阿福。阿福正在擦拭鏽蝕鐵劍，眼角餘光掠過你的身影，掏出懷中的懷錶冷哼一聲："
+                f"『今日工時已滿！若無預付定金與超時加班費，血衣樓恕不接單。大俠請回吧！』"
+            )
+            tag = "算計工時"
+            opts = [
+                "A) 詢問血衣樓黑榜殺手最新的懸賞名單",
+                "B) 出示勞動基準法條文要求開具加班費理賠單",
+                "C) 亮出利刃架在阿福脖子上逼問血衣樓分舵線索"
+            ]
+        elif npc_name == "錢莊老王":
+            narrative = (
+                f"{p_name}立於櫃檯前。錢莊老王算盤撥得噼啪作響，金光爍爍的雙眼掃過你身上的沉重背包，嘿嘿笑道："
+                f"『客官是來存款還是借貸？龍門錢莊即日起推出高槓桿期貨，保證年化收益翻倍！』"
+            )
+            tag = "精算"
+            opts = [
+                "A) 詢問錢莊存款利率與少林武當抵押貸款行情",
+                "B) 拿出不良資產證券化 (MBS) 方案要求槓桿加碼",
+                "C) 亮出沾血匕首逼老王交出總庫房鑰匙與銀票"
+            ]
+        else:
+            narrative = (
+                f"{p_name}對著{npc_name}開口表達意圖。{npc_name}眼神微動，轉過身來打量著你，緩緩說道："
+                f"『江湖險惡，不知閣下專程前來所為何事？』"
+            )
+            tag = "思索"
+            opts = [
+                f"A) 抱拳向{npc_name}詢問當前地區 [{current_location}] 的傳聞",
+                f"B) 掏出勞動基準法條文與{npc_name}進行談判拉扯",
+                f"C) 上前對{npc_name}進行身體接觸與耳邊輕語試探"
+            ]
+
+        return GameStateDelta(
+            narrative=narrative,
+            player_hp_change=0,
+            player_stamina_change=0,
+            player_gold_change=0,
+            intimacy_change=2,
+            cultivation_exp_gained=5,
+            inventory_added=[],
+            inventory_removed=[],
+            npc_status_tag=tag,
+            world_flag_set={},
+            options=opts
+        )
+
     def process_action(
         self,
         client: OllamaClient,
@@ -170,7 +254,7 @@ class NPCAgent:
 
         messages = [{"role": "system", "content": system_prompt}]
 
-        recent_history = self.history[-6:]
+        recent_history = self.history[-4:]
         for msg in recent_history:
             messages.append(msg)
 
@@ -187,13 +271,24 @@ class NPCAgent:
             f"【玩家 ({player_state.name}) 最新行動 (地點={current_location}, 回合={game_turn})】: 「{player_action}」\n"
             f"請緊扣【上一輪劇情結局】與最新行動「{player_action}」，以半文半白武俠風格撰寫 150~300 字富含微表情、動作張力與官能氣氛的小說段落，詳細描述 {self.profile.name} 的反應與對白！"
             f"同時推演親密度變更 (intimacy_change)、雙修經驗 (cultivation_exp_gained)、主線更新與 3 個具體動態選項 (options A/B/C)。"
+            f"\n重要：請直接輸出 JSON 物件，嚴禁包含 Markdown 標記或額外文字！"
         )
         messages.append({"role": "user", "content": action_prompt})
 
-        delta = client.chat_structured(
-            messages=messages,
-            response_model=GameStateDelta
-        )
+        try:
+            delta = client.chat_structured(
+                messages=messages,
+                response_model=GameStateDelta
+            )
+        except Exception as e:
+            import logging
+            logging.warning(f"Ollama 推演異常 ({e})，觸發 NPC [{self.profile.name}] 智慧保底動態響應")
+            delta = self._generate_fallback_delta(
+                player_action=player_action,
+                player_state=player_state,
+                current_location=current_location,
+                err_msg=str(e)
+            )
 
         # 紀錄歷史對話
         self.history.append({"role": "user", "content": player_action})

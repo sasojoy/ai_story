@@ -94,7 +94,7 @@ def main():
         print(f"[!] 警告: 無法連線至 Ollama ({engine.game_config.ollama_url})！")
         print("請確認 Ollama 服務已啟動 (例如: ollama run qwen2.5:1.5b)")
 
-    print("\n提示指令: [/switch 切換NPC] [/save 1 快速存檔] [/load 1 讀取存檔] [/status 玩家狀態] [/reset 重置對話] [/exit 退出遊戲]")
+    print("\n提示指令: [/switch 切換NPC] [/dossier 查看NPC生平檔案] [/save 1 快速存檔] [/load 1 讀取存檔] [/status 玩家狀態] [/reset 重置對話] [/exit 退出遊戲]")
 
     last_options = [
         "A) 亮出兵器靜觀其變，開口詢問對方的意圖",
@@ -149,10 +149,17 @@ def main():
                 switch_npc_menu(engine)
                 continue
 
-            elif user_input.lower() in ["/status", "status"]:
-                print(f"\n世界事件 Flag: {engine.world_flags}")
-                print(f"主線摘要: {engine.main_quest_summary}")
-                print(f"勢力聲望: {engine.factions}")
+            elif user_input.lower() in ["/dossier", "dossier", "/npc", "npc"]:
+                if engine.current_agent:
+                    profile = engine.current_agent.profile
+                    print(f"\n【NPC 詳細檔案與生平解鎖】: {profile.name} ({profile.identity})")
+                    print(f"親密度: {profile.intimacy}/100 (提示: 提升親密度至 25/50/75 可逐步解鎖數值與生平)")
+                    print(f"數值情報: {profile.get_unlocked_stats()}")
+                    print("生平故事:")
+                    for b in profile.get_unlocked_biography():
+                        print(f"  - {b}")
+                else:
+                    print("\n>>> 當前未選定互動 NPC。")
                 continue
 
             elif user_input.lower() in ["/reset", "reset"]:

@@ -39,6 +39,9 @@ def save_game(slot_id: int, engine: Any) -> str:
     for name, agent in engine.agents.items():
         npcs_data[name] = {
             "intimacy": agent.profile.intimacy,
+            "current_activity": agent.profile.current_activity,
+            "relationships": agent.profile.relationships,
+            "recent_activities": agent.profile.recent_activities,
             "current_status_tag": agent.current_status_tag,
             "history": agent.history
         }
@@ -57,6 +60,7 @@ def save_game(slot_id: int, engine: Any) -> str:
         "game_turn": engine.game_turn,
         "factions": engine.factions,
         "world_flags": engine.world_flags,
+        "world_news": getattr(engine, "world_news", []),
         "current_npc_name": engine.current_agent.profile.name if engine.current_agent else "",
         "npcs_data": npcs_data
     }
@@ -76,6 +80,9 @@ def save_account_game(account_name: str, engine: Any) -> str:
     for name, agent in engine.agents.items():
         npcs_data[name] = {
             "intimacy": agent.profile.intimacy,
+            "current_activity": agent.profile.current_activity,
+            "relationships": agent.profile.relationships,
+            "recent_activities": agent.profile.recent_activities,
             "current_status_tag": agent.current_status_tag,
             "history": agent.history
         }
@@ -94,6 +101,7 @@ def save_account_game(account_name: str, engine: Any) -> str:
         "game_turn": engine.game_turn,
         "factions": engine.factions,
         "world_flags": engine.world_flags,
+        "world_news": getattr(engine, "world_news", []),
         "current_npc_name": engine.current_agent.profile.name if engine.current_agent else "",
         "npcs_data": npcs_data
     }
@@ -138,6 +146,8 @@ def load_game_from_file(save_path: str, engine: Any) -> bool:
         engine.game_turn = save_data.get("game_turn", 1)
         engine.factions = dict(save_data.get("factions", {}))
         engine.world_flags = dict(save_data.get("world_flags", {}))
+        if "world_news" in save_data:
+            engine.world_news = list(save_data["world_news"])
 
         # 還原 NPC 狀態與對話歷史
         npcs_data = save_data.get("npcs_data", {})
@@ -145,6 +155,12 @@ def load_game_from_file(save_path: str, engine: Any) -> bool:
             if name in engine.agents:
                 agent = engine.agents[name]
                 agent.profile.intimacy = npc_info.get("intimacy", 0)
+                if "current_activity" in npc_info:
+                    agent.profile.current_activity = npc_info["current_activity"]
+                if "relationships" in npc_info:
+                    agent.profile.relationships = dict(npc_info["relationships"])
+                if "recent_activities" in npc_info:
+                    agent.profile.recent_activities = list(npc_info["recent_activities"])
                 agent.current_status_tag = npc_info.get("current_status_tag", "正常")
                 agent.history = list(npc_info.get("history", []))
 

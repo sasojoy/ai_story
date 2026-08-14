@@ -50,26 +50,57 @@ class GameStateDelta(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def normalize_llm_dict(cls, data: Any) -> Any:
+        import re
+
         if not isinstance(data, dict):
             return data
 
-        # 1. 處理數值欄位為 None 的情況
+        # 1. 處理數值欄位為 None 或字串的情況
         for int_field in [
             "player_hp_change", "player_stamina_change", "player_gold_change",
             "player_charm_change", "intimacy_change", "cultivation_exp_gained"
         ]:
-            if data.get(int_field) is None:
+            val = data.get(int_field)
+            if val is None:
+                data[int_field] = 0
+            elif isinstance(val, (int, float)):
+                data[int_field] = int(val)
+            elif isinstance(val, str):
+                m = re.search(r'[-+]?\d+', val)
+                data[int_field] = int(m.group(0)) if m else 0
+            else:
                 data[int_field] = 0
 
-        # 2. 處理容器欄位為 None 或非目標型態的情況
-        if data.get("faction_reputation_changes") is None or not isinstance(data.get("faction_reputation_changes"), dict):
-            data["faction_reputation_changes"] = {}
-
+        # 2. 處理容器欄位 (List[str])
         for list_field in ["inventory_added", "inventory_removed", "unlocked_locations", "available_exits"]:
-            if data.get(list_field) is None or not isinstance(data.get(list_field), list):
+            val = data.get(list_field)
+            if val is None:
+                data[list_field] = []
+            elif isinstance(val, str):
+                s_val = val.strip()
+                data[list_field] = [s_val] if s_val and s_val != "無" else []
+            elif isinstance(val, dict):
+                data[list_field] = [str(v) for v in val.values() if v]
+            elif isinstance(val, list):
+                data[list_field] = [str(x) for x in val if x]
+            else:
                 data[list_field] = []
 
-        # 3. 處理 world_flag_set 欄位型態過濾與相容
+        # 3. 處理 Dict[str, int] 欄位 (faction_reputation_changes)
+        f_rep = data.get("faction_reputation_changes")
+        if not isinstance(f_rep, dict):
+            data["faction_reputation_changes"] = {}
+        else:
+            clean_f_rep = {}
+            for k, v in f_rep.items():
+                if isinstance(v, (int, float)):
+                    clean_f_rep[str(k)] = int(v)
+                elif isinstance(v, str):
+                    m = re.search(r'[-+]?\d+', v)
+                    clean_f_rep[str(k)] = int(m.group(0)) if m else 0
+            data["faction_reputation_changes"] = clean_f_rep
+
+        # 4. 處理 world_flag_set 欄位型態過濾與相容
         if "world_flag_set" in data and isinstance(data["world_flag_set"], dict):
             clean_flags = {}
             for k, v in data["world_flag_set"].items():
@@ -89,10 +120,10 @@ class GameStateDelta(BaseModel):
                         else:
                             clean_flags[str(k)] = bool(v_str)
             data["world_flag_set"] = clean_flags
-        elif data.get("world_flag_set") is None or not isinstance(data.get("world_flag_set"), dict):
+        else:
             data["world_flag_set"] = {}
 
-        # 4. 處理 current_location (若 LLM 回傳 dict 如 {'name': '龍門客棧'})
+        # 5. 處理 current_location (若 LLM 回傳 dict 如 {'name': '龍門客棧'})
         if "current_location" in data and data["current_location"]:
             if isinstance(data["current_location"], dict):
                 loc_val = data["current_location"].get("name") or data["current_location"].get("location") or str(data["current_location"])
@@ -100,7 +131,7 @@ class GameStateDelta(BaseModel):
             elif not isinstance(data["current_location"], str):
                 data["current_location"] = str(data["current_location"])
 
-        # 5. 處理 narrative 欄位別名
+        # 6. 處理 narrative 欄位別名
         if not data.get("narrative") or str(data.get("narrative")).strip() in ["...", ""]:
             for alias in [
                 "content", "story", "description", "response", "answer",
@@ -112,26 +143,33 @@ class GameStateDelta(BaseModel):
         if not data.get("narrative"):
             data["narrative"] = "..."
 
-        # 6. 處理 npc_status_tag 別名
+        # 7. 處理 npc_status_tag 別名與靜默標籤轉置
         if "npc_status_tag" not in data or not data["npc_status_tag"]:
             for alias in ["status", "npc_status", "tag", "emotion"]:
                 if alias in data and data[alias]:
                     data["npc_status_tag"] = str(data[alias])
                     break
-        if "npc_status_tag" not in data or not data["npc_status_tag"]:
-            data["npc_status_tag"] = "正常"
+        if not data.get("npc_status_tag") or data.get("npc_status_tag") in ["靜默", "None", "null", ""]:
+            data["npc_status_tag"] = "凝視"
 
-        # 7. 處理 main_quest_summary_update 別名
+        # 8. 處理 main_quest_summary_update 別名
         if not data.get("main_quest_summary_update"):
             for alias in ["main_quest_update", "quest_update", "main_quest", "quest_summary"]:
                 if alias in data and data[alias] and isinstance(data[alias], str):
                     data["main_quest_summary_update"] = str(data[alias]).strip()
                     break
 
-        # 8. 處理 options 欄位 (清理並自動替代佔位字詞)
-        if "options" in data and isinstance(data["options"], list):
-            clean_opts = []
-            for item in data["options"]:
+        # 9. 處理 options 欄位 (支援 dict, string 與 list)
+        raw_options = data.get("options")
+        clean_opts = []
+
+        if isinstance(raw_options, dict):
+            raw_options = list(raw_options.values())
+        elif isinstance(raw_options, str):
+            raw_options = [line.strip() for line in raw_options.splitlines() if line.strip()]
+
+        if isinstance(raw_options, list):
+            for item in raw_options:
                 val = ""
                 if isinstance(item, str):
                     val = item
@@ -145,14 +183,16 @@ class GameStateDelta(BaseModel):
                 if val and not is_placeholder_option(val):
                     clean_opts.append(str(val))
 
-            if len(clean_opts) >= 3:
-                data["options"] = clean_opts[:3]
-            else:
-                data["options"] = [
-                    "A) 亮出兵器靜觀其變，開口詢問對方的意圖",
-                    "B) 移動前往黑風寨山腳避開風頭",
-                    "C) 上前進行身體接觸與耳邊輕語誘惑條款"
-                ]
+        if len(clean_opts) >= 3:
+            data["options"] = clean_opts[:3]
+        else:
+            data["options"] = [
+                "A) 亮出兵器靜觀其變，開口詢問對方的意圖",
+                "B) 移動前往周邊安全區域避開風頭",
+                "C) 上前進行身體接觸與耳邊輕語試探"
+            ]
+
+        return data
 
         return data
 
@@ -164,7 +204,61 @@ class NPCProfile(BaseModel):
     hp: int = 100
     location: str
     intimacy: int = 0
+    current_activity: str = "正在靜待時機"
+    relationships: Dict[str, int] = Field(default_factory=dict)
+    recent_activities: List[str] = Field(default_factory=list)
+    stats: Dict[str, Any] = Field(
+        default_factory=lambda: {
+            "realm": "後天境",
+            "attack": 50,
+            "defense": 40,
+            "agility": 50,
+            "weapon": "尋常兵刃"
+        }
+    )
+    biography: List[str] = Field(
+        default_factory=lambda: [
+            "【初見印象】江湖中人，神祕莫測，需透過對話與提升親密度逐步解鎖其生平與不為人知的祕密。"
+        ]
+    )
     system_prompt_override: Optional[str] = None
+
+    def get_unlocked_biography(self) -> List[str]:
+        """根據親密度解鎖生平故事章節"""
+        total = len(self.biography)
+        if total == 0:
+            return []
+        if self.intimacy >= 75:
+            count = total
+        elif self.intimacy >= 50:
+            count = min(3, total)
+        elif self.intimacy >= 25:
+            count = min(2, total)
+        else:
+            count = 1
+        return self.biography[:count]
+
+    def get_unlocked_stats(self) -> Dict[str, Any]:
+        """根據親密度解鎖數值情報"""
+        unlocked = {}
+        unlocked["hp"] = self.hp
+        unlocked["location"] = self.location
+        
+        if self.intimacy < 25:
+            unlocked["realm"] = "???"
+            unlocked["attack"] = "???"
+            unlocked["defense"] = "???"
+            unlocked["agility"] = "???"
+            unlocked["weapon"] = "???"
+        elif self.intimacy < 50:
+            unlocked["realm"] = self.stats.get("realm", "後天境")
+            unlocked["attack"] = self.stats.get("attack", 50)
+            unlocked["defense"] = "???"
+            unlocked["agility"] = "???"
+            unlocked["weapon"] = self.stats.get("weapon", "未知")
+        else:
+            unlocked.update(self.stats)
+        return unlocked
 
 
 class PlayerState(BaseModel):

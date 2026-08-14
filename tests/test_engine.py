@@ -92,6 +92,78 @@ class TestEngine(unittest.TestCase):
         self.assertEqual(engine.player_state.gold, 100)  # 50 + 50
         self.assertIn("銀票", engine.player_state.inventory)
 
+    def test_npc_stats_and_biography_unlock(self):
+        profile = NPCProfile(
+            name="測試NPC",
+            identity="神祕客",
+            personality="寡言",
+            hp=100,
+            location="客棧",
+            intimacy=10,
+            stats={"attack": 80, "realm": "先天境"},
+            biography=["初見傳聞", "解鎖故事1", "解鎖故事2", "解鎖故事3"]
+        )
+        stats_low = profile.get_unlocked_stats()
+        self.assertEqual(stats_low["attack"], "???")
+        self.assertEqual(len(profile.get_unlocked_biography()), 1)
+
+        profile.intimacy = 30
+        stats_mid = profile.get_unlocked_stats()
+        self.assertEqual(stats_mid["attack"], 80)
+        self.assertEqual(len(profile.get_unlocked_biography()), 2)
+
+        profile.intimacy = 80
+        stats_high = profile.get_unlocked_stats()
+        self.assertEqual(stats_high["attack"], 80)
+        self.assertEqual(stats_high["realm"], "先天境")
+        self.assertEqual(len(profile.get_unlocked_biography()), 4)
+
+    def test_npc_autonomous_actions_and_world_news(self):
+        engine = GameEngine()
+        initial_news_count = len(engine.world_news)
+        self.assertGreater(initial_news_count, 0)
+
+        # 模擬一輪自主推演
+        engine.simulate_npc_autonomous_actions()
+        self.assertGreaterEqual(len(engine.world_news), initial_news_count)
+        self.assertIn("【江湖動態", engine.world_news[0])
+
+    def test_normalize_llm_dict_robustness(self):
+        raw_dict = {
+            "narrative": "老闆娘笑了笑",
+            "player_hp_change": "-10",
+            "inventory_added": "銀兩",
+            "npc_status_tag": "靜默",
+            "options": {
+                "A": "選項A測試",
+                "B": "選項B測試",
+                "C": "選項C測試"
+            }
+        }
+        delta = GameStateDelta.model_validate(raw_dict)
+        self.assertEqual(delta.player_hp_change, -10)
+        self.assertEqual(delta.inventory_added, ["銀兩"])
+        self.assertEqual(delta.npc_status_tag, "凝視")  # 轉置靜默標籤
+        self.assertEqual(len(delta.options), 3)
+
+    @patch("src.ollama_client.OllamaClient.chat_structured")
+    def test_npc_fallback_on_exception(self, mock_chat):
+        mock_chat.side_effect = Exception("Ollama service timeout")
+        agent = NPCAgent(self.profile)
+        mock_client = MagicMock()
+        mock_client.chat_structured.side_effect = Exception("Ollama service timeout")
+
+        delta = agent.process_action(
+            client=mock_client,
+            player_action="你好",
+            player_state=self.player_state
+        )
+
+        self.assertIsNotNone(delta)
+        self.assertNotEqual(delta.npc_status_tag, "靜默")
+        self.assertIn("殺手阿福", delta.narrative)
+        self.assertEqual(len(delta.options), 3)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -38,6 +38,12 @@ class GameEngine:
         self.current_location: str = "龍門客棧"
         self.unlocked_locations: Set[str] = set()
         self.recent_world_events: List[str] = []
+        self.world_news: List[str] = [
+            "【江湖動態】[殺手阿福] 正在暗巷按《勞基法》精算工時，拒絕了血衣樓的無償加班指令。",
+            "【江湖動態】[錢莊老王] 正在龍門錢莊發行「江湖第一期高利貸債券」，招攬各路豪客。",
+            "【江湖動態】[合歡宗聖女] 於天字房微醺品酒，暗中打量著闖入龍門客棧的各路強者。",
+            "【江湖動態】[風騷老闆娘] 在客棧酒櫃前親自下榻招攬豪客，打探著血秘卷的傳聞。"
+        ]
 
         for reg_name, reg_info in self.world_map.get("regions", {}).items():
             if reg_info.get("is_unlocked"):
@@ -144,6 +150,7 @@ class GameEngine:
             self.current_location = location_name
             self.unlocked_locations.add(location_name)
             self._update_bound_npc_for_location()
+            self.simulate_npc_autonomous_actions()
             return True
         return False
 
@@ -263,6 +270,62 @@ class GameEngine:
             if len(self.recent_world_events) > 5:
                 self.recent_world_events = self.recent_world_events[-5:]
 
+    def simulate_npc_autonomous_actions(self):
+        """每回合進行非當前 NPC 的自主行為推演與社交關聯演變"""
+        import random
+
+        activities_pool = {
+            "殺手阿福": [
+                ("正在暗巷擦拭鏽蝕鐵劍，同時翻閱《勞動基準法》條文", {"錢莊老王": -5}),
+                ("準時響應六點下班號角，收劍歸鞘並向過路客商索要延時精神損失費", {"風騷老闆娘": +5}),
+                ("在暗巷一招震退兩名前來催討加班費的血衣樓小卒", {"風騷老闆娘": +5, "錢莊老王": -5}),
+                ("坐在客棧外石凳上閉目養神，嚴正拒絕任何未支付預付款的刺殺委託", {})
+            ],
+            "錢莊老王": [
+                ("正在錢莊撥打金算盤，嘗試將合歡宗的門派債務進行打包證券化", {"合歡宗聖女": -5}),
+                ("親自跑去龍門客棧推銷「龍門黑市高槓桿期貨」，被老闆娘打發了一壺烈酒", {"風騷老闆娘": +5}),
+                ("在櫃檯前查驗剛收到的黃金熔錠，暗中計算如何向阿福追討貸款利息", {"殺手阿福": -5}),
+                ("籌劃龍門錢莊納斯達克上市招股書，嘗試拉攏各大武林勢力入股", {"風騷老闆娘": +5})
+            ],
+            "合歡宗聖女": [
+                ("正在天字房紅燭下品嚐西域葡萄酒，搖曳七情魔音鈴修煉太上陰陽心法", {"風騷老闆娘": +5}),
+                ("暗中派香婢向下樓與風騷老闆娘對接，交換朝廷錦衣衛與血衣樓的最新情報", {"風騷老闆娘": +10}),
+                ("站在天字房窗前俯瞰龍門客棧暗巷，暗中觀察殺手阿福的拔劍出招速度", {"殺手阿福": +5}),
+                ("在紅燭微光下研讀上古雙修祕籍殘頁，尋解開師門詛咒的雄性強者", {})
+            ],
+            "風騷老闆娘": [
+                ("正在酒櫃前與過往客商調情斟酒，用柔情與酒香換取黑市秘寶資訊", {"合歡宗聖女": +5}),
+                ("親自前往龍門客棧地下暗道清點密藏，暗中資助義軍物資糧草", {"殺手阿福": +5}),
+                ("微笑着指點錢莊老王關於龍門客棧的房租契約條款，小賺了一筆利息", {"錢莊老王": +5}),
+                ("倚靠在客棧二樓欄杆邊抿酒，眼神掃過堂內每位江湖豪客的腰間佩兵", {})
+            ]
+        }
+
+        current_npc_name = self.current_agent.profile.name if self.current_agent else ""
+
+        for name, agent in self.agents.items():
+            if name == current_npc_name:
+                continue
+
+            p = agent.profile
+            pool = activities_pool.get(name, [])
+            if pool:
+                act_text, rel_changes = random.choice(pool)
+                p.current_activity = act_text
+                p.recent_activities.append(f"[第{self.game_turn}回合] {act_text}")
+                if len(p.recent_activities) > 5:
+                    p.recent_activities = p.recent_activities[-5:]
+
+                for target_npc, change in rel_changes.items():
+                    curr_rel = p.relationships.get(target_npc, 0)
+                    p.relationships[target_npc] = max(-100, min(100, curr_rel + change))
+
+                news_item = f"【江湖動態 · 回合{self.game_turn}】[{p.name}] {act_text}"
+                self.world_news.insert(0, news_item)
+
+        if len(self.world_news) > 10:
+            self.world_news = self.world_news[:10]
+
     def interact(self, player_action: str) -> GameStateDelta:
         """與當前 NPC 互動"""
         if not self.current_agent:
@@ -284,4 +347,6 @@ class GameEngine:
         )
 
         self.apply_delta(delta)
+        self.game_turn += 1
+        self.simulate_npc_autonomous_actions()
         return delta

@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 import requests
 from typing import List, Dict, Any, Type, TypeVar, Optional
 from pydantic import BaseModel, ValidationError
@@ -10,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 def clean_json_text(text: str) -> str:
-    """清理 LLM 輸出中可能包含的 markdown 程式碼區塊"""
+    """清理 LLM 輸出中可能包含的 markdown 程式碼區塊與外圍非 JSON 文字"""
     text = text.strip()
     if text.startswith("```"):
         lines = text.splitlines()
@@ -19,7 +20,86 @@ def clean_json_text(text: str) -> str:
         if lines and lines[-1].startswith("```"):
             lines = lines[:-1]
         text = "\n".join(lines).strip()
+
+    start_idx = text.find("{")
+    end_idx = text.rfind("}")
+    if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+        text = text[start_idx:end_idx + 1]
+
     return text
+
+
+def repair_truncated_json(s: str) -> str:
+    """嘗試修復因 token 截斷導致的不完整 JSON 結構"""
+    s = s.strip()
+    start_idx = s.find("{")
+    if start_idx != -1:
+        s = s[start_idx:]
+
+    s = re.sub(r',\s*$', '', s)
+    s = re.sub(r':\s*$', ': ""', s)
+
+    in_string = False
+    escape = False
+    stack = []
+
+    for char in s:
+        if escape:
+            escape = False
+            continue
+        if char == '\\':
+            escape = True
+            continue
+        if char == '"':
+            in_string = not in_string
+            continue
+        if not in_string:
+            if char in '{[':
+                stack.append(char)
+            elif char in '}]':
+                if stack:
+                    stack.pop()
+
+    if in_string:
+        s += '"'
+
+    while stack:
+        top = stack.pop()
+        if top == '{':
+            s += '}'
+        elif top == '[':
+            s += ']'
+
+    return s
+
+
+def parse_json_robustly(text: str) -> dict:
+    """穩健解析 LLM 輸出的 JSON，具備容錯修復機制"""
+    cleaned = clean_json_text(text)
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        pass
+
+    # 1. 嘗試修復尾隨逗號
+    fixed = re.sub(r',\s*([\}\]])', r'\1', cleaned)
+    try:
+        return json.loads(fixed)
+    except json.JSONDecodeError:
+        pass
+
+    # 2. 嘗試修復字串內未轉義換行
+    fixed_newlines = re.sub(r'(?<!\\)\n', r'\\n', cleaned)
+    fixed_newlines = re.sub(r',\s*([\}\]])', r'\1', fixed_newlines)
+    try:
+        return json.loads(fixed_newlines)
+    except json.JSONDecodeError:
+        pass
+
+    # 3. 嘗試修復截斷不完整 JSON
+    repaired = repair_truncated_json(cleaned)
+    repaired_clean = re.sub(r',\s*([\}\]])', r'\1', repaired)
+    return json.loads(repaired_clean)
 
 
 class OllamaClient:
@@ -58,7 +138,9 @@ class OllamaClient:
             "format": "json",
             "stream": False,
             "options": {
-                "temperature": temperature
+                "temperature": temperature,
+                "num_predict": 2048,
+                "num_ctx": 4096
             }
         }
 
@@ -72,8 +154,7 @@ class OllamaClient:
             raw_data = res.json()
             content = raw_data.get("message", {}).get("content", "")
             
-            cleaned = clean_json_text(content)
-            data = json.loads(cleaned)
+            data = parse_json_robustly(content)
             return response_model.model_validate(data)
 
         except (json.JSONDecodeError, ValidationError, requests.RequestException) as e:
@@ -98,7 +179,9 @@ class OllamaClient:
                 "format": "json",
                 "stream": False,
                 "options": {
-                    "temperature": temperature
+                    "temperature": temperature,
+                    "num_predict": 2048,
+                    "num_ctx": 4096
                 }
             }
 
@@ -109,6 +192,5 @@ class OllamaClient:
             raw_data = res.json()
             content = raw_data.get("message", {}).get("content", "")
             
-            cleaned = clean_json_text(content)
-            data = json.loads(cleaned)
+            data = parse_json_robustly(content)
             return response_model.model_validate(data)

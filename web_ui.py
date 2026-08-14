@@ -39,22 +39,37 @@ def get_engine_for_user(username: str = "楚留香") -> GameEngine:
     return session_engines[clean_name]
 
 
+engine = get_engine_for_user("楚留香")
+
+
 def generate_dynamic_options(npc_name: str, location_name: str, intimacy: int, turn: int) -> list:
     if npc_name == "合歡宗聖女":
-        if intimacy >= 40 or turn >= 3:
-            return [
-                f"A) 眼神深情凝視聖女柳如煙，詢問合歡宗雙修功法的絕密心法",
-                f"B) 提議與柳如煙聯手對付前來追殺的正派武林盟聯軍",
-                f"C) 溫柔地將柳如煙攬入懷中，在耳畔低語運轉雙修靈氣"
-            ]
-        else:
+        if turn % 3 == 1:
             return [
                 f"A) 抱拳拱手向聖女柳如煙詢問懷中血秘卷與解毒線索",
                 f"B) 掏出《勞動基準法》質疑合歡宗深夜出診違規要求補償",
                 f"C) 湊近柳如煙身旁，眼神挑逗並嘗試進行身體接觸試探"
             ]
+        elif turn % 3 == 2:
+            return [
+                f"A) 眼神深情凝視聖女柳如煙，詢問合歡宗雙修心法的絕密要訣",
+                f"B) 提議與柳如煙聯手對付前來追殺的正派武林盟聯軍",
+                f"C) 溫柔地將柳如煙攬入懷中，在耳畔低語運轉雙修靈氣"
+            ]
+        else:
+            return [
+                f"A) 向柳如煙打聽少林與武當鎮派武學的江湖隱情",
+                f"B) 開出龍門對沖基金股權協議邀請柳如煙技術入股",
+                f"C) 順勢牽起柳如煙冰涼柔嫩的纖手，運轉雙修心法導入靈氣"
+            ]
     elif npc_name == "風騷老闆娘":
-        if intimacy >= 40 or turn >= 3:
+        if turn % 3 == 1:
+            return [
+                f"A) 點一壺上等竹葉青向老闆娘賽金花打聽龍門關最新消息",
+                f"B) 拿出客棧餐飲評鑑表要求賽金花打八折",
+                f"C) 湊近賽金花耳畔輕吟調情話語並撫摸其手背"
+            ]
+        elif turn % 3 == 2:
             return [
                 f"A) 詢問老闆娘賽金花龍門客棧密道與各方勢力的核心情報",
                 f"B) 提議將龍門客棧打包上市進行資本股權劃轉",
@@ -62,9 +77,9 @@ def generate_dynamic_options(npc_name: str, location_name: str, intimacy: int, t
             ]
         else:
             return [
-                f"A) 點一壺上等竹葉青向老闆娘賽金花打聽龍門關最新消息",
-                f"B) 拿出客棧餐飲評鑑表要求賽金花打八折",
-                f"C) 湊近賽金花耳畔輕吟調情話語並撫摸其手背"
+                f"A) 詢問賽金花關於血衣樓刺殺懸賞榜的幕後主使",
+                f"B) 開出《一例一休管理公約》幫賽金花理順客棧夥計工時",
+                f"C) 凝視賽金花嬌艷的雙唇，輕握其柔荑許下江湖護花承諾"
             ]
     elif npc_name == "殺手阿福":
         if turn % 2 == 0:
@@ -159,6 +174,29 @@ def get_map_markdown(engine: GameEngine) -> str:
     return md
 
 
+def get_npc_dossier_markdown(engine: GameEngine) -> str:
+    if not engine.current_agent:
+        return "### 📜 [NPC 機密檔案]\n目前無互動對象。"
+
+    p = engine.current_agent.profile
+    tag = engine.current_agent.current_status_tag
+
+    md = f"""### 📜 [{p.name} 機密檔案]
+- **角色身份**: `{p.identity}` | **所在地點**: `{p.location}`
+- **性格特質**: {p.personality}
+- **對話狀態**: `[{tag}]` | **親密度**: `{p.intimacy}/100`
+"""
+    return md
+
+
+def get_world_news_markdown(engine: GameEngine) -> str:
+    events = engine.recent_world_events[-3:] if engine.recent_world_events else ["龍門關外夜雨傾盆，風平浪靜。"]
+    events_md = "\n".join([f"- {ev}" for ev in events])
+    return f"""### 📰 [江湖動態新聞連線]
+{events_md}
+"""
+
+
 def get_saves_markdown() -> str:
     saves = list_saves()
     md_lines = ["### 💾 [存檔槽位狀態一覽]"]
@@ -218,6 +256,8 @@ def restore_web_state_after_load(engine: GameEngine, msg_text: str):
         clean_history,
         get_status_markdown(engine),
         get_map_markdown(engine),
+        get_npc_dossier_markdown(engine),
+        get_world_news_markdown(engine),
         msg_text,
         engine.current_location,
         engine.current_agent.profile.name if engine.current_agent else None,
@@ -264,7 +304,7 @@ def continue_game(custom_name: str):
         return (
             gr.update(visible=False),
             gr.update(visible=True),
-            res[0], res[1], res[2], res[3], res[4], res[5], res[6], res[7], res[8], res[9], res[10], res[11], res[12]
+            res[0], res[1], res[2], res[3], res[4], res[5], res[6], res[7], res[8], res[9], res[10], res[11], res[12], res[13], res[14]
         )
     else:
         return (
@@ -273,6 +313,8 @@ def continue_game(custom_name: str):
             [],
             get_status_markdown(engine),
             get_map_markdown(engine),
+            get_npc_dossier_markdown(engine),
+            get_world_news_markdown(engine),
             f"未檢測到帳號 [{clean_name}] 的歷史存檔，請開始全新冒險！",
             engine.current_location,
             engine.current_agent.profile.name if engine.current_agent else None,
@@ -291,6 +333,7 @@ def on_select_npc(custom_name: str, npc_name: str):
     opts = get_npc_initial_options(engine, npc_name)
     return (
         get_status_markdown(engine),
+        get_npc_dossier_markdown(engine),
         msg,
         gr.update(value=opts[0]),
         gr.update(value=opts[1]),
@@ -319,6 +362,8 @@ def on_select_location(custom_name: str, location_name: str, history: list):
             clean_history,
             get_status_markdown(engine),
             get_map_markdown(engine),
+            get_npc_dossier_markdown(engine),
+            get_world_news_markdown(engine),
             msg,
             engine.current_agent.profile.name if engine.current_agent else None,
             gr.update(value=opts[0]),
@@ -332,6 +377,8 @@ def on_select_location(custom_name: str, location_name: str, history: list):
         clean_history,
         get_status_markdown(engine),
         get_map_markdown(engine),
+        get_npc_dossier_markdown(engine),
+        get_world_news_markdown(engine),
         "移動失敗",
         engine.current_agent.profile.name if engine.current_agent else None,
         gr.update(),
@@ -354,7 +401,7 @@ def enter_jianghu(custom_name: str):
         return (
             gr.update(visible=False),
             gr.update(visible=True),
-            res[0], res[1], res[2], res[3], res[4], res[5], res[6], res[7], res[8], res[9], res[10], res[11], res[12]
+            res[0], res[1], res[2], res[3], res[4], res[5], res[6], res[7], res[8], res[9], res[10], res[11], res[12], res[13], res[14]
         )
 
     engine.set_player_name(clean_name)
@@ -375,6 +422,8 @@ def enter_jianghu(custom_name: str):
         initial_history,
         get_status_markdown(engine),
         get_map_markdown(engine),
+        get_npc_dossier_markdown(engine),
+        get_world_news_markdown(engine),
         gr.update(value=opts[0]),
         gr.update(value=opts[1]),
         gr.update(value=opts[2]),
@@ -394,6 +443,8 @@ def process_player_choice(custom_name: str, user_input: str, history: list, prev
             clean_history,
             get_status_markdown(engine),
             get_map_markdown(engine),
+            get_npc_dossier_markdown(engine),
+            get_world_news_markdown(engine),
             gr.update(),
             gr.update(),
             gr.update(),
@@ -410,16 +461,24 @@ def process_player_choice(custom_name: str, user_input: str, history: list, prev
     try:
         delta = engine.interact(user_input)
     except Exception as e:
-        delta = GameStateDelta(
-            narrative=f"[{npc_name}] 默默地看著你... (提示: Ollama LLM 連線訊息: {e})",
-            player_hp_change=0,
-            player_gold_change=0,
-            inventory_added=[],
-            inventory_removed=[],
-            npc_status_tag="靜默",
-            world_flag_set={},
-            options=fallback_opts
-        )
+        if engine.current_agent:
+            delta = engine.current_agent._generate_fallback_delta(
+                player_action=user_input,
+                player_state=engine.player_state,
+                current_location=engine.current_location,
+                err_msg=str(e)
+            )
+        else:
+            delta = GameStateDelta(
+                narrative=f"[{npc_name}] 默默地思索著眼前的情勢...",
+                player_hp_change=0,
+                player_gold_change=0,
+                inventory_added=[],
+                inventory_removed=[],
+                npc_status_tag="凝視",
+                world_flag_set={},
+                options=fallback_opts
+            )
         engine.apply_delta(delta)
 
     # 檢查 LLM 回傳的故事短句，若過短或僅重複玩家行動，進行小說文風擴充與情節描繪
@@ -495,6 +554,8 @@ def process_player_choice(custom_name: str, user_input: str, history: list, prev
         clean_history,
         get_status_markdown(engine),
         get_map_markdown(engine),
+        get_npc_dossier_markdown(engine),
+        get_world_news_markdown(engine),
         gr.update(value=opt_a),
         gr.update(value=opt_b),
         gr.update(value=opt_c),
@@ -516,6 +577,8 @@ def reset_chat(custom_name: str):
         "對話歷史已重置",
         get_status_markdown(engine),
         get_map_markdown(engine),
+        get_npc_dossier_markdown(engine),
+        get_world_news_markdown(engine),
         gr.update(value=opts[0]),
         gr.update(value=opts[1]),
         gr.update(value=opts[2]),
@@ -534,7 +597,7 @@ def toggle_custom_input():
 with gr.Blocks(title="Local Blade RPG Engine") as demo:
     gr.Markdown("# 🗡️ Local Blade RPG Engine - 暗黑武俠動態沙盒")
     gr.Markdown("使用 Ollama 本地端 LLM 驅動的高自由度文字 RPG 遊戲引擎 (v1.0.0)")
-    gr.Markdown("📱 **[手機與跨裝置連線網址]**: 請確保手機與電腦連接同一個 Wi-Fi 網路，於手機瀏覽器輸入 `http://192.168.1.123:7861` 即可跨裝置遊玩！")
+    gr.Markdown("📱 **[手機與跨裝置連線網址]**: 請確保手機與電腦連接同一個 Wi-Fi 網路，於手機瀏覽器輸入 `http://192.168.1.123:7860` 即可跨裝置遊玩！")
 
     state_opt_a = gr.State(DEFAULT_OPTIONS[0])
     state_opt_b = gr.State(DEFAULT_OPTIONS[1])
@@ -567,6 +630,8 @@ with gr.Blocks(title="Local Blade RPG Engine") as demo:
             with gr.Column(scale=1):
                 status_box = gr.Markdown(value=lambda: get_status_markdown(engine))
                 map_box = gr.Markdown(value=lambda: get_map_markdown(engine))
+                dossier_box = gr.Markdown(value=lambda: get_npc_dossier_markdown(engine))
+                news_box = gr.Markdown(value=lambda: get_world_news_markdown(engine))
 
                 location_dropdown = gr.Dropdown(
                     choices=list(engine.world_map.get("regions", {}).keys()),
@@ -622,7 +687,7 @@ with gr.Blocks(title="Local Blade RPG Engine") as demo:
     btn_enter_game.click(
         fn=enter_jianghu,
         inputs=[player_name_input],
-        outputs=[prologue_group, main_game_group, chatbot, status_box, map_box, btn_opt_a, btn_opt_b, btn_opt_c, state_opt_a, state_opt_b, state_opt_c]
+        outputs=[prologue_group, main_game_group, chatbot, status_box, map_box, dossier_box, news_box, btn_opt_a, btn_opt_b, btn_opt_c, state_opt_a, state_opt_b, state_opt_c]
     )
 
     # 繼續遊戲點擊事件
@@ -630,7 +695,7 @@ with gr.Blocks(title="Local Blade RPG Engine") as demo:
         fn=continue_game,
         inputs=[player_name_input],
         outputs=[
-            prologue_group, main_game_group, chatbot, status_box, map_box,
+            prologue_group, main_game_group, chatbot, status_box, map_box, dossier_box, news_box,
             system_msg, location_dropdown, npc_dropdown, save_list_box,
             btn_opt_a, btn_opt_b, btn_opt_c, state_opt_a, state_opt_b, state_opt_c
         ]
@@ -647,7 +712,7 @@ with gr.Blocks(title="Local Blade RPG Engine") as demo:
         fn=on_load_click,
         inputs=[player_name_input, slot_dropdown],
         outputs=[
-            chatbot, status_box, map_box, system_msg, location_dropdown,
+            chatbot, status_box, map_box, dossier_box, news_box, system_msg, location_dropdown,
             npc_dropdown, save_list_box, btn_opt_a, btn_opt_b, btn_opt_c,
             state_opt_a, state_opt_b, state_opt_c
         ]
@@ -657,33 +722,33 @@ with gr.Blocks(title="Local Blade RPG Engine") as demo:
     location_dropdown.change(
         fn=on_select_location,
         inputs=[player_name_input, location_dropdown, chatbot],
-        outputs=[chatbot, status_box, map_box, system_msg, npc_dropdown, btn_opt_a, btn_opt_b, btn_opt_c, state_opt_a, state_opt_b, state_opt_c]
+        outputs=[chatbot, status_box, map_box, dossier_box, news_box, system_msg, npc_dropdown, btn_opt_a, btn_opt_b, btn_opt_c, state_opt_a, state_opt_b, state_opt_c]
     )
 
     # 事件繫結
     npc_dropdown.change(
         fn=on_select_npc,
         inputs=[player_name_input, npc_dropdown],
-        outputs=[status_box, system_msg, btn_opt_a, btn_opt_b, btn_opt_c, state_opt_a, state_opt_b, state_opt_c]
+        outputs=[status_box, dossier_box, system_msg, btn_opt_a, btn_opt_b, btn_opt_c, state_opt_a, state_opt_b, state_opt_c]
     )
 
     # 點擊選項 A / B / C 直接推進劇情
     btn_opt_a.click(
         fn=process_player_choice,
         inputs=[player_name_input, state_opt_a, chatbot, state_opt_a, state_opt_b, state_opt_c],
-        outputs=[input_box, chatbot, status_box, map_box, btn_opt_a, btn_opt_b, btn_opt_c, state_opt_a, state_opt_b, state_opt_c]
+        outputs=[input_box, chatbot, status_box, map_box, dossier_box, news_box, btn_opt_a, btn_opt_b, btn_opt_c, state_opt_a, state_opt_b, state_opt_c]
     )
 
     btn_opt_b.click(
         fn=process_player_choice,
         inputs=[player_name_input, state_opt_b, chatbot, state_opt_a, state_opt_b, state_opt_c],
-        outputs=[input_box, chatbot, status_box, map_box, btn_opt_a, btn_opt_b, btn_opt_c, state_opt_a, state_opt_b, state_opt_c]
+        outputs=[input_box, chatbot, status_box, map_box, dossier_box, news_box, btn_opt_a, btn_opt_b, btn_opt_c, state_opt_a, state_opt_b, state_opt_c]
     )
 
     btn_opt_c.click(
         fn=process_player_choice,
         inputs=[player_name_input, state_opt_c, chatbot, state_opt_a, state_opt_b, state_opt_c],
-        outputs=[input_box, chatbot, status_box, map_box, btn_opt_a, btn_opt_b, btn_opt_c, state_opt_a, state_opt_b, state_opt_c]
+        outputs=[input_box, chatbot, status_box, map_box, dossier_box, news_box, btn_opt_a, btn_opt_b, btn_opt_c, state_opt_a, state_opt_b, state_opt_c]
     )
 
     # 點擊 [其他] 展開自由輸入框
@@ -697,22 +762,22 @@ with gr.Blocks(title="Local Blade RPG Engine") as demo:
     submit_btn.click(
         fn=process_player_choice,
         inputs=[player_name_input, input_box, chatbot, state_opt_a, state_opt_b, state_opt_c],
-        outputs=[input_box, chatbot, status_box, map_box, btn_opt_a, btn_opt_b, btn_opt_c, state_opt_a, state_opt_b, state_opt_c]
+        outputs=[input_box, chatbot, status_box, map_box, dossier_box, news_box, btn_opt_a, btn_opt_b, btn_opt_c, state_opt_a, state_opt_b, state_opt_c]
     )
 
     input_box.submit(
         fn=process_player_choice,
         inputs=[player_name_input, input_box, chatbot, state_opt_a, state_opt_b, state_opt_c],
-        outputs=[input_box, chatbot, status_box, map_box, btn_opt_a, btn_opt_b, btn_opt_c, state_opt_a, state_opt_b, state_opt_c]
+        outputs=[input_box, chatbot, status_box, map_box, dossier_box, news_box, btn_opt_a, btn_opt_b, btn_opt_c, state_opt_a, state_opt_b, state_opt_c]
     )
 
     reset_btn.click(
         fn=reset_chat,
         inputs=[player_name_input],
-        outputs=[chatbot, system_msg, status_box, map_box, btn_opt_a, btn_opt_b, btn_opt_c, state_opt_a, state_opt_b, state_opt_c, custom_input_row]
+        outputs=[chatbot, system_msg, status_box, map_box, dossier_box, news_box, btn_opt_a, btn_opt_b, btn_opt_c, state_opt_a, state_opt_b, state_opt_c, custom_input_row]
     )
 
 
 if __name__ == "__main__":
     print("正在啟動 Local Blade RPG Web UI (0.0.0.0:7860，已開啟公共分享網址 share=True)...")
-    demo.launch(server_name="0.0.0.0", server_port=7860, share=True, show_error=True)
+    demo.launch(server_name="0.0.0.0", server_port=7860, show_error=True)
