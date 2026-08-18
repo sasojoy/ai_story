@@ -28,7 +28,8 @@ class GameEngine:
         self.client = OllamaClient(
             base_url=self.game_config.ollama_url,
             model=self.game_config.model_name,
-            timeout=self.game_config.timeout
+            timeout=self.game_config.timeout,
+            context_length=self.game_config.context_length
         )
 
         self.player_state = PlayerState()
@@ -247,34 +248,16 @@ class GameEngine:
             return True
         return False
 
-    def save_slot(self, slot_id: int = 1) -> str:
-        """快速存檔指定 Slot (1~5)"""
-        from src.save_manager import save_game
-        return save_game(slot_id, self)
-
     def auto_save(self, account_name: str = None) -> str:
-        """帳號即時自動存檔"""
+        """帳號即時自動存檔（目前唯一支援的存檔機制，見 ARCHITECTURE.md 存檔系統整併）"""
         from src.save_manager import save_account_game
         target_account = account_name or self.player_state.name
         return save_account_game(target_account, self)
-
-    def load_slot(self, slot_id: int = 1) -> bool:
-        """讀取指定 Slot (1~5) 存檔"""
-        from src.save_manager import load_game
-        return load_game(slot_id, self)
 
     def load_account(self, account_name: str) -> bool:
         """讀取指定帳號即時存檔"""
         from src.save_manager import load_account_game
         return load_account_game(account_name, self)
-
-    def load_latest_slot(self) -> bool:
-        """讀取最新一次存檔"""
-        from src.save_manager import get_latest_save_slot_id, load_game
-        slot_id = get_latest_save_slot_id()
-        if slot_id is not None:
-            return load_game(slot_id, self)
-        return False
 
     def apply_delta(self, delta: GameStateDelta):
         """套用 GameStateDelta 變更玩家狀態、地點、親密度、雙修修為與世界標記"""

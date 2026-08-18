@@ -62,6 +62,36 @@ class TestEngine(unittest.TestCase):
         self.assertNotIn("鏽蝕鐵劍", engine.player_state.inventory)
         self.assertTrue(engine.world_flags.get("met_afu"))
 
+    def test_apply_delta_milestone_and_faction_paths(self):
+        """Stage 0 安全網：apply_delta 原本只測過 HP/金幣/背包/world_flags，
+        補上里程碑去重與勢力聲望疊加這兩條路徑，供後續重構比對行為。"""
+        engine = GameEngine()
+        engine.factions["血衣樓"] = 10
+        start_zhengpai = engine.factions.get("正派武林盟", 0)
+
+        delta = GameStateDelta(
+            narrative="測試里程碑與勢力聲望",
+            milestone_unlocked="初探龍門秘辛",
+            faction_reputation_changes={"血衣樓": 20, "正派武林盟": -5}
+        )
+        engine.apply_delta(delta)
+
+        self.assertIn("初探龍門秘辛", engine.story_milestones)
+        self.assertEqual(engine.factions["血衣樓"], 30)
+        self.assertEqual(engine.factions["正派武林盟"], start_zhengpai - 5)
+
+        # 同一個里程碑不應該被重複加入第二次
+        delta2 = GameStateDelta(
+            narrative="再次觸發同一個里程碑",
+            milestone_unlocked="初探龍門秘辛",
+            faction_reputation_changes={"血衣樓": 5}
+        )
+        engine.apply_delta(delta2)
+
+        self.assertEqual(engine.story_milestones.count("初探龍門秘辛"), 1)
+        self.assertEqual(engine.factions["血衣樓"], 35)
+        self.assertEqual(engine.factions["正派武林盟"], start_zhengpai - 5)
+
     def test_switch_npc(self):
         engine = GameEngine()
         self.assertIsNotNone(engine.current_agent)

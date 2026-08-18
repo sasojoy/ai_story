@@ -29,7 +29,6 @@ class GameStateDelta(BaseModel):
     world_flag_set: Dict[str, bool] = Field(default_factory=dict, description="引發的世界事件標記")
     current_location: Optional[str] = Field(default=None, description="玩家當前所在地點 (如: 龍門客棧, 黑風寨山腳, 亂葬崗)")
     unlocked_locations: List[str] = Field(default_factory=list, description="新解鎖的地點清單 (如: ['亂葬崗', '血衣樓分舵'])")
-    available_exits: List[str] = Field(default_factory=list, description="當前地點可連通移動的鄰近區域地點清單")
     main_quest_summary_update: Optional[str] = Field(
         default=None,
         description="根據玩家最新選擇動態改寫的主線故事摘要"
@@ -78,7 +77,7 @@ class GameStateDelta(BaseModel):
                 data[int_field] = 0
 
         # 2. 處理容器欄位 (List[str])
-        for list_field in ["inventory_added", "inventory_removed", "unlocked_locations", "available_exits"]:
+        for list_field in ["inventory_added", "inventory_removed", "unlocked_locations"]:
             val = data.get(list_field)
             if val is None:
                 data[list_field] = []

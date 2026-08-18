@@ -5,18 +5,24 @@ import unittest
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from src.game_engine import GameEngine
-from src.save_manager import save_game, load_game, list_saves, get_latest_save_slot_id, get_save_path
+from src.save_manager import (
+    save_account_game,
+    load_account_game,
+    list_account_saves,
+    get_latest_account_name,
+    get_account_save_path,
+)
 
 
 class TestSaveManager(unittest.TestCase):
+    """Stage 2 之後只支援 account-based 存檔（見 ARCHITECTURE.md 存檔系統整併）。"""
 
     def setUp(self):
         self.engine = GameEngine()
-        self.test_slot = 99  # 使用測試專用 Slot
+        self.test_account = "測試帳號_SaveManager"
 
     def tearDown(self):
-        # 測試清理
-        test_path = get_save_path(self.test_slot)
+        test_path = get_account_save_path(self.test_account)
         if os.path.exists(test_path):
             os.remove(test_path)
 
@@ -34,6 +40,7 @@ class TestSaveManager(unittest.TestCase):
         self.engine.move_to_location("亂葬崗")
         self.engine.factions["血衣樓"] = 80
         self.engine.world_flags["met_she_maiden"] = True
+        self.engine.story_milestones.append("初探血衣樓密道")
 
         if "合歡宗聖女" in self.engine.agents:
             agent = self.engine.agents["合歡宗聖女"]
@@ -42,14 +49,15 @@ class TestSaveManager(unittest.TestCase):
                 {"role": "user", "content": "聖女可願與我雙修？"},
                 {"role": "assistant", "content": "柳如煙眼波流轉，微笑道：『少俠若是誠心，有何不可？』"}
             ]
+            agent.used_options_history.add("聖女可願與我雙修？")
 
         # 2. 執行存檔
-        msg = save_game(self.test_slot, self.engine)
-        self.assertIn("存檔成功", msg)
+        msg = save_account_game(self.test_account, self.engine)
+        self.assertIn("自動存檔成功", msg)
 
         # 3. 建立全新 GameEngine 實例並讀取存檔
         new_engine = GameEngine()
-        success = load_game(self.test_slot, new_engine)
+        success = load_account_game(self.test_account, new_engine)
 
         self.assertTrue(success)
 
@@ -66,12 +74,45 @@ class TestSaveManager(unittest.TestCase):
         self.assertEqual(new_engine.current_location, "亂葬崗")
         self.assertEqual(new_engine.factions["血衣樓"], 80)
         self.assertTrue(new_engine.world_flags.get("met_she_maiden"))
+        self.assertIn("初探血衣樓密道", new_engine.story_milestones)
 
         if "合歡宗聖女" in new_engine.agents:
             restored_agent = new_engine.agents["合歡宗聖女"]
             self.assertEqual(restored_agent.profile.intimacy, 65)
             self.assertEqual(len(restored_agent.history), 2)
             self.assertEqual(restored_agent.history[0]["content"], "聖女可願與我雙修？")
+            self.assertIn("聖女可願與我雙修？", restored_agent.used_options_history)
+
+    def test_story_milestones_and_used_options_history_are_now_persisted(self):
+        """Stage 2 修復：story_milestones 與每個 NPCAgent 的 used_options_history
+        現在會被存檔/讀檔正確還原（Stage 0 的 characterization test 記錄的是修復前的現況，
+        這裡驗證修復後的行為）。"""
+        self.engine.story_milestones.append("測試里程碑：夜探血衣樓")
+        if "殺手阿福" in self.engine.agents:
+            self.engine.agents["殺手阿福"].used_options_history.add("測試選項：夜探血衣樓")
+
+        save_account_game(self.test_account, self.engine)
+
+        new_engine = GameEngine()
+        load_account_game(self.test_account, new_engine)
+
+        self.assertIn("測試里程碑：夜探血衣樓", new_engine.story_milestones)
+        if "殺手阿福" in new_engine.agents:
+            self.assertIn(
+                "測試選項：夜探血衣樓",
+                new_engine.agents["殺手阿福"].used_options_history
+            )
+
+    def test_list_and_get_latest_account_saves(self):
+        save_account_game(self.test_account, self.engine)
+
+        saves = list_account_saves()
+        account_names = [s["account_name"] for s in saves]
+        self.assertIn(self.test_account, account_names)
+
+        # 剛存檔的帳號時間戳最新，get_latest_account_name 應該找得到，而不是像
+        # 舊版 get_latest_save_slot_id 那樣只認 slot 存檔而永遠找不到現存的 account 存檔
+        self.assertEqual(get_latest_account_name(), self.test_account)
 
 
 if __name__ == "__main__":

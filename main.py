@@ -1,6 +1,7 @@
 import sys
 import os
 import json
+from typing import List
 
 # 確保可 import src 模組
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -13,6 +14,7 @@ if sys.platform == "win32" and hasattr(sys.stdout, "reconfigure"):
         pass
 
 from src.game_engine import GameEngine
+from src.save_manager import has_account_save
 
 
 def print_banner():
@@ -84,6 +86,18 @@ def main():
 
     # 顯示序幕與世界大背景
     print_prologue(engine)
+
+    # 詢問玩家名稱，作為帳號存檔的識別依據
+    player_name = input("\n請輸入你的俠客名號 (直接 Enter 使用預設名稱): ").strip()
+    if player_name:
+        engine.set_player_name(player_name)
+
+    if has_account_save(engine.player_state.name):
+        resume = input(f"\n偵測到帳號 [{engine.player_state.name}] 的歷史存檔，要讀取嗎？ (Y/n): ").strip().lower()
+        if resume != "n":
+            if engine.load_account(engine.player_state.name):
+                print(f"\n>>> 已讀取帳號 [{engine.player_state.name}] 的歷史進度！")
+
     input("\n按下 [Enter] 鍵 踏入江湖，開啟冒險...")
 
     # 檢查 Ollama 連線狀態
@@ -94,51 +108,47 @@ def main():
         print(f"[!] 警告: 無法連線至 Ollama ({engine.game_config.ollama_url})！")
         print("請確認 Ollama 服務已啟動 (例如: ollama run qwen2.5:1.5b)")
 
-    print("\n提示指令: [/switch 切換NPC] [/dossier 查看NPC生平檔案] [/save 1 快速存檔] [/load 1 讀取存檔] [/status 玩家狀態] [/reset 重置對話] [/exit 退出遊戲]")
+    print("\n提示指令: [/switch 切換NPC] [/dossier 查看NPC生平檔案] [/save 存檔] [/load 讀取存檔] [/status 玩家狀態] [/reset 重置對話] [/exit 退出遊戲]")
 
-    last_options = [
-        "A) 亮出兵器靜觀其變，開口詢問對方的意圖",
-        "B) 掏出《勞動基準法》與理賠條款進行談判拉扯",
-        "C) 上前進行身體接觸與耳邊輕語誘惑條款"
-    ]
+    last_options: List[str] = []
 
     while True:
         try:
             print_status(engine)
-            if last_options and len(last_options) >= 3:
+            option_letters = ["A", "B", "C", "D", "E"]
+            if last_options:
                 print("\n【動態劇情選項】")
-                print(f"  [A] {last_options[0]}")
-                print(f"  [B] {last_options[1]}")
-                print(f"  [C] {last_options[2]}")
-                print("  [D/其它] (輸入 A/B/C 選擇，或直接打字輸入任意行動/對話)")
+                for letter, opt in zip(option_letters, last_options):
+                    print(f"  [{letter}] {opt}")
+                print("  (輸入字母選擇，或直接打字輸入任意行動/對話)")
 
-            user_input = input("\n請選擇 (A/B/C/D) 或輸入行動 > ").strip()
+            user_input = input("\n請選擇 (A/B/C/D/E) 或輸入行動 > ").strip()
 
             if not user_input:
                 continue
 
-            if user_input.upper() == "A" and last_options and len(last_options) >= 1:
-                user_input = last_options[0]
-            elif user_input.upper() == "B" and last_options and len(last_options) >= 2:
-                user_input = last_options[1]
-            elif user_input.upper() == "C" and last_options and len(last_options) >= 3:
-                user_input = last_options[2]
+            if user_input.upper() in option_letters:
+                idx = option_letters.index(user_input.upper())
+                if idx < len(last_options):
+                    user_input = last_options[idx]
 
-            if user_input.lower().startswith("/save"):
-                parts = user_input.split()
-                slot = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 1
-                msg = engine.save_slot(slot)
+            if user_input.lower() in ["/save", "save"]:
+                msg = engine.auto_save(engine.player_state.name)
                 print(f"\n>>> {msg}")
                 continue
 
-            elif user_input.lower().startswith("/load"):
-                parts = user_input.split()
-                slot = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 1
-                success = engine.load_slot(slot)
+            elif user_input.lower() in ["/load", "load"]:
+                success = engine.load_account(engine.player_state.name)
                 if success:
-                    print(f"\n>>> 成功讀取 Slot {slot} 存檔！")
+                    print(f"\n>>> 成功讀取帳號 [{engine.player_state.name}] 的存檔！")
+                    last_options = []
                 else:
-                    print(f"\n>>> 讀取 Slot {slot} 失敗 (找不到存檔)")
+                    print(f"\n>>> 讀取帳號 [{engine.player_state.name}] 失敗 (找不到存檔)")
+                continue
+
+            elif user_input.lower() in ["/status", "status"]:
+                # print_status 已在每輪迴圈開頭執行，這裡僅確保 /status 是可被辨識的指令，
+                # 不會被誤當成玩家行動送給 LLM
                 continue
 
             elif user_input.lower() in ["/exit", "exit", "quit", "q"]:

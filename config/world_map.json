@@ -6,12 +6,7 @@
       "connections": ["黑風寨山腳", "少林寺下鎮", "龍門錢莊"],
       "is_unlocked": true,
       "danger_level": "低",
-      "bound_npc": "風騷老闆娘",
-      "region_events": [
-        "在酒桌旁聽到關於血秘卷的江湖傳聞",
-        "發現一名酩酊大醉的刀客掉落了銅錢",
-        "目睹兩名仇家在堂前因口角拔刀相向"
-      ]
+      "bound_npc": "風騷老闆娘"
     },
     "龍門錢莊": {
       "name": "龍門錢莊",
@@ -19,11 +14,7 @@
       "connections": ["龍門客棧", "少林寺下鎮"],
       "is_unlocked": true,
       "danger_level": "低",
-      "bound_npc": "錢莊老王",
-      "region_events": [
-        "老王正在與幾位波斯商人熱絡討論匯率槓桿",
-        "發現錢莊門口貼著朝廷對通緝犯的重金懸賞令"
-      ]
+      "bound_npc": "錢莊老王"
     },
     "黑風寨山腳": {
       "name": "黑風寨山腳",
@@ -31,11 +22,7 @@
       "connections": ["龍門客棧", "亂葬崗"],
       "is_unlocked": true,
       "danger_level": "中",
-      "bound_npc": "殺手阿福",
-      "region_events": [
-        "路邊發現一具剛遇害不久的鏢師屍首",
-        "草叢中發出沙沙異響，疑似有暗哨埋伏"
-      ]
+      "bound_npc": "殺手阿福"
     },
     "少林寺下鎮": {
       "name": "少林寺下鎮",
@@ -43,11 +30,7 @@
       "connections": ["龍門客棧", "龍門錢莊", "血衣樓分舵"],
       "is_unlocked": true,
       "danger_level": "低",
-      "bound_npc": "錢莊老王",
-      "region_events": [
-        "遭遇正派巡邏弟子盤查身分",
-        "香客施捨獲得少許銅錢"
-      ]
+      "bound_npc": "錢莊老王"
     },
     "亂葬崗": {
       "name": "亂葬崗",
@@ -55,11 +38,7 @@
       "connections": ["黑風寨山腳", "血衣樓分舵", "合歡宗天字房"],
       "is_unlocked": false,
       "danger_level": "高",
-      "bound_npc": "合歡宗聖女",
-      "region_events": [
-        "尋獲殘破的古老功法殘頁",
-        "遭逢腐屍毒氣侵蝕體力"
-      ]
+      "bound_npc": "合歡宗聖女"
     },
     "血衣樓分舵": {
       "name": "血衣樓分舵",
@@ -67,11 +46,7 @@
       "connections": ["少林寺下鎮", "亂葬崗"],
       "is_unlocked": false,
       "danger_level": "極危",
-      "bound_npc": "殺手阿福",
-      "region_events": [
-        "看見暗影中數名血衣殺手正在洗刷刀刃上的血跡",
-        "接取刺殺黑榜任務"
-      ]
+      "bound_npc": "殺手阿福"
     },
     "合歡宗天字房": {
       "name": "合歡宗天字房",
@@ -79,10 +54,7 @@
       "connections": ["龍門客棧", "亂葬崗"],
       "is_unlocked": false,
       "danger_level": "中",
-      "bound_npc": "合歡宗聖女",
-      "region_events": [
-        "聖女在紅燭下輕撫琴弦，眼神流露魅惑之意"
-      ]
+      "bound_npc": "合歡宗聖女"
     }
   }
 }

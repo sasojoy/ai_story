@@ -143,11 +143,13 @@ class OllamaClient:
         self,
         base_url: str = "http://localhost:11434",
         model: str = "qwen2.5:7b",
-        timeout: int = 60
+        timeout: int = 60,
+        context_length: int = 4096
     ):
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.timeout = timeout
+        self.context_length = context_length
 
     def check_health(self) -> bool:
         """檢查 Ollama 服務是否正常運行"""
@@ -181,7 +183,7 @@ class OllamaClient:
                 "presence_penalty": 0.3,
                 "frequency_penalty": 0.3,
                 "num_predict": 512,
-                "num_ctx": 4096
+                "num_ctx": self.context_length
             }
         }
 
@@ -227,7 +229,7 @@ class OllamaClient:
                     "presence_penalty": 0.3,
                     "frequency_penalty": 0.3,
                     "num_predict": 512,
-                    "num_ctx": 4096
+                    "num_ctx": self.context_length
                 }
             }
 
@@ -266,7 +268,7 @@ class OllamaClient:
                 "presence_penalty": 0.3,
                 "frequency_penalty": 0.3,
                 "num_predict": num_predict,
-                "num_ctx": 4096
+                "num_ctx": self.context_length
             }
         }
 

@@ -22,7 +22,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import gradio as gr
 from src.game_engine import GameEngine
 from src.models import GameStateDelta, is_placeholder_option
-from src.save_manager import list_saves, has_account_save, load_account_game, save_account_game
+from src.save_manager import list_account_saves, has_account_save, load_account_game, save_account_game
 
 # 獨立帳號 Session 引擎註冊表
 session_engines: dict = {}
@@ -346,11 +346,13 @@ def get_world_news_markdown(engine: GameEngine) -> str:
 
 
 def get_saves_markdown() -> str:
-    saves = list_saves()
-    md_lines = ["### 💾 [存檔槽位狀態一覽]"]
-    for s in saves:
-        status_tag = "✅ 已存檔" if s["exists"] else "⚪ 空槽位"
-        md_lines.append(f"- **Slot {s['slot_id']}**: `{status_tag}` | {s['timestamp']} | `{s['summary']}`")
+    saves = list_account_saves()
+    md_lines = ["### 💾 [帳號自動存檔狀態一覽]"]
+    if not saves:
+        md_lines.append("- 尚無任何帳號存檔")
+        return "\n".join(md_lines)
+    for s in saves[:5]:
+        md_lines.append(f"- **{s['account_name']}**: {s['timestamp']} | `{s['summary']}`")
     return "\n".join(md_lines)
 
 
@@ -423,21 +425,19 @@ def restore_web_state_after_load(engine: GameEngine, msg_text: str):
     )
 
 
-def on_save_click(custom_name: str, slot_str: str):
+def on_save_click(custom_name: str):
     engine = get_engine_for_user(custom_name)
-    slot_id = int(slot_str.split()[-1])
-    msg = engine.save_slot(slot_id)
+    msg = engine.auto_save(custom_name)
     return msg, get_saves_markdown()
 
 
-def on_load_click(custom_name: str, slot_str: str):
+def on_load_click(custom_name: str):
     engine = get_engine_for_user(custom_name)
-    slot_id = int(slot_str.split()[-1])
-    success = engine.load_slot(slot_id)
+    success = engine.load_account(custom_name)
     if success:
-        msg = f"成功讀取 Slot {slot_id} 存檔！"
+        msg = f"成功讀取帳號 [{custom_name}] 的存檔！"
     else:
-        msg = f"讀取 Slot {slot_id} 失敗 (找不到存檔)"
+        msg = f"讀取帳號 [{custom_name}] 失敗 (找不到存檔)"
     return restore_web_state_after_load(engine, msg)
 
 
@@ -445,11 +445,7 @@ def continue_game(custom_name: str):
     clean_name = custom_name.strip() if custom_name else "楚留香"
     engine = get_engine_for_user(clean_name)
 
-    success = False
-    if has_account_save(clean_name):
-        success = engine.load_account(clean_name)
-    else:
-        success = engine.load_latest_slot()
+    success = has_account_save(clean_name) and engine.load_account(clean_name)
 
     if success:
         res = restore_web_state_after_load(engine, f"帳號 [{clean_name}] 已成功讀取歷史自動存檔進度！")
@@ -839,16 +835,10 @@ with gr.Blocks(title="Local Blade RPG Engine") as demo:
                     interactive=True
                 )
 
-                gr.Markdown("### 💾 [存檔與載入控制]")
+                gr.Markdown("### 💾 [帳號存檔與載入控制]")
                 with gr.Row():
-                    slot_dropdown = gr.Dropdown(
-                        choices=["Slot 1", "Slot 2", "Slot 3", "Slot 4", "Slot 5"],
-                        value="Slot 1",
-                        label="選擇存檔槽位",
-                        scale=2
-                    )
-                    btn_save_slot = gr.Button("💾 快速存檔", variant="primary", scale=1)
-                    btn_load_slot = gr.Button("📂 讀取存檔", variant="secondary", scale=1)
+                    btn_save_account = gr.Button("💾 立即存檔", variant="primary", scale=1)
+                    btn_load_account = gr.Button("📂 重新載入我的存檔", variant="secondary", scale=1)
 
                 save_list_box = gr.Markdown(value=get_saves_markdown)
                 system_msg = gr.Textbox(label="系統訊息", value="準備就緒", interactive=False)
@@ -890,15 +880,15 @@ with gr.Blocks(title="Local Blade RPG Engine") as demo:
     )
 
     # 存檔與讀檔事件
-    btn_save_slot.click(
+    btn_save_account.click(
         fn=on_save_click,
-        inputs=[player_name_input, slot_dropdown],
+        inputs=[player_name_input],
         outputs=[system_msg, save_list_box]
     )
 
-    btn_load_slot.click(
+    btn_load_account.click(
         fn=on_load_click,
-        inputs=[player_name_input, slot_dropdown],
+        inputs=[player_name_input],
         outputs=[
             chatbot, status_box, map_box, dossier_box, news_box, system_msg, location_dropdown,
             npc_dropdown, save_list_box, btn_opt_a, btn_opt_b, btn_opt_c, btn_opt_d, btn_opt_e,
