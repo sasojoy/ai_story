@@ -249,33 +249,32 @@ class NPCProfile(BaseModel):
         return self.display_name or self.name
 
     def get_unlocked_biography(self) -> List[str]:
-        """根據親密度解鎖生平故事章節"""
+        """根據親密度解鎖生平故事章節；分級門檻以 config/npc_stages.json 為 SSOT，
+        查無該 NPC 資料時 fallback 回舊版寫死的 25/50/75 門檻 (見 src/rules.py)"""
         total = len(self.biography)
         if total == 0:
             return []
-        if self.intimacy >= 75:
-            count = total
-        elif self.intimacy >= 50:
-            count = min(3, total)
-        elif self.intimacy >= 25:
-            count = min(2, total)
-        else:
-            count = 1
+        from src.rules import get_intimacy_stage_number
+        count = min(get_intimacy_stage_number(self.name, self.intimacy), total)
         return self.biography[:count]
 
     def get_unlocked_stats(self) -> Dict[str, Any]:
-        """根據親密度解鎖數值情報"""
+        """根據親密度解鎖數值情報；分級門檻以 config/npc_stages.json 為 SSOT，
+        查無該 NPC 資料時 fallback 回舊版寫死的 25/50/75 門檻 (見 src/rules.py)"""
         unlocked = {}
         unlocked["hp"] = self.hp
         unlocked["location"] = self.location
 
-        if self.intimacy < 25:
+        from src.rules import get_intimacy_stage_number
+        stage = get_intimacy_stage_number(self.name, self.intimacy)
+
+        if stage <= 1:
             unlocked["realm"] = "???"
             unlocked["attack"] = "???"
             unlocked["defense"] = "???"
             unlocked["agility"] = "???"
             unlocked["weapon"] = "???"
-        elif self.intimacy < 50:
+        elif stage == 2:
             unlocked["realm"] = self.stats.get("realm", "後天境")
             unlocked["attack"] = self.stats.get("attack", 50)
             unlocked["defense"] = "???"

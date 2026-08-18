@@ -8,8 +8,11 @@
 - [x] Stage 1 — 清死程式碼/死設定
 - [x] Stage 2 — 存檔系統整併為 account-based
 - [x] Stage 3 — 共用 fallback/選項模組（`src/options.py` + `config/npc_fallbacks.json`，commit `699551d`）
-- [ ] Stage 4 — 親密度分級 SSOT（接上 `config/npc_stages.json`）**← 下一步**
-- [ ] Stage 5～8 — 尚未開始
+- [x] Stage 4 — 親密度分級 SSOT（`src/rules.py::get_intimacy_stage/get_intimacy_stage_number` 接上 `config/npc_stages.json`）
+- [ ] Stage 5 — Prompt/schema 去重複 **← 下一步**
+- [ ] Stage 6～8 — 尚未開始
+
+使用者預計這次重構做到 Stage 7 為止（Stage 8 只是文件、不實作）。
 
 ## 近期修復：LLM 輸出截斷導致選項跑進劇情文字
 

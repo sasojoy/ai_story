@@ -205,7 +205,7 @@ config/
 建立 `config/npc_fallbacks.json` + 通用 fallback 生成；建立 `src/options.py`；`npc_agent.py::_generate_fallback_delta` 與 `web_ui.py::generate_dynamic_options` 都改呼叫它，刪掉兩份寫死的內容。
 檔案：`config/npc_fallbacks.json`（新）、`src/options.py`（新）、`src/npc_agent.py`、`web_ui.py`、新增 `tests/test_options.py`
 
-**Stage 4 — 親密度分級 SSOT**
+**Stage 4 — 親密度分級 SSOT ✅ 已完成**
 接上 `config/npc_stages.json`，新增 `rules.get_intimacy_stage()`（此時可先建立最小版的 `rules.py`，或延後到 Stage 7 一起做——排程上兩種順序都可以）。
 檔案：`src/rules.py`（新，最小版）或 `src/models.py`、新增 `tests/test_models.py`（涵蓋邊界值 24/25/49/50/74/75 與未知 NPC 的 fallback）
 
