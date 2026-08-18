@@ -3,6 +3,7 @@ import os
 from typing import List, Dict, Any, Optional, Set
 from src.models import NPCProfile, PlayerState, GameStateDelta
 from src.ollama_client import OllamaClient
+from src.options import generate_fallback_delta
 
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -165,91 +166,15 @@ class NPCAgent:
         err_msg: str = "",
         game_turn: int = 1
     ) -> GameStateDelta:
-        """當 Ollama 連線失敗或解析異常時，智慧推演符合 NPC 個性的保底劇情與 5 個動態選項"""
-        p_name = player_state.name
-        npc_name = self.profile.name
-
-        disp_name = self.profile.display_name or self.profile.name
-
-        if npc_name == "風騷老闆娘" or disp_name == "賽金花":
-            narrative = (
-                f"{p_name}身形前傾，直視著賽金花。賽金花眼波盈盈，纖手順勢撫過酒櫃上的古藤酒壺，"
-                f"朱唇微啟笑道：『大俠這般氣勢洶洶，莫非嫌老娘這龍門客棧的酒不夠濃，還是嫌今夜的天字房不夠熱鬧？』"
-                f"燭光搖曳下，她的嬌軀微傾，眼神中透著幾分動情與深層試探。"
-            )
-            tag = "嬌笑"
-            opts = [
-                "A) 探聽龍門客棧密道與黑市秘寶情報",
-                "B) 掏出商業合同提議將客棧資產打包上市",
-                "C) 湊近賽金花耳畔撫摸其手背討要天字房鑰匙",
-                "D) 眼神一冷亮出血滴子逼問賽金花關於血衣樓黑榜",
-                "E) 移動前往龍門錢莊查詢存款行情"
-            ]
-        elif npc_name == "合歡宗聖女" or disp_name == "柳如煙":
-            narrative = (
-                f"{p_name}步步逼近。柳如煙修長的美腿在紅燭微光下若隱若現，七情魔音鈴發出清脆叮噹聲。"
-                f"她輕按胸口，微醺的眼波流轉，吐息如蘭道：『少俠心跳得這般急，莫非我合歡宗的太上陰陽心法，已經勾動了少俠的心神？』"
-            )
-            tag = "魅惑"
-            opts = [
-                "A) 詢問柳如煙合歡宗雙修心法與師門詛咒真相",
-                "B) 質疑合歡宗深夜出診違反勞動基準法要求補償",
-                "C) 溫柔將柳如煙攬入懷中在耳邊輕語運轉雙修靈氣",
-                "D) 亮出冷刃逼問柳如煙是否有意背叛正派武林盟",
-                "E) 移動前往亂葬崗搜尋古老功法殘頁"
-            ]
-        elif npc_name == "殺手阿福" or disp_name == "阿福":
-            narrative = (
-                f"{p_name}靠近暗巷中的阿福。阿福正在擦拭鏽蝕鐵劍，眼角餘光掠過你的身影，掏出懷中的懷錶冷哼一聲："
-                f"『今日工時已滿！若無預付定金與超時加班費，血衣樓恕不接單。大俠請回吧！』"
-            )
-            tag = "算計工時"
-            opts = [
-                "A) 詢問阿福血衣樓黑榜殺手最新的懸賞名單",
-                "B) 出示勞動基準法條文要求開具加班費理賠單",
-                "C) 湊近阿福身旁掏出雙修秘笈試圖私下交易",
-                "D) 亮出利刃架在阿福脖子上逼他透露分舵地圖",
-                "E) 移動前往黑風寨山腳察看埋伏陷阱"
-            ]
-        elif npc_name == "錢莊老王" or disp_name == "老王":
-            narrative = (
-                f"{p_name}立於櫃檯前。老王算盤撥得噼啪作響，金光爍爍的雙眼掃過你身上的沉重背包，嘿嘿笑道："
-                f"『客官是來存款還是借貸？龍門錢莊即日起推出高槓桿期貨，保證年化收益翻倍！』"
-            )
-            tag = "精算"
-            opts = [
-                "A) 詢問老王錢莊存款利率與少林武當抵押貸款行情",
-                "B) 拿出不良資產包證券化 (MBS) 方案要求槓桿加碼",
-                "C) 上前對老王展露魅力試圖減免貸款利息",
-                "D) 亮出沾血匕首逼老王交出總庫房鑰匙與銀票",
-                "E) 移動前往少林寺下鎮聽取梵音淨化心神"
-            ]
-        else:
-            narrative = (
-                f"{p_name}對著{disp_name}開口表達意圖。{disp_name}眼神微動，轉過身來打量著你，緩緩說道："
-                f"『江湖險惡，不知閣下專程前來所為何事？』"
-            )
-            tag = "思索"
-            opts = [
-                f"A) 抱拳向{disp_name}詢問當前地區 [{current_location}] 的傳聞",
-                f"B) 掏出勞動基準法條文與{disp_name}進行談判拉扯",
-                f"C) 上前對{disp_name}進行身體接觸與耳邊輕語試探",
-                f"D) 亮出暗器戒備，冷聲威脅{disp_name}",
-                f"E) 在當前區域 [{current_location}] 仔細搜尋線索"
-            ]
-
-        return GameStateDelta(
-            narrative=narrative,
-            player_hp_change=0,
-            player_stamina_change=0,
-            player_gold_change=0,
-            intimacy_change=2,
-            cultivation_exp_gained=5,
-            inventory_added=[],
-            inventory_removed=[],
-            npc_status_tag=tag,
-            world_flag_set={},
-            options=opts
+        """當 Ollama 連線失敗或解析異常時，透過共用的 options 模組推演符合 NPC 個性的保底劇情與 5 個動態選項"""
+        return generate_fallback_delta(
+            npc_name=self.profile.name,
+            player_state=player_state,
+            location=current_location,
+            turn=game_turn,
+            exclude_opts=self.used_options_history,
+            disp_name=self.profile.display_name,
+            identity=self.profile.identity,
         )
 
     def get_deduplicated_history(self) -> List[Dict[str, str]]:

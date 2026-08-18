@@ -1,7 +1,6 @@
 import sys
 import os
 import json
-from typing import Set, Optional
 
 # 設置 Windows 控制台輸出為 UTF-8 避免 CP950 編碼崩潰
 if sys.platform == "win32":
@@ -22,6 +21,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import gradio as gr
 from src.game_engine import GameEngine
 from src.models import GameStateDelta, is_placeholder_option
+from src.options import generate_fallback_options, generate_single_fallback_option, generate_fallback_delta
 from src.save_manager import list_account_saves, has_account_save, load_account_game, save_account_game
 
 # 獨立帳號 Session 引擎註冊表
@@ -43,226 +43,15 @@ def get_engine_for_user(username: str = "楚留香") -> GameEngine:
 engine = get_engine_for_user("楚留香")
 
 
-def generate_single_option(
-    idx: int,
-    npc_name: str,
-    location_name: str,
-    intimacy: int,
-    turn: int,
-    exclude_opts: Optional[Set[str]] = None
-) -> str:
-    exclude = exclude_opts or set()
-
-    pools = {
-        "合歡宗聖女": [
-            [  # A) 正派/常規
-                "A) 抱拳拱手向聖女柳如煙詢問懷中血秘卷與解毒線索",
-                "A) 眼神深情凝視聖女柳如煙，詢問合歡宗雙修心法的絕密要訣",
-                "A) 向柳如煙打聽少林與武當鎮派武學的江湖陰謀",
-                "A) 與柳如煙密謀龍門之巔最終反殺正派盟主與朝廷禁衛計畫",
-                f"A) 向柳如煙打聽當前地點 [{location_name}] 的暗道與周邊形勢"
-            ],
-            [  # B) 謀略/智取談判
-                "B) 分析四大勢力利害關係向柳如煙提出籌碼交換",
-                "B) 抓出柳如煙言語中的試探破綻，開出黑市情報做交易",
-                "B) 提議與柳如煙聯手抗衡正派武林盟與朝廷追兵",
-                "B) 以血秘卷第一層密碼為條件籌劃雙方共同退路",
-                f"B) 冷靜剖析[{location_name}]局勢，向柳如煙開出合作盟約"
-            ],
-            [  # C) 情慾/色誘/親密
-                "C) 湊近柳如煙身旁，眼神挑逗並嘗試進行身體接觸試探",
-                "C) 溫柔地將柳如煙攬入懷中，在耳畔低語運轉雙修靈氣試探心意",
-                "C) 順勢牽起柳如煙冰涼柔嫩的纖手，運轉雙修心法導入靈氣驅解詛咒",
-                "C) 與柳如煙緊緊相擁，深度運轉太上陰陽心法突破修為至頂峰大成",
-                f"C) 凝視柳如煙美眸，輕撫其腰肢運轉太上陰陽心法合練"
-            ],
-            [  # D) 混亂邪惡/背叛/暗黑
-                "D) 眼神一冷搜刮柳如煙隨身攜帶的合歡宗毒藥令牌",
-                "D) 亮出冷刃逼問柳如煙是否有意背叛正派武林盟",
-                "D) 邀請柳如煙一同解開血秘卷上的雙修陣法封印",
-                "D) 亮出毒刃威脅周邊埋伏的正派刺客保護柳如煙",
-                f"D) 眼神冷冽拔出暗器戒備，逼問柳如煙隨身密卷真相"
-            ],
-            [  # E) 地圖探索/轉移
-                "E) 移動前往亂葬崗搜尋古老功法殘頁",
-                "E) 轉移陣地前往少林寺下鎮避開風頭",
-                "E) 移動前往血衣樓分舵探索情報",
-                f"E) 轉移陣地前往 [{location_name}] 核心密室籌劃大局",
-                f"E) 在當前區域 [{location_name}] 仔細搜尋蛛絲馬跡與秘密通道"
-            ]
-        ],
-        "風騷老闆娘": [
-            [  # A
-                "A) 點一壺上等竹葉青向老闆娘賽金花打聽龍門關最新消息",
-                "A) 詢問老闆娘賽金花龍門客棧密道與各方勢力的核心情報",
-                "A) 要求賽金花引薦黑市兵器商購買上等寶劍",
-                "A) 與賽金花密謀掌控龍門關黑市情報網發起反擊",
-                f"A) 探聽關於 [{location_name}] 黑市傳聞與血秘卷第一層真相"
-            ],
-            [  # B
-                "B) 以龍門客棧密道情報與賽金花進行籌碼劃分",
-                "B) 分析血衣樓黑榜賞金，提議與賽金花二八分帳",
-                "B) 拿出黑市情報做交換，說服賽金花提供庇護",
-                "B) 洞察賽金花的商賈企圖，提出合開情報網的謀略",
-                f"B) 冷靜與賽金花交涉關於[{location_name}]的黑市收益分成"
-            ],
-            [  # C
-                "C) 湊近賽金花耳畔輕吟調情話語並撫摸其手背",
-                "C) 伸手環住賽金花豐滿的細腰，低聲討要天字房鑰匙",
-                "C) 隨賽金花進入天字房秘室，共飲合歡美酒傾聽其紅塵身世心聲",
-                "C) 攬住賽金花嬌軀在紅燭下雙宿雙飛共定生死誓言",
-                f"C) 溫柔握住賽金花手心，在紅燭下雙修合練運轉靈氣"
-            ],
-            [  # D
-                "D) 亮出血滴子逼問賽金花關於血衣樓黑榜的幕後主使",
-                "D) 冷聲逼問賽金花龍門客棧地下庫房位置",
-                "D) 掏出暗器威脅客棧酒保搜刮當日營業銀票",
-                "D) 拔劍除掉暗中監視客棧的正派武林盟眼線",
-                f"D) 眼神一冷亮出武器搜刮周邊密卷與隨身銀票"
-            ],
-            [  # E
-                "E) 移動前往龍門錢莊查詢存款行情",
-                "E) 移動前往黑風寨山腳避開風頭",
-                "E) 移動前往少林寺下鎮避開朝廷搜捕",
-                f"E) 移動前往區域 [{location_name}] 核心避難暗道",
-                f"E) 在當前區域 [{location_name}] 仔細搜尋隱蔽出口"
-            ]
-        ],
-        "殺手阿福": [
-            [  # A
-                "A) 亮出武器防備阿福突襲，詢問血衣樓的接單規則",
-                "A) 詢問阿福血衣樓黑榜殺手最新的懸賞名單",
-                "A) 重金雇傭阿福作為個人私人金牌護衛",
-                "A) 詢問阿福關於血衣樓樓主與朝廷禁衛的秘密交易",
-                f"A) 向阿福打聽 [{location_name}] 周邊殺手伏擊點"
-            ],
-            [  # B
-                "B) 以黑市定金與情報做籌碼說服阿福暫緩刺殺",
-                "B) 指出血衣樓懸賞令的條款漏洞，開出翻倍重金",
-                "B) 提議協助阿福反殺血衣樓執法隊，劃分戰利品",
-                "B) 分析朝廷禁衛軍的動向，向阿福提供逃生避難路線",
-                f"B) 與阿福進行江湖籌碼談判，開出讓其無法拒絕的代價"
-            ],
-            [  # C
-                "C) 湊近阿福耳邊輕語利益交換誘惑條款",
-                "C) 掏出合歡宗雙修秘笈試圖與阿福私下交易",
-                "C) 向阿福展露魅力邀請其退出血衣樓共闖江湖",
-                "C) 湊近阿福身旁掏出美酒與雙修秘笈進行深層拉扯",
-                f"C) 展示高超魅力與阿福分享秘寶並輕撫其手背"
-            ],
-            [  # D
-                "D) 拔出利刃冷不防割向阿福右手動脈進行強襲",
-                "D) 將劇毒匕首架在阿福脖子上逼他透露分舵地圖",
-                "D) 聯手阿福發動伏擊殺死血衣樓前來督戰的執法長老",
-                "D) 亮出冷刃逼問阿福血衣樓最新黑榜刺殺目標",
-                f"D) 眼神一冷亮出匕首逼問阿福分舵地圖與藏寶"
-            ],
-            [  # E
-                "E) 移動前往亂葬崗搜尋避難點",
-                "E) 移動前往黑風寨山腳察看埋伏陷阱",
-                f"E) 移動前往地點 [{location_name}] 探索暗道",
-                f"E) 在當前區域 [{location_name}] 搜尋埋伏陷阱與出路",
-                f"E) 移動前往周邊安全地點避開血衣樓追殺"
-            ]
-        ],
-        "錢莊老王": [
-            [  # A
-                "A) 詢問老王錢莊當前存款與黑市金庫行情",
-                "A) 詢問老王少林與武當鎮派武學的抵押拍賣行情",
-                "A) 與老王商討收購少林武當地產股權計劃",
-                "A) 向老王探聽四大勢力最新資金流向與黃金庫存",
-                f"A) 詢問老王關於地點 [{location_name}] 的土地抵押行情"
-            ],
-            [  # B
-                "B) 拿出黑市黃金密藏庫存地圖向老王進行高額借貸談判",
-                "B) 以四大勢力的地下債務清單為籌碼逼老王劃轉銀票",
-                "B) 提議與老王聯手做空正派武林盟與朝廷軍費資金鏈",
-                "B) 剖析江湖局勢向老王提出龍門錢莊資本擴張合約",
-                f"B) 出示黑市籌碼說服老王開具無限額度信用憑證"
-            ],
-            [  # C
-                "C) 湊近老王耳邊低語財色交易條款",
-                "C) 捏住老王手腕將劇毒滲入其脈搏脅迫劃轉銀票",
-                "C) 展示高超魅力說服老王為自己開立無限額度金卡",
-                "C) 上前對老王展露美色與魅力試圖減免貸款利息",
-                f"C) 展露高超魅力試圖說服老王開立免息貸款合同"
-            ],
-            [  # D
-                "D) 亮出沾血匕首逼老王交出總庫房鑰匙",
-                "D) 強行搶走錢莊櫃檯上的最新銀票票據",
-                "D) 威脅老王將朝廷懸賞金暗中劃入自己帳戶",
-                "D) 亮出利刃逼問老王關於血衣樓與錢莊的密約",
-                f"D) 眼神一冷掏出匕首逼問老王核心庫房與地圖"
-            ],
-            [  # E
-                "E) 在錢莊櫃檯周邊仔細搜尋帳簿與地圖",
-                "E) 移動前往少林寺下鎮聽取梵音淨化心神",
-                f"E) 移動前往區域 [{location_name}] 尋找投資標的",
-                f"E) 在當前區域 [{location_name}] 搜尋密藏銀票",
-                f"E) 移動前往龍門客棧尋求保護與情報交易"
-            ]
-        ]
-    }
-
-    npc_pools = pools.get(npc_name)
-    if not npc_pools:
-        default_candidates = [
-            [f"A) 抱拳向{npc_name}詢問當前地區 [{location_name}] 的傳聞", f"A) 探聽關於{npc_name}的出身來歷與背後勢力", f"A) 誠懇向{npc_name}討教當前局勢與解毒線索"],
-            [f"B) 冷靜分析四大勢力利害關係與{npc_name}進行談判", f"B) 拿出黑市情報籌碼提議與{npc_name}利益均沾", f"B) 運用江湖談判與利益交換試圖說服{npc_name}"],
-            [f"C) 湊近{npc_name}耳邊輕語並進行身體接觸試探", f"C) 牽起{npc_name}的手指展露魅力拉近情感距離", f"C) 上前擁住{npc_name}運轉靈氣進行雙修親密試探"],
-            [f"D) 眼神一冷搜刮{npc_name}隨身帶有的密卷與銀票", f"D) 亮出利刃冷聲威脅{npc_name}透露秘密", f"D) 出其不意亮出暗器強襲{npc_name}索要情報"],
-            [f"E) 在當前區域 [{location_name}] 仔細搜尋蛛絲馬跡", f"E) 移動前往周邊安全區域避開風頭", f"E) 移動前往鄰近地點尋找避難所"]
-        ]
-        category_candidates = default_candidates[idx % 5]
-    else:
-        category_candidates = npc_pools[idx % 5]
-
-    for cand in category_candidates:
-        cand_clean = cand.strip()
-        if cand_clean not in exclude:
-            return cand_clean
-
-    prefixes = ["A", "B", "C", "D", "E"]
-    prefix = prefixes[idx % 5]
-    descriptions = [
-        f"向{npc_name}打聽關於[{location_name}]的最新情報",
-        f"與{npc_name}進行冷靜利害分析與利益交涉",
-        f"上前對{npc_name}展露美色與魅力進行深層拉扯",
-        f"亮出冷刃戒備並強行搜刮{npc_name}身上的秘卷",
-        f"在[{location_name}]區域搜尋周邊秘密出口"
-    ]
-    desc = descriptions[idx % 5]
-    dynamic_opt = f"{prefix}) {desc} (第{turn}回合)"
-    if dynamic_opt in exclude:
-        dynamic_opt = f"{prefix}) {desc} (第{turn}回合-{len(exclude)+1})"
-    return dynamic_opt
-
-
-def generate_dynamic_options(
-    npc_name: str,
-    location_name: str,
-    intimacy: int,
-    turn: int,
-    exclude_opts: Optional[Set[str]] = None
-) -> list:
-    exclude = set(exclude_opts) if exclude_opts else set()
-    result = []
-    for idx in range(5):
-        opt = generate_single_option(idx, npc_name, location_name, intimacy, turn, exclude)
-        result.append(opt)
-        exclude.add(opt)
-    return result
-
-
 def get_npc_initial_options(engine: GameEngine, npc_name: str) -> list:
     loc = engine.current_location
     agent = engine.agents.get(npc_name)
-    intimacy = agent.profile.intimacy if agent else 0
+    disp_name = agent.profile.display_name if agent else None
     used_history = set(agent.used_options_history) if agent else set()
-    return generate_dynamic_options(npc_name, loc, intimacy, engine.game_turn, used_history)
+    return generate_fallback_options(npc_name, loc, engine.game_turn, used_history, disp_name=disp_name)
 
 
-DEFAULT_OPTIONS = generate_dynamic_options("風騷老闆娘", "龍門客棧", 0, 1)
+DEFAULT_OPTIONS = get_npc_initial_options(engine, "風騷老闆娘")
 
 
 def get_status_markdown(engine: GameEngine) -> str:
@@ -630,25 +419,28 @@ def process_player_choice(custom_name: str, user_input: str, history: list, prev
 
     # 與 NPC 互動
     npc_name = engine.current_agent.profile.name if engine.current_agent else ""
-    intimacy = engine.current_agent.profile.intimacy if engine.current_agent else 0
     used_history = set(engine.current_agent.used_options_history) if engine.current_agent else set()
     prev_opts = {
         prev_opt_a.strip(), prev_opt_b.strip(), prev_opt_c.strip(),
         prev_opt_d.strip(), prev_opt_e.strip()
     }
-    fallback_opts = generate_dynamic_options(
-        npc_name, engine.current_location, intimacy, engine.game_turn + 1, used_history | prev_opts
+    disp_name = engine.current_agent.profile.display_name if engine.current_agent else None
+    fallback_opts = generate_fallback_options(
+        npc_name, engine.current_location, engine.game_turn + 1, used_history | prev_opts, disp_name=disp_name
     )
 
     try:
         delta = engine.interact(user_input)
     except Exception as e:
         if engine.current_agent:
-            delta = engine.current_agent._generate_fallback_delta(
-                player_action=user_input,
+            delta = generate_fallback_delta(
+                npc_name=npc_name,
                 player_state=engine.player_state,
-                current_location=engine.current_location,
-                err_msg=str(e)
+                location=engine.current_location,
+                turn=engine.game_turn,
+                exclude_opts=used_history | prev_opts,
+                disp_name=disp_name,
+                identity=engine.current_agent.profile.identity,
             )
         else:
             delta = GameStateDelta(
@@ -719,8 +511,8 @@ def process_player_choice(custom_name: str, user_input: str, history: list, prev
             final_opts.append(raw_opt)
             exclude_opts.add(raw_opt)
         else:
-            new_opt = generate_single_option(
-                idx, npc_name, engine.current_location, intimacy, engine.game_turn, exclude_opts
+            new_opt = generate_single_fallback_option(
+                idx, npc_name, engine.current_location, engine.game_turn, exclude_opts, disp_name=disp_name
             )
             final_opts.append(new_opt)
             exclude_opts.add(new_opt)
