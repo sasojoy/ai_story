@@ -4,7 +4,7 @@ from typing import List, Dict, Any, Optional
 
 def is_placeholder_option(text: str) -> bool:
     text_lower = str(text).lower()
-    placeholders = ["選項文字", "常規選項", "搞笑選項", "暗黑選項", "正派選項", "選項a", "選項b", "選項c", "選項d", "選項e"]
+    placeholders = ["選項文字", "常規選項", "搞笑選項", "謀略選項", "談判選項", "暗黑選項", "正派選項", "選項a", "選項b", "選項c", "選項d", "選項e"]
     return any(p in text_lower for p in placeholders)
 
 
@@ -45,12 +45,12 @@ class GameStateDelta(BaseModel):
     options: List[str] = Field(
         default_factory=lambda: [
             "A) 亮出兵器靜觀其變，開口詢問對方的意圖",
-            "B) 掏出《勞動基準法》與理賠條款進行談判拉扯",
+            "B) 分析眼前局勢利害，冷靜提出籌碼條件進行談判",
             "C) 上前進行身體接觸與耳邊輕語試探",
             "D) 眼神一冷出其不意搜刮對方的隨身密卷",
             "E) 在當前區域仔細搜尋蛛絲馬跡與周邊通道"
         ],
-        description="提供給玩家選擇的 5 個動態劇情選項 (A: 正派/常規, B: 智取/搞笑, C: 情慾/色誘/親密, D: 混亂/背叛/暗黑, E: 地圖探索/轉移)"
+        description="提供給玩家選擇的 5 個動態劇情選項 (A: 正派/常規, B: 謀略/智取/談判, C: 情慾/色誘/親密, D: 混亂/背叛/暗黑, E: 地圖探索/轉移)"
     )
 
     @model_validator(mode="before")
@@ -202,7 +202,7 @@ class GameStateDelta(BaseModel):
         else:
             data["options"] = [
                 "A) 亮出兵器靜觀其變，開口詢問對方的意圖",
-                "B) 掏出《勞動基準法》與理賠條款進行談判拉扯",
+                "B) 分析眼前局勢利害，冷靜提出籌碼條件進行談判",
                 "C) 上前進行身體接觸與耳邊輕語試探",
                 "D) 眼神一冷出其不意搜刮對方的隨身密卷",
                 "E) 移動前往周邊安全區域避開風頭"
@@ -215,6 +215,7 @@ class NPCProfile(BaseModel):
     name: str
     identity: str
     personality: str
+    display_name: Optional[str] = None
     hp: int = 100
     location: str
     intimacy: int = 0
@@ -236,6 +237,10 @@ class NPCProfile(BaseModel):
         ]
     )
     system_prompt_override: Optional[str] = None
+
+    @property
+    def narrative_name(self) -> str:
+        return self.display_name or self.name
 
     def get_unlocked_biography(self) -> List[str]:
         """根據親密度解鎖生平故事章節"""

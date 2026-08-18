@@ -36,7 +36,7 @@ class TestEngine(unittest.TestCase):
         self.assertIn("HP=100", prompt)
         self.assertIn("金幣=50", prompt)
         self.assertIn("鏽蝕鐵劍", prompt)
-        self.assertIn("允許玩家進行任何荒謬", prompt)
+        self.assertIn("允許玩家進行任何正邪抉擇", prompt)
 
     def test_game_engine_apply_delta(self):
         engine = GameEngine()
@@ -161,8 +161,79 @@ class TestEngine(unittest.TestCase):
 
         self.assertIsNotNone(delta)
         self.assertNotEqual(delta.npc_status_tag, "靜默")
-        self.assertIn("殺手阿福", delta.narrative)
+        self.assertIn("阿福", delta.narrative)
         self.assertGreaterEqual(len(delta.options), 3)
+
+    @patch("src.ollama_client.OllamaClient.chat_structured")
+    def test_option_deduplication_and_progression(self, mock_chat):
+        mock_delta = GameStateDelta(
+            narrative="賽金花眼波盈盈地看了你一眼",
+            options=[
+                "A) 詢問老闆娘賽金花龍門客棧密道與各方勢力的核心情報",
+                "B) 提議將龍門客棧打包上市進行資本股權劃轉",
+                "C) 湊近賽金花耳畔輕吟調情話語並撫摸其手背",  # 故意包含上一輪的選項 C 測試去重
+                "D) 冷聲逼問賽金花龍門客棧地下庫房位置",
+                "E) 移動前往黑風寨山腳避開風頭"
+            ]
+        )
+        mock_chat.return_value = mock_delta
+
+        from web_ui import process_player_choice, get_engine_for_user
+        eng = get_engine_for_user("測試玩家_OptionDedup")
+        eng.switch_npc("風騷老闆娘")
+
+        # 第一回合選擇選項 C
+        res1 = process_player_choice(
+            custom_name="測試玩家_OptionDedup",
+            user_input="C) 湊近賽金花耳畔輕吟調情話語並撫摸其手背",
+            history=[],
+            prev_opt_a="A) 點一壺上等竹葉青向老闆娘賽金花打聽龍門關最新消息",
+            prev_opt_b="B) 拿出客棧餐飲評鑑表要求賽金花打八折",
+            prev_opt_c="C) 湊近賽金花耳畔輕吟調情話語並撫摸其手背",
+            prev_opt_d="D) 亮出血滴子逼問賽金花關於血衣樓黑榜的幕後主使",
+            prev_opt_e="E) 移動前往龍門錢莊查詢存款行情"
+        )
+
+        opt_c_turn2 = res1[12]  # opt_c is at index 12
+        self.assertNotEqual(opt_c_turn2, "C) 湊近賽金花耳畔輕吟調情話語並撫摸其手背")
+
+        # 第二回合再選選項 C (使用第二回合獲得的 opt_c_turn2)
+        res2 = process_player_choice(
+            custom_name="測試玩家_OptionDedup",
+            user_input=opt_c_turn2,
+            history=res1[0],
+            prev_opt_a=res1[10],
+            prev_opt_b=res1[11],
+            prev_opt_c=res1[12],
+            prev_opt_d=res1[13],
+            prev_opt_e=res1[14]
+        )
+
+        opt_c_turn3 = res2[12]  # opt_c is at index 12
+        self.assertNotEqual(opt_c_turn3, opt_c_turn2)
+        self.assertNotEqual(opt_c_turn3, "C) 湊近賽金花耳畔輕吟調情話語並撫摸其手背")
+
+    def test_history_deduplication_and_repeat_penalty(self):
+        agent = NPCAgent(self.profile)
+        # 故意加入重複的 assistant 歷史紀錄
+        agent.history = [
+            {"role": "user", "content": "行動 1"},
+            {"role": "assistant", "content": "楚留香與柳如煙相擁，雙方的心意彼此對話。"},
+            {"role": "user", "content": "行動 2"},
+            {"role": "assistant", "content": "楚留香與柳如煙相擁，雙方的心意彼此對話。"},
+            {"role": "user", "content": "行動 3"},
+            {"role": "assistant", "content": "楚留香與柳如煙相擁，雙方的心意彼此對話。"}
+        ]
+
+        dedup = agent.get_deduplicated_history()
+        # 驗證重複的 assistant 紀錄已被自動清洗，只保留 1 筆
+        assistant_msgs = [m for m in dedup if m.get("role") == "assistant"]
+        self.assertEqual(len(assistant_msgs), 1)
+
+        # 驗證 System Prompt 簡化且不含僵化硬性模板詞「瞳孔微震」
+        sys_prompt = agent.build_system_prompt(player_state=self.player_state)
+        self.assertNotIn("瞳孔微震", sys_prompt)
+        self.assertNotIn("雙頰酡紅", sys_prompt)
 
 
 if __name__ == "__main__":

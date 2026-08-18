@@ -5,11 +5,16 @@ from unittest.mock import patch, MagicMock
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from src.ollama_client import OllamaClient, clean_json_text, repair_truncated_json, parse_json_robustly
+from src.ollama_client import OllamaClient, clean_json_text, repair_truncated_json, parse_json_robustly, extract_partial_narrative
 from src.models import GameStateDelta
 
 
 class TestOllamaClient(unittest.TestCase):
+
+    def test_extract_partial_narrative(self):
+        partial_json = '{\n  "narrative": "大漠黃沙，龍門客棧內熱氣騰騰'
+        extracted = extract_partial_narrative(partial_json)
+        self.assertEqual(extracted, "大漠黃沙，龍門客棧內熱氣騰騰")
 
     def test_clean_json_text(self):
         raw_markdown = "```json\n{\"narrative\": \"test\", \"npc_status_tag\": \"normal\"}\n```"
@@ -88,6 +93,28 @@ class TestOllamaClient(unittest.TestCase):
         self.assertEqual(mock_post.call_count, 2)
         self.assertEqual(result.narrative, "重構成功")
         self.assertEqual(result.player_hp_change, 5)
+
+    @patch("requests.post")
+    def test_chat_structured_stream_success(self, mock_post):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.iter_lines.return_value = [
+            '{"message": {"content": "{\\n  \\"narrative\\": \\"賽金花"}}'.encode("utf-8"),
+            '{"message": {"content": "嬌笑了聲\\", \\"intimacy_change\\": 5}"}}'.encode("utf-8")
+        ]
+        mock_post.return_value = mock_resp
+
+        client = OllamaClient()
+        chunks = list(client.chat_structured_stream(
+            messages=[{"role": "user", "content": "你好"}],
+            response_model=GameStateDelta
+        ))
+
+        self.assertTrue(len(chunks) > 0)
+        final_narrative, final_delta = chunks[-1]
+        self.assertEqual(final_narrative, "賽金花嬌笑了聲")
+        self.assertIsInstance(final_delta, GameStateDelta)
+        self.assertEqual(final_delta.intimacy_change, 5)
 
 
 if __name__ == "__main__":

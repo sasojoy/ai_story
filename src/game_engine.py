@@ -43,10 +43,10 @@ class GameEngine:
         self.story_milestones: List[str] = ["客棧甦醒與初入龍門"]
         self.recent_world_events: List[str] = []
         self.world_news: List[str] = [
-            "【江湖動態】[殺手阿福] 正在暗巷按《勞基法》精算工時，拒絕了血衣樓的無償加班指令。",
-            "【江湖動態】[錢莊老王] 正在龍門錢莊發行「江湖第一期高利貸債券」，招攬各路豪客。",
-            "【江湖動態】[合歡宗聖女] 於天字房微醺品酒，暗中打量著闖入龍門客棧的各路強者。",
-            "【江湖動態】[風騷老闆娘] 在客棧酒櫃前親自下榻招攬豪客，打探著血秘卷的傳聞。"
+            "【江湖動態】[阿福] 正在暗巷擦拭漆黑古鐵劍，拒絕了血衣樓無預付訂金的刺殺指令。",
+            "【江湖動態】[老王] 正在龍門錢莊清點黑市黃金，盤算各大門派的地下債務。",
+            "【江湖動態】[柳如煙] 於天字房微醺品酒，暗中打量著闖入龍門客棧的各路強者。",
+            "【江湖動態】[賽金花] 在客棧酒櫃前斟酒招攬豪客，打探著血秘卷的傳聞。"
         ]
 
         for reg_name, reg_info in self.world_map.get("regions", {}).items():
@@ -363,27 +363,27 @@ class GameEngine:
 
         activities_pool = {
             "殺手阿福": [
-                ("正在暗巷擦拭鏽蝕鐵劍，同時翻閱《勞動基準法》條文", {"錢莊老王": -5}),
-                ("準時響應六點下班號角，收劍歸鞘並向過路客商索要延時精神損失費", {"風騷老闆娘": +5}),
-                ("在暗巷一招震退兩名前來催討加班費的血衣樓小卒", {"風騷老闆娘": +5, "錢莊老王": -5}),
-                ("坐在客棧外石凳上閉目養神，嚴正拒絕任何未支付預付款的刺殺委託", {})
+                ("正在暗巷擦拭漆黑古鐵劍，冷眼觀察周邊埋伏的血衣樓刺客", {"錢莊老王": -5}),
+                ("收劍歸鞘，嚴正拒絕任何未支付預付金的刺殺委託", {"風騷老闆娘": +5}),
+                ("在暗巷一招震退兩名前來試探的血衣樓小卒", {"風騷老闆娘": +5, "錢莊老王": -5}),
+                ("坐在客棧外石凳上閉目養神，擦拭手背上的陳年劍傷", {})
             ],
             "錢莊老王": [
-                ("正在錢莊撥打金算盤，嘗試將合歡宗的門派債務進行打包證券化", {"合歡宗聖女": -5}),
-                ("親自跑去龍門客棧推銷「龍門黑市高槓桿期貨」，被老闆娘打發了一壺烈酒", {"風騷老闆娘": +5}),
-                ("在櫃檯前查驗剛收到的黃金熔錠，暗中計算如何向阿福追討貸款利息", {"殺手阿福": -5}),
-                ("籌劃龍門錢莊納斯達克上市招股書，嘗試拉攏各大武林勢力入股", {"風騷老闆娘": +5})
+                ("正在錢莊撥打金算盤，精算四大勢力的地下借貸與武器抵押", {"合歡宗聖女": -5}),
+                ("親自跑去龍門客棧推銷黑市黃金借貸，被賽金花打發了一壺烈酒", {"風騷老闆娘": +5}),
+                ("在櫃檯前查驗剛收到的黃金熔錠，暗中計算如何向阿福追討黑市貸款", {"殺手阿福": -5}),
+                ("籌劃龍門錢莊地下資金鏈，嘗試拉攏各大武林勢力入股", {"風騷老闆娘": +5})
             ],
             "合歡宗聖女": [
                 ("正在天字房紅燭下品嚐西域葡萄酒，搖曳七情魔音鈴修煉太上陰陽心法", {"風騷老闆娘": +5}),
-                ("暗中派香婢向下樓與風騷老闆娘對接，交換朝廷錦衣衛與血衣樓的最新情報", {"風騷老闆娘": +10}),
-                ("站在天字房窗前俯瞰龍門客棧暗巷，暗中觀察殺手阿福的拔劍出招速度", {"殺手阿福": +5}),
+                ("暗中派香婢向下樓與賽金花對接，交換朝廷錦衣衛與血衣樓的最新情報", {"風騷老闆娘": +10}),
+                ("站在天字房窗前俯瞰龍門客棧暗巷，暗中觀察阿福的拔劍出招速度", {"殺手阿福": +5}),
                 ("在紅燭微光下研讀上古雙修祕籍殘頁，尋解開師門詛咒的雄性強者", {})
             ],
             "風騷老闆娘": [
                 ("正在酒櫃前與過往客商調情斟酒，用柔情與酒香換取黑市秘寶資訊", {"合歡宗聖女": +5}),
                 ("親自前往龍門客棧地下暗道清點密藏，暗中資助義軍物資糧草", {"殺手阿福": +5}),
-                ("微笑着指點錢莊老王關於龍門客棧的房租契約條款，小賺了一筆利息", {"錢莊老王": +5}),
+                ("微笑着指點老王關於龍門客棧的租憑契約條款，小賺了一筆利息", {"錢莊老王": -5}),
                 ("倚靠在客棧二樓欄杆邊抿酒，眼神掃過堂內每位江湖豪客的腰間佩兵", {})
             ]
         }
@@ -407,7 +407,8 @@ class GameEngine:
                     curr_rel = p.relationships.get(target_npc, 0)
                     p.relationships[target_npc] = max(-100, min(100, curr_rel + change))
 
-                news_item = f"【江湖動態 · 回合{self.game_turn}】[{p.name}] {act_text}"
+                disp_name = p.display_name or p.name
+                news_item = f"【江湖動態 · 回合{self.game_turn}】[{disp_name}] {act_text}"
                 self.world_news.insert(0, news_item)
 
         if len(self.world_news) > 10:
@@ -439,3 +440,30 @@ class GameEngine:
         self.apply_delta(delta)
         self.simulate_npc_autonomous_actions()
         return delta
+
+    def interact_stream(self, player_action: str):
+        """與當前 NPC 串流互動"""
+        if not self.current_agent:
+            raise ValueError("目前沒有選擇任何 NPC 進行互動！")
+
+        reg_info = self.get_current_region()
+        ch_info = self.get_current_chapter_info()
+
+        for partial_narrative, delta in self.current_agent.process_action_stream(
+            client=self.client,
+            player_action=player_action,
+            player_state=self.player_state,
+            game_turn=self.game_turn,
+            main_quest_summary=self.main_quest_summary,
+            factions=self.factions,
+            current_location=self.current_location,
+            current_region_desc=reg_info.get("description", ""),
+            available_exits=self.get_available_exits(),
+            recent_world_events=self.recent_world_events,
+            story_chapter_title=ch_info.get("title", "第一章：血夜甦醒與龍門破局"),
+            story_chapter_goal=ch_info.get("goal", "尋求療傷與避難，查明懷中血秘卷真相。")
+        ):
+            if delta is not None:
+                self.apply_delta(delta)
+                self.simulate_npc_autonomous_actions()
+            yield partial_narrative, delta

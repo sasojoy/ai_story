@@ -73,6 +73,42 @@ def repair_truncated_json(s: str) -> str:
     return s
 
 
+def extract_partial_narrative(text: str) -> str:
+    """從未完成/串流中的 JSON 文字中即時提取 narrative 欄位之內容"""
+    start = text.find('"narrative"')
+    if start == -1:
+        return ""
+    colon = text.find(':', start)
+    if colon == -1:
+        return ""
+    quote_start = text.find('"', colon)
+    if quote_start == -1:
+        return ""
+
+    content = text[quote_start + 1:]
+    result = []
+    i = 0
+    while i < len(content):
+        ch = content[i]
+        if ch == '\\' and i + 1 < len(content):
+            next_ch = content[i + 1]
+            if next_ch == '"':
+                result.append('"')
+            elif next_ch == 'n':
+                result.append('\n')
+            elif next_ch == '\\':
+                result.append('\\')
+            else:
+                result.append(next_ch)
+            i += 2
+            continue
+        if ch == '"':
+            break
+        result.append(ch)
+        i += 1
+    return "".join(result)
+
+
 def parse_json_robustly(text: str) -> dict:
     """穩健解析 LLM 輸出的 JSON，具備容錯修復機制"""
     cleaned = clean_json_text(text)
@@ -137,9 +173,14 @@ class OllamaClient:
             "messages": messages,
             "format": "json",
             "stream": False,
+            "keep_alive": "60m",
             "options": {
                 "temperature": temperature,
-                "num_predict": 2048,
+                "repeat_penalty": 1.18,
+                "top_p": 0.9,
+                "presence_penalty": 0.3,
+                "frequency_penalty": 0.3,
+                "num_predict": 512,
                 "num_ctx": 4096
             }
         }
@@ -178,9 +219,14 @@ class OllamaClient:
                 "messages": retry_messages,
                 "format": "json",
                 "stream": False,
+                "keep_alive": "60m",
                 "options": {
                     "temperature": temperature,
-                    "num_predict": 2048,
+                    "repeat_penalty": 1.18,
+                    "top_p": 0.9,
+                    "presence_penalty": 0.3,
+                    "frequency_penalty": 0.3,
+                    "num_predict": 512,
                     "num_ctx": 4096
                 }
             }
@@ -194,3 +240,64 @@ class OllamaClient:
             
             data = parse_json_robustly(content)
             return response_model.model_validate(data)
+
+    def chat_structured_stream(
+        self,
+        messages: List[Dict[str, str]],
+        response_model: Type[T],
+        temperature: float = 0.7,
+        num_predict: int = 512
+    ):
+        """
+        以串流 (stream: True) 方式調用 Ollama Chat API。
+        過程持續 yield (partial_narrative, None)
+        串流結束時 yield (full_narrative, validated_model_instance)
+        """
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "format": "json",
+            "stream": True,
+            "keep_alive": "60m",
+            "options": {
+                "temperature": temperature,
+                "repeat_penalty": 1.18,
+                "top_p": 0.9,
+                "presence_penalty": 0.3,
+                "frequency_penalty": 0.3,
+                "num_predict": num_predict,
+                "num_ctx": 4096
+            }
+        }
+
+        url = f"{self.base_url}/api/chat"
+        full_content = ""
+
+        try:
+            res = requests.post(url, json=payload, timeout=self.timeout, stream=True)
+            if res.status_code == 404:
+                raise RuntimeError(f"Ollama 回傳 404：模型 '{self.model}' 未找到，請先執行 `ollama pull {self.model}` 下載模型。")
+            res.raise_for_status()
+
+            for line in res.iter_lines():
+                if not line:
+                    continue
+                try:
+                    chunk_json = json.loads(line.decode("utf-8"))
+                    chunk_content = chunk_json.get("message", {}).get("content", "")
+                    full_content += chunk_content
+                    partial = extract_partial_narrative(full_content)
+                    if partial:
+                        yield (partial, None)
+                except Exception:
+                    pass
+
+            data = parse_json_robustly(full_content)
+            validated = response_model.model_validate(data)
+            narrative = getattr(validated, "narrative", "") or extract_partial_narrative(full_content)
+            yield (narrative, validated)
+
+        except Exception as e:
+            logger.warning(f"串流請求/解析失敗 ({e})，降級至單次完整請求...")
+            result = self.chat_structured(messages=messages, response_model=response_model, temperature=temperature)
+            yield (result.narrative, result)
