@@ -182,7 +182,7 @@ class OllamaClient:
                 "top_p": 0.9,
                 "presence_penalty": 0.3,
                 "frequency_penalty": 0.3,
-                "num_predict": 512,
+                "num_predict": 1024,
                 "num_ctx": self.context_length
             }
         }
@@ -228,7 +228,7 @@ class OllamaClient:
                     "top_p": 0.9,
                     "presence_penalty": 0.3,
                     "frequency_penalty": 0.3,
-                    "num_predict": 512,
+                    "num_predict": 1024,
                     "num_ctx": self.context_length
                 }
             }
@@ -248,7 +248,7 @@ class OllamaClient:
         messages: List[Dict[str, str]],
         response_model: Type[T],
         temperature: float = 0.7,
-        num_predict: int = 512
+        num_predict: int = 1024
     ):
         """
         以串流 (stream: True) 方式調用 Ollama Chat API。

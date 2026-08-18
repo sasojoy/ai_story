@@ -148,6 +148,13 @@ class GameStateDelta(BaseModel):
         if not data.get("narrative"):
             data["narrative"] = "..."
 
+        # 6.5 部分小型模型偶爾會把選項清單誤附加在 narrative 段落尾端而非獨立的 options 欄位，
+        # 這裡偵測「選項 A)」/「选项A)」這類標記並截斷，避免選項清單重複出現在劇情文字中
+        leak_match = re.search(r'(選項|选项)\s*A\s*[)\.、）]', data["narrative"])
+        if leak_match and leak_match.start() > 10:
+            trimmed = data["narrative"][:leak_match.start()].rstrip("*# \n")
+            data["narrative"] = trimmed or data["narrative"]
+
         # 7. 處理 npc_status_tag 別名與靜默標籤轉置
         if "npc_status_tag" not in data or not data["npc_status_tag"]:
             for alias in ["status", "npc_status", "tag", "emotion"]:

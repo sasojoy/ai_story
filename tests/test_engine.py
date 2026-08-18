@@ -176,6 +176,34 @@ class TestEngine(unittest.TestCase):
         self.assertEqual(delta.npc_status_tag, "凝視")  # 轉置靜默標籤
         self.assertGreaterEqual(len(delta.options), 3)
 
+    def test_normalize_llm_dict_strips_leaked_options_from_narrative(self):
+        """小型模型有時會把選項清單誤附加在 narrative 尾端 (例如 qwen2.5:1.5b 的實測案例)，
+        驗證這種情況會被自動截斷，不會讓選項清單重複出現在劇情文字裡。"""
+        raw_dict = {
+            "narrative": (
+                "楚留香在這時開始有了新的行動：\n\n"
+                "**選項 A) '這話說得倒是挺自信的'，楚留香心中暗笑。\n"
+                "选项 B) '那話說起來可是蠻有道理的'，楚留香心中暗道。**"
+            ),
+            "options": [
+                "A) 抱拳向賽金花詢問真實來歷",
+                "B) 分析局勢向賽金花提出籌碼交換",
+                "C) 上前攬住賽金花腰肢進行情慾交換",
+                "D) 眼神一冷搜刮賽金花隨身密卷",
+                "E) 移動前往黑風寨山腳避開風頭"
+            ]
+        }
+        delta = GameStateDelta.model_validate(raw_dict)
+        self.assertNotIn("選項", delta.narrative)
+        self.assertNotIn("选项", delta.narrative)
+        self.assertTrue(delta.narrative.startswith("楚留香在這時開始有了新的行動"))
+
+    def test_normalize_llm_dict_keeps_narrative_mentioning_option_midsentence(self):
+        """只有「選項/选项」緊接著 A) 這種清單開頭標記才截斷，一般提及「選項」兩字的敘述不受影響。"""
+        raw_dict = {"narrative": "賽金花笑道：『大俠這選項未免太多了些，不如挑一個吧。』"}
+        delta = GameStateDelta.model_validate(raw_dict)
+        self.assertEqual(delta.narrative, "賽金花笑道：『大俠這選項未免太多了些，不如挑一個吧。』")
+
     @patch("src.ollama_client.OllamaClient.chat_structured")
     def test_npc_fallback_on_exception(self, mock_chat):
         mock_chat.side_effect = Exception("Ollama service timeout")

@@ -187,21 +187,21 @@ config/
 
 ## 四、分階段重構順序
 
-每階段獨立可交付、可測試，由低風險排到高風險；後面階段依賴前面階段完成。
+每階段獨立可交付、可測試，由低風險排到高風險；後面階段依賴前面階段完成。目前進度見 [CLAUDE.md](CLAUDE.md)。
 
-**Stage 0 — 補測試安全網（不改行為）**
+**Stage 0 — 補測試安全網（不改行為）✅ 已完成**
 `interact_stream`/`process_action_stream` 目前零覆蓋率，先補上 mock 測試（成功路徑 + fallback 路徑），再動大範圍重構才安全。
 檔案：`tests/test_engine.py`、`tests/test_save_manager.py`、新增 `tests/test_streaming.py`
 
-**Stage 1 — 清死程式碼/死設定**
+**Stage 1 — 清死程式碼/死設定 ✅ 已完成**
 移除 `available_exits`、`region_events`、`key_event`；把 `GameConfig.context_length` 接進 `ollama_client.py`（取代 3 處硬編碼）；移除 `server/`；刪除/重建過時的 `scripts/test_prompt.py`。
 檔案：`src/models.py`、`config/world_map.json`、`config/story_outline.json`、`src/ollama_client.py`、`server/`、`scripts/test_prompt.py`
 
-**Stage 2 — 存檔系統整併**
+**Stage 2 — 存檔系統整併 ✅ 已完成**
 移除 `save_manager.py`/`GameEngine` 的 slot 機制；修正 `list_saves`/最新存檔偵測改用 account 機制；補回 `story_milestones`/`used_options_history` 的存讀；`main.py` 改用 account 存讀 + 補上 `/status` + 5 個選項全部 hotkey。
 檔案：`src/save_manager.py`、`src/game_engine.py`、`main.py`、`tests/test_save_manager.py`（改寫成針對 account 機制）
 
-**Stage 3 — 共用 fallback/選項模組**
+**Stage 3 — 共用 fallback/選項模組 ✅ 已完成（commit `699551d`）**
 建立 `config/npc_fallbacks.json` + 通用 fallback 生成；建立 `src/options.py`；`npc_agent.py::_generate_fallback_delta` 與 `web_ui.py::generate_dynamic_options` 都改呼叫它，刪掉兩份寫死的內容。
 檔案：`config/npc_fallbacks.json`（新）、`src/options.py`（新）、`src/npc_agent.py`、`web_ui.py`、新增 `tests/test_options.py`
 
