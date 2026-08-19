@@ -797,4 +797,4 @@ with gr.Blocks(title="Local Blade RPG Engine") as demo:
 
 if __name__ == "__main__":
     print("正在啟動 Local Blade RPG Web UI (0.0.0.0:7860，已開啟公共分享網址 share=True)...")
-    demo.launch(server_name="0.0.0.0", server_port=7860, show_error=True)
+    demo.launch(server_name="0.0.0.0", server_port=7860, show_error=True, share=True)

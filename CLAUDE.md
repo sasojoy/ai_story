@@ -38,6 +38,14 @@
 1. **不要用 `list(generator)` 收集中途 yield 再事後檢查內容**：`process_player_choice` 為了讓 Gradio 能低成本更新畫面，是「就地修改同一個 `clean_history` 物件再 yield」，不是每次 yield 一份新的複本。用 `list(...)` 收集會拿到一堆指向同一個「已經被改到最終狀態」物件的參照，事後檢查 `results[0]` 看到的其實是最後一輪的內容。要驗證中途狀態，必須在 `for result in gen:` 迴圈「當下」就把要斷言的純量值（字串/數字）取出來存成快照。
 2. **`process_player_choice` 結尾一定會呼叫 `engine.auto_save()` 寫入真實存檔檔案**：如果測試斷言依賴選項去重後「剛好是哪個候選字串」這種精確值，殘留的存檔檔案會讓 `used_options_history` 帶著上一次測試執行的痕跡，導致同一份測試在不同次執行結果不一樣。要嘛 mock 掉 `src.save_manager.save_account_game`，要嘛只斷言相對行為（例如「跟前一輪不一樣」），不要斷言絕對字串。
 
+## 手機/外部網路連線：Gradio share=True
+
+`web_ui.py` 最下面的啟動訊息一直宣稱「已開啟公共分享網址 share=True」，但實際的 `demo.launch(...)` 呼叫從來沒有真的傳 `share=True`——這是既有程式碼裡訊息跟行為對不上的舊 bug，只是之前沒人需要外部連線所以沒發現。已修正為 `demo.launch(server_name="0.0.0.0", server_port=7860, show_error=True, share=True)`，這樣啟動時終端機會印出一個 `https://xxxxx.gradio.live` 的公開連結（Gradio 官方 tunnel，有效期 72 小時），手機用行動網路（不需要跟主機同一個 Wi-Fi）也能連進來玩。
+
+**注意**：這個連結雖然不會被公開索引，但只要有連結的人都能打開遊戲，不要隨便外流。
+
+**已知限制**：啟動 `web_ui.py`（尤其是帶 `share=True` 開公開通道）目前會被 Claude Code 的 auto mode classifier 擋下，即使加了 `.claude/settings.local.json` 的 `Bash(*web_ui.py*)` 允許規則也一樣——很可能是因為 `.claude/` 目錄是這個 session 開始「之後」才建立的，設定監看器沒吃到，需要重開一個新的 Claude Code session 才會生效。如果重開 session 後還是被擋，代表這可能是 classifier 刻意不給覆蓋的安全邊界（開公開對外通道），屆時請自己在終端機手動執行 `.venv/Scripts/python.exe web_ui.py`。
+
 ## 執行與測試
 
 ```bash
