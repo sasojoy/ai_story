@@ -1,12 +1,13 @@
 import sys
 import os
+import json
 import unittest
 from unittest.mock import patch, MagicMock
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from src.models import NPCProfile, PlayerState, GameStateDelta
-from src.npc_agent import NPCAgent
+from src.npc_agent import NPCAgent, build_schema_example, load_lorebook
 from src.game_engine import GameEngine
 
 
@@ -37,6 +38,25 @@ class TestEngine(unittest.TestCase):
         self.assertIn("金幣=50", prompt)
         self.assertIn("鏽蝕鐵劍", prompt)
         self.assertIn("允許玩家進行任何正邪抉擇", prompt)
+
+    def test_build_schema_example_matches_model_fields(self):
+        """Stage 5 安全網：JSON 範例改成從 GameStateDelta.model_fields 動態產生，
+        這裡確保範例的欄位集合永遠等於實際 schema，防止新增/改動欄位卻忘記同步 prompt。"""
+        example_dict = json.loads(build_schema_example("測試角色"))
+        self.assertEqual(set(example_dict.keys()), set(GameStateDelta.model_fields.keys()))
+        self.assertIn("測試角色", example_dict["narrative"])
+        self.assertIn("測試角色", example_dict["npc_status_tag"])
+        self.assertEqual(len(example_dict["options"]), 5)
+        # 動態產生的欄位範例本身也要通過 model 驗證
+        GameStateDelta.model_validate(example_dict)
+
+    def test_load_lorebook_is_cached_across_calls(self):
+        """Stage 5：load_lorebook 加上 lru_cache，同一個 process 內同一個路徑只應該讀一次檔"""
+        load_lorebook.cache_clear()
+        first = load_lorebook("config/lorebook.json")
+        with patch("builtins.open", side_effect=AssertionError("不應該再次讀檔")):
+            second = load_lorebook("config/lorebook.json")
+        self.assertIs(first, second)
 
     def test_game_engine_apply_delta(self):
         engine = GameEngine()

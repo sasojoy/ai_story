@@ -209,7 +209,7 @@ config/
 接上 `config/npc_stages.json`，新增 `rules.get_intimacy_stage()`（此時可先建立最小版的 `rules.py`，或延後到 Stage 7 一起做——排程上兩種順序都可以）。
 檔案：`src/rules.py`（新，最小版）或 `src/models.py`、新增 `tests/test_models.py`（涵蓋邊界值 24/25/49/50/74/75 與未知 NPC 的 fallback）
 
-**Stage 5 — Prompt/schema 去重複**
+**Stage 5 — Prompt/schema 去重複 ✅ 已完成**
 JSON 範例改成從 `GameStateDelta.model_fields` 動態產生 + 加回歸測試；`load_lorebook` 改成 process 內快取而非每回合讀檔；抽出 `process_action`/`process_action_stream` 共用的 `_build_messages`/`_record_turn` helper；`ollama_client.py` 的 payload 建構整併成一個 helper。
 檔案：`src/npc_agent.py`、`src/ollama_client.py`、`tests/test_ollama.py`、`tests/test_engine.py`
 

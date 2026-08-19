@@ -160,6 +160,31 @@ class OllamaClient:
             logger.warning(f"Ollama 連線檢查失敗: {e}")
             return False
 
+    def _build_payload(
+        self,
+        messages: List[Dict[str, str]],
+        temperature: float,
+        stream: bool = False,
+        num_predict: int = 1024
+    ) -> Dict[str, Any]:
+        """組裝 /api/chat 的 request payload，統一取樣參數與 num_ctx 來源，避免三處重複字面量"""
+        return {
+            "model": self.model,
+            "messages": messages,
+            "format": "json",
+            "stream": stream,
+            "keep_alive": "60m",
+            "options": {
+                "temperature": temperature,
+                "repeat_penalty": 1.18,
+                "top_p": 0.9,
+                "presence_penalty": 0.3,
+                "frequency_penalty": 0.3,
+                "num_predict": num_predict,
+                "num_ctx": self.context_length
+            }
+        }
+
     def chat_structured(
         self,
         messages: List[Dict[str, str]],
@@ -170,22 +195,7 @@ class OllamaClient:
         發送對話請求並解析為指定 Pydantic 模型。
         具備一次自動重新提示 (Re-prompt) 的重試機制。
         """
-        payload = {
-            "model": self.model,
-            "messages": messages,
-            "format": "json",
-            "stream": False,
-            "keep_alive": "60m",
-            "options": {
-                "temperature": temperature,
-                "repeat_penalty": 1.18,
-                "top_p": 0.9,
-                "presence_penalty": 0.3,
-                "frequency_penalty": 0.3,
-                "num_predict": 1024,
-                "num_ctx": self.context_length
-            }
-        }
+        payload = self._build_payload(messages, temperature)
 
         url = f"{self.base_url}/api/chat"
 
@@ -216,22 +226,7 @@ class OllamaClient:
                 )
             })
             
-            retry_payload = {
-                "model": self.model,
-                "messages": retry_messages,
-                "format": "json",
-                "stream": False,
-                "keep_alive": "60m",
-                "options": {
-                    "temperature": temperature,
-                    "repeat_penalty": 1.18,
-                    "top_p": 0.9,
-                    "presence_penalty": 0.3,
-                    "frequency_penalty": 0.3,
-                    "num_predict": 1024,
-                    "num_ctx": self.context_length
-                }
-            }
+            retry_payload = self._build_payload(retry_messages, temperature)
 
             res = requests.post(url, json=retry_payload, timeout=self.timeout)
             if res.status_code == 404:
@@ -255,22 +250,7 @@ class OllamaClient:
         過程持續 yield (partial_narrative, None)
         串流結束時 yield (full_narrative, validated_model_instance)
         """
-        payload = {
-            "model": self.model,
-            "messages": messages,
-            "format": "json",
-            "stream": True,
-            "keep_alive": "60m",
-            "options": {
-                "temperature": temperature,
-                "repeat_penalty": 1.18,
-                "top_p": 0.9,
-                "presence_penalty": 0.3,
-                "frequency_penalty": 0.3,
-                "num_predict": num_predict,
-                "num_ctx": self.context_length
-            }
-        }
+        payload = self._build_payload(messages, temperature, stream=True, num_predict=num_predict)
 
         url = f"{self.base_url}/api/chat"
         full_content = ""

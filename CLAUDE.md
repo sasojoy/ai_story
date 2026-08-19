@@ -9,8 +9,9 @@
 - [x] Stage 2 — 存檔系統整併為 account-based
 - [x] Stage 3 — 共用 fallback/選項模組（`src/options.py` + `config/npc_fallbacks.json`，commit `699551d`）
 - [x] Stage 4 — 親密度分級 SSOT（`src/rules.py::get_intimacy_stage/get_intimacy_stage_number` 接上 `config/npc_stages.json`）
-- [ ] Stage 5 — Prompt/schema 去重複 **← 下一步**
-- [ ] Stage 6～8 — 尚未開始
+- [x] Stage 5 — Prompt/schema 去重複（JSON 範例改由 `npc_agent.py::build_schema_example()` 從 `GameStateDelta.model_fields` 動態產生；`load_lorebook` 加 `lru_cache`；`_build_messages`/`_record_turn` helper 消除 `process_action`/`process_action_stream` 重複；`ollama_client.py::_build_payload` 整併三份 payload 字面量）
+- [ ] Stage 6 — Web UI 接上串流 **← 下一步**
+- [ ] Stage 7～8 — 尚未開始
 
 使用者預計這次重構做到 Stage 7 為止（Stage 8 只是文件、不實作）。
 
