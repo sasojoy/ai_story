@@ -125,6 +125,68 @@ class TestStreaming(unittest.TestCase):
         with self.assertRaises(ValueError):
             list(engine.interact_stream("隨便做點什麼"))
 
+    # ---- web_ui.process_player_choice (Stage 6：Web UI 接上串流) ----
+
+    @patch("src.save_manager.save_account_game")
+    @patch("src.ollama_client.OllamaClient.chat_structured_stream")
+    def test_process_player_choice_streams_partial_then_final_update(self, mock_stream, mock_save):
+        """process_player_choice 結尾會呼叫 engine.auto_save() 寫入真實存檔檔案；
+        這裡 mock 掉磁碟寫入，避免測試之間透過殘留的存檔檔案互相污染 used_options_history，
+        導致選項去重的結果每次執行都不一樣。"""
+        final_delta = GameStateDelta(
+            narrative="賽金花緩緩靠近，眼神炙熱",
+            options=[
+                # 注意：不能用「全新選項A」這種字面帶「選項a」的文字，會被
+                # is_placeholder_option() 判定為佔位字串而被過濾掉，改用具體描述
+                "A) 邀請對方共飲一杯，順勢打探消息",
+                "B) 冷靜分析局勢利弊，提出新的合作條件",
+                "C) 靠近對方低聲耳語幾句心事",
+                "D) 亮出兵器故作警戒姿態",
+                "E) 轉身望向窗外的江湖夜色"
+            ]
+        )
+        mock_stream.return_value = iter([
+            ("賽金花緩緩", None),
+            ("賽金花緩緩靠近", None),
+            ("賽金花緩緩靠近，眼神炙熱", final_delta),
+        ])
+
+        from web_ui import process_player_choice, get_engine_for_user, DEFAULT_OPTIONS
+        eng = get_engine_for_user("_stage6_stream_test")
+        eng.switch_npc("風騷老闆娘")
+
+        # process_player_choice 在每次 yield 之間會就地修改同一個 clean_history 物件
+        # (讓 Gradio 能低成本地逐步更新畫面)，所以這裡逐步消費 generator 時要立刻把
+        # 當下的文字內容取出存成不可變的字串快照，而不是用 list(generator) 整批收集
+        # tuple 參照 —— 否則收集到的每個 tuple 最終都會指向同一個「已被改到最後狀態」的物件。
+        gen = process_player_choice(
+            custom_name="_stage6_stream_test",
+            user_input=DEFAULT_OPTIONS[0],
+            history=[],
+            prev_opt_a=DEFAULT_OPTIONS[0],
+            prev_opt_b=DEFAULT_OPTIONS[1],
+            prev_opt_c=DEFAULT_OPTIONS[2],
+            prev_opt_d=DEFAULT_OPTIONS[3],
+            prev_opt_e=DEFAULT_OPTIONS[4],
+        )
+
+        texts = []
+        final_result = None
+        for result in gen:
+            texts.append(result[0][-1]["content"][0]["text"])
+            final_result = result
+
+        # 兩個 partial yield + 一個最終 yield
+        self.assertEqual(len(texts), 3)
+
+        # 中途 yield：chatbot 最後一則訊息的文字隨串流逐步變長
+        self.assertEqual(texts[0], "賽金花緩緩")
+        self.assertEqual(texts[1], "賽金花緩緩靠近")
+
+        # 最後一個 yield 才是完整格式化過的訊息，且選項已經更新（不是 gr.update() 空白 no-op）
+        self.assertIn("賽金花緩緩靠近，眼神炙熱", texts[-1])
+        self.assertEqual(final_result[10], "A) 邀請對方共飲一杯，順勢打探消息")
+
 
 if __name__ == "__main__":
     unittest.main()

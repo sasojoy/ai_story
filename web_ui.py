@@ -395,11 +395,12 @@ def enter_jianghu(custom_name: str):
 
 
 def process_player_choice(custom_name: str, user_input: str, history: list, prev_opt_a: str = "", prev_opt_b: str = "", prev_opt_c: str = "", prev_opt_d: str = "", prev_opt_e: str = ""):
+    """以串流方式推進劇情：過程持續 yield 逐步填入的敘事文字，只有最後一個 yield 才更新狀態板與選項按鈕"""
     engine = get_engine_for_user(custom_name)
     clean_history = parse_history(history)
 
     if not user_input or not user_input.strip():
-        return (
+        yield (
             clean_history,
             get_status_markdown(engine),
             get_map_markdown(engine),
@@ -416,6 +417,7 @@ def process_player_choice(custom_name: str, user_input: str, history: list, prev
             gr.update(),
             gr.update()
         )
+        return
 
     # 與 NPC 互動
     npc_name = engine.current_agent.profile.name if engine.current_agent else ""
@@ -429,8 +431,24 @@ def process_player_choice(custom_name: str, user_input: str, history: list, prev
         npc_name, engine.current_location, engine.game_turn + 1, used_history | prev_opts, disp_name=disp_name
     )
 
+    clean_history.append({"role": "user", "content": [{"type": "text", "text": str(user_input)}]})
+    clean_history.append({"role": "assistant", "content": [{"type": "text", "text": ""}]})
+
+    delta = None
     try:
-        delta = engine.interact(user_input)
+        if not engine.current_agent:
+            raise ValueError("目前沒有選擇任何 NPC 進行互動！")
+        for partial_narrative, streamed_delta in engine.interact_stream(user_input):
+            clean_history[-1]["content"][0]["text"] = partial_narrative
+            if streamed_delta is not None:
+                delta = streamed_delta
+                break
+            yield (
+                clean_history,
+                gr.update(), gr.update(), gr.update(), gr.update(),
+                gr.update(), gr.update(), gr.update(), gr.update(), gr.update(),
+                gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
+            )
     except Exception as e:
         if engine.current_agent:
             delta = generate_fallback_delta(
@@ -453,6 +471,16 @@ def process_player_choice(custom_name: str, user_input: str, history: list, prev
                 world_flag_set={},
                 options=fallback_opts
             )
+        engine.apply_delta(delta)
+
+    if delta is None:
+        # 理論上不會發生：interact_stream 保證最後一定會 yield 出非 None 的 delta，
+        # 這裡是防禦性保底，避免真的發生時整個 handler 直接崩潰
+        delta = GameStateDelta(
+            narrative=f"[{npc_name}] 陷入了短暫的沉默...",
+            npc_status_tag="沉默",
+            options=fallback_opts
+        )
         engine.apply_delta(delta)
 
     # 組合顯示內容
@@ -483,15 +511,7 @@ def process_player_choice(custom_name: str, user_input: str, history: list, prev
     tag_str = f" `[狀態: {delta.npc_status_tag}]`" if delta.npc_status_tag else ""
 
     bot_msg = f"{delta.narrative}{status_str}{quest_str}{tag_str}"
-
-    clean_history.append({
-        "role": "user",
-        "content": [{"type": "text", "text": str(user_input)}]
-    })
-    clean_history.append({
-        "role": "assistant",
-        "content": [{"type": "text", "text": str(bot_msg)}]
-    })
+    clean_history[-1]["content"][0]["text"] = bot_msg
 
     # 檢查歷史使用過的選項與上一輪選項，進行嚴格去重與動態補齊
     used_history = set(engine.current_agent.used_options_history) if engine.current_agent else set()
@@ -525,7 +545,7 @@ def process_player_choice(custom_name: str, user_input: str, history: list, prev
 
     engine.auto_save()
 
-    return (
+    yield (
         clean_history,
         get_status_markdown(engine),
         get_map_markdown(engine),

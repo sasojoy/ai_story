@@ -213,7 +213,7 @@ config/
 JSON 範例改成從 `GameStateDelta.model_fields` 動態產生 + 加回歸測試；`load_lorebook` 改成 process 內快取而非每回合讀檔；抽出 `process_action`/`process_action_stream` 共用的 `_build_messages`/`_record_turn` helper；`ollama_client.py` 的 payload 建構整併成一個 helper。
 檔案：`src/npc_agent.py`、`src/ollama_client.py`、`tests/test_ollama.py`、`tests/test_engine.py`
 
-**Stage 6 — Web UI 接上串流**
+**Stage 6 — Web UI 接上串流 ✅ 已完成**
 `process_player_choice` 改成迭代 `engine.interact_stream(user_input)`，逐步更新敘事文字框/Chatbot，只在最後一個 yield（`delta is not None`）才更新狀態與選項；移除多餘的私有方法 `_generate_fallback_delta` 呼叫（改用 Stage 3 的共用模組）；`main.py` 留註解記錄「CLI 刻意不接串流」的決定。
 檔案：`web_ui.py`、`main.py`（僅註解）
 

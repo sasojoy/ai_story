@@ -242,8 +242,10 @@ class TestEngine(unittest.TestCase):
         self.assertIn("阿福", delta.narrative)
         self.assertGreaterEqual(len(delta.options), 3)
 
-    @patch("src.ollama_client.OllamaClient.chat_structured")
-    def test_option_deduplication_and_progression(self, mock_chat):
+    @patch("src.ollama_client.OllamaClient.chat_structured_stream")
+    def test_option_deduplication_and_progression(self, mock_stream):
+        """Stage 6：process_player_choice 改成串流 generator，這裡改為 mock chat_structured_stream
+        並取 generator 的最後一個 yield（等同 Gradio 消費到最後一次更新後的畫面狀態）。"""
         mock_delta = GameStateDelta(
             narrative="賽金花眼波盈盈地看了你一眼",
             options=[
@@ -254,14 +256,14 @@ class TestEngine(unittest.TestCase):
                 "E) 移動前往黑風寨山腳避開風頭"
             ]
         )
-        mock_chat.return_value = mock_delta
+        mock_stream.return_value = iter([(mock_delta.narrative, mock_delta)])
 
         from web_ui import process_player_choice, get_engine_for_user
         eng = get_engine_for_user("測試玩家_OptionDedup")
         eng.switch_npc("風騷老闆娘")
 
         # 第一回合選擇選項 C
-        res1 = process_player_choice(
+        res1 = list(process_player_choice(
             custom_name="測試玩家_OptionDedup",
             user_input="C) 湊近賽金花耳畔輕吟調情話語並撫摸其手背",
             history=[],
@@ -270,13 +272,14 @@ class TestEngine(unittest.TestCase):
             prev_opt_c="C) 湊近賽金花耳畔輕吟調情話語並撫摸其手背",
             prev_opt_d="D) 亮出血滴子逼問賽金花關於血衣樓黑榜的幕後主使",
             prev_opt_e="E) 移動前往龍門錢莊查詢存款行情"
-        )
+        ))[-1]
 
         opt_c_turn2 = res1[12]  # opt_c is at index 12
         self.assertNotEqual(opt_c_turn2, "C) 湊近賽金花耳畔輕吟調情話語並撫摸其手背")
 
         # 第二回合再選選項 C (使用第二回合獲得的 opt_c_turn2)
-        res2 = process_player_choice(
+        mock_stream.return_value = iter([(mock_delta.narrative, mock_delta)])
+        res2 = list(process_player_choice(
             custom_name="測試玩家_OptionDedup",
             user_input=opt_c_turn2,
             history=res1[0],
@@ -285,7 +288,7 @@ class TestEngine(unittest.TestCase):
             prev_opt_c=res1[12],
             prev_opt_d=res1[13],
             prev_opt_e=res1[14]
-        )
+        ))[-1]
 
         opt_c_turn3 = res2[12]  # opt_c is at index 12
         self.assertNotEqual(opt_c_turn3, opt_c_turn2)

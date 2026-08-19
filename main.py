@@ -179,6 +179,8 @@ def main():
                 continue
 
             # 與 NPC 互動
+            # 刻意不接 engine.interact_stream()：Web UI 有 Gradio 原生的 generator 更新機制，
+            # 改動很小；純文字終端機要做到「逐字重寫游標」的體驗，實作複雜度不划算，見 ARCHITECTURE.md Stage 6。
             print("\nGM 算牌中/推演劇情演變...")
             delta = engine.interact(user_input)
             if delta.options and len(delta.options) >= 3:

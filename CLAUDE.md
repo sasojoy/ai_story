@@ -10,8 +10,9 @@
 - [x] Stage 3 — 共用 fallback/選項模組（`src/options.py` + `config/npc_fallbacks.json`，commit `699551d`）
 - [x] Stage 4 — 親密度分級 SSOT（`src/rules.py::get_intimacy_stage/get_intimacy_stage_number` 接上 `config/npc_stages.json`）
 - [x] Stage 5 — Prompt/schema 去重複（JSON 範例改由 `npc_agent.py::build_schema_example()` 從 `GameStateDelta.model_fields` 動態產生；`load_lorebook` 加 `lru_cache`；`_build_messages`/`_record_turn` helper 消除 `process_action`/`process_action_stream` 重複；`ollama_client.py::_build_payload` 整併三份 payload 字面量）
-- [ ] Stage 6 — Web UI 接上串流 **← 下一步**
-- [ ] Stage 7～8 — 尚未開始
+- [x] Stage 6 — Web UI 接上串流（`web_ui.py::process_player_choice` 改成 generator，迭代 `engine.interact_stream()` 逐步更新 Chatbot，只有最後一個 yield 才更新狀態板/選項；用真實本地 Ollama 驗證過 145 次逐字 yield 正常運作；`main.py` 補上「CLI 刻意不接串流」的註解）
+- [ ] Stage 7 — `GameEngine` 拆分為 facade **← 下一步（風險最高，排最後）**
+- [ ] Stage 8 — 戰鬥系統擴充點（僅文件，不實作）
 
 使用者預計這次重構做到 Stage 7 為止（Stage 8 只是文件、不實作）。
 
@@ -26,6 +27,13 @@
 - `src/models.py::normalize_llm_dict` 新增防線：偵測「選項 A)」/「选项A)」這類清單開頭標記並自動從 narrative 截斷（`tests/test_engine.py` 有覆蓋，含「一般語句提到『選項』兩字不應誤刪」的邊界測試）
 
 **已知但刻意不採用的方案**：把 `context_length`（`num_ctx`）從 4096 提高到 8192，理論上能讓長對話歷史不被截斷，但實測在這台機器上會讓單次回應從 ~60 秒暴增到 180 秒逾時失敗，得不償失，所以維持 4096。如果之後在效能更好的機器上開發，可以重新評估調高。
+
+## 測試 web_ui.py 串流函式時的兩個陷阱
+
+寫 `process_player_choice`（或未來其他串流 generator）的測試時踩過兩個坑，記錄起來避免重踩：
+
+1. **不要用 `list(generator)` 收集中途 yield 再事後檢查內容**：`process_player_choice` 為了讓 Gradio 能低成本更新畫面，是「就地修改同一個 `clean_history` 物件再 yield」，不是每次 yield 一份新的複本。用 `list(...)` 收集會拿到一堆指向同一個「已經被改到最終狀態」物件的參照，事後檢查 `results[0]` 看到的其實是最後一輪的內容。要驗證中途狀態，必須在 `for result in gen:` 迴圈「當下」就把要斷言的純量值（字串/數字）取出來存成快照。
+2. **`process_player_choice` 結尾一定會呼叫 `engine.auto_save()` 寫入真實存檔檔案**：如果測試斷言依賴選項去重後「剛好是哪個候選字串」這種精確值，殘留的存檔檔案會讓 `used_options_history` 帶著上一次測試執行的痕跡，導致同一份測試在不同次執行結果不一樣。要嘛 mock 掉 `src.save_manager.save_account_game`，要嘛只斷言相對行為（例如「跟前一輪不一樣」），不要斷言絕對字串。
 
 ## 執行與測試
 
