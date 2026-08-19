@@ -1,13 +1,10 @@
 import json
-import os
 from functools import lru_cache
 from typing import List, Dict, Any, Optional, Set
+from src.content_loader import load_json_or_default
 from src.models import NPCProfile, PlayerState, GameStateDelta
 from src.ollama_client import OllamaClient
 from src.options import generate_fallback_delta
-
-
-BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
 # 手動客製的 LLM 輸出範例值，只用在需要具體引導文字才能提升生成品質的欄位；
 # 其餘欄位改由 build_schema_example() 從 GameStateDelta.model_fields 動態產生，
@@ -43,25 +40,21 @@ def build_schema_example(disp_name: str) -> str:
     return json.dumps(example, ensure_ascii=False, indent=2)
 
 
+_DEFAULT_LOREBOOK: Dict[str, Any] = {
+    "world_setting": "這是一個秩序崩解、殘酷血腥的暗黑江湖。",
+    "intimate_style_guide": {
+        "writing_principles": "以半文半白武俠風格，將男女情感博弈、言語誘惑與江湖恩怨緊密結合。注重描寫人物內心拉扯、微表情變化與身體語言，營造深具感染力與官能美感的氛圍。",
+        "style_examples": {
+            "emotional_intimacy": "夜氣肅殺，窗外竹影搖曳。她緩緩貼近，冰涼的指尖沿著胸膛衣角滑過，最終停留在脈搏躍動處。感受著那沉穩而急促的心跳聲，她唇角泛起一抹含蓄而狡黠的笑意..."
+        }
+    }
+}
+
+
 @lru_cache(maxsize=8)
 def load_lorebook(lorebook_path: str = "config/lorebook.json") -> Dict[str, Any]:
     """讀取世界觀/文風設定；每個 process 只讀一次並快取，避免每回合重複讀檔+parse"""
-    full_path = lorebook_path if os.path.isabs(lorebook_path) else os.path.join(BASE_DIR, lorebook_path)
-    if os.path.exists(full_path):
-        try:
-            with open(full_path, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            pass
-    return {
-        "world_setting": "這是一個秩序崩解、殘酷血腥的暗黑江湖。",
-        "intimate_style_guide": {
-            "writing_principles": "以半文半白武俠風格，將男女情感博弈、言語誘惑與江湖恩怨緊密結合。注重描寫人物內心拉扯、微表情變化與身體語言，營造深具感染力與官能美感的氛圍。",
-            "style_examples": {
-                "emotional_intimacy": "夜氣肅殺，窗外竹影搖曳。她緩緩貼近，冰涼的指尖沿著胸膛衣角滑過，最終停留在脈搏躍動處。感受著那沉穩而急促的心跳聲，她唇角泛起一抹含蓄而狡黠的笑意..."
-            }
-        }
-    }
+    return load_json_or_default(lorebook_path, _DEFAULT_LOREBOOK)
 
 
 class NPCAgent:

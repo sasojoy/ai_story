@@ -1,24 +1,15 @@
-import json
-import os
 from typing import Dict, List, Optional, Set, Tuple
 
+from src.content_loader import load_json_or_default
 from src.models import GameStateDelta, PlayerState
 
 
-BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 CATEGORIES = ["A", "B", "C", "D", "E"]
 
 
 def load_npc_fallbacks(path: str = "config/npc_fallbacks.json") -> Dict[str, Dict]:
     """讀取每個 NPC 的保底劇情/選項內容；查無設定檔時回傳空 dict，交由呼叫端動態生成通用內容"""
-    full_path = path if os.path.isabs(path) else os.path.join(BASE_DIR, path)
-    if os.path.exists(full_path):
-        try:
-            with open(full_path, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            pass
-    return {}
+    return load_json_or_default(path, {})
 
 
 def _generic_option_pools(name_for_text: str, location: str) -> Dict[str, List[str]]:

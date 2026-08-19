@@ -142,6 +142,38 @@ class TestEngine(unittest.TestCase):
         self.assertEqual(engine.player_state.gold, 100)  # 50 + 50
         self.assertIn("銀票", engine.player_state.inventory)
 
+    @patch("src.game_engine.npc_autonomy.simulate_npc_autonomous_actions")
+    @patch("src.ollama_client.OllamaClient.chat_structured")
+    def test_interact_with_location_change_triggers_npc_autonomy_exactly_once(self, mock_chat, mock_autonomy):
+        """Stage 7 bug 修正回歸測試：move_to_location 本身不再觸發 NPC 自主行動，
+        所以就算這回合的 delta 帶有地點轉移 (apply_delta 內部會呼叫 move_to_location)，
+        interact() 結尾也應該只觸發一次自主行動，而不是過去那樣觸發兩次。"""
+        mock_delta = GameStateDelta(
+            narrative="測試地點轉移是否只觸發一次自主行動",
+            current_location="黑風寨山腳"
+        )
+        mock_chat.return_value = mock_delta
+
+        engine = GameEngine()
+        engine.switch_npc("風騷老闆娘")
+        engine.interact("移動去黑風寨山腳")
+
+        self.assertEqual(engine.current_location, "黑風寨山腳")
+        self.assertEqual(mock_autonomy.call_count, 1)
+
+    @patch("src.save_manager.save_account_game")
+    @patch("src.game_engine.npc_autonomy.simulate_npc_autonomous_actions")
+    def test_on_select_location_triggers_npc_autonomy_exactly_once(self, mock_autonomy, mock_save):
+        """web_ui.on_select_location 是唯一不經過 interact() 的直接地點移動入口；
+        move_to_location 不再自己觸發自主行動後，這裡要驗證它有自己補觸發恰好一次。"""
+        from web_ui import on_select_location, get_engine_for_user
+        eng = get_engine_for_user("_stage7_move_test")
+
+        on_select_location("_stage7_move_test", "黑風寨山腳", [])
+
+        self.assertEqual(eng.current_location, "黑風寨山腳")
+        self.assertEqual(mock_autonomy.call_count, 1)
+
     def test_npc_stats_and_biography_unlock(self):
         profile = NPCProfile(
             name="測試NPC",

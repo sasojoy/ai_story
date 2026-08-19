@@ -1,0 +1,28 @@
+{
+  "activities_pool": {
+    "殺手阿福": [
+      {"text": "正在暗巷擦拭漆黑古鐵劍，冷眼觀察周邊埋伏的血衣樓刺客", "relationship_changes": {"錢莊老王": -5}},
+      {"text": "收劍歸鞘，嚴正拒絕任何未支付預付金的刺殺委託", "relationship_changes": {"風騷老闆娘": 5}},
+      {"text": "在暗巷一招震退兩名前來試探的血衣樓小卒", "relationship_changes": {"風騷老闆娘": 5, "錢莊老王": -5}},
+      {"text": "坐在客棧外石凳上閉目養神，擦拭手背上的陳年劍傷", "relationship_changes": {}}
+    ],
+    "錢莊老王": [
+      {"text": "正在錢莊撥打金算盤，精算四大勢力的地下借貸與武器抵押", "relationship_changes": {"合歡宗聖女": -5}},
+      {"text": "親自跑去龍門客棧推銷黑市黃金借貸，被賽金花打發了一壺烈酒", "relationship_changes": {"風騷老闆娘": 5}},
+      {"text": "在櫃檯前查驗剛收到的黃金熔錠，暗中計算如何向阿福追討黑市貸款", "relationship_changes": {"殺手阿福": -5}},
+      {"text": "籌劃龍門錢莊地下資金鏈，嘗試拉攏各大武林勢力入股", "relationship_changes": {"風騷老闆娘": 5}}
+    ],
+    "合歡宗聖女": [
+      {"text": "正在天字房紅燭下品嚐西域葡萄酒，搖曳七情魔音鈴修煉太上陰陽心法", "relationship_changes": {"風騷老闆娘": 5}},
+      {"text": "暗中派香婢向下樓與賽金花對接，交換朝廷錦衣衛與血衣樓的最新情報", "relationship_changes": {"風騷老闆娘": 10}},
+      {"text": "站在天字房窗前俯瞰龍門客棧暗巷，暗中觀察阿福的拔劍出招速度", "relationship_changes": {"殺手阿福": 5}},
+      {"text": "在紅燭微光下研讀上古雙修祕籍殘頁，尋解開師門詛咒的雄性強者", "relationship_changes": {}}
+    ],
+    "風騷老闆娘": [
+      {"text": "正在酒櫃前與過往客商調情斟酒，用柔情與酒香換取黑市秘寶資訊", "relationship_changes": {"合歡宗聖女": 5}},
+      {"text": "親自前往龍門客棧地下暗道清點密藏，暗中資助義軍物資糧草", "relationship_changes": {"殺手阿福": 5}},
+      {"text": "微笑着指點老王關於龍門客棧的租憑契約條款，小賺了一筆利息", "relationship_changes": {"錢莊老王": -5}},
+      {"text": "倚靠在客棧二樓欄杆邊抿酒，眼神掃過堂內每位江湖豪客的腰間佩兵", "relationship_changes": {}}
+    ]
+  }
+}

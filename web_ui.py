@@ -292,6 +292,9 @@ def on_select_location(custom_name: str, location_name: str, history: list):
     engine = get_engine_for_user(custom_name)
     clean_history = parse_history(history)
     if location_name and engine.move_to_location(location_name):
+        # move_to_location 本身不觸發 NPC 自主行動 (見 ARCHITECTURE.md Stage 7)，
+        # 這裡是唯一的直接地點移動入口 (不經過 interact)，所以要自己觸發恰好一次
+        engine.simulate_npc_autonomous_actions()
         reg = engine.get_current_region()
         msg = f"【轉移陣地】已抵達 [{location_name}]"
 

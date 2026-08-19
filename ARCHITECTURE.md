@@ -217,9 +217,12 @@ JSON 範例改成從 `GameStateDelta.model_fields` 動態產生 + 加回歸測�
 `process_player_choice` 改成迭代 `engine.interact_stream(user_input)`，逐步更新敘事文字框/Chatbot，只在最後一個 yield（`delta is not None`）才更新狀態與選項；移除多餘的私有方法 `_generate_fallback_delta` 呼叫（改用 Stage 3 的共用模組）；`main.py` 留註解記錄「CLI 刻意不接串流」的決定。
 檔案：`web_ui.py`、`main.py`（僅註解）
 
-**Stage 7 — `GameEngine` 拆分為 facade（風險最高，排最後）**
-抽出 `content_loader.py`（收斂 5 個 `_load_*` 成一個 helper）、`state.py::GameState`、`rules.py::apply_delta/evaluate_ending/get_current_chapter_info`（若 Stage 4 還沒做就一併納入）、`npc_autonomy.py` + `config/npc_autonomy.json`（把寫死的 `activities_pool` 資料化）。`game_engine.py` 變薄成 facade，對外方法簽章維持不變，`main.py`/`web_ui.py` 呼叫端不用改。順手修掉「同一回合 NPC 自主行動可能觸發兩次」的 bug，讓它每回合只跑一次。
-檔案：`src/content_loader.py`、`src/state.py`、`src/rules.py`、`src/npc_autonomy.py`、`config/npc_autonomy.json`（皆為新增）、`src/game_engine.py`（改寫為 facade）、`tests/test_engine.py`（拆分/擴充）
+**Stage 7 — `GameEngine` 拆分為 facade（風險最高，排最後）✅ 已完成**
+抽出 `content_loader.py`、`state.py::GameState`、`rules.py::apply_delta/evaluate_ending/get_current_chapter_info`、`npc_autonomy.py` + `config/npc_autonomy.json`（把寫死的 `activities_pool` 資料化）。`game_engine.py` 變薄成 facade：執行期狀態欄位委由 `GameState` 持有，`GameEngine` 上保留同名 property 轉發（含 setter）維持 100% 向後相容，對外方法簽章完全不變，`main.py`/`web_ui.py`/`save_manager.py` 呼叫端都不用改。順手修掉「同一回合 NPC 自主行動可能觸發兩次」的 bug：`move_to_location` 不再自己觸發自主行動模擬，改由呼叫端（`interact`/`interact_stream`，以及 `web_ui.py::on_select_location` 這個唯一不經過 `interact` 的直接移動入口）各自負責觸發恰好一次。
+
+`content_loader.py` 的範圍比原規劃更大：除了收斂 `GameEngine` 原本 5 個 `_load_*`，也把 Stage 3～5 各自獨立寫的 `options.py::load_npc_fallbacks`、`rules.py::load_npc_stages`、`npc_agent.py::load_lorebook` 一併改用同一個 `load_json_or_default()`，消掉這次重構自己在早期階段新增的重複讀檔邏輯。
+
+檔案：`src/content_loader.py`、`src/state.py`、`src/npc_autonomy.py`、`config/npc_autonomy.json`（皆為新增）、`src/game_engine.py`（改寫為 facade）、`src/rules.py`/`src/options.py`/`src/npc_agent.py`（改用 content_loader）、`web_ui.py`（`on_select_location` 補上自主行動觸發）、`tests/test_engine.py`（新增雙觸發 bug 回歸測試）
 
 **Stage 8 — 戰鬥系統擴充點（僅文件，不實作）**
 為 ROADMAP 階段二的**輕量戰鬥**預留位置——依 VISION.md 三，戰鬥不做獨立畫面/模式切換，而是跟一般 NPC 互動走同一套「選項 → LLM 敘事回合」流程。判定邏輯（用敏捷/戰力/勢力等數值算出成功率或傷害區間）放在新的 `src/combat.py`，是一個純函式：輸入雙方相關屬性，輸出一個結構化結果，交給 `rules.py` 折算進 `GameState`（跟今天 `apply_delta` 的模式一樣），這個結果會被當成額外上下文餵進 `npc_agent.py` 的 prompt，讓 LLM 生成對應的敘事描寫，而不是另外做一個戰鬥狀態機或獨立 UI。`NPCProfile.stats`（attack/defense/agility/weapon）已經存在不用改；`PlayerState.inventory` 目前是 `List[str]`，等真的要做裝備欄位時才需要升級成 `Item`/`Equipment` model，這部分明確排除在本次重構範圍外。

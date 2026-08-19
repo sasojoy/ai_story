@@ -11,8 +11,11 @@
 - [x] Stage 4 — 親密度分級 SSOT（`src/rules.py::get_intimacy_stage/get_intimacy_stage_number` 接上 `config/npc_stages.json`）
 - [x] Stage 5 — Prompt/schema 去重複（JSON 範例改由 `npc_agent.py::build_schema_example()` 從 `GameStateDelta.model_fields` 動態產生；`load_lorebook` 加 `lru_cache`；`_build_messages`/`_record_turn` helper 消除 `process_action`/`process_action_stream` 重複；`ollama_client.py::_build_payload` 整併三份 payload 字面量）
 - [x] Stage 6 — Web UI 接上串流（`web_ui.py::process_player_choice` 改成 generator，迭代 `engine.interact_stream()` 逐步更新 Chatbot，只有最後一個 yield 才更新狀態板/選項；用真實本地 Ollama 驗證過 145 次逐字 yield 正常運作；`main.py` 補上「CLI 刻意不接串流」的註解）
-- [ ] Stage 7 — `GameEngine` 拆分為 facade **← 下一步（風險最高，排最後）**
-- [ ] Stage 8 — 戰鬥系統擴充點（僅文件，不實作）
+- [x] Stage 7 — `GameEngine` 拆分為 facade（`src/content_loader.py`/`src/state.py::GameState`/`src/npc_autonomy.py` + `config/npc_autonomy.json`；`rules.py` 擴充 `apply_delta`/`evaluate_ending`/`get_current_chapter_info`；`game_engine.py` 變薄成 facade，靠 property 轉發維持 100% 向後相容；順手修掉「NPC 自主行動同回合觸發兩次」的既有 bug；`content_loader` 範圍比原規劃更大，一併收斂了 Stage 3～5 自己新增的三個重複 loader）
+- [ ] Stage 8 — 戰鬥系統擴充點（僅文件，不實作）**← 使用者規劃的重構到此為止（Stage 8 本身也只是留文件，不實作）**
+
+### Stage 7 討論過但刻意沒做的事：GameState 自己管存讀檔序列化
+考慮過讓 `GameState` 自己提供 `to_dict()/from_dict()`，取代 `save_manager.py` 手動列欄位的存讀檔邏輯（這能防止「新增欄位忘記同步存檔」的 bug class，Stage 2 已經因為這樣漏掉 `story_milestones`/`used_options_history` 一次）。最後決定不做：existing 存檔格式（含使用者正在玩的真實存檔）已經是這個手刻的 JSON 形狀，貿然改序列化方式有存檔不相容的風險；而且 `NPCAgent`（親密度、對話歷史）不是純資料，不會被 `GameState` 直接持有，所以這個構想並不能像預期的那樣把存讀檔邏輯完全收斂到一個地方，效益比想像中小。如果之後真的要動存檔格式，建議另開一個獨立階段，並先補一個「載入舊格式存檔」的相容性回歸測試再動手。
 
 使用者預計這次重構做到 Stage 7 為止（Stage 8 只是文件、不實作）。
 
