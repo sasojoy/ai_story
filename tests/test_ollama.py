@@ -49,7 +49,7 @@ class TestOllamaClient(unittest.TestCase):
         mock_resp.status_code = 200
         mock_resp.json.return_value = {
             "message": {
-                "content": '{"narrative": "殺手阿福看了看錶說下班了", "player_hp_change": 0, "player_gold_change": -10, "inventory_added": [], "inventory_removed": [], "npc_status_tag": "準時下班", "world_flag_set": {}}'
+                "content": '{"narrative": "殺手阿福看了看錶說下班了", "player_hp_change": 0, "player_gold_change": -10, "inventory_added": [], "inventory_removed": [], "npc_status_tag": "準時下班", "world_flag_set": {}, "options": ["A) 詢問意圖", "B) 談判", "C) 色誘", "D) 搜刮", "E) 移動"]}'
             }
         }
         mock_post.return_value = mock_resp
@@ -78,7 +78,7 @@ class TestOllamaClient(unittest.TestCase):
         good_resp.status_code = 200
         good_resp.json.return_value = {
             "message": {
-                "content": '{"narrative": "重構成功", "player_hp_change": 5, "player_gold_change": 0, "inventory_added": [], "inventory_removed": [], "npc_status_tag": "冷靜", "world_flag_set": {}}'
+                "content": '{"narrative": "重構成功", "player_hp_change": 5, "player_gold_change": 0, "inventory_added": [], "inventory_removed": [], "npc_status_tag": "冷靜", "world_flag_set": {}, "options": ["A) 詢問意圖", "B) 談判", "C) 色誘", "D) 搜刮", "E) 移動"]}'
             }
         }
 
@@ -95,12 +95,64 @@ class TestOllamaClient(unittest.TestCase):
         self.assertEqual(result.player_hp_change, 5)
 
     @patch("requests.post")
+    def test_chat_structured_missing_options_triggers_retry(self, mock_post):
+        """實測案例：小模型敘事陷入復讀迴圈把 token 用光，JSON 語法本身合法但整個沒寫到
+        options 欄位；GameStateDelta.options 有 default_factory 給的固定預設值，Pydantic
+        驗證不會報錯，若不特別檢查會靜默回傳那份寫死清單，玩家覺得「選項永遠是那幾個」。
+        驗證這種情況會觸發 re-prompt 重試，而不是靜默接受。"""
+        missing_options_resp = MagicMock()
+        missing_options_resp.status_code = 200
+        missing_options_resp.json.return_value = {
+            "message": {
+                "content": '{"narrative": "復讀復讀復讀復讀復讀...", "player_hp_change": 0, "npc_status_tag": "凝視", "world_flag_set": {}}'
+            }
+        }
+
+        good_resp = MagicMock()
+        good_resp.status_code = 200
+        good_resp.json.return_value = {
+            "message": {
+                "content": '{"narrative": "重試後正常", "npc_status_tag": "冷靜", "world_flag_set": {}, "options": ["A) a", "B) b", "C) c", "D) d", "E) e"]}'
+            }
+        }
+
+        mock_post.side_effect = [missing_options_resp, good_resp]
+
+        client = OllamaClient()
+        result = client.chat_structured(
+            messages=[{"role": "user", "content": "測試"}],
+            response_model=GameStateDelta
+        )
+
+        self.assertEqual(mock_post.call_count, 2)
+        self.assertEqual(result.narrative, "重試後正常")
+        self.assertEqual(result.options, ["A) a", "B) b", "C) c", "D) d", "E) e"])
+
+    @patch("requests.post")
+    def test_chat_structured_missing_options_on_retry_too_raises(self, mock_post):
+        """兩次都缺 options（持續被截斷）時應該直接拋出例外讓上層 NPCAgent 走專屬 fallback，
+        而不是把 GameStateDelta 寫死的預設選項清單當成正常結果悄悄回傳。"""
+        missing_options_resp = MagicMock()
+        missing_options_resp.status_code = 200
+        missing_options_resp.json.return_value = {
+            "message": {"content": '{"narrative": "復讀中...", "world_flag_set": {}}'}
+        }
+        mock_post.side_effect = [missing_options_resp, missing_options_resp]
+
+        client = OllamaClient()
+        with self.assertRaises(ValueError):
+            client.chat_structured(
+                messages=[{"role": "user", "content": "測試"}],
+                response_model=GameStateDelta
+            )
+
+    @patch("requests.post")
     def test_chat_structured_stream_success(self, mock_post):
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.iter_lines.return_value = [
             '{"message": {"content": "{\\n  \\"narrative\\": \\"賽金花"}}'.encode("utf-8"),
-            '{"message": {"content": "嬌笑了聲\\", \\"intimacy_change\\": 5}"}}'.encode("utf-8")
+            '{"message": {"content": "嬌笑了聲\\", \\"intimacy_change\\": 5, \\"options\\": [\\"A) a\\", \\"B) b\\", \\"C) c\\", \\"D) d\\", \\"E) e\\"]}"}}'.encode("utf-8")
         ]
         mock_post.return_value = mock_resp
 
@@ -115,6 +167,36 @@ class TestOllamaClient(unittest.TestCase):
         self.assertEqual(final_narrative, "賽金花嬌笑了聲")
         self.assertIsInstance(final_delta, GameStateDelta)
         self.assertEqual(final_delta.intimacy_change, 5)
+
+    @patch("requests.post")
+    def test_chat_structured_stream_missing_options_falls_back(self, mock_post):
+        """串流回應缺 options 時應該降級呼叫 chat_structured()（非串流、帶 re-prompt 重試），
+        不能直接把缺 options 的結果包成 GameStateDelta 回傳給玩家。"""
+        stream_resp = MagicMock()
+        stream_resp.status_code = 200
+        stream_resp.iter_lines.return_value = [
+            '{"message": {"content": "{\\"narrative\\": \\"復讀迴圈導致沒寫到選項\\", \\"world_flag_set\\": {}}"}}'.encode("utf-8")
+        ]
+
+        fallback_resp = MagicMock()
+        fallback_resp.status_code = 200
+        fallback_resp.json.return_value = {
+            "message": {
+                "content": '{"narrative": "降級後正常", "world_flag_set": {}, "options": ["A) a", "B) b", "C) c", "D) d", "E) e"]}'
+            }
+        }
+
+        mock_post.side_effect = [stream_resp, fallback_resp]
+
+        client = OllamaClient()
+        chunks = list(client.chat_structured_stream(
+            messages=[{"role": "user", "content": "測試"}],
+            response_model=GameStateDelta
+        ))
+
+        final_narrative, final_delta = chunks[-1]
+        self.assertEqual(final_narrative, "降級後正常")
+        self.assertEqual(final_delta.options, ["A) a", "B) b", "C) c", "D) d", "E) e"])
 
 
 if __name__ == "__main__":

@@ -397,7 +397,7 @@ def enter_jianghu(custom_name: str):
     )
 
 
-def process_player_choice(custom_name: str, user_input: str, history: list, prev_opt_a: str = "", prev_opt_b: str = "", prev_opt_c: str = "", prev_opt_d: str = "", prev_opt_e: str = ""):
+def process_player_choice(custom_name: str, user_input: str, history: list, prev_opt_a: str = "", prev_opt_b: str = "", prev_opt_c: str = "", prev_opt_d: str = "", prev_opt_e: str = "", chosen_category: str = None):
     """以串流方式推進劇情：過程持續 yield 逐步填入的敘事文字，只有最後一個 yield 才更新狀態板與選項按鈕"""
     engine = get_engine_for_user(custom_name)
     clean_history = parse_history(history)
@@ -430,8 +430,15 @@ def process_player_choice(custom_name: str, user_input: str, history: list, prev
         prev_opt_d.strip(), prev_opt_e.strip()
     }
     disp_name = engine.current_agent.profile.display_name if engine.current_agent else None
+    # 收尾回合 (climax_pending) 的選項要視同已回到中立狀態重新提供五種類型，不能繼續鎖定
+    # 收尾前的主題，否則玩家會覺得「收尾完怎麼還是同一種選項，一直輪迴」
+    active_thread_snapshot = (
+        None if (engine.current_agent and engine.current_agent.thread_climax_pending)
+        else (engine.current_agent.active_thread if engine.current_agent else None)
+    )
     fallback_opts = generate_fallback_options(
-        npc_name, engine.current_location, engine.game_turn + 1, used_history | prev_opts, disp_name=disp_name
+        npc_name, engine.current_location, engine.game_turn + 1, used_history | prev_opts,
+        disp_name=disp_name, active_thread=active_thread_snapshot
     )
 
     clean_history.append({"role": "user", "content": [{"type": "text", "text": str(user_input)}]})
@@ -441,7 +448,7 @@ def process_player_choice(custom_name: str, user_input: str, history: list, prev
     try:
         if not engine.current_agent:
             raise ValueError("目前沒有選擇任何 NPC 進行互動！")
-        for partial_narrative, streamed_delta in engine.interact_stream(user_input):
+        for partial_narrative, streamed_delta in engine.interact_stream(user_input, chosen_category=chosen_category):
             clean_history[-1]["content"][0]["text"] = partial_narrative
             if streamed_delta is not None:
                 delta = streamed_delta
@@ -520,7 +527,10 @@ def process_player_choice(custom_name: str, user_input: str, history: list, prev
     used_history = set(engine.current_agent.used_options_history) if engine.current_agent else set()
     exclude_opts = used_history | prev_opts
 
-    raw_opts = delta.options if (delta.options and len(delta.options) >= 5) else fallback_opts
+    # 只要 LLM 有回傳任何選項就沿用（就算不到 5 個）：下面逐格迴圈本來就會對缺的格位
+    # 個別補生成，用完整 fallback_opts 整批取代會把模型辛苦生出的其餘幾個貼合劇情的
+    # 選項也一起丟掉，換成完全通用、跟當下劇情無關的罐頭選項，是玩家覺得「選項不連貫」的主因之一。
+    raw_opts = delta.options if delta.options else fallback_opts
 
     final_opts = []
     for idx in range(5):
@@ -535,7 +545,8 @@ def process_player_choice(custom_name: str, user_input: str, history: list, prev
             exclude_opts.add(raw_opt)
         else:
             new_opt = generate_single_fallback_option(
-                idx, npc_name, engine.current_location, engine.game_turn, exclude_opts, disp_name=disp_name
+                idx, npc_name, engine.current_location, engine.game_turn, exclude_opts, disp_name=disp_name,
+                active_thread=engine.current_agent.active_thread if engine.current_agent else None
             )
             final_opts.append(new_opt)
             exclude_opts.add(new_opt)
@@ -605,6 +616,14 @@ with gr.Blocks(title="Local Blade RPG Engine") as demo:
     state_opt_c = gr.State(DEFAULT_OPTIONS[2])
     state_opt_d = gr.State(DEFAULT_OPTIONS[3])
     state_opt_e = gr.State(DEFAULT_OPTIONS[4])
+
+    # 每個按鈕固定對應的類別代號 (A~E)，用於主題線鎖定 (見 src/rules.py::update_thread_state)；
+    # 用按鈕身份直接傳常數，不用去解析 LLM 輸出文字裡的「A)」前綴，100% 準確
+    category_a = gr.State("A")
+    category_b = gr.State("B")
+    category_c = gr.State("C")
+    category_d = gr.State("D")
+    category_e = gr.State("E")
 
     # 1. 序幕的故事、自由取名與背景衝突展示區
     with gr.Column(visible=True) as prologue_group:
@@ -736,7 +755,7 @@ with gr.Blocks(title="Local Blade RPG Engine") as demo:
     # 點擊選項 A / B / C / D / E 直接推進劇情
     btn_opt_a.click(
         fn=process_player_choice,
-        inputs=[player_name_input, state_opt_a, chatbot, state_opt_a, state_opt_b, state_opt_c, state_opt_d, state_opt_e],
+        inputs=[player_name_input, state_opt_a, chatbot, state_opt_a, state_opt_b, state_opt_c, state_opt_d, state_opt_e, category_a],
         outputs=[
             chatbot, status_box, map_box, dossier_box, news_box,
             btn_opt_a, btn_opt_b, btn_opt_c, btn_opt_d, btn_opt_e,
@@ -746,7 +765,7 @@ with gr.Blocks(title="Local Blade RPG Engine") as demo:
 
     btn_opt_b.click(
         fn=process_player_choice,
-        inputs=[player_name_input, state_opt_b, chatbot, state_opt_a, state_opt_b, state_opt_c, state_opt_d, state_opt_e],
+        inputs=[player_name_input, state_opt_b, chatbot, state_opt_a, state_opt_b, state_opt_c, state_opt_d, state_opt_e, category_b],
         outputs=[
             chatbot, status_box, map_box, dossier_box, news_box,
             btn_opt_a, btn_opt_b, btn_opt_c, btn_opt_d, btn_opt_e,
@@ -756,7 +775,7 @@ with gr.Blocks(title="Local Blade RPG Engine") as demo:
 
     btn_opt_c.click(
         fn=process_player_choice,
-        inputs=[player_name_input, state_opt_c, chatbot, state_opt_a, state_opt_b, state_opt_c, state_opt_d, state_opt_e],
+        inputs=[player_name_input, state_opt_c, chatbot, state_opt_a, state_opt_b, state_opt_c, state_opt_d, state_opt_e, category_c],
         outputs=[
             chatbot, status_box, map_box, dossier_box, news_box,
             btn_opt_a, btn_opt_b, btn_opt_c, btn_opt_d, btn_opt_e,
@@ -766,7 +785,7 @@ with gr.Blocks(title="Local Blade RPG Engine") as demo:
 
     btn_opt_d.click(
         fn=process_player_choice,
-        inputs=[player_name_input, state_opt_d, chatbot, state_opt_a, state_opt_b, state_opt_c, state_opt_d, state_opt_e],
+        inputs=[player_name_input, state_opt_d, chatbot, state_opt_a, state_opt_b, state_opt_c, state_opt_d, state_opt_e, category_d],
         outputs=[
             chatbot, status_box, map_box, dossier_box, news_box,
             btn_opt_a, btn_opt_b, btn_opt_c, btn_opt_d, btn_opt_e,
@@ -776,7 +795,7 @@ with gr.Blocks(title="Local Blade RPG Engine") as demo:
 
     btn_opt_e.click(
         fn=process_player_choice,
-        inputs=[player_name_input, state_opt_e, chatbot, state_opt_a, state_opt_b, state_opt_c, state_opt_d, state_opt_e],
+        inputs=[player_name_input, state_opt_e, chatbot, state_opt_a, state_opt_b, state_opt_c, state_opt_d, state_opt_e, category_e],
         outputs=[
             chatbot, status_box, map_box, dossier_box, news_box,
             btn_opt_a, btn_opt_b, btn_opt_c, btn_opt_d, btn_opt_e,

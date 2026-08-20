@@ -9,6 +9,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from src.models import NPCProfile, PlayerState, GameStateDelta
 from src.npc_agent import NPCAgent, build_schema_example, load_lorebook
 from src.game_engine import GameEngine
+from src.thread_state import update_thread_state, THREAD_INTENSITY_THRESHOLD, THREAD_INTENSITY_BASE_STEP
 
 
 class TestEngine(unittest.TestCase):
@@ -250,6 +251,27 @@ class TestEngine(unittest.TestCase):
         self.assertNotIn("选项", delta.narrative)
         self.assertTrue(delta.narrative.startswith("楚留香在這時開始有了新的行動"))
 
+    def test_normalize_llm_dict_options_key_value_shape(self):
+        """實測案例：qwen2.5:1.5b 有時把 options 內每個項目寫成 {"key": "C", "value": "完整選項文字"}，
+        跟程式原本假設的 {"value": "A", "text": "內容"}（value 放字母、text 放內容）欄位語意剛好相反。
+        修復前會把 value 誤當成字母前綴、把整個 dict 的 repr 字串塞進畫面，
+        變成「C) 完整選項文字...) {'key': 'C', 'value': '完整選項文字...'}」這種可見的畫面污染。"""
+        raw_dict = {
+            "narrative": "柳如煙雙眸微眯",
+            "options": [
+                {"key": "A", "value": "A) 亮出兵器靜觀其變，開口詢問對方的意圖"},
+                {"key": "B", "value": "B) 分析眼前局勢利害，冷靜提出籌碼條件進行談判"},
+                {"key": "C", "value": "C) 上前進行身體接觸與耳邊輕語試探"},
+                {"key": "D", "value": "D) 眼神一冷出其不意搜刮對方的隨身密卷"},
+                {"key": "E", "value": "E) 移動前往周邊安全區域避開風頭"},
+            ],
+        }
+        delta = GameStateDelta.model_validate(raw_dict)
+        for opt in delta.options:
+            self.assertNotIn("{'key'", opt)
+            self.assertNotIn("'value':", opt)
+        self.assertIn("C) 上前進行身體接觸與耳邊輕語試探", delta.options)
+
     def test_normalize_llm_dict_keeps_narrative_mentioning_option_midsentence(self):
         """只有「選項/选项」緊接著 A) 這種清單開頭標記才截斷，一般提及「選項」兩字的敘述不受影響。"""
         raw_dict = {"narrative": "賽金花笑道：『大俠這選項未免太多了些，不如挑一個吧。』"}
@@ -326,6 +348,48 @@ class TestEngine(unittest.TestCase):
         self.assertNotEqual(opt_c_turn3, opt_c_turn2)
         self.assertNotEqual(opt_c_turn3, "C) 湊近賽金花耳畔輕吟調情話語並撫摸其手背")
 
+    @patch("src.ollama_client.OllamaClient.chat_structured_stream")
+    def test_partial_llm_options_are_preserved_not_fully_discarded(self, mock_stream):
+        """實測回報：模型只生出 4 個有效選項時（第 5 個被判定重複/佔位而濾掉），
+        以前的邏輯會把這 4 個貼合當下劇情的選項整批丟棄、換成完全通用的罐頭選項，
+        玩家因此覺得「選項不連貫」。驗證修復後：這 4 個真實選項會被保留，只有缺的
+        那一格才會用單格保底補上。"""
+        # 清掉這個帳號可能殘留的存檔：process_player_choice 結尾一定會 auto_save，
+        # 殘留的存檔會讓 used_options_history 帶著上一次執行的痕跡，導致保底選項
+        # 挑到不同候選字串，使這個測試在不同次執行結果不一致（CLAUDE.md 已記錄過這個坑）。
+        from src.save_manager import get_account_save_path
+        save_path = get_account_save_path("測試玩家_PartialOptions")
+        if os.path.exists(save_path):
+            os.remove(save_path)
+
+        mock_delta = GameStateDelta(
+            narrative="賽金花眼波盈盈地看了你一眼",
+            options=[
+                "A) 詢問賽金花關於今晚黑風寨夜襲的傳聞",
+                "B) 提議與賽金花聯手對付血衣樓的追兵",
+                "C) 邀請賽金花共飲一杯壓驚酒拉近距離",
+                "D) 冷聲逼問賽金花今晚客棧異狀的真相",
+            ]
+        )
+        mock_stream.return_value = iter([(mock_delta.narrative, mock_delta)])
+
+        from web_ui import process_player_choice, get_engine_for_user
+        eng = get_engine_for_user("測試玩家_PartialOptions")
+        eng.switch_npc("風騷老闆娘")
+
+        result = list(process_player_choice(
+            custom_name="測試玩家_PartialOptions",
+            user_input="向老闆娘打聽消息",
+            history=[],
+        ))[-1]
+
+        opt_a, opt_b, opt_c, opt_d, opt_e = result[10], result[11], result[12], result[13], result[14]
+        self.assertEqual(opt_a, "A) 詢問賽金花關於今晚黑風寨夜襲的傳聞")
+        self.assertEqual(opt_b, "B) 提議與賽金花聯手對付血衣樓的追兵")
+        self.assertEqual(opt_c, "C) 邀請賽金花共飲一杯壓驚酒拉近距離")
+        self.assertEqual(opt_d, "D) 冷聲逼問賽金花今晚客棧異狀的真相")
+        self.assertTrue(opt_e.startswith("E)"))  # 缺的那一格由單格保底補上
+
     def test_history_deduplication_and_repeat_penalty(self):
         agent = NPCAgent(self.profile)
         # 故意加入重複的 assistant 歷史紀錄
@@ -347,6 +411,123 @@ class TestEngine(unittest.TestCase):
         sys_prompt = agent.build_system_prompt(player_state=self.player_state)
         self.assertNotIn("瞳孔微震", sys_prompt)
         self.assertNotIn("雙頰酡紅", sys_prompt)
+
+    # ---- 主題線鎖定狀態機 (src/thread_state.py::update_thread_state) ----
+    # 設計討論見對話紀錄：玩家選了 B(謀略)/C(情慾)/D(混亂) 其中一類後，接下來幾回合的
+    # 選項應該延續同一主題，而不是每回合都重新開放五種不相關的類型；E(地圖探索/轉移)
+    # 永遠是逃生口，主題強度累積到門檻後下一回合先收尾再重置回中立狀態。
+
+    def test_thread_lock_stays_neutral_on_a_or_e_from_neutral_state(self):
+        agent = NPCAgent(self.profile)
+        delta = GameStateDelta(narrative="測試")
+        update_thread_state(agent, "A", delta)
+        self.assertIsNone(agent.active_thread)
+        update_thread_state(agent, "E", delta)
+        self.assertIsNone(agent.active_thread)
+
+    def test_thread_lock_enters_on_bcd_category_from_neutral_state(self):
+        agent = NPCAgent(self.profile)
+        delta = GameStateDelta(narrative="測試")
+        update_thread_state(agent, "C", delta)
+        self.assertEqual(agent.active_thread, "C")
+        self.assertEqual(agent.thread_intensity, THREAD_INTENSITY_BASE_STEP)
+        self.assertFalse(agent.thread_climax_pending)
+
+    def test_thread_lock_e_breaks_active_thread_immediately(self):
+        agent = NPCAgent(self.profile)
+        agent.active_thread = "C"
+        agent.thread_intensity = 50
+        delta = GameStateDelta(narrative="測試")
+        update_thread_state(agent, "E", delta)
+        self.assertIsNone(agent.active_thread)
+        self.assertEqual(agent.thread_intensity, 0)
+        self.assertFalse(agent.thread_climax_pending)
+
+    def test_thread_lock_c_accumulates_via_intimacy_change_magnitude(self):
+        agent = NPCAgent(self.profile)
+        agent.active_thread = "C"
+        agent.thread_intensity = 20
+        delta = GameStateDelta(narrative="測試", intimacy_change=15)
+        update_thread_state(agent, "C", delta)
+        self.assertEqual(agent.thread_intensity, 20 + THREAD_INTENSITY_BASE_STEP + 15)
+        self.assertFalse(agent.thread_climax_pending)
+
+    def test_thread_lock_d_accumulates_via_faction_reputation_magnitude(self):
+        agent = NPCAgent(self.profile)
+        agent.active_thread = "D"
+        agent.thread_intensity = 20
+        delta = GameStateDelta(narrative="測試", faction_reputation_changes={"血衣樓": -30, "正派武林盟": 10})
+        update_thread_state(agent, "D", delta)
+        self.assertEqual(agent.thread_intensity, 20 + THREAD_INTENSITY_BASE_STEP + 40)
+
+    def test_thread_lock_b_accumulates_fixed_bonus_on_quest_or_milestone_update(self):
+        agent_with_update = NPCAgent(self.profile)
+        agent_with_update.active_thread = "B"
+        agent_with_update.thread_intensity = 20
+        delta_with_milestone = GameStateDelta(narrative="測試", milestone_unlocked="第一層毒詛解開")
+        update_thread_state(agent_with_update, "B", delta_with_milestone)
+        self.assertEqual(agent_with_update.thread_intensity, 20 + THREAD_INTENSITY_BASE_STEP * 2)
+
+        agent_without_update = NPCAgent(self.profile)
+        agent_without_update.active_thread = "B"
+        agent_without_update.thread_intensity = 20
+        delta_without_update = GameStateDelta(narrative="測試")
+        update_thread_state(agent_without_update, "B", delta_without_update)
+        self.assertEqual(agent_without_update.thread_intensity, 20 + THREAD_INTENSITY_BASE_STEP)
+
+    def test_thread_lock_reaches_climax_pending_when_threshold_crossed(self):
+        agent = NPCAgent(self.profile)
+        agent.active_thread = "C"
+        agent.thread_intensity = THREAD_INTENSITY_THRESHOLD - 10
+        delta = GameStateDelta(narrative="測試", intimacy_change=20)
+        update_thread_state(agent, "C", delta)
+        self.assertGreaterEqual(agent.thread_intensity, THREAD_INTENSITY_THRESHOLD)
+        self.assertTrue(agent.thread_climax_pending)
+        # 跨過門檻的當下還不會立刻重置，要等收尾回合結束才重置
+        self.assertEqual(agent.active_thread, "C")
+
+    def test_thread_lock_resolves_to_neutral_after_climax_round(self):
+        agent = NPCAgent(self.profile)
+        agent.active_thread = "C"
+        agent.thread_intensity = 120
+        agent.thread_climax_pending = True
+        delta = GameStateDelta(narrative="測試")
+        update_thread_state(agent, "C", delta)
+        self.assertIsNone(agent.active_thread)
+        self.assertEqual(agent.thread_intensity, 0)
+        self.assertFalse(agent.thread_climax_pending)
+
+    def test_build_system_prompt_reflects_thread_lock_state(self):
+        agent = NPCAgent(self.profile)
+        neutral_prompt = agent.build_system_prompt(player_state=self.player_state)
+        self.assertIn("選項 C (情慾/色誘/雙修)", neutral_prompt)
+
+        agent.active_thread = "C"
+        agent.thread_intensity = 40
+        locked_prompt = agent.build_system_prompt(player_state=self.player_state)
+        self.assertIn("情慾/色誘/雙修", locked_prompt)
+        self.assertIn("A~D 四個選項請全部延續這個主題方向", locked_prompt)
+        self.assertNotIn("選項 C (情慾/色誘/雙修): 利用美色", locked_prompt)
+
+        agent.thread_climax_pending = True
+        climax_prompt = agent.build_system_prompt(player_state=self.player_state)
+        self.assertIn("收尾回合", climax_prompt)
+
+    @patch("src.ollama_client.OllamaClient.chat_structured_stream")
+    def test_chosen_category_wiring_from_engine_locks_thread(self, mock_stream):
+        """驗證 web_ui 按鈕 -> GameEngine.interact_stream(chosen_category=...) -> NPCAgent
+        -> update_thread_state 整條路徑真的有接上，不是只有單元測試裡直接呼叫函式而已"""
+        engine = GameEngine()
+        engine.switch_npc("風騷老闆娘")
+        mock_delta = GameStateDelta(narrative="測試劇情", intimacy_change=10)
+        mock_stream.return_value = iter([(mock_delta.narrative, mock_delta)])
+
+        list(engine.interact_stream("C) 上前進行身體接觸試探", chosen_category="C"))
+
+        self.assertEqual(engine.current_agent.active_thread, "C")
+        # 這是「從中立進入主題線」的第一回合，只會拿到固定的起始強度；
+        # delta 訊號 (intimacy_change 等) 只在已經鎖定後的後續回合才會疊加進去
+        self.assertEqual(engine.current_agent.thread_intensity, THREAD_INTENSITY_BASE_STEP)
 
 
 if __name__ == "__main__":

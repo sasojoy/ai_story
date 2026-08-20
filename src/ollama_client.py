@@ -109,6 +109,15 @@ def extract_partial_narrative(text: str) -> str:
     return "".join(result)
 
 
+def _ensure_options_present(data: dict) -> None:
+    """LLM 回應若因復讀迴圈等原因被 num_predict 截斷，常常整個 JSON 都還沒寫到 options
+    欄位就被切斷；GameStateDelta.options 有 default_factory 給的固定預設選項清單，
+    Pydantic 驗證並不會報錯，會靜默套用那份寫死清單，玩家會覺得「選項永遠是那幾個」。
+    這裡明確擋下來，逼它走 re-prompt 重試或上層 NPC 專屬 fallback，而不是悄悄回傳固定預設值。"""
+    if not data.get("options"):
+        raise ValueError("LLM 回應缺少有效的 options 欄位，疑似被截斷")
+
+
 def parse_json_robustly(text: str) -> dict:
     """穩健解析 LLM 輸出的 JSON，具備容錯修復機制"""
     cleaned = clean_json_text(text)
@@ -177,6 +186,7 @@ class OllamaClient:
             "options": {
                 "temperature": temperature,
                 "repeat_penalty": 1.18,
+                "repeat_last_n": self.context_length,
                 "top_p": 0.9,
                 "presence_penalty": 0.3,
                 "frequency_penalty": 0.3,
@@ -208,9 +218,10 @@ class OllamaClient:
             content = raw_data.get("message", {}).get("content", "")
             
             data = parse_json_robustly(content)
+            _ensure_options_present(data)
             return response_model.model_validate(data)
 
-        except (json.JSONDecodeError, ValidationError, requests.RequestException) as e:
+        except (json.JSONDecodeError, ValidationError, requests.RequestException, ValueError) as e:
             if isinstance(e, requests.HTTPError) and e.response is not None and e.response.status_code == 404:
                 raise RuntimeError(f"Ollama 回傳 404：模型 '{self.model}' 未找到，請先執行 `ollama pull {self.model}` 下載模型。")
 
@@ -236,6 +247,7 @@ class OllamaClient:
             content = raw_data.get("message", {}).get("content", "")
             
             data = parse_json_robustly(content)
+            _ensure_options_present(data)
             return response_model.model_validate(data)
 
     def chat_structured_stream(
@@ -275,6 +287,7 @@ class OllamaClient:
                     pass
 
             data = parse_json_robustly(full_content)
+            _ensure_options_present(data)
             validated = response_model.model_validate(data)
             narrative = getattr(validated, "narrative", "") or extract_partial_narrative(full_content)
             yield (narrative, validated)

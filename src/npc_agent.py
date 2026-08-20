@@ -5,6 +5,7 @@ from src.content_loader import load_json_or_default
 from src.models import NPCProfile, PlayerState, GameStateDelta
 from src.ollama_client import OllamaClient
 from src.options import generate_fallback_delta
+from src.thread_state import THREAD_CATEGORY_LABELS, THREAD_RESOLVE_HINTS, update_thread_state
 
 # 手動客製的 LLM 輸出範例值，只用在需要具體引導文字才能提升生成品質的欄位；
 # 其餘欄位改由 build_schema_example() 從 GameStateDelta.model_fields 動態產生，
@@ -40,6 +41,40 @@ def build_schema_example(disp_name: str) -> str:
     return json.dumps(example, ensure_ascii=False, indent=2)
 
 
+_OPTION_OUTCOME_NEUTRALITY_RULE = (
+    "每個選項只能描述玩家【打算採取的行動】本身，嚴禁預先寫死或暗示這個行動一定會成功、"
+    "對方會如何回應或接下來會發生什麼結果——結果留給下一輪的 narrative 來揭曉，玩家選擇當下不該預知後果。\n"
+)
+
+
+def build_option_generation_instruction(
+    disp_name: str,
+    active_thread: Optional[str] = None,
+    climax_pending: bool = False,
+) -> str:
+    """依主題線鎖定狀態 (見 src/rules.py::update_thread_state) 產生選項生成指令文字，
+    system_prompt_override 與預設 prompt 兩條路徑共用，避免各自維護一份幾乎一樣的文字。"""
+    if climax_pending and active_thread:
+        return (
+            f"必須在 options 欄位中生成 5 個具體動態選項。本回合為「{THREAD_CATEGORY_LABELS[active_thread]}」"
+            f"主題線的收尾回合：請讓劇情自然迎向一個轉折或收尾（{THREAD_RESOLVE_HINTS[active_thread]}），"
+            f"為下一段故事留下空間。收尾後這回合的 options 請重新提供 5 種不同類型的選項，"
+            f"象徵故事進入新的一段 (A: 正派/常規, B: 謀略/智取/談判, C: 情慾/色誘/雙修, "
+            f"D: 混亂/背叛/暗黑, E: 地圖探索/轉移)。{_OPTION_OUTCOME_NEUTRALITY_RULE}"
+        )
+    if active_thread:
+        return (
+            f"必須在 options 欄位中生成 5 個具體動態選項。玩家目前處於「{THREAD_CATEGORY_LABELS[active_thread]}」"
+            f"主題線中：A~D 四個選項請全部延續這個主題方向，發想 4 個不同切入角度的具體行動變體"
+            f"（彼此不重複、也不與歷史選項重複）；E 維持原本【地圖探索/轉移】語意不變，"
+            f"作為玩家隨時可以脫離這條主題線、回到{disp_name}身邊之外選擇的選項。{_OPTION_OUTCOME_NEUTRALITY_RULE}"
+        )
+    return (
+        f"必須在 options 欄位中生成 5 個具體動態選項 (A: 正派/常規, B: 謀略/智取/談判, "
+        f"C: 情慾/色誘/雙修, D: 混亂/背叛/暗黑, E: 地圖探索/轉移)。{_OPTION_OUTCOME_NEUTRALITY_RULE}"
+    )
+
+
 _DEFAULT_LOREBOOK: Dict[str, Any] = {
     "world_setting": "這是一個秩序崩解、殘酷血腥的暗黑江湖。",
     "intimate_style_guide": {
@@ -64,6 +99,11 @@ class NPCAgent:
         self.history: List[Dict[str, str]] = []
         self.used_options_history: Set[str] = set()
         self.current_status_tag: str = "正常"
+        # 主題線鎖定狀態（見 src/rules.py::update_thread_state）：玩家選了 B/C/D 其中一類後，
+        # 接下來幾回合的選項會朝同一主題延伸，避免每回合五個選項都是不相關的類型
+        self.active_thread: Optional[str] = None
+        self.thread_intensity: int = 0
+        self.thread_climax_pending: bool = False
 
     def build_system_prompt(
         self,
@@ -124,7 +164,7 @@ class NPCAgent:
                 f"2. 【章節單向推進與嚴禁重複】: 必須承接玩家行動單向向前推進劇情！【嚴禁重複上一輪的語句、對話或描繪】！選項 A~E 絕對禁止與歷史選項重複。\n"
                 f"3. 請根據玩家最新行動在 main_quest_summary_update 欄位中改寫主線故事摘要。\n"
                 f"4. 評估玩家【魅力】與【親密度】：若進行色誘、情感博弈或雙修，於 intimacy_change 回傳好感度變更，於 player_stamina_change 回傳體力消耗，於 cultivation_exp_gained 回傳經驗。\n"
-                f"5. 必須在 options 欄位中生成 5 個具體動態選項 (A: 正派/常規, B: 謀略/智取/談判, C: 情慾/色誘/雙修, D: 混亂/背叛/暗黑, E: 地圖探索/轉移)。\n"
+                f"5. {build_option_generation_instruction(disp_name, self.active_thread, self.thread_climax_pending)}"
             )
             return base_prompt + context_addon
 
@@ -150,17 +190,27 @@ class NPCAgent:
             f"5. 結合玩家【魅力={player_state.charm}】與對當前 {disp_name} 的【親密度={self.profile.intimacy}】推演感情發展：若進行色誘拉扯或雙修，於 intimacy_change 回傳好感度增長，於 player_stamina_change 回傳體力變更，於 cultivation_exp_gained 回傳修為經驗。\n"
             f"6. 請根據玩家最新選擇，於 main_quest_summary_update 欄位中自動改寫最新的主線故事摘要。\n"
             f"7. 若影響勢力，於 faction_reputation_changes 欄位回傳聲望變更 (如 {{\"血衣樓\": +20, \"正派武林盟\": -30}})。\n"
-            f"8. 每輪輸出 JSON 時，必須在 options 欄位中根據當前最新劇情與地理位置即興創作 5 個具體動態選項：\n"
-            f"   - 選項 A (正派/常規): 符合傳統武俠邏輯應對\n"
-            f"   - 選項 B (謀略/智取/談判): 分析局勢利害關係、黑市籌碼交換或戰術談判拉扯，嚴禁無厘頭現代搞笑用語\n"
-            f"   - 選項 C (情慾/色誘/雙修): 利用美色、身體接觸、情感控制、雙修合練對 {disp_name} 發動行動\n"
-            f"   - 選項 D (混亂邪惡/背叛/暗黑): 賣友求榮、加入敵陣、強行脅迫或極端物理強襲\n"
-            f"   - 選項 E (地圖探索/轉移): 在當前區域搜尋或移動前往鄰近區域\n"
+            f"8. {self._build_neutral_or_thread_option_instruction(disp_name)}"
             f"9. 必須且僅能輸出符合 Pydantic Schema 的合法 JSON 物件。\n\n"
             f"【JSON 格式規範】\n"
             f"{build_schema_example(disp_name)}\n"
         )
         return prompt
+
+    def _build_neutral_or_thread_option_instruction(self, disp_name: str) -> str:
+        """中立狀態（沒有鎖定主題線）維持原本較詳細的五類選項說明；一旦鎖定/收尾主題線，
+        改用 build_option_generation_instruction 產生對應的指令文字（見 src/rules.py 的狀態機）"""
+        if self.active_thread:
+            return build_option_generation_instruction(disp_name, self.active_thread, self.thread_climax_pending)
+        return (
+            f"每輪輸出 JSON 時，必須在 options 欄位中根據當前最新劇情與地理位置即興創作 5 個具體動態選項：\n"
+            f"   - 選項 A (正派/常規): 符合傳統武俠邏輯應對\n"
+            f"   - 選項 B (謀略/智取/談判): 分析局勢利害關係、黑市籌碼交換或戰術談判拉扯，嚴禁無厘頭現代搞笑用語\n"
+            f"   - 選項 C (情慾/色誘/雙修): 利用美色、身體接觸、情感控制、雙修合練對 {disp_name} 發動行動\n"
+            f"   - 選項 D (混亂邪惡/背叛/暗黑): 賣友求榮、加入敵陣、強行脅迫或極端物理強襲\n"
+            f"   - 選項 E (地圖探索/轉移): 在當前區域搜尋或移動前往鄰近區域\n"
+            f"{_OPTION_OUTCOME_NEUTRALITY_RULE}"
+        )
 
     def _generate_fallback_delta(
         self,
@@ -179,6 +229,8 @@ class NPCAgent:
             exclude_opts=self.used_options_history,
             disp_name=self.profile.display_name,
             identity=self.profile.identity,
+            active_thread=self.active_thread,
+            climax_pending=self.thread_climax_pending,
         )
 
     def get_deduplicated_history(self) -> List[Dict[str, str]]:
@@ -278,7 +330,8 @@ class NPCAgent:
         available_exits: Optional[List[str]] = None,
         recent_world_events: Optional[List[str]] = None,
         story_chapter_title: str = "第一章：血夜甦醒與龍門破局",
-        story_chapter_goal: str = "在龍門客棧尋求療傷與生存，查明懷中血秘卷的第一層真相。"
+        story_chapter_goal: str = "在龍門客棧尋求療傷與生存，查明懷中血秘卷的第一層真相。",
+        chosen_category: Optional[str] = None
     ) -> GameStateDelta:
         messages = self._build_messages(
             player_action=player_action,
@@ -311,6 +364,7 @@ class NPCAgent:
             )
 
         self._record_turn(player_action, delta)
+        update_thread_state(self, chosen_category, delta)
         return delta
 
     def process_action_stream(
@@ -326,7 +380,8 @@ class NPCAgent:
         available_exits: Optional[List[str]] = None,
         recent_world_events: Optional[List[str]] = None,
         story_chapter_title: str = "第一章：血夜甦醒與龍門破局",
-        story_chapter_goal: str = "在龍門客棧尋求療傷與生存，查明懷中血秘卷的第一層真相。"
+        story_chapter_goal: str = "在龍門客棧尋求療傷與生存，查明懷中血秘卷的第一層真相。",
+        chosen_category: Optional[str] = None
     ):
         """以串流方式進行 NPC 行動推演，過程持續 yield (partial_narrative, None)，最後 yield (narrative, delta)"""
         messages = self._build_messages(
@@ -350,6 +405,7 @@ class NPCAgent:
             ):
                 if delta is not None:
                     self._record_turn(player_action, delta)
+                    update_thread_state(self, chosen_category, delta)
                     yield (delta.narrative, delta)
                 else:
                     yield (partial_narrative, None)
@@ -364,6 +420,7 @@ class NPCAgent:
                 game_turn=game_turn
             )
             self._record_turn(player_action, delta)
+            update_thread_state(self, chosen_category, delta)
             yield (delta.narrative, delta)
 
     def reset_history(self):

@@ -312,8 +312,9 @@ class GameEngine:
         """每回合進行非當前互動 NPC 的自主行為推演與社交關聯演變"""
         npc_autonomy.simulate_npc_autonomous_actions(self.state)
 
-    def interact(self, player_action: str) -> GameStateDelta:
-        """與當前 NPC 互動"""
+    def interact(self, player_action: str, chosen_category: Optional[str] = None) -> GameStateDelta:
+        """與當前 NPC 互動；chosen_category 是玩家選的選項所屬類別 (A~E)，用於主題線鎖定
+        （見 src/rules.py::update_thread_state），CLI 沒有固定按鈕對應類別，預設 None 即可"""
         if not self.state.current_agent:
             raise ValueError("目前沒有選擇任何 NPC 進行互動！")
 
@@ -332,15 +333,16 @@ class GameEngine:
             available_exits=self.get_available_exits(),
             recent_world_events=self.state.recent_world_events,
             story_chapter_title=ch_info.get("title", "第一章：血夜甦醒與龍門破局"),
-            story_chapter_goal=ch_info.get("goal", "尋求療傷與避難，查明懷中血秘卷真相。")
+            story_chapter_goal=ch_info.get("goal", "尋求療傷與避難，查明懷中血秘卷真相。"),
+            chosen_category=chosen_category
         )
 
         self.apply_delta(delta)
         self.simulate_npc_autonomous_actions()
         return delta
 
-    def interact_stream(self, player_action: str):
-        """與當前 NPC 串流互動"""
+    def interact_stream(self, player_action: str, chosen_category: Optional[str] = None):
+        """與當前 NPC 串流互動；chosen_category 見 interact() 的說明"""
         if not self.state.current_agent:
             raise ValueError("目前沒有選擇任何 NPC 進行互動！")
 
@@ -359,7 +361,8 @@ class GameEngine:
             available_exits=self.get_available_exits(),
             recent_world_events=self.state.recent_world_events,
             story_chapter_title=ch_info.get("title", "第一章：血夜甦醒與龍門破局"),
-            story_chapter_goal=ch_info.get("goal", "尋求療傷與避難，查明懷中血秘卷真相。")
+            story_chapter_goal=ch_info.get("goal", "尋求療傷與避難，查明懷中血秘卷真相。"),
+            chosen_category=chosen_category
         ):
             if delta is not None:
                 self.apply_delta(delta)

@@ -97,6 +97,68 @@ class TestOptions(unittest.TestCase):
         self.assertEqual(delta.narrative, expected_delta.narrative)
         self.assertEqual(delta.npc_status_tag, expected_delta.npc_status_tag)
 
+    def test_fallback_options_respect_active_thread_for_abd_slots(self):
+        """實測案例：帳號存檔顯示鎖定在情慾(C)主題線時，A/B/D 插槽的保底選項卻抓了各自
+        原本位置對應類別(正派/謀略/混亂)的候選池，跟當下敘事完全脫節。驗證修復後鎖定中
+        時 A/B/D 插槽改抓鎖定主題(C)的候選池內容，只有前綴字母仍對應插槽位置；E 不受影響。"""
+        c_pool_texts = {
+            tpl.format(disp_name="賽金花", location="龍門客棧")
+            for tpl in load_npc_fallbacks()["風騷老闆娘"]["option_pools"]["C"]
+        }
+        opts = generate_fallback_options(
+            "風騷老闆娘", "龍門客棧", turn=1, disp_name="賽金花", active_thread="C"
+        )
+        self.assertEqual(len(opts), 5)
+        for idx, prefix in enumerate("ABCD"):
+            self.assertTrue(opts[idx].startswith(f"{prefix}) "))
+            content = opts[idx][3:]
+            self.assertIn(content, c_pool_texts, f"插槽 {prefix} 的內容應該來自鎖定主題 C 的候選池")
+        # E 不受主題線鎖定影響，維持自己原本的地圖探索/轉移候選池
+        e_pool_texts = {
+            tpl.format(disp_name="賽金花", location="龍門客棧")
+            for tpl in load_npc_fallbacks()["風騷老闆娘"]["option_pools"]["E"]
+        }
+        self.assertTrue(opts[4].startswith("E) "))
+        self.assertIn(opts[4][3:], e_pool_texts)
+
+    def test_fallback_options_without_active_thread_use_own_position_category(self):
+        """沒有鎖定主題線 (active_thread=None) 時維持原本行為：每個插槽抓自己對應類別的候選池"""
+        opts = generate_fallback_options("風騷老闆娘", "龍門客棧", turn=1, disp_name="賽金花")
+        a_pool_texts = {
+            tpl.format(disp_name="賽金花", location="龍門客棧")
+            for tpl in load_npc_fallbacks()["風騷老闆娘"]["option_pools"]["A"]
+        }
+        self.assertIn(opts[0][3:], a_pool_texts)
+
+    def test_fallback_options_revert_to_neutral_during_climax_pending(self):
+        """收尾回合 (climax_pending=True) 就算 LLM 完全連不上、只能用保底選項，也要視同已經
+        回到中立狀態重新提供五種類型，不能繼續鎖定收尾前的主題——否則玩家會覺得「收尾完
+        怎麼還是同一種選項，一直輪迴」。"""
+        delta = generate_fallback_delta(
+            npc_name="風騷老闆娘", player_state=self.player_state, location="龍門客棧",
+            disp_name="賽金花", active_thread="C", climax_pending=True
+        )
+        a_pool_texts = {
+            tpl.format(disp_name="賽金花", location="龍門客棧")
+            for tpl in load_npc_fallbacks()["風騷老闆娘"]["option_pools"]["A"]
+        }
+        self.assertIn(delta.options[0][3:], a_pool_texts)
+
+    def test_fallback_narrative_appends_resolution_text_during_climax_pending(self):
+        """收尾回合的保底劇情要補一句跟鎖定主題呼應的收尾句，讀起來才像個收尾，
+        而不是隨機接上一句跟前面語氣不搭的通用保底劇情。"""
+        narrative, _ = generate_fallback_narrative(
+            npc_name="風騷老闆娘", player_name="楚留香", location="龍門客棧",
+            disp_name="賽金花", active_thread="C", climax_pending=True
+        )
+        self.assertIn("旖旎纏綿", narrative)
+
+        # 沒有收尾中的一般情況不受影響
+        narrative_normal, _ = generate_fallback_narrative(
+            npc_name="風騷老闆娘", player_name="楚留香", location="龍門客棧", disp_name="賽金花"
+        )
+        self.assertNotIn("旖旎纏綿", narrative_normal)
+
     def test_unknown_npc_option_pools_are_generic_but_well_formed(self):
         opts = generate_fallback_options("路人乙", "亂葬崗", turn=1)
         self.assertEqual(len(opts), 5)

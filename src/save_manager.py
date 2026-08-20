@@ -40,7 +40,10 @@ def save_account_game(account_name: str, engine: Any) -> str:
             "recent_activities": agent.profile.recent_activities,
             "current_status_tag": agent.current_status_tag,
             "history": agent.history,
-            "used_options_history": list(agent.used_options_history)
+            "used_options_history": list(agent.used_options_history),
+            "active_thread": agent.active_thread,
+            "thread_intensity": agent.thread_intensity,
+            "thread_climax_pending": agent.thread_climax_pending
         }
 
     quest_short = engine.main_quest_summary[:18] + "..." if len(engine.main_quest_summary) > 18 else engine.main_quest_summary
@@ -117,6 +120,9 @@ def load_game_from_file(save_path: str, engine: Any) -> bool:
                 agent.current_status_tag = npc_info.get("current_status_tag", "正常")
                 agent.history = list(npc_info.get("history", []))
                 agent.used_options_history = set(npc_info.get("used_options_history", []))
+                agent.active_thread = npc_info.get("active_thread")
+                agent.thread_intensity = npc_info.get("thread_intensity", 0)
+                agent.thread_climax_pending = npc_info.get("thread_climax_pending", False)
 
         # 切換至存檔時的當前 NPC 或地點預設 NPC
         target_npc = save_data.get("current_npc_name", "")

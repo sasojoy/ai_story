@@ -192,9 +192,17 @@ class GameStateDelta(BaseModel):
                 if isinstance(item, str):
                     val = item
                 elif isinstance(item, dict):
-                    val = item.get("text") or item.get("option") or item.get("description") or item.get("label") or str(item)
+                    val = item.get("text") or item.get("option") or item.get("description") or item.get("label")
+                    if not val:
+                        # 有些模型把完整選項文字放在 "value"、字母代號放在 "key"
+                        # （例如 {"key": "C", "value": "C) ..."}），跟預期的
+                        # {"value": "A", "text": "..."} 欄位語意剛好相反；用字串長度挑出
+                        # dict 裡最長的字串當內容，避免把整個 dict 的 repr 塞進畫面。
+                        candidates = [v for v in item.values() if isinstance(v, str) and v.strip()]
+                        val = max(candidates, key=len) if candidates else str(item)
+                    val = str(val)
                     prefix = item.get("value", "")
-                    if prefix and not str(val).startswith(prefix):
+                    if prefix and len(str(prefix)) <= 3 and not val.startswith(str(prefix)):
                         val = f"{prefix}) {val}"
 
                 val = sanitize_option_text(val)
