@@ -10,6 +10,17 @@ T = TypeVar('T', bound=BaseModel)
 logger = logging.getLogger(__name__)
 
 
+def _strip_thinking_block(text: str) -> str:
+    """移除「思考型」模型（如 qwen3.5/qwen3-abliterated）洩漏到 content 裡的推理過程。
+    這類模型的 chat template 通常已經預先塞入開頭的 <think>，所以原始回應裡常常只看得到
+    結尾的 </think>，看不到對應的開頭標籤；同時支援完整 <think>...</think> 配對的情況。"""
+    if "</think>" in text:
+        text = text.rsplit("</think>", 1)[-1]
+    elif "<think>" in text:
+        text = re.sub(r"<think>.*", "", text, flags=re.DOTALL)
+    return text.strip()
+
+
 def clean_json_text(text: str) -> str:
     """清理 LLM 輸出中可能包含的 markdown 程式碼區塊與外圍非 JSON 文字"""
     text = text.strip()
@@ -224,7 +235,7 @@ class OllamaClient:
             # message.thinking 欄位，正式答案 content 有時會留空；這裡當保底退而
             # 使用 thinking 欄位的內容，避免整段生成結果無聲地變成空字串。
             content = (message.get("thinking") or "").strip()
-        return content
+        return _strip_thinking_block(content)
 
     def chat_structured(
         self,

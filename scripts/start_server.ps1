@@ -12,7 +12,12 @@ Set-Location $ProjectRoot
 $PidFile = Join-Path $ProjectRoot "web_ui.pid"
 $LogFile = Join-Path $ProjectRoot "web_ui_run.log"
 $ErrLogFile = Join-Path $ProjectRoot "web_ui_run_err.log"
-$Python = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
+$VenvPython = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
+if (Test-Path $VenvPython) {
+    $Python = $VenvPython
+} else {
+    $Python = (Get-Command python).Source
+}
 
 # 1. 若已經有伺服器在跑（port 7860 有人聽），不要重複啟動
 $existing = Get-NetTCPConnection -LocalPort 7860 -State Listen -ErrorAction SilentlyContinue
