@@ -8,3 +8,6 @@ env/
 venv/
 .DS_Store
 .claude/settings.local.json
+
+# 結局劇情生成內容（含露骨場景），不進版本控制，只留在本機
+saves/endings/

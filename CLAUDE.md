@@ -2,6 +2,42 @@
 
 給 Claude Code 的專案速覽。完整規劃請見 [VISION.md](VISION.md)（產品願景）、[ARCHITECTURE.md](ARCHITECTURE.md)（架構債與分階段重構計畫）、[ROADMAP.md](ROADMAP.md)（功能路線圖）——這三份是本專案的權威文件，開始任何工作前先讀 ARCHITECTURE.md 的「分階段重構順序」了解目前走到哪一步。
 
+**注意**：以上三份文件與下面「目前進度」段落，描述的是 `main` 分支上「多軸線沙盒」那套舊方向。
+目前還有一條**方向完全不同、平行進行**的重構在 `feature/conquest-route-redesign` 分支上，
+收斂成單一情慾/征服路線＋四位獨立女主角，完整規劃與工作日誌見該分支的
+[REDESIGN_PLAN.md](REDESIGN_PLAN.md)。下面這節是那條分支的工作日誌摘要。
+
+## 征服路線重構工作日誌（`feature/conquest-route-redesign` 分支）
+
+**已完成的部分**（詳細設計討論與確認過程見 `REDESIGN_PLAN.md`）：
+- 四位女主角人設（沈青鋒/慕容茵/卓芷若/阿罌）與世界觀（群芳會／棲霜山莊）逐項跟使用者
+  確認定案。
+- 核心機制重構：好感度區間改成 -50~80；選項從「LLM 每回合自由創作 5 個＋自報好感度變化」
+  改成「LLM 每回合寫 3 個選項文字＋標記固定分類 (tag)，系統依分類查表覆寫好感度變化，
+  不信任 LLM 自報數字」；好感度接近終極/黑化門檻時系統決定性插入關鍵臨界選項；
+  `evaluate_ending` 改成對稱規則逐一檢查四位角色；`src/thread_state.py` 主題線鎖定
+  狀態機整個移除（單一路線不再需要）。五份主要設定檔全面替換成新角色/新世界觀內容。
+  `pytest` 63 個測試全數通過（測試套件已同步更新）。
+- **結局劇情生成管線**（`src/ending_writer.py` + `config/ending_writer_config.json` +
+  Web UI 的「🔞 結局劇情檢視器」面板）：獨立於一般回合制劇情之外，用專門的模型把角色人設
+  與黑化流程大綱擴寫成長篇結局內文。實測過 `huihui_ai/qwen3.5-abliterated:4b`
+  （完全不夠露骨，且發現這是「思考型」模型，`message.content` 有時是空的，實際內容跑進
+  `message.thinking`，已在 `src/ollama_client.py::chat_text()` 加了 fallback 讀取）與
+  `hf.co/bartowski/EVA-Qwen2.5-7B-v0.1-GGUF:Q4_K_M`（篇幅夠但角色名字會飄掉、劇情跟給定
+  大綱前後不連貫，推測是 7B 模型在 Q4 量化下擕不住一次 2048 tokens 長篇生成的連貫性）。
+  **使用者決定先停在這裡，等機器升級、能跑更強的模型後再回來處理**——管線本身已經可用，
+  之後只要把 `config/ending_writer_config.json` 的 `model_name` 換掉即可，不需要重新搭建；
+  下一個值得嘗試的方向是把黑化流程拆成多次較短的生成呼叫（每步驟分別生成再接續前文），
+  而不是一次要模型寫完整段 2048 tokens，理論上能同時改善連貫性與角色名字漂移的問題。
+
+**背景執行的坑（這台機器上踩過，記錄起來避免重踩）**：長時間生成任務（例如結局劇情這種
+2048 tokens 的單次呼叫）如果直接用 Claude Code 的 Bash 工具背景執行，曾經被 Claude Code
+自己的背景任務追蹤器在毫無预警的情況下砍掉（跟 `web_ui.py` 一直以來用 `Start-Process`
+完全分離啟動是同一類問題，見下方「手機/外部網路連線」段落）。修法：比照
+`scripts/start_server.ps1` 的模式，寫一個小腳本用 PowerShell `Start-Process` 完全分離啟動，
+執行完把結果寫進一個標記檔案，再輪詢標記檔案是否出現，而不是依賴 Bash 工具自己的背景任務
+追蹤機制。
+
 ## 目前進度（重構，依 ARCHITECTURE.md 第四節分階段順序）
 
 - [x] Stage 0 — 補測試安全網（`tests/test_streaming.py`）

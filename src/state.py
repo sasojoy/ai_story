@@ -23,3 +23,4 @@ class GameState:
     world_news: List[str] = field(default_factory=list)
     factions: Dict[str, int] = field(default_factory=dict)
     world_flags: Dict[str, bool] = field(default_factory=dict)
+    triggered_endings: Set[str] = field(default_factory=set)

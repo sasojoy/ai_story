@@ -1,0 +1,8 @@
+{
+  "ollama_url": "http://localhost:11434",
+  "model_name": "hf.co/bartowski/EVA-Qwen2.5-7B-v0.1-GGUF:Q4_K_M",
+  "context_length": 4096,
+  "timeout": 480,
+  "num_predict": 2048,
+  "temperature": 0.9
+}

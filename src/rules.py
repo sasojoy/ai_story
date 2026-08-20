@@ -84,7 +84,7 @@ def apply_delta(state: GameState, delta: GameStateDelta, world_map: Dict[str, An
 
     if state.current_agent and delta.intimacy_change != 0:
         current_intimacy = state.current_agent.profile.intimacy
-        state.current_agent.profile.intimacy = max(0, min(100, current_intimacy + delta.intimacy_change))
+        state.current_agent.profile.intimacy = max(-50, min(80, current_intimacy + delta.intimacy_change))
 
     if delta.cultivation_art_learned and delta.cultivation_art_learned.strip():
         art = delta.cultivation_art_learned.strip()
@@ -132,30 +132,45 @@ def apply_delta(state: GameState, delta: GameStateDelta, world_map: Dict[str, An
 
 
 def evaluate_ending(state: GameState, story_outline: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    """依目前 GameState 判斷是否已達成四大結局之一"""
+    """對稱結局判定：每位角色獨立檢查好感度是否達到 >=80 (終極劇情/好結局) 或 <=-50
+    (黑化結局)，不像舊版四大結局各自寫一條互不相同的 if 判斷。已觸發過結局的角色記錄在
+    state.triggered_endings，之後不會再被這裡回傳 (避免同一角色的結局畫面重複出現、
+    也讓其他角色的結局有機會被看到)；四位角色都在 triggered_endings 裡即代表全破關，
+    可用 all_endings_triggered() 查詢。
+
+    這是一個「查詢＋記錄」合一的函式 (呼叫時會 mutate state.triggered_endings)，
+    不是純函式，因為 triggered_endings 的判斷本身就依賴每次呼叫時的目前狀態，
+    分成兩個函式呼叫端反而容易漏呼叫其中一個、造成兩邊不同步。"""
     endings = story_outline.get("endings", {})
 
-    def _intimacy_of(npc_name: str) -> int:
-        agent = state.agents.get(npc_name)
-        return agent.profile.intimacy if agent else 0
+    for npc_name, agent in state.agents.items():
+        if npc_name in state.triggered_endings:
+            continue
 
-    # 結局 1: 暗黑巨擘
-    if state.factions.get("血衣樓", 0) >= 50 and state.world_flags.get("joined_xueyilou"):
-        return endings.get("ending_1")
+        intimacy = agent.profile.intimacy
+        disp_name = agent.profile.display_name or npc_name
+        npc_endings = endings.get(npc_name, {})
 
-    # 結局 2: 雙宿雙飛
-    if (_intimacy_of("合歡宗聖女") >= 70 or _intimacy_of("風騷老闆娘") >= 70) and state.player_state.cultivation_level >= 3:
-        return endings.get("ending_2")
+        if intimacy >= 80:
+            state.triggered_endings.add(npc_name)
+            return npc_endings.get("good") or {
+                "name": f"【{disp_name}・終極劇情】",
+                "description": f"{disp_name}對你徹底敞開心防，兩人的羈絆修成正果。"
+            }
 
-    # 結局 3: 金融霸主
-    if state.player_state.gold >= 1000 and _intimacy_of("錢莊老王") >= 50:
-        return endings.get("ending_3")
-
-    # 結局 4: 回合數達 15 以上觸發龍門傳奇終局
-    if state.game_turn >= 15:
-        return endings.get("ending_4")
+        if intimacy <= -50:
+            state.triggered_endings.add(npc_name)
+            return npc_endings.get("bad") or {
+                "name": f"【{disp_name}・黑化結局】",
+                "description": f"{disp_name}徹底臣服於你的支配之下，再也無法回頭。"
+            }
 
     return None
+
+
+def all_endings_triggered(state: GameState) -> bool:
+    """四位角色是否都已觸發過結局 (不論好結局或黑化結局)，即整場遊戲破關的條件"""
+    return bool(state.agents) and set(state.agents.keys()) <= state.triggered_endings
 
 
 def get_current_chapter_info(state: GameState, story_outline: Dict[str, Any]) -> Dict[str, Any]:

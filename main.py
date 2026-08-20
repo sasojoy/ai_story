@@ -115,14 +115,14 @@ def main():
     while True:
         try:
             print_status(engine)
-            option_letters = ["A", "B", "C", "D", "E"]
+            option_letters = ["A", "B", "C"]
             if last_options:
                 print("\n【動態劇情選項】")
                 for letter, opt in zip(option_letters, last_options):
                     print(f"  [{letter}] {opt}")
                 print("  (輸入字母選擇，或直接打字輸入任意行動/對話)")
 
-            user_input = input("\n請選擇 (A/B/C/D/E) 或輸入行動 > ").strip()
+            user_input = input("\n請選擇 (A/B/C) 或輸入行動 > ").strip()
 
             if not user_input:
                 continue
@@ -163,7 +163,7 @@ def main():
                 if engine.current_agent:
                     profile = engine.current_agent.profile
                     print(f"\n【NPC 詳細檔案與生平解鎖】: {profile.name} ({profile.identity})")
-                    print(f"親密度: {profile.intimacy}/100 (提示: 提升親密度至 25/50/75 可逐步解鎖數值與生平)")
+                    print(f"好感度: {profile.intimacy} (範圍 -50~80，達到 80 觸發終極劇情、降到 -50 觸發黑化結局)")
                     print(f"數值情報: {profile.get_unlocked_stats()}")
                     print("生平故事:")
                     for b in profile.get_unlocked_biography():

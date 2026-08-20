@@ -23,6 +23,7 @@ from src.game_engine import GameEngine
 from src.models import GameStateDelta, is_placeholder_option
 from src.options import generate_fallback_options, generate_single_fallback_option, generate_fallback_delta
 from src.save_manager import list_account_saves, has_account_save, load_account_game, save_account_game
+from src.ending_writer import DEFAULT_OUTPUT_DIR
 
 # 獨立帳號 Session 引擎註冊表
 session_engines: dict = {}
@@ -40,18 +41,34 @@ def get_engine_for_user(username: str = "楚留香") -> GameEngine:
     return session_engines[clean_name]
 
 
-engine = get_engine_for_user("楚留香")
-
-
 def get_npc_initial_options(engine: GameEngine, npc_name: str) -> list:
+    """生成一組全新的保底選項給指定 NPC，並同步寫回 agent.last_offered_options/tags，
+    確保玩家下一次點擊按鈕時 NPCAgent 能正確比對出這次行動屬於哪個分類。"""
     loc = engine.current_location
     agent = engine.agents.get(npc_name)
     disp_name = agent.profile.display_name if agent else None
     used_history = set(agent.used_options_history) if agent else set()
-    return generate_fallback_options(npc_name, loc, engine.game_turn, used_history, disp_name=disp_name)
+    options, tags = generate_fallback_options(npc_name, loc, engine.game_turn, used_history, disp_name=disp_name)
+    if agent:
+        agent.last_offered_options = list(options)
+        agent.last_offered_tags = list(tags)
+    return options
 
 
-DEFAULT_OPTIONS = get_npc_initial_options(engine, "風騷老闆娘")
+def get_display_options(engine: GameEngine, npc_name: str) -> list:
+    """回傳目前應該顯示給玩家的選項：優先沿用 agent 已記錄的 last_offered_options
+    (例如剛讀檔還原、延續存檔當下的選項)，查無才生成新的保底選項。"""
+    agent = engine.agents.get(npc_name)
+    if agent and agent.last_offered_options and len(agent.last_offered_options) >= 3:
+        return agent.last_offered_options[:3]
+    return get_npc_initial_options(engine, npc_name)
+
+
+DEFAULT_NPC_NAME = None
+engine = get_engine_for_user("楚留香")
+if engine.current_agent:
+    DEFAULT_NPC_NAME = engine.current_agent.profile.name
+DEFAULT_OPTIONS = get_display_options(engine, DEFAULT_NPC_NAME) if DEFAULT_NPC_NAME else ["A) ...", "B) ...", "C) ..."]
 
 
 def get_status_markdown(engine: GameEngine) -> str:
@@ -60,24 +77,26 @@ def get_status_markdown(engine: GameEngine) -> str:
     arts_str = ", ".join(p.cultivation_arts) if p.cultivation_arts else "無"
 
     ch_info = engine.get_current_chapter_info()
-    ch_title = ch_info.get("title", "第一章：血夜甦醒與龍門破局")
-    ch_goal = ch_info.get("goal", "尋求療傷與避難，查明懷中血秘卷真相")
+    ch_title = ch_info.get("title", "")
+    ch_goal = ch_info.get("goal", "")
 
     current_npc_info = "無"
-    intimacy_info = "0/100"
+    intimacy_info = "0 (範圍 -50~80)"
     if engine.current_agent:
         profile = engine.current_agent.profile
         tag = engine.current_agent.current_status_tag
         current_npc_info = f"**{profile.name}** ({profile.identity}) | 位置: {profile.location} | 狀態: `[{tag}]`"
-        intimacy_info = f"`{profile.intimacy}/100`"
+        intimacy_info = f"`{profile.intimacy}` (範圍 -50~80)"
 
     factions_str = " | ".join([f"{k}: `{v}`" for k, v in engine.factions.items()]) if engine.factions else "無"
 
     ending_info = engine.evaluate_ending()
-    ending_md = f"\n\n🏆 **[觸發終局結局]**: **{ending_info['name']}**\n*{ending_info['description']}*" if ending_info else ""
+    ending_md = f"\n\n🏆 **[觸發結局]**: **{ending_info['name']}**\n*{ending_info['description']}*" if ending_info else ""
+    if engine.all_endings_triggered():
+        ending_md += "\n\n🎉 **四人皆已觸發過結局，全破關！**"
 
     md = f"""### 📜 [{ch_title}] (第 {engine.game_turn} 回合)
-- **本章目標**: `{ch_goal}`
+- **本章氛圍**: `{ch_goal}`
 - **動態主線摘要**: `{engine.main_quest_summary}`
 - **勢力聲望**: {factions_str}{ending_md}
 
@@ -87,8 +106,8 @@ def get_status_markdown(engine: GameEngine) -> str:
 - **魅力/吸引力**: `{p.charm}` | **金幣**: `{p.gold}` 兩
 - **修為等級**: `Level {p.cultivation_level}` (經驗: `{p.cultivation_exp}`)
 - **功法武學**: `{arts_str}`
-- **當前互動 NPC**: {current_npc_info}
-- **NPC 親密度/好感度**: {intimacy_info}
+- **當前互動對象**: {current_npc_info}
+- **好感度**: {intimacy_info}
 - **背包**: `{inv_str}`
 """
     return md
@@ -102,7 +121,7 @@ def get_map_markdown(engine: GameEngine) -> str:
     exits_str = ", ".join([f"`{e}`" for e in exits]) if exits else "無"
     unlocked_str = ", ".join([f"`{u}`" for u in unlocked]) if unlocked else "無"
 
-    md = f"""### 🧭 [網狀地圖與探索看板]
+    md = f"""### 🧭 [棲霜山莊探索看板]
 - **當前所在地**: **{engine.current_location}** (危險度: `{reg.get('danger_level', '低')}`)
 - **地區環境描寫**: {reg.get('description', '')}
 - **鄰近可連通區域**: {exits_str}
@@ -113,7 +132,7 @@ def get_map_markdown(engine: GameEngine) -> str:
 
 def get_npc_dossier_markdown(engine: GameEngine) -> str:
     if not engine.current_agent:
-        return "### 📜 [NPC 機密檔案]\n目前無互動對象。"
+        return "### 📜 [機密檔案]\n目前無互動對象。"
 
     p = engine.current_agent.profile
     tag = engine.current_agent.current_status_tag
@@ -121,13 +140,13 @@ def get_npc_dossier_markdown(engine: GameEngine) -> str:
     md = f"""### 📜 [{p.name} 機密檔案]
 - **角色身份**: `{p.identity}` | **所在地點**: `{p.location}`
 - **性格特質**: {p.personality}
-- **對話狀態**: `[{tag}]` | **親密度**: `{p.intimacy}/100`
+- **對話狀態**: `[{tag}]` | **好感度**: `{p.intimacy}` (範圍 -50~80)
 """
     return md
 
 
 def get_world_news_markdown(engine: GameEngine) -> str:
-    events = engine.recent_world_events[-3:] if engine.recent_world_events else ["龍門關外夜雨傾盆，風平浪靜。"]
+    events = engine.recent_world_events[-3:] if engine.recent_world_events else ["棲霜山莊夜色沉靜，群芳會尚未真正開始。"]
     events_md = "\n".join([f"- {ev}" for ev in events])
     return f"""### 📰 [江湖動態新聞連線]
 {events_md}
@@ -190,7 +209,8 @@ def restore_web_state_after_load(engine: GameEngine, msg_text: str):
             else:
                 clean_history.append({"role": "assistant", "content": [{"type": "text", "text": str(content)}]})
 
-    opts = get_npc_initial_options(engine, engine.current_agent.profile.name if engine.current_agent else "")
+    npc_name = engine.current_agent.profile.name if engine.current_agent else ""
+    opts = get_display_options(engine, npc_name)
     return (
         clean_history,
         get_status_markdown(engine),
@@ -199,18 +219,14 @@ def restore_web_state_after_load(engine: GameEngine, msg_text: str):
         get_world_news_markdown(engine),
         msg_text,
         engine.current_location,
-        engine.current_agent.profile.name if engine.current_agent else None,
+        npc_name if npc_name else None,
         get_saves_markdown(),
         gr.update(value=opts[0]),
         gr.update(value=opts[1]),
         gr.update(value=opts[2]),
-        gr.update(value=opts[3]),
-        gr.update(value=opts[4]),
         opts[0],
         opts[1],
         opts[2],
-        opts[3],
-        opts[4]
     )
 
 
@@ -242,11 +258,11 @@ def continue_game(custom_name: str):
             gr.update(visible=False),
             gr.update(visible=True),
             res[0], res[1], res[2], res[3], res[4], res[5], res[6], res[7], res[8],
-            res[9], res[10], res[11], res[12], res[13],
-            res[14], res[15], res[16], res[17], res[18]
+            res[9], res[10], res[11], res[12], res[13], res[14]
         )
     else:
-        opts = DEFAULT_OPTIONS
+        npc_name = engine.current_agent.profile.name if engine.current_agent else ""
+        opts = get_display_options(engine, npc_name) if npc_name else DEFAULT_OPTIONS
         return (
             gr.update(visible=True),
             gr.update(visible=False),
@@ -257,10 +273,10 @@ def continue_game(custom_name: str):
             get_world_news_markdown(engine),
             f"未檢測到帳號 [{clean_name}] 的歷史存檔，請開始全新冒險！",
             engine.current_location,
-            engine.current_agent.profile.name if engine.current_agent else None,
+            npc_name if npc_name else None,
             get_saves_markdown(),
-            gr.update(value=opts[0]), gr.update(value=opts[1]), gr.update(value=opts[2]), gr.update(value=opts[3]), gr.update(value=opts[4]),
-            opts[0], opts[1], opts[2], opts[3], opts[4]
+            gr.update(value=opts[0]), gr.update(value=opts[1]), gr.update(value=opts[2]),
+            opts[0], opts[1], opts[2]
         )
 
 
@@ -278,13 +294,9 @@ def on_select_npc(custom_name: str, npc_name: str):
         gr.update(value=opts[0]),
         gr.update(value=opts[1]),
         gr.update(value=opts[2]),
-        gr.update(value=opts[3]),
-        gr.update(value=opts[4]),
         opts[0],
         opts[1],
         opts[2],
-        opts[3],
-        opts[4]
     )
 
 
@@ -300,10 +312,11 @@ def on_select_location(custom_name: str, location_name: str, history: list):
 
         clean_history.append({
             "role": "assistant",
-            "content": [{"type": "text", "text": f"🧭 **[地圖移動]** 大俠移步至 **{location_name}**！\n\n{reg.get('description', '')}\n危險度: `{reg.get('danger_level', '未知')}` | 駐留 NPC: `{reg.get('bound_npc', '無')}`"}]
+            "content": [{"type": "text", "text": f"🧭 **[地圖移動]** 大俠移步至 **{location_name}**！\n\n{reg.get('description', '')}\n危險度: `{reg.get('danger_level', '未知')}` | 駐留對象: `{reg.get('bound_npc', '無')}`"}]
         })
 
-        opts = get_npc_initial_options(engine, engine.current_agent.profile.name if engine.current_agent else "")
+        npc_name = engine.current_agent.profile.name if engine.current_agent else ""
+        opts = get_npc_initial_options(engine, npc_name) if npc_name else ["A) ...", "B) ...", "C) ..."]
         engine.auto_save()
         return (
             clean_history,
@@ -312,17 +325,13 @@ def on_select_location(custom_name: str, location_name: str, history: list):
             get_npc_dossier_markdown(engine),
             get_world_news_markdown(engine),
             msg,
-            engine.current_agent.profile.name if engine.current_agent else None,
+            npc_name if npc_name else None,
             gr.update(value=opts[0]),
             gr.update(value=opts[1]),
             gr.update(value=opts[2]),
-            gr.update(value=opts[3]),
-            gr.update(value=opts[4]),
             opts[0],
             opts[1],
             opts[2],
-            opts[3],
-            opts[4]
         )
     return (
         clean_history,
@@ -338,10 +347,6 @@ def on_select_location(custom_name: str, location_name: str, history: list):
         gr.update(),
         gr.update(),
         gr.update(),
-        gr.update(),
-        gr.update(),
-        gr.update(),
-        gr.update()
     )
 
 
@@ -356,20 +361,20 @@ def enter_jianghu(custom_name: str):
             gr.update(visible=False),
             gr.update(visible=True),
             res[0], res[1], res[2], res[3], res[4], res[5], res[6], res[7], res[8],
-            res[9], res[10], res[11], res[12], res[13],
-            res[14], res[15], res[16], res[17], res[18]
+            res[9], res[10], res[11], res[12], res[13], res[14]
         )
 
     engine.set_player_name(clean_name)
     intro = engine.world_intro
-    opening_text = f"【血夜序幕故事】\n{intro.get('opening_narrative', '')}\n\n【大背景局勢衝突】\n{intro.get('background_conflict', '')}\n\n大俠 [{clean_name}] 身處龍門客棧風暴中心，眼前四大勢力盤根錯節，你準備如何踏出江湖第一步？"
+    opening_text = f"【群芳會序幕】\n{intro.get('opening_narrative', '')}\n\n【江湖局勢】\n{intro.get('background_conflict', '')}\n\n大俠 [{clean_name}] 已抵達棲霜山莊，四大勢力代表齊聚一堂，你準備如何踏出第一步？"
 
     initial_history = [{
         "role": "assistant",
         "content": [{"type": "text", "text": opening_text}]
     }]
 
-    opts = get_npc_initial_options(engine, engine.current_agent.profile.name if engine.current_agent else "")
+    npc_name = engine.current_agent.profile.name if engine.current_agent else ""
+    opts = get_npc_initial_options(engine, npc_name) if npc_name else ["A) ...", "B) ...", "C) ..."]
     engine.auto_save()
 
     return (
@@ -380,24 +385,20 @@ def enter_jianghu(custom_name: str):
         get_map_markdown(engine),
         get_npc_dossier_markdown(engine),
         get_world_news_markdown(engine),
-        f"歡迎大俠 [{clean_name}] 踏入江湖！",
+        f"歡迎大俠 [{clean_name}] 踏入群芳會！",
         engine.current_location,
-        engine.current_agent.profile.name if engine.current_agent else None,
+        npc_name if npc_name else None,
         get_saves_markdown(),
         gr.update(value=opts[0]),
         gr.update(value=opts[1]),
         gr.update(value=opts[2]),
-        gr.update(value=opts[3]),
-        gr.update(value=opts[4]),
         opts[0],
         opts[1],
         opts[2],
-        opts[3],
-        opts[4]
     )
 
 
-def process_player_choice(custom_name: str, user_input: str, history: list, prev_opt_a: str = "", prev_opt_b: str = "", prev_opt_c: str = "", prev_opt_d: str = "", prev_opt_e: str = "", chosen_category: str = None):
+def process_player_choice(custom_name: str, user_input: str, history: list, prev_opt_a: str = "", prev_opt_b: str = "", prev_opt_c: str = ""):
     """以串流方式推進劇情：過程持續 yield 逐步填入的敘事文字，只有最後一個 yield 才更新狀態板與選項按鈕"""
     engine = get_engine_for_user(custom_name)
     clean_history = parse_history(history)
@@ -415,30 +416,16 @@ def process_player_choice(custom_name: str, user_input: str, history: list, prev
             gr.update(),
             gr.update(),
             gr.update(),
-            gr.update(),
-            gr.update(),
-            gr.update(),
-            gr.update()
         )
         return
 
     # 與 NPC 互動
     npc_name = engine.current_agent.profile.name if engine.current_agent else ""
     used_history = set(engine.current_agent.used_options_history) if engine.current_agent else set()
-    prev_opts = {
-        prev_opt_a.strip(), prev_opt_b.strip(), prev_opt_c.strip(),
-        prev_opt_d.strip(), prev_opt_e.strip()
-    }
+    prev_opts = {prev_opt_a.strip(), prev_opt_b.strip(), prev_opt_c.strip()}
     disp_name = engine.current_agent.profile.display_name if engine.current_agent else None
-    # 收尾回合 (climax_pending) 的選項要視同已回到中立狀態重新提供五種類型，不能繼續鎖定
-    # 收尾前的主題，否則玩家會覺得「收尾完怎麼還是同一種選項，一直輪迴」
-    active_thread_snapshot = (
-        None if (engine.current_agent and engine.current_agent.thread_climax_pending)
-        else (engine.current_agent.active_thread if engine.current_agent else None)
-    )
-    fallback_opts = generate_fallback_options(
-        npc_name, engine.current_location, engine.game_turn + 1, used_history | prev_opts,
-        disp_name=disp_name, active_thread=active_thread_snapshot
+    fallback_opts, _fallback_tags = generate_fallback_options(
+        npc_name, engine.current_location, engine.game_turn + 1, used_history | prev_opts, disp_name=disp_name
     )
 
     clean_history.append({"role": "user", "content": [{"type": "text", "text": str(user_input)}]})
@@ -448,7 +435,7 @@ def process_player_choice(custom_name: str, user_input: str, history: list, prev
     try:
         if not engine.current_agent:
             raise ValueError("目前沒有選擇任何 NPC 進行互動！")
-        for partial_narrative, streamed_delta in engine.interact_stream(user_input, chosen_category=chosen_category):
+        for partial_narrative, streamed_delta in engine.interact_stream(user_input):
             clean_history[-1]["content"][0]["text"] = partial_narrative
             if streamed_delta is not None:
                 delta = streamed_delta
@@ -456,8 +443,7 @@ def process_player_choice(custom_name: str, user_input: str, history: list, prev
             yield (
                 clean_history,
                 gr.update(), gr.update(), gr.update(), gr.update(),
-                gr.update(), gr.update(), gr.update(), gr.update(), gr.update(),
-                gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
+                gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
             )
     except Exception as e:
         if engine.current_agent:
@@ -479,7 +465,8 @@ def process_player_choice(custom_name: str, user_input: str, history: list, prev
                 inventory_removed=[],
                 npc_status_tag="凝視",
                 world_flag_set={},
-                options=fallback_opts
+                options=fallback_opts,
+                option_tags=_fallback_tags,
             )
         engine.apply_delta(delta)
 
@@ -489,7 +476,8 @@ def process_player_choice(custom_name: str, user_input: str, history: list, prev
         delta = GameStateDelta(
             narrative=f"[{npc_name}] 陷入了短暫的沉默...",
             npc_status_tag="沉默",
-            options=fallback_opts
+            options=fallback_opts,
+            option_tags=_fallback_tags,
         )
         engine.apply_delta(delta)
 
@@ -506,7 +494,7 @@ def process_player_choice(custom_name: str, user_input: str, history: list, prev
         changes.append(f"金幣 {sign}{delta.player_gold_change}")
     if delta.intimacy_change != 0:
         sign = "+" if delta.intimacy_change > 0 else ""
-        changes.append(f"親密度 {sign}{delta.intimacy_change}")
+        changes.append(f"好感度 {sign}{delta.intimacy_change}")
     if delta.cultivation_exp_gained > 0:
         changes.append(f"修為經驗 +{delta.cultivation_exp_gained}")
     if delta.cultivation_art_learned:
@@ -527,13 +515,14 @@ def process_player_choice(custom_name: str, user_input: str, history: list, prev
     used_history = set(engine.current_agent.used_options_history) if engine.current_agent else set()
     exclude_opts = used_history | prev_opts
 
-    # 只要 LLM 有回傳任何選項就沿用（就算不到 5 個）：下面逐格迴圈本來就會對缺的格位
+    # 只要 LLM 有回傳任何選項就沿用（就算不到 3 個）：下面逐格迴圈本來就會對缺的格位
     # 個別補生成，用完整 fallback_opts 整批取代會把模型辛苦生出的其餘幾個貼合劇情的
     # 選項也一起丟掉，換成完全通用、跟當下劇情無關的罐頭選項，是玩家覺得「選項不連貫」的主因之一。
     raw_opts = delta.options if delta.options else fallback_opts
+    raw_tags = delta.option_tags if delta.option_tags else _fallback_tags
 
     final_opts = []
-    for idx in range(5):
+    for idx in range(3):
         raw_opt = raw_opts[idx].strip() if idx < len(raw_opts) else ""
         is_dup = (
             not raw_opt or
@@ -544,18 +533,23 @@ def process_player_choice(custom_name: str, user_input: str, history: list, prev
             final_opts.append(raw_opt)
             exclude_opts.add(raw_opt)
         else:
-            new_opt = generate_single_fallback_option(
-                idx, npc_name, engine.current_location, engine.game_turn, exclude_opts, disp_name=disp_name,
-                active_thread=engine.current_agent.active_thread if engine.current_agent else None
+            new_opt, new_tag = generate_single_fallback_option(
+                idx, npc_name, engine.current_location, engine.game_turn, exclude_opts, disp_name=disp_name
             )
             final_opts.append(new_opt)
             exclude_opts.add(new_opt)
+            if idx < len(raw_tags):
+                raw_tags[idx] = new_tag
 
     if engine.current_agent:
         for opt in final_opts:
             engine.current_agent.used_options_history.add(opt)
+        # 若選項因去重被替換，agent 記錄的 last_offered_options 要跟著更新，
+        # 否則下一輪玩家點擊按鈕時比對的會是被替換前的舊文字，查不到分類
+        engine.current_agent.last_offered_options = list(final_opts)
+        engine.current_agent.last_offered_tags = list(raw_tags[:3]) if len(raw_tags) >= 3 else list(_fallback_tags)
 
-    opt_a, opt_b, opt_c, opt_d, opt_e = final_opts
+    opt_a, opt_b, opt_c = final_opts
 
     engine.auto_save()
 
@@ -568,22 +562,42 @@ def process_player_choice(custom_name: str, user_input: str, history: list, prev
         gr.update(value=opt_a),
         gr.update(value=opt_b),
         gr.update(value=opt_c),
-        gr.update(value=opt_d),
-        gr.update(value=opt_e),
         opt_a,
         opt_b,
         opt_c,
-        opt_d,
-        opt_e
     )
+
+
+def list_ending_files() -> list:
+    """列出 saves/endings/ 底下已生成的結局劇情檔案；查無目錄時回傳空清單。"""
+    if not os.path.isdir(DEFAULT_OUTPUT_DIR):
+        return []
+    return sorted(f for f in os.listdir(DEFAULT_OUTPUT_DIR) if f.endswith(".txt"))
+
+
+def load_ending_content(filename: str) -> str:
+    """讀取指定結局檔案內容顯示給玩家——由 Gradio 自己的伺服器端讀檔直接渲染到瀏覽器，
+    內容全程只在使用者自己的裝置與自己的伺服器之間傳輸。"""
+    if not filename:
+        return "請先從上方選擇一份結局檔案。"
+    path = os.path.join(DEFAULT_OUTPUT_DIR, filename)
+    if not os.path.isfile(path):
+        return f"找不到檔案：{filename}"
+    with open(path, "r", encoding="utf-8") as f:
+        return f.read()
+
+
+def refresh_ending_list():
+    files = list_ending_files()
+    return gr.update(choices=files, value=files[0] if files else None)
 
 
 def reset_chat(custom_name: str):
     engine = get_engine_for_user(custom_name)
     npc_name = engine.current_agent.profile.name if engine.current_agent else ""
-    opts = get_npc_initial_options(engine, npc_name)
     if engine.current_agent:
         engine.current_agent.reset_history()
+    opts = get_npc_initial_options(engine, npc_name) if npc_name else ["A) ...", "B) ...", "C) ..."]
     engine.auto_save()
     return (
         [],
@@ -595,40 +609,26 @@ def reset_chat(custom_name: str):
         gr.update(value=opts[0]),
         gr.update(value=opts[1]),
         gr.update(value=opts[2]),
-        gr.update(value=opts[3]),
-        gr.update(value=opts[4]),
         opts[0],
         opts[1],
         opts[2],
-        opts[3],
-        opts[4]
     )
 
 
 # 建立 Gradio Web UI 介面
 with gr.Blocks(title="Local Blade RPG Engine") as demo:
-    gr.Markdown("# 🗡️ Local Blade RPG Engine - 暗黑武俠動態沙盒")
-    gr.Markdown("使用 Ollama 本地端 LLM 驅動的高自由度文字 RPG 遊戲引擎 (v1.0.0)")
+    gr.Markdown("# 🗡️ Local Blade RPG Engine - 群芳會・棲霜山莊")
+    gr.Markdown("使用 Ollama 本地端 LLM 驅動的暗黑武俠情慾/征服路線文字 RPG 遊戲引擎")
     gr.Markdown("📱 **[手機與跨裝置連線網址]**: 請確保手機與電腦連接同一個 Wi-Fi 網路，於手機瀏覽器輸入 `http://192.168.1.123:7860` 即可跨裝置遊玩！")
 
     state_opt_a = gr.State(DEFAULT_OPTIONS[0])
     state_opt_b = gr.State(DEFAULT_OPTIONS[1])
     state_opt_c = gr.State(DEFAULT_OPTIONS[2])
-    state_opt_d = gr.State(DEFAULT_OPTIONS[3])
-    state_opt_e = gr.State(DEFAULT_OPTIONS[4])
-
-    # 每個按鈕固定對應的類別代號 (A~E)，用於主題線鎖定 (見 src/rules.py::update_thread_state)；
-    # 用按鈕身份直接傳常數，不用去解析 LLM 輸出文字裡的「A)」前綴，100% 準確
-    category_a = gr.State("A")
-    category_b = gr.State("B")
-    category_c = gr.State("C")
-    category_d = gr.State("D")
-    category_e = gr.State("E")
 
     # 1. 序幕的故事、自由取名與背景衝突展示區
     with gr.Column(visible=True) as prologue_group:
         intro_data = engine.world_intro
-        gr.Markdown(f"## 📜 {intro_data.get('title', '血夜龍門')}")
+        gr.Markdown(f"## 📜 {intro_data.get('title', '群芳會')}")
 
         player_name_input = gr.Textbox(
             label="👤 帳號 / 大俠姓名 (登入與自動紀錄)",
@@ -665,7 +665,7 @@ with gr.Blocks(title="Local Blade RPG Engine") as demo:
                 npc_dropdown = gr.Dropdown(
                     choices=list(engine.agents.keys()),
                     value=engine.current_agent.profile.name if engine.current_agent else None,
-                    label="選擇互動 NPC",
+                    label="選擇互動對象",
                     interactive=True
                 )
 
@@ -676,7 +676,24 @@ with gr.Blocks(title="Local Blade RPG Engine") as demo:
 
                 save_list_box = gr.Markdown(value=get_saves_markdown)
                 system_msg = gr.Textbox(label="系統訊息", value="準備就緒", interactive=False)
-                reset_btn = gr.Button("重置與當前 NPC 對話", variant="secondary")
+                reset_btn = gr.Button("重置與當前對象對話", variant="secondary")
+
+                with gr.Accordion("🔞 結局劇情檢視器", open=True):
+                    gr.Markdown("由伺服器端直接讀取 `saves/endings/` 底下已生成的結局檔案顯示，內容不經過任何第三方。")
+                    ending_file_dropdown = gr.Dropdown(
+                        choices=list_ending_files(),
+                        label="選擇已生成的結局檔案",
+                        interactive=True
+                    )
+                    with gr.Row():
+                        btn_refresh_endings = gr.Button("🔄 重新整理清單", variant="secondary")
+                        btn_show_ending = gr.Button("📖 顯示內容", variant="primary")
+                    ending_content_box = gr.Textbox(
+                        value="請先選擇一份結局檔案，再按「顯示內容」。",
+                        label="結局內文",
+                        lines=15,
+                        interactive=False
+                    )
 
             with gr.Column(scale=2):
                 chatbot = gr.Chatbot(label="遊戲對話紀錄", height=450)
@@ -686,8 +703,6 @@ with gr.Blocks(title="Local Blade RPG Engine") as demo:
                     btn_opt_a = gr.Button(DEFAULT_OPTIONS[0], variant="primary")
                     btn_opt_b = gr.Button(DEFAULT_OPTIONS[1], variant="secondary")
                     btn_opt_c = gr.Button(DEFAULT_OPTIONS[2], variant="stop")
-                    btn_opt_d = gr.Button(DEFAULT_OPTIONS[3], variant="secondary")
-                    btn_opt_e = gr.Button(DEFAULT_OPTIONS[4], variant="secondary")
 
     # 踏入江湖點擊事件
     btn_enter_game.click(
@@ -696,8 +711,8 @@ with gr.Blocks(title="Local Blade RPG Engine") as demo:
         outputs=[
             prologue_group, main_game_group, chatbot, status_box, map_box, dossier_box, news_box,
             system_msg, location_dropdown, npc_dropdown, save_list_box,
-            btn_opt_a, btn_opt_b, btn_opt_c, btn_opt_d, btn_opt_e,
-            state_opt_a, state_opt_b, state_opt_c, state_opt_d, state_opt_e
+            btn_opt_a, btn_opt_b, btn_opt_c,
+            state_opt_a, state_opt_b, state_opt_c
         ]
     )
 
@@ -708,8 +723,8 @@ with gr.Blocks(title="Local Blade RPG Engine") as demo:
         outputs=[
             prologue_group, main_game_group, chatbot, status_box, map_box, dossier_box, news_box,
             system_msg, location_dropdown, npc_dropdown, save_list_box,
-            btn_opt_a, btn_opt_b, btn_opt_c, btn_opt_d, btn_opt_e,
-            state_opt_a, state_opt_b, state_opt_c, state_opt_d, state_opt_e
+            btn_opt_a, btn_opt_b, btn_opt_c,
+            state_opt_a, state_opt_b, state_opt_c
         ]
     )
 
@@ -725,8 +740,8 @@ with gr.Blocks(title="Local Blade RPG Engine") as demo:
         inputs=[player_name_input],
         outputs=[
             chatbot, status_box, map_box, dossier_box, news_box, system_msg, location_dropdown,
-            npc_dropdown, save_list_box, btn_opt_a, btn_opt_b, btn_opt_c, btn_opt_d, btn_opt_e,
-            state_opt_a, state_opt_b, state_opt_c, state_opt_d, state_opt_e
+            npc_dropdown, save_list_box, btn_opt_a, btn_opt_b, btn_opt_c,
+            state_opt_a, state_opt_b, state_opt_c
         ]
     )
 
@@ -736,8 +751,8 @@ with gr.Blocks(title="Local Blade RPG Engine") as demo:
         inputs=[player_name_input, location_dropdown, chatbot],
         outputs=[
             chatbot, status_box, map_box, dossier_box, news_box, system_msg, npc_dropdown,
-            btn_opt_a, btn_opt_b, btn_opt_c, btn_opt_d, btn_opt_e,
-            state_opt_a, state_opt_b, state_opt_c, state_opt_d, state_opt_e
+            btn_opt_a, btn_opt_b, btn_opt_c,
+            state_opt_a, state_opt_b, state_opt_c
         ]
     )
 
@@ -747,59 +762,39 @@ with gr.Blocks(title="Local Blade RPG Engine") as demo:
         inputs=[player_name_input, npc_dropdown],
         outputs=[
             status_box, dossier_box, system_msg,
-            btn_opt_a, btn_opt_b, btn_opt_c, btn_opt_d, btn_opt_e,
-            state_opt_a, state_opt_b, state_opt_c, state_opt_d, state_opt_e
+            btn_opt_a, btn_opt_b, btn_opt_c,
+            state_opt_a, state_opt_b, state_opt_c
         ]
     )
 
-    # 點擊選項 A / B / C / D / E 直接推進劇情
+    # 點擊選項 A / B / C 直接推進劇情
     btn_opt_a.click(
         fn=process_player_choice,
-        inputs=[player_name_input, state_opt_a, chatbot, state_opt_a, state_opt_b, state_opt_c, state_opt_d, state_opt_e, category_a],
+        inputs=[player_name_input, state_opt_a, chatbot, state_opt_a, state_opt_b, state_opt_c],
         outputs=[
             chatbot, status_box, map_box, dossier_box, news_box,
-            btn_opt_a, btn_opt_b, btn_opt_c, btn_opt_d, btn_opt_e,
-            state_opt_a, state_opt_b, state_opt_c, state_opt_d, state_opt_e
+            btn_opt_a, btn_opt_b, btn_opt_c,
+            state_opt_a, state_opt_b, state_opt_c
         ]
     )
 
     btn_opt_b.click(
         fn=process_player_choice,
-        inputs=[player_name_input, state_opt_b, chatbot, state_opt_a, state_opt_b, state_opt_c, state_opt_d, state_opt_e, category_b],
+        inputs=[player_name_input, state_opt_b, chatbot, state_opt_a, state_opt_b, state_opt_c],
         outputs=[
             chatbot, status_box, map_box, dossier_box, news_box,
-            btn_opt_a, btn_opt_b, btn_opt_c, btn_opt_d, btn_opt_e,
-            state_opt_a, state_opt_b, state_opt_c, state_opt_d, state_opt_e
+            btn_opt_a, btn_opt_b, btn_opt_c,
+            state_opt_a, state_opt_b, state_opt_c
         ]
     )
 
     btn_opt_c.click(
         fn=process_player_choice,
-        inputs=[player_name_input, state_opt_c, chatbot, state_opt_a, state_opt_b, state_opt_c, state_opt_d, state_opt_e, category_c],
+        inputs=[player_name_input, state_opt_c, chatbot, state_opt_a, state_opt_b, state_opt_c],
         outputs=[
             chatbot, status_box, map_box, dossier_box, news_box,
-            btn_opt_a, btn_opt_b, btn_opt_c, btn_opt_d, btn_opt_e,
-            state_opt_a, state_opt_b, state_opt_c, state_opt_d, state_opt_e
-        ]
-    )
-
-    btn_opt_d.click(
-        fn=process_player_choice,
-        inputs=[player_name_input, state_opt_d, chatbot, state_opt_a, state_opt_b, state_opt_c, state_opt_d, state_opt_e, category_d],
-        outputs=[
-            chatbot, status_box, map_box, dossier_box, news_box,
-            btn_opt_a, btn_opt_b, btn_opt_c, btn_opt_d, btn_opt_e,
-            state_opt_a, state_opt_b, state_opt_c, state_opt_d, state_opt_e
-        ]
-    )
-
-    btn_opt_e.click(
-        fn=process_player_choice,
-        inputs=[player_name_input, state_opt_e, chatbot, state_opt_a, state_opt_b, state_opt_c, state_opt_d, state_opt_e, category_e],
-        outputs=[
-            chatbot, status_box, map_box, dossier_box, news_box,
-            btn_opt_a, btn_opt_b, btn_opt_c, btn_opt_d, btn_opt_e,
-            state_opt_a, state_opt_b, state_opt_c, state_opt_d, state_opt_e
+            btn_opt_a, btn_opt_b, btn_opt_c,
+            state_opt_a, state_opt_b, state_opt_c
         ]
     )
 
@@ -808,10 +803,17 @@ with gr.Blocks(title="Local Blade RPG Engine") as demo:
         inputs=[player_name_input],
         outputs=[
             chatbot, system_msg, status_box, map_box, dossier_box, news_box,
-            btn_opt_a, btn_opt_b, btn_opt_c, btn_opt_d, btn_opt_e,
-            state_opt_a, state_opt_b, state_opt_c, state_opt_d, state_opt_e
+            btn_opt_a, btn_opt_b, btn_opt_c,
+            state_opt_a, state_opt_b, state_opt_c
         ]
     )
+
+    # 結局劇情檢視器事件：change/select 兩種事件都綁，外加一個明確的「顯示內容」按鈕
+    # 當保底，避免手機瀏覽器上 Dropdown 的 change 事件沒有確實觸發時完全沒有反應
+    btn_refresh_endings.click(fn=refresh_ending_list, outputs=[ending_file_dropdown])
+    btn_show_ending.click(fn=load_ending_content, inputs=[ending_file_dropdown], outputs=[ending_content_box])
+    ending_file_dropdown.change(fn=load_ending_content, inputs=[ending_file_dropdown], outputs=[ending_content_box])
+    ending_file_dropdown.select(fn=load_ending_content, inputs=[ending_file_dropdown], outputs=[ending_content_box])
 
 
 if __name__ == "__main__":

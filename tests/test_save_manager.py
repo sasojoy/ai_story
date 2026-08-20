@@ -36,20 +36,23 @@ class TestSaveManager(unittest.TestCase):
         self.engine.player_state.cultivation_arts.append("合歡玄天功")
 
         self.engine.game_turn = 5
-        self.engine.main_quest_summary = "已加入血衣樓，準備反殺正派盟主"
-        self.engine.move_to_location("亂葬崗")
-        self.engine.factions["血衣樓"] = 80
-        self.engine.world_flags["met_she_maiden"] = True
-        self.engine.story_milestones.append("初探血衣樓密道")
+        self.engine.main_quest_summary = "已取得毒經谷信任，準備接近殘卷下落"
+        self.engine.move_to_location("棲霜山莊後山")
+        self.engine.factions["血罌宗"] = 80
+        self.engine.world_flags["met_ayin"] = True
+        self.engine.story_milestones.append("初探血罌宗邪功")
+        self.engine.triggered_endings.add("卓芷若")
 
-        if "合歡宗聖女" in self.engine.agents:
-            agent = self.engine.agents["合歡宗聖女"]
+        if "慕容茵" in self.engine.agents:
+            agent = self.engine.agents["慕容茵"]
             agent.profile.intimacy = 65
             agent.history = [
-                {"role": "user", "content": "聖女可願與我雙修？"},
-                {"role": "assistant", "content": "柳如煙眼波流轉，微笑道：『少俠若是誠心，有何不可？』"}
+                {"role": "user", "content": "你可願與我坦誠相待？"},
+                {"role": "assistant", "content": "慕容茵眼波流轉，微笑道：『少俠若是誠心，有何不可？』"}
             ]
-            agent.used_options_history.add("聖女可願與我雙修？")
+            agent.used_options_history.add("你可願與我坦誠相待？")
+            agent.last_offered_options = ["A) 選項一", "B) 選項二", "C) 選項三"]
+            agent.last_offered_tags = ["真誠切磋", "中性互動", "強攻鋪墊"]
 
         # 2. 執行存檔
         msg = save_account_game(self.test_account, self.engine)
@@ -70,37 +73,40 @@ class TestSaveManager(unittest.TestCase):
         self.assertIn("合歡玄天功", new_engine.player_state.cultivation_arts)
 
         self.assertEqual(new_engine.game_turn, 5)
-        self.assertEqual(new_engine.main_quest_summary, "已加入血衣樓，準備反殺正派盟主")
-        self.assertEqual(new_engine.current_location, "亂葬崗")
-        self.assertEqual(new_engine.factions["血衣樓"], 80)
-        self.assertTrue(new_engine.world_flags.get("met_she_maiden"))
-        self.assertIn("初探血衣樓密道", new_engine.story_milestones)
+        self.assertEqual(new_engine.main_quest_summary, "已取得毒經谷信任，準備接近殘卷下落")
+        self.assertEqual(new_engine.current_location, "棲霜山莊後山")
+        self.assertEqual(new_engine.factions["血罌宗"], 80)
+        self.assertTrue(new_engine.world_flags.get("met_ayin"))
+        self.assertIn("初探血罌宗邪功", new_engine.story_milestones)
+        self.assertIn("卓芷若", new_engine.triggered_endings)
 
-        if "合歡宗聖女" in new_engine.agents:
-            restored_agent = new_engine.agents["合歡宗聖女"]
+        if "慕容茵" in new_engine.agents:
+            restored_agent = new_engine.agents["慕容茵"]
             self.assertEqual(restored_agent.profile.intimacy, 65)
             self.assertEqual(len(restored_agent.history), 2)
-            self.assertEqual(restored_agent.history[0]["content"], "聖女可願與我雙修？")
-            self.assertIn("聖女可願與我雙修？", restored_agent.used_options_history)
+            self.assertEqual(restored_agent.history[0]["content"], "你可願與我坦誠相待？")
+            self.assertIn("你可願與我坦誠相待？", restored_agent.used_options_history)
+            self.assertEqual(restored_agent.last_offered_options, ["A) 選項一", "B) 選項二", "C) 選項三"])
+            self.assertEqual(restored_agent.last_offered_tags, ["真誠切磋", "中性互動", "強攻鋪墊"])
 
     def test_story_milestones_and_used_options_history_are_now_persisted(self):
         """Stage 2 修復：story_milestones 與每個 NPCAgent 的 used_options_history
         現在會被存檔/讀檔正確還原（Stage 0 的 characterization test 記錄的是修復前的現況，
         這裡驗證修復後的行為）。"""
-        self.engine.story_milestones.append("測試里程碑：夜探血衣樓")
-        if "殺手阿福" in self.engine.agents:
-            self.engine.agents["殺手阿福"].used_options_history.add("測試選項：夜探血衣樓")
+        self.engine.story_milestones.append("測試里程碑：夜探血罌宗")
+        if "沈青鋒" in self.engine.agents:
+            self.engine.agents["沈青鋒"].used_options_history.add("測試選項：夜探血罌宗")
 
         save_account_game(self.test_account, self.engine)
 
         new_engine = GameEngine()
         load_account_game(self.test_account, new_engine)
 
-        self.assertIn("測試里程碑：夜探血衣樓", new_engine.story_milestones)
-        if "殺手阿福" in new_engine.agents:
+        self.assertIn("測試里程碑：夜探血罌宗", new_engine.story_milestones)
+        if "沈青鋒" in new_engine.agents:
             self.assertIn(
-                "測試選項：夜探血衣樓",
-                new_engine.agents["殺手阿福"].used_options_history
+                "測試選項：夜探血罌宗",
+                new_engine.agents["沈青鋒"].used_options_history
             )
 
     def test_list_and_get_latest_account_saves(self):

@@ -126,7 +126,7 @@ class TestOllamaClient(unittest.TestCase):
 
         self.assertEqual(mock_post.call_count, 2)
         self.assertEqual(result.narrative, "重試後正常")
-        self.assertEqual(result.options, ["A) a", "B) b", "C) c", "D) d", "E) e"])
+        self.assertEqual(result.options, ["A) a", "B) b", "C) c"])
 
     @patch("requests.post")
     def test_chat_structured_missing_options_on_retry_too_raises(self, mock_post):
@@ -196,7 +196,7 @@ class TestOllamaClient(unittest.TestCase):
 
         final_narrative, final_delta = chunks[-1]
         self.assertEqual(final_narrative, "降級後正常")
-        self.assertEqual(final_delta.options, ["A) a", "B) b", "C) c", "D) d", "E) e"])
+        self.assertEqual(final_delta.options, ["A) a", "B) b", "C) c"])
 
 
 if __name__ == "__main__":

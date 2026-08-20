@@ -2,10 +2,13 @@ from typing import Dict, List, Optional, Set, Tuple
 
 from src.content_loader import load_json_or_default
 from src.models import GameStateDelta, PlayerState
-from src.thread_state import THREAD_FALLBACK_RESOLUTION_TEXT
 
 
-CATEGORIES = ["A", "B", "C", "D", "E"]
+# 每回合固定顯示 3 個選項，插槽位置用 A/B/C 標示；保底 (fallback) 選項固定用這三個分類
+# 對應三個插槽——不是每位角色所有可能的分類 (例如「黑化臨界」「終極臨界」只由
+# src/npc_agent.py 依好感度門檻決定性地系統插入，不會出現在保底候選池裡)。
+POSITION_LABELS = ["A", "B", "C"]
+FALLBACK_TAG_SLOTS = ["真誠切磋", "中性互動", "強攻鋪墊"]
 
 
 def load_npc_fallbacks(path: str = "config/npc_fallbacks.json") -> Dict[str, Dict]:
@@ -14,32 +17,23 @@ def load_npc_fallbacks(path: str = "config/npc_fallbacks.json") -> Dict[str, Dic
 
 
 def _generic_option_pools(name_for_text: str, location: str) -> Dict[str, List[str]]:
-    """查無 npc_fallbacks.json 資料的 NPC (例如玩家自訂/新增角色) 用姓名動態生成通用選項池"""
+    """查無 npc_fallbacks.json 資料的 NPC (例如玩家自訂/新增角色) 用姓名動態生成通用選項池，
+    依分類 (tag) 而非舊版 A~E 位置類別索引。"""
     return {
-        "A": [
-            f"抱拳向{name_for_text}詢問當前地區 [{location}] 的傳聞",
-            f"探聽關於{name_for_text}的出身來歷與背後勢力",
-            f"誠懇向{name_for_text}討教當前局勢與解毒線索",
+        "真誠切磋": [
+            f"坦然向{name_for_text}展現真本事，不耍花招",
+            f"誠心向{name_for_text}請教，展現尊重的姿態",
+            f"以真心話回應{name_for_text}，不刻意討好",
         ],
-        "B": [
-            f"冷靜分析四大勢力利害關係與{name_for_text}進行談判",
-            f"拿出黑市情報籌碼提議與{name_for_text}利益均沾",
-            f"運用江湖談判與利益交換試圖說服{name_for_text}",
+        "中性互動": [
+            f"與{name_for_text}並肩談論當前局勢 [{location}]",
+            f"陪{name_for_text}處理眼前瑣事，觀察其反應",
+            f"與{name_for_text}保持不遠不近的距離閒聊",
         ],
-        "C": [
-            f"湊近{name_for_text}耳邊輕語並進行身體接觸試探",
-            f"牽起{name_for_text}的手指展露魅力拉近情感距離",
-            f"上前擁住{name_for_text}運轉靈氣進行雙修親密試探",
-        ],
-        "D": [
-            f"眼神一冷搜刮{name_for_text}隨身帶有的密卷與銀票",
-            f"亮出利刃冷聲威脅{name_for_text}透露秘密",
-            f"出其不意亮出暗器強襲{name_for_text}索要情報",
-        ],
-        "E": [
-            f"在當前區域 [{location}] 仔細搜尋蛛絲馬跡",
-            f"移動前往周邊安全區域避開風頭",
-            f"移動前往鄰近地點尋找避難所",
+        "強攻鋪墊": [
+            f"尋機摸清{name_for_text}的防備，暗中盤算強硬手段",
+            f"言語試探{name_for_text}的底線，帶著壓迫感",
+            f"逼近{name_for_text}，用氣勢施加壓力",
         ],
     }
 
@@ -49,8 +43,8 @@ def _resolve_option_pools(npc_name: str, location: str, disp_name: Optional[str]
     entry = load_npc_fallbacks().get(npc_name)
     if entry and entry.get("option_pools"):
         return {
-            category: [tpl.format(disp_name=name_for_text, location=location) for tpl in templates]
-            for category, templates in entry["option_pools"].items()
+            tag: [tpl.format(disp_name=name_for_text, location=location) for tpl in templates]
+            for tag, templates in entry["option_pools"].items()
         }
     return _generic_option_pools(name_for_text, location)
 
@@ -62,37 +56,31 @@ def generate_single_fallback_option(
     turn: int = 1,
     exclude_opts: Optional[Set[str]] = None,
     disp_name: Optional[str] = None,
-    active_thread: Optional[str] = None,
-) -> str:
-    """產生單一分類 (依 idx 對應 A~E) 的保底選項，優先從選項池挑選未使用過的候選。
-
-    active_thread 是主題線鎖定狀態 (見 src/thread_state.py)：鎖定中時 A~D 四個插槽的
-    內容都要改抓鎖定主題的候選池，E 永遠維持自己原本的類別不受影響——否則會出現「敘事
-    在講情慾線，A 插槽卻蹦出一句跟正派/常規完全不相關的保底選項」這種串不起來的情況
-    （這是實測案例：帳號存檔的 used_options_history 出現大量跟目前鎖定主題無關的 A/B/D
-    類保底選項，玩家反饋「選項好像是寫死的」）。"""
+    tag: Optional[str] = None,
+) -> Tuple[str, str]:
+    """產生單一插槽 (依 idx 對應 A~C) 的保底選項與其分類，優先從選項池挑選未使用過的候選；
+    回傳 (選項文字, 分類 tag)。"""
     exclude = exclude_opts or set()
-    position_category = CATEGORIES[idx % 5]
-    content_category = active_thread if (active_thread and position_category != "E") else position_category
-    candidates = _resolve_option_pools(npc_name, location, disp_name).get(content_category, [])
+    position_label = POSITION_LABELS[idx % 3]
+    content_tag = tag or FALLBACK_TAG_SLOTS[idx % 3]
+    candidates = _resolve_option_pools(npc_name, location, disp_name).get(content_tag, [])
 
     for candidate in candidates:
-        option = f"{position_category}) {candidate.strip()}"
+        option = f"{position_label}) {candidate.strip()}"
         if option not in exclude:
-            return option
+            return option, content_tag
 
     name_for_text = disp_name or npc_name
     descriptions = {
-        "A": f"向{name_for_text}打聽關於[{location}]的最新情報",
-        "B": f"與{name_for_text}進行冷靜利害分析與利益交涉",
-        "C": f"上前對{name_for_text}展露魅力進行深層拉扯",
-        "D": f"亮出冷刃戒備並強行搜刮{name_for_text}身上的秘卷",
-        "E": f"在[{location}]區域搜尋周邊秘密出口",
+        "真誠切磋": f"坦然向{name_for_text}展現真本事，不耍花招",
+        "中性互動": f"與{name_for_text}保持不遠不近的距離閒聊近況",
+        "強攻鋪墊": f"逼近{name_for_text}，用氣勢施加壓力",
     }
-    dynamic_option = f"{position_category}) {descriptions[content_category]} (第{turn}回合)"
+    desc = descriptions.get(content_tag, f"與{name_for_text}互動 [{location}]")
+    dynamic_option = f"{position_label}) {desc} (第{turn}回合)"
     if dynamic_option in exclude:
-        dynamic_option = f"{position_category}) {descriptions[content_category]} (第{turn}回合-{len(exclude) + 1})"
-    return dynamic_option
+        dynamic_option = f"{position_label}) {desc} (第{turn}回合-{len(exclude) + 1})"
+    return dynamic_option, content_tag
 
 
 def generate_fallback_options(
@@ -101,16 +89,18 @@ def generate_fallback_options(
     turn: int = 1,
     exclude_opts: Optional[Set[str]] = None,
     disp_name: Optional[str] = None,
-    active_thread: Optional[str] = None,
-) -> List[str]:
-    """產生完整 5 個 (A~E) 保底動態選項，CLI/Web UI/NPCAgent 共用"""
+) -> Tuple[List[str], List[str]]:
+    """產生完整 3 個 (A~C) 保底動態選項與其分類，CLI/Web UI/NPCAgent 共用；
+    回傳 (選項文字清單, 對應分類清單)，兩者長度皆為 3、依序對應。"""
     exclude = set(exclude_opts) if exclude_opts else set()
-    result = []
-    for idx in range(5):
-        option = generate_single_fallback_option(idx, npc_name, location, turn, exclude, disp_name, active_thread)
-        result.append(option)
+    options: List[str] = []
+    tags: List[str] = []
+    for idx in range(3):
+        option, tag = generate_single_fallback_option(idx, npc_name, location, turn, exclude, disp_name)
+        options.append(option)
+        tags.append(tag)
         exclude.add(option)
-    return result
+    return options, tags
 
 
 def generate_fallback_narrative(
@@ -119,14 +109,8 @@ def generate_fallback_narrative(
     location: str,
     disp_name: Optional[str] = None,
     identity: Optional[str] = None,
-    active_thread: Optional[str] = None,
-    climax_pending: bool = False,
 ) -> Tuple[str, str]:
-    """產生保底劇情段落與 NPC 情緒標籤；查無資料的新 NPC 用其身份動態生成通用劇情。
-
-    climax_pending 為 True 時（主題線收尾回合，見 src/thread_state.py），即使 LLM 完全連不上、
-    只能用保底劇情，也要在後面補一句跟當下鎖定主題呼應的收尾句，讓玩家感覺這段有被好好收尾，
-    而不是隨機接上一句跟前面語氣不搭的通用保底劇情。"""
+    """產生保底劇情段落與 NPC 情緒標籤；查無資料的新 NPC 用其身份動態生成通用劇情。"""
     name_for_text = disp_name or npc_name
     entry = load_npc_fallbacks().get(npc_name)
     if entry and entry.get("narrative"):
@@ -136,12 +120,9 @@ def generate_fallback_narrative(
         identity_str = f"（{identity}）" if identity else ""
         narrative = (
             f"{player_name}對著{name_for_text}{identity_str}開口表達意圖。{name_for_text}眼神微動，"
-            f"轉過身來打量著你，緩緩說道：『江湖險惡，不知閣下專程前來所為何事？』"
+            f"轉過身來打量著你，緩緩說道：『這般心思，倒是值得細細思量。』"
         )
         tag = "思索"
-
-    if climax_pending and active_thread in THREAD_FALLBACK_RESOLUTION_TEXT:
-        narrative = f"{narrative}{THREAD_FALLBACK_RESOLUTION_TEXT[active_thread]}"
 
     return narrative, tag
 
@@ -154,29 +135,47 @@ def generate_fallback_delta(
     exclude_opts: Optional[Set[str]] = None,
     disp_name: Optional[str] = None,
     identity: Optional[str] = None,
-    active_thread: Optional[str] = None,
-    climax_pending: bool = False,
 ) -> GameStateDelta:
     """組合保底劇情與保底選項為完整的 GameStateDelta，供 LLM 呼叫失敗時使用。
 
-    climax_pending 為 True（主題線收尾回合）時，選項要視同已經回到中立狀態重新提供五種
-    不同類型，而不是繼續鎖定在收尾前的主題——否則玩家會覺得「收尾完怎麼還是同一種選項，
-    一直輪迴」。"""
-    narrative, tag = generate_fallback_narrative(
-        npc_name, player_state.name, location, disp_name, identity, active_thread, climax_pending
-    )
-    options_thread = None if climax_pending else active_thread
-    options = generate_fallback_options(npc_name, location, turn, exclude_opts, disp_name, options_thread)
+    intimacy_change 固定為 0：這個 delta 代表的是「LLM 這回合完全連不上」，好感度變化
+    應該由呼叫端 (src/npc_agent.py) 依玩家這次選擇的選項分類查表覆寫，不是這個函式的責任。"""
+    narrative, tag = generate_fallback_narrative(npc_name, player_state.name, location, disp_name, identity)
+    options, option_tags = generate_fallback_options(npc_name, location, turn, exclude_opts, disp_name)
     return GameStateDelta(
         narrative=narrative,
         player_hp_change=0,
         player_stamina_change=0,
         player_gold_change=0,
-        intimacy_change=2,
+        intimacy_change=0,
         cultivation_exp_gained=5,
         inventory_added=[],
         inventory_removed=[],
         npc_status_tag=tag,
         world_flag_set={},
         options=options,
+        option_tags=option_tags,
     )
+
+
+def inject_critical_option(
+    delta: GameStateDelta,
+    predicted_intimacy: int,
+    disp_name: str,
+    bad_ending_flow: Optional[List[str]] = None,
+    good_threshold: int = 70,
+    bad_threshold: int = -40,
+) -> None:
+    """好感度接近門檻時，決定性地把最後一格選項換成關鍵臨界選項，取代 LLM 自由發想——
+    確保「終極劇情/黑化結局」這種不可逆分岔是系統控制、玩家清楚知道自己在選什麼，
+    不是隨機從候選池撞到的。就地修改 delta.options/delta.option_tags 最後一格 (index 2)。"""
+    if len(delta.options) < 3 or len(delta.option_tags) < 3:
+        return
+
+    if predicted_intimacy >= good_threshold:
+        delta.options[2] = f"C) 向{disp_name}坦露心跡，準備迎向這段關係的終極時刻"
+        delta.option_tags[2] = "終極臨界"
+    elif predicted_intimacy <= bad_threshold:
+        flow_hint = bad_ending_flow[0] if bad_ending_flow else "圖窮匕見，強行壓制"
+        delta.options[2] = f"C) {flow_hint}——徹底壓制{disp_name}，不再留任何餘地"
+        delta.option_tags[2] = "黑化臨界"

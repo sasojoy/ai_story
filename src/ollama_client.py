@@ -174,13 +174,15 @@ class OllamaClient:
         messages: List[Dict[str, str]],
         temperature: float,
         stream: bool = False,
-        num_predict: int = 1024
+        num_predict: int = 1024,
+        json_format: bool = True
     ) -> Dict[str, Any]:
-        """組裝 /api/chat 的 request payload，統一取樣參數與 num_ctx 來源，避免三處重複字面量"""
-        return {
+        """組裝 /api/chat 的 request payload，統一取樣參數與 num_ctx 來源，避免三處重複字面量。
+        json_format=False 用於純文字長篇生成（見 chat_text），不強制 Ollama 的 JSON 輸出模式，
+        因為 format:"json" 會限制/干擾模型的自由行文，不適合拿來寫長篇小說內文。"""
+        payload = {
             "model": self.model,
             "messages": messages,
-            "format": "json",
             "stream": stream,
             "keep_alive": "60m",
             "options": {
@@ -194,6 +196,35 @@ class OllamaClient:
                 "num_ctx": self.context_length
             }
         }
+        if json_format:
+            payload["format"] = "json"
+        return payload
+
+    def chat_text(
+        self,
+        messages: List[Dict[str, str]],
+        temperature: float = 0.85,
+        num_predict: int = 2048
+    ) -> str:
+        """純文字長篇生成：不強制 JSON schema，直接回傳模型輸出的原始文字。
+        用於結局劇情這類長篇小說內文生成，跟 chat_structured 系列（回合制 JSON 狀態機）
+        是完全不同的用途，故意不共用同一個方法。"""
+        payload = self._build_payload(messages, temperature, num_predict=num_predict, json_format=False)
+        url = f"{self.base_url}/api/chat"
+
+        res = requests.post(url, json=payload, timeout=self.timeout)
+        if res.status_code == 404:
+            raise RuntimeError(f"Ollama 回傳 404：模型 '{self.model}' 未找到，請先執行 `ollama pull {self.model}` 下載模型。")
+        res.raise_for_status()
+        raw_data = res.json()
+        message = raw_data.get("message", {})
+        content = (message.get("content") or "").strip()
+        if not content:
+            # 部分模型（例如 qwen3.5 這類「思考型」模型）會把推理過程放在獨立的
+            # message.thinking 欄位，正式答案 content 有時會留空；這裡當保底退而
+            # 使用 thinking 欄位的內容，避免整段生成結果無聲地變成空字串。
+            content = (message.get("thinking") or "").strip()
+        return content
 
     def chat_structured(
         self,

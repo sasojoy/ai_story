@@ -41,9 +41,8 @@ def save_account_game(account_name: str, engine: Any) -> str:
             "current_status_tag": agent.current_status_tag,
             "history": agent.history,
             "used_options_history": list(agent.used_options_history),
-            "active_thread": agent.active_thread,
-            "thread_intensity": agent.thread_intensity,
-            "thread_climax_pending": agent.thread_climax_pending
+            "last_offered_options": agent.last_offered_options,
+            "last_offered_tags": agent.last_offered_tags,
         }
 
     quest_short = engine.main_quest_summary[:18] + "..." if len(engine.main_quest_summary) > 18 else engine.main_quest_summary
@@ -63,7 +62,8 @@ def save_account_game(account_name: str, engine: Any) -> str:
         "world_flags": engine.world_flags,
         "world_news": getattr(engine, "world_news", []),
         "current_npc_name": engine.current_agent.profile.name if engine.current_agent else "",
-        "npcs_data": npcs_data
+        "npcs_data": npcs_data,
+        "triggered_endings": list(getattr(engine, "triggered_endings", [])),
     }
 
     save_path = get_account_save_path(account_name)
@@ -104,6 +104,7 @@ def load_game_from_file(save_path: str, engine: Any) -> bool:
         engine.world_flags = dict(save_data.get("world_flags", {}))
         if "world_news" in save_data:
             engine.world_news = list(save_data["world_news"])
+        engine.triggered_endings = set(save_data.get("triggered_endings", []))
 
         # 還原 NPC 狀態與對話歷史
         npcs_data = save_data.get("npcs_data", {})
@@ -120,9 +121,8 @@ def load_game_from_file(save_path: str, engine: Any) -> bool:
                 agent.current_status_tag = npc_info.get("current_status_tag", "正常")
                 agent.history = list(npc_info.get("history", []))
                 agent.used_options_history = set(npc_info.get("used_options_history", []))
-                agent.active_thread = npc_info.get("active_thread")
-                agent.thread_intensity = npc_info.get("thread_intensity", 0)
-                agent.thread_climax_pending = npc_info.get("thread_climax_pending", False)
+                agent.last_offered_options = list(npc_info.get("last_offered_options", []))
+                agent.last_offered_tags = list(npc_info.get("last_offered_tags", []))
 
         # 切換至存檔時的當前 NPC 或地點預設 NPC
         target_npc = save_data.get("current_npc_name", "")

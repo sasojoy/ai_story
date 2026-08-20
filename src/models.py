@@ -20,7 +20,7 @@ class GameStateDelta(BaseModel):
     player_stamina_change: int = Field(default=0, description="玩家體力變更值,可為正負數")
     player_gold_change: int = Field(default=0, description="玩家金幣變更值,可為正負數")
     player_charm_change: int = Field(default=0, description="玩家魅力變更值,可為正負數")
-    intimacy_change: int = Field(default=0, description="當前 NPC 親密度/好感度變更值 (可為正負數, 0~100)")
+    intimacy_change: int = Field(default=0, description="當前 NPC 親密度/好感度變更值 (可為正負數, 範圍 -50~80)。實際套用時系統會依玩家選擇的選項分類 (tag) 查表覆寫這個數字，不採用 LLM 自己填的值。")
     cultivation_art_learned: Optional[str] = Field(default=None, description="新解鎖領悟的雙修功法或武學")
     cultivation_exp_gained: int = Field(default=0, description="修為/雙修經驗值增長")
     inventory_added: List[str] = Field(default_factory=list, description="獲得的物品清單")
@@ -43,13 +43,17 @@ class GameStateDelta(BaseModel):
     )
     options: List[str] = Field(
         default_factory=lambda: [
-            "A) 亮出兵器靜觀其變，開口詢問對方的意圖",
-            "B) 分析眼前局勢利害，冷靜提出籌碼條件進行談判",
-            "C) 上前進行身體接觸與耳邊輕語試探",
-            "D) 眼神一冷出其不意搜刮對方的隨身密卷",
-            "E) 在當前區域仔細搜尋蛛絲馬跡與周邊通道"
+            "A) 亮出真本事，堂堂正正試探對方的反應",
+            "B) 不遠不近地陪伴與交談，維持中性距離",
+            "C) 尋機施展強硬手段，逼對方就範"
         ],
-        description="提供給玩家選擇的 5 個動態劇情選項 (A: 正派/常規, B: 謀略/智取/談判, C: 情慾/色誘/親密, D: 混亂/背叛/暗黑, E: 地圖探索/轉移)"
+        description="提供給玩家選擇的 3 個動態劇情選項，全部圍繞單一角色的情慾/征服脈絡發想 (A/B/C)"
+    )
+    option_tags: List[str] = Field(
+        default_factory=lambda: ["真誠切磋", "中性互動", "強攻鋪墊"],
+        description="對應 options 每個選項的分類標籤，只能從當前 NPC 固定的分類清單中選一個 "
+                     "(例如 真誠切磋/中性互動/花言巧語/強攻鋪墊)；系統依這個分類查表決定好感度變化，"
+                     "不採用 LLM 自己判斷的數字。長度必須與 options 一致。"
     )
 
     @model_validator(mode="before")
@@ -209,18 +213,28 @@ class GameStateDelta(BaseModel):
                 if val and not is_placeholder_option(val):
                     clean_opts.append(str(val))
 
-        if len(clean_opts) >= 5:
-            data["options"] = clean_opts[:5]
-        elif len(clean_opts) >= 3:
-            data["options"] = clean_opts
+        if len(clean_opts) >= 3:
+            data["options"] = clean_opts[:3]
         else:
             data["options"] = [
-                "A) 亮出兵器靜觀其變，開口詢問對方的意圖",
-                "B) 分析眼前局勢利害，冷靜提出籌碼條件進行談判",
-                "C) 上前進行身體接觸與耳邊輕語試探",
-                "D) 眼神一冷出其不意搜刮對方的隨身密卷",
-                "E) 移動前往周邊安全區域避開風頭"
+                "A) 亮出真本事，堂堂正正試探對方的反應",
+                "B) 不遠不近地陪伴與交談，維持中性距離",
+                "C) 尋機施展強硬手段，逼對方就範"
             ]
+
+        # 10. 處理 option_tags 欄位：長度需跟 options 一致，不足或非法一律補中性標籤，
+        # 實際是否為當前 NPC 合法的分類清單交由呼叫端 (src/npc_agent.py) 再次校驗，
+        # 這裡只保證型態正確、長度對齊，不在 pydantic 層做業務規則檢查。
+        n_opts = len(data["options"])
+        raw_tags = data.get("option_tags")
+        if isinstance(raw_tags, dict):
+            raw_tags = list(raw_tags.values())
+        clean_tags = []
+        if isinstance(raw_tags, list):
+            clean_tags = [str(t).strip() for t in raw_tags if str(t).strip()]
+        while len(clean_tags) < n_opts:
+            clean_tags.append("中性互動")
+        data["option_tags"] = clean_tags[:n_opts]
 
         return data
 
@@ -230,12 +244,32 @@ class NPCProfile(BaseModel):
     identity: str
     personality: str
     display_name: Optional[str] = None
+    faction: Optional[str] = None
     hp: int = 100
     location: str
     intimacy: int = 0
     current_activity: str = "正在靜待時機"
     relationships: Dict[str, int] = Field(default_factory=dict)
     recent_activities: List[str] = Field(default_factory=list)
+    body: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="身材描述資料 (height_cm/build/measurements_cm/sensitivity_note 等，不強制欄位)"
+    )
+    bad_ending_flow: List[str] = Field(
+        default_factory=list,
+        description="黑化結局的劇情步驟大綱，僅供之後無審查模型接手寫實際劇情文字時當大綱參考"
+    )
+    intimacy_tags: Dict[str, int] = Field(
+        default_factory=lambda: {
+            "真誠切磋": 6,
+            "中性互動": 2,
+            "花言巧語": -3,
+            "強攻鋪墊": -8,
+            "黑化臨界": -25,
+            "終極臨界": 10,
+        },
+        description="選項分類 (tag) 對應的固定好感度增減值，見 resolve_intimacy_delta()"
+    )
     stats: Dict[str, Any] = Field(
         default_factory=lambda: {
             "realm": "後天境",
@@ -255,6 +289,13 @@ class NPCProfile(BaseModel):
     @property
     def narrative_name(self) -> str:
         return self.display_name or self.name
+
+    def resolve_intimacy_delta(self, tag: Optional[str]) -> int:
+        """依選項分類 (tag) 查表拿到固定好感度增減值；tag 為 None 或不在清單內時
+        一律 fallback 成「中性互動」(查無「中性互動」則視為 0)，不採用 LLM 自報的數字。"""
+        if not tag:
+            return 0
+        return self.intimacy_tags.get(tag, self.intimacy_tags.get("中性互動", 0))
 
     def get_unlocked_biography(self) -> List[str]:
         """根據親密度解鎖生平故事章節；分級門檻以 config/npc_stages.json 為 SSOT，

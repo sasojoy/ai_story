@@ -79,21 +79,21 @@ class TestStreaming(unittest.TestCase):
     @patch("src.ollama_client.OllamaClient.chat_structured_stream")
     def test_interact_stream_applies_delta_exactly_once_on_final_yield(self, mock_stream):
         final_delta = GameStateDelta(
-            narrative="老王低聲附耳道有妙計",
+            narrative="慕容茵低聲附耳道有妙計",
             player_gold_change=30,
             inventory_added=["密函"],
         )
         mock_stream.return_value = iter([
-            ("老王低聲", None),
-            ("老王低聲附耳道有妙計", final_delta),
+            ("慕容茵低聲", None),
+            ("慕容茵低聲附耳道有妙計", final_delta),
         ])
 
         engine = GameEngine()
-        engine.switch_npc("錢莊老王")
+        engine.switch_npc("慕容茵")
         start_turn = engine.game_turn
         start_gold = engine.player_state.gold
 
-        collected = list(engine.interact_stream("附耳過去聽老王的計畫"))
+        collected = list(engine.interact_stream("附耳過去聽慕容茵的計畫"))
 
         self.assertEqual(len(collected), 2)
         self.assertIsNone(collected[0][1])
@@ -109,7 +109,7 @@ class TestStreaming(unittest.TestCase):
         mock_stream.side_effect = Exception("Ollama stream timeout")
 
         engine = GameEngine()
-        engine.switch_npc("殺手阿福")
+        engine.switch_npc("沈青鋒")
         start_turn = engine.game_turn
 
         collected = list(engine.interact_stream("試探性攻擊"))
@@ -134,26 +134,25 @@ class TestStreaming(unittest.TestCase):
         這裡 mock 掉磁碟寫入，避免測試之間透過殘留的存檔檔案互相污染 used_options_history，
         導致選項去重的結果每次執行都不一樣。"""
         final_delta = GameStateDelta(
-            narrative="賽金花緩緩靠近，眼神炙熱",
+            narrative="卓芷若緩緩靠近，眼神炙熱",
             options=[
                 # 注意：不能用「全新選項A」這種字面帶「選項a」的文字，會被
                 # is_placeholder_option() 判定為佔位字串而被過濾掉，改用具體描述
                 "A) 邀請對方共飲一杯，順勢打探消息",
                 "B) 冷靜分析局勢利弊，提出新的合作條件",
                 "C) 靠近對方低聲耳語幾句心事",
-                "D) 亮出兵器故作警戒姿態",
-                "E) 轉身望向窗外的江湖夜色"
-            ]
+            ],
+            option_tags=["真誠切磋", "中性互動", "強攻鋪墊"],
         )
         mock_stream.return_value = iter([
-            ("賽金花緩緩", None),
-            ("賽金花緩緩靠近", None),
-            ("賽金花緩緩靠近，眼神炙熱", final_delta),
+            ("卓芷若緩緩", None),
+            ("卓芷若緩緩靠近", None),
+            ("卓芷若緩緩靠近，眼神炙熱", final_delta),
         ])
 
         from web_ui import process_player_choice, get_engine_for_user, DEFAULT_OPTIONS
         eng = get_engine_for_user("_stage6_stream_test")
-        eng.switch_npc("風騷老闆娘")
+        eng.switch_npc("卓芷若")
 
         # process_player_choice 在每次 yield 之間會就地修改同一個 clean_history 物件
         # (讓 Gradio 能低成本地逐步更新畫面)，所以這裡逐步消費 generator 時要立刻把
@@ -166,8 +165,6 @@ class TestStreaming(unittest.TestCase):
             prev_opt_a=DEFAULT_OPTIONS[0],
             prev_opt_b=DEFAULT_OPTIONS[1],
             prev_opt_c=DEFAULT_OPTIONS[2],
-            prev_opt_d=DEFAULT_OPTIONS[3],
-            prev_opt_e=DEFAULT_OPTIONS[4],
         )
 
         texts = []
@@ -180,12 +177,14 @@ class TestStreaming(unittest.TestCase):
         self.assertEqual(len(texts), 3)
 
         # 中途 yield：chatbot 最後一則訊息的文字隨串流逐步變長
-        self.assertEqual(texts[0], "賽金花緩緩")
-        self.assertEqual(texts[1], "賽金花緩緩靠近")
+        self.assertEqual(texts[0], "卓芷若緩緩")
+        self.assertEqual(texts[1], "卓芷若緩緩靠近")
 
         # 最後一個 yield 才是完整格式化過的訊息，且選項已經更新（不是 gr.update() 空白 no-op）
-        self.assertIn("賽金花緩緩靠近，眼神炙熱", texts[-1])
-        self.assertEqual(final_result[10], "A) 邀請對方共飲一杯，順勢打探消息")
+        self.assertIn("卓芷若緩緩靠近，眼神炙熱", texts[-1])
+        # 新的 yield tuple 順序 (11 欄)：history, status, map, dossier, news,
+        # btn_a/b/c update, opt_a/b/c state；opt_a 的最終值落在 index 8
+        self.assertEqual(final_result[8], "A) 邀請對方共飲一杯，順勢打探消息")
 
 
 if __name__ == "__main__":

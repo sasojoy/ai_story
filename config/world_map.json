@@ -1,60 +1,44 @@
 {
   "regions": {
-    "龍門客棧": {
-      "name": "龍門客棧",
-      "description": "大漠黃沙中的兩層木造酒樓，紅燭搖曳，酒香與血腥氣交織。黑白兩道豪客聚集，是消息流通與交易的最佳場所。",
-      "connections": ["黑風寨山腳", "少林寺下鎮", "龍門錢莊"],
+    "棲霜山莊正廳": {
+      "name": "棲霜山莊正廳",
+      "description": "群芳會的主要聚會場所，雕梁畫棟，四大勢力代表齊聚一堂，表面觥籌交錯，暗地裡卻各懷心思。",
+      "connections": ["棲霜山莊演武場", "棲霜山莊廂房", "棲霜山莊藥廬", "棲霜山莊後山"],
       "is_unlocked": true,
       "danger_level": "低",
-      "bound_npc": "風騷老闆娘"
+      "bound_npc": "卓芷若"
     },
-    "龍門錢莊": {
-      "name": "龍門錢莊",
-      "description": "金字招牌高懸，算盤聲不絕於耳。這裡是龍門關內資金流轉的命脈，金條銀票堆積如山，防衛極其森嚴。",
-      "connections": ["龍門客棧", "少林寺下鎮"],
-      "is_unlocked": true,
-      "danger_level": "低",
-      "bound_npc": "錢莊老王"
-    },
-    "黑風寨山腳": {
-      "name": "黑風寨山腳",
-      "description": "陡峭的山道被濃霧籠罩，兩旁密林聳立，暗藏殺機。樹幹上留有許多新鮮的刀砍斧鑿痕跡。",
-      "connections": ["龍門客棧", "亂葬崗"],
+    "棲霜山莊演武場": {
+      "name": "棲霜山莊演武場",
+      "description": "山莊後方的開闊石地，劍痕遍佈，是一劍宗宗主沈青鋒日常練劍之處，氣氛肅殺凝重。",
+      "connections": ["棲霜山莊正廳"],
       "is_unlocked": true,
       "danger_level": "中",
-      "bound_npc": "殺手阿福"
+      "bound_npc": "沈青鋒"
     },
-    "少林寺下鎮": {
-      "name": "少林寺下鎮",
-      "description": "位於嵩山腳下的繁華古鎮，梵音香火飄渺，香客與江湖遊俠穿梭其間。鎮上治安良好但氣氛肅穆。",
-      "connections": ["龍門客棧", "龍門錢莊", "血衣樓分舵"],
+    "棲霜山莊廂房": {
+      "name": "棲霜山莊廂房",
+      "description": "裝飾精緻的待客廂房，香氣繚繞，慕容茵常在此與各方賓客談笑周旋、暗中打探情報。",
+      "connections": ["棲霜山莊正廳"],
       "is_unlocked": true,
       "danger_level": "低",
-      "bound_npc": "錢莊老王"
+      "bound_npc": "慕容茵"
     },
-    "亂葬崗": {
-      "name": "亂葬崗",
-      "description": "荒涼陰森的白骨墳塚，磷火閃爍，夜鴉啼鳴。冷風中夾雜著腐臭與藥香，據傳常有魔道中人在此夜會。",
-      "connections": ["黑風寨山腳", "血衣樓分舵", "合歡宗天字房"],
-      "is_unlocked": false,
+    "棲霜山莊藥廬": {
+      "name": "棲霜山莊藥廬",
+      "description": "山莊一隅的清幽藥廬，藥香四溢，卓芷若在此為傷者診治、整理藥材。",
+      "connections": ["棲霜山莊正廳"],
+      "is_unlocked": true,
+      "danger_level": "低",
+      "bound_npc": "卓芷若"
+    },
+    "棲霜山莊後山": {
+      "name": "棲霜山莊後山",
+      "description": "人跡罕至的荒僻後山，邪氣隱隱浮動，是血罌宗巫女阿罌自行修煉邪功之處。",
+      "connections": ["棲霜山莊正廳"],
+      "is_unlocked": true,
       "danger_level": "高",
-      "bound_npc": "合歡宗聖女"
-    },
-    "血衣樓分舵": {
-      "name": "血衣樓分舵",
-      "description": "隱匿於地下溶洞中的殺手據點，幽暗的火把映照著滿牆的刺殺懸賞竹牌，冷酷無情。",
-      "connections": ["少林寺下鎮", "亂葬崗"],
-      "is_unlocked": false,
-      "danger_level": "極危",
-      "bound_npc": "殺手阿福"
-    },
-    "合歡宗天字房": {
-      "name": "合歡宗天字房",
-      "description": "客棧頂樓暗藏的奢華秘室，紅紗漫舞，檀香撲鼻，軟榻上散發著誘人的靡靡之氣。",
-      "connections": ["龍門客棧", "亂葬崗"],
-      "is_unlocked": false,
-      "danger_level": "中",
-      "bound_npc": "合歡宗聖女"
+      "bound_npc": "阿罌"
     }
   }
 }
