@@ -23,13 +23,24 @@ _DEFAULT_GOOD_OUTLINE = [
 class EndingWriterConfig(BaseModel):
     """獨立於 config/game_config.json 的模型設定：結局劇情用專門的無審查/abliterated 模型
     生成長篇小說內文，跟一般回合制劇情用的 qwen2.5:1.5b（JSON schema 導向）完全是兩件事，
-    故意不共用同一份設定檔，避免兩邊的參數需求（num_predict、temperature 等）互相牽制。"""
+    故意不共用同一份設定檔，避免兩邊的參數需求（num_predict、temperature 等）互相牽制。
+
+    backend："ollama"（指令遵循模型，走 build_ending_system_prompt/build_step_user_prompt
+    的指令式 prompt，多步驟接龍）或 "rwkv"（純續寫模型，走 build_ending_prefix/
+    build_combined_outline_cue 的前綴單次生成）。實測發現用中文情色小說語料直接訓練的
+    RWKV 續寫模型
+    （a686d380/rwkv-5-h-world）比「泛用 instruct 模型 + abliteration + prompt 工程」
+    穩定非常多——不需要「移除拒答」，因為它训练時看過的資料本身就是這種文字，角色名字也
+    完全不會漂移。缺點是它不吃指令，只能給前綴接龍，所以两條路徑的 prompt 組裝方式不同。"""
+    backend: str = "ollama"
     ollama_url: str = "http://localhost:11434"
     model_name: str = "huihui_ai/qwen3.5-abliterated:4b"
     context_length: int = 4096
     timeout: int = 180
     num_predict: int = 2048
     temperature: float = 0.9
+    rwkv_url: str = "http://127.0.0.1:8000"
+    rwkv_top_p: float = 0.3
 
 
 def load_ending_writer_config(path: str = "config/ending_writer_config.json") -> EndingWriterConfig:
@@ -172,6 +183,39 @@ def build_step_user_prompt(step_index: int, step_text: str, total_steps: int, is
     return instruction
 
 
+def build_ending_prefix(
+    profile: NPCProfile,
+    ending_flavor: Dict[str, Any],
+    player_name: str = "楚留香",
+) -> str:
+    """組裝給 RWKV 這類純續寫模型的開場前綴——用描述性散文交代角色與場景，不能像
+    build_ending_system_prompt 那樣寫成指令，因為續寫模型不吃指令，只會把整段前綴當成
+    「小說已經寫到這裡」直接接下去，指令式文字放進去只會被當成故事內容的一部分續寫下去
+    （反而更容易長歪），所以這裡刻意全部寫成第三人稱敘事散文。"""
+    disp_name = profile.display_name or profile.name
+    body_desc = _format_body(profile.body)
+    ending_desc = ending_flavor.get("description", "")
+
+    parts = [f"{disp_name}，{profile.identity}，{profile.personality}"]
+    if body_desc and body_desc != "（無特別記錄的身材資料）":
+        parts.append(f"她{body_desc}。")
+    if ending_desc:
+        parts.append(ending_desc)
+    parts.append(f"{player_name}與{disp_name}之間的這場糾葛，終於來到了決定命運的這一刻。")
+    return "".join(parts) + "\n\n"
+
+
+def build_combined_outline_cue(outline_steps: List[str]) -> str:
+    """把整份大綱濃縮成一句劇情走向提示，接在 build_ending_prefix 後面單次生成用。
+
+    實測發現 RWKV 這類 RNN 類架構接上多步驟接龍（每步驟分開呼叫、累積前綴越滾越長）
+    後，容易被前綴裡剛出現過的句子「黏住」反覆複誦，縮小上下文視窗、拉高重複偵測門檻
+    都只能緩解、無法根治。RWKV 真正穩定的用法是「乾淨的短前綴 + 一次生成」——這裡改成
+    把整份大綱一次寫成劇情走向提示，只呼叫模型一次，直接利用這個已驗證有效的短打特性，
+    犧牲一些篇幅換取穩定度。"""
+    return "接下來，" + "，".join(outline_steps) + "。\n\n"
+
+
 _META_LEAK_LINE_PATTERN = re.compile(
     r"^\s*(#{1,6}\s|\[注意\]|\[Note\]|以上文本|創意延續提示|创意延续提示|留意環境轉換|加入新元素)"
 )
@@ -230,15 +274,56 @@ def strip_meta_leakage(text: str) -> str:
 MAX_STEP_RETRIES = 3
 
 
+def _has_repeated_sentence_loop(text: str, min_len: int = 8, min_repeats: int = 2) -> bool:
+    """偵測「同一句子逐字重複」的復讀迴圈——實測發現 RWKV 這類 RNN 類架構在多步驟接龍、
+    累積前綴變長之後，比 transformer 更容易整段崩潰成複誦自己剛寫過的句子（尤其是抗
+    重複參數沒調好的時候）。門檻原本設 3 次，實測發現重複 2 次讀起來就已經很出戲了，
+    調嚴一點抓到就直接砍掉。用句號/驚嘆號/問號/換行切句，只計算長度夠長的句子（太短的
+    句子，例如「嗯……」「啊……」，正常對話裡本來就會合理重複）。"""
+    sentences = re.split(r"[。！？\n]", text)
+    counts: Dict[str, int] = {}
+    for s in sentences:
+        s = s.strip()
+        if len(s) < min_len:
+            continue
+        counts[s] = counts.get(s, 0) + 1
+        if counts[s] >= min_repeats:
+            return True
+    return False
+
+
+def _truncate_before_repeat_loop(text: str, min_len: int = 8, min_repeats: int = 2) -> str:
+    """把復讀迴圈第一次踩到重複門檻的地方直接砍掉，只保留迴圈開始之前還算正常的內容。
+    用在重試 MAX_STEP_RETRIES 次後仍然崩壞時的最後補救——與其把整段複誦文字塞進最終
+    結局文字、或整回合直接開天窗，不如搶救迴圈之前的部分，至少不會讓後面的步驟也
+    跟著被這段複誦文字帶偏（見 generate_ending_scene 的 accumulated 說明）。"""
+    parts = re.split(r"([。！？\n])", text)
+    counts: Dict[str, int] = {}
+    kept: List[str] = []
+    i = 0
+    while i < len(parts):
+        segment = parts[i]
+        delimiter = parts[i + 1] if i + 1 < len(parts) else ""
+        stripped_segment = segment.strip()
+        if len(stripped_segment) >= min_len:
+            counts[stripped_segment] = counts.get(stripped_segment, 0) + 1
+            if counts[stripped_segment] >= min_repeats:
+                break
+        kept.append(segment + delimiter)
+        i += 2
+    return "".join(kept).strip()
+
+
 def is_step_output_broken(text: str, expected_min_chars: int) -> bool:
-    """判斷這一步驟的生成結果是否崩壞，判斷依據來自實測觀察到的三種失敗模式：
+    """判斷這一步驟的生成結果是否崩壞，判斷依據來自實測觀察到的四種失敗模式：
 
     1. 過濾掉破格文字後幾乎沒剩下內容——通常是整段都在自我規劃、清乾淨後所剩無幾。
     2. 大量非常見符號／emoji——實測看過模型在長輸出後期失控，整段崩潰成表情符號與
        貨幣符號亂碼（例如 😊✨🎉🟦🟢₹₩），這類字元在正常武俠敘事裡幾乎不會出現，
        用密度當高準確度的崩壞訊號。
     3. 大量英文字母——這是要求全程繁體中文的武俠敘事，實測看過模型在上下文壓力大時
-       整段（甚至整個規劃自白）滑進英文，用密度當訊號觸發重試。"""
+       整段（甚至整個規劃自白）滑進英文，用密度當訊號觸發重試。
+    4. 同一句子逐字重複 3 次以上——見 _has_repeated_sentence_loop。"""
     stripped = text.strip()
     if len(stripped) < max(20, int(expected_min_chars * 0.3)):
         return True
@@ -251,7 +336,95 @@ def is_step_output_broken(text: str, expected_min_chars: int) -> bool:
     if (symbol_chars / len(stripped)) > 0.03:
         return True
     ascii_letter_chars = sum(1 for ch in stripped if ch.isascii() and ch.isalpha())
-    return (ascii_letter_chars / len(stripped)) > 0.15
+    if (ascii_letter_chars / len(stripped)) > 0.15:
+        return True
+    return _has_repeated_sentence_loop(stripped)
+
+
+def _generate_steps_ollama(
+    profile: NPCProfile,
+    ending_type: str,
+    ending_flavor: Dict[str, Any],
+    lorebook: Dict[str, Any],
+    outline_steps: List[str],
+    player_name: str,
+    config: "EndingWriterConfig",
+    climax_start: int,
+    base_budget: int,
+) -> List[str]:
+    """指令遵循模型（qwen 系列 abliterated）路線：多輪對話 + 每步驟明確指令。"""
+    client = OllamaClient(
+        base_url=config.ollama_url,
+        model=config.model_name,
+        timeout=config.timeout,
+        context_length=config.context_length,
+    )
+    total_steps = len(outline_steps)
+    system_prompt = build_ending_system_prompt(
+        profile, ending_type, ending_flavor, lorebook, outline_steps, player_name
+    )
+    messages: List[Dict[str, str]] = [{"role": "system", "content": system_prompt}]
+
+    step_texts: List[str] = []
+    for i, step_text in enumerate(outline_steps):
+        is_climax_step = i >= climax_start
+        step_budget = base_budget * 2 if is_climax_step else base_budget
+        messages.append(
+            {"role": "user", "content": build_step_user_prompt(i, step_text, total_steps, is_climax_step)}
+        )
+        step_output = ""
+        for _attempt in range(MAX_STEP_RETRIES):
+            step_output = strip_meta_leakage(
+                client.chat_text(messages, temperature=config.temperature, num_predict=step_budget)
+            )
+            if not is_step_output_broken(step_output, step_budget):
+                break
+        else:
+            # 重試 MAX_STEP_RETRIES 次後仍然崩壞：搶救復讀迴圈之前還算正常的內容，
+            # 避免把整段複誦文字塞進最終結局文字、也避免帶壞下一輪對話歷史。
+            step_output = _truncate_before_repeat_loop(step_output)
+        messages.append({"role": "assistant", "content": step_output})
+        step_texts.append(step_output)
+    return step_texts
+
+
+def _generate_steps_rwkv(
+    profile: NPCProfile,
+    ending_flavor: Dict[str, Any],
+    outline_steps: List[str],
+    player_name: str,
+    config: "EndingWriterConfig",
+    climax_start: int,
+    base_budget: int,
+) -> List[str]:
+    """純續寫模型（RWKV，用中文情色小說語料直接訓練）路線：單次生成，不接龍。
+
+    原本設計成跟 ollama 路線一樣多步驟接龍，實測發現 RWKV 這類 RNN 類架構接上接龍後
+    （每步驟分開呼叫、累積前綴越滾越長）容易被前綴裡剛出現過的句子「黏住」反覆複誦，
+    縮小上下文視窗、拉高重複偵測門檻都只能緩解、無法根治。RWKV 真正穩定的用法是「乾淨
+    的短前綴 + 一次生成」，所以改成把整份大綱濃縮成一句劇情走向提示，只呼叫模型一次，
+    犧牲一些篇幅細節換取穩定度（不再有 climax 步驟加碼預算的概念，因為只有一次呼叫）。"""
+    from src.rwkv_client import RWKVClient
+
+    client = RWKVClient(base_url=config.rwkv_url, timeout=config.timeout)
+    prompt = build_ending_prefix(profile, ending_flavor, player_name) + build_combined_outline_cue(outline_steps)
+    budget = max(base_budget * len(outline_steps), 600)
+
+    text = ""
+    for _attempt in range(MAX_STEP_RETRIES):
+        text = strip_meta_leakage(
+            client.complete(
+                prompt,
+                max_tokens=budget,
+                temperature=config.temperature,
+                top_p=config.rwkv_top_p,
+            )
+        )
+        if not is_step_output_broken(text, budget):
+            break
+    else:
+        text = _truncate_before_repeat_loop(text)
+    return [text]
 
 
 def generate_ending_scene(
@@ -266,11 +439,14 @@ def generate_ending_scene(
 ) -> Dict[str, Any]:
     """呼叫專屬的無審查模型，把指定角色/結局類型的劇情大綱擴寫成完整小說內文並存檔。
 
-    採多步驟接龍生成：大綱每一步驟分開呼叫模型、透過多輪對話歷史串接前文，而不是要模型
-    一次生成完整 2048 tokens 長文。動機：實測過單次生成在這個量化等級下常常提前結束、
-    甚至直接寫「(以下省略)」跳過親密場景本身，被判斷是「一次要模型撐住整段長文的連貫性」
-    這個負擔本身的問題，拆成多次較短的生成、每步驟都能看到自己前面寫過的內容再接續，
-    預期能同時改善連貫性與迴避問題。
+    採多步驟接龍生成：大綱每一步驟分開呼叫模型，而不是要模型一次生成完整長文。動機：
+    實測過單次生成常常提前結束、甚至直接寫「(以下省略)」跳過親密場景本身，被判斷是
+    「一次要模型撐住整段長文的連貫性」這個負擔本身的問題，拆成多次較短的生成、每步驟都
+    能看到自己前面寫過的內容再接續，預期能同時改善連貫性與迴避問題。
+
+    `config.backend` 決定實際走哪條生成路線（見 EndingWriterConfig 的說明），
+    兩條路線共用大綱步驟、climax 步驟加碼預算、破格文字過濾與崩壞重試的邏輯，
+    只有 prompt 組裝方式與呼叫的模型 API 不同。
 
     回傳的 dict 含 text（完整內文，供 Web UI 顯示用）與 path/word_count 等中繼資料。"""
     if ending_type not in ("good", "bad"):
@@ -287,41 +463,21 @@ def generate_ending_scene(
     lorebook = load_json_or_default(lorebook_path, {})
     config = load_ending_writer_config(config_path)
 
-    client = OllamaClient(
-        base_url=config.ollama_url,
-        model=config.model_name,
-        timeout=config.timeout,
-        context_length=config.context_length,
-    )
-
     outline_steps = get_outline_steps(profile, ending_type)
-    system_prompt = build_ending_system_prompt(
-        profile, ending_type, ending_flavor, lorebook, outline_steps, player_name
-    )
-    messages: List[Dict[str, str]] = [{"role": "system", "content": system_prompt}]
-
     total_steps = len(outline_steps)
     # 最後兩步（不足兩步時只算最後一步）是親密場景本身，實測不管模型大小都會把預算花在
     # 鋪陳氣氛、寫不到真正的親密描寫，所以額外加碼 token 預算給這幾步。
     climax_start = max(0, total_steps - 2)
     base_budget = max(300, config.num_predict // (total_steps + 2))
 
-    step_texts: List[str] = []
-    for i, step_text in enumerate(outline_steps):
-        is_climax_step = i >= climax_start
-        step_budget = base_budget * 2 if is_climax_step else base_budget
-        messages.append(
-            {"role": "user", "content": build_step_user_prompt(i, step_text, total_steps, is_climax_step)}
+    if config.backend == "rwkv":
+        step_texts = _generate_steps_rwkv(
+            profile, ending_flavor, outline_steps, player_name, config, climax_start, base_budget
         )
-        step_output = ""
-        for _attempt in range(MAX_STEP_RETRIES):
-            step_output = strip_meta_leakage(
-                client.chat_text(messages, temperature=config.temperature, num_predict=step_budget)
-            )
-            if not is_step_output_broken(step_output, step_budget):
-                break
-        messages.append({"role": "assistant", "content": step_output})
-        step_texts.append(step_output)
+    else:
+        step_texts = _generate_steps_ollama(
+            profile, ending_type, ending_flavor, lorebook, outline_steps, player_name, config, climax_start, base_budget
+        )
 
     text = "\n\n".join(part for part in step_texts if part)
 
@@ -334,7 +490,7 @@ def generate_ending_scene(
         "success": bool(text.strip()),
         "npc_name": npc_name,
         "ending_type": ending_type,
-        "model": config.model_name,
+        "model": config.model_name if config.backend != "rwkv" else f"rwkv:{config.rwkv_url}",
         "path": safe_path,
         "word_count": len(text),
         "steps": len(outline_steps),

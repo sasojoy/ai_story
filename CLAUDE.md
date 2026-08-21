@@ -103,9 +103,72 @@ VRAM），`context_length` 從 4096 拉高到 8192（原本 4096 是純 CPU 時�
   （`config/ending_writer_config.json`，`context_length` 也拉高到 8192）。
   **實測結論：不管哪個模型，露骨程度跟穩定性都有明顯隨機波動**（同樣輸入，這次寫得很
   好、下次可能整段崩潰成 emoji/符號亂碼），這比較像是這個尺寸/量化組合的固有限制，不是
-  prompt 調整能穩定解決的天花板。使用者已提出後續方向是**用 `novels/` 裡的範例文字做
-  LoRA 微調**（QLoRA + Unsloth，訓練 7B 級模型），但範圍規劃到一半先暫停，尚未開始動手
-  （需要另外設定訓練環境、準備訓練資料），之後要接續前先確認使用者想投入的時間/模型大小。
+  prompt 調整能穩定解決的天花板。這個結論後來被下面「RWKV 續寫模型」的實驗部分推翻——
+  不是「這個任務本身就做不到穩定」，是「abliterated instruct 模型不適合這個任務」。
+
+**結局劇情生成管線的後續：RWKV 續寫模型是重大突破（同一個 session 後段接續處理）**
+
+使用者提出一個關鍵洞察：跟其一直在「泛用 instruct 模型 + abliteration + prompt 工程」
+這條路線裡打轉，不如換個方向找**專門用中文情色小說語料直接訓練**的模型——這類模型不需要
+「移除拒答」，因為它訓練時看過的資料本身就是這種文字。找到
+`a686d380/rwkv-5-h-world`（HuggingFace，Apache 2.0），實測結果證實這個方向完全正確：
+
+- **架構跟這個專案原本假設的完全不同**：這是 RWKV（RNN 類架構，不是 transformer），
+  不能直接被 Ollama 讀取，需要另外裝
+  [RWKV Runner](https://github.com/josStorer/RWKV-Runner) 的 `backend-python`
+  跑一個獨立的 OpenAI 相容 API server（預設 port 8000，`/v1/completions`）。
+  設定步驟：`git clone` RWKV-Runner 原始碼到 `tools/rwkv-runner-src/`、在
+  `backend-python/` 底下建 venv 裝 `requirements.txt`（**torch 那一行改用
+  `pip install torch --index-url https://download.pytorch.org/whl/cu128` 另外裝**，
+  requirements.txt 裡沒指定 index 的 torch 版本太舊，這台機器的 RTX 5070 是 Blackwell
+  架構 (compute capability 12.0)，舊版 torch 會報
+  `CUDA error: no kernel image is available for execution on the device`，要 cu128
+  以上的 wheel 才有 sm_120 kernel）。模型權重（1.5B/3B/7B 三種尺寸的 `.pth` 檔）另外從
+  HuggingFace 下載到 `tools/rwkv-models/`。`tools/` 整個資料夾已加進 `.gitignore`
+  （裡面是外部原始碼、執行檔、GB 級模型權重，不該進版本控制），啟動流程寫成
+  `scripts/start_rwkv_server.ps1`/`stop_rwkv_server.ps1`（跟 `start_server.ps1` 同一
+  套模式：`Start-Process` 完全分離啟動，啟動後自動呼叫 `/switch-model` 載入 3B 模型，
+  策略用 `cuda fp16i8`）。**寫這兩個新腳本時踩到一個坑**：用 Write 工具新建的 `.ps1`
+  檔沒有 UTF-8 BOM，Windows PowerShell 5.1 沒有 BOM 就會用系統 ANSI 編碼讀檔，把檔案裡
+  的中文字元讀壞導致字串常值解析失敗（`TerminatorExpectedAtEndOfString`）——舊的
+  `start_server.ps1` 之所以能正常運作是因為它本來就有 BOM。修法：寫完新的 `.ps1` 檔後
+  用 `Get-Content -Encoding UTF8 | Set-Content -Encoding UTF8` 補上 BOM（Windows
+  PowerShell 5.1 的 `-Encoding UTF8` 預設就會寫入 BOM）。
+- **比較過 3B 跟 7B**：兩者品質沒有壓倒性差異（都會隨機波動），但 7B 用掉
+  10.9GB/12GB VRAM（幾乎吃滿），3B 只需要一小部分、速度也快，最後採用 3B。
+- **這是純續寫 (completion) 模型，不是指令遵循 (chat) 模型**：不能像 qwen 那樣下指令
+  「請描寫...」，只能給一段前綴讓它自然接下去，所以 `src/ending_writer.py` 新增
+  `backend: "ollama" | "rwkv"` 分流：`_generate_steps_ollama`（原本的多輪對話+指令）
+  跟 `_generate_steps_rwkv`（前綴接龍，`build_ending_prefix`/
+  `build_combined_outline_cue` 全部寫成第三人稱敘事散文，不能有指令式用語）。新增
+  `src/rwkv_client.py::RWKVClient` 這個獨立的輕量 client，故意不跟 `OllamaClient`
+  共用（呼叫的 API 形狀跟使用情境都不同，硬共用只會兩邊都變得不乾淨）。
+- **重大的架構教訓：接龍多步驟生成（今天稍早才確立的模式）反而是 RWKV 的天敵**。
+  一開始比照 ollama 路線也做成多步驟接龍（`build_step_continuation_cue`，累積前綴
+  越滾越長），結果實測發現 RWKV 這類 RNN 類架構比 transformer 更容易被累積前綴裡
+  剛出現過的句子「黏住」，反覆複誦自己剛寫過的內容——縮小上下文視窗、拉高
+  `frequency_penalty`/`presence_penalty`、拉嚴重複偵測門檻（3 次降到 2 次）都只能
+  緩解、無法根治，這幾個嘗試已經全部刪除，`build_step_continuation_cue` 這個函式也已
+  移除。**最終解法是徹底放棄接龍，改成單次生成**：把整份大綱濃縮成一句劇情走向提示
+  (`build_combined_outline_cue`)接在角色前綴後面，只呼叫模型一次。改成單次生成後
+  品質大幅提升且穩定很多（30 次跨角色測試裡大多數品質很好、速度也快很多，
+  99~150 秒對比接龍版本的 260~400+ 秒），這是全部測試過的方案裡最好的結果。
+- **仍未解決的新問題**：單次生成偶爾會**跑題到其他武俠作品的角色宇宙**（例如某次
+  「卓芷若」的結局生成混入了小龍女、楊過、趙敏、李莫愁等金庸小說角色）——這是訓練語料
+  包含大量武俠小說（可能含金庸原作或同人）造成的角色名字聯想污染，不是崩潰/亂碼類型
+  的失敗，現有的 `is_step_output_broken()` 偵測不到。使用者已決定**先在這裡打住，之後
+  再考慮要不要加「偵測到知名武俠角色名字就重試」這類規則**。
+- **新增機制（跟 ollama 路線共用）**：`_has_repeated_sentence_loop()`/
+  `_truncate_before_repeat_loop()`——偵測「同一句子逐字重複 2 次以上」直接判定崩壞，
+  重試 `MAX_STEP_RETRIES` 次後仍然崩壞就砍掉復讀迴圈開始的地方、只保留前面正常的內容
+  （而不是把整段複誦文字塞進最終結局文字），這是 CLAUDE.md 更早之前就記錄過但沒真的
+  做的防線，這次借助 RWKV 暴露出的復讀問題順手補上，ollama 路線也一併受惠。
+- **使用者提出但尚未實作的下一個方向**：角色標籤（例如「巨乳」）觸發對應的**人工預先
+  寫好的劇情模板庫**，模型只需要做「把選中的模板套進當前情境、調整人稱/銜接語氣」這種
+  輕量編輯工作，而不是從零生成整段露骨內容——把 LLM 的任務從「創作」降級成「改寫」，
+  對應到 `NPCProfile.body` 可以加 `body_tags: List[str]`、`config/scene_templates.json`
+  存模板庫、依標籤篩選模板。這個方向使用者認為可行且評價正面，但決定先確認 RWKV
+  這條路線後再回頭做。
 
 **主線敘事連貫性補強**：
 - `story_milestones`（原本只有存讀檔，從未被塞進 LLM prompt，形同虛設）現在會實際注入

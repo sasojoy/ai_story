@@ -14,3 +14,7 @@ web_ui.pid
 saves/endings/
 config/style_reference.txt
 novels/
+
+# 本機工具/第三方執行檔/模型權重（RWKV Runner 原始碼、.exe、.pth 模型檔等），
+# 體積大且是外部依賴，不進版本控制
+tools/

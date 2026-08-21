@@ -1,8 +1,11 @@
 {
+  "backend": "rwkv",
   "ollama_url": "http://localhost:11434",
   "model_name": "huihui_ai/qwen3-abliterated:14b",
   "context_length": 8192,
-  "timeout": 900,
+  "timeout": 180,
   "num_predict": 2048,
-  "temperature": 0.9
+  "temperature": 1.0,
+  "rwkv_url": "http://127.0.0.1:8000",
+  "rwkv_top_p": 0.3
 }
