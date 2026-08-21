@@ -1,13 +1,20 @@
 import os
 import re
 import unicodedata
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from pydantic import BaseModel
 
 from src.content_loader import load_json_or_default
 from src.models import NPCProfile
 from src.ollama_client import OllamaClient
+from src.scene_templates import (
+    DEFAULT_SCENE_TEMPLATES_PATH,
+    fill_scene_template_beats,
+    load_scene_templates,
+    select_template,
+    substitute_names,
+)
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 DEFAULT_OUTPUT_DIR = os.path.join(BASE_DIR, "saves", "endings")
@@ -427,6 +434,68 @@ def _generate_steps_rwkv(
     return [text]
 
 
+def _first_sentence(text: str) -> str:
+    """RWKV 的 beat 續寫沒有明確的停止點，可能接著往下多寫好幾句，只取第一句/第一段
+    當作這個插槽的內容，避免一個角色反應插槽膨脹成一整段搶戲的敘事。"""
+    match = re.search(r"^(.*?[。！？])", text)
+    if match:
+        return match.group(1)
+    return text.split("\n")[0].strip()
+
+
+def make_ollama_beat_generator(profile: NPCProfile, config: "EndingWriterConfig") -> Callable[[str], str]:
+    """組出一個可以重複呼叫的 generate_beat 函式，供 fill_scene_template_beats 依序
+    填每個 {beat:xxx} 插槽。ollama 是指令遵循模型，直接下指令「接著寫一句貼合個性的
+    反應」；只取前文最後一小段當上下文，不用整段模板文字，是刻意省 token（插槽通常
+    只需要知道剛發生了什麼，不需要整份模板從頭看起）。"""
+    client = OllamaClient(
+        base_url=config.ollama_url, model=config.model_name,
+        timeout=config.timeout, context_length=config.context_length,
+    )
+    disp_name = profile.display_name or profile.name
+    system_prompt = (
+        f"你正在扮演{disp_name}，{profile.identity}，性格：{profile.personality}。"
+        "接下來會給你一段小說前文，請只接著寫一句貼合她個性的台詞或心理反應，"
+        "不要重複前文內容，不要加旁白、標題或任何說明文字，直接輸出這一句話本身。"
+    )
+
+    def generate_beat(prefix: str) -> str:
+        tail = prefix[-400:]
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"前文：\n{tail}\n\n請接著寫一句貼合她個性的反應或台詞。"},
+        ]
+        for _attempt in range(MAX_STEP_RETRIES):
+            output = strip_meta_leakage(client.chat_text(messages, temperature=config.temperature, num_predict=80))
+            if output and not is_step_output_broken(output, expected_min_chars=10):
+                return output
+        return ""
+
+    return generate_beat
+
+
+def make_rwkv_beat_generator(config: "EndingWriterConfig") -> Callable[[str], str]:
+    """RWKV 不吃指令，插槽只能靠續寫語意實現：把模板已經確定的文字尾段直接當前綴丟給
+    模型接著寫，取第一句當插槽內容（見 _first_sentence）。這正是 RWKV 真正穩定的用法
+    （乾淨的短前綴 + 一次生成，見 _generate_steps_rwkv 的說明），插槽本身就是短前綴、
+    短續寫，不需要額外處理。"""
+    from src.rwkv_client import RWKVClient
+
+    client = RWKVClient(base_url=config.rwkv_url, timeout=config.timeout)
+
+    def generate_beat(prefix: str) -> str:
+        tail = prefix[-400:]
+        for _attempt in range(MAX_STEP_RETRIES):
+            output = strip_meta_leakage(
+                client.complete(tail, max_tokens=60, temperature=config.temperature, top_p=config.rwkv_top_p)
+            )
+            if output and not is_step_output_broken(output, expected_min_chars=10):
+                return _first_sentence(output)
+        return ""
+
+    return generate_beat
+
+
 def generate_ending_scene(
     npc_name: str,
     ending_type: str,
@@ -436,6 +505,7 @@ def generate_ending_scene(
     story_outline_path: str = "config/story_outline.json",
     lorebook_path: str = "config/lorebook.json",
     config_path: str = "config/ending_writer_config.json",
+    scene_templates_path: str = DEFAULT_SCENE_TEMPLATES_PATH,
 ) -> Dict[str, Any]:
     """呼叫專屬的無審查模型，把指定角色/結局類型的劇情大綱擴寫成完整小說內文並存檔。
 
@@ -447,6 +517,11 @@ def generate_ending_scene(
     `config.backend` 決定實際走哪條生成路線（見 EndingWriterConfig 的說明），
     兩條路線共用大綱步驟、climax 步驟加碼預算、破格文字過濾與崩壞重試的邏輯，
     只有 prompt 組裝方式與呼叫的模型 API 不同。
+
+    親密場景（climax 步驟）如果能在 scene_templates.json 找到符合這位角色 character_tags
+    的模板，就改用模板：鋪陳步驟仍照舊自由生成，最後把模板套上姓名並逐一生成
+    {beat:xxx} 角色個性化插槽取代掉原本的自由生成 climax 步驟。找不到符合的模板
+    （模板庫還沒建、或這個角色沒有對應標籤）時完全退回原本的自由生成流程，行為不變。
 
     回傳的 dict 含 text（完整內文，供 Web UI 顯示用）與 path/word_count 等中繼資料。"""
     if ending_type not in ("good", "bad"):
@@ -470,7 +545,35 @@ def generate_ending_scene(
     climax_start = max(0, total_steps - 2)
     base_budget = max(300, config.num_predict // (total_steps + 2))
 
-    if config.backend == "rwkv":
+    templates = load_scene_templates(scene_templates_path)
+    selected = select_template(profile, templates)
+
+    matched_act_name: Optional[str] = None
+    if selected is not None:
+        matched_act_name, template_text = selected
+        lead_up_steps = outline_steps[:climax_start]
+
+        if config.backend == "rwkv":
+            lead_up_texts = (
+                _generate_steps_rwkv(
+                    profile, ending_flavor, lead_up_steps, player_name, config, len(lead_up_steps), base_budget
+                )
+                if lead_up_steps else []
+            )
+            beat_generator = make_rwkv_beat_generator(config)
+        else:
+            lead_up_texts = (
+                _generate_steps_ollama(
+                    profile, ending_type, ending_flavor, lorebook, lead_up_steps, player_name, config,
+                    len(lead_up_steps), base_budget,
+                )
+                if lead_up_steps else []
+            )
+            beat_generator = make_ollama_beat_generator(profile, config)
+
+        climax_text = fill_scene_template_beats(substitute_names(template_text, profile, player_name), beat_generator)
+        step_texts = lead_up_texts + [climax_text]
+    elif config.backend == "rwkv":
         step_texts = _generate_steps_rwkv(
             profile, ending_flavor, outline_steps, player_name, config, climax_start, base_budget
         )
@@ -494,5 +597,6 @@ def generate_ending_scene(
         "path": safe_path,
         "word_count": len(text),
         "steps": len(outline_steps),
+        "scene_template": matched_act_name,
         "text": text,
     }

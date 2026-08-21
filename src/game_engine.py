@@ -268,6 +268,22 @@ class GameEngine:
     def triggered_endings(self, value) -> None:
         self.state.triggered_endings = value
 
+    @property
+    def intimate_mode_npc(self) -> Optional[str]:
+        return self.state.intimate_mode_npc
+
+    @intimate_mode_npc.setter
+    def intimate_mode_npc(self, value: Optional[str]) -> None:
+        self.state.intimate_mode_npc = value
+
+    @property
+    def intimate_mode_ending_type(self) -> Optional[str]:
+        return self.state.intimate_mode_ending_type
+
+    @intimate_mode_ending_type.setter
+    def intimate_mode_ending_type(self, value: Optional[str]) -> None:
+        self.state.intimate_mode_ending_type = value
+
     # ---- 規則查詢：委派給 src/rules.py ----
 
     def get_current_chapter_info(self) -> Dict[str, Any]:
@@ -278,6 +294,25 @@ class GameEngine:
 
     def all_endings_triggered(self) -> bool:
         return rules.all_endings_triggered(self.state)
+
+    def check_and_enter_intimate_mode(self) -> Optional[Dict[str, Any]]:
+        """性愛模式的唯一進入點：好感度達到終極/黑化門檻時，讓遊戲切換成
+        src/intimate_mode.py 的動作選單互動，取代一般劇情選項。刻意獨立於
+        evaluate_ending()（那個方法本來就會被 web_ui.py::get_status_markdown()
+        每次畫面重繪時呼叫、純粹拿來顯示結局橫幅，是既有行為，不動它），這裡額外呼叫
+        一次是安全的——evaluate_ending() 本身用 triggered_endings 做過保護，同一個
+        角色不會被觸發兩次。已經在性愛模式中就不重複進入（避免中途又被切到別的角色）。"""
+        if self.state.intimate_mode_npc:
+            return None
+        result = self.evaluate_ending()
+        if result is None:
+            return None
+        npc_name = result.get("npc_name")
+        if not npc_name or npc_name not in self.agents:
+            return None
+        self.state.intimate_mode_npc = npc_name
+        self.state.intimate_mode_ending_type = result.get("ending_type", "good")
+        return result
 
     def get_current_region(self) -> Dict[str, Any]:
         regions = self.world_map.get("regions", {})

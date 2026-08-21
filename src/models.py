@@ -259,6 +259,14 @@ class NPCProfile(BaseModel):
         default_factory=dict,
         description="身材描述資料 (height_cm/build/measurements_cm/sensitivity_note 等，不強制欄位)"
     )
+    character_tags: List[str] = Field(
+        default_factory=list,
+        description="角色屬性標籤（身材/性格傾向/身份關係/癖好取向/行為偏好，例如「巨乳」"
+                     "「傲嬌」「人妻」「喜歡口交」），單一扁平清單、不分子類別，純粹用來跟 "
+                     "config/scene_templates.json 的 required_tags 比對挑選結局劇情模板。跟 "
+                     "body/personality 的自由文字描述是兩回事——那兩個欄位負責提供敘事用的"
+                     "細節文字，這個欄位只負責『這個角色適用哪些模板』的比對"
+    )
     bad_ending_flow: List[str] = Field(
         default_factory=list,
         description="黑化結局的劇情步驟大綱，僅供之後無審查模型接手寫實際劇情文字時當大綱參考"

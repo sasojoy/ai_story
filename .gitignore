@@ -13,6 +13,7 @@ web_ui.pid
 # 結局劇情生成內容（含露骨場景），不進版本控制，只留在本機
 saves/endings/
 config/style_reference.txt
+config/scene_templates.json
 novels/
 
 # 本機工具/第三方執行檔/模型權重（RWKV Runner 原始碼、.exe、.pth 模型檔等），

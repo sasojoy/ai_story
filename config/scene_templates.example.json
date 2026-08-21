@@ -1,0 +1,59 @@
+{
+  "_說明": "這份檔案示範 config/scene_templates.json 的實際寫法——格式正確、氣氛與張力描寫到位，但刻意停在含蓄留白（呼應 config/lorebook.json 的 intimate_style_guide 那套「微表情/肢體張力/官能氛圍」寫法），不寫具體露骨動作。可以進版本控制當參考範例。真正要用的露骨模板庫請整理成 config/scene_templates.json（已加進 .gitignore，不會被提交），把下面這種骨架裡的收斂片段換成你從參考作品整理出來的具體內容即可。required_tags 比對的是 NPCProfile.character_tags（單一扁平標籤清單，涵蓋身材/性格傾向/身份關係/癖好取向/行為偏好，不分子類別）。label 是性愛模式選單按鈕上實際顯示的文字，留空會 fallback 用 act_name（這份檔案的 key）本身。applicable_endings 是性愛模式專用的第二道篩選（good=情投意合／bad=用強路線，留空代表兩條路線都能出現），刻意跟 required_tags 分開運作——不要拿 required_tags 兼職做路線篩選，那是之前踩過的坑（character_tags 決定她是誰，不該決定她能走哪條結局路線）。check_tag/requires_check/is_finisher 也都只有性愛模式（src/intimate_mode.py）會讀，ending_writer.py 的整場結局挑選完全不受這些欄位影響。",
+  "貼近試探": {
+    "required_tags": [],
+    "label": "溫柔地貼近她",
+    "variants": [
+      {
+        "text": "燭火在暖閣中微微搖曳，{name}終於卸下了慣常的防備，任由{player_name}的氣息一寸寸貼近。{beat:opening}她的指尖輕輕攀上你的衣襟，呼吸裡帶著自己都未察覺的顫動，{beat:reaction}再無半分先前的抗拒，只任這一刻的溫度在兩人之間漫開。"
+      },
+      {
+        "text": "夜色沉靜，{name}倚在{player_name}肩側，久違地卸下了滿身戒心。{beat:opening}她閉上眼，任憑指尖描摹過自己緊繃又漸漸鬆軟下來的身子，{beat:reaction}唇邊終於溢出一聲極輕極輕的嘆息。"
+      }
+    ]
+  },
+  "敏感反應": {
+    "required_tags": [
+      "敏感體質"
+    ],
+    "label": "撫過她的敏感之處",
+    "variants": [
+      {
+        "text": "{player_name}的指尖不過是輕輕一劃，{name}整個人便如遭雷擊般繃緊了脊背，連呼吸都亂了節奏。{beat:opening}她死死咬住下唇，不欲再讓自己失態，卻擋不住那一波波不受控制的顫慄，{beat:reaction}那副強撐的冷硬外殼，在這一刻裂開了一道再也藏不住的縫隙。"
+      }
+    ]
+  },
+  "野性反撲": {
+    "required_tags": [
+      "野性"
+    ],
+    "label": "與她纏鬥角力",
+    "variants": [
+      {
+        "text": "{name}反手扣住{player_name}的手腕，眼底翻湧著毫不掩飾的挑釁與興味——這是她的較量方式，從不服輸，卻也第一次心甘情願地退了半步。{beat:opening}她湊近你耳畔，聲音裡混著粗重的喘息與壓不住的笑意，{beat:reaction}終究還是鬆開了緊握的拳，任由這一場角力換了個方向繼續下去。"
+      }
+    ]
+  },
+  "要求更進一步": {
+    "required_tags": [],
+    "label": "要求她更進一步",
+    "check_tag": "喜歡口交",
+    "requires_check": true,
+    "variants": [
+      {
+        "text": "{name}怔了一下，隨即輕輕點頭，{beat:opening}俯身依言而行，{beat:reaction}動作裡帶著幾分刻意討好的意味。"
+      }
+    ]
+  },
+  "圓滿收場": {
+    "required_tags": [],
+    "label": "深情擁吻，收場此夜",
+    "applicable_endings": [],
+    "is_finisher": true,
+    "variants": [
+      {
+        "text": "{beat:opening}{name}輕輕靠進{player_name}懷裡，讓這一夜的糾纏，在彼此交疊的呼吸聲中緩緩落下帷幕。{beat:reaction}"
+      }
+    ]
+  }
+}

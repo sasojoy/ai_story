@@ -122,6 +122,23 @@ class TestSaveManager(unittest.TestCase):
 
         self.assertEqual(new_engine.npc_relationship_notes.get("慕容茵"), "已互相試探過底細")
 
+    def test_character_tags_are_persisted(self):
+        """character_tags 原本是純靜態設定（每次都從 config/npcs.json 重新讀），但
+        src/intimate_mode.py 的 attempt_intimate_action() 會在遊戲過程中把新習得的
+        標籤直接 append 進 profile.character_tags，所以要跟 intimacy 一樣存讀檔，
+        否則重新載入存檔會遺失玩家讓角色習得的標籤。"""
+        if "阿罌" in self.engine.agents:
+            agent = self.engine.agents["阿罌"]
+            agent.profile.character_tags.append("喜歡口交")
+
+        save_account_game(self.test_account, self.engine)
+
+        new_engine = GameEngine()
+        load_account_game(self.test_account, new_engine)
+
+        if "阿罌" in new_engine.agents:
+            self.assertIn("喜歡口交", new_engine.agents["阿罌"].profile.character_tags)
+
     def test_list_and_get_latest_account_saves(self):
         save_account_game(self.test_account, self.engine)
 

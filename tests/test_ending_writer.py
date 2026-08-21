@@ -1,8 +1,18 @@
+import json
+from unittest.mock import MagicMock, patch
+
 from src.ending_writer import (
     strip_meta_leakage, get_outline_steps, build_step_user_prompt, is_step_output_broken,
     build_ending_prefix, build_combined_outline_cue, _truncate_before_repeat_loop,
+    generate_ending_scene,
 )
 from src.models import NPCProfile
+
+_LONG_ENOUGH_BEAT_OUTPUT = "這是一段夠長的角色個性化反應文字內容，用來通過長度檢查門檻。"
+
+
+def _write_json(path, data):
+    path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
 
 
 def test_strip_meta_leakage_removes_markdown_headers_and_code_fences():
@@ -140,6 +150,77 @@ def test_build_ending_prefix_is_narrative_not_instructional():
     assert "測試結局描述" in prefix
     assert "請" not in prefix
     assert "必須" not in prefix
+
+
+def test_generate_ending_scene_uses_matching_scene_template(tmp_path):
+    """有符合 character_tags 的模板時，climax 部分應該套模板（含姓名替換與 beat 插槽生成），
+    而不是走原本的自由生成路線。用只有 2 個步驟的 bad_ending_flow 讓 climax_start=0，
+    完全不需要生成鋪陳步驟，簡化 mock 設定。"""
+    npcs_path = tmp_path / "npcs.json"
+    _write_json(npcs_path, {
+        "測試角色": {
+            "name": "測試角色", "display_name": "小測", "identity": "測試身份",
+            "personality": "測試性格", "location": "測試地點",
+            "character_tags": ["巨乳"],
+            "bad_ending_flow": ["步驟一", "步驟二"],
+        }
+    })
+    story_outline_path = tmp_path / "story_outline.json"
+    _write_json(story_outline_path, {"endings": {}})
+    lorebook_path = tmp_path / "lorebook.json"
+    _write_json(lorebook_path, {})
+    scene_templates_path = tmp_path / "scene_templates.json"
+    _write_json(scene_templates_path, {
+        "示範動作": {
+            "required_tags": ["巨乳"],
+            "variants": [{"text": "{name}望向{player_name}。{beat:opening}固定收尾文字。"}],
+        }
+    })
+
+    mock_client = MagicMock()
+    mock_client.chat_text.return_value = _LONG_ENOUGH_BEAT_OUTPUT
+    with patch("src.ending_writer.OllamaClient", return_value=mock_client):
+        result = generate_ending_scene(
+            npc_name="測試角色", ending_type="bad", output_dir=str(tmp_path / "out"),
+            npcs_path=str(npcs_path), story_outline_path=str(story_outline_path),
+            lorebook_path=str(lorebook_path), config_path=str(tmp_path / "missing_config.json"),
+            scene_templates_path=str(scene_templates_path),
+        )
+
+    assert result["scene_template"] == "示範動作"
+    assert "小測望向楚留香" in result["text"]
+    assert _LONG_ENOUGH_BEAT_OUTPUT in result["text"]
+    assert "固定收尾文字" in result["text"]
+    assert "{beat:opening}" not in result["text"]
+
+
+def test_generate_ending_scene_falls_back_to_free_generation_without_matching_template(tmp_path):
+    """沒有任何符合資格的模板（這裡直接指向不存在的模板檔）時，應該完全走原本的自由生成
+    路線，scene_template 回傳 None，行為跟加這個功能之前一致。"""
+    npcs_path = tmp_path / "npcs.json"
+    _write_json(npcs_path, {
+        "測試角色": {
+            "name": "測試角色", "identity": "測試身份", "personality": "測試性格",
+            "location": "測試地點", "bad_ending_flow": ["唯一步驟"],
+        }
+    })
+    story_outline_path = tmp_path / "story_outline.json"
+    _write_json(story_outline_path, {"endings": {}})
+    lorebook_path = tmp_path / "lorebook.json"
+    _write_json(lorebook_path, {})
+
+    mock_client = MagicMock()
+    mock_client.chat_text.return_value = "自由生成的敘事內容，長度足夠通過崩壞偵測門檻不被判定為異常輸出。"
+    with patch("src.ending_writer.OllamaClient", return_value=mock_client):
+        result = generate_ending_scene(
+            npc_name="測試角色", ending_type="bad", output_dir=str(tmp_path / "out"),
+            npcs_path=str(npcs_path), story_outline_path=str(story_outline_path),
+            lorebook_path=str(lorebook_path), config_path=str(tmp_path / "missing_config.json"),
+            scene_templates_path=str(tmp_path / "missing_scene_templates.json"),
+        )
+
+    assert result["scene_template"] is None
+    assert "自由生成的敘事內容" in result["text"]
 
 
 def test_build_combined_outline_cue_joins_all_steps_into_one_hint():

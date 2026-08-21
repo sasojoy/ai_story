@@ -33,11 +33,16 @@ def save_account_game(account_name: str, engine: Any) -> str:
 
     npcs_data = {}
     for name, agent in engine.agents.items():
+        # character_tags 原本是 config/npcs.json 的靜態設定，但 src/intimate_mode.py
+        # 的 attempt_intimate_action() 會在遊戲過程中就地把新習得的標籤 append 進
+        # profile.character_tags，所以這裡要跟 intimacy/relationships 一樣存檔，
+        # 否則重新載入存檔會遺失玩家在性愛模式裡讓角色習得的標籤。
         npcs_data[name] = {
             "intimacy": agent.profile.intimacy,
             "current_activity": agent.profile.current_activity,
             "relationships": agent.profile.relationships,
             "recent_activities": agent.profile.recent_activities,
+            "character_tags": agent.profile.character_tags,
             "current_status_tag": agent.current_status_tag,
             "history": agent.history,
             "used_options_history": list(agent.used_options_history),
@@ -65,6 +70,8 @@ def save_account_game(account_name: str, engine: Any) -> str:
         "current_npc_name": engine.current_agent.profile.name if engine.current_agent else "",
         "npcs_data": npcs_data,
         "triggered_endings": list(getattr(engine, "triggered_endings", [])),
+        "intimate_mode_npc": getattr(engine, "intimate_mode_npc", None),
+        "intimate_mode_ending_type": getattr(engine, "intimate_mode_ending_type", None),
     }
 
     save_path = get_account_save_path(account_name)
@@ -107,6 +114,8 @@ def load_game_from_file(save_path: str, engine: Any) -> bool:
         if "world_news" in save_data:
             engine.world_news = list(save_data["world_news"])
         engine.triggered_endings = set(save_data.get("triggered_endings", []))
+        engine.intimate_mode_npc = save_data.get("intimate_mode_npc")
+        engine.intimate_mode_ending_type = save_data.get("intimate_mode_ending_type")
 
         # 還原 NPC 狀態與對話歷史
         npcs_data = save_data.get("npcs_data", {})
@@ -120,6 +129,8 @@ def load_game_from_file(save_path: str, engine: Any) -> bool:
                     agent.profile.relationships = dict(npc_info["relationships"])
                 if "recent_activities" in npc_info:
                     agent.profile.recent_activities = list(npc_info["recent_activities"])
+                if "character_tags" in npc_info:
+                    agent.profile.character_tags = list(npc_info["character_tags"])
                 agent.current_status_tag = npc_info.get("current_status_tag", "正常")
                 agent.history = list(npc_info.get("history", []))
                 agent.used_options_history = set(npc_info.get("used_options_history", []))

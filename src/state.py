@@ -30,3 +30,8 @@ class GameState:
     factions: Dict[str, int] = field(default_factory=dict)
     world_flags: Dict[str, bool] = field(default_factory=dict)
     triggered_endings: Set[str] = field(default_factory=set)
+    # 性愛模式：非 None 代表玩家目前正在跟 intimate_mode_npc 進行互動式收尾（見
+    # src/intimate_mode.py），此時 web_ui.py 的選項按鈕會顯示動作選單而不是一般劇情選項，
+    # 直到玩家選到 is_finisher=True 的動作才會被清回 None。
+    intimate_mode_npc: Optional[str] = None
+    intimate_mode_ending_type: Optional[str] = None

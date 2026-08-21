@@ -157,17 +157,19 @@ def evaluate_ending(state: GameState, story_outline: Dict[str, Any]) -> Optional
 
         if intimacy >= 80:
             state.triggered_endings.add(npc_name)
-            return npc_endings.get("good") or {
+            flavor = npc_endings.get("good") or {
                 "name": f"【{disp_name}・終極劇情】",
                 "description": f"{disp_name}對你徹底敞開心防，兩人的羈絆修成正果。"
             }
+            return {**flavor, "npc_name": npc_name, "ending_type": "good"}
 
         if intimacy <= -50:
             state.triggered_endings.add(npc_name)
-            return npc_endings.get("bad") or {
+            flavor = npc_endings.get("bad") or {
                 "name": f"【{disp_name}・黑化結局】",
                 "description": f"{disp_name}徹底臣服於你的支配之下，再也無法回頭。"
             }
+            return {**flavor, "npc_name": npc_name, "ending_type": "bad"}
 
     return None
 

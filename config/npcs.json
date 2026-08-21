@@ -29,10 +29,25 @@
     "body": {
       "height_cm": 174,
       "build": "劍客體態，修長勁瘦，肌肉線條緊實但不誇張",
-      "measurements_cm": { "bust": 85, "waist": 58, "hip": 86 },
+      "measurements_cm": {
+        "bust": 85,
+        "waist": 58,
+        "hip": 86
+      },
       "sensitivity_note": "體質極度敏感，跟表面冷硬人設形成反差"
     },
-    "bad_ending_flow": ["下迷藥", "激她拔劍相向", "戰鬥中凌辱她", "利用敏感體質擊潰心防", "臣服"],
+    "bad_ending_flow": [
+      "下迷藥",
+      "激她拔劍相向",
+      "戰鬥中凌辱她",
+      "利用敏感體質擊潰心防",
+      "臣服"
+    ],
+    "character_tags": [
+      "纖瘦",
+      "敏感體質",
+      "強勢"
+    ],
     "intimacy_tags": {
       "真誠切磋": 7,
       "中性互動": 2,
@@ -72,9 +87,23 @@
     "body": {
       "height_cm": 165,
       "build": "豐滿妖嬈，身段柔軟，慣用體態魅惑人心",
-      "measurements_cm": { "bust": 92, "waist": 60, "hip": 90 }
+      "measurements_cm": {
+        "bust": 92,
+        "waist": 60,
+        "hip": 90
+      }
     },
-    "bad_ending_flow": ["識破她的算計", "將計就計反制", "把她逼入無計可施的絕境", "臣服"],
+    "bad_ending_flow": [
+      "識破她的算計",
+      "將計就計反制",
+      "把她逼入無計可施的絕境",
+      "臣服"
+    ],
+    "character_tags": [
+      "豐滿",
+      "腹黑",
+      "強勢"
+    ],
     "intimacy_tags": {
       "真誠切磋": 9,
       "中性互動": 3,
@@ -114,9 +143,22 @@
     "body": {
       "height_cm": 162,
       "build": "溫婉柔和身形，不誇張但有女人味，體態偏纖細軟糯",
-      "measurements_cm": { "bust": 86, "waist": 60, "hip": 88 }
+      "measurements_cm": {
+        "bust": 86,
+        "waist": 60,
+        "hip": 88
+      }
     },
-    "bad_ending_flow": ["以強硬手段踐踏她的道德底線", "摧毀她對人性最後一點信任", "臣服"],
+    "bad_ending_flow": [
+      "以強硬手段踐踏她的道德底線",
+      "摧毀她對人性最後一點信任",
+      "臣服"
+    ],
+    "character_tags": [
+      "纖瘦",
+      "母性",
+      "順從"
+    ],
     "intimacy_tags": {
       "真誠切磋": 8,
       "中性互動": 3,
@@ -156,9 +198,23 @@
     "body": {
       "height_cm": 156,
       "build": "嬌小豐滿的成年女性體型（骨架、五官、氣質維持成年比例，單純個子矮，不是孩童身形），巨乳與野性氣質形成反差",
-      "measurements_cm": { "bust": 94, "waist": 56, "hip": 88 }
+      "measurements_cm": {
+        "bust": 94,
+        "waist": 56,
+        "hip": 88
+      }
     },
-    "bad_ending_flow": ["連番較量仍壓制不下她的野性", "最終耗盡她的氣力與心防", "徹底臣服"],
+    "bad_ending_flow": [
+      "連番較量仍壓制不下她的野性",
+      "最終耗盡她的氣力與心防",
+      "徹底臣服"
+    ],
+    "character_tags": [
+      "巨乳",
+      "嬌小",
+      "野性",
+      "強勢"
+    ],
     "intimacy_tags": {
       "真誠切磋": 5,
       "中性互動": 2,

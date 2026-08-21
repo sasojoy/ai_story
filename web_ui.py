@@ -23,7 +23,9 @@ from src.game_engine import GameEngine
 from src.models import GameStateDelta, is_placeholder_option
 from src.options import generate_fallback_options, generate_single_fallback_option, generate_fallback_delta
 from src.save_manager import list_account_saves, has_account_save, load_account_game, save_account_game
-from src.ending_writer import DEFAULT_OUTPUT_DIR
+from src.ending_writer import DEFAULT_OUTPUT_DIR, load_ending_writer_config, make_ollama_beat_generator, make_rwkv_beat_generator
+from src.intimate_mode import list_intimate_actions, attempt_intimate_action
+from src.scene_templates import load_scene_templates, get_action_label
 
 # 獨立帳號 Session 引擎註冊表
 session_engines: dict = {}
@@ -41,9 +43,51 @@ def get_engine_for_user(username: str = "楚留香") -> GameEngine:
     return session_engines[clean_name]
 
 
+def _pick_intimate_menu(matches: list) -> list:
+    """從 list_intimate_actions() 回傳的 (act_name, entry) 清單裡挑出最多 3 個放進選單。
+    優先保留最多 2 個非收尾動作 + 1 個收尾動作，確保只要有任何 is_finisher=True 的
+    動作符合資格，玩家就一定有辦法結束性愛模式，不會卡在只能選非收尾動作的死路。
+    不足 3 個時重複最後一個湊滿，配合既有 UI 固定 3 顆按鈕的限制（見 btn_opt_a/b/c）。"""
+    finishers = [m for m in matches if m[1].is_finisher]
+    others = [m for m in matches if not m[1].is_finisher]
+    menu = others[:2] + finishers[:1]
+    if len(menu) < 3:
+        rest = [m for m in matches if m not in menu]
+        menu += rest[: 3 - len(menu)]
+    while menu and len(menu) < 3:
+        menu.append(menu[-1])
+    return menu[:3]
+
+
+def get_intimate_menu_options(engine: GameEngine, npc_name: str) -> list:
+    """性愛模式的動作選單標籤：優先顯示 entry.label（玩家導向的動作描述，例如
+    「撫弄她的胸乳」），沒填才 fallback 用 act_name 本身（見 get_action_label）。
+    沿用一般回合制既有的 3 顆按鈕 UI，不另外開新元件。刻意不寫回
+    agent.last_offered_options/tags——性愛模式的選項比對改成直接拿按鈕文字對照
+    scene_templates.json 算出來的 label，跟一般回合制的 tag 比對系統是兩套獨立機制，
+    見 process_intimate_choice。"""
+    agent = engine.agents.get(npc_name)
+    if not agent:
+        return ["A) ...", "B) ...", "C) ..."]
+    templates = load_scene_templates()
+    matches = list_intimate_actions(agent.profile, templates, engine.intimate_mode_ending_type or "good")
+    menu = _pick_intimate_menu(matches)
+    labels = [get_action_label(name, entry) for name, entry in menu]
+    return labels if labels else ["（靜靜地靠近她）"]
+
+
 def get_npc_initial_options(engine: GameEngine, npc_name: str) -> list:
     """生成一組全新的保底選項給指定 NPC，並同步寫回 agent.last_offered_options/tags，
-    確保玩家下一次點擊按鈕時 NPCAgent 能正確比對出這次行動屬於哪個分類。"""
+    確保玩家下一次點擊按鈕時 NPCAgent 能正確比對出這次行動屬於哪個分類。
+
+    每次呼叫都先確認一次是否該進入性愛模式（check_and_enter_intimate_mode 本身有
+    triggered_endings/intimate_mode_npc 保護，重複呼叫是安全的）——這是所有選項產生
+    路徑的共同起點 (on_select_npc/on_select_location/enter_jianghu 都會經過這裡)，
+    在這裡集中判斷，其餘呼叫端不用各自處理。"""
+    engine.check_and_enter_intimate_mode()
+    if engine.intimate_mode_npc == npc_name:
+        return get_intimate_menu_options(engine, npc_name)
+
     loc = engine.current_location
     agent = engine.agents.get(npc_name)
     disp_name = agent.profile.display_name if agent else None
@@ -58,6 +102,9 @@ def get_npc_initial_options(engine: GameEngine, npc_name: str) -> list:
 def get_display_options(engine: GameEngine, npc_name: str) -> list:
     """回傳目前應該顯示給玩家的選項：優先沿用 agent 已記錄的 last_offered_options
     (例如剛讀檔還原、延續存檔當下的選項)，查無才生成新的保底選項。"""
+    engine.check_and_enter_intimate_mode()
+    if engine.intimate_mode_npc == npc_name:
+        return get_intimate_menu_options(engine, npc_name)
     agent = engine.agents.get(npc_name)
     if agent and agent.last_offered_options and len(agent.last_offered_options) >= 3:
         return agent.last_offered_options[:3]
@@ -80,14 +127,6 @@ def get_status_markdown(engine: GameEngine) -> str:
     ch_title = ch_info.get("title", "")
     ch_goal = ch_info.get("goal", "")
 
-    current_npc_info = "無"
-    intimacy_info = "0 (範圍 -50~80)"
-    if engine.current_agent:
-        profile = engine.current_agent.profile
-        tag = engine.current_agent.current_status_tag
-        current_npc_info = f"**{profile.name}** ({profile.identity}) | 位置: {profile.location} | 狀態: `[{tag}]`"
-        intimacy_info = f"`{profile.intimacy}` (範圍 -50~80)"
-
     factions_str = " | ".join([f"{k}: `{v}`" for k, v in engine.factions.items()]) if engine.factions else "無"
 
     ending_info = engine.evaluate_ending()
@@ -95,20 +134,36 @@ def get_status_markdown(engine: GameEngine) -> str:
     if engine.all_endings_triggered():
         ending_md += "\n\n🎉 **四人皆已觸發過結局，全破關！**"
 
-    md = f"""### 📜 [{ch_title}] (第 {engine.game_turn} 回合)
+    # 當前互動對象/好感度不在這裡重複顯示——NPC 檔案面板 (get_npc_dossier_markdown)
+    # 已經是同一個資訊唯一該出現的地方，這裡只留玩家自身數值與世界局勢。
+    #
+    # 玩家最常瞄一眼的三個數字（金錢/體力/境界）直接放在最前面、永遠可見；其餘細節
+    # （HP/魅力/修為經驗/功法/背包/章節主線/勢力聲望/結局橫幅）收進 <details> 摺疊區塊
+    # 預設收起。用 <details> 而不是另外拉一個 Gradio 元件，是因為 get_status_markdown()
+    # 的回傳值被十幾個呼叫端當同一個 status_box 輸出在用，拆成兩個元件要同步改掉每一處
+    # 輸出 tuple 的形狀，風險跟改動範圍都遠大於在同一個 Markdown 字串裡包一層可摺疊 HTML。
+    #
+    # 境界 (cultivation realm) 目前 PlayerState 還沒有對應欄位（只有 cultivation_level
+    # 這個數字等級），先留一個佔位文字，之後真的實裝了直接把這行換成真實資料即可。
+    md = f"""### 🗡️ [{p.name}]（第 {engine.game_turn} 回合）
+- **金幣**: `{p.gold}` 兩 | **體力**: `{p.stamina}/{p.max_stamina}` | **境界**: `尚未實裝`
+
+<details>
+<summary>📜 詳細狀態（點擊展開）</summary>
+
+### 📜 [{ch_title}] (第 {engine.game_turn} 回合)
 - **本章氛圍**: `{ch_goal}`
 - **動態主線摘要**: `{engine.main_quest_summary}`
 - **勢力聲望**: {factions_str}{ending_md}
 
 ---
-### 🗡️ [{p.name} 狀態板]
-- **生命 (HP)**: `{p.hp}/{p.max_hp}` | **體力**: `{p.stamina}/{p.max_stamina}`
-- **魅力/吸引力**: `{p.charm}` | **金幣**: `{p.gold}` 兩
+- **生命 (HP)**: `{p.hp}/{p.max_hp}`
+- **魅力/吸引力**: `{p.charm}`
 - **修為等級**: `Level {p.cultivation_level}` (經驗: `{p.cultivation_exp}`)
 - **功法武學**: `{arts_str}`
-- **當前互動對象**: {current_npc_info}
-- **好感度**: {intimacy_info}
 - **背包**: `{inv_str}`
+
+</details>
 """
     return md
 
@@ -131,16 +186,23 @@ def get_map_markdown(engine: GameEngine) -> str:
 
 
 def get_npc_dossier_markdown(engine: GameEngine) -> str:
+    """整塊都收在 <details> 裡預設摺疊（理由跟 get_status_markdown 的說明一樣：這個
+    函式的回傳值被同一個 dossier_box 元件在十幾個呼叫端共用，用 <details> 而不是拆
+    元件才不用同步改掉每一處輸出 tuple）。"""
     if not engine.current_agent:
-        return "### 📜 [機密檔案]\n目前無互動對象。"
+        return "<details>\n<summary>📜 機密檔案（點擊展開）</summary>\n\n目前無互動對象。\n\n</details>"
 
     p = engine.current_agent.profile
     tag = engine.current_agent.current_status_tag
 
-    md = f"""### 📜 [{p.name} 機密檔案]
+    md = f"""<details>
+<summary>📜 [{p.name}] 機密檔案（點擊展開）</summary>
+
 - **角色身份**: `{p.identity}` | **所在地點**: `{p.location}`
 - **性格特質**: {p.personality}
 - **對話狀態**: `[{tag}]` | **好感度**: `{p.intimacy}` (範圍 -50~80)
+
+</details>
 """
     return md
 
@@ -398,6 +460,83 @@ def enter_jianghu(custom_name: str):
     )
 
 
+def process_intimate_choice(engine: GameEngine, npc_name: str, user_input: str, clean_history: list):
+    """性愛模式的單一回合：比對玩家點擊的動作標籤（label 字串，見 get_action_label）、
+    呼叫 attempt_intimate_action 判定成功/失敗並生成敘事，選到 is_finisher 動作就把
+    engine.intimate_mode_npc 清空、退回一般回合制。跟一般回合制共用同一組 UI 元件
+    (3 個選項按鈕)，最後一個 yield 的格式必須跟 process_player_choice 完全一致，這樣
+    Gradio 端的 wiring 不用另外新增元件。
+
+    是個 generator：{beat:xxx} 插槽要即時呼叫本機 Ollama/RWKV 模型，這一步可能要等
+    幾秒鐘，先 yield 一個「她似乎正在回應」的暫時訊息讓畫面立刻有反應，而不是整段
+    卡住不動，跟一般回合制 process_player_choice 用 interact_stream 逐字更新畫面是
+    同一個「讓玩家知道系統還活著」的用意，只是這裡沒有真的逐字串流、只有頭尾兩個
+    yield（beat 生成本身不是串流 API）。"""
+    agent = engine.agents.get(npc_name)
+    profile = agent.profile
+    ending_type = engine.intimate_mode_ending_type or "good"
+    disp_name = profile.display_name or profile.name
+
+    templates = load_scene_templates()
+    matches = list_intimate_actions(profile, templates, ending_type)
+    match_by_label = {get_action_label(name, entry): entry for name, entry in matches}
+    entry = match_by_label.get(user_input.strip())
+
+    clean_history.append({"role": "user", "content": [{"type": "text", "text": str(user_input)}]})
+    clean_history.append({"role": "assistant", "content": [{"type": "text", "text": f"（{disp_name}似乎正在回應……）"}]})
+    yield (
+        clean_history,
+        gr.update(), gr.update(), gr.update(), gr.update(),
+        gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update(),
+    )
+
+    if entry is None:
+        clean_history[-1]["content"][0]["text"] = f"（{disp_name}似乎沒聽懂你的意思……）"
+    else:
+        config = load_ending_writer_config()
+        if config.backend == "rwkv":
+            beat_generator = make_rwkv_beat_generator(config)
+        else:
+            beat_generator = make_ollama_beat_generator(profile, config)
+
+        result = attempt_intimate_action(profile, entry, engine.player_state.name, beat_generator)
+
+        status_note = "" if result.success else "（她拒絕了……）"
+        tag_note = (
+            f"\n\n*（{disp_name}似乎漸漸習得了「{result.tag_granted}」……）*"
+            if result.tag_granted else ""
+        )
+        bot_text = f"{status_note}{result.narrative}{tag_note}"
+
+        if result.is_finisher:
+            engine.intimate_mode_npc = None
+            engine.intimate_mode_ending_type = None
+            bot_text += "\n\n---\n🌙 **【性愛模式結束】** 這段親密的糾葛，暫時告一段落。"
+
+        clean_history[-1]["content"][0]["text"] = bot_text
+
+    engine.auto_save()
+
+    if engine.intimate_mode_npc == npc_name:
+        opt_a, opt_b, opt_c = get_intimate_menu_options(engine, npc_name)[:3]
+    else:
+        opt_a, opt_b, opt_c = get_npc_initial_options(engine, npc_name)[:3]
+
+    yield (
+        clean_history,
+        get_status_markdown(engine),
+        get_map_markdown(engine),
+        get_npc_dossier_markdown(engine),
+        get_world_news_markdown(engine),
+        gr.update(value=opt_a),
+        gr.update(value=opt_b),
+        gr.update(value=opt_c),
+        opt_a,
+        opt_b,
+        opt_c,
+    )
+
+
 def process_player_choice(custom_name: str, user_input: str, history: list, prev_opt_a: str = "", prev_opt_b: str = "", prev_opt_c: str = ""):
     """以串流方式推進劇情：過程持續 yield 逐步填入的敘事文字，只有最後一個 yield 才更新狀態板與選項按鈕"""
     engine = get_engine_for_user(custom_name)
@@ -419,8 +558,13 @@ def process_player_choice(custom_name: str, user_input: str, history: list, prev
         )
         return
 
-    # 與 NPC 互動
     npc_name = engine.current_agent.profile.name if engine.current_agent else ""
+
+    if npc_name and engine.intimate_mode_npc == npc_name:
+        yield from process_intimate_choice(engine, npc_name, user_input, clean_history)
+        return
+
+    # 與 NPC 互動
     used_history = set(engine.current_agent.used_options_history) if engine.current_agent else set()
     prev_opts = {prev_opt_a.strip(), prev_opt_b.strip(), prev_opt_c.strip()}
     disp_name = engine.current_agent.profile.display_name if engine.current_agent else None
@@ -510,6 +654,33 @@ def process_player_choice(custom_name: str, user_input: str, history: list, prev
 
     bot_msg = f"{delta.narrative}{status_str}{quest_str}{tag_str}"
     clean_history[-1]["content"][0]["text"] = bot_msg
+
+    # 這一回合的好感度變化有沒有剛好跨過終極/黑化門檻，馬上切進性愛模式——不用等玩家
+    # 之後重新切換 NPC 或移動地點才會被 get_npc_initial_options 那條路徑偵測到。
+    # apply_delta 在 interact_stream/exception fallback 兩條路徑都已經跑過，這裡讀到的
+    # profile.intimacy 一定是這回合結束後的最終值。
+    intimate_trigger = engine.check_and_enter_intimate_mode()
+    if intimate_trigger and engine.intimate_mode_npc == npc_name:
+        clean_history[-1]["content"][0]["text"] += (
+            f"\n\n---\n🏆 **【觸發結局】{intimate_trigger['name']}**\n*{intimate_trigger['description']}*"
+            "\n\n💋 進入性愛模式，請從下方動作選單選擇下一步。"
+        )
+        opt_a, opt_b, opt_c = get_intimate_menu_options(engine, npc_name)[:3]
+        engine.auto_save()
+        yield (
+            clean_history,
+            get_status_markdown(engine),
+            get_map_markdown(engine),
+            get_npc_dossier_markdown(engine),
+            get_world_news_markdown(engine),
+            gr.update(value=opt_a),
+            gr.update(value=opt_b),
+            gr.update(value=opt_c),
+            opt_a,
+            opt_b,
+            opt_c,
+        )
+        return
 
     # 檢查歷史使用過的選項與上一輪選項，進行嚴格去重與動態補齊
     used_history = set(engine.current_agent.used_options_history) if engine.current_agent else set()
@@ -650,10 +821,11 @@ with gr.Blocks(title="Local Blade RPG Engine") as demo:
     with gr.Column(visible=False) as main_game_group:
         with gr.Row():
             with gr.Column(scale=1):
+                # 狀態板/NPC 檔案是每回合都要看的核心資訊，維持一直展開。地圖/新聞、
+                # 存檔控制、結局檢視器都是「偶爾才需要點開看一眼」的次要資訊，收進
+                # Accordion 預設折疊，避免左欄一開場就是一長串文字牆（尤其手機上）。
                 status_box = gr.Markdown(value=lambda: get_status_markdown(engine))
-                map_box = gr.Markdown(value=lambda: get_map_markdown(engine))
                 dossier_box = gr.Markdown(value=lambda: get_npc_dossier_markdown(engine))
-                news_box = gr.Markdown(value=lambda: get_world_news_markdown(engine))
 
                 location_dropdown = gr.Dropdown(
                     choices=list(engine.world_map.get("regions", {}).keys()),
@@ -669,16 +841,21 @@ with gr.Blocks(title="Local Blade RPG Engine") as demo:
                     interactive=True
                 )
 
-                gr.Markdown("### 💾 [帳號存檔與載入控制]")
-                with gr.Row():
-                    btn_save_account = gr.Button("💾 立即存檔", variant="primary", scale=1)
-                    btn_load_account = gr.Button("📂 重新載入我的存檔", variant="secondary", scale=1)
+                with gr.Accordion("🗺️ 地圖與江湖動態", open=False):
+                    map_box = gr.Markdown(value=lambda: get_map_markdown(engine))
+                    news_box = gr.Markdown(value=lambda: get_world_news_markdown(engine))
 
-                save_list_box = gr.Markdown(value=get_saves_markdown)
-                system_msg = gr.Textbox(label="系統訊息", value="準備就緒", interactive=False)
-                reset_btn = gr.Button("重置與當前對象對話", variant="secondary")
+                with gr.Accordion("💾 存檔與系統控制", open=False):
+                    gr.Markdown("### 💾 [帳號存檔與載入控制]")
+                    with gr.Row():
+                        btn_save_account = gr.Button("💾 立即存檔", variant="primary", scale=1)
+                        btn_load_account = gr.Button("📂 重新載入我的存檔", variant="secondary", scale=1)
 
-                with gr.Accordion("🔞 結局劇情檢視器", open=True):
+                    save_list_box = gr.Markdown(value=get_saves_markdown)
+                    system_msg = gr.Textbox(label="系統訊息", value="準備就緒", interactive=False)
+                    reset_btn = gr.Button("重置與當前對象對話", variant="secondary")
+
+                with gr.Accordion("🔞 結局劇情檢視器", open=False):
                     gr.Markdown("由伺服器端直接讀取 `saves/endings/` 底下已生成的結局檔案顯示，內容不經過任何第三方。")
                     ending_file_dropdown = gr.Dropdown(
                         choices=list_ending_files(),
