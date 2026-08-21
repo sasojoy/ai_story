@@ -213,6 +213,14 @@ class GameEngine:
         self.state.main_quest_summary = value
 
     @property
+    def npc_relationship_notes(self):
+        return self.state.npc_relationship_notes
+
+    @npc_relationship_notes.setter
+    def npc_relationship_notes(self, value) -> None:
+        self.state.npc_relationship_notes = value
+
+    @property
     def story_milestones(self):
         return self.state.story_milestones
 
@@ -344,6 +352,8 @@ class GameEngine:
             recent_world_events=self.state.recent_world_events,
             story_chapter_title=ch_info.get("title", ""),
             story_chapter_goal=ch_info.get("goal", ""),
+            story_milestones=self.state.story_milestones,
+            npc_relationship_notes=self.state.npc_relationship_notes,
         )
 
         self.apply_delta(delta)
@@ -371,6 +381,8 @@ class GameEngine:
             recent_world_events=self.state.recent_world_events,
             story_chapter_title=ch_info.get("title", ""),
             story_chapter_goal=ch_info.get("goal", ""),
+            story_milestones=self.state.story_milestones,
+            npc_relationship_notes=self.state.npc_relationship_notes,
         ):
             if delta is not None:
                 self.apply_delta(delta)

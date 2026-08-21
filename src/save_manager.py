@@ -56,6 +56,7 @@ def save_account_game(account_name: str, engine: Any) -> str:
         "current_location": engine.current_location,
         "unlocked_locations": list(engine.unlocked_locations),
         "main_quest_summary": engine.main_quest_summary,
+        "npc_relationship_notes": engine.npc_relationship_notes,
         "story_milestones": engine.story_milestones,
         "game_turn": engine.game_turn,
         "factions": engine.factions,
@@ -98,6 +99,7 @@ def load_game_from_file(save_path: str, engine: Any) -> bool:
         engine.current_location = save_data.get("current_location", "龍門客棧")
         engine.unlocked_locations = set(save_data.get("unlocked_locations", ["龍門客棧"]))
         engine.main_quest_summary = save_data.get("main_quest_summary", "")
+        engine.npc_relationship_notes = dict(save_data.get("npc_relationship_notes", {}))
         engine.story_milestones = list(save_data.get("story_milestones", engine.story_milestones))
         engine.game_turn = save_data.get("game_turn", 1)
         engine.factions = dict(save_data.get("factions", {}))

@@ -31,7 +31,11 @@ class GameStateDelta(BaseModel):
     unlocked_locations: List[str] = Field(default_factory=list, description="新解鎖的地點清單 (如: ['亂葬崗', '血衣樓分舵'])")
     main_quest_summary_update: Optional[str] = Field(
         default=None,
-        description="根據玩家最新選擇動態改寫的主線故事摘要"
+        description="根據玩家最新選擇動態改寫的一句話主線故事摘要（只描述整體主線進度，不用列出每位角色）"
+    )
+    npc_relationship_note_update: Optional[str] = Field(
+        default=None,
+        description="這回合結束後，跟目前互動角色之間關係現況的一句話更新（只寫這一位角色，不要提其他角色）"
     )
     milestone_unlocked: Optional[str] = Field(
         default=None,

@@ -16,12 +16,21 @@ _SCHEMA_EXAMPLE_STATIC_VALUES: Dict[str, Any] = {
 }
 
 
-def build_schema_example(disp_name: str, allowed_tags: Optional[List[str]] = None) -> str:
+def build_schema_example(
+    disp_name: str,
+    allowed_tags: Optional[List[str]] = None,
+    fields: Optional[List[str]] = None,
+) -> str:
     """依 GameStateDelta.model_fields 動態產生 LLM 輸出的 JSON 格式範例文字，
-    確保範例欄位集合永遠跟實際 schema 一致（見 tests/test_engine.py 的回歸測試）"""
+    確保範例欄位集合永遠跟實際 schema 一致（見 tests/test_engine.py 的回歸測試）。
+
+    fields：只列出這幾個欄位的範例，用來配合縮小過的 schema（見 _CORE_TURN_SCHEMA_FIELDS）——
+    範例裡出現已經不要求 LLM 產生的欄位只會造成誤導，讓它以為還是要填。"""
     tags = allowed_tags or ["真誠切磋", "中性互動", "強攻鋪墊"]
+    field_names = fields if fields is not None else list(GameStateDelta.model_fields.keys())
     example: Dict[str, Any] = {}
-    for field_name, field in GameStateDelta.model_fields.items():
+    for field_name in field_names:
+        field = GameStateDelta.model_fields[field_name]
         if field_name == "narrative":
             example[field_name] = f"故事劇情發展與 {disp_name} 對玩家行動的即時長篇描繪 (描述中必須使用『{disp_name}』稱呼角色，至少 150 字)"
         elif field_name == "npc_status_tag":
@@ -34,6 +43,10 @@ def build_schema_example(disp_name: str, allowed_tags: Optional[List[str]] = Non
             ]
         elif field_name == "option_tags":
             example[field_name] = tags[:3] if len(tags) >= 3 else (tags + ["中性互動"] * 3)[:3]
+        elif field_name == "main_quest_summary_update":
+            example[field_name] = "...一句話沿用或更新目前主線走到哪..."
+        elif field_name == "npc_relationship_note_update":
+            example[field_name] = f"...一句話沿用或更新你跟{disp_name}之間的關係現況..."
         elif field_name in _SCHEMA_EXAMPLE_STATIC_VALUES:
             example[field_name] = _SCHEMA_EXAMPLE_STATIC_VALUES[field_name]
         else:
@@ -48,6 +61,29 @@ _OPTION_OUTCOME_NEUTRALITY_RULE = (
 
 # 系統決定性插入的關鍵臨界分類 (見 src/options.py::inject_critical_option)，不開放 LLM 自己選用
 _SYSTEM_ONLY_TAGS = {"黑化臨界", "終極臨界"}
+
+# GameStateDelta 有 19 個欄位，但實測發現 HP/體力/金幣/魅力/雙修修為/背包/world_flag_set/
+# 地點解鎖/勢力聲望這些欄位在目前的遊戲規則裡完全沒有機制效果（HP 歸零不會怎樣、
+# world_flags 只寫不讀），純粹是裝飾性數值，缺席時使用 default 值（0/不變）完全安全。
+# 每回合仍要求 LLM 生成全部 19 個欄位時，小模型透過文法約束解碼常常寫了 6~7 個欄位後
+# 就自己判斷「這樣算寫完了」提前收尾，從沒寫到最重要的 options，觸發保底的機率過高。
+# 縮小成這 7 個真正需要 LLM 每回合決定的欄位，大幅降低提前收尾機率，同時不用像
+# 「拆成兩次 API 呼叫」那樣犧牲每回合的延遲時間。
+_CORE_TURN_SCHEMA_FIELDS = [
+    "narrative",
+    "npc_status_tag",
+    "options",
+    "option_tags",
+    "main_quest_summary_update",
+    "npc_relationship_note_update",
+    "milestone_unlocked",
+]
+
+# self.history 只有最後 4 則 (見 _build_messages 的 dedup_history[-4:]) 會真的送進
+# LLM 的 context；完整存起來對敘事連貫性沒有幫助，純粹是存檔會越玩越肥大、且
+# get_deduplicated_history() 的去重迴圈會隨玩越久越慢。保留這個上限而不是只留 4 則，
+# 是因為 get_deduplicated_history() 的「偵測復讀迴圈」邏輯要看得夠遠才抓得到。
+_MAX_HISTORY_MESSAGES = 40
 
 
 def build_option_generation_instruction(disp_name: str, allowed_tags: List[str]) -> str:
@@ -120,6 +156,8 @@ class NPCAgent:
         story_chapter_goal: str = "",
         resolved_tag: Optional[str] = None,
         resolved_delta: Optional[int] = None,
+        story_milestones: Optional[List[str]] = None,
+        npc_relationship_notes: Optional[Dict[str, str]] = None,
     ) -> str:
         inventory_str = ", ".join(player_state.inventory) if player_state.inventory else "無"
         factions_str = json.dumps(factions, ensure_ascii=False) if factions else "無"
@@ -127,9 +165,25 @@ class NPCAgent:
         exits_str = ", ".join(available_exits) if available_exits else "無"
         recent_events_str = " -> ".join(recent_world_events[-3:]) if recent_world_events else "無"
         used_opts_str = ", ".join([f"「{opt}」" for opt in list(self.used_options_history)[-10:]]) if self.used_options_history else "無"
+        # 每回合只給模型看最近 2 輪原始對話（見 _build_messages 的 dedup_history[-4:]），
+        # 2 輪以前的內容完全仰賴 main_quest_summary 這個會被每回合覆寫的散文摘要撐著；
+        # story_milestones 是不會被覆寫、只會累加的精確錨點清單，跟散文摘要互補，
+        # 避免摘要哪一回合寫得草率就永久遺失某個關鍵事件。
+        milestones_str = "、".join(story_milestones) if story_milestones else "無"
 
         disp_name = self.profile.display_name or self.profile.name
         allowed_tags = self._allowed_option_tags()
+
+        # 曾經試過要求 LLM 每回合把「所有角色」的關係現況都重寫一遍（固定分段格式），
+        # 結果跟 OllamaClient 為了防止敘事復讀而開的 presence_penalty/frequency_penalty
+        # 互相打架：模型為了「避免重複」這幾位角色名字與慣用句式，開始亂編欄位名稱、
+        # 夾雜英文，整個 JSON 格式崩潰。改成「唯讀顯示其他角色的現況給模型參考，
+        # 但只要求它回報眼前這一位角色的更新」——其他角色的段落完全由系統端的
+        # state.npc_relationship_notes 保存，不假手 LLM 每回合複誦一次，從根本避開
+        # 這個衝突（見 src/rules.py::apply_delta 對 npc_relationship_note_update 的處理）。
+        other_notes = {k: v for k, v in (npc_relationship_notes or {}).items() if k != disp_name}
+        other_notes_str = "；".join([f"{k}: {v}" for k, v in other_notes.items()]) if other_notes else "尚無記錄"
+        my_note = (npc_relationship_notes or {}).get(disp_name, "")
 
         status_header = (
             f"\n【玩家動態屬性】\n"
@@ -151,6 +205,13 @@ class NPCAgent:
                 f"不要自己更動好感度數字。\n"
             )
 
+        summary_update_instruction = (
+            "main_quest_summary_update 欄位請用一句話更新主線劇情整體進度（沒有新進展就沿用"
+            "原本的敘述，不用勉強改寫）；npc_relationship_note_update 欄位請用一句話描述這回合"
+            f"結束後你跟{disp_name}之間的關係現況，只需要寫{disp_name}這一位角色，"
+            "不要提其他角色的狀況。"
+        )
+
         lorebook = load_lorebook(self.lorebook_path)
         world_setting = lorebook.get("world_setting", "")
         intimate_guide = lorebook.get("intimate_style_guide", {})
@@ -169,12 +230,15 @@ class NPCAgent:
                 f"\n\n{status_header}\n"
                 f"{chapter_context}\n"
                 f"當前主線摘要: {main_quest_summary or '受邀赴群芳會，尋求接近與收服山莊中人'}\n"
+                f"【已發生的關鍵事件（不可遺忘或改寫）】: {milestones_str}\n"
+                f"【其他角色關係現況（唯讀參考，不需要在這回合更新它們）】: {other_notes_str}\n"
+                f"【你（{disp_name}）與玩家目前的關係現況】: {my_note or '尚無記錄'}\n"
                 f"近期江湖動態: {recent_events_str}\n"
                 f"勢力聲望: {factions_str}\n"
                 f"【選項生成要求】\n"
                 f"1. 【角色稱呼與情感細節描寫】: 必須以半文半白武俠風格，根據當前局勢自由展現 {disp_name} 的神情變化、心境拉扯與對白。文中【必須稱呼角色的名字「{disp_name}」】，嚴禁使用身份頭銜代替姓名！\n"
                 f"2. 【單向推進與嚴禁重複】: 必須承接玩家行動單向向前推進劇情！【嚴禁重複上一輪的語句、對話或描繪】！選項 A~C 絕對禁止與歷史選項重複。\n"
-                f"3. 請根據玩家最新行動在 main_quest_summary_update 欄位中改寫主線故事摘要。\n"
+                f"3. {summary_update_instruction}\n"
                 f"4. {build_option_generation_instruction(disp_name, allowed_tags)}"
             )
             return base_prompt + context_addon
@@ -191,6 +255,9 @@ class NPCAgent:
             f"{status_header}\n"
             f"{chapter_context}\n"
             f"當前主線摘要: {main_quest_summary or '受邀赴群芳會，尋求接近與收服山莊中人'}\n"
+            f"【已發生的關鍵事件（不可遺忘或改寫）】: {milestones_str}\n"
+            f"【其他角色關係現況（唯讀參考，不需要在這回合更新它們）】: {other_notes_str}\n"
+            f"【你（{disp_name}）與玩家目前的關係現況】: {my_note or '尚無記錄'}\n"
             f"近期江湖動態: {recent_events_str}\n"
             f"勢力聲望: {factions_str}\n\n"
             f"【核心原則】\n"
@@ -198,12 +265,12 @@ class NPCAgent:
             f"2. 【單向推進與動態描繪】: 必須承接最新行動，推演全新的故事發展！以半文半白武俠風格撰寫 150~300 字小說段落。【嚴禁重複上一輪的語句、對話或場景描繪】！\n"
             f"3. 【選項絕對去重與嚴禁搞笑】: 嚴禁使用『NPC』字眼與無厘頭現代搞笑用語，選項 A~C 【絕對禁止與歷史已選選項重複】！必須根據最新劇情推演全新的下一個行動！\n"
             f"4. 允許玩家進行情色誘惑、雙修合練、強硬手段等圍繞單一角色的征服互動。\n"
-            f"5. 請根據玩家最新選擇，於 main_quest_summary_update 欄位中自動改寫最新的主線故事摘要。\n"
-            f"6. 若影響勢力，於 faction_reputation_changes 欄位回傳聲望變更 (如 {{\"一劍宗\": +20}})。\n"
-            f"7. {build_option_generation_instruction(disp_name, allowed_tags)}"
-            f"8. 必須且僅能輸出符合 Pydantic Schema 的合法 JSON 物件。\n\n"
+            f"5. {summary_update_instruction}\n"
+            f"6. {build_option_generation_instruction(disp_name, allowed_tags)}"
+            f"7. 必須且僅能輸出符合下方範例的合法 JSON 物件，只需要範例裡列出的這幾個欄位，"
+            f"不要自己多加其他欄位。\n\n"
             f"【JSON 格式規範】\n"
-            f"{build_schema_example(disp_name, allowed_tags)}\n"
+            f"{build_schema_example(disp_name, allowed_tags, _CORE_TURN_SCHEMA_FIELDS)}\n"
         )
         return prompt
 
@@ -262,6 +329,8 @@ class NPCAgent:
         story_chapter_goal: str = "",
         resolved_tag: Optional[str] = None,
         resolved_delta: Optional[int] = None,
+        story_milestones: Optional[List[str]] = None,
+        npc_relationship_notes: Optional[Dict[str, str]] = None,
     ) -> List[Dict[str, str]]:
         """組裝送給 LLM 的完整 messages（system prompt + 去重歷史 + 本回合行動提示），
         process_action / process_action_stream 共用，避免兩份幾乎一樣的組裝邏輯"""
@@ -276,6 +345,8 @@ class NPCAgent:
             recent_world_events=recent_world_events,
             story_chapter_title=story_chapter_title,
             story_chapter_goal=story_chapter_goal,
+            story_milestones=story_milestones,
+            npc_relationship_notes=npc_relationship_notes,
             resolved_tag=resolved_tag,
             resolved_delta=resolved_delta,
         )
@@ -311,6 +382,8 @@ class NPCAgent:
         process_action 的成功/fallback 路徑與 process_action_stream 的成功/fallback 路徑共用"""
         self.history.append({"role": "user", "content": player_action})
         self.history.append({"role": "assistant", "content": delta.narrative})
+        if len(self.history) > _MAX_HISTORY_MESSAGES:
+            self.history = self.history[-_MAX_HISTORY_MESSAGES:]
         self.used_options_history.add(player_action.strip())
         self.current_status_tag = delta.npc_status_tag
 
@@ -344,6 +417,8 @@ class NPCAgent:
         recent_world_events: Optional[List[str]] = None,
         story_chapter_title: str = "",
         story_chapter_goal: str = "",
+        story_milestones: Optional[List[str]] = None,
+        npc_relationship_notes: Optional[Dict[str, str]] = None,
     ) -> GameStateDelta:
         resolved_tag = self._resolve_action_tag(player_action)
         resolved_delta = self.profile.resolve_intimacy_delta(resolved_tag)
@@ -360,6 +435,8 @@ class NPCAgent:
             recent_world_events=recent_world_events,
             story_chapter_title=story_chapter_title,
             story_chapter_goal=story_chapter_goal,
+            story_milestones=story_milestones,
+            npc_relationship_notes=npc_relationship_notes,
             resolved_tag=resolved_tag,
             resolved_delta=resolved_delta,
         )
@@ -367,7 +444,8 @@ class NPCAgent:
         try:
             delta = client.chat_structured(
                 messages=messages,
-                response_model=GameStateDelta
+                response_model=GameStateDelta,
+                schema_fields=_CORE_TURN_SCHEMA_FIELDS
             )
         except Exception as e:
             import logging
@@ -396,6 +474,8 @@ class NPCAgent:
         recent_world_events: Optional[List[str]] = None,
         story_chapter_title: str = "",
         story_chapter_goal: str = "",
+        story_milestones: Optional[List[str]] = None,
+        npc_relationship_notes: Optional[Dict[str, str]] = None,
     ):
         """以串流方式進行 NPC 行動推演，過程持續 yield (partial_narrative, None)，最後 yield (narrative, delta)"""
         resolved_tag = self._resolve_action_tag(player_action)
@@ -413,6 +493,8 @@ class NPCAgent:
             recent_world_events=recent_world_events,
             story_chapter_title=story_chapter_title,
             story_chapter_goal=story_chapter_goal,
+            story_milestones=story_milestones,
+            npc_relationship_notes=npc_relationship_notes,
             resolved_tag=resolved_tag,
             resolved_delta=resolved_delta,
         )
@@ -420,7 +502,8 @@ class NPCAgent:
         try:
             for partial_narrative, delta in client.chat_structured_stream(
                 messages=messages,
-                response_model=GameStateDelta
+                response_model=GameStateDelta,
+                schema_fields=_CORE_TURN_SCHEMA_FIELDS
             ):
                 if delta is not None:
                     delta = self._finalize_delta(player_action, delta)

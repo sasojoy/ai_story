@@ -114,6 +114,10 @@ def apply_delta(state: GameState, delta: GameStateDelta, world_map: Dict[str, An
     if delta.main_quest_summary_update and delta.main_quest_summary_update.strip():
         state.main_quest_summary = delta.main_quest_summary_update.strip()
 
+    if delta.npc_relationship_note_update and delta.npc_relationship_note_update.strip() and state.current_agent:
+        npc_name = state.current_agent.profile.display_name or state.current_agent.profile.name
+        state.npc_relationship_notes[npc_name] = delta.npc_relationship_note_update.strip()
+
     if delta.milestone_unlocked and delta.milestone_unlocked.strip():
         ms = delta.milestone_unlocked.strip()
         if ms not in state.story_milestones:

@@ -141,6 +141,26 @@ class TestEngine(unittest.TestCase):
         self.assertEqual(engine.factions["血罌宗"], 35)
         self.assertEqual(engine.factions["一劍宗"], start_yijian - 5)
 
+    def test_apply_delta_updates_npc_relationship_note_for_current_agent_only(self):
+        """npc_relationship_note_update 應該只更新「目前互動中」那位角色的記錄，
+        其他角色的記錄要維持原封不動——這是刻意設計成「系統端逐一角色更新」，
+        取代原本要求 LLM 每回合把所有角色都重寫一遍的做法（見 build_system_prompt
+        的說明：那個做法會跟 repeat/presence/frequency penalty 互相打架）。"""
+        engine = GameEngine()
+        current_profile = engine.current_agent.profile
+        current_name = current_profile.display_name or current_profile.name
+        other_name = next(name for name in engine.agents if name != current_profile.name)
+        engine.npc_relationship_notes[other_name] = "舊的記錄，不應該被動到"
+
+        delta = GameStateDelta(
+            narrative="測試角色關係現況更新",
+            npc_relationship_note_update="剛剛互相交換了信物"
+        )
+        engine.apply_delta(delta)
+
+        self.assertEqual(engine.npc_relationship_notes[current_name], "剛剛互相交換了信物")
+        self.assertEqual(engine.npc_relationship_notes[other_name], "舊的記錄，不應該被動到")
+
     def test_switch_npc(self):
         engine = GameEngine()
         self.assertIsNotNone(engine.current_agent)
@@ -406,6 +426,61 @@ class TestEngine(unittest.TestCase):
         sys_prompt = agent.build_system_prompt(player_state=self.player_state)
         self.assertNotIn("瞳孔微震", sys_prompt)
         self.assertNotIn("雙頰酡紅", sys_prompt)
+
+    def test_build_system_prompt_includes_story_milestones(self):
+        """story_milestones 之前只有存讀檔，從沒被塞進 prompt，模型完全看不到；
+        補上這個注入後，用來當「不會被 main_quest_summary 覆寫掉」的精確錨點。"""
+        agent = NPCAgent(self.profile)
+        prompt_without = agent.build_system_prompt(self.player_state)
+        self.assertIn("【已發生的關鍵事件（不可遺忘或改寫）】: 無", prompt_without)
+
+        prompt_with = agent.build_system_prompt(
+            self.player_state,
+            story_milestones=["踏入棲霜山莊，群芳會啟", "與青鋒交手負傷"],
+        )
+        self.assertIn("踏入棲霜山莊，群芳會啟", prompt_with)
+        self.assertIn("與青鋒交手負傷", prompt_with)
+
+    def test_build_system_prompt_shows_other_npc_notes_readonly_and_asks_for_one_line(self):
+        """一開始試過要求 LLM 每回合把「所有角色」的關係現況都重寫一遍（固定分段格式），
+        結果跟 OllamaClient 的 presence_penalty/frequency_penalty 互相打架，模型為了
+        避免重複這幾位角色名字與慣用句式而整個 JSON 格式崩潰、夾雜英文、自創欄位。
+        改成「其他角色的現況只唯讀顯示給模型參考，只要求它回報眼前這一位角色的
+        更新」，這裡驗證新設計真的有進到 prompt 裡，而且不再要求它重寫其他角色。"""
+        agent = NPCAgent(self.profile)
+        prompt = agent.build_system_prompt(
+            self.player_state,
+            npc_relationship_notes={"慕容茵": "已互相試探過底細", self.profile.name: "尚未有實質互動"},
+        )
+        self.assertIn("其他角色關係現況（唯讀參考，不需要在這回合更新它們）", prompt)
+        self.assertIn("慕容茵: 已互相試探過底細", prompt)
+        self.assertIn(f"你（{self.profile.name}）與玩家目前的關係現況", prompt)
+        self.assertIn("尚未有實質互動", prompt)
+        self.assertIn("npc_relationship_note_update", prompt)
+        self.assertIn(f"只需要寫{self.profile.name}這一位角色", prompt)
+
+    def test_build_schema_example_includes_npc_relationship_note_update(self):
+        example_dict = json.loads(build_schema_example("測試角色"))
+        self.assertIn("npc_relationship_note_update", example_dict)
+        self.assertIn("測試角色", example_dict["npc_relationship_note_update"])
+
+    def test_history_is_capped_to_avoid_unbounded_growth(self):
+        """self.history 只有最後 4 則會真的送進 LLM (_build_messages 的 [-4:])，
+        完整保留對連貫性沒有幫助，只會讓存檔越玩越肥大；_record_turn 應該要裁剪。"""
+        from src.npc_agent import _MAX_HISTORY_MESSAGES
+
+        agent = NPCAgent(self.profile)
+        for i in range(_MAX_HISTORY_MESSAGES):
+            delta = GameStateDelta(narrative=f"劇情 {i}")
+            agent._record_turn(f"行動 {i}", delta)
+
+        self.assertLessEqual(len(agent.history), _MAX_HISTORY_MESSAGES)
+        # 裁剪後應該保留「最新」的記錄，而不是最舊的
+        last_index = _MAX_HISTORY_MESSAGES - 1
+        self.assertEqual(agent.history[-2]["content"], f"行動 {last_index}")
+        self.assertEqual(agent.history[-1]["content"], f"劇情 {last_index}")
+        # 最舊的一半應該已經被裁掉
+        self.assertNotIn("行動 0", [m["content"] for m in agent.history])
 
 
 if __name__ == "__main__":

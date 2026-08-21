@@ -109,6 +109,19 @@ class TestSaveManager(unittest.TestCase):
                 new_engine.agents["沈青鋒"].used_options_history
             )
 
+    def test_npc_relationship_notes_are_persisted(self):
+        """npc_relationship_notes 是取代「要求 LLM 每回合重寫所有角色摘要」的新機制
+        （見 src/npc_agent.py::build_system_prompt 的說明），確認存讀檔正確往返，
+        且讀取舊格式存檔（沒有這個欄位）時能優雅降級成空字典，不會噴例外。"""
+        self.engine.npc_relationship_notes["慕容茵"] = "已互相試探過底細"
+
+        save_account_game(self.test_account, self.engine)
+
+        new_engine = GameEngine()
+        load_account_game(self.test_account, new_engine)
+
+        self.assertEqual(new_engine.npc_relationship_notes.get("慕容茵"), "已互相試探過底細")
+
     def test_list_and_get_latest_account_saves(self):
         save_account_game(self.test_account, self.engine)
 

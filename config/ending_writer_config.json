@@ -1,7 +1,7 @@
 {
   "ollama_url": "http://localhost:11434",
   "model_name": "huihui_ai/qwen3-abliterated:14b",
-  "context_length": 4096,
+  "context_length": 8192,
   "timeout": 900,
   "num_predict": 2048,
   "temperature": 0.9

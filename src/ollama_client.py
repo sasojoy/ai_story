@@ -10,6 +10,20 @@ T = TypeVar('T', bound=BaseModel)
 logger = logging.getLogger(__name__)
 
 
+def _trim_schema_properties(schema: Dict[str, Any], fields: List[str]) -> Dict[str, Any]:
+    """回傳一份只保留指定欄位的 schema 複本，用於縮小送給 Ollama 的 JSON Schema。
+
+    動機：response_model 的欄位數量越多，實測發現小模型透過文法約束 (grammar-constrained)
+    解碼時越容易在寫了一部分欄位後就自己判斷「這樣算寫完了」提前收尾，導致關鍵欄位
+    （例如 options）從沒被寫到。呼叫端通常有很多欄位其實有安全的預設值可以代表「這回合
+    沒變化」（例如 HP/金幣這類在目前遊戲規則裡完全沒有機制效果的裝飾性數值），這些欄位
+    不需要每回合都要求 LLM 產生——縮小 schema 只留下真正需要 LLM 決定的欄位，降低提前
+    收尾的機率，Pydantic 驗證時其餘欄位仍會使用各自的 default 值，不受影響。"""
+    trimmed = dict(schema)
+    trimmed["properties"] = {k: v for k, v in schema.get("properties", {}).items() if k in fields}
+    return trimmed
+
+
 def _strip_thinking_block(text: str) -> str:
     """移除「思考型」模型（如 qwen3.5/qwen3-abliterated）洩漏到 content 裡的推理過程。
     這類模型的 chat template 通常已經預先塞入開頭的 <think>，所以原始回應裡常常只看得到
@@ -185,12 +199,20 @@ class OllamaClient:
         messages: List[Dict[str, str]],
         temperature: float,
         stream: bool = False,
-        num_predict: int = 1024,
-        json_format: bool = True
+        num_predict: int = 2048,
+        json_format: bool = True,
+        json_schema: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """組裝 /api/chat 的 request payload，統一取樣參數與 num_ctx 來源，避免三處重複字面量。
         json_format=False 用於純文字長篇生成（見 chat_text），不強制 Ollama 的 JSON 輸出模式，
-        因為 format:"json" 會限制/干擾模型的自由行文，不適合拿來寫長篇小說內文。"""
+        因為 format:"json" 會限制/干擾模型的自由行文，不適合拿來寫長篇小說內文。
+
+        json_schema：實測發現通用的 format:"json"（只保證語法合法的 JSON，不管欄位齊不齊全）
+        對 GameStateDelta 這種 19 個欄位的大 schema 太寬鬆——小模型常常寫了 6~7 個欄位後就
+        自己判斷「這樣算寫完了」提前補上 `}`，導致最重要的 options 欄位從沒被寫到，觸發保底。
+        Ollama 支援把完整 JSON Schema 傳給 format 欄位（而不是字串 "json"），會用文法約束
+        (grammar-constrained) 解碼強制模型的輸出結構符合 schema，理論上能從根本避免這種
+        「語法合法但欄位不齊全」的提前收尾問題。傳入時優先於 json_format。"""
         payload = {
             "model": self.model,
             "messages": messages,
@@ -207,7 +229,9 @@ class OllamaClient:
                 "num_ctx": self.context_length
             }
         }
-        if json_format:
+        if json_schema is not None:
+            payload["format"] = json_schema
+        elif json_format:
             payload["format"] = "json"
         return payload
 
@@ -241,13 +265,20 @@ class OllamaClient:
         self,
         messages: List[Dict[str, str]],
         response_model: Type[T],
-        temperature: float = 0.7
+        temperature: float = 0.7,
+        schema_fields: Optional[List[str]] = None
     ) -> T:
         """
         發送對話請求並解析為指定 Pydantic 模型。
         具備一次自動重新提示 (Re-prompt) 的重試機制。
+
+        schema_fields：只有在 response_model 欄位很多、但呼叫端知道其中大部分都有安全的
+        預設值時才需要傳入，見 _trim_schema_properties 的說明。
         """
-        payload = self._build_payload(messages, temperature)
+        schema = response_model.model_json_schema()
+        if schema_fields:
+            schema = _trim_schema_properties(schema, schema_fields)
+        payload = self._build_payload(messages, temperature, json_schema=schema)
 
         url = f"{self.base_url}/api/chat"
 
@@ -258,7 +289,7 @@ class OllamaClient:
             res.raise_for_status()
             raw_data = res.json()
             content = raw_data.get("message", {}).get("content", "")
-            
+
             data = parse_json_robustly(content)
             _ensure_options_present(data)
             return response_model.model_validate(data)
@@ -268,7 +299,7 @@ class OllamaClient:
                 raise RuntimeError(f"Ollama 回傳 404：模型 '{self.model}' 未找到，請先執行 `ollama pull {self.model}` 下載模型。")
 
             logger.warning(f"首次 LLM JSON 解析/請求失敗 ({e})，觸發 Re-prompt 重試機制...")
-            
+
             # Re-prompt 準備
             retry_messages = list(messages)
             retry_messages.append({
@@ -278,8 +309,8 @@ class OllamaClient:
                     "請務必且僅輸出符合 Schema 的合法 JSON 物件，嚴禁包含 Markdown 標記或額外文字。"
                 )
             })
-            
-            retry_payload = self._build_payload(retry_messages, temperature)
+
+            retry_payload = self._build_payload(retry_messages, temperature, json_schema=schema)
 
             res = requests.post(url, json=retry_payload, timeout=self.timeout)
             if res.status_code == 404:
@@ -297,14 +328,20 @@ class OllamaClient:
         messages: List[Dict[str, str]],
         response_model: Type[T],
         temperature: float = 0.7,
-        num_predict: int = 1024
+        num_predict: int = 2048,
+        schema_fields: Optional[List[str]] = None
     ):
         """
         以串流 (stream: True) 方式調用 Ollama Chat API。
         過程持續 yield (partial_narrative, None)
         串流結束時 yield (full_narrative, validated_model_instance)
+
+        schema_fields：見 chat_structured 的說明。
         """
-        payload = self._build_payload(messages, temperature, stream=True, num_predict=num_predict)
+        schema = response_model.model_json_schema()
+        if schema_fields:
+            schema = _trim_schema_properties(schema, schema_fields)
+        payload = self._build_payload(messages, temperature, stream=True, num_predict=num_predict, json_schema=schema)
 
         url = f"{self.base_url}/api/chat"
         full_content = ""
@@ -336,5 +373,7 @@ class OllamaClient:
 
         except Exception as e:
             logger.warning(f"串流請求/解析失敗 ({e})，降級至單次完整請求...")
-            result = self.chat_structured(messages=messages, response_model=response_model, temperature=temperature)
+            result = self.chat_structured(
+                messages=messages, response_model=response_model, temperature=temperature, schema_fields=schema_fields
+            )
             yield (result.narrative, result)

@@ -71,3 +71,24 @@ def test_is_step_output_broken_detects_too_short_output():
 def test_is_step_output_broken_accepts_normal_prose():
     normal = "楚留香緩緩走近，青鋒渾身戰慄，指尖顫抖著握緊了劍柄，卻始終未能揮出那一劍。" * 5
     assert not is_step_output_broken(normal, expected_min_chars=100)
+
+
+def test_is_step_output_broken_detects_heavy_english_mixing():
+    mixed = (
+        "Alright, let's see what the user is asking for now. They want step 2 of the outline "
+        "which involves provoking her into drawing her sword against him in this scene."
+    )
+    assert is_step_output_broken(mixed, expected_min_chars=50)
+
+
+def test_strip_meta_leakage_drops_markdown_planning_list():
+    text = (
+        "楚留香負手而立，青鋒渾身戰慄。\n\n"
+        "1. **戰鬥初期** - 表面上看起來是一場正面衝突。\n"
+        "2. **轉折點到來** - 當其中一個發現對方其實並沒有那麼強。\n\n"
+        "她終於再也支撐不住，癱倒在地。"
+    )
+    result = strip_meta_leakage(text)
+    assert "戰鬥初期" not in result
+    assert "楚留香負手而立" in result
+    assert "她終於再也支撐不住" in result

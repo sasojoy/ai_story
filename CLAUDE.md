@@ -25,10 +25,9 @@
   `message.thinking`，已在 `src/ollama_client.py::chat_text()` 加了 fallback 讀取）與
   `hf.co/bartowski/EVA-Qwen2.5-7B-v0.1-GGUF:Q4_K_M`（篇幅夠但角色名字會飄掉、劇情跟給定
   大綱前後不連貫，推測是 7B 模型在 Q4 量化下擕不住一次 2048 tokens 長篇生成的連貫性）。
-  **使用者決定先停在這裡，等機器升級、能跑更強的模型後再回來處理**——管線本身已經可用，
-  之後只要把 `config/ending_writer_config.json` 的 `model_name` 換掉即可，不需要重新搭建；
-  下一個值得嘗試的方向是把黑化流程拆成多次較短的生成呼叫（每步驟分別生成再接續前文），
-  而不是一次要模型寫完整段 2048 tokens，理論上能同時改善連貫性與角色名字漂移的問題。
+  當時使用者決定先停在這裡、等機器升級後再回來處理；機器升級後已接續處理，見下方
+  「機器升級後的模型/可靠度修復」一節（多步驟接龍生成、few-shot 風格範例、崩壞偵測重試
+  等），目前結論是露骨程度與穩定性仍有明顯隨機波動，下一步方向是 LoRA 微調。
 
 **背景執行的坑（這台機器上踩過，記錄起來避免重踩）**：長時間生成任務（例如結局劇情這種
 2048 tokens 的單次呼叫）如果直接用 Claude Code 的 Bash 工具背景執行，曾經被 Claude Code
@@ -37,6 +36,90 @@
 `scripts/start_server.ps1` 的模式，寫一個小腳本用 PowerShell `Start-Process` 完全分離啟動，
 執行完把結果寫進一個標記檔案，再輪詢標記檔案是否出現，而不是依賴 Bash 工具自己的背景任務
 追蹤機制。
+
+## 機器升級後的模型/可靠度修復（新 session，硬體從純 CPU 換成 RTX 5070 12GB + 60GB RAM 之後）
+
+機器升級後 Ollama 跟 Python 套件整個要重裝（原本裝的東西都不見了），順便把停在
+「等機器升級」的結局生成管線與主線引擎都往前推進了一大步。
+
+**主線引擎模型與 `context_length`**：`config/game_config.json` 的 `model_name` 從
+`qwen2.5:1.5b` 換成 `qwen2.5:14b`（GPU 加速後速度足夠，Q4_K_M 約 9GB 完整塞進 12GB
+VRAM），`context_length` 從 4096 拉高到 8192（原本 4096 是純 CPU 時代怕拉高會讓單次回應
+從 60 秒暴增到 180 秒才定的限制，GPU 加速後這個顧慮不再成立）。
+
+**主線引擎 JSON 輸出可靠度問題（重大發現與修法）**：換上 14b 之後第一次實機測試才發現
+`GameStateDelta`（19 個欄位）用 Ollama 通用 `format:"json"` 模式時，成功率低到接近
+0%——小模型透過這個只保證「語法合法」不保證「欄位齊全」的模式，常常寫了 6~7 個欄位後就
+自己判斷「這樣算寫完了」提前補上 `}`，`options` 欄位從沒被寫到，觸發保底。（用真實
+存檔重現、隔離變因後確認：跟同一個 session 稍早加的 `story_milestones`/摘要機制無關，
+也不是 14b 特有——1.5b 換上同一套 prompt 一樣是這個成功率；這是換模型後第一次真的做
+端到端實機測試才浮現的既有問題，過去可能一直存在只是沒被系統性測過。）
+
+修法分兩步，最終**單次 API 呼叫、完全不加延遲**達到 30 次跨 4 位角色測試 100% 成功
+（樣本數不大，但比對照組的 0~50% 是質的差異）：
+1. `src/ollama_client.py::_build_payload` 新增 `json_schema` 參數，傳完整 Pydantic
+   JSON Schema 給 Ollama 的 `format` 欄位（而不是字串 `"json"`），啟用文法約束
+   (grammar-constrained) 解碼。**單獨這步只把成功率從約 0% 拉到約 50%**，因為
+   `GameStateDelta` 每個欄位都有 `default` 值，Pydantic 生成的 schema 因此完全沒有
+   `"required"` 清單，文法約束依然允許模型在任何時候合法收尾。
+   **試過手動在 schema 裡補 `"required": [...]` 清單想強制填滿關鍵欄位，結果讓成功率
+   降到 0/8，比不加還糟——已回退，不要重踩這個方向。**
+2. 查程式碼確認 `player_hp_change`/`player_stamina_change`/`player_gold_change`/
+   `player_charm_change`/`cultivation_art_learned`/`cultivation_exp_gained`/
+   `inventory_added`/`inventory_removed`/`world_flag_set`/`current_location`/
+   `unlocked_locations`/`faction_reputation_changes` 這 12 個欄位在**目前**的征服路線
+   遊戲規則裡完全沒有機制效果（HP 歸零不會怎樣、`world_flags` 只寫不讀、
+   `cultivation_level` 只影響自己的升級公式不影響任何判定），純粹是裝飾性數值，缺席時
+   套用 default 值（0/不變）完全安全。於是把每回合要求 LLM 主動產生的欄位從 19 個縮小成
+   7 個核心欄位（`src/npc_agent.py::_CORE_TURN_SCHEMA_FIELDS`：`narrative`、
+   `npc_status_tag`、`options`、`option_tags`、`main_quest_summary_update`、
+   `npc_relationship_note_update`、`milestone_unlocked`），透過
+   `OllamaClient.chat_structured/chat_structured_stream` 新增的 `schema_fields`
+   參數（`_trim_schema_properties` 只保留指定欄位）送出縮小過的 schema。
+   **`GameStateDelta` 資料模型本身完全沒有刪欄位**，那 12 個欄位還在、還能正常存讀檔，
+   只是不再放進每回合送給 LLM 的 schema／prompt 範例裡。
+   **使用者明確交代**：金錢/體力/修為這幾個欄位目前劇情用不到，但之後的劇情內容有可能會
+   用到——**之後如果真的要恢復，只要把對應欄位名稱加回 `_CORE_TURN_SCHEMA_FIELDS`
+   （`src/npc_agent.py`），`build_schema_example()` 的範例跟 `build_system_prompt()`
+   「核心原則」編號指令都會跟著自動涵蓋，不需要重新設計**；加回去後很可能又要重新測一次
+   成功率有沒有掉回去，必要時可能得同時精簡其他欄位來平衡 schema 大小。
+
+**結局劇情生成管線**（`src/ending_writer.py`，接續之前「等機器升級」停下的地方）：
+- 改成多步驟接龍生成：大綱每一步驟分開呼叫模型、用多輪對話歷史串接前文，取代單次要模型
+  寫完整段 2048 tokens；最後兩步（親密場景本身）額外加碼 token 預算＋明確指令要求直接
+  進入具體描寫，不要一直鋪陳氣氛。
+- 新增 `strip_meta_leakage()` 過濾模型偶爾破格輸出的「自我規劃/創作提示」文字（markdown
+  標題、code fence、提到「用戶」的整段、`1. **標題** - ` 這種條列格式），以及
+  `is_step_output_broken()` 崩壞偵測（過濾後內容太短，或 emoji/符號密度過高）搭配最多
+  3 次自動重試。
+- 新增 `config/style_reference.txt`（真人撰寫的露骨風格範例，人名已替換成通用代詞，
+  當 few-shot 錨點用——因為光靠抽象指令「請直接描寫」對 abliterated 模型沒什麼約束力，
+  abliteration 只移除拒答，不會移除模型從 RLHF 學來的「含蓄比較有品味」傾向）。這個檔案
+  跟 `saves/endings/` 一樣**刻意不進版本控制**（`.gitignore` 已加），內容本身很露骨、
+  只留在本機；`novels/` 整個資料夾（使用者放的原始參考小說）也一併加進 `.gitignore`。
+- 換模型測過 `TheDrummer/Cydonia-24B-v4.3`（Q4_K_M，中文明顯不行，大量夾雜英文、
+  最終崩潰成同義詞洗版）、`huihui_ai/qwen3-abliterated:30b-a3b`（MoE，仍不夠露骨，
+  且混進緬甸文/阿拉伯文標點符號等量化錯亂），最後採用 `huihui_ai/qwen3-abliterated:14b`
+  （`config/ending_writer_config.json`，`context_length` 也拉高到 8192）。
+  **實測結論：不管哪個模型，露骨程度跟穩定性都有明顯隨機波動**（同樣輸入，這次寫得很
+  好、下次可能整段崩潰成 emoji/符號亂碼），這比較像是這個尺寸/量化組合的固有限制，不是
+  prompt 調整能穩定解決的天花板。使用者已提出後續方向是**用 `novels/` 裡的範例文字做
+  LoRA 微調**（QLoRA + Unsloth，訓練 7B 級模型），但範圍規劃到一半先暫停，尚未開始動手
+  （需要另外設定訓練環境、準備訓練資料），之後要接續前先確認使用者想投入的時間/模型大小。
+
+**主線敘事連貫性補強**：
+- `story_milestones`（原本只有存讀檔，從未被塞進 LLM prompt，形同虛設）現在會實際注入
+  system prompt 當「不可遺忘或改寫」的精確錨點，跟會被逐輪覆寫的 `main_quest_summary`
+  互補。
+- 新增 `GameState.npc_relationship_notes`（`Dict[角色名, 一句話關係現況]`）取代「要求
+  LLM 每回合把四位角色的關係現況都重寫一遍」的最初設計——**那個設計已經試過，結果跟
+  `OllamaClient` 為了防止敘事復讀而開的 `presence_penalty`/`frequency_penalty` 互相
+  打架**：模型為了「避免重複」這幾位角色名字與慣用句式，開始亂編欄位名稱、夾雜英文，
+  JSON 格式整個崩潰。改成系統端逐一角色更新（`src/rules.py::apply_delta` 只更新
+  `state.current_agent` 那一位角色的記錄）、其他角色的現況只用唯讀方式顯示給模型參考，
+  LLM 只需要回報眼前這一位角色的更新即可，從根本避開這個衝突。
+- `NPCAgent.history` 加了上限（`_MAX_HISTORY_MESSAGES = 40`），純粹是存檔衛生／效能考量
+  （反正 `_build_messages` 本來就只取最後 4 則送進 LLM），不是連貫性修復。
 
 ## 目前進度（重構，依 ARCHITECTURE.md 第四節分階段順序）
 
@@ -152,9 +235,15 @@ python main.py        # CLI 介面
 pytest                 # 全部離線可跑，不需要真的連線 Ollama
 ```
 
-`config/game_config.json` 目前設定 `model_name: qwen2.5:1.5b`（本機已安裝，`context_length: 4096`）。這台機器上也裝了 `qwen2.5-coder:7b-instruct-q4_K_M`，如果要換更大的模型做品質比較，記得同步評估推論速度，不要只看輸出品質。
+`config/game_config.json` 目前設定 `model_name: qwen2.5:14b`（`context_length: 8192`）。
 
-**已實測過 `qwen2.5:7b`（非 coder 版，本機也已下載，未刪除）不適合這台機器**：實測真實吞吐量約 4.8 tokens/秒，單一 150 字左右的敘事回應就要 32.6 秒生成時間；換算遊戲實際需要的完整回合（150~300 字敘事 + 5 個選項 + JSON 狀態欄位，`num_predict=1024`）單回合要 3~4 分鐘，比 `qwen2.5:1.5b`（約 60 秒/回合）慢 3~4 倍，對即時對話型遊戲來說體驗太差，使用者已明確選擇留在 `qwen2.5:1.5b`。如果之後要重新評估，直接把 `model_name` 改回 `qwen2.5:7b` 不用重新下載；但要注意 `OllamaClient()` 直接建構子的 `timeout` 預設只有 60 秒，跟 `game_config.json` 的 `timeout: 120` 不同步，拿 `OllamaClient()` 單獨做基準測試時記得手動帶入 `timeout=` 参數，否則會在 60 秒誤觸發保底機制，量到的其實是罐頭劇情不是真實 LLM 輸出。
+**以下是機器升級（純 CPU → RTX 5070 12GB + 60GB RAM）前的舊結論，只留當歷史紀錄，已不適用**：
+當時實測過 `qwen2.5:7b`（非 coder 版）純 CPU 推論吞吐量約 4.8 tokens/秒，單回合要 3~4
+分鐘，比 `qwen2.5:1.5b`（約 60 秒/回合）慢 3~4 倍，所以選擇留在 `qwen2.5:1.5b`。機器升級
+後這個限制已不成立，GPU 加速下 `qwen2.5:14b` 单回合速度良好（見上方「機器升級後的模型/
+可靠度修復」一節），已正式換上；`OllamaClient()` 直接建構子的 `timeout` 預設只有 60 秒，
+跟 `game_config.json` 的 `timeout: 120` 不同步，拿 `OllamaClient()` 單獨做基準測試時記得
+手動帶入 `timeout=` 参數，這一點在 GPU 環境下依然適用，不受機器升級影響。
 
 ## 個人 hobby 專案的設計原則（ARCHITECTURE.md 已明訂，維持一致）
 

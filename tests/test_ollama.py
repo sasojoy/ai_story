@@ -5,7 +5,10 @@ from unittest.mock import patch, MagicMock
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from src.ollama_client import OllamaClient, clean_json_text, repair_truncated_json, parse_json_robustly, extract_partial_narrative
+from src.ollama_client import (
+    OllamaClient, clean_json_text, repair_truncated_json, parse_json_robustly,
+    extract_partial_narrative, _trim_schema_properties
+)
 from src.models import GameStateDelta
 
 
@@ -27,6 +30,35 @@ class TestOllamaClient(unittest.TestCase):
         parsed = parse_json_robustly(repaired)
         self.assertEqual(parsed["narrative"], "殺手阿福擦拭著鐵劍")
         self.assertEqual(parsed["options"], ["A) 詢問意圖"])
+
+    def test_trim_schema_properties_keeps_only_requested_fields(self):
+        """實測發現 GameStateDelta 的 19 個欄位太多，小模型透過文法約束解碼時常常寫了
+        6~7 個欄位就自己判斷「寫完了」提前收尾，從沒寫到 options。這裡驗證縮小 schema
+        的輔助函式行為正確，且不會動到傳入的原始 dict。"""
+        schema = GameStateDelta.model_json_schema()
+        trimmed = _trim_schema_properties(schema, ["narrative", "options"])
+        self.assertEqual(set(trimmed["properties"].keys()), {"narrative", "options"})
+        self.assertIn("player_hp_change", schema["properties"])
+
+    @patch("requests.post")
+    def test_chat_structured_sends_trimmed_schema_when_fields_given(self, mock_post):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "message": {"content": '{"narrative": "測試", "options": ["A", "B", "C"]}'}
+        }
+        mock_post.return_value = mock_resp
+
+        client = OllamaClient()
+        client.chat_structured(
+            messages=[{"role": "user", "content": "測試"}],
+            response_model=GameStateDelta,
+            schema_fields=["narrative", "options", "option_tags"]
+        )
+
+        sent_payload = mock_post.call_args.kwargs["json"]
+        sent_schema_properties = sent_payload["format"]["properties"]
+        self.assertEqual(set(sent_schema_properties.keys()), {"narrative", "options", "option_tags"})
 
     @patch("requests.get")
     def test_check_health_success(self, mock_get):

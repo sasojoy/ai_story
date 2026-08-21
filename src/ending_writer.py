@@ -65,6 +65,16 @@ def get_outline_steps(profile: NPCProfile, ending_type: str) -> List[str]:
     return list(_DEFAULT_GOOD_OUTLINE)
 
 
+def _load_style_reference(path: str = "config/style_reference.txt") -> str:
+    """讀取本機專屬的露骨文風範例（不進版本控制，理由跟 saves/endings/ 一樣：內容本身很
+    露骨，只留在本機）。找不到檔案時回傳空字串，讓 prompt 組裝優雅降級，不會因為缺這份
+    選用性檔案而整個掛掉。"""
+    if not os.path.isfile(path):
+        return ""
+    with open(path, "r", encoding="utf-8") as f:
+        return f.read().strip()
+
+
 def build_ending_system_prompt(
     profile: NPCProfile,
     ending_type: str,
@@ -72,22 +82,41 @@ def build_ending_system_prompt(
     lorebook: Dict[str, Any],
     outline_steps: List[str],
     player_name: str = "楚留香",
+    style_reference: Optional[str] = None,
 ) -> str:
     """組裝送給結局寫手模型的系統提示：人設、身材、寫作風格指引，加上完整大綱總覽（讓模型
     知道整體走向與自己目前寫到哪一步），實際逐步生成的指令另外由 build_step_user_prompt 補上。
 
     刻意不沿用 config/lorebook.json 的 intimate_style_guide.style_examples：那份範例是給
     一般回合制劇情（qwen2.5:1.5b）用的含蓄留白寫法（例如「雙頰泛起淡淡的酡紅」），
-    是刻意設計成點到為止的風格。如果把這份範例當「文風範例」餵給結局寫手模型，具體範例
-    對輸出風格的錨定力通常比抽象指令更強，會把結局內文也一起帶往含蓄留白，跟這裡要的
-    露骨直寫方向互相矛盾——第一次實測（沈青鋒黑化結局）就是因為這樣完全沒有 18 禁成分。"""
+    是刻意設計成點到為止的風格，直接拿來當結局寫手的錨點只會把輸出帶往含蓄留白，跟這裡要
+    的露骨直寫方向互相矛盾。
+
+    style_reference（config/style_reference.txt，選用）：反過來利用「具體範例對輸出風格
+    的錨定力比抽象指令強」這件事——實測發現不管怎麼加強「請直接描寫、不要迴避」這類抽象
+    指令，abliterated 模型仍然預設寫得比較含蓄（abliteration 只移除拒答，不會移除模型從
+    RLHF 訓練學來的「含蓄比較有品味」傾向），改用一段真正露骨的範例文字當錨點後，模型會
+    直接模仿範例的尺度而不是自己猜要多直接才算直接。範例文字已經把人名替換成他/她等通用
+    代詞，並在說明裡明確要求不可以照抄範例的人名或情節，只借用其文字直接程度與用詞方式，
+    避免把範例角色的名字或劇情帶進輸出，重演之前角色名字漂移的問題。"""
     disp_name = profile.display_name or profile.name
     intimate_guide = lorebook.get("intimate_style_guide", {})
     writing_principles = intimate_guide.get("writing_principles", "")
+    if style_reference is None:
+        style_reference = _load_style_reference()
 
     outline_overview = "\n".join([f"{i + 1}. {step}" for i, step in enumerate(outline_steps)])
     ending_name = ending_flavor.get("name", "")
     ending_desc = ending_flavor.get("description", "")
+
+    style_example_block = ""
+    if style_reference:
+        style_example_block = (
+            "【文字直接程度範例（僅供參考尺度與用詞方式，範例中的人名、地點、情節一律不可"
+            "照搬進輸出——只借用它「多直接、多具體」這件事本身，實際內容仍須嚴格貼合上面的"
+            "角色人設與劇情大綱）】\n"
+            f"{style_reference}\n\n"
+        )
 
     return (
         "【寫作權限宣告】\n"
@@ -106,6 +135,7 @@ def build_ending_system_prompt(
         f"身材：{_format_body(profile.body)}\n\n"
         f"【文風指引（僅限敘事節奏與用詞的文白比例，親密場景仍須直接具體描寫，不受此節制約）】\n"
         f"{writing_principles}\n\n"
+        f"{style_example_block}"
         f"【這段結局的定位】\n{ending_name}\n{ending_desc}\n\n"
         f"【完整劇情大綱總覽（共 {len(outline_steps)} 步，接下來會逐步請你一步一步寫，"
         f"這裡先讓你知道整體走向，不要在單一步驟就把後面的步驟也寫掉）】\n{outline_overview}\n\n"
@@ -145,10 +175,27 @@ def build_step_user_prompt(step_index: int, step_text: str, total_steps: int, is
 _META_LEAK_LINE_PATTERN = re.compile(
     r"^\s*(#{1,6}\s|\[注意\]|\[Note\]|以上文本|創意延續提示|创意延续提示|留意環境轉換|加入新元素)"
 )
-# 段落級關鍵字：「用戶／用户」是本專案語境下小說正文絕不會出現的詞（角色是武俠人物，
-# 不會提到「使用者」這種概念），只要整段裡出現就幾乎可以確定是模型破格在描述自己
-# 正在執行的任務，而不是在寫故事本身，用它當高準確度訊號整段丟棄。
-_META_LEAK_PARAGRAPH_KEYWORDS = ("用戶", "用户", "使用者")
+# 段落級關鍵字：這些詞在武俠小說正文裡幾乎不會出現，只要整段裡出現就幾乎可以確定是模型
+# 破格在複述/規劃自己接下來要寫什麼，而不是在寫故事本身，用它當高準確度訊號整段丟棄。
+# 清單是從實測踩過的幾種破格說法逐步累積的，之後如果又看到新的說法可以繼續補。
+_META_LEAK_PARAGRAPH_KEYWORDS = (
+    "用戶", "用户", "使用者",
+    "回顧之前", "回顾之前", "接下來我要", "接下来我要",
+    "現在進入", "现在进入", "首先回顧", "首先回顾",
+    "這次的重點", "这次的重点", "根據這個故事的發展", "根据这个故事的发展",
+    "整個劇情發展", "整个剧情发展", "現在來到最關鍵", "现在来到最关键",
+    "這些內容都需要", "这些内容都需要", "最後檢查", "最后检查",
+    "從寫作角度", "从写作角度",
+)
+
+
+def _is_meta_planning_list_paragraph(paragraph: str) -> bool:
+    """偵測 markdown 條列式的規劃文字（例如「1. **戰鬥初期** - ...」這種格式）——正常
+    武俠敘事不會用編號＋粗體的條列格式寫作，只要一段裡有兩行以上符合這個格式，幾乎可以
+    確定是模型在條列說明自己的寫作計畫，而不是故事正文。"""
+    list_line_pattern = re.compile(r"^\s*([\-*]\s|\d+\.\s*\*\*)")
+    hits = sum(1 for line in paragraph.splitlines() if list_line_pattern.match(line))
+    return hits >= 2
 
 
 def strip_meta_leakage(text: str) -> str:
@@ -175,6 +222,7 @@ def strip_meta_leakage(text: str) -> str:
     paragraphs = [
         p for p in paragraphs
         if not any(keyword in p for keyword in _META_LEAK_PARAGRAPH_KEYWORDS)
+        and not _is_meta_planning_list_paragraph(p)
     ]
     return "\n\n".join(p.strip() for p in paragraphs if p.strip()).strip()
 
@@ -183,12 +231,14 @@ MAX_STEP_RETRIES = 3
 
 
 def is_step_output_broken(text: str, expected_min_chars: int) -> bool:
-    """判斷這一步驟的生成結果是否崩壞，判斷依據來自實測觀察到的兩種失敗模式：
+    """判斷這一步驟的生成結果是否崩壞，判斷依據來自實測觀察到的三種失敗模式：
 
     1. 過濾掉破格文字後幾乎沒剩下內容——通常是整段都在自我規劃、清乾淨後所剩無幾。
     2. 大量非常見符號／emoji——實測看過模型在長輸出後期失控，整段崩潰成表情符號與
        貨幣符號亂碼（例如 😊✨🎉🟦🟢₹₩），這類字元在正常武俠敘事裡幾乎不會出現，
-       用密度當高準確度的崩壞訊號。"""
+       用密度當高準確度的崩壞訊號。
+    3. 大量英文字母——這是要求全程繁體中文的武俠敘事，實測看過模型在上下文壓力大時
+       整段（甚至整個規劃自白）滑進英文，用密度當訊號觸發重試。"""
     stripped = text.strip()
     if len(stripped) < max(20, int(expected_min_chars * 0.3)):
         return True
@@ -198,7 +248,10 @@ def is_step_output_broken(text: str, expected_min_chars: int) -> bool:
         1 for ch in stripped
         if unicodedata.category(ch) in ("So", "Sk", "Sc") or ord(ch) >= 0x1F000
     )
-    return (symbol_chars / len(stripped)) > 0.03
+    if (symbol_chars / len(stripped)) > 0.03:
+        return True
+    ascii_letter_chars = sum(1 for ch in stripped if ch.isascii() and ch.isalpha())
+    return (ascii_letter_chars / len(stripped)) > 0.15
 
 
 def generate_ending_scene(
