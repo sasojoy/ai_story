@@ -73,3 +73,8 @@ def test_render_map_new_look(state, content):
 def test_label_flips_left_near_right_edge(state, content):
     content.locations["lake"].x = 390
     assert 'text-anchor="end"' in render_map(state, content)
+
+
+def test_legend_sits_at_the_bottom(state, content):
+    svg = render_map(state, content)
+    assert f'<rect x="8" y="{content.map.height - 50}"' in svg

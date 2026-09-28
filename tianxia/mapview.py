@@ -103,13 +103,13 @@ def _label(loc: Location, view: str) -> str:
     return f"{loc.name}？" if view == "outline" else ""
 
 
-def _legend(bg: str) -> str:
-    parts = [f'<rect x="8" y="6" width="400" height="46" rx="6" fill="{bg}" fill-opacity="0.9"/>']
+def _legend(bg: str, top: int) -> str:
+    parts = [f'<rect x="8" y="{top}" width="400" height="46" rx="6" fill="{bg}" fill-opacity="0.9"/>']
     for i, (view, text) in enumerate(LEGEND_STATES):
         x = 18 + i * 72
-        parts.append(f'<circle cx="{x}" cy="19" r="5" fill="{NODE_FILL[view]}"/>')
-        parts.append(f'<text x="{x + 9}" y="23" font-size="12" fill="#5F5E5A">{text}</text>')
-    parts.append(f'<text x="14" y="44" font-size="12" fill="#5F5E5A">{LEGEND_SYMBOLS}</text>')
+        parts.append(f'<circle cx="{x}" cy="{top + 13}" r="5" fill="{NODE_FILL[view]}"/>')
+        parts.append(f'<text x="{x + 9}" y="{top + 17}" font-size="12" fill="#5F5E5A">{text}</text>')
+    parts.append(f'<text x="14" y="{top + 38}" font-size="12" fill="#5F5E5A">{LEGEND_SYMBOLS}</text>')
     return "".join(parts)
 
 
@@ -170,6 +170,6 @@ def render_map(state: GameState, content: Content) -> str:
             x, anchor = loc.x - offset, "end"
         fill = TEXT_DARK if view in KNOWN else TEXT_MUTED
         out.append(_text(x, loc.y + 5, text, font, fill, bg, anchor, bold=view == "current"))
-    out.append(_legend(bg))
+    out.append(_legend(bg, m.height - 50))
     out.append("</svg>")
     return "".join(out)

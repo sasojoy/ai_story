@@ -1,6 +1,6 @@
 {
   "width": 680,
-  "height": 420,
+  "height": 470,
   "background": "#F6F1E4",
   "regions": [
     {"name": "江北", "points": [[0, 0], [680, 0], [680, 182], [510, 178], [340, 174], [170, 168], [0, 172]], "fill": "#EFE5CB", "text_fill": "#C9B98F", "label_x": 610, "label_y": 50},
