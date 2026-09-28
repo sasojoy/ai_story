@@ -83,7 +83,7 @@ def test_hidden_trend_cannot_use_lte_threshold(tmp_path):
 def test_unknown_field_rejected(tmp_path):
     root = copy_fixture(tmp_path)
     edit_json(root / "locations.json", lambda d: d[0].update(conection=["lake"]))
-    with pytest.raises(Exception, match="conection"):
+    with pytest.raises(ContentError, match="conection"):
         load_content(root)
 
 
@@ -153,6 +153,13 @@ def test_buff_effect_needs_stat(tmp_path):
     root = copy_fixture(tmp_path)
     edit_json(root / "skills.json", lambda d: d[3]["effects"][0].pop("stat"))
     with pytest.raises(ContentError, match="step"):
+        load_content(root)
+
+
+def test_skill_without_effects_names_the_skill(tmp_path):
+    root = copy_fixture(tmp_path)
+    edit_json(root / "skills.json", lambda d: d[0].update(effects=[]))
+    with pytest.raises(ContentError, match="fist"):
         load_content(root)
 
 

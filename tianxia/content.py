@@ -4,6 +4,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from pydantic import ValidationError
+
 from .models import (
     STATS, CharacterDef, Condition, Config, Content, Effect, Event, Location, MapLayout, Scenario,
     Sect, Skill, Squad, Tutorial,
@@ -19,7 +21,7 @@ def load_content(root: Path) -> Content:
     events: dict[str, Event] = {}
     for path in sorted((root / "events").glob("*.json")):
         for raw in _read(path):
-            event = Event(**raw)
+            event = _build(Event, raw)
             if event.id in events:
                 raise ContentError(f"事件 id 重複：{event.id}（{path.name}）")
             events[event.id] = event
@@ -43,10 +45,18 @@ def _read(path: Path):
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _build(model, raw: dict):
+    """建立一筆有 id 的內容；欄位錯誤時改報 ContentError，並指出是哪一筆。"""
+    try:
+        return model(**raw)
+    except ValidationError as e:
+        raise ContentError(f"{model.__name__} {raw.get('id', '?')}：{e}") from e
+
+
 def _index(model, items: list[dict]) -> dict:
     result = {}
     for raw in items:
-        obj = model(**raw)
+        obj = _build(model, raw)
         if obj.id in result:
             raise ContentError(f"{model.__name__} id 重複：{obj.id}")
         result[obj.id] = obj
