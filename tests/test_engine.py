@@ -318,6 +318,17 @@ def test_upgrade_and_dispel_with_xinde(game):
     assert p.skills["fist"] == 1 and p.stats["xinde"] == 88  # 返還 (20+40)×0.8＝48
 
 
+def test_innate_arts_can_be_upgraded_but_not_dispelled(game):
+    p = game.state.player
+    p.stats["xinde"] = 40
+    game.upgrade("skill:family")  # 本人的本命
+    game.upgrade("innate:mate")  # 同伴的本命
+    assert p.skills["family"] == 2 and p.members["mate"].innate_level == 2 and p.stats["xinde"] == 0
+    assert game.dispel("skill:family") == ["本命武學不能散功。"]
+    assert game.dispel("innate:mate") == ["本命武學不能散功。"]
+    assert p.skills["family"] == 2 and p.members["mate"].innate_level == 2 and p.stats["xinde"] == 0
+
+
 def test_upgrade_companion_innate(game):
     p = game.state.player
     p.stats["xinde"] = 20

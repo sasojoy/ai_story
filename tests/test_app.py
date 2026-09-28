@@ -87,6 +87,17 @@ def test_loadout_handler_moves_skill_between_members(tmp_path, monkeypatch):
     assert game.state.player.loadouts["player"] == [None, "changquan"]
 
 
+def test_loadout_handler_skips_when_no_skill_chosen_and_empty_choice_unequips(tmp_path, monkeypatch):
+    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
+    game = Game.new(app.CONTENT, "測試")
+    out = app.loadout_handler(game, "player", "1", None)  # 武學下拉還沒選任何東西
+    assert out == [gr.skip()] * app.N_OUTPUTS
+    assert game.state.player.loadouts["player"] == ["tuna", "changquan"]
+    assert not (tmp_path / "測試.json").exists()
+    app.loadout_handler(game, "player", "1", "")  # 選了「（空）」：卸下
+    assert game.state.player.loadouts["player"] == [None, "changquan"]
+
+
 def test_upgrade_and_dispel_handlers(tmp_path, monkeypatch):
     monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
     game = Game.new(app.CONTENT, "測試")

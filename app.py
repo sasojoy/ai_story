@@ -107,7 +107,8 @@ def seclude_handler(game, hours):
 
 
 def loadout_handler(game, member, slot, skill_id):
-    if not member:  # game 為 None 時 act() 會自己略過
+    # game 為 None 時 act() 會自己略過；武學下拉完全沒選（None）也略過，選「（空）」是空字串，代表卸下
+    if not member or skill_id is None:
         return [gr.skip()] * N_OUTPUTS
     return act(game, lambda g: g.set_loadout(member, int(slot) - 1, skill_id or None))
 

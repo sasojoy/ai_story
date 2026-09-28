@@ -221,10 +221,18 @@ def upgrade(state: GameState, content: Content, target: str) -> list[str]:
     return [f"【{name}】精進至第{level + 1}成（心得 −{cost}）。"]
 
 
+def _is_innate(content: Content, target: str) -> bool:
+    """本人的本命（skill:<player_innate>）或同伴的本命（innate:<key>）。"""
+    kind, _, ident = target.partition(":")
+    return kind == "innate" or (kind == "skill" and ident == content.config.player_innate)
+
+
 def dispel(state: GameState, content: Content, target: str) -> list[str]:
     info = _target_info(state, content, target)
     if info is None:
         return ["沒有這門武學。"]
+    if _is_innate(content, target):
+        return ["本命武學不能散功。"]
     name, level = info
     if level <= 1:
         return [f"【{name}】尚在第一成，無功可散。"]
