@@ -81,6 +81,7 @@ def new_game_state(content: Content, name: str) -> GameState:
         location=content.scenario.start_location,
         stats=dict(cfg.start_stats),
         stamina=float(cfg.stamina_max),
+        tutorial_step=0,
     )
     world = WorldState(
         trends={t.id: t.start for t in trends},

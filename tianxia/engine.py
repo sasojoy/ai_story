@@ -67,9 +67,15 @@ class Game:
             s.world.storyline, s.world.act = line_ids[0], 0
         acts = next(line for line in c.scenario.storylines if line.id == s.world.storyline).acts
         s.world.act = min(s.world.act, len(acts) - 1)
+        if "tutorial_step" not in p.model_fields_set:
+            # 舊存檔在新手引導功能上線前就存在，沒有這個欄位；視為引導已完成，不強塞新手引導。
+            p.tutorial_step = len(c.tutorial.steps)
         p.tutorial_step = min(p.tutorial_step, len(c.tutorial.steps))
         p.visited = {loc_id for loc_id in p.visited if loc_id in c.locations}
         p.visited.add(p.location)
+        for flag in s.world.flags:
+            if flag not in s.world.flag_times:
+                s.world.flag_times[flag] = s.world.time
 
     # ── 時間 ──────────────────────────────────────────────
 
@@ -304,8 +310,14 @@ class Game:
     def set_anonymous(self, value: bool) -> None:
         self.state.player.anonymous = bool(value)
 
+    def skip_tutorial(self) -> list[str]:
+        """設定裡的「略過新手引導」：直接跳到引導結束。"""
+        self.state.player.tutorial_step = len(self.content.tutorial.steps)
+        return self._log(["（已略過新手引導。）"])
+
     def view_map(self) -> list[str]:
-        """介面打開地圖時呼叫（新手引導會用到）。"""
+        """介面打開地圖時呼叫。不論新手引導是否還在「看地圖」那一步，都先記下玩家看過地圖。"""
+        self.state.player.flags.add("看過地圖")
         return self._log(note_action(self.state, self.content, "view_map"))
 
     def quest_text(self) -> str:
@@ -316,8 +328,10 @@ class Game:
 
     def new_season(self) -> list[str]:
         last_real = self.state.last_real
+        tutorial_step = self.state.player.tutorial_step
         self.state = Game.new(self.content, self.state.player.name, self.rng).state
         self.state.last_real = last_real
+        self.state.player.tutorial_step = tutorial_step
         return []
 
     def skill_choices(self, slot_type: str) -> list[tuple[str, str]]:

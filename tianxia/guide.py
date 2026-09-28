@@ -1,7 +1,7 @@
 """新手引導、個人目標與任務區塊：讓玩家知道這一季在發生什麼、下一步該做什麼。"""
 from __future__ import annotations
 
-from .models import Content
+from .models import Content, TutorialStep
 from .rules import apply_effect, check_condition
 from .state import GameState
 from .world import current_act, current_storyline
@@ -16,21 +16,29 @@ def tutorial_intro(content: Content) -> list[str]:
     return [f"【{t.speaker}】{t.steps[0].text}"] if t.steps else []
 
 
-def note_action(state: GameState, content: Content, action: str) -> list[str]:
-    """玩家做完一個行動後呼叫：符合目前引導步驟就推進一步並發獎勵。"""
-    if not tutorial_active(state, content):
-        return []
-    t = content.tutorial
-    step = t.steps[state.player.tutorial_step]
+def _step_done(state: GameState, content: Content, step: TutorialStep, action: str) -> bool:
     goal = step.done_when
     if goal.action and goal.action != action:
-        return []
+        return False
     if goal.locations and state.player.location not in goal.locations:
+        return False
+    return check_condition(goal.condition, state)
+
+
+def note_action(state: GameState, content: Content, action: str) -> list[str]:
+    """玩家做完一個行動後呼叫：符合目前引導步驟就推進一步並發獎勵，接著立刻檢查
+    下一步是否也已經達成（例如旗標早就成立），一路完成到不再符合為止。"""
+    t = content.tutorial
+    msgs: list[str] = []
+    while tutorial_active(state, content) and _step_done(
+        state, content, t.steps[state.player.tutorial_step], action
+    ):
+        step = t.steps[state.player.tutorial_step]
+        state.player.tutorial_step += 1
+        msgs.append("✔ 引導完成")
+        msgs += apply_effect(step.reward, state, content)
+    if not msgs:
         return []
-    if not check_condition(goal.condition, state):
-        return []
-    state.player.tutorial_step += 1
-    msgs = [f"✔ 引導完成：{step.text}"] + apply_effect(step.reward, state, content)
     if tutorial_active(state, content):
         msgs.append(f"【{t.speaker}】{t.steps[state.player.tutorial_step].text}")
     elif t.outro:
@@ -38,12 +46,19 @@ def note_action(state: GameState, content: Content, action: str) -> list[str]:
     return msgs
 
 
+def _idle(state: GameState) -> bool:
+    return (
+        not state.world.ended and state.battle is None and state.pending_event is None
+        and state.player.busy_until is None
+    )
+
+
 def next_hint(state: GameState, content: Content) -> str:
     if tutorial_active(state, content):
         t = content.tutorial
         return f"（{t.speaker}）{t.steps[state.player.tutorial_step].text}"
     hint = current_act(state, content).goal
-    if state.player.stamina >= content.config.stamina_max * 0.9:
+    if state.player.stamina >= content.config.stamina_max * 0.9 and _idle(state):
         hint += "　體力將滿，別讓它浪費。"
     return hint
 

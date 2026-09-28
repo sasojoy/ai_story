@@ -188,6 +188,55 @@ def test_stale_storyline_is_reset(content, game):
     assert (fresh.state.world.storyline, fresh.state.world.act) == ("main", 0)
 
 
+def test_new_game_starts_tutorial_at_step_zero(content):
+    from tianxia.engine import Game
+
+    fresh = Game.new(content, "新人")
+    assert fresh.state.player.tutorial_step == 0
+
+
+def test_old_save_missing_tutorial_step_finishes_tutorial(content, game):
+    from tianxia.engine import Game
+    from tianxia.state import GameState
+
+    dump = game.state.model_dump()
+    del dump["player"]["tutorial_step"]  # 模擬引導功能上線前存的舊檔
+    old_state = GameState.model_validate(dump)
+    fresh = Game(content, old_state)
+    assert fresh.state.player.tutorial_step == len(content.tutorial.steps)
+
+
+def test_skip_tutorial(game):
+    msgs = game.skip_tutorial()
+    assert game.state.player.tutorial_step == len(game.content.tutorial.steps)
+    assert msgs == ["（已略過新手引導。）"]
+    assert msgs[0] in game.state.log
+
+
+def test_new_season_keeps_finished_tutorial_state(game):
+    game.skip_tutorial()
+    game.advance(2 * 24 * HOUR)
+    game.choose("season:new")
+    assert game.state.player.tutorial_step == len(game.content.tutorial.steps)
+
+
+def test_new_season_keeps_unfinished_tutorial_state(game):
+    game.choose("act:explore")  # 引導推進到第 1 步，尚未完成
+    assert game.state.player.tutorial_step == 1
+    game.advance(2 * 24 * HOUR)
+    game.choose("season:new")
+    assert game.state.player.tutorial_step == 1
+
+
+def test_stale_world_flags_get_flag_time_backfilled(content, game):
+    from tianxia.engine import Game
+
+    game.state.world.time = 12345
+    game.state.world.flags.add("legacy_flag")  # 模擬舊存檔在 flag_times 出現前就有的旗標
+    fresh = Game(content, game.state)
+    assert fresh.state.world.flag_times["legacy_flag"] == 12345
+
+
 def test_tutorial_runs_through_engine(game):
     assert "【說書人】先探索一下。" in game.state.log
     game.choose("act:explore")
@@ -199,6 +248,19 @@ def test_tutorial_runs_through_engine(game):
     game.view_map()
     assert game.state.player.tutorial_step == 3
     assert "拜入門派" in game.quest_text()
+
+
+def test_view_map_always_sets_flag_even_when_not_current_step(game):
+    game.view_map()
+    game.view_map()
+    assert "看過地圖" in game.state.player.flags
+    assert game.state.player.tutorial_step == 0  # 引導還在第一步（探索），不是看地圖
+    game.choose("act:explore")
+    if game.state.pending_event:
+        game.choose(ids(game)[-1])
+    game.choose("move:lake")
+    # s2（去湖邊）完成的當下，因為旗標早就成立，s3（看地圖）也一併完成，不用再開一次地圖
+    assert game.state.player.tutorial_step == 3
 
 
 def test_visited_and_map(game):

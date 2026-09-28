@@ -40,3 +40,11 @@ def test_map_view_handler_advances_tutorial(tmp_path, monkeypatch):
     out = app.map_view_handler(game)
     assert len(out) == app.N_OUTPUTS
     assert game.state.player.tutorial_step == 2
+
+
+def test_skip_tutorial_handler_finishes_tutorial(tmp_path, monkeypatch):
+    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
+    game = Game.new(app.CONTENT, "測試")
+    out = app.skip_tutorial_handler(game)
+    assert len(out) == app.N_OUTPUTS
+    assert game.state.player.tutorial_step == len(app.CONTENT.tutorial.steps)

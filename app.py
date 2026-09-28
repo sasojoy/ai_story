@@ -123,6 +123,10 @@ def map_view_handler(game):
     return act(game, lambda g: g.view_map())
 
 
+def skip_tutorial_handler(game):
+    return act(game, lambda g: g.skip_tutorial())
+
+
 def tick_handler(game):
     return act(game, lambda g: None)
 
@@ -173,6 +177,7 @@ def build_demo() -> gr.Blocks:
                         seclude_btn = gr.Button("開始閉關")
                     with gr.Tab("設定"):
                         anon_cb = gr.Checkbox(label="匿名行走（江湖傳聞中不顯示名號）")
+                        skip_tutorial_btn = gr.Button("略過新手引導")
                         gr.Markdown("**測試用：時間快轉**")
                         with gr.Row():
                             ff_btns = {h: gr.Button(f"+{h} 小時") for h in (1, 8, 24)}
@@ -191,6 +196,7 @@ def build_demo() -> gr.Blocks:
             dd.input(make_equip_handler(slot), inputs=[game_state, dd], outputs=outputs)
         seclude_btn.click(seclude_handler, inputs=[game_state, seclude_dd, hours_sl], outputs=outputs)
         anon_cb.input(anonymous_handler, inputs=[game_state, anon_cb], outputs=outputs)
+        skip_tutorial_btn.click(skip_tutorial_handler, inputs=[game_state], outputs=outputs)
         map_tab.select(map_view_handler, inputs=[game_state], outputs=outputs)
         for hours, btn in ff_btns.items():
             btn.click(make_fast_forward_handler(hours), inputs=[game_state], outputs=outputs)
