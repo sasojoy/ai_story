@@ -156,6 +156,11 @@ def _outcome(side_a: list[Unit], side_b: list[Unit]) -> str | None:
     return None
 
 
+def _foes_beaten(u: Unit, units: list[Unit]) -> bool:
+    """對方隊長（或全員）已倒下：勝負已分，出手的人不再繼續。"""
+    return _lost([x for x in units if x.side != u.side])
+
+
 def _has(u: Unit, control: str) -> bool:
     return any(s.kind == "control" and s.control == control for s in u.statuses)
 
@@ -199,7 +204,7 @@ def _act(u: Unit, units: list[Unit], rng: random.Random, report: list[str], rule
         report.append(f"{u.name}穴道受制，動彈不得。")
         return
     _try_ultimate(u, units, rng, report, rules)
-    if not _enemies(u, units):
+    if _foes_beaten(u, units):
         return
     if _has(u, "卸兵"):
         report.append(f"{u.name}兵刃被卸，無法出招。")
@@ -207,7 +212,7 @@ def _act(u: Unit, units: list[Unit], rng: random.Random, report: list[str], rule
     target = _pick_target(u, units, rng, rules)
     _hit(u, target, 1.0, u.style, rng, report, rules, "普攻")
     for art in u.arts:
-        if art.kind == "連招" and _enemies(u, units) and rng.random() < art.chance:
+        if art.kind == "連招" and not _foes_beaten(u, units) and rng.random() < art.chance:
             report.append(f"【連招】{u.name}順勢使出{art.name}！")
             for eff in art.effects:
                 _apply(u, eff, art.style, units, rng, report, rules, main=target)
@@ -251,9 +256,9 @@ def _apply(u: Unit, eff: Eff, style: str, units, rng, report, rules, main: Unit 
         if eff.kind == "damage":
             _hit(u, t, eff.value, style, rng, report, rules, "招式")
         elif eff.kind == "heal":
-            amount = round(eff.value * t.hp_max)
-            t.hp = min(t.hp_max, t.hp + amount)
-            report.append(f"{t.name}回復 {amount} 點內力。")
+            before = t.hp
+            t.hp = min(t.hp_max, t.hp + round(eff.value * t.hp_max))
+            report.append(f"{t.name}回復 {round(t.hp - before)} 點內力。")
         elif eff.kind in ("buff", "debuff"):
             t.statuses.append(Status(eff.kind, eff.value, stat=eff.stat, rounds=rounds))
             word = "提升" if eff.kind == "buff" else "降低"

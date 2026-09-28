@@ -124,6 +124,39 @@ def test_heal_targets_lowest_ally():
     assert res.hp[1] > 100
 
 
+def test_heal_reports_amount_actually_restored():
+    heal = Art("回春", "絕招", chance=1.0, effects=[Eff("heal", 0.5, target="ally_lowest")])
+    healer = unit("醫", spd=10, hp=1000, arts=[heal])
+    hurt = unit("傷", hp=900, hp_max=1000)
+    res = run_battle([healer, hurt], [unit("敵", hp=99999, atk=1, spd=1)], random.Random(0), Rules(max_rounds=1))
+    assert res.hp[1] == 1000
+    assert "傷回復 100 點內力。" in res.report  # 上限只差 100，不是 0.5 × 1000
+
+
+def _enemy_leader_and_guard():
+    return [unit("乙", hp=100, spd=1, leader=True), unit("丙", hp=99999, spd=1)]
+
+
+def test_turn_ends_when_ultimate_fells_enemy_leader():
+    ult = Art("開碑手", "絕招", chance=1.0, effects=[Eff("damage", 5.0)])
+    combo = Art("連環腿", "連招", chance=1.0, effects=[Eff("damage", 1.0)])
+    a = unit("甲", atk=50, spd=10, hp=99999, arts=[ult, combo])
+    res = run_battle([a], _enemy_leader_and_guard(), FixedRandom(0.0), Rules())
+    assert res.outcome == "win"
+    fell = next(i for i, line in enumerate(res.report) if line.endswith("乙倒下了！"))
+    assert res.report[fell + 1:] == ["乙倒下，敵方敗退。"]  # 不再普攻丙，也不接連招
+
+
+def test_turn_ends_when_normal_attack_fells_enemy_leader():
+    combo = Art("連環腿", "連招", chance=1.0, effects=[Eff("damage", 1.0)])
+    a = unit("甲", atk=50, spd=10, hp=99999, arts=[combo])
+    res = run_battle([a], _enemy_leader_and_guard(), FixedRandom(0.0), Rules())
+    assert res.outcome == "win"
+    fell = next(i for i, line in enumerate(res.report) if line.endswith("乙倒下了！"))
+    assert "的普攻命中乙" in res.report[fell]
+    assert res.report[fell + 1:] == ["乙倒下，敵方敗退。"]
+
+
 def test_damage_scales_with_remaining_pool():
     rules = Rules()
     target = unit("乙", dfn=0)
