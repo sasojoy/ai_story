@@ -66,6 +66,13 @@
     {"id": "fjl_takes_treasure", "condition": {"flag_age_hours": {"cave_open": 48}, "world_flags_none": ["treasure_taken"]},
      "text": "翻江龍率眾闖入藏龍洞，前朝寶藏落入水寨之手！", "world_flags_add": ["treasure_lost"]}
   ],
+  "milestones": [
+    {"id": "join_sect", "text": "拜入棲霞劍派或玄鐵門", "condition": {"sects": ["qixia", "xuantie"]}},
+    {"id": "fame_10", "text": "名望達到 10", "condition": {"min_stats": {"fame": 10}}},
+    {"id": "beat_fjl", "text": "擊敗翻江龍", "condition": {"world_flags_all": ["fjl_defeated"]}},
+    {"id": "take_treasure", "text": "取得前朝寶藏", "condition": {"world_flags_all": ["treasure_taken"]}},
+    {"id": "crush_kou", "text": "平定太湖（寇亂 10 以下）", "condition": {"world_flags_all": ["kou_crushed"]}}
+  ],
   "endings": [
     {"id": "kou_win", "title": "水寇稱霸", "hint": "寇亂達到 80，鎮江陷落。",
      "text": "鎮江陷落，翻江龍坐擁運河。江南的商旅從此要向水寨納貢，而這一季的俠客們，只能在酒館裡嘆息。",

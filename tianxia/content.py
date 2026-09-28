@@ -6,6 +6,7 @@ from pathlib import Path
 
 from .models import (
     STATS, Condition, Config, Content, Effect, Enemy, Event, Location, MapLayout, Scenario, Sect, Skill,
+    Tutorial,
 )
 
 
@@ -31,6 +32,7 @@ def load_content(root: Path) -> Content:
         enemies=_index(Enemy, _read(root / "enemies.json")),
         events=events,
         map=MapLayout(**_read(root / "map.json")),
+        tutorial=Tutorial(**_read(root / "tutorial.json")),
     )
     validate(content)
     return content
@@ -175,6 +177,14 @@ def validate(c: Content) -> None:
         last is not None and last.condition == Condition() and last.storyline is None,
         "劇本的最後一個結局必須沒有條件、也不限主線（作為保底結局）",
     )
+
+    for milestone in c.scenario.milestones:
+        check_condition(f"個人目標 {milestone.id}", milestone.condition)
+    for step in c.tutorial.steps:
+        where = f"新手引導 {step.id}"
+        known(where, step.done_when.locations, c.locations, "地點")
+        check_condition(where, step.done_when.condition)
+        check_effect(where, step.reward)
 
     if errors:
         raise ContentError("內容檔有誤：\n" + "\n".join(errors))

@@ -186,3 +186,16 @@ def test_stale_storyline_is_reset(content, game):
     game.state.world.act = 5
     fresh = Game(content, game.state)
     assert (fresh.state.world.storyline, fresh.state.world.act) == ("main", 0)
+
+
+def test_tutorial_runs_through_engine(game):
+    assert "【說書人】先探索一下。" in game.state.log
+    game.choose("act:explore")
+    assert game.state.player.tutorial_step == 1
+    if game.state.pending_event:
+        game.choose(ids(game)[-1])  # 先把探索遇到的事件處理掉
+    game.choose("move:lake")
+    assert game.state.player.tutorial_step == 2
+    game.view_map()
+    assert game.state.player.tutorial_step == 3
+    assert "拜入門派" in game.quest_text()

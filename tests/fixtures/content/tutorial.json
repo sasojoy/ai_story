@@ -1,0 +1,9 @@
+{
+  "speaker": "說書人",
+  "steps": [
+    {"id": "s1", "text": "先探索一下。", "done_when": {"action": "explore"}, "reward": {"stats": {"silver": 5}}},
+    {"id": "s2", "text": "去湖邊。", "done_when": {"action": "move", "locations": ["lake"]}},
+    {"id": "s3", "text": "看看地圖。", "done_when": {"action": "view_map"}}
+  ],
+  "outro": "去闖吧。"
+}

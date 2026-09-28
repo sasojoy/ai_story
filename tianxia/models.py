@@ -209,6 +209,33 @@ class Storyline(_Strict):
     replaces_when: Condition | None = None  # 支線主線：條件成立時取代主線
 
 
+class Milestone(_Strict):
+    id: str
+    text: str
+    condition: Condition
+
+
+class TutorialGoal(_Strict):
+    """三項都要符合才算完成；空的欄位不檢查。"""
+
+    action: Literal["explore", "train", "socialize", "move", "view_map"] | None = None
+    locations: list[str] = Field(default_factory=list)
+    condition: Condition = Field(default_factory=Condition)
+
+
+class TutorialStep(_Strict):
+    id: str
+    text: str
+    done_when: TutorialGoal
+    reward: Effect = Field(default_factory=Effect)
+
+
+class Tutorial(_Strict):
+    speaker: str = "老說書人"
+    steps: list[TutorialStep] = Field(default_factory=list)
+    outro: str = ""
+
+
 class Scenario(_Strict):
     id: str
     name: str
@@ -220,6 +247,7 @@ class Scenario(_Strict):
     world_events: list[WorldEvent] = Field(default_factory=list)
     storylines: list[Storyline] = Field(min_length=1)
     endings: list[Ending]
+    milestones: list[Milestone] = Field(default_factory=list)
 
 
 class Config(_Strict):
@@ -261,3 +289,4 @@ class Content(_Strict):
     sects: dict[str, Sect]
     enemies: dict[str, Enemy]
     map: MapLayout
+    tutorial: Tutorial

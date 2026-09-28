@@ -27,6 +27,7 @@ class PlayerState(BaseModel):
     busy_until: float | None = None  # 閉關結束的遊戲時間
     seclusion_start: float = 0.0
     seclusion_skill: str | None = None
+    tutorial_step: int = 0  # 等於引導步數時代表引導結束
 
 
 class Rumor(BaseModel):

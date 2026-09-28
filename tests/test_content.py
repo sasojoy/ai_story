@@ -126,3 +126,10 @@ def test_ending_with_unknown_storyline_rejected(tmp_path):
     edit_json(root / "scenario.json", lambda d: d["endings"][0].update(storyline="nope"))
     with pytest.raises(ContentError, match="nope"):
         load_content(root)
+
+
+def test_tutorial_unknown_location_rejected(tmp_path):
+    root = copy_fixture(tmp_path)
+    edit_json(root / "tutorial.json", lambda d: d["steps"][1]["done_when"].update(locations=["mars"]))
+    with pytest.raises(ContentError, match="mars"):
+        load_content(root)

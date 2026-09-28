@@ -9,6 +9,7 @@ from .combat import (
     TACTICS, auto_battle, battle_round, battle_status, enemy_fighter, player_fighter, start_battle,
 )
 from .events import choice_label, has_events_here, pick_event, visible_choices
+from .guide import note_action, quest_text, tutorial_intro
 from .models import Content, Effect, Event
 from .rules import add_skill_exp, apply_effect, change_trend, learn_skill, roll_check
 from .state import EQUIP_SLOTS, GameState, Rumor, new_game_state
@@ -36,7 +37,10 @@ class Game:
         game = cls(content, new_game_state(content, name), rng)
         for skill_id in content.config.starter_skills:
             learn_skill(game.state, content, skill_id)
-        game._log([f"══ {content.scenario.name} ══", content.scenario.intro, game.location_text()])
+        game._log(
+            [f"══ {content.scenario.name} ══", content.scenario.intro, game.location_text()]
+            + tutorial_intro(content)
+        )
         return game
 
     def _drop_stale_references(self) -> None:
@@ -61,6 +65,7 @@ class Game:
             s.world.storyline, s.world.act = line_ids[0], 0
         acts = next(line for line in c.scenario.storylines if line.id == s.world.storyline).acts
         s.world.act = min(s.world.act, len(acts) - 1)
+        p.tutorial_step = min(p.tutorial_step, len(c.tutorial.steps))
 
     # ── 時間 ──────────────────────────────────────────────
 
@@ -149,6 +154,10 @@ class Game:
             msgs = self._tactic(arg)
         else:
             msgs = self.new_season()
+        if kind == "act" and arg != "break":
+            msgs += note_action(self.state, self.content, arg)
+        elif kind == "move":
+            msgs += note_action(self.state, self.content, "move")
         msgs += check_thresholds(self.state, self.content)
         return self._log(msgs)
 
@@ -289,6 +298,13 @@ class Game:
 
     def set_anonymous(self, value: bool) -> None:
         self.state.player.anonymous = bool(value)
+
+    def view_map(self) -> list[str]:
+        """介面打開地圖時呼叫（新手引導會用到）。"""
+        return self._log(note_action(self.state, self.content, "view_map"))
+
+    def quest_text(self) -> str:
+        return quest_text(self.state, self.content)
 
     def new_season(self) -> list[str]:
         last_real = self.state.last_real

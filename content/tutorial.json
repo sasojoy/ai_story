@@ -1,0 +1,19 @@
+{
+  "speaker": "老說書人",
+  "steps": [
+    {"id": "t1_explore", "text": "少俠初到揚州？先在城裡「探索」一番，江湖上的事，往往就藏在街頭巷尾。",
+     "done_when": {"action": "explore"}, "reward": {"stats": {"silver": 10}}},
+    {"id": "t2_map", "text": "點開右邊的「地圖」分頁看看。亮的是你看得見、去過的地方，灰的是還沒摸清的江湖。",
+     "done_when": {"action": "view_map"}, "reward": {"stamina": 10}},
+    {"id": "t3_outskirts", "text": "出城往揚州城郊走走，那裡常有地痞山賊，正好練練身手。",
+     "done_when": {"action": "move", "locations": ["yangzhou_jiao"]}},
+    {"id": "t4_train", "text": "在城郊「歷練」一回。打贏了，拳腳會精進，也能賺些盤纏。",
+     "done_when": {"action": "train"}, "reward": {"stats": {"silver": 10}}},
+    {"id": "t5_kou", "text": "太湖水寇越鬧越凶。城郊往東就是高郵湖，去那裡歷練，就是在替江南壓下寇亂。",
+     "done_when": {"action": "train", "locations": ["gaoyou", "guazhou", "taihu_north", "taihu_isle"]},
+     "reward": {"stats": {"silver": 20, "fame": 1}}},
+    {"id": "t6_sect", "text": "江湖上有門有派好辦事。棲霞劍派在金陵東北的棲霞山，玄鐵門在無錫城外，去看看合不合你的脾氣。",
+     "done_when": {"action": "move", "locations": ["qixia_sect", "xuantie"]}, "reward": {"stats": {"fame": 1}}}
+  ],
+  "outro": "老夫能說的都說了。上面的「主線」會告訴你江南正在發生什麼，接下來的江湖，就看你自己了。"
+}
