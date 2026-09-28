@@ -67,3 +67,42 @@ def test_tick_never_switches_main_tabs(tmp_path, monkeypatch):
     game.choose("act:explore")
     out = app.tick_handler(game)
     assert out[app.MAIN_TABS_INDEX] == gr.update()
+
+
+def test_render_includes_team_skills_and_report():
+    game = Game.new(app.CONTENT, "測試")
+    out = app.render(game)
+    assert "（隊長）" in out[app.TEAM_INDEX]
+    assert "家傳劍法" in out[app.TEAM_INDEX + 1] and "吐納法" in out[app.TEAM_INDEX + 1]
+    assert out[app.REPORT_INDEX] == "（還沒有戰報。）"
+
+
+def test_loadout_handler_moves_skill_between_members(tmp_path, monkeypatch):
+    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
+    game = Game.new(app.CONTENT, "測試")
+    assert game.state.player.loadouts["player"] == ["tuna", "changquan"]
+    out = app.loadout_handler(game, "hantie", "1", "tuna")
+    assert len(out) == app.N_OUTPUTS
+    assert game.state.player.loadouts["hantie"][0] == "tuna"
+    assert game.state.player.loadouts["player"] == [None, "changquan"]
+
+
+def test_upgrade_and_dispel_handlers(tmp_path, monkeypatch):
+    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
+    game = Game.new(app.CONTENT, "測試")
+    game.state.player.stats["xinde"] = 100
+    app.upgrade_handler(game, "skill:tuna")
+    assert game.state.player.skills["tuna"] == 2
+    app.dispel_handler(game, "skill:tuna")
+    assert game.state.player.skills["tuna"] == 1
+
+
+def test_incompatible_old_save_is_backed_up(tmp_path, monkeypatch):
+    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
+    (tmp_path / "測試.json").write_text("{}", encoding="utf-8")
+    out = app.start("測試")
+    game = out[0]
+    assert game.state.player.name == "測試"
+    backups = list((tmp_path / "backup").glob("測試-*.json"))
+    assert len(backups) == 1 and backups[0].read_text(encoding="utf-8") == "{}"
+    assert any("已備份" in line for line in game.state.log)

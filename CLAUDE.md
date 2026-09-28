@@ -6,6 +6,8 @@
 - `tianxia/`：純 Python 規則引擎，**不得 import gradio**。`engine.Game` 是唯一對外門面。
 - `content/`：所有遊戲內容（JSON），載入時由 `tianxia/content.py::validate` 交叉檢查。
 - `app.py`：Gradio 介面，只負責顯示與接線。
+- `tianxia/battle.py`：三對三全自動戰鬥引擎，只處理數字（不 import 內容模型）。
+- `tianxia/team.py`：門下、內力、心得升級與散功、武學配置；把人物與武學轉成戰鬥單位。
 
 ## 原則
 - 數值全部由規則引擎決定，執行時不接 LLM。

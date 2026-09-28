@@ -320,6 +320,10 @@ class Game:
     def report_text(self) -> str:
         return "\n\n".join(self.state.last_report) or "（還沒有戰報。）"
 
+    def notice(self, text: str) -> list[str]:
+        """介面層要告訴玩家的系統訊息（例如舊存檔已備份）。"""
+        return self._log([text])
+
     def set_anonymous(self, value: bool) -> None:
         self.state.player.anonymous = bool(value)
 
