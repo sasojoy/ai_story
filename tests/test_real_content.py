@@ -69,3 +69,27 @@ def test_bao_line_advances_to_aftermath_act_after_treasure_taken():
     w.flags.add("treasure_taken")
     check_thresholds(game.state, content)
     assert current_act(game.state, content).id == "bao_4"
+
+
+def test_peace_treasure_ending_reachable_on_bao_line():
+    from tianxia.engine import Game
+    from tianxia.world import evaluate_ending
+
+    content = load_content(CONTENT_DIR)
+    game = Game.new(content, "測試俠客", rng=random.Random(0))
+    w = game.state.world
+    w.storyline = "bao_line"
+    w.flags.update({"kou_crushed", "treasure_taken"})
+    assert evaluate_ending(game.state, content).id == "peace_treasure"
+
+
+def test_peace_ending_on_kou_line_with_only_kou_crushed():
+    from tianxia.engine import Game
+    from tianxia.world import evaluate_ending
+
+    content = load_content(CONTENT_DIR)
+    game = Game.new(content, "測試俠客", rng=random.Random(0))
+    w = game.state.world
+    w.storyline = "kou_line"
+    w.flags.add("kou_crushed")
+    assert evaluate_ending(game.state, content).id == "peace"

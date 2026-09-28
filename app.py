@@ -22,9 +22,10 @@ CONTENT = load_content(ROOT / "content")
 SAVE_DIR = ROOT / "saves"
 MAX_BUTTONS = 10
 LOG_LINES = 40
-# game_state、任務區塊、狀態文字、場景文字、紀錄、地圖、大勢、傳聞、江湖史、選項 id 清單、匿名勾選框，
-# 再加上按鈕（MAX_BUTTONS）、武學欄位下拉（EQUIP_SLOTS）、閉關武學下拉。
-N_OUTPUTS = 11 + MAX_BUTTONS + len(EQUIP_SLOTS) + 1
+# game_state、任務區塊、狀態文字、場景文字、紀錄、地圖、大勢、傳聞、江湖史、選項 id 清單、匿名勾選框、
+# 左欄「場景／地圖」分頁，再加上按鈕（MAX_BUTTONS）、武學欄位下拉（EQUIP_SLOTS）、閉關武學下拉。
+MAIN_TABS_INDEX = 11
+N_OUTPUTS = 12 + MAX_BUTTONS + len(EQUIP_SLOTS) + 1
 
 ACT_LOCK = threading.Lock()
 
@@ -42,7 +43,7 @@ def save_path(name: str) -> Path:
     return SAVE_DIR / (re.sub(r'[\\/:*?"<>|]', "_", name) + ".json")
 
 
-def render(game: Game) -> list:
+def render(game: Game, focus_scene: bool = False) -> list:
     """回傳順序必須和 build_demo() 裡的 outputs 一致。"""
     options = game.options()[:MAX_BUTTONS]
     buttons = []
@@ -69,10 +70,17 @@ def render(game: Game) -> list:
         game.chronicle_text(),
         [o.id for o in options],
         p.anonymous,
+        gr.update(selected="scene") if focus_scene else gr.update(),
         *buttons,
         *equips,
         gr.update(choices=learned),
     ]
+
+
+def _scene_key(game: Game) -> tuple:
+    """目前需要玩家讀場景的東西：待處理事件或進行中的戰鬥。"""
+    s = game.state
+    return (s.pending_event, s.battle.enemy_id if s.battle else None)
 
 
 def act(game: Game | None, action) -> list:
@@ -81,9 +89,11 @@ def act(game: Game | None, action) -> list:
         return [gr.skip()] * N_OUTPUTS
     with ACT_LOCK:
         game.sync(time.time())
+        before = _scene_key(game)
         action(game)
         save_game(game.state, save_path(game.state.player.name))
-        return render(game)
+        after = _scene_key(game)
+        return render(game, focus_scene=after != (None, None) and after != before)
 
 
 def make_option_handler(index: int):
@@ -150,18 +160,20 @@ def build_demo() -> gr.Blocks:
             start_btn = gr.Button("踏入江湖", variant="primary")
         with gr.Row(visible=False) as game_row:
             with gr.Column(scale=3):
-                quest_md = gr.Markdown()
-                gr.Markdown("---")
-                scene_md = gr.Markdown()
+                with gr.Tabs(selected="scene") as main_tabs:
+                    with gr.Tab("場景", id="scene"):
+                        scene_md = gr.Markdown()
+                    with gr.Tab("地圖", id="map") as map_tab:
+                        map_html = gr.HTML()
                 option_btns = [gr.Button(visible=False) for _ in range(MAX_BUTTONS)]
                 gr.Markdown("---")
                 log_md = gr.Markdown()
             with gr.Column(scale=2):
+                with gr.Accordion("主線與目標", open=True):
+                    quest_md = gr.Markdown()
                 status_md = gr.Markdown()
-                with gr.Tabs(selected="trends"):
-                    with gr.Tab("地圖", id="map") as map_tab:
-                        map_html = gr.HTML()
-                    with gr.Tab("江湖大勢", id="trends"):
+                with gr.Tabs():
+                    with gr.Tab("江湖大勢"):
                         trends_md = gr.Markdown()
                     with gr.Tab("江湖傳聞"):
                         rumors_md = gr.Markdown()
@@ -184,7 +196,7 @@ def build_demo() -> gr.Blocks:
 
         outputs = [
             game_state, quest_md, status_md, scene_md, log_md, map_html, trends_md, rumors_md, chronicle_md,
-            ids_state, anon_cb, *option_btns, *equip_dds, seclude_dd,
+            ids_state, anon_cb, main_tabs, *option_btns, *equip_dds, seclude_dd,
         ]
         assert len(outputs) == N_OUTPUTS
 

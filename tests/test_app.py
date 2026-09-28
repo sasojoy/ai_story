@@ -1,3 +1,5 @@
+import gradio as gr
+
 import app
 from tianxia.engine import Game
 
@@ -48,3 +50,20 @@ def test_skip_tutorial_handler_finishes_tutorial(tmp_path, monkeypatch):
     out = app.skip_tutorial_handler(game)
     assert len(out) == app.N_OUTPUTS
     assert game.state.player.tutorial_step == len(app.CONTENT.tutorial.steps)
+
+
+def test_new_event_switches_main_tabs_to_scene(tmp_path, monkeypatch):
+    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
+    game = Game.new(app.CONTENT, "測試")
+    ids = [o.id for o in game.options()]
+    out = app.make_option_handler(ids.index("act:explore"))(game, ids)
+    assert game.state.pending_event is not None  # 揚州城探索必定遇到城鎮事件
+    assert out[app.MAIN_TABS_INDEX] == gr.update(selected="scene")
+
+
+def test_tick_never_switches_main_tabs(tmp_path, monkeypatch):
+    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
+    game = Game.new(app.CONTENT, "測試")
+    game.choose("act:explore")
+    out = app.tick_handler(game)
+    assert out[app.MAIN_TABS_INDEX] == gr.update()

@@ -176,9 +176,25 @@ class MapLabel(_Strict):
     y: int
 
 
+HEX_COLOR = r"^#[0-9A-Fa-f]{6}$"
+
+
+class MapRegion(_Strict):
+    """地圖上的一塊區域（例如江北、金陵一帶），以多邊形著色。"""
+
+    name: str
+    points: list[list[int]]
+    fill: str = Field(pattern=HEX_COLOR)
+    text_fill: str = Field(pattern=HEX_COLOR)
+    label_x: int
+    label_y: int
+
+
 class MapLayout(_Strict):
     width: int = 680
     height: int = 420
+    background: str = Field(default="#F6F1E4", pattern=HEX_COLOR)
+    regions: list[MapRegion] = Field(default_factory=list)
     rivers: list[list[list[int]]] = Field(default_factory=list)  # 每條河是一串 [x, y] 點
     labels: list[MapLabel] = Field(default_factory=list)
 

@@ -1,4 +1,6 @@
-from tianxia.mapview import location_view, render_map, vision_range, visible_locations
+from tianxia.mapview import (
+    location_view, node_shape, render_map, text_width, vision_range, visible_locations,
+)
 
 
 def test_vision_range_grows_with_fame(state, content):
@@ -44,3 +46,30 @@ def test_render_map(state, content):
     content.config.vision_base = 0
     content.locations["lake"].important = True
     assert "湖邊？" in render_map(state, content)
+
+
+def test_node_shapes_follow_tags(content):
+    assert node_shape(content.locations["town"]) == "town"
+    assert node_shape(content.locations["lake"]) == "wild"
+    content.locations["lake"].tags.append("門派")
+    assert node_shape(content.locations["lake"]) == "sect"
+
+
+def test_text_width():
+    assert text_width("湖邊", 10) == 20
+    assert text_width("ab", 10) == 12
+
+
+def test_render_map_new_look(state, content):
+    svg = render_map(state, content)
+    assert 'fill="#F6F1E4"' in svg  # 固定淺色底
+    assert "測試北區" in svg and 'fill="#EFE5CB"' in svg  # 區域
+    assert 'stroke="#BA7517"' in svg  # 湖邊危險 2 → 橙色外圈
+    assert "湖邊 ⚔" in svg and "★" not in svg
+    assert "paint-order:stroke" in svg
+    assert "<rect" in svg  # 小鎮（城鎮）畫成方塊
+
+
+def test_label_flips_left_near_right_edge(state, content):
+    content.locations["lake"].x = 390
+    assert 'text-anchor="end"' in render_map(state, content)
