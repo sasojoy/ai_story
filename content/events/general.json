@@ -19,7 +19,7 @@
     {"text": "悄悄退出，回報官府", "effect": {"text": "官兵連夜查抄倉庫，水寇在城裡的據點被拔了一個。", "stats": {"good": 3, "silver": 20}, "trend": {"kou": -3}}},
     {"text": "等他們走後，向醉漢敲一筆封口費", "effect": {"text": "醉漢哭喪著臉，把一袋碎銀塞給你。", "stats": {"silver": 40, "evil": 2}}},
     {"text": "拔劍闖進去", "combat": "shuikou",
-     "effect": {"text": "你一人一劍，殺得水寇四散奔逃！", "stats": {"fame": 3, "good": 2}, "trend": {"kou": -5}, "rumor": "{name}單槍匹馬挑了水寇在城裡的私鹽倉。"},
+     "effect": {"text": "你率眾闖進倉庫，殺得水寇四散奔逃！", "stats": {"fame": 3, "good": 2}, "trend": {"kou": -5}, "rumor": "{name}率眾挑了水寇在城裡的私鹽倉。"},
      "fail_effect": {"text": "寡不敵眾，你帶傷殺出重圍。", "stamina": -20}}
   ]},
   {"id": "herb", "title": "紫靈芝", "tags": ["山林"],
