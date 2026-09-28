@@ -29,6 +29,7 @@ class Game:
         self.content = content
         self.state = state
         self.rng = rng or random.Random()
+        self._drop_stale_references()
 
     @classmethod
     def new(cls, content: Content, name: str, rng: random.Random | None = None) -> Game:
@@ -37,6 +38,22 @@ class Game:
             learn_skill(game.state, content, skill_id)
         game._log([f"══ {content.scenario.name} ══", content.scenario.intro, game.location_text()])
         return game
+
+    def _drop_stale_references(self) -> None:
+        """內容檔改版後，舊存檔可能引用已刪除的事件、地點或武學；丟掉這些引用以免當機。"""
+        s, c = self.state, self.content
+        p = s.player
+        if s.pending_event and s.pending_event not in c.events:
+            s.pending_event = None
+        if s.battle and (s.battle.enemy_id not in c.enemies or s.battle.event_id not in c.events):
+            s.battle = None
+        if p.location not in c.locations:
+            p.location = c.scenario.start_location
+        p.skills = {k: v for k, v in p.skills.items() if k in c.skills}
+        p.equipped = [sid if sid in p.skills else None for sid in p.equipped]
+        if p.seclusion_skill and p.seclusion_skill not in p.skills:
+            p.busy_until = None
+            p.seclusion_skill = None
 
     # ── 時間 ──────────────────────────────────────────────
 
