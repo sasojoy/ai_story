@@ -55,3 +55,17 @@ def test_treasure_storyline_can_be_lost_to_fanjianglong():
     assert w.storyline == "bao_line" and "cave_open" in w.flags
     game.advance(49 * 3600)
     assert "treasure_lost" in w.flags
+
+
+def test_bao_line_advances_to_aftermath_act_after_treasure_taken():
+    from tianxia.engine import Game
+    from tianxia.world import check_thresholds, current_act
+
+    content = load_content(CONTENT_DIR)
+    game = Game.new(content, "測試俠客", rng=random.Random(0))
+    w = game.state.world
+    w.storyline = "bao_line"
+    w.act = 2  # bao_3「藏龍洞」
+    w.flags.add("treasure_taken")
+    check_thresholds(game.state, content)
+    assert current_act(game.state, content).id == "bao_4"

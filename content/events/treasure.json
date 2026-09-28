@@ -43,7 +43,7 @@
   {"id": "bao_guardian", "title": "藏龍洞守墓人", "locations": ["canglong"], "condition": {"world_flags_none": ["treasure_taken", "treasure_lost"]},
    "text": "藏龍洞深處，一位白髮老人盤坐在石門前，緩緩睜開眼：「四十年了，終於有人找到這裡。想要寶藏，先過我這一關。」",
    "choices": [
-    {"text": "出手", "combat": "shoumu",
+    {"text": "出手", "combat": "shoumu", "condition": {"world_flags_none": ["treasure_lost"]},
      "effect": {"text": "老人長嘆一聲，讓開了石門。門後金光耀眼，還有一卷寫著「混元一氣」的絹冊。", "stats": {"silver": 500, "fame": 15}, "learn_skills": ["hunyuan"], "world_flags_add": ["treasure_taken"],
       "rumor": "藏龍洞中傳出巨響，前朝寶藏被{name}取走了！", "chronicle": "{name}擊敗藏龍洞守墓人，取得前朝寶藏與失傳內功「混元一氣」。"},
      "fail_effect": {"text": "老人一掌將你推出洞外：「再練十年吧。」", "stamina": -30}},
