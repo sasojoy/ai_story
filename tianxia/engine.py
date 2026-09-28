@@ -18,6 +18,7 @@ from .world import check_thresholds, end_season, sim_tick
 
 HOUR = 3600
 DAY = 86400
+LOG_BREAK = "\x1e"  # 紀錄中每次行動結束的分隔標記（不顯示）
 
 
 class Option(BaseModel):
@@ -402,9 +403,27 @@ class Game:
     def chronicle_text(self) -> str:
         return _timeline(self.state.world.chronicle) or "（江湖史尚無記載。）"
 
+    def log_text(self, limit: int = 15) -> str:
+        """最新的行動排在最上面；同一次行動內的文字維持原本順序。"""
+        groups: list[list[str]] = []
+        current: list[str] = []
+        for line in self.state.log:
+            if line == LOG_BREAK:
+                if current:
+                    groups.append(current)
+                    current = []
+            else:
+                current.append(line)
+        if current:
+            groups.append(current)
+        return "\n\n---\n\n".join("\n\n".join(group) for group in reversed(groups[-limit:]))
+
     def _log(self, msgs: list[str]) -> list[str]:
+        if not msgs:
+            return msgs
         log = self.state.log
         log.extend(msgs)
+        log.append(LOG_BREAK)
         overflow = len(log) - self.content.config.max_log
         if overflow > 0:
             del log[:overflow]

@@ -268,3 +268,32 @@ def test_visited_and_map(game):
     game.choose("move:lake")
     assert game.state.player.visited == {"town", "lake"}
     assert "<svg" in game.map_svg()
+
+
+def test_log_text_shows_newest_action_first(game):
+    from tianxia.engine import LOG_BREAK
+
+    game.choose("move:lake")
+    game.choose("act:train")
+    text = game.log_text()
+    assert text.index("你在湖邊與") < text.index("【湖邊】")  # 最新的行動在最上面
+    assert text.index("【湖邊】") < text.index("測試開始。")  # 開場紀錄在最下面
+    marks = game.state.log.count(LOG_BREAK)
+    game.advance(0)  # 沒有訊息的呼叫不產生空的一組
+    assert game.state.log.count(LOG_BREAK) == marks
+
+
+def test_log_text_keeps_order_within_an_action(game):
+    game.choose("act:explore")
+    text = game.log_text()
+    assert text.startswith("【醉漢】")
+    assert text.index("【醉漢】") < text.index("一名醉漢撞上了你。")
+
+
+def test_log_text_limits_groups_and_handles_old_saves(game):
+    game.state.log = ["舊紀錄一", "舊紀錄二"]  # 舊存檔沒有分隔標記：整段當成一組
+    assert game.log_text() == "舊紀錄一\n\n舊紀錄二"
+    for _ in range(5):
+        game.choose("move:lake")
+        game.choose("move:town")
+    assert game.log_text(limit=2).count("---") == 1

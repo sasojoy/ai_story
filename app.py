@@ -21,7 +21,6 @@ ROOT = Path(__file__).parent
 CONTENT = load_content(ROOT / "content")
 SAVE_DIR = ROOT / "saves"
 MAX_BUTTONS = 10
-LOG_LINES = 40
 # game_state、任務區塊、狀態文字、場景文字、紀錄、地圖、大勢、傳聞、江湖史、選項 id 清單、匿名勾選框、
 # 左欄「場景／地圖」分頁，再加上按鈕（MAX_BUTTONS）、武學欄位下拉（EQUIP_SLOTS）、閉關武學下拉。
 MAIN_TABS_INDEX = 11
@@ -63,7 +62,7 @@ def render(game: Game, focus_scene: bool = False) -> list:
         game.quest_text(),
         game.status_text(),
         game.scene_text(),
-        "\n\n".join(game.state.log[-LOG_LINES:]),
+        game.log_text(),
         game.map_svg(),
         game.trends_text(),
         game.rumors_text(),
