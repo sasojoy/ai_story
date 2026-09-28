@@ -191,6 +191,12 @@ def _target_info(state: GameState, content: Content, target: str) -> tuple[str, 
     return None
 
 
+def target_level(state: GameState, content: Content, target: str) -> int | None:
+    """target 目前的成數；沒有這門武學時回傳 None。"""
+    info = _target_info(state, content, target)
+    return info[1] if info else None
+
+
 def _set_level(state: GameState, target: str, level: int) -> None:
     kind, _, ident = target.partition(":")
     if kind == "skill":

@@ -43,6 +43,13 @@ def test_bot_plays_full_season(seed):
     assert len(game.state.player.seen_events) >= 5
 
 
+def test_bot_grows_its_arts_with_xinde():
+    game = play_season(load_content(CONTENT_DIR), 1)
+    p = game.state.player
+    levels = list(p.skills.values()) + [m.innate_level for key, m in p.members.items() if key != "player"]
+    assert max(levels) > 1
+
+
 def test_treasure_storyline_can_be_lost_to_fanjianglong():
     from tianxia.engine import Game
     from tianxia.world import check_thresholds
