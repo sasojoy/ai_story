@@ -22,3 +22,10 @@ class FixedRandom(random.Random):
 @pytest.fixture
 def content():
     return load_content(FIXTURE)
+
+
+@pytest.fixture
+def state(content):
+    from tianxia.state import new_game_state
+
+    return new_game_state(content, "沈浪")
