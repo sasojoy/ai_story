@@ -24,3 +24,19 @@ def test_save_path_strips_unsafe_characters(tmp_path, monkeypatch):
 
 def test_build_demo():
     assert app.build_demo() is not None
+
+
+def test_render_includes_quest_and_map():
+    game = Game.new(app.CONTENT, "測試")
+    out = app.render(game)
+    assert any(isinstance(x, str) and x.startswith("### 主線") for x in out)
+    assert any(isinstance(x, str) and x.startswith("<svg") for x in out)
+
+
+def test_map_view_handler_advances_tutorial(tmp_path, monkeypatch):
+    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
+    game = Game.new(app.CONTENT, "測試")
+    game.state.player.tutorial_step = 1  # 第二步是「打開地圖」
+    out = app.map_view_handler(game)
+    assert len(out) == app.N_OUTPUTS
+    assert game.state.player.tutorial_step == 2

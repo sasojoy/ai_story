@@ -22,9 +22,9 @@ CONTENT = load_content(ROOT / "content")
 SAVE_DIR = ROOT / "saves"
 MAX_BUTTONS = 10
 LOG_LINES = 40
-# game_state、狀態文字、場景文字、紀錄、大勢、傳聞、江湖史、選項 id 清單、匿名勾選框，
+# game_state、任務區塊、狀態文字、場景文字、紀錄、地圖、大勢、傳聞、江湖史、選項 id 清單、匿名勾選框，
 # 再加上按鈕（MAX_BUTTONS）、武學欄位下拉（EQUIP_SLOTS）、閉關武學下拉。
-N_OUTPUTS = 9 + MAX_BUTTONS + len(EQUIP_SLOTS) + 1
+N_OUTPUTS = 11 + MAX_BUTTONS + len(EQUIP_SLOTS) + 1
 
 ACT_LOCK = threading.Lock()
 
@@ -59,9 +59,11 @@ def render(game: Game) -> list:
     learned = [choice for slot in ("內功", "外功", "輕功") for choice in game.skill_choices(slot)]
     return [
         game,
+        game.quest_text(),
         game.status_text(),
         game.scene_text(),
         "\n\n".join(game.state.log[-LOG_LINES:]),
+        game.map_svg(),
         game.trends_text(),
         game.rumors_text(),
         game.chronicle_text(),
@@ -117,6 +119,10 @@ def anonymous_handler(game, value):
     return act(game, lambda g: g.set_anonymous(value))
 
 
+def map_view_handler(game):
+    return act(game, lambda g: g.view_map())
+
+
 def tick_handler(game):
     return act(game, lambda g: None)
 
@@ -140,14 +146,18 @@ def build_demo() -> gr.Blocks:
             start_btn = gr.Button("踏入江湖", variant="primary")
         with gr.Row(visible=False) as game_row:
             with gr.Column(scale=3):
+                quest_md = gr.Markdown()
+                gr.Markdown("---")
                 scene_md = gr.Markdown()
                 option_btns = [gr.Button(visible=False) for _ in range(MAX_BUTTONS)]
                 gr.Markdown("---")
                 log_md = gr.Markdown()
             with gr.Column(scale=2):
                 status_md = gr.Markdown()
-                with gr.Tabs():
-                    with gr.Tab("江湖大勢"):
+                with gr.Tabs(selected="trends"):
+                    with gr.Tab("地圖", id="map") as map_tab:
+                        map_html = gr.HTML()
+                    with gr.Tab("江湖大勢", id="trends"):
                         trends_md = gr.Markdown()
                     with gr.Tab("江湖傳聞"):
                         rumors_md = gr.Markdown()
@@ -168,8 +178,8 @@ def build_demo() -> gr.Blocks:
                             ff_btns = {h: gr.Button(f"+{h} 小時") for h in (1, 8, 24)}
 
         outputs = [
-            game_state, status_md, scene_md, log_md, trends_md, rumors_md, chronicle_md, ids_state,
-            anon_cb, *option_btns, *equip_dds, seclude_dd,
+            game_state, quest_md, status_md, scene_md, log_md, map_html, trends_md, rumors_md, chronicle_md,
+            ids_state, anon_cb, *option_btns, *equip_dds, seclude_dd,
         ]
         assert len(outputs) == N_OUTPUTS
 
@@ -181,6 +191,7 @@ def build_demo() -> gr.Blocks:
             dd.input(make_equip_handler(slot), inputs=[game_state, dd], outputs=outputs)
         seclude_btn.click(seclude_handler, inputs=[game_state, seclude_dd, hours_sl], outputs=outputs)
         anon_cb.input(anonymous_handler, inputs=[game_state, anon_cb], outputs=outputs)
+        map_tab.select(map_view_handler, inputs=[game_state], outputs=outputs)
         for hours, btn in ff_btns.items():
             btn.click(make_fast_forward_handler(hours), inputs=[game_state], outputs=outputs)
         gr.Timer(10).tick(tick_handler, inputs=[game_state], outputs=outputs)
