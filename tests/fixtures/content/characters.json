@@ -1,0 +1,6 @@
+[
+  {"id": "mate", "name": "韓鐵", "tier": "玄", "style": "剛", "stats": {"str": 6, "agi": 5, "con": 6, "wis": 4},
+   "growth": {"str": 0.3, "agi": 0.2, "con": 0.3, "wis": 0.1}, "aptitude": {"剛": "A"}, "innate": "palm"},
+  {"id": "thug", "name": "小嘍囉", "tier": "敵", "style": "剛", "stats": {"str": 3, "agi": 3, "con": 1, "wis": 2}},
+  {"id": "boss", "name": "翻江龍", "tier": "敵", "style": "剛", "stats": {"str": 40, "agi": 30, "con": 40, "wis": 10}, "innate": "heavy"}
+]

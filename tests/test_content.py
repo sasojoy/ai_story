@@ -140,3 +140,38 @@ def test_map_region_color_must_be_hex(tmp_path):
     edit_json(root / "map.json", lambda d: d["regions"][0].update(fill="red"))
     with pytest.raises(Exception, match="fill"):
         load_content(root)
+
+
+def test_characters_and_squads_loaded(content):
+    assert content.characters["mate"].innate == "palm"
+    assert content.squads["thug"].members[0].character == "thug"
+    assert content.skills["sword"].kind == "絕招"
+    assert content.skills["sword"].effects[0].top == 2.0
+
+
+def test_buff_effect_needs_stat(tmp_path):
+    root = copy_fixture(tmp_path)
+    edit_json(root / "skills.json", lambda d: d[3]["effects"][0].pop("stat"))
+    with pytest.raises(ContentError, match="step"):
+        load_content(root)
+
+
+def test_ultimate_needs_chance(tmp_path):
+    root = copy_fixture(tmp_path)
+    edit_json(root / "skills.json", lambda d: d[2].update(chance_base=0))
+    with pytest.raises(ContentError, match="sword"):
+        load_content(root)
+
+
+def test_squad_with_unknown_character_rejected(tmp_path):
+    root = copy_fixture(tmp_path)
+    edit_json(root / "squads.json", lambda d: d[0]["members"].append({"character": "ghost"}))
+    with pytest.raises(ContentError, match="ghost"):
+        load_content(root)
+
+
+def test_character_missing_combat_stat_rejected(tmp_path):
+    root = copy_fixture(tmp_path)
+    edit_json(root / "characters.json", lambda d: d[0]["stats"].pop("wis"))
+    with pytest.raises(ContentError, match="mate"):
+        load_content(root)

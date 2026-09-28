@@ -9,6 +9,9 @@ STATS = ("str", "agi", "con", "wis", "silver", "good", "evil", "fame")
 Style = Literal["剛", "柔", "快", "巧", "無"]
 Slot = Literal["內功", "外功", "輕功"]
 ActionKind = Literal["explore", "train", "socialize"]
+Tier = Literal["天", "地", "玄", "黃", "敵"]
+Grade = Literal["S", "A", "B", "C"]
+EffectKind = Literal["damage", "heal", "buff", "debuff", "control", "dodge", "reduce"]
 
 
 class _Strict(BaseModel):
@@ -102,14 +105,32 @@ class Location(_Strict):
     unlock_flag: str | None = None  # 設定後，需該世界旗標成立才能前往
 
 
+class SkillEffect(_Strict):
+    """武學效果。base 是第 1 成的數值，top 是第 10 成的數值（省略＝不隨成數變化）。"""
+
+    kind: EffectKind
+    base: float
+    top: float | None = None
+    target: Literal["enemy", "enemies", "self", "ally_lowest", "allies"] = "enemy"
+    stat: Literal["atk", "dfn", "spd"] | None = None
+    control: Literal["點穴", "卸兵", "封脈"] | None = None
+    rounds: int = 1
+
+
 class Skill(_Strict):
     id: str
     name: str
-    slot: Slot
+    slot: Slot | None = None
     style: Style = "無"
-    power: int
+    power: int = 0
     sect: str | None = None
     desc: str = ""
+    kind: Literal["心法", "絕招", "連招"] | None = None
+    quality: Literal["下", "中", "上"] = "中"
+    chance_base: float = 0.0
+    chance_top: float | None = None
+    prep: int = 0
+    effects: list[SkillEffect] = Field(default_factory=list)
 
 
 class Sect(_Strict):
@@ -131,6 +152,37 @@ class Enemy(_Strict):
     spd: int
     style: Style = "無"
     reward_silver: int = 0
+
+
+class CharacterDef(_Strict):
+    """人物（同伴或敵人）。stats 是第 1 級的屬性，growth 是每升一級增加的量。"""
+
+    id: str
+    name: str
+    tier: Tier
+    style: Style = "無"
+    stats: dict[str, float]
+    growth: dict[str, float] = Field(default_factory=dict)
+    aptitude: dict[str, Grade] = Field(default_factory=dict)  # 剛柔快巧；未列出＝B
+    innate: str | None = None
+    sect: str | None = None
+    desc: str = ""
+
+
+class SquadMember(_Strict):
+    character: str
+    level: int = Field(default=1, ge=1)
+
+
+class Squad(_Strict):
+    """敵方隊伍；第一名成員是隊長。"""
+
+    id: str
+    name: str
+    members: list[SquadMember] = Field(min_length=1, max_length=3)
+    reward_silver: int = 0
+    reward_xinde: int = 0
+    exp: int = 0
 
 
 class Trend(_Strict):
@@ -307,5 +359,7 @@ class Content(_Strict):
     skills: dict[str, Skill]
     sects: dict[str, Sect]
     enemies: dict[str, Enemy]
+    characters: dict[str, CharacterDef]
+    squads: dict[str, Squad]
     map: MapLayout
     tutorial: Tutorial

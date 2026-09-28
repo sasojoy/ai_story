@@ -5,8 +5,8 @@ import json
 from pathlib import Path
 
 from .models import (
-    STATS, Condition, Config, Content, Effect, Enemy, Event, Location, MapLayout, Scenario, Sect, Skill,
-    Tutorial,
+    STATS, CharacterDef, Condition, Config, Content, Effect, Enemy, Event, Location, MapLayout, Scenario,
+    Sect, Skill, Squad, Tutorial,
 )
 
 
@@ -30,6 +30,8 @@ def load_content(root: Path) -> Content:
         skills=_index(Skill, _read(root / "skills.json")),
         sects=_index(Sect, _read(root / "sects.json")),
         enemies=_index(Enemy, _read(root / "enemies.json")),
+        characters=_index(CharacterDef, _read(root / "characters.json")),
+        squads=_index(Squad, _read(root / "squads.json")),
         events=events,
         map=MapLayout(**_read(root / "map.json")),
         tutorial=Tutorial(**_read(root / "tutorial.json")),
@@ -185,6 +187,31 @@ def validate(c: Content) -> None:
         known(where, step.done_when.locations, c.locations, "地點")
         check_condition(where, step.done_when.condition)
         check_effect(where, step.reward)
+
+    for skill in c.skills.values():
+        where = f"武學 {skill.id}"
+        if skill.kind in ("絕招", "連招"):
+            need(skill.chance_base > 0, f"{where}：絕招／連招必須有發動率 chance_base")
+        if skill.kind == "心法":
+            need(skill.chance_base == 0 and skill.prep == 0, f"{where}：心法不能有發動率或準備回合")
+        if skill.kind is not None:
+            need(bool(skill.effects), f"{where}：至少要有一個效果")
+        for eff in skill.effects:
+            if eff.kind in ("buff", "debuff"):
+                need(eff.stat is not None, f"{where}：{eff.kind} 效果必須指定 stat")
+            if eff.kind == "control":
+                need(eff.control is not None, f"{where}：control 效果必須指定 control")
+    for ch in c.characters.values():
+        where = f"人物 {ch.id}"
+        for stat in ("str", "agi", "con", "wis"):
+            need(stat in ch.stats, f"{where}：stats 缺少 {stat}")
+        known(where, ch.aptitude, ("剛", "柔", "快", "巧"), "流派")
+        if ch.innate:
+            known(where, [ch.innate], c.skills, "武學")
+        if ch.sect:
+            known(where, [ch.sect], c.sects, "門派")
+    for squad in c.squads.values():
+        known(f"敵方隊伍 {squad.id}", [m.character for m in squad.members], c.characters, "人物")
 
     if errors:
         raise ContentError("內容檔有誤：\n" + "\n".join(errors))
