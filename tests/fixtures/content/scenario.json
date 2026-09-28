@@ -1,0 +1,23 @@
+{
+  "id": "test",
+  "name": "測試劇本",
+  "intro": "測試開始。",
+  "start_location": "town",
+  "trends": [
+    {"id": "kou", "name": "寇亂", "desc": "水寇勢力", "start": 30},
+    {"id": "bao", "name": "寶藏", "desc": "前朝寶藏", "hidden": true}
+  ],
+  "thresholds": [
+    {"id": "kou50", "trend": "kou", "op": ">=", "value": 50, "text": "水寇封江！", "world_flags_add": ["blocked"]},
+    {"id": "kou80", "trend": "kou", "op": ">=", "value": 80, "text": "水寇稱霸！", "world_flags_add": ["kou_win"], "ends_season": true},
+    {"id": "bao100", "trend": "bao", "op": ">=", "value": 100, "text": "寶洞現世！", "world_flags_add": ["cave_open"]}
+  ],
+  "sim_players": [
+    {"name": "翻江龍", "actions_per_day": 24, "trend": {"kou": 1}, "rumors": ["{name}又劫了一艘船。"], "rumor_chance": 1.0},
+    {"name": "鬼手", "actions_per_day": 24, "trend": {"bao": 1}, "requires_revealed": "bao", "rumors": ["{name}在挖土。"], "rumor_chance": 0.0}
+  ],
+  "endings": [
+    {"id": "kou_win", "title": "水寇稱霸", "text": "江南落入水寇之手。", "condition": {"world_flags_all": ["kou_win"]}},
+    {"id": "default", "title": "風雨飄搖", "text": "江南依舊動盪。"}
+  ]
+}

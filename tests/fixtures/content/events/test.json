@@ -1,0 +1,28 @@
+[
+  {"id": "drunk", "title": "醉漢", "text": "一名醉漢撞上了你。", "locations": ["town"], "choices": [
+    {"text": "逼問", "check": {"stat": "str", "difficulty": 5},
+     "effect": {"text": "他全招了。", "stats": {"good": 2}, "trend": {"kou": -5}},
+     "fail_effect": {"text": "被他溜了。"}},
+    {"text": "摸走鐵牌", "effect": {"stats": {"evil": 1}, "flags_add": ["token"]}},
+    {"text": "入夥", "condition": {"min_stats": {"evil": 5}}, "effect": {"flags_add": ["kou_member"]}}
+  ]},
+  {"id": "scroll", "title": "殘卷", "text": "你撿到一片殘卷。", "locations": ["lake"], "qiyu": true, "once": true, "choices": [
+    {"text": "收下", "effect": {"trend": {"bao": 20}, "rumor": "{name}撿到了殘卷！", "chronicle": "{name}發現殘卷。"}}
+  ]},
+  {"id": "join", "title": "拜師", "text": "流雲派收徒。", "actions": ["socialize"], "locations": ["town"], "condition": {"no_sect": true}, "choices": [
+    {"text": "拜入", "effect": {"join_sect": "cloud"}},
+    {"text": "婉拒"}
+  ]},
+  {"id": "duel", "title": "挑戰", "text": "翻江龍攔住去路。", "actions": ["socialize"], "locations": ["lake"], "choices": [
+    {"text": "應戰", "combat": "boss",
+     "effect": {"text": "你擊敗了翻江龍！", "trend": {"kou": -20}},
+     "fail_effect": {"text": "你敗了。", "stats": {"silver": -10}}},
+    {"text": "迴避"}
+  ]},
+  {"id": "chain_a", "title": "跟蹤", "text": "你跟了上去。", "actions": ["train"], "locations": ["lake"], "choices": [
+    {"text": "繼續", "effect": {"next_event": "chain_b"}}
+  ]},
+  {"id": "chain_b", "title": "倉庫", "text": "你發現一座倉庫。", "actions": [], "choices": [
+    {"text": "離開"}
+  ]}
+]

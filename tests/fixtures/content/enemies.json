@@ -1,0 +1,4 @@
+[
+  {"id": "thug", "name": "小嘍囉", "desc": "拿著魚叉的水寇。", "hp": 30, "atk": 8, "dfn": 2, "spd": 5, "style": "剛", "reward_silver": 5},
+  {"id": "boss", "name": "翻江龍", "desc": "水寨大當家。", "hp": 500, "atk": 60, "dfn": 30, "spd": 30, "style": "剛"}
+]

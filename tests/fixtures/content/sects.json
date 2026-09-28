@@ -1,0 +1,3 @@
+[
+  {"id": "cloud", "name": "流雲派", "location": "town", "alignment": "正", "desc": "以劍法聞名。", "starter_skills": ["sword"]}
+]

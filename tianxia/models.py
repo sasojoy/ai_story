@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 STATS = ("str", "agi", "con", "wis", "silver", "good", "evil", "fame")
 Style = Literal["剛", "柔", "快", "巧", "無"]
@@ -11,7 +11,12 @@ Slot = Literal["內功", "外功", "輕功"]
 ActionKind = Literal["explore", "train", "socialize"]
 
 
-class Condition(BaseModel):
+class _Strict(BaseModel):
+    """內容檔的欄位拼錯時直接報錯，而不是被默默忽略。"""
+    model_config = ConfigDict(extra="forbid")
+
+
+class Condition(_Strict):
     """所有欄位都是「且」的關係；空的欄位不檢查。"""
 
     min_stats: dict[str, int] = Field(default_factory=dict)
@@ -28,7 +33,7 @@ class Condition(BaseModel):
     world_flags_none: list[str] = Field(default_factory=list)
 
 
-class Effect(BaseModel):
+class Effect(_Strict):
     text: str = ""
     stats: dict[str, int] = Field(default_factory=dict)
     stamina: int = 0
@@ -44,12 +49,12 @@ class Effect(BaseModel):
     next_event: str | None = None
 
 
-class Check(BaseModel):
+class Check(_Strict):
     stat: str
     difficulty: int
 
 
-class Choice(BaseModel):
+class Choice(_Strict):
     text: str
     condition: Condition = Field(default_factory=Condition)
     check: Check | None = None
@@ -58,7 +63,7 @@ class Choice(BaseModel):
     fail_effect: Effect = Field(default_factory=Effect)  # 檢定失敗／戰鬥落敗
 
 
-class Event(BaseModel):
+class Event(_Strict):
     id: str
     title: str
     text: str
@@ -72,7 +77,7 @@ class Event(BaseModel):
     choices: list[Choice] = Field(min_length=1)
 
 
-class Location(BaseModel):
+class Location(_Strict):
     id: str
     name: str
     description: str
@@ -86,7 +91,7 @@ class Location(BaseModel):
     unlock_flag: str | None = None  # 設定後，需該世界旗標成立才能前往
 
 
-class Skill(BaseModel):
+class Skill(_Strict):
     id: str
     name: str
     slot: Slot
@@ -96,7 +101,7 @@ class Skill(BaseModel):
     desc: str = ""
 
 
-class Sect(BaseModel):
+class Sect(_Strict):
     id: str
     name: str
     location: str
@@ -105,7 +110,7 @@ class Sect(BaseModel):
     starter_skills: list[str] = Field(default_factory=list)
 
 
-class Enemy(BaseModel):
+class Enemy(_Strict):
     id: str
     name: str
     desc: str = ""
@@ -117,7 +122,7 @@ class Enemy(BaseModel):
     reward_silver: int = 0
 
 
-class Trend(BaseModel):
+class Trend(_Strict):
     id: str
     name: str
     desc: str = ""
@@ -125,7 +130,7 @@ class Trend(BaseModel):
     hidden: bool = False
 
 
-class Threshold(BaseModel):
+class Threshold(_Strict):
     id: str
     trend: str
     op: Literal[">=", "<="]
@@ -135,7 +140,7 @@ class Threshold(BaseModel):
     ends_season: bool = False
 
 
-class SimPlayer(BaseModel):
+class SimPlayer(_Strict):
     name: str
     actions_per_day: float
     trend: dict[str, int] = Field(default_factory=dict)
@@ -144,14 +149,14 @@ class SimPlayer(BaseModel):
     rumor_chance: float = 0.3
 
 
-class Ending(BaseModel):
+class Ending(_Strict):
     id: str
     title: str
     text: str
     condition: Condition = Field(default_factory=Condition)
 
 
-class Scenario(BaseModel):
+class Scenario(_Strict):
     id: str
     name: str
     intro: str
@@ -162,7 +167,7 @@ class Scenario(BaseModel):
     endings: list[Ending]
 
 
-class Config(BaseModel):
+class Config(_Strict):
     stamina_max: int = 150
     stamina_regen_seconds: float = 300
     action_cost: dict[str, int] = Field(
@@ -192,7 +197,7 @@ class Config(BaseModel):
     max_log: int = 200
 
 
-class Content(BaseModel):
+class Content(_Strict):
     config: Config
     scenario: Scenario
     locations: dict[str, Location]

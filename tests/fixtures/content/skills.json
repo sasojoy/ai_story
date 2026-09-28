@@ -1,0 +1,6 @@
+[
+  {"id": "fist", "name": "長拳", "slot": "外功", "style": "剛", "power": 10},
+  {"id": "breath", "name": "吐納法", "slot": "內功", "power": 8},
+  {"id": "sword", "name": "流雲劍", "slot": "外功", "style": "柔", "power": 16, "sect": "cloud"},
+  {"id": "step", "name": "追風步", "slot": "輕功", "style": "快", "power": 12}
+]
