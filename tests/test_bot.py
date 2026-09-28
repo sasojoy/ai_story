@@ -21,7 +21,9 @@ def test_bot_keeps_xinde_it_cannot_spend(game):
 
 def test_bot_skips_arts_at_tenth_level(game):
     p = game.state.player
-    p.skills["fist"] = 10
-    p.stats["xinde"] = 20
-    spend_xinde(game)
-    assert p.skills == {"fist": 10, "family": 2}
+    p.skills.update({"fist": 10, "family": 10})
+    p.stats["xinde"] = 1200
+    spend_xinde(game)  # 只剩同伴本命能升：第 1→10 成共 900；之後全滿，剩下的心得留著
+    assert p.members["mate"].innate_level == 10
+    assert p.skills == {"fist": 10, "family": 10}
+    assert p.stats["xinde"] == 300
