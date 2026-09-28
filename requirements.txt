@@ -1,3 +1,6 @@
 pydantic>=2.6
-gradio>=5.0
+# 因這台機器的 Windows 應用程式控制封鎖了較新版 pandas 的 DLL，以下版本固定為目前已驗證可用的版本
+gradio==6.24.0
+pandas==3.0.5
+numpy==2.5.2
 pytest>=8.0
