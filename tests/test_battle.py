@@ -96,6 +96,26 @@ def test_control_effect_applies_status():
     assert "乙穴道受制，動彈不得。" in res.report
 
 
+def test_control_from_slower_caster_skips_targets_next_turn():
+    """持續回合以中招者自己的回合計：快的人本回合已出手，一回合的點穴要留到他下一回合。"""
+    art = Art("點穴手", "絕招", chance=1.0, effects=[Eff("control", 1.0, control="點穴", rounds=1)])
+    slow = unit("甲", spd=1, hp=99999, arts=[art])
+    fast = unit("乙", spd=10, hp=99999, atk=1)
+    res = run_battle([slow], [fast], FixedRandom(0.0), Rules(max_rounds=2))
+    first, second = "\n".join(res.report).split("── 第2回合 ──")
+    assert "乙被點穴了！" in first and "乙穴道受制" not in first
+    assert "乙穴道受制，動彈不得。" in second
+
+
+def test_status_gained_on_own_turn_is_not_ticked_that_turn():
+    buff = Art("提氣", "絕招", chance=1.0, effects=[Eff("buff", 0.5, target="self", stat="atk", rounds=1)])
+    a = unit("甲", spd=10, hp=99999, arts=[buff])
+    b = unit("乙", spd=1, hp=99999, atk=1, statuses=[Status("buff", 0.5, stat="dfn", rounds=1)])
+    run_battle([a], [b], random.Random(0), Rules(max_rounds=1))
+    assert [(s.stat, s.rounds) for s in a.statuses] == [("atk", 1)]  # 自己這回合才得到的，不扣
+    assert b.statuses == []  # 回合開始就有的，自己的回合結束時扣掉
+
+
 def test_heal_targets_lowest_ally():
     heal = Art("回春", "絕招", chance=1.0, effects=[Eff("heal", 0.5, target="ally_lowest")])
     healer = unit("醫", spd=10, hp=1000, arts=[heal])

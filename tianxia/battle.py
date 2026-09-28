@@ -128,14 +128,14 @@ def run_battle(side_a: list[Unit], side_b: list[Unit], rng: random.Random, rules
         for u in sorted((u for u in units if u.alive), key=lambda u: (-stat_of(u, "spd"), u.side)):
             if not u.alive:
                 continue
+            held = list(u.statuses)
             _act(u, units, rng, report, rules)
+            _tick(u, held)
             outcome = _outcome(side_a, side_b)
             if outcome:
                 loser = side_b if outcome == "win" else side_a
                 report.append(f"{_leader(loser).name}倒下，{'敵方' if outcome == 'win' else '我方'}敗退。")
                 return BattleResult(outcome, rnd, report, [u.hp for u in side_a])
-        for u in units:
-            _tick(u)
     report.append(f"{rules.max_rounds}回合已過，雙方各自收兵，不分勝負。")
     return BattleResult("draw", rules.max_rounds, report, [u.hp for u in side_a])
 
@@ -286,7 +286,9 @@ def _hit(att: Unit, dfd: Unit | None, mult: float, style: str, rng, report, rule
     report.append(line)
 
 
-def _tick(u: Unit) -> None:
-    for s in u.statuses:
+def _tick(u: Unit, held: list[Status]) -> None:
+    """持續回合以持有者自己的回合計（被點穴而跳過的回合也算）。
+    只扣這一回合開始時就已持有的狀態；自己這回合才得到的，留到下一回合結束再扣。"""
+    for s in held:
         s.rounds -= 1
     u.statuses = [s for s in u.statuses if s.rounds > 0]
