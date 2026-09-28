@@ -118,3 +118,31 @@ def test_starting_team_beats_street_thugs():
 
 def test_starting_team_cannot_beat_fanjianglong():
     assert _win_rate("fanjianglong") <= 0.1
+
+
+def _trained_win_rate(squad_id: str, level: int, skill_level: int, runs: int = 40) -> float:
+    """新開一局，全隊練到 level 級、所有武學（本人武學、本人本命、同伴本命）練到第 skill_level 成；
+    每場開打前回滿內力，讓每一場互不影響。"""
+    from tianxia.engine import Game
+    from tianxia.team import fight
+
+    content = load_content(CONTENT_DIR)
+    game = Game.new(content, "測試俠客", rng=random.Random(0))
+    p = game.state.player
+    for member in p.members.values():
+        member.level = level
+        member.innate_level = skill_level
+    for skill_id in p.skills:
+        p.skills[skill_id] = skill_level
+    wins = 0
+    for seed in range(runs):
+        for member in p.members.values():
+            member.neili = None
+        wins += fight(game.state, content, squad_id, random.Random(seed)).outcome == "win"
+    return wins / runs
+
+
+def test_tomb_guardian_gates_the_treasure_within_a_season():
+    """藏龍洞守墓人：剛出道的隊伍打不過，練到 10 級、武學第五成就有一戰之力（寶藏主線才走得完）。"""
+    assert _trained_win_rate("shoumu", level=1, skill_level=1) <= 0.1
+    assert _trained_win_rate("shoumu", level=10, skill_level=5) >= 0.5

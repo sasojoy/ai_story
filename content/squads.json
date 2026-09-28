@@ -8,6 +8,6 @@
   {"id": "toumu", "name": "水寨頭目", "members": [{"character": "toumu", "level": 10}, {"character": "shuikou", "level": 8}, {"character": "shuikou", "level": 8}], "reward_silver": 40, "reward_xinde": 35, "exp": 40},
   {"id": "fanjianglong", "name": "翻江龍", "members": [{"character": "fanjianglong", "level": 18}, {"character": "toumu", "level": 14}, {"character": "shuikou", "level": 12}], "reward_xinde": 80, "exp": 80},
   {"id": "guishou", "name": "鬼手劉三", "members": [{"character": "guishou", "level": 12}, {"character": "shanzei", "level": 8}], "reward_xinde": 40, "exp": 40},
-  {"id": "shoumu", "name": "藏龍洞守墓人", "members": [{"character": "shoumu", "level": 20}], "reward_xinde": 100, "exp": 80},
+  {"id": "shoumu", "name": "藏龍洞守墓人", "members": [{"character": "shoumu", "level": 15}], "reward_xinde": 100, "exp": 80},
   {"id": "xuantie_dizi", "name": "玄鐵門師兄", "members": [{"character": "xuantie_dizi", "level": 6}, {"character": "xuantie_dizi", "level": 5}], "reward_xinde": 20, "exp": 20}
 ]
