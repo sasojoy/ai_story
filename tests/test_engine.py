@@ -89,6 +89,49 @@ def test_event_battle_is_fully_automatic(game):
     assert now < top  # 內力留在戰後的剩餘值
 
 
+def test_event_battle_win_pays_squad_rewards_once_and_applies_choice_effect(game):
+    game.content.events["duel"].choices[0].combat = "thug"  # 換成打得贏的小嘍囉
+    game.choose("move:lake")
+    game.choose("act:socialize")
+    assert game.state.pending_event == "duel"
+    game.choose("choice:0")
+    p = game.state.player
+    assert game.state.pending_event is None
+    assert "你擊敗了翻江龍！" in game.state.log  # 選項的 effect
+    assert game.state.world.trends["kou"] == 10  # 30 − 20
+    assert p.stats["silver"] == 55 and p.stats["xinde"] == 10  # 隊伍獎勵只給一次
+    assert p.members["player"].exp == 20 and p.members["mate"].exp == 20
+
+
+def test_event_battle_draw_clears_event_without_effects(game):
+    game.content.config.battle_rounds = 1  # 一回合打不倒翻江龍，他也打不倒隊長
+    game.choose("move:lake")
+    game.choose("act:socialize")
+    assert game.state.pending_event == "duel"
+    game.choose("choice:0")
+    p = game.state.player
+    assert "不分勝負" in game.state.last_report[-1]
+    assert game.state.pending_event is None
+    assert "你擊敗了翻江龍！" not in game.state.log and "你敗了。" not in game.state.log
+    assert game.state.world.trends["kou"] == 30
+    assert p.stats["silver"] == 50 and p.stats["xinde"] == 0
+    assert p.members["player"].exp == 0
+
+
+def test_add_exp_crosses_several_levels_and_stops_at_max_level(game):
+    from tianxia.team import add_exp
+
+    game.content.config.max_level = 4
+    p = game.state.player
+    msgs = add_exp(game.state, game.content, 350)  # 第 1→2 級要 100、第 2→3 級要 200，剩 50
+    assert (p.members["player"].level, p.members["player"].exp) == (3, 50)
+    assert (p.members["mate"].level, p.members["mate"].exp) == (3, 50)
+    assert msgs == ["沈浪升到第 2 級！", "沈浪升到第 3 級！", "韓鐵升到第 2 級！", "韓鐵升到第 3 級！"]
+    assert add_exp(game.state, game.content, 10000) == ["沈浪升到第 4 級！", "韓鐵升到第 4 級！"]
+    assert add_exp(game.state, game.content, 10000) == []
+    assert p.members["player"].level == 4 and p.members["mate"].level == 4
+
+
 def test_train_wins_and_pushes_trend(game):
     game.choose("move:lake")
     game.choose("act:train")
