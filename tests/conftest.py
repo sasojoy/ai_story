@@ -29,3 +29,12 @@ def state(content):
     from tianxia.state import new_game_state
 
     return new_game_state(content, "沈浪")
+
+
+@pytest.fixture
+def game(content):
+    from tianxia.engine import Game
+
+    content.config.train_event_chance = 0.0
+    content.config.train_stat_chance = 0.0
+    return Game.new(content, "沈浪", rng=random.Random(0))
