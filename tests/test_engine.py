@@ -199,3 +199,10 @@ def test_tutorial_runs_through_engine(game):
     game.view_map()
     assert game.state.player.tutorial_step == 3
     assert "拜入門派" in game.quest_text()
+
+
+def test_visited_and_map(game):
+    assert game.state.player.visited == {"town"}
+    game.choose("move:lake")
+    assert game.state.player.visited == {"town", "lake"}
+    assert "<svg" in game.map_svg()

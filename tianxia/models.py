@@ -277,6 +277,9 @@ class Config(_Strict):
             "silver": "銀兩", "good": "善名", "evil": "惡名", "fame": "名望",
         }
     )
+    vision_base: int = 2  # 從所在地沿道路看得見幾步
+    vision_fame: int = 10  # 名望達到這個值，視野 +1
+    vision_qinggong_level: int = 5  # 裝備的輕功練到這個成數，視野 +1
     max_log: int = 200
 
 

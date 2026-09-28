@@ -28,6 +28,7 @@ class PlayerState(BaseModel):
     seclusion_start: float = 0.0
     seclusion_skill: str | None = None
     tutorial_step: int = 0  # 等於引導步數時代表引導結束
+    visited: set[str] = Field(default_factory=set)  # 去過的地點
 
 
 class Rumor(BaseModel):

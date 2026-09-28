@@ -10,6 +10,7 @@ from .combat import (
 )
 from .events import choice_label, has_events_here, pick_event, visible_choices
 from .guide import note_action, quest_text, tutorial_intro
+from .mapview import render_map
 from .models import Content, Effect, Event
 from .rules import add_skill_exp, apply_effect, change_trend, learn_skill, roll_check
 from .state import EQUIP_SLOTS, GameState, Rumor, new_game_state
@@ -37,6 +38,7 @@ class Game:
         game = cls(content, new_game_state(content, name), rng)
         for skill_id in content.config.starter_skills:
             learn_skill(game.state, content, skill_id)
+        game.state.player.visited.add(game.state.player.location)
         game._log(
             [f"══ {content.scenario.name} ══", content.scenario.intro, game.location_text()]
             + tutorial_intro(content)
@@ -66,6 +68,8 @@ class Game:
         acts = next(line for line in c.scenario.storylines if line.id == s.world.storyline).acts
         s.world.act = min(s.world.act, len(acts) - 1)
         p.tutorial_step = min(p.tutorial_step, len(c.tutorial.steps))
+        p.visited = {loc_id for loc_id in p.visited if loc_id in c.locations}
+        p.visited.add(p.location)
 
     # ── 時間 ──────────────────────────────────────────────
 
@@ -218,6 +222,7 @@ class Game:
         dest = self.content.locations[dest_id]
         self.state.player.stamina -= dest.move_cost
         self.state.player.location = dest_id
+        self.state.player.visited.add(dest_id)
         return [self.location_text()]
 
     def _choose(self, index: int) -> list[str]:
@@ -305,6 +310,9 @@ class Game:
 
     def quest_text(self) -> str:
         return quest_text(self.state, self.content)
+
+    def map_svg(self) -> str:
+        return render_map(self.state, self.content)
 
     def new_season(self) -> list[str]:
         last_real = self.state.last_real
