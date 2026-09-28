@@ -1,0 +1,16 @@
+{
+  "stamina_max": 150,
+  "stamina_regen_seconds": 300,
+  "action_cost": {"explore": 10, "train": 10, "socialize": 5},
+  "time_scale": 1.0,
+  "season_days": 14,
+  "seclusion_exp_per_hour": 20,
+  "skill_exp_per_level": 100,
+  "train_skill_exp": 10,
+  "train_stat_chance": 0.3,
+  "train_event_chance": 0.3,
+  "qiyu_weight_multiplier": 1.5,
+  "starter_skills": ["tuna", "changquan"],
+  "start_stats": {"str": 5, "agi": 5, "con": 5, "wis": 5, "silver": 50, "good": 0, "evil": 0, "fame": 0},
+  "max_log": 200
+}

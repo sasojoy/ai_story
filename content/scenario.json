@@ -1,0 +1,39 @@
+{
+  "id": "jiangnan_storm",
+  "name": "江南風雨",
+  "intro": "大胤末年，朝廷無力南顧。太湖水寨大當家「翻江龍」聚眾數千，劫掠運河商船；又有流言說，前朝覆滅時，有一批寶藏藏在江南某處山中。你背著一個包袱，站在揚州城門口——江湖，就從這裡開始。",
+  "start_location": "yangzhou",
+  "trends": [
+    {"id": "kou", "name": "太湖寇亂", "desc": "水寇勢力越大，江南越亂。到 50 會封鎖運河，到 80 水寇將攻陷鎮江。剿寇能讓它下降。", "start": 30},
+    {"id": "bao", "name": "前朝寶藏", "desc": "藏寶圖的拼湊進度。湊齊時，寶藏所在將會現世。", "start": 0, "hidden": true}
+  ],
+  "thresholds": [
+    {"id": "kou_50", "trend": "kou", "op": ">=", "value": 50, "text": "太湖水寇封鎖運河，揚州至鎮江的商路斷絕，沿岸人心惶惶！", "world_flags_add": ["canal_blocked"]},
+    {"id": "kou_80", "trend": "kou", "op": ">=", "value": 80, "text": "翻江龍率水寨大軍攻破鎮江渡口，江南從此落入水寇之手！", "world_flags_add": ["kou_win"], "ends_season": true},
+    {"id": "kou_10", "trend": "kou", "op": "<=", "value": 10, "text": "太湖水寨被各路俠客踏平，翻江龍下落不明，運河重歸太平。", "world_flags_add": ["kou_crushed"]},
+    {"id": "bao_50", "trend": "bao", "op": ">=", "value": 50, "text": "江湖傳言：前朝藏寶圖已拼出大半，各路人馬湧向棲霞山。", "world_flags_add": ["bao_half"]},
+    {"id": "bao_100", "trend": "bao", "op": ">=", "value": 100, "text": "藏寶圖終於湊齊！棲霞後山的「藏龍洞」現世，洞口有人把守。", "world_flags_add": ["cave_open"]}
+  ],
+  "sim_players": [
+    {"name": "翻江龍", "actions_per_day": 8, "trend": {"kou": 1}, "rumor_chance": 0.25, "rumors": [
+      "太湖水寇又劫了一艘官船，據說是{name}親自帶的人。",
+      "{name}在太湖放話：「江南的水路，從今往後姓翻！」",
+      "運河上又有商船失蹤，人人都說是{name}的手筆。"
+    ]},
+    {"name": "白衣劍客沈青", "actions_per_day": 3, "trend": {"kou": -1}, "rumor_chance": 0.3, "rumors": [
+      "{name}在太湖邊獨挑水寇十七人，劍不染塵。",
+      "有人看見{name}在鎮江渡口護送難民過江。"
+    ]},
+    {"name": "鬼手劉三", "actions_per_day": 3, "trend": {"bao": 2}, "requires_revealed": "bao", "rumor_chance": 0.3, "rumors": [
+      "有人看見{name}在棲霞山一帶鬼鬼祟祟地挖土。",
+      "{name}在金陵黑市高價收購前朝古物。"
+    ]}
+  ],
+  "endings": [
+    {"id": "kou_win", "title": "水寇稱霸", "text": "鎮江陷落，翻江龍坐擁運河。江南的商旅從此要向水寨納貢，而這一季的俠客們，只能在酒館裡嘆息。", "condition": {"world_flags_all": ["kou_win"]}},
+    {"id": "peace_treasure", "title": "江南太平，寶藏重光", "text": "水寨覆滅，前朝寶藏也重見天日。這一季的江南，是俠客的江南。", "condition": {"world_flags_all": ["kou_crushed", "treasure_taken"]}},
+    {"id": "treasure", "title": "寶藏現世，亂局未平", "text": "寶藏被人取走，江湖為之震動；然而太湖水寇仍在，江南的風雨還遠未停歇。", "condition": {"world_flags_all": ["treasure_taken"]}},
+    {"id": "peace", "title": "寇平而寶藏成謎", "text": "運河重歸太平，但那批前朝寶藏，依舊是酒館裡說不完的傳說。", "condition": {"world_flags_all": ["kou_crushed"]}},
+    {"id": "default", "title": "江南依舊風雨飄搖", "text": "這一季，沒有人能徹底改變江南。水寇與俠客互有勝負，寶藏的傳說仍在流傳。"}
+  ]
+}

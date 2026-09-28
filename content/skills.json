@@ -1,0 +1,14 @@
+[
+  {"id": "tuna", "name": "吐納法", "slot": "內功", "style": "無", "power": 8, "desc": "最粗淺的調息法門，人人都會。"},
+  {"id": "changquan", "name": "長拳", "slot": "外功", "style": "剛", "power": 10, "desc": "街頭巷尾都有人練的拳法。"},
+  {"id": "qixia_xinjue", "name": "棲霞心訣", "slot": "內功", "style": "柔", "power": 16, "sect": "qixia", "desc": "棲霞劍派的入門內功，綿長不絕。"},
+  {"id": "liuyun", "name": "流雲劍法", "slot": "外功", "style": "柔", "power": 16, "sect": "qixia", "desc": "劍勢如流雲舒卷，以柔化剛。"},
+  {"id": "luoying", "name": "落英劍式", "slot": "外功", "style": "快", "power": 22, "sect": "qixia", "desc": "棲霞劍派的進階劍法，劍光如落英繽紛。"},
+  {"id": "yanhui", "name": "燕回翔", "slot": "輕功", "style": "快", "power": 18, "sect": "qixia", "desc": "棲霞劍派的輕功，身法輕盈如燕。"},
+  {"id": "xuantie_gong", "name": "玄鐵功", "slot": "內功", "style": "剛", "power": 18, "sect": "xuantie", "desc": "玄鐵門的護體內功，練到深處刀槍難入。"},
+  {"id": "tiesha", "name": "鐵砂掌", "slot": "外功", "style": "剛", "power": 18, "sect": "xuantie", "desc": "玄鐵門的看家掌法，一掌下去碑裂石碎。"},
+  {"id": "lieshi", "name": "裂石拳", "slot": "外功", "style": "剛", "power": 24, "sect": "xuantie", "desc": "玄鐵門的進階拳法，剛猛無儔。"},
+  {"id": "zhuifeng", "name": "追風步", "slot": "輕功", "style": "快", "power": 12, "desc": "鏢局裡流傳的輕功，講究腳下快。"},
+  {"id": "feihua", "name": "飛花摘葉", "slot": "外功", "style": "巧", "power": 22, "desc": "摘葉飛花皆可傷人的奇門手法，只傳無門無派之人。"},
+  {"id": "hunyuan", "name": "混元一氣", "slot": "內功", "style": "無", "power": 26, "desc": "前朝秘藏的內功心法，渾厚無比。"}
+]
