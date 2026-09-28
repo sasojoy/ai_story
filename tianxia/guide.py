@@ -47,10 +47,7 @@ def note_action(state: GameState, content: Content, action: str) -> list[str]:
 
 
 def _idle(state: GameState) -> bool:
-    return (
-        not state.world.ended and state.battle is None and state.pending_event is None
-        and state.player.busy_until is None
-    )
+    return not state.world.ended and state.pending_event is None and state.player.busy_until is None
 
 
 def next_hint(state: GameState, content: Content) -> str:

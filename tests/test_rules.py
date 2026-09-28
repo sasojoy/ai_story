@@ -2,7 +2,7 @@ import pytest
 
 from tianxia.models import Check, Condition, Effect
 from tianxia.rules import (
-    add_skill_exp, add_world_flags, apply_effect, check_chance, check_condition, current_day, learn_skill,
+    add_world_flags, apply_effect, check_chance, check_condition, current_day, learn_skill,
 )
 
 
@@ -11,6 +11,7 @@ def test_new_state(state):
     assert state.player.stamina == 150
     assert state.world.trends == {"kou": 30, "bao": 0}
     assert state.world.revealed == {"kou"}
+    assert state.player.team == ["player", "mate"]
 
 
 def test_empty_condition_passes(state):
@@ -91,11 +92,10 @@ def test_rumor_respects_anonymity(state, content):
     assert state.world.chronicle[0].text == "沈浪發現殘卷。"
 
 
-def test_join_sect_learns_and_equips(state, content):
+def test_join_sect_learns_starter_skills(state, content):
     msgs = apply_effect(Effect(join_sect="cloud"), state, content)
     assert state.player.sect == "cloud"
-    assert "sword" in state.player.skills
-    assert state.player.equipped[1] == "sword"
+    assert state.player.skills["sword"] == 1
     assert any("流雲派" in m for m in msgs)
 
 
@@ -106,28 +106,11 @@ def test_leave_sect_sets_flag(state, content):
     assert "叛出:cloud" in state.player.flags
 
 
-def test_learn_skill_fills_first_matching_empty_slot(state, content):
-    learn_skill(state, content, "fist")
-    learn_skill(state, content, "sword")
-    assert state.player.equipped == [None, "fist", "sword", None]
+def test_learn_skill_starts_at_first_level(state, content):
+    msgs = learn_skill(state, content, "fist")
+    assert state.player.skills["fist"] == 1
+    assert "長拳" in msgs[0]
     assert learn_skill(state, content, "fist") == []
-
-
-def test_learn_skill_no_empty_slot_suggests_swap(state, content):
-    learn_skill(state, content, "fist")
-    learn_skill(state, content, "sword")
-    msgs = learn_skill(state, content, "palm")  # 外功，兩個外功欄位都滿了
-    assert msgs[-1] == "（可在「武學」分頁把【驚濤掌】換上外功欄位。）"
-
-
-def test_skill_exp_levels_up_and_caps(state, content):
-    learn_skill(state, content, "fist")
-    msgs = add_skill_exp(state, content, "fist", 250)
-    prog = state.player.skills["fist"]
-    assert (prog.level, prog.exp) == (3, 50)
-    assert len(msgs) == 2
-    add_skill_exp(state, content, "fist", 10_000)
-    assert (prog.level, prog.exp) == (10, 0)
 
 
 def test_current_day(state):

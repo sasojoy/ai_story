@@ -98,3 +98,23 @@ def test_peace_ending_on_kou_line_with_only_kou_crushed():
 def test_legend_strip_does_not_cover_locations():
     c = load_content(CONTENT_DIR)
     assert max(loc.y for loc in c.locations.values()) + 12 < c.map.height - 50
+
+
+def _win_rate(squad_id: str, runs: int = 40) -> float:
+    from tianxia.engine import Game
+    from tianxia.team import fight
+
+    content = load_content(CONTENT_DIR)
+    wins = 0
+    for seed in range(runs):
+        game = Game.new(content, "測試俠客", rng=random.Random(seed))
+        wins += fight(game.state, content, squad_id, random.Random(seed)).outcome == "win"
+    return wins / runs
+
+
+def test_starting_team_beats_street_thugs():
+    assert _win_rate("dipi") >= 0.8
+
+
+def test_starting_team_cannot_beat_fanjianglong():
+    assert _win_rate("fanjianglong") <= 0.1

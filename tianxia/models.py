@@ -5,9 +5,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-STATS = ("str", "agi", "con", "wis", "silver", "good", "evil", "fame")
+STATS = ("str", "agi", "con", "wis", "silver", "good", "evil", "fame", "xinde")
 Style = Literal["剛", "柔", "快", "巧", "無"]
-Slot = Literal["內功", "外功", "輕功"]
 ActionKind = Literal["explore", "train", "socialize"]
 Tier = Literal["天", "地", "玄", "黃", "敵"]
 Grade = Literal["S", "A", "B", "C"]
@@ -70,7 +69,7 @@ class Choice(_Strict):
     text: str
     condition: Condition = Field(default_factory=Condition)
     check: Check | None = None
-    combat: str | None = None  # 敵人 id：選了就進入關鍵戰鬥
+    combat: str | None = None  # 敵方隊伍 id：選了就自動開打
     effect: Effect = Field(default_factory=Effect)  # 檢定成功／戰鬥勝利（或無檢定時）
     fail_effect: Effect = Field(default_factory=Effect)  # 檢定失敗／戰鬥落敗
 
@@ -120,17 +119,15 @@ class SkillEffect(_Strict):
 class Skill(_Strict):
     id: str
     name: str
-    slot: Slot | None = None
+    kind: Literal["心法", "絕招", "連招"]
     style: Style = "無"
-    power: int = 0
-    sect: str | None = None
-    desc: str = ""
-    kind: Literal["心法", "絕招", "連招"] | None = None
     quality: Literal["下", "中", "上"] = "中"
+    sect: str | None = None
     chance_base: float = 0.0
     chance_top: float | None = None
     prep: int = 0
-    effects: list[SkillEffect] = Field(default_factory=list)
+    effects: list[SkillEffect] = Field(min_length=1)
+    desc: str = ""
 
 
 class Sect(_Strict):
@@ -140,18 +137,6 @@ class Sect(_Strict):
     alignment: Literal["正", "邪", "中"]
     desc: str = ""
     starter_skills: list[str] = Field(default_factory=list)
-
-
-class Enemy(_Strict):
-    id: str
-    name: str
-    desc: str = ""
-    hp: int
-    atk: int
-    dfn: int
-    spd: int
-    style: Style = "無"
-    reward_silver: int = 0
 
 
 class CharacterDef(_Strict):
@@ -326,9 +311,6 @@ class Config(_Strict):
     )
     time_scale: float = 1.0
     season_days: float = 14
-    seclusion_exp_per_hour: int = 20
-    skill_exp_per_level: int = 100
-    train_skill_exp: int = 10
     train_stat_chance: float = 0.3
     train_event_chance: float = 0.3
     qiyu_weight_multiplier: float = 1.5
@@ -336,19 +318,40 @@ class Config(_Strict):
     start_stats: dict[str, int] = Field(
         default_factory=lambda: {
             "str": 5, "agi": 5, "con": 5, "wis": 5,
-            "silver": 50, "good": 0, "evil": 0, "fame": 0,
+            "silver": 50, "good": 0, "evil": 0, "fame": 0, "xinde": 0,
         }
     )
     stat_names: dict[str, str] = Field(
         default_factory=lambda: {
             "str": "臂力", "agi": "身法", "con": "根骨", "wis": "悟性",
-            "silver": "銀兩", "good": "善名", "evil": "惡名", "fame": "名望",
+            "silver": "銀兩", "good": "善名", "evil": "惡名", "fame": "名望", "xinde": "心得",
         }
     )
     vision_base: int = 2  # 從所在地沿道路看得見幾步
     vision_fame: int = 10  # 名望達到這個值，視野 +1
-    vision_qinggong_level: int = 5  # 裝備的輕功練到這個成數，視野 +1
     max_log: int = 200
+    player_innate: str | None = None  # 本人的本命武學（1a 為固定武學，1b 改為骨架＋詞條）
+    player_style: Style = "無"
+    player_aptitude: dict[str, Grade] = Field(default_factory=dict)
+    player_growth: dict[str, float] = Field(
+        default_factory=lambda: {"str": 0.3, "agi": 0.3, "con": 0.3, "wis": 0.3}
+    )
+    start_companions: list[str] = Field(default_factory=list)  # 出身給的同伴；前兩名與本人組隊
+    battle_rounds: int = 8
+    battle_atk_factor: float = 12.0
+    battle_def_factor: float = 5.0
+    neili_base: float = 300
+    neili_per_con: float = 40
+    neili_per_level: float = 20
+    neili_regen_hours: float = 2  # 內力從零回滿所需時間
+    newbie_days: float = 3  # 每季前幾天內力回復加倍
+    seclusion_xinde_per_hour: int = 15
+    xinde_cost_factor: int = 20  # 第 n 成升到 n+1 成需要 factor × n
+    dispel_refund: float = 0.8
+    level_exp: int = 100  # 第 n 級升 n+1 級需要 level_exp × n
+    max_level: int = 30
+    vision_skills: list[str] = Field(default_factory=list)  # 練到 vision_skill_level 時視野 +1
+    vision_skill_level: int = 5
 
 
 class Content(_Strict):
@@ -358,7 +361,6 @@ class Content(_Strict):
     events: dict[str, Event]
     skills: dict[str, Skill]
     sects: dict[str, Sect]
-    enemies: dict[str, Enemy]
     characters: dict[str, CharacterDef]
     squads: dict[str, Squad]
     map: MapLayout

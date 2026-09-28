@@ -1,16 +1,18 @@
-"""執行期狀態：玩家、世界、戰鬥。全部是可直接序列化成 JSON 的 Pydantic 模型。"""
+"""執行期狀態：玩家、門下、世界。全部是可直接序列化成 JSON 的 Pydantic 模型。"""
 from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
 from .models import Content
 
-EQUIP_SLOTS = ("內功", "外功", "外功", "輕功")
+PLAYER = "player"  # 門下資料裡代表玩家本人的 key
 
 
-class SkillProgress(BaseModel):
+class Member(BaseModel):
     level: int = 1
     exp: int = 0
+    neili: float | None = None  # None＝內力全滿
+    innate_level: int = 1  # 同伴本命武學的成數（本人的本命記在 skills 裡）
 
 
 class PlayerState(BaseModel):
@@ -20,13 +22,14 @@ class PlayerState(BaseModel):
     stamina: float
     flags: set[str] = Field(default_factory=set)
     sect: str | None = None
-    skills: dict[str, SkillProgress] = Field(default_factory=dict)
-    equipped: list[str | None] = Field(default_factory=lambda: [None] * len(EQUIP_SLOTS))
+    skills: dict[str, int] = Field(default_factory=dict)  # 已習武學 → 成數
+    members: dict[str, Member] = Field(default_factory=dict)  # 門下；PLAYER＝本人
+    team: list[str] = Field(default_factory=list)  # 出戰隊伍，第一位是隊長
+    loadouts: dict[str, list[str | None]] = Field(default_factory=dict)  # 每人兩格自選武學
     seen_events: set[str] = Field(default_factory=set)
     anonymous: bool = False
     busy_until: float | None = None  # 閉關結束的遊戲時間
     seclusion_start: float = 0.0
-    seclusion_skill: str | None = None
     tutorial_step: int = 0  # 等於引導步數時代表引導結束
     visited: set[str] = Field(default_factory=set)  # 去過的地點
 
@@ -53,22 +56,11 @@ class WorldState(BaseModel):
     act: int = 0  # 目前第幾幕（從 0 起算）
 
 
-class BattleState(BaseModel):
-    enemy_id: str
-    event_id: str
-    choice_index: int
-    player_hp: int
-    player_hp_max: int
-    enemy_hp: int
-    round: int = 0
-    ultimate_used: bool = False
-
-
 class GameState(BaseModel):
     player: PlayerState
     world: WorldState
     pending_event: str | None = None
-    battle: BattleState | None = None
+    last_report: list[str] = Field(default_factory=list)  # 最近一場戰鬥的完整戰報
     log: list[str] = Field(default_factory=list)
     last_real: float | None = None  # 上次同步的現實時間（time.time()）
 
@@ -76,12 +68,17 @@ class GameState(BaseModel):
 def new_game_state(content: Content, name: str) -> GameState:
     cfg = content.config
     trends = content.scenario.trends
+    companions = list(cfg.start_companions)
+    keys = [PLAYER] + companions
     player = PlayerState(
         name=name,
         location=content.scenario.start_location,
         stats=dict(cfg.start_stats),
         stamina=float(cfg.stamina_max),
         tutorial_step=0,
+        members={key: Member() for key in keys},
+        team=keys[:3],
+        loadouts={key: [None, None] for key in keys},
     )
     world = WorldState(
         trends={t.id: t.start for t in trends},

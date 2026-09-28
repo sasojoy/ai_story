@@ -5,20 +5,19 @@ import random
 
 from pydantic import BaseModel
 
-from .combat import (
-    TACTICS, auto_battle, battle_round, battle_status, enemy_fighter, player_fighter, start_battle,
-)
+from . import team
 from .events import choice_label, has_events_here, pick_event, visible_choices
 from .guide import note_action, quest_text, tutorial_intro
 from .mapview import render_map
-from .models import Content, Effect, Event
-from .rules import add_skill_exp, apply_effect, change_trend, learn_skill, roll_check
-from .state import EQUIP_SLOTS, GameState, Rumor, new_game_state
+from .models import Content, Effect, Event, Squad
+from .rules import apply_effect, change_trend, learn_skill, roll_check
+from .state import PLAYER, GameState, Member, Rumor, new_game_state
 from .world import check_thresholds, end_season, sim_tick
 
 HOUR = 3600
 DAY = 86400
 LOG_BREAK = "\x1e"  # 紀錄中每次行動結束的分隔標記（不顯示）
+REPORT_HINT = "（戰報見「戰報」分頁）"
 
 
 class Option(BaseModel):
@@ -37,9 +36,14 @@ class Game:
     @classmethod
     def new(cls, content: Content, name: str, rng: random.Random | None = None) -> Game:
         game = cls(content, new_game_state(content, name), rng)
-        for skill_id in content.config.starter_skills:
+        cfg, p = content.config, game.state.player
+        for skill_id in cfg.starter_skills:
             learn_skill(game.state, content, skill_id)
-        game.state.player.visited.add(game.state.player.location)
+        if cfg.player_innate:
+            learn_skill(game.state, content, cfg.player_innate)
+        free = [s for s in cfg.starter_skills if s != cfg.player_innate]
+        p.loadouts[PLAYER] = (free + [None] * team.FREE_SLOTS)[: team.FREE_SLOTS]
+        p.visited.add(p.location)
         game._log(
             [f"══ {content.scenario.name} ══", content.scenario.intro, game.location_text()]
             + tutorial_intro(content)
@@ -47,22 +51,21 @@ class Game:
         return game
 
     def _drop_stale_references(self) -> None:
-        """內容檔改版後，舊存檔可能引用已刪除的事件、地點或武學；丟掉這些引用以免當機。"""
+        """內容檔改版後，舊存檔可能引用已刪除的事件、地點、武學或人物；丟掉這些引用以免當機。"""
         s, c = self.state, self.content
         p = s.player
         if s.pending_event and s.pending_event not in c.events:
             s.pending_event = None
-        if s.battle and (s.battle.enemy_id not in c.enemies or s.battle.event_id not in c.events):
-            s.battle = None
-        if s.battle and s.battle.choice_index >= len(c.events[s.battle.event_id].choices):
-            s.battle = None
         if p.location not in c.locations:
             p.location = c.scenario.start_location
         p.skills = {k: v for k, v in p.skills.items() if k in c.skills}
-        p.equipped = [sid if sid in p.skills else None for sid in p.equipped]
-        if p.seclusion_skill and p.seclusion_skill not in p.skills:
-            p.busy_until = None
-            p.seclusion_skill = None
+        p.members = {k: m for k, m in p.members.items() if k == PLAYER or k in c.characters}
+        p.members.setdefault(PLAYER, Member())
+        p.team = [k for k in p.team if k in p.members][:3] or [PLAYER]
+        p.loadouts = {
+            k: [sid if sid in p.skills else None for sid in slots][: team.FREE_SLOTS]
+            for k, slots in p.loadouts.items() if k in p.members
+        }
         line_ids = [line.id for line in c.scenario.storylines]
         if s.world.storyline not in line_ids:
             s.world.storyline, s.world.act = line_ids[0], 0
@@ -102,6 +105,12 @@ class Game:
         cfg, p, w = self.content.config, self.state.player, self.state.world
         w.time += seconds
         p.stamina = min(cfg.stamina_max, p.stamina + seconds / cfg.stamina_regen_seconds)
+        rate = seconds / (cfg.neili_regen_hours * HOUR)
+        if p.busy_until is not None:
+            rate *= 2  # 閉關時內力回復加倍
+        if w.time <= cfg.newbie_days * DAY:
+            rate *= 2  # 新手期加倍
+        team.regen_neili(self.state, self.content, rate)
         msgs: list[str] = []
         if p.busy_until is not None and w.time >= p.busy_until:
             msgs += self._finish_seclusion(p.busy_until)
@@ -120,11 +129,6 @@ class Game:
         s, c = self.state, self.content
         if s.world.ended:
             return [Option(id="season:new", label="開啟新的賽季")]
-        if s.battle:
-            return [
-                Option(id=f"tactic:{t}", label=t, enabled=not (t == "絕招" and s.battle.ultimate_used))
-                for t in TACTICS
-            ]
         if s.pending_event:
             event = c.events[s.pending_event]
             return [Option(id=f"choice:{i}", label=choice_label(ch, s)) for i, ch in visible_choices(event, s)]
@@ -161,8 +165,6 @@ class Game:
             msgs = self._move(arg)
         elif kind == "choice":
             msgs = self._choose(int(arg))
-        elif kind == "tactic":
-            msgs = self._tactic(arg)
         else:
             msgs = self.new_season()
         if kind == "act" and arg != "break":
@@ -199,31 +201,39 @@ class Game:
         s, c = self.state, self.content
         p = s.player
         loc = c.locations[p.location]
-        enemy = c.enemies[self.rng.choice(loc.enemies)]
-        won, rounds = auto_battle(player_fighter(s, c), enemy_fighter(enemy), self.rng)
-        if won:
-            msgs = [f"你在{loc.name}與{enemy.name}交手 {rounds} 回合，將其擊退。"]
-            if enemy.reward_silver:
-                p.stats["silver"] += enemy.reward_silver
-                msgs.append(f"銀兩 +{enemy.reward_silver}")
+        squad = c.squads[self.rng.choice(loc.enemies)]
+        result = team.fight(s, c, squad.id, self.rng)
+        if result.outcome == "win":
+            msgs = [f"你率眾在{loc.name}與{squad.name}交手，{result.rounds}回合後將其擊退。{REPORT_HINT}"]
+            msgs += self._battle_rewards(squad)
             if self.rng.random() < c.config.train_stat_chance:
                 key = self.rng.choice(["str", "agi", "con"])
                 p.stats[key] += 1
                 msgs.append(f"{c.config.stat_names[key]} +1")
-            for skill_id in p.equipped:
-                if skill_id and c.skills[skill_id].slot == "外功":
-                    msgs += add_skill_exp(s, c, skill_id, c.config.train_skill_exp)
             for trend_id, delta in loc.train_trend.items():
                 msgs += change_trend(s, c, trend_id, delta)
-        else:
+        elif result.outcome == "lose":
             loss = p.stats["silver"] // 10
             p.stats["silver"] -= loss
-            msgs = [f"你在{loc.name}與{enemy.name}交手 {rounds} 回合，不敵敗走，失落銀兩 {loss}。"]
+            msgs = [f"你率眾在{loc.name}與{squad.name}交手，不敵敗走，失落銀兩 {loss}。{REPORT_HINT}"]
+        else:
+            msgs = [f"你率眾在{loc.name}與{squad.name}纏鬥{result.rounds}回合，不分勝負。{REPORT_HINT}"]
         if self.rng.random() < c.config.train_event_chance:
             event = pick_event(s, c, "train", self.rng)
             if event:
                 msgs += self._present(event)
         return msgs
+
+    def _battle_rewards(self, squad: Squad) -> list[str]:
+        p = self.state.player
+        msgs = []
+        if squad.reward_silver:
+            p.stats["silver"] += squad.reward_silver
+            msgs.append(f"銀兩 +{squad.reward_silver}")
+        if squad.reward_xinde:
+            p.stats["xinde"] = p.stats.get("xinde", 0) + squad.reward_xinde
+            msgs.append(f"心得 +{squad.reward_xinde}")
+        return msgs + team.add_exp(self.state, self.content, squad.exp)
 
     def _move(self, dest_id: str) -> list[str]:
         dest = self.content.locations[dest_id]
@@ -239,21 +249,20 @@ class Game:
         s.pending_event = None
         msgs = [f"▸ {choice.text}"]
         if choice.combat:
-            return msgs + start_battle(s, c, choice.combat, event.id, index)
+            squad = c.squads[choice.combat]
+            result = team.fight(s, c, squad.id, self.rng)
+            if result.outcome == "win":
+                msgs.append(f"你率眾與{squad.name}交手，{result.rounds}回合後獲勝。{REPORT_HINT}")
+                return msgs + self._battle_rewards(squad) + self._apply(choice.effect)
+            if result.outcome == "lose":
+                msgs.append(f"你率眾與{squad.name}交手，不敵敗退。{REPORT_HINT}")
+                return msgs + self._apply(choice.fail_effect)
+            return msgs + [f"你與{squad.name}纏鬥{result.rounds}回合，雙方不分勝負，各自退開。{REPORT_HINT}"]
         if choice.check:
             success = roll_check(choice.check, s, self.rng)
             msgs.append("（檢定成功）" if success else "（檢定失敗）")
             return msgs + self._apply(choice.effect if success else choice.fail_effect)
         return msgs + self._apply(choice.effect)
-
-    def _tactic(self, tactic: str) -> list[str]:
-        s, c = self.state, self.content
-        event_id, index = s.battle.event_id, s.battle.choice_index
-        outcome, msgs = battle_round(s, c, tactic, self.rng)
-        if outcome is None or outcome in ("flee", "draw"):
-            return msgs
-        choice = c.events[event_id].choices[index]
-        return msgs + self._apply(choice.effect if outcome == "win" else choice.fail_effect)
 
     def _apply(self, effect: Effect) -> list[str]:
         msgs = apply_effect(effect, self.state, self.content)
@@ -261,52 +270,55 @@ class Game:
             msgs += self._present(self.content.events[effect.next_event])
         return msgs
 
-    # ── 閉關、武學、設定 ─────────────────────────────────
+    # ── 閉關、門下、設定 ─────────────────────────────────
 
     def _idle(self) -> bool:
         s = self.state
-        return (
-            not s.world.ended and s.battle is None and s.pending_event is None
-            and s.player.busy_until is None
-        )
+        return not s.world.ended and s.pending_event is None and s.player.busy_until is None
 
-    def seclude(self, hours: int, skill_id: str) -> list[str]:
+    def seclude(self, hours: int) -> list[str]:
         p = self.state.player
         if not self._idle():
             return self._log(["你現在無法閉關。"])
-        if skill_id not in p.skills:
-            return self._log(["你尚未習得這門武學。"])
         hours = max(1, min(12, int(hours)))
         p.busy_until = self.state.world.time + hours * HOUR
         p.seclusion_start = self.state.world.time
-        p.seclusion_skill = skill_id
-        return self._log([f"你閉關苦修【{self.content.skills[skill_id].name}】，預計 {hours} 小時後出關。"])
+        return self._log([f"你閉關靜修，預計 {hours} 小時後出關；閉關期間內力回復加倍。"])
 
     def _finish_seclusion(self, end_time: float) -> list[str]:
         p, cfg = self.state.player, self.content.config
         hours = (end_time - p.seclusion_start) / HOUR
-        amount = round(hours * cfg.seclusion_exp_per_hour * (1 + p.stats["wis"] / 20))
-        skill_id = p.seclusion_skill
+        amount = round(hours * cfg.seclusion_xinde_per_hour * (1 + p.stats["wis"] / 20))
         p.busy_until = None
-        p.seclusion_skill = None
-        msgs = [f"你結束閉關（{hours:.1f} 小時），【{self.content.skills[skill_id].name}】修為 +{amount}。"]
-        return msgs + add_skill_exp(self.state, self.content, skill_id, amount)
+        p.stats["xinde"] = p.stats.get("xinde", 0) + amount
+        return [f"你結束閉關（{hours:.1f} 小時），心得 +{amount}。"]
 
-    def equip(self, slot: int, skill_id: str | None) -> list[str]:
-        p, c = self.state.player, self.content
-        if self.state.battle is not None:
-            return self._log(["戰鬥中無法更換武學。"])
-        if skill_id:
-            if skill_id not in p.skills:
-                return self._log(["你尚未習得這門武學。"])
-            if c.skills[skill_id].slot != EQUIP_SLOTS[slot]:
-                return self._log([f"【{c.skills[skill_id].name}】不能放在{EQUIP_SLOTS[slot]}欄位。"])
-            for i, other in enumerate(p.equipped):
-                if other == skill_id and i != slot:
-                    p.equipped[i] = None
-        p.equipped[slot] = skill_id or None
-        label = c.skills[skill_id].name if skill_id else "（空）"
-        return self._log([f"{EQUIP_SLOTS[slot]}欄位：{label}"])
+    def upgrade(self, target: str) -> list[str]:
+        return self._log(team.upgrade(self.state, self.content, target))
+
+    def dispel(self, target: str) -> list[str]:
+        return self._log(team.dispel(self.state, self.content, target))
+
+    def set_loadout(self, member: str, slot: int, skill_id: str | None) -> list[str]:
+        return self._log(team.set_loadout(self.state, self.content, member, slot, skill_id))
+
+    def upgrade_options(self) -> list[tuple[str, str]]:
+        return team.upgrade_options(self.state, self.content)
+
+    def loadout_choices(self) -> list[tuple[str, str]]:
+        return team.loadout_choices(self.state, self.content)
+
+    def team_members(self) -> list[tuple[str, str]]:
+        return [(team.member_name(self.state, self.content, key), key) for key in self.state.player.team]
+
+    def team_text(self) -> str:
+        return team.team_text(self.state, self.content)
+
+    def skills_text(self) -> str:
+        return team.skills_text(self.state, self.content)
+
+    def report_text(self) -> str:
+        return "\n\n".join(self.state.last_report) or "（還沒有戰報。）"
 
     def set_anonymous(self, value: bool) -> None:
         self.state.player.anonymous = bool(value)
@@ -335,13 +347,6 @@ class Game:
         self.state.player.tutorial_step = tutorial_step
         return []
 
-    def skill_choices(self, slot_type: str) -> list[tuple[str, str]]:
-        return [
-            (f"{self.content.skills[sid].name} 第{prog.level}成", sid)
-            for sid, prog in self.state.player.skills.items()
-            if self.content.skills[sid].slot == slot_type
-        ]
-
     # ── 畫面文字 ──────────────────────────────────────────
 
     def location_text(self) -> str:
@@ -352,8 +357,6 @@ class Game:
         s, c = self.state, self.content
         if s.world.ended:
             return f"## {s.world.ending_title}\n\n{s.world.ending_text}"
-        if s.battle:
-            return f"⚔ {battle_status(s, c)}"
         if s.pending_event:
             event = c.events[s.pending_event]
             return f"**{event.title}**\n\n{event.text}"
@@ -371,15 +374,15 @@ class Game:
             f"📍 {c.locations[p.location].name}　⏳ 第 {day} 天 {clock}（本季共 {c.config.season_days:g} 天）",
             f"**體力** {int(p.stamina)} / {c.config.stamina_max}",
             "　".join(f"{names[k]} {p.stats[k]}" for k in ("str", "agi", "con", "wis")),
-            "　".join(f"{names[k]} {p.stats[k]}" for k in ("silver", "good", "evil", "fame")),
-            "**武學**",
+            "　".join(f"{names[k]} {p.stats.get(k, 0)}" for k in ("silver", "good", "evil", "fame", "xinde")),
+            "**隊伍**",
         ]
-        for slot, skill_id in zip(EQUIP_SLOTS, p.equipped):
-            if skill_id:
-                skill = c.skills[skill_id]
-                lines.append(f"- {slot}：{skill.name}（{skill.style}）第{p.skills[skill_id].level}成")
-            else:
-                lines.append(f"- {slot}：（空）")
+        for i, key in enumerate(p.team):
+            now, cap = team.member_neili(s, c, key)
+            leader = "（隊長）" if i == 0 else ""
+            lines.append(
+                f"- {team.member_name(s, c, key)}{leader}　第{p.members[key].level}級　內力 {int(now)}/{int(cap)}"
+            )
         if p.busy_until is not None:
             lines.append(f"🧘 閉關中，約 {(p.busy_until - w.time) / HOUR:.1f} 小時後出關")
         return "\n\n".join(lines)

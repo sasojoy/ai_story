@@ -15,27 +15,17 @@ import gradio as gr
 from tianxia.content import load_content
 from tianxia.engine import Game
 from tianxia.save import load_game, save_game
-from tianxia.state import EQUIP_SLOTS
 
 ROOT = Path(__file__).parent
 CONTENT = load_content(ROOT / "content")
 SAVE_DIR = ROOT / "saves"
 MAX_BUTTONS = 10
 # game_state、任務區塊、狀態文字、場景文字、紀錄、地圖、大勢、傳聞、江湖史、選項 id 清單、匿名勾選框、
-# 左欄「場景／地圖」分頁，再加上按鈕（MAX_BUTTONS）、武學欄位下拉（EQUIP_SLOTS）、閉關武學下拉。
+# 左欄「場景／地圖」分頁，再加上按鈕（MAX_BUTTONS）。
 MAIN_TABS_INDEX = 11
-N_OUTPUTS = 12 + MAX_BUTTONS + len(EQUIP_SLOTS) + 1
+N_OUTPUTS = 12 + MAX_BUTTONS
 
 ACT_LOCK = threading.Lock()
-
-
-def equip_slot_label(index: int) -> str:
-    """把 EQUIP_SLOTS 的重複欄位（外功×2）編號，避免兩個欄位撞名。"""
-    slot = EQUIP_SLOTS[index]
-    dupes = [i for i, s in enumerate(EQUIP_SLOTS) if s == slot]
-    if len(dupes) == 1:
-        return f"{slot}欄位"
-    return f"{slot}{'一二三四五'[dupes.index(index)]}"
 
 
 def save_path(name: str) -> Path:
@@ -52,11 +42,6 @@ def render(game: Game, focus_scene: bool = False) -> list:
         else:
             buttons.append(gr.update(visible=False))
     p = game.state.player
-    equips = [
-        gr.update(choices=[("（空）", "")] + game.skill_choices(slot), value=skill_id or "")
-        for slot, skill_id in zip(EQUIP_SLOTS, p.equipped)
-    ]
-    learned = [choice for slot in ("內功", "外功", "輕功") for choice in game.skill_choices(slot)]
     return [
         game,
         game.quest_text(),
@@ -71,15 +56,12 @@ def render(game: Game, focus_scene: bool = False) -> list:
         p.anonymous,
         gr.update(selected="scene") if focus_scene else gr.update(),
         *buttons,
-        *equips,
-        gr.update(choices=learned),
     ]
 
 
-def _scene_key(game: Game) -> tuple:
-    """目前需要玩家讀場景的東西：待處理事件或進行中的戰鬥。"""
-    s = game.state
-    return (s.pending_event, s.battle.enemy_id if s.battle else None)
+def _scene_key(game: Game) -> str | None:
+    """目前需要玩家讀場景的東西：待處理事件。"""
+    return game.state.pending_event
 
 
 def act(game: Game | None, action) -> list:
@@ -92,7 +74,7 @@ def act(game: Game | None, action) -> list:
         action(game)
         save_game(game.state, save_path(game.state.player.name))
         after = _scene_key(game)
-        return render(game, focus_scene=after != (None, None) and after != before)
+        return render(game, focus_scene=after is not None and after != before)
 
 
 def make_option_handler(index: int):
@@ -104,13 +86,6 @@ def make_option_handler(index: int):
     return handler
 
 
-def make_equip_handler(slot: int):
-    def handler(game, skill_id):
-        return act(game, lambda g: g.equip(slot, skill_id or None))
-
-    return handler
-
-
 def make_fast_forward_handler(hours: int):
     def handler(game):
         return act(game, lambda g: g.advance(hours * 3600))
@@ -118,10 +93,8 @@ def make_fast_forward_handler(hours: int):
     return handler
 
 
-def seclude_handler(game, skill_id, hours):
-    if not skill_id:
-        return [gr.skip()] * N_OUTPUTS
-    return act(game, lambda g: g.seclude(int(hours), skill_id))
+def seclude_handler(game, hours):
+    return act(game, lambda g: g.seclude(int(hours)))
 
 
 def anonymous_handler(game, value):
@@ -178,12 +151,8 @@ def build_demo() -> gr.Blocks:
                         rumors_md = gr.Markdown()
                     with gr.Tab("江湖史"):
                         chronicle_md = gr.Markdown()
-                    with gr.Tab("武學"):
-                        equip_dds = [
-                            gr.Dropdown(label=equip_slot_label(i), choices=[], interactive=True)
-                            for i in range(len(EQUIP_SLOTS))
-                        ]
-                        seclude_dd = gr.Dropdown(label="閉關修練的武學", choices=[], interactive=True)
+                    with gr.Tab("閉關"):
+                        gr.Markdown("閉關可以得到心得，期間內力回復加倍。")
                         hours_sl = gr.Slider(1, 12, value=8, step=1, label="閉關時數（小時）")
                         seclude_btn = gr.Button("開始閉關")
                     with gr.Tab("設定"):
@@ -195,7 +164,7 @@ def build_demo() -> gr.Blocks:
 
         outputs = [
             game_state, quest_md, status_md, scene_md, log_md, map_html, trends_md, rumors_md, chronicle_md,
-            ids_state, anon_cb, main_tabs, *option_btns, *equip_dds, seclude_dd,
+            ids_state, anon_cb, main_tabs, *option_btns,
         ]
         assert len(outputs) == N_OUTPUTS
 
@@ -203,9 +172,7 @@ def build_demo() -> gr.Blocks:
         name_box.submit(start, inputs=[name_box], outputs=outputs + [start_col, game_row])
         for i, btn in enumerate(option_btns):
             btn.click(make_option_handler(i), inputs=[game_state, ids_state], outputs=outputs)
-        for slot, dd in enumerate(equip_dds):
-            dd.input(make_equip_handler(slot), inputs=[game_state, dd], outputs=outputs)
-        seclude_btn.click(seclude_handler, inputs=[game_state, seclude_dd, hours_sl], outputs=outputs)
+        seclude_btn.click(seclude_handler, inputs=[game_state, hours_sl], outputs=outputs)
         anon_cb.input(anonymous_handler, inputs=[game_state, anon_cb], outputs=outputs)
         skip_tutorial_btn.click(skip_tutorial_handler, inputs=[game_state], outputs=outputs)
         map_tab.select(map_view_handler, inputs=[game_state], outputs=outputs)

@@ -9,12 +9,12 @@ def test_vision_range_grows_with_fame(state, content):
     assert vision_range(state, content) == 3
 
 
-def test_vision_range_grows_with_trained_qinggong(state, content):
+def test_vision_range_grows_with_trained_vision_skill(state, content):
     from tianxia.rules import learn_skill
 
     learn_skill(state, content, "step")
     assert vision_range(state, content) == 2
-    state.player.skills["step"].level = 5
+    state.player.skills["step"] = 5
     assert vision_range(state, content) == 3
 
 

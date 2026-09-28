@@ -1,12 +1,11 @@
-"""數值規則的核心：條件判定、效果套用、屬性檢定、大勢推進、武學經驗。"""
+"""數值規則的核心：條件判定、效果套用、屬性檢定、大勢推進、習得武學。"""
 from __future__ import annotations
 
 import random
 
 from .models import Check, Condition, Content, Effect
-from .state import EQUIP_SLOTS, GameState, Rumor, SkillProgress
+from .state import GameState, Rumor
 
-MAX_SKILL_LEVEL = 10
 DAY = 86400
 
 
@@ -106,33 +105,8 @@ def learn_skill(state: GameState, content: Content, skill_id: str) -> list[str]:
     p = state.player
     if skill_id in p.skills:
         return []
-    p.skills[skill_id] = SkillProgress()
-    skill = content.skills[skill_id]
-    msgs = [f"你習得了【{skill.name}】！"]
-    for i, slot in enumerate(EQUIP_SLOTS):
-        if slot == skill.slot and p.equipped[i] is None:
-            p.equipped[i] = skill_id
-            msgs.append(f"已將【{skill.name}】配置於{slot}欄位。")
-            break
-    else:
-        msgs.append(f"（可在「武學」分頁把【{skill.name}】換上{skill.slot}欄位。）")
-    return msgs
-
-
-def add_skill_exp(state: GameState, content: Content, skill_id: str, amount: int) -> list[str]:
-    prog = state.player.skills[skill_id]
-    if prog.level >= MAX_SKILL_LEVEL:
-        return []
-    prog.exp += amount
-    per_level = content.config.skill_exp_per_level
-    msgs = []
-    while prog.exp >= per_level and prog.level < MAX_SKILL_LEVEL:
-        prog.exp -= per_level
-        prog.level += 1
-        msgs.append(f"【{content.skills[skill_id].name}】精進至第{prog.level}成！")
-    if prog.level >= MAX_SKILL_LEVEL:
-        prog.exp = 0
-    return msgs
+    p.skills[skill_id] = 1
+    return [f"你習得了【{content.skills[skill_id].name}】！（可在「門下」分頁配置給隊中的人。）"]
 
 
 def apply_effect(effect: Effect, state: GameState, content: Content) -> list[str]:

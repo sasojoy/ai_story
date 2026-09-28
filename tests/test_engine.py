@@ -12,7 +12,9 @@ def ids(game):
 def test_new_game(game):
     p = game.state.player
     assert p.location == "town" and p.stamina == 150
-    assert p.equipped[1] == "fist"
+    assert p.skills == {"fist": 1, "family": 1}
+    assert p.team == ["player", "mate"]
+    assert p.loadouts["player"] == ["fist", None]
     assert "測試開始。" in game.state.log
 
 
@@ -68,22 +70,23 @@ def test_join_sect_via_socialize(game):
     game.choose("act:socialize")
     game.choose("choice:0")
     assert game.state.player.sect == "cloud"
-    assert game.state.player.equipped[1:3] == ["fist", "sword"]
+    assert game.state.player.skills["sword"] == 1
 
 
-def test_key_battle_flow_lose(game):
+def test_event_battle_is_fully_automatic(game):
     game.choose("move:lake")
     game.choose("act:socialize")
     assert game.state.pending_event == "duel"
-    game.choose("choice:0")
-    assert ids(game) == ["tactic:強攻", "tactic:巧取", "tactic:固守", "tactic:絕招", "tactic:撤退"]
-    for _ in range(10):
-        if game.state.battle is None:
-            break
-        game.choose("tactic:強攻")
-    assert game.state.battle is None
+    game.choose("choice:0")  # 應戰翻江龍：全自動打完
+    assert game.state.pending_event is None
+    assert not any(i.startswith("tactic:") for i in ids(game))
     assert game.state.player.stats["silver"] == 40
     assert "你敗了。" in game.state.log
+    assert game.state.last_report[0] == "⚔ 對陣：翻江龍"
+    from tianxia.team import member_neili
+
+    now, top = member_neili(game.state, game.content, "player")
+    assert now < top  # 內力留在戰後的剩餘值
 
 
 def test_train_wins_and_pushes_trend(game):
@@ -92,7 +95,8 @@ def test_train_wins_and_pushes_trend(game):
     p = game.state.player
     assert p.stamina == 135
     assert p.stats["silver"] == 55
-    assert p.skills["fist"].exp == 10
+    assert p.stats["xinde"] == 10
+    assert p.members["player"].exp == 20
     assert game.state.world.trends["kou"] == 29
 
 
@@ -120,20 +124,20 @@ def test_sync_uses_real_clock_and_time_scale(game):
     assert game.state.player.stamina == pytest.approx(2)
 
 
-def test_seclusion_completes_and_grants_exp(game):
-    game.seclude(4, "fist")
+def test_seclusion_grants_xinde(game):
+    game.seclude(4)
     assert ids(game) == ["act:break"]
     game.advance(4 * HOUR)
     assert game.state.player.busy_until is None
-    assert game.state.player.skills["fist"].level == 2  # 4 小時 × 20 × (1 + 5/20) = 100
+    assert game.state.player.stats["xinde"] == 75  # 4 小時 × 15 × (1 + 5/20)
 
 
 def test_break_seclusion_early(game):
-    game.seclude(4, "fist")
+    game.seclude(4)
     game.advance(HOUR)
     game.choose("act:break")
     assert game.state.player.busy_until is None
-    assert game.state.player.skills["fist"].exp == 25
+    assert game.state.player.stats["xinde"] == 19  # round(1 × 15 × 1.25)
 
 
 def test_season_ends_by_time(game):
@@ -159,15 +163,19 @@ def test_new_season_keeps_last_real(game):
     assert game.state.last_real == 1000.0
 
 
-def test_equip_rules(game):
+def test_loadout_rules(game):
     game.choose("act:socialize")
-    game.choose("choice:0")  # 學到 sword，放進第二個外功欄
-    game.equip(1, "sword")
-    assert game.state.player.equipped[1:3] == ["sword", None]
-    game.equip(0, "sword")  # 欄位不符，不變
-    assert game.state.player.equipped[0] is None
-    game.equip(1, None)
-    assert game.state.player.equipped[1] is None
+    game.choose("choice:0")  # 拜入流雲派，學到 sword
+    p = game.state.player
+    game.set_loadout("player", 1, "sword")
+    assert p.loadouts["player"] == ["fist", "sword"]
+    game.set_loadout("mate", 0, "sword")  # 同一門武學只能配給一個人：從本人身上移走
+    assert p.loadouts["player"] == ["fist", None]
+    assert p.loadouts["mate"] == ["sword", None]
+    game.set_loadout("player", 1, "family")  # 本人的本命不能再配一次
+    assert p.loadouts["player"] == ["fist", None]
+    game.set_loadout("player", 0, None)
+    assert p.loadouts["player"] == [None, None]
 
 
 def test_texts_render(game):
@@ -276,7 +284,7 @@ def test_log_text_shows_newest_action_first(game):
     game.choose("move:lake")
     game.choose("act:train")
     text = game.log_text()
-    assert text.index("你在湖邊與") < text.index("【湖邊】")  # 最新的行動在最上面
+    assert text.index("你率眾在湖邊與") < text.index("【湖邊】")  # 最新的行動在最上面
     assert text.index("【湖邊】") < text.index("測試開始。")  # 開場紀錄在最下面
     marks = game.state.log.count(LOG_BREAK)
     game.advance(0)  # 沒有訊息的呼叫不產生空的一組
@@ -297,3 +305,35 @@ def test_log_text_limits_groups_and_handles_old_saves(game):
         game.choose("move:lake")
         game.choose("move:town")
     assert game.log_text(limit=2).count("---") == 1
+
+
+def test_upgrade_and_dispel_with_xinde(game):
+    p = game.state.player
+    p.stats["xinde"] = 100
+    game.upgrade("skill:fist")
+    game.upgrade("skill:fist")
+    assert p.skills["fist"] == 3 and p.stats["xinde"] == 40  # 20 + 40
+    assert "心得不足" in game.upgrade("skill:fist")[0]  # 第 3→4 成要 60
+    game.dispel("skill:fist")
+    assert p.skills["fist"] == 1 and p.stats["xinde"] == 88  # 返還 (20+40)×0.8＝48
+
+
+def test_upgrade_companion_innate(game):
+    p = game.state.player
+    p.stats["xinde"] = 20
+    game.upgrade("innate:mate")
+    assert p.members["mate"].innate_level == 2
+    assert ("韓鐵・本命驚濤掌 第2成", "innate:mate") in game.upgrade_options()
+
+
+def test_neili_regenerates_over_time(game):
+    game.state.player.members["player"].neili = 1.0
+    game.advance(2 * HOUR)
+    assert game.state.player.members["player"].neili is None  # 回滿（新手期加倍，兩小時綽綽有餘）
+
+
+def test_texts_for_team_skills_and_report(game):
+    assert "韓鐵" in game.team_text() and "（隊長）" in game.team_text()
+    assert "長拳" in game.skills_text()
+    assert game.report_text() == "（還沒有戰報。）"
+    assert game.team_members() == [("沈浪", "player"), ("韓鐵", "mate")]

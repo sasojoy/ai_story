@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 
 from .models import (
-    STATS, CharacterDef, Condition, Config, Content, Effect, Enemy, Event, Location, MapLayout, Scenario,
+    STATS, CharacterDef, Condition, Config, Content, Effect, Event, Location, MapLayout, Scenario,
     Sect, Skill, Squad, Tutorial,
 )
 
@@ -29,7 +29,6 @@ def load_content(root: Path) -> Content:
         locations=_index(Location, _read(root / "locations.json")),
         skills=_index(Skill, _read(root / "skills.json")),
         sects=_index(Sect, _read(root / "sects.json")),
-        enemies=_index(Enemy, _read(root / "enemies.json")),
         characters=_index(CharacterDef, _read(root / "characters.json")),
         squads=_index(Squad, _read(root / "squads.json")),
         events=events,
@@ -91,6 +90,11 @@ def validate(c: Content) -> None:
     for stat in STATS:
         need(stat in cfg.start_stats, f"config.start_stats 缺少 {stat}")
     known("config.starter_skills", cfg.starter_skills, c.skills, "武學")
+    if cfg.player_innate:
+        known("config.player_innate", [cfg.player_innate], c.skills, "武學")
+    known("config.start_companions", cfg.start_companions, c.characters, "人物")
+    known("config.vision_skills", cfg.vision_skills, c.skills, "武學")
+    known("config.player_aptitude", cfg.player_aptitude, ("剛", "柔", "快", "巧"), "流派")
 
     for loc in c.locations.values():
         where = f"地點 {loc.id}"
@@ -99,7 +103,7 @@ def validate(c: Content) -> None:
                 errors.append(f"{where}：連到不存在的地點 {dest}")
             elif loc.id not in c.locations[dest].connections:
                 errors.append(f"地點 {loc.id} 連到 {dest}，但 {dest} 沒有連回來")
-        known(where, loc.enemies, c.enemies, "敵人")
+        known(where, loc.enemies, c.squads, "敵方隊伍")
         known(where, loc.train_trend, trend_ids, "大勢線")
         need(
             0 <= loc.x <= c.map.width and 0 <= loc.y <= c.map.height,
@@ -128,7 +132,7 @@ def validate(c: Content) -> None:
             check_effect(cw, ch.effect)
             check_effect(cw, ch.fail_effect)
             if ch.combat:
-                known(cw, [ch.combat], c.enemies, "敵人")
+                known(cw, [ch.combat], c.squads, "敵方隊伍")
             if ch.check:
                 known(cw, [ch.check.stat], STATS, "屬性")
 
@@ -194,8 +198,6 @@ def validate(c: Content) -> None:
             need(skill.chance_base > 0, f"{where}：絕招／連招必須有發動率 chance_base")
         if skill.kind == "心法":
             need(skill.chance_base == 0 and skill.prep == 0, f"{where}：心法不能有發動率或準備回合")
-        if skill.kind is not None:
-            need(bool(skill.effects), f"{where}：至少要有一個效果")
         for eff in skill.effects:
             if eff.kind in ("buff", "debuff"):
                 need(eff.stat is not None, f"{where}：{eff.kind} 效果必須指定 stat")

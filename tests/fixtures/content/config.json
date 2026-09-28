@@ -1,1 +1,2 @@
-{"starter_skills": ["fist"], "season_days": 2}
+{"starter_skills": ["fist"], "season_days": 2, "player_innate": "family", "player_style": "柔",
+ "player_aptitude": {"柔": "A"}, "start_companions": ["mate"], "vision_skills": ["step"]}

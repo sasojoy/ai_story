@@ -25,13 +25,8 @@ LEGEND_SYMBOLS = "■ 城鎮　◆ 門派　● 野外　外圈：綠安全／�
 
 def vision_range(state: GameState, content: Content) -> int:
     cfg, p = content.config, state.player
-    trained_qinggong = any(
-        skill_id
-        and content.skills[skill_id].slot == "輕功"
-        and p.skills[skill_id].level >= cfg.vision_qinggong_level
-        for skill_id in p.equipped
-    )
-    bonus = p.stats.get("fame", 0) >= cfg.vision_fame or trained_qinggong
+    trained = any(p.skills.get(skill_id, 0) >= cfg.vision_skill_level for skill_id in cfg.vision_skills)
+    bonus = p.stats.get("fame", 0) >= cfg.vision_fame or trained
     return cfg.vision_base + (1 if bonus else 0)
 
 
