@@ -105,3 +105,24 @@ def test_unknown_trend_in_revealed_rejected(tmp_path):
     edit_json(root / "events" / "test.json", lambda d: d[0].update(condition={"revealed_all": ["ghost"]}))
     with pytest.raises(ContentError, match="ghost"):
         load_content(root)
+
+
+def test_branch_storyline_needs_replaces_when(tmp_path):
+    root = copy_fixture(tmp_path)
+    edit_json(root / "scenario.json", lambda d: d["storylines"][1].pop("replaces_when"))
+    with pytest.raises(ContentError, match="treasure"):
+        load_content(root)
+
+
+def test_final_act_cannot_advance(tmp_path):
+    root = copy_fixture(tmp_path)
+    edit_json(root / "scenario.json", lambda d: d["storylines"][0]["acts"][1].update(advance_when={"day_min": 3}))
+    with pytest.raises(ContentError, match="a2"):
+        load_content(root)
+
+
+def test_ending_with_unknown_storyline_rejected(tmp_path):
+    root = copy_fixture(tmp_path)
+    edit_json(root / "scenario.json", lambda d: d["endings"][0].update(storyline="nope"))
+    with pytest.raises(ContentError, match="nope"):
+        load_content(root)

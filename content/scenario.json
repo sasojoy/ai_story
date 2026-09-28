@@ -15,25 +15,78 @@
     {"id": "bao_100", "trend": "bao", "op": ">=", "value": 100, "text": "藏寶圖終於湊齊！棲霞後山的「藏龍洞」現世，洞口有人把守。", "world_flags_add": ["cave_open"]}
   ],
   "sim_players": [
-    {"name": "翻江龍", "actions_per_day": 8, "trend": {"kou": 1}, "rumor_chance": 0.25, "condition": {"world_flags_none": ["fjl_defeated", "kou_crushed"]}, "rumors": [
+    {"name": "翻江龍", "actions_per_day": 8, "trend": {"kou": 1}, "rumor_chance": 0.25,
+     "condition": {"world_flags_none": ["fjl_defeated", "kou_crushed"], "revealed_none": ["bao"]},
+     "rumors": [
       "太湖水寇又劫了一艘官船，據說是{name}親自帶的人。",
       "{name}在太湖放話：「江南的水路，從今往後姓翻！」",
       "運河上又有商船失蹤，人人都說是{name}的手筆。"
+    ]},
+    {"name": "翻江龍", "actions_per_day": 4, "trend": {"kou": 1, "bao": 1}, "rumor_chance": 0.3,
+     "condition": {"revealed_all": ["bao"], "world_flags_none": ["fjl_defeated", "kou_crushed", "cave_open"]},
+     "rumors": [
+      "{name}派人到棲霞山一帶打聽前朝寶藏的下落。",
+      "水寨的船少了一半，聽說{name}分兵去找寶藏了。"
     ]},
     {"name": "白衣劍客沈青", "actions_per_day": 3, "trend": {"kou": -1}, "rumor_chance": 0.3, "rumors": [
       "{name}在太湖邊獨挑水寇十七人，劍不染塵。",
       "有人看見{name}在鎮江渡口護送難民過江。"
     ]},
-    {"name": "鬼手劉三", "actions_per_day": 3, "trend": {"bao": 2}, "requires_revealed": "bao", "rumor_chance": 0.3, "condition": {"world_flags_none": ["treasure_taken"]}, "rumors": [
+    {"name": "鬼手劉三", "actions_per_day": 3, "trend": {"bao": 2}, "requires_revealed": "bao", "rumor_chance": 0.3,
+     "condition": {"world_flags_none": ["treasure_taken", "treasure_lost", "cave_open"]},
+     "rumors": [
       "有人看見{name}在棲霞山一帶鬼鬼祟祟地挖土。",
       "{name}在金陵黑市高價收購前朝古物。"
     ]}
   ],
+  "storylines": [
+    {"id": "kou_line", "name": "太湖寇亂", "acts": [
+      {"id": "kou_1", "title": "水寇橫行", "text": "翻江龍的水寨日漸壯大，運河上的商船接連失蹤。",
+       "goal": "到高郵湖、瓜洲渡或太湖一帶歷練剿寇，別讓寇亂到 50（運河會被封鎖）。",
+       "advance_when": {"any_of": [{"world_flags_all": ["canal_blocked"]}, {"day_min": 5}]}},
+      {"id": "kou_2", "title": "運河封鎖", "text": "運河被封，商旅斷絕，翻江龍的名號響遍江南。",
+       "goal": "打破封鎖；名望夠了，就去太湖水寨挑戰翻江龍。",
+       "advance_when": {"any_of": [{"world_flags_all": ["fjl_defeated"]}, {"trend_min": {"kou": 70}}, {"day_min": 10}]}},
+      {"id": "kou_3", "title": "鎮江決戰", "text": "水寨大軍壓向鎮江，江南的命運在此一戰。",
+       "goal": "守住鎮江直到季末（寇亂不到 80），或把寇亂壓到 10 以下，徹底平定太湖。"}
+    ]},
+    {"id": "bao_line", "name": "前朝寶藏", "intro": "前朝藏寶圖殘卷現世，翻江龍分兵尋寶，江南的局勢從此改寫。",
+     "replaces_when": {"revealed_all": ["bao"]}, "acts": [
+      {"id": "bao_1", "title": "殘卷現世", "text": "殘卷的消息傳開，各路人馬開始在金陵、棲霞山一帶搜尋。",
+       "goal": "在棲霞山一帶挖掘、找金陵的老學究解讀，把寶藏線推到 50。",
+       "advance_when": {"trend_min": {"bao": 50}}},
+      {"id": "bao_2", "title": "群雄爭寶", "text": "翻江龍與鬼手劉三都在搶地圖，誰先湊齊，誰就能找到寶藏。",
+       "goal": "搶在翻江龍與鬼手劉三之前，把寶藏線推到 100。",
+       "advance_when": {"world_flags_all": ["cave_open"]}},
+      {"id": "bao_3", "title": "藏龍洞", "text": "藏龍洞現世，洞口有守墓人把守，翻江龍的人馬也在路上。",
+       "goal": "48 小時內趕到棲霞後山的藏龍洞，擊敗守墓人。"}
+    ]}
+  ],
+  "world_events": [
+    {"id": "fjl_takes_treasure", "condition": {"flag_age_hours": {"cave_open": 48}, "world_flags_none": ["treasure_taken"]},
+     "text": "翻江龍率眾闖入藏龍洞，前朝寶藏落入水寨之手！", "world_flags_add": ["treasure_lost"]}
+  ],
   "endings": [
-    {"id": "kou_win", "title": "水寇稱霸", "text": "鎮江陷落，翻江龍坐擁運河。江南的商旅從此要向水寨納貢，而這一季的俠客們，只能在酒館裡嘆息。", "condition": {"world_flags_all": ["kou_win"]}},
-    {"id": "peace_treasure", "title": "江南太平，寶藏重光", "text": "水寨覆滅，前朝寶藏也重見天日。這一季的江南，是俠客的江南。", "condition": {"world_flags_all": ["kou_crushed", "treasure_taken"]}},
-    {"id": "treasure", "title": "寶藏現世，亂局未平", "text": "寶藏被人取走，江湖為之震動；然而太湖水寇仍在，江南的風雨還遠未停歇。", "condition": {"world_flags_all": ["treasure_taken"]}},
-    {"id": "peace", "title": "寇平而寶藏成謎", "text": "運河重歸太平，但那批前朝寶藏，依舊是酒館裡說不完的傳說。", "condition": {"world_flags_all": ["kou_crushed"]}},
-    {"id": "default", "title": "江南依舊風雨飄搖", "text": "這一季，沒有人能徹底改變江南。水寇與俠客互有勝負，寶藏的傳說仍在流傳。"}
+    {"id": "kou_win", "title": "水寇稱霸", "hint": "寇亂達到 80，鎮江陷落。",
+     "text": "鎮江陷落，翻江龍坐擁運河。江南的商旅從此要向水寨納貢，而這一季的俠客們，只能在酒館裡嘆息。",
+     "condition": {"world_flags_all": ["kou_win"]}},
+    {"id": "peace_treasure", "storyline": "bao_line", "title": "江南太平，寶藏重光", "hint": "取得寶藏，並把寇亂壓到 10 以下。",
+     "text": "水寨覆滅，前朝寶藏也重見天日。這一季的江南，是俠客的江南。",
+     "condition": {"world_flags_all": ["kou_crushed", "treasure_taken"]}},
+    {"id": "treasure", "storyline": "bao_line", "title": "寶藏重光", "hint": "在藏龍洞擊敗守墓人，取得寶藏。",
+     "text": "寶藏被俠客取走，江湖為之震動；然而太湖水寇仍在，江南的風雨還遠未停歇。",
+     "condition": {"world_flags_all": ["treasure_taken"]}},
+    {"id": "treasure_lost", "storyline": "bao_line", "title": "寶藏落入水寨", "hint": "藏龍洞現世 48 小時內無人取寶，翻江龍就會搶先。",
+     "text": "翻江龍帶著前朝寶藏回到太湖，水寨從此兵強馬壯。俠客們錯過的，不只是一批金銀。",
+     "condition": {"world_flags_all": ["treasure_lost"]}},
+    {"id": "treasure_none", "storyline": "bao_line", "title": "寶藏成謎", "hint": "季末仍無人找到寶藏。",
+     "text": "藏寶圖的碎片散落江湖，寶藏依舊是酒館裡說不完的傳說。"},
+    {"id": "peace", "storyline": "kou_line", "title": "太湖平定", "hint": "把寇亂壓到 10 以下。",
+     "text": "運河重歸太平，但那批前朝寶藏，依舊是酒館裡說不完的傳說。",
+     "condition": {"world_flags_all": ["kou_crushed"]}},
+    {"id": "hold", "storyline": "kou_line", "title": "鎮江守住了", "hint": "撐到季末，寇亂不到 80。",
+     "text": "水寨大軍在鎮江城下鎩羽而歸，江南暫得喘息；但翻江龍仍在，下一場風雨隨時會來。"},
+    {"id": "default", "title": "江南依舊風雨飄搖",
+     "text": "這一季，沒有人能徹底改變江南。水寇與俠客互有勝負，寶藏的傳說仍在流傳。"}
   ]
 }

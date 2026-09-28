@@ -16,16 +16,19 @@ from tianxia.content import load_content  # noqa: E402
 def main(runs: int) -> None:
     content = load_content(ROOT / "content")
     endings, thresholds = Counter(), Counter()
+    storylines = Counter()
     days, events = [], []
     for seed in range(runs):
         world = (game := play_season(content, seed)).state.world
         endings[world.ending_title] += 1
         thresholds.update(world.fired_thresholds)
+        storylines[world.storyline] += 1
         days.append(world.time / 86400)
         events.append(len(game.state.player.seen_events))
     print(f"模擬 {runs} 季")
     print("結局：", dict(endings))
     print("門檻觸發次數：", dict(thresholds))
+    print("最終主線：", dict(storylines))
     print(f"平均季長 {sum(days) / runs:.1f} 天；平均遇到 {sum(events) / runs:.1f} 種事件")
 
 

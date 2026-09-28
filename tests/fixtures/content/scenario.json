@@ -16,8 +16,22 @@
     {"name": "翻江龍", "actions_per_day": 24, "trend": {"kou": 1}, "rumors": ["{name}又劫了一艘船。"], "rumor_chance": 1.0},
     {"name": "鬼手", "actions_per_day": 24, "trend": {"bao": 1}, "requires_revealed": "bao", "rumors": ["{name}在挖土。"], "rumor_chance": 0.0}
   ],
+  "storylines": [
+    {"id": "main", "name": "寇亂", "acts": [
+      {"id": "a1", "title": "水寇橫行", "text": "水寇開始作亂。", "goal": "壓制寇亂", "advance_when": {"trend_min": {"kou": 60}}},
+      {"id": "a2", "title": "運河封鎖", "text": "運河被封了。", "goal": "打破封鎖"}
+    ]},
+    {"id": "treasure", "name": "寶藏", "intro": "有人找到了殘卷。", "replaces_when": {"revealed_all": ["bao"]}, "acts": [
+      {"id": "t1", "title": "殘卷現世", "text": "殘卷出現了。", "goal": "湊齊地圖", "advance_when": {"world_flags_all": ["cave_open"]}},
+      {"id": "t2", "title": "寶洞", "text": "寶洞現世。", "goal": "取得寶藏"}
+    ]}
+  ],
+  "world_events": [
+    {"id": "grab", "condition": {"flag_age_hours": {"cave_open": 2}}, "text": "寶藏被搶走了！", "world_flags_add": ["treasure_lost"]}
+  ],
   "endings": [
-    {"id": "kou_win", "title": "水寇稱霸", "text": "江南落入水寇之手。", "condition": {"world_flags_all": ["kou_win"]}},
+    {"id": "kou_win", "title": "水寇稱霸", "text": "江南落入水寇之手。", "hint": "寇亂達 80", "condition": {"world_flags_all": ["kou_win"]}},
+    {"id": "lost", "storyline": "treasure", "title": "寶藏被奪", "text": "寶藏落入他人之手。", "hint": "寶洞現世兩小時內無人取寶", "condition": {"world_flags_all": ["treasure_lost"]}},
     {"id": "default", "title": "風雨飄搖", "text": "江南依舊動盪。"}
   ]
 }

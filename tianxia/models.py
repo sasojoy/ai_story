@@ -165,6 +165,8 @@ class Ending(_Strict):
     id: str
     title: str
     text: str
+    storyline: str | None = None  # 只在這條主線下成立；None＝任何主線
+    hint: str = ""  # 顯示在任務區塊：怎麼達成這個結局
     condition: Condition = Field(default_factory=Condition)
 
 
@@ -181,6 +183,32 @@ class MapLayout(_Strict):
     labels: list[MapLabel] = Field(default_factory=list)
 
 
+class WorldEvent(_Strict):
+    """以任意條件觸發、只觸發一次的世界事件。"""
+
+    id: str
+    condition: Condition
+    text: str
+    world_flags_add: list[str] = Field(default_factory=list)
+    ends_season: bool = False
+
+
+class Act(_Strict):
+    id: str
+    title: str
+    text: str
+    goal: str
+    advance_when: Condition | None = None  # 最後一幕為 None
+
+
+class Storyline(_Strict):
+    id: str
+    name: str
+    intro: str = ""
+    acts: list[Act] = Field(min_length=1)
+    replaces_when: Condition | None = None  # 支線主線：條件成立時取代主線
+
+
 class Scenario(_Strict):
     id: str
     name: str
@@ -189,6 +217,8 @@ class Scenario(_Strict):
     trends: list[Trend]
     thresholds: list[Threshold] = Field(default_factory=list)
     sim_players: list[SimPlayer] = Field(default_factory=list)
+    world_events: list[WorldEvent] = Field(default_factory=list)
+    storylines: list[Storyline] = Field(min_length=1)
     endings: list[Ending]
 
 

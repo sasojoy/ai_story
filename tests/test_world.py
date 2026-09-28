@@ -1,6 +1,8 @@
 import random
 
-from tianxia.world import check_thresholds, end_season, evaluate_ending, sim_tick
+from tianxia.world import (
+    check_thresholds, current_act, current_storyline, end_season, evaluate_ending, sim_tick,
+)
 
 
 def test_threshold_fires_once_and_sets_flag(state, content):
@@ -55,3 +57,50 @@ def test_threshold_records_flag_time(state, content):
     state.world.trends["kou"] = 50
     check_thresholds(state, content)
     assert state.world.flag_times["blocked"] == 5000
+
+
+def test_starts_on_main_storyline(state, content):
+    assert current_storyline(state, content).id == "main"
+    assert current_act(state, content).id == "a1"
+
+
+def test_act_advances_when_condition_met(state, content):
+    state.world.trends["kou"] = 60
+    msgs = check_thresholds(state, content)
+    assert state.world.act == 1
+    assert any("第2幕" in m and "運河封鎖" in m for m in msgs)
+
+
+def test_last_act_never_advances(state, content):
+    state.world.act = 1
+    state.world.trends["kou"] = 60
+    check_thresholds(state, content)
+    assert state.world.act == 1
+
+
+def test_hidden_line_rewrites_storyline(state, content):
+    state.world.act = 1
+    state.world.revealed.add("bao")
+    msgs = check_thresholds(state, content)
+    assert (state.world.storyline, state.world.act) == ("treasure", 0)
+    assert any("主線改寫" in m for m in msgs)
+    assert "主線改寫" in state.world.rumors[-1].text
+
+
+def test_world_event_fires_after_flag_age(state, content):
+    state.world.revealed.add("bao")
+    state.world.trends["bao"] = 100
+    check_thresholds(state, content)  # bao100 → cave_open（時間 0）；主線改寫並推進到 t2
+    assert current_act(state, content).id == "t2"
+    assert "treasure_lost" not in state.world.flags
+    state.world.time = 7200
+    msgs = check_thresholds(state, content)
+    assert "treasure_lost" in state.world.flags
+    assert "【江湖大事】寶藏被搶走了！" in msgs
+
+
+def test_endings_scoped_to_storyline(state, content):
+    state.world.flags.add("treasure_lost")
+    assert evaluate_ending(state, content).id == "default"
+    state.world.storyline = "treasure"
+    assert evaluate_ending(state, content).id == "lost"

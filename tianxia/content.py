@@ -143,9 +143,37 @@ def validate(c: Content) -> None:
         check_condition(where, sim.condition)
     for ending in c.scenario.endings:
         check_condition(f"結局 {ending.id}", ending.condition)
+
+    line_ids = [s.id for s in c.scenario.storylines]
+    need(len(set(line_ids)) == len(line_ids), "主線 id 重複")
+    for i, line in enumerate(c.scenario.storylines):
+        where = f"主線 {line.id}"
+        if i == 0:
+            need(line.replaces_when is None, f"{where}：第一條主線不能有 replaces_when")
+        else:
+            need(line.replaces_when is not None, f"{where}：支線主線必須有 replaces_when")
+            if line.replaces_when is not None:
+                check_condition(where, line.replaces_when)
+        for j, act in enumerate(line.acts):
+            aw = f"{where} 第{j + 1}幕 {act.id}"
+            if j == len(line.acts) - 1:
+                need(act.advance_when is None, f"{aw}：最後一幕不能有 advance_when")
+            else:
+                need(act.advance_when is not None, f"{aw}：非最後一幕必須有 advance_when")
+                if act.advance_when is not None:
+                    check_condition(aw, act.advance_when)
+    for ending in c.scenario.endings:
+        if ending.storyline:
+            known(f"結局 {ending.id}", [ending.storyline], line_ids, "主線")
+    fire_ids = [t.id for t in c.scenario.thresholds] + [e.id for e in c.scenario.world_events]
+    need(len(set(fire_ids)) == len(fire_ids), "大勢門檻與世界事件的 id 重複")
+    for event in c.scenario.world_events:
+        check_condition(f"世界事件 {event.id}", event.condition)
+
+    last = c.scenario.endings[-1] if c.scenario.endings else None
     need(
-        bool(c.scenario.endings) and c.scenario.endings[-1].condition == Condition(),
-        "劇本的最後一個結局必須沒有條件（作為保底結局）",
+        last is not None and last.condition == Condition() and last.storyline is None,
+        "劇本的最後一個結局必須沒有條件、也不限主線（作為保底結局）",
     )
 
     if errors:

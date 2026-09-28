@@ -47,6 +47,8 @@ class WorldState(BaseModel):
     ended: bool = False
     ending_title: str = ""
     ending_text: str = ""
+    storyline: str = ""  # 目前主線 id
+    act: int = 0  # 目前第幾幕（從 0 起算）
 
 
 class BattleState(BaseModel):
@@ -81,5 +83,6 @@ def new_game_state(content: Content, name: str) -> GameState:
     world = WorldState(
         trends={t.id: t.start for t in trends},
         revealed={t.id for t in trends if not t.hidden},
+        storyline=content.scenario.storylines[0].id,
     )
     return GameState(player=player, world=world)

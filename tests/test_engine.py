@@ -177,3 +177,12 @@ def test_texts_render(game):
     assert game.rumors_text() == "（尚無傳聞。）"
     game.choose("act:explore")
     assert "醉漢" in game.scene_text()
+
+
+def test_stale_storyline_is_reset(content, game):
+    from tianxia.engine import Game
+
+    game.state.world.storyline = "removed_line"
+    game.state.world.act = 5
+    fresh = Game(content, game.state)
+    assert (fresh.state.world.storyline, fresh.state.world.act) == ("main", 0)

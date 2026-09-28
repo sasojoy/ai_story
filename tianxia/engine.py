@@ -56,6 +56,11 @@ class Game:
         if p.seclusion_skill and p.seclusion_skill not in p.skills:
             p.busy_until = None
             p.seclusion_skill = None
+        line_ids = [line.id for line in c.scenario.storylines]
+        if s.world.storyline not in line_ids:
+            s.world.storyline, s.world.act = line_ids[0], 0
+        acts = next(line for line in c.scenario.storylines if line.id == s.world.storyline).acts
+        s.world.act = min(s.world.act, len(acts) - 1)
 
     # ── 時間 ──────────────────────────────────────────────
 

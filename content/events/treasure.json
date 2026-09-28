@@ -40,7 +40,7 @@
      "effect": {"text": "你熬了一夜，終於看出殘卷上的暗記。", "trend": {"bao": 15}},
      "fail_effect": {"text": "你盯著殘卷看了一夜，只看得眼花。"}}
   ]},
-  {"id": "bao_guardian", "title": "藏龍洞守墓人", "locations": ["canglong"], "condition": {"world_flags_none": ["treasure_taken"]},
+  {"id": "bao_guardian", "title": "藏龍洞守墓人", "locations": ["canglong"], "condition": {"world_flags_none": ["treasure_taken", "treasure_lost"]},
    "text": "藏龍洞深處，一位白髮老人盤坐在石門前，緩緩睜開眼：「四十年了，終於有人找到這裡。想要寶藏，先過我這一關。」",
    "choices": [
     {"text": "出手", "combat": "shoumu",

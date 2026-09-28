@@ -1,3 +1,5 @@
+import random
+
 import pytest
 from collections import deque
 from pathlib import Path
@@ -39,3 +41,17 @@ def test_bot_plays_full_season(seed):
     assert game.state.world.ended
     assert game.state.world.ending_title
     assert len(game.state.player.seen_events) >= 5
+
+
+def test_treasure_storyline_can_be_lost_to_fanjianglong():
+    from tianxia.engine import Game
+    from tianxia.world import check_thresholds
+
+    game = Game.new(load_content(CONTENT_DIR), "測試俠客", rng=random.Random(0))
+    w = game.state.world
+    w.revealed.add("bao")
+    w.trends["bao"] = 100
+    check_thresholds(game.state, game.content)
+    assert w.storyline == "bao_line" and "cave_open" in w.flags
+    game.advance(49 * 3600)
+    assert "treasure_lost" in w.flags
