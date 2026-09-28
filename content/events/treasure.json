@@ -1,0 +1,52 @@
+[
+  {"id": "bao_scroll", "title": "白骨與殘卷", "locations": ["qixia_foot", "qixia_back", "yuhuatai"], "qiyu": true, "weight": 0.15, "once": true, "condition": {"trend_max": {"bao": 0}},
+   "text": "你一腳踩空，跌進一個被雨水沖開的土坑。坑底有具白骨，懷裡緊緊抱著一個油布包——裡面是半張泛黃的地圖，角落蓋著前朝的官印。",
+   "choices": [
+    {"text": "收起殘卷，把消息傳出去", "effect": {"text": "消息傳開，江湖上的眼睛都轉向了金陵。", "stats": {"fame": 2}, "trend": {"bao": 20}, "flags_add": ["bao_piece"],
+     "rumor": "江湖傳聞：{name}在金陵一帶掘出一片前朝藏寶圖殘卷！", "chronicle": "{name}發現第一片前朝藏寶圖殘卷，寶藏之謎浮上檯面。"}},
+    {"text": "收起殘卷，秘而不宣", "effect": {"text": "你把殘卷貼身收好，誰也沒告訴。", "trend": {"bao": 20}, "flags_add": ["bao_piece"]}}
+  ]},
+  {"id": "bao_antique", "title": "古董鋪的舊圖", "actions": ["socialize"], "locations": ["suzhou", "jinling"], "weight": 0.5, "once": true,
+   "condition": {"trend_max": {"bao": 0}, "min_stats": {"silver": 150}},
+   "text": "古董鋪的掌櫃神神秘秘地拉你到後堂：「客官，這半張舊圖是前朝的東西，一百五十兩，不二價。」",
+   "choices": [
+    {"text": "買下", "effect": {"text": "你展開舊圖，上面畫著一座山，山勢像極了棲霞山。", "stats": {"silver": -150}, "trend": {"bao": 20}, "flags_add": ["bao_piece"]}},
+    {"text": "不買", "effect": {"text": "掌櫃聳聳肩，把舊圖收了回去。"}}
+  ]},
+  {"id": "bao_dig", "title": "循圖挖掘", "tags": ["山林"], "condition": {"trend_min": {"bao": 1}, "world_flags_none": ["cave_open"]},
+   "text": "你對照殘卷上的山形，找到一處可疑的土坡。",
+   "choices": [
+    {"text": "動手挖掘", "check": {"stat": "wis", "difficulty": 6},
+     "effect": {"text": "鏟子碰到一個鐵盒，裡面又是一片殘卷！", "stamina": -15, "trend": {"bao": 10}},
+     "fail_effect": {"text": "挖了半天，只挖出一窩螞蟻。", "stamina": -15}},
+    {"text": "做個記號，改天再來", "effect": {"text": "你在樹上刻了個記號。"}}
+  ]},
+  {"id": "bao_rival", "title": "鬼手劉三", "tags": ["山林"], "weight": 0.7, "condition": {"trend_min": {"bao": 20}, "world_flags_none": ["cave_open"]},
+   "text": "土坡後面有人在挖土，那人猛一回頭——是江南有名的盜墓賊，鬼手劉三。",
+   "choices": [
+    {"text": "動手搶他的殘卷", "combat": "guishou",
+     "effect": {"text": "鬼手劉三丟下殘卷，一溜煙跑了。", "stats": {"fame": 2}, "trend": {"bao": 15}},
+     "fail_effect": {"text": "等你回過神來，身上的殘卷已經被他摸走了。", "trend": {"bao": -5}}},
+    {"text": "談合作：「一起找，平分。」", "condition": {"min_stats": {"silver": 20}},
+     "effect": {"text": "劉三眼珠一轉，收了你二十兩「定金」，給了你一條線索。", "stats": {"silver": -20}, "trend": {"bao": 8}}},
+    {"text": "悄悄走開", "effect": {"text": "你不想惹這個麻煩。"}}
+  ]},
+  {"id": "bao_scholar", "title": "老學究", "actions": ["socialize"], "locations": ["jinling"], "once": true, "condition": {"trend_min": {"bao": 1}, "world_flags_none": ["cave_open"]},
+   "text": "國子監旁住著一位老學究，據說對前朝典故無所不知。",
+   "choices": [
+    {"text": "帶上謝禮請教", "condition": {"min_stats": {"silver": 20}},
+     "effect": {"text": "老學究指著殘卷上的小字：「這不是地名，是前朝工部的營造編號……」", "stats": {"silver": -20, "wis": 1}, "trend": {"bao": 15}}},
+    {"text": "自己拿著殘卷琢磨", "check": {"stat": "wis", "difficulty": 8},
+     "effect": {"text": "你熬了一夜，終於看出殘卷上的暗記。", "trend": {"bao": 15}},
+     "fail_effect": {"text": "你盯著殘卷看了一夜，只看得眼花。"}}
+  ]},
+  {"id": "bao_guardian", "title": "藏龍洞守墓人", "locations": ["canglong"], "condition": {"world_flags_none": ["treasure_taken"]},
+   "text": "藏龍洞深處，一位白髮老人盤坐在石門前，緩緩睜開眼：「四十年了，終於有人找到這裡。想要寶藏，先過我這一關。」",
+   "choices": [
+    {"text": "出手", "combat": "shoumu",
+     "effect": {"text": "老人長嘆一聲，讓開了石門。門後金光耀眼，還有一卷寫著「混元一氣」的絹冊。", "stats": {"silver": 500, "fame": 15}, "learn_skills": ["hunyuan"], "world_flags_add": ["treasure_taken"],
+      "rumor": "藏龍洞中傳出巨響，前朝寶藏被{name}取走了！", "chronicle": "{name}擊敗藏龍洞守墓人，取得前朝寶藏與失傳內功「混元一氣」。"},
+     "fail_effect": {"text": "老人一掌將你推出洞外：「再練十年吧。」", "stamina": -30}},
+    {"text": "退出洞外", "effect": {"text": "你決定先回去準備。"}}
+  ]}
+]

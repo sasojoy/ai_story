@@ -1,0 +1,69 @@
+[
+  {"id": "kou_escort", "title": "布商求援", "locations": ["guazhou", "zhenjiang"],
+   "text": "一位滿頭大汗的布商拉住你：「少俠！我這船貨要過江，最近水寇猖獗，能不能護送一程？酬金好說！」",
+   "choices": [
+    {"text": "答應護送", "combat": "shuikou",
+     "effect": {"text": "水寇果然來劫，被你殺退，布商千恩萬謝。", "stats": {"silver": 35, "good": 1}, "trend": {"kou": -3}},
+     "fail_effect": {"text": "你寡不敵眾，貨被劫走一半，布商哭天搶地。", "trend": {"kou": 1}}},
+    {"text": "收了訂金，半路溜走", "effect": {"text": "布商在渡口等了一整天，也沒等到你。", "stats": {"silver": 20, "evil": 3, "fame": -2}}},
+    {"text": "婉拒", "effect": {"text": "布商嘆了口氣，另找他人去了。"}}
+  ]},
+  {"id": "kou_recruit", "title": "水寇拉人", "locations": ["gaoyou", "taihu_north"], "condition": {"flags_none": ["kou_member", "kou_spy", "kou_traitor"]},
+   "text": "幾名水寇攔住你，為首的咧嘴一笑：「看你身手不錯，跟著翻江龍大當家混，吃香的喝辣的，怎樣？」",
+   "choices": [
+    {"text": "入夥", "effect": {"text": "你接過水寨的狼頭牌，從此是道上的人了。", "stats": {"silver": 30, "evil": 3}, "trend": {"kou": 3}, "flags_add": ["kou_member"], "rumor": "有人說{name}投了太湖水寨。"}},
+    {"text": "假意入夥，伺機探聽", "check": {"stat": "wis", "difficulty": 7},
+     "effect": {"text": "你混進了水寇的隊伍，對方還沒起疑。", "flags_add": ["kou_spy"]},
+     "fail_effect": {"text": "你眼神一閃被看穿，挨了一刀才逃出來。", "stamina": -15, "stats": {"evil": 1}}},
+    {"text": "拔劍", "combat": "shuikou",
+     "effect": {"text": "你一劍逼退為首的水寇，其餘的四散而逃。", "stats": {"fame": 1}, "trend": {"kou": -2}},
+     "fail_effect": {"text": "你被水寇打翻在地，身上的銀子也被搜走了。", "stamina": -15, "stats": {"silver": -10}}}
+  ]},
+  {"id": "kou_spy_report", "title": "巡江校尉", "actions": ["socialize"], "locations": ["zhenjiang", "suzhou"], "condition": {"flags_all": ["kou_spy"]}, "once": true,
+   "text": "你找到官府的巡江校尉，他正為水寇的布防發愁。",
+   "choices": [
+    {"text": "獻上水寨布防", "effect": {"text": "校尉大喜，當夜便調兵突襲。", "stats": {"good": 3, "fame": 3, "silver": 50}, "trend": {"kou": -10}, "flags_remove": ["kou_spy"],
+     "rumor": "{name}潛入水寨，探得布防交給官府，水寇折損慘重！", "chronicle": "{name}潛入太湖水寨，探得布防，重挫水寇。"}},
+    {"text": "暫不透露，繼續潛伏", "effect": {"text": "你決定再等等，也許能探到更大的消息。"}}
+  ]},
+  {"id": "kou_member_raid", "title": "水寨的命令", "tags": ["水路"], "condition": {"flags_all": ["kou_member"]},
+   "text": "水寨傳來命令：今晚劫一艘運糧船，你也得上。",
+   "choices": [
+    {"text": "動手", "effect": {"text": "糧船上的人跪了一地，你分到了一份。", "stats": {"silver": 40, "evil": 3}, "trend": {"kou": 3}}},
+    {"text": "放走糧船，從此與水寨一刀兩斷", "effect": {"text": "你悄悄解開纜繩，看著糧船消失在夜色裡。", "stats": {"good": 2}, "trend": {"kou": -2},
+     "flags_remove": ["kou_member"], "flags_add": ["kou_traitor"], "rumor": "{name}在劫船時倒戈，放走了一整船糧食，水寨揚言要他的命。"}}
+  ]},
+  {"id": "kou_blockade", "title": "運河封鎖", "tags": ["水路", "渡口"], "weight": 2, "condition": {"world_flags_all": ["canal_blocked"], "world_flags_none": ["kou_crushed"]},
+   "text": "運河被水寇封鎖，渡口擠滿了過不了江的百姓，米價一天漲三次。",
+   "choices": [
+    {"text": "夜襲水寇的哨船", "combat": "shuikou",
+     "effect": {"text": "你摸上哨船，一把火燒了個乾淨。", "stats": {"fame": 2, "good": 1}, "trend": {"kou": -4}},
+     "fail_effect": {"text": "哨船上早有埋伏，你跳江才逃過一劫。", "stamina": -20}},
+    {"text": "囤米高價賣出", "effect": {"text": "你賺了一大筆，也挨了不少白眼。", "stats": {"silver": 40, "evil": 3}}},
+    {"text": "幫忙維持秩序", "effect": {"text": "百姓們漸漸安定下來。", "stamina": -10, "stats": {"good": 2}}}
+  ]},
+  {"id": "kou_captives", "title": "蘆葦盪", "locations": ["taihu_north", "taihu_isle"],
+   "text": "蘆葦盪裡綁著幾個被擄來的漁民，看守的水寇正在打瞌睡。",
+   "choices": [
+    {"text": "悄悄救人", "check": {"stat": "agi", "difficulty": 6},
+     "effect": {"text": "你割斷繩子，帶著漁民從蘆葦盪摸了出去。", "stats": {"good": 3}, "trend": {"kou": -2}},
+     "fail_effect": {"text": "看守驚醒大叫，你只好丟下漁民逃走。", "stamina": -15}},
+    {"text": "裝作沒看見", "effect": {"text": "你繞開了蘆葦盪。"}}
+  ]},
+  {"id": "kou_boss", "title": "翻江龍", "locations": ["taihu_isle"], "weight": 0.6,
+   "condition": {"min_stats": {"fame": 3}, "world_flags_none": ["kou_crushed", "fjl_defeated"]},
+   "text": "聚義廳前，一個鐵塔般的大漢拄著九環刀，冷冷地看著你：「就是你，最近專跟我水寨作對？」——正是翻江龍。",
+   "choices": [
+    {"text": "拔劍：「正是在下。」", "combat": "fanjianglong",
+     "effect": {"text": "九環刀脫手飛出，翻江龍踉蹌後退，水寇們面面相覷。", "stats": {"fame": 10, "good": 3}, "trend": {"kou": -25}, "world_flags_add": ["fjl_defeated"],
+      "rumor": "{name}在太湖水寨當眾擊敗翻江龍！", "chronicle": "{name}於太湖水寨擊敗水寇大當家翻江龍。"},
+     "fail_effect": {"text": "九環刀勢大力沉，你被震得虎口迸裂，狼狽逃出水寨。", "stamina": -30, "stats": {"silver": -20}}},
+    {"text": "轉身就走", "effect": {"text": "翻江龍的笑聲在身後迴盪。"}}
+  ]},
+  {"id": "kou_reward", "title": "知府設宴", "actions": ["socialize"], "locations": ["suzhou"], "condition": {"world_flags_all": ["kou_crushed"]}, "once": true,
+   "text": "蘇州知府設宴答謝平定太湖的俠客，席間有人提起你的名字。",
+   "choices": [
+    {"text": "赴宴領賞", "effect": {"text": "知府親手把一盤銀錠推到你面前。", "stats": {"silver": 100, "fame": 5}}},
+    {"text": "婉拒", "effect": {"text": "你說，平寇是分內之事。", "stats": {"good": 3}}}
+  ]}
+]

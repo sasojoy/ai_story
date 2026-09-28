@@ -1,0 +1,139 @@
+[
+  {"id": "drunk_token", "title": "狼頭鐵牌", "locations": ["shouxihu", "qinhuai"],
+   "text": "一名醉漢跌跌撞撞撞上了你，懷中掉出一塊刻著狼頭的鐵牌。他慌忙撿起，眼神閃過一絲驚恐。",
+   "choices": [
+    {"text": "一把扣住他的手腕，逼問鐵牌來歷", "check": {"stat": "str", "difficulty": 6},
+     "effect": {"text": "醉漢疼得齜牙咧嘴，全招了：狼頭牌是太湖水寨的暗記，他是水寨安插在城裡的眼線。你將他扭送官府。", "stats": {"good": 2, "fame": 1}, "trend": {"kou": -2}},
+     "fail_effect": {"text": "醉漢身子一扭，竟像泥鰍般滑脫，轉眼消失在人群裡。"}},
+    {"text": "裝作沒看見，暗中跟蹤", "check": {"stat": "agi", "difficulty": 6},
+     "effect": {"text": "你遠遠吊在他身後，一路跟到運河邊一座破倉庫。", "stamina": -10, "next_event": "drunk_warehouse"},
+     "fail_effect": {"text": "拐過兩條巷子，人就不見了。", "stamina": -10}},
+    {"text": "扶他起身，順手摸走鐵牌", "check": {"stat": "agi", "difficulty": 5},
+     "effect": {"text": "你扶起醉漢，鐵牌已悄悄落入你袖中。", "stats": {"evil": 1}, "flags_add": ["wolf_token"]},
+     "fail_effect": {"text": "醉漢猛然抓住你的手：「小賊！」四周的人都朝你看過來。", "stats": {"fame": -1}}},
+    {"text": "不予理會，繼續賞景", "effect": {"text": "你轉過身，湖上的畫舫正緩緩駛過。"}}
+  ]},
+  {"id": "drunk_warehouse", "title": "運河倉庫", "actions": [],
+   "text": "倉庫裡燈火昏暗，十幾名水寇正在搬運私鹽，那醉漢正向一名頭目低聲稟報。",
+   "choices": [
+    {"text": "悄悄退出，回報官府", "effect": {"text": "官兵連夜查抄倉庫，水寇在城裡的據點被拔了一個。", "stats": {"good": 3, "silver": 20}, "trend": {"kou": -3}}},
+    {"text": "等他們走後，向醉漢敲一筆封口費", "effect": {"text": "醉漢哭喪著臉，把一袋碎銀塞給你。", "stats": {"silver": 40, "evil": 2}}},
+    {"text": "拔劍闖進去", "combat": "shuikou",
+     "effect": {"text": "你一人一劍，殺得水寇四散奔逃！", "stats": {"fame": 3, "good": 2}, "trend": {"kou": -5}, "rumor": "{name}單槍匹馬挑了水寇在城裡的私鹽倉。"},
+     "fail_effect": {"text": "寡不敵眾，你帶傷殺出重圍。", "stamina": -20}}
+  ]},
+  {"id": "herb", "title": "紫靈芝", "tags": ["山林"],
+   "text": "石縫間長著一株紫色的靈芝，傘蓋上泛著微光。",
+   "choices": [
+    {"text": "採下來拿去藥鋪賣", "effect": {"text": "藥鋪掌櫃出了個好價錢。", "stats": {"silver": 15}}},
+    {"text": "當場服下", "check": {"stat": "wis", "difficulty": 6},
+     "effect": {"text": "一股暖流自丹田升起，你只覺筋骨舒展。", "stats": {"con": 1}},
+     "fail_effect": {"text": "你腹痛如絞，在草叢裡躺了半天。", "stamina": -15}},
+    {"text": "留在原地，讓它繼續長", "effect": {"text": "你記下了位置，心想也許有一天用得上。", "stats": {"good": 1}}}
+  ]},
+  {"id": "beggar", "title": "路邊乞丐", "tags": ["官道", "野外"],
+   "text": "路邊一個老乞丐捧著破碗，眼巴巴地望著你。",
+   "choices": [
+    {"text": "施捨幾兩銀子", "effect": {"text": "老乞丐咧開缺牙的嘴笑了，多看了你兩眼。", "stats": {"silver": -5, "good": 1}, "flags_add": ["helped_beggar"]}},
+    {"text": "視而不見", "effect": {"text": "你快步走過。"}},
+    {"text": "一腳踢翻他的碗", "effect": {"text": "銅板滾了一地，老乞丐一聲不吭地撿著。", "stats": {"evil": 2}}}
+  ]},
+  {"id": "temple_zen", "title": "禪房聽經", "tags": ["寺院"],
+   "text": "禪房裡傳出老僧講經的聲音，香客們席地而坐。",
+   "choices": [
+    {"text": "坐下靜聽", "check": {"stat": "wis", "difficulty": 6},
+     "effect": {"text": "你似有所悟，心境一片澄明。", "stamina": -5, "stats": {"wis": 1}},
+     "fail_effect": {"text": "聽著聽著，你竟睡著了。", "stamina": -5}},
+    {"text": "捐些香油錢", "effect": {"text": "知客僧雙手合十：「施主善心。」", "stats": {"silver": -10, "good": 2}}},
+    {"text": "悄悄退出去", "effect": {"text": "你輕輕帶上了禪房的門。"}}
+  ]},
+  {"id": "tavern_brawl", "title": "酒樓鬥毆", "tags": ["城鎮"],
+   "text": "酒樓裡兩幫人一言不合，桌椅橫飛，眼看要出人命。",
+   "choices": [
+    {"text": "上前勸架", "check": {"stat": "str", "difficulty": 6},
+     "effect": {"text": "你一手一個把人分開，眾人見你手勁驚人，都不敢再鬧。", "stats": {"good": 1, "fame": 1}},
+     "fail_effect": {"text": "你被一張飛來的板凳砸中，還賠了掌櫃桌椅錢。", "stats": {"silver": -5}}},
+    {"text": "趁亂撿走地上的錢袋", "effect": {"text": "錢袋沉甸甸的，沒人注意到你。", "stats": {"silver": 12, "evil": 1}}},
+    {"text": "找個角落看熱鬧", "effect": {"text": "你喝完一壺酒，看完了一場好戲。"}}
+  ]},
+  {"id": "teahouse", "title": "茶館說書", "actions": ["socialize"], "tags": ["城鎮"],
+   "text": "茶館裡說書先生正講到精彩處，醒木一拍，滿堂喝采。",
+   "choices": [
+    {"text": "花幾個錢向茶客打聽消息", "effect": {"text": "茶客壓低聲音：「太湖那邊不太平，翻江龍又在招兵買馬。還有人說，棲霞山裡挖出過前朝的古錢……」", "stats": {"silver": -5}}},
+    {"text": "上台和說書先生對幾句", "check": {"stat": "wis", "difficulty": 7},
+     "effect": {"text": "你一番妙語，說書先生拱手稱服，茶客們記住了你的名號。", "stats": {"fame": 1}},
+     "fail_effect": {"text": "你張口結舌，惹得哄堂大笑。"}},
+    {"text": "喝完茶就走", "effect": {"text": "茶香猶在舌尖。"}}
+  ]},
+  {"id": "fisherman", "title": "補網的漁翁", "tags": ["湖畔", "水路"],
+   "text": "湖邊一位老漁翁正在補網，嘴裡念叨著今年的魚不好打。",
+   "choices": [
+    {"text": "幫他補網", "effect": {"text": "漁翁嘆道：「水寇到處抓壯丁，年輕人都不敢下湖了。」", "stamina": -5, "stats": {"good": 1}}},
+    {"text": "買一碗魚湯", "effect": {"text": "一碗熱騰騰的魚湯下肚，渾身都是力氣。", "stamina": 15, "stats": {"silver": -3}}},
+    {"text": "向他打聽水寇的動靜", "check": {"stat": "wis", "difficulty": 5},
+     "effect": {"text": "漁翁指了指湖心：「水寨的船，每逢初一十五就出來。」你暗暗記下。", "flags_add": ["kou_intel"]},
+     "fail_effect": {"text": "漁翁搖搖頭，不肯多說。"}}
+  ]},
+  {"id": "wolves", "title": "狼群", "tags": ["山林", "野外"],
+   "text": "林中傳來一聲狼嚎，幾雙綠油油的眼睛從四面圍了過來。",
+   "choices": [
+    {"text": "拔出兵器迎戰", "combat": "yelang",
+     "effect": {"text": "你殺退狼群，身法越發靈活了。", "stats": {"agi": 1}},
+     "fail_effect": {"text": "你被咬了幾口，狼狽地逃出樹林。", "stamina": -15}},
+    {"text": "爬上大樹躲避", "check": {"stat": "agi", "difficulty": 5},
+     "effect": {"text": "你攀上高枝，狼群轉了幾圈悻悻而去。"},
+     "fail_effect": {"text": "你爬到一半滑了下來，被追得滿山跑。", "stamina": -15}}
+  ]},
+  {"id": "hanshan_bell", "title": "夜半鐘聲", "locations": ["hanshan"], "once": true,
+   "text": "夜半鐘聲悠悠傳來，寺外江楓漁火，客船靜泊。",
+   "choices": [
+    {"text": "閉目靜聽", "effect": {"text": "鐘聲一聲聲敲進心裡，你的思緒清明了許多。", "stats": {"wis": 1}}},
+    {"text": "回客棧歇息", "effect": {"text": "你睡了一個好覺。", "stamina": 10}}
+  ]},
+  {"id": "train_insight", "title": "拆招頓悟", "actions": ["train"],
+   "text": "一番苦戰之後，方才對手的一招在你腦海中反覆浮現。",
+   "choices": [
+    {"text": "趁熱再練幾遍", "effect": {"text": "你反覆演練，拳腳更有力了。", "stamina": -10, "stats": {"str": 1}}},
+    {"text": "靜下心來細想", "check": {"stat": "wis", "difficulty": 6},
+     "effect": {"text": "你想通了其中關竅。", "stats": {"wis": 1}},
+     "fail_effect": {"text": "想了半天，還是沒想明白。"}}
+  ]},
+  {"id": "train_onlooker", "title": "錦衣少年", "actions": ["train"],
+   "text": "打鬥剛歇，一個錦衣少年跑過來，一臉崇拜地看著你。",
+   "choices": [
+    {"text": "收下他送的見面禮", "effect": {"text": "少年說回去要跟人講講你的威風。", "stats": {"silver": 15, "fame": 1}}},
+    {"text": "教他兩招防身", "effect": {"text": "少年學得有模有樣，千恩萬謝地走了。", "stamina": -5, "stats": {"good": 1, "fame": 1}}},
+    {"text": "擺擺手離開", "effect": {"text": "你不喜歡被人盯著看。"}}
+  ]},
+  {"id": "escort_teacher", "title": "威遠鏢局", "actions": ["socialize"], "locations": ["yangzhou"], "condition": {"skills_none": ["zhuifeng"]},
+   "text": "威遠鏢局的老鏢頭正在院子裡教新進的趟子手練腳力。",
+   "choices": [
+    {"text": "付四十兩學費，跟著練追風步", "condition": {"min_stats": {"silver": 40}},
+     "effect": {"text": "老鏢頭收了錢，教得倒是實在。", "stats": {"silver": -40}, "learn_skills": ["zhuifeng"]}},
+    {"text": "替鏢局跑一趟腿", "effect": {"text": "你幫鏢局送了封信，拿到一份工錢。", "stamina": -15, "stats": {"silver": 15}}},
+    {"text": "告辭", "effect": {"text": "老鏢頭點點頭，繼續吆喝。"}}
+  ]},
+  {"id": "monk_jinshan", "title": "金山寺方丈", "actions": ["socialize"], "locations": ["jinshan"],
+   "text": "金山寺的老方丈正在寺後菜園澆水。",
+   "choices": [
+    {"text": "請教調息之法", "check": {"stat": "wis", "difficulty": 6},
+     "effect": {"text": "老方丈隨口點撥幾句，你的氣息順暢了許多。", "stamina": -5, "stats": {"con": 1}},
+     "fail_effect": {"text": "老方丈笑而不語，繼續澆他的菜。", "stamina": -5}},
+    {"text": "幫忙挑水", "effect": {"text": "老方丈道了聲善哉。", "stamina": -10, "stats": {"good": 1}}}
+  ]},
+  {"id": "qinhuai_song", "title": "畫舫歌聲", "actions": ["socialize"], "locations": ["qinhuai"],
+   "text": "秦淮河的畫舫上傳來琵琶聲，一位歌女倚窗而歌。",
+   "choices": [
+    {"text": "上船聽曲", "condition": {"min_stats": {"silver": 20}},
+     "effect": {"text": "一曲終了，你一身疲憊都散了。", "stamina": 20, "stats": {"silver": -20}}},
+    {"text": "在岸邊聽一會兒就走", "effect": {"text": "曲子隨水聲漸遠。"}}
+  ]},
+  {"id": "waterfall", "title": "瀑布怪客", "tags": ["山林"], "qiyu": true, "weight": 0.2, "once": true,
+   "text": "山澗瀑布下，一個赤足怪客正在急流中來回縱躍，身形快得只剩一道影子。",
+   "choices": [
+    {"text": "躲在石後偷學", "check": {"stat": "wis", "difficulty": 7},
+     "effect": {"text": "你把怪客的步法默記在心，竟學到了七八成。", "stats": {"agi": 1}, "learn_skills": ["zhuifeng"]},
+     "fail_effect": {"text": "你看得眼花撩亂，什麼也沒記住。"}},
+    {"text": "上前拜見", "effect": {"text": "怪客瞥了你一眼，一個起落就不見了。"}}
+  ]}
+]
