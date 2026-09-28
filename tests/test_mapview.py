@@ -78,3 +78,12 @@ def test_label_flips_left_near_right_edge(state, content):
 def test_legend_sits_at_the_bottom(state, content):
     svg = render_map(state, content)
     assert f'<rect x="8" y="{content.map.height - 50}"' in svg
+
+
+def test_remembered_color_is_distinct_from_visible(state, content):
+    from tianxia.mapview import NODE_FILL
+
+    assert NODE_FILL["remembered"] == "#7F77DD"  # 紫色，和看得見的綠色明顯不同
+    content.config.vision_base = 0
+    state.player.visited.add("lake")
+    assert 'fill="#7F77DD"' in render_map(state, content)

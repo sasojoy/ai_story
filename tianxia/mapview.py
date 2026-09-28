@@ -10,7 +10,7 @@ KNOWN = ("current", "visible", "remembered")
 NODE_FILL = {
     "current": "#D85A30",
     "visible": "#1D9E75",
-    "remembered": "#5DCAA5",
+    "remembered": "#7F77DD",
     "outline": "#B4B2A9",
     "dot": "#C9C3B2",
 }
