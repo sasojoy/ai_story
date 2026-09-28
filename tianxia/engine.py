@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from .combat import (
     TACTICS, auto_battle, battle_round, battle_status, enemy_fighter, player_fighter, start_battle,
 )
-from .events import choice_label, pick_event, visible_choices
+from .events import choice_label, has_events_here, pick_event, visible_choices
 from .models import Content, Effect, Event
 from .rules import add_skill_exp, apply_effect, change_trend, learn_skill, roll_check
 from .state import EQUIP_SLOTS, GameState, Rumor, new_game_state
@@ -46,6 +46,8 @@ class Game:
         if s.pending_event and s.pending_event not in c.events:
             s.pending_event = None
         if s.battle and (s.battle.enemy_id not in c.enemies or s.battle.event_id not in c.events):
+            s.battle = None
+        if s.battle and s.battle.choice_index >= len(c.events[s.battle.event_id].choices):
             s.battle = None
         if p.location not in c.locations:
             p.location = c.scenario.start_location
@@ -113,7 +115,8 @@ class Game:
         if loc.enemies:
             opts.append(self._cost_option("act:train", "歷練", cost["train"]))
         opts.append(self._cost_option("act:explore", "探索", cost["explore"]))
-        opts.append(self._cost_option("act:socialize", "交遊", cost["socialize"]))
+        if has_events_here(c, loc, "socialize"):
+            opts.append(self._cost_option("act:socialize", "交遊", cost["socialize"]))
         for dest_id in loc.connections:
             dest = c.locations[dest_id]
             if dest.unlock_flag and dest.unlock_flag not in s.world.flags:
@@ -221,7 +224,7 @@ class Game:
         s, c = self.state, self.content
         event_id, index = s.battle.event_id, s.battle.choice_index
         outcome, msgs = battle_round(s, c, tactic, self.rng)
-        if outcome is None or outcome == "flee":
+        if outcome is None or outcome in ("flee", "draw"):
             return msgs
         choice = c.events[event_id].choices[index]
         return msgs + self._apply(choice.effect if outcome == "win" else choice.fail_effect)
@@ -283,7 +286,9 @@ class Game:
         self.state.player.anonymous = bool(value)
 
     def new_season(self) -> list[str]:
+        last_real = self.state.last_real
         self.state = Game.new(self.content, self.state.player.name, self.rng).state
+        self.state.last_real = last_real
         return []
 
     def skill_choices(self, slot_type: str) -> list[tuple[str, str]]:

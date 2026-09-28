@@ -41,3 +41,10 @@ def test_sim_player_waits_for_revealed_trend(state, content):
     state.world.revealed.add("bao")
     sim_tick(state, content, 2, random.Random(0))
     assert state.world.trends["bao"] == 2
+
+
+def test_sim_player_respects_condition(state, content):
+    content.scenario.sim_players[0].condition.world_flags_none.append("blocked")
+    state.world.flags.add("blocked")
+    sim_tick(state, content, 3, random.Random(0))
+    assert state.world.trends["kou"] == 30

@@ -116,7 +116,7 @@ def battle_round(
             deal, take = 0.5, 1.0
             msgs.append("你想以巧取勝，卻被對方識破。")
     elif tactic == "固守":
-        deal, take, heal = 0.5, 0.4, b.player_hp_max // 10
+        deal, take, heal = 0.5, 0.6, b.player_hp_max // 20
         msgs.append("你守住門戶，調勻氣息。")
     elif tactic == "絕招":
         if b.ultimate_used:
@@ -157,8 +157,7 @@ def battle_round(
     if heal:
         b.player_hp = min(b.player_hp_max, b.player_hp + heal)
     if b.round >= MAX_KEY_ROUNDS:
-        won = b.player_hp / b.player_hp_max >= b.enemy_hp / ef.hp
         state.battle = None
-        return ("win" if won else "lose"), msgs + ["雙方力竭，勝負已分。"]
+        return "draw", msgs + ["雙方力竭，各自退開，未分勝負。"]
     msgs.append(battle_status(state, content))
     return None, msgs

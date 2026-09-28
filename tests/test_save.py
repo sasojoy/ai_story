@@ -1,6 +1,6 @@
 from tianxia.engine import Game
 from tianxia.save import load_game, save_game
-from tianxia.state import SkillProgress
+from tianxia.state import BattleState, SkillProgress
 
 
 def test_roundtrip(tmp_path, game):
@@ -23,3 +23,13 @@ def test_stale_references_are_dropped(content, game):
     assert fresh.state.player.location == "town"
     assert fresh.state.player.equipped[1] is None
     assert "removed_skill" not in fresh.state.player.skills
+
+
+def test_stale_battle_choice_index_is_dropped(content, game):
+    s = game.state
+    s.battle = BattleState(
+        enemy_id="boss", event_id="duel", choice_index=99,
+        player_hp=100, player_hp_max=100, enemy_hp=100,
+    )
+    fresh = Game(content, s)
+    assert fresh.state.battle is None

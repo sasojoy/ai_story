@@ -27,6 +27,13 @@ def test_locked_location_hidden_until_flag(game):
     assert "move:cave" in ids(game)
 
 
+def test_socialize_hidden_when_no_events_here(game):
+    game.state.world.flags.add("cave_open")
+    game.choose("move:lake")
+    game.state.player.location = "cave"
+    assert "act:socialize" not in ids(game)
+
+
 def test_move_costs_stamina(game):
     game.choose("move:lake")
     assert game.state.player.location == "lake"
@@ -143,6 +150,13 @@ def test_new_season_resets(game):
     assert not game.state.world.ended
     assert game.state.world.trends["kou"] == 30
     assert game.state.player.name == "沈浪"
+
+
+def test_new_season_keeps_last_real(game):
+    game.sync(1000.0)
+    game.advance(2 * 24 * HOUR)
+    game.choose("season:new")
+    assert game.state.last_real == 1000.0
 
 
 def test_equip_rules(game):

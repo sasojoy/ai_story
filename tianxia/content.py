@@ -132,6 +132,7 @@ def validate(c: Content) -> None:
         known(where, sim.trend, trend_ids, "大勢線")
         if sim.requires_revealed:
             known(where, [sim.requires_revealed], trend_ids, "大勢線")
+        check_condition(where, sim.condition)
     for ending in c.scenario.endings:
         check_condition(f"結局 {ending.id}", ending.condition)
     need(

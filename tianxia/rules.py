@@ -87,6 +87,8 @@ def learn_skill(state: GameState, content: Content, skill_id: str) -> list[str]:
             p.equipped[i] = skill_id
             msgs.append(f"已將【{skill.name}】配置於{slot}欄位。")
             break
+    else:
+        msgs.append(f"（可在「武學」分頁把【{skill.name}】換上{skill.slot}欄位。）")
     return msgs
 
 

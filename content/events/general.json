@@ -131,7 +131,7 @@
   {"id": "waterfall", "title": "瀑布怪客", "tags": ["山林"], "qiyu": true, "weight": 0.2, "once": true,
    "text": "山澗瀑布下，一個赤足怪客正在急流中來回縱躍，身形快得只剩一道影子。",
    "choices": [
-    {"text": "躲在石後偷學", "check": {"stat": "wis", "difficulty": 7},
+    {"text": "躲在石後偷學", "condition": {"skills_none": ["zhuifeng"]}, "check": {"stat": "wis", "difficulty": 7},
      "effect": {"text": "你把怪客的步法默記在心，竟學到了七八成。", "stats": {"agi": 1}, "learn_skills": ["zhuifeng"]},
      "fail_effect": {"text": "你看得眼花撩亂，什麼也沒記住。"}},
     {"text": "上前拜見", "effect": {"text": "怪客瞥了你一眼，一個起落就不見了。"}}

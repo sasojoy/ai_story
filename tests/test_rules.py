@@ -111,6 +111,13 @@ def test_learn_skill_fills_first_matching_empty_slot(state, content):
     assert learn_skill(state, content, "fist") == []
 
 
+def test_learn_skill_no_empty_slot_suggests_swap(state, content):
+    learn_skill(state, content, "fist")
+    learn_skill(state, content, "sword")
+    msgs = learn_skill(state, content, "palm")  # 外功，兩個外功欄位都滿了
+    assert msgs[-1] == "（可在「武學」分頁把【驚濤掌】換上外功欄位。）"
+
+
 def test_skill_exp_levels_up_and_caps(state, content):
     learn_skill(state, content, "fist")
     msgs = add_skill_exp(state, content, "fist", 250)

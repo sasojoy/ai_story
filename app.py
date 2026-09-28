@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import re
+import threading
 import time
 from pathlib import Path
 
@@ -21,7 +22,20 @@ CONTENT = load_content(ROOT / "content")
 SAVE_DIR = ROOT / "saves"
 MAX_BUTTONS = 10
 LOG_LINES = 40
-N_OUTPUTS = 8 + MAX_BUTTONS + len(EQUIP_SLOTS) + 1
+# game_state、狀態文字、場景文字、紀錄、大勢、傳聞、江湖史、選項 id 清單、匿名勾選框，
+# 再加上按鈕（MAX_BUTTONS）、武學欄位下拉（EQUIP_SLOTS）、閉關武學下拉。
+N_OUTPUTS = 9 + MAX_BUTTONS + len(EQUIP_SLOTS) + 1
+
+ACT_LOCK = threading.Lock()
+
+
+def equip_slot_label(index: int) -> str:
+    """把 EQUIP_SLOTS 的重複欄位（外功×2）編號，避免兩個欄位撞名。"""
+    slot = EQUIP_SLOTS[index]
+    dupes = [i for i, s in enumerate(EQUIP_SLOTS) if s == slot]
+    if len(dupes) == 1:
+        return f"{slot}欄位"
+    return f"{slot}{'一二三四五'[dupes.index(index)]}"
 
 
 def save_path(name: str) -> Path:
@@ -52,6 +66,7 @@ def render(game: Game) -> list:
         game.rumors_text(),
         game.chronicle_text(),
         [o.id for o in options],
+        p.anonymous,
         *buttons,
         *equips,
         gr.update(choices=learned),
@@ -59,13 +74,14 @@ def render(game: Game) -> list:
 
 
 def act(game: Game | None, action) -> list:
-    """同步時間 → 執行動作 → 存檔 → 重畫。"""
+    """同步時間 → 執行動作 → 存檔 → 重畫。上鎖避免計時器與按鈕點擊同時操作同一存檔。"""
     if game is None:
         return [gr.skip()] * N_OUTPUTS
-    game.sync(time.time())
-    action(game)
-    save_game(game.state, save_path(game.state.player.name))
-    return render(game)
+    with ACT_LOCK:
+        game.sync(time.time())
+        action(game)
+        save_game(game.state, save_path(game.state.player.name))
+        return render(game)
 
 
 def make_option_handler(index: int):
@@ -139,8 +155,8 @@ def build_demo() -> gr.Blocks:
                         chronicle_md = gr.Markdown()
                     with gr.Tab("武學"):
                         equip_dds = [
-                            gr.Dropdown(label=f"{slot}欄位", choices=[], interactive=True)
-                            for slot in EQUIP_SLOTS
+                            gr.Dropdown(label=equip_slot_label(i), choices=[], interactive=True)
+                            for i in range(len(EQUIP_SLOTS))
                         ]
                         seclude_dd = gr.Dropdown(label="閉關修練的武學", choices=[], interactive=True)
                         hours_sl = gr.Slider(1, 12, value=8, step=1, label="閉關時數（小時）")
@@ -153,7 +169,7 @@ def build_demo() -> gr.Blocks:
 
         outputs = [
             game_state, status_md, scene_md, log_md, trends_md, rumors_md, chronicle_md, ids_state,
-            *option_btns, *equip_dds, seclude_dd,
+            anon_cb, *option_btns, *equip_dds, seclude_dd,
         ]
         assert len(outputs) == N_OUTPUTS
 

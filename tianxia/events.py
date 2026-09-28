@@ -14,6 +14,13 @@ def event_matches_location(event: Event, location: Location) -> bool:
     return location.id in event.locations or bool(set(event.tags) & set(location.tags))
 
 
+def has_events_here(content: Content, location: Location, action: str) -> bool:
+    return any(
+        action in event.actions and event_matches_location(event, location)
+        for event in content.events.values()
+    )
+
+
 def pick_event(
     state: GameState, content: Content, action: str, rng: random.Random
 ) -> Event | None:

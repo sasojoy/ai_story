@@ -1,6 +1,8 @@
 import random
 
-from tianxia.events import choice_label, event_matches_location, pick_event, visible_choices
+from tianxia.events import (
+    choice_label, event_matches_location, has_events_here, pick_event, visible_choices,
+)
 
 
 def test_location_matching(content):
@@ -41,6 +43,11 @@ def test_visible_choices_hide_conditional(state, content):
     assert [i for i, _ in visible_choices(ev, state)] == [0, 1]
     state.player.stats["evil"] = 5
     assert [i for i, _ in visible_choices(ev, state)] == [0, 1, 2]
+
+
+def test_has_events_here(content):
+    assert has_events_here(content, content.locations["town"], "socialize")
+    assert not has_events_here(content, content.locations["cave"], "socialize")
 
 
 def test_choice_label_shows_success_rate(state, content):

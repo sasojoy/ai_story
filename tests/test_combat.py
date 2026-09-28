@@ -68,3 +68,24 @@ def test_key_battle_lose(state, content):
         if outcome:
             break
     assert outcome == "lose" and state.battle is None
+
+
+def test_turtling_never_wins_key_battle(state, content):
+    for seed in range(20):
+        state.battle = None
+        start_battle(state, content, "boss", "duel", 0)
+        outcome = None
+        rng = random.Random(seed)
+        while outcome is None:
+            outcome, _ = battle_round(state, content, "固守", rng)
+        assert outcome != "win"
+
+
+def test_key_battle_draw_at_round_limit(state, content):
+    state.player.stats["con"] = 500
+    start_battle(state, content, "boss", "duel", 0)
+    outcome = None
+    rng = random.Random(0)
+    while outcome is None:
+        outcome, _ = battle_round(state, content, "固守", rng)
+    assert outcome == "draw" and state.battle is None

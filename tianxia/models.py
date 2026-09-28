@@ -147,6 +147,7 @@ class SimPlayer(_Strict):
     requires_revealed: str | None = None  # 這條隱藏線浮現之前不會行動
     rumors: list[str] = Field(default_factory=list)
     rumor_chance: float = 0.3
+    condition: Condition = Field(default_factory=Condition)
 
 
 class Ending(_Strict):

@@ -15,7 +15,7 @@
     {"id": "bao_100", "trend": "bao", "op": ">=", "value": 100, "text": "藏寶圖終於湊齊！棲霞後山的「藏龍洞」現世，洞口有人把守。", "world_flags_add": ["cave_open"]}
   ],
   "sim_players": [
-    {"name": "翻江龍", "actions_per_day": 8, "trend": {"kou": 1}, "rumor_chance": 0.25, "rumors": [
+    {"name": "翻江龍", "actions_per_day": 8, "trend": {"kou": 1}, "rumor_chance": 0.25, "condition": {"world_flags_none": ["fjl_defeated", "kou_crushed"]}, "rumors": [
       "太湖水寇又劫了一艘官船，據說是{name}親自帶的人。",
       "{name}在太湖放話：「江南的水路，從今往後姓翻！」",
       "運河上又有商船失蹤，人人都說是{name}的手筆。"
@@ -24,7 +24,7 @@
       "{name}在太湖邊獨挑水寇十七人，劍不染塵。",
       "有人看見{name}在鎮江渡口護送難民過江。"
     ]},
-    {"name": "鬼手劉三", "actions_per_day": 3, "trend": {"bao": 2}, "requires_revealed": "bao", "rumor_chance": 0.3, "rumors": [
+    {"name": "鬼手劉三", "actions_per_day": 3, "trend": {"bao": 2}, "requires_revealed": "bao", "rumor_chance": 0.3, "condition": {"world_flags_none": ["treasure_taken"]}, "rumors": [
       "有人看見{name}在棲霞山一帶鬼鬼祟祟地挖土。",
       "{name}在金陵黑市高價收購前朝古物。"
     ]}
