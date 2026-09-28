@@ -7,10 +7,25 @@ from .models import Check, Condition, Content, Effect
 from .state import EQUIP_SLOTS, GameState, Rumor, SkillProgress
 
 MAX_SKILL_LEVEL = 10
+DAY = 86400
 
 
 def display_name(state: GameState) -> str:
     return "某位少俠" if state.player.anonymous else state.player.name
+
+
+def current_day(state: GameState) -> int:
+    """賽季第幾天（從 1 開始）。"""
+    return int(state.world.time // DAY) + 1
+
+
+def add_world_flags(state: GameState, flags) -> None:
+    """加入世界旗標並記錄第一次成立的時間；已存在的旗標不重設時間。"""
+    w = state.world
+    for flag in flags:
+        if flag not in w.flags:
+            w.flags.add(flag)
+            w.flag_times[flag] = w.time
 
 
 def check_condition(cond: Condition, state: GameState) -> bool:
@@ -34,6 +49,18 @@ def check_condition(cond: Condition, state: GameState) -> bool:
     if any(w.trends.get(t, 0) > v for t, v in cond.trend_max.items()):
         return False
     if not set(cond.world_flags_all) <= w.flags or set(cond.world_flags_none) & w.flags:
+        return False
+    day = current_day(state)
+    if cond.day_min is not None and day < cond.day_min:
+        return False
+    if cond.day_max is not None and day > cond.day_max:
+        return False
+    if not set(cond.revealed_all) <= w.revealed or set(cond.revealed_none) & w.revealed:
+        return False
+    for flag, hours in cond.flag_age_hours.items():
+        if flag not in w.flag_times or w.time - w.flag_times[flag] < hours * 3600:
+            return False
+    if cond.any_of and not any(check_condition(sub, state) for sub in cond.any_of):
         return False
     return True
 
@@ -136,7 +163,7 @@ def apply_effect(effect: Effect, state: GameState, content: Content) -> list[str
         p.sect = None
     for trend_id, delta in effect.trend.items():
         msgs += change_trend(state, content, trend_id, delta)
-    state.world.flags |= set(effect.world_flags_add)
+    add_world_flags(state, effect.world_flags_add)
     name = display_name(state)
     if effect.rumor:
         text = effect.rumor.format(name=name)

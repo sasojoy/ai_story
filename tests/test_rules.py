@@ -1,7 +1,9 @@
 import pytest
 
 from tianxia.models import Check, Condition, Effect
-from tianxia.rules import add_skill_exp, apply_effect, check_chance, check_condition, learn_skill
+from tianxia.rules import (
+    add_skill_exp, add_world_flags, apply_effect, check_chance, check_condition, current_day, learn_skill,
+)
 
 
 def test_new_state(state):
@@ -126,3 +128,44 @@ def test_skill_exp_levels_up_and_caps(state, content):
     assert len(msgs) == 2
     add_skill_exp(state, content, "fist", 10_000)
     assert (prog.level, prog.exp) == (10, 0)
+
+
+def test_current_day(state):
+    assert current_day(state) == 1
+    state.world.time = 86400 * 2 + 5
+    assert current_day(state) == 3
+
+
+def test_condition_day_range(state):
+    state.world.time = 86400 * 4  # 第 5 天
+    assert check_condition(Condition(day_min=5), state)
+    assert not check_condition(Condition(day_min=6), state)
+    assert not check_condition(Condition(day_max=4), state)
+
+
+def test_condition_revealed(state):
+    assert check_condition(Condition(revealed_all=["kou"], revealed_none=["bao"]), state)
+    state.world.revealed.add("bao")
+    assert not check_condition(Condition(revealed_none=["bao"]), state)
+
+
+def test_condition_any_of(state):
+    assert check_condition(Condition(any_of=[Condition(min_stats={"str": 99}), Condition(day_min=1)]), state)
+    assert not check_condition(Condition(any_of=[Condition(min_stats={"str": 99})]), state)
+
+
+def test_world_flag_age(state):
+    add_world_flags(state, ["cave_open"])
+    cond = Condition(flag_age_hours={"cave_open": 2})
+    assert not check_condition(cond, state)
+    state.world.time = 7200
+    assert check_condition(cond, state)
+    add_world_flags(state, ["cave_open"])  # 已存在：不重設時間
+    assert state.world.flag_times["cave_open"] == 0
+
+
+def test_effect_world_flags_record_time(state, content):
+    state.world.time = 3600
+    apply_effect(Effect(world_flags_add=["x"]), state, content)
+    assert "x" in state.world.flags
+    assert state.world.flag_times["x"] == 3600

@@ -4,7 +4,7 @@ from __future__ import annotations
 import random
 
 from .models import Content, Ending
-from .rules import add_chronicle, add_rumor, change_trend, check_condition
+from .rules import add_chronicle, add_rumor, add_world_flags, change_trend, check_condition
 from .state import GameState
 
 
@@ -20,7 +20,7 @@ def check_thresholds(state: GameState, content: Content) -> list[str]:
         if not (value >= th.value if th.op == ">=" else value <= th.value):
             continue
         w.fired_thresholds.add(th.id)
-        w.flags |= set(th.world_flags_add)
+        add_world_flags(state, th.world_flags_add)
         add_rumor(state, th.text)
         add_chronicle(state, th.text)
         msgs.append(f"【江湖大事】{th.text}")

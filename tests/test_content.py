@@ -85,3 +85,23 @@ def test_unknown_field_rejected(tmp_path):
     edit_json(root / "locations.json", lambda d: d[0].update(conection=["lake"]))
     with pytest.raises(Exception, match="conection"):
         load_content(root)
+
+
+def test_map_loaded(content):
+    assert content.map.width == 400
+    assert content.map.labels[0].text == "測試區"
+    assert (content.locations["town"].x, content.locations["town"].y) == (100, 100)
+
+
+def test_location_outside_map_rejected(tmp_path):
+    root = copy_fixture(tmp_path)
+    edit_json(root / "locations.json", lambda d: d[0].update(x=9999))
+    with pytest.raises(ContentError, match="town"):
+        load_content(root)
+
+
+def test_unknown_trend_in_revealed_rejected(tmp_path):
+    root = copy_fixture(tmp_path)
+    edit_json(root / "events" / "test.json", lambda d: d[0].update(condition={"revealed_all": ["ghost"]}))
+    with pytest.raises(ContentError, match="ghost"):
+        load_content(root)

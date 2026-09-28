@@ -39,6 +39,7 @@ class WorldState(BaseModel):
     trends: dict[str, int] = Field(default_factory=dict)
     revealed: set[str] = Field(default_factory=set)
     flags: set[str] = Field(default_factory=set)
+    flag_times: dict[str, float] = Field(default_factory=dict)  # 世界旗標第一次成立的遊戲時間
     fired_thresholds: set[str] = Field(default_factory=set)
     rumors: list[Rumor] = Field(default_factory=list)
     chronicle: list[Rumor] = Field(default_factory=list)

@@ -48,3 +48,10 @@ def test_sim_player_respects_condition(state, content):
     state.world.flags.add("blocked")
     sim_tick(state, content, 3, random.Random(0))
     assert state.world.trends["kou"] == 30
+
+
+def test_threshold_records_flag_time(state, content):
+    state.world.time = 5000
+    state.world.trends["kou"] = 50
+    check_thresholds(state, content)
+    assert state.world.flag_times["blocked"] == 5000

@@ -17,7 +17,7 @@ class _Strict(BaseModel):
 
 
 class Condition(_Strict):
-    """所有欄位都是「且」的關係；空的欄位不檢查。"""
+    """所有欄位都是「且」的關係（any_of 內部是「或」）；空的欄位不檢查。"""
 
     min_stats: dict[str, int] = Field(default_factory=dict)
     max_stats: dict[str, int] = Field(default_factory=dict)
@@ -31,6 +31,15 @@ class Condition(_Strict):
     trend_max: dict[str, int] = Field(default_factory=dict)
     world_flags_all: list[str] = Field(default_factory=list)
     world_flags_none: list[str] = Field(default_factory=list)
+    day_min: int | None = None
+    day_max: int | None = None
+    revealed_all: list[str] = Field(default_factory=list)
+    revealed_none: list[str] = Field(default_factory=list)
+    flag_age_hours: dict[str, int] = Field(default_factory=dict)  # 世界旗標成立後至少經過幾小時
+    any_of: list[Condition] = Field(default_factory=list)  # 非空時，至少一個子條件成立
+
+
+Condition.model_rebuild()
 
 
 class Effect(_Strict):
@@ -82,6 +91,8 @@ class Location(_Strict):
     name: str
     description: str
     connections: list[str]
+    x: int
+    y: int
     tags: list[str] = Field(default_factory=list)
     danger: int = Field(default=1, ge=1, le=3)
     move_cost: int = 5
@@ -157,6 +168,19 @@ class Ending(_Strict):
     condition: Condition = Field(default_factory=Condition)
 
 
+class MapLabel(_Strict):
+    text: str
+    x: int
+    y: int
+
+
+class MapLayout(_Strict):
+    width: int = 680
+    height: int = 420
+    rivers: list[list[list[int]]] = Field(default_factory=list)  # 每條河是一串 [x, y] 點
+    labels: list[MapLabel] = Field(default_factory=list)
+
+
 class Scenario(_Strict):
     id: str
     name: str
@@ -206,3 +230,4 @@ class Content(_Strict):
     skills: dict[str, Skill]
     sects: dict[str, Sect]
     enemies: dict[str, Enemy]
+    map: MapLayout

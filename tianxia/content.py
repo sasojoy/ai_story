@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 
 from .models import (
-    STATS, Condition, Config, Content, Effect, Enemy, Event, Location, Scenario, Sect, Skill,
+    STATS, Condition, Config, Content, Effect, Enemy, Event, Location, MapLayout, Scenario, Sect, Skill,
 )
 
 
@@ -30,6 +30,7 @@ def load_content(root: Path) -> Content:
         sects=_index(Sect, _read(root / "sects.json")),
         enemies=_index(Enemy, _read(root / "enemies.json")),
         events=events,
+        map=MapLayout(**_read(root / "map.json")),
     )
     validate(content)
     return content
@@ -67,6 +68,9 @@ def validate(c: Content) -> None:
         known(where, cond.sects, c.sects, "門派")
         known(where, [*cond.skills_all, *cond.skills_none], c.skills, "武學")
         known(where, [*cond.trend_min, *cond.trend_max], trend_ids, "大勢線")
+        known(where, [*cond.revealed_all, *cond.revealed_none], trend_ids, "大勢線")
+        for sub in cond.any_of:
+            check_condition(where, sub)
 
     def check_effect(where: str, eff: Effect) -> None:
         known(where, eff.stats, STATS, "屬性")
@@ -93,6 +97,10 @@ def validate(c: Content) -> None:
                 errors.append(f"地點 {loc.id} 連到 {dest}，但 {dest} 沒有連回來")
         known(where, loc.enemies, c.enemies, "敵人")
         known(where, loc.train_trend, trend_ids, "大勢線")
+        need(
+            0 <= loc.x <= c.map.width and 0 <= loc.y <= c.map.height,
+            f"{where}：座標 ({loc.x}, {loc.y}) 超出地圖範圍",
+        )
     need(c.scenario.start_location in c.locations, f"劇本起點 {c.scenario.start_location} 不存在")
 
     for skill in c.skills.values():
