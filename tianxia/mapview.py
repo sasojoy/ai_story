@@ -61,6 +61,9 @@ LEGEND_LAYERS = {
 }
 MINI_SPAN = 220  # 小地圖裡，大區較長的一邊畫成多寬
 MINI_PAD = 26
+MINI_HEIGHT = 200  # 小地圖在畫面上固定的高度（px）；寬度隨欄寬，圖置中
+MINI_TEXT = 12  # 小地圖的字級
+MINI_RING = 10  # 小地圖所在地圓圈的半徑
 HINT_SPOTS = {  # 往相鄰大區的方向標在小地圖邊緣的哪裡：箭頭 → (橫向比例, 直向比例, 對齊)
     "→": (1, 0.5, "end"), "↘": (1, 1, "end"), "↓": (0.5, 1, "middle"), "↙": (0, 1, "start"),
     "←": (0, 0.5, "start"), "↖": (0, 0, "start"), "↑": (0.5, 0, "middle"), "↗": (1, 0, "end"),
@@ -446,8 +449,10 @@ def render_map(
 # ── 場景小地圖 ─────────────────────────────────────────
 
 
-def _hints(state: GameState, content: Content, region: MapRegion, width: float, height: float, bg: str) -> list[str]:
-    """小地圖邊緣往相鄰大區的方向，例如「↘ 太湖一帶」；同一個方向有兩區時往內疊一行。"""
+def _hints(
+    state: GameState, content: Content, region: MapRegion, width: float, height: float
+) -> list[tuple[str, Spot]]:
+    """小地圖邊緣往相鄰大區的方向，例如「↘ 太湖一帶」：（文字, 位置）；同一個方向有兩區時往內疊一行。"""
     out = []
     used: dict[str, int] = {}
     for arrow, other in atlas.neighbours(state, content, region):
@@ -456,14 +461,17 @@ def _hints(state: GameState, content: Content, region: MapRegion, width: float, 
         used[arrow] = stack + 1
         x = 4 + fx * (width - 8)
         y = 16 + fy * (height - 22) + (-14 if fy == 1 else 14) * stack
-        out.append(_text(x, y, f"{arrow} {other.name}", 12, TEXT_MUTED, bg, anchor))
+        out.append((f"{arrow} {other.name}", (x, y, anchor)))
     return out
 
 
 def render_minimap(state: GameState, content: Content) -> str:
     """場景旁的小地圖：只畫所在大區的輪廓、區內摸清的地點（小點；只有重要地點與所在地寫名字）、
     沒摸清的淡點、所在地的醒目記號，以及往相鄰大區的方向。不畫路，也不寫危險、敵人、體力等數字。
-    地圖沒有大區時回傳空字串。"""
+    地圖沒有大區時回傳空字串。畫面上固定 MINI_HEIGHT 高、置中，換大區時場景列不會跟著跳。
+
+    名字不疊字、也不出界：所在地的名字寫在記號上方（擠不下時寫在下方）；重要地點的名字寫在點的右邊
+    （在所在地左邊的寫在左邊），那一邊會壓到別的字或出界就換另一邊，兩邊都不行就不寫。"""
     region = atlas.region_of(content, state.player.location)
     if region is None:
         return ""
@@ -475,6 +483,7 @@ def render_minimap(state: GameState, content: Content) -> str:
     scale = MINI_SPAN / max(max(xs) - left, max(ys) - top, 1)
     width = (max(xs) - left) * scale + 2 * MINI_PAD
     height = (max(ys) - top) * scale + 2 * MINI_PAD
+    bounds = (2, 2, width - 2, height - 2)
 
     def at(x: float, y: float) -> tuple[float, float]:
         return round(MINI_PAD + (x - left) * scale, 1), round(MINI_PAD + (y - top) * scale, 1)
@@ -482,34 +491,50 @@ def render_minimap(state: GameState, content: Content) -> str:
     outline = " ".join(f"{px:g},{py:g}" for px, py in (at(x, y) for x, y in region.points))
     out = [
         f'<svg viewBox="0 0 {width:.1f} {height:.1f}" xmlns="http://www.w3.org/2000/svg" '
-        'style="width:100%;height:auto;font-family:sans-serif;cursor:pointer">',
+        f'style="display:block;width:100%;height:{MINI_HEIGHT}px;font-family:sans-serif;cursor:pointer">',
         f'<rect x="0" y="0" width="{width:.1f}" height="{height:.1f}" rx="10" fill="{bg}"/>',
         f'<polygon points="{outline}" fill="{region.fill}" stroke="{region.text_fill}" stroke-width="2"/>',
     ]
+    hints = _hints(state, content, region, width, height)
+    taken = [text_box(x, y, text, MINI_TEXT, anchor) for text, (x, y, anchor) in hints]  # 名字要避開的範圍
     here = content.locations[state.player.location]
-    here_x = at(here.x, here.y)[0]
-    labels = []
+    here_x, here_y = at(here.x, here.y)
+    ring = MINI_RING + 1
+    taken.append((here_x - ring, here_y - ring, here_x + ring, here_y + ring))
+    half = text_width(here.name, MINI_TEXT) / 2
+    name_x = min(max(here_x, bounds[0] + half), bounds[2] - half)  # 靠邊時往內挪，不出界
+    spots = [(name_x, here_y - ring - 3, "middle"), (name_x, here_y + ring + 2 + MINI_TEXT * ASCENT, "middle")]
+    name_spot = next((spot for spot in spots if _fits(here.name, spot, taken, bounds)), spots[0])
+    taken.append(text_box(*name_spot[:2], here.name, MINI_TEXT, name_spot[2]))
+    labels = [_text(*name_spot[:2], here.name, MINI_TEXT, TEXT_DARK, bg, name_spot[2], bold=True)]
     for loc in content.locations.values():
         view = views[loc.id]
         if view == "hidden" or atlas.region_of(content, loc.id).id != region.id:
             continue
         x, y = at(loc.x, loc.y)
         if view == "current":
-            out.append(f'<circle cx="{x:g}" cy="{y:g}" r="10" fill="none" stroke="{NODE_FILL["current"]}" stroke-width="2"/>')
+            out.append(
+                f'<circle cx="{x:g}" cy="{y:g}" r="{MINI_RING}" fill="none" stroke="{NODE_FILL["current"]}" stroke-width="2"/>'
+            )
             out.append(f'<circle cx="{x:g}" cy="{y:g}" r="5" fill="{NODE_FILL["current"]}"/>')
         elif view in KNOWN:
             out.append(f'<circle cx="{x:g}" cy="{y:g}" r="3.5" fill="{NODE_FILL[view]}"/>')
         else:
             out.append(f'<circle cx="{x:g}" cy="{y:g}" r="2.5" fill="{NODE_FILL["dot"]}" fill-opacity="0.7"/>')
-        if view == "current":  # 所在地的名字寫在記號上方，不和旁邊地點的名字疊在一起
-            labels.append(_text(x, y - 14, loc.name, 12, TEXT_DARK, bg, "middle", bold=True))
-        elif view in KNOWN and loc.important:
-            lx, anchor = x + 7, "start"
-            name_w = text_width(loc.name, 12)
-            if lx + name_w > width - 2 or (x < here_x and x - 7 - name_w >= 2):  # 在所在地左邊的，名字寫在左邊
-                lx, anchor = x - 7, "end"
-            labels.append(_text(lx, y + 4, loc.name, 12, TEXT_DARK, bg, anchor))
+        if view in KNOWN and view != "current" and loc.important:
+            right, left_side = (x + 7, y + 4, "start"), (x - 7, y + 4, "end")
+            for spot in ((left_side, right) if x < here_x else (right, left_side)):
+                if _fits(loc.name, spot, taken, bounds):
+                    taken.append(text_box(*spot[:2], loc.name, MINI_TEXT, spot[2]))
+                    labels.append(_text(*spot[:2], loc.name, MINI_TEXT, TEXT_DARK, bg, spot[2]))
+                    break
     out += labels
-    out += _hints(state, content, region, width, height, bg)
+    out += [_text(x, y, text, MINI_TEXT, TEXT_MUTED, bg, anchor) for text, (x, y, anchor) in hints]
     out.append("</svg>")
     return "".join(out)
+
+
+def _fits(text: str, spot: Spot, taken: list[Box], bounds: Box) -> bool:
+    """小地圖上這段字擺在 spot 會不會壓到 taken 或出界。"""
+    box = text_box(spot[0], spot[1], text, MINI_TEXT, spot[2])
+    return not _outside(box, bounds) and not _hits([box], taken)

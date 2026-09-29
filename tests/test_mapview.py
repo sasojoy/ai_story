@@ -3,7 +3,7 @@ import re
 
 from tianxia.atlas import location_view, vision_range, visible_locations
 from tianxia.mapview import (
-    LEGEND_LAYERS, NODE_FILL, ROUTE_STROKE, SELECT_STROKE, node_shape, render_map, render_minimap,
+    LEGEND_LAYERS, MINI_HEIGHT, NODE_FILL, ROUTE_STROKE, SELECT_STROKE, node_shape, render_map, render_minimap,
     text_box, text_width,
 )
 from tianxia.state import Rumor
@@ -218,6 +218,21 @@ def test_minimap_points_to_neighbouring_regions(state, content):
     state.player.location = "cave"
     svg = render_minimap(state, content)
     assert 'fill="#E2EAF1"' in svg and ">↑ 測試北區<" in svg and ">寶洞<" in svg
+
+
+def test_minimap_names_step_aside_or_are_left_out(state, content):
+    lake = content.locations["lake"]
+    lake.important = True
+    lake.x, lake.y = 100, 75  # 緊貼在小鎮上方：寫在哪一邊都會壓到小鎮的名字
+    svg = render_minimap(state, content)
+    assert ">小鎮<" in svg and ">湖邊<" not in svg
+    lake.x = 60  # 往左挪：在所在地左邊，名字寫在左邊就擺得下
+    assert re.search(r'text-anchor="end"[^>]*>湖邊<', render_minimap(state, content))
+
+
+def test_minimap_keeps_a_fixed_height(state, content):
+    svg = render_minimap(state, content)
+    assert f"height:{MINI_HEIGHT}px" in svg and "height:auto" not in svg
 
 
 def test_minimap_keeps_showing_the_player_during_an_event(state, content):

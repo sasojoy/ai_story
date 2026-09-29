@@ -338,6 +338,20 @@ def test_world_map_labels_never_collide_with_everything_known(layer, bao):
         assert _map_collisions(game, layer, marks=loc_id not in CROWDED) == [], f"在 {loc_id}"
 
 
+@pytest.mark.parametrize("cave", [False, True])
+def test_minimap_labels_never_collide_or_leave_the_canvas(cave):
+    from tianxia.mapview import render_minimap
+
+    game = _map_game(everything=True, cave=cave)
+    for loc_id, loc in game.content.locations.items():
+        if loc.unlock_flag and not cave:
+            continue
+        game.state.player.location = loc_id
+        svg = render_minimap(game.state, game.content)
+        width, height = map(float, re.search(r'viewBox="0 0 ([\d.]+) ([\d.]+)"', svg).groups())
+        assert _collisions(svg, width, height) == [], loc_id
+
+
 def _win_rate(squad_id: str, runs: int = 40) -> float:
     from tianxia.engine import Game
     from tianxia.team import fight
