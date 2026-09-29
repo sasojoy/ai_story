@@ -98,7 +98,7 @@ class Location(_Strict):
     y: int
     tags: list[str] = Field(default_factory=list)
     danger: int = Field(default=1, ge=1, le=3)
-    move_cost: int = 5
+    move_cost: int = Field(default=5, ge=0)
     important: bool = False
     enemies: list[str] = Field(default_factory=list)
     train_trend: dict[str, int] = Field(default_factory=dict)

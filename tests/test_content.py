@@ -254,6 +254,13 @@ def test_unknown_sim_rumor_place_rejected(tmp_path):
         load_content(root)
 
 
+def test_negative_move_cost_rejected(tmp_path):
+    root = copy_fixture(tmp_path)
+    edit_json(root / "locations.json", lambda d: d[1].update(move_cost=-1))
+    with pytest.raises(ContentError, match="(?s)Location lake.*move_cost"):
+        load_content(root)
+
+
 def test_unknown_act_place_rejected(tmp_path):
     root = copy_fixture(tmp_path)
     edit_json(root / "scenario.json", lambda d: d["storylines"][0]["acts"][1].update(places=["mars"]))
