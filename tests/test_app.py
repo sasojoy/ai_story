@@ -42,7 +42,8 @@ def test_render_includes_quest_and_minimap():
     game = Game.new(app.CONTENT, "測試")
     out = app.render(game)
     assert any(isinstance(x, str) and x.startswith("### 主線") for x in out)
-    assert out[app.MINIMAP_INDEX] == game.minimap_svg() and ">↘ 太湖一帶<" in out[app.MINIMAP_INDEX]
+    minimap = out[app.MINIMAP_INDEX]
+    assert minimap == game.minimap_svg() and ">揚州城（你）<" in minimap and ">↓ 鎮江渡口<" in minimap
 
 
 def test_skip_tutorial_handler_finishes_tutorial(tmp_path, monkeypatch):
@@ -69,7 +70,7 @@ def test_minimap_follows_an_event(tmp_path, monkeypatch):
     ids = [o.id for o in game.options()]
     out = app.make_option_handler(ids.index("act:explore"))(game, ids)
     assert game.state.pending_event is not None  # 揚州城探索必定遇到城鎮事件
-    assert ">揚州城<" in out[app.MINIMAP_INDEX]  # 事件進行中也照常標出所在地
+    assert ">揚州城（你）<" in out[app.MINIMAP_INDEX]  # 事件進行中也照常標出所在地
 
 
 def test_render_includes_the_card_placeholders():

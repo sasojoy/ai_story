@@ -1,4 +1,4 @@
-"""地圖畫法（純字串，不依賴介面框架）：大地圖「江湖輿圖」的四個圖層，以及場景旁的大區小地圖。
+"""地圖畫法（純字串，不依賴介面框架）：大地圖「江湖輿圖」的四個圖層，以及場景旁以你為中心的小地圖。
 要標什麼由 atlas 決定（視野、大區、路線、各圖層的資料），這裡只負責畫成 SVG。
 
 大地圖上摸清的地點與畫出名字的未知地點包在 <g data-loc="地點 id"> 裡，介面層靠它知道點了哪個地點。
@@ -62,15 +62,13 @@ LEGEND_LAYERS = {
 RIVER_STROKE = "#7FA9D6"
 RIVER_TEXT = "#6F93BA"
 RIVER_SIZE = 13  # 河名
-MINI_SPAN = 220  # 小地圖裡，大區較長的一邊畫成多寬
-MINI_PAD = 26
+MINI_WINDOW = (270, 180)  # 小地圖：以所在地為中心，從大地圖截多寬、多高（地圖單位）；大約看得到一兩站路
 MINI_HEIGHT = 200  # 小地圖在畫面上固定的高度（px）；寬度隨欄寬，圖置中
-MINI_TEXT = 12  # 小地圖的字級
-MINI_RING = 10  # 小地圖所在地圓圈的半徑
-HINT_SPOTS = {  # 往相鄰大區的方向標在小地圖邊緣的哪裡：箭頭 → (橫向比例, 直向比例, 對齊)
-    "→": (1, 0.5, "end"), "↘": (1, 1, "end"), "↓": (0.5, 1, "middle"), "↙": (0, 1, "start"),
-    "←": (0, 0.5, "start"), "↖": (0, 0, "start"), "↑": (0.5, 0, "middle"), "↗": (1, 0, "end"),
-}
+MINI_HOPS = 2  # 視窗外、幾站路以內的摸清地點，在視窗邊緣標出方向
+MINI_ARROWS = 4  # 視窗邊緣最多標幾個方向
+ARROW_SIZE = 13  # 視窗邊緣方向的字級
+ARROW_SLIDE = 6  # 方向擠不下時，沿著邊緣滑開一次滑多遠
+ARROW_SLIDES = 10  # 往每一邊最多滑幾次
 
 
 def node_shape(loc: Location) -> str:
@@ -215,9 +213,10 @@ def _text(
     )
 
 
-def _label(loc: Location, view: str) -> str:
+def _label(loc: Location, view: str, fights: bool = True) -> str:
+    """地點的名字：摸清的寫名字（fights 時有敵人的加 ⚔，所在地加「（你）」），畫出輪廓的寫「名字？」，淡點不寫。"""
     if view in KNOWN:
-        return loc.name + (" ⚔" if loc.enemies else "") + ("（你）" if view == "current" else "")
+        return loc.name + (" ⚔" if fights and loc.enemies else "") + ("（你）" if view == "current" else "")
     return f"{loc.name}？" if view == "outline" else ""
 
 
@@ -308,9 +307,10 @@ def _reach(loc: Location, view: str, selected: bool) -> tuple[float, float]:
     return mark, ring
 
 
-def _label_spots(x: int, y: int, reach: float, lines: list[tuple[str, int]]) -> list[Spot]:
+def _label_spots(x: int, y: int, reach: float, lines: list[tuple[str, int]], edge: float = EDGE) -> list[Spot]:
     """地點名字（連同底下的小字）可以擺的位置，依偏好排好：右、左、左下、右下；都擠不下時再試
-    右邊與左邊高一行（小字在記號旁、名字在它上面）、右上、左上，最後把下方與上方的字往左滑開。"""
+    右邊與左邊高一行（小字在記號旁、名字在它上面）、右上、左上，最後把下方與上方的字往左滑開，
+    最遠滑到 edge（文字能擺到的最左邊）。"""
     gap = reach + LABEL_GAP
     clear = reach + LABEL_PAD + 1  # 上下擺時，文字離記號中心至少多遠
     below = y + clear + lines[0][1] * ASCENT
@@ -321,9 +321,9 @@ def _label_spots(x: int, y: int, reach: float, lines: list[tuple[str, int]]) -> 
     spots += [(x - reach, above, "start"), (x + reach, above, "end")]
     width = max(text_width(text, size) for text, size in lines)
     lefts = [x - reach - d for d in range(SLIDE_STEP, math.ceil(width - 2 * reach), SLIDE_STEP)]
-    lefts = [left for left in lefts if left >= EDGE]
-    if x + reach - width < EDGE < x - reach:
-        lefts.append(EDGE)  # 貼著畫布左邊
+    lefts = [left for left in lefts if left >= edge]
+    if x + reach - width < edge < x - reach:
+        lefts.append(edge)  # 貼著畫布左邊
     return spots + [(left, base, "start") for base in (below, above) for left in lefts]
 
 
@@ -484,98 +484,110 @@ def render_map(
 # ── 場景小地圖 ─────────────────────────────────────────
 
 
-def _hints(
-    state: GameState, content: Content, region: MapRegion, width: float, height: float
-) -> list[tuple[str, Spot]]:
-    """小地圖邊緣往相鄰大區的方向，例如「↘ 太湖一帶」：（文字, 位置）；同一個方向有兩區時往內疊一行。"""
-    out = []
-    used: dict[str, int] = {}
-    for arrow, other in atlas.neighbours(state, content, region):
-        fx, fy, anchor = HINT_SPOTS[arrow]
-        stack = used.get(arrow, 0)
-        used[arrow] = stack + 1
-        x = 4 + fx * (width - 8)
-        y = 16 + fy * (height - 22) + (-14 if fy == 1 else 14) * stack
-        out.append((f"{arrow} {other.name}", (x, y, anchor)))
-    return out
+def _contains(box: Box, x: float, y: float) -> bool:
+    return box[0] <= x <= box[2] and box[1] <= y <= box[3]
+
+
+def _edge_targets(
+    state: GameState, content: Content, views: dict[str, str], here: Location, window: Box
+) -> list[Location]:
+    """視窗外、MINI_HOPS 站以內（只走已開放的地點）的摸清地點：站數少的先，一樣時近的先，最多 MINI_ARROWS 個。"""
+    hops = atlas.road_hops(state, content, MINI_HOPS)
+    far = [
+        loc for loc in content.locations.values()
+        if loc.id in hops and views[loc.id] in KNOWN and not _contains(window, loc.x, loc.y)
+    ]
+    far.sort(key=lambda loc: (hops[loc.id], math.hypot(loc.x - here.x, loc.y - here.y)))
+    return far[:MINI_ARROWS]
+
+
+def _edge_spots(start: Location, end: Location, text: str, size: int, bounds: Box) -> list[Spot]:
+    """視窗邊緣方向文字（置中對齊）可以擺的位置：從 start 往 end 的方向看過去、文字剛好貼著 bounds 邊緣的
+    位置最優先；擠不下時沿著那條邊往兩旁滑開，近的先試。"""
+    half_w, half_h = text_width(text, size) / 2, size / 2
+    lo_x, hi_x = bounds[0] + half_w, bounds[2] - half_w  # 文字中心能到的範圍
+    lo_y, hi_y = bounds[1] + half_h, bounds[3] - half_h
+    dx, dy = end.x - start.x, end.y - start.y
+    to_x = ((hi_x if dx > 0 else lo_x) - start.x) / dx if dx else math.inf  # 走多遠碰到左右邊
+    to_y = ((hi_y if dy > 0 else lo_y) - start.y) / dy if dy else math.inf  # 走多遠碰到上下邊
+    t = min(to_x, to_y)
+    cx = min(max(start.x + t * dx, lo_x), hi_x)
+    cy = min(max(start.y + t * dy, lo_y), hi_y)
+    centres: list[tuple[float, float]] = []
+    for shift in [0] + [sign * k * ARROW_SLIDE for k in range(1, ARROW_SLIDES + 1) for sign in (1, -1)]:
+        if to_x <= to_y:  # 貼著左右邊：上下滑
+            centre = (cx, min(max(cy + shift, lo_y), hi_y))
+        else:  # 貼著上下邊：左右滑
+            centre = (min(max(cx + shift, lo_x), hi_x), cy)
+        if centre not in centres:
+            centres.append(centre)
+    return [(x, y + size * (ASCENT - 0.5), "middle") for x, y in centres]
 
 
 def render_minimap(state: GameState, content: Content) -> str:
-    """場景旁的小地圖：只畫所在大區的輪廓、區內摸清的地點（小點；只有重要地點與所在地寫名字）、
-    沒摸清的淡點、所在地的醒目記號，以及往相鄰大區的方向。不畫路，也不寫危險、敵人、體力等數字。
-    地圖沒有大區時回傳空字串。畫面上固定 MINI_HEIGHT 高、置中，換大區時場景列不會跟著跳。
-
-    名字不疊字、也不出界：所在地的名字寫在記號上方（擠不下時寫在下方）；重要地點的名字寫在點的右邊
-    （在所在地左邊的寫在左邊），那一邊會壓到別的字或出界就換另一邊，兩邊都不行就不寫。"""
-    region = atlas.region_of(content, state.player.location)
-    if region is None:
-        return ""
-    bg = content.map.background
+    """場景旁的小地圖：以所在地為中心，從大地圖截一塊 MINI_WINDOW 大的視窗（超出地圖的地方填底色），
+    畫法同大地圖：大區底色（照原色，不依大勢變紅）、河、路，以及整個落在視窗裡的大區名稱與河名。
+    中心落在視窗裡的地點依視野畫記號：摸清的寫名字（所在地寫「名字（你）」並加粗），畫出輪廓的未知地點寫
+    「名字？」，淡點不寫名字；未開放的地點與通往它的路不畫。視窗外的地點不畫記號，只有路通出去；
+    其中 MINI_HOPS 站以內的摸清地點，在視窗邊緣朝它的方向寫「箭頭 名字」（見 _edge_targets）。
+    不畫圖層的記號、勝算、體力、傳聞，也沒有圖例。
+    名字與方向用大地圖同一套擺法（_label_spots、_place_labels），彼此不疊、也不出視窗。
+    畫面上固定 MINI_HEIGHT 高、置中；平常每次重畫都會呼叫，不算勝算。"""
+    m = content.map
+    bg = m.background
     views = atlas.views(state, content)
-    xs = [x for x, _ in region.points]
-    ys = [y for _, y in region.points]
-    left, top = min(xs), min(ys)
-    scale = MINI_SPAN / max(max(xs) - left, max(ys) - top, 1)
-    width = (max(xs) - left) * scale + 2 * MINI_PAD
-    height = (max(ys) - top) * scale + 2 * MINI_PAD
-    bounds = (2, 2, width - 2, height - 2)
-
-    def at(x: float, y: float) -> tuple[float, float]:
-        return round(MINI_PAD + (x - left) * scale, 1), round(MINI_PAD + (y - top) * scale, 1)
-
-    outline = " ".join(f"{px:g},{py:g}" for px, py in (at(x, y) for x, y in region.points))
-    out = [
-        f'<svg viewBox="0 0 {width:.1f} {height:.1f}" xmlns="http://www.w3.org/2000/svg" '
-        f'style="display:block;width:100%;height:{MINI_HEIGHT}px;font-family:sans-serif;cursor:pointer">',
-        f'<rect x="0" y="0" width="{width:.1f}" height="{height:.1f}" rx="10" fill="{bg}"/>',
-        f'<polygon points="{outline}" fill="{region.fill}" stroke="{region.text_fill}" stroke-width="2"/>',
-    ]
-    hints = _hints(state, content, region, width, height)
-    taken = [text_box(x, y, text, MINI_TEXT, anchor) for text, (x, y, anchor) in hints]  # 名字要避開的範圍
     here = content.locations[state.player.location]
-    here_x, here_y = at(here.x, here.y)
-    ring = MINI_RING + 1
-    taken.append((here_x - ring, here_y - ring, here_x + ring, here_y + ring))
-    half = text_width(here.name, MINI_TEXT) / 2
-    name_x = min(max(here_x, bounds[0] + half), bounds[2] - half)  # 靠邊時往內挪，不出界
-    spots = [(name_x, here_y - ring - 3, "middle"), (name_x, here_y + ring + 2 + MINI_TEXT * ASCENT, "middle")]
-    dots = [  # 區內其他摸清地點的點：所在地的名字盡量不蓋住它們
-        (x - 3.5, y - 3.5, x + 3.5, y + 3.5)
-        for x, y in (at(loc.x, loc.y) for loc in content.locations.values()
-                     if views[loc.id] in ("visible", "remembered") and atlas.region_of(content, loc.id).id == region.id)
+    width, height = MINI_WINDOW
+    left, top = here.x - width / 2, here.y - height / 2
+    window = (left, top, left + width, top + height)
+    bounds = _grow(window, -EDGE)
+    rect = f'x="{left:g}" y="{top:g}" width="{width}" height="{height}"'
+    clip = f"minimap-{here.x}-{here.y}"  # 裁切範圍的 id：同一頁有兩張同一處的小地圖時，範圍也一樣
+    out = [
+        f'<svg viewBox="{left:g} {top:g} {width} {height}" xmlns="http://www.w3.org/2000/svg" '
+        f'style="display:block;width:100%;height:{MINI_HEIGHT}px;font-family:sans-serif;cursor:pointer">',
+        f'<defs><clipPath id="{clip}"><rect {rect} rx="10"/></clipPath></defs>',
+        f'<g clip-path="url(#{clip})">',  # 圖比視窗寬時，視窗外的東西不露出來
+        f'<rect {rect} fill="{bg}"/>',
+        *_polygons(m, {}),
     ]
-    name_spot = next((spot for spot in spots if _fits(here.name, spot, taken + dots, bounds)), None)
-    name_spot = name_spot or next((spot for spot in spots if _fits(here.name, spot, taken, bounds)), spots[0])
-    taken.append(text_box(*name_spot[:2], here.name, MINI_TEXT, name_spot[2]))
-    labels = [_text(*name_spot[:2], here.name, MINI_TEXT, TEXT_DARK, bg, name_spot[2], bold=True)]
-    for loc in content.locations.values():
+    taken: list[Taken] = []  # 已經佔用的範圍：擺名字與方向時要避開
+    for region in m.regions:
+        box = text_box(region.label_x, region.label_y, region.name, REGION_SIZE)
+        if not _outside(box, bounds):
+            out.append(_text(region.label_x, region.label_y, region.name, REGION_SIZE, region.text_fill, bg))
+            taken.append((box, TEXT_WEIGHT))
+    out += _rivers(m)
+    for label in m.labels:
+        text, box = _river_label(label)
+        if not _outside(box, bounds):
+            out.append(text)
+            taken.append((box, TEXT_WEIGHT))
+    out += _roads(content, views)
+    shown = [  # 中心落在視窗裡的地點：記號就算壓到邊緣只露出一部分，也照樣寫名字
+        loc for loc in content.locations.values() if views[loc.id] != "hidden" and _contains(window, loc.x, loc.y)
+    ]
+    reach: dict[str, float] = {}
+    for loc in shown:
         view = views[loc.id]
-        if view == "hidden" or atlas.region_of(content, loc.id).id != region.id:
+        parts, reach[loc.id] = _node(loc, view, NODE_FILL[view], False, taken)
+        out += parts
+    labels: list[Label] = []
+    looks = []  # 每段字的（顏色, 加粗）
+    for loc in sorted(shown, key=lambda loc: loc.id != here.id):  # 所在地排第一個
+        view = views[loc.id]
+        text = _label(loc, view, fights=False)
+        if not text:
             continue
-        x, y = at(loc.x, loc.y)
-        if view == "current":
-            out.append(
-                f'<circle cx="{x:g}" cy="{y:g}" r="{MINI_RING}" fill="none" stroke="{NODE_FILL["current"]}" stroke-width="2"/>'
-            )
-            out.append(f'<circle cx="{x:g}" cy="{y:g}" r="5" fill="{NODE_FILL["current"]}"/>')
-        elif view in KNOWN:
-            out.append(f'<circle cx="{x:g}" cy="{y:g}" r="3.5" fill="{NODE_FILL[view]}"/>')
-        else:
-            out.append(f'<circle cx="{x:g}" cy="{y:g}" r="2.5" fill="{NODE_FILL["dot"]}" fill-opacity="0.7"/>')
-        if view in KNOWN and view != "current" and loc.important:
-            right, left_side = (x + 7, y + 4, "start"), (x - 7, y + 4, "end")
-            for spot in ((left_side, right) if x < here_x else (right, left_side)):
-                if _fits(loc.name, spot, taken, bounds):
-                    taken.append(text_box(*spot[:2], loc.name, MINI_TEXT, spot[2]))
-                    labels.append(_text(*spot[:2], loc.name, MINI_TEXT, TEXT_DARK, bg, spot[2]))
-                    break
-    out += labels
-    out += [_text(x, y, text, MINI_TEXT, TEXT_MUTED, bg, anchor) for text, (x, y, anchor) in hints]
-    out.append("</svg>")
+        lines = [(text, LABEL_SIZE if view in KNOWN else LABEL_SIZE - 1)]
+        labels.append((lines, _label_spots(loc.x, loc.y, reach[loc.id], lines, bounds[0])))
+        looks.append((TEXT_DARK if view in KNOWN else TEXT_MUTED, view == "current"))
+    for loc in _edge_targets(state, content, views, here, window):
+        text = f"{atlas.direction((here.x, here.y), (loc.x, loc.y))} {loc.name}"
+        labels.append(([(text, ARROW_SIZE)], _edge_spots(here, loc, text, ARROW_SIZE, bounds)))
+        looks.append((TEXT_MUTED, False))
+    spots = _place_labels(labels, taken, bounds)
+    for ([(text, size)], _), (fill, bold), (x, y, anchor) in zip(labels, looks, spots):
+        out.append(_text(x, y, text, size, fill, bg, anchor, bold))
+    out.append("</g></svg>")
     return "".join(out)
-
-
-def _fits(text: str, spot: Spot, taken: list[Box], bounds: Box) -> bool:
-    """小地圖上這段字擺在 spot 會不會壓到 taken 或出界。"""
-    box = text_box(spot[0], spot[1], text, MINI_TEXT, spot[2])
-    return not _outside(box, bounds) and not _hits([box], taken)

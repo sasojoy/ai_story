@@ -139,39 +139,10 @@ def region_of(content: Content, loc_id: str) -> MapRegion | None:
     return min(regions, key=lambda region: _edge_distance(loc.x, loc.y, region.points))
 
 
-def region_center(region: MapRegion) -> tuple[float, float]:
-    """多邊形的形心；面積為 0 時用頂點平均。"""
-    points = region.points
-    area = cx = cy = 0.0
-    for i, (x1, y1) in enumerate(points):
-        x2, y2 = points[(i + 1) % len(points)]
-        cross = x1 * y2 - x2 * y1
-        area += cross
-        cx += (x1 + x2) * cross
-        cy += (y1 + y2) * cross
-    if area == 0:
-        return sum(p[0] for p in points) / len(points), sum(p[1] for p in points) / len(points)
-    return cx / (3 * area), cy / (3 * area)
-
-
 def direction(start: tuple[float, float], end: tuple[float, float]) -> str:
     """從 start 看 end 的八方位箭頭。"""
     angle = math.degrees(math.atan2(end[1] - start[1], end[0] - start[0]))
     return ARROWS[round(angle / 45) % len(ARROWS)]
-
-
-def neighbours(state: GameState, content: Content, region: MapRegion) -> list[tuple[str, MapRegion]]:
-    """和這一區有已開放的道路相連的其他大區：（從這一區中心看過去的箭頭, 大區），依 map.json 順序。"""
-    linked: set[str] = set()
-    for loc in content.locations.values():
-        if not is_unlocked(loc, state) or region_of(content, loc.id).id != region.id:
-            continue
-        for dest in loc.connections:
-            other = region_of(content, dest)
-            if other.id != region.id and is_unlocked(content.locations[dest], state):
-                linked.add(other.id)
-    center = region_center(region)
-    return [(direction(center, region_center(r)), r) for r in content.map.regions if r.id in linked]
 
 
 # ── 局勢 ──────────────────────────────────────────────

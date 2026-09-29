@@ -596,7 +596,7 @@ class Game:
         return render_map(self.state, self.content, layer, selected, odds)
 
     def minimap_svg(self) -> str:
-        """場景旁的大區小地圖（SVG）；地圖沒有大區時是空字串。"""
+        """場景旁以你為中心的小地圖（SVG）：從大地圖截出所在地附近的一塊；不算勝算。"""
         return render_minimap(self.state, self.content)
 
     def map_header(self) -> str:

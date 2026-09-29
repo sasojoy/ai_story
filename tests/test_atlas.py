@@ -1,6 +1,6 @@
 from tianxia.atlas import (
-    Route, detail_text, direction, foes, goal_places, haunters, is_known, known_locations, neighbours, place_choices,
-    recent_news, region_center, region_of, region_trends, road_hops, routes, travel_button, worst_foe,
+    Route, detail_text, direction, foes, goal_places, haunters, is_known, known_locations, place_choices, recent_news,
+    region_of, region_trends, road_hops, routes, travel_button, worst_foe,
 )
 from tianxia.models import Location
 from tianxia.state import Rumor
@@ -60,21 +60,10 @@ def test_known_locations_and_place_choices(state, content):
 # ── 大區 ──────────────────────────────────────────────
 
 
-def test_region_center_and_direction(content):
-    assert region_center(region(content, "north")) == (200, 75)
+def test_direction():
     assert [direction((0, 0), end) for end in ((9, 0), (9, 9), (0, 9), (-9, 9), (-9, 0), (-9, -9), (0, -9), (9, -9))] == [
         "→", "↘", "↓", "↙", "←", "↖", "↑", "↗",
     ]
-
-
-def test_neighbours_are_regions_joined_by_open_roads(state, content):
-    north, south = region(content, "north"), region(content, "south")
-    assert neighbours(state, content, north) == []  # 夾具的地點都在北區
-    content.locations["cave"].y = 170  # 寶洞移到南區，但還沒開放
-    assert neighbours(state, content, north) == []
-    state.world.flags.add("cave_open")
-    assert neighbours(state, content, north) == [("↓", south)]
-    assert neighbours(state, content, south) == [("↑", north)]
 
 
 def test_road_hops_count_stops_over_open_roads(state, content):

@@ -1,4 +1,5 @@
 import html
+import math
 import random
 import re
 
@@ -156,21 +157,6 @@ def test_real_regions_trends_and_membership():
     assert members == REGIONS  # 棲霞劍派移到 (55, 188)，和棲霞山腳同屬金陵一帶
 
 
-def test_real_region_neighbours_point_the_right_way():
-    from tianxia.atlas import neighbours
-    from tianxia.state import new_game_state
-
-    c = load_content(CONTENT_DIR)
-    state = new_game_state(c, "測試俠客")
-    regions = {r.id: r for r in c.map.regions}
-    found = {rid: [(arrow, other.name) for arrow, other in neighbours(state, c, r)] for rid, r in regions.items()}
-    assert found == {
-        "jiangbei": [("↘", "太湖一帶")],  # 棲霞劍派移到江南後，江北只經瓜洲渡—鎮江渡口連到太湖一帶
-        "jinling_area": [("→", "太湖一帶")],
-        "taihu_area": [("↖", "江北"), ("←", "金陵一帶")],
-    }
-
-
 def test_travel_on_real_content_matches_the_design_examples():
     from tianxia.engine import Game
 
@@ -297,12 +283,13 @@ def _overlaps(a: Box, b: Box, allow: float = 1.0) -> bool:
     return a[0] < b[2] - allow and b[0] < a[2] - allow and a[1] < b[3] - allow and b[1] < a[3] - allow
 
 
-def _collisions(svg: str, width: float, height: float, marks: list[tuple[str, Box]] = ()) -> list[str]:
-    """疊在一起的文字、壓到地點記號的文字、超出畫布的文字（容許 1 px）。"""
+def _collisions(svg: str, canvas: Box, marks: list[tuple[str, Box]] = ()) -> list[str]:
+    """疊在一起的文字、壓到地點記號的文字、超出畫布（左、上、右、下）的文字（容許 1 px）。"""
     texts = _text_boxes(svg)
     found = [f"{a}×{b}" for i, (a, box_a) in enumerate(texts) for b, box_b in texts[i + 1:] if _overlaps(box_a, box_b)]
     found += [f"{a}×{b}" for a, box_a in texts for b, box_b in marks if _overlaps(box_a, box_b)]
-    found += [f"{a} 出界" for a, (left, top, right, bottom) in texts if left < -1 or top < -1 or right > width + 1 or bottom > height + 1]
+    x0, y0, x1, y1 = canvas
+    found += [f"{a} 出界" for a, (left, top, right, bottom) in texts if left < x0 - 1 or top < y0 - 1 or right > x1 + 1 or bottom > y1 + 1]
     return found
 
 
@@ -336,7 +323,7 @@ def _map_collisions(game, layer: str, selected: str | None = None, marks: bool =
 
     m = game.content.map
     svg = render_map(game.state, game.content, layer, selected, _widest_odds if layer == "enemies" else None)
-    return _collisions(svg, m.width, m.height, _mark_boxes(svg, m.height - 50) if marks else [])
+    return _collisions(svg, (0, 0, m.width, m.height), _mark_boxes(svg, m.height - 50) if marks else [])
 
 
 @pytest.mark.parametrize("layer", ["situation", "enemies", "story", "routes"])
@@ -362,18 +349,38 @@ def test_world_map_labels_never_collide_with_everything_known(layer, bao):
         assert _map_collisions(game, layer, marks=loc_id not in CROWDED) == [], f"在 {loc_id}"
 
 
+def _minimap_window(svg: str) -> Box:
+    left, top, width, height = map(float, re.search(r'viewBox="([-\d.]+) ([-\d.]+) ([\d.]+) ([\d.]+)"', svg).groups())
+    return left, top, left + width, top + height
+
+
+@pytest.mark.parametrize("everything", [False, True])
+@pytest.mark.parametrize("bao", [False, True])
 @pytest.mark.parametrize("cave", [False, True])
-def test_minimap_labels_never_collide_or_leave_the_canvas(cave):
+def test_minimap_labels_never_collide_or_leave_the_canvas(everything, bao, cave):
+    """每個地點當所在地時，小地圖上的字不疊字、不壓到地點記號、也不出視窗。"""
     from tianxia.mapview import render_minimap
 
-    game = _map_game(everything=True, cave=cave)
+    game = _map_game(everything=everything, bao=bao, cave=cave)
     for loc_id, loc in game.content.locations.items():
         if loc.unlock_flag and not cave:
             continue
         game.state.player.location = loc_id
         svg = render_minimap(game.state, game.content)
-        width, height = map(float, re.search(r'viewBox="0 0 ([\d.]+) ([\d.]+)"', svg).groups())
-        assert _collisions(svg, width, height) == [], loc_id
+        assert _collisions(svg, _minimap_window(svg), _mark_boxes(svg, math.inf)) == [], loc_id
+
+
+def test_minimap_at_the_start_shows_the_places_around_yangzhou():
+    from tianxia.mapview import render_minimap
+
+    game = _map_game(everything=False, cave=False)
+    svg = render_minimap(game.state, game.content)
+    left, top, right, bottom = _minimap_window(svg)
+    assert ((left + right) / 2, (top + bottom) / 2) == (330, 80)  # 揚州城在正中間
+    names = [text for text, _ in _text_boxes(svg)]
+    assert {"揚州城（你）", "瘦西湖", "揚州城郊", "瓜洲渡"} <= set(names)
+    assert {"→ 高郵湖", "↓ 鎮江渡口"} <= set(names)  # 兩站外、視窗外的地點標在邊緣
+    assert all("？" not in name and "⚔" not in name for name in names)
 
 
 def _win_rate(squad_id: str, runs: int = 40) -> float:
