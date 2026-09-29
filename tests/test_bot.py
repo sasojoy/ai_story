@@ -32,11 +32,35 @@ def test_bot_skips_arts_at_tenth_level(game):
     assert p.stats["xinde"] == 300
 
 
-def test_bot_takes_in_disciples_and_accepts_whoever_wants_to_join(game):
-    rng = random.Random(0)
-    assert pick(game, game.options(), rng) == "act:apprentice"
+def test_bot_accepts_whoever_wants_to_join(game):
     game.state.pending_event = "meet"
-    assert pick(game, game.options(), rng) == "choice:0"  # 「請他入門」
+    assert pick(game, game.options(), random.Random(0)) == "choice:0"  # 「請他入門」
+
+
+def never_picks_apprentice(game) -> bool:
+    return all(pick(game, game.options(), random.Random(seed)) != "act:apprentice" for seed in range(50))
+
+
+def test_bot_takes_in_disciples_only_with_room_and_silver_to_spare(game):
+    """收徒只在名冊（含你）還塞不滿已開放的隊伍（每隊 3 人）、而且付完還付得起下一次（銀兩 ≥ 2 × 40）時才收，
+    這時一定收；其他時候也不會隨機選到它（整季模擬才不會為了收徒把銀兩花光、改變主線的走向）。"""
+    p = game.state.player
+    assert "act:apprentice" in [o.id for o in game.options() if o.enabled]
+    assert p.stats["silver"] == 50 and never_picks_apprentice(game)  # 付得起一次，付完就不夠下一次
+    p.stats["silver"] = 80
+    assert pick(game, game.options(), random.Random(0)) == "act:apprentice"
+    for key in ("friend", "hero", "captain", "sage"):  # 名冊 6 人：開放的 2 隊剛好塞滿
+        p.members[key] = Member()
+        p.loadouts[key] = [None, None]
+    assert "act:apprentice" in [o.id for o in game.options() if o.enabled]  # 書生、小六還收得到
+    assert never_picks_apprentice(game)
+    game.state.world.act_reached = 1  # 第二幕：開放 3 隊，塞得下 9 人
+    assert pick(game, game.options(), random.Random(0)) == "act:apprentice"
+
+
+def test_bot_has_nothing_to_pick_when_only_an_unwanted_apprenticeship_is_left(game):
+    options = [o for o in game.options() if o.id == "act:apprentice"]
+    assert pick(game, options, random.Random(0)) is None  # 銀兩 50：不收，也沒有別的可選（整季模擬就讓時間過去）
 
 
 def test_bot_puts_the_strongest_pair_under_the_cap_in_the_main_team(game):

@@ -1,6 +1,7 @@
 """亂數機器人：玩完一整季，把心得花在武學上。用於整季測試與平衡模擬。
 
-大多數時候隨機選一個可用的選項；只有三件事照規矩來：遇到結識的選項一定接受、能收徒就收徒、
+大多數時候隨機選一個可用的選項；只有三件事照規矩來：遇到結識的選項一定接受、
+收徒只在名冊還塞不滿已開放的隊伍而且付完還付得起下一次時收（見 wants_apprentice），
 每一步之後把本隊換成統御上限內最強的組合（見 arrange_team）。
 """
 from __future__ import annotations
@@ -12,9 +13,10 @@ from itertools import combinations
 from . import roster, team
 from .engine import Game, Option
 from .models import Content
-from .state import PLAYER
+from .state import PLAYER, TEAM_SIZE
 
 HALF_HOUR = 1800
+APPRENTICE = "act:apprentice"
 
 
 def spend_xinde(game: Game) -> None:
@@ -34,17 +36,26 @@ def spend_xinde(game: Game) -> None:
         game.upgrade(target)
 
 
-def pick(game: Game, options: list[Option], rng: random.Random) -> str:
-    """結識的選項一定接受、能收徒就收徒；其餘隨機挑一個。"""
+def wants_apprentice(game: Game) -> bool:
+    """要不要收徒：名冊（含你）還塞不滿已開放的隊伍（每隊 TEAM_SIZE 人），而且付完這次還付得起下一次
+    （銀兩 ≥ 2 × 收徒的銀兩）。這是模擬用的策略，不是遊戲規則：不讓機器人為了收徒把銀兩花光、改變主線的走向。"""
+    p, cfg = game.state.player, game.content.config
+    return len(p.members) < TEAM_SIZE * game.team_count() and p.stats.get("silver", 0) >= 2 * cfg.apprentice_silver
+
+
+def pick(game: Game, options: list[Option], rng: random.Random) -> str | None:
+    """結識的選項一定接受；想收徒（wants_apprentice）時一定收徒，不想收時也不會隨機選到它；其餘隨機挑一個。
+    沒得挑（只剩不想收的收徒）時回傳 None。"""
     s = game.state
     if s.pending_event:
         choices = game.content.events[s.pending_event].choices
         for option in options:
             if option.id.startswith("choice:") and choices[int(option.id.partition(":")[2])].effect.recruit:
                 return option.id
-    if any(option.id == "act:apprentice" for option in options):
-        return "act:apprentice"
-    return rng.choice(options).id
+    if any(option.id == APPRENTICE for option in options) and wants_apprentice(game):
+        return APPRENTICE
+    rest = [option for option in options if option.id != APPRENTICE]
+    return rng.choice(rest).id if rest else None
 
 
 def arrange_team(game: Game) -> None:
@@ -75,11 +86,12 @@ def play_season(
         if game.state.world.ended:
             break
         options = [o for o in game.options(odds=False) if o.enabled]
-        if options:
-            game.choose(pick(game, options, rng))
+        choice = pick(game, options, rng) if options else None
+        if choice is not None:
+            game.choose(choice)
             spend_xinde(game)
             arrange_team(game)
-        if not options or step % 4 == 0:
+        if choice is None or step % 4 == 0:
             game.advance(HALF_HOUR)
         if observe is not None:
             observe(game)
