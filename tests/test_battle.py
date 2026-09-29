@@ -1,4 +1,6 @@
 import random
+import re
+from pathlib import Path
 
 import pytest
 
@@ -170,3 +172,58 @@ def test_counter_and_aptitude_multiply_damage():
     att = unit("甲", atk=20, aptitude={"柔": 1.2})
     assert compute_damage(att, unit("乙", dfn=0, style="剛"), 1.0, "柔", rules) == round(240 * 1.25 * 1.2)
     assert compute_damage(att, unit("丙", dfn=0, style="無"), 1.0, "柔", rules) == round(240 * 1.2)
+
+
+# ── 戰鬥事件與我方表現 ─────────────────────────────────
+
+
+def test_battle_module_stays_pure():
+    import tianxia.battle as battle
+
+    source = Path(battle.__file__).read_text(encoding="utf-8")
+    assert "models" not in source and "gradio" not in source
+
+
+def test_ultimate_event_is_recorded_when_cast_not_when_charging():
+    art = Art("開碑手", "絕招", chance=1.0, prep=1, effects=[Eff("damage", 2.0)])
+    a = unit("甲", hp=99999, arts=[art])
+    res = run_battle([a], [unit("乙", hp=99999, atk=1)], random.Random(0), Rules(max_rounds=2))
+    ultimates = [e for e in res.events if e.kind == "ultimate"]
+    assert [(e.round, e.actor, e.actor_side, e.art) for e in ultimates] == [(2, "甲", 0, "開碑手")]
+
+
+def test_control_hit_is_an_event_and_is_tallied():
+    art = Art("點穴手", "絕招", chance=1.0, effects=[Eff("control", 1.0, control="點穴", rounds=1)])
+    a = unit("甲", spd=10, hp=99999, arts=[art])
+    b = unit("乙", spd=1, hp=99999, atk=1)
+    res = run_battle([a], [b], FixedRandom(0.0), Rules(max_rounds=1))
+    controls = [e for e in res.events if e.kind == "control"]
+    assert [(e.round, e.actor, e.actor_side, e.target, e.art, e.control) for e in controls] == [
+        (1, "甲", 0, "乙", "點穴手", "點穴")
+    ]
+    assert res.controls == [1]
+
+
+def test_resisted_control_is_neither_an_event_nor_tallied():
+    art = Art("點穴手", "絕招", chance=1.0, effects=[Eff("control", 1.0, control="點穴", rounds=1)])
+    a = unit("甲", spd=10, hp=99999, arts=[art])
+    res = run_battle([a], [unit("乙", spd=1, hp=99999, atk=1)], FixedRandom(0.99), Rules(max_rounds=1))
+    assert "乙化解了點穴。" in res.report
+    assert res.controls == [0]
+    assert not any(e.kind == "control" for e in res.events)
+
+
+def test_knockout_is_an_event_and_damage_is_tallied_from_the_report():
+    res = run_battle([unit("強", atk=50, hp=2000)], [unit("弱", atk=5, hp=100)], random.Random(0))
+    knockouts = [e for e in res.events if e.kind == "knockout"]
+    assert [(e.round, e.actor, e.actor_side, e.target, e.is_leader) for e in knockouts] == [(1, "強", 0, "弱", True)]
+    shown = sum(int(n) for n in re.findall(r"強的\S+命中弱，造成 (\d+) 點傷害", "\n".join(res.report)))
+    assert shown > 0 and res.dealt == [shown]
+    assert res.controls == [0]
+
+
+def test_tallies_count_only_the_current_battle():
+    a = unit("強", atk=50, hp=2000)
+    first = run_battle([a], [unit("弱", atk=5, hp=100)], random.Random(0))
+    second = run_battle([a], [unit("弱", atk=5, hp=100)], random.Random(0))
+    assert second.dealt == first.dealt
