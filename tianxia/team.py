@@ -187,8 +187,11 @@ def fight(state: GameState, content: Content, squad_id: str, rng: random.Random)
 # ── 戰前情報：勝算 ─────────────────────────────────────
 
 
-def odds_word(wins: int, runs: int) -> str:
-    """依勝率分五段：≥90% 穩勝、≥65% 有把握、≥35% 五五波、≥10% 凶險，其餘必敗。"""
+def odds_word(wins: int, draws: int, runs: int) -> str:
+    """依勝率分五段：≥90% 穩勝、≥65% 有把握、≥35% 五五波、≥10% 凶險，其餘必敗；
+    勝率 < 35% 且平手率 ≥ 50% 時改判「難分勝負」（多半打不完，不算真的必敗）。"""
+    if wins * 100 < 35 * runs and draws * 100 >= 50 * runs:
+        return "難分勝負"
     for pct, word in ODDS:
         if wins * 100 >= pct * runs:
             return word
@@ -216,11 +219,12 @@ def estimate(state: GameState, content: Content, squad_id: str, cache: dict[str,
     if cache is not None and key in cache:
         return cache[key]
     rng = random.Random(ESTIMATE_SEED)
-    wins = 0
+    wins = draws = 0
     for _ in range(ESTIMATE_RUNS):
         result = run_battle(_estimate_units(state, content), enemy_units(content, squad), rng, rules)
         wins += result.outcome == "win"
-    word = odds_word(wins, ESTIMATE_RUNS)
+        draws += result.outcome == "draw"
+    word = odds_word(wins, draws, ESTIMATE_RUNS)
     if cache is not None:
         if len(cache) >= ESTIMATE_CACHE_LIMIT:
             cache.clear()

@@ -4,6 +4,8 @@
 """
 from __future__ import annotations
 
+import re
+
 from . import team
 from .battle import BattleEvent, BattleResult
 from .models import Content, Squad
@@ -18,6 +20,15 @@ KIND_WORDS = {"train": "歷練", "event": "劇情"}
 NO_RECORD = "（還沒有戰報。）"
 DAY = 86400
 HOUR = 3600
+_NUMERIC_CHANGE = re.compile(r"^\S+ [+-]\d+(\.\d+)?$")  # 例如「名望 +3」「銀兩 -10」
+
+
+def split_changes(msgs: list[str]) -> tuple[list[str], list[str]]:
+    """把一串訊息（apply_effect、歷練加成……的回傳）分成（數值變化, 敘事文字）兩份，各自保留原順序。
+    數值變化是「標籤 + 正負號 + 數字」這種格式，例如「名望 +3」；其餘一律算敘事文字。"""
+    changes = [m for m in msgs if _NUMERIC_CHANGE.match(m)]
+    notes = [m for m in msgs if not _NUMERIC_CHANGE.match(m)]
+    return changes, notes
 
 
 # ── 建立紀錄 ──────────────────────────────────────────
@@ -112,9 +123,9 @@ def summary_line(record: BattleRecord) -> str:
 
 
 def list_label(record: BattleRecord) -> str:
-    """戰報列表的一列：「勝　第1天 08:30　揚州城郊　vs 劫道山賊　4 回合」。"""
+    """戰報列表的一列：「勝　第12場　第1天 08:30　揚州城郊　vs 劫道山賊　4 回合」。"""
     return (
-        f"{OUTCOME_WORDS[record.outcome]}　{clock_text(record.time)}　{record.location}"
+        f"{OUTCOME_WORDS[record.outcome]}　第{record.id}場　{clock_text(record.time)}　{record.location}"
         f"　vs {record.opponent}　{record.rounds} 回合"
     )
 
@@ -137,7 +148,8 @@ def _result_line(record: BattleRecord) -> str:
 
 
 def gains_text(record: BattleRecord) -> str:
-    """獲得與損失，例如「經驗 +15（每人）　心得 +12　銀兩 +10　臂力 +1」；什麼都沒有時寫「無」。"""
+    """獲得與損失：只列數字，例如「經驗 +15（每人）　心得 +12　銀兩 +10　臂力 +1」；什麼都沒有時寫「無」。
+    劇情／敘事文字不算在內，見 story_text。"""
     parts = []
     if record.exp:
         parts.append(f"經驗 +{record.exp}（每人）")
@@ -145,38 +157,58 @@ def gains_text(record: BattleRecord) -> str:
         parts.append(f"心得 +{record.xinde}")
     if record.silver:
         parts.append(f"銀兩 {record.silver:+d}")
-    return "　".join(parts + record.notes) or "無"
+    return "　".join(parts + record.changes) or "無"
+
+
+def story_text(record: BattleRecord) -> str:
+    """結果的敘事文字（選項效果文字、升級、拜師等），不含【江湖傳聞】那一行；沒有時是空字串。"""
+    return "　".join(n for n in record.notes if not n.startswith("【江湖傳聞】"))
 
 
 def _moments_block(record: BattleRecord) -> str:
     return "\n".join(f"- {m}" for m in record.moments) or "（沒有特別的一刻。）"
 
 
+def _story_block(record: BattleRecord) -> list[str]:
+    """「結果」那一行；沒有敘事文字時整行省略。"""
+    story = story_text(record)
+    return [f"**結果**　{story}"] if story else []
+
+
 def card_text(record: BattleRecord) -> str:
-    """場景裡的戰鬥卡片（Markdown）：標題、時間與類型、結果、關鍵時刻、獲得與損失。"""
+    """場景裡的戰鬥卡片（Markdown）：標題、時間與類型、結果、關鍵時刻、（劇情結果）、獲得與損失。"""
     return "\n\n".join([
         _title(record),
         _when(record),
         _result_line(record),
         _moments_block(record),
+        *_story_block(record),
         f"**獲得與損失**　{gains_text(record)}",
     ])
 
 
-def detail_text(record: BattleRecord) -> str:
-    """戰報分頁下方的完整內容（Markdown）：陣容、結果、關鍵時刻、得失、我方表現、逐回合戰報。"""
-    ours = "、".join(f"{f.name} Lv{f.level}" for f in record.ours)
+def _theirs_line(record: BattleRecord) -> str:
+    """「對方」那一行：隊名和隊長同名時（隊伍以首領命名）不重複寫隊名，只列陣容。"""
     theirs = "、".join(f"{f.name} Lv{f.level}" for f in record.theirs)
+    if record.theirs and record.theirs[0].name == record.opponent:
+        return f"**對方**　{theirs}"
+    return f"**對方**　{record.opponent}：{theirs}"
+
+
+def detail_text(record: BattleRecord) -> str:
+    """戰報分頁下方的完整內容（Markdown）：陣容、結果、關鍵時刻、（劇情結果）、得失、我方表現、逐回合戰報。"""
+    ours = "、".join(f"{f.name} Lv{f.level}" for f in record.ours)
     rows = ["| 人物 | 造成傷害 | 控制命中 |", "|---|---|---|"]
     rows += [f"| {p.name} | {p.damage} | {p.controls} |" for p in record.performance]
     return "\n\n".join([
         _title(record),
         f"{_when(record)}　第 {record.id} 場",
         f"**我方**　{ours}",
-        f"**對方**　{record.opponent}：{theirs}",
+        _theirs_line(record),
         f"{_result_line(record)}　（{record.ending}）",
         "**關鍵時刻**",
         _moments_block(record),
+        *_story_block(record),
         f"**獲得與損失**　{gains_text(record)}",
         "**我方表現**",
         "\n".join(rows),

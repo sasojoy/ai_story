@@ -40,6 +40,18 @@ def test_1a_save_without_battle_records_still_loads(tmp_path, content, game):
     assert [r.id for r in old.state.battles] == [1]
 
 
+def test_pre_fix_battle_record_without_changes_field_still_loads(tmp_path, game):
+    """在「結果／獲得與損失」拆分上線前存的戰報，BattleRecord 還沒有 changes 欄位；讀檔不能炸。"""
+    game.choose("move:lake")
+    game.choose("act:train")
+    dump = game.state.model_dump(mode="json")
+    del dump["battles"][0]["changes"]  # 模擬舊版存檔
+    path = tmp_path / "old_battle.json"
+    path.write_text(json.dumps(dump, ensure_ascii=False), encoding="utf-8")
+    state = load_game(path)
+    assert state.battles[0].changes == []
+
+
 def test_stale_battle_card_is_dropped(content, game):
     game.state.battle_card = 7  # 卡片指向一場不在紀錄裡的戰鬥
     assert Game(content, game.state).battle_card_id() is None

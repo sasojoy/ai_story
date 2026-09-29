@@ -95,7 +95,8 @@ def test_event_battle_is_fully_automatic(game):
     record = game.state.battles[0]
     assert (record.kind, record.event, record.opponent, record.outcome) == ("event", "挑戰", "翻江龍", "lose")
     assert record.ending == "沈浪倒下，我方敗退。" and not record.leader_ok
-    assert record.notes == ["你敗了。", "銀兩 -10"]  # 失敗分支的劇情結果
+    assert record.notes == ["你敗了。"]  # 失敗分支的劇情文字
+    assert record.changes == ["銀兩 -10"]  # 失敗分支扣的銀兩是數值變化，不混進敘事
     assert f"⚔ 湖邊：不敵翻江龍，敗退（{record.rounds} 回合）" in game.state.log
     from tianxia.team import member_neili
 
@@ -115,6 +116,29 @@ def test_event_battle_win_pays_squad_rewards_once_and_applies_choice_effect(game
     assert game.state.world.trends["kou"] == 10  # 30 − 20
     assert p.stats["silver"] == 55 and p.stats["xinde"] == 10  # 隊伍獎勵只給一次
     assert p.members["player"].exp == 20 and p.members["mate"].exp == 20
+
+
+def test_event_battle_win_splits_story_from_numeric_changes(game):
+    game.content.events["duel"].choices[0].combat = "thug"  # 換成打得贏的小嘍囉
+    game.content.events["duel"].choices[0].effect.stats = {"fame": 3}
+    game.content.events["duel"].choices[0].effect.rumor = "{name}擊敗了翻江龍！"
+    game.choose("move:lake")
+    game.choose("act:socialize")
+    game.choose("choice:0")
+    record = game.state.battles[0]
+    assert record.outcome == "win"
+    assert record.notes == ["你擊敗了翻江龍！", "【江湖傳聞】沈浪擊敗了翻江龍！"]
+    assert record.changes == ["名望 +3"]
+
+
+def test_train_win_stat_bonus_is_recorded_as_a_change_not_a_note(game):
+    game.content.config.train_stat_chance = 1.0
+    game.choose("move:lake")
+    game.choose("act:train")
+    record = game.state.battles[0]
+    assert record.outcome == "win"
+    assert record.changes and record.changes[0] in ("臂力 +1", "身法 +1", "根骨 +1")
+    assert record.notes == []
 
 
 def test_event_battle_draw_takes_the_fail_branch(game):
@@ -177,9 +201,24 @@ def test_train_draw_changes_nothing(game):
 def test_odds_word_tiers():
     from tianxia.team import odds_word
 
-    assert [odds_word(wins, 40) for wins in (40, 36, 35, 26, 25, 14, 13, 4, 3, 0)] == [
+    # 平手率低（0）時，五段門檻不受影響。
+    assert [odds_word(wins, 0, 40) for wins in (40, 36, 35, 26, 25, 14, 13, 4, 3, 0)] == [
         "穩勝", "穩勝", "有把握", "有把握", "五五波", "五五波", "凶險", "凶險", "必敗", "必敗",
     ]
+
+
+def test_odds_word_shows_hard_to_tell_when_mostly_draws():
+    from tianxia.team import odds_word
+
+    # 勝率 < 35% 且平手率 ≥ 50%：改判「難分勝負」，即使勝率落在凶險／必敗的區間。
+    assert odds_word(8, 92, 100) == "難分勝負"  # 新手隊打黑熊：92 平、8 敗
+    assert odds_word(13, 20, 40) == "難分勝負"  # 原本會是「凶險」（13/40 ≥ 10%）
+    assert odds_word(0, 20, 40) == "難分勝負"  # 平手率剛好 50%
+    # 平手率不足五成時，仍照五段門檻。
+    assert odds_word(0, 19, 40) == "必敗"
+    assert odds_word(13, 19, 40) == "凶險"
+    # 勝率已達 35% 以上時，五段門檻不受平手率影響。
+    assert odds_word(14, 26, 40) == "五五波"
 
 
 def test_battle_options_show_opponent_and_odds(game):
@@ -192,7 +231,7 @@ def test_battle_options_show_opponent_and_odds(game):
 
 def test_draws_do_not_count_as_wins(game):
     game.content.config.battle_rounds = 1  # 一回合分不出勝負：四十場全是平手
-    assert game.odds("thug") == "必敗"
+    assert game.odds("thug") == "難分勝負"  # 0 勝、全平手：不算贏，但也打不輸——難分勝負而非必敗
 
 
 def test_odds_are_stable_and_leave_the_game_rng_alone(game, content):
@@ -542,7 +581,7 @@ def test_battle_list_and_detail(game):
     game.choose("act:train")
     (label, newest), (_, older) = game.battle_list()
     assert (newest, older) == (2, 1)
-    assert label.startswith("勝　第1天 00:00　湖邊　vs 水寇小隊　") and label.endswith(" 回合")
+    assert label.startswith("勝　第2場　第1天 00:00　湖邊　vs 水寇小隊　") and label.endswith(" 回合")
     detail = game.battle_detail(older)
     assert detail.startswith("### ⚔ 湖邊・對陣 小嘍囉\n\n第1天 00:00　歷練　第 1 場")
     for part in ("**我方**　沈浪 Lv1、韓鐵 Lv1", "**對方**　水寇小隊：小嘍囉 Lv1", "**關鍵時刻**",

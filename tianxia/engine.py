@@ -238,7 +238,9 @@ class Game:
                 extra.append(f"{c.config.stat_names[key]} +1")
             for trend_id, delta in loc.train_trend.items():
                 extra += change_trend(s, c, trend_id, delta)
-            record.notes += extra
+            changes, notes = battlelog.split_changes(extra)
+            record.changes += changes
+            record.notes += notes
             msgs += extra
         elif result.outcome == "lose":
             loss = p.stats["silver"] // 10
@@ -308,7 +310,9 @@ class Game:
         rewards = self._battle_rewards(squad, record) if won else []
         effect = choice.effect if won else choice.fail_effect
         story = apply_effect(effect, s, c)
-        record.notes += story
+        changes, notes = battlelog.split_changes(story)
+        record.changes += changes
+        record.notes += notes
         msgs = [self._file_battle(record)] + rewards + story
         if effect.next_event:
             msgs += self._present(c.events[effect.next_event])

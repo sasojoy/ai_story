@@ -90,7 +90,8 @@ class BattleRecord(BaseModel):
     exp: int = 0  # 每人獲得的經驗
     xinde: int = 0
     silver: int = 0  # 正數為獲得、負數為失落
-    notes: list[str] = Field(default_factory=list)  # 其他得失：升級、屬性、大勢、劇情結果
+    notes: list[str] = Field(default_factory=list)  # 敘事文字：選項效果、升級、拜師、傳聞等（不是數字，見 changes）
+    changes: list[str] = Field(default_factory=list)  # 其他數值變化，如屬性、名望、善惡名（經驗／心得／銀兩已有專屬欄位）
     report: list[str] = Field(default_factory=list)  # 完整逐回合戰報
     performance: list[Performance] = Field(default_factory=list)  # 我方每人表現，順序同 ours
 
