@@ -169,6 +169,24 @@ def test_real_region_neighbours_point_the_right_way():
     }
 
 
+def test_travel_on_real_content_matches_the_design_examples():
+    from tianxia.engine import Game
+
+    game = Game.new(load_content(CONTENT_DIR), "測試俠客", rng=random.Random(0))
+    p = game.state.player
+    p.tutorial_step = 2  # 下一步是「出城往揚州城郊走走」
+    game.travel("gaoyou")
+    assert game.state.journal[0].title == "前往 高郵湖（途經 揚州城郊）"
+    assert p.location == "gaoyou" and p.stamina == 140 and p.tutorial_step == 3
+
+    p.location = "yangzhou"
+    p.visited |= {"guazhou", "zhenjiang", "changzhou", "wuxi", "taihu_north", "taihu_isle"}
+    p.stamina = 10
+    game.travel("taihu_isle")
+    assert game.state.journal[0].title == "前往 太湖水寨（體力不足，停在 鎮江渡口）"
+    assert p.location == "zhenjiang" and p.stamina == 0
+
+
 def test_real_content_places_are_filled_in():
     c = load_content(CONTENT_DIR)
     s = c.scenario

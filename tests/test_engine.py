@@ -604,3 +604,74 @@ def test_menxia_page_texts(game):
     assert game.slot_label("player", 1) == "自選2　（空）"
     assert [t for _, t in game.skill_library()] == ["skill:fist", "skill:family", "innate:mate"]
     assert game.skill_detail("skill:family").startswith("### 家傳劍")
+
+
+# ── 安排前往 ──────────────────────────────────────────
+
+
+def test_travel_walks_hop_by_hop_and_writes_one_entry(game):
+    game.state.world.flags.add("cave_open")
+    before = len(game.state.journal)
+    msgs = game.travel("cave")
+    p = game.state.player
+    assert p.location == "cave" and p.stamina == 140  # 湖邊 5 ＋ 寶洞 5
+    assert {"lake", "cave"} <= p.visited
+    assert len(game.state.journal) == before + 1
+    entry = game.state.journal[0]
+    assert entry.title == "前往 寶洞（途經 湖邊）" and entry.lines == []  # 地點描述由場景顯示
+    assert msgs[-1] == game.location_text() == game.scene_text()
+
+
+def test_travel_to_a_neighbour_has_a_plain_title(game):
+    game.travel("lake")
+    assert game.state.journal[0].title == "前往 湖邊"
+
+
+def test_travel_stops_when_the_next_hop_is_unaffordable(game):
+    game.state.world.flags.add("cave_open")
+    game.state.player.stamina = 7
+    game.travel("cave")
+    assert game.state.player.location == "lake" and game.state.player.stamina == 2
+    assert game.state.journal[0].title == "前往 寶洞（體力不足，停在 湖邊）"
+
+
+def test_travel_runs_the_guide_and_thresholds_at_every_hop(game, monkeypatch):
+    from tianxia import engine
+
+    seen = []
+    real = engine.check_thresholds
+    monkeypatch.setattr(engine, "check_thresholds", lambda s, c: seen.append(s.player.location) or real(s, c))
+    game.state.world.flags.add("cave_open")
+    game.state.player.tutorial_step = 1  # 下一步是「去湖邊」
+    game.travel("cave")
+    assert seen == ["lake", "cave"]
+    assert game.state.player.tutorial_step == 2  # 途經湖邊就算完成
+    assert game.state.journal[0].lines == ["✔ 引導完成", "【說書人】看看地圖。"]
+
+
+def test_travel_is_refused_with_a_reason(game):
+    before = len(game.state.journal)
+    game.state.pending_event = "drunk"
+    assert game.travel("lake") == ["（有事件待處理，不能安排前往。）"]
+    game.state.pending_event = None
+    game.state.player.busy_until = 3600.0
+    assert game.travel("lake") == ["（閉關中，不能安排前往。）"]
+    game.state.player.busy_until = None
+    game.state.world.ended = True
+    assert game.travel("lake") == ["（賽季已結束，不能安排前往。）"]
+    game.state.world.ended = False
+    assert game.travel("town") == ["（無法安排前往這裡。）"]  # 所在地
+    assert game.travel("cave") == ["（無法安排前往這裡。）"]  # 未開放
+    assert game.travel("nowhere") == ["（無法安排前往這裡。）"]
+    game.state.player.stamina = 3
+    assert game.travel("lake") == ["（體力不足，第一站要 5 體力。）"]
+    assert game.state.player.location == "town" and game.state.player.stamina == 3
+    assert len(game.state.journal) == before  # 沒走成，不寫紀錄
+
+
+def test_travel_clears_the_battle_card(game):
+    game.choose("move:lake")
+    game.choose("act:train")
+    assert game.battle_card_id() is not None
+    game.travel("town")
+    assert game.battle_card_id() is None
