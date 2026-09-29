@@ -230,6 +230,13 @@ def test_minimap_names_step_aside_or_are_left_out(state, content):
     assert re.search(r'text-anchor="end"[^>]*>湖邊<', render_minimap(state, content))
 
 
+def test_minimap_current_name_does_not_cover_another_place(state, content):
+    content.locations["lake"].x, content.locations["lake"].y = 100, 70  # 湖邊就在小鎮正上方
+    svg = render_minimap(state, content)
+    here_y = 26 + 100 * 0.55  # 小鎮在小地圖上的位置（測試北區 400 寬，畫成 220）
+    assert float(re.search(r'<text x="[\d.]+" y="([\d.]+)"[^>]*>小鎮<', svg)[1]) > here_y  # 改寫在記號下方
+
+
 def test_minimap_keeps_a_fixed_height(state, content):
     svg = render_minimap(state, content)
     assert f"height:{MINI_HEIGHT}px" in svg and "height:auto" not in svg

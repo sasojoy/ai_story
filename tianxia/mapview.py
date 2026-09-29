@@ -504,7 +504,13 @@ def render_minimap(state: GameState, content: Content) -> str:
     half = text_width(here.name, MINI_TEXT) / 2
     name_x = min(max(here_x, bounds[0] + half), bounds[2] - half)  # 靠邊時往內挪，不出界
     spots = [(name_x, here_y - ring - 3, "middle"), (name_x, here_y + ring + 2 + MINI_TEXT * ASCENT, "middle")]
-    name_spot = next((spot for spot in spots if _fits(here.name, spot, taken, bounds)), spots[0])
+    dots = [  # 區內其他摸清地點的點：所在地的名字盡量不蓋住它們
+        (x - 3.5, y - 3.5, x + 3.5, y + 3.5)
+        for x, y in (at(loc.x, loc.y) for loc in content.locations.values()
+                     if views[loc.id] in ("visible", "remembered") and atlas.region_of(content, loc.id).id == region.id)
+    ]
+    name_spot = next((spot for spot in spots if _fits(here.name, spot, taken + dots, bounds)), None)
+    name_spot = name_spot or next((spot for spot in spots if _fits(here.name, spot, taken, bounds)), spots[0])
     taken.append(text_box(*name_spot[:2], here.name, MINI_TEXT, name_spot[2]))
     labels = [_text(*name_spot[:2], here.name, MINI_TEXT, TEXT_DARK, bg, name_spot[2], bold=True)]
     for loc in content.locations.values():
