@@ -36,7 +36,7 @@
    "choices": [
     {"text": "帶上謝禮請教", "condition": {"min_stats": {"silver": 20}},
      "effect": {"text": "老學究指著殘卷上的小字：「這不是地名，是前朝工部的營造編號……」", "stats": {"silver": -20, "wis": 1}, "trend": {"bao": 15}}},
-    {"text": "自己拿著殘卷琢磨", "check": {"stat": "wis", "difficulty": 8},
+    {"text": "自己拿著殘卷琢磨", "check": {"stat": "wis", "difficulty": 8, "by": "self"},
      "effect": {"text": "你熬了一夜，終於看出殘卷上的暗記。", "trend": {"bao": 15}},
      "fail_effect": {"text": "你盯著殘卷看了一夜，只看得眼花。"}}
   ]},

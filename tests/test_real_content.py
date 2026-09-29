@@ -32,10 +32,11 @@ def test_all_locations_reachable_from_start():
 SELF_CHECKS = {
     ("herb", "當場服下"), ("temple_zen", "坐下靜聽"), ("teahouse", "上台和說書先生對幾句"),
     ("train_insight", "靜下心來細想"), ("monk_jinshan", "請教調息之法"), ("waterfall", "躲在石後偷學"),
+    ("bao_scholar", "自己拿著殘卷琢磨"),
 }
 
 
-def test_exactly_the_six_self_checks_are_marked():
+def test_exactly_the_seven_self_checks_are_marked():
     c = load_content(CONTENT_DIR)
     checks = [(e.id, ch.text, ch.check.by) for e in c.events.values() for ch in e.choices if ch.check]
     assert len(checks) == 16
@@ -61,6 +62,14 @@ def test_bot_grows_its_arts_with_xinde():
     p = game.state.player
     levels = list(p.skills.values()) + [m.innate_level for key, m in p.members.items() if key != "player"]
     assert max(levels) > 1
+
+
+def test_fresh_team_facing_heixiong_shows_hard_to_tell():
+    """新手隊初期打不動黑熊（防禦高），模擬大多是平手：該顯示「難分勝負」而非「必敗」。"""
+    from tianxia.engine import Game
+
+    game = Game.new(load_content(CONTENT_DIR), "測試俠客", rng=random.Random(0))
+    assert game.odds("heixiong") == "難分勝負"
 
 
 def test_treasure_storyline_can_be_lost_to_fanjianglong():
