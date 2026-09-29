@@ -102,12 +102,17 @@ class Game:
         return self.advance(elapsed)
 
     def advance(self, seconds: float) -> list[str]:
+        """時間流逝。平常不寫江湖紀錄；發生江湖大事或主線變化時寫一則「江湖大事」（連續的併成一則），
+        閉關時間到了寫一則「出關」（見 _finish_seclusion）。"""
         msgs: list[str] = []
         remaining = seconds
         while remaining > 0 and not self.state.world.ended:
             step = min(remaining, HOUR)
             remaining -= step
             msgs += self._advance_step(step)
+        news = journal.news_entry(self.state.world.time, msgs)
+        if news is not None:
+            journal.add_entry(self.state, news, merge=True)
         return self._log(msgs)
 
     def _advance_step(self, seconds: float) -> list[str]:
@@ -254,7 +259,7 @@ class Game:
         self.state.pending_event = event.id
         self.state.player.seen_events.add(event.id)
         head = f"✦ 奇遇：{event.title}" if event.qiyu else f"【{event.title}】"
-        self._outcome(f"遇上奇遇【{event.title}】" if event.qiyu else f"遇上【{event.title}】", head)
+        self._outcome(journal.event_marker(event.title, event.qiyu), head)
         self._hide(event.text)  # 事件的開場由場景顯示
         return [head, event.text]
 
@@ -320,7 +325,7 @@ class Game:
             self._draft.outcome(battlelog.outcome_text(record), line)
             self._draft.battle_id = record.id
             if record.exp:
-                self._draft.changes.append(f"經驗 +{record.exp}")
+                self._draft.changes.append(f"經驗 +{record.exp}（每人）")  # 寫法和卡片的獲得與損失一致
         return line
 
     def _move(self, dest_id: str) -> list[str]:
@@ -410,7 +415,7 @@ class Game:
             journal.add_entry(self.state, JournalEntry(time=end_time, title="出關", tag=tag, changes=[change]))
         return [msg]
 
-    # 門下的操作只有真的改了東西才寫江湖紀錄；「心得不足」這類失敗訊息由門下頁面自己顯示。
+    # 門下的操作只有真的改了東西才寫江湖紀錄，連續幾次併成一則；「心得不足」這類失敗訊息由門下頁面自己顯示。
 
     def upgrade(self, target: str) -> list[str]:
         level, xinde = team.target_level(self.state, self.content, target), self._xinde()
@@ -440,7 +445,8 @@ class Game:
     def _menxia_entry(self, tag: str, xinde_before: int) -> None:
         delta = self._xinde() - xinde_before
         changes = [f"心得 {delta:+d}"] if delta else []
-        journal.add_entry(self.state, JournalEntry(time=self.state.world.time, title="門下", tag=tag, changes=changes))
+        entry = JournalEntry(time=self.state.world.time, title=journal.MENXIA, tag=tag, changes=changes)
+        journal.add_entry(self.state, entry, merge=True)
 
     def upgrade_options(self) -> list[tuple[str, str]]:
         return team.upgrade_options(self.state, self.content)
@@ -522,8 +528,11 @@ class Game:
         self.state.player.anonymous = bool(value)
 
     def skip_tutorial(self) -> list[str]:
-        """設定裡的「略過新手引導」：直接跳到引導結束。"""
-        self.state.player.tutorial_step = len(self.content.tutorial.steps)
+        """設定裡的「略過新手引導」：直接跳到引導結束。引導早就結束時什麼都不做。"""
+        steps = len(self.content.tutorial.steps)
+        if self.state.player.tutorial_step >= steps:
+            return []
+        self.state.player.tutorial_step = steps
         self._write("新手引導", [], tag="已略過")
         return self._log(["（已略過新手引導。）"])
 
@@ -624,6 +633,15 @@ class Game:
         """「剛剛」那一格改放戰鬥卡片：卡片還在，而且最新一則紀錄就是打那一場的行動。"""
         s = self.state
         return self.battle_card_id() is not None and bool(s.journal) and s.journal[0].battle_id == s.battle_card
+
+    def battle_extra_html(self) -> str:
+        """顯示戰鬥卡片時放在卡片底下的補充（HTML）：同一次行動裡卡片沒寫到的敘事與數值變化，
+        例如打完仗剛好完成的新手引導與它的獎勵；沒有顯示戰鬥卡片或沒有補充時是空字串。"""
+        if not self.shows_battle_card():
+            return ""
+        record = battlelog.find(self.state, self.state.battle_card)
+        lines, changes = journal.card_leftovers(self.state.journal[0], record.notes, battlelog.gains_list(record))
+        return journal.extra_html(lines, changes)
 
     def _log(self, msgs: list[str]) -> list[str]:
         if not msgs:

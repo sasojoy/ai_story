@@ -153,9 +153,8 @@ def _result_line(record: BattleRecord) -> str:
     return f"**{word}**・{record.rounds} 回合・隊長{leader}{health}"
 
 
-def gains_text(record: BattleRecord) -> str:
-    """獲得與損失：只列數字，例如「經驗 +15（每人）　心得 +12　銀兩 +10　臂力 +1」；什麼都沒有時寫「無」。
-    劇情／敘事文字不算在內，見 story_text。"""
+def gains_list(record: BattleRecord) -> list[str]:
+    """獲得與損失的每一項，例如 ["經驗 +15（每人）", "心得 +12", "銀兩 +10", "臂力 +1"]。"""
     parts = []
     if record.exp:
         parts.append(f"經驗 +{record.exp}（每人）")
@@ -163,7 +162,13 @@ def gains_text(record: BattleRecord) -> str:
         parts.append(f"心得 +{record.xinde}")
     if record.silver:
         parts.append(f"銀兩 {record.silver:+d}")
-    return "　".join(parts + record.changes) or "無"
+    return parts + record.changes
+
+
+def gains_text(record: BattleRecord) -> str:
+    """獲得與損失：只列數字，例如「經驗 +15（每人）　心得 +12　銀兩 +10　臂力 +1」；什麼都沒有時寫「無」。
+    劇情／敘事文字不算在內，見 story_text。"""
+    return "　".join(gains_list(record)) or "無"
 
 
 def story_text(record: BattleRecord) -> str:

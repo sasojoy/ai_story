@@ -1,5 +1,5 @@
 """江湖紀錄：把玩家的每次行動整理成一則 JournalEntry（標題、結果標記、敘事、數值變化），
-並產生左欄「剛剛」卡片與紀錄列的 HTML。
+並產生左欄「剛剛」卡片、戰鬥卡片底下的補充與紀錄列的 HTML。
 
 原始訊息仍照舊寫進 GameState.log；紀錄只是給畫面看的整理，由 engine 在知道是什麼行動的地方建立。
 這裡只產生 HTML 字串與樣式，不 import gradio。
@@ -17,10 +17,90 @@ LOG_BREAK = "\x1e"  # GameState.log 中每次行動結束的分隔標記（不�
 MAX_ENTRIES = 30  # 存檔保留最近幾則
 LEGACY_TIME = -1.0  # 舊存檔的 log 轉來的紀錄不知道時間
 TITLE_MAX = 40  # 舊存檔轉來的標題最長幾個字，超過的截斷
-_SIGNED = re.compile(r"([+-])(\d+(?:\.\d+)?)$")  # 數值變化最後的「+3」「-10」
+MENXIA = "門下"  # 門下操作那一則的標題；連續的會併成一則
+WORLD_NEWS = "江湖大事"  # 時間流逝時發生的江湖大事那一則的標題；連續的會併成一則
+NEWS_PREFIXES = ("【江湖大事】", "【主線】", "【主線改寫】")  # world.py 寫出的大勢門檻、世界事件、主線變化
+
+# 數值變化：「標籤 正負號數字（附註）」，例如「銀兩 -5」「經驗 +15（每人）」
+_CHANGE = re.compile(r"^(\S+) ([+-])(\d+(?:\.\d+)?)(（[^）]*）)?$")
+_MARKER = re.compile(r"^遇上(奇遇)?【[^】]+】$")  # event_marker 寫出的「遇上【X】」
+# 舊存檔裡什麼都沒改變的失敗訊息（門下、閉關、過期的選項）；整組都是這種的不轉成紀錄。
+_FAILURE = re.compile(
+    r"^(心得不足：.*|沒有這門武學。|本命武學不能散功。|【[^】]+】已經練到第十成。|【[^】]+】尚在第一成，無功可散。"
+    r"|沒有這個武學欄。|你尚未習得這門武學。|【[^】]+】是隊中某人的本命武學，不能重複配置。"
+    r"|（此刻無法這麼做。）|你現在無法閉關。)$"
+)
+
+
+# ── 數值變化 ──────────────────────────────────────────
+
+
+def _parse(change: str) -> tuple[tuple[str, str], float] | None:
+    """「銀兩 -5」→ (("銀兩", ""), -5.0)；「經驗 +15（每人）」→ (("經驗", "（每人）"), 15.0)；看不懂時回傳 None。"""
+    m = _CHANGE.match(change.strip())
+    if m is None:
+        return None
+    value = float(m.group(3))
+    return (m.group(1), m.group(4) or ""), -value if m.group(2) == "-" else value
+
+
+def _format(key: tuple[str, str], value: float) -> str:
+    label, suffix = key
+    number = int(abs(value)) if float(value).is_integer() else abs(value)
+    return f"{label} {'+' if value > 0 else '-'}{number}{suffix}"
+
+
+def _totals(changes: list[str]) -> tuple[list[tuple[str, object]], dict[tuple[str, str], float]]:
+    """依第一次出現的順序列出（"raw", 原文）或（"key", 標籤），並加總每個標籤的數值。"""
+    order: list[tuple[str, object]] = []
+    totals: dict[tuple[str, str], float] = {}
+    for change in changes:
+        parsed = _parse(change)
+        if parsed is None:
+            order.append(("raw", change))
+            continue
+        key, value = parsed
+        if key not in totals:
+            totals[key] = 0.0
+            order.append(("key", key))
+        totals[key] = round(totals[key] + value, 6)
+    return order, totals
+
+
+def combine_changes(changes: list[str]) -> list[str]:
+    """同一個標籤的數值加總成一項（例如兩個「銀兩 +10」→「銀兩 +20」），順序依第一次出現；加總為零的省略。"""
+    order, totals = _totals(changes)
+    return [x if kind == "raw" else _format(x, totals[x]) for kind, x in order if kind == "raw" or totals[x]]
+
+
+def subtract_changes(changes: list[str], shown: list[str]) -> list[str]:
+    """changes 扣掉已經顯示過的 shown（例如戰鬥卡片上的獲得與損失），剩下還沒顯示的部分。"""
+    order, totals = _totals(changes)
+    _, minus = _totals(shown)
+    out = []
+    for kind, x in order:
+        if kind == "raw":
+            if x not in shown:
+                out.append(x)
+        elif value := round(totals[x] - minus.get(x, 0.0), 6):
+            out.append(_format(x, value))
+    return out
+
+
+def change_class(change: str) -> str:
+    """數值變化的顏色：增加 tx-up（綠）、減少 tx-down（紅）；零或看不出正負時不上色。"""
+    parsed = _parse(change)
+    if parsed is None or parsed[1] == 0:
+        return ""
+    return "tx-up" if parsed[1] > 0 else "tx-down"
 
 
 # ── 建立紀錄 ──────────────────────────────────────────
+
+
+def event_marker(title: str, qiyu: bool) -> str:
+    """遇上事件時在紀錄裡的寫法：「遇上【酒樓鬥毆】」「遇上奇遇【瀑布怪客】」。"""
+    return f"遇上奇遇【{title}】" if qiyu else f"遇上【{title}】"
 
 
 @dataclass
@@ -59,20 +139,41 @@ class Draft:
                 kept.append(new)
         changes, lines = split_changes(kept)
         return JournalEntry(
-            time=time, title=self.title, tag=self.tag, lines=lines, changes=self.changes + changes,
+            time=time, title=self.title, tag=self.tag, lines=lines, changes=combine_changes(self.changes + changes),
             battle_id=self.battle_id,
         )
 
 
-def add_entry(state: GameState, entry: JournalEntry) -> None:
-    """最新的放最前面，只留最近 MAX_ENTRIES 則。"""
+def news_entry(time: float, msgs: list[str]) -> JournalEntry | None:
+    """時間流逝時的訊息裡挑出江湖大事與主線變化（一般的江湖傳聞不算）；沒有時回傳 None。"""
+    news = [m.removeprefix("【江湖大事】") for m in msgs if m.startswith(NEWS_PREFIXES)]
+    if not news:
+        return None
+    return JournalEntry(time=time, title=WORLD_NEWS, tag=news[-1], lines=news if len(news) > 1 else [])
+
+
+def _story(entry: JournalEntry) -> list[str]:
+    """併成一則時這一則貢獻的敘事：有敘事就用敘事，只有結果標記的（例如一次升級）用結果標記。"""
+    return entry.lines or ([entry.tag] if entry.tag else [])
+
+
+def add_entry(state: GameState, entry: JournalEntry, merge: bool = False) -> None:
+    """最新的放最前面，只留最近 MAX_ENTRIES 則。
+    merge=True 且最新一則是同一類（同標題）時併進那一則：敘事依序接上、數值變化加總、時間與結果標記用新的。"""
+    head = state.journal[0] if state.journal else None
+    if merge and head is not None and head.title == entry.title and head.time >= 0:
+        state.journal[0] = JournalEntry(
+            time=entry.time, title=entry.title, tag=entry.tag or head.tag, lines=_story(head) + _story(entry),
+            changes=combine_changes(head.changes + entry.changes),
+        )
+        return
     state.journal.insert(0, entry)
     del state.journal[MAX_ENTRIES:]
 
 
 def from_legacy_log(log: list[str]) -> list[JournalEntry]:
     """舊存檔只有 log：每組（LOG_BREAK 之間）轉成一則，第一行當標題、其餘分成敘事與數值變化；
-    最新的在前，最多 MAX_ENTRIES 則。多行的訊息拆成一行一行，空行略過。"""
+    最新的在前，最多 MAX_ENTRIES 則。多行的訊息拆成一行一行，空行略過；整組只有失敗訊息的略過。"""
     groups: list[list[str]] = []
     current: list[str] = []
     for msg in log:
@@ -84,30 +185,30 @@ def from_legacy_log(log: list[str]) -> list[JournalEntry]:
         current += [line.strip() for line in str(msg).replace(LOG_BREAK, "\n").split("\n") if line.strip()]
     if current:
         groups.append(current)
+    groups = [g for g in groups if not all(_FAILURE.match(line) for line in g)]
     entries = []
     for title, *rest in reversed(groups[-MAX_ENTRIES:]):
         if len(title) > TITLE_MAX:
             rest = [title, *rest]
             title = title[:TITLE_MAX] + "…"
         changes, lines = split_changes(rest)
-        entries.append(JournalEntry(time=LEGACY_TIME, title=title, lines=lines, changes=changes))
+        entries.append(JournalEntry(time=LEGACY_TIME, title=title, lines=lines, changes=combine_changes(changes)))
     return entries
+
+
+def card_leftovers(entry: JournalEntry, notes: list[str], shown: list[str]) -> tuple[list[str], list[str]]:
+    """打了仗的那一則裡，戰鬥卡片沒寫到的敘事與數值變化（例如同一次行動完成的新手引導與它的獎勵）。
+    notes 是卡片那一場的敘事（BattleRecord.notes），shown 是卡片上的獲得與損失；「遇上【X】」由場景顯示，不算。"""
+    lines = [line for line in entry.lines if line not in notes and not _MARKER.match(line)]
+    return lines, subtract_changes(entry.changes, shown)
 
 
 # ── 顯示 ──────────────────────────────────────────────
 
 
-def change_class(change: str) -> str:
-    """數值變化的顏色：增加 tx-up（綠）、減少 tx-down（紅）；零或看不出正負時不上色。"""
-    m = _SIGNED.search(change.strip())
-    if not m or float(m.group(2)) == 0:
-        return ""
-    return "tx-up" if m.group(1) == "+" else "tx-down"
-
-
 def _esc(text: str) -> str:
-    """HTML 跳脫；大括號與錢號也轉成實體，免得被 Gradio 的 HTML 樣板當成樣板語法。"""
-    return html.escape(text).replace("{", "&#123;").replace("}", "&#125;").replace("$", "&#36;")
+    """HTML 跳脫。gr.HTML 的樣板是「${value}」，值原樣插進去、不會再被當成樣板解讀，所以大括號不必另外處理。"""
+    return html.escape(text)
 
 
 def _when(time: float) -> str:
@@ -117,6 +218,10 @@ def _when(time: float) -> str:
 def _heading(entry: JournalEntry) -> str:
     tag = f'<span class="tx-tag">{_esc(entry.tag)}</span>' if entry.tag else ""
     return f'<span class="tx-title">{_esc(entry.title)}</span>{tag}'
+
+
+def _lines(lines: list[str]) -> str:
+    return "".join(f'<div class="tx-line">{_esc(line).replace(chr(10), "<br>")}</div>' for line in lines)
 
 
 def _chips(changes: list[str], tag: str) -> str:
@@ -129,21 +234,32 @@ def _chips(changes: list[str], tag: str) -> str:
 
 
 def card_html(entry: JournalEntry) -> str:
-    """「剛剛」卡片：時間、標題與結果標記、敘事、數值變化（綠增紅減）。"""
-    when = "剛剛" if entry.time < 0 else f"剛剛　{clock_text(entry.time)}"
-    lines = "".join(f'<div class="tx-line">{_esc(line).replace(chr(10), "<br>")}</div>' for line in entry.lines)
+    """「剛剛」卡片：時間、標題與結果標記、敘事、數值變化（綠增紅減）。舊存檔轉來的紀錄寫「舊紀錄」。"""
+    when = "舊紀錄" if entry.time < 0 else f"剛剛　{clock_text(entry.time)}"
     return (
         f'<div class="tx-now"><div class="tx-when">{when}</div><div class="tx-head">{_heading(entry)}</div>'
-        f'{lines}{_chips(entry.changes, "div")}</div>'
+        f'{_lines(entry.lines)}{_chips(entry.changes, "div")}</div>'
     )
 
 
+def extra_html(lines: list[str], changes: list[str]) -> str:
+    """戰鬥卡片底下的補充：卡片沒寫到的敘事與數值變化（見 card_leftovers）；都沒有時是空字串。"""
+    if not lines and not changes:
+        return ""
+    return f'<div class="tx-extra">{_lines(lines)}{_chips(changes, "div")}</div>'
+
+
 def _row(entry: JournalEntry) -> str:
-    """紀錄的一列：時間一欄、標題與結果標記、數值變化；敘事只放在滑鼠提示裡。"""
-    hint = f' title="{_esc(chr(10).join(entry.lines))}"' if entry.lines else ""
+    """紀錄的一列：時間一欄、標題與結果標記、數值變化。有敘事的一列可以點開，敘事收在裡面。"""
+    head = (
+        f'<span class="tx-time">{_when(entry.time)}</span>'
+        f'<span class="tx-main">{_heading(entry)}{_chips(entry.changes, "span")}</span>'
+    )
+    if not entry.lines:
+        return f'<div class="tx-row"><div class="tx-sum">{head}</div></div>'
     return (
-        f'<div class="tx-row"{hint}><span class="tx-time">{_when(entry.time)}</span>'
-        f'<span class="tx-main">{_heading(entry)}{_chips(entry.changes, "span")}</span></div>'
+        f'<details class="tx-row"><summary class="tx-sum">{head}</summary>'
+        f'<div class="tx-body">{_lines(entry.lines)}</div></details>'
     )
 
 
@@ -157,6 +273,7 @@ def rows_html(entries: list[JournalEntry], heading: str = "", empty: str = "") -
 
 
 # 卡片與紀錄列的樣式（介面層交給 gr.HTML 的 css_template，會自動限定在該元件內）。
+# css_template 會先經過 Handlebars 再當成 JS 樣板字串，所以這裡不能出現反引號、「${」或「{{」。
 # 顏色用 Gradio 主題變數，亮色與暗色主題都讀得清楚；增減用淡色底加框線表示，文字維持主題的字色。
 CSS = """
 .tx-now { border: 1px solid var(--border-color-primary); border-radius: 8px; padding: 8px 12px;
@@ -166,6 +283,8 @@ CSS = """
 .tx-title { font-weight: 600; }
 .tx-tag { margin-left: 0.75em; opacity: 0.85; }
 .tx-line { margin: 2px 0; }
+.tx-extra { border-left: 3px solid var(--border-color-primary); padding: 2px 10px; margin: 2px 0;
+  font-size: 14px; line-height: 1.6; }
 .tx-chgs { display: inline-flex; flex-wrap: wrap; gap: 4px; margin-left: 0.75em; vertical-align: middle; }
 div.tx-chgs { display: flex; margin: 6px 0 2px; }
 .tx-chg { font-size: 12px; line-height: 1.5; padding: 0 6px; border-radius: 4px; white-space: nowrap;
@@ -173,10 +292,14 @@ div.tx-chgs { display: flex; margin: 6px 0 2px; }
 .tx-up { background: rgba(22, 163, 74, 0.16); border-color: rgba(22, 163, 74, 0.7); }
 .tx-down { background: rgba(220, 38, 38, 0.16); border-color: rgba(220, 38, 38, 0.7); }
 .tx-heading { font-weight: 600; margin: 4px 0; }
-.tx-row { display: flex; gap: 10px; padding: 3px 0; border-bottom: 1px solid var(--border-color-primary);
-  font-size: 14px; line-height: 1.6; }
+.tx-row { border-bottom: 1px solid var(--border-color-primary); font-size: 14px; line-height: 1.6; }
+.tx-sum { display: flex; gap: 10px; padding: 3px 0; }
+summary.tx-sum { cursor: pointer; list-style: none; }
+summary.tx-sum::-webkit-details-marker { display: none; }
+summary.tx-sum .tx-main::after { content: "▸"; margin-left: 0.5em; font-size: 11px; opacity: 0.55; }
+details[open] > summary.tx-sum .tx-main::after { content: "▾"; }
+.tx-body { padding: 0 0 4px calc(6.5em + 10px); font-size: 13px; opacity: 0.9; }
 .tx-time { flex: 0 0 6.5em; font-size: 12px; opacity: 0.7; white-space: nowrap; padding-top: 2px; }
 .tx-main { flex: 1; min-width: 0; }
-.tx-main .tx-tag { white-space: nowrap; }
 .tx-empty { font-size: 13px; opacity: 0.7; }
 """

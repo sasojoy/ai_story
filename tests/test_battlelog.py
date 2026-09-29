@@ -3,6 +3,7 @@ from tianxia.battlelog import (
     card_text,
     clock_text,
     detail_text,
+    gains_list,
     gains_text,
     key_moments,
     list_label,
@@ -116,6 +117,8 @@ def test_gains_text():
     assert gains_text(record(outcome="lose", silver=-5)) == "銀兩 -5"
     # notes（敘事文字）不算進獲得與損失，即使裡面有東西。
     assert gains_text(record(notes=["你率眾闖進倉庫，殺得水寇四散奔逃！"])) == "無"
+    assert gains_list(rec) == ["經驗 +15（每人）", "心得 +12", "銀兩 +10", "臂力 +1"]  # 江湖紀錄拿來比對卡片上已有的
+    assert gains_list(record()) == []
 
 
 def test_story_text_joins_notes_but_hides_rumor_lines():

@@ -80,7 +80,7 @@ def test_train_entry_carries_the_battle_summary_and_gains(game):
     assert entry.title == "歷練・湖邊"
     assert entry.tag == f"擊退水寇小隊（{record.rounds} 回合）"
     assert entry.battle_id == record.id == 1
-    assert entry.changes == ["經驗 +20", "銀兩 +5", "心得 +10"]
+    assert entry.changes == ["經驗 +20（每人）", "銀兩 +5", "心得 +10"]  # 經驗的寫法和戰鬥卡片一致
     assert entry.lines == []
     assert f"⚔ 湖邊：擊退水寇小隊（{record.rounds} 回合）" in game.state.log
 
@@ -169,6 +169,24 @@ def test_time_passing_writes_no_entry(game):
     assert game.state.journal == before
 
 
+def test_world_news_while_time_passes_is_written_and_merged(game):
+    game.advance(20 * HOUR)  # 翻江龍每小時把寇亂推高 1：到 50 時水寇封江
+    entry = latest(game)
+    assert (entry.title, entry.tag, entry.lines) == ("江湖大事", "水寇封江！", [])
+    assert entry.time == 20 * HOUR
+    game.advance(10 * HOUR)  # 到 60 時主線進入第二幕：接在同一則裡
+    entry = latest(game)
+    assert entry.title == "江湖大事" and entry.time == 30 * HOUR
+    assert entry.lines == ["水寇封江！", "【主線】第2幕「運河封鎖」：運河被封了。"]  # 一般的傳聞不寫進來
+    assert entry.tag == "【主線】第2幕「運河封鎖」：運河被封了。"
+    assert len(game.state.journal) == 2
+    game.choose("move:lake")
+    game.state.world.trends["kou"] = 79
+    game.advance(HOUR)  # 前一則不是江湖大事：另起一則
+    assert [e.title for e in game.state.journal[:3]] == ["江湖大事", "前往 湖邊", "江湖大事"]
+    assert latest(game).tag == "水寇稱霸！"
+
+
 def test_invalid_option_writes_no_entry(game):
     game.choose("move:cave")
     assert len(game.state.journal) == 1
@@ -187,12 +205,27 @@ def test_menxia_changes_are_written_but_failures_are_not(game):
     entry = latest(game)
     assert (entry.title, entry.tag, entry.lines, entry.changes) == ("門下", "【長拳】精進至第2成", [], ["心得 -20"])
     game.dispel("skill:fist")
-    assert (latest(game).tag, latest(game).changes) == ("【長拳】散功，退回第一成", ["心得 +16"])
     game.upgrade("innate:mate")
-    assert latest(game).tag == "【驚濤掌】精進至第2成"
     game.set_loadout("player", 0, None)
-    assert (latest(game).title, latest(game).tag) == ("門下", "沈浪的第1個武學欄：（空）")
-    assert len(game.state.journal) == 5
+    entry = latest(game)  # 連續在門下做的事併成一則：敘事依序接上、心得加總、時間與結果標記用最新的
+    assert len(game.state.journal) == 2
+    assert (entry.title, entry.tag) == ("門下", "沈浪的第1個武學欄：（空）")
+    assert entry.lines == [
+        "【長拳】精進至第2成", "【長拳】散功，退回第一成", "【驚濤掌】精進至第2成", "沈浪的第1個武學欄：（空）"
+    ]
+    assert entry.changes == ["心得 -24"]  # −20 ＋16 −20
+
+
+def test_menxia_entries_merge_only_when_nothing_else_happened_in_between(game):
+    game.state.player.stats["xinde"] = 100
+    game.upgrade("skill:fist")
+    game.state.world.time = 600
+    game.choose("move:lake")
+    game.upgrade("skill:fist")
+    game.state.world.time = 1200
+    game.upgrade("innate:mate")
+    assert [e.title for e in game.state.journal] == ["門下", "前往 湖邊", "門下", "測試劇本"]
+    assert latest(game).time == 1200 and latest(game).changes == ["心得 -60"]
 
 
 def test_view_map_writes_an_entry_only_when_it_finishes_a_guide_step(game):
@@ -210,6 +243,51 @@ def test_notice_and_skip_tutorial(game):
     assert (latest(game).title, latest(game).lines) == ("舊存檔已備份", ["（舊存檔已備份。）"])
     game.skip_tutorial()
     assert (latest(game).title, latest(game).tag, latest(game).lines) == ("新手引導", "已略過", [])
+    log_size = len(game.state.log)
+    assert game.skip_tutorial() == []  # 引導早就結束了：什麼都不做
+    assert len(game.state.journal) == 3 and len(game.state.log) == log_size
+
+
+# ── 戰鬥卡片底下的補充 ─────────────────────────────────
+
+
+def guided_train(game):
+    """湖邊歷練剛好完成一步新手引導（獎勵銀兩 5）。"""
+    game.content.tutorial.steps[0].done_when.action = "train"
+    game.choose("move:lake")
+    game.choose("act:train")
+
+
+def test_changes_with_the_same_label_are_added_up(game):
+    guided_train(game)
+    entry = latest(game)
+    assert entry.changes == ["經驗 +20（每人）", "銀兩 +10", "心得 +10"]  # 對手的 5 兩＋引導獎勵 5 兩
+    assert entry.lines == ["✔ 引導完成", "【說書人】去湖邊。"]
+
+
+def test_battle_card_extra_shows_what_the_card_does_not(game):
+    guided_train(game)
+    assert game.shows_battle_card()
+    extra = game.battle_extra_html()
+    assert "✔ 引導完成" in extra and "【說書人】去湖邊。" in extra
+    assert '<span class="tx-chg tx-up">銀兩 +5</span>' in extra  # 卡片上只有對手給的 5 兩
+    assert "經驗" not in extra and "心得" not in extra  # 卡片上已經有了
+
+
+def test_battle_card_extra_skips_card_notes_and_event_markers(game):
+    game.content.config.train_event_chance = 1.0
+    game.choose("move:lake")
+    game.choose("act:train")
+    assert latest(game).lines == ["遇上【跟蹤】"]
+    assert game.battle_extra_html() == ""  # 事件由場景顯示；其餘都在卡片上
+    game.content.config.train_event_chance = 0.0
+    game.state.player.members["player"].exp = 90
+    game.state.pending_event = None
+    game.choose("act:train")
+    assert "沈浪升到第 2 級！" in latest(game).lines and "沈浪升到第 2 級！" in game.state.battles[0].notes
+    assert game.battle_extra_html() == ""  # 升級已經寫在卡片的「結果」裡
+    game.choose("move:town")
+    assert game.battle_extra_html() == ""  # 沒有顯示戰鬥卡片時沒有補充
 
 
 def test_new_season_starts_a_fresh_journal(game):
@@ -237,15 +315,16 @@ def test_legacy_log_is_converted_once(content, game):
         "【小鎮】危險 ★\n\n一個小鎮。", LOG_BREAK,
         "心得不足：【吐納法】升到第2成需要 20。", LOG_BREAK, LOG_BREAK,  # 連續的分隔標記
         "▸ 上前勸架", "（韓鐵出手——失敗）", "你被一張飛來的板凳砸中。", "銀兩 -5", "", "  ", LOG_BREAK,
+        "本命武學不能散功。", "【長拳】已經練到第十成。", LOG_BREAK,  # 只有失敗訊息的一組：不轉
         "銀兩 +5", LOG_BREAK,  # 只有數字的一組
         "長" * 60,  # 沒有結尾分隔標記、而且很長
     ]
     fresh = Game(content, game.state)
     entries = fresh.state.journal
-    assert [e.title for e in entries] == ["長" * 40 + "…", "銀兩 +5", "▸ 上前勸架", "心得不足：【吐納法】升到第2成需要 20。", "【小鎮】危險 ★"]
+    assert [e.title for e in entries] == ["長" * 40 + "…", "銀兩 +5", "▸ 上前勸架", "【小鎮】危險 ★"]
     assert entries[0].lines == ["長" * 60]  # 標題截斷時，完整的一行留在敘事裡
     assert (entries[2].lines, entries[2].changes) == (["（韓鐵出手——失敗）", "你被一張飛來的板凳砸中。"], ["銀兩 -5"])
-    assert entries[4].lines == ["一個小鎮。"]
+    assert entries[3].lines == ["一個小鎮。"]
     assert all(e.time == journal.LEGACY_TIME and e.tag == "" and e.battle_id is None for e in entries)
     again = Game(content, fresh.state)
     assert again.state.journal == entries  # 只轉一次
@@ -260,6 +339,13 @@ def test_legacy_log_without_breaks_and_the_cap(content, game):
     entries = Game(content, game.state).state.journal
     assert len(entries) == 30 and entries[0].title == "第44組" and entries[-1].title == "第15組"
     assert journal.from_legacy_log([]) == [] and journal.from_legacy_log([LOG_BREAK, "", LOG_BREAK]) == []
+    failures = [
+        "心得不足：【吐納法】升到第2成需要 20。", "沒有這門武學。", "【長拳】尚在第一成，無功可散。", "沒有這個武學欄。",
+        "你尚未習得這門武學。", "【吐納法】是隊中某人的本命武學，不能重複配置。", "（此刻無法這麼做。）", "你現在無法閉關。",
+    ]
+    assert journal.from_legacy_log([x for f in failures for x in (f, LOG_BREAK)]) == []
+    kept = journal.from_legacy_log(["心得不足：【吐納法】升到第2成需要 20。", "你閉關靜修。"])
+    assert [e.title for e in kept] == ["心得不足：【吐納法】升到第2成需要 20。"]  # 同一組裡還有別的事：照常轉
 
 
 def test_old_save_file_without_a_journal_loads_and_converts(tmp_path, content, game):
@@ -293,9 +379,19 @@ def entry(**kw):
 
 
 def test_change_signs():
-    assert [journal.change_class(c) for c in ("銀兩 +10", "心得 -20", "名望 +0", "奇怪的一行")] == [
-        "tx-up", "tx-down", "", ""
+    assert [journal.change_class(c) for c in ("銀兩 +10", "心得 -20", "名望 +0", "奇怪的一行", "經驗 +15（每人）")] == [
+        "tx-up", "tx-down", "", "", "tx-up"
     ]
+
+
+def test_combine_and_subtract_changes():
+    assert journal.combine_changes(["銀兩 +10", "心得 +8", "銀兩 +10", "經驗 +5（每人）", "經驗 +5（每人）"]) == [
+        "銀兩 +20", "心得 +8", "經驗 +10（每人）"
+    ]
+    assert journal.combine_changes(["銀兩 +5", "銀兩 -5", "體力 +10.0", "奇怪的一行"]) == ["體力 +10", "奇怪的一行"]
+    shown = ["心得 +10", "銀兩 +5", "經驗 +20（每人）"]
+    assert journal.subtract_changes(["經驗 +20（每人）", "銀兩 +10", "心得 +10"], shown) == ["銀兩 +5"]
+    assert journal.subtract_changes(["奇怪的一行", "名望 +1"], ["奇怪的一行"]) == ["名望 +1"]
 
 
 def test_card_html_shows_time_title_tag_lines_and_coloured_changes():
@@ -306,19 +402,35 @@ def test_card_html_shows_time_title_tag_lines_and_coloured_changes():
     assert html.index("剛剛") < html.index("探索揚州城") < html.index("✔ 引導完成") < html.index("銀兩 +10")
 
 
+def test_card_html_for_a_legacy_entry_does_not_claim_just_now():
+    html = journal.card_html(entry(time=journal.LEGACY_TIME))
+    assert "舊紀錄" in html and "剛剛" not in html
+
+
 def test_card_html_escapes_text():
-    html = journal.card_html(entry(title="<b>x</b>", lines=["a & b", "{name}"], changes=[]))
+    html = journal.card_html(entry(title="<b>x</b>", lines=["a & b", "{name} ${x}"], changes=[]))
     assert "<b>x</b>" not in html and "&lt;b&gt;x&lt;/b&gt;" in html and "a &amp; b" in html
-    assert "{" not in html  # 大括號也轉成實體，不會被 Gradio 的樣板誤讀
+    assert "{name} ${x}" in html  # gr.HTML 把值原樣插進樣板、不再解讀：大括號不必處理
     assert "tx-chgs" not in html  # 沒有數值變化時不畫那一排
 
 
-def test_rows_html_one_line_per_entry():
-    html = journal.rows_html([entry(), entry(title="拔出兵器迎戰", tag="擊退狼群（3 回合）", time=-1.0)])
+def test_extra_html():
+    html = journal.extra_html(["✔ 引導完成"], ["銀兩 +10"])
+    assert html.startswith('<div class="tx-extra">') and "✔ 引導完成" in html
+    assert '<span class="tx-chg tx-up">銀兩 +10</span>' in html
+    assert journal.extra_html([], []) == ""
+
+
+def test_rows_html_one_line_per_entry_with_the_story_folded_inside():
+    html = journal.rows_html([entry(), entry(title="拔出兵器迎戰", tag="擊退狼群（3 回合）", time=-1.0, lines=[])])
     assert html.count('class="tx-row"') == 2
     assert "第1天 04:20" in html and "舊紀錄" in html  # 舊存檔轉來的紀錄沒有時間
     assert html.index("探索揚州城") < html.index("拔出兵器迎戰")
-    assert "✔ 引導完成" not in html.replace('title="✔ 引導完成"', "")  # 敘事只放在滑鼠提示裡
+    # 有敘事的一列可以點開：摘要就是那一列，敘事在裡面；沒有敘事的一列就是一般的一列
+    assert html.count("<details") == 1 and html.count("<summary") == 1 and "title=" not in html
+    summary = html[html.index("<summary"):html.index("</summary>")]
+    assert "探索揚州城" in summary and "銀兩 +10" in summary and "✔ 引導完成" not in summary
+    assert html.index("</summary>") < html.index("✔ 引導完成") < html.index("</details>")
     assert journal.rows_html([], heading="江湖紀錄", empty="（沒有了。）").count("（沒有了。）") == 1
     assert journal.rows_html([], heading="江湖紀錄").startswith('<div class="tx-journal"><div class="tx-heading">江湖紀錄')
 
