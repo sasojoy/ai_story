@@ -142,6 +142,18 @@ def test_map_region_color_must_be_hex(tmp_path):
         load_content(root)
 
 
+def test_check_by_must_be_team_or_self(tmp_path):
+    root = copy_fixture(tmp_path)
+    edit_json(root / "events" / "test.json", lambda d: d[0]["choices"][0]["check"].update(by="friend"))
+    with pytest.raises(ContentError, match="drunk"):
+        load_content(root)
+
+
+def test_checks_default_to_team(content):
+    assert content.events["drunk"].choices[0].check.by == "team"
+    assert content.events["insight"].choices[0].check.by == "self"
+
+
 def test_characters_and_squads_loaded(content):
     assert content.characters["mate"].innate == "palm"
     assert content.squads["thug"].members[0].character == "thug"

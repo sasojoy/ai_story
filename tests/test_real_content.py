@@ -29,6 +29,19 @@ def test_all_locations_reachable_from_start():
     assert seen == set(c.locations)
 
 
+SELF_CHECKS = {
+    ("herb", "當場服下"), ("temple_zen", "坐下靜聽"), ("teahouse", "上台和說書先生對幾句"),
+    ("train_insight", "靜下心來細想"), ("monk_jinshan", "請教調息之法"), ("waterfall", "躲在石後偷學"),
+}
+
+
+def test_exactly_the_six_self_checks_are_marked():
+    c = load_content(CONTENT_DIR)
+    checks = [(e.id, ch.text, ch.check.by) for e in c.events.values() for ch in e.choices if ch.check]
+    assert len(checks) == 16
+    assert {(eid, text) for eid, text, by in checks if by == "self"} == SELF_CHECKS
+
+
 def test_real_content_has_enough_events():
     c = load_content(CONTENT_DIR)
     assert len(c.events) >= 30

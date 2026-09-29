@@ -24,5 +24,10 @@
   ]},
   {"id": "chain_b", "title": "倉庫", "text": "你發現一座倉庫。", "actions": [], "choices": [
     {"text": "離開"}
+  ]},
+  {"id": "insight", "title": "調息", "text": "你盤膝而坐，試著運氣。", "actions": [], "choices": [
+    {"text": "運氣衝關", "check": {"stat": "con", "difficulty": 5, "by": "self"},
+     "effect": {"text": "一股暖流貫通周身。", "stats": {"xinde": 5}},
+     "fail_effect": {"text": "氣息一亂，只得作罷。"}}
   ]}
 ]

@@ -63,6 +63,7 @@ class Effect(_Strict):
 class Check(_Strict):
     stat: str
     difficulty: int
+    by: Literal["team", "self"] = "team"  # team：隊伍派屬性最高的人出手；self：只看本人
 
 
 class Choice(_Strict):

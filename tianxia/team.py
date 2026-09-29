@@ -4,7 +4,7 @@ from __future__ import annotations
 import random
 
 from .battle import Art, BattleResult, Eff, Rules, Unit, run_battle
-from .models import Content, Skill, Squad
+from .models import Check, Content, Skill, Squad
 from .state import PLAYER, GameState
 
 COMBAT_STATS = ("str", "agi", "con", "wis")
@@ -61,6 +61,28 @@ def slot_skill(state: GameState, key: str, slot: int) -> str | None:
     """某人第 slot 個自選欄（從 0 起算）裡的武學 id；空欄或沒有這一欄時回傳 None。"""
     slots = state.player.loadouts.get(key) or []
     return slots[slot] if 0 <= slot < len(slots) else None
+
+
+def team_keys(state: GameState) -> list[str]:
+    """出戰隊伍（第一位是隊長），略過已不在門下的人。"""
+    p = state.player
+    return [key for key in p.team if key in p.members]
+
+
+def check_actor(state: GameState, content: Content, check: Check) -> str:
+    """檢定由誰出手（回傳門下 key）。本人檢定，或檢定的是銀兩、名望這類只有本人才有的屬性時，一律本人；
+    隊伍檢定取出戰隊伍中這項屬性目前數值（含等級成長）最高的人，同分時本人優先、其餘依隊伍順序。"""
+    if check.by == "self" or check.stat not in COMBAT_STATS:
+        return PLAYER
+    keys = sorted(team_keys(state), key=lambda k: k != PLAYER) or [PLAYER]
+    return max(keys, key=lambda k: member_stats(state, content, k)[check.stat])
+
+
+def check_value(state: GameState, content: Content, key: str, stat: str) -> float:
+    """出手者這項屬性的目前數值：戰鬥屬性含等級成長；其他屬性只有本人有，直接讀本人的。"""
+    if stat in COMBAT_STATS:
+        return member_stats(state, content, key)[stat]
+    return float(state.player.stats.get(stat, 0))
 
 
 def innate_level(state: GameState, content: Content, key: str) -> int:

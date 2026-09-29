@@ -10,7 +10,7 @@ from .events import choice_label, has_events_here, pick_event, visible_choices
 from .guide import note_action, quest_text, tutorial_intro
 from .mapview import render_map
 from .models import Content, Effect, Event, Squad
-from .rules import apply_effect, change_trend, learn_skill, roll_check
+from .rules import apply_effect, change_trend, check_who, learn_skill, roll_check
 from .state import PLAYER, GameState, Member, Rumor, new_game_state
 from .world import check_thresholds, end_season, sim_tick
 
@@ -133,7 +133,7 @@ class Game:
             return [Option(id="season:new", label="開啟新的賽季")]
         if s.pending_event:
             event = c.events[s.pending_event]
-            return [Option(id=f"choice:{i}", label=choice_label(ch, s)) for i, ch in visible_choices(event, s)]
+            return [Option(id=f"choice:{i}", label=choice_label(ch, s, c)) for i, ch in visible_choices(event, s)]
         if s.player.busy_until is not None:
             return [Option(id="act:break", label="提前出關")]
         loc = c.locations[s.player.location]
@@ -261,8 +261,9 @@ class Game:
                 return msgs + self._apply(choice.fail_effect)
             return msgs + [f"你與{squad.name}纏鬥{result.rounds}回合，雙方不分勝負，各自退開。{REPORT_HINT}"]
         if choice.check:
-            success = roll_check(choice.check, s, self.rng)
-            msgs.append("（檢定成功）" if success else "（檢定失敗）")
+            who = check_who(choice.check, s, c)
+            success = roll_check(choice.check, s, c, self.rng)
+            msgs.append(f"（{who}——{'成功' if success else '失敗'}）")
             return msgs + self._apply(choice.effect if success else choice.fail_effect)
         return msgs + self._apply(choice.effect)
 

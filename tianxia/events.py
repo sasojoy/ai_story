@@ -4,7 +4,7 @@ from __future__ import annotations
 import random
 
 from .models import Choice, Content, Event, Location
-from .rules import check_chance, check_condition
+from .rules import check_condition, check_who
 from .state import GameState
 
 
@@ -48,7 +48,8 @@ def visible_choices(event: Event, state: GameState) -> list[tuple[int, Choice]]:
     return [(i, c) for i, c in enumerate(event.choices) if check_condition(c.condition, state)]
 
 
-def choice_label(choice: Choice, state: GameState) -> str:
+def choice_label(choice: Choice, state: GameState, content: Content) -> str:
+    """有檢定的選項寫出由誰出手（不寫成功率）；其餘照原文。"""
     if choice.check:
-        return f"{choice.text}（成功率 {round(check_chance(choice.check, state) * 100)}%）"
+        return f"{choice.text}（{check_who(choice.check, state, content)}）"
     return choice.text

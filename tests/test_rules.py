@@ -2,8 +2,9 @@ import pytest
 
 from tianxia.models import Check, Condition, Effect
 from tianxia.rules import (
-    add_world_flags, apply_effect, check_chance, check_condition, current_day, learn_skill,
+    add_world_flags, apply_effect, check_chance, check_condition, check_who, current_day, learn_skill,
 )
+from tianxia.team import check_actor
 
 
 def test_new_state(state):
@@ -42,11 +43,47 @@ def test_condition_world(state):
     assert not check_condition(Condition(world_flags_none=["blocked"]), state)
 
 
-def test_check_chance_scales_and_clamps(state):
-    assert check_chance(Check(stat="str", difficulty=5), state) == 0.5
-    assert check_chance(Check(stat="str", difficulty=7), state) == pytest.approx(0.3)
-    assert check_chance(Check(stat="str", difficulty=50), state) == 0.05
-    assert check_chance(Check(stat="str", difficulty=-50), state) == 0.95
+def test_check_chance_scales_and_clamps(state, content):
+    assert check_chance(Check(stat="str", difficulty=5, by="self"), state, content) == 0.5
+    assert check_chance(Check(stat="str", difficulty=7, by="self"), state, content) == pytest.approx(0.3)
+    assert check_chance(Check(stat="str", difficulty=50, by="self"), state, content) == 0.05
+    assert check_chance(Check(stat="str", difficulty=-50, by="self"), state, content) == 0.95
+
+
+def test_team_check_sends_the_member_with_the_highest_stat(state, content):
+    check = Check(stat="str", difficulty=5)  # 本人臂力 5、韓鐵 6
+    assert check_actor(state, content, check) == "mate"
+    assert check_chance(check, state, content) == pytest.approx(0.6)  # 用出手者的屬性算
+    assert check_who(check, state, content) == "韓鐵出手"
+
+
+def test_team_check_tie_goes_to_the_player_first(state, content):
+    check = Check(stat="agi", difficulty=5)  # 身法同為 5
+    assert check_actor(state, content, check) == "player"
+    assert check_who(check, state, content) == "本人出手"
+    state.player.team = ["mate", "player"]  # 就算本人不排第一，同分時也是本人先
+    assert check_actor(state, content, check) == "player"
+
+
+def test_team_check_counts_level_growth(state, content):
+    check = Check(stat="agi", difficulty=5)
+    state.player.members["mate"].level = 2  # 韓鐵身法 5 + 0.2
+    assert check_actor(state, content, check) == "mate"
+    assert check_chance(check, state, content) == pytest.approx(0.52)
+
+
+def test_self_check_is_always_the_player(state, content):
+    check = Check(stat="con", difficulty=5, by="self")  # 韓鐵根骨 6 比本人高，也輪不到他
+    assert check_actor(state, content, check) == "player"
+    assert check_chance(check, state, content) == 0.5
+    assert check_who(check, state, content) == "本人"
+
+
+def test_check_on_a_player_only_stat_is_made_by_the_player(state, content):
+    state.player.stats["fame"] = 3
+    check = Check(stat="fame", difficulty=2)
+    assert check_actor(state, content, check) == "player"
+    assert check_chance(check, state, content) == pytest.approx(0.6)
 
 
 def test_apply_stats_clamps_at_zero(state, content):

@@ -63,7 +63,17 @@ def test_explore_presents_event_and_resolves_check(game):
     assert game.state.pending_event is None
     assert game.state.player.stats["good"] == 2
     assert game.state.world.trends["kou"] == 25
-    assert "（檢定成功）" in game.state.log
+    assert "（韓鐵出手——成功）" in game.state.log
+
+
+def test_self_check_names_the_player_and_takes_the_fail_branch(game):
+    game.state.pending_event = "insight"
+    assert [o.label for o in game.options()] == ["運氣衝關（本人）"]
+    game.rng = FixedRandom(0.99)  # 成功率 50%：必定失敗
+    game.choose("choice:0")
+    log = game.state.log
+    assert log.index("（本人——失敗）") < log.index("氣息一亂，只得作罷。")
+    assert game.state.player.stats["xinde"] == 0
 
 
 def test_join_sect_via_socialize(game):

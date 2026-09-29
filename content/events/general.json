@@ -26,7 +26,7 @@
    "text": "石縫間長著一株紫色的靈芝，傘蓋上泛著微光。",
    "choices": [
     {"text": "採下來拿去藥鋪賣", "effect": {"text": "藥鋪掌櫃出了個好價錢。", "stats": {"silver": 15}}},
-    {"text": "當場服下", "check": {"stat": "wis", "difficulty": 6},
+    {"text": "當場服下", "check": {"stat": "wis", "difficulty": 6, "by": "self"},
      "effect": {"text": "一股暖流自丹田升起，你只覺筋骨舒展。", "stats": {"con": 1}},
      "fail_effect": {"text": "你腹痛如絞，在草叢裡躺了半天。", "stamina": -15}},
     {"text": "留在原地，讓它繼續長", "effect": {"text": "你記下了位置，心想也許有一天用得上。", "stats": {"good": 1}}}
@@ -41,7 +41,7 @@
   {"id": "temple_zen", "title": "禪房聽經", "tags": ["寺院"],
    "text": "禪房裡傳出老僧講經的聲音，香客們席地而坐。",
    "choices": [
-    {"text": "坐下靜聽", "check": {"stat": "wis", "difficulty": 6},
+    {"text": "坐下靜聽", "check": {"stat": "wis", "difficulty": 6, "by": "self"},
      "effect": {"text": "你似有所悟，心境一片澄明。", "stamina": -5, "stats": {"wis": 1}},
      "fail_effect": {"text": "聽著聽著，你竟睡著了。", "stamina": -5}},
     {"text": "捐些香油錢", "effect": {"text": "知客僧雙手合十：「施主善心。」", "stats": {"silver": -10, "good": 2}}},
@@ -60,7 +60,7 @@
    "text": "茶館裡說書先生正講到精彩處，醒木一拍，滿堂喝采。",
    "choices": [
     {"text": "花幾個錢向茶客打聽消息", "effect": {"text": "茶客壓低聲音：「太湖那邊不太平，翻江龍又在招兵買馬。還有人說，棲霞山裡挖出過前朝的古錢……」", "stats": {"silver": -5}}},
-    {"text": "上台和說書先生對幾句", "check": {"stat": "wis", "difficulty": 7},
+    {"text": "上台和說書先生對幾句", "check": {"stat": "wis", "difficulty": 7, "by": "self"},
      "effect": {"text": "你一番妙語，說書先生拱手稱服，茶客們記住了你的名號。", "stats": {"fame": 1}},
      "fail_effect": {"text": "你張口結舌，惹得哄堂大笑。"}},
     {"text": "喝完茶就走", "effect": {"text": "茶香猶在舌尖。"}}
@@ -94,7 +94,7 @@
    "text": "一番苦戰之後，方才對手的一招在你腦海中反覆浮現。",
    "choices": [
     {"text": "趁熱再練幾遍", "effect": {"text": "你反覆演練，拳腳更有力了。", "stamina": -10, "stats": {"str": 1}}},
-    {"text": "靜下心來細想", "check": {"stat": "wis", "difficulty": 6},
+    {"text": "靜下心來細想", "check": {"stat": "wis", "difficulty": 6, "by": "self"},
      "effect": {"text": "你想通了其中關竅。", "stats": {"wis": 1}},
      "fail_effect": {"text": "想了半天，還是沒想明白。"}}
   ]},
@@ -116,7 +116,7 @@
   {"id": "monk_jinshan", "title": "金山寺方丈", "actions": ["socialize"], "locations": ["jinshan"],
    "text": "金山寺的老方丈正在寺後菜園澆水。",
    "choices": [
-    {"text": "請教調息之法", "check": {"stat": "wis", "difficulty": 6},
+    {"text": "請教調息之法", "check": {"stat": "wis", "difficulty": 6, "by": "self"},
      "effect": {"text": "老方丈隨口點撥幾句，你的氣息順暢了許多。", "stamina": -5, "stats": {"con": 1}},
      "fail_effect": {"text": "老方丈笑而不語，繼續澆他的菜。", "stamina": -5}},
     {"text": "幫忙挑水", "effect": {"text": "老方丈道了聲善哉。", "stamina": -10, "stats": {"good": 1}}}
@@ -131,7 +131,7 @@
   {"id": "waterfall", "title": "瀑布怪客", "tags": ["山林"], "qiyu": true, "weight": 0.2, "once": true,
    "text": "山澗瀑布下，一個赤足怪客正在急流中來回縱躍，身形快得只剩一道影子。",
    "choices": [
-    {"text": "躲在石後偷學", "condition": {"skills_none": ["zhuifeng"]}, "check": {"stat": "wis", "difficulty": 7},
+    {"text": "躲在石後偷學", "condition": {"skills_none": ["zhuifeng"]}, "check": {"stat": "wis", "difficulty": 7, "by": "self"},
      "effect": {"text": "你把怪客的步法默記在心，竟學到了七八成。", "stats": {"agi": 1}, "learn_skills": ["zhuifeng"]},
      "fail_effect": {"text": "你看得眼花撩亂，什麼也沒記住。"}},
     {"text": "上前拜見", "effect": {"text": "怪客瞥了你一眼，一個起落就不見了。"}}

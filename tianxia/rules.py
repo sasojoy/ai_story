@@ -3,8 +3,9 @@ from __future__ import annotations
 
 import random
 
+from . import team
 from .models import Check, Condition, Content, Effect
-from .state import GameState, Rumor
+from .state import PLAYER, GameState, Rumor
 
 DAY = 86400
 
@@ -64,14 +65,23 @@ def check_condition(cond: Condition, state: GameState) -> bool:
     return True
 
 
-def check_chance(check: Check, state: GameState) -> float:
-    """屬性每高於難度 1 點，成功率 +10%；範圍 5%～95%。"""
-    value = state.player.stats.get(check.stat, 0)
+def check_chance(check: Check, state: GameState, content: Content) -> float:
+    """出手者的屬性每高於難度 1 點，成功率 +10%；範圍 5%～95%。"""
+    key = team.check_actor(state, content, check)
+    value = team.check_value(state, content, key, check.stat)
     return min(0.95, max(0.05, 0.5 + (value - check.difficulty) * 0.1))
 
 
-def roll_check(check: Check, state: GameState, rng: random.Random) -> bool:
-    return rng.random() < check_chance(check, state)
+def roll_check(check: Check, state: GameState, content: Content, rng: random.Random) -> bool:
+    return rng.random() < check_chance(check, state, content)
+
+
+def check_who(check: Check, state: GameState, content: Content) -> str:
+    """選項與結果上寫的出手者：本人檢定寫「本人」；隊伍檢定寫「某某出手」，派出的是本人時寫「本人出手」。"""
+    if check.by == "self":
+        return "本人"
+    key = team.check_actor(state, content, check)
+    return "本人出手" if key == PLAYER else f"{team.member_name(state, content, key)}出手"
 
 
 def add_rumor(state: GameState, text: str) -> None:
