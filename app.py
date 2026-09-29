@@ -1,11 +1,14 @@
 """《天下大勢》原型的網頁介面（Gradio）。
 
 遊戲規則全部在 tianxia/，這個檔案只負責畫面與接線：每次操作都先把現實時間同步進遊戲、
-執行動作、存檔，再整個重畫。「門下」（隊伍與武學配置）與「戰報」（歷次戰鬥的列表與完整內容）
-都是另外的整頁，分別由 render_menxia() 與戰報頁面自己的處理函式重畫。
-左欄由上而下是場景（地點或事件）與選項按鈕、「剛剛」卡片（最新一則江湖紀錄；打完仗時換成戰鬥卡片，
-卡片沒寫到的補充放在卡片底下）、「江湖紀錄」（再來的 5 則，一則一列、可點開看敘事，更早的收在摺疊區裡）。
-按戰鬥卡片的「看完整戰報」或右欄的「戰報」按鈕都能打開戰報頁面。
+執行動作、存檔，再整個重畫。「門下」（隊伍與武學配置）、「戰報」（歷次戰鬥的列表與完整內容）與
+「大地圖」（江湖輿圖：四個圖層、地點詳情與安排前往）都是另外的整頁，同一時間只顯示一頁（見 PAGES），
+分別由 render_menxia()、戰報頁面與 render_map_page() 重畫。
+左欄由上而下是場景列（左邊是地點或事件，右邊是所在大區的小地圖與「大地圖」按鈕）、選項按鈕、
+「剛剛」卡片（最新一則江湖紀錄；打完仗時換成戰鬥卡片，卡片沒寫到的補充放在卡片底下）、
+「江湖紀錄」（再來的 5 則，一則一列、可點開看敘事，更早的收在摺疊區裡）。
+按戰鬥卡片的「看完整戰報」或右欄的「戰報」按鈕都能打開戰報頁面；點小地圖、小地圖下方或右欄的「大地圖」按鈕
+打開大地圖。
 """
 from __future__ import annotations
 
@@ -26,17 +29,17 @@ ROOT = Path(__file__).parent
 CONTENT = load_content(ROOT / "content")
 SAVE_DIR = ROOT / "saves"
 MAX_BUTTONS = 10
-# game_state、任務區塊、狀態文字、場景文字、「剛剛」卡片（打完仗時是戰鬥卡片底下的補充）、地圖、大勢、傳聞、江湖史、選項 id 清單、匿名勾選框、
-# 左欄「場景／地圖」分頁、戰鬥卡片、「看完整戰報」按鈕、江湖紀錄、更早的紀錄、「展開更早的紀錄」摺疊區，
+# game_state、任務區塊、狀態文字、場景文字、「剛剛」卡片（打完仗時是戰鬥卡片底下的補充）、小地圖、大勢、傳聞、江湖史、
+# 選項 id 清單、匿名勾選框、戰鬥卡片、「看完整戰報」按鈕、江湖紀錄、更早的紀錄、「展開更早的紀錄」摺疊區，
 # 再加上按鈕（MAX_BUTTONS）。
 LATEST_INDEX = 4
-MAIN_TABS_INDEX = 11
-CARD_INDEX = 12
-CARD_BUTTON_INDEX = 13
-JOURNAL_INDEX = 14
-OLDER_INDEX = 15
-OLDER_ACCORDION_INDEX = 16
-N_OUTPUTS = 17 + MAX_BUTTONS
+MINIMAP_INDEX = 5
+CARD_INDEX = 11
+CARD_BUTTON_INDEX = 12
+JOURNAL_INDEX = 13
+OLDER_INDEX = 14
+OLDER_ACCORDION_INDEX = 15
+N_OUTPUTS = 16 + MAX_BUTTONS
 RECENT_ROWS = 5  # 「剛剛」之後直接列出幾則
 OLDER_ROWS = 30  # 摺疊區裡最多幾則（存檔本來就只留 30 則）
 
@@ -59,6 +62,26 @@ MX_DISPEL_INDEX = MX_LIBRARY_INDEX + 5
 MX_MESSAGE_INDEX = MX_LIBRARY_INDEX + 6
 MENXIA_OUTPUTS = MX_MESSAGE_INDEX + 1
 
+# 整頁：江湖畫面、門下、戰報、大地圖；同一時間只顯示一頁（見 show_page），順序同 build_demo() 的 pages。
+PAGES = ("main", "menxia", "report", "map")
+
+# 大地圖頁面（render_map_page）的輸出順序：時間與體力、圖層、大地圖、地點下拉選單、地點詳情、「安排前往」按鈕。
+MAP_HEAD_INDEX = 0
+MAP_LAYER_INDEX = 1
+MAP_SVG_INDEX = 2
+MAP_PLACE_INDEX = 3
+MAP_DETAIL_INDEX = 4
+MAP_TRAVEL_INDEX = 5
+MAP_OUTPUTS = 6
+DEFAULT_LAYER = "situation"
+# 點大地圖上的地點：地點包在 data-loc 裡（見 mapview.render_map），把它的 id 當成 click 事件的資料送回 Python。
+MAP_CLICK_JS = (
+    "element.addEventListener('click', (event) => {"
+    " const spot = event.target.closest('[data-loc]');"
+    " if (spot) { trigger('click', {loc: spot.getAttribute('data-loc')}); }"
+    " });"
+)
+
 Slot = tuple[str, int]  # 選中的自選欄：(人物 key, 第幾欄，從 0 起算)
 
 ACT_LOCK = threading.Lock()
@@ -68,7 +91,7 @@ def save_path(name: str) -> Path:
     return SAVE_DIR / (re.sub(r'[\\/:*?"<>|]', "_", name) + ".json")
 
 
-def render(game: Game, focus_scene: bool = False) -> list:
+def render(game: Game) -> list:
     """回傳順序必須和 build_demo() 裡的 outputs 一致。"""
     options = game.options()[:MAX_BUTTONS]
     buttons = []
@@ -89,13 +112,12 @@ def render(game: Game, focus_scene: bool = False) -> list:
         game.status_text(),
         game.scene_text(),
         gr.update(value=latest, visible=bool(latest)),
-        game.world_map_svg(),
+        game.minimap_svg(),
         game.trends_text(),
         game.rumors_text(),
         game.chronicle_text(),
         [o.id for o in options],
         p.anonymous,
-        gr.update(selected="scene") if focus_scene else gr.update(),
         gr.update(value=card or "", visible=card is not None),
         gr.update(visible=card is not None),
         game.journal_html(1, RECENT_ROWS, heading="江湖紀錄", empty="（還沒有更早的紀錄。）"),
@@ -172,27 +194,20 @@ def _menxia_buttons(game: Game, slot: Slot | None, target: str | None) -> list:
     ]
 
 
-def _scene_event(game: Game) -> str | None:
-    """需要玩家到「場景」分頁讀的東西：待處理的事件（戰鬥卡片在按鈕底下、不在分頁裡，不必切換）。"""
-    return game.state.pending_event
-
-
 def act(game: Game | None, action, menxia: tuple[Slot | None, str | None] | None = None) -> list:
     """同步時間 → 執行動作 → 存檔 → 重畫。上鎖避免計時器與按鈕點擊同時操作同一存檔。
 
     menxia＝(選取的自選欄, 選取的武學) 時連門下頁面一起重畫；動作回傳的訊息（None 表示沒有）顯示在頁面上。
-    戰報頁面是獨立的一整頁，不在這裡重畫（見 open_report_page／open_report_handler）。
+    戰報頁面與大地圖頁面是獨立的整頁，不在這裡重畫（見 open_report_page、render_map_page）。
     """
     n = N_OUTPUTS if menxia is None else N_OUTPUTS + MENXIA_OUTPUTS
     if game is None:
         return [gr.skip()] * n
     with ACT_LOCK:
         game.sync(time.time())
-        before = _scene_event(game)
         msgs = action(game)
         save_game(game.state, save_path(game.state.player.name))
-        after = _scene_event(game)
-        out = render(game, focus_scene=after is not None and after != before)
+        out = render(game)
         if menxia is not None:
             out += render_menxia(game, *menxia, None if msgs is None else "\n\n".join(msgs))
         return out
@@ -355,8 +370,68 @@ def anonymous_handler(game, value):
     return act(game, lambda g: g.set_anonymous(value))
 
 
-def map_view_handler(game):
-    return act(game, lambda g: g.view_map())
+def show_page(page: str) -> list:
+    """四個整頁（PAGES）的顯示與否：只顯示 page 那一頁。"""
+    return [gr.update(visible=name == page) for name in PAGES]
+
+
+def render_map_page(game: Game, layer: str, selected: str | None) -> list:
+    """大地圖頁面的全部輸出，順序見 MAP_*_INDEX。選的地點不在下拉選單裡（例如走動後、換了新賽季）時改選所在地。"""
+    places = game.map_places()
+    if selected not in {loc_id for _, loc_id in places}:
+        selected = game.state.player.location
+    if layer not in Game.MAP_LAYERS:
+        layer = DEFAULT_LAYER
+    button = game.travel_button(selected)
+    out = [
+        game.map_header(),
+        gr.update(value=layer),
+        game.world_map_svg(layer, selected),
+        gr.update(choices=places, value=selected),
+        game.place_detail(selected),
+        gr.update(visible=False) if button is None else gr.update(visible=True, value=button[0], interactive=button[1]),
+    ]
+    assert len(out) == MAP_OUTPUTS
+    return out
+
+
+def open_world_map(game):
+    """右欄「大地圖」、點小地圖或小地圖下方的「大地圖」：打開大地圖頁面，預設「局勢」、選中所在地。
+    打開大地圖可能完成新手引導的一步，所以先照一般動作同步、存檔、重畫江湖畫面。"""
+    if game is None:
+        return [gr.skip()] * (N_OUTPUTS + len(PAGES) + MAP_OUTPUTS)
+    out = act(game, lambda g: g.view_map())
+    with ACT_LOCK:
+        return out + show_page("map") + render_map_page(game, DEFAULT_LAYER, None)
+
+
+def map_page_handler(game, layer, selected):
+    """切換圖層，或從下拉選單選地點：重畫大地圖頁面（不算行動，不存檔）。"""
+    if game is None:
+        return [gr.skip()] * MAP_OUTPUTS
+    with ACT_LOCK:
+        return render_map_page(game, layer, selected)
+
+
+def map_click_handler(game, layer, evt: gr.EventData):
+    """在大地圖上點一個地點（MAP_CLICK_JS 送來 {loc: 地點 id}）：選中它；點到選不了的地方不動。"""
+    loc_id = getattr(evt, "loc", None)
+    if game is None or loc_id not in {place for _, place in game.map_places()}:
+        return [gr.skip()] * MAP_OUTPUTS
+    with ACT_LOCK:
+        return render_map_page(game, layer, loc_id)
+
+
+def travel_handler(game, selected):
+    """「安排前往」：一站一站走過去，走完回到江湖畫面，場景顯示抵達的地點。"""
+    if game is None:
+        return [gr.skip()] * (N_OUTPUTS + len(PAGES))
+    return act(game, lambda g: g.travel(selected)) + show_page("main")
+
+
+def close_world_map():
+    """大地圖頁面的「返回江湖」。"""
+    return show_page("main")
 
 
 def skip_tutorial_handler(game):
@@ -385,14 +460,11 @@ def open_game(name: str) -> Game:
 
 
 def start(name):
-    """踏入江湖：藏起開始畫面、顯示江湖畫面，門下頁面與戰報頁面維持隱藏。"""
+    """踏入江湖：藏起開始畫面、顯示江湖畫面，門下、戰報、大地圖頁面維持隱藏。"""
     name = (name or "").strip()
     if not name:
         raise gr.Error("請先輸入你的名號。")
-    shown = [
-        gr.update(visible=False), gr.update(visible=True), gr.update(visible=False), gr.update(visible=False)
-    ]  # start_col、game_row、menxia_col、report_col
-    return act(open_game(name), lambda g: None) + shown
+    return act(open_game(name), lambda g: None) + [gr.update(visible=False)] + show_page("main")  # start_col、PAGES
 
 
 def build_demo() -> gr.Blocks:
@@ -407,11 +479,11 @@ def build_demo() -> gr.Blocks:
             start_btn = gr.Button("踏入江湖", variant="primary")
         with gr.Row(visible=False) as game_row:
             with gr.Column(scale=3):
-                with gr.Tabs(selected="scene") as main_tabs:
-                    with gr.Tab("場景", id="scene"):
-                        scene_md = gr.Markdown()
-                    with gr.Tab("地圖", id="map") as map_tab:
-                        map_html = gr.HTML()
+                with gr.Row(equal_height=False) as scene_row:
+                    scene_md = gr.Markdown(scale=3)
+                    with gr.Column(scale=2, min_width=180):
+                        minimap_html = gr.HTML()  # 預設的 js_on_load：點一下就觸發 click
+                        mini_map_btn = gr.Button("大地圖", size="sm")
                 option_btns = [gr.Button(visible=False) for _ in range(MAX_BUTTONS)]
                 # 「剛剛」：最新一則江湖紀錄的卡片；這次行動打了仗時改放戰鬥卡片，latest_html 則放卡片沒寫到的補充。
                 battle_card_md = gr.Markdown(visible=False, container=True)
@@ -427,6 +499,7 @@ def build_demo() -> gr.Blocks:
                 with gr.Row():
                     menxia_btn = gr.Button("門下")
                     report_btn = gr.Button("戰報")
+                    map_btn = gr.Button("大地圖")
                 with gr.Tabs():
                     with gr.Tab("江湖大勢"):
                         trends_md = gr.Markdown()
@@ -478,13 +551,33 @@ def build_demo() -> gr.Blocks:
                     report_list_radio = gr.Radio(label="歷次戰鬥（最新在前）", choices=[], interactive=True)
                 with gr.Column(scale=2):
                     report_detail_md = gr.Markdown()
+        with gr.Column(visible=False) as map_col:
+            with gr.Row(equal_height=True):
+                gr.Markdown("## 江湖輿圖", scale=1)
+                map_head_md = gr.Markdown(scale=6)
+                map_back_btn = gr.Button("返回江湖", scale=0, min_width=120)
+            layer_radio = gr.Radio(
+                label="圖層", choices=[(name, key) for key, name in Game.MAP_LAYERS.items()], value=DEFAULT_LAYER,
+                interactive=True,
+            )
+            with gr.Row():
+                with gr.Column(scale=3):
+                    world_map_html = gr.HTML(js_on_load=MAP_CLICK_JS)
+                with gr.Column(scale=2, min_width=260):
+                    place_dd = gr.Dropdown(label="地點（也可以直接點地圖）", choices=[], interactive=True)
+                    place_md = gr.Markdown()
+                    travel_btn = gr.Button("安排前往", variant="primary", visible=False)
 
         outputs = [
-            game_state, quest_md, status_md, scene_md, latest_html, map_html, trends_md, rumors_md, chronicle_md,
-            ids_state, anon_cb, main_tabs, battle_card_md, card_btn, journal_html, older_html, older_acc,
+            game_state, quest_md, status_md, scene_md, latest_html, minimap_html, trends_md, rumors_md, chronicle_md,
+            ids_state, anon_cb, battle_card_md, card_btn, journal_html, older_html, older_acc,
             *option_btns,
         ]
         assert len(outputs) == N_OUTPUTS
+        pages = [game_row, menxia_col, report_col, map_col]
+        assert len(pages) == len(PAGES)
+        map_outputs = [map_head_md, layer_radio, world_map_html, place_dd, place_md, travel_btn]
+        assert len(map_outputs) == MAP_OUTPUTS
         menxia_outputs = [mx_slot, mx_target, mx_head_md]
         for member_col, card_md, slot_btns in members:
             menxia_outputs += [member_col, card_md, *slot_btns]
@@ -492,14 +585,13 @@ def build_demo() -> gr.Blocks:
         assert len(menxia_outputs) == MENXIA_OUTPUTS
         selection = [game_state, mx_slot, mx_target]
 
-        start_btn.click(start, inputs=[name_box], outputs=outputs + [start_col, game_row, menxia_col, report_col])
-        name_box.submit(start, inputs=[name_box], outputs=outputs + [start_col, game_row, menxia_col, report_col])
+        start_btn.click(start, inputs=[name_box], outputs=outputs + [start_col] + pages)
+        name_box.submit(start, inputs=[name_box], outputs=outputs + [start_col] + pages)
         for i, btn in enumerate(option_btns):
             btn.click(make_option_handler(i), inputs=[game_state, ids_state], outputs=outputs)
         seclude_btn.click(seclude_handler, inputs=[game_state, hours_sl], outputs=outputs)
         anon_cb.input(anonymous_handler, inputs=[game_state, anon_cb], outputs=outputs)
         skip_tutorial_btn.click(skip_tutorial_handler, inputs=[game_state], outputs=outputs)
-        map_tab.select(map_view_handler, inputs=[game_state], outputs=outputs)
         for hours, btn in ff_btns.items():
             btn.click(make_fast_forward_handler(hours), inputs=[game_state], outputs=outputs)
 
@@ -512,6 +604,13 @@ def build_demo() -> gr.Blocks:
         report_list_radio.input(
             report_pick_handler, inputs=[game_state, report_list_radio], outputs=[report_detail_md]
         )
+        for opener in (map_btn, mini_map_btn, minimap_html):
+            opener.click(open_world_map, inputs=[game_state], outputs=outputs + pages + map_outputs)
+        map_back_btn.click(close_world_map, outputs=pages)
+        layer_radio.input(map_page_handler, inputs=[game_state, layer_radio, place_dd], outputs=map_outputs)
+        place_dd.input(map_page_handler, inputs=[game_state, layer_radio, place_dd], outputs=map_outputs)
+        world_map_html.click(map_click_handler, inputs=[game_state, layer_radio], outputs=map_outputs)
+        travel_btn.click(travel_handler, inputs=[game_state, place_dd], outputs=outputs + pages)
         for col, (_, _, (innate_btn, *free_btns)) in enumerate(members):
             innate_btn.click(make_innate_slot_handler(col), inputs=selection, outputs=menxia_outputs)
             for index, btn in enumerate(free_btns):

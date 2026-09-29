@@ -206,6 +206,13 @@ def test_enemies_layer_on_real_content_simulates_once_per_foe(monkeypatch):
     assert len(calls) == 160  # 已快取
 
 
+def test_map_guide_step_points_to_the_world_map():
+    c = load_content(CONTENT_DIR)
+    step = c.tutorial.steps[1]
+    assert step.id == "t2_map" and "「大地圖」" in step.text and "分頁" not in step.text
+    assert step.done_when.condition.flags_all == ["看過地圖"]  # Game.view_map()：打開大地圖就算完成
+
+
 def test_real_content_places_are_filled_in():
     c = load_content(CONTENT_DIR)
     s = c.scenario

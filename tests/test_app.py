@@ -16,6 +16,7 @@ def test_render_matches_outputs():
     game = Game.new(app.CONTENT, "測試")
     assert len(app.render(game)) == app.N_OUTPUTS
     assert len(app.render_menxia(game, None, None)) == app.MENXIA_OUTPUTS
+    assert len(app.render_map_page(game, "situation", None)) == app.MAP_OUTPUTS
 
 
 def test_option_handler_acts_and_saves(tmp_path, monkeypatch):
@@ -37,20 +38,11 @@ def test_build_demo():
     assert app.build_demo() is not None
 
 
-def test_render_includes_quest_and_map():
+def test_render_includes_quest_and_minimap():
     game = Game.new(app.CONTENT, "測試")
     out = app.render(game)
     assert any(isinstance(x, str) and x.startswith("### 主線") for x in out)
-    assert any(isinstance(x, str) and x.startswith("<svg") for x in out)
-
-
-def test_map_view_handler_advances_tutorial(tmp_path, monkeypatch):
-    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
-    game = Game.new(app.CONTENT, "測試")
-    game.state.player.tutorial_step = 1  # 第二步是「打開地圖」
-    out = app.map_view_handler(game)
-    assert len(out) == app.N_OUTPUTS
-    assert game.state.player.tutorial_step == 2
+    assert out[app.MINIMAP_INDEX] == game.minimap_svg() and ">↘ 太湖一帶<" in out[app.MINIMAP_INDEX]
 
 
 def test_skip_tutorial_handler_finishes_tutorial(tmp_path, monkeypatch):
@@ -61,21 +53,23 @@ def test_skip_tutorial_handler_finishes_tutorial(tmp_path, monkeypatch):
     assert game.state.player.tutorial_step == len(app.CONTENT.tutorial.steps)
 
 
-def test_new_event_switches_main_tabs_to_scene(tmp_path, monkeypatch):
+def test_left_column_has_no_tabs_and_puts_the_minimap_beside_the_scene():
+    demo = app.build_demo()
+    tabs = [block.label for block in demo.blocks.values() if isinstance(block, gr.Tab)]
+    assert "場景" not in tabs and "地圖" not in tabs  # 右欄的分頁照舊
+    outputs = next(f for f in demo.fns.values() if f.fn is app.start).outputs
+    scene, minimap = outputs[3], outputs[app.MINIMAP_INDEX]
+    assert isinstance(scene, gr.Markdown) and isinstance(minimap, gr.HTML)
+    assert isinstance(scene.parent, gr.Row) and minimap.parent.parent is scene.parent  # 場景列：左文字、右小地圖
+
+
+def test_minimap_follows_an_event(tmp_path, monkeypatch):
     monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
     game = Game.new(app.CONTENT, "測試")
     ids = [o.id for o in game.options()]
     out = app.make_option_handler(ids.index("act:explore"))(game, ids)
     assert game.state.pending_event is not None  # 揚州城探索必定遇到城鎮事件
-    assert out[app.MAIN_TABS_INDEX] == gr.update(selected="scene")
-
-
-def test_tick_never_switches_main_tabs(tmp_path, monkeypatch):
-    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
-    game = Game.new(app.CONTENT, "測試")
-    game.choose("act:explore")
-    out = app.tick_handler(game, None, None)
-    assert out[app.MAIN_TABS_INDEX] == gr.update()
+    assert ">揚州城<" in out[app.MINIMAP_INDEX]  # 事件進行中也照常標出所在地
 
 
 def test_render_includes_the_card_placeholders():
@@ -163,8 +157,6 @@ def test_battle_shows_a_card_until_the_next_action(tmp_path, monkeypatch):
     assert card["visible"] is True and card["value"].startswith("### ⚔ 揚州城郊・對陣 ")
     assert out[app.CARD_BUTTON_INDEX] == gr.update(visible=True)
     assert out[app.LATEST_INDEX] == gr.update(value="", visible=False)  # 只顯示戰鬥卡片，不同時放「剛剛」卡片
-    # 戰鬥卡片在選項按鈕底下、不在「場景／地圖」分頁裡：只為了卡片不必切換分頁（遇上事件時才切回場景）。
-    assert out[app.MAIN_TABS_INDEX] == gr.update()
     out = click(game, "move:yangzhou")
     assert out[app.CARD_INDEX] == gr.update(value="", visible=False)
     assert out[app.CARD_BUTTON_INDEX] == gr.update(visible=False)
@@ -197,7 +189,6 @@ def test_tick_keeps_the_card(tmp_path, monkeypatch):
     click(game, "act:train")
     out = app.tick_handler(game, None, None)
     assert out[app.CARD_INDEX]["visible"] is True
-    assert out[app.MAIN_TABS_INDEX] == gr.update()
 
 
 def test_battle_card_output_is_not_a_menxia_component():
@@ -342,13 +333,11 @@ def test_open_and_close_menxia_flip_visibility():
     assert app.close_menxia() == [gr.update(visible=True), gr.update(visible=False)]
 
 
-def test_start_leaves_menxia_and_report_hidden(tmp_path, monkeypatch):
+def test_start_leaves_menxia_report_and_map_hidden(tmp_path, monkeypatch):
     monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
     out = app.start("測試")
-    assert len(out) == app.N_OUTPUTS + 4
-    assert out[-4:] == [
-        gr.update(visible=False), gr.update(visible=True), gr.update(visible=False), gr.update(visible=False)
-    ]
+    assert len(out) == app.N_OUTPUTS + 1 + len(app.PAGES)
+    assert out[-5:] == [gr.update(visible=False), gr.update(visible=True)] + [gr.update(visible=False)] * 3
 
 
 def test_free_slot_click_selects_the_slot_and_its_art():
@@ -496,3 +485,126 @@ def test_incompatible_old_save_is_backed_up(tmp_path, monkeypatch):
     assert len(backups) == 1 and backups[0].read_text(encoding="utf-8") == "{}"
     assert any("已備份" in line for line in game.state.log)
     assert game.state.journal[0].title == "舊存檔已備份" and "已備份到 saves/backup/" in game.state.journal[0].lines[0]
+
+
+# ── 大地圖頁面 ─────────────────────────────────────────
+
+
+def map_page(out: list) -> list:
+    """open_world_map 輸出裡大地圖頁面的那一段（順序見 MAP_*_INDEX）。"""
+    return out[app.N_OUTPUTS + len(app.PAGES):]
+
+
+def test_open_world_map_shows_the_page_and_finishes_the_guide_step(tmp_path, monkeypatch):
+    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
+    game = Game.new(app.CONTENT, "測試")
+    game.state.player.tutorial_step = 1  # 第二步是「按『大地圖』看看」
+    out = app.open_world_map(game)
+    assert len(out) == app.N_OUTPUTS + len(app.PAGES) + app.MAP_OUTPUTS
+    assert out[app.N_OUTPUTS:app.N_OUTPUTS + len(app.PAGES)] == app.show_page("map")
+    assert game.state.player.tutorial_step == 2
+    assert "✔ 引導完成" in out[app.LATEST_INDEX]["value"]  # 江湖畫面也跟著重畫
+    assert (tmp_path / "測試.json").exists()
+    page = map_page(out)
+    assert page[app.MAP_HEAD_INDEX] == "⏳ 第1天 00:00　**體力** 150 / 150"  # 引導獎勵的體力超過上限不算
+    assert page[app.MAP_LAYER_INDEX] == gr.update(value="situation")  # 預設「局勢」
+    assert page[app.MAP_SVG_INDEX].startswith("<svg") and ">太湖寇亂 30<" in page[app.MAP_SVG_INDEX]
+    places = page[app.MAP_PLACE_INDEX]
+    assert places["value"] == "yangzhou" and ("揚州城（所在地）", "yangzhou") in places["choices"]  # 預設選中所在地
+    assert page[app.MAP_DETAIL_INDEX].startswith("### 揚州城（所在地）")
+    assert page[app.MAP_TRAVEL_INDEX] == gr.update(visible=False)  # 所在地不顯示「安排前往」
+    assert app.open_world_map(None) == [gr.skip()] * (app.N_OUTPUTS + len(app.PAGES) + app.MAP_OUTPUTS)
+
+
+def test_the_four_pages_are_mutually_exclusive():
+    assert app.show_page("map") == [gr.update(visible=False)] * 3 + [gr.update(visible=True)]
+    assert app.close_world_map() == [gr.update(visible=True)] + [gr.update(visible=False)] * 3
+    demo = app.build_demo()
+    fns = list(demo.fns.values())
+    pages = next(f for f in fns if f.fn is app.start).outputs[-len(app.PAGES):]
+    game_row = pages[0]
+    assert [f.outputs[-len(app.PAGES) - app.MAP_OUTPUTS:][:len(app.PAGES)] for f in fns if f.fn is app.open_world_map] == [
+        pages
+    ] * 3  # 右欄按鈕、小地圖、小地圖下方的按鈕
+    assert next(f for f in fns if f.fn is app.close_world_map).outputs == pages
+
+    def inside(block, container) -> bool:
+        while block is not None:
+            if block is container:
+                return True
+            block = block.parent
+        return False
+
+    # 打開整頁的按鈕全都在江湖畫面裡：一頁開著時按不到另一頁，門下、戰報、大地圖不會同時出現。
+    openers = (app.open_menxia, app.open_report_page, app.open_report_handler, app.open_world_map)
+    for fn in (f for f in fns if f.fn in openers):
+        assert all(inside(demo.blocks[block_id], game_row) for block_id, _ in fn.targets)
+
+
+def test_switching_layers_redraws_only_the_map_page(tmp_path, monkeypatch):
+    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
+    game = Game.new(app.CONTENT, "測試")
+    page = app.map_page_handler(game, "routes", "gaoyou")
+    assert len(page) == app.MAP_OUTPUTS
+    assert page[app.MAP_LAYER_INDEX] == gr.update(value="routes")
+    assert ">10 體力<" in page[app.MAP_SVG_INDEX] and "數字：走過去最省的體力" in page[app.MAP_SVG_INDEX]
+    assert page[app.MAP_PLACE_INDEX]["value"] == "gaoyou"
+    assert page[app.MAP_TRAVEL_INDEX] == gr.update(visible=True, value="安排前往（約 10 體力）", interactive=True)
+    page = app.map_page_handler(game, "enemies", "gaoyou")
+    assert "最險：水寇嘍囉 穩勝" in page[app.MAP_SVG_INDEX]
+    assert "**敵情**　水寇嘍囉 穩勝、太湖水寇 穩勝" in page[app.MAP_DETAIL_INDEX]
+    assert app.map_page_handler(game, "nonsense", "nowhere")[app.MAP_PLACE_INDEX]["value"] == "yangzhou"
+    assert app.map_page_handler(None, "routes", "gaoyou") == [gr.skip()] * app.MAP_OUTPUTS
+    assert not (tmp_path / "測試.json").exists()  # 看地圖不算行動，不存檔
+
+
+def test_clicking_a_place_on_the_map_selects_it():
+    game = Game.new(app.CONTENT, "測試")
+    page = app.map_click_handler(game, "story", gr.EventData(None, {"loc": "gaoyou"}))
+    assert page[app.MAP_PLACE_INDEX]["value"] == "gaoyou"
+    assert page[app.MAP_DETAIL_INDEX].startswith("### 高郵湖")
+    assert 'r="18" fill="none" stroke="#2C2C2A"' in page[app.MAP_SVG_INDEX]  # 被選的地點加粗標示
+    skip = [gr.skip()] * app.MAP_OUTPUTS
+    assert app.map_click_handler(game, "story", gr.EventData(None, {"loc": "hanshan"})) == skip  # 沒名字的淡點
+    assert app.map_click_handler(game, "story", gr.EventData(None, {})) == skip
+    assert app.map_click_handler(None, "story", gr.EventData(None, {"loc": "gaoyou"})) == skip
+
+
+def test_unknown_place_shows_only_that_it_is_unknown():
+    game = Game.new(app.CONTENT, "測試")
+    page = app.map_page_handler(game, "situation", "suzhou")
+    assert page[app.MAP_DETAIL_INDEX] == "### 蘇州城？\n\n尚未摸清"
+    assert page[app.MAP_TRAVEL_INDEX] == gr.update(visible=False)
+
+
+def test_travel_button_explains_why_it_cannot_go():
+    game = Game.new(app.CONTENT, "測試")
+    game.state.pending_event = "tavern_brawl"
+    page = app.map_page_handler(game, "situation", "gaoyou")
+    assert page[app.MAP_TRAVEL_INDEX] == gr.update(visible=True, value="有事件待處理，不能安排前往", interactive=False)
+
+
+def test_travel_returns_to_the_main_view_at_the_destination(tmp_path, monkeypatch):
+    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
+    game = Game.new(app.CONTENT, "測試")
+    out = app.travel_handler(game, "gaoyou")
+    assert len(out) == app.N_OUTPUTS + len(app.PAGES)
+    assert out[app.N_OUTPUTS:] == app.show_page("main")
+    assert game.state.player.location == "gaoyou"
+    assert out[3].startswith("【高郵湖】")  # 場景顯示抵達的地點
+    assert "前往 高郵湖（途經 揚州城郊）" in out[app.LATEST_INDEX]["value"]
+    assert (tmp_path / "測試.json").exists()
+    assert app.travel_handler(None, "gaoyou") == [gr.skip()] * (app.N_OUTPUTS + len(app.PAGES))
+
+
+def test_normal_redraws_never_simulate_odds(tmp_path, monkeypatch):
+    from tianxia import team
+
+    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
+    game = Game.new(app.CONTENT, "測試")
+    calls = []
+    real = team.run_battle
+    monkeypatch.setattr(team, "run_battle", lambda *args: calls.append(1) or real(*args))
+    app.tick_handler(game, None, None)
+    app.open_world_map(game)  # 預設局勢層；所在地沒有敵人
+    assert calls == []

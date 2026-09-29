@@ -575,7 +575,7 @@ class Game:
         return self._log(["（已略過新手引導。）"])
 
     def view_map(self) -> list[str]:
-        """介面打開地圖時呼叫。不論新手引導是否還在「看地圖」那一步，都先記下玩家看過地圖。
+        """介面打開大地圖時呼叫。不論新手引導是否還在「按『大地圖』看看」那一步，都先記下玩家看過地圖。
         平常看地圖不寫江湖紀錄；只有剛好完成一步新手引導時，才記下引導的獎勵與下一步。"""
         self.state.player.flags.add("看過地圖")
         msgs = note_action(self.state, self.content, "view_map")
