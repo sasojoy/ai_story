@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import random
 
-from . import rules, team
+from . import rules, team  # 與 rules 互相 import：只能引入整個模組、呼叫時才取屬性，不能 from .rules import current_day
 from .models import COMPANION_TIERS, Content, Squad
 from .state import PLAYER, TEAM_SIZE, GameState, Member, Team
 
@@ -93,9 +93,9 @@ def set_member(state: GameState, content: Content, index: int, slot: int, key: s
     換成之後，那一隊裡配著隊友本命武學的人會被卸下那門武學，每卸一門多回傳一句說明。
     換不成時回傳「（原因。）」、什麼都不改；沒有變化時回傳空清單。"""
     p = state.player
-    name = team_name(index)
     if not 0 <= index < len(p.teams) or not 0 <= slot < TEAM_SIZE:
         return ["（沒有這個位置。）"]
+    name = team_name(index)  # 先確認有這一隊：隊名的數字只寫到「十」
     if index >= team_count(state, content):
         return [f"（{name}{opens_at(content, index)}。）"]
     if index == 0 and slot == 0:

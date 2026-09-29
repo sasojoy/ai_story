@@ -344,6 +344,8 @@ ROSTER_ERRORS = [
     ("events/test.json", lambda d: by_id(d, "hermit").update(qiyu=False), "人物 sage：「奇遇」管道沒有事件帶得來"),
     ("events/test.json", lambda d: by_id(d, "fortune").update(actions=["socialize"]), "事件 fortune：福緣事件只由交遊觸發，actions 要是空的"),
     ("events/test.json", lambda d: by_id(d, "fortune")["choices"].append({"text": "婉拒"}), "事件 fortune：福緣事件的每個選項都要結識一個人"),
+    ("events/test.json", lambda d: by_id(d, "fortune")["choices"][0].update(combat="thug"), "事件 fortune 選項0：福緣事件的選項不能有檢定或戰鬥"),
+    ("events/test.json", lambda d: by_id(d, "fortune")["choices"][0].update(check={"stat": "wis", "difficulty": 5}), "事件 fortune 選項0：福緣事件的選項不能有檢定或戰鬥"),
     ("config.json", lambda d: d.update(team_counts=[2, 3]), "config.team_counts 與 config.command_caps 要一樣長"),
     ("config.json", lambda d: d.update(command_caps=[15, 20, 18]), "config.team_counts 與 config.command_caps 不能遞減"),
     ("config.json", lambda d: d.update(apprentice_weights={"地": 10}), "config.apprentice_weights：未知的品階 地"),

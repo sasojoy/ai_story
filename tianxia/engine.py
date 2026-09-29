@@ -197,7 +197,7 @@ class Game:
         return choice_label(choice, self.state, self.content)
 
     def odds(self, squad_id: str) -> str:
-        """出戰隊伍對上這支敵方隊伍的勝算：穩勝／有把握／五五波／凶險／必敗。"""
+        """本隊對上這支敵方隊伍的勝算：穩勝／有把握／五五波／凶險／必敗。"""
         return team.estimate(self.state, self.content, squad_id, self._odds)
 
     def choose(self, option_id: str) -> list[str]:
@@ -318,7 +318,9 @@ class Game:
         record = battlelog.new_record(s, c, squad, result, "train")
         msgs: list[str] = []
         if result.outcome == "win":
-            msgs += self._battle_rewards(squad, record)
+            rewards, joined = self._battle_rewards(squad, record)
+            record.notes += joined
+            msgs += rewards + joined
             extra: list[str] = []
             if self.rng.random() < c.config.train_stat_chance:
                 key = self.rng.choice(["str", "agi", "con"])
@@ -343,8 +345,9 @@ class Game:
                 msgs += self._present(event)
         return msgs
 
-    def _battle_rewards(self, squad: Squad, record: BattleRecord) -> list[str]:
-        """打贏時發對手獎勵（銀兩、心得、每人經驗）並擲招降，同時記進戰鬥紀錄。"""
+    def _battle_rewards(self, squad: Squad, record: BattleRecord) -> tuple[list[str], list[str]]:
+        """打贏時發對手獎勵（銀兩、心得、每人經驗）並擲招降（亂數在這裡取用，順序不變）。
+        回傳（獎勵與升級, 投效的敘事）：前者已記進戰鬥紀錄；投效由呼叫的地方接在最後、記進紀錄（劇情戰接在劇情之後）。"""
         p = self.state.player
         msgs = []
         if squad.reward_silver:
@@ -358,8 +361,8 @@ class Game:
         record.exp = squad.exp
         levels = team.add_exp(self.state, self.content, squad.exp)
         joined = roster.surrender(self.state, self.content, squad, self.rng)
-        record.notes += levels + joined
-        return msgs + levels + joined
+        record.notes += levels
+        return msgs + levels, joined
 
     def _file_battle(self, record: BattleRecord) -> str:
         """把戰鬥紀錄存進歷史、場景顯示它的卡片；回傳紀錄裡的一行摘要。
@@ -444,13 +447,13 @@ class Game:
         result = team.fight(s, c, squad.id, self.rng)
         record = battlelog.new_record(s, c, squad, result, "event", event.title)
         won = result.outcome == "win"
-        rewards = self._battle_rewards(squad, record) if won else []
+        rewards, joined = self._battle_rewards(squad, record) if won else ([], [])
         effect = choice.effect if won else choice.fail_effect
         story = apply_effect(effect, s, c)
         changes, notes = battlelog.split_changes(story)
         record.changes += changes
-        record.notes += notes
-        msgs = [self._file_battle(record)] + rewards + story
+        record.notes += notes + joined  # 投效接在打贏的劇情之後
+        msgs = [self._file_battle(record)] + rewards + story + joined
         if effect.next_event:
             msgs += self._present(c.events[effect.next_event])
         return msgs

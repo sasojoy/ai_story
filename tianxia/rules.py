@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import random
 
-from . import roster, team
+from . import roster, team  # 與 roster 互相 import：只能引入整個模組、呼叫時才取屬性，不能 from .roster import …
 from .models import Check, Condition, Content, Effect
 from .state import PLAYER, GameState, Rumor
 

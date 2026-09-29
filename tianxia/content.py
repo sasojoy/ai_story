@@ -243,6 +243,11 @@ def validate(c: Content) -> None:
         if ev.fortune:
             need(not ev.actions, f"{where}：福緣事件只由交遊觸發，actions 要是空的")
             need(all(ch.effect.recruit for ch in ev.choices), f"{where}：福緣事件的每個選項都要結識一個人")
+            for i, ch in enumerate(ev.choices):
+                need(
+                    ch.check is None and ch.combat is None,
+                    f"{where} 選項{i}：福緣事件的選項不能有檢定或戰鬥（福緣自己送上門時直接套用第一個選項的效果）",
+                )
 
     region_ids = [region.id for region in c.map.regions]
     duplicated = sorted({rid for rid in region_ids if region_ids.count(rid) > 1})

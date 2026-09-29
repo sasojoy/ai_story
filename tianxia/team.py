@@ -100,7 +100,7 @@ def trait_of(content: Content, key: str) -> str | None:
 
 def check_actor(state: GameState, content: Content, check: Check) -> str:
     """檢定由誰出手（回傳門下 key）。本人檢定，或檢定的是銀兩、名望這類只有本人才有的屬性時，一律本人；
-    隊伍檢定取出戰隊伍中這項屬性目前數值（含等級成長）最高的人，同分時本人優先、其餘依隊伍順序。"""
+    隊伍檢定取本隊中這項屬性目前數值（含等級成長）最高的人，同分時本人優先、其餘依隊伍順序。"""
     if check.by == "self" or check.stat not in COMBAT_STATS:
         return PLAYER
     keys = sorted(team_keys(state), key=lambda k: k != PLAYER) or [PLAYER]
@@ -196,7 +196,7 @@ def battle_rules(content: Content) -> Rules:
 
 
 def team_units(state: GameState, content: Content) -> list[Unit]:
-    """出戰隊伍的戰鬥單位，順序同 team_keys；第一位是隊長。"""
+    """本隊的戰鬥單位，順序同 team_keys；第一位是隊長。"""
     return [build_unit(state, content, key, leader=i == 0) for i, key in enumerate(team_keys(state))]
 
 

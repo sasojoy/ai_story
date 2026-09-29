@@ -130,6 +130,8 @@ def test_unopened_teams_and_unknown_people_are_refused(game):
     assert game.set_member(1, 0, "ghost") == ["（名冊裡沒有這個人。）"]
     assert game.set_member(1, 0, "sage") == ["（名冊裡沒有這個人。）"]  # 還沒入門
     assert game.set_member(9, 0, "pupil") == ["（沒有這個位置。）"]
+    assert game.set_member(10, 0, "pupil") == ["（沒有這個位置。）"]  # 超出隊名的數字也不出錯
+    assert game.set_member(-1, 0, "pupil") == ["（沒有這個位置。）"]
     assert game.set_member(1, 3, "pupil") == ["（沒有這個位置。）"]
     assert game.set_member(0, 2, "mate") == ["（韓鐵已經在本隊。）"]
     assert teams(game) == [["player", "mate"], [], [], []]
@@ -410,6 +412,11 @@ def test_event_battles_can_bring_a_surrender_too(game):
     game.choose("act:socialize")
     game.choose("choice:0")
     assert "captain" in game.state.player.members
+    surrender = ["水寇小隊敗退，【頭目】願意投效！", "【頭目】入門（地品・剛・統御 4），從第 1 級練起，先列候補。"]
+    record = game.state.battles[0]
+    assert record.notes == ["你擊敗了翻江龍！"] + surrender  # 投效接在打贏的劇情之後
+    lines = game.state.journal[0].lines
+    assert lines[-2:] == surrender and lines.index("你擊敗了翻江龍！") < lines.index(surrender[0])
 
 
 def test_surrender_uses_the_default_chance(game):
@@ -467,6 +474,28 @@ def test_fortune_arrives_by_itself_after_day_seven(game):
     ]
     game.advance(24 * 3600)
     assert sum(e.title == "結識【俠女】" for e in game.state.journal) == 1
+
+
+def test_an_old_save_past_day_seven_gets_the_fortune_on_its_next_sync(tmp_path, content, game):
+    """1c 以前的存檔（只有 team，沒有 fortune、收徒次數、act_reached）已經過了第 7 天：下一次同步時間就收到福緣。"""
+    content.config.season_days = 10
+    content.scenario.sim_players = []  # 不讓水寇提早結束這一季
+    game.state.world.time = 7 * 24 * 3600 + 3600  # 第 8 天
+    game.state.last_real = 1000.0
+    dump = game.state.model_dump(mode="json")
+    player = dump["player"]
+    player["team"] = player.pop("teams")[0]["members"]
+    for field in ("fortune", "apprentice_day", "apprentice_count"):
+        del player[field]
+    del dump["world"]["act_reached"]
+    path = tmp_path / "old.json"
+    path.write_text(json.dumps(dump, ensure_ascii=False), encoding="utf-8")
+    old = Game(content, load_game(path))
+    assert not old.state.player.fortune and "hero" not in old.state.player.members
+    old.sync(1060.0)
+    assert "hero" in old.state.player.members and old.state.player.fortune
+    entry = next(e for e in old.state.journal if e.title == "結識【俠女】")
+    assert entry.tag == "地品・福緣"
 
 
 def test_no_fortune_when_everyone_it_could_bring_is_here(game):
