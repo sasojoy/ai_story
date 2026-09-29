@@ -175,13 +175,12 @@ def team_units(state: GameState, content: Content) -> list[Unit]:
 
 
 def fight(state: GameState, content: Content, squad_id: str, rng: random.Random) -> BattleResult:
-    """出戰隊伍對上一支敵方隊伍；戰後內力保留剩餘值，並記下完整戰報。"""
+    """出戰隊伍對上一支敵方隊伍；戰後內力保留剩餘值。戰鬥紀錄由 engine 透過 battlelog 建立。"""
     p = state.player
     squad = content.squads[squad_id]
     result = run_battle(team_units(state, content), enemy_units(content, squad), rng, battle_rules(content))
     for key, hp in zip(team_keys(state), result.hp):
         p.members[key].neili = hp
-    state.last_report = [f"⚔ 對陣：{squad.name}"] + result.report
     return result
 
 

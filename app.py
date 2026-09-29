@@ -74,7 +74,7 @@ def render(game: Game, focus_scene: bool = False) -> list:
         [o.id for o in options],
         p.anonymous,
         gr.update(selected="scene") if focus_scene else gr.update(),
-        game.report_text(),
+        game.battle_detail(),
         *buttons,
     ]
 

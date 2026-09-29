@@ -5,19 +5,18 @@ import random
 
 from pydantic import BaseModel
 
-from . import skillview, team
+from . import battlelog, skillview, team
 from .events import choice_label, has_events_here, pick_event, visible_choices
 from .guide import note_action, quest_text, tutorial_intro
 from .mapview import render_map
 from .models import Choice, Content, Effect, Event, Location, Squad
 from .rules import apply_effect, change_trend, check_who, learn_skill, roll_check
-from .state import PLAYER, GameState, Member, Rumor, new_game_state
+from .state import PLAYER, BattleRecord, GameState, Member, Rumor, new_game_state
 from .world import check_thresholds, end_season, sim_tick
 
 HOUR = 3600
 DAY = 86400
 LOG_BREAK = "\x1e"  # 紀錄中每次行動結束的分隔標記（不顯示）
-REPORT_HINT = "（戰報見「戰報」分頁）"
 
 
 class Option(BaseModel):
@@ -83,6 +82,8 @@ class Game:
         for flag in s.world.flags:
             if flag not in s.world.flag_times:
                 s.world.flag_times[flag] = s.world.time
+        if battlelog.find(s, s.battle_card) is None:
+            s.battle_card = None
 
     # ── 時間 ──────────────────────────────────────────────
 
@@ -179,6 +180,7 @@ class Game:
         option = {o.id: o for o in self.options(odds=False)}.get(option_id)
         if option is None or not option.enabled:
             return self._log(["（此刻無法這麼做。）"])
+        self.state.battle_card = None  # 上一場的戰鬥卡片只留到下一次行動
         kind, _, arg = option_id.partition(":")
         if kind == "act":
             msgs = self._act(arg)
@@ -219,42 +221,60 @@ class Game:
         return [head, event.text]
 
     def _train(self) -> list[str]:
+        """歷練：勝得對手獎勵、屬性機會與大勢變化；敗失落一成銀兩；平手無獎懲。"""
         s, c = self.state, self.content
         p = s.player
         loc = c.locations[p.location]
         squad = c.squads[self.rng.choice(loc.enemies)]
         result = team.fight(s, c, squad.id, self.rng)
+        record = battlelog.new_record(s, c, squad, result, "train")
+        msgs: list[str] = []
         if result.outcome == "win":
-            msgs = [f"你率眾在{loc.name}與{squad.name}交手，{result.rounds}回合後將其擊退。{REPORT_HINT}"]
-            msgs += self._battle_rewards(squad)
+            msgs += self._battle_rewards(squad, record)
+            extra: list[str] = []
             if self.rng.random() < c.config.train_stat_chance:
                 key = self.rng.choice(["str", "agi", "con"])
                 p.stats[key] += 1
-                msgs.append(f"{c.config.stat_names[key]} +1")
+                extra.append(f"{c.config.stat_names[key]} +1")
             for trend_id, delta in loc.train_trend.items():
-                msgs += change_trend(s, c, trend_id, delta)
+                extra += change_trend(s, c, trend_id, delta)
+            record.notes += extra
+            msgs += extra
         elif result.outcome == "lose":
             loss = p.stats["silver"] // 10
             p.stats["silver"] -= loss
-            msgs = [f"你率眾在{loc.name}與{squad.name}交手，不敵敗走，失落銀兩 {loss}。{REPORT_HINT}"]
-        else:
-            msgs = [f"你率眾在{loc.name}與{squad.name}纏鬥{result.rounds}回合，不分勝負。{REPORT_HINT}"]
+            record.silver = -loss
+            if loss:
+                msgs.append(f"銀兩 -{loss}")
+        msgs.insert(0, self._file_battle(record))
         if self.rng.random() < c.config.train_event_chance:
             event = pick_event(s, c, "train", self.rng)
             if event:
                 msgs += self._present(event)
         return msgs
 
-    def _battle_rewards(self, squad: Squad) -> list[str]:
+    def _battle_rewards(self, squad: Squad, record: BattleRecord) -> list[str]:
+        """打贏時發對手獎勵（銀兩、心得、每人經驗），同時記進戰鬥紀錄。"""
         p = self.state.player
         msgs = []
         if squad.reward_silver:
             p.stats["silver"] += squad.reward_silver
+            record.silver = squad.reward_silver
             msgs.append(f"銀兩 +{squad.reward_silver}")
         if squad.reward_xinde:
             p.stats["xinde"] = p.stats.get("xinde", 0) + squad.reward_xinde
+            record.xinde = squad.reward_xinde
             msgs.append(f"心得 +{squad.reward_xinde}")
-        return msgs + team.add_exp(self.state, self.content, squad.exp)
+        record.exp = squad.exp
+        levels = team.add_exp(self.state, self.content, squad.exp)
+        record.notes += levels
+        return msgs + levels
+
+    def _file_battle(self, record: BattleRecord) -> str:
+        """把戰鬥紀錄存進歷史、場景顯示它的卡片；回傳紀錄裡的一行摘要。"""
+        battlelog.add_record(self.state, record)
+        self.state.battle_card = record.id
+        return battlelog.summary_line(record)
 
     def _move(self, dest_id: str) -> list[str]:
         dest = self.content.locations[dest_id]
@@ -270,21 +290,29 @@ class Game:
         s.pending_event = None
         msgs = [f"▸ {choice.text}"]
         if choice.combat:
-            squad = c.squads[choice.combat]
-            result = team.fight(s, c, squad.id, self.rng)
-            if result.outcome == "win":
-                msgs.append(f"你率眾與{squad.name}交手，{result.rounds}回合後獲勝。{REPORT_HINT}")
-                return msgs + self._battle_rewards(squad) + self._apply(choice.effect)
-            if result.outcome == "lose":
-                msgs.append(f"你率眾與{squad.name}交手，不敵敗退。{REPORT_HINT}")
-                return msgs + self._apply(choice.fail_effect)
-            return msgs + [f"你與{squad.name}纏鬥{result.rounds}回合，雙方不分勝負，各自退開。{REPORT_HINT}"]
+            return msgs + self._event_battle(event, choice)
         if choice.check:
             who = check_who(choice.check, s, c)
             success = roll_check(choice.check, s, c, self.rng)
             msgs.append(f"（{who}——{'成功' if success else '失敗'}）")
             return msgs + self._apply(choice.effect if success else choice.fail_effect)
         return msgs + self._apply(choice.effect)
+
+    def _event_battle(self, event: Event, choice: Choice) -> list[str]:
+        """劇情戰：勝得對手獎勵並走該選項的劇情結果；敗或平手（沒打贏）走失敗分支。"""
+        s, c = self.state, self.content
+        squad = c.squads[choice.combat]
+        result = team.fight(s, c, squad.id, self.rng)
+        record = battlelog.new_record(s, c, squad, result, "event", event.title)
+        won = result.outcome == "win"
+        rewards = self._battle_rewards(squad, record) if won else []
+        effect = choice.effect if won else choice.fail_effect
+        story = apply_effect(effect, s, c)
+        record.notes += story
+        msgs = [self._file_battle(record)] + rewards + story
+        if effect.next_event:
+            msgs += self._present(c.events[effect.next_event])
+        return msgs
 
     def _apply(self, effect: Effect) -> list[str]:
         msgs = apply_effect(effect, self.state, self.content)
@@ -303,6 +331,7 @@ class Game:
         if not self._idle():
             return self._log(["你現在無法閉關。"])
         hours = max(1, min(12, int(hours)))
+        self.state.battle_card = None
         p.busy_until = self.state.world.time + hours * HOUR
         p.seclusion_start = self.state.world.time
         return self._log([f"你閉關靜修，預計 {hours} 小時後出關；閉關期間內力回復加倍。"])
@@ -370,8 +399,30 @@ class Game:
             return None
         return team.dispel_refund(self.content, level)
 
-    def report_text(self) -> str:
-        return "\n\n".join(self.state.last_report) or "（還沒有戰報。）"
+    # ── 戰鬥紀錄 ──────────────────────────────────────────
+
+    def battle_card(self) -> str | None:
+        """場景裡的戰鬥卡片（Markdown）；這次行動沒有打仗時為 None。"""
+        record = battlelog.find(self.state, self.state.battle_card)
+        return battlelog.card_text(record) if record else None
+
+    def battle_card_id(self) -> int | None:
+        """卡片上那一場的流水號；沒有卡片時為 None。"""
+        record = battlelog.find(self.state, self.state.battle_card)
+        return record.id if record else None
+
+    def latest_battle_id(self) -> int | None:
+        return self.state.battles[0].id if self.state.battles else None
+
+    def battle_list(self) -> list[tuple[str, int]]:
+        """戰報列表：（「勝　第1天 08:30　揚州城郊　vs 劫道山賊　4 回合」, 流水號），最新的在前。"""
+        return [(battlelog.list_label(r), r.id) for r in self.state.battles]
+
+    def battle_detail(self, record_id: int | None = None) -> str:
+        """某一場的完整戰報（Markdown）；沒指定或找不到時顯示最新一場。"""
+        s = self.state
+        record = battlelog.find(s, record_id) or (s.battles[0] if s.battles else None)
+        return battlelog.detail_text(record) if record else battlelog.NO_RECORD
 
     def notice(self, text: str) -> list[str]:
         """介面層要告訴玩家的系統訊息（例如舊存檔已備份）。"""

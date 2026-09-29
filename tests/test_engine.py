@@ -92,7 +92,11 @@ def test_event_battle_is_fully_automatic(game):
     assert not any(i.startswith("tactic:") for i in ids(game))
     assert game.state.player.stats["silver"] == 40
     assert "你敗了。" in game.state.log
-    assert game.state.last_report[0] == "⚔ 對陣：翻江龍"
+    record = game.state.battles[0]
+    assert (record.kind, record.event, record.opponent, record.outcome) == ("event", "挑戰", "翻江龍", "lose")
+    assert record.ending == "沈浪倒下，我方敗退。" and not record.leader_ok
+    assert record.notes == ["你敗了。", "銀兩 -10"]  # 失敗分支的劇情結果
+    assert f"⚔ 湖邊：不敵翻江龍，敗退（{record.rounds} 回合）" in game.state.log
     from tianxia.team import member_neili
 
     now, top = member_neili(game.state, game.content, "player")
@@ -113,19 +117,61 @@ def test_event_battle_win_pays_squad_rewards_once_and_applies_choice_effect(game
     assert p.members["player"].exp == 20 and p.members["mate"].exp == 20
 
 
-def test_event_battle_draw_clears_event_without_effects(game):
+def test_event_battle_draw_takes_the_fail_branch(game):
     game.content.config.battle_rounds = 1  # 一回合打不倒翻江龍，他也打不倒隊長
     game.choose("move:lake")
     game.choose("act:socialize")
     assert game.state.pending_event == "duel"
     game.choose("choice:0")
     p = game.state.player
-    assert "不分勝負" in game.state.last_report[-1]
+    record = game.state.battles[0]
+    assert record.outcome == "draw" and "不分勝負" in record.ending
     assert game.state.pending_event is None
-    assert "你擊敗了翻江龍！" not in game.state.log and "你敗了。" not in game.state.log
+    assert "你敗了。" in game.state.log and "你擊敗了翻江龍！" not in game.state.log  # 平手算沒打贏
     assert game.state.world.trends["kou"] == 30
-    assert p.stats["silver"] == 50 and p.stats["xinde"] == 0
+    assert p.stats["silver"] == 40 and p.stats["xinde"] == 0  # 失敗分支扣 10 兩；沒有對手獎勵
     assert p.members["player"].exp == 0
+    assert "⚔ 湖邊：與翻江龍不分勝負（1 回合）" in game.state.log
+
+
+def test_train_win_is_recorded_with_rewards(game):
+    game.choose("move:lake")
+    game.choose("act:train")
+    record = game.state.battles[0]
+    assert (record.id, record.kind, record.location, record.opponent, record.outcome) == (
+        1, "train", "湖邊", "水寇小隊", "win"
+    )
+    assert [(f.name, f.level) for f in record.ours] == [("沈浪", 1), ("韓鐵", 1)]
+    assert [(f.name, f.level) for f in record.theirs] == [("小嘍囉", 1)]
+    assert (record.exp, record.xinde, record.silver) == (20, 10, 5)
+    assert record.leader_ok and record.ending == record.report[-1] == "小嘍囉倒下，敵方敗退。"
+    assert 1 <= len(record.moments) <= 3 and "擊倒敵方隊長小嘍囉" in record.moments[-1]
+    assert [p.name for p in record.performance] == ["沈浪", "韓鐵"]
+    assert sum(p.damage for p in record.performance) > 0
+    assert f"⚔ 湖邊：擊退水寇小隊（{record.rounds} 回合）" in game.state.log
+    assert not any("戰報見" in line for line in game.state.log)
+
+
+def test_train_loss_costs_a_tenth_of_the_silver(game):
+    game.content.locations["lake"].enemies = ["boss"]
+    game.choose("move:lake")
+    game.choose("act:train")
+    record = game.state.battles[0]
+    assert record.outcome == "lose" and record.silver == -5
+    assert game.state.player.stats["silver"] == 45
+    assert f"⚔ 湖邊：不敵翻江龍，敗退（{record.rounds} 回合）" in game.state.log
+
+
+def test_train_draw_changes_nothing(game):
+    game.content.locations["lake"].enemies = ["boss"]
+    game.content.config.battle_rounds = 1
+    game.choose("move:lake")
+    game.choose("act:train")
+    record = game.state.battles[0]
+    assert record.outcome == "draw"
+    assert (record.exp, record.xinde, record.silver, record.notes) == (0, 0, 0, [])
+    assert game.state.player.stats["silver"] == 50
+    assert game.state.world.trends["kou"] == 30  # 大勢變化只在打贏時
 
 
 def test_odds_word_tiers():
@@ -389,7 +435,7 @@ def test_log_text_shows_newest_action_first(game):
     game.choose("move:lake")
     game.choose("act:train")
     text = game.log_text()
-    assert text.index("你率眾在湖邊與") < text.index("【湖邊】")  # 最新的行動在最上面
+    assert text.index("⚔ 湖邊：") < text.index("【湖邊】")  # 最新的行動在最上面
     assert text.index("【湖邊】") < text.index("測試開始。")  # 開場紀錄在最下面
     marks = game.state.log.count(LOG_BREAK)
     game.advance(0)  # 沒有訊息的呼叫不產生空的一組
@@ -452,8 +498,58 @@ def test_texts_for_team_skills_and_report(game):
     assert game.member_card("player").startswith("### 沈浪（隊長）")
     assert game.member_card("mate").startswith("### 韓鐵")
     assert any(label.startswith("長拳") for label, _ in game.skill_library())
-    assert game.report_text() == "（還沒有戰報。）"
+    assert game.battle_detail() == "（還沒有戰報。）"
+    assert game.battle_list() == [] and game.battle_card() is None and game.battle_card_id() is None
     assert game.team_members() == [("沈浪", "player"), ("韓鐵", "mate")]
+
+
+def test_battle_card_lasts_until_the_next_action(game):
+    game.choose("move:lake")
+    game.choose("act:train")
+    assert game.battle_card_id() == 1
+    card = game.battle_card()
+    assert card.startswith("### ⚔ 湖邊・對陣 小嘍囉\n\n第1天 00:00　歷練")
+    assert "**勝**・" in card and "隊長沈浪無恙" in card and "經驗 +20（每人）　心得 +10　銀兩 +5" in card
+    game.advance(600)  # 時間流逝、計時器重畫都不算行動
+    assert game.battle_card_id() == 1
+    game.choose("move:town")
+    assert game.battle_card() is None and game.battle_card_id() is None
+    assert game.latest_battle_id() == 1  # 紀錄還在
+
+
+def test_seclusion_also_clears_the_battle_card(game):
+    game.choose("move:lake")
+    game.choose("act:train")
+    game.seclude(1)
+    assert game.battle_card() is None
+
+
+def test_battle_history_keeps_the_newest_twenty(game):
+    game.choose("move:lake")
+    for _ in range(25):
+        game.state.player.stamina = 150
+        game.choose("act:train")
+    battles = game.state.battles
+    assert len(battles) == 20
+    assert [r.id for r in battles[:2]] == [25, 24] and battles[-1].id == 6
+    assert [rid for _, rid in game.battle_list()] == [r.id for r in battles]
+    assert game.battle_card_id() == 25
+
+
+def test_battle_list_and_detail(game):
+    game.choose("move:lake")
+    game.choose("act:train")
+    game.choose("act:train")
+    (label, newest), (_, older) = game.battle_list()
+    assert (newest, older) == (2, 1)
+    assert label.startswith("勝　第1天 00:00　湖邊　vs 水寇小隊　") and label.endswith(" 回合")
+    detail = game.battle_detail(older)
+    assert detail.startswith("### ⚔ 湖邊・對陣 小嘍囉\n\n第1天 00:00　歷練　第 1 場")
+    for part in ("**我方**　沈浪 Lv1、韓鐵 Lv1", "**對方**　水寇小隊：小嘍囉 Lv1", "**關鍵時刻**",
+                 "| 人物 | 造成傷害 | 控制命中 |", "**逐回合戰報**", "── 第1回合 ──"):
+        assert part in detail
+    assert game.battle_detail() == game.battle_detail(newest) != detail  # 預設最新一場
+    assert game.battle_detail(999) == game.battle_detail(newest)  # 找不到時也顯示最新一場
 
 
 def test_menxia_page_helpers(game):

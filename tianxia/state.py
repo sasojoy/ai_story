@@ -1,6 +1,8 @@
 """執行期狀態：玩家、門下、世界。全部是可直接序列化成 JSON 的 Pydantic 模型。"""
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 from .models import Content
@@ -56,11 +58,50 @@ class WorldState(BaseModel):
     act: int = 0  # 目前第幾幕（從 0 起算）
 
 
+class Fighter(BaseModel):
+    name: str
+    level: int
+
+
+class Performance(BaseModel):
+    """我方一人在這場的表現（只提供數據）。"""
+
+    name: str
+    damage: int  # 造成的傷害（戰報上的數字加總）
+    controls: int  # 控制命中次數
+
+
+class BattleRecord(BaseModel):
+    """一場戰鬥（歷練或劇情戰）的紀錄。"""
+
+    id: int  # 流水號，本季從 1 起算
+    time: float  # 開打時的遊戲時間
+    location: str  # 地點名稱
+    kind: Literal["train", "event"]  # 歷練／劇情
+    event: str = ""  # 劇情戰的事件標題
+    opponent: str  # 敵方隊伍名稱
+    ours: list[Fighter]  # 我方陣容，第一位是隊長；等級是開打時的等級
+    theirs: list[Fighter]
+    outcome: Literal["win", "draw", "lose"]
+    rounds: int
+    ending: str  # 結束原因（戰報最後一行）
+    leader_ok: bool  # 我方隊長是否無恙
+    moments: list[str] = Field(default_factory=list)  # 關鍵時刻，最多 3 則
+    exp: int = 0  # 每人獲得的經驗
+    xinde: int = 0
+    silver: int = 0  # 正數為獲得、負數為失落
+    notes: list[str] = Field(default_factory=list)  # 其他得失：升級、屬性、大勢、劇情結果
+    report: list[str] = Field(default_factory=list)  # 完整逐回合戰報
+    performance: list[Performance] = Field(default_factory=list)  # 我方每人表現，順序同 ours
+
+
 class GameState(BaseModel):
     player: PlayerState
     world: WorldState
     pending_event: str | None = None
-    last_report: list[str] = Field(default_factory=list)  # 最近一場戰鬥的完整戰報
+    battles: list[BattleRecord] = Field(default_factory=list)  # 最近的戰鬥紀錄，最新的在前
+    battle_seq: int = 0  # 最近一場戰鬥的流水號
+    battle_card: int | None = None  # 場景裡顯示卡片的那一場；下一次行動時清掉
     log: list[str] = Field(default_factory=list)
     last_real: float | None = None  # 上次同步的現實時間（time.time()）
 
