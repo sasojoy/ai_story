@@ -177,5 +177,6 @@ div.tx-chgs { display: flex; margin: 6px 0 2px; }
   font-size: 14px; line-height: 1.6; }
 .tx-time { flex: 0 0 6.5em; font-size: 12px; opacity: 0.7; white-space: nowrap; padding-top: 2px; }
 .tx-main { flex: 1; min-width: 0; }
+.tx-main .tx-tag { white-space: nowrap; }
 .tx-empty { font-size: 13px; opacity: 0.7; }
 """

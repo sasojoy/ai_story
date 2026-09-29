@@ -625,21 +625,6 @@ class Game:
         s = self.state
         return self.battle_card_id() is not None and bool(s.journal) and s.journal[0].battle_id == s.battle_card
 
-    def log_text(self, limit: int = 15) -> str:
-        """最新的行動排在最上面；同一次行動內的文字維持原本順序。"""
-        groups: list[list[str]] = []
-        current: list[str] = []
-        for line in self.state.log:
-            if line == LOG_BREAK:
-                if current:
-                    groups.append(current)
-                    current = []
-            else:
-                current.append(line)
-        if current:
-            groups.append(current)
-        return "\n\n---\n\n".join("\n\n".join(group) for group in reversed(groups[-limit:]))
-
     def _log(self, msgs: list[str]) -> list[str]:
         if not msgs:
             return msgs

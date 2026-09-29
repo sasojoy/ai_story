@@ -468,33 +468,24 @@ def test_visited_and_map(game):
     assert "<svg" in game.map_svg()
 
 
-def test_log_text_shows_newest_action_first(game):
+def test_raw_log_keeps_every_message_with_one_break_per_action(game):
+    """原始訊息照舊寫進 log（畫面改看江湖紀錄，見 test_journal.py）：依發生順序，每次行動後夾一個分隔標記。"""
     from tianxia.engine import LOG_BREAK
 
     game.choose("move:lake")
     game.choose("act:train")
-    text = game.log_text()
-    assert text.index("⚔ 湖邊：") < text.index("【湖邊】")  # 最新的行動在最上面
-    assert text.index("【湖邊】") < text.index("測試開始。")  # 開場紀錄在最下面
-    marks = game.state.log.count(LOG_BREAK)
+    log = game.state.log
+    summary = f"⚔ 湖邊：擊退水寇小隊（{game.state.battles[0].rounds} 回合）"
+    assert log.index("測試開始。") < log.index("【湖邊】危險 ★★\n\n湖水茫茫。") < log.index(summary)
+    assert log[-1] == LOG_BREAK and log.count(LOG_BREAK) == 3
     game.advance(0)  # 沒有訊息的呼叫不產生空的一組
-    assert game.state.log.count(LOG_BREAK) == marks
+    assert log.count(LOG_BREAK) == 3
 
 
-def test_log_text_keeps_order_within_an_action(game):
+def test_raw_log_keeps_order_within_an_action(game):
     game.choose("act:explore")
-    text = game.log_text()
-    assert text.startswith("【醉漢】")
-    assert text.index("【醉漢】") < text.index("一名醉漢撞上了你。")
-
-
-def test_log_text_limits_groups_and_handles_old_saves(game):
-    game.state.log = ["舊紀錄一", "舊紀錄二"]  # 舊存檔沒有分隔標記：整段當成一組
-    assert game.log_text() == "舊紀錄一\n\n舊紀錄二"
-    for _ in range(5):
-        game.choose("move:lake")
-        game.choose("move:town")
-    assert game.log_text(limit=2).count("---") == 1
+    log = game.state.log
+    assert log.index("【醉漢】") + 1 == log.index("一名醉漢撞上了你。")
 
 
 def test_upgrade_and_dispel_with_xinde(game):

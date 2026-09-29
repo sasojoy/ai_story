@@ -85,6 +85,60 @@ def test_render_includes_the_card_placeholders():
     assert out[app.CARD_BUTTON_INDEX] == gr.update(visible=False)
 
 
+# ── 「剛剛」卡片與江湖紀錄 ─────────────────────────────
+
+
+def test_latest_card_shows_the_newest_entry(tmp_path, monkeypatch):
+    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
+    game = Game.new(app.CONTENT, "測試")
+    latest = app.render(game)[app.LATEST_INDEX]
+    assert latest["visible"] is True
+    assert "剛剛　第1天 00:00" in latest["value"] and "江南風雨" in latest["value"] and "賽季開始" in latest["value"]
+    out = click(game, "move:yangzhou_jiao")
+    latest = out[app.LATEST_INDEX]["value"]
+    assert "前往 揚州城郊" in latest
+    assert app.CONTENT.locations["yangzhou_jiao"].description not in latest  # 地點描述只在場景裡
+
+
+def test_journal_rows_show_five_and_fold_the_rest(tmp_path, monkeypatch):
+    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
+    game = Game.new(app.CONTENT, "測試")
+    out = app.render(game)
+    assert "江湖紀錄" in out[app.JOURNAL_INDEX] and 'class="tx-row"' not in out[app.JOURNAL_INDEX]
+    assert out[app.OLDER_INDEX] == "" and out[app.OLDER_ACCORDION_INDEX] == gr.update(visible=False)
+    for i in range(8):
+        game.state.player.stamina = 150
+        out = click(game, "move:yangzhou_jiao" if i % 2 == 0 else "move:yangzhou")
+    assert len(game.state.journal) == 9
+    assert out[app.JOURNAL_INDEX].count('class="tx-row"') == 5  # 「剛剛」之後的 5 則
+    assert "江湖紀錄" in out[app.JOURNAL_INDEX]
+    assert out[app.OLDER_INDEX].count('class="tx-row"') == 3  # 更早的收進摺疊區
+    assert "江南風雨" in out[app.OLDER_INDEX]
+    assert out[app.OLDER_ACCORDION_INDEX] == gr.update(visible=True)
+
+
+def test_change_tags_are_coloured_by_sign(tmp_path, monkeypatch):
+    game = battle_game(tmp_path, monkeypatch)
+    click(game, "act:train")
+    game.state.pending_event = None
+    out = click(game, "move:yangzhou")
+    assert '<span class="tx-chg tx-up">經驗 +' in out[app.JOURNAL_INDEX]  # 歷練那一則成了紀錄的一列
+    game.state.player.stats["xinde"] = 100
+    out = app.upgrade_handler(game, None, "skill:tuna")
+    assert '<span class="tx-chg tx-down">心得 -20</span>' in out[app.LATEST_INDEX]["value"]
+
+
+def test_journal_outputs_are_their_own_components():
+    demo = app.build_demo()
+    fns = list(demo.fns.values())
+    outputs = next(f for f in fns if f.fn is app.start).outputs
+    menxia_fn = next(f for f in fns if f.fn is app.open_menxia)
+    html = [outputs[i] for i in (app.LATEST_INDEX, app.JOURNAL_INDEX, app.OLDER_INDEX)]
+    assert all(isinstance(c, gr.HTML) for c in html) and len(set(html)) == 3
+    assert isinstance(outputs[app.OLDER_ACCORDION_INDEX], gr.Accordion)
+    assert not set(html) & set(menxia_fn.outputs)
+
+
 # ── 戰鬥卡片與戰報 ─────────────────────────────────────
 
 
@@ -107,11 +161,22 @@ def test_battle_shows_a_card_until_the_next_action(tmp_path, monkeypatch):
     card = out[app.CARD_INDEX]
     assert card["visible"] is True and card["value"].startswith("### ⚔ 揚州城郊・對陣 ")
     assert out[app.CARD_BUTTON_INDEX] == gr.update(visible=True)
+    assert out[app.LATEST_INDEX] == gr.update(value="", visible=False)  # 只顯示戰鬥卡片，不同時放「剛剛」卡片
     assert out[app.MAIN_TABS_INDEX] == gr.update(selected="scene")  # 在看地圖也會切回場景看卡片
     game.state.pending_event = None  # 歷練後可能遇到事件；這裡只看卡片
     out = click(game, "move:yangzhou")
     assert out[app.CARD_INDEX] == gr.update(value="", visible=False)
     assert out[app.CARD_BUTTON_INDEX] == gr.update(visible=False)
+    assert out[app.LATEST_INDEX]["visible"] is True and "前往 揚州城" in out[app.LATEST_INDEX]["value"]
+
+
+def test_menxia_action_after_a_battle_replaces_the_battle_card(tmp_path, monkeypatch):
+    game = battle_game(tmp_path, monkeypatch)
+    click(game, "act:train")
+    game.state.player.stats["xinde"] = 100
+    out = app.upgrade_handler(game, None, "skill:tuna")
+    assert out[app.CARD_INDEX] == gr.update(value="", visible=False)  # 兩張卡片不同時出現
+    assert "【吐納法】精進至第2成" in out[app.LATEST_INDEX]["value"]
 
 
 def test_tick_keeps_the_card(tmp_path, monkeypatch):
@@ -311,7 +376,8 @@ def test_equip_through_the_page_moves_the_art(tmp_path, monkeypatch):
     assert column(page, 1)[3]["value"] == "自選1　吐納法（心法）第1成"
     assert column(page, 0)[3]["value"] == "自選1　（空）"
     assert "韓鐵的第1個武學欄：吐納法" in page[app.MX_MESSAGE_INDEX]
-    assert "韓鐵的第1個武學欄：吐納法" in game.log_text()
+    assert game.state.journal[0].tag == "韓鐵的第1個武學欄：吐納法"
+    assert "韓鐵的第1個武學欄：吐納法" in out[app.LATEST_INDEX]["value"]
     assert (tmp_path / "測試.json").exists()
 
 
@@ -369,6 +435,7 @@ def test_upgrade_without_xinde_shows_the_message_on_the_page(tmp_path, monkeypat
     out = app.upgrade_handler(game, None, "skill:tuna")
     assert "心得不足" in out[app.N_OUTPUTS + app.MX_MESSAGE_INDEX]
     assert game.state.player.skills["tuna"] == 1
+    assert len(game.state.journal) == 1 and "心得不足" not in out[app.LATEST_INDEX]["value"]  # 失敗不進江湖紀錄
 
 
 def test_upgrade_button_at_the_tenth_level():
@@ -415,3 +482,4 @@ def test_incompatible_old_save_is_backed_up(tmp_path, monkeypatch):
     backups = list((tmp_path / "backup").glob("測試-*.json"))
     assert len(backups) == 1 and backups[0].read_text(encoding="utf-8") == "{}"
     assert any("已備份" in line for line in game.state.log)
+    assert game.state.journal[0].title == "舊存檔已備份" and "已備份到 saves/backup/" in game.state.journal[0].lines[0]
