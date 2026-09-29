@@ -71,3 +71,15 @@ def test_stale_references_are_dropped(content, game):
     assert fresh.state.player.loadouts["player"][1] is None
     assert "removed_skill" not in fresh.state.player.skills
     assert fresh.state.player.team == ["player", "mate"]
+
+
+def test_old_rumors_without_a_location_still_load(tmp_path, game):
+    from tianxia.state import Rumor
+
+    game.state.world.rumors.append(Rumor(time=0, text="舊傳聞", location="lake"))
+    dump = game.state.model_dump(mode="json")
+    del dump["world"]["rumors"][0]["location"]  # 模擬大地圖上線前的存檔
+    path = tmp_path / "old_rumor.json"
+    path.write_text(json.dumps(dump, ensure_ascii=False), encoding="utf-8")
+    state = load_game(path)
+    assert (state.world.rumors[0].text, state.world.rumors[0].location) == ("舊傳聞", None)

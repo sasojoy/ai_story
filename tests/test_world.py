@@ -104,3 +104,41 @@ def test_endings_scoped_to_storyline(state, content):
     assert evaluate_ending(state, content).id == "default"
     state.world.storyline = "treasure"
     assert evaluate_ending(state, content).id == "lost"
+
+
+def test_world_news_is_recorded_where_it_happens(state, content):
+    state.world.trends["kou"] = 50
+    check_thresholds(state, content)
+    assert state.world.rumors[-1].location == "lake"  # kou50 的發生地
+    assert state.world.chronicle[-1].location is None
+    state.world.revealed.add("bao")
+    check_thresholds(state, content)
+    assert "主線改寫" in state.world.rumors[-1].text and state.world.rumors[-1].location is None
+
+
+def test_world_event_is_recorded_where_it_happens(state, content):
+    state.world.flags.add("cave_open")
+    state.world.flag_times["cave_open"] = 0
+    state.world.time = 2 * 3600
+    check_thresholds(state, content)
+    assert state.world.rumors[-1].text == "寶藏被搶走了！" and state.world.rumors[-1].location == "cave"
+
+
+def test_sim_rumors_go_to_the_first_haunt(state, content):
+    sim_tick(state, content, 1, random.Random(0))
+    assert state.world.rumors[-1].text == "翻江龍又劫了一艘船。" and state.world.rumors[-1].location == "lake"
+    content.scenario.sim_players[0].haunts = []
+    sim_tick(state, content, 1, random.Random(0))
+    assert state.world.rumors[-1].location is None
+
+
+def test_haunts_leave_the_world_simulation_unchanged(state, content):
+    other = state.model_copy(deep=True)
+    rng_a, rng_b = random.Random(5), random.Random(5)
+    sim_tick(state, content, 48, rng_a)
+    for sim in content.scenario.sim_players:
+        sim.haunts = []
+    sim_tick(other, content, 48, rng_b)
+    assert rng_a.getstate() == rng_b.getstate()  # 亂數用量一樣
+    assert state.world.trends == other.world.trends
+    assert [r.text for r in state.world.rumors] == [r.text for r in other.world.rumors]

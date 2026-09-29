@@ -134,6 +134,34 @@ def test_starting_team_odds_on_real_content():
     assert game.options()[0].label == "歷練（體力 10・可能遇到：地痞無賴 穩勝、劫道山賊 穩勝）"
 
 
+REGIONS = {
+    "jiangbei": {"yangzhou", "shouxihu", "yangzhou_jiao", "gaoyou", "guazhou"},
+    "jinling_area": {"jinshan", "jiangning_road", "jinling", "qinhuai", "yuhuatai", "qixia_sect", "qixia_foot", "qixia_back", "canglong"},
+    "taihu_area": {"zhenjiang", "changzhou", "wuxi", "xuantie", "taihu_north", "taihu_isle", "suzhou", "hanshan"},
+}
+
+
+def test_real_regions_trends_and_membership():
+    from tianxia.atlas import region_of
+
+    c = load_content(CONTENT_DIR)
+    assert {r.id: r.trends for r in c.map.regions} == {
+        "jiangbei": ["kou"], "jinling_area": ["bao"], "taihu_area": ["kou"],
+    }
+    members: dict[str, set[str]] = {}
+    for loc_id in c.locations:
+        members.setdefault(region_of(c, loc_id).id, set()).add(loc_id)
+    assert members == REGIONS  # 棲霞劍派移到 (55, 188)，和棲霞山腳同屬金陵一帶
+
+
+def test_real_content_places_are_filled_in():
+    c = load_content(CONTENT_DIR)
+    s = c.scenario
+    assert all(sim.haunts for sim in s.sim_players)
+    assert all(act.places for line in s.storylines for act in line.acts)
+    assert all(th.location for th in s.thresholds) and all(e.location for e in s.world_events)
+
+
 def test_legend_strip_does_not_cover_locations():
     c = load_content(CONTENT_DIR)
     assert max(loc.y for loc in c.locations.values()) + 12 < c.map.height - 50

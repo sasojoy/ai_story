@@ -146,9 +146,22 @@ def validate(c: Content) -> None:
             if ch.check:
                 known(cw, [ch.check.stat], STATS, "屬性")
 
+    region_ids = [region.id for region in c.map.regions]
+    duplicated = sorted({rid for rid in region_ids if region_ids.count(rid) > 1})
+    need(not duplicated, f"大區 id 重複：{'、'.join(duplicated)}")
+    for region in c.map.regions:
+        where = f"大區 {region.id}"
+        known(where, region.trends, trend_ids, "大勢線")
+        need(
+            len(region.points) >= 3 and all(len(point) == 2 for point in region.points),
+            f"{where}：多邊形至少要有 3 個 [x, y] 點",
+        )
+
     for th in c.scenario.thresholds:
         where = f"門檻 {th.id}"
         known(where, [th.trend], trend_ids, "大勢線")
+        if th.location:
+            known(where, [th.location], c.locations, "地點")
         need(
             not (th.trend in hidden and th.op == "<="),
             f"{where}：隱藏大勢線不能用 <= 門檻（未浮現時數值為 0，會立刻觸發）",
@@ -158,6 +171,7 @@ def validate(c: Content) -> None:
         known(where, sim.trend, trend_ids, "大勢線")
         if sim.requires_revealed:
             known(where, [sim.requires_revealed], trend_ids, "大勢線")
+        known(where, sim.haunts, c.locations, "地點")
         check_condition(where, sim.condition)
     for ending in c.scenario.endings:
         check_condition(f"結局 {ending.id}", ending.condition)
@@ -174,6 +188,7 @@ def validate(c: Content) -> None:
                 check_condition(where, line.replaces_when)
         for j, act in enumerate(line.acts):
             aw = f"{where} 第{j + 1}幕 {act.id}"
+            known(aw, act.places, c.locations, "地點")
             if j == len(line.acts) - 1:
                 need(act.advance_when is None, f"{aw}：最後一幕不能有 advance_when")
             else:
@@ -187,6 +202,8 @@ def validate(c: Content) -> None:
     need(len(set(fire_ids)) == len(fire_ids), "大勢門檻與世界事件的 id 重複")
     for event in c.scenario.world_events:
         check_condition(f"世界事件 {event.id}", event.condition)
+        if event.location:
+            known(f"世界事件 {event.id}", [event.location], c.locations, "地點")
 
     last = c.scenario.endings[-1] if c.scenario.endings else None
     need(

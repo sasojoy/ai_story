@@ -1,6 +1,9 @@
 {
   "width": 400, "height": 200,
-  "regions": [{"name": "測試北區", "points": [[0, 0], [400, 0], [400, 150], [0, 150]], "fill": "#EFE5CB", "text_fill": "#C9B98F", "label_x": 300, "label_y": 30}],
+  "regions": [
+    {"id": "north", "name": "測試北區", "trends": ["kou"], "points": [[0, 0], [400, 0], [400, 150], [0, 150]], "fill": "#EFE5CB", "text_fill": "#C9B98F", "label_x": 300, "label_y": 30},
+    {"id": "south", "name": "測試南區", "trends": ["bao"], "points": [[0, 150], [400, 150], [400, 190], [0, 190]], "fill": "#E2EAF1", "text_fill": "#9FB3C6", "label_x": 300, "label_y": 180}
+  ],
   "rivers": [[[0, 150], [400, 150]]],
   "labels": [{"text": "測試區", "x": 20, "y": 20}]
 }

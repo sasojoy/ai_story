@@ -23,7 +23,7 @@
    "description": "城南的小山崗，遍地是五色的雨花石。近來常有人在這一帶挖土，不知在找什麼。"},
   {"id": "qixia_foot", "name": "棲霞山腳", "tags": ["山林"], "connections": ["jinling", "qixia_sect", "qixia_back"], "x": 110, "y": 210, "enemies": ["yelang"],
    "description": "楓林如火的山腳，山道蜿蜒而上。林中偶有狼嚎。"},
-  {"id": "qixia_sect", "name": "棲霞劍派", "important": true, "tags": ["門派"], "connections": ["qixia_foot"], "x": 70, "y": 138,
+  {"id": "qixia_sect", "name": "棲霞劍派", "important": true, "tags": ["門派"], "connections": ["qixia_foot"], "x": 55, "y": 188,
    "description": "山腰上的劍派，白牆青瓦，演武場上劍光閃爍。門規森嚴，弟子們個個行止端正。"},
   {"id": "qixia_back", "name": "棲霞後山", "tags": ["山林"], "danger": 2, "move_cost": 8, "connections": ["qixia_foot", "canglong"], "x": 40, "y": 245, "enemies": ["yelang", "heixiong"],
    "description": "人跡罕至的深山，古木參天，岩壁陡峭。傳說前朝曾在這裡開鑿過什麼。"},

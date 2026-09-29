@@ -187,6 +187,7 @@ class Threshold(_Strict):
     text: str
     world_flags_add: list[str] = Field(default_factory=list)
     ends_season: bool = False
+    location: str | None = None  # 發生地：傳聞記在這裡，大地圖劇情層標 ✦；None＝不在特定地點
 
 
 class SimPlayer(_Strict):
@@ -197,6 +198,7 @@ class SimPlayer(_Strict):
     rumors: list[str] = Field(default_factory=list)
     rumor_chance: float = 0.3
     condition: Condition = Field(default_factory=Condition)
+    haunts: list[str] = Field(default_factory=list)  # 常出沒的地點（固定不動）；他的傳聞記在第一個
 
 
 class Ending(_Strict):
@@ -218,9 +220,11 @@ HEX_COLOR = r"^#[0-9A-Fa-f]{6}$"
 
 
 class MapRegion(_Strict):
-    """地圖上的一塊區域（例如江北、金陵一帶），以多邊形著色。"""
+    """地圖上的一塊大區（例如江北、金陵一帶），以多邊形著色；地點依座標落在哪一區自動歸屬（見 atlas.region_of）。"""
 
+    id: str
     name: str
+    trends: list[str] = Field(default_factory=list)  # 對應的大勢線：大地圖局勢層依它上色
     points: list[list[int]]
     fill: str = Field(pattern=HEX_COLOR)
     text_fill: str = Field(pattern=HEX_COLOR)
@@ -245,6 +249,7 @@ class WorldEvent(_Strict):
     text: str
     world_flags_add: list[str] = Field(default_factory=list)
     ends_season: bool = False
+    location: str | None = None  # 發生地，同 Threshold.location
 
 
 class Act(_Strict):
@@ -253,6 +258,7 @@ class Act(_Strict):
     text: str
     goal: str
     advance_when: Condition | None = None  # 最後一幕為 None
+    places: list[str] = Field(default_factory=list)  # 這一幕的目標地點：大地圖劇情層標 ★
 
 
 class Storyline(_Strict):

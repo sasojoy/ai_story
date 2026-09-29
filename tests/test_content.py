@@ -194,3 +194,68 @@ def test_character_missing_combat_stat_rejected(tmp_path):
     edit_json(root / "characters.json", lambda d: d[0]["stats"].pop("wis"))
     with pytest.raises(ContentError, match="mate"):
         load_content(root)
+
+
+def test_map_and_scenario_places_loaded(content):
+    assert [(r.id, r.trends) for r in content.map.regions] == [("north", ["kou"]), ("south", ["bao"])]
+    s = content.scenario
+    assert [sim.haunts for sim in s.sim_players] == [["lake"], ["cave"]]
+    assert [act.places for act in s.storylines[0].acts] == [["lake"], []]
+    assert [th.location for th in s.thresholds] == ["lake", None, "cave"]
+    assert s.world_events[0].location == "cave"
+
+
+def test_region_with_unknown_trend_rejected(tmp_path):
+    root = copy_fixture(tmp_path)
+    edit_json(root / "map.json", lambda d: d["regions"][0]["trends"].append("ghost"))
+    with pytest.raises(ContentError, match="大區 north.*ghost"):
+        load_content(root)
+
+
+def test_duplicate_region_id_rejected(tmp_path):
+    root = copy_fixture(tmp_path)
+    edit_json(root / "map.json", lambda d: d["regions"][1].update(id="north"))
+    with pytest.raises(ContentError, match="大區 id 重複：north"):
+        load_content(root)
+
+
+def test_region_needs_an_id(tmp_path):
+    root = copy_fixture(tmp_path)
+    edit_json(root / "map.json", lambda d: d["regions"][0].pop("id"))
+    with pytest.raises(Exception, match="id"):
+        load_content(root)
+
+
+def test_region_needs_a_polygon(tmp_path):
+    root = copy_fixture(tmp_path)
+    edit_json(root / "map.json", lambda d: d["regions"][1].update(points=[[0, 150], [400, 150]]))
+    with pytest.raises(ContentError, match="大區 south"):
+        load_content(root)
+
+
+def test_unknown_haunt_rejected(tmp_path):
+    root = copy_fixture(tmp_path)
+    edit_json(root / "scenario.json", lambda d: d["sim_players"][0]["haunts"].append("mars"))
+    with pytest.raises(ContentError, match="虛擬玩家 翻江龍.*mars"):
+        load_content(root)
+
+
+def test_unknown_act_place_rejected(tmp_path):
+    root = copy_fixture(tmp_path)
+    edit_json(root / "scenario.json", lambda d: d["storylines"][0]["acts"][1].update(places=["mars"]))
+    with pytest.raises(ContentError, match="a2.*mars"):
+        load_content(root)
+
+
+def test_unknown_threshold_location_rejected(tmp_path):
+    root = copy_fixture(tmp_path)
+    edit_json(root / "scenario.json", lambda d: d["thresholds"][1].update(location="mars"))
+    with pytest.raises(ContentError, match="kou80.*mars"):
+        load_content(root)
+
+
+def test_unknown_world_event_location_rejected(tmp_path):
+    root = copy_fixture(tmp_path)
+    edit_json(root / "scenario.json", lambda d: d["world_events"][0].update(location="mars"))
+    with pytest.raises(ContentError, match="grab.*mars"):
+        load_content(root)

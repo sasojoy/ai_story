@@ -84,8 +84,8 @@ def check_who(check: Check, state: GameState, content: Content) -> str:
     return "本人出手" if key == PLAYER else f"{team.member_name(state, content, key)}出手"
 
 
-def add_rumor(state: GameState, text: str) -> None:
-    state.world.rumors.append(Rumor(time=state.world.time, text=text))
+def add_rumor(state: GameState, text: str, location: str | None = None) -> None:
+    state.world.rumors.append(Rumor(time=state.world.time, text=text, location=location))
 
 
 def add_chronicle(state: GameState, text: str) -> None:
@@ -151,7 +151,7 @@ def apply_effect(effect: Effect, state: GameState, content: Content) -> list[str
     name = display_name(state)
     if effect.rumor:
         text = effect.rumor.format(name=name)
-        add_rumor(state, text)
+        add_rumor(state, text, state.player.location)  # 玩家觸發的傳聞記在當時所在地
         msgs.append(f"【江湖傳聞】{text}")
     if effect.chronicle:
         add_chronicle(state, effect.chronicle.format(name=name))

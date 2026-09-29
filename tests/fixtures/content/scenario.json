@@ -8,26 +8,26 @@
     {"id": "bao", "name": "寶藏", "desc": "前朝寶藏", "hidden": true}
   ],
   "thresholds": [
-    {"id": "kou50", "trend": "kou", "op": ">=", "value": 50, "text": "水寇封江！", "world_flags_add": ["blocked"]},
+    {"id": "kou50", "trend": "kou", "op": ">=", "value": 50, "text": "水寇封江！", "world_flags_add": ["blocked"], "location": "lake"},
     {"id": "kou80", "trend": "kou", "op": ">=", "value": 80, "text": "水寇稱霸！", "world_flags_add": ["kou_win"], "ends_season": true},
-    {"id": "bao100", "trend": "bao", "op": ">=", "value": 100, "text": "寶洞現世！", "world_flags_add": ["cave_open"]}
+    {"id": "bao100", "trend": "bao", "op": ">=", "value": 100, "text": "寶洞現世！", "world_flags_add": ["cave_open"], "location": "cave"}
   ],
   "sim_players": [
-    {"name": "翻江龍", "actions_per_day": 24, "trend": {"kou": 1}, "rumors": ["{name}又劫了一艘船。"], "rumor_chance": 1.0},
-    {"name": "鬼手", "actions_per_day": 24, "trend": {"bao": 1}, "requires_revealed": "bao", "rumors": ["{name}在挖土。"], "rumor_chance": 0.0}
+    {"name": "翻江龍", "actions_per_day": 24, "trend": {"kou": 1}, "haunts": ["lake"], "rumors": ["{name}又劫了一艘船。"], "rumor_chance": 1.0},
+    {"name": "鬼手", "actions_per_day": 24, "trend": {"bao": 1}, "requires_revealed": "bao", "haunts": ["cave"], "rumors": ["{name}在挖土。"], "rumor_chance": 0.0}
   ],
   "storylines": [
     {"id": "main", "name": "寇亂", "acts": [
-      {"id": "a1", "title": "水寇橫行", "text": "水寇開始作亂。", "goal": "壓制寇亂", "advance_when": {"trend_min": {"kou": 60}}},
+      {"id": "a1", "title": "水寇橫行", "text": "水寇開始作亂。", "goal": "壓制寇亂", "places": ["lake"], "advance_when": {"trend_min": {"kou": 60}}},
       {"id": "a2", "title": "運河封鎖", "text": "運河被封了。", "goal": "打破封鎖"}
     ]},
     {"id": "treasure", "name": "寶藏", "intro": "有人找到了殘卷。", "replaces_when": {"revealed_all": ["bao"]}, "acts": [
       {"id": "t1", "title": "殘卷現世", "text": "殘卷出現了。", "goal": "湊齊地圖", "advance_when": {"world_flags_all": ["cave_open"]}},
-      {"id": "t2", "title": "寶洞", "text": "寶洞現世。", "goal": "取得寶藏"}
+      {"id": "t2", "title": "寶洞", "text": "寶洞現世。", "goal": "取得寶藏", "places": ["cave"]}
     ]}
   ],
   "world_events": [
-    {"id": "grab", "condition": {"flag_age_hours": {"cave_open": 2}}, "text": "寶藏被搶走了！", "world_flags_add": ["treasure_lost"]}
+    {"id": "grab", "condition": {"flag_age_hours": {"cave_open": 2}}, "text": "寶藏被搶走了！", "world_flags_add": ["treasure_lost"], "location": "cave"}
   ],
   "milestones": [
     {"id": "m1", "text": "拜入門派", "condition": {"sects": ["cloud"]}},

@@ -8,36 +8,36 @@
     {"id": "bao", "name": "前朝寶藏", "desc": "藏寶圖的拼湊進度。湊齊時，寶藏所在將會現世。", "start": 0, "hidden": true}
   ],
   "thresholds": [
-    {"id": "kou_50", "trend": "kou", "op": ">=", "value": 50, "text": "太湖水寇封鎖運河，揚州至鎮江的商路斷絕，沿岸人心惶惶！", "world_flags_add": ["canal_blocked"]},
-    {"id": "kou_80", "trend": "kou", "op": ">=", "value": 80, "text": "翻江龍率水寨大軍攻破鎮江渡口，江南從此落入水寇之手！", "world_flags_add": ["kou_win"], "ends_season": true},
-    {"id": "kou_10", "trend": "kou", "op": "<=", "value": 10, "text": "太湖水寨被各路俠客踏平，翻江龍下落不明，運河重歸太平。", "world_flags_add": ["kou_crushed"]},
-    {"id": "bao_50", "trend": "bao", "op": ">=", "value": 50, "text": "江湖傳言：前朝藏寶圖已拼出大半，各路人馬湧向棲霞山。", "world_flags_add": ["bao_half"]},
-    {"id": "bao_100", "trend": "bao", "op": ">=", "value": 100, "text": "藏寶圖終於湊齊！棲霞後山的「藏龍洞」現世，洞口有人把守。", "world_flags_add": ["cave_open"]}
+    {"id": "kou_50", "trend": "kou", "op": ">=", "value": 50, "text": "太湖水寇封鎖運河，揚州至鎮江的商路斷絕，沿岸人心惶惶！", "world_flags_add": ["canal_blocked"], "location": "guazhou"},
+    {"id": "kou_80", "trend": "kou", "op": ">=", "value": 80, "text": "翻江龍率水寨大軍攻破鎮江渡口，江南從此落入水寇之手！", "world_flags_add": ["kou_win"], "ends_season": true, "location": "zhenjiang"},
+    {"id": "kou_10", "trend": "kou", "op": "<=", "value": 10, "text": "太湖水寨被各路俠客踏平，翻江龍下落不明，運河重歸太平。", "world_flags_add": ["kou_crushed"], "location": "taihu_isle"},
+    {"id": "bao_50", "trend": "bao", "op": ">=", "value": 50, "text": "江湖傳言：前朝藏寶圖已拼出大半，各路人馬湧向棲霞山。", "world_flags_add": ["bao_half"], "location": "qixia_foot"},
+    {"id": "bao_100", "trend": "bao", "op": ">=", "value": 100, "text": "藏寶圖終於湊齊！棲霞後山的「藏龍洞」現世，洞口有人把守。", "world_flags_add": ["cave_open"], "location": "canglong"}
   ],
   "sim_players": [
-    {"name": "翻江龍", "actions_per_day": 8, "trend": {"kou": 1}, "rumor_chance": 0.25,
+    {"name": "翻江龍", "actions_per_day": 8, "trend": {"kou": 1}, "rumor_chance": 0.25, "haunts": ["taihu_isle"],
      "condition": {"world_flags_none": ["fjl_defeated", "kou_crushed"], "revealed_none": ["bao"]},
      "rumors": [
       "太湖水寇又劫了一艘官船，據說是{name}親自帶的人。",
       "{name}在太湖放話：「江南的水路，從今往後姓翻！」",
       "運河上又有商船失蹤，人人都說是{name}的手筆。"
     ]},
-    {"name": "翻江龍", "actions_per_day": 4, "trend": {"kou": 1, "bao": 1}, "rumor_chance": 0.3,
+    {"name": "翻江龍", "actions_per_day": 4, "trend": {"kou": 1, "bao": 1}, "rumor_chance": 0.3, "haunts": ["qixia_foot", "taihu_isle"],
      "condition": {"revealed_all": ["bao"], "world_flags_none": ["fjl_defeated", "kou_crushed", "cave_open"]},
      "rumors": [
       "{name}派人到棲霞山一帶打聽前朝寶藏的下落。",
       "水寨的船少了一半，聽說{name}分兵去找寶藏了。"
     ]},
-    {"name": "翻江龍", "actions_per_day": 6, "trend": {"kou": 1}, "rumor_chance": 0.25,
+    {"name": "翻江龍", "actions_per_day": 6, "trend": {"kou": 1}, "rumor_chance": 0.25, "haunts": ["taihu_isle"],
      "condition": {"world_flags_all": ["cave_open"], "world_flags_none": ["fjl_defeated", "kou_crushed"]},
      "rumors": [
       "{name}的人馬從棲霞山撤回太湖，運河上又不太平了。"
     ]},
-    {"name": "白衣劍客沈青", "actions_per_day": 3, "trend": {"kou": -1}, "rumor_chance": 0.3, "rumors": [
+    {"name": "白衣劍客沈青", "actions_per_day": 3, "trend": {"kou": -1}, "rumor_chance": 0.3, "haunts": ["taihu_north", "zhenjiang"], "rumors": [
       "{name}在太湖邊獨挑水寇十七人，劍不染塵。",
       "有人看見{name}在鎮江渡口護送難民過江。"
     ]},
-    {"name": "鬼手劉三", "actions_per_day": 3, "trend": {"bao": 2}, "requires_revealed": "bao", "rumor_chance": 0.3,
+    {"name": "鬼手劉三", "actions_per_day": 3, "trend": {"bao": 2}, "requires_revealed": "bao", "rumor_chance": 0.3, "haunts": ["qixia_back", "jinling"],
      "condition": {"world_flags_none": ["treasure_taken", "treasure_lost", "cave_open"]},
      "rumors": [
       "有人看見{name}在棲霞山一帶鬼鬼祟祟地挖土。",
@@ -47,32 +47,32 @@
   "storylines": [
     {"id": "kou_line", "name": "太湖寇亂", "acts": [
       {"id": "kou_1", "title": "水寇橫行", "text": "翻江龍的水寨日漸壯大，運河上的商船接連失蹤。",
-       "goal": "到高郵湖、瓜洲渡或太湖一帶歷練剿寇，別讓寇亂到 50（運河會被封鎖）。",
+       "goal": "到高郵湖、瓜洲渡或太湖一帶歷練剿寇，別讓寇亂到 50（運河會被封鎖）。", "places": ["gaoyou", "guazhou", "taihu_north"],
        "advance_when": {"any_of": [{"world_flags_all": ["canal_blocked"]}, {"day_min": 5}]}},
       {"id": "kou_2", "title": "風聲鶴唳", "text": "水寇勢大，運河一帶風聲鶴唳，商旅人人自危。",
-       "goal": "別讓寇亂到 50（運河會被封鎖）；名望達 3 以上，可以去太湖水寨挑戰翻江龍。",
+       "goal": "別讓寇亂到 50（運河會被封鎖）；名望達 3 以上，可以去太湖水寨挑戰翻江龍。", "places": ["taihu_isle"],
        "advance_when": {"any_of": [{"world_flags_all": ["fjl_defeated"]}, {"trend_min": {"kou": 70}}, {"day_min": 10}]}},
       {"id": "kou_3", "title": "鎮江決戰", "text": "決戰將至：翻江龍若未除，水寨大軍隨時可能壓向鎮江。",
-       "goal": "守住鎮江直到季末（寇亂不到 80），或把寇亂壓到 10 以下，徹底平定太湖。"}
+       "goal": "守住鎮江直到季末（寇亂不到 80），或把寇亂壓到 10 以下，徹底平定太湖。", "places": ["zhenjiang"]}
     ]},
     {"id": "bao_line", "name": "前朝寶藏", "intro": "前朝藏寶圖殘卷現世，翻江龍分兵尋寶，江南的局勢從此改寫。",
      "replaces_when": {"revealed_all": ["bao"]}, "acts": [
       {"id": "bao_1", "title": "殘卷現世", "text": "殘卷的消息傳開，各路人馬開始在金陵、棲霞山一帶搜尋。",
-       "goal": "在棲霞山一帶挖掘、找金陵的老學究解讀，把寶藏線推到 50。",
+       "goal": "在棲霞山一帶挖掘、找金陵的老學究解讀，把寶藏線推到 50。", "places": ["qixia_foot", "qixia_back", "jinling"],
        "advance_when": {"trend_min": {"bao": 50}}},
       {"id": "bao_2", "title": "群雄爭寶", "text": "翻江龍與鬼手劉三都在搶地圖，誰先湊齊，誰就能找到寶藏。",
-       "goal": "搶在翻江龍與鬼手劉三之前，把寶藏線推到 100。",
+       "goal": "搶在翻江龍與鬼手劉三之前，把寶藏線推到 100。", "places": ["qixia_foot", "qixia_back"],
        "advance_when": {"world_flags_all": ["cave_open"]}},
       {"id": "bao_3", "title": "藏龍洞", "text": "藏龍洞現世，洞口有守墓人把守，翻江龍的人馬也在路上。",
-       "goal": "48 小時內趕到棲霞後山的藏龍洞，擊敗守墓人。",
+       "goal": "48 小時內趕到棲霞後山的藏龍洞，擊敗守墓人。", "places": ["canglong"],
        "advance_when": {"any_of": [{"world_flags_all": ["treasure_taken"]}, {"world_flags_all": ["treasure_lost"]}]}},
       {"id": "bao_4", "title": "餘波", "text": "寶藏已有了下落，江湖的目光重新回到太湖與運河。",
-       "goal": "回頭壓制寇亂，撐到季末；寇亂到 80 鎮江仍會失守。"}
+       "goal": "回頭壓制寇亂，撐到季末；寇亂到 80 鎮江仍會失守。", "places": ["taihu_north", "taihu_isle"]}
     ]}
   ],
   "world_events": [
     {"id": "fjl_takes_treasure", "condition": {"flag_age_hours": {"cave_open": 48}, "world_flags_none": ["treasure_taken", "kou_crushed", "fjl_defeated"]},
-     "text": "翻江龍率眾闖入藏龍洞，前朝寶藏落入水寨之手！", "world_flags_add": ["treasure_lost"]}
+     "text": "翻江龍率眾闖入藏龍洞，前朝寶藏落入水寨之手！", "world_flags_add": ["treasure_lost"], "location": "canglong"}
   ],
   "milestones": [
     {"id": "join_sect", "text": "拜入棲霞劍派或玄鐵門", "condition": {"sects": ["qixia", "xuantie"]}},

@@ -39,6 +39,7 @@ class PlayerState(BaseModel):
 class Rumor(BaseModel):
     time: float
     text: str
+    location: str | None = None  # 發生地（地點 id）；江湖史、舊存檔與不在特定地點的傳聞為 None
 
 
 class WorldState(BaseModel):

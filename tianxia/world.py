@@ -20,24 +20,25 @@ def check_thresholds(state: GameState, content: Content) -> list[str]:
         value = w.trends.get(th.trend, 0)
         if not (value >= th.value if th.op == ">=" else value <= th.value):
             continue
-        msgs += _fire(state, content, th.id, th.text, th.world_flags_add, th.ends_season)
+        msgs += _fire(state, content, th.id, th.text, th.world_flags_add, th.ends_season, th.location)
         if w.ended:
             return msgs
     for event in content.scenario.world_events:
         if event.id in w.fired_thresholds or not check_condition(event.condition, state):
             continue
-        msgs += _fire(state, content, event.id, event.text, event.world_flags_add, event.ends_season)
+        msgs += _fire(state, content, event.id, event.text, event.world_flags_add, event.ends_season, event.location)
         if w.ended:
             return msgs
     return msgs + update_storyline(state, content)
 
 
 def _fire(
-    state: GameState, content: Content, fire_id: str, text: str, flags: list[str], ends_season: bool
+    state: GameState, content: Content, fire_id: str, text: str, flags: list[str], ends_season: bool,
+    location: str | None = None,
 ) -> list[str]:
     state.world.fired_thresholds.add(fire_id)
     add_world_flags(state, flags)
-    add_rumor(state, text)
+    add_rumor(state, text, location)
     add_chronicle(state, text)
     msgs = [f"【江湖大事】{text}"]
     if ends_season:
@@ -93,7 +94,7 @@ def sim_tick(state: GameState, content: Content, hours: int, rng: random.Random)
                 change_trend(state, content, trend_id, delta, reveal=False)
             if sim.rumors and rng.random() < sim.rumor_chance:
                 text = rng.choice(sim.rumors).format(name=sim.name)
-                add_rumor(state, text)
+                add_rumor(state, text, sim.haunts[0] if sim.haunts else None)  # 記在第一個常出沒處；不多用亂數
                 msgs.append(f"【江湖傳聞】{text}")
         msgs += check_thresholds(state, content)
         if state.world.ended:

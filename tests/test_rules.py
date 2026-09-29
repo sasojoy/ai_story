@@ -189,3 +189,10 @@ def test_effect_world_flags_record_time(state, content):
     apply_effect(Effect(world_flags_add=["x"]), state, content)
     assert "x" in state.world.flags
     assert state.world.flag_times["x"] == 3600
+
+
+def test_rumor_is_recorded_where_the_player_stands(state, content):
+    state.player.location = "lake"
+    apply_effect(Effect(rumor="{name}撿到了殘卷！", chronicle="{name}發現殘卷。"), state, content)
+    assert state.world.rumors[-1].location == "lake"
+    assert state.world.chronicle[-1].location is None  # 江湖史不記地點
