@@ -49,6 +49,20 @@ def innate_of(state: GameState, content: Content, key: str) -> str | None:
     return content.config.player_innate if key == PLAYER else content.characters[key].innate
 
 
+def member_style(content: Content, key: str) -> tuple[str, dict[str, str]]:
+    """（流派, 資質等級）；資質沒列出的流派算 B。"""
+    if key == PLAYER:
+        return content.config.player_style, content.config.player_aptitude
+    character = content.characters[key]
+    return character.style, character.aptitude
+
+
+def slot_skill(state: GameState, key: str, slot: int) -> str | None:
+    """某人第 slot 個自選欄（從 0 起算）裡的武學 id；空欄或沒有這一欄時回傳 None。"""
+    slots = state.player.loadouts.get(key) or []
+    return slots[slot] if 0 <= slot < len(slots) else None
+
+
 def innate_level(state: GameState, content: Content, key: str) -> int:
     """本人的本命記在已習武學裡；同伴的本命成數記在門下資料裡。"""
     if key == PLAYER:
@@ -85,14 +99,10 @@ def member_neili(state: GameState, content: Content, key: str) -> tuple[float, f
 
 
 def build_unit(state: GameState, content: Content, key: str, leader: bool) -> Unit:
-    p, cfg = state.player, content.config
+    p = state.player
     stats = member_stats(state, content, key)
     now, cap = member_neili(state, content, key)
-    if key == PLAYER:
-        style, grades = cfg.player_style, cfg.player_aptitude
-    else:
-        character = content.characters[key]
-        style, grades = character.style, character.aptitude
+    style, grades = member_style(content, key)
     arts = []
     innate = innate_of(state, content, key)
     if innate:
@@ -221,23 +231,36 @@ def upgrade(state: GameState, content: Content, target: str) -> list[str]:
     return [f"【{name}】精進至第{level + 1}成（心得 −{cost}）。"]
 
 
-def _is_innate(content: Content, target: str) -> bool:
+def is_innate(content: Content, target: str) -> bool:
     """本人的本命（skill:<player_innate>）或同伴的本命（innate:<key>）。"""
     kind, _, ident = target.partition(":")
     return kind == "innate" or (kind == "skill" and ident == content.config.player_innate)
+
+
+def innate_target(state: GameState, content: Content, key: str) -> str | None:
+    """這個人的本命在武學庫裡的 target；沒有本命時回傳 None。"""
+    if key == PLAYER:
+        innate = content.config.player_innate
+        return f"skill:{innate}" if innate and innate in state.player.skills else None
+    return f"innate:{key}" if key in state.player.members and innate_of(state, content, key) else None
+
+
+def dispel_refund(content: Content, level: int) -> int:
+    """從第 level 成散回第一成時返還的心得。"""
+    spent = sum(upgrade_cost(content, n) for n in range(1, level))
+    return int(spent * content.config.dispel_refund)
 
 
 def dispel(state: GameState, content: Content, target: str) -> list[str]:
     info = _target_info(state, content, target)
     if info is None:
         return ["沒有這門武學。"]
-    if _is_innate(content, target):
+    if is_innate(content, target):
         return ["本命武學不能散功。"]
     name, level = info
     if level <= 1:
         return [f"【{name}】尚在第一成，無功可散。"]
-    spent = sum(upgrade_cost(content, n) for n in range(1, level))
-    refund = int(spent * content.config.dispel_refund)
+    refund = dispel_refund(content, level)
     _set_level(state, target, 1)
     state.player.stats["xinde"] = state.player.stats.get("xinde", 0) + refund
     return [f"你散去【{name}】的功力，退回第一成，返還心得 {refund}。"]

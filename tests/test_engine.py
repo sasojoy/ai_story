@@ -391,3 +391,27 @@ def test_texts_for_team_skills_and_report(game):
     assert "長拳" in game.skills_text()
     assert game.report_text() == "（還沒有戰報。）"
     assert game.team_members() == [("沈浪", "player"), ("韓鐵", "mate")]
+
+
+def test_menxia_page_helpers(game):
+    p = game.state.player
+    assert game.innate_target("player") == "skill:family"
+    assert game.innate_target("mate") == "innate:mate"
+    assert game.is_innate("skill:family") and game.is_innate("innate:mate") and not game.is_innate("skill:fist")
+    assert game.slot_skill("player", 0) == "fist" and game.slot_skill("player", 1) is None
+    assert game.upgrade_cost("skill:fist") == 20
+    assert game.upgrade_cost("skill:nothing") is None
+    assert game.dispel_refund("skill:fist") is None  # 第一成無功可散
+    p.skills["fist"] = 10
+    assert game.upgrade_cost("skill:fist") is None
+    assert game.dispel_refund("skill:fist") == 720  # 20 × (1 + … + 9) × 0.8
+    p.skills["family"] = 3
+    assert game.dispel_refund("skill:family") is None  # 本命不能散功
+
+
+def test_menxia_page_texts(game):
+    assert game.menxia_rules().startswith("同一隊同一門武學只能配一次")
+    assert game.member_card("player").startswith("### 沈浪（隊長）")
+    assert game.slot_label("player", 1) == "自選2　（空）"
+    assert [t for _, t in game.skill_library()] == ["skill:fist", "skill:family", "innate:mate"]
+    assert game.skill_detail("skill:family").startswith("### 家傳劍")

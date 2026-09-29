@@ -5,7 +5,7 @@ import random
 
 from pydantic import BaseModel
 
-from . import team
+from . import skillview, team
 from .events import choice_label, has_events_here, pick_event, visible_choices
 from .guide import note_action, quest_text, tutorial_intro
 from .mapview import render_map
@@ -27,6 +27,8 @@ class Option(BaseModel):
 
 
 class Game:
+    FREE_SLOTS = team.FREE_SLOTS
+
     def __init__(self, content: Content, state: GameState, rng: random.Random | None = None):
         self.content = content
         self.state = state
@@ -310,6 +312,46 @@ class Game:
 
     def team_members(self) -> list[tuple[str, str]]:
         return [(team.member_name(self.state, self.content, key), key) for key in self.state.player.team]
+
+    # ── 門下頁面 ──────────────────────────────────────────
+
+    def skill_library(self) -> list[tuple[str, str]]:
+        return skillview.library(self.state, self.content)
+
+    def skill_detail(self, target: str | None) -> str:
+        return skillview.detail(self.state, self.content, target)
+
+    def member_card(self, key: str) -> str:
+        return skillview.member_card(self.state, self.content, key)
+
+    def slot_label(self, key: str, slot: int | None) -> str:
+        return skillview.slot_label(self.state, self.content, key, slot)
+
+    def menxia_rules(self) -> str:
+        return skillview.rules_line(self.content)
+
+    def innate_target(self, key: str) -> str | None:
+        return team.innate_target(self.state, self.content, key)
+
+    def is_innate(self, target: str) -> bool:
+        return team.is_innate(self.content, target)
+
+    def slot_skill(self, key: str, slot: int) -> str | None:
+        return team.slot_skill(self.state, key, slot)
+
+    def upgrade_cost(self, target: str) -> int | None:
+        """升一成要花的心得；已達第十成或沒有這門武學時回傳 None。"""
+        level = team.target_level(self.state, self.content, target)
+        if level is None or level >= team.MAX_SKILL_LEVEL:
+            return None
+        return team.upgrade_cost(self.content, level)
+
+    def dispel_refund(self, target: str) -> int | None:
+        """散功會返還的心得；本命、第一成或沒有這門武學（散不了功）時回傳 None。"""
+        level = team.target_level(self.state, self.content, target)
+        if level is None or level <= 1 or team.is_innate(self.content, target):
+            return None
+        return team.dispel_refund(self.content, level)
 
     def team_text(self) -> str:
         return team.team_text(self.state, self.content)
