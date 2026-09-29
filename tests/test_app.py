@@ -157,17 +157,30 @@ def click(game: Game, option_id: str) -> list:
 
 def test_battle_shows_a_card_until_the_next_action(tmp_path, monkeypatch):
     game = battle_game(tmp_path, monkeypatch)
+    monkeypatch.setattr(app.CONTENT.config, "train_event_chance", 0.0)  # 這裡只看卡片，不要遇上事件
     out = click(game, "act:train")
     card = out[app.CARD_INDEX]
     assert card["visible"] is True and card["value"].startswith("### ⚔ 揚州城郊・對陣 ")
     assert out[app.CARD_BUTTON_INDEX] == gr.update(visible=True)
     assert out[app.LATEST_INDEX] == gr.update(value="", visible=False)  # 只顯示戰鬥卡片，不同時放「剛剛」卡片
-    assert out[app.MAIN_TABS_INDEX] == gr.update(selected="scene")  # 在看地圖也會切回場景看卡片
-    game.state.pending_event = None  # 歷練後可能遇到事件；這裡只看卡片
+    # 戰鬥卡片在選項按鈕底下、不在「場景／地圖」分頁裡：只為了卡片不必切換分頁（遇上事件時才切回場景）。
+    assert out[app.MAIN_TABS_INDEX] == gr.update()
     out = click(game, "move:yangzhou")
     assert out[app.CARD_INDEX] == gr.update(value="", visible=False)
     assert out[app.CARD_BUTTON_INDEX] == gr.update(visible=False)
     assert out[app.LATEST_INDEX]["visible"] is True and "前往 揚州城" in out[app.LATEST_INDEX]["value"]
+
+
+def test_battle_card_carries_what_else_happened_in_that_action(tmp_path, monkeypatch):
+    game = battle_game(tmp_path, monkeypatch)
+    game.state.player.tutorial_step = 3  # 下一步引導就是「在城郊歷練一回」，獎勵銀兩 10
+    out = click(game, "act:train")
+    assert out[app.CARD_INDEX]["visible"] is True
+    extra = out[app.LATEST_INDEX]
+    assert extra["visible"] is True and 'class="tx-extra"' in extra["value"]
+    assert "✔ 引導完成" in extra["value"] and "【老說書人】" in extra["value"]
+    assert '<span class="tx-chg tx-up">銀兩 +10</span>' in extra["value"]  # 引導獎勵；對手給的銀兩在卡片上
+    assert "剛剛" not in extra["value"]  # 不是第二張卡片
 
 
 def test_menxia_action_after_a_battle_replaces_the_battle_card(tmp_path, monkeypatch):

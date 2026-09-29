@@ -3,9 +3,9 @@
 遊戲規則全部在 tianxia/，這個檔案只負責畫面與接線：每次操作都先把現實時間同步進遊戲、
 執行動作、存檔，再整個重畫。「門下」（隊伍與武學配置）與「戰報」（歷次戰鬥的列表與完整內容）
 都是另外的整頁，分別由 render_menxia() 與戰報頁面自己的處理函式重畫。
-左欄由上而下是場景（地點或事件）與選項按鈕、「剛剛」卡片（最新一則江湖紀錄；打完仗時換成戰鬥卡片）、
-「江湖紀錄」（再來的 5 則，一則一列，更早的收在摺疊區裡）。按戰鬥卡片的「看完整戰報」
-或右欄的「戰報」按鈕都能打開戰報頁面。
+左欄由上而下是場景（地點或事件）與選項按鈕、「剛剛」卡片（最新一則江湖紀錄；打完仗時換成戰鬥卡片，
+卡片沒寫到的補充放在卡片底下）、「江湖紀錄」（再來的 5 則，一則一列、可點開看敘事，更早的收在摺疊區裡）。
+按戰鬥卡片的「看完整戰報」或右欄的「戰報」按鈕都能打開戰報頁面。
 """
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ ROOT = Path(__file__).parent
 CONTENT = load_content(ROOT / "content")
 SAVE_DIR = ROOT / "saves"
 MAX_BUTTONS = 10
-# game_state、任務區塊、狀態文字、場景文字、「剛剛」卡片、地圖、大勢、傳聞、江湖史、選項 id 清單、匿名勾選框、
+# game_state、任務區塊、狀態文字、場景文字、「剛剛」卡片（打完仗時是戰鬥卡片底下的補充）、地圖、大勢、傳聞、江湖史、選項 id 清單、匿名勾選框、
 # 左欄「場景／地圖」分頁、戰鬥卡片、「看完整戰報」按鈕、江湖紀錄、更早的紀錄、「展開更早的紀錄」摺疊區，
 # 再加上按鈕（MAX_BUTTONS）。
 LATEST_INDEX = 4
@@ -78,9 +78,10 @@ def render(game: Game, focus_scene: bool = False) -> list:
         else:
             buttons.append(gr.update(visible=False))
     p = game.state.player
-    # 「剛剛」那一格：這次行動打了仗就只放戰鬥卡片（結果與獲得損失都在上面），否則放最新一則紀錄。
+    # 「剛剛」那一格：這次行動打了仗就放戰鬥卡片（結果與獲得損失都在上面），卡片沒寫到的
+    # （例如同時完成的新手引導與獎勵）放在卡片底下；沒打仗時放最新一則紀錄的卡片。
     card = game.battle_card() if game.shows_battle_card() else None
-    latest = "" if card is not None else game.latest_entry_html()
+    latest = game.battle_extra_html() if card is not None else game.latest_entry_html()
     older = game.journal_html(1 + RECENT_ROWS, OLDER_ROWS)
     return [
         game,
@@ -171,9 +172,9 @@ def _menxia_buttons(game: Game, slot: Slot | None, target: str | None) -> list:
     ]
 
 
-def _scene_key(game: Game) -> tuple[str | None, int | None]:
-    """目前需要玩家讀場景的東西：待處理事件、剛打完的戰鬥卡片。"""
-    return game.state.pending_event, game.battle_card_id()
+def _scene_event(game: Game) -> str | None:
+    """需要玩家到「場景」分頁讀的東西：待處理的事件（戰鬥卡片在按鈕底下、不在分頁裡，不必切換）。"""
+    return game.state.pending_event
 
 
 def act(game: Game | None, action, menxia: tuple[Slot | None, str | None] | None = None) -> list:
@@ -187,11 +188,11 @@ def act(game: Game | None, action, menxia: tuple[Slot | None, str | None] | None
         return [gr.skip()] * n
     with ACT_LOCK:
         game.sync(time.time())
-        before = _scene_key(game)
+        before = _scene_event(game)
         msgs = action(game)
         save_game(game.state, save_path(game.state.player.name))
-        after = _scene_key(game)
-        out = render(game, focus_scene=after != (None, None) and after != before)
+        after = _scene_event(game)
+        out = render(game, focus_scene=after is not None and after != before)
         if menxia is not None:
             out += render_menxia(game, *menxia, None if msgs is None else "\n\n".join(msgs))
         return out
@@ -412,10 +413,10 @@ def build_demo() -> gr.Blocks:
                     with gr.Tab("地圖", id="map") as map_tab:
                         map_html = gr.HTML()
                 option_btns = [gr.Button(visible=False) for _ in range(MAX_BUTTONS)]
-                # 「剛剛」：最新一則江湖紀錄；這次行動打了仗時改放戰鬥卡片，兩者不會同時出現。
+                # 「剛剛」：最新一則江湖紀錄的卡片；這次行動打了仗時改放戰鬥卡片，latest_html 則放卡片沒寫到的補充。
                 battle_card_md = gr.Markdown(visible=False, container=True)
-                card_btn = gr.Button("看完整戰報", visible=False)
                 latest_html = gr.HTML(css_template=JOURNAL_CSS)
+                card_btn = gr.Button("看完整戰報", visible=False)
                 journal_html = gr.HTML(css_template=JOURNAL_CSS)
                 with gr.Accordion("展開更早的紀錄", open=False, visible=False) as older_acc:
                     older_html = gr.HTML(css_template=JOURNAL_CSS)
