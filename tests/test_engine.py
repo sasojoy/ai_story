@@ -387,8 +387,9 @@ def test_neili_regenerates_over_time(game):
 
 
 def test_texts_for_team_skills_and_report(game):
-    assert "韓鐵" in game.team_text() and "（隊長）" in game.team_text()
-    assert "長拳" in game.skills_text()
+    assert game.member_card("player").startswith("### 沈浪（隊長）")
+    assert game.member_card("mate").startswith("### 韓鐵")
+    assert any(label.startswith("長拳") for label, _ in game.skill_library())
     assert game.report_text() == "（還沒有戰報。）"
     assert game.team_members() == [("沈浪", "player"), ("韓鐵", "mate")]
 

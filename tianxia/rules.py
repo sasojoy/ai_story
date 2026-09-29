@@ -106,7 +106,7 @@ def learn_skill(state: GameState, content: Content, skill_id: str) -> list[str]:
     if skill_id in p.skills:
         return []
     p.skills[skill_id] = 1
-    return [f"你習得了【{content.skills[skill_id].name}】！（可在「門下」分頁配置給隊中的人。）"]
+    return [f"你習得了【{content.skills[skill_id].name}】！（可按右側「門下」配置給隊中的人。）"]
 
 
 def apply_effect(effect: Effect, state: GameState, content: Content) -> list[str]:

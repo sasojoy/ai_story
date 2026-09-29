@@ -7,7 +7,7 @@
      "done_when": {"condition": {"flags_all": ["看過地圖"]}}, "reward": {"stamina": 10}},
     {"id": "t3_outskirts", "text": "出城往揚州城郊走走，那裡常有地痞山賊，正好練練身手。",
      "done_when": {"locations": ["yangzhou_jiao"]}, "reward": {"stats": {"silver": 5}}},
-    {"id": "t4_train", "text": "在城郊「歷練」一回，率同伴出手。打贏了能得心得與盤纏；心得到右側「門下」分頁升級武學。",
+    {"id": "t4_train", "text": "在城郊「歷練」一回，率同伴出手。打贏了能得心得與盤纏；心得到右側「門下」升級武學。",
      "done_when": {"action": "train"}, "reward": {"stats": {"silver": 10}}},
     {"id": "t5_kou", "text": "太湖水寇越鬧越凶。城郊往東就是高郵湖，去那裡歷練，就是在替江南壓下寇亂。",
      "done_when": {"action": "train", "locations": ["gaoyou", "guazhou", "taihu_north", "taihu_isle"]},

@@ -307,9 +307,6 @@ class Game:
     def upgrade_options(self) -> list[tuple[str, str]]:
         return team.upgrade_options(self.state, self.content)
 
-    def loadout_choices(self) -> list[tuple[str, str]]:
-        return team.loadout_choices(self.state, self.content)
-
     def team_members(self) -> list[tuple[str, str]]:
         return [(team.member_name(self.state, self.content, key), key) for key in self.state.player.team]
 
@@ -352,12 +349,6 @@ class Game:
         if level is None or level <= 1 or team.is_innate(self.content, target):
             return None
         return team.dispel_refund(self.content, level)
-
-    def team_text(self) -> str:
-        return team.team_text(self.state, self.content)
-
-    def skills_text(self) -> str:
-        return team.skills_text(self.state, self.content)
 
     def report_text(self) -> str:
         return "\n\n".join(self.state.last_report) or "（還沒有戰報。）"

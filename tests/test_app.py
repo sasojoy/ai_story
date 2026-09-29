@@ -4,9 +4,16 @@ import app
 from tianxia.engine import Game
 
 
+def column(page, i):
+    """門下頁面第 i 位隊員那一組輸出：欄、人物卡、本命、自選1、自選2。"""
+    start = app.MX_COLUMNS_INDEX + i * app.MX_COLUMN_SIZE
+    return page[start:start + app.MX_COLUMN_SIZE]
+
+
 def test_render_matches_outputs():
     game = Game.new(app.CONTENT, "測試")
     assert len(app.render(game)) == app.N_OUTPUTS
+    assert len(app.render_menxia(game, None, None)) == app.MENXIA_OUTPUTS
 
 
 def test_option_handler_acts_and_saves(tmp_path, monkeypatch):
@@ -65,47 +72,201 @@ def test_tick_never_switches_main_tabs(tmp_path, monkeypatch):
     monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
     game = Game.new(app.CONTENT, "測試")
     game.choose("act:explore")
-    out = app.tick_handler(game)
+    out = app.tick_handler(game, None, None)
     assert out[app.MAIN_TABS_INDEX] == gr.update()
 
 
-def test_render_includes_team_skills_and_report():
+def test_render_includes_report():
     game = Game.new(app.CONTENT, "測試")
-    out = app.render(game)
-    assert "（隊長）" in out[app.TEAM_INDEX]
-    assert "家傳劍法" in out[app.TEAM_INDEX + 1] and "吐納法" in out[app.TEAM_INDEX + 1]
-    assert out[app.REPORT_INDEX] == "（還沒有戰報。）"
+    assert app.render(game)[app.REPORT_INDEX] == "（還沒有戰報。）"
 
 
-def test_loadout_handler_moves_skill_between_members(tmp_path, monkeypatch):
+# ── 門下頁面 ──────────────────────────────────────────
+
+
+def test_menxia_page_shows_cards_slots_and_library():
+    game = Game.new(app.CONTENT, "測試")
+    out = app.render_menxia(game, None, None)
+    assert out[:2] == [None, None]
+    assert "**心得** 0" in out[app.MX_HEAD_INDEX] and "本命不能散功" in out[app.MX_HEAD_INDEX]
+    shown, card, innate, free1, free2 = column(out, 0)
+    assert shown == gr.update(visible=True)
+    assert card.startswith("### 測試（隊長）") and "內力" in card
+    assert innate["value"] == "本命　家傳劍法（絕招）第1成"
+    assert free1["value"] == "自選1　吐納法（心法）第1成" and free1["variant"] == "secondary"
+    assert free2["value"] == "自選2　長拳（連招）第1成"
+    assert column(out, 1)[1].startswith("### 韓鐵") and column(out, 2)[1].startswith("### 小墨")
+    library = out[app.MX_LIBRARY_INDEX]
+    assert [t for _, t in library["choices"]] == [
+        "skill:tuna", "skill:changquan", "skill:jiachuan", "innate:hantie", "innate:xiaomo"
+    ]
+    assert library["value"] is None
+    assert "點選" in out[app.MX_DETAIL_INDEX]
+    for index in (app.MX_EQUIP_INDEX, app.MX_UNEQUIP_INDEX, app.MX_UPGRADE_INDEX, app.MX_DISPEL_INDEX):
+        assert out[index]["visible"] is False
+
+
+def test_menxia_hides_columns_beyond_the_team():
+    game = Game.new(app.CONTENT, "測試")
+    game.state.player.team = ["player", "hantie"]
+    out = app.render_menxia(game, None, None)
+    assert column(out, 1)[0] == gr.update(visible=True)
+    assert column(out, 2)[0] == gr.update(visible=False)
+
+
+def test_menxia_drops_stale_selection():
+    game = Game.new(app.CONTENT, "測試")
+    out = app.render_menxia(game, ("ghost", 0), "skill:nothing")
+    assert out[:2] == [None, None]
+
+
+def test_open_and_close_menxia_flip_visibility():
+    game = Game.new(app.CONTENT, "測試")
+    out = app.open_menxia(game, None, None)
+    assert len(out) == 2 + app.MENXIA_OUTPUTS
+    assert out[:2] == [gr.update(visible=False), gr.update(visible=True)]  # 江湖畫面、門下頁面
+    assert out[2 + app.MX_MESSAGE_INDEX] == ""
+    assert app.close_menxia() == [gr.update(visible=True), gr.update(visible=False)]
+
+
+def test_start_leaves_menxia_hidden(tmp_path, monkeypatch):
+    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
+    out = app.start("測試")
+    assert len(out) == app.N_OUTPUTS + 3
+    assert out[-3:] == [gr.update(visible=False), gr.update(visible=True), gr.update(visible=False)]
+
+
+def test_free_slot_click_selects_the_slot_and_its_art():
+    game = Game.new(app.CONTENT, "測試")
+    out = app.make_free_slot_handler(0, 0)(game, None, None)
+    assert len(out) == app.MENXIA_OUTPUTS
+    assert out[:2] == [("player", 0), "skill:tuna"]
+    assert column(out, 0)[3]["variant"] == "primary" and column(out, 0)[4]["variant"] == "secondary"
+    assert out[app.MX_LIBRARY_INDEX]["value"] == "skill:tuna"
+    assert out[app.MX_DETAIL_INDEX].startswith("### 吐納法")
+    unequip = out[app.MX_UNEQUIP_INDEX]
+    assert unequip["visible"] is True and unequip["value"] == "卸下〔測試・自選1〕"
+    assert out[app.MX_EQUIP_INDEX]["visible"] is False  # 已經配在這一欄
+
+
+def test_empty_free_slot_keeps_the_chosen_art():
+    game = Game.new(app.CONTENT, "測試")
+    out = app.make_free_slot_handler(1, 0)(game, None, "skill:changquan")
+    assert out[:2] == [("hantie", 0), "skill:changquan"]
+    equip = out[app.MX_EQUIP_INDEX]
+    assert equip["visible"] is True and equip["value"] == "配置到〔韓鐵・自選1〕"
+    assert out[app.MX_UNEQUIP_INDEX]["visible"] is False
+
+
+def test_equip_through_the_page_moves_the_art(tmp_path, monkeypatch):
     monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
     game = Game.new(app.CONTENT, "測試")
-    assert game.state.player.loadouts["player"] == ["tuna", "changquan"]
-    out = app.loadout_handler(game, "hantie", "1", "tuna")
-    assert len(out) == app.N_OUTPUTS
-    assert game.state.player.loadouts["hantie"][0] == "tuna"
+    slot = app.make_free_slot_handler(1, 0)(game, None, None)[0]
+    chosen = app.library_handler(game, slot, "skill:tuna")
+    assert chosen[:2] == [("hantie", 0), "skill:tuna"]
+    assert chosen[app.MX_EQUIP_INDEX]["visible"] is True
+    out = app.equip_handler(game, slot, "skill:tuna")
+    assert len(out) == app.N_OUTPUTS + app.MENXIA_OUTPUTS
+    p = game.state.player
+    assert p.loadouts["hantie"][0] == "tuna"
+    assert p.loadouts["player"] == [None, "changquan"]  # 同一隊同一門武學只能配一次
+    page = out[app.N_OUTPUTS:]
+    assert column(page, 1)[3]["value"] == "自選1　吐納法（心法）第1成"
+    assert column(page, 0)[3]["value"] == "自選1　（空）"
+    assert "韓鐵的第1個武學欄：吐納法" in page[app.MX_MESSAGE_INDEX]
+    assert "韓鐵的第1個武學欄：吐納法" in game.log_text()
+    assert (tmp_path / "測試.json").exists()
+
+
+def test_innate_slot_selects_the_innate_and_hides_equip_and_dispel():
+    game = Game.new(app.CONTENT, "測試")
+    out = app.make_innate_slot_handler(0)(game, ("hantie", 0), "skill:tuna")
+    assert out[:2] == [None, "skill:jiachuan"]
+    assert out[app.MX_EQUIP_INDEX]["visible"] is False
+    assert out[app.MX_DISPEL_INDEX]["visible"] is False
+    upgrade = out[app.MX_UPGRADE_INDEX]
+    assert upgrade["visible"] is True and upgrade["value"] == "升一成（心得 20）"
+    assert all(button["variant"] == "secondary" for button in column(out, 1)[2:])
+    out = app.make_innate_slot_handler(2)(game, None, None)
+    assert out[:2] == [None, "innate:xiaomo"]
+    assert out[app.MX_DETAIL_INDEX].startswith("### 亂針")
+
+
+def test_player_innate_cannot_be_equipped_into_a_free_slot():
+    game = Game.new(app.CONTENT, "測試")
+    out = app.library_handler(game, ("hantie", 0), "skill:jiachuan")
+    assert out[:2] == [("hantie", 0), "skill:jiachuan"]
+    assert out[app.MX_EQUIP_INDEX]["visible"] is False
+
+
+def test_unequip_empties_the_slot(tmp_path, monkeypatch):
+    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
+    game = Game.new(app.CONTENT, "測試")
+    out = app.unequip_handler(game, ("player", 0), "skill:tuna")
     assert game.state.player.loadouts["player"] == [None, "changquan"]
+    page = out[app.N_OUTPUTS:]
+    assert page[app.MX_UNEQUIP_INDEX]["visible"] is False
+    assert page[app.MX_EQUIP_INDEX]["visible"] is True  # 還選著吐納法，可以再配回去
 
 
-def test_loadout_handler_skips_when_no_skill_chosen_and_empty_choice_unequips(tmp_path, monkeypatch):
+def test_upgrade_and_dispel_through_the_page(tmp_path, monkeypatch):
     monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
     game = Game.new(app.CONTENT, "測試")
-    out = app.loadout_handler(game, "player", "1", None)  # 武學下拉還沒選任何東西
-    assert out == [gr.skip()] * app.N_OUTPUTS
+    p = game.state.player
+    p.stats["xinde"] = 100
+    page = app.upgrade_handler(game, None, "skill:tuna")[app.N_OUTPUTS:]
+    assert p.skills["tuna"] == 2 and p.stats["xinde"] == 80
+    assert "精進至第2成" in page[app.MX_MESSAGE_INDEX]
+    assert "**心得** 80" in page[app.MX_HEAD_INDEX]
+    assert page[app.MX_UPGRADE_INDEX]["value"] == "升一成（心得 40）"
+    assert page[app.MX_DISPEL_INDEX]["value"] == "散功（返還心得 16）"
+    assert page[app.MX_DISPEL_INDEX]["interactive"] is True
+    page = app.dispel_handler(game, None, "skill:tuna")[app.N_OUTPUTS:]
+    assert p.skills["tuna"] == 1 and p.stats["xinde"] == 96
+    assert page[app.MX_DISPEL_INDEX]["interactive"] is False  # 第一成無功可散
+
+
+def test_upgrade_without_xinde_shows_the_message_on_the_page(tmp_path, monkeypatch):
+    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
+    game = Game.new(app.CONTENT, "測試")
+    out = app.upgrade_handler(game, None, "skill:tuna")
+    assert "心得不足" in out[app.N_OUTPUTS + app.MX_MESSAGE_INDEX]
+    assert game.state.player.skills["tuna"] == 1
+
+
+def test_upgrade_button_at_the_tenth_level():
+    game = Game.new(app.CONTENT, "測試")
+    game.state.player.skills["tuna"] = 10
+    out = app.render_menxia(game, None, "skill:tuna")
+    assert out[app.MX_UPGRADE_INDEX]["value"] == "已達第十成"
+    assert out[app.MX_UPGRADE_INDEX]["interactive"] is False
+
+
+def test_page_actions_skip_without_a_selection(tmp_path, monkeypatch):
+    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
+    game = Game.new(app.CONTENT, "測試")
+    skip = [gr.skip()] * (app.N_OUTPUTS + app.MENXIA_OUTPUTS)
+    assert app.equip_handler(game, None, "skill:tuna") == skip
+    assert app.equip_handler(game, ("hantie", 0), None) == skip
+    assert app.unequip_handler(game, None, "skill:tuna") == skip
+    assert app.upgrade_handler(game, None, None) == skip
+    assert app.dispel_handler(game, None, None) == skip
+    assert app.equip_handler(None, ("hantie", 0), "skill:tuna") == skip
+    assert app.tick_handler(None, None, None) == skip
     assert game.state.player.loadouts["player"] == ["tuna", "changquan"]
     assert not (tmp_path / "測試.json").exists()
-    app.loadout_handler(game, "player", "1", "")  # 選了「（空）」：卸下
-    assert game.state.player.loadouts["player"] == [None, "changquan"]
 
 
-def test_upgrade_and_dispel_handlers(tmp_path, monkeypatch):
+def test_tick_refreshes_the_page_and_keeps_the_selection(tmp_path, monkeypatch):
     monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
     game = Game.new(app.CONTENT, "測試")
-    game.state.player.stats["xinde"] = 100
-    app.upgrade_handler(game, "skill:tuna")
-    assert game.state.player.skills["tuna"] == 2
-    app.dispel_handler(game, "skill:tuna")
-    assert game.state.player.skills["tuna"] == 1
+    game.state.player.members["hantie"].neili = 100.0
+    out = app.tick_handler(game, ("player", 1), "skill:changquan")
+    assert len(out) == app.N_OUTPUTS + app.MENXIA_OUTPUTS
+    page = out[app.N_OUTPUTS:]
+    assert page[:2] == [("player", 1), "skill:changquan"]
+    assert "內力 100 / " in column(page, 1)[1]
+    assert page[app.MX_MESSAGE_INDEX] == gr.update()  # 不清掉上一則訊息
 
 
 def test_incompatible_old_save_is_backed_up(tmp_path, monkeypatch):
