@@ -43,6 +43,11 @@ def test_condition_world(state):
     assert not check_condition(Condition(world_flags_none=["blocked"]), state)
 
 
+def test_condition_members_none(state):
+    assert check_condition(Condition(members_none=["hero", "sage"]), state)
+    assert not check_condition(Condition(members_none=["hero", "mate"]), state)  # 韓鐵一開局就在門下
+
+
 def test_check_chance_scales_and_clamps(state, content):
     assert check_chance(Check(stat="str", difficulty=5, by="self"), state, content) == 0.5
     assert check_chance(Check(stat="str", difficulty=7, by="self"), state, content) == pytest.approx(0.3)

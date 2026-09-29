@@ -9,7 +9,9 @@ STATS = ("str", "agi", "con", "wis", "silver", "good", "evil", "fame", "xinde")
 Style = Literal["剛", "柔", "快", "巧", "無"]
 ActionKind = Literal["explore", "train", "socialize"]
 Tier = Literal["天", "地", "玄", "黃", "敵"]
+COMPANION_TIERS = ("天", "地", "玄", "黃")  # 同伴的品階，由高到低；「敵」只給敵人
 Grade = Literal["S", "A", "B", "C"]
+Source = Literal["開局", "收徒", "交遊", "福緣", "奇遇", "招降", "招賢"]  # 同伴的取得管道
 EffectKind = Literal["damage", "heal", "buff", "debuff", "control", "dodge", "reduce"]
 
 
@@ -38,6 +40,7 @@ class Condition(_Strict):
     revealed_all: list[str] = Field(default_factory=list)
     revealed_none: list[str] = Field(default_factory=list)
     flag_age_hours: dict[str, int] = Field(default_factory=dict)  # 世界旗標成立後至少經過幾小時
+    members_none: list[str] = Field(default_factory=list)  # 這些人物都還沒入門（結識事件用它排除已入門的人）
     any_of: list[Condition] = Field(default_factory=list)  # 非空時，至少一個子條件成立
 
 
@@ -58,6 +61,7 @@ class Effect(_Strict):
     join_sect: str | None = None
     leave_sect: bool = False
     next_event: str | None = None
+    recruit: str | None = None  # 結識某人（同伴 id）：入門；已入門時改給心得（見 roster.recruit）
 
 
 class Check(_Strict):
@@ -85,6 +89,7 @@ class Event(_Strict):
     weight: float = 1.0
     once: bool = False
     qiyu: bool = False
+    fortune: bool = False  # 新立門戶福緣：不會被隨機抽到，由 engine 在交遊時觸發（actions 必須是空的）
     condition: Condition = Field(default_factory=Condition)
     choices: list[Choice] = Field(min_length=1)
 
@@ -153,11 +158,22 @@ class CharacterDef(_Strict):
     innate: str | None = None
     sect: str | None = None
     desc: str = ""
+    command: int | None = None  # 統御；同伴必填，敵人不填
+    sources: list[Source] = Field(default_factory=list)  # 取得管道；同伴必填，敵人不填
+    recruit_at: list[str] = Field(default_factory=list)  # 只在這些地點收得到徒；空＝任何城鎮或門派
+    trait: str | None = None  # 天品的特性：一門效果固定的心法，不佔武學欄、不能升級或散功
 
 
 class SquadMember(_Strict):
     character: str
     level: int = Field(default=1, ge=1)
+
+
+class Surrender(_Strict):
+    """打贏敵方隊伍後可能投效的人（同伴 id）；chance 省略時用 config.surrender_chance。"""
+
+    character: str
+    chance: float | None = Field(default=None, ge=0, le=1)
 
 
 class Squad(_Strict):
@@ -169,6 +185,7 @@ class Squad(_Strict):
     reward_silver: int = 0
     reward_xinde: int = 0
     exp: int = 0
+    surrender: Surrender | None = None  # 打贏後可能投效的人
 
 
 class Trend(_Strict):
@@ -367,6 +384,20 @@ class Config(_Strict):
     max_level: int = 30
     vision_skills: list[str] = Field(default_factory=list)  # 練到 vision_skill_level 時視野 +1
     vision_skill_level: int = 5
+    # ── 名冊與編隊（1c）──
+    team_counts: list[int] = Field(default_factory=lambda: [2, 3, 4])  # 開放的隊伍數：第一幕、第二幕、第三幕起
+    command_caps: list[int] = Field(default_factory=lambda: [15, 18, 20])  # 每隊總統御上限，同上
+    player_command: int = 5  # 你本人的統御
+    apprentice_silver: int = 40  # 收徒：每次的銀兩
+    apprentice_stamina: int = 5  # 收徒：每次的體力
+    apprentice_per_day: int = 2  # 收徒：每個遊戲日最多幾次
+    apprentice_tags: list[str] = Field(default_factory=lambda: ["城鎮", "門派"])  # 有這些標籤的地點才能收徒
+    apprentice_weights: dict[str, float] = Field(default_factory=lambda: {"黃": 75, "玄": 25})  # 收徒抽到各品階的比重
+    surrender_chance: float = 0.25  # 招降：敵方隊伍沒寫 chance 時的機率
+    fortune_day_min: int = 2  # 新立門戶福緣：第幾天起交遊必定先觸發
+    fortune_day_max: int = 7  # 新立門戶福緣：第幾天結束還沒發生就直接送上門
+    # 劇情事件結識到已入門的人時改給的心得（暫定・另談，1c-3 招賢的重複人物也用這一張表）
+    duplicate_xinde: dict[str, int] = Field(default_factory=lambda: {"黃": 10, "玄": 20, "地": 50, "天": 100})
 
 
 class Content(_Strict):

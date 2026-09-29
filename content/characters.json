@@ -1,8 +1,8 @@
 [
-  {"id": "hantie", "name": "韓鐵", "tier": "玄", "style": "剛", "desc": "世家的護院武師，話少，手上功夫硬。",
+  {"id": "hantie", "name": "韓鐵", "tier": "玄", "style": "剛", "command": 3, "sources": ["開局"], "desc": "世家的護院武師，話少，手上功夫硬。",
    "stats": {"str": 6, "agi": 4, "con": 6, "wis": 3}, "growth": {"str": 0.35, "agi": 0.2, "con": 0.35, "wis": 0.15},
    "aptitude": {"剛": "A", "柔": "C"}, "innate": "kaibei"},
-  {"id": "xiaomo", "name": "小墨", "tier": "玄", "style": "巧", "desc": "跟著你長大的書童，機靈，袖裡藏針。",
+  {"id": "xiaomo", "name": "小墨", "tier": "玄", "style": "巧", "command": 4, "sources": ["開局"], "desc": "跟著你長大的書童，機靈，袖裡藏針。",
    "stats": {"str": 4, "agi": 6, "con": 4, "wis": 6}, "growth": {"str": 0.2, "agi": 0.35, "con": 0.2, "wis": 0.35},
    "aptitude": {"巧": "A", "快": "A", "剛": "C"}, "innate": "luanzhen"},
   {"id": "dipi", "name": "地痞無賴", "tier": "敵", "style": "無", "stats": {"str": 3, "agi": 3, "con": 3, "wis": 2}, "growth": {"str": 0.2, "agi": 0.2, "con": 0.2, "wis": 0.1}},

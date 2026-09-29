@@ -29,5 +29,19 @@
     {"text": "運氣衝關", "check": {"stat": "con", "difficulty": 5, "by": "self"},
      "effect": {"text": "一股暖流貫通周身。", "stats": {"xinde": 5}},
      "fail_effect": {"text": "氣息一亂，只得作罷。"}}
+  ]},
+  {"id": "meet", "title": "琴聲", "text": "茶樓裡有人撫琴。", "actions": ["socialize"], "locations": ["town"],
+   "condition": {"flags_all": ["heard_music"], "members_none": ["friend"]}, "choices": [
+    {"text": "請他入門", "effect": {"text": "琴師收起琴，跟你走了。", "recruit": "friend"}},
+    {"text": "聽完就走"}
+  ]},
+  {"id": "hermit", "title": "隱士", "text": "湖邊有個釣魚的老人。", "locations": ["lake"], "qiyu": true, "once": true,
+   "condition": {"flags_all": ["met_hermit"], "members_none": ["sage"]}, "choices": [
+    {"text": "請他同行", "effect": {"recruit": "sage"}},
+    {"text": "告辭"}
+  ]},
+  {"id": "fortune", "title": "俠女來投", "text": "一位俠女登門拜訪。", "actions": [], "fortune": true,
+   "condition": {"members_none": ["hero"]}, "choices": [
+    {"text": "請她入門", "effect": {"text": "俠女抱拳：「今後請多指教。」", "recruit": "hero"}}
   ]}
 ]

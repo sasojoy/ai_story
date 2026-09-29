@@ -60,6 +60,8 @@ def check_condition(cond: Condition, state: GameState) -> bool:
     for flag, hours in cond.flag_age_hours.items():
         if flag not in w.flag_times or w.time - w.flag_times[flag] < hours * 3600:
             return False
+    if set(cond.members_none) & set(p.members):
+        return False
     if cond.any_of and not any(check_condition(sub, state) for sub in cond.any_of):
         return False
     return True

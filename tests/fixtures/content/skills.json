@@ -7,10 +7,17 @@
    "chance_base": 0.3, "chance_top": 0.5, "effects": [{"kind": "damage", "base": 1.2, "top": 2.0}]},
   {"id": "step", "name": "追風步", "style": "快", "kind": "心法", "quality": "下",
    "effects": [{"kind": "buff", "base": 0.1, "top": 0.2, "target": "self", "stat": "spd"}]},
-  {"id": "palm", "name": "驚濤掌", "style": "剛", "kind": "絕招",
+  {"id": "palm", "name": "驚濤掌", "style": "剛", "kind": "絕招", "quality": "下",
    "chance_base": 0.25, "chance_top": 0.4, "effects": [{"kind": "damage", "base": 1.0, "top": 1.6}, {"kind": "control", "base": 0.2, "top": 0.35, "control": "點穴"}]},
   {"id": "heavy", "name": "開碑手", "kind": "絕招", "style": "剛", "quality": "上", "chance_base": 1.0, "prep": 1,
    "effects": [{"kind": "damage", "base": 3.0}]},
   {"id": "family", "name": "家傳劍", "kind": "絕招", "style": "柔", "chance_base": 0.3, "chance_top": 0.45,
-   "effects": [{"kind": "damage", "base": 1.2, "top": 1.9}]}
+   "effects": [{"kind": "damage", "base": 1.2, "top": 1.9}]},
+  {"id": "needle", "name": "飛針", "style": "巧", "kind": "絕招", "quality": "下", "chance_base": 0.25, "chance_top": 0.4,
+   "effects": [{"kind": "damage", "base": 0.5, "top": 0.8}]},
+  {"id": "wave", "name": "浪濤劍", "style": "柔", "kind": "絕招", "quality": "中", "chance_base": 0.3, "chance_top": 0.45,
+   "effects": [{"kind": "damage", "base": 1.4, "top": 2.1}]},
+  {"id": "sky", "name": "天外劍", "style": "快", "kind": "絕招", "quality": "上", "chance_base": 0.3, "chance_top": 0.45,
+   "effects": [{"kind": "damage", "base": 1.3, "top": 2.0}, {"kind": "control", "base": 0.2, "top": 0.35, "control": "卸兵"}]},
+  {"id": "calm", "name": "靜心訣", "kind": "心法", "quality": "上", "effects": [{"kind": "reduce", "base": 0.1, "target": "self"}]}
 ]

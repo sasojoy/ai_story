@@ -1,6 +1,19 @@
 [
-  {"id": "mate", "name": "韓鐵", "tier": "玄", "style": "剛", "stats": {"str": 6, "agi": 5, "con": 6, "wis": 4},
+  {"id": "mate", "name": "韓鐵", "tier": "玄", "style": "剛", "command": 3, "sources": ["開局"], "stats": {"str": 6, "agi": 5, "con": 6, "wis": 4},
    "growth": {"str": 0.3, "agi": 0.2, "con": 0.3, "wis": 0.1}, "aptitude": {"剛": "A"}, "innate": "palm"},
   {"id": "thug", "name": "小嘍囉", "tier": "敵", "style": "剛", "stats": {"str": 3, "agi": 3, "con": 1, "wis": 2}},
-  {"id": "boss", "name": "翻江龍", "tier": "敵", "style": "剛", "stats": {"str": 40, "agi": 30, "con": 40, "wis": 10}, "innate": "heavy"}
+  {"id": "boss", "name": "翻江龍", "tier": "敵", "style": "剛", "stats": {"str": 40, "agi": 30, "con": 40, "wis": 10}, "innate": "heavy"},
+  {"id": "pupil", "name": "小六", "tier": "黃", "style": "快", "command": 2, "sources": ["收徒", "招賢"],
+   "stats": {"str": 4, "agi": 5, "con": 3, "wis": 4}, "growth": {"str": 0.2, "agi": 0.3, "con": 0.1, "wis": 0.2}, "aptitude": {"剛": "C"}},
+  {"id": "scholar", "name": "書生", "tier": "玄", "style": "巧", "command": 3, "sources": ["收徒"], "recruit_at": ["town"],
+   "stats": {"str": 4, "agi": 5, "con": 4, "wis": 7}, "growth": {"str": 0.2, "agi": 0.25, "con": 0.2, "wis": 0.4}, "aptitude": {"巧": "A"}, "innate": "needle"},
+  {"id": "friend", "name": "琴師", "tier": "玄", "style": "柔", "command": 4, "sources": ["交遊", "招賢"],
+   "stats": {"str": 4, "agi": 5, "con": 5, "wis": 6}, "growth": {"str": 0.25, "agi": 0.25, "con": 0.25, "wis": 0.3}, "aptitude": {"柔": "A"}, "innate": "needle"},
+  {"id": "hero", "name": "俠女", "tier": "地", "style": "柔", "command": 5, "sources": ["福緣", "招賢"],
+   "stats": {"str": 5, "agi": 6, "con": 6, "wis": 6}, "growth": {"str": 0.3, "agi": 0.35, "con": 0.3, "wis": 0.35}, "aptitude": {"柔": "S"}, "innate": "wave"},
+  {"id": "captain", "name": "頭目", "tier": "地", "style": "剛", "command": 4, "sources": ["招降"],
+   "stats": {"str": 7, "agi": 5, "con": 7, "wis": 4}, "growth": {"str": 0.4, "agi": 0.3, "con": 0.4, "wis": 0.2}, "aptitude": {"剛": "S"}, "innate": "wave"},
+  {"id": "sage", "name": "隱士", "tier": "天", "style": "快", "command": 7, "sources": ["奇遇", "招賢"],
+   "stats": {"str": 6, "agi": 8, "con": 5, "wis": 7}, "growth": {"str": 0.35, "agi": 0.45, "con": 0.3, "wis": 0.4},
+   "aptitude": {"快": "S", "巧": "S"}, "innate": "sky", "trait": "calm"}
 ]
