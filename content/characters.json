@@ -9,7 +9,7 @@
    "desc": "碼頭上扛包的腳夫，一頓能吃三斤米飯，力氣也大得嚇人。",
    "stats": {"str": 5, "agi": 3, "con": 5, "wis": 3}, "growth": {"str": 0.25, "agi": 0.15, "con": 0.25, "wis": 0.15},
    "aptitude": {"剛": "B", "巧": "C"}},
-  {"id": "aheng", "name": "阿蘅", "tier": "黃", "style": "柔", "command": 1, "sources": ["收徒", "招賢"],
+  {"id": "aheng", "name": "阿棠", "tier": "黃", "style": "柔", "command": 1, "sources": ["收徒", "招賢"],
    "desc": "繡坊的學徒，性子溫吞，穿針引線的手卻極穩。",
    "stats": {"str": 3, "agi": 4, "con": 4, "wis": 5}, "growth": {"str": 0.15, "agi": 0.2, "con": 0.2, "wis": 0.25},
    "aptitude": {"柔": "B", "剛": "C"}},
