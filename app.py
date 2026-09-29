@@ -128,7 +128,7 @@ def _menxia_buttons(game: Game, slot: Slot | None, target: str | None) -> list:
         held = game.slot_skill(*slot)
     can_equip = (
         slot is not None and target is not None and target.startswith("skill:")
-        and not game.is_innate(target) and target != f"skill:{held}"
+        and not game.is_innate(target) and (held is None or target != f"skill:{held}")
     )
     cost = game.upgrade_cost(target) if target else None
     refund = game.dispel_refund(target) if target else None
