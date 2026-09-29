@@ -33,7 +33,7 @@ def play_season(content: Content, seed: int, max_steps: int = 20000) -> Game:
     for step in range(max_steps):
         if game.state.world.ended:
             break
-        options = [o for o in game.options() if o.enabled]
+        options = [o for o in game.options(odds=False) if o.enabled]
         if options:
             game.choose(rng.choice(options).id)
             spend_xinde(game)

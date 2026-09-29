@@ -9,7 +9,7 @@ from . import skillview, team
 from .events import choice_label, has_events_here, pick_event, visible_choices
 from .guide import note_action, quest_text, tutorial_intro
 from .mapview import render_map
-from .models import Content, Effect, Event, Squad
+from .models import Choice, Content, Effect, Event, Location, Squad
 from .rules import apply_effect, change_trend, check_who, learn_skill, roll_check
 from .state import PLAYER, GameState, Member, Rumor, new_game_state
 from .world import check_thresholds, end_season, sim_tick
@@ -33,6 +33,7 @@ class Game:
         self.content = content
         self.state = state
         self.rng = rng or random.Random()
+        self._odds: dict[str, str] = {}  # 勝算快取，見 team.estimate
         self._drop_stale_references()
 
     @classmethod
@@ -127,20 +128,21 @@ class Game:
 
     # ── 選項 ──────────────────────────────────────────────
 
-    def options(self) -> list[Option]:
+    def options(self, odds: bool = True) -> list[Option]:
+        """目前可選的行動。odds=False 時不附勝算、也就不必模擬（choose() 與機器人只看 id）。"""
         s, c = self.state, self.content
         if s.world.ended:
             return [Option(id="season:new", label="開啟新的賽季")]
         if s.pending_event:
             event = c.events[s.pending_event]
-            return [Option(id=f"choice:{i}", label=choice_label(ch, s, c)) for i, ch in visible_choices(event, s)]
+            return [Option(id=f"choice:{i}", label=self._choice_label(ch, odds)) for i, ch in visible_choices(event, s)]
         if s.player.busy_until is not None:
             return [Option(id="act:break", label="提前出關")]
         loc = c.locations[s.player.location]
         cost = c.config.action_cost
         opts = []
         if loc.enemies:
-            opts.append(self._cost_option("act:train", "歷練", cost["train"]))
+            opts.append(self._cost_option("act:train", "歷練", cost["train"], self._train_note(loc) if odds else ""))
         opts.append(self._cost_option("act:explore", "探索", cost["explore"]))
         if has_events_here(c, loc, "socialize"):
             opts.append(self._cost_option("act:socialize", "交遊", cost["socialize"]))
@@ -151,13 +153,30 @@ class Game:
             opts.append(self._cost_option(f"move:{dest_id}", f"前往 {dest.name}", dest.move_cost))
         return opts
 
-    def _cost_option(self, option_id: str, label: str, cost: int) -> Option:
+    def _cost_option(self, option_id: str, label: str, cost: int, note: str = "") -> Option:
+        extra = f"・{note}" if note else ""
         return Option(
-            id=option_id, label=f"{label}（體力 {cost}）", enabled=self.state.player.stamina >= cost
+            id=option_id, label=f"{label}（體力 {cost}{extra}）", enabled=self.state.player.stamina >= cost
         )
 
+    def _train_note(self, loc: Location) -> str:
+        """歷練按鈕上的戰前情報，例如「可能遇到：地痞無賴 穩勝、劫道山賊 穩勝」。"""
+        foes = [f"{self.content.squads[sid].name} {self.odds(sid)}" for sid in dict.fromkeys(loc.enemies)]
+        return "可能遇到：" + "、".join(foes)
+
+    def _choice_label(self, choice: Choice, odds: bool) -> str:
+        """動手的選項寫出對手與勝算，例如「拔劍闖進去（對手：太湖水寇・有把握）」；其餘見 choice_label。"""
+        if choice.combat and odds:
+            squad = self.content.squads[choice.combat]
+            return f"{choice.text}（對手：{squad.name}・{self.odds(squad.id)}）"
+        return choice_label(choice, self.state, self.content)
+
+    def odds(self, squad_id: str) -> str:
+        """出戰隊伍對上這支敵方隊伍的勝算：穩勝／有把握／五五波／凶險／必敗。"""
+        return team.estimate(self.state, self.content, squad_id, self._odds)
+
     def choose(self, option_id: str) -> list[str]:
-        option = {o.id: o for o in self.options()}.get(option_id)
+        option = {o.id: o for o in self.options(odds=False)}.get(option_id)
         if option is None or not option.enabled:
             return self._log(["（此刻無法這麼做。）"])
         kind, _, arg = option_id.partition(":")

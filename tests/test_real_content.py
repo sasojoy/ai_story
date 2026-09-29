@@ -115,6 +115,16 @@ def test_peace_ending_on_kou_line_with_only_kou_crushed():
     assert evaluate_ending(game.state, content).id == "peace"
 
 
+def test_starting_team_odds_on_real_content():
+    from tianxia.engine import Game
+
+    game = Game.new(load_content(CONTENT_DIR), "測試俠客", rng=random.Random(0))
+    assert game.odds("dipi") == "穩勝"
+    assert game.odds("fanjianglong") == "必敗"
+    game.state.player.location = "yangzhou_jiao"
+    assert game.options()[0].label == "歷練（體力 10・可能遇到：地痞無賴 穩勝、劫道山賊 穩勝）"
+
+
 def test_legend_strip_does_not_cover_locations():
     c = load_content(CONTENT_DIR)
     assert max(loc.y for loc in c.locations.values()) + 12 < c.map.height - 50

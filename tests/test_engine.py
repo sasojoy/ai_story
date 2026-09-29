@@ -128,6 +128,58 @@ def test_event_battle_draw_clears_event_without_effects(game):
     assert p.members["player"].exp == 0
 
 
+def test_odds_word_tiers():
+    from tianxia.team import odds_word
+
+    assert [odds_word(wins, 40) for wins in (40, 36, 35, 26, 25, 14, 13, 4, 3, 0)] == [
+        "穩勝", "穩勝", "有把握", "有把握", "五五波", "五五波", "凶險", "凶險", "必敗", "必敗",
+    ]
+
+
+def test_battle_options_show_opponent_and_odds(game):
+    game.choose("move:lake")
+    assert game.options()[0].label == "歷練（體力 10・可能遇到：水寇小隊 穩勝）"
+    assert game.options(odds=False)[0].label == "歷練（體力 10）"  # 機器人與 choose() 不必模擬
+    game.choose("act:socialize")
+    assert [o.label for o in game.options()] == ["應戰（對手：翻江龍・必敗）", "迴避"]
+
+
+def test_draws_do_not_count_as_wins(game):
+    game.content.config.battle_rounds = 1  # 一回合分不出勝負：四十場全是平手
+    assert game.odds("thug") == "必敗"
+
+
+def test_odds_are_stable_and_leave_the_game_rng_alone(game, content):
+    from tianxia.engine import Game
+
+    before = game.rng.getstate()
+    first = game.odds("thug")
+    assert game.rng.getstate() == before
+    assert Game(content, game.state).odds("thug") == first  # 同樣的情況，重新建立的 Game 也算出一樣的勝算
+
+
+def test_odds_are_cached_until_something_that_matters_changes(game, monkeypatch):
+    from tianxia import team
+
+    calls = []
+    real = team.run_battle
+    monkeypatch.setattr(team, "run_battle", lambda *args: calls.append(1) or real(*args))
+    game.odds("thug")
+    assert len(calls) == 40
+    game.odds("thug")
+    assert len(calls) == 40  # 什麼都沒變：直接用快取
+    p = game.state.player
+    p.members["player"].neili = 504.4  # 上限 520 的 97%：捨去成 95% 那一級，要重算
+    game.odds("thug")
+    assert len(calls) == 80
+    p.members["player"].neili = 514.8  # 99%：還是 95% 那一級，用快取
+    game.odds("thug")
+    assert len(calls) == 80
+    game.set_loadout("player", 0, None)  # 在門下換了配置：依新陣容重算
+    game.odds("thug")
+    assert len(calls) == 120
+
+
 def test_add_exp_crosses_several_levels_and_stops_at_max_level(game):
     from tianxia.team import add_exp
 

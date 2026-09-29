@@ -1,6 +1,7 @@
 """門下與隊伍：人物數值、內力、組隊作戰、經驗、心得升級與散功、武學配置。"""
 from __future__ import annotations
 
+import math
 import random
 
 from .battle import Art, BattleResult, Eff, Rules, Unit, run_battle
@@ -13,6 +14,11 @@ APTITUDE = {"S": 1.2, "A": 1.0, "B": 0.85, "C": 0.7}
 FREE_SLOTS = 2
 MAX_SKILL_LEVEL = 10
 MIN_NEILI_RATIO = 0.1  # 內力再低，上陣時也至少有一成：戰敗只會變弱，不會無法行動
+ESTIMATE_RUNS = 40
+ESTIMATE_SEED = 20260929  # 固定種子：同樣的情況每次都算出同樣的勝算，畫面不會跳動
+NEILI_STEPS = 20  # 估勝算時內力以 5% 為一級（無條件捨去），回復中的內力不會每次重畫都重算
+ESTIMATE_CACHE_LIMIT = 256
+ODDS = ((90, "穩勝"), (65, "有把握"), (35, "五五波"), (10, "凶險"))  # 勝率（%）門檻；再低就是必敗
 
 
 def skill_value(base: float, top: float | None, level: int) -> float:
@@ -163,17 +169,64 @@ def battle_rules(content: Content) -> Rules:
     return Rules(max_rounds=cfg.battle_rounds, atk_factor=cfg.battle_atk_factor, def_factor=cfg.battle_def_factor)
 
 
+def team_units(state: GameState, content: Content) -> list[Unit]:
+    """出戰隊伍的戰鬥單位，順序同 team_keys；第一位是隊長。"""
+    return [build_unit(state, content, key, leader=i == 0) for i, key in enumerate(team_keys(state))]
+
+
 def fight(state: GameState, content: Content, squad_id: str, rng: random.Random) -> BattleResult:
     """出戰隊伍對上一支敵方隊伍；戰後內力保留剩餘值，並記下完整戰報。"""
     p = state.player
-    team = [key for key in p.team if key in p.members]
     squad = content.squads[squad_id]
-    ours = [build_unit(state, content, key, leader=i == 0) for i, key in enumerate(team)]
-    result = run_battle(ours, enemy_units(content, squad), rng, battle_rules(content))
-    for key, hp in zip(team, result.hp):
+    result = run_battle(team_units(state, content), enemy_units(content, squad), rng, battle_rules(content))
+    for key, hp in zip(team_keys(state), result.hp):
         p.members[key].neili = hp
     state.last_report = [f"⚔ 對陣：{squad.name}"] + result.report
     return result
+
+
+# ── 戰前情報：勝算 ─────────────────────────────────────
+
+
+def odds_word(wins: int, runs: int) -> str:
+    """依勝率分五段：≥90% 穩勝、≥65% 有把握、≥35% 五五波、≥10% 凶險，其餘必敗。"""
+    for pct, word in ODDS:
+        if wins * 100 >= pct * runs:
+            return word
+    return "必敗"
+
+
+def _estimate_units(state: GameState, content: Content) -> list[Unit]:
+    """估勝算用的我方單位：和實戰相同，只是內力捨去到 5% 的整數倍（最少仍有一成）。"""
+    units = team_units(state, content)
+    for u in units:
+        step = math.floor(u.hp / u.hp_max * NEILI_STEPS) / NEILI_STEPS
+        u.hp = u.hp_max * max(MIN_NEILI_RATIO, step)
+    return units
+
+
+def estimate(state: GameState, content: Content, squad_id: str, cache: dict[str, str] | None = None) -> str:
+    """以目前的隊伍、配置、成數、等級與內力，用固定種子模擬 ESTIMATE_RUNS 場，回傳勝算（平手不算勝）。
+
+    cache 的鍵是「我方單位、敵方單位、戰鬥規則」的完整內容，這些都沒變時直接用上次的結果；
+    不會動到遊戲本身的亂數。
+    """
+    squad = content.squads[squad_id]
+    rules = battle_rules(content)
+    key = repr((squad_id, _estimate_units(state, content), enemy_units(content, squad), rules))
+    if cache is not None and key in cache:
+        return cache[key]
+    rng = random.Random(ESTIMATE_SEED)
+    wins = 0
+    for _ in range(ESTIMATE_RUNS):
+        result = run_battle(_estimate_units(state, content), enemy_units(content, squad), rng, rules)
+        wins += result.outcome == "win"
+    word = odds_word(wins, ESTIMATE_RUNS)
+    if cache is not None:
+        if len(cache) >= ESTIMATE_CACHE_LIMIT:
+            cache.clear()
+        cache[key] = word
+    return word
 
 
 def add_exp(state: GameState, content: Content, amount: int) -> list[str]:
