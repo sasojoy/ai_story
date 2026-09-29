@@ -40,18 +40,23 @@ def is_unlocked(loc: Location, state: GameState) -> bool:
     return not loc.unlock_flag or loc.unlock_flag in state.world.flags
 
 
-def visible_locations(state: GameState, content: Content) -> set[str]:
-    seen = {state.player.location}
+def road_hops(state: GameState, content: Content, limit: int) -> dict[str, int]:
+    """從所在地出發、只走已開放的地點，limit 站以內到得了的地點：地點 id → 最少幾站（所在地是 0）。"""
+    hops = {state.player.location: 0}
     frontier = [state.player.location]
-    for _ in range(vision_range(state, content)):
+    for step in range(1, limit + 1):
         nxt = []
         for loc_id in frontier:
             for dest in content.locations[loc_id].connections:
-                if dest not in seen and is_unlocked(content.locations[dest], state):
-                    seen.add(dest)
+                if dest not in hops and is_unlocked(content.locations[dest], state):
+                    hops[dest] = step
                     nxt.append(dest)
         frontier = nxt
-    return seen
+    return hops
+
+
+def visible_locations(state: GameState, content: Content) -> set[str]:
+    return set(road_hops(state, content, vision_range(state, content)))
 
 
 def location_view(loc_id: str, state: GameState, content: Content, visible: set[str]) -> str:

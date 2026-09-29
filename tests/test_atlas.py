@@ -1,6 +1,6 @@
 from tianxia.atlas import (
     Route, detail_text, direction, foes, goal_places, haunters, is_known, known_locations, neighbours, place_choices,
-    recent_news, region_center, region_of, region_trends, routes, travel_button, worst_foe,
+    recent_news, region_center, region_of, region_trends, road_hops, routes, travel_button, worst_foe,
 )
 from tianxia.models import Location
 from tianxia.state import Rumor
@@ -75,6 +75,15 @@ def test_neighbours_are_regions_joined_by_open_roads(state, content):
     state.world.flags.add("cave_open")
     assert neighbours(state, content, north) == [("↓", south)]
     assert neighbours(state, content, south) == [("↑", north)]
+
+
+def test_road_hops_count_stops_over_open_roads(state, content):
+    assert road_hops(state, content, 2) == {"town": 0, "lake": 1}  # 寶洞未開放
+    state.world.flags.add("cave_open")
+    assert road_hops(state, content, 2) == {"town": 0, "lake": 1, "cave": 2}
+    assert road_hops(state, content, 1) == {"town": 0, "lake": 1}
+    add_hill(content, 5)
+    assert road_hops(state, content, 2) == {"town": 0, "lake": 1, "hill": 1, "cave": 2}
 
 
 # ── 局勢 ──────────────────────────────────────────────
