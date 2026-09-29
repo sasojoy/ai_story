@@ -343,8 +343,9 @@ class Game:
 
     def travel(self, dest_id: str) -> list[str]:
         """大地圖的「安排前往」：沿最省體力的路一站一站走，每站照常扣體力、檢查新手引導的移動步驟與大勢門檻；
-        下一站體力不夠就停在已抵達的地方。整趟只寫一則江湖紀錄：「前往 高郵湖（途經 揚州城郊）」，
-        中途停下時寫「前往 太湖水寨（體力不足，停在 鎮江渡口）」。不能前往時只回傳原因，不動、也不寫紀錄。"""
+        下一站體力不夠、或途中賽季落幕就停在已抵達的地方。整趟只寫一則江湖紀錄：「前往 高郵湖（途經 揚州城郊）」，
+        中途停下時寫「前往 太湖水寨（體力不足，停在 鎮江渡口）」或「（賽季落幕，停在 …）」。
+        不能前往時只回傳原因，不動、也不寫紀錄。"""
         s, c = self.state, self.content
         button = atlas.travel_button(s, c, dest_id) if dest_id in c.locations else None
         if button is None or not button[1]:
@@ -355,8 +356,8 @@ class Game:
         try:
             msgs: list[str] = []
             for hop in route.path:
-                if s.player.stamina < c.locations[hop].move_cost:
-                    break
+                if s.world.ended or s.player.stamina < c.locations[hop].move_cost:
+                    break  # 途中賽季落幕，或下一站體力不夠：停在已抵達的地方
                 msgs += self._move(hop)
                 msgs += note_action(s, c, "move")
                 msgs += check_thresholds(s, c)
@@ -370,7 +371,8 @@ class Game:
         c, here = self.content, self.state.player.location
         title = f"前往 {c.locations[dest_id].name}"
         if here != dest_id:
-            return f"{title}（體力不足，停在 {c.locations[here].name}）"
+            why = "賽季落幕" if self.state.world.ended else "體力不足"
+            return f"{title}（{why}，停在 {c.locations[here].name}）"
         if route.via:
             return f"{title}（途經 {'、'.join(c.locations[loc_id].name for loc_id in route.via)}）"
         return title

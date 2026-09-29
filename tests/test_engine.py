@@ -649,6 +649,14 @@ def test_travel_runs_the_guide_and_thresholds_at_every_hop(game, monkeypatch):
     assert game.state.journal[0].lines == ["✔ 引導完成", "【說書人】看看地圖。"]
 
 
+def test_travel_stops_when_the_season_ends_on_the_way(game):
+    game.state.world.flags.add("cave_open")
+    game.state.world.trends["kou"] = 80  # 一走到湖邊就觸發「水寇稱霸」，賽季落幕
+    game.travel("cave")
+    assert game.state.world.ended and game.state.player.location == "lake"
+    assert game.state.journal[0].title == "前往 寶洞（賽季落幕，停在 湖邊）"
+
+
 def test_travel_is_refused_with_a_reason(game):
     before = len(game.state.journal)
     game.state.pending_event = "drunk"
