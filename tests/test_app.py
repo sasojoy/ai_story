@@ -570,6 +570,14 @@ def test_clicking_a_place_on_the_map_selects_it():
     assert app.map_click_handler(None, "story", gr.EventData(None, {"loc": "gaoyou"})) == skip
 
 
+def test_clicking_the_map_ignores_malformed_event_data():
+    game = Game.new(app.CONTENT, "測試")
+    skip = [gr.skip()] * app.MAP_OUTPUTS
+    for data in (None, [], ["gaoyou"], "loc", 3, {"loc": None}, {"loc": ["gaoyou"]}, {"loc": {"id": "gaoyou"}}, {"loc": 3}):
+        assert app.map_click_handler(game, "story", gr.EventData(None, data)) == skip, data
+    assert app.map_click_handler(game, "story", None) == skip
+
+
 def test_unknown_place_shows_only_that_it_is_unknown():
     game = Game.new(app.CONTENT, "測試")
     page = app.map_page_handler(game, "situation", "suzhou")
@@ -584,17 +592,38 @@ def test_travel_button_explains_why_it_cannot_go():
     assert page[app.MAP_TRAVEL_INDEX] == gr.update(visible=True, value="有事件待處理，不能安排前往", interactive=False)
 
 
+TRAVEL_OUTPUTS = app.N_OUTPUTS + len(app.PAGES) + app.MAP_OUTPUTS  # 江湖畫面、四個整頁、大地圖頁面
+
+
 def test_travel_returns_to_the_main_view_at_the_destination(tmp_path, monkeypatch):
     monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
     game = Game.new(app.CONTENT, "測試")
-    out = app.travel_handler(game, "gaoyou")
-    assert len(out) == app.N_OUTPUTS + len(app.PAGES)
-    assert out[app.N_OUTPUTS:] == app.show_page("main")
+    out = app.travel_handler(game, "situation", "gaoyou")
+    assert len(out) == TRAVEL_OUTPUTS
+    assert out[app.N_OUTPUTS:app.N_OUTPUTS + len(app.PAGES)] == app.show_page("main")
+    assert map_page(out) == [gr.skip()] * app.MAP_OUTPUTS  # 大地圖頁面藏起來了，不用重畫
     assert game.state.player.location == "gaoyou"
     assert out[3].startswith("【高郵湖】")  # 場景顯示抵達的地點
     assert "前往 高郵湖（途經 揚州城郊）" in out[app.LATEST_INDEX]["value"]
     assert (tmp_path / "測試.json").exists()
-    assert app.travel_handler(None, "gaoyou") == [gr.skip()] * (app.N_OUTPUTS + len(app.PAGES))
+    assert app.travel_handler(None, "situation", "gaoyou") == [gr.skip()] * TRAVEL_OUTPUTS
+
+
+def test_refused_trip_stays_on_the_map_and_says_why(tmp_path, monkeypatch):
+    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
+    game = Game.new(app.CONTENT, "測試")
+    game.state.pending_event = "tavern_brawl"  # 按鈕是舊的：打開大地圖之後才冒出事件
+    out = app.travel_handler(game, "story", "gaoyou")
+    assert len(out) == TRAVEL_OUTPUTS
+    assert out[app.N_OUTPUTS:app.N_OUTPUTS + len(app.PAGES)] == app.show_page("map")  # 留在大地圖
+    page = map_page(out)
+    assert page[app.MAP_LAYER_INDEX] == gr.update(value="story") and page[app.MAP_PLACE_INDEX]["value"] == "gaoyou"
+    assert page[app.MAP_DETAIL_INDEX].startswith("**沒能出發**：有事件待處理，不能安排前往。\n\n### 高郵湖")
+    assert page[app.MAP_TRAVEL_INDEX] == gr.update(visible=True, value="有事件待處理，不能安排前往", interactive=False)
+    assert game.state.player.location == "yangzhou"
+    demo = app.build_demo()
+    wired = next(f for f in demo.fns.values() if f.fn is app.travel_handler)
+    assert len(wired.outputs) == TRAVEL_OUTPUTS and len(wired.inputs) == 3
 
 
 def test_normal_redraws_never_simulate_odds(tmp_path, monkeypatch):

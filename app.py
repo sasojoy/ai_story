@@ -375,8 +375,9 @@ def show_page(page: str) -> list:
     return [gr.update(visible=name == page) for name in PAGES]
 
 
-def render_map_page(game: Game, layer: str, selected: str | None) -> list:
-    """大地圖頁面的全部輸出，順序見 MAP_*_INDEX。選的地點不在下拉選單裡（例如走動後、換了新賽季）時改選所在地。"""
+def render_map_page(game: Game, layer: str, selected: str | None, notice: str = "") -> list:
+    """大地圖頁面的全部輸出，順序見 MAP_*_INDEX。選的地點不在下拉選單裡（例如走動後、換了新賽季）時改選所在地。
+    notice 寫在地點詳情的最上面（例如「安排前往」沒走成的原因）。"""
     places = game.map_places()
     if selected not in {loc_id for _, loc_id in places}:
         selected = game.state.player.location
@@ -388,7 +389,7 @@ def render_map_page(game: Game, layer: str, selected: str | None) -> list:
         gr.update(value=layer),
         game.world_map_svg(layer, selected),
         gr.update(choices=places, value=selected),
-        game.place_detail(selected),
+        (f"{notice}\n\n" if notice else "") + game.place_detail(selected),
         gr.update(visible=False) if button is None else gr.update(visible=True, value=button[0], interactive=button[1]),
     ]
     assert len(out) == MAP_OUTPUTS
@@ -413,20 +414,44 @@ def map_page_handler(game, layer, selected):
         return render_map_page(game, layer, selected)
 
 
+def clicked_place(evt: gr.EventData | None) -> str | None:
+    """點大地圖送來的地點 id（MAP_CLICK_JS 送 {loc: 地點 id}）；沒有資料或資料的樣子不對時為 None。"""
+    try:
+        loc_id = evt.loc
+    except (AttributeError, TypeError, KeyError, IndexError):
+        return None
+    return loc_id if isinstance(loc_id, str) else None
+
+
 def map_click_handler(game, layer, evt: gr.EventData):
-    """在大地圖上點一個地點（MAP_CLICK_JS 送來 {loc: 地點 id}）：選中它；點到選不了的地方不動。"""
-    loc_id = getattr(evt, "loc", None)
+    """在大地圖上點一個地點：選中它；點到選不了的地方、或送來的資料不對時不動。"""
+    loc_id = clicked_place(evt)
     if game is None or loc_id not in {place for _, place in game.map_places()}:
         return [gr.skip()] * MAP_OUTPUTS
     with ACT_LOCK:
         return render_map_page(game, layer, loc_id)
 
 
-def travel_handler(game, selected):
-    """「安排前往」：一站一站走過去，走完回到江湖畫面，場景顯示抵達的地點。"""
+def travel_handler(game, layer, selected):
+    """「安排前往」：一站一站走過去，走完回到江湖畫面，場景顯示抵達的地點（大地圖頁面藏起來，不用重畫）。
+    按鈕是舊的而走不成時（例如打開大地圖之後才冒出事件），留在大地圖，地點詳情最上面寫出原因。"""
     if game is None:
-        return [gr.skip()] * (N_OUTPUTS + len(PAGES))
-    return act(game, lambda g: g.travel(selected)) + show_page("main")
+        return [gr.skip()] * (N_OUTPUTS + len(PAGES) + MAP_OUTPUTS)
+    refused: list[str] = []
+
+    def go(g: Game) -> list[str]:
+        start = g.state.player.location
+        msgs = g.travel(selected)
+        if g.state.player.location == start:  # 走得成一定會走出第一站；沒動就是被擋下來了
+            refused.extend(msgs)
+        return msgs
+
+    out = act(game, go)
+    if not refused:
+        return out + show_page("main") + [gr.skip()] * MAP_OUTPUTS
+    reason = refused[0].strip("（）")
+    with ACT_LOCK:
+        return out + show_page("map") + render_map_page(game, layer, selected, f"**沒能出發**：{reason}")
 
 
 def close_world_map():
@@ -479,7 +504,7 @@ def build_demo() -> gr.Blocks:
             start_btn = gr.Button("踏入江湖", variant="primary")
         with gr.Row(visible=False) as game_row:
             with gr.Column(scale=3):
-                with gr.Row(equal_height=False) as scene_row:
+                with gr.Row(equal_height=False):
                     scene_md = gr.Markdown(scale=3)
                     with gr.Column(scale=2, min_width=180):
                         minimap_html = gr.HTML()  # 預設的 js_on_load：點一下就觸發 click
@@ -610,7 +635,9 @@ def build_demo() -> gr.Blocks:
         layer_radio.input(map_page_handler, inputs=[game_state, layer_radio, place_dd], outputs=map_outputs)
         place_dd.input(map_page_handler, inputs=[game_state, layer_radio, place_dd], outputs=map_outputs)
         world_map_html.click(map_click_handler, inputs=[game_state, layer_radio], outputs=map_outputs)
-        travel_btn.click(travel_handler, inputs=[game_state, place_dd], outputs=outputs + pages)
+        travel_btn.click(
+            travel_handler, inputs=[game_state, layer_radio, place_dd], outputs=outputs + pages + map_outputs
+        )
         for col, (_, _, (innate_btn, *free_btns)) in enumerate(members):
             innate_btn.click(make_innate_slot_handler(col), inputs=selection, outputs=menxia_outputs)
             for index, btn in enumerate(free_btns):
