@@ -190,15 +190,23 @@ class Threshold(_Strict):
     location: str | None = None  # 發生地：傳聞記在這裡，大地圖劇情層標 ✦；None＝不在特定地點
 
 
+class SimRumor(_Strict):
+    """虛擬玩家的一則傳聞，連同它發生的地點（傳聞裡寫明了在哪裡時用）。"""
+
+    text: str
+    location: str
+
+
 class SimPlayer(_Strict):
     name: str
     actions_per_day: float
     trend: dict[str, int] = Field(default_factory=dict)
     requires_revealed: str | None = None  # 這條隱藏線浮現之前不會行動
-    rumors: list[str] = Field(default_factory=list)
+    # 傳聞：寫成字串的記在第一個常出沒處；寫成 {"text", "location"} 的記在它寫的地點
+    rumors: list[str | SimRumor] = Field(default_factory=list)
     rumor_chance: float = 0.3
     condition: Condition = Field(default_factory=Condition)
-    haunts: list[str] = Field(default_factory=list)  # 常出沒的地點（固定不動）；他的傳聞記在第一個
+    haunts: list[str] = Field(default_factory=list)  # 常出沒的地點（固定不動）
 
 
 class Ending(_Strict):

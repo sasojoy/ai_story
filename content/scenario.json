@@ -26,7 +26,7 @@
      "condition": {"revealed_all": ["bao"], "world_flags_none": ["fjl_defeated", "kou_crushed", "cave_open"]},
      "rumors": [
       "{name}派人到棲霞山一帶打聽前朝寶藏的下落。",
-      "水寨的船少了一半，聽說{name}分兵去找寶藏了。"
+      {"text": "水寨的船少了一半，聽說{name}分兵去找寶藏了。", "location": "taihu_isle"}
     ]},
     {"name": "翻江龍", "actions_per_day": 6, "trend": {"kou": 1}, "rumor_chance": 0.25, "haunts": ["taihu_isle"],
      "condition": {"world_flags_all": ["cave_open"], "world_flags_none": ["fjl_defeated", "kou_crushed"]},
@@ -35,13 +35,13 @@
     ]},
     {"name": "白衣劍客沈青", "actions_per_day": 3, "trend": {"kou": -1}, "rumor_chance": 0.3, "haunts": ["taihu_north", "zhenjiang"], "rumors": [
       "{name}在太湖邊獨挑水寇十七人，劍不染塵。",
-      "有人看見{name}在鎮江渡口護送難民過江。"
+      {"text": "有人看見{name}在鎮江渡口護送難民過江。", "location": "zhenjiang"}
     ]},
     {"name": "鬼手劉三", "actions_per_day": 3, "trend": {"bao": 2}, "requires_revealed": "bao", "rumor_chance": 0.3, "haunts": ["qixia_back", "jinling"],
      "condition": {"world_flags_none": ["treasure_taken", "treasure_lost", "cave_open"]},
      "rumors": [
       "有人看見{name}在棲霞山一帶鬼鬼祟祟地挖土。",
-      "{name}在金陵黑市高價收購前朝古物。"
+      {"text": "{name}在金陵黑市高價收購前朝古物。", "location": "jinling"}
     ]}
   ],
   "storylines": [

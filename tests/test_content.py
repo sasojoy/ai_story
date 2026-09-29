@@ -240,6 +240,20 @@ def test_unknown_haunt_rejected(tmp_path):
         load_content(root)
 
 
+def test_sim_rumor_may_carry_its_own_place(tmp_path):
+    root = copy_fixture(tmp_path)
+    edit_json(root / "scenario.json", lambda d: d["sim_players"][0]["rumors"].append({"text": "{name}在寶洞外轉悠。", "location": "cave"}))
+    rumors = load_content(root).scenario.sim_players[0].rumors
+    assert rumors[0] == "{name}又劫了一艘船。" and (rumors[1].text, rumors[1].location) == ("{name}在寶洞外轉悠。", "cave")
+
+
+def test_unknown_sim_rumor_place_rejected(tmp_path):
+    root = copy_fixture(tmp_path)
+    edit_json(root / "scenario.json", lambda d: d["sim_players"][0]["rumors"].append({"text": "{name}上了火星。", "location": "mars"}))
+    with pytest.raises(ContentError, match="虛擬玩家 翻江龍.*傳聞「{name}上了火星。」.*mars"):
+        load_content(root)
+
+
 def test_unknown_act_place_rejected(tmp_path):
     root = copy_fixture(tmp_path)
     edit_json(root / "scenario.json", lambda d: d["storylines"][0]["acts"][1].update(places=["mars"]))

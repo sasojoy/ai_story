@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import random
 
-from .models import Act, Content, Ending, Storyline
+from .models import Act, Content, Ending, SimPlayer, SimRumor, Storyline
 from .rules import add_chronicle, add_rumor, add_world_flags, change_trend, check_condition
 from .state import GameState
 
@@ -93,13 +93,21 @@ def sim_tick(state: GameState, content: Content, hours: int, rng: random.Random)
             for trend_id, delta in sim.trend.items():
                 change_trend(state, content, trend_id, delta, reveal=False)
             if sim.rumors and rng.random() < sim.rumor_chance:
-                text = rng.choice(sim.rumors).format(name=sim.name)
-                add_rumor(state, text, sim.haunts[0] if sim.haunts else None)  # 記在第一個常出沒處；不多用亂數
+                text, where = _rumor_place(sim, rng.choice(sim.rumors))  # 和以前一樣只抽一次亂數
+                text = text.format(name=sim.name)
+                add_rumor(state, text, where)
                 msgs.append(f"【江湖傳聞】{text}")
         msgs += check_thresholds(state, content)
         if state.world.ended:
             break
     return msgs
+
+
+def _rumor_place(sim: SimPlayer, rumor: str | SimRumor) -> tuple[str, str | None]:
+    """虛擬玩家一則傳聞的（文字, 發生地）：寫明地點的記在那裡，否則記在第一個常出沒處。不用亂數。"""
+    if isinstance(rumor, SimRumor):
+        return rumor.text, rumor.location
+    return rumor, sim.haunts[0] if sim.haunts else None
 
 
 def evaluate_ending(state: GameState, content: Content) -> Ending:

@@ -8,7 +8,7 @@ from pydantic import ValidationError
 
 from .models import (
     STATS, CharacterDef, Condition, Config, Content, Effect, Event, Location, MapLayout, Scenario,
-    Sect, Skill, Squad, Tutorial,
+    Sect, SimRumor, Skill, Squad, Tutorial,
 )
 
 
@@ -172,6 +172,9 @@ def validate(c: Content) -> None:
         if sim.requires_revealed:
             known(where, [sim.requires_revealed], trend_ids, "大勢線")
         known(where, sim.haunts, c.locations, "地點")
+        for rumor in sim.rumors:
+            if isinstance(rumor, SimRumor):
+                known(f"{where} 的傳聞「{rumor.text}」", [rumor.location], c.locations, "地點")
         check_condition(where, sim.condition)
     for ending in c.scenario.endings:
         check_condition(f"結局 {ending.id}", ending.condition)

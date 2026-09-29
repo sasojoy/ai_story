@@ -132,6 +132,14 @@ def test_sim_rumors_go_to_the_first_haunt(state, content):
     assert state.world.rumors[-1].location is None
 
 
+def test_a_sim_rumor_can_name_its_own_place(state, content):
+    from tianxia.models import SimRumor
+
+    content.scenario.sim_players[0].rumors = [SimRumor(text="{name}在寶洞外轉悠。", location="cave")]
+    sim_tick(state, content, 1, random.Random(0))
+    assert state.world.rumors[-1].text == "翻江龍在寶洞外轉悠。" and state.world.rumors[-1].location == "cave"
+
+
 def test_haunts_leave_the_world_simulation_unchanged(state, content):
     other = state.model_copy(deep=True)
     rng_a, rng_b = random.Random(5), random.Random(5)
@@ -142,3 +150,20 @@ def test_haunts_leave_the_world_simulation_unchanged(state, content):
     assert rng_a.getstate() == rng_b.getstate()  # 亂數用量一樣
     assert state.world.trends == other.world.trends
     assert [r.text for r in state.world.rumors] == [r.text for r in other.world.rumors]
+
+
+def test_rumor_places_leave_the_world_simulation_unchanged(state, content):
+    from tianxia.models import SimRumor
+
+    other = state.model_copy(deep=True)
+    content.scenario.sim_players[0].rumors = ["{name}又劫了一艘船。", "{name}在湖上放話。", "{name}又出手了。"]
+    rng_a, rng_b = random.Random(5), random.Random(5)
+    sim_tick(state, content, 48, rng_a)
+    for sim in content.scenario.sim_players:
+        sim.rumors = [SimRumor(text=text, location="cave") for text in sim.rumors]
+    sim_tick(other, content, 48, rng_b)
+    assert rng_a.getstate() == rng_b.getstate()  # 亂數用量一樣，挑中的傳聞也一樣
+    assert state.world.trends == other.world.trends
+    assert [r.text for r in state.world.rumors] == [r.text for r in other.world.rumors]
+    assert {r.location for r in state.world.rumors if "翻江龍" in r.text} == {"lake"}  # 寫成字串：記在第一個常出沒處
+    assert {r.location for r in other.world.rumors if "翻江龍" in r.text} == {"cave"}  # 寫成物件：記在它寫的地點

@@ -223,6 +223,30 @@ def test_real_content_places_are_filled_in():
     assert all(th.location for th in s.thresholds) and all(e.location for e in s.world_events)
 
 
+def test_sim_rumors_are_pinned_where_they_happen():
+    """龍頭人物的傳聞標在大地圖上的地點要和傳聞寫的地方一致；沒寫明地點的記在第一個常出沒處。"""
+    from tianxia.models import SimRumor
+
+    c = load_content(CONTENT_DIR)
+    where = {}
+    for sim in c.scenario.sim_players:
+        for rumor in sim.rumors:
+            text, loc_id = (rumor.text, rumor.location) if isinstance(rumor, SimRumor) else (rumor, sim.haunts[0])
+            where[text.format(name=sim.name)] = loc_id
+    assert where == {
+        "太湖水寇又劫了一艘官船，據說是翻江龍親自帶的人。": "taihu_isle",
+        "翻江龍在太湖放話：「江南的水路，從今往後姓翻！」": "taihu_isle",
+        "運河上又有商船失蹤，人人都說是翻江龍的手筆。": "taihu_isle",
+        "翻江龍派人到棲霞山一帶打聽前朝寶藏的下落。": "qixia_foot",
+        "水寨的船少了一半，聽說翻江龍分兵去找寶藏了。": "taihu_isle",
+        "翻江龍的人馬從棲霞山撤回太湖，運河上又不太平了。": "taihu_isle",
+        "白衣劍客沈青在太湖邊獨挑水寇十七人，劍不染塵。": "taihu_north",
+        "有人看見白衣劍客沈青在鎮江渡口護送難民過江。": "zhenjiang",
+        "有人看見鬼手劉三在棲霞山一帶鬼鬼祟祟地挖土。": "qixia_back",
+        "鬼手劉三在金陵黑市高價收購前朝古物。": "jinling",
+    }
+
+
 def test_legend_strip_does_not_cover_locations():
     c = load_content(CONTENT_DIR)
     assert max(loc.y for loc in c.locations.values()) + 12 < c.map.height - 50
