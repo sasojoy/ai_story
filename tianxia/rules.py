@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import random
 
-from . import team
+from . import roster, team
 from .models import Check, Condition, Content, Effect
 from .state import PLAYER, GameState, Rumor
 
@@ -147,6 +147,8 @@ def apply_effect(effect: Effect, state: GameState, content: Content) -> list[str
         msgs.append(f"你叛出了{content.sects[p.sect].name}。")
         p.flags.add(f"叛出:{p.sect}")
         p.sect = None
+    if effect.recruit:
+        msgs += roster.recruit(state, content, effect.recruit)
     for trend_id, delta in effect.trend.items():
         msgs += change_trend(state, content, trend_id, delta)
     add_world_flags(state, effect.world_flags_add)

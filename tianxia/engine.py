@@ -6,7 +6,7 @@ import random
 from pydantic import BaseModel
 
 from . import atlas, battlelog, journal, roster, skillview, team
-from .events import choice_label, has_events_here, pick_event, visible_choices
+from .events import choice_label, fortune_events, has_events_here, pick_event, visible_choices
 from .guide import note_action, quest_text, tutorial_intro
 from .journal import LOG_BREAK, Draft
 from .mapview import render_map, render_minimap
@@ -133,6 +133,8 @@ class Game:
         msgs: list[str] = []
         if p.busy_until is not None and w.time >= p.busy_until:
             msgs += self._finish_seclusion(p.busy_until)
+        if roster.fortune_overdue(self.state, self.content):
+            msgs += self._deliver_fortune()
         w.sim_accum += seconds
         hours = int(w.sim_accum // HOUR)
         if hours:
@@ -162,6 +164,12 @@ class Game:
         opts.append(self._cost_option("act:explore", "探索", cost["explore"]))
         if has_events_here(c, loc, "socialize"):
             opts.append(self._cost_option("act:socialize", "交遊", cost["socialize"]))
+        block = roster.apprentice_block(s, c)
+        if block == "":
+            cfg = c.config
+            opts.append(self._cost_option("act:apprentice", "收徒", cfg.apprentice_stamina, f"銀兩 {cfg.apprentice_silver}"))
+        elif block is not None:
+            opts.append(Option(id="act:apprentice", label=block, enabled=False))
         for dest_id in loc.connections:
             dest = c.locations[dest_id]
             if dest.unlock_flag and dest.unlock_flag not in s.world.flags:
@@ -200,6 +208,7 @@ class Game:
         if kind == "season":  # 新賽季的開場紀錄由 Game.new 寫好
             return self._log(self.new_season() + check_thresholds(self.state, self.content))
         self._draft = Draft(self._action_title(kind, arg))
+        before = set(self.state.player.members)
         try:
             if kind == "act":
                 msgs = self._act(arg)
@@ -212,14 +221,21 @@ class Game:
             elif kind == "move":
                 msgs += note_action(self.state, self.content, "move")
             msgs += check_thresholds(self.state, self.content)
+            self._tag_joined(before)
             journal.add_entry(self.state, self._draft.entry(self.state.world.time, msgs))
         finally:
             self._draft = None
         return self._log(msgs)
 
+    def _tag_joined(self, before: set[str]) -> None:
+        """這次行動有人入門（收徒、結識、招降），而紀錄還沒有結果標記時，標上「地品・入門」。"""
+        joined = [key for key in self.state.player.members if key not in before]
+        if joined and self._draft is not None and not self._draft.tag:
+            self._draft.tag = roster.joined_tag(self.content, joined[0])
+
     def _action_title(self, kind: str, arg: str) -> str:
         """這次行動在江湖紀錄裡的標題：「前往 揚州城」「探索揚州城」「交遊・揚州城」「歷練・揚州城郊」、
-        「酒樓鬥毆・上前勸架」（事件標題・選項）或「提前出關」。"""
+        「收徒・揚州城」、「酒樓鬥毆・上前勸架」（事件標題・選項）或「提前出關」。"""
         s, c = self.state, self.content
         if kind == "move":
             return f"前往 {c.locations[arg].name}"
@@ -227,7 +243,8 @@ class Game:
             event = c.events[s.pending_event]
             return f"{event.title}・{event.choices[int(arg)].text}"
         here = c.locations[s.player.location].name
-        return {"explore": f"探索{here}", "socialize": f"交遊・{here}", "train": f"歷練・{here}"}.get(arg, "提前出關")
+        titles = {"explore": f"探索{here}", "socialize": f"交遊・{here}", "train": f"歷練・{here}", "apprentice": f"收徒・{here}"}
+        return titles.get(arg, "提前出關")
 
     def _hide(self, msg: str) -> None:
         """這則訊息不寫進江湖紀錄（場景已經顯示，或已經寫在標題裡）。"""
@@ -249,12 +266,34 @@ class Game:
         cost = self.content.config.action_cost
         if what == "break":
             return self._finish_seclusion(self.state.world.time)
+        if what == "apprentice":
+            return roster.apprentice(self.state, self.content, self.rng)
         self.state.player.stamina -= cost[what]
         if what == "train":
             return self._train()
         if what == "explore":
             return self._encounter("explore", "你四處走走，一無所獲。")
+        if roster.fortune_due(self.state, self.content):
+            events = fortune_events(self.state, self.content)
+            if events:  # 新立門戶福緣：第 fortune_day_min 天起的第一次交遊必定先遇上
+                self.state.player.fortune = True
+                return self._present(self.rng.choice(events))
         return self._encounter("socialize", "此地無人可訪，你只好悻悻離去。")
+
+    def _deliver_fortune(self) -> list[str]:
+        """第 fortune_day_max 天結束還沒遇上新立門戶福緣：直接送上門（第一個還能觸發的福緣事件的第一個選項），
+        另寫一則江湖紀錄「結識【某某】」。已經沒有人可送時只記下福緣已過。"""
+        s, c = self.state, self.content
+        s.player.fortune = True
+        events = fortune_events(s, c)
+        if not events:
+            return []
+        event = events[0]
+        effect = event.choices[0].effect
+        msgs = [event.text] + apply_effect(effect, s, c)
+        ch = c.characters[effect.recruit]
+        journal.add_entry(s, Draft(f"結識【{ch.name}】", f"{ch.tier}品・福緣").entry(s.world.time, msgs))
+        return msgs
 
     def _encounter(self, action: str, nothing: str) -> list[str]:
         event = pick_event(self.state, self.content, action, self.rng)
@@ -304,7 +343,7 @@ class Game:
         return msgs
 
     def _battle_rewards(self, squad: Squad, record: BattleRecord) -> list[str]:
-        """打贏時發對手獎勵（銀兩、心得、每人經驗），同時記進戰鬥紀錄。"""
+        """打贏時發對手獎勵（銀兩、心得、每人經驗）並擲招降，同時記進戰鬥紀錄。"""
         p = self.state.player
         msgs = []
         if squad.reward_silver:
@@ -317,8 +356,9 @@ class Game:
             msgs.append(f"心得 +{squad.reward_xinde}")
         record.exp = squad.exp
         levels = team.add_exp(self.state, self.content, squad.exp)
-        record.notes += levels
-        return msgs + levels
+        joined = roster.surrender(self.state, self.content, squad, self.rng)
+        record.notes += levels + joined
+        return msgs + levels + joined
 
     def _file_battle(self, record: BattleRecord) -> str:
         """把戰鬥紀錄存進歷史、場景顯示它的卡片；回傳紀錄裡的一行摘要。

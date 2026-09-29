@@ -19,7 +19,7 @@ def test_new_game(game):
 
 
 def test_town_options(game):
-    assert ids(game) == ["act:explore", "act:socialize", "move:lake"]  # 城鎮沒有敵人，不能歷練
+    assert ids(game) == ["act:explore", "act:socialize", "act:apprentice", "move:lake"]  # 城鎮沒有敵人，不能歷練；可以收徒
 
 
 def test_locked_location_hidden_until_flag(game):

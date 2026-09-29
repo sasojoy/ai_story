@@ -1,13 +1,16 @@
 import json
+import random
 
 import pytest
 
+from conftest import FIXTURE, FixedRandom
 from tianxia import roster, team
+from tianxia.content import load_content
 from tianxia.engine import Game
-from tianxia.models import Check
-from tianxia.rules import learn_skill
+from tianxia.models import Check, Surrender
+from tianxia.rules import check_condition, learn_skill
 from tianxia.save import load_game
-from tianxia.state import Member
+from tianxia.state import Member, new_game_state
 from tianxia.world import check_thresholds
 
 
@@ -269,3 +272,226 @@ def test_trait_goes_into_battle_as_a_fixed_xinfa(game):
     assert team.upgrade(game.state, game.content, "skill:calm") == ["沒有這門武學。"]
     assert team.dispel(game.state, game.content, "skill:calm") == ["沒有這門武學。"]
     assert p.loadouts["sage"] == [None, None]
+
+
+# ── 入門 ──────────────────────────────────────────────
+
+
+def option(game, option_id):
+    found = next(o for o in game.options() if o.id == option_id)
+    return found.label, found.enabled
+
+
+def test_newcomers_start_at_the_lowest_level_in_the_teams(game):
+    p = game.state.player
+    p.members["player"].level, p.members["mate"].level = 6, 4
+    join(game, "pupil", level=1)  # 候補的等級不算
+    assert roster.join_level(game.state) == 4
+    assert roster.recruit(game.state, game.content, "hero") == [
+        "【俠女】入門（地品・柔・統御 5），從第 4 級練起，先列候補。"
+    ]
+    assert p.members["hero"].level == 4 and p.loadouts["hero"] == [None, None]
+    assert roster.bench(game.state, game.content) == ["hero", "pupil"]
+
+
+def test_recruiting_someone_already_here_turns_into_xinde(game):
+    assert roster.recruit(game.state, game.content, "mate") == ["【韓鐵】早已在門下，這份緣分化為心得。", "心得 +20"]
+    assert game.state.player.stats["xinde"] == 20
+
+
+def test_meeting_event_recruits_and_is_written_down(game):
+    game.state.pending_event = "meet"
+    game.choose("choice:0")
+    assert "friend" in roster.bench(game.state, game.content)
+    entry = game.state.journal[0]
+    assert (entry.title, entry.tag) == ("琴聲・請他入門", "玄品・入門")
+    assert entry.lines == ["琴師收起琴，跟你走了。", "【琴師】入門（玄品・柔・統御 4），從第 1 級練起，先列候補。"]
+
+
+def test_meeting_events_leave_out_people_already_here(game):
+    game.state.player.flags.add("heard_music")
+    condition = game.content.events["meet"].condition
+    assert check_condition(condition, game.state)
+    join(game, "friend")
+    assert not check_condition(condition, game.state)
+
+
+# ── 收徒 ──────────────────────────────────────────────
+
+
+def test_apprentice_is_offered_in_towns_and_sects_only(game):
+    assert [o.id for o in game.options()] == ["act:explore", "act:socialize", "act:apprentice", "move:lake"]
+    assert option(game, "act:apprentice") == ("收徒（體力 5・銀兩 40）", True)
+    game.choose("move:lake")  # 湖畔不是城鎮或門派
+    assert "act:apprentice" not in [o.id for o in game.options()]
+
+
+def test_apprentice_costs_silver_and_stamina_and_brings_someone(game):
+    game.choose("act:apprentice")
+    p = game.state.player
+    assert (p.stamina, p.stats["silver"], p.apprentice_day, p.apprentice_count) == (145, 10, 1, 1)
+    assert "scholar" in p.members and "pupil" not in p.members  # 固定亂數 Random(0) 抽到玄品
+    entry = game.state.journal[0]
+    assert (entry.title, entry.tag, entry.changes) == ("收徒・小鎮", "玄品・入門", ["銀兩 -40"])
+    assert entry.lines == ["【書生】入門（玄品・巧・統御 3），從第 1 級練起，先列候補。"]
+
+
+def test_apprentice_explains_why_it_cannot_be_done(game):
+    p = game.state.player
+    p.stats["silver"] = 39
+    assert option(game, "act:apprentice") == ("收徒（銀兩不足，要 40 兩）", False)
+    p.stats["silver"] = 100
+    p.stamina = 4
+    assert option(game, "act:apprentice") == ("收徒（體力 5・銀兩 40）", False)
+    p.stamina = 150
+    p.apprentice_day, p.apprentice_count = 1, 2
+    assert option(game, "act:apprentice") == ("收徒（今天已收了 2 次）", False)
+    assert game.choose("act:apprentice") == ["（此刻無法這麼做。）"]
+    join(game, "pupil", "scholar")
+    assert option(game, "act:apprentice") == ("此地已無可收之徒", False)
+
+
+def test_apprentice_count_starts_over_the_next_day(game):
+    p = game.state.player
+    p.apprentice_day, p.apprentice_count = 1, 2
+    game.advance(24 * 3600)
+    assert option(game, "act:apprentice") == ("收徒（體力 5・銀兩 40）", True)
+    game.choose("act:apprentice")
+    assert (p.apprentice_day, p.apprentice_count) == (2, 1)
+
+
+def test_recruit_at_limits_where_someone_can_be_taken_in(game):
+    assert roster.apprentice_candidates(game.state, game.content) == ["pupil", "scholar"]
+    game.state.player.location = "lake"
+    assert roster.apprentice_candidates(game.state, game.content) == ["pupil"]  # 書生只在小鎮收得到
+
+
+def test_apprentice_draws_huang_three_times_in_four(content):
+    counts = {"黃": 0, "玄": 0}
+    for seed in range(400):
+        state = new_game_state(content, "測試")
+        roster.apprentice(state, content, random.Random(seed))
+        newcomer = next(key for key in state.player.members if key in ("pupil", "scholar"))
+        counts[content.characters[newcomer].tier] += 1
+    assert 270 <= counts["黃"] <= 330, counts  # 黃 75%、玄 25%
+
+
+def test_apprentice_takes_whoever_is_left(game):
+    join(game, "pupil")
+    roster.apprentice(game.state, game.content, random.Random(0))
+    assert "scholar" in game.state.player.members
+
+
+# ── 招降 ──────────────────────────────────────────────
+
+
+def test_beating_a_squad_may_bring_a_surrender(game):
+    game.content.squads["thug"].surrender = Surrender(character="captain", chance=1.0)
+    game.choose("move:lake")
+    game.choose("act:train")
+    record = game.state.battles[0]
+    assert record.outcome == "win" and "captain" in game.state.player.members
+    assert record.notes == [
+        "水寇小隊敗退，【頭目】願意投效！", "【頭目】入門（地品・剛・統御 4），從第 1 級練起，先列候補。"
+    ]
+    entry = game.state.journal[0]
+    assert entry.tag.startswith("擊退水寇小隊") and "水寇小隊敗退，【頭目】願意投效！" in entry.lines
+
+
+def test_event_battles_can_bring_a_surrender_too(game):
+    game.content.squads["thug"].surrender = Surrender(character="captain", chance=1.0)
+    game.content.events["duel"].choices[0].combat = "thug"
+    game.choose("move:lake")
+    game.choose("act:socialize")
+    game.choose("choice:0")
+    assert "captain" in game.state.player.members
+
+
+def test_surrender_uses_the_default_chance(game):
+    squad = game.content.squads["boss"]  # 沒寫機率：用 config.surrender_chance 0.25
+    assert roster.surrender(game.state, game.content, squad, FixedRandom(0.3)) == []
+    assert roster.surrender(game.state, game.content, squad, FixedRandom(0.2))[0] == "翻江龍敗退，【頭目】願意投效！"
+
+
+def test_no_surrender_roll_once_they_are_here():
+    """已經入門就不擲：打完之後的亂數狀態，和那支隊伍根本沒有招降時一模一樣。"""
+
+    def after_training(with_surrender: bool):
+        c = load_content(FIXTURE)
+        c.config.train_event_chance = c.config.train_stat_chance = 0.0
+        if with_surrender:
+            c.squads["thug"].surrender = Surrender(character="captain", chance=0.5)
+        g = Game.new(c, "沈浪", rng=random.Random(0))
+        join(g, "captain")
+        g.choose("move:lake")
+        g.choose("act:train")
+        return g.rng.getstate()
+
+    assert after_training(True) == after_training(False)
+
+
+# ── 新立門戶福緣 ─────────────────────────────────────────
+
+
+def test_fortune_comes_first_when_socializing_from_day_two(game):
+    game.choose("act:socialize")  # 第一天：照常
+    assert game.state.pending_event == "join"
+    game.choose("choice:1")
+    game.state.world.time = 24 * 3600  # 第二天
+    game.choose("act:socialize")
+    assert game.state.pending_event == "fortune" and game.state.player.fortune
+    game.choose("choice:0")
+    assert "hero" in game.state.player.members
+    entry = game.state.journal[0]
+    assert (entry.title, entry.tag) == ("俠女來投・請她入門", "地品・入門")
+    game.choose("act:socialize")
+    assert game.state.pending_event == "join"  # 每季只有一次
+
+
+def test_fortune_arrives_by_itself_after_day_seven(game):
+    game.content.config.season_days = 10
+    game.content.scenario.sim_players = []  # 不讓水寇提早結束這一季
+    game.advance(7 * 24 * 3600 - 3600)
+    assert "hero" not in game.state.player.members
+    game.advance(3600)
+    assert "hero" in game.state.player.members and game.state.player.fortune
+    entry = next(e for e in game.state.journal if e.title == "結識【俠女】")
+    assert entry.tag == "地品・福緣"
+    assert entry.lines == [
+        "一位俠女登門拜訪。", "俠女抱拳：「今後請多指教。」", "【俠女】入門（地品・柔・統御 5），從第 1 級練起，先列候補。"
+    ]
+    game.advance(24 * 3600)
+    assert sum(e.title == "結識【俠女】" for e in game.state.journal) == 1
+
+
+def test_no_fortune_when_everyone_it_could_bring_is_here(game):
+    join(game, "hero")
+    game.state.world.time = 24 * 3600
+    game.choose("act:socialize")
+    assert game.state.pending_event == "join" and not game.state.player.fortune
+    game.content.config.season_days = 10
+    game.content.scenario.sim_players = []
+    game.advance(7 * 24 * 3600)
+    assert game.state.player.fortune and not any(e.title.startswith("結識") for e in game.state.journal)
+
+
+def test_old_save_without_recruiting_fields_loads(tmp_path, content, game):
+    dump = game.state.model_dump(mode="json")
+    for key in ("apprentice_day", "apprentice_count", "fortune"):
+        del dump["player"][key]
+    path = tmp_path / "old.json"
+    path.write_text(json.dumps(dump, ensure_ascii=False), encoding="utf-8")
+    p = Game(content, load_game(path)).state.player
+    assert (p.apprentice_day, p.apprentice_count, p.fortune) == (0, 0, False)
+
+
+def test_a_new_season_starts_the_roster_over(game):
+    join(game, "hero")
+    game.set_member(1, 0, "hero")
+    p = game.state.player
+    p.fortune, p.apprentice_day, p.apprentice_count = True, 1, 2
+    game.advance(2 * 24 * 3600)  # 夾具一季兩天
+    game.choose("season:new")
+    p = game.state.player
+    assert set(p.members) == {"player", "mate"} and teams(game) == [["player", "mate"], [], [], []]
+    assert (p.fortune, p.apprentice_day, p.apprentice_count, game.state.world.act_reached) == (False, 0, 0, 0)

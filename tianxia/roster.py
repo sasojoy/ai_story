@@ -6,9 +6,11 @@
 """
 from __future__ import annotations
 
-from . import team
-from .models import COMPANION_TIERS, Content
-from .state import PLAYER, TEAM_SIZE, GameState, Team
+import random
+
+from . import rules, team
+from .models import COMPANION_TIERS, Content, Squad
+from .state import PLAYER, TEAM_SIZE, GameState, Member, Team
 
 NUMERALS = "零一二三四五六七八九十"
 
@@ -152,3 +154,107 @@ def _unequip_innates(state: GameState, content: Content, index: int) -> list[str
                     f"已從{team.member_name(state, content, holder)}的武學欄卸下。"
                 )
     return msgs
+
+
+# ── 入門 ──────────────────────────────────────────────
+
+
+def join_level(state: GameState) -> int:
+    """新人的等級：目前各隊成員中最低的等級（候補不算），至少 1。"""
+    p = state.player
+    return max(1, min((p.members[key].level for key in team.lined_up(state)), default=1))
+
+
+def recruit(state: GameState, content: Content, char_id: str) -> list[str]:
+    """char_id 入門：從 join_level 起算、先列候補。已經在門下時照 config.duplicate_xinde 改給心得
+    （劇情事件萬一給了已入門的人時；不算進 1c-3 的付費心得上限）。回傳敘事與數值變化。"""
+    p, ch = state.player, content.characters[char_id]
+    if char_id in p.members:
+        amount = content.config.duplicate_xinde[ch.tier]
+        p.stats["xinde"] = p.stats.get("xinde", 0) + amount
+        return [f"【{ch.name}】早已在門下，這份緣分化為心得。", f"心得 +{amount}"]
+    level = join_level(state)
+    p.members[char_id] = Member(level=level)
+    p.loadouts[char_id] = [None] * team.FREE_SLOTS
+    return [f"【{ch.name}】入門（{ch.tier}品・{ch.style}・統御 {ch.command}），從第 {level} 級練起，先列候補。"]
+
+
+def joined_tag(content: Content, char_id: str) -> str:
+    """有人入門的那一則江湖紀錄的結果標記，例如「地品・入門」。"""
+    return f"{content.characters[char_id].tier}品・入門"
+
+
+# ── 收徒 ──────────────────────────────────────────────
+
+
+def apprentice_candidates(state: GameState, content: Content) -> list[str]:
+    """在目前所在地收得到、還沒入門的人：有「收徒」管道，寫了 recruit_at 的只在那些地點。"""
+    p, weights = state.player, content.config.apprentice_weights
+    return [
+        cid for cid, ch in content.characters.items()
+        if "收徒" in ch.sources and ch.tier in weights and cid not in p.members
+        and (not ch.recruit_at or p.location in ch.recruit_at)
+    ]
+
+
+def apprenticed_today(state: GameState) -> int:
+    p = state.player
+    return p.apprentice_count if p.apprentice_day == rules.current_day(state) else 0
+
+
+def apprentice_block(state: GameState, content: Content) -> str | None:
+    """「收徒」選項的狀態：這裡不是城鎮或門派時為 None（不顯示）；收得了時是空字串（體力由 engine 照一般行動判斷）；
+    收不了時是按鈕上要寫的原因。"""
+    cfg = content.config
+    if not set(content.locations[state.player.location].tags) & set(cfg.apprentice_tags):
+        return None
+    if not apprentice_candidates(state, content):
+        return "此地已無可收之徒"
+    if apprenticed_today(state) >= cfg.apprentice_per_day:
+        return f"收徒（今天已收了 {cfg.apprentice_per_day} 次）"
+    if state.player.stats.get("silver", 0) < cfg.apprentice_silver:
+        return f"收徒（銀兩不足，要 {cfg.apprentice_silver} 兩）"
+    return ""
+
+
+def apprentice(state: GameState, content: Content, rng: random.Random) -> list[str]:
+    """收徒：花銀兩與體力，從這裡收得到的人裡先依 config.apprentice_weights 抽品階（只在還有人的品階之間）、
+    再在同品階裡平均抽一位。呼叫前 engine 已確認 apprentice_block 是空字串、體力也夠。"""
+    cfg, p = content.config, state.player
+    pool = apprentice_candidates(state, content)
+    tiers = [tier for tier in cfg.apprentice_weights if any(content.characters[k].tier == tier for k in pool)]
+    tier = rng.choices(tiers, weights=[cfg.apprentice_weights[t] for t in tiers])[0]
+    pick = rng.choice([k for k in pool if content.characters[k].tier == tier])
+    p.stamina -= cfg.apprentice_stamina
+    p.stats["silver"] -= cfg.apprentice_silver
+    p.apprentice_count = apprenticed_today(state) + 1
+    p.apprentice_day = rules.current_day(state)
+    return [f"銀兩 -{cfg.apprentice_silver}"] + recruit(state, content, pick)
+
+
+# ── 招降 ──────────────────────────────────────────────
+
+
+def surrender(state: GameState, content: Content, squad: Squad, rng: random.Random) -> list[str]:
+    """打贏有 surrender 的敵方隊伍後擲一次招降；沒有招降或那人已經入門時不擲（不動亂數）。"""
+    offer = squad.surrender
+    if offer is None or offer.character in state.player.members:
+        return []
+    chance = content.config.surrender_chance if offer.chance is None else offer.chance
+    if rng.random() >= chance:
+        return []
+    name = content.characters[offer.character].name
+    return [f"{squad.name}敗退，【{name}】願意投效！"] + recruit(state, content, offer.character)
+
+
+# ── 新立門戶福緣 ─────────────────────────────────────────
+
+
+def fortune_due(state: GameState, content: Content) -> bool:
+    """福緣還沒發生，而且已經是第 fortune_day_min 天（含）以後：這時交遊必定先觸發福緣事件。"""
+    return not state.player.fortune and rules.current_day(state) >= content.config.fortune_day_min
+
+
+def fortune_overdue(state: GameState, content: Content) -> bool:
+    """第 fortune_day_max 天已經結束，福緣還沒發生：直接送上門。"""
+    return not state.player.fortune and state.world.time >= content.config.fortune_day_max * rules.DAY

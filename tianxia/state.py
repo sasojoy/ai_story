@@ -41,6 +41,9 @@ class PlayerState(BaseModel):
     seclusion_start: float = 0.0
     tutorial_step: int = 0  # 等於引導步數時代表引導結束
     visited: set[str] = Field(default_factory=set)  # 去過的地點
+    apprentice_day: int = 0  # 上次收徒是第幾天
+    apprentice_count: int = 0  # 那一天已經收了幾次
+    fortune: bool = False  # 本季的新立門戶福緣已經發生（或已經沒有人可送）
 
     @model_validator(mode="before")
     @classmethod
