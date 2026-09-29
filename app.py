@@ -2,6 +2,7 @@
 
 遊戲規則全部在 tianxia/，這個檔案只負責畫面與接線：每次操作都先把現實時間同步進遊戲、
 執行動作、存檔，再整個重畫。「門下」（隊伍與武學配置）是另一整頁，由 render_menxia() 重畫。
+打完仗時場景上方出現戰鬥卡片；右欄「戰報」分頁是歷次戰鬥的列表與完整戰報。
 """
 from __future__ import annotations
 
@@ -22,10 +23,13 @@ CONTENT = load_content(ROOT / "content")
 SAVE_DIR = ROOT / "saves"
 MAX_BUTTONS = 10
 # game_state、任務區塊、狀態文字、場景文字、紀錄、地圖、大勢、傳聞、江湖史、選項 id 清單、匿名勾選框、
-# 左欄「場景／地圖」分頁、戰報，再加上按鈕（MAX_BUTTONS）。
+# 左欄「場景／地圖」分頁、戰報列表、戰報內容、戰鬥卡片、「看完整戰報」按鈕，再加上按鈕（MAX_BUTTONS）。
 MAIN_TABS_INDEX = 11
-REPORT_INDEX = 12
-N_OUTPUTS = 13 + MAX_BUTTONS
+REPORT_LIST_INDEX = 12
+REPORT_INDEX = 13
+CARD_INDEX = 14
+CARD_BUTTON_INDEX = 15
+N_OUTPUTS = 16 + MAX_BUTTONS
 
 # 門下頁面（render_menxia）的輸出順序：選取的自選欄、選取的武學、心得與規則、
 # 每位隊員一組（欄、人物卡、本命、自選1、自選2）、武學庫、武學詳情、配置到、卸下、升一成、散功、訊息。
@@ -51,8 +55,12 @@ def save_path(name: str) -> Path:
     return SAVE_DIR / (re.sub(r'[\\/:*?"<>|]', "_", name) + ".json")
 
 
-def render(game: Game, focus_scene: bool = False) -> list:
-    """回傳順序必須和 build_demo() 裡的 outputs 一致。"""
+def render(game: Game, focus_scene: bool = False, refresh_report: bool = True) -> list:
+    """回傳順序必須和 build_demo() 裡的 outputs 一致。
+
+    refresh_report：重畫戰報列表並選好最新一場（剛進遊戲、或這次行動打了仗）；
+    為 False 時不動列表與內容，保留玩家在列表上的選取（例如計時器重畫）。
+    """
     options = game.options()[:MAX_BUTTONS]
     buttons = []
     for i in range(MAX_BUTTONS):
@@ -61,6 +69,12 @@ def render(game: Game, focus_scene: bool = False) -> list:
         else:
             buttons.append(gr.update(visible=False))
     p = game.state.player
+    if refresh_report:
+        latest = game.latest_battle_id()
+        report = [gr.update(choices=game.battle_list(), value=latest), game.battle_detail(latest)]
+    else:
+        report = [gr.update(), gr.update()]
+    card = game.battle_card()
     return [
         game,
         game.quest_text(),
@@ -74,7 +88,9 @@ def render(game: Game, focus_scene: bool = False) -> list:
         [o.id for o in options],
         p.anonymous,
         gr.update(selected="scene") if focus_scene else gr.update(),
-        game.battle_detail(),
+        *report,
+        gr.update(value=card or "", visible=card is not None),
+        gr.update(visible=card is not None),
         *buttons,
     ]
 
@@ -146,15 +162,18 @@ def _menxia_buttons(game: Game, slot: Slot | None, target: str | None) -> list:
     ]
 
 
-def _scene_key(game: Game) -> str | None:
-    """目前需要玩家讀場景的東西：待處理事件。"""
-    return game.state.pending_event
+def _scene_key(game: Game) -> tuple[str | None, int | None]:
+    """目前需要玩家讀場景的東西：待處理事件、剛打完的戰鬥卡片。"""
+    return game.state.pending_event, game.battle_card_id()
 
 
-def act(game: Game | None, action, menxia: tuple[Slot | None, str | None] | None = None) -> list:
+def act(
+    game: Game | None, action, menxia: tuple[Slot | None, str | None] | None = None, refresh_report: bool = False
+) -> list:
     """同步時間 → 執行動作 → 存檔 → 重畫。上鎖避免計時器與按鈕點擊同時操作同一存檔。
 
     menxia＝(選取的自選欄, 選取的武學) 時連門下頁面一起重畫；動作回傳的訊息（None 表示沒有）顯示在頁面上。
+    戰報列表只在這次動作打了仗（或 refresh_report）時重畫並選好最新一場。
     """
     n = N_OUTPUTS if menxia is None else N_OUTPUTS + MENXIA_OUTPUTS
     if game is None:
@@ -162,10 +181,15 @@ def act(game: Game | None, action, menxia: tuple[Slot | None, str | None] | None
     with ACT_LOCK:
         game.sync(time.time())
         before = _scene_key(game)
+        latest = game.latest_battle_id()
         msgs = action(game)
         save_game(game.state, save_path(game.state.player.name))
         after = _scene_key(game)
-        out = render(game, focus_scene=after is not None and after != before)
+        out = render(
+            game,
+            focus_scene=after != (None, None) and after != before,
+            refresh_report=refresh_report or game.latest_battle_id() != latest,
+        )
         if menxia is not None:
             out += render_menxia(game, *menxia, None if msgs is None else "\n\n".join(msgs))
         return out
@@ -283,6 +307,27 @@ def dispel_handler(game, slot, target):
     return act(game, lambda g: g.dispel(target), menxia=(slot, target))
 
 
+def open_report_handler(game):
+    """場景卡片上的「看完整戰報」：右欄切到「戰報」分頁，並選好卡片上的這一場。"""
+    if game is None:
+        return [gr.skip()] * 3
+    with ACT_LOCK:
+        record_id = game.battle_card_id()
+        return [
+            gr.update(selected="report"),
+            gr.update(choices=game.battle_list(), value=record_id),
+            game.battle_detail(record_id),
+        ]
+
+
+def report_pick_handler(game, record_id):
+    """在戰報列表點選一場：下方顯示這一場的完整內容。"""
+    if game is None:
+        return gr.skip()
+    with ACT_LOCK:
+        return game.battle_detail(record_id)
+
+
 def anonymous_handler(game, value):
     return act(game, lambda g: g.set_anonymous(value))
 
@@ -322,7 +367,7 @@ def start(name):
     if not name:
         raise gr.Error("請先輸入你的名號。")
     shown = [gr.update(visible=False), gr.update(visible=True), gr.update(visible=False)]
-    return act(open_game(name), lambda g: None) + shown
+    return act(open_game(name), lambda g: None, refresh_report=True) + shown
 
 
 def build_demo() -> gr.Blocks:
@@ -339,6 +384,8 @@ def build_demo() -> gr.Blocks:
             with gr.Column(scale=3):
                 with gr.Tabs(selected="scene") as main_tabs:
                     with gr.Tab("場景", id="scene"):
+                        battle_card_md = gr.Markdown(visible=False)
+                        card_btn = gr.Button("看完整戰報", visible=False)
                         scene_md = gr.Markdown()
                     with gr.Tab("地圖", id="map") as map_tab:
                         map_html = gr.HTML()
@@ -350,8 +397,9 @@ def build_demo() -> gr.Blocks:
                     quest_md = gr.Markdown()
                 status_md = gr.Markdown()
                 menxia_btn = gr.Button("門下")
-                with gr.Tabs():
-                    with gr.Tab("戰報"):
+                with gr.Tabs() as side_tabs:
+                    with gr.Tab("戰報", id="report"):
+                        report_list = gr.Radio(label="歷次戰鬥（最新在前）", choices=[], interactive=True)
                         report_md = gr.Markdown()
                     with gr.Tab("江湖大勢"):
                         trends_md = gr.Markdown()
@@ -396,7 +444,7 @@ def build_demo() -> gr.Blocks:
 
         outputs = [
             game_state, quest_md, status_md, scene_md, log_md, map_html, trends_md, rumors_md, chronicle_md,
-            ids_state, anon_cb, main_tabs, report_md,
+            ids_state, anon_cb, main_tabs, report_list, report_md, battle_card_md, card_btn,
             *option_btns,
         ]
         assert len(outputs) == N_OUTPUTS
@@ -415,6 +463,8 @@ def build_demo() -> gr.Blocks:
         anon_cb.input(anonymous_handler, inputs=[game_state, anon_cb], outputs=outputs)
         skip_tutorial_btn.click(skip_tutorial_handler, inputs=[game_state], outputs=outputs)
         map_tab.select(map_view_handler, inputs=[game_state], outputs=outputs)
+        card_btn.click(open_report_handler, inputs=[game_state], outputs=[side_tabs, report_list, report_md])
+        report_list.input(report_pick_handler, inputs=[game_state, report_list], outputs=[report_md])
         for hours, btn in ff_btns.items():
             btn.click(make_fast_forward_handler(hours), inputs=[game_state], outputs=outputs)
 

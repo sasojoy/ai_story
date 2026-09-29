@@ -1,3 +1,5 @@
+import random
+
 import gradio as gr
 
 import app
@@ -78,7 +80,85 @@ def test_tick_never_switches_main_tabs(tmp_path, monkeypatch):
 
 def test_render_includes_report():
     game = Game.new(app.CONTENT, "測試")
-    assert app.render(game)[app.REPORT_INDEX] == "（還沒有戰報。）"
+    out = app.render(game)
+    assert out[app.REPORT_INDEX] == "（還沒有戰報。）"
+    assert out[app.REPORT_LIST_INDEX] == gr.update(choices=[], value=None)
+    assert out[app.CARD_INDEX] == gr.update(value="", visible=False)
+    assert out[app.CARD_BUTTON_INDEX] == gr.update(visible=False)
+
+
+# ── 戰鬥卡片與戰報 ─────────────────────────────────────
+
+
+def battle_game(tmp_path, monkeypatch) -> Game:
+    """一局站在揚州城郊（可以歷練）的新遊戲，存檔寫到 tmp_path。"""
+    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
+    game = Game.new(app.CONTENT, "測試", rng=random.Random(0))
+    game.state.player.location = "yangzhou_jiao"
+    return game
+
+
+def click(game: Game, option_id: str) -> list:
+    ids = [o.id for o in game.options()]
+    return app.make_option_handler(ids.index(option_id))(game, ids)
+
+
+def test_battle_shows_a_card_until_the_next_action(tmp_path, monkeypatch):
+    game = battle_game(tmp_path, monkeypatch)
+    out = click(game, "act:train")
+    record = game.state.battles[0]
+    card = out[app.CARD_INDEX]
+    assert card["visible"] is True and card["value"].startswith("### ⚔ 揚州城郊・對陣 ")
+    assert out[app.CARD_BUTTON_INDEX] == gr.update(visible=True)
+    assert out[app.MAIN_TABS_INDEX] == gr.update(selected="scene")  # 在看地圖也會切回場景看卡片
+    listing = out[app.REPORT_LIST_INDEX]
+    assert listing["value"] == record.id and listing["choices"] == game.battle_list()
+    assert out[app.REPORT_INDEX] == game.battle_detail(record.id)
+    game.state.pending_event = None  # 歷練後可能遇到事件；這裡只看卡片
+    out = click(game, "move:yangzhou")
+    assert out[app.CARD_INDEX] == gr.update(value="", visible=False)
+    assert out[app.CARD_BUTTON_INDEX] == gr.update(visible=False)
+    assert out[app.REPORT_LIST_INDEX] == gr.update() and out[app.REPORT_INDEX] == gr.update()  # 保留列表上的選取
+
+
+def test_tick_keeps_the_card_and_the_report_selection(tmp_path, monkeypatch):
+    game = battle_game(tmp_path, monkeypatch)
+    click(game, "act:train")
+    out = app.tick_handler(game, None, None)
+    assert out[app.CARD_INDEX]["visible"] is True
+    assert out[app.REPORT_LIST_INDEX] == gr.update()
+    assert out[app.MAIN_TABS_INDEX] == gr.update()
+
+
+def test_report_list_pick_and_open_full_report(tmp_path, monkeypatch):
+    game = battle_game(tmp_path, monkeypatch)
+    for _ in range(2):
+        game.state.pending_event = None
+        click(game, "act:train")
+    newest, older = [rid for _, rid in game.battle_list()]
+    assert app.report_pick_handler(game, older) == game.battle_detail(older) != game.battle_detail(newest)
+    tabs, listing, detail = app.open_report_handler(game)  # 卡片上的「看完整戰報」
+    assert tabs == gr.update(selected="report")
+    assert listing["value"] == newest == game.battle_card_id()
+    assert detail == game.battle_detail(newest)
+    assert app.open_report_handler(None) == [gr.skip()] * 3
+
+
+def test_start_fills_the_report_list(tmp_path, monkeypatch):
+    game = battle_game(tmp_path, monkeypatch)
+    click(game, "act:train")
+    out = app.start("測試")  # 讀回剛才的存檔
+    listing = out[app.REPORT_LIST_INDEX]
+    assert listing["value"] == 1 and len(listing["choices"]) == 1
+
+
+def test_battle_card_output_is_not_a_menxia_component():
+    """CARD_INDEX 要接到場景戰鬥卡片，不能誤用門下頁面的元件（例如命名衝突誤用了迴圈變數 card_md）。"""
+    demo = app.build_demo()
+    fns = list(demo.fns.values())
+    start_fn = next(f for f in fns if f.fn is app.start)
+    menxia_fn = next(f for f in fns if f.fn is app.open_menxia)
+    assert start_fn.outputs[app.CARD_INDEX] not in menxia_fn.outputs
 
 
 # ── 門下頁面 ──────────────────────────────────────────
