@@ -1,4 +1,6 @@
+import html
 import random
+import re
 
 import pytest
 from collections import deque
@@ -224,6 +226,116 @@ def test_real_content_places_are_filled_in():
 def test_legend_strip_does_not_cover_locations():
     c = load_content(CONTENT_DIR)
     assert max(loc.y for loc in c.locations.values()) + 12 < c.map.height - 50
+
+
+# ── 大地圖與小地圖不疊字 ─────────────────────────────
+
+TEXT_RE = re.compile(r'<text x="([-\d.]+)" y="([-\d.]+)" font-size="(\d+)"([^>]*)>([^<]*)</text>')
+Box = tuple[float, float, float, float]  # 左、上、右、下
+
+
+def _text_boxes(svg: str) -> list[tuple[str, Box]]:
+    """SVG 裡每段文字大約佔的範圍：寬用 text_width 估，高就是字級（基線以上 0.85、以下 0.15）。"""
+    from tianxia.mapview import text_width
+
+    out = []
+    for m in TEXT_RE.finditer(svg):
+        x, y, size, text = float(m[1]), float(m[2]), int(m[3]), html.unescape(m[5])
+        anchor = re.search(r'text-anchor="(\w+)"', m[4])
+        width = text_width(text, size)
+        left = x - {"start": 0, "middle": width / 2, "end": width}[anchor[1] if anchor else "start"]
+        out.append((text, (left, y - size * 0.85, left + width, y + size * 0.15)))
+    return out
+
+
+def _mark_boxes(svg: str, bottom: float) -> list[tuple[str, Box]]:
+    """大地圖上地點記號的範圍（方塊、菱形、圓點，含外圈與所在地、選定的圓圈）；bottom 以下的圖例不算。"""
+    out = []
+    for m in re.finditer(r'<rect x="([-\d.]+)" y="([-\d.]+)" width="([\d.]+)" height="([\d.]+)" rx="3"([^>]*)>', svg):
+        x, y, w, h = map(float, m.groups()[:4])
+        pad = 1.5 if "stroke=" in m[5] else 0
+        out.append((f"記號({x + w / 2:g},{y + h / 2:g})", (x - pad, y - pad, x + w + pad, y + h + pad)))
+    for m in re.finditer(r'<path d="M([-\d.]+) ([-\d.]+) L([-\d.]+) [-\d.]+ L[^"]*"([^>]*)>', svg):
+        x, top, right = float(m[1]), float(m[2]), float(m[3])
+        s = right - x + (1.5 if "stroke=" in m[4] else 0)
+        out.append((f"記號({x:g},{top + right - x:g})", (x - s, top + right - x - s, x + s, top + right - x + s)))
+    for m in re.finditer(r'<circle cx="([-\d.]+)" cy="([-\d.]+)" r="([\d.]+)" fill="([^"]+)"([^>]*)>', svg):
+        cx, cy, r = float(m[1]), float(m[2]), float(m[3])
+        if m[4] == "#000000" or cy > bottom:  # 透明的可點範圍、圖例
+            continue
+        stroke = re.search(r'stroke-width="([\d.]+)"', m[5])
+        r += float(stroke[1]) / 2 if stroke else 0
+        out.append((f"記號({cx:g},{cy:g})", (cx - r, cy - r, cx + r, cy + r)))
+    return out
+
+
+def _overlaps(a: Box, b: Box, allow: float = 1.0) -> bool:
+    return a[0] < b[2] - allow and b[0] < a[2] - allow and a[1] < b[3] - allow and b[1] < a[3] - allow
+
+
+def _collisions(svg: str, width: float, height: float, marks: list[tuple[str, Box]] = ()) -> list[str]:
+    """疊在一起的文字、壓到地點記號的文字、超出畫布的文字（容許 1 px）。"""
+    texts = _text_boxes(svg)
+    found = [f"{a}×{b}" for i, (a, box_a) in enumerate(texts) for b, box_b in texts[i + 1:] if _overlaps(box_a, box_b)]
+    found += [f"{a}×{b}" for a, box_a in texts for b, box_b in marks if _overlaps(box_a, box_b)]
+    found += [f"{a} 出界" for a, (left, top, right, bottom) in texts if left < -1 or top < -1 or right > width + 1 or bottom > height + 1]
+    return found
+
+
+def _map_game(everything: bool, bao: bool = False, cave: bool = True):
+    """everything：每個地點都去過、每個地點都有最近的傳聞；bao：寶藏線浮現、進入寶藏主線；cave：藏龍洞開放。"""
+    from tianxia.engine import Game
+    from tianxia.state import Rumor
+
+    c = load_content(CONTENT_DIR)
+    game = Game.new(c, "測試俠客", rng=random.Random(0))
+    s = game.state
+    if cave:
+        s.world.flags.add("cave_open")
+    if bao:
+        s.world.revealed.add("bao")
+        s.world.trends["bao"] = 60
+        s.world.storyline, s.world.act = "bao_line", 1
+    if everything:
+        s.player.visited = set(c.locations)
+        s.world.rumors += [Rumor(time=s.world.time, text="傳聞", location=loc_id) for loc_id in c.locations]
+    return game
+
+
+def _widest_odds(squad_id: str) -> str:
+    return "難分勝負"  # 最長的勝算詞
+
+
+def _map_collisions(game, layer: str, selected: str | None = None, marks: bool = True) -> list[str]:
+    """大地圖上疊在一起、出界的文字；marks 時連壓到地點記號的文字也算。"""
+    from tianxia.mapview import render_map
+
+    m = game.content.map
+    svg = render_map(game.state, game.content, layer, selected, _widest_odds if layer == "enemies" else None)
+    return _collisions(svg, m.width, m.height, _mark_boxes(svg, m.height - 50) if marks else [])
+
+
+@pytest.mark.parametrize("layer", ["situation", "enemies", "story", "routes"])
+def test_world_map_labels_never_collide_at_the_start(layer):
+    game = _map_game(everything=False, cave=False)
+    for selected in [None, *(loc_id for _, loc_id in game.map_places())]:
+        assert _map_collisions(game, layer, selected) == [], selected
+
+
+# 棲霞山腳、棲霞後山、棲霞劍派、藏龍洞、金陵城擠在一起：其中棲霞山腳或棲霞後山畫上大圓圈（所在地或選定）時，
+# 棲霞後山的名字連同底下的小字找不到完全空著的地方，只能壓到旁邊的地點記號（文字仍然不疊）。
+CROWDED = {"qixia_foot", "qixia_back"}
+
+
+@pytest.mark.parametrize("layer", ["situation", "enemies", "story", "routes"])
+@pytest.mark.parametrize("bao", [False, True])
+def test_world_map_labels_never_collide_with_everything_known(layer, bao):
+    game = _map_game(everything=True, bao=bao)
+    for loc_id in game.content.locations:
+        assert _map_collisions(game, layer, loc_id, marks=loc_id not in CROWDED) == [], f"選 {loc_id}"
+    for loc_id in game.content.locations:
+        game.state.player.location = loc_id
+        assert _map_collisions(game, layer, marks=loc_id not in CROWDED) == [], f"在 {loc_id}"
 
 
 def _win_rate(squad_id: str, runs: int = 40) -> float:

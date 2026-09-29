@@ -1,6 +1,10 @@
+import html
+import re
+
 from tianxia.atlas import location_view, vision_range, visible_locations
 from tianxia.mapview import (
-    LEGEND_LAYERS, NODE_FILL, ROUTE_STROKE, SELECT_STROKE, node_shape, render_map, render_minimap, text_width,
+    LEGEND_LAYERS, NODE_FILL, ROUTE_STROKE, SELECT_STROKE, node_shape, render_map, render_minimap,
+    text_box, text_width,
 )
 from tianxia.state import Rumor
 
@@ -64,6 +68,7 @@ def test_node_shapes_follow_tags(content):
 def test_text_width():
     assert text_width("湖邊", 10) == 20
     assert text_width("ab", 10) == 12
+    assert text_width("⚑★✦⚔↘←", 10) == 60  # 地圖記號與箭頭在中文字型裡約一個字寬
 
 
 def test_render_map_new_look(state, content):
@@ -74,6 +79,37 @@ def test_render_map_new_look(state, content):
     assert "湖邊 ⚔" in svg and "★" not in svg
     assert "paint-order:stroke" in svg
     assert "<rect" in svg  # 小鎮（城鎮）畫成方塊
+
+
+def label_box(svg: str, loc_id: str):
+    """大地圖上某個地點名字那一行大約佔的範圍。"""
+    m = re.search(
+        rf'<text x="([-\d.]+)" y="([-\d.]+)" font-size="(\d+)"[^>]*text-anchor="(\w+)"[^>]*data-loc="{loc_id}"[^>]*>([^<]*)</text>',
+        svg,
+    )
+    return text_box(float(m[1]), float(m[2]), html.unescape(m[5]), int(m[3]), m[4])
+
+
+def overlap(a, b) -> bool:
+    return a[0] < b[2] and b[0] < a[2] and a[1] < b[3] and b[1] < a[3]
+
+
+def test_labels_step_aside_for_other_places_and_labels(state, content):
+    content.locations["lake"].x = 150  # 湖邊緊貼在小鎮右邊：小鎮的名字擺右邊會壓到湖邊的記號
+    svg = render_map(state, content, "routes")
+    town, lake = label_box(svg, "town"), label_box(svg, "lake")
+    assert not overlap(town, lake) and not overlap(town, (140.5, 90.5, 159.5, 109.5))
+    assert town[0] != 100 + 11 + 8 + 5  # 不是原本右邊的位置
+
+
+def test_selected_label_sits_outside_the_selection_ring(state, content):
+    svg = render_map(state, content, selected="lake")
+    assert label_box(svg, "lake")[0] >= 200 + 8 + 10 + 1.5  # 選定的圓圈：半徑 18、線寬 3
+
+
+def test_region_names_have_a_halo_so_they_read_on_any_tint(state, content):
+    svg = render_map(state, content)
+    assert re.search(r'<text [^>]*fill="#C9B98F"[^>]*stroke="#F6F1E4"[^>]*>測試北區</text>', svg)
 
 
 def test_label_flips_left_near_right_edge(state, content):
