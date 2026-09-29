@@ -588,12 +588,32 @@ def test_swap_menus_are_wired_to_the_main_view_and_the_page():
     assert all(len(f.outputs) == app.N_OUTPUTS + app.MENXIA_OUTPUTS for f in swaps)
 
 
-def test_swap_menus_fire_once_per_pick():
-    """Gradio 的下拉選單選好之後失焦時會再送一次 input：換人接在 select 上，同一個選擇才不會執行兩次
-    （否則選「（空）」會連空兩位，選人時第二次什麼都沒換、把頁面上的訊息清掉）。"""
+def test_swap_menus_are_wired_to_blur():
+    """換人接在 blur 上：Gradio 的下拉選單不論用滑鼠或鍵盤（方向鍵、打字篩選再按 Enter）選，最後都會失焦、送一次 blur；
+    select 只有滑鼠選才送，input 滑鼠選一次會送兩次（「（空）」會連空兩位）。這裡只檢查接線；
+    失焦時送來原本的人（沒選、或重選同一人）見 test_swap_to_whoever_is_already_there_changes_nothing。"""
     demo = app.build_demo()
     swaps = [f for f in demo.fns.values() if f.fn.__qualname__ == "make_swap_handler.<locals>.handler"]
-    assert [event for f in swaps for _, event in f.targets] == ["select"] * app.MAX_MEMBERS
+    assert [event for f in swaps for _, event in f.targets] == ["blur"] * app.MAX_MEMBERS
+
+
+def test_swap_to_whoever_is_already_there_changes_nothing(tmp_path, monkeypatch):
+    """選單失焦就會送來一次：選的就是這一位現在的人（點開又離開、或重選同一人），或空位選了空，
+    什麼都不做——不改、不存檔、不重畫，頁面上的訊息也留著。"""
+    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
+    game = Game.new(app.CONTENT, "測試")
+    skip = [gr.skip()] * (app.N_OUTPUTS + app.MENXIA_OUTPUTS)
+    assert app.make_swap_handler(1)(game, None, None, 0, None, "hantie") == skip
+    assert app.make_swap_handler(0)(game, None, None, 0, None, "player") == skip  # 本隊第一欄是你本人
+    assert app.make_swap_handler(2)(game, None, None, 1, None, app.EMPTY_SLOT) == skip  # 第二隊第三欄本來就空著
+    assert app.make_swap_handler(2)(game, None, None, 1, None, None) == skip  # 空位的選單點開又離開
+    assert game.team_keys() == ["player", "hantie", "xiaomo"] and game.team_keys(1) == []
+    assert len(game.state.journal) == 1 and not (tmp_path / "測試.json").exists()
+    page = app.make_swap_handler(1)(game, None, None, 0, None, app.EMPTY_SLOT)[app.N_OUTPUTS:]
+    assert page[app.MX_MESSAGE_INDEX] == "韓鐵移到候補（本隊統御 9／15）"
+    assert column(page, 1)[app.MX_SWAP_OFFSET]["value"] == "xiaomo"  # 小墨往前補，選單改寫成他
+    assert app.make_swap_handler(1)(game, None, None, 0, None, "xiaomo") == skip  # 不會連他也空掉
+    assert game.team_keys() == ["player", "xiaomo"]
 
 
 def test_swap_shows_every_line_it_returns_on_the_page(tmp_path, monkeypatch):

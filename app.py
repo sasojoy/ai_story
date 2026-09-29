@@ -93,6 +93,7 @@ MAP_CLICK_JS = (
 Slot = tuple[str, int]  # 選中的自選欄：(人物 key, 第幾欄，從 0 起算)
 
 ACT_LOCK = threading.Lock()
+UNCHANGED = object()  # 動作回傳它表示什麼都沒做：act 不存檔、不重畫（頁面上的訊息也留著）
 
 
 def save_path(name: str) -> Path:
@@ -198,12 +199,17 @@ def render_menxia(
     return out
 
 
+def _column_key(game: Game, team: int, col: int) -> str | None:
+    """第 team 隊第 col 欄的人；空位時為 None。處理函式要在同一把 ACT_LOCK 裡查和用（換人可能同時讓這一隊變少）。"""
+    keys = game.team_keys(team)
+    return keys[col] if col < len(keys) else None
+
+
 def _swap_menu(game: Game, team: int, col: int) -> dict:
     """一欄上方的「換人」選單；本隊第一欄是你本人，固定不換：選單鎖住，只寫明原因（各欄才對得齊）。"""
-    keys = game.team_keys(team)
+    current = _column_key(game, team, col)
     if team == 0 and col == 0:
-        return gr.update(visible=True, interactive=False, choices=[("你本人（固定是本隊的隊長）", keys[0])], value=keys[0])
-    current = keys[col] if col < len(keys) else None
+        return gr.update(visible=True, interactive=False, choices=[("你本人（固定是本隊的隊長）", current)], value=current)
     return gr.update(visible=True, interactive=True, choices=game.swap_choices(team, col), value=current)
 
 
@@ -239,7 +245,7 @@ def act(game: Game | None, action, menxia: tuple | None = None) -> list:
     """同步時間 → 執行動作 → 存檔 → 重畫。上鎖避免計時器與按鈕點擊同時操作同一存檔。
 
     menxia＝(選取的自選欄, 選取的武學, 顯示中的隊伍, 名冊裡點選的人) 時連門下頁面一起重畫；
-    動作回傳的訊息（None 表示沒有）顯示在頁面上。
+    動作回傳的訊息（None 表示沒有）顯示在頁面上；回傳 UNCHANGED 時什麼都不存、不重畫。
     戰報頁面與大地圖頁面是獨立的整頁，不在這裡重畫（見 open_report_page、render_map_page）。
     """
     n = N_OUTPUTS if menxia is None else N_OUTPUTS + MENXIA_OUTPUTS
@@ -248,6 +254,8 @@ def act(game: Game | None, action, menxia: tuple | None = None) -> list:
     with ACT_LOCK:
         game.sync(time.time())
         msgs = action(game)
+        if msgs is UNCHANGED:
+            return [gr.skip()] * n
         save_game(game.state, save_path(game.state.player.name))
         out = render(game)
         if menxia is not None:
@@ -295,12 +303,11 @@ def make_innate_slot_handler(col: int):
     def handler(game, slot, target, team=0, person=None):
         if game is None:
             return [gr.skip()] * MENXIA_OUTPUTS
-        with ACT_LOCK:  # 查人數與取人在同一把鎖裡：換人可能同時讓這一隊變少
+        with ACT_LOCK:
             team = team_index(game, team)
-            keys = game.team_keys(team)
-            if col >= len(keys):
+            key = _column_key(game, team, col)
+            if key is None:
                 return [gr.skip()] * MENXIA_OUTPUTS
-            key = keys[col]
             return render_menxia(game, None, game.innate_target(key) or target, "", team, person)
 
     return handler
@@ -312,12 +319,11 @@ def make_free_slot_handler(col: int, index: int):
     def handler(game, slot, target, team=0, person=None):
         if game is None:
             return [gr.skip()] * MENXIA_OUTPUTS
-        with ACT_LOCK:  # 查人數與取人在同一把鎖裡：換人可能同時讓這一隊變少
+        with ACT_LOCK:
             team = team_index(game, team)
-            keys = game.team_keys(team)
-            if col >= len(keys):
+            key = _column_key(game, team, col)
+            if key is None:
                 return [gr.skip()] * MENXIA_OUTPUTS
-            key = keys[col]
             held = game.slot_skill(key, index)
             return render_menxia(game, (key, index), f"skill:{held}" if held else target, "", team, person)
 
@@ -338,15 +344,22 @@ def _page_skip() -> list:
 
 
 def make_swap_handler(col: int):
-    """某一欄上方的「換人」選單：把這一位換成選的人（「（空）」＝空出這一位）。照一般動作同步、存檔、重畫，
-    換不成時（例如統御超過上限）頁面上寫原因、選單回到原本的人。"""
+    """某一欄上方的「換人」選單（選單失焦時送來，滑鼠、鍵盤選都一樣）：把這一位換成選的人（「（空）」＝空出這一位）。
+    照一般動作同步、存檔、重畫，換不成時（例如統御超過上限）頁面上寫原因、選單回到原本的人。
+    選的就是這一位現在的人（點開又離開、或重選同一人），或空位選了空時什麼都不做。"""
 
     def handler(game, slot, target, team, person, choice):
         if game is None or choice is None:
             return _page_skip()
         team = team_index(game, team)
         key = None if choice == EMPTY_SLOT else choice
-        return act(game, lambda g: g.set_member(team, col, key), menxia=(slot, target, team, person))
+
+        def swap(g: Game):
+            if _column_key(g, team, col) == key:  # 在 act 的鎖裡查：這一位已經是他（或本來就空著）
+                return UNCHANGED
+            return g.set_member(team, col, key)
+
+        return act(game, swap, menxia=(slot, target, team, person))
 
     return handler
 
@@ -721,8 +734,8 @@ def build_demo() -> gr.Blocks:
             innate_btn.click(make_innate_slot_handler(col), inputs=selection, outputs=menxia_outputs)
             for index, btn in enumerate(free_btns):
                 btn.click(make_free_slot_handler(col, index), inputs=selection, outputs=menxia_outputs)
-            # 用 select 而不是 input：下拉選單選好之後失焦時會再送一次 input，同一個選擇會被執行兩次。
-            swap_dd.select(make_swap_handler(col), inputs=selection + [swap_dd], outputs=outputs + menxia_outputs)
+            # 接 blur：滑鼠、鍵盤選好都會失焦、各送一次（select 鍵盤選不送，input 滑鼠選會送兩次）。
+            swap_dd.blur(make_swap_handler(col), inputs=selection + [swap_dd], outputs=outputs + menxia_outputs)
         library_radio.input(
             view_handler, inputs=[game_state, mx_slot, library_radio, team_radio, roster_radio], outputs=menxia_outputs
         )
