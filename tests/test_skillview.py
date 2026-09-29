@@ -1,6 +1,7 @@
 from tianxia import skillview
 from tianxia.models import SkillEffect
 from tianxia.rules import learn_skill
+from tianxia.state import Member
 
 
 # ── 效果表的列名（不含數字）──────────────────────────────
@@ -224,6 +225,19 @@ def test_member_card_grows_with_level(game):
     assert "內力 100 / 624" in card  # 300 + 6.6 × 40 + 3 × 20
     assert "臂力 6.6　身法 5.4　根骨 6.6　悟性 4.2" in card
     assert "資質　剛A　柔B　快B　巧B" in card
+
+
+def test_member_card_shows_rank_command_where_innate_and_trait(game):
+    card = skillview.member_card(game.state, game.content, "player", innate=True)
+    assert "本人　統御 5　本隊" in card and "本命　家傳劍（絕招）第1成" in card and "特性" not in card
+    card = skillview.member_card(game.state, game.content, "mate")
+    assert "玄品　統御 3　本隊" in card and "本命" not in card  # 隊伍欄底下已經有本命的按鈕
+    for key in ("sage", "pupil"):
+        game.state.player.members[key] = Member()
+    card = skillview.member_card(game.state, game.content, "sage", innate=True)
+    assert "天品　統御 7　候補" in card and "本命　天外劍（絕招）第1成" in card
+    assert card.endswith("特性　靜心訣：減傷・自身・整場 10%（開戰時生效；不佔武學欄、不能升級或散功）")
+    assert "本命　無" in skillview.member_card(game.state, game.content, "pupil", innate=True)  # 黃品沒有本命
 
 
 def test_slot_labels(game):

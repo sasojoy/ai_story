@@ -13,6 +13,7 @@ from .models import COMPANION_TIERS, Content, Squad
 from .state import PLAYER, TEAM_SIZE, GameState, Member, Team
 
 NUMERALS = "零一二三四五六七八九十"
+EMPTY_CHOICE = ""  # 門下頁「換人」選單裡「（空）」的值
 
 
 # ── 隊伍數與統御上限 ─────────────────────────────────────
@@ -62,11 +63,6 @@ def roster(state: GameState, content: Content) -> list[str]:
     order = {tier: i for i, tier in enumerate(COMPANION_TIERS)}
     others = [key for key in state.player.members if key != PLAYER]
     return [PLAYER] + sorted(others, key=lambda key: order[content.characters[key].tier])
-
-
-def bench(state: GameState, content: Content) -> list[str]:
-    """候補：在名冊裡、但不在任何一隊的人，順序同 roster。"""
-    return [key for key in roster(state, content) if team.team_of(state, key) is None]
 
 
 def normalize(state: GameState, content: Content) -> None:
@@ -258,3 +254,63 @@ def fortune_due(state: GameState, content: Content) -> bool:
 def fortune_overdue(state: GameState, content: Content) -> bool:
     """第 fortune_day_max 天已經結束，福緣還沒發生：直接送上門。"""
     return not state.player.fortune and state.world.time >= content.config.fortune_day_max * rules.DAY
+
+
+# ── 門下頁的文字 ──────────────────────────────────────────
+
+
+def where(state: GameState, key: str) -> str:
+    """這個人在哪裡：本隊、第二隊……或候補。"""
+    index = team.team_of(state, key)
+    return "候補" if index is None else team_name(index)
+
+
+def team_choices(state: GameState, content: Content) -> list[tuple[str, int]]:
+    """隊伍切換：（「本隊」「第二隊」「第三隊（第二幕開放）」, 第幾隊），設定裡的每一隊都列出來。"""
+    opened = team_count(state, content)
+    return [
+        (team_name(i) if i < opened else f"{team_name(i)}（{opens_at(content, i)}）", i)
+        for i in range(len(state.player.teams))
+    ]
+
+
+def team_info(state: GameState, content: Content, index: int) -> str:
+    """選中那一隊的資訊列（Markdown），例如「**本隊**　統御 12／15　跟著你行動」「**第二隊**　統御 0／15　待命」；
+    還沒開放的隊伍寫「**第三隊**　第二幕開放」。"""
+    name = f"**{team_name(index)}**"
+    if index >= team_count(state, content):
+        return f"{name}　{opens_at(content, index)}"
+    status = "跟著你行動" if index == 0 else "待命"
+    return f"{name}　統御 {team_command(state, content, index)}／{command_cap(state, content)}　{status}"
+
+
+def _label(state: GameState, content: Content, key: str) -> tuple[str, str, int, int]:
+    """（品階, 流派, 統御, 等級）；你本人的品階寫「本人」。"""
+    rank = "本人" if key == PLAYER else content.characters[key].tier
+    return rank, team.member_style(content, key)[0], command_of(content, key), state.player.members[key].level
+
+
+def roster_lines(state: GameState, content: Content) -> list[tuple[str, str]]:
+    """名冊列表：（「玄　韓鐵　剛　統御 3　第 1 級　本隊」, key），順序同 roster。"""
+    lines = []
+    for key in roster(state, content):
+        rank, style, command, level = _label(state, content, key)
+        name = team.member_name(state, content, key)
+        lines.append((f"{rank}　{name}　{style}　統御 {command}　第 {level} 級　{where(state, key)}", key))
+    return lines
+
+
+def swap_choices(state: GameState, content: Content, index: int, slot: int) -> list[tuple[str, str]]:
+    """第 index 隊第 slot 位的「換人」選單：先是這一位目前的人（空位時沒有），再來是候補與別隊的人（依名冊順序），
+    最後是「（空）」（值是 EMPTY_CHOICE，空位時沒有）。你本人與同一隊的其他人不在選單裡。"""
+    members = team.team_keys(state, index)
+    current = members[slot] if slot < len(members) else None
+    keys = ([current] if current else []) + [k for k in roster(state, content) if k != PLAYER and k not in members]
+    items = []
+    for key in keys:
+        rank, style, command, level = _label(state, content, key)
+        name = team.member_name(state, content, key)
+        items.append((f"{name}（{rank}品・{style}・統御 {command}・第 {level} 級・{where(state, key)}）", key))
+    if current:
+        items.append(("（空）", EMPTY_CHOICE))
+    return items

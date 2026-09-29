@@ -5,7 +5,7 @@
 """
 from __future__ import annotations
 
-from . import team
+from . import roster, team
 from .battle import ADVANTAGE, BEATS, STAT_NAMES
 from .models import Content, Skill, SkillEffect
 from .state import PLAYER, GameState
@@ -271,22 +271,39 @@ def detail(state: GameState, content: Content, target: str | None) -> str:
 # ── 人物卡、武學欄、武學庫 ──────────────────────────────
 
 
-def member_card(state: GameState, content: Content, key: str) -> str:
-    """人物卡（Markdown）：等級、流派、內力、升級後的屬性與四流派資質。"""
+def member_card(state: GameState, content: Content, key: str, innate: bool = False) -> str:
+    """人物卡（Markdown）：品階、統御與在哪一隊，等級、流派、內力、升級後的屬性、四流派資質，天品另有特性。
+    innate 為 True 時多寫一行本命（名冊裡看人物卡時用；隊伍欄底下已經有本命的按鈕）。"""
     p, cfg = state.player, content.config
     member = p.members[key]
     leader = "（隊長）" if team.team_of(state, key) is not None and team.teammates(state, key)[0] == key else ""
+    rank = "本人" if key == PLAYER else f"{content.characters[key].tier}品"
     style, grades = team.member_style(content, key)
     exp = "已滿級" if member.level >= cfg.max_level else f"經驗 {member.exp}/{cfg.level_exp * member.level}"
     now, cap = team.member_neili(state, content, key)
     stats = team.member_stats(state, content, key)
-    return "\n\n".join([
+    lines = [
         f"### {team.member_name(state, content, key)}{leader}",
+        f"{rank}　統御 {roster.command_of(content, key)}　{roster.where(state, key)}",
         f"第 {member.level} 級（{exp}）　流派 {style}",
         f"內力 {int(now)} / {int(cap)}",
         "　".join(f"{cfg.stat_names[k]} {_num(stats[k])}" for k in team.COMBAT_STATS),
         "資質　" + "　".join(f"{s}{grades.get(s, 'B')}" for s in team.STYLES),
-    ])
+    ]
+    if innate:
+        skill_id = team.innate_of(state, content, key)
+        level = team.innate_level(state, content, key)
+        lines.append("本命　" + (_art_label(content.skills[skill_id], level) if skill_id else "無"))
+    trait = team.trait_of(content, key)
+    if trait:
+        lines.append(trait_line(content.skills[trait]))
+    return "\n\n".join(lines)
+
+
+def trait_line(skill: Skill) -> str:
+    """天品特性的白話說明：效果固定（第 1 成的數字），開戰時生效。"""
+    effects = "；".join(f"{effect_label(e, skill.kind)} {_pct(e.base)}%" for e in skill.effects)
+    return f"特性　{skill.name}：{effects}（開戰時生效；不佔武學欄、不能升級或散功）"
 
 
 def _art_label(skill: Skill, level: int) -> str:

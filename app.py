@@ -47,12 +47,16 @@ OLDER_ROWS = 30  # 摺疊區裡最多幾則（存檔本來就只留 30 則）
 # 江湖畫面顯示與否、戰報頁面顯示與否、戰鬥列表、選定那一場的完整內容。
 REPORT_EMPTY_TEXT = "（還沒有戰報。打一場歷練或劇情戰之後，這裡會列出每一場。）"
 
-# 門下頁面（render_menxia）的輸出順序：選取的自選欄、選取的武學、心得與規則、
-# 每位隊員一組（欄、人物卡、本命、自選1、自選2）、武學庫、武學詳情、配置到、卸下、升一成、散功、訊息。
-MAX_MEMBERS = 3  # 出戰隊伍最多三人
-MX_COLUMN_SIZE = 3 + Game.FREE_SLOTS
+# 門下頁面（render_menxia）的輸出順序：選取的自選欄、選取的武學、心得與規則、隊伍切換、選中那一隊的資訊列、
+# 每一欄一組（欄、人物卡、本命、自選1、自選2、換人選單）、武學庫、武學詳情、配置到、卸下、升一成、散功、訊息、
+# 名冊、名冊裡點選那人的人物卡。
+MAX_MEMBERS = 3  # 每隊最多三人
+MX_COLUMN_SIZE = 4 + Game.FREE_SLOTS
+MX_SWAP_OFFSET = MX_COLUMN_SIZE - 1  # 一欄裡「換人」選單的位置
 MX_HEAD_INDEX = 2
-MX_COLUMNS_INDEX = 3
+MX_TEAM_INDEX = 3
+MX_TEAM_INFO_INDEX = 4
+MX_COLUMNS_INDEX = 5
 MX_LIBRARY_INDEX = MX_COLUMNS_INDEX + MAX_MEMBERS * MX_COLUMN_SIZE
 MX_DETAIL_INDEX = MX_LIBRARY_INDEX + 1
 MX_EQUIP_INDEX = MX_LIBRARY_INDEX + 2
@@ -60,7 +64,11 @@ MX_UNEQUIP_INDEX = MX_LIBRARY_INDEX + 3
 MX_UPGRADE_INDEX = MX_LIBRARY_INDEX + 4
 MX_DISPEL_INDEX = MX_LIBRARY_INDEX + 5
 MX_MESSAGE_INDEX = MX_LIBRARY_INDEX + 6
-MENXIA_OUTPUTS = MX_MESSAGE_INDEX + 1
+MX_ROSTER_INDEX = MX_LIBRARY_INDEX + 7
+MX_PERSON_INDEX = MX_LIBRARY_INDEX + 8
+MENXIA_OUTPUTS = MX_PERSON_INDEX + 1
+EMPTY_SLOT = Game.EMPTY_CHOICE  # 「換人」選單裡「（空）」的值（空字串）
+PERSON_HINT = "（點名冊裡的一個人，這裡會顯示他的人物卡。）"
 
 # 整頁：江湖畫面、門下、戰報、大地圖；同一時間只顯示一頁（見 show_page），順序同 build_demo() 的 pages。
 PAGES = ("main", "menxia", "report", "map")
@@ -130,48 +138,81 @@ def render(game: Game) -> list:
 # ── 門下頁面 ──────────────────────────────────────────
 
 
-def menxia_selection(game: Game, slot: Slot | None, target: str | None) -> tuple[Slot | None, str | None]:
-    """丟掉已經不成立的選取（例如換了新賽季）：自選欄要屬於隊中的人，武學要在武學庫裡。"""
+def team_index(game: Game, value) -> int:
+    """隊伍切換的值；不認得時（例如舊畫面送來的值）回到本隊。"""
+    return value if isinstance(value, int) and 0 <= value < len(game.state.player.teams) else 0
+
+
+def menxia_selection(
+    game: Game, slot: Slot | None, target: str | None, team: int = 0
+) -> tuple[Slot | None, str | None]:
+    """丟掉已經不成立的選取（例如換了新賽季、切換了隊伍）：自選欄要屬於顯示中那一隊的人，武學要在武學庫裡。"""
     if slot is not None:
         key, index = slot
-        slot = (key, index) if key in game.team_keys() and 0 <= index < Game.FREE_SLOTS else None
+        slot = (key, index) if key in game.team_keys(team) and 0 <= index < Game.FREE_SLOTS else None
     if target not in {t for _, t in game.upgrade_options()}:
         target = None
     return slot, target
 
 
-def render_menxia(game: Game, slot: Slot | None, target: str | None, message: str | None = None) -> list:
-    """門下頁面的全部輸出，順序見 MX_*_INDEX；message 為 None 時保留頁面上原本的訊息。"""
-    slot, target = menxia_selection(game, slot, target)
-    team = game.team_keys()
-    out: list = [slot, target, f"**心得** {game.state.player.stats.get('xinde', 0)}　｜　{game.menxia_rules()}"]
+def render_menxia(
+    game: Game, slot: Slot | None, target: str | None, message: str | None = None,
+    team: int = 0, person: str | None = None,
+) -> list:
+    """門下頁面的全部輸出，順序見 MX_*_INDEX；message 為 None 時保留頁面上原本的訊息。
+    team 是顯示中的隊伍（0＝本隊），person 是名冊裡點選的人。"""
+    team = team_index(game, team)
+    slot, target = menxia_selection(game, slot, target, team)
+    lines = game.roster_lines()
+    if person not in {key for _, key in lines}:
+        person = None
+    keys = game.team_keys(team)
+    out: list = [
+        slot, target, f"**心得** {game.state.player.stats.get('xinde', 0)}　｜　{game.menxia_rules()}",
+        gr.update(choices=game.team_choices(), value=team), game.team_info(team),
+    ]
     for col in range(MAX_MEMBERS):
-        if col >= len(team):
+        if team >= game.team_count():  # 還沒開放的隊伍：整排不顯示
             out += [gr.update(visible=False)] + [gr.update()] * (MX_COLUMN_SIZE - 1)
             continue
-        key = team[col]
+        if col >= len(keys):  # 空位：只有「換人」選單
+            out += [gr.update(visible=True), "（空位）"] + [gr.update(visible=False)] * (1 + Game.FREE_SLOTS)
+            out.append(_swap_menu(game, team, col))
+            continue
+        key = keys[col]
         out += [
             gr.update(visible=True),
             game.member_card(key),
-            gr.update(value=game.slot_label(key, None), variant="secondary"),
+            gr.update(visible=True, value=game.slot_label(key, None), variant="secondary"),
         ]
         out += [
-            gr.update(value=game.slot_label(key, i), variant="primary" if slot == (key, i) else "secondary")
+            gr.update(visible=True, value=game.slot_label(key, i), variant="primary" if slot == (key, i) else "secondary")
             for i in range(Game.FREE_SLOTS)
         ]
+        out.append(_swap_menu(game, team, col))
     out += [gr.update(choices=game.skill_library(), value=target), game.skill_detail(target)]
-    out += _menxia_buttons(game, slot, target)
+    out += _menxia_buttons(game, slot, target, team)
     out.append(gr.update() if message is None else message)
+    out += [gr.update(choices=lines, value=person), game.member_card(person, innate=True) if person else PERSON_HINT]
     assert len(out) == MENXIA_OUTPUTS
     return out
 
 
-def _menxia_buttons(game: Game, slot: Slot | None, target: str | None) -> list:
+def _swap_menu(game: Game, team: int, col: int) -> dict:
+    """一欄上方的「換人」選單；本隊第一欄是你本人，固定不換：選單鎖住，只寫明原因（各欄才對得齊）。"""
+    keys = game.team_keys(team)
+    if team == 0 and col == 0:
+        return gr.update(visible=True, interactive=False, choices=[("你本人（固定是本隊的隊長）", keys[0])], value=keys[0])
+    current = keys[col] if col < len(keys) else None
+    return gr.update(visible=True, interactive=True, choices=game.swap_choices(team, col), value=current)
+
+
+def _menxia_buttons(game: Game, slot: Slot | None, target: str | None, team: int = 0) -> list:
     """「配置到」、「卸下」、「升一成」、「散功」四個按鈕：看選取決定顯示與否，文字寫明是哪一欄、多少心得。"""
     where = ""
     held = None
     if slot is not None:
-        names = {key: name for name, key in game.team_members()}
+        names = {key: name for name, key in game.team_members(team)}
         where = f"〔{names[slot[0]]}・自選{slot[1] + 1}〕"
         held = game.slot_skill(*slot)
     can_equip = (
@@ -194,10 +235,11 @@ def _menxia_buttons(game: Game, slot: Slot | None, target: str | None) -> list:
     ]
 
 
-def act(game: Game | None, action, menxia: tuple[Slot | None, str | None] | None = None) -> list:
+def act(game: Game | None, action, menxia: tuple | None = None) -> list:
     """同步時間 → 執行動作 → 存檔 → 重畫。上鎖避免計時器與按鈕點擊同時操作同一存檔。
 
-    menxia＝(選取的自選欄, 選取的武學) 時連門下頁面一起重畫；動作回傳的訊息（None 表示沒有）顯示在頁面上。
+    menxia＝(選取的自選欄, 選取的武學, 顯示中的隊伍, 名冊裡點選的人) 時連門下頁面一起重畫；
+    動作回傳的訊息（None 表示沒有）顯示在頁面上。
     戰報頁面與大地圖頁面是獨立的整頁，不在這裡重畫（見 open_report_page、render_map_page）。
     """
     n = N_OUTPUTS if menxia is None else N_OUTPUTS + MENXIA_OUTPUTS
@@ -209,7 +251,8 @@ def act(game: Game | None, action, menxia: tuple[Slot | None, str | None] | None
         save_game(game.state, save_path(game.state.player.name))
         out = render(game)
         if menxia is not None:
-            out += render_menxia(game, *menxia, None if msgs is None else "\n\n".join(msgs))
+            slot, target, *view = menxia
+            out += render_menxia(game, slot, target, None if msgs is None else "\n\n".join(msgs), *view)
         return out
 
 
@@ -233,12 +276,12 @@ def seclude_handler(game, hours):
     return act(game, lambda g: g.seclude(int(hours)))
 
 
-def open_menxia(game, slot, target):
-    """「門下」：藏起江湖畫面、打開門下頁面並重畫。"""
+def open_menxia(game, slot, target, team=0, person=None):
+    """「門下」：藏起江湖畫面、打開門下頁面並重畫（停在上次看的那一隊）。"""
     if game is None:
         return [gr.skip()] * (2 + MENXIA_OUTPUTS)
     with ACT_LOCK:
-        return [gr.update(visible=False), gr.update(visible=True)] + render_menxia(game, slot, target, "")
+        return [gr.update(visible=False), gr.update(visible=True)] + render_menxia(game, slot, target, "", team, person)
 
 
 def close_menxia():
@@ -249,12 +292,16 @@ def close_menxia():
 def make_innate_slot_handler(col: int):
     """點某人的本命欄：在武學庫與詳情選中他的本命，並取消自選欄的選取。"""
 
-    def handler(game, slot, target):
-        if game is None or col >= len(game.team_keys()):
+    def handler(game, slot, target, team=0, person=None):
+        if game is None:
             return [gr.skip()] * MENXIA_OUTPUTS
-        with ACT_LOCK:
-            key = game.team_keys()[col]
-            return render_menxia(game, None, game.innate_target(key) or target, "")
+        with ACT_LOCK:  # 查人數與取人在同一把鎖裡：換人可能同時讓這一隊變少
+            team = team_index(game, team)
+            keys = game.team_keys(team)
+            if col >= len(keys):
+                return [gr.skip()] * MENXIA_OUTPUTS
+            key = keys[col]
+            return render_menxia(game, None, game.innate_target(key) or target, "", team, person)
 
     return handler
 
@@ -262,67 +309,90 @@ def make_innate_slot_handler(col: int):
 def make_free_slot_handler(col: int, index: int):
     """點某人的自選欄：選取這一欄；欄裡有武學時，也一併選中那門武學。"""
 
-    def handler(game, slot, target):
-        if game is None or col >= len(game.team_keys()):
+    def handler(game, slot, target, team=0, person=None):
+        if game is None:
             return [gr.skip()] * MENXIA_OUTPUTS
-        with ACT_LOCK:
-            key = game.team_keys()[col]
+        with ACT_LOCK:  # 查人數與取人在同一把鎖裡：換人可能同時讓這一隊變少
+            team = team_index(game, team)
+            keys = game.team_keys(team)
+            if col >= len(keys):
+                return [gr.skip()] * MENXIA_OUTPUTS
+            key = keys[col]
             held = game.slot_skill(key, index)
-            return render_menxia(game, (key, index), f"skill:{held}" if held else target, "")
+            return render_menxia(game, (key, index), f"skill:{held}" if held else target, "", team, person)
 
     return handler
 
 
-def library_handler(game, slot, target):
-    """在武學庫選一門武學：顯示它的詳情，自選欄的選取不變。"""
+def view_handler(game, slot, target, team=0, person=None):
+    """在武學庫選一門武學、切換隊伍、在名冊點一個人：重畫門下頁面（不算行動、不存檔）；
+    自選欄的選取只在還是顯示中那一隊的人時保留。"""
     if game is None:
         return [gr.skip()] * MENXIA_OUTPUTS
     with ACT_LOCK:
-        return render_menxia(game, slot, target, "")
+        return render_menxia(game, slot, target, "", team, person)
 
 
 def _page_skip() -> list:
     return [gr.skip()] * (N_OUTPUTS + MENXIA_OUTPUTS)
 
 
-def equip_handler(game, slot, target):
-    """把選中的武學配到選中的自選欄；原本配在別人身上的會移過來（一門武學同時只配給一個人）。"""
+def make_swap_handler(col: int):
+    """某一欄上方的「換人」選單：把這一位換成選的人（「（空）」＝空出這一位）。照一般動作同步、存檔、重畫，
+    換不成時（例如統御超過上限）頁面上寫原因、選單回到原本的人。"""
+
+    def handler(game, slot, target, team, person, choice):
+        if game is None or choice is None:
+            return _page_skip()
+        team = team_index(game, team)
+        key = None if choice == EMPTY_SLOT else choice
+        return act(game, lambda g: g.set_member(team, col, key), menxia=(slot, target, team, person))
+
+    return handler
+
+
+def equip_handler(game, slot, target, team=0, person=None):
+    """把選中的武學配到選中的自選欄；原本配在別人身上的會移過來（同一門武學同時只能配給一個人）。"""
     if game is None:
         return _page_skip()
-    slot, target = menxia_selection(game, slot, target)
+    team = team_index(game, team)
+    slot, target = menxia_selection(game, slot, target, team)
     if slot is None or target is None or not target.startswith("skill:"):
         return _page_skip()
     key, index = slot
     skill_id = target.removeprefix("skill:")
-    return act(game, lambda g: g.set_loadout(key, index, skill_id), menxia=(slot, target))
+    return act(game, lambda g: g.set_loadout(key, index, skill_id), menxia=(slot, target, team, person))
 
 
-def unequip_handler(game, slot, target):
+def unequip_handler(game, slot, target, team=0, person=None):
     if game is None:
         return _page_skip()
-    slot, target = menxia_selection(game, slot, target)
+    team = team_index(game, team)
+    slot, target = menxia_selection(game, slot, target, team)
     if slot is None:
         return _page_skip()
     key, index = slot
-    return act(game, lambda g: g.set_loadout(key, index, None), menxia=(slot, target))
+    return act(game, lambda g: g.set_loadout(key, index, None), menxia=(slot, target, team, person))
 
 
-def upgrade_handler(game, slot, target):
+def upgrade_handler(game, slot, target, team=0, person=None):
     if game is None:
         return _page_skip()
-    slot, target = menxia_selection(game, slot, target)
+    team = team_index(game, team)
+    slot, target = menxia_selection(game, slot, target, team)
     if target is None:
         return _page_skip()
-    return act(game, lambda g: g.upgrade(target), menxia=(slot, target))
+    return act(game, lambda g: g.upgrade(target), menxia=(slot, target, team, person))
 
 
-def dispel_handler(game, slot, target):
+def dispel_handler(game, slot, target, team=0, person=None):
     if game is None:
         return _page_skip()
-    slot, target = menxia_selection(game, slot, target)
+    team = team_index(game, team)
+    slot, target = menxia_selection(game, slot, target, team)
     if target is None:
         return _page_skip()
-    return act(game, lambda g: g.dispel(target), menxia=(slot, target))
+    return act(game, lambda g: g.dispel(target), menxia=(slot, target, team, person))
 
 
 def _report_page(record_id: int | None, game: Game) -> list:
@@ -463,9 +533,9 @@ def skip_tutorial_handler(game):
     return act(game, lambda g: g.skip_tutorial())
 
 
-def tick_handler(game, slot, target):
-    """計時器：同步時間，連同門下頁面一起重畫（保留目前的選取與訊息），內力等數字才會跟著走。"""
-    return act(game, lambda g: None, menxia=(slot, target))
+def tick_handler(game, slot, target, team=0, person=None):
+    """計時器：同步時間，連同門下頁面一起重畫（保留目前的選取、隊伍與訊息），內力等數字才會跟著走。"""
+    return act(game, lambda g: None, menxia=(slot, target, team, person))
 
 
 def open_game(name: str) -> Game:
@@ -547,13 +617,21 @@ def build_demo() -> gr.Blocks:
                 gr.Markdown("## 門下", scale=1)
                 mx_head_md = gr.Markdown(scale=6)
                 back_btn = gr.Button("返回江湖", scale=0, min_width=120)
+            team_radio = gr.Radio(label="隊伍", choices=[], interactive=True)  # 值是第幾隊；還沒打開門下時為 None（＝本隊）
+            team_info_md = gr.Markdown()
             members = []
             with gr.Row():
                 for _ in range(MAX_MEMBERS):
                     with gr.Column(visible=False, min_width=240) as member_col:
+                        swap_dd = gr.Dropdown(label="換人", choices=[], interactive=True)
                         card_md = gr.Markdown()
                         slot_btns = [gr.Button("（空）") for _ in range(1 + Game.FREE_SLOTS)]  # 本命、自選…
-                    members.append((member_col, card_md, slot_btns))
+                    members.append((member_col, card_md, slot_btns, swap_dd))
+            with gr.Row():
+                with gr.Column(scale=1):
+                    roster_radio = gr.Radio(label="名冊（點名字看人物卡）", choices=[], interactive=True)
+                with gr.Column(scale=1):
+                    person_md = gr.Markdown()
             with gr.Row():
                 with gr.Column(scale=1):
                     library_radio = gr.Radio(label="武學庫", choices=[], interactive=True)
@@ -603,12 +681,13 @@ def build_demo() -> gr.Blocks:
         assert len(pages) == len(PAGES)
         map_outputs = [map_head_md, layer_radio, world_map_html, place_dd, place_md, travel_btn]
         assert len(map_outputs) == MAP_OUTPUTS
-        menxia_outputs = [mx_slot, mx_target, mx_head_md]
-        for member_col, card_md, slot_btns in members:
-            menxia_outputs += [member_col, card_md, *slot_btns]
+        menxia_outputs = [mx_slot, mx_target, mx_head_md, team_radio, team_info_md]
+        for member_col, card_md, slot_btns, swap_dd in members:
+            menxia_outputs += [member_col, card_md, *slot_btns, swap_dd]
         menxia_outputs += [library_radio, detail_md, equip_btn, unequip_btn, upgrade_btn, dispel_btn, mx_message_md]
+        menxia_outputs += [roster_radio, person_md]
         assert len(menxia_outputs) == MENXIA_OUTPUTS
-        selection = [game_state, mx_slot, mx_target]
+        selection = [game_state, mx_slot, mx_target, team_radio, roster_radio]
 
         start_btn.click(start, inputs=[name_box], outputs=outputs + [start_col] + pages)
         name_box.submit(start, inputs=[name_box], outputs=outputs + [start_col] + pages)
@@ -638,11 +717,17 @@ def build_demo() -> gr.Blocks:
         travel_btn.click(
             travel_handler, inputs=[game_state, layer_radio, place_dd], outputs=outputs + pages + map_outputs
         )
-        for col, (_, _, (innate_btn, *free_btns)) in enumerate(members):
+        for col, (_, _, (innate_btn, *free_btns), swap_dd) in enumerate(members):
             innate_btn.click(make_innate_slot_handler(col), inputs=selection, outputs=menxia_outputs)
             for index, btn in enumerate(free_btns):
                 btn.click(make_free_slot_handler(col, index), inputs=selection, outputs=menxia_outputs)
-        library_radio.input(library_handler, inputs=[game_state, mx_slot, library_radio], outputs=menxia_outputs)
+            # 用 select 而不是 input：下拉選單選好之後失焦時會再送一次 input，同一個選擇會被執行兩次。
+            swap_dd.select(make_swap_handler(col), inputs=selection + [swap_dd], outputs=outputs + menxia_outputs)
+        library_radio.input(
+            view_handler, inputs=[game_state, mx_slot, library_radio, team_radio, roster_radio], outputs=menxia_outputs
+        )
+        team_radio.input(view_handler, inputs=selection, outputs=menxia_outputs)
+        roster_radio.input(view_handler, inputs=selection, outputs=menxia_outputs)
         for btn, handler in (
             (equip_btn, equip_handler), (unequip_btn, unequip_handler),
             (upgrade_btn, upgrade_handler), (dispel_btn, dispel_handler),

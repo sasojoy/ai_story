@@ -4,10 +4,12 @@ import gradio as gr
 
 import app
 from tianxia.engine import Game
+from tianxia.rules import learn_skill
+from tianxia.state import Member
 
 
 def column(page, i):
-    """門下頁面第 i 位隊員那一組輸出：欄、人物卡、本命、自選1、自選2。"""
+    """門下頁面第 i 欄那一組輸出：欄、人物卡、本命、自選1、自選2、換人選單。"""
     start = app.MX_COLUMNS_INDEX + i * app.MX_COLUMN_SIZE
     return page[start:start + app.MX_COLUMN_SIZE]
 
@@ -286,8 +288,11 @@ def test_menxia_page_shows_cards_slots_and_library():
     out = app.render_menxia(game, None, None)
     assert out[:2] == [None, None]
     assert "**心得** 0" in out[app.MX_HEAD_INDEX] and "本命不能散功" in out[app.MX_HEAD_INDEX]
-    shown, card, innate, free1, free2 = column(out, 0)
+    shown, card, innate, free1, free2, swap = column(out, 0)
     assert shown == gr.update(visible=True)
+    assert swap == gr.update(  # 你本人固定是本隊的隊長：選單鎖住，只寫明原因
+        visible=True, interactive=False, choices=[("你本人（固定是本隊的隊長）", "player")], value="player"
+    )
     assert card.startswith("### 測試（隊長）") and "內力" in card
     assert innate["value"] == "本命　家傳劍法（絕招）第1成"
     assert free1["value"] == "自選1　吐納法（心法）第1成" and free1["variant"] == "secondary"
@@ -311,12 +316,16 @@ def test_library_labels_stay_short_with_real_content():
     assert max(len(label) for label in labels) <= 42, max(labels, key=len)
 
 
-def test_menxia_hides_columns_beyond_the_team():
+def test_menxia_shows_an_empty_slot_with_only_the_swap_menu():
     game = Game.new(app.CONTENT, "測試")
     game.state.player.teams[0].members = ["player", "hantie"]
     out = app.render_menxia(game, None, None)
     assert column(out, 1)[0] == gr.update(visible=True)
-    assert column(out, 2)[0] == gr.update(visible=False)
+    shown, card, innate, free1, free2, swap = column(out, 2)
+    assert shown == gr.update(visible=True) and card == "（空位）"
+    assert innate == free1 == free2 == gr.update(visible=False)
+    assert swap["visible"] is True and swap["interactive"] is True and swap["value"] is None
+    assert swap["choices"] == [("小墨（玄品・巧・統御 4・第 1 級・候補）", "xiaomo")]
 
 
 def test_menxia_drops_stale_selection():
@@ -367,7 +376,7 @@ def test_equip_through_the_page_moves_the_art(tmp_path, monkeypatch):
     monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
     game = Game.new(app.CONTENT, "測試")
     slot = app.make_free_slot_handler(1, 0)(game, None, None)[0]
-    chosen = app.library_handler(game, slot, "skill:tuna")
+    chosen = app.view_handler(game, slot, "skill:tuna")
     assert chosen[:2] == [("hantie", 0), "skill:tuna"]
     assert chosen[app.MX_EQUIP_INDEX]["visible"] is True
     out = app.equip_handler(game, slot, "skill:tuna")
@@ -392,7 +401,7 @@ def test_innate_slot_selects_the_innate_and_hides_equip_and_dispel():
     assert out[app.MX_DISPEL_INDEX]["visible"] is False
     upgrade = out[app.MX_UPGRADE_INDEX]
     assert upgrade["visible"] is True and upgrade["value"] == "升一成（心得 20）"
-    assert all(button["variant"] == "secondary" for button in column(out, 1)[2:])
+    assert all(button["variant"] == "secondary" for button in column(out, 1)[2:5])
     out = app.make_innate_slot_handler(2)(game, None, None)
     assert out[:2] == [None, "innate:xiaomo"]
     assert out[app.MX_DETAIL_INDEX].startswith("### 亂針")
@@ -400,7 +409,7 @@ def test_innate_slot_selects_the_innate_and_hides_equip_and_dispel():
 
 def test_player_innate_cannot_be_equipped_into_a_free_slot():
     game = Game.new(app.CONTENT, "測試")
-    out = app.library_handler(game, ("hantie", 0), "skill:jiachuan")
+    out = app.view_handler(game, ("hantie", 0), "skill:jiachuan")
     assert out[:2] == [("hantie", 0), "skill:jiachuan"]
     assert out[app.MX_EQUIP_INDEX]["visible"] is False
 
@@ -474,6 +483,139 @@ def test_tick_refreshes_the_page_and_keeps_the_selection(tmp_path, monkeypatch):
     assert page[:2] == [("player", 1), "skill:changquan"]
     assert "內力 100 / " in column(page, 1)[1]
     assert page[app.MX_MESSAGE_INDEX] == gr.update()  # 不清掉上一則訊息
+
+
+# ── 門下頁面：隊伍與名冊 ──────────────────────────────────
+
+
+def test_menxia_team_switcher_and_info_line():
+    game = Game.new(app.CONTENT, "測試")
+    out = app.render_menxia(game, None, None)
+    team = out[app.MX_TEAM_INDEX]
+    assert team["choices"] == [("本隊", 0), ("第二隊", 1), ("第三隊（第二幕開放）", 2), ("第四隊（第三幕開放）", 3)]
+    assert team["value"] == 0
+    assert out[app.MX_TEAM_INFO_INDEX] == "**本隊**　統御 12／15　跟著你行動"
+    page = app.open_menxia(game, None, None, 1)[2:]  # 再打開門下時停在上次看的那一隊
+    assert page[app.MX_TEAM_INDEX]["value"] == 1 and page[app.MX_TEAM_INFO_INDEX].startswith("**第二隊**")
+    page = app.open_menxia(game, None, None, None, None)[2:]  # 第一次打開：隊伍切換還沒有值
+    assert page[app.MX_TEAM_INDEX]["value"] == 0
+
+
+def test_second_team_starts_empty_and_can_take_people_from_the_main_team():
+    game = Game.new(app.CONTENT, "測試")
+    out = app.view_handler(game, None, None, 1)
+    assert out[app.MX_TEAM_INFO_INDEX] == "**第二隊**　統御 0／15　待命"
+    for col in range(app.MAX_MEMBERS):
+        shown, card, *_, swap = column(out, col)
+        assert shown == gr.update(visible=True) and card == "（空位）"
+        assert swap["choices"] == [
+            ("韓鐵（玄品・剛・統御 3・第 1 級・本隊）", "hantie"), ("小墨（玄品・巧・統御 4・第 1 級・本隊）", "xiaomo"),
+        ]
+
+
+def test_unopened_team_says_when_it_opens():
+    game = Game.new(app.CONTENT, "測試")
+    out = app.view_handler(game, ("player", 0), "skill:tuna", 2)
+    assert out[app.MX_TEAM_INFO_INDEX] == "**第三隊**　第二幕開放"
+    assert all(column(out, col)[0] == gr.update(visible=False) for col in range(app.MAX_MEMBERS))
+    assert out[:2] == [None, "skill:tuna"]  # 選中的自選欄不屬於這一隊：丟掉；選中的武學留著
+    assert app.view_handler(game, None, None, 99)[app.MX_TEAM_INDEX]["value"] == 0  # 不認得的隊伍回到本隊
+
+
+def test_swap_moves_someone_saves_and_writes_it_down(tmp_path, monkeypatch):
+    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
+    game = Game.new(app.CONTENT, "測試")
+    out = app.make_swap_handler(0)(game, None, None, 1, None, "hantie")
+    assert len(out) == app.N_OUTPUTS + app.MENXIA_OUTPUTS
+    assert [t.members for t in game.state.player.teams][:2] == [["player", "xiaomo"], ["hantie"]]
+    page = out[app.N_OUTPUTS:]
+    assert page[app.MX_MESSAGE_INDEX] == "韓鐵從本隊編入第二隊（第二隊統御 3／15）"
+    assert page[app.MX_TEAM_INFO_INDEX] == "**第二隊**　統御 3／15　待命"
+    assert column(page, 0)[1].startswith("### 韓鐵（隊長）") and "本命" not in column(page, 0)[1]  # 本命在按鈕上
+    assert "韓鐵從本隊編入第二隊" in out[app.LATEST_INDEX]["value"]
+    assert (tmp_path / "測試.json").exists()
+
+
+def test_swap_over_the_command_cap_is_refused_on_the_page(tmp_path, monkeypatch):
+    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
+    game = Game.new(app.CONTENT, "測試")
+    p = game.state.player
+    for key in ("yanguihong", "shoumuren", "luchenzhou"):
+        p.members[key] = Member()
+        p.loadouts[key] = [None, None]
+    game.set_member(1, 0, "yanguihong")
+    game.set_member(1, 1, "shoumuren")
+    page = app.make_swap_handler(2)(game, None, None, 1, None, "luchenzhou")[app.N_OUTPUTS:]
+    assert page[app.MX_MESSAGE_INDEX] == "（統御 19／15，陸沉舟換不進第二隊。）"
+    assert column(page, 2)[app.MX_SWAP_OFFSET]["value"] is None  # 選單回到空位
+    assert game.team_keys(1) == ["yanguihong", "shoumuren"]
+
+
+def test_emptying_a_slot_from_its_swap_menu(tmp_path, monkeypatch):
+    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
+    game = Game.new(app.CONTENT, "測試")
+    swap = column(app.render_menxia(game, None, None), 1)[app.MX_SWAP_OFFSET]
+    assert swap["value"] == "hantie" and swap["choices"][0][1] == "hantie"
+    assert swap["choices"][-1] == ("（空）", app.EMPTY_SLOT)
+    app.make_swap_handler(1)(game, None, None, 0, None, app.EMPTY_SLOT)
+    assert game.team_keys() == ["player", "xiaomo"]
+    assert app.make_swap_handler(1)(None, None, None, 0, None, "hantie") == [gr.skip()] * (app.N_OUTPUTS + app.MENXIA_OUTPUTS)
+
+
+def test_roster_lists_everyone_and_shows_any_card():
+    game = Game.new(app.CONTENT, "測試")
+    game.state.player.members["aheng"] = Member()
+    game.state.player.loadouts["aheng"] = [None, None]
+    out = app.render_menxia(game, None, None)
+    assert out[app.MX_ROSTER_INDEX]["choices"] == [
+        ("本人　測試　柔　統御 5　第 1 級　本隊", "player"),
+        ("玄　韓鐵　剛　統御 3　第 1 級　本隊", "hantie"),
+        ("玄　小墨　巧　統御 4　第 1 級　本隊", "xiaomo"),
+        ("黃　阿棠　柔　統御 1　第 1 級　候補", "aheng"),
+    ]
+    assert out[app.MX_PERSON_INDEX] == app.PERSON_HINT
+    card = app.view_handler(game, None, None, 0, "aheng")[app.MX_PERSON_INDEX]
+    assert card.startswith("### 阿棠") and "黃品　統御 1　候補" in card and "本命　無" in card
+    assert app.view_handler(game, None, None, 0, "ghost")[app.MX_ROSTER_INDEX]["value"] is None
+
+
+def test_swap_menus_are_wired_to_the_main_view_and_the_page():
+    demo = app.build_demo()
+    team_radio = next(b for b in demo.blocks.values() if isinstance(b, gr.Radio) and b.label == "隊伍")
+    assert team_radio.value is None  # 還沒有選項時不能先有值，否則第一次打開門下就會被 Gradio 擋下
+    swaps = [f for f in demo.fns.values() if f.fn.__qualname__ == "make_swap_handler.<locals>.handler"]
+    assert len(swaps) == app.MAX_MEMBERS
+    assert all(len(f.outputs) == app.N_OUTPUTS + app.MENXIA_OUTPUTS for f in swaps)
+
+
+def test_swap_menus_fire_once_per_pick():
+    """Gradio 的下拉選單選好之後失焦時會再送一次 input：換人接在 select 上，同一個選擇才不會執行兩次
+    （否則選「（空）」會連空兩位，選人時第二次什麼都沒換、把頁面上的訊息清掉）。"""
+    demo = app.build_demo()
+    swaps = [f for f in demo.fns.values() if f.fn.__qualname__ == "make_swap_handler.<locals>.handler"]
+    assert [event for f in swaps for _, event in f.targets] == ["select"] * app.MAX_MEMBERS
+
+
+def test_swap_shows_every_line_it_returns_on_the_page(tmp_path, monkeypatch):
+    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
+    game = Game.new(app.CONTENT, "測試")
+    learn_skill(game.state, game.content, "kaibei")  # 韓鐵的本命
+    game.set_member(1, 0, "xiaomo")
+    game.set_loadout("xiaomo", 0, "kaibei")  # 第二隊沒有人以它為本命，配得上
+    page = app.make_swap_handler(1)(game, None, None, 1, None, "hantie")[app.N_OUTPUTS:]
+    assert page[app.MX_MESSAGE_INDEX] == (
+        "韓鐵從本隊編入第二隊（第二隊統御 7／15）\n\n開碑手是韓鐵的本命，已從小墨的武學欄卸下。"
+    )
+    assert game.state.player.loadouts["xiaomo"] == [None, None]
+
+
+def test_slot_clicks_on_an_empty_slot_are_skipped():
+    game = Game.new(app.CONTENT, "測試")
+    skip = [gr.skip()] * app.MENXIA_OUTPUTS
+    assert app.make_innate_slot_handler(0)(game, None, None, 1) == skip  # 第二隊還沒有人
+    assert app.make_free_slot_handler(2, 0)(game, None, None, 1) == skip
+    assert app.make_free_slot_handler(1, 0)(game, None, None, 2) == skip  # 還沒開放的隊伍
+    assert app.make_free_slot_handler(1, 0)(game, None, None)[:2] == [("hantie", 0), None]
 
 
 def test_incompatible_old_save_is_backed_up(tmp_path, monkeypatch):

@@ -27,6 +27,7 @@ class Option(BaseModel):
 
 class Game:
     FREE_SLOTS = team.FREE_SLOTS
+    EMPTY_CHOICE = roster.EMPTY_CHOICE  # 門下頁「換人」選單裡「（空）」的值
     MAP_LAYERS = atlas.LAYERS  # 大地圖的圖層：id → 名稱
 
     def __init__(self, content: Content, state: GameState, rng: random.Random | None = None):
@@ -549,6 +550,18 @@ class Game:
         """每隊的總統御上限。"""
         return roster.command_cap(self.state, self.content)
 
+    def team_choices(self) -> list[tuple[str, int]]:
+        return roster.team_choices(self.state, self.content)
+
+    def team_info(self, index: int) -> str:
+        return roster.team_info(self.state, self.content, index)
+
+    def roster_lines(self) -> list[tuple[str, str]]:
+        return roster.roster_lines(self.state, self.content)
+
+    def swap_choices(self, index: int, slot: int) -> list[tuple[str, str]]:
+        return roster.swap_choices(self.state, self.content, index, slot)
+
     def set_member(self, index: int, slot: int, key: str | None) -> list[str]:
         """門下頁的「換人」：第 index 隊第 slot 位換成 key（None＝空出來）。真的換了才寫江湖紀錄（和其他門下操作併成一則）。"""
         before = [list(t.members) for t in self.state.player.teams]
@@ -565,8 +578,8 @@ class Game:
     def skill_detail(self, target: str | None) -> str:
         return skillview.detail(self.state, self.content, target)
 
-    def member_card(self, key: str) -> str:
-        return skillview.member_card(self.state, self.content, key)
+    def member_card(self, key: str, innate: bool = False) -> str:
+        return skillview.member_card(self.state, self.content, key, innate)
 
     def slot_label(self, key: str, slot: int | None) -> str:
         return skillview.slot_label(self.state, self.content, key, slot)

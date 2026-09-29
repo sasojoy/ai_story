@@ -25,6 +25,11 @@ def teams(game):
     return [list(t.members) for t in game.state.player.teams]
 
 
+def bench(state, content):
+    """候補：名冊裡不在任何一隊的人，依名冊順序（門下頁照 roster.where 標「候補」）。"""
+    return [key for key in roster.roster(state, content) if roster.where(state, key) == "候補"]
+
+
 # ── 隊伍數與統御上限 ─────────────────────────────────────
 
 
@@ -32,7 +37,7 @@ def test_new_game_has_the_main_team_and_empty_teams(game):
     assert teams(game) == [["player", "mate"], [], [], []]
     assert (game.team_count(), game.command_cap()) == (2, 15)
     assert roster.team_command(game.state, game.content, 0) == 8  # 你 5 ＋ 韓鐵 3
-    assert roster.bench(game.state, game.content) == []
+    assert bench(game.state, game.content) == []
 
 
 @pytest.mark.parametrize("reached, count, cap", [(0, 2, 15), (1, 3, 18), (2, 4, 20), (3, 4, 20)])
@@ -69,10 +74,10 @@ def test_roster_lists_the_player_then_by_tier_then_by_joining(game):
 
 def test_put_a_bench_member_into_the_second_team(game):
     join(game, "pupil")
-    assert roster.bench(game.state, game.content) == ["pupil"]
+    assert bench(game.state, game.content) == ["pupil"]
     assert game.set_member(1, 0, "pupil") == ["小六編入第二隊（第二隊統御 2／15）"]
     assert teams(game)[:2] == [["player", "mate"], ["pupil"]]
-    assert roster.bench(game.state, game.content) == []
+    assert bench(game.state, game.content) == []
     entry = game.state.journal[0]
     assert (entry.title, entry.tag) == ("門下", "小六編入第二隊（第二隊統御 2／15）")
 
@@ -88,7 +93,7 @@ def test_replacing_sends_the_old_member_to_the_bench(game):
     join(game, "pupil")
     assert game.set_member(0, 1, "pupil") == ["小六編入本隊，韓鐵移到候補（本隊統御 7／15）"]
     assert teams(game)[0] == ["player", "pupil"]
-    assert roster.bench(game.state, game.content) == ["mate"]
+    assert bench(game.state, game.content) == ["mate"]
 
 
 def test_emptying_a_slot_moves_the_rest_forward(game):
@@ -154,7 +159,7 @@ def test_loading_tidies_up_the_teams(content, game):
     p.teams[2].members = ["hero"]  # 第三隊還沒開放
     fresh = Game(content, game.state)
     assert teams(fresh) == [["player", "mate", "pupil"], ["friend"], [], []]
-    assert roster.bench(fresh.state, content) == ["hero", "scholar"]
+    assert bench(fresh.state, content) == ["hero", "scholar"]
 
 
 # ── 只有本隊出手 ─────────────────────────────────────────
@@ -291,7 +296,7 @@ def test_newcomers_start_at_the_lowest_level_in_the_teams(game):
         "【俠女】入門（地品・柔・統御 5），從第 4 級練起，先列候補。"
     ]
     assert p.members["hero"].level == 4 and p.loadouts["hero"] == [None, None]
-    assert roster.bench(game.state, game.content) == ["hero", "pupil"]
+    assert bench(game.state, game.content) == ["hero", "pupil"]
 
 
 def test_recruiting_someone_already_here_turns_into_xinde(game):
@@ -302,7 +307,7 @@ def test_recruiting_someone_already_here_turns_into_xinde(game):
 def test_meeting_event_recruits_and_is_written_down(game):
     game.state.pending_event = "meet"
     game.choose("choice:0")
-    assert "friend" in roster.bench(game.state, game.content)
+    assert "friend" in bench(game.state, game.content)
     entry = game.state.journal[0]
     assert (entry.title, entry.tag) == ("琴聲・請他入門", "玄品・入門")
     assert entry.lines == ["琴師收起琴，跟你走了。", "【琴師】入門（玄品・柔・統御 4），從第 1 級練起，先列候補。"]
