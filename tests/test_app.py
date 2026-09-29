@@ -339,7 +339,7 @@ def test_open_and_close_menxia_flip_visibility():
     out = app.open_menxia(game, None, None)
     assert len(out) == 2 + app.MENXIA_OUTPUTS
     assert out[:2] == [gr.update(visible=False), gr.update(visible=True)]  # 江湖畫面、門下頁面
-    assert out[2 + app.MX_MESSAGE_INDEX] == ""
+    assert out[2 + app.MX_MESSAGE_INDEX] == "" and out[2 + app.MX_SWAP_MESSAGE_INDEX] == ""
     assert app.close_menxia() == [gr.update(visible=True), gr.update(visible=False)]
 
 
@@ -432,6 +432,7 @@ def test_upgrade_and_dispel_through_the_page(tmp_path, monkeypatch):
     page = app.upgrade_handler(game, None, "skill:tuna")[app.N_OUTPUTS:]
     assert p.skills["tuna"] == 2 and p.stats["xinde"] == 80
     assert "精進至第2成" in page[app.MX_MESSAGE_INDEX]
+    assert page[app.MX_SWAP_MESSAGE_INDEX] == ""  # 武學動作的結果寫在武學按鈕旁，換人的舊訊息清掉
     assert "**心得** 80" in page[app.MX_HEAD_INDEX]
     assert page[app.MX_UPGRADE_INDEX]["value"] == "升一成（心得 40）"
     assert page[app.MX_DISPEL_INDEX]["value"] == "散功（返還心得 16）"
@@ -483,6 +484,10 @@ def test_tick_refreshes_the_page_and_keeps_the_selection(tmp_path, monkeypatch):
     assert page[:2] == [("player", 1), "skill:changquan"]
     assert "內力 100 / " in column(page, 1)[1]
     assert page[app.MX_MESSAGE_INDEX] == gr.update()  # 不清掉上一則訊息
+    assert page[app.MX_SWAP_MESSAGE_INDEX] == gr.update()
+    page = app.tick_handler(game, None, None, 1, "hantie")[app.N_OUTPUTS:]  # 看著第二隊、名冊點著韓鐵
+    assert page[app.MX_TEAM_INDEX]["value"] == 1 and page[app.MX_TEAM_INFO_INDEX].startswith("**第二隊**")
+    assert page[app.MX_ROSTER_INDEX]["value"] == "hantie" and page[app.MX_PERSON_INDEX].startswith("### 韓鐵")
 
 
 # ── 門下頁面：隊伍與名冊 ──────────────────────────────────
@@ -529,7 +534,7 @@ def test_swap_moves_someone_saves_and_writes_it_down(tmp_path, monkeypatch):
     assert len(out) == app.N_OUTPUTS + app.MENXIA_OUTPUTS
     assert [t.members for t in game.state.player.teams][:2] == [["player", "xiaomo"], ["hantie"]]
     page = out[app.N_OUTPUTS:]
-    assert page[app.MX_MESSAGE_INDEX] == "韓鐵從本隊編入第二隊（第二隊統御 3／15）"
+    assert page[app.MX_SWAP_MESSAGE_INDEX] == "韓鐵從本隊編入第二隊（第二隊統御 3／15）"
     assert page[app.MX_TEAM_INFO_INDEX] == "**第二隊**　統御 3／15　待命"
     assert column(page, 0)[1].startswith("### 韓鐵（隊長）") and "本命" not in column(page, 0)[1]  # 本命在按鈕上
     assert "韓鐵從本隊編入第二隊" in out[app.LATEST_INDEX]["value"]
@@ -546,7 +551,8 @@ def test_swap_over_the_command_cap_is_refused_on_the_page(tmp_path, monkeypatch)
     game.set_member(1, 0, "yanguihong")
     game.set_member(1, 1, "shoumuren")
     page = app.make_swap_handler(2)(game, None, None, 1, None, "luchenzhou")[app.N_OUTPUTS:]
-    assert page[app.MX_MESSAGE_INDEX] == "（統御 19／15，陸沉舟換不進第二隊。）"
+    assert page[app.MX_SWAP_MESSAGE_INDEX] == "（統御 19／15，陸沉舟換不進第二隊。）"  # 寫在資訊列底下、選單旁邊
+    assert page[app.MX_MESSAGE_INDEX] == ""  # 不寫在武學按鈕旁
     assert column(page, 2)[app.MX_SWAP_OFFSET]["value"] is None  # 選單回到空位
     assert game.team_keys(1) == ["yanguihong", "shoumuren"]
 
@@ -610,7 +616,7 @@ def test_swap_to_whoever_is_already_there_changes_nothing(tmp_path, monkeypatch)
     assert game.team_keys() == ["player", "hantie", "xiaomo"] and game.team_keys(1) == []
     assert len(game.state.journal) == 1 and not (tmp_path / "測試.json").exists()
     page = app.make_swap_handler(1)(game, None, None, 0, None, app.EMPTY_SLOT)[app.N_OUTPUTS:]
-    assert page[app.MX_MESSAGE_INDEX] == "韓鐵移到候補（本隊統御 9／15）"
+    assert page[app.MX_SWAP_MESSAGE_INDEX] == "韓鐵移到候補（本隊統御 9／15）"
     assert column(page, 1)[app.MX_SWAP_OFFSET]["value"] == "xiaomo"  # 小墨往前補，選單改寫成他
     assert app.make_swap_handler(1)(game, None, None, 0, None, "xiaomo") == skip  # 不會連他也空掉
     assert game.team_keys() == ["player", "xiaomo"]
@@ -623,10 +629,35 @@ def test_swap_shows_every_line_it_returns_on_the_page(tmp_path, monkeypatch):
     game.set_member(1, 0, "xiaomo")
     game.set_loadout("xiaomo", 0, "kaibei")  # 第二隊沒有人以它為本命，配得上
     page = app.make_swap_handler(1)(game, None, None, 1, None, "hantie")[app.N_OUTPUTS:]
-    assert page[app.MX_MESSAGE_INDEX] == (
+    assert page[app.MX_SWAP_MESSAGE_INDEX] == (
         "韓鐵從本隊編入第二隊（第二隊統御 7／15）\n\n開碑手是韓鐵的本命，已從小墨的武學欄卸下。"
     )
+    assert page[app.MX_MESSAGE_INDEX] == ""
     assert game.state.player.loadouts["xiaomo"] == [None, None]
+
+
+def test_swap_results_show_right_under_the_team_info_line(tmp_path, monkeypatch):
+    """換人的結果（換不成的原因、卸下本命的說明）寫在隊伍資訊列正下方的元件、換人選單上面；
+    武學按鈕旁的訊息在頁面下方，1280×900 的畫面要往下捲很遠才看得到，只留給配置、卸下、精進、散功。
+    換隊、打開門下時清掉；計時器重畫時留著；之後做武學動作時清掉（只留最新的一則）。"""
+    demo = app.build_demo()
+    swap_fn = next(f for f in demo.fns.values() if f.fn.__qualname__ == "make_swap_handler.<locals>.handler")
+    page = swap_fn.outputs[app.N_OUTPUTS:]
+    info, note = page[app.MX_TEAM_INFO_INDEX], page[app.MX_SWAP_MESSAGE_INDEX]
+    assert isinstance(note, gr.Markdown) and note is not page[app.MX_MESSAGE_INDEX]
+    siblings = info.parent.children
+    assert siblings.index(note) == siblings.index(info) + 1  # 緊接在資訊列底下
+    assert siblings.index(note) < siblings.index(page[app.MX_COLUMNS_INDEX].parent)  # 在各欄（換人選單）上面
+
+    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
+    game = Game.new(app.CONTENT, "測試")
+    game.state.player.members["yanguihong"] = Member()
+    game.state.player.loadouts["yanguihong"] = [None, None]
+    page = app.make_swap_handler(1)(game, None, None, 0, None, "yanguihong")[app.N_OUTPUTS:]  # 換下韓鐵：5＋7＋4
+    assert page[app.MX_SWAP_MESSAGE_INDEX] == "（統御 16／15，晏歸鴻換不進本隊。）"
+    assert page[app.MX_MESSAGE_INDEX] == ""
+    assert app.tick_handler(game, None, None, 0)[app.N_OUTPUTS + app.MX_SWAP_MESSAGE_INDEX] == gr.update()
+    assert app.view_handler(game, None, None, 1)[app.MX_SWAP_MESSAGE_INDEX] == ""  # 換到別隊：清掉
 
 
 def test_slot_clicks_on_an_empty_slot_are_skipped():

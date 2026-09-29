@@ -48,22 +48,23 @@ OLDER_ROWS = 30  # 摺疊區裡最多幾則（存檔本來就只留 30 則）
 REPORT_EMPTY_TEXT = "（還沒有戰報。打一場歷練或劇情戰之後，這裡會列出每一場。）"
 
 # 門下頁面（render_menxia）的輸出順序：選取的自選欄、選取的武學、心得與規則、隊伍切換、選中那一隊的資訊列、
-# 每一欄一組（欄、人物卡、本命、自選1、自選2、換人選單）、武學庫、武學詳情、配置到、卸下、升一成、散功、訊息、
-# 名冊、名冊裡點選那人的人物卡。
+# 換人的結果（資訊列正下方）、每一欄一組（欄、人物卡、本命、自選1、自選2、換人選單）、武學庫、武學詳情、
+# 配置到、卸下、升一成、散功、武學動作的結果、名冊、名冊裡點選那人的人物卡。
 MAX_MEMBERS = 3  # 每隊最多三人
 MX_COLUMN_SIZE = 4 + Game.FREE_SLOTS
 MX_SWAP_OFFSET = MX_COLUMN_SIZE - 1  # 一欄裡「換人」選單的位置
 MX_HEAD_INDEX = 2
 MX_TEAM_INDEX = 3
 MX_TEAM_INFO_INDEX = 4
-MX_COLUMNS_INDEX = 5
+MX_SWAP_MESSAGE_INDEX = 5  # 換人的結果（例如換不成的原因），緊接在資訊列底下、換人選單上面
+MX_COLUMNS_INDEX = 6
 MX_LIBRARY_INDEX = MX_COLUMNS_INDEX + MAX_MEMBERS * MX_COLUMN_SIZE
 MX_DETAIL_INDEX = MX_LIBRARY_INDEX + 1
 MX_EQUIP_INDEX = MX_LIBRARY_INDEX + 2
 MX_UNEQUIP_INDEX = MX_LIBRARY_INDEX + 3
 MX_UPGRADE_INDEX = MX_LIBRARY_INDEX + 4
 MX_DISPEL_INDEX = MX_LIBRARY_INDEX + 5
-MX_MESSAGE_INDEX = MX_LIBRARY_INDEX + 6
+MX_MESSAGE_INDEX = MX_LIBRARY_INDEX + 6  # 武學動作（配置、卸下、精進、散功）的結果，在武學按鈕旁
 MX_ROSTER_INDEX = MX_LIBRARY_INDEX + 7
 MX_PERSON_INDEX = MX_LIBRARY_INDEX + 8
 MENXIA_OUTPUTS = MX_PERSON_INDEX + 1
@@ -158,19 +159,24 @@ def menxia_selection(
 
 def render_menxia(
     game: Game, slot: Slot | None, target: str | None, message: str | None = None,
-    team: int = 0, person: str | None = None,
+    team: int = 0, person: str | None = None, swap: bool = False,
 ) -> list:
-    """門下頁面的全部輸出，順序見 MX_*_INDEX；message 為 None 時保留頁面上原本的訊息。
-    team 是顯示中的隊伍（0＝本隊），person 是名冊裡點選的人。"""
+    """門下頁面的全部輸出，順序見 MX_*_INDEX。team 是顯示中的隊伍（0＝本隊），person 是名冊裡點選的人。
+    message 是剛才那個動作的結果：換人（swap）的寫在資訊列正下方、換人選單上面，其他寫在武學按鈕旁；
+    寫了一處就清掉另一處，頁面上只留最新的一則。message 為 None 時兩處都保留原本的訊息，空字串時兩處都清掉。"""
     team = team_index(game, team)
     slot, target = menxia_selection(game, slot, target, team)
     lines = game.roster_lines()
     if person not in {key for _, key in lines}:
         person = None
     keys = game.team_keys(team)
+    if message is None:
+        swap_note = skill_note = gr.update()
+    else:
+        swap_note, skill_note = (message, "") if swap else ("", message)
     out: list = [
         slot, target, f"**心得** {game.state.player.stats.get('xinde', 0)}　｜　{game.menxia_rules()}",
-        gr.update(choices=game.team_choices(), value=team), game.team_info(team),
+        gr.update(choices=game.team_choices(), value=team), game.team_info(team), swap_note,
     ]
     for col in range(MAX_MEMBERS):
         if team >= game.team_count():  # 還沒開放的隊伍：整排不顯示
@@ -193,7 +199,7 @@ def render_menxia(
         out.append(_swap_menu(game, team, col))
     out += [gr.update(choices=game.skill_library(), value=target), game.skill_detail(target)]
     out += _menxia_buttons(game, slot, target, team)
-    out.append(gr.update() if message is None else message)
+    out.append(skill_note)
     out += [gr.update(choices=lines, value=person), game.member_card(person, innate=True) if person else PERSON_HINT]
     assert len(out) == MENXIA_OUTPUTS
     return out
@@ -241,11 +247,12 @@ def _menxia_buttons(game: Game, slot: Slot | None, target: str | None, team: int
     ]
 
 
-def act(game: Game | None, action, menxia: tuple | None = None) -> list:
+def act(game: Game | None, action, menxia: tuple | None = None, swap: bool = False) -> list:
     """同步時間 → 執行動作 → 存檔 → 重畫。上鎖避免計時器與按鈕點擊同時操作同一存檔。
 
     menxia＝(選取的自選欄, 選取的武學, 顯示中的隊伍, 名冊裡點選的人) 時連門下頁面一起重畫；
-    動作回傳的訊息（None 表示沒有）顯示在頁面上；回傳 UNCHANGED 時什麼都不存、不重畫。
+    動作回傳的訊息（None 表示沒有）顯示在頁面上：換人（swap）的在資訊列底下，其他在武學按鈕旁（見 render_menxia）；
+    回傳 UNCHANGED 時什麼都不存、不重畫。
     戰報頁面與大地圖頁面是獨立的整頁，不在這裡重畫（見 open_report_page、render_map_page）。
     """
     n = N_OUTPUTS if menxia is None else N_OUTPUTS + MENXIA_OUTPUTS
@@ -260,7 +267,7 @@ def act(game: Game | None, action, menxia: tuple | None = None) -> list:
         out = render(game)
         if menxia is not None:
             slot, target, *view = menxia
-            out += render_menxia(game, slot, target, None if msgs is None else "\n\n".join(msgs), *view)
+            out += render_menxia(game, slot, target, None if msgs is None else "\n\n".join(msgs), *view, swap=swap)
         return out
 
 
@@ -345,7 +352,7 @@ def _page_skip() -> list:
 
 def make_swap_handler(col: int):
     """某一欄上方的「換人」選單（選單失焦時送來，滑鼠、鍵盤選都一樣）：把這一位換成選的人（「（空）」＝空出這一位）。
-    照一般動作同步、存檔、重畫，換不成時（例如統御超過上限）頁面上寫原因、選單回到原本的人。
+    照一般動作同步、存檔、重畫；結果寫在資訊列正下方（換不成時寫原因，例如統御超過上限，選單回到原本的人）。
     選的就是這一位現在的人（點開又離開、或重選同一人），或空位選了空時什麼都不做。"""
 
     def handler(game, slot, target, team, person, choice):
@@ -354,12 +361,12 @@ def make_swap_handler(col: int):
         team = team_index(game, team)
         key = None if choice == EMPTY_SLOT else choice
 
-        def swap(g: Game):
+        def move(g: Game):
             if _column_key(g, team, col) == key:  # 在 act 的鎖裡查：這一位已經是他（或本來就空著）
                 return UNCHANGED
             return g.set_member(team, col, key)
 
-        return act(game, swap, menxia=(slot, target, team, person))
+        return act(game, move, menxia=(slot, target, team, person), swap=True)
 
     return handler
 
@@ -632,6 +639,7 @@ def build_demo() -> gr.Blocks:
                 back_btn = gr.Button("返回江湖", scale=0, min_width=120)
             team_radio = gr.Radio(label="隊伍", choices=[], interactive=True)  # 值是第幾隊；還沒打開門下時為 None（＝本隊）
             team_info_md = gr.Markdown()
+            swap_message_md = gr.Markdown()  # 換人的結果：放在換人選單旁，不必往下捲到武學按鈕那裡才看得到
             members = []
             with gr.Row():
                 for _ in range(MAX_MEMBERS):
@@ -694,7 +702,7 @@ def build_demo() -> gr.Blocks:
         assert len(pages) == len(PAGES)
         map_outputs = [map_head_md, layer_radio, world_map_html, place_dd, place_md, travel_btn]
         assert len(map_outputs) == MAP_OUTPUTS
-        menxia_outputs = [mx_slot, mx_target, mx_head_md, team_radio, team_info_md]
+        menxia_outputs = [mx_slot, mx_target, mx_head_md, team_radio, team_info_md, swap_message_md]
         for member_col, card_md, slot_btns, swap_dd in members:
             menxia_outputs += [member_col, card_md, *slot_btns, swap_dd]
         menxia_outputs += [library_radio, detail_md, equip_btn, unequip_btn, upgrade_btn, dispel_btn, mx_message_md]
