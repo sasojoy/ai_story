@@ -465,7 +465,7 @@ def test_visited_and_map(game):
     assert game.state.player.visited == {"town"}
     game.choose("move:lake")
     assert game.state.player.visited == {"town", "lake"}
-    assert "<svg" in game.map_svg()
+    assert "<svg" in game.world_map_svg()
 
 
 def test_raw_log_keeps_every_message_with_one_break_per_action(game):
@@ -675,3 +675,22 @@ def test_travel_clears_the_battle_card(game):
     assert game.battle_card_id() is not None
     game.travel("town")
     assert game.battle_card_id() is None
+
+
+# ── 大地圖不在平常重畫時算勝算 ─────────────────────────
+
+
+def test_only_the_enemies_layer_simulates(game, monkeypatch):
+    from tianxia import team
+
+    calls = []
+    real = team.run_battle
+    monkeypatch.setattr(team, "run_battle", lambda *args: calls.append(1) or real(*args))
+    game.minimap_svg()
+    for layer in ("situation", "story", "routes"):
+        game.world_map_svg(layer, "lake")
+    assert calls == []
+    assert "最險：水寇小隊 穩勝" in game.world_map_svg("enemies")
+    assert len(calls) == 40  # 湖邊一個對手 × 40 場
+    game.world_map_svg("enemies")
+    assert len(calls) == 40  # 快取

@@ -89,7 +89,7 @@ def render(game: Game, focus_scene: bool = False) -> list:
         game.status_text(),
         game.scene_text(),
         gr.update(value=latest, visible=bool(latest)),
-        game.map_svg(),
+        game.world_map_svg(),
         game.trends_text(),
         game.rumors_text(),
         game.chronicle_text(),

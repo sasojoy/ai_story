@@ -187,6 +187,25 @@ def test_travel_on_real_content_matches_the_design_examples():
     assert p.location == "zhenjiang" and p.stamina == 0
 
 
+def test_enemies_layer_on_real_content_simulates_once_per_foe(monkeypatch):
+    from tianxia import team
+    from tianxia.engine import Game
+
+    game = Game.new(load_content(CONTENT_DIR), "測試俠客", rng=random.Random(0))
+    calls = []
+    real = team.run_battle
+    monkeypatch.setattr(team, "run_battle", lambda *args: calls.append(1) or real(*args))
+    for layer in ("situation", "story", "routes"):
+        game.world_map_svg(layer, "gaoyou")
+    game.minimap_svg()
+    assert calls == []  # 平常重畫不模擬
+    svg = game.world_map_svg("enemies")
+    assert len(calls) == 4 * 40  # 開局摸清的地點有 4 種對手：地痞、山賊、嘍囉、水寇
+    assert "最險：水寇嘍囉 穩勝" in svg
+    game.world_map_svg("enemies", "gaoyou")
+    assert len(calls) == 160  # 已快取
+
+
 def test_real_content_places_are_filled_in():
     c = load_content(CONTENT_DIR)
     s = c.scenario

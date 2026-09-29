@@ -9,7 +9,7 @@ from . import atlas, battlelog, journal, skillview, team
 from .events import choice_label, has_events_here, pick_event, visible_choices
 from .guide import note_action, quest_text, tutorial_intro
 from .journal import LOG_BREAK, Draft
-from .mapview import render_map
+from .mapview import render_map, render_minimap
 from .models import Choice, Content, Effect, Event, Location, Squad
 from .rules import apply_effect, change_trend, check_who, learn_skill, roll_check
 from .state import PLAYER, BattleRecord, GameState, JournalEntry, Member, Rumor, new_game_state
@@ -586,10 +586,16 @@ class Game:
     def quest_text(self) -> str:
         return quest_text(self.state, self.content)
 
-    def map_svg(self) -> str:
-        return render_map(self.state, self.content)
-
     # ── 大地圖 ────────────────────────────────────────────
+
+    def world_map_svg(self, layer: str = "situation", selected: str | None = None) -> str:
+        """大地圖（SVG）。只有敵情層會算勝算（摸清地點的對手，快取在 Game._odds）；其餘圖層與平常重畫都不模擬。"""
+        odds = self.odds if layer == "enemies" else None
+        return render_map(self.state, self.content, layer, selected, odds)
+
+    def minimap_svg(self) -> str:
+        """場景旁的大區小地圖（SVG）；地圖沒有大區時是空字串。"""
+        return render_minimap(self.state, self.content)
 
     def map_header(self) -> str:
         """大地圖頁面上方的時間與體力。"""
