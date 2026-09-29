@@ -1,11 +1,18 @@
-"""亂數機器人：隨機選擇可用選項玩完一整季，並把心得花在武學上。用於整季測試與平衡模擬。"""
+"""亂數機器人：玩完一整季，把心得花在武學上。用於整季測試與平衡模擬。
+
+大多數時候隨機選一個可用的選項；只有三件事照規矩來：遇到結識的選項一定接受、能收徒就收徒、
+每一步之後把本隊換成統御上限內最強的組合（見 arrange_team）。
+"""
 from __future__ import annotations
 
 import random
+from collections.abc import Callable
+from itertools import combinations
 
-from . import team
-from .engine import Game
+from . import roster, team
+from .engine import Game, Option
 from .models import Content
+from .state import PLAYER
 
 HALF_HOUR = 1800
 
@@ -27,7 +34,41 @@ def spend_xinde(game: Game) -> None:
         game.upgrade(target)
 
 
-def play_season(content: Content, seed: int, max_steps: int = 20000) -> Game:
+def pick(game: Game, options: list[Option], rng: random.Random) -> str:
+    """結識的選項一定接受、能收徒就收徒；其餘隨機挑一個。"""
+    s = game.state
+    if s.pending_event:
+        choices = game.content.events[s.pending_event].choices
+        for option in options:
+            if option.id.startswith("choice:") and choices[int(option.id.partition(":")[2])].effect.recruit:
+                return option.id
+    if any(option.id == "act:apprentice" for option in options):
+        return "act:apprentice"
+    return rng.choice(options).id
+
+
+def arrange_team(game: Game) -> None:
+    """把本隊你以外的兩格換成統御上限內最強的兩人（強弱看目前四項屬性加總，一樣強時取名冊裡排前面的）。"""
+    s, c = game.state, game.content
+    room = game.command_cap() - roster.command_of(c, PLAYER)
+    others = [key for key in roster.roster(s, c) if key != PLAYER]
+    power = {key: sum(team.member_stats(s, c, key).values()) for key in others}
+    pairs = [pair for pair in combinations(others, 2) if sum(roster.command_of(c, k) for k in pair) <= room]
+    if not pairs:
+        return
+    best = max(pairs, key=lambda pair: sum(power[k] for k in pair))
+    if set(best) == set(game.team_keys()[1:]):
+        return
+    game.set_member(0, 2, None)
+    game.set_member(0, 1, None)
+    for key in best:
+        game.set_member(0, 2, key)
+
+
+def play_season(
+    content: Content, seed: int, max_steps: int = 20000, observe: Callable[[Game], None] | None = None
+) -> Game:
+    """玩完一季；observe 不是 None 時，每一步之後都呼叫一次（模擬器用來記錄第幾天有多少人）。"""
     game = Game.new(content, f"機器人{seed}", rng=random.Random(seed))
     rng = random.Random(seed)
     for step in range(max_steps):
@@ -35,8 +76,11 @@ def play_season(content: Content, seed: int, max_steps: int = 20000) -> Game:
             break
         options = [o for o in game.options(odds=False) if o.enabled]
         if options:
-            game.choose(rng.choice(options).id)
+            game.choose(pick(game, options, rng))
             spend_xinde(game)
+            arrange_team(game)
         if not options or step % 4 == 0:
             game.advance(HALF_HOUR)
+        if observe is not None:
+            observe(game)
     return game

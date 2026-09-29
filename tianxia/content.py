@@ -357,6 +357,10 @@ def validate(c: Content) -> None:
     for ch in c.characters.values():
         if ch.tier != "敵":
             check_companion(ch)
+    need(
+        any(ch.tier == "地" and "福緣" in ch.sources for ch in c.characters.values()),
+        "至少要有一名標了「福緣」的地品（新立門戶福緣要送的人）",
+    )
 
     if errors:
         raise ContentError("內容檔有誤：\n" + "\n".join(errors))

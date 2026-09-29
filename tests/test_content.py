@@ -357,3 +357,10 @@ def test_roster_content_errors_name_the_culprit(tmp_path, filename, edit, messag
     edit_json(root / filename, edit)
     with pytest.raises(ContentError, match=message):
         load_content(root)
+
+
+def test_at_least_one_fortune_di_tier_is_required(tmp_path):
+    root = copy_fixture(tmp_path)
+    edit_json(root / "characters.json", lambda d: by_id(d, "hero").update(sources=["招賢", "奇遇"]))
+    with pytest.raises(ContentError, match="至少要有一名標了「福緣」的地品"):
+        load_content(root)

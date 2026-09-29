@@ -1,0 +1,42 @@
+[
+  {"id": "meet_luo", "title": "鏢局快腿", "actions": ["socialize"], "locations": ["yangzhou"],
+   "condition": {"members_none": ["luoxingyun"]},
+   "text": "威遠鏢局的趟子手駱行雲剛跑完一趟鏢，滿身塵土地湊過來：「少俠，聽說你在江湖上闖蕩，身邊還缺不缺跑腿的？我這雙腿，全揚州沒人追得上。」",
+   "choices": [
+    {"text": "收他入門", "effect": {"text": "駱行雲咧嘴一笑，把鏢局的號衣往肩上一搭：「那我這就去辭工！」", "recruit": "luoxingyun"}},
+    {"text": "婉拒", "effect": {"text": "駱行雲撓撓頭：「那我再多跑幾趟鏢，等少俠改變主意。」"}}
+  ]},
+  {"id": "meet_ruan", "title": "畫舫琵琶", "actions": ["socialize"], "locations": ["qinhuai"],
+   "condition": {"members_none": ["ruanqingxian"]},
+   "text": "畫舫上的琵琶聲忽然一緊，一根弦應聲而斷，斷弦像刀一樣削落了船頭的燈籠穗子。彈琵琶的女子阮青弦抬眼看你：「少俠看得懂？帶我離開這條河吧，我彈膩了。」",
+   "choices": [
+    {"text": "請她同行", "effect": {"text": "阮青弦把琵琶往背上一負，踏著船舷上了岸。", "recruit": "ruanqingxian"}},
+    {"text": "放下賞錢告辭", "effect": {"text": "琵琶聲又響了起來，像什麼都沒發生過。", "stats": {"silver": -5}}}
+  ]},
+  {"id": "fortune_lu", "title": "福緣・長槍來投", "actions": [], "fortune": true,
+   "condition": {"members_none": ["luchenzhou"]},
+   "text": "你在江湖上的名號漸漸傳開。客棧門口來了一個背著長槍的漢子，抱拳道：「在下陸沉舟，當過幾年邊軍校尉。聽說少俠新立門戶，特來討個出身。」",
+   "choices": [
+    {"text": "請他入門", "effect": {"text": "陸沉舟把長槍往地上一頓：「從今往後，這條命交給少俠了。」", "recruit": "luchenzhou"}}
+  ]},
+  {"id": "fortune_zhu", "title": "福緣・走索的姑娘", "actions": [], "fortune": true,
+   "condition": {"members_none": ["zhuxiaochan"]},
+   "text": "街口有人走索賣藝。一個姑娘在繩上翻了三個跟斗，順手彈出一顆石子，把偷錢的小賊點得動彈不得。收了場子，她徑直走到你面前：「我叫祝小蟬。聽說你新立門戶，缺不缺人？我不想再走索了。」",
+   "choices": [
+    {"text": "請她入門", "effect": {"text": "祝小蟬把收錢的銅盤往腰上一掛：「那就說定了。」", "recruit": "zhuxiaochan"}}
+  ]},
+  {"id": "qiyu_shiqing", "title": "啞僧", "locations": ["hanshan"], "qiyu": true, "weight": 0.3, "once": true,
+   "condition": {"members_none": ["shiqing"]},
+   "text": "鐘樓上，一個啞僧每天敲一百零八響鐘，從不錯半拍。今天他敲完最後一響，放下槌，朝你比了個手勢——他想跟你下山。住持在樓下嘆氣：「他在這裡敲了二十年，也該出去走走了。」",
+   "choices": [
+    {"text": "帶他下山", "effect": {"text": "啞僧合十行禮，背起一個小小的包袱跟在你身後。", "recruit": "shiqing"}},
+    {"text": "合十告辭", "effect": {"text": "鐘聲又從身後傳來，一聲一聲，不疾不徐。"}}
+  ]},
+  {"id": "qiyu_yan", "title": "青衫客", "tags": ["山林", "官道"], "qiyu": true, "weight": 0.15, "once": true,
+   "condition": {"members_none": ["yanguihong"], "min_stats": {"fame": 3}},
+   "text": "山道旁，一個青衫人坐在石頭上削竹枝。你走近時，他頭也不抬：「你那路家傳劍法，第三式慢了半拍。」竹枝一抖，劍意逼人。「我閒了十年，想看看你能走多遠。」",
+   "choices": [
+    {"text": "請他同行", "effect": {"text": "青衫人把竹枝往腰間一插：「晏歸鴻。走吧。」", "recruit": "yanguihong"}},
+    {"text": "謝過指點", "effect": {"text": "等你回過神來，石頭上已經沒有人了。"}}
+  ]}
+]

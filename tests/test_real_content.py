@@ -403,15 +403,20 @@ def test_starting_team_cannot_beat_fanjianglong():
     assert _win_rate("fanjianglong") <= 0.1
 
 
-def _trained_win_rate(squad_id: str, level: int, skill_level: int, runs: int = 40) -> float:
-    """新開一局，全隊練到 level 級、所有武學（本人武學、本人本命、同伴本命）練到第 skill_level 成；
+def _lineup_win_rate(companions: list[str], squad_id: str, level: int, skill_level: int, runs: int = 40) -> float:
+    """新開一局，本隊是你＋companions，全員練到 level 級、所有武學（本人武學、本人本命、同伴本命）練到第 skill_level 成；
     每場開打前回滿內力，讓每一場互不影響。"""
     from tianxia.engine import Game
+    from tianxia.state import Member
     from tianxia.team import fight
 
     content = load_content(CONTENT_DIR)
     game = Game.new(content, "測試俠客", rng=random.Random(0))
     p = game.state.player
+    for key in companions:
+        p.members.setdefault(key, Member())
+        p.loadouts.setdefault(key, [None, None])
+    p.teams[0].members = ["player", *companions]
     for member in p.members.values():
         member.level = level
         member.innate_level = skill_level
@@ -425,7 +430,77 @@ def _trained_win_rate(squad_id: str, level: int, skill_level: int, runs: int = 4
     return wins / runs
 
 
+def _trained_win_rate(squad_id: str, level: int, skill_level: int, runs: int = 40) -> float:
+    """開局的隊伍（你＋韓鐵＋小墨）練到 level 級、武學第 skill_level 成的勝率。"""
+    return _lineup_win_rate(["hantie", "xiaomo"], squad_id, level, skill_level, runs)
+
+
 def test_tomb_guardian_gates_the_treasure_within_a_season():
     """藏龍洞守墓人：剛出道的隊伍打不過，練到 10 級、武學第五成就有一戰之力（寶藏主線才走得完）。"""
     assert _trained_win_rate("shoumu", level=1, skill_level=1) <= 0.1
     assert _trained_win_rate("shoumu", level=10, skill_level=5) >= 0.5
+
+
+# ── 名冊（1c-1）──────────────────────────────────────────
+
+
+def test_real_roster_matches_the_design():
+    """16 名同伴：天 2、地 4、玄 6、黃 4；取得管道照設計文件 §3.6 分配。"""
+    from collections import Counter
+
+    c = load_content(CONTENT_DIR)
+    companions = {cid: ch for cid, ch in c.characters.items() if ch.tier != "敵"}
+    assert len(companions) == 16
+    assert Counter(ch.tier for ch in companions.values()) == {"天": 2, "地": 4, "玄": 6, "黃": 4}
+    by_source = {
+        source: sorted(cid for cid, ch in companions.items() if source in ch.sources)
+        for source in ("開局", "收徒", "交遊", "福緣", "奇遇", "招降")
+    }
+    assert by_source == {
+        "開局": ["hantie", "xiaomo"],
+        "收徒": ["aheng", "baixiaoman", "chengsuyi", "dusanjin", "fangxiaozhou", "luoshitou"],
+        "交遊": ["luoxingyun", "ruanqingxian"],
+        "福緣": ["luchenzhou", "zhuxiaochan"],
+        "奇遇": ["shiqing", "yanguihong"],
+        "招降": ["hehengjiang", "shoumuren"],
+    }
+    assert sorted(cid for cid, ch in companions.items() if "招賢" not in ch.sources) == [
+        "hantie", "hehengjiang", "shoumuren", "xiaomo",
+    ]
+    assert sorted(ch.command for ch in companions.values() if ch.tier == "地") == [4, 5, 5, 6]  # 同品階也有划不划算
+
+
+def test_surrender_never_takes_a_sim_leader():
+    """龍頭人物（翻江龍、鬼手劉三）一直由世界模擬扮演，不能被招降；投效的是水寨頭目與藏龍洞守墓人。"""
+    c = load_content(CONTENT_DIR)
+    leaders = {sim.name for sim in c.scenario.sim_players}
+    offers = {sid: squad.surrender.character for sid, squad in c.squads.items() if squad.surrender}
+    assert offers == {"toumu": "hehengjiang", "shoumu": "shoumuren"}
+    assert not {c.squads[sid].name for sid in offers} & leaders
+    assert not {c.characters[cid].name for cid in offers.values()} & leaders
+
+
+def test_mute_monk_is_only_met_at_hanshan_temple():
+    """啞僧的鐘樓在寒山寺；同樣是寺院的金山寺撞不見他。"""
+    from tianxia.events import event_matches_location
+
+    c = load_content(CONTENT_DIR)
+    event = c.events["qiyu_shiqing"]
+    assert [loc.id for loc in c.locations.values() if event_matches_location(event, loc)] == ["hanshan"]
+
+
+def test_heaven_tier_leads_without_breaking_the_bosses():
+    """你＋韓鐵＋X，第 5 級、武學第 3 成對上藏龍洞守墓人：天品 > 地品 > 玄品；就算帶著天品，翻江龍照樣打不動。"""
+    rates = {x: _lineup_win_rate(["hantie", x], "shoumu", 5, 3) for x in ("xiaomo", "luchenzhou", "yanguihong")}
+    assert rates["xiaomo"] < rates["luchenzhou"] < rates["yanguihong"], rates
+    assert _lineup_win_rate(["yanguihong", "aheng"], "fanjianglong", 10, 5) <= 0.1
+
+
+def test_bot_builds_a_roster_within_the_cap():
+    from tianxia import roster
+
+    game = play_season(load_content(CONTENT_DIR), 1)
+    p, c = game.state.player, game.content
+    assert len(p.members) >= 9  # 季末目標 10～12 人（含你本人）
+    assert p.fortune and any(c.characters[key].tier == "地" for key in p.members if key != "player")
+    assert len(game.team_keys()) == 3 and roster.team_command(game.state, c, 0) <= game.command_cap()
