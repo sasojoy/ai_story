@@ -154,6 +154,21 @@ def test_real_regions_trends_and_membership():
     assert members == REGIONS  # 棲霞劍派移到 (55, 188)，和棲霞山腳同屬金陵一帶
 
 
+def test_real_region_neighbours_point_the_right_way():
+    from tianxia.atlas import neighbours
+    from tianxia.state import new_game_state
+
+    c = load_content(CONTENT_DIR)
+    state = new_game_state(c, "測試俠客")
+    regions = {r.id: r for r in c.map.regions}
+    found = {rid: [(arrow, other.name) for arrow, other in neighbours(state, c, r)] for rid, r in regions.items()}
+    assert found == {
+        "jiangbei": [("↘", "太湖一帶")],  # 棲霞劍派移到江南後，江北只經瓜洲渡—鎮江渡口連到太湖一帶
+        "jinling_area": [("→", "太湖一帶")],
+        "taihu_area": [("↖", "江北"), ("←", "金陵一帶")],
+    }
+
+
 def test_real_content_places_are_filled_in():
     c = load_content(CONTENT_DIR)
     s = c.scenario

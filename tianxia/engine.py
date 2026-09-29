@@ -5,7 +5,7 @@ import random
 
 from pydantic import BaseModel
 
-from . import battlelog, journal, skillview, team
+from . import atlas, battlelog, journal, skillview, team
 from .events import choice_label, has_events_here, pick_event, visible_choices
 from .guide import note_action, quest_text, tutorial_intro
 from .journal import LOG_BREAK, Draft
@@ -27,6 +27,7 @@ class Option(BaseModel):
 
 class Game:
     FREE_SLOTS = team.FREE_SLOTS
+    MAP_LAYERS = atlas.LAYERS  # 大地圖的圖層：id → 名稱
 
     def __init__(self, content: Content, state: GameState, rng: random.Random | None = None):
         self.content = content
@@ -81,6 +82,9 @@ class Game:
         p.tutorial_step = min(p.tutorial_step, len(c.tutorial.steps))
         p.visited = {loc_id for loc_id in p.visited if loc_id in c.locations}
         p.visited.add(p.location)
+        for rumor in s.world.rumors:
+            if rumor.location is not None and rumor.location not in c.locations:
+                rumor.location = None  # 傳聞的發生地已從內容裡刪掉：傳聞留著，只是不再標在地圖上
         for flag in s.world.flags:
             if flag not in s.world.flag_times:
                 s.world.flag_times[flag] = s.world.time
@@ -550,6 +554,24 @@ class Game:
 
     def map_svg(self) -> str:
         return render_map(self.state, self.content)
+
+    # ── 大地圖 ────────────────────────────────────────────
+
+    def map_header(self) -> str:
+        """大地圖頁面上方的時間與體力。"""
+        return atlas.header_text(self.state, self.content)
+
+    def map_places(self) -> list[tuple[str, str]]:
+        """大地圖下拉選單：（顯示文字, 地點 id），只列摸清的地點與畫出名字的未知地點。"""
+        return atlas.place_choices(self.state, self.content)
+
+    def place_detail(self, loc_id: str) -> str:
+        """詳情欄（Markdown）。摸清而且有敵人的地點會算勝算（快取在 Game._odds）。"""
+        return atlas.detail_text(self.state, self.content, loc_id, self.odds)
+
+    def travel_button(self, loc_id: str) -> tuple[str, bool] | None:
+        """「安排前往」按鈕的（文字, 按得下去）；不該顯示按鈕時為 None。"""
+        return atlas.travel_button(self.state, self.content, loc_id)
 
     def new_season(self) -> list[str]:
         last_real = self.state.last_real

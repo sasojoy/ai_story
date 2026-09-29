@@ -1,12 +1,12 @@
-"""地圖與視野：計算玩家看得見哪些地點，並產生 SVG 地圖（純字串，不依賴介面框架）。"""
+"""地圖畫法：把 atlas 算好的視野與圖層資料畫成 SVG（純字串，不依賴介面框架）。"""
 from __future__ import annotations
 
 from html import escape
 
+from .atlas import KNOWN, location_view, visible_locations
 from .models import Content, Location
 from .state import GameState
 
-KNOWN = ("current", "visible", "remembered")
 NODE_FILL = {
     "current": "#D85A30",
     "visible": "#1D9E75",
@@ -21,44 +21,6 @@ TEXT_MUTED = "#8A8577"
 LABEL_SIZE = 15
 LEGEND_STATES = [("current", "所在地"), ("visible", "看得見"), ("remembered", "去過"), ("outline", "未知")]
 LEGEND_SYMBOLS = "■ 城鎮　◆ 門派　● 野外　外圈：綠安全／橙危險／紅兇險　⚔ 可歷練"
-
-
-def vision_range(state: GameState, content: Content) -> int:
-    cfg, p = content.config, state.player
-    trained = any(p.skills.get(skill_id, 0) >= cfg.vision_skill_level for skill_id in cfg.vision_skills)
-    bonus = p.stats.get("fame", 0) >= cfg.vision_fame or trained
-    return cfg.vision_base + (1 if bonus else 0)
-
-
-def is_unlocked(loc: Location, state: GameState) -> bool:
-    return not loc.unlock_flag or loc.unlock_flag in state.world.flags
-
-
-def visible_locations(state: GameState, content: Content) -> set[str]:
-    seen = {state.player.location}
-    frontier = [state.player.location]
-    for _ in range(vision_range(state, content)):
-        nxt = []
-        for loc_id in frontier:
-            for dest in content.locations[loc_id].connections:
-                if dest not in seen and is_unlocked(content.locations[dest], state):
-                    seen.add(dest)
-                    nxt.append(dest)
-        frontier = nxt
-    return seen
-
-
-def location_view(loc_id: str, state: GameState, content: Content, visible: set[str]) -> str:
-    loc = content.locations[loc_id]
-    if not is_unlocked(loc, state):
-        return "hidden"
-    if loc_id == state.player.location:
-        return "current"
-    if loc_id in visible:
-        return "visible"
-    if loc_id in state.player.visited:
-        return "remembered"
-    return "outline" if loc.important else "dot"
 
 
 def node_shape(loc: Location) -> str:

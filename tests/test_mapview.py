@@ -1,6 +1,5 @@
-from tianxia.mapview import (
-    location_view, node_shape, render_map, text_width, vision_range, visible_locations,
-)
+from tianxia.atlas import location_view, vision_range, visible_locations
+from tianxia.mapview import node_shape, render_map, text_width
 
 
 def test_vision_range_grows_with_fame(state, content):

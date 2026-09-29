@@ -83,3 +83,15 @@ def test_old_rumors_without_a_location_still_load(tmp_path, game):
     path.write_text(json.dumps(dump, ensure_ascii=False), encoding="utf-8")
     state = load_game(path)
     assert (state.world.rumors[0].text, state.world.rumors[0].location) == ("舊傳聞", None)
+
+
+def test_rumor_at_a_removed_place_loses_its_location(tmp_path, content, game):
+    from tianxia.state import Rumor
+
+    game.state.world.rumors.append(Rumor(time=0, text="舊地方的傳聞", location="removed_place"))
+    game.state.world.rumors.append(Rumor(time=0, text="湖邊的傳聞", location="lake"))
+    path = tmp_path / "stale_rumor.json"
+    save_game(game.state, path)  # 存檔裡的傳聞指向一個內容裡已不存在的地點
+    fresh = Game(content, load_game(path))
+    assert [(r.text, r.location) for r in fresh.state.world.rumors] == [("舊地方的傳聞", None), ("湖邊的傳聞", "lake")]
+    assert "湖邊的傳聞" in fresh.place_detail("lake")  # 查詢不會當機
