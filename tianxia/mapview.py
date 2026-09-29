@@ -10,7 +10,7 @@ from html import escape
 
 from . import atlas
 from .atlas import KNOWN, Odds
-from .models import Content, Location, MapRegion
+from .models import Content, Location, MapLabel, MapLayout, MapRegion
 from .state import GameState
 
 NODE_FILL = {
@@ -59,6 +59,9 @@ LEGEND_LAYERS = {
     "story": f"★ 這一幕主線的目標　✦ 最近 {atlas.NEWS_DAYS} 天的大事與傳聞",
     "routes": "數字：走過去最省的體力　粗線：到選定地點的路",
 }
+RIVER_STROKE = "#7FA9D6"
+RIVER_TEXT = "#6F93BA"
+RIVER_SIZE = 13  # 河名
 MINI_SPAN = 220  # 小地圖裡，大區較長的一邊畫成多寬
 MINI_PAD = 26
 MINI_HEIGHT = 200  # 小地圖在畫面上固定的高度（px）；寬度隨欄寬，圖置中
@@ -343,6 +346,67 @@ def _region_labels(
     return "".join(out), trends
 
 
+def _polygons(m: MapLayout, tints: dict[str, str]) -> list[str]:
+    """大區的底色；tints 是換過的顏色（大區 id → 顏色），其餘照原色。"""
+    return [
+        f'<polygon points="{" ".join(f"{x},{y}" for x, y in region.points)}" fill="{tints.get(region.id, region.fill)}"/>'
+        for region in m.regions
+    ]
+
+
+def _rivers(m: MapLayout) -> list[str]:
+    return [
+        f'<polyline points="{" ".join(f"{x},{y}" for x, y in river)}" fill="none" stroke="{RIVER_STROKE}" '
+        'stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>'
+        for river in m.rivers
+    ]
+
+
+def _river_label(label: MapLabel) -> tuple[str, Box]:
+    """河名的 SVG 與它佔的範圍。"""
+    svg = f'<text x="{label.x}" y="{label.y}" font-size="{RIVER_SIZE}" fill="{RIVER_TEXT}">{escape(label.text)}</text>'
+    return svg, text_box(label.x, label.y, label.text, RIVER_SIZE)
+
+
+def _roads(content: Content, views: dict[str, str]) -> list[str]:
+    """地點之間的路：兩頭都畫得出來（不是未開放）才畫；有一頭摸清時是實線，不然是淡虛線。"""
+    out = []
+    for a_id, a in content.locations.items():
+        for b_id in a.connections:
+            if a_id > b_id or "hidden" in (views[a_id], views[b_id]):
+                continue
+            b = content.locations[b_id]
+            if views[a_id] in KNOWN or views[b_id] in KNOWN:
+                style = 'stroke="#8A8577" stroke-width="2"'
+            else:
+                style = 'stroke="#C9C3B2" stroke-width="1.5" stroke-dasharray="4 4"'
+            out.append(f'<line x1="{a.x}" y1="{a.y}" x2="{b.x}" y2="{b.y}" {style}/>')
+    return out
+
+
+def _node(loc: Location, view: str, fill: str, selected: bool, taken: list[Taken]) -> tuple[list[str], float]:
+    """地點記號：所在地的圓圈、依視野畫的形狀（摸清的加危險外圈）、選定的圓圈。
+    把記號佔的範圍加進 taken，回傳（SVG 片段, 記號往外畫到多遠）。"""
+    size = NODE_SIZE[view]
+    mark, reach = _reach(loc, view, selected)
+    taken.append(((loc.x - mark, loc.y - mark, loc.x + mark, loc.y + mark), 1))
+    if reach > mark:  # 所在地、選定的圓圈：壓到細圓圈沒有壓到實心記號那麼糟
+        taken.append(((loc.x - reach, loc.y - reach, loc.x + reach, loc.y + reach), RING_WEIGHT))
+    parts = []
+    if view == "current":
+        parts.append(
+            f'<circle cx="{loc.x}" cy="{loc.y}" r="{size + 7}" fill="none" stroke="{NODE_FILL["current"]}" stroke-width="2"/>'
+        )
+    shape = "wild" if view == "dot" else node_shape(loc)
+    ring = DANGER_RING.get(loc.danger) if view in KNOWN else None
+    parts.append(_shape(shape, loc.x, loc.y, size, fill, ring))
+    if selected:
+        parts.append(
+            f'<circle cx="{loc.x}" cy="{loc.y}" r="{size + 10}" fill="none" stroke="{SELECT_STROKE}" stroke-width="3"/>'
+        )
+    return parts, reach
+
+
 def render_map(
     state: GameState, content: Content, layer: str = "situation", selected: str | None = None,
     odds: Odds | None = None,
@@ -365,32 +429,20 @@ def render_map(
     ]
     taken: list[Taken] = []  # 已經佔用的範圍：擺地點名字時要避開
     region_texts = []
+    tints = {}
     for region in m.regions:
         text, trends = _region_labels(state, content, region, layer, taken)
-        fill = _tint(region.fill, max(value for _, value in trends)) if trends else region.fill
-        points = " ".join(f"{x},{y}" for x, y in region.points)
-        out.append(f'<polygon points="{points}" fill="{fill}"/>')
+        if trends:
+            tints[region.id] = _tint(region.fill, max(value for _, value in trends))
         region_texts.append(text)
+    out += _polygons(m, tints)
     out += region_texts  # 大區名稱畫在所有大區上面，不會被相鄰的大區蓋住
-    for river in m.rivers:
-        points = " ".join(f"{x},{y}" for x, y in river)
-        out.append(
-            f'<polyline points="{points}" fill="none" stroke="#7FA9D6" stroke-width="8" '
-            'stroke-linecap="round" stroke-linejoin="round"/>'
-        )
+    out += _rivers(m)
     for label in m.labels:
-        out.append(f'<text x="{label.x}" y="{label.y}" font-size="13" fill="#6F93BA">{escape(label.text)}</text>')
-        taken.append((text_box(label.x, label.y, label.text, 13), TEXT_WEIGHT))
-    for a_id, a in content.locations.items():
-        for b_id in a.connections:
-            if a_id > b_id or "hidden" in (views[a_id], views[b_id]):
-                continue
-            b = content.locations[b_id]
-            if views[a_id] in KNOWN or views[b_id] in KNOWN:
-                style = 'stroke="#8A8577" stroke-width="2"'
-            else:
-                style = 'stroke="#C9C3B2" stroke-width="1.5" stroke-dasharray="4 4"'
-            out.append(f'<line x1="{a.x}" y1="{a.y}" x2="{b.x}" y2="{b.y}" {style}/>')
+        text, box = _river_label(label)
+        out.append(text)
+        taken.append((box, TEXT_WEIGHT))
+    out += _roads(content, views)
     if layer == "routes":
         out.append(_route_line(state, content, selected))
     reach: dict[str, float] = {}
@@ -398,24 +450,7 @@ def render_map(
         view = views[loc.id]
         if view == "hidden":
             continue
-        size = NODE_SIZE[view]
-        mark, reach[loc.id] = _reach(loc, view, loc.id == selected)
-        taken.append(((loc.x - mark, loc.y - mark, loc.x + mark, loc.y + mark), 1))
-        if reach[loc.id] > mark:  # 所在地、選定的圓圈：壓到細圓圈沒有壓到實心記號那麼糟
-            r = reach[loc.id]
-            taken.append(((loc.x - r, loc.y - r, loc.x + r, loc.y + r), RING_WEIGHT))
-        parts = []
-        if view == "current":
-            parts.append(
-                f'<circle cx="{loc.x}" cy="{loc.y}" r="{size + 7}" fill="none" stroke="{NODE_FILL["current"]}" stroke-width="2"/>'
-            )
-        shape = "wild" if view == "dot" else node_shape(loc)
-        ring = DANGER_RING.get(loc.danger) if view in KNOWN else None
-        parts.append(_shape(shape, loc.x, loc.y, size, fills.get(loc.id, NODE_FILL[view]), ring))
-        if loc.id == selected:
-            parts.append(
-                f'<circle cx="{loc.x}" cy="{loc.y}" r="{size + 10}" fill="none" stroke="{SELECT_STROKE}" stroke-width="3"/>'
-            )
+        parts, reach[loc.id] = _node(loc, view, fills.get(loc.id, NODE_FILL[view]), loc.id == selected, taken)
         if view in SELECTABLE:
             hit = f'<circle cx="{loc.x}" cy="{loc.y}" r="{HIT_RADIUS}" fill="#000000" fill-opacity="0"/>'
             out.append(f'<g data-loc="{loc.id}" style="cursor:pointer">{hit}{"".join(parts)}</g>')
