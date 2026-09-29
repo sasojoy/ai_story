@@ -64,13 +64,13 @@ def test_stale_references_are_dropped(content, game):
     s.player.location = "removed_place"
     s.player.skills["removed_skill"] = 3
     s.player.loadouts["player"][1] = "removed_skill"
-    s.player.team.append("ghost")
+    s.player.teams[0].members.append("ghost")
     fresh = Game(content, s)
     assert fresh.state.pending_event is None
     assert fresh.state.player.location == "town"
     assert fresh.state.player.loadouts["player"][1] is None
     assert "removed_skill" not in fresh.state.player.skills
-    assert fresh.state.player.team == ["player", "mate"]
+    assert [t.members for t in fresh.state.player.teams] == [["player", "mate"], [], [], []]
 
 
 def test_old_rumors_without_a_location_still_load(tmp_path, game):

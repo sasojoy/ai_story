@@ -134,7 +134,7 @@ def menxia_selection(game: Game, slot: Slot | None, target: str | None) -> tuple
     """丟掉已經不成立的選取（例如換了新賽季）：自選欄要屬於隊中的人，武學要在武學庫裡。"""
     if slot is not None:
         key, index = slot
-        slot = (key, index) if key in game.state.player.team and 0 <= index < Game.FREE_SLOTS else None
+        slot = (key, index) if key in game.team_keys() and 0 <= index < Game.FREE_SLOTS else None
     if target not in {t for _, t in game.upgrade_options()}:
         target = None
     return slot, target
@@ -143,7 +143,7 @@ def menxia_selection(game: Game, slot: Slot | None, target: str | None) -> tuple
 def render_menxia(game: Game, slot: Slot | None, target: str | None, message: str | None = None) -> list:
     """門下頁面的全部輸出，順序見 MX_*_INDEX；message 為 None 時保留頁面上原本的訊息。"""
     slot, target = menxia_selection(game, slot, target)
-    team = game.state.player.team
+    team = game.team_keys()
     out: list = [slot, target, f"**心得** {game.state.player.stats.get('xinde', 0)}　｜　{game.menxia_rules()}"]
     for col in range(MAX_MEMBERS):
         if col >= len(team):
@@ -250,10 +250,10 @@ def make_innate_slot_handler(col: int):
     """點某人的本命欄：在武學庫與詳情選中他的本命，並取消自選欄的選取。"""
 
     def handler(game, slot, target):
-        if game is None or col >= len(game.state.player.team):
+        if game is None or col >= len(game.team_keys()):
             return [gr.skip()] * MENXIA_OUTPUTS
         with ACT_LOCK:
-            key = game.state.player.team[col]
+            key = game.team_keys()[col]
             return render_menxia(game, None, game.innate_target(key) or target, "")
 
     return handler
@@ -263,10 +263,10 @@ def make_free_slot_handler(col: int, index: int):
     """點某人的自選欄：選取這一欄；欄裡有武學時，也一併選中那門武學。"""
 
     def handler(game, slot, target):
-        if game is None or col >= len(game.state.player.team):
+        if game is None or col >= len(game.team_keys()):
             return [gr.skip()] * MENXIA_OUTPUTS
         with ACT_LOCK:
-            key = game.state.player.team[col]
+            key = game.team_keys()[col]
             held = game.slot_skill(key, index)
             return render_menxia(game, (key, index), f"skill:{held}" if held else target, "")
 
@@ -286,7 +286,7 @@ def _page_skip() -> list:
 
 
 def equip_handler(game, slot, target):
-    """把選中的武學配到選中的自選欄；原本配在別人身上的會移過來（同一隊同一門只能配一次）。"""
+    """把選中的武學配到選中的自選欄；原本配在別人身上的會移過來（一門武學同時只配給一個人）。"""
     if game is None:
         return _page_skip()
     slot, target = menxia_selection(game, slot, target)

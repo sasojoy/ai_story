@@ -90,7 +90,9 @@ def test_summary_is_first_effect_plus_chance(content):
 
 
 def test_rules_line_uses_config(content):
-    assert skillview.rules_line(content) == "同一隊同一門武學只能配一次；第 n 成升一成要心得 20×n；散功返還八成；本命不能散功"
+    assert skillview.rules_line(content) == (
+        "一門武學同時只能配給一個人，某人的本命不能配給同隊的人；第 n 成升一成要心得 20×n；散功返還八成；本命不能散功"
+    )
     content.config.dispel_refund = 0.75
     assert "散功返還 75%" in skillview.rules_line(content)
 

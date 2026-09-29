@@ -13,7 +13,7 @@ def test_new_game(game):
     p = game.state.player
     assert p.location == "town" and p.stamina == 150
     assert p.skills == {"fist": 1, "family": 1}
-    assert p.team == ["player", "mate"]
+    assert [t.members for t in p.teams] == [["player", "mate"], [], [], []]
     assert p.loadouts["player"] == ["fist", None]
     assert "測試開始。" in game.state.log
 
@@ -599,7 +599,7 @@ def test_menxia_page_helpers(game):
 
 
 def test_menxia_page_texts(game):
-    assert game.menxia_rules().startswith("同一隊同一門武學只能配一次")
+    assert game.menxia_rules().startswith("一門武學同時只能配給一個人，某人的本命不能配給同隊的人")
     assert game.member_card("player").startswith("### 沈浪（隊長）")
     assert game.slot_label("player", 1) == "自選2　（空）"
     assert [t for _, t in game.skill_library()] == ["skill:fist", "skill:family", "innate:mate"]

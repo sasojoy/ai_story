@@ -313,7 +313,7 @@ def test_library_labels_stay_short_with_real_content():
 
 def test_menxia_hides_columns_beyond_the_team():
     game = Game.new(app.CONTENT, "測試")
-    game.state.player.team = ["player", "hantie"]
+    game.state.player.teams[0].members = ["player", "hantie"]
     out = app.render_menxia(game, None, None)
     assert column(out, 1)[0] == gr.update(visible=True)
     assert column(out, 2)[0] == gr.update(visible=False)
@@ -374,7 +374,7 @@ def test_equip_through_the_page_moves_the_art(tmp_path, monkeypatch):
     assert len(out) == app.N_OUTPUTS + app.MENXIA_OUTPUTS
     p = game.state.player
     assert p.loadouts["hantie"][0] == "tuna"
-    assert p.loadouts["player"] == [None, "changquan"]  # 同一隊同一門武學只能配一次
+    assert p.loadouts["player"] == [None, "changquan"]  # 一門武學同時只配給一個人
     page = out[app.N_OUTPUTS:]
     assert column(page, 1)[3]["value"] == "自選1　吐納法（心法）第1成"
     assert column(page, 0)[3]["value"] == "自選1　（空）"

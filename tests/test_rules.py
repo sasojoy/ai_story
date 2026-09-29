@@ -12,7 +12,7 @@ def test_new_state(state):
     assert state.player.stamina == 150
     assert state.world.trends == {"kou": 30, "bao": 0}
     assert state.world.revealed == {"kou"}
-    assert state.player.team == ["player", "mate"]
+    assert [t.members for t in state.player.teams] == [["player", "mate"], [], [], []]
 
 
 def test_empty_condition_passes(state):
@@ -66,7 +66,7 @@ def test_team_check_tie_goes_to_the_player_first(state, content):
     check = Check(stat="agi", difficulty=5)  # 身法同為 5
     assert check_actor(state, content, check) == "player"
     assert check_who(check, state, content) == "本人出手"
-    state.player.team = ["mate", "player"]  # 就算本人不排第一，同分時也是本人先
+    state.player.teams[0].members = ["mate", "player"]  # 就算本人不排第一，同分時也是本人先
     assert check_actor(state, content, check) == "player"
 
 

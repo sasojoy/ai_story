@@ -102,7 +102,7 @@ def summary(skill: Skill, level: int) -> str:
 def rules_line(content: Content) -> str:
     cfg = content.config
     return (
-        f"同一隊同一門武學只能配一次；第 n 成升一成要心得 {cfg.xinde_cost_factor}×n；"
+        f"一門武學同時只能配給一個人，某人的本命不能配給同隊的人；第 n 成升一成要心得 {cfg.xinde_cost_factor}×n；"
         f"散功返還{_ratio_word(cfg.dispel_refund)}；本命不能散功"
     )
 
@@ -156,7 +156,8 @@ def _placements(state: GameState, content: Content, target: str) -> list[str]:
     spots = []
     if ident == content.config.player_innate:
         spots.append(f"{team.member_name(state, content, PLAYER)}・本命")
-    for key in list(p.team) + [k for k in p.loadouts if k not in p.team]:
+    lined = team.lined_up(state)
+    for key in lined + [k for k in p.loadouts if k not in lined]:
         for i, skill_id in enumerate(p.loadouts.get(key, [])):
             if skill_id == ident:
                 spots.append(f"{team.member_name(state, content, key)}・自選{i + 1}")
@@ -229,7 +230,7 @@ def _aptitude_block(state: GameState, content: Content, skill: Skill, target: st
         if holder is not None:
             return f"{head}　本命只有本人能用；{reason}，資質不影響它。"
         return f"{head}　{reason}，資質不影響它，誰用都一樣。"
-    keys = [holder] if holder is not None else state.player.team
+    keys = [holder] if holder is not None else team.lined_up(state)
     note = "（本命只有本人能用）" if holder is not None else ""
     rows = []
     for key in keys:
@@ -274,7 +275,7 @@ def member_card(state: GameState, content: Content, key: str) -> str:
     """人物卡（Markdown）：等級、流派、內力、升級後的屬性與四流派資質。"""
     p, cfg = state.player, content.config
     member = p.members[key]
-    leader = "（隊長）" if p.team and p.team[0] == key else ""
+    leader = "（隊長）" if team.team_of(state, key) is not None and team.teammates(state, key)[0] == key else ""
     style, grades = team.member_style(content, key)
     exp = "已滿級" if member.level >= cfg.max_level else f"經驗 {member.exp}/{cfg.level_exp * member.level}"
     now, cap = team.member_neili(state, content, key)

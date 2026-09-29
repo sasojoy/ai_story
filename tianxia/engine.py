@@ -5,7 +5,7 @@ import random
 
 from pydantic import BaseModel
 
-from . import atlas, battlelog, journal, skillview, team
+from . import atlas, battlelog, journal, roster, skillview, team
 from .events import choice_label, has_events_here, pick_event, visible_choices
 from .guide import note_action, quest_text, tutorial_intro
 from .journal import LOG_BREAK, Draft
@@ -66,7 +66,6 @@ class Game:
         p.skills = {k: v for k, v in p.skills.items() if k in c.skills}
         p.members = {k: m for k, m in p.members.items() if k == PLAYER or k in c.characters}
         p.members.setdefault(PLAYER, Member())
-        p.team = [k for k in p.team if k in p.members][:3] or [PLAYER]
         p.loadouts = {
             k: [sid if sid in p.skills else None for sid in slots][: team.FREE_SLOTS]
             for k, slots in p.loadouts.items() if k in p.members
@@ -76,6 +75,8 @@ class Game:
             s.world.storyline, s.world.act = line_ids[0], 0
         acts = next(line for line in c.scenario.storylines if line.id == s.world.storyline).acts
         s.world.act = min(s.world.act, len(acts) - 1)
+        s.world.act_reached = max(s.world.act_reached, s.world.act)  # 1c 以前的存檔沒有這個欄位
+        roster.normalize(s, c)
         if "tutorial_step" not in p.model_fields_set:
             # 舊存檔在新手引導功能上線前就存在，沒有這個欄位；視為引導已完成，不強塞新手引導。
             p.tutorial_step = len(c.tutorial.steps)
@@ -491,8 +492,30 @@ class Game:
     def upgrade_options(self) -> list[tuple[str, str]]:
         return team.upgrade_options(self.state, self.content)
 
-    def team_members(self) -> list[tuple[str, str]]:
-        return [(team.member_name(self.state, self.content, key), key) for key in self.state.player.team]
+    def team_members(self, index: int = 0) -> list[tuple[str, str]]:
+        """第 index 隊（預設本隊）的（名字, key），第一位是隊長。"""
+        return [(team.member_name(self.state, self.content, key), key) for key in self.team_keys(index)]
+
+    # ── 名冊與編隊 ────────────────────────────────────────
+
+    def team_keys(self, index: int = 0) -> list[str]:
+        return team.team_keys(self.state, index)
+
+    def team_count(self) -> int:
+        """目前開放幾隊（含本隊）。"""
+        return roster.team_count(self.state, self.content)
+
+    def command_cap(self) -> int:
+        """每隊的總統御上限。"""
+        return roster.command_cap(self.state, self.content)
+
+    def set_member(self, index: int, slot: int, key: str | None) -> list[str]:
+        """門下頁的「換人」：第 index 隊第 slot 位換成 key（None＝空出來）。真的換了才寫江湖紀錄（和其他門下操作併成一則）。"""
+        before = [list(t.members) for t in self.state.player.teams]
+        msgs = self._log(roster.set_member(self.state, self.content, index, slot, key))
+        if [t.members for t in self.state.player.teams] != before:
+            self._menxia_entry(msgs[0], self._xinde())
+        return msgs
 
     # ── 門下頁面 ──────────────────────────────────────────
 
@@ -653,7 +676,7 @@ class Game:
             "　".join(f"{names[k]} {p.stats.get(k, 0)}" for k in ("silver", "good", "evil", "fame", "xinde")),
             "**隊伍**",
         ]
-        for i, key in enumerate(p.team):
+        for i, key in enumerate(team.team_keys(s)):
             now, cap = team.member_neili(s, c, key)
             leader = "（隊長）" if i == 0 else ""
             lines.append(

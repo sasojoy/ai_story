@@ -69,10 +69,33 @@ def slot_skill(state: GameState, key: str, slot: int) -> str | None:
     return slots[slot] if 0 <= slot < len(slots) else None
 
 
-def team_keys(state: GameState) -> list[str]:
-    """出戰隊伍（第一位是隊長），略過已不在門下的人。"""
-    p = state.player
-    return [key for key in p.team if key in p.members]
+def team_keys(state: GameState, index: int = 0) -> list[str]:
+    """第 index 隊（預設本隊）的成員，第一位是隊長；略過已不在門下的人。1c-1 只有本隊會出手。"""
+    teams = state.player.teams
+    if not 0 <= index < len(teams):
+        return []
+    return [key for key in teams[index].members if key in state.player.members]
+
+
+def team_of(state: GameState, key: str) -> int | None:
+    """key 在第幾隊（從 0 起算，0 是本隊）；候補（不在任何一隊）時為 None。"""
+    return next((i for i, t in enumerate(state.player.teams) if key in t.members), None)
+
+
+def teammates(state: GameState, key: str) -> list[str]:
+    """和 key 同一隊的人（含自己）；候補只有自己。"""
+    index = team_of(state, key)
+    return [key] if index is None else team_keys(state, index)
+
+
+def lined_up(state: GameState) -> list[str]:
+    """所有隊伍裡的人，依隊伍順序；候補不算。"""
+    return [key for index in range(len(state.player.teams)) for key in team_keys(state, index)]
+
+
+def trait_of(content: Content, key: str) -> str | None:
+    """天品的特性（一門心法）；其他人沒有。"""
+    return None if key == PLAYER else content.characters[key].trait
 
 
 def check_actor(state: GameState, content: Content, check: Check) -> str:
@@ -135,6 +158,9 @@ def build_unit(state: GameState, content: Content, key: str, leader: bool) -> Un
     innate = innate_of(state, content, key)
     if innate:
         arts.append(art_from_skill(content.skills[innate], innate_level(state, content, key)))
+    trait = trait_of(content, key)
+    if trait:
+        arts.append(art_from_skill(content.skills[trait], 1))  # 效果固定（內容檢查保證不寫 top）
     for skill_id in p.loadouts.get(key, []):
         if skill_id:
             arts.append(art_from_skill(content.skills[skill_id], p.skills[skill_id]))
@@ -175,7 +201,7 @@ def team_units(state: GameState, content: Content) -> list[Unit]:
 
 
 def fight(state: GameState, content: Content, squad_id: str, rng: random.Random) -> BattleResult:
-    """出戰隊伍對上一支敵方隊伍；戰後內力保留剩餘值。戰鬥紀錄由 engine 透過 battlelog 建立。"""
+    """本隊對上一支敵方隊伍；戰後內力保留剩餘值。戰鬥紀錄由 engine 透過 battlelog 建立。"""
     p = state.player
     squad = content.squads[squad_id]
     result = run_battle(team_units(state, content), enemy_units(content, squad), rng, battle_rules(content))
@@ -233,12 +259,12 @@ def estimate(state: GameState, content: Content, squad_id: str, cache: dict[str,
 
 
 def add_exp(state: GameState, content: Content, amount: int) -> list[str]:
-    """出戰隊伍的每個人都獲得經驗。"""
+    """本隊（打這一場的隊伍）的每個人都獲得經驗；候補與其他隊伍不長經驗。"""
     cfg, p = content.config, state.player
     msgs = []
-    for key in p.team:
-        member = p.members.get(key)
-        if member is None or member.level >= cfg.max_level or amount <= 0:
+    for key in team_keys(state):
+        member = p.members[key]
+        if member.level >= cfg.max_level or amount <= 0:
             continue
         member.exp += amount
         while member.exp >= cfg.level_exp * member.level and member.level < cfg.max_level:
@@ -366,14 +392,15 @@ def upgrade_options(state: GameState, content: Content) -> list[tuple[str, str]]
 
 
 def set_loadout(state: GameState, content: Content, key: str, slot: int, skill_id: str | None) -> list[str]:
-    """同一隊裡，同一門武學只能出現一次（本命或自選）；配給新的人時會從原本的人身上移走。"""
+    """同一門武學同時只能配給一個人（跨隊也一樣），配給新的人時會從原本的人身上移走；
+    某人的本命武學不能再配給他同一隊的人（各隊各自判斷，候補只看自己）。"""
     p = state.player
     if key not in p.members or not 0 <= slot < FREE_SLOTS:
         return ["沒有這個武學欄。"]
     if skill_id is not None:
         if skill_id not in p.skills:
             return ["你尚未習得這門武學。"]
-        if any(innate_of(state, content, k) == skill_id for k in p.team if k in p.members):
+        if any(innate_of(state, content, k) == skill_id for k in teammates(state, key)):
             return [f"【{content.skills[skill_id].name}】是隊中某人的本命武學，不能重複配置。"]
         for other_key, slots in p.loadouts.items():
             for i, sid in enumerate(slots):

@@ -3,11 +3,12 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from .models import Content
 
 PLAYER = "player"  # 門下資料裡代表玩家本人的 key
+TEAM_SIZE = 3  # 每隊最多幾人
 
 
 class Member(BaseModel):
@@ -15,6 +16,12 @@ class Member(BaseModel):
     exp: int = 0
     neili: float | None = None  # None＝內力全滿
     innate_level: int = 1  # 同伴本命武學的成數（本人的本命記在 skills 裡）
+
+
+class Team(BaseModel):
+    """一支隊伍。第一支是本隊（第一位固定是你本人）；1c-2 的派遣隊會在這裡加上自己的體力與派遣狀態。"""
+
+    members: list[str] = Field(default_factory=list)  # 第一位是隊長；最多 TEAM_SIZE 人
 
 
 class PlayerState(BaseModel):
@@ -25,8 +32,8 @@ class PlayerState(BaseModel):
     flags: set[str] = Field(default_factory=set)
     sect: str | None = None
     skills: dict[str, int] = Field(default_factory=dict)  # 已習武學 → 成數
-    members: dict[str, Member] = Field(default_factory=dict)  # 門下；PLAYER＝本人
-    team: list[str] = Field(default_factory=list)  # 出戰隊伍，第一位是隊長
+    members: dict[str, Member] = Field(default_factory=dict)  # 名冊（門下）；PLAYER＝本人，其餘依入門先後
+    teams: list[Team] = Field(default_factory=list)  # 各隊；第一支是本隊，數量見 roster.normalize
     loadouts: dict[str, list[str | None]] = Field(default_factory=dict)  # 每人兩格自選武學
     seen_events: set[str] = Field(default_factory=set)
     anonymous: bool = False
@@ -34,6 +41,15 @@ class PlayerState(BaseModel):
     seclusion_start: float = 0.0
     tutorial_step: int = 0  # 等於引導步數時代表引導結束
     visited: set[str] = Field(default_factory=set)  # 去過的地點
+
+    @model_validator(mode="before")
+    @classmethod
+    def _single_team(cls, data):
+        """1c 以前的存檔只有一支出戰隊伍（team）：它就是本隊；其他隊伍由 roster.normalize 補齊。"""
+        if isinstance(data, dict) and "team" in data and "teams" not in data:
+            data = dict(data)
+            data["teams"] = [{"members": data.pop("team")}]
+        return data
 
 
 class Rumor(BaseModel):
@@ -57,6 +73,7 @@ class WorldState(BaseModel):
     ending_text: str = ""
     storyline: str = ""  # 目前主線 id
     act: int = 0  # 目前第幾幕（從 0 起算）
+    act_reached: int = 0  # 本季到過的最遠一幕；主線改寫會把 act 歸零，隊伍數與統御上限看這個（見 roster.stage）
 
 
 class Fighter(BaseModel):
@@ -132,7 +149,7 @@ def new_game_state(content: Content, name: str) -> GameState:
         stamina=float(cfg.stamina_max),
         tutorial_step=0,
         members={key: Member() for key in keys},
-        team=keys[:3],
+        teams=[Team(members=keys[:TEAM_SIZE])] + [Team() for _ in range(max(cfg.team_counts) - 1)],
         loadouts={key: [None, None] for key in keys},
     )
     world = WorldState(

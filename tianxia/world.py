@@ -74,6 +74,7 @@ def update_storyline(state: GameState, content: Content) -> list[str]:
         if act.advance_when is None or not check_condition(act.advance_when, state):
             break
         w.act += 1
+        w.act_reached = max(w.act_reached, w.act)
         nxt = line.acts[w.act]
         msgs.append(f"【主線】第{w.act + 1}幕「{nxt.title}」：{nxt.text}")
         add_chronicle(state, f"{line.name}・第{w.act + 1}幕「{nxt.title}」")
