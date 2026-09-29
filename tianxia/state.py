@@ -96,6 +96,17 @@ class BattleRecord(BaseModel):
     performance: list[Performance] = Field(default_factory=list)  # 我方每人表現，順序同 ours
 
 
+class JournalEntry(BaseModel):
+    """江湖紀錄的一則：玩家的一次行動，整理成給畫面看的樣子（原始訊息仍照舊寫在 GameState.log）。"""
+
+    time: float  # 行動時的遊戲時間；舊存檔轉來的紀錄沒有時間，記為 journal.LEGACY_TIME
+    title: str  # 例如「前往 揚州城」「歷練・揚州城郊」「酒樓鬥毆・上前勸架」
+    tag: str = ""  # 簡短的結果，例如「遇上【酒樓鬥毆】」「擊退劫道山賊（4 回合）」「韓鐵出手・失敗」
+    lines: list[str] = Field(default_factory=list)  # 敘事文字
+    changes: list[str] = Field(default_factory=list)  # 數值變化，例如「銀兩 -5」「心得 +12」
+    battle_id: int | None = None  # 這次行動打的那一場（BattleRecord.id）
+
+
 class GameState(BaseModel):
     player: PlayerState
     world: WorldState
@@ -103,7 +114,8 @@ class GameState(BaseModel):
     battles: list[BattleRecord] = Field(default_factory=list)  # 最近的戰鬥紀錄，最新的在前
     battle_seq: int = 0  # 最近一場戰鬥的流水號
     battle_card: int | None = None  # 場景裡顯示卡片的那一場；下一次行動時清掉
-    log: list[str] = Field(default_factory=list)
+    log: list[str] = Field(default_factory=list)  # 原始訊息，每次行動之間夾一個 journal.LOG_BREAK
+    journal: list[JournalEntry] = Field(default_factory=list)  # 江湖紀錄，最新的在前，最多 journal.MAX_ENTRIES 則
     last_real: float | None = None  # 上次同步的現實時間（time.time()）
 
 

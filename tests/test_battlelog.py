@@ -7,6 +7,7 @@ from tianxia.battlelog import (
     key_moments,
     list_label,
     moment_text,
+    outcome_text,
     split_changes,
     story_text,
     summary_line,
@@ -79,6 +80,8 @@ def test_record_texts():
     assert summary_line(rec) == "⚔ 揚州城郊：擊退劫道山賊（4 回合）"
     assert summary_line(record(outcome="lose")) == "⚔ 揚州城郊：不敵劫道山賊，敗退（4 回合）"
     assert summary_line(record(outcome="draw")) == "⚔ 揚州城郊：與劫道山賊不分勝負（4 回合）"
+    assert outcome_text(rec) == "擊退劫道山賊（4 回合）"  # 江湖紀錄的結果標記：摘要去掉 ⚔ 與地點
+    assert outcome_text(record(outcome="lose")) == "不敵劫道山賊，敗退（4 回合）"
     assert list_label(rec) == "勝　第3場　第2天 08:30　揚州城郊　vs 劫道山賊　4 回合"
     assert list_label(record(outcome="draw")).startswith("平　第3場　")
     assert list_label(record(outcome="lose")).startswith("敗　第3場　")

@@ -113,14 +113,19 @@ def clock_text(time: float) -> str:
     return f"第{int(time // DAY) + 1}天 {int(time % DAY // HOUR):02d}:{int(time % HOUR // 60):02d}"
 
 
+def outcome_text(record: BattleRecord) -> str:
+    """結果的短句，例如「擊退劫道山賊（4 回合）」；江湖紀錄拿它當那一則的結果標記。"""
+    foe, rounds = record.opponent, f"（{record.rounds} 回合）"
+    if record.outcome == "win":
+        return f"擊退{foe}{rounds}"
+    if record.outcome == "lose":
+        return f"不敵{foe}，敗退{rounds}"
+    return f"與{foe}不分勝負{rounds}"
+
+
 def summary_line(record: BattleRecord) -> str:
     """紀錄裡的一行摘要，例如「⚔ 揚州城郊：擊退劫道山賊（4 回合）」。"""
-    where, foe, rounds = record.location, record.opponent, f"（{record.rounds} 回合）"
-    if record.outcome == "win":
-        return f"⚔ {where}：擊退{foe}{rounds}"
-    if record.outcome == "lose":
-        return f"⚔ {where}：不敵{foe}，敗退{rounds}"
-    return f"⚔ {where}：與{foe}不分勝負{rounds}"
+    return f"⚔ {record.location}：{outcome_text(record)}"
 
 
 def list_label(record: BattleRecord) -> str:

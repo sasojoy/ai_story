@@ -5,18 +5,18 @@ import random
 
 from pydantic import BaseModel
 
-from . import battlelog, skillview, team
+from . import battlelog, journal, skillview, team
 from .events import choice_label, has_events_here, pick_event, visible_choices
 from .guide import note_action, quest_text, tutorial_intro
+from .journal import LOG_BREAK, Draft
 from .mapview import render_map
 from .models import Choice, Content, Effect, Event, Location, Squad
 from .rules import apply_effect, change_trend, check_who, learn_skill, roll_check
-from .state import PLAYER, BattleRecord, GameState, Member, Rumor, new_game_state
+from .state import PLAYER, BattleRecord, GameState, JournalEntry, Member, Rumor, new_game_state
 from .world import check_thresholds, end_season, sim_tick
 
 HOUR = 3600
 DAY = 86400
-LOG_BREAK = "\x1e"  # 紀錄中每次行動結束的分隔標記（不顯示）
 
 
 class Option(BaseModel):
@@ -33,6 +33,7 @@ class Game:
         self.state = state
         self.rng = rng or random.Random()
         self._odds: dict[str, str] = {}  # 勝算快取，見 team.estimate
+        self._draft: Draft | None = None  # choose() 進行中那次行動的江湖紀錄草稿
         self._drop_stale_references()
 
     @classmethod
@@ -50,6 +51,7 @@ class Game:
             [f"══ {content.scenario.name} ══", content.scenario.intro, game.location_text()]
             + tutorial_intro(content)
         )
+        game._write(content.scenario.name, [content.scenario.intro] + tutorial_intro(content), tag="賽季開始")
         return game
 
     def _drop_stale_references(self) -> None:
@@ -84,6 +86,9 @@ class Game:
                 s.world.flag_times[flag] = s.world.time
         if battlelog.find(s, s.battle_card) is None:
             s.battle_card = None
+        if not s.journal and s.log:
+            # 江湖紀錄上線前的存檔只有原始訊息：轉一次成簡單的紀錄，之後照新的方式寫。
+            s.journal = journal.from_legacy_log(s.log)
 
     # ── 時間 ──────────────────────────────────────────────
 
@@ -182,20 +187,51 @@ class Game:
             return self._log(["（此刻無法這麼做。）"])
         self.state.battle_card = None  # 上一場的戰鬥卡片只留到下一次行動
         kind, _, arg = option_id.partition(":")
-        if kind == "act":
-            msgs = self._act(arg)
-        elif kind == "move":
-            msgs = self._move(arg)
-        elif kind == "choice":
-            msgs = self._choose(int(arg))
-        else:
-            msgs = self.new_season()
-        if kind == "act" and arg != "break":
-            msgs += note_action(self.state, self.content, arg)
-        elif kind == "move":
-            msgs += note_action(self.state, self.content, "move")
-        msgs += check_thresholds(self.state, self.content)
+        if kind == "season":  # 新賽季的開場紀錄由 Game.new 寫好
+            return self._log(self.new_season() + check_thresholds(self.state, self.content))
+        self._draft = Draft(self._action_title(kind, arg))
+        try:
+            if kind == "act":
+                msgs = self._act(arg)
+            elif kind == "move":
+                msgs = self._move(arg)
+            else:
+                msgs = self._choose(int(arg))
+            if kind == "act" and arg != "break":
+                msgs += note_action(self.state, self.content, arg)
+            elif kind == "move":
+                msgs += note_action(self.state, self.content, "move")
+            msgs += check_thresholds(self.state, self.content)
+            journal.add_entry(self.state, self._draft.entry(self.state.world.time, msgs))
+        finally:
+            self._draft = None
         return self._log(msgs)
+
+    def _action_title(self, kind: str, arg: str) -> str:
+        """這次行動在江湖紀錄裡的標題：「前往 揚州城」「探索揚州城」「交遊・揚州城」「歷練・揚州城郊」、
+        「酒樓鬥毆・上前勸架」（事件標題・選項）或「提前出關」。"""
+        s, c = self.state, self.content
+        if kind == "move":
+            return f"前往 {c.locations[arg].name}"
+        if kind == "choice":
+            event = c.events[s.pending_event]
+            return f"{event.title}・{event.choices[int(arg)].text}"
+        here = c.locations[s.player.location].name
+        return {"explore": f"探索{here}", "socialize": f"交遊・{here}", "train": f"歷練・{here}"}.get(arg, "提前出關")
+
+    def _hide(self, msg: str) -> None:
+        """這則訊息不寫進江湖紀錄（場景已經顯示，或已經寫在標題裡）。"""
+        if self._draft is not None:
+            self._draft.hide(msg)
+
+    def _outcome(self, text: str, msg: str) -> None:
+        """這則訊息是這次行動的結果，在江湖紀錄裡寫成 text（見 journal.Draft.outcome）。"""
+        if self._draft is not None:
+            self._draft.outcome(text, msg)
+
+    def _write(self, title: str, msgs: list[str], tag: str = "") -> None:
+        """不經過 choose() 的行動（開場、閉關、系統訊息……）直接寫一則江湖紀錄。"""
+        journal.add_entry(self.state, Draft(title, tag).entry(self.state.world.time, msgs))
 
     # ── 行動 ──────────────────────────────────────────────
 
@@ -218,6 +254,8 @@ class Game:
         self.state.pending_event = event.id
         self.state.player.seen_events.add(event.id)
         head = f"✦ 奇遇：{event.title}" if event.qiyu else f"【{event.title}】"
+        self._outcome(f"遇上奇遇【{event.title}】" if event.qiyu else f"遇上【{event.title}】", head)
+        self._hide(event.text)  # 事件的開場由場景顯示
         return [head, event.text]
 
     def _train(self) -> list[str]:
@@ -273,17 +311,26 @@ class Game:
         return msgs + levels
 
     def _file_battle(self, record: BattleRecord) -> str:
-        """把戰鬥紀錄存進歷史、場景顯示它的卡片；回傳紀錄裡的一行摘要。"""
+        """把戰鬥紀錄存進歷史、場景顯示它的卡片；回傳紀錄裡的一行摘要。
+        江湖紀錄裡這一則的結果標記寫成「擊退劫道山賊（4 回合）」，並補上每人獲得的經驗。"""
         battlelog.add_record(self.state, record)
         self.state.battle_card = record.id
-        return battlelog.summary_line(record)
+        line = battlelog.summary_line(record)
+        if self._draft is not None:
+            self._draft.outcome(battlelog.outcome_text(record), line)
+            self._draft.battle_id = record.id
+            if record.exp:
+                self._draft.changes.append(f"經驗 +{record.exp}")
+        return line
 
     def _move(self, dest_id: str) -> list[str]:
         dest = self.content.locations[dest_id]
         self.state.player.stamina -= dest.move_cost
         self.state.player.location = dest_id
         self.state.player.visited.add(dest_id)
-        return [self.location_text()]
+        text = self.location_text()
+        self._hide(text)  # 地點描述由場景顯示
+        return [text]
 
     def _choose(self, index: int) -> list[str]:
         s, c = self.state, self.content
@@ -291,12 +338,15 @@ class Game:
         choice = event.choices[index]
         s.pending_event = None
         msgs = [f"▸ {choice.text}"]
+        self._hide(msgs[0])  # 選項已經寫在標題裡
         if choice.combat:
             return msgs + self._event_battle(event, choice)
         if choice.check:
             who = check_who(choice.check, s, c)
             success = roll_check(choice.check, s, c, self.rng)
-            msgs.append(f"（{who}——{'成功' if success else '失敗'}）")
+            word = "成功" if success else "失敗"
+            msgs.append(f"（{who}——{word}）")
+            self._outcome(f"{who}・{word}", msgs[-1])
             return msgs + self._apply(choice.effect if success else choice.fail_effect)
         return msgs + self._apply(choice.effect)
 
@@ -333,29 +383,64 @@ class Game:
     def seclude(self, hours: int) -> list[str]:
         p = self.state.player
         if not self._idle():
-            return self._log(["你現在無法閉關。"])
+            msgs = ["你現在無法閉關。"]
+            self._write("閉關", msgs)
+            return self._log(msgs)
         hours = max(1, min(12, int(hours)))
         self.state.battle_card = None
         p.busy_until = self.state.world.time + hours * HOUR
         p.seclusion_start = self.state.world.time
-        return self._log([f"你閉關靜修，預計 {hours} 小時後出關；閉關期間內力回復加倍。"])
+        msgs = [f"你閉關靜修，預計 {hours} 小時後出關；閉關期間內力回復加倍。"]
+        self._write("閉關", msgs, tag=f"{hours} 小時")
+        return self._log(msgs)
 
     def _finish_seclusion(self, end_time: float) -> list[str]:
+        """出關並發心得。按「提前出關」時寫進那次行動的紀錄；時間到了自己出關時另寫一則「出關」。"""
         p, cfg = self.state.player, self.content.config
         hours = (end_time - p.seclusion_start) / HOUR
         amount = round(hours * cfg.seclusion_xinde_per_hour * (1 + p.stats["wis"] / 20))
         p.busy_until = None
         p.stats["xinde"] = p.stats.get("xinde", 0) + amount
-        return [f"你結束閉關（{hours:.1f} 小時），心得 +{amount}。"]
+        msg = f"你結束閉關（{hours:.1f} 小時），心得 +{amount}。"
+        tag, change = f"{hours:.1f} 小時", f"心得 +{amount}"
+        if self._draft is not None:
+            self._draft.outcome(tag, msg)
+            self._draft.changes.append(change)
+        else:
+            journal.add_entry(self.state, JournalEntry(time=end_time, title="出關", tag=tag, changes=[change]))
+        return [msg]
+
+    # 門下的操作只有真的改了東西才寫江湖紀錄；「心得不足」這類失敗訊息由門下頁面自己顯示。
 
     def upgrade(self, target: str) -> list[str]:
-        return self._log(team.upgrade(self.state, self.content, target))
+        level, xinde = team.target_level(self.state, self.content, target), self._xinde()
+        msgs = self._log(team.upgrade(self.state, self.content, target))
+        now = team.target_level(self.state, self.content, target)
+        if now != level:
+            self._menxia_entry(f"【{team.target_name(self.state, self.content, target)}】精進至第{now}成", xinde)
+        return msgs
 
     def dispel(self, target: str) -> list[str]:
-        return self._log(team.dispel(self.state, self.content, target))
+        level, xinde = team.target_level(self.state, self.content, target), self._xinde()
+        msgs = self._log(team.dispel(self.state, self.content, target))
+        if team.target_level(self.state, self.content, target) != level:
+            self._menxia_entry(f"【{team.target_name(self.state, self.content, target)}】散功，退回第一成", xinde)
+        return msgs
 
     def set_loadout(self, member: str, slot: int, skill_id: str | None) -> list[str]:
-        return self._log(team.set_loadout(self.state, self.content, member, slot, skill_id))
+        before = {key: list(slots) for key, slots in self.state.player.loadouts.items()}
+        msgs = self._log(team.set_loadout(self.state, self.content, member, slot, skill_id))
+        if self.state.player.loadouts != before:
+            self._menxia_entry(msgs[0], self._xinde())
+        return msgs
+
+    def _xinde(self) -> int:
+        return self.state.player.stats.get("xinde", 0)
+
+    def _menxia_entry(self, tag: str, xinde_before: int) -> None:
+        delta = self._xinde() - xinde_before
+        changes = [f"心得 {delta:+d}"] if delta else []
+        journal.add_entry(self.state, JournalEntry(time=self.state.world.time, title="門下", tag=tag, changes=changes))
 
     def upgrade_options(self) -> list[tuple[str, str]]:
         return team.upgrade_options(self.state, self.content)
@@ -428,8 +513,9 @@ class Game:
         record = battlelog.find(s, record_id) or (s.battles[0] if s.battles else None)
         return battlelog.detail_text(record) if record else battlelog.NO_RECORD
 
-    def notice(self, text: str) -> list[str]:
-        """介面層要告訴玩家的系統訊息（例如舊存檔已備份）。"""
+    def notice(self, text: str, title: str = "提醒") -> list[str]:
+        """介面層要告訴玩家的系統訊息（例如舊存檔已備份）；title 是江湖紀錄裡這一則的標題。"""
+        self._write(title, [text])
         return self._log([text])
 
     def set_anonymous(self, value: bool) -> None:
@@ -438,12 +524,17 @@ class Game:
     def skip_tutorial(self) -> list[str]:
         """設定裡的「略過新手引導」：直接跳到引導結束。"""
         self.state.player.tutorial_step = len(self.content.tutorial.steps)
+        self._write("新手引導", [], tag="已略過")
         return self._log(["（已略過新手引導。）"])
 
     def view_map(self) -> list[str]:
-        """介面打開地圖時呼叫。不論新手引導是否還在「看地圖」那一步，都先記下玩家看過地圖。"""
+        """介面打開地圖時呼叫。不論新手引導是否還在「看地圖」那一步，都先記下玩家看過地圖。
+        平常看地圖不寫江湖紀錄；只有剛好完成一步新手引導時，才記下引導的獎勵與下一步。"""
         self.state.player.flags.add("看過地圖")
-        return self._log(note_action(self.state, self.content, "view_map"))
+        msgs = note_action(self.state, self.content, "view_map")
+        if msgs:
+            self._write("翻看地圖", msgs)
+        return self._log(msgs)
 
     def quest_text(self) -> str:
         return quest_text(self.state, self.content)
@@ -517,6 +608,22 @@ class Game:
 
     def chronicle_text(self) -> str:
         return _timeline(self.state.world.chronicle) or "（江湖史尚無記載。）"
+
+    # ── 江湖紀錄 ──────────────────────────────────────────
+
+    def latest_entry_html(self) -> str:
+        """左欄「剛剛」卡片：最新一則紀錄的完整內容（HTML）；還沒有紀錄時是空字串。"""
+        entries = self.state.journal
+        return journal.card_html(entries[0]) if entries else ""
+
+    def journal_html(self, start: int = 1, limit: int = 5, heading: str = "", empty: str = "") -> str:
+        """紀錄列（HTML）：從第 start 則（0＝最新）起最多 limit 則，一則一列；沒有東西可顯示時是空字串。"""
+        return journal.rows_html(self.state.journal[start:start + limit], heading, empty)
+
+    def shows_battle_card(self) -> bool:
+        """「剛剛」那一格改放戰鬥卡片：卡片還在，而且最新一則紀錄就是打那一場的行動。"""
+        s = self.state
+        return self.battle_card_id() is not None and bool(s.journal) and s.journal[0].battle_id == s.battle_card
 
     def log_text(self, limit: int = 15) -> str:
         """最新的行動排在最上面；同一次行動內的文字維持原本順序。"""
