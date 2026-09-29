@@ -106,6 +106,14 @@ def test_menxia_page_shows_cards_slots_and_library():
         assert out[index]["visible"] is False
 
 
+def test_library_labels_stay_short_with_real_content():
+    game = Game.new(app.CONTENT, "沈青衫")
+    for skill_id in app.CONTENT.skills:  # 全部武學都學會、都練到第十成：最長的情形
+        game.state.player.skills[skill_id] = 10
+    labels = [label for label, _ in game.skill_library()]
+    assert max(len(label) for label in labels) <= 42, max(labels, key=len)
+
+
 def test_menxia_hides_columns_beyond_the_team():
     game = Game.new(app.CONTENT, "測試")
     game.state.player.team = ["player", "hantie"]

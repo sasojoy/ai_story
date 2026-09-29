@@ -14,6 +14,7 @@ HINT = "（點選上方的武學欄，或左邊武學庫裡的一門武學，這
 QUALITY_NAMES = {"下": "下品", "中": "中品", "上": "上品"}
 CONTROL_NOTES = {"點穴": "整回合不能行動", "卸兵": "不能普攻，也不會連招", "封脈": "發不出絕招"}
 STAT_NOTES = {("spd", "buff"): "（出手更早）", ("spd", "debuff"): "（出手更晚）"}
+GROUP_WORDS = {"enemies": "全體", "allies": "全隊"}  # 武學庫短句裡的群體前綴
 TARGET_WORDS = {"enemies": "所有敵人", "self": "自身", "ally_lowest": "內力比例最低的隊友", "allies": "全隊"}
 LASTING_KINDS = ("buff", "debuff", "control", "dodge", "reduce")
 CHINESE_DIGITS = "零一二三四五六七八九十"
@@ -58,32 +59,41 @@ def _who(effect: SkillEffect, kind: str) -> str:
     return "一名敵人" if kind == "心法" else "目標"
 
 
-def effect_text(effect: SkillEffect, level: int, kind: str) -> str:
-    """一個效果在第 level 成時的白話說明；kind 是武學類型（心法／絕招／連招）。"""
-    pct = _pct(team.skill_value(effect.base, effect.top, level))
-    who = _who(effect, kind)
+def _name(effect: SkillEffect, kind: str) -> str:
+    """效果叫什麼：傷害／追加傷害、回復內力、封脈、攻擊提升、閃避、減傷……"""
     if effect.kind == "damage":
-        return f"對{who}{'追加' if kind == '連招' else '造成'} {pct}% 傷害"
+        return "追加傷害" if kind == "連招" else "傷害"
     if effect.kind == "heal":
-        return f"回復{who} {pct}% 內力"
+        return "回復內力"
     if effect.kind == "control":
-        rounds = "整場" if kind == "心法" else f"{effect.rounds} 回合"
-        control = effect.control
-        return f"{pct}% 機率使{who}被{control}（{CONTROL_NOTES[control]}）{rounds}；悟性越高越容易命中"
+        return effect.control
     if effect.kind in ("buff", "debuff"):
-        word = "提升" if effect.kind == "buff" else "降低"
-        note = STAT_NOTES.get((effect.stat, effect.kind), "")
-        text = f"{who}{STAT_NAMES[effect.stat]}{word} {pct}%{note}"
-    elif effect.kind == "dodge":
-        text = f"{who}閃避 {pct}%（只閃得開普攻）"
-    else:  # reduce
-        text = f"{who}受到的傷害減少 {pct}%"
-    return text + ("，持續整場" if kind == "心法" else f"，持續 {effect.rounds} 回合")
+        return STAT_NAMES[effect.stat] + ("提升" if effect.kind == "buff" else "降低")
+    return "閃避" if effect.kind == "dodge" else "減傷"
 
 
-def summary(content: Content, skill: Skill, level: int) -> str:
-    """武學庫的一行摘要：第一個效果，絕招／連招再加上發動率。"""
-    text = effect_text(skill.effects[0], level, skill.kind)
+def effect_label(effect: SkillEffect, kind: str) -> str:
+    """效果表的列名：是什麼、落在誰身上、持續多久；不含數字（數字在旁邊的成數欄）。kind 是武學類型。"""
+    who = _who(effect, kind)
+    if effect.kind in ("damage", "heal"):
+        return f"{_name(effect, kind)}・{who}"
+    lasting = "整場" if kind == "心法" else f"{effect.rounds} 回合"
+    if effect.kind == "control":
+        parts = [f"{effect.control}命中率"] + ([] if who == "目標" else [who]) + [lasting]
+        return "・".join(parts) + f"（{CONTROL_NOTES[effect.control]}）"
+    note = "（只閃得開普攻）" if effect.kind == "dodge" else STAT_NOTES.get((effect.stat, effect.kind), "")
+    return f"{_name(effect, kind)}・{who}・{lasting}{note}"
+
+
+def effect_short(effect: SkillEffect, level: int, kind: str) -> str:
+    """武學庫用的短句：效果名稱加上第 level 成的數字，例如「追加傷害 60%」「全體傷害 80%」。"""
+    pct = _pct(team.skill_value(effect.base, effect.top, level))
+    return f"{GROUP_WORDS.get(effect.target, '')}{_name(effect, kind)} {pct}%"
+
+
+def summary(skill: Skill, level: int) -> str:
+    """武學庫的一行摘要：第一個效果的短句，絕招／連招再加上發動率。"""
+    text = effect_short(skill.effects[0], level, skill.kind)
     if skill.kind != "心法":
         text += f"，發動 {_pct(team.skill_value(skill.chance_base, skill.chance_top, level))}%"
     return text
@@ -168,7 +178,7 @@ def _level_table(skill: Skill, level: int) -> str:
     if skill.kind != "心法":
         rows.append(f"| 發動率 | {cells(skill.chance_base, skill.chance_top)} |")
     for effect in skill.effects:
-        rows.append(f"| {effect_text(effect, level, skill.kind)} | {cells(effect.base, effect.top)} |")
+        rows.append(f"| {effect_label(effect, skill.kind)} | {cells(effect.base, effect.top)} |")
     return "\n".join(rows)
 
 
@@ -179,7 +189,7 @@ def _notes(skill: Skill) -> list[str]:
     if _has(skill, "control"):
         notes.append("控制命中率＝表中機率 ×（1 +（自己悟性 − 對方悟性）× 5%），最低 5%、最高 95%。")
     if skill.kind != "心法" and any(e.kind in LASTING_KINDS for e in skill.effects):
-        notes.append("回合數以承受者自己的出手次數計。")
+        notes.append("回合數以承受者自己的回合計（被點穴而沒出手也算一回合）。")
     return notes
 
 
@@ -197,20 +207,38 @@ def _counter_line(skill: Skill) -> str:
     )
 
 
-def _aptitude_block(state: GameState, content: Content, skill: Skill) -> str:
-    """資質只乘在同流派的傷害上：列出隊中每個人用這門武學的倍率，順手的排前面。"""
+def _holder(content: Content, target: str) -> str | None:
+    """本命武學的主人（只有他能用）；不是本命時回傳 None。"""
+    if not team.is_innate(content, target):
+        return None
+    kind, _, ident = target.partition(":")
+    return ident if kind == "innate" else PLAYER
+
+
+def _aptitude_block(state: GameState, content: Content, skill: Skill, target: str) -> str:
+    """資質只乘在同流派的傷害上：列出誰用這門武學的倍率，順手的排前面；本命只列主人。"""
+    head = "**誰用最順手**"
+    holder = _holder(content, target)
     if skill.style == "無":
-        return "**誰用最順手**　無流派：資質不影響它，誰用都一樣。"
-    if not _has(skill, "damage"):
-        return "**誰用最順手**　這門武學不造成傷害，資質不影響它，誰用都一樣。"
+        reason = "無流派"
+    elif not _has(skill, "damage"):
+        reason = "這門武學不造成傷害"
+    else:
+        reason = None
+    if reason is not None:
+        if holder is not None:
+            return f"{head}　本命只有本人能用；{reason}，資質不影響它。"
+        return f"{head}　{reason}，資質不影響它，誰用都一樣。"
+    keys = [holder] if holder is not None else state.player.team
+    note = "（本命只有本人能用）" if holder is not None else ""
     rows = []
-    for key in state.player.team:
+    for key in keys:
         _, grades = team.member_style(content, key)
         grade = grades.get(skill.style, "B")
         mult = team.APTITUDE[grade]
-        rows.append((mult, f"- {team.member_name(state, content, key)} {skill.style}{grade} ×{_mult(mult)}"))
+        rows.append((mult, f"- {team.member_name(state, content, key)} {skill.style}{grade} ×{_mult(mult)}{note}"))
     rows.sort(key=lambda row: -row[0])
-    return "**誰用最順手**（資質只放大或縮小這門武學的傷害）\n\n" + "\n".join(line for _, line in rows)
+    return f"{head}（資質只放大或縮小這門武學的傷害）\n\n" + "\n".join(line for _, line in rows)
 
 
 def detail(state: GameState, content: Content, target: str | None) -> str:
@@ -228,7 +256,7 @@ def detail(state: GameState, content: Content, target: str | None) -> str:
     if notes:
         parts.append("註：" + "".join(notes))
     parts.append(f"**相剋**　{_counter_line(skill)}")
-    parts.append(_aptitude_block(state, content, skill))
+    parts.append(_aptitude_block(state, content, skill, target))
     parts.append(f"**目前配置於**　{'、'.join(_placements(state, content, target)) or '未配置'}")
     if level >= team.MAX_SKILL_LEVEL:
         parts.append("**已達第十成**")
@@ -278,15 +306,14 @@ def slot_label(state: GameState, content: Content, key: str, slot: int | None) -
 
 
 def library(state: GameState, content: Content) -> list[tuple[str, str]]:
-    """武學庫：（一行說明, target），順序同 team.upgrade_options。"""
+    """武學庫：（短短一行, target），順序同 team.upgrade_options；完整說明在 detail。"""
     items = []
     for _, target in team.upgrade_options(state, content):
         skill, level = _resolve(state, content, target)
         spots = _placements(state, content, target)
-        where = f"配置於 {'、'.join(spots)}" if spots else "未配置"
         label = (
             f"{skill.name}（{skill.kind}・{_style_name(skill.style)}）第{level}成"
-            f" — {summary(content, skill, level)} — {where}"
+            f"　{summary(skill, level)}〔{'、'.join(spots) or '未配置'}〕"
         )
         items.append((label, target))
     return items
