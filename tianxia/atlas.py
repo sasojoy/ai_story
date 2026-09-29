@@ -78,6 +78,12 @@ def known_locations(state: GameState, content: Content) -> set[str]:
     return {loc_id for loc_id, view in views(state, content).items() if view in KNOWN}
 
 
+def is_known(state: GameState, content: Content, loc_id: str) -> bool:
+    """這個地點摸清了嗎（看得見或去過，而且已開放）。沒摸清的地點不能洩漏敵人、勝算、路線或名字：
+    下面局勢、劇情、敵情的資料函式本身不檢查，呼叫端（圖層、詳情欄）要先用這個把關。"""
+    return location_view(loc_id, state, content, visible_locations(state, content)) in KNOWN
+
+
 def place_choices(state: GameState, content: Content) -> list[tuple[str, str]]:
     """大地圖選得到的地點（顯示文字, 地點 id），依內容順序：摸清的寫名字（所在地另外註明），
     畫出輪廓的未知重要地點寫「名字？」；沒名字的淡點與未開放的地點不列。"""
@@ -180,7 +186,7 @@ def sim_shown(sim: SimPlayer, state: GameState) -> bool:
 
 
 def haunters(state: GameState, content: Content, loc_id: str) -> list[str]:
-    """常出沒在這個地點、而且已經該露面的龍頭人物名字（同名只列一次）。"""
+    """常出沒在這個地點、而且已經該露面的龍頭人物名字（同名只列一次）。不檢查視野：呼叫端要先用 is_known 把關。"""
     names = [sim.name for sim in content.scenario.sim_players if loc_id in sim.haunts and sim_shown(sim, state)]
     return list(dict.fromkeys(names))
 
@@ -189,12 +195,13 @@ def haunters(state: GameState, content: Content, loc_id: str) -> list[str]:
 
 
 def goal_places(state: GameState, content: Content) -> list[str]:
-    """目前這一幕主線的目標地點。隱藏主線要等大勢浮現、取代主線後，才會是「目前這一幕」。"""
+    """目前這一幕主線的目標地點。隱藏主線要等大勢浮現、取代主線後，才會是「目前這一幕」。
+    不檢查視野：呼叫端要用 is_known 把關，沒摸清的目標不能標出來。"""
     return list(current_act(state, content).places)
 
 
 def recent_news(state: GameState, loc_id: str) -> list[Rumor]:
-    """這個地點最近 NEWS_DAYS 天的江湖大事與傳聞，最新的在前。"""
+    """這個地點最近 NEWS_DAYS 天的江湖大事與傳聞，最新的在前。不檢查視野：呼叫端要先用 is_known 把關。"""
     now = state.world.time
     return [r for r in reversed(state.world.rumors) if r.location == loc_id and now - r.time <= NEWS_DAYS * DAY]
 
@@ -203,12 +210,14 @@ def recent_news(state: GameState, loc_id: str) -> list[Rumor]:
 
 
 def foes(content: Content, loc: Location, odds: Odds) -> list[tuple[str, str]]:
-    """可能遇到的敵方隊伍與勝算：（隊伍名稱, 勝算），同一隊只列一次。"""
+    """可能遇到的敵方隊伍與勝算：（隊伍名稱, 勝算），同一隊只列一次。
+    不檢查視野：呼叫端要先用 is_known 把關，沒摸清的地點不能露出敵人，也不該去算勝算。"""
     return [(content.squads[squad_id].name, odds(squad_id)) for squad_id in dict.fromkeys(loc.enemies)]
 
 
 def worst_foe(content: Content, loc: Location, odds: Odds) -> tuple[str, str] | None:
-    """最難對付的對手與勝算（勝算最差的；一樣差取排在前面的）；沒有敵人時為 None。"""
+    """最難對付的對手與勝算（勝算最差的；一樣差取排在前面的）；沒有敵人時為 None。
+    不檢查視野：呼叫端要先用 is_known 把關（同 foes）。"""
     listed = foes(content, loc, odds)
     return max(listed, key=lambda foe: ODDS_ORDER.index(foe[1])) if listed else None
 
@@ -285,10 +294,11 @@ def _names(content: Content, loc_ids) -> str:
 def detail_text(state: GameState, content: Content, loc_id: str, odds: Odds) -> str:
     """詳情欄（Markdown）：局勢、敵情、劇情、路線四方面。沒摸清的地點只寫「尚未摸清」，也不算勝算。"""
     loc = content.locations[loc_id]
-    view = views(state, content)[loc_id]
-    if view not in KNOWN:
-        return f"### {loc.name}？\n\n{UNKNOWN}"
-    here = view == "current"
+    if not is_known(state, content, loc_id):
+        # 只有畫出輪廓的未知重要地點才有名字；淡點與未開放的地點連名字都不能露
+        outlined = views(state, content)[loc_id] == "outline"
+        return f"### {loc.name if outlined else ''}？\n\n{UNKNOWN}"
+    here = loc_id == state.player.location
     parts = [f"### {loc.name}" + ("（所在地）" if here else "") + f"　危險 {'★' * loc.danger}"]
 
     region = region_of(content, loc_id)

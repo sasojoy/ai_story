@@ -1,5 +1,5 @@
 from tianxia.atlas import (
-    Route, detail_text, direction, foes, goal_places, haunters, known_locations, neighbours, place_choices,
+    Route, detail_text, direction, foes, goal_places, haunters, is_known, known_locations, neighbours, place_choices,
     recent_news, region_center, region_of, region_trends, routes, travel_button, worst_foe,
 )
 from tianxia.models import Location
@@ -170,6 +170,32 @@ def test_routes_only_pass_known_and_open_places(state, content):
     assert routes(state, content)["cave"] == Route(("lake", "cave"), 17)
 
 
+def add_place(content, loc_id: str, cost: int, links: list[str]) -> None:
+    content.locations[loc_id] = Location(
+        id=loc_id, name=loc_id, description="測試地點。", connections=list(links), x=150, y=50, move_cost=cost
+    )
+    for other in links:
+        content.locations[other].connections.append(loc_id)
+
+
+def test_routes_break_ties_by_fewer_hops_then_by_id(state, content):
+    state.world.flags.add("cave_open")
+    content.config.vision_base = 3
+    content.locations["lake"].move_cost = 6
+    content.locations["cave"].move_cost = 5
+    add_place(content, "aa", cost=3, links=["town"])  # 另一條路：小鎮—aa—ab—寶洞，同樣 11 體力，但多一站
+    add_place(content, "ab", cost=3, links=["aa", "cave"])
+    found = routes(state, content)["cave"]
+    assert found == Route(("lake", "cave"), 11)  # 一樣省時站數少的贏，即使另一條路的地點 id 排在前面
+
+    content.locations["lake"].move_cost = 5
+    add_place(content, "hill", cost=5, links=["town", "cave"])  # 湖邊與山丘一樣 10 體力、一樣兩站
+    assert routes(state, content)["cave"] == Route(("hill", "cave"), 10)  # 再一樣時比地點 id：hill 在 lake 前面
+    for loc in content.locations.values():
+        loc.connections.reverse()
+    assert routes(state, content)["cave"] == Route(("hill", "cave"), 10)  # 和連線寫的順序無關
+
+
 # ── 安排前往 ──────────────────────────────────────────
 
 
@@ -199,7 +225,24 @@ def test_travel_button_shows_cost_or_reason(state, content):
 def test_detail_of_an_unknown_place_leaks_nothing(state, content):
     content.config.vision_base = 0
     content.locations["lake"].important = True
-    assert detail_text(state, content, "lake", no_odds) == "### 湖邊？\n\n尚未摸清"
+    assert detail_text(state, content, "lake", no_odds) == "### 湖邊？\n\n尚未摸清"  # 只有畫出輪廓的才有名字
+
+
+def test_detail_of_a_locked_place_or_a_dot_leaks_no_name(state, content):
+    assert detail_text(state, content, "cave", no_odds) == "### ？\n\n尚未摸清"  # 未開放：完全不畫
+    content.config.vision_base = 0
+    assert content.locations["lake"].important is False
+    assert detail_text(state, content, "lake", no_odds) == "### ？\n\n尚未摸清"  # 淡點沒有名字
+
+
+def test_is_known_gates_places_for_the_layer_primitives(state, content):
+    assert (is_known(state, content, "town"), is_known(state, content, "lake"), is_known(state, content, "cave")) == (
+        True, True, False,
+    )
+    content.config.vision_base = 0
+    assert is_known(state, content, "lake") is False
+    state.player.visited.add("lake")
+    assert is_known(state, content, "lake") is True  # 去過的記得
 
 
 def test_detail_lists_situation_enemies_story_and_route(state, content):
