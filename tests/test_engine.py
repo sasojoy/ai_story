@@ -585,7 +585,7 @@ def test_battle_list_and_detail(game):
     detail = game.battle_detail(older)
     assert detail.startswith("### ⚔ 湖邊・對陣 小嘍囉\n\n第1天 00:00　歷練　第 1 場")
     for part in ("**我方**　沈浪 Lv1、韓鐵 Lv1", "**對方**　水寇小隊：小嘍囉 Lv1", "**關鍵時刻**",
-                 "| 人物 | 造成傷害 | 控制命中 |", "**逐回合戰報**", "── 第1回合 ──"):
+                 "| 人物 | 造成傷害 | 控制命中 |", "**逐回合戰報**", "#### 第1回合"):
         assert part in detail
     assert game.battle_detail() == game.battle_detail(newest) != detail  # 預設最新一場
     assert game.battle_detail(999) == game.battle_detail(newest)  # 找不到時也顯示最新一場

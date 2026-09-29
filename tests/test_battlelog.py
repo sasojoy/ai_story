@@ -146,3 +146,38 @@ def test_detail_text_puts_story_before_gains_and_hides_rumor():
     assert "**結果**　你率眾闖進倉庫，殺得水寇四散奔逃！" in detail
     assert "【江湖傳聞】" not in detail
     assert detail.index("**結果**") < detail.index("**獲得與損失**")
+
+
+def test_detail_text_groups_the_round_by_round_report_under_headings():
+    """逐回合戰報依回合分組：每回合一個 #### 標題，底下是這回合的行（列點）；
+    回合線之前的心法歸在「開戰前」。文字本身（來自 battle.py）不變，只是排版分組。"""
+    rec = record(report=[
+        "【心法】小墨運起吐納法。",
+        "── 第1回合 ──",
+        "沈浪對劫道山賊使出一記重拳，造成 5 點傷害。",
+        "韓鐵對劫道山賊使出一記重拳，造成 4 點傷害。",
+        "── 第2回合 ──",
+        "小墨對劫道山賊使出【亂針】，命中！",
+        "劫道山賊倒下，敵方敗退。",
+    ])
+    detail = detail_text(rec)
+    assert "#### 開戰前\n- 【心法】小墨運起吐納法。" in detail
+    assert (
+        "#### 第1回合\n"
+        "- 沈浪對劫道山賊使出一記重拳，造成 5 點傷害。\n"
+        "- 韓鐵對劫道山賊使出一記重拳，造成 4 點傷害。"
+    ) in detail
+    assert (
+        "#### 第2回合\n"
+        "- 小墨對劫道山賊使出【亂針】，命中！\n"
+        "- 劫道山賊倒下，敵方敗退。"
+    ) in detail
+    assert detail.index("#### 開戰前") < detail.index("#### 第1回合") < detail.index("#### 第2回合")
+    assert "── 第1回合 ──" not in detail  # 原本的回合線換成標題，不重複
+
+
+def test_detail_text_omits_the_pre_battle_heading_when_there_is_no_心法():
+    rec = record(report=["── 第1回合 ──", "沈浪對劫道山賊使出一記重拳，造成 5 點傷害。"])
+    detail = detail_text(rec)
+    assert "#### 開戰前" not in detail
+    assert "#### 第1回合\n- 沈浪對劫道山賊使出一記重拳，造成 5 點傷害。" in detail

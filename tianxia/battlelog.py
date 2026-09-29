@@ -21,6 +21,7 @@ NO_RECORD = "（還沒有戰報。）"
 DAY = 86400
 HOUR = 3600
 _NUMERIC_CHANGE = re.compile(r"^\S+ [+-]\d+(\.\d+)?$")  # 例如「名望 +3」「銀兩 -10」
+_ROUND_MARK = re.compile(r"^── 第(\d+)回合 ──$")  # battle.py 逐回合戰報裡的回合分隔線
 
 
 def split_changes(msgs: list[str]) -> tuple[list[str], list[str]]:
@@ -195,6 +196,27 @@ def _theirs_line(record: BattleRecord) -> str:
     return f"**對方**　{record.opponent}：{theirs}"
 
 
+def _round_sections(report: list[str]) -> list[tuple[str, list[str]]]:
+    """把逐回合戰報依「── 第N回合 ──」分隔線分組：[(標題, 這段的行), ...]，最新的規則線換成標題不重複。
+    分隔線之前的行（心法）歸在「開戰前」；如果沒有這樣的行，那一段就整段省略。"""
+    sections: list[tuple[str, list[str]]] = [("開戰前", [])]
+    for line in report:
+        m = _ROUND_MARK.match(line)
+        if m:
+            sections.append((f"第{m.group(1)}回合", []))
+        else:
+            sections[-1][1].append(line)
+    return [(title, lines) for title, lines in sections if lines]
+
+
+def rounds_text(record: BattleRecord) -> str:
+    """逐回合戰報：每回合一個 #### 標題，底下是這回合的行列成一份清單，方便閱讀。"""
+    return "\n\n".join(
+        "\n".join([f"#### {title}", *(f"- {line}" for line in lines)])
+        for title, lines in _round_sections(record.report)
+    )
+
+
 def detail_text(record: BattleRecord) -> str:
     """戰報分頁下方的完整內容（Markdown）：陣容、結果、關鍵時刻、（劇情結果）、得失、我方表現、逐回合戰報。"""
     ours = "、".join(f"{f.name} Lv{f.level}" for f in record.ours)
@@ -213,5 +235,5 @@ def detail_text(record: BattleRecord) -> str:
         "**我方表現**",
         "\n".join(rows),
         "**逐回合戰報**",
-        "\n\n".join(record.report),
+        rounds_text(record),
     ])
