@@ -1,208 +1,245 @@
 [
   {
-    "id": "hantie",
-    "name": "韓鐵",
-    "desc": "世家的護院武師，話少，手上功夫硬。",
+    "id": "zhangjiao",
+    "name": "張角",
+    "kind": "locked",
+    "background": "鉅鹿人，本是讀書不第的寒士，自稱得「南華老仙」傳授《太平要術》，習得符水咒語治病之術。",
+    "situation": "以「太平道」傳教十餘年，信眾遍布八州，暗中以「蒼天已死，黃天當立，歲在甲子，天下大吉」為口號串連信眾，甲子年舉兵，自稱「天公將軍」。",
+    "personality": "兼具宗教領袖的感召力與政治野心——對信眾展現悲天憫人、普濟蒼生的一面，私底下極具權謀算計，深諳如何用宗教語言包裝改朝換代的野心。說話帶著佈道者的篤定語氣，對「黃天當立」的理想是真心相信，不只是權謀話術。",
+    "deep_interaction": true,
+    "stats": {
+      "str": 4,
+      "agi": 4,
+      "con": 4,
+      "wis": 9
+    },
+    "growth": {
+      "str": 0.15,
+      "agi": 0.15,
+      "con": 0.15,
+      "wis": 0.45
+    },
+    "desc": "以「太平道」傳教十餘年，信眾遍布八州，暗中以「蒼天已死，黃天當立，歲在甲子，天下大吉」為口號串連信眾，甲子年舉兵，自稱「天公將軍」。"
+  },
+  {
+    "id": "zhangbao",
+    "name": "張寶",
+    "kind": "locked",
+    "background": "張角之弟，隨兄傳教多年。",
+    "situation": "號「地公將軍」，統領一部黃巾軍，於潁川、廣宗一帶與漢軍交戰。",
+    "personality": "比兄長更衝動好戰，對「黃天當立」的信念是全然的追隨而非自己的理想，重視跟兄弟們並肩作戰的情義，遇事容易衝動行事，缺乏張角的城府與耐性。",
+    "deep_interaction": true,
     "stats": {
       "str": 6,
-      "agi": 4,
+      "agi": 5,
       "con": 6,
-      "wis": 3
+      "wis": 4
+    },
+    "growth": {
+      "str": 0.3,
+      "agi": 0.25,
+      "con": 0.3,
+      "wis": 0.15
+    },
+    "desc": "號「地公將軍」，統領一部黃巾軍，於潁川、廣宗一帶與漢軍交戰。"
+  },
+  {
+    "id": "zhangliang",
+    "name": "張梁",
+    "kind": "locked",
+    "background": "張角三弟。",
+    "situation": "號「人公將軍」，於廣宗一帶力戰皇甫嵩、盧植所率漢軍。",
+    "personality": "三兄弟中最悍勇敢戰、最願意身先士卒的一位，重情重義，對麾下士卒體恤有加，戰場上是狠角色，私下待人卻頗有溫情的一面。",
+    "deep_interaction": true,
+    "stats": {
+      "str": 7,
+      "agi": 5,
+      "con": 6,
+      "wis": 4
     },
     "growth": {
       "str": 0.35,
-      "agi": 0.2,
-      "con": 0.35,
+      "agi": 0.25,
+      "con": 0.3,
       "wis": 0.15
     },
-    "kind": "recruitable",
-    "recruit_at": "yangzhou",
-    "starting_wugong": "kaibei"
+    "desc": "號「人公將軍」，於廣宗一帶力戰皇甫嵩、盧植所率漢軍。"
   },
   {
-    "id": "xiaomo",
-    "name": "小墨",
-    "desc": "跟著你長大的書童，機靈，袖裡藏針。",
+    "id": "hejin",
+    "name": "何進",
+    "kind": "locked",
+    "background": "南陽屠戶出身，因異母妹何氏入宮為貴人（後為皇后）而顯貴，出身寒微卻一步登天。",
+    "situation": "黃巾之亂時任大將軍，名義上統領平亂諸軍，實際上依賴麾下將領（皇甫嵩、朱儁等）真正領兵作戰。",
+    "personality": "優柔寡斷、外強中乾，出身微賤反而更愛擺大將軍的架子撐場面，耳根子軟、容易被身邊人的意見左右，決斷力明顯不足，卻又貪戀權位不肯放手。",
+    "deep_interaction": true,
     "stats": {
-      "str": 4,
-      "agi": 6,
+      "str": 3,
+      "agi": 3,
       "con": 4,
+      "wis": 4
+    },
+    "growth": {
+      "str": 0.15,
+      "agi": 0.15,
+      "con": 0.2,
+      "wis": 0.2
+    },
+    "desc": "黃巾之亂時任大將軍，名義上統領平亂諸軍，實際上依賴麾下將領（皇甫嵩、朱儁等）真正領兵作戰。"
+  },
+  {
+    "id": "huangfusong",
+    "name": "皇甫嵩",
+    "kind": "locked",
+    "background": "將門世家，安定朝那人，叔父皇甫規是漢末名將，家學淵源。",
+    "situation": "拜左中郎將，與朱儁分道討黃巾，於長社（火攻大破黃巾）、廣宗（擊斬張梁）等地連戰連捷，是平定黃巾的首功之臣。",
+    "personality": "治軍嚴明、愛惜士卒，用兵持重卻懂得把握戰機，為人謙退不居功，是德才兼具、戰功赫赫又不居功自傲的典範型人物。",
+    "deep_interaction": true,
+    "stats": {
+      "str": 7,
+      "agi": 6,
+      "con": 7,
+      "wis": 8
+    },
+    "growth": {
+      "str": 0.35,
+      "agi": 0.3,
+      "con": 0.35,
+      "wis": 0.4
+    },
+    "desc": "拜左中郎將，與朱儁分道討黃巾，於長社（火攻大破黃巾）、廣宗（擊斬張梁）等地連戰連捷，是平定黃巾的首功之臣。"
+  },
+  {
+    "id": "zhujun",
+    "name": "朱儁",
+    "kind": "locked",
+    "background": "會稽上虞人，寒門出身，早年以孝義聞名鄉里，後受薦入仕，一路憑實績升遷，不靠家世。",
+    "situation": "拜右中郎將，與皇甫嵩並肩討黃巾，圍剿南陽黃巾軍有功。",
+    "personality": "務實幹練、雷厲風行，出身不高更顯堅毅，用兵沉穩不冒進，說話做事都帶著寒門出身特有的務實與謹慎。",
+    "deep_interaction": true,
+    "stats": {
+      "str": 6,
+      "agi": 5,
+      "con": 7,
       "wis": 6
     },
     "growth": {
-      "str": 0.2,
+      "str": 0.3,
+      "agi": 0.25,
+      "con": 0.35,
+      "wis": 0.3
+    },
+    "desc": "拜右中郎將，與皇甫嵩並肩討黃巾，圍剿南陽黃巾軍有功。"
+  },
+  {
+    "id": "luzhi",
+    "name": "盧植",
+    "kind": "locked",
+    "background": "涿郡人，經學大儒馬融門下高徒，通曉經學，是當代名士。",
+    "situation": "拜北中郎將討張角，圍困廣宗幾乎破城，卻因不肯賄賂前來監軍的宦官左豐，被誣陷「畏敵不進」下獄，功敗垂成。劉備、公孫瓚都曾是他的學生。",
+    "personality": "儒將典範，德才兼備、剛正不阿，治軍有方，正因為不肯同流合污賄賂宦官而遭陷害入獄，性格核心是「寧可功虧一簣也不肯低頭」的骨氣。",
+    "deep_interaction": true,
+    "stats": {
+      "str": 5,
+      "agi": 4,
+      "con": 5,
+      "wis": 8
+    },
+    "growth": {
+      "str": 0.25,
+      "agi": 0.2,
+      "con": 0.25,
+      "wis": 0.4
+    },
+    "desc": "拜北中郎將討張角，圍困廣宗幾乎破城，卻因不肯賄賂前來監軍的宦官左豐，被誣陷「畏敵不進」下獄，功敗垂成。劉備、公孫瓚都曾是他的學生。"
+  },
+  {
+    "id": "dongzhuo",
+    "name": "董卓",
+    "kind": "locked",
+    "background": "隴西臨洮人，出身邊地豪強，早年以驍勇聞名於羌胡之中，能左右開弓、膂力過人。",
+    "situation": "接替盧植圍剿張角，此時尚只是眾多平亂將領之一，還未掌握中央大權，戰功也不算頂尖，只是嶄露頭角的邊將之一。",
+    "personality": "此階段驍勇善戰、頗有邊將豪氣，行事粗獷不拘小節，但已隱約可見貪功、跋扈、輕慢同僚的性格苗頭——這是最適合示範「性情隨互動漂移」機制的角色，起點是邊將的粗豪果敢，未來走向仍是未知數。",
+    "deep_interaction": true,
+    "stats": {
+      "str": 8,
+      "agi": 5,
+      "con": 8,
+      "wis": 4
+    },
+    "growth": {
+      "str": 0.4,
+      "agi": 0.25,
+      "con": 0.4,
+      "wis": 0.2
+    },
+    "desc": "接替盧植圍剿張角，此時尚只是眾多平亂將領之一，還未掌握中央大權，戰功也不算頂尖，只是嶄露頭角的邊將之一。"
+  },
+  {
+    "id": "caocao",
+    "name": "曹操",
+    "kind": "recruitable",
+    "recruit_at": "qiao_county",
+    "background": "沛國譙縣人，其父曹嵩為宦官曹騰的養子，家底殷實卻因宦官背景頗受士人清議輕視。",
+    "situation": "任騎都尉，隨皇甫嵩討潁川黃巾，這是他初次獨當一面領兵作戰。",
+    "personality": "機警多智、膽識過人，年輕時已展現「治世之能臣、亂世之奸雄」的雛形，行事果決不拘小節，敢用非常手段；對士人清議的輕視他抱著又在意又不甘的複雜心態，求才若渴不問出身。",
+    "deep_interaction": true,
+    "starting_wugong": "caocao_wugong",
+    "starting_neigong": "caocao_neigong",
+    "stats": {
+      "str": 5,
+      "agi": 7,
+      "con": 5,
+      "wis": 8
+    },
+    "growth": {
+      "str": 0.25,
       "agi": 0.35,
-      "con": 0.2,
+      "con": 0.25,
+      "wis": 0.4
+    },
+    "desc": "任騎都尉，隨皇甫嵩討潁川黃巾，這是他初次獨當一面領兵作戰。"
+  },
+  {
+    "id": "liubei",
+    "name": "劉備",
+    "kind": "recruitable",
+    "recruit_at": "zhuo_county",
+    "background": "涿郡人，漢室宗親（中山靖王劉勝之後，但家道早已中落），少時與母親織席販履為生，出身清貧。",
+    "situation": "與盧植同鄉，曾受業於盧植門下；黃巾起事後，與關羽、張飛在涿郡起兵響應官軍討賊。",
+    "personality": "仁厚寬和、禮賢下士，胸懷大志卻此時尚無立足之地，善於收攏人心、待人以誠，但決斷力略顯優柔，常在「仁義」與「時機」之間猶豫。",
+    "deep_interaction": true,
+    "starting_wugong": "liubei_wugong",
+    "starting_neigong": "liubei_neigong",
+    "stats": {
+      "str": 5,
+      "agi": 5,
+      "con": 5,
+      "wis": 7
+    },
+    "growth": {
+      "str": 0.25,
+      "agi": 0.25,
+      "con": 0.25,
       "wis": 0.35
     },
-    "kind": "recruitable",
-    "recruit_at": "yangzhou",
-    "starting_wugong": "luanzhen"
+    "desc": "與盧植同鄉，曾受業於盧植門下；黃巾起事後，與關羽、張飛在涿郡起兵響應官軍討賊。"
   },
   {
-    "id": "dusanjin",
-    "name": "杜三斤",
-    "desc": "碼頭上扛包的腳夫，一頓能吃三斤米飯，力氣也大得嚇人。",
-    "stats": {
-      "str": 5,
-      "agi": 3,
-      "con": 5,
-      "wis": 3
-    },
-    "growth": {
-      "str": 0.25,
-      "agi": 0.15,
-      "con": 0.25,
-      "wis": 0.15
-    },
+    "id": "guanyu",
+    "name": "關羽",
     "kind": "recruitable",
-    "recruit_at": "yangzhou"
-  },
-  {
-    "id": "aheng",
-    "name": "阿棠",
-    "desc": "繡坊的學徒，性子溫吞，穿針引線的手卻極穩。",
+    "recruit_at": "zhuo_county",
+    "background": "河東解良人，早年因故亡命奔涿郡（民間傳說因除霸行俠而流亡異鄉）。",
+    "situation": "與劉備、張飛結為異姓兄弟，追隨劉備起兵討黃巾。",
+    "personality": "忠義凜然、傲上而不辱下，重義氣、講信用，對待士卒體恤有加，但性格剛愎自負、看不起同僚——對兄長劉備的忠誠近乎信仰。",
+    "deep_interaction": true,
+    "starting_wugong": "guanyu_wugong",
+    "starting_neigong": "guanyu_neigong",
     "stats": {
-      "str": 3,
-      "agi": 4,
-      "con": 4,
-      "wis": 5
-    },
-    "growth": {
-      "str": 0.15,
-      "agi": 0.2,
-      "con": 0.2,
-      "wis": 0.25
-    },
-    "kind": "recruitable",
-    "recruit_at": "yangzhou"
-  },
-  {
-    "id": "fangxiaozhou",
-    "name": "方小舟",
-    "desc": "渡口撐船的少年，身子輕、腳下快，在船頭跳來跳去從不落水。",
-    "stats": {
-      "str": 3,
+      "str": 8,
       "agi": 6,
-      "con": 3,
-      "wis": 4
-    },
-    "growth": {
-      "str": 0.2,
-      "agi": 0.3,
-      "con": 0.15,
-      "wis": 0.15
-    },
-    "kind": "recruitable",
-    "recruit_at": "yangzhou"
-  },
-  {
-    "id": "baixiaoman",
-    "name": "白小滿",
-    "desc": "藥鋪的小學徒，認得上百種草藥，手指比誰都靈巧。",
-    "stats": {
-      "str": 3,
-      "agi": 5,
-      "con": 4,
-      "wis": 5
-    },
-    "growth": {
-      "str": 0.15,
-      "agi": 0.25,
-      "con": 0.2,
-      "wis": 0.25
-    },
-    "kind": "recruitable",
-    "recruit_at": "yangzhou"
-  },
-  {
-    "id": "luoshitou",
-    "name": "羅石頭",
-    "desc": "在城裡打零工的壯漢，挑水劈柴練出一身蠻力，自己琢磨了一套拳，一心想拜師。",
-    "stats": {
-      "str": 6,
-      "agi": 3,
       "con": 7,
-      "wis": 3
-    },
-    "growth": {
-      "str": 0.35,
-      "agi": 0.15,
-      "con": 0.4,
-      "wis": 0.15
-    },
-    "kind": "recruitable",
-    "recruit_at": "yangzhou",
-    "starting_wugong": "suishi"
-  },
-  {
-    "id": "chengsuyi",
-    "name": "程素衣",
-    "desc": "棲霞劍派的外門弟子，劍法已有七分火候，只差一個肯帶她闖江湖的人。",
-    "stats": {
-      "str": 4,
-      "agi": 5,
-      "con": 5,
-      "wis": 6
-    },
-    "growth": {
-      "str": 0.25,
-      "agi": 0.25,
-      "con": 0.25,
-      "wis": 0.3
-    },
-    "kind": "recruitable",
-    "recruit_at": "yangzhou",
-    "starting_wugong": "suxin"
-  },
-  {
-    "id": "luoxingyun",
-    "name": "駱行雲",
-    "desc": "威遠鏢局的趟子手，腳程全揚州第一，一天能跑兩趟鏢。",
-    "stats": {
-      "str": 5,
-      "agi": 7,
-      "con": 4,
-      "wis": 4
-    },
-    "growth": {
-      "str": 0.3,
-      "agi": 0.4,
-      "con": 0.2,
-      "wis": 0.15
-    },
-    "kind": "recruitable",
-    "recruit_at": "yangzhou",
-    "starting_wugong": "tangzi"
-  },
-  {
-    "id": "ruanqingxian",
-    "name": "阮青弦",
-    "desc": "秦淮畫舫上的琵琶手，指法裡藏著暗勁，一根弦能削斷刀穗。",
-    "stats": {
-      "str": 4,
-      "agi": 6,
-      "con": 4,
-      "wis": 6
-    },
-    "growth": {
-      "str": 0.2,
-      "agi": 0.35,
-      "con": 0.2,
-      "wis": 0.3
-    },
-    "kind": "recruitable",
-    "recruit_at": "yangzhou",
-    "starting_wugong": "duanxian"
-  },
-  {
-    "id": "luchenzhou",
-    "name": "陸沉舟",
-    "desc": "退伍的邊軍校尉，一桿長槍，聽說你新立門戶，特來討個出身。",
-    "stats": {
-      "str": 7,
-      "agi": 5,
-      "con": 6,
       "wis": 5
     },
     "growth": {
@@ -211,297 +248,106 @@
       "con": 0.35,
       "wis": 0.25
     },
-    "kind": "recruitable",
-    "recruit_at": "yangzhou",
-    "starting_wugong": "pozhen"
+    "desc": "與劉備、張飛結為異姓兄弟，追隨劉備起兵討黃巾。"
   },
   {
-    "id": "zhuxiaochan",
-    "name": "祝小蟬",
-    "desc": "走索賣藝的姑娘，一手飛石專打穴道，從不落空。",
-    "stats": {
-      "str": 5,
-      "agi": 7,
-      "con": 4,
-      "wis": 7
-    },
-    "growth": {
-      "str": 0.3,
-      "agi": 0.4,
-      "con": 0.2,
-      "wis": 0.4
-    },
+    "id": "zhangfei",
+    "name": "張飛",
     "kind": "recruitable",
-    "recruit_at": "yangzhou",
-    "starting_wugong": "jingchan"
-  },
-  {
-    "id": "shiqing",
-    "name": "石磬",
-    "desc": "寒山寺敲鐘的啞僧，一百零八響從不錯半拍，出手也是這般不疾不徐。",
+    "recruit_at": "zhuo_county",
+    "background": "涿郡人，家中殷實，以屠豬賣酒為業，是三兄弟裡出身最寬裕的一位。",
+    "situation": "與劉備、關羽結義，出資助劉備招募鄉勇討黃巾。",
+    "personality": "暴躁直率、嫉惡如仇，對敵人凶狠、對兄長忠心不二，好酒使性容易衝動，但心思其實粗中有細，並非有勇無謀。",
+    "deep_interaction": true,
+    "starting_wugong": "zhangfei_wugong",
+    "starting_neigong": "zhangfei_neigong",
     "stats": {
-      "str": 5,
-      "agi": 5,
-      "con": 7,
-      "wis": 6
+      "str": 9,
+      "agi": 6,
+      "con": 8,
+      "wis": 3
     },
     "growth": {
-      "str": 0.3,
+      "str": 0.45,
       "agi": 0.3,
       "con": 0.4,
-      "wis": 0.3
+      "wis": 0.15
     },
-    "kind": "recruitable",
-    "recruit_at": "yangzhou",
-    "starting_wugong": "chenzhong"
+    "desc": "與劉備、關羽結義，出資助劉備招募鄉勇討黃巾。"
   },
   {
-    "id": "hehengjiang",
-    "name": "賀橫江",
-    "desc": "原是太湖水寨的頭目，敗在你手上之後，說水寨裡沒有比你更值得跟的人。",
-    "stats": {
-      "str": 6,
-      "agi": 7,
-      "con": 5,
-      "wis": 5
-    },
-    "growth": {
-      "str": 0.35,
-      "agi": 0.4,
-      "con": 0.3,
-      "wis": 0.25
-    },
+    "id": "sunjian",
+    "name": "孫堅",
     "kind": "recruitable",
-    "recruit_at": "yangzhou",
-    "starting_wugong": "fenshui"
-  },
-  {
-    "id": "yanguihong",
-    "name": "晏歸鴻",
-    "desc": "一身青衫的劍客，自稱閒了十年，想看看你能走多遠。",
+    "recruit_at": "wan_city",
+    "background": "吳郡富春人，自稱兵法家孫武後代，少年時曾單身擊退海盜聞名鄉里，是江東本地嶄露頭角的豪傑。",
+    "situation": "任佐軍司馬，招募鄉勇隨朱儁討南陽黃巾，作戰驍勇屢立戰功。",
+    "personality": "驍勇善戰、意氣風發，人稱「江東猛虎」，行事果斷敢衝敢殺，帶兵極具個人魅力與感染力，是天生的戰場領袖，不擅權謀、直來直往。",
+    "deep_interaction": true,
+    "starting_wugong": "sunjian_wugong",
+    "starting_neigong": "sunjian_neigong",
     "stats": {
-      "str": 7,
+      "str": 8,
       "agi": 8,
       "con": 6,
-      "wis": 5
-    },
-    "growth": {
-      "str": 0.4,
-      "agi": 0.45,
-      "con": 0.35,
-      "wis": 0.3
-    },
-    "kind": "recruitable",
-    "recruit_at": "yangzhou",
-    "starting_wugong": "guihong",
-    "starting_neigong": "jinghong"
-  },
-  {
-    "id": "shoumuren",
-    "name": "守墓人",
-    "desc": "守了藏龍洞四十年的老人，本名早已忘了；寶藏既然有了主，他也不必再守。",
-    "stats": {
-      "str": 7,
-      "agi": 4,
-      "con": 8,
-      "wis": 7
-    },
-    "growth": {
-      "str": 0.4,
-      "agi": 0.25,
-      "con": 0.45,
-      "wis": 0.4
-    },
-    "kind": "recruitable",
-    "recruit_at": "yangzhou",
-    "starting_wugong": "guicang",
-    "starting_neigong": "kushou"
-  },
-  {
-    "id": "dipi",
-    "name": "地痞無賴",
-    "desc": "",
-    "stats": {
-      "str": 3,
-      "agi": 3,
-      "con": 3,
-      "wis": 2
-    },
-    "growth": {
-      "str": 0.2,
-      "agi": 0.2,
-      "con": 0.2,
-      "wis": 0.1
-    }
-  },
-  {
-    "id": "shanzei",
-    "name": "劫道山賊",
-    "desc": "",
-    "stats": {
-      "str": 4,
-      "agi": 3,
-      "con": 4,
-      "wis": 2
-    },
-    "growth": {
-      "str": 0.25,
-      "agi": 0.2,
-      "con": 0.25,
-      "wis": 0.1
-    }
-  },
-  {
-    "id": "yelang",
-    "name": "野狼",
-    "desc": "",
-    "stats": {
-      "str": 3,
-      "agi": 6,
-      "con": 2,
-      "wis": 1
-    },
-    "growth": {
-      "str": 0.25,
-      "agi": 0.3,
-      "con": 0.15,
-      "wis": 0.05
-    }
-  },
-  {
-    "id": "heixiong",
-    "name": "黑熊",
-    "desc": "",
-    "stats": {
-      "str": 6,
-      "agi": 2,
-      "con": 7,
-      "wis": 1
-    },
-    "growth": {
-      "str": 0.3,
-      "agi": 0.1,
-      "con": 0.35,
-      "wis": 0.05
-    }
-  },
-  {
-    "id": "louluo",
-    "name": "水寇嘍囉",
-    "desc": "",
-    "stats": {
-      "str": 3,
-      "agi": 3,
-      "con": 3,
-      "wis": 2
-    },
-    "growth": {
-      "str": 0.2,
-      "agi": 0.2,
-      "con": 0.2,
-      "wis": 0.1
-    }
-  },
-  {
-    "id": "shuikou",
-    "name": "太湖水寇",
-    "desc": "",
-    "stats": {
-      "str": 4,
-      "agi": 4,
-      "con": 4,
-      "wis": 3
-    },
-    "growth": {
-      "str": 0.25,
-      "agi": 0.25,
-      "con": 0.25,
-      "wis": 0.15
-    }
-  },
-  {
-    "id": "toumu",
-    "name": "水寨頭目",
-    "desc": "",
-    "stats": {
-      "str": 5,
-      "agi": 6,
-      "con": 5,
       "wis": 4
     },
     "growth": {
-      "str": 0.3,
-      "agi": 0.3,
+      "str": 0.4,
+      "agi": 0.4,
       "con": 0.3,
       "wis": 0.2
-    }
-  },
-  {
-    "id": "fanjianglong",
-    "name": "翻江龍",
-    "desc": "",
-    "stats": {
-      "str": 7,
-      "agi": 5,
-      "con": 7,
-      "wis": 5
     },
-    "growth": {
-      "str": 0.35,
-      "agi": 0.25,
-      "con": 0.35,
-      "wis": 0.2
-    }
+    "desc": "任佐軍司馬，招募鄉勇隨朱儁討南陽黃巾，作戰驍勇屢立戰功。"
   },
   {
-    "id": "guishou",
-    "name": "鬼手劉三",
-    "desc": "",
+    "id": "yuanshao",
+    "name": "袁紹",
+    "kind": "recruitable",
+    "recruit_at": "runan",
+    "background": "汝南汝陽人，「四世三公」的頂級名門之後，家族累世高官，是當時最顯赫的世家子弟之一。",
+    "situation": "黃巾之亂時活躍於洛陽官場、任司隸校尉屬官一類的職位，尚未真正統兵平亂，主要在京城政治圈嶄露頭角。",
+    "personality": "出身尊貴、儀表堂堂，外表寬厚禮賢下士、廣結名士，內心卻猜忌多疑、優柔寡斷，遇大事常難下決斷——外在的名門氣度與內在的猶疑不決形成明顯反差。",
+    "deep_interaction": true,
+    "starting_wugong": "yuanshao_wugong",
+    "starting_neigong": "yuanshao_neigong",
     "stats": {
       "str": 5,
-      "agi": 7,
-      "con": 4,
-      "wis": 6
-    },
-    "growth": {
-      "str": 0.3,
-      "agi": 0.35,
-      "con": 0.2,
-      "wis": 0.3
-    }
-  },
-  {
-    "id": "shoumu",
-    "name": "藏龍洞守墓人",
-    "desc": "",
-    "stats": {
-      "str": 6,
       "agi": 5,
-      "con": 7,
+      "con": 5,
       "wis": 7
     },
     "growth": {
-      "str": 0.35,
+      "str": 0.25,
       "agi": 0.25,
-      "con": 0.1,
-      "wis": 0.3
-    }
+      "con": 0.25,
+      "wis": 0.35
+    },
+    "desc": "黃巾之亂時活躍於洛陽官場、任司隸校尉屬官一類的職位，尚未真正統兵平亂，主要在京城政治圈嶄露頭角。"
   },
   {
-    "id": "xuantie_dizi",
-    "name": "玄鐵門師兄",
-    "desc": "",
+    "id": "taoqian",
+    "name": "陶謙",
+    "kind": "recruitable",
+    "recruit_at": "runan_market",
+    "background": "丹陽人，少年任俠使氣，後折節讀書，由武轉文入仕。",
+    "situation": "黃巾之亂時參與徐州一帶平亂有功，嶄露頭角，日後將出任徐州牧。",
+    "personality": "外表溫厚仁慈、治理地方寬厚愛民，內裡其實剛愎、容易猜忌——史書對他的評價本來就褒貶不一，這種「外仁內剛」的反差正好是這批人裡對比感最強的一位。",
+    "deep_interaction": true,
+    "starting_wugong": "taoqian_wugong",
+    "starting_neigong": "taoqian_neigong",
     "stats": {
-      "str": 5,
-      "agi": 3,
-      "con": 6,
-      "wis": 3
+      "str": 4,
+      "agi": 4,
+      "con": 5,
+      "wis": 6
     },
     "growth": {
-      "str": 0.25,
-      "agi": 0.15,
-      "con": 0.3,
-      "wis": 0.1
-    }
+      "str": 0.2,
+      "agi": 0.2,
+      "con": 0.25,
+      "wis": 0.3
+    },
+    "desc": "黃巾之亂時參與徐州一帶平亂有功，嶄露頭角，日後將出任徐州牧。"
   }
 ]

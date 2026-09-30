@@ -279,7 +279,7 @@ class Milestone(_Strict):
 class TutorialGoal(_Strict):
     """三項都要符合才算完成；空的欄位不檢查。"""
 
-    action: Literal["explore", "train", "socialize", "move", "view_map"] | None = None
+    action: Literal["explore", "socialize", "move", "view_map", "recruit", "practice"] | None = None
     locations: list[str] = Field(default_factory=list)
     condition: Condition = Field(default_factory=Condition)
 

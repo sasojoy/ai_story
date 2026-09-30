@@ -1,42 +1,219 @@
 [
-  {"id": "meet_luo", "title": "鏢局快腿", "actions": ["socialize"], "locations": ["yangzhou"],
-   "condition": {"members_none": ["luoxingyun"]},
-   "text": "威遠鏢局的趟子手駱行雲剛跑完一趟鏢，滿身塵土地湊過來：「少俠，聽說你在江湖上闖蕩，身邊還缺不缺跑腿的？我這雙腿，全揚州沒人追得上。」",
-   "choices": [
-    {"text": "收他入門", "effect": {"text": "駱行雲咧嘴一笑，把鏢局的號衣往肩上一搭：「那我這就去辭工！」", "recruit": "luoxingyun"}},
-    {"text": "婉拒", "effect": {"text": "駱行雲撓撓頭：「那我再多跑幾趟鏢，等少俠改變主意。」"}}
-  ]},
-  {"id": "meet_ruan", "title": "畫舫琵琶", "actions": ["socialize"], "locations": ["qinhuai"],
-   "condition": {"members_none": ["ruanqingxian"]},
-   "text": "畫舫上的琵琶聲忽然一緊，一根弦應聲而斷，斷弦像刀一樣削落了船頭的燈籠穗子。彈琵琶的女子阮青弦抬眼看你：「少俠看得懂？帶我離開這條河吧，我彈膩了。」",
-   "choices": [
-    {"text": "請她同行", "effect": {"text": "阮青弦把琵琶往背上一負，踏著船舷上了岸。", "recruit": "ruanqingxian"}},
-    {"text": "放下賞錢告辭", "effect": {"text": "琵琶聲又響了起來，像什麼都沒發生過。", "stats": {"silver": -5}}}
-  ]},
-  {"id": "fortune_lu", "title": "福緣・長槍來投", "actions": [], "fortune": true,
-   "condition": {"members_none": ["luchenzhou"]},
-   "text": "你在江湖上的名號漸漸傳開。一個背著長槍的漢子一路打聽，尋到你面前，抱拳道：「在下陸沉舟，當過幾年邊軍校尉。聽說少俠新立門戶，特來討個出身。」",
-   "choices": [
-    {"text": "請他入門", "effect": {"text": "陸沉舟把長槍往地上一頓：「從今往後，這條命交給少俠了。」", "recruit": "luchenzhou"}}
-  ]},
-  {"id": "fortune_zhu", "title": "福緣・走索的姑娘", "actions": [], "fortune": true,
-   "condition": {"members_none": ["zhuxiaochan"]},
-   "text": "你正要動身，一顆石子忽然打中肘彎的穴道，右臂一麻，抬也抬不起來；片刻之後，麻勁才退。回頭一看，一個肩上扛著走索長繩的姑娘正笑嘻嘻地走過來，指尖還夾著另一顆石子：「別惱，試試手。我叫祝小蟬。聽說你新立門戶，缺不缺人？我不想再走索了。」",
-   "choices": [
-    {"text": "請她入門", "effect": {"text": "祝小蟬把收錢的銅盤往腰上一掛：「那就說定了。」", "recruit": "zhuxiaochan"}}
-  ]},
-  {"id": "qiyu_shiqing", "title": "啞僧", "locations": ["hanshan"], "qiyu": true, "weight": 0.3, "once": true,
-   "condition": {"members_none": ["shiqing"]},
-   "text": "鐘樓上，一個啞僧每天敲一百零八響鐘，從不錯半拍。今天他敲完最後一響，放下槌，朝你比了個手勢——他想跟你下山。住持在樓下嘆氣：「他在這裡敲了二十年，也該出去走走了。」",
-   "choices": [
-    {"text": "帶他下山", "effect": {"text": "啞僧合十行禮，背起一個小小的包袱跟在你身後。", "recruit": "shiqing"}},
-    {"text": "合十告辭", "effect": {"text": "鐘聲又從身後傳來，一聲一聲，不疾不徐。"}}
-  ]},
-  {"id": "qiyu_yan", "title": "青衫客", "tags": ["山林", "官道"], "qiyu": true, "weight": 0.15, "once": true,
-   "condition": {"members_none": ["yanguihong"], "min_stats": {"fame": 3}},
-   "text": "路旁，一個青衫人坐在石頭上削竹枝。你走近時，他頭也不抬：「你那路家傳劍法，第三式慢了半拍。」竹枝一抖，劍意逼人。「我閒了十年，想看看你能走多遠。」",
-   "choices": [
-    {"text": "請他同行", "effect": {"text": "青衫人把竹枝往腰間一插：「晏歸鴻。走吧。」", "recruit": "yanguihong"}},
-    {"text": "謝過指點", "effect": {"text": "等你回過神來，石頭上已經沒有人了。"}}
-  ]}
+  {
+    "id": "meet_caocao",
+    "title": "譙縣少年",
+    "actions": [
+      "socialize"
+    ],
+    "locations": [
+      "qiao_county"
+    ],
+    "condition": {
+      "members_none": [
+        "caocao"
+      ]
+    },
+    "text": "曹家莊院外，一個眼神銳利的青年正在盤問幾個形跡可疑的路人，動作乾淨利落。他打量你片刻：「閣下面生，可是也為討賊而來？在下曹操，騎都尉，剛從潁川回來述職。」",
+    "choices": [
+      {
+        "text": "請他結交同行",
+        "effect": {
+          "text": "曹操上下打量你一番，忽然笑了：「有意思。走吧，多個人多雙眼睛。」",
+          "recruit": "caocao"
+        }
+      },
+      {
+        "text": "只是寒暄幾句",
+        "effect": {
+          "text": "曹操拱拱手，轉身又去盤問下一個路人了。"
+        }
+      }
+    ]
+  },
+  {
+    "id": "meet_liu_guan_zhang",
+    "title": "涿郡結義兄弟",
+    "actions": [
+      "socialize"
+    ],
+    "locations": [
+      "zhuo_county"
+    ],
+    "condition": {
+      "members_none": [
+        "liubei"
+      ]
+    },
+    "text": "集市邊，一個織席販履出身的青年正招募鄉勇討賊，身旁站著一個丹鳳眼的壯漢與一個豹頭環眼的大漢，三人氣度不凡。青年拱手道：「在下劉備，這是我結義兄弟關羽、張飛。少俠可願一同舉義？」",
+    "choices": [
+      {
+        "text": "與劉備結交",
+        "effect": {
+          "text": "劉備大喜：「得少俠相助，如虎添翼！」",
+          "recruit": "liubei"
+        }
+      },
+      {
+        "text": "只想結識",
+        "effect": {
+          "text": "劉備依舊客客氣氣地寒暄了幾句。"
+        }
+      }
+    ]
+  },
+  {
+    "id": "meet_guanyu",
+    "title": "丹鳳眼的漢子",
+    "actions": [
+      "socialize"
+    ],
+    "locations": [
+      "zhuo_county"
+    ],
+    "condition": {
+      "members_none": [
+        "guanyu"
+      ]
+    },
+    "text": "劉備身旁那位丹鳳眼、臥蠶眉的漢子主動上前：「在下關羽，河東解良人氏。聽劉玄德說少俠身手不凡，願共討此賊否？」",
+    "choices": [
+      {
+        "text": "與關羽結交",
+        "effect": {
+          "text": "關羽鄭重抱拳：「關某識人，往後還望少俠多多指教。」",
+          "recruit": "guanyu"
+        }
+      },
+      {
+        "text": "只想結識",
+        "effect": {
+          "text": "關羽微微頷首，不再多言。"
+        }
+      }
+    ]
+  },
+  {
+    "id": "meet_zhangfei",
+    "title": "屠豬賣酒的大漢",
+    "actions": [
+      "socialize"
+    ],
+    "locations": [
+      "zhuo_county"
+    ],
+    "condition": {
+      "members_none": [
+        "zhangfei"
+      ]
+    },
+    "text": "集市另一頭，一個豹頭環眼的大漢正扯著嗓子招呼鄉勇喝酒：「討賊去！誰跟我張飛喝了這碗酒，就是自家兄弟！」",
+    "choices": [
+      {
+        "text": "接過酒碗",
+        "effect": {
+          "text": "張飛哈哈大笑，一巴掌拍在你肩上：「好！算你一個！」",
+          "recruit": "zhangfei"
+        }
+      },
+      {
+        "text": "婉拒這碗酒",
+        "effect": {
+          "text": "張飛咕噥一句，自己把酒喝了。"
+        }
+      }
+    ]
+  },
+  {
+    "id": "meet_sunjian",
+    "title": "宛城少年將領",
+    "actions": [
+      "socialize"
+    ],
+    "locations": [
+      "wan_city"
+    ],
+    "condition": {
+      "members_none": [
+        "sunjian"
+      ]
+    },
+    "text": "城中傳聞，佐軍司馬孫堅在南陽一帶連戰連捷，人稱「江東猛虎」。你在校場外見到他時，他正赤手空拳跟幾個部曲較力，笑聲豪邁。",
+    "choices": [
+      {
+        "text": "上前結交",
+        "effect": {
+          "text": "孫堅爽朗一笑，重重握住你的手：「痛快！少俠往後儘管來尋我！」",
+          "recruit": "sunjian"
+        }
+      },
+      {
+        "text": "只是遠遠看著",
+        "effect": {
+          "text": "孫堅的笑聲在校場上回蕩，你沒有上前。"
+        }
+      }
+    ]
+  },
+  {
+    "id": "meet_yuanshao",
+    "title": "汝南名士圈",
+    "actions": [
+      "socialize"
+    ],
+    "locations": [
+      "runan"
+    ],
+    "condition": {
+      "members_none": [
+        "yuanshao"
+      ]
+    },
+    "text": "汝南城中，一群士人正圍著一位儀表堂堂的青年高談闊論。此人正是「四世三公」袁氏之後——袁紹，言談間頗有招攬四方之意。",
+    "choices": [
+      {
+        "text": "上前自我引薦",
+        "effect": {
+          "text": "袁紹拉住你的手，笑得十分熱絡：「少俠英雄出少年，往後多親近親近。」",
+          "recruit": "yuanshao"
+        }
+      },
+      {
+        "text": "在人群外靜靜聽著",
+        "effect": {
+          "text": "袁紹的談吐確實吸引人，但你沒有湊上前。"
+        }
+      }
+    ]
+  },
+  {
+    "id": "meet_taoqian",
+    "title": "折節讀書的能吏",
+    "actions": [
+      "socialize"
+    ],
+    "locations": [
+      "runan_market"
+    ],
+    "condition": {
+      "members_none": [
+        "taoqian"
+      ]
+    },
+    "text": "集市上，一位氣度溫厚的中年官員正在安撫因兵荒而流離的百姓，處置得井井有條。旁人說，他叫陶謙，少年任俠，後來折節讀書入了仕。",
+    "choices": [
+      {
+        "text": "上前結識",
+        "effect": {
+          "text": "陶謙拱手還禮，眼神裡透著幾分審視：「少俠若不嫌棄，往後彼此照應。」",
+          "recruit": "taoqian"
+        }
+      },
+      {
+        "text": "只是旁觀",
+        "effect": {
+          "text": "陶謙繼續忙著安置流民，沒有留意到你。"
+        }
+      }
+    ]
+  }
 ]

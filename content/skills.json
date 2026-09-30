@@ -1,226 +1,114 @@
 [
   {
-    "id": "tuna",
-    "name": "吐納法",
+    "id": "caocao_wugong",
+    "name": "挾風槍法",
+    "kind": "武學",
+    "attribute": "快",
+    "desc": "曹操的本命武學。"
+  },
+  {
+    "id": "caocao_neigong",
+    "name": "梟雄心經",
+    "kind": "內功",
+    "attribute": "陽",
+    "desc": "曹操的本命內功。"
+  },
+  {
+    "id": "liubei_wugong",
+    "name": "雙股劍",
+    "kind": "武學",
+    "attribute": "柔",
+    "desc": "劉備的本命武學。"
+  },
+  {
+    "id": "liubei_neigong",
+    "name": "仁德心法",
+    "kind": "內功",
+    "attribute": "柔",
+    "desc": "劉備的本命內功。"
+  },
+  {
+    "id": "guanyu_wugong",
+    "name": "青龍刀法",
+    "kind": "武學",
+    "attribute": "剛",
+    "desc": "關羽的本命武學。"
+  },
+  {
+    "id": "guanyu_neigong",
+    "name": "忠義心法",
+    "kind": "內功",
+    "attribute": "陽",
+    "desc": "關羽的本命內功。"
+  },
+  {
+    "id": "zhangfei_wugong",
+    "name": "丈八蛇矛",
+    "kind": "武學",
+    "attribute": "剛",
+    "desc": "張飛的本命武學。"
+  },
+  {
+    "id": "zhangfei_neigong",
+    "name": "猛虎氣訣",
+    "kind": "內功",
+    "attribute": "陽",
+    "desc": "張飛的本命內功。"
+  },
+  {
+    "id": "sunjian_wugong",
+    "name": "江東槍法",
+    "kind": "武學",
+    "attribute": "快",
+    "desc": "孫堅的本命武學。"
+  },
+  {
+    "id": "sunjian_neigong",
+    "name": "江東心法",
+    "kind": "內功",
+    "attribute": "陽",
+    "desc": "孫堅的本命內功。"
+  },
+  {
+    "id": "yuanshao_wugong",
+    "name": "四世劍",
+    "kind": "武學",
+    "attribute": "虛",
+    "desc": "袁紹的本命武學。"
+  },
+  {
+    "id": "yuanshao_neigong",
+    "name": "名門心法",
     "kind": "內功",
     "attribute": "陰",
-    "desc": "最粗淺的調息法門，人人都會。"
+    "desc": "袁紹的本命內功。"
   },
   {
-    "id": "changquan",
-    "name": "長拳",
-    "kind": "武學",
-    "attribute": "剛",
-    "desc": "街頭巷尾都有人練的拳法。"
-  },
-  {
-    "id": "qixia_xinjue",
-    "name": "棲霞心訣",
-    "kind": "內功",
-    "attribute": "柔",
-    "desc": "棲霞劍派的入門內功，綿長不絕。"
-  },
-  {
-    "id": "liuyun",
-    "name": "流雲劍法",
+    "id": "taoqian_wugong",
+    "name": "仁厚棍法",
     "kind": "武學",
     "attribute": "柔",
-    "desc": "劍勢如流雲舒卷，以柔化剛。"
+    "desc": "陶謙的本命武學。"
   },
   {
-    "id": "luoying",
-    "name": "落英劍式",
-    "kind": "武學",
-    "attribute": "快",
-    "desc": "棲霞劍派的進階劍法，劍光如落英繽紛。"
-  },
-  {
-    "id": "yanhui",
-    "name": "燕回翔",
+    "id": "taoqian_neigong",
+    "name": "厚德心法",
     "kind": "內功",
-    "attribute": "快",
-    "desc": "棲霞劍派的輕功，身法輕盈如燕。"
-  },
-  {
-    "id": "xuantie_gong",
-    "name": "玄鐵功",
-    "kind": "內功",
-    "attribute": "剛",
-    "desc": "玄鐵門的護體內功，練到深處刀槍難入。"
-  },
-  {
-    "id": "tiesha",
-    "name": "鐵砂掌",
-    "kind": "武學",
-    "attribute": "剛",
-    "desc": "玄鐵門的看家掌法，一掌下去碑裂石碎。"
-  },
-  {
-    "id": "lieshi",
-    "name": "裂石拳",
-    "kind": "武學",
-    "attribute": "剛",
-    "desc": "玄鐵門的進階拳法，剛猛無儔。"
+    "attribute": "陰",
+    "desc": "陶謙的本命內功。"
   },
   {
     "id": "zhuifeng",
     "name": "追風步",
-    "kind": "內功",
-    "attribute": "快",
-    "desc": "鏢局裡流傳的輕功，講究腳下快。"
-  },
-  {
-    "id": "feihua",
-    "name": "飛花摘葉",
     "kind": "武學",
-    "attribute": "虛",
-    "desc": "摘葉飛花皆可傷人的奇門手法，只傳無門無派之人。"
+    "attribute": "快",
+    "desc": "江湖上流傳的輕身步法，講究腳下快。"
   },
   {
     "id": "hunyuan",
     "name": "混元一氣",
     "kind": "內功",
-    "attribute": "陰",
-    "desc": "前朝秘藏的內功心法，渾厚無比。"
-  },
-  {
-    "id": "jiachuan",
-    "name": "家傳劍法",
-    "kind": "武學",
-    "attribute": "柔",
-    "desc": "世家代代相傳的劍法，綿中帶勁。"
-  },
-  {
-    "id": "kaibei",
-    "name": "開碑手",
-    "kind": "武學",
-    "attribute": "剛",
-    "desc": "武師的看家掌法，一掌能開碑裂石。"
-  },
-  {
-    "id": "luanzhen",
-    "name": "亂針",
-    "kind": "武學",
-    "attribute": "虛",
-    "desc": "書童藏在袖中的繡花針，專打穴脈。"
-  },
-  {
-    "id": "yucha",
-    "name": "魚叉亂刺",
-    "kind": "武學",
-    "attribute": "剛",
-    "desc": "水寇慣用的亂刺，毫無章法卻很難纏。"
-  },
-  {
-    "id": "xiongzhang",
-    "name": "熊掌拍擊",
-    "kind": "武學",
-    "attribute": "剛",
-    "desc": "黑熊人立而起，一掌拍下。"
-  },
-  {
-    "id": "jiuhuan",
-    "name": "九環斷江",
-    "kind": "武學",
-    "attribute": "剛",
-    "desc": "翻江龍的九環刀絕技，刀風所至如江水斷流。"
-  },
-  {
-    "id": "guiying",
-    "name": "鬼影手",
-    "kind": "武學",
-    "attribute": "虛",
-    "desc": "鬼手劉三的空手奪白刃。"
-  },
-  {
-    "id": "shoumu_gong",
-    "name": "守墓功",
-    "kind": "內功",
-    "attribute": "柔",
-    "desc": "守墓四十年練成的內功，綿密無隙。"
-  },
-  {
-    "id": "suishi",
-    "name": "碎石拳",
-    "kind": "武學",
-    "attribute": "剛",
-    "desc": "羅石頭劈柴時自己琢磨出來的拳，沒有章法，只有力氣。"
-  },
-  {
-    "id": "suxin",
-    "name": "素衣劍",
-    "kind": "武學",
-    "attribute": "柔",
-    "desc": "棲霞劍派外門弟子練的基本劍式，一招一式都很乾淨。"
-  },
-  {
-    "id": "tangzi",
-    "name": "趟子腿",
-    "kind": "武學",
-    "attribute": "快",
-    "desc": "鏢局趟子手防身的腿法，跑得快，踢得也快。"
-  },
-  {
-    "id": "duanxian",
-    "name": "斷弦",
-    "kind": "武學",
-    "attribute": "虛",
-    "desc": "琵琶弦上藏著的暗勁，弦斷時傷人，也亂人心神。"
-  },
-  {
-    "id": "pozhen",
-    "name": "破陣槍",
-    "kind": "武學",
-    "attribute": "剛",
-    "desc": "邊軍衝陣的槍法，一槍只求把人挑翻。"
-  },
-  {
-    "id": "jingchan",
-    "name": "驚蟬石",
-    "kind": "武學",
-    "attribute": "虛",
-    "desc": "走索時練出的飛石手法，專打穴道，中者如蟬受驚、動彈不得。"
-  },
-  {
-    "id": "chenzhong",
-    "name": "晨鐘",
-    "kind": "武學",
-    "attribute": "柔",
-    "desc": "啞僧敲了二十年鐘悟出的吐納，一聲長鳴，全隊氣息為之一振。"
-  },
-  {
-    "id": "fenshui",
-    "name": "分水刺",
-    "kind": "武學",
-    "attribute": "快",
-    "desc": "水寨頭目在水底練出的短刺，快得看不清出手。"
-  },
-  {
-    "id": "guihong",
-    "name": "歸鴻劍",
-    "kind": "武學",
-    "attribute": "快",
-    "desc": "晏歸鴻的劍，快得像雁群掠過湖面，劍到時對方的兵刃已經脫手。"
-  },
-  {
-    "id": "guicang",
-    "name": "歸藏掌",
-    "kind": "武學",
-    "attribute": "柔",
-    "desc": "守墓人四十年只練一掌，掌力綿長，專封人經脈。"
-  },
-  {
-    "id": "jinghong",
-    "name": "驚鴻",
-    "kind": "內功",
-    "attribute": "快",
-    "desc": "晏歸鴻的特性：身法翩若驚鴻，出手總比人早一步。"
-  },
-  {
-    "id": "kushou",
-    "name": "枯守",
-    "kind": "內功",
-    "attribute": "柔",
-    "desc": "守墓人的特性：四十年枯坐，氣息沉得像一塊石頭。"
+    "attribute": "陽",
+    "desc": "南華觀藏著的失傳內功，渾厚無比，只有取得傳國玉璽碎片才能習得。"
   }
 ]

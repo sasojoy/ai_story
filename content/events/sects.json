@@ -1,46 +1,112 @@
 [
-  {"id": "qixia_join", "title": "棲霞收徒", "actions": ["socialize"], "locations": ["qixia_sect"],
-   "condition": {"no_sect": true, "flags_none": ["叛出:qixia"], "max_stats": {"evil": 9}},
-   "text": "棲霞劍派的知客弟子迎上來：「掌門有令，近來江南不寧，本派廣開山門，收錄品行端正的弟子。」",
-   "choices": [
-    {"text": "拜入棲霞劍派", "effect": {"text": "你在祖師像前叩了三個頭，從此是棲霞弟子。門規第一條：不得恃武作惡。", "join_sect": "qixia"}},
-    {"text": "婉拒，當個散人", "effect": {"text": "知客弟子也不勉強，送你下山。"}}
-  ]},
-  {"id": "xuantie_join", "title": "玄鐵試煉", "actions": ["socialize"], "locations": ["xuantie"],
-   "condition": {"no_sect": true, "flags_none": ["叛出:xuantie"]},
-   "text": "玄鐵門的演武場上，一個赤膊大漢攔住你：「想入我玄鐵門？先接我三拳！」",
-   "choices": [
-    {"text": "接招", "combat": "xuantie_dizi",
-     "effect": {"text": "大漢揉著胳膊哈哈大笑：「好！從今天起你就是玄鐵門的人了！」", "join_sect": "xuantie"},
-     "fail_effect": {"text": "你被一拳打出演武場，大漢喊道：「練結實了再來！」", "stamina": -10}},
-    {"text": "告辭", "effect": {"text": "你轉身離開了演武場。"}}
-  ]},
-  {"id": "qixia_teach", "title": "師父傳劍", "actions": ["socialize"], "locations": ["qixia_sect"],
-   "condition": {"sects": ["qixia"], "min_stats": {"fame": 5}, "skills_none": ["luoying"]},
-   "text": "師父把你叫到後山：「你在江湖上的事，為師都聽說了。今天傳你本門的『落英劍式』與『燕回翔』。」",
-   "choices": [
-    {"text": "恭敬受教", "effect": {"text": "劍光如落英繽紛，你練到日落才停手。", "learn_skills": ["luoying", "yanhui"]}},
-    {"text": "自覺火候未到，改日再來", "effect": {"text": "師父點點頭：「也好。」"}}
-  ]},
-  {"id": "xuantie_teach", "title": "門主傳拳", "actions": ["socialize"], "locations": ["xuantie"],
-   "condition": {"sects": ["xuantie"], "min_stats": {"fame": 5}, "skills_none": ["lieshi"]},
-   "text": "門主拍拍你的肩膀：「小子，你在外面沒給玄鐵門丟臉。這套『裂石拳』，今天傳給你。」",
-   "choices": [
-    {"text": "抱拳受教", "effect": {"text": "一拳下去，演武場邊的石墩裂成兩半。", "learn_skills": ["lieshi"]}},
-    {"text": "自覺火候未到，改日再來", "effect": {"text": "門主哈哈一笑：「有自知之明，不錯。」"}}
-  ]},
-  {"id": "qixia_rule", "title": "清理門戶", "weight": 5, "condition": {"sects": ["qixia"], "min_stats": {"evil": 10}},
-   "text": "一名棲霞劍派的師兄攔在路中，面色鐵青：「師弟，你在外面做的事，掌門都知道了。跟我回山領罰！」",
-   "choices": [
-    {"text": "回山領罰", "effect": {"text": "你在思過崖面壁三天，腿都跪麻了。", "stamina": -30, "stats": {"evil": -5}}},
-    {"text": "叛出師門", "effect": {"text": "你折斷了棲霞弟子的腰牌，擲在師兄腳下。", "leave_sect": true, "stats": {"evil": 3},
-     "rumor": "{name}叛出棲霞劍派！棲霞弟子揚言要清理門戶。", "chronicle": "{name}叛出棲霞劍派。"}}
-  ]},
-  {"id": "beggar_master", "title": "乞丐高人", "tags": ["官道", "野外"], "qiyu": true, "weight": 0.4, "once": true,
-   "condition": {"no_sect": true, "flags_all": ["helped_beggar"]},
-   "text": "又是那個老乞丐。他朝你擠擠眼，隨手摘下一片樹葉一彈——葉子竟釘進了三丈外的樹幹。「小子，心腸不錯，又沒門沒派，這手『飛花摘葉』要不要學？」",
-   "choices": [
-    {"text": "拜謝學藝", "effect": {"text": "老乞丐教完就走，連名字都沒留下。", "stats": {"fame": 1}, "learn_skills": ["feihua"]}},
-    {"text": "婉拒", "effect": {"text": "老乞丐哈哈一笑，消失在官道盡頭。"}}
-  ]}
+  {
+    "id": "yingchuan_join",
+    "title": "書院收徒",
+    "actions": [
+      "socialize"
+    ],
+    "locations": [
+      "yingchuan_academy"
+    ],
+    "condition": {
+      "no_sect": true,
+      "flags_none": [
+        "叛出:yingchuan_academy"
+      ],
+      "max_stats": {
+        "evil": 9
+      }
+    },
+    "text": "潁川書院的門生迎上來：「近來世道不寧，山長有令，廣招品行端正的士子，共議天下大勢。」",
+    "choices": [
+      {
+        "text": "投身書院",
+        "effect": {
+          "text": "你在講堂前一揖到地，從此列名門生。院規第一條：不得恃武作惡。",
+          "join_sect": "yingchuan_academy"
+        }
+      },
+      {
+        "text": "婉拒，仍作散人",
+        "effect": {
+          "text": "門生也不勉強，送你出門。"
+        }
+      }
+    ]
+  },
+  {
+    "id": "cao_manor_join",
+    "title": "曹氏試煉",
+    "actions": [
+      "socialize"
+    ],
+    "locations": [
+      "cao_manor"
+    ],
+    "condition": {
+      "no_sect": true,
+      "flags_none": [
+        "叛出:cao_manor"
+      ]
+    },
+    "text": "曹氏莊院的演武場上，一個精壯的護院攔住你：「想投身曹家？先接我三招！」",
+    "choices": [
+      {
+        "text": "接招",
+        "combat": "xuantie_dizi",
+        "effect": {
+          "text": "護院揉著胳膊哈哈大笑：「好！從今天起你就是自家人了！」",
+          "join_sect": "cao_manor"
+        },
+        "fail_effect": {
+          "text": "你被一招逼出演武場，護院喊道：「練結實了再來！」",
+          "stamina": -10
+        }
+      },
+      {
+        "text": "告辭",
+        "effect": {
+          "text": "你轉身離開了演武場。"
+        }
+      }
+    ]
+  },
+  {
+    "id": "yingchuan_rule",
+    "title": "清理門戶",
+    "weight": 5,
+    "condition": {
+      "sects": [
+        "yingchuan_academy"
+      ],
+      "min_stats": {
+        "evil": 10
+      }
+    },
+    "text": "一名書院同窗攔在路中，面色鐵青：「賢弟，你在外面做的事，山長都知道了。跟我回去領罰！」",
+    "choices": [
+      {
+        "text": "回去領罰",
+        "effect": {
+          "text": "你在講堂外罰站三天，膝蓋都跪麻了。",
+          "stamina": -30,
+          "stats": {
+            "evil": -5
+          }
+        }
+      },
+      {
+        "text": "從此不再往來",
+        "effect": {
+          "text": "你把院中的信物擲在同窗腳下。",
+          "leave_sect": true,
+          "stats": {
+            "evil": 3
+          },
+          "rumor": "{name}與潁川書院鬧翻，眾人議論紛紛。",
+          "chronicle": "{name}與潁川書院決裂。"
+        }
+      }
+    ]
+  }
 ]

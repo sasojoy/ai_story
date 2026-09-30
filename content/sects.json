@@ -1,16 +1,4 @@
 [
-  {
-    "id": "qixia",
-    "name": "棲霞劍派",
-    "location": "qixia_sect",
-    "alignment": "正",
-    "desc": "棲霞山上的劍派，劍法以柔克剛，門規嚴明，不容門下作惡。"
-  },
-  {
-    "id": "xuantie",
-    "name": "玄鐵門",
-    "location": "xuantie",
-    "alignment": "中",
-    "desc": "無錫城外的外家門派，以剛猛拳掌見長，只問強弱，不問出身。"
-  }
+  {"id": "yingchuan_academy", "name": "潁川書院", "location": "yingchuan_academy", "alignment": "正", "desc": "潁川名士講學授徒之處，門規嚴謹，重清議、輕武力，投身其中能結交不少日後的謀臣名士。"},
+  {"id": "cao_manor", "name": "曹氏莊院", "location": "cao_manor", "alignment": "中", "desc": "曹家在譙縣的祖宅，家丁護院個個身手不弱，行事不拘一格，只問成效不問出身。"}
 ]

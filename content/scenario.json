@@ -1,107 +1,96 @@
 {
-  "id": "jiangnan_storm",
-  "name": "江南風雨",
-  "intro": "大胤末年，朝廷無力南顧。太湖水寨大當家「翻江龍」聚眾數千，劫掠運河商船；又有流言說，前朝覆滅時，有一批寶藏藏在江南某處山中。你背著一個包袱，站在揚州城門口——江湖，就從這裡開始。",
-  "start_location": "yangzhou",
+  "id": "huangjin_uprising",
+  "name": "黃巾之亂",
+  "intro": "漢室衰微，宦官弄權，天下早已民不聊生。鉅鹿人張角自稱得「南華老仙」傳授《太平要術》，暗中以「蒼天已死，黃天當立，歲在甲子，天下大吉」串連八州信眾。甲子年春，黃巾軍揭竿而起，烽煙四起。你背著一個包袱，站在潁川郡城門口——亂世江湖，就從這裡開始。",
+  "start_location": "yingchuan",
   "trends": [
-    {"id": "kou", "name": "太湖寇亂", "desc": "水寇勢力越大，江南越亂。到 50 會封鎖運河，到 80 水寇將攻陷鎮江。剿寇能讓它下降。", "start": 30},
-    {"id": "bao", "name": "前朝寶藏", "desc": "藏寶圖的拼湊進度。湊齊時，寶藏所在將會現世。", "start": 0, "hidden": true}
+    {"id": "huangjin", "name": "黃巾聲勢", "desc": "黃巾軍在潁川一帶的聲勢。到 50 官道將被切斷，到 80 潁川恐將淪陷。剿討能讓它下降。", "start": 25},
+    {"id": "yuxi", "name": "玉璽碎片線索", "desc": "傳國玉璽碎片下落的線索拼湊進度。湊齊時，碎片的下落將會現世。", "start": 0, "hidden": true}
   ],
   "thresholds": [
-    {"id": "kou_50", "trend": "kou", "op": ">=", "value": 50, "text": "太湖水寇封鎖運河，揚州至鎮江的商路斷絕，沿岸人心惶惶！", "world_flags_add": ["canal_blocked"], "location": "guazhou"},
-    {"id": "kou_80", "trend": "kou", "op": ">=", "value": 80, "text": "翻江龍率水寨大軍攻破鎮江渡口，江南從此落入水寇之手！", "world_flags_add": ["kou_win"], "ends_season": true, "location": "zhenjiang"},
-    {"id": "kou_10", "trend": "kou", "op": "<=", "value": 10, "text": "太湖水寨被各路俠客踏平，翻江龍下落不明，運河重歸太平。", "world_flags_add": ["kou_crushed"], "location": "taihu_isle"},
-    {"id": "bao_50", "trend": "bao", "op": ">=", "value": 50, "text": "江湖傳言：前朝藏寶圖已拼出大半，各路人馬湧向棲霞山。", "world_flags_add": ["bao_half"], "location": "qixia_foot"},
-    {"id": "bao_100", "trend": "bao", "op": ">=", "value": 100, "text": "藏寶圖終於湊齊！棲霞後山的「藏龍洞」現世，洞口有人把守。", "world_flags_add": ["cave_open"], "location": "canglong"}
+    {"id": "huangjin_50", "trend": "huangjin", "op": ">=", "value": 50, "text": "黃巾軍切斷洛陽官道，潁川與朝廷的聯繫斷絕，城中人心惶惶！", "world_flags_add": ["road_blocked"], "location": "luoyang_road"},
+    {"id": "huangjin_80", "trend": "huangjin", "op": ">=", "value": 80, "text": "波才率黃巾大軍攻破潁川防線，郡治陷落，漢軍節節敗退！", "world_flags_add": ["huangjin_win"], "ends_season": true, "location": "yingchuan"},
+    {"id": "huangjin_10", "trend": "huangjin", "op": "<=", "value": 10, "text": "黃巾別部營寨被各路義士踏平，波才下落不明，潁川重歸平靜。", "world_flags_add": ["huangjin_crushed"], "location": "huangjin_camp"},
+    {"id": "yuxi_50", "trend": "yuxi", "op": ">=", "value": 50, "text": "江湖傳言：南華老仙留下的符文線索已拼出大半，各路人馬湧向嵩山。", "world_flags_add": ["yuxi_half"], "location": "songshan_foot"},
+    {"id": "yuxi_100", "trend": "yuxi", "op": ">=", "value": 100, "text": "線索終於湊齊！嵩山深處的「南華觀」現世，觀內符文石壁後，隱約可見寒光。", "world_flags_add": ["xi_open"], "location": "jade_cave"}
   ],
   "sim_players": [
-    {"name": "翻江龍", "actions_per_day": 8, "trend": {"kou": 1}, "rumor_chance": 0.25, "haunts": ["taihu_isle"],
-     "condition": {"world_flags_none": ["fjl_defeated", "kou_crushed"], "revealed_none": ["bao"]},
+    {"name": "波才", "actions_per_day": 8, "trend": {"huangjin": 1}, "rumor_chance": 0.25, "haunts": ["huangjin_camp"],
+     "condition": {"world_flags_none": ["bocai_defeated", "huangjin_crushed"], "revealed_none": ["yuxi"]},
      "rumors": [
-      "太湖水寇又劫了一艘官船，據說是{name}親自帶的人。",
-      "{name}在太湖放話：「江南的水路，從今往後姓翻！」",
-      "運河上又有商船失蹤，人人都說是{name}的手筆。"
+      "黃巾別部又劫了一支糧隊，據說是波才親自帶的人。",
+      "波才在營寨放話：「潁川的天，從今往後是黃天！」",
+      "官道上又有商旅失蹤，人人都說是波才的手筆。"
     ]},
-    {"name": "翻江龍", "actions_per_day": 4, "trend": {"kou": 1, "bao": 1}, "rumor_chance": 0.3, "haunts": ["qixia_foot", "taihu_isle"],
-     "condition": {"revealed_all": ["bao"], "world_flags_none": ["fjl_defeated", "kou_crushed", "cave_open"]},
+    {"name": "皇甫嵩", "actions_per_day": 3, "trend": {"huangjin": -1}, "rumor_chance": 0.3, "haunts": ["changshe", "yingchuan"], "rumors": [
+      "皇甫嵩在長社夜縱大火，又燒了黃巾一座營寨。",
+      {"text": "有人看見皇甫嵩親自巡視潁川城防，軍紀肅然。", "location": "yingchuan"}
+    ]},
+    {"name": "董卓", "actions_per_day": 3, "trend": {"yuxi": 2}, "requires_revealed": "yuxi", "rumor_chance": 0.3, "haunts": ["deep_mountain", "runan"],
+     "condition": {"world_flags_none": ["shard_taken", "shard_lost", "xi_open"]},
      "rumors": [
-      "{name}派人到棲霞山一帶打聽前朝寶藏的下落。",
-      {"text": "水寨的船少了一半，聽說{name}分兵去找寶藏了。", "location": "taihu_isle"}
-    ]},
-    {"name": "翻江龍", "actions_per_day": 6, "trend": {"kou": 1}, "rumor_chance": 0.25, "haunts": ["taihu_isle"],
-     "condition": {"world_flags_all": ["cave_open"], "world_flags_none": ["fjl_defeated", "kou_crushed"]},
-     "rumors": [
-      "{name}的人馬從棲霞山撤回太湖，運河上又不太平了。"
-    ]},
-    {"name": "白衣劍客沈青", "actions_per_day": 3, "trend": {"kou": -1}, "rumor_chance": 0.3, "haunts": ["taihu_north", "zhenjiang"], "rumors": [
-      "{name}在太湖邊獨挑水寇十七人，劍不染塵。",
-      {"text": "有人看見{name}在鎮江渡口護送難民過江。", "location": "zhenjiang"}
-    ]},
-    {"name": "鬼手劉三", "actions_per_day": 3, "trend": {"bao": 2}, "requires_revealed": "bao", "rumor_chance": 0.3, "haunts": ["qixia_back", "jinling"],
-     "condition": {"world_flags_none": ["treasure_taken", "treasure_lost", "cave_open"]},
-     "rumors": [
-      "有人看見{name}在棲霞山一帶鬼鬼祟祟地挖土。",
-      {"text": "{name}在金陵黑市高價收購前朝古物。", "location": "jinling"}
+      "有人看見董卓的斥候在嵩山一帶四處打聽符文的下落。",
+      {"text": "董卓在汝南高價收購前朝古物，出手闊綽。", "location": "runan"}
     ]}
   ],
   "storylines": [
-    {"id": "kou_line", "name": "太湖寇亂", "acts": [
-      {"id": "kou_1", "title": "水寇橫行", "text": "翻江龍的水寨日漸壯大，運河上的商船接連失蹤。",
-       "goal": "到高郵湖、瓜洲渡或太湖一帶歷練剿寇，別讓寇亂到 50（運河會被封鎖）。", "places": ["gaoyou", "guazhou", "taihu_north"],
-       "advance_when": {"any_of": [{"world_flags_all": ["canal_blocked"]}, {"day_min": 5}]}},
-      {"id": "kou_2", "title": "風聲鶴唳", "text": "水寇勢大，運河一帶風聲鶴唳，商旅人人自危。",
-       "goal": "別讓寇亂到 50（運河會被封鎖）；名望達 3 以上，可以去太湖水寨挑戰翻江龍。", "places": ["taihu_isle"],
-       "advance_when": {"any_of": [{"world_flags_all": ["fjl_defeated"]}, {"trend_min": {"kou": 70}}, {"day_min": 10}]}},
-      {"id": "kou_3", "title": "鎮江決戰", "text": "決戰將至：翻江龍若未除，水寨大軍隨時可能壓向鎮江。",
-       "goal": "守住鎮江直到季末（寇亂不到 80），或把寇亂壓到 10 以下，徹底平定太湖。", "places": ["zhenjiang"]}
+    {"id": "huangjin_line", "name": "黃巾之亂", "acts": [
+      {"id": "huangjin_1", "title": "黃巾橫行", "text": "波才的黃巾別部日漸壯大，官道上的商旅接連失蹤。",
+       "goal": "到長社、洛陽官道或汝南荒野一帶討伐黃巾，別讓聲勢到 50（官道會被切斷）。", "places": ["changshe", "luoyang_road", "runan_wilds"],
+       "advance_when": {"any_of": [{"world_flags_all": ["road_blocked"]}, {"day_min": 5}]}},
+      {"id": "huangjin_2", "title": "風聲鶴唳", "text": "黃巾勢大，官道一帶風聲鶴唳，商旅人人自危。",
+       "goal": "別讓聲勢到 50（官道會被切斷）；名望達 3 以上，可以去黃巾別部營寨挑戰波才。", "places": ["huangjin_camp"],
+       "advance_when": {"any_of": [{"world_flags_all": ["bocai_defeated"]}, {"trend_min": {"huangjin": 70}}, {"day_min": 10}]}},
+      {"id": "huangjin_3", "title": "潁川決戰", "text": "決戰將至：波才若未除，黃巾大軍隨時可能壓向潁川。",
+       "goal": "守住潁川直到季末（聲勢不到 80），或把聲勢壓到 10 以下，徹底平定黃巾。", "places": ["yingchuan"]}
     ]},
-    {"id": "bao_line", "name": "前朝寶藏", "intro": "前朝藏寶圖殘卷現世，翻江龍分兵尋寶，江南的局勢從此改寫。",
-     "replaces_when": {"revealed_all": ["bao"]}, "acts": [
-      {"id": "bao_1", "title": "殘卷現世", "text": "殘卷的消息傳開，各路人馬開始在金陵、棲霞山一帶搜尋。",
-       "goal": "在棲霞山一帶挖掘、找金陵的老學究解讀，把寶藏線推到 50。", "places": ["qixia_foot", "qixia_back", "jinling"],
-       "advance_when": {"trend_min": {"bao": 50}}},
-      {"id": "bao_2", "title": "群雄爭寶", "text": "翻江龍與鬼手劉三都在搶地圖，誰先湊齊，誰就能找到寶藏。",
-       "goal": "搶在翻江龍與鬼手劉三之前，把寶藏線推到 100。", "places": ["qixia_foot", "qixia_back"],
-       "advance_when": {"world_flags_all": ["cave_open"]}},
-      {"id": "bao_3", "title": "藏龍洞", "text": "藏龍洞現世，洞口有守墓人把守，翻江龍的人馬也在路上。",
-       "goal": "48 小時內趕到棲霞後山的藏龍洞，擊敗守墓人。", "places": ["canglong"],
-       "advance_when": {"any_of": [{"world_flags_all": ["treasure_taken"]}, {"world_flags_all": ["treasure_lost"]}]}},
-      {"id": "bao_4", "title": "餘波", "text": "寶藏已有了下落，江湖的目光重新回到太湖與運河。",
-       "goal": "回頭壓制寇亂，撐到季末；寇亂到 80 鎮江仍會失守。", "places": ["taihu_north", "taihu_isle"]}
+    {"id": "yuxi_line", "name": "傳國玉璽", "intro": "南華老仙留下的符文線索現世，董卓分兵尋訪，天下的局勢從此改寫。",
+     "replaces_when": {"revealed_all": ["yuxi"]}, "acts": [
+      {"id": "yuxi_1", "title": "符文現世", "text": "線索的消息傳開，各路人馬開始在汝南、嵩山一帶搜尋。",
+       "goal": "在嵩山一帶探查、找汝南的名士解讀符文，把線索推到 50。", "places": ["songshan_foot", "deep_mountain", "runan"],
+       "advance_when": {"trend_min": {"yuxi": 50}}},
+      {"id": "yuxi_2", "title": "群雄爭璽", "text": "董卓與各路人馬都在搶符文線索，誰先湊齊，誰就能找到碎片下落。",
+       "goal": "搶在董卓之前，把線索推到 100。", "places": ["songshan_foot", "deep_mountain"],
+       "advance_when": {"world_flags_all": ["xi_open"]}},
+      {"id": "yuxi_3", "title": "南華觀", "text": "南華觀現世，觀內有看守者把守，董卓的人馬也在路上。",
+       "goal": "48 小時內趕到嵩山深處的南華觀，擊敗看守者。", "places": ["jade_cave"],
+       "advance_when": {"any_of": [{"world_flags_all": ["shard_taken"]}, {"world_flags_all": ["shard_lost"]}]}},
+      {"id": "yuxi_4", "title": "餘波", "text": "玉璽碎片已有了下落，天下的目光重新回到黃巾之亂本身。",
+       "goal": "回頭壓制黃巾聲勢，撐到季末；聲勢到 80 潁川仍會淪陷。", "places": ["runan_wilds", "huangjin_camp"]}
     ]}
   ],
   "world_events": [
-    {"id": "fjl_takes_treasure", "condition": {"flag_age_hours": {"cave_open": 48}, "world_flags_none": ["treasure_taken", "kou_crushed", "fjl_defeated"]},
-     "text": "翻江龍率眾闖入藏龍洞，前朝寶藏落入水寨之手！", "world_flags_add": ["treasure_lost"], "location": "canglong"}
+    {"id": "dongzhuo_takes_shard", "condition": {"flag_age_hours": {"xi_open": 48}, "world_flags_none": ["shard_taken", "huangjin_crushed", "bocai_defeated"]},
+     "text": "董卓率眾闖入南華觀，傳國玉璽的碎片落入他手！", "world_flags_add": ["shard_lost"], "location": "jade_cave"}
   ],
   "milestones": [
-    {"id": "join_sect", "text": "拜入棲霞劍派或玄鐵門", "condition": {"sects": ["qixia", "xuantie"]}},
+    {"id": "join_sect", "text": "投身潁川書院或曹氏莊院", "condition": {"sects": ["yingchuan_academy", "cao_manor"]}},
     {"id": "fame_10", "text": "名望達到 10", "condition": {"min_stats": {"fame": 10}}},
-    {"id": "beat_fjl", "text": "擊敗翻江龍", "condition": {"world_flags_all": ["fjl_defeated"]}},
-    {"id": "take_treasure", "text": "取得前朝寶藏", "condition": {"world_flags_all": ["treasure_taken"]}},
-    {"id": "crush_kou", "text": "平定太湖（寇亂 10 以下）", "condition": {"world_flags_all": ["kou_crushed"]}}
+    {"id": "beat_bocai", "text": "擊敗波才", "condition": {"world_flags_all": ["bocai_defeated"]}},
+    {"id": "take_shard", "text": "取得傳國玉璽碎片", "condition": {"world_flags_all": ["shard_taken"]}},
+    {"id": "crush_huangjin", "text": "平定黃巾（聲勢 10 以下）", "condition": {"world_flags_all": ["huangjin_crushed"]}}
   ],
   "endings": [
-    {"id": "kou_win", "title": "水寇稱霸", "hint": "寇亂達到 80，鎮江陷落。",
-     "text": "鎮江陷落，翻江龍坐擁運河。江南的商旅從此要向水寨納貢，而這一季的俠客們，只能在酒館裡嘆息。",
-     "condition": {"world_flags_all": ["kou_win"]}},
-    {"id": "peace_treasure", "storyline": "bao_line", "title": "江南太平，寶藏重光", "hint": "取得寶藏，並把寇亂壓到 10 以下。",
-     "text": "水寨覆滅，前朝寶藏也重見天日。這一季的江南，是俠客的江南。",
-     "condition": {"world_flags_all": ["kou_crushed", "treasure_taken"]}},
-    {"id": "peace", "title": "太湖平定", "hint": "把寇亂壓到 10 以下。",
-     "text": "運河重歸太平，但那批前朝寶藏，依舊是酒館裡說不完的傳說。",
-     "condition": {"world_flags_all": ["kou_crushed"]}},
-    {"id": "treasure", "storyline": "bao_line", "title": "寶藏重光", "hint": "在藏龍洞擊敗守墓人，取得寶藏。",
-     "text": "寶藏被俠客取走，江湖為之震動；然而太湖水寇仍在，江南的風雨還遠未停歇。",
-     "condition": {"world_flags_all": ["treasure_taken"]}},
-    {"id": "treasure_lost", "storyline": "bao_line", "title": "寶藏落入水寨", "hint": "藏龍洞現世 48 小時內無人取寶，翻江龍就會搶先。",
-     "text": "翻江龍帶著前朝寶藏回到太湖，水寨從此兵強馬壯。俠客們錯過的，不只是一批金銀。",
-     "condition": {"world_flags_all": ["treasure_lost"]}},
-    {"id": "treasure_none", "storyline": "bao_line", "title": "寶藏成謎", "hint": "季末仍無人找到寶藏。",
-     "text": "藏寶圖的碎片散落江湖，寶藏依舊是酒館裡說不完的傳說。"},
-    {"id": "hold", "storyline": "kou_line", "title": "鎮江守住了", "hint": "撐到季末，寇亂不到 80。",
-     "text": "水寨大軍在鎮江城下鎩羽而歸，江南暫得喘息；但翻江龍仍在，下一場風雨隨時會來。"},
-    {"id": "default", "title": "江南依舊風雨飄搖",
-     "text": "這一季，沒有人能徹底改變江南。水寇與俠客互有勝負，寶藏的傳說仍在流傳。"}
+    {"id": "huangjin_win", "title": "黃巾稱霸", "hint": "黃巾聲勢達到 80，潁川陷落。",
+     "text": "潁川陷落，波才的黃巾大軍席捲中原。漢室的威望從此一落千丈，而這一季的義士們，只能在殘破的城牆下嘆息。",
+     "condition": {"world_flags_all": ["huangjin_win"]}},
+    {"id": "peace_shard", "storyline": "yuxi_line", "title": "亂世稍歇，玉璽重光", "hint": "取得玉璽碎片，並把黃巾聲勢壓到 10 以下。",
+     "text": "黃巾別部覆滅，傳國玉璽的碎片也重見天日。這一季的中原，是義士的中原。",
+     "condition": {"world_flags_all": ["huangjin_crushed", "shard_taken"]}},
+    {"id": "peace", "title": "潁川平定", "hint": "把黃巾聲勢壓到 10 以下。",
+     "text": "官道重歸平靜，但那枚傳國玉璽的碎片，依舊是酒肆裡說不完的傳說。",
+     "condition": {"world_flags_all": ["huangjin_crushed"]}},
+    {"id": "shard", "storyline": "yuxi_line", "title": "玉璽重光", "hint": "在南華觀擊敗看守者，取得碎片。",
+     "text": "碎片被義士取走，天下為之震動；然而黃巾軍仍在，中原的烽煙還遠未停歇。",
+     "condition": {"world_flags_all": ["shard_taken"]}},
+    {"id": "shard_lost", "storyline": "yuxi_line", "title": "玉璽落入董卓之手", "hint": "南華觀現世 48 小時內無人取寶，董卓就會搶先。",
+     "text": "董卓帶著玉璽碎片離開，行事愈發驕橫。義士們錯過的，或許不只是一片古玉。",
+     "condition": {"world_flags_all": ["shard_lost"]}},
+    {"id": "shard_none", "storyline": "yuxi_line", "title": "玉璽成謎", "hint": "季末仍無人找到碎片下落。",
+     "text": "符文線索散落江湖，傳國玉璽的下落依舊是酒肆裡說不完的傳說。"},
+    {"id": "hold", "storyline": "huangjin_line", "title": "潁川守住了", "hint": "撐到季末，黃巾聲勢不到 80。",
+     "text": "黃巾大軍在潁川城下鎩羽而歸，中原暫得喘息；但波才仍在，下一場烽煙隨時會來。"},
+    {"id": "default", "title": "中原依舊烽煙未散",
+     "text": "這一季，沒有人能徹底改變中原的局勢。黃巾軍與漢室互有勝負，玉璽的傳說仍在流傳。"}
   ]
 }

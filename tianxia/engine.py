@@ -499,6 +499,7 @@ class Game:
         msgs = self._log([msg])
         if art is not None:
             self._menxia_entry(msg, xinde)
+            msgs += note_action(self.state, self.content, self.world, "practice")
         return msgs
 
     def practice(self, kind: str) -> list[str]:
@@ -506,6 +507,7 @@ class Game:
         xinde = self._xinde()
         msgs = self._log(team.practice(self.state, self.content, self.world, kind, self.rng))
         self._menxia_entry(msgs[0] if msgs else "練功", xinde)
+        msgs += note_action(self.state, self.content, self.world, "practice")
         return msgs
 
     def heal(self) -> list[str]:
