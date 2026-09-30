@@ -15,7 +15,19 @@ class Member(BaseModel):
     level: int = 1
     exp: int = 0
     neili: float | None = None  # None＝內力全滿
-    innate_level: int = 1  # 同伴本命武學的成數（本人的本命記在 skills 裡）
+    innate_level: int = 1  # 舊武學系統遺留欄位，battle.py/team.py 移除後這個欄位會跟著清掉
+
+    # ── 好感度（sanguo-companions 合併新增）──
+    affinity: int = 0  # 0~100 單向「情誼」，只管內容解鎖，不影響任何數值/成功率（見設計文件七.1）
+    relationship_note: str = ""  # 一句話關係現況，交遊沒填時系統補一個保底版本，沿用 ai_story 的機制
+
+    # ── 新武學系統（sanguo-companions 合併新增，取代 battle.py 的 loadouts/innate_level）──
+    # 每人最多學一門內功、一門武學（設計文件六.4），id 指向 tianxia/martial_arts.py 的 MartialArt，
+    # 可能是內容裡的固定武學（本命武學）也可能是玩家自創、存在共用世界狀態裡的武學。
+    neigong_id: str | None = None
+    neigong_level: int = 1  # 熟練度，第一成～第十成
+    wugong_id: str | None = None
+    wugong_level: int = 1
 
 
 class Team(BaseModel):
