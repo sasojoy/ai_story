@@ -366,3 +366,39 @@ def test_at_least_one_fortune_di_tier_is_required(tmp_path):
     edit_json(root / "characters.json", lambda d: by_id(d, "hero").update(sources=["招賢", "奇遇"]))
     with pytest.raises(ContentError, match="至少要有一名標了「福緣」的地品"):
         load_content(root)
+
+
+# ── 招賢（1c-3）──────────────────────────────────────────
+
+
+def test_gacha_config_defaults(content):
+    cfg = content.config
+    assert (cfg.gacha_single, cfg.gacha_ten, cfg.gacha_pity, cfg.gacha_ten_floor) == (100, 1000, 40, "地")
+    assert cfg.gacha_rates == {"天": 3, "地": 12, "玄": 35, "黃": 50}
+    assert (cfg.gacha_xinde_half, cfg.gacha_xinde_cap) == (150, 300)
+    assert cfg.gacha_silver == {"黃": 10, "玄": 20, "地": 50, "天": 100}
+    assert cfg.test_yuanbao == 1000 and cfg.provisional == []
+
+
+GACHA_ERRORS = [
+    ("config.json", lambda d: d.update(gacha_rates={"天": 3, "地": 12, "玄": 35, "黃": 40}), "config.gacha_rates 要寫齊天地玄黃、不能是負的，加起來是 100"),
+    ("config.json", lambda d: d.update(gacha_rates={"天": 3, "地": 12, "玄": 85}), "config.gacha_rates 要寫齊天地玄黃"),
+    ("config.json", lambda d: d.update(gacha_rates={"天": 0, "地": 15, "玄": 35, "黃": 50}), "config.gacha_rates：天品的機率要大於 0（保底必得天品）"),
+    ("characters.json", lambda d: by_id(d, "hero")["sources"].remove("招賢"), "config.gacha_rates：地品的機率大於 0，卡池裡卻沒有地品"),
+    ("config.json", lambda d: d.update(gacha_ten_floor="敵"), "config.gacha_ten_floor：未知的品階 敵"),
+    ("config.json", lambda d: d.update(gacha_silver={"天": 100}), "config.gacha_silver 要寫齊天地玄黃"),
+    ("config.json", lambda d: d.update(gacha_silver={"黃": -1, "玄": 20, "地": 50, "天": 100}), "config.gacha_silver 的銀兩不能是負的"),
+    ("config.json", lambda d: d.update(duplicate_xinde={"黃": 10, "玄": -20, "地": 50, "天": 100}), "config.duplicate_xinde 的心得不能是負的"),
+    ("config.json", lambda d: d.update(gacha_pity=0), "config.gacha_single、gacha_ten、gacha_pity 至少要是 1"),
+    ("config.json", lambda d: d.update(test_yuanbao=0), "config.test_yuanbao 至少要是 1"),
+    ("config.json", lambda d: d.update(gacha_xinde_half=400), "config.gacha_xinde_half 要在 0 到 gacha_xinde_cap 之間"),
+    ("config.json", lambda d: d.update(provisional=["gacha_price"]), "config.provisional：未知的設定 gacha_price"),
+]
+
+
+@pytest.mark.parametrize("filename, edit, message", GACHA_ERRORS)
+def test_gacha_content_errors_name_the_culprit(tmp_path, filename, edit, message):
+    root = copy_fixture(tmp_path)
+    edit_json(root / filename, edit)
+    with pytest.raises(ContentError, match=message):
+        load_content(root)

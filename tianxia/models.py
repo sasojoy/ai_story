@@ -164,6 +164,11 @@ class CharacterDef(_Strict):
     trait: str | None = None  # 天品的特性：一門效果固定的心法，不佔武學欄、不能升級或散功
 
 
+def in_gacha_pool(ch: CharacterDef) -> bool:
+    """招賢的卡池：同伴品階、取得管道有「招賢」。tianxia/gacha.py 抽人與載入時的卡池檢查（content.py）都用這一個判斷。"""
+    return ch.tier in COMPANION_TIERS and "招賢" in ch.sources
+
+
 class SquadMember(_Strict):
     character: str
     level: int = Field(default=1, ge=1)
@@ -396,8 +401,24 @@ class Config(_Strict):
     surrender_chance: float = 0.25  # 招降：敵方隊伍沒寫 chance 時的機率
     fortune_day_min: int = 2  # 新立門戶福緣：第幾天起交遊必定先觸發
     fortune_day_max: int = 7  # 新立門戶福緣：第幾天結束還沒發生就直接送上門
-    # 劇情事件結識到已入門的人時改給的心得（暫定・另談，1c-3 招賢的重複人物也用這一張表）
+    # 劇情事件結識到已入門的人、招賢抽到重複的人時改給的心得（暫定・另談；招賢的另受付費心得護欄限制）
     duplicate_xinde: dict[str, int] = Field(default_factory=lambda: {"黃": 10, "玄": 20, "地": 50, "天": 100})
+    # ── 招賢（1c-3）：價格、重複換算與付費心得護欄是「暫定・另談」的數字（見 provisional），只是讓功能能跑 ──
+    gacha_single: int = 100  # 單抽要幾元寶（暫定・另談）
+    gacha_ten: int = 1000  # 十連要幾元寶（暫定・另談）
+    gacha_rates: dict[str, float] = Field(  # 各品階的機率（%，加起來 100），同品階的人平均分配
+        default_factory=lambda: {"天": 3, "地": 12, "玄": 35, "黃": 50}
+    )
+    gacha_pity: int = 40  # 保底：連續這麼多抽沒出天品，這一抽必得天品
+    gacha_ten_floor: str = "地"  # 十連至少一名這個品階以上（和天品保底分開算）
+    gacha_xinde_cap: int = 300  # 付費心得護欄：本季招賢換到的心得最多這麼多（暫定・另談）
+    gacha_xinde_half: int = 150  # 付費心得護欄：本季招賢心得超過這個數之後，重複只給一半（暫定・另談）
+    gacha_silver: dict[str, int] = Field(  # 付費心得護欄：本季招賢心得滿了之後，重複改給的銀兩（暫定・另談）
+        default_factory=lambda: {"黃": 10, "玄": 20, "地": 50, "天": 100}
+    )
+    test_yuanbao: int = 1000  # 設定分頁「測試：領取元寶」每按一次給多少元寶
+    # 標為「暫定・另談」的設定名稱：JSON 不能寫註解，寫在這裡；載入時檢查名稱存在，不影響任何數字
+    provisional: list[str] = Field(default_factory=list)
 
 
 class Content(_Strict):

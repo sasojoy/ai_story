@@ -8,7 +8,7 @@ from pydantic import ValidationError
 
 from .models import (
     COMPANION_TIERS, STATS, CharacterDef, Condition, Config, Content, Effect, Event, Location, MapLayout,
-    Scenario, Sect, SimRumor, Skill, Squad, Tutorial,
+    Scenario, Sect, SimRumor, Skill, Squad, Tutorial, in_gacha_pool,
 )
 
 # 同伴的品階規則（設計文件 1c §1.2）：統御範圍、本命品質（黃品沒有本命）、流派資質
@@ -193,6 +193,26 @@ def validate(c: Content) -> None:
     )
     known("config.apprentice_weights", cfg.apprentice_weights, ("黃", "玄"), "品階")
     need(set(cfg.duplicate_xinde) == set(COMPANION_TIERS), "config.duplicate_xinde 要寫齊天地玄黃")
+    need(min(cfg.duplicate_xinde.values(), default=0) >= 0, "config.duplicate_xinde 的心得不能是負的")
+    rates = cfg.gacha_rates
+    need(
+        set(rates) == set(COMPANION_TIERS) and min(rates.values(), default=0) >= 0 and abs(sum(rates.values()) - 100) < 1e-6,
+        "config.gacha_rates 要寫齊天地玄黃、不能是負的，加起來是 100（%）",
+    )
+    for tier in COMPANION_TIERS:
+        if rates.get(tier, 0) > 0:
+            need(
+                any(ch.tier == tier and in_gacha_pool(ch) for ch in c.characters.values()),
+                f"config.gacha_rates：{tier}品的機率大於 0，卡池裡卻沒有{tier}品（人物的 sources 要有「招賢」）",
+            )
+    need(rates.get(COMPANION_TIERS[0], 0) > 0, "config.gacha_rates：天品的機率要大於 0（保底必得天品）")
+    need(cfg.gacha_ten_floor in COMPANION_TIERS, f"config.gacha_ten_floor：未知的品階 {cfg.gacha_ten_floor}")
+    need(set(cfg.gacha_silver) == set(COMPANION_TIERS), "config.gacha_silver 要寫齊天地玄黃")
+    need(min(cfg.gacha_silver.values(), default=0) >= 0, "config.gacha_silver 的銀兩不能是負的")
+    need(min(cfg.gacha_single, cfg.gacha_ten, cfg.gacha_pity) >= 1, "config.gacha_single、gacha_ten、gacha_pity 至少要是 1")
+    need(cfg.test_yuanbao >= 1, "config.test_yuanbao 至少要是 1")
+    need(0 <= cfg.gacha_xinde_half <= cfg.gacha_xinde_cap, "config.gacha_xinde_half 要在 0 到 gacha_xinde_cap 之間")
+    known("config.provisional", cfg.provisional, Config.model_fields, "設定")
 
     for loc in c.locations.values():
         where = f"地點 {loc.id}"

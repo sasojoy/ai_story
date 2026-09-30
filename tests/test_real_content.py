@@ -566,3 +566,22 @@ def test_bot_builds_a_roster_within_the_cap():
     assert len(p.members) >= 9  # 季末目標 10～12 人（含你本人）
     assert p.fortune and any(c.characters[key].tier == "地" for key in p.members if key != "player")
     assert len(game.team_keys()) == 3 and roster.team_command(game.state, c, 0) <= game.command_cap()
+
+
+# ── 招賢（1c-3）──────────────────────────────────────────
+
+
+def test_real_gacha_pool_and_provisional_numbers():
+    """卡池：開局兩人與只能招降的人以外的 12 人；價格、重複換算與付費心得護欄標為暫定・另談。"""
+    from tianxia import gacha
+
+    c = load_content(CONTENT_DIR)
+    assert gacha.pool(c) == {
+        "天": ["yanguihong"],
+        "地": ["luchenzhou", "zhuxiaochan", "shiqing"],
+        "玄": ["luoshitou", "chengsuyi", "luoxingyun", "ruanqingxian"],
+        "黃": ["dusanjin", "aheng", "fangxiaozhou", "baixiaoman"],
+    }
+    assert sorted(c.config.provisional) == [
+        "duplicate_xinde", "gacha_silver", "gacha_single", "gacha_ten", "gacha_xinde_cap", "gacha_xinde_half",
+    ]

@@ -26,5 +26,15 @@
   "surrender_chance": 0.25,
   "fortune_day_min": 2,
   "fortune_day_max": 7,
-  "duplicate_xinde": {"黃": 10, "玄": 20, "地": 50, "天": 100}
+  "duplicate_xinde": {"黃": 10, "玄": 20, "地": 50, "天": 100},
+  "gacha_single": 100,
+  "gacha_ten": 1000,
+  "gacha_rates": {"天": 3, "地": 12, "玄": 35, "黃": 50},
+  "gacha_pity": 40,
+  "gacha_ten_floor": "地",
+  "gacha_xinde_cap": 300,
+  "gacha_xinde_half": 150,
+  "gacha_silver": {"黃": 10, "玄": 20, "地": 50, "天": 100},
+  "test_yuanbao": 1000,
+  "provisional": ["duplicate_xinde", "gacha_single", "gacha_ten", "gacha_xinde_cap", "gacha_xinde_half", "gacha_silver"]
 }

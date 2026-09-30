@@ -24,6 +24,15 @@ class Team(BaseModel):
     members: list[str] = Field(default_factory=list)  # 第一位是隊長；最多 TEAM_SIZE 人
 
 
+class Pull(BaseModel):
+    """招賢抽到的一位（招賢分頁「最近一次」的結果卡）。"""
+
+    character: str
+    new: bool  # True：新入門；False：重複
+    xinde: int = 0  # 重複換到的心得
+    silver: int = 0  # 本季招賢心得滿了之後，重複改給的銀兩
+
+
 class PlayerState(BaseModel):
     name: str
     location: str
@@ -44,6 +53,10 @@ class PlayerState(BaseModel):
     apprentice_day: int = 0  # 上次收徒是第幾天
     apprentice_count: int = 0  # 那一天已經收了幾次
     fortune: bool = False  # 本季的新立門戶福緣已經發生（或已經沒有人可送）
+    yuanbao: int = 0  # 元寶：測試用的付費貨幣，只用在招賢；跨季保留（見 Game.new_season）
+    gacha_pity: int = 0  # 連續幾抽沒出天品；跨季保留
+    gacha_xinde: int = 0  # 本季招賢換到的心得（付費心得護欄看它；劇情重複結識換到的心得不算）
+    gacha_last: list[Pull] = Field(default_factory=list)  # 最近一次招賢的結果，依抽到的順序
 
     @model_validator(mode="before")
     @classmethod
