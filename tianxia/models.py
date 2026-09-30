@@ -401,7 +401,7 @@ class Config(_Strict):
     surrender_chance: float = 0.25  # 招降：敵方隊伍沒寫 chance 時的機率
     fortune_day_min: int = 2  # 新立門戶福緣：第幾天起交遊必定先觸發
     fortune_day_max: int = 7  # 新立門戶福緣：第幾天結束還沒發生就直接送上門
-    # 劇情事件結識到已入門的人、招賢抽到重複的人時改給的心得（暫定・另談；招賢的另受付費心得護欄限制）
+    # 劇情事件結識到已入門的人、招賢抽到重複的人、福緣賀禮（地）時改給的心得（暫定・另談；招賢的另受付費心得護欄限制）
     duplicate_xinde: dict[str, int] = Field(default_factory=lambda: {"黃": 10, "玄": 20, "地": 50, "天": 100})
     # ── 招賢（1c-3）：價格、重複換算與付費心得護欄是「暫定・另談」的數字（見 provisional），只是讓功能能跑 ──
     gacha_single: int = 100  # 單抽要幾元寶（暫定・另談）

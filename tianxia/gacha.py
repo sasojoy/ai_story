@@ -177,7 +177,7 @@ def rules_text(state: GameState, content: Content) -> str:
         f"**保底**　連續 {cfg.gacha_pity} 抽沒出天品，第 {cfg.gacha_pity} 抽必得天品，抽到天品就重新算；"
         f"十連至少一名{cfg.gacha_ten_floor}品以上（和天品保底分開算）",
         f"**重複**　已入門的人化為心得（{_by_tier(cfg.duplicate_xinde)}）；本季招賢心得超過 {cfg.gacha_xinde_half} "
-        f"之後減半，滿 {cfg.gacha_xinde_cap} 之後改給銀兩（{_by_tier(cfg.gacha_silver)}）",
+        f"之後減半、最多補到 {cfg.gacha_xinde_cap}，滿了之後改給銀兩（{_by_tier(cfg.gacha_silver)}）",
         "**卡池**",
     ]
     members = state.player.members

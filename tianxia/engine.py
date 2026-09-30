@@ -10,7 +10,7 @@ from .events import choice_label, fortune_events, has_events_here, pick_event, v
 from .guide import note_action, quest_text, tutorial_intro
 from .journal import LOG_BREAK, Draft
 from .mapview import render_map, render_minimap
-from .models import Choice, Content, Effect, Event, Location, Squad
+from .models import COMPANION_TIERS, Choice, Content, Effect, Event, Location, Squad
 from .rules import apply_effect, change_trend, check_who, learn_skill, roll_check
 from .state import PLAYER, BattleRecord, GameState, JournalEntry, Member, Rumor, new_game_state
 from .world import check_thresholds, end_season, sim_tick
@@ -72,7 +72,11 @@ class Game:
             k: [sid if sid in p.skills else None for sid in slots][: team.FREE_SLOTS]
             for k, slots in p.loadouts.items() if k in p.members
         }
-        p.gacha_last = [pull for pull in p.gacha_last if pull.character in c.characters]
+        # 抽卡結果只留還在、而且仍是同伴品階的人（內容改版把某人改成敵人，門下頁就查不到他的品階樣式）。
+        p.gacha_last = [
+            pull for pull in p.gacha_last
+            if pull.character in c.characters and c.characters[pull.character].tier in COMPANION_TIERS
+        ]
         line_ids = [line.id for line in c.scenario.storylines]
         if s.world.storyline not in line_ids:
             s.world.storyline, s.world.act = line_ids[0], 0

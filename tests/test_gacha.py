@@ -7,7 +7,7 @@ import pytest
 from conftest import FixedRandom
 from tianxia import gacha, roster
 from tianxia.engine import Game
-from tianxia.models import CharacterDef, in_gacha_pool
+from tianxia.models import COMPANION_TIERS, CharacterDef, in_gacha_pool
 from tianxia.save import load_game, save_game
 from tianxia.state import Member, Pull, new_game_state
 
@@ -307,6 +307,15 @@ def test_stale_pull_results_are_dropped(content, game):
     assert Game(content, game.state).state.player.gacha_last == [Pull(character="pupil", new=False, xinde=10)]
 
 
+def test_pull_results_of_characters_no_longer_companions_are_dropped(content, game):
+    """內容改版把某人改成敵人（品階不再是同伴品階）：舊的抽卡結果丟掉，免得門下頁查不到品階的樣式而當機。"""
+    assert content.characters["thug"].tier not in COMPANION_TIERS
+    game.state.player.gacha_last = [Pull(character="thug", new=True), Pull(character="pupil", new=True)]
+    kept = Game(content, game.state).state.player.gacha_last
+    assert kept == [Pull(character="pupil", new=True)]
+    assert 'class="gc-name"' in gacha.cards_html(game.state, content)  # 剩下的照常畫得出來
+
+
 def test_save_roundtrip_keeps_the_gacha_state(tmp_path, game):
     game.state.player.yuanbao = 1000
     game.pull(10)
@@ -330,8 +339,8 @@ def test_rules_publish_rates_pity_duplicates_and_the_pool(state, content):
     assert text.startswith("**機率**　天品 3%　地品 12%　玄品 35%　黃品 50%（同品階的人平均分配）")
     assert "**保底**　連續 40 抽沒出天品，第 40 抽必得天品，抽到天品就重新算；十連至少一名地品以上（和天品保底分開算）" in text
     assert (
-        "**重複**　已入門的人化為心得（黃 10、玄 20、地 50、天 100）；本季招賢心得超過 150 之後減半，"
-        "滿 300 之後改給銀兩（黃 10、玄 20、地 50、天 100）"
+        "**重複**　已入門的人化為心得（黃 10、玄 20、地 50、天 100）；本季招賢心得超過 150 之後減半、"
+        "最多補到 300，滿了之後改給銀兩（黃 10、玄 20、地 50、天 100）"
     ) in text
     assert text.endswith(
         "**卡池**\n\n- 天品（每人 3%）：隱士\n- 地品（每人 12%）：俠女（已入門）\n- 玄品（每人 35%）：琴師\n- 黃品（每人 50%）：小六"
