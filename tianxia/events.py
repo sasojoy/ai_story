@@ -6,6 +6,7 @@ import random
 from .models import Choice, Content, Event, Location
 from .rules import check_condition, check_who
 from .state import GameState
+from .world_state import WorldStateStore
 
 
 def event_matches_location(event: Event, location: Location) -> bool:
@@ -53,8 +54,8 @@ def visible_choices(event: Event, state: GameState) -> list[tuple[int, Choice]]:
     return [(i, c) for i, c in enumerate(event.choices) if check_condition(c.condition, state)]
 
 
-def choice_label(choice: Choice, state: GameState, content: Content) -> str:
+def choice_label(choice: Choice, state: GameState, content: Content, world: WorldStateStore) -> str:
     """有檢定的選項寫出由誰出手（不寫成功率）；其餘照原文。"""
     if choice.check:
-        return f"{choice.text}（{check_who(choice.check, state, content)}）"
+        return f"{choice.text}（{check_who(choice.check, state, content, world)}）"
     return choice.text

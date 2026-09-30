@@ -8,7 +8,7 @@ def test_roundtrip(tmp_path, game):
     game.choose("act:socialize")
     game.choose("choice:0")
     game.state.world.flags.add("blocked")
-    game.state.player.members["mate"].neili = 12.5
+    game.state.player.member.neili = 12.5
     path = tmp_path / "saves" / "沈浪.json"
     save_game(game.state, path)
     assert load_game(path) == game.state
@@ -16,7 +16,7 @@ def test_roundtrip(tmp_path, game):
 
 def test_roundtrip_keeps_battle_records(tmp_path, game):
     game.choose("move:lake")
-    game.choose("act:train")
+    game._squad_encounter("thug")  # 直接觸發遭遇，不依賴 explore 的隨機事件/遭遇機率
     path = tmp_path / "saves" / "沈浪.json"
     save_game(game.state, path)
     loaded = load_game(path)
@@ -36,14 +36,14 @@ def test_1a_save_without_battle_records_still_loads(tmp_path, content, game):
     assert "last_report" not in state.model_dump()
     old = Game(content, state)
     old.choose("move:lake")
-    old.choose("act:train")
+    old._squad_encounter("thug")
     assert [r.id for r in old.state.battles] == [1]
 
 
 def test_pre_fix_battle_record_without_changes_field_still_loads(tmp_path, game):
     """在「結果／獲得與損失」拆分上線前存的戰報，BattleRecord 還沒有 changes 欄位；讀檔不能炸。"""
     game.choose("move:lake")
-    game.choose("act:train")
+    game._squad_encounter("thug")
     dump = game.state.model_dump(mode="json")
     del dump["battles"][0]["changes"]  # 模擬舊版存檔
     path = tmp_path / "old_battle.json"
@@ -62,15 +62,13 @@ def test_stale_references_are_dropped(content, game):
     s = game.state
     s.pending_event = "removed_event"
     s.player.location = "removed_place"
-    s.player.skills["removed_skill"] = 3
-    s.player.loadouts["player"][1] = "removed_skill"
-    s.player.teams[0].members.append("ghost")
+    s.player.member.wugong_id = "removed_skill"
+    s.player.team.append("ghost")
     fresh = Game(content, s)
     assert fresh.state.pending_event is None
     assert fresh.state.player.location == "town"
-    assert fresh.state.player.loadouts["player"][1] is None
-    assert "removed_skill" not in fresh.state.player.skills
-    assert [t.members for t in fresh.state.player.teams] == [["player", "mate"], [], [], []]
+    assert fresh.state.player.member.wugong_id is None
+    assert "ghost" not in fresh.state.player.team
 
 
 def test_old_rumors_without_a_location_still_load(tmp_path, game):

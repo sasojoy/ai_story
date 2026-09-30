@@ -1,4 +1,4 @@
 [
-  {"id": "thug", "name": "水寇小隊", "members": [{"character": "thug", "level": 1}], "reward_silver": 5, "reward_xinde": 10, "exp": 20},
-  {"id": "boss", "name": "翻江龍", "members": [{"character": "boss", "level": 10}], "surrender": {"character": "captain"}}
+  {"id": "thug", "name": "水寇小隊", "difficulty": 5, "attribute": "剛", "reward_silver": 5, "reward_xinde": 10, "exp": 20},
+  {"id": "boss", "name": "翻江龍", "difficulty": 200, "attribute": "剛"}
 ]

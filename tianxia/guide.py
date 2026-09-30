@@ -5,6 +5,7 @@ from .models import Content, TutorialStep
 from .rules import apply_effect, check_condition
 from .state import GameState
 from .world import current_act, current_storyline
+from .world_state import WorldStateStore
 
 
 def tutorial_active(state: GameState, content: Content) -> bool:
@@ -25,7 +26,7 @@ def _step_done(state: GameState, content: Content, step: TutorialStep, action: s
     return check_condition(goal.condition, state)
 
 
-def note_action(state: GameState, content: Content, action: str) -> list[str]:
+def note_action(state: GameState, content: Content, world: WorldStateStore, action: str) -> list[str]:
     """玩家做完一個行動後呼叫：符合目前引導步驟就推進一步並發獎勵，接著立刻檢查
     下一步是否也已經達成（例如旗標早就成立），一路完成到不再符合為止。"""
     t = content.tutorial
@@ -36,7 +37,7 @@ def note_action(state: GameState, content: Content, action: str) -> list[str]:
         step = t.steps[state.player.tutorial_step]
         state.player.tutorial_step += 1
         msgs.append("✔ 引導完成")
-        msgs += apply_effect(step.reward, state, content)
+        msgs += apply_effect(step.reward, state, content, world)
     if not msgs:
         return []
     if tutorial_active(state, content):

@@ -19,6 +19,15 @@ class FixedRandom(random.Random):
         return self.value
 
 
+@pytest.fixture(autouse=True)
+def isolated_world_state(tmp_path, monkeypatch):
+    """每個測試都用自己的暫存共用世界狀態檔，不會讀寫到真正的 saves/world/state.json，
+    測試之間也不會互相汙染（例如武學命名去重、同伴招募狀態）。"""
+    from tianxia import world_state
+
+    monkeypatch.setattr(world_state, "DEFAULT_PATH", tmp_path / "world" / "state.json")
+
+
 @pytest.fixture
 def content():
     return load_content(FIXTURE)
@@ -29,6 +38,13 @@ def state(content):
     from tianxia.state import new_game_state
 
     return new_game_state(content, "沈浪")
+
+
+@pytest.fixture
+def world():
+    from tianxia.world_state import WorldStateStore
+
+    return WorldStateStore()
 
 
 @pytest.fixture

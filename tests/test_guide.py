@@ -5,30 +5,30 @@ def test_intro_is_first_step(content):
     assert tutorial_intro(content) == ["【說書人】先探索一下。"]
 
 
-def test_matching_action_completes_step_and_rewards(state, content):
-    msgs = note_action(state, content, "explore")
+def test_matching_action_completes_step_and_rewards(state, content, world):
+    msgs = note_action(state, content, world, "explore")
     assert state.player.tutorial_step == 1
     assert state.player.stats["silver"] == 55
     assert msgs[0] == "✔ 引導完成"
     assert msgs[-1] == "【說書人】去湖邊。"
 
 
-def test_wrong_action_or_place_does_nothing(state, content):
-    assert note_action(state, content, "train") == []
-    note_action(state, content, "explore")
-    assert note_action(state, content, "move") == []  # 還在小鎮，不是湖邊
+def test_wrong_action_or_place_does_nothing(state, content, world):
+    assert note_action(state, content, world, "train") == []
+    note_action(state, content, world, "explore")
+    assert note_action(state, content, world, "move") == []  # 還在小鎮，不是湖邊
     state.player.location = "lake"
-    note_action(state, content, "move")
+    note_action(state, content, world, "move")
     assert state.player.tutorial_step == 2
 
 
-def test_outro_after_last_step(state, content):
+def test_outro_after_last_step(state, content, world):
     state.player.tutorial_step = 2
     state.player.flags.add("看過地圖")  # s3 現在是地圖旗標條件，模擬 Game.view_map() 先設旗標
-    msgs = note_action(state, content, "view_map")
+    msgs = note_action(state, content, world, "view_map")
     assert not tutorial_active(state, content)
     assert msgs[-1] == "【說書人】去闖吧。"
-    assert note_action(state, content, "view_map") == []
+    assert note_action(state, content, world, "view_map") == []
 
 
 def test_quest_text_shows_storyline_endings_and_milestones(state, content):
@@ -67,23 +67,23 @@ def test_quest_text_after_season_end(state, content):
     assert quest_text(state, content).startswith("### 賽季落幕：風雨飄搖")
 
 
-def test_flag_set_early_completes_later_step_in_same_call(state, content):
+def test_flag_set_early_completes_later_step_in_same_call(state, content, world):
     """s3（看地圖）的旗標若提早成立，完成 s2 的當下應該連帶完成 s3。"""
     state.player.flags.add("看過地圖")
-    note_action(state, content, "explore")
+    note_action(state, content, world, "explore")
     assert state.player.tutorial_step == 1
     state.player.location = "lake"
-    msgs = note_action(state, content, "move")
+    msgs = note_action(state, content, world, "move")
     assert state.player.tutorial_step == 3
     assert msgs.count("✔ 引導完成") == 2
     assert msgs[-1] == "【說書人】去闖吧。"
 
 
-def test_location_only_step_completes_regardless_of_action(state, content):
+def test_location_only_step_completes_regardless_of_action(state, content, world):
     """把 s2 暫時改成純地點條件：人已經在湖邊時，任何行動都該完成它。"""
     content.tutorial.steps[1].done_when.action = None
     state.player.tutorial_step = 1
     state.player.location = "lake"
-    msgs = note_action(state, content, "explore")
+    msgs = note_action(state, content, world, "explore")
     assert state.player.tutorial_step == 2
     assert msgs[0] == "✔ 引導完成"

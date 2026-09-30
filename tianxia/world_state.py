@@ -1,11 +1,15 @@
-"""共用世界狀態：獨立於各玩家存檔之外、所有玩家共讀共寫的一份資料（設計文件四.3／六.2）。
+"""共用世界狀態：獨立於各玩家存檔之外、所有玩家共讀共寫的一份資料（設計文件四.3／四.4／六.2）。
 
-目前存兩件事：
+存四件事：
 - **自創武學命名登記**：武學名稱全服不能重名，這裡是唯一的「這個名字有沒有被用過」的
   真相來源（`martial_arts.generate_from_name()` 本身是純函式，不會、也不該自己記狀態）。
-- **同伴性情漂移**：歷史人物的「當下性情」是全服玩家共同形塑的，不是存在單一玩家存檔裡
-  （見設計文件四.3）。這裡只存原始的 tag 累積計數；把計數轉成一句話性情描述的語意判斷
-  留給 `companion_agent.py`（還沒實作），這個模組只負責資料的共用讀寫與鎖。
+- **同伴性情漂移**：歷史人物的「當下性情」是全服玩家共同形塑的，不是存在單一玩家存檔裡。
+  這裡只存原始的 tag 累積計數；把計數轉成一句話性情描述的語意判斷留給
+  `companion_agent.py`（還沒實作），這個模組只負責資料的共用讀寫與鎖。
+- **同伴進度與招募狀態**：設計文件四.4 定案「每位歷史人物全服唯一」之後，同伴的等級／
+  武學／熟練度是這個人物本身的屬性，不是某個玩家存檔裡的副本——被誰招走了，屬性也還是
+  同一份，換人招募不會歸零。`PlayerState`（見 state.py）只留「這個玩家對這位人物的好感度」，
+  跟他有沒有被招募、等級多高完全無關（好感度不管你招不招得到他都在累積，見設計文件七.1）。
 
 因為 tianxia 是一個 Gradio process 服務所有連進來的玩家（見設計文件八.1），不需要真正的
 client-server 架構，用檔案鎖保護一份共用 JSON 檔即可。鎖用 mkdir（在 POSIX 跟 Windows
@@ -14,7 +18,6 @@ client-server 架構，用檔案鎖保護一份共用 JSON 檔即可。鎖用 mk
 from __future__ import annotations
 
 import contextlib
-import json
 import time
 from pathlib import Path
 
@@ -30,10 +33,24 @@ LOCK_STALE_AFTER = 30.0  # 鎖目錄存在超過這麼久視為前一個行程�
 LOCK_POLL_INTERVAL = 0.05
 
 
-class WorldState(BaseModel):
+class CompanionProgress(BaseModel):
+    """一位歷史人物（可招募的 7 位）目前的等級/武學/招募狀態，全服共用一份。"""
+
+    level: int = 1
+    exp: int = 0
+    neili: float | None = None  # 氣血，None＝滿
+    neigong_id: str | None = None
+    neigong_level: int = 1
+    wugong_id: str | None = None
+    wugong_level: int = 1
+    owner: str | None = None  # 目前招募他的玩家名號；None＝自由之身，誰都能嘗試招募
+
+
+class SharedWorldState(BaseModel):
     created_skills: dict[str, MartialArt] = Field(default_factory=dict)  # 鍵是武學名稱
     companion_tag_counts: dict[str, dict[str, int]] = Field(default_factory=dict)  # 人物 id -> {tag: 次數}
     companion_drift_note: dict[str, str] = Field(default_factory=dict)  # 人物 id -> 目前漂移後的一句話性情
+    companions: dict[str, CompanionProgress] = Field(default_factory=dict)  # 人物 id -> 進度/招募狀態
 
 
 @contextlib.contextmanager
@@ -70,18 +87,18 @@ class WorldStateStore:
         self.path = Path(path) if path else DEFAULT_PATH
         self.lock_dir = self.path.with_suffix(".lock")
 
-    def read(self) -> WorldState:
+    def read(self) -> SharedWorldState:
         if not self.path.exists():
-            return WorldState()
-        return WorldState.model_validate_json(self.path.read_text(encoding="utf-8"))
+            return SharedWorldState()
+        return SharedWorldState.model_validate_json(self.path.read_text(encoding="utf-8"))
 
-    def _write(self, state: WorldState) -> None:
+    def _write(self, state: SharedWorldState) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         tmp = self.path.with_suffix(".tmp")
         tmp.write_text(state.model_dump_json(indent=1), encoding="utf-8")
         tmp.replace(self.path)
 
-    def mutate(self, fn) -> WorldState:
+    def mutate(self, fn) -> SharedWorldState:
         """在鎖保護下讀取→套用 fn(state)→寫回，回傳套用後的狀態。fn 直接原地修改 state。"""
         with _locked(self.lock_dir):
             state = self.read()
@@ -99,7 +116,7 @@ class WorldStateStore:
         不會有兩個玩家同時取到同一個名字都成功的競態）。"""
         claimed = {"ok": False}
 
-        def _apply(state: WorldState) -> None:
+        def _apply(state: SharedWorldState) -> None:
             if art.name.strip() in state.created_skills:
                 return
             state.created_skills[art.name.strip()] = art
@@ -112,7 +129,7 @@ class WorldStateStore:
 
     def record_companion_tag(self, companion_id: str, tag: str) -> None:
         """累積一次交遊 tag；轉成漂移後的性情描述是 companion_agent.py 的事，這裡只記數。"""
-        def _apply(state: WorldState) -> None:
+        def _apply(state: SharedWorldState) -> None:
             counts = state.companion_tag_counts.setdefault(companion_id, {})
             counts[tag] = counts.get(tag, 0) + 1
 
@@ -122,7 +139,45 @@ class WorldStateStore:
         return self.read().companion_drift_note.get(companion_id, "")
 
     def set_companion_drift_note(self, companion_id: str, note: str) -> None:
-        def _apply(state: WorldState) -> None:
+        def _apply(state: SharedWorldState) -> None:
             state.companion_drift_note[companion_id] = note
 
         self.mutate(_apply)
+
+    # ── 同伴進度與招募 ────────────────────────────────────
+
+    def get_companion(self, companion_id: str) -> CompanionProgress:
+        """讀目前進度；還沒有人動過這位人物時回傳一份預設值（不會寫回檔案，純讀取）。"""
+        return self.read().companions.get(companion_id, CompanionProgress())
+
+    def try_recruit(self, companion_id: str, player_name: str) -> bool:
+        """嘗試把 owner 設成 player_name；已經有主的話失敗（設計文件四.4：唯一、可搶）。
+        判定「招募難不難、會不會惹惱對方要求決鬥」是呼叫端（engine.py）的事，這裡只負責
+        「搶到了沒」這個最終的原子操作，避免兩個玩家同時搶到同一個人。"""
+        result = {"ok": False}
+
+        def _apply(state: SharedWorldState) -> None:
+            progress = state.companions.setdefault(companion_id, CompanionProgress())
+            if progress.owner is not None:
+                return
+            progress.owner = player_name
+            result["ok"] = True
+
+        self.mutate(_apply)
+        return result["ok"]
+
+    def release_companion(self, companion_id: str) -> None:
+        """放走同伴（離隊/戰敗失去等）：只清 owner，等級/武學等進度原封不動保留。"""
+        def _apply(state: SharedWorldState) -> None:
+            if companion_id in state.companions:
+                state.companions[companion_id].owner = None
+
+        self.mutate(_apply)
+
+    def update_companion(self, companion_id: str, fn) -> CompanionProgress:
+        """在鎖保護下修改某位同伴的進度（升級、配置武學等），fn 直接原地修改 CompanionProgress。"""
+        def _apply(state: SharedWorldState) -> None:
+            progress = state.companions.setdefault(companion_id, CompanionProgress())
+            fn(progress)
+
+        return self.mutate(_apply).companions[companion_id]

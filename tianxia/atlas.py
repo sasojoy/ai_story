@@ -34,8 +34,7 @@ Odds = Callable[[str], str]  # 敵方隊伍 id → 勝算（Game.odds）
 
 def vision_range(state: GameState, content: Content) -> int:
     cfg, p = content.config, state.player
-    trained = any(p.skills.get(skill_id, 0) >= cfg.vision_skill_level for skill_id in cfg.vision_skills)
-    bonus = p.stats.get("fame", 0) >= cfg.vision_fame or trained
+    bonus = p.stats.get("fame", 0) >= cfg.vision_fame
     return cfg.vision_base + (1 if bonus else 0)
 
 

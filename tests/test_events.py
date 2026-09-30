@@ -50,9 +50,11 @@ def test_has_events_here(content):
     assert not has_events_here(content, content.locations["cave"], "socialize")
 
 
-def test_choice_label_shows_who_acts_not_the_success_rate(state, content):
+def test_choice_label_shows_who_acts_not_the_success_rate(state, content, world):
     drunk = content.events["drunk"]
-    assert choice_label(drunk.choices[0], state, content) == "逼問（韓鐵出手）"  # 隊伍檢定：臂力最高的韓鐵
-    assert choice_label(drunk.choices[1], state, content) == "摸走鐵牌"
+    assert choice_label(drunk.choices[0], state, content, world) == "逼問（本人出手）"  # 空隊伍時只有本人
+    state.player.team.append("mate")  # 韓鐵臂力比本人高
+    assert choice_label(drunk.choices[0], state, content, world) == "逼問（韓鐵出手）"
+    assert choice_label(drunk.choices[1], state, content, world) == "摸走鐵牌"
     insight = content.events["insight"]
-    assert choice_label(insight.choices[0], state, content) == "運氣衝關（本人）"  # 本人檢定
+    assert choice_label(insight.choices[0], state, content, world) == "運氣衝關（本人）"  # 本人檢定

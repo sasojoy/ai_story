@@ -1,19 +1,25 @@
-"""遊戲門面：介面層唯一需要呼叫的類別。負責行動、選項、時間流逝與畫面文字。"""
+"""遊戲門面：介面層唯一需要呼叫的類別。負責行動、選項、時間流逝與畫面文字。
+
+sanguo-companions 合併大幅重寫：拿掉 battle.py 的 3v3 全自動戰鬥、多隊派遣、招賢抽卡、
+收徒系統，改成單次判定遭遇（encounter.py）、單一隊伍（最多 4 位同伴）、唯一同伴的
+招募（roster.py）、練功兩種模式（team.py：自創功法／鍛鍊）。
+"""
 from __future__ import annotations
 
 import random
 
 from pydantic import BaseModel
 
-from . import atlas, battlelog, gacha, journal, roster, skillview, team
-from .events import choice_label, fortune_events, has_events_here, pick_event, visible_choices
+from . import atlas, battlelog, journal, roster, skillview, team
+from .events import choice_label, has_events_here, pick_event, visible_choices
 from .guide import note_action, quest_text, tutorial_intro
 from .journal import LOG_BREAK, Draft
 from .mapview import render_map, render_minimap
-from .models import COMPANION_TIERS, Choice, Content, Effect, Event, Location, Squad
-from .rules import apply_effect, change_trend, check_who, learn_skill, roll_check
-from .state import PLAYER, BattleRecord, GameState, JournalEntry, Member, Rumor, new_game_state
+from .models import Choice, Content, Effect, Event, Location, Squad
+from .rules import apply_effect, change_trend, check_who, roll_check
+from .state import GameState, JournalEntry, Rumor, new_game_state
 from .world import check_thresholds, end_season, sim_tick
+from .world_state import WorldStateStore
 
 HOUR = 3600
 DAY = 86400
@@ -26,29 +32,25 @@ class Option(BaseModel):
 
 
 class Game:
-    FREE_SLOTS = team.FREE_SLOTS
-    EMPTY_CHOICE = roster.EMPTY_CHOICE  # 門下頁「換人」選單裡「（空）」的值
     MAP_LAYERS = atlas.LAYERS  # 大地圖的圖層：id → 名稱
-    PULL_SIZES = (gacha.SINGLE, gacha.TEN)  # 招賢：單抽、十連
 
-    def __init__(self, content: Content, state: GameState, rng: random.Random | None = None):
+    def __init__(
+        self, content: Content, state: GameState, rng: random.Random | None = None,
+        world: WorldStateStore | None = None,
+    ):
         self.content = content
         self.state = state
         self.rng = rng or random.Random()
-        self._odds: dict[str, str] = {}  # 勝算快取，見 team.estimate
+        self.world = world or WorldStateStore()
         self._draft: Draft | None = None  # choose() 進行中那次行動的江湖紀錄草稿
         self._drop_stale_references()
 
     @classmethod
-    def new(cls, content: Content, name: str, rng: random.Random | None = None) -> Game:
-        game = cls(content, new_game_state(content, name), rng)
-        cfg, p = content.config, game.state.player
-        for skill_id in cfg.starter_skills:
-            learn_skill(game.state, content, skill_id)
-        if cfg.player_innate:
-            learn_skill(game.state, content, cfg.player_innate)
-        free = [s for s in cfg.starter_skills if s != cfg.player_innate]
-        p.loadouts[PLAYER] = (free + [None] * team.FREE_SLOTS)[: team.FREE_SLOTS]
+    def new(
+        cls, content: Content, name: str, rng: random.Random | None = None, world: WorldStateStore | None = None,
+    ) -> Game:
+        game = cls(content, new_game_state(content, name), rng, world)
+        p = game.state.player
         p.visited.add(p.location)
         game._log(
             [f"══ {content.scenario.name} ══", content.scenario.intro, game.location_text()]
@@ -65,41 +67,31 @@ class Game:
             s.pending_event = None
         if p.location not in c.locations:
             p.location = c.scenario.start_location
-        p.skills = {k: v for k, v in p.skills.items() if k in c.skills}
-        p.members = {k: m for k, m in p.members.items() if k == PLAYER or k in c.characters}
-        p.members.setdefault(PLAYER, Member())
-        p.loadouts = {
-            k: [sid if sid in p.skills else None for sid in slots][: team.FREE_SLOTS]
-            for k, slots in p.loadouts.items() if k in p.members
-        }
-        # 抽卡結果只留還在、而且仍是同伴品階的人（內容改版把某人改成敵人，門下頁就查不到他的品階樣式）。
-        p.gacha_last = [
-            pull for pull in p.gacha_last
-            if pull.character in c.characters and c.characters[pull.character].tier in COMPANION_TIERS
-        ]
+        p.team = [k for k in p.team if k in c.characters][: team.MAX_TEAM_COMPANIONS]
+        if p.member.neigong_id and p.member.neigong_id not in c.skills and not self.world.is_skill_name_taken(p.member.neigong_id):
+            p.member.neigong_id = None
+        if p.member.wugong_id and p.member.wugong_id not in c.skills and not self.world.is_skill_name_taken(p.member.wugong_id):
+            p.member.wugong_id = None
         line_ids = [line.id for line in c.scenario.storylines]
         if s.world.storyline not in line_ids:
             s.world.storyline, s.world.act = line_ids[0], 0
         acts = next(line for line in c.scenario.storylines if line.id == s.world.storyline).acts
         s.world.act = min(s.world.act, len(acts) - 1)
-        s.world.act_reached = max(s.world.act_reached, s.world.act)  # 1c 以前的存檔沒有這個欄位
-        roster.normalize(s, c)
+        s.world.act_reached = max(s.world.act_reached, s.world.act)
         if "tutorial_step" not in p.model_fields_set:
-            # 舊存檔在新手引導功能上線前就存在，沒有這個欄位；視為引導已完成，不強塞新手引導。
             p.tutorial_step = len(c.tutorial.steps)
         p.tutorial_step = min(p.tutorial_step, len(c.tutorial.steps))
         p.visited = {loc_id for loc_id in p.visited if loc_id in c.locations}
         p.visited.add(p.location)
         for rumor in s.world.rumors:
             if rumor.location is not None and rumor.location not in c.locations:
-                rumor.location = None  # 傳聞的發生地已從內容裡刪掉：傳聞留著，只是不再標在地圖上
+                rumor.location = None
         for flag in s.world.flags:
             if flag not in s.world.flag_times:
                 s.world.flag_times[flag] = s.world.time
         if battlelog.find(s, s.battle_card) is None:
             s.battle_card = None
         if not s.journal and s.log:
-            # 江湖紀錄上線前的存檔只有原始訊息：轉一次成簡單的紀錄，之後照新的方式寫。
             s.journal = journal.from_legacy_log(s.log)
 
     # ── 時間 ──────────────────────────────────────────────
@@ -114,8 +106,6 @@ class Game:
         return self.advance(elapsed)
 
     def advance(self, seconds: float) -> list[str]:
-        """時間流逝。平常不寫江湖紀錄；發生江湖大事或主線變化時寫一則「江湖大事」（連續的併成一則），
-        閉關時間到了寫一則「出關」（見 _finish_seclusion）。"""
         msgs: list[str] = []
         remaining = seconds
         while remaining > 0 and not self.state.world.ended:
@@ -133,10 +123,12 @@ class Game:
         p.stamina = min(cfg.stamina_max, p.stamina + seconds / cfg.stamina_regen_seconds)
         rate = seconds / (cfg.neili_regen_hours * HOUR)
         if p.busy_until is not None:
-            rate *= 2  # 閉關時內力回復加倍
+            rate *= 2
         if w.time <= cfg.newbie_days * DAY:
-            rate *= 2  # 新手期加倍
-        team.regen_neili(self.state, self.content, rate)
+            rate *= 2
+        team.regen_neili(self.content, p.member, rate)
+        for cid in p.team:
+            self.world.update_companion(cid, lambda progress: team.regen_neili(self.content, progress, rate))
         msgs: list[str] = []
         if p.busy_until is not None and w.time >= p.busy_until:
             msgs += self._finish_seclusion(p.busy_until)
@@ -154,7 +146,6 @@ class Game:
     # ── 選項 ──────────────────────────────────────────────
 
     def options(self, odds: bool = True) -> list[Option]:
-        """目前可選的行動。odds=False 時不附勝算、也就不必模擬（choose() 與機器人只看 id）。"""
         s, c = self.state, self.content
         if s.world.ended:
             return [Option(id="season:new", label="開啟新的賽季")]
@@ -165,18 +156,14 @@ class Game:
             return [Option(id="act:break", label="提前出關")]
         loc = c.locations[s.player.location]
         cost = c.config.action_cost
-        opts = []
-        if loc.enemies:
-            opts.append(self._cost_option("act:train", "歷練", cost["train"], self._train_note(loc) if odds else ""))
+        opts = [self._cost_option("act:practice", "練功", cost.get("train", 10))]
         opts.append(self._cost_option("act:explore", "探索", cost["explore"]))
         if has_events_here(c, loc, "socialize"):
             opts.append(self._cost_option("act:socialize", "交遊", cost["socialize"]))
-        block = roster.apprentice_block(s, c)
-        if block == "":
+        target = self._recruit_target()
+        if target is not None:
             cfg = c.config
-            opts.append(self._cost_option("act:apprentice", "收徒", cfg.apprentice_stamina, f"銀兩 {cfg.apprentice_silver}"))
-        elif block is not None:
-            opts.append(Option(id="act:apprentice", label=block, enabled=False))
+            opts.append(self._cost_option("act:recruit", f"招募【{c.characters[target].name}】", cfg.recruit_stamina))
         for dest_id in loc.connections:
             dest = c.locations[dest_id]
             if dest.unlock_flag and dest.unlock_flag not in s.world.flags:
@@ -184,38 +171,38 @@ class Game:
             opts.append(self._cost_option(f"move:{dest_id}", f"前往 {dest.name}", dest.move_cost))
         return opts
 
+    def _recruit_target(self) -> str | None:
+        """這個地點目前能嘗試招募的人（自由之身、recruit_at 是這裡）；沒有就是 None。"""
+        s, c = self.state, self.content
+        for cid, ch in c.characters.items():
+            if ch.kind == "recruitable" and ch.recruit_at == s.player.location and roster.owned_by(self.world, cid) is None:
+                return cid
+        return None
+
     def _cost_option(self, option_id: str, label: str, cost: int, note: str = "") -> Option:
         extra = f"・{note}" if note else ""
         return Option(
             id=option_id, label=f"{label}（體力 {cost}{extra}）", enabled=self.state.player.stamina >= cost
         )
 
-    def _train_note(self, loc: Location) -> str:
-        """歷練按鈕上的戰前情報，例如「可能遇到：地痞無賴 穩勝、劫道山賊 穩勝」。"""
-        foes = [f"{self.content.squads[sid].name} {self.odds(sid)}" for sid in dict.fromkeys(loc.enemies)]
-        return "可能遇到：" + "、".join(foes)
-
     def _choice_label(self, choice: Choice, odds: bool) -> str:
-        """動手的選項寫出對手與勝算，例如「拔劍闖進去（對手：太湖水寇・有把握）」；其餘見 choice_label。"""
         if choice.combat and odds:
             squad = self.content.squads[choice.combat]
             return f"{choice.text}（對手：{squad.name}・{self.odds(squad.id)}）"
-        return choice_label(choice, self.state, self.content)
+        return choice_label(choice, self.state, self.content, self.world)
 
     def odds(self, squad_id: str) -> str:
-        """本隊對上這支敵方隊伍的勝算：穩勝／有把握／五五波／凶險／必敗。"""
-        return team.estimate(self.state, self.content, squad_id, self._odds)
+        return team.estimate(self.state, self.content, self.world, squad_id)
 
     def choose(self, option_id: str) -> list[str]:
         option = {o.id: o for o in self.options(odds=False)}.get(option_id)
         if option is None or not option.enabled:
             return self._log(["（此刻無法這麼做。）"])
-        self.state.battle_card = None  # 上一場的戰鬥卡片只留到下一次行動
+        self.state.battle_card = None
         kind, _, arg = option_id.partition(":")
-        if kind == "season":  # 新賽季的開場紀錄由 Game.new 寫好
+        if kind == "season":
             return self._log(self.new_season() + check_thresholds(self.state, self.content))
         self._draft = Draft(self._action_title(kind, arg))
-        before = set(self.state.player.members)
         try:
             if kind == "act":
                 msgs = self._act(arg)
@@ -224,25 +211,16 @@ class Game:
             else:
                 msgs = self._choose(int(arg))
             if kind == "act" and arg != "break":
-                msgs += note_action(self.state, self.content, arg)
+                msgs += note_action(self.state, self.content, self.world, arg)
             elif kind == "move":
-                msgs += note_action(self.state, self.content, "move")
+                msgs += note_action(self.state, self.content, self.world, "move")
             msgs += check_thresholds(self.state, self.content)
-            self._tag_joined(before)
             journal.add_entry(self.state, self._draft.entry(self.state.world.time, msgs))
         finally:
             self._draft = None
         return self._log(msgs)
 
-    def _tag_joined(self, before: set[str]) -> None:
-        """這次行動有人入門（收徒、結識、招降），而紀錄還沒有結果標記時，標上「地品・入門」。"""
-        joined = [key for key in self.state.player.members if key not in before]
-        if joined and self._draft is not None and not self._draft.tag:
-            self._draft.tag = roster.joined_tag(self.content, joined[0])
-
     def _action_title(self, kind: str, arg: str) -> str:
-        """這次行動在江湖紀錄裡的標題：「前往 揚州城」「探索揚州城」「交遊・揚州城」「歷練・揚州城郊」、
-        「收徒・揚州城」、「酒樓鬥毆・上前勸架」（事件標題・選項）或「提前出關」。"""
         s, c = self.state, self.content
         if kind == "move":
             return f"前往 {c.locations[arg].name}"
@@ -250,21 +228,21 @@ class Game:
             event = c.events[s.pending_event]
             return f"{event.title}・{event.choices[int(arg)].text}"
         here = c.locations[s.player.location].name
-        titles = {"explore": f"探索{here}", "socialize": f"交遊・{here}", "train": f"歷練・{here}", "apprentice": f"收徒・{here}"}
+        titles = {
+            "explore": f"探索{here}", "socialize": f"交遊・{here}", "practice": f"練功・{here}",
+            "recruit": f"招募・{here}",
+        }
         return titles.get(arg, "提前出關")
 
     def _hide(self, msg: str) -> None:
-        """這則訊息不寫進江湖紀錄（場景已經顯示，或已經寫在標題裡）。"""
         if self._draft is not None:
             self._draft.hide(msg)
 
     def _outcome(self, text: str, msg: str) -> None:
-        """這則訊息是這次行動的結果，在江湖紀錄裡寫成 text（見 journal.Draft.outcome）。"""
         if self._draft is not None:
             self._draft.outcome(text, msg)
 
     def _write(self, title: str, msgs: list[str], tag: str = "") -> None:
-        """不經過 choose() 的行動（開場、閉關、系統訊息……）直接寫一則江湖紀錄。"""
         journal.add_entry(self.state, Draft(title, tag).entry(self.state.world.time, msgs))
 
     # ── 行動 ──────────────────────────────────────────────
@@ -273,76 +251,83 @@ class Game:
         cost = self.content.config.action_cost
         if what == "break":
             return self._finish_seclusion(self.state.world.time)
-        if what == "apprentice":
-            return roster.apprentice(self.state, self.content, self.rng)
+        if what == "recruit":
+            return self._recruit()
+        if what == "practice":
+            return ["（請在「門下」頁選擇自創功法或鍛鍊。）"]
         self.state.player.stamina -= cost[what]
-        if what == "train":
-            return self._train()
         if what == "explore":
             return self._encounter("explore", "你四處走走，一無所獲。")
         if roster.fortune_due(self.state, self.content):
-            events = fortune_events(self.state, self.content)
-            if events:  # 新立門戶福緣：第 fortune_day_min 天起的第一次交遊必定先遇上
+            candidates = [cid for cid, ch in self.content.characters.items() if ch.kind == "recruitable"]
+            if candidates and roster.owned_by(self.world, candidates[0]) is None:
                 self.state.player.fortune = True
-                return self._present(self.rng.choice(events))
-            # 福緣要來的人都已經在門下（招賢請進門的）：福緣改送賀禮，取代這次的交遊遭遇（和福緣事件一樣，
-            # 這一次交遊不再擲一般的遭遇），所以不用亂數；紀錄寫成一則「福緣」（標「賀禮」），不是「交遊・某地」。
+                cid = candidates[0]
+                msgs = [f"你新立門戶不久，【{self.content.characters[cid].name}】主動前來結識。"]
+                msgs += roster.recruit(self.state, self.content, self.world, cid)
+                return msgs
             if self._draft is not None:
                 self._draft.title, self._draft.tag = "福緣", "賀禮"
             return self._fortune_gift()
         return self._encounter("socialize", "此地無人可訪，你只好悻悻離去。")
 
+    def _recruit(self) -> list[str]:
+        target = self._recruit_target()
+        if target is None:
+            return ["（此地此刻沒有能招募的人。）"]
+        self.state.player.stamina -= self.content.config.recruit_stamina
+        return roster.attempt_recruit(self.state, self.content, self.world, target, self.rng)
+
     def _fortune_gift(self) -> list[str]:
-        """沒有福緣事件還能結識任何人：福緣照樣算過了（每季保證一次），改送一份賀禮，
-        心得 + config.duplicate_xinde["地"]（福緣的人都是地品）；不算進本季招賢心得。回傳敘事與數值變化。"""
         p = self.state.player
-        amount = self.content.config.duplicate_xinde["地"]
+        amount = self.content.config.recruit_consolation_xinde
         p.fortune = True
         p.stats["xinde"] = p.stats.get("xinde", 0) + amount
         return ["江湖朋友聽說你新立門戶，送來一份賀禮。", f"心得 +{amount}"]
 
     def _deliver_fortune(self) -> list[str]:
-        """第 fortune_day_max 天結束還沒遇上新立門戶福緣：直接送上門（第一個還能觸發的福緣事件的第一個選項），
-        另寫一則江湖紀錄「結識【某某】」。已經沒有人可送時改送賀禮（見 _fortune_gift），寫一則「福緣」（標「賀禮」）。"""
         s, c = self.state, self.content
         s.player.fortune = True
-        events = fortune_events(s, c)
-        if not events:
+        candidates = [cid for cid, ch in c.characters.items() if ch.kind == "recruitable"]
+        free = [cid for cid in candidates if roster.owned_by(self.world, cid) is None]
+        if not free:
             msgs = self._fortune_gift()
             self._write("福緣", msgs, tag="賀禮")
             return msgs
-        event = events[0]
-        effect = event.choices[0].effect
-        msgs = [event.text] + apply_effect(effect, s, c)
-        ch = c.characters[effect.recruit]
-        journal.add_entry(s, Draft(f"結識【{ch.name}】", f"{ch.tier}品・福緣").entry(s.world.time, msgs))
+        cid = free[0]
+        msgs = roster.recruit(s, c, self.world, cid)
+        journal.add_entry(s, Draft(f"結識【{c.characters[cid].name}】", "福緣").entry(s.world.time, msgs))
         return msgs
 
     def _encounter(self, action: str, nothing: str) -> list[str]:
         event = pick_event(self.state, self.content, action, self.rng)
-        return self._present(event) if event else [nothing]
+        if event:
+            return self._present(event)
+        loc = self.content.locations[self.state.player.location]
+        if action == "explore" and loc.enemies and self.rng.random() < self.content.config.train_event_chance:
+            return self._squad_encounter(self.rng.choice(loc.enemies))
+        return [nothing]
 
     def _present(self, event: Event) -> list[str]:
         self.state.pending_event = event.id
         self.state.player.seen_events.add(event.id)
         head = f"✦ 奇遇：{event.title}" if event.qiyu else f"【{event.title}】"
         self._outcome(journal.event_marker(event.title, event.qiyu), head)
-        self._hide(event.text)  # 事件的開場由場景顯示
+        self._hide(event.text)
         return [head, event.text]
 
-    def _train(self) -> list[str]:
-        """歷練：勝得對手獎勵、屬性機會與大勢變化；敗失落一成銀兩；平手無獎懲。"""
+    def _squad_encounter(self, squad_id: str) -> list[str]:
+        """遭遇一支敵方隊伍：單次判定，勝得對手獎勵與屬性機會，落敗失落一成銀兩。"""
         s, c = self.state, self.content
         p = s.player
         loc = c.locations[p.location]
-        squad = c.squads[self.rng.choice(loc.enemies)]
-        result = team.fight(s, c, squad.id, self.rng)
-        record = battlelog.new_record(s, c, squad, result, "train")
+        squad = c.squads[squad_id]
+        result = team.fight(s, c, self.world, squad.id, self.rng)
+        record = battlelog.new_record(s, c, self.world, squad, result, "train")
         msgs: list[str] = []
-        if result.outcome == "win":
-            rewards, joined = self._battle_rewards(squad, record)
-            record.notes += joined
-            msgs += rewards + joined
+        if result.tier in team.WIN_TIERS:
+            rewards = self._battle_rewards(squad, record)
+            msgs += rewards
             extra: list[str] = []
             if self.rng.random() < c.config.train_stat_chance:
                 key = self.rng.choice(["str", "agi", "con"])
@@ -354,22 +339,16 @@ class Game:
             record.changes += changes
             record.notes += notes
             msgs += extra
-        elif result.outcome == "lose":
+        elif result.tier == "落敗":
             loss = p.stats["silver"] // 10
             p.stats["silver"] -= loss
             record.silver = -loss
             if loss:
                 msgs.append(f"銀兩 -{loss}")
         msgs.insert(0, self._file_battle(record))
-        if self.rng.random() < c.config.train_event_chance:
-            event = pick_event(s, c, "train", self.rng)
-            if event:
-                msgs += self._present(event)
         return msgs
 
-    def _battle_rewards(self, squad: Squad, record: BattleRecord) -> tuple[list[str], list[str]]:
-        """打贏時發對手獎勵（銀兩、心得、每人經驗）並擲招降（亂數在這裡取用，順序不變）。
-        回傳（獎勵與升級, 投效的敘事）：前者已記進戰鬥紀錄；投效由呼叫的地方接在最後、記進紀錄（劇情戰接在劇情之後）。"""
+    def _battle_rewards(self, squad: Squad, record) -> list[str]:
         p = self.state.player
         msgs = []
         if squad.reward_silver:
@@ -381,14 +360,11 @@ class Game:
             record.xinde = squad.reward_xinde
             msgs.append(f"心得 +{squad.reward_xinde}")
         record.exp = squad.exp
-        levels = team.add_exp(self.state, self.content, squad.exp)
-        joined = roster.surrender(self.state, self.content, squad, self.rng)
+        levels = team.add_exp(self.content, p.member, squad.exp, p.name)
         record.notes += levels
-        return msgs + levels, joined
+        return msgs + levels
 
-    def _file_battle(self, record: BattleRecord) -> str:
-        """把戰鬥紀錄存進歷史、場景顯示它的卡片；回傳紀錄裡的一行摘要。
-        江湖紀錄裡這一則的結果標記寫成「擊退劫道山賊（4 回合）」，並補上每人獲得的經驗。"""
+    def _file_battle(self, record) -> str:
         battlelog.add_record(self.state, record)
         self.state.battle_card = record.id
         line = battlelog.summary_line(record)
@@ -396,7 +372,7 @@ class Game:
             self._draft.outcome(battlelog.outcome_text(record), line)
             self._draft.battle_id = record.id
             if record.exp:
-                self._draft.changes.append(f"經驗 +{record.exp}（每人）")  # 寫法和卡片的獲得與損失一致
+                self._draft.changes.append(f"經驗 +{record.exp}（每人）")
         return line
 
     def _move(self, dest_id: str) -> list[str]:
@@ -405,28 +381,24 @@ class Game:
         self.state.player.location = dest_id
         self.state.player.visited.add(dest_id)
         text = self.location_text()
-        self._hide(text)  # 地點描述由場景顯示
+        self._hide(text)
         return [text]
 
     def travel(self, dest_id: str) -> list[str]:
-        """大地圖的「安排前往」：沿最省體力的路一站一站走，每站照常扣體力、檢查新手引導的移動步驟與大勢門檻；
-        下一站體力不夠、或途中賽季落幕就停在已抵達的地方。整趟只寫一則江湖紀錄：「前往 高郵湖（途經 揚州城郊）」，
-        中途停下時寫「前往 太湖水寨（體力不足，停在 鎮江渡口）」或「（賽季落幕，停在 …）」。
-        不能前往時只回傳原因，不動、也不寫紀錄。"""
         s, c = self.state, self.content
         button = atlas.travel_button(s, c, dest_id) if dest_id in c.locations else None
         if button is None or not button[1]:
             return self._log([f"（{button[0] if button else '無法安排前往這裡'}。）"])
         route = atlas.routes(s, c)[dest_id]
-        s.battle_card = None  # 和其他行動一樣，上一場的戰鬥卡片到此為止
+        s.battle_card = None
         self._draft = Draft(f"前往 {c.locations[dest_id].name}")
         try:
             msgs: list[str] = []
             for hop in route.path:
                 if s.world.ended or s.player.stamina < c.locations[hop].move_cost:
-                    break  # 途中賽季落幕，或下一站體力不夠：停在已抵達的地方
+                    break
                 msgs += self._move(hop)
-                msgs += note_action(s, c, "move")
+                msgs += note_action(s, c, self.world, "move")
                 msgs += check_thresholds(s, c)
             self._draft.title = self._travel_title(dest_id, route)
             journal.add_entry(s, self._draft.entry(s.world.time, msgs))
@@ -450,12 +422,12 @@ class Game:
         choice = event.choices[index]
         s.pending_event = None
         msgs = [f"▸ {choice.text}"]
-        self._hide(msgs[0])  # 選項已經寫在標題裡
+        self._hide(msgs[0])
         if choice.combat:
             return msgs + self._event_battle(event, choice)
         if choice.check:
-            who = check_who(choice.check, s, c)
-            success = roll_check(choice.check, s, c, self.rng)
+            who = check_who(choice.check, s, c, self.world)
+            success = roll_check(choice.check, s, c, self.world, self.rng)
             word = "成功" if success else "失敗"
             msgs.append(f"（{who}——{word}）")
             self._outcome(f"{who}・{word}", msgs[-1])
@@ -463,30 +435,29 @@ class Game:
         return msgs + self._apply(choice.effect)
 
     def _event_battle(self, event: Event, choice: Choice) -> list[str]:
-        """劇情戰：勝得對手獎勵並走該選項的劇情結果；敗或平手（沒打贏）走失敗分支。"""
         s, c = self.state, self.content
         squad = c.squads[choice.combat]
-        result = team.fight(s, c, squad.id, self.rng)
-        record = battlelog.new_record(s, c, squad, result, "event", event.title)
-        won = result.outcome == "win"
-        rewards, joined = self._battle_rewards(squad, record) if won else ([], [])
+        result = team.fight(s, c, self.world, squad.id, self.rng)
+        record = battlelog.new_record(s, c, self.world, squad, result, "event", event.title)
+        won = result.tier in team.WIN_TIERS
+        rewards = self._battle_rewards(squad, record) if won else []
         effect = choice.effect if won else choice.fail_effect
-        story = apply_effect(effect, s, c)
+        story = apply_effect(effect, s, c, self.world)
         changes, notes = battlelog.split_changes(story)
         record.changes += changes
-        record.notes += notes + joined  # 投效接在打贏的劇情之後
-        msgs = [self._file_battle(record)] + rewards + story + joined
+        record.notes += notes
+        msgs = [self._file_battle(record)] + rewards + story
         if effect.next_event:
             msgs += self._present(c.events[effect.next_event])
         return msgs
 
     def _apply(self, effect: Effect) -> list[str]:
-        msgs = apply_effect(effect, self.state, self.content)
+        msgs = apply_effect(effect, self.state, self.content, self.world)
         if effect.next_event:
             msgs += self._present(self.content.events[effect.next_event])
         return msgs
 
-    # ── 閉關、門下、設定 ─────────────────────────────────
+    # ── 閉關、練功、療傷、設定 ────────────────────────────
 
     def _idle(self) -> bool:
         s = self.state
@@ -502,12 +473,11 @@ class Game:
         self.state.battle_card = None
         p.busy_until = self.state.world.time + hours * HOUR
         p.seclusion_start = self.state.world.time
-        msgs = [f"你閉關靜修，預計 {hours} 小時後出關；閉關期間內力回復加倍。"]
+        msgs = [f"你閉關靜修，預計 {hours} 小時後出關；閉關期間氣血回復加倍。"]
         self._write("閉關", msgs, tag=f"{hours} 小時")
         return self._log(msgs)
 
     def _finish_seclusion(self, end_time: float) -> list[str]:
-        """出關並發心得。按「提前出關」時寫進那次行動的紀錄；時間到了自己出關時另寫一則「出關」。"""
         p, cfg = self.state.player, self.content.config
         hours = (end_time - p.seclusion_start) / HOUR
         amount = round(hours * cfg.seclusion_xinde_per_hour * (1 + p.stats["wis"] / 20))
@@ -522,28 +492,26 @@ class Game:
             journal.add_entry(self.state, JournalEntry(time=end_time, title="出關", tag=tag, changes=[change]))
         return [msg]
 
-    # 門下的操作只有真的改了東西才寫江湖紀錄，連續幾次併成一則；「心得不足」這類失敗訊息由門下頁面自己顯示。
-
-    def upgrade(self, target: str) -> list[str]:
-        level, xinde = team.target_level(self.state, self.content, target), self._xinde()
-        msgs = self._log(team.upgrade(self.state, self.content, target))
-        now = team.target_level(self.state, self.content, target)
-        if now != level:
-            self._menxia_entry(f"【{team.target_name(self.state, self.content, target)}】精進至第{now}成", xinde)
+    def create_skill(self, name: str, kind: str) -> list[str]:
+        """自創功法：取名決定屬性/威力/成長性，全服不能重名（設計文件六.2）。"""
+        xinde = self._xinde()
+        art, msg = team.create_skill(self.state, self.content, self.world, name, kind)
+        msgs = self._log([msg])
+        if art is not None:
+            self._menxia_entry(msg, xinde)
         return msgs
 
-    def dispel(self, target: str) -> list[str]:
-        level, xinde = team.target_level(self.state, self.content, target), self._xinde()
-        msgs = self._log(team.dispel(self.state, self.content, target))
-        if team.target_level(self.state, self.content, target) != level:
-            self._menxia_entry(f"【{team.target_name(self.state, self.content, target)}】散功，退回第一成", xinde)
+    def practice(self, kind: str) -> list[str]:
+        """鍛鍊：目前已學會的內功或武學加深一成，累積受傷風險。"""
+        xinde = self._xinde()
+        msgs = self._log(team.practice(self.state, self.content, self.world, kind, self.rng))
+        self._menxia_entry(msgs[0] if msgs else "練功", xinde)
         return msgs
 
-    def set_loadout(self, member: str, slot: int, skill_id: str | None) -> list[str]:
-        before = {key: list(slots) for key, slots in self.state.player.loadouts.items()}
-        msgs = self._log(team.set_loadout(self.state, self.content, member, slot, skill_id))
-        if self.state.player.loadouts != before:
-            self._menxia_entry(msgs[0], self._xinde())
+    def heal(self) -> list[str]:
+        xinde = self._xinde()
+        msgs = self._log(team.heal(self.state, self.content, self.state.player.member))
+        self._menxia_entry(msgs[0] if msgs else "療傷", xinde)
         return msgs
 
     def _xinde(self) -> int:
@@ -555,131 +523,44 @@ class Game:
         entry = JournalEntry(time=self.state.world.time, title=journal.MENXIA, tag=tag, changes=changes)
         journal.add_entry(self.state, entry, merge=True)
 
-    def upgrade_options(self) -> list[tuple[str, str]]:
-        return team.upgrade_options(self.state, self.content)
+    # ── 門下與隊伍 ────────────────────────────────────────
 
-    def team_members(self, index: int = 0) -> list[tuple[str, str]]:
-        """第 index 隊（預設本隊）的（名字, key），第一位是隊長。"""
-        return [(team.member_name(self.state, self.content, key), key) for key in self.team_keys(index)]
-
-    # ── 名冊與編隊 ────────────────────────────────────────
-
-    def team_keys(self, index: int = 0) -> list[str]:
-        return team.team_keys(self.state, index)
-
-    def team_count(self) -> int:
-        """目前開放幾隊（含本隊）。"""
-        return roster.team_count(self.state, self.content)
-
-    def command_cap(self) -> int:
-        """每隊的總統御上限。"""
-        return roster.command_cap(self.state, self.content)
-
-    def team_choices(self) -> list[tuple[str, int]]:
-        return roster.team_choices(self.state, self.content)
-
-    def team_info(self, index: int) -> str:
-        return roster.team_info(self.state, self.content, index)
+    def team_members(self) -> list[tuple[str, str]]:
+        return [(team.member_name(self.state, self.content, key), key) for key in team.team_keys(self.state)]
 
     def roster_lines(self) -> list[tuple[str, str]]:
-        return roster.roster_lines(self.state, self.content)
+        return roster.roster_lines(self.state, self.content, self.world)
 
-    def swap_choices(self, index: int, slot: int) -> list[tuple[str, str]]:
-        return roster.swap_choices(self.state, self.content, index, slot)
+    def owned_companions(self) -> list[str]:
+        return roster.owned_companions(self.world, self.state.player.name)
 
-    def set_member(self, index: int, slot: int, key: str | None) -> list[str]:
-        """門下頁的「換人」：第 index 隊第 slot 位換成 key（None＝空出來）。真的換了才寫江湖紀錄（和其他門下操作併成一則）。"""
-        before = [list(t.members) for t in self.state.player.teams]
-        msgs = self._log(roster.set_member(self.state, self.content, index, slot, key))
-        if [t.members for t in self.state.player.teams] != before:
-            self._menxia_entry(msgs[0], self._xinde())
-        return msgs
+    def add_to_team(self, companion_id: str) -> list[str]:
+        return self._log(team.add_to_team(self.state, companion_id))
 
-    # ── 招賢 ──────────────────────────────────────────────
+    def remove_from_team(self, companion_id: str) -> list[str]:
+        return self._log(team.remove_from_team(self.state, companion_id))
 
-    def pull(self, count: int) -> list[str]:
-        """招賢：單抽（count=1）或十連（count=10）。抽成了寫一則江湖紀錄「招賢・十連」（標「得地品【某某】」，
-        敘事是每一抽的結果，數值變化是元寶、心得與銀兩），回傳一句摘要給招賢分頁（每一抽的結果在結果卡上）；
-        抽不成時只回傳原因：什麼都不動、不用亂數、不寫紀錄。"""
-        reason = gacha.block(self.state, self.content, count)
-        if reason:
-            return self._log([f"（{reason}。）"])
-        msgs = gacha.pull(self.state, self.content, self.rng, count)
-        pulls = self.state.player.gacha_last
-        self._write(f"招賢・{gacha.label(count)}", msgs, tag=gacha.tag(self.content, pulls))
-        self._log(msgs)
-        return [gacha.summary(pulls, count)]
-
-    def grant_yuanbao(self) -> list[str]:
-        """設定分頁的「測試：領取元寶」：元寶 + config.test_yuanbao，記一則江湖紀錄。不用亂數。"""
-        amount = self.content.config.test_yuanbao
-        self.state.player.yuanbao += amount
-        msgs = [f"元寶 +{amount}"]
-        self._write("測試：領取元寶", msgs)
-        return self._log(msgs)
-
-    def pull_button(self, count: int) -> tuple[str, bool]:
-        """招賢分頁「單抽」「十連」按鈕的（文字, 按得下去）。"""
-        return gacha.button(self.state, self.content, count)
-
-    def gacha_head(self) -> str:
-        return gacha.head(self.state, self.content)
-
-    def gacha_rules(self) -> str:
-        return gacha.rules_text(self.state, self.content)
-
-    def gacha_cards_html(self) -> str:
-        return gacha.cards_html(self.state, self.content)
-
-    # ── 門下頁面 ──────────────────────────────────────────
+    # ── 門下頁面：武學說明 ──────────────────────────────────
 
     def skill_library(self) -> list[tuple[str, str]]:
-        return skillview.library(self.state, self.content)
+        return skillview.library(self.state, self.content, self.world)
 
-    def skill_detail(self, target: str | None) -> str:
-        return skillview.detail(self.state, self.content, target)
+    def skill_detail(self, kind: str) -> str:
+        return skillview.detail(self.state, self.content, self.world, kind)
 
-    def member_card(self, key: str, innate: bool = False) -> str:
-        return skillview.member_card(self.state, self.content, key, innate)
-
-    def slot_label(self, key: str, slot: int | None) -> str:
-        return skillview.slot_label(self.state, self.content, key, slot)
+    def member_card(self, key: str) -> str:
+        return skillview.member_card(self.state, self.content, self.world, key)
 
     def menxia_rules(self) -> str:
         return skillview.rules_line(self.content)
 
-    def innate_target(self, key: str) -> str | None:
-        return team.innate_target(self.state, self.content, key)
-
-    def is_innate(self, target: str) -> bool:
-        return team.is_innate(self.content, target)
-
-    def slot_skill(self, key: str, slot: int) -> str | None:
-        return team.slot_skill(self.state, key, slot)
-
-    def upgrade_cost(self, target: str) -> int | None:
-        """升一成要花的心得；已達第十成或沒有這門武學時回傳 None。"""
-        level = team.target_level(self.state, self.content, target)
-        if level is None or level >= team.MAX_SKILL_LEVEL:
-            return None
-        return team.upgrade_cost(self.content, level)
-
-    def dispel_refund(self, target: str) -> int | None:
-        """散功會返還的心得；本命、第一成或沒有這門武學（散不了功）時回傳 None。"""
-        level = team.target_level(self.state, self.content, target)
-        if level is None or level <= 1 or team.is_innate(self.content, target):
-            return None
-        return team.dispel_refund(self.content, level)
-
     # ── 戰鬥紀錄 ──────────────────────────────────────────
 
     def battle_card(self) -> str | None:
-        """場景裡的戰鬥卡片（Markdown）；這次行動沒有打仗時為 None。"""
         record = battlelog.find(self.state, self.state.battle_card)
         return battlelog.card_text(record) if record else None
 
     def battle_card_id(self) -> int | None:
-        """卡片上那一場的流水號；沒有卡片時為 None。"""
         record = battlelog.find(self.state, self.state.battle_card)
         return record.id if record else None
 
@@ -687,17 +568,14 @@ class Game:
         return self.state.battles[0].id if self.state.battles else None
 
     def battle_list(self) -> list[tuple[str, int]]:
-        """戰報列表：（「勝　第1天 08:30　揚州城郊　vs 劫道山賊　4 回合」, 流水號），最新的在前。"""
         return [(battlelog.list_label(r), r.id) for r in self.state.battles]
 
     def battle_detail(self, record_id: int | None = None) -> str:
-        """某一場的完整戰報（Markdown）；沒指定或找不到時顯示最新一場。"""
         s = self.state
         record = battlelog.find(s, record_id) or (s.battles[0] if s.battles else None)
         return battlelog.detail_text(record) if record else battlelog.NO_RECORD
 
     def notice(self, text: str, title: str = "提醒") -> list[str]:
-        """介面層要告訴玩家的系統訊息（例如舊存檔已備份）；title 是江湖紀錄裡這一則的標題。"""
         self._write(title, [text])
         return self._log([text])
 
@@ -705,7 +583,6 @@ class Game:
         self.state.player.anonymous = bool(value)
 
     def skip_tutorial(self) -> list[str]:
-        """設定裡的「略過新手引導」：直接跳到引導結束。引導早就結束時什麼都不做。"""
         steps = len(self.content.tutorial.steps)
         if self.state.player.tutorial_step >= steps:
             return []
@@ -714,10 +591,8 @@ class Game:
         return self._log(["（已略過新手引導。）"])
 
     def view_map(self) -> list[str]:
-        """介面打開大地圖時呼叫。不論新手引導是否還在「按『大地圖』看看」那一步，都先記下玩家看過地圖。
-        平常看地圖不寫江湖紀錄；只有剛好完成一步新手引導時，才記下引導的獎勵與下一步。"""
         self.state.player.flags.add("看過地圖")
-        msgs = note_action(self.state, self.content, "view_map")
+        msgs = note_action(self.state, self.content, self.world, "view_map")
         if msgs:
             self._write("翻看地圖", msgs)
         return self._log(msgs)
@@ -728,38 +603,31 @@ class Game:
     # ── 大地圖 ────────────────────────────────────────────
 
     def world_map_svg(self, layer: str = "situation", selected: str | None = None) -> str:
-        """大地圖（SVG）。只有敵情層會算勝算（摸清地點的對手，快取在 Game._odds）；其餘圖層與平常重畫都不模擬。"""
         odds = self.odds if layer == "enemies" else None
         return render_map(self.state, self.content, layer, selected, odds)
 
     def minimap_svg(self) -> str:
-        """場景旁以你為中心的小地圖（SVG）：從大地圖截出所在地附近的一塊；不算勝算。"""
         return render_minimap(self.state, self.content)
 
     def map_header(self) -> str:
-        """大地圖頁面上方的時間與體力。"""
         return atlas.header_text(self.state, self.content)
 
     def map_places(self) -> list[tuple[str, str]]:
-        """大地圖下拉選單：（顯示文字, 地點 id），只列摸清的地點與畫出名字的未知地點。"""
         return atlas.place_choices(self.state, self.content)
 
     def place_detail(self, loc_id: str) -> str:
-        """詳情欄（Markdown）。摸清而且有敵人的地點會算勝算（快取在 Game._odds）。"""
         return atlas.detail_text(self.state, self.content, loc_id, self.odds)
 
     def travel_button(self, loc_id: str) -> tuple[str, bool] | None:
-        """「安排前往」按鈕的（文字, 按得下去）；不該顯示按鈕時為 None。"""
         return atlas.travel_button(self.state, self.content, loc_id)
 
     def new_season(self) -> list[str]:
-        """整個狀態重新開始，只留下現實時間的同步點、新手引導的進度，以及元寶與招賢的保底計數（跨季保留）。"""
+        """玩家自己的狀態重新開始（現實時間同步點、新手引導進度跨季保留）；同伴的等級/
+        武學/招募狀態是共用世界狀態，不歸這個方法管，不會因為某個玩家開新季就重置。"""
         old = self.state
-        self.state = Game.new(self.content, old.player.name, self.rng).state
+        self.state = Game.new(self.content, old.player.name, self.rng, self.world).state
         self.state.last_real = old.last_real
-        p = self.state.player
-        p.tutorial_step = old.player.tutorial_step
-        p.yuanbao, p.gacha_pity = old.player.yuanbao, old.player.gacha_pity
+        self.state.player.tutorial_step = old.player.tutorial_step
         return []
 
     # ── 畫面文字 ──────────────────────────────────────────
@@ -792,12 +660,12 @@ class Game:
             "　".join(f"{names[k]} {p.stats.get(k, 0)}" for k in ("silver", "good", "evil", "fame", "xinde")),
             "**隊伍**",
         ]
-        for i, key in enumerate(team.team_keys(s)):
-            now, cap = team.member_neili(s, c, key)
-            leader = "（隊長）" if i == 0 else ""
-            lines.append(
-                f"- {team.member_name(s, c, key)}{leader}　第{p.members[key].level}級　內力 {int(now)}/{int(cap)}"
-            )
+        now, cap = team.member_neili(c, p.member)
+        lines.append(f"- {p.name}（隊長）　第{p.member.level}級　氣血 {int(now)}/{int(cap)}")
+        for cid in p.team:
+            progress = self.world.get_companion(cid)
+            now, cap = team.member_neili(c, progress)
+            lines.append(f"- {c.characters[cid].name}　第{progress.level}級　氣血 {int(now)}/{int(cap)}")
         if p.busy_until is not None:
             lines.append(f"🧘 閉關中，約 {(p.busy_until - w.time) / HOUR:.1f} 小時後出關")
         return "\n\n".join(lines)
@@ -824,22 +692,17 @@ class Game:
     # ── 江湖紀錄 ──────────────────────────────────────────
 
     def latest_entry_html(self) -> str:
-        """左欄「剛剛」卡片：最新一則紀錄的完整內容（HTML）；還沒有紀錄時是空字串。"""
         entries = self.state.journal
         return journal.card_html(entries[0]) if entries else ""
 
     def journal_html(self, start: int = 1, limit: int = 5, heading: str = "", empty: str = "") -> str:
-        """紀錄列（HTML）：從第 start 則（0＝最新）起最多 limit 則，一則一列；沒有東西可顯示時是空字串。"""
         return journal.rows_html(self.state.journal[start:start + limit], heading, empty)
 
     def shows_battle_card(self) -> bool:
-        """「剛剛」那一格改放戰鬥卡片：卡片還在，而且最新一則紀錄就是打那一場的行動。"""
         s = self.state
         return self.battle_card_id() is not None and bool(s.journal) and s.journal[0].battle_id == s.battle_card
 
     def battle_extra_html(self) -> str:
-        """顯示戰鬥卡片時放在卡片底下的補充（HTML）：同一次行動裡卡片沒寫到的敘事與數值變化，
-        例如打完仗剛好完成的新手引導與它的獎勵；沒有顯示戰鬥卡片或沒有補充時是空字串。"""
         if not self.shows_battle_card():
             return ""
         record = battlelog.find(self.state, self.state.battle_card)

@@ -7,11 +7,21 @@
 from __future__ import annotations
 
 from random import Random
+from typing import Protocol
 
 from pydantic import BaseModel
 
 from .martial_arts import MartialArt, counters, power_at
-from .state import Member
+
+
+class HasMartialArts(Protocol):
+    """玩家 Member 與同伴 CompanionProgress（見 world_state.py）都符合這個形狀，
+    member_power() 不在乎實際是哪一個型別。"""
+
+    neigong_id: str | None
+    neigong_level: int
+    wugong_id: str | None
+    wugong_level: int
 
 # 內功威力換算成武學威力的加成比例：內功威力 100 大約是 +100% 加成，跟自創功法
 # QUALITY_TOP_POWER 的量級（絕學上限 120）對齊，故意讓「絕學等級的內功」能接近翻倍。
@@ -42,7 +52,7 @@ class EncounterResult(BaseModel):
     difficulty: float
 
 
-def member_power(member: Member, arts: dict[str, MartialArt], opponent_attribute: str | None = None) -> float:
+def member_power(member: HasMartialArts, arts: dict[str, MartialArt], opponent_attribute: str | None = None) -> float:
     """這個人目前貢獻的威力：沒學武學就是 0（內功沒有武學可以加成，貢獻也是 0）。"""
     if not member.wugong_id or member.wugong_id not in arts:
         return 0.0
@@ -56,7 +66,7 @@ def member_power(member: Member, arts: dict[str, MartialArt], opponent_attribute
     return power
 
 
-def team_power(members: list[Member], arts: dict[str, MartialArt], opponent_attribute: str | None = None) -> float:
+def team_power(members: list[HasMartialArts], arts: dict[str, MartialArt], opponent_attribute: str | None = None) -> float:
     return sum(member_power(m, arts, opponent_attribute) for m in members)
 
 

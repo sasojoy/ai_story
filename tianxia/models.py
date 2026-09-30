@@ -6,13 +6,12 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 STATS = ("str", "agi", "con", "wis", "silver", "good", "evil", "fame", "xinde")
-Style = Literal["剛", "柔", "快", "巧", "無"]
 ActionKind = Literal["explore", "train", "socialize"]
-Tier = Literal["天", "地", "玄", "黃", "敵"]
-COMPANION_TIERS = ("天", "地", "玄", "黃")  # 同伴的品階，由高到低；「敵」只給敵人
-Grade = Literal["S", "A", "B", "C"]
-Source = Literal["開局", "收徒", "交遊", "福緣", "奇遇", "招降", "招賢"]  # 同伴的取得管道
-EffectKind = Literal["damage", "heal", "buff", "debuff", "control", "dodge", "reduce"]
+# sanguo-companions 合併：同伴不再分天地玄黃品階，改成「龍頭人物」（劇情鎖定，不可招募，
+# 見設計文件四.4）跟「可招募」兩種，決定要不要出現在招募流程裡。
+CompanionKind = Literal["locked", "recruitable"]
+MartialKind = Literal["內功", "武學"]
+Attribute = Literal["陰", "陽", "剛", "柔", "快", "慢", "虛", "實"]  # 見 tianxia/martial_arts.py
 
 
 class _Strict(BaseModel):
@@ -110,29 +109,18 @@ class Location(_Strict):
     unlock_flag: str | None = None  # 設定後，需該世界旗標成立才能前往
 
 
-class SkillEffect(_Strict):
-    """武學效果。base 是第 1 成的數值，top 是第 10 成的數值（省略＝不隨成數變化）。"""
+class SkillDef(_Strict):
+    """武學/內功的內容定義（sanguo-companions 合併重寫，取代 battle.py 時代的 Skill/SkillEffect）。
 
-    kind: EffectKind
-    base: float
-    top: float | None = None
-    target: Literal["enemy", "enemies", "self", "ally_lowest", "allies"] = "enemy"
-    stat: Literal["atk", "dfn", "spd"] | None = None
-    control: Literal["點穴", "卸兵", "封脈"] | None = None
-    rounds: int = 1
+    只定義「本命武學」（歷史人物的固定武學，情誼滿門檻習得）——自創功法完全是玩家取名
+    當下即時生成、存進共用世界狀態（見 martial_arts.py／world_state.py），不進這份內容檔。
+    本命武學的品質固定是絕學（見 martial_arts.historical_art），這裡不必也不該填品質。
+    """
 
-
-class Skill(_Strict):
     id: str
     name: str
-    kind: Literal["心法", "絕招", "連招"]
-    style: Style = "無"
-    quality: Literal["下", "中", "上"] = "中"
-    sect: str | None = None
-    chance_base: float = 0.0
-    chance_top: float | None = None
-    prep: int = 0
-    effects: list[SkillEffect] = Field(min_length=1)
+    kind: MartialKind
+    attribute: Attribute
     desc: str = ""
 
 
@@ -142,55 +130,38 @@ class Sect(_Strict):
     location: str
     alignment: Literal["正", "邪", "中"]
     desc: str = ""
-    starter_skills: list[str] = Field(default_factory=list)
 
 
 class CharacterDef(_Strict):
-    """人物（同伴或敵人）。stats 是第 1 級的屬性，growth 是每升一級增加的量。"""
+    """人物（同伴或敵人）。stats 是第 1 級的屬性，growth 是每升一級增加的量，仍給 Check
+    系統（辦事/修行類事件選項的屬性判定）使用，跟遭遇/劇情戰的判定（encounter.py）無關。"""
 
     id: str
     name: str
-    tier: Tier
-    style: Style = "無"
+    background: str = ""  # 出身
+    situation: str = ""  # 此時處境
+    personality: str = ""  # 性格基礎模板，companion_agent.py 的 system prompt 錨點
+    kind: CompanionKind | None = None  # 同伴才填：locked（龍頭人物，不可招募）／recruitable；敵人不填
     stats: dict[str, float]
     growth: dict[str, float] = Field(default_factory=dict)
-    aptitude: dict[str, Grade] = Field(default_factory=dict)  # 剛柔快巧；未列出＝B
-    innate: str | None = None
     sect: str | None = None
     desc: str = ""
-    command: int | None = None  # 統御；同伴必填，敵人不填
-    sources: list[Source] = Field(default_factory=list)  # 取得管道；同伴必填，敵人不填
-    recruit_at: list[str] = Field(default_factory=list)  # 只在這些地點收得到徒；空＝任何城鎮或門派
-    trait: str | None = None  # 天品的特性：一門效果固定的心法，不佔武學欄、不能升級或散功
-
-
-def in_gacha_pool(ch: CharacterDef) -> bool:
-    """招賢的卡池：同伴品階、取得管道有「招賢」。tianxia/gacha.py 抽人與載入時的卡池檢查（content.py）都用這一個判斷。"""
-    return ch.tier in COMPANION_TIERS and "招賢" in ch.sources
-
-
-class SquadMember(_Strict):
-    character: str
-    level: int = Field(default=1, ge=1)
-
-
-class Surrender(_Strict):
-    """打贏敵方隊伍後可能投效的人（同伴 id）；chance 省略時用 config.surrender_chance。"""
-
-    character: str
-    chance: float | None = Field(default=None, ge=0, le=1)
+    starting_wugong: str | None = None  # 本命武學 id（指向 SkillDef，kind 必須是「武學」）
+    starting_neigong: str | None = None  # 本命內功 id（指向 SkillDef，kind 必須是「內功」）
+    deep_interaction: bool = False  # 是否走 companion_agent.py 的即時 LLM 對話（見設計文件四.3）
+    recruit_at: str | None = None  # 可招募的同伴在哪個地點找得到他（龍頭人物不填，四處走動不固定）
 
 
 class Squad(_Strict):
-    """敵方隊伍；第一名成員是隊長。"""
+    """遭遇/劇情戰的對手：一個抽象的難度值＋屬性，不是完整的人物陣容（見 encounter.py 的單次判定）。"""
 
     id: str
     name: str
-    members: list[SquadMember] = Field(min_length=1, max_length=3)
+    difficulty: float
+    attribute: Attribute | None = None
     reward_silver: int = 0
     reward_xinde: int = 0
     exp: int = 0
-    surrender: Surrender | None = None  # 打贏後可能投效的人
 
 
 class Trend(_Strict):
@@ -367,58 +338,30 @@ class Config(_Strict):
     vision_base: int = 2  # 從所在地沿道路看得見幾步
     vision_fame: int = 10  # 名望達到這個值，視野 +1
     max_log: int = 200
-    player_innate: str | None = None  # 本人的本命武學（1a 為固定武學，1b 改為骨架＋詞條）
-    player_style: Style = "無"
-    player_aptitude: dict[str, Grade] = Field(default_factory=dict)
     player_growth: dict[str, float] = Field(
         default_factory=lambda: {"str": 0.3, "agi": 0.3, "con": 0.3, "wis": 0.3}
     )
-    start_companions: list[str] = Field(default_factory=list)  # 出身給的同伴；前兩名與本人組隊
-    battle_rounds: int = 8
-    battle_atk_factor: float = 12.0
-    battle_def_factor: float = 5.0
     neili_base: float = 300
     neili_per_con: float = 40
     neili_per_level: float = 20
-    neili_regen_hours: float = 2  # 內力從零回滿所需時間
-    newbie_days: float = 3  # 每季前幾天內力回復加倍
+    neili_regen_hours: float = 2  # 氣血從零回滿所需時間
+    newbie_days: float = 3  # 每季前幾天氣血回復加倍
     seclusion_xinde_per_hour: int = 15
     xinde_cost_factor: int = 20  # 第 n 成升到 n+1 成需要 factor × n
-    dispel_refund: float = 0.8
     level_exp: int = 100  # 第 n 級升 n+1 級需要 level_exp × n
     max_level: int = 30
-    vision_skills: list[str] = Field(default_factory=list)  # 練到 vision_skill_level 時視野 +1
-    vision_skill_level: int = 5
-    # ── 名冊與編隊（1c）──
-    team_counts: list[int] = Field(default_factory=lambda: [2, 3, 4])  # 開放的隊伍數：第一幕、第二幕、第三幕起
-    command_caps: list[int] = Field(default_factory=lambda: [15, 18, 20])  # 每隊總統御上限，同上
-    player_command: int = 5  # 你本人的統御
-    apprentice_silver: int = 40  # 收徒：每次的銀兩
-    apprentice_stamina: int = 5  # 收徒：每次的體力
-    apprentice_per_day: int = 2  # 收徒：每個遊戲日最多幾次
-    apprentice_tags: list[str] = Field(default_factory=lambda: ["城鎮", "門派"])  # 有這些標籤的地點才能收徒
-    apprentice_weights: dict[str, float] = Field(default_factory=lambda: {"黃": 75, "玄": 25})  # 收徒抽到各品階的比重
-    surrender_chance: float = 0.25  # 招降：敵方隊伍沒寫 chance 時的機率
+    # ── 練功（sanguo-companions 合併重寫，見設計文件六.2）──
+    practice_injury_chance: float = 0.15  # 每次練功累積受傷（內傷）的機率
+    practice_injury_amount: float = 15.0  # 受傷時扣的氣血（累積為內傷，需療傷才能回到滿上限）
+    heal_silver_per_injury: int = 2  # 療傷：每點內傷要幾兩銀子（無條件進位）
+    # ── 同伴招募（sanguo-companions 合併重寫，取代舊的收徒/招賢，見設計文件四.4）──
+    recruit_stamina: int = 15  # 嘗試招募一次的體力
+    recruit_base_chance: float = 0.35  # 基礎成功率，情誼會再往上加（見 roster.py）
+    recruit_affinity_bonus: float = 0.5  # 情誼每 100 點，成功率加多少（乘上目前好感度/100）
+    duel_chance_on_fail: float = 0.4  # 招募失敗時，額外觸發對方要求決鬥的機率
+    recruit_consolation_xinde: int = 30  # 劇情事件想結識的人已經被別人招走時，改給的心得
     fortune_day_min: int = 2  # 新立門戶福緣：第幾天起交遊必定先觸發
     fortune_day_max: int = 7  # 新立門戶福緣：第幾天結束還沒發生就直接送上門
-    # 劇情事件結識到已入門的人、招賢抽到重複的人、福緣賀禮（地）時改給的心得（暫定・另談；招賢的另受付費心得護欄限制）
-    duplicate_xinde: dict[str, int] = Field(default_factory=lambda: {"黃": 10, "玄": 20, "地": 50, "天": 100})
-    # ── 招賢（1c-3）：價格、重複換算與付費心得護欄是「暫定・另談」的數字（見 provisional），只是讓功能能跑 ──
-    gacha_single: int = 100  # 單抽要幾元寶（暫定・另談）
-    gacha_ten: int = 1000  # 十連要幾元寶（暫定・另談）
-    gacha_rates: dict[str, float] = Field(  # 各品階的機率（%，加起來 100），同品階的人平均分配
-        default_factory=lambda: {"天": 3, "地": 12, "玄": 35, "黃": 50}
-    )
-    gacha_pity: int = 40  # 保底：連續這麼多抽沒出天品，這一抽必得天品
-    gacha_ten_floor: str = "地"  # 十連至少一名這個品階以上（和天品保底分開算）
-    gacha_xinde_cap: int = 300  # 付費心得護欄：本季招賢換到的心得最多這麼多（暫定・另談）
-    gacha_xinde_half: int = 150  # 付費心得護欄：本季招賢心得超過這個數之後，重複只給一半（暫定・另談）
-    gacha_silver: dict[str, int] = Field(  # 付費心得護欄：本季招賢心得滿了之後，重複改給的銀兩（暫定・另談）
-        default_factory=lambda: {"黃": 10, "玄": 20, "地": 50, "天": 100}
-    )
-    test_yuanbao: int = 1000  # 設定分頁「測試：領取元寶」每按一次給多少元寶
-    # 標為「暫定・另談」的設定名稱：JSON 不能寫註解，寫在這裡；載入時檢查名稱存在，不影響任何數字
-    provisional: list[str] = Field(default_factory=list)
 
 
 class Content(_Strict):
@@ -426,7 +369,7 @@ class Content(_Strict):
     scenario: Scenario
     locations: dict[str, Location]
     events: dict[str, Event]
-    skills: dict[str, Skill]
+    skills: dict[str, SkillDef]
     sects: dict[str, Sect]
     characters: dict[str, CharacterDef]
     squads: dict[str, Squad]

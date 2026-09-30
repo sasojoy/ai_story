@@ -6,6 +6,7 @@ import random
 from . import roster, team  # 與 roster 互相 import：只能引入整個模組、呼叫時才取屬性，不能 from .roster import …
 from .models import Check, Condition, Content, Effect
 from .state import PLAYER, GameState, Rumor
+from .world_state import WorldStateStore
 
 DAY = 86400
 
@@ -40,9 +41,10 @@ def check_condition(cond: Condition, state: GameState) -> bool:
         return False
     if cond.no_sect and p.sect is not None:
         return False
-    if any(s not in p.skills for s in cond.skills_all):
+    known_skills = {p.member.neigong_id, p.member.wugong_id} - {None}
+    if any(s not in known_skills for s in cond.skills_all):
         return False
-    if any(s in p.skills for s in cond.skills_none):
+    if any(s in known_skills for s in cond.skills_none):
         return False
     if any(w.trends.get(t, 0) < v for t, v in cond.trend_min.items()):
         return False
@@ -60,29 +62,29 @@ def check_condition(cond: Condition, state: GameState) -> bool:
     for flag, hours in cond.flag_age_hours.items():
         if flag not in w.flag_times or w.time - w.flag_times[flag] < hours * 3600:
             return False
-    if set(cond.members_none) & set(p.members):
+    if set(cond.members_none) & set(p.team):
         return False
     if cond.any_of and not any(check_condition(sub, state) for sub in cond.any_of):
         return False
     return True
 
 
-def check_chance(check: Check, state: GameState, content: Content) -> float:
+def check_chance(check: Check, state: GameState, content: Content, world: WorldStateStore) -> float:
     """出手者的屬性每高於難度 1 點，成功率 +10%；範圍 5%～95%。"""
-    key = team.check_actor(state, content, check)
-    value = team.check_value(state, content, key, check.stat)
+    key = team.check_actor(state, content, world, check)
+    value = team.check_value(state, content, world, key, check.stat)
     return min(0.95, max(0.05, 0.5 + (value - check.difficulty) * 0.1))
 
 
-def roll_check(check: Check, state: GameState, content: Content, rng: random.Random) -> bool:
-    return rng.random() < check_chance(check, state, content)
+def roll_check(check: Check, state: GameState, content: Content, world: WorldStateStore, rng: random.Random) -> bool:
+    return rng.random() < check_chance(check, state, content, world)
 
 
-def check_who(check: Check, state: GameState, content: Content) -> str:
+def check_who(check: Check, state: GameState, content: Content, world: WorldStateStore) -> str:
     """選項與結果上寫的出手者：本人檢定寫「本人」；隊伍檢定寫「某某出手」，派出的是本人時寫「本人出手」。"""
     if check.by == "self":
         return "本人"
-    key = team.check_actor(state, content, check)
+    key = team.check_actor(state, content, world, check)
     return "本人出手" if key == PLAYER else f"{team.member_name(state, content, key)}出手"
 
 
@@ -114,14 +116,20 @@ def change_trend(
 
 
 def learn_skill(state: GameState, content: Content, skill_id: str) -> list[str]:
-    p = state.player
-    if skill_id in p.skills:
+    """每人最多學一門內功、一門武學（設計文件六.4）：對應的欄位已經有人時直接跳過，不覆蓋。"""
+    member = state.player.member
+    skill = content.skills[skill_id]
+    slot = "neigong_id" if skill.kind == "內功" else "wugong_id"
+    if getattr(member, slot) == skill_id:
         return []
-    p.skills[skill_id] = 1
-    return [f"你習得了【{content.skills[skill_id].name}】！（可按右側「門下」配置給隊中的人。）"]
+    if getattr(member, slot) is not None:
+        return [f"你已經學了一門{skill.kind}，【{skill.name}】這次先無緣習得。"]
+    setattr(member, slot, skill_id)
+    setattr(member, slot.replace("_id", "_level"), 1)
+    return [f"你習得了【{skill.name}】！"]
 
 
-def apply_effect(effect: Effect, state: GameState, content: Content) -> list[str]:
+def apply_effect(effect: Effect, state: GameState, content: Content, world: WorldStateStore) -> list[str]:
     p = state.player
     names = content.config.stat_names
     msgs: list[str] = []
@@ -141,14 +149,12 @@ def apply_effect(effect: Effect, state: GameState, content: Content) -> list[str
         sect = content.sects[effect.join_sect]
         p.sect = sect.id
         msgs.append(f"你拜入了{sect.name}！")
-        for skill_id in sect.starter_skills:
-            msgs += learn_skill(state, content, skill_id)
     if effect.leave_sect and p.sect:
         msgs.append(f"你叛出了{content.sects[p.sect].name}。")
         p.flags.add(f"叛出:{p.sect}")
         p.sect = None
     if effect.recruit:
-        msgs += roster.recruit(state, content, effect.recruit)
+        msgs += roster.recruit(state, content, world, effect.recruit)
     for trend_id, delta in effect.trend.items():
         msgs += change_trend(state, content, trend_id, delta)
     add_world_flags(state, effect.world_flags_add)

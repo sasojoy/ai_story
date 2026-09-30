@@ -72,27 +72,30 @@ def test_socialize_entry(game):
     assert (latest(game).title, latest(game).tag) == ("交遊・小鎮", "遇上【拜師】")
 
 
+def _give_player_a_winning_wugong(game):
+    """讓玩家確定打得過 thug（難度 5）：自創一門威力夠高的武學。"""
+    game.create_skill("測試長拳", "武學")
+
+
 def test_train_entry_carries_the_battle_summary_and_gains(game):
+    from conftest import FixedRandom
+
     game.choose("move:lake")
-    game.choose("act:train")
+    _give_player_a_winning_wugong(game)
+    game.rng = FixedRandom(0.99)  # 好運氣，確保是大勝或險勝（算進 WIN_TIERS）
+    game._draft = journal.Draft("歷練・湖邊")
+    msgs = game._squad_encounter("thug")
+    journal.add_entry(game.state, game._draft.entry(game.state.world.time, msgs))
+    game._log(msgs)
+    game._draft = None
     record = game.state.battles[0]
     entry = latest(game)
     assert entry.title == "歷練・湖邊"
-    assert entry.tag == f"擊退水寇小隊（{record.rounds} 回合）"
+    assert entry.tag == f"{record.tier}水寇小隊"
     assert entry.battle_id == record.id == 1
     assert entry.changes == ["經驗 +20（每人）", "銀兩 +5", "心得 +10"]  # 經驗的寫法和戰鬥卡片一致
     assert entry.lines == []
-    assert f"⚔ 湖邊：擊退水寇小隊（{record.rounds} 回合）" in game.state.log
-
-
-def test_train_that_meets_an_event_lists_it_as_a_line(game):
-    game.content.config.train_event_chance = 1.0
-    game.choose("move:lake")
-    game.choose("act:train")
-    entry = latest(game)
-    assert entry.tag.startswith("擊退水寇小隊")
-    assert entry.lines == ["遇上【跟蹤】"]
-    assert "你跟了上去。" not in entry.lines
+    assert f"⚔ 湖邊：{record.tier}水寇小隊" in game.state.log
 
 
 def test_choice_entry_names_the_event_and_the_check(game):
@@ -100,10 +103,10 @@ def test_choice_entry_names_the_event_and_the_check(game):
     game.choose("act:explore")
     game.choose("choice:0")
     entry = latest(game)
-    assert (entry.title, entry.tag) == ("醉漢・逼問", "韓鐵出手・成功")
+    assert (entry.title, entry.tag) == ("醉漢・逼問", "本人出手・成功")  # 空隊伍時只有本人
     assert entry.lines == ["他全招了。"]
     assert entry.changes == ["善名 +2"]
-    assert "▸ 逼問" in game.state.log and "（韓鐵出手——成功）" in game.state.log
+    assert "▸ 逼問" in game.state.log and "（本人出手——成功）" in game.state.log
 
 
 def test_self_check_choice_entry(game):
@@ -121,15 +124,17 @@ def test_choice_entry_with_a_battle(game):
     record = game.state.battles[0]
     entry = latest(game)
     assert entry.title == "挑戰・應戰"
-    assert entry.tag == f"不敵翻江龍，敗退（{record.rounds} 回合）"
+    assert entry.tag == f"{record.tier}翻江龍"  # 難度 200，新手打不過
     assert entry.battle_id == record.id
     assert (entry.lines, entry.changes) == (["你敗了。"], ["銀兩 -10"])
 
 
 def test_choice_that_leads_to_another_event(game):
-    game.content.config.train_event_chance = 1.0
-    game.choose("move:lake")
-    game.choose("act:train")
+    """chain_a/chain_b 事件鏈：直接把 chain_a 設成待處理事件，不依賴哪個行動觸發它
+    （新制度下 explore/socialize 才會隨機遇上事件，跟事件骨架裡的 actions 標記已經沒有
+    「歷練」這個分類，chain_a 原本標的 actions=["train"] 在新制度下不會被任何行動觸發，
+    這裡只測「選項串接下一個事件」本身這件事，跳過「怎麼遇到 chain_a」）。"""
+    game.state.pending_event = "chain_a"
     game.choose("choice:0")
     entry = latest(game)
     assert (entry.title, entry.tag, entry.lines) == ("跟蹤・繼續", "遇上【倉庫】", [])
@@ -140,7 +145,7 @@ def test_seclusion_start_and_finish(game):
     game.seclude(4)
     entry = latest(game)
     assert (entry.title, entry.tag) == ("閉關", "4 小時")
-    assert entry.lines == ["你閉關靜修，預計 4 小時後出關；閉關期間內力回復加倍。"]
+    assert entry.lines == ["你閉關靜修，預計 4 小時後出關；閉關期間氣血回復加倍。"]
     game.advance(4 * HOUR)
     entry = latest(game)
     assert (entry.title, entry.tag, entry.lines, entry.changes) == ("出關", "4.0 小時", [], ["心得 +75"])
@@ -193,39 +198,26 @@ def test_invalid_option_writes_no_entry(game):
 
 
 def test_menxia_changes_are_written_but_failures_are_not(game):
-    p = game.state.player
-    assert "心得不足" in game.upgrade("skill:fist")[0]
-    assert game.dispel("skill:family") == ["本命武學不能散功。"]
-    assert game.set_loadout("player", 0, "sword") == ["你尚未習得這門武學。"]
-    game.set_loadout("player", 0, "fist")  # 原本就配著：什麼都沒變
+    assert game.create_skill("", "武學") == ["得先取個名字。"]
     assert len(game.state.journal) == 1
-    assert any("心得不足" in line for line in game.state.log)  # 失敗訊息仍留在 log
-    p.stats["xinde"] = 100
-    game.upgrade("skill:fist")
+    game.create_skill("測試長拳", "武學")
     entry = latest(game)
-    assert (entry.title, entry.tag, entry.lines, entry.changes) == ("門下", "【長拳】精進至第2成", [], ["心得 -20"])
-    game.dispel("skill:fist")
-    game.upgrade("innate:mate")
-    game.set_loadout("player", 0, None)
-    entry = latest(game)  # 連續在門下做的事併成一則：敘事依序接上、心得加總、時間與結果標記用最新的
-    assert len(game.state.journal) == 2
-    assert (entry.title, entry.tag) == ("門下", "沈浪的第1個武學欄：（空）")
-    assert entry.lines == [
-        "【長拳】精進至第2成", "【長拳】散功，退回第一成", "【驚濤掌】精進至第2成", "沈浪的第1個武學欄：（空）"
-    ]
-    assert entry.changes == ["心得 -24"]  # −20 ＋16 −20
+    assert entry.title == "門下"
+    assert "自創了一門武學" in entry.tag
+    assert game.create_skill("另一門", "武學") == ["你已經有一門武學了，同時只能練一門。"]
+    assert len(game.state.journal) == 2  # 失敗不會再寫一則新紀錄
+    assert any("你已經有一門武學了" in line for line in game.state.log)  # 失敗訊息仍留在 log
 
 
 def test_menxia_entries_merge_only_when_nothing_else_happened_in_between(game):
-    game.state.player.stats["xinde"] = 100
-    game.upgrade("skill:fist")
+    game.create_skill("測試長拳", "武學")
     game.state.world.time = 600
     game.choose("move:lake")
-    game.upgrade("skill:fist")
+    game.practice("武學")
     game.state.world.time = 1200
-    game.upgrade("innate:mate")
+    game.practice("武學")
     assert [e.title for e in game.state.journal] == ["門下", "前往 湖邊", "門下", "測試劇本"]
-    assert latest(game).time == 1200 and latest(game).changes == ["心得 -60"]
+    assert latest(game).time == 1200
 
 
 def test_view_map_writes_an_entry_only_when_it_finishes_a_guide_step(game):
@@ -252,10 +244,18 @@ def test_notice_and_skip_tutorial(game):
 
 
 def guided_train(game):
-    """湖邊歷練剛好完成一步新手引導（獎勵銀兩 5）。"""
-    game.content.tutorial.steps[0].done_when.action = "train"
+    """湖邊探索剛好遇上遭遇戰、順便完成一步新手引導（獎勵銀兩 5）：把唯一的湖邊探索事件
+    標成已經看過，逼 explore 落到隨機遭遇戰那條路（見 engine.py::_encounter），
+    train_event_chance=1.0 保證真的觸發。"""
+    game.content.tutorial.steps[0].done_when.action = "explore"
+    game.content.config.train_event_chance = 1.0
+    game.state.player.seen_events.add("scroll")
+    _give_player_a_winning_wugong(game)
+    from conftest import FixedRandom
+
+    game.rng = FixedRandom(0.99)
     game.choose("move:lake")
-    game.choose("act:train")
+    game.choose("act:explore")
 
 
 def test_changes_with_the_same_label_are_added_up(game):
@@ -275,15 +275,16 @@ def test_battle_card_extra_shows_what_the_card_does_not(game):
 
 
 def test_battle_card_extra_skips_card_notes_and_event_markers(game):
+    game.state.player.tutorial_step = 1  # 跳過第一步，這次遭遇戰不該混進引導訊息
     game.content.config.train_event_chance = 1.0
+    game.state.player.seen_events.add("scroll")
+    _give_player_a_winning_wugong(game)
+    from conftest import FixedRandom
+
+    game.rng = FixedRandom(0.99)
+    game.state.player.member.exp = 90
     game.choose("move:lake")
-    game.choose("act:train")
-    assert latest(game).lines == ["遇上【跟蹤】"]
-    assert game.battle_extra_html() == ""  # 事件由場景顯示；其餘都在卡片上
-    game.content.config.train_event_chance = 0.0
-    game.state.player.members["player"].exp = 90
-    game.state.pending_event = None
-    game.choose("act:train")
+    game.choose("act:explore")
     assert "沈浪升到第 2 級！" in latest(game).lines and "沈浪升到第 2 級！" in game.state.battles[0].notes
     assert game.battle_extra_html() == ""  # 升級已經寫在卡片的「結果」裡
     game.choose("move:town")
@@ -361,8 +362,14 @@ def test_old_save_file_without_a_journal_loads_and_converts(tmp_path, content, g
 
 
 def test_journal_survives_a_save_round_trip(tmp_path, game):
+    game.content.config.train_event_chance = 1.0
+    game.state.player.seen_events.add("scroll")
+    _give_player_a_winning_wugong(game)
+    from conftest import FixedRandom
+
+    game.rng = FixedRandom(0.99)
     game.choose("move:lake")
-    game.choose("act:train")
+    game.choose("act:explore")
     path = tmp_path / "沈浪.json"
     save_game(game.state, path)
     loaded = load_game(path)
@@ -436,15 +443,20 @@ def test_rows_html_one_line_per_entry_with_the_story_folded_inside():
 
 
 def test_game_html_helpers(game):
+    game.content.config.train_event_chance = 1.0
+    game.state.player.seen_events.add("scroll")
+    from conftest import FixedRandom
+
+    game.rng = FixedRandom(0.99)
     game.choose("move:lake")
     assert "前往 湖邊" in game.latest_entry_html()
     rows = game.journal_html(1, 5)
     assert rows.count('class="tx-row"') == 1 and "測試劇本" in rows
     assert game.journal_html(6, 30) == ""
     assert not game.shows_battle_card()
-    game.choose("act:train")
+    _give_player_a_winning_wugong(game)
+    game.choose("act:explore")
     assert game.shows_battle_card()  # 最新一則就是卡片上那一場
-    game.state.player.stats["xinde"] = 100
-    game.upgrade("skill:fist")
+    game.practice("武學")
     assert not game.shows_battle_card()  # 之後在門下做了事：「剛剛」改顯示那一則
     assert game.battle_card() is not None

@@ -3,46 +3,31 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field
 
 from .models import Content
 
-PLAYER = "player"  # 門下資料裡代表玩家本人的 key
-TEAM_SIZE = 3  # 每隊最多幾人
+PLAYER = "player"  # 沿用舊名，指玩家本人；同伴不再用 key 存在 PlayerState 裡（見下）
 
 
 class Member(BaseModel):
+    """玩家本人的角色表：等級/氣血/內功/武學。同伴不再用這個模型——他們全服唯一，等級/
+    武學是共用資料（見 world_state.py::CompanionProgress），不是某個玩家存檔裡的副本。"""
+
     level: int = 1
     exp: int = 0
-    neili: float | None = None  # None＝內力全滿
-    innate_level: int = 1  # 舊武學系統遺留欄位，battle.py/team.py 移除後這個欄位會跟著清掉
+    neili: float | None = None  # 氣血，None＝滿
 
-    # ── 好感度（sanguo-companions 合併新增）──
-    affinity: int = 0  # 0~100 單向「情誼」，只管內容解鎖，不影響任何數值/成功率（見設計文件七.1）
-    relationship_note: str = ""  # 一句話關係現況，交遊沒填時系統補一個保底版本，沿用 ai_story 的機制
-
-    # ── 新武學系統（sanguo-companions 合併新增，取代 battle.py 的 loadouts/innate_level）──
-    # 每人最多學一門內功、一門武學（設計文件六.4），id 指向 tianxia/martial_arts.py 的 MartialArt，
-    # 可能是內容裡的固定武學（本命武學）也可能是玩家自創、存在共用世界狀態裡的武學。
+    # 每人最多學一門內功、一門武學（設計文件六.4），id 指向 tianxia/martial_arts.py 的
+    # MartialArt，可能是內容裡的固定武學（本命武學）也可能是玩家自創、存在共用世界狀態
+    # 裡的武學。
     neigong_id: str | None = None
     neigong_level: int = 1  # 熟練度，第一成～第十成
     wugong_id: str | None = None
     wugong_level: int = 1
 
 
-class Team(BaseModel):
-    """一支隊伍。第一支是本隊（第一位固定是你本人）；1c-2 的派遣隊會在這裡加上自己的體力與派遣狀態。"""
-
-    members: list[str] = Field(default_factory=list)  # 第一位是隊長；最多 TEAM_SIZE 人
-
-
-class Pull(BaseModel):
-    """招賢抽到的一位（招賢分頁「最近一次」的結果卡）。"""
-
-    character: str
-    new: bool  # True：新入門；False：重複
-    xinde: int = 0  # 重複換到的心得
-    silver: int = 0  # 本季招賢心得滿了之後，重複改給的銀兩
+MAX_TEAM_COMPANIONS = 4  # 設計文件四.4：每位玩家最多帶 4 個夥伴，只有一支隊伍，沒有多隊派遣
 
 
 class PlayerState(BaseModel):
@@ -52,32 +37,20 @@ class PlayerState(BaseModel):
     stamina: float
     flags: set[str] = Field(default_factory=set)
     sect: str | None = None
-    skills: dict[str, int] = Field(default_factory=dict)  # 已習武學 → 成數
-    members: dict[str, Member] = Field(default_factory=dict)  # 名冊（門下）；PLAYER＝本人，其餘依入門先後
-    teams: list[Team] = Field(default_factory=list)  # 各隊；第一支是本隊，數量見 roster.normalize
-    loadouts: dict[str, list[str | None]] = Field(default_factory=dict)  # 每人兩格自選武學
+    member: Member = Field(default_factory=Member)  # 玩家本人的角色表
+
+    # ── 同伴（sanguo-companions 合併重寫：全服唯一，見 world_state.py）──
+    team: list[str] = Field(default_factory=list)  # 目前帶在身邊出戰的同伴 id，最多 MAX_TEAM_COMPANIONS 人
+    affinities: dict[str, int] = Field(default_factory=dict)  # 人物 id -> 0~100 好感度，跟有沒有招到他無關
+    relationship_notes: dict[str, str] = Field(default_factory=dict)  # 人物 id -> 一句話關係現況
+
     seen_events: set[str] = Field(default_factory=set)
     anonymous: bool = False
     busy_until: float | None = None  # 閉關結束的遊戲時間
     seclusion_start: float = 0.0
     tutorial_step: int = 0  # 等於引導步數時代表引導結束
     visited: set[str] = Field(default_factory=set)  # 去過的地點
-    apprentice_day: int = 0  # 上次收徒是第幾天
-    apprentice_count: int = 0  # 那一天已經收了幾次
     fortune: bool = False  # 本季的新立門戶福緣已經發生（或已經改送賀禮）
-    yuanbao: int = 0  # 元寶：測試用的付費貨幣，只用在招賢；跨季保留（見 Game.new_season）
-    gacha_pity: int = 0  # 連續幾抽沒出天品；跨季保留
-    gacha_xinde: int = 0  # 本季招賢換到的心得（付費心得護欄看它；劇情重複結識換到的心得不算）
-    gacha_last: list[Pull] = Field(default_factory=list)  # 最近一次招賢的結果，依抽到的順序
-
-    @model_validator(mode="before")
-    @classmethod
-    def _single_team(cls, data):
-        """1c 以前的存檔只有一支出戰隊伍（team）：它就是本隊；其他隊伍由 roster.normalize 補齊。"""
-        if isinstance(data, dict) and "team" in data and "teams" not in data:
-            data = dict(data)
-            data["teams"] = [{"members": data.pop("team")}]
-        return data
 
 
 class Rumor(BaseModel):
@@ -109,16 +82,9 @@ class Fighter(BaseModel):
     level: int
 
 
-class Performance(BaseModel):
-    """我方一人在這場的表現（只提供數據）。"""
-
-    name: str
-    damage: int  # 造成的傷害（戰報上的數字加總）
-    controls: int  # 控制命中次數
-
-
 class BattleRecord(BaseModel):
-    """一場戰鬥（歷練或劇情戰）的紀錄。"""
+    """一場遭遇/劇情戰的紀錄（sanguo-companions 合併重寫：單次判定，取代舊的逐回合戰報，
+    見 tianxia/encounter.py）。"""
 
     id: int  # 流水號，本季從 1 起算
     time: float  # 開打時的遊戲時間
@@ -127,19 +93,14 @@ class BattleRecord(BaseModel):
     event: str = ""  # 劇情戰的事件標題
     opponent: str  # 敵方隊伍名稱
     ours: list[Fighter]  # 我方陣容，第一位是隊長；等級是開打時的等級
-    theirs: list[Fighter]
-    outcome: Literal["win", "draw", "lose"]
-    rounds: int
-    ending: str  # 結束原因（戰報最後一行）
-    leader_ok: bool  # 我方隊長是否無恙
-    moments: list[str] = Field(default_factory=list)  # 關鍵時刻，最多 3 則
+    tier: str  # 大勝/險勝/僵持/落敗（encounter.EncounterResult.tier）
+    our_power: float
+    difficulty: float
     exp: int = 0  # 每人獲得的經驗
     xinde: int = 0
     silver: int = 0  # 正數為獲得、負數為失落
     notes: list[str] = Field(default_factory=list)  # 敘事文字：選項效果、升級、拜師、傳聞等（不是數字，見 changes）
     changes: list[str] = Field(default_factory=list)  # 其他數值變化，如屬性、名望、善惡名（經驗／心得／銀兩已有專屬欄位）
-    report: list[str] = Field(default_factory=list)  # 完整逐回合戰報
-    performance: list[Performance] = Field(default_factory=list)  # 我方每人表現，順序同 ours
 
 
 class JournalEntry(BaseModel):
@@ -166,19 +127,18 @@ class GameState(BaseModel):
 
 
 def new_game_state(content: Content, name: str) -> GameState:
+    """同伴全服唯一（設計文件四.4），開局不再自動塞給玩家任何一位——每個新玩家都是孤身
+    一人起步，招募是要在遊戲裡真的去搶的行動，不是開局贈品（不然「唯一」第一時間就矛盾：
+    每個新玩家都自動擁有同一位歷史人物是不可能的）。"""
     cfg = content.config
     trends = content.scenario.trends
-    companions = list(cfg.start_companions)
-    keys = [PLAYER] + companions
     player = PlayerState(
         name=name,
         location=content.scenario.start_location,
         stats=dict(cfg.start_stats),
         stamina=float(cfg.stamina_max),
         tutorial_step=0,
-        members={key: Member() for key in keys},
-        teams=[Team(members=keys[:TEAM_SIZE])] + [Team() for _ in range(max(cfg.team_counts) - 1)],
-        loadouts={key: [None, None] for key in keys},
+        member=Member(),
     )
     world = WorldState(
         trends={t.id: t.start for t in trends},

@@ -1,4 +1,11 @@
-"""載入 content/ 底下的 JSON，並檢查所有交叉引用。內容寫錯時在載入當下就報錯。"""
+"""載入 content/ 底下的 JSON，並檢查所有交叉引用。內容寫錯時在載入當下就報錯。
+
+sanguo-companions 合併大幅簡化了這裡的驗證規則（見設計文件開放決策記錄）：舊制度圍繞
+天地玄黃品階/統御區間/流派資質 S 級數量/招賢卡池/收徒地點的一大批交叉檢查全部拿掉，
+因為新制度（同伴全服唯一、無抽卡、無多隊、無舊武學品階系統）根本沒有這些概念。只保留
+基本的交叉引用完整性檢查（id 存在、不重複、地點互相連通等），細緻的內容規則之後好玩
+再視需要補回來。
+"""
 from __future__ import annotations
 
 import json
@@ -7,19 +14,9 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from .models import (
-    COMPANION_TIERS, STATS, CharacterDef, Condition, Config, Content, Effect, Event, Location, MapLayout,
-    Scenario, Sect, SimRumor, Skill, Squad, Tutorial, in_gacha_pool,
+    STATS, CharacterDef, Condition, Config, Content, Effect, Event, Location, MapLayout,
+    Scenario, Sect, SimRumor, SkillDef, Squad, Tutorial,
 )
-
-# 同伴的品階規則（設計文件 1c §1.2）：統御範圍、本命品質（黃品沒有本命）、流派資質
-TIER_COMMAND = {"天": (6, 7), "地": (4, 6), "玄": (3, 4), "黃": (1, 3)}
-TIER_INNATE = {"天": "上", "地": "中", "玄": "下", "黃": None}
-TIER_S = {"天": 2, "地": 1}  # 流派資質裡剛好要有幾項 S
-TIER_TOP = {"玄": "A", "黃": "B"}  # 流派資質最高到哪一級
-GRADES = "SABC"
-# 取得管道只給哪些品階；開局、招賢不限
-SOURCE_TIERS = {"收徒": ("黃", "玄"), "交遊": ("玄", "地"), "福緣": ("地",), "奇遇": ("地", "天"), "招降": ("地", "天")}
-BROUGHT = ("交遊", "奇遇", "福緣", "招降")  # 要有事件或敵方隊伍真的帶得來的管道
 
 
 class ContentError(Exception):
@@ -39,7 +36,7 @@ def load_content(root: Path) -> Content:
         config=Config(**_read(root / "config.json")),
         scenario=Scenario(**_read(root / "scenario.json")),
         locations=_index(Location, _read(root / "locations.json")),
-        skills=_index(Skill, _read(root / "skills.json")),
+        skills=_index(SkillDef, _read(root / "skills.json")),
         sects=_index(Sect, _read(root / "sects.json")),
         characters=_index(CharacterDef, _read(root / "characters.json")),
         squads=_index(Squad, _read(root / "squads.json")),
@@ -107,112 +104,13 @@ def validate(c: Content) -> None:
         if eff.recruit:
             known(where, [eff.recruit], c.characters, "人物")
             if eff.recruit in c.characters:
-                need(c.characters[eff.recruit].tier != "敵", f"{where}：結識的 {eff.recruit} 不是同伴")
-
-    brought: dict[str, set[str]] = {}  # 人物 id → 真的帶得來他的管道（事件、敵方隊伍）
-
-    def bring(cid: str, source: str, where: str) -> None:
-        if cid in c.characters and c.characters[cid].tier != "敵":
-            brought.setdefault(cid, set()).add(source)
-            need(source in c.characters[cid].sources, f"{where}：{source}帶來的 {cid} 要有「{source}」管道")
-
-    def check_companion(ch: CharacterDef) -> None:
-        where = f"人物 {ch.id}"
-        low, high = TIER_COMMAND[ch.tier]
-        got = "沒有填 command" if ch.command is None else f"現在是 {ch.command}"
-        need(ch.command is not None and low <= ch.command <= high, f"{where}：{ch.tier}品的統御要在 {low}～{high}（{got}）")
-        quality = TIER_INNATE[ch.tier]
-        if quality is None:
-            need(ch.innate is None, f"{where}：黃品沒有本命武學")
-        elif ch.innate is None:
-            errors.append(f"{where}：{ch.tier}品要有本命武學")
-        elif ch.innate in c.skills:
-            innate = c.skills[ch.innate]
-            need(innate.quality == quality, f"{where}：{ch.tier}品的本命要是{quality}品（{innate.name} 是{innate.quality}品）")
-        grades = list(ch.aptitude.values())
-        if ch.tier in TIER_S:
-            need(grades.count("S") == TIER_S[ch.tier], f"{where}：{ch.tier}品的流派資質要剛好 {TIER_S[ch.tier]} 項 S")
-        else:
-            top = TIER_TOP[ch.tier]
-            need(all(GRADES.index(g) >= GRADES.index(top) for g in grades), f"{where}：{ch.tier}品的流派資質最高 {top}")
-        if ch.tier == "天":
-            need(ch.trait is not None, f"{where}：天品要有特性 trait")
-        elif ch.trait is not None:
-            errors.append(f"{where}：只有天品有特性")
-        if ch.trait is not None:
-            known(where, [ch.trait], c.skills, "武學")
-            trait = c.skills.get(ch.trait)
-            if trait is not None:
-                need(
-                    trait.kind == "心法" and all(e.top is None for e in trait.effects),
-                    f"{where}：特性 {ch.trait} 要是效果固定（不寫 top）的心法",
-                )
-        need(bool(ch.sources), f"{where}：同伴要寫取得管道 sources")
-        if ch.sources:
-            need(any(s != "招賢" for s in ch.sources), f"{where}：至少要有一條招賢以外的免費管道")
-        need(("開局" in ch.sources) == (ch.id in cfg.start_companions), f"{where}：「開局」管道要和 config.start_companions 一致")
-        for source in ch.sources:
-            if source in SOURCE_TIERS:
-                tiers = SOURCE_TIERS[source]
-                need(ch.tier in tiers, f"{where}：「{source}」管道只給{'、'.join(t + '品' for t in tiers)}")
-            if source in BROUGHT:
-                what = "敵方隊伍" if source == "招降" else "事件"
-                need(source in brought.get(ch.id, set()), f"{where}：「{source}」管道沒有{what}帶得來")
-        need(not ch.recruit_at or "收徒" in ch.sources, f"{where}：有收徒地點 recruit_at 就要有「收徒」管道")
-        for loc_id in ch.recruit_at:
-            if loc_id not in c.locations:
-                errors.append(f"{where}：未知的地點 {loc_id}")
-            else:
-                need(
-                    bool(set(c.locations[loc_id].tags) & set(cfg.apprentice_tags)),
-                    f"{where}：收徒地點 {loc_id} 不是{'或'.join(cfg.apprentice_tags)}",
-                )
+                need(c.characters[eff.recruit].kind == "recruitable", f"{where}：結識的 {eff.recruit} 不是可招募的同伴")
 
     cfg = c.config
     for action in ("explore", "train", "socialize"):
         need(action in cfg.action_cost, f"config.action_cost 缺少 {action}")
     for stat in STATS:
         need(stat in cfg.start_stats, f"config.start_stats 缺少 {stat}")
-    known("config.starter_skills", cfg.starter_skills, c.skills, "武學")
-    if cfg.player_innate:
-        known("config.player_innate", [cfg.player_innate], c.skills, "武學")
-    known("config.start_companions", cfg.start_companions, c.characters, "人物")
-    known("config.vision_skills", cfg.vision_skills, c.skills, "武學")
-    known("config.player_aptitude", cfg.player_aptitude, ("剛", "柔", "快", "巧"), "流派")
-    for key in cfg.start_companions:
-        if key in c.characters:
-            need(c.characters[key].tier != "敵", f"config.start_companions：{key} 是敵人，不是同伴")
-    need(
-        bool(cfg.team_counts) and len(cfg.team_counts) == len(cfg.command_caps),
-        "config.team_counts 與 config.command_caps 要一樣長，而且不能是空的",
-    )
-    need(
-        all(n >= 1 for n in cfg.team_counts) and cfg.team_counts == sorted(cfg.team_counts)
-        and cfg.command_caps == sorted(cfg.command_caps),
-        "config.team_counts 與 config.command_caps 不能遞減，而且至少要有一隊",
-    )
-    known("config.apprentice_weights", cfg.apprentice_weights, ("黃", "玄"), "品階")
-    need(set(cfg.duplicate_xinde) == set(COMPANION_TIERS), "config.duplicate_xinde 要寫齊天地玄黃")
-    need(min(cfg.duplicate_xinde.values(), default=0) >= 0, "config.duplicate_xinde 的心得不能是負的")
-    rates = cfg.gacha_rates
-    need(
-        set(rates) == set(COMPANION_TIERS) and min(rates.values(), default=0) >= 0 and abs(sum(rates.values()) - 100) < 1e-6,
-        "config.gacha_rates 要寫齊天地玄黃、不能是負的，加起來是 100（%）",
-    )
-    for tier in COMPANION_TIERS:
-        if rates.get(tier, 0) > 0:
-            need(
-                any(ch.tier == tier and in_gacha_pool(ch) for ch in c.characters.values()),
-                f"config.gacha_rates：{tier}品的機率大於 0，卡池裡卻沒有{tier}品（人物的 sources 要有「招賢」）",
-            )
-    need(rates.get(COMPANION_TIERS[0], 0) > 0, "config.gacha_rates：天品的機率要大於 0（保底必得天品）")
-    need(cfg.gacha_ten_floor in COMPANION_TIERS, f"config.gacha_ten_floor：未知的品階 {cfg.gacha_ten_floor}")
-    need(set(cfg.gacha_silver) == set(COMPANION_TIERS), "config.gacha_silver 要寫齊天地玄黃")
-    need(min(cfg.gacha_silver.values(), default=0) >= 0, "config.gacha_silver 的銀兩不能是負的")
-    need(min(cfg.gacha_single, cfg.gacha_ten, cfg.gacha_pity) >= 1, "config.gacha_single、gacha_ten、gacha_pity 至少要是 1")
-    need(cfg.test_yuanbao >= 1, "config.test_yuanbao 至少要是 1")
-    need(0 <= cfg.gacha_xinde_half <= cfg.gacha_xinde_cap, "config.gacha_xinde_half 要在 0 到 gacha_xinde_cap 之間")
-    known("config.provisional", cfg.provisional, Config.model_fields, "設定")
 
     for loc in c.locations.values():
         where = f"地點 {loc.id}"
@@ -229,12 +127,8 @@ def validate(c: Content) -> None:
         )
     need(c.scenario.start_location in c.locations, f"劇本起點 {c.scenario.start_location} 不存在")
 
-    for skill in c.skills.values():
-        if skill.sect:
-            known(f"武學 {skill.id}", [skill.sect], c.sects, "門派")
     for sect in c.sects.values():
         known(f"門派 {sect.id}", [sect.location], c.locations, "地點")
-        known(f"門派 {sect.id}", sect.starter_skills, c.skills, "武學")
 
     for ev in c.events.values():
         where = f"事件 {ev.id}"
@@ -259,7 +153,6 @@ def validate(c: Content) -> None:
                 cid in ev.condition.members_none,
                 f"{where}：結識 {cid} 的事件，condition.members_none 要列出 {cid}（已入門就不該再遇到）",
             )
-            bring(cid, "福緣" if ev.fortune else "奇遇" if ev.qiyu else "交遊", where)
         if ev.fortune:
             need(not ev.actions, f"{where}：福緣事件只由交遊觸發，actions 要是空的")
             need(all(ch.effect.recruit for ch in ev.choices), f"{where}：福緣事件的每個選項都要結識一個人")
@@ -345,47 +238,30 @@ def validate(c: Content) -> None:
         check_condition(where, step.done_when.condition)
         check_effect(where, step.reward)
 
-    for skill in c.skills.values():
-        where = f"武學 {skill.id}"
-        if skill.kind in ("絕招", "連招"):
-            need(skill.chance_base > 0, f"{where}：絕招／連招必須有發動率 chance_base")
-        if skill.kind == "心法":
-            need(skill.chance_base == 0 and skill.prep == 0, f"{where}：心法不能有發動率或準備回合")
-        for eff in skill.effects:
-            if eff.kind in ("buff", "debuff"):
-                need(eff.stat is not None, f"{where}：{eff.kind} 效果必須指定 stat")
-            if eff.kind == "control":
-                need(eff.control is not None, f"{where}：control 效果必須指定 control")
     for ch in c.characters.values():
         where = f"人物 {ch.id}"
         for stat in ("str", "agi", "con", "wis"):
             need(stat in ch.stats, f"{where}：stats 缺少 {stat}")
-        known(where, ch.aptitude, ("剛", "柔", "快", "巧"), "流派")
-        if ch.innate:
-            known(where, [ch.innate], c.skills, "武學")
         if ch.sect:
             known(where, [ch.sect], c.sects, "門派")
-        if ch.tier == "敵":
-            need(
-                ch.command is None and not ch.sources and not ch.recruit_at and ch.trait is None,
-                f"{where}：敵人不能有統御、取得管道、收徒地點或特性",
-            )
+        if ch.starting_wugong:
+            known(where, [ch.starting_wugong], c.skills, "武學")
+            if ch.starting_wugong in c.skills:
+                need(c.skills[ch.starting_wugong].kind == "武學", f"{where}：starting_wugong 要指向 kind=武學 的武學")
+        if ch.starting_neigong:
+            known(where, [ch.starting_neigong], c.skills, "武學")
+            if ch.starting_neigong in c.skills:
+                need(c.skills[ch.starting_neigong].kind == "內功", f"{where}：starting_neigong 要指向 kind=內功 的武學")
+        need(
+            ch.kind is not None or ch.starting_wugong is None,
+            f"{where}：敵人（kind 沒填）不需要 starting_wugong，那是同伴才有的欄位",
+        )
+        if ch.recruit_at:
+            known(where, [ch.recruit_at], c.locations, "地點")
+            need(ch.kind == "recruitable", f"{where}：只有 kind=recruitable 的同伴需要 recruit_at")
     for squad in c.squads.values():
         where = f"敵方隊伍 {squad.id}"
-        known(where, [m.character for m in squad.members], c.characters, "人物")
-        if squad.surrender:
-            cid = squad.surrender.character
-            known(where, [cid], c.characters, "人物")
-            if cid in c.characters:
-                need(c.characters[cid].tier != "敵", f"{where}：招降的 {cid} 不是同伴")
-                bring(cid, "招降", where)
-    for ch in c.characters.values():
-        if ch.tier != "敵":
-            check_companion(ch)
-    need(
-        any(ch.tier == "地" and "福緣" in ch.sources for ch in c.characters.values()),
-        "至少要有一名標了「福緣」的地品（新立門戶福緣要送的人）",
-    )
+        need(squad.difficulty >= 0, f"{where}：difficulty 不能是負的")
 
     if errors:
         raise ContentError("內容檔有誤：\n" + "\n".join(errors))
