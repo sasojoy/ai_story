@@ -2,7 +2,7 @@ from tianxia.atlas import (
     Route, detail_text, direction, foes, goal_places, haunters, is_known, known_locations, place_choices, recent_news,
     region_of, region_trends, road_hops, routes, travel_button, worst_foe,
 )
-from tianxia.models import Location
+from tianxia.models import Condition, Location, SimPlayer
 from tianxia.state import Rumor
 
 DAY = 86400
@@ -247,7 +247,7 @@ def test_detail_lists_situation_enemies_story_and_route(state, content):
     state.world.rumors.append(Rumor(time=0, text="翻江龍又劫了一艘船。", location="lake"))
     text = detail_text(state, content, "lake", {"thug": "穩勝"}.get)
     assert text.startswith("### 湖邊　危險 ★★")
-    assert "**局勢**　測試北區（寇亂 30）　｜　常出沒：翻江龍" in text
+    assert "**局勢**　測試北區（寇亂 30）\n" in text and "**龍頭人物**　翻江龍（常出沒在此）" in text
     assert "**敵情**　水寇小隊 穩勝" in text
     assert "★ 這一幕主線的目標：壓制寇亂" in text
     assert "✦ 最近 3 天的大事與傳聞：\n- 第1天 00:00　翻江龍又劫了一艘船。" in text
@@ -257,6 +257,100 @@ def test_detail_lists_situation_enemies_story_and_route(state, content):
     assert "沒有龍頭人物在此出沒" in here and "沒有人在這裡滋事" in here
     assert "不是這一幕主線的目標" in here and "最近 3 天沒有大事或傳聞" in here
     assert here.endswith("**路線**　你就在這裡")
+
+
+LEADER_WHO = "江湖上的龍頭人物，會自己行動，左右江湖大勢"
+
+
+def lake_detail(state, content) -> str:
+    return detail_text(state, content, "lake", {"thug": "穩勝"}.get)
+
+
+def test_detail_explains_who_a_haunting_leader_is_and_what_he_is_doing(state, content):
+    text = lake_detail(state, content)
+    assert "**龍頭人物**　翻江龍（常出沒在此）\n" in text
+    assert f"- {LEADER_WHO}。" in text
+    assert "- 現在：每天約出手 24 次，讓寇亂上升。" in text
+    assert "常出沒：" not in text and text.count("翻江龍") == 1  # 常出沒的資訊併進這一塊，不說兩次
+    assert "最近：" not in text  # 沒有傳聞：不寫最近
+
+
+def test_detail_says_which_way_each_visible_trend_moves(state, content):
+    boss = content.scenario.sim_players[0]
+    boss.actions_per_day = 2.5
+    boss.trend = {"kou": -2}
+    assert "- 現在：每天約出手 2.5 次，讓寇亂下降。" in lake_detail(state, content)
+    state.world.revealed.add("bao")
+    boss.trend = {"kou": -1, "bao": 1}
+    assert "- 現在：每天約出手 2.5 次，讓寶藏上升，讓寇亂下降。" in lake_detail(state, content)
+    boss.trend = {"kou": 1, "bao": 1}
+    assert "- 現在：每天約出手 2.5 次，讓寇亂、寶藏上升。" in lake_detail(state, content)
+
+
+def test_detail_never_names_a_hidden_trend_the_leader_pushes(state, content):
+    boss = content.scenario.sim_players[0]
+    boss.trend = {"kou": 1, "bao": 3}  # 寶藏線還沒浮現：世界模擬不動它，詳情也不能提
+    text = lake_detail(state, content)
+    assert "- 現在：每天約出手 24 次，讓寇亂上升。" in text and "寶藏" not in text
+    boss.trend = {"bao": 3}
+    text = lake_detail(state, content)
+    assert "- 現在：每天約出手 24 次。" in text and "寶藏" not in text
+
+
+def test_detail_shows_the_quiet_phrase_when_no_entry_of_his_is_active(state, content):
+    boss = content.scenario.sim_players[0]
+    boss.condition.world_flags_none.append("fjl_defeated")
+    assert "- 現在：每天約出手" in lake_detail(state, content)
+    state.world.flags.add("fjl_defeated")
+    text = lake_detail(state, content)
+    assert "- 現在：眼下沒有動靜。" in text and "每天約出手" not in text and "- 江湖上的龍頭人物" in text  # 還是龍頭人物、還在此出沒
+
+
+def test_detail_describes_the_entry_that_is_active_now(state, content):
+    boss = content.scenario.sim_players[0]
+    boss.condition.world_flags_none.append("cave_open")
+    content.scenario.sim_players.append(SimPlayer(
+        name="翻江龍", actions_per_day=6, trend={"kou": -1}, haunts=["lake"], condition=Condition(world_flags_all=["cave_open"]),
+    ))
+    assert "- 現在：每天約出手 24 次，讓寇亂上升。" in lake_detail(state, content)
+    state.world.flags.add("cave_open")
+    text = lake_detail(state, content)
+    assert "- 現在：每天約出手 6 次，讓寇亂下降。" in text and "每天約出手 24" not in text
+    assert text.count("**龍頭人物**") == 1  # 同一個人只說一次
+
+
+def test_detail_lists_the_two_newest_rumors_that_mention_him(state, content):
+    rumors = state.world.rumors
+    rumors.append(Rumor(time=0, text="翻江龍在湖上放話。", location="lake"))
+    rumors.append(Rumor(time=1 * DAY, text="鬼手在挖土。", location="cave"))  # 沒提到他
+    rumors.append(Rumor(time=2 * DAY + 3600, text="翻江龍又劫了一艘船。", location="lake"))
+    rumors.append(Rumor(time=3 * DAY + 7200, text="有人說翻江龍去了別處。", location="town"))
+    rumors.append(Rumor(time=4 * DAY, text="翻江龍的老巢被圍了。"))  # 沒有地點也算
+    text = lake_detail(state, content)
+    assert "- 最近：\n  - 第5天 00:00　翻江龍的老巢被圍了。\n  - 第4天 02:00　有人說翻江龍去了別處。\n" in text
+    assert "放話" not in text.split("**敵情**")[0]  # 最多兩則：更舊的不列
+    assert "鬼手在挖土" not in text.split("**敵情**")[0]
+    rumors.pop()
+    rumors.pop()
+    assert "- 最近：\n  - 第3天 01:00　翻江龍又劫了一艘船。\n  - 第1天 00:00　翻江龍在湖上放話。\n" in lake_detail(state, content)
+
+
+def test_detail_waits_for_the_hidden_trend_before_describing_a_leader(state, content):
+    state.world.flags.add("cave_open")
+    state.player.location = "lake"  # 寶洞在視野內
+    assert "鬼手" not in detail_text(state, content, "cave", no_odds)
+    assert "寶藏" not in detail_text(state, content, "cave", no_odds)
+    state.world.revealed.add("bao")
+    text = detail_text(state, content, "cave", no_odds)
+    assert "**龍頭人物**　鬼手（常出沒在此）" in text and "- 現在：每天約出手 24 次，讓寶藏上升。" in text
+
+
+def test_detail_of_an_unknown_place_still_says_nothing_about_leaders(state, content):
+    content.config.vision_base = 0
+    content.locations["lake"].important = True
+    state.world.rumors.append(Rumor(time=0, text="翻江龍又劫了一艘船。", location="lake"))
+    text = detail_text(state, content, "lake", no_odds)
+    assert text == "### 湖邊？\n\n尚未摸清" and "翻江龍" not in text
 
 
 def test_detail_names_the_places_on_the_way(state, content):

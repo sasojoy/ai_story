@@ -1,7 +1,7 @@
 import random
 
 from tianxia.world import (
-    check_thresholds, current_act, current_storyline, end_season, evaluate_ending, sim_tick,
+    check_thresholds, current_act, current_storyline, end_season, evaluate_ending, sim_active, sim_tick,
 )
 
 
@@ -50,6 +50,19 @@ def test_sim_player_respects_condition(state, content):
     state.world.flags.add("blocked")
     sim_tick(state, content, 3, random.Random(0))
     assert state.world.trends["kou"] == 30
+
+
+def test_sim_active_is_the_rule_sim_tick_acts_by(state, content):
+    boss, ghost = content.scenario.sim_players
+    assert sim_active(boss, state) and not sim_active(ghost, state)  # 鬼手要等寶藏線浮現
+    state.world.revealed.add("bao")
+    assert sim_active(ghost, state)
+    boss.condition.world_flags_none.append("blocked")
+    state.world.flags.add("blocked")
+    assert not sim_active(boss, state)  # 條件不成立
+    before = dict(state.world.trends)
+    sim_tick(state, content, 3, random.Random(0))
+    assert state.world.trends["kou"] == before["kou"] and state.world.trends["bao"] == before["bao"] + 3  # 只有鬼手動
 
 
 def test_threshold_records_flag_time(state, content):

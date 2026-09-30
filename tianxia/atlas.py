@@ -14,12 +14,15 @@ from dataclasses import dataclass
 from .battlelog import clock_text
 from .models import Content, Location, MapRegion, SimPlayer
 from .state import GameState, Rumor
-from .world import current_act
+from .world import current_act, sim_active
 
 DAY = 86400
 KNOWN = ("current", "visible", "remembered")  # 摸清的地點
 LAYERS = {"situation": "局勢", "enemies": "敵情", "story": "劇情", "routes": "路線"}
 NEWS_DAYS = 3  # 劇情層的 ✦：最近幾天的大事與傳聞
+LEADER_NEWS = 2  # 詳情欄每位龍頭人物最多列幾則最近提到他的傳聞
+LEADER_WHO = "江湖上的龍頭人物，會自己行動，左右江湖大勢"
+LEADER_QUIET = "眼下沒有動靜"
 ODDS_ORDER = ("穩勝", "有把握", "五五波", "難分勝負", "凶險", "必敗")  # 由易到難；「最險」取排在最後的
 ARROWS = ("→", "↘", "↓", "↙", "←", "↖", "↑", "↗")  # 從正東起順時針，每 45 度一個（畫面座標 y 向下）
 UNKNOWN = "尚未摸清"
@@ -167,6 +170,37 @@ def haunters(state: GameState, content: Content, loc_id: str) -> list[str]:
     return list(dict.fromkeys(names))
 
 
+def leader_activity(state: GameState, content: Content, name: str) -> str:
+    """龍頭人物現在在做什麼：他名下此刻會行動的設定（和世界模擬同一條規則，見 world.sim_active），
+    寫成「每天約出手 N 次，讓某某大勢上升／下降」。只寫已浮現的大勢，隱藏大勢不提；沒有一條會行動時寫「眼下沒有動靜」。"""
+    trend_names = {t.id: t.name for t in content.scenario.trends}
+    revealed = state.world.revealed
+    doing = []
+    for sim in content.scenario.sim_players:
+        if sim.name != name or not sim_active(sim, state):
+            continue
+        ups = [trend_names[t] for t, delta in sim.trend.items() if delta > 0 and t in revealed]
+        downs = [trend_names[t] for t, delta in sim.trend.items() if delta < 0 and t in revealed]
+        pushes = ([f"讓{'、'.join(ups)}上升"] if ups else []) + ([f"讓{'、'.join(downs)}下降"] if downs else [])
+        doing.append("，".join([f"每天約出手 {sim.actions_per_day:g} 次", *pushes]))
+    return "；".join(doing) or LEADER_QUIET
+
+
+def leader_news(state: GameState, name: str) -> list[Rumor]:
+    """最近提到這位龍頭人物的傳聞（不分地點、不限天數），最新的在前，最多 LEADER_NEWS 則。"""
+    return [r for r in reversed(state.world.rumors) if name in r.text][:LEADER_NEWS]
+
+
+def leader_text(state: GameState, content: Content, name: str) -> str:
+    """詳情欄裡一位常出沒在此的龍頭人物：他是誰、現在在做什麼、最近的傳聞（沒有就不寫）。
+    和 haunters 一樣不檢查視野與是否該露面：呼叫端要先把關。"""
+    lines = [f"**龍頭人物**　{name}（常出沒在此）", f"- {LEADER_WHO}。", f"- 現在：{leader_activity(state, content, name)}。"]
+    news = leader_news(state, name)
+    if news:
+        lines += ["- 最近：", *(f"  - {clock_text(r.time)}　{r.text}" for r in news)]
+    return "\n".join(lines)
+
+
 # ── 劇情 ──────────────────────────────────────────────
 
 
@@ -268,7 +302,8 @@ def _names(content: Content, loc_ids) -> str:
 
 
 def detail_text(state: GameState, content: Content, loc_id: str, odds: Odds) -> str:
-    """詳情欄（Markdown）：局勢、敵情、劇情、路線四方面。沒摸清的地點只寫「尚未摸清」，也不算勝算。"""
+    """詳情欄（Markdown）：局勢（含常出沒在此的龍頭人物是誰、現在在做什麼、最近的傳聞）、敵情、劇情、路線。
+    沒摸清的地點只寫「尚未摸清」，也不算勝算。"""
     loc = content.locations[loc_id]
     if not is_known(state, content, loc_id):
         # 只有畫出輪廓的未知重要地點才有名字；淡點與未開放的地點連名字都不能露
@@ -283,8 +318,11 @@ def detail_text(state: GameState, content: Content, loc_id: str, odds: Odds) -> 
         trends = "、".join(f"{name} {value}" for name, value in region_trends(state, content, region))
         situation.append(region.name + (f"（{trends}）" if trends else ""))
     people = haunters(state, content, loc_id)
-    situation.append(f"常出沒：{'、'.join(people)}" if people else "沒有龍頭人物在此出沒")
-    parts.append("**局勢**　" + "　｜　".join(situation))
+    if not people:
+        situation.append("沒有龍頭人物在此出沒")
+    if situation:
+        parts.append("**局勢**　" + "　｜　".join(situation))
+    parts += [leader_text(state, content, name) for name in people]  # 常出沒的人物併在這裡說明，不另外列名字
 
     listed = foes(content, loc, odds)
     parts.append("**敵情**　" + ("、".join(f"{name} {word}" for name, word in listed) if listed else "沒有人在這裡滋事"))

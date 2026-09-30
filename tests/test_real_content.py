@@ -238,6 +238,68 @@ def test_legend_strip_does_not_cover_locations():
     assert max(loc.y for loc in c.locations.values()) + 12 < c.map.height - 50
 
 
+@pytest.mark.parametrize("layer", ["situation", "enemies", "story", "routes"])
+def test_legend_line_fits_inside_the_legend_box(layer):
+    from tianxia.mapview import LEGEND_LAYERS, LEGEND_RING, text_width
+
+    c = load_content(CONTENT_DIR)
+    assert text_width(f"{LEGEND_RING}　{LEGEND_LAYERS[layer]}", 12) + 24 <= c.map.width - 16  # 圖例的框不會被切掉
+
+
+# ── 大地圖詳情欄：龍頭人物 ───────────────────────────
+
+LEADER_WHO = "- 江湖上的龍頭人物，會自己行動，左右江湖大勢。"
+
+
+def test_zhenjiang_detail_explains_the_swordsman_who_haunts_it():
+    from tianxia.state import Rumor
+
+    game = _map_game(everything=False, cave=False)
+    text = game.place_detail("zhenjiang")
+    assert "**龍頭人物**　白衣劍客沈青（常出沒在此）" in text
+    assert LEADER_WHO in text
+    assert "- 現在：每天約出手 3 次，讓太湖寇亂下降。" in text
+    assert "常出沒：" not in text and "最近：" not in text
+    s = game.state
+    s.world.time = 3 * 3600
+    s.world.rumors.append(Rumor(time=3600, text="白衣劍客沈青在太湖邊獨挑水寇十七人，劍不染塵。", location="taihu_north"))
+    s.world.rumors.append(Rumor(time=2 * 3600, text="翻江龍又劫了一艘官船。", location="taihu_isle"))  # 沒提到他
+    s.world.rumors.append(Rumor(time=3 * 3600, text="有人看見白衣劍客沈青在鎮江渡口護送難民過江。", location="zhenjiang"))
+    text = game.place_detail("zhenjiang")
+    assert (
+        "- 最近：\n  - 第1天 03:00　有人看見白衣劍客沈青在鎮江渡口護送難民過江。\n"
+        "  - 第1天 01:00　白衣劍客沈青在太湖邊獨挑水寇十七人，劍不染塵。\n"
+    ) in text and "翻江龍" not in text
+
+
+def test_the_ghost_hand_is_not_described_until_the_treasure_trend_surfaces():
+    game = _map_game(everything=True, cave=False)
+    places = [loc_id for _, loc_id in game.map_places()]
+    assert {"jinling", "qixia_back"} <= set(places)
+    for loc_id in places:
+        assert "鬼手劉三" not in game.place_detail(loc_id) and "前朝寶藏" not in game.place_detail(loc_id), loc_id
+    game.state.world.revealed.add("bao")
+    for loc_id in ("jinling", "qixia_back"):
+        text = game.place_detail(loc_id)
+        assert "**龍頭人物**　鬼手劉三（常出沒在此）" in text and LEADER_WHO in text, loc_id
+        assert "- 現在：每天約出手 3 次，讓前朝寶藏上升。" in text, loc_id
+
+
+def test_the_river_dragon_detail_follows_the_phase_the_world_is_in():
+    game = _map_game(everything=True, cave=False)
+    s = game.state
+    assert "- 現在：每天約出手 8 次，讓太湖寇亂上升。" in game.place_detail("taihu_isle")
+    assert "翻江龍" not in game.place_detail("qixia_foot")  # 這一段還不會去棲霞山
+    s.world.revealed.add("bao")
+    assert "- 現在：每天約出手 4 次，讓太湖寇亂、前朝寶藏上升。" in game.place_detail("taihu_isle")
+    assert "**龍頭人物**　翻江龍（常出沒在此）" in game.place_detail("qixia_foot")
+    s.world.flags.add("cave_open")
+    assert "- 現在：每天約出手 6 次，讓太湖寇亂上升。" in game.place_detail("taihu_isle")
+    s.world.flags.add("fjl_defeated")
+    text = game.place_detail("taihu_isle")
+    assert "- 現在：眼下沒有動靜。" in text and "每天約出手" not in text and "**龍頭人物**　翻江龍（常出沒在此）" in text
+
+
 # ── 大地圖與小地圖不疊字 ─────────────────────────────
 
 TEXT_RE = re.compile(r'<text x="([-\d.]+)" y="([-\d.]+)" font-size="(\d+)"([^>]*)>([^<]*)</text>')

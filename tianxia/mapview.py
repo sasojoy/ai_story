@@ -54,7 +54,7 @@ LEGEND_STATES = [("current", "所在地"), ("visible", "看得見"), ("remembere
 LEGEND_SHAPES = "■ 城鎮　◆ 門派　● 野外"
 LEGEND_RING = "外圈：綠安全／橙危險／紅兇險　⚔ 可歷練"
 LEGEND_LAYERS = {
-    "situation": "⚑ 龍頭人物常出沒　大區越紅，大勢越凶",
+    "situation": "⚑ 龍頭人物（會自己行動的江湖人物）常出沒　大區越紅，大勢越凶",
     "enemies": "底色同外圈　最險：最難對付的對手與勝算",
     "story": f"★ 這一幕主線的目標　✦ 最近 {atlas.NEWS_DAYS} 天的大事與傳聞",
     "routes": "數字：走過去最省的體力　粗線：到選定地點的路",

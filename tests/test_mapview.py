@@ -142,6 +142,10 @@ def test_every_layer_has_its_own_legend(state, content):
         assert all(other not in svg for other in LEGEND_LAYERS.values() if other != line)
 
 
+def test_situation_legend_says_what_a_flagged_leader_is():
+    assert "⚑ 龍頭人物（會自己行動的江湖人物）常出沒" in LEGEND_LAYERS["situation"]
+
+
 def test_situation_layer_tints_regions_and_flags_haunts(state, content):
     svg = render_map(state, content)
     assert 'fill="#E7C6AE"' in svg and 'fill="#EFE5CB"' not in svg  # 北區依寇亂 30 往紅色靠
