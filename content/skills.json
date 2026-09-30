@@ -1,124 +1,226 @@
 [
-  {"id": "tuna", "name": "吐納法", "style": "無", "desc": "最粗淺的調息法門，人人都會。",
-   "kind": "心法", "quality": "下", "effects": [{"kind": "reduce", "base": 0.05, "top": 0.15, "target": "self"}]},
-  {"id": "changquan", "name": "長拳", "style": "剛", "desc": "街頭巷尾都有人練的拳法。",
-   "kind": "連招", "quality": "下", "chance_base": 0.30, "chance_top": 0.45,
-   "effects": [{"kind": "damage", "base": 0.6, "top": 1.0}]},
-  {"id": "qixia_xinjue", "name": "棲霞心訣", "style": "柔", "sect": "qixia", "desc": "棲霞劍派的入門內功，綿長不絕。",
-   "kind": "心法", "quality": "中", "effects": [{"kind": "buff", "base": 0.08, "top": 0.20, "target": "self", "stat": "dfn"}]},
-  {"id": "liuyun", "name": "流雲劍法", "style": "柔", "sect": "qixia", "desc": "劍勢如流雲舒卷，以柔化剛。",
-   "kind": "絕招", "quality": "中", "chance_base": 0.30, "chance_top": 0.45,
-   "effects": [{"kind": "damage", "base": 1.2, "top": 1.9}]},
-  {"id": "luoying", "name": "落英劍式", "style": "快", "sect": "qixia", "desc": "棲霞劍派的進階劍法，劍光如落英繽紛。",
-   "kind": "絕招", "quality": "上", "chance_base": 0.35, "chance_top": 0.50, "prep": 1,
-   "effects": [{"kind": "damage", "base": 0.8, "top": 1.3, "target": "enemies"}]},
-  {"id": "yanhui", "name": "燕回翔", "style": "快", "sect": "qixia", "desc": "棲霞劍派的輕功，身法輕盈如燕。",
-   "kind": "心法", "quality": "中", "effects": [{"kind": "dodge", "base": 0.08, "top": 0.20, "target": "self"}]},
-  {"id": "xuantie_gong", "name": "玄鐵功", "style": "剛", "sect": "xuantie", "desc": "玄鐵門的護體內功，練到深處刀槍難入。",
-   "kind": "心法", "quality": "中", "effects": [{"kind": "reduce", "base": 0.08, "top": 0.20, "target": "self"}]},
-  {"id": "tiesha", "name": "鐵砂掌", "style": "剛", "sect": "xuantie",
-   "desc": "玄鐵門的看家掌法，一掌下去碑裂石碎。",
-   "kind": "連招", "quality": "中", "chance_base": 0.30, "chance_top": 0.45,
-   "effects": [{"kind": "damage", "base": 0.5, "top": 0.9},
-               {"kind": "debuff", "base": 0.10, "top": 0.20, "stat": "atk", "rounds": 2}]},
-  {"id": "lieshi", "name": "裂石拳", "style": "剛", "sect": "xuantie", "desc": "玄鐵門的進階拳法，剛猛無儔。",
-   "kind": "絕招", "quality": "上", "chance_base": 0.30, "chance_top": 0.45, "prep": 1,
-   "effects": [{"kind": "damage", "base": 1.8, "top": 2.8},
-               {"kind": "control", "base": 0.20, "top": 0.35, "control": "點穴", "rounds": 1}]},
-  {"id": "zhuifeng", "name": "追風步", "style": "快", "desc": "鏢局裡流傳的輕功，講究腳下快。",
-   "kind": "心法", "quality": "下", "effects": [{"kind": "buff", "base": 0.10, "top": 0.25, "target": "self", "stat": "spd"}]},
-  {"id": "feihua", "name": "飛花摘葉", "style": "巧", "desc": "摘葉飛花皆可傷人的奇門手法，只傳無門無派之人。",
-   "kind": "連招", "quality": "上", "chance_base": 0.35, "chance_top": 0.50,
-   "effects": [{"kind": "damage", "base": 0.4, "top": 0.7, "target": "enemies"},
-               {"kind": "control", "base": 0.15, "top": 0.30, "control": "卸兵", "target": "enemies", "rounds": 1}]},
-  {"id": "hunyuan", "name": "混元一氣", "style": "無", "desc": "前朝秘藏的內功心法，渾厚無比。",
-   "kind": "心法", "quality": "上",
-   "effects": [{"kind": "buff", "base": 0.10, "top": 0.25, "target": "self", "stat": "atk"},
-               {"kind": "buff", "base": 0.10, "top": 0.25, "target": "self", "stat": "dfn"}]},
-  {"id": "jiachuan", "name": "家傳劍法", "kind": "絕招", "style": "柔", "quality": "中",
-   "chance_base": 0.30, "chance_top": 0.45,
-   "effects": [{"kind": "damage", "base": 1.2, "top": 1.9}],
-   "desc": "世家代代相傳的劍法，綿中帶勁。"},
-  {"id": "kaibei", "name": "開碑手", "kind": "連招", "style": "剛", "quality": "下",
-   "chance_base": 0.30, "chance_top": 0.45,
-   "effects": [{"kind": "damage", "base": 0.7, "top": 1.1}],
-   "desc": "武師的看家掌法，一掌能開碑裂石。"},
-  {"id": "luanzhen", "name": "亂針", "kind": "絕招", "style": "巧", "quality": "下",
-   "chance_base": 0.25, "chance_top": 0.40,
-   "effects": [{"kind": "damage", "base": 0.5, "top": 0.8},
-               {"kind": "control", "base": 0.30, "top": 0.45, "control": "封脈", "rounds": 1}],
-   "desc": "書童藏在袖中的繡花針，專打穴脈。"},
-  {"id": "yucha", "name": "魚叉亂刺", "kind": "連招", "style": "剛", "quality": "下",
-   "chance_base": 0.25, "chance_top": 0.40,
-   "effects": [{"kind": "damage", "base": 0.5, "top": 0.8}],
-   "desc": "水寇慣用的亂刺，毫無章法卻很難纏。"},
-  {"id": "xiongzhang", "name": "熊掌拍擊", "kind": "絕招", "style": "剛", "quality": "下",
-   "chance_base": 0.30, "chance_top": 0.40,
-   "effects": [{"kind": "damage", "base": 1.5, "top": 2.0}],
-   "desc": "黑熊人立而起，一掌拍下。"},
-  {"id": "jiuhuan", "name": "九環斷江", "kind": "絕招", "style": "剛", "quality": "上",
-   "chance_base": 0.35, "chance_top": 0.50, "prep": 1,
-   "effects": [{"kind": "damage", "base": 1.2, "top": 1.8, "target": "enemies"},
-               {"kind": "control", "base": 0.15, "top": 0.30, "control": "點穴", "target": "enemies", "rounds": 1}],
-   "desc": "翻江龍的九環刀絕技，刀風所至如江水斷流。"},
-  {"id": "guiying", "name": "鬼影手", "kind": "連招", "style": "巧", "quality": "中",
-   "chance_base": 0.30, "chance_top": 0.45,
-   "effects": [{"kind": "damage", "base": 0.5, "top": 0.8},
-               {"kind": "control", "base": 0.20, "top": 0.35, "control": "卸兵", "rounds": 1}],
-   "desc": "鬼手劉三的空手奪白刃。"},
-  {"id": "shoumu_gong", "name": "守墓功", "kind": "心法", "style": "柔", "quality": "上",
-   "effects": [{"kind": "reduce", "base": 0.15, "top": 0.25, "target": "self"},
-               {"kind": "buff", "base": 0.10, "top": 0.20, "target": "self", "stat": "dfn"}],
-   "desc": "守墓四十年練成的內功，綿密無隙。"},
-  {"id": "suishi", "name": "碎石拳", "kind": "連招", "style": "剛", "quality": "下",
-   "chance_base": 0.30, "chance_top": 0.45,
-   "effects": [{"kind": "damage", "base": 0.6, "top": 1.0}],
-   "desc": "羅石頭劈柴時自己琢磨出來的拳，沒有章法，只有力氣。"},
-  {"id": "suxin", "name": "素衣劍", "kind": "絕招", "style": "柔", "quality": "下",
-   "chance_base": 0.25, "chance_top": 0.40,
-   "effects": [{"kind": "damage", "base": 1.0, "top": 1.5}],
-   "desc": "棲霞劍派外門弟子練的基本劍式，一招一式都很乾淨。"},
-  {"id": "tangzi", "name": "趟子腿", "kind": "連招", "style": "快", "quality": "下",
-   "chance_base": 0.30, "chance_top": 0.45,
-   "effects": [{"kind": "damage", "base": 0.5, "top": 0.8}],
-   "desc": "鏢局趟子手防身的腿法，跑得快，踢得也快。"},
-  {"id": "duanxian", "name": "斷弦", "kind": "絕招", "style": "巧", "quality": "下",
-   "chance_base": 0.25, "chance_top": 0.40,
-   "effects": [{"kind": "damage", "base": 0.5, "top": 0.8},
-               {"kind": "debuff", "base": 0.10, "top": 0.15, "stat": "atk", "rounds": 2}],
-   "desc": "琵琶弦上藏著的暗勁，弦斷時傷人，也亂人心神。"},
-  {"id": "pozhen", "name": "破陣槍", "kind": "絕招", "style": "剛", "quality": "中",
-   "chance_base": 0.30, "chance_top": 0.45,
-   "effects": [{"kind": "damage", "base": 1.4, "top": 2.1}],
-   "desc": "邊軍衝陣的槍法，一槍只求把人挑翻。"},
-  {"id": "jingchan", "name": "驚蟬石", "kind": "連招", "style": "巧", "quality": "中",
-   "chance_base": 0.35, "chance_top": 0.50,
-   "effects": [{"kind": "control", "base": 0.30, "top": 0.45, "control": "點穴", "rounds": 1}],
-   "desc": "走索時練出的飛石手法，專打穴道，中者如蟬受驚、動彈不得。"},
-  {"id": "chenzhong", "name": "晨鐘", "kind": "絕招", "style": "柔", "quality": "中",
-   "chance_base": 0.25, "chance_top": 0.40,
-   "effects": [{"kind": "heal", "base": 0.12, "top": 0.20, "target": "allies"}],
-   "desc": "啞僧敲了二十年鐘悟出的吐納，一聲長鳴，全隊氣息為之一振。"},
-  {"id": "fenshui", "name": "分水刺", "kind": "連招", "style": "快", "quality": "中",
-   "chance_base": 0.35, "chance_top": 0.50,
-   "effects": [{"kind": "damage", "base": 0.7, "top": 1.1}],
-   "desc": "水寨頭目在水底練出的短刺，快得看不清出手。"},
-  {"id": "guihong", "name": "歸鴻劍", "kind": "絕招", "style": "快", "quality": "上",
-   "chance_base": 0.30, "chance_top": 0.45,
-   "effects": [{"kind": "damage", "base": 1.3, "top": 2.0},
-               {"kind": "control", "base": 0.20, "top": 0.35, "control": "卸兵", "rounds": 1}],
-   "desc": "晏歸鴻的劍，快得像雁群掠過湖面，劍到時對方的兵刃已經脫手。"},
-  {"id": "guicang", "name": "歸藏掌", "kind": "絕招", "style": "柔", "quality": "上",
-   "chance_base": 0.30, "chance_top": 0.45,
-   "effects": [{"kind": "damage", "base": 1.5, "top": 2.3},
-               {"kind": "control", "base": 0.25, "top": 0.40, "control": "封脈", "rounds": 1}],
-   "desc": "守墓人四十年只練一掌，掌力綿長，專封人經脈。"},
-  {"id": "jinghong", "name": "驚鴻", "kind": "心法", "style": "快", "quality": "上",
-   "effects": [{"kind": "buff", "base": 0.15, "target": "self", "stat": "spd"},
-               {"kind": "dodge", "base": 0.05, "target": "self"}],
-   "desc": "晏歸鴻的特性：身法翩若驚鴻，出手總比人早一步。"},
-  {"id": "kushou", "name": "枯守", "kind": "心法", "style": "柔", "quality": "上",
-   "effects": [{"kind": "reduce", "base": 0.10, "target": "self"},
-               {"kind": "buff", "base": 0.10, "target": "self", "stat": "dfn"}],
-   "desc": "守墓人的特性：四十年枯坐，氣息沉得像一塊石頭。"}
+  {
+    "id": "tuna",
+    "name": "吐納法",
+    "kind": "內功",
+    "attribute": "陰",
+    "desc": "最粗淺的調息法門，人人都會。"
+  },
+  {
+    "id": "changquan",
+    "name": "長拳",
+    "kind": "武學",
+    "attribute": "剛",
+    "desc": "街頭巷尾都有人練的拳法。"
+  },
+  {
+    "id": "qixia_xinjue",
+    "name": "棲霞心訣",
+    "kind": "內功",
+    "attribute": "柔",
+    "desc": "棲霞劍派的入門內功，綿長不絕。"
+  },
+  {
+    "id": "liuyun",
+    "name": "流雲劍法",
+    "kind": "武學",
+    "attribute": "柔",
+    "desc": "劍勢如流雲舒卷，以柔化剛。"
+  },
+  {
+    "id": "luoying",
+    "name": "落英劍式",
+    "kind": "武學",
+    "attribute": "快",
+    "desc": "棲霞劍派的進階劍法，劍光如落英繽紛。"
+  },
+  {
+    "id": "yanhui",
+    "name": "燕回翔",
+    "kind": "內功",
+    "attribute": "快",
+    "desc": "棲霞劍派的輕功，身法輕盈如燕。"
+  },
+  {
+    "id": "xuantie_gong",
+    "name": "玄鐵功",
+    "kind": "內功",
+    "attribute": "剛",
+    "desc": "玄鐵門的護體內功，練到深處刀槍難入。"
+  },
+  {
+    "id": "tiesha",
+    "name": "鐵砂掌",
+    "kind": "武學",
+    "attribute": "剛",
+    "desc": "玄鐵門的看家掌法，一掌下去碑裂石碎。"
+  },
+  {
+    "id": "lieshi",
+    "name": "裂石拳",
+    "kind": "武學",
+    "attribute": "剛",
+    "desc": "玄鐵門的進階拳法，剛猛無儔。"
+  },
+  {
+    "id": "zhuifeng",
+    "name": "追風步",
+    "kind": "內功",
+    "attribute": "快",
+    "desc": "鏢局裡流傳的輕功，講究腳下快。"
+  },
+  {
+    "id": "feihua",
+    "name": "飛花摘葉",
+    "kind": "武學",
+    "attribute": "虛",
+    "desc": "摘葉飛花皆可傷人的奇門手法，只傳無門無派之人。"
+  },
+  {
+    "id": "hunyuan",
+    "name": "混元一氣",
+    "kind": "內功",
+    "attribute": "陰",
+    "desc": "前朝秘藏的內功心法，渾厚無比。"
+  },
+  {
+    "id": "jiachuan",
+    "name": "家傳劍法",
+    "kind": "武學",
+    "attribute": "柔",
+    "desc": "世家代代相傳的劍法，綿中帶勁。"
+  },
+  {
+    "id": "kaibei",
+    "name": "開碑手",
+    "kind": "武學",
+    "attribute": "剛",
+    "desc": "武師的看家掌法，一掌能開碑裂石。"
+  },
+  {
+    "id": "luanzhen",
+    "name": "亂針",
+    "kind": "武學",
+    "attribute": "虛",
+    "desc": "書童藏在袖中的繡花針，專打穴脈。"
+  },
+  {
+    "id": "yucha",
+    "name": "魚叉亂刺",
+    "kind": "武學",
+    "attribute": "剛",
+    "desc": "水寇慣用的亂刺，毫無章法卻很難纏。"
+  },
+  {
+    "id": "xiongzhang",
+    "name": "熊掌拍擊",
+    "kind": "武學",
+    "attribute": "剛",
+    "desc": "黑熊人立而起，一掌拍下。"
+  },
+  {
+    "id": "jiuhuan",
+    "name": "九環斷江",
+    "kind": "武學",
+    "attribute": "剛",
+    "desc": "翻江龍的九環刀絕技，刀風所至如江水斷流。"
+  },
+  {
+    "id": "guiying",
+    "name": "鬼影手",
+    "kind": "武學",
+    "attribute": "虛",
+    "desc": "鬼手劉三的空手奪白刃。"
+  },
+  {
+    "id": "shoumu_gong",
+    "name": "守墓功",
+    "kind": "內功",
+    "attribute": "柔",
+    "desc": "守墓四十年練成的內功，綿密無隙。"
+  },
+  {
+    "id": "suishi",
+    "name": "碎石拳",
+    "kind": "武學",
+    "attribute": "剛",
+    "desc": "羅石頭劈柴時自己琢磨出來的拳，沒有章法，只有力氣。"
+  },
+  {
+    "id": "suxin",
+    "name": "素衣劍",
+    "kind": "武學",
+    "attribute": "柔",
+    "desc": "棲霞劍派外門弟子練的基本劍式，一招一式都很乾淨。"
+  },
+  {
+    "id": "tangzi",
+    "name": "趟子腿",
+    "kind": "武學",
+    "attribute": "快",
+    "desc": "鏢局趟子手防身的腿法，跑得快，踢得也快。"
+  },
+  {
+    "id": "duanxian",
+    "name": "斷弦",
+    "kind": "武學",
+    "attribute": "虛",
+    "desc": "琵琶弦上藏著的暗勁，弦斷時傷人，也亂人心神。"
+  },
+  {
+    "id": "pozhen",
+    "name": "破陣槍",
+    "kind": "武學",
+    "attribute": "剛",
+    "desc": "邊軍衝陣的槍法，一槍只求把人挑翻。"
+  },
+  {
+    "id": "jingchan",
+    "name": "驚蟬石",
+    "kind": "武學",
+    "attribute": "虛",
+    "desc": "走索時練出的飛石手法，專打穴道，中者如蟬受驚、動彈不得。"
+  },
+  {
+    "id": "chenzhong",
+    "name": "晨鐘",
+    "kind": "武學",
+    "attribute": "柔",
+    "desc": "啞僧敲了二十年鐘悟出的吐納，一聲長鳴，全隊氣息為之一振。"
+  },
+  {
+    "id": "fenshui",
+    "name": "分水刺",
+    "kind": "武學",
+    "attribute": "快",
+    "desc": "水寨頭目在水底練出的短刺，快得看不清出手。"
+  },
+  {
+    "id": "guihong",
+    "name": "歸鴻劍",
+    "kind": "武學",
+    "attribute": "快",
+    "desc": "晏歸鴻的劍，快得像雁群掠過湖面，劍到時對方的兵刃已經脫手。"
+  },
+  {
+    "id": "guicang",
+    "name": "歸藏掌",
+    "kind": "武學",
+    "attribute": "柔",
+    "desc": "守墓人四十年只練一掌，掌力綿長，專封人經脈。"
+  },
+  {
+    "id": "jinghong",
+    "name": "驚鴻",
+    "kind": "內功",
+    "attribute": "快",
+    "desc": "晏歸鴻的特性：身法翩若驚鴻，出手總比人早一步。"
+  },
+  {
+    "id": "kushou",
+    "name": "枯守",
+    "kind": "內功",
+    "attribute": "柔",
+    "desc": "守墓人的特性：四十年枯坐，氣息沉得像一塊石頭。"
+  }
 ]

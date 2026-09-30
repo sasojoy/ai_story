@@ -1,6 +1,16 @@
 [
-  {"id": "qixia", "name": "棲霞劍派", "location": "qixia_sect", "alignment": "正", "starter_skills": ["qixia_xinjue", "liuyun"],
-   "desc": "棲霞山上的劍派，劍法以柔克剛，門規嚴明，不容門下作惡。"},
-  {"id": "xuantie", "name": "玄鐵門", "location": "xuantie", "alignment": "中", "starter_skills": ["xuantie_gong", "tiesha"],
-   "desc": "無錫城外的外家門派，以剛猛拳掌見長，只問強弱，不問出身。"}
+  {
+    "id": "qixia",
+    "name": "棲霞劍派",
+    "location": "qixia_sect",
+    "alignment": "正",
+    "desc": "棲霞山上的劍派，劍法以柔克剛，門規嚴明，不容門下作惡。"
+  },
+  {
+    "id": "xuantie",
+    "name": "玄鐵門",
+    "location": "xuantie",
+    "alignment": "中",
+    "desc": "無錫城外的外家門派，以剛猛拳掌見長，只問強弱，不問出身。"
+  }
 ]

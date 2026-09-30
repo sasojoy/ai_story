@@ -1,7 +1,7 @@
 """《天下大勢》原型的網頁介面（Gradio）。
 
 遊戲規則全部在 tianxia/，這個檔案只負責畫面與接線：每次操作都先把現實時間同步進遊戲、
-執行動作、存檔，再整個重畫。「門下」（隊伍與武學配置）、「戰報」（歷次戰鬥的列表與完整內容）與
+執行動作、存檔，再整個重畫。「門下」（練功與招募）、「戰報」（歷次戰鬥的列表與完整內容）與
 「大地圖」（江湖輿圖：四個圖層、地點詳情與安排前往）都是另外的整頁，同一時間只顯示一頁（見 PAGES），
 分別由 render_menxia()、戰報頁面與 render_map_page() 重畫。
 左欄由上而下是場景列（左邊是地點或事件，右邊是以你為中心的小地圖與「大地圖」按鈕）、選項按鈕、
@@ -9,6 +9,9 @@
 「江湖紀錄」（再來的 5 則，一則一列、可點開看敘事，更早的收在摺疊區裡）。
 按戰鬥卡片的「看完整戰報」或右欄的「戰報」按鈕都能打開戰報頁面；點小地圖、小地圖下方或右欄的「大地圖」按鈕
 打開大地圖。
+
+sanguo-companions 合併大幅簡化了「門下」頁：不再有多隊切換/換人選單/武學欄配置/招賢分頁，
+同伴全服唯一、練功只有自創功法／鍛鍊兩個按鈕（見設計文件四.4、六.2）。
 """
 from __future__ import annotations
 
@@ -22,7 +25,6 @@ import gradio as gr
 
 from tianxia.content import load_content
 from tianxia.engine import Game
-from tianxia.gacha import CSS as GACHA_CSS
 from tianxia.journal import CSS as JOURNAL_CSS
 from tianxia.save import load_game, save_game
 
@@ -44,40 +46,12 @@ N_OUTPUTS = 16 + MAX_BUTTONS
 RECENT_ROWS = 5  # 「剛剛」之後直接列出幾則
 OLDER_ROWS = 30  # 摺疊區裡最多幾則（存檔本來就只留 30 則）
 
-# 戰報頁面的輸出順序（見 open_report_page／open_report_handler）：
-# 江湖畫面顯示與否、戰報頁面顯示與否、戰鬥列表、選定那一場的完整內容。
-REPORT_EMPTY_TEXT = "（還沒有戰報。打一場歷練或劇情戰之後，這裡會列出每一場。）"
+REPORT_EMPTY_TEXT = "（還沒有戰報。打一場遭遇戰或劇情戰之後，這裡會列出每一場。）"
 
-# 門下頁面（render_menxia）的輸出順序：選取的自選欄、選取的武學、心得與規則、隊伍切換、選中那一隊的資訊列、
-# 換人的結果（資訊列正下方）、每一欄一組（欄、人物卡、本命、自選1、自選2、換人選單）、武學庫、武學詳情、
-# 配置到、卸下、升一成、散功、武學動作的結果、名冊、名冊裡點選那人的人物卡（以上在「名冊・隊伍」分頁）；
-# 再來是「招賢」分頁：元寶與保底倒數、機率與卡池、「單抽」「十連」按鈕、抽完的摘要、最近一次的結果卡。
-MAX_MEMBERS = 3  # 每隊最多三人
-MX_COLUMN_SIZE = 4 + Game.FREE_SLOTS
-MX_SWAP_OFFSET = MX_COLUMN_SIZE - 1  # 一欄裡「換人」選單的位置
-MX_HEAD_INDEX = 2
-MX_TEAM_INDEX = 3
-MX_TEAM_INFO_INDEX = 4
-MX_SWAP_MESSAGE_INDEX = 5  # 換人的結果（例如換不成的原因），緊接在資訊列底下、換人選單上面
-MX_COLUMNS_INDEX = 6
-MX_LIBRARY_INDEX = MX_COLUMNS_INDEX + MAX_MEMBERS * MX_COLUMN_SIZE
-MX_DETAIL_INDEX = MX_LIBRARY_INDEX + 1
-MX_EQUIP_INDEX = MX_LIBRARY_INDEX + 2
-MX_UNEQUIP_INDEX = MX_LIBRARY_INDEX + 3
-MX_UPGRADE_INDEX = MX_LIBRARY_INDEX + 4
-MX_DISPEL_INDEX = MX_LIBRARY_INDEX + 5
-MX_MESSAGE_INDEX = MX_LIBRARY_INDEX + 6  # 武學動作（配置、卸下、精進、散功）的結果，在武學按鈕旁
-MX_ROSTER_INDEX = MX_LIBRARY_INDEX + 7
-MX_PERSON_INDEX = MX_LIBRARY_INDEX + 8
-MX_GACHA_HEAD_INDEX = MX_LIBRARY_INDEX + 9  # 招賢分頁：元寶、保底倒數、本季招賢心得
-MX_GACHA_RULES_INDEX = MX_LIBRARY_INDEX + 10  # 機率、保底、重複換算、卡池
-MX_GACHA_BUTTONS_INDEX = MX_LIBRARY_INDEX + 11  # 「單抽」「十連」按鈕，順序同 Game.PULL_SIZES
-MX_GACHA_MESSAGE_INDEX = MX_GACHA_BUTTONS_INDEX + len(Game.PULL_SIZES)  # 抽完的摘要或抽不成的原因
-MX_GACHA_CARDS_INDEX = MX_GACHA_MESSAGE_INDEX + 1  # 最近一次的結果卡
-MENXIA_OUTPUTS = MX_GACHA_CARDS_INDEX + 1
-NOTE_SPOTS = ("skill", "swap", "gacha")  # 動作的結果寫在哪裡：武學按鈕旁、資訊列底下、招賢按鈕底下
-EMPTY_SLOT = Game.EMPTY_CHOICE  # 「換人」選單裡「（空）」的值（空字串）
-PERSON_HINT = "（點名冊裡的一個人，這裡會顯示他的人物卡。）"
+# 門下頁面（render_menxia）的輸出順序：規則/心得說明、本人角色卡、名冊（本人＋已招募同伴）、
+# 選中那個人的角色卡、加入/移出隊伍按鈕、練功的「武學/內功」選擇、自創功法的名字輸入框、
+# 自創／鍛鍊／療傷三個按鈕、動作結果。
+PERSON_HINT = "（點名冊裡的一個人，這裡會顯示他的角色卡。）"
 
 # 整頁：江湖畫面、門下、戰報、大地圖；同一時間只顯示一頁（見 show_page），順序同 build_demo() 的 pages。
 PAGES = ("main", "menxia", "report", "map")
@@ -99,10 +73,9 @@ MAP_CLICK_JS = (
     " });"
 )
 
-Slot = tuple[str, int]  # 選中的自選欄：(人物 key, 第幾欄，從 0 起算)
-
 ACT_LOCK = threading.Lock()
 UNCHANGED = object()  # 動作回傳它表示什麼都沒做：act 不存檔、不重畫（頁面上的訊息也留著）
+KINDS = ("武學", "內功")
 
 
 def save_path(name: str) -> Path:
@@ -148,136 +121,34 @@ def render(game: Game) -> list:
 # ── 門下頁面 ──────────────────────────────────────────
 
 
-def team_index(game: Game, value) -> int:
-    """隊伍切換的值；不認得時（例如舊畫面送來的值）回到本隊。"""
-    return value if isinstance(value, int) and 0 <= value < len(game.state.player.teams) else 0
-
-
-def menxia_selection(
-    game: Game, slot: Slot | None, target: str | None, team: int = 0
-) -> tuple[Slot | None, str | None]:
-    """丟掉已經不成立的選取（例如換了新賽季、切換了隊伍）：自選欄要屬於顯示中那一隊的人，武學要在武學庫裡。"""
-    if slot is not None:
-        key, index = slot
-        slot = (key, index) if key in game.team_keys(team) and 0 <= index < Game.FREE_SLOTS else None
-    if target not in {t for _, t in game.upgrade_options()}:
-        target = None
-    return slot, target
-
-
-def _check_note(note: str) -> None:
-    """動作結果寫的地方只能是 NOTE_SPOTS 之一：寫錯了就報錯，免得默默把三處的訊息都清掉。"""
-    if note not in NOTE_SPOTS:
-        raise ValueError(f"note 要是 {'、'.join(NOTE_SPOTS)} 之一，不是 {note!r}")
-
-
-def render_menxia(
-    game: Game, slot: Slot | None, target: str | None, message: str | None = None,
-    team: int = 0, person: str | None = None, note: str = "skill",
-) -> list:
-    """門下頁面的全部輸出，順序見 MX_*_INDEX。team 是顯示中的隊伍（0＝本隊），person 是名冊裡點選的人。
-    message 是剛才那個動作的結果，寫在 note 那一處（NOTE_SPOTS）：換人（swap）的在資訊列正下方、換人選單上面，
-    招賢（gacha）的在單抽、十連按鈕底下，其他（skill）在武學按鈕旁；寫了一處就清掉其他兩處，頁面上只留最新的一則。
-    message 為 None 時三處都保留原本的訊息，空字串時三處都清掉。note 不在 NOTE_SPOTS 裡時報 ValueError。"""
-    _check_note(note)
-    team = team_index(game, team)
-    slot, target = menxia_selection(game, slot, target, team)
+def render_menxia(game: Game, person: str | None = None, message: str | None = None) -> list:
+    """門下頁面的全部輸出。person 是名冊裡點選的人（None＝本人）；
+    message 是剛才那個動作的結果，None 時保留原本的訊息、空字串時清掉。"""
     lines = game.roster_lines()
-    if person not in {key for _, key in lines}:
+    valid_keys = {key for _, key in lines}
+    if person not in valid_keys:
         person = None
-    keys = game.team_keys(team)
-    if message is None:
-        notes = {spot: gr.update() for spot in NOTE_SPOTS}
-    else:
-        notes = {spot: message if spot == note else "" for spot in NOTE_SPOTS}
-    out: list = [
-        slot, target, f"**心得** {game.state.player.stats.get('xinde', 0)}　｜　{game.menxia_rules()}",
-        gr.update(choices=game.team_choices(), value=team), game.team_info(team), notes["swap"],
+    on_team = person is not None and person in game.state.player.team
+    toggle_label = "移出隊伍" if on_team else "加入隊伍"
+    out = [
+        f"**心得** {game.state.player.stats.get('xinde', 0)}　｜　{game.menxia_rules()}",
+        game.member_card("player"),
+        gr.update(choices=lines, value=person),
+        game.member_card(person) if person else PERSON_HINT,
+        gr.update(visible=person is not None, value=toggle_label),
+        gr.update() if message is None else message,
     ]
-    for col in range(MAX_MEMBERS):
-        if team >= game.team_count():  # 還沒開放的隊伍：整排不顯示
-            out += [gr.update(visible=False)] + [gr.update()] * (MX_COLUMN_SIZE - 1)
-            continue
-        if col >= len(keys):  # 空位：只有「換人」選單
-            out += [gr.update(visible=True), "（空位）"] + [gr.update(visible=False)] * (1 + Game.FREE_SLOTS)
-            out.append(_swap_menu(game, team, col))
-            continue
-        key = keys[col]
-        out += [
-            gr.update(visible=True),
-            game.member_card(key),
-            gr.update(visible=True, value=game.slot_label(key, None), variant="secondary"),
-        ]
-        out += [
-            gr.update(visible=True, value=game.slot_label(key, i), variant="primary" if slot == (key, i) else "secondary")
-            for i in range(Game.FREE_SLOTS)
-        ]
-        out.append(_swap_menu(game, team, col))
-    out += [gr.update(choices=game.skill_library(), value=target), game.skill_detail(target)]
-    out += _menxia_buttons(game, slot, target, team)
-    out.append(notes["skill"])
-    out += [gr.update(choices=lines, value=person), game.member_card(person, innate=True) if person else PERSON_HINT]
-    out += [game.gacha_head(), game.gacha_rules()]
-    for count in Game.PULL_SIZES:
-        text, ok = game.pull_button(count)
-        out.append(gr.update(value=text, interactive=ok))
-    out += [notes["gacha"], game.gacha_cards_html()]
-    assert len(out) == MENXIA_OUTPUTS
     return out
 
 
-def _column_key(game: Game, team: int, col: int) -> str | None:
-    """第 team 隊第 col 欄的人；空位時為 None。處理函式要在同一把 ACT_LOCK 裡查和用（換人可能同時讓這一隊變少）。"""
-    keys = game.team_keys(team)
-    return keys[col] if col < len(keys) else None
-
-
-def _swap_menu(game: Game, team: int, col: int) -> dict:
-    """一欄上方的「換人」選單；本隊第一欄是你本人，固定不換：選單鎖住，只寫明原因（各欄才對得齊）。"""
-    current = _column_key(game, team, col)
-    if team == 0 and col == 0:
-        return gr.update(visible=True, interactive=False, choices=[("你本人（固定是本隊的隊長）", current)], value=current)
-    return gr.update(visible=True, interactive=True, choices=game.swap_choices(team, col), value=current)
-
-
-def _menxia_buttons(game: Game, slot: Slot | None, target: str | None, team: int = 0) -> list:
-    """「配置到」、「卸下」、「升一成」、「散功」四個按鈕：看選取決定顯示與否，文字寫明是哪一欄、多少心得。"""
-    where = ""
-    held = None
-    if slot is not None:
-        names = {key: name for name, key in game.team_members(team)}
-        where = f"〔{names[slot[0]]}・自選{slot[1] + 1}〕"
-        held = game.slot_skill(*slot)
-    can_equip = (
-        slot is not None and target is not None and target.startswith("skill:")
-        and not game.is_innate(target) and (held is None or target != f"skill:{held}")
-    )
-    cost = game.upgrade_cost(target) if target else None
-    refund = game.dispel_refund(target) if target else None
-    return [
-        gr.update(visible=can_equip, value=f"配置到{where}"),
-        gr.update(visible=held is not None, value=f"卸下{where}"),
-        gr.update(
-            visible=target is not None, interactive=cost is not None,
-            value="已達第十成" if cost is None else f"升一成（心得 {cost}）",
-        ),
-        gr.update(
-            visible=target is not None and not game.is_innate(target), interactive=refund is not None,
-            value="散功（第一成無功可散）" if refund is None else f"散功（返還心得 {refund}）",
-        ),
-    ]
-
-
-def act(game: Game | None, action, menxia: tuple | None = None, note: str = "skill") -> list:
+def act(game: Game | None, action, note: bool = False) -> list:
     """同步時間 → 執行動作 → 存檔 → 重畫。上鎖避免計時器與按鈕點擊同時操作同一存檔。
 
-    menxia＝(選取的自選欄, 選取的武學, 顯示中的隊伍, 名冊裡點選的人) 時連門下頁面一起重畫；
-    動作回傳的訊息（None 表示沒有）顯示在頁面上 note 那一處（見 render_menxia）；
-    回傳 UNCHANGED 時什麼都不存、不重畫。note 不在 NOTE_SPOTS 裡時在執行動作之前就報 ValueError。
+    note=True 時連門下頁面一起重畫，動作回傳的訊息顯示在門下頁面的訊息區；
+    回傳 UNCHANGED 時什麼都不存、不重畫。
     戰報頁面與大地圖頁面是獨立的整頁，不在這裡重畫（見 open_report_page、render_map_page）。
     """
-    _check_note(note)
-    n = N_OUTPUTS if menxia is None else N_OUTPUTS + MENXIA_OUTPUTS
+    n = N_OUTPUTS if not note else N_OUTPUTS + 6
     if game is None:
         return [gr.skip()] * n
     with ACT_LOCK:
@@ -287,9 +158,8 @@ def act(game: Game | None, action, menxia: tuple | None = None, note: str = "ski
             return [gr.skip()] * n
         save_game(game.state, save_path(game.state.player.name))
         out = render(game)
-        if menxia is not None:
-            slot, target, *view = menxia
-            out += render_menxia(game, slot, target, None if msgs is None else "\n\n".join(msgs), *view, note=note)
+        if note:
+            out += render_menxia(game, None, None if msgs is None else "\n\n".join(msgs))
         return out
 
 
@@ -313,12 +183,12 @@ def seclude_handler(game, hours):
     return act(game, lambda g: g.seclude(int(hours)))
 
 
-def open_menxia(game, slot, target, team=0, person=None):
-    """「門下」：藏起江湖畫面、打開門下頁面並重畫（停在上次看的那一隊）。"""
+def open_menxia(game, person=None):
+    """「門下」：藏起江湖畫面、打開門下頁面並重畫。"""
     if game is None:
-        return [gr.skip()] * (2 + MENXIA_OUTPUTS)
+        return [gr.skip()] * 8
     with ACT_LOCK:
-        return [gr.update(visible=False), gr.update(visible=True)] + render_menxia(game, slot, target, "", team, person)
+        return [gr.update(visible=False), gr.update(visible=True)] + render_menxia(game, person, "")
 
 
 def close_menxia():
@@ -326,127 +196,47 @@ def close_menxia():
     return [gr.update(visible=True), gr.update(visible=False)]
 
 
-def make_innate_slot_handler(col: int):
-    """點某人的本命欄：在武學庫與詳情選中他的本命，並取消自選欄的選取。"""
-
-    def handler(game, slot, target, team=0, person=None):
-        if game is None:
-            return [gr.skip()] * MENXIA_OUTPUTS
-        with ACT_LOCK:
-            team = team_index(game, team)
-            key = _column_key(game, team, col)
-            if key is None:
-                return [gr.skip()] * MENXIA_OUTPUTS
-            return render_menxia(game, None, game.innate_target(key) or target, "", team, person)
-
-    return handler
-
-
-def make_free_slot_handler(col: int, index: int):
-    """點某人的自選欄：選取這一欄；欄裡有武學時，也一併選中那門武學。"""
-
-    def handler(game, slot, target, team=0, person=None):
-        if game is None:
-            return [gr.skip()] * MENXIA_OUTPUTS
-        with ACT_LOCK:
-            team = team_index(game, team)
-            key = _column_key(game, team, col)
-            if key is None:
-                return [gr.skip()] * MENXIA_OUTPUTS
-            held = game.slot_skill(key, index)
-            return render_menxia(game, (key, index), f"skill:{held}" if held else target, "", team, person)
-
-    return handler
-
-
-def view_handler(game, slot, target, team=0, person=None):
-    """在武學庫選一門武學、切換隊伍、在名冊點一個人：重畫門下頁面（不算行動、不存檔）；
-    自選欄的選取只在還是顯示中那一隊的人時保留。"""
+def roster_pick_handler(game, person):
+    """在名冊點一個人：重畫門下頁面（不算行動、不存檔）。"""
     if game is None:
-        return [gr.skip()] * MENXIA_OUTPUTS
+        return [gr.skip()] * 6
     with ACT_LOCK:
-        return render_menxia(game, slot, target, "", team, person)
+        return render_menxia(game, person, "")
 
 
-def _page_skip() -> list:
-    return [gr.skip()] * (N_OUTPUTS + MENXIA_OUTPUTS)
+def toggle_team_handler(game, person):
+    if game is None or person is None:
+        return [gr.skip()] * 6
+    if person in game.state.player.team:
+        return _menxia_act(game, lambda g: g.remove_from_team(person), person)
+    return _menxia_act(game, lambda g: g.add_to_team(person), person)
 
 
-def make_swap_handler(col: int):
-    """某一欄上方的「換人」選單（選單失焦時送來，滑鼠、鍵盤選都一樣）：把這一位換成選的人（「（空）」＝空出這一位）。
-    照一般動作同步、存檔、重畫；結果寫在資訊列正下方（換不成時寫原因，例如統御超過上限，選單回到原本的人）。
-    選的就是這一位現在的人（點開又離開、或重選同一人），或空位選了空時什麼都不做。"""
-
-    def handler(game, slot, target, team, person, choice):
-        if game is None or choice is None:
-            return _page_skip()
-        team = team_index(game, team)
-        key = None if choice == EMPTY_SLOT else choice
-
-        def move(g: Game):
-            if _column_key(g, team, col) == key:  # 在 act 的鎖裡查：這一位已經是他（或本來就空著）
-                return UNCHANGED
-            return g.set_member(team, col, key)
-
-        return act(game, move, menxia=(slot, target, team, person), note="swap")
-
-    return handler
+def _menxia_act(game: Game, action, person: str | None) -> list:
+    """門下頁面專屬的動作（加入/移出隊伍、練功、療傷）：同步、動作、存檔、只重畫門下頁面。"""
+    with ACT_LOCK:
+        game.sync(time.time())
+        msgs = action(game)
+        save_game(game.state, save_path(game.state.player.name))
+        return render_menxia(game, person, "\n\n".join(msgs) if msgs else "")
 
 
-def equip_handler(game, slot, target, team=0, person=None):
-    """把選中的武學配到選中的自選欄；原本配在別人身上的會移過來（同一門武學同時只能配給一個人）。"""
+def create_skill_handler(game, person, kind, name):
     if game is None:
-        return _page_skip()
-    team = team_index(game, team)
-    slot, target = menxia_selection(game, slot, target, team)
-    if slot is None or target is None or not target.startswith("skill:"):
-        return _page_skip()
-    key, index = slot
-    skill_id = target.removeprefix("skill:")
-    return act(game, lambda g: g.set_loadout(key, index, skill_id), menxia=(slot, target, team, person))
+        return [gr.skip()] * 6
+    return _menxia_act(game, lambda g: g.create_skill(name or "", kind), person)
 
 
-def unequip_handler(game, slot, target, team=0, person=None):
+def practice_handler(game, person, kind):
     if game is None:
-        return _page_skip()
-    team = team_index(game, team)
-    slot, target = menxia_selection(game, slot, target, team)
-    if slot is None:
-        return _page_skip()
-    key, index = slot
-    return act(game, lambda g: g.set_loadout(key, index, None), menxia=(slot, target, team, person))
+        return [gr.skip()] * 6
+    return _menxia_act(game, lambda g: g.practice(kind), person)
 
 
-def upgrade_handler(game, slot, target, team=0, person=None):
+def heal_handler(game, person):
     if game is None:
-        return _page_skip()
-    team = team_index(game, team)
-    slot, target = menxia_selection(game, slot, target, team)
-    if target is None:
-        return _page_skip()
-    return act(game, lambda g: g.upgrade(target), menxia=(slot, target, team, person))
-
-
-def dispel_handler(game, slot, target, team=0, person=None):
-    if game is None:
-        return _page_skip()
-    team = team_index(game, team)
-    slot, target = menxia_selection(game, slot, target, team)
-    if target is None:
-        return _page_skip()
-    return act(game, lambda g: g.dispel(target), menxia=(slot, target, team, person))
-
-
-def make_pull_handler(count: int):
-    """招賢分頁的「單抽」（count=1）、「十連」（count=10）：照一般動作同步、抽、存檔、重畫；
-    抽完的摘要（或抽不成的原因）寫在按鈕底下，每一抽的結果排在結果卡上。"""
-
-    def handler(game, slot, target, team=0, person=None):
-        if game is None:
-            return _page_skip()
-        return act(game, lambda g: g.pull(count), menxia=(slot, target, team, person), note="gacha")
-
-    return handler
+        return [gr.skip()] * 6
+    return _menxia_act(game, lambda g: g.heal(), person)
 
 
 def _report_page(record_id: int | None, game: Game) -> list:
@@ -587,14 +377,14 @@ def skip_tutorial_handler(game):
     return act(game, lambda g: g.skip_tutorial())
 
 
-def yuanbao_handler(game):
-    """設定分頁的「測試：領取元寶」。"""
-    return act(game, lambda g: g.grant_yuanbao())
-
-
-def tick_handler(game, slot, target, team=0, person=None):
-    """計時器：同步時間，連同門下頁面一起重畫（保留目前的選取、隊伍與訊息），內力等數字才會跟著走。"""
-    return act(game, lambda g: None, menxia=(slot, target, team, person))
+def tick_handler(game, person):
+    """計時器：同步時間，連同門下頁面一起重畫（保留目前的選取，氣血等數字才會跟著走）。"""
+    if game is None:
+        return [gr.skip()] * (N_OUTPUTS + 6)
+    with ACT_LOCK:
+        game.sync(time.time())
+        save_game(game.state, save_path(game.state.player.name))
+        return render(game) + render_menxia(game, person, None)
 
 
 def open_game(name: str) -> Game:
@@ -625,8 +415,6 @@ def build_demo() -> gr.Blocks:
     with gr.Blocks(title="天下大勢") as demo:
         game_state = gr.State(None)
         ids_state = gr.State([])
-        mx_slot = gr.State(None)  # 門下頁面選中的自選欄（Slot）
-        mx_target = gr.State(None)  # 門下頁面選中的武學：skill:<id> 或 innate:<key>
         gr.Markdown("# 天下大勢 · 原型")
         with gr.Column(visible=True) as start_col:
             name_box = gr.Textbox(label="你的名號", placeholder="例如：沈青衫（輸入舊名號會讀取存檔）")
@@ -662,7 +450,7 @@ def build_demo() -> gr.Blocks:
                     with gr.Tab("江湖史"):
                         chronicle_md = gr.Markdown()
                     with gr.Tab("閉關"):
-                        gr.Markdown("閉關可以得到心得，期間內力回復加倍。")
+                        gr.Markdown("閉關可以得到心得，期間氣血回復加倍。")
                         hours_sl = gr.Slider(1, 12, value=8, step=1, label="閉關時數（小時）")
                         seclude_btn = gr.Button("開始閉關")
                     with gr.Tab("設定"):
@@ -671,55 +459,30 @@ def build_demo() -> gr.Blocks:
                         gr.Markdown("**測試用：時間快轉**")
                         with gr.Row():
                             ff_btns = {h: gr.Button(f"+{h} 小時") for h in (1, 8, 24)}
-                        gr.Markdown("**測試用：元寶**（原型不接金流；元寶只用在門下的「招賢」）")
-                        yuanbao_btn = gr.Button(f"測試：領取 {CONTENT.config.test_yuanbao} 元寶")
         with gr.Column(visible=False) as menxia_col:
             with gr.Row(equal_height=True):
                 gr.Markdown("## 門下", scale=1)
-                mx_head_md = gr.Markdown(scale=6)
                 back_btn = gr.Button("返回江湖", scale=0, min_width=120)
-            with gr.Tabs():
-                with gr.Tab("名冊・隊伍"):
-                    team_radio = gr.Radio(label="隊伍", choices=[], interactive=True)  # 值是第幾隊；還沒打開門下時為 None（＝本隊）
-                    team_info_md = gr.Markdown()
-                    swap_message_md = gr.Markdown()  # 換人的結果：放在換人選單旁，不必往下捲到武學按鈕那裡才看得到
-                    members = []
-                    with gr.Row():
-                        for _ in range(MAX_MEMBERS):
-                            with gr.Column(visible=False, min_width=240) as member_col:
-                                swap_dd = gr.Dropdown(label="換人", choices=[], interactive=True)
-                                card_md = gr.Markdown()
-                                slot_btns = [gr.Button("（空）") for _ in range(1 + Game.FREE_SLOTS)]  # 本命、自選…
-                            members.append((member_col, card_md, slot_btns, swap_dd))
-                    with gr.Row():
-                        with gr.Column(scale=1):
-                            roster_radio = gr.Radio(label="名冊（點名字看人物卡）", choices=[], interactive=True)
-                        with gr.Column(scale=1):
-                            person_md = gr.Markdown()
-                    with gr.Row():
-                        with gr.Column(scale=1):
-                            library_radio = gr.Radio(label="武學庫", choices=[], interactive=True)
-                        with gr.Column(scale=1):
-                            gr.Markdown("**武學詳情**")
-                            detail_md = gr.Markdown()
-                            with gr.Row():
-                                equip_btn = gr.Button("配置到", variant="primary", visible=False)
-                                unequip_btn = gr.Button("卸下", visible=False)
-                                upgrade_btn = gr.Button("升一成", visible=False)
-                                dispel_btn = gr.Button("散功", variant="stop", visible=False)
-                            mx_message_md = gr.Markdown()
-                with gr.Tab("招賢"):
-                    with gr.Row():
-                        with gr.Column(scale=3):
-                            gacha_head_md = gr.Markdown()
-                            gr.Markdown(f"元寶是測試用的：在右欄「設定」分頁按「測試：領取 {CONTENT.config.test_yuanbao} 元寶」。")
-                            with gr.Row():
-                                pull_btns = [gr.Button("單抽"), gr.Button("十連", variant="primary")]  # 順序同 Game.PULL_SIZES
-                            gacha_message_md = gr.Markdown()
-                            gr.Markdown("**最近一次的結果**")
-                            gacha_cards_html = gr.HTML(css_template=GACHA_CSS)
-                        with gr.Column(scale=2, min_width=260):
-                            gacha_rules_md = gr.Markdown()
+            mx_head_md = gr.Markdown()
+            with gr.Row():
+                with gr.Column(scale=1):
+                    gr.Markdown("**本人**")
+                    player_card_md = gr.Markdown()
+                    gr.Markdown("**名冊**（本人與已招募的同伴；點名字看角色卡）")
+                    roster_radio = gr.Radio(label="", choices=[], interactive=True)
+                with gr.Column(scale=1):
+                    gr.Markdown("**角色卡**")
+                    person_card_md = gr.Markdown(PERSON_HINT)
+                    team_toggle_btn = gr.Button("加入隊伍", visible=False)
+            gr.Markdown("---\n**練功**：自創功法（取名決定屬性/威力/成長性，全服不能重名）或鍛鍊已學會的。")
+            with gr.Row():
+                kind_radio = gr.Radio(label="內功／武學", choices=list(KINDS), value="武學", interactive=True)
+                skill_name_tb = gr.Textbox(label="自創功法的名字", placeholder="幫你的武學取個名字")
+            with gr.Row():
+                create_btn = gr.Button("自創功法", variant="primary")
+                practice_btn = gr.Button("鍛鍊")
+                heal_btn = gr.Button("療傷")
+            mx_message_md = gr.Markdown()
         with gr.Column(visible=False) as report_col:
             with gr.Row(equal_height=True):
                 gr.Markdown("## 戰報", scale=1)
@@ -757,14 +520,7 @@ def build_demo() -> gr.Blocks:
         assert len(pages) == len(PAGES)
         map_outputs = [map_head_md, layer_radio, world_map_html, place_dd, place_md, travel_btn]
         assert len(map_outputs) == MAP_OUTPUTS
-        menxia_outputs = [mx_slot, mx_target, mx_head_md, team_radio, team_info_md, swap_message_md]
-        for member_col, card_md, slot_btns, swap_dd in members:
-            menxia_outputs += [member_col, card_md, *slot_btns, swap_dd]
-        menxia_outputs += [library_radio, detail_md, equip_btn, unequip_btn, upgrade_btn, dispel_btn, mx_message_md]
-        menxia_outputs += [roster_radio, person_md]
-        menxia_outputs += [gacha_head_md, gacha_rules_md, *pull_btns, gacha_message_md, gacha_cards_html]
-        assert len(menxia_outputs) == MENXIA_OUTPUTS
-        selection = [game_state, mx_slot, mx_target, team_radio, roster_radio]
+        menxia_outputs = [mx_head_md, player_card_md, roster_radio, person_card_md, team_toggle_btn, mx_message_md]
 
         start_btn.click(start, inputs=[name_box], outputs=outputs + [start_col] + pages)
         name_box.submit(start, inputs=[name_box], outputs=outputs + [start_col] + pages)
@@ -775,9 +531,8 @@ def build_demo() -> gr.Blocks:
         skip_tutorial_btn.click(skip_tutorial_handler, inputs=[game_state], outputs=outputs)
         for hours, btn in ff_btns.items():
             btn.click(make_fast_forward_handler(hours), inputs=[game_state], outputs=outputs)
-        yuanbao_btn.click(yuanbao_handler, inputs=[game_state], outputs=outputs)
 
-        menxia_btn.click(open_menxia, inputs=selection, outputs=[game_row, menxia_col] + menxia_outputs)
+        menxia_btn.click(open_menxia, inputs=[game_state], outputs=[game_row, menxia_col] + menxia_outputs)
         back_btn.click(close_menxia, outputs=[game_row, menxia_col])
         report_outputs = [game_row, report_col, report_list_radio, report_detail_md]
         report_btn.click(open_report_page, inputs=[game_state], outputs=report_outputs)
@@ -795,25 +550,14 @@ def build_demo() -> gr.Blocks:
         travel_btn.click(
             travel_handler, inputs=[game_state, layer_radio, place_dd], outputs=outputs + pages + map_outputs
         )
-        for col, (_, _, (innate_btn, *free_btns), swap_dd) in enumerate(members):
-            innate_btn.click(make_innate_slot_handler(col), inputs=selection, outputs=menxia_outputs)
-            for index, btn in enumerate(free_btns):
-                btn.click(make_free_slot_handler(col, index), inputs=selection, outputs=menxia_outputs)
-            # 接 blur：滑鼠、鍵盤選好都會失焦、各送一次（select 鍵盤選不送，input 滑鼠選會送兩次）。
-            swap_dd.blur(make_swap_handler(col), inputs=selection + [swap_dd], outputs=outputs + menxia_outputs)
-        library_radio.input(
-            view_handler, inputs=[game_state, mx_slot, library_radio, team_radio, roster_radio], outputs=menxia_outputs
+        roster_radio.input(roster_pick_handler, inputs=[game_state, roster_radio], outputs=menxia_outputs)
+        team_toggle_btn.click(toggle_team_handler, inputs=[game_state, roster_radio], outputs=menxia_outputs)
+        create_btn.click(
+            create_skill_handler, inputs=[game_state, roster_radio, kind_radio, skill_name_tb], outputs=menxia_outputs
         )
-        team_radio.input(view_handler, inputs=selection, outputs=menxia_outputs)
-        roster_radio.input(view_handler, inputs=selection, outputs=menxia_outputs)
-        for btn, handler in (
-            (equip_btn, equip_handler), (unequip_btn, unequip_handler),
-            (upgrade_btn, upgrade_handler), (dispel_btn, dispel_handler),
-        ):
-            btn.click(handler, inputs=selection, outputs=outputs + menxia_outputs)
-        for count, btn in zip(Game.PULL_SIZES, pull_btns):
-            btn.click(make_pull_handler(count), inputs=selection, outputs=outputs + menxia_outputs)
-        gr.Timer(10).tick(tick_handler, inputs=selection, outputs=outputs + menxia_outputs)
+        practice_btn.click(practice_handler, inputs=[game_state, roster_radio, kind_radio], outputs=menxia_outputs)
+        heal_btn.click(heal_handler, inputs=[game_state, roster_radio], outputs=menxia_outputs)
+        gr.Timer(10).tick(tick_handler, inputs=[game_state, roster_radio], outputs=outputs + menxia_outputs)
     return demo
 
 

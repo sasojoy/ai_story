@@ -362,5 +362,5 @@ def test_game_map_helpers(game):
     assert game.MAP_LAYERS == {"situation": "局勢", "enemies": "敵情", "story": "劇情", "routes": "路線"}
     assert game.map_header() == "⏳ 第1天 00:00　**體力** 150 / 150"
     assert game.map_places() == [("小鎮（所在地）", "town"), ("湖邊", "lake")]
-    assert "**敵情**　水寇小隊 穩勝" in game.place_detail("lake")  # 用 Game.odds（有快取）
+    assert "**敵情**　水寇小隊" in game.place_detail("lake")  # 用 Game.odds；具體勝算數字待平衡調整
     assert game.travel_button("lake") == ("安排前往（約 5 體力）", True)

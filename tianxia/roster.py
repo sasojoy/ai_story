@@ -37,6 +37,18 @@ def recruit_chance(content: Content, state: GameState, companion_id: str) -> flo
     return min(0.95, max(0.05, cfg.recruit_base_chance + (affinity / 100) * cfg.recruit_affinity_bonus))
 
 
+def _seed_starting_skills(world: WorldStateStore, companion_id: str, ch) -> None:
+    """第一次被招募時，把內容裡的 starting_wugong/starting_neigong 配給他（不覆蓋既有進度：
+    同伴被放走又再招募，等級/武學是全服共用的，原封不動保留，見 world_state.py）。"""
+    def _apply(progress):
+        if progress.wugong_id is None and ch.starting_wugong:
+            progress.wugong_id = ch.starting_wugong
+        if progress.neigong_id is None and ch.starting_neigong:
+            progress.neigong_id = ch.starting_neigong
+
+    world.update_companion(companion_id, _apply)
+
+
 def attempt_recruit(
     state: GameState, content: Content, world: WorldStateStore, companion_id: str, rng: random.Random,
 ) -> list[str]:
@@ -54,6 +66,7 @@ def attempt_recruit(
     if rng.random() < chance:
         if not world.try_recruit(companion_id, p.name):
             return [f"晚了一步，【{disp}】剛剛被別人招攬走了。"]
+        _seed_starting_skills(world, companion_id, ch)
         msgs = [f"【{disp}】被你的誠意打動，願意追隨於你！"]
         return msgs + team.add_to_team(state, companion_id)
     if rng.random() < content.config.duel_chance_on_fail:
@@ -78,6 +91,7 @@ def recruit(state: GameState, content: Content, world: WorldStateStore, char_id:
         amount = content.config.recruit_consolation_xinde
         state.player.stats["xinde"] = state.player.stats.get("xinde", 0) + amount
         return [f"【{ch.name}】剛剛被別人招攬走了，這份緣分化為心得。", f"心得 +{amount}"]
+    _seed_starting_skills(world, char_id, ch)
     return [f"【{ch.name}】加入了你的隊伍！"] + team.add_to_team(state, char_id)
 
 
