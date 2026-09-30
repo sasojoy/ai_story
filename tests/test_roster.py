@@ -512,7 +512,7 @@ def test_the_fortune_is_a_gift_when_everyone_it_could_bring_is_already_here(game
     assert game.rng.getstate() == before and game.state.pending_event is None
     assert p.fortune and (p.stats["xinde"], p.gacha_xinde) == (50, 0)
     entry = game.state.journal[0]
-    assert (entry.title, entry.lines, entry.changes) == ("福緣", [GIFT], ["心得 +50"])
+    assert (entry.title, entry.tag, entry.lines, entry.changes) == ("福緣", "賀禮", [GIFT], ["心得 +50"])
     game.choose("act:socialize")
     assert game.state.pending_event == "join" and p.stats["xinde"] == 50  # 每季只有一次
 
@@ -527,7 +527,7 @@ def test_day_seven_gives_the_gift_when_everyone_it_could_bring_is_already_here(g
     p = game.state.player
     assert p.fortune and (p.stats["xinde"], p.gacha_xinde) == (50, 0)
     entry = next(e for e in game.state.journal if e.title == "福緣")
-    assert (entry.lines, entry.changes) == ([GIFT], ["心得 +50"])
+    assert (entry.tag, entry.lines, entry.changes) == ("賀禮", [GIFT], ["心得 +50"])
     assert not any(e.title.startswith("結識") for e in game.state.journal)
     game.advance(24 * 3600)
     assert sum(e.title == "福緣" for e in game.state.journal) == 1 and p.stats["xinde"] == 50

@@ -29,6 +29,7 @@ class Game:
     FREE_SLOTS = team.FREE_SLOTS
     EMPTY_CHOICE = roster.EMPTY_CHOICE  # 門下頁「換人」選單裡「（空）」的值
     MAP_LAYERS = atlas.LAYERS  # 大地圖的圖層：id → 名稱
+    PULL_SIZES = (gacha.SINGLE, gacha.TEN)  # 招賢：單抽、十連
 
     def __init__(self, content: Content, state: GameState, rng: random.Random | None = None):
         self.content = content
@@ -281,9 +282,9 @@ class Game:
                 self.state.player.fortune = True
                 return self._present(self.rng.choice(events))
             # 福緣要來的人都已經在門下（招賢請進門的）：福緣改送賀禮，取代這次的交遊遭遇（和福緣事件一樣，
-            # 這一次交遊不再擲一般的遭遇），所以不用亂數；紀錄寫成一則「福緣」，不是「交遊・某地」。
+            # 這一次交遊不再擲一般的遭遇），所以不用亂數；紀錄寫成一則「福緣」（標「賀禮」），不是「交遊・某地」。
             if self._draft is not None:
-                self._draft.title = "福緣"
+                self._draft.title, self._draft.tag = "福緣", "賀禮"
             return self._fortune_gift()
         return self._encounter("socialize", "此地無人可訪，你只好悻悻離去。")
 
@@ -298,13 +299,13 @@ class Game:
 
     def _deliver_fortune(self) -> list[str]:
         """第 fortune_day_max 天結束還沒遇上新立門戶福緣：直接送上門（第一個還能觸發的福緣事件的第一個選項），
-        另寫一則江湖紀錄「結識【某某】」。已經沒有人可送時改送賀禮（見 _fortune_gift），寫一則「福緣」。"""
+        另寫一則江湖紀錄「結識【某某】」。已經沒有人可送時改送賀禮（見 _fortune_gift），寫一則「福緣」（標「賀禮」）。"""
         s, c = self.state, self.content
         s.player.fortune = True
         events = fortune_events(s, c)
         if not events:
             msgs = self._fortune_gift()
-            self._write("福緣", msgs)
+            self._write("福緣", msgs, tag="賀禮")
             return msgs
         event = events[0]
         effect = event.choices[0].effect
@@ -612,6 +613,19 @@ class Game:
         msgs = [f"元寶 +{amount}"]
         self._write("測試：領取元寶", msgs)
         return self._log(msgs)
+
+    def pull_button(self, count: int) -> tuple[str, bool]:
+        """招賢分頁「單抽」「十連」按鈕的（文字, 按得下去）。"""
+        return gacha.button(self.state, self.content, count)
+
+    def gacha_head(self) -> str:
+        return gacha.head(self.state, self.content)
+
+    def gacha_rules(self) -> str:
+        return gacha.rules_text(self.state, self.content)
+
+    def gacha_cards_html(self) -> str:
+        return gacha.cards_html(self.state, self.content)
 
     # ── 門下頁面 ──────────────────────────────────────────
 

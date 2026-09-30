@@ -1,6 +1,7 @@
 import random
 
 import gradio as gr
+import pytest
 
 import app
 from tianxia.engine import Game
@@ -692,6 +693,112 @@ def test_incompatible_old_save_is_backed_up(tmp_path, monkeypatch):
     assert len(backups) == 1 and backups[0].read_text(encoding="utf-8") == "{}"
     assert any("已備份" in line for line in game.state.log)
     assert game.state.journal[0].title == "舊存檔已備份" and "已備份到 saves/backup/" in game.state.journal[0].lines[0]
+
+
+# ── 門下頁面：招賢 ──────────────────────────────────────────
+
+
+def tab_of(block) -> str:
+    while not isinstance(block, gr.Tab):
+        block = block.parent
+    return block.label
+
+
+def test_menxia_has_a_roster_tab_and_a_zhaoxian_tab():
+    demo = app.build_demo()
+    tabs = [b for b in demo.blocks.values() if isinstance(b, gr.Tab) and b.label in ("名冊・隊伍", "招賢")]
+    assert [t.label for t in tabs] == ["名冊・隊伍", "招賢"] and tabs[0].parent is tabs[1].parent
+    page = next(f for f in demo.fns.values() if f.fn is app.open_menxia).outputs[2:]
+    for index in (app.MX_TEAM_INDEX, app.MX_SWAP_MESSAGE_INDEX, app.MX_LIBRARY_INDEX, app.MX_ROSTER_INDEX):
+        assert tab_of(page[index]) == "名冊・隊伍"
+    assert {tab_of(page[i]) for i in range(app.MX_GACHA_HEAD_INDEX, app.MENXIA_OUTPUTS)} == {"招賢"}
+    hints = [b for b in demo.blocks.values() if isinstance(b, gr.Markdown) and "測試：領取 1000 元寶" in str(b.value)]
+    assert [tab_of(b) for b in hints] == ["招賢"]  # 告訴玩家元寶去哪裡領
+
+
+def test_zhaoxian_tab_shows_yuanbao_pity_rates_and_the_pool():
+    game = Game.new(app.CONTENT, "測試")
+    out = app.render_menxia(game, None, None)
+    assert out[app.MX_GACHA_HEAD_INDEX] == "**元寶** 0　｜　再 **40** 抽必得天品　｜　本季招賢心得 0／300"
+    rules = out[app.MX_GACHA_RULES_INDEX]
+    assert "**機率**　天品 3%　地品 12%　玄品 35%　黃品 50%（同品階的人平均分配）" in rules
+    assert "- 天品（每人 3%）：晏歸鴻" in rules and "- 地品（每人 4%）：陸沉舟、祝小蟬、石磬" in rules
+    assert "- 玄品（每人 8.75%）：羅石頭、程素衣、駱行雲、阮青弦" in rules
+    assert "- 黃品（每人 12.5%）：杜三斤、阿棠、方小舟、白小滿" in rules
+    assert "韓鐵" not in rules and "守墓人" not in rules  # 開局與只能招降的人不在卡池裡
+    one, ten = out[app.MX_GACHA_BUTTONS_INDEX:app.MX_GACHA_MESSAGE_INDEX]
+    assert (one["value"], one["interactive"]) == ("單抽（元寶不足，要 100）", False)
+    assert (ten["value"], ten["interactive"]) == ("十連（元寶不足，要 1000）", False)
+    assert "還沒有招賢過" in out[app.MX_GACHA_CARDS_INDEX]
+    game.state.player.yuanbao = 1000
+    one, ten = app.render_menxia(game, None, None)[app.MX_GACHA_BUTTONS_INDEX:app.MX_GACHA_MESSAGE_INDEX]
+    assert (one["value"], one["interactive"]) == ("單抽（元寶 100）", True)
+    assert (ten["value"], ten["interactive"]) == ("十連（元寶 1000・至少一名地品以上）", True)
+
+
+def test_ten_pull_through_the_page_saves_and_lays_out_the_cards(tmp_path, monkeypatch):
+    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
+    game = Game.new(app.CONTENT, "測試", rng=random.Random(4))
+    game.state.player.yuanbao = 1000
+    out = app.make_pull_handler(10)(game, None, None, 0, None)
+    assert len(out) == app.N_OUTPUTS + app.MENXIA_OUTPUTS
+    page = out[app.N_OUTPUTS:]
+    assert page[app.MX_GACHA_MESSAGE_INDEX] == "十連：新入門 7 人，重複 3 人（心得 +50）。"
+    assert page[app.MX_MESSAGE_INDEX] == "" and page[app.MX_SWAP_MESSAGE_INDEX] == ""
+    assert page[app.MX_GACHA_HEAD_INDEX] == "**元寶** 0　｜　再 **34** 抽必得天品　｜　本季招賢心得 50／300"  # 第 4 抽是天品
+    cards = page[app.MX_GACHA_CARDS_INDEX]
+    assert cards.count('<div class="gc-card ') == 10
+    assert '<div class="gc-name">晏歸鴻</div><div>天品・快・統御 7</div><div>本命　歸鴻劍</div>' in cards
+    assert "晏歸鴻（已入門）" in page[app.MX_GACHA_RULES_INDEX]
+    assert "招賢・十連" in out[app.LATEST_INDEX]["value"] and "得天品【晏歸鴻】" in out[app.LATEST_INDEX]["value"]
+    assert (tmp_path / "測試.json").exists()
+    roster = [key for _, key in page[app.MX_ROSTER_INDEX]["choices"]]
+    assert "yanguihong" in roster and len(roster) == 10  # 你、韓鐵、小墨＋新入門 7 人
+
+
+def test_a_refused_pull_says_why_under_the_buttons(tmp_path, monkeypatch):
+    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
+    game = Game.new(app.CONTENT, "測試")
+    page = app.make_pull_handler(1)(game, None, None, 0, None)[app.N_OUTPUTS:]
+    assert page[app.MX_GACHA_MESSAGE_INDEX] == "（元寶不足，要 100。）"
+    assert page[app.MX_MESSAGE_INDEX] == "" and page[app.MX_SWAP_MESSAGE_INDEX] == ""
+    assert app.tick_handler(game, None, None, 0)[app.N_OUTPUTS + app.MX_GACHA_MESSAGE_INDEX] == gr.update()  # 計時器留著
+    assert app.view_handler(game, None, None, 1)[app.MX_GACHA_MESSAGE_INDEX] == ""  # 換到別隊：清掉
+    assert app.make_pull_handler(1)(None, None, None) == [gr.skip()] * (app.N_OUTPUTS + app.MENXIA_OUTPUTS)
+
+
+def test_pull_buttons_are_wired_to_the_main_view_and_the_page():
+    demo = app.build_demo()
+    pulls = [f for f in demo.fns.values() if f.fn.__qualname__ == "make_pull_handler.<locals>.handler"]
+    assert [event for f in pulls for _, event in f.targets] == ["click"] * len(Game.PULL_SIZES)
+    assert all(len(f.outputs) == app.N_OUTPUTS + app.MENXIA_OUTPUTS for f in pulls)
+    buttons = pulls[0].outputs[app.N_OUTPUTS + app.MX_GACHA_BUTTONS_INDEX:app.N_OUTPUTS + app.MX_GACHA_MESSAGE_INDEX]
+    assert [b.value for b in buttons] == ["單抽", "十連"]
+
+
+def test_viewing_the_zhaoxian_tab_and_a_refused_pull_leave_the_rng_alone(tmp_path, monkeypatch):
+    """亂數只在真的抽的時候用：打開門下、重畫招賢分頁（按鈕按得下去或按不下去）、按不下去的十連都不動亂數。"""
+    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
+    game = Game.new(app.CONTENT, "測試", rng=random.Random(4))
+    game.state.player.yuanbao = 100  # 單抽按得下去、十連按不下去
+    before = game.rng.getstate()
+    app.open_menxia(game, None, None)
+    app.view_handler(game, None, None, 1)
+    page = app.make_pull_handler(10)(game, None, None, 0, None)[app.N_OUTPUTS:]
+    assert page[app.MX_GACHA_MESSAGE_INDEX] == "（元寶不足，要 1000。）"
+    assert game.rng.getstate() == before and game.state.player.yuanbao == 100
+
+
+def test_an_unknown_note_spot_is_refused(tmp_path, monkeypatch):
+    """動作結果寫在哪裡只能是 NOTE_SPOTS 之一：寫錯了要報錯，不能默默把三處訊息都清掉；act 在動作之前就擋下。"""
+    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
+    game = Game.new(app.CONTENT, "測試")
+    with pytest.raises(ValueError, match="swop"):
+        app.render_menxia(game, None, None, "訊息", note="swop")
+    ran = []
+    with pytest.raises(ValueError, match="swop"):
+        app.act(game, lambda g: ran.append(g) or ["訊息"], menxia=(None, None, 0, None), note="swop")
+    assert ran == [] and not (tmp_path / "測試.json").exists()
 
 
 # ── 大地圖頁面 ─────────────────────────────────────────

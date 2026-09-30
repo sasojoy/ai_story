@@ -9,6 +9,7 @@ config.gacha_ten_floor（地品）以上，和天品保底分開算。新人照�
 """
 from __future__ import annotations
 
+import html
 import random
 
 from . import roster
@@ -133,3 +134,95 @@ def summary(pulls: list[Pull], count: int) -> str:
         gains = "、".join(f"{name} +{amount}" for name, amount in totals if amount)
         parts.append(f"重複 {len(pulls) - new} 人" + (f"（{gains}）" if gains else ""))
     return f"{label(count)}：{'，'.join(parts)}。"
+
+
+# ── 招賢分頁的文字 ─────────────────────────────────────────
+
+NO_PULLS = "（還沒有招賢過。按「單抽」或「十連」，抽到的人會列在這裡。）"
+TIER_CLASS = {"天": "gc-t1", "地": "gc-t2", "玄": "gc-t3", "黃": "gc-t4"}  # 結果卡左邊色條的顏色
+
+
+def button(state: GameState, content: Content, count: int) -> tuple[str, bool]:
+    """「單抽」「十連」按鈕的（文字, 按得下去）：「單抽（元寶 100）」「十連（元寶 1000・至少一名地品以上）」；
+    抽不成時寫原因，例如「十連（元寶不足，要 1000）」「單抽（賽季已落幕）」。"""
+    reason = block(state, content, count)
+    if reason:
+        return f"{label(count)}（{reason}）", False
+    extra = f"・至少一名{content.config.gacha_ten_floor}品以上" if count == TEN else ""
+    return f"{label(count)}（元寶 {cost(content, count)}{extra}）", True
+
+
+def head(state: GameState, content: Content) -> str:
+    """分頁最上面一行（Markdown）：元寶、保底倒數、本季招賢心得。"""
+    cfg, p = content.config, state.player
+    left = max(1, cfg.gacha_pity - p.gacha_pity)
+    return f"**元寶** {p.yuanbao}　｜　再 **{left}** 抽必得天品　｜　本季招賢心得 {p.gacha_xinde}／{cfg.gacha_xinde_cap}"
+
+
+def _pct(value: float) -> str:
+    return f"{round(value, 2):g}%"
+
+
+def _by_tier(values: dict[str, int]) -> str:
+    """「黃 10、玄 20、地 50、天 100」：由低到高。"""
+    return "、".join(f"{tier} {values[tier]}" for tier in reversed(COMPANION_TIERS))
+
+
+def rules_text(state: GameState, content: Content) -> str:
+    """公開的機率、保底、重複換算與卡池（Markdown）；卡池每人標出品階與單人機率，已入門的人註明。"""
+    cfg = content.config
+    rates = "　".join(f"{tier}品 {_pct(cfg.gacha_rates[tier])}" for tier in COMPANION_TIERS)
+    paras = [
+        f"**機率**　{rates}（同品階的人平均分配）",
+        f"**保底**　連續 {cfg.gacha_pity} 抽沒出天品，第 {cfg.gacha_pity} 抽必得天品，抽到天品就重新算；"
+        f"十連至少一名{cfg.gacha_ten_floor}品以上（和天品保底分開算）",
+        f"**重複**　已入門的人化為心得（{_by_tier(cfg.duplicate_xinde)}）；本季招賢心得超過 {cfg.gacha_xinde_half} "
+        f"之後減半，滿 {cfg.gacha_xinde_cap} 之後改給銀兩（{_by_tier(cfg.gacha_silver)}）",
+        "**卡池**",
+    ]
+    members = state.player.members
+    items = []
+    for tier, ids in pool(content).items():
+        names = "、".join(content.characters[cid].name + ("（已入門）" if cid in members else "") for cid in ids)
+        items.append(f"- {tier}品（每人 {_pct(cfg.gacha_rates[tier] / len(ids))}）：{names}")
+    return "\n\n".join(paras) + "\n\n" + "\n".join(items)
+
+
+def cards_html(state: GameState, content: Content) -> str:
+    """最近一次的結果卡（HTML），依抽到的順序：名字、品階、流派、統御、本命（黃品寫「本命　無」），
+    以及「新入門」或「重複 → 心得 +50」「重複 → 銀兩 +50」。還沒抽過時是 NO_PULLS。"""
+    pulls = state.player.gacha_last
+    if not pulls:
+        return f'<div class="gc-empty">{html.escape(NO_PULLS)}</div>'
+    return f'<div class="gc-cards">{"".join(_card(content, x) for x in pulls)}</div>'
+
+
+def _card(content: Content, x: Pull) -> str:
+    ch = content.characters[x.character]
+    innate = content.skills[ch.innate].name if ch.innate else "無"
+    if x.new:
+        result = '<div class="gc-result gc-new">新入門</div>'
+    else:
+        gain = f"銀兩 +{x.silver}" if x.silver else f"心得 +{x.xinde}"
+        result = f'<div class="gc-result">重複 → {gain}</div>'
+    return (
+        f'<div class="gc-card {TIER_CLASS[ch.tier]}"><div class="gc-name">{html.escape(ch.name)}</div>'
+        f"<div>{ch.tier}品・{ch.style}・統御 {ch.command}</div><div>本命　{html.escape(innate)}</div>{result}</div>"
+    )
+
+
+# 結果卡的樣式（介面層交給 gr.HTML 的 css_template，會自動限定在該元件內）。和 journal.CSS 一樣，
+# 這裡不能出現反引號、「${」或「{{」；底色與框線用 Gradio 主題變數，品階只用左邊的色條區分。
+CSS = """
+.gc-cards { display: flex; flex-wrap: wrap; gap: 8px; }
+.gc-card { flex: 0 1 150px; min-width: 130px; border: 1px solid var(--border-color-primary); border-left-width: 4px;
+  border-radius: 8px; padding: 6px 10px; background: var(--background-fill-secondary); font-size: 13px; line-height: 1.6; }
+.gc-name { font-weight: 600; font-size: 15px; }
+.gc-t1 { border-left-color: #C9A227; }
+.gc-t2 { border-left-color: #8B5CF6; }
+.gc-t3 { border-left-color: #3B82F6; }
+.gc-t4 { border-left-color: #9CA3AF; }
+.gc-result { margin-top: 2px; }
+.gc-new { font-weight: 600; color: #16A34A; }
+.gc-empty { font-size: 13px; opacity: 0.7; }
+"""

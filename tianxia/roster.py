@@ -247,7 +247,8 @@ def surrender(state: GameState, content: Content, squad: Squad, rng: random.Rand
 
 
 def fortune_due(state: GameState, content: Content) -> bool:
-    """福緣還沒發生，而且已經是第 fortune_day_min 天（含）以後：這時交遊必定先觸發福緣事件。"""
+    """福緣還沒發生，而且已經是第 fortune_day_min 天（含）以後：這時交遊必定先觸發福緣事件
+    （福緣要來的人都已經在門下時改送賀禮，見 Game._fortune_gift）。"""
     return not state.player.fortune and rules.current_day(state) >= content.config.fortune_day_min
 
 

@@ -313,3 +313,52 @@ def test_save_roundtrip_keeps_the_gacha_state(tmp_path, game):
     path = tmp_path / "saves" / "沈浪.json"
     save_game(game.state, path)
     assert load_game(path) == game.state and len(game.state.player.gacha_last) == 10
+
+
+# ── 招賢分頁的文字 ─────────────────────────────────────────
+
+
+def test_head_counts_down_to_the_pity(state, content):
+    assert gacha.head(state, content) == "**元寶** 0　｜　再 **40** 抽必得天品　｜　本季招賢心得 0／300"
+    state.player.yuanbao, state.player.gacha_pity, state.player.gacha_xinde = 250, 39, 120
+    assert gacha.head(state, content) == "**元寶** 250　｜　再 **1** 抽必得天品　｜　本季招賢心得 120／300"
+
+
+def test_rules_publish_rates_pity_duplicates_and_the_pool(state, content):
+    join(state, "hero")
+    text = gacha.rules_text(state, content)
+    assert text.startswith("**機率**　天品 3%　地品 12%　玄品 35%　黃品 50%（同品階的人平均分配）")
+    assert "**保底**　連續 40 抽沒出天品，第 40 抽必得天品，抽到天品就重新算；十連至少一名地品以上（和天品保底分開算）" in text
+    assert (
+        "**重複**　已入門的人化為心得（黃 10、玄 20、地 50、天 100）；本季招賢心得超過 150 之後減半，"
+        "滿 300 之後改給銀兩（黃 10、玄 20、地 50、天 100）"
+    ) in text
+    assert text.endswith(
+        "**卡池**\n\n- 天品（每人 3%）：隱士\n- 地品（每人 12%）：俠女（已入門）\n- 玄品（每人 35%）：琴師\n- 黃品（每人 50%）：小六"
+    )
+
+
+def test_buttons_say_the_price_or_why_not(state, content):
+    assert gacha.button(state, content, 1) == ("單抽（元寶不足，要 100）", False)
+    state.player.yuanbao = 1000
+    assert gacha.button(state, content, 1) == ("單抽（元寶 100）", True)
+    assert gacha.button(state, content, 10) == ("十連（元寶 1000・至少一名地品以上）", True)
+    state.world.ended = True
+    assert gacha.button(state, content, 10) == ("十連（賽季已落幕）", False)
+
+
+def test_result_cards_show_who_came_and_what_a_duplicate_became(state, content):
+    assert gacha.cards_html(state, content) == f'<div class="gc-empty">{gacha.NO_PULLS}</div>'
+    state.player.gacha_last = [
+        Pull(character="sage", new=True),
+        Pull(character="pupil", new=False, xinde=10),
+        Pull(character="hero", new=False, silver=50),
+    ]
+    cards = gacha.cards_html(state, content)
+    assert cards.count('<div class="gc-card ') == 3
+    assert (
+        '<div class="gc-card gc-t1"><div class="gc-name">隱士</div><div>天品・快・統御 7</div>'
+        '<div>本命　天外劍</div><div class="gc-result gc-new">新入門</div></div>'
+    ) in cards
+    assert '<div>黃品・快・統御 2</div><div>本命　無</div><div class="gc-result">重複 → 心得 +10</div>' in cards
+    assert '<div class="gc-result">重複 → 銀兩 +50</div>' in cards
