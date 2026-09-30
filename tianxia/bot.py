@@ -3,6 +3,7 @@
 大多數時候隨機選一個可用的選項；只有三件事照規矩來：遇到結識的選項一定接受、
 收徒只在名冊還塞不滿已開放的隊伍而且付完還付得起下一次時收（見 wants_apprentice），
 每一步之後把本隊換成統御上限內最強的組合（見 arrange_team）。
+付費機器人（play_season 給了 yuanbao）開季先把元寶全花在招賢（見 spend_yuanbao），其餘和免費機器人一樣。
 """
 from __future__ import annotations
 
@@ -76,12 +77,28 @@ def arrange_team(game: Game) -> None:
         game.set_member(0, 2, key)
 
 
+def spend_yuanbao(game: Game) -> None:
+    """付費機器人開季時的招賢：元寶夠十連就一直十連，剩下的零頭夠單抽就單抽。"""
+    for count in sorted(Game.PULL_SIZES, reverse=True):
+        while game.pull_button(count)[1]:
+            game.pull(count)
+
+
 def play_season(
-    content: Content, seed: int, max_steps: int = 20000, observe: Callable[[Game], None] | None = None
+    content: Content, seed: int, max_steps: int = 20000, observe: Callable[[Game], None] | None = None,
+    yuanbao: int = 0,
 ) -> Game:
-    """玩完一季；observe 不是 None 時，每一步之後都呼叫一次（模擬器用來記錄第幾天有多少人）。"""
+    """玩完一季。yuanbao 大於 0 時是付費機器人：開季先拿這麼多元寶招賢，花掉換來的心得、排好本隊，再開始玩。
+    observe 不是 None 時，開始玩之前呼叫一次（開季的樣子），之後每一步之後都呼叫一次（模擬器用來記錄名冊與交手的時間點）。"""
     game = Game.new(content, f"機器人{seed}", rng=random.Random(seed))
     rng = random.Random(seed)
+    if yuanbao:
+        game.state.player.yuanbao += yuanbao
+        spend_yuanbao(game)
+        spend_xinde(game)
+        arrange_team(game)
+    if observe is not None:
+        observe(game)
     for step in range(max_steps):
         if game.state.world.ended:
             break

@@ -1,6 +1,7 @@
 import random
 
-from tianxia.bot import arrange_team, pick, spend_xinde
+from tianxia import team
+from tianxia.bot import arrange_team, pick, play_season, spend_xinde
 from tianxia.state import Member
 
 
@@ -72,3 +73,34 @@ def test_bot_puts_the_strongest_pair_under_the_cap_in_the_main_team(game):
     entries = len(game.state.journal)
     arrange_team(game)  # 已經是最好的組合：不再動
     assert len(game.state.journal) == entries
+
+
+def test_paid_bot_spends_its_yuanbao_at_season_start(content):
+    """付費機器人：開季先十連、零頭單抽，換來的心得花掉、本隊排好，才交給 observe 看開季的樣子。"""
+    seen = []
+    game = play_season(content, 0, max_steps=0, yuanbao=2300, observe=lambda g: seen.append(g.state.player.yuanbao))
+    p = game.state.player
+    titles = [e.title for e in game.state.journal]
+    assert (titles.count("招賢・十連"), titles.count("招賢・單抽")) == (2, 3)
+    assert seen == [0] and game.state.world.time == 0
+    assert p.gacha_xinde > 0  # 重複的人換到了心得……
+    costs = [
+        team.upgrade_cost(content, level)
+        for _, target in game.upgrade_options()
+        if (level := team.target_level(game.state, content, target)) is not None and level < team.MAX_SKILL_LEVEL
+    ]
+    assert not costs or p.stats["xinde"] < min(costs)  # ……付得起的精進都升了：剩下的心得買不起任何一次
+    assert max(p.skills.values()) > 1 or any(m.innate_level > 1 for m in p.members.values())
+    assert len(game.team_keys()) == 3
+    entries = len(game.state.journal)
+    arrange_team(game)
+    assert len(game.state.journal) == entries  # 本隊已經是最好的組合
+
+
+def test_free_bot_never_pulls(content):
+    """免費機器人（沒給元寶）真的玩了好幾步，元寶、保底、結果、江湖紀錄裡都沒有招賢的痕跡。"""
+    game = play_season(content, 0, max_steps=100)
+    p = game.state.player
+    assert game.state.world.time > 0
+    assert p.yuanbao == 0 and p.gacha_pity == 0 and p.gacha_xinde == 0 and p.gacha_last == []
+    assert not any(e.title.startswith("招賢") for e in game.state.journal)

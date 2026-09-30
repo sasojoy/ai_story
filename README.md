@@ -27,7 +27,10 @@ python -m venv .venv
 ```bash
 .venv/Scripts/python.exe -m pytest -q
 .venv/Scripts/python.exe scripts/simulate.py 30
+.venv/Scripts/python.exe scripts/simulate.py 30 3000
 ```
+
+模擬器讓機器人玩完整季，印出結局、大勢、名冊人數與整季拿到的心得；第二個參數是付費機器人開季先花在招賢的元寶，另外印出它的統計，以及付費方與免費方的本隊在開季、第二幕、第三幕交手的勝率（設計文件的目標是不超過 70%、60%、55%）。
 
 ## 修改內容
 

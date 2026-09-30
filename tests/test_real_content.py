@@ -585,3 +585,14 @@ def test_real_gacha_pool_and_provisional_numbers():
     assert sorted(c.config.provisional) == [
         "duplicate_xinde", "gacha_silver", "gacha_single", "gacha_ten", "gacha_xinde_cap", "gacha_xinde_half",
     ]
+
+
+def test_paid_bot_plays_a_full_season():
+    """付費機器人（開季 3000 元寶＝三次十連）照樣玩得完一整季；招賢心得不超過上限，本隊照統御上限排。"""
+    from tianxia import roster
+
+    game = play_season(load_content(CONTENT_DIR), 1, yuanbao=3000)
+    p, c = game.state.player, game.content
+    assert game.state.world.ended and p.yuanbao == 0
+    assert 0 < p.gacha_xinde <= c.config.gacha_xinde_cap
+    assert len(p.members) >= 12 and roster.team_command(game.state, c, 0) <= game.command_cap()
