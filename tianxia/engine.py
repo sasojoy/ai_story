@@ -10,12 +10,13 @@ import random
 
 from pydantic import BaseModel
 
-from . import atlas, battlelog, journal, roster, skillview, team
+from . import atlas, battlelog, companion_agent, journal, roster, skillview, team
 from .events import choice_label, has_events_here, pick_event, visible_choices
 from .guide import note_action, quest_text, tutorial_intro
 from .journal import LOG_BREAK, Draft
 from .mapview import render_map, render_minimap
 from .models import Choice, Content, Effect, Event, Location, Squad
+from .ollama_client import OllamaClient
 from .rules import apply_effect, change_trend, check_who, roll_check
 from .state import GameState, JournalEntry, Rumor, new_game_state
 from .world import check_thresholds, end_season, sim_tick
@@ -42,6 +43,9 @@ class Game:
         self.state = state
         self.rng = rng or random.Random()
         self.world = world or WorldStateStore()
+        self.client = OllamaClient(
+            base_url=content.config.ollama_url, model=content.config.ollama_model, timeout=content.config.ollama_timeout,
+        )  # companion_agent.py 用；連不上時每次呼叫各自優雅退回保底反應，這裡不用先健檢
         self._draft: Draft | None = None  # choose() 進行中那次行動的江湖紀錄草稿
         self._drop_stale_references()
 
@@ -65,6 +69,8 @@ class Game:
         p = s.player
         if s.pending_event and s.pending_event not in c.events:
             s.pending_event = None
+        if p.pending_companion and p.pending_companion not in c.characters:
+            p.pending_companion = None
         if p.location not in c.locations:
             p.location = c.scenario.start_location
         p.team = [k for k in p.team if k in c.characters][: team.MAX_TEAM_COMPANIONS]
@@ -152,6 +158,11 @@ class Game:
         if s.pending_event:
             event = c.events[s.pending_event]
             return [Option(id=f"choice:{i}", label=self._choice_label(ch, odds)) for i, ch in visible_choices(event, s)]
+        if s.player.pending_companion:
+            dialogue_options, _ = s.player.last_offered_dialogue.get(s.player.pending_companion, [[], []])
+            opts = [Option(id=f"talk:{i}", label=text) for i, text in enumerate(dialogue_options)]
+            opts.append(Option(id="talk:leave", label="告辭"))
+            return opts
         if s.player.busy_until is not None:
             return [Option(id="act:break", label="提前出關")]
         loc = c.locations[s.player.location]
@@ -208,6 +219,8 @@ class Game:
                 msgs = self._act(arg)
             elif kind == "move":
                 msgs = self._move(arg)
+            elif kind == "talk":
+                msgs = self._talk(arg)
             else:
                 msgs = self._choose(int(arg))
             if kind == "act" and arg != "break":
@@ -227,6 +240,9 @@ class Game:
         if kind == "choice":
             event = c.events[s.pending_event]
             return f"{event.title}・{event.choices[int(arg)].text}"
+        if kind == "talk":
+            character = c.characters[s.player.pending_companion]
+            return f"交談・{character.name}"
         here = c.locations[s.player.location].name
         titles = {
             "explore": f"探索{here}", "socialize": f"交遊・{here}", "practice": f"練功・{here}",
@@ -269,7 +285,29 @@ class Game:
             if self._draft is not None:
                 self._draft.title, self._draft.tag = "福緣", "賀禮"
             return self._fortune_gift()
+        companion_id = self._deep_interaction_target()
+        if companion_id is not None:
+            return companion_agent.start_dialogue(self.client, self.state, self.content, self.world, companion_id, self.rng)
         return self._encounter("socialize", "此地無人可訪，你只好悻悻離去。")
+
+    def _deep_interaction_target(self) -> str | None:
+        """這個地點目前能深度對話的人物 id（見設計文件四.3：目前僅開放 7 位可招募人物，
+        8 位鎖定的龍頭人物沒有 recruit_at 地點，暫不在此範圍）；沒有就是 None。"""
+        s, c = self.state, self.content
+        for cid, ch in c.characters.items():
+            if ch.deep_interaction and ch.recruit_at == s.player.location:
+                return cid
+        return None
+
+    def _talk(self, arg: str) -> list[str]:
+        companion_id = self.state.player.pending_companion
+        if companion_id is None:
+            return ["（此刻無法這麼做。）"]
+        if arg == "leave":
+            return companion_agent.leave_dialogue(self.state)
+        return companion_agent.continue_dialogue(
+            self.client, self.state, self.content, self.world, companion_id, int(arg), self.rng
+        )
 
     def _recruit(self) -> list[str]:
         target = self._recruit_target()
@@ -645,6 +683,11 @@ class Game:
         if s.pending_event:
             event = c.events[s.pending_event]
             return f"**{event.title}**\n\n{event.text}"
+        if s.player.pending_companion:
+            character = c.characters[s.player.pending_companion]
+            history = s.player.dialogue_history.get(s.player.pending_companion, [])
+            last = next((m["content"] for m in reversed(history) if m.get("role") == "assistant"), "")
+            return f"**{character.name}**\n\n{last}"
         return self.location_text()
 
     def status_text(self) -> str:

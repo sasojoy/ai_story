@@ -314,6 +314,9 @@ class Scenario(_Strict):
 class Config(_Strict):
     stamina_max: int = 150
     stamina_regen_seconds: float = 300
+    ollama_url: str = "http://localhost:11434"  # companion_agent.py 深度對話用；連不上時優雅退回保底反應
+    ollama_model: str = "qwen2.5:14b"
+    ollama_timeout: int = 120
     action_cost: dict[str, int] = Field(
         default_factory=lambda: {"explore": 10, "train": 10, "socialize": 5}
     )
