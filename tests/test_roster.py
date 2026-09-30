@@ -498,15 +498,39 @@ def test_an_old_save_past_day_seven_gets_the_fortune_on_its_next_sync(tmp_path, 
     assert entry.tag == "地品・福緣"
 
 
-def test_no_fortune_when_everyone_it_could_bring_is_here(game):
+GIFT = "江湖朋友聽說你新立門戶，送來一份賀禮。"
+
+
+def test_the_fortune_is_a_gift_when_everyone_it_could_bring_is_already_here(game):
+    """招賢已經把福緣的人都請進門了：從第 2 天起的第一次交遊，福緣改送一份賀禮（心得）；
+    賀禮取代這次的交遊遭遇，不擲亂數，也不算進本季招賢心得。"""
     join(game, "hero")
     game.state.world.time = 24 * 3600
+    before = game.rng.getstate()
     game.choose("act:socialize")
-    assert game.state.pending_event == "join" and not game.state.player.fortune
+    p = game.state.player
+    assert game.rng.getstate() == before and game.state.pending_event is None
+    assert p.fortune and (p.stats["xinde"], p.gacha_xinde) == (50, 0)
+    entry = game.state.journal[0]
+    assert (entry.title, entry.lines, entry.changes) == ("福緣", [GIFT], ["心得 +50"])
+    game.choose("act:socialize")
+    assert game.state.pending_event == "join" and p.stats["xinde"] == 50  # 每季只有一次
+
+
+def test_day_seven_gives_the_gift_when_everyone_it_could_bring_is_already_here(game):
+    join(game, "hero")
     game.content.config.season_days = 10
     game.content.scenario.sim_players = []
-    game.advance(7 * 24 * 3600)
-    assert game.state.player.fortune and not any(e.title.startswith("結識") for e in game.state.journal)
+    game.advance(7 * 24 * 3600 - 3600)
+    assert not game.state.player.fortune
+    game.advance(3600)
+    p = game.state.player
+    assert p.fortune and (p.stats["xinde"], p.gacha_xinde) == (50, 0)
+    entry = next(e for e in game.state.journal if e.title == "福緣")
+    assert (entry.lines, entry.changes) == ([GIFT], ["心得 +50"])
+    assert not any(e.title.startswith("結識") for e in game.state.journal)
+    game.advance(24 * 3600)
+    assert sum(e.title == "福緣" for e in game.state.journal) == 1 and p.stats["xinde"] == 50
 
 
 def test_old_save_without_recruiting_fields_loads(tmp_path, content, game):

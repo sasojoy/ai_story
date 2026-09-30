@@ -56,6 +56,19 @@ def test_skip_tutorial_handler_finishes_tutorial(tmp_path, monkeypatch):
     assert game.state.player.tutorial_step == len(app.CONTENT.tutorial.steps)
 
 
+def test_settings_has_a_test_button_for_yuanbao(tmp_path, monkeypatch):
+    demo = app.build_demo()
+    button = next(b for b in demo.blocks.values() if isinstance(b, gr.Button) and "元寶" in str(b.value))
+    assert button.value == "測試：領取 1000 元寶" and button.parent.label == "設定"  # 寫明是測試用
+    handler = next(f for f in demo.fns.values() if f.fn is app.yuanbao_handler)
+    assert len(handler.outputs) == app.N_OUTPUTS
+    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
+    game = Game.new(app.CONTENT, "測試")
+    out = app.yuanbao_handler(game)
+    assert len(out) == app.N_OUTPUTS and game.state.player.yuanbao == 1000
+    assert "元寶 +1000" in out[app.LATEST_INDEX]["value"] and (tmp_path / "測試.json").exists()
+
+
 def test_left_column_has_no_tabs_and_puts_the_minimap_beside_the_scene():
     demo = app.build_demo()
     tabs = [block.label for block in demo.blocks.values() if isinstance(block, gr.Tab)]

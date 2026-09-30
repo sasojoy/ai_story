@@ -553,6 +553,11 @@ def skip_tutorial_handler(game):
     return act(game, lambda g: g.skip_tutorial())
 
 
+def yuanbao_handler(game):
+    """設定分頁的「測試：領取元寶」。"""
+    return act(game, lambda g: g.grant_yuanbao())
+
+
 def tick_handler(game, slot, target, team=0, person=None):
     """計時器：同步時間，連同門下頁面一起重畫（保留目前的選取、隊伍與訊息），內力等數字才會跟著走。"""
     return act(game, lambda g: None, menxia=(slot, target, team, person))
@@ -632,6 +637,8 @@ def build_demo() -> gr.Blocks:
                         gr.Markdown("**測試用：時間快轉**")
                         with gr.Row():
                             ff_btns = {h: gr.Button(f"+{h} 小時") for h in (1, 8, 24)}
+                        gr.Markdown("**測試用：元寶**（原型不接金流；元寶只用在門下的「招賢」）")
+                        yuanbao_btn = gr.Button(f"測試：領取 {CONTENT.config.test_yuanbao} 元寶")
         with gr.Column(visible=False) as menxia_col:
             with gr.Row(equal_height=True):
                 gr.Markdown("## 門下", scale=1)
@@ -719,6 +726,7 @@ def build_demo() -> gr.Blocks:
         skip_tutorial_btn.click(skip_tutorial_handler, inputs=[game_state], outputs=outputs)
         for hours, btn in ff_btns.items():
             btn.click(make_fast_forward_handler(hours), inputs=[game_state], outputs=outputs)
+        yuanbao_btn.click(yuanbao_handler, inputs=[game_state], outputs=outputs)
 
         menxia_btn.click(open_menxia, inputs=selection, outputs=[game_row, menxia_col] + menxia_outputs)
         back_btn.click(close_menxia, outputs=[game_row, menxia_col])

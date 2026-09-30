@@ -5,7 +5,7 @@ import random
 
 from pydantic import BaseModel
 
-from . import atlas, battlelog, journal, roster, skillview, team
+from . import atlas, battlelog, gacha, journal, roster, skillview, team
 from .events import choice_label, fortune_events, has_events_here, pick_event, visible_choices
 from .guide import note_action, quest_text, tutorial_intro
 from .journal import LOG_BREAK, Draft
@@ -71,6 +71,7 @@ class Game:
             k: [sid if sid in p.skills else None for sid in slots][: team.FREE_SLOTS]
             for k, slots in p.loadouts.items() if k in p.members
         }
+        p.gacha_last = [pull for pull in p.gacha_last if pull.character in c.characters]
         line_ids = [line.id for line in c.scenario.storylines]
         if s.world.storyline not in line_ids:
             s.world.storyline, s.world.act = line_ids[0], 0
@@ -279,16 +280,32 @@ class Game:
             if events:  # 新立門戶福緣：第 fortune_day_min 天起的第一次交遊必定先遇上
                 self.state.player.fortune = True
                 return self._present(self.rng.choice(events))
+            # 福緣要來的人都已經在門下（招賢請進門的）：福緣改送賀禮，取代這次的交遊遭遇（和福緣事件一樣，
+            # 這一次交遊不再擲一般的遭遇），所以不用亂數；紀錄寫成一則「福緣」，不是「交遊・某地」。
+            if self._draft is not None:
+                self._draft.title = "福緣"
+            return self._fortune_gift()
         return self._encounter("socialize", "此地無人可訪，你只好悻悻離去。")
+
+    def _fortune_gift(self) -> list[str]:
+        """沒有福緣事件還能結識任何人：福緣照樣算過了（每季保證一次），改送一份賀禮，
+        心得 + config.duplicate_xinde["地"]（福緣的人都是地品）；不算進本季招賢心得。回傳敘事與數值變化。"""
+        p = self.state.player
+        amount = self.content.config.duplicate_xinde["地"]
+        p.fortune = True
+        p.stats["xinde"] = p.stats.get("xinde", 0) + amount
+        return ["江湖朋友聽說你新立門戶，送來一份賀禮。", f"心得 +{amount}"]
 
     def _deliver_fortune(self) -> list[str]:
         """第 fortune_day_max 天結束還沒遇上新立門戶福緣：直接送上門（第一個還能觸發的福緣事件的第一個選項），
-        另寫一則江湖紀錄「結識【某某】」。已經沒有人可送時只記下福緣已過。"""
+        另寫一則江湖紀錄「結識【某某】」。已經沒有人可送時改送賀禮（見 _fortune_gift），寫一則「福緣」。"""
         s, c = self.state, self.content
         s.player.fortune = True
         events = fortune_events(s, c)
         if not events:
-            return []
+            msgs = self._fortune_gift()
+            self._write("福緣", msgs)
+            return msgs
         event = events[0]
         effect = event.choices[0].effect
         msgs = [event.text] + apply_effect(effect, s, c)
@@ -573,6 +590,29 @@ class Game:
             self._menxia_entry(msgs[0], self._xinde())
         return msgs
 
+    # ── 招賢 ──────────────────────────────────────────────
+
+    def pull(self, count: int) -> list[str]:
+        """招賢：單抽（count=1）或十連（count=10）。抽成了寫一則江湖紀錄「招賢・十連」（標「得地品【某某】」，
+        敘事是每一抽的結果，數值變化是元寶、心得與銀兩），回傳一句摘要給招賢分頁（每一抽的結果在結果卡上）；
+        抽不成時只回傳原因：什麼都不動、不用亂數、不寫紀錄。"""
+        reason = gacha.block(self.state, self.content, count)
+        if reason:
+            return self._log([f"（{reason}。）"])
+        msgs = gacha.pull(self.state, self.content, self.rng, count)
+        pulls = self.state.player.gacha_last
+        self._write(f"招賢・{gacha.label(count)}", msgs, tag=gacha.tag(self.content, pulls))
+        self._log(msgs)
+        return [gacha.summary(pulls, count)]
+
+    def grant_yuanbao(self) -> list[str]:
+        """設定分頁的「測試：領取元寶」：元寶 + config.test_yuanbao，記一則江湖紀錄。不用亂數。"""
+        amount = self.content.config.test_yuanbao
+        self.state.player.yuanbao += amount
+        msgs = [f"元寶 +{amount}"]
+        self._write("測試：領取元寶", msgs)
+        return self._log(msgs)
+
     # ── 門下頁面 ──────────────────────────────────────────
 
     def skill_library(self) -> list[tuple[str, str]]:
@@ -695,11 +735,13 @@ class Game:
         return atlas.travel_button(self.state, self.content, loc_id)
 
     def new_season(self) -> list[str]:
-        last_real = self.state.last_real
-        tutorial_step = self.state.player.tutorial_step
-        self.state = Game.new(self.content, self.state.player.name, self.rng).state
-        self.state.last_real = last_real
-        self.state.player.tutorial_step = tutorial_step
+        """整個狀態重新開始，只留下現實時間的同步點、新手引導的進度，以及元寶與招賢的保底計數（跨季保留）。"""
+        old = self.state
+        self.state = Game.new(self.content, old.player.name, self.rng).state
+        self.state.last_real = old.last_real
+        p = self.state.player
+        p.tutorial_step = old.player.tutorial_step
+        p.yuanbao, p.gacha_pity = old.player.yuanbao, old.player.gacha_pity
         return []
 
     # ── 畫面文字 ──────────────────────────────────────────

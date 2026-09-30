@@ -8,7 +8,7 @@ from conftest import FixedRandom
 from tianxia import gacha, roster
 from tianxia.engine import Game
 from tianxia.models import CharacterDef, in_gacha_pool
-from tianxia.save import load_game
+from tianxia.save import load_game, save_game
 from tianxia.state import Member, Pull, new_game_state
 
 # 固定亂數抽到的品階（夾具的機率照預設：天 3、地 12、玄 35、黃 50，依天地玄黃累加）
@@ -227,3 +227,89 @@ def test_old_save_without_gacha_fields_loads(tmp_path, content, game):
     path.write_text(json.dumps(dump, ensure_ascii=False), encoding="utf-8")
     p = Game(content, load_game(path)).state.player
     assert (p.yuanbao, p.gacha_pity, p.gacha_xinde, p.gacha_last) == (0, 0, 0, [])
+
+
+# ── 江湖紀錄、新賽季與測試元寶（Game）──────────────────────
+
+
+def test_a_ten_pull_writes_one_journal_entry(game):
+    game.state.player.yuanbao = 1000
+    game.rng = FixedRandom(HUANG)
+    assert game.pull(10) == ["十連：新入門 2 人，重複 8 人（心得 +80）。"]
+    entry = game.state.journal[0]
+    assert (entry.title, entry.tag, entry.changes) == ("招賢・十連", "得地品【俠女】", ["元寶 -1000", "心得 +80"])
+    assert entry.lines == (
+        ["【小六】入門（黃品・快・統御 2），從第 1 級練起，先列候補。"]
+        + ["【小六】（黃品）重複 → 心得 +10"] * 8
+        + ["【俠女】入門（地品・柔・統御 5），從第 1 級練起，先列候補。"]
+    )
+
+
+def test_a_single_pull_is_written_down_too(game):
+    game.state.player.yuanbao = 100
+    game.rng = FixedRandom(TIAN)
+    assert game.pull(1) == ["單抽：新入門 1 人。"]
+    entry = game.state.journal[0]
+    assert (entry.title, entry.tag, entry.changes) == ("招賢・單抽", "得天品【隱士】", ["元寶 -100"])
+
+
+def test_the_tag_names_the_highest_tier_new_ones_first(content):
+    dup_hero, new_captain = Pull(character="hero", new=False, xinde=50), Pull(character="captain", new=True)
+    assert gacha.tag(content, [dup_hero, new_captain]) == "得地品【頭目】"  # 同品階：新入門優先
+    assert gacha.tag(content, [dup_hero, Pull(character="hero", new=False, xinde=25)]) == "得地品【俠女】"
+    assert gacha.tag(content, [Pull(character="pupil", new=True), Pull(character="sage", new=False, xinde=100)]) == (
+        "得天品【隱士】"
+    )
+
+
+def test_a_refused_pull_changes_nothing(game):
+    game.state.player.yuanbao = 999
+    before, entries = game.rng.getstate(), len(game.state.journal)
+    assert game.pull(10) == ["（元寶不足，要 1000。）"]
+    assert game.rng.getstate() == before and len(game.state.journal) == entries
+    assert (game.state.player.yuanbao, game.state.player.gacha_last) == (999, [])
+
+
+def test_the_test_grant_does_not_touch_the_rng(game):
+    before = game.rng.getstate()
+    game.grant_yuanbao()
+    assert game.rng.getstate() == before
+
+
+def test_no_pulls_once_the_season_is_over(game):
+    game.state.player.yuanbao = 100
+    game.advance(2 * 24 * 3600)  # 夾具一季兩天
+    assert game.pull(1) == ["（賽季已落幕。）"] and game.state.player.yuanbao == 100
+
+
+def test_yuanbao_and_pity_carry_into_the_next_season(game):
+    game.state.player.yuanbao = 1300
+    game.rng = FixedRandom(HUANG)
+    game.pull(10)
+    game.rng = random.Random(0)
+    game.advance(2 * 24 * 3600)
+    game.choose("season:new")
+    p = game.state.player
+    assert (p.yuanbao, p.gacha_pity) == (300, 10)  # 元寶與保底計數跨季保留
+    assert (p.gacha_xinde, p.gacha_last, p.stats["xinde"]) == (0, [], 0)  # 本季招賢心得、結果與名冊照舊清空
+    assert set(p.members) == {"player", "mate"}
+
+
+def test_the_test_button_grants_yuanbao(game):
+    assert game.grant_yuanbao() == ["元寶 +1000"]
+    assert game.state.player.yuanbao == 1000
+    entry = game.state.journal[0]
+    assert (entry.title, entry.lines, entry.changes) == ("測試：領取元寶", [], ["元寶 +1000"])
+
+
+def test_stale_pull_results_are_dropped(content, game):
+    game.state.player.gacha_last = [Pull(character="ghost", new=True), Pull(character="pupil", new=False, xinde=10)]
+    assert Game(content, game.state).state.player.gacha_last == [Pull(character="pupil", new=False, xinde=10)]
+
+
+def test_save_roundtrip_keeps_the_gacha_state(tmp_path, game):
+    game.state.player.yuanbao = 1000
+    game.pull(10)
+    path = tmp_path / "saves" / "沈浪.json"
+    save_game(game.state, path)
+    assert load_game(path) == game.state and len(game.state.player.gacha_last) == 10

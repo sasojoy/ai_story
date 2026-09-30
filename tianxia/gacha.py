@@ -111,3 +111,25 @@ def _duplicate(state: GameState, content: Content, cid: str) -> tuple[Pull, list
     p.gacha_xinde += amount
     p.stats["xinde"] = p.stats.get("xinde", 0) + amount
     return Pull(character=cid, new=False, xinde=amount), [f"{head} → 心得 +{amount}{note}", f"心得 +{amount}"]
+
+
+# ── 江湖紀錄與摘要 ─────────────────────────────────────────
+
+
+def tag(content: Content, pulls: list[Pull]) -> str:
+    """江湖紀錄的結果標記，點名品階最高的那一位（同品階時新入門優先，再來是先抽到的），例如「得地品【陸沉舟】」。"""
+    order = {tier: i for i, tier in enumerate(COMPANION_TIERS)}
+    best = min(pulls, key=lambda x: (order[content.characters[x.character].tier], not x.new))
+    ch = content.characters[best.character]
+    return f"得{ch.tier}品【{ch.name}】"
+
+
+def summary(pulls: list[Pull], count: int) -> str:
+    """抽完顯示在招賢分頁的一句話，例如「十連：新入門 2 人，重複 8 人（心得 +70）。」"""
+    new = sum(x.new for x in pulls)
+    parts = [f"新入門 {new} 人"] if new else []
+    if len(pulls) > new:
+        totals = (("心得", sum(x.xinde for x in pulls)), ("銀兩", sum(x.silver for x in pulls)))
+        gains = "、".join(f"{name} +{amount}" for name, amount in totals if amount)
+        parts.append(f"重複 {len(pulls) - new} 人" + (f"（{gains}）" if gains else ""))
+    return f"{label(count)}：{'，'.join(parts)}。"
