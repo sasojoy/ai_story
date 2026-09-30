@@ -2,3 +2,7 @@
 __pycache__/
 .pytest_cache/
 saves/
+app.pid
+app_run.log
+app_run_err.log
+.gradio/
