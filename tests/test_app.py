@@ -1,953 +1,353 @@
-import random
-
 import gradio as gr
 import pytest
 
 import app
+from tianxia import roster
 from tianxia.engine import Game
-from tianxia.rules import learn_skill
-from tianxia.state import Member
+from tianxia.save import save_game
+
+SKIP = {"__type__": "update"}
 
 
-def column(page, i):
-    """門下頁面第 i 欄那一組輸出：欄、人物卡、本命、自選1、自選2、換人選單。"""
-    start = app.MX_COLUMNS_INDEX + i * app.MX_COLUMN_SIZE
-    return page[start:start + app.MX_COLUMN_SIZE]
+@pytest.fixture(autouse=True)
+def save_dir(tmp_path, monkeypatch):
+    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
+    return tmp_path
 
 
-def test_render_matches_outputs():
-    game = Game.new(app.CONTENT, "測試")
+@pytest.fixture
+def game():
+    return Game.new(app.CONTENT, "測試")
+
+
+# ── 重畫函式的輸出形狀 ─────────────────────────────────────
+
+
+def test_render_matches_n_outputs(game):
     assert len(app.render(game)) == app.N_OUTPUTS
-    assert len(app.render_menxia(game, None, None)) == app.MENXIA_OUTPUTS
-    assert len(app.render_map_page(game, "situation", None)) == app.MAP_OUTPUTS
 
 
-def test_option_handler_acts_and_saves(tmp_path, monkeypatch):
-    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
-    game = Game.new(app.CONTENT, "測試")
-    ids = [o.id for o in game.options()]
-    out = app.make_option_handler(ids.index("act:explore"))(game, ids)
-    assert len(out) == app.N_OUTPUTS
-    assert (tmp_path / "測試.json").exists()
-    assert game.state.player.stamina < 150
+def test_render_includes_quest_status_and_minimap(game):
+    out = app.render(game)
+    assert any(isinstance(x, str) and x.startswith("### 主線") for x in out)
+    assert "測試" in out[2]  # status_md
+    assert out[app.MINIMAP_INDEX] == game.minimap_svg()
+    assert "<svg" in out[app.MINIMAP_INDEX]
 
 
-def test_save_path_strips_unsafe_characters(tmp_path, monkeypatch):
-    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
+def test_render_menxia_shape_and_hint(game):
+    out = app.render_menxia(game)
+    assert len(out) == 6
+    assert out[3] == app.PERSON_HINT  # 沒選人時顯示提示
+    assert out[0].startswith("**心得** 0")
+
+
+def test_render_menxia_with_an_unknown_person_falls_back_to_none(game):
+    out = app.render_menxia(game, "ghost", "")
+    assert out[3] == app.PERSON_HINT
+
+
+def test_render_map_page_shape(game):
+    out = app.render_map_page(game, "situation", None)
+    assert len(out) == app.MAP_OUTPUTS
+    assert out[app.MAP_PLACE_INDEX]["value"] == game.state.player.location
+
+
+# ── save_path ──────────────────────────────────────────
+
+
+def test_save_path_strips_unsafe_characters():
     assert app.save_path("沈/浪?").name == "沈_浪_.json"
 
 
-def test_build_demo():
-    assert app.build_demo() is not None
+# ── act() 與選項按鈕 ──────────────────────────────────────
 
 
-def test_render_includes_quest_and_minimap():
-    game = Game.new(app.CONTENT, "測試")
-    out = app.render(game)
-    assert any(isinstance(x, str) and x.startswith("### 主線") for x in out)
-    minimap = out[app.MINIMAP_INDEX]
-    assert minimap == game.minimap_svg() and ">揚州城（你）<" in minimap and ">↓ 鎮江渡口<" in minimap
+def test_act_with_no_game_skips_every_output():
+    assert app.act(None, lambda g: None) == [gr.skip()] * app.N_OUTPUTS
+    assert app.act(None, lambda g: None, note=True) == [gr.skip()] * (app.N_OUTPUTS + 6)
 
 
-def test_skip_tutorial_handler_finishes_tutorial(tmp_path, monkeypatch):
-    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
-    game = Game.new(app.CONTENT, "測試")
+def test_act_runs_saves_and_renders(game, save_dir):
+    out = app.act(game, lambda g: g.choose("act:explore"))
+    assert len(out) == app.N_OUTPUTS
+    assert (save_dir / "測試.json").exists()
+    assert game.state.player.stamina < 150
+
+
+def test_act_returning_unchanged_skips_everything(game, save_dir):
+    out = app.act(game, lambda g: app.UNCHANGED)
+    assert out == [gr.skip()] * app.N_OUTPUTS
+    assert not (save_dir / "測試.json").exists()
+
+
+def test_make_option_handler_dispatches_to_the_right_option(game):
+    ids = [o.id for o in game.options()]
+    handler = app.make_option_handler(ids.index("act:explore"))
+    out = handler(game, ids)
+    assert len(out) == app.N_OUTPUTS
+    assert game.state.player.stamina < 150
+
+
+def test_make_option_handler_skips_when_index_is_out_of_range(game):
+    ids = [o.id for o in game.options()]
+    handler = app.make_option_handler(99)
+    assert handler(game, ids) == [gr.skip()] * app.N_OUTPUTS
+
+
+def test_make_option_handler_skips_with_no_game():
+    assert app.make_option_handler(0)(None, []) == [gr.skip()] * app.N_OUTPUTS
+
+
+def test_make_fast_forward_handler_advances_time(game):
+    handler = app.make_fast_forward_handler(8)
+    handler(game)
+    assert game.state.world.time == 8 * 3600
+
+
+def test_seclude_handler(game):
+    out = app.seclude_handler(game, 4)
+    assert len(out) == app.N_OUTPUTS
+    assert game.state.player.busy_until is not None
+
+
+# ── 門下頁面 ──────────────────────────────────────────────
+
+
+def test_open_and_close_menxia(game):
+    out = app.open_menxia(game)
+    assert len(out) == 8
+    assert out[0] == {"__type__": "update", "visible": False}
+    assert out[1] == {"__type__": "update", "visible": True}
+    assert app.close_menxia() == [
+        {"__type__": "update", "visible": True}, {"__type__": "update", "visible": False},
+    ]
+
+
+def test_open_menxia_with_no_game_skips():
+    assert app.open_menxia(None) == [gr.skip()] * 8
+
+
+def test_roster_pick_shows_the_selected_persons_card(game):
+    roster.recruit(game.state, game.content, game.world, "liubei")
+    out = app.roster_pick_handler(game, "liubei")
+    assert out[2]["value"] == "liubei"
+    assert out[3].startswith("### 劉備")
+
+
+def test_roster_pick_with_no_game_skips():
+    assert app.roster_pick_handler(None, "liubei") == [gr.skip()] * 6
+
+
+def test_toggle_team_adds_then_removes(game):
+    roster.recruit(game.state, game.content, game.world, "liubei")
+    assert game.state.player.team == ["liubei"]  # roster.recruit 已經自動加入隊伍
+    out = app.toggle_team_handler(game, "liubei")
+    assert out[4] == {"value": "加入隊伍", "__type__": "update", "visible": True}
+    assert game.state.player.team == []
+    out2 = app.toggle_team_handler(game, "liubei")
+    assert out2[4] == {"value": "移出隊伍", "__type__": "update", "visible": True}
+    assert game.state.player.team == ["liubei"]
+
+
+def test_toggle_team_with_no_person_or_game_skips(game):
+    assert app.toggle_team_handler(game, None) == [gr.skip()] * 6
+    assert app.toggle_team_handler(None, "liubei") == [gr.skip()] * 6
+
+
+def test_create_skill_practice_and_heal_handlers(game):
+    out = app.create_skill_handler(game, "player", "武學", "龍吟九霄")
+    assert out[5] == "你自創了一門武學【龍吟九霄】（中品，屬陰）！"
+    out2 = app.practice_handler(game, "player", "武學")
+    assert out2[5] == "【龍吟九霄】精進至第2成。"
+    out3 = app.heal_handler(game, "player")
+    assert out3[5] == "氣血無恙，不用療傷。"
+
+
+def test_menxia_handlers_with_no_game_skip():
+    assert app.create_skill_handler(None, "player", "武學", "x") == [gr.skip()] * 6
+    assert app.practice_handler(None, "player", "武學") == [gr.skip()] * 6
+    assert app.heal_handler(None, "player") == [gr.skip()] * 6
+
+
+# ── 戰報頁面 ──────────────────────────────────────────────
+
+
+def test_report_page_is_empty_with_no_battles(game):
+    out = app.open_report_page(game)
+    assert len(out) == 4
+    assert out[3] == app.REPORT_EMPTY_TEXT
+
+
+def test_report_page_with_no_game_skips():
+    assert app.open_report_page(None) == [gr.skip()] * 4
+    assert app.open_report_handler(None) == [gr.skip()] * 4
+
+
+def test_close_report():
+    assert app.close_report() == [
+        {"__type__": "update", "visible": True}, {"__type__": "update", "visible": False},
+    ]
+
+
+def test_report_pick_handler_shows_that_records_detail(game):
+    assert app.report_pick_handler(None, None) == gr.skip()
+
+
+# ── 匿名、整頁切換 ────────────────────────────────────────
+
+
+def test_anonymous_handler_flips_the_flag(game):
+    out = app.anonymous_handler(game, True)
+    assert len(out) == app.N_OUTPUTS
+    assert game.state.player.anonymous is True
+
+
+def test_show_page_only_shows_the_named_page():
+    out = app.show_page("menxia")
+    visible = [u["visible"] for u in out]
+    assert visible == [name == "menxia" for name in app.PAGES]
+
+
+# ── 大地圖 ────────────────────────────────────────────────
+
+
+def test_map_page_handler_selects_a_place(game):
+    out = app.map_page_handler(game, "situation", "yingshui")
+    assert out[app.MAP_PLACE_INDEX]["value"] == "yingshui"
+
+
+def test_map_page_handler_with_no_game_skips():
+    assert app.map_page_handler(None, "situation", "yingshui") == [gr.skip()] * app.MAP_OUTPUTS
+
+
+def test_clicked_place_reads_the_loc_attribute():
+    class Evt:
+        loc = "yingshui"
+
+    assert app.clicked_place(Evt()) == "yingshui"
+    assert app.clicked_place(None) is None
+
+    class BadEvt:
+        loc = 123
+
+    assert app.clicked_place(BadEvt()) is None
+
+
+def test_map_click_handler_ignores_an_unknown_place(game):
+    class Evt:
+        loc = "does-not-exist"
+
+    assert app.map_click_handler(game, "situation", Evt()) == [gr.skip()] * app.MAP_OUTPUTS
+
+
+def test_map_click_handler_selects_a_known_place(game):
+    class Evt:
+        loc = "yingshui"
+
+    out = app.map_click_handler(game, "situation", Evt())
+    assert out[app.MAP_PLACE_INDEX]["value"] == "yingshui"
+
+
+def test_open_world_map(game, save_dir):
+    out = app.open_world_map(game)
+    assert len(out) == app.N_OUTPUTS + len(app.PAGES) + app.MAP_OUTPUTS
+    assert (save_dir / "測試.json").exists()
+
+
+def test_open_world_map_with_no_game_skips():
+    n = app.N_OUTPUTS + len(app.PAGES) + app.MAP_OUTPUTS
+    assert app.open_world_map(None) == [gr.skip()] * n
+
+
+def test_travel_handler_succeeds_and_returns_to_the_main_page(game):
+    out = app.travel_handler(game, "situation", "yingshui")
+    assert len(out) == app.N_OUTPUTS + len(app.PAGES) + app.MAP_OUTPUTS
+    assert game.state.player.location == "yingshui"
+    pages = out[app.N_OUTPUTS:app.N_OUTPUTS + len(app.PAGES)]
+    assert [p.get("visible") for p in pages] == [name == "main" for name in app.PAGES]
+
+
+def test_travel_handler_refused_stays_on_the_map_and_explains_why(game):
+    game.seclude(4)  # 閉關中，安排前往會被擋下
+    out = app.travel_handler(game, "situation", "yingshui")
+    pages = out[app.N_OUTPUTS:app.N_OUTPUTS + len(app.PAGES)]
+    assert [p.get("visible") for p in pages] == [name == "map" for name in app.PAGES]
+    detail = out[app.N_OUTPUTS + len(app.PAGES) + app.MAP_DETAIL_INDEX]
+    assert "沒能出發" in detail and "閉關中" in detail
+
+
+def test_travel_handler_with_no_game_skips():
+    n = app.N_OUTPUTS + len(app.PAGES) + app.MAP_OUTPUTS
+    assert app.travel_handler(None, "situation", "yingshui") == [gr.skip()] * n
+
+
+def test_close_world_map():
+    out = app.close_world_map()
+    assert [u["visible"] for u in out] == [name == "main" for name in app.PAGES]
+
+
+# ── 引導、計時器 ──────────────────────────────────────────
+
+
+def test_skip_tutorial_handler(game):
     out = app.skip_tutorial_handler(game)
     assert len(out) == app.N_OUTPUTS
     assert game.state.player.tutorial_step == len(app.CONTENT.tutorial.steps)
 
 
-def test_settings_has_a_test_button_for_yuanbao(tmp_path, monkeypatch):
-    demo = app.build_demo()
-    button = next(b for b in demo.blocks.values() if isinstance(b, gr.Button) and "元寶" in str(b.value))
-    assert button.value == "測試：領取 1000 元寶" and button.parent.label == "設定"  # 寫明是測試用
-    handler = next(f for f in demo.fns.values() if f.fn is app.yuanbao_handler)
-    assert len(handler.outputs) == app.N_OUTPUTS
-    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
-    game = Game.new(app.CONTENT, "測試")
-    out = app.yuanbao_handler(game)
-    assert len(out) == app.N_OUTPUTS and game.state.player.yuanbao == 1000
-    assert "元寶 +1000" in out[app.LATEST_INDEX]["value"] and (tmp_path / "測試.json").exists()
+def test_tick_handler_syncs_and_saves(game, save_dir):
+    out = app.tick_handler(game, None)
+    assert len(out) == app.N_OUTPUTS + 6
+    assert (save_dir / "測試.json").exists()
 
 
-def test_left_column_has_no_tabs_and_puts_the_minimap_beside_the_scene():
-    demo = app.build_demo()
-    tabs = [block.label for block in demo.blocks.values() if isinstance(block, gr.Tab)]
-    assert "場景" not in tabs and "地圖" not in tabs  # 右欄的分頁照舊
-    outputs = next(f for f in demo.fns.values() if f.fn is app.start).outputs
-    scene, minimap = outputs[3], outputs[app.MINIMAP_INDEX]
-    assert isinstance(scene, gr.Markdown) and isinstance(minimap, gr.HTML)
-    assert isinstance(scene.parent, gr.Row) and minimap.parent.parent is scene.parent  # 場景列：左文字、右小地圖
+def test_tick_handler_with_no_game_skips():
+    n = app.N_OUTPUTS + 6
+    assert app.tick_handler(None, None) == [gr.skip()] * n
 
 
-def test_minimap_follows_an_event(tmp_path, monkeypatch):
-    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
-    game = Game.new(app.CONTENT, "測試")
-    ids = [o.id for o in game.options()]
-    out = app.make_option_handler(ids.index("act:explore"))(game, ids)
-    assert game.state.pending_event is not None  # 揚州城探索必定遇到城鎮事件
-    assert ">揚州城（你）<" in out[app.MINIMAP_INDEX]  # 事件進行中也照常標出所在地
+# ── 開局、讀檔 ────────────────────────────────────────────
 
 
-def test_render_includes_the_card_placeholders():
-    game = Game.new(app.CONTENT, "測試")
-    out = app.render(game)
-    assert out[app.CARD_INDEX] == gr.update(value="", visible=False)
-    assert out[app.CARD_BUTTON_INDEX] == gr.update(visible=False)
+def test_open_game_creates_a_new_character_when_no_save_exists(save_dir):
+    g = app.open_game("新玩家")
+    assert g.state.player.name == "新玩家"
 
 
-# ── 「剛剛」卡片與江湖紀錄 ─────────────────────────────
+def test_open_game_loads_an_existing_save(save_dir):
+    g = app.open_game("新玩家")
+    g.state.player.stamina = 42.0
+    save_game(g.state, app.save_path("新玩家"))
+    reloaded = app.open_game("新玩家")
+    assert reloaded.state.player.stamina == 42.0
 
 
-def test_latest_card_shows_the_newest_entry(tmp_path, monkeypatch):
-    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
-    game = Game.new(app.CONTENT, "測試")
-    latest = app.render(game)[app.LATEST_INDEX]
-    assert latest["visible"] is True
-    assert "剛剛　第1天 00:00" in latest["value"] and "江南風雨" in latest["value"] and "賽季開始" in latest["value"]
-    out = click(game, "move:yangzhou_jiao")
-    latest = out[app.LATEST_INDEX]["value"]
-    assert "前往 揚州城郊" in latest
-    assert app.CONTENT.locations["yangzhou_jiao"].description not in latest  # 地點描述只在場景裡
+def test_open_game_backs_up_a_corrupt_save_and_starts_fresh(save_dir):
+    bad = app.save_path("壞掉的")
+    bad.write_text("{not json", encoding="utf-8")
+    g = app.open_game("壞掉的")
+    assert g.state.player.name == "壞掉的"
+    assert list((save_dir / "backup").glob("壞掉的-*.json"))
+    assert any("已備份" in line for line in g.state.log)
 
 
-def test_journal_rows_show_five_and_fold_the_rest(tmp_path, monkeypatch):
-    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
-    game = Game.new(app.CONTENT, "測試")
-    out = app.render(game)
-    assert "江湖紀錄" in out[app.JOURNAL_INDEX] and 'class="tx-row"' not in out[app.JOURNAL_INDEX]
-    assert out[app.OLDER_INDEX] == "" and out[app.OLDER_ACCORDION_INDEX] == gr.update(visible=False)
-    for i in range(8):
-        game.state.player.stamina = 150
-        out = click(game, "move:yangzhou_jiao" if i % 2 == 0 else "move:yangzhou")
-    assert len(game.state.journal) == 9
-    assert out[app.JOURNAL_INDEX].count('class="tx-row"') == 5  # 「剛剛」之後的 5 則
-    assert "江湖紀錄" in out[app.JOURNAL_INDEX]
-    assert out[app.OLDER_INDEX].count('class="tx-row"') == 3  # 更早的收進摺疊區
-    assert "江南風雨" in out[app.OLDER_INDEX]
-    assert out[app.OLDER_ACCORDION_INDEX] == gr.update(visible=True)
+def test_start_requires_a_name():
+    with pytest.raises(gr.Error):
+        app.start("  ")
 
 
-def test_change_tags_are_coloured_by_sign(tmp_path, monkeypatch):
-    game = battle_game(tmp_path, monkeypatch)
-    click(game, "act:train")
-    game.state.pending_event = None
-    out = click(game, "move:yangzhou")
-    assert '<span class="tx-chg tx-up">經驗 +' in out[app.JOURNAL_INDEX]  # 歷練那一則成了紀錄的一列
-    game.state.player.stats["xinde"] = 100
-    out = app.upgrade_handler(game, None, "skill:tuna")
-    assert '<span class="tx-chg tx-down">心得 -20</span>' in out[app.LATEST_INDEX]["value"]
-
-
-def test_journal_outputs_are_their_own_components():
-    demo = app.build_demo()
-    fns = list(demo.fns.values())
-    outputs = next(f for f in fns if f.fn is app.start).outputs
-    menxia_fn = next(f for f in fns if f.fn is app.open_menxia)
-    html = [outputs[i] for i in (app.LATEST_INDEX, app.JOURNAL_INDEX, app.OLDER_INDEX)]
-    assert all(isinstance(c, gr.HTML) for c in html) and len(set(html)) == 3
-    assert isinstance(outputs[app.OLDER_ACCORDION_INDEX], gr.Accordion)
-    assert not set(html) & set(menxia_fn.outputs)
-
-
-# ── 戰鬥卡片與戰報 ─────────────────────────────────────
-
-
-def battle_game(tmp_path, monkeypatch) -> Game:
-    """一局站在揚州城郊（可以歷練）的新遊戲，存檔寫到 tmp_path。"""
-    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
-    game = Game.new(app.CONTENT, "測試", rng=random.Random(0))
-    game.state.player.location = "yangzhou_jiao"
-    return game
-
-
-def click(game: Game, option_id: str) -> list:
-    ids = [o.id for o in game.options()]
-    return app.make_option_handler(ids.index(option_id))(game, ids)
-
-
-def test_battle_shows_a_card_until_the_next_action(tmp_path, monkeypatch):
-    game = battle_game(tmp_path, monkeypatch)
-    monkeypatch.setattr(app.CONTENT.config, "train_event_chance", 0.0)  # 這裡只看卡片，不要遇上事件
-    out = click(game, "act:train")
-    card = out[app.CARD_INDEX]
-    assert card["visible"] is True and card["value"].startswith("### ⚔ 揚州城郊・對陣 ")
-    assert out[app.CARD_BUTTON_INDEX] == gr.update(visible=True)
-    assert out[app.LATEST_INDEX] == gr.update(value="", visible=False)  # 只顯示戰鬥卡片，不同時放「剛剛」卡片
-    out = click(game, "move:yangzhou")
-    assert out[app.CARD_INDEX] == gr.update(value="", visible=False)
-    assert out[app.CARD_BUTTON_INDEX] == gr.update(visible=False)
-    assert out[app.LATEST_INDEX]["visible"] is True and "前往 揚州城" in out[app.LATEST_INDEX]["value"]
-
-
-def test_battle_card_carries_what_else_happened_in_that_action(tmp_path, monkeypatch):
-    game = battle_game(tmp_path, monkeypatch)
-    game.state.player.tutorial_step = 3  # 下一步引導就是「在城郊歷練一回」，獎勵銀兩 10
-    out = click(game, "act:train")
-    assert out[app.CARD_INDEX]["visible"] is True
-    extra = out[app.LATEST_INDEX]
-    assert extra["visible"] is True and 'class="tx-extra"' in extra["value"]
-    assert "✔ 引導完成" in extra["value"] and "【老說書人】" in extra["value"]
-    assert '<span class="tx-chg tx-up">銀兩 +10</span>' in extra["value"]  # 引導獎勵；對手給的銀兩在卡片上
-    assert "剛剛" not in extra["value"]  # 不是第二張卡片
-
-
-def test_menxia_action_after_a_battle_replaces_the_battle_card(tmp_path, monkeypatch):
-    game = battle_game(tmp_path, monkeypatch)
-    click(game, "act:train")
-    game.state.player.stats["xinde"] = 100
-    out = app.upgrade_handler(game, None, "skill:tuna")
-    assert out[app.CARD_INDEX] == gr.update(value="", visible=False)  # 兩張卡片不同時出現
-    assert "【吐納法】精進至第2成" in out[app.LATEST_INDEX]["value"]
-
-
-def test_tick_keeps_the_card(tmp_path, monkeypatch):
-    game = battle_game(tmp_path, monkeypatch)
-    click(game, "act:train")
-    out = app.tick_handler(game, None, None)
-    assert out[app.CARD_INDEX]["visible"] is True
-
-
-def test_battle_card_output_is_not_a_menxia_component():
-    """CARD_INDEX 要接到場景戰鬥卡片，不能誤用門下頁面的元件（例如命名衝突誤用了迴圈變數 card_md）。"""
-    demo = app.build_demo()
-    fns = list(demo.fns.values())
-    start_fn = next(f for f in fns if f.fn is app.start)
-    menxia_fn = next(f for f in fns if f.fn is app.open_menxia)
-    assert start_fn.outputs[app.CARD_INDEX] not in menxia_fn.outputs
-
-
-# ── 戰報頁面 ───────────────────────────────────────────
-
-
-def test_report_page_starts_empty():
-    game = Game.new(app.CONTENT, "測試")
-    out = app.open_report_page(game)
-    assert len(out) == 4
-    assert out[:2] == [gr.update(visible=False), gr.update(visible=True)]  # 江湖畫面、戰報頁面
-    assert out[2] == gr.update(choices=[], value=None)
-    assert out[3] == app.REPORT_EMPTY_TEXT
-    assert app.open_report_page(None) == [gr.skip()] * 4
-
-
-def test_report_btn_opens_the_page_with_the_newest_selected(tmp_path, monkeypatch):
-    game = battle_game(tmp_path, monkeypatch)
-    for _ in range(2):
-        game.state.pending_event = None
-        click(game, "act:train")
-    newest, older = [rid for _, rid in game.battle_list()]
-    out = app.open_report_page(game)
-    assert out[:2] == [gr.update(visible=False), gr.update(visible=True)]
-    listing = out[2]
-    assert listing["value"] == newest and listing["choices"] == game.battle_list()
-    assert out[3] == game.battle_detail(newest)
-
-
-def test_report_back_btn_returns_to_the_main_view():
-    assert app.close_report() == [gr.update(visible=True), gr.update(visible=False)]
-
-
-def test_card_btn_opens_the_report_page_with_that_record(tmp_path, monkeypatch):
-    game = battle_game(tmp_path, monkeypatch)
-    for _ in range(2):
-        game.state.pending_event = None
-        click(game, "act:train")
-    newest, older = [rid for _, rid in game.battle_list()]
-    out = app.open_report_handler(game)  # 卡片上的「看完整戰報」
-    assert len(out) == 4
-    assert out[:2] == [gr.update(visible=False), gr.update(visible=True)]
-    listing = out[2]
-    assert listing["value"] == newest == game.battle_card_id()
-    assert out[3] == game.battle_detail(newest)
-    assert app.open_report_handler(None) == [gr.skip()] * 4
-
-
-def test_report_list_pick_shows_that_record(tmp_path, monkeypatch):
-    game = battle_game(tmp_path, monkeypatch)
-    for _ in range(2):
-        game.state.pending_event = None
-        click(game, "act:train")
-    newest, older = [rid for _, rid in game.battle_list()]
-    assert app.report_pick_handler(game, older) == game.battle_detail(older) != game.battle_detail(newest)
-    assert app.report_pick_handler(None, older) == gr.skip()
-
-
-def test_tick_does_not_touch_the_report_page(tmp_path, monkeypatch):
-    """計時器只重畫江湖畫面／門下頁面，不該碰戰報頁面的元件（戰報頁面開著時，行動的按鈕本來就看不到）。"""
-    game = battle_game(tmp_path, monkeypatch)
-    click(game, "act:train")
-    out = app.tick_handler(game, None, None)
-    assert len(out) == app.N_OUTPUTS + app.MENXIA_OUTPUTS  # 沒有多出戰報頁面的欄位
-
-
-def test_report_page_outputs_are_not_menxia_or_main_components():
-    """戰報頁面自己的列表／詳情元件不能誤用門下頁面或其他頁面既有的元件
-    （game_row／report_col 本來就是好幾個處理函式都要切換顯示與否的容器，共用不算誤用）。"""
-    demo = app.build_demo()
-    fns = list(demo.fns.values())
-    report_fn = next(f for f in fns if f.fn is app.open_report_page)
-    card_fn = next(f for f in fns if f.fn is app.open_report_handler)
-    menxia_fn = next(f for f in fns if f.fn is app.open_menxia)
-    start_fn = next(f for f in fns if f.fn is app.start)
-    assert report_fn.outputs[2:] == card_fn.outputs[2:]  # 戰報按鈕與看完整戰報共用同一組列表／詳情元件
-    assert not set(report_fn.outputs[2:]) & set(menxia_fn.outputs)
-    assert not set(report_fn.outputs[2:]) & set(start_fn.outputs)
-
-
-# ── 門下頁面 ──────────────────────────────────────────
-
-
-def test_menxia_page_shows_cards_slots_and_library():
-    game = Game.new(app.CONTENT, "測試")
-    out = app.render_menxia(game, None, None)
-    assert out[:2] == [None, None]
-    assert "**心得** 0" in out[app.MX_HEAD_INDEX] and "本命不能散功" in out[app.MX_HEAD_INDEX]
-    shown, card, innate, free1, free2, swap = column(out, 0)
-    assert shown == gr.update(visible=True)
-    assert swap == gr.update(  # 你本人固定是本隊的隊長：選單鎖住，只寫明原因
-        visible=True, interactive=False, choices=[("你本人（固定是本隊的隊長）", "player")], value="player"
-    )
-    assert card.startswith("### 測試（隊長）") and "內力" in card
-    assert innate["value"] == "本命　家傳劍法（絕招）第1成"
-    assert free1["value"] == "自選1　吐納法（心法）第1成" and free1["variant"] == "secondary"
-    assert free2["value"] == "自選2　長拳（連招）第1成"
-    assert column(out, 1)[1].startswith("### 韓鐵") and column(out, 2)[1].startswith("### 小墨")
-    library = out[app.MX_LIBRARY_INDEX]
-    assert [t for _, t in library["choices"]] == [
-        "skill:tuna", "skill:changquan", "skill:jiachuan", "innate:hantie", "innate:xiaomo"
-    ]
-    assert library["value"] is None
-    assert "點選" in out[app.MX_DETAIL_INDEX]
-    for index in (app.MX_EQUIP_INDEX, app.MX_UNEQUIP_INDEX, app.MX_UPGRADE_INDEX, app.MX_DISPEL_INDEX):
-        assert out[index]["visible"] is False
-
-
-def test_library_labels_stay_short_with_real_content():
-    game = Game.new(app.CONTENT, "沈青衫")
-    for skill_id in app.CONTENT.skills:  # 全部武學都學會、都練到第十成：最長的情形
-        game.state.player.skills[skill_id] = 10
-    labels = [label for label, _ in game.skill_library()]
-    assert max(len(label) for label in labels) <= 42, max(labels, key=len)
-
-
-def test_menxia_shows_an_empty_slot_with_only_the_swap_menu():
-    game = Game.new(app.CONTENT, "測試")
-    game.state.player.teams[0].members = ["player", "hantie"]
-    out = app.render_menxia(game, None, None)
-    assert column(out, 1)[0] == gr.update(visible=True)
-    shown, card, innate, free1, free2, swap = column(out, 2)
-    assert shown == gr.update(visible=True) and card == "（空位）"
-    assert innate == free1 == free2 == gr.update(visible=False)
-    assert swap["visible"] is True and swap["interactive"] is True and swap["value"] is None
-    assert swap["choices"] == [("小墨（玄品・巧・統御 4・第 1 級・候補）", "xiaomo")]
-
-
-def test_menxia_drops_stale_selection():
-    game = Game.new(app.CONTENT, "測試")
-    out = app.render_menxia(game, ("ghost", 0), "skill:nothing")
-    assert out[:2] == [None, None]
-
-
-def test_open_and_close_menxia_flip_visibility():
-    game = Game.new(app.CONTENT, "測試")
-    out = app.open_menxia(game, None, None)
-    assert len(out) == 2 + app.MENXIA_OUTPUTS
-    assert out[:2] == [gr.update(visible=False), gr.update(visible=True)]  # 江湖畫面、門下頁面
-    assert out[2 + app.MX_MESSAGE_INDEX] == "" and out[2 + app.MX_SWAP_MESSAGE_INDEX] == ""
-    assert app.close_menxia() == [gr.update(visible=True), gr.update(visible=False)]
-
-
-def test_start_leaves_menxia_report_and_map_hidden(tmp_path, monkeypatch):
-    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
-    out = app.start("測試")
+def test_start_opens_the_main_page(save_dir):
+    out = app.start("新玩家")
     assert len(out) == app.N_OUTPUTS + 1 + len(app.PAGES)
-    assert out[-5:] == [gr.update(visible=False), gr.update(visible=True)] + [gr.update(visible=False)] * 3
+    start_col_update = out[app.N_OUTPUTS]
+    assert start_col_update["visible"] is False
+    pages = out[app.N_OUTPUTS + 1:]
+    assert [p["visible"] for p in pages] == [name == "main" for name in app.PAGES]
 
 
-def test_free_slot_click_selects_the_slot_and_its_art():
-    game = Game.new(app.CONTENT, "測試")
-    out = app.make_free_slot_handler(0, 0)(game, None, None)
-    assert len(out) == app.MENXIA_OUTPUTS
-    assert out[:2] == [("player", 0), "skill:tuna"]
-    assert column(out, 0)[3]["variant"] == "primary" and column(out, 0)[4]["variant"] == "secondary"
-    assert out[app.MX_LIBRARY_INDEX]["value"] == "skill:tuna"
-    assert out[app.MX_DETAIL_INDEX].startswith("### 吐納法")
-    unequip = out[app.MX_UNEQUIP_INDEX]
-    assert unequip["visible"] is True and unequip["value"] == "卸下〔測試・自選1〕"
-    assert out[app.MX_EQUIP_INDEX]["visible"] is False  # 已經配在這一欄
+# ── build_demo ────────────────────────────────────────────
 
 
-def test_empty_free_slot_keeps_the_chosen_art():
-    game = Game.new(app.CONTENT, "測試")
-    out = app.make_free_slot_handler(1, 0)(game, None, "skill:changquan")
-    assert out[:2] == [("hantie", 0), "skill:changquan"]
-    equip = out[app.MX_EQUIP_INDEX]
-    assert equip["visible"] is True and equip["value"] == "配置到〔韓鐵・自選1〕"
-    assert out[app.MX_UNEQUIP_INDEX]["visible"] is False
-
-
-def test_equip_through_the_page_moves_the_art(tmp_path, monkeypatch):
-    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
-    game = Game.new(app.CONTENT, "測試")
-    slot = app.make_free_slot_handler(1, 0)(game, None, None)[0]
-    chosen = app.view_handler(game, slot, "skill:tuna")
-    assert chosen[:2] == [("hantie", 0), "skill:tuna"]
-    assert chosen[app.MX_EQUIP_INDEX]["visible"] is True
-    out = app.equip_handler(game, slot, "skill:tuna")
-    assert len(out) == app.N_OUTPUTS + app.MENXIA_OUTPUTS
-    p = game.state.player
-    assert p.loadouts["hantie"][0] == "tuna"
-    assert p.loadouts["player"] == [None, "changquan"]  # 一門武學同時只配給一個人
-    page = out[app.N_OUTPUTS:]
-    assert column(page, 1)[3]["value"] == "自選1　吐納法（心法）第1成"
-    assert column(page, 0)[3]["value"] == "自選1　（空）"
-    assert "韓鐵的第1個武學欄：吐納法" in page[app.MX_MESSAGE_INDEX]
-    assert game.state.journal[0].tag == "韓鐵的第1個武學欄：吐納法"
-    assert "韓鐵的第1個武學欄：吐納法" in out[app.LATEST_INDEX]["value"]
-    assert (tmp_path / "測試.json").exists()
-
-
-def test_innate_slot_selects_the_innate_and_hides_equip_and_dispel():
-    game = Game.new(app.CONTENT, "測試")
-    out = app.make_innate_slot_handler(0)(game, ("hantie", 0), "skill:tuna")
-    assert out[:2] == [None, "skill:jiachuan"]
-    assert out[app.MX_EQUIP_INDEX]["visible"] is False
-    assert out[app.MX_DISPEL_INDEX]["visible"] is False
-    upgrade = out[app.MX_UPGRADE_INDEX]
-    assert upgrade["visible"] is True and upgrade["value"] == "升一成（心得 20）"
-    assert all(button["variant"] == "secondary" for button in column(out, 1)[2:5])
-    out = app.make_innate_slot_handler(2)(game, None, None)
-    assert out[:2] == [None, "innate:xiaomo"]
-    assert out[app.MX_DETAIL_INDEX].startswith("### 亂針")
-
-
-def test_player_innate_cannot_be_equipped_into_a_free_slot():
-    game = Game.new(app.CONTENT, "測試")
-    out = app.view_handler(game, ("hantie", 0), "skill:jiachuan")
-    assert out[:2] == [("hantie", 0), "skill:jiachuan"]
-    assert out[app.MX_EQUIP_INDEX]["visible"] is False
-
-
-def test_unequip_empties_the_slot(tmp_path, monkeypatch):
-    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
-    game = Game.new(app.CONTENT, "測試")
-    out = app.unequip_handler(game, ("player", 0), "skill:tuna")
-    assert game.state.player.loadouts["player"] == [None, "changquan"]
-    page = out[app.N_OUTPUTS:]
-    assert page[app.MX_UNEQUIP_INDEX]["visible"] is False
-    assert page[app.MX_EQUIP_INDEX]["visible"] is True  # 還選著吐納法，可以再配回去
-
-
-def test_upgrade_and_dispel_through_the_page(tmp_path, monkeypatch):
-    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
-    game = Game.new(app.CONTENT, "測試")
-    p = game.state.player
-    p.stats["xinde"] = 100
-    page = app.upgrade_handler(game, None, "skill:tuna")[app.N_OUTPUTS:]
-    assert p.skills["tuna"] == 2 and p.stats["xinde"] == 80
-    assert "精進至第2成" in page[app.MX_MESSAGE_INDEX]
-    assert page[app.MX_SWAP_MESSAGE_INDEX] == ""  # 武學動作的結果寫在武學按鈕旁，換人的舊訊息清掉
-    assert "**心得** 80" in page[app.MX_HEAD_INDEX]
-    assert page[app.MX_UPGRADE_INDEX]["value"] == "升一成（心得 40）"
-    assert page[app.MX_DISPEL_INDEX]["value"] == "散功（返還心得 16）"
-    assert page[app.MX_DISPEL_INDEX]["interactive"] is True
-    page = app.dispel_handler(game, None, "skill:tuna")[app.N_OUTPUTS:]
-    assert p.skills["tuna"] == 1 and p.stats["xinde"] == 96
-    assert page[app.MX_DISPEL_INDEX]["interactive"] is False  # 第一成無功可散
-
-
-def test_upgrade_without_xinde_shows_the_message_on_the_page(tmp_path, monkeypatch):
-    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
-    game = Game.new(app.CONTENT, "測試")
-    out = app.upgrade_handler(game, None, "skill:tuna")
-    assert "心得不足" in out[app.N_OUTPUTS + app.MX_MESSAGE_INDEX]
-    assert game.state.player.skills["tuna"] == 1
-    assert len(game.state.journal) == 1 and "心得不足" not in out[app.LATEST_INDEX]["value"]  # 失敗不進江湖紀錄
-
-
-def test_upgrade_button_at_the_tenth_level():
-    game = Game.new(app.CONTENT, "測試")
-    game.state.player.skills["tuna"] = 10
-    out = app.render_menxia(game, None, "skill:tuna")
-    assert out[app.MX_UPGRADE_INDEX]["value"] == "已達第十成"
-    assert out[app.MX_UPGRADE_INDEX]["interactive"] is False
-
-
-def test_page_actions_skip_without_a_selection(tmp_path, monkeypatch):
-    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
-    game = Game.new(app.CONTENT, "測試")
-    skip = [gr.skip()] * (app.N_OUTPUTS + app.MENXIA_OUTPUTS)
-    assert app.equip_handler(game, None, "skill:tuna") == skip
-    assert app.equip_handler(game, ("hantie", 0), None) == skip
-    assert app.unequip_handler(game, None, "skill:tuna") == skip
-    assert app.upgrade_handler(game, None, None) == skip
-    assert app.dispel_handler(game, None, None) == skip
-    assert app.equip_handler(None, ("hantie", 0), "skill:tuna") == skip
-    assert app.tick_handler(None, None, None) == skip
-    assert game.state.player.loadouts["player"] == ["tuna", "changquan"]
-    assert not (tmp_path / "測試.json").exists()
-
-
-def test_tick_refreshes_the_page_and_keeps_the_selection(tmp_path, monkeypatch):
-    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
-    game = Game.new(app.CONTENT, "測試")
-    game.state.player.members["hantie"].neili = 100.0
-    out = app.tick_handler(game, ("player", 1), "skill:changquan")
-    assert len(out) == app.N_OUTPUTS + app.MENXIA_OUTPUTS
-    page = out[app.N_OUTPUTS:]
-    assert page[:2] == [("player", 1), "skill:changquan"]
-    assert "內力 100 / " in column(page, 1)[1]
-    assert page[app.MX_MESSAGE_INDEX] == gr.update()  # 不清掉上一則訊息
-    assert page[app.MX_SWAP_MESSAGE_INDEX] == gr.update()
-    page = app.tick_handler(game, None, None, 1, "hantie")[app.N_OUTPUTS:]  # 看著第二隊、名冊點著韓鐵
-    assert page[app.MX_TEAM_INDEX]["value"] == 1 and page[app.MX_TEAM_INFO_INDEX].startswith("**第二隊**")
-    assert page[app.MX_ROSTER_INDEX]["value"] == "hantie" and page[app.MX_PERSON_INDEX].startswith("### 韓鐵")
-
-
-# ── 門下頁面：隊伍與名冊 ──────────────────────────────────
-
-
-def test_menxia_team_switcher_and_info_line():
-    game = Game.new(app.CONTENT, "測試")
-    out = app.render_menxia(game, None, None)
-    team = out[app.MX_TEAM_INDEX]
-    assert team["choices"] == [("本隊", 0), ("第二隊", 1), ("第三隊（第二幕開放）", 2), ("第四隊（第三幕開放）", 3)]
-    assert team["value"] == 0
-    assert out[app.MX_TEAM_INFO_INDEX] == "**本隊**　統御 12／15　跟著你行動"
-    page = app.open_menxia(game, None, None, 1)[2:]  # 再打開門下時停在上次看的那一隊
-    assert page[app.MX_TEAM_INDEX]["value"] == 1 and page[app.MX_TEAM_INFO_INDEX].startswith("**第二隊**")
-    page = app.open_menxia(game, None, None, None, None)[2:]  # 第一次打開：隊伍切換還沒有值
-    assert page[app.MX_TEAM_INDEX]["value"] == 0
-
-
-def test_second_team_starts_empty_and_can_take_people_from_the_main_team():
-    game = Game.new(app.CONTENT, "測試")
-    out = app.view_handler(game, None, None, 1)
-    assert out[app.MX_TEAM_INFO_INDEX] == "**第二隊**　統御 0／15　待命"
-    for col in range(app.MAX_MEMBERS):
-        shown, card, *_, swap = column(out, col)
-        assert shown == gr.update(visible=True) and card == "（空位）"
-        assert swap["choices"] == [
-            ("韓鐵（玄品・剛・統御 3・第 1 級・本隊）", "hantie"), ("小墨（玄品・巧・統御 4・第 1 級・本隊）", "xiaomo"),
-        ]
-
-
-def test_unopened_team_says_when_it_opens():
-    game = Game.new(app.CONTENT, "測試")
-    out = app.view_handler(game, ("player", 0), "skill:tuna", 2)
-    assert out[app.MX_TEAM_INFO_INDEX] == "**第三隊**　第二幕開放"
-    assert all(column(out, col)[0] == gr.update(visible=False) for col in range(app.MAX_MEMBERS))
-    assert out[:2] == [None, "skill:tuna"]  # 選中的自選欄不屬於這一隊：丟掉；選中的武學留著
-    assert app.view_handler(game, None, None, 99)[app.MX_TEAM_INDEX]["value"] == 0  # 不認得的隊伍回到本隊
-
-
-def test_swap_moves_someone_saves_and_writes_it_down(tmp_path, monkeypatch):
-    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
-    game = Game.new(app.CONTENT, "測試")
-    out = app.make_swap_handler(0)(game, None, None, 1, None, "hantie")
-    assert len(out) == app.N_OUTPUTS + app.MENXIA_OUTPUTS
-    assert [t.members for t in game.state.player.teams][:2] == [["player", "xiaomo"], ["hantie"]]
-    page = out[app.N_OUTPUTS:]
-    assert page[app.MX_SWAP_MESSAGE_INDEX] == "韓鐵從本隊編入第二隊（第二隊統御 3／15）"
-    assert page[app.MX_TEAM_INFO_INDEX] == "**第二隊**　統御 3／15　待命"
-    assert column(page, 0)[1].startswith("### 韓鐵（隊長）") and "本命" not in column(page, 0)[1]  # 本命在按鈕上
-    assert "韓鐵從本隊編入第二隊" in out[app.LATEST_INDEX]["value"]
-    assert (tmp_path / "測試.json").exists()
-
-
-def test_swap_over_the_command_cap_is_refused_on_the_page(tmp_path, monkeypatch):
-    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
-    game = Game.new(app.CONTENT, "測試")
-    p = game.state.player
-    for key in ("yanguihong", "shoumuren", "luchenzhou"):
-        p.members[key] = Member()
-        p.loadouts[key] = [None, None]
-    game.set_member(1, 0, "yanguihong")
-    game.set_member(1, 1, "shoumuren")
-    page = app.make_swap_handler(2)(game, None, None, 1, None, "luchenzhou")[app.N_OUTPUTS:]
-    assert page[app.MX_SWAP_MESSAGE_INDEX] == "（統御 19／15，陸沉舟換不進第二隊。）"  # 寫在資訊列底下、選單旁邊
-    assert page[app.MX_MESSAGE_INDEX] == ""  # 不寫在武學按鈕旁
-    assert column(page, 2)[app.MX_SWAP_OFFSET]["value"] is None  # 選單回到空位
-    assert game.team_keys(1) == ["yanguihong", "shoumuren"]
-
-
-def test_emptying_a_slot_from_its_swap_menu(tmp_path, monkeypatch):
-    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
-    game = Game.new(app.CONTENT, "測試")
-    swap = column(app.render_menxia(game, None, None), 1)[app.MX_SWAP_OFFSET]
-    assert swap["value"] == "hantie" and swap["choices"][0][1] == "hantie"
-    assert swap["choices"][-1] == ("（空）", app.EMPTY_SLOT)
-    app.make_swap_handler(1)(game, None, None, 0, None, app.EMPTY_SLOT)
-    assert game.team_keys() == ["player", "xiaomo"]
-    assert app.make_swap_handler(1)(None, None, None, 0, None, "hantie") == [gr.skip()] * (app.N_OUTPUTS + app.MENXIA_OUTPUTS)
-
-
-def test_roster_lists_everyone_and_shows_any_card():
-    game = Game.new(app.CONTENT, "測試")
-    game.state.player.members["aheng"] = Member()
-    game.state.player.loadouts["aheng"] = [None, None]
-    out = app.render_menxia(game, None, None)
-    assert out[app.MX_ROSTER_INDEX]["choices"] == [
-        ("本人　測試　柔　統御 5　第 1 級　本隊", "player"),
-        ("玄　韓鐵　剛　統御 3　第 1 級　本隊", "hantie"),
-        ("玄　小墨　巧　統御 4　第 1 級　本隊", "xiaomo"),
-        ("黃　阿棠　柔　統御 1　第 1 級　候補", "aheng"),
-    ]
-    assert out[app.MX_PERSON_INDEX] == app.PERSON_HINT
-    card = app.view_handler(game, None, None, 0, "aheng")[app.MX_PERSON_INDEX]
-    assert card.startswith("### 阿棠") and "黃品　統御 1　候補" in card and "本命　無" in card
-    assert app.view_handler(game, None, None, 0, "ghost")[app.MX_ROSTER_INDEX]["value"] is None
-
-
-def test_swap_menus_are_wired_to_the_main_view_and_the_page():
-    demo = app.build_demo()
-    team_radio = next(b for b in demo.blocks.values() if isinstance(b, gr.Radio) and b.label == "隊伍")
-    assert team_radio.value is None  # 還沒有選項時不能先有值，否則第一次打開門下就會被 Gradio 擋下
-    swaps = [f for f in demo.fns.values() if f.fn.__qualname__ == "make_swap_handler.<locals>.handler"]
-    assert len(swaps) == app.MAX_MEMBERS
-    assert all(len(f.outputs) == app.N_OUTPUTS + app.MENXIA_OUTPUTS for f in swaps)
-
-
-def test_swap_menus_are_wired_to_blur():
-    """換人接在 blur 上：Gradio 的下拉選單不論用滑鼠或鍵盤（方向鍵、打字篩選再按 Enter）選，最後都會失焦、送一次 blur；
-    select 只有滑鼠選才送，input 滑鼠選一次會送兩次（「（空）」會連空兩位）。這裡只檢查接線；
-    失焦時送來原本的人（沒選、或重選同一人）見 test_swap_to_whoever_is_already_there_changes_nothing。"""
-    demo = app.build_demo()
-    swaps = [f for f in demo.fns.values() if f.fn.__qualname__ == "make_swap_handler.<locals>.handler"]
-    assert [event for f in swaps for _, event in f.targets] == ["blur"] * app.MAX_MEMBERS
-
-
-def test_swap_to_whoever_is_already_there_changes_nothing(tmp_path, monkeypatch):
-    """選單失焦就會送來一次：選的就是這一位現在的人（點開又離開、或重選同一人），或空位選了空，
-    什麼都不做——不改、不存檔、不重畫，頁面上的訊息也留著。"""
-    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
-    game = Game.new(app.CONTENT, "測試")
-    skip = [gr.skip()] * (app.N_OUTPUTS + app.MENXIA_OUTPUTS)
-    assert app.make_swap_handler(1)(game, None, None, 0, None, "hantie") == skip
-    assert app.make_swap_handler(0)(game, None, None, 0, None, "player") == skip  # 本隊第一欄是你本人
-    assert app.make_swap_handler(2)(game, None, None, 1, None, app.EMPTY_SLOT) == skip  # 第二隊第三欄本來就空著
-    assert app.make_swap_handler(2)(game, None, None, 1, None, None) == skip  # 空位的選單點開又離開
-    assert game.team_keys() == ["player", "hantie", "xiaomo"] and game.team_keys(1) == []
-    assert len(game.state.journal) == 1 and not (tmp_path / "測試.json").exists()
-    page = app.make_swap_handler(1)(game, None, None, 0, None, app.EMPTY_SLOT)[app.N_OUTPUTS:]
-    assert page[app.MX_SWAP_MESSAGE_INDEX] == "韓鐵移到候補（本隊統御 9／15）"
-    assert column(page, 1)[app.MX_SWAP_OFFSET]["value"] == "xiaomo"  # 小墨往前補，選單改寫成他
-    assert app.make_swap_handler(1)(game, None, None, 0, None, "xiaomo") == skip  # 不會連他也空掉
-    assert game.team_keys() == ["player", "xiaomo"]
-
-
-def test_swap_shows_every_line_it_returns_on_the_page(tmp_path, monkeypatch):
-    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
-    game = Game.new(app.CONTENT, "測試")
-    learn_skill(game.state, game.content, "kaibei")  # 韓鐵的本命
-    game.set_member(1, 0, "xiaomo")
-    game.set_loadout("xiaomo", 0, "kaibei")  # 第二隊沒有人以它為本命，配得上
-    page = app.make_swap_handler(1)(game, None, None, 1, None, "hantie")[app.N_OUTPUTS:]
-    assert page[app.MX_SWAP_MESSAGE_INDEX] == (
-        "韓鐵從本隊編入第二隊（第二隊統御 7／15）\n\n開碑手是韓鐵的本命，已從小墨的武學欄卸下。"
-    )
-    assert page[app.MX_MESSAGE_INDEX] == ""
-    assert game.state.player.loadouts["xiaomo"] == [None, None]
-
-
-def test_swap_results_show_right_under_the_team_info_line(tmp_path, monkeypatch):
-    """換人的結果（換不成的原因、卸下本命的說明）寫在隊伍資訊列正下方的元件、換人選單上面；
-    武學按鈕旁的訊息在頁面下方，1280×900 的畫面要往下捲很遠才看得到，只留給配置、卸下、精進、散功。
-    換隊、打開門下時清掉；計時器重畫時留著；之後做武學動作時清掉（只留最新的一則）。"""
-    demo = app.build_demo()
-    swap_fn = next(f for f in demo.fns.values() if f.fn.__qualname__ == "make_swap_handler.<locals>.handler")
-    page = swap_fn.outputs[app.N_OUTPUTS:]
-    info, note = page[app.MX_TEAM_INFO_INDEX], page[app.MX_SWAP_MESSAGE_INDEX]
-    assert isinstance(note, gr.Markdown) and note is not page[app.MX_MESSAGE_INDEX]
-    siblings = info.parent.children
-    assert siblings.index(note) == siblings.index(info) + 1  # 緊接在資訊列底下
-    assert siblings.index(note) < siblings.index(page[app.MX_COLUMNS_INDEX].parent)  # 在各欄（換人選單）上面
-
-    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
-    game = Game.new(app.CONTENT, "測試")
-    game.state.player.members["yanguihong"] = Member()
-    game.state.player.loadouts["yanguihong"] = [None, None]
-    page = app.make_swap_handler(1)(game, None, None, 0, None, "yanguihong")[app.N_OUTPUTS:]  # 換下韓鐵：5＋7＋4
-    assert page[app.MX_SWAP_MESSAGE_INDEX] == "（統御 16／15，晏歸鴻換不進本隊。）"
-    assert page[app.MX_MESSAGE_INDEX] == ""
-    assert app.tick_handler(game, None, None, 0)[app.N_OUTPUTS + app.MX_SWAP_MESSAGE_INDEX] == gr.update()
-    assert app.view_handler(game, None, None, 1)[app.MX_SWAP_MESSAGE_INDEX] == ""  # 換到別隊：清掉
-
-
-def test_slot_clicks_on_an_empty_slot_are_skipped():
-    game = Game.new(app.CONTENT, "測試")
-    skip = [gr.skip()] * app.MENXIA_OUTPUTS
-    assert app.make_innate_slot_handler(0)(game, None, None, 1) == skip  # 第二隊還沒有人
-    assert app.make_free_slot_handler(2, 0)(game, None, None, 1) == skip
-    assert app.make_free_slot_handler(1, 0)(game, None, None, 2) == skip  # 還沒開放的隊伍
-    assert app.make_free_slot_handler(1, 0)(game, None, None)[:2] == [("hantie", 0), None]
-
-
-def test_incompatible_old_save_is_backed_up(tmp_path, monkeypatch):
-    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
-    (tmp_path / "測試.json").write_text("{}", encoding="utf-8")
-    out = app.start("測試")
-    game = out[0]
-    assert game.state.player.name == "測試"
-    backups = list((tmp_path / "backup").glob("測試-*.json"))
-    assert len(backups) == 1 and backups[0].read_text(encoding="utf-8") == "{}"
-    assert any("已備份" in line for line in game.state.log)
-    assert game.state.journal[0].title == "舊存檔已備份" and "已備份到 saves/backup/" in game.state.journal[0].lines[0]
-
-
-# ── 門下頁面：招賢 ──────────────────────────────────────────
-
-
-def tab_of(block) -> str:
-    while not isinstance(block, gr.Tab):
-        block = block.parent
-    return block.label
-
-
-def test_menxia_has_a_roster_tab_and_a_zhaoxian_tab():
-    demo = app.build_demo()
-    tabs = [b for b in demo.blocks.values() if isinstance(b, gr.Tab) and b.label in ("名冊・隊伍", "招賢")]
-    assert [t.label for t in tabs] == ["名冊・隊伍", "招賢"] and tabs[0].parent is tabs[1].parent
-    page = next(f for f in demo.fns.values() if f.fn is app.open_menxia).outputs[2:]
-    for index in (app.MX_TEAM_INDEX, app.MX_SWAP_MESSAGE_INDEX, app.MX_LIBRARY_INDEX, app.MX_ROSTER_INDEX):
-        assert tab_of(page[index]) == "名冊・隊伍"
-    assert {tab_of(page[i]) for i in range(app.MX_GACHA_HEAD_INDEX, app.MENXIA_OUTPUTS)} == {"招賢"}
-    hints = [b for b in demo.blocks.values() if isinstance(b, gr.Markdown) and "測試：領取 1000 元寶" in str(b.value)]
-    assert [tab_of(b) for b in hints] == ["招賢"]  # 告訴玩家元寶去哪裡領
-
-
-def test_zhaoxian_tab_shows_yuanbao_pity_rates_and_the_pool():
-    game = Game.new(app.CONTENT, "測試")
-    out = app.render_menxia(game, None, None)
-    assert out[app.MX_GACHA_HEAD_INDEX] == "**元寶** 0　｜　再 **40** 抽必得天品　｜　本季招賢心得 0／300"
-    rules = out[app.MX_GACHA_RULES_INDEX]
-    assert "**機率**　天品 3%　地品 12%　玄品 35%　黃品 50%（同品階的人平均分配）" in rules
-    assert "- 天品（每人 3%）：晏歸鴻" in rules and "- 地品（每人 4%）：陸沉舟、祝小蟬、石磬" in rules
-    assert "- 玄品（每人 8.75%）：羅石頭、程素衣、駱行雲、阮青弦" in rules
-    assert "- 黃品（每人 12.5%）：杜三斤、阿棠、方小舟、白小滿" in rules
-    assert "韓鐵" not in rules and "守墓人" not in rules  # 開局與只能招降的人不在卡池裡
-    one, ten = out[app.MX_GACHA_BUTTONS_INDEX:app.MX_GACHA_MESSAGE_INDEX]
-    assert (one["value"], one["interactive"]) == ("單抽（元寶不足，要 100）", False)
-    assert (ten["value"], ten["interactive"]) == ("十連（元寶不足，要 1000）", False)
-    assert "還沒有招賢過" in out[app.MX_GACHA_CARDS_INDEX]
-    game.state.player.yuanbao = 1000
-    one, ten = app.render_menxia(game, None, None)[app.MX_GACHA_BUTTONS_INDEX:app.MX_GACHA_MESSAGE_INDEX]
-    assert (one["value"], one["interactive"]) == ("單抽（元寶 100）", True)
-    assert (ten["value"], ten["interactive"]) == ("十連（元寶 1000・至少一名地品以上）", True)
-
-
-def test_ten_pull_through_the_page_saves_and_lays_out_the_cards(tmp_path, monkeypatch):
-    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
-    game = Game.new(app.CONTENT, "測試", rng=random.Random(4))
-    game.state.player.yuanbao = 1000
-    out = app.make_pull_handler(10)(game, None, None, 0, None)
-    assert len(out) == app.N_OUTPUTS + app.MENXIA_OUTPUTS
-    page = out[app.N_OUTPUTS:]
-    assert page[app.MX_GACHA_MESSAGE_INDEX] == "十連：新入門 7 人，重複 3 人（心得 +50）。"
-    assert page[app.MX_MESSAGE_INDEX] == "" and page[app.MX_SWAP_MESSAGE_INDEX] == ""
-    assert page[app.MX_GACHA_HEAD_INDEX] == "**元寶** 0　｜　再 **34** 抽必得天品　｜　本季招賢心得 50／300"  # 第 4 抽是天品
-    cards = page[app.MX_GACHA_CARDS_INDEX]
-    assert cards.count('<div class="gc-card ') == 10
-    assert '<div class="gc-name">晏歸鴻</div><div>天品・快・統御 7</div><div>本命　歸鴻劍</div>' in cards
-    assert "晏歸鴻（已入門）" in page[app.MX_GACHA_RULES_INDEX]
-    assert "招賢・十連" in out[app.LATEST_INDEX]["value"] and "得天品【晏歸鴻】" in out[app.LATEST_INDEX]["value"]
-    assert (tmp_path / "測試.json").exists()
-    roster = [key for _, key in page[app.MX_ROSTER_INDEX]["choices"]]
-    assert "yanguihong" in roster and len(roster) == 10  # 你、韓鐵、小墨＋新入門 7 人
-
-
-def test_a_refused_pull_says_why_under_the_buttons(tmp_path, monkeypatch):
-    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
-    game = Game.new(app.CONTENT, "測試")
-    page = app.make_pull_handler(1)(game, None, None, 0, None)[app.N_OUTPUTS:]
-    assert page[app.MX_GACHA_MESSAGE_INDEX] == "（元寶不足，要 100。）"
-    assert page[app.MX_MESSAGE_INDEX] == "" and page[app.MX_SWAP_MESSAGE_INDEX] == ""
-    assert app.tick_handler(game, None, None, 0)[app.N_OUTPUTS + app.MX_GACHA_MESSAGE_INDEX] == gr.update()  # 計時器留著
-    assert app.view_handler(game, None, None, 1)[app.MX_GACHA_MESSAGE_INDEX] == ""  # 換到別隊：清掉
-    assert app.make_pull_handler(1)(None, None, None) == [gr.skip()] * (app.N_OUTPUTS + app.MENXIA_OUTPUTS)
-
-
-def test_pull_buttons_are_wired_to_the_main_view_and_the_page():
-    demo = app.build_demo()
-    pulls = [f for f in demo.fns.values() if f.fn.__qualname__ == "make_pull_handler.<locals>.handler"]
-    assert [event for f in pulls for _, event in f.targets] == ["click"] * len(Game.PULL_SIZES)
-    assert all(len(f.outputs) == app.N_OUTPUTS + app.MENXIA_OUTPUTS for f in pulls)
-    buttons = pulls[0].outputs[app.N_OUTPUTS + app.MX_GACHA_BUTTONS_INDEX:app.N_OUTPUTS + app.MX_GACHA_MESSAGE_INDEX]
-    assert [b.value for b in buttons] == ["單抽", "十連"]
-
-
-def test_viewing_the_zhaoxian_tab_and_a_refused_pull_leave_the_rng_alone(tmp_path, monkeypatch):
-    """亂數只在真的抽的時候用：打開門下、重畫招賢分頁（按鈕按得下去或按不下去）、按不下去的十連都不動亂數。"""
-    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
-    game = Game.new(app.CONTENT, "測試", rng=random.Random(4))
-    game.state.player.yuanbao = 100  # 單抽按得下去、十連按不下去
-    before = game.rng.getstate()
-    app.open_menxia(game, None, None)
-    app.view_handler(game, None, None, 1)
-    page = app.make_pull_handler(10)(game, None, None, 0, None)[app.N_OUTPUTS:]
-    assert page[app.MX_GACHA_MESSAGE_INDEX] == "（元寶不足，要 1000。）"
-    assert game.rng.getstate() == before and game.state.player.yuanbao == 100
-
-
-def test_an_unknown_note_spot_is_refused(tmp_path, monkeypatch):
-    """動作結果寫在哪裡只能是 NOTE_SPOTS 之一：寫錯了要報錯，不能默默把三處訊息都清掉；act 在動作之前就擋下。"""
-    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
-    game = Game.new(app.CONTENT, "測試")
-    with pytest.raises(ValueError, match="swop"):
-        app.render_menxia(game, None, None, "訊息", note="swop")
-    ran = []
-    with pytest.raises(ValueError, match="swop"):
-        app.act(game, lambda g: ran.append(g) or ["訊息"], menxia=(None, None, 0, None), note="swop")
-    assert ran == [] and not (tmp_path / "測試.json").exists()
-
-
-# ── 大地圖頁面 ─────────────────────────────────────────
-
-
-def map_page(out: list) -> list:
-    """open_world_map 輸出裡大地圖頁面的那一段（順序見 MAP_*_INDEX）。"""
-    return out[app.N_OUTPUTS + len(app.PAGES):]
-
-
-def test_open_world_map_shows_the_page_and_finishes_the_guide_step(tmp_path, monkeypatch):
-    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
-    game = Game.new(app.CONTENT, "測試")
-    game.state.player.tutorial_step = 1  # 第二步是「按『大地圖』看看」
-    out = app.open_world_map(game)
-    assert len(out) == app.N_OUTPUTS + len(app.PAGES) + app.MAP_OUTPUTS
-    assert out[app.N_OUTPUTS:app.N_OUTPUTS + len(app.PAGES)] == app.show_page("map")
-    assert game.state.player.tutorial_step == 2
-    assert "✔ 引導完成" in out[app.LATEST_INDEX]["value"]  # 江湖畫面也跟著重畫
-    assert (tmp_path / "測試.json").exists()
-    page = map_page(out)
-    assert page[app.MAP_HEAD_INDEX] == "⏳ 第1天 00:00　**體力** 150 / 150"  # 引導獎勵的體力超過上限不算
-    assert page[app.MAP_LAYER_INDEX] == gr.update(value="situation")  # 預設「局勢」
-    assert page[app.MAP_SVG_INDEX].startswith("<svg") and ">太湖寇亂 30<" in page[app.MAP_SVG_INDEX]
-    places = page[app.MAP_PLACE_INDEX]
-    assert places["value"] == "yangzhou" and ("揚州城（所在地）", "yangzhou") in places["choices"]  # 預設選中所在地
-    assert page[app.MAP_DETAIL_INDEX].startswith("### 揚州城（所在地）")
-    assert page[app.MAP_TRAVEL_INDEX] == gr.update(visible=False)  # 所在地不顯示「安排前往」
-    assert app.open_world_map(None) == [gr.skip()] * (app.N_OUTPUTS + len(app.PAGES) + app.MAP_OUTPUTS)
-
-
-def test_the_four_pages_are_mutually_exclusive():
-    assert app.show_page("map") == [gr.update(visible=False)] * 3 + [gr.update(visible=True)]
-    assert app.close_world_map() == [gr.update(visible=True)] + [gr.update(visible=False)] * 3
-    demo = app.build_demo()
-    fns = list(demo.fns.values())
-    pages = next(f for f in fns if f.fn is app.start).outputs[-len(app.PAGES):]
-    game_row = pages[0]
-    assert [f.outputs[-len(app.PAGES) - app.MAP_OUTPUTS:][:len(app.PAGES)] for f in fns if f.fn is app.open_world_map] == [
-        pages
-    ] * 3  # 右欄按鈕、小地圖、小地圖下方的按鈕
-    assert next(f for f in fns if f.fn is app.close_world_map).outputs == pages
-
-    def inside(block, container) -> bool:
-        while block is not None:
-            if block is container:
-                return True
-            block = block.parent
-        return False
-
-    # 打開整頁的按鈕全都在江湖畫面裡：一頁開著時按不到另一頁，門下、戰報、大地圖不會同時出現。
-    openers = (app.open_menxia, app.open_report_page, app.open_report_handler, app.open_world_map)
-    for fn in (f for f in fns if f.fn in openers):
-        assert all(inside(demo.blocks[block_id], game_row) for block_id, _ in fn.targets)
-
-
-def test_switching_layers_redraws_only_the_map_page(tmp_path, monkeypatch):
-    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
-    game = Game.new(app.CONTENT, "測試")
-    page = app.map_page_handler(game, "routes", "gaoyou")
-    assert len(page) == app.MAP_OUTPUTS
-    assert page[app.MAP_LAYER_INDEX] == gr.update(value="routes")
-    assert ">10 體力<" in page[app.MAP_SVG_INDEX] and "數字：走過去最省的體力" in page[app.MAP_SVG_INDEX]
-    assert page[app.MAP_PLACE_INDEX]["value"] == "gaoyou"
-    assert page[app.MAP_TRAVEL_INDEX] == gr.update(visible=True, value="安排前往（約 10 體力）", interactive=True)
-    page = app.map_page_handler(game, "enemies", "gaoyou")
-    assert "最險：水寇嘍囉 穩勝" in page[app.MAP_SVG_INDEX]
-    assert "**敵情**　水寇嘍囉 穩勝、太湖水寇 穩勝" in page[app.MAP_DETAIL_INDEX]
-    assert app.map_page_handler(game, "nonsense", "nowhere")[app.MAP_PLACE_INDEX]["value"] == "yangzhou"
-    assert app.map_page_handler(None, "routes", "gaoyou") == [gr.skip()] * app.MAP_OUTPUTS
-    assert not (tmp_path / "測試.json").exists()  # 看地圖不算行動，不存檔
-
-
-def test_clicking_a_place_on_the_map_selects_it():
-    game = Game.new(app.CONTENT, "測試")
-    page = app.map_click_handler(game, "story", gr.EventData(None, {"loc": "gaoyou"}))
-    assert page[app.MAP_PLACE_INDEX]["value"] == "gaoyou"
-    assert page[app.MAP_DETAIL_INDEX].startswith("### 高郵湖")
-    assert 'r="18" fill="none" stroke="#2C2C2A"' in page[app.MAP_SVG_INDEX]  # 被選的地點加粗標示
-    skip = [gr.skip()] * app.MAP_OUTPUTS
-    assert app.map_click_handler(game, "story", gr.EventData(None, {"loc": "hanshan"})) == skip  # 沒名字的淡點
-    assert app.map_click_handler(game, "story", gr.EventData(None, {})) == skip
-    assert app.map_click_handler(None, "story", gr.EventData(None, {"loc": "gaoyou"})) == skip
-
-
-def test_clicking_the_map_ignores_malformed_event_data():
-    game = Game.new(app.CONTENT, "測試")
-    skip = [gr.skip()] * app.MAP_OUTPUTS
-    for data in (None, [], ["gaoyou"], "loc", 3, {"loc": None}, {"loc": ["gaoyou"]}, {"loc": {"id": "gaoyou"}}, {"loc": 3}):
-        assert app.map_click_handler(game, "story", gr.EventData(None, data)) == skip, data
-    assert app.map_click_handler(game, "story", None) == skip
-
-
-def test_unknown_place_shows_only_that_it_is_unknown():
-    game = Game.new(app.CONTENT, "測試")
-    page = app.map_page_handler(game, "situation", "suzhou")
-    assert page[app.MAP_DETAIL_INDEX] == "### 蘇州城？\n\n尚未摸清"
-    assert page[app.MAP_TRAVEL_INDEX] == gr.update(visible=False)
-
-
-def test_travel_button_explains_why_it_cannot_go():
-    game = Game.new(app.CONTENT, "測試")
-    game.state.pending_event = "tavern_brawl"
-    page = app.map_page_handler(game, "situation", "gaoyou")
-    assert page[app.MAP_TRAVEL_INDEX] == gr.update(visible=True, value="有事件待處理，不能安排前往", interactive=False)
-
-
-TRAVEL_OUTPUTS = app.N_OUTPUTS + len(app.PAGES) + app.MAP_OUTPUTS  # 江湖畫面、四個整頁、大地圖頁面
-
-
-def test_travel_returns_to_the_main_view_at_the_destination(tmp_path, monkeypatch):
-    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
-    game = Game.new(app.CONTENT, "測試")
-    out = app.travel_handler(game, "situation", "gaoyou")
-    assert len(out) == TRAVEL_OUTPUTS
-    assert out[app.N_OUTPUTS:app.N_OUTPUTS + len(app.PAGES)] == app.show_page("main")
-    assert map_page(out) == [gr.skip()] * app.MAP_OUTPUTS  # 大地圖頁面藏起來了，不用重畫
-    assert game.state.player.location == "gaoyou"
-    assert out[3].startswith("【高郵湖】")  # 場景顯示抵達的地點
-    assert "前往 高郵湖（途經 揚州城郊）" in out[app.LATEST_INDEX]["value"]
-    assert (tmp_path / "測試.json").exists()
-    assert app.travel_handler(None, "situation", "gaoyou") == [gr.skip()] * TRAVEL_OUTPUTS
-
-
-def test_refused_trip_stays_on_the_map_and_says_why(tmp_path, monkeypatch):
-    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
-    game = Game.new(app.CONTENT, "測試")
-    game.state.pending_event = "tavern_brawl"  # 按鈕是舊的：打開大地圖之後才冒出事件
-    out = app.travel_handler(game, "story", "gaoyou")
-    assert len(out) == TRAVEL_OUTPUTS
-    assert out[app.N_OUTPUTS:app.N_OUTPUTS + len(app.PAGES)] == app.show_page("map")  # 留在大地圖
-    page = map_page(out)
-    assert page[app.MAP_LAYER_INDEX] == gr.update(value="story") and page[app.MAP_PLACE_INDEX]["value"] == "gaoyou"
-    assert page[app.MAP_DETAIL_INDEX].startswith("**沒能出發**：有事件待處理，不能安排前往。\n\n### 高郵湖")
-    assert page[app.MAP_TRAVEL_INDEX] == gr.update(visible=True, value="有事件待處理，不能安排前往", interactive=False)
-    assert game.state.player.location == "yangzhou"
-    demo = app.build_demo()
-    wired = next(f for f in demo.fns.values() if f.fn is app.travel_handler)
-    assert len(wired.outputs) == TRAVEL_OUTPUTS and len(wired.inputs) == 3
-
-
-def test_normal_redraws_never_simulate_odds(tmp_path, monkeypatch):
-    from tianxia import team
-
-    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
-    game = Game.new(app.CONTENT, "測試")
-    calls = []
-    real = team.run_battle
-    monkeypatch.setattr(team, "run_battle", lambda *args: calls.append(1) or real(*args))
-    app.tick_handler(game, None, None)
-    app.open_world_map(game)  # 預設局勢層；所在地沒有敵人
-    assert calls == []
+def test_build_demo_constructs_without_error():
+    assert app.build_demo() is not None

@@ -313,7 +313,6 @@ class Game:
         target = self._recruit_target()
         if target is None:
             return ["（此地此刻沒有能招募的人。）"]
-        self.state.player.stamina -= self.content.config.recruit_stamina
         return roster.attempt_recruit(self.state, self.content, self.world, target, self.rng)
 
     def _fortune_gift(self) -> list[str]:

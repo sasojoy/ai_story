@@ -27,7 +27,7 @@ def recruitable_here(content: Content, world: WorldStateStore, location: str) ->
     """在這個地點可以嘗試招募的人：內容標了 kind=recruitable、目前自由之身。"""
     return [
         cid for cid, ch in content.characters.items()
-        if ch.kind == "recruitable" and owned_by(world, cid) is None
+        if ch.kind == "recruitable" and ch.recruit_at == location and owned_by(world, cid) is None
     ]
 
 
