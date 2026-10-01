@@ -12,10 +12,16 @@
     "action_tags": {
       "guan_safe": {"trend_delta": 2, "neili_damage": 15},
       "guan_aggressive": {"trend_delta": 6, "neili_damage": 60, "mitigated_by_power": true},
-      "guan_reckless": {"trend_delta": 15, "neili_damage": 350},
       "huang_safe": {"trend_delta": -2, "neili_damage": 15},
-      "huang_aggressive": {"trend_delta": -6, "neili_damage": 60, "mitigated_by_power": true},
-      "huang_reckless": {"trend_delta": -15, "neili_damage": 350}
+      "huang_aggressive": {"trend_delta": -6, "neili_damage": 60, "mitigated_by_power": true}
+    },
+    "free_text_gamble": {
+      "success_trend_base": 5,
+      "success_trend_per_risk": 0.3,
+      "success_neili_damage": 10,
+      "failure_trend_per_risk": 0.1,
+      "failure_neili_base": 20,
+      "failure_neili_per_risk": 3.0
     },
     "acts": [
       {

@@ -3,6 +3,7 @@ from unittest import mock
 
 import pytest
 
+from conftest import FixedRandom
 from tianxia import battle_instance as bi
 from tianxia.models import (
     BattleAct, BattleActionEffect, BattleAdvanceWhen, BattleDef, BattleFaction, BattleOption, BattleOutcome,
@@ -48,6 +49,25 @@ def definition() -> BattleDef:
         muster_seconds=600,
         round_seconds=120,
     )
+
+
+@pytest.fixture
+def gamble_definition(definition) -> BattleDef:
+    """跟 definition 同一個骨架，但 reckless 選項標成 free_text、並設定了
+    free_text_gamble——給「放手一搏」賭局機制的測試用，不影響 definition 自己既有的
+    那些測試（那些是純查表路徑，兩者分開測）。"""
+    from tianxia.models import FreeTextGamble
+
+    copy = definition.model_copy(deep=True)
+    for act in copy.acts:
+        for option in act.options:
+            if option.tag == "reckless":
+                option.free_text = True
+    copy.free_text_gamble = FreeTextGamble(
+        success_trend_base=5, success_trend_per_risk=0.3, success_neili_damage=10,
+        failure_trend_per_risk=0.1, failure_neili_base=20, failure_neili_per_risk=3.0,
+    )
+    return copy
 
 
 # ── 集結期 ───────────────────────────────────────────────
@@ -164,6 +184,125 @@ def test_resolve_round_surfaces_custom_text_in_the_messages(definition):
     msgs = bi.resolve_round(instance, definition, random.Random(0))
     assert any("直取波才首級" in m for m in msgs)
     assert instance.participants["甲"].neili == 80  # 跟沒打字的 aggressive 扣血量一樣（100-20）
+
+
+# ── 放手一搏：LLM 評成功率、系統擲骰、公式換算（設計討論：「我就是希望看到玩家的
+# 奇葩操作對戰局產生影響」）─────────────────────────────────────
+
+
+def test_resolve_round_gamble_success_pushes_trend_toward_the_actors_faction(gamble_definition):
+    instance = _active_battle(gamble_definition)
+    bi.submit_action(instance, "甲", "reckless", success_rate=50)  # 甲在 guan（factions[0]，正向）
+    bi.submit_action(instance, "乙", "safe")
+    msgs = bi.resolve_round(instance, gamble_definition, FixedRandom(0.0))  # random()=0.0，永遠擲骰成功
+    assert instance.trend > 50 + 1  # guan_safe 的 乙 本來就會 +1，另外甲賭贏了應該推得更高
+    assert any("這一搏成功了" in m for m in msgs)
+    assert instance.participants["甲"].neili == 90  # 100 - success_neili_damage(10)
+
+
+def test_resolve_round_gamble_failure_pushes_trend_away_from_the_actors_faction(gamble_definition):
+    instance = _active_battle(gamble_definition)
+    bi.submit_action(instance, "甲", "reckless", success_rate=80)  # risk=20，刻意選小一點避免傷害超過上限被夾到 0 看不出公式
+    bi.submit_action(instance, "乙", "safe")
+    msgs = bi.resolve_round(instance, gamble_definition, FixedRandom(0.999))  # 永遠擲骰失敗
+    assert any("這一搏失敗了" in m for m in msgs)
+    # risk=20：failure_neili = 20 + 20*3.0 = 80
+    assert instance.participants["甲"].neili == 100 - 80
+
+
+def test_resolve_round_gamble_direction_flips_for_the_second_faction(gamble_definition):
+    """乙在 huang（factions[1]，負向）：賭贏了戰局應該往 huang 那邊推（trend 下降）。"""
+    instance = _active_battle(gamble_definition)
+    bi.submit_action(instance, "甲", "safe")
+    bi.submit_action(instance, "乙", "reckless", success_rate=50)
+    bi.resolve_round(instance, gamble_definition, FixedRandom(0.0))
+    # guan_safe 的甲 +1，huang 賭贏再往下推，trend 應該落在 51 以下
+    assert instance.trend < 51
+
+
+def test_resolve_round_gamble_higher_risk_means_bigger_reward_and_bigger_cost(gamble_definition):
+    low_risk = _active_battle(gamble_definition)
+    bi.submit_action(low_risk, "甲", "reckless", success_rate=90)  # risk=10
+    bi.submit_action(low_risk, "乙", "safe")
+    bi.resolve_round(low_risk, gamble_definition, FixedRandom(0.999))  # 失敗
+    low_risk_damage = 100 - low_risk.participants["甲"].neili
+
+    high_risk = _active_battle(gamble_definition)
+    bi.submit_action(high_risk, "甲", "reckless", success_rate=10)  # risk=90
+    bi.submit_action(high_risk, "乙", "safe")
+    bi.resolve_round(high_risk, gamble_definition, FixedRandom(0.999))  # 失敗
+    high_risk_damage = 100 - high_risk.participants["甲"].neili
+
+    assert high_risk_damage > low_risk_damage  # 風險愈高，失敗代價愈重
+
+
+def test_resolve_round_gamble_can_eliminate_on_a_bad_roll(gamble_definition):
+    """極端的奇葩操作（成功率評很低）賭輸了，傷害可以直接打到出局——跟固定選項的
+    reckless 一樣，是數字夠狠，不是程式特判。"""
+    instance = _active_battle(gamble_definition)
+    bi.submit_action(instance, "甲", "reckless", success_rate=1)  # risk=99
+    bi.submit_action(instance, "乙", "safe")
+    bi.resolve_round(instance, gamble_definition, FixedRandom(0.999))  # 失敗
+    assert instance.participants["甲"].eliminated
+
+
+def test_resolve_round_gamble_message_includes_the_assessed_success_rate(gamble_definition):
+    instance = _active_battle(gamble_definition)
+    bi.submit_action(instance, "甲", "reckless", text="直取波才首級", success_rate=25)
+    bi.submit_action(instance, "乙", "safe")
+    msgs = bi.resolve_round(instance, gamble_definition, FixedRandom(0.0))
+    assert any("直取波才首級" in m and "25%" in m for m in msgs)
+
+
+def test_resolve_round_without_a_gamble_config_falls_back_to_the_tag_lookup(definition):
+    """definition（沒設定 free_text_gamble）就算送出了 success_rate，也不會走賭局路徑，
+    因為場上根本沒有這套機制可以依循——退回原本 action_tags 查表那條路。用 trend 而不是
+    neili 驗證：reckless 固定 neili_damage=200 兩條路徑都會把 100 點氣血打到夾在 0（看
+    不出差異），但 trend_delta 是固定的 10，賭局公式算出來的值幾乎不可能剛好湊成同一個數，
+    足以分辨走的是哪一條路。"""
+    instance = _active_battle(definition)
+    bi.submit_action(instance, "甲", "reckless", success_rate=50)
+    bi.submit_action(instance, "乙", "safe")
+    bi.resolve_round(instance, definition, FixedRandom(0.0))
+    assert instance.trend == 50 + 10 + 1  # reckless 固定 trend_delta=10，加上 乙 safe 的 +1
+    assert instance.participants["甲"].eliminated  # neili_damage=200 遠超過上限，夾到 0 出局
+
+
+# ── assess_action_success_rate：LLM 評機率 ─────────────────────────
+
+
+def test_assess_action_success_rate_without_a_client_returns_the_default(gamble_definition):
+    act = gamble_definition.acts[0]
+    assert bi.assess_action_success_rate(None, act, "官軍", "直取波才首級") == bi.DEFAULT_FREE_TEXT_SUCCESS_RATE
+
+
+def test_assess_action_success_rate_uses_the_llm_value_when_available(gamble_definition):
+    act = gamble_definition.acts[0]
+    client = mock.Mock()
+    client.chat_structured.return_value = bi.SuccessRateJudgment(success_rate=25, reasoning="風險很高")
+    assert bi.assess_action_success_rate(client, act, "官軍", "直取波才首級") == 25
+
+
+def test_assess_action_success_rate_clamps_an_out_of_range_value(gamble_definition):
+    act = gamble_definition.acts[0]
+    client = mock.Mock()
+    client.chat_structured.return_value = bi.SuccessRateJudgment(success_rate=150)
+    assert bi.assess_action_success_rate(client, act, "官軍", "某個行動") == 100
+
+
+def test_assess_action_success_rate_falls_back_when_the_llm_call_fails(gamble_definition):
+    act = gamble_definition.acts[0]
+    client = mock.Mock()
+    client.chat_structured.side_effect = RuntimeError("連不上")
+    assert bi.assess_action_success_rate(client, act, "官軍", "直取波才首級") == bi.DEFAULT_FREE_TEXT_SUCCESS_RATE
+
+
+def test_bot_choose_action_never_selects_a_free_text_option(gamble_definition):
+    """機器人不會自己想描述，free_text 選項對它們來說等同不存在。"""
+    instance = _active_battle(gamble_definition)
+    for _ in range(50):
+        tag = bi.bot_choose_action(instance, gamble_definition, "甲", random.Random())
+        assert tag != "reckless"  # 這個 definition 裡 reckless 是 free_text
 
 
 def test_reckless_action_can_eliminate_a_participant_outright(definition):

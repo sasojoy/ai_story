@@ -27,10 +27,21 @@ def no_real_ollama_flavor_calls(monkeypatch):
     config.json）各自真的嘗試連線一次才失敗——雖然每次只要 ~2 秒，但乘上整個套件的測試
     數量會拖到以分鐘計。預設回傳空字串（等同「這次沒有潤色句」，跟真的連不上時的行為
     一致），需要真的驗證 flavor 呼叫內容的測試（tests/test_flavor.py、test_engine.py 的
-    重遊/重複事件測試）自己用 mock.patch.object 覆蓋這個預設值即可。"""
+    重遊/重複事件測試）自己用 mock.patch.object 覆蓋這個預設值即可。
+
+    同一個理由也適用於 chat_structured——battle_instance.py::assess_action_success_rate
+    現在每次自訂戰鬥行動送出都會呼叫一次，不假掉的話同樣會對關閉的 port 真的連線才
+    失敗（優雅退回保底值，不影響測試正確性，只是拖慢）。這裡讓它直接拋例外，模擬
+    「連不上」，跟真正連不上時的行為（各呼叫端自己的 graceful fallback）一致；
+    tests/test_real_content.py 用真實內容時已經有自己的 autouse fixture 蓋掉這個
+    預設值，那邊不受影響。"""
     from tianxia.ollama_client import OllamaClient
 
+    def _no_chat_structured(self, *args, **kwargs):
+        raise RuntimeError("Ollama 連不上（測試環境預設假的，見 no_real_ollama_flavor_calls）")
+
     monkeypatch.setattr(OllamaClient, "chat_text", lambda self, messages, **kwargs: "")
+    monkeypatch.setattr(OllamaClient, "chat_structured", _no_chat_structured)
 
 
 @pytest.fixture(autouse=True)

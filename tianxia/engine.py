@@ -531,7 +531,10 @@ class Game:
         text = text.strip()[:20]
         if not text:
             return ["（請先輸入你想做的事。）"]
-        return self._submit_battle_action(name, definition, option.tag, text)
+        act = battle_instance.current_act(battle, definition)
+        faction_name = next((f.name for f in definition.factions if f.id == p.faction), p.faction)
+        success_rate = battle_instance.assess_action_success_rate(self.client, act, faction_name, text)
+        return self._submit_battle_action(name, definition, option.tag, text, success_rate)
 
     def _battle_choose(self, arg: str) -> list[str]:
         """choose() 分派進這裡之前，已經透過自己開頭那次 self.options(odds=False) 呼叫
@@ -559,14 +562,17 @@ class Game:
             return self._submit_battle_action(name, definition, rest)
         return ["（此刻無法這麼做。）"]
 
-    def _submit_battle_action(self, name: str, definition: BattleDef, tag: str, text: str | None = None) -> list[str]:
-        """送出一個行動（按鈕選的固定 tag，或自訂輸入框的 free_text 選項）並嘗試結算這
-        回合；呼叫端已經確認過戰鬥還在進行（還沒結束），所以這裡如果結算完變成 ended，
-        一定是這次送出的行動剛好造成的，不用再跟「結算前是不是已經 ended」比對。"""
+    def _submit_battle_action(
+        self, name: str, definition: BattleDef, tag: str, text: str | None = None, success_rate: int | None = None,
+    ) -> list[str]:
+        """送出一個行動（按鈕選的固定 tag，或自訂輸入框的 free_text 選項，連同 LLM 先評好
+        的成功率）並嘗試結算這回合；呼叫端已經確認過戰鬥還在進行（還沒結束），所以這裡
+        如果結算完變成 ended，一定是這次送出的行動剛好造成的，不用再跟「結算前是不是
+        已經 ended」比對。"""
         captured: dict[str, list[str]] = {"msgs": []}
 
         def _apply(b: battle_instance.BattleInstance) -> None:
-            battle_instance.submit_action(b, name, tag, text)
+            battle_instance.submit_action(b, name, tag, text, success_rate)
             captured["msgs"] = self._advance_battle_round(b, definition)
 
         battle = self.world.mutate_battle(_apply)

@@ -1,8 +1,13 @@
 """全服共用的即時多人戰鬥（設計討論：集結選陣營→逐幕逐回合鎖步→決戰幕判定勝負）。
 
-跟整個專案一貫的原則一樣：戰局推進/氣血損耗是查表決定的確定性結果，不信任 LLM 自己算
-數字；LLM 只負責在固定骨架（BattleDef.acts）裡，依這一回合大家選擇的傾向生成一段敘事
-潤色，骨架本身一定會照查表結果往下走，不會被 LLM 帶偏。
+固定選項（穩守/猛攻）的推進/氣血損耗是查表決定的確定性結果，不信任 LLM 自己算數字；
+自訂行動（放手一搏，見 BattleOption.free_text／FreeTextGamble）則是 LLM 評估一個成功率
+（這件事 LLM 做得到、也實測過排序穩定），系統拿這個機率真的擲骰、用寫死的公式換算
+成戰局推動/氣血損耗——玩家的奇葩操作因此真的會影響戰局（賭贏大賺、賭輸慘賠），但
+「最後是不是成功」跟「成功該加多少」都是系統的亂數/公式決定，LLM 從頭到尾不會直接
+吐出任何被拿去套用的數字，只吐一個被擲骰消費掉的機率。LLM 另外也負責在固定骨架
+（BattleDef.acts）裡，依這一回合發生的事生成一段敘事潤色，骨架本身一定會照查表/擲骰
+結果往下走，不會被 LLM 帶偏。
 
 這裡是純粹的資料模型跟引擎函式，不碰共用儲存的存讀鎖（那是 world_state.py::
 get_battle/mutate_battle/start_battle 的事）、不碰 Gradio UI（那是 engine.py/app.py 的事）。
@@ -20,6 +25,9 @@ from .models import BattleAct, BattleActionEffect, BattleDef, BattleOption, Batt
 from .ollama_client import OllamaClient
 
 Phase = Literal["muster", "active", "ended"]
+
+DEFAULT_FREE_TEXT_SUCCESS_RATE = 40  # LLM 評估失敗/無 client 時的保底值——明顯偏低（放手一搏預設不利），
+# 不是 50/50，呼應「不會全程 LLM 自由發展」的框架精神：評不出來就當作風險自負，不讓機制因為評估失敗而意外變得穩賺不賠。
 
 
 class BattleParticipant(BaseModel):
@@ -39,7 +47,11 @@ class BattleParticipant(BaseModel):
 
 class BattleRound(BaseModel):
     pending_actions: dict[str, str] = Field(default_factory=dict)  # 玩家名號 -> tag
-    custom_texts: dict[str, str] = Field(default_factory=dict)  # 玩家名號 -> 自訂行動文字（free_text 選項才有，機制效果不受影響，只給 LLM 潤色用）
+    custom_texts: dict[str, str] = Field(default_factory=dict)  # 玩家名號 -> 自訂行動文字（free_text 選項才有）
+    success_rates: dict[str, int] = Field(default_factory=dict)  # 玩家名號 -> LLM 評估的成功率（0~100，
+    # free_text 選項才有；在送出的當下就評好存起來，不是結算時才問——resolve_round 不能
+    # 呼叫 LLM，見模組說明。這個欄位有值就代表這個人這回合是賭局型行動，沒有值就是走
+    # action_tags 查表的一般行動，resolve_round 靠這個區分兩條路徑）。
     opened_real: float = 0.0  # 這回合開放選擇的時間點，逾時代選判斷用
 
 
@@ -123,17 +135,22 @@ def options_for(instance: BattleInstance, definition: BattleDef, name: str) -> l
     return [o for o in act.options if o.faction in (None, p.faction)]
 
 
-def submit_action(instance: BattleInstance, name: str, tag: str, text: str | None = None) -> None:
-    """記錄一個人這回合選的行動；已經陣亡或不在這場戰鬥裡的人送出無效。text 是
-    free_text 選項的自訂行動內容（見 BattleOption.free_text）——只會被餵給 LLM 當敘事
-    素材（見 resolve_round），不影響 tag 查到的機制效果，不管玩家打了什麼，數值結果都
-    一樣，只有故事寫法不同。"""
+def submit_action(
+    instance: BattleInstance, name: str, tag: str, text: str | None = None, success_rate: int | None = None,
+) -> None:
+    """記錄一個人這回合選的行動；已經陣亡或不在這場戰鬥裡的人送出無效。text/success_rate
+    是 free_text 選項才有（見 BattleOption.free_text）——success_rate 是呼叫端（engine.py
+    ::submit_battle_custom_action）在送出的當下先問過 LLM 評好的成功率，resolve_round
+    靠這個欄位有沒有值決定這個人這回合是賭局型行動還是一般查表行動，自己不會、也不能
+    呼叫 LLM（見模組說明）。"""
     p = instance.participants.get(name)
     if p is None or p.eliminated or instance.phase != "active":
         return
     instance.round.pending_actions[name] = tag
     if text:
         instance.round.custom_texts[name] = text
+    if success_rate is not None:
+        instance.round.success_rates[name] = max(0, min(100, success_rate))
 
 
 def round_is_complete(instance: BattleInstance) -> bool:
@@ -168,20 +185,39 @@ def resolve_round(instance: BattleInstance, definition: BattleDef, rng: random.R
     msgs，請 LLM 潤色成一段敘事，再把潤色後的文字（或潤色失敗時的 msgs 本身）加進
     narrative_log，這裡不越俎代庖）。"""
     msgs: list[str] = []
+    positive_faction = definition.factions[0].id
     for name, tag in list(instance.round.pending_actions.items()):
         p = instance.participants.get(name)
         if p is None or p.eliminated:
             continue
-        effect = definition.action_tags.get(tag)
-        if effect is None:
-            continue
+        success_rate = instance.round.success_rates.get(name)
         custom_text = instance.round.custom_texts.get(name)
-        if custom_text:
-            msgs.append(f"{name}放手一搏：「{custom_text}」")
-        instance.trend = max(0, min(100, instance.trend + effect.trend_delta))
-        damage = effect.neili_damage
-        if effect.mitigated_by_power:
-            damage *= 1 - _power_mitigation(p.power)
+        if success_rate is not None and definition.free_text_gamble is not None:
+            gamble = definition.free_text_gamble
+            risk = 100 - success_rate
+            succeeded = rng.random() * 100 < success_rate
+            sign = 1 if p.faction == positive_faction else -1
+            if custom_text:
+                msgs.append(f"{name}放手一搏：「{custom_text}」（評估成功率 {success_rate}%）")
+            if succeeded:
+                delta = gamble.success_trend_base + round(risk * gamble.success_trend_per_risk)
+                damage = gamble.success_neili_damage
+                msgs.append(f"{name}這一搏成功了！")
+            else:
+                delta = -round(risk * gamble.failure_trend_per_risk)
+                damage = gamble.failure_neili_base + risk * gamble.failure_neili_per_risk
+                msgs.append(f"{name}這一搏失敗了，付出了慘痛代價。")
+            instance.trend = max(0, min(100, instance.trend + sign * delta))
+        else:
+            effect = definition.action_tags.get(tag)
+            if effect is None:
+                continue
+            if custom_text:
+                msgs.append(f"{name}放手一搏：「{custom_text}」")
+            instance.trend = max(0, min(100, instance.trend + effect.trend_delta))
+            damage = effect.neili_damage
+            if effect.mitigated_by_power:
+                damage *= 1 - _power_mitigation(p.power)
         p.neili = max(0.0, p.neili - damage)
         if p.neili <= 0 and not p.eliminated:
             p.eliminated = True
@@ -231,12 +267,46 @@ def bot_choose_action(instance: BattleInstance, definition: BattleDef, name: str
     損耗愈低愈容易被選到，但不是完全不會選有風險的——這樣測試戰鬥用機器人湊場時行為
     會有變化，不會每次都選同一個，也不會像真的 AI 一樣聰明判斷局勢（那不是這裡的目標，
     設計討論原文：「不會全程 LLM 自由發展...大框架還是會進行下去」，機器人只是補位湊人數，
-    不需要聰明）。正式營運時要用機器人增加活躍感，也是同一套函式。"""
-    options = options_for(instance, definition, name)
+    不需要聰明）。正式營運時要用機器人增加活躍感，也是同一套函式。故意排除 free_text
+    選項——機器人不會自己想出一段有意義的描述，用它只會得到一句空話，交給固定選項就好。"""
+    options = [o for o in options_for(instance, definition, name) if not o.free_text]
     if not options:
         return None
     weights = [1.0 / (definition.action_tags.get(o.tag, BattleActionEffect()).neili_damage + 1) for o in options]
     return rng.choices(options, weights=weights, k=1)[0].tag
+
+
+class SuccessRateJudgment(BaseModel):
+    success_rate: int = DEFAULT_FREE_TEXT_SUCCESS_RATE
+    reasoning: str = ""
+
+
+def assess_action_success_rate(
+    client: OllamaClient | None, act: BattleAct, faction_name: str, text: str,
+) -> int:
+    """請 LLM 評估這段自訂行動聽起來有多可能成功（0~100）——只評機率，不評「成不成功」
+    本身（那是 resolve_round 擲骰決定的），也不會被拿去當作任何數值直接套用，只是擲骰
+    用的機率輸入。連不上/生成失敗/格式不對都回傳保底值（見 DEFAULT_FREE_TEXT_SUCCESS_RATE），
+    不會讓整個行動失敗——這類評估本來就是錦上添花，寧可給一個偏低的保守值，也不要卡住
+    玩家的回合。"""
+    if client is None:
+        return DEFAULT_FREE_TEXT_SUCCESS_RATE
+    messages = [
+        {"role": "system", "content": (
+            "你是三國時代戰場的判定系統，負責評估玩家描述的行動合理的成功機率，不是故事"
+            "寫手、也不負責決定最終是否成功。只能根據行動本身在戰場上的合理性判斷，"
+            "請給出 0~100 的整數 success_rate（成功機率）與一句話 reasoning。"
+        )},
+        {"role": "user", "content": (
+            f"戰場情境：【{act.title}】{act.text}\n玩家所屬：{faction_name}\n"
+            f"玩家的行動：「{text}」\n請給出 success_rate、reasoning。"
+        )},
+    ]
+    try:
+        result = client.chat_structured(messages, SuccessRateJudgment, temperature=0.7, required_fields=["success_rate"])
+    except Exception:
+        return DEFAULT_FREE_TEXT_SUCCESS_RATE
+    return max(0, min(100, result.success_rate))
 
 
 def narrate_round(client: OllamaClient | None, definition: BattleDef, instance: BattleInstance, msgs: list[str]) -> str:

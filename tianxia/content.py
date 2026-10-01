@@ -243,9 +243,14 @@ def validate(c: Content) -> None:
             else:
                 need(act.advance_when is not None, f"{aw}：非最後一幕必須有 advance_when")
             for option in act.options:
-                known(f"{aw} 選項「{option.text}」", [option.tag], battle.action_tags, "行動分類")
+                if not option.free_text:  # free_text 選項不查表，機制走 FreeTextGamble 擲骰，不需要 action_tags 裡有對應的 tag
+                    known(f"{aw} 選項「{option.text}」", [option.tag], battle.action_tags, "行動分類")
                 if option.faction is not None:
                     known(f"{aw} 選項「{option.text}」", [option.faction], faction_ids, "陣營")
+        need(
+            battle.free_text_gamble is not None or not any(o.free_text for a in battle.acts for o in a.options),
+            f"{where}：有 free_text 選項，必須設定 free_text_gamble",
+        )
         for outcome in battle.outcomes:
             known(f"{where} 結果「{outcome.title}」", [outcome.faction], faction_ids, "陣營")
             known(f"{where} 結果「{outcome.title}」", outcome.trend_delta, trend_ids, "大勢線")

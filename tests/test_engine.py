@@ -946,8 +946,10 @@ def test_submit_battle_custom_action_works_even_as_the_very_first_call_after_mus
 
 
 def test_custom_action_mechanics_match_the_fixed_tag_regardless_of_text(content, game):
-    """不管玩家打了什麼字，機制效果（戰局推動/氣血損耗）都是查 reckless 這個 tag，
-    不會因為文字內容不同而有不同結果。"""
+    """這個 fixture 沒有設定 free_text_gamble，所以就算玩家打的字會先被送去評成功率，
+    resolve_round 還是會退回 action_tags 查表那條路（見 battle_instance.py 的對應測試），
+    機制效果不會因為文字內容不同而有不同結果——有設定 free_text_gamble 的戰鬥則相反，
+    見 test_submit_battle_custom_action_assesses_success_rate_and_feeds_the_gamble。"""
     definition = _install_battle_def_with_free_text(content)
     after_muster = _join_and_open(content, game, definition)
     with mock.patch("tianxia.engine.time.time", return_value=after_muster):
@@ -955,3 +957,36 @@ def test_custom_action_mechanics_match_the_fixed_tag_regardless_of_text(content,
     battle = game.world.get_battle()
     cap = game._battle_neili_cap()  # 玩家真實的氣血上限（join 時是這樣算的，不是隨便假設的數字）
     assert battle.participants["沈浪"].neili == cap - 50  # reckless 的 50 點損耗
+
+
+def _install_battle_def_with_gamble(content):
+    from tianxia.models import FreeTextGamble
+
+    definition = _install_battle_def_with_free_text(content)
+    definition.id = "t3"
+    content.battles[definition.id] = definition
+    definition.free_text_gamble = FreeTextGamble(
+        success_trend_base=5, success_trend_per_risk=0.3, success_neili_damage=10,
+        failure_trend_per_risk=0.1, failure_neili_base=20, failure_neili_per_risk=3.0,
+    )
+    return definition
+
+
+def test_submit_battle_custom_action_assesses_success_rate_and_feeds_the_gamble(content, game):
+    """跟上一個測試同一套劇本，差別只在這個 definition 有設定 free_text_gamble——這次
+    送出的自訂行動會先呼叫 LLM（這裡用 mock）評成功率，評出來的結果真的拿去擲骰、
+    算出不是固定 50 點的傷害，證明整條鏈路（engine.submit_battle_custom_action →
+    battle_instance.assess_action_success_rate → resolve_round 的賭局分支）真的接起來了。"""
+    definition = _install_battle_def_with_gamble(content)
+    after_muster = _join_and_open(content, game, definition)
+    with mock.patch("tianxia.engine.time.time", return_value=after_muster), \
+         mock.patch.object(game.client, "chat_structured", return_value=battle_instance.SuccessRateJudgment(success_rate=20)):
+        game.submit_battle_custom_action("直取波才首級")
+    battle = game.world.get_battle()
+    cap = game._battle_neili_cap()
+    # success_rate=20、risk=80：成功時只扣固定的 10（傷害很小，賭贏代價低），失敗時扣
+    # 20+80*3=260——用的是 game.rng（真的隨機，不是 FixedRandom），究竟成功還是失敗
+    # 不好預測，但傷害一定精確落在這兩個數字其中之一，不會是固定查表的 50，證明真的
+    # 走了賭局公式（不是退回 action_tags 查表那條路）。
+    damage = cap - battle.participants["沈浪"].neili
+    assert damage in (10, 260)

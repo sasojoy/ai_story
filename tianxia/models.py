@@ -428,11 +428,33 @@ class BattleOutcome(_Strict):
     trend_delta: dict[str, int] = Field(default_factory=dict)  # 結果套用到共用賽季的大勢推動（trend id -> 增減量）
 
 
+class FreeTextGamble(_Strict):
+    """自訂行動（放手一搏）的機制（設計討論：「我就是希望看到玩家的奇葩操作對戰局產生
+    影響」）：LLM 評估這個行動聽起來有多可能成功（success_rate，0~100），系統拿這個
+    機率真的擲骰——賭贏了吃大戰果，賭輸了付大代價，幅度都跟著 LLM 評出的風險程度
+    （100 - success_rate）走，不是固定一個數字，所以同樣是「放手一搏」，打「直取敵將
+    首級」（成功率低）贏了戰果驚人、輸了代價慘重；打相對保守的描述（成功率高）輸贏
+    幅度都小很多。LLM 只負責評機率這一件事（已實測 qwen2.5:14b 對這種單純的機率評估
+    排序穩定、同一行動重複問也不會亂跳），擲骰跟換算成數值完全是系統做的，不信任 LLM
+    自己決定「這次到底成不成功」或「成功了該加多少」。"""
+
+    success_trend_base: int = 5  # 成功時，戰局推動的基礎量
+    success_trend_per_risk: float = 0.3  # 成功時，風險每 1 點再加多少戰局推動
+    success_neili_damage: float = 10  # 成功時的氣血損耗（固定小額，賭贏了代價不高）
+    failure_trend_per_risk: float = 0.1  # 失敗時，戰局往對方倒退的量（乘上風險，取負）
+    failure_neili_base: float = 20  # 失敗時的基礎氣血損耗
+    failure_neili_per_risk: float = 3.0  # 失敗時，風險每 1 點再加多少氣血損耗
+
+
 class BattleDef(_Strict):
     """全服共用的即時多人戰鬥骨架（例如「黃巾決戰」）：集結選陣營→逐幕逐回合（框架給
     選項，查表推動戰局/扣氣血）→決戰幕的戰局數值判定最終勝負。不是自由發展的 LLM 劇情，
     是固定骨架裡的有限變因（設計討論：「有一個基本框架，玩家可以根據自身影響一些要素，
-    但是大框架還是會進行下去」）。"""
+    但是大框架還是會進行下去」）。
+
+    factions 的第一個是戰局 trend 的正向方（trend 越高對他們越有利，越低對第二個陣營
+    越有利）——固定選項靠 action_tags 自己決定方向；free_text 的賭局型行動（見
+    FreeTextGamble）沒有個別的 tag 效果可以決定方向，統一照這個順序推算。"""
 
     id: str
     name: str
@@ -441,6 +463,7 @@ class BattleDef(_Strict):
     trend_start: int = 50
     acts: list[BattleAct] = Field(min_length=1)
     action_tags: dict[str, BattleActionEffect]
+    free_text_gamble: FreeTextGamble | None = None  # 有 free_text 選項時必填
     outcomes: list[BattleOutcome] = Field(min_length=1)
     muster_seconds: float = 600  # 集結期：開放選陣營的時間，逾時系統自動分配
     round_seconds: float = 120  # 每回合等待所有參戰者選擇的時間，逾時系統代選保守行動
