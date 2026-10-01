@@ -166,9 +166,10 @@ def test_eliminated_participant_is_excluded_from_the_next_rounds_requirement(def
 
 def test_mitigated_by_power_reduces_damage_for_a_powerful_participant(definition):
     instance = _active_battle(definition)
+    instance.participants["甲"].power = 100
     bi.submit_action(instance, "甲", "aggressive")
     bi.submit_action(instance, "乙", "aggressive")
-    bi.resolve_round(instance, definition, random.Random(0), power_of=lambda name: 100 if name == "甲" else None)
+    bi.resolve_round(instance, definition, random.Random(0))
     assert instance.participants["甲"].neili > instance.participants["乙"].neili
 
 
@@ -233,6 +234,27 @@ def test_the_fallback_outcome_with_no_bounds_catches_a_stalemate(definition):
     bi.submit_action(instance, "乙", "safe")
     bi.resolve_round(instance, definition, random.Random(0))
     assert instance.outcome_title == "僵持"
+
+
+# ── 機器人自動選擇 ───────────────────────────────────────
+
+
+def test_bot_choose_action_returns_a_tag_from_the_available_options(definition):
+    instance = _active_battle(definition)
+    tag = bi.bot_choose_action(instance, definition, "甲", random.Random(0))
+    assert tag in {"safe", "aggressive", "reckless"}
+
+
+def test_bot_choose_action_returns_none_for_a_non_participant(definition):
+    instance = _active_battle(definition)
+    assert bi.bot_choose_action(instance, definition, "幽靈", random.Random(0)) is None
+
+
+def test_bot_choose_action_prefers_lower_risk_options_on_average(definition):
+    instance = _active_battle(definition)
+    picks = [bi.bot_choose_action(instance, definition, "甲", random.Random(i)) for i in range(200)]
+    counts = {tag: picks.count(tag) for tag in ("safe", "aggressive", "reckless")}
+    assert counts["safe"] > counts["reckless"]  # safe 的氣血損耗最低，應該被選到最多次
 
 
 # ── LLM 敘事潤色（可選，失敗/無 client 就退回系統訊息）────────────

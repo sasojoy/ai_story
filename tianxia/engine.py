@@ -7,15 +7,16 @@ sanguo-companions 合併大幅重寫：拿掉 battle.py 的 3v3 全自動戰鬥�
 from __future__ import annotations
 
 import random
+import time
 
 from pydantic import BaseModel
 
-from . import atlas, battlelog, companion_agent, flavor, journal, roster, skillview, team
+from . import atlas, battle_instance, battlelog, companion_agent, encounter, flavor, journal, roster, skillview, team
 from .events import choice_label, has_events_here, pick_event, visible_choices
 from .guide import note_action, quest_text, tutorial_intro
 from .journal import LOG_BREAK, Draft
 from .mapview import render_map, render_minimap
-from .models import Choice, Content, Effect, Event, Location, Squad
+from .models import BattleDef, Choice, Content, Effect, Event, Location, Squad
 from .ollama_client import OllamaClient
 from .rules import apply_effect, change_trend, check_who, roll_check
 from .state import GameState, JournalEntry, Rumor, new_game_state
@@ -197,6 +198,9 @@ class Game:
 
     def options(self, odds: bool = True) -> list[Option]:
         s, c = self.state, self.content
+        battle_status = self._battle_status()
+        if battle_status is not None:
+            return self._battle_options(*battle_status)
         if s.world.ended:
             return [Option(id="season:new", label="開啟新的賽季")]
         if s.pending_event:
@@ -265,6 +269,8 @@ class Game:
             msgs = self.new_season() + check_thresholds(self.state, self.content, self.world, self.client)
             self._save_season()
             return self._log(msgs)
+        if kind == "battle":
+            return self._log(self._battle_choose(arg))
         self._draft = Draft(self._action_title(kind, arg))
         try:
             if kind == "act":
@@ -361,6 +367,120 @@ class Game:
         return companion_agent.continue_dialogue(
             self.client, self.state, self.content, self.world, companion_id, int(arg), self.rng
         )
+
+    # ── 全服即時多人戰鬥（設計討論：集結選陣營→逐幕逐回合鎖步）──────────
+
+    def _battle_power(self) -> float:
+        """玩家自己目前的武學威力快照，加入戰鬥時存一份進 BattleParticipant.power，
+        之後戰鬥結算的威力抵銷只讀這份快照，不會、也不能臨時去查任何人的角色資料
+        （見 battle_instance.py::BattleParticipant 的欄位註解）。"""
+        arts = team.team_arts(self.state, self.content, self.world)
+        return encounter.member_power(self.state.player.member, arts)
+
+    def _battle_neili_cap(self) -> float:
+        _, cap = team.member_neili(self.content, self.state.player.member)
+        return cap
+
+    def _battle_status(self, tick: bool = True) -> tuple[battle_instance.BattleInstance, BattleDef] | None:
+        """目前這場全服戰鬥的最新狀態。tick=True 時順便處理所有「只要時間到了就該自動
+        發生」的事（集結逾時自動分配、回合逾時代選保守行動、機器人立刻選、全員選完就
+        結算）——不管是誰的畫面刷新到這裡，都會把戰鬥狀態追趕到跟現實時間一致，誰先連線
+        誰先看到，別人下次連線也會看到同一份結果（跟 _reconcile_season 同一套精神）。
+        tick=False 只單純讀取，不會推進任何東西——options()/scene_text() 同一次畫面刷新
+        都會各呼叫一次這個方法，只讓其中一個（options()）真的推進，避免同一次刷新裡
+        推進兩次（純機器人對戰、沒有人類卡著等行動時，兩次推進會在一次畫面刷新裡偷跑
+        兩回合，而不是一回合）。沒有進行中的戰鬥，或戰鬥已經結束，回傳 None。"""
+        raw = self.world.get_battle()
+        if raw is None:
+            return None
+        definition = self.content.battles.get(raw.battle_id)
+        if definition is None:
+            return None
+        if not tick:
+            return None if raw.phase == "ended" else (raw, definition)
+        now = time.time()
+        battle = self.world.mutate_battle(lambda b: self._tick_battle(b, definition, now)) or raw
+        if battle.phase == "ended":
+            return None
+        return battle, definition
+
+    def _tick_battle(self, battle: battle_instance.BattleInstance, definition: BattleDef, now: float) -> None:
+        if battle.phase == "muster" and now >= battle.muster_deadline_real:
+            battle_instance.close_muster(battle, definition, self.rng, now)
+        if battle.phase != "active":
+            return
+        for p in list(battle.participants.values()):
+            if p.is_bot and not p.eliminated and p.name not in battle.round.pending_actions:
+                tag = battle_instance.bot_choose_action(battle, definition, p.name, self.rng)
+                if tag:
+                    battle_instance.submit_action(battle, p.name, tag)
+        if now - battle.round.opened_real >= definition.round_seconds and not battle_instance.round_is_complete(battle):
+            default_tag = min(definition.action_tags, key=lambda t: definition.action_tags[t].neili_damage)
+            battle_instance.fill_timed_out_actions(battle, definition, default_tag)
+        if battle_instance.round_is_complete(battle):
+            msgs = battle_instance.resolve_round(battle, definition, self.rng, now=now)
+            narration = battle_instance.narrate_round(self.client, definition, battle, msgs)
+            if narration:
+                battle.narrative_log.append(narration)
+
+    def _battle_scene_text(self, battle: battle_instance.BattleInstance, definition: BattleDef) -> str:
+        header = f"**{definition.name}**"
+        if battle.phase == "muster":
+            remaining = max(0, int(battle.muster_deadline_real - time.time()))
+            return f"{header}\n\n集結中，還剩 {remaining // 60} 分 {remaining % 60} 秒選擇陣營。"
+        act = battle_instance.current_act(battle, definition)
+        lines = [header, f"【{act.title}】{act.text}"] + battle.narrative_log[-5:]
+        p = battle.participants.get(self.state.player.name)
+        if p is not None and p.eliminated:
+            lines.append("（你已經倒下，只能在一旁觀戰。）")
+        return "\n\n".join(lines)
+
+    def _battle_options(self, battle: battle_instance.BattleInstance, definition: BattleDef) -> list[Option]:
+        name = self.state.player.name
+        if battle.phase == "muster":
+            return [Option(id=f"battle:join:{f.id}", label=f"加入【{f.name}】") for f in definition.factions]
+        p = battle.participants.get(name)
+        if p is None:
+            return [Option(id="battle:join_late", label="加入戰局")]
+        if p.eliminated:
+            return [Option(id="battle:spectate", label="（觀戰中，無法行動）", enabled=False)]
+        if name in battle.round.pending_actions:
+            return [Option(id="battle:waiting", label="（已選擇，等待其他人……）", enabled=False)]
+        return [
+            Option(id=f"battle:act:{o.tag}", label=o.text)
+            for o in battle_instance.options_for(battle, definition, name)
+        ]
+
+    def _battle_choose(self, arg: str) -> list[str]:
+        """choose() 分派進這裡之前，已經透過自己開頭那次 self.options(odds=False) 呼叫
+        推進過一次了（options() 內部會 tick），這裡用 tick=False 只讀，避免同一次請求裡
+        重複推進兩次。"""
+        status = self._battle_status(tick=False)
+        if status is None:
+            return ["（此刻無法這麼做。）"]
+        _, definition = status
+        name = self.state.player.name
+        kind, _, rest = arg.partition(":")
+        if kind == "join":
+            self.world.mutate_battle(
+                lambda b: battle_instance.join_faction(b, name, rest, self._battle_neili_cap(), self._battle_power())
+            )
+            return ["你加入了這場戰局。"]
+        if kind == "join_late":
+            self.world.mutate_battle(
+                lambda b: battle_instance.auto_assign_latecomer(
+                    b, definition, name, self._battle_neili_cap(), self.rng, self._battle_power(),
+                )
+            )
+            return ["你加入了戰局，這回合先觀戰，下回合開始可以行動。"]
+        if kind == "act":
+            self.world.mutate_battle(lambda b: self._submit_and_resolve(b, definition, name, rest))
+            return []
+        return ["（此刻無法這麼做。）"]
+
+    def _submit_and_resolve(self, battle: battle_instance.BattleInstance, definition: BattleDef, name: str, tag: str) -> None:
+        battle_instance.submit_action(battle, name, tag)
+        self._tick_battle(battle, definition, time.time())
 
     def _recruit(self) -> list[str]:
         target = self._recruit_target()
@@ -743,6 +863,9 @@ class Game:
 
     def scene_text(self) -> str:
         s, c = self.state, self.content
+        battle_status = self._battle_status(tick=False)
+        if battle_status is not None:
+            return self._battle_scene_text(*battle_status)
         if s.world.ended:
             return f"## {s.world.ending_title}\n\n{s.world.ending_text}"
         if s.pending_event:

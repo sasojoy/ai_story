@@ -4,8 +4,8 @@ from unittest import mock
 import pytest
 
 from conftest import FixedRandom
-from tianxia import companion_agent, flavor, rules
-from tianxia.engine import Game
+from tianxia import battle_instance, companion_agent, flavor, rules
+from tianxia.engine import Game, Option
 from tianxia.state import GameState
 from tianxia.world_state import WorldStateStore
 
@@ -657,3 +657,112 @@ def test_travel_is_refused_with_a_reason(game):
     assert game.travel("lake") == ["（體力不足，第一站要 5 體力。）"]
     assert game.state.player.location == "town" and game.state.player.stamina == 3
     assert len(game.state.journal) == before
+
+
+# ── 全服即時多人戰鬥（設計討論：集結選陣營→逐幕逐回合鎖步）──────────
+
+
+def _install_battle_def(content):
+    from tianxia.models import (
+        BattleAct, BattleActionEffect, BattleAdvanceWhen, BattleDef, BattleFaction, BattleOption, BattleOutcome,
+    )
+
+    definition = BattleDef(
+        id="t1", name="測試決戰",
+        factions=[BattleFaction(id="guan", name="官軍"), BattleFaction(id="huang", name="黃巾")],
+        acts=[
+            BattleAct(
+                id="a1", title="初探", text="雙方試探。", goal="推動戰局",
+                options=[BattleOption(text="穩紮穩打", tag="safe"), BattleOption(text="全力進攻", tag="aggressive")],
+                advance_when=BattleAdvanceWhen(trend_min=90),
+            ),
+        ],
+        action_tags={
+            "safe": BattleActionEffect(trend_delta=1, neili_damage=5),
+            "aggressive": BattleActionEffect(trend_delta=5, neili_damage=20),
+        },
+        outcomes=[BattleOutcome(faction="guan", title="官軍大勝", text="官軍獲勝。")],
+        muster_seconds=600, round_seconds=120,
+    )
+    content.battles[definition.id] = definition
+    return definition
+
+
+def test_no_active_battle_leaves_normal_gameplay_untouched(content, game):
+    assert game._battle_status() is None
+    assert ids(game)[0] == "act:practice"
+
+
+def test_an_active_muster_shows_faction_join_options(content, game):
+    definition = _install_battle_def(content)
+    game.world.start_battle(definition, now=1000.0)
+    with mock.patch("tianxia.engine.time.time", return_value=1000.0):
+        assert ids(game) == ["battle:join:guan", "battle:join:huang"]
+        assert "測試決戰" in game.scene_text()
+
+
+def test_joining_a_faction_during_muster(content, game):
+    definition = _install_battle_def(content)
+    game.world.start_battle(definition, now=1000.0)
+    with mock.patch("tianxia.engine.time.time", return_value=1000.0):
+        game.choose("battle:join:guan")
+    assert game.world.get_battle().participants["沈浪"].faction == "guan"
+
+
+def test_muster_auto_closes_once_the_deadline_passes(content, game):
+    definition = _install_battle_def(content)
+    game.world.start_battle(definition, now=1000.0)
+    with mock.patch("tianxia.engine.time.time", return_value=1000.0):
+        game.choose("battle:join:guan")
+    with mock.patch("tianxia.engine.time.time", return_value=1000.0 + definition.muster_seconds + 1):
+        status = game._battle_status()
+    assert status is not None and status[0].phase == "active"
+
+
+def test_submitting_an_action_and_a_bot_auto_fills_then_the_round_resolves(content, game):
+    definition = _install_battle_def(content)
+    game.world.start_battle(definition, now=0.0)
+    with mock.patch("tianxia.engine.time.time", return_value=0.0):
+        game.choose("battle:join:guan")
+        game.world.mutate_battle(
+            lambda b: battle_instance.join_faction(b, "機器人", "huang", neili_cap=100.0, is_bot=True)
+        )
+    after_muster = definition.muster_seconds + 1
+    with mock.patch("tianxia.engine.time.time", return_value=after_muster):
+        game._battle_status()  # 推進一次，確保集結已關閉、進入 active
+        game.choose("battle:act:safe")  # 人類送出，機器人在同一次 tick 裡自動補上，回合應該已經結算
+    battle = game.world.get_battle()
+    assert battle.trend != 50  # 已經結算過，trend 被推動了
+    assert battle.round.pending_actions == {}  # 回合已經重置
+
+
+def test_an_eliminated_participant_sees_a_spectate_only_option(content, game):
+    definition = _install_battle_def(content)
+    game.world.start_battle(definition, now=0.0)
+    with mock.patch("tianxia.engine.time.time", return_value=0.0):
+        game.choose("battle:join:guan")
+    after_muster = definition.muster_seconds + 1
+    with mock.patch("tianxia.engine.time.time", return_value=after_muster):
+        game._battle_status()  # 讓集結自動關閉
+    game.world.mutate_battle(lambda b: setattr(b.participants["沈浪"], "eliminated", True))
+    with mock.patch("tianxia.engine.time.time", return_value=after_muster):
+        opts = game.options()
+    assert opts == [Option(id="battle:spectate", label="（觀戰中，無法行動）", enabled=False)]
+
+
+def test_a_latecomer_can_join_an_already_active_battle(content, game):
+    definition = _install_battle_def(content)
+    game.world.start_battle(definition, now=0.0)
+    with mock.patch("tianxia.engine.time.time", return_value=definition.muster_seconds + 1):
+        game._battle_status()  # 讓集結自動關閉，模擬戰鬥已經開打
+        assert ids(game) == ["battle:join_late"]
+        game.choose("battle:join_late")
+    assert "沈浪" in game.world.get_battle().participants
+
+
+def test_battle_ending_falls_back_to_normal_gameplay_on_the_next_render(content, game):
+    definition = _install_battle_def(content)
+    game.world.start_battle(definition, now=0.0)
+    game.world.mutate_battle(lambda b: setattr(b, "phase", "ended"))
+    assert game._battle_status() is None
+    assert ids(game)[0] == "act:practice"

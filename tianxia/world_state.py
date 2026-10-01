@@ -23,8 +23,9 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
+from .battle_instance import BattleInstance
 from .martial_arts import MartialArt
-from .models import Content
+from .models import BattleDef, Content
 from .state import WorldState
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -77,6 +78,10 @@ class SharedWorldState(BaseModel):
     season: WorldState = Field(default_factory=WorldState)
     season_number: int = 1
     season_last_real: float | None = None
+
+    # ── 全服即時多人戰鬥（設計討論：集結選陣營→逐幕逐回合鎖步）────────
+    # 同一時間最多一場（先簡化成這樣；真的需要同時好幾場再擴充成 list/dict）。
+    active_battle: BattleInstance | None = None
 
 
 @contextlib.contextmanager
@@ -299,6 +304,51 @@ class WorldStateStore:
         if elapsed <= 0:
             return []
         return world_module.advance_season(self, content, elapsed, rng)
+
+    # ── 全服即時多人戰鬥 ──────────────────────────────────
+
+    def get_battle(self) -> BattleInstance | None:
+        return self.read().active_battle
+
+    def mutate_battle(self, fn) -> BattleInstance | None:
+        """在鎖保護下讀取目前這場戰鬥→套用 fn(battle)→寫回；戰鬥不存在時 fn 不會被呼叫，
+        直接回傳 None（呼叫端自己決定要不要把「沒有進行中的戰鬥」當錯誤處理）。"""
+        result: dict[str, BattleInstance | None] = {"battle": None}
+
+        def _apply(state: SharedWorldState) -> None:
+            if state.active_battle is None:
+                return
+            fn(state.active_battle)
+            result["battle"] = state.active_battle
+
+        self.mutate(_apply)
+        return result["battle"]
+
+    def start_battle(self, definition: BattleDef, now: float) -> BattleInstance:
+        """開一場新戰鬥；已經有一場還沒結束的戰鬥時，原封不動回傳那一場（鎖內判斷，
+        避免兩個觸發點前後腳都想開戰，結果互相蓋掉彼此的集結名單）。"""
+        from .battle_instance import start_muster
+
+        result: dict[str, BattleInstance] = {}
+
+        def _apply(state: SharedWorldState) -> None:
+            if state.active_battle is not None and state.active_battle.phase != "ended":
+                result["battle"] = state.active_battle
+                return
+            state.active_battle = start_muster(definition, now)
+            result["battle"] = state.active_battle
+
+        self.mutate(_apply)
+        return result["battle"]
+
+    def clear_battle(self) -> None:
+        """戰鬥結束、大家都看過結果之後清掉，讓下一場能夠開始（不清的話 start_battle
+        會因為「還有一場 phase != ended」卡住——但 ended 的戰鬥本來就不會卡住
+        start_battle，這裡單純是不想讓共用狀態一直留著打完的舊戰鬥）。"""
+        def _apply(state: SharedWorldState) -> None:
+            state.active_battle = None
+
+        self.mutate(_apply)
 
     # ── 同伴進度與招募 ────────────────────────────────────
 

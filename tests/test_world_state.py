@@ -130,6 +130,58 @@ def test_catch_up_season_advances_the_shared_clock_by_elapsed_real_time(store, c
     assert store.get_season().time == 7200 * content.config.time_scale
 
 
+def _battle_definition():
+    from tianxia.models import (
+        BattleAct, BattleActionEffect, BattleAdvanceWhen, BattleDef, BattleFaction, BattleOption, BattleOutcome,
+    )
+
+    return BattleDef(
+        id="b1", name="測試戰", factions=[BattleFaction(id="a", name="甲方"), BattleFaction(id="b", name="乙方")],
+        acts=[BattleAct(id="a1", title="開戰", text="開戰了。", goal="打贏", options=[BattleOption(text="進攻", tag="go")])],
+        action_tags={"go": BattleActionEffect(trend_delta=1, neili_damage=5)},
+        outcomes=[BattleOutcome(faction="a", title="甲方勝", text="甲方贏了。")],
+    )
+
+
+def test_get_battle_is_none_before_any_battle_starts(store):
+    assert store.get_battle() is None
+
+
+def test_start_battle_creates_a_fresh_battle(store):
+    battle = store.start_battle(_battle_definition(), now=0.0)
+    assert battle.phase == "muster"
+    assert store.get_battle().battle_id == "b1"
+
+
+def test_start_battle_is_a_no_op_while_one_is_already_running(store):
+    first = store.start_battle(_battle_definition(), now=0.0)
+    again = store.start_battle(_battle_definition(), now=1000.0)
+    assert again.muster_deadline_real == first.muster_deadline_real  # 沒有被重新開一場蓋掉
+
+
+def test_start_battle_starts_a_new_one_once_the_previous_has_ended(store):
+    store.start_battle(_battle_definition(), now=0.0)
+    store.mutate_battle(lambda b: setattr(b, "phase", "ended"))
+    again = store.start_battle(_battle_definition(), now=500.0)
+    assert again.phase == "muster" and again.muster_deadline_real == 500.0 + 600.0
+
+
+def test_mutate_battle_returns_none_without_an_active_battle(store):
+    assert store.mutate_battle(lambda b: None) is None
+
+
+def test_mutate_battle_persists_changes(store):
+    store.start_battle(_battle_definition(), now=0.0)
+    store.mutate_battle(lambda b: setattr(b, "trend", 77))
+    assert store.get_battle().trend == 77
+
+
+def test_clear_battle_removes_it(store):
+    store.start_battle(_battle_definition(), now=0.0)
+    store.clear_battle()
+    assert store.get_battle() is None
+
+
 def test_catch_up_season_only_advances_once_no_matter_who_calls_it(store, content):
     """不管幾個「玩家」在同一個現實時間點各自呼叫一次，世界時間只走一份，不會重複累加。"""
     rng = __import__("random").Random(0)

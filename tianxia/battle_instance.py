@@ -4,10 +4,10 @@
 數字；LLM 只負責在固定骨架（BattleDef.acts）裡，依這一回合大家選擇的傾向生成一段敘事
 潤色，骨架本身一定會照查表結果往下走，不會被 LLM 帶偏。
 
-這裡只有純粹的資料模型跟引擎函式，不碰 UI、不碰共用儲存的存讀——那是下一步的事（先把
-骨架用假內容測通，再決定要怎麼接進 WorldStateStore／Gradio UI，見設計討論）。回合「鎖步」
-的意思是：每個參戰者各自送出一個行動，全員都送出（或逾時被系統代選）才會真正結算那一
-回合，由誰送出最後一個行動就由誰的這次呼叫觸發結算，不需要背景常駐程式。
+這裡是純粹的資料模型跟引擎函式，不碰共用儲存的存讀鎖（那是 world_state.py::
+get_battle/mutate_battle/start_battle 的事）、不碰 Gradio UI（那是 engine.py/app.py 的事）。
+回合「鎖步」的意思是：每個參戰者各自送出一個行動，全員都送出（或逾時被系統代選）才會
+真正結算那一回合，由誰送出最後一個行動就由誰的這次呼叫觸發結算，不需要背景常駐程式。
 """
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from .models import BattleAct, BattleDef, BattleOption, BattleOutcome
+from .models import BattleAct, BattleActionEffect, BattleDef, BattleOption, BattleOutcome
 from .ollama_client import OllamaClient
 
 Phase = Literal["muster", "active", "ended"]
@@ -30,6 +30,9 @@ class BattleParticipant(BaseModel):
     # 平常的氣血，這是刻意的設計邊界（見設計討論沒有明講時的預設假設，之後如果想要「這場
     # 戰鬥真的會傷到我的角色」，再回頭改這裡）。
     neili_cap: float
+    power: float = 0.0  # 加入時快照的武學威力（給 mitigated_by_power 用，見 resolve_round）——
+    # 戰局結算只看共用戰鬥狀態本身，不會、也不能回頭去讀別的玩家自己存檔裡的角色資料，
+    # 所以威力要在加入當下、由那個玩家自己的 Game 執行個體算好存進來。
     eliminated: bool = False
     is_bot: bool = False
 
@@ -59,17 +62,17 @@ def start_muster(definition: BattleDef, now: float) -> BattleInstance:
 
 
 def join_faction(
-    instance: BattleInstance, name: str, faction: str, neili_cap: float, is_bot: bool = False,
+    instance: BattleInstance, name: str, faction: str, neili_cap: float, power: float = 0.0, is_bot: bool = False,
 ) -> None:
     """集結期選陣營；已經選過的人再選一次視為改選（還沒進入 active 都還能換）。"""
     if instance.phase != "muster":
         return
     instance.participants[name] = BattleParticipant(
-        name=name, faction=faction, neili=neili_cap, neili_cap=neili_cap, is_bot=is_bot,
+        name=name, faction=faction, neili=neili_cap, neili_cap=neili_cap, power=power, is_bot=is_bot,
     )
 
 
-def close_muster(instance: BattleInstance, definition: BattleDef, rng: random.Random) -> None:
+def close_muster(instance: BattleInstance, definition: BattleDef, rng: random.Random, now: float = 0.0) -> None:
     """集結期結束：還沒選陣營的人（名字已經在 participants 裡但沒指定，或完全沒動作、
     呼叫端另外傳進來的在線名單）由這個函式統一處理——這裡只負責「把已經報名但沒選邊的人
     隨機分配」，呼叫端自己決定要不要把從沒選過的在線玩家也塞進 participants。"""
@@ -80,20 +83,20 @@ def close_muster(instance: BattleInstance, definition: BattleDef, rng: random.Ra
         if p.faction not in faction_ids:
             p.faction = rng.choice(faction_ids)
     instance.phase = "active"
-    instance.round = BattleRound(opened_real=0.0)
+    instance.round = BattleRound(opened_real=now)
     instance.narrative_log.append(f"【{definition.name}】集結完畢，戰鬥開始！")
 
 
 def auto_assign_latecomer(
     instance: BattleInstance, definition: BattleDef, name: str, neili_cap: float, rng: random.Random,
-    is_bot: bool = False,
+    power: float = 0.0, is_bot: bool = False,
 ) -> None:
     """集結期結束後才出現的人（包含機器人）：直接塞進人數較少的一方，維持陣營平衡。"""
     faction_ids = [f.id for f in definition.factions]
     counts = {fid: sum(1 for p in instance.participants.values() if p.faction == fid) for fid in faction_ids}
     faction = min(counts, key=lambda fid: (counts[fid], rng.random()))
     instance.participants[name] = BattleParticipant(
-        name=name, faction=faction, neili=neili_cap, neili_cap=neili_cap, is_bot=is_bot,
+        name=name, faction=faction, neili=neili_cap, neili_cap=neili_cap, power=power, is_bot=is_bot,
     )
 
 
@@ -143,14 +146,16 @@ def _power_mitigation(power: float | None) -> float:
     return min(0.6, power / 200)
 
 
-def resolve_round(
-    instance: BattleInstance, definition: BattleDef, rng: random.Random, power_of=lambda name: None,
-) -> list[str]:
+def resolve_round(instance: BattleInstance, definition: BattleDef, rng: random.Random, now: float = 0.0) -> list[str]:
     """結算一回合：依每個人選的 tag 查表推動戰局 trend、扣氣血，氣血歸零的人出局；
-    檢查目前幕的進幕條件，滿足就換下一幕；最後把回合狀態重置給下一回合用。power_of(name)
-    是個函式，回傳這個人當下的武學威力（給 mitigated_by_power 用），預設一律回傳 None
-    （不抵銷），呼叫端（engine.py）接進真正的角色資料時再換成真的查詢函式。回傳這回合發生
-    的事件訊息（系統判定的部分，不含 LLM 潤色——那是呼叫端另外接的，見 narrate_round）。"""
+    檢查目前幕的進幕條件，滿足就換下一幕；最後把回合狀態重置給下一回合用（opened_real
+    設成 now，給下一回合的逾時判斷當起點）。威力抵銷（mitigated_by_power）直接讀
+    BattleParticipant.power——那是加入戰鬥當下由各自的 Game 執行個體算好快照進來的
+    （見 BattleParticipant 的欄位註解），這裡不需要、也不能臨時去查任何人的角色資料。
+    回傳這回合發生的事件訊息（系統判定的部分，不含 LLM 潤色、也不會自己寫進
+    narrative_log——那兩件事都是呼叫端的事，見 narrate_round：呼叫端通常是先結算拿到
+    msgs，請 LLM 潤色成一段敘事，再把潤色後的文字（或潤色失敗時的 msgs 本身）加進
+    narrative_log，這裡不越俎代庖）。"""
     msgs: list[str] = []
     for name, tag in list(instance.round.pending_actions.items()):
         p = instance.participants.get(name)
@@ -162,7 +167,7 @@ def resolve_round(
         instance.trend = max(0, min(100, instance.trend + effect.trend_delta))
         damage = effect.neili_damage
         if effect.mitigated_by_power:
-            damage *= 1 - _power_mitigation(power_of(name))
+            damage *= 1 - _power_mitigation(p.power)
         p.neili = max(0.0, p.neili - damage)
         if p.neili <= 0 and not p.eliminated:
             p.eliminated = True
@@ -184,8 +189,7 @@ def resolve_round(
         instance.outcome_title, instance.outcome_text = outcome.title, outcome.text
         msgs.append(f"══ {outcome.title} ══")
         msgs.append(outcome.text)
-    instance.round = BattleRound(opened_real=0.0)
-    instance.narrative_log.extend(msgs)
+    instance.round = BattleRound(opened_real=now)
     return msgs
 
 
@@ -199,6 +203,19 @@ def _check_outcome(instance: BattleInstance, definition: BattleDef) -> BattleOut
         if (lo is None or instance.trend >= lo) and (hi is None or instance.trend <= hi):
             return outcome
     return None
+
+
+def bot_choose_action(instance: BattleInstance, definition: BattleDef, name: str, rng: random.Random) -> str | None:
+    """機器人這回合要選什麼：依選項的風險（action_tags 查到的氣血損耗）反向加權隨機選，
+    損耗愈低愈容易被選到，但不是完全不會選有風險的——這樣測試戰鬥用機器人湊場時行為
+    會有變化，不會每次都選同一個，也不會像真的 AI 一樣聰明判斷局勢（那不是這裡的目標，
+    設計討論原文：「不會全程 LLM 自由發展...大框架還是會進行下去」，機器人只是補位湊人數，
+    不需要聰明）。正式營運時要用機器人增加活躍感，也是同一套函式。"""
+    options = options_for(instance, definition, name)
+    if not options:
+        return None
+    weights = [1.0 / (definition.action_tags.get(o.tag, BattleActionEffect()).neili_damage + 1) for o in options]
+    return rng.choices(options, weights=weights, k=1)[0].tag
 
 
 def narrate_round(client: OllamaClient | None, definition: BattleDef, instance: BattleInstance, msgs: list[str]) -> str:
