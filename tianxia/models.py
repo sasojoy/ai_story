@@ -388,9 +388,13 @@ class BattleActionEffect(_Strict):
 
 
 class BattleOption(_Strict):
-    text: str
-    tag: str  # 對照 BattleDef.action_tags 的 key
+    text: str  # free_text=True 時這是提示語（顯示在輸入框旁），不是按鈕文字
+    tag: str  # 對照 BattleDef.action_tags 的 key——即使是 free_text，機制效果還是查這張表，
+    # 不會因為玩家打了什麼字而改變數值（跟全專案一貫原則一樣：不信任 LLM 自己算數字）；
+    # 玩家自己打的字只會被餵給 LLM 當敘事潤色的素材（見 battle_instance.py::resolve_round）。
     faction: str | None = None  # 限定某一方才能選；None＝雙方都能選
+    free_text: bool = False  # True 時這個「選項」不是按鈕，是一個最多 20 字的自訂行動輸入框
+    # （設計討論：「魯莽」這類選項本來就該是玩家自己想出的招，不是從固定清單挑一個）
 
 
 class BattleAdvanceWhen(_Strict):

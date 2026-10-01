@@ -490,8 +490,48 @@ class Game:
             return [Option(id="battle:waiting", label="（已選擇，等待其他人……）", enabled=False)]
         return [
             Option(id=f"battle:act:{o.tag}", label=o.text)
-            for o in battle_instance.options_for(battle, definition, name)
+            for o in battle_instance.options_for(battle, definition, name) if not o.free_text
         ]
+
+    def battle_free_text_prompt(self) -> str | None:
+        """這回合是否有自訂行動的輸入框可以用，有的話回傳提示語（見 BattleOption.free_text
+        ——設計討論：魯莽這類選項該是玩家自己想出來的招，不是從清單挑一個）；沒有（不在
+        戰鬥中、集結期、已經出局、這回合已經選過）就回傳 None，app.py 用這個決定輸入框
+        要不要顯示。"""
+        status = self._battle_status(tick=False)
+        if status is None:
+            return None
+        battle, definition = status
+        name = self.state.player.name
+        p = battle.participants.get(name)
+        if battle.phase != "active" or p is None or p.eliminated or name in battle.round.pending_actions:
+            return None
+        option = next((o for o in battle_instance.options_for(battle, definition, name) if o.free_text), None)
+        return option.text if option else None
+
+    def submit_battle_custom_action(self, text: str) -> list[str]:
+        """自訂行動輸入框的送出：截到 20 字，查到這回合對應的 free_text 選項，機制效果
+        還是走它的 tag（跟按按鈕完全一樣的查表邏輯），玩家打的字只會被餵給 LLM 潤色。
+        這裡用 tick=True（不是 tick=False）——跟 _battle_choose() 不一樣，這個方法不是
+        透過 choose() 進來的，choose() 開頭那次 self.options(odds=False) 呼叫順便推進
+        過一次集結逾時/回合逾時的保護在這裡沒有發生過，這個方法是自己的入口，必須自己
+        負責先追趕一次，不然集結剛好逾時的那一刻送出的行動會在 submit_action() 裡被
+        「battle.phase 還是 muster」悄悄吃掉（見那次遇到的真實 bug）。"""
+        status = self._battle_status()
+        if status is None:
+            return ["（此刻無法這麼做。）"]
+        battle, definition = status
+        name = self.state.player.name
+        p = battle.participants.get(name)
+        if p is None or p.eliminated or name in battle.round.pending_actions:
+            return ["（此刻無法這麼做。）"]
+        option = next((o for o in battle_instance.options_for(battle, definition, name) if o.free_text), None)
+        if option is None:
+            return ["（此刻無法這麼做。）"]
+        text = text.strip()[:20]
+        if not text:
+            return ["（請先輸入你想做的事。）"]
+        return self._submit_battle_action(name, definition, option.tag, text)
 
     def _battle_choose(self, arg: str) -> list[str]:
         """choose() 分派進這裡之前，已經透過自己開頭那次 self.options(odds=False) 呼叫
@@ -516,20 +556,23 @@ class Game:
             )
             return ["你加入了戰局，這回合先觀戰，下回合開始可以行動。"]
         if kind == "act":
-            # 上面 self._battle_status(tick=False) 剛確認過戰鬥還在進行（還沒結束），
-            # 所以這裡如果結算完變成 ended，一定是這次送出的行動剛好造成的，不用再跟
-            # 「結算前是不是已經 ended」比對。
-            captured: dict[str, list[str]] = {"msgs": []}
-
-            def _apply(b: battle_instance.BattleInstance) -> None:
-                battle_instance.submit_action(b, name, rest)
-                captured["msgs"] = self._advance_battle_round(b, definition)
-
-            battle = self.world.mutate_battle(_apply)
-            if battle is not None and battle.phase == "ended":
-                self._apply_battle_outcome(battle)
-            return captured["msgs"] or ["你選擇了行動，等待其他人……"]
+            return self._submit_battle_action(name, definition, rest)
         return ["（此刻無法這麼做。）"]
+
+    def _submit_battle_action(self, name: str, definition: BattleDef, tag: str, text: str | None = None) -> list[str]:
+        """送出一個行動（按鈕選的固定 tag，或自訂輸入框的 free_text 選項）並嘗試結算這
+        回合；呼叫端已經確認過戰鬥還在進行（還沒結束），所以這裡如果結算完變成 ended，
+        一定是這次送出的行動剛好造成的，不用再跟「結算前是不是已經 ended」比對。"""
+        captured: dict[str, list[str]] = {"msgs": []}
+
+        def _apply(b: battle_instance.BattleInstance) -> None:
+            battle_instance.submit_action(b, name, tag, text)
+            captured["msgs"] = self._advance_battle_round(b, definition)
+
+        battle = self.world.mutate_battle(_apply)
+        if battle is not None and battle.phase == "ended":
+            self._apply_battle_outcome(battle)
+        return captured["msgs"] or ["你選擇了行動，等待其他人……"]
 
     def _recruit(self) -> list[str]:
         target = self._recruit_target()

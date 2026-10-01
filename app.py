@@ -34,7 +34,8 @@ SAVE_DIR = ROOT / "saves"
 MAX_BUTTONS = 10
 # game_state、任務區塊、狀態文字、場景文字、「剛剛」卡片（打完仗時是戰鬥卡片底下的補充）、小地圖、大勢、傳聞、江湖史、
 # 選項 id 清單、匿名勾選框、戰鬥卡片、「看完整戰報」按鈕、江湖紀錄、更早的紀錄、「展開更早的紀錄」摺疊區，
-# 再加上按鈕（MAX_BUTTONS）。
+# 再加上按鈕（MAX_BUTTONS），最後是全服戰鬥的自訂行動輸入框跟送出按鈕（見設計討論：
+# 「魯莽」這類選項該是玩家自己想出來的招，不是從固定清單挑一個）。
 LATEST_INDEX = 4
 MINIMAP_INDEX = 5
 CARD_INDEX = 11
@@ -42,7 +43,9 @@ CARD_BUTTON_INDEX = 12
 JOURNAL_INDEX = 13
 OLDER_INDEX = 14
 OLDER_ACCORDION_INDEX = 15
-N_OUTPUTS = 16 + MAX_BUTTONS
+BATTLE_TEXT_INDEX = 16 + MAX_BUTTONS
+BATTLE_TEXT_BUTTON_INDEX = 17 + MAX_BUTTONS
+N_OUTPUTS = 18 + MAX_BUTTONS
 RECENT_ROWS = 5  # 「剛剛」之後直接列出幾則
 OLDER_ROWS = 30  # 摺疊區裡最多幾則（存檔本來就只留 30 則）
 
@@ -85,6 +88,7 @@ def save_path(name: str) -> Path:
 def render(game: Game) -> list:
     """回傳順序必須和 build_demo() 裡的 outputs 一致。"""
     options = game.options()[:MAX_BUTTONS]
+    free_text_prompt = game.battle_free_text_prompt()
     buttons = []
     for i in range(MAX_BUTTONS):
         if i < len(options):
@@ -115,6 +119,8 @@ def render(game: Game) -> list:
         older,
         gr.update(visible=bool(older)),
         *buttons,
+        gr.update(value="", label=free_text_prompt or "", visible=free_text_prompt is not None),
+        gr.update(visible=free_text_prompt is not None),
     ]
 
 
@@ -181,6 +187,10 @@ def make_fast_forward_handler(hours: int):
 
 def seclude_handler(game, hours):
     return act(game, lambda g: g.seclude(int(hours)))
+
+
+def battle_text_handler(game, text):
+    return act(game, lambda g: g.submit_battle_custom_action(text))
 
 
 def open_menxia(game, person=None):
@@ -427,6 +437,13 @@ def build_demo() -> gr.Blocks:
                         minimap_html = gr.HTML()  # 預設的 js_on_load：點一下就觸發 click
                         mini_map_btn = gr.Button("大地圖", size="sm")
                 option_btns = [gr.Button(visible=False) for _ in range(MAX_BUTTONS)]
+                # 全服即時戰鬥的自訂行動（20 字內）：魯莽/放手一搏這類選項是玩家自己想出
+                # 來的招，不是固定清單裡選一個（見設計討論）；平常（不在這種回合）都隱藏。
+                with gr.Row():
+                    battle_text_tb = gr.Textbox(
+                        visible=False, show_label=True, scale=4, placeholder="輸入你想做的事（20字內）", max_lines=1,
+                    )
+                    battle_text_btn = gr.Button("送出", visible=False, scale=1, variant="primary")
                 # 「剛剛」：最新一則江湖紀錄的卡片；這次行動打了仗時改放戰鬥卡片，latest_html 則放卡片沒寫到的補充。
                 battle_card_md = gr.Markdown(visible=False, container=True)
                 latest_html = gr.HTML(css_template=JOURNAL_CSS)
@@ -514,6 +531,7 @@ def build_demo() -> gr.Blocks:
             game_state, quest_md, status_md, scene_md, latest_html, minimap_html, trends_md, rumors_md, chronicle_md,
             ids_state, anon_cb, battle_card_md, card_btn, journal_html, older_html, older_acc,
             *option_btns,
+            battle_text_tb, battle_text_btn,
         ]
         assert len(outputs) == N_OUTPUTS
         pages = [game_row, menxia_col, report_col, map_col]
@@ -527,6 +545,8 @@ def build_demo() -> gr.Blocks:
         for i, btn in enumerate(option_btns):
             btn.click(make_option_handler(i), inputs=[game_state, ids_state], outputs=outputs)
         seclude_btn.click(seclude_handler, inputs=[game_state, hours_sl], outputs=outputs)
+        battle_text_btn.click(battle_text_handler, inputs=[game_state, battle_text_tb], outputs=outputs)
+        battle_text_tb.submit(battle_text_handler, inputs=[game_state, battle_text_tb], outputs=outputs)
         anon_cb.input(anonymous_handler, inputs=[game_state, anon_cb], outputs=outputs)
         skip_tutorial_btn.click(skip_tutorial_handler, inputs=[game_state], outputs=outputs)
         for hours, btn in ff_btns.items():

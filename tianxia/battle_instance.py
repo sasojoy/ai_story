@@ -39,6 +39,7 @@ class BattleParticipant(BaseModel):
 
 class BattleRound(BaseModel):
     pending_actions: dict[str, str] = Field(default_factory=dict)  # 玩家名號 -> tag
+    custom_texts: dict[str, str] = Field(default_factory=dict)  # 玩家名號 -> 自訂行動文字（free_text 選項才有，機制效果不受影響，只給 LLM 潤色用）
     opened_real: float = 0.0  # 這回合開放選擇的時間點，逾時代選判斷用
 
 
@@ -122,12 +123,17 @@ def options_for(instance: BattleInstance, definition: BattleDef, name: str) -> l
     return [o for o in act.options if o.faction in (None, p.faction)]
 
 
-def submit_action(instance: BattleInstance, name: str, tag: str) -> None:
-    """記錄一個人這回合選的行動；已經陣亡或不在這場戰鬥裡的人送出無效。"""
+def submit_action(instance: BattleInstance, name: str, tag: str, text: str | None = None) -> None:
+    """記錄一個人這回合選的行動；已經陣亡或不在這場戰鬥裡的人送出無效。text 是
+    free_text 選項的自訂行動內容（見 BattleOption.free_text）——只會被餵給 LLM 當敘事
+    素材（見 resolve_round），不影響 tag 查到的機制效果，不管玩家打了什麼，數值結果都
+    一樣，只有故事寫法不同。"""
     p = instance.participants.get(name)
     if p is None or p.eliminated or instance.phase != "active":
         return
     instance.round.pending_actions[name] = tag
+    if text:
+        instance.round.custom_texts[name] = text
 
 
 def round_is_complete(instance: BattleInstance) -> bool:
@@ -169,6 +175,9 @@ def resolve_round(instance: BattleInstance, definition: BattleDef, rng: random.R
         effect = definition.action_tags.get(tag)
         if effect is None:
             continue
+        custom_text = instance.round.custom_texts.get(name)
+        if custom_text:
+            msgs.append(f"{name}放手一搏：「{custom_text}」")
         instance.trend = max(0, min(100, instance.trend + effect.trend_delta))
         damage = effect.neili_damage
         if effect.mitigated_by_power:

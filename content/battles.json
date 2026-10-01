@@ -26,10 +26,10 @@
         "options": [
           {"text": "穩守陣線", "tag": "guan_safe", "faction": "guan"},
           {"text": "率先衝鋒", "tag": "guan_aggressive", "faction": "guan"},
-          {"text": "獨自殺入敵陣", "tag": "guan_reckless", "faction": "guan"},
+          {"text": "放手一搏（20字內，寫下你想做的事）", "tag": "guan_reckless", "faction": "guan", "free_text": true},
           {"text": "死守營寨", "tag": "huang_safe", "faction": "huang"},
           {"text": "捨命衝殺", "tag": "huang_aggressive", "faction": "huang"},
-          {"text": "孤身闖陣搏殺", "tag": "huang_reckless", "faction": "huang"}
+          {"text": "放手一搏（20字內，寫下你想做的事）", "tag": "huang_reckless", "faction": "huang", "free_text": true}
         ],
         "advance_when": {"trend_outside": 20}
       },
@@ -41,10 +41,10 @@
         "options": [
           {"text": "穩紮穩打，徐圖進取", "tag": "guan_safe", "faction": "guan"},
           {"text": "全線壓上，猛攻不歇", "tag": "guan_aggressive", "faction": "guan"},
-          {"text": "單騎踏營，直取敵將", "tag": "guan_reckless", "faction": "guan"},
+          {"text": "孤注一擲（20字內，寫下你想做的事）", "tag": "guan_reckless", "faction": "guan", "free_text": true},
           {"text": "且戰且退，保存實力", "tag": "huang_safe", "faction": "huang"},
           {"text": "拼死反撲，誓死不退", "tag": "huang_aggressive", "faction": "huang"},
-          {"text": "孤注一擲，衝擊敵陣", "tag": "huang_reckless", "faction": "huang"}
+          {"text": "孤注一擲（20字內，寫下你想做的事）", "tag": "huang_reckless", "faction": "huang", "free_text": true}
         ],
         "advance_when": {"trend_outside": 35}
       },
@@ -56,10 +56,10 @@
         "options": [
           {"text": "穩住陣腳，等待戰機", "tag": "guan_safe", "faction": "guan"},
           {"text": "全軍壓上，畢其功於一役", "tag": "guan_aggressive", "faction": "guan"},
-          {"text": "親自陷陣，直取敵酋", "tag": "guan_reckless", "faction": "guan"},
+          {"text": "背水一戰（20字內，寫下你想做的事）", "tag": "guan_reckless", "faction": "guan", "free_text": true},
           {"text": "死守最後防線", "tag": "huang_safe", "faction": "huang"},
           {"text": "絕地反擊，背水一戰", "tag": "huang_aggressive", "faction": "huang"},
-          {"text": "捨身衝陣，求死一搏", "tag": "huang_reckless", "faction": "huang"}
+          {"text": "背水一戰（20字內，寫下你想做的事）", "tag": "huang_reckless", "faction": "huang", "free_text": true}
         ]
       }
     ],

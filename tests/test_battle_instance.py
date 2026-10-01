@@ -143,6 +143,29 @@ def test_resolve_round_pushes_the_trend_and_drains_neili(definition):
     assert instance.participants["乙"].neili == 95
 
 
+def test_submit_action_records_custom_text(definition):
+    instance = _active_battle(definition)
+    bi.submit_action(instance, "甲", "reckless", text="直取波才首級")
+    assert instance.round.custom_texts["甲"] == "直取波才首級"
+    assert instance.round.pending_actions["甲"] == "reckless"  # 機制效果還是走 tag 查表
+
+
+def test_submit_action_without_text_leaves_custom_texts_untouched(definition):
+    instance = _active_battle(definition)
+    bi.submit_action(instance, "甲", "safe")
+    assert "甲" not in instance.round.custom_texts
+
+
+def test_resolve_round_surfaces_custom_text_in_the_messages(definition):
+    """自訂文字不影響查表結果（威力/氣血照舊算），只會被包進訊息裡給 LLM 潤色用。"""
+    instance = _active_battle(definition)
+    bi.submit_action(instance, "甲", "aggressive", text="直取波才首級")
+    bi.submit_action(instance, "乙", "safe")
+    msgs = bi.resolve_round(instance, definition, random.Random(0))
+    assert any("直取波才首級" in m for m in msgs)
+    assert instance.participants["甲"].neili == 80  # 跟沒打字的 aggressive 扣血量一樣（100-20）
+
+
 def test_reckless_action_can_eliminate_a_participant_outright(definition):
     """單刀衝撞敵營這種框架內選項本身就設定成極高氣血損耗，一回合就能把人打到出局——
     不是程式特別判斷「這個行動很魯莽」，是內容本身的查表數字夠狠。"""

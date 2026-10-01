@@ -1,8 +1,10 @@
+from unittest import mock
+
 import gradio as gr
 import pytest
 
 import app
-from tianxia import roster
+from tianxia import battle_instance, roster
 from tianxia.engine import Game
 from tianxia.save import save_game
 
@@ -344,6 +346,48 @@ def test_start_opens_the_main_page(save_dir):
     assert start_col_update["visible"] is False
     pages = out[app.N_OUTPUTS + 1:]
     assert [p["visible"] for p in pages] == [name == "main" for name in app.PAGES]
+
+
+# ── 全服即時戰鬥：自訂行動輸入框（設計討論：魯莽該是玩家自己想出來的招）──────────
+
+
+def test_battle_textbox_is_hidden_outside_a_battle(game):
+    out = app.render(game)
+    assert out[app.BATTLE_TEXT_INDEX]["visible"] is False
+    assert out[app.BATTLE_TEXT_BUTTON_INDEX]["visible"] is False
+
+
+def test_battle_textbox_shows_the_prompt_once_free_text_is_available(game):
+    definition = app.CONTENT.battles["huangjin_showdown"]
+    game.world.start_battle(definition, now=0.0)
+    with mock.patch("tianxia.engine.time.time", return_value=0.0):
+        game.choose("battle:join:guan")
+    after_muster = definition.muster_seconds + 1
+    with mock.patch("tianxia.engine.time.time", return_value=after_muster):
+        out = app.render(game)
+    assert out[app.BATTLE_TEXT_INDEX]["visible"] is True
+    assert out[app.BATTLE_TEXT_INDEX]["label"] == game.battle_free_text_prompt()
+    assert out[app.BATTLE_TEXT_BUTTON_INDEX]["visible"] is True
+
+
+def test_battle_text_handler_submits_the_custom_action(game, save_dir):
+    definition = app.CONTENT.battles["huangjin_showdown"]
+    game.world.start_battle(definition, now=0.0)
+    with mock.patch("tianxia.engine.time.time", return_value=0.0):
+        game.choose("battle:join:guan")
+        game.world.mutate_battle(
+            lambda b: battle_instance.join_faction(b, "機器人", "huang", neili_cap=320.0, is_bot=True)
+        )
+    after_muster = definition.muster_seconds + 1
+    with mock.patch("tianxia.engine.time.time", return_value=after_muster):
+        out = app.battle_text_handler(game, "直取波才首級")
+    assert len(out) == app.N_OUTPUTS
+    battle = game.world.get_battle()
+    assert any("直取波才首級" in line for line in battle.narrative_log)
+
+
+def test_battle_text_handler_with_no_game_skips():
+    assert app.battle_text_handler(None, "test") == [gr.skip()] * app.N_OUTPUTS
 
 
 # ── build_demo ────────────────────────────────────────────

@@ -821,3 +821,137 @@ def test_battle_ending_falls_back_to_normal_gameplay_on_the_next_render(content,
     game.world.mutate_battle(lambda b: setattr(b, "phase", "ended"))
     assert game._battle_status() is None
     assert ids(game)[0] == "act:practice"
+
+
+# ── 自訂行動輸入框（設計討論：魯莽該是玩家自己想出來的招，不是固定選單）────────
+
+
+def _install_battle_def_with_free_text(content):
+    from tianxia.models import (
+        BattleAct, BattleActionEffect, BattleDef, BattleFaction, BattleOption, BattleOutcome,
+    )
+
+    definition = BattleDef(
+        id="t2", name="測試決戰（自訂行動）",
+        factions=[BattleFaction(id="guan", name="官軍"), BattleFaction(id="huang", name="黃巾")],
+        acts=[
+            BattleAct(
+                id="a1", title="初探", text="雙方試探。", goal="推動戰局",
+                options=[
+                    BattleOption(text="穩紮穩打", tag="safe", faction="guan"),
+                    BattleOption(text="放手一搏（20字內）", tag="reckless", faction="guan", free_text=True),
+                    BattleOption(text="死守營寨", tag="huang_safe", faction="huang"),
+                ],
+            ),
+        ],
+        action_tags={
+            "safe": BattleActionEffect(trend_delta=1, neili_damage=5),
+            "reckless": BattleActionEffect(trend_delta=10, neili_damage=50),
+            "huang_safe": BattleActionEffect(trend_delta=-1, neili_damage=5),
+        },
+        outcomes=[BattleOutcome(faction="guan", title="官軍大勝", text="官軍獲勝。")],
+        muster_seconds=600, round_seconds=120,
+    )
+    content.battles[definition.id] = definition
+    return definition
+
+
+def _join_and_open(content, game, definition):
+    game.world.start_battle(definition, now=0.0)
+    with mock.patch("tianxia.engine.time.time", return_value=0.0):
+        game.choose("battle:join:guan")
+        game.world.mutate_battle(
+            lambda b: battle_instance.join_faction(b, "機器人", "huang", neili_cap=100.0, is_bot=True)
+        )
+    after_muster = definition.muster_seconds + 1
+    with mock.patch("tianxia.engine.time.time", return_value=after_muster):
+        game._battle_status()
+    return after_muster
+
+
+def test_free_text_option_is_excluded_from_the_button_list(content, game):
+    definition = _install_battle_def_with_free_text(content)
+    after_muster = _join_and_open(content, game, definition)
+    with mock.patch("tianxia.engine.time.time", return_value=after_muster):
+        assert [o.label for o in game.options()] == ["穩紮穩打"]  # 自訂行動不是按鈕
+
+
+def test_battle_free_text_prompt_shows_when_available(content, game):
+    definition = _install_battle_def_with_free_text(content)
+    after_muster = _join_and_open(content, game, definition)
+    with mock.patch("tianxia.engine.time.time", return_value=after_muster):
+        assert game.battle_free_text_prompt() == "放手一搏（20字內）"
+
+
+def test_battle_free_text_prompt_is_none_outside_battle(content, game):
+    assert game.battle_free_text_prompt() is None
+
+
+def test_battle_free_text_prompt_is_none_after_submitting(content, game):
+    definition = _install_battle_def_with_free_text(content)
+    after_muster = _join_and_open(content, game, definition)
+    with mock.patch("tianxia.engine.time.time", return_value=after_muster):
+        game.submit_battle_custom_action("直取波才首級")
+        assert game.battle_free_text_prompt() is None
+
+
+def test_submit_battle_custom_action_truncates_to_20_characters(content, game):
+    """這場測試戰鬥只有一幕、保底結果沒有數值門檻，機器人補位後這回合會立刻結算（round
+    也會跟著重置），所以改檢查 narrative_log（結算後仍然保留）而不是 round.custom_texts
+    （結算後已經清空）。"""
+    definition = _install_battle_def_with_free_text(content)
+    after_muster = _join_and_open(content, game, definition)
+    long_text = "一二三四五六七八九十" * 3  # 30 字
+    with mock.patch("tianxia.engine.time.time", return_value=after_muster):
+        game.submit_battle_custom_action(long_text)
+    battle = game.world.get_battle()
+    assert any(long_text[:20] in line for line in battle.narrative_log)
+    assert not any(long_text in line for line in battle.narrative_log)  # 完整 30 字版本不該出現
+
+
+def test_submit_battle_custom_action_rejects_empty_input(content, game):
+    definition = _install_battle_def_with_free_text(content)
+    after_muster = _join_and_open(content, game, definition)
+    with mock.patch("tianxia.engine.time.time", return_value=after_muster):
+        msgs = game.submit_battle_custom_action("   ")
+    assert msgs == ["（請先輸入你想做的事。）"]
+    assert "沈浪" not in game.world.get_battle().round.pending_actions
+
+
+def test_submit_battle_custom_action_outside_battle_is_a_no_op(content, game):
+    assert game.submit_battle_custom_action("test") == ["（此刻無法這麼做。）"]
+
+
+def test_submit_battle_custom_action_works_even_as_the_very_first_call_after_muster_overruns(content, game):
+    """自訂行動輸入框不是透過 choose() 進來的，沒有 choose() 開頭那次 self.options()
+    順便推進過一次的保護——真的抓到過的 bug：如果這是集結逾時後的第一個請求，
+    submit_battle_custom_action() 自己沒有先追趕，battle_instance.submit_action()
+    內部看到 battle.phase 還是 "muster" 會悄悄把這次送出的行動吃掉，玩家完全不知道
+    自己其實白打了一輪字。"""
+    definition = _install_battle_def_with_free_text(content)
+    game.world.start_battle(definition, now=0.0)
+    with mock.patch("tianxia.engine.time.time", return_value=0.0):
+        game.choose("battle:join:guan")
+        game.world.mutate_battle(
+            lambda b: battle_instance.join_faction(b, "機器人", "huang", neili_cap=100.0, is_bot=True)
+        )
+    after_muster = definition.muster_seconds + 1
+    with mock.patch("tianxia.engine.time.time", return_value=after_muster):
+        # 注意：這裡故意不先呼叫 game.options()/game._battle_status() 暖身，
+        # 直接送出自訂行動，模擬「這是逾時後第一個進來的請求」。
+        msgs = game.submit_battle_custom_action("直取波才首級")
+    assert msgs != ["（此刻無法這麼做。）"]
+    battle = game.world.get_battle()
+    assert any("直取波才首級" in line for line in battle.narrative_log)
+
+
+def test_custom_action_mechanics_match_the_fixed_tag_regardless_of_text(content, game):
+    """不管玩家打了什麼字，機制效果（戰局推動/氣血損耗）都是查 reckless 這個 tag，
+    不會因為文字內容不同而有不同結果。"""
+    definition = _install_battle_def_with_free_text(content)
+    after_muster = _join_and_open(content, game, definition)
+    with mock.patch("tianxia.engine.time.time", return_value=after_muster):
+        game.submit_battle_custom_action("直取波才首級")
+    battle = game.world.get_battle()
+    cap = game._battle_neili_cap()  # 玩家真實的氣血上限（join 時是這樣算的，不是隨便假設的數字）
+    assert battle.participants["沈浪"].neili == cap - 50  # reckless 的 50 點損耗
