@@ -215,9 +215,8 @@ class Game:
             return [Option(id="act:break", label="提前出關")]
         loc = c.locations[s.player.location]
         cost = c.config.action_cost
-        opts = [self._cost_option("act:practice", "練功", cost.get("train", 10))]
-        opts.append(self._cost_option("act:explore", "探索", cost["explore"]))
-        if has_events_here(c, loc, "socialize"):
+        opts = [self._cost_option("act:explore", "探索", cost["explore"])]
+        if has_events_here(c, loc, "socialize") or self._deep_interaction_target() is not None:
             opts.append(self._cost_option("act:socialize", "交遊", cost["socialize"]))
         target = self._recruit_target()
         if target is not None:
@@ -228,6 +227,7 @@ class Game:
             if dest.unlock_flag and dest.unlock_flag not in s.world.flags:
                 continue
             opts.append(self._cost_option(f"move:{dest_id}", f"前往 {dest.name}", dest.move_cost))
+        opts.append(Option(id="act:rest", label="打坐歇息（恢復體力，約一個時辰）"))
         return opts
 
     def _recruit_target(self) -> str | None:
@@ -304,8 +304,8 @@ class Game:
             return f"交談・{character.name}"
         here = c.locations[s.player.location].name
         titles = {
-            "explore": f"探索{here}", "socialize": f"交遊・{here}", "practice": f"練功・{here}",
-            "recruit": f"招募・{here}",
+            "explore": f"探索{here}", "socialize": f"交遊・{here}",
+            "recruit": f"招募・{here}", "rest": f"打坐歇息・{here}",
         }
         return titles.get(arg, "提前出關")
 
@@ -328,8 +328,8 @@ class Game:
             return self._finish_seclusion(self.state.world.time)
         if what == "recruit":
             return self._recruit()
-        if what == "practice":
-            return ["（請在「門下」頁選擇自創功法或鍛鍊。）"]
+        if what == "rest":
+            return self._rest()
         self.state.player.stamina -= cost[what]
         if what == "explore":
             return self._encounter("explore", "你四處走走，一無所獲。")
@@ -348,6 +348,18 @@ class Game:
         if companion_id is not None:
             return companion_agent.start_dialogue(self.client, self.state, self.content, self.world, companion_id, self.rng)
         return self._encounter("socialize", "此地無人可訪，你只好悻悻離去。")
+
+    def _rest(self) -> list[str]:
+        """原地打坐歇息一個時辰：只推進玩家自己的進度（體力/氣血），不碰共用賽季時鐘
+        （跟 advance() 不同，advance() 連共用賽季一起快轉，玩家自己缺體力時不該連帶
+        把全服的大勢/倒數也推走）。保證選單上永遠有一個不受體力門檻限制的行動，玩家
+        不會因為體力見底就被晾在原地，每個按鈕都是 disabled（實機 playtest 發現的
+        卡死情境：體力歸零後原本沒有任何選項能點，只能乾等現實時間過去或翻到「門下」
+        頁的閉關分頁，新玩家完全不會知道要這樣做）。"""
+        before = self.state.player.stamina
+        msgs = self._advance_player_local(HOUR)
+        gained = self.state.player.stamina - before
+        return [f"你就地打坐歇息了一個時辰，體力恢復了 {gained:.0f} 點。"] + msgs
 
     def _deep_interaction_target(self) -> str | None:
         """這個地點目前能深度對話的人物 id：可招募的 7 位在 recruit_at，鎖定的 8 位龍頭

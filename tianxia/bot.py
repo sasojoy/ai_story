@@ -39,13 +39,20 @@ def spend_xinde(game: Game, rng: random.Random) -> None:
 
 
 def pick(game: Game, options: list[Option], rng: random.Random) -> str | None:
-    """結識（choice 的 effect.recruit）一定接受；其餘隨機挑一個。沒得挑時回傳 None。"""
+    """結識（choice 的 effect.recruit）一定接受；其餘隨機挑一個。沒得挑時回傳 None。
+
+    故意排除 act:rest：那是修給真人玩家的保底（體力見底時選單不會整排 disabled），
+    機器人不需要、也不該選——act:rest 永遠 enabled，機器人要是跟其他選項一樣隨機挑，
+    「沒有其他選項可選」這個訊號就永遠不會成立，下面 play_season() 用這個訊號決定要不要
+    呼叫 game.advance() 推進遊戲時間的節奏會被打亂（體力耗盡的頻率大幅降低，時間推進
+    跟著變少，一整季要跑完所需的步數暴增到頂到 max_steps 才停，拖垮整個測試套件）。"""
     s = game.state
     if s.pending_event:
         choices = game.content.events[s.pending_event].choices
         for option in options:
             if option.id.startswith("choice:") and choices[int(option.id.partition(":")[2])].effect.recruit:
                 return option.id
+    options = [o for o in options if o.id != "act:rest"]
     return rng.choice(options).id if options else None
 
 

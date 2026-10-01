@@ -29,7 +29,7 @@ def test_new_game(game):
 
 def test_town_options(game):
     # 小鎮有事件可交遊（拜師）、有可招募的人（韓鐵），沒有敵人所以不能歷練
-    assert ids(game) == ["act:practice", "act:explore", "act:socialize", "act:recruit", "move:lake"]
+    assert ids(game) == ["act:explore", "act:socialize", "act:recruit", "move:lake", "act:rest"]
 
 
 def test_locked_location_hidden_until_flag(game):
@@ -68,9 +68,30 @@ def test_invalid_option_rejected(game):
 
 def test_insufficient_stamina_disables_actions(game):
     game.state.player.stamina = 4
-    assert all(not o.enabled for o in game.options())
+    opts = game.options()
+    assert all(not o.enabled for o in opts if o.id != "act:rest")
     game.choose("act:explore")
     assert game.state.player.stamina == 4
+
+
+def test_rest_is_always_available_and_never_locks_the_player_out(game):
+    """實機 playtest 發現的卡死情境：體力見底時過去完全沒有選項可點（連移動都不行），
+    玩家只能乾等現實時間過去或自己發現「門下」頁的閉關分頁——新玩家根本不知道要這麼做。
+    act:rest 必須永遠是 enabled，且真的能恢復體力，不管共用賽季時鐘怎麼走。"""
+    game.state.player.stamina = 0
+    opts = game.options()
+    rest = next(o for o in opts if o.id == "act:rest")
+    assert rest.enabled
+    game.choose("act:rest")
+    assert game.state.player.stamina > 0
+
+
+def test_rest_does_not_advance_the_shared_season_clock(game):
+    """跟 advance()（測試用時間快轉，連共用賽季一起推進）不同：一個人缺體力想歇息，
+    不該連帶把全服的大勢/倒數也推走。"""
+    before = game.state.world.time
+    game.choose("act:rest")
+    assert game.state.world.time == before
 
 
 # ── 事件與檢定 ────────────────────────────────────────────
@@ -281,7 +302,7 @@ def test_continuing_and_leaving_a_dialogue(content, game):
         msgs = game.choose("talk:leave")
     assert msgs == ["你結束了這段交談，先行告辭。"]
     assert game.state.player.pending_companion is None
-    assert ids(game) == ["act:practice", "act:explore", "act:socialize", "act:recruit", "move:lake"]
+    assert ids(game) == ["act:explore", "act:socialize", "act:recruit", "move:lake", "act:rest"]
 
 
 def test_socializing_without_a_deep_interaction_companion_falls_through_to_events(game):
@@ -690,7 +711,7 @@ def _install_battle_def(content):
 
 def test_no_active_battle_leaves_normal_gameplay_untouched(content, game):
     assert game._battle_status() is None
-    assert ids(game)[0] == "act:practice"
+    assert ids(game)[0] == "act:explore"
 
 
 def test_an_active_muster_shows_faction_join_options(content, game):
@@ -820,7 +841,7 @@ def test_battle_ending_falls_back_to_normal_gameplay_on_the_next_render(content,
     game.world.start_battle(definition, now=0.0)
     game.world.mutate_battle(lambda b: setattr(b, "phase", "ended"))
     assert game._battle_status() is None
-    assert ids(game)[0] == "act:practice"
+    assert ids(game)[0] == "act:explore"
 
 
 # ── 自訂行動輸入框（設計討論：魯莽該是玩家自己想出來的招，不是固定選單）────────
