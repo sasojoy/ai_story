@@ -60,6 +60,11 @@ class PlayerState(BaseModel):
     visited: set[str] = Field(default_factory=set)  # 去過的地點
     fortune: bool = False  # 本季的新立門戶福緣已經發生（或已經改送賀禮）
 
+    # ── 共享賽季（跨玩家，見 world_state.py::SharedWorldState.season）────
+    season_number: int = 1  # 這個玩家的角色屬於第幾季；跟共用賽季的編號對不上時，
+    # Game._drop_stale_references() 會知道共用的賽季已經換過一輪，幫這個玩家的角色重開
+    # 新的一季（好感度/關係現況保留，角色本身的等級/位置/隊伍重新開始，見設計討論）。
+
 
 class Rumor(BaseModel):
     time: float

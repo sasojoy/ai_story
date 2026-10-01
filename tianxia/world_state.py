@@ -24,6 +24,8 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 
 from .martial_arts import MartialArt
+from .models import Content
+from .state import WorldState
 
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_PATH = ROOT / "saves" / "world" / "state.json"
@@ -67,6 +69,14 @@ class SharedWorldState(BaseModel):
     companions: dict[str, CompanionProgress] = Field(default_factory=dict)  # 人物 id -> 進度/招募狀態
     event_flavor: dict[str, str] = Field(default_factory=dict)  # 江湖大事 id -> 全服共用的一次性潤色句（設計文件 8.2 第 4 點）
     jade_seal_fragments: list[JadeSealFragment] = Field(default_factory=list)  # 跨季持久（設計文件九.2）
+
+    # ── 共享賽季（真正共享的大勢/門檻/主線/結局，取代原本每個玩家各自獨立的 WorldState）──
+    # 「跨季」的東西（武學命名登記、同伴進度、玉璽碎片等，上面那些欄位）永遠留著；season
+    # 本身每次開新賽季會被整個換掉（見 start_new_season）。season_number 從 1 起算，
+    # season_last_real 是這個賽季的共用時鐘上次對到現實時間的時間點（None＝還沒對過）。
+    season: WorldState = Field(default_factory=WorldState)
+    season_number: int = 1
+    season_last_real: float | None = None
 
 
 @contextlib.contextmanager
@@ -221,6 +231,74 @@ class WorldStateStore:
         lines = [f"傳國玉璽：{len(fragments)}/{JADE_SEAL_FRAGMENT_COUNT} 塊碎片已現世——"]
         lines += [f"　第 {f.number} 塊：{f.finder}（{f.season_name}）{f.text}" for f in fragments]
         return "\n".join(lines)
+
+    # ── 共享賽季 ──────────────────────────────────────────
+
+    def get_season(self) -> WorldState:
+        return self.read().season
+
+    def get_season_number(self) -> int:
+        return self.read().season_number
+
+    def mutate_season(self, fn) -> WorldState:
+        """在鎖保護下讀取共用賽季→套用 fn(season)→寫回，回傳套用後的狀態。fn 直接原地
+        修改 season（一個 WorldState）。寫動作本身是唯一需要鎖的地方——app.py 另外還有一個
+        process 內的 ACT_LOCK 序列化所有玩家行動，這裡的檔案鎖是給沒有 ACT_LOCK 的場合用的
+        （CLI、測試、未來真的拆成多個行程時），兩者不衝突。"""
+        def _apply(state: SharedWorldState) -> None:
+            fn(state.season)
+
+        return self.mutate(_apply).season
+
+    def save_season(self, season: WorldState) -> None:
+        """整份覆寫共用賽季：呼叫端（engine.py）已經在自己的流程裡把 state.world 指向
+        get_season() 讀回的那一份、就地修改過，這裡單純寫回，不需要再做一次 fn 包裝。"""
+        def _apply(state: SharedWorldState) -> None:
+            state.season = season
+
+        self.mutate(_apply)
+
+    def start_new_season(self, content: Content) -> WorldState:
+        """全服第一次開局（還沒有任何共用賽季）或目前賽季已經結束時，重新用 content 的
+        劇本種出一份全新的共用賽季，賽季編號 +1；賽季還在進行中時原封不動回傳目前的賽季
+        （不會因為兩個玩家前後腳都呼叫就重複重置——鎖內判斷，只有第一個真的執行重置）。"""
+        def _apply(state: SharedWorldState) -> None:
+            if state.season.storyline and not state.season.ended:
+                return
+            is_bootstrap = not state.season.storyline  # 從未真正初始化過，不是「結束後輪替」
+            trends = content.scenario.trends
+            state.season = WorldState(
+                trends={t.id: t.start for t in trends},
+                revealed={t.id for t in trends if not t.hidden},
+                storyline=content.scenario.storylines[0].id,
+            )
+            if not is_bootstrap:
+                state.season_number += 1  # 全服第一次開局維持第 1 季；只有真的輪替才遞增
+
+        return self.mutate(_apply).season
+
+    def catch_up_season(self, content, now: float, rng) -> list[str]:
+        """被動的現實時間追趕：不管是誰在這一刻跟伺服器互動，都把共用賽季依「距離上次
+        有人追趕過了多久現實時間」往前推進，而不是依呼叫者自己的步調——這樣不管幾個玩家
+        同時在線、各自多久互動一次，世界的時間永遠只走一份，不會重複計算也不會停滯。
+        實際的「推進 N 秒會發生什麼事」邏輯在 world.py::advance_season（避免循環 import：
+        world.py 已經 import 這個模組，不能反過來由這裡 import world.py）。"""
+        from . import world as world_module
+
+        result: dict[str, list[str] | float] = {"msgs": [], "elapsed": 0.0}
+
+        def _apply(state: SharedWorldState) -> None:
+            last = state.season_last_real
+            state.season_last_real = now
+            if last is None:
+                return
+            result["elapsed"] = max(0.0, now - last) * content.config.time_scale
+
+        self.mutate(_apply)
+        elapsed = result["elapsed"]
+        if elapsed <= 0:
+            return []
+        return world_module.advance_season(self, content, elapsed, rng)
 
     # ── 同伴進度與招募 ────────────────────────────────────
 

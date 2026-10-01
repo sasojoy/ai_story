@@ -7,8 +7,11 @@ from . import flavor, leaderboard
 from .models import Act, Content, Ending, SimPlayer, SimRumor, Storyline
 from .ollama_client import OllamaClient
 from .rules import add_chronicle, add_rumor, add_world_flags, change_trend, check_condition
-from .state import GameState
+from .state import GameState, PlayerState, WorldState
 from .world_state import WorldStateStore
+
+HOUR = 3600
+DAY = 86400
 
 
 def check_thresholds(
@@ -160,4 +163,50 @@ def end_season(state: GameState, content: Content, world: WorldStateStore | None
     if world is not None:
         board = leaderboard.compute_leaderboard(content, world)
         msgs += leaderboard.format_lines(board)
+    return msgs
+
+
+def _season_vehicle(content: Content, season: WorldState) -> GameState:
+    """sim_tick/check_thresholds/end_season 都要一個完整的 GameState，但推進共用賽季時
+    沒有「當下是哪個玩家」這回事——世界事件/門檻的條件照設計只該看大勢/世界旗標，不該看
+    某個特定玩家的屬性或旗標（這份共用賽季是所有玩家共同的，依附在任何一個人身上都不對）。
+    這裡造一個不會被存檔、純粹借來呼叫既有函式的空殼玩家，確保共用賽季的推進結果不會
+    意外因為「剛好是誰觸發的」而有任何差異。"""
+    player = PlayerState(name="", location=content.scenario.start_location, stats={}, stamina=0)
+    return GameState(player=player, world=season)
+
+
+def advance_world_state(
+    season: WorldState, content: Content, seconds: float, rng: random.Random, world: WorldStateStore | None = None,
+) -> list[str]:
+    """把一份 WorldState（不管是共用賽季的副本，還是——理論上——任何 WorldState）原地
+    往前推進 seconds 秒：逐小時推進、累積滿一小時才跑一次虛擬玩家模擬（避免長時間快轉時
+    事件/門檻判斷太粗），照搬原本 engine.py::_advance_step 的世界部分。純函式性質（除了
+    原地修改傳入的 season），不處理鎖——鎖是呼叫端的事：Game.advance() 直接對
+    self.state.world 呼叫這個函式再自己存回共用儲存（跟 choose()/travel() 同一套模式）；
+    被動的現實時間追趕（world_state.py::catch_up_season）則透過下面的 advance_season
+    包一層鎖再呼叫。"""
+    vehicle = _season_vehicle(content, season)
+    msgs: list[str] = []
+    remaining = seconds
+    while remaining > 0 and not season.ended:
+        step = min(remaining, HOUR)
+        remaining -= step
+        season.time += step
+        season.sim_accum += step
+        hours = int(season.sim_accum // HOUR)
+        if hours:
+            season.sim_accum -= hours * HOUR
+            msgs += sim_tick(vehicle, content, hours, rng)
+        if not season.ended and season.time >= content.config.season_days * DAY:
+            msgs += end_season(vehicle, content, world)
+    return msgs
+
+
+def advance_season(world: WorldStateStore, content: Content, seconds: float, rng: random.Random) -> list[str]:
+    """跟 advance_world_state 做一樣的事，差別是這裡直接鎖住共用賽季本身來源、修改、
+    寫回——給被動的現實時間追趕用（world_state.py::catch_up_season），那條路徑沒有
+    哪個玩家的 self.state.world 可以操作，只能直接對著共用儲存動手。"""
+    msgs: list[str] = []
+    world.mutate_season(lambda season: msgs.extend(advance_world_state(season, content, seconds, rng, world)))
     return msgs

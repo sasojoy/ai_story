@@ -439,6 +439,65 @@ def test_new_season_resets_and_keeps_the_name_and_last_real(game):
     assert game.state.last_real == 1000.0
 
 
+# ── 共享賽季：跨玩家傳播（真正共享賽季，取代每個玩家各自獨立的大勢/門檻）──────────
+
+
+def test_two_players_start_in_the_same_shared_season(content, world):
+    a = Game.new(content, "甲", rng=random.Random(1), world=world)
+    b = Game.new(content, "乙", rng=random.Random(2), world=world)
+    assert a.state.world.trends == b.state.world.trends
+    assert a.state.world.storyline == b.state.world.storyline
+
+
+def test_one_players_trend_push_is_invisible_to_another_until_they_sync(content, world):
+    a = Game.new(content, "甲", rng=random.Random(1), world=world)
+    b = Game.new(content, "乙", rng=random.Random(2), world=world)
+    a.state.world.trends["kou"] = 55
+    a._save_season()
+    assert b.state.world.trends["kou"] == 30  # 乙還沒同步，看不到甲剛才的改動
+    b.sync(1000.0)
+    assert b.state.world.trends["kou"] == 55  # 同步後就看到了
+
+
+def test_one_players_action_ending_the_season_propagates_to_another_on_sync(content, world):
+    a = Game.new(content, "甲", rng=random.Random(1), world=world)
+    b = Game.new(content, "乙", rng=random.Random(2), world=world)
+    a.state.world.trends["kou"] = 80
+    from tianxia.world import check_thresholds
+    check_thresholds(a.state, content, a.world, a.client)
+    a._save_season()
+    assert a.state.world.ended
+    assert not b.state.world.ended  # 乙還沒同步
+    b.sync(1000.0)
+    assert b.state.world.ended and b.state.world.ending_title == a.state.world.ending_title
+
+
+def test_new_season_propagates_to_another_player_on_their_next_sync(content, world):
+    a = Game.new(content, "甲", rng=random.Random(1), world=world)
+    b = Game.new(content, "乙", rng=random.Random(2), world=world)
+    b.state.player.affinities["mate"] = 42
+    b.state.player.member.level = 5
+    a.advance(2 * DAY)
+    assert a.state.world.ended
+    a.choose("season:new")
+    assert a.state.player.season_number == 2
+
+    b.sync(1000.0)  # 乙完全沒點任何東西，只是連線期間剛好同步到
+    assert b.state.player.season_number == 2
+    assert not b.state.world.ended
+    assert b.state.player.affinities["mate"] == 42  # 好感度保留
+    assert b.state.player.member.level == 1  # 角色本身重新開始
+
+
+def test_a_brand_new_player_joining_mid_season_sees_the_current_shared_state(content, world):
+    a = Game.new(content, "甲", rng=random.Random(1), world=world)
+    a.state.world.trends["kou"] = 70
+    a._save_season()
+    b = Game.new(content, "乙", rng=random.Random(2), world=world)  # 乙中途才加入
+    assert b.state.world.trends["kou"] == 70
+    assert b.state.player.season_number == 1
+
+
 # ── 新手引導 ──────────────────────────────────────────────
 
 
@@ -492,8 +551,13 @@ def test_old_save_missing_tutorial_step_finishes_the_tutorial(content, game):
 
 
 def test_stale_world_flags_get_flag_time_backfilled(content, game):
-    game.state.world.time = 12345
-    game.state.world.flags.add("legacy_flag")
+    """共用賽季本身的存檔格式較舊、缺 flag_times 時也要能補上——世界狀態現在是從共用
+    儲存拉回來的（見 _reconcile_season），不是直接改 game.state.world 就能模擬，要改
+    的是共用儲存裡實際存著的那一份。"""
+    season = game.world.get_season()
+    season.time = 12345
+    season.flags.add("legacy_flag")
+    game.world.save_season(season)
     fresh = Game(content, game.state, world=game.world)
     assert fresh.state.world.flag_times["legacy_flag"] == 12345
 

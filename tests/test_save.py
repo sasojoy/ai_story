@@ -84,12 +84,17 @@ def test_old_rumors_without_a_location_still_load(tmp_path, game):
 
 
 def test_rumor_at_a_removed_place_loses_its_location(tmp_path, content, game):
+    """傳聞現在跟著共用賽季走（見 Game._reconcile_season），不是存在玩家自己的存檔裡——
+    要模擬「內容已不存在的地點」要改共用儲存裡那一份，不是玩家存檔裡的 world 欄位
+    （那個欄位讀檔時會被共用賽季整個覆蓋掉）。"""
     from tianxia.state import Rumor
 
-    game.state.world.rumors.append(Rumor(time=0, text="舊地方的傳聞", location="removed_place"))
-    game.state.world.rumors.append(Rumor(time=0, text="湖邊的傳聞", location="lake"))
+    season = game.world.get_season()
+    season.rumors.append(Rumor(time=0, text="舊地方的傳聞", location="removed_place"))
+    season.rumors.append(Rumor(time=0, text="湖邊的傳聞", location="lake"))
+    game.world.save_season(season)
     path = tmp_path / "stale_rumor.json"
-    save_game(game.state, path)  # 存檔裡的傳聞指向一個內容裡已不存在的地點
-    fresh = Game(content, load_game(path))
+    save_game(game.state, path)
+    fresh = Game(content, load_game(path), world=game.world)
     assert [(r.text, r.location) for r in fresh.state.world.rumors] == [("舊地方的傳聞", None), ("湖邊的傳聞", "lake")]
     assert "湖邊的傳聞" in fresh.place_detail("lake")  # 查詢不會當機

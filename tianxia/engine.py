@@ -19,7 +19,7 @@ from .models import Choice, Content, Effect, Event, Location, Squad
 from .ollama_client import OllamaClient
 from .rules import apply_effect, change_trend, check_who, roll_check
 from .state import GameState, JournalEntry, Rumor, new_game_state
-from .world import check_thresholds, end_season, sim_tick
+from .world import advance_world_state, check_thresholds, end_season, sim_tick
 from .world_state import WorldStateStore
 
 HOUR = 3600
@@ -63,8 +63,47 @@ class Game:
         game._write(content.scenario.name, [content.scenario.intro] + tutorial_intro(content), tag="賽季開始")
         return game
 
+    def _reconcile_season(self) -> None:
+        """把 self.state.world 對齊到目前的共用賽季（設計文件「真正共享賽季」討論，取代
+        原本每個玩家各自獨立的 WorldState）。全服第一次開局（還沒有任何共用賽季）在這裡
+        順便種出第一季；共用賽季已經換過一輪（不管是自己剛觸發 new_season，還是連線期間
+        別的玩家觸發的）時，幫這個玩家的角色也開新的一季——角色本身（等級/位置/隊伍）
+        重新開始，但跟同伴的好感度/關係現況/對話歷史是「我跟他的交情」，不是賽季道具，
+        保留下來。__init__ 時（讀存檔／新角色）要呼叫，之後每次 sync() 也要呼叫，這樣連線
+        途中別人把賽季推到下一輪時，我才不會一直停在上一季的畫面。"""
+        shared = self.world.get_season()
+        if not shared.storyline:  # 全服第一次開局，從未真正初始化過
+            shared = self.world.start_new_season(self.content)
+        shared_number = self.world.get_season_number()
+        if self.state.player.season_number < shared_number:
+            self._reset_player_for_new_season(shared_number)
+        self.state.world = shared
+
+    def _reset_player_for_new_season(self, season_number: int) -> None:
+        """新一季：玩家整個 GameState 重新開始（角色、江湖紀錄、戰報都是上一季的事了），
+        只保留現實時間同步點（last_real，不然下次 sync 會把一整季沒上線的時間都當成
+        流逝掉）跟幾項明確認定「跟賽季無關、是我自己的」的東西——新手引導進度、跟同伴的
+        好感度/關係現況/對話歷史（見設計討論：好感度跨季保留，只重組隊伍）。world 欄位
+        這裡不用管，呼叫端（_reconcile_season）緊接著就會把它指向共用賽季。"""
+        old = self.state
+        fresh = new_game_state(self.content, old.player.name)
+        fresh.last_real = old.last_real
+        fresh.player.tutorial_step = old.player.tutorial_step
+        fresh.player.affinities = old.player.affinities
+        fresh.player.relationship_notes = old.player.relationship_notes
+        fresh.player.dialogue_history = old.player.dialogue_history
+        fresh.player.used_dialogue_options = old.player.used_dialogue_options
+        fresh.player.turns_since_consolidation = old.player.turns_since_consolidation
+        fresh.player.season_number = season_number
+        self.state = fresh
+        self.state.player.visited.add(self.state.player.location)
+        self._write(
+            self.content.scenario.name, [self.content.scenario.intro] + tutorial_intro(self.content), tag="賽季開始",
+        )
+
     def _drop_stale_references(self) -> None:
         """內容檔改版後，舊存檔可能引用已刪除的事件、地點、武學或人物；丟掉這些引用以免當機。"""
+        self._reconcile_season()
         s, c = self.state, self.content
         p = s.player
         if s.pending_event and s.pending_event not in c.events:
@@ -103,29 +142,41 @@ class Game:
     # ── 時間 ──────────────────────────────────────────────
 
     def sync(self, now: float) -> list[str]:
-        """把現實經過的時間（乘上 time_scale）推進到遊戲裡。第一次呼叫只記錄時間點。"""
+        """把現實經過的時間推進到遊戲裡。玩家自己的體力/氣血照自己上次連線以來的步調追趕；
+        共用賽季的時間/大勢則照「距離上次有人追趕過了多久現實時間」追趕——不管是誰觸發、
+        隔多久觸發一次，一份共用時鐘永遠只走一次，不會因為好幾個玩家同時在線就重複推進
+        （見 world_state.py::catch_up_season）。也會順便偵測共用賽季是不是已經被別人推到
+        下一輪了（見 _reconcile_season）。"""
+        self._reconcile_season()
+        msgs = list(self.world.catch_up_season(self.content, now, self.rng))
+        self.state.world = self.world.get_season()  # 剛才的追趕可能進一步推進了賽季，拉回最新的一份
         if self.state.last_real is None:
             self.state.last_real = now
-            return []
-        elapsed = max(0.0, now - self.state.last_real) * self.content.config.time_scale
-        self.state.last_real = now
-        return self.advance(elapsed)
-
-    def advance(self, seconds: float) -> list[str]:
-        msgs: list[str] = []
-        remaining = seconds
-        while remaining > 0 and not self.state.world.ended:
-            step = min(remaining, HOUR)
-            remaining -= step
-            msgs += self._advance_step(step)
+        else:
+            elapsed = max(0.0, now - self.state.last_real) * self.content.config.time_scale
+            self.state.last_real = now
+            msgs += self._advance_player_local(elapsed)
         news = journal.news_entry(self.state.world.time, msgs)
         if news is not None:
             journal.add_entry(self.state, news, merge=True)
         return self._log(msgs)
 
-    def _advance_step(self, seconds: float) -> list[str]:
+    def advance(self, seconds: float) -> list[str]:
+        """玩家主動「等待」固定一段遊戲時間（快轉按鈕）：直接在 self.state.world（剛同步
+        過的共用賽季副本）上往前推進 seconds，再存回共用儲存——跟 choose()/travel() 同一套
+        「本地修改、行動結束後存回」模式，不是用現實時間反推（那是 sync() 的事）。"""
+        msgs = advance_world_state(self.state.world, self.content, seconds, self.rng, self.world)
+        msgs += self._advance_player_local(seconds)
+        self._save_season()
+        news = journal.news_entry(self.state.world.time, msgs)
+        if news is not None:
+            journal.add_entry(self.state, news, merge=True)
+        return self._log(msgs)
+
+    def _advance_player_local(self, seconds: float) -> list[str]:
+        """玩家自己的部分：體力/氣血回復、閉關出關、新立門戶福緣——這些是「我」的進度，
+        不是共用賽季的一部分，照自己經過的時間算，不受共用賽季時鐘怎麼走影響。"""
         cfg, p, w = self.content.config, self.state.player, self.state.world
-        w.time += seconds
         p.stamina = min(cfg.stamina_max, p.stamina + seconds / cfg.stamina_regen_seconds)
         rate = seconds / (cfg.neili_regen_hours * HOUR)
         if p.busy_until is not None:
@@ -140,13 +191,6 @@ class Game:
             msgs += self._finish_seclusion(p.busy_until)
         if roster.fortune_overdue(self.state, self.content):
             msgs += self._deliver_fortune()
-        w.sim_accum += seconds
-        hours = int(w.sim_accum // HOUR)
-        if hours:
-            w.sim_accum -= hours * HOUR
-            msgs += sim_tick(self.state, self.content, hours, self.rng)
-        if not w.ended and w.time >= cfg.season_days * DAY:
-            msgs += end_season(self.state, self.content, self.world)
         return msgs
 
     # ── 選項 ──────────────────────────────────────────────
@@ -205,6 +249,12 @@ class Game:
     def odds(self, squad_id: str) -> str:
         return team.estimate(self.state, self.content, self.world, squad_id)
 
+    def _save_season(self) -> None:
+        """choose()/travel() 直接在 self.state.world 上就地修改（check_thresholds、
+        apply_effect 的 trend 變動等既有程式碼都是這樣寫的，沒有、也不需要特別改寫成
+        認得共用儲存的樣子），行動結束後這裡統一寫回共用賽季一次。"""
+        self.world.save_season(self.state.world)
+
     def choose(self, option_id: str) -> list[str]:
         option = {o.id: o for o in self.options(odds=False)}.get(option_id)
         if option is None or not option.enabled:
@@ -212,7 +262,9 @@ class Game:
         self.state.battle_card = None
         kind, _, arg = option_id.partition(":")
         if kind == "season":
-            return self._log(self.new_season() + check_thresholds(self.state, self.content, self.world, self.client))
+            msgs = self.new_season() + check_thresholds(self.state, self.content, self.world, self.client)
+            self._save_season()
+            return self._log(msgs)
         self._draft = Draft(self._action_title(kind, arg))
         try:
             if kind == "act":
@@ -231,6 +283,7 @@ class Game:
             journal.add_entry(self.state, self._draft.entry(self.state.world.time, msgs))
         finally:
             self._draft = None
+        self._save_season()
         return self._log(msgs)
 
     def _action_title(self, kind: str, arg: str) -> str:
@@ -452,6 +505,7 @@ class Game:
             journal.add_entry(s, self._draft.entry(s.world.time, msgs))
         finally:
             self._draft = None
+        self._save_season()
         return self._log(msgs)
 
     def _travel_title(self, dest_id: str, route: atlas.Route) -> str:
@@ -672,12 +726,13 @@ class Game:
         return atlas.travel_button(self.state, self.content, loc_id)
 
     def new_season(self) -> list[str]:
-        """玩家自己的狀態重新開始（現實時間同步點、新手引導進度跨季保留）；同伴的等級/
-        武學/招募狀態是共用世界狀態，不歸這個方法管，不會因為某個玩家開新季就重置。"""
-        old = self.state
-        self.state = Game.new(self.content, old.player.name, self.rng, self.world).state
-        self.state.last_real = old.last_real
-        self.state.player.tutorial_step = old.player.tutorial_step
+        """開啟下一季：真正重置共用賽季的是 start_new_season（在共用儲存的鎖內判斷，
+        賽季已經結束才會真的重置、只有第一個真的觸發的玩家會讓它發生；已經有人搶先開了
+        下一季的話，這裡只是跟著對齊，不會重置兩次）。玩家自己的角色重新開始（等級/位置/
+        隊伍），但跟同伴的好感度/關係現況/對話歷史、新手引導進度是跨季保留的，
+        見 _reset_player_for_new_season。"""
+        self.world.start_new_season(self.content)
+        self._reconcile_season()
         return []
 
     # ── 畫面文字 ──────────────────────────────────────────

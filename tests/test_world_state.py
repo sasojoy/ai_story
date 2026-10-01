@@ -75,6 +75,71 @@ def test_lock_prevents_concurrent_mutation_from_corrupting_state(tmp_path):
     assert len(store_a.read().created_skills) == 20
 
 
+# ── 共享賽季（真正共享的大勢/門檻/主線，取代每個玩家各自的 WorldState）──────────
+
+
+def test_get_season_before_anything_exists_is_an_empty_default(store):
+    season = store.get_season()
+    assert season.storyline == "" and season.trends == {}
+    assert store.get_season_number() == 1
+
+
+def test_start_new_season_bootstraps_from_content_and_keeps_season_number_at_one(store, content):
+    season = store.start_new_season(content)
+    assert season.storyline == content.scenario.storylines[0].id
+    assert season.trends == {t.id: t.start for t in content.scenario.trends}
+    assert store.get_season_number() == 1  # 第一次開局不是「輪替」，維持第 1 季
+
+
+def test_start_new_season_is_a_no_op_while_the_current_season_is_still_running(store, content):
+    store.start_new_season(content)
+    store.mutate_season(lambda season: season.trends.__setitem__("kou", 77))
+    store.start_new_season(content)  # 還沒結束，再呼叫一次不會重置
+    assert store.get_season().trends["kou"] == 77
+    assert store.get_season_number() == 1
+
+
+def test_start_new_season_resets_and_increments_once_the_season_has_ended(store, content):
+    store.start_new_season(content)
+    store.mutate_season(lambda season: setattr(season, "ended", True))
+    store.start_new_season(content)
+    assert store.get_season().ended is False
+    assert store.get_season_number() == 2
+
+
+def test_save_season_overwrites_the_stored_copy(store, content):
+    season = store.start_new_season(content)
+    season.trends["kou"] = 90
+    store.save_season(season)
+    assert store.get_season().trends["kou"] == 90
+
+
+def test_catch_up_season_does_nothing_on_the_very_first_call(store, content):
+    """第一次呼叫只記錄時間點（跟舊的 Game.sync() 行為一致），不會憑空推進一大段。"""
+    store.start_new_season(content)
+    msgs = store.catch_up_season(content, 1000.0, __import__("random").Random(0))
+    assert msgs == []
+    assert store.get_season().time == 0
+
+
+def test_catch_up_season_advances_the_shared_clock_by_elapsed_real_time(store, content):
+    rng = __import__("random").Random(0)
+    store.start_new_season(content)
+    store.catch_up_season(content, 1000.0, rng)  # 第一次：只記錄時間點
+    store.catch_up_season(content, 1000.0 + 7200, rng)  # 第二次：過了 2 小時現實時間
+    assert store.get_season().time == 7200 * content.config.time_scale
+
+
+def test_catch_up_season_only_advances_once_no_matter_who_calls_it(store, content):
+    """不管幾個「玩家」在同一個現實時間點各自呼叫一次，世界時間只走一份，不會重複累加。"""
+    rng = __import__("random").Random(0)
+    store.start_new_season(content)
+    store.catch_up_season(content, 1000.0, rng)
+    store.catch_up_season(content, 1000.0 + 3600, rng)
+    store.catch_up_season(content, 1000.0 + 3600, rng)  # 同一個時間點，另一個「玩家」又呼叫一次
+    assert store.get_season().time == 3600 * content.config.time_scale
+
+
 # ── 江湖大事潤色（全服共用一次，還要改進第 3 點）──────────────────
 
 
