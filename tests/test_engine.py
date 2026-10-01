@@ -47,12 +47,23 @@ def test_socialize_hidden_when_no_events_here(game):
 
 
 def test_recruit_option_follows_who_is_free_at_this_location(game):
-    assert "招募【韓鐵】（體力 15）" in [o.label for o in game.options() if o.id == "act:recruit"]
+    assert "招募【韓鐵】（體力 15・成功率約 35%）" in [o.label for o in game.options() if o.id == "act:recruit"]
     game.choose("move:lake")
-    assert "招募【琴師】（體力 15）" in [o.label for o in game.options() if o.id == "act:recruit"]
+    assert "招募【琴師】（體力 15・成功率約 35%）" in [o.label for o in game.options() if o.id == "act:recruit"]
     game.world.try_recruit("friend", "李四")
     game.world.try_recruit("hero", "李四")
     assert "act:recruit" not in ids(game)  # 湖邊兩人都被搶走了
+
+
+def test_recruit_option_shows_the_real_odds_and_tracks_affinity(game):
+    """實機 playtest 發現招募失敗時玩家完全看不出原因、也不知道好感度才是真正的槓桿
+    （roster.py::recruit_chance）。選單上的成功率要跟著好感度即時變化，不是寫死的。"""
+    def label():
+        return next(o.label for o in game.options() if o.id == "act:recruit")
+
+    assert "成功率約 35%" in label()  # 好感度 0：基礎成功率
+    game.state.player.affinities["mate"] = 100
+    assert "成功率約 85%" in label()  # 基礎 35% + 好感度 100 的加成 50%
 
 
 def test_move_costs_stamina(game):

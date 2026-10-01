@@ -70,8 +70,13 @@ def attempt_recruit(
         msgs = [f"【{disp}】被你的誠意打動，願意追隨於你！"]
         return msgs + team.add_to_team(state, companion_id)
     if rng.random() < content.config.duel_chance_on_fail:
-        return [f"【{disp}】對你的貿然嘗試大為不悅，當場要求與你一較高下——你惹上了一場決鬥。"]
-    return [f"【{disp}】婉拒了你這次的招攬，看來還需要多花心思。"]
+        loss = min(p.stats.get("silver", 0), content.config.duel_fail_silver_loss)
+        p.stats["silver"] = p.stats.get("silver", 0) - loss
+        msgs = [f"【{disp}】對你的貿然嘗試大為不悅，當場要求與你一較高下——你吃了幾下教訓，倉皇退走。"]
+        if loss:
+            msgs.append(f"銀兩 -{loss}")
+        return msgs
+    return [f"【{disp}】婉拒了你這次的招攬，看來還需要多花心思——先多來幾趟「交遊」，培養交情再試，成功率會更高。"]
 
 
 def recruit(state: GameState, content: Content, world: WorldStateStore, char_id: str) -> list[str]:

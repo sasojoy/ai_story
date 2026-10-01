@@ -221,7 +221,11 @@ class Game:
         target = self._recruit_target()
         if target is not None:
             cfg = c.config
-            opts.append(self._cost_option("act:recruit", f"招募【{c.characters[target].name}】", cfg.recruit_stamina))
+            chance = roster.recruit_chance(c, s, target)
+            opts.append(self._cost_option(
+                "act:recruit", f"招募【{c.characters[target].name}】", cfg.recruit_stamina,
+                note=f"成功率約 {chance * 100:.0f}%",
+            ))
         for dest_id in loc.connections:
             dest = c.locations[dest_id]
             if dest.unlock_flag and dest.unlock_flag not in s.world.flags:

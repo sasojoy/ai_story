@@ -49,14 +49,28 @@ def test_attempt_recruit_succeeds_and_seeds_the_starting_skill(state, content, w
 
 def test_attempt_recruit_can_fail_without_a_duel(state, content, world):
     msgs = roster.attempt_recruit(state, content, world, "mate", FixedRandom(0.4))  # 招募失敗、決鬥骰也沒過
-    assert msgs == ["【韓鐵】婉拒了你這次的招攬，看來還需要多花心思。"]
+    assert msgs == ["【韓鐵】婉拒了你這次的招攬，看來還需要多花心思——先多來幾趟「交遊」，培養交情再試，成功率會更高。"]
     assert state.player.team == [] and roster.owned_by(world, "mate") is None
 
 
 def test_attempt_recruit_failure_can_provoke_a_duel(state, content, world):
+    """「設計文件四.4：失敗有代價」原本只有嚇人的文字、沒有真的扣任何東西——決鬥現在會
+    真的賠銀兩，不再是空包彈。"""
+    silver_before = state.player.stats["silver"]
     msgs = roster.attempt_recruit(state, content, world, "mate", FixedRandom(0.36))  # 招募失敗、觸發決鬥
-    assert msgs == ["【韓鐵】對你的貿然嘗試大為不悅，當場要求與你一較高下——你惹上了一場決鬥。"]
+    assert msgs == [
+        "【韓鐵】對你的貿然嘗試大為不悅，當場要求與你一較高下——你吃了幾下教訓，倉皇退走。",
+        f"銀兩 -{content.config.duel_fail_silver_loss}",
+    ]
+    assert state.player.stats["silver"] == silver_before - content.config.duel_fail_silver_loss
     assert roster.owned_by(world, "mate") is None
+
+
+def test_duel_silver_loss_does_not_go_negative(state, content, world):
+    state.player.stats["silver"] = 5  # 比 duel_fail_silver_loss（預設 15）還少
+    msgs = roster.attempt_recruit(state, content, world, "mate", FixedRandom(0.36))
+    assert state.player.stats["silver"] == 0
+    assert "銀兩 -5" in msgs
 
 
 def test_attempt_recruit_someone_already_yours_is_a_no_op(state, content, world):
