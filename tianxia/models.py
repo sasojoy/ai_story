@@ -370,6 +370,70 @@ class Config(_Strict):
     fortune_day_max: int = 7  # 新立門戶福緣：第幾天結束還沒發生就直接送上門
 
 
+class BattleFaction(_Strict):
+    id: str
+    name: str
+
+
+class BattleActionEffect(_Strict):
+    """一個行動分類（tag）選了之後的確定性效果——跟全專案一貫的原則一樣（好感度 tag
+    查表、同伴反應強度覆寫），戰局推動跟氣血損耗都是這裡查表決定，LLM 只管潤色敘事，
+    不負責算任何數字。"""
+
+    trend_delta: int = 0  # 推動戰局 trend 的量（正負方向看 BattleDef 怎麼定義雙方）
+    neili_damage: float = 0  # 這個行動的基礎氣血損耗
+    mitigated_by_power: bool = False  # True 時依選擇者自身武學威力算一個抵銷比例（有實力的人魯莽也扛得住一些）
+
+
+class BattleOption(_Strict):
+    text: str
+    tag: str  # 對照 BattleDef.action_tags 的 key
+    faction: str | None = None  # 限定某一方才能選；None＝雙方都能選
+
+
+class BattleAdvanceWhen(_Strict):
+    """跟 Condition 不一樣——戰鬥幕只看戰局 trend，不該看哪個玩家的個人屬性/旗標
+    （一場戰鬥是所有參戰者共同經歷的，不該因為某個人的狀態而對其他人判斷出不同結果）。"""
+
+    trend_min: int | None = None
+    trend_max: int | None = None
+
+
+class BattleAct(_Strict):
+    id: str
+    title: str
+    text: str
+    goal: str
+    options: list[BattleOption] = Field(min_length=1)
+    advance_when: BattleAdvanceWhen | None = None  # None＝最後一幕
+
+
+class BattleOutcome(_Strict):
+    faction: str
+    trend_min: int | None = None
+    trend_max: int | None = None
+    title: str
+    text: str
+
+
+class BattleDef(_Strict):
+    """全服共用的即時多人戰鬥骨架（例如「黃巾決戰」）：集結選陣營→逐幕逐回合（框架給
+    選項，查表推動戰局/扣氣血）→決戰幕的戰局數值判定最終勝負。不是自由發展的 LLM 劇情，
+    是固定骨架裡的有限變因（設計討論：「有一個基本框架，玩家可以根據自身影響一些要素，
+    但是大框架還是會進行下去」）。"""
+
+    id: str
+    name: str
+    factions: list[BattleFaction] = Field(min_length=2)
+    trend_name: str = "戰局"
+    trend_start: int = 50
+    acts: list[BattleAct] = Field(min_length=1)
+    action_tags: dict[str, BattleActionEffect]
+    outcomes: list[BattleOutcome] = Field(min_length=1)
+    muster_seconds: float = 600  # 集結期：開放選陣營的時間，逾時系統自動分配
+    round_seconds: float = 120  # 每回合等待所有參戰者選擇的時間，逾時系統代選保守行動
+
+
 class Content(_Strict):
     config: Config
     scenario: Scenario
@@ -379,5 +443,6 @@ class Content(_Strict):
     sects: dict[str, Sect]
     characters: dict[str, CharacterDef]
     squads: dict[str, Squad]
+    battles: dict[str, BattleDef] = Field(default_factory=dict)  # 內容尚未撰寫，先留介面（見設計討論，骨架做完再回頭寫黃巾決戰）
     map: MapLayout
     tutorial: Tutorial
