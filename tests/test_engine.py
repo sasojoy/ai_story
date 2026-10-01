@@ -626,6 +626,15 @@ def test_texts_render(game):
     assert "醉漢" in game.scene_text()
 
 
+def test_status_text_shows_the_practice_hint_only_when_xinde_is_idle(game):
+    assert "心得" in game.status_text() and "別讓它擱著" not in game.status_text()
+    game.state.player.stats["xinde"] = game.content.config.xinde_hint_threshold
+    assert "別讓它擱著" in game.status_text()
+    game.state.player.member.wugong_level = game.state.player.member.neigong_level = 10
+    game.state.player.member.wugong_id = game.state.player.member.neigong_id = "fist"
+    assert "別讓它擱著" not in game.status_text()
+
+
 def test_visited_and_map(game):
     assert game.state.player.visited == {"town"}
     game.choose("move:lake")

@@ -64,3 +64,34 @@ def test_detail_of_a_self_created_skill_says_so(state, content, world):
 def test_detail_of_a_missing_skill_reference_is_a_placeholder(state, content, world):
     state.player.member.wugong_id = "ghost"
     assert skillview.detail(state, content, world, "武學") == "（找不到武學資料：ghost）"
+
+
+# ── 練功提示（心得目前沒有用途，提示把它接回門下）──────────────
+
+
+def test_practice_hint_stays_quiet_below_the_threshold(state, content):
+    state.player.stats["xinde"] = content.config.xinde_hint_threshold - 1
+    assert skillview.practice_hint(state, content) is None
+
+
+def test_practice_hint_names_both_kinds_when_nothing_is_learned(state, content):
+    state.player.stats["xinde"] = content.config.xinde_hint_threshold
+    hint = skillview.practice_hint(state, content)
+    assert hint is not None
+    assert "內功、武學" in hint and str(content.config.xinde_hint_threshold) in hint
+
+
+def test_practice_hint_names_only_what_is_left_to_train(state, content, world):
+    state.player.stats["xinde"] = 500
+    team.create_skill(state, content, world, "龍吟九霄", "武學")
+    state.player.member.wugong_level = 10
+    hint = skillview.practice_hint(state, content)
+    assert hint is not None and "內功" in hint and "武學" not in hint
+
+
+def test_practice_hint_goes_away_once_everything_is_at_the_tenth_level(state, content, world):
+    state.player.stats["xinde"] = 9999
+    team.create_skill(state, content, world, "龍吟九霄", "武學")
+    team.create_skill(state, content, world, "太虛吐納", "內功")
+    state.player.member.wugong_level = state.player.member.neigong_level = 10
+    assert skillview.practice_hint(state, content) is None

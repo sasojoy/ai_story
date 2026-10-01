@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from . import team
-from .martial_arts import power_at
+from .martial_arts import MAX_LEVEL, power_at
 from .models import Content
 from .state import PLAYER, GameState
 from .world_state import WorldStateStore
@@ -13,6 +13,31 @@ from .world_state import WorldStateStore
 
 def rules_line(content: Content) -> str:
     return "每人最多學一門內功、一門武學：自創功法（取名決定屬性/威力/成長性）或鍛鍊已知武學。"
+
+
+def practice_hint(state: GameState, content: Content) -> str | None:
+    """主畫面的練功提示：心得擱到 `xinde_hint_threshold` 以上、而且確實還有功夫可以練時才回傳一句話。
+
+    心得目前完全不是貨幣（`team.practice`/`create_skill` 兩條路徑都免費、無限次，
+    `Config.xinde_cost_factor` 沒有任何地方讀），所以這句話的用途不是「你存夠錢了」，而是把
+    「在江湖裡攢到的心得」跟「門下的練功動作」接起來。實測隨機玩完一整季的心得收入只有
+    20~96（刻意閉關才會多），所以門檻故意訂得低；真正需要這句話的是從來沒進過門下、心得
+    一路擱著而武學還停在第一成的玩家。兩門都練到第十成就不再提示，免得變成嘮叨。
+    """
+    xinde = state.player.stats.get("xinde", 0)
+    if xinde < content.config.xinde_hint_threshold:
+        return None
+    member = state.player.member
+    todo = [
+        kind
+        for kind, slot, level_slot in (
+            ("內功", "neigong_id", "neigong_level"), ("武學", "wugong_id", "wugong_level"),
+        )
+        if getattr(member, slot) is None or getattr(member, level_slot) < MAX_LEVEL
+    ]
+    if not todo:
+        return None
+    return f"💡 你已攢下 {xinde} 點心得。去「門下」自創或鍛鍊{'、'.join(todo)}不花一分一毫，別讓它擱著。"
 
 
 def _art_label(content: Content, world: WorldStateStore, skill_id: str | None, level: int) -> str:

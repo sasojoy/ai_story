@@ -1005,8 +1005,11 @@ class Game:
             f"**體力** {int(p.stamina)} / {c.config.stamina_max}",
             "　".join(f"{names[k]} {p.stats[k]}" for k in ("str", "agi", "con", "wis")),
             "　".join(f"{names[k]} {p.stats.get(k, 0)}" for k in ("silver", "good", "evil", "fame", "xinde")),
-            "**隊伍**",
         ]
+        hint = skillview.practice_hint(s, c)  # 心得擱著沒用、又還有功夫沒練滿時才有這一行
+        if hint is not None:
+            lines.append(hint)
+        lines.append("**隊伍**")
         now, cap = team.member_neili(c, p.member)
         lines.append(f"- {p.name}（隊長）　第{p.member.level}級　氣血 {int(now)}/{int(cap)}")
         for cid in p.team:

@@ -355,7 +355,8 @@ class Config(_Strict):
     neili_regen_hours: float = 2  # 氣血從零回滿所需時間
     newbie_days: float = 3  # 每季前幾天氣血回復加倍
     seclusion_xinde_per_hour: int = 15
-    xinde_cost_factor: int = 20  # 第 n 成升到 n+1 成需要 factor × n
+    xinde_cost_factor: int = 20  # 第 n 成升到 n+1 成需要 factor × n（構想欄位，目前練功免費、沒有任何地方讀它）
+    xinde_hint_threshold: int = 50  # 心得擱到這個量、而且還有功夫沒練滿時，主畫面提示玩家去門下練功
     level_exp: int = 100  # 第 n 級升 n+1 級需要 level_exp × n
     max_level: int = 30
     # ── 練功（sanguo-companions 合併重寫，見設計文件六.2）──
