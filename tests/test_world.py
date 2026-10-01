@@ -16,6 +16,45 @@ def test_threshold_fires_once_and_sets_flag(state, content):
     assert check_thresholds(state, content) == []
 
 
+def _install_battle_def(content):
+    from tianxia.models import BattleAct, BattleActionEffect, BattleDef, BattleFaction, BattleOption, BattleOutcome
+
+    definition = BattleDef(
+        id="b1", name="測試決戰", factions=[BattleFaction(id="a", name="甲方"), BattleFaction(id="b", name="乙方")],
+        acts=[BattleAct(id="a1", title="開戰", text="開戰了。", goal="打贏", options=[BattleOption(text="進攻", tag="go")])],
+        action_tags={"go": BattleActionEffect(trend_delta=1, neili_damage=5)},
+        outcomes=[BattleOutcome(faction="a", title="甲方勝", text="甲方贏了。")],
+    )
+    content.battles[definition.id] = definition
+    return definition
+
+
+def test_threshold_with_starts_battle_opens_a_shared_battle(state, content, world):
+    content.scenario.thresholds[0].starts_battle = "b1"
+    _install_battle_def(content)
+    state.world.trends["kou"] = 50
+    msgs = check_thresholds(state, content, world)
+    assert world.get_battle() is not None
+    assert world.get_battle().battle_id == "b1"
+    assert any("集結號角" in m for m in msgs)
+
+
+def test_threshold_with_starts_battle_but_no_matching_content_is_a_safe_no_op(state, content, world):
+    content.scenario.thresholds[0].starts_battle = "does_not_exist"
+    state.world.trends["kou"] = 50
+    msgs = check_thresholds(state, content, world)
+    assert world.get_battle() is None
+    assert msgs == ["【江湖大事】水寇封江！"]
+
+
+def test_threshold_with_starts_battle_does_nothing_without_a_world_store(state, content):
+    content.scenario.thresholds[0].starts_battle = "b1"
+    _install_battle_def(content)
+    state.world.trends["kou"] = 50
+    msgs = check_thresholds(state, content)  # 沒傳 world，跟既有呼叫端相容
+    assert msgs == ["【江湖大事】水寇封江！"]
+
+
 def test_threshold_without_world_or_client_stays_unflavored(state, content):
     """既有呼叫端（沒傳 world/client）行為完全不變：純文字，沒有潤色句。"""
     state.world.trends["kou"] = 50

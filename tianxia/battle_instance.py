@@ -53,6 +53,11 @@ class BattleInstance(BaseModel):
     narrative_log: list[str] = Field(default_factory=list)
     outcome_title: str | None = None
     outcome_text: str | None = None
+    outcome_world_flags: list[str] = Field(default_factory=list)  # 結果要套用到共用賽季的世界旗標（複製自
+    # BattleOutcome.world_flags_add，不是參照——戰鬥結算只碰共用戰鬥狀態本身，套用到賽季是
+    # 呼叫端 engine.py 的事，見 Game._apply_battle_outcome；這裡存一份複本給它讀，不用
+    # 重新比對一次是哪個 BattleOutcome）。
+    outcome_trend_delta: dict[str, int] = Field(default_factory=dict)  # 同上，複製自 BattleOutcome.trend_delta
 
 
 def start_muster(definition: BattleDef, now: float) -> BattleInstance:
@@ -175,8 +180,13 @@ def resolve_round(instance: BattleInstance, definition: BattleDef, rng: random.R
     act = current_act(instance, definition)
     advanced = False
     if act.advance_when is not None:
-        lo, hi = act.advance_when.trend_min, act.advance_when.trend_max
-        crossed = (lo is None or instance.trend >= lo) and (hi is None or instance.trend <= hi)
+        aw = act.advance_when
+        if aw.trend_outside is not None:
+            crossed = abs(instance.trend - definition.trend_start) >= aw.trend_outside
+        else:
+            crossed = (aw.trend_min is None or instance.trend >= aw.trend_min) and (
+                aw.trend_max is None or instance.trend <= aw.trend_max
+            )
         if crossed and instance.act_index < len(definition.acts) - 1:
             instance.act_index += 1
             advanced = True
@@ -187,6 +197,8 @@ def resolve_round(instance: BattleInstance, definition: BattleDef, rng: random.R
     if outcome is not None:
         instance.phase = "ended"
         instance.outcome_title, instance.outcome_text = outcome.title, outcome.text
+        instance.outcome_world_flags = list(outcome.world_flags_add)
+        instance.outcome_trend_delta = dict(outcome.trend_delta)
         msgs.append(f"══ {outcome.title} ══")
         msgs.append(outcome.text)
     instance.round = BattleRound(opened_real=now)

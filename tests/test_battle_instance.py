@@ -226,6 +226,48 @@ def test_outcome_ends_the_battle_once_on_the_final_act(definition):
     assert instance.outcome_title == "官軍大勝"
 
 
+def test_outcome_copies_the_season_level_consequences_onto_the_instance(definition):
+    definition.outcomes[0].world_flags_add = ["huangjin_decisive_win"]
+    definition.outcomes[0].trend_delta = {"huangjin": -35}
+    instance = _active_battle(definition)
+    instance.act_index = 1
+    instance.trend = 75
+    bi.submit_action(instance, "甲", "safe")
+    bi.submit_action(instance, "乙", "safe")
+    bi.resolve_round(instance, definition, random.Random(0))
+    assert instance.outcome_world_flags == ["huangjin_decisive_win"]
+    assert instance.outcome_trend_delta == {"huangjin": -35}
+
+
+def test_advance_when_trend_outside_triggers_on_either_direction(definition):
+    """trend_outside 是雙向的：不管戰局往哪一方傾斜，偏離中性值夠多就該換幕，不是只有
+    某一方拉開差距才算。"""
+    definition.acts[0].advance_when = BattleAdvanceWhen(trend_outside=20)
+    low = _active_battle(definition)
+    low.trend = 25  # |25-50|=25 >= 20
+    bi.submit_action(low, "甲", "safe")
+    bi.submit_action(low, "乙", "safe")
+    bi.resolve_round(low, definition, random.Random(0))
+    assert low.act_index == 1
+
+    high = _active_battle(definition)
+    high.trend = 75  # |75-50|=25 >= 20
+    bi.submit_action(high, "甲", "safe")
+    bi.submit_action(high, "乙", "safe")
+    bi.resolve_round(high, definition, random.Random(0))
+    assert high.act_index == 1
+
+
+def test_advance_when_trend_outside_does_not_trigger_near_neutral(definition):
+    definition.acts[0].advance_when = BattleAdvanceWhen(trend_outside=20)
+    instance = _active_battle(definition)
+    instance.trend = 55  # |55-50|=5 < 20
+    bi.submit_action(instance, "甲", "safe")
+    bi.submit_action(instance, "乙", "safe")
+    bi.resolve_round(instance, definition, random.Random(0))
+    assert instance.act_index == 0
+
+
 def test_the_fallback_outcome_with_no_bounds_catches_a_stalemate(definition):
     instance = _active_battle(definition)
     instance.act_index = 1

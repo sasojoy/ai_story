@@ -182,6 +182,7 @@ class Threshold(_Strict):
     text: str
     world_flags_add: list[str] = Field(default_factory=list)
     ends_season: bool = False
+    starts_battle: str | None = None  # 指向 Content.battles 的 id：觸發時開一場全服即時戰鬥，不是立刻套用效果
     location: str | None = None  # 發生地：傳聞記在這裡，大地圖劇情層標 ✦；None＝不在特定地點
 
 
@@ -252,6 +253,7 @@ class WorldEvent(_Strict):
     text: str
     world_flags_add: list[str] = Field(default_factory=list)
     ends_season: bool = False
+    starts_battle: str | None = None  # 同 Threshold.starts_battle
     location: str | None = None  # 發生地，同 Threshold.location
 
 
@@ -393,10 +395,14 @@ class BattleOption(_Strict):
 
 class BattleAdvanceWhen(_Strict):
     """跟 Condition 不一樣——戰鬥幕只看戰局 trend，不該看哪個玩家的個人屬性/旗標
-    （一場戰鬥是所有參戰者共同經歷的，不該因為某個人的狀態而對其他人判斷出不同結果）。"""
+    （一場戰鬥是所有參戰者共同經歷的，不該因為某個人的狀態而對其他人判斷出不同結果）。
+    trend_min/trend_max 是「夾在區間內」（AND，例如「停留在中段膠著」）；trend_outside
+    是「偏離中性值夠多」（OR，雙向都算——戰局往任一方明顯傾斜就該進入下一幕，不是只有
+    某一方拉開差距才算，兩種只會擇一使用）。"""
 
     trend_min: int | None = None
     trend_max: int | None = None
+    trend_outside: int | None = None  # |trend - BattleDef.trend_start| >= 這個值就算成立
 
 
 class BattleAct(_Strict):
@@ -414,6 +420,8 @@ class BattleOutcome(_Strict):
     trend_max: int | None = None
     title: str
     text: str
+    world_flags_add: list[str] = Field(default_factory=list)  # 結果套用到共用賽季的世界旗標
+    trend_delta: dict[str, int] = Field(default_factory=dict)  # 結果套用到共用賽季的大勢推動（trend id -> 增減量）
 
 
 class BattleDef(_Strict):

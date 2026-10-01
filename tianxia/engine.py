@@ -398,17 +398,27 @@ class Game:
             return None
         if not tick:
             return None if raw.phase == "ended" else (raw, definition)
-        now = time.time()
-        battle = self.world.mutate_battle(lambda b: self._tick_battle(b, definition, now)) or raw
+        was_ended = raw.phase == "ended"
+        battle, _ = self._run_battle_tick(definition)
+        battle = battle or raw
         if battle.phase == "ended":
+            if not was_ended:
+                self._apply_battle_outcome(battle)
             return None
         return battle, definition
 
-    def _tick_battle(self, battle: battle_instance.BattleInstance, definition: BattleDef, now: float) -> None:
+    def _advance_battle_round(self, battle: battle_instance.BattleInstance, definition: BattleDef) -> list[str]:
+        """核心推進邏輯（在呼叫端已經握有 mutate_battle 鎖的前提下原地修改 battle）：
+        集結逾時自動分配、機器人補位、回合逾時代選保守行動、全員到齊就結算並請 LLM
+        潤色。回傳這次呼叫如果真的結算了一回合的敘事訊息，沒有結算就是空清單。這是
+        _run_battle_tick()（被動追趕，options()/scene_text() 用）跟 _battle_choose()
+        的 act 分支（玩家自己送出行動，可能剛好湊滿全員）共用的同一份邏輯，確保兩條
+        路徑的推進規則完全一致——只是呼叫的時間點跟是否先 submit_action 不同。"""
+        now = time.time()
         if battle.phase == "muster" and now >= battle.muster_deadline_real:
             battle_instance.close_muster(battle, definition, self.rng, now)
         if battle.phase != "active":
-            return
+            return []
         for p in list(battle.participants.values()):
             if p.is_bot and not p.eliminated and p.name not in battle.round.pending_actions:
                 tag = battle_instance.bot_choose_action(battle, definition, p.name, self.rng)
@@ -417,11 +427,43 @@ class Game:
         if now - battle.round.opened_real >= definition.round_seconds and not battle_instance.round_is_complete(battle):
             default_tag = min(definition.action_tags, key=lambda t: definition.action_tags[t].neili_damage)
             battle_instance.fill_timed_out_actions(battle, definition, default_tag)
-        if battle_instance.round_is_complete(battle):
-            msgs = battle_instance.resolve_round(battle, definition, self.rng, now=now)
-            narration = battle_instance.narrate_round(self.client, definition, battle, msgs)
-            if narration:
-                battle.narrative_log.append(narration)
+        if not battle_instance.round_is_complete(battle):
+            return []
+        msgs = battle_instance.resolve_round(battle, definition, self.rng, now=now)
+        narration = battle_instance.narrate_round(self.client, definition, battle, msgs)
+        if narration:
+            battle.narrative_log.append(narration)
+        return [narration] if narration else msgs
+
+    def _run_battle_tick(self, definition: BattleDef) -> tuple[battle_instance.BattleInstance | None, list[str]]:
+        """在鎖保護下跑一次 _advance_battle_round，給被動追趕（options()/scene_text()）用。"""
+        captured: dict[str, list[str]] = {"msgs": []}
+
+        def _apply(b: battle_instance.BattleInstance) -> None:
+            captured["msgs"] = self._advance_battle_round(b, definition)
+
+        battle = self.world.mutate_battle(_apply)
+        return battle, captured["msgs"]
+
+    def _apply_battle_outcome(self, battle: battle_instance.BattleInstance) -> None:
+        """戰鬥剛結束這一刻，把結果套用到共用賽季（大勢推動／世界旗標），順便留一筆
+        江湖史——這裡故意不在 mutate_battle 的 callback 裡面做（兩者用同一把檔案鎖，
+        不是可重入的，巢狀呼叫 mutate_season 會自我鎖死），所以是呼叫端在拿到
+        mutate_battle 的結果、確定鎖已經釋放之後才呼叫，順序上一定晚於戰鬥本身的結算。"""
+        if not (battle.outcome_world_flags or battle.outcome_trend_delta or battle.outcome_title):
+            return
+
+        def _apply(season) -> None:
+            for trend_id, delta in battle.outcome_trend_delta.items():
+                season.trends[trend_id] = max(0, min(100, season.trends.get(trend_id, 0) + delta))
+            for flag in battle.outcome_world_flags:
+                if flag not in season.flags:
+                    season.flags.add(flag)
+                    season.flag_times[flag] = season.time
+            if battle.outcome_title:
+                season.chronicle.append(Rumor(time=season.time, text=f"【{battle.outcome_title}】{battle.outcome_text}"))
+
+        self.world.mutate_season(_apply)
 
     def _battle_scene_text(self, battle: battle_instance.BattleInstance, definition: BattleDef) -> str:
         header = f"**{definition.name}**"
@@ -474,13 +516,20 @@ class Game:
             )
             return ["你加入了戰局，這回合先觀戰，下回合開始可以行動。"]
         if kind == "act":
-            self.world.mutate_battle(lambda b: self._submit_and_resolve(b, definition, name, rest))
-            return []
-        return ["（此刻無法這麼做。）"]
+            # 上面 self._battle_status(tick=False) 剛確認過戰鬥還在進行（還沒結束），
+            # 所以這裡如果結算完變成 ended，一定是這次送出的行動剛好造成的，不用再跟
+            # 「結算前是不是已經 ended」比對。
+            captured: dict[str, list[str]] = {"msgs": []}
 
-    def _submit_and_resolve(self, battle: battle_instance.BattleInstance, definition: BattleDef, name: str, tag: str) -> None:
-        battle_instance.submit_action(battle, name, tag)
-        self._tick_battle(battle, definition, time.time())
+            def _apply(b: battle_instance.BattleInstance) -> None:
+                battle_instance.submit_action(b, name, rest)
+                captured["msgs"] = self._advance_battle_round(b, definition)
+
+            battle = self.world.mutate_battle(_apply)
+            if battle is not None and battle.phase == "ended":
+                self._apply_battle_outcome(battle)
+            return captured["msgs"] or ["你選擇了行動，等待其他人……"]
+        return ["（此刻無法這麼做。）"]
 
     def _recruit(self) -> list[str]:
         target = self._recruit_target()

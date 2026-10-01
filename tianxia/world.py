@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import random
+import time
 
 from . import flavor, leaderboard
 from .models import Act, Content, Ending, SimPlayer, SimRumor, Storyline
@@ -30,15 +31,18 @@ def check_thresholds(
         value = w.trends.get(th.trend, 0)
         if not (value >= th.value if th.op == ">=" else value <= th.value):
             continue
-        msgs += _fire(state, content, th.id, th.text, th.world_flags_add, th.ends_season, th.location, world, client)
+        msgs += _fire(
+            state, content, th.id, th.text, th.world_flags_add, th.ends_season, th.starts_battle, th.location,
+            world, client,
+        )
         if w.ended:
             return msgs
     for event in content.scenario.world_events:
         if event.id in w.fired_thresholds or not check_condition(event.condition, state):
             continue
         msgs += _fire(
-            state, content, event.id, event.text, event.world_flags_add, event.ends_season, event.location,
-            world, client,
+            state, content, event.id, event.text, event.world_flags_add, event.ends_season, event.starts_battle,
+            event.location, world, client,
         )
         if w.ended:
             return msgs
@@ -47,7 +51,8 @@ def check_thresholds(
 
 def _fire(
     state: GameState, content: Content, fire_id: str, text: str, flags: list[str], ends_season: bool,
-    location: str | None = None, world: WorldStateStore | None = None, client: OllamaClient | None = None,
+    starts_battle: str | None = None, location: str | None = None, world: WorldStateStore | None = None,
+    client: OllamaClient | None = None,
 ) -> list[str]:
     state.world.fired_thresholds.add(fire_id)
     add_world_flags(state, flags)
@@ -64,6 +69,9 @@ def _fire(
         if flourish:
             shown_text = f"{text}\n\n{flourish}"
     msgs = [f"【江湖大事】{shown_text}"]
+    if starts_battle and world is not None and starts_battle in content.battles:
+        world.start_battle(content.battles[starts_battle], now=time.time())
+        msgs.append(f"🛡️ 【全服戰報】{content.battles[starts_battle].name}的集結號角已經吹響！")
     if ends_season:
         msgs += end_season(state, content, world)
     return msgs

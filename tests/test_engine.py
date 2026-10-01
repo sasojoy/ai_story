@@ -736,6 +736,61 @@ def test_submitting_an_action_and_a_bot_auto_fills_then_the_round_resolves(conte
     assert battle.round.pending_actions == {}  # 回合已經重置
 
 
+def test_the_player_whose_action_completes_the_round_sees_the_resolution_text(content, game):
+    """送出最後一個行動的那個人，自己這次 choose() 的回傳就該看到這一回合真正發生的事
+    （不能是空清單）——不管這回合只是普通推進，還是剛好把戰鬥打完。"""
+    definition = _install_battle_def(content)
+    game.world.start_battle(definition, now=0.0)
+    with mock.patch("tianxia.engine.time.time", return_value=0.0):
+        game.choose("battle:join:guan")
+        game.world.mutate_battle(
+            lambda b: battle_instance.join_faction(b, "機器人", "huang", neili_cap=100.0, is_bot=True)
+        )
+    after_muster = definition.muster_seconds + 1
+    with mock.patch("tianxia.engine.time.time", return_value=after_muster):
+        game._battle_status()
+        msgs = game.choose("battle:act:safe")
+    assert msgs != []
+    assert any("官軍大勝" in m or "官軍獲勝" in m for m in msgs)  # _install_battle_def 的保底結果沒有數值門檻，第一回合就分出勝負
+
+
+def test_waiting_for_others_returns_a_placeholder_message(content, game):
+    """送出行動但還有人沒選完，回合不會結算：至少要有個訊息，不能讓畫面看起來像沒反應。"""
+    definition = _install_battle_def(content)
+    definition.outcomes[0] = definition.outcomes[0].model_copy(update={"trend_min": 999})  # 讓這回合分不出勝負
+    game.world.start_battle(definition, now=0.0)
+    with mock.patch("tianxia.engine.time.time", return_value=0.0):
+        game.choose("battle:join:guan")
+        game.world.mutate_battle(lambda b: battle_instance.join_faction(b, "乙玩家", "huang", neili_cap=100.0))
+    after_muster = definition.muster_seconds + 1
+    with mock.patch("tianxia.engine.time.time", return_value=after_muster):
+        game._battle_status()
+        msgs = game.choose("battle:act:safe")
+    assert msgs == ["你選擇了行動，等待其他人……"]
+
+
+def test_battle_outcome_applies_trend_delta_and_flags_to_the_shared_season(content, game):
+    definition = _install_battle_def(content)
+    definition.outcomes[0] = definition.outcomes[0].model_copy(
+        update={"world_flags_add": ["huangjin_decisive_win"], "trend_delta": {"kou": -40}}
+    )
+    game.world.start_battle(definition, now=0.0)
+    with mock.patch("tianxia.engine.time.time", return_value=0.0):
+        game.choose("battle:join:guan")
+        game.world.mutate_battle(
+            lambda b: battle_instance.join_faction(b, "機器人", "huang", neili_cap=100.0, is_bot=True)
+        )
+    before = game.world.get_season().trends["kou"]
+    after_muster = definition.muster_seconds + 1
+    with mock.patch("tianxia.engine.time.time", return_value=after_muster):
+        game._battle_status()
+        game.choose("battle:act:safe")
+    season = game.world.get_season()
+    assert season.trends["kou"] == max(0, before - 40)
+    assert "huangjin_decisive_win" in season.flags
+    assert any("官軍大勝" in r.text for r in season.chronicle)
+
+
 def test_an_eliminated_participant_sees_a_spectate_only_option(content, game):
     definition = _install_battle_def(content)
     game.world.start_battle(definition, now=0.0)
