@@ -5,4 +5,6 @@ saves/
 app.pid
 app_run.log
 app_run_err.log
+server_out.log
+server_err.log
 .gradio/
