@@ -9,6 +9,7 @@
   ],
   "thresholds": [
     {"id": "huangjin_50", "trend": "huangjin", "op": ">=", "value": 50, "text": "黃巾軍切斷洛陽官道，潁川與朝廷的聯繫斷絕，城中人心惶惶！", "world_flags_add": ["road_blocked"], "location": "luoyang_road"},
+    {"id": "huangjin_60", "trend": "huangjin", "op": ">=", "value": 60, "text": "波才親率黃巾軍主力與官軍精銳在潁川城下列陣以待，一場決定中原命運的大戰一觸即發！", "starts_battle": "huangjin_showdown", "location": "yingchuan"},
     {"id": "huangjin_80", "trend": "huangjin", "op": ">=", "value": 80, "text": "波才率黃巾大軍攻破潁川防線，郡治陷落，漢軍節節敗退！", "world_flags_add": ["huangjin_win"], "ends_season": true, "location": "yingchuan"},
     {"id": "huangjin_10", "trend": "huangjin", "op": "<=", "value": 10, "text": "黃巾別部營寨被各路義士踏平，波才下落不明，潁川重歸平靜。", "world_flags_add": ["huangjin_crushed"], "location": "huangjin_camp"},
     {"id": "yuxi_50", "trend": "yuxi", "op": ">=", "value": 50, "text": "江湖傳言：南華老仙留下的符文線索已拼出大半，各路人馬湧向嵩山。", "world_flags_add": ["yuxi_half"], "location": "songshan_foot"},
@@ -69,7 +70,9 @@
     {"id": "fame_10", "text": "名望達到 10", "condition": {"min_stats": {"fame": 10}}},
     {"id": "beat_bocai", "text": "擊敗波才", "condition": {"world_flags_all": ["bocai_defeated"]}},
     {"id": "take_shard", "text": "取得傳國玉璽碎片", "condition": {"world_flags_all": ["shard_taken"]}},
-    {"id": "crush_huangjin", "text": "平定黃巾（聲勢 10 以下）", "condition": {"world_flags_all": ["huangjin_crushed"]}}
+    {"id": "crush_huangjin", "text": "平定黃巾（聲勢 10 以下）", "condition": {"world_flags_all": ["huangjin_crushed"]}},
+    {"id": "showdown_win", "text": "打贏黃巾決戰", "condition": {"world_flags_all": ["huangjin_decisive_win"]}},
+    {"id": "showdown_loss", "text": "黃巾決戰落敗", "condition": {"world_flags_all": ["huangjin_decisive_loss"]}}
   ],
   "endings": [
     {"id": "huangjin_win", "title": "黃巾稱霸", "hint": "黃巾聲勢達到 80，潁川陷落。",

@@ -1,0 +1,92 @@
+[
+  {
+    "id": "huangjin_showdown",
+    "name": "黃巾決戰",
+    "factions": [
+      {"id": "guan", "name": "官軍"},
+      {"id": "huang", "name": "黃巾軍"}
+    ],
+    "trend_start": 50,
+    "muster_seconds": 300,
+    "round_seconds": 90,
+    "action_tags": {
+      "guan_safe": {"trend_delta": 2, "neili_damage": 15},
+      "guan_aggressive": {"trend_delta": 6, "neili_damage": 60, "mitigated_by_power": true},
+      "guan_reckless": {"trend_delta": 15, "neili_damage": 350},
+      "huang_safe": {"trend_delta": -2, "neili_damage": 15},
+      "huang_aggressive": {"trend_delta": -6, "neili_damage": 60, "mitigated_by_power": true},
+      "huang_reckless": {"trend_delta": -15, "neili_damage": 350}
+    },
+    "acts": [
+      {
+        "id": "showdown_1",
+        "title": "兩軍對陣",
+        "text": "官軍與黃巾軍主力在潁川城外列陣，旌旗蔽日，殺氣騰騰——決定中原命運的一戰，就在今日。",
+        "goal": "推動戰局，別讓對方先拉開差距",
+        "options": [
+          {"text": "穩守陣線", "tag": "guan_safe", "faction": "guan"},
+          {"text": "率先衝鋒", "tag": "guan_aggressive", "faction": "guan"},
+          {"text": "獨自殺入敵陣", "tag": "guan_reckless", "faction": "guan"},
+          {"text": "死守營寨", "tag": "huang_safe", "faction": "huang"},
+          {"text": "捨命衝殺", "tag": "huang_aggressive", "faction": "huang"},
+          {"text": "孤身闖陣搏殺", "tag": "huang_reckless", "faction": "huang"}
+        ],
+        "advance_when": {"trend_outside": 20}
+      },
+      {
+        "id": "showdown_2",
+        "title": "鏖戰正酣",
+        "text": "戰線犬牙交錯，雙方都已殺紅了眼，誰能撐到最後，誰就能主宰接下來的戰局。",
+        "goal": "持續推動戰局，撐過這一輪消耗",
+        "options": [
+          {"text": "穩紮穩打，徐圖進取", "tag": "guan_safe", "faction": "guan"},
+          {"text": "全線壓上，猛攻不歇", "tag": "guan_aggressive", "faction": "guan"},
+          {"text": "單騎踏營，直取敵將", "tag": "guan_reckless", "faction": "guan"},
+          {"text": "且戰且退，保存實力", "tag": "huang_safe", "faction": "huang"},
+          {"text": "拼死反撲，誓死不退", "tag": "huang_aggressive", "faction": "huang"},
+          {"text": "孤注一擲，衝擊敵陣", "tag": "huang_reckless", "faction": "huang"}
+        ],
+        "advance_when": {"trend_outside": 35}
+      },
+      {
+        "id": "showdown_3",
+        "title": "決勝時刻",
+        "text": "勝負已經近在咫尺，這最後一擊，將決定誰才是潁川城下真正的主人。",
+        "goal": "分出最終勝負",
+        "options": [
+          {"text": "穩住陣腳，等待戰機", "tag": "guan_safe", "faction": "guan"},
+          {"text": "全軍壓上，畢其功於一役", "tag": "guan_aggressive", "faction": "guan"},
+          {"text": "親自陷陣，直取敵酋", "tag": "guan_reckless", "faction": "guan"},
+          {"text": "死守最後防線", "tag": "huang_safe", "faction": "huang"},
+          {"text": "絕地反擊，背水一戰", "tag": "huang_aggressive", "faction": "huang"},
+          {"text": "捨身衝陣，求死一搏", "tag": "huang_reckless", "faction": "huang"}
+        ]
+      }
+    ],
+    "outcomes": [
+      {
+        "faction": "guan",
+        "trend_min": 65,
+        "title": "官軍大勝",
+        "text": "官軍士氣如虹，黃巾軍全線潰散，波才的主力在這一戰中土崩瓦解——潁川的危局，就此解除大半。",
+        "world_flags_add": ["huangjin_decisive_win"],
+        "trend_delta": {"huangjin": -35}
+      },
+      {
+        "faction": "huang",
+        "trend_max": 35,
+        "title": "黃巾得勢",
+        "text": "黃巾軍殺出重圍，官軍損兵折將，潁川城下一片狼藉——波才的聲勢，反而因此更加浩大。",
+        "world_flags_add": ["huangjin_decisive_loss"],
+        "trend_delta": {"huangjin": 25}
+      },
+      {
+        "faction": "guan",
+        "title": "兩軍膠著",
+        "text": "鏖戰半日，雙方都已疲憊不堪，各自鳴金收兵——這一戰沒能分出勝負，但官軍總算守住了陣線。",
+        "world_flags_add": [],
+        "trend_delta": {"huangjin": -5}
+      }
+    ]
+  }
+]
