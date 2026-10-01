@@ -149,7 +149,9 @@ class CharacterDef(_Strict):
     starting_wugong: str | None = None  # 本命武學 id（指向 SkillDef，kind 必須是「武學」）
     starting_neigong: str | None = None  # 本命內功 id（指向 SkillDef，kind 必須是「內功」）
     deep_interaction: bool = False  # 是否走 companion_agent.py 的即時 LLM 對話（見設計文件四.3）
-    recruit_at: str | None = None  # 可招募的同伴在哪個地點找得到他（龍頭人物不填，四處走動不固定）
+    recruit_at: str | None = None  # 可招募的同伴在哪個地點找得到他（龍頭人物不填，用 talk_at）
+    talk_at: str | None = None  # kind=locked 的龍頭人物在哪個地點可以深度對話（不可招募，見上一輪「還要改進」5）
+    affinity_tag_deltas: dict[str, int] | None = None  # 覆寫 companion_agent.AFFINITY_TAG_DELTAS 的個別項目；None／缺的 tag 用預設值
 
 
 class Squad(_Strict):

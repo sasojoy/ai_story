@@ -291,6 +291,17 @@ def test_socializing_without_a_deep_interaction_companion_falls_through_to_event
     assert game.state.player.pending_companion is None
 
 
+def test_locked_figures_use_talk_at_instead_of_recruit_at_for_dialogue(content, game):
+    """龍頭人物（kind=locked）不可招募，深度對話走 talk_at，不是 recruit_at。"""
+    ch = content.characters["mate"]
+    ch.kind, ch.recruit_at, ch.talk_at, ch.deep_interaction = "locked", None, "town", True
+    with mock.patch.object(companion_agent, "_generate", return_value=FAKE_TURN):
+        msgs = game.choose("act:socialize")
+    assert msgs == ["他點了點頭。"]
+    assert game.state.player.pending_companion == "mate"
+    assert "act:recruit" not in ids(game)  # 鎖定人物不會因為 talk_at 而冒出招募選項
+
+
 # ── 練功、療傷 ───────────────────────────────────────────
 
 

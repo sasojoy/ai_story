@@ -291,11 +291,11 @@ class Game:
         return self._encounter("socialize", "此地無人可訪，你只好悻悻離去。")
 
     def _deep_interaction_target(self) -> str | None:
-        """這個地點目前能深度對話的人物 id（見設計文件四.3：目前僅開放 7 位可招募人物，
-        8 位鎖定的龍頭人物沒有 recruit_at 地點，暫不在此範圍）；沒有就是 None。"""
+        """這個地點目前能深度對話的人物 id：可招募的 7 位在 recruit_at，鎖定的 8 位龍頭
+        人物在 talk_at（不可招募，見「還要改進」第 5 點）；沒有就是 None。"""
         s, c = self.state, self.content
         for cid, ch in c.characters.items():
-            if ch.deep_interaction and ch.recruit_at == s.player.location:
+            if ch.deep_interaction and s.player.location in (ch.recruit_at, ch.talk_at):
                 return cid
         return None
 

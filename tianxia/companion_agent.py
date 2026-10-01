@@ -27,6 +27,7 @@ MAX_HISTORY_MESSAGES = 40
 MEMORY_CONSOLIDATION_INTERVAL = 20
 MAX_RETRIES = 3
 SIGNATURE_SKILL_AFFINITY_THRESHOLD = 70  # 情誼達到這個門檻，才能向對方習得本命武學（設計文件七.1）
+DRIFT_SYNTHESIS_INTERVAL = 15  # 全服玩家對這位人物又新累積了幾次交遊 tag，就該重新語意化一次性情漂移
 
 # 好感度 tag 查表（設計文件七.1／五.1 一貫原則：好感度變化只信任封閉分類查表，
 # 不信任 LLM 自報數字）。目前是全部人物共用同一張表，之後如果要每位歷史人物有不同的
@@ -60,7 +61,17 @@ class MemoryConsolidation(BaseModel):
     new_milestones: list[str] = Field(default_factory=list)
 
 
-def resolve_tag_delta(tag: str | None) -> int:
+class DriftSynthesis(BaseModel):
+    drift_note: str = ""
+
+
+def resolve_tag_delta(tag: str | None, character: CharacterDef | None = None) -> int:
+    """查表決定好感度變化：先看這位人物有沒有覆寫這個 tag（CharacterDef.affinity_tag_deltas，
+    見「還要改進」第 6 點——15 位人物性格差異很大，同一句話對曹操跟劉備的效果不該一樣），
+    沒覆寫才退回全人物共用的預設值。"""
+    overrides = character.affinity_tag_deltas if character else None
+    if overrides and tag in overrides:
+        return overrides[tag]
     return AFFINITY_TAG_DELTAS.get(tag or "", 0)
 
 
@@ -165,7 +176,7 @@ def _apply_turn(
 ) -> list[str]:
     """回合收尾共用邏輯：查表覆寫好感度、記錄對話、更新關係現況，回傳要顯示的訊息。"""
     p = state.player
-    delta = resolve_tag_delta(tag)
+    delta = resolve_tag_delta(tag, character)
     before = p.affinities.get(companion_id, 0)
     after = max(0, min(100, before + delta))
     p.affinities[companion_id] = after
@@ -213,6 +224,7 @@ def continue_dialogue(
     msgs = _apply_turn(state, character, companion_id, player_action, turn, tag)
     msgs += _maybe_grant_signature_skill(state, content, character, companion_id)
     msgs += _maybe_consolidate_memory(client, state, character, companion_id)
+    _maybe_synthesize_drift(client, character, companion_id, world)
     return msgs
 
 
@@ -251,6 +263,43 @@ def _maybe_consolidate_memory(client: OllamaClient | None, state: GameState, cha
     p.turns_since_consolidation[companion_id] = 0
     p.relationship_notes[companion_id] = result.relationship_summary.strip() or p.relationship_notes.get(companion_id, "")
     return [f"📖 【記憶梳理】{character.name} 這段時光的點滴，已在心底沉澱。"]
+
+
+def _maybe_synthesize_drift(client: OllamaClient | None, character: CharacterDef, companion_id: str, world: WorldStateStore) -> None:
+    """性情漂移語意化（設計文件四.3，先前只累積原始 tag 計數、沒有語意判斷的部分）：
+    每當全服玩家對這位人物又新累積了 DRIFT_SYNTHESIS_INTERVAL 次交遊 tag，獨立呼叫一次
+    LLM，把「大家最近對他做了什麼」的分佈濃縮成一句漂移後的性情描述，寫回共用世界狀態
+    （build_system_prompt 已經會讀取並顯示給下一輪對話參考）。這是全服共用的判斷，不是
+    某個玩家專屬的，所以不回傳訊息給玩家看——純粹背景更新，失敗就跳過，下次互動再試。"""
+    if client is None or world.tag_counts_since_last_drift(companion_id) < DRIFT_SYNTHESIS_INTERVAL:
+        return
+    counts = world.read().companion_tag_counts.get(companion_id, {})
+    if not counts:
+        return
+    distribution = "、".join(f"{tag} {n} 次" for tag, n in sorted(counts.items(), key=lambda kv: -kv[1]))
+    baseline_note = world.get_companion_drift_note(companion_id)
+    baseline_str = f"\n他目前已經漂移到的性情：{baseline_note}" if baseline_note else ""
+    messages = [
+        {"role": "system", "content": (
+            f"你是遊戲的性情演化系統，負責判斷歷史人物「{character.name}」在許多玩家的集體互動下，"
+            "性情是否該有細微的變化——這是全服共用的判斷，不是針對單一玩家。\n"
+            f"【{character.name}的性格基礎模板（不可違背，只能在這個基礎上微調）】{character.personality}"
+            f"{baseline_str}\n"
+            f"【眾玩家累積至今、對他的言行傾向統計】{distribution}\n"
+            "請用一句話描述他現在的性情，應該要反映統計裡占比最高的傾向，但措辭要貼合他的基礎性格，"
+            "不能整個變成另一個人；如果統計分佈很平均、看不出明顯傾向，就寫他維持基礎性格、"
+            "只是更加篤定或更加圓融這類細微描述，不要憑空編造劇情事件。"
+        )},
+        {"role": "user", "content": "請給出 drift_note。"},
+    ]
+    for _ in range(MAX_RETRIES):
+        try:
+            result = client.chat_structured(messages, DriftSynthesis, temperature=0.6, required_fields=["drift_note"])
+        except Exception:
+            continue
+        if result.drift_note.strip():
+            world.record_drift_synthesis(companion_id, result.drift_note.strip())
+            return
 
 
 def leave_dialogue(state: GameState) -> list[str]:

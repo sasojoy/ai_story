@@ -50,6 +50,7 @@ class SharedWorldState(BaseModel):
     created_skills: dict[str, MartialArt] = Field(default_factory=dict)  # 鍵是武學名稱
     companion_tag_counts: dict[str, dict[str, int]] = Field(default_factory=dict)  # 人物 id -> {tag: 次數}
     companion_drift_note: dict[str, str] = Field(default_factory=dict)  # 人物 id -> 目前漂移後的一句話性情
+    companion_drift_synthesized_at: dict[str, int] = Field(default_factory=dict)  # 人物 id -> 上次語意化時的 tag 總數
     companions: dict[str, CompanionProgress] = Field(default_factory=dict)  # 人物 id -> 進度/招募狀態
 
 
@@ -141,6 +142,25 @@ class WorldStateStore:
     def set_companion_drift_note(self, companion_id: str, note: str) -> None:
         def _apply(state: SharedWorldState) -> None:
             state.companion_drift_note[companion_id] = note
+
+        self.mutate(_apply)
+
+    def tag_counts_since_last_drift(self, companion_id: str) -> int:
+        """自上次語意化以來，全服玩家又新累積了幾次交遊 tag（給 companion_agent.py 判斷
+        要不要觸發一次漂移語意化；用「總次數」而非時間排程，不管同時有幾個玩家在玩，
+        誰的這次互動剛好跨過門檻就由誰觸發）。"""
+        read = self.read()
+        total = sum(read.companion_tag_counts.get(companion_id, {}).values())
+        return total - read.companion_drift_synthesized_at.get(companion_id, 0)
+
+    def record_drift_synthesis(self, companion_id: str, note: str) -> None:
+        """語意化完成後，原子性地把新的一句話性情跟「這次是在累積到多少次時算的」一起
+        寫回（鎖內讀當下總數，避免跟 record_companion_tag 之間有競態，把門檻標記設過頭
+        或設不夠）。"""
+        def _apply(state: SharedWorldState) -> None:
+            state.companion_drift_note[companion_id] = note
+            total = sum(state.companion_tag_counts.get(companion_id, {}).values())
+            state.companion_drift_synthesized_at[companion_id] = total
 
         self.mutate(_apply)
 

@@ -13,6 +13,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
+from .companion_agent import DIALOGUE_TAGS
 from .models import (
     STATS, CharacterDef, Condition, Config, Content, Effect, Event, Location, MapLayout,
     Scenario, Sect, SimRumor, SkillDef, Squad, Tutorial,
@@ -259,6 +260,12 @@ def validate(c: Content) -> None:
         if ch.recruit_at:
             known(where, [ch.recruit_at], c.locations, "地點")
             need(ch.kind == "recruitable", f"{where}：只有 kind=recruitable 的同伴需要 recruit_at")
+        if ch.talk_at:
+            known(where, [ch.talk_at], c.locations, "地點")
+            need(ch.kind == "locked", f"{where}：只有 kind=locked 的龍頭人物需要 talk_at（可招募的同伴用 recruit_at）")
+        if ch.affinity_tag_deltas:
+            for tag in ch.affinity_tag_deltas:
+                need(tag in DIALOGUE_TAGS, f"{where}：affinity_tag_deltas 的 {tag!r} 不是合法的交遊 tag")
     for squad in c.squads.values():
         where = f"敵方隊伍 {squad.id}"
         need(squad.difficulty >= 0, f"{where}：difficulty 不能是負的")
