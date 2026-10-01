@@ -213,3 +213,41 @@ def test_rumor_is_recorded_where_the_player_stands(state, content, world):
     apply_effect(Effect(rumor="{name}撿到了殘卷！", chronicle="{name}發現殘卷。"), state, content, world)
     assert state.world.rumors[-1].location == "lake"
     assert state.world.chronicle[-1].location is None  # 江湖史不記地點
+
+
+# ── 傳國玉璽碎片（跨季，還要改進第 2 點）─────────────────────────
+
+
+def test_newly_set_jade_seal_flag_records_a_fragment(state, content, world):
+    content.scenario.jade_seal_flag = "shard_taken"
+    apply_effect(Effect(world_flags_add=["shard_taken"], chronicle="{name}取得玉璽碎片。"), state, content, world)
+    fragments = world.get_jade_seal_fragments()
+    assert len(fragments) == 1
+    assert fragments[0].finder == state.player.name
+    assert fragments[0].season_name == content.scenario.name
+    assert fragments[0].text == f"{state.player.name}取得玉璽碎片。"
+
+
+def test_jade_seal_flag_already_set_does_not_record_again(state, content, world):
+    content.scenario.jade_seal_flag = "shard_taken"
+    apply_effect(Effect(world_flags_add=["shard_taken"]), state, content, world)
+    apply_effect(Effect(world_flags_add=["shard_taken"]), state, content, world)  # 已經有這個旗標：不重複記錄
+    assert len(world.get_jade_seal_fragments()) == 1
+
+
+def test_unrelated_flags_do_not_record_a_fragment(state, content, world):
+    content.scenario.jade_seal_flag = "shard_taken"
+    apply_effect(Effect(world_flags_add=["some_other_flag"]), state, content, world)
+    assert world.get_jade_seal_fragments() == []
+
+
+def test_without_a_jade_seal_flag_configured_nothing_is_recorded(state, content, world):
+    assert content.scenario.jade_seal_flag is None
+    apply_effect(Effect(world_flags_add=["shard_taken"]), state, content, world)
+    assert world.get_jade_seal_fragments() == []
+
+
+def test_fragment_falls_back_to_a_generic_text_without_a_chronicle(state, content, world):
+    content.scenario.jade_seal_flag = "shard_taken"
+    apply_effect(Effect(world_flags_add=["shard_taken"]), state, content, world)
+    assert "取得了傳國玉璽的一塊碎片" in world.get_jade_seal_fragments()[0].text

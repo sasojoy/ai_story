@@ -150,6 +150,14 @@ class OllamaClient:
             payload["format"] = json_schema
         return payload
 
+    def chat_text(self, messages: list[dict[str, str]], temperature: float = 0.8, num_predict: int = 120) -> str:
+        """非結構化的自由文字生成（flavor.py 用），不走 JSON schema、不重試——這類呼叫是
+        錦上添花的裝飾句，失敗直接讓呼叫端省略即可，不值得重試拖慢行動流程。"""
+        payload = self._build_payload(messages, temperature, num_predict=num_predict)
+        res = requests.post(f"{self.base_url}/api/chat", json=payload, timeout=self.timeout)
+        res.raise_for_status()
+        return res.json().get("message", {}).get("content", "")
+
     def chat_structured(
         self, messages: list[dict[str, str]], response_model: Type[T], temperature: float = 0.8,
         schema_fields: list[str] | None = None, required_fields: list[str] | None = None,

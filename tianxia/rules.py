@@ -6,7 +6,7 @@ import random
 from . import roster, team  # 與 roster 互相 import：只能引入整個模組、呼叫時才取屬性，不能 from .roster import …
 from .models import Check, Condition, Content, Effect
 from .state import PLAYER, GameState, Rumor
-from .world_state import WorldStateStore
+from .world_state import JADE_SEAL_FRAGMENT_COUNT, WorldStateStore
 
 DAY = 86400
 
@@ -157,6 +157,10 @@ def apply_effect(effect: Effect, state: GameState, content: Content, world: Worl
         msgs += roster.recruit(state, content, world, effect.recruit)
     for trend_id, delta in effect.trend.items():
         msgs += change_trend(state, content, trend_id, delta)
+    jade_seal_flag = content.scenario.jade_seal_flag
+    newly_found_shard = (
+        jade_seal_flag is not None and jade_seal_flag in effect.world_flags_add and jade_seal_flag not in state.world.flags
+    )
     add_world_flags(state, effect.world_flags_add)
     name = display_name(state)
     if effect.rumor:
@@ -165,4 +169,9 @@ def apply_effect(effect: Effect, state: GameState, content: Content, world: Worl
         msgs.append(f"【江湖傳聞】{text}")
     if effect.chronicle:
         add_chronicle(state, effect.chronicle.format(name=name))
+    if newly_found_shard:
+        fragment_text = effect.chronicle.format(name=name) if effect.chronicle else f"{name}取得了傳國玉璽的一塊碎片。"
+        fragment = world.record_jade_seal_fragment(name, content.scenario.name, fragment_text)
+        if fragment is not None:
+            msgs.append(f"🏺 【天下大事】{name}尋得傳國玉璽第 {fragment.number} 塊碎片！（{fragment.number}/{JADE_SEAL_FRAGMENT_COUNT} 已現世）")
     return msgs

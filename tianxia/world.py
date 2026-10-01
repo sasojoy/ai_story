@@ -3,13 +3,20 @@ from __future__ import annotations
 
 import random
 
+from . import flavor, leaderboard
 from .models import Act, Content, Ending, SimPlayer, SimRumor, Storyline
+from .ollama_client import OllamaClient
 from .rules import add_chronicle, add_rumor, add_world_flags, change_trend, check_condition
 from .state import GameState
+from .world_state import WorldStateStore
 
 
-def check_thresholds(state: GameState, content: Content) -> list[str]:
-    """依序處理大勢門檻、世界事件（各只觸發一次），最後更新主線進度。"""
+def check_thresholds(
+    state: GameState, content: Content, world: WorldStateStore | None = None, client: OllamaClient | None = None,
+) -> list[str]:
+    """依序處理大勢門檻、世界事件（各只觸發一次），最後更新主線進度。world/client 給
+    _fire() 用來潤色江湖大事的傳聞文字（設計文件 8.2 第 4 點）；不傳就是原本的純文字，
+    兩者都是選填，不影響既有呼叫端或測試。"""
     w = state.world
     msgs: list[str] = []
     if w.ended:
@@ -20,13 +27,16 @@ def check_thresholds(state: GameState, content: Content) -> list[str]:
         value = w.trends.get(th.trend, 0)
         if not (value >= th.value if th.op == ">=" else value <= th.value):
             continue
-        msgs += _fire(state, content, th.id, th.text, th.world_flags_add, th.ends_season, th.location)
+        msgs += _fire(state, content, th.id, th.text, th.world_flags_add, th.ends_season, th.location, world, client)
         if w.ended:
             return msgs
     for event in content.scenario.world_events:
         if event.id in w.fired_thresholds or not check_condition(event.condition, state):
             continue
-        msgs += _fire(state, content, event.id, event.text, event.world_flags_add, event.ends_season, event.location)
+        msgs += _fire(
+            state, content, event.id, event.text, event.world_flags_add, event.ends_season, event.location,
+            world, client,
+        )
         if w.ended:
             return msgs
     return msgs + update_storyline(state, content)
@@ -34,15 +44,25 @@ def check_thresholds(state: GameState, content: Content) -> list[str]:
 
 def _fire(
     state: GameState, content: Content, fire_id: str, text: str, flags: list[str], ends_season: bool,
-    location: str | None = None,
+    location: str | None = None, world: WorldStateStore | None = None, client: OllamaClient | None = None,
 ) -> list[str]:
     state.world.fired_thresholds.add(fire_id)
     add_world_flags(state, flags)
     add_rumor(state, text, location)
     add_chronicle(state, text)
-    msgs = [f"【江湖大事】{text}"]
+    shown_text = text
+    if world is not None:
+        flourish = world.get_event_flavor(fire_id)
+        if not flourish and client is not None:
+            flourish = flavor.polish_world_event(client, text)
+            if flourish:
+                world.set_event_flavor(fire_id, flourish)
+                flourish = world.get_event_flavor(fire_id)  # 可能被別的玩家搶先寫入，讀回真正共用的那一份
+        if flourish:
+            shown_text = f"{text}\n\n{flourish}"
+    msgs = [f"【江湖大事】{shown_text}"]
     if ends_season:
-        msgs += end_season(state, content)
+        msgs += end_season(state, content, world)
     return msgs
 
 
@@ -125,7 +145,9 @@ def evaluate_ending(state: GameState, content: Content) -> Ending:
     return content.scenario.endings[-1]
 
 
-def end_season(state: GameState, content: Content) -> list[str]:
+def end_season(state: GameState, content: Content, world: WorldStateStore | None = None) -> list[str]:
+    """world 給的話，順便算一次天下武學榜／內功榜附在結局後面（設計文件 6.5）；不傳就是
+    原本的純結局文字，選填不影響既有呼叫端或測試。"""
     w = state.world
     if w.ended:
         return []
@@ -134,4 +156,8 @@ def end_season(state: GameState, content: Content) -> list[str]:
     w.ending_title = ending.title
     w.ending_text = ending.text
     add_chronicle(state, f"賽季落幕：{ending.title}")
-    return [f"══ 賽季落幕：{ending.title} ══", ending.text]
+    msgs = [f"══ 賽季落幕：{ending.title} ══", ending.text]
+    if world is not None:
+        board = leaderboard.compute_leaderboard(content, world)
+        msgs += leaderboard.format_lines(board)
+    return msgs

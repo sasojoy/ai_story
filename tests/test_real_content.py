@@ -43,9 +43,16 @@ def _fake_chat_structured(self, messages, response_model, **kwargs):
     return response_model()
 
 
+def _fake_chat_text(self, messages, **kwargs):
+    """flavor.py 的裝飾句潤色（重遊地點/重複事件/江湖大事）也會連真正的 Ollama，同樣要假掉，
+    不然整季模擬每次重遊/重複觸發都會多一次真的網路呼叫，把測試拖到以分鐘計。"""
+    return "（測試用潤色句）"
+
+
 @pytest.fixture(autouse=True)
 def no_real_ollama():
-    with mock.patch.object(OllamaClient, "chat_structured", _fake_chat_structured):
+    with mock.patch.object(OllamaClient, "chat_structured", _fake_chat_structured), \
+         mock.patch.object(OllamaClient, "chat_text", _fake_chat_text):
         yield
 
 

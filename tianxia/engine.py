@@ -10,7 +10,7 @@ import random
 
 from pydantic import BaseModel
 
-from . import atlas, battlelog, companion_agent, journal, roster, skillview, team
+from . import atlas, battlelog, companion_agent, flavor, journal, roster, skillview, team
 from .events import choice_label, has_events_here, pick_event, visible_choices
 from .guide import note_action, quest_text, tutorial_intro
 from .journal import LOG_BREAK, Draft
@@ -146,7 +146,7 @@ class Game:
             w.sim_accum -= hours * HOUR
             msgs += sim_tick(self.state, self.content, hours, self.rng)
         if not w.ended and w.time >= cfg.season_days * DAY:
-            msgs += end_season(self.state, self.content)
+            msgs += end_season(self.state, self.content, self.world)
         return msgs
 
     # ── 選項 ──────────────────────────────────────────────
@@ -212,7 +212,7 @@ class Game:
         self.state.battle_card = None
         kind, _, arg = option_id.partition(":")
         if kind == "season":
-            return self._log(self.new_season() + check_thresholds(self.state, self.content))
+            return self._log(self.new_season() + check_thresholds(self.state, self.content, self.world, self.client))
         self._draft = Draft(self._action_title(kind, arg))
         try:
             if kind == "act":
@@ -227,7 +227,7 @@ class Game:
                 msgs += note_action(self.state, self.content, self.world, arg)
             elif kind == "move":
                 msgs += note_action(self.state, self.content, self.world, "move")
-            msgs += check_thresholds(self.state, self.content)
+            msgs += check_thresholds(self.state, self.content, self.world, self.client)
             journal.add_entry(self.state, self._draft.entry(self.state.world.time, msgs))
         finally:
             self._draft = None
@@ -346,12 +346,18 @@ class Game:
         return [nothing]
 
     def _present(self, event: Event) -> list[str]:
+        is_repeat = event.id in self.state.player.seen_events
         self.state.pending_event = event.id
         self.state.player.seen_events.add(event.id)
         head = f"✦ 奇遇：{event.title}" if event.qiyu else f"【{event.title}】"
+        text = event.text
+        if is_repeat:
+            flourish = flavor.polish_event_repeat(self.client, event.title, event.text)
+            if flourish:
+                text = f"{event.text}\n\n{flourish}"
         self._outcome(journal.event_marker(event.title, event.qiyu), head)
-        self._hide(event.text)
-        return [head, event.text]
+        self._hide(text)
+        return [head, text]
 
     def _squad_encounter(self, squad_id: str) -> list[str]:
         """遭遇一支敵方隊伍：單次判定，勝得對手獎勵與屬性機會，落敗失落一成銀兩。"""
@@ -414,10 +420,15 @@ class Game:
 
     def _move(self, dest_id: str) -> list[str]:
         dest = self.content.locations[dest_id]
+        is_revisit = dest_id in self.state.player.visited
         self.state.player.stamina -= dest.move_cost
         self.state.player.location = dest_id
         self.state.player.visited.add(dest_id)
         text = self.location_text()
+        if is_revisit and not dest.important:
+            flourish = flavor.polish_revisit(self.client, dest.name, dest.description)
+            if flourish:
+                text = f"{text}\n\n{flourish}"
         self._hide(text)
         return [text]
 
@@ -436,7 +447,7 @@ class Game:
                     break
                 msgs += self._move(hop)
                 msgs += note_action(s, c, self.world, "move")
-                msgs += check_thresholds(s, c)
+                msgs += check_thresholds(s, c, self.world, self.client)
             self._draft.title = self._travel_title(dest_id, route)
             journal.add_entry(s, self._draft.entry(s.world.time, msgs))
         finally:
@@ -731,7 +742,8 @@ class Game:
         return _timeline(self.state.world.rumors[-limit:][::-1]) or "（尚無傳聞。）"
 
     def chronicle_text(self) -> str:
-        return _timeline(self.state.world.chronicle) or "（江湖史尚無記載。）"
+        text = _timeline(self.state.world.chronicle) or "（江湖史尚無記載。）"
+        return f"{text}\n\n---\n\n{self.world.jade_seal_summary()}"
 
     # ── 江湖紀錄 ──────────────────────────────────────────
 

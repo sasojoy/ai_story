@@ -4,7 +4,7 @@ from unittest import mock
 import pytest
 
 from conftest import FixedRandom
-from tianxia import companion_agent, rules
+from tianxia import companion_agent, flavor, rules
 from tianxia.engine import Game
 from tianxia.state import GameState
 from tianxia.world_state import WorldStateStore
@@ -300,6 +300,52 @@ def test_locked_figures_use_talk_at_instead_of_recruit_at_for_dialogue(content, 
     assert msgs == ["他點了點頭。"]
     assert game.state.player.pending_companion == "mate"
     assert "act:recruit" not in ids(game)  # 鎖定人物不會因為 talk_at 而冒出招募選項
+
+
+# ── 重複內容的潤色（還要改進第 3 點）─────────────────────────
+
+
+def test_first_visit_to_a_location_does_not_call_flavor(game):
+    with mock.patch.object(flavor, "polish_revisit") as polish:
+        game.choose("move:lake")  # 第一次去湖邊，不是重遊
+    polish.assert_not_called()
+
+
+def test_revisiting_a_location_appends_the_flavor_sentence(game):
+    game.choose("move:lake")
+    with mock.patch.object(flavor, "polish_revisit", return_value="風又吹起了。"):
+        msgs = game.choose("move:town")  # 小鎮開局就去過，這次是重遊
+    assert msgs[0].endswith("\n\n風又吹起了。")
+
+
+def test_revisiting_an_important_location_skips_flavor(content, game):
+    content.locations["town"].important = True
+    game.choose("move:lake")
+    with mock.patch.object(flavor, "polish_revisit") as polish:
+        game.choose("move:town")
+    polish.assert_not_called()
+
+
+def test_revisiting_skips_the_sentence_when_flavor_comes_back_empty(game):
+    game.choose("move:lake")
+    with mock.patch.object(flavor, "polish_revisit", return_value=""):
+        msgs = game.choose("move:town")
+    assert msgs[0] == game.location_text()  # 失敗就整句省略，不多附加任何東西
+
+
+def test_presenting_an_event_for_the_first_time_does_not_call_flavor(game):
+    event = next(iter(game.content.events.values()))
+    with mock.patch.object(flavor, "polish_event_repeat") as polish:
+        game._present(event)
+    polish.assert_not_called()
+
+
+def test_presenting_a_repeated_event_appends_the_flavor_sentence(game):
+    event = next(iter(game.content.events.values()))
+    game._present(event)
+    with mock.patch.object(flavor, "polish_event_repeat", return_value="巷口又傳來同樣的吆喝聲。"):
+        head, text = game._present(event)
+    assert text.endswith("\n\n巷口又傳來同樣的吆喝聲。")
 
 
 # ── 練功、療傷 ───────────────────────────────────────────

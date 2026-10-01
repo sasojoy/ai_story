@@ -73,3 +73,40 @@ def test_lock_prevents_concurrent_mutation_from_corrupting_state(tmp_path):
         art = generate_from_name(f"武學{i}", "武學", f"武學{i}")
         (store_a if i % 2 == 0 else store_b).claim_skill_name(art)
     assert len(store_a.read().created_skills) == 20
+
+
+# ── 江湖大事潤色（全服共用一次，還要改進第 3 點）──────────────────
+
+
+def test_event_flavor_starts_empty(store):
+    assert store.get_event_flavor("huangjin_80") == ""
+
+
+def test_set_event_flavor_first_write_wins(store):
+    store.set_event_flavor("huangjin_80", "城頭的旗幟已經換了顏色。")
+    store.set_event_flavor("huangjin_80", "別的玩家搶先寫入的另一句話。")
+    assert store.get_event_flavor("huangjin_80") == "城頭的旗幟已經換了顏色。"
+
+
+# ── 傳國玉璽碎片（跨季，還要改進第 2 點）─────────────────────────
+
+
+def test_record_jade_seal_fragment_numbers_in_order(store):
+    first = store.record_jade_seal_fragment("強者", "黃巾之亂", "強者擊敗看守者，取得第一塊碎片。")
+    second = store.record_jade_seal_fragment("弱者", "黃巾之亂", "弱者意外尋得第二塊碎片。")
+    assert (first.number, second.number) == (1, 2)
+    assert [f.finder for f in store.get_jade_seal_fragments()] == ["強者", "弱者"]
+
+
+def test_record_jade_seal_fragment_stops_after_seven(store):
+    for i in range(7):
+        store.record_jade_seal_fragment(f"玩家{i}", "測試季", "找到了。")
+    assert store.record_jade_seal_fragment("第八人", "測試季", "來晚了。") is None
+    assert len(store.get_jade_seal_fragments()) == 7
+
+
+def test_jade_seal_summary_before_and_after_a_fragment_is_found(store):
+    assert "尚無人尋獲" in store.jade_seal_summary()
+    store.record_jade_seal_fragment("強者", "黃巾之亂", "強者擊敗看守者，取得第一塊碎片。")
+    summary = store.jade_seal_summary()
+    assert "1/7" in summary and "強者" in summary and "黃巾之亂" in summary

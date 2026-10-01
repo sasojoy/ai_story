@@ -311,6 +311,7 @@ class Scenario(_Strict):
     storylines: list[Storyline] = Field(min_length=1)
     endings: list[Ending]
     milestones: list[Milestone] = Field(default_factory=list)
+    jade_seal_flag: str | None = None  # 這個世界旗標代表玩家親手取得了這一季的玉璽碎片（設計文件九），記進跨季持久紀錄
 
 
 class Config(_Strict):

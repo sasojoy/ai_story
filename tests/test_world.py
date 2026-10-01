@@ -1,4 +1,5 @@
 import random
+from unittest import mock
 
 from tianxia.world import (
     check_thresholds, current_act, current_storyline, end_season, evaluate_ending, sim_active, sim_tick,
@@ -13,6 +14,38 @@ def test_threshold_fires_once_and_sets_flag(state, content):
     assert state.world.rumors[-1].text == "水寇封江！"
     assert state.world.chronicle[-1].text == "水寇封江！"
     assert check_thresholds(state, content) == []
+
+
+def test_threshold_without_world_or_client_stays_unflavored(state, content):
+    """既有呼叫端（沒傳 world/client）行為完全不變：純文字，沒有潤色句。"""
+    state.world.trends["kou"] = 50
+    assert check_thresholds(state, content) == ["【江湖大事】水寇封江！"]
+
+
+def test_threshold_flavor_is_computed_once_and_cached(state, content, world):
+    client = mock.Mock()
+    client.chat_text.return_value = "碼頭的船家議論紛紛。"
+    state.world.trends["kou"] = 50
+    msgs = check_thresholds(state, content, world, client)
+    assert msgs == ["【江湖大事】水寇封江！\n\n碼頭的船家議論紛紛。"]
+    assert client.chat_text.call_count == 1
+    assert world.get_event_flavor("kou50") == "碼頭的船家議論紛紛。"
+
+
+def test_threshold_flavor_reuses_a_cached_value_without_calling_the_llm_again(state, content, world):
+    world.set_event_flavor("kou50", "已經有人潤色過的句子。")
+    client = mock.Mock()
+    state.world.trends["kou"] = 50
+    msgs = check_thresholds(state, content, world, client)
+    assert msgs == ["【江湖大事】水寇封江！\n\n已經有人潤色過的句子。"]
+    client.chat_text.assert_not_called()
+
+
+def test_threshold_skips_the_flourish_when_the_llm_call_fails(state, content, world):
+    client = mock.Mock()
+    client.chat_text.side_effect = RuntimeError("連不上")
+    state.world.trends["kou"] = 50
+    assert check_thresholds(state, content, world, client) == ["【江湖大事】水寇封江！"]
 
 
 def test_ending_threshold_ends_season(state, content):
@@ -30,6 +63,15 @@ def test_evaluate_ending_falls_back(state, content):
 def test_end_season_is_idempotent(state, content):
     assert end_season(state, content)
     assert end_season(state, content) == []
+
+
+def test_end_season_without_world_skips_the_leaderboard(state, content):
+    assert "【天下武學榜】" not in "\n".join(end_season(state, content))
+
+
+def test_end_season_with_world_appends_the_leaderboard(state, content, world):
+    msgs = end_season(state, content, world)
+    assert "【天下武學榜】" in msgs and "【內功榜】" in msgs
 
 
 def test_sim_players_push_trends_and_spread_rumors(state, content):

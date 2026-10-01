@@ -33,6 +33,19 @@ LOCK_STALE_AFTER = 30.0  # 鎖目錄存在超過這麼久視為前一個行程�
 LOCK_POLL_INTERVAL = 0.05
 
 
+JADE_SEAL_FRAGMENT_COUNT = 7  # 設計文件九.2：七塊碎片＝跨季長線，不是單季目標
+
+
+class JadeSealFragment(BaseModel):
+    """跨季持久記錄的一塊傳國玉璽碎片（設計文件九）：找到後永遠留在這裡，不會因為任何
+    玩家開新季、甚至之後換到別的季別劇本而被清掉——這正是「跨季」的字面意思。"""
+
+    number: int  # 第幾塊（1~JADE_SEAL_FRAGMENT_COUNT），依找到的先後順序
+    finder: str  # 找到的玩家名號
+    season_name: str  # 當時是哪一季主題劇本找到的（例如「黃巾之亂」）
+    text: str  # 給玩家看的一句話紀錄（通常取自觸發事件的 chronicle 文字）
+
+
 class CompanionProgress(BaseModel):
     """一位歷史人物（可招募的 7 位）目前的等級/武學/招募狀態，全服共用一份。"""
 
@@ -52,6 +65,8 @@ class SharedWorldState(BaseModel):
     companion_drift_note: dict[str, str] = Field(default_factory=dict)  # 人物 id -> 目前漂移後的一句話性情
     companion_drift_synthesized_at: dict[str, int] = Field(default_factory=dict)  # 人物 id -> 上次語意化時的 tag 總數
     companions: dict[str, CompanionProgress] = Field(default_factory=dict)  # 人物 id -> 進度/招募狀態
+    event_flavor: dict[str, str] = Field(default_factory=dict)  # 江湖大事 id -> 全服共用的一次性潤色句（設計文件 8.2 第 4 點）
+    jade_seal_fragments: list[JadeSealFragment] = Field(default_factory=list)  # 跨季持久（設計文件九.2）
 
 
 @contextlib.contextmanager
@@ -163,6 +178,49 @@ class WorldStateStore:
             state.companion_drift_synthesized_at[companion_id] = total
 
         self.mutate(_apply)
+
+    # ── 江湖大事潤色（全服共用一次）───────────────────────────
+
+    def get_event_flavor(self, fire_id: str) -> str:
+        return self.read().event_flavor.get(fire_id, "")
+
+    def set_event_flavor(self, fire_id: str, text: str) -> None:
+        """只在這個江湖大事還沒有人潤色過時才寫入（鎖內判斷），避免兩個玩家前後腳都觸發
+        同一個門檻時各自呼叫一次 LLM、最後互相覆蓋彼此的結果——全服應該永遠只看到同一份。"""
+        def _apply(state: SharedWorldState) -> None:
+            state.event_flavor.setdefault(fire_id, text)
+
+        self.mutate(_apply)
+
+    # ── 傳國玉璽碎片（跨季，設計文件九）───────────────────────
+
+    def record_jade_seal_fragment(self, finder: str, season_name: str, text: str) -> JadeSealFragment | None:
+        """記錄一塊新找到的碎片；七塊都找完之後回傳 None（不再記錄，這條跨季長線到此結束）。
+        在鎖內判斷「現在是第幾塊」，避免兩個玩家幾乎同時觸發時編號重複或漏編。"""
+        result: dict[str, JadeSealFragment | None] = {"fragment": None}
+
+        def _apply(state: SharedWorldState) -> None:
+            if len(state.jade_seal_fragments) >= JADE_SEAL_FRAGMENT_COUNT:
+                return
+            fragment = JadeSealFragment(
+                number=len(state.jade_seal_fragments) + 1, finder=finder, season_name=season_name, text=text,
+            )
+            state.jade_seal_fragments.append(fragment)
+            result["fragment"] = fragment
+
+        self.mutate(_apply)
+        return result["fragment"]
+
+    def get_jade_seal_fragments(self) -> list[JadeSealFragment]:
+        return self.read().jade_seal_fragments
+
+    def jade_seal_summary(self) -> str:
+        fragments = self.get_jade_seal_fragments()
+        if not fragments:
+            return "傳國玉璽的七塊碎片，至今尚無人尋獲過一塊。"
+        lines = [f"傳國玉璽：{len(fragments)}/{JADE_SEAL_FRAGMENT_COUNT} 塊碎片已現世——"]
+        lines += [f"　第 {f.number} 塊：{f.finder}（{f.season_name}）{f.text}" for f in fragments]
+        return "\n".join(lines)
 
     # ── 同伴進度與招募 ────────────────────────────────────
 

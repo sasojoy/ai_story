@@ -63,6 +63,7 @@
     {"id": "dongzhuo_takes_shard", "condition": {"flag_age_hours": {"xi_open": 48}, "world_flags_none": ["shard_taken", "huangjin_crushed", "bocai_defeated"]},
      "text": "董卓率眾闖入南華觀，傳國玉璽的碎片落入他手！", "world_flags_add": ["shard_lost"], "location": "jade_cave"}
   ],
+  "jade_seal_flag": "shard_taken",
   "milestones": [
     {"id": "join_sect", "text": "投身潁川書院或曹氏莊院", "condition": {"sects": ["yingchuan_academy", "cao_manor"]}},
     {"id": "fame_10", "text": "名望達到 10", "condition": {"min_stats": {"fame": 10}}},
