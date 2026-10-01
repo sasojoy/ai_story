@@ -295,3 +295,123 @@ def test_roster_content_errors_name_the_culprit(tmp_path, filename, edit, messag
     edit_json(root / filename, edit)
     with pytest.raises(ContentError, match=message):
         load_content(root)
+
+
+# ── 全服即時多人戰鬥內容 ──────────────────────────────────
+
+MINIMAL_BATTLE = {
+    "id": "b1", "name": "測試決戰",
+    "factions": [{"id": "a", "name": "甲方"}, {"id": "b", "name": "乙方"}],
+    "acts": [
+        {
+            "id": "a1", "title": "開戰", "text": "開戰了。", "goal": "打贏",
+            "options": [{"text": "進攻", "tag": "go"}],
+        }
+    ],
+    "action_tags": {"go": {"trend_delta": 1, "neili_damage": 5}},
+    "outcomes": [{"faction": "a", "title": "甲方勝", "text": "甲方贏了。"}],
+}
+
+
+def write_battles_json(root, battles=(MINIMAL_BATTLE,)):
+    (root / "battles.json").write_text(json.dumps(list(battles), ensure_ascii=False), encoding="utf-8")
+
+
+def test_battles_json_is_optional(content):
+    assert content.battles == {}  # fixture 沒有 battles.json，預設空字典，不報錯
+
+
+def test_a_valid_battle_loads(tmp_path):
+    root = copy_fixture(tmp_path)
+    write_battles_json(root)
+    content = load_content(root)
+    assert "b1" in content.battles and content.battles["b1"].name == "測試決戰"
+
+
+def test_threshold_starts_battle_with_unknown_id_rejected(tmp_path):
+    root = copy_fixture(tmp_path)
+    write_battles_json(root)
+    edit_json(root / "scenario.json", lambda d: d["thresholds"][0].update(starts_battle="does_not_exist"))
+    with pytest.raises(ContentError, match="does_not_exist"):
+        load_content(root)
+
+
+def test_threshold_starts_battle_with_known_id_loads(tmp_path):
+    root = copy_fixture(tmp_path)
+    write_battles_json(root)
+    edit_json(root / "scenario.json", lambda d: d["thresholds"][0].update(starts_battle="b1"))
+    content = load_content(root)
+    assert content.scenario.thresholds[0].starts_battle == "b1"
+
+
+def test_battle_option_with_unknown_tag_rejected(tmp_path):
+    root = copy_fixture(tmp_path)
+    battle = json.loads(json.dumps(MINIMAL_BATTLE))
+    battle["acts"][0]["options"][0]["tag"] = "ghost"
+    write_battles_json(root, [battle])
+    with pytest.raises(ContentError, match="ghost"):
+        load_content(root)
+
+
+def test_battle_option_restricted_to_an_unknown_faction_rejected(tmp_path):
+    root = copy_fixture(tmp_path)
+    battle = json.loads(json.dumps(MINIMAL_BATTLE))
+    battle["acts"][0]["options"][0]["faction"] = "ghost"
+    write_battles_json(root, [battle])
+    with pytest.raises(ContentError, match="ghost"):
+        load_content(root)
+
+
+def test_battle_non_final_act_needs_advance_when(tmp_path):
+    root = copy_fixture(tmp_path)
+    battle = json.loads(json.dumps(MINIMAL_BATTLE))
+    battle["acts"].append(json.loads(json.dumps(battle["acts"][0])))
+    battle["acts"][1]["id"] = "a2"
+    write_battles_json(root, [battle])
+    with pytest.raises(ContentError, match="非最後一幕必須有 advance_when"):
+        load_content(root)
+
+
+def test_battle_final_act_cannot_have_advance_when(tmp_path):
+    root = copy_fixture(tmp_path)
+    battle = json.loads(json.dumps(MINIMAL_BATTLE))
+    battle["acts"][0]["advance_when"] = {"trend_min": 80}
+    write_battles_json(root, [battle])
+    with pytest.raises(ContentError, match="最後一幕不能有 advance_when"):
+        load_content(root)
+
+
+def test_battle_outcome_with_unknown_faction_rejected(tmp_path):
+    root = copy_fixture(tmp_path)
+    battle = json.loads(json.dumps(MINIMAL_BATTLE))
+    battle["outcomes"][0]["faction"] = "ghost"
+    write_battles_json(root, [battle])
+    with pytest.raises(ContentError, match="ghost"):
+        load_content(root)
+
+
+def test_battle_outcome_trend_delta_with_unknown_trend_rejected(tmp_path):
+    root = copy_fixture(tmp_path)
+    battle = json.loads(json.dumps(MINIMAL_BATTLE))
+    battle["outcomes"][0]["trend_delta"] = {"ghost": -10}
+    write_battles_json(root, [battle])
+    with pytest.raises(ContentError, match="ghost"):
+        load_content(root)
+
+
+def test_battle_last_outcome_must_be_unconditional(tmp_path):
+    root = copy_fixture(tmp_path)
+    battle = json.loads(json.dumps(MINIMAL_BATTLE))
+    battle["outcomes"][0]["trend_min"] = 80
+    write_battles_json(root, [battle])
+    with pytest.raises(ContentError, match="最後一個結果必須沒有數值門檻"):
+        load_content(root)
+
+
+def test_duplicate_battle_faction_id_rejected(tmp_path):
+    root = copy_fixture(tmp_path)
+    battle = json.loads(json.dumps(MINIMAL_BATTLE))
+    battle["factions"][1]["id"] = "a"
+    write_battles_json(root, [battle])
+    with pytest.raises(ContentError, match="陣營 id 重複"):
+        load_content(root)

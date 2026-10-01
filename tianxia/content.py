@@ -15,7 +15,7 @@ from pydantic import ValidationError
 
 from .companion_agent import DIALOGUE_TAGS
 from .models import (
-    STATS, CharacterDef, Condition, Config, Content, Effect, Event, Location, MapLayout,
+    STATS, BattleDef, CharacterDef, Condition, Config, Content, Effect, Event, Location, MapLayout,
     Scenario, Sect, SimRumor, SkillDef, Squad, Tutorial,
 )
 
@@ -41,6 +41,7 @@ def load_content(root: Path) -> Content:
         sects=_index(Sect, _read(root / "sects.json")),
         characters=_index(CharacterDef, _read(root / "characters.json")),
         squads=_index(Squad, _read(root / "squads.json")),
+        battles=_index(BattleDef, _read(root / "battles.json")) if (root / "battles.json").exists() else {},
         events=events,
         map=MapLayout(**_read(root / "map.json")),
         tutorial=Tutorial(**_read(root / "tutorial.json")),
@@ -179,6 +180,8 @@ def validate(c: Content) -> None:
         known(where, [th.trend], trend_ids, "大勢線")
         if th.location:
             known(where, [th.location], c.locations, "地點")
+        if th.starts_battle:
+            known(where, [th.starts_battle], c.battles, "戰鬥")
         need(
             not (th.trend in hidden and th.op == "<="),
             f"{where}：隱藏大勢線不能用 <= 門檻（未浮現時數值為 0，會立刻觸發）",
@@ -224,6 +227,32 @@ def validate(c: Content) -> None:
         check_condition(f"世界事件 {event.id}", event.condition)
         if event.location:
             known(f"世界事件 {event.id}", [event.location], c.locations, "地點")
+        if event.starts_battle:
+            known(f"世界事件 {event.id}", [event.starts_battle], c.battles, "戰鬥")
+
+    for battle in c.battles.values():
+        where = f"戰鬥 {battle.id}"
+        faction_ids = [f.id for f in battle.factions]
+        need(len(set(faction_ids)) == len(faction_ids), f"{where}：陣營 id 重複")
+        act_ids = [a.id for a in battle.acts]
+        need(len(set(act_ids)) == len(act_ids), f"{where}：幕 id 重複")
+        for i, act in enumerate(battle.acts):
+            aw = f"{where} {act.id}"
+            if i == len(battle.acts) - 1:
+                need(act.advance_when is None, f"{aw}：最後一幕不能有 advance_when")
+            else:
+                need(act.advance_when is not None, f"{aw}：非最後一幕必須有 advance_when")
+            for option in act.options:
+                known(f"{aw} 選項「{option.text}」", [option.tag], battle.action_tags, "行動分類")
+                if option.faction is not None:
+                    known(f"{aw} 選項「{option.text}」", [option.faction], faction_ids, "陣營")
+        for outcome in battle.outcomes:
+            known(f"{where} 結果「{outcome.title}」", [outcome.faction], faction_ids, "陣營")
+            known(f"{where} 結果「{outcome.title}」", outcome.trend_delta, trend_ids, "大勢線")
+        need(
+            battle.outcomes[-1].trend_min is None and battle.outcomes[-1].trend_max is None,
+            f"{where}：最後一個結果必須沒有數值門檻（作為保底結果，一定要能命中）",
+        )
 
     last = c.scenario.endings[-1] if c.scenario.endings else None
     need(
