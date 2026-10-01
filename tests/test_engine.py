@@ -175,7 +175,7 @@ def test_event_battle_win_splits_story_from_numeric_changes(game):
     game.choose("choice:0")
     record = game.state.battles[0]
     assert record.tier in ("大勝", "險勝")
-    assert record.notes == ["你擊敗了翻江龍！", "【江湖傳聞】沈浪擊敗了翻江龍！"]
+    assert record.notes == ["你擊敗了翻江龍！", "（寇亂 -20）", "【江湖傳聞】沈浪擊敗了翻江龍！"]
     assert record.changes == ["名望 +3"]
 
 
@@ -218,7 +218,7 @@ def test_train_win_stat_bonus_is_recorded_as_a_change_not_a_note(game):
     record = game.state.battles[0]
     assert record.tier in ("大勝", "險勝")
     assert record.changes and record.changes[0].split(" ")[1] == "+1"
-    assert record.notes == []
+    assert record.notes == ["（寇亂 -1）"]  # 湖邊 train_trend kou:-1
 
 
 def test_train_event_chain(game):

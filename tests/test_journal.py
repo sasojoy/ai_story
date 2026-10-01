@@ -94,7 +94,7 @@ def test_train_entry_carries_the_battle_summary_and_gains(game):
     assert entry.tag == f"{record.tier}水寇小隊"
     assert entry.battle_id == record.id == 1
     assert entry.changes == ["經驗 +20（每人）", "銀兩 +5", "心得 +10"]  # 經驗的寫法和戰鬥卡片一致
-    assert entry.lines == []
+    assert entry.lines == ["（寇亂 -1）"]  # 湖邊 train_trend kou:-1
     assert f"⚔ 湖邊：{record.tier}水寇小隊" in game.state.log
 
 
@@ -104,7 +104,7 @@ def test_choice_entry_names_the_event_and_the_check(game):
     game.choose("choice:0")
     entry = latest(game)
     assert (entry.title, entry.tag) == ("醉漢・逼問", "本人出手・成功")  # 空隊伍時只有本人
-    assert entry.lines == ["他全招了。"]
+    assert entry.lines == ["他全招了。", "（寇亂 -5）"]
     assert entry.changes == ["善名 +2"]
     assert "▸ 逼問" in game.state.log and "（本人出手——成功）" in game.state.log
 
@@ -262,7 +262,7 @@ def test_changes_with_the_same_label_are_added_up(game):
     guided_train(game)
     entry = latest(game)
     assert entry.changes == ["經驗 +20（每人）", "銀兩 +10", "心得 +10"]  # 對手的 5 兩＋引導獎勵 5 兩
-    assert entry.lines == ["✔ 引導完成", "【說書人】去湖邊。"]
+    assert entry.lines == ["（寇亂 -1）", "✔ 引導完成", "【說書人】去湖邊。"]  # 湖邊 train_trend kou:-1
 
 
 def test_battle_card_extra_shows_what_the_card_does_not(game):

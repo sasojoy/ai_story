@@ -103,7 +103,14 @@ def trend_name(content: Content, trend_id: str) -> str:
 def change_trend(
     state: GameState, content: Content, trend_id: str, delta: int, reveal: bool = True
 ) -> list[str]:
-    """推動大勢線。隱藏線只有在 reveal=True 且正向推進時才會浮現；未浮現前其他推動一律無效。"""
+    """推動大勢線。隱藏線只有在 reveal=True 且正向推進時才會浮現；未浮現前其他推動一律無效。
+
+    已浮現的大勢線，每次真的推動（夾在 0~100 之後實際有變化）都會多回傳一則顯示用的
+    訊息，跟「銀兩 -5」「名望 +1」同一種呈現方式——改這個之前，大勢線只有「第一次浮現」
+    那一刻才有任何文字反饋，之後不管是打贏遭遇戰、選了某個事件分支推動了多少，玩家在
+    劇情文字裡完全看不到，必須自己點開「江湖大勢」分頁才看得到數字，等於看不出自己的
+    行動有沒有用。sim_tick()（背景虛擬玩家，每小時自動微幅推動）刻意不接住這個回傳值，
+    所以背景推動依然維持安靜，不會洗版；只有玩家自己選擇/打贏的那一刻才會顯示。"""
     w = state.world
     msgs: list[str] = []
     if trend_id not in w.revealed:
@@ -111,7 +118,12 @@ def change_trend(
             return msgs
         w.revealed.add(trend_id)
         msgs.append(f"（江湖暗流湧動——「{trend_name(content, trend_id)}」浮上檯面。）")
-    w.trends[trend_id] = min(100, max(0, w.trends.get(trend_id, 0) + delta))
+    before = w.trends.get(trend_id, 0)
+    after = min(100, max(0, before + delta))
+    w.trends[trend_id] = after
+    actual = after - before
+    if actual:
+        msgs.append(f"（{trend_name(content, trend_id)} {'+' if actual >= 0 else ''}{actual}）")
     return msgs
 
 
