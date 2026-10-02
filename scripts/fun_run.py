@@ -97,10 +97,42 @@ class FunLog:
     last_novel_day: float = 0.0
     seen: dict[str, set] = field(default_factory=lambda: {k: set() for k in NOVELTY_POINTS})
 
+    chances: Counter = field(default_factory=Counter)  # 管道 -> 這條管道被碰到幾次（分管道正規化的分母）
+    channel_points: Counter = field(default_factory=Counter)  # 管道 -> 新鮮感加分（給 raw 用）
+    channel_penalty: Counter = field(default_factory=Counter)  # 管道 -> 扣分（給 raw 用）
+    channel_bad: Counter = field(default_factory=Counter)  # 管道 -> 「這次機會壞掉」的次數（重複、白燒）
+
     @property
     def raw(self) -> float:
         """未正規化的總分；只用來看組成，不要拿來比較不同的跑次。"""
         return self.novelty_points - self.repeat_penalty - self.wasted * WASTE_PENALTY
+
+    def channel_score(self, channel: str) -> float | None:
+        """一條管道的「新鮮命中率」：每次碰到它，有幾成給了你新東西（−100 ~ +100）。
+
+        刻意用**次數**而不是加權分數：第一版用分數算，結果各管道的尺度差了兩個數量級
+        （配方 +450、地點 +7），平均一樣被最大的那個支配——換了一種形式的同一個病。
+        改成比率之後每條管道都在同一個 0~100 的尺度上，而且讀起來有意義：
+        「事件 −9」就是「事件觸發 62 次，其中只有 17 次是沒看過的，剩下都在重複」。
+        """
+        chances = self.chances[channel]
+        if not chances:
+            return None
+        bad = self.channel_bad[channel]
+        return max(-100.0, min(100.0, (self.novelty[channel] - bad) / chances * 100))
+
+    @property
+    def balanced(self) -> float:
+        """**分管道各自正規化再平均**，每條管道等權重。
+
+        這是企劃者把決定權交回來之後選的版本。只看一個總分（`score`）的問題是：分母是「總行動
+        數」，所以權重完全由「那條管道多常觸發」決定——一季約 1100 個行動，事件觸發好幾百次、
+        **開爐只有 5~8 次**，於是煉製的缺陷（白燒一爐扣 4 分，攤成 0.4 分／百行動）被埋在 20 分
+        的種子噪音裡，校準時完全看不見。分管道之後，白燒一爐是「8 次機會裡壞了 1 次」，在煉製
+        那條管道上就是很大的一筆。
+        """
+        scores = [s for s in (self.channel_score(c) for c in NOVELTY_POINTS) if s is not None]
+        return sum(scores) / len(scores) if scores else 0.0
 
     @property
     def score(self) -> float:
@@ -114,6 +146,10 @@ class FunLog:
         """
         return self.raw / max(1, self.actions) * 100
 
+    def chance(self, channel: str, times: int = 1) -> None:
+        """這條管道被碰到了（不管結果是新東西還是重複）——分管道正規化的分母。"""
+        self.chances[channel] += times
+
     def add_novelty(self, kind: str, key, day: float, changed: bool) -> None:
         if key in self.seen[kind]:
             return
@@ -123,14 +159,17 @@ class FunLog:
         if not changed:
             self.hollow[kind] += 1
         self.novelty_points += points
+        self.channel_points[kind] += points
         self.last_novel_day = max(self.last_novel_day, day)
         self.by_day.setdefault(int(day), [0.0, 0.0])[0] += points
 
-    def add_repeat(self, key: str, day: float) -> None:
+    def add_repeat(self, key: str, day: float, channel: str = "事件") -> None:
         self.repeats[key] += 1
         times = self.repeats[key]
         penalty = min(REPEAT_CAP, (times - 1) * REPEAT_STEP)
         self.repeat_penalty += penalty
+        self.channel_penalty[channel] += penalty
+        self.channel_bad[channel] += 1
         self.by_day.setdefault(int(day), [0.0, 0.0])[1] += penalty
 
 
@@ -155,10 +194,15 @@ def observe_step(game: Game, log: FunLog, before: tuple, option_id: str, before_
     # 事件：engine 把看過的寫進 seen_events，所以「新出現的 id」就是這一步觸發的事件
     fired = s.player.seen_events - before_events
     for event_id in fired:
+        log.chance("事件")
         log.add_novelty("事件", event_id, day, changed)
     if s.pending_event and not fired:  # 觸發了，但是以前看過的那一則
+        log.chance("事件")
         log.add_repeat(f"事件:{s.pending_event}", day)
 
+    gained = sum(s.player.materials.values()) - before[7]  # 快照第 7 項是素材總數
+    if gained > 0:
+        log.chance("素材", gained)  # 掉到幾個素材就是幾次機會（撿到重複的種類不算新鮮感）
     for material_id, count in s.player.materials.items():
         if count > 0:
             log.add_novelty("素材", material_id, day, True)  # 拿到素材本身就是改變
@@ -168,6 +212,10 @@ def observe_step(game: Game, log: FunLog, before: tuple, option_id: str, before_
     if s.battles:
         log.add_novelty("對手", s.battles[0].opponent, day, True)
     log.add_novelty("地點", s.player.location, day, True)
+    if option_id.startswith("move:"):
+        log.chance("地點")
+    if option_id == "act:train":
+        log.chance("對手")
 
     if option_id.startswith(("move:", "act:train", "act:rest")) or option_id in ("act:explore", "act:socialize"):
         if not fired:
@@ -240,8 +288,14 @@ def play(content, seed: int, world_dir: Path, *, no_craft=False, no_train=False,
                                    game.state.player.stats.get("xinde", 0))
                     if after_spend != before_spend:  # 真的開了一爐
                         log.crafts += 1
+                        log.chance("配方首創")  # 開爐＝煉製這條管道的一次機會
+                        log.chance("配方查表")
                         if not (now_arts - had_arts):  # 卻沒有換到任何新功法
                             log.wasted += 1
+                            log.channel_penalty["配方首創"] += WASTE_PENALTY / 2
+                            log.channel_penalty["配方查表"] += WASTE_PENALTY / 2
+                            log.channel_bad["配方首創"] += 1
+                            log.channel_bad["配方查表"] += 1
         if choice is None or step % 4 == 0:
             game.advance(HALF_HOUR)
 
@@ -253,11 +307,22 @@ def play(content, seed: int, world_dir: Path, *, no_craft=False, no_train=False,
 
 
 def report(label: str, logs: list[FunLog], content) -> float:
-    scores = [lg.score for lg in logs]
+    """印出一個狀態的報表，回傳**分管道平均**的好玩度（判準用這個，見 FunLog.balanced）。"""
+    scores = [lg.balanced for lg in logs]
     avg = sum(scores) / len(scores)
+    flat_scores = [lg.score for lg in logs]
+    print(f"\n{'=' * 72}\n{label}　好玩度（分管道平均）{avg:+.1f}"
+          f"（各 seed：{'、'.join(f'{s:+.0f}' for s in scores)}）")
+    print("  每條管道的新鮮命中率（每次機會有幾成給了新東西）：", end="")
+    for channel in NOVELTY_POINTS:
+        per = [lg.channel_score(channel) for lg in logs]
+        got = [v for v in per if v is not None]
+        chances = sum(lg.chances[channel] for lg in logs) / len(logs)
+        print(f"{channel} {sum(got) / len(got):+.0f}（{chances:.0f} 次機會）　" if got else f"{channel} －　", end="")
+    print(f"\n  舊的單一總分（會被最吵的管道支配，留著對照）："
+          f"{sum(flat_scores) / len(flat_scores):+.1f} 分／百行動")
     acts = sum(lg.actions for lg in logs) / len(logs)
-    print(f"\n{'=' * 72}\n{label}　好玩度 {avg:+.1f} 分／百行動"
-          f"（各 seed：{'、'.join(f'{s:+.0f}' for s in scores)}；平均 {acts:.0f} 個行動）")
+    print(f"  一季平均 {acts:.0f} 個行動")
     totals = Counter()
     hollow = Counter()
     for lg in logs:

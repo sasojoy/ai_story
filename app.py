@@ -83,6 +83,61 @@ MAP_CLICK_JS = (
 UNCHANGED = object()  # 動作回傳它表示什麼都沒做：act 不存檔、不重畫（頁面上的訊息也留著）
 KINDS = ("武學", "內功")
 
+# 介面樣式：手機排版與幾個小動畫。
+#
+# 為什麼要特別處理手機：Gradio 的 Row 是 flex，預設在窄螢幕也不會換行，所以「場景文字 ×
+# 小地圖」「左欄 × 右欄」在手機上會各縮成一半，兩邊都讀不動。下面用 elem_classes 掛的
+# class 在窄螢幕把它們改成直排，並把**行動按鈕排在狀態與分頁之前**——手機玩家最常做的事是
+# 「看場景、按一個選項」，那兩件事要在第一屏。
+#
+# 動畫刻意都很小而且只在「有事發生」的地方：剛剛那張紀錄卡片浮現、戰鬥卡片浮現、煉製開爐時
+# 按鈕像爐火一樣明滅、拿到新東西的那一行掃過一道光。全部包在 prefers-reduced-motion 的
+# 保護裡（會動的東西對一部分人是負擔，系統設定說不要動就一律不動）。
+UI_CSS = """
+/* ── 通用：不要讓任何東西把頁面撐寬 ── */
+svg, img, canvas { max-width: 100%; height: auto; }
+.tx-page, .tx-main-col, .tx-side-col { min-width: 0; }
+.tx-act button { min-height: 42px; }
+.tx-nav button { min-height: 40px; }
+
+/* ── 手機（含多數平板直立）：直排、放大觸控目標、行動優先 ── */
+@media (max-width: 760px) {
+  .tx-game { flex-direction: column !important; }
+  .tx-main-col { order: 1; }
+  .tx-side-col { order: 2; }
+  .tx-scene-row { flex-direction: column !important; }
+  .tx-mini { order: 2; max-width: 100% !important; min-width: 0 !important; }
+  .tx-mini svg { width: 100%; }
+  /* 導覽（門下／戰報／大地圖）黏在上緣，拇指永遠按得到 */
+  .tx-nav { position: sticky; top: 0; z-index: 30; padding: 4px 0;
+            background: var(--body-background-fill); }
+  .tx-act button, .tx-page button, .tx-nav button { min-height: 48px; font-size: 16px; }
+  /* 欄位與選單在手機上給足高度，避免誤觸 */
+  .tx-page input, .tx-page textarea, .tx-page select { min-height: 42px; font-size: 16px; }
+  .tx-side-row { flex-direction: column !important; }
+}
+
+/* ── 小動畫 ── */
+@keyframes tx-rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.tx-card { animation: tx-rise 0.3s ease-out; }
+.tx-page { animation: tx-rise 0.24s ease-out; }
+
+/* 煉製：開爐期間按鈕像爐火明滅（那段等待實測 27~83 秒，要讓玩家知道還活著） */
+@keyframes tx-ember {
+  0%, 100% { box-shadow: 0 0 0 rgba(234, 88, 12, 0); }
+  50% { box-shadow: 0 0 14px 2px rgba(234, 88, 12, 0.75); }
+}
+.tx-forge button[disabled] { animation: tx-ember 1.1s ease-in-out infinite; }
+
+/* 練功／療傷：按下去給一點回饋，不然門下頁完全靜止 */
+.tx-page button:active { transform: scale(0.98); }
+
+@media (prefers-reduced-motion: reduce) {
+  .tx-card, .tx-page, .tx-forge button[disabled] { animation: none !important; }
+  .tx-page button:active { transform: none; }
+}
+"""
+
 
 def save_path(name: str) -> Path:
     return path_for(SAVE_DIR, name)
@@ -634,18 +689,18 @@ def build_demo() -> gr.Blocks:
                 reg_pw_box = gr.Textbox(label="密碼", type="password", placeholder="至少 6 字")
                 reg_pw2_box = gr.Textbox(label="再輸入一次密碼", type="password")
                 reg_btn = gr.Button("註冊", variant="primary")
-        with gr.Column(visible=False) as create_col:
+        with gr.Column(visible=False, elem_classes=["tx-page"]) as create_col:
             gr.Markdown("這個帳號還沒有角色。取一個名號，踏入江湖。")
             name_box = gr.Textbox(label="你的名號", placeholder="例如：沈青衫")
             start_btn = gr.Button("建立角色", variant="primary")
-        with gr.Row(visible=False) as game_row:
-            with gr.Column(scale=3):
-                with gr.Row(equal_height=False):
+        with gr.Row(visible=False, elem_classes=["tx-game"]) as game_row:
+            with gr.Column(scale=3, elem_classes=["tx-main-col"]):
+                with gr.Row(equal_height=False, elem_classes=["tx-scene-row"]):
                     scene_md = gr.Markdown(scale=3)
-                    with gr.Column(scale=2, min_width=180):
+                    with gr.Column(scale=2, min_width=180, elem_classes=["tx-mini"]):
                         minimap_html = gr.HTML()  # 預設的 js_on_load：點一下就觸發 click
                         mini_map_btn = gr.Button("大地圖", size="sm")
-                option_btns = [gr.Button(visible=False) for _ in range(MAX_BUTTONS)]
+                option_btns = [gr.Button(visible=False, elem_classes=["tx-act"]) for _ in range(MAX_BUTTONS)]
                 # 全服即時戰鬥的自訂行動（20 字內）：魯莽/放手一搏這類選項是玩家自己想出
                 # 來的招，不是固定清單裡選一個（見設計討論）；平常（不在這種回合）都隱藏。
                 with gr.Row():
@@ -654,17 +709,17 @@ def build_demo() -> gr.Blocks:
                     )
                     battle_text_btn = gr.Button("送出", visible=False, scale=1, variant="primary")
                 # 「剛剛」：最新一則江湖紀錄的卡片；這次行動打了仗時改放戰鬥卡片，latest_html 則放卡片沒寫到的補充。
-                battle_card_md = gr.Markdown(visible=False, container=True)
+                battle_card_md = gr.Markdown(visible=False, container=True, elem_classes=["tx-card"])
                 latest_html = gr.HTML(css_template=JOURNAL_CSS)
                 card_btn = gr.Button("看完整戰報", visible=False)
                 journal_html = gr.HTML(css_template=JOURNAL_CSS)
                 with gr.Accordion("展開更早的紀錄", open=False, visible=False) as older_acc:
                     older_html = gr.HTML(css_template=JOURNAL_CSS)
-            with gr.Column(scale=2):
+            with gr.Column(scale=2, elem_classes=["tx-side-col"]):
                 with gr.Accordion("主線與目標", open=True):
                     quest_md = gr.Markdown()
                 status_md = gr.Markdown()
-                with gr.Row():
+                with gr.Row(elem_classes=["tx-nav"]):
                     menxia_btn = gr.Button("門下")
                     report_btn = gr.Button("戰報")
                     map_btn = gr.Button("大地圖")
@@ -715,7 +770,7 @@ def build_demo() -> gr.Blocks:
                                 reset_pw_box = gr.Textbox(label="臨時密碼")
                                 reset_btn = gr.Button("重設密碼")
                             reset_md = gr.Markdown()
-        with gr.Column(visible=False) as menxia_col:
+        with gr.Column(visible=False, elem_classes=["tx-page"]) as menxia_col:
             with gr.Row(equal_height=True):
                 gr.Markdown("## 門下", scale=1)
                 back_btn = gr.Button("返回江湖", scale=0, min_width=120)
@@ -739,7 +794,7 @@ def build_demo() -> gr.Blocks:
                     multiselect=True, max_choices=MATERIALS_PER_CRAFT, interactive=True,
                 )
                 craft_kind_radio = gr.Radio(label="煉內功／武學", choices=list(KINDS), value=KINDS[0], interactive=True)
-            craft_btn = gr.Button("開爐煉製", variant="primary")
+            craft_btn = gr.Button("開爐煉製", variant="primary", elem_classes=["tx-forge"])
             gr.Markdown("---\n**功法庫**：煉出來還沒配上身的功法。改練會把目前那一門收回庫裡，熟練度各自保留。")
             with gr.Row():
                 arts_radio = gr.Radio(label="", choices=[], interactive=True)
@@ -753,7 +808,7 @@ def build_demo() -> gr.Blocks:
                 practice_btn = gr.Button("鍛鍊")
                 heal_btn = gr.Button("療傷")
             mx_message_md = gr.Markdown()
-        with gr.Column(visible=False) as report_col:
+        with gr.Column(visible=False, elem_classes=["tx-page"]) as report_col:
             with gr.Row(equal_height=True):
                 gr.Markdown("## 戰報", scale=1)
                 gr.Markdown(scale=6)
@@ -763,7 +818,7 @@ def build_demo() -> gr.Blocks:
                     report_list_radio = gr.Radio(label="歷次戰鬥（最新在前）", choices=[], interactive=True)
                 with gr.Column(scale=2):
                     report_detail_md = gr.Markdown()
-        with gr.Column(visible=False) as map_col:
+        with gr.Column(visible=False, elem_classes=["tx-page"]) as map_col:
             with gr.Row(equal_height=True):
                 gr.Markdown("## 江湖輿圖", scale=1)
                 map_head_md = gr.Markdown(scale=6)
@@ -865,4 +920,5 @@ def build_demo() -> gr.Blocks:
 
 
 if __name__ == "__main__":
-    build_demo().launch(server_name="0.0.0.0", server_port=7861, share=True)
+    # Gradio 6 把 css 從 Blocks 的建構子移到 launch()（不照它搬的話樣式根本不會送出）
+    build_demo().launch(server_name="0.0.0.0", server_port=7861, share=True, css=UI_CSS)
