@@ -177,6 +177,20 @@ def test_catch_up_season_only_advances_once_no_matter_who_calls_it(store, conten
     assert store.get_season().time == 3600 * content.config.time_scale
 
 
+def test_catch_up_season_never_turns_the_shared_clock_back(store, content):
+    """拿比較早的時間來追趕（假人程式一輪開頭讀的錶，真人已經在這之後對過時鐘）：共用時鐘
+    不能被撥回去，不然下一個人會把那一段再算一次；這一次也不多算時間。"""
+    rng = random.Random(0)
+    store.seed_first_season(content)
+    store.catch_up_season(content, 1000.0, rng)
+    store.catch_up_season(content, 1100.0, rng)
+    store.catch_up_season(content, 1050.0, rng)  # 較早的時間
+    assert store.read().season_last_real == 1100.0
+    assert store.get_season().time == 100 * content.config.time_scale
+    store.catch_up_season(content, 1200.0, rng)
+    assert store.get_season().time == 200 * content.config.time_scale
+
+
 # ── 江湖大事潤色（全服共用一次，還要改進第 3 點）──────────────────
 
 

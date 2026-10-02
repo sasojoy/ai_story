@@ -406,14 +406,17 @@ class WorldStateStore:
         有人追趕過了多久現實時間」往前推進，而不是依呼叫者自己的步調——這樣不管幾個玩家
         同時在線、各自多久互動一次，世界的時間永遠只走一份，不會重複計算也不會停滯。
         實際的「推進 N 秒會發生什麼事」邏輯在 world.py::advance_season（避免循環 import：
-        world.py 已經 import 這個模組，不能反過來由這裡 import world.py）。"""
+        world.py 已經 import 這個模組，不能反過來由這裡 import world.py）。
+
+        時鐘只會往前：拿比上次對過的還早的時間來追趕（例如假人程式在真人行動之前讀的錶），
+        不推進、也不把時鐘撥回去——撥回去的話，下一個人會把那一段再算一次。"""
         from . import world as world_module
 
         result: dict[str, list[str] | float] = {"msgs": [], "elapsed": 0.0}
 
         def _apply(state: SharedWorldState) -> None:
             last = state.season_last_real
-            state.season_last_real = now
+            state.season_last_real = now if last is None else max(last, now)
             if last is None or state.season_phase() != "running":
                 return
             result["elapsed"] = max(0.0, now - last) * content.config.time_scale

@@ -87,7 +87,8 @@ class BotRunner:
                 continue
             try:
                 with self.world.action_lock(timeout=LOCK_WAIT):
-                    self._take_turn(path, now)
+                    # 拿到鎖之後才看錶：上一個假人放鎖到現在，真人可能已經把共用時鐘對到更晚了
+                    self._take_turn(path, self.clock())
                 report.acted += 1
             except TimeoutError:
                 report.skipped += 1

@@ -139,6 +139,42 @@ def test_a_bot_skips_its_turn_while_a_player_holds_the_action_lock(runner, world
     assert [s.model_dump() for s in _bots(tmp_path)] == before
 
 
+def test_a_player_acting_between_bot_turns_does_not_make_the_season_run_faster(
+    runner, world, content, tmp_path, clock, monkeypatch,
+):
+    """一輪裡每個假人之間都會放開行動鎖，真人可能就在這時候行動、把共用時鐘對到更晚的時間。
+    下一個假人要用自己拿到鎖之後的時間補算，不能把時鐘撥回這一輪開頭讀的時間——不然下一個
+    真人會把那一段再算一次，賽季走得比現實快。"""
+    monkeypatch.setattr(server_bots, "is_online", lambda profile, now: True)
+    monkeypatch.setattr(bot_policy, "take_turn", lambda game, profile, rng: None)  # 只看時鐘
+    content.config.bots_min_per_faction = 1
+    content.config.bot_tick_seconds = 1000  # 在線就一定做一個動作
+    runner.tick()  # 補人
+    start_real, start_time = world.read().season_last_real, world.get_season().time
+
+    def ticking():  # 每看一次錶就過了 10 秒
+        clock[0] += 10
+        return clock[0]
+
+    runner.clock = ticking
+    real_turn = runner._take_turn
+    turns, players = [], []
+
+    def turn_then_a_player_acts(path, now):
+        turns.append(now)
+        result = real_turn(path, now)
+        players.append(ticking())
+        world.catch_up_season(content, players[-1], random.Random(0))  # 這個假人做完，真人接著行動
+        return result
+
+    monkeypatch.setattr(runner, "_take_turn", turn_then_a_player_acts)
+    runner.tick()
+    end = ticking()
+    world.catch_up_season(content, end, random.Random(0))  # 一輪結束後，真人又行動一次
+    assert len(turns) == 2 and turns[1] > players[0]  # 第二個假人看的錶在真人行動之後
+    assert world.get_season().time - start_time == (end - start_real) * content.config.time_scale
+
+
 def test_bots_do_nothing_until_the_admin_opens_the_season(content, tmp_path, clock):
     _install(content)
     content.config.auto_open_first_season = False
