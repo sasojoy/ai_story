@@ -223,6 +223,14 @@ class Game:
         loc = c.locations[s.player.location]
         cost = c.config.action_cost
         opts = [self._cost_option("act:explore", "探索", cost["explore"])]
+        if loc.enemies:
+            # 歷練：這個地點的敵人，必定開打（見 _train）。sanguo-companions 合併時這個行動被
+            # 整個拿掉，於是 Location.enemies／action_cost["train"]／train_event_chance 三個設定
+            # 一起變成死的，而遭遇戰只剩劇情事件的 combat 選項——實測整季只打 3 場。
+            opts.append(self._cost_option(
+                "act:train", "歷練", cost["train"],
+                note=f"對手：{c.squads[loc.enemies[0]].name}" if len(loc.enemies) == 1 else f"{len(loc.enemies)} 路對手",
+            ))
         if has_events_here(c, loc, "socialize") or self._deep_interaction_target() is not None:
             opts.append(self._cost_option("act:socialize", "交遊", cost["socialize"]))
         target = self._recruit_target()
@@ -315,7 +323,7 @@ class Game:
             return f"交談・{character.name}"
         here = c.locations[s.player.location].name
         titles = {
-            "explore": f"探索{here}", "socialize": f"交遊・{here}",
+            "explore": f"探索{here}", "socialize": f"交遊・{here}", "train": f"歷練・{here}",
             "recruit": f"招募・{here}", "rest": f"打坐歇息・{here}",
         }
         return titles.get(arg, "提前出關")
@@ -344,6 +352,8 @@ class Game:
         self.state.player.stamina -= cost[what]
         if what == "explore":
             return self._explore()
+        if what == "train":
+            return self._train()
         if roster.fortune_due(self.state, self.content):
             candidates = [cid for cid, ch in self.content.characters.items() if ch.kind == "recruitable"]
             if candidates and roster.owned_by(self.world, candidates[0]) is None:
@@ -374,6 +384,26 @@ class Game:
         nothing = "你四處走走，一無所獲。" if line is None else f"你在{loc.name}翻找了一陣。"
         msgs = self._encounter("explore", nothing)
         return msgs + [line] if line is not None else msgs
+
+    def _train(self) -> list[str]:
+        """歷練：找這個地點的敵人打一場，**必定開打**；打完有機率接一段戰後的餘韻事件。
+
+        這個行動在 sanguo-companions 合併時被整個移除，後果是整條隨機遭遇戰的路斷掉：
+        `pick_event()` 只在「完全沒有合格候選」時才回 None，而有三個事件是「任何地點、
+        可重複、探索觸發」，所以實測 22 個地點探索都是 100% 撞到事件，掛在 explore 後面的
+        遭遇戰分支一次都沒執行過（整季只有劇情事件的 combat 選項那 3 場）。
+
+        打完之後的 `train_event_chance` 機率是給 `actions: ["train"]` 的事件用的——「拆招頓悟」
+        與「錦衣少年」的文字本來就是戰後餘韻（「一番苦戰之後…」「打鬥剛歇…」），合併時被改掛
+        到 explore，於是在集市散步也會冒出來。現在它們回到正確的位置。
+        """
+        loc = self.content.locations[self.state.player.location]
+        msgs = self._squad_encounter(self.rng.choice(loc.enemies))
+        if self.rng.random() < self.content.config.train_event_chance:
+            event = pick_event(self.state, self.content, "train", self.rng)
+            if event is not None:
+                msgs += self._present(event)
+        return msgs
 
     def _rest(self) -> list[str]:
         """原地打坐歇息一個時辰：只推進玩家自己的進度（體力/氣血），不碰共用賽季時鐘

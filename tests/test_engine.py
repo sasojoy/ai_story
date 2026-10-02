@@ -1088,3 +1088,54 @@ def test_exploring_picks_up_a_material_even_when_an_event_fires(game):
     assert any("【" in m for m in msgs)  # 真的有事件
     assert "獲得 隕鐵膽 ×1" in msgs
     assert game.state.player.materials == {"gang_3": 1}
+
+
+# ── 歷練（第二層：遭遇戰的唯一管道）──────────────────────────
+
+
+def test_train_is_offered_only_where_there_are_enemies(game):
+    ids = [o.id for o in game.options()]
+    assert "act:train" not in ids  # 鎮上沒有敵人
+    game.choose("move:lake")  # 湖邊有水寇小隊
+    option = next(o for o in game.options() if o.id == "act:train")
+    assert "歷練" in option.label and "水寇小隊" in option.label
+
+
+def test_training_always_fights_even_though_an_event_would_have_fired(game):
+    """探索永遠會撞到事件（pick_event 只在完全沒有候選時才回 None），所以掛在探索後面的
+    遭遇戰分支一次都不會執行——歷練就是為了這件事存在的。"""
+    rules.learn_skill(game.state, game.content, "fist")
+    game.choose("move:lake")
+    game.rng = FixedRandom(0.99)  # 高到不會觸發戰後事件
+    msgs = game.choose("act:train")
+    assert game.state.battles and game.state.battles[0].opponent == "水寇小隊"
+    assert game.state.pending_event is None  # 沒有被事件搶走
+    assert any("⚔" in m for m in msgs)
+
+
+def test_training_costs_the_configured_stamina(game):
+    game.choose("move:lake")
+    before = game.state.player.stamina
+    game.rng = FixedRandom(0.99)
+    game.choose("act:train")
+    assert before - game.state.player.stamina == game.content.config.action_cost["train"]
+
+
+def test_a_post_battle_event_can_follow_the_fight(game):
+    """「拆招頓悟」「錦衣少年」的文字本來就是戰後餘韻，現在掛回 actions: ["train"]。"""
+    game.content.events["chain_a"].actions = ["train"]  # fixture 裡唯一掛在 train 上的事件
+    game.content.config.train_event_chance = 1.0
+    rules.learn_skill(game.state, game.content, "fist")
+    game.choose("move:lake")
+    game.rng = FixedRandom(0.3)
+    game.choose("act:train")
+    assert game.state.battles  # 先打了一場
+    assert game.state.pending_event == "chain_a"  # 再接上戰後的事件
+
+
+def test_the_journal_calls_it_a_training_trip(game):
+    rules.learn_skill(game.state, game.content, "fist")
+    game.choose("move:lake")
+    game.rng = FixedRandom(0.99)
+    game.choose("act:train")
+    assert any(entry.title == "歷練・湖邊" for entry in game.state.journal)

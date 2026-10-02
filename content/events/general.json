@@ -462,7 +462,7 @@
     "id": "train_insight",
     "title": "拆招頓悟",
     "actions": [
-      "explore"
+      "train"
     ],
     "text": "一番苦戰之後，方才對手的一招在你腦海中反覆浮現。",
     "choices": [
@@ -499,7 +499,7 @@
     "id": "train_onlooker",
     "title": "錦衣少年",
     "actions": [
-      "explore"
+      "train"
     ],
     "text": "打鬥剛歇，一個錦衣少年跑過來，一臉崇拜地看著你。",
     "choices": [

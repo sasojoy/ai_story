@@ -1,19 +1,92 @@
 {
   "speaker": "老說書人",
   "steps": [
-    {"id": "t1_explore", "text": "少俠初到潁川？先在城裡「探索」一番，亂世裡的消息，往往就藏在街頭巷尾。",
-     "done_when": {"action": "explore"}, "reward": {"stats": {"silver": 10}}},
-    {"id": "t2_map", "text": "按小地圖下方的「大地圖」看看。亮的是你看得見、去過的地方，灰的是還沒摸清的天下；選一個地點，還能直接安排前往。",
-     "done_when": {"condition": {"flags_all": ["看過地圖"]}}, "reward": {"stamina": 10}},
-    {"id": "t3_outskirts", "text": "出城往潁川郊野走走，那裡常有流寇與黃巾散兵，正好練練身手。",
-     "done_when": {"locations": ["yingchuan_wilds"]}, "reward": {"stats": {"silver": 5}}},
-    {"id": "t4_practice", "text": "在右側「門下」頁，自創一門武學或鍛鍊已學會的——心得能讓武學精進，威力才跟得上局勢。",
-     "done_when": {"action": "practice"}, "reward": {"stats": {"silver": 10}}},
-    {"id": "t5_huangjin", "text": "黃巾軍越鬧越凶。郊野往東是長社，去那裡探索、討伐黃巾，就是在替潁川壓下聲勢。",
-     "done_when": {"action": "explore", "locations": ["changshe", "luoyang_road", "runan_wilds"]},
-     "reward": {"stats": {"silver": 20, "fame": 1}}},
-    {"id": "t6_sect", "text": "亂世裡有門有派好辦事。潁川書院就在城中，曹氏莊院在譙縣，去看看合不合你的脾氣——那裡沒準還能遇上幾位日後的風雲人物。",
-     "done_when": {"action": "move", "locations": ["yingchuan_academy", "cao_manor"]}, "reward": {"stats": {"fame": 1}}}
+    {
+      "id": "t1_explore",
+      "text": "少俠初到潁川？先在城裡「探索」一番，亂世裡的消息，往往就藏在街頭巷尾。",
+      "done_when": {
+        "action": "explore"
+      },
+      "reward": {
+        "stats": {
+          "silver": 10
+        }
+      }
+    },
+    {
+      "id": "t2_map",
+      "text": "按小地圖下方的「大地圖」看看。亮的是你看得見、去過的地方，灰的是還沒摸清的天下；選一個地點，還能直接安排前往。",
+      "done_when": {
+        "condition": {
+          "flags_all": [
+            "看過地圖"
+          ]
+        }
+      },
+      "reward": {
+        "stamina": 10
+      }
+    },
+    {
+      "id": "t3_outskirts",
+      "text": "出城往潁川郊野走走，那裡常有流寇與黃巾散兵——到了有敵人的地方，選單上會多一個「歷練」，正好練練身手。",
+      "done_when": {
+        "locations": [
+          "yingchuan_wilds"
+        ]
+      },
+      "reward": {
+        "stats": {
+          "silver": 5
+        }
+      }
+    },
+    {
+      "id": "t4_practice",
+      "text": "在右側「門下」頁，自創一門武學或鍛鍊已學會的——心得能讓武學精進，威力才跟得上局勢。",
+      "done_when": {
+        "action": "practice"
+      },
+      "reward": {
+        "stats": {
+          "silver": 10
+        }
+      }
+    },
+    {
+      "id": "t5_huangjin",
+      "text": "黃巾軍越鬧越凶。郊野往東是長社，去那裡探索、討伐黃巾，就是在替潁川壓下聲勢。",
+      "done_when": {
+        "action": "explore",
+        "locations": [
+          "changshe",
+          "luoyang_road",
+          "runan_wilds"
+        ]
+      },
+      "reward": {
+        "stats": {
+          "silver": 20,
+          "fame": 1
+        }
+      }
+    },
+    {
+      "id": "t6_sect",
+      "text": "亂世裡有門有派好辦事。潁川書院就在城中，曹氏莊院在譙縣，去看看合不合你的脾氣——那裡沒準還能遇上幾位日後的風雲人物。",
+      "done_when": {
+        "action": "move",
+        "locations": [
+          "yingchuan_academy",
+          "cao_manor"
+        ]
+      },
+      "reward": {
+        "stats": {
+          "fame": 1
+        }
+      }
+    }
   ],
   "outro": "老夫能說的都說了。上面的「主線」會告訴你中原正在發生什麼，接下來的天下，就看你自己了。"
 }
