@@ -454,3 +454,36 @@ def test_a_material_tier_outside_one_to_three_rejected(tmp_path):
     edit_json(root / "materials.json", lambda d: d[0].update(tier=4))
     with pytest.raises(ContentError):
         load_content(root)
+
+
+def _strand_the_top_tier(root):
+    """造出「鎮山鐵」當初那個情境：所有對手都寫了明確 drops（依難度的預設表因此不會執行），
+    於是三階素材沒有任何管道拿得到。"""
+    drops = [{"material": "gang_1"}, {"material": "gang_2"}]  # 一、二階仍有來源，只有三階斷掉
+    edit_json(root / "squads.json", lambda d: [sq.update(drops=list(drops)) for sq in d])
+
+
+def test_a_material_with_no_source_at_all_rejected(tmp_path):
+    """第一版的「鎮山鐵」就是這樣漏掉的：存在於內容裡，但沒有任何管道拿得到。"""
+    root = copy_fixture(tmp_path)
+    _strand_the_top_tier(root)
+    with pytest.raises(ContentError, match="沒有任何取得管道"):
+        load_content(root)
+
+
+def test_a_material_only_an_event_gives_is_still_reachable(tmp_path):
+    """手寫劇情給的素材算有來源（天品的主要管道就是奇遇，見設計 §4.3）。"""
+    root = copy_fixture(tmp_path)
+    _strand_the_top_tier(root)
+    edit_json(
+        root / "events" / "test.json",
+        lambda d: d[0]["choices"][0]["effect"].update(materials={"gang_3": 1}),
+    )
+    load_content(root)  # 不該再報錯
+
+
+def test_a_material_only_a_location_offers_is_still_reachable(tmp_path):
+    root = copy_fixture(tmp_path)
+    _strand_the_top_tier(root)
+    edit_json(root / "locations.json", lambda d: d[0].update(materials=["gang_3"]))
+    load_content(root)

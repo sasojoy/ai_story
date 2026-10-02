@@ -76,6 +76,27 @@ def _index(model, items: list[dict]) -> dict:
     return result
 
 
+def _material_sources(c: Content) -> set[str]:
+    """所有拿得到的素材 id：地點撿、對手掉（含依難度的預設表）、事件給。"""
+    from .materials import _default_rolls, by_tier  # noqa: PLC0415  延後 import，避免循環依賴
+
+    reachable: set[str] = set()
+    for loc in c.locations.values():
+        reachable |= set(loc.materials)
+        if not loc.materials and loc.tags:
+            reachable |= {m.id for m in by_tier(c, 1)}  # 沒填 materials 的地點給隨機一階素材
+    for squad in c.squads.values():
+        if squad.drops:
+            reachable |= {d.material for d in squad.drops}
+            continue
+        for tier, _chance in _default_rolls(squad):
+            reachable |= {m.id for m in by_tier(c, tier, squad.attribute)}
+    for ev in c.events.values():
+        for ch in ev.choices:
+            reachable |= set(ch.effect.materials) | set(ch.fail_effect.materials)
+    return reachable
+
+
 def validate(c: Content) -> None:
     errors: list[str] = []
     trend_ids = {t.id for t in c.scenario.trends}
@@ -140,6 +161,16 @@ def validate(c: Content) -> None:
 
     for squad in c.squads.values():
         known(f"敵方隊伍 {squad.id}", [drop.material for drop in squad.drops], c.materials, "素材")
+
+    # 每一種素材都要至少有一個拿得到的管道，否則它是死內容。第一版的「鎮山鐵」就是這樣
+    # 漏掉的：掉天品的兩個對手屬剛與屬柔、奇遇給屬快，屬慢沒人負責，而難度 >=100 的對手
+    # 都寫了明確 drops，所以依難度的預設表（會按對手屬性挑）對它們根本不執行。
+    unreachable = sorted(set(c.materials) - _material_sources(c))
+    need(
+        not unreachable,
+        "這些素材沒有任何取得管道（沒有對手掉、沒有地點撿、沒有事件給）："
+        + "、".join(f"{c.materials[mid].name}（{mid}）" for mid in unreachable),
+    )
 
     # 煉製的決定性組名字表（LLM 不可用時的退路）：不能是空的，而且組出來的每一個名字都得
     # 通過命名過濾——這條退路一定會被走到（整季模擬把 LLM mock 掉），組出壞名字會永久登記。
