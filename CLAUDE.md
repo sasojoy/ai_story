@@ -29,7 +29,8 @@
 - 伺服器假人（`docs/superpowers/specs/2026-10-02-伺服器假人-design.md`）跟真人完全一樣、看不出來：「是假人」只記在存檔的 `PlayerState.bot`，任何畫面、榜單、戰鬥名單、主控台輸出都不能顯示或透露；假人只透過 `Game` 的公開行動做事，不呼叫 LLM。
 - `app.py` 與 `run_bots.py` 是兩個程式、共用同一份全服紀錄與存檔：每次「補算時間＋做動作＋存檔」都要包在 `WorldStateStore.action_lock()` 裡（伺服器等到拿到為止，假人等不到就跳過）。
 - 投靠要確認一次（先按 `faction:<id>`，再按 `faction:confirm`）；陣營人數看全服投靠名冊（`WorldStateStore.faction_counts()`）。
-- 管理者（試玩期是 `Rayal`）在設定頁可以立刻開戰、觸發大勢門檻或世界事件、推動大勢線；效果跟自然發生一樣（`Game.admin_start_battle`／`admin_fire`／`admin_push_trend`）。
+- 管理者（試玩期是 `Rayal`）在設定頁可以立刻開戰、觸發大勢門檻或世界事件、推動大勢線；效果跟自然發生一樣（`Game.admin_start_battle`／`admin_fire`／`admin_push_trend`），也可以幫玩家重設密碼。管理者的角色要先用 `scripts/set_password.py` 綁到帳號上。
+- 登入用帳號密碼（`tianxia/accounts.py`，帳號檔在 `saves/accounts/accounts.json`；設計見 `docs/superpowers/specs/2026-10-03-帳號密碼登入-design.md`）：帳號和名號分開，一個帳號一個角色；帳號不存在與密碼錯、名號被真人或假人用掉，各自回同一句話，避免試出誰是假人。會改帳號檔或建立存檔的動作都包在行動鎖裡。
 
 ## 指令
 - 執行：`.venv/Scripts/python.exe app.py`（http://127.0.0.1:7861）
@@ -37,6 +38,7 @@
 - 平衡模擬：`.venv/Scripts/python.exe scripts/simulate.py 30`
 - 伺服器假人：`.venv/Scripts/python.exe run_bots.py`（跟 `app.py` 同時開著）
 - 假人整季模擬：`.venv/Scripts/python.exe scripts/sim_server_bots.py --seasons 2`
+- 幫帳號設密碼（主機端）：`.venv/Scripts/python.exe scripts/set_password.py <帳號> [--character <名號>]`（密碼寫到 `.local/`，不印在畫面上）
 
 ### 開發伺服器的啟動方式（這台機器上的慣例）
 不要用 Bash 工具背景執行 `app.py`（會被背景任務追蹤器砍掉）。用 PowerShell `Start-Process`

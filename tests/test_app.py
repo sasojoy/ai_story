@@ -351,26 +351,6 @@ def test_open_game_backs_up_a_corrupt_save_and_starts_fresh(save_dir):
     assert any("已備份" in line for line in g.state.log)
 
 
-def test_start_requires_a_name():
-    with pytest.raises(gr.Error):
-        app.start("  ")
-
-
-def test_start_opens_the_main_page(save_dir):
-    out = app.start("新玩家")
-    assert len(out) == app.N_OUTPUTS + 1 + len(app.PAGES) + 1
-    start_col_update = out[app.N_OUTPUTS]
-    assert start_col_update["visible"] is False
-    pages = out[app.N_OUTPUTS + 1: app.N_OUTPUTS + 1 + len(app.PAGES)]
-    assert [p["visible"] for p in pages] == [name == "main" for name in app.PAGES]
-    assert out[-1]["visible"] is False  # 一般玩家看不到管理者區塊
-
-
-def test_start_shows_the_admin_tools_to_admins(save_dir, monkeypatch):
-    monkeypatch.setattr(app.CONTENT.config, "admins", ["掌門"])
-    assert app.start("掌門")[-1]["visible"] is True
-
-
 # ── 全服即時戰鬥：自訂行動輸入框（設計討論：魯莽該是玩家自己想出來的招）──────────
 
 
@@ -556,3 +536,127 @@ def test_switch_art_handler_changes_what_you_practise(game):
     out = app.switch_art_handler(game, "player", "龍吟九霄")
     assert "改練【龍吟九霄】" in out[6]
     assert game.state.player.member.wugong_id == "龍吟九霄"
+
+# ── 帳號密碼登入（docs/superpowers/specs/2026-10-03-帳號密碼登入-design.md）──────────
+
+ENTRY_OUTPUTS = app.N_OUTPUTS + 2 + len(app.PAGES) + 2  # outputs＋start_col、create_col＋各頁＋admin_group、account_state
+START_COL = app.N_OUTPUTS
+CREATE_COL = app.N_OUTPUTS + 1
+
+
+@pytest.fixture(autouse=True)
+def fresh_login_failures():
+    app.LOGIN_FAILURES.clear()
+    yield
+    app.LOGIN_FAILURES.clear()
+
+
+def _pages(out):
+    return [p["visible"] for p in out[app.N_OUTPUTS + 2: app.N_OUTPUTS + 2 + len(app.PAGES)]]
+
+
+def test_register_then_create_a_character_enters_the_game(save_dir):
+    out = app.register("Shen_01", "secret-pw", "secret-pw")
+    assert len(out) == ENTRY_OUTPUTS
+    assert out[START_COL]["visible"] is False and out[CREATE_COL]["visible"] is True
+    assert out[-1] == "shen_01"
+    out = app.create_character("shen_01", "沈青衫")
+    assert len(out) == ENTRY_OUTPUTS
+    assert out[START_COL]["visible"] is False and out[CREATE_COL]["visible"] is False
+    assert _pages(out) == [name == "main" for name in app.PAGES]
+    assert out[-2]["visible"] is False  # 一般玩家看不到管理者區塊
+    assert out[-1] == "shen_01"
+    assert app.save_path("沈青衫").exists()
+    assert app.account_store().get("shen_01").character == "沈青衫"
+
+
+def test_create_character_requires_a_login_and_a_name(save_dir):
+    with pytest.raises(gr.Error, match="請先登入。"):
+        app.create_character(None, "沈青衫")
+    app.register("shen_01", "secret-pw", "secret-pw")
+    with pytest.raises(gr.Error, match="請先輸入你的名號。"):
+        app.create_character("shen_01", "  ")
+
+
+def test_login_with_a_character_goes_straight_in(save_dir):
+    app.register("shen_01", "secret-pw", "secret-pw")
+    app.create_character("shen_01", "沈青衫")
+    out = app.login("SHEN_01", "secret-pw")
+    assert len(out) == ENTRY_OUTPUTS
+    assert _pages(out) == [name == "main" for name in app.PAGES]
+    assert out[-1] == "shen_01"
+
+
+def test_login_without_a_character_asks_for_a_name(save_dir):
+    app.register("shen_01", "secret-pw", "secret-pw")
+    out = app.login("shen_01", "secret-pw")
+    assert out[START_COL]["visible"] is False and out[CREATE_COL]["visible"] is True
+
+
+def test_login_errors_read_the_same(save_dir):
+    app.register("shen_01", "secret-pw", "secret-pw")
+    with pytest.raises(gr.Error, match="帳號或密碼不對。"):
+        app.login("shen_01", "wrong-pw")
+    with pytest.raises(gr.Error, match="帳號或密碼不對。"):
+        app.login("nobody", "secret-pw")
+
+
+def test_register_checks_the_repeated_password_and_the_format(save_dir):
+    with pytest.raises(gr.Error, match="兩次輸入的密碼不一樣。"):
+        app.register("shen_01", "secret-pw", "secret-px")
+    with pytest.raises(gr.Error, match="帳號只能用英文字母、數字、底線，3～20 字。"):
+        app.register("沈", "secret-pw", "secret-pw")
+    assert app.account_store().get("shen_01") is None
+
+
+def test_a_bot_name_a_player_name_and_an_admin_name_are_refused_with_the_same_words(save_dir, monkeypatch):
+    monkeypatch.setattr(app.CONTENT.config, "admins", ["掌門"])
+    bot = app.open_game("周泰安")
+    bot.state.player.bot = BotProfile(personality="普通", seed=1, faction="guan", season_number=1)
+    save_game(bot.state, app.save_path("周泰安"))
+    app.register("first", "secret-pw", "secret-pw")
+    app.create_character("first", "沈青衫")
+    app.register("second", "secret-pw", "secret-pw")
+    messages = []
+    for name in ("周泰安", "沈青衫", "掌門"):
+        with pytest.raises(gr.Error, match="這個名號已有人使用。") as err:
+            app.create_character("second", name)
+        messages.append(str(err.value))
+    assert len(set(messages)) == 1
+    assert app.account_store().get("second").character is None
+
+
+def test_an_admin_account_sees_the_admin_tools(save_dir, monkeypatch):
+    monkeypatch.setattr(app.CONTENT.config, "admins", ["掌門"])
+    boss = app.open_game("掌門")
+    save_game(boss.state, app.save_path("掌門"))
+    store = app.account_store()
+    store.register("boss", "secret-pw")
+    store.bind_character("boss", "掌門")  # 管理者的帳號由主機端腳本綁（scripts/set_password.py）
+    assert app.login("boss", "secret-pw")[-2]["visible"] is True
+
+
+def test_change_password(save_dir):
+    app.register("shen_01", "secret-pw", "secret-pw")
+    assert app.change_password_handler("shen_01", "wrong-pw", "new-secret", "new-secret")[0] == "舊密碼不對。"
+    assert app.change_password_handler("shen_01", "secret-pw", "new-secret", "new-secreX")[0] == "兩次輸入的密碼不一樣。"
+    assert app.change_password_handler("shen_01", "secret-pw", "123", "123")[0] == "密碼至少 6 字。"
+    assert app.change_password_handler("shen_01", "secret-pw", "new-secret", "new-secret") == ["密碼已更新。", "", "", ""]
+    app.login("shen_01", "new-secret")
+
+
+def test_change_password_needs_a_login(save_dir):
+    assert app.change_password_handler(None, "secret-pw", "new-secret", "new-secret")[0] == "請先登入。"
+
+
+def test_only_admins_can_reset_a_password(save_dir, monkeypatch):
+    app.register("shen_01", "secret-pw", "secret-pw")
+    app.create_character("shen_01", "沈青衫")
+    player = app.open_game("沈青衫")
+    assert app.reset_password_handler(player, "shen_01", "temp-pass") == ["（只有管理者能重設密碼。）", ""]
+    assert app.reset_password_handler(None, "shen_01", "temp-pass") == ["（只有管理者能重設密碼。）", ""]
+    monkeypatch.setattr(app.CONTENT.config, "admins", ["沈青衫"])
+    assert app.reset_password_handler(player, "沒這個人", "temp-pass") == ["找不到這個帳號或名號。", ""]
+    assert app.reset_password_handler(player, "shen_01", "123") == ["密碼至少 6 字。", ""]
+    assert app.reset_password_handler(player, "沈青衫", "temp-pass") == ["已重設 shen_01 的密碼。", ""]
+    app.login("shen_01", "temp-pass")

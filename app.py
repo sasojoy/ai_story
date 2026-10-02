@@ -21,11 +21,13 @@ from pathlib import Path
 
 import gradio as gr
 
+from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, AccountStore, normalize
 from tianxia.content import load_content
 from tianxia.craft import MATERIALS_PER_CRAFT
 from tianxia.engine import Game
 from tianxia.journal import CSS as JOURNAL_CSS
 from tianxia.save import load_game, path_for, save_game
+from tianxia.world_state import WorldStateStore
 
 ROOT = Path(__file__).parent
 CONTENT = load_content(ROOT / "content")
@@ -472,7 +474,7 @@ def open_game(name: str) -> Game:
     try:
         state = load_game(path)
         if state.player.bot is not None:  # 伺服器假人的存檔：不讓真人接手（伺服器假人設計第五節）
-            raise gr.Error("這個名號已有人使用。")
+            raise gr.Error(NAME_TAKEN)
         return Game(CONTENT, state)
     except gr.Error:  # gr.Error 也是 ValueError 的子類別：不先放行，下面會把假人的存檔當成壞檔備份掉
         raise
@@ -485,16 +487,109 @@ def open_game(name: str) -> Game:
         return game
 
 
-def start(name):
-    """踏入江湖：藏起開始畫面、顯示江湖畫面，門下、戰報、大地圖頁面維持隱藏；管理者才看得到設定頁的管理者區塊。"""
+LOGIN_FAILURES: dict[str, list[float]] = {}  # 擋猜密碼的紀錄，整個伺服器共用、只放記憶體（帳號密碼登入設計第三節）
+
+
+def account_store() -> AccountStore:
+    return AccountStore(SAVE_DIR / "accounts" / "accounts.json", failures=LOGIN_FAILURES)
+
+
+def name_taken(name: str) -> bool:
+    """名號有人用：已經有存檔（真人或假人一樣）、綁在某個帳號上，或是管理者的名號。
+    假人與真人回同一句話，就沒辦法用名號試出誰是假人（帳號密碼登入設計第三節）。"""
+    admins = {a.casefold() for a in CONTENT.config.admins}
+    return save_path(name).exists() or account_store().owner_of(name) is not None or name.casefold() in admins
+
+
+def _entered(game: Game, account_key: str) -> list:
+    """進遊戲：藏起開始畫面與建立角色、顯示江湖畫面；管理者才看得到設定頁的管理者區塊。"""
+    return (
+        act(game, lambda g: None) + [gr.update(visible=False), gr.update(visible=False)]  # start_col、create_col
+        + show_page("main") + [gr.update(visible=game.is_admin()), account_key]  # PAGES、admin_group、account_state
+    )
+
+
+def _needs_character(account_key: str) -> list:
+    """登入了但帳號還沒有角色：顯示「取名號，建立角色」。"""
+    return (
+        [gr.skip()] * N_OUTPUTS + [gr.update(visible=False), gr.update(visible=True)]
+        + [gr.skip()] * len(PAGES) + [gr.skip(), account_key]
+    )
+
+
+def login(login_name, password):
+    try:
+        account = account_store().authenticate(login_name, password)
+    except AccountError as exc:
+        raise gr.Error(str(exc))
+    key = normalize(login_name)
+    if account.character is None:
+        return _needs_character(key)
+    return _entered(open_game(account.character), key)
+
+
+def register(login_name, password, again):
+    if (password or "") != (again or ""):
+        raise gr.Error(PASSWORDS_DIFFER)
+    try:
+        with WorldStateStore().action_lock():
+            account_store().register(login_name, password)
+    except AccountError as exc:
+        raise gr.Error(str(exc))
+    return _needs_character(normalize(login_name))
+
+
+def create_character(account_key, name):
+    """建立角色：檢查名號沒人用 → 建存檔 → 綁到帳號，三步在同一把行動鎖裡做完（不跟假人程式取名撞在一起）。"""
+    if not account_key:
+        raise gr.Error("請先登入。")
     name = (name or "").strip()
     if not name:
         raise gr.Error("請先輸入你的名號。")
-    game = open_game(name)
-    return (
-        act(game, lambda g: None) + [gr.update(visible=False)] + show_page("main")  # start_col、PAGES
-        + [gr.update(visible=game.is_admin())]  # admin_group
-    )
+    store = account_store()
+    with WorldStateStore().action_lock():
+        account = store.get(account_key)
+        if account is None:
+            raise gr.Error("請先登入。")
+        if account.character is not None:  # 連按兩次：已經建好了，直接進遊戲
+            game = open_game(account.character)
+        else:
+            if name_taken(name):
+                raise gr.Error(NAME_TAKEN)
+            game = Game.new(CONTENT, name)
+            save_game(game.state, save_path(name))
+            store.bind_character(account_key, name)
+    return _entered(game, account_key)
+
+
+def change_password_handler(account_key, old, new, again):
+    """設定頁的修改密碼：結果寫在表單旁邊，不寫進江湖紀錄；成功或失敗都把三個密碼欄清空。"""
+    if not account_key:
+        return ["請先登入。", "", "", ""]
+    if (new or "") != (again or ""):
+        return [PASSWORDS_DIFFER, "", "", ""]
+    try:
+        with WorldStateStore().action_lock():
+            account_store().change_password(account_key, old, new)
+    except AccountError as exc:
+        return [str(exc), "", "", ""]
+    return ["密碼已更新。", "", "", ""]
+
+
+def reset_password_handler(game, target, temp):
+    """管理者幫人重設密碼（先照帳號找，再照名號找）；臨時密碼由管理者私下告訴對方。"""
+    if game is None or not game.is_admin():
+        return ["（只有管理者能重設密碼。）", ""]
+    store = account_store()
+    try:
+        with WorldStateStore().action_lock():
+            key = store.find(target)
+            if key is None:
+                return ["找不到這個帳號或名號。", ""]
+            store.set_password(key, temp)
+    except AccountError as exc:
+        return [str(exc), ""]
+    return [f"已重設 {store.get(key).login} 的密碼。", ""]
 
 
 def build_demo() -> gr.Blocks:
@@ -502,9 +597,21 @@ def build_demo() -> gr.Blocks:
         game_state = gr.State(None)
         ids_state = gr.State([])
         gr.Markdown("# 天下大勢 · 原型")
+        account_state = gr.State(None)
         with gr.Column(visible=True) as start_col:
-            name_box = gr.Textbox(label="你的名號", placeholder="例如：沈青衫（輸入舊名號會讀取存檔）")
-            start_btn = gr.Button("踏入江湖", variant="primary")
+            with gr.Tab("登入"):
+                login_box = gr.Textbox(label="帳號")
+                login_pw_box = gr.Textbox(label="密碼", type="password")
+                login_btn = gr.Button("登入", variant="primary")
+            with gr.Tab("註冊"):
+                reg_box = gr.Textbox(label="帳號", placeholder="英文字母、數字、底線，3～20 字")
+                reg_pw_box = gr.Textbox(label="密碼", type="password", placeholder="至少 6 字")
+                reg_pw2_box = gr.Textbox(label="再輸入一次密碼", type="password")
+                reg_btn = gr.Button("註冊", variant="primary")
+        with gr.Column(visible=False) as create_col:
+            gr.Markdown("這個帳號還沒有角色。取一個名號，踏入江湖。")
+            name_box = gr.Textbox(label="你的名號", placeholder="例如：沈青衫")
+            start_btn = gr.Button("建立角色", variant="primary")
         with gr.Row(visible=False) as game_row:
             with gr.Column(scale=3):
                 with gr.Row(equal_height=False):
@@ -549,6 +656,13 @@ def build_demo() -> gr.Blocks:
                     with gr.Tab("設定"):
                         anon_cb = gr.Checkbox(label="匿名行走（江湖傳聞中不顯示名號）")
                         skip_tutorial_btn = gr.Button("略過新手引導")
+                        with gr.Group():
+                            gr.Markdown("**修改密碼**")
+                            old_pw_box = gr.Textbox(label="舊密碼", type="password")
+                            new_pw_box = gr.Textbox(label="新密碼", type="password")
+                            new_pw2_box = gr.Textbox(label="再輸入一次新密碼", type="password")
+                            change_pw_btn = gr.Button("修改密碼")
+                            change_pw_md = gr.Markdown()
                         with gr.Group(visible=False) as admin_group:
                             gr.Markdown("**管理者**")
                             with gr.Row():
@@ -569,6 +683,12 @@ def build_demo() -> gr.Blocks:
                                 admin_trend_dd = gr.Dropdown(trend_choices, label="大勢線", interactive=True)
                                 admin_trend_nb = gr.Number(value=10, precision=0, label="推動量（負數＝壓低）")
                                 admin_trend_btn = gr.Button("推動")
+                            gr.Markdown("重設密碼（朋友忘記密碼時用；臨時密碼私下告訴他）")
+                            with gr.Row():
+                                reset_target_box = gr.Textbox(label="帳號或名號")
+                                reset_pw_box = gr.Textbox(label="臨時密碼")
+                                reset_btn = gr.Button("重設密碼")
+                            reset_md = gr.Markdown()
         with gr.Column(visible=False) as menxia_col:
             with gr.Row(equal_height=True):
                 gr.Markdown("## 門下", scale=1)
@@ -650,8 +770,17 @@ def build_demo() -> gr.Blocks:
             craft_mats_dd, craft_head_md, arts_radio,
         ]
 
-        start_btn.click(start, inputs=[name_box], outputs=outputs + [start_col] + pages + [admin_group])
-        name_box.submit(start, inputs=[name_box], outputs=outputs + [start_col] + pages + [admin_group])
+        entry_outputs = outputs + [start_col, create_col] + pages + [admin_group, account_state]
+        login_btn.click(login, inputs=[login_box, login_pw_box], outputs=entry_outputs)
+        login_pw_box.submit(login, inputs=[login_box, login_pw_box], outputs=entry_outputs)
+        reg_btn.click(register, inputs=[reg_box, reg_pw_box, reg_pw2_box], outputs=entry_outputs)
+        start_btn.click(create_character, inputs=[account_state, name_box], outputs=entry_outputs)
+        name_box.submit(create_character, inputs=[account_state, name_box], outputs=entry_outputs)
+        change_pw_btn.click(
+            change_password_handler, inputs=[account_state, old_pw_box, new_pw_box, new_pw2_box],
+            outputs=[change_pw_md, old_pw_box, new_pw_box, new_pw2_box],
+        )
+        reset_btn.click(reset_password_handler, inputs=[game_state, reset_target_box, reset_pw_box], outputs=[reset_md, reset_pw_box])
         for i, btn in enumerate(option_btns):
             btn.click(make_option_handler(i), inputs=[game_state, ids_state], outputs=outputs)
         seclude_btn.click(seclude_handler, inputs=[game_state, hours_sl], outputs=outputs)
