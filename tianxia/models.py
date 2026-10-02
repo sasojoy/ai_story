@@ -385,6 +385,10 @@ class Config(_Strict):
     # ── 賽季生命週期（第一季設計第十四節）──
     admins: list[str] = Field(default_factory=list)  # 管理者的名號；暫時用名號認人，線上架構會換成帳號權限
     auto_open_first_season: bool = False  # True＝全服第一次開局就直接開季（測試內容用）；正式內容由管理者開季
+    # ── 伺服器規模（伺服器假人設計第八節第 5 項；第一季設計 5.4、十二）──
+    server_max_players: int = 30  # 伺服器人數上限；第四階席次、之後的軍令陣營額度照它等比例換算
+    rank4_seat_ratio: float = 0.008  # 每陣營第四階席次＝上限 × 這個比例（四捨五入，最少 1 席）
+    talk_stamina: int = 2  # 跟大勢人物對話，每一輪扣的體力
 
 
 class BattleFaction(_Strict):

@@ -216,7 +216,8 @@ class Game:
             return [Option(id=f"choice:{i}", label=self._choice_label(ch, odds)) for i, ch in visible_choices(event, s)]
         if s.player.pending_companion:
             dialogue_options, _ = s.player.last_offered_dialogue.get(s.player.pending_companion, [[], []])
-            opts = [Option(id=f"talk:{i}", label=text) for i, text in enumerate(dialogue_options)]
+            talk_cost = c.config.talk_stamina
+            opts = [self._cost_option(f"talk:{i}", text, talk_cost) for i, text in enumerate(dialogue_options)]
             opts.append(Option(id="talk:leave", label="告辭"))
             return opts
         if s.player.busy_until is not None:
@@ -392,6 +393,7 @@ class Game:
             return ["（此刻無法這麼做。）"]
         if arg == "leave":
             return companion_agent.leave_dialogue(self.state)
+        self.state.player.stamina -= self.content.config.talk_stamina  # 每一輪對話都要花體力（伺服器假人設計第八節第 4 項）
         return companion_agent.continue_dialogue(
             self.client, self.state, self.content, self.world, companion_id, int(arg), self.rng
         )

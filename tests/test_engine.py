@@ -1247,3 +1247,23 @@ def test_fast_forwarding_across_a_battle_threshold_starts_the_battle(content, ga
     assert any("集結號角" in m for m in msgs)
     assert game.state.world.pending_battle is None
     assert game.world.get_season().pending_battle is None
+
+
+def test_each_dialogue_turn_costs_stamina(content, game):
+    """伺服器假人設計第八節第 4 項：跟大勢人物對話每一輪扣體力，不再是免費的。"""
+    content.characters["mate"].deep_interaction = True
+    with mock.patch.object(companion_agent, "_generate", return_value=FAKE_TURN):
+        game.choose("act:socialize")
+        before = game.state.player.stamina
+        game.choose("talk:0")
+    assert game.state.player.stamina == before - content.config.talk_stamina
+
+
+def test_dialogue_turns_are_disabled_without_stamina_but_leaving_is_not(content, game):
+    content.characters["mate"].deep_interaction = True
+    with mock.patch.object(companion_agent, "_generate", return_value=FAKE_TURN):
+        game.choose("act:socialize")
+    game.state.player.stamina = content.config.talk_stamina - 1
+    options = {o.id: o for o in game.options()}
+    assert not options["talk:0"].enabled and not options["talk:1"].enabled
+    assert options["talk:leave"].enabled
