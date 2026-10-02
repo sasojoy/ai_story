@@ -402,6 +402,10 @@ class Game:
                 return cid
         return None
 
+    def socialize_starts_dialogue(self) -> bool:
+        """在這裡交遊會直接跟大勢人物對話（伺服器假人不閒聊大勢人物，見 bot_policy）。"""
+        return self._deep_interaction_target() is not None
+
     def _talk(self, arg: str) -> list[str]:
         companion_id = self.state.player.pending_companion
         if companion_id is None:
