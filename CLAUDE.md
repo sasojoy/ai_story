@@ -13,6 +13,11 @@
 - `tianxia/skillview.py`：「門下」頁面的說明文字（武學白話說明、人物卡、武學欄、武學庫）；只讀狀態、不改數值，說法以 `battle.py` 的實際規則為準。
 - `tianxia/atlas.py`：大地圖的資料（純資料與文字）：視野、大區歸屬（地點座標落在哪個大區多邊形，區外歸最近的大區）、最省體力的路線、四個圖層要標的東西、地點詳情與「安排前往」的條件；勝算只在敵情層與詳情欄才算。
 - `tianxia/mapview.py`：把 atlas 的資料畫成 SVG：大地圖（江湖輿圖）與場景旁以你為中心的小地圖（從大地圖截一塊，畫法與視野同大地圖，視窗外兩站以內的摸清地點在邊緣標方向）。
+- `tianxia/server_bots.py`：伺服器假人的名號、個性、作息（純函式，不碰檔案也不 import 引擎）。
+- `tianxia/bot_policy.py`：假人照陣營目標做一個動作，只走 `Game` 的公開行動，不呼叫 LLM。
+- `tianxia/bot_runner.py`：假人程式的核心，每一輪補人（先叫醒退隱的、沒有才新建）、叫醒、讓在線的假人做事。
+- `tianxia/fileio.py`：Windows 檔案被占用時的重試（存檔、全服紀錄共用）。
+- `run_bots.py`：假人程式的入口，每隔 `bot_tick_seconds` 呼叫一次 `BotRunner.tick()`，跟 `app.py` 同時開著。
 
 ## 原則
 - 數值全部由規則引擎決定，執行時不接 LLM。
@@ -21,11 +26,17 @@
 - 改內容後跑 `pytest`：`tests/test_real_content.py` 會讓機器人玩完整季，抓出內容錯誤。
 - 賽季由管理者開：全服第一次開局停在「籌備中」，管理者（`content/config.json` 的 `admins`，暫時用名號認人）在設定頁按「開季」；季結束進入「休季」，管理者按「開啟下一季」。換季時同伴全部重獲自由、自創武學名字全部釋出、天機 +1（同名長出不同武學）。測試內容用 `auto_open_first_season: true` 直接開季。升級前就存在的 `saves/world/state.json` 沒有「已開季」的紀錄，升級後會停在籌備中，管理者按一次「開季」即可；如果那一季在升級前就已經結束，管理者先按「開季」、再按「開啟下一季」。管理者名號要專用、難猜，而且不要拿來平常遊玩——任何人打出這個名號就有管理者權限，用 gradio.live 公開連結分享時尤其危險。
 - 陣營（`content/scenario.json` 的 `factions`）：玩家開局是散人，在陣營的 `join_at` 地點按「投靠」，或拜入陣營名下的門派；劇本有分陣營時，全服決戰只能站自己陣營那邊，散人與不在交戰雙方的陣營不能參戰，只在一旁觀戰、照常遊玩。狀態列的名號後面顯示門派、陣營（兩者都有時寫成「門派・陣營」），都沒有才是散人。
+- 伺服器假人（`docs/superpowers/specs/2026-10-02-伺服器假人-design.md`）跟真人完全一樣、看不出來：「是假人」只記在存檔的 `PlayerState.bot`，任何畫面、榜單、戰鬥名單、主控台輸出都不能顯示或透露；假人只透過 `Game` 的公開行動做事，不呼叫 LLM。
+- `app.py` 與 `run_bots.py` 是兩個程式、共用同一份全服紀錄與存檔：每次「補算時間＋做動作＋存檔」都要包在 `WorldStateStore.action_lock()` 裡（伺服器等到拿到為止，假人等不到就跳過）。
+- 投靠要確認一次（先按 `faction:<id>`，再按 `faction:confirm`）；陣營人數看全服投靠名冊（`WorldStateStore.faction_counts()`）。
+- 管理者（試玩期是 `Rayal`）在設定頁可以立刻開戰、觸發大勢門檻或世界事件、推動大勢線；效果跟自然發生一樣（`Game.admin_start_battle`／`admin_fire`／`admin_push_trend`）。
 
 ## 指令
 - 執行：`.venv/Scripts/python.exe app.py`（http://127.0.0.1:7861）
 - 測試：`.venv/Scripts/python.exe -m pytest -q`
 - 平衡模擬：`.venv/Scripts/python.exe scripts/simulate.py 30`
+- 伺服器假人：`.venv/Scripts/python.exe run_bots.py`（跟 `app.py` 同時開著）
+- 假人整季模擬：`.venv/Scripts/python.exe scripts/sim_server_bots.py --seasons 2`
 
 ### 開發伺服器的啟動方式（這台機器上的慣例）
 不要用 Bash 工具背景執行 `app.py`（會被背景任務追蹤器砍掉）。用 PowerShell `Start-Process`
