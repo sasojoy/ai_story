@@ -325,6 +325,7 @@ class WorldStateStore:
             state.companions = {}  # 跨季不滾雪球第二條：同伴全部重獲自由、等級武學歸零
             state.created_skills = {}  # 第三條：自創武學名字全部釋出
             state.tianji += 1
+            state.active_battle = None  # 上一季沒打完（或打完沒清掉）的戰鬥不帶進新的一季
             result["ok"] = True
 
         self.mutate(_apply)

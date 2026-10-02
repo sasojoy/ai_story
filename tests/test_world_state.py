@@ -298,3 +298,12 @@ def test_next_season_releases_every_created_skill_name_and_turns_the_tianji(stor
     store.next_season(content, now=1.0)
     assert store.is_skill_name_taken("驚雷掌") is False
     assert store.read().tianji == 1
+
+
+def test_next_season_clears_a_leftover_battle(store, content):
+    content.config.auto_open_first_season = True
+    store.seed_first_season(content)
+    store.start_battle(_battle_definition(), now=0.0)
+    store.mutate_season(lambda season: setattr(season, "ended", True))
+    store.next_season(content, now=1.0)
+    assert store.get_battle() is None

@@ -826,16 +826,55 @@ def test_with_factions_the_muster_only_offers_your_own_side(content, game):
     with mock.patch("tianxia.engine.time.time", return_value=1000.0):
         assert ids(game) == ["battle:join:huang"]
         assert game.choose("battle:join:guan") == ["（此刻無法這麼做。）"]
+        assert "選擇陣營" in game.scene_text()
 
 
-def test_with_factions_a_free_agent_or_an_outside_faction_can_only_watch(content, game):
+def test_with_factions_joining_the_other_side_directly_is_refused(content, game):
+    """選單上本來就不會出現對方陣營的加入選項；直接呼叫 _battle_choose 也一樣擋得住。"""
+    _install_factions(content)
+    definition = _install_battle_def(content)
+    game.state.player.faction = "huang"
+    game.world.start_battle(definition, now=1000.0)
+    assert game._battle_choose("join:guan") == ["（你只能站在自己陣營這一邊。）"]
+    assert game.world.get_battle().participants == {}
+
+
+def test_with_factions_a_free_agent_or_an_outside_faction_watches_and_keeps_playing(content, game):
     _install_factions(content)
     definition = _install_battle_def(content)
     game.world.start_battle(definition, now=1000.0)
     with mock.patch("tianxia.engine.time.time", return_value=1000.0):
-        assert [(o.id, o.enabled) for o in game.options()] == [("battle:spectate", False)]
-        game.state.player.faction = "haoqiang"
-        assert [(o.id, o.enabled) for o in game.options()] == [("battle:spectate", False)]
+        for faction in (None, "haoqiang"):
+            game.state.player.faction = faction
+            assert "act:explore" in ids(game)
+            assert not any(i.startswith("battle:") for i in ids(game))
+            scene = game.scene_text()
+            assert "測試決戰" in scene and "觀戰" in scene and "選擇陣營" not in scene
+
+
+def test_with_factions_a_free_agent_can_leave_the_sidelines_once_the_battle_is_under_way(content, game):
+    _install_factions(content)
+    definition = _install_battle_def(content)
+    game.world.start_battle(definition, now=0.0)
+    game.world.mutate_battle(lambda b: battle_instance.join_faction(b, "乙玩家", "huang", neili_cap=100.0))
+    with mock.patch("tianxia.engine.time.time", return_value=definition.muster_seconds + 1):
+        assert game._battle_status()[0].phase == "active"
+        assert "act:explore" in ids(game)
+        assert not any(i.startswith("battle:") for i in ids(game))
+        game.choose("faction:guan")
+        assert game.state.player.faction == "guan"
+        assert ids(game) == ["battle:join_late"]  # 投靠了交戰的一方，就能加入戰局
+
+
+def test_a_watcher_still_sees_their_own_event_below_the_battle(content, game):
+    _install_factions(content)
+    definition = _install_battle_def(content)
+    game.world.start_battle(definition, now=1000.0)
+    with mock.patch("tianxia.engine.time.time", return_value=1000.0):
+        game.choose("act:explore")
+        event = content.events[game.state.pending_event]
+        scene = game.scene_text()
+    assert "測試決戰" in scene and event.title in scene
 
 
 def test_with_factions_a_latecomer_joins_their_own_side(content, game):
@@ -843,10 +882,42 @@ def test_with_factions_a_latecomer_joins_their_own_side(content, game):
     definition = _install_battle_def(content)
     game.state.player.faction = "huang"
     game.world.start_battle(definition, now=0.0)
+    # 黃巾已經有人了，單看人數平衡會把後來的人分去官軍；玩家仍要站在自己的黃巾這一邊。
+    game.world.mutate_battle(lambda b: battle_instance.join_faction(b, "乙玩家", "huang", neili_cap=100.0))
     with mock.patch("tianxia.engine.time.time", return_value=definition.muster_seconds + 1):
         game._battle_status()
         game.choose("battle:join_late")
     assert game.world.get_battle().participants["沈浪"].faction == "huang"
+
+
+def test_a_battle_with_no_fighters_ends_with_its_fallback_outcome_once_the_round_times_out(content, game):
+    _install_factions(content)
+    definition = _install_battle_def(content)
+    game.world.start_battle(definition, now=0.0)
+    closed = definition.muster_seconds + 1
+    with mock.patch("tianxia.engine.time.time", return_value=closed):
+        assert game._battle_status()[0].phase == "active"
+    with mock.patch("tianxia.engine.time.time", return_value=closed + definition.round_seconds - 1):
+        assert game._battle_status() is not None  # 回合還沒逾時，不提前收場
+    with mock.patch("tianxia.engine.time.time", return_value=closed + definition.round_seconds):
+        assert "act:explore" in ids(game)
+    assert game.world.get_battle().phase == "ended"
+    assert any("官軍大勝" in r.text for r in game.world.get_season().chronicle)
+
+
+def test_status_text_shows_the_faction_of_a_player_without_a_sect(content, game):
+    _install_factions(content)
+    assert "散人" in game.status_text()
+    game.choose("faction:guan")
+    assert "官軍" in game.status_text() and "散人" not in game.status_text()
+
+
+def test_status_text_shows_both_sect_and_faction(content, game):
+    _install_factions(content)
+    game.state.player.sect = "cloud"
+    assert "流雲派" in game.status_text() and "官軍" not in game.status_text()
+    game.state.player.faction = "guan"
+    assert "流雲派・官軍" in game.status_text()
 
 
 def test_no_active_battle_leaves_normal_gameplay_untouched(content, game):

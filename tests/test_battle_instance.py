@@ -454,6 +454,52 @@ def test_the_fallback_outcome_with_no_bounds_catches_a_stalemate(definition):
     assert instance.outcome_title == "僵持"
 
 
+# ── 沒有人能打：回合逾時就用保底結果收場 ─────────────────────
+
+
+def _empty_active_battle(definition, now: float) -> bi.BattleInstance:
+    instance = bi.start_muster(definition, now=0.0)
+    bi.close_muster(instance, definition, random.Random(0), now=now)
+    return instance
+
+
+def test_end_without_fighters_uses_the_fallback_outcome_once_the_round_times_out(definition):
+    definition.outcomes[-1].world_flags_add = ["stalemate"]
+    definition.outcomes[-1].trend_delta = {"huangjin": 5}
+    instance = _empty_active_battle(definition, now=600.0)
+    instance.trend = 75  # 照戰局本該是「官軍大勝」；沒有人在場，一律用保底結果收場
+    assert bi.end_without_fighters(instance, definition, now=600.0 + definition.round_seconds - 1) == []
+    assert instance.phase == "active"
+    msgs = bi.end_without_fighters(instance, definition, now=600.0 + definition.round_seconds)
+    assert instance.phase == "ended"
+    assert (instance.outcome_title, instance.outcome_text) == ("僵持", "不分勝負。")
+    assert instance.outcome_world_flags == ["stalemate"]
+    assert instance.outcome_trend_delta == {"huangjin": 5}
+    assert "══ 僵持 ══" in msgs and "不分勝負。" in msgs
+    assert "僵持" in instance.narrative_log[-1]
+
+
+def test_end_without_fighters_also_ends_once_everyone_has_fallen(definition):
+    instance = _active_battle(definition)
+    for p in instance.participants.values():
+        p.eliminated = True
+    bi.end_without_fighters(instance, definition, now=definition.round_seconds)
+    assert instance.phase == "ended" and instance.outcome_title == "僵持"
+
+
+def test_end_without_fighters_leaves_a_battle_with_someone_still_standing_alone(definition):
+    instance = _active_battle(definition)
+    instance.participants["甲"].eliminated = True
+    assert bi.end_without_fighters(instance, definition, now=10_000.0) == []
+    assert instance.phase == "active" and instance.outcome_title is None
+
+
+def test_end_without_fighters_does_nothing_during_muster(definition):
+    instance = bi.start_muster(definition, now=0.0)
+    assert bi.end_without_fighters(instance, definition, now=10_000.0) == []
+    assert instance.phase == "muster"
+
+
 # ── 機器人自動選擇 ───────────────────────────────────────
 
 

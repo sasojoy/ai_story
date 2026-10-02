@@ -242,12 +242,33 @@ def resolve_round(instance: BattleInstance, definition: BattleDef, rng: random.R
     # 大家在新的一幕裡選過一次行動，才輪到檢查是不是已經分出勝負）。
     outcome = None if advanced else _check_outcome(instance, definition)
     if outcome is not None:
-        instance.phase = "ended"
-        instance.outcome_title, instance.outcome_text = outcome.title, outcome.text
-        instance.outcome_world_flags = list(outcome.world_flags_add)
-        instance.outcome_trend_delta = dict(outcome.trend_delta)
-        msgs.append(f"══ {outcome.title} ══")
-        msgs.append(outcome.text)
+        msgs += _record_outcome(instance, outcome)
+    instance.round = BattleRound(opened_real=now)
+    return msgs
+
+
+def _record_outcome(instance: BattleInstance, outcome: BattleOutcome) -> list[str]:
+    """把終局記到戰鬥上（套用到共用賽季是呼叫端 engine.py 的事，見 BattleInstance 的欄位註解），
+    回傳要給大家看的兩行。"""
+    instance.phase = "ended"
+    instance.outcome_title, instance.outcome_text = outcome.title, outcome.text
+    instance.outcome_world_flags = list(outcome.world_flags_add)
+    instance.outcome_trend_delta = dict(outcome.trend_delta)
+    return [f"══ {outcome.title} ══", outcome.text]
+
+
+def end_without_fighters(instance: BattleInstance, definition: BattleDef, now: float) -> list[str]:
+    """場上已經沒有任何還能打的人（沒人參戰、或全都倒下了），而且這一回合已經逾時：
+    沒有人能送出行動，round_is_complete 永遠不會成立，這場戰鬥就會永遠卡著——這時直接用
+    內容最後那個無條件的保底結果（definition.outcomes[-1]，content.py::validate 保證它
+    沒有門檻）收場，記錄方式跟 resolve_round 分出勝負時一樣。這裡沒有 LLM 潤色，收場的
+    幾句話直接寫進 narrative_log。還有人在場、還在集結、或回合還沒逾時，什麼都不做、回傳空清單。"""
+    if instance.phase != "active" or _active_participants(instance):
+        return []
+    if now - instance.round.opened_real < definition.round_seconds:
+        return []
+    msgs = ["戰場上已經沒有人還能出手，這場戰鬥就此收場。"] + _record_outcome(instance, definition.outcomes[-1])
+    instance.narrative_log.append("\n".join(msgs))
     instance.round = BattleRound(opened_real=now)
     return msgs
 

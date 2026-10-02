@@ -202,7 +202,7 @@ class Game:
     def options(self, odds: bool = True) -> list[Option]:
         s, c = self.state, self.content
         battle_status = self._battle_status()
-        if battle_status is not None:
+        if battle_status is not None and not self._watching_battle(*battle_status):
             return self._battle_options(*battle_status)
         if self.world.season_phase() == "preparing":
             return [Option(id="season:preparing", label="賽季籌備中，等待管理者開季", enabled=False)]
@@ -442,8 +442,9 @@ class Game:
 
     def _advance_battle_round(self, battle: battle_instance.BattleInstance, definition: BattleDef) -> list[str]:
         """核心推進邏輯（在呼叫端已經握有 mutate_battle 鎖的前提下原地修改 battle）：
-        集結逾時自動分配、機器人補位、回合逾時代選保守行動、全員到齊就結算並請 LLM
-        潤色。回傳這次呼叫如果真的結算了一回合的敘事訊息，沒有結算就是空清單。這是
+        集結逾時自動分配、機器人補位、場上沒人能打又逾時就用保底結果收場、回合逾時代選
+        保守行動、全員到齊就結算並請 LLM 潤色。回傳這次呼叫如果真的結算了一回合（或收場）
+        的敘事訊息，沒有結算就是空清單。這是
         _run_battle_tick()（被動追趕，options()/scene_text() 用）跟 _battle_choose()
         的 act 分支（玩家自己送出行動，可能剛好湊滿全員）共用的同一份邏輯，確保兩條
         路徑的推進規則完全一致——只是呼叫的時間點跟是否先 submit_action 不同。"""
@@ -457,6 +458,9 @@ class Game:
                 tag = battle_instance.bot_choose_action(battle, definition, p.name, self.rng)
                 if tag:
                     battle_instance.submit_action(battle, p.name, tag)
+        ended = battle_instance.end_without_fighters(battle, definition, now)  # 沒人能打、回合逾時：用保底結果收場
+        if ended:
+            return ended
         if now - battle.round.opened_real >= definition.round_seconds and not battle_instance.round_is_complete(battle):
             default_tag = min(definition.action_tags, key=lambda t: definition.action_tags[t].neili_damage)
             battle_instance.fill_timed_out_actions(battle, definition, default_tag)
@@ -498,35 +502,44 @@ class Game:
 
         self.world.mutate_season(_apply)
 
+    def _watching_battle(self, battle: battle_instance.BattleInstance, definition: BattleDef) -> bool:
+        """劇本分陣營時，這個人打不了這場仗、只能觀戰：自己的陣營（散人沒有陣營）不是交戰的
+        任何一方，而且還在集結、或已經開打但他不在場上。觀戰的人照常遊玩（options() 不會
+        回傳戰鬥選項），場景上仍看得到這場戰鬥——全服決戰不能把打不了仗的人鎖住。劇本不分
+        陣營時誰都能加入，永遠回傳 False。"""
+        if not self.content.scenario.factions:
+            return False
+        if self.state.player.faction in {f.id for f in definition.factions}:
+            return False
+        return battle.phase == "muster" or self.state.player.name not in battle.participants
+
     def _battle_scene_text(self, battle: battle_instance.BattleInstance, definition: BattleDef) -> str:
         header = f"**{definition.name}**"
+        watching = self._watching_battle(battle, definition)
+        watch_line = "你不屬於交戰的任何一方，在一旁觀戰。"
         if battle.phase == "muster":
             remaining = max(0, int(battle.muster_deadline_real - time.time()))
-            return f"{header}\n\n集結中，還剩 {remaining // 60} 分 {remaining % 60} 秒選擇陣營。"
+            countdown = f"集結中，還剩 {remaining // 60} 分 {remaining % 60} 秒"
+            return f"{header}\n\n{countdown}。{watch_line}" if watching else f"{header}\n\n{countdown}選擇陣營。"
         act = battle_instance.current_act(battle, definition)
         lines = [header, f"【{act.title}】{act.text}"] + battle.narrative_log[-5:]
         p = battle.participants.get(self.state.player.name)
         if p is not None and p.eliminated:
             lines.append("（你已經倒下，只能在一旁觀戰。）")
+        if watching:
+            lines.append(watch_line)
         return "\n\n".join(lines)
 
     def _battle_options(self, battle: battle_instance.BattleInstance, definition: BattleDef) -> list[Option]:
+        """打得了這場仗的人的戰鬥選項（只能觀戰的人不會走到這裡，見 _watching_battle）。"""
         name = self.state.player.name
-        sides_locked = bool(self.content.scenario.factions)  # 劇本分陣營：只能站在自己陣營那邊
-        mine = self.state.player.faction
-        in_battle = mine in {f.id for f in definition.factions}
-        spectate = Option(id="battle:spectate", label="（你不屬於交戰的任何一方，只能觀戰）", enabled=False)
         if battle.phase == "muster":
-            if not sides_locked:
-                return [Option(id=f"battle:join:{f.id}", label=f"加入【{f.name}】") for f in definition.factions]
-            if not in_battle:
-                return [spectate]
-            side = next(f for f in definition.factions if f.id == mine)
-            return [Option(id=f"battle:join:{side.id}", label=f"加入【{side.name}】")]
+            sides = definition.factions
+            if self.content.scenario.factions:  # 劇本分陣營：只能站在自己陣營那邊
+                sides = [f for f in definition.factions if f.id == self.state.player.faction]
+            return [Option(id=f"battle:join:{f.id}", label=f"加入【{f.name}】") for f in sides]
         p = battle.participants.get(name)
         if p is None:
-            if sides_locked and not in_battle:
-                return [spectate]
             return [Option(id="battle:join_late", label="加入戰局")]
         if p.eliminated:
             return [Option(id="battle:spectate", label="（觀戰中，無法行動）", enabled=False)]
@@ -1040,10 +1053,18 @@ class Game:
         return f"【{loc.name}】危險 {'★' * loc.danger}\n\n{loc.description}"
 
     def scene_text(self) -> str:
-        s, c = self.state, self.content
+        """有全服戰鬥時大家都看得到戰場；只能觀戰的人照常遊玩，自己眼前的事（事件、對話、
+        地點）接在戰場底下，不然遇到事件時只看得到選項、看不到事件本身。"""
         battle_status = self._battle_status(tick=False)
-        if battle_status is not None:
-            return self._battle_scene_text(*battle_status)
+        if battle_status is None:
+            return self._own_scene_text()
+        battle_scene = self._battle_scene_text(*battle_status)
+        if not self._watching_battle(*battle_status):
+            return battle_scene
+        return f"{battle_scene}\n\n---\n\n{self._own_scene_text()}"
+
+    def _own_scene_text(self) -> str:
+        s, c = self.state, self.content
         if s.world.ended:
             return f"## {s.world.ending_title}\n\n{s.world.ending_text}"
         if s.pending_event:
@@ -1060,11 +1081,13 @@ class Game:
         s, c = self.state, self.content
         p, w = s.player, s.world
         names = c.config.stat_names
-        sect = c.sects[p.sect].name if p.sect else "散人"
+        sect = c.sects[p.sect].name if p.sect else None
+        faction = next((f.name for f in c.scenario.factions if f.id == p.faction), None)
+        affiliation = "・".join(name for name in (sect, faction) if name) or "散人"
         day = int(w.time // DAY) + 1
         clock = f"{int(w.time % DAY // HOUR):02d}:{int(w.time % HOUR // 60):02d}"
         lines = [
-            f"### {p.name}　·　{sect}" + ("（匿名行走）" if p.anonymous else ""),
+            f"### {p.name}　·　{affiliation}" + ("（匿名行走）" if p.anonymous else ""),
             f"📍 {c.locations[p.location].name}　⏳ 第 {day} 天 {clock}（本季共 {c.config.season_days:g} 天）",
             f"**體力** {int(p.stamina)} / {c.config.stamina_max}",
             "　".join(f"{names[k]} {p.stats[k]}" for k in ("str", "agi", "con", "wis")),
