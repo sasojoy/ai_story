@@ -131,7 +131,7 @@ def create_skill(
         return None, f"你已經有一門{kind}了，同時只能練一門。"
     if world.is_skill_name_taken(name) or name in content.skills:
         return None, f"【{name}】這個名字已經有人取走了，換一個吧。"
-    art = generate_from_name(name, kind, name)
+    art = generate_from_name(name, kind, name, world.read().tianji)
     if not world.claim_skill_name(art):
         return None, f"【{name}】這個名字已經有人取走了，換一個吧。"
     setattr(member, slot, art.id)

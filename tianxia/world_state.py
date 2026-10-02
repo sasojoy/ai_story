@@ -81,6 +81,7 @@ class SharedWorldState(BaseModel):
     season_number: int = 1
     season_last_real: float | None = None
     season_opened: bool = False  # 這一季管理者開季了沒；False＝籌備中（見 season_phase）
+    tianji: int = 0  # 天機：每次換季 +1，自創武學「名字 → 數值」的配方跟著換（跨季不滾雪球第三條）
 
     # ── 全服即時多人戰鬥（設計討論：集結選陣營→逐幕逐回合鎖步）────────
     # 同一時間最多一場（先簡化成這樣；真的需要同時好幾場再擴充成 list/dict）。
@@ -334,6 +335,9 @@ class WorldStateStore:
             state.season_number += 1
             state.season_opened = True
             state.season_last_real = now
+            state.companions = {}  # 跨季不滾雪球第二條：同伴全部重獲自由、等級武學歸零
+            state.created_skills = {}  # 第三條：自創武學名字全部釋出
+            state.tianji += 1
             result["ok"] = True
 
         self.mutate(_apply)

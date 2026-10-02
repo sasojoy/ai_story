@@ -299,3 +299,25 @@ def test_next_season_keeps_the_jade_seal_fragments(store, content):
     store.mutate_season(lambda season: setattr(season, "ended", True))
     store.next_season(content, now=1.0)
     assert [f.finder for f in store.get_jade_seal_fragments()] == ["甲"]
+
+
+def test_next_season_frees_every_companion_and_resets_their_progress(store, content):
+    content.config.auto_open_first_season = True
+    store.seed_first_season(content)
+    store.try_recruit("mate", "甲")
+    store.update_companion("mate", lambda progress: setattr(progress, "level", 9))
+    store.mutate_season(lambda season: setattr(season, "ended", True))
+    store.next_season(content, now=1.0)
+    progress = store.get_companion("mate")
+    assert progress.owner is None and progress.level == 1
+
+
+def test_next_season_releases_every_created_skill_name_and_turns_the_tianji(store, content):
+    content.config.auto_open_first_season = True
+    store.seed_first_season(content)
+    store.claim_skill_name(generate_from_name("驚雷掌", "武學", "驚雷掌"))
+    assert store.read().tianji == 0
+    store.mutate_season(lambda season: setattr(season, "ended", True))
+    store.next_season(content, now=1.0)
+    assert store.is_skill_name_taken("驚雷掌") is False
+    assert store.read().tianji == 1

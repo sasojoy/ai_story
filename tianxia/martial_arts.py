@@ -45,8 +45,10 @@ def power_at(art: MartialArt, level: int) -> float:
     return art.base_power + (art.top_power - art.base_power) * (level - 1) / (MAX_LEVEL - 1)
 
 
-def _hash_bytes(name: str) -> bytes:
-    return hashlib.sha256(name.strip().encode("utf-8")).digest()
+def _hash_bytes(name: str, tianji: int = 0) -> bytes:
+    """天機 0 用名字本身（保留既有配方）；之後每一季在名字前面加上天機，同名長出不同的武學。"""
+    key = name.strip() if tianji == 0 else f"{tianji}|{name.strip()}"
+    return hashlib.sha256(key.encode("utf-8")).digest()
 
 
 def _weighted_pick(digest_byte: int, weights: dict[str, float]) -> str:
@@ -61,15 +63,17 @@ def _weighted_pick(digest_byte: int, weights: dict[str, float]) -> str:
     return next(reversed(weights))
 
 
-def generate_from_name(name: str, kind: str, skill_id: str) -> MartialArt:
+def generate_from_name(name: str, kind: str, skill_id: str, tianji: int = 0) -> MartialArt:
     """自創功法：名字即配方，純函式、同名同結果，見模組說明。
 
     - 屬性：取雜湊第一個位元組對 8 取餘數，映射到 ATTRIBUTES。
     - 品質：取雜湊第二個位元組，依 CREATED_QUALITY_WEIGHTS 抽（絕學機率極小但存在）。
     - 威力：品質決定第一成/第十成的區間（QUALITY_BASE_POWER/TOP_POWER），區間內再用
       第三個位元組做小幅微調（±10%），同品質的武學威力才不會完全一樣。
+    - tianji：這一季的天機（見 world_state.SharedWorldState.tianji），同一季內同名同結果，
+      換季後重新洗牌。
     """
-    digest = _hash_bytes(name)
+    digest = _hash_bytes(name, tianji)
     attribute = ATTRIBUTES[digest[0] % len(ATTRIBUTES)]
     quality = _weighted_pick(digest[1], CREATED_QUALITY_WEIGHTS)
     jitter = 0.9 + (digest[2] / 255.0) * 0.2  # 0.9~1.1

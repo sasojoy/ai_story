@@ -6,6 +6,7 @@ from tianxia.martial_arts import (
     historical_art,
     power_at,
 )
+from tianxia.world_state import WorldStateStore
 
 
 def test_generate_from_name_is_deterministic():
@@ -64,3 +65,39 @@ def test_attribute_counters_are_symmetric_pairs():
         assert counters(attacker, defender)
         assert counters(defender, attacker)
         assert not counters(attacker, attacker)
+
+
+def test_tianji_zero_matches_the_original_recipe():
+    """天機 0 必須沿用換季機制出現前的配方：直接拿名字本身的雜湊算，不加任何前綴。"""
+    import hashlib
+
+    from tianxia.martial_arts import ATTRIBUTES
+
+    art = generate_from_name("驚雷掌", "武學", "x", tianji=0)
+    digest = hashlib.sha256("驚雷掌".encode("utf-8")).digest()
+    assert art.attribute == ATTRIBUTES[digest[0] % len(ATTRIBUTES)]
+    assert art == generate_from_name("驚雷掌", "武學", "x")
+
+
+def test_the_same_name_is_stable_within_one_tianji():
+    assert generate_from_name("流雲劍", "武學", "x", tianji=2) == generate_from_name("流雲劍", "武學", "x", tianji=2)
+
+
+def test_the_same_names_reshuffle_when_the_tianji_changes():
+    names = ["驚雷掌", "流雲劍", "寒江訣", "斷岳刀", "回風步"]
+    before = [generate_from_name(n, "武學", n, tianji=0) for n in names]
+    after = [generate_from_name(n, "武學", n, tianji=1) for n in names]
+    assert [(a.attribute, a.quality, a.base_power) for a in before] != [
+        (a.attribute, a.quality, a.base_power) for a in after
+    ]
+
+
+def test_create_skill_uses_the_current_tianji(content, tmp_path):
+    from tianxia import team
+    from tianxia.state import new_game_state
+
+    store = WorldStateStore(tmp_path / "world.json")
+    store.mutate(lambda state: setattr(state, "tianji", 3))
+    state = new_game_state(content, "甲")
+    art, _ = team.create_skill(state, content, store, "驚雷掌", "武學")
+    assert art == generate_from_name("驚雷掌", "武學", "驚雷掌", tianji=3)
