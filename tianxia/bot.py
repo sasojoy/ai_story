@@ -64,6 +64,7 @@ def play_season(
     observe 不是 None 時，開始玩之前呼叫一次（開季的樣子），之後每一步之後都呼叫一次
     （模擬器用來記錄名冊與交手的時間點）。"""
     game = Game.new(content, f"機器人{seed}", rng=random.Random(seed), world=world)
+    game.world.open_season(now=0.0)  # 模擬時機器人自己就是管理者：籌備中就直接開季，已經開了則什麼都不做
     rng = random.Random(seed)
     if observe is not None:
         observe(game)

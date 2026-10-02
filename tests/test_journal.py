@@ -292,9 +292,10 @@ def test_battle_card_extra_skips_card_notes_and_event_markers(game):
 
 
 def test_new_season_starts_a_fresh_journal(game):
+    game.content.config.admins = [game.state.player.name]
     game.choose("move:lake")
     game.advance(2 * 24 * HOUR)
-    game.choose("season:new")
+    game.admin_next_season(now=0.0)
     assert [e.title for e in game.state.journal] == ["測試劇本"]
 
 

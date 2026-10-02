@@ -458,16 +458,18 @@ def test_season_ends_by_time(game):
     w = game.state.world
     assert w.ended and w.ending_title == "風雨飄搖"
     assert "blocked" in w.flags
-    assert ids(game) == ["season:new"]
+    assert ids(game) == ["season:resting"]
 
 
-def test_new_season_resets_and_keeps_the_name_and_last_real(game):
+def test_admin_next_season_resets_and_keeps_the_name_and_last_real(game):
+    game.content.config.admins = ["沈浪"]
     game.sync(1000.0)
     game.advance(2 * DAY)
-    game.choose("season:new")
+    game.admin_next_season(now=2000.0)
     assert not game.state.world.ended
     assert game.state.world.trends["kou"] == 30
     assert game.state.player.name == "沈浪"
+    assert game.state.player.season_number == 2
     assert game.state.last_real == 1000.0
 
 
@@ -511,7 +513,8 @@ def test_new_season_propagates_to_another_player_on_their_next_sync(content, wor
     b.state.player.member.level = 5
     a.advance(2 * DAY)
     assert a.state.world.ended
-    a.choose("season:new")
+    a.content.config.admins = ["甲"]
+    a.admin_next_season(now=1.0)
     assert a.state.player.season_number == 2
 
     b.sync(1000.0)  # 乙完全沒點任何東西，只是連線期間剛好同步到
@@ -528,6 +531,54 @@ def test_a_brand_new_player_joining_mid_season_sees_the_current_shared_state(con
     b = Game.new(content, "乙", rng=random.Random(2), world=world)  # 乙中途才加入
     assert b.state.world.trends["kou"] == 70
     assert b.state.player.season_number == 1
+
+
+def test_a_fresh_server_waits_for_the_admin(content, world):
+    content.config.auto_open_first_season = False
+    game = Game.new(content, "甲", rng=random.Random(1), world=world)
+    assert [(o.id, o.enabled) for o in game.options()] == [("season:preparing", False)]
+    assert game.choose("act:explore") == ["（此刻無法這麼做。）"]
+
+
+def test_only_an_admin_can_open_the_season(content, world):
+    content.config.auto_open_first_season = False
+    content.config.admins = ["管理者"]
+    player = Game.new(content, "甲", rng=random.Random(1), world=world)
+    assert player.admin_open_season(now=0.0) == ["（只有管理者能開季。）"]
+    admin = Game.new(content, "管理者", rng=random.Random(2), world=world)
+    admin.admin_open_season(now=0.0)
+    assert world.season_phase() == "running"
+    assert admin.admin_open_season(now=1.0) == ["（現在不是籌備期，無法開季。）"]
+    player.sync(10.0)
+    assert "act:explore" in ids(player)
+
+
+def test_the_shared_clock_does_not_run_while_preparing(content, world):
+    content.config.auto_open_first_season = False
+    content.config.time_scale = 60
+    game = Game.new(content, "甲", rng=random.Random(1), world=world)
+    game.sync(1000.0)
+    game.sync(1010.0)
+    assert game.state.world.time == 0
+
+
+def test_travel_is_refused_while_preparing(content, world):
+    content.config.auto_open_first_season = False
+    game = Game.new(content, "甲", rng=random.Random(1), world=world)
+    assert game.travel("lake") == ["（賽季籌備中，等待管理者開季。）"]
+    assert game.state.player.location == "town"
+
+
+def test_players_cannot_start_the_next_season_themselves(game):
+    game.advance(2 * DAY)
+    assert game.choose("season:new") == ["（此刻無法這麼做。）"]
+    assert game.admin_next_season(now=0.0) == ["（只有管理者能開啟下一季。）"]
+    assert game.state.world.ended
+
+
+def test_admin_next_season_needs_the_season_to_be_over(game):
+    game.content.config.admins = ["沈浪"]
+    assert game.admin_next_season(now=0.0) == ["（這一季還沒結束，無法開啟下一季。）"]
 
 
 # ── 新手引導 ──────────────────────────────────────────────

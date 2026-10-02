@@ -1,1 +1,1 @@
-{"season_days": 2, "ollama_url": "http://127.0.0.1:1", "ollama_timeout": 3}
+{"season_days": 2, "ollama_url": "http://127.0.0.1:1", "ollama_timeout": 3, "auto_open_first_season": true}

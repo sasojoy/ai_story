@@ -75,7 +75,7 @@ class SharedWorldState(BaseModel):
 
     # ── 共享賽季（真正共享的大勢/門檻/主線/結局，取代原本每個玩家各自獨立的 WorldState）──
     # 「跨季」的東西（武學命名登記、同伴進度、玉璽碎片等，上面那些欄位）永遠留著；season
-    # 本身每次開新賽季會被整個換掉（見 start_new_season）。season_number 從 1 起算，
+    # 本身每次開新賽季會被整個換掉（見 next_season）。season_number 從 1 起算，
     # season_last_real 是這個賽季的共用時鐘上次對到現實時間的時間點（None＝還沒對過）。
     season: WorldState = Field(default_factory=WorldState)
     season_number: int = 1
@@ -281,19 +281,6 @@ class WorldStateStore:
             state.season = season
 
         self.mutate(_apply)
-
-    def start_new_season(self, content: Content) -> WorldState:
-        """舊的自動開季入口（Task 3 改由 seed_first_season/open_season/next_season 取代後刪除）。"""
-        def _apply(state: SharedWorldState) -> None:
-            if state.season.storyline and not state.season.ended:
-                return
-            is_bootstrap = not state.season.storyline
-            state.season = _fresh_season(content)
-            state.season_opened = True
-            if not is_bootstrap:
-                state.season_number += 1
-
-        return self.mutate(_apply).season
 
     def season_phase(self) -> SeasonPhase:
         return self.read().season_phase()

@@ -17,6 +17,12 @@ def save_dir(tmp_path, monkeypatch):
     return tmp_path
 
 
+@pytest.fixture(autouse=True)
+def season_already_open(monkeypatch):
+    """app.CONTENT 是正式內容（預設要管理者開季）；app 的測試要的是一季已經開打的畫面。"""
+    monkeypatch.setattr(app.CONTENT.config, "auto_open_first_season", True)
+
+
 @pytest.fixture
 def game():
     return Game.new(app.CONTENT, "測試")

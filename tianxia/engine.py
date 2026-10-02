@@ -67,14 +67,14 @@ class Game:
     def _reconcile_season(self) -> None:
         """把 self.state.world 對齊到目前的共用賽季（設計文件「真正共享賽季」討論，取代
         原本每個玩家各自獨立的 WorldState）。全服第一次開局（還沒有任何共用賽季）在這裡
-        順便種出第一季；共用賽季已經換過一輪（不管是自己剛觸發 new_season，還是連線期間
-        別的玩家觸發的）時，幫這個玩家的角色也開新的一季——角色本身（等級/位置/隊伍）
+        種出第一季，預設停在籌備中等管理者開季；共用賽季已經換過一輪（不管是自己剛開下一季，
+        還是連線期間別的玩家觸發的）時，幫這個玩家的角色也開新的一季——角色本身（等級/位置/隊伍）
         重新開始，但跟同伴的好感度/關係現況/對話歷史是「我跟他的交情」，不是賽季道具，
         保留下來。__init__ 時（讀存檔／新角色）要呼叫，之後每次 sync() 也要呼叫，這樣連線
         途中別人把賽季推到下一輪時，我才不會一直停在上一季的畫面。"""
         shared = self.world.get_season()
-        if not shared.storyline:  # 全服第一次開局，從未真正初始化過
-            shared = self.world.start_new_season(self.content)
+        if not shared.storyline:  # 全服第一次開局：種出第一季（要不要直接開季看內容設定）
+            shared = self.world.seed_first_season(self.content)
         shared_number = self.world.get_season_number()
         if self.state.player.season_number < shared_number:
             self._reset_player_for_new_season(shared_number)
@@ -163,10 +163,13 @@ class Game:
         return self._log(msgs)
 
     def advance(self, seconds: float) -> list[str]:
-        """玩家主動「等待」固定一段遊戲時間（快轉按鈕）：直接在 self.state.world（剛同步
-        過的共用賽季副本）上往前推進 seconds，再存回共用儲存——跟 choose()/travel() 同一套
-        「本地修改、行動結束後存回」模式，不是用現實時間反推（那是 sync() 的事）。"""
-        msgs = advance_world_state(self.state.world, self.content, seconds, self.rng, self.world)
+        """玩家主動「等待」固定一段遊戲時間（快轉按鈕）：進行中時，直接在 self.state.world
+        （剛同步過的共用賽季副本）上往前推進 seconds，再存回共用儲存——跟 choose()/travel()
+        同一套「本地修改、行動結束後存回」模式，不是用現實時間反推（那是 sync() 的事）。
+        籌備中、休季時共用賽季不動，只推進玩家自己的部分。"""
+        msgs: list[str] = []
+        if self.world.season_phase() == "running":
+            msgs += advance_world_state(self.state.world, self.content, seconds, self.rng, self.world)
         msgs += self._advance_player_local(seconds)
         self._save_season()
         news = journal.news_entry(self.state.world.time, msgs)
@@ -201,8 +204,10 @@ class Game:
         battle_status = self._battle_status()
         if battle_status is not None:
             return self._battle_options(*battle_status)
+        if self.world.season_phase() == "preparing":
+            return [Option(id="season:preparing", label="賽季籌備中，等待管理者開季", enabled=False)]
         if s.world.ended:
-            return [Option(id="season:new", label="開啟新的賽季")]
+            return [Option(id="season:resting", label="休季中，等待管理者開啟下一季", enabled=False)]
         if s.pending_event:
             event = c.events[s.pending_event]
             return [Option(id=f"choice:{i}", label=self._choice_label(ch, odds)) for i, ch in visible_choices(event, s)]
@@ -269,10 +274,6 @@ class Game:
             return self._log(["（此刻無法這麼做。）"])
         self.state.battle_card = None
         kind, _, arg = option_id.partition(":")
-        if kind == "season":
-            msgs = self.new_season() + check_thresholds(self.state, self.content, self.world, self.client)
-            self._save_season()
-            return self._log(msgs)
         if kind == "battle":
             return self._log(self._battle_choose(arg))
         self._draft = Draft(self._action_title(kind, arg))
@@ -720,6 +721,8 @@ class Game:
         return [text]
 
     def travel(self, dest_id: str) -> list[str]:
+        if self.world.season_phase() == "preparing":
+            return self._log(["（賽季籌備中，等待管理者開季。）"])
         s, c = self.state, self.content
         button = atlas.travel_button(s, c, dest_id) if dest_id in c.locations else None
         if button is None or not button[1]:
@@ -959,15 +962,30 @@ class Game:
     def travel_button(self, loc_id: str) -> tuple[str, bool] | None:
         return atlas.travel_button(self.state, self.content, loc_id)
 
-    def new_season(self) -> list[str]:
-        """開啟下一季：真正重置共用賽季的是 start_new_season（在共用儲存的鎖內判斷，
-        賽季已經結束才會真的重置、只有第一個真的觸發的玩家會讓它發生；已經有人搶先開了
-        下一季的話，這裡只是跟著對齊，不會重置兩次）。玩家自己的角色重新開始（等級/位置/
-        隊伍），但跟同伴的好感度/關係現況/對話歷史、新手引導進度是跨季保留的，
-        見 _reset_player_for_new_season。"""
-        self.world.start_new_season(self.content)
+    # ── 管理者 ────────────────────────────────────────────
+
+    def is_admin(self) -> bool:
+        """暫時用名號認管理者（content/config.json 的 admins）；線上架構會換成帳號權限。"""
+        return self.state.player.name in self.content.config.admins
+
+    def admin_open_season(self, now: float) -> list[str]:
+        """管理者開季：籌備中 → 進行中。"""
+        if not self.is_admin():
+            return self._log(["（只有管理者能開季。）"])
+        if not self.world.open_season(now):
+            return self._log(["（現在不是籌備期，無法開季。）"])
+        msgs = [f"══ {self.content.scenario.name}・開季 ══"]
+        self._write("開季", msgs, tag="管理者")
+        return self._log(msgs)
+
+    def admin_next_season(self, now: float) -> list[str]:
+        """管理者開下一季：只在休季時有效；管理者自己的角色跟著換季（其他玩家下次同步時換）。"""
+        if not self.is_admin():
+            return self._log(["（只有管理者能開啟下一季。）"])
+        if not self.world.next_season(self.content, now):
+            return self._log(["（這一季還沒結束，無法開啟下一季。）"])
         self._reconcile_season()
-        return []
+        return self._log([f"══ 第 {self.world.get_season_number()} 季開始 ══"])
 
     # ── 畫面文字 ──────────────────────────────────────────
 

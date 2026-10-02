@@ -58,7 +58,9 @@ def no_real_ollama():
 
 @pytest.fixture(scope="module")
 def content():
-    return load_content(CONTENT_DIR)
+    c = load_content(CONTENT_DIR)
+    c.config.auto_open_first_season = True  # 這個檔案測的是開打後的內容；正式設定另有一個測試檢查
+    return c
 
 
 # ── 內容結構完整性 ────────────────────────────────────────
@@ -68,6 +70,10 @@ def test_real_content_loads():
     c = load_content(CONTENT_DIR)
     assert 20 <= len(c.locations) <= 30
     assert {t.id for t in c.scenario.trends} == {"huangjin", "yuxi"}
+
+
+def test_real_content_waits_for_the_admin_to_open_the_season():
+    assert load_content(CONTENT_DIR).config.auto_open_first_season is False
 
 
 def test_all_locations_reachable_from_start(content):

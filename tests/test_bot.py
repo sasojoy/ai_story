@@ -71,3 +71,9 @@ def test_play_season_observe_is_called_before_and_after_every_step(content):
     play_season(content, 0, max_steps=5, observe=lambda g: seen.append(g.state.world.time))
     assert len(seen) == 6  # 開季一次 + 每步一次
     assert seen[0] == 0.0
+
+
+def test_the_bot_opens_the_season_itself_when_the_server_is_still_preparing(content):
+    content.config.auto_open_first_season = False
+    game = play_season(content, 1)
+    assert game.state.world.ended
