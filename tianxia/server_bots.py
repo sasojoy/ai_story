@@ -27,7 +27,7 @@ GIVEN = (
 )
 SKILL_PREFIXES = (
     "青松", "流雲", "斷岳", "驚鴻", "寒江", "落霞", "孤鴻", "飛雪", "長風", "破陣", "蒼龍", "赤霄", "玄冰", "烈陽",
-    "歸元", "太初", "回風", "碧濤", "鐵騎", "白虹", "紫電", "鎮山", "穿雲", "摧城", "追月", "奔雷", "鳴鏑", "照膽",
+    "歸元", "太初", "迴瀾", "碧濤", "鐵騎", "長虹", "紫電", "鎮山", "穿雲", "摧城", "追月", "奔雷", "鳴鏑", "照膽",
 )
 SKILL_SUFFIXES = {
     "內功": ("訣", "功", "心經", "真氣", "吐納法"),
@@ -38,7 +38,7 @@ SKILL_SUFFIXES = {
 @dataclass(frozen=True)
 class Temper:
     windows: tuple[int, ...]  # 每天幾段上線（從中挑一個，種子固定）
-    window_minutes: tuple[int, int]  # 每段多長（分鐘）的範圍
+    total_minutes: tuple[int, int]  # 每天上線總共幾分鐘的範圍（平分給挑到的段數，不隨段數變多）
     action_seconds: float  # 在線時平均多久做一個動作
     attend: float  # 戰鬥集結時趕來的機率
     strength_bonus: float  # 加在 bot_strength 上
@@ -46,9 +46,9 @@ class Temper:
 
 
 TEMPERS: dict[Personality, Temper] = {
-    "積極": Temper(windows=(2,), window_minutes=(120, 150), action_seconds=60, attend=0.9, strength_bonus=0.2, skip_day=0.0),
-    "普通": Temper(windows=(1, 2), window_minutes=(70, 100), action_seconds=120, attend=0.6, strength_bonus=0.0, skip_day=0.0),
-    "懶散": Temper(windows=(1,), window_minutes=(50, 70), action_seconds=180, attend=0.3, strength_bonus=-0.2, skip_day=0.5),
+    "積極": Temper(windows=(2,), total_minutes=(240, 300), action_seconds=60, attend=0.9, strength_bonus=0.2, skip_day=0.0),
+    "普通": Temper(windows=(1, 2), total_minutes=(120, 180), action_seconds=120, attend=0.6, strength_bonus=0.0, skip_day=0.0),
+    "懶散": Temper(windows=(1,), total_minutes=(50, 70), action_seconds=180, attend=0.3, strength_bonus=-0.2, skip_day=0.5),
 }
 PERSONALITY_WEIGHTS: dict[Personality, int] = {"積極": 20, "普通": 50, "懶散": 30}
 
@@ -74,12 +74,15 @@ def make_skill_name(rng: random.Random, kind: str) -> str:
 
 def schedule(profile: BotProfile) -> list[tuple[int, int]]:
     """每天的上線時段（台灣時間，從午夜起算的分鐘數，[開始, 結束)），同一個假人永遠一樣。
-    第一段在晚上 19～24 點之間，第二段（有的話）在中午 11:30～13:00 開始。"""
+    每天總共上線多久由個性的範圍決定，再平分給一到兩段（餘數歸第一段）；第一段在晚上
+    19～24 點之間，第二段（有的話）在中午 11:30～13:00 開始。"""
     temper = TEMPERS[profile.personality]
     rng = random.Random(profile.seed)
+    count = rng.choice(temper.windows)
+    total = rng.randint(*temper.total_minutes)
     spans: list[tuple[int, int]] = []
-    for i in range(rng.choice(temper.windows)):
-        length = rng.randint(*temper.window_minutes)
+    for i in range(count):
+        length = total // count + (total % count if i == 0 else 0)
         start = rng.randint(19 * 60, 24 * 60 - length) if i == 0 else rng.randint(11 * 60 + 30, 13 * 60)
         spans.append((start, start + length))
     return spans

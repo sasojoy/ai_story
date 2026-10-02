@@ -1,7 +1,6 @@
 import random
 from collections import Counter
 
-from tianxia import server_bots
 from tianxia.models import Config
 from tianxia.server_bots import (
     DAY, GIVEN, SURNAMES, TZ_OFFSET, act_chance, active, attends_battle, is_online, make_name, make_skill_name,
@@ -46,6 +45,19 @@ def test_the_same_bot_always_has_the_same_schedule_and_it_fits_its_temper():
     assert 240 <= total <= 300
     for start, end in schedule(eager):
         assert 11 * 60 + 30 <= start < end <= 24 * 60
+
+
+def test_each_temper_keeps_its_daily_total_and_its_windows_inside_waking_hours():
+    ranges = {"積極": (240, 300), "普通": (120, 180), "懶散": (50, 70)}
+    window_counts = Counter()
+    for personality, (low, high) in ranges.items():
+        for seed in range(200):
+            spans = schedule(_bot(personality, seed=seed))
+            assert low <= sum(end - start for start, end in spans) <= high
+            for start, end in spans:
+                assert 11 * 60 + 30 <= start < end <= 24 * 60
+            window_counts[personality, len(spans)] += 1
+    assert window_counts["普通", 1] > 0 and window_counts["普通", 2] > 0  # 一到兩段都有
 
 
 def test_a_bot_is_online_only_inside_its_windows():
