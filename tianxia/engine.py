@@ -721,7 +721,7 @@ class Game:
         return [text]
 
     def travel(self, dest_id: str) -> list[str]:
-        if self.world.season_phase() == "preparing":
+        if self._preparing():
             return self._log(["（賽季籌備中，等待管理者開季。）"])
         s, c = self.state, self.content
         button = atlas.travel_button(s, c, dest_id) if dest_id in c.locations else None
@@ -798,9 +798,15 @@ class Game:
 
     # ── 閉關、練功、療傷、設定 ────────────────────────────
 
+    def _preparing(self) -> bool:
+        """賽季籌備中（管理者還沒開季）：玩家什麼都不能做。"""
+        return self.world.season_phase() == "preparing"
+
     def _idle(self) -> bool:
         s = self.state
-        return not s.world.ended and s.pending_event is None and s.player.busy_until is None
+        return (
+            not self._preparing() and not s.world.ended and s.pending_event is None and s.player.busy_until is None
+        )
 
     def seclude(self, hours: int) -> list[str]:
         p = self.state.player
@@ -833,6 +839,8 @@ class Game:
 
     def create_skill(self, name: str, kind: str) -> list[str]:
         """自創功法：取名決定屬性/威力/成長性，全服不能重名（設計文件六.2）。"""
+        if self._preparing():
+            return self._log(["（賽季籌備中，等待管理者開季。）"])
         xinde = self._xinde()
         art, msg = team.create_skill(self.state, self.content, self.world, name, kind)
         msgs = self._log([msg])
@@ -843,6 +851,8 @@ class Game:
 
     def practice(self, kind: str) -> list[str]:
         """鍛鍊：目前已學會的內功或武學加深一成，累積受傷風險。"""
+        if self._preparing():
+            return self._log(["（賽季籌備中，等待管理者開季。）"])
         xinde = self._xinde()
         msgs = self._log(team.practice(self.state, self.content, self.world, kind, self.rng))
         self._menxia_entry(msgs[0] if msgs else "練功", xinde)
@@ -850,6 +860,8 @@ class Game:
         return msgs
 
     def heal(self) -> list[str]:
+        if self._preparing():
+            return self._log(["（賽季籌備中，等待管理者開季。）"])
         xinde = self._xinde()
         msgs = self._log(team.heal(self.state, self.content, self.state.player.member))
         self._menxia_entry(msgs[0] if msgs else "療傷", xinde)
@@ -876,9 +888,13 @@ class Game:
         return roster.owned_companions(self.world, self.state.player.name)
 
     def add_to_team(self, companion_id: str) -> list[str]:
+        if self._preparing():
+            return self._log(["（賽季籌備中，等待管理者開季。）"])
         return self._log(team.add_to_team(self.state, companion_id))
 
     def remove_from_team(self, companion_id: str) -> list[str]:
+        if self._preparing():
+            return self._log(["（賽季籌備中，等待管理者開季。）"])
         return self._log(team.remove_from_team(self.state, companion_id))
 
     # ── 門下頁面：武學說明 ──────────────────────────────────

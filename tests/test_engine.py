@@ -569,6 +569,20 @@ def test_travel_is_refused_while_preparing(content, world):
     assert game.state.player.location == "town"
 
 
+def test_nothing_personal_can_be_done_while_preparing(content, world):
+    content.config.auto_open_first_season = False
+    game = Game.new(content, "甲", rng=random.Random(1), world=world)
+    waiting = ["（賽季籌備中，等待管理者開季。）"]
+    assert game.create_skill("驚雷掌", "武學") == waiting
+    assert game.practice("武學") == waiting
+    assert game.heal() == waiting
+    assert game.add_to_team("mate") == waiting
+    assert game.remove_from_team("mate") == waiting
+    assert game.seclude(4) == ["你現在無法閉關。"]
+    assert game.state.player.busy_until is None
+    assert game.state.player.member.wugong_id is None
+
+
 def test_players_cannot_start_the_next_season_themselves(game):
     game.advance(2 * DAY)
     assert game.choose("season:new") == ["（此刻無法這麼做。）"]
