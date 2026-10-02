@@ -313,3 +313,8 @@ def test_enemy_squads_are_marked_with_the_designers_factions(content):
     assert {sid for sid, f in factions.items() if f == "huang"} == {"louluo", "shuikou", "toumu", "shanzei", "fanjianglong"}
     assert {sid for sid, f in factions.items() if f == "guan"} == {"guishou"}
     assert {sid for sid, f in factions.items() if f == "haoqiang"} == {"xuantie_dizi"}
+
+
+def test_season_one_tells_the_dialogue_model_when_it_is(content):
+    note = content.scenario.era_note
+    assert "184" in note and "諸葛亮" in note and "赤壁" in note

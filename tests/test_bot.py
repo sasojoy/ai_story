@@ -82,3 +82,13 @@ def test_the_bot_opens_the_season_itself_when_the_server_is_still_preparing(cont
     content.config.auto_open_first_season = False
     game = play_season(content, 1)
     assert game.state.world.ended
+
+
+def test_a_bot_does_not_try_to_heal_what_it_cannot_afford(game):
+    """付不起療傷費就先不療傷，不然每一輪都會在江湖紀錄裡寫一筆「銀兩不足」。"""
+    member = game.state.player.member
+    member.injury = 40.0
+    game.state.player.stats["silver"] = 0
+    assert not wants_heal(game)
+    game.state.player.stats["silver"] = 999
+    assert wants_heal(game)

@@ -23,9 +23,10 @@ CRAFT_TRIES = 4  # 煉製時最多試幾組素材組合（第一組是階最高�
 
 
 def wants_heal(game: Game) -> bool:
-    """有內傷才療傷：療傷照內傷計價（見 team.heal_cost），氣血低但沒有內傷時會自己回，
-    去療傷只會寫一筆「氣血無恙」。"""
-    return team.heal_cost(game.content, game.state.player.member) > 0
+    """有內傷、而且付得起才療傷：療傷照內傷計價（見 team.heal_cost）。氣血低但沒有內傷時會自己回，
+    付不起時去療傷只會寫一筆「銀兩不足」。"""
+    cost = team.heal_cost(game.content, game.state.player.member)
+    return 0 < cost <= game.state.player.stats.get("silver", 0)
 
 
 def spend_xinde(game: Game, rng: random.Random) -> None:

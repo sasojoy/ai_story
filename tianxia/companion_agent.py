@@ -16,6 +16,7 @@ from random import Random
 
 from pydantic import BaseModel, Field
 
+from . import zh
 from .models import CharacterDef, Content
 from .ollama_client import OllamaClient
 from .state import GameState
@@ -105,6 +106,11 @@ def build_system_prompt(
     used = p.used_dialogue_options.get(companion_id, [])
     used_str = "、".join(f"「{o}」" for o in used[-8:]) if used else "無"
     tags_str = "、".join(DIALOGUE_TAGS)
+    from .world import current_act  # 函式內 import：避免循環引用
+
+    act_title = current_act(state, content).title
+    day = int(state.world.time // 86400) + 1
+    era_str = f"【時代】{content.scenario.era_note}\n" if content.scenario.era_note else ""
 
     return (
         f"你是文字角色扮演遊戲的敘事引擎，正在扮演三國時代真實歷史人物「{character.name}」，"
@@ -112,6 +118,8 @@ def build_system_prompt(
         f"【{character.name}的出身】{character.background}\n"
         f"【{character.name}此時的處境】{character.situation}\n"
         f"【{character.name}的性格】{character.personality}{drift_str}\n"
+        f"{era_str}"
+        f"【此刻】{content.scenario.name}・{act_title}，第 {day} 天。\n"
         f"【玩家】{p.name}，目前好感度 {affinity}（範圍 0~100，只會照玩家選的話變化，"
         f"不是你決定的）。你與玩家目前的關係現況：{my_note}\n"
         f"【已經說過的話（避免重複）】{used_str}\n\n"
@@ -126,7 +134,9 @@ def build_system_prompt(
         "工作。\n"
         "4. relationship_note_update 欄位請用一句話描述這回合結束後你們的關係現況，"
         "盡量包含一個具體細節，不要只寫抽象形容詞。\n"
-        "5. 必須且僅能輸出符合下列範例的合法 JSON 物件：\n"
+        "5. 只談此刻已經發生或正在發生的事；不得提及之後才成名的人物或之後才發生的事件，也不要預言未來。\n"
+        f"6. 敘事用第三人稱描寫{character.name}的神情與言語，稱呼玩家一律用「你」；不要替玩家說話，也不要描寫玩家的內心或反應。\n"
+        "7. 必須且僅能輸出符合下列範例的合法 JSON 物件：\n"
         '{"narrative": "...", "options": ["選項一", "選項二", "選項三"], '
         f'"option_tags": ["{DIALOGUE_TAGS[0]}", "{DIALOGUE_TAGS[1]}", "{DIALOGUE_TAGS[2]}"], '
         '"relationship_note_update": "..."}'
@@ -303,7 +313,14 @@ def _generate(
         raise DialogueUnavailable(f"{companion_id}：沒有可用的模型")
     messages = _build_messages(character, state, content, world, companion_id, player_action)
     try:
-        return client.chat_structured(messages, CompanionTurn, required_fields=["options"])
+        turn = client.chat_structured(messages, CompanionTurn, required_fields=["options"])
+        # 模型常夾雜簡體字（提示裡寫了也只部分改善），所以在輸出端確定性地轉成繁體。
+        # option_tags 不轉：它們是固定清單裡的值，必須原樣比對。
+        return turn.model_copy(update={
+            "narrative": zh.to_traditional(turn.narrative),
+            "options": [zh.to_traditional(o) for o in turn.options],
+            "relationship_note_update": zh.to_traditional(turn.relationship_note_update) if turn.relationship_note_update else turn.relationship_note_update,
+        })
     except Exception as e:
         logger.warning(f"companion_agent 生成失敗 ({companion_id}): {e}，這輪對話取消")
         raise DialogueUnavailable(str(e)) from e

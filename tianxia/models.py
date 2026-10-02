@@ -356,6 +356,7 @@ class Scenario(_Strict):
     id: str
     name: str
     intro: str
+    era_note: str = ""  # 給對話模型的時代背景：這一季是哪一年、各人物此時的身分、哪些事還沒發生（避免扯到之後的年代）
     start_location: str
     factions: list[FactionDef] = Field(default_factory=list)  # 空的＝這個劇本不分陣營，全服決戰維持集結時選邊
     trends: list[Trend]

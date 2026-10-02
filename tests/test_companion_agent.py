@@ -98,3 +98,30 @@ def test_generate_gives_up_when_no_model_can_answer(content, state, world):
     client.chat_structured.side_effect = RuntimeError("模型 'qwen2.5:14b' 未找到")
     with pytest.raises(companion_agent.DialogueUnavailable):
         companion_agent._generate(client, character, state, content, world, "mate", "閒聊幾句")
+
+
+def test_the_prompt_anchors_the_era_and_forbids_later_events(content, state, world):
+    content.scenario.era_note = "東漢中平元年（公元184年），黃巾起事。諸葛亮還是孩童。"
+    prompt = companion_agent.build_system_prompt(content.characters["mate"], state, content, world, "mate")
+    assert "中平元年（公元184年）" in prompt
+    assert "不得提及之後" in prompt
+    act = content.scenario.storylines[0].acts[0].title
+    assert act in prompt
+
+
+def test_the_prompt_keeps_the_player_in_the_second_person(content, state, world):
+    prompt = companion_agent.build_system_prompt(content.characters["mate"], state, content, world, "mate")
+    assert "稱呼玩家一律用「你」" in prompt
+    assert "不要替玩家說話" in prompt
+
+
+def test_generated_text_is_converted_to_traditional_chinese(content, state, world):
+    client = mock.Mock()
+    client.chat_structured.return_value = companion_agent.CompanionTurn(
+        narrative="他说这话时闪过一丝笑意。", options=["说几句话", "告辞", "听他说"],
+        option_tags=["尋常寒暄", "尋常寒暄", "尋常寒暄"], relationship_note_update="关系还算融洽",
+    )
+    turn = companion_agent._generate(client, content.characters["mate"], state, content, world, "mate", "閒聊幾句")
+    assert turn.narrative == "他說這話時閃過一絲笑意。"
+    assert turn.options[0] == "說幾句話"
+    assert turn.relationship_note_update == "關係還算融洽"
