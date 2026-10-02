@@ -415,3 +415,42 @@ def test_duplicate_battle_faction_id_rejected(tmp_path):
     write_battles_json(root, [battle])
     with pytest.raises(ContentError, match="陣營 id 重複"):
         load_content(root)
+
+
+# ── 煉製素材（無限煉製第一刀）──────────────────────────────
+
+
+def test_unknown_material_on_a_location_rejected(tmp_path):
+    root = copy_fixture(tmp_path)
+    edit_json(root / "locations.json", lambda d: d[0].update(materials=["ghost"]))
+    with pytest.raises(ContentError, match="ghost"):
+        load_content(root)
+
+
+def test_unknown_material_in_a_squad_drop_rejected(tmp_path):
+    root = copy_fixture(tmp_path)
+    edit_json(root / "squads.json", lambda d: d[0].update(drops=[{"material": "ghost"}]))
+    with pytest.raises(ContentError, match="ghost"):
+        load_content(root)
+
+
+def test_unknown_material_in_an_effect_rejected(tmp_path):
+    root = copy_fixture(tmp_path)
+    edit_json(root / "events" / "test.json", lambda d: d[0]["choices"][0]["effect"].update(materials={"ghost": 1}))
+    with pytest.raises(ContentError, match="ghost"):
+        load_content(root)
+
+
+def test_a_tier_with_no_material_at_all_rejected(tmp_path):
+    """沒寫 drops 的對手走依難度的預設掉落表，所以每一階都得有素材可挑。"""
+    root = copy_fixture(tmp_path)
+    edit_json(root / "materials.json", lambda d: d.remove(next(m for m in d if m["tier"] == 3)))
+    with pytest.raises(ContentError, match="天品"):
+        load_content(root)
+
+
+def test_a_material_tier_outside_one_to_three_rejected(tmp_path):
+    root = copy_fixture(tmp_path)
+    edit_json(root / "materials.json", lambda d: d[0].update(tier=4))
+    with pytest.raises(ContentError):
+        load_content(root)

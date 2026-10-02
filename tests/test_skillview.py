@@ -95,3 +95,19 @@ def test_practice_hint_goes_away_once_everything_is_at_the_tenth_level(state, co
     team.create_skill(state, content, world, "太虛吐納", "內功")
     state.player.member.wugong_level = state.player.member.neigong_level = 10
     assert skillview.practice_hint(state, content) is None
+
+
+# ── 煉製素材（門下頁的背包）────────────────────────────────
+
+
+def test_bag_text_when_empty_says_where_materials_come_from(state, content):
+    text = skillview.bag_text(state, content)
+    assert text.startswith("**煉製素材**")
+    assert "打贏對手" in text and "探索" in text
+
+
+def test_bag_text_lists_what_you_hold_high_tier_first(state, content):
+    state.player.materials = {"gang_1": 2, "gang_3": 1}
+    lines = skillview.bag_text(state, content).splitlines()
+    assert lines[1].startswith("- 隕鐵膽 ×1　天品・屬剛")
+    assert lines[2].startswith("- 精鐵砂 ×2　凡品・屬剛")

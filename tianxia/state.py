@@ -52,6 +52,9 @@ class PlayerState(BaseModel):
     last_offered_dialogue: dict[str, list[list[str]]] = Field(default_factory=dict)  # 人物 id -> [選項文字清單, 對應tag清單]
     turns_since_consolidation: dict[str, int] = Field(default_factory=dict)  # 人物 id -> 距離上次記憶梳理幾輪
 
+    # ── 煉製素材（無限煉製第一刀，見 tianxia/materials.py）──
+    materials: dict[str, int] = Field(default_factory=dict)  # 素材 id -> 數量；舊存檔沒這欄就是空背包
+
     seen_events: set[str] = Field(default_factory=set)
     anonymous: bool = False
     busy_until: float | None = None  # 閉關結束的遊戲時間
@@ -112,6 +115,7 @@ class BattleRecord(BaseModel):
     exp: int = 0  # 每人獲得的經驗
     xinde: int = 0
     silver: int = 0  # 正數為獲得、負數為失落
+    materials: list[str] = Field(default_factory=list)  # 這一戰掉落的素材，已經是「精鐵砂 ×1」這樣的句子
     notes: list[str] = Field(default_factory=list)  # 敘事文字：選項效果、升級、拜師、傳聞等（不是數字，見 changes）
     changes: list[str] = Field(default_factory=list)  # 其他數值變化，如屬性、名望、善惡名（經驗／心得／銀兩已有專屬欄位）
 

@@ -1031,3 +1031,60 @@ def test_submit_battle_custom_action_assesses_success_rate_and_feeds_the_gamble(
     # 走了賭局公式（不是退回 action_tags 查表那條路）。
     damage = cap - battle.participants["沈浪"].neili
     assert damage in (10, 260)
+
+
+# ── 煉製素材的掉落（無限煉製第一刀）──────────────────────────
+
+
+def test_train_win_drops_a_material_into_the_bag_and_the_report(game):
+    rules.learn_skill(game.state, game.content, "fist")  # 壓倒性的威力，穩贏
+    game.content.config.train_event_chance = 1.0
+    game.choose("move:lake")
+    game.state.player.seen_events.add("scroll")  # 避開探索遇到殘卷奇遇
+    game.rng = FixedRandom(0.3)  # 水寇小隊難度 5：預設掉落表 50% 掉一個一階素材
+    msgs = game.choose("act:explore")
+    record = game.state.battles[0]
+    assert record.materials == ["精鐵砂 ×1"]
+    assert game.state.player.materials == {"gang_1": 1}
+    assert "獲得 精鐵砂 ×1" in msgs
+
+
+def test_a_hard_fought_loss_drops_nothing(game):
+    game.content.locations["lake"].enemies = ["boss"]  # 打不贏的翻江龍
+    game.content.config.train_event_chance = 1.0
+    game.content.config.explore_material_chance = 0.0  # 只看戰鬥那條路，不要被探索自己撿到的混進來
+    game.choose("move:lake")
+    game.state.player.seen_events.add("scroll")
+    game.rng = FixedRandom(0.0)
+    game.choose("act:explore")
+    assert game.state.battles[0].tier == "落敗"
+    assert game.state.player.materials == {}
+
+
+def test_exploring_a_quiet_place_can_still_turn_up_a_material(game):
+    game.state.player.location = "cave"  # fixture 的山洞沒有任何事件也沒有敵人
+    game.content.locations["cave"].materials = ["gang_3"]
+    game.rng = FixedRandom(0.0)
+    msgs = game.choose("act:explore")  # 訊息串後面還會接新手引導的進度
+    assert "你在寶洞翻找了一陣。" in msgs and "獲得 隕鐵膽 ×1" in msgs
+    assert game.state.player.materials == {"gang_3": 1}
+
+
+def test_exploring_and_finding_nothing_still_says_so(game):
+    game.state.player.location = "cave"
+    game.content.config.explore_material_chance = 0.0
+    game.rng = FixedRandom(0.99)
+    msgs = game.choose("act:explore")
+    assert msgs[0] == "你四處走走，一無所獲。"
+    assert not any("獲得" in m for m in msgs)
+    assert game.state.player.materials == {}
+
+
+def test_exploring_picks_up_a_material_even_when_an_event_fires(game):
+    """素材的判定在事件之前：實測整季 100 次探索都撞到事件，掛在「一無所獲」上等於沒做。"""
+    game.content.locations["town"].materials = ["gang_3"]
+    game.rng = FixedRandom(0.0)  # 必中素材，也必定撞到鎮上的事件
+    msgs = game.choose("act:explore")  # 訊息串後面還會接新手引導的進度
+    assert any("【" in m for m in msgs)  # 真的有事件
+    assert "獲得 隕鐵膽 ×1" in msgs
+    assert game.state.player.materials == {"gang_3": 1}

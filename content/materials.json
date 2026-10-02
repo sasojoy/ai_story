@@ -1,0 +1,17 @@
+[
+  {"id": "gang_1", "name": "精鐵砂", "attribute": "剛", "tier": 1, "description": "尋常鐵匠鋪也有的東西，勝在量多。"},
+  {"id": "gang_2", "name": "玄鋼骨", "attribute": "剛", "tier": 2, "description": "軍器監廢爐裡挑出的鋼條，敲上去聲音又悶又長。"},
+  {"id": "gang_3", "name": "隕鐵膽", "attribute": "剛", "tier": 3, "description": "天上落下來那塊鐵最中心的一顆，刀砍上去不留痕。"},
+
+  {"id": "rou_1", "name": "柳絲綿", "attribute": "柔", "tier": 1, "description": "河灘柳樹抽的新絲，纏在手上怎麼也扯不斷。"},
+  {"id": "rou_2", "name": "流雲絮", "attribute": "柔", "tier": 2, "description": "高嶺晨霧凝出的一團白絮，一吹就散，一握又回來。"},
+  {"id": "rou_3", "name": "化水晶", "attribute": "柔", "tier": 3, "description": "看著是塊晶，在溫水裡會慢慢化開，化完了水還是那麼多。"},
+
+  {"id": "kuai_1", "name": "驚羽", "attribute": "快", "tier": 1, "description": "受驚的雀鳥掉下的一根尾羽，輕得幾乎沒有重量。"},
+  {"id": "kuai_2", "name": "風隼翎", "attribute": "快", "tier": 2, "description": "崖頂獵隼換下的翎管，拿在手裡會往風來的那一邊偏。"},
+  {"id": "kuai_3", "name": "掣電鱗", "attribute": "快", "tier": 3, "description": "雷雨夜躍出水面的那條魚身上落下一片，摸著發麻。"},
+
+  {"id": "man_1", "name": "沉淵石", "attribute": "慢", "tier": 1, "description": "深潭底撈上來的圓石，同樣大小比別的石頭重上一倍。"},
+  {"id": "man_2", "name": "磐嶽土", "attribute": "慢", "tier": 2, "description": "山根處掘出的黏土，曬乾之後鐵鑿也鑿不進去。"},
+  {"id": "man_3", "name": "鎮山鐵", "attribute": "慢", "tier": 3, "description": "舊寺鎮山塔基裡的一截鐵樁，據說埋著就不許山走。"}
+]

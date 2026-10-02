@@ -14,9 +14,10 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from .companion_agent import DIALOGUE_TAGS
+from .materials import TIER_NAMES
 from .models import (
     STATS, BattleDef, CharacterDef, Condition, Config, Content, Effect, Event, Location, MapLayout,
-    Scenario, Sect, SimRumor, SkillDef, Squad, Tutorial,
+    Material, Scenario, Sect, SimRumor, SkillDef, Squad, Tutorial,
 )
 
 
@@ -38,6 +39,7 @@ def load_content(root: Path) -> Content:
         scenario=Scenario(**_read(root / "scenario.json")),
         locations=_index(Location, _read(root / "locations.json")),
         skills=_index(SkillDef, _read(root / "skills.json")),
+        materials=_index(Material, _read(root / "materials.json")),
         sects=_index(Sect, _read(root / "sects.json")),
         characters=_index(CharacterDef, _read(root / "characters.json")),
         squads=_index(Squad, _read(root / "squads.json")),
@@ -98,6 +100,7 @@ def validate(c: Content) -> None:
     def check_effect(where: str, eff: Effect) -> None:
         known(where, eff.stats, STATS, "屬性")
         known(where, eff.learn_skills, c.skills, "武學")
+        known(where, eff.materials, c.materials, "素材")
         known(where, eff.trend, trend_ids, "大勢線")
         if eff.join_sect:
             known(where, [eff.join_sect], c.sects, "門派")
@@ -123,6 +126,7 @@ def validate(c: Content) -> None:
                 errors.append(f"地點 {loc.id} 連到 {dest}，但 {dest} 沒有連回來")
         known(where, loc.enemies, c.squads, "敵方隊伍")
         known(where, loc.train_trend, trend_ids, "大勢線")
+        known(where, loc.materials, c.materials, "素材")
         need(
             0 <= loc.x <= c.map.width and 0 <= loc.y <= c.map.height,
             f"{where}：座標 ({loc.x}, {loc.y}) 超出地圖範圍",
@@ -131,6 +135,15 @@ def validate(c: Content) -> None:
 
     for sect in c.sects.values():
         known(f"門派 {sect.id}", [sect.location], c.locations, "地點")
+
+    for squad in c.squads.values():
+        known(f"敵方隊伍 {squad.id}", [drop.material for drop in squad.drops], c.materials, "素材")
+    # 沒寫 drops 的對手走 materials.py 依難度的預設掉落表，所以每一階都得有素材可挑。
+    for tier in sorted(TIER_NAMES):
+        need(
+            any(m.tier == tier for m in c.materials.values()),
+            f"content/materials.json 沒有任何第 {tier} 階（{TIER_NAMES[tier]}）的素材，預設掉落表會挑不到東西",
+        )
 
     for ev in c.events.values():
         where = f"事件 {ev.id}"

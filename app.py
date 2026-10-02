@@ -52,9 +52,10 @@ OLDER_ROWS = 30  # 摺疊區裡最多幾則（存檔本來就只留 30 則）
 REPORT_EMPTY_TEXT = "（還沒有戰報。打一場遭遇戰或劇情戰之後，這裡會列出每一場。）"
 
 # 門下頁面（render_menxia）的輸出順序：規則/心得說明、本人角色卡、名冊（本人＋已招募同伴）、
-# 選中那個人的角色卡、加入/移出隊伍按鈕、練功的「武學/內功」選擇、自創功法的名字輸入框、
-# 自創／鍛鍊／療傷三個按鈕、動作結果。
+# 選中那個人的角色卡、加入/移出隊伍按鈕、煉製素材（背包）、練功的「武學/內功」選擇、
+# 自創功法的名字輸入框、自創／鍛鍊／療傷三個按鈕、動作結果。
 PERSON_HINT = "（點名冊裡的一個人，這裡會顯示他的角色卡。）"
+MENXIA_OUTPUTS = 7  # render_menxia 的輸出數量（見上面的順序）；open_menxia 另外前綴兩個可見性更新
 
 # 整頁：江湖畫面、門下、戰報、大地圖；同一時間只顯示一頁（見 show_page），順序同 build_demo() 的 pages。
 PAGES = ("main", "menxia", "report", "map")
@@ -142,6 +143,7 @@ def render_menxia(game: Game, person: str | None = None, message: str | None = N
         gr.update(choices=lines, value=person),
         game.member_card(person) if person else PERSON_HINT,
         gr.update(visible=person is not None, value=toggle_label),
+        game.bag_text(),
         gr.update() if message is None else message,
     ]
     return out
@@ -154,7 +156,7 @@ def act(game: Game | None, action, note: bool = False) -> list:
     回傳 UNCHANGED 時什麼都不存、不重畫。
     戰報頁面與大地圖頁面是獨立的整頁，不在這裡重畫（見 open_report_page、render_map_page）。
     """
-    n = N_OUTPUTS if not note else N_OUTPUTS + 6
+    n = N_OUTPUTS if not note else N_OUTPUTS + MENXIA_OUTPUTS
     if game is None:
         return [gr.skip()] * n
     with ACT_LOCK:
@@ -196,7 +198,7 @@ def battle_text_handler(game, text):
 def open_menxia(game, person=None):
     """「門下」：藏起江湖畫面、打開門下頁面並重畫。"""
     if game is None:
-        return [gr.skip()] * 8
+        return [gr.skip()] * (2 + MENXIA_OUTPUTS)
     with ACT_LOCK:
         return [gr.update(visible=False), gr.update(visible=True)] + render_menxia(game, person, "")
 
@@ -209,14 +211,14 @@ def close_menxia():
 def roster_pick_handler(game, person):
     """在名冊點一個人：重畫門下頁面（不算行動、不存檔）。"""
     if game is None:
-        return [gr.skip()] * 6
+        return [gr.skip()] * MENXIA_OUTPUTS
     with ACT_LOCK:
         return render_menxia(game, person, "")
 
 
 def toggle_team_handler(game, person):
     if game is None or person is None:
-        return [gr.skip()] * 6
+        return [gr.skip()] * MENXIA_OUTPUTS
     if person in game.state.player.team:
         return _menxia_act(game, lambda g: g.remove_from_team(person), person)
     return _menxia_act(game, lambda g: g.add_to_team(person), person)
@@ -233,19 +235,19 @@ def _menxia_act(game: Game, action, person: str | None) -> list:
 
 def create_skill_handler(game, person, kind, name):
     if game is None:
-        return [gr.skip()] * 6
+        return [gr.skip()] * MENXIA_OUTPUTS
     return _menxia_act(game, lambda g: g.create_skill(name or "", kind), person)
 
 
 def practice_handler(game, person, kind):
     if game is None:
-        return [gr.skip()] * 6
+        return [gr.skip()] * MENXIA_OUTPUTS
     return _menxia_act(game, lambda g: g.practice(kind), person)
 
 
 def heal_handler(game, person):
     if game is None:
-        return [gr.skip()] * 6
+        return [gr.skip()] * MENXIA_OUTPUTS
     return _menxia_act(game, lambda g: g.heal(), person)
 
 
@@ -390,7 +392,7 @@ def skip_tutorial_handler(game):
 def tick_handler(game, person):
     """計時器：同步時間，連同門下頁面一起重畫（保留目前的選取，氣血等數字才會跟著走）。"""
     if game is None:
-        return [gr.skip()] * (N_OUTPUTS + 6)
+        return [gr.skip()] * (N_OUTPUTS + MENXIA_OUTPUTS)
     with ACT_LOCK:
         game.sync(time.time())
         save_game(game.state, save_path(game.state.player.name))
@@ -491,6 +493,8 @@ def build_demo() -> gr.Blocks:
                     gr.Markdown("**角色卡**")
                     person_card_md = gr.Markdown(PERSON_HINT)
                     team_toggle_btn = gr.Button("加入隊伍", visible=False)
+            gr.Markdown("---")
+            bag_md = gr.Markdown()
             gr.Markdown("---\n**練功**：自創功法（取名決定屬性/威力/成長性，全服不能重名）或鍛鍊已學會的。")
             with gr.Row():
                 kind_radio = gr.Radio(label="內功／武學", choices=list(KINDS), value="武學", interactive=True)
@@ -538,7 +542,9 @@ def build_demo() -> gr.Blocks:
         assert len(pages) == len(PAGES)
         map_outputs = [map_head_md, layer_radio, world_map_html, place_dd, place_md, travel_btn]
         assert len(map_outputs) == MAP_OUTPUTS
-        menxia_outputs = [mx_head_md, player_card_md, roster_radio, person_card_md, team_toggle_btn, mx_message_md]
+        menxia_outputs = [
+            mx_head_md, player_card_md, roster_radio, person_card_md, team_toggle_btn, bag_md, mx_message_md,
+        ]
 
         start_btn.click(start, inputs=[name_box], outputs=outputs + [start_col] + pages)
         name_box.submit(start, inputs=[name_box], outputs=outputs + [start_col] + pages)

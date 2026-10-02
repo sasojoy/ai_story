@@ -4,7 +4,7 @@
 """
 from __future__ import annotations
 
-from . import team
+from . import materials, team
 from .martial_arts import MAX_LEVEL, power_at
 from .models import Content
 from .state import PLAYER, GameState
@@ -38,6 +38,23 @@ def practice_hint(state: GameState, content: Content) -> str | None:
     if not todo:
         return None
     return f"💡 你已攢下 {xinde} 點心得。去「門下」自創或鍛鍊{'、'.join(todo)}不花一分一毫，別讓它擱著。"
+
+
+def bag_text(state: GameState, content: Content) -> str:
+    """門下頁的「煉製素材」那一塊：背包內容，階高的排前面。
+
+    素材是煉製的材料（見 tianxia/materials.py）；煉製本身還沒做，所以這裡只說素材怎麼來、
+    不提還不存在的按鈕。
+    """
+    items = materials.bag_contents(state, content)
+    if not items:
+        return "**煉製素材**　還沒撿到任何素材——打贏對手、四處探索，或在奇遇裡拿到。"
+    lines = ["**煉製素材**　煉製功法的材料，分凡品、靈品、天品三階。"]
+    lines += [
+        f"- {m.name} ×{n}　{materials.tier_label(m)}・屬{m.attribute}　{m.description}"
+        for m, n in items
+    ]
+    return "\n".join(lines)
 
 
 def _art_label(content: Content, world: WorldStateStore, skill_id: str | None, level: int) -> str:

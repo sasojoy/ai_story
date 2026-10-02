@@ -61,6 +61,31 @@ class Effect(_Strict):
     leave_sect: bool = False
     next_event: str | None = None
     recruit: str | None = None  # 結識某人（同伴 id）：入門；已入門時改給心得（見 roster.recruit）
+    materials: dict[str, int] = Field(default_factory=dict)  # 給煉製素材（素材 id -> 數量）；手寫劇情是天品素材的主要來源
+
+
+class Material(_Strict):
+    """煉製用的素材：一個屬性 × 一個階（見 docs/superpowers/specs/2026-10-01-無限煉製-design.md §三）。
+
+    階只影響「煉出來的東西有多好」（素材的階位移品質的機率分佈），不影響屬性。
+    """
+
+    id: str
+    name: str
+    attribute: Attribute
+    tier: int = Field(ge=1, le=3)  # 1 凡品、2 靈品、3 天品
+    description: str = ""
+
+
+class Drop(_Strict):
+    """一筆掉落：打贏這支隊伍時有 chance 的機率掉 count 個這種素材。
+
+    敵方隊伍沒寫 drops 時走 materials.py 的預設掉落表（依難度），內容不必每隻都填。
+    """
+
+    material: str
+    chance: float = Field(default=1.0, ge=0.0, le=1.0)
+    count: int = Field(default=1, ge=1)
 
 
 class Check(_Strict):
@@ -106,6 +131,7 @@ class Location(_Strict):
     important: bool = False
     enemies: list[str] = Field(default_factory=list)
     train_trend: dict[str, int] = Field(default_factory=dict)
+    materials: list[str] = Field(default_factory=list)  # 在這裡探索可能撿到的素材；留空則給隨機的一階素材
     unlock_flag: str | None = None  # 設定後，需該世界旗標成立才能前往
 
 
@@ -164,6 +190,7 @@ class Squad(_Strict):
     reward_silver: int = 0
     reward_xinde: int = 0
     exp: int = 0
+    drops: list[Drop] = Field(default_factory=list)  # 留空則走 materials.py 依難度的預設掉落表
 
 
 class Trend(_Strict):
@@ -357,6 +384,7 @@ class Config(_Strict):
     seclusion_xinde_per_hour: int = 15
     xinde_cost_factor: int = 20  # 第 n 成升到 n+1 成需要 factor × n（構想欄位，目前練功免費、沒有任何地方讀它）
     xinde_hint_threshold: int = 50  # 心得擱到這個量、而且還有功夫沒練滿時，主畫面提示玩家去門下練功
+    explore_material_chance: float = 0.3  # 探索沒撞到事件也沒撞到敵人時，撿到一個素材的機率（見無限煉製設計 §4.2）
     level_exp: int = 100  # 第 n 級升 n+1 級需要 level_exp × n
     max_level: int = 30
     # ── 練功（sanguo-companions 合併重寫，見設計文件六.2）──
@@ -477,6 +505,7 @@ class Content(_Strict):
     locations: dict[str, Location]
     events: dict[str, Event]
     skills: dict[str, SkillDef]
+    materials: dict[str, Material]
     sects: dict[str, Sect]
     characters: dict[str, CharacterDef]
     squads: dict[str, Squad]

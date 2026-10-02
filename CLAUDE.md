@@ -180,74 +180,93 @@
 `tests/test_real_content.py` 的方式 mock 掉 `OllamaClient.chat_structured`/`chat_text`），
 沒有依賴 simulate.py。
 
-## 下一個 session 的待辦（2026-10-01 交接）
+## 無限煉製（Infinite Alchemy 方向）：spec 定稿 + 第一刀「素材與掉落」已完成
 
-**先確認工作目錄**：這些待辦全部屬於 `C:\Users\User\Documents\ai_story-tianxia`
-（分支 `feature/sanguo-companions`）。上一次交接就是因為在 `C:\Users\User\Documents\ai_story`
-（分支 `feature/conquest-route-redesign`，另一個完全不同的遊戲）開 session，載入到錯的
-CLAUDE.md，白繞了一圈才找到正確的 worktree。**開工前先 `git worktree list` 核對一次。**
+權威文件：`docs/superpowers/specs/2026-10-01-無限煉製-design.md`（commit `e47d0e7`，四個待確認
+項目都已由企劃者拍板，見該文件 §十二）。方向是武功玩法比照
+[Infinite Alchemy](https://infinialchemy.com/)：素材是元素、功法是合成結果，**第一個煉出某個
+配方的人替全服定義它**。
 
-### 1. 把「心得提示」那組改動提交掉（已完成、只差 commit）
-工作區目前有 6 個檔案未提交，588 個測試已經全部通過、也用真實 `Game` 實例驗證過四種狀態的
-畫面輸出：`tianxia/skillview.py`（新增 `practice_hint`）、`tianxia/engine.py`
-（`status_text()` 接上）、`tianxia/models.py`（新增 `xinde_hint_threshold`，預設 50）、
-`tests/test_skillview.py`（4 個）、`tests/test_engine.py`（1 個）、`CLAUDE.md`（上面那節）。
-要決定的只有 commit 訊息，以及要不要順便 push。
+### 拍板的四件事（不要再重新討論）
+1. **配方結果全服共享**：第二個煉出同一配方的人拿到**同一門**功法。連帶承認兩條路徑規則不同
+   ——取名自創＝獨佔（`create_skill()` 維持全服不能重名），煉製＝共享的知識。
+2. **練功維持免費**（第二次做同樣的決定）；心得的去處是煉製。
+3. **繁簡轉換用 OpenCC，但用純 Python 的 `opencc-python-reimplemented`**，不用官方 C++ binding
+   （帶 DLL，`requirements.txt` 已記載這台機器封鎖過較新版 pandas 的 DLL）。包成 `tianxia/zh.py`、
+   import 失敗退回手寫對照表。順帶可以收掉對話的簡體字問題。
+4. **煉製不消耗體力、也不推進遊戲時間**（跟門下既有的練功／療傷一致）。
 
-### 2. 無限煉製方向：先寫 spec，還是直接做最小一刀？（最大的一件，等決定）
-使用者提的新方向：武功/武器玩法比照 [Infinite Alchemy](https://infinialchemy.com/)——元素
-素材合成功法、功法與功法再合成，素材從地圖探索／戰鬥獲勝獎勵／奇遇取得；另外要玩家之間的
-互動（偷竊、仇殺、決鬥、結義、同盟）。使用者的話：「從蒐集材料到應用 LLM 特色變強，然後跟
-歷史人物 NPC 互動，推動大勢」。
+### 素材只用四個屬性（企劃者 2026-10-02 指示）
+原本做成八屬性 × 三階 ＝ 24 種，企劃者說「八屬性太多了，能不能先減少到四個」，改成
+**剛／柔／快／慢 × 三階 ＝ 12 種**。選這四個不是隨便挑：八屬性是四組相剋對，剛柔與快慢是
+**兩組完整的對**，所以相剋在這四個屬性裡是封閉的（剛↔柔、快↔慢），煉製設計 §5.3 的
+「相剋相生」規則一個字都不用改。
 
-已經查證並討論定案的部分，**下個 session 不用重新推導**：
-- **現成可當地基的三樣東西**：`martial_arts.generate_from_name()`（名字即配方的純函式，
-  文字→雜湊→屬性/品質/威力，同名同結果）、`SharedWorldState.created_skills`（**全服配方
-  登記表**，`claim_skill_name()` 在檔案鎖內原子判斷，正好等於無限煉製「第一個發現者定義
-  配方、之後所有人看到同一結果」的快取）、`ATTRIBUTES` 八元素（陰陽剛柔快慢虛實）+
-  `ATTRIBUTE_COUNTERS` 相剋表。
-- **與原則「數值全部由規則引擎決定，執行時不接 LLM」的衝突，解法已定**：照專案已有的兩個
-  先例（`generate_from_name` 人給語意/引擎給數值、`FreeTextGamble` LLM 只估 success_rate）
-  切開——合成時先查配方登記表，命中就直接回傳同一結果（**零 LLM 呼叫、全服一致**）；沒命中
-  才呼叫 LLM 一次，而且**只要它產生名字（+一句說明），一個數字都不準碰**，再把名字丟進
-  既有的 `generate_from_name()` 得到所有數值，最後用 `claim_skill_name()` 原子登記。這樣
-  「LLM 不決定數值」字面上仍然成立，無限可能來自命名空間而不是數值自由度，而且 6~8 秒的
-  LLM 成本只在首次發現時付一次。
-- **唯一還需要設計的公式**：品質若純由名字雜湊決定，兩個頂級素材可能合出下品，「蒐集材料
-  變強」就斷了。解法方向是讓**輸入的稀有度位移品質機率分佈**（`CREATED_QUALITY_WEIGHTS`
-  現成），雜湊只在位移後的分佈內抽。這是整個系統的平衡核心。
-- **規模誠實**：**目前完全沒有道具/素材/背包系統**（`PlayerState` 只有 `stats`/`flags`，
-  戰鬥獎勵只有 exp/心得/銀兩，沒有掉落），素材是全新一套：資料模型＋`content/` 掉落表＋
-  背包欄位＋存讀檔＋UI，約等於同伴系統那個量級，不是一個增量。
-- **兩個有證據的風險**：(a) 煉製出的名字會**永久登記進 `created_skills`**，不是轉瞬即逝的
-  對話句，所以已知未解的簡體字洩漏會變成永久污染——這是終於該上 OpenCC 的具體理由；
-  (b) 原則第二條要求武學名稱原創、不用金庸專有名詞，但隔壁 conquest 分支實測生成時直接
-  跑題到小龍女/楊過/趙敏/李莫愁，LLM 來命名功法必定產出九陰真經之類的東西，**過濾必須
-  在 `claim_skill_name()` 之前執行**（登記是永久的，事後補救不了）。
-- **玩家互動建議晚一步**，而且有個前置問題要先回答：目前玩家彼此**根本不會相遇**（決鬥只是
-  招募失敗的罰款 `duel_fail_silver_loss`，唯一同場是全服決戰），偷竊/仇殺要能非同步改動
-  離線玩家的狀態，`mutate()`＋檔案鎖解決了原子性，但沒有通知管道、沒有離線保護、沒有同意
-  模型。「玩家在哪裡遇到彼此」要先有答案（大地圖可能是）。
-- **順帶的好處**：這個方向直接修掉上面量到的「練功免費導致第 0.2 天就滿等、整季剩 13.8 天
-  沒有成長曲線」，而且**心得終於有用途**（拿來當煉製消耗，比「練功要花心得」自然得多；
-  被否決的選項 (1) 可以用這個形式正當地回來，但係數要照實際收入重新校準）。
+**武學本身的八屬性沒有動**：`martial_arts.ATTRIBUTES`、`ATTRIBUTE_COUNTERS`、
+`content/skills.json`、11 支敵方隊伍仍然是八個（既有內容依賴它）。差別只是煉製出來的功法
+屬性會落在這四個裡面。要補回八個只是在 `content/materials.json` 多加 12 筆，程式一行都不用改；
+屬性在四個之外的對手（目前只有「董卓帳下斥候」屬虛）走 `materials.by_tier()` 既有的退路：
+挑不到同屬性就在同階裡隨機給。
 
-**建議的最小第一刀**（照專案慣例，這種規模該先寫 spec 到 `docs/superpowers/specs/`）：
-素材模型＋探索/戰鬥掉素材＋門下「煉製」（素材→功法，走上面那條快取鏈），**先不做
-功法+功法、先不做 PvP**。
+### 第一刀做了什麼（素材＋掉落＋背包，還沒有煉製）
+- `content/materials.json`（新）：12 種素材，名稱全原創。
+- `tianxia/materials.py`（新，純規則）：背包的 `grant`/`take`/`held`/`bag_contents`、
+  依難度的預設掉落表、探索撿拾。**刻意不做完整道具系統**（沒有重量、堆疊上限、丟棄）。
+- 掉落三條管道：打贏（`Squad.drops` 或依難度的預設表）、探索（`Location.materials`）、
+  奇遇（`Effect.materials`，手寫劇情是天品的主要來源）。
+- `PlayerState.materials`（背包）、`BattleRecord.materials`（戰報看得到掉落）；全部有預設值，
+  **舊存檔直接可讀**。
+- 門下頁多一塊「煉製素材」（`skillview.bag_text`），階高的排前面。
+- 622 個測試通過（新增 `tests/test_materials.py` 20 個，加上 content／engine／rules／skillview／
+  app 各自的新測試）。
 
-### 3. `scripts/simulate.py` 是死的：要修還是刪？（等決定）
-詳見上一節。目前 import 階段就炸（`tianxia.battle` 已不存在），還呼叫
-`team.upgrade_cost()`/`battle_rules()`/`team_units()` 三個不存在的函式，所以 CLAUDE.md
-「指令」那節的 `平衡模擬` 是一條跑不動的命令。要復活得把「付費方 vs 免費方本隊交手勝率」
-整套重寫到 `encounter.py` 上。
+### 兩個被實測推翻的設計假設（記下來，這是這一刀最有價值的部分）
+1. **「探索常常完全空手」是錯的，而且原本的做法等於沒做**：設計文件 §4.2 原本寫「在『一無所獲』
+   那條分支上加 30% 機率撿到素材」。用真實內容跑完整季去數，**100 次探索有 100 次都撞到手寫
+   事件或敵人**，那條分支一次都沒執行到，整季只拿到打贏掉的 3 個素材。改成
+   **`engine.py::_explore()` 在探索這個動作本身就滾一次素材**，不管接下來有沒有撞到事件或敵人。
+   以後要在「什麼都沒發生」的分支上掛東西，先確認那個分支真的會被走到。
+2. **素材不是瓶頸，心得才是**：改好之後實測一季 20~24 個素材（平均 21，低於原訂的 25~60）。
+   判定為足夠、維持 `explore_material_chance = 0.3` 不調——煉製一次吃兩樣素材，21 個夠煉十次，
+   而心得（整季 20~96、一次煉製 16~51）只夠煉 1~6 次。素材再多也煉不出更多東西。
+   **三階素材整季都是 0**（隨機機器人只打 3 場遭遇戰，碰不到難度 ≥100 的對手也沒撞到奇遇），
+   所以天品的平衡要等真人試玩才驗得出來。
 
-### 4. `mapping-architecture-flow` skill 缺 `example.html`
-已安裝到 `C:\Users\User\.claude\skills\mapping-architecture-flow\SKILL.md`（裝在個人層
-而不是專案層，因為有兩個 worktree，裝進其中一個另一邊吃不到）。但使用者只上傳了 SKILL.md，
-沒有它依賴的 `example.html`——SKILL.md 的「做法」第 2 步是「複製 `example.html`、CSS 與
-渲染函式不動」，少了模板會卡住。本機兩個 worktree、`~/.claude`、Downloads/桌面都找過沒有，
-使用者發佈過的 Artifact 也只有四個（Momentum Ledger、提早進場調查、動能加倉回測、
-訊號還是雜訊），沒有架構圖那一份。兩條路：使用者補上原檔，或第一次執行時照 SKILL.md 已經
-寫得很具體的規格（流程圖座標、四種狀態、`NODES`/`EDGES`/`TREE` 結構）重建一份《天下大勢》
-架構圖，再存成 `example.html` 當以後的模板（那份 example 本來就是這個 skill 的產物）。
+### 順手修掉的一個脆弱設計
+門下頁的輸出數量本來散在 `app.py` 六處與 `tests/test_app.py` 五處的字面量（`6`／`8`），
+這次加一塊背包就一次全踩到（6 個測試同時失敗）。改成 `app.MENXIA_OUTPUTS` 一個常數，
+程式與測試都引用它。**以後往門下頁加東西只要改那一個數字。**
+
+### 第一刀還沒做的（照 spec 的順序）
+第二步「煉製與配方快取」（素材 → 功法，含 LLM 只命名、名字過濾、`tianxia/zh.py`）、
+第三步「功法庫與改練 + 門下煉製頁」。注意 `team.py` **目前沒有散功也沒有換功法的函式**
+（CLAUDE.md 舊版寫的「散功」不存在），所以煉出絕學也裝不上去——第三步必須做。
+另外 `skillview.practice_hint()` 現在寫著「練功不花一分一毫」，煉製開始吃心得之後要一起改寫。
+
+## 下一個 session 的待辦（2026-10-02 交接）
+
+**先確認工作目錄**：`C:\Users\User\Documents\ai_story-tianxia`（分支
+`feature/sanguo-companions`）。曾經在 `C:\Users\User\Documents\ai_story`
+（分支 `feature/conquest-route-redesign`，另一個完全不同的遊戲）開 session、載入到錯的
+CLAUDE.md，白繞了一圈。**開工前先 `git worktree list` 核對一次。**
+
+### 1. 接著做無限煉製第二刀：煉製與配方快取
+照 spec §5 做：配方鍵（兩個素材 id 排序 + 內功／武學）→ 查 `SharedWorldState.recipes` →
+命中就直接取 `created_skills` 裡那一門（零 LLM）→ 沒命中才呼叫 LLM **只要名字＋一句說明**
+→ 過濾（OpenCC 繁體化、禁用詞、格式）→ `generate_from_name(..., weights=位移後的品質權重)`
+→ 鎖內 `claim_skill_name()` + 登記配方。LLM 呼叫在鎖外（照 `battle_instance.py` 的先例）。
+`generate_from_name` 要加一個預設值不變的 `weights` 參數（既有自創路徑的結果必須完全不變，
+有測試保護）。
+
+### 2. `scripts/simulate.py` 是死的：要修還是刪？（等決定，從 2026-10-01 擱到現在）
+import 階段就炸（`tianxia.battle` 已不存在），還呼叫 `team.upgrade_cost()`／`battle_rules()`／
+`team_units()` 與 `p.gacha_xinde` 四個不存在的東西。要復活得把「付費方 vs 免費方本隊交手勝率」
+整套重寫到 `encounter.py` 上。**煉製的平衡校準會需要它那套收支統計**，所以做第二刀之前
+值得先決定。目前量數據都是改用 `bot.play_season` 直接測（見上面兩次實測）。
+
+### 3. 架構圖（`mapping-architecture-flow` skill）
+`example.html` 已由使用者補齊、裝在 `C:\Users\User\.claude\skills\mapping-architecture-flow\`，
+skill 現在可以正常執行。2026-10-01 產出的那份架構圖在
+https://claude.ai/code/artifact/c63483c5-4b2f-42ff-bfe6-4c76d73e0e95
+（10 個系統、114 個細項：已完成 75／開發中 21／討論中 5／規劃中 13）。**第一刀做完之後那份
+已經過期**（素材與掉落從「開發中」變「已完成」），下次有里程碑時用同一個檔案路徑更新即可。

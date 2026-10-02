@@ -39,9 +39,10 @@ def test_render_includes_quest_status_and_minimap(game):
 
 def test_render_menxia_shape_and_hint(game):
     out = app.render_menxia(game)
-    assert len(out) == 6
+    assert len(out) == app.MENXIA_OUTPUTS
     assert out[3] == app.PERSON_HINT  # 沒選人時顯示提示
     assert out[0].startswith("**心得** 0")
+    assert out[5].startswith("**煉製素材**")  # 背包那一塊（還沒撿到任何素材）
 
 
 def test_render_menxia_with_an_unknown_person_falls_back_to_none(game):
@@ -67,7 +68,7 @@ def test_save_path_strips_unsafe_characters():
 
 def test_act_with_no_game_skips_every_output():
     assert app.act(None, lambda g: None) == [gr.skip()] * app.N_OUTPUTS
-    assert app.act(None, lambda g: None, note=True) == [gr.skip()] * (app.N_OUTPUTS + 6)
+    assert app.act(None, lambda g: None, note=True) == [gr.skip()] * (app.N_OUTPUTS + app.MENXIA_OUTPUTS)
 
 
 def test_act_runs_saves_and_renders(game, save_dir):
@@ -118,7 +119,7 @@ def test_seclude_handler(game):
 
 def test_open_and_close_menxia(game):
     out = app.open_menxia(game)
-    assert len(out) == 8
+    assert len(out) == 2 + app.MENXIA_OUTPUTS
     assert out[0] == {"__type__": "update", "visible": False}
     assert out[1] == {"__type__": "update", "visible": True}
     assert app.close_menxia() == [
@@ -127,7 +128,7 @@ def test_open_and_close_menxia(game):
 
 
 def test_open_menxia_with_no_game_skips():
-    assert app.open_menxia(None) == [gr.skip()] * 8
+    assert app.open_menxia(None) == [gr.skip()] * (2 + app.MENXIA_OUTPUTS)
 
 
 def test_roster_pick_shows_the_selected_persons_card(game):
@@ -138,7 +139,7 @@ def test_roster_pick_shows_the_selected_persons_card(game):
 
 
 def test_roster_pick_with_no_game_skips():
-    assert app.roster_pick_handler(None, "liubei") == [gr.skip()] * 6
+    assert app.roster_pick_handler(None, "liubei") == [gr.skip()] * app.MENXIA_OUTPUTS
 
 
 def test_toggle_team_adds_then_removes(game):
@@ -153,23 +154,23 @@ def test_toggle_team_adds_then_removes(game):
 
 
 def test_toggle_team_with_no_person_or_game_skips(game):
-    assert app.toggle_team_handler(game, None) == [gr.skip()] * 6
-    assert app.toggle_team_handler(None, "liubei") == [gr.skip()] * 6
+    assert app.toggle_team_handler(game, None) == [gr.skip()] * app.MENXIA_OUTPUTS
+    assert app.toggle_team_handler(None, "liubei") == [gr.skip()] * app.MENXIA_OUTPUTS
 
 
 def test_create_skill_practice_and_heal_handlers(game):
     out = app.create_skill_handler(game, "player", "武學", "龍吟九霄")
-    assert out[5] == "你自創了一門武學【龍吟九霄】（中品，屬陰）！"
+    assert out[6] == "你自創了一門武學【龍吟九霄】（中品，屬陰）！"
     out2 = app.practice_handler(game, "player", "武學")
-    assert out2[5] == "【龍吟九霄】精進至第2成。"
+    assert out2[6] == "【龍吟九霄】精進至第2成。"
     out3 = app.heal_handler(game, "player")
-    assert out3[5] == "氣血無恙，不用療傷。"
+    assert out3[6] == "氣血無恙，不用療傷。"
 
 
 def test_menxia_handlers_with_no_game_skip():
-    assert app.create_skill_handler(None, "player", "武學", "x") == [gr.skip()] * 6
-    assert app.practice_handler(None, "player", "武學") == [gr.skip()] * 6
-    assert app.heal_handler(None, "player") == [gr.skip()] * 6
+    assert app.create_skill_handler(None, "player", "武學", "x") == [gr.skip()] * app.MENXIA_OUTPUTS
+    assert app.practice_handler(None, "player", "武學") == [gr.skip()] * app.MENXIA_OUTPUTS
+    assert app.heal_handler(None, "player") == [gr.skip()] * app.MENXIA_OUTPUTS
 
 
 # ── 戰報頁面 ──────────────────────────────────────────────
@@ -300,12 +301,12 @@ def test_skip_tutorial_handler(game):
 
 def test_tick_handler_syncs_and_saves(game, save_dir):
     out = app.tick_handler(game, None)
-    assert len(out) == app.N_OUTPUTS + 6
+    assert len(out) == app.N_OUTPUTS + app.MENXIA_OUTPUTS
     assert (save_dir / "測試.json").exists()
 
 
 def test_tick_handler_with_no_game_skips():
-    n = app.N_OUTPUTS + 6
+    n = app.N_OUTPUTS + app.MENXIA_OUTPUTS
     assert app.tick_handler(None, None) == [gr.skip()] * n
 
 

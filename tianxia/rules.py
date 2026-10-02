@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import random
 
-from . import roster, team  # 與 roster 互相 import：只能引入整個模組、呼叫時才取屬性，不能 from .roster import …
+from . import materials, roster, team  # 與 roster 互相 import：只能引入整個模組、呼叫時才取屬性，不能 from .roster import …
 from .models import Check, Condition, Content, Effect
 from .state import PLAYER, GameState, Rumor
 from .world_state import JADE_SEAL_FRAGMENT_COUNT, WorldStateStore
@@ -150,6 +150,10 @@ def apply_effect(effect: Effect, state: GameState, content: Content, world: Worl
     for key, delta in effect.stats.items():
         p.stats[key] = max(0, p.stats.get(key, 0) + delta)
         msgs.append(f"{names.get(key, key)} {'+' if delta >= 0 else ''}{delta}")
+    for material_id, count in effect.materials.items():
+        line = materials.grant(state, content, material_id, count)
+        if line:
+            msgs.append(line)
     if effect.stamina:
         p.stamina = min(content.config.stamina_max, max(0.0, p.stamina + effect.stamina))
         msgs.append(f"體力 {'+' if effect.stamina > 0 else ''}{effect.stamina}")

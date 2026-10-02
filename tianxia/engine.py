@@ -11,7 +11,7 @@ import time
 
 from pydantic import BaseModel
 
-from . import atlas, battle_instance, battlelog, companion_agent, encounter, flavor, journal, roster, skillview, team
+from . import atlas, battle_instance, battlelog, companion_agent, encounter, flavor, journal, materials, roster, skillview, team
 from .events import choice_label, has_events_here, pick_event, visible_choices
 from .guide import note_action, quest_text, tutorial_intro
 from .journal import LOG_BREAK, Draft
@@ -336,7 +336,7 @@ class Game:
             return self._rest()
         self.state.player.stamina -= cost[what]
         if what == "explore":
-            return self._encounter("explore", "你四處走走，一無所獲。")
+            return self._explore()
         if roster.fortune_due(self.state, self.content):
             candidates = [cid for cid, ch in self.content.characters.items() if ch.kind == "recruitable"]
             if candidates and roster.owned_by(self.world, candidates[0]) is None:
@@ -352,6 +352,21 @@ class Game:
         if companion_id is not None:
             return companion_agent.start_dialogue(self.client, self.state, self.content, self.world, companion_id, self.rng)
         return self._encounter("socialize", "此地無人可訪，你只好悻悻離去。")
+
+    def _explore(self) -> list[str]:
+        """探索：先滾一次煉製素材，再走一般的遭遇流程（事件／敵人／一無所獲）。
+
+        素材的判定**刻意放在事件之前、而且不管接下來發生什麼都會滾**：原本照設計文件
+        §4.2 掛在「一無所獲」那條分支上，但用真實內容跑完整季實測，100 次探索有 100 次
+        都撞到手寫事件或敵人，那條分支一次都沒執行到（整季只拿到打贏掉的 3 個素材）。
+        改成探索本身就有機會撿到東西，一季約 30 個，對得上設計文件 §4.4 的產出目標。
+        """
+        loc = self.content.locations[self.state.player.location]
+        found = materials.roll_explore_drop(loc, self.content, self.rng)
+        line = materials.grant(self.state, self.content, found) if found is not None else None
+        nothing = "你四處走走，一無所獲。" if line is None else f"你在{loc.name}翻找了一陣。"
+        msgs = self._encounter("explore", nothing)
+        return msgs + [line] if line is not None else msgs
 
     def _rest(self) -> list[str]:
         """原地打坐歇息一個時辰：只推進玩家自己的進度（體力/氣血），不碰共用賽季時鐘
@@ -689,6 +704,11 @@ class Game:
             p.stats["xinde"] = p.stats.get("xinde", 0) + squad.reward_xinde
             record.xinde = squad.reward_xinde
             msgs.append(f"心得 +{squad.reward_xinde}")
+        for material_id, count in materials.roll_squad_drops(squad, self.content, self.rng):
+            line = materials.grant(self.state, self.content, material_id, count)
+            if line:
+                record.materials.append(line.removeprefix("獲得 "))
+                msgs.append(line)
         record.exp = squad.exp
         levels = team.add_exp(self.content, p.member, squad.exp, p.name)
         record.notes += levels
@@ -891,6 +911,9 @@ class Game:
 
     def menxia_rules(self) -> str:
         return skillview.rules_line(self.content)
+
+    def bag_text(self) -> str:
+        return skillview.bag_text(self.state, self.content)
 
     # ── 戰鬥紀錄 ──────────────────────────────────────────
 

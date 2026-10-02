@@ -251,3 +251,15 @@ def test_fragment_falls_back_to_a_generic_text_without_a_chronicle(state, conten
     content.scenario.jade_seal_flag = "shard_taken"
     apply_effect(Effect(world_flags_add=["shard_taken"]), state, content, world)
     assert "取得了傳國玉璽的一塊碎片" in world.get_jade_seal_fragments()[0].text
+
+
+def test_effect_materials_land_in_the_bag(state, content, world):
+    msgs = apply_effect(Effect(materials={"gang_1": 2}), state, content, world)
+    assert "獲得 精鐵砂 ×2" in msgs
+    assert state.player.materials == {"gang_1": 2}
+
+
+def test_effect_with_an_unknown_material_says_nothing(state, content, world):
+    msgs = apply_effect(Effect(materials={"ghost": 1}), state, content, world)
+    assert msgs == []
+    assert state.player.materials == {}
