@@ -422,6 +422,135 @@ def test_an_abandoned_action_lock_is_reclaimed(store):
         pass
 
 
+@pytest.fixture
+def dead_pid():
+    """一個已經結束的程式的 PID。Popen 物件留到測試結束：Windows 上它握著那個程式的 handle，
+    這段期間這個 PID 不會被別的程式拿去用。"""
+    proc = subprocess.Popen([sys.executable, "-c", "pass"])
+    proc.wait(timeout=60)
+    yield proc.pid
+
+
+def test_an_action_lock_left_by_a_killed_program_is_reclaimed_at_once(store, dead_pid):
+    """程式被強制結束（關掉終端機分頁、taskkill /F）時 finally 不會跑，鎖目錄留在原地。鎖裡
+    記著拿鎖的程式的 PID；那個程式已經不在了，就馬上回收，不必等 600 秒。"""
+    store.action_lock_dir.mkdir(parents=True)  # 剛剛才拿的鎖：只看存在多久的話要等 600 秒
+    (store.action_lock_dir / "owner").write_text(str(dead_pid), encoding="ascii")
+    started = time.monotonic()
+    with store.action_lock(timeout=1):
+        assert (store.action_lock_dir / "owner").read_text(encoding="ascii") == str(os.getpid())
+    assert time.monotonic() - started < 1
+    assert not store.action_lock_dir.exists()
+
+
+def test_a_lock_held_by_a_running_program_is_not_broken_until_it_ends(store):
+    """記在鎖裡的程式還在跑，就照舊等（不能搶）；那個程式一結束，鎖就能回收。"""
+    proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+    try:
+        store.action_lock_dir.mkdir(parents=True)
+        (store.action_lock_dir / "owner").write_text(str(proc.pid), encoding="ascii")
+        with pytest.raises(TimeoutError):
+            with store.action_lock(timeout=0.3):
+                pass
+        assert (store.action_lock_dir / "owner").read_text(encoding="ascii") == str(proc.pid)
+    finally:
+        proc.kill()  # 測試自己開的程式，結束它（不是拿 os.kill 問程式在不在）
+        proc.wait(timeout=60)
+    with store.action_lock(timeout=1):
+        pass
+
+
+def test_a_lock_held_by_another_thread_of_this_program_is_not_broken(store):
+    """拿鎖的是同一個程式裡的另一個執行緒：PID 是自己的、程式還在，照舊等到逾時。"""
+    held, release = threading.Event(), threading.Event()
+    stale_after = world_state.ACTION_LOCK_STALE_AFTER
+
+    def holder():
+        with _locked(store.action_lock_dir, timeout=1, stale_after=stale_after):
+            held.set()
+            release.wait(10)
+
+    thread = threading.Thread(target=holder)
+    thread.start()
+    try:
+        assert held.wait(5)
+        with pytest.raises(TimeoutError):
+            with _locked(store.action_lock_dir, timeout=0.2, stale_after=stale_after):
+                pass
+        assert store.action_lock_dir.is_dir()
+    finally:
+        release.set()
+        thread.join(5)
+    assert not store.action_lock_dir.exists()
+
+
+def test_a_lock_retaken_while_someone_was_reclaiming_it_is_left_alone(store, dead_pid):
+    """好幾個人同時發現同一把死鎖：第一個人回收完、自己拿到鎖之後，晚一步的人（剛才讀到的還是
+    死掉的主人）重讀會看到換人了，不能把第一個人剛拿到的鎖刪掉。"""
+    stale_after = world_state.ACTION_LOCK_STALE_AFTER
+    with store.action_lock(timeout=1):  # 第一個人已經回收完、拿到鎖
+        assert not world_state._break_lock(store.action_lock_dir, dead_pid, stale_after)
+        assert (store.action_lock_dir / "owner").read_text(encoding="ascii") == str(os.getpid())
+
+
+def test_only_one_program_reclaims_a_lock_at_a_time(store, dead_pid):
+    """有人正在回收（守門目錄在）就讓他回收；守門目錄是回收到一半被強制結束留下的，過一陣子清掉。"""
+    guard = store.action_lock_dir.with_name(store.action_lock_dir.name + ".break")
+    store.action_lock_dir.mkdir(parents=True)
+    (store.action_lock_dir / "owner").write_text(str(dead_pid), encoding="ascii")
+    guard.mkdir()
+    with pytest.raises(TimeoutError):
+        with store.action_lock(timeout=0.2):
+            pass
+    long_ago = time.time() - world_state.LOCK_STALE_AFTER - 1
+    os.utime(guard, (long_ago, long_ago))
+    with store.action_lock(timeout=1):
+        pass
+    assert not guard.exists() and not store.action_lock_dir.exists()
+
+
+def test_taking_a_lock_waits_while_windows_is_still_deleting_the_last_one(tmp_path, monkeypatch):
+    """Windows 上，上一個人剛放掉、還在刪除中的鎖目錄，再 mkdir 會丟 PermissionError（不是
+    FileExistsError）：稍等重試就好，不能變成行動出錯。"""
+    lock_dir = tmp_path / "busy.lock"
+    real_mkdir = Path.mkdir
+    calls = {"n": 0}
+
+    def pending_delete_once(self, *args, **kwargs):
+        if self == lock_dir:
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise PermissionError("拒絕存取：這個目錄正在刪除")
+        return real_mkdir(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "mkdir", pending_delete_once)
+    with _locked(lock_dir, timeout=1):
+        assert lock_dir.is_dir()
+    assert calls["n"] == 2
+    assert not lock_dir.exists()
+
+
+def test_releasing_a_lock_retries_while_windows_still_holds_the_directory(tmp_path, monkeypatch):
+    """放鎖時 rmdir 一時被擋（防毒或另一個程式正在看這個目錄）：重試到刪掉為止，不能默默留著
+    鎖——行動鎖留著的話，大家要多等 600 秒。"""
+    lock_dir = tmp_path / "busy.lock"
+    real_rmdir = Path.rmdir
+    calls = {"n": 0}
+
+    def busy_once(self):
+        if self == lock_dir:
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise PermissionError("另一個程式正在用這個目錄")
+        return real_rmdir(self)
+
+    monkeypatch.setattr(Path, "rmdir", busy_once)
+    with _locked(lock_dir, timeout=1):
+        pass
+    assert calls["n"] == 2
+    assert not lock_dir.exists()
+
+
 _WRITER = """
 import sys
 from pathlib import Path

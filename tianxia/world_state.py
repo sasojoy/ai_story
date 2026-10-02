@@ -22,6 +22,8 @@ client-server 架構，用檔案鎖保護一份共用 JSON 檔即可。鎖用 mk
 from __future__ import annotations
 
 import contextlib
+import functools
+import os
 import threading
 import time
 from pathlib import Path
@@ -43,6 +45,11 @@ LOCK_STALE_AFTER = 30.0  # 鎖目錄存在超過這麼久視為前一個行程�
 LOCK_POLL_INTERVAL = 0.05
 ACTION_LOCK_STALE_AFTER = 600.0  # 行動鎖存在超過這麼久才視為程式異常結束：真人的行動可能在等 LLM（見 action_lock）
 _ACTION_THREAD_LOCK = threading.Lock()  # 同一個程式裡的執行緒先排這個隊，再去搶跨程式的檔案鎖
+LOCK_OWNER_FILE = "owner"  # 鎖目錄裡記著拿鎖程式 PID 的檔案（見 _locked）
+
+_PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+_STILL_ACTIVE = 259
+_ERROR_ACCESS_DENIED = 5
 
 SeasonPhase = Literal["preparing", "running", "resting"]  # 籌備（管理者還沒開季）／進行中／休季（這一季已結束）
 
@@ -106,31 +113,130 @@ class SharedWorldState(BaseModel):
         return "resting" if self.season.ended else "running"
 
 
+@functools.cache
+def _kernel32():
+    import ctypes
+    from ctypes import wintypes
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.GetExitCodeProcess.argtypes = (wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD))
+    kernel32.GetExitCodeProcess.restype = wintypes.BOOL
+    kernel32.CloseHandle.argtypes = (wintypes.HANDLE,)
+    kernel32.CloseHandle.restype = wintypes.BOOL
+    return kernel32
+
+
+def _process_alive(pid: int) -> bool:
+    """這個 PID 的程式還在不在。Windows 用 OpenProcess＋GetExitCodeProcess 問（Windows 上的
+    os.kill 會直接把程式結束掉，絕對不能拿來問）；其他系統送 0 號訊號問。問不清楚（權限不足、
+    查不到結束碼）都當作還在：寧可照舊等，也不搶一個可能還有人拿著的鎖。"""
+    if os.name == "nt":
+        import ctypes
+        from ctypes import wintypes
+
+        kernel32 = _kernel32()
+        handle = kernel32.OpenProcess(_PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+        if not handle:
+            return ctypes.get_last_error() == _ERROR_ACCESS_DENIED
+        try:
+            code = wintypes.DWORD()
+            if not kernel32.GetExitCodeProcess(handle, ctypes.byref(code)):
+                return True
+            return code.value == _STILL_ACTIVE
+        finally:
+            kernel32.CloseHandle(handle)
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def _lock_owner(owner_file: Path) -> int | None:
+    """鎖裡記的 PID；沒有這個檔（剛建好鎖還沒寫、或舊版程式的鎖）、讀不到或內容不對都回 None。"""
+    try:
+        pid = int(owner_file.read_text(encoding="ascii").strip())
+    except (OSError, ValueError):
+        return None
+    return pid if pid > 0 else None
+
+
+def _abandoned(lock_dir: Path, owner: int | None, stale_after: float) -> bool:
+    """這把鎖是不是被丟下了：記的程式已經不在，或鎖存在超過 stale_after（owner＝鎖裡記的 PID）。"""
+    if owner is not None and not _process_alive(owner):
+        return True
+    try:
+        return time.time() - lock_dir.stat().st_mtime > stale_after
+    except OSError:
+        return False
+
+
+def _break_lock(lock_dir: Path, owner: int | None, stale_after: float) -> bool:
+    """回收一把被丟下的鎖，鎖目錄刪掉了才回傳 True。owner 是剛才讀到的拿鎖程式（None＝鎖裡沒記）。
+
+    同一時間只能有一個人回收：先拿旁邊的守門目錄（<鎖>.break），拿到了再讀一次 owner 檔，還是
+    剛才那個主人、而且還是被丟下的才刪。好幾個人同時發現同一把死鎖時，第一個人回收完、自己拿到鎖
+    寫上新主人之後，後面的人重讀就會看到換人了，不會把第一個人剛拿到的鎖也刪掉。守門目錄只在回收
+    那一瞬間存在；回收到一半被強制結束留下的，過了 LOCK_STALE_AFTER 就清掉。"""
+    guard = lock_dir.with_name(lock_dir.name + ".break")
+    owner_file = lock_dir / LOCK_OWNER_FILE
+    try:
+        guard.mkdir()
+    except FileExistsError:
+        with contextlib.suppress(OSError):
+            if time.time() - guard.stat().st_mtime > LOCK_STALE_AFTER:
+                guard.rmdir()
+        return False
+    except OSError:
+        return False
+    try:
+        if _lock_owner(owner_file) != owner or not _abandoned(lock_dir, owner, stale_after):
+            return False  # 等守門目錄的這段時間，鎖已經換人或放掉了
+        retry_sharing(lambda: owner_file.unlink(missing_ok=True))  # 沒記主人的也可能有寫到一半的空檔
+        retry_sharing(lock_dir.rmdir)
+        return True
+    except OSError:
+        return False
+    finally:
+        with contextlib.suppress(OSError):
+            retry_sharing(guard.rmdir)
+
+
 @contextlib.contextmanager
 def _locked(lock_dir: Path, timeout: float | None = LOCK_TIMEOUT, stale_after: float = LOCK_STALE_AFTER):
-    """timeout=None 時一直等到拿到為止。"""
+    """timeout=None 時一直等到拿到為止。
+
+    拿到鎖（mkdir 成功）就在鎖目錄裡寫一個 owner 檔，記自己的 PID；放鎖時先刪 owner 檔再刪目錄。
+    等別人的鎖時：記的那個程式已經不在了（被強制結束：關掉終端機分頁、taskkill /F，finally 沒跑到、
+    鎖沒放），馬上回收；程式還在、或鎖裡沒記主人（剛建好還沒寫、讀不到、舊版程式的鎖），照舊等到
+    鎖存在超過 stale_after 才回收（見 _break_lock）。Windows 上還在刪除中的目錄，mkdir／rmdir 會丟
+    PermissionError（不是 FileExistsError），用 retry_sharing 稍等重試。"""
     deadline = None if timeout is None else time.monotonic() + timeout
     while True:
         try:
-            lock_dir.mkdir(parents=True, exist_ok=False)
+            retry_sharing(lambda: lock_dir.mkdir(parents=True, exist_ok=False))
             break
         except FileExistsError:
-            try:
-                age = time.time() - lock_dir.stat().st_mtime
-            except OSError:
-                age = 0.0
-            if age > stale_after:
-                with contextlib.suppress(OSError):
-                    lock_dir.rmdir()
+            owner = _lock_owner(lock_dir / LOCK_OWNER_FILE)
+            if _abandoned(lock_dir, owner, stale_after) and _break_lock(lock_dir, owner, stale_after):
                 continue
             if deadline is not None and time.monotonic() >= deadline:
                 raise TimeoutError(f"等不到鎖：{lock_dir}")
             time.sleep(LOCK_POLL_INTERVAL)
+    owner_file = lock_dir / LOCK_OWNER_FILE
     try:
+        with contextlib.suppress(OSError):  # 寫不進去也照樣拿著鎖，只是別人只能照存在多久判斷
+            owner_file.write_text(str(os.getpid()), encoding="ascii")
         yield
     finally:
         with contextlib.suppress(OSError):
-            lock_dir.rmdir()
+            retry_sharing(lambda: owner_file.unlink(missing_ok=True))
+        with contextlib.suppress(OSError):
+            retry_sharing(lock_dir.rmdir)
 
 
 def _fresh_season(content: Content) -> WorldState:
