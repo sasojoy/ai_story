@@ -391,6 +391,11 @@ class Config(_Strict):
     server_max_players: int = 30  # 伺服器人數上限；第四階席次、之後的軍令陣營額度照它等比例換算
     rank4_seat_ratio: float = 0.008  # 每陣營第四階席次＝上限 × 這個比例（四捨五入，最少 1 席）
     talk_stamina: int = 2  # 跟大勢人物對話，每一輪扣的體力
+    # ── 伺服器假人（伺服器假人設計第四、六節）──
+    bots_min_per_faction: int = 5  # 每個陣營（真人＋假人）至少幾人，不足由假人程式補
+    bot_strength: float = 0.6  # 假人挑最高分選項的機率（0＝全隨機，1＝永遠挑最高分）；積極 +0.2、懶散 -0.2
+    bot_tick_seconds: float = 20  # 假人程式多久巡一輪（現實秒數）
+    bot_fill_seconds: float = 3600  # 同一個陣營兩次補人至少隔幾秒（現實時間），看起來像玩家陸續湧入
 
 
 class BattleFaction(_Strict):

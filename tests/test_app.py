@@ -7,6 +7,7 @@ import app
 from tianxia import battle_instance, roster
 from tianxia.engine import Game
 from tianxia.save import save_game
+from tianxia.state import BotProfile
 from tianxia.world_state import WorldStateStore
 
 SKIP = {"__type__": "update"}
@@ -454,3 +455,12 @@ def test_every_action_takes_the_cross_program_action_lock(game, monkeypatch):
     app.tick_handler(game, None)
     assert calls == [None, None]
     assert not hasattr(app, "ACT_LOCK")
+
+
+def test_open_game_refuses_a_name_that_belongs_to_a_server_bot(save_dir):
+    g = app.open_game("周泰安")
+    g.state.player.bot = BotProfile(personality="普通", seed=1, faction="guan", season_number=1)
+    save_game(g.state, app.save_path("周泰安"))
+    with pytest.raises(gr.Error, match="這個名號已有人使用"):
+        app.open_game("周泰安")
+    assert not (save_dir / "backup").exists()  # 假人的存檔不能被當成壞檔備份走

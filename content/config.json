@@ -14,5 +14,9 @@
   "admins": [],
   "server_max_players": 30,
   "rank4_seat_ratio": 0.008,
-  "talk_stamina": 2
+  "talk_stamina": 2,
+  "bots_min_per_faction": 5,
+  "bot_strength": 0.6,
+  "bot_tick_seconds": 20,
+  "bot_fill_seconds": 3600
 }

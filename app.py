@@ -15,7 +15,6 @@ sanguo-companions 合併大幅簡化了「門下」頁：不再有多隊切換/�
 """
 from __future__ import annotations
 
-import re
 import shutil
 import time
 from pathlib import Path
@@ -25,7 +24,7 @@ import gradio as gr
 from tianxia.content import load_content
 from tianxia.engine import Game
 from tianxia.journal import CSS as JOURNAL_CSS
-from tianxia.save import load_game, save_game
+from tianxia.save import load_game, path_for, save_game
 
 ROOT = Path(__file__).parent
 CONTENT = load_content(ROOT / "content")
@@ -80,7 +79,7 @@ KINDS = ("武學", "內功")
 
 
 def save_path(name: str) -> Path:
-    return SAVE_DIR / (re.sub(r'[\\/:*?"<>|]', "_", name) + ".json")
+    return path_for(SAVE_DIR, name)
 
 
 def render(game: Game) -> list:
@@ -411,7 +410,12 @@ def open_game(name: str) -> Game:
     if not path.exists():
         return Game.new(CONTENT, name)
     try:
-        return Game(CONTENT, load_game(path))
+        state = load_game(path)
+        if state.player.bot is not None:  # 伺服器假人的存檔：不讓真人接手（伺服器假人設計第五節）
+            raise gr.Error("這個名號已有人使用。")
+        return Game(CONTENT, state)
+    except gr.Error:  # gr.Error 也是 ValueError 的子類別：不先放行，下面會把假人的存檔當成壞檔備份掉
+        raise
     except ValueError:  # pydantic 的 ValidationError 屬於 ValueError
         backup = SAVE_DIR / "backup" / f"{path.stem}-{int(time.time())}.json"
         backup.parent.mkdir(parents=True, exist_ok=True)

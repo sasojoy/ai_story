@@ -95,6 +95,7 @@ class Game:
         fresh.player.dialogue_history = old.player.dialogue_history
         fresh.player.used_dialogue_options = old.player.used_dialogue_options
         fresh.player.turns_since_consolidation = old.player.turns_since_consolidation
+        fresh.player.bot = old.player.bot  # 伺服器假人的身分與作息跨季保留
         fresh.player.season_number = season_number
         self.state = fresh
         self.state.player.visited.add(self.state.player.location)

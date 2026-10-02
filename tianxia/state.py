@@ -29,6 +29,19 @@ class Member(BaseModel):
 
 MAX_TEAM_COMPANIONS = 4  # 設計文件四.4：每位玩家最多帶 4 個夥伴，只有一支隊伍，沒有多隊派遣
 
+Personality = Literal["積極", "普通", "懶散"]
+
+
+class BotProfile(BaseModel):
+    """伺服器假人的內部資料（伺服器假人設計第五節）：只存在存檔裡，畫面上任何地方都不顯示。
+    faction／season_number：這一季被叫醒、替哪個陣營效力；season_number 跟全服賽季編號
+    對不上（或 faction 是 None）就是退隱中，不上線（見 server_bots.active）。"""
+
+    personality: Personality
+    seed: int  # 作息、趕來參戰的擲骰都從這裡算，同一個假人永遠一樣
+    faction: str | None = None
+    season_number: int = 0
+
 
 class PlayerState(BaseModel):
     name: str
@@ -66,6 +79,7 @@ class PlayerState(BaseModel):
     season_number: int = 1  # 這個玩家的角色屬於第幾季；跟共用賽季的編號對不上時，
     # Game._drop_stale_references() 會知道共用的賽季已經換過一輪，幫這個玩家的角色重開
     # 新的一季（好感度/關係現況保留，角色本身的等級/位置/隊伍重新開始，見設計討論）。
+    bot: BotProfile | None = None  # 伺服器假人才有（伺服器假人設計第五節）；任何畫面都不能顯示或透露
 
 
 class Rumor(BaseModel):

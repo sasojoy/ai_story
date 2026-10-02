@@ -7,7 +7,7 @@ import pytest
 from conftest import FixedRandom
 from tianxia import battle_instance, companion_agent, flavor, rules
 from tianxia.engine import Game, Option
-from tianxia.state import GameState
+from tianxia.state import BotProfile, GameState
 from tianxia.world_state import WorldStateStore
 
 HOUR = 3600
@@ -1302,3 +1302,20 @@ def test_a_player_who_joined_before_the_roll_existed_is_counted_on_the_next_sync
     game.state.player.faction = "huang"
     game.sync(time.time())
     assert game.world.faction_counts() == {"huang": 1}
+
+
+def test_a_new_season_keeps_a_server_bots_profile(content, game):
+    profile = BotProfile(personality="積極", seed=7, faction="guan", season_number=1)
+    game.state.player.bot = profile
+    game.world.mutate_season(lambda season: setattr(season, "ended", True))
+    assert game.world.next_season(content, now=time.time())
+    game.sync(time.time())
+    assert game.state.player.season_number == 2
+    assert game.state.player.bot == profile
+
+
+def test_a_server_bot_looks_exactly_like_a_player_on_screen(content, game):
+    """伺服器假人設計第五節：「是假人」只記在存檔裡，畫面上任何地方都看不出來。"""
+    before = (game.status_text(), game.scene_text(), game.quest_text(), game.journal_html(1, 5))
+    game.state.player.bot = BotProfile(personality="積極", seed=7, faction="guan", season_number=1)
+    assert (game.status_text(), game.scene_text(), game.quest_text(), game.journal_html(1, 5)) == before

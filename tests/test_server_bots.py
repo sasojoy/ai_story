@@ -1,0 +1,83 @@
+import random
+from collections import Counter
+
+from tianxia import server_bots
+from tianxia.models import Config
+from tianxia.server_bots import (
+    DAY, GIVEN, SURNAMES, TZ_OFFSET, act_chance, active, attends_battle, is_online, make_name, make_skill_name,
+    pick_personality, schedule, strength,
+)
+from tianxia.state import BotProfile
+
+
+def _bot(personality="普通", seed=7, faction="guan", season_number=1):
+    return BotProfile(personality=personality, seed=seed, faction=faction, season_number=season_number)
+
+
+def _at(minute_of_day: int, day: int = 20000) -> float:
+    """台灣時間第 day 天的第 minute_of_day 分鐘，換成現實時間戳。"""
+    return day * DAY + minute_of_day * 60 - TZ_OFFSET
+
+
+def test_names_look_like_han_names_and_avoid_taken_ones():
+    first = make_name(random.Random(1), set())
+    assert 2 <= len(first) <= 3 and first[0] in SURNAMES and all(ch in GIVEN for ch in first[1:])
+    assert make_name(random.Random(1), {first}) != first
+
+
+def test_skill_names_have_no_digits():
+    for kind in ("內功", "武學"):
+        name = make_skill_name(random.Random(2), kind)
+        assert name and not any(ch.isdigit() for ch in name)
+
+
+def test_personalities_follow_the_twenty_fifty_thirty_split():
+    rng = random.Random(0)
+    counts = Counter(pick_personality(rng) for _ in range(10000))
+    assert abs(counts["積極"] / 10000 - 0.2) < 0.03
+    assert abs(counts["普通"] / 10000 - 0.5) < 0.03
+    assert abs(counts["懶散"] / 10000 - 0.3) < 0.03
+
+
+def test_the_same_bot_always_has_the_same_schedule_and_it_fits_its_temper():
+    eager = _bot("積極", seed=11)
+    assert schedule(eager) == schedule(_bot("積極", seed=11))
+    total = sum(end - start for start, end in schedule(eager))
+    assert 240 <= total <= 300
+    for start, end in schedule(eager):
+        assert 11 * 60 + 30 <= start < end <= 24 * 60
+
+
+def test_a_bot_is_online_only_inside_its_windows():
+    eager = _bot("積極", seed=11)
+    start, end = schedule(eager)[0]
+    assert is_online(eager, _at(start))
+    assert not is_online(eager, _at(4 * 60))  # 凌晨四點
+
+
+def test_a_lazy_bot_skips_about_half_of_the_days():
+    lazy = _bot("懶散", seed=5)
+    start, _ = schedule(lazy)[0]
+    online_days = sum(is_online(lazy, _at(start, day)) for day in range(20000, 20200))
+    assert 70 <= online_days <= 130
+
+
+def test_turning_up_for_a_battle_is_reproducible_and_follows_the_temper():
+    eager = _bot("積極", seed=3)
+    assert attends_battle(eager, 123.0) == attends_battle(eager, 123.0)
+    shows = sum(attends_battle(eager, float(key)) for key in range(1000))
+    assert 850 <= shows <= 950
+
+
+def test_act_chance_and_strength():
+    config = Config(bot_tick_seconds=20, bot_strength=0.9)
+    assert act_chance(_bot("普通"), config) == 20 / 120
+    assert strength(config, _bot("積極")) == 1.0
+    assert strength(Config(bot_strength=0.1), _bot("懶散")) == 0.0
+    assert strength(Config(bot_strength=0.6), _bot("普通")) == 0.6
+
+
+def test_a_bot_is_active_only_when_woken_for_this_season():
+    assert active(_bot(faction="guan", season_number=2), 2)
+    assert not active(_bot(faction="guan", season_number=1), 2)
+    assert not active(_bot(faction=None, season_number=2), 2)
