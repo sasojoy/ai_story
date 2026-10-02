@@ -256,10 +256,11 @@ class Game:
             # 歷練：這個地點的敵人，必定開打（見 _train）。sanguo-companions 合併時這個行動被
             # 整個拿掉，於是 Location.enemies／action_cost["train"]／train_event_chance 三個設定
             # 一起變成死的，而遭遇戰只剩劇情事件的 combat 選項——實測整季只打 3 場。
-            opts.append(self._cost_option(
-                "act:train", "歷練", cost["train"],
-                note=f"對手：{c.squads[loc.enemies[0]].name}" if len(loc.enemies) == 1 else f"{len(loc.enemies)} 路對手",
-            ))
+            #
+            # 標籤要顯示勝算（跟劇情戰的選項同一套慣例，見 _choice_label）：實機試玩發現
+            # 新角色沒有武學時威力是 0，在任何地點歷練都**必敗**，而落敗現在真的要付氣血與
+            # 內傷的代價——不顯示勝算的話，玩家會在開局連輸三場、氣血見底才知道自己不該打。
+            opts.append(self._cost_option("act:train", "歷練", cost["train"], note=self._train_note(loc, odds)))
         if has_events_here(c, loc, "socialize") or self._figures_here():
             opts.append(self._cost_option("act:socialize", "交遊", cost["socialize"]))
         target = self._recruit_target()
@@ -295,6 +296,17 @@ class Game:
         return Option(
             id=option_id, label=f"{label}（體力 {cost}{extra}）", enabled=self.state.player.stamina >= cost
         )
+
+    def _train_note(self, loc: Location, odds: bool) -> str:
+        """歷練按鈕上的補充說明：對手是誰、勝算多少（勝算的計算比較貴，所以照既有慣例吃 odds 旗標）。"""
+        squads = [self.content.squads[sid] for sid in loc.enemies]
+        who = squads[0].name if len(squads) == 1 else f"{len(squads)} 路對手"
+        if not odds:
+            return who
+        # 多路對手時以**最強的**那個當參考（真的開打是隨機挑）：這個標籤的用途是警告玩家，
+        # 寧可低估也不要給出過度樂觀的承諾。
+        hardest = max(squads, key=lambda s: s.difficulty)
+        return f"{who}・{self.odds(hardest.id)}"
 
     def _choice_label(self, choice: Choice, odds: bool) -> str:
         if choice.combat and odds:
