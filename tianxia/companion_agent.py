@@ -113,7 +113,7 @@ def build_system_prompt(
     era_str = f"【時代】{content.scenario.era_note}\n" if content.scenario.era_note else ""
 
     return (
-        f"你是文字角色扮演遊戲的敘事引擎，正在扮演三國時代真實歷史人物「{character.name}」，"
+        f"你是文字角色扮演遊戲的敘事引擎，正在扮演漢末真實歷史人物「{character.name}」，"
         f"跟玩家進行一段交遊對話。\n"
         f"【{character.name}的出身】{character.background}\n"
         f"【{character.name}此時的處境】{character.situation}\n"
@@ -125,7 +125,7 @@ def build_system_prompt(
         f"【已經說過的話（避免重複）】{used_str}\n\n"
         "【寫作要求】\n"
         "0. 全程使用繁體中文書寫（包含人名、選項文字），不可出現簡體字。\n"
-        "1. 以貼合三國時代語境的口吻描寫這一回合的互動與對白，控制在 100~200 字，"
+        "1. 以貼合漢末時代語境的口吻描寫這一回合的互動與對白，控制在 100~200 字，"
         "要有畫面感（神情、語氣、周遭環境），不要寫成流水帳，同一句話不要連用超過 3 個「的」字。\n"
         f"2. 必須在 options 欄位生成 3 個具體的玩家發言/行動選項，圍繞與{character.name}的"
         "交流展開，每個選項只能描述玩家打算說/做的事本身，不能預先寫死對方會怎麼回應。\n"
@@ -315,10 +315,11 @@ def _generate(
     try:
         turn = client.chat_structured(messages, CompanionTurn, required_fields=["options"])
         # 模型常夾雜簡體字（提示裡寫了也只部分改善），所以在輸出端確定性地轉成繁體。
-        # option_tags 不轉：它們是固定清單裡的值，必須原樣比對。
+        # option_tags 也要轉：好感度查表是精確比對，模型寫成簡體的 tag（實機見過「由衷讚赏」）會落空。
         return turn.model_copy(update={
             "narrative": zh.to_traditional(turn.narrative),
             "options": [zh.to_traditional(o) for o in turn.options],
+            "option_tags": [zh.to_traditional(t) for t in turn.option_tags],
             "relationship_note_update": zh.to_traditional(turn.relationship_note_update) if turn.relationship_note_update else turn.relationship_note_update,
         })
     except Exception as e:

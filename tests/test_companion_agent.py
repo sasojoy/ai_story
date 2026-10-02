@@ -101,9 +101,9 @@ def test_generate_gives_up_when_no_model_can_answer(content, state, world):
 
 
 def test_the_prompt_anchors_the_era_and_forbids_later_events(content, state, world):
-    content.scenario.era_note = "東漢中平元年（公元184年），黃巾起事。諸葛亮還是孩童。"
+    content.scenario.era_note = "東漢靈帝光和七年（公元184年，年底改元中平），黃巾起事。諸葛亮還是孩童。"
     prompt = companion_agent.build_system_prompt(content.characters["mate"], state, content, world, "mate")
-    assert "中平元年（公元184年）" in prompt
+    assert "光和七年（公元184年，年底改元中平）" in prompt
     assert "不得提及之後" in prompt
     act = content.scenario.storylines[0].acts[0].title
     assert act in prompt
@@ -125,3 +125,28 @@ def test_generated_text_is_converted_to_traditional_chinese(content, state, worl
     assert turn.narrative == "他說這話時閃過一絲笑意。"
     assert turn.options[0] == "說幾句話"
     assert turn.relationship_note_update == "關係還算融洽"
+
+
+def test_generated_tags_are_converted_so_the_affinity_lookup_still_matches(content, state, world):
+    """模型有時把清單裡的 tag 寫成簡體（實機見過「由衷讚赏」）；查表是精確比對，不轉就會變成 0。"""
+    client = mock.Mock()
+    client.chat_structured.return_value = companion_agent.CompanionTurn(
+        narrative="他點了點頭。", options=["夸他", "告辞", "闲聊"],
+        option_tags=["由衷讚赏", "尋常寒暄", "尋常寒暄"],
+    )
+    turn = companion_agent._generate(client, content.characters["mate"], state, content, world, "mate", "閒聊幾句")
+    assert turn.option_tags[0] == "由衷讚賞"
+    assert resolve_tag_delta(turn.option_tags[0]) > 0
+
+
+def test_every_dialogue_tag_survives_the_traditional_conversion_unchanged():
+    from tianxia import zh
+
+    assert [zh.to_traditional(t) for t in companion_agent.DIALOGUE_TAGS] == companion_agent.DIALOGUE_TAGS
+
+
+def test_the_prompt_frames_the_figure_as_late_han_not_the_three_kingdoms(content, state, world):
+    prompt = companion_agent.build_system_prompt(content.characters["mate"], state, content, world, "mate")
+    assert "漢末真實歷史人物" in prompt
+    assert "貼合漢末時代語境" in prompt
+    assert "三國時代" not in prompt
