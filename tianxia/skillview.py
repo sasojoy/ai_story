@@ -4,7 +4,7 @@
 """
 from __future__ import annotations
 
-from . import materials, team
+from . import craft, materials, team
 from .martial_arts import MAX_LEVEL, power_at
 from .models import Content
 from .state import PLAYER, GameState
@@ -16,13 +16,12 @@ def rules_line(content: Content) -> str:
 
 
 def practice_hint(state: GameState, content: Content) -> str | None:
-    """主畫面的練功提示：心得擱到 `xinde_hint_threshold` 以上、而且確實還有功夫可以練時才回傳一句話。
+    """主畫面的練功提示：心得擱到 `xinde_hint_threshold` 以上、而且確實有事可做時才回傳一句話。
 
-    心得目前完全不是貨幣（`team.practice`/`create_skill` 兩條路徑都免費、無限次，
-    `Config.xinde_cost_factor` 沒有任何地方讀），所以這句話的用途不是「你存夠錢了」，而是把
-    「在江湖裡攢到的心得」跟「門下的練功動作」接起來。實測隨機玩完一整季的心得收入只有
-    20~96（刻意閉關才會多），所以門檻故意訂得低；真正需要這句話的是從來沒進過門下、心得
-    一路擱著而武學還停在第一成的玩家。兩門都練到第十成就不再提示，免得變成嘮叨。
+    心得的去處有兩個：鍛鍊（免費，已決定維持免費）與**煉製**（真的要花心得，見 craft.py）。
+    實測隨機玩完一整季的心得收入只有 20~96，所以門檻故意訂得低；真正需要這句話的是從來沒
+    進過門下、心得一路擱著而武學還停在第一成的玩家。兩門都練滿、又煉不動時就不再提示，
+    免得變成嘮叨；文字也只列出真正做得到的那幾件事。
     """
     xinde = state.player.stats.get("xinde", 0)
     if xinde < content.config.xinde_hint_threshold:
@@ -35,17 +34,62 @@ def practice_hint(state: GameState, content: Content) -> str | None:
         )
         if getattr(member, slot) is None or getattr(member, level_slot) < MAX_LEVEL
     ]
-    if not todo:
+    parts = []
+    if todo:
+        parts.append(f"鍛鍊{'、'.join(todo)}（不花一分一毫）")
+    if _can_afford_a_craft(state, content, xinde):
+        parts.append("拿素材煉製新功法")
+    if not parts:
         return None
-    return f"💡 你已攢下 {xinde} 點心得。去「門下」自創或鍛鍊{'、'.join(todo)}不花一分一毫，別讓它擱著。"
+    return f"💡 你已攢下 {xinde} 點心得。去「門下」{'，或'.join(parts)}。"
+
+
+def _can_afford_a_craft(state: GameState, content: Content, xinde: int) -> bool:
+    """手上的素材湊得出一爐、而且心得付得起最便宜的那一爐嗎？"""
+    cheapest = _cheapest_pair(state, content)
+    return cheapest is not None and xinde >= craft.cost(content, cheapest)
+
+
+def _cheapest_pair(state: GameState, content: Content) -> list[str] | None:
+    """背包裡最便宜的兩樣素材（階最低的兩個，可以是同一種的兩個）；湊不出兩個就 None。"""
+    held: list[str] = []
+    for material, count in materials.bag_contents(state, content):
+        held += [material.id] * count
+    if len(held) < craft.MATERIALS_PER_CRAFT:
+        return None
+    held.sort(key=lambda mid: content.materials[mid].tier)
+    return held[: craft.MATERIALS_PER_CRAFT]
+
+
+def craft_line(state: GameState, content: Content, material_ids: list[str], kind: str) -> str:
+    """門下煉製那一塊的說明：成本、目前心得，或者為什麼還不能開爐。"""
+    xinde = state.player.stats.get("xinde", 0)
+    if len(material_ids) != craft.MATERIALS_PER_CRAFT:
+        return f"**煉製**　選 {craft.MATERIALS_PER_CRAFT} 樣素材煉成一門功法。目前心得 {xinde}。"
+    price = craft.cost(content, material_ids)
+    names = "＋".join(content.materials[mid].name for mid in material_ids if mid in content.materials)
+    problem = craft.can_craft(state, content, material_ids, kind)
+    head = f"**煉製**　{names} → 一門{kind}，花 {price} 點心得（你有 {xinde} 點）。"
+    return head if problem is None else f"{head}\n⚠ {problem}"
+
+
+def art_library(state: GameState, content: Content, world: WorldStateStore) -> list[tuple[str, str]]:
+    """功法庫（煉出來但沒配上身的）：（顯示文字, 功法 id），給「改練」的選單用。
+
+    跟底下的 `library()` 不是同一件事：那個列的是「目前配在身上、可以鍛鍊的」兩門。
+    """
+    out = []
+    for art_id in state.player.arts:
+        art = team.resolve_art(art_id, content, world)
+        if art is None:
+            continue
+        level = state.player.art_levels.get(art_id, 1)
+        out.append((f"{art.kind}　{art.name}（{art.quality}・屬{art.attribute}）第{level}成", art_id))
+    return out
 
 
 def bag_text(state: GameState, content: Content) -> str:
-    """門下頁的「煉製素材」那一塊：背包內容，階高的排前面。
-
-    素材是煉製的材料（見 tianxia/materials.py）；煉製本身還沒做，所以這裡只說素材怎麼來、
-    不提還不存在的按鈕。
-    """
+    """門下頁的「煉製素材」那一塊：背包內容，階高的排前面（素材是煉製的材料，見 craft.py）。"""
     items = materials.bag_contents(state, content)
     if not items:
         return "**煉製素材**　還沒撿到任何素材——打贏對手、四處探索，或在奇遇裡拿到。"

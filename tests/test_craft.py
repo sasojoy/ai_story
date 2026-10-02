@@ -374,3 +374,74 @@ def test_the_same_recipe_crafted_offline_twice_is_identical(stocked, content, wo
         second, _ = craft.craft(stocked, content, world, client, ["gang_2", "gang_2"], "內功")
     assert first is not None and second is not None
     assert (first.name, first.quality, first.attribute) == (second.name, second.quality, second.attribute)
+
+
+# ── 改練（功法庫 → 身上）──────────────────────────────────
+
+
+def craft_two_wugong(state, content, world):
+    """煉兩門武學：第一門自動配上身，第二門進功法庫。"""
+    client = OllamaClient()
+    with naming("裂江訣"):
+        first, _ = craft.craft(state, content, world, client, ["gang_1", "gang_1"], "武學")
+    with naming("沉山勢"):
+        second, _ = craft.craft(state, content, world, client, ["gang_2", "gang_2"], "武學")
+    return first, second
+
+
+def test_switching_swaps_the_equipped_art_with_the_library_one(stocked, content, world):
+    from tianxia import team
+
+    first, second = craft_two_wugong(stocked, content, world)
+    msgs = team.switch_art(stocked, content, world, second.id)
+    member = stocked.player.member
+    assert member.wugong_id == second.id
+    assert stocked.player.arts == [first.id]
+    assert f"改練【{second.name}】" in "\n".join(msgs)
+
+
+def test_switching_keeps_each_arts_level(stocked, content, world):
+    """熟練度各自保留：換回來不用重練（設計 §六）。"""
+    from tianxia import team
+
+    first, second = craft_two_wugong(stocked, content, world)
+    stocked.player.member.wugong_level = 7  # 把第一門練到第七成
+    team.switch_art(stocked, content, world, second.id)
+    assert stocked.player.member.wugong_level == 1  # 新的那門從第一成開始
+    team.switch_art(stocked, content, world, first.id)
+    assert stocked.player.member.wugong_level == 7  # 換回來還是第七成
+    assert stocked.player.art_levels[second.id] == 1
+
+
+def test_switching_into_an_empty_slot_needs_no_swap(stocked, content, world):
+    from tianxia import team
+
+    client = OllamaClient()
+    with naming("玄淵經"):
+        art, _ = craft.craft(stocked, content, world, client, ["gang_1", "gang_1"], "內功")
+    stocked.player.member.neigong_id = None  # 假裝這門內功只在庫裡
+    stocked.player.arts.append(art.id)
+    msgs = team.switch_art(stocked, content, world, art.id)
+    assert stocked.player.member.neigong_id == art.id and stocked.player.arts == []
+    assert len(msgs) == 1  # 沒有「你收起了…」那一句
+
+
+def test_switching_something_not_in_the_library_is_refused(stocked, content, world):
+    from tianxia import team
+
+    assert team.switch_art(stocked, content, world, "ghost") == ["你的功法庫裡沒有這一門。"]
+
+
+def test_a_neigong_in_the_library_does_not_displace_a_wugong(stocked, content, world):
+    from tianxia import team
+
+    client = OllamaClient()
+    with naming("裂江訣"):
+        wugong, _ = craft.craft(stocked, content, world, client, ["gang_1", "gang_1"], "武學")
+    with naming("玄淵經"):
+        neigong, _ = craft.craft(stocked, content, world, client, ["gang_1", "gang_1"], "內功")
+    stocked.player.member.neigong_id = None
+    stocked.player.arts.append(neigong.id)
+    team.switch_art(stocked, content, world, neigong.id)
+    assert stocked.player.member.wugong_id == wugong.id  # 武學沒被動到
+    assert stocked.player.member.neigong_id == neigong.id

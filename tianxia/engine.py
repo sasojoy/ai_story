@@ -121,6 +121,10 @@ class Game:
             p.member.neigong_id = None
         if p.member.wugong_id and p.member.wugong_id not in c.skills and not self.world.is_skill_name_taken(p.member.wugong_id):
             p.member.wugong_id = None
+        # 功法庫與素材：內容檔改版（或換季）後可能指到不存在的東西
+        p.arts = [a for a in p.arts if team.resolve_art(a, c, self.world) is not None]
+        p.art_levels = {k: v for k, v in p.art_levels.items() if team.resolve_art(k, c, self.world) is not None}
+        p.materials = {k: v for k, v in p.materials.items() if k in c.materials and v > 0}
         line_ids = [line.id for line in c.scenario.storylines]
         if s.world.storyline not in line_ids:
             s.world.storyline, s.world.act = line_ids[0], 0
@@ -878,6 +882,26 @@ class Game:
 
     def craft_cost(self, material_ids: list[str]) -> int:
         return craft.cost(self.content, material_ids)
+
+    def craft_line(self, material_ids: list[str], kind: str) -> str:
+        return skillview.craft_line(self.state, self.content, material_ids, kind)
+
+    def material_choices(self) -> list[tuple[str, str]]:
+        """煉製選單的素材選項：（顯示文字, 素材 id），階高的排前面。"""
+        return [
+            (f"{m.name}（{materials.tier_label(m)}・屬{m.attribute}）×{n}", m.id)
+            for m, n in materials.bag_contents(self.state, self.content)
+        ]
+
+    def art_library(self) -> list[tuple[str, str]]:
+        return skillview.art_library(self.state, self.content, self.world)
+
+    def switch_art(self, art_id: str) -> list[str]:
+        """改練：把功法庫裡的一門換上身（見 team.switch_art）。"""
+        xinde = self._xinde()
+        msgs = self._log(team.switch_art(self.state, self.content, self.world, art_id))
+        self._menxia_entry(msgs[-1] if msgs else "改練", xinde)
+        return msgs
 
     def practice(self, kind: str) -> list[str]:
         """鍛鍊：目前已學會的內功或武學加深一成，累積受傷風險。"""

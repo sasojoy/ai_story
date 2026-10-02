@@ -159,6 +159,9 @@ def test_toggle_team_with_no_person_or_game_skips(game):
 
 
 def test_create_skill_practice_and_heal_handlers(game):
+    # 練功受傷是機率、而且沒固定種子，受傷時會多一段內傷訊息、療傷也就不再是「無恙」——
+    # 這是這個測試原本 flaky 的原因（CLAUDE.md 有記），關掉受傷機率就完全確定了。
+    game.content.config.practice_injury_chance = 0.0
     out = app.create_skill_handler(game, "player", "武學", "龍吟九霄")
     assert out[6] == "你自創了一門武學【龍吟九霄】（中品，屬陰）！"
     out2 = app.practice_handler(game, "player", "武學")
@@ -396,3 +399,64 @@ def test_battle_text_handler_with_no_game_skips():
 
 def test_build_demo_constructs_without_error():
     assert app.build_demo() is not None
+
+
+# ── 煉製與改練（門下頁第三刀）──────────────────────────────
+
+
+def test_render_menxia_includes_the_craft_block_and_library(game):
+    out = app.render_menxia(game)
+    assert out[7]["choices"] == []  # 素材選單（背包是空的）
+    assert out[8].startswith("**煉製**")
+    assert out[9]["choices"] == []  # 功法庫
+
+
+def test_craft_busy_locks_the_button_and_warns_about_the_wait():
+    button, message = app.craft_busy()
+    assert button["interactive"] is False
+    assert "一分鐘" in message
+    assert app.craft_done()["interactive"] is True
+
+
+def test_craft_handler_crafts_and_redraws(game):
+    from unittest import mock
+
+    from tianxia import craft, materials
+    from tianxia.ollama_client import OllamaClient
+
+    materials.grant(game.state, game.content, "gang_1", 2)
+    game.state.player.stats["xinde"] = 500
+    with mock.patch.object(
+        OllamaClient, "chat_structured",
+        lambda self, messages, response_model, **kw: craft.CraftedName(name="裂江訣", description="說明。"),
+    ):
+        out = app.craft_handler(game, "player", ["gang_1", "gang_1"], "武學")
+    assert "【裂江訣】" in out[6]
+    assert game.state.player.member.wugong_id == "裂江訣"
+
+
+def test_craft_preview_shows_the_cost_without_crafting(game):
+    from tianxia import materials
+
+    materials.grant(game.state, game.content, "gang_1", 2)
+    line = app.craft_preview_handler(game, ["gang_1", "gang_1"], "武學")
+    assert "花" in line and "點心得" in line
+    assert game.state.player.materials == {"gang_1": 2}  # 什麼都沒扣
+
+
+def test_craft_and_switch_handlers_skip_without_a_game():
+    assert app.craft_handler(None, "player", [], "武學") == [gr.skip()] * app.MENXIA_OUTPUTS
+    assert app.switch_art_handler(None, "player", "x") == [gr.skip()] * app.MENXIA_OUTPUTS
+    assert app.switch_art_handler(object(), "player", None) == [gr.skip()] * app.MENXIA_OUTPUTS
+    assert app.craft_preview_handler(None, [], "武學") == gr.skip()
+
+
+def test_switch_art_handler_changes_what_you_practise(game):
+    from tianxia import team
+
+    team.create_skill(game.state, game.content, game.world, "龍吟九霄", "武學")
+    game.state.player.member.wugong_id = None  # 假裝它只在庫裡
+    game.state.player.arts.append("龍吟九霄")
+    out = app.switch_art_handler(game, "player", "龍吟九霄")
+    assert "改練【龍吟九霄】" in out[6]
+    assert game.state.player.member.wugong_id == "龍吟九霄"

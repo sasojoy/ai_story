@@ -180,7 +180,7 @@
 `tests/test_real_content.py` 的方式 mock 掉 `OllamaClient.chat_structured`/`chat_text`），
 沒有依賴 simulate.py。
 
-## 無限煉製（Infinite Alchemy 方向）：spec 定稿，第一刀「素材與掉落」、第二刀「煉製與配方快取」已完成
+## 無限煉製（Infinite Alchemy 方向）：spec 定稿，三刀（素材與掉落／煉製與配方快取／煉製頁與改練）全部完成
 
 權威文件：`docs/superpowers/specs/2026-10-01-無限煉製-design.md`（commit `e47d0e7`，四個待確認
 項目都已由企劃者拍板，見該文件 §十二）。方向是武功玩法比照
@@ -275,10 +275,23 @@ spec（spec 把功法庫整個排在第三刀）——第一刀才發現 `team.p
 
 另外 spec §5.5 的算例原本寫錯（「兩個天品 ＝ 51」，實際是 5×2 + 3×6 ＝ 28）；公式不變，只修算例。
 
-### 第三刀還沒做
-門下「煉製」頁（含上面那段等待的處理）、功法庫的**改練**（把庫裡的換上來、熟練度各自保留，
-`PlayerState.art_levels` 還沒做）、`skillview.practice_hint()` 的文案要改寫（現在寫著
-「練功不花一分一毫」，煉製已經在吃心得了）。
+### 第三刀做了什麼（煉製頁與改練，已完成）
+- **門下頁的「煉製」那一塊**：素材複選選單（最多兩樣）、內功／武學、一行即時更新的成本說明
+  （不能煉時加一句 ⚠ 原因）、「開爐煉製」。按下去**先把按鈕變成「爐火正旺…」並 disable**，
+  因為首次發現的配方要等本機模型取名 27~83 秒（Gradio 的 `.click().then().then()` 三段）。
+- **功法庫與改練**（`team.switch_art()`）：把庫裡的換上身、被換下的回庫，**熟練度各自保留**。
+  實作上 `Member.neigong_level`/`wugong_level` 仍是「目前那門」的權威值（encounter／skillview／
+  practice 全都讀它），`PlayerState.art_levels` 只在**換下來時寫入、換上去時取出**——比 spec
+  原本寫的「改成從 art_levels 同步的快取值」動的地方少得多，舊存檔也不必回填。
+- `skillview.practice_hint()` 文案改寫：現在會按「真正做得到的事」列出鍛鍊與／或煉製
+  （湊得出一爐、心得又付得起最便宜那爐時才提煉製），兩邊都沒事做就閉嘴。
+- `engine.Game` 新增 `craft()`／`craft_cost()`／`craft_line()`／`material_choices()`／
+  `art_library()`／`switch_art()`；`_drop_stale_references()` 會清掉指向不存在東西的
+  `arts`／`art_levels`／`materials`。
+- 696 個測試通過。**順手修掉 CLAUDE.md 記了很久的那個 flaky 測試**
+  （`test_create_skill_practice_and_heal_handlers`）：原因就是練功受傷是沒固定種子的機率，
+  受傷時訊息多一段、療傷也就不再是「無恙」——測試裡把 `practice_injury_chance` 設成 0 就
+  完全確定了。連跑三次都過。
 
 ## 下一個 session 的待辦（2026-10-02 交接，第二刀之後）
 
@@ -287,12 +300,11 @@ spec（spec 把功法庫整個排在第三刀）——第一刀才發現 `team.p
 （分支 `feature/conquest-route-redesign`，另一個完全不同的遊戲）開 session、載入到錯的
 CLAUDE.md，白繞了一圈。**開工前先 `git worktree list` 核對一次。**
 
-### 1. 接著做無限煉製第三刀：煉製頁與改練
-三件事：(a) 門下頁加「煉製」那一塊（選兩樣素材、顯示成本／目前心得、開爐按鈕、結果卡片，
-而且**一定要處理 27~83 秒的等待**，見上面的實測）；(b) 功法庫的改練——把庫裡的功法換上來、
-被換下的回庫、熟練度各自保留（要新增 `PlayerState.art_levels`，舊存檔用現有的
-`member.*_level` 回填）；(c) `skillview.practice_hint()` 的文案改寫（現在寫著「練功不花
-一分一毫」，煉製已經在吃心得了）。注意門下頁加東西只要改 `app.MENXIA_OUTPUTS` 一個數字。
+### 1. 平衡與瓶頸：煉製做完之後真正該談的事（已與企劃者開始討論）
+三刀都做完了，機制可用，但幾個量到的數字顯示**經濟仍然很緊**：一季只煉得起 1~6 爐
+（心得 20~96、一爐 16~28），素材卻有 21 個（夠煉十次）；三階素材整季是 0；隨機機器人整季
+只打 3 場遭遇戰。也就是**心得是唯一的瓶頸，而素材與戰鬥的曝光都過剩**。要調的話候選有：
+心得收入、一爐成本、三階素材的來源、或者讓戰鬥更常發生。**動數字前先決定要讓誰當瓶頸。**
 
 ### 2. `scripts/simulate.py` 是死的：要修還是刪？（等決定，從 2026-10-01 擱到現在）
 import 階段就炸（`tianxia.battle` 已不存在），還呼叫 `team.upgrade_cost()`／`battle_rules()`／

@@ -54,7 +54,8 @@ class PlayerState(BaseModel):
 
     # ── 煉製素材（無限煉製第一刀，見 tianxia/materials.py）──
     materials: dict[str, int] = Field(default_factory=dict)  # 素材 id -> 數量；舊存檔沒這欄就是空背包
-    arts: list[str] = Field(default_factory=list)  # 功法庫：煉出來但沒配上身的功法 id（改練是第三刀的事）
+    arts: list[str] = Field(default_factory=list)  # 功法庫：煉出來但沒配上身的功法 id
+    art_levels: dict[str, int] = Field(default_factory=dict)  # 每門學過的功法各自的熟練度；改練時存進來／取出來
 
     seen_events: set[str] = Field(default_factory=set)
     anonymous: bool = False

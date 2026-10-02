@@ -24,6 +24,7 @@ from pathlib import Path
 import gradio as gr
 
 from tianxia.content import load_content
+from tianxia.craft import MATERIALS_PER_CRAFT
 from tianxia.engine import Game
 from tianxia.journal import CSS as JOURNAL_CSS
 from tianxia.save import load_game, save_game
@@ -52,10 +53,10 @@ OLDER_ROWS = 30  # 摺疊區裡最多幾則（存檔本來就只留 30 則）
 REPORT_EMPTY_TEXT = "（還沒有戰報。打一場遭遇戰或劇情戰之後，這裡會列出每一場。）"
 
 # 門下頁面（render_menxia）的輸出順序：規則/心得說明、本人角色卡、名冊（本人＋已招募同伴）、
-# 選中那個人的角色卡、加入/移出隊伍按鈕、煉製素材（背包）、練功的「武學/內功」選擇、
-# 自創功法的名字輸入框、自創／鍛鍊／療傷三個按鈕、動作結果。
+# 選中那個人的角色卡、加入/移出隊伍按鈕、煉製素材（背包）、動作結果，之後是煉製那一塊
+# （素材選單、成本說明）與功法庫選單。訊息留在第 6 格不動，新東西一律往後加。
 PERSON_HINT = "（點名冊裡的一個人，這裡會顯示他的角色卡。）"
-MENXIA_OUTPUTS = 7  # render_menxia 的輸出數量（見上面的順序）；open_menxia 另外前綴兩個可見性更新
+MENXIA_OUTPUTS = 10  # render_menxia 的輸出數量（見上面的順序）；open_menxia 另外前綴兩個可見性更新
 
 # 整頁：江湖畫面、門下、戰報、大地圖；同一時間只顯示一頁（見 show_page），順序同 build_demo() 的 pages。
 PAGES = ("main", "menxia", "report", "map")
@@ -145,6 +146,9 @@ def render_menxia(game: Game, person: str | None = None, message: str | None = N
         gr.update(visible=person is not None, value=toggle_label),
         game.bag_text(),
         gr.update() if message is None else message,
+        gr.update(choices=game.material_choices(), value=[]),
+        game.craft_line([], KINDS[0]),
+        gr.update(choices=game.art_library(), value=None),
     ]
     return out
 
@@ -249,6 +253,38 @@ def heal_handler(game, person):
     if game is None:
         return [gr.skip()] * MENXIA_OUTPUTS
     return _menxia_act(game, lambda g: g.heal(), person)
+
+
+def craft_busy():
+    """開爐之前先鎖住按鈕、說一句話：全服第一次發現某個配方時要等本機模型取名，
+    實測 27~83 秒（配方已經有人煉過就是查表，瞬間完成）。"""
+    return [
+        gr.update(interactive=False, value="爐火正旺…"),
+        "爐火正旺——若這個配方是江湖上第一次煉成，取名要花上一分鐘，請稍候。",
+    ]
+
+
+def craft_done():
+    return gr.update(interactive=True, value="開爐煉製")
+
+
+def craft_handler(game, person, material_ids, kind):
+    if game is None:
+        return [gr.skip()] * MENXIA_OUTPUTS
+    return _menxia_act(game, lambda g: g.craft(list(material_ids or []), kind), person)
+
+
+def craft_preview_handler(game, material_ids, kind):
+    """選了素材／換了種類就更新成本說明（不算行動、不存檔）。"""
+    if game is None:
+        return gr.skip()
+    return game.craft_line(list(material_ids or []), kind)
+
+
+def switch_art_handler(game, person, art_id):
+    if game is None or not art_id:
+        return [gr.skip()] * MENXIA_OUTPUTS
+    return _menxia_act(game, lambda g: g.switch_art(art_id), person)
 
 
 def _report_page(record_id: int | None, game: Game) -> list:
@@ -495,6 +531,18 @@ def build_demo() -> gr.Blocks:
                     team_toggle_btn = gr.Button("加入隊伍", visible=False)
             gr.Markdown("---")
             bag_md = gr.Markdown()
+            craft_head_md = gr.Markdown()
+            with gr.Row():
+                craft_mats_dd = gr.Dropdown(
+                    label=f"投入 {MATERIALS_PER_CRAFT} 樣素材（可以選同一種兩次）", choices=[],
+                    multiselect=True, max_choices=MATERIALS_PER_CRAFT, interactive=True,
+                )
+                craft_kind_radio = gr.Radio(label="煉內功／武學", choices=list(KINDS), value=KINDS[0], interactive=True)
+            craft_btn = gr.Button("開爐煉製", variant="primary")
+            gr.Markdown("---\n**功法庫**：煉出來還沒配上身的功法。改練會把目前那一門收回庫裡，熟練度各自保留。")
+            with gr.Row():
+                arts_radio = gr.Radio(label="", choices=[], interactive=True)
+                switch_btn = gr.Button("改練", scale=0, min_width=120)
             gr.Markdown("---\n**練功**：自創功法（取名決定屬性/威力/成長性，全服不能重名）或鍛鍊已學會的。")
             with gr.Row():
                 kind_radio = gr.Radio(label="內功／武學", choices=list(KINDS), value="武學", interactive=True)
@@ -544,6 +592,7 @@ def build_demo() -> gr.Blocks:
         assert len(map_outputs) == MAP_OUTPUTS
         menxia_outputs = [
             mx_head_md, player_card_md, roster_radio, person_card_md, team_toggle_btn, bag_md, mx_message_md,
+            craft_mats_dd, craft_head_md, arts_radio,
         ]
 
         start_btn.click(start, inputs=[name_box], outputs=outputs + [start_col] + pages)
@@ -583,6 +632,17 @@ def build_demo() -> gr.Blocks:
         )
         practice_btn.click(practice_handler, inputs=[game_state, roster_radio, kind_radio], outputs=menxia_outputs)
         heal_btn.click(heal_handler, inputs=[game_state, roster_radio], outputs=menxia_outputs)
+        craft_btn.click(craft_busy, outputs=[craft_btn, mx_message_md]).then(
+            craft_handler, inputs=[game_state, roster_radio, craft_mats_dd, craft_kind_radio],
+            outputs=menxia_outputs,
+        ).then(craft_done, outputs=[craft_btn])
+        craft_mats_dd.input(
+            craft_preview_handler, inputs=[game_state, craft_mats_dd, craft_kind_radio], outputs=[craft_head_md],
+        )
+        craft_kind_radio.input(
+            craft_preview_handler, inputs=[game_state, craft_mats_dd, craft_kind_radio], outputs=[craft_head_md],
+        )
+        switch_btn.click(switch_art_handler, inputs=[game_state, roster_radio, arts_radio], outputs=menxia_outputs)
         gr.Timer(10).tick(tick_handler, inputs=[game_state, roster_radio], outputs=outputs + menxia_outputs)
     return demo
 

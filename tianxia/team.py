@@ -139,6 +139,38 @@ def create_skill(
     return art, f"你自創了一門{kind}【{name}】（{art.quality}，屬{art.attribute}）！"
 
 
+def switch_art(state: GameState, content: Content, world: WorldStateStore, art_id: str) -> list[str]:
+    """改練：把功法庫裡的一門換上身，被換下來的回庫，兩邊的熟練度**各自保留**。
+
+    煉製（craft.py）會讓同一個人擁有超過一門內功／武學，但每人同時只能練一門（設計文件
+    六.4），所以需要這個動作——在這之前整個 team.py 連散功都沒有，煉出絕學卻裝不上去。
+    熟練度存在 `PlayerState.art_levels`（換下來時寫進去、換上去時取出來），所以換回來不用
+    重練；舊存檔沒有這個欄位時，庫裡的功法一律從第一成算起。
+    """
+    p = state.player
+    if art_id not in p.arts:
+        return ["你的功法庫裡沒有這一門。"]
+    art = resolve_art(art_id, content, world)
+    if art is None:
+        return ["（找不到這門功法的資料。）"]
+    member = p.member
+    slot = "neigong_id" if art.kind == "內功" else "wugong_id"
+    level_slot = slot.replace("_id", "_level")
+    current_id = getattr(member, slot)
+    msgs = []
+    if current_id is not None:
+        p.art_levels[current_id] = getattr(member, level_slot)
+        p.arts.append(current_id)
+        current = resolve_art(current_id, content, world)
+        msgs.append(f"你收起了【{current.name if current else current_id}】（第{p.art_levels[current_id]}成，再換回來不用重練）。")
+    p.arts.remove(art_id)
+    level = p.art_levels.get(art_id, 1)
+    setattr(member, slot, art_id)
+    setattr(member, level_slot, level)
+    msgs.append(f"你改練【{art.name}】（{art.quality}・屬{art.attribute}），目前第{level}成。")
+    return msgs
+
+
 def practice(
     state: GameState, content: Content, world: WorldStateStore, kind: str, rng: random.Random,
 ) -> list[str]:

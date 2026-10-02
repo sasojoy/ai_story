@@ -627,12 +627,12 @@ def test_texts_render(game):
 
 
 def test_status_text_shows_the_practice_hint_only_when_xinde_is_idle(game):
-    assert "心得" in game.status_text() and "別讓它擱著" not in game.status_text()
+    assert "心得" in game.status_text() and "💡" not in game.status_text()
     game.state.player.stats["xinde"] = game.content.config.xinde_hint_threshold
-    assert "別讓它擱著" in game.status_text()
+    assert "💡" in game.status_text() and "鍛鍊內功、武學" in game.status_text()
     game.state.player.member.wugong_level = game.state.player.member.neigong_level = 10
     game.state.player.member.wugong_id = game.state.player.member.neigong_id = "fist"
-    assert "別讓它擱著" not in game.status_text()
+    assert "💡" not in game.status_text()  # 沒東西可練、也湊不出一爐素材
 
 
 def test_visited_and_map(game):
