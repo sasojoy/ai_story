@@ -25,6 +25,14 @@ GIVEN = (
     "清澄淵澤濟濤浩洪源淳潤滿盈豐茂榮華英俊傑豪雄偉卓群翼輔弼佐佑贊襄承繼紹嗣先宗"
     "敬肅莊端正直方圓良善淑賢彥彬斌璋瑾瑜琰琮璧珪珣琦瓊瑤懷思念志謀略韜策計籌度量"
 )
+FAMOUS_NAMES = frozenset((  # 三國名人：上面的字庫組得出其中一些（趙雲、周瑜、馬超⋯⋯），假人不能頂著這些名號
+    "曹操 劉備 孫權 孫策 孫堅 關羽 張飛 趙雲 馬超 黃忠 魏延 諸葛亮 龐統 法正 姜維 周瑜 魯肅 呂蒙 陸遜 甘寧 "
+    "太史慈 周泰 黃蓋 程普 韓當 呂布 高順 張遼 陳宮 貂蟬 袁紹 袁術 顏良 文醜 董卓 李傕 郭汜 華雄 馬騰 韓遂 "
+    "公孫瓚 劉表 劉璋 劉焉 張魯 夏侯惇 夏侯淵 曹仁 曹洪 典韋 許褚 徐晃 張郃 于禁 樂進 李典 荀彧 荀攸 郭嘉 "
+    "賈詡 程昱 司馬懿 司馬昭 鄧艾 鍾會 孟獲 華佗 左慈 于吉 張角 張寶 張梁 皇甫嵩 朱儁 盧植 何進 陶謙 王允 "
+    "蔡邕 大喬 小喬 孫尚香 甄宓 關平 關興 張苞 馬岱 嚴顏 王平 廖化 糜竺 糜芳 簡雍 孫乾 徐庶 陳登 臧霸 張繡 "
+    "劉禪 曹丕 曹植 曹叡 蔣琬 費禕 董允"
+).split())
 SKILL_PREFIXES = (
     "青松", "流雲", "斷岳", "驚鴻", "寒江", "落霞", "孤鴻", "飛雪", "長風", "破陣", "蒼龍", "赤霄", "玄冰", "烈陽",
     "歸元", "太初", "迴瀾", "碧濤", "鐵騎", "長虹", "紫電", "鎮山", "穿雲", "摧城", "追月", "奔雷", "鳴鏑", "照膽",
@@ -58,11 +66,11 @@ def pick_personality(rng: random.Random) -> Personality:
 
 
 def make_name(rng: random.Random, taken: set[str]) -> str:
-    """漢末風格的名號（單名、雙名各半），不跟 taken 裡的任何名字重複。"""
+    """漢末風格的名號（單名、雙名各半），不跟 taken 裡的任何名字重複，也不是三國名人（FAMOUS_NAMES）。"""
     for _ in range(1000):
         given = rng.choice(GIVEN) if rng.random() < 0.5 else rng.choice(GIVEN) + rng.choice(GIVEN)
         name = rng.choice(SURNAMES) + given
-        if name not in taken:
+        if name not in taken and name not in FAMOUS_NAMES:
             return name
     raise RuntimeError("名號字庫用完了")
 

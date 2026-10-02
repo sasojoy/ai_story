@@ -2,6 +2,7 @@ import random
 from collections import Counter
 
 from tianxia.models import Config
+from tianxia import server_bots
 from tianxia.server_bots import (
     DAY, GIVEN, SURNAMES, TZ_OFFSET, act_chance, active, attends_battle, is_online, make_name, make_skill_name,
     pick_personality, schedule, strength,
@@ -22,6 +23,29 @@ def test_names_look_like_han_names_and_avoid_taken_ones():
     first = make_name(random.Random(1), set())
     assert 2 <= len(first) <= 3 and first[0] in SURNAMES and all(ch in GIVEN for ch in first[1:])
     assert make_name(random.Random(1), {first}) != first
+
+
+class _Scripted(random.Random):
+    """照劇本抽字：random() 永遠抽到單名，choice() 依序拿 picks 裡的字（先名、後姓）。"""
+
+    def __init__(self, picks):
+        super().__init__(0)
+        self.picks = list(picks)
+
+    def random(self):
+        return 0.0
+
+    def choice(self, seq):
+        pick = self.picks.pop(0)
+        assert pick in seq
+        return pick
+
+
+def test_names_never_match_a_famous_three_kingdoms_figure():
+    """字庫組得出趙雲、周瑜、馬超這種名人；抽到了就重抽，假人不能頂著名人的名號。"""
+    assert make_name(_Scripted(["雲", "趙", "雲", "陳"]), set()) == "陳雲"
+    assert make_name(_Scripted(["瑜", "周", "超", "馬", "瑜", "林"]), set()) == "林瑜"
+    assert {"趙雲", "周瑜", "馬超"} <= server_bots.FAMOUS_NAMES
 
 
 def test_skill_names_have_no_digits():

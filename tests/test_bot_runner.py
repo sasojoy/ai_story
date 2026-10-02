@@ -361,6 +361,22 @@ def test_a_new_bot_never_takes_the_name_of_an_unreadable_save(runner, content, t
     assert sorted(p.stem for p in saves.glob("*.json")) == ["某丙", "某乙", "某人"]
 
 
+def test_a_new_bot_never_takes_the_name_of_a_historical_figure_in_the_content(runner, content, monkeypatch):
+    monkeypatch.setattr(server_bots, "is_online", lambda profile, now: False)
+    content.config.bots_min_per_faction = 1
+    seen = []
+    real_make_name = server_bots.make_name
+
+    def spy(rng, taken):
+        seen.append(set(taken))
+        return real_make_name(rng, taken)
+
+    monkeypatch.setattr(server_bots, "make_name", spy)
+    assert runner.tick().added == 2
+    figures = {ch.name for ch in content.characters.values()}
+    assert figures and all(figures <= taken for taken in seen)
+
+
 def test_a_bot_that_turned_up_for_a_battle_goes_offline_once_it_is_eliminated(
     runner, world, content, tmp_path, clock, monkeypatch,
 ):
