@@ -1,11 +1,18 @@
+import os
 import random
+import subprocess
+import sys
+import threading
 import time
 from pathlib import Path
 
 import pytest
 
+from tianxia import world_state
 from tianxia.martial_arts import generate_from_name
 from tianxia.world_state import WorldStateStore, _locked
+
+ROOT = Path(__file__).resolve().parent.parent
 
 
 @pytest.fixture
@@ -307,3 +314,115 @@ def test_next_season_clears_a_leftover_battle(store, content):
     store.mutate_season(lambda season: setattr(season, "ended", True))
     store.next_season(content, now=1.0)
     assert store.get_battle() is None
+
+
+# ── 兩個程式同時讀寫（伺服器假人設計第九節）──────────────────
+
+
+def test_read_retries_while_another_program_has_the_file_open(store, monkeypatch):
+    store.mutate(lambda s: setattr(s, "tianji", 3))
+    real_read = Path.read_text
+    calls = {"n": 0}
+
+    def busy_twice(self, *args, **kwargs):
+        calls["n"] += 1
+        if calls["n"] <= 2:
+            raise PermissionError("另一個程式正在用這個檔案")
+        return real_read(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", busy_twice)
+    assert store.read().tianji == 3
+    assert calls["n"] == 3
+
+
+def test_write_retries_while_another_program_has_the_file_open(store, monkeypatch):
+    store.mutate(lambda s: None)
+    real_replace = Path.replace
+    calls = {"n": 0}
+
+    def busy_twice(self, target):
+        calls["n"] += 1
+        if calls["n"] <= 2:
+            raise PermissionError("另一個程式正在讀這個檔案")
+        return real_replace(self, target)
+
+    monkeypatch.setattr(Path, "replace", busy_twice)
+    store.mutate(lambda s: setattr(s, "tianji", 5))
+    assert calls["n"] == 3
+    assert store.read().tianji == 5
+
+
+def test_the_action_lock_is_released_afterwards(store):
+    with store.action_lock(timeout=1):
+        assert store.action_lock_dir.exists()
+    assert not store.action_lock_dir.exists()
+    with store.action_lock(timeout=1):
+        pass
+
+
+def test_the_action_lock_times_out_while_another_thread_holds_it(store):
+    errors = []
+
+    def other():
+        try:
+            with store.action_lock(timeout=0.2):
+                pass
+        except TimeoutError as error:
+            errors.append(error)
+
+    with store.action_lock():
+        thread = threading.Thread(target=other)
+        thread.start()
+        thread.join(5)
+    assert len(errors) == 1
+
+
+def test_an_action_lock_held_for_two_minutes_is_not_mistaken_for_a_crash(store):
+    """真人的行動可能在等 LLM：全服紀錄的鎖 30 秒就回收，行動鎖不能這樣搶走別人的鎖。"""
+    store.action_lock_dir.mkdir(parents=True)
+    two_minutes_ago = time.time() - 120
+    os.utime(store.action_lock_dir, (two_minutes_ago, two_minutes_ago))
+    with pytest.raises(TimeoutError):
+        with store.action_lock(timeout=0.2):
+            pass
+
+
+def test_an_abandoned_action_lock_is_reclaimed(store):
+    store.action_lock_dir.mkdir(parents=True)
+    long_ago = time.time() - world_state.ACTION_LOCK_STALE_AFTER - 1
+    os.utime(store.action_lock_dir, (long_ago, long_ago))
+    with store.action_lock(timeout=1):
+        pass
+
+
+_WRITER = """
+import sys
+from pathlib import Path
+from tianxia.world_state import WorldStateStore
+store = WorldStateStore(Path(sys.argv[1]))
+for _ in range(int(sys.argv[2])):
+    with store.action_lock(timeout=60):
+        season = store.get_season()  # 跟 Game 一樣：讀一份、改、整份寫回
+        season.time += 1
+        store.save_season(season)
+"""
+
+_READER = """
+import sys
+from pathlib import Path
+from tianxia.world_state import WorldStateStore
+store = WorldStateStore(Path(sys.argv[1]))
+for _ in range(int(sys.argv[2])):
+    store.read()
+"""
+
+
+def test_two_programs_acting_at_once_lose_no_updates_and_never_trip_over_the_file(tmp_path):
+    """伺服器與假人程式同時對同一份全服紀錄「讀一份、改、整份寫回」，另一個程式同時一直在讀：
+    行動鎖讓兩邊一個一個來（一次都不少），讀寫重試讓 Windows 不會報檔案被占用。"""
+    path = tmp_path / "world" / "state.json"
+    WorldStateStore(path).mutate(lambda s: None)
+    procs = [subprocess.Popen([sys.executable, "-c", _WRITER, str(path), "40"], cwd=ROOT) for _ in range(2)]
+    procs.append(subprocess.Popen([sys.executable, "-c", _READER, str(path), "400"], cwd=ROOT))
+    assert [p.wait(timeout=180) for p in procs] == [0, 0, 0]
+    assert WorldStateStore(path).get_season().time == 80

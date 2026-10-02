@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 from tianxia.engine import Game
 from tianxia.save import load_game, save_game
@@ -98,3 +99,28 @@ def test_rumor_at_a_removed_place_loses_its_location(tmp_path, content, game):
     fresh = Game(content, load_game(path), world=game.world)
     assert [(r.text, r.location) for r in fresh.state.world.rumors] == [("舊地方的傳聞", None), ("湖邊的傳聞", "lake")]
     assert "湖邊的傳聞" in fresh.place_detail("lake")  # 查詢不會當機
+
+
+def test_save_and_load_retry_while_another_program_has_the_file_open(tmp_path, state, monkeypatch):
+    path = tmp_path / "saves" / "沈浪.json"
+    save_game(state, path)
+    real_read, real_replace = Path.read_text, Path.replace
+    calls = {"read": 0, "replace": 0}
+
+    def busy_read(self, *args, **kwargs):
+        calls["read"] += 1
+        if calls["read"] == 1:
+            raise PermissionError("另一個程式正在寫這個檔案")
+        return real_read(self, *args, **kwargs)
+
+    def busy_replace(self, target):
+        calls["replace"] += 1
+        if calls["replace"] == 1:
+            raise PermissionError("另一個程式正在讀這個檔案")
+        return real_replace(self, target)
+
+    monkeypatch.setattr(Path, "read_text", busy_read)
+    monkeypatch.setattr(Path, "replace", busy_replace)
+    save_game(state, path)
+    assert load_game(path).player.name == state.player.name
+    assert calls == {"read": 2, "replace": 2}

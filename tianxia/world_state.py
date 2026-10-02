@@ -14,10 +14,15 @@
 因為 tianxia 是一個 Gradio process 服務所有連進來的玩家（見設計文件八.1），不需要真正的
 client-server 架構，用檔案鎖保護一份共用 JSON 檔即可。鎖用 mkdir（在 POSIX 跟 Windows
 上都是原子操作，不需要額外套件），逾時會強制回收，避免程式異常結束後鎖永遠卡住。
+
+伺服器假人程式（`run_bots.py`）是第二個程式，跟 `app.py` 讀寫同一份檔案：兩邊每次行動
+（補算時間＋做動作＋存檔）都要包在 `action_lock()` 裡，一個一個來；`mutate` 的檔案鎖保護的
+只是單次的讀改寫。
 """
 from __future__ import annotations
 
 import contextlib
+import threading
 import time
 from pathlib import Path
 from typing import Literal
@@ -25,6 +30,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from .battle_instance import BattleInstance
+from .fileio import retry_sharing
 from .martial_arts import MartialArt
 from .models import BattleDef, Content
 from .state import WorldState
@@ -35,6 +41,8 @@ DEFAULT_PATH = ROOT / "saves" / "world" / "state.json"
 LOCK_TIMEOUT = 5.0  # 等鎖最多幾秒
 LOCK_STALE_AFTER = 30.0  # 鎖目錄存在超過這麼久視為前一個行程異常結束，強制回收
 LOCK_POLL_INTERVAL = 0.05
+ACTION_LOCK_STALE_AFTER = 600.0  # 行動鎖存在超過這麼久才視為程式異常結束：真人的行動可能在等 LLM（見 action_lock）
+_ACTION_THREAD_LOCK = threading.Lock()  # 同一個程式裡的執行緒先排這個隊，再去搶跨程式的檔案鎖
 
 SeasonPhase = Literal["preparing", "running", "resting"]  # 籌備（管理者還沒開季）／進行中／休季（這一季已結束）
 
@@ -94,8 +102,9 @@ class SharedWorldState(BaseModel):
 
 
 @contextlib.contextmanager
-def _locked(lock_dir: Path):
-    deadline = time.monotonic() + LOCK_TIMEOUT
+def _locked(lock_dir: Path, timeout: float | None = LOCK_TIMEOUT, stale_after: float = LOCK_STALE_AFTER):
+    """timeout=None 時一直等到拿到為止。"""
+    deadline = None if timeout is None else time.monotonic() + timeout
     while True:
         try:
             lock_dir.mkdir(parents=True, exist_ok=False)
@@ -105,12 +114,12 @@ def _locked(lock_dir: Path):
                 age = time.time() - lock_dir.stat().st_mtime
             except OSError:
                 age = 0.0
-            if age > LOCK_STALE_AFTER:
+            if age > stale_after:
                 with contextlib.suppress(OSError):
                     lock_dir.rmdir()
                 continue
-            if time.monotonic() >= deadline:
-                raise TimeoutError(f"等不到世界狀態的鎖：{lock_dir}")
+            if deadline is not None and time.monotonic() >= deadline:
+                raise TimeoutError(f"等不到鎖：{lock_dir}")
             time.sleep(LOCK_POLL_INTERVAL)
     try:
         yield
@@ -136,17 +145,18 @@ class WorldStateStore:
     def __init__(self, path: Path | None = None):
         self.path = Path(path) if path else DEFAULT_PATH
         self.lock_dir = self.path.with_suffix(".lock")
+        self.action_lock_dir = self.path.with_name(self.path.stem + ".action.lock")
 
     def read(self) -> SharedWorldState:
         if not self.path.exists():
             return SharedWorldState()
-        return SharedWorldState.model_validate_json(self.path.read_text(encoding="utf-8"))
+        return SharedWorldState.model_validate_json(retry_sharing(lambda: self.path.read_text(encoding="utf-8")))
 
     def _write(self, state: SharedWorldState) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         tmp = self.path.with_suffix(".tmp")
         tmp.write_text(state.model_dump_json(indent=1), encoding="utf-8")
-        tmp.replace(self.path)
+        retry_sharing(lambda: tmp.replace(self.path))
 
     def mutate(self, fn) -> SharedWorldState:
         """在鎖保護下讀取→套用 fn(state)→寫回，回傳套用後的狀態。fn 直接原地修改 state。"""
@@ -155,6 +165,21 @@ class WorldStateStore:
             fn(state)
             self._write(state)
             return state
+
+    @contextlib.contextmanager
+    def action_lock(self, timeout: float | None = None):
+        """跨程式的行動鎖（伺服器假人設計第九節）：app.py 與假人程式每次「補算時間＋做動作＋
+        存檔」都包在這裡面。玩家每次行動完會把整份賽季寫回（Game._save_season），兩個程式同時
+        行動時後寫的會蓋掉先寫的；拿同一把鎖就一個一個來。timeout=None 等到拿到為止（伺服器）；
+        給秒數時等不到就丟 TimeoutError（假人程式跳過這一輪，不卡住正在等 LLM 的真人）。
+        不可重入：同一個執行緒拿著鎖時不能再拿一次。"""
+        if not _ACTION_THREAD_LOCK.acquire(timeout=-1 if timeout is None else timeout):
+            raise TimeoutError("等不到行動鎖（同一個程式裡的其他執行緒還拿著）")
+        try:
+            with _locked(self.action_lock_dir, timeout=timeout, stale_after=ACTION_LOCK_STALE_AFTER):
+                yield
+        finally:
+            _ACTION_THREAD_LOCK.release()
 
     # ── 武學命名登記 ──────────────────────────────────────
 
@@ -266,9 +291,9 @@ class WorldStateStore:
 
     def mutate_season(self, fn) -> WorldState:
         """在鎖保護下讀取共用賽季→套用 fn(season)→寫回，回傳套用後的狀態。fn 直接原地
-        修改 season（一個 WorldState）。寫動作本身是唯一需要鎖的地方——app.py 另外還有一個
-        process 內的 ACT_LOCK 序列化所有玩家行動，這裡的檔案鎖是給沒有 ACT_LOCK 的場合用的
-        （CLI、測試、未來真的拆成多個行程時），兩者不衝突。"""
+        修改 season（一個 WorldState）。寫動作本身是唯一需要鎖的地方——app.py 與假人程式的
+        每次行動都包在跨程式的 action_lock() 裡，一個一個來；這裡的檔案鎖保護的是單次讀改寫，
+        給沒有 action_lock 的場合用（CLI、測試），兩者不衝突。"""
         def _apply(state: SharedWorldState) -> None:
             fn(state.season)
 

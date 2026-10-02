@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import re
 import shutil
-import threading
 import time
 from pathlib import Path
 
@@ -76,7 +75,6 @@ MAP_CLICK_JS = (
     " });"
 )
 
-ACT_LOCK = threading.Lock()
 UNCHANGED = object()  # 動作回傳它表示什麼都沒做：act 不存檔、不重畫（頁面上的訊息也留著）
 KINDS = ("武學", "內功")
 
@@ -148,7 +146,7 @@ def render_menxia(game: Game, person: str | None = None, message: str | None = N
 
 
 def act(game: Game | None, action, note: bool = False) -> list:
-    """同步時間 → 執行動作 → 存檔 → 重畫。上鎖避免計時器與按鈕點擊同時操作同一存檔。
+    """同步時間 → 執行動作 → 存檔 → 重畫。拿跨程式的行動鎖（假人程式也拿同一把），避免計時器、按鈕點擊與假人同時操作。
 
     note=True 時連門下頁面一起重畫，動作回傳的訊息顯示在門下頁面的訊息區；
     回傳 UNCHANGED 時什麼都不存、不重畫。
@@ -157,7 +155,7 @@ def act(game: Game | None, action, note: bool = False) -> list:
     n = N_OUTPUTS if not note else N_OUTPUTS + 6
     if game is None:
         return [gr.skip()] * n
-    with ACT_LOCK:
+    with game.world.action_lock():
         game.sync(time.time())
         msgs = action(game)
         if msgs is UNCHANGED:
@@ -207,7 +205,7 @@ def open_menxia(game, person=None):
     """「門下」：藏起江湖畫面、打開門下頁面並重畫。"""
     if game is None:
         return [gr.skip()] * 8
-    with ACT_LOCK:
+    with game.world.action_lock():
         return [gr.update(visible=False), gr.update(visible=True)] + render_menxia(game, person, "")
 
 
@@ -220,7 +218,7 @@ def roster_pick_handler(game, person):
     """在名冊點一個人：重畫門下頁面（不算行動、不存檔）。"""
     if game is None:
         return [gr.skip()] * 6
-    with ACT_LOCK:
+    with game.world.action_lock():
         return render_menxia(game, person, "")
 
 
@@ -234,7 +232,7 @@ def toggle_team_handler(game, person):
 
 def _menxia_act(game: Game, action, person: str | None) -> list:
     """門下頁面專屬的動作（加入/移出隊伍、練功、療傷）：同步、動作、存檔、只重畫門下頁面。"""
-    with ACT_LOCK:
+    with game.world.action_lock():
         game.sync(time.time())
         msgs = action(game)
         save_game(game.state, save_path(game.state.player.name))
@@ -275,7 +273,7 @@ def open_report_page(game):
     """右欄「戰報」按鈕：打開戰報頁面，選好最新一場。"""
     if game is None:
         return [gr.skip()] * 4
-    with ACT_LOCK:
+    with game.world.action_lock():
         return _report_page(game.latest_battle_id(), game)
 
 
@@ -283,7 +281,7 @@ def open_report_handler(game):
     """場景卡片上的「看完整戰報」：打開戰報頁面，並選好卡片上的這一場。"""
     if game is None:
         return [gr.skip()] * 4
-    with ACT_LOCK:
+    with game.world.action_lock():
         return _report_page(game.battle_card_id(), game)
 
 
@@ -296,7 +294,7 @@ def report_pick_handler(game, record_id):
     """在戰報列表點選一場：右邊顯示這一場的完整內容。"""
     if game is None:
         return gr.skip()
-    with ACT_LOCK:
+    with game.world.action_lock():
         return game.battle_detail(record_id)
 
 
@@ -336,7 +334,7 @@ def open_world_map(game):
     if game is None:
         return [gr.skip()] * (N_OUTPUTS + len(PAGES) + MAP_OUTPUTS)
     out = act(game, lambda g: g.view_map())
-    with ACT_LOCK:
+    with game.world.action_lock():
         return out + show_page("map") + render_map_page(game, DEFAULT_LAYER, None)
 
 
@@ -344,7 +342,7 @@ def map_page_handler(game, layer, selected):
     """切換圖層，或從下拉選單選地點：重畫大地圖頁面（不算行動，不存檔）。"""
     if game is None:
         return [gr.skip()] * MAP_OUTPUTS
-    with ACT_LOCK:
+    with game.world.action_lock():
         return render_map_page(game, layer, selected)
 
 
@@ -362,7 +360,7 @@ def map_click_handler(game, layer, evt: gr.EventData):
     loc_id = clicked_place(evt)
     if game is None or loc_id not in {place for _, place in game.map_places()}:
         return [gr.skip()] * MAP_OUTPUTS
-    with ACT_LOCK:
+    with game.world.action_lock():
         return render_map_page(game, layer, loc_id)
 
 
@@ -384,7 +382,7 @@ def travel_handler(game, layer, selected):
     if not refused:
         return out + show_page("main") + [gr.skip()] * MAP_OUTPUTS
     reason = refused[0].strip("（）")
-    with ACT_LOCK:
+    with game.world.action_lock():
         return out + show_page("map") + render_map_page(game, layer, selected, f"**沒能出發**：{reason}")
 
 
@@ -401,7 +399,7 @@ def tick_handler(game, person):
     """計時器：同步時間，連同門下頁面一起重畫（保留目前的選取，氣血等數字才會跟著走）。"""
     if game is None:
         return [gr.skip()] * (N_OUTPUTS + 6)
-    with ACT_LOCK:
+    with game.world.action_lock():
         game.sync(time.time())
         save_game(game.state, save_path(game.state.player.name))
         return render(game) + render_menxia(game, person, None)

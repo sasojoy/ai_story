@@ -7,6 +7,7 @@ import app
 from tianxia import battle_instance, roster
 from tianxia.engine import Game
 from tianxia.save import save_game
+from tianxia.world_state import WorldStateStore
 
 SKIP = {"__type__": "update"}
 
@@ -437,3 +438,19 @@ def test_open_season_handler_only_works_for_admins(tmp_path, monkeypatch):
     monkeypatch.setattr(app.CONTENT.config, "admins", ["路人"])
     app.open_season_handler(fresh)
     assert fresh.world.season_phase() == "running"
+
+
+def test_every_action_takes_the_cross_program_action_lock(game, monkeypatch):
+    """伺服器假人設計第九節：伺服器的行動鎖要讓假人程式也看得到，不能只是程式內的執行緒鎖。"""
+    calls = []
+    real = WorldStateStore.action_lock
+
+    def spy(self, timeout=None):
+        calls.append(timeout)
+        return real(self, timeout)
+
+    monkeypatch.setattr(WorldStateStore, "action_lock", spy)
+    app.act(game, lambda g: None)
+    app.tick_handler(game, None)
+    assert calls == [None, None]
+    assert not hasattr(app, "ACT_LOCK")
