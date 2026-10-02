@@ -10,5 +10,6 @@
   "start_stats": {"str": 5, "agi": 5, "con": 5, "wis": 5, "silver": 50, "good": 0, "evil": 0, "fame": 0, "xinde": 0},
   "max_log": 200,
   "fortune_day_min": 2,
-  "fortune_day_max": 7
+  "fortune_day_max": 7,
+  "admins": []
 }

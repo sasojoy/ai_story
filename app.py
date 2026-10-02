@@ -180,9 +180,19 @@ def make_option_handler(index: int):
 
 def make_fast_forward_handler(hours: int):
     def handler(game):
+        if game is not None and not game.is_admin():
+            return act(game, lambda g: g.notice("（只有管理者能快轉時間。）"))
         return act(game, lambda g: g.advance(hours * 3600))
 
     return handler
+
+
+def open_season_handler(game):
+    return act(game, lambda g: g.admin_open_season(time.time()))
+
+
+def next_season_handler(game):
+    return act(game, lambda g: g.admin_next_season(time.time()))
 
 
 def seclude_handler(game, hours):
@@ -414,11 +424,15 @@ def open_game(name: str) -> Game:
 
 
 def start(name):
-    """踏入江湖：藏起開始畫面、顯示江湖畫面，門下、戰報、大地圖頁面維持隱藏。"""
+    """踏入江湖：藏起開始畫面、顯示江湖畫面，門下、戰報、大地圖頁面維持隱藏；管理者才看得到設定頁的管理者區塊。"""
     name = (name or "").strip()
     if not name:
         raise gr.Error("請先輸入你的名號。")
-    return act(open_game(name), lambda g: None) + [gr.update(visible=False)] + show_page("main")  # start_col、PAGES
+    game = open_game(name)
+    return (
+        act(game, lambda g: None) + [gr.update(visible=False)] + show_page("main")  # start_col、PAGES
+        + [gr.update(visible=game.is_admin())]  # admin_group
+    )
 
 
 def build_demo() -> gr.Blocks:
@@ -473,9 +487,14 @@ def build_demo() -> gr.Blocks:
                     with gr.Tab("設定"):
                         anon_cb = gr.Checkbox(label="匿名行走（江湖傳聞中不顯示名號）")
                         skip_tutorial_btn = gr.Button("略過新手引導")
-                        gr.Markdown("**測試用：時間快轉**")
-                        with gr.Row():
-                            ff_btns = {h: gr.Button(f"+{h} 小時") for h in (1, 8, 24)}
+                        with gr.Group(visible=False) as admin_group:
+                            gr.Markdown("**管理者**")
+                            with gr.Row():
+                                open_season_btn = gr.Button("開季")
+                                next_season_btn = gr.Button("開啟下一季")
+                            gr.Markdown("時間快轉（全服一起快轉，只在測試時用）")
+                            with gr.Row():
+                                ff_btns = {h: gr.Button(f"+{h} 小時") for h in (1, 8, 24)}
         with gr.Column(visible=False) as menxia_col:
             with gr.Row(equal_height=True):
                 gr.Markdown("## 門下", scale=1)
@@ -540,8 +559,8 @@ def build_demo() -> gr.Blocks:
         assert len(map_outputs) == MAP_OUTPUTS
         menxia_outputs = [mx_head_md, player_card_md, roster_radio, person_card_md, team_toggle_btn, mx_message_md]
 
-        start_btn.click(start, inputs=[name_box], outputs=outputs + [start_col] + pages)
-        name_box.submit(start, inputs=[name_box], outputs=outputs + [start_col] + pages)
+        start_btn.click(start, inputs=[name_box], outputs=outputs + [start_col] + pages + [admin_group])
+        name_box.submit(start, inputs=[name_box], outputs=outputs + [start_col] + pages + [admin_group])
         for i, btn in enumerate(option_btns):
             btn.click(make_option_handler(i), inputs=[game_state, ids_state], outputs=outputs)
         seclude_btn.click(seclude_handler, inputs=[game_state, hours_sl], outputs=outputs)
@@ -551,6 +570,8 @@ def build_demo() -> gr.Blocks:
         skip_tutorial_btn.click(skip_tutorial_handler, inputs=[game_state], outputs=outputs)
         for hours, btn in ff_btns.items():
             btn.click(make_fast_forward_handler(hours), inputs=[game_state], outputs=outputs)
+        open_season_btn.click(open_season_handler, inputs=[game_state], outputs=outputs)
+        next_season_btn.click(next_season_handler, inputs=[game_state], outputs=outputs)
 
         menxia_btn.click(open_menxia, inputs=[game_state], outputs=[game_row, menxia_col] + menxia_outputs)
         back_btn.click(close_menxia, outputs=[game_row, menxia_col])

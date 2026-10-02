@@ -107,10 +107,15 @@ def test_make_option_handler_skips_with_no_game():
     assert app.make_option_handler(0)(None, []) == [gr.skip()] * app.N_OUTPUTS
 
 
-def test_make_fast_forward_handler_advances_time(game):
-    handler = app.make_fast_forward_handler(8)
-    handler(game)
+def test_make_fast_forward_handler_advances_time_for_admins(game, monkeypatch):
+    monkeypatch.setattr(app.CONTENT.config, "admins", ["測試"])
+    app.make_fast_forward_handler(8)(game)
     assert game.state.world.time == 8 * 3600
+
+
+def test_fast_forward_is_refused_for_non_admins(game):
+    app.make_fast_forward_handler(8)(game)
+    assert game.state.world.time < 3600
 
 
 def test_seclude_handler(game):
@@ -347,11 +352,17 @@ def test_start_requires_a_name():
 
 def test_start_opens_the_main_page(save_dir):
     out = app.start("新玩家")
-    assert len(out) == app.N_OUTPUTS + 1 + len(app.PAGES)
+    assert len(out) == app.N_OUTPUTS + 1 + len(app.PAGES) + 1
     start_col_update = out[app.N_OUTPUTS]
     assert start_col_update["visible"] is False
-    pages = out[app.N_OUTPUTS + 1:]
+    pages = out[app.N_OUTPUTS + 1: app.N_OUTPUTS + 1 + len(app.PAGES)]
     assert [p["visible"] for p in pages] == [name == "main" for name in app.PAGES]
+    assert out[-1]["visible"] is False  # 一般玩家看不到管理者區塊
+
+
+def test_start_shows_the_admin_tools_to_admins(save_dir, monkeypatch):
+    monkeypatch.setattr(app.CONTENT.config, "admins", ["掌門"])
+    assert app.start("掌門")[-1]["visible"] is True
 
 
 # ── 全服即時戰鬥：自訂行動輸入框（設計討論：魯莽該是玩家自己想出來的招）──────────
@@ -401,3 +412,17 @@ def test_battle_text_handler_with_no_game_skips():
 
 def test_build_demo_constructs_without_error():
     assert app.build_demo() is not None
+
+
+def test_next_season_handler_runs_the_admin_rollover(game, monkeypatch):
+    monkeypatch.setattr(app.CONTENT.config, "admins", ["測試"])
+    game.advance(app.CONTENT.config.season_days * 86400)
+    assert game.state.world.ended
+    app.next_season_handler(game)
+    assert not game.state.world.ended
+    assert game.state.player.season_number == 2
+
+
+def test_open_season_handler_is_refused_for_non_admins(game):
+    out = app.open_season_handler(game)
+    assert len(out) == app.N_OUTPUTS
