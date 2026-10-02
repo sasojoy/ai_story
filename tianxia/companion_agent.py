@@ -47,6 +47,11 @@ DIALOGUE_TAGS = list(AFFINITY_TAG_DELTAS.keys())
 GENERIC_OPENING = "上前攀談，試著攀談幾句"
 
 
+class DialogueUnavailable(Exception):
+    """這一輪生成不出對話（沒有模型可用、連不上、模型沒裝或解析失敗）：呼叫端把這輪當作沒發生、
+    結束對話（企劃者決定：不再退回同一句保底反應讓玩家卡在原地白扣體力）。"""
+
+
 class CompanionTurn(BaseModel):
     """交遊一回合的 LLM 輸出：敘事 + 3 個帶 tag 的選項，好感度查表覆寫，不信任這裡任何數字。"""
 
@@ -87,26 +92,6 @@ def _fallback_relationship_note(delta: int, disp_name: str) -> str:
     else:
         trend = "因為你剛才的話而明顯不快"
     return f"{disp_name}{trend}。"
-
-
-def _fallback_turn(character: CharacterDef, exclude: list[str]) -> CompanionTurn:
-    """Ollama 連線失敗/解析失敗時的保底：通用但貼合角色個性的反應，3 個通用選項。"""
-    disp_name = character.name
-    narrative = f"{disp_name}只是淡淡應了一聲，似乎心思不在此處，並未多說什麼。"
-    pool = [
-        (f"請教{disp_name}對眼下局勢的看法", "真誠請教"),
-        (f"與{disp_name}閒話幾句家常", "尋常寒暄"),
-        (f"向{disp_name}坦言自己的來歷與打算", "坦誠相待"),
-    ]
-    options, tags = [], []
-    for text, tag in pool:
-        if text not in exclude:
-            options.append(text)
-            tags.append(tag)
-    while len(options) < 3:
-        options.append(f"（沉默地陪{disp_name}站一會兒）")
-        tags.append("尋常寒暄")
-    return CompanionTurn(narrative=narrative, options=options[:3], option_tags=tags[:3])
 
 
 def build_system_prompt(
@@ -200,11 +185,11 @@ def start_dialogue(
     client: OllamaClient | None, state: GameState, content: Content, world: WorldStateStore, companion_id: str,
     rng: Random,
 ) -> list[str]:
-    """交遊觸發深度對話的第一回合：用一句通用的「上前攀談」當隱含的玩家行動。"""
+    """交遊觸發深度對話的第一回合：用一句通用的「上前攀談」當隱含的玩家行動。
+    先生成、成功了才開始對話；生成不出來（DialogueUnavailable）時不留下任何狀態。"""
     character = content.characters[companion_id]
+    turn = _generate(client, character, state, content, world, companion_id, GENERIC_OPENING)
     state.player.pending_companion = companion_id
-    exclude = state.player.used_dialogue_options.get(companion_id, [])
-    turn = _generate(client, character, state, content, world, companion_id, GENERIC_OPENING, exclude)
     return _apply_turn(state, character, companion_id, GENERIC_OPENING, turn, tag=None)
 
 
@@ -212,16 +197,16 @@ def continue_dialogue(
     client: OllamaClient | None, state: GameState, content: Content, world: WorldStateStore, companion_id: str,
     choice_index: int, rng: Random,
 ) -> list[str]:
-    """玩家選了上一回合的第 choice_index 個選項：查表套用好感度、繼續生成下一回合。"""
+    """玩家選了上一回合的第 choice_index 個選項：查表套用好感度、繼續生成下一回合。
+    先生成、成功了才記交遊 tag 與好感度；生成不出來（DialogueUnavailable）時這輪當作沒發生。"""
     character = content.characters[companion_id]
     options, tags = state.player.last_offered_dialogue.get(companion_id, [[], []])
     if not (0 <= choice_index < len(options)):
         return ["（此刻無法這麼做。）"]
     player_action, tag = options[choice_index], tags[choice_index] if choice_index < len(tags) else None
 
+    turn = _generate(client, character, state, content, world, companion_id, player_action)
     world.record_companion_tag(companion_id, tag or "尋常寒暄")
-    exclude = state.player.used_dialogue_options.get(companion_id, [])
-    turn = _generate(client, character, state, content, world, companion_id, player_action, exclude)
     msgs = _apply_turn(state, character, companion_id, player_action, turn, tag)
     msgs += _maybe_grant_signature_skill(state, content, character, companion_id)
     msgs += _maybe_consolidate_memory(client, state, character, companion_id)
@@ -312,16 +297,16 @@ def leave_dialogue(state: GameState) -> list[str]:
 
 def _generate(
     client: OllamaClient | None, character: CharacterDef, state: GameState, content: Content, world: WorldStateStore,
-    companion_id: str, player_action: str, exclude: list[str],
+    companion_id: str, player_action: str,
 ) -> CompanionTurn:
     if client is None:
-        return _fallback_turn(character, exclude)
+        raise DialogueUnavailable(f"{companion_id}：沒有可用的模型")
     messages = _build_messages(character, state, content, world, companion_id, player_action)
     try:
         return client.chat_structured(messages, CompanionTurn, required_fields=["options"])
     except Exception as e:
-        logger.warning(f"companion_agent 生成失敗 ({companion_id}): {e}，改用保底反應")
-        return _fallback_turn(character, exclude)
+        logger.warning(f"companion_agent 生成失敗 ({companion_id}): {e}，這輪對話取消")
+        raise DialogueUnavailable(str(e)) from e
 
 
 def _maybe_grant_signature_skill(state: GameState, content: Content, character: CharacterDef, companion_id: str) -> list[str]:

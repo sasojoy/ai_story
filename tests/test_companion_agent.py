@@ -1,5 +1,7 @@
 from unittest import mock
 
+import pytest
+
 from tianxia import companion_agent
 from tianxia.companion_agent import DriftSynthesis, resolve_tag_delta
 from tianxia.world_state import WorldStateStore
@@ -86,3 +88,13 @@ def test_maybe_synthesize_drift_leaves_the_note_unset_when_every_retry_fails(con
     assert client.chat_structured.call_count == companion_agent.MAX_RETRIES
     assert world.get_companion_drift_note("mate") == ""
     assert world.tag_counts_since_last_drift("mate") == companion_agent.DRIFT_SYNTHESIS_INTERVAL  # 沒消耗門檻，下次還會再試
+
+
+def test_generate_gives_up_when_no_model_can_answer(content, state, world):
+    character = content.characters["mate"]
+    with pytest.raises(companion_agent.DialogueUnavailable):
+        companion_agent._generate(None, character, state, content, world, "mate", "閒聊幾句")
+    client = mock.Mock()
+    client.chat_structured.side_effect = RuntimeError("模型 'qwen2.5:14b' 未找到")
+    with pytest.raises(companion_agent.DialogueUnavailable):
+        companion_agent._generate(client, character, state, content, world, "mate", "閒聊幾句")

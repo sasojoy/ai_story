@@ -49,7 +49,7 @@ class Game:
         self.world = world or WorldStateStore()
         self.client = OllamaClient(
             base_url=content.config.ollama_url, model=content.config.ollama_model, timeout=content.config.ollama_timeout,
-        )  # companion_agent.py 用；連不上時每次呼叫各自優雅退回保底反應，這裡不用先健檢
+        )  # companion_agent.py 用；連不上時那輪對話取消，這裡不用先健檢
         self._draft: Draft | None = None  # choose() 進行中那次行動的江湖紀錄草稿
         self._drop_stale_references()
 
@@ -400,7 +400,13 @@ class Game:
             return self._fortune_gift()
         companion_id = self._deep_interaction_target()
         if companion_id is not None:
-            return companion_agent.start_dialogue(self.client, self.state, self.content, self.world, companion_id, self.rng)
+            try:
+                return companion_agent.start_dialogue(
+                    self.client, self.state, self.content, self.world, companion_id, self.rng,
+                )
+            except companion_agent.DialogueUnavailable:
+                self.state.player.stamina += cost[what]  # 生成不出對話：這次交遊不花體力
+                return self._dialogue_unavailable(companion_id)
         return self._encounter("socialize", "此地無人可訪，你只好悻悻離去。")
 
     def _explore(self) -> list[str]:
@@ -463,16 +469,26 @@ class Game:
         """在這裡交遊會直接跟大勢人物對話（伺服器假人不閒聊大勢人物，見 bot_policy）。"""
         return self._deep_interaction_target() is not None
 
+    def _dialogue_unavailable(self, companion_id: str) -> list[str]:
+        """這一輪生成不出對話（模型叫不動）：這輪不算數、對話結束（企劃者決定：不要卡在同一句
+        保底反應裡白扣體力）。"""
+        self.state.player.pending_companion = None
+        return [f"{self.content.characters[companion_id].name}似乎無心多談，你只好先行告辭。"]
+
     def _talk(self, arg: str) -> list[str]:
         companion_id = self.state.player.pending_companion
         if companion_id is None:
             return ["（此刻無法這麼做。）"]
         if arg == "leave":
             return companion_agent.leave_dialogue(self.state)
-        self.state.player.stamina -= self.content.config.talk_stamina  # 每一輪對話都要花體力（伺服器假人設計第八節第 4 項）
-        return companion_agent.continue_dialogue(
-            self.client, self.state, self.content, self.world, companion_id, int(arg), self.rng
-        )
+        try:
+            msgs = companion_agent.continue_dialogue(
+                self.client, self.state, self.content, self.world, companion_id, int(arg), self.rng
+            )
+        except companion_agent.DialogueUnavailable:
+            return self._dialogue_unavailable(companion_id)
+        self.state.player.stamina -= self.content.config.talk_stamina  # 每一輪對話都要花體力（伺服器假人設計第八節第 4 項）；生成不出來的那輪不算
+        return msgs
 
     def _faction(self, faction_id: str):
         return next(f for f in self.content.scenario.factions if f.id == faction_id)

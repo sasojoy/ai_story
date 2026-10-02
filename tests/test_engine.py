@@ -1501,3 +1501,28 @@ def test_the_journal_calls_it_a_training_trip(game):
     game.rng = FixedRandom(0.99)
     game.choose("act:train")
     assert any(entry.title == "歷練・湖邊" for entry in game.state.journal)
+
+
+def test_an_unavailable_dialogue_turn_costs_nothing_and_ends_the_talk(content, game):
+    """模型叫不動：這輪不扣體力、不記好感度與交遊 tag，對話直接結束（不再卡在同一句保底反應裡）。"""
+    content.characters["mate"].deep_interaction = True
+    with mock.patch.object(companion_agent, "_generate", return_value=FAKE_TURN):
+        game.choose("act:socialize")
+    before = game.state.player.stamina
+    with mock.patch.object(companion_agent, "_generate", side_effect=companion_agent.DialogueUnavailable("404")):
+        msgs = game.choose("talk:0")
+    assert msgs == ["韓鐵似乎無心多談，你只好先行告辭。"]
+    assert game.state.player.stamina == before
+    assert game.state.player.pending_companion is None
+    assert game.state.player.affinities.get("mate", 0) == 0
+    assert "mate" not in game.world.read().companion_tag_counts
+
+
+def test_an_unavailable_opening_refunds_the_socialize_cost(content, game):
+    content.characters["mate"].deep_interaction = True
+    before = game.state.player.stamina
+    with mock.patch.object(companion_agent, "_generate", side_effect=companion_agent.DialogueUnavailable("404")):
+        msgs = game.choose("act:socialize")
+    assert msgs == ["韓鐵似乎無心多談，你只好先行告辭。"]
+    assert game.state.player.stamina == before
+    assert game.state.player.pending_companion is None
