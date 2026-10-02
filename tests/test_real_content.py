@@ -101,27 +101,25 @@ def test_start_location_has_no_enemies(content):
 # ── 人物誌：15 位黃巾之亂人物 ─────────────────────────────
 
 
-def test_fifteen_historical_figures_split_locked_and_recruitable(content):
-    locked = [ch for ch in content.characters.values() if ch.kind == "locked"]
-    recruitable = [ch for ch in content.characters.values() if ch.kind == "recruitable"]
+FORMER_RECRUITABLE = ["caocao", "liubei", "guanyu", "zhangfei", "sunjian", "yuanshao", "taoqian"]
+
+
+def test_all_fifteen_historical_figures_are_locked(content):
+    """第一季設計第一節：大勢人物這一季都不開放招募。"""
     assert len(content.characters) == 15
-    assert len(locked) == 8 and len(recruitable) == 7
+    assert all(ch.kind == "locked" for ch in content.characters.values())
 
 
-def test_only_recruitable_figures_have_a_recruit_location(content):
+def test_every_figure_has_a_place_to_talk_and_nobody_has_a_recruit_location(content):
     for ch in content.characters.values():
-        if ch.kind == "recruitable":
-            assert ch.recruit_at in content.locations, ch.id
-        else:
-            assert ch.recruit_at is None, ch.id
+        assert ch.talk_at in content.locations, ch.id
+        assert ch.recruit_at is None, ch.id
 
 
-def test_recruitable_figures_have_their_own_signature_skills(content):
-    for ch in content.characters.values():
-        if ch.kind != "recruitable":
-            continue
-        assert ch.starting_wugong in content.skills, ch.id
-        assert ch.starting_neigong in content.skills, ch.id
+def test_the_former_recruitable_seven_keep_their_signature_skills(content):
+    for cid in FORMER_RECRUITABLE:
+        ch = content.characters[cid]
+        assert ch.starting_wugong in content.skills and ch.starting_neigong in content.skills, cid
 
 
 def test_every_figure_opts_into_deep_dialogue(content):
@@ -131,31 +129,37 @@ def test_every_figure_opts_into_deep_dialogue(content):
 
 
 def test_lu_bei_faction_all_gather_at_zhuo_county(content):
-    zhuo_faction = {cid for cid, ch in content.characters.items() if ch.recruit_at == "zhuo_county"}
+    zhuo_faction = {cid for cid, ch in content.characters.items() if ch.talk_at == "zhuo_county"}
     assert zhuo_faction == {"liubei", "guanyu", "zhangfei"}
 
 
 # ── 招募（roster.py）跑在真正的內容上 ──────────────────────
 
 
-def test_recruitable_here_matches_each_figures_own_location(content):
+def test_nobody_is_recruitable_anywhere(content):
     from tianxia.world_state import WorldStateStore
 
     world = WorldStateStore(None)  # 讀取用不到磁碟：.read() 找不到檔案時回傳空狀態
-    assert roster.recruitable_here(content, world, "zhuo_county") == ["liubei", "guanyu", "zhangfei"]
-    assert roster.recruitable_here(content, world, "qiao_county") == ["caocao"]
-    assert roster.recruitable_here(content, world, "yingchuan") == []  # 開局地點沒有人可招
+    for loc_id in content.locations:
+        assert roster.recruitable_here(content, world, loc_id) == [], loc_id
 
 
-def test_attempt_recruit_seeds_the_real_signature_skills(content, world):
-    from tianxia.state import new_game_state
+def test_meeting_events_mark_the_acquaintance_instead_of_handing_out_companions(content):
+    for ev in content.events.values():
+        for choice in ev.choices:
+            assert choice.effect.recruit is None and choice.fail_effect.recruit is None, ev.id
+    meet = content.events["meet_caocao"]
+    assert "結識:caocao" in meet.choices[0].effect.flags_add
+    assert "結識:caocao" in meet.condition.flags_none
 
-    state = new_game_state(content, "測試俠客")
-    msgs = roster.attempt_recruit(state, content, world, "caocao", random.Random(0))
-    assert msgs
-    progress = world.get_companion("caocao")
-    if progress.owner == "測試俠客":
-        assert progress.wugong_id == "caocao_wugong" and progress.neigong_id == "caocao_neigong"
+
+def test_the_fortune_turns_into_a_gift_when_nobody_can_be_recruited(content, tmp_path):
+    from tianxia.world_state import WorldStateStore
+
+    game = Game.new(content, "測試俠客", rng=random.Random(0), world=WorldStateStore(tmp_path / "world.json"))
+    msgs = game._deliver_fortune()
+    assert any("賀禮" in m for m in msgs)
+    assert game.state.player.team == []
 
 
 # ── 完整跑一季（機器人）──────────────────────────────────
