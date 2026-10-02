@@ -2,7 +2,8 @@
 用假時鐘跑完一整季，印出有沒有開戰、兩邊參戰人數、各陣營人數、結局。
 
 執行：.venv/Scripts/python.exe scripts/sim_server_bots.py --seasons 2 --time-scale 6 --tick 60
-（time-scale 越大跑越快，但假人的作息是現實時間：太大會讓一季只涵蓋一兩個晚上）
+（time-scale 越大跑越快，但假人的作息是現實時間：太大會讓一季只涵蓋一兩個晚上；
+遠離出生地的陣營，懶散的假人可能整季都走不到投靠點，各陣營人數因此補不滿）
 """
 from __future__ import annotations
 
@@ -17,7 +18,7 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from tianxia import bot, server_bots  # noqa: E402
+from tianxia import bot, leaderboard, server_bots  # noqa: E402
 from tianxia.bot_runner import BotRunner  # noqa: E402
 from tianxia.content import load_content  # noqa: E402
 from tianxia.engine import Game  # noqa: E402
@@ -52,16 +53,17 @@ def run_season(content, workdir: Path, seed: int, tick: float) -> dict:
     now = [START]
     world = WorldStateStore(workdir / "world" / "state.json")
     saves = workdir / "saves"
-    rng = random.Random(seed)
+    rng = random.Random(seed)  # 模擬自己用的亂數；假人程式與「真人」另用不同的種子，三者互不牽動
     sides: Counter = Counter()
     battle_started_day = None
-    with mock.patch("time.time", lambda: now[0]):
+    # 季末結算榜單時，leaderboard 沒指定存檔夾就會讀真的 saves/；改指到這次的暫存夾，不碰真資料
+    with mock.patch("time.time", lambda: now[0]), mock.patch.object(leaderboard, "DEFAULT_SAVES_DIR", saves):
         world.seed_first_season(content)
         world.open_season(now[0])
-        humans = [Game.new(content, name, rng=random.Random(seed + i), world=world) for i, name in enumerate(HUMANS)]
+        humans = [Game.new(content, name, rng=random.Random(seed + 2000 + i), world=world) for i, name in enumerate(HUMANS)]
         for game in humans:
             game.client = None
-        runner = BotRunner(content, world, saves, random.Random(seed), clock=lambda: now[0])
+        runner = BotRunner(content, world, saves, random.Random(seed + 1000), clock=lambda: now[0])
         while not world.get_season().ended and now[0] - START < MAX_REAL_DAYS * 86400:
             runner.tick()
             hour = int((now[0] + server_bots.TZ_OFFSET) % 86400 // 3600)
