@@ -115,6 +115,10 @@ svg, img, canvas { max-width: 100%; height: auto; }
   /* 欄位與選單在手機上給足高度，避免誤觸 */
   .tx-page input, .tx-page textarea, .tx-page select { min-height: 42px; font-size: 16px; }
   .tx-side-row { flex-direction: column !important; }
+  /* 江湖紀錄限高可捲：不限的話它會把底下的東西（與下一次的選項）一路推出螢幕 */
+  .tx-journal { max-height: 42vh; overflow-y: auto; }
+  /* 大地圖的地點詳情在地圖下方，給足寬度 */
+  .tx-place { min-width: 0 !important; }
 }
 
 /* ── 小動畫 ── */
@@ -712,7 +716,7 @@ def build_demo() -> gr.Blocks:
                 battle_card_md = gr.Markdown(visible=False, container=True, elem_classes=["tx-card"])
                 latest_html = gr.HTML(css_template=JOURNAL_CSS)
                 card_btn = gr.Button("看完整戰報", visible=False)
-                journal_html = gr.HTML(css_template=JOURNAL_CSS)
+                journal_html = gr.HTML(css_template=JOURNAL_CSS, elem_classes=["tx-journal"])
                 with gr.Accordion("展開更早的紀錄", open=False, visible=False) as older_acc:
                     older_html = gr.HTML(css_template=JOURNAL_CSS)
             with gr.Column(scale=2, elem_classes=["tx-side-col"]):
@@ -775,45 +779,52 @@ def build_demo() -> gr.Blocks:
                 gr.Markdown("## 門下", scale=1)
                 back_btn = gr.Button("返回江湖", scale=0, min_width=120)
             mx_head_md = gr.Markdown()
-            with gr.Row():
-                with gr.Column(scale=1):
-                    gr.Markdown("**本人**")
-                    player_card_md = gr.Markdown()
-                    gr.Markdown("**名冊**（本人與已招募的同伴；點名字看角色卡）")
-                    roster_radio = gr.Radio(label="", choices=[], interactive=True)
-                with gr.Column(scale=1):
-                    gr.Markdown("**角色卡**")
-                    person_card_md = gr.Markdown(PERSON_HINT)
-                    team_toggle_btn = gr.Button("加入隊伍", visible=False)
-            gr.Markdown("---")
-            bag_md = gr.Markdown()
-            craft_head_md = gr.Markdown()
-            with gr.Row():
-                craft_mats_dd = gr.Dropdown(
-                    label=f"投入 {MATERIALS_PER_CRAFT} 樣素材（可以選同一種兩次）", choices=[],
-                    multiselect=True, max_choices=MATERIALS_PER_CRAFT, interactive=True,
-                )
-                craft_kind_radio = gr.Radio(label="煉內功／武學", choices=list(KINDS), value=KINDS[0], interactive=True)
-            craft_btn = gr.Button("開爐煉製", variant="primary", elem_classes=["tx-forge"])
-            gr.Markdown("---\n**功法庫**：煉出來還沒配上身的功法。改練會把目前那一門收回庫裡，熟練度各自保留。")
-            with gr.Row():
-                arts_radio = gr.Radio(label="", choices=[], interactive=True)
-                switch_btn = gr.Button("改練", scale=0, min_width=120)
-            gr.Markdown("---\n**練功**：自創功法（取名決定屬性/威力/成長性，全服不能重名）或鍛鍊已學會的。")
-            with gr.Row():
-                kind_radio = gr.Radio(label="內功／武學", choices=list(KINDS), value="武學", interactive=True)
-                skill_name_tb = gr.Textbox(label="自創功法的名字", placeholder="幫你的武學取個名字")
-            with gr.Row():
-                create_btn = gr.Button("自創功法", variant="primary")
-                practice_btn = gr.Button("鍛鍊")
-                heal_btn = gr.Button("療傷")
-            mx_message_md = gr.Markdown()
+            # 動作結果放在最上面：手機上按完按鈕，訊息若在整頁最底下根本看不到
+            mx_message_md = gr.Markdown(elem_classes=["tx-card"])
+            with gr.Accordion("練功", open=True):
+                gr.Markdown("自創功法（取名決定屬性/威力/成長性，全服不能重名）或鍛鍊已學會的。")
+                with gr.Row(elem_classes=["tx-side-row"]):
+                    kind_radio = gr.Radio(label="內功／武學", choices=list(KINDS), value="武學", interactive=True)
+                    skill_name_tb = gr.Textbox(label="自創功法的名字", placeholder="幫你的武學取個名字")
+                with gr.Row():
+                    create_btn = gr.Button("自創功法", variant="primary")
+                    practice_btn = gr.Button("鍛鍊")
+                    heal_btn = gr.Button("療傷")
+            with gr.Accordion("煉製", open=True):
+                craft_head_md = gr.Markdown()
+                with gr.Row(elem_classes=["tx-side-row"]):
+                    craft_mats_dd = gr.Dropdown(
+                        label=f"投入 {MATERIALS_PER_CRAFT} 樣素材（可以選同一種兩次）", choices=[],
+                        multiselect=True, max_choices=MATERIALS_PER_CRAFT, interactive=True,
+                    )
+                    craft_kind_radio = gr.Radio(
+                        label="煉內功／武學", choices=list(KINDS), value=KINDS[0], interactive=True,
+                    )
+                craft_btn = gr.Button("開爐煉製", variant="primary", elem_classes=["tx-forge"])
+            with gr.Accordion("煉製素材", open=False):
+                bag_md = gr.Markdown()
+            with gr.Accordion("功法庫", open=False):
+                gr.Markdown("煉出來還沒配上身的功法。改練會把目前那一門收回庫裡，熟練度各自保留。")
+                with gr.Row(elem_classes=["tx-side-row"]):
+                    arts_radio = gr.Radio(label="", choices=[], interactive=True)
+                    switch_btn = gr.Button("改練", scale=0, min_width=120)
+            with gr.Accordion("名冊與角色卡", open=False):
+                with gr.Row(elem_classes=["tx-side-row"]):
+                    with gr.Column(scale=1):
+                        gr.Markdown("**本人**")
+                        player_card_md = gr.Markdown()
+                        gr.Markdown("**名冊**（本人與已招募的同伴；點名字看角色卡）")
+                        roster_radio = gr.Radio(label="", choices=[], interactive=True)
+                    with gr.Column(scale=1):
+                        gr.Markdown("**角色卡**")
+                        person_card_md = gr.Markdown(PERSON_HINT)
+                        team_toggle_btn = gr.Button("加入隊伍", visible=False)
         with gr.Column(visible=False, elem_classes=["tx-page"]) as report_col:
             with gr.Row(equal_height=True):
                 gr.Markdown("## 戰報", scale=1)
                 gr.Markdown(scale=6)
                 report_back_btn = gr.Button("返回江湖", scale=0, min_width=120)
-            with gr.Row():
+            with gr.Row(elem_classes=["tx-side-row"]):
                 with gr.Column(scale=1):
                     report_list_radio = gr.Radio(label="歷次戰鬥（最新在前）", choices=[], interactive=True)
                 with gr.Column(scale=2):
@@ -827,10 +838,10 @@ def build_demo() -> gr.Blocks:
                 label="圖層", choices=[(name, key) for key, name in Game.MAP_LAYERS.items()], value=DEFAULT_LAYER,
                 interactive=True,
             )
-            with gr.Row():
+            with gr.Row(elem_classes=["tx-side-row"]):
                 with gr.Column(scale=3):
                     world_map_html = gr.HTML(js_on_load=MAP_CLICK_JS)
-                with gr.Column(scale=2, min_width=260):
+                with gr.Column(scale=2, min_width=260, elem_classes=["tx-place"]):
                     place_dd = gr.Dropdown(label="地點（也可以直接點地圖）", choices=[], interactive=True)
                     place_md = gr.Markdown()
                     travel_btn = gr.Button("安排前往", variant="primary", visible=False)

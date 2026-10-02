@@ -74,6 +74,10 @@ NOVELTY_POINTS = {
 REPEAT_STEP = 0.5  # 第 n 次看到同一個敘事內容，扣 (n-1) × STEP
 REPEAT_CAP = 3.0  # 單次扣分上限（見模組說明第 3 點）
 WASTE_PENALTY = 4.0  # 花了資源（素材＋心得）卻沒換到新功法，一次扣這麼多
+MISSING_CHANNEL = -100.0  # 一條管道整季沒出現過（例如完全沒有戰鬥）：那是最壞的情況，不是「沒資料」
+# 校準逼出來的第二件事：原本把 0 次機會的管道**排除在平均之外**，結果「整季沒有任何戰鬥」
+# 的狀態 ② 拿到 +36.9 分，跟修好的版本（+41.6）只差 5 分——因為它的煉製管道滿分，把平均
+# 拉了上去。內容整條不存在應該是重罰，不是中性。
 # 這一項是校準逼出來的：第一版只有「新鮮感」與「重複」兩項，結果「會重煉已知配方、47% 白燒」
 # 那個已知缺陷跟修好的版本**分數一模一樣**——因為重煉不會產生新內容，所以在只看新鮮感的
 # 指標下它是「什麼都沒發生」，而不是「虧了」。花掉的資源本來可以換到別的新東西，那個機會
@@ -117,7 +121,7 @@ class FunLog:
         """
         chances = self.chances[channel]
         if not chances:
-            return None
+            return MISSING_CHANNEL  # 整季沒出現過：這是最壞的情況，不是「沒資料」
         bad = self.channel_bad[channel]
         return max(-100.0, min(100.0, (self.novelty[channel] - bad) / chances * 100))
 
@@ -131,7 +135,7 @@ class FunLog:
         的種子噪音裡，校準時完全看不見。分管道之後，白燒一爐是「8 次機會裡壞了 1 次」，在煉製
         那條管道上就是很大的一筆。
         """
-        scores = [s for s in (self.channel_score(c) for c in NOVELTY_POINTS) if s is not None]
+        scores = [self.channel_score(c) for c in NOVELTY_POINTS]
         return sum(scores) / len(scores) if scores else 0.0
 
     @property
@@ -316,9 +320,9 @@ def report(label: str, logs: list[FunLog], content) -> float:
     print("  每條管道的新鮮命中率（每次機會有幾成給了新東西）：", end="")
     for channel in NOVELTY_POINTS:
         per = [lg.channel_score(channel) for lg in logs]
-        got = [v for v in per if v is not None]
         chances = sum(lg.chances[channel] for lg in logs) / len(logs)
-        print(f"{channel} {sum(got) / len(got):+.0f}（{chances:.0f} 次機會）　" if got else f"{channel} －　", end="")
+        mark = "（整季沒出現）" if chances < 0.5 else f"（{chances:.0f} 次機會）"
+        print(f"{channel} {sum(per) / len(per):+.0f}{mark}　", end="")
     print(f"\n  舊的單一總分（會被最吵的管道支配，留著對照）："
           f"{sum(flat_scores) / len(flat_scores):+.1f} 分／百行動")
     acts = sum(lg.actions for lg in logs) / len(logs)
@@ -414,7 +418,7 @@ def main() -> None:
                 print("\n判準不通過：以下已知缺陷狀態的分數不低於「現在」，要先確認是重現不夠真、還是指標看不見")
                 for label in losers:
                     print(f"  ・{label}")
-            spread = max(max(lg.score for lg in logs) - min(lg.score for lg in logs) for logs in all_logs)
+            spread = max(max(lg.balanced for lg in logs) - min(lg.balanced for lg in logs) for logs in all_logs)
             gap = max(scores) - min(scores)
             note = "比狀態之間的差距還大，單一 seed 不能用來下結論" if spread > gap else "小於狀態之間的差距"
             print(f"種子之間的落差：{spread:.0f} 分（狀態之間 {gap:.0f} 分）——{note}")
