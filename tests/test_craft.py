@@ -501,3 +501,58 @@ def test_can_craft_without_a_world_skips_the_duplicate_check(stocked, content, w
     with naming("裂江訣"):
         craft.craft(stocked, content, world, client, ["gang_1", "gang_1"], "武學")
     assert craft.can_craft(stocked, content, ["gang_1", "gang_1"], "武學") is None
+
+
+# ── 換季：配方每季清空、煉製吃天機（第一季設計第十四節）──────────
+
+
+def supplied(content, name: str):
+    """一個剛好湊得出一爐「剛＋剛」的新玩家。"""
+    from tianxia.state import new_game_state
+
+    other = new_game_state(content, name)
+    materials.grant(other, content, "gang_1", 2)
+    other.player.stats["xinde"] = 500
+    return other
+
+
+def test_the_tianji_decides_what_a_recipe_grows_into(content, world, tmp_path):
+    """同一個配方、同一個名字，天機不同就長出不同的功法（每季換一次天機，同名長出不同武學）。
+    fixture 的剛＋剛武學在天機 0 與天機 1 的品質剛好不同，所以差異是確定的、不靠運氣。"""
+    from tianxia.world_state import WorldStateStore
+
+    later = WorldStateStore(path=tmp_path / "later" / "state.json")
+    later.mutate(lambda state: setattr(state, "tianji", 1))
+    client = OllamaClient()
+    with llm_down():
+        before, _ = craft.craft(supplied(content, "甲"), content, world, client, ["gang_1", "gang_1"], "武學")
+        after, _ = craft.craft(supplied(content, "乙"), content, later, client, ["gang_1", "gang_1"], "武學")
+    assert before is not None and after is not None
+    assert before.name == after.name  # 退路組名只看配方，所以名字一樣
+    assert before.quality != after.quality
+    gang = content.materials["gang_1"]
+    expected = generate_from_name(
+        after.name, "武學", after.name, tianji=1,
+        weights=craft.quality_weights(craft.mean_tier(gang, gang)), attribute="剛",
+    )
+    assert (after.quality, after.base_power, after.top_power) == (expected.quality, expected.base_power, expected.top_power)
+
+
+def test_recipes_are_cleared_every_season_and_rediscovered(content, world):
+    """配方每季清空，大家重新發現、首創者重新認定。以前換季只清了功法本體、沒清配方表，
+    舊配方全部指向已經不存在的功法，第二季起同一爐永遠「爐火熄了」。"""
+    world.seed_first_season(content)  # 測試內容會直接開季
+    client = OllamaClient()
+    key = craft.recipe_key(["gang_1", "gang_1"], "武學")
+    with llm_down():
+        first, _ = craft.craft(supplied(content, "甲"), content, world, client, ["gang_1", "gang_1"], "武學")
+    assert first is not None and first.creator == "甲"
+    world.mutate_season(lambda season: setattr(season, "ended", True))
+    assert world.next_season(content, now=1.0)
+
+    with llm_down():
+        again, msgs = craft.craft(supplied(content, "乙"), content, world, client, ["gang_1", "gang_1"], "武學")
+    assert again is not None, msgs
+    assert again.creator == "乙"  # 這一季的首創者
+    assert "江湖上第一次煉成" in "\n".join(msgs)
+    assert world.read().recipes == {key: again.name}

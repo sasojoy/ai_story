@@ -307,6 +307,19 @@ def test_next_season_releases_every_created_skill_name_and_turns_the_tianji(stor
     assert store.read().tianji == 1
 
 
+def test_next_season_clears_the_crafting_recipes(store, content):
+    """煉製配方每季清空、大家重新發現（第一季設計第十四節）。"""
+    content.config.auto_open_first_season = True
+    store.seed_first_season(content)
+    key = "gang_1+gang_1|武學"
+    store.claim_recipe(key, generate_from_name("玄雷式", "武學", "玄雷式"))
+    assert store.lookup_recipe(key) is not None
+    store.mutate_season(lambda season: setattr(season, "ended", True))
+    assert store.next_season(content, now=1.0)
+    assert store.read().recipes == {}
+    assert store.lookup_recipe(key) is None
+
+
 def test_next_season_clears_a_leftover_battle(store, content):
     content.config.auto_open_first_season = True
     store.seed_first_season(content)

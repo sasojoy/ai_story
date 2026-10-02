@@ -75,7 +75,7 @@ class CompanionProgress(BaseModel):
 
 class SharedWorldState(BaseModel):
     created_skills: dict[str, MartialArt] = Field(default_factory=dict)  # 鍵是武學名稱
-    recipes: dict[str, str] = Field(default_factory=dict)  # 煉製配方鍵 -> 功法名稱（功法本體存在 created_skills）
+    recipes: dict[str, str] = Field(default_factory=dict)  # 煉製配方鍵 -> 功法名稱（功法本體存在 created_skills）；每季清空，見 next_season
     companion_tag_counts: dict[str, dict[str, int]] = Field(default_factory=dict)  # 人物 id -> {tag: 次數}
     companion_drift_note: dict[str, str] = Field(default_factory=dict)  # 人物 id -> 目前漂移後的一句話性情
     companion_drift_synthesized_at: dict[str, int] = Field(default_factory=dict)  # 人物 id -> 上次語意化時的 tag 總數
@@ -84,8 +84,9 @@ class SharedWorldState(BaseModel):
     jade_seal_fragments: list[JadeSealFragment] = Field(default_factory=list)  # 跨季持久（設計文件九.2）
 
     # ── 共享賽季（真正共享的大勢/門檻/主線/結局，取代原本每個玩家各自獨立的 WorldState）──
-    # 「跨季」的東西（武學命名登記、同伴進度、玉璽碎片等，上面那些欄位）永遠留著；season
-    # 本身每次開新賽季會被整個換掉（見 next_season）。season_number 從 1 起算，
+    # 上面那些欄位不跟著 season 整個換掉，但換季時武學命名登記、煉製配方、同伴進度會照
+    # 「跨季不滾雪球」清空，玉璽碎片等才是永遠留著；season 本身每次開新賽季會被整個換掉
+    # （見 next_season）。season_number 從 1 起算，
     # season_last_real 是這個賽季的共用時鐘上次對到現實時間的時間點（None＝還沒對過）。
     season: WorldState = Field(default_factory=WorldState)
     season_number: int = 1
@@ -375,7 +376,11 @@ class WorldStateStore:
 
     def next_season(self, content: Content, now: float) -> bool:
         """管理者開下一季：只在休季時有效。換上全新的一季、賽季編號 +1、直接開季，
-        賽季時鐘從 now 起算；跨季保留的東西（玉璽碎片等）不動。"""
+        賽季時鐘從 now 起算；同伴、自創武學名字、煉製配方清空，天機 +1；跨季保留的東西
+        （玉璽碎片等）不動。
+
+        上一季的配方首創紀錄還沒寫進江湖史：江湖史（`WorldState.chronicle`）放在 season 裡、
+        換季時跟著整個換掉，目前沒有跨季保存的江湖史可以寫。"""
         result = {"ok": False}
 
         def _apply(state: SharedWorldState) -> None:
@@ -387,6 +392,7 @@ class WorldStateStore:
             state.season_last_real = now
             state.companions = {}  # 跨季不滾雪球第二條：同伴全部重獲自由、等級武學歸零
             state.created_skills = {}  # 第三條：自創武學名字全部釋出
+            state.recipes = {}  # 煉製配方跟著清空，大家重新發現、首創者重新認定（第一季設計第十四節）
             state.tianji += 1
             state.active_battle = None  # 上一季沒打完（或打完沒清掉）的戰鬥不帶進新的一季
             state.faction_rolls = {}  # 新的一季大家重新投靠

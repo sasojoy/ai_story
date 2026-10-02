@@ -7,8 +7,9 @@
 | LLM | **只產出名字＋一句說明**。一個數字都不碰。 |
 | 引擎 | 素材 → 品質機率分佈的位移、屬性、擲骰（名字的雜湊）、成本、全服登記 |
 
-無限的可能來自命名空間，不是數值自由度。而且因為配方有全服快取，LLM 的成本**只在全服
-第一次發現某個配方時付一次**，之後是純查表（零 LLM 呼叫、零亂數、全服看到同一個結果）。
+無限的可能來自命名空間，不是數值自由度。而且因為配方有全服快取，LLM 的成本**只在每一季
+全服第一次發現某個配方時付一次**，之後是純查表（零 LLM 呼叫、零亂數、全服看到同一個結果）。
+配方表每季清空、擲骰吃這一季的天機（第一季設計第十四節），所以每季都要重新發現、首創者重新認定。
 
 LLM 呼叫刻意在檔案鎖**外面**（照 battle_instance.py 既有的先例），只有登記那一步進鎖。
 """
@@ -253,7 +254,9 @@ def craft(
     """煉製一門功法，回傳（功法, 訊息）；不能煉時回傳 (None, [原因])。
 
     流程（設計 §5.2）：檢查 → 查配方快取 → 命中就直接用登記在案的那一門（零 LLM）→
-    沒命中才請 LLM 命名 → 過濾 → 依素材決定屬性與品質權重 → 鎖內登記 → 扣素材與心得。
+    沒命中才請 LLM 命名 → 過濾 → 依素材決定屬性與品質權重、用名字＋這一季的天機擲骰 →
+    鎖內登記 → 扣素材與心得。配方表每季清空（見 `WorldStateStore.next_season`），所以
+    同一個配方每季都要重新發現，換了天機也會長出不同的功法。
     """
     problem = can_craft(state, content, material_ids, kind, world)
     if problem is not None:
@@ -268,10 +271,11 @@ def craft(
         name, note = propose_name(client, content, a, b, kind)
         weights = quality_weights(mean_tier(a, b))
         attribute = result_attribute(a, b)
+        tianji = world.read().tianji  # 這一季的天機：同一個名字每季長出不同的功法
         for attempt in range(CLAIM_ATTEMPTS):
             if name is None:
                 name = fallback_name(content, key, kind, salt=attempt)
-            candidate = generate_from_name(name, kind, name, weights=weights, attribute=attribute)
+            candidate = generate_from_name(name, kind, name, tianji, weights=weights, attribute=attribute)
             candidate.creator = state.player.name
             candidate.note = note
             art, first_time = world.claim_recipe(key, candidate)
