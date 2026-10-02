@@ -732,6 +732,9 @@ class Game:
             record.silver = -loss
             if loss:
                 msgs.append(f"銀兩 -{loss}")
+        toll = team.take_encounter_toll(s, c, self.world, result.tier)
+        record.changes += toll
+        msgs += toll
         msgs.insert(0, self._file_battle(record))
         return msgs
 

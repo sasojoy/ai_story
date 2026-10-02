@@ -16,7 +16,8 @@ class Member(BaseModel):
 
     level: int = 1
     exp: int = 0
-    neili: float | None = None  # 氣血，None＝滿
+    neili: float | None = None  # 氣血，None＝回滿（滿＝上限 − 內傷）
+    injury: float = 0.0  # 內傷：氣血自己只回到「上限 − 內傷」，要療傷才能清掉（氣血設計 §1.3）
 
     # 每人最多學一門內功、一門武學（設計文件六.4），id 指向 tianxia/martial_arts.py 的
     # MartialArt，可能是內容裡的固定武學（本命武學）也可能是玩家自創、存在共用世界狀態

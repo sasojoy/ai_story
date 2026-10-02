@@ -30,6 +30,16 @@ NEIGONG_BONUS_DIVISOR = 100.0
 # 屬性相剋加成：己方招式屬性克制對方時，這一位的威力乘這個倍率。
 COUNTER_BONUS = 1.3
 
+# 氣血狀態對威力的影響（氣血設計 §1.1【定】：剩越少出手越弱，0.5 + 0.5 × 剩餘／上限）。
+# 滿血是 1.0、見底是 0.5。等級因此是「續戰力」——上限越高，同樣的絕對損耗壓下來的比例越小。
+CONDITION_FLOOR = 0.5
+
+
+def condition_of(now: float, cap: float) -> float:
+    if cap <= 0:
+        return 1.0
+    return CONDITION_FLOOR + (1 - CONDITION_FLOOR) * max(0.0, min(1.0, now / cap))
+
 # 隨機「戰場運氣」項的半幅：resolve_encounter 會在 -LUCK_HALF..+LUCK_HALF 之間加減。
 LUCK_HALF = 15.0
 
@@ -52,8 +62,15 @@ class EncounterResult(BaseModel):
     difficulty: float
 
 
-def member_power(member: HasMartialArts, arts: dict[str, MartialArt], opponent_attribute: str | None = None) -> float:
-    """這個人目前貢獻的威力：沒學武學就是 0（內功沒有武學可以加成，貢獻也是 0）。"""
+def member_power(
+    member: HasMartialArts, arts: dict[str, MartialArt], opponent_attribute: str | None = None,
+    condition: float = 1.0,
+) -> float:
+    """這個人目前貢獻的威力：沒學武學就是 0（內功沒有武學可以加成，貢獻也是 0）。
+
+    `condition` 是氣血狀態係數（見 condition_of）：帶傷上陣的人出手比較弱。呼叫端算好傳進來，
+    因為氣血上限要讀 content 的設定，而這個模組刻意只處理數字、不碰內容模型。
+    """
     if not member.wugong_id or member.wugong_id not in arts:
         return 0.0
     wugong = arts[member.wugong_id]
@@ -63,11 +80,17 @@ def member_power(member: HasMartialArts, arts: dict[str, MartialArt], opponent_a
         power *= 1 + power_at(neigong, member.neigong_level) / NEIGONG_BONUS_DIVISOR
     if opponent_attribute and counters(wugong.attribute, opponent_attribute):
         power *= COUNTER_BONUS
-    return power
+    return power * condition
 
 
-def team_power(members: list[HasMartialArts], arts: dict[str, MartialArt], opponent_attribute: str | None = None) -> float:
-    return sum(member_power(m, arts, opponent_attribute) for m in members)
+def team_power(
+    members: list[HasMartialArts], arts: dict[str, MartialArt], opponent_attribute: str | None = None,
+    conditions: list[float] | None = None,
+) -> float:
+    """隊伍總威力。`conditions` 是跟 members 一一對應的氣血狀態係數，省略時當作全員滿血。"""
+    if conditions is None:
+        conditions = [1.0] * len(members)
+    return sum(member_power(m, arts, opponent_attribute, c) for m, c in zip(members, conditions))
 
 
 def resolve_encounter(our_power: float, difficulty: float, rng: Random) -> EncounterResult:

@@ -189,7 +189,8 @@ def practice(
     setattr(member, level_slot, level + 1)
     msgs = [f"【{name}】精進至第{level + 1}成。"]
     if rng.random() < cfg.practice_injury_chance:
-        now, cap = member_neili(content, member)
+        now, _cap = member_neili(content, member)
+        member.injury += cfg.practice_injury_amount
         member.neili = max(0.0, now - cfg.practice_injury_amount)
         msgs.append(f"這一番苦練傷了氣血，氣血 -{cfg.practice_injury_amount:.0f}（累積內傷，需要療傷才能回到滿血）。")
     return msgs
@@ -200,17 +201,34 @@ def neili_cap(content: Content, level: int) -> float:
     return cfg.neili_base + level * cfg.neili_per_level
 
 
-def member_neili(content: Content, member) -> tuple[float, float]:
-    """回傳（目前氣血, 上限）。member 可以是玩家的 Member 或同伴的 CompanionProgress。"""
+MIN_CEILING_RATIO = 0.1  # 內傷再重，能回到的氣血上蓋也不低於上限的一成（氣血設計 §1.3：再低也照樣能出戰）
+
+
+def neili_ceiling(content: Content, member) -> float:
+    """內傷之後氣血自己能回到哪裡（上限 − 內傷，但不低於上限的一成）。"""
     cap = neili_cap(content, member.level)
-    return (cap if member.neili is None else min(member.neili, cap)), cap
+    return max(cap * MIN_CEILING_RATIO, cap - getattr(member, "injury", 0.0))
+
+
+def member_neili(content: Content, member) -> tuple[float, float]:
+    """回傳（目前氣血, 上限）。member 可以是玩家的 Member 或同伴的 CompanionProgress。
+
+    `neili is None` 代表「回滿了」——有內傷時的「滿」是上蓋（上限 − 內傷），不是上限本身。
+    """
+    cap = neili_cap(content, member.level)
+    ceiling = neili_ceiling(content, member)
+    now = ceiling if member.neili is None else min(member.neili, ceiling)
+    return now, cap
 
 
 def heal_cost(content: Content, member) -> int:
-    """療傷要多少銀兩：氣血上限跟目前值的差距，換算成內傷點數。"""
-    now, cap = member_neili(content, member)
-    injury = max(0.0, cap - now)
-    return math.ceil(injury * content.config.heal_silver_per_injury / max(1.0, content.config.practice_injury_amount))
+    """療傷要多少銀兩：按內傷點數計價（氣血設計 §二，預設每 2 點內傷 1 兩，無條件進位）。
+
+    刻意只看內傷、不看「目前氣血離上限多遠」——輕傷本來就會自己回，付錢去買它沒有意義
+    （改之前就是這樣：療傷等於花錢跳過兩小時的等待，而內傷根本不存在）。
+    """
+    injury = max(0.0, getattr(member, "injury", 0.0))
+    return math.ceil(injury / max(1.0, content.config.heal_neili_per_silver))
 
 
 def heal(state: GameState, content: Content, member) -> list[str]:
@@ -221,8 +239,10 @@ def heal(state: GameState, content: Content, member) -> list[str]:
     if p.stats.get("silver", 0) < cost:
         return [f"銀兩不足：療傷需要 {cost} 兩。"]
     p.stats["silver"] -= cost
+    healed = member.injury
+    member.injury = 0.0
     member.neili = None
-    return [f"療傷完畢，氣血回滿（銀兩 -{cost}）。"]
+    return [f"療傷完畢，內傷 -{healed:.0f}、氣血回滿（銀兩 -{cost}）。"]
 
 
 # ── 經驗與等級 ────────────────────────────────────────────
@@ -242,15 +262,62 @@ def add_exp(content: Content, member, amount: int, name: str) -> list[str]:
 
 
 def regen_neili(content: Content, member, fraction: float) -> None:
+    """氣血隨時間回復——只回到上蓋（上限 − 內傷），內傷那部分要療傷才清得掉。"""
     if member.neili is None:
         return
-    _, cap = member_neili(content, member)
-    member.neili += cap * fraction
-    if member.neili >= cap:
+    cap = neili_cap(content, member.level)
+    ceiling = neili_ceiling(content, member)
+    member.neili += cap * fraction  # 回復速度照上限算，所以內傷不會讓回復變慢
+    if member.neili >= ceiling:
         member.neili = None
 
 
 # ── 遭遇/劇情戰：串接 encounter.py 的單次判定 ───────────────
+
+
+def team_conditions(state: GameState, content: Content, world: WorldStateStore) -> list[float]:
+    """本隊每個人的氣血狀態係數，順序跟 team_participants 一致（氣血設計 §1.1：帶傷出手較弱）。"""
+    return [
+        encounter.condition_of(*member_neili(content, member))
+        for member in team_participants(state, world)
+    ]
+
+
+def take_encounter_toll(
+    state: GameState, content: Content, world: WorldStateStore, tier: str,
+) -> list[str]:
+    """一場遭遇戰打完的氣血代價（氣血設計 §1.3）：按結果扣氣血，其中一部分變成內傷。
+
+    沒有這一段的話戰鬥是**沒有損耗的免費收入**——而那正是「歷練」復活之後最明顯的破口：
+    打得越多拿得越多，卻完全不必付出什麼。扣掉的量按上限的比例算，所以等級（上限）
+    決定的是「撐得住幾場」，不是「打得多痛」。
+    """
+    cfg = content.config
+    fraction = cfg.encounter_neili_loss.get(tier, 0.0)
+    if fraction <= 0:
+        return []
+    msgs = []
+    for key in team_keys(state):
+        if key == PLAYER:
+            member = state.player.member
+            lost, hurt = _apply_toll(content, member, fraction)
+            msgs.append(f"氣血 -{lost:.0f}")  # 照既有慣例寫變化量（跟「銀兩 -5」「心得 +12」同一串）
+            if hurt >= 1:
+                msgs.append(f"內傷 +{hurt:.0f}")
+        else:
+            world.update_companion(key, lambda progress: _apply_toll(content, progress, fraction))
+    return msgs
+
+
+def _apply_toll(content: Content, member, fraction: float) -> tuple[float, float]:
+    """扣一場的氣血，回傳（實際掉了多少氣血, 其中變成內傷的量）。"""
+    now, cap = member_neili(content, member)
+    loss = cap * fraction
+    hurt = loss * content.config.injury_share
+    member.injury += hurt
+    member.neili = max(0.0, now - loss)
+    after, _ = member_neili(content, member)
+    return now - after, hurt
 
 
 def fight(
@@ -258,7 +325,9 @@ def fight(
 ) -> encounter.EncounterResult:
     squad = content.squads[squad_id]
     arts = team_arts(state, content, world)
-    power = encounter.team_power(team_participants(state, world), arts, squad.attribute)
+    power = encounter.team_power(
+        team_participants(state, world), arts, squad.attribute, team_conditions(state, content, world),
+    )
     return encounter.resolve_encounter(power, squad.difficulty, rng)
 
 
@@ -285,5 +354,7 @@ def _odds_text(wins: int, draws: int, runs: int) -> str:
 def estimate(state: GameState, content: Content, world: WorldStateStore, squad_id: str) -> str:
     squad = content.squads[squad_id]
     arts = team_arts(state, content, world)
-    power = encounter.team_power(team_participants(state, world), arts, squad.attribute)
+    power = encounter.team_power(
+        team_participants(state, world), arts, squad.attribute, team_conditions(state, content, world),
+    )
     return odds_word(power, squad)

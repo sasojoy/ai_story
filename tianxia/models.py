@@ -399,12 +399,20 @@ class Config(_Strict):
     explore_material_chance: float = 0.3  # 探索時撿到一個素材的機率（見無限煉製設計 §4.2）
     craft_xinde_base: int = 5  # 煉製成本 = base × 素材數 + per_tier × 階總和（見無限煉製設計 §5.5）
     craft_xinde_per_tier: int = 3
-    level_exp: int = 100  # 第 n 級升 n+1 級需要 level_exp × n
+    level_exp: int = 10  # 第 n 級升 n+1 級需要 level_exp × n
+    # 原本是 100，但實測一季打 19~26 場只升到第 2~3 級（升到第 10 級要 4500 經驗），
+    # 而氣血設計 §1.4 的平衡量測點在第 5／10／15 級——連第 5 級都到不了。降到 10 之後
+    # 一季大約升到第 10 級，等級的兩條線（氣血上限、檢定屬性）才有量級可談。
     max_level: int = 30
     # ── 練功（sanguo-companions 合併重寫，見設計文件六.2）──
     practice_injury_chance: float = 0.15  # 每次練功累積受傷（內傷）的機率
+    # 遭遇戰按結果扣氣血，扣掉的量是上限的幾成（氣血設計 §1.3：打完要付代價，不是免費收入）
+    encounter_neili_loss: dict[str, float] = Field(
+        default_factory=lambda: {"大勝": 0.05, "險勝": 0.15, "僵持": 0.20, "落敗": 0.30}
+    )
+    injury_share: float = 0.2  # 損失的氣血有幾成變成內傷（其餘是輕傷，自己會回）
     practice_injury_amount: float = 15.0  # 受傷時扣的氣血（累積為內傷，需療傷才能回到滿上限）
-    heal_silver_per_injury: int = 2  # 療傷：每點內傷要幾兩銀子（無條件進位）
+    heal_neili_per_silver: float = 2.0  # 療傷：每幾點內傷算一兩銀子（氣血設計 §二：預設每 2 點 1 兩，無條件進位）
     # ── 同伴招募（sanguo-companions 合併重寫，取代舊的收徒/招賢，見設計文件四.4）──
     recruit_stamina: int = 15  # 嘗試招募一次的體力
     recruit_base_chance: float = 0.35  # 基礎成功率，情誼會再往上加（見 roster.py）

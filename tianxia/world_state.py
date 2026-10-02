@@ -54,7 +54,8 @@ class CompanionProgress(BaseModel):
 
     level: int = 1
     exp: int = 0
-    neili: float | None = None  # 氣血，None＝滿
+    neili: float | None = None  # 氣血，None＝回滿（滿＝上限 − 內傷）
+    injury: float = 0.0  # 內傷，同 state.Member.injury
     neigong_id: str | None = None
     neigong_level: int = 1
     wugong_id: str | None = None

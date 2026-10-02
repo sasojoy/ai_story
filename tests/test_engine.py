@@ -404,11 +404,14 @@ def test_create_skill_rejects_a_taken_name(game):
 
 def test_heal(game):
     assert game.heal() == ["氣血無恙，不用療傷。"]
-    game.state.player.member.neili = 10.0
+    member = game.state.player.member
+    member.neili = 10.0  # 只有輕傷：會自己回，不該收錢（療傷按內傷計價，見 team.heal_cost）
+    assert game.heal() == ["氣血無恙，不用療傷。"]
+    member.injury = 40.0
     game.state.player.stats["silver"] = 999
     msgs = game.heal()
     assert msgs[0].startswith("療傷完畢")
-    assert game.state.player.member.neili is None
+    assert member.injury == 0.0 and member.neili is None
 
 
 # ── 閉關 ──────────────────────────────────────────────
