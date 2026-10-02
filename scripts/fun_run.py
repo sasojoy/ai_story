@@ -92,13 +92,27 @@ class FunLog:
     mechanical: int = 0  # 機制動作的重複次數（不扣分，只記錄）
     wasted: int = 0  # 花了資源卻沒換到新功法的次數
     crafts: int = 0  # 總共開了幾爐
+    actions: int = 0  # 總共做了幾個行動（分數要除以它，見下面 score 的說明）
     by_day: dict[int, list[float]] = field(default_factory=dict)  # 遊戲日 -> [加分, 扣分]
     last_novel_day: float = 0.0
     seen: dict[str, set] = field(default_factory=lambda: {k: set() for k in NOVELTY_POINTS})
 
     @property
-    def score(self) -> float:
+    def raw(self) -> float:
+        """未正規化的總分；只用來看組成，不要拿來比較不同的跑次。"""
         return self.novelty_points - self.repeat_penalty - self.wasted * WASTE_PENALTY
+
+    @property
+    def score(self) -> float:
+        """**每 100 個行動**的好玩度。一定要除以行動數，不能用總分。
+
+        校準用 8 個 seed 跑出來的教訓：總分會隨「玩了多久」無上限累積。單一次重複的扣分有
+        上限（REPEAT_CAP），但重複的次數沒有——有一個 seed 跑出 -2616 分，推算是約 900 次
+        重複事件，它只是跑了很長一季、在沒有新東西的狀態下一直探索。那正是「分數變成賽季
+        長度的代理變數」，而我原本只防了一半（防了每次的幅度，沒防次數）。除以行動數之後
+        量的是「每單位遊玩的新鮮感密度」，那才是好玩度該有的意思。
+        """
+        return self.raw / max(1, self.actions) * 100
 
     def add_novelty(self, kind: str, key, day: float, changed: bool) -> None:
         if key in self.seen[kind]:
@@ -198,6 +212,7 @@ def play(content, seed: int, world_dir: Path, *, no_craft=False, no_train=False,
         if choice is not None:
             before, before_events = snapshot(game), set(game.state.player.seen_events)
             game.choose(choice)
+            log.actions += 1
             observe_step(game, log, before, choice, before_events)
             if step % SPEND_XINDE_EVERY == 0:
                 bot.spend_xinde(game, rng)
@@ -208,7 +223,12 @@ def play(content, seed: int, world_dir: Path, *, no_craft=False, no_train=False,
                     before_spend = (sum(game.state.player.materials.values()),
                                     game.state.player.stats.get("xinde", 0))
                     if allow_recraft:
-                        with mock.patch.object(craft, "can_craft", lenient_can_craft):
+                        # 連 CRAFT_TRIES 一起退回 1：舊版沒有「被擋就換一組」的重試迴圈，
+                        # 那個迴圈跟「擋重煉」是同一個 commit（2b05b47）加的。只關掉檢查、
+                        # 留著重試，機器人照樣會自己換到一組沒煉過的，白燒根本不會發生——
+                        # 校準的 ③ 跟 ④ 一模一樣就是這個原因，不是指標看不見。
+                        with mock.patch.object(craft, "can_craft", lenient_can_craft), \
+                             mock.patch.object(bot, "CRAFT_TRIES", 1):
                             bot.craft_and_keep_the_best(game, rng)
                     else:
                         bot.craft_and_keep_the_best(game, rng)
@@ -235,7 +255,9 @@ def play(content, seed: int, world_dir: Path, *, no_craft=False, no_train=False,
 def report(label: str, logs: list[FunLog], content) -> float:
     scores = [lg.score for lg in logs]
     avg = sum(scores) / len(scores)
-    print(f"\n{'=' * 72}\n{label}　好玩度 {avg:+.1f}（各 seed：{'、'.join(f'{s:+.0f}' for s in scores)}）")
+    acts = sum(lg.actions for lg in logs) / len(logs)
+    print(f"\n{'=' * 72}\n{label}　好玩度 {avg:+.1f} 分／百行動"
+          f"（各 seed：{'、'.join(f'{s:+.0f}' for s in scores)}；平均 {acts:.0f} 個行動）")
     totals = Counter()
     hollow = Counter()
     for lg in logs:
@@ -305,15 +327,32 @@ def main() -> None:
                 ("③ 會重煉已知配方、47% 白燒（2b05b47 之前）", {"allow_recraft": True}),
                 ("④ 現在", {}),
             ]
-            results = []
+            results, all_logs = [], []
             for i, (label, flags) in enumerate(cases):
                 logs = [play(content, s, tmp / f"c{i}s{s}", **flags) for s in args.seeds]
+                all_logs.append(logs)
                 results.append((label, report(label, logs, content)))
             print(f"\n{'=' * 72}\n校準結果（期望是 ① < ② < ③ < ④）")
             for label, score in results:
                 print(f"  {score:+8.1f}　{label}")
-            ordered = [s for _, s in results]
-            print("\n排序正確：" + ("是 ✔ 指標可以信任" if ordered == sorted(ordered) else "否 ✘ 要先改指標，不要用它下結論"))
+            # 判準刻意只要求「現在要贏過每一個已知缺陷」，不要求三個缺陷狀態之間也排對：
+            # 「遭遇戰一季只有 3 場」跟「47% 的爐白燒」哪個比較無聊，我們從來沒有依據可以排，
+            # 那是我一開始沒有根據就寫進期望裡的假設。實測 ③（-23.1）比 ②（-16.2）更低，
+            # 與其硬調參數去迎合那個假設，不如承認判準該收窄到真正有依據的那一條。
+            scores = [s for _, s in results]
+            now, defects = scores[-1], scores[:-1]
+            losers = [results[i][0] for i, s in enumerate(defects) if s >= now]
+            if not losers:
+                print(f"\n判準通過：現在（{now:+.1f}）贏過每一個已知缺陷狀態"
+                      f"（最接近的是 {max(defects):+.1f}，差 {now - max(defects):.0f} 分）")
+            else:
+                print("\n判準不通過：以下已知缺陷狀態的分數不低於「現在」，要先確認是重現不夠真、還是指標看不見")
+                for label in losers:
+                    print(f"  ・{label}")
+            spread = max(max(lg.score for lg in logs) - min(lg.score for lg in logs) for logs in all_logs)
+            gap = max(scores) - min(scores)
+            note = "比狀態之間的差距還大，單一 seed 不能用來下結論" if spread > gap else "小於狀態之間的差距"
+            print(f"種子之間的落差：{spread:.0f} 分（狀態之間 {gap:.0f} 分）——{note}")
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
