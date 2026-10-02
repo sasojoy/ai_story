@@ -4,7 +4,8 @@ import shutil
 import pytest
 
 from conftest import FIXTURE
-from tianxia.content import ContentError, load_content
+from tianxia.content import ContentError, load_content, validate
+from tianxia.models import FactionDef
 
 
 def copy_fixture(tmp_path):
@@ -415,3 +416,21 @@ def test_duplicate_battle_faction_id_rejected(tmp_path):
     write_battles_json(root, [battle])
     with pytest.raises(ContentError, match="陣營 id 重複"):
         load_content(root)
+
+
+def test_validate_rejects_a_faction_joining_at_an_unknown_place(content):
+    content.scenario.factions = [FactionDef(id="guan", name="官軍", join_at=["nowhere"])]
+    with pytest.raises(ContentError, match="nowhere"):
+        validate(content)
+
+
+def test_validate_rejects_a_faction_owning_an_unknown_sect(content):
+    content.scenario.factions = [FactionDef(id="guan", name="官軍", sects=["no_such_sect"])]
+    with pytest.raises(ContentError, match="no_such_sect"):
+        validate(content)
+
+
+def test_validate_rejects_duplicate_faction_ids(content):
+    content.scenario.factions = [FactionDef(id="guan", name="官軍"), FactionDef(id="guan", name="又是官軍")]
+    with pytest.raises(ContentError, match="陣營 id 重複"):
+        validate(content)

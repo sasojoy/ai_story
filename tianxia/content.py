@@ -230,10 +230,18 @@ def validate(c: Content) -> None:
         if event.starts_battle:
             known(f"世界事件 {event.id}", [event.starts_battle], c.battles, "戰鬥")
 
+    scenario_faction_ids = [f.id for f in c.scenario.factions]
+    need(len(set(scenario_faction_ids)) == len(scenario_faction_ids), "劇本：陣營 id 重複")
+    for faction in c.scenario.factions:
+        known(f"陣營 {faction.id}", faction.join_at, c.locations, "地點")
+        known(f"陣營 {faction.id}", faction.sects, c.sects, "門派")
+
     for battle in c.battles.values():
         where = f"戰鬥 {battle.id}"
         faction_ids = [f.id for f in battle.factions]
         need(len(set(faction_ids)) == len(faction_ids), f"{where}：陣營 id 重複")
+        if scenario_faction_ids:
+            known(where, faction_ids, scenario_faction_ids, "陣營")
         act_ids = [a.id for a in battle.acts]
         need(len(set(act_ids)) == len(act_ids), f"{where}：幕 id 重複")
         for i, act in enumerate(battle.acts):

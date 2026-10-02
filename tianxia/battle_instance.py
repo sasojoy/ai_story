@@ -107,12 +107,14 @@ def close_muster(instance: BattleInstance, definition: BattleDef, rng: random.Ra
 
 def auto_assign_latecomer(
     instance: BattleInstance, definition: BattleDef, name: str, neili_cap: float, rng: random.Random,
-    power: float = 0.0, is_bot: bool = False,
+    power: float = 0.0, is_bot: bool = False, faction: str | None = None,
 ) -> None:
-    """集結期結束後才出現的人（包含機器人）：直接塞進人數較少的一方，維持陣營平衡。"""
+    """集結期結束後才出現的人（包含機器人）：有指定陣營（劇本分陣營時的玩家）就站自己那邊，
+    否則塞進人數較少的一方，維持陣營平衡。"""
     faction_ids = [f.id for f in definition.factions]
-    counts = {fid: sum(1 for p in instance.participants.values() if p.faction == fid) for fid in faction_ids}
-    faction = min(counts, key=lambda fid: (counts[fid], rng.random()))
+    if faction not in faction_ids:
+        counts = {fid: sum(1 for p in instance.participants.values() if p.faction == fid) for fid in faction_ids}
+        faction = min(counts, key=lambda fid: (counts[fid], rng.random()))
     instance.participants[name] = BattleParticipant(
         name=name, faction=faction, neili=neili_cap, neili_cap=neili_cap, power=power, is_bot=is_bot,
     )

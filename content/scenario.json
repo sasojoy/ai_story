@@ -3,6 +3,11 @@
   "name": "黃巾之亂",
   "intro": "漢室衰微，宦官弄權，天下早已民不聊生。鉅鹿人張角自稱得「南華老仙」傳授《太平要術》，暗中以「蒼天已死，黃天當立，歲在甲子，天下大吉」串連八州信眾。甲子年春，黃巾軍揭竿而起，烽煙四起。你背著一個包袱，站在潁川郡城門口——亂世江湖，就從這裡開始。",
   "start_location": "yingchuan",
+  "factions": [
+    {"id": "guan", "name": "官軍", "join_at": ["yingchuan", "changshe", "wan_city"], "sects": ["yingchuan_academy"]},
+    {"id": "huang", "name": "黃巾軍", "join_at": ["huangjin_camp"]},
+    {"id": "haoqiang", "name": "地方豪強", "join_at": ["zhuo_county", "cao_manor"], "sects": ["cao_manor"]}
+  ],
   "trends": [
     {"id": "huangjin", "name": "黃巾聲勢", "desc": "黃巾軍在潁川一帶的聲勢。到 50 官道將被切斷，到 80 潁川恐將淪陷。剿討能讓它下降。", "start": 25},
     {"id": "yuxi", "name": "玉璽碎片線索", "desc": "傳國玉璽碎片下落的線索拼湊進度。湊齊時，碎片的下落將會現世。", "start": 0, "hidden": true}

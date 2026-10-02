@@ -20,6 +20,7 @@
 - 檢定分兩種：`Check.by` 為 `"team"`（預設，派出戰隊伍中該屬性最高的人）或 `"self"`（修行類，只看本人）。
 - 改內容後跑 `pytest`：`tests/test_real_content.py` 會讓機器人玩完整季，抓出內容錯誤。
 - 賽季由管理者開：全服第一次開局停在「籌備中」，管理者（`content/config.json` 的 `admins`，暫時用名號認人）在設定頁按「開季」；季結束進入「休季」，管理者按「開啟下一季」。換季時同伴全部重獲自由、自創武學名字全部釋出、天機 +1（同名長出不同武學）。測試內容用 `auto_open_first_season: true` 直接開季。升級前就存在的 `saves/world/state.json` 沒有「已開季」的紀錄，升級後會停在籌備中，管理者按一次「開季」即可。
+- 陣營（`content/scenario.json` 的 `factions`）：玩家開局是散人，在陣營的 `join_at` 地點按「投靠」，或拜入陣營名下的門派；劇本有分陣營時，全服決戰只能站自己陣營那邊，散人與不在交戰雙方的陣營只能觀戰。
 
 ## 指令
 - 執行：`.venv/Scripts/python.exe app.py`（http://127.0.0.1:7861）

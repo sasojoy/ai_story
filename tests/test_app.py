@@ -376,6 +376,7 @@ def test_battle_textbox_is_hidden_outside_a_battle(game):
 
 def test_battle_textbox_shows_the_prompt_once_free_text_is_available(game):
     definition = app.CONTENT.battles["huangjin_showdown"]
+    game.state.player.faction = "guan"  # 劇本分陣營：散人只能觀戰，要先投靠才有得加入
     game.world.start_battle(definition, now=0.0)
     with mock.patch("tianxia.engine.time.time", return_value=0.0):
         game.choose("battle:join:guan")
@@ -389,6 +390,7 @@ def test_battle_textbox_shows_the_prompt_once_free_text_is_available(game):
 
 def test_battle_text_handler_submits_the_custom_action(game, save_dir):
     definition = app.CONTENT.battles["huangjin_showdown"]
+    game.state.player.faction = "guan"  # 劇本分陣營：散人只能觀戰，要先投靠才有得加入
     game.world.start_battle(definition, now=0.0)
     with mock.patch("tianxia.engine.time.time", return_value=0.0):
         game.choose("battle:join:guan")

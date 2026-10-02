@@ -109,6 +109,20 @@ def test_auto_assign_latecomer_balances_faction_sizes(definition):
     assert instance.participants["乙"].faction == "huang"  # guan 已經有一人，平衡塞進人少的一方
 
 
+def test_auto_assign_latecomer_keeps_a_given_faction_even_when_unbalanced(definition):
+    instance = bi.start_muster(definition, now=0.0)
+    bi.join_faction(instance, "甲", "guan", neili_cap=100.0)
+    bi.auto_assign_latecomer(instance, definition, "乙", neili_cap=100.0, rng=random.Random(0), faction="guan")
+    assert instance.participants["乙"].faction == "guan"  # 指定了陣營就站自己那邊，不被平衡規則改邊
+
+
+def test_auto_assign_latecomer_ignores_a_faction_not_in_the_battle(definition):
+    instance = bi.start_muster(definition, now=0.0)
+    bi.join_faction(instance, "甲", "guan", neili_cap=100.0)
+    bi.auto_assign_latecomer(instance, definition, "乙", neili_cap=100.0, rng=random.Random(0), faction="haoqiang")
+    assert instance.participants["乙"].faction == "huang"  # 指定的陣營不在這場戰鬥裡，退回平衡塞人
+
+
 # ── 回合鎖步 ─────────────────────────────────────────────
 
 

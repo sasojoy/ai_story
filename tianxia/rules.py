@@ -161,6 +161,10 @@ def apply_effect(effect: Effect, state: GameState, content: Content, world: Worl
         sect = content.sects[effect.join_sect]
         p.sect = sect.id
         msgs.append(f"你拜入了{sect.name}！")
+        owner = next((f for f in content.scenario.factions if sect.id in f.sects), None)
+        if owner is not None and p.faction is None:
+            p.faction = owner.id
+            msgs.append(f"你從此是{owner.name}的人了。")
     if effect.leave_sect and p.sect:
         msgs.append(f"你叛出了{content.sects[p.sect].name}。")
         p.flags.add(f"叛出:{p.sect}")

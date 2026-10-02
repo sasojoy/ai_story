@@ -236,6 +236,10 @@ class Game:
             if dest.unlock_flag and dest.unlock_flag not in s.world.flags:
                 continue
             opts.append(self._cost_option(f"move:{dest_id}", f"前往 {dest.name}", dest.move_cost))
+        if s.player.faction is None:
+            for faction in c.scenario.factions:
+                if s.player.location in faction.join_at:
+                    opts.append(Option(id=f"faction:{faction.id}", label=f"投靠{faction.name}"))
         opts.append(Option(id="act:rest", label="打坐歇息（恢復體力，約一個時辰）"))
         return opts
 
@@ -284,6 +288,8 @@ class Game:
                 msgs = self._move(arg)
             elif kind == "talk":
                 msgs = self._talk(arg)
+            elif kind == "faction":
+                msgs = self._join_faction(arg)
             else:
                 msgs = self._choose(int(arg))
             if kind == "act" and arg != "break":
@@ -299,6 +305,8 @@ class Game:
 
     def _action_title(self, kind: str, arg: str) -> str:
         s, c = self.state, self.content
+        if kind == "faction":
+            return f"投靠{self._faction(arg).name}"
         if kind == "move":
             return f"前往 {c.locations[arg].name}"
         if kind == "choice":
@@ -384,6 +392,14 @@ class Game:
         return companion_agent.continue_dialogue(
             self.client, self.state, self.content, self.world, companion_id, int(arg), self.rng
         )
+
+    def _faction(self, faction_id: str):
+        return next(f for f in self.content.scenario.factions if f.id == faction_id)
+
+    def _join_faction(self, faction_id: str) -> list[str]:
+        faction = self._faction(faction_id)
+        self.state.player.faction = faction.id
+        return [f"你投靠了{faction.name}。"]
 
     # ── 全服即時多人戰鬥（設計討論：集結選陣營→逐幕逐回合鎖步）──────────
 
@@ -496,10 +512,21 @@ class Game:
 
     def _battle_options(self, battle: battle_instance.BattleInstance, definition: BattleDef) -> list[Option]:
         name = self.state.player.name
+        sides_locked = bool(self.content.scenario.factions)  # 劇本分陣營：只能站在自己陣營那邊
+        mine = self.state.player.faction
+        in_battle = mine in {f.id for f in definition.factions}
+        spectate = Option(id="battle:spectate", label="（你不屬於交戰的任何一方，只能觀戰）", enabled=False)
         if battle.phase == "muster":
-            return [Option(id=f"battle:join:{f.id}", label=f"加入【{f.name}】") for f in definition.factions]
+            if not sides_locked:
+                return [Option(id=f"battle:join:{f.id}", label=f"加入【{f.name}】") for f in definition.factions]
+            if not in_battle:
+                return [spectate]
+            side = next(f for f in definition.factions if f.id == mine)
+            return [Option(id=f"battle:join:{side.id}", label=f"加入【{side.name}】")]
         p = battle.participants.get(name)
         if p is None:
+            if sides_locked and not in_battle:
+                return [spectate]
             return [Option(id="battle:join_late", label="加入戰局")]
         if p.eliminated:
             return [Option(id="battle:spectate", label="（觀戰中，無法行動）", enabled=False)]
@@ -564,14 +591,17 @@ class Game:
         name = self.state.player.name
         kind, _, rest = arg.partition(":")
         if kind == "join":
+            if self.content.scenario.factions and rest != self.state.player.faction:
+                return ["（你只能站在自己陣營這一邊。）"]
             self.world.mutate_battle(
                 lambda b: battle_instance.join_faction(b, name, rest, self._battle_neili_cap(), self._battle_power())
             )
             return ["你加入了這場戰局。"]
         if kind == "join_late":
+            own = self.state.player.faction if self.content.scenario.factions else None
             self.world.mutate_battle(
                 lambda b: battle_instance.auto_assign_latecomer(
-                    b, definition, name, self._battle_neili_cap(), self.rng, self._battle_power(),
+                    b, definition, name, self._battle_neili_cap(), self.rng, self._battle_power(), faction=own,
                 )
             )
             return ["你加入了戰局，這回合先觀戰，下回合開始可以行動。"]

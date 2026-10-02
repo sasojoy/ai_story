@@ -301,11 +301,21 @@ class Tutorial(_Strict):
     outro: str = ""
 
 
+class FactionDef(_Strict):
+    """一季的玩家陣營（第一季設計第五節）：在 join_at 的地點可以投靠；拜入 sects 裡的門派也算投靠這個陣營。"""
+
+    id: str
+    name: str
+    join_at: list[str] = Field(default_factory=list)
+    sects: list[str] = Field(default_factory=list)
+
+
 class Scenario(_Strict):
     id: str
     name: str
     intro: str
     start_location: str
+    factions: list[FactionDef] = Field(default_factory=list)  # 空的＝這個劇本不分陣營，全服決戰維持集結時選邊
     trends: list[Trend]
     thresholds: list[Threshold] = Field(default_factory=list)
     sim_players: list[SimPlayer] = Field(default_factory=list)

@@ -37,6 +37,7 @@ class PlayerState(BaseModel):
     stamina: float
     flags: set[str] = Field(default_factory=set)
     sect: str | None = None
+    faction: str | None = None  # 投靠的陣營 id（Scenario.factions）；None＝散人
     member: Member = Field(default_factory=Member)  # 玩家本人的角色表
 
     # ── 同伴（sanguo-companions 合併重寫：全服唯一，見 world_state.py）──

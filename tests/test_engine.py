@@ -794,6 +794,61 @@ def _install_battle_def(content):
     return definition
 
 
+def _install_factions(content):
+    from tianxia.models import FactionDef
+
+    content.scenario.factions = [
+        FactionDef(id="guan", name="官軍", join_at=["town"]),
+        FactionDef(id="huang", name="黃巾"),
+        FactionDef(id="haoqiang", name="地方豪強"),
+    ]
+
+
+def test_a_free_agent_can_join_a_faction_where_it_recruits(content, game):
+    _install_factions(content)
+    assert "faction:guan" in ids(game)
+    game.choose("faction:guan")
+    assert game.state.player.faction == "guan"
+    assert "faction:guan" not in ids(game)
+
+
+def test_the_join_option_only_shows_at_the_factions_own_places(content, game):
+    _install_factions(content)
+    game.choose("move:lake")
+    assert not any(i.startswith("faction:") for i in ids(game))
+
+
+def test_with_factions_the_muster_only_offers_your_own_side(content, game):
+    _install_factions(content)
+    definition = _install_battle_def(content)
+    game.state.player.faction = "huang"
+    game.world.start_battle(definition, now=1000.0)
+    with mock.patch("tianxia.engine.time.time", return_value=1000.0):
+        assert ids(game) == ["battle:join:huang"]
+        assert game.choose("battle:join:guan") == ["（此刻無法這麼做。）"]
+
+
+def test_with_factions_a_free_agent_or_an_outside_faction_can_only_watch(content, game):
+    _install_factions(content)
+    definition = _install_battle_def(content)
+    game.world.start_battle(definition, now=1000.0)
+    with mock.patch("tianxia.engine.time.time", return_value=1000.0):
+        assert [(o.id, o.enabled) for o in game.options()] == [("battle:spectate", False)]
+        game.state.player.faction = "haoqiang"
+        assert [(o.id, o.enabled) for o in game.options()] == [("battle:spectate", False)]
+
+
+def test_with_factions_a_latecomer_joins_their_own_side(content, game):
+    _install_factions(content)
+    definition = _install_battle_def(content)
+    game.state.player.faction = "huang"
+    game.world.start_battle(definition, now=0.0)
+    with mock.patch("tianxia.engine.time.time", return_value=definition.muster_seconds + 1):
+        game._battle_status()
+        game.choose("battle:join_late")
+    assert game.world.get_battle().participants["沈浪"].faction == "huang"
+
+
 def test_no_active_battle_leaves_normal_gameplay_untouched(content, game):
     assert game._battle_status() is None
     assert ids(game)[0] == "act:explore"

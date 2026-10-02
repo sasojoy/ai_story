@@ -251,3 +251,21 @@ def test_fragment_falls_back_to_a_generic_text_without_a_chronicle(state, conten
     content.scenario.jade_seal_flag = "shard_taken"
     apply_effect(Effect(world_flags_add=["shard_taken"]), state, content, world)
     assert "取得了傳國玉璽的一塊碎片" in world.get_jade_seal_fragments()[0].text
+
+
+def test_joining_a_sect_also_joins_the_faction_that_owns_it(state, content, world):
+    from tianxia.models import FactionDef
+
+    content.scenario.factions = [FactionDef(id="guan", name="官軍", sects=["cloud"])]
+    msgs = apply_effect(Effect(join_sect="cloud"), state, content, world)
+    assert state.player.faction == "guan"
+    assert any("官軍" in m for m in msgs)
+
+
+def test_joining_a_sect_keeps_an_existing_faction(state, content, world):
+    from tianxia.models import FactionDef
+
+    content.scenario.factions = [FactionDef(id="guan", name="官軍", sects=["cloud"])]
+    state.player.faction = "huang"
+    apply_effect(Effect(join_sect="cloud"), state, content, world)
+    assert state.player.faction == "huang"

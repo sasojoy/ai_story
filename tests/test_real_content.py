@@ -279,3 +279,9 @@ def test_every_location_belongs_to_a_region(content):
 
     for loc_id in content.locations:
         assert region_of(content, loc_id) is not None, loc_id
+
+
+def test_real_content_defines_the_three_factions_and_the_battle_uses_them(content):
+    assert [f.id for f in content.scenario.factions] == ["guan", "huang", "haoqiang"]
+    sides = {f.id for f in content.battles["huangjin_showdown"].factions}
+    assert sides <= {f.id for f in content.scenario.factions}
