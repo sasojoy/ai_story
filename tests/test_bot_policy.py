@@ -144,3 +144,26 @@ def test_look_after_creates_arts_with_ordinary_looking_names(content, game):
     member = game.state.player.member
     assert member.neigong_id and member.wugong_id
     assert not any(ch.isdigit() for ch in member.neigong_id + member.wugong_id)
+
+def test_a_bot_trains_where_training_helps_its_faction(content, game):
+    _install_factions(content)  # 官軍 goals kou -1、黃巾 goals kou +1
+    game.state.player.faction = "huang"
+    game.choose("move:lake")  # 湖邊 train_trend kou -1：黃巾的人在這裡歷練會往 +1 推
+    train = bot_policy.score(game, Option(id="act:train", label=""), _profile("huang"))
+    explore = bot_policy.score(game, Option(id="act:explore", label=""), _profile("huang"))
+    assert train > explore
+
+
+def test_training_with_no_push_scores_below_exploring(content, game):
+    content.locations["town"].enemies = ["thug"]  # 小鎮有敵人但沒有大勢推動
+    game.state.player.faction = "guan"
+    _install_factions(content)
+    assert bot_policy.score(game, Option(id="act:train", label=""), _profile("guan")) == bot_policy.TRAIN_SCORE
+    assert bot_policy.TRAIN_SCORE < bot_policy.score(game, Option(id="act:explore", label=""), _profile("guan"))
+
+
+def test_a_bot_heads_for_a_place_where_training_helps(content, game):
+    _install_factions(content)
+    game.state.player.faction = "huang"
+    to_lake = bot_policy.score(game, Option(id="move:lake", label=""), _profile("huang"))
+    assert to_lake >= bot_policy.HOME_MOVE_SCORE + bot_policy.TRAIN_MOVE_SCORE

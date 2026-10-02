@@ -307,3 +307,9 @@ def test_each_side_of_the_war_wants_the_yellow_turbans_to_go_its_way(content):
 
 def test_the_playtest_admin_is_rayal():
     assert load_content(CONTENT_DIR).config.admins == ["Rayal"]
+
+def test_enemy_squads_are_marked_with_the_designers_factions(content):
+    factions = {sid: s.faction for sid, s in content.squads.items()}
+    assert {sid for sid, f in factions.items() if f == "huang"} == {"louluo", "shuikou", "toumu", "shanzei", "fanjianglong"}
+    assert {sid for sid, f in factions.items() if f == "guan"} == {"guishou"}
+    assert {sid for sid, f in factions.items() if f == "haoqiang"} == {"xuantie_dizi"}

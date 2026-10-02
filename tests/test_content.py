@@ -518,3 +518,9 @@ def test_a_material_only_a_location_offers_is_still_reachable(tmp_path):
     _strand_the_top_tier(root)
     edit_json(root / "locations.json", lambda d: d[0].update(materials=["gang_3"]))
     load_content(root)
+
+def test_validate_rejects_a_squad_of_an_unknown_faction(content):
+    content.scenario.factions = [FactionDef(id="guan", name="官軍")]
+    content.squads["thug"].faction = "ghost"
+    with pytest.raises(ContentError, match="ghost"):
+        validate(content)

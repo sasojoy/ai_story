@@ -816,11 +816,13 @@ class Game:
         return [head, text]
 
     def _squad_encounter(self, squad_id: str) -> list[str]:
-        """遭遇一支敵方隊伍：單次判定，勝得對手獎勵與屬性機會，落敗失落一成銀兩。"""
+        """遭遇一支敵方隊伍：單次判定，勝得對手獎勵與屬性機會，落敗失落一成銀兩；自己陣營的隊伍改成操練（見 _drill）。"""
         s, c = self.state, self.content
         p = s.player
         loc = c.locations[p.location]
         squad = c.squads[squad_id]
+        if squad.faction is not None and squad.faction == p.faction:
+            return self._drill(squad)
         result = team.fight(s, c, self.world, squad.id, self.rng)
         record = battlelog.new_record(s, c, self.world, squad, result, "train")
         msgs: list[str] = []
@@ -833,7 +835,7 @@ class Game:
                 p.stats[key] += 1
                 extra.append(f"{c.config.stat_names[key]} +1")
             for trend_id, delta in loc.train_trend.items():
-                extra += change_trend(s, c, trend_id, delta)
+                extra += change_trend(s, c, trend_id, self._train_push(trend_id, delta))
             changes, notes = battlelog.split_changes(extra)
             record.changes += changes
             record.notes += notes
@@ -849,6 +851,38 @@ class Game:
         msgs += toll
         msgs.insert(0, self._file_battle(record))
         return msgs
+
+    def _drill(self, squad: Squad) -> list[str]:
+        """在自己陣營的地方歷練：不打自己人，一起操軍擺陣（企劃者 2026-10-02 決定）。不會輸、不扣氣血；
+        給經驗與心得、有機會加屬性；不給銀兩、不掉素材（不搶自己人）；地點的大勢推動往自己陣營有利的方向推。"""
+        s, c = self.state, self.content
+        p = s.player
+        loc = c.locations[p.location]
+        msgs = [f"你與{squad.name}一同操軍擺陣，軍心為之一振。"]
+        self._outcome("操練", msgs[0])
+        if squad.reward_xinde:
+            p.stats["xinde"] = p.stats.get("xinde", 0) + squad.reward_xinde
+            msgs.append(f"心得 +{squad.reward_xinde}")
+        msgs += team.add_exp(c, p.member, squad.exp, p.name)
+        if self.rng.random() < c.config.train_stat_chance:
+            key = self.rng.choice(["str", "agi", "con"])
+            p.stats[key] += 1
+            msgs.append(f"{c.config.stat_names[key]} +1")
+        for trend_id, delta in loc.train_trend.items():
+            msgs += change_trend(s, c, trend_id, self._train_push(trend_id, delta))
+        return msgs
+
+    def _train_push(self, trend_id: str, delta: int) -> int:
+        """歷練（打贏或操練）推大勢：量照地點設定；自己陣營對這條線有目標就往目標方向推，散人和
+        沒有這條線目標的陣營照地點原本的方向（企劃者 2026-10-02 決定）。"""
+        faction = next((f for f in self.content.scenario.factions if f.id == self.state.player.faction), None)
+        goal = faction.goals.get(trend_id, 0) if faction is not None else 0
+        return abs(delta) * goal if goal else delta
+
+    def train_trend_push(self, loc_id: str | None = None) -> dict[str, int]:
+        """在這個地點（預設所在地）歷練打贏或操練時，各條大勢線會被推多少（照自己的陣營，見 _train_push）。"""
+        loc = self.content.locations[loc_id or self.state.player.location]
+        return {trend_id: self._train_push(trend_id, delta) for trend_id, delta in loc.train_trend.items()}
 
     def _battle_rewards(self, squad: Squad, record) -> list[str]:
         p = self.state.player

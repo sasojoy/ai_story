@@ -1526,3 +1526,61 @@ def test_an_unavailable_opening_refunds_the_socialize_cost(content, game):
     assert msgs == ["韓鐵似乎無心多談，你只好先行告辭。"]
     assert game.state.player.stamina == before
     assert game.state.player.pending_companion is None
+
+def _training_factions(content):
+    from tianxia.models import FactionDef
+
+    content.scenario.factions = [
+        FactionDef(id="guan", name="官軍", join_at=["town"], goals={"kou": -1}),
+        FactionDef(id="huang", name="黃巾", join_at=["lake"], goals={"kou": 1}),
+        FactionDef(id="haoqiang", name="地方豪強"),
+    ]
+
+
+@pytest.mark.parametrize("faction, expected", [("huang", 31), ("guan", 29), ("haoqiang", 29), (None, 29)])
+def test_winning_a_training_fight_pushes_the_trend_your_factions_way(content, game, faction, expected):
+    """企劃者決定：歷練推大勢的量照地點，方向照自己陣營的目標；散人和沒有這條線目標的陣營照地點原本的方向。"""
+    _training_factions(content)
+    game.state.player.faction = faction
+    rules.learn_skill(game.state, game.content, "fist")  # 壓倒性的威力，穩贏
+    game.choose("move:lake")
+    game.choose("act:train")  # 湖邊的對手是水寇小隊（不屬於任何陣營），train_trend kou:-1
+    assert game.state.battles[0].kind == "train"
+    assert game.state.world.trends["kou"] == expected
+
+
+def test_training_with_your_own_factions_squad_is_a_drill(content, game):
+    """遇到自己陣營的人不開打，改成一起操軍擺陣：不會輸、給經驗與心得、不給銀兩不掉素材，大勢往自己這邊推。"""
+    _training_factions(content)
+    content.squads["thug"].faction = "huang"
+    game.state.player.faction = "huang"  # 沒學武功也沒關係：操練不會輸
+    game.choose("move:lake")
+    silver, xinde = game.state.player.stats["silver"], game.state.player.stats.get("xinde", 0)
+    msgs = game.choose("act:train")
+    assert any("操軍擺陣" in m for m in msgs)
+    assert game.state.battles == []
+    assert game.state.player.stats["silver"] == silver
+    assert game.state.player.stats["xinde"] == xinde + content.squads["thug"].reward_xinde
+    assert game.state.player.member.exp > 0 or game.state.player.member.level > 1
+    assert game.state.player.materials == {}
+    assert game.state.world.trends["kou"] == 31
+
+
+def test_train_trend_push_previews_the_push_for_your_faction(content, game):
+    _training_factions(content)
+    game.state.player.faction = "huang"
+    assert game.train_trend_push("lake") == {"kou": 1}
+    assert game.train_trend_push("town") == {}
+    game.state.player.faction = None
+    assert game.train_trend_push("lake") == {"kou": -1}
+
+def test_a_drill_is_journaled_as_a_drill_without_a_battle_card(content, game):
+    _training_factions(content)
+    content.squads["thug"].faction = "huang"
+    game.state.player.faction = "huang"
+    game.choose("move:lake")
+    game.choose("act:train")
+    entry = game.state.journal[0]
+    assert (entry.title, entry.tag, entry.battle_id) == ("歷練・湖邊", "操練", None)
+    assert entry.changes == ["心得 +10"] and entry.lines == ["（寇亂 +1）"]
+    assert game.state.battle_card is None

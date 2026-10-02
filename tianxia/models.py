@@ -142,7 +142,7 @@ class Location(_Strict):
     move_cost: int = Field(default=5, ge=0)
     important: bool = False
     enemies: list[str] = Field(default_factory=list)
-    train_trend: dict[str, int] = Field(default_factory=dict)
+    train_trend: dict[str, int] = Field(default_factory=dict)  # 歷練打贏／操練推大勢的量；正負是散人的方向，有陣營目標的人照自己的目標推（Game._train_push）
     materials: list[str] = Field(default_factory=list)  # 在這裡探索可能撿到的素材；留空則給隨機的一階素材
     unlock_flag: str | None = None  # 設定後，需該世界旗標成立才能前往
 
@@ -203,6 +203,7 @@ class Squad(_Strict):
     reward_xinde: int = 0
     exp: int = 0
     drops: list[Drop] = Field(default_factory=list)  # 留空則走 materials.py 依難度的預設掉落表
+    faction: str | None = None  # 這支隊伍屬於哪個陣營（Scenario.factions 的 id）；自己陣營的人遇到時改成操練、不開打
 
 
 class Trend(_Strict):

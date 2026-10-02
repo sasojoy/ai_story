@@ -161,6 +161,8 @@ def validate(c: Content) -> None:
 
     for squad in c.squads.values():
         known(f"敵方隊伍 {squad.id}", [drop.material for drop in squad.drops], c.materials, "素材")
+        if squad.faction is not None:
+            known(f"敵方隊伍 {squad.id}", [squad.faction], [f.id for f in c.scenario.factions], "陣營")
 
     # 每一種素材都要至少有一個拿得到的管道，否則它是死內容。第一版的「鎮山鐵」就是這樣
     # 漏掉的：掉天品的兩個對手屬剛與屬柔、奇遇給屬快，屬慢沒人負責，而難度 >=100 的對手

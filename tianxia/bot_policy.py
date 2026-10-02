@@ -19,8 +19,10 @@ REWARD_STATS = ("str", "agi", "con", "wis", "silver", "fame", "xinde")
 TREND_WEIGHT = 10.0  # 推大勢一點，抵得過十點獎勵
 JOIN_BATTLE_SCORE = 100.0
 ACT_SCORES = {"explore": 1.0, "socialize": 0.8}
+TRAIN_SCORE = 0.6  # 歷練本身的分數（低於探索）；對自己陣營有利的地點再加上大勢分
 HOME_MOVE_SCORE = 0.3  # 往自己陣營投靠點一帶走
 AWAY_MOVE_SCORE = 0.1
+TRAIN_MOVE_SCORE = 0.5  # 往「歷練對自己陣營有利」的地點走，額外加分
 PRACTICE_CHANCE = 0.2  # 每次行動順便鍛鍊一門的機率（練功不花心得，不能每次都練）
 SKILL_NAME_TRIES = 5
 
@@ -82,10 +84,13 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
     if kind == "talk":
         return 0.0 if arg == "leave" else None
     if kind == "move":
-        return HOME_MOVE_SCORE if arg in _home(game, profile) else AWAY_MOVE_SCORE
+        base = HOME_MOVE_SCORE if arg in _home(game, profile) else AWAY_MOVE_SCORE
+        return base + (TRAIN_MOVE_SCORE if _train_value(game, profile, arg) > 0 else 0.0)
     if kind == "act":
         if arg == "socialize" and game.socialize_starts_dialogue():
             return None
+        if arg == "train":
+            return TRAIN_SCORE + _train_value(game, profile)
         return ACT_SCORES.get(arg, 0.0)
     return None
 
@@ -95,6 +100,12 @@ def effect_score(effect: Effect, goals: dict[str, int]) -> float:
     push = sum(goals.get(trend_id, 0) * delta for trend_id, delta in effect.trend.items())
     reward = sum(max(0, effect.stats.get(key, 0)) for key in REWARD_STATS)
     return TREND_WEIGHT * push + reward / 10
+
+
+def _train_value(game: Game, profile: BotProfile, loc_id: str | None = None) -> float:
+    """在這個地點（預設所在地）歷練對自己陣營的大勢分（同 effect_score 的一點抵十分）。"""
+    goals = _goals(game, profile)
+    return TREND_WEIGHT * sum(goals.get(t, 0) * d for t, d in game.train_trend_push(loc_id).items())
 
 
 def next_hop(game: Game, targets: list[str]) -> str | None:
