@@ -21,7 +21,7 @@ from .journal import LOG_BREAK, Draft
 from .mapview import render_map, render_minimap
 from .models import BattleDef, Choice, Content, Effect, Event, Location, Squad
 from .ollama_client import OllamaClient
-from .rules import apply_effect, change_trend, check_who, roll_check
+from .rules import apply_effect, change_trend, check_who, current_day, roll_check
 from .state import GameState, JournalEntry, Rumor, new_game_state
 from .world import advance_world_state, check_thresholds, end_season, fire_by_id, sim_tick, start_pending_battle
 from .world_state import WorldStateStore
@@ -470,19 +470,18 @@ class Game:
         p = self.state.player
         return f"結識:{companion_id}" in p.flags or p.stats.get("fame", 0) >= self.content.characters[companion_id].audience_fame
 
+    def _talks_used(self, companion_id: str) -> int:
+        """今天（遊戲日，跟福緣用同一個算法）已經跟這位人物聊了幾輪；紀錄是前幾天的就當沒聊過。"""
+        record = self.state.player.talks_today.get(companion_id)
+        return record[1] if record and record[0] == current_day(self.state) else 0
+
     def _talks_left(self, companion_id: str) -> int:
         """今天（遊戲日）還能跟這位人物聊幾輪。"""
-        day = int(self.state.world.time // DAY)
-        record = self.state.player.talks_today.get(companion_id)
-        used = record[1] if record and record[0] == day else 0
-        return max(0, self.content.config.talk_turns_per_day - used)
+        return max(0, self.content.config.talk_turns_per_day - self._talks_used(companion_id))
 
     def _count_talk(self, companion_id: str) -> list[str]:
         """記一輪；今天聊滿了就自動告辭。"""
-        day = int(self.state.world.time // DAY)
-        record = self.state.player.talks_today.get(companion_id)
-        used = record[1] if record and record[0] == day else 0
-        self.state.player.talks_today[companion_id] = [day, used + 1]
+        self.state.player.talks_today[companion_id] = [current_day(self.state), self._talks_used(companion_id) + 1]
         if self._talks_left(companion_id) > 0:
             return []
         self.state.player.pending_companion = None
@@ -508,6 +507,16 @@ class Game:
     def socialize_starts_dialogue(self) -> bool:
         """在這裡交遊會直接跟大勢人物對話（伺服器假人不閒聊大勢人物，見 bot_policy）。"""
         return self._deep_interaction_target() is not None
+
+    def socialize_is_futile(self) -> bool:
+        """在這裡交遊注定白跑一趟（伺服器假人不該去按）：這個地點沒有交遊事件、沒有見得到的大勢人物，
+        而且福緣還沒到期（交遊最先發福緣，見 _act）。"""
+        s, c = self.state, self.content
+        return (
+            not has_events_here(c, c.locations[s.player.location], "socialize")
+            and self._deep_interaction_target() is None
+            and not roster.fortune_due(s, c)
+        )
 
     def _dialogue_unavailable(self, companion_id: str) -> list[str]:
         """這一輪生成不出對話（模型叫不動）：這輪不算數、對話結束（企劃者決定：不要卡在同一句

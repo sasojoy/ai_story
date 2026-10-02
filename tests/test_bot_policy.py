@@ -167,3 +167,30 @@ def test_a_bot_heads_for_a_place_where_training_helps(content, game):
     game.state.player.faction = "huang"
     to_lake = bot_policy.score(game, Option(id="move:lake", label=""), _profile("huang"))
     assert to_lake >= bot_policy.HOME_MOVE_SCORE + bot_policy.TRAIN_MOVE_SCORE
+
+
+def test_a_bot_does_not_socialize_where_it_would_only_be_turned_away(content, game):
+    """名望不夠的假人在只有大勢人物、沒有交遊事件的地方，交遊只會白扣體力；福緣到期時交遊會先送福緣，就另當別論。"""
+    ch = content.characters["mate"]
+    ch.deep_interaction, ch.audience_fame = True, 10
+    ch.kind, ch.recruit_at, ch.talk_at = "locked", None, "cave"
+    game.state.player.location = "cave"
+    profile = _profile("guan")
+    socialize = Option(id="act:socialize", label="")
+    assert game.socialize_is_futile() and not game.socialize_starts_dialogue()
+    assert bot_policy.score(game, socialize, profile) is None
+    game.state.world.time = 86400  # 第二天：福緣到期，交遊會先送福緣
+    assert not game.socialize_is_futile()
+    assert bot_policy.score(game, socialize, profile) == bot_policy.ACT_SCORES["socialize"]
+    game.state.player.fortune = True  # 福緣給過了：又是白跑一趟
+    assert game.socialize_is_futile()
+    game.state.player.stats["fame"] = 10  # 名望到了：見得到他，不白跑，但交遊會開口對話，照舊不去
+    assert not game.socialize_is_futile() and game.socialize_starts_dialogue()
+    assert bot_policy.score(game, socialize, profile) is None
+
+
+def test_a_bot_still_socializes_where_the_location_has_events(content, game):
+    content.characters["mate"].deep_interaction = True
+    content.characters["mate"].audience_fame = 10  # 小鎮有交遊事件（拜師），見不到韓鐵也不白跑
+    assert not game.socialize_is_futile()
+    assert bot_policy.score(game, Option(id="act:socialize", label=""), _profile("guan")) == bot_policy.ACT_SCORES["socialize"]

@@ -1595,7 +1595,8 @@ def _figure(content, fame=0):
 
 def test_a_newcomer_without_fame_is_turned_away_from_a_figure(content, game):
     _figure(content, fame=10)
-    with mock.patch("tianxia.engine.pick_event", return_value=None),             mock.patch.object(companion_agent, "_generate", return_value=FAKE_TURN):
+    with mock.patch("tianxia.engine.pick_event", return_value=None), \
+            mock.patch.object(companion_agent, "_generate", return_value=FAKE_TURN):
         msgs = game.choose("act:socialize")
     assert game.state.player.pending_companion is None
     assert msgs == ["你想求見韓鐵，但人微言輕，被擋在門外（名望 10 以上才見得到）。"]
@@ -1631,3 +1632,22 @@ def test_three_turns_a_day_with_the_same_figure(content, game):
         game.state.world.time += 86400  # 隔天重算
         game.choose("act:socialize")
     assert game.state.player.pending_companion == "mate"
+
+
+def test_socialize_is_offered_where_a_figure_stands_even_if_you_cannot_meet_him(content, game):
+    """寶洞沒有交遊事件：沒有大勢人物時不給交遊；有一位見不到的大勢人物時照樣給，按下去才知道為什麼見不到。"""
+    game.state.player.location = "cave"
+    assert "act:socialize" not in ids(game)
+    ch = _figure(content, fame=10)
+    ch.kind, ch.recruit_at, ch.talk_at = "locked", None, "cave"
+    assert game.state.player.stats.get("fame", 0) < 10
+    assert "act:socialize" in ids(game)
+
+
+def test_a_newcomer_below_the_threshold_gets_the_locations_event_instead_of_a_dialogue(content, game):
+    """小鎮有交遊事件（拜師）也有一位名望不夠的大勢人物：不 mock pick_event，交遊照地點事件走，不算被擋在門外。"""
+    _figure(content, fame=10)
+    msgs = game.choose("act:socialize")
+    assert game.state.player.pending_companion is None
+    assert game.state.pending_event is not None
+    assert "你想求見韓鐵，但人微言輕，被擋在門外（名望 10 以上才見得到）。" not in msgs
