@@ -21,6 +21,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from . import zh
 from .models import BattleAct, BattleActionEffect, BattleDef, BattleOption, BattleOutcome
 from .ollama_client import OllamaClient
 
@@ -316,7 +317,7 @@ def assess_action_success_rate(
         return DEFAULT_FREE_TEXT_SUCCESS_RATE
     messages = [
         {"role": "system", "content": (
-            "你是三國時代戰場的判定系統，負責評估玩家描述的行動合理的成功機率，不是故事"
+            "你是漢末兩軍交戰的戰場判定系統，負責評估玩家描述的行動合理的成功機率，不是故事"
             "寫手、也不負責決定最終是否成功。只能根據行動本身在戰場上的合理性判斷，"
             "請給出 0~100 的整數 success_rate（成功機率）與一句話 reasoning。"
         )},
@@ -330,6 +331,14 @@ def assess_action_success_rate(
     except Exception:
         return DEFAULT_FREE_TEXT_SUCCESS_RATE
     return max(0, min(100, result.success_rate))
+
+
+# 試玩時潤色寫出「劍尖相碰」這種武俠單挑的畫面；全服決戰是兩軍對陣，要寫成漢末的戰陣。
+BATTLE_NARRATOR_PROMPT = (
+    "你是漢末三國文字遊戲的戰場敘事生成器，只潤色既有判定，不自創結果。這是兩軍對陣的戰場："
+    "旌旗、陣列、鼓聲號角、弓弩齊發、騎兵衝陣、步卒廝殺；不要寫成武俠的單打獨鬥或刀劍特寫，"
+    "也不要提到判定裡沒有的人物或事件。用繁體中文。"
+)
 
 
 def narrate_round(client: OllamaClient | None, definition: BattleDef, instance: BattleInstance, msgs: list[str]) -> str:
@@ -347,10 +356,9 @@ def narrate_round(client: OllamaClient | None, definition: BattleDef, instance: 
     )
     try:
         text = client.chat_text(
-            [{"role": "system", "content": "你是文字武俠遊戲的戰場敘事生成器，只潤色既有判定，不自創結果。"},
-             {"role": "user", "content": prompt}],
+            [{"role": "system", "content": BATTLE_NARRATOR_PROMPT}, {"role": "user", "content": prompt}],
             num_predict=200,
         )
     except Exception:
         return "\n".join(msgs)
-    return text.strip() or "\n".join(msgs)
+    return zh.to_traditional(text.strip()) or "\n".join(msgs)

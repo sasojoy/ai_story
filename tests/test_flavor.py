@@ -35,3 +35,11 @@ def test_polish_world_event_passes_the_threshold_text():
     assert result == "街坊議論紛紛。"
     prompt = client.chat_text.call_args[0][0][1]["content"]
     assert "黃巾軍攻破潁川防線" in prompt
+
+
+def test_flavor_is_late_han_not_wuxia_and_comes_out_in_traditional_characters():
+    assert "漢末" in flavor._SYSTEM_PROMPT
+    assert "三國時代" not in flavor._SYSTEM_PROMPT and "文字武俠遊戲" not in flavor._SYSTEM_PROMPT
+    client = mock.Mock()
+    client.chat_text.return_value = "风吹过城头的旗帜。"
+    assert flavor.polish_revisit(client, "潁川", "城外營寨連綿。") == "風吹過城頭的旗幟。"

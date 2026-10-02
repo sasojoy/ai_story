@@ -8,15 +8,16 @@
 """
 from __future__ import annotations
 
+from . import zh
 from .ollama_client import OllamaClient
 
 FLAVOR_NUM_PREDICT = 80
 
 _SYSTEM_PROMPT = (
-    "你是文字武俠遊戲的氣氛點綴生成器，只負責在一段已經寫好的固定文字後面，補一句簡短"
-    "（15~40 字）的即景或心境描寫，貼合三國時代語境，不重寫、不否定、不總結前面的內容，"
-    "純粹是再多看一眼的補充細節。只輸出這一句話本身，不要加引號、不要加任何格式標記、"
-    "不要解釋你在做什麼。"
+    "你是漢末三國文字遊戲的氣氛點綴生成器，只負責在一段已經寫好的固定文字後面，補一句簡短"
+    "（15~40 字）的即景或心境描寫，貼合漢末亂世的語境（不是武俠小說），不重寫、不否定、不總結"
+    "前面的內容，也不要提到原文沒有的人物或事件，純粹是再多看一眼的補充細節。只輸出這一句話"
+    "本身，用繁體中文，不要加引號、不要加任何格式標記、不要解釋你在做什麼。"
 )
 
 
@@ -28,7 +29,7 @@ def _ask(client: OllamaClient | None, prompt: str) -> str:
         text = client.chat_text(messages, num_predict=FLAVOR_NUM_PREDICT)
     except Exception:
         return ""
-    return text.strip().strip('「」"')
+    return zh.to_traditional(text.strip().strip('「」"'))
 
 
 def polish_revisit(client: OllamaClient | None, loc_name: str, loc_desc: str) -> str:

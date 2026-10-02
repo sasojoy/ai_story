@@ -541,3 +541,24 @@ def test_narrate_round_falls_back_when_the_llm_call_fails(definition):
     client = mock.Mock()
     client.chat_text.side_effect = RuntimeError("連不上")
     assert bi.narrate_round(client, definition, instance, ["甲選了穩紮穩打。"]) == "甲選了穩紮穩打。"
+
+
+def test_narrate_round_writes_a_late_han_battle_in_traditional_characters(definition):
+    """戰況潤色是漢末兩軍對陣，不是武俠單挑；輸出轉成繁體（試玩時出現「劍尖相碰」這種武俠寫法）。"""
+    instance = _active_battle(definition)
+    client = mock.Mock()
+    client.chat_text.return_value = "战场上烟尘四起。"
+    text = bi.narrate_round(client, definition, instance, ["甲選了穩紮穩打。"])
+    system = client.chat_text.call_args.args[0][0]["content"]
+    assert "漢末" in system and "兩軍對陣" in system and "單打獨鬥" in system
+    assert "武俠遊戲" not in system
+    assert text == "戰場上煙塵四起。"
+
+
+def test_the_free_text_judge_is_set_in_the_late_han(definition):
+    instance = _active_battle(definition)
+    client = mock.Mock()
+    client.chat_structured.return_value = bi.SuccessRateJudgment(success_rate=40)
+    bi.assess_action_success_rate(client, bi.current_act(instance, definition), "官軍", "從側翼包抄")
+    system = client.chat_structured.call_args.args[0][0]["content"]
+    assert "漢末" in system and "三國時代" not in system
