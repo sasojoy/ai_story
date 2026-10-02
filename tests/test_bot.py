@@ -22,9 +22,10 @@ def test_spend_xinde_first_creates_then_practices_each_slot(game):
 
 def test_spend_xinde_heals_first_when_neili_is_low(game):
     game.state.player.member.neili = 10.0
+    game.state.player.member.injury = 40.0  # 有內傷才有東西可以療（療傷按內傷計價）
     game.state.player.stats["silver"] = 999
     spend_xinde(game, random.Random(0))
-    assert game.state.player.member.neili is None  # 回滿
+    assert game.state.player.member.injury == 0.0 and game.state.player.member.neili is None
 
 
 def test_pick_accepts_whoever_the_event_wants_to_recruit(game):

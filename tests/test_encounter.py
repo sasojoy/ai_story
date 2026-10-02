@@ -1,5 +1,6 @@
 import random
 
+from tianxia import encounter
 from tianxia.encounter import (
     EncounterResult,
     describe_result,
@@ -69,17 +70,28 @@ def test_team_power_sums_all_members_and_skips_empty_ones():
 
 
 def test_resolve_encounter_tiers_by_margin_without_luck():
-    assert resolve_encounter(our_power=140, difficulty=100, rng=NO_LUCK).tier == "大勝"  # margin 40
-    assert resolve_encounter(our_power=110, difficulty=100, rng=NO_LUCK).tier == "險勝"  # margin 10
+    """門檻是難度的比例（大勝 50%、險勝 15%、僵持 -50%），難度 100 時剛好是 50／15／-50。"""
+    assert resolve_encounter(our_power=150, difficulty=100, rng=NO_LUCK).tier == "大勝"  # margin 50
+    assert resolve_encounter(our_power=115, difficulty=100, rng=NO_LUCK).tier == "險勝"  # margin 15
     assert resolve_encounter(our_power=90, difficulty=100, rng=NO_LUCK).tier == "僵持"  # margin -10
-    assert resolve_encounter(our_power=50, difficulty=100, rng=NO_LUCK).tier == "落敗"  # margin -50
+    assert resolve_encounter(our_power=40, difficulty=100, rng=NO_LUCK).tier == "落敗"  # margin -60
+
+
+def test_the_thresholds_scale_with_how_big_the_fight_is():
+    """同樣的「威力多 10 點」，打小角色是大勝、打強敵只是僵持——運氣與門檻都按難度的比例算。"""
+    assert resolve_encounter(our_power=20, difficulty=10, rng=NO_LUCK).tier == "大勝"  # 多 10 點，門檻 5
+    assert resolve_encounter(our_power=160, difficulty=150, rng=NO_LUCK).tier == "僵持"  # 多 10 點，門檻 22.5
 
 
 def test_resolve_encounter_luck_can_swing_a_close_match():
-    good_luck = FixedRandom(1.0)  # uniform(-15,15) -> 15，margin 15 >= 險勝門檻 10
-    bad_luck = FixedRandom(0.0)  # uniform(-15,15) -> -15，margin -15 >= 僵持門檻 -20
+    good_luck = FixedRandom(1.0)  # 難度 100 → uniform(-30,30) 取 30，margin 30 >= 險勝門檻 15
+    bad_luck = FixedRandom(0.0)  # -30，margin -30 >= 僵持門檻 -50
     assert resolve_encounter(our_power=100, difficulty=100, rng=good_luck).tier == "險勝"
     assert resolve_encounter(our_power=100, difficulty=100, rng=bad_luck).tier == "僵持"
+
+
+def test_luck_never_vanishes_even_for_a_trivial_fight():
+    assert encounter.luck_half(0) == encounter.LUCK_MIN
 
 
 def test_describe_result_fills_in_names_for_every_tier():

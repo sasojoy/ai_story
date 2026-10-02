@@ -26,6 +26,10 @@
     "y": 55,
     "tags": [
       "河畔"
+    ],
+    "materials": [
+      "rou_1",
+      "man_1"
     ]
   },
   {
@@ -44,6 +48,10 @@
     "enemies": [
       "dipi",
       "shanzei"
+    ],
+    "materials": [
+      "gang_1",
+      "kuai_1"
     ]
   },
   {
@@ -65,7 +73,11 @@
     ],
     "train_trend": {
       "huangjin": -1
-    }
+    },
+    "materials": [
+      "gang_2",
+      "gang_1"
+    ]
   },
   {
     "id": "luoyang_road",
@@ -86,7 +98,11 @@
     ],
     "train_trend": {
       "huangjin": -1
-    }
+    },
+    "materials": [
+      "kuai_1",
+      "gang_1"
+    ]
   },
   {
     "id": "wan_city",
@@ -116,6 +132,10 @@
     "y": 192,
     "tags": [
       "寺院"
+    ],
+    "materials": [
+      "man_1",
+      "rou_1"
     ]
   },
   {
@@ -134,6 +154,10 @@
     ],
     "enemies": [
       "shanzei"
+    ],
+    "materials": [
+      "kuai_1",
+      "rou_1"
     ]
   },
   {
@@ -180,6 +204,10 @@
     ],
     "enemies": [
       "dipi"
+    ],
+    "materials": [
+      "man_1",
+      "gang_1"
     ]
   },
   {
@@ -198,6 +226,10 @@
     ],
     "enemies": [
       "yelang"
+    ],
+    "materials": [
+      "rou_1",
+      "kuai_1"
     ]
   },
   {
@@ -232,6 +264,10 @@
     "enemies": [
       "yelang",
       "heixiong"
+    ],
+    "materials": [
+      "man_2",
+      "rou_2"
     ]
   },
   {
@@ -249,7 +285,11 @@
     ],
     "danger": 3,
     "move_cost": 8,
-    "unlock_flag": "xi_open"
+    "unlock_flag": "xi_open",
+    "materials": [
+      "man_2",
+      "kuai_2"
+    ]
   },
   {
     "id": "runan_market",
@@ -263,6 +303,10 @@
     "y": 245,
     "tags": [
       "城鎮"
+    ],
+    "materials": [
+      "gang_1",
+      "rou_1"
     ]
   },
   {
@@ -316,7 +360,11 @@
     ],
     "train_trend": {
       "huangjin": -1
-    }
+    },
+    "materials": [
+      "man_1",
+      "kuai_1"
+    ]
   },
   {
     "id": "huangjin_camp",
@@ -338,7 +386,11 @@
     ],
     "train_trend": {
       "huangjin": -2
-    }
+    },
+    "materials": [
+      "gang_2",
+      "kuai_2"
+    ]
   },
   {
     "id": "zhuo_county",
@@ -366,6 +418,10 @@
     "y": 300,
     "tags": [
       "城鎮"
+    ],
+    "materials": [
+      "gang_1",
+      "kuai_1"
     ]
   }
 ]

@@ -11,7 +11,10 @@ import time
 
 from pydantic import BaseModel
 
-from . import atlas, battle_instance, battlelog, companion_agent, encounter, flavor, journal, roster, skillview, team
+from . import (
+    atlas, battle_instance, battlelog, companion_agent, craft, encounter, flavor, journal, materials, roster,
+    skillview, team,
+)
 from .events import choice_label, has_events_here, pick_event, visible_choices
 from .guide import note_action, quest_text, tutorial_intro
 from .journal import LOG_BREAK, Draft
@@ -121,6 +124,15 @@ class Game:
             p.member.neigong_id = None
         if p.member.wugong_id and p.member.wugong_id not in c.skills and not self.world.is_skill_name_taken(p.member.wugong_id):
             p.member.wugong_id = None
+        # 功法庫與素材：內容檔改版（或換季）後可能指到不存在的東西
+        equipped = {p.member.neigong_id, p.member.wugong_id}
+        seen: set[str] = set()
+        p.arts = [  # 去重，並把已經配在身上的從庫裡移除（舊版重煉同一配方會造成這種髒狀態）
+            a for a in p.arts
+            if team.resolve_art(a, c, self.world) is not None and a not in equipped and not (a in seen or seen.add(a))
+        ]
+        p.art_levels = {k: v for k, v in p.art_levels.items() if team.resolve_art(k, c, self.world) is not None}
+        p.materials = {k: v for k, v in p.materials.items() if k in c.materials and v > 0}
         line_ids = [line.id for line in c.scenario.storylines]
         if s.world.storyline not in line_ids:
             s.world.storyline, s.world.act = line_ids[0], 0
@@ -235,6 +247,14 @@ class Game:
         loc = c.locations[s.player.location]
         cost = c.config.action_cost
         opts = [self._cost_option("act:explore", "探索", cost["explore"])]
+        if loc.enemies:
+            # 歷練：這個地點的敵人，必定開打（見 _train）。sanguo-companions 合併時這個行動被
+            # 整個拿掉，於是 Location.enemies／action_cost["train"]／train_event_chance 三個設定
+            # 一起變成死的，而遭遇戰只剩劇情事件的 combat 選項——實測整季只打 3 場。
+            opts.append(self._cost_option(
+                "act:train", "歷練", cost["train"],
+                note=f"對手：{c.squads[loc.enemies[0]].name}" if len(loc.enemies) == 1 else f"{len(loc.enemies)} 路對手",
+            ))
         if has_events_here(c, loc, "socialize") or self._deep_interaction_target() is not None:
             opts.append(self._cost_option("act:socialize", "交遊", cost["socialize"]))
         target = self._recruit_target()
@@ -336,7 +356,7 @@ class Game:
             return f"交談・{character.name}"
         here = c.locations[s.player.location].name
         titles = {
-            "explore": f"探索{here}", "socialize": f"交遊・{here}",
+            "explore": f"探索{here}", "socialize": f"交遊・{here}", "train": f"歷練・{here}",
             "recruit": f"招募・{here}", "rest": f"打坐歇息・{here}",
         }
         return titles.get(arg, "提前出關")
@@ -364,7 +384,9 @@ class Game:
             return self._rest()
         self.state.player.stamina -= cost[what]
         if what == "explore":
-            return self._encounter("explore", "你四處走走，一無所獲。")
+            return self._explore()
+        if what == "train":
+            return self._train()
         if roster.fortune_due(self.state, self.content):
             candidates = [cid for cid, ch in self.content.characters.items() if ch.kind == "recruitable"]
             if candidates and roster.owned_by(self.world, candidates[0]) is None:
@@ -380,6 +402,41 @@ class Game:
         if companion_id is not None:
             return companion_agent.start_dialogue(self.client, self.state, self.content, self.world, companion_id, self.rng)
         return self._encounter("socialize", "此地無人可訪，你只好悻悻離去。")
+
+    def _explore(self) -> list[str]:
+        """探索：先滾一次煉製素材，再走一般的遭遇流程（事件／敵人／一無所獲）。
+
+        素材的判定**刻意放在事件之前、而且不管接下來發生什麼都會滾**：原本照設計文件
+        §4.2 掛在「一無所獲」那條分支上，但用真實內容跑完整季實測，100 次探索有 100 次
+        都撞到手寫事件或敵人，那條分支一次都沒執行到（整季只拿到打贏掉的 3 個素材）。
+        改成探索本身就有機會撿到東西，一季約 30 個，對得上設計文件 §4.4 的產出目標。
+        """
+        loc = self.content.locations[self.state.player.location]
+        found = materials.roll_explore_drop(loc, self.content, self.rng)
+        line = materials.grant(self.state, self.content, found) if found is not None else None
+        nothing = "你四處走走，一無所獲。" if line is None else f"你在{loc.name}翻找了一陣。"
+        msgs = self._encounter("explore", nothing)
+        return msgs + [line] if line is not None else msgs
+
+    def _train(self) -> list[str]:
+        """歷練：找這個地點的敵人打一場，**必定開打**；打完有機率接一段戰後的餘韻事件。
+
+        這個行動在 sanguo-companions 合併時被整個移除，後果是整條隨機遭遇戰的路斷掉：
+        `pick_event()` 只在「完全沒有合格候選」時才回 None，而有三個事件是「任何地點、
+        可重複、探索觸發」，所以實測 22 個地點探索都是 100% 撞到事件，掛在 explore 後面的
+        遭遇戰分支一次都沒執行過（整季只有劇情事件的 combat 選項那 3 場）。
+
+        打完之後的 `train_event_chance` 機率是給 `actions: ["train"]` 的事件用的——「拆招頓悟」
+        與「錦衣少年」的文字本來就是戰後餘韻（「一番苦戰之後…」「打鬥剛歇…」），合併時被改掛
+        到 explore，於是在集市散步也會冒出來。現在它們回到正確的位置。
+        """
+        loc = self.content.locations[self.state.player.location]
+        msgs = self._squad_encounter(self.rng.choice(loc.enemies))
+        if self.rng.random() < self.content.config.train_event_chance:
+            event = pick_event(self.state, self.content, "train", self.rng)
+            if event is not None:
+                msgs += self._present(event)
+        return msgs
 
     def _rest(self) -> list[str]:
         """原地打坐歇息一個時辰：只推進玩家自己的進度（體力/氣血），不碰共用賽季時鐘
@@ -771,6 +828,9 @@ class Game:
             record.silver = -loss
             if loss:
                 msgs.append(f"銀兩 -{loss}")
+        toll = team.take_encounter_toll(s, c, self.world, result.tier)
+        record.changes += toll
+        msgs += toll
         msgs.insert(0, self._file_battle(record))
         return msgs
 
@@ -785,6 +845,11 @@ class Game:
             p.stats["xinde"] = p.stats.get("xinde", 0) + squad.reward_xinde
             record.xinde = squad.reward_xinde
             msgs.append(f"心得 +{squad.reward_xinde}")
+        for material_id, count in materials.roll_squad_drops(squad, self.content, self.rng):
+            line = materials.grant(self.state, self.content, material_id, count)
+            if line:
+                record.materials.append(line.removeprefix("獲得 "))
+                msgs.append(line)
         record.exp = squad.exp
         levels = team.add_exp(self.content, p.member, squad.exp, p.name)
         record.notes += levels
@@ -944,6 +1009,48 @@ class Game:
             msgs += note_action(self.state, self.content, self.world, "practice")
         return msgs
 
+    def craft(self, material_ids: list[str], kind: str) -> list[str]:
+        """煉製：兩樣素材煉成一門功法，花心得（見 tianxia/craft.py）。
+
+        LLM 只在「全服第一次煉出這個配方」時被呼叫一次，而且只負責取名字；配方命中就是純
+        查表。呼叫在這裡而不是在 `craft.py` 裡拿 client，是為了跟其他門下動作一樣由 Game
+        統一處理江湖紀錄。
+        """
+        if self._preparing():
+            return self._log(["（賽季籌備中，等待管理者開季。）"])
+        xinde = self._xinde()
+        art, msgs = craft.craft(self.state, self.content, self.world, self.client, material_ids, kind)
+        out = self._log(msgs)
+        if art is not None:
+            self._menxia_entry(f"煉製【{art.name}】", xinde)
+            out += note_action(self.state, self.content, self.world, "practice")
+        return out
+
+    def craft_cost(self, material_ids: list[str]) -> int:
+        return craft.cost(self.content, material_ids)
+
+    def craft_line(self, material_ids: list[str], kind: str) -> str:
+        return skillview.craft_line(self.state, self.content, material_ids, kind, self.world)
+
+    def material_choices(self) -> list[tuple[str, str]]:
+        """煉製選單的素材選項：（顯示文字, 素材 id），階高的排前面。"""
+        return [
+            (f"{m.name}（{materials.tier_label(m)}・屬{m.attribute}）×{n}", m.id)
+            for m, n in materials.bag_contents(self.state, self.content)
+        ]
+
+    def art_library(self) -> list[tuple[str, str]]:
+        return skillview.art_library(self.state, self.content, self.world)
+
+    def switch_art(self, art_id: str) -> list[str]:
+        """改練：把功法庫裡的一門換上身（見 team.switch_art）。"""
+        if self._preparing():
+            return self._log(["（賽季籌備中，等待管理者開季。）"])
+        xinde = self._xinde()
+        msgs = self._log(team.switch_art(self.state, self.content, self.world, art_id))
+        self._menxia_entry(msgs[-1] if msgs else "改練", xinde)
+        return msgs
+
     def practice(self, kind: str) -> list[str]:
         """鍛鍊：目前已學會的內功或武學加深一成，累積受傷風險。"""
         if self._preparing():
@@ -1005,6 +1112,9 @@ class Game:
 
     def menxia_rules(self) -> str:
         return skillview.rules_line(self.content)
+
+    def bag_text(self) -> str:
+        return skillview.bag_text(self.state, self.content)
 
     # ── 戰鬥紀錄 ──────────────────────────────────────────
 

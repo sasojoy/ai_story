@@ -61,6 +61,43 @@ class Effect(_Strict):
     leave_sect: bool = False
     next_event: str | None = None
     recruit: str | None = None  # 結識某人（同伴 id）：入門；已入門時改給心得（見 roster.recruit）
+    materials: dict[str, int] = Field(default_factory=dict)  # 給煉製素材（素材 id -> 數量）；手寫劇情是天品素材的主要來源
+
+
+class Material(_Strict):
+    """煉製用的素材：一個屬性 × 一個階（見 docs/superpowers/specs/2026-10-01-無限煉製-design.md §三）。
+
+    階只影響「煉出來的東西有多好」（素材的階位移品質的機率分佈），不影響屬性。
+    """
+
+    id: str
+    name: str
+    attribute: Attribute
+    tier: int = Field(ge=1, le=3)  # 1 凡品、2 靈品、3 天品
+    description: str = ""
+
+
+class CraftNames(_Strict):
+    """煉製時 LLM 不可用（或產出的名字過不了過濾）的決定性組名字表，見無限煉製設計 §5.6。
+
+    用配方鍵的雜湊挑 prefix × suffix，所以同一個配方永遠組出同一個名字——離線也能玩，
+    而且 `tests/test_real_content.py` 整季模擬（LLM 被 mock）走的就是這條路。
+    """
+
+    prefixes: list[str]
+    wugong: list[str]  # 武學的字尾
+    neigong: list[str]  # 內功的字尾
+
+
+class Drop(_Strict):
+    """一筆掉落：打贏這支隊伍時有 chance 的機率掉 count 個這種素材。
+
+    敵方隊伍沒寫 drops 時走 materials.py 的預設掉落表（依難度），內容不必每隻都填。
+    """
+
+    material: str
+    chance: float = Field(default=1.0, ge=0.0, le=1.0)
+    count: int = Field(default=1, ge=1)
 
 
 class Check(_Strict):
@@ -106,6 +143,7 @@ class Location(_Strict):
     important: bool = False
     enemies: list[str] = Field(default_factory=list)
     train_trend: dict[str, int] = Field(default_factory=dict)
+    materials: list[str] = Field(default_factory=list)  # 在這裡探索可能撿到的素材；留空則給隨機的一階素材
     unlock_flag: str | None = None  # 設定後，需該世界旗標成立才能前往
 
 
@@ -164,6 +202,7 @@ class Squad(_Strict):
     reward_silver: int = 0
     reward_xinde: int = 0
     exp: int = 0
+    drops: list[Drop] = Field(default_factory=list)  # 留空則走 materials.py 依難度的預設掉落表
 
 
 class Trend(_Strict):
@@ -369,12 +408,23 @@ class Config(_Strict):
     seclusion_xinde_per_hour: int = 15
     xinde_cost_factor: int = 20  # 第 n 成升到 n+1 成需要 factor × n（構想欄位，目前練功免費、沒有任何地方讀它）
     xinde_hint_threshold: int = 50  # 心得擱到這個量、而且還有功夫沒練滿時，主畫面提示玩家去門下練功
-    level_exp: int = 100  # 第 n 級升 n+1 級需要 level_exp × n
+    explore_material_chance: float = 0.3  # 探索時撿到一個素材的機率（見無限煉製設計 §4.2）
+    craft_xinde_base: int = 5  # 煉製成本 = base × 素材數 + per_tier × 階總和（見無限煉製設計 §5.5）
+    craft_xinde_per_tier: int = 3
+    level_exp: int = 10  # 第 n 級升 n+1 級需要 level_exp × n
+    # 原本是 100，但實測一季打 19~26 場只升到第 2~3 級（升到第 10 級要 4500 經驗），
+    # 而氣血設計 §1.4 的平衡量測點在第 5／10／15 級——連第 5 級都到不了。降到 10 之後
+    # 一季大約升到第 10 級，等級的兩條線（氣血上限、檢定屬性）才有量級可談。
     max_level: int = 30
     # ── 練功（sanguo-companions 合併重寫，見設計文件六.2）──
     practice_injury_chance: float = 0.15  # 每次練功累積受傷（內傷）的機率
+    # 遭遇戰按結果扣氣血，扣掉的量是上限的幾成（氣血設計 §1.3：打完要付代價，不是免費收入）
+    encounter_neili_loss: dict[str, float] = Field(
+        default_factory=lambda: {"大勝": 0.05, "險勝": 0.15, "僵持": 0.20, "落敗": 0.30}
+    )
+    injury_share: float = 0.2  # 損失的氣血有幾成變成內傷（其餘是輕傷，自己會回）
     practice_injury_amount: float = 15.0  # 受傷時扣的氣血（累積為內傷，需療傷才能回到滿上限）
-    heal_silver_per_injury: int = 2  # 療傷：每點內傷要幾兩銀子（無條件進位）
+    heal_neili_per_silver: float = 2.0  # 療傷：每幾點內傷算一兩銀子（氣血設計 §二：預設每 2 點 1 兩，無條件進位）
     # ── 同伴招募（sanguo-companions 合併重寫，取代舊的收徒/招賢，見設計文件四.4）──
     recruit_stamina: int = 15  # 嘗試招募一次的體力
     recruit_base_chance: float = 0.35  # 基礎成功率，情誼會再往上加（見 roster.py）
@@ -501,6 +551,9 @@ class Content(_Strict):
     locations: dict[str, Location]
     events: dict[str, Event]
     skills: dict[str, SkillDef]
+    materials: dict[str, Material]
+    craft_names: CraftNames
+    banned_names: list[str]  # 煉製命名的禁用詞（原創原則：不用金庸等作品的專有名詞）
     sects: dict[str, Sect]
     characters: dict[str, CharacterDef]
     squads: dict[str, Squad]

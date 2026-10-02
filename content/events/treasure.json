@@ -31,7 +31,10 @@
             "yuxi_piece"
           ],
           "rumor": "江湖傳聞：{name}在嵩山一帶掘出一片南華老仙的符文殘卷！",
-          "chronicle": "{name}發現第一片符文殘卷，傳國玉璽之謎浮上檯面。"
+          "chronicle": "{name}發現第一片符文殘卷，傳國玉璽之謎浮上檯面。",
+          "materials": {
+            "rou_2": 1
+          }
         }
       },
       {
@@ -43,7 +46,10 @@
           },
           "flags_add": [
             "yuxi_piece"
-          ]
+          ],
+          "materials": {
+            "rou_2": 1
+          }
         }
       }
     ]

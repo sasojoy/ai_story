@@ -269,3 +269,15 @@ def test_joining_a_sect_keeps_an_existing_faction(state, content, world):
     state.player.faction = "huang"
     apply_effect(Effect(join_sect="cloud"), state, content, world)
     assert state.player.faction == "huang"
+
+
+def test_effect_materials_land_in_the_bag(state, content, world):
+    msgs = apply_effect(Effect(materials={"gang_1": 2}), state, content, world)
+    assert "獲得 精鐵砂 ×2" in msgs
+    assert state.player.materials == {"gang_1": 2}
+
+
+def test_effect_with_an_unknown_material_says_nothing(state, content, world):
+    msgs = apply_effect(Effect(materials={"ghost": 1}), state, content, world)
+    assert msgs == []
+    assert state.player.materials == {}

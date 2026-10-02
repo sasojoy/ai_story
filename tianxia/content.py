@@ -14,9 +14,10 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from .companion_agent import DIALOGUE_TAGS
+from .materials import TIER_NAMES
 from .models import (
-    STATS, BattleDef, CharacterDef, Condition, Config, Content, Effect, Event, Location, MapLayout,
-    Scenario, Sect, SimRumor, SkillDef, Squad, Tutorial,
+    STATS, BattleDef, CharacterDef, Condition, Config, Content, CraftNames, Effect, Event, Location,
+    MapLayout, Material, Scenario, Sect, SimRumor, SkillDef, Squad, Tutorial,
 )
 
 
@@ -38,6 +39,9 @@ def load_content(root: Path) -> Content:
         scenario=Scenario(**_read(root / "scenario.json")),
         locations=_index(Location, _read(root / "locations.json")),
         skills=_index(SkillDef, _read(root / "skills.json")),
+        materials=_index(Material, _read(root / "materials.json")),
+        craft_names=CraftNames(**_read(root / "craft_names.json")),
+        banned_names=_read(root / "banned_names.json"),
         sects=_index(Sect, _read(root / "sects.json")),
         characters=_index(CharacterDef, _read(root / "characters.json")),
         squads=_index(Squad, _read(root / "squads.json")),
@@ -72,6 +76,27 @@ def _index(model, items: list[dict]) -> dict:
     return result
 
 
+def _material_sources(c: Content) -> set[str]:
+    """所有拿得到的素材 id：地點撿、對手掉（含依難度的預設表）、事件給。"""
+    from .materials import _default_rolls, by_tier  # noqa: PLC0415  延後 import，避免循環依賴
+
+    reachable: set[str] = set()
+    for loc in c.locations.values():
+        reachable |= set(loc.materials)
+        if not loc.materials and loc.tags:
+            reachable |= {m.id for m in by_tier(c, 1)}  # 沒填 materials 的地點給隨機一階素材
+    for squad in c.squads.values():
+        if squad.drops:
+            reachable |= {d.material for d in squad.drops}
+            continue
+        for tier, _chance in _default_rolls(squad):
+            reachable |= {m.id for m in by_tier(c, tier, squad.attribute)}
+    for ev in c.events.values():
+        for ch in ev.choices:
+            reachable |= set(ch.effect.materials) | set(ch.fail_effect.materials)
+    return reachable
+
+
 def validate(c: Content) -> None:
     errors: list[str] = []
     trend_ids = {t.id for t in c.scenario.trends}
@@ -98,6 +123,7 @@ def validate(c: Content) -> None:
     def check_effect(where: str, eff: Effect) -> None:
         known(where, eff.stats, STATS, "屬性")
         known(where, eff.learn_skills, c.skills, "武學")
+        known(where, eff.materials, c.materials, "素材")
         known(where, eff.trend, trend_ids, "大勢線")
         if eff.join_sect:
             known(where, [eff.join_sect], c.sects, "門派")
@@ -123,6 +149,7 @@ def validate(c: Content) -> None:
                 errors.append(f"地點 {loc.id} 連到 {dest}，但 {dest} 沒有連回來")
         known(where, loc.enemies, c.squads, "敵方隊伍")
         known(where, loc.train_trend, trend_ids, "大勢線")
+        known(where, loc.materials, c.materials, "素材")
         need(
             0 <= loc.x <= c.map.width and 0 <= loc.y <= c.map.height,
             f"{where}：座標 ({loc.x}, {loc.y}) 超出地圖範圍",
@@ -131,6 +158,40 @@ def validate(c: Content) -> None:
 
     for sect in c.sects.values():
         known(f"門派 {sect.id}", [sect.location], c.locations, "地點")
+
+    for squad in c.squads.values():
+        known(f"敵方隊伍 {squad.id}", [drop.material for drop in squad.drops], c.materials, "素材")
+
+    # 每一種素材都要至少有一個拿得到的管道，否則它是死內容。第一版的「鎮山鐵」就是這樣
+    # 漏掉的：掉天品的兩個對手屬剛與屬柔、奇遇給屬快，屬慢沒人負責，而難度 >=100 的對手
+    # 都寫了明確 drops，所以依難度的預設表（會按對手屬性挑）對它們根本不執行。
+    unreachable = sorted(set(c.materials) - _material_sources(c))
+    need(
+        not unreachable,
+        "這些素材沒有任何取得管道（沒有對手掉、沒有地點撿、沒有事件給）："
+        + "、".join(f"{c.materials[mid].name}（{mid}）" for mid in unreachable),
+    )
+
+    # 煉製的決定性組名字表（LLM 不可用時的退路）：不能是空的，而且組出來的每一個名字都得
+    # 通過命名過濾——這條退路一定會被走到（整季模擬把 LLM mock 掉），組出壞名字會永久登記。
+    from .craft import name_problem  # noqa: PLC0415  延後 import，避免 content <-> craft 互相依賴
+
+    names = c.craft_names
+    need(bool(names.prefixes), "craft_names.prefixes 不能是空的")
+    need(bool(names.wugong), "craft_names.wugong 不能是空的")
+    need(bool(names.neigong), "craft_names.neigong 不能是空的")
+    for prefix in names.prefixes:
+        for suffix in [*names.wugong, *names.neigong]:
+            reason = name_problem(prefix + suffix, c)
+            need(reason is None, f"craft_names 組出的名字「{prefix + suffix}」過不了命名過濾：{reason}")
+    for word in c.banned_names:
+        need(bool(word.strip()), "banned_names 裡有空字串")
+    # 沒寫 drops 的對手走 materials.py 依難度的預設掉落表，所以每一階都得有素材可挑。
+    for tier in sorted(TIER_NAMES):
+        need(
+            any(m.tier == tier for m in c.materials.values()),
+            f"content/materials.json 沒有任何第 {tier} 階（{TIER_NAMES[tier]}）的素材，預設掉落表會挑不到東西",
+        )
 
     for ev in c.events.values():
         where = f"事件 {ev.id}"

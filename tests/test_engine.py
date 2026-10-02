@@ -165,6 +165,7 @@ def test_event_battle_is_fully_automatic_and_a_loss_applies_the_fail_effect(game
 
 def test_event_battle_win_pays_squad_rewards_once_and_applies_choice_effect(game):
     game.content.events["duel"].choices[0].combat = "thug"  # 換成打得贏的水寇小隊
+    rules.learn_skill(game.state, game.content, "fist")  # 沒武學＝威力 0，門檻改成比例後真的打不贏
     game.choose("move:lake")
     game.choose("act:socialize")
     game.rng = FixedRandom(1.0)  # 最佳運氣：穩穩打贏
@@ -179,6 +180,7 @@ def test_event_battle_win_pays_squad_rewards_once_and_applies_choice_effect(game
 
 def test_event_battle_win_splits_story_from_numeric_changes(game):
     game.content.events["duel"].choices[0].combat = "thug"
+    rules.learn_skill(game.state, game.content, "fist")
     game.content.events["duel"].choices[0].effect.stats = {"fame": 3}
     game.content.events["duel"].choices[0].effect.rumor = "{name}擊敗了翻江龍！"
     game.choose("move:lake")
@@ -405,11 +407,14 @@ def test_create_skill_rejects_a_taken_name(game):
 
 def test_heal(game):
     assert game.heal() == ["氣血無恙，不用療傷。"]
-    game.state.player.member.neili = 10.0
+    member = game.state.player.member
+    member.neili = 10.0  # 只有輕傷：會自己回，不該收錢（療傷按內傷計價，見 team.heal_cost）
+    assert game.heal() == ["氣血無恙，不用療傷。"]
+    member.injury = 40.0
     game.state.player.stats["silver"] = 999
     msgs = game.heal()
     assert msgs[0].startswith("療傷完畢")
-    assert game.state.player.member.neili is None
+    assert member.injury == 0.0 and member.neili is None
 
 
 # ── 閉關 ──────────────────────────────────────────────
@@ -582,6 +587,11 @@ def test_nothing_personal_can_be_done_while_preparing(content, world):
     assert game.seclude(4) == ["你現在無法閉關。"]
     assert game.state.player.busy_until is None
     assert game.state.player.member.wugong_id is None
+    game.state.player.materials = {"gang_1": 2}
+    game.state.player.stats["xinde"] = 500
+    assert game.craft(["gang_1", "gang_1"], "武學") == waiting
+    assert game.state.player.materials == {"gang_1": 2}
+    assert game.switch_art("驚雷掌") == waiting
 
 
 def test_players_cannot_start_the_next_season_themselves(game):
@@ -693,12 +703,12 @@ def test_texts_render(game):
 
 
 def test_status_text_shows_the_practice_hint_only_when_xinde_is_idle(game):
-    assert "心得" in game.status_text() and "別讓它擱著" not in game.status_text()
+    assert "心得" in game.status_text() and "💡" not in game.status_text()
     game.state.player.stats["xinde"] = game.content.config.xinde_hint_threshold
-    assert "別讓它擱著" in game.status_text()
+    assert "💡" in game.status_text() and "鍛鍊內功、武學" in game.status_text()
     game.state.player.member.wugong_level = game.state.player.member.neigong_level = 10
     game.state.player.member.wugong_id = game.state.player.member.neigong_id = "fist"
-    assert "別讓它擱著" not in game.status_text()
+    assert "💡" not in game.status_text()  # 沒東西可練、也湊不出一爐素材
 
 
 def test_visited_and_map(game):
@@ -1383,3 +1393,111 @@ def test_triggers_wait_for_the_season_to_run(content, game):
     assert game.admin_fire("kou50") == ["（賽季沒有在進行，無法觸發。）"]
     assert game.admin_push_trend("kou", 5) == ["（賽季沒有在進行，無法觸發。）"]
     assert game.admin_start_battle("t1", now=time.time()) == ["（賽季沒有在進行，無法觸發。）"]
+
+
+# ── 煉製素材的掉落（無限煉製第一刀）──────────────────────────
+
+
+def test_train_win_drops_a_material_into_the_bag_and_the_report(game):
+    rules.learn_skill(game.state, game.content, "fist")  # 壓倒性的威力，穩贏
+    game.content.config.train_event_chance = 1.0
+    game.choose("move:lake")
+    game.state.player.seen_events.add("scroll")  # 避開探索遇到殘卷奇遇
+    game.rng = FixedRandom(0.3)  # 水寇小隊難度 5：預設掉落表 50% 掉一個一階素材
+    msgs = game.choose("act:explore")
+    record = game.state.battles[0]
+    assert record.materials == ["精鐵砂 ×1"]
+    assert game.state.player.materials == {"gang_1": 1}
+    assert "獲得 精鐵砂 ×1" in msgs
+
+
+def test_a_hard_fought_loss_drops_nothing(game):
+    game.content.locations["lake"].enemies = ["boss"]  # 打不贏的翻江龍
+    game.content.config.train_event_chance = 1.0
+    game.content.config.explore_material_chance = 0.0  # 只看戰鬥那條路，不要被探索自己撿到的混進來
+    game.choose("move:lake")
+    game.state.player.seen_events.add("scroll")
+    game.rng = FixedRandom(0.0)
+    game.choose("act:explore")
+    assert game.state.battles[0].tier == "落敗"
+    assert game.state.player.materials == {}
+
+
+def test_exploring_a_quiet_place_can_still_turn_up_a_material(game):
+    game.state.player.location = "cave"  # fixture 的山洞沒有任何事件也沒有敵人
+    game.content.locations["cave"].materials = ["gang_3"]
+    game.rng = FixedRandom(0.0)
+    msgs = game.choose("act:explore")  # 訊息串後面還會接新手引導的進度
+    assert "你在寶洞翻找了一陣。" in msgs and "獲得 隕鐵膽 ×1" in msgs
+    assert game.state.player.materials == {"gang_3": 1}
+
+
+def test_exploring_and_finding_nothing_still_says_so(game):
+    game.state.player.location = "cave"
+    game.content.config.explore_material_chance = 0.0
+    game.rng = FixedRandom(0.99)
+    msgs = game.choose("act:explore")
+    assert msgs[0] == "你四處走走，一無所獲。"
+    assert not any("獲得" in m for m in msgs)
+    assert game.state.player.materials == {}
+
+
+def test_exploring_picks_up_a_material_even_when_an_event_fires(game):
+    """素材的判定在事件之前：實測整季 100 次探索都撞到事件，掛在「一無所獲」上等於沒做。"""
+    game.content.locations["town"].materials = ["gang_3"]
+    game.rng = FixedRandom(0.0)  # 必中素材，也必定撞到鎮上的事件
+    msgs = game.choose("act:explore")  # 訊息串後面還會接新手引導的進度
+    assert any("【" in m for m in msgs)  # 真的有事件
+    assert "獲得 隕鐵膽 ×1" in msgs
+    assert game.state.player.materials == {"gang_3": 1}
+
+
+# ── 歷練（第二層：遭遇戰的唯一管道）──────────────────────────
+
+
+def test_train_is_offered_only_where_there_are_enemies(game):
+    ids = [o.id for o in game.options()]
+    assert "act:train" not in ids  # 鎮上沒有敵人
+    game.choose("move:lake")  # 湖邊有水寇小隊
+    option = next(o for o in game.options() if o.id == "act:train")
+    assert "歷練" in option.label and "水寇小隊" in option.label
+
+
+def test_training_always_fights_even_though_an_event_would_have_fired(game):
+    """探索永遠會撞到事件（pick_event 只在完全沒有候選時才回 None），所以掛在探索後面的
+    遭遇戰分支一次都不會執行——歷練就是為了這件事存在的。"""
+    rules.learn_skill(game.state, game.content, "fist")
+    game.choose("move:lake")
+    game.rng = FixedRandom(0.99)  # 高到不會觸發戰後事件
+    msgs = game.choose("act:train")
+    assert game.state.battles and game.state.battles[0].opponent == "水寇小隊"
+    assert game.state.pending_event is None  # 沒有被事件搶走
+    assert any("⚔" in m for m in msgs)
+
+
+def test_training_costs_the_configured_stamina(game):
+    game.choose("move:lake")
+    before = game.state.player.stamina
+    game.rng = FixedRandom(0.99)
+    game.choose("act:train")
+    assert before - game.state.player.stamina == game.content.config.action_cost["train"]
+
+
+def test_a_post_battle_event_can_follow_the_fight(game):
+    """「拆招頓悟」「錦衣少年」的文字本來就是戰後餘韻，現在掛回 actions: ["train"]。"""
+    game.content.events["chain_a"].actions = ["train"]  # fixture 裡唯一掛在 train 上的事件
+    game.content.config.train_event_chance = 1.0
+    rules.learn_skill(game.state, game.content, "fist")
+    game.choose("move:lake")
+    game.rng = FixedRandom(0.3)
+    game.choose("act:train")
+    assert game.state.battles  # 先打了一場
+    assert game.state.pending_event == "chain_a"  # 再接上戰後的事件
+
+
+def test_the_journal_calls_it_a_training_trip(game):
+    rules.learn_skill(game.state, game.content, "fist")
+    game.choose("move:lake")
+    game.rng = FixedRandom(0.99)
+    game.choose("act:train")
+    assert any(entry.title == "歷練・湖邊" for entry in game.state.journal)

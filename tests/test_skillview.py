@@ -95,3 +95,84 @@ def test_practice_hint_goes_away_once_everything_is_at_the_tenth_level(state, co
     team.create_skill(state, content, world, "太虛吐納", "內功")
     state.player.member.wugong_level = state.player.member.neigong_level = 10
     assert skillview.practice_hint(state, content) is None
+
+
+# ── 煉製素材（門下頁的背包）────────────────────────────────
+
+
+def test_bag_text_when_empty_says_where_materials_come_from(state, content):
+    text = skillview.bag_text(state, content)
+    assert text.startswith("**煉製素材**")
+    assert "打贏對手" in text and "探索" in text
+
+
+def test_bag_text_lists_what_you_hold_high_tier_first(state, content):
+    state.player.materials = {"gang_1": 2, "gang_3": 1}
+    lines = skillview.bag_text(state, content).splitlines()
+    assert lines[1].startswith("- 隕鐵膽 ×1　天品・屬剛")
+    assert lines[2].startswith("- 精鐵砂 ×2　凡品・屬剛")
+
+
+# ── 煉製那一塊的說明與功法庫 ────────────────────────────────
+
+
+def test_craft_line_asks_for_two_materials_first(state, content):
+    line = skillview.craft_line(state, content, [], "武學")
+    assert "選 2 樣素材" in line and "目前心得 0" in line
+
+
+def test_craft_line_shows_the_cost_and_what_you_have(state, content):
+    from tianxia import materials
+
+    materials.grant(state, content, "gang_1", 2)
+    state.player.stats["xinde"] = 100
+    line = skillview.craft_line(state, content, ["gang_1", "gang_1"], "武學")
+    assert "精鐵砂＋精鐵砂 → 一門武學" in line and "你有 100 點" in line
+    assert "⚠" not in line
+
+
+def test_craft_line_explains_why_it_cannot_be_done(state, content):
+    from tianxia import materials
+
+    materials.grant(state, content, "gang_1", 2)
+    state.player.stats["xinde"] = 0
+    line = skillview.craft_line(state, content, ["gang_1", "gang_1"], "武學")
+    assert "⚠" in line and "心得不足" in line
+
+
+def test_the_art_library_is_empty_at_first(state, content, world):
+    assert skillview.art_library(state, content, world) == []
+
+
+def test_the_art_library_lists_each_art_with_its_own_level(state, content, world):
+    team.create_skill(state, content, world, "龍吟九霄", "武學")
+    state.player.arts.append("龍吟九霄")
+    state.player.art_levels["龍吟九霄"] = 4
+    label, art_id = skillview.art_library(state, content, world)[0]
+    assert art_id == "龍吟九霄" and "第4成" in label and "武學" in label
+
+
+# ── 練功提示（煉製之後文案改寫）──────────────────────────────
+
+
+def test_the_hint_mentions_crafting_once_you_can_afford_a_furnace(state, content):
+    from tianxia import materials
+
+    state.player.stats["xinde"] = 500
+    materials.grant(state, content, "gang_1", 2)
+    hint = skillview.practice_hint(state, content)
+    assert hint is not None and "煉製" in hint
+
+
+def test_the_hint_says_nothing_about_crafting_without_materials(state, content):
+    state.player.stats["xinde"] = 500
+    hint = skillview.practice_hint(state, content)
+    assert hint is not None and "煉製" not in hint
+
+
+def test_the_hint_goes_quiet_when_everything_is_maxed_and_nothing_can_be_crafted(state, content, world):
+    state.player.stats["xinde"] = 500
+    team.create_skill(state, content, world, "龍吟九霄", "武學")
+    team.create_skill(state, content, world, "太虛吐納", "內功")
+    state.player.member.wugong_level = state.player.member.neigong_level = 10
+    assert skillview.practice_hint(state, content) is None

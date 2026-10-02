@@ -16,7 +16,8 @@ class Member(BaseModel):
 
     level: int = 1
     exp: int = 0
-    neili: float | None = None  # 氣血，None＝滿
+    neili: float | None = None  # 氣血，None＝回滿（滿＝上限 − 內傷）
+    injury: float = 0.0  # 內傷：氣血自己只回到「上限 − 內傷」，要療傷才能清掉（氣血設計 §1.3）
 
     # 每人最多學一門內功、一門武學（設計文件六.4），id 指向 tianxia/martial_arts.py 的
     # MartialArt，可能是內容裡的固定武學（本命武學）也可能是玩家自創、存在共用世界狀態
@@ -66,6 +67,11 @@ class PlayerState(BaseModel):
     used_dialogue_options: dict[str, list[str]] = Field(default_factory=dict)  # 人物 id -> 說過的話（避免重複）
     last_offered_dialogue: dict[str, list[list[str]]] = Field(default_factory=dict)  # 人物 id -> [選項文字清單, 對應tag清單]
     turns_since_consolidation: dict[str, int] = Field(default_factory=dict)  # 人物 id -> 距離上次記憶梳理幾輪
+
+    # ── 煉製素材（無限煉製第一刀，見 tianxia/materials.py）──
+    materials: dict[str, int] = Field(default_factory=dict)  # 素材 id -> 數量；舊存檔沒這欄就是空背包
+    arts: list[str] = Field(default_factory=list)  # 功法庫：煉出來但沒配上身的功法 id
+    art_levels: dict[str, int] = Field(default_factory=dict)  # 每門學過的功法各自的熟練度；改練時存進來／取出來
 
     seen_events: set[str] = Field(default_factory=set)
     anonymous: bool = False
@@ -130,6 +136,7 @@ class BattleRecord(BaseModel):
     exp: int = 0  # 每人獲得的經驗
     xinde: int = 0
     silver: int = 0  # 正數為獲得、負數為失落
+    materials: list[str] = Field(default_factory=list)  # 這一戰掉落的素材，已經是「精鐵砂 ×1」這樣的句子
     notes: list[str] = Field(default_factory=list)  # 敘事文字：選項效果、升級、拜師、傳聞等（不是數字，見 changes）
     changes: list[str] = Field(default_factory=list)  # 其他數值變化，如屬性、名望、善惡名（經驗／心得／銀兩已有專屬欄位）
 

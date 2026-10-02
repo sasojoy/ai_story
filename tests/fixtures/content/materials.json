@@ -1,0 +1,6 @@
+[
+  {"id": "gang_1", "name": "精鐵砂", "attribute": "剛", "tier": 1, "description": "鐵匠鋪也有的東西。"},
+  {"id": "gang_2", "name": "玄鋼骨", "attribute": "剛", "tier": 2, "description": "廢爐裡挑出的鋼條。"},
+  {"id": "gang_3", "name": "隕鐵膽", "attribute": "剛", "tier": 3, "description": "天上落下來那塊鐵的中心。"},
+  {"id": "kuai_1", "name": "驚羽", "attribute": "快", "tier": 1, "description": "受驚雀鳥掉的尾羽。"}
+]
