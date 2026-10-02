@@ -285,3 +285,10 @@ def test_real_content_defines_the_three_factions_and_the_battle_uses_them(conten
     assert [f.id for f in content.scenario.factions] == ["guan", "huang", "haoqiang"]
     sides = {f.id for f in content.battles["huangjin_showdown"].factions}
     assert sides <= {f.id for f in content.scenario.factions}
+
+
+def test_the_showdown_gives_scattered_players_time_to_gather(content):
+    """企劃者定案：集結 30 分鐘、每回合 5 分鐘，人少、上線時間不一的伺服器也來得及到場。"""
+    showdown = content.battles["huangjin_showdown"]
+    assert showdown.muster_seconds == 30 * 60
+    assert showdown.round_seconds == 5 * 60

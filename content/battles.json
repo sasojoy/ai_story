@@ -7,8 +7,8 @@
       {"id": "huang", "name": "黃巾軍"}
     ],
     "trend_start": 50,
-    "muster_seconds": 300,
-    "round_seconds": 90,
+    "muster_seconds": 1800,
+    "round_seconds": 300,
     "action_tags": {
       "guan_safe": {"trend_delta": 2, "neili_damage": 15},
       "guan_aggressive": {"trend_delta": 6, "neili_damage": 60, "mitigated_by_power": true},
