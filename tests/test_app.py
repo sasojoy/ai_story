@@ -423,6 +423,15 @@ def test_next_season_handler_runs_the_admin_rollover(game, monkeypatch):
     assert game.state.player.season_number == 2
 
 
-def test_open_season_handler_is_refused_for_non_admins(game):
-    out = app.open_season_handler(game)
+def test_open_season_handler_only_works_for_admins(tmp_path, monkeypatch):
+    from tianxia.world_state import WorldStateStore
+
+    monkeypatch.setattr(app.CONTENT.config, "auto_open_first_season", False)
+    fresh = Game.new(app.CONTENT, "路人", world=WorldStateStore(tmp_path / "world.json"))
+    assert fresh.world.season_phase() == "preparing"
+    out = app.open_season_handler(fresh)
     assert len(out) == app.N_OUTPUTS
+    assert fresh.world.season_phase() == "preparing"  # 一般玩家按不動
+    monkeypatch.setattr(app.CONTENT.config, "admins", ["路人"])
+    app.open_season_handler(fresh)
+    assert fresh.world.season_phase() == "running"
