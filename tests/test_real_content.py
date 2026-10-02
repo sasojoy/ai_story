@@ -318,3 +318,9 @@ def test_enemy_squads_are_marked_with_the_designers_factions(content):
 def test_season_one_tells_the_dialogue_model_when_it_is(content):
     note = content.scenario.era_note
     assert "184" in note and "諸葛亮" in note and "赤壁" in note
+
+
+def test_every_figure_has_an_audience_threshold(content):
+    figures = {cid: ch.audience_fame for cid, ch in content.characters.items() if ch.deep_interaction}
+    assert len(figures) == 15 and all(fame > 0 for fame in figures.values())
+    assert figures["liubei"] < figures["caocao"] < figures["yuanshao"] < figures["luzhi"] < figures["huangfusong"] < figures["zhangjiao"]

@@ -1584,3 +1584,50 @@ def test_a_drill_is_journaled_as_a_drill_without_a_battle_card(content, game):
     assert (entry.title, entry.tag, entry.battle_id) == ("歷練・湖邊", "操練", None)
     assert entry.changes == ["心得 +10", "經驗 +20（每人）"] and entry.lines == ["（寇亂 +1）"]
     assert game.state.battle_card is None
+
+
+def _figure(content, fame=0):
+    ch = content.characters["mate"]
+    ch.deep_interaction = True
+    ch.audience_fame = fame
+    return ch
+
+
+def test_a_newcomer_without_fame_is_turned_away_from_a_figure(content, game):
+    _figure(content, fame=10)
+    with mock.patch("tianxia.engine.pick_event", return_value=None),             mock.patch.object(companion_agent, "_generate", return_value=FAKE_TURN):
+        msgs = game.choose("act:socialize")
+    assert game.state.player.pending_companion is None
+    assert msgs == ["你想求見韓鐵，但人微言輕，被擋在門外（名望 10 以上才見得到）。"]
+
+
+def test_enough_fame_or_a_prior_meeting_opens_the_door(content, game):
+    _figure(content, fame=10)
+    game.state.player.flags.add("結識:mate")
+    with mock.patch.object(companion_agent, "_generate", return_value=FAKE_TURN):
+        game.choose("act:socialize")
+    assert game.state.player.pending_companion == "mate"
+    game.choose("talk:leave")
+    game.state.player.flags.discard("結識:mate")
+    game.state.player.stats["fame"] = 10
+    with mock.patch.object(companion_agent, "_generate", return_value=FAKE_TURN):
+        game.choose("act:socialize")
+    assert game.state.player.pending_companion == "mate"
+
+
+def test_three_turns_a_day_with_the_same_figure(content, game):
+    _figure(content)
+    game.state.player.fortune = True  # 第二天起交遊會先觸發新立門戶福緣，這裡只測輪數上限
+    with mock.patch.object(companion_agent, "_generate", return_value=FAKE_TURN):
+        game.choose("act:socialize")
+        game.choose("talk:0")
+        game.choose("talk:0")
+        msgs = game.choose("talk:0")
+        assert msgs[-1] == "天色已晚，韓鐵起身送客，改日再敘。"
+        assert game.state.player.pending_companion is None
+        with mock.patch("tianxia.engine.pick_event", return_value=None):
+            msgs = game.choose("act:socialize")
+        assert msgs == ["韓鐵今日事忙，改日再來拜會吧。"]
+        game.state.world.time += 86400  # 隔天重算
+        game.choose("act:socialize")
+    assert game.state.player.pending_companion == "mate"

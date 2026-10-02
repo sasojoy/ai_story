@@ -255,7 +255,7 @@ class Game:
                 "act:train", "歷練", cost["train"],
                 note=f"對手：{c.squads[loc.enemies[0]].name}" if len(loc.enemies) == 1 else f"{len(loc.enemies)} 路對手",
             ))
-        if has_events_here(c, loc, "socialize") or self._deep_interaction_target() is not None:
+        if has_events_here(c, loc, "socialize") or self._figures_here():
             opts.append(self._cost_option("act:socialize", "交遊", cost["socialize"]))
         target = self._recruit_target()
         if target is not None:
@@ -407,7 +407,7 @@ class Game:
             except companion_agent.DialogueUnavailable:
                 self.state.player.stamina += cost[what]  # 生成不出對話：這次交遊不花體力
                 return self._dialogue_unavailable(companion_id)
-        return self._encounter("socialize", "此地無人可訪，你只好悻悻離去。")
+        return self._encounter("socialize", self._no_audience_line())
 
     def _explore(self) -> list[str]:
         """探索：先滾一次煉製素材，再走一般的遭遇流程（事件／敵人／一無所獲）。
@@ -456,14 +456,54 @@ class Game:
         gained = self.state.player.stamina - before
         return [f"你就地打坐歇息了一個時辰，體力恢復了 {gained:.0f} 點。"] + msgs
 
-    def _deep_interaction_target(self) -> str | None:
-        """這個地點目前能深度對話的人物 id：可招募的 7 位在 recruit_at，鎖定的 8 位龍頭
-        人物在 talk_at（不可招募，見「還要改進」第 5 點）；沒有就是 None。"""
+    def _figures_here(self) -> list[str]:
+        """這個地點的大勢人物（不管見不見得到）：可招募的 7 位在 recruit_at，鎖定的 8 位龍頭
+        人物在 talk_at（不可招募，見「還要改進」第 5 點）。"""
         s, c = self.state, self.content
-        for cid, ch in c.characters.items():
-            if ch.deep_interaction and s.player.location in (ch.recruit_at, ch.talk_at):
-                return cid
+        return [
+            cid for cid, ch in c.characters.items()
+            if ch.deep_interaction and s.player.location in (ch.recruit_at, ch.talk_at)
+        ]
+
+    def _can_meet(self, companion_id: str) -> bool:
+        """見得到這位人物：名望到了他的求見門檻，或是透過他的「結識」事件認識過（企劃者 2026-10-02 決定）。"""
+        p = self.state.player
+        return f"結識:{companion_id}" in p.flags or p.stats.get("fame", 0) >= self.content.characters[companion_id].audience_fame
+
+    def _talks_left(self, companion_id: str) -> int:
+        """今天（遊戲日）還能跟這位人物聊幾輪。"""
+        day = int(self.state.world.time // DAY)
+        record = self.state.player.talks_today.get(companion_id)
+        used = record[1] if record and record[0] == day else 0
+        return max(0, self.content.config.talk_turns_per_day - used)
+
+    def _count_talk(self, companion_id: str) -> list[str]:
+        """記一輪；今天聊滿了就自動告辭。"""
+        day = int(self.state.world.time // DAY)
+        record = self.state.player.talks_today.get(companion_id)
+        used = record[1] if record and record[0] == day else 0
+        self.state.player.talks_today[companion_id] = [day, used + 1]
+        if self._talks_left(companion_id) > 0:
+            return []
+        self.state.player.pending_companion = None
+        return [f"天色已晚，{self.content.characters[companion_id].name}起身送客，改日再敘。"]
+
+    def _deep_interaction_target(self) -> str | None:
+        """這個地點此刻能深度對話的人物 id：見得到（名望或結識），而且今天還沒聊滿；沒有就是 None。"""
+        for companion_id in self._figures_here():
+            if self._can_meet(companion_id) and self._talks_left(companion_id) > 0:
+                return companion_id
         return None
+
+    def _no_audience_line(self) -> str:
+        """交遊時見不到這裡的大勢人物時的說明；這裡沒有大勢人物就是原本的「此地無人可訪」。"""
+        for companion_id in self._figures_here():
+            ch = self.content.characters[companion_id]
+            if not self._can_meet(companion_id):
+                return f"你想求見{ch.name}，但人微言輕，被擋在門外（名望 {ch.audience_fame} 以上才見得到）。"
+            if self._talks_left(companion_id) == 0:
+                return f"{ch.name}今日事忙，改日再來拜會吧。"
+        return "此地無人可訪，你只好悻悻離去。"
 
     def socialize_starts_dialogue(self) -> bool:
         """在這裡交遊會直接跟大勢人物對話（伺服器假人不閒聊大勢人物，見 bot_policy）。"""
@@ -488,6 +528,7 @@ class Game:
         except companion_agent.DialogueUnavailable:
             return self._dialogue_unavailable(companion_id)
         self.state.player.stamina -= self.content.config.talk_stamina  # 每一輪對話都要花體力（伺服器假人設計第八節第 4 項）；生成不出來的那輪不算
+        msgs += self._count_talk(companion_id)
         return msgs
 
     def _faction(self, faction_id: str):
