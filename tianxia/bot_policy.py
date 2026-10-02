@@ -47,7 +47,7 @@ def take_turn(game: Game, profile: BotProfile, rng: random.Random) -> list[str]:
 
 
 def look_after(game: Game, rng: random.Random) -> None:
-    """照顧動作（不受強度旋鈕影響）：氣血不到五成先療傷；沒學過的功法先自創（取一個像樣的名字），
+    """照顧動作（不受強度旋鈕影響）：有內傷先療傷；沒學過的功法先自創（取一個像樣的名字），
     學過的偶爾鍛鍊一成。"""
     if wants_heal(game):
         game.heal()

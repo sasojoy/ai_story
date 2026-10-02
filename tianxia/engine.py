@@ -860,10 +860,17 @@ class Game:
         loc = c.locations[p.location]
         msgs = [f"你與{squad.name}一同操軍擺陣，軍心為之一振。"]
         self._outcome("操練", msgs[0])
+        xinde_line = None
         if squad.reward_xinde:
             p.stats["xinde"] = p.stats.get("xinde", 0) + squad.reward_xinde
-            msgs.append(f"心得 +{squad.reward_xinde}")
+            xinde_line = f"心得 +{squad.reward_xinde}"
+            msgs.append(xinde_line)
+            if self._draft is not None:
+                self._draft.hide(xinde_line)
+                self._draft.changes.append(xinde_line)
         msgs += team.add_exp(c, p.member, squad.exp, p.name)
+        if self._draft is not None and squad.exp > 0:
+            self._draft.changes.append(f"經驗 +{squad.exp}（每人）")
         if self.rng.random() < c.config.train_stat_chance:
             key = self.rng.choice(["str", "agi", "con"])
             p.stats[key] += 1

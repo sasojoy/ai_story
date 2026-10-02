@@ -4,9 +4,13 @@ from tianxia.bot import pick, play_season, spend_xinde, wants_heal
 from tianxia.world_state import WorldStateStore
 
 
-def test_wants_heal_follows_the_half_neili_threshold(game):
+def test_wants_heal_only_with_internal_injury(game):
+    """療傷照內傷計價：氣血低但沒有內傷時會自己回，不用去療傷（不然只會一直寫「氣血無恙」）。"""
+    member = game.state.player.member
     assert not wants_heal(game)
-    game.state.player.member.neili = 10.0
+    member.neili = 1.0
+    assert not wants_heal(game)
+    member.injury = 10.0
     assert wants_heal(game)
 
 

@@ -1582,5 +1582,5 @@ def test_a_drill_is_journaled_as_a_drill_without_a_battle_card(content, game):
     game.choose("act:train")
     entry = game.state.journal[0]
     assert (entry.title, entry.tag, entry.battle_id) == ("歷練・湖邊", "操練", None)
-    assert entry.changes == ["心得 +10"] and entry.lines == ["（寇亂 +1）"]
+    assert entry.changes == ["心得 +10", "經驗 +20（每人）"] and entry.lines == ["（寇亂 +1）"]
     assert game.state.battle_card is None
