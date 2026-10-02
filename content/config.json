@@ -2,6 +2,7 @@
   "stamina_max": 150,
   "stamina_regen_seconds": 300,
   "action_cost": {"explore": 10, "train": 10, "socialize": 5},
+  "ollama_model": "qwen2.5:7b",
   "time_scale": 1.0,
   "season_days": 14,
   "train_stat_chance": 0.3,
