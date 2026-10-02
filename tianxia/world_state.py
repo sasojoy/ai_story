@@ -20,6 +20,7 @@ from __future__ import annotations
 import contextlib
 import time
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -35,6 +36,7 @@ LOCK_TIMEOUT = 5.0  # 等鎖最多幾秒
 LOCK_STALE_AFTER = 30.0  # 鎖目錄存在超過這麼久視為前一個行程異常結束，強制回收
 LOCK_POLL_INTERVAL = 0.05
 
+SeasonPhase = Literal["preparing", "running", "resting"]  # 籌備（管理者還沒開季）／進行中／休季（這一季已結束）
 
 JADE_SEAL_FRAGMENT_COUNT = 7  # 設計文件九.2：七塊碎片＝跨季長線，不是單季目標
 
@@ -78,10 +80,16 @@ class SharedWorldState(BaseModel):
     season: WorldState = Field(default_factory=WorldState)
     season_number: int = 1
     season_last_real: float | None = None
+    season_opened: bool = False  # 這一季管理者開季了沒；False＝籌備中（見 season_phase）
 
     # ── 全服即時多人戰鬥（設計討論：集結選陣營→逐幕逐回合鎖步）────────
     # 同一時間最多一場（先簡化成這樣；真的需要同時好幾場再擴充成 list/dict）。
     active_battle: BattleInstance | None = None
+
+    def season_phase(self) -> SeasonPhase:
+        if not self.season.storyline or not self.season_opened:
+            return "preparing"
+        return "resting" if self.season.ended else "running"
 
 
 @contextlib.contextmanager
@@ -108,6 +116,16 @@ def _locked(lock_dir: Path):
     finally:
         with contextlib.suppress(OSError):
             lock_dir.rmdir()
+
+
+def _fresh_season(content: Content) -> WorldState:
+    """照劇本種出一季全新的共用賽季（大勢起始值、公開的大勢線、第一條主線）。"""
+    trends = content.scenario.trends
+    return WorldState(
+        trends={t.id: t.start for t in trends},
+        revealed={t.id for t in trends if not t.hidden},
+        storyline=content.scenario.storylines[0].id,
+    )
 
 
 class WorldStateStore:
@@ -264,23 +282,62 @@ class WorldStateStore:
         self.mutate(_apply)
 
     def start_new_season(self, content: Content) -> WorldState:
-        """全服第一次開局（還沒有任何共用賽季）或目前賽季已經結束時，重新用 content 的
-        劇本種出一份全新的共用賽季，賽季編號 +1；賽季還在進行中時原封不動回傳目前的賽季
-        （不會因為兩個玩家前後腳都呼叫就重複重置——鎖內判斷，只有第一個真的執行重置）。"""
+        """舊的自動開季入口（Task 3 改由 seed_first_season/open_season/next_season 取代後刪除）。"""
         def _apply(state: SharedWorldState) -> None:
             if state.season.storyline and not state.season.ended:
                 return
-            is_bootstrap = not state.season.storyline  # 從未真正初始化過，不是「結束後輪替」
-            trends = content.scenario.trends
-            state.season = WorldState(
-                trends={t.id: t.start for t in trends},
-                revealed={t.id for t in trends if not t.hidden},
-                storyline=content.scenario.storylines[0].id,
-            )
+            is_bootstrap = not state.season.storyline
+            state.season = _fresh_season(content)
+            state.season_opened = True
             if not is_bootstrap:
-                state.season_number += 1  # 全服第一次開局維持第 1 季；只有真的輪替才遞增
+                state.season_number += 1
 
         return self.mutate(_apply).season
+
+    def season_phase(self) -> SeasonPhase:
+        return self.read().season_phase()
+
+    def seed_first_season(self, content: Content) -> WorldState:
+        """全服第一次開局：照劇本種出第 1 季。預設停在籌備中等管理者開季；內容設定
+        auto_open_first_season 時直接開季。已經種過就原封不動回傳。"""
+        def _apply(state: SharedWorldState) -> None:
+            if state.season.storyline:
+                return
+            state.season = _fresh_season(content)
+            state.season_opened = content.config.auto_open_first_season
+
+        return self.mutate(_apply).season
+
+    def open_season(self, now: float) -> bool:
+        """管理者開季：籌備中 → 進行中，賽季時鐘從 now 起算。還沒種、或已經開過，回傳 False。"""
+        result = {"ok": False}
+
+        def _apply(state: SharedWorldState) -> None:
+            if not state.season.storyline or state.season_opened:
+                return
+            state.season_opened = True
+            state.season_last_real = now
+            result["ok"] = True
+
+        self.mutate(_apply)
+        return result["ok"]
+
+    def next_season(self, content: Content, now: float) -> bool:
+        """管理者開下一季：只在休季時有效。換上全新的一季、賽季編號 +1、直接開季，
+        賽季時鐘從 now 起算；跨季保留的東西（玉璽碎片等）不動。"""
+        result = {"ok": False}
+
+        def _apply(state: SharedWorldState) -> None:
+            if state.season_phase() != "resting":
+                return
+            state.season = _fresh_season(content)
+            state.season_number += 1
+            state.season_opened = True
+            state.season_last_real = now
+            result["ok"] = True
+
+        self.mutate(_apply)
+        return result["ok"]
 
     def catch_up_season(self, content, now: float, rng) -> list[str]:
         """被動的現實時間追趕：不管是誰在這一刻跟伺服器互動，都把共用賽季依「距離上次
@@ -295,7 +352,7 @@ class WorldStateStore:
         def _apply(state: SharedWorldState) -> None:
             last = state.season_last_real
             state.season_last_real = now
-            if last is None:
+            if last is None or state.season_phase() != "running":
                 return
             result["elapsed"] = max(0.0, now - last) * content.config.time_scale
 

@@ -372,6 +372,9 @@ class Config(_Strict):
     recruit_consolation_xinde: int = 30  # 劇情事件想結識的人已經被別人招走時，改給的心得
     fortune_day_min: int = 2  # 新立門戶福緣：第幾天起交遊必定先觸發
     fortune_day_max: int = 7  # 新立門戶福緣：第幾天結束還沒發生就直接送上門
+    # ── 賽季生命週期（第一季設計第十四節）──
+    admins: list[str] = Field(default_factory=list)  # 管理者的名號；暫時用名號認人，線上架構會換成帳號權限
+    auto_open_first_season: bool = False  # True＝全服第一次開局就直接開季（測試內容用）；正式內容由管理者開季
 
 
 class BattleFaction(_Strict):

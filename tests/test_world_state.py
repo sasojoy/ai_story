@@ -1,3 +1,4 @@
+import random
 import time
 from pathlib import Path
 
@@ -227,3 +228,74 @@ def test_jade_seal_summary_before_and_after_a_fragment_is_found(store):
     store.record_jade_seal_fragment("強者", "黃巾之亂", "強者擊敗看守者，取得第一塊碎片。")
     summary = store.jade_seal_summary()
     assert "1/7" in summary and "強者" in summary and "黃巾之亂" in summary
+
+
+# ── 賽季階段：籌備 → 進行中 → 休季（第一季設計第十四節）──────────
+
+
+def test_seed_first_season_waits_for_the_admin_by_default(store, content):
+    content.config.auto_open_first_season = False
+    season = store.seed_first_season(content)
+    assert season.storyline == content.scenario.storylines[0].id
+    assert season.trends == {t.id: t.start for t in content.scenario.trends}
+    assert store.season_phase() == "preparing"
+    assert store.get_season_number() == 1
+
+
+def test_seed_first_season_opens_directly_when_content_says_so(store, content):
+    content.config.auto_open_first_season = True
+    store.seed_first_season(content)
+    assert store.season_phase() == "running"
+
+
+def test_seed_first_season_is_a_no_op_once_seeded(store, content):
+    content.config.auto_open_first_season = False
+    store.seed_first_season(content)
+    store.mutate_season(lambda season: season.trends.__setitem__("kou", 77))
+    store.seed_first_season(content)
+    assert store.get_season().trends["kou"] == 77
+
+
+def test_open_season_moves_preparing_to_running_once(store, content):
+    content.config.auto_open_first_season = False
+    store.seed_first_season(content)
+    assert store.open_season(now=500.0) is True
+    assert store.season_phase() == "running"
+    assert store.read().season_last_real == 500.0
+    assert store.open_season(now=600.0) is False
+
+
+def test_open_season_needs_a_seeded_season(store):
+    assert store.open_season(now=1.0) is False
+    assert store.season_phase() == "preparing"
+
+
+def test_catch_up_season_does_not_move_the_clock_while_preparing(store, content):
+    content.config.auto_open_first_season = False
+    content.config.time_scale = 60
+    store.seed_first_season(content)
+    store.catch_up_season(content, 1000.0, random.Random(0))
+    store.catch_up_season(content, 1010.0, random.Random(0))
+    assert store.get_season().time == 0
+
+
+def test_next_season_only_works_while_resting(store, content):
+    content.config.auto_open_first_season = True
+    store.seed_first_season(content)
+    assert store.next_season(content, now=1.0) is False  # 還在進行中
+    store.mutate_season(lambda season: setattr(season, "ended", True))
+    assert store.season_phase() == "resting"
+    assert store.next_season(content, now=2.0) is True
+    assert store.season_phase() == "running"
+    assert store.get_season_number() == 2
+    assert store.get_season().ended is False
+    assert store.read().season_last_real == 2.0
+
+
+def test_next_season_keeps_the_jade_seal_fragments(store, content):
+    content.config.auto_open_first_season = True
+    store.seed_first_season(content)
+    store.record_jade_seal_fragment("甲", "測試劇本", "甲取得了碎片。")
+    store.mutate_season(lambda season: setattr(season, "ended", True))
+    store.next_season(content, now=1.0)
+    assert [f.finder for f in store.get_jade_seal_fragments()] == ["甲"]
