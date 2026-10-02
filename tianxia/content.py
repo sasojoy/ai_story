@@ -16,8 +16,8 @@ from pydantic import ValidationError
 from .companion_agent import DIALOGUE_TAGS
 from .materials import TIER_NAMES
 from .models import (
-    STATS, BattleDef, CharacterDef, Condition, Config, Content, Effect, Event, Location, MapLayout,
-    Material, Scenario, Sect, SimRumor, SkillDef, Squad, Tutorial,
+    STATS, BattleDef, CharacterDef, Condition, Config, Content, CraftNames, Effect, Event, Location,
+    MapLayout, Material, Scenario, Sect, SimRumor, SkillDef, Squad, Tutorial,
 )
 
 
@@ -40,6 +40,8 @@ def load_content(root: Path) -> Content:
         locations=_index(Location, _read(root / "locations.json")),
         skills=_index(SkillDef, _read(root / "skills.json")),
         materials=_index(Material, _read(root / "materials.json")),
+        craft_names=CraftNames(**_read(root / "craft_names.json")),
+        banned_names=_read(root / "banned_names.json"),
         sects=_index(Sect, _read(root / "sects.json")),
         characters=_index(CharacterDef, _read(root / "characters.json")),
         squads=_index(Squad, _read(root / "squads.json")),
@@ -138,6 +140,21 @@ def validate(c: Content) -> None:
 
     for squad in c.squads.values():
         known(f"敵方隊伍 {squad.id}", [drop.material for drop in squad.drops], c.materials, "素材")
+
+    # 煉製的決定性組名字表（LLM 不可用時的退路）：不能是空的，而且組出來的每一個名字都得
+    # 通過命名過濾——這條退路一定會被走到（整季模擬把 LLM mock 掉），組出壞名字會永久登記。
+    from .craft import name_problem  # noqa: PLC0415  延後 import，避免 content <-> craft 互相依賴
+
+    names = c.craft_names
+    need(bool(names.prefixes), "craft_names.prefixes 不能是空的")
+    need(bool(names.wugong), "craft_names.wugong 不能是空的")
+    need(bool(names.neigong), "craft_names.neigong 不能是空的")
+    for prefix in names.prefixes:
+        for suffix in [*names.wugong, *names.neigong]:
+            reason = name_problem(prefix + suffix, c)
+            need(reason is None, f"craft_names 組出的名字「{prefix + suffix}」過不了命名過濾：{reason}")
+    for word in c.banned_names:
+        need(bool(word.strip()), "banned_names 裡有空字串")
     # 沒寫 drops 的對手走 materials.py 依難度的預設掉落表，所以每一階都得有素材可挑。
     for tier in sorted(TIER_NAMES):
         need(

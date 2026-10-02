@@ -11,7 +11,10 @@ import time
 
 from pydantic import BaseModel
 
-from . import atlas, battle_instance, battlelog, companion_agent, encounter, flavor, journal, materials, roster, skillview, team
+from . import (
+    atlas, battle_instance, battlelog, companion_agent, craft, encounter, flavor, journal, materials, roster,
+    skillview, team,
+)
 from .events import choice_label, has_events_here, pick_event, visible_choices
 from .guide import note_action, quest_text, tutorial_intro
 from .journal import LOG_BREAK, Draft
@@ -857,6 +860,24 @@ class Game:
             self._menxia_entry(msg, xinde)
             msgs += note_action(self.state, self.content, self.world, "practice")
         return msgs
+
+    def craft(self, material_ids: list[str], kind: str) -> list[str]:
+        """煉製：兩樣素材煉成一門功法，花心得（見 tianxia/craft.py）。
+
+        LLM 只在「全服第一次煉出這個配方」時被呼叫一次，而且只負責取名字；配方命中就是純
+        查表。呼叫在這裡而不是在 `craft.py` 裡拿 client，是為了跟其他門下動作一樣由 Game
+        統一處理江湖紀錄。
+        """
+        xinde = self._xinde()
+        art, msgs = craft.craft(self.state, self.content, self.world, self.client, material_ids, kind)
+        out = self._log(msgs)
+        if art is not None:
+            self._menxia_entry(f"煉製【{art.name}】", xinde)
+            out += note_action(self.state, self.content, self.world, "practice")
+        return out
+
+    def craft_cost(self, material_ids: list[str]) -> int:
+        return craft.cost(self.content, material_ids)
 
     def practice(self, kind: str) -> list[str]:
         """鍛鍊：目前已學會的內功或武學加深一成，累積受傷風險。"""

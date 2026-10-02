@@ -4,3 +4,6 @@ gradio==6.24.0
 pandas==3.0.5
 numpy==2.5.2
 pytest>=8.0
+# 簡繁轉換（tianxia/zh.py）：刻意用純 Python 版，不用官方 opencc 的 C++ binding——它帶編譯好的
+# DLL，而這台機器的應用程式控制已經封鎖過較新版 pandas 的 DLL（見上面那條註解）。
+opencc-python-reimplemented>=0.1.7

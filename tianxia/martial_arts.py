@@ -37,6 +37,7 @@ class MartialArt(BaseModel):
     top_power: float
     origin: str = "created"  # "historical"（本命武學，內容手寫）或 "created"（玩家自創）
     creator: str | None = None  # 自創功法的取名者（玩家名號），本命武學為 None
+    note: str = ""  # 煉製時由 LLM 寫的一句話描述（只有語意、沒有數字）；自創與本命武學是空的
 
 
 def power_at(art: MartialArt, level: int) -> float:
@@ -61,17 +62,25 @@ def _weighted_pick(digest_byte: int, weights: dict[str, float]) -> str:
     return next(reversed(weights))
 
 
-def generate_from_name(name: str, kind: str, skill_id: str) -> MartialArt:
+def generate_from_name(
+    name: str, kind: str, skill_id: str,
+    weights: dict[str, float] | None = None, attribute: str | None = None,
+) -> MartialArt:
     """自創功法：名字即配方，純函式、同名同結果，見模組說明。
 
     - 屬性：取雜湊第一個位元組對 8 取餘數，映射到 ATTRIBUTES。
     - 品質：取雜湊第二個位元組，依 CREATED_QUALITY_WEIGHTS 抽（絕學機率極小但存在）。
     - 威力：品質決定第一成/第十成的區間（QUALITY_BASE_POWER/TOP_POWER），區間內再用
       第三個位元組做小幅微調（±10%），同品質的武學威力才不會完全一樣。
+
+    `weights` 與 `attribute` 是給煉製用的（見 tianxia/craft.py，無限煉製設計 §5.3、§5.4）：
+    煉製要讓「素材的階位移品質的機率分佈」、「屬性由素材決定」，但擲骰仍然來自名字的雜湊。
+    兩個都不傳時行為跟以前**完全一樣**（取名自創那條路徑的結果不受影響，有測試保護）。
+    `weights` 的鍵要照 QUALITIES 的順序排（_weighted_pick 走的是累積分佈，順序有意義）。
     """
     digest = _hash_bytes(name)
-    attribute = ATTRIBUTES[digest[0] % len(ATTRIBUTES)]
-    quality = _weighted_pick(digest[1], CREATED_QUALITY_WEIGHTS)
+    attribute = attribute or ATTRIBUTES[digest[0] % len(ATTRIBUTES)]
+    quality = _weighted_pick(digest[1], weights or CREATED_QUALITY_WEIGHTS)
     jitter = 0.9 + (digest[2] / 255.0) * 0.2  # 0.9~1.1
     return MartialArt(
         id=skill_id,

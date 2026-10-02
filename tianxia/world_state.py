@@ -64,6 +64,7 @@ class CompanionProgress(BaseModel):
 
 class SharedWorldState(BaseModel):
     created_skills: dict[str, MartialArt] = Field(default_factory=dict)  # 鍵是武學名稱
+    recipes: dict[str, str] = Field(default_factory=dict)  # 煉製配方鍵 -> 功法名稱（功法本體存在 created_skills）
     companion_tag_counts: dict[str, dict[str, int]] = Field(default_factory=dict)  # 人物 id -> {tag: 次數}
     companion_drift_note: dict[str, str] = Field(default_factory=dict)  # 人物 id -> 目前漂移後的一句話性情
     companion_drift_synthesized_at: dict[str, int] = Field(default_factory=dict)  # 人物 id -> 上次語意化時的 tag 總數
@@ -155,6 +156,40 @@ class WorldStateStore:
 
         self.mutate(_apply)
         return claimed["ok"]
+
+    # ── 煉製配方登記（無限煉製設計 §5.1：第一個煉出來的人替全服定義它）────
+
+    def lookup_recipe(self, key: str) -> MartialArt | None:
+        """這個配方已經被人煉出來過嗎？有就回傳登記在案的那一門（全服所有人看到同一個結果）。"""
+        state = self.read()
+        name = state.recipes.get(key)
+        return state.created_skills.get(name) if name else None
+
+    def claim_recipe(self, key: str, art: MartialArt) -> tuple[MartialArt | None, bool]:
+        """登記配方與功法，回傳（這個配方的功法, 是不是首創）。全部在檔案鎖內原子判斷。
+
+        三種結果：
+        - 配方已經有人登記 → 回傳**登記在案的那一門**與 False（這是正確行為，不是錯誤：
+          配方的結果全服共享，見設計 §十二 第 1 點）。
+        - 配方還沒人登記，而 `art.name` 也還沒被占用 → 登記，回傳 (art, True)。
+        - 配方還沒人登記，但 `art.name` 已經被別人的自創功法或別的配方占用 → 回傳
+          (None, False)，呼叫端要換一個名字再試（取名自創仍然是獨佔的）。
+        """
+        result: dict[str, object] = {"art": None, "first": False}
+
+        def _apply(state: SharedWorldState) -> None:
+            existing = state.recipes.get(key)
+            if existing:
+                result["art"] = state.created_skills.get(existing)
+                return
+            if art.name in state.created_skills:
+                return  # 名字撞到，呼叫端換名字
+            state.created_skills[art.name] = art
+            state.recipes[key] = art.name
+            result["art"], result["first"] = art, True
+
+        self.mutate(_apply)
+        return result["art"], bool(result["first"])  # type: ignore[return-value]
 
     # ── 同伴性情漂移 ──────────────────────────────────────
 

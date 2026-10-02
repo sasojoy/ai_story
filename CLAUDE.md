@@ -180,7 +180,7 @@
 `tests/test_real_content.py` 的方式 mock 掉 `OllamaClient.chat_structured`/`chat_text`），
 沒有依賴 simulate.py。
 
-## 無限煉製（Infinite Alchemy 方向）：spec 定稿 + 第一刀「素材與掉落」已完成
+## 無限煉製（Infinite Alchemy 方向）：spec 定稿，第一刀「素材與掉落」、第二刀「煉製與配方快取」已完成
 
 權威文件：`docs/superpowers/specs/2026-10-01-無限煉製-design.md`（commit `e47d0e7`，四個待確認
 項目都已由企劃者拍板，見該文件 §十二）。方向是武功玩法比照
@@ -237,26 +237,62 @@
 這次加一塊背包就一次全踩到（6 個測試同時失敗）。改成 `app.MENXIA_OUTPUTS` 一個常數，
 程式與測試都引用它。**以後往門下頁加東西只要改那一個數字。**
 
-### 第一刀還沒做的（照 spec 的順序）
-第二步「煉製與配方快取」（素材 → 功法，含 LLM 只命名、名字過濾、`tianxia/zh.py`）、
-第三步「功法庫與改練 + 門下煉製頁」。注意 `team.py` **目前沒有散功也沒有換功法的函式**
-（CLAUDE.md 舊版寫的「散功」不存在），所以煉出絕學也裝不上去——第三步必須做。
-另外 `skillview.practice_hint()` 現在寫著「練功不花一分一毫」，煉製開始吃心得之後要一起改寫。
+### 第二刀做了什麼（煉製與配方快取，已完成）
+- `tianxia/craft.py`（新）：配方鍵、成本、品質權重內插、屬性規則、命名過濾、決定性退路組名、
+  `craft()` 整條流程。`Game.craft(material_ids, kind)` 是介面層的入口（UI 是第三刀）。
+- `tianxia/zh.py`（新）：`to_traditional()`，用 `opencc-python-reimplemented`（`s2twp`），
+  **import 或建構失敗就退回手寫對照表**，所以這個依賴壞掉不會讓遊戲壞掉。
+- `SharedWorldState.recipes`（配方鍵 → 功法名字）＋ `lookup_recipe()`／`claim_recipe()`
+  （鎖內原子）。功法本體仍存在既有的 `created_skills`。
+- `generate_from_name()` 多了 `weights` 與 `attribute` 兩個具名參數，**不傳時行為完全不變**
+  （取名自創那條路徑的結果一個字都沒動，有測試保護）。
+- `content/craft_names.json`（退路字表：20 前綴 × 16 字尾 × 兩種 ＝ 640 個名字）、
+  `content/banned_names.json`（76 筆金庸專有名詞）。載入時**會驗證退路組出的每一個名字都
+  過得了命名過濾**——這條退路一定會被走到（整季模擬把 LLM mock 掉），組出壞名字會永久登記。
+- `MartialArt.note`（LLM 寫的一句話說明）、`PlayerState.arts`（功法庫）。
+- 677 個測試通過（新增 `tests/test_craft.py` 49 個、`tests/test_zh.py` 6 個）。
 
-## 下一個 session 的待辦（2026-10-02 交接）
+**煉出來的功法放哪**：對應欄位空著就直接配上身，否則進 `PlayerState.arts`。這是刻意偏離
+spec（spec 把功法庫整個排在第三刀）——第一刀才發現 `team.py` 沒有散功／換功法的函式，
+如果第二刀煉出絕學卻無處可去，就是自己造一個死路。真正的「改練」仍是第三刀。
+
+### 真實模型實測（照專案慣例，LLM 相關定案前要用真模型跑一次）
+用 `qwen2.5:14b` 煉五爐，名字品質可用、沒有跑題到既有作品：鑄韌拳、滯鉄心經、綿鷹勁、
+韌勁心經、滌嶽心經；說明都是純敘事、沒有數字。配方快取再煉同一爐是 **0.008 秒**、零 LLM
+呼叫、結果完全相同。
+
+三個被實測修正的東西（全部寫回 spec）：
+1. **spec §5.3 的「取克方的屬性」無法成立**：`ATTRIBUTE_COUNTERS` 是**相互**相剋的
+   （`"剛": "柔"` 與 `"柔": "剛"` 同時存在），一組對裡沒有單方面的克方——照原文實作會變成
+   「誰放在參數前面誰贏」。改成**階高者勝**，同階才交給名字雜湊。
+2. **OpenCC 的 `s2twp` 不處理異體字**：模型回過「滯**鉄**心經」，「鉄」是日式新字體，既不是
+   簡體也不是繁體正字，`s2twp` 原樣放過、「只能是中文字」的格式檢查也放過，差一步就被永久
+   登記。這個套件**沒有附 `jp2t` 字典**，所以 `zh.py` 自帶一張 `VARIANTS` 表，在 OpenCC
+   之後再套一次。**以後凡是要「保證繁體」的地方，只靠 OpenCC 是不夠的。**
+3. **LLM 延遲比預估高一個量級**：spec 寫「6~8 秒」，實測 **27~83 秒**。機制沒問題，但第三刀
+   做煉製頁時一定要處理這段等待（按鈕先 disable、顯示爐火正旺之類），不能讓玩家對著沒反應
+   的畫面。
+
+另外 spec §5.5 的算例原本寫錯（「兩個天品 ＝ 51」，實際是 5×2 + 3×6 ＝ 28）；公式不變，只修算例。
+
+### 第三刀還沒做
+門下「煉製」頁（含上面那段等待的處理）、功法庫的**改練**（把庫裡的換上來、熟練度各自保留，
+`PlayerState.art_levels` 還沒做）、`skillview.practice_hint()` 的文案要改寫（現在寫著
+「練功不花一分一毫」，煉製已經在吃心得了）。
+
+## 下一個 session 的待辦（2026-10-02 交接，第二刀之後）
 
 **先確認工作目錄**：`C:\Users\User\Documents\ai_story-tianxia`（分支
 `feature/sanguo-companions`）。曾經在 `C:\Users\User\Documents\ai_story`
 （分支 `feature/conquest-route-redesign`，另一個完全不同的遊戲）開 session、載入到錯的
 CLAUDE.md，白繞了一圈。**開工前先 `git worktree list` 核對一次。**
 
-### 1. 接著做無限煉製第二刀：煉製與配方快取
-照 spec §5 做：配方鍵（兩個素材 id 排序 + 內功／武學）→ 查 `SharedWorldState.recipes` →
-命中就直接取 `created_skills` 裡那一門（零 LLM）→ 沒命中才呼叫 LLM **只要名字＋一句說明**
-→ 過濾（OpenCC 繁體化、禁用詞、格式）→ `generate_from_name(..., weights=位移後的品質權重)`
-→ 鎖內 `claim_skill_name()` + 登記配方。LLM 呼叫在鎖外（照 `battle_instance.py` 的先例）。
-`generate_from_name` 要加一個預設值不變的 `weights` 參數（既有自創路徑的結果必須完全不變，
-有測試保護）。
+### 1. 接著做無限煉製第三刀：煉製頁與改練
+三件事：(a) 門下頁加「煉製」那一塊（選兩樣素材、顯示成本／目前心得、開爐按鈕、結果卡片，
+而且**一定要處理 27~83 秒的等待**，見上面的實測）；(b) 功法庫的改練——把庫裡的功法換上來、
+被換下的回庫、熟練度各自保留（要新增 `PlayerState.art_levels`，舊存檔用現有的
+`member.*_level` 回填）；(c) `skillview.practice_hint()` 的文案改寫（現在寫著「練功不花
+一分一毫」，煉製已經在吃心得了）。注意門下頁加東西只要改 `app.MENXIA_OUTPUTS` 一個數字。
 
 ### 2. `scripts/simulate.py` 是死的：要修還是刪？（等決定，從 2026-10-01 擱到現在）
 import 階段就炸（`tianxia.battle` 已不存在），還呼叫 `team.upgrade_cost()`／`battle_rules()`／
