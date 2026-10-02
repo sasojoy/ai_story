@@ -88,8 +88,9 @@ class BotRunner:
             try:
                 with self.world.action_lock(timeout=LOCK_WAIT):
                     # 拿到鎖之後才看錶：上一個假人放鎖到現在，真人可能已經把共用時鐘對到更晚了
-                    self._take_turn(path, self.clock())
-                report.acted += 1
+                    acted = self._take_turn(path, self.clock())
+                if acted:
+                    report.acted += 1
             except TimeoutError:
                 report.skipped += 1
             except Exception as exc:
@@ -97,12 +98,26 @@ class BotRunner:
                 report.failed += 1
         return report
 
-    def _take_turn(self, path: Path, now: float) -> None:
-        game = Game(self.content, load_game(path), self.rng, self.world)
+    def _take_turn(self, path: Path, now: float) -> bool:
+        """拿著行動鎖做一個動作，真的出手才回傳 True。這一輪開頭查過的賽季可能已經變了（各個假人
+        之間會放鎖）：季已經結束、或管理者開了下一季（這個假人就算退隱了），就什麼都不做、也不存檔；
+        自己補算時間時走到季末，存下補算的結果，但不在休季時做事。"""
+        state = load_game(path)
+        shared = self.world.read()
+        profile = state.player.bot
+        if shared.season_phase() != "running":
+            return False
+        if profile is None or not server_bots.active(profile, shared.season_number):
+            return False
+        game = Game(self.content, state, self.rng, self.world)
         game.client = None  # 假人不呼叫 LLM（伺服器假人設計第三節）
         game.sync(now)
+        if game.state.world.ended:
+            save_game(game.state, path)
+            return False
         bot_policy.take_turn(game, game.state.player.bot, self.rng)
         save_game(game.state, path)
+        return True
 
     def _online(
         self, profile: BotProfile, state: GameState, now: float,

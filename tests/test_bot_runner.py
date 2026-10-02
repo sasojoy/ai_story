@@ -175,6 +175,80 @@ def test_a_player_acting_between_bot_turns_does_not_make_the_season_run_faster(
     assert world.get_season().time - start_time == (end - start_real) * content.config.time_scale
 
 
+def _saves_snapshot(tmp_path):
+    return {p.name: p.read_bytes() for p in sorted((tmp_path / "saves").glob("*.json"))}
+
+
+def _round_where_something_happens_mid_round(runner, content, tmp_path, clock, monkeypatch, happen):
+    """補好人之後再跑一輪：這一輪開頭還在進行中，排到第一個假人時（還沒拿行動鎖）發生 happen()。
+    回傳（這一輪的報告, 真的出手的假人名號）。"""
+    monkeypatch.setattr(server_bots, "is_online", lambda profile, now: False)
+    content.config.bots_min_per_faction = 1
+    content.config.bot_tick_seconds = 1000  # 在線就一定做一個動作
+    runner.tick()  # 補人
+    played = []
+    monkeypatch.setattr(bot_policy, "take_turn", lambda game, profile, rng: played.append(game.state.player.name))
+    happened = []
+
+    def online_and_then_it_happens(profile, now):
+        if not happened:
+            happened.append(happen())
+        return True
+
+    monkeypatch.setattr(server_bots, "is_online", online_and_then_it_happens)
+    clock[0] += 60
+    return runner.tick(), played
+
+
+def test_bots_stop_acting_when_the_season_ends_in_the_middle_of_a_round(
+    runner, world, content, tmp_path, clock, monkeypatch,
+):
+    before = None
+
+    def season_ends():
+        nonlocal before
+        world.mutate_season(lambda season: setattr(season, "ended", True))
+        before = _saves_snapshot(tmp_path)
+
+    report, played = _round_where_something_happens_mid_round(runner, content, tmp_path, clock, monkeypatch, season_ends)
+    assert played == [] and report.acted == 0
+    assert _saves_snapshot(tmp_path) == before  # 休季了：不做事，也不存檔
+
+
+def test_a_bot_retired_by_a_new_season_in_the_middle_of_a_round_does_not_act(
+    runner, world, content, tmp_path, clock, monkeypatch,
+):
+    """這一輪開頭還是第 1 季；管理者在這一輪中間開了第 2 季，第 1 季的假人都算退隱，不能跑到
+    新的一季去替舊陣營做事。"""
+    before = None
+
+    def admin_opens_the_next_season():
+        nonlocal before
+        world.mutate_season(lambda season: setattr(season, "ended", True))
+        assert world.next_season(content, now=clock[0])
+        before = _saves_snapshot(tmp_path)
+
+    report, played = _round_where_something_happens_mid_round(
+        runner, content, tmp_path, clock, monkeypatch, admin_opens_the_next_season,
+    )
+    assert played == [] and report.acted == 0
+    assert _saves_snapshot(tmp_path) == before
+    assert world.faction_counts() == {}  # 沒有人替舊陣營投靠進新的一季
+
+
+def test_a_bot_whose_own_catch_up_ends_the_season_saves_but_does_not_act(
+    runner, world, content, tmp_path, clock, monkeypatch,
+):
+    """假人自己補算時間時剛好走到季末：補算的結果要存下來，但不能在休季時做事。"""
+    def nearly_over():
+        world.mutate_season(lambda season: setattr(season, "time", content.config.season_days * 86400 - 30))
+
+    report, played = _round_where_something_happens_mid_round(runner, content, tmp_path, clock, monkeypatch, nearly_over)
+    assert world.get_season().ended
+    assert played == [] and report.acted == 0
+    assert any(s.last_real == clock[0] for s in _bots(tmp_path))  # 走到季末的那一個假人存了補算的結果
+
+
 def test_bots_do_nothing_until_the_admin_opens_the_season(content, tmp_path, clock):
     _install(content)
     content.config.auto_open_first_season = False
