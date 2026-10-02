@@ -111,6 +111,8 @@ class Game:
             s.pending_event = None
         if p.pending_companion and p.pending_companion not in c.characters:
             p.pending_companion = None
+        if p.pending_faction and p.pending_faction not in {f.id for f in c.scenario.factions}:
+            p.pending_faction = None
         if p.location not in c.locations:
             p.location = c.scenario.start_location
         p.team = [k for k in p.team if k in c.characters][: team.MAX_TEAM_COMPANIONS]
@@ -151,6 +153,7 @@ class Game:
         self._reconcile_season()
         msgs = list(self.world.catch_up_season(self.content, now, self.rng))
         self.state.world = self.world.get_season()  # 剛才的追趕可能進一步推進了賽季，拉回最新的一份
+        self._record_faction()
         if self.state.last_real is None:
             self.state.last_real = now
         else:
@@ -220,6 +223,12 @@ class Game:
             opts = [self._cost_option(f"talk:{i}", text, talk_cost) for i, text in enumerate(dialogue_options)]
             opts.append(Option(id="talk:leave", label="告辭"))
             return opts
+        if s.player.pending_faction:
+            faction = self._faction(s.player.pending_faction)
+            return [
+                Option(id="faction:confirm", label=f"確定投靠{faction.name}"),
+                Option(id="faction:cancel", label="再想想"),
+            ]
         if s.player.busy_until is not None:
             return [Option(id="act:break", label="提前出關")]
         loc = c.locations[s.player.location]
@@ -293,7 +302,7 @@ class Game:
             elif kind == "talk":
                 msgs = self._talk(arg)
             elif kind == "faction":
-                msgs = self._join_faction(arg)
+                msgs = self._faction_step(arg)
             else:
                 msgs = self._choose(int(arg))
             if kind == "act" and arg != "break":
@@ -304,13 +313,18 @@ class Game:
             journal.add_entry(self.state, self._draft.entry(self.state.world.time, msgs))
         finally:
             self._draft = None
+        self._record_faction()
         self._save_season()
         return self._log(msgs)
 
     def _action_title(self, kind: str, arg: str) -> str:
         s, c = self.state, self.content
         if kind == "faction":
-            return f"投靠{self._faction(arg).name}"
+            if arg == "confirm":
+                return f"投靠{self._faction(s.player.pending_faction).name}"
+            if arg == "cancel":
+                return "再想想"
+            return f"考慮投靠{self._faction(arg).name}"
         if kind == "move":
             return f"前往 {c.locations[arg].name}"
         if kind == "choice":
@@ -401,10 +415,38 @@ class Game:
     def _faction(self, faction_id: str):
         return next(f for f in self.content.scenario.factions if f.id == faction_id)
 
-    def _join_faction(self, faction_id: str) -> list[str]:
-        faction = self._faction(faction_id)
-        self.state.player.faction = faction.id
-        return [f"你投靠了{faction.name}。"]
+    def _faction_step(self, arg: str) -> list[str]:
+        """投靠分兩步（伺服器假人設計第八節第 3 項）：按「投靠某陣營」先出確認畫面（寫明這一季
+        不能改投、三方目前各有幾人），「確定」才真的投靠，「再想想」就作罷。"""
+        p = self.state.player
+        if arg == "cancel":
+            p.pending_faction = None
+            return ["你決定再想想。"]
+        if arg == "confirm":
+            faction = self._faction(p.pending_faction)
+            p.pending_faction = None
+            if p.location not in faction.join_at:
+                return ["（你已經不在投靠的地方了。）"]
+            p.faction = faction.id
+            return [f"你投靠了{faction.name}。"]
+        faction = self._faction(arg)
+        p.pending_faction = faction.id
+        return [self._faction_prompt(faction)]
+
+    def _faction_prompt(self, faction) -> str:
+        return f"投靠後這一季不能改投（叛投另論）。{self.faction_counts_text()}。確定投靠{faction.name}？"
+
+    def faction_counts_text(self) -> str:
+        """「目前官軍 N 人、黃巾軍 M 人、地方豪強 K 人」：照全服投靠名冊（真人與假人一起算）。"""
+        counts = self.world.faction_counts()
+        return "目前" + "、".join(f"{f.name} {counts.get(f.id, 0)} 人" for f in self.content.scenario.factions)
+
+    def _record_faction(self) -> None:
+        """把自己的陣營記進全服投靠名冊（陣營人數看這份）；已經記過就不再寫。choose() 結束時
+        與 sync() 都會呼叫，名冊出現之前就投靠了的人（或拜入門派而投靠的人）也會補記進去。"""
+        p = self.state.player
+        if p.faction is not None and self.world.read().faction_rolls.get(p.name) != p.faction:
+            self.world.record_faction(p.name, p.faction)
 
     # ── 全服即時多人戰鬥（設計討論：集結選陣營→逐幕逐回合鎖步）──────────
 
@@ -1080,6 +1122,9 @@ class Game:
             history = s.player.dialogue_history.get(s.player.pending_companion, [])
             last = next((m["content"] for m in reversed(history) if m.get("role") == "assistant"), "")
             return f"**{character.name}**\n\n{last}"
+        if s.player.pending_faction:
+            faction = self._faction(s.player.pending_faction)
+            return f"**投靠{faction.name}**\n\n{self._faction_prompt(faction)}"
         return self.location_text()
 
     def status_text(self) -> str:

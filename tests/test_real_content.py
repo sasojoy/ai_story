@@ -292,3 +292,14 @@ def test_the_showdown_gives_scattered_players_time_to_gather(content):
     showdown = content.battles["huangjin_showdown"]
     assert showdown.muster_seconds == 30 * 60
     assert showdown.round_seconds == 5 * 60
+
+
+def test_nobody_can_join_a_faction_at_the_start_location(content):
+    """伺服器假人設計第八節第 3 項：開局地點不設投靠點，不然所有人一開場就全投了官軍。"""
+    start = content.scenario.start_location
+    assert all(start not in f.join_at for f in content.scenario.factions)
+
+
+def test_each_side_of_the_war_wants_the_yellow_turbans_to_go_its_way(content):
+    goals = {f.id: f.goals for f in content.scenario.factions}
+    assert goals == {"guan": {"huangjin": -1}, "huang": {"huangjin": 1}, "haoqiang": {}}

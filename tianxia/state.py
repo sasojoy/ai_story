@@ -38,6 +38,7 @@ class PlayerState(BaseModel):
     flags: set[str] = Field(default_factory=set)
     sect: str | None = None
     faction: str | None = None  # 投靠的陣營 id（Scenario.factions）；None＝散人
+    pending_faction: str | None = None  # 按了「投靠某陣營」、還在確認畫面上的陣營 id
     member: Member = Field(default_factory=Member)  # 玩家本人的角色表
 
     # ── 同伴（sanguo-companions 合併重寫：全服唯一，見 world_state.py）──

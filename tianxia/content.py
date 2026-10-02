@@ -235,6 +235,8 @@ def validate(c: Content) -> None:
     for faction in c.scenario.factions:
         known(f"陣營 {faction.id}", faction.join_at, c.locations, "地點")
         known(f"陣營 {faction.id}", faction.sects, c.sects, "門派")
+        known(f"陣營 {faction.id}", faction.goals, trend_ids, "大勢線")
+        need(all(d in (-1, 1) for d in faction.goals.values()), f"陣營 {faction.id}：goals 的方向只能是 1 或 -1")
 
     for battle in c.battles.values():
         where = f"戰鬥 {battle.id}"

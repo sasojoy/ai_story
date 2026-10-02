@@ -434,3 +434,15 @@ def test_validate_rejects_duplicate_faction_ids(content):
     content.scenario.factions = [FactionDef(id="guan", name="官軍"), FactionDef(id="guan", name="又是官軍")]
     with pytest.raises(ContentError, match="陣營 id 重複"):
         validate(content)
+
+
+def test_validate_rejects_a_faction_goal_on_an_unknown_trend(content):
+    content.scenario.factions = [FactionDef(id="guan", name="官軍", goals={"ghost": 1})]
+    with pytest.raises(ContentError, match="ghost"):
+        validate(content)
+
+
+def test_validate_rejects_a_faction_goal_that_is_not_up_or_down(content):
+    content.scenario.factions = [FactionDef(id="guan", name="官軍", goals={"kou": 2})]
+    with pytest.raises(ContentError, match="goals"):
+        validate(content)

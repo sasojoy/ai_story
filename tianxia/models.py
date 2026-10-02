@@ -302,12 +302,14 @@ class Tutorial(_Strict):
 
 
 class FactionDef(_Strict):
-    """一季的玩家陣營（第一季設計第五節）：在 join_at 的地點可以投靠；拜入 sects 裡的門派也算投靠這個陣營。"""
+    """一季的玩家陣營（第一季設計第五節）：在 join_at 的地點可以投靠；拜入 sects 裡的門派也算投靠這個陣營。
+    goals 是這個陣營想把各條大勢線往哪推（伺服器假人照它打分數）。"""
 
     id: str
     name: str
     join_at: list[str] = Field(default_factory=list)
     sects: list[str] = Field(default_factory=list)
+    goals: dict[str, int] = Field(default_factory=dict)  # 大勢線 id → 1 推高／-1 壓低；伺服器假人照這個行動
 
 
 class Scenario(_Strict):

@@ -426,3 +426,14 @@ def test_two_programs_acting_at_once_lose_no_updates_and_never_trip_over_the_fil
     procs.append(subprocess.Popen([sys.executable, "-c", _READER, str(path), "400"], cwd=ROOT))
     assert [p.wait(timeout=180) for p in procs] == [0, 0, 0]
     assert WorldStateStore(path).get_season().time == 80
+
+
+def test_next_season_clears_the_faction_roll(store, content):
+    store.seed_first_season(content)  # 測試內容會直接開季
+    store.record_faction("甲", "guan")
+    store.record_faction("乙", "guan")
+    store.record_faction("丙", "huang")
+    assert store.faction_counts() == {"guan": 2, "huang": 1}
+    store.mutate_season(lambda season: setattr(season, "ended", True))
+    assert store.next_season(content, now=1.0)
+    assert store.faction_counts() == {}

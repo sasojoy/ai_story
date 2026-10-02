@@ -90,6 +90,8 @@ class SharedWorldState(BaseModel):
     season_last_real: float | None = None
     season_opened: bool = False  # 這一季管理者開季了沒；False＝籌備中（見 season_phase）
     tianji: int = 0  # 天機：每次換季 +1，自創武學「名字 → 數值」的配方跟著換（跨季不滾雪球第三條）
+    faction_rolls: dict[str, str] = Field(default_factory=dict)  # 這一季的投靠名冊：玩家名號 → 陣營 id
+    # （真人與伺服器假人一起記，不記誰是假人；陣營人數看這份，換季清空，見 next_season）
 
     # ── 全服即時多人戰鬥（設計討論：集結選陣營→逐幕逐回合鎖步）────────
     # 同一時間最多一場（先簡化成這樣；真的需要同時好幾場再擴充成 list/dict）。
@@ -351,6 +353,7 @@ class WorldStateStore:
             state.created_skills = {}  # 第三條：自創武學名字全部釋出
             state.tianji += 1
             state.active_battle = None  # 上一季沒打完（或打完沒清掉）的戰鬥不帶進新的一季
+            state.faction_rolls = {}  # 新的一季大家重新投靠
             result["ok"] = True
 
         self.mutate(_apply)
@@ -378,6 +381,21 @@ class WorldStateStore:
         if elapsed <= 0:
             return []
         return world_module.advance_season(self, content, elapsed, rng)
+
+    # ── 投靠名冊（伺服器假人設計第八節第 3 項）──────────────────
+
+    def record_faction(self, name: str, faction_id: str) -> None:
+        def _apply(state: SharedWorldState) -> None:
+            state.faction_rolls[name] = faction_id
+
+        self.mutate(_apply)
+
+    def faction_counts(self) -> dict[str, int]:
+        """這一季各陣營投靠了幾人（只列有人的陣營）。"""
+        counts: dict[str, int] = {}
+        for faction_id in self.read().faction_rolls.values():
+            counts[faction_id] = counts.get(faction_id, 0) + 1
+        return counts
 
     # ── 全服即時多人戰鬥 ──────────────────────────────────
 
