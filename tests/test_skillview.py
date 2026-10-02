@@ -30,10 +30,10 @@ def test_library_is_empty_until_something_is_learned(state, content, world):
     assert skillview.library(state, content, world) == []
     rules.learn_skill(state, content, "fist")
     assert skillview.library(state, content, world) == [
-        ("武學　長拳（絕學・屬剛）第1成", "武學"),
+        ("武學　長拳（絕學・屬剛）第1成 ●○○○○○○○○○", "武學"),  # 熟練度十格條，見 skillview.level_bar
     ]
     rules.learn_skill(state, content, "breath")
-    assert ("內功　吐納法（絕學・屬陰）第1成", "內功") in skillview.library(state, content, world)
+    assert ("內功　吐納法（絕學・屬陰）第1成 ●○○○○○○○○○", "內功") in skillview.library(state, content, world)
 
 
 def test_detail_before_learning_says_so(state, content, world):
@@ -186,3 +186,11 @@ def test_the_hint_goes_quiet_when_everything_is_maxed_and_nothing_can_be_crafted
     team.create_skill(state, content, world, "太虛吐納", "內功")
     state.player.member.wugong_level = state.player.member.neigong_level = 10
     assert skillview.practice_hint(state, content) is None
+
+
+def test_the_level_bar_reads_at_a_glance():
+    """手機上「第4成」要讀過才知道練到哪，十格條一眼就看得出還剩多少可練。"""
+    assert skillview.level_bar(0) == "○" * 10
+    assert skillview.level_bar(4) == "●●●●○○○○○○"
+    assert skillview.level_bar(10) == "●" * 10
+    assert skillview.level_bar(99) == "●" * 10  # 夾住，不會長出第 11 格
