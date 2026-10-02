@@ -122,7 +122,12 @@ class Game:
         if p.member.wugong_id and p.member.wugong_id not in c.skills and not self.world.is_skill_name_taken(p.member.wugong_id):
             p.member.wugong_id = None
         # 功法庫與素材：內容檔改版（或換季）後可能指到不存在的東西
-        p.arts = [a for a in p.arts if team.resolve_art(a, c, self.world) is not None]
+        equipped = {p.member.neigong_id, p.member.wugong_id}
+        seen: set[str] = set()
+        p.arts = [  # 去重，並把已經配在身上的從庫裡移除（舊版重煉同一配方會造成這種髒狀態）
+            a for a in p.arts
+            if team.resolve_art(a, c, self.world) is not None and a not in equipped and not (a in seen or seen.add(a))
+        ]
         p.art_levels = {k: v for k, v in p.art_levels.items() if team.resolve_art(k, c, self.world) is not None}
         p.materials = {k: v for k, v in p.materials.items() if k in c.materials and v > 0}
         line_ids = [line.id for line in c.scenario.storylines]
@@ -914,7 +919,7 @@ class Game:
         return craft.cost(self.content, material_ids)
 
     def craft_line(self, material_ids: list[str], kind: str) -> str:
-        return skillview.craft_line(self.state, self.content, material_ids, kind)
+        return skillview.craft_line(self.state, self.content, material_ids, kind, self.world)
 
     def material_choices(self) -> list[tuple[str, str]]:
         """煉製選單的素材選項：（顯示文字, 素材 id），階高的排前面。"""

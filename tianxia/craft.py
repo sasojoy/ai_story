@@ -210,8 +210,23 @@ def fallback_name(content: Content, key: str, kind: str, salt: int = 0) -> str:
 # ── 煉製 ──────────────────────────────────────────────────
 
 
-def can_craft(state: GameState, content: Content, material_ids: list[str], kind: str) -> str | None:
-    """不能煉的原因；None＝可以煉。"""
+def already_have(state: GameState, art: MartialArt) -> bool:
+    """這門功法已經在身上或功法庫裡了嗎？"""
+    member = state.player.member
+    return art.id in (member.neigong_id, member.wugong_id) or art.id in state.player.arts
+
+
+def can_craft(
+    state: GameState, content: Content, material_ids: list[str], kind: str,
+    world: WorldStateStore | None = None,
+) -> str | None:
+    """不能煉的原因；None＝可以煉。
+
+    給了 `world` 時會多一條檢查：**這個配方煉出來的功法你已經有了**就不准煉。煉製的意義是
+    取得你還沒有的功法——重煉只會白燒素材與心得，換到一個自己已經擁有的東西（實測機器人
+    一季 17 爐裡有 8 爐是這種，而且舊版會讓同一門功法同時在身上也在功法庫裡）。
+    配方已經被別人首創、但自己還沒有那門功法時**仍然可以煉**，那正是全服共享配方的價值。
+    """
     if kind not in KINDS:
         return f"只能煉內功或武學，不是「{kind}」。"
     if len(material_ids) != MATERIALS_PER_CRAFT:
@@ -224,6 +239,10 @@ def can_craft(state: GameState, content: Content, material_ids: list[str], kind:
     price = cost(content, material_ids)
     if state.player.stats.get("xinde", 0) < price:
         return f"心得不足：煉製需要 {price} 點，你只有 {state.player.stats.get('xinde', 0)} 點。"
+    if world is not None:
+        known = world.lookup_recipe(recipe_key(material_ids, kind))
+        if known is not None and already_have(state, known):
+            return f"這一爐煉出來還是【{known.name}】，你已經有了——換一組素材吧。"
     return None
 
 
@@ -236,7 +255,7 @@ def craft(
     流程（設計 §5.2）：檢查 → 查配方快取 → 命中就直接用登記在案的那一門（零 LLM）→
     沒命中才請 LLM 命名 → 過濾 → 依素材決定屬性與品質權重 → 鎖內登記 → 扣素材與心得。
     """
-    problem = can_craft(state, content, material_ids, kind)
+    problem = can_craft(state, content, material_ids, kind, world)
     if problem is not None:
         return None, [problem]
 
@@ -295,6 +314,8 @@ def _store(state: GameState, art: MartialArt) -> list[str]:
     """
     member = state.player.member
     slot = "neigong_id" if art.kind == "內功" else "wugong_id"
+    if getattr(member, slot) == art.id:
+        return [f"你身上練的就是【{art.name}】。"]  # 防禦：can_craft 應該已經擋掉了
     if getattr(member, slot) is None:
         setattr(member, slot, art.id)
         setattr(member, slot.replace("_id", "_level"), 1)

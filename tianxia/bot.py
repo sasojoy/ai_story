@@ -18,6 +18,7 @@ from .world_state import WorldStateStore
 
 HALF_HOUR = 1800
 SPEND_XINDE_EVERY = 5  # 每幾步檢查一次要不要拿心得去練功/療傷/煉製
+CRAFT_TRIES = 4  # 煉製時最多試幾組素材組合（第一組是階最高的，其餘隨機）
 
 
 def wants_heal(game: Game) -> bool:
@@ -50,12 +51,16 @@ def craft_and_keep_the_best(game: Game, rng: random.Random) -> None:
         held += [material.id] * count
     if len(held) < craft.MATERIALS_PER_CRAFT:
         return
-    pair = held[: craft.MATERIALS_PER_CRAFT]  # bag_contents 已經照階由高到低排
-    kind = rng.choice(craft.KINDS)
-    if craft.can_craft(game.state, game.content, pair, kind) is not None:
-        return
-    game.craft(pair, kind)
-    _switch_to_the_strongest(game)
+    # 先試階最高的那一組，被擋下（素材不夠／心得不夠／這門功法已經有了）就換幾組試試。
+    # 不換的話一旦撞到「已經煉過」的配方，機器人會從此再也不煉製，整季模擬就測不到煉製了。
+    candidates = [held[: craft.MATERIALS_PER_CRAFT]]
+    candidates += [[rng.choice(held), rng.choice(held)] for _ in range(CRAFT_TRIES - 1)]
+    for pair in candidates:
+        for kind in rng.sample(craft.KINDS, len(craft.KINDS)):
+            if craft.can_craft(game.state, game.content, pair, kind, game.world) is None:
+                game.craft(pair, kind)
+                _switch_to_the_strongest(game)
+                return
 
 
 def _switch_to_the_strongest(game: Game) -> None:

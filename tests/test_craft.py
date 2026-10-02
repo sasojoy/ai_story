@@ -310,6 +310,7 @@ def test_a_cached_recipe_never_calls_the_llm_again(stocked, content, world):
     client = OllamaClient()
     with naming("裂江訣"):
         first, _ = craft.craft(stocked, content, world, client, ["gang_1", "gang_1"], "武學")
+    stocked.player.member.wugong_id = None  # 散功：這樣這個配方才又煉得起來（否則會被擋，見下面那個測試）
     with mock.patch.object(OllamaClient, "chat_structured", side_effect=AssertionError("不該再呼叫 LLM")):
         second, msgs = craft.craft(stocked, content, world, client, ["gang_1", "gang_1"], "武學")
     assert second is not None and second.name == first.name
@@ -371,6 +372,7 @@ def test_the_same_recipe_crafted_offline_twice_is_identical(stocked, content, wo
     client = OllamaClient()
     with llm_down():
         first, _ = craft.craft(stocked, content, world, client, ["gang_2", "gang_2"], "內功")
+        stocked.player.member.neigong_id = None  # 散功，不然同一門功法不准重煉
         second, _ = craft.craft(stocked, content, world, client, ["gang_2", "gang_2"], "內功")
     assert first is not None and second is not None
     assert (first.name, first.quality, first.attribute) == (second.name, second.quality, second.attribute)
@@ -445,3 +447,57 @@ def test_a_neigong_in_the_library_does_not_displace_a_wugong(stocked, content, w
     team.switch_art(stocked, content, world, neigong.id)
     assert stocked.player.member.wugong_id == wugong.id  # 武學沒被動到
     assert stocked.player.member.neigong_id == neigong.id
+
+
+# ── 不准重煉自己已經有的功法（第四層）────────────────────────
+
+
+def test_recrafting_an_art_you_already_practise_is_refused(stocked, content, world):
+    """煉製的意義是取得你還沒有的功法。重煉只會白燒素材與心得——而舊版還會讓同一門功法
+    同時在身上也在功法庫裡（實測機器人一季 17 爐有 8 爐是這種）。"""
+    client = OllamaClient()
+    with naming("裂江訣"):
+        art, _ = craft.craft(stocked, content, world, client, ["gang_1", "gang_1"], "武學")
+    before_materials = dict(stocked.player.materials)
+    before_xinde = stocked.player.stats["xinde"]
+    again, msgs = craft.craft(stocked, content, world, client, ["gang_1", "gang_1"], "武學")
+    assert again is None
+    assert art.name in msgs[0] and "你已經有了" in msgs[0]
+    assert stocked.player.materials == before_materials  # 什麼都沒扣
+    assert stocked.player.stats["xinde"] == before_xinde
+    assert stocked.player.arts == []  # 也沒有塞重複的進功法庫
+
+
+def test_recrafting_something_only_in_your_library_is_also_refused(stocked, content, world):
+    client = OllamaClient()
+    with naming("裂江訣"):
+        craft.craft(stocked, content, world, client, ["gang_1", "gang_1"], "武學")
+    with naming("沉山勢"):
+        second, _ = craft.craft(stocked, content, world, client, ["gang_2", "gang_2"], "武學")
+    assert stocked.player.arts == [second.id]  # 在庫裡
+    again, msgs = craft.craft(stocked, content, world, client, ["gang_2", "gang_2"], "武學")
+    assert again is None and "你已經有了" in msgs[0]
+
+
+def test_a_recipe_someone_else_discovered_can_still_be_crafted(stocked, content, world):
+    """全服共享配方的價值就在這裡：別人首創、自己還沒有，照樣煉得出來（而且零 LLM）。"""
+    from tianxia.state import new_game_state
+
+    client = OllamaClient()
+    with naming("裂江訣"):
+        mine, _ = craft.craft(stocked, content, world, client, ["gang_1", "gang_1"], "武學")
+    other = new_game_state(content, "另一個玩家")
+    materials.grant(other, content, "gang_1", 2)
+    other.player.stats["xinde"] = 500
+    assert craft.can_craft(other, content, ["gang_1", "gang_1"], "武學", world) is None
+    with mock.patch.object(OllamaClient, "chat_structured", side_effect=AssertionError("不該呼叫 LLM")):
+        theirs, _ = craft.craft(other, content, world, client, ["gang_1", "gang_1"], "武學")
+    assert theirs is not None and theirs.name == mine.name
+
+
+def test_can_craft_without_a_world_skips_the_duplicate_check(stocked, content, world):
+    """沒傳 world 時只做素材與心得的檢查（舊呼叫端不會壞）。"""
+    client = OllamaClient()
+    with naming("裂江訣"):
+        craft.craft(stocked, content, world, client, ["gang_1", "gang_1"], "武學")
+    assert craft.can_craft(stocked, content, ["gang_1", "gang_1"], "武學") is None
