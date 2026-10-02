@@ -20,7 +20,7 @@ from .models import BattleDef, Choice, Content, Effect, Event, Location, Squad
 from .ollama_client import OllamaClient
 from .rules import apply_effect, change_trend, check_who, roll_check
 from .state import GameState, JournalEntry, Rumor, new_game_state
-from .world import advance_world_state, check_thresholds, end_season, sim_tick
+from .world import advance_world_state, check_thresholds, end_season, sim_tick, start_pending_battle
 from .world_state import WorldStateStore
 
 HOUR = 3600
@@ -166,12 +166,15 @@ class Game:
         """玩家主動「等待」固定一段遊戲時間（快轉按鈕）：進行中時，直接在 self.state.world
         （剛同步過的共用賽季副本）上往前推進 seconds，再存回共用儲存——跟 choose()/travel()
         同一套「本地修改、行動結束後存回」模式，不是用現實時間反推（那是 sync() 的事）。
-        籌備中、休季時共用賽季不動，只推進玩家自己的部分。"""
+        籌備中、休季時共用賽季不動，只推進玩家自己的部分。推進途中跨過開戰門檻的戰鬥，
+        存回之後才開（見 world.start_pending_battle），再拉回最新的共用賽季。"""
         msgs: list[str] = []
         if self.world.season_phase() == "running":
             msgs += advance_world_state(self.state.world, self.content, seconds, self.rng, self.world)
         msgs += self._advance_player_local(seconds)
         self._save_season()
+        msgs += start_pending_battle(self.world, self.content)
+        self.state.world = self.world.get_season()
         news = journal.news_entry(self.state.world.time, msgs)
         if news is not None:
             journal.add_entry(self.state, news, merge=True)

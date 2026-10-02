@@ -1222,3 +1222,28 @@ def test_submit_battle_custom_action_assesses_success_rate_and_feeds_the_gamble(
     # 走了賭局公式（不是退回 action_tags 查表那條路）。
     damage = cap - battle.participants["沈浪"].neili
     assert damage in (10, 260)
+
+
+def test_a_battle_threshold_crossed_in_the_background_starts_the_battle(content, game):
+    """伺服器假人設計第八節第 1 項：沒人在行動時，大勢人物在背景把大勢推過開戰門檻，也要開戰。"""
+    from tianxia.world import advance_season
+
+    definition = _install_battle_def(content)
+    content.scenario.thresholds[0].starts_battle = definition.id  # kou50
+    game.world.mutate_season(lambda season: season.trends.__setitem__("kou", 60))
+    msgs = advance_season(game.world, content, 3600, random.Random(0))
+    battle = game.world.get_battle()
+    assert battle is not None and battle.battle_id == definition.id and battle.phase == "muster"
+    assert any("集結號角" in m for m in msgs)
+    assert game.world.get_season().pending_battle is None
+
+
+def test_fast_forwarding_across_a_battle_threshold_starts_the_battle(content, game):
+    definition = _install_battle_def(content)
+    content.scenario.thresholds[0].starts_battle = definition.id
+    game.state.world.trends["kou"] = 60
+    msgs = game.advance(3600)
+    assert game.world.get_battle() is not None
+    assert any("集結號角" in m for m in msgs)
+    assert game.state.world.pending_battle is None
+    assert game.world.get_season().pending_battle is None

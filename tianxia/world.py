@@ -69,9 +69,12 @@ def _fire(
         if flourish:
             shown_text = f"{text}\n\n{flourish}"
     msgs = [f"【江湖大事】{shown_text}"]
-    if starts_battle and world is not None and starts_battle in content.battles:
-        world.start_battle(content.battles[starts_battle], now=time.time())
-        msgs.append(f"🛡️ 【全服戰報】{content.battles[starts_battle].name}的集結號角已經吹響！")
+    if starts_battle and starts_battle in content.battles:
+        if world is not None:
+            world.start_battle(content.battles[starts_battle], now=time.time())
+            msgs.append(f"🛡️ 【全服戰報】{content.battles[starts_battle].name}的集結號角已經吹響！")
+        else:  # 背景推進（sim_tick）：先記下來，鎖放開後由 start_pending_battle 開戰
+            state.world.pending_battle = starts_battle
     if ends_season:
         msgs += end_season(state, content, world)
     return msgs
@@ -211,10 +214,29 @@ def advance_world_state(
     return msgs
 
 
+def start_pending_battle(world: WorldStateStore, content: Content) -> list[str]:
+    """背景推進跨過開戰門檻時只在賽季上記下要開哪一場（見 _fire）；呼叫端放開全服紀錄的鎖
+    之後呼叫這裡，真的開戰並清掉記號。沒有待開的戰鬥就什麼都不寫。"""
+    if world.get_season().pending_battle is None:
+        return []
+    taken: dict[str, str | None] = {"id": None}
+
+    def _apply(season: WorldState) -> None:
+        taken["id"], season.pending_battle = season.pending_battle, None
+
+    world.mutate_season(_apply)
+    battle_id = taken["id"]
+    if battle_id is None or battle_id not in content.battles:
+        return []
+    world.start_battle(content.battles[battle_id], now=time.time())
+    return [f"🛡️ 【全服戰報】{content.battles[battle_id].name}的集結號角已經吹響！"]
+
+
 def advance_season(world: WorldStateStore, content: Content, seconds: float, rng: random.Random) -> list[str]:
     """跟 advance_world_state 做一樣的事，差別是這裡直接鎖住共用賽季本身來源、修改、
     寫回——給被動的現實時間追趕用（world_state.py::catch_up_season），那條路徑沒有
-    哪個玩家的 self.state.world 可以操作，只能直接對著共用儲存動手。"""
+    哪個玩家的 self.state.world 可以操作，只能直接對著共用儲存動手。鎖放開之後才開
+    推進途中跨過門檻的戰鬥（見 start_pending_battle）。"""
     msgs: list[str] = []
     world.mutate_season(lambda season: msgs.extend(advance_world_state(season, content, seconds, rng, world)))
-    return msgs
+    return msgs + start_pending_battle(world, content)
