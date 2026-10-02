@@ -1319,3 +1319,67 @@ def test_a_server_bot_looks_exactly_like_a_player_on_screen(content, game):
     before = (game.status_text(), game.scene_text(), game.quest_text(), game.journal_html(1, 5))
     game.state.player.bot = BotProfile(personality="積極", seed=7, faction="guan", season_number=1)
     assert (game.status_text(), game.scene_text(), game.quest_text(), game.journal_html(1, 5)) == before
+
+
+# ── 管理者觸發（伺服器假人計畫 Task 8）────────────────────────
+
+
+def _admin(content, game):
+    content.config.admins = [game.state.player.name]
+    return game
+
+
+def test_only_an_admin_can_trigger_things(content, game):
+    definition = _install_battle_def(content)
+    assert game.admin_start_battle(definition.id, now=time.time()) == ["（只有管理者能開戰。）"]
+    assert game.admin_fire("kou50") == ["（只有管理者能觸發大事。）"]
+    assert game.admin_push_trend("kou", 10) == ["（只有管理者能推動大勢。）"]
+    assert game.world.get_battle() is None
+    assert "kou50" not in game.world.get_season().fired_thresholds
+    assert game.world.get_season().trends["kou"] == 30
+
+
+def test_an_admin_starts_a_battle_right_away(content, game):
+    definition = _install_battle_def(content)
+    _admin(content, game)
+    msgs = game.admin_start_battle(definition.id, now=time.time())
+    assert any("集結號角" in m for m in msgs)
+    assert game.world.get_battle().phase == "muster"
+    assert game.admin_start_battle(definition.id, now=time.time()) == ["（已經有一場戰鬥在進行。）"]
+    assert game.admin_start_battle("no_such_battle", now=time.time()) == ["（沒有這場戰鬥。）"]
+
+
+def test_an_admin_fires_a_great_event_once(content, game):
+    _admin(content, game)
+    msgs = game.admin_fire("kou50")
+    assert any("水寇封江" in m for m in msgs)
+    season = game.world.get_season()
+    assert "kou50" in season.fired_thresholds and "blocked" in season.flags
+    assert game.admin_fire("kou50") == ["（這件大事已經發生過了。）"]
+    assert game.admin_fire("no_such_event") == ["（沒有這件大事。）"]
+
+
+def test_firing_a_battle_threshold_by_hand_starts_its_battle(content, game):
+    definition = _install_battle_def(content)
+    content.scenario.thresholds[0].starts_battle = definition.id
+    _admin(content, game)
+    game.admin_fire("kou50")
+    assert game.world.get_battle() is not None
+
+
+def test_an_admin_push_crosses_thresholds_like_any_push(content, game):
+    _admin(content, game)
+    game.admin_push_trend("kou", 25)  # 30 → 55，跨過 kou50
+    season = game.world.get_season()
+    assert season.trends["kou"] == 55
+    assert "kou50" in season.fired_thresholds
+    assert game.admin_push_trend("no_such_trend", 5) == ["（沒有這條大勢線。）"]
+
+
+def test_triggers_wait_for_the_season_to_run(content, game):
+    _admin(content, game)
+    game.world.mutate_season(lambda season: setattr(season, "ended", True))
+    game.sync(time.time())
+    assert game.admin_fire("kou50") == ["（賽季沒有在進行，無法觸發。）"]
+    assert game.admin_push_trend("kou", 5) == ["（賽季沒有在進行，無法觸發。）"]
+    assert game.admin_start_battle("t1", now=time.time()) == ["（賽季沒有在進行，無法觸發。）"]

@@ -464,3 +464,30 @@ def test_open_game_refuses_a_name_that_belongs_to_a_server_bot(save_dir):
     with pytest.raises(gr.Error, match="這個名號已有人使用"):
         app.open_game("周泰安")
     assert not (save_dir / "backup").exists()  # 假人的存檔不能被當成壞檔備份走
+
+
+def test_admin_trigger_handlers(game, monkeypatch):
+    monkeypatch.setattr(app.CONTENT.config, "admins", ["測試"])
+    out = app.admin_trend_handler(game, "huangjin", 5)
+    assert len(out) == app.N_OUTPUTS
+    assert game.world.get_season().trends["huangjin"] == app.CONTENT.scenario.trends[0].start + 5
+    app.admin_fire_handler(game, "huangjin_50")
+    assert "huangjin_50" in game.world.get_season().fired_thresholds
+    app.admin_battle_handler(game, "huangjin_showdown")
+    assert game.world.get_battle() is not None
+
+
+def test_admin_trigger_handlers_do_nothing_for_players(game):
+    app.admin_battle_handler(game, "huangjin_showdown")
+    app.admin_trend_handler(game, "huangjin", 50)
+    assert game.world.get_battle() is None
+    assert game.world.get_season().trends["huangjin"] == app.CONTENT.scenario.trends[0].start
+
+
+def test_admin_choices_list_every_battle_great_event_and_trend():
+    battles, events, trends = app.admin_choices()
+    assert [b[1] for b in battles] == list(app.CONTENT.battles)
+    assert [e[1] for e in events] == [th.id for th in app.CONTENT.scenario.thresholds] + [
+        ev.id for ev in app.CONTENT.scenario.world_events
+    ]
+    assert [t[1] for t in trends] == [t.id for t in app.CONTENT.scenario.trends]

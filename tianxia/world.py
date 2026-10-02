@@ -80,6 +80,26 @@ def _fire(
     return msgs
 
 
+def fire_by_id(
+    state: GameState, content: Content, fire_id: str, world: WorldStateStore | None = None,
+    client: OllamaClient | None = None,
+) -> list[str] | None:
+    """管理者手動觸發：照 id 找大勢門檻或世界事件，照自然觸發的方式觸發一次（旗標、傳聞、江湖史、
+    開戰、結束賽季都一樣），再更新主線。已經發生過、或找不到這個 id，回傳 None。"""
+    if fire_id in state.world.fired_thresholds:
+        return None
+    source = next((th for th in content.scenario.thresholds if th.id == fire_id), None)
+    if source is None:
+        source = next((ev for ev in content.scenario.world_events if ev.id == fire_id), None)
+    if source is None:
+        return None
+    msgs = _fire(
+        state, content, source.id, source.text, source.world_flags_add, source.ends_season, source.starts_battle,
+        source.location, world, client,
+    )
+    return msgs if state.world.ended else msgs + update_storyline(state, content)
+
+
 def current_storyline(state: GameState, content: Content) -> Storyline:
     return next(s for s in content.scenario.storylines if s.id == state.world.storyline)
 

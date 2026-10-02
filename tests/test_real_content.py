@@ -303,3 +303,7 @@ def test_nobody_can_join_a_faction_at_the_start_location(content):
 def test_each_side_of_the_war_wants_the_yellow_turbans_to_go_its_way(content):
     goals = {f.id: f.goals for f in content.scenario.factions}
     assert goals == {"guan": {"huangjin": -1}, "huang": {"huangjin": 1}, "haoqiang": {}}
+
+
+def test_the_playtest_admin_is_rayal():
+    assert load_content(CONTENT_DIR).config.admins == ["Rayal"]

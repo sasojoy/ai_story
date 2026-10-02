@@ -192,6 +192,28 @@ def next_season_handler(game):
     return act(game, lambda g: g.admin_next_season(time.time()))
 
 
+def admin_choices() -> tuple[list[tuple[str, str]], list[tuple[str, str]], list[tuple[str, str]]]:
+    """管理者觸發區的三個下拉選單：（戰鬥, 大事, 大勢線），每項是（顯示文字, id）。照內容固定；
+    已經發生過的大事按下去會被引擎拒絕，不必在這裡過濾。"""
+    scenario = CONTENT.scenario
+    battles = [(b.name, b.id) for b in CONTENT.battles.values()]
+    events = [(f"{x.text[:30]}（{x.id}）", x.id) for x in [*scenario.thresholds, *scenario.world_events]]
+    trends = [(t.name, t.id) for t in scenario.trends]
+    return battles, events, trends
+
+
+def admin_battle_handler(game, battle_id):
+    return act(game, lambda g: g.admin_start_battle(battle_id or "", time.time()))
+
+
+def admin_fire_handler(game, fire_id):
+    return act(game, lambda g: g.admin_fire(fire_id or ""))
+
+
+def admin_trend_handler(game, trend_id, amount):
+    return act(game, lambda g: g.admin_push_trend(trend_id or "", int(amount or 0)))
+
+
 def seclude_handler(game, hours):
     return act(game, lambda g: g.seclude(int(hours)))
 
@@ -497,6 +519,18 @@ def build_demo() -> gr.Blocks:
                             gr.Markdown("時間快轉（全服一起快轉，只在測試時用）")
                             with gr.Row():
                                 ff_btns = {h: gr.Button(f"+{h} 小時") for h in (1, 8, 24)}
+                            battle_choices, event_choices, trend_choices = admin_choices()
+                            gr.Markdown("觸發（人少、大勢推不到門檻時用；效果跟自然發生一樣）")
+                            with gr.Row():
+                                admin_battle_dd = gr.Dropdown(battle_choices, label="戰鬥", interactive=True)
+                                admin_battle_btn = gr.Button("立刻開戰")
+                            with gr.Row():
+                                admin_fire_dd = gr.Dropdown(event_choices, label="大事", interactive=True)
+                                admin_fire_btn = gr.Button("觸發")
+                            with gr.Row():
+                                admin_trend_dd = gr.Dropdown(trend_choices, label="大勢線", interactive=True)
+                                admin_trend_nb = gr.Number(value=10, precision=0, label="推動量（負數＝壓低）")
+                                admin_trend_btn = gr.Button("推動")
         with gr.Column(visible=False) as menxia_col:
             with gr.Row(equal_height=True):
                 gr.Markdown("## 門下", scale=1)
@@ -574,6 +608,11 @@ def build_demo() -> gr.Blocks:
             btn.click(make_fast_forward_handler(hours), inputs=[game_state], outputs=outputs)
         open_season_btn.click(open_season_handler, inputs=[game_state], outputs=outputs)
         next_season_btn.click(next_season_handler, inputs=[game_state], outputs=outputs)
+        admin_battle_btn.click(admin_battle_handler, inputs=[game_state, admin_battle_dd], outputs=outputs)
+        admin_fire_btn.click(admin_fire_handler, inputs=[game_state, admin_fire_dd], outputs=outputs)
+        admin_trend_btn.click(
+            admin_trend_handler, inputs=[game_state, admin_trend_dd, admin_trend_nb], outputs=outputs
+        )
 
         menxia_btn.click(open_menxia, inputs=[game_state], outputs=[game_row, menxia_col] + menxia_outputs)
         back_btn.click(close_menxia, outputs=[game_row, menxia_col])

@@ -20,7 +20,7 @@ from .models import BattleDef, Choice, Content, Effect, Event, Location, Squad
 from .ollama_client import OllamaClient
 from .rules import apply_effect, change_trend, check_who, roll_check
 from .state import GameState, JournalEntry, Rumor, new_game_state
-from .world import advance_world_state, check_thresholds, end_season, sim_tick, start_pending_battle
+from .world import advance_world_state, check_thresholds, end_season, fire_by_id, sim_tick, start_pending_battle
 from .world_state import WorldStateStore
 
 HOUR = 3600
@@ -1097,6 +1097,57 @@ class Game:
             return self._log(["（這一季還沒結束，無法開啟下一季。）"])
         self._reconcile_season()
         return self._log([f"══ 第 {self.world.get_season_number()} 季開始 ══"])
+
+    def _admin_refusal(self, action: str) -> list[str] | None:
+        """管理者觸發的共同檢查：不是管理者、或賽季沒有在進行，回傳要顯示的拒絕訊息；可以做就回傳 None。"""
+        if not self.is_admin():
+            return [f"（只有管理者能{action}。）"]
+        if self.world.season_phase() != "running":
+            return ["（賽季沒有在進行，無法觸發。）"]
+        return None
+
+    def admin_start_battle(self, battle_id: str, now: float) -> list[str]:
+        """管理者直接開一場全服戰鬥（試玩時人少、大勢推不到門檻也能開戰）。"""
+        refusal = self._admin_refusal("開戰")
+        if refusal:
+            return self._log(refusal)
+        definition = self.content.battles.get(battle_id)
+        if definition is None:
+            return self._log(["（沒有這場戰鬥。）"])
+        current = self.world.get_battle()
+        if current is not None and current.phase != "ended":
+            return self._log(["（已經有一場戰鬥在進行。）"])
+        self.world.start_battle(definition, now)
+        msgs = [f"🛡️ 【全服戰報】{definition.name}的集結號角已經吹響！"]
+        self._write(f"開戰・{definition.name}", msgs, tag="管理者")
+        return self._log(msgs)
+
+    def admin_fire(self, fire_id: str) -> list[str]:
+        """管理者直接觸發一則大勢門檻或世界事件：效果跟自然發生一樣，一季只會發生一次。"""
+        refusal = self._admin_refusal("觸發大事")
+        if refusal:
+            return self._log(refusal)
+        if fire_id in self.state.world.fired_thresholds:
+            return self._log(["（這件大事已經發生過了。）"])
+        msgs = fire_by_id(self.state, self.content, fire_id, self.world, self.client)
+        if msgs is None:
+            return self._log(["（沒有這件大事。）"])
+        self._write("觸發大事", msgs, tag="管理者")
+        self._save_season()
+        return self._log(msgs)
+
+    def admin_push_trend(self, trend_id: str, delta: int) -> list[str]:
+        """管理者直接推一條大勢線（正數推高、負數壓低）；推過門檻就照常觸發大事。"""
+        refusal = self._admin_refusal("推動大勢")
+        if refusal:
+            return self._log(refusal)
+        if trend_id not in {t.id for t in self.content.scenario.trends}:
+            return self._log(["（沒有這條大勢線。）"])
+        msgs = change_trend(self.state, self.content, trend_id, delta)
+        msgs += check_thresholds(self.state, self.content, self.world, self.client)
+        self._write("推動大勢", msgs or ["大勢紋絲不動。"], tag="管理者")
+        self._save_season()
+        return self._log(msgs)
 
     # ── 畫面文字 ──────────────────────────────────────────
 
