@@ -57,3 +57,19 @@ def test_refuses_a_name_another_account_owns(tmp_path, content):
     store.bind_character("owner", "沈青衫")
     assert _run(tmp_path, "intruder", "--character", "沈青衫") == 1
     assert store.get("intruder") is None
+
+
+def test_refuses_to_move_an_account_to_another_character(tmp_path, content):
+    for name in ("沈青衫", "柳如煙"):
+        save_game(Game.new(content, name).state, path_for(tmp_path / "saves", name))
+    _run(tmp_path, "shen", "--character", "沈青衫")
+    first = (tmp_path / "local" / "shen_password.txt").read_text(encoding="utf-8").strip()
+    assert _run(tmp_path, "shen", "--character", "柳如煙") == 1
+    assert (tmp_path / "local" / "shen_password.txt").read_text(encoding="utf-8").strip() == first
+    assert _store(tmp_path).authenticate("shen", first).character == "沈青衫"
+
+
+def test_refuses_a_bad_login(tmp_path, capsys):
+    assert _run(tmp_path, "有中文") == 1
+    assert "帳號只能用英文字母、數字、底線，3～20 字。" in capsys.readouterr().out
+    assert not (tmp_path / "local").exists()

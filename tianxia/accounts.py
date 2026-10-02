@@ -11,9 +11,10 @@ import hmac
 import json
 import re
 import secrets
+import threading
 import time
 from collections.abc import Callable
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 
 from .fileio import retry_sharing
@@ -25,6 +26,8 @@ SCRYPT_PARAMS = {"n": 2 ** 14, "r": 8, "p": 1, "dklen": 32}
 SALT_BYTES = 16
 MAX_FAILURES = 5
 FAILURE_WINDOW = 600.0  # 秒：同一個帳號 10 分鐘內錯 5 次，就先不收它的登入
+_THROTTLE_LOCK = threading.Lock()  # 擋猜密碼的紀錄由好幾個 AccountStore 共用（伺服器每次請求都建一個新的）：檢查與記帳要一起做
+_DUMMY_SALT = bytes(SALT_BYTES)  # 不存在的帳號也算一次雜湊，花的時間跟密碼錯一樣，分不出帳號在不在
 
 LOGIN_FAILED = "帳號或密碼不對。"
 LOGIN_TAKEN = "這個帳號已有人使用。"
@@ -73,7 +76,7 @@ def check_password(password: str | None) -> str:
 
 
 def hash_password(password: str, salt: bytes) -> str:
-    return hashlib.scrypt(password.encode("utf-8"), salt=salt, **SCRYPT_PARAMS).hex()
+    return hashlib.scrypt(password.encode("utf-8", "surrogatepass"), salt=salt, **SCRYPT_PARAMS).hex()
 
 
 def _new_secret(password: str) -> tuple[str, str]:
@@ -101,10 +104,18 @@ class AccountStore:
     # ── 檔案 ──────────────────────────────────────
 
     def _load(self) -> dict[str, Account]:
+        """讀帳號檔；看不懂的檔案（版本不對、形狀不對）直接丟錯，不當成空的——不然下一次寫入會把它蓋掉。
+        紀錄裡多出來、這一版不認得的欄位略過（例如之後才加的 LINE／Google 綁定）。"""
         if not self.path.exists():
             return {}
         raw = json.loads(retry_sharing(lambda: self.path.read_text(encoding="utf-8")))
-        return {key: Account(**data) for key, data in raw.get("accounts", {}).items()}
+        if not isinstance(raw, dict) or raw.get("version") != 1 or not isinstance(raw.get("accounts"), dict):
+            raise ValueError(f"看不懂的帳號檔：{self.path}")
+        known = {f.name for f in fields(Account)}
+        return {
+            key: Account(**{k: v for k, v in data.items() if k in known})
+            for key, data in raw["accounts"].items()
+        }
 
     def _save(self, accounts: dict[str, Account]) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -151,18 +162,24 @@ class AccountStore:
         return account
 
     def authenticate(self, login: str | None, password: str | None) -> Account:
-        """帳號不存在和密碼錯是同一句話；10 分鐘內錯 5 次就先不收（不存在的帳號也照算）。"""
+        """帳號不存在和密碼錯是同一句話、花一樣的時間；10 分鐘內錯 5 次就先不收（不存在的帳號也照算）。
+        先記一次失敗再比對密碼，比對成功才清掉：同時送來的猜測不會全部擠過檢查。"""
         key = normalize(login)
         now = self.clock()
-        recent = [t for t in self.failures.get(key, []) if now - t < FAILURE_WINDOW]
-        if len(recent) >= MAX_FAILURES:
-            self.failures[key] = recent
-            raise AccountError(TOO_MANY_TRIES)
-        account = self._load().get(key)
-        if account is None or not _matches(account, password or ""):
+        with _THROTTLE_LOCK:
+            recent = [t for t in self.failures.get(key, []) if now - t < FAILURE_WINDOW]
+            if len(recent) >= MAX_FAILURES:
+                self.failures[key] = recent
+                raise AccountError(TOO_MANY_TRIES)
             self.failures[key] = recent + [now]
+        account = self._load().get(key)
+        if account is None:
+            hash_password(password or "", _DUMMY_SALT)
             raise AccountError(LOGIN_FAILED)
-        self.failures.pop(key, None)
+        if not _matches(account, password or ""):
+            raise AccountError(LOGIN_FAILED)
+        with _THROTTLE_LOCK:
+            self.failures.pop(key, None)
         return account
 
     def bind_character(self, login: str, name: str) -> None:
@@ -190,7 +207,9 @@ class AccountStore:
         self._save(accounts)
 
     def set_password(self, login: str | None, new: str | None) -> None:
-        """管理者重設、scripts/set_password.py 用：不必知道舊密碼；順便解除擋猜密碼。"""
+        """管理者重設、scripts/set_password.py 用：不必知道舊密碼；順便解除擋猜密碼。
+
+        擋猜密碼的紀錄只在同一個程式的記憶體裡：從 scripts/set_password.py 重設，不會解除正在跑的伺服器裡的鎖定（最多再等 10 分鐘）；在遊戲裡由管理者重設才會。"""
         accounts = self._load()
         key = normalize(login)
         account = accounts.get(key)
@@ -199,4 +218,5 @@ class AccountStore:
         check_password(new)
         account.salt, account.hash = _new_secret(new)
         self._save(accounts)
-        self.failures.pop(key, None)
+        with _THROTTLE_LOCK:
+            self.failures.pop(key, None)

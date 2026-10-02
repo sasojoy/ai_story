@@ -1,4 +1,5 @@
 import json
+import threading
 
 import pytest
 
@@ -152,6 +153,8 @@ def test_set_password_needs_no_old_one_and_lifts_the_lock(store):
     for _ in range(5):
         with pytest.raises(AccountError):
             store.authenticate("alpha", "nope-nope")
+    with pytest.raises(AccountError, match="嘗試太多次"):
+        store.authenticate("alpha", "secret-pw")
     store.set_password("alpha", "temp-pass")
     assert store.authenticate("alpha", "temp-pass").login == "alpha"
 
@@ -160,3 +163,62 @@ def test_a_missing_file_is_an_empty_store(store):
     assert store.get("alpha") is None
     assert store.find("alpha") is None
     assert not store.path.exists()
+
+
+def test_parallel_guesses_cannot_slip_past_the_throttle(tmp_path):
+    """同時送很多個錯的猜測：最多 5 個拿到「帳號或密碼不對」，其他都被擋。"""
+    path = tmp_path / "accounts.json"
+    AccountStore(path).register("alpha", "secret-pw")
+    failures: dict[str, list[float]] = {}
+    barrier = threading.Barrier(20)
+    results: list[str] = []
+
+    def guess():
+        barrier.wait()
+        try:
+            AccountStore(path, failures=failures).authenticate("alpha", "wrong-guess")
+        except AccountError as exc:
+            results.append(str(exc))
+
+    threads = [threading.Thread(target=guess) for _ in range(20)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert len(results) == 20
+    assert results.count("帳號或密碼不對。") <= 5
+    assert results.count("嘗試太多次，請 10 分鐘後再試。") >= 15
+
+
+def test_one_more_try_once_the_oldest_failure_ages_out(store, clock):
+    store.register("alpha", "secret-pw")
+    for _ in range(5):
+        with pytest.raises(AccountError, match="帳號或密碼不對。"):
+            store.authenticate("alpha", "nope-nope")
+        clock.now += 10  # 失敗時間 1000、1010、1020、1030、1040
+    clock.now = 1_601.0  # 1000 那一次滿 10 分鐘了，其他四次還在
+    with pytest.raises(AccountError, match="帳號或密碼不對。"):
+        store.authenticate("alpha", "nope-nope")
+    with pytest.raises(AccountError, match="嘗試太多次"):
+        store.authenticate("alpha", "secret-pw")
+
+
+def test_odd_characters_in_a_password_do_not_crash(store):
+    store.register("alpha", "\ud800abcdef")
+    assert store.authenticate("alpha", "\ud800abcdef").login == "alpha"
+
+
+def test_an_unreadable_accounts_file_is_refused_not_overwritten(store):
+    store.path.parent.mkdir(parents=True, exist_ok=True)
+    store.path.write_text('{"version": 2, "accounts": {}}', encoding="utf-8")
+    with pytest.raises(ValueError, match="看不懂的帳號檔"):
+        store.register("alpha", "secret-pw")
+    assert store.path.read_text(encoding="utf-8") == '{"version": 2, "accounts": {}}'
+
+
+def test_unknown_fields_in_a_record_are_ignored(store):
+    store.register("alpha", "secret-pw")
+    data = json.loads(store.path.read_text(encoding="utf-8"))
+    data["accounts"]["alpha"]["line_id"] = "U123"
+    store.path.write_text(json.dumps(data), encoding="utf-8")
+    assert store.authenticate("alpha", "secret-pw").login == "alpha"
