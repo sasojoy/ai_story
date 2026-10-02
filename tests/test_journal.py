@@ -94,7 +94,7 @@ def test_train_entry_carries_the_battle_summary_and_gains(game):
     assert entry.tag == f"{record.tier}水寇小隊"
     assert entry.battle_id == record.id == 1
     assert entry.changes == [
-        "經驗 +20（每人）", "銀兩 +5", "心得 +10", "氣血 -48", "內傷 +10",
+        "經驗 +20（每人）", "銀兩 +5", "心得 +10", "氣血 -16", "內傷 +3",
     ]  # 經驗的寫法和戰鬥卡片一致；氣血與內傷是打完的代價（氣血設計 §1.3）
     assert entry.lines == ["（寇亂 -1）"]  # 湖邊 train_trend kou:-1
     assert f"⚔ 湖邊：{record.tier}水寇小隊" in game.state.log
@@ -264,7 +264,7 @@ def test_changes_with_the_same_label_are_added_up(game):
     guided_train(game)
     entry = latest(game)
     assert entry.changes == [
-        "經驗 +20（每人）", "銀兩 +10", "心得 +10", "氣血 -48", "內傷 +10",
+        "經驗 +20（每人）", "銀兩 +10", "心得 +10", "氣血 -16", "內傷 +3",
     ]  # 對手的 5 兩＋引導獎勵 5 兩（同標籤相加）
     assert entry.lines == ["（寇亂 -1）", "✔ 引導完成", "【說書人】去湖邊。"]  # 湖邊 train_trend kou:-1
 

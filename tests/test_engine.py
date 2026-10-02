@@ -164,6 +164,7 @@ def test_event_battle_is_fully_automatic_and_a_loss_applies_the_fail_effect(game
 
 def test_event_battle_win_pays_squad_rewards_once_and_applies_choice_effect(game):
     game.content.events["duel"].choices[0].combat = "thug"  # 換成打得贏的水寇小隊
+    rules.learn_skill(game.state, game.content, "fist")  # 沒武學＝威力 0，門檻改成比例後真的打不贏
     game.choose("move:lake")
     game.choose("act:socialize")
     game.rng = FixedRandom(1.0)  # 最佳運氣：穩穩打贏
@@ -178,6 +179,7 @@ def test_event_battle_win_pays_squad_rewards_once_and_applies_choice_effect(game
 
 def test_event_battle_win_splits_story_from_numeric_changes(game):
     game.content.events["duel"].choices[0].combat = "thug"
+    rules.learn_skill(game.state, game.content, "fist")
     game.content.events["duel"].choices[0].effect.stats = {"fame": 3}
     game.content.events["duel"].choices[0].effect.rumor = "{name}擊敗了翻江龍！"
     game.choose("move:lake")
