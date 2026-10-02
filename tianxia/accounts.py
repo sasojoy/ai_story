@@ -28,6 +28,7 @@ MAX_FAILURES = 5
 FAILURE_WINDOW = 600.0  # 秒：同一個帳號 10 分鐘內錯 5 次，就先不收它的登入
 _THROTTLE_LOCK = threading.Lock()  # 擋猜密碼的紀錄由好幾個 AccountStore 共用（伺服器每次請求都建一個新的）：檢查與記帳要一起做
 _DUMMY_SALT = bytes(SALT_BYTES)  # 不存在的帳號也算一次雜湊，花的時間跟密碼錯一樣，分不出帳號在不在
+_INVALID_LOGIN = "\0invalid"  # 格式不對的帳號共用的擋猜密碼紀錄（不可能跟真的帳號撞名）
 
 LOGIN_FAILED = "帳號或密碼不對。"
 LOGIN_TAKEN = "這個帳號已有人使用。"
@@ -163,23 +164,29 @@ class AccountStore:
 
     def authenticate(self, login: str | None, password: str | None) -> Account:
         """帳號不存在和密碼錯是同一句話、花一樣的時間；10 分鐘內錯 5 次就先不收（不存在的帳號也照算）。
-        先記一次失敗再比對密碼，比對成功才清掉：同時送來的猜測不會全部擠過檢查。"""
+        先記一次失敗再比對密碼，比對成功才清掉：同時送來的猜測不會全部擠過檢查。
+        不可能是帳號的字串（格式不對）共用一格紀錄，紀錄的鍵多長不由對方決定；太長的密碼也不整串雜湊。"""
         key = normalize(login)
+        bucket = key if LOGIN_PATTERN.fullmatch(key) else _INVALID_LOGIN
         now = self.clock()
         with _THROTTLE_LOCK:
-            recent = [t for t in self.failures.get(key, []) if now - t < FAILURE_WINDOW]
+            recent = [t for t in self.failures.get(bucket, []) if now - t < FAILURE_WINDOW]
             if len(recent) >= MAX_FAILURES:
-                self.failures[key] = recent
+                self.failures[bucket] = recent
                 raise AccountError(TOO_MANY_TRIES)
-            self.failures[key] = recent + [now]
-        account = self._load().get(key)
-        if account is None:
-            hash_password(password or "", _DUMMY_SALT)
+            self.failures[bucket] = recent + [now]
+        password = password or ""
+        if len(password) > PASSWORD_MAX:  # 不會有帳號的密碼這麼長：照樣花一次雜湊的時間，但只雜湊前面一段
+            hash_password(password[:PASSWORD_MAX], _DUMMY_SALT)
             raise AccountError(LOGIN_FAILED)
-        if not _matches(account, password or ""):
+        account = self._load().get(key) if bucket == key else None
+        if account is None:
+            hash_password(password, _DUMMY_SALT)
+            raise AccountError(LOGIN_FAILED)
+        if not _matches(account, password):
             raise AccountError(LOGIN_FAILED)
         with _THROTTLE_LOCK:
-            self.failures.pop(key, None)
+            self.failures.pop(bucket, None)
         return account
 
     def bind_character(self, login: str, name: str) -> None:

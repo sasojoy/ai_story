@@ -660,3 +660,18 @@ def test_only_admins_can_reset_a_password(save_dir, monkeypatch):
     assert app.reset_password_handler(player, "shen_01", "123") == ["密碼至少 6 字。", ""]
     assert app.reset_password_handler(player, "沈青衫", "temp-pass") == ["已重設 shen_01 的密碼。", ""]
     app.login("shen_01", "temp-pass")
+
+
+def test_names_with_invisible_characters_or_too_long_are_refused(save_dir):
+    app.register("shen_01", "secret-pw", "secret-pw")
+    for bad in ("Ray\u200bal", "\u202eRayal", "名" * 17):
+        with pytest.raises(gr.Error, match="名號最多 16 字，也不能有看不見的字元。"):
+            app.create_character("shen_01", bad)
+    assert app.account_store().get("shen_01").character is None
+
+
+def test_full_width_letters_count_as_the_same_name(save_dir, monkeypatch):
+    monkeypatch.setattr(app.CONTENT.config, "admins", ["Rayal"])
+    app.register("shen_01", "secret-pw", "secret-pw")
+    with pytest.raises(gr.Error, match="這個名號已有人使用。"):
+        app.create_character("shen_01", "Ｒａｙａｌ")

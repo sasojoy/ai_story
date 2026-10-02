@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import shutil
 import time
+import unicodedata
 from pathlib import Path
 
 import gradio as gr
@@ -488,6 +489,8 @@ def open_game(name: str) -> Game:
 
 
 LOGIN_FAILURES: dict[str, list[float]] = {}  # 擋猜密碼的紀錄，整個伺服器共用、只放記憶體（帳號密碼登入設計第三節）
+NAME_MAX = 16  # 角色名號的長度上限
+BAD_NAME = f"名號最多 {NAME_MAX} 字，也不能有看不見的字元。"  # 看不見的字元（零寬、控制、雙向排版）會讓兩個名號看起來一樣
 
 
 def account_store() -> AccountStore:
@@ -543,9 +546,11 @@ def create_character(account_key, name):
     """建立角色：檢查名號沒人用 → 建存檔 → 綁到帳號，三步在同一把行動鎖裡做完（不跟假人程式取名撞在一起）。"""
     if not account_key:
         raise gr.Error("請先登入。")
-    name = (name or "").strip()
+    name = unicodedata.normalize("NFKC", name or "").strip()  # 全形英數字當成一般英數字：不能用「Ｒａｙａｌ」冒充「Rayal」
     if not name:
         raise gr.Error("請先輸入你的名號。")
+    if len(name) > NAME_MAX or any(unicodedata.category(ch) in ("Cc", "Cf") for ch in name):
+        raise gr.Error(BAD_NAME)
     store = account_store()
     with WorldStateStore().action_lock():
         account = store.get(account_key)

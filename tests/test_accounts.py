@@ -222,3 +222,16 @@ def test_unknown_fields_in_a_record_are_ignored(store):
     data["accounts"]["alpha"]["line_id"] = "U123"
     store.path.write_text(json.dumps(data), encoding="utf-8")
     assert store.authenticate("alpha", "secret-pw").login == "alpha"
+
+
+def test_huge_logins_and_passwords_cannot_grow_memory(tmp_path):
+    failures: dict[str, list[float]] = {}
+    store = AccountStore(tmp_path / "accounts.json", failures=failures)
+    for i in range(3):
+        with pytest.raises(AccountError, match="帳號或密碼不對。"):
+            store.authenticate(f"{i}" + "x" * 5_000_000, "whatever1")
+    assert len(failures) == 1 and all(len(k) <= 20 for k in failures)
+    store.register("alpha", "secret-pw")
+    with pytest.raises(AccountError, match="帳號或密碼不對。"):
+        store.authenticate("alpha", "y" * 5_000_000)
+    assert store.authenticate("alpha", "secret-pw").login == "alpha"
