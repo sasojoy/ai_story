@@ -13,6 +13,7 @@ from __future__ import annotations
 import logging
 import random
 import time
+import traceback
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -27,6 +28,14 @@ from .world_state import WorldStateStore
 LOCK_WAIT = 2.0  # 假人等行動鎖最多幾秒；等不到就跳過這一輪
 
 log = logging.getLogger(__name__)
+
+
+def log_failure(exc: BaseException) -> None:
+    """記一筆出錯，但不留下任何認得出誰是假人的東西（伺服器假人設計第五節：連開伺服器的人也不能
+    從主控台或 log 看出誰是假人）。只寫例外的類別名稱與呼叫堆疊（程式碼位置與原始碼那幾行）；
+    例外訊息（常夾著存檔路徑或名號）、路徑、名號一概不寫。"""
+    frames = "".join(traceback.format_tb(exc.__traceback__))
+    log.error("假人程式出錯：%s\n%s", type(exc).__name__, frames)
 
 
 @dataclass
@@ -59,9 +68,12 @@ class BotRunner:
         now = self.clock()
         try:
             with self.world.action_lock(timeout=LOCK_WAIT):
-                report.added = self._fill(now)
+                self._fill(now, report)
         except TimeoutError:
             report.skipped += 1
+        except Exception as exc:  # 補人出錯不能讓整個程式倒下：記下來，這一輪照樣讓在線的假人做事
+            log_failure(exc)
+            report.failed += 1
         season = self.world.get_season_number()
         battle = self._battle_sides()
         for path, state in self._saves():
@@ -79,8 +91,8 @@ class BotRunner:
                 report.acted += 1
             except TimeoutError:
                 report.skipped += 1
-            except Exception:
-                log.exception("假人行動失敗：%s", path.name)
+            except Exception as exc:
+                log_failure(exc)
                 report.failed += 1
         return report
 
@@ -92,25 +104,32 @@ class BotRunner:
         save_game(game.state, path)
 
     def _online(
-        self, profile: BotProfile, state: GameState, now: float, battle: tuple[float, set[str]] | None,
+        self, profile: BotProfile, state: GameState, now: float,
+        battle: tuple[float, set[str], set[str]] | None,
     ) -> bool:
-        """照作息在線；或者自己的陣營正在打全服戰鬥，而這個假人擲中了趕來參戰。"""
+        """照作息在線；或者自己的陣營正在打全服戰鬥，而這個假人擲中了趕來參戰，且還沒出局
+        （趕來的假人在線到戰鬥結束或自己出局，設計第六節）。"""
         if server_bots.is_online(profile, now):
             return True
         if battle is None:
             return False
-        key, sides = battle
-        return state.player.faction in sides and server_bots.attends_battle(profile, key)
+        key, sides, out = battle
+        return (
+            state.player.faction in sides and state.player.name not in out
+            and server_bots.attends_battle(profile, key)
+        )
 
-    def _battle_sides(self) -> tuple[float, set[str]] | None:
-        """進行中的全服戰鬥：（這場的識別值＝集結截止時間, 交戰陣營）；沒有或已經結束回傳 None。"""
+    def _battle_sides(self) -> tuple[float, set[str], set[str]] | None:
+        """進行中的全服戰鬥：（這場的識別值＝集結截止時間, 交戰陣營, 已經出局的參戰者名號）；
+        沒有或已經結束回傳 None。"""
         battle = self.world.get_battle()
         if battle is None or battle.phase == "ended":
             return None
         definition = self.content.battles.get(battle.battle_id)
         if definition is None:
             return None
-        return battle.muster_deadline_real, {f.id for f in definition.factions}
+        out = {p.name for p in battle.participants.values() if p.eliminated}
+        return battle.muster_deadline_real, {f.id for f in definition.factions}, out
 
     def _saves(self) -> list[tuple[Path, GameState]]:
         if not self.saves_dir.is_dir():
@@ -123,7 +142,8 @@ class BotRunner:
                 continue  # 損毀／格式不相容的存檔跳過（跟榜單一樣）
         return found
 
-    def _fill(self, now: float) -> int:
+    def _fill(self, now: float, report: TickReport) -> None:
+        """補人；補成一個就記一個進 report.added（中途出錯時，已經補成的仍算數）。"""
         cfg = self.content.config
         season = self.world.get_season_number()
         saves = self._saves()
@@ -132,7 +152,6 @@ class BotRunner:
             bot = state.player.bot
             if bot is not None and server_bots.active(bot, season) and state.player.faction is None:
                 counts[bot.faction] = counts.get(bot.faction, 0) + 1
-        added = 0
         for faction in self.content.scenario.factions:
             if counts.get(faction.id, 0) >= cfg.bots_min_per_faction:
                 continue
@@ -141,8 +160,7 @@ class BotRunner:
                 continue
             saves = self._add_bot(faction.id, season, saves, now)
             self.last_added[faction.id] = now
-            added += 1
-        return added
+            report.added += 1
 
     def _add_bot(
         self, faction_id: str, season: int, saves: list[tuple[Path, GameState]], now: float,
@@ -156,8 +174,9 @@ class BotRunner:
             path, state = self.rng.choice(retired)
             game = Game(self.content, state, self.rng, self.world)
         else:
-            taken = {path.stem for path, _ in saves} | {ch.name for ch in self.content.characters.values()}
-            taken |= set(self.content.config.admins)
+            # 名號不能撞到任何一個存檔檔名，包括讀不出來（損毀、舊格式）的玩家存檔——不然新假人會把它蓋掉
+            taken = {path.stem for path in self.saves_dir.glob("*.json")}
+            taken |= {ch.name for ch in self.content.characters.values()} | set(self.content.config.admins)
             name = server_bots.make_name(self.rng, taken)
             game = Game.new(self.content, name, rng=self.rng, world=self.world)
             game.state.player.bot = BotProfile(

@@ -1,10 +1,12 @@
+import logging
 import random
 import time
 
 import pytest
 
 import run_bots
-from tianxia import bot_runner, server_bots
+from tianxia import bot_policy, bot_runner, server_bots
+from tianxia.battle_instance import BattleParticipant
 from tianxia.bot_runner import BotRunner
 from tianxia.engine import Game
 from tianxia.models import (
@@ -176,3 +178,135 @@ def test_run_bots_starts_and_runs_a_round(monkeypatch, capsys):
     run_bots.main(ticks=1)
     out = capsys.readouterr().out
     assert "伺服器假人程式啟動" in out
+
+
+def _identity_free(name: str, capsys, caplog) -> bool:
+    """名號不能出現在任何地方：主控台輸出、log 的訊息與例外文字都算。"""
+    out = capsys.readouterr()
+    logged = caplog.text + "".join(
+        f"{record.getMessage()}{record.exc_text or ''}{record.exc_info or ''}" for record in caplog.records
+    )
+    return name not in out.out and name not in out.err and name not in logged
+
+
+def test_a_failing_bot_turn_is_counted_and_reported_without_any_name(
+    runner, content, tmp_path, clock, monkeypatch, capsys, caplog,
+):
+    monkeypatch.setattr(server_bots, "is_online", lambda profile, now: True)
+    content.config.bots_min_per_faction = 1
+    content.config.bot_tick_seconds = 1000
+    runner.tick()
+    victim = _bots(tmp_path)[0].player.name
+
+    def boom(game, profile, rng):
+        if game.state.player.name == victim:
+            raise OSError(f"寫不進 {path_for(tmp_path / 'saves', victim)}（{victim}）")
+
+    monkeypatch.setattr(bot_policy, "take_turn", boom)
+    clock[0] += 60
+    capsys.readouterr()  # 丟掉補人那一輪的輸出
+    with caplog.at_level(logging.DEBUG):
+        report = runner.tick()
+    assert report.failed == 1 and report.acted == 1
+    assert "OSError" in caplog.text  # 看得到是什麼錯、出在哪一行，但看不到內容
+    assert "boom" in caplog.text
+    assert _identity_free(victim, capsys, caplog)
+
+
+def test_a_failure_while_topping_up_is_counted_and_does_not_stop_the_tick(
+    runner, content, tmp_path, monkeypatch, caplog,
+):
+    monkeypatch.setattr(server_bots, "is_online", lambda profile, now: False)
+    content.config.bots_min_per_faction = 1
+
+    secret = "名號" + "字庫用完了"  # 例外訊息不能出現在 log 裡（log 會印出原始碼那一行，所以訊息不能直接寫在 raise 那行）
+
+    def pool_empty(rng, taken):
+        raise RuntimeError(secret)
+
+    monkeypatch.setattr(server_bots, "make_name", pool_empty)
+    with caplog.at_level(logging.DEBUG):
+        report = runner.tick()
+    assert report.failed >= 1 and report.added == 0
+    assert "RuntimeError" in caplog.text and secret not in caplog.text
+
+
+def test_a_new_bot_never_takes_the_name_of_an_unreadable_save(runner, content, tmp_path, monkeypatch):
+    monkeypatch.setattr(server_bots, "is_online", lambda profile, now: False)
+    content.config.bots_min_per_faction = 1
+    saves = tmp_path / "saves"
+    saves.mkdir()
+    garbage = saves / "某人.json"
+    garbage.write_bytes(b"{this is not a save")
+    proposals, seen = ["某人", "某乙", "某丙"], []
+
+    def propose(rng, taken):
+        seen.append(set(taken))
+        return next(name for name in proposals if name not in taken)
+
+    monkeypatch.setattr(server_bots, "make_name", propose)
+    assert runner.tick().added == 2
+    assert all("某人" in taken for taken in seen)
+    assert garbage.read_bytes() == b"{this is not a save"
+    assert sorted(p.stem for p in saves.glob("*.json")) == ["某丙", "某乙", "某人"]
+
+
+def test_a_bot_that_turned_up_for_a_battle_goes_offline_once_it_is_eliminated(
+    runner, world, content, tmp_path, clock, monkeypatch,
+):
+    monkeypatch.setattr(server_bots, "is_online", lambda profile, now: False)  # 都不在作息時段
+    monkeypatch.setattr(server_bots, "attends_battle", lambda profile, key: True)  # 但都擲中趕來參戰
+    monkeypatch.setattr(bot_policy, "take_turn", lambda game, profile, rng: None)  # 只看誰算在線
+    monkeypatch.setattr(time, "time", lambda: clock[0])
+    content.config.bots_min_per_faction = 1
+    content.config.bot_tick_seconds = 1000
+    assert runner.tick().online == 0  # 沒有戰鬥：不在作息時段就不上線
+    for path in sorted((tmp_path / "saves").glob("*.json")):  # 兩個假人都已投靠自己的陣營
+        state = load_game(path)
+        state.player.faction = state.player.bot.faction
+        save_game(state, path)
+    battle = world.start_battle(content.battles["t1"], clock[0])
+    assert battle.phase == "muster"
+    assert runner.tick().online == 2  # 集結中：兩邊的假人都趕來
+
+    bots = [(s.player.name, s.player.bot.faction) for s in _bots(tmp_path)]
+
+    def seat(battle):
+        for name, faction in bots:
+            battle.participants[name] = BattleParticipant(
+                name=name, faction=faction, neili=10, neili_cap=10, eliminated=name == bots[0][0],
+            )
+
+    world.mutate_battle(seat)
+    assert runner.tick().online == 1  # 出局的那一位不再上線，沒出局的還在
+    world.mutate_battle(lambda b: setattr(b, "phase", "ended"))
+    assert runner.tick().online == 0  # 戰鬥結束，大家都回到自己的作息
+
+
+def test_run_bots_keeps_going_after_a_bad_tick_and_prints_no_names(monkeypatch, capsys, caplog):
+    monkeypatch.setattr(run_bots.time, "sleep", lambda seconds: None)
+    calls = []
+    secret = "某位" + "假人的名號"  # 例外訊息；log 會印出 raise 那一行原始碼，所以訊息不能直接寫在那行
+
+    def flaky(self):
+        calls.append(1)
+        if len(calls) == 1:
+            raise RuntimeError(secret)
+        return bot_runner.TickReport()
+
+    monkeypatch.setattr(BotRunner, "tick", flaky)
+    with caplog.at_level(logging.DEBUG):
+        run_bots.main(ticks=2)
+    assert len(calls) == 2  # 第一輪出錯了，第二輪照常跑
+    out = capsys.readouterr()
+    assert "出錯 1" in out.out
+    assert "RuntimeError" in caplog.text and secret not in out.out + out.err + caplog.text
+
+
+def test_run_bots_ends_cleanly_on_ctrl_c(monkeypatch, capsys):
+    def interrupted(seconds):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(run_bots.time, "sleep", interrupted)
+    run_bots.main()  # 不給輪數：本來會一直跑；Ctrl+C 要乾淨結束，不丟例外
+    assert "伺服器假人程式結束" in capsys.readouterr().out
