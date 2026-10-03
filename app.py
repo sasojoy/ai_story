@@ -4,11 +4,13 @@
 執行動作、存檔，再整個重畫。「門下」（練功與招募）、「戰報」（歷次戰鬥的列表與完整內容）與
 「大地圖」（江湖輿圖：四個圖層、地點詳情與安排前往）都是另外的整頁，同一時間只顯示一頁（見 PAGES），
 分別由 render_menxia()、戰報頁面與 render_map_page() 重畫。
-左欄由上而下是場景列（左邊是地點或事件，右邊是以你為中心的小地圖與「大地圖」按鈕）、選項按鈕、
-「剛剛」卡片（最新一則江湖紀錄；打完仗時換成戰鬥卡片，卡片沒寫到的補充放在卡片底下）、
-「江湖紀錄」（再來的 5 則，一則一列、可點開看敘事，更早的收在摺疊區裡）。
-按戰鬥卡片的「看完整戰報」或右欄的「戰報」按鈕都能打開戰報頁面；點小地圖、小地圖下方或右欄的「大地圖」按鈕
-打開大地圖。
+左欄由上而下是**功能按鈕列**（煉製／修練／戰報／輿圖，手機上黏在上緣）、場景列（左邊是地點或
+事件，右邊是以你為中心的小地圖）、選項按鈕、「剛剛」卡片（最新一則江湖紀錄；打完仗時換成戰鬥
+卡片，卡片沒寫到的補充放在卡片底下）、「江湖紀錄」（再來的 5 則，一則一列、可點開看敘事，
+更早的收在摺疊區裡）。
+「煉製」與「修練」進的是同一個門下頁，差別只在到站時展開哪一區（見 open_menxia_at）——刻意
+不另外放一顆「門下」，不然就是三顆開同一頁的按鈕。按戰鬥卡片的「看完整戰報」也能打開戰報頁面；
+點小地圖或小地圖下方的按鈕打開大地圖。
 
 sanguo-companions 合併大幅簡化了「門下」頁：不再有多隊切換/換人選單/武學欄配置/招賢分頁，
 同伴全服唯一、練功只有自創功法／鍛鍊兩個按鈕（見設計文件四.4、六.2）。
@@ -738,9 +740,10 @@ def build_demo() -> gr.Blocks:
                 # 分頁按鈕放在**最上面**（企劃者的示意圖就是這樣）：原本藏在右欄，手機上右欄
                 # 排在主欄之後，等於要捲過整個場景與選項才看得到，形同沒有導覽。
                 with gr.Row(elem_classes=["tx-nav"]):
-                    menxia_btn = gr.Button("🏯 門下", size="sm")
+                    # 四個各自不同的去處。刻意**沒有**「門下」這一顆：煉製與修練本來就在
+                    # 門下頁裡，再多一個開同一頁的按鈕只是三顆一樣的東西（實機看了就知道）。
                     craft_nav_btn = gr.Button("🔥 煉製", size="sm")
-                    practice_nav_btn = gr.Button("🥋 鍛鍊", size="sm")
+                    practice_nav_btn = gr.Button("🥋 修練", size="sm")
                     report_btn = gr.Button("⚔ 戰報", size="sm")
                     map_btn = gr.Button("🗺 輿圖", size="sm")
                 with gr.Row(equal_height=False, elem_classes=["tx-scene-row"]):
@@ -930,7 +933,6 @@ def build_demo() -> gr.Blocks:
             admin_trend_handler, inputs=[game_state, admin_trend_dd, admin_trend_nb], outputs=outputs
         )
 
-        menxia_btn.click(open_menxia, inputs=[game_state], outputs=[game_row, menxia_col] + menxia_outputs)
         section_outputs = [game_row, menxia_col] + menxia_outputs + [practice_acc, craft_acc]
         craft_nav_btn.click(
             lambda g: open_menxia_at(g, "craft"), inputs=[game_state], outputs=section_outputs,
