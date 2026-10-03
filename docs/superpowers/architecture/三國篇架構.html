@@ -143,7 +143,7 @@ details.sub:not([open]) > summary .name::after { content: " ▸"; }
 <div class="wrap">
   <header>
     <h1>天下大勢・三國篇 遊戲架構</h1>
-    <p class="meta">資料截至 2026-10-03・分支 feature/sanguo-companions（94dea4a）・1121 個自動測試全部通過</p>
+    <p class="meta">資料截至 2026-10-03・分支 feature/sanguo-companions（b103c82）・1121 個自動測試全部通過</p>
     <div class="legend" id="legend" aria-label="依狀態篩選"></div>
     <div class="defs">
       <span><b style="color:var(--done)">已完成</b>：做好了，現在就能玩</span>
@@ -262,7 +262,7 @@ const TREE = [
       { name: "戰鬥卡片與戰報（最近 20 場），漢末戰陣的口吻", s: "done" } ] },
     { name: "武學四欄位：品質、熟練度、威力、屬性", s: "done" },
     { name: "自創功法：名字決定屬性與品質，全服不能重名", s: "done" },
-    { name: "自創功法限次數（例如三天一次），讓玩家的創意跟 LLM 煉製碰撞", s: "talk", note: "你 10/2 交辦；現在自創零成本、無限次，玩家永遠選自創、煉製被冷落。交給「軍備物資設計」跟你談：三天算遊戲還是現實時間、每季重置、要不要收心得。不進第一次 beta" },
+    { name: "自創與融合：自創的功法可以跟任何功法融合（可跨種、兩門都用掉、品質保底較好那門）", s: "plan", note: "你跟「軍備物資設計」定的：自創先不限次數、融合一起開，全部放開觀察；文件寫了風險、觀察清單和收回的時機。發現原本的前提不成立：現在其實每季每種只能自創一次。要等線上架構第 1 期的功法表和第 2 期的 AI 工作佇列，不進第一次 beta" },
     { name: "鍛鍊、改練（換上功法庫裡的另一門）", s: "done" },
     { name: "氣血與療傷", s: "done", c: [
       { name: "打完扣氣血、兩成變內傷，療傷照內傷計價", s: "done" },
