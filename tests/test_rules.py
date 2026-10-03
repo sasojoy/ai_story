@@ -281,3 +281,16 @@ def test_effect_with_an_unknown_material_says_nothing(state, content, world):
     msgs = apply_effect(Effect(materials={"ghost": 1}), state, content, world)
     assert msgs == []
     assert state.player.materials == {}
+
+
+def test_an_event_rumor_is_local_news_of_its_region(state, content, world):
+    """傳聞分層設計第二、七節：事件的傳聞是地方傳聞，記下所在大區；觸發者匿名時記成不具名。"""
+    from tianxia import atlas
+
+    state.player.anonymous = True
+    apply_effect(Effect(rumor="{name}在此留名"), state, content, world)
+    rumor = state.world.rumors[-1]
+    region = atlas.region_of(content, state.player.location)
+    assert rumor.layer == "local" and rumor.location == state.player.location
+    assert rumor.region == (region.id if region else None)
+    assert rumor.named is False and "某位少俠" in rumor.text

@@ -1769,8 +1769,14 @@ class Game:
         return _timeline(self.state.world.rumors[-limit:][::-1]) or "（尚無傳聞。）"
 
     def chronicle_text(self) -> str:
-        text = _timeline(self.state.world.chronicle) or "（江湖史尚無記載。）"
-        return f"{text}\n\n---\n\n{self.world.jade_seal_summary()}"
+        """江湖史：這一季在最前面，往前每一季各一段（線上架構設計 3.2：江湖史跨季保留），最後是玉璽碎片。"""
+        number = self.world.get_season_number()
+        current = _timeline(self.state.world.chronicle) or "（江湖史尚無記載。）"
+        past = self.world.chronicle_before(number)
+        parts = [f"### 第 {number} 季（本季）\n\n{current}" if past else current]
+        parts += [f"### 第 {n} 季\n\n{_timeline(entries)}" for n, entries in past]
+        parts.append(self.world.jade_seal_summary())
+        return "\n\n---\n\n".join(parts)
 
     # ── 江湖紀錄 ──────────────────────────────────────────
 

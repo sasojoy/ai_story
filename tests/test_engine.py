@@ -7,7 +7,7 @@ import pytest
 from conftest import FixedRandom, at, walk_to
 from tianxia import battle_instance, companion_agent, flavor, rules
 from tianxia.engine import Game, Option
-from tianxia.state import BotProfile, GameState, Journey
+from tianxia.state import BotProfile, GameState, Journey, Rumor
 from tianxia.sqlite_world import open_world
 
 HOUR = 3600
@@ -2374,3 +2374,15 @@ def test_the_training_odds_quote_the_hardest_opponent(game):
     walk_to(game, "lake")
     option = next(o for o in game.options() if o.id == "act:train")
     assert "2 路對手" in option.label and "必敗" in option.label  # 翻江龍打不贏
+
+
+def test_the_chronicle_lists_earlier_seasons_after_this_one(content, game):
+    """線上架構設計 3.2：江湖史跨季保留。"""
+    season = game.world.get_season()
+    season.chronicle.append(Rumor(time=0, text="第一季的大事"))
+    season.ended = True
+    game.world.save_season(season)
+    assert game.world.next_season(content, now=1.0)
+    game.sync(2.0)
+    text = game.chronicle_text()
+    assert text.index("第 2 季（本季）") < text.index("### 第 1 季") < text.index("第一季的大事")

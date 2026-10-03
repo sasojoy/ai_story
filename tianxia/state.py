@@ -107,10 +107,21 @@ class PlayerState(BaseModel):
     bot: BotProfile | None = None  # 伺服器假人才有（伺服器假人設計第五節）；任何畫面都不能顯示或透露
 
 
+RumorLayer = Literal["world", "faction", "local", "personal"]  # 天下大事／陣營軍情／地方傳聞／個人線索（傳聞分層設計第二節）
+
+
 class Rumor(BaseModel):
+    """一則傳聞，或一則江湖史（江湖史只用到 id、time、text、location）。"""
+
     time: float
     text: str
     location: str | None = None  # 發生地（地點 id）；江湖史、舊存檔與不在特定地點的傳聞為 None
+    id: int | None = None  # 資料庫的流水號；None＝還沒寫進資料庫（存的時候新增一列，見 sqlite_world）
+    layer: RumorLayer = "world"
+    faction: str | None = None  # 陣營軍情：哪個陣營的人看得到
+    region: str | None = None  # 發生地所在的大區（atlas.region_of）；地方傳聞照它給人看
+    character: str | None = None  # 個人線索：只有這個名號看得到
+    named: bool = True  # 具名；觸發者選了匿名（「某位少俠」）時是 False
 
 
 class WorldState(BaseModel):

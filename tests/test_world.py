@@ -261,3 +261,9 @@ def test_rumor_places_leave_the_world_simulation_unchanged(state, content):
     assert [r.text for r in state.world.rumors] == [r.text for r in other.world.rumors]
     assert {r.location for r in state.world.rumors if "翻江龍" in r.text} == {"lake"}  # 寫成字串：記在第一個常出沒處
     assert {r.location for r in other.world.rumors if "翻江龍" in r.text} == {"cave"}  # 寫成物件：記在它寫的地點
+
+
+def test_a_threshold_rumor_is_world_news(state, content):
+    state.world.trends["kou"] = 50
+    check_thresholds(state, content)
+    assert state.world.rumors[-1].layer == "world"

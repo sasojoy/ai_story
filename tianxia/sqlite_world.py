@@ -3,6 +3,8 @@
 - `world` 表一列：SharedWorldState 除了賽季以外的小資料，整份覆寫。
 - `seasons` 表一季一列：WorldState，整份覆寫。換季不刪資料：賽季編號加一、新的一季另起一列，
   舊的一季原封不動留著。
+- 傳聞（`rumors` 表）與江湖史（`chronicle` 表）一則一列：寫的時候只新增還沒有流水號的；讀全服狀態時不讀回來，
+  只有 get_season() 讀（給畫面看）。江湖史跨季保留。
 - 每個會寫的方法自己是一筆交易；呼叫端已經在 action_lock() 裡時，併進那一筆（見 database.Database）。
 """
 from __future__ import annotations
@@ -11,13 +13,13 @@ import random
 from collections.abc import Callable
 from contextlib import AbstractContextManager
 from pathlib import Path
-from sqlite3 import Connection
+from sqlite3 import Connection, Row
 
 from .battle_instance import BattleInstance, start_muster
 from .database import Database, open_database
 from .martial_arts import MartialArt
 from .models import BattleDef, Content
-from .state import WorldState
+from .state import Rumor, WorldState
 from .world_state import (
     JADE_SEAL_FRAGMENT_COUNT, CompanionProgress, JadeSealFragment, SeasonPhase, SharedWorldState, fresh_season,
     jade_seal_summary,
@@ -49,10 +51,10 @@ class SqliteWorldStore:
             self._save(conn, state)
             return state
 
-    def _load(self, conn: Connection) -> SharedWorldState:
+    def _load(self, conn: Connection, logs: bool = False) -> SharedWorldState:
         row = conn.execute("SELECT data FROM world WHERE id = 1").fetchone()
         state = SharedWorldState() if row is None else SharedWorldState.model_validate_json(row["data"])
-        state.season = self._load_season(conn, state.season_number)
+        state.season = self._load_season(conn, state.season_number, logs)
         return state
 
     def _save(self, conn: Connection, state: SharedWorldState) -> None:
@@ -62,15 +64,44 @@ class SqliteWorldStore:
         )
         self._save_season(conn, state.season_number, state.season)
 
-    def _load_season(self, conn: Connection, number: int) -> WorldState:
+    def _load_season(self, conn: Connection, number: int, logs: bool = False) -> WorldState:
+        """logs=True 才把這一季的傳聞與江湖史讀回來（只有 get_season 要）。其他時候兩個清單是空的：
+        往裡面加的照樣寫得進去（見 _save_season），已經寫過的也不會因此被蓋掉。"""
         row = conn.execute("SELECT data FROM seasons WHERE number = ?", (number,)).fetchone()
-        return WorldState() if row is None else WorldState.model_validate_json(row["data"])
+        season = WorldState() if row is None else WorldState.model_validate_json(row["data"])
+        if logs:
+            season.rumors = [
+                _rumor(r) for r in conn.execute("SELECT * FROM rumors WHERE season = ? ORDER BY id", (number,))
+            ]
+            season.chronicle = [
+                _chronicle_entry(r)
+                for r in conn.execute("SELECT * FROM chronicle WHERE season = ? ORDER BY id", (number,))
+            ]
+        return season
 
     def _save_season(self, conn: Connection, number: int, season: WorldState) -> None:
+        """季的小資料整份覆寫；傳聞與江湖史只新增還沒有流水號的（id 是 None），寫完把流水號填回去。
+        交易撤回時流水號已經填上了：Game 每個動作開頭都 sync、重新讀一份賽季，不會拿著它繼續用。"""
         conn.execute(
             "INSERT INTO seasons (number, data) VALUES (?, ?) ON CONFLICT (number) DO UPDATE SET data = excluded.data",
-            (number, season.model_dump_json()),
+            (number, season.model_dump_json(exclude={"rumors", "chronicle"})),
         )
+        for rumor in season.rumors:
+            if rumor.id is None:
+                rumor.id = conn.execute(
+                    "INSERT INTO rumors (season, time, layer, faction, region, location, character, named, text) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        number, rumor.time, rumor.layer, rumor.faction, rumor.region, rumor.location,
+                        rumor.character, rumor.named, rumor.text,
+                    ),
+                ).lastrowid
+        for entry in season.chronicle:
+            if entry.id is None:
+                entry.id = conn.execute(
+                    "INSERT INTO chronicle (season, time, location, text) VALUES (?, ?, ?, ?)",
+                    (number, entry.time, entry.location, entry.text),
+                ).lastrowid
 
     # ── 武學命名登記與煉製配方 ──────────────────────────────
 
@@ -173,7 +204,18 @@ class SqliteWorldStore:
     # ── 共享賽季 ──────────────────────────────────────────
 
     def get_season(self) -> WorldState:
-        return self.read().season
+        with self.db.snapshot() as conn:
+            return self._load(conn, logs=True).season
+
+    def chronicle_before(self, season_number: int) -> list[tuple[int, list[Rumor]]]:
+        with self.db.snapshot() as conn:
+            rows = conn.execute(
+                "SELECT * FROM chronicle WHERE season < ? ORDER BY season DESC, id", (season_number,),
+            ).fetchall()
+        seasons: dict[int, list[Rumor]] = {}
+        for row in rows:
+            seasons.setdefault(row["season"], []).append(_chronicle_entry(row))
+        return list(seasons.items())
 
     def get_season_number(self) -> int:
         return self.read().season_number
@@ -324,3 +366,14 @@ class SqliteWorldStore:
             fn(state.companions.setdefault(companion_id, CompanionProgress()))
 
         return self.mutate(_apply).companions[companion_id]
+
+
+def _rumor(row: Row) -> Rumor:
+    return Rumor(
+        id=row["id"], time=row["time"], text=row["text"], location=row["location"], layer=row["layer"],
+        faction=row["faction"], region=row["region"], character=row["character"], named=bool(row["named"]),
+    )
+
+
+def _chronicle_entry(row: Row) -> Rumor:
+    return Rumor(id=row["id"], time=row["time"], text=row["text"], location=row["location"])
