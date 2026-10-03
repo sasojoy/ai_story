@@ -701,10 +701,10 @@ DIALOGUE_TURN = companion_agent.CompanionTurn(
 
 
 def _stand_by_a_figure(game):
-    """站到正式內容裡張梁所在的地點（廣宗；張角也在那裡，但名望不到見不到，交遊會找張梁），有他的結識旗標所以見得到；
-    福緣設成已領，交遊不會先觸發福緣。"""
-    game.state.player.location = "guangzong"
-    game.state.player.flags.add("結識:zhangliang")
+    """站到正式內容裡盧植所在的地點（盧植營，只有他一位大勢人物：交遊直接找他），有他的結識旗標所以見得到；
+    福緣設成已領，交遊不會先觸發福緣。兩位以上人物的地點（例如廣宗）交遊不開口，要「求見」指名。"""
+    game.state.player.location = "luzhi_camp"
+    game.state.player.flags.add("結識:luzhi")
     game.state.player.fortune = True
 
 
@@ -743,7 +743,7 @@ def test_a_dialogue_option_generates_outside_the_action_lock(game, lock_events):
         server.choose(game, "act:socialize")
     gen.assert_called_once()
     assert lock_events == ["enter", "exit", "generate", "enter", "exit"]  # 鎖內備料 → 鎖外生成 → 鎖內套用
-    assert game.state.player.pending_companion == "zhangliang"
+    assert game.state.player.pending_companion == "luzhi"
 
 
 def test_the_generated_turn_is_applied_and_saved(game, save_dir):
@@ -756,9 +756,9 @@ def test_the_generated_turn_is_applied_and_saved(game, save_dir):
             mock.patch.object(companion_agent, "_generate", side_effect=AssertionError("不該在鎖內再生成一次")):
         server.choose(game, "talk:0")
     gen.assert_called_once()
-    assert game.state.player.affinities["zhangliang"] == 1
+    assert game.state.player.affinities["luzhi"] == 1
     assert game.state.player.stamina < before  # 這一輪對話的體力照扣
-    assert game.state.player.dialogue_history["zhangliang"][-2:] == [
+    assert game.state.player.dialogue_history["luzhi"][-2:] == [
         {"role": "user", "content": "閒聊幾句"}, {"role": "assistant", "content": "他點了點頭。"},
     ]
     assert "他點了點頭。" in game.state.journal[0].lines
@@ -778,7 +778,7 @@ def test_a_failed_generation_ends_the_talk_for_free(game, lock_events):
     assert lock_events == ["enter", "exit", "generate", "enter", "exit"]
     assert game.state.player.pending_companion is None
     assert game.state.player.stamina == before
-    assert game.state.journal[0].lines == ["張梁似乎無心多談，你只好先行告辭。"]
+    assert game.state.journal[0].lines == ["盧植似乎無心多談，你只好先行告辭。"]
 
 
 def test_a_changed_option_list_while_generating_falls_back_to_generating_in_the_lock(game):
@@ -790,7 +790,7 @@ def test_a_changed_option_list_while_generating_falls_back_to_generating_in_the_
     def generate(client, messages):
         # 資料庫是唯一的真實來源（進鎖先重讀）：生成的那十秒裡另一個請求（連點兩下、第二個分頁）存了新的選單
         other = open_characters().load("測試")
-        other.player.last_offered_dialogue["zhangliang"] = [["換了一句話", "告辭"], ["尋常寒暄", "尋常寒暄"]]
+        other.player.last_offered_dialogue["luzhi"] = [["換了一句話", "告辭"], ["尋常寒暄", "尋常寒暄"]]
         open_characters().save(other)
         return DIALOGUE_TURN
 

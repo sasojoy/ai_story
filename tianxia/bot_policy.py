@@ -80,7 +80,7 @@ def pick(game: Game, options: list[Option], profile: BotProfile, rng: random.Ran
 
 
 def score(game: Game, option: Option, profile: BotProfile) -> float | None:
-    """選項的分數；None＝假人不會選（別的陣營的投靠、閒聊大勢人物、只會被擋在門外的交遊、投靠的確認畫面另外處理）。"""
+    """選項的分數；None＝假人不會選（別的陣營的投靠、閒聊或求見大勢人物、只會被擋在門外的交遊、投靠的確認畫面另外處理）。"""
     kind, _, arg = option.id.partition(":")
     if kind == "battle":
         return _battle_score(game, arg)
@@ -89,10 +89,14 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
         return effect_score(event.choices[int(arg)].effect, _goals(game, profile))
     if kind == "talk":
         return 0.0 if arg == "leave" else None
+    if kind == "call":
+        return 0.0 if arg == "back" else None  # 假人不求見大勢人物（不呼叫模型）；萬一停在求見選單上，只會按返回
     if kind == "move":
         base = HOME_MOVE_SCORE if arg in _home(game, profile) else AWAY_MOVE_SCORE
         return base + (TRAIN_MOVE_SCORE if _train_value(game, profile, arg) > 0 else 0.0)
     if kind == "act":
+        if arg == "call":
+            return None
         if arg == "socialize" and (game.socialize_starts_dialogue() or game.socialize_is_futile()):
             return None
         if arg == "train":

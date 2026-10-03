@@ -28,6 +28,7 @@ from .world_state import WorldStateStore
 
 HOUR = 3600
 DAY = 86400
+AUDIENCE_HALL_FIGURES = 2  # 一個地點有幾位以上的大勢人物，交遊就不直接找人、改按「求見」指名（企劃者 2026-10-03 決定）
 
 
 class Option(BaseModel):
@@ -125,6 +126,8 @@ class Game:
             p.pending_faction = None
         if p.location not in c.locations:
             p.location = c.scenario.start_location
+        if p.picking_audience and not self._audience_hall():
+            p.picking_audience = False  # 內容改版後這裡不再有兩位以上的人物：收起求見選單
         if p.journey is not None and any(loc_id not in c.locations for loc_id in p.journey.path):
             p.journey = None
         p.team = [k for k in p.team if k in c.characters][: team.MAX_TEAM_COMPANIONS]
@@ -266,6 +269,8 @@ class Game:
                 Option(id="faction:confirm", label=f"確定投靠{faction.name}"),
                 Option(id="faction:cancel", label="再想想"),
             ]
+        if s.player.picking_audience:
+            return self._audience_options()
         if s.player.busy_until is not None:
             return [Option(id="act:break", label="提前出關")]
         j = s.player.journey
@@ -289,8 +294,13 @@ class Game:
             # 新角色沒有武學時威力是 0，在任何地點歷練都**必敗**，而落敗現在真的要付氣血與
             # 內傷的代價——不顯示勝算的話，玩家會在開局連輸三場、氣血見底才知道自己不該打。
             opts.append(self._cost_option("act:train", "歷練", cost["train"], note=self._train_note(loc, odds)))
-        if has_events_here(c, loc, "socialize") or self._figures_here():
+        figures = self._figures_here()
+        if has_events_here(c, loc, "socialize") or len(figures) == 1:
+            # 兩位以上大勢人物的地點，交遊只走福緣與地點事件、從不開口對話（見 _socialize_figure），
+            # 所以只在有交遊事件時才給；人物改由下面的「求見」指名
             opts.append(self._cost_option("act:socialize", "交遊", cost["socialize"]))
+        if len(figures) >= AUDIENCE_HALL_FIGURES:
+            opts.append(Option(id="act:call", label="求見"))  # 只是打開第二層選單，不花體力（見 _audience_options）
         target = self._recruit_target()
         if target is not None:
             cfg = c.config
@@ -360,8 +370,10 @@ class Game:
         """鎖外生成的階段 A（server.py 在行動鎖內、很快地呼叫）：現在選這個選項，會不會生成一輪對話？
         會就回傳要送給模型的單子（選項、人物、玩家這一步、messages），不會就是 None。只讀、不改狀態。
         - `talk:N`：N 是上一輪提供的選項、手上有對話、選項沒停用；`talk:leave` 不生成。
-        - `act:socialize`：選項沒停用、福緣還沒到（福緣先發，見 _act）、這裡有見得到的人物；
-          玩家這一步固定是 GENERIC_OPENING。
+        - `act:socialize`：選項沒停用、福緣還沒到（福緣先發，見 _act）、這裡只有一位大勢人物而且見得到
+          （兩位以上的地點交遊不開口，見 _socialize_figure）；玩家這一步固定是 GENERIC_OPENING。
+        - `call:<人物>`：求見選單上按得下去的那位人物（選項沒停用＝見得到、今天還沒談滿、體力夠）；
+          玩家這一步固定是 GENERIC_OPENING。`call:back` 不生成。
         其他選項都不呼叫對話模型。
         只讀：選單用 tick=False 取，不推進戰鬥（推進可能結算一回合並呼叫 LLM 潤色，而且備料與
         進鎖重驗各會呼叫這個方法一次；一次請求的那一次推進留給 choose() 開頭）。"""
@@ -380,10 +392,12 @@ class Game:
         elif option_id == "act:socialize":
             if roster.fortune_due(self.state, self.content):
                 return None
-            companion_id = self._deep_interaction_target()
+            companion_id = self._socialize_figure()
             if companion_id is None:
                 return None
             player_action = companion_agent.GENERIC_OPENING
+        elif kind == "call" and arg != "back":
+            companion_id, player_action = arg, companion_agent.GENERIC_OPENING
         else:
             return None
         return companion_agent.build_request(
@@ -426,7 +440,7 @@ class Game:
         kind, _, arg = option_id.partition(":")
         if kind == "battle":
             return self._log(self._battle_choose(arg))
-        prepared = self._checked_prepared(option_id, prepared) if kind in ("act", "talk") else None
+        prepared = self._checked_prepared(option_id, prepared) if kind in ("act", "talk", "call") else None
         self._draft = Draft(self._action_title(kind, arg))
         try:
             if kind == "act":
@@ -437,10 +451,14 @@ class Game:
                 msgs = self._talk(arg, prepared)
             elif kind == "faction":
                 msgs = self._faction_step(arg)
+            elif kind == "call":
+                msgs = self._call(arg, prepared)
             else:
                 msgs = self._choose(int(arg))
             if kind == "act" and arg != "break":
                 msgs += note_action(self.state, self.content, self.world, arg)
+            if kind == "call" and arg != "back":
+                msgs += note_action(self.state, self.content, self.world, "socialize")  # 指名求見算一次交遊（新手引導、任務）
             msgs += check_thresholds(self.state, self.content, self.world, self.client, now=self.now)
             journal.add_entry(self.state, self._draft.entry(self.state.world.time, msgs))
         finally:
@@ -465,9 +483,11 @@ class Game:
         if kind == "talk":
             character = c.characters[s.player.pending_companion]
             return f"交談・{character.name}"
+        if kind == "call":
+            return "收回名帖" if arg == "back" else f"求見・{c.characters[arg].name}"
         here = c.locations[s.player.location].name
         titles = {
-            "explore": f"探索{here}", "socialize": f"交遊・{here}", "train": f"歷練・{here}",
+            "explore": f"探索{here}", "socialize": f"交遊・{here}", "call": f"求見・{here}", "train": f"歷練・{here}",
             "recruit": f"招募・{here}", "rest": f"打坐・{here}", "stand": "起身", "halt": "喊停",
         }
         return titles.get(arg, "提前出關")
@@ -497,6 +517,9 @@ class Game:
             return self._recruit()
         if what == "rest":
             return self._rest()
+        if what == "call":
+            self.state.player.picking_audience = True  # 打開求見選單（見 _audience_options），不花體力
+            return [f"你遞上名帖，準備求見{self.content.locations[self.state.player.location].name}的人物。"]
         self.state.player.stamina -= cost[what]
         if what == "explore":
             return self._explore()
@@ -513,17 +536,31 @@ class Game:
             if self._draft is not None:
                 self._draft.title, self._draft.tag = "福緣", "賀禮"
             return self._fortune_gift()
-        companion_id = self._deep_interaction_target()
+        companion_id = self._socialize_figure()
         if companion_id is not None:
-            try:
-                return companion_agent.start_dialogue(
-                    self.client, self.state, self.content, self.world, companion_id, self.rng,
-                    turn=self._prepared_turn(prepared),
-                )
-            except companion_agent.DialogueUnavailable:
-                self.state.player.stamina += cost[what]  # 生成不出對話：這次交遊不花體力
-                return self._dialogue_unavailable(companion_id)
+            return self._open_dialogue(companion_id, prepared)
         return self._encounter("socialize", self._no_audience_line())
+
+    def _call(self, arg: str, prepared: companion_agent.PreparedTurn | None = None) -> list[str]:
+        """求見選單上的選擇：「返回」收起選單；選了一位人物就跟他開口對話，跟交遊碰上人物時一模一樣——
+        花交遊的體力、生成不出對話就退回（見 _open_dialogue）。福緣不在這裡發：指名求見就是要見這個人
+        （福緣照舊由交遊先發，或到期自己送上門，見 _advance_player_local）。"""
+        self.state.player.picking_audience = False
+        if arg == "back":
+            return ["你收回名帖，暫且不求見了。"]
+        self.state.player.stamina -= self.content.config.action_cost["socialize"]
+        return self._open_dialogue(arg, prepared)
+
+    def _open_dialogue(self, companion_id: str, prepared: companion_agent.PreparedTurn | None) -> list[str]:
+        """跟一位大勢人物開口對話（呼叫端已經扣了交遊的體力）：生成不出對話時退回那份體力，對話不開始。"""
+        try:
+            return companion_agent.start_dialogue(
+                self.client, self.state, self.content, self.world, companion_id, self.rng,
+                turn=self._prepared_turn(prepared),
+            )
+        except companion_agent.DialogueUnavailable:
+            self.state.player.stamina += self.content.config.action_cost["socialize"]  # 生成不出對話：這次不花體力
+            return self._dialogue_unavailable(companion_id)
 
     def _explore(self) -> list[str]:
         """探索：先滾一次煉製素材，再走一般的遭遇流程（事件／敵人／一無所獲）。
@@ -622,8 +659,48 @@ class Game:
                 return companion_id
         return None
 
+    def _audience_hall(self) -> bool:
+        """這裡有兩位以上的大勢人物：交遊不再直接找第一位見得到的人，改按「求見」指名（企劃者 2026-10-03 決定）。"""
+        return len(self._figures_here()) >= AUDIENCE_HALL_FIGURES
+
+    def _socialize_figure(self) -> str | None:
+        """交遊會直接開口對話的那位人物：只有這裡至多一位大勢人物時才有（見得到、今天還沒談滿，見
+        _deep_interaction_target）；兩位以上的地點交遊只走福緣與地點事件，人物要按「求見」指名。"""
+        if self._audience_hall():
+            return None
+        return self._deep_interaction_target()
+
+    def _audience_options(self) -> list[Option]:
+        """求見的第二層選單：這裡每一位大勢人物一個選項，最後是永遠按得下去的「返回」。名望不夠（也沒結識過）、
+        或今天已經跟他談滿的人按不下去並寫明原因；每天的輪數上限是每位人物各算各的（talk_turns_per_day）。"""
+        c = self.content
+        cost = c.config.action_cost["socialize"]
+        per_day = c.config.talk_turns_per_day
+        opts = []
+        for companion_id in self._figures_here():
+            ch = c.characters[companion_id]
+            option_id = f"call:{companion_id}"
+            left = self._talks_left(companion_id)
+            if not self._can_meet(companion_id):
+                opts.append(Option(id=option_id, label=f"{ch.name}（名望 {ch.audience_fame} 以上才見得到）", enabled=False))
+            elif left == 0:
+                opts.append(Option(id=option_id, label=f"{ch.name}（今天已經談滿 {per_day} 輪，明天再來）", enabled=False))
+            else:
+                opts.append(self._cost_option(option_id, ch.name, cost, note=f"今天還能談 {left}/{per_day} 輪"))
+        opts.append(Option(id="call:back", label="返回"))
+        return opts
+
+    def _audience_intro(self) -> str:
+        """求見畫面的說明（場景上的那一段）：挑一位拜會；每位人物每天最多談幾輪，各算各的。"""
+        here = self.content.locations[self.state.player.location].name
+        per_day = self.content.config.talk_turns_per_day
+        return f"{here}有好幾位人物，挑一位求見。每位人物每天最多談 {per_day} 輪，各算各的；名望不夠的見不到，談滿的明天再來。"
+
     def _no_audience_line(self) -> str:
-        """交遊時見不到這裡的大勢人物時的說明；這裡沒有大勢人物就是原本的「此地無人可訪」。"""
+        """交遊時見不到這裡的大勢人物時的說明；這裡沒有大勢人物就是原本的「此地無人可訪」；
+        兩位以上大勢人物的地點交遊不找人，提醒要按「求見」。"""
+        if self._audience_hall():
+            return "你四處結交了一番，沒遇上什麼事；想拜會此地的人物，請按「求見」指名。"
         for companion_id in self._figures_here():
             ch = self.content.characters[companion_id]
             if not self._can_meet(companion_id):
@@ -634,7 +711,7 @@ class Game:
 
     def socialize_starts_dialogue(self) -> bool:
         """在這裡交遊會直接跟大勢人物對話（伺服器假人不閒聊大勢人物，見 bot_policy）。"""
-        return self._deep_interaction_target() is not None
+        return self._socialize_figure() is not None
 
     def socialize_is_futile(self) -> bool:
         """在這裡交遊注定白跑一趟（伺服器假人不該去按）：這個地點沒有交遊事件、沒有見得到的大勢人物，
@@ -642,7 +719,7 @@ class Game:
         s, c = self.state, self.content
         return (
             not has_events_here(c, c.locations[s.player.location], "socialize")
-            and self._deep_interaction_target() is None
+            and self._socialize_figure() is None
             and not roster.fortune_due(s, c)
         )
 
@@ -1387,7 +1464,7 @@ class Game:
         s = self.state
         return (
             not self._preparing() and not s.world.ended and s.pending_event is None and s.player.busy_until is None
-            and s.player.resting_since is None and s.player.journey is None
+            and s.player.resting_since is None and s.player.journey is None and not s.player.picking_audience
         )
 
     def seclude(self, hours: int) -> list[str]:
@@ -1713,6 +1790,8 @@ class Game:
         if s.player.pending_faction:
             faction = self._faction(s.player.pending_faction)
             return f"**投靠{faction.name}**\n\n{self._faction_prompt(faction)}"
+        if s.player.picking_audience:
+            return f"**求見**\n\n{self._audience_intro()}"
         if s.player.journey is not None:
             halted = "（已經喊停）" if s.player.journey.stop_at is not None else ""
             return f"**在路上**{halted}\n\n{self._journey_line()}。\n\n路上不能做事；可以先下線，到了會自己抵達。"

@@ -291,3 +291,16 @@ def test_bots_never_pick_the_halt_or_rest_options_meant_for_humans(content, game
     monkeypatch.setattr(game, "options", lambda **kwargs: human_only)
     assert bot_policy.take_turn(game, _profile("guan"), random.Random(0)) == []
     assert game.state.player.journey is None and game.state.player.resting_since is None
+
+
+def test_a_bot_never_calls_on_a_figure_but_can_always_back_out(content, game):
+    """假人不求見大勢人物（不呼叫模型）；萬一停在求見選單上，只會按「返回」。"""
+    for cid in ("mate", "scholar"):
+        content.characters[cid].deep_interaction = True
+    profile = _profile("guan")
+    assert bot_policy.score(game, Option(id="act:call", label=""), profile) is None
+    game.choose("act:call")
+    options = [o for o in game.options(odds=False) if o.enabled]
+    assert [o.id for o in options] == ["call:mate", "call:scholar", "call:back"]
+    assert [bot_policy.score(game, o, profile) for o in options] == [None, None, 0.0]
+    assert bot_policy.pick(game, options, profile, random.Random(0)) == "call:back"

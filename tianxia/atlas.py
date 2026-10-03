@@ -333,13 +333,15 @@ class TravelOption:
 
 
 def travel_block(state: GameState) -> str | None:
-    """現在不能安排前往的原因（賽季已結束、有事件待處理、交談中、投靠待確認、閉關中、在路上、打坐中）；可以時為 None。"""
+    """現在不能安排前往的原因（賽季已結束、有事件待處理、交談中、求見中、投靠待確認、閉關中、在路上、打坐中）；可以時為 None。"""
     if state.world.ended:
         return "賽季已結束，不能安排前往"
     if state.pending_event:
         return "有事件待處理，不能安排前往"
     if state.player.pending_companion:
         return "交談中，先告辭才能安排前往"
+    if state.player.picking_audience:
+        return "求見中，先返回才能安排前往"
     if state.player.pending_faction:
         return "投靠還沒決定，先決定再安排前往"
     if state.player.busy_until is not None:

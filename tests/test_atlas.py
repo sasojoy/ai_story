@@ -407,3 +407,9 @@ def test_game_map_helpers(game):
     assert game.map_places() == [("小鎮（所在地）", "town"), ("湖邊", "lake")]
     assert "**敵情**　水寇小隊" in game.place_detail("lake")  # 用 Game.odds；具體勝算數字待平衡調整
     assert game.travel_options("lake")[0] == TravelOption("walk", "步行（約 3 分鐘）", True)
+
+
+def test_picking_whom_to_call_on_blocks_travel(state, content):
+    state.player.picking_audience = True
+    assert travel_options(state, content, "lake") == [TravelOption("walk", "求見中，先返回才能安排前往", False)]
+    assert travel_refusal(state, content, "lake", "walk") == "求見中，先返回才能安排前往"

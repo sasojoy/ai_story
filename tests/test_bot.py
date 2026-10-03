@@ -92,3 +92,14 @@ def test_a_bot_does_not_try_to_heal_what_it_cannot_afford(game):
     assert not wants_heal(game)
     game.state.player.stats["silver"] = 999
     assert wants_heal(game)
+
+
+def test_the_bot_backs_out_of_an_audience_list_it_cannot_use(content, game):
+    """機器人隨機挑選項，可能按到「求見」；名單上的人都見不到時「返回」永遠按得下去，整季模擬不會卡住。"""
+    for cid in ("mate", "scholar"):
+        content.characters[cid].deep_interaction = True
+        content.characters[cid].audience_fame = 99
+    game.choose("act:call")
+    options = [o for o in game.options(odds=False) if o.enabled]
+    assert [o.id for o in options] == ["call:back"]
+    assert pick(game, options, random.Random(0)) == "call:back"

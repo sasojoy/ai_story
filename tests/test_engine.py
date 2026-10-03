@@ -2495,3 +2495,174 @@ def test_a_drill_gives_every_fighter_the_exp_too(content, game):
     assert game.world.get_companion("mate").level == 2
     assert "韓鐵升到第 2 級！" in msgs
     assert "韓鐵升到第 2 級！" in game.state.journal[0].lines
+
+
+# ── 指名求見（兩位以上大勢人物的地點，企劃者 2026-10-03 決定）──────────
+
+
+def _hall(content, game, mate_fame=0, scholar_fame=0):
+    """把小鎮變成兩位大勢人物的地點：韓鐵、書生（recruit_at 本來就是小鎮）都開深度對話。小鎮有交遊事件（拜師）；
+    福緣設成已領，交遊不會先送福緣。"""
+    for cid, fame in (("mate", mate_fame), ("scholar", scholar_fame)):
+        content.characters[cid].deep_interaction = True
+        content.characters[cid].audience_fame = fame
+    game.state.player.fortune = True
+
+
+def _labels(game):
+    return {o.id: (o.label, o.enabled) for o in game.options()}
+
+
+def test_a_place_with_two_figures_offers_one_audience_option(content, game):
+    _hall(content, game)
+    assert ids(game) == ["act:explore", "act:socialize", "act:call", "act:recruit", "move:lake", "act:rest"]
+    assert _labels(game)["act:call"] == ("求見", True)
+
+
+def test_a_place_with_two_figures_and_no_socialize_events_has_no_socialize_option(content, game):
+    for cid in ("mate", "scholar"):
+        ch = content.characters[cid]
+        ch.kind, ch.recruit_at, ch.talk_at, ch.deep_interaction = "locked", None, "cave", True
+    game.state.player.location = "cave"  # 寶洞沒有交遊事件
+    assert "act:socialize" not in ids(game) and "act:call" in ids(game)
+
+
+def test_socializing_where_two_figures_stand_never_opens_a_dialogue(content, game):
+    _hall(content, game)
+    assert not game.socialize_starts_dialogue()
+    assert game.dialogue_request("act:socialize") is None
+    with mock.patch.object(companion_agent, "_generate", side_effect=AssertionError("交遊不該開口對話")):
+        game.choose("act:socialize")
+    assert game.state.pending_event == "join"  # 小鎮的交遊事件（拜師）照常發生
+    assert game.state.player.pending_companion is None
+    game.state.pending_event = None
+    with mock.patch("tianxia.engine.pick_event", return_value=None):
+        msgs = game.choose("act:socialize")
+    assert msgs == ["你四處結交了一番，沒遇上什麼事；想拜會此地的人物，請按「求見」指名。"]
+
+
+def test_the_audience_list_names_each_figure_and_why_some_cannot_be_seen(content, game):
+    _hall(content, game, mate_fame=10)
+    game.choose("act:call")
+    assert game.state.player.picking_audience
+    assert [(o.id, o.label, o.enabled) for o in game.options()] == [
+        ("call:mate", "韓鐵（名望 10 以上才見得到）", False),
+        ("call:scholar", "書生（體力 5・今天還能談 3/3 輪）", True),
+        ("call:back", "返回", True),
+    ]
+    scene = game.scene_text()
+    assert scene.startswith("**求見**") and "每位人物每天最多談 3 輪，各算各的" in scene
+    assert game.state.journal[0].title == "求見・小鎮"
+    assert game.state.player.stamina == content.config.stamina_max  # 打開名單不花體力
+
+
+def test_a_prior_meeting_opens_the_door_in_the_audience_list(content, game):
+    _hall(content, game, mate_fame=10)
+    game.state.player.flags.add("結識:mate")
+    game.choose("act:call")
+    assert _labels(game)["call:mate"] == ("韓鐵（體力 5・今天還能談 3/3 輪）", True)
+
+
+def test_calling_on_a_figure_starts_the_dialogue_with_that_figure(content, game):
+    _hall(content, game)
+    game.choose("act:call")
+    with mock.patch.object(companion_agent, "_generate", return_value=FAKE_TURN), \
+            mock.patch("tianxia.engine.note_action", return_value=[]) as noted:
+        msgs = game.choose("call:scholar")
+    assert msgs == ["他點了點頭。"]
+    p = game.state.player
+    assert p.pending_companion == "scholar" and not p.picking_audience
+    assert p.stamina == content.config.stamina_max - content.config.action_cost["socialize"]
+    assert ids(game) == ["talk:0", "talk:1", "talk:leave"]
+    assert game.state.journal[0].title == "求見・書生"
+    noted.assert_called_once()
+    assert noted.call_args.args[3] == "socialize"  # 指名求見算一次交遊（新手引導、任務）
+
+
+def test_the_daily_limit_counts_per_figure(content, game):
+    """每位人物每天最多談 3 輪，各算各的：跟書生談滿了，韓鐵照樣見得到。"""
+    _hall(content, game)
+    with mock.patch.object(companion_agent, "_generate", return_value=FAKE_TURN):
+        game.choose("act:call")
+        game.choose("call:scholar")
+        game.choose("talk:0")
+        game.choose("talk:0")
+        msgs = game.choose("talk:0")
+    assert msgs[-1] == "天色已晚，書生起身送客，改日再敘。"
+    game.choose("act:call")
+    labels = _labels(game)
+    assert labels["call:scholar"] == ("書生（今天已經談滿 3 輪，明天再來）", False)
+    assert labels["call:mate"] == ("韓鐵（體力 5・今天還能談 3/3 輪）", True)
+    assert game.choose("call:scholar") == ["（此刻無法這麼做。）"]
+    game.state.world.time += DAY  # 隔天重算
+    assert _labels(game)["call:scholar"][1]
+
+
+def test_an_unavailable_audience_refunds_the_cost_and_closes_the_list(content, game):
+    _hall(content, game)
+    game.choose("act:call")
+    with mock.patch.object(companion_agent, "_generate", side_effect=companion_agent.DialogueUnavailable("404")):
+        msgs = game.choose("call:scholar")
+    assert msgs == ["書生似乎無心多談，你只好先行告辭。"]
+    p = game.state.player
+    assert p.stamina == content.config.stamina_max
+    assert p.pending_companion is None and not p.picking_audience
+
+
+def test_going_back_always_works_and_closes_the_list(content, game):
+    _hall(content, game)
+    game.choose("act:call")
+    game.state.player.stamina = 0
+    labels = _labels(game)
+    assert labels["call:scholar"] == ("書生（體力 5・今天還能談 3/3 輪）", False)  # 體力不夠
+    assert labels["call:back"] == ("返回", True)  # 永遠有路可退，不會卡死
+    assert game.choose("call:back") == ["你收回名帖，暫且不求見了。"]
+    assert not game.state.player.picking_audience
+    assert "act:call" in ids(game)
+    assert game.state.journal[0].title == "收回名帖"
+
+
+def test_you_cannot_travel_or_seclude_while_picking_whom_to_call_on(content, game):
+    _hall(content, game)
+    game.choose("act:call")
+    assert game.travel_refusal("lake") == "求見中，先返回才能安排前往"
+    assert game.travel("lake") == ["（求見中，先返回才能安排前往。）"]
+    assert game.seclude(4) == ["你現在無法閉關。"]
+
+
+def test_dialogue_request_for_a_call_is_the_generic_opening(content, game):
+    _hall(content, game, mate_fame=10)
+    game.choose("act:call")
+    req = game.dialogue_request("call:scholar")
+    assert (req.option_id, req.companion_id, req.player_action) == (
+        "call:scholar", "scholar", companion_agent.GENERIC_OPENING,
+    )
+    assert game.dialogue_request("call:mate") is None  # 見不到：選項停用
+    assert game.dialogue_request("call:back") is None
+
+
+def test_choose_applies_a_prepared_audience_without_calling_the_model(content, game):
+    _hall(content, game)
+    game.choose("act:call")
+    prepared = _prepared(game, "call:scholar", turn=NEXT_TURN)
+    with _no_model():
+        msgs = game.choose("call:scholar", prepared=prepared)
+    assert msgs == ["他笑了笑。"]
+    assert game.state.player.pending_companion == "scholar"
+
+
+def test_a_prepared_failure_for_an_audience_refunds_the_cost(content, game):
+    _hall(content, game)
+    game.choose("act:call")
+    prepared = _prepared(game, "call:scholar", turn=None)
+    with _no_model():
+        msgs = game.choose("call:scholar", prepared=prepared)
+    assert msgs == ["書生似乎無心多談，你只好先行告辭。"]
+    assert game.state.player.stamina == content.config.stamina_max
+    assert not game.state.player.picking_audience
+
+
+def test_a_stale_audience_list_is_closed_where_two_figures_no_longer_stand(content, game):
+    game.state.player.picking_audience = True  # 夾具的小鎮沒有大勢人物：例如內容改版後讀進來的舊存檔
+    reloaded = Game(content, game.state, world=game.world)
+    assert not reloaded.state.player.picking_audience
