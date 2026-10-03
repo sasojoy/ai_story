@@ -2729,13 +2729,12 @@ def test_a_reroute_charges_the_new_way_and_refunds_nothing(game):
     game.state.player.stamina = 100
     game.set_move_mode("hurry")
     game.choose("move:lake:hurry")  # 3 分鐘：3 點
-    game.choose("road:back:hurry")  # 剛出發就掉頭：至少 1 點，原本的 3 點不退
-    assert game.state.player.stamina == 96
-    game.advance(game.state.player.journey.arrive_at[-1] - game.state.world.time)
+    game.choose("road:back:hurry")  # 剛出發就掉頭：不扣體力、當下回到小鎮（FB-025），原本的 3 點不退
+    assert game.state.player.stamina == 97 and game.state.player.journey is None
     game.choose("move:lake:hurry")
     game.advance(30)  # 趕路 90 秒的一成三
     game.travel("cave", "hurry")  # 繼續：2 ＋ 4.5 ＝ 6.5 分鐘，7 點；第一段是半段路
-    assert game.state.player.stamina == pytest.approx(96 - 3 - 7 + 30 / 180)  # 走那 30 秒回了一點點
+    assert game.state.player.stamina == pytest.approx(97 - 3 - 7 + 30 / 180)  # 走那 30 秒回了一點點
     j = game.state.player.journey
     assert j.arrive_at == [pytest.approx(game.state.world.time + 60), pytest.approx(game.state.world.time + 195)]
 
@@ -2788,6 +2787,46 @@ def test_turning_back_follows_the_move_mode(game):
     game.choose("road:back:dash")
     assert game.state.player.location == "town" and game.state.player.journey is None
     assert game.state.player.stamina == 8
+
+
+def test_turning_back_right_after_setting_off_is_free_and_lands_at_once(game):
+    """剛出發就折返（FB-025）：回程不到半分鐘路程時，哪種走法都不扣體力、當下就回到原地（路上裁決「給 QA 的」）。"""
+    game.set_move_mode("hurry")
+    game.choose("move:lake:hurry")
+    game.advance(10)  # 趕路 10 秒＝走了 1/3 分鐘路程
+    stamina = game.state.player.stamina
+    assert [(o.label, o.enabled) for o in game.travel_options("town")] == [
+        ("步行（立刻到）", True), ("趕路（立刻到）", True), ("疾行（立刻到）", True),
+    ]
+    assert (_back(game).id, _back(game).label) == ("road:back:hurry", "折返 小鎮（立刻到）")
+    game.choose("road:back:hurry")
+    p = game.state.player
+    assert (p.location, p.journey, p.stamina) == ("town", None, stamina)
+    assert (game.state.journal[0].title, game.state.journal[0].tag, game.state.journal[0].changes) == (
+        "前往 小鎮", "立刻折返", [],
+    )
+
+
+def test_turning_back_after_a_real_stretch_still_costs_and_takes_time(game):
+    """走了一段才折返照舊算：回程 1.5 分鐘路程，趕路 2 點、約 1 分鐘。"""
+    game.set_move_mode("hurry")
+    game.choose("move:lake:hurry")
+    game.advance(45)  # 趕路 90 秒的一半
+    stamina = game.state.player.stamina
+    assert _back(game).label == "折返 小鎮（趕路約 1 分鐘・體力 2）"
+    game.choose("road:back:hurry")
+    p = game.state.player
+    assert p.journey is not None and p.journey.path == ["town"] and p.stamina == stamina - 2
+
+
+def test_turning_back_twice_quickly_is_not_a_free_arrival_at_the_far_end(game):
+    """掉頭之後馬上又掉頭：身後那一站是剛才要去的湖邊、不是自己最後待過的小鎮，不算剛出發，照舊要走（不能拿來白白抵達）。"""
+    game.choose("move:lake")
+    game.advance(160)  # 走了快九成
+    game.choose("road:back")
+    game.choose("road:back")  # 再掉頭：往湖邊，回程 20 秒路程
+    p = game.state.player
+    assert p.journey is not None and p.journey.path == ["lake"] and p.location == "town"
 
 
 def test_the_road_scene_says_what_you_can_do_on_the_road(game):
