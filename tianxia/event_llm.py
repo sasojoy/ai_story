@@ -1,10 +1,11 @@
 """探索的隨口應對（探索的多人與LLM玩法設計 8.1）：玩家在事件裡自己寫一句做法，LLM 只評這個
 做法在情境裡有多可能成功，擲骰之後再潤色一兩句。跟決戰的放手一搏
 （battle_instance.assess_action_success_rate）同一套分工：LLM 只碰一個機率，屬性修正、
-5%～85% 夾值、擲骰、套用 effect／fail_effect 都是引擎的事，這裡一概不管。
+5%～85% 夾值、擲骰、套用 effect／fail_effect 都是引擎的事（rules.free_text_rate、Game.answer_event），
+這裡一概不管。
 
-兩個函式都不碰遊戲狀態，只吃事件定義和玩家寫的字，所以可以在行動鎖外面呼叫（本機模型
-評一次要幾十秒）。連不上或格式不對：評估回保底的 40，潤色回 None 讓呼叫端只用 effect 原文。
+兩個函式都不碰遊戲狀態，只吃事件定義和玩家寫的字，所以 server.py 在行動鎖外面呼叫
+（本機模型評一次要幾十秒）。連不上或格式不對：評估回保底的 40，潤色回 None 讓呼叫端只用 effect 原文。
 """
 from __future__ import annotations
 

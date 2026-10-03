@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import random
+import re
 
 from . import materials, roster, team  # 與 roster 互相 import：只能引入整個模組、呼叫時才取屬性，不能 from .roster import …
 from .models import Check, Condition, Content, Effect
@@ -64,6 +65,10 @@ def check_condition(cond: Condition, state: GameState) -> bool:
             return False
     if set(cond.members_none) & set(p.team):
         return False
+    if any(w.marks.get(k, 0) < v for k, v in cond.marks_min.items()):
+        return False
+    if any(w.marks.get(k, 0) > v for k, v in cond.marks_max.items()):
+        return False
     if cond.any_of and not any(check_condition(sub, state) for sub in cond.any_of):
         return False
     return True
@@ -78,6 +83,62 @@ def check_chance(check: Check, state: GameState, content: Content, world: WorldS
 
 def roll_check(check: Check, state: GameState, content: Content, world: WorldStateStore, rng: random.Random) -> bool:
     return rng.random() < check_chance(check, state, content, world)
+
+
+FREE_TEXT_MIN_RATE, FREE_TEXT_MAX_RATE = 5, 85  # 隨口應對的成功率夾在這之間：再會寫也不會穩贏，寫得爛也不會必敗
+FREE_TEXT_PER_POINT = 4  # 相關屬性每比 5 高（低）1 點，成功率 +4（−4）
+
+
+def free_text_rate(llm_rate: int, choice, state: GameState, content: Content, world: WorldStateStore) -> int:
+    """隨口應對的成功率（百分比）：LLM 評的 0～100，加上屬性修正（照 choice.by 取出手者，跟一般檢定同一個函式），
+    夾在 5～85。choice 是 models.FreeTextChoice。"""
+    key = team.check_actor(state, content, world, choice)
+    value = team.check_value(state, content, world, key, choice.stat)
+    rate = round(llm_rate + (value - 5) * FREE_TEXT_PER_POINT)
+    return max(FREE_TEXT_MIN_RATE, min(FREE_TEXT_MAX_RATE, rate))
+
+
+def rate_words(rate: int) -> str:
+    """成功率寫成「成算」：四捨五入到一成（85% 是九成，不用 round 的銀行家進位），不到一成寫「一成不到」。"""
+    if rate < 10:
+        return "成算一成不到"
+    tenths = min(9, int(rate / 10 + 0.5))
+    return f"成算{'一二三四五六七八九'[tenths - 1]}成"
+
+
+_MARKS_TOKEN = re.compile(r"\{marks:([^{}]+)\}")
+
+
+def fuzzy_count(n: int) -> str:
+    """地方痕跡的人數只給模糊說法、不列名字（看不出誰是假人，伺服器假人設計第五節）。"""
+    if n <= 0:
+        return "還沒有人"
+    if n <= 2:
+        return "一兩個人"
+    if n <= 9:
+        return "幾個人"
+    if n <= 19:
+        return "十來個人"
+    if n <= 49:
+        return "幾十個人"
+    return "上百人"
+
+
+def fill_marks(text: str, state: GameState) -> str:
+    """把文字裡的 {marks:地點:痕跡} 換成這個痕跡目前的模糊人數。"""
+    if "{marks:" not in text:
+        return text
+    return _MARKS_TOKEN.sub(lambda m: fuzzy_count(state.world.marks.get(m.group(1), 0)), text)
+
+
+def add_marks(marks: dict[str, int], state: GameState) -> None:
+    """留下地方痕跡：同一個人對同一個痕跡，同一個遊戲日只算第一次（不讓一個人刷出整條變化）。"""
+    day = current_day(state)
+    for key, n in marks.items():
+        if state.player.mark_days.get(key) == day:
+            continue
+        state.player.mark_days[key] = day
+        state.world.marks[key] = state.world.marks.get(key, 0) + n
 
 
 def check_who(check: Check, state: GameState, content: Content, world: WorldStateStore) -> str:
@@ -159,7 +220,7 @@ def apply_effect(effect: Effect, state: GameState, content: Content, world: Worl
     names = content.config.stat_names
     msgs: list[str] = []
     if effect.text:
-        msgs.append(effect.text)
+        msgs.append(fill_marks(effect.text, state))
     for key, delta in effect.stats.items():
         p.stats[key] = max(0, p.stats.get(key, 0) + delta)
         msgs.append(f"{names.get(key, key)} {'+' if delta >= 0 else ''}{delta}")
@@ -195,6 +256,7 @@ def apply_effect(effect: Effect, state: GameState, content: Content, world: Worl
         jade_seal_flag is not None and jade_seal_flag in effect.world_flags_add and jade_seal_flag not in state.world.flags
     )
     add_world_flags(state, effect.world_flags_add)
+    add_marks(effect.marks, state)
     name = display_name(state)
     if effect.rumor:
         text = effect.rumor.format(name=name)
