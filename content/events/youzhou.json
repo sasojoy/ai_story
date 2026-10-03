@@ -1,0 +1,308 @@
+[
+  {
+    "id": "youzhou_sangshu_drill",
+    "title": "桑樹下操練",
+    "locations": [
+      "loushang_village"
+    ],
+    "text": "大桑樹下，十幾個鄉勇拿著削尖的竹竿操練，隊伍歪歪斜斜。領頭的漢子喊得嗓子都啞了，看見你，揮手要你過去搭把手。",
+    "choices": [
+      {
+        "text": "下場示範怎麼持竿列陣",
+        "check": {
+          "stat": "agi",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "你帶著他們練了一下午，總算站得像個隊伍。領頭的漢子塞給你一雙新編的草鞋。",
+          "stats": {
+            "good": 1,
+            "fame": 1
+          }
+        },
+        "fail_effect": {
+          "text": "你一竿掃空，自己先絆了一跤，鄉勇們笑成一團。",
+          "stamina": -5
+        }
+      },
+      {
+        "text": "掏些銀錢給他們打幾把刀",
+        "condition": {
+          "min_stats": {
+            "silver": 15
+          }
+        },
+        "effect": {
+          "text": "領頭的漢子拱手道謝，說等鐵匠打好了刀，村裡守夜的人就不必拿竹竿了。",
+          "stats": {
+            "silver": -15,
+            "good": 2
+          },
+          "trend": {
+            "huangjin": -1
+          }
+        }
+      },
+      {
+        "text": "看了一會兒就走",
+        "effect": {
+          "text": "身後的吆喝聲一直傳到村口。"
+        }
+      }
+    ]
+  },
+  {
+    "id": "youzhou_mat_weaver",
+    "title": "織蓆人家",
+    "locations": [
+      "loushang_village"
+    ],
+    "text": "村裡一戶織蓆販履的人家，門口堆著新蓆與草鞋。主人說近來路上不太平，貨送不進涿郡城，問你肯不肯幫忙捎一趟。",
+    "choices": [
+      {
+        "text": "替他把貨扛進城",
+        "effect": {
+          "text": "你扛著蓆子進城交了貨。主人分你幾個錢做腳力，又送你一束搓繩剩下的柳絲。",
+          "stamina": -10,
+          "stats": {
+            "silver": 10,
+            "good": 1
+          },
+          "materials": {
+            "rou_1": 1
+          }
+        }
+      },
+      {
+        "text": "壓低價錢整批買下，轉手賣到集市",
+        "condition": {
+          "min_stats": {
+            "silver": 10
+          }
+        },
+        "check": {
+          "stat": "wis",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "你把價錢殺得極低，轉手在集市賣了個好價。主人知道後，只是嘆了口氣。",
+          "stats": {
+            "silver": 25,
+            "evil": 1
+          }
+        },
+        "fail_effect": {
+          "text": "集市上的蓆子堆得比你的還高，你只能賠本脫手，白忙了一場。",
+          "stats": {
+            "silver": -10
+          }
+        }
+      },
+      {
+        "text": "說自己另有要事",
+        "effect": {
+          "text": "主人點點頭，又低頭編起草鞋來。"
+        }
+      }
+    ]
+  },
+  {
+    "id": "youzhou_jieshe_stage",
+    "title": "結社招人",
+    "locations": [
+      "zhuo_militia_hall"
+    ],
+    "text": "結社廳前搭了個臺子，豪族的管事高聲吆喝：能拉開三石弓、或在臺上撂倒結社的教頭，便有賞錢。臺下擠滿了看熱鬧的遊俠兒。",
+    "choices": [
+      {
+        "text": "上臺跟教頭比劃",
+        "combat": "yiyong",
+        "effect": {
+          "text": "你把教頭摔下了臺，管事當場賞了你一袋錢，臺下叫好聲一片。",
+          "stats": {
+            "silver": 30,
+            "fame": 2
+          },
+          "rumor": "有人說{name}在涿郡結社的臺上撂倒了教頭。"
+        },
+        "fail_effect": {
+          "text": "教頭幾下就把你掀翻在地，臺下一陣大笑。",
+          "stamina": -10,
+          "stats": {
+            "fame": -1
+          }
+        }
+      },
+      {
+        "text": "去拉那張三石弓",
+        "check": {
+          "stat": "str",
+          "difficulty": 7
+        },
+        "effect": {
+          "text": "弓弦拉得如滿月一般，管事眼睛一亮，給了你一份賞錢。",
+          "stats": {
+            "silver": 20,
+            "fame": 1
+          }
+        },
+        "fail_effect": {
+          "text": "弓只拉開一半，你漲紅了臉放下，悄悄退回人群裡。"
+        }
+      },
+      {
+        "text": "在臺下聽遊俠兒閒聊",
+        "effect": {
+          "text": "旁邊的人說，這結社嘴上說保鄉，收的人卻比縣裡的兵還多，錢糧都是豪族出的。"
+        }
+      }
+    ]
+  },
+  {
+    "id": "youzhou_juma_flood",
+    "title": "急流難渡",
+    "locations": [
+      "juma_river"
+    ],
+    "text": "拒馬河水漲，渡口的木筏被沖走了。一家老小扛著包袱站在岸邊，說是從冀州逃出來的，要往涿郡投親。",
+    "choices": [
+      {
+        "text": "涉水把他們一個個背過河",
+        "check": {
+          "stat": "con",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "河水冰冷刺骨，你來回七八趟，總算把一家人都送上了北岸。老漢拉著你的手，半天說不出話。",
+          "stats": {
+            "good": 2,
+            "fame": 1
+          }
+        },
+        "fail_effect": {
+          "text": "走到河心腳下一滑，你被沖出好遠，好不容易才爬上岸，那家人只能另想辦法。",
+          "stamina": -15
+        }
+      },
+      {
+        "text": "收幾個錢，指給他們一處淺灘",
+        "effect": {
+          "text": "老漢數出幾枚銅錢給你，一家人沿著你指的方向下了水。",
+          "stats": {
+            "silver": 5,
+            "evil": 1
+          }
+        }
+      },
+      {
+        "text": "勸他們往上游去找橋",
+        "effect": {
+          "text": "一家人道了謝，沿著河岸往上游走去。"
+        }
+      }
+    ]
+  },
+  {
+    "id": "youzhou_reed_boat",
+    "title": "蘆葦叢中",
+    "locations": [
+      "juma_river"
+    ],
+    "text": "蘆葦深處藏著一條小船，幾個漢子正把搶來的糧袋往船上搬。有人看見了你，手摸向了腰間的刀。",
+    "choices": [
+      {
+        "text": "拔刀衝上去",
+        "combat": "he_shuikou",
+        "effect": {
+          "text": "水寇丟下糧袋跳河逃了。你把糧袋送回下游的村子，村人認得袋上的記號，連聲道謝。",
+          "stats": {
+            "good": 2,
+            "fame": 1
+          }
+        },
+        "fail_effect": {
+          "text": "你被他們用船篙打退，小船撐進蘆葦，轉眼不見了。",
+          "stamina": -10
+        }
+      },
+      {
+        "text": "說自己也是來討口飯吃的",
+        "check": {
+          "stat": "wis",
+          "difficulty": 7
+        },
+        "effect": {
+          "text": "為首的打量你半天，信了，分給你一份搶來的錢。",
+          "stats": {
+            "silver": 25,
+            "evil": 2
+          }
+        },
+        "fail_effect": {
+          "text": "他們不信，一把將你推進河裡，你爬上岸時錢袋已經不見了。",
+          "stats": {
+            "silver": -15
+          }
+        }
+      },
+      {
+        "text": "裝作沒看見，轉身離開",
+        "effect": {
+          "text": "身後傳來一陣低笑，你沒有回頭。"
+        }
+      }
+    ]
+  },
+  {
+    "id": "youzhou_hunter_cabin",
+    "title": "獵戶木屋",
+    "locations": [
+      "yanshan_foot"
+    ],
+    "text": "天色將晚，山腳的獵戶木屋亮著燈。老獵戶讓你進屋烤火，說這幾天燕山的馬賊下山搶馬，連他的獵犬都被牽走了。",
+    "choices": [
+      {
+        "text": "循著馬蹄印上山去追",
+        "combat": "yan_mazei",
+        "effect": {
+          "text": "你在山坳裡追上馬賊，奪回了獵犬和兩匹馬。老獵戶一早就把馬牽回了山下的人家。",
+          "stats": {
+            "good": 2,
+            "fame": 1
+          }
+        },
+        "fail_effect": {
+          "text": "馬賊人多馬快，你追了半座山，只撿回一身傷。",
+          "stamina": -15
+        }
+      },
+      {
+        "text": "幫他補好漏風的屋牆",
+        "effect": {
+          "text": "老獵戶從山根下挖來一種黏土，曬乾了比石頭還硬。補完牆，他分了你一塊。",
+          "stamina": -10,
+          "materials": {
+            "man_2": 1
+          }
+        }
+      },
+      {
+        "text": "跟他學怎麼看山裡的蹄印",
+        "check": {
+          "stat": "wis",
+          "difficulty": 6,
+          "by": "self"
+        },
+        "effect": {
+          "text": "老獵戶教你從蹄印的深淺看出馬上馱了幾個人、走了多久。",
+          "stats": {
+            "wis": 1
+          }
+        },
+        "fail_effect": {
+          "text": "火烤得人發暖，聽到一半你就打起了瞌睡。"
+        }
+      }
+    ]
+  }
+]
