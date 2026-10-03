@@ -264,7 +264,10 @@ class Game:
         j = s.player.journey
         if j is not None:
             end = c.locations[j.path[j.last]].name
-            return [Option(id="act:on_road", label=f"（在路上，{battlelog.clock_text(j.arrive_at[j.last])} 抵達{end}）", enabled=False)]
+            opts = [Option(id="act:on_road", label=f"（在路上，{battlelog.clock_text(j.arrive_at[j.last])} 抵達{end}）", enabled=False)]
+            if j.stop_at is None and j.reached < j.last:
+                opts.append(Option(id="act:halt", label=f"喊停（到{c.locations[j.path[j.reached]].name}就停下）"))
+            return opts
         if s.player.resting_since is not None:
             return [Option(id="act:stand", label="起身")]
         loc = c.locations[s.player.location]
@@ -442,7 +445,7 @@ class Game:
         here = c.locations[s.player.location].name
         titles = {
             "explore": f"探索{here}", "socialize": f"交遊・{here}", "train": f"歷練・{here}",
-            "recruit": f"招募・{here}", "rest": f"打坐・{here}", "stand": "起身",
+            "recruit": f"招募・{here}", "rest": f"打坐・{here}", "stand": "起身", "halt": "喊停",
         }
         return titles.get(arg, "提前出關")
 
@@ -465,6 +468,8 @@ class Game:
             return self._finish_seclusion(self.state.world.time)
         if what == "stand":
             return self._stand_up()
+        if what == "halt":
+            return self._halt()
         if what == "recruit":
             return self._recruit()
         if what == "rest":
@@ -1173,6 +1178,16 @@ class Game:
             line += f"；下一站{c.locations[j.path[j.reached]].name}"
         return line
 
+    def _halt(self) -> list[str]:
+        """喊停（地圖擴充設計 3.3）：到下一站就停下，不走完全程。不花體力；趕路已經扣的體力也不退。"""
+        s, c = self.state, self.content
+        j = s.player.journey
+        j.stop_at = j.reached
+        msgs = [f"你喊停，到了{c.locations[j.path[j.reached]].name}就停下來。"]
+        if j.mode == "hurry":
+            msgs.append("（趕路已經花掉的體力不退。）")
+        return msgs
+
     def travel(self, dest_id: str, mode: TravelMode = "walk") -> list[str]:
         """安排前往（大地圖詳情欄的按鈕）：照路程最短的路線出發，走法見 _depart。"""
         refusal = self.travel_refusal(dest_id, mode)
@@ -1576,7 +1591,8 @@ class Game:
             faction = self._faction(s.player.pending_faction)
             return f"**投靠{faction.name}**\n\n{self._faction_prompt(faction)}"
         if s.player.journey is not None:
-            return f"**在路上**\n\n{self._journey_line()}。\n\n路上不能做事；可以先下線，到了會自己抵達。"
+            halted = "（已經喊停）" if s.player.journey.stop_at is not None else ""
+            return f"**在路上**{halted}\n\n{self._journey_line()}。\n\n路上不能做事；可以先下線，到了會自己抵達。"
         return self.location_text()
 
     def status_text(self) -> str:

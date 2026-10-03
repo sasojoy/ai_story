@@ -2052,3 +2052,34 @@ def test_choosing_a_prepared_dialogue_option_ticks_the_battle_only_once(content,
     with patched, _no_model():
         game.choose("talk:0", prepared=prepared)
     assert calls.count(True) == 1
+
+
+# ── 喊停（地圖擴充：停在下一站） ─────────────────────────────────────────
+
+
+def test_you_can_stop_at_the_next_station(game):
+    game.state.world.flags.add("cave_open")
+    game.travel("cave", "walk")
+    assert [o.id for o in game.options() if o.enabled] == ["act:halt"]
+    assert "喊停（到湖邊就停下）" in [o.label for o in game.options()]
+    game.choose("act:halt")
+    assert game.state.player.journey.stop_at == 0
+    assert not any(o.id == "act:halt" for o in game.options())  # 已經喊停了
+    assert "已經喊停" in game.scene_text()
+    game.advance(game.state.player.journey.arrive_at[0] - game.state.world.time)
+    assert game.state.player.location == "lake" and game.state.player.journey is None
+    assert game.state.journal[0].tag == "喊停，停在 湖邊"
+
+
+def test_stopping_does_not_refund_the_stamina_paid_to_hurry(game):
+    game.state.world.flags.add("cave_open")
+    game.state.player.stamina = 100
+    game.travel("cave", "hurry")  # 7.5 分鐘：8 點
+    msgs = game.choose("act:halt")
+    assert game.state.player.stamina == 92
+    assert "（趕路已經花掉的體力不退。）" in msgs
+
+
+def test_there_is_nothing_to_stop_on_the_last_leg(game):
+    game.choose("move:lake")
+    assert not any(o.id == "act:halt" for o in game.options())
