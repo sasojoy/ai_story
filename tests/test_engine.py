@@ -1081,6 +1081,16 @@ def test_a_stale_journey_is_dropped_on_load(content, game):
     assert reloaded.state.player.journey is None
 
 
+def test_a_rerouted_journey_whose_road_end_is_gone_is_dropped_on_load(content, game):
+    """改道後的半段路，另一頭（origin）在內容改版時被拿掉：路已經不存在，丟掉這趟路程，不然算位置會找不到地點。"""
+    game.state.player.journey = Journey(mode="walk", path=["town"], arrive_at=[60.0], origin="nowhere", share=0.5)
+    assert Game(content, game.state, world=game.world).state.player.journey is None
+    game.state.player.location = "nowhere"  # 所在地被拿掉、改回起點：腳下這段路也不存在了
+    game.state.player.journey = Journey(mode="walk", path=["lake"], arrive_at=[60.0])
+    reloaded = Game(content, game.state, world=game.world)
+    assert reloaded.state.player.journey is None and reloaded.state.player.location == content.scenario.start_location
+
+
 # ── 全服即時多人戰鬥（設計討論：集結選陣營→逐幕逐回合鎖步）──────────
 
 

@@ -150,11 +150,17 @@ class Game:
             p.pending_companion = None
         if p.pending_faction and p.pending_faction not in {f.id for f in c.scenario.factions}:
             p.pending_faction = None
-        if p.location not in c.locations:
+        lost_place = p.location not in c.locations
+        if lost_place:
             p.location = c.scenario.start_location
         if p.picking_audience and not self._audience_hall():
             p.picking_audience = False  # 內容改版後這裡不再有兩位以上的人物：收起求見選單
-        if p.journey is not None and any(loc_id not in c.locations for loc_id in p.journey.path):
+        j = p.journey
+        if j is not None and (
+            lost_place  # 所在地被拿掉、改回起點：腳下這段路已經不存在
+            or any(loc_id not in c.locations for loc_id in j.path)
+            or (j.origin is not None and j.origin not in c.locations)  # 改道後半段路的起點（見 atlas.road_spot）
+        ):
             p.journey = None
         p.team = [k for k in p.team if k in c.characters][: team.MAX_TEAM_COMPANIONS]
         if p.member.neigong_id and p.member.neigong_id not in c.skills and not self.world.is_skill_name_taken(p.member.neigong_id):
