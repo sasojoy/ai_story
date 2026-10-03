@@ -1,0 +1,560 @@
+<title>天下大勢三國篇架構</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap">
+<style>
+/* 版面：頁首＋狀態篩選 → 整體運作流程圖 → 接下來 → 系統細分（可展開的樹） */
+:root {
+  --bg: #F1F4F3; --surface: #FFFFFF; --ink: #1D2422; --muted: #5E6A66; --line: #D3DBD8; --accent: #2B687C;
+  --done: #2E7A50; --dev: #A9731A; --talk: #7550AD; --plan: #75817D;
+  --done-bg: #E2F0E7; --dev-bg: #F6EBD4; --talk-bg: #EDE6F7; --plan-bg: #E8ECEA;
+  --display: "Noto Serif TC", "Songti TC", "PMingLiU", serif;
+  --body: "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #121817; --surface: #1B2321; --ink: #E4EBE8; --muted: #98A6A1; --line: #2D3835; --accent: #6FB2C7;
+  --done: #6CC495; --dev: #DDB05A; --talk: #B496E6; --plan: #97A39F;
+  --done-bg: #1B3226; --dev-bg: #372D18; --talk-bg: #2C2440; --plan-bg: #232C2A; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #121817; --surface: #1B2321; --ink: #E4EBE8; --muted: #98A6A1; --line: #2D3835; --accent: #6FB2C7;
+  --done: #6CC495; --dev: #DDB05A; --talk: #B496E6; --plan: #97A39F;
+  --done-bg: #1B3226; --dev-bg: #372D18; --talk-bg: #2C2440; --plan-bg: #232C2A; color-scheme: dark }
+
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body { background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.6; }
+.wrap { max-width: 1080px; margin: 0 auto; padding-inline: 20px; padding-block: 32px 64px; display: grid; gap: 36px; }
+h1, h2 { font-family: var(--display); text-wrap: balance; margin: 0; letter-spacing: .02em; }
+h1 { font-size: clamp(26px, 4vw, 36px); }
+h2 { font-size: 21px; }
+p { margin: 0; }
+.muted { color: var(--muted); }
+.meta { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+header { display: grid; gap: 14px; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px; }
+.filter { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--line); background: var(--surface);
+  color: var(--ink); border-radius: 999px; padding: 6px 12px 6px 10px; font: inherit; font-size: 14px; cursor: pointer; }
+.filter[aria-pressed="false"] { opacity: .45; }
+.filter:focus-visible, .tree summary:focus-visible, .flow a:focus-visible rect.box { outline: 2px solid var(--accent); outline-offset: 2px; }
+.filter .n { font-variant-numeric: tabular-nums; color: var(--muted); }
+.dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.legend-note { font-size: 13px; color: var(--muted); }
+.defs { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 6px 18px; font-size: 13px; color: var(--muted); }
+.defs b { font-weight: 700; }
+
+.s-done { --c: var(--done); --cb: var(--done-bg); }
+.s-dev { --c: var(--dev); --cb: var(--dev-bg); }
+.s-talk { --c: var(--talk); --cb: var(--talk-bg); }
+.s-plan { --c: var(--plan); --cb: var(--plan-bg); }
+.dot { background: var(--c); }
+.chip { display: inline-block; font-size: 12px; line-height: 1; padding: 4px 8px; border-radius: 999px; background: var(--cb); color: var(--c);
+  font-weight: 700; white-space: nowrap; letter-spacing: .04em; }
+
+section { display: grid; gap: 14px; }
+.flowbox { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow-x: auto; }
+.flow { display: block; width: 100%; min-width: 780px; height: auto; }
+.flow .box { fill: var(--surface); stroke: var(--line); stroke-width: 1.2; }
+.flow a:hover .box { stroke: var(--accent); }
+.flow .stripe { fill: var(--c); }
+.flow .t { font-family: var(--display); font-size: 15px; font-weight: 700; fill: var(--ink); }
+.flow .sub { font-size: 11.5px; fill: var(--muted); }
+.flow .st { font-size: 11px; font-weight: 700; fill: var(--c); }
+.flow .edge { fill: none; stroke: var(--muted); stroke-width: 1.4; }
+.flow .edge.soft { stroke-dasharray: 4 4; }
+.flow .lab { font-size: 12px; fill: var(--muted); }
+.flow .arrowhead { fill: var(--muted); }
+.flow-note { font-size: 13px; color: var(--muted); }
+
+.next { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
+.step { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: grid; gap: 6px; align-content: start; min-width: 0; }
+.step .k { font-size: 12px; color: var(--muted); letter-spacing: .08em; }
+.step h3 { margin: 0; font-size: 16px; font-family: var(--display); }
+.step p { font-size: 14px; color: var(--muted); }
+.asks { display: grid; gap: 4px; font-size: 14px; padding-left: 18px; margin: 0; }
+.asks li { color: var(--ink); }
+
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
+.btn { font: inherit; font-size: 13px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 6px; padding: 5px 10px; cursor: pointer; }
+.btn:hover { border-color: var(--accent); }
+.tree { display: grid; gap: 14px; }
+.sys { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; min-width: 0; }
+.sys > summary { list-style: none; cursor: pointer; padding: 14px 16px; display: grid; grid-template-columns: 1fr auto; gap: 4px 16px; align-items: center; }
+.sys > summary::-webkit-details-marker { display: none; }
+.sys > summary h3 { margin: 0; font-family: var(--display); font-size: 18px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.sys > summary h3::before { content: "▸"; font-size: 13px; color: var(--muted); transition: transform .15s; }
+.sys[open] > summary h3::before { transform: rotate(90deg); }
+.sys > summary .desc { grid-column: 1 / -1; font-size: 14px; color: var(--muted); }
+.bar { display: flex; width: 140px; height: 8px; border-radius: 4px; overflow: hidden; background: var(--plan-bg); }
+.bar span { background: var(--c); }
+.counts { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.items { list-style: none; margin: 0; padding: 0 16px 14px; display: grid; gap: 2px; }
+.items ul { list-style: none; margin: 2px 0 6px; padding: 0 0 0 22px; border-left: 1px dashed var(--line); display: grid; gap: 2px; }
+.row { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; align-items: baseline; padding: 6px 0; border-top: 1px solid var(--line); }
+.items ul .row { border-top: 0; padding: 4px 0; }
+.row .name { min-width: 0; }
+.row .note { grid-column: 1 / -1; font-size: 13px; color: var(--muted); }
+.items ul .name { font-size: 14px; }
+details.sub > summary { list-style: none; cursor: pointer; }
+details.sub > summary::-webkit-details-marker { display: none; }
+details.sub > summary .name::after { content: " ▾"; font-size: 11px; color: var(--muted); }
+details.sub:not([open]) > summary .name::after { content: " ▸"; }
+.empty { font-size: 14px; color: var(--muted); padding: 16px; }
+@media (max-width: 560px) {
+  .sys > summary { grid-template-columns: 1fr; }
+  .counts { text-align: left; }
+}
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>天下大勢・三國篇 遊戲架構</h1>
+    <p class="meta">資料截至 2026-10-03・分支 feature/sanguo-companions（7623e03）・980 個自動測試</p>
+    <div class="legend" id="legend" aria-label="依狀態篩選"></div>
+    <div class="defs">
+      <span><b style="color:var(--done)">已完成</b>：做好了，現在就能玩</span>
+      <span><b style="color:var(--dev)">開發中</b>：設計已定，排入開發</span>
+      <span><b style="color:var(--talk)">討論中</b>：正在談，或等你決定</span>
+      <span><b style="color:var(--plan)">規劃中</b>：在路線圖上，還沒排進開發</span>
+    </div>
+  </header>
+
+  <section aria-labelledby="flow-h">
+    <h2 id="flow-h">整體運作</h2>
+    <p class="muted">管理者開季後，全服共用同一份天下大勢與同一個時鐘。你在遊歷中投靠陣營、遭遇與歷練、撿素材煉製功法、求見大勢人物；大勢人物與伺服器假人在背景推動大勢，黃巾聲勢過門檻就開全服決戰。大勢任務推出時改寫勝負，大勢跨過門檻就換幕，最後收束成結局寫進江湖史，再接下一段史事。點方塊可以跳到下面的細項。</p>
+    <div class="flowbox">
+      <svg class="flow" viewBox="0 0 994 420" role="img" aria-labelledby="flow-title">
+        <title id="flow-title">一季的整體流程：開季、遊歷、交鋒、收穫、練功與煉製、交遊、大勢人物、天下大勢、陣營與晉升、全服決戰、大勢任務、門檻與換幕、結局與江湖史、二十季史事</title>
+        <defs>
+          <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path class="arrowhead" d="M0,0 L10,5 L0,10 z"/>
+          </marker>
+        </defs>
+        <g id="edges"></g>
+        <g id="nodes"></g>
+      </svg>
+    </div>
+    <p class="flow-note">實線是每天都在跑的循環，虛線是跨季才發生的事。地圖、AI、介面、多人帳號與線上架構、開發與測試橫跨整個流程，列在下面的系統細分裡。</p>
+  </section>
+
+  <section aria-labelledby="next-h">
+    <h2 id="next-h">接下來</h2>
+    <div class="next">
+      <div class="step"><span class="k">正在做・設計已定</span><h3>地圖擴充與移動</h3><p>「地圖擴充開發」session 負責。先做規則：自然回復改每 3 分鐘 1 點、打坐真的坐下來、步行／趕路／疾行、在路上、決戰要人在現場；再把地圖重排成五大區 40 個地點、補 18 個新地點的內容，最後整季模擬調數字。</p></div>
+      <div class="step"><span class="k">接著・設計待你確認</span><h3>線上架構第 1 期：引擎改造</h3><p>「② 線上架構」session 先陪你審設計全文，再寫第 1 期計畫：時間由外部傳入、全服狀態改存 SQLite、角色存檔拿掉賽季副本、江湖史跨季保存。地圖擴充合進來之後才開工，免得兩邊同時改引擎。</p></div>
+      <div class="step"><span class="k">同時談・設計待你確認</span><h3>軍備物資與合成表</h3><p>「軍備物資設計」session 跟你談：探索與合成產出可以捐給陣營的物資。已定捐物資算貢獻、不設每日上限；物資對陣營的作用、合成表、貢獻比例還在談。</p></div>
+      <div class="step"><span class="k">同時談・設計待你確認</span><h3>第一季陣營內容</h3><p>「④ 陣營內容設計」session 跟你談：9 則晉升奇遇、第 3、4 階機緣、11 條關鍵伏筆事件鏈、軍令文字、波才與張曼成的人物誌。現在都只有大綱。</p></div>
+      <div class="step"><span class="k">等你決定</span><h3>待回覆的事</h3>
+        <ul class="asks">
+          <li>地圖計畫的三處偏離：4 個城鎮官署不放敵人、多一條拒馬河畔到下曲陽的山路、2 個地名縮短</li>
+          <li>伺服器假人與帳號登入兩份計畫的 35 條裁決；分支要合併、開 PR，還是維持原樣</li>
+          <li>試玩對外連結：繼續用 gradio.live（偶爾斷線），還是你註冊 ngrok</li>
+          <li>補假人要不要加快（現在每陣營每小時補 1 人）</li>
+          <li>另開一個私人管理者帳號（Rayal 是公開名字，可能被故意輸錯密碼鎖住）</li>
+          <li>平衡：在自己大營操練零風險拿高階獎勵、決戰實際參戰的人少</li>
+          <li>平衡模擬器壞掉了，要修還是刪</li>
+          <li>二十季大綱草稿要換、合併或拆開哪幾季</li>
+          <li>商業模式：抽卡拿掉後怎麼收費</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="tree-h">
+    <div class="toolbar">
+      <h2 id="tree-h">系統細分</h2>
+      <div style="display:flex;gap:8px">
+        <button class="btn" type="button" id="expand">全部展開</button>
+        <button class="btn" type="button" id="collapse">全部收合</button>
+      </div>
+    </div>
+    <div class="tree" id="tree"></div>
+  </section>
+</div>
+
+<script>
+const LABEL = { done: "已完成", dev: "開發中", talk: "討論中", plan: "規劃中" };
+const ORDER = ["done", "dev", "talk", "plan"];
+
+// 系統細分：name, s（狀態）, note（補充）, c（子項）
+const TREE = [
+  { id: "world", name: "世界觀推進：天下大勢與賽季", desc: "全服共用的一季：陣營、大勢線、推動與貢獻、大勢人物、大勢任務、門檻與決戰、傳聞、結局與跨季。", items: [
+    { name: "全服共用一季", s: "done", c: [
+      { name: "大勢、主線、時鐘、傳聞、江湖史全服共用一份", s: "done", note: "存成一個全服 JSON 檔加行動鎖，撐不住兩三千人；線上架構第 1 期改存 SQLite" },
+      { name: "玩家隨時加入，直接進入當下局勢", s: "done" },
+      { name: "新手福利從自己加入的那天起算", s: "dev" } ] },
+    { name: "賽季生命週期", s: "done", c: [
+      { name: "一季照真實時間走（原型 14 天，目標約 12 週）", s: "done", note: "天數之後再調" },
+      { name: "籌備中、管理者開季、休季、管理者開下一季", s: "done", note: "籌備中不能做個人行動" },
+      { name: "時間快轉只給管理者，全服一起快轉", s: "done" },
+      { name: "公告停機時賽季時鐘暫停、季末往後延", s: "dev", note: "線上架構第四節" } ] },
+    { name: "陣營", s: "done", c: [
+      { name: "散人起步，在投靠點投靠官軍、黃巾軍、地方豪強", s: "done" },
+      { name: "投靠前確認一次，顯示三方目前人數（真人與假人一起算）", s: "done" },
+      { name: "開局地點不設投靠點；潁川書院歸官軍、曹氏莊院歸豪強", s: "done" },
+      { name: "每陣營三個投靠點，分散在五大區", s: "dev", note: "隨地圖擴充一起做" },
+      { name: "叛投：一季一次，身份歸零、舊進度帶不走", s: "dev" } ] },
+    { name: "大勢線", s: "done", c: [
+      { name: "黃巾聲勢（公開，起始 25）", s: "done" },
+      { name: "玉璽碎片線索（隱藏，浮現後公開）", s: "done" },
+      { name: "事件選項與歷練推大勢，推了有回饋", s: "done" },
+      { name: "三條戰線戰況加權成黃巾聲勢", s: "dev" },
+      { name: "豪強割據與亂局（戰況在 35～65 之間時割據自然上漲）", s: "dev" } ] },
+    { name: "陣營態勢與勝利條件", s: "dev", c: [
+      { name: "三方態勢分數公開顯示", s: "dev" },
+      { name: "決定性勝利：任一方到 85 立刻收束；季末三方比分數", s: "dev", note: "數字預設" } ] },
+    { name: "推動規則與貢獻帳", s: "dev", c: [
+      { name: "陣營人越多每人效果越小（每人 1／√n）", s: "dev" },
+      { name: "活躍人數＝過去 24 小時推過大勢的成員，真人假人都算", s: "dev" },
+      { name: "每人每天每條線有上限，超過後大勢不動、貢獻記兩成", s: "dev", note: "兩成是預設" },
+      { name: "個人貢獻帳（不公開）：晉升、席次排名、季末獎勵都看它", s: "dev" } ] },
+    { name: "身份晉升", s: "dev", c: [
+      { name: "每陣營四階身份，越高影響越大、次數越受限", s: "dev" },
+      { name: "晉升＝貢獻到門檻；第 3、4 階還要遇到機緣", s: "dev" },
+      { name: "第四階席次照伺服器人數換算（3000 人 24 席），每週依貢獻輪替", s: "dev", note: "換算公式已寫好，等晉升系統接上" },
+      { name: "9 則晉升奇遇的劇本", s: "talk", note: "只有大綱；④ 陣營內容 session 在談" },
+      { name: "第 3、4 階的機緣清單（每陣營每階 2～3 種）", s: "talk", note: "④ 陣營內容 session 在談" },
+      { name: "隊伍同伴＝陣營給的原創部下（第 2 階 2 人到第 4 階 4 人）", s: "dev" } ] },
+    { name: "陣營議事與軍令", s: "dev", c: [
+      { name: "第四階每週定戰略方針，全陣營先投票", s: "dev" },
+      { name: "會戰時段（預設週二、週四晚上 8 點）推力加倍，可投票改", s: "dev" },
+      { name: "約 10 種軍令模板，個人部分加陣營總額度", s: "dev" },
+      { name: "軍令文字", s: "talk", note: "④ 陣營內容 session 在談" } ] },
+    { name: "門檻事件與世界事件", s: "done", c: [
+      { name: "黃巾聲勢：50 切斷官道、60 開啟全服決戰、80 潁川陷落", s: "done", note: "第一季設計改成三場固定時間的決戰，60 開戰之後會拿掉" },
+      { name: "玉璽線索：50 群雄湧向嵩山、100 南華觀現世", s: "done" },
+      { name: "背景推進跨過門檻也會開戰", s: "done" },
+      { name: "第一次觸發的天下大事由 AI 潤色一次、全服共用", s: "done" } ] },
+    { name: "史書時刻表", s: "dev", c: [
+      { name: "11 件史書大事照週次發生，結果照戰況擲骰", s: "dev" },
+      { name: "完成關鍵伏筆就直接定案、改寫後面的時刻表", s: "dev" },
+      { name: "11 條關鍵伏筆的事件鏈與線索", s: "talk", note: "④ 陣營內容 session 在談" } ] },
+    { name: "全服決戰", s: "done", c: [
+      { name: "集結 30 分鐘、每回合 5 分鐘，逾時代選保守行動", s: "done" },
+      { name: "沿用玩家自己的陣營；不在交戰雙方的人照常遊玩、觀戰", s: "done" },
+      { name: "三幕鎖步；穩守、猛攻查表，放手一搏 AI 只估成功率", s: "done" },
+      { name: "沒人打的決戰自動結束，換季時清掉；管理者可以手動開戰", s: "done" },
+      { name: "要人在那場決戰的大區才能加入", s: "dev", note: "隨地圖擴充第 1 步" },
+      { name: "三場固定時間的大戲：長社、宛城、廣宗", s: "dev" },
+      { name: "地方豪強在決戰中是第三方趁亂", s: "dev" },
+      { name: "上千人參戰時的回合規則", s: "talk", note: "現在要全員出手才結算，人多時每回合都會等到逾時" } ] },
+    { name: "分幕主線", s: "done", c: [
+      { name: "主線「黃巾之亂」三幕", s: "done" },
+      { name: "支線主線「傳國玉璽」四幕，線索浮現時取代主線", s: "done" } ] },
+    { name: "大勢任務：玉璽碎片一", s: "done", c: [
+      { name: "現行：南華觀擊敗看守者取得，48 小時無人取就被董卓奪走", s: "done" },
+      { name: "七塊碎片的跨季紀錄", s: "done" },
+      { name: "張角持有碎片，兩個入口（張角之死、線索浮現）", s: "dev" },
+      { name: "勝利條件改成碎片在誰手上；第一次奪得＝全服躍進、兩週倒數", s: "dev" },
+      { name: "碎片被董卓奪走：董卓擁兵自重成第四方，三方可奪回", s: "dev" } ] },
+    { name: "大勢人物", s: "done", c: [
+      { name: "15 位都是大勢人物，這一版不開放招募", s: "done" },
+      { name: "波才、皇甫嵩、董卓在背景推大勢、放傳聞", s: "done" },
+      { name: "歸屬陣營、聲威、反應規則；聲威歸零退場、同陣營接位", s: "dev" },
+      { name: "天命人物只會重創；董卓、曹操、袁紹會轉向", s: "dev" },
+      { name: "照五大區重新安排位置（張角在廣宗、何進在大將軍府…）", s: "dev", note: "隨地圖擴充" },
+      { name: "波才、張曼成的人物誌", s: "talk", note: "④ 陣營內容 session 在談" } ] },
+    { name: "人物性情漂移（全服一起形塑）", s: "done", c: [
+      { name: "交遊選的那類話累積進全服紀錄", s: "done" },
+      { name: "累積一定次數後用 AI 合成一句「近來的性情」放回對話", s: "done" } ] },
+    { name: "傳聞與江湖史", s: "done", c: [
+      { name: "傳聞記在發生地，可具名或匿名", s: "done" },
+      { name: "傳聞分四層：天下大事、陣營軍情、地方傳聞、個人線索", s: "dev", note: "設計已定；資料表隨線上架構第 1 期建，規則在第 2 期之後" },
+      { name: "例行行動每 4 小時彙整成一則地方摘要", s: "dev" },
+      { name: "刺探才看得到敵方機密軍情", s: "dev" },
+      { name: "上線時的「你不在的時候」摘要", s: "dev" },
+      { name: "江湖史跨季保存", s: "dev", note: "線上架構第 1 期" } ] },
+    { name: "結局與獎勵", s: "done", c: [
+      { name: "結局 8 種，依主線與大勢收束、寫進江湖史", s: "done" },
+      { name: "天下武學榜、內功榜", s: "done" },
+      { name: "董卓的狀態另外疊加在世界記憶上", s: "dev" },
+      { name: "陣營獎勵：勝方滿額、第二名一半、第三名三成，個人依貢獻比例", s: "dev", note: "數字預設" },
+      { name: "稱號與江湖史留名", s: "dev" } ] },
+    { name: "跨季不滾雪球", s: "done", c: [
+      { name: "季末同伴重獲自由、角色從頭開始", s: "done" },
+      { name: "季末自創武學名字釋出、天機加一", s: "done" },
+      { name: "起手資源只看上一季、不疊加、有上限", s: "dev" } ] } ] },
+
+  { id: "saga", name: "二十季史事", desc: "184 年黃巾之亂到 280 年三國歸晉，每季一段史事；目標至少營運二十季。", items: [
+    { name: "二十季大綱草稿（每季的史事、主舞台、陣營、大勢任務模式、玉璽）", s: "talk", note: "草稿在世界觀推進註記第三節" },
+    { name: "三個分歧點：官渡、赤壁、夷陵", s: "talk" },
+    { name: "世界記憶：第一季結局怎麼影響第二季", s: "dev", note: "第一季設計 13.1 已定" },
+    { name: "七塊玉璽碎片，第 20 季七塊合一", s: "plan" },
+    { name: "每季換一種大勢任務模式（第一版只做寶物爭奪）", s: "plan" },
+    { name: "內容生產線：骨架手寫、AI 展開、自動把關、人審關鍵", s: "talk" },
+    { name: "二十季之後：分服輪迴、第二部、家族傳承", s: "plan" } ] },
+
+  { id: "journey", name: "遊歷", desc: "每天的核心循環：體力 → 行動 → 事件 → 數值與大勢變化。", items: [
+    { name: "體力", s: "done", c: [
+      { name: "上限 150", s: "done" },
+      { name: "自然回復改成每 3 分鐘 1 點", s: "dev", note: "現在每 5 分鐘 1 點" },
+      { name: "打坐改成真的坐下來：回復加倍、期間不能做事", s: "dev", note: "現在按一下立刻補 12 點，可以連按" } ] },
+    { name: "移動", s: "done", c: [
+      { name: "移動與大地圖安排前往", s: "done" },
+      { name: "路程照地圖距離算，步行、趕路、疾行三檔", s: "dev", note: "現在每一站扣固定體力、不花時間" },
+      { name: "在路上：可以下線、可以喊停，抵達由伺服器處理", s: "dev" } ] },
+    { name: "行動：探索、交遊、閉關", s: "done", note: "探索 10 點體力，三成機率撿到素材" },
+    { name: "文字事件 41 則（含 3 則奇遇）：選項、條件、事件鏈", s: "done" },
+    { name: "18 個新地點的探索事件", s: "dev", note: "隨地圖擴充" },
+    { name: "重複造訪、重複事件加一句 AI 裝飾", s: "done" },
+    { name: "善名、惡名、名望、銀兩", s: "done" },
+    { name: "新手引導", s: "done", c: [
+      { name: "6 步引導、主線目標提示與里程碑", s: "done" },
+      { name: "引導文字改寫成新的移動與體力", s: "dev" } ] } ] },
+
+  { id: "clash", name: "交鋒", desc: "一般遭遇與歷練，一次判定出結果。", items: [
+    { name: "檢定：辦事由隊中屬性最高的人出手，修行只看本人", s: "done" },
+    { name: "單次判定：威力、相剋、運氣；氣血與等級也算進去", s: "done" },
+    { name: "運氣與門檻隨對手難度調整", s: "done" },
+    { name: "歷練：打當地的敵人推大勢、掉素材", s: "done" },
+    { name: "遇到自己陣營的人改成操練：不打，給經驗心得", s: "done" },
+    { name: "11 支敵方隊伍、戰前勝算", s: "done", note: "CLAUDE.md 說勝算有快取，其實沒有，每次重算 40 場" },
+    { name: "新增 10 支標陣營的隊伍", s: "dev", note: "隨地圖擴充" },
+    { name: "戰鬥卡片與戰報（最近 20 場），漢末戰陣的口吻", s: "done" } ] },
+
+  { id: "growth", name: "練功與煉製", desc: "每人一門內功、一門武學；自創、鍛鍊、無限煉製，以及正在談的軍備物資。", items: [
+    { name: "武學四欄位：品質、熟練度、威力、屬性", s: "done" },
+    { name: "自創功法：名字決定屬性與品質，全服不能重名", s: "done" },
+    { name: "鍛鍊、改練（換上功法庫裡的另一門）", s: "done" },
+    { name: "氣血與療傷（照內傷計價）", s: "done" },
+    { name: "等級：打仗得經驗，影響遭遇", s: "done" },
+    { name: "無限煉製", s: "done", c: [
+      { name: "12 種素材（四系各三階）、背包", s: "done" },
+      { name: "戰鬥、探索、奇遇掉素材", s: "done" },
+      { name: "兩樣素材煉一門功法，配方全服共享、第一個煉出的人定義", s: "done" },
+      { name: "凡品配方不花心得，有靈品、天品才花", s: "done" },
+      { name: "配方每季清空、擲骰吃這一季的天機", s: "done" },
+      { name: "名字過濾與繁體轉換", s: "done" } ] },
+    { name: "功法＋功法再合成", s: "plan" },
+    { name: "軍備物資：探索與合成產出可以捐給陣營的物資", s: "talk", note: "「軍備物資設計」session 在談", c: [
+      { name: "捐物資算個人貢獻，不設每日上限", s: "talk", note: "你已同意，設計文件還沒寫" },
+      { name: "物資對陣營的作用、合成表、捐一份算多少貢獻", s: "talk" } ] },
+    { name: "門戶與建築（演武場、醫廬）", s: "plan" } ] },
+
+  { id: "social", name: "交遊與大勢人物對話", desc: "跟歷史人物的 AI 對話與情誼。", items: [
+    { name: "AI 深度對話：每輪一段敘事＋3 個選項", s: "done" },
+    { name: "求見門檻：名望不夠見不到，透過結識事件認識的人可以破例", s: "done", note: "劉關張 5 到何進、張角 30" },
+    { name: "同一位人物每天最多聊 3 輪，每輪扣 2 點體力", s: "done" },
+    { name: "模型叫不動時那一輪不扣體力、對話結束", s: "done" },
+    { name: "對話錨定在 184 年、稱玩家為「你」、一律轉繁體", s: "done" },
+    { name: "對話改在全服鎖外面生成", s: "dev", note: "已提交，審查中；之前聊一輪別人要等約 10 秒" },
+    { name: "情誼 0～100、關係現況一句話、每 20 輪記憶梳理", s: "done" },
+    { name: "好感度跨季帶一成、對話紀錄保留", s: "dev" },
+    { name: "情誼解鎖人物私下透露的伏筆與機緣線索", s: "dev" },
+    { name: "對話話題深度、專屬奇遇鏈隨情誼解鎖", s: "plan" } ] },
+
+  { id: "map", name: "地圖", desc: "第一季的地圖、視野、大地圖與小地圖。", items: [
+    { name: "現在：3 區 22 個地點", s: "done", note: "方位跟真實地理對不起來，任兩點只有一條路" },
+    { name: "視野、大地圖四圖層、小地圖、隱藏地點南華觀", s: "done" },
+    { name: "地圖擴充：五大區 40 個地點", s: "dev", note: "「地圖擴充開發」session 在做", c: [
+      { name: "照真實方位重排；每區有環、跨區有第二條路", s: "dev", note: "座標已解算驗證；廣宗到宛城步行約 36 分鐘" },
+      { name: "18 個新地點（冀州、洛陽、幽州、南陽）", s: "dev" },
+      { name: "大地圖照原尺寸顯示、可以捲動", s: "dev" } ] },
+    { name: "逐季擴大的天下地圖", s: "plan" } ] },
+
+  { id: "ai", name: "AI 的角色", desc: "規則決定數值，AI 負責說話與文字；目前用本機 Ollama。", items: [
+    { name: "交遊對話、性情漂移、決戰敘事、裝飾句、煉製取名", s: "done" },
+    { name: "放手一搏：AI 只估成功率，擲骰與幅度由系統決定", s: "done" },
+    { name: "失敗一律退回固定文字或預設值；輸出一律轉繁體", s: "done" },
+    { name: "對話模型 gemma4:26b，約 9～10 秒一輪", s: "done", note: "8GB 顯卡；開發與線上會共用" },
+    { name: "LLM 改成背景工作佇列，等回應時不擋人", s: "dev", note: "線上架構第 2 期" },
+    { name: "上千人同時對話的規模與費用", s: "talk", note: "子項目三，還沒談" },
+    { name: "每週從軍令模板挑選的「軍令導演」", s: "plan" } ] },
+
+  { id: "ui", name: "介面與紀錄", desc: "玩家看到的畫面與江湖紀錄。", items: [
+    { name: "江湖紀錄：剛剛卡片、最近 5 則、最多 30 則", s: "done" },
+    { name: "整頁：門下、煉製、戰報、大地圖；決戰時接管畫面", s: "done" },
+    { name: "右欄：江湖大勢、傳聞、江湖史、閉關、設定", s: "done" },
+    { name: "管理者區塊：開季、下一季、快轉、手動開戰、觸發大事、推大勢、重設密碼", s: "done" },
+    { name: "正式版網頁前端：Vue、手機為主，地圖沿用伺服器畫的 SVG", s: "dev", note: "線上架構第 4 期" } ] },
+
+  { id: "multi", name: "多人、帳號與線上架構", desc: "全服共用的世界、伺服器假人、帳號，以及撐起兩三千人的線上架構。", items: [
+    { name: "帳號", s: "done", c: [
+      { name: "帳號密碼登入與註冊，登入後才建立角色", s: "done" },
+      { name: "擋猜密碼、名號擋隱形字與相似字、修改密碼", s: "done" },
+      { name: "管理者只認他帳號擁有的角色", s: "done" },
+      { name: "LINE、Google 登入，封測期間加邀請碼", s: "dev", note: "線上架構第 3 期" },
+      { name: "封測時要不要保留帳號密碼登入", s: "talk" } ] },
+    { name: "伺服器假人", s: "done", c: [
+      { name: "每陣營補到 5 人，各有漢末名字、個性與作息", s: "done" },
+      { name: "照陣營目標行動，跟真人看不出差別", s: "done" },
+      { name: "補人的速度（現在每陣營每小時 1 人）", s: "talk", note: "新的一季開頭很空" } ] },
+    { name: "現行：兩支程式共用存檔，跨程式行動鎖", s: "done", note: "可以試玩，撐不住三千人" },
+    { name: "試玩對外連結", s: "talk", note: "gradio.live 偶爾斷線；ngrok 要你註冊帳號" },
+    { name: "線上架構（② 設計已寫，全文待你審）", s: "dev", c: [
+      { name: "一服一支程式，全服狀態在記憶體，每個動作寫進 SQLite", s: "dev" },
+      { name: "伺服器自己的排程推世界時間、決戰逾時、季末結算", s: "dev" },
+      { name: "WebSocket 只推有變化的部分", s: "dev" },
+      { name: "放在你的電腦，Cloudflare Tunnel 對外；線上版與開發版分開", s: "dev", note: "開封測前買網域" },
+      { name: "改內容熱更新、改程式無縫重啟、大改版停機 2～4 小時", s: "dev" },
+      { name: "每天備份到雲端硬碟", s: "dev" },
+      { name: "封測 300 人壓測達標才開；正式前壓測到 3000 人", s: "dev" } ] },
+    { name: "玩家互動：偷竊、仇殺、決鬥、結義、同盟", s: "plan", note: "先要回答玩家在哪裡相遇" } ] },
+
+  { id: "product", name: "開發與測試", desc: "撐起開發、測試與營運的部分。", items: [
+    { name: "規則引擎與介面分離、內容 JSON 載入時檢查", s: "done" },
+    { name: "980 個自動測試，機器人玩完整季", s: "done" },
+    { name: "整季假人模擬（兩季）", s: "done", note: "量到：決戰實際參戰的人少、黃巾和豪強補不滿、在自己大營操練零風險" },
+    { name: "平衡：操練零風險拿高階獎勵、決戰參戰人數", s: "talk" },
+    { name: "平衡模擬器", s: "talk", note: "合併後跑不起來，要修還是刪" },
+    { name: "分工：PM、地圖擴充開發、三個設計 session、測試與試玩回饋", s: "done", note: "2026-10-03 起" },
+    { name: "試玩回饋清單：收、重現、分類，回報 PM 再分派", s: "dev", note: "「測試與試玩回饋」session" },
+    { name: "伺服器假人與帳號登入兩份計畫的 35 條裁決", s: "talk", note: "等你審；分支要合併、開 PR，還是維持原樣也一起決定" },
+    { name: "商業模式", s: "talk", note: "抽卡已拿掉，怎麼收費還沒定" } ] },
+];
+
+// 整體運作流程圖的方塊：x, y, 標題, 副標, 狀態, 狀態文字, 連到哪一節
+const W = 132, H = 62;
+const NODES = {
+  start:   { x: 16,  y: 40,  t: "開季",         sub: "管理者開季、隨時加入", s: "done", st: "已完成", to: "world" },
+  journey: { x: 182, y: 40,  t: "遊歷",         sub: "體力 → 移動 → 事件", s: "done", st: "已完成・移動開發中", to: "journey" },
+  clash:   { x: 348, y: 40,  t: "交鋒",         sub: "遭遇、歷練、操練",   s: "done", st: "已完成", to: "clash" },
+  reward:  { x: 514, y: 40,  t: "收穫",         sub: "銀兩、心得、素材",   s: "done", st: "已完成", to: "growth" },
+  growth:  { x: 680, y: 40,  t: "練功與煉製",   sub: "自創、鍛鍊、煉製",   s: "done", st: "已完成・軍備物資討論中", to: "growth" },
+  social:  { x: 846, y: 40,  t: "交遊",         sub: "求見、AI 對話、情誼", s: "done", st: "已完成", to: "social" },
+  leaders: { x: 182, y: 176, t: "大勢人物",     sub: "推大勢、會轉向",     s: "done", st: "已完成・行為開發中", to: "world" },
+  trends:  { x: 348, y: 176, t: "天下大勢",     sub: "全服共用一份",       s: "done", st: "已完成・戰線開發中", to: "world" },
+  faction: { x: 514, y: 176, t: "陣營與晉升",   sub: "投靠、貢獻、晉升",   s: "dev",  st: "投靠已完成・晉升開發中", to: "world" },
+  battle:  { x: 680, y: 176, t: "全服決戰",     sub: "集結、鎖步、放手一搏", s: "done", st: "已完成・要在場開發中", to: "world" },
+  leap:    { x: 182, y: 312, t: "大勢任務",     sub: "玉璽碎片、改寫勝負", s: "dev",  st: "開發中・碎片紀錄已做", to: "world" },
+  acts:    { x: 348, y: 312, t: "門檻與換幕",   sub: "大事件、史書時刻表", s: "done", st: "已完成・時刻表開發中", to: "world" },
+  ending:  { x: 514, y: 312, t: "結局與江湖史", sub: "結局、武學榜、獎勵", s: "done", st: "已完成・獎勵開發中", to: "world" },
+  legacy:  { x: 680, y: 312, t: "二十季史事",   sub: "黃巾 → 三國歸晉",   s: "talk", st: "討論中・大綱草稿", to: "saga" },
+};
+// 連線：path、是否虛線、標籤（x, y, 文字）
+const EDGES = [
+  { d: "M148 71 H180" }, { d: "M314 71 H346" }, { d: "M480 71 H512" }, { d: "M646 71 H678" },
+  { d: "M846 71 H814" },
+  { d: "M730 40 V22 H248 V38", lab: [489, 16, "變強，再出發"] },
+  { d: "M262 102 L398 174" },
+  { d: "M314 207 H346" },
+  { d: "M514 207 H482" },
+  { d: "M440 238 V262 H746 V240", lab: [600, 256, "過門檻開戰"] },
+  { d: "M414 238 V310" },
+  { d: "M370 238 L290 310" },
+  { d: "M314 343 H346" },
+  { d: "M480 343 H512" }, { d: "M646 343 H678" },
+  { d: "M746 374 V398 H82 V104", soft: true, lab: [414, 392, "下一季（下一段史事）"] },
+];
+
+const SVG = "http://www.w3.org/2000/svg";
+function el(tag, attrs = {}, text) {
+  const n = document.createElementNS(SVG, tag);
+  for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
+  if (text != null) n.textContent = text;
+  return n;
+}
+function drawFlow() {
+  const edges = document.getElementById("edges"), nodes = document.getElementById("nodes");
+  for (const e of EDGES) {
+    edges.append(el("path", { d: e.d, class: "edge" + (e.soft ? " soft" : ""), "marker-end": "url(#ah)" }));
+    if (e.lab) edges.append(el("text", { x: e.lab[0], y: e.lab[1], "text-anchor": "middle", class: "lab" }, e.lab[2]));
+  }
+  for (const n of Object.values(NODES)) {
+    const a = el("a", { href: "#sec-" + n.to, class: "s-" + n.s });
+    a.append(el("title", {}, `${n.t}：${n.sub}（${n.st}）`));
+    a.append(el("rect", { x: n.x, y: n.y, width: W, height: H, rx: 8, class: "box" }));
+    a.append(el("rect", { x: n.x, y: n.y + 8, width: 4, height: H - 16, rx: 2, class: "stripe" }));
+    a.append(el("text", { x: n.x + 14, y: n.y + 22, class: "t" }, n.t));
+    a.append(el("text", { x: n.x + 14, y: n.y + 39, class: "sub" }, n.sub));
+    a.append(el("text", { x: n.x + 14, y: n.y + 54, class: "st" }, n.st));
+    nodes.append(a);
+  }
+}
+
+// 只算沒有子項的細項，避免重複計數
+function leaves(item) { return item.c ? item.c.flatMap(leaves) : [item]; }
+const active = new Set(ORDER);
+
+function chip(s) { const c = document.createElement("span"); c.className = "chip s-" + s; c.textContent = LABEL[s]; return c; }
+function row(item) {
+  const r = document.createElement("div"); r.className = "row";
+  const name = document.createElement("span"); name.className = "name"; name.textContent = item.name;
+  r.append(name, chip(item.s));
+  if (item.note) { const n = document.createElement("span"); n.className = "note"; n.textContent = item.note; r.append(n); }
+  return r;
+}
+function renderItem(item) {
+  const li = document.createElement("li");
+  li.dataset.s = item.s;
+  if (item.c) {
+    const d = document.createElement("details"); d.className = "sub"; d.open = true;
+    const sum = document.createElement("summary"); sum.append(row(item));
+    const ul = document.createElement("ul");
+    item.c.forEach(ch => ul.append(renderItem(ch)));
+    d.append(sum, ul); li.append(d);
+  } else li.append(row(item));
+  return li;
+}
+function renderTree() {
+  const tree = document.getElementById("tree");
+  for (const sys of TREE) {
+    const d = document.createElement("details"); d.className = "sys"; d.open = true; d.id = "sec-" + sys.id;
+    const sum = document.createElement("summary");
+    const h = document.createElement("h3"); h.textContent = sys.name;
+    const all = sys.items.flatMap(leaves);
+    const tally = Object.fromEntries(ORDER.map(s => [s, all.filter(x => x.s === s).length]));
+    const right = document.createElement("div"); right.style.display = "grid"; right.style.gap = "4px"; right.style.justifyItems = "end";
+    const bar = document.createElement("div"); bar.className = "bar"; bar.setAttribute("aria-hidden", "true");
+    ORDER.forEach(s => { if (tally[s]) { const sp = document.createElement("span"); sp.className = "s-" + s; sp.style.width = (tally[s] / all.length * 100) + "%"; bar.append(sp); } });
+    const counts = document.createElement("span"); counts.className = "counts";
+    counts.textContent = ORDER.filter(s => tally[s]).map(s => `${LABEL[s]} ${tally[s]}`).join("・");
+    right.append(bar, counts);
+    const desc = document.createElement("p"); desc.className = "desc"; desc.textContent = sys.desc;
+    sum.append(h, right, desc);
+    const ul = document.createElement("ul"); ul.className = "items";
+    sys.items.forEach(it => ul.append(renderItem(it)));
+    d.append(sum, ul); tree.append(d);
+  }
+  const empty = document.createElement("p"); empty.className = "empty"; empty.id = "empty"; empty.hidden = true;
+  empty.textContent = "沒有符合的項目。點上方的狀態把篩選打開。";
+  tree.append(empty);
+}
+function applyFilter() {
+  function visit(li) {
+    const kids = li.querySelectorAll(":scope > details > ul > li");
+    let any = false;
+    kids.forEach(k => { if (visit(k)) any = true; });
+    const show = active.has(li.dataset.s) || any;
+    li.hidden = !show;
+    return show;
+  }
+  let total = 0;
+  document.querySelectorAll(".sys").forEach(sys => {
+    let any = false;
+    sys.querySelectorAll(":scope > ul > li").forEach(li => { if (visit(li)) any = true; });
+    sys.hidden = !any; if (any) total++;
+  });
+  document.getElementById("empty").hidden = total > 0;
+}
+function renderLegend() {
+  const all = TREE.flatMap(s => s.items.flatMap(leaves));
+  const legend = document.getElementById("legend");
+  for (const s of ORDER) {
+    const b = document.createElement("button"); b.type = "button"; b.className = "filter s-" + s; b.setAttribute("aria-pressed", "true");
+    const d = document.createElement("span"); d.className = "dot";
+    const n = document.createElement("span"); n.className = "n"; n.textContent = all.filter(x => x.s === s).length;
+    b.append(d, document.createTextNode(LABEL[s]), n);
+    b.addEventListener("click", () => {
+      if (active.has(s)) active.delete(s); else active.add(s);
+      b.setAttribute("aria-pressed", String(active.has(s)));
+      applyFilter();
+    });
+    legend.append(b);
+  }
+  const note = document.createElement("span"); note.className = "legend-note"; note.style.alignSelf = "center";
+  note.textContent = `共 ${all.length} 個細項，點狀態可以篩選`;
+  legend.append(note);
+}
+function setAll(open) { document.querySelectorAll("#tree details").forEach(d => d.open = open); }
+
+drawFlow();
+renderTree();
+renderLegend();
+document.getElementById("expand").addEventListener("click", () => setAll(true));
+document.getElementById("collapse").addEventListener("click", () => setAll(false));
+document.querySelectorAll('.flow a').forEach(a => a.addEventListener("click", () => {
+  const target = document.querySelector(a.getAttribute("href"));
+  if (target && target.tagName === "DETAILS") target.open = true;
+}));
+</script>
