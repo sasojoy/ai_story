@@ -111,9 +111,15 @@ svg, img, canvas { max-width: 100%; height: auto; }
   /* 導覽（門下／戰報／大地圖）黏在上緣，拇指永遠按得到 */
   .tx-nav { position: sticky; top: 0; z-index: 30; padding: 4px 0;
             background: var(--body-background-fill); }
-  .tx-act button, .tx-page button, .tx-nav button { min-height: 48px; font-size: 16px; }
-  /* 欄位與選單在手機上給足高度，避免誤觸 */
-  .tx-page input, .tx-page textarea, .tx-page select { min-height: 42px; font-size: 16px; }
+  /* 字級：觸控高度要夠（44px），但字不必跟著放大——上一版把按鈕字放到 16px，實機看起來
+     又大又醜。參考圖的按鈕字其實比內文小一號，靠的是間距而不是字級。 */
+  .tx-act button, .tx-page button { min-height: 44px; font-size: 14px; }
+  .tx-nav button { min-height: 38px; font-size: 13px; padding: 4px 6px; }
+  /* 輸入欄維持 16px：低於 16px 時 iOS Safari 會在聚焦時自動放大整頁 */
+  .tx-page input, .tx-page textarea, .tx-page select { min-height: 40px; font-size: 16px; }
+  .tx-scene, .tx-page, .tx-journal { font-size: 14px; }
+  .tx-scene h3, .tx-page h2, .tx-page h3 { font-size: 16px; margin: 4px 0; }
+  .tx-act button { padding: 6px 10px; }
   .tx-side-row { flex-direction: column !important; }
   /* ── 一頁到底（參考 infinialchemy 的手機版：資源一列、分頁一排、主操作不用捲）──
      目標是「開著遊戲時，狀態、場景、所有可按的選項同時看得到」。做法是把**會變長的東西**
@@ -130,6 +136,11 @@ svg, img, canvas { max-width: 100%; height: auto; }
               background: var(--body-background-fill); }
   /* 大地圖的地點詳情在地圖下方，給足寬度 */
   .tx-place { min-width: 0 !important; }
+  /* 大地圖：整張縮到螢幕寬（手機上原尺寸 680px 要左右拖才看得完，等於看不到全局），
+     同時把圖上的字放大補回縮放損失（680→約 390px 是 57%，字從 12 放到 18 約等於原本的大小）。
+     真的要看細節還是可以在框內左右拖。 */
+  .tx-world-map svg { width: 100% !important; height: auto !important; max-width: 100% !important; }
+  .tx-world-map text { font-size: 18px !important; }
 }
 
 /* ── 小動畫 ── */
@@ -328,6 +339,20 @@ def open_menxia(game, person=None):
         return [gr.skip()] * (2 + MENXIA_OUTPUTS)
     with game.world.action_lock():
         return [gr.update(visible=False), gr.update(visible=True)] + render_menxia(game, person, "")
+
+
+def open_menxia_at(game, section: str):
+    """從最上面那排的「煉製」「鍛鍊」進門下：開頁之外，只把對應的那一區展開、另一區收起。
+
+    這兩個動作玩家一天要按很多次，藏在門下頁裡等於每次都要先點門下、再捲到那一區。
+    """
+    if game is None:
+        return [gr.skip()] * (2 + MENXIA_OUTPUTS + 2)
+    crafting = section == "craft"
+    return open_menxia(game) + [
+        gr.update(open=not crafting),  # 練功
+        gr.update(open=crafting),  # 煉製
+    ]
 
 
 def close_menxia():
@@ -710,6 +735,14 @@ def build_demo() -> gr.Blocks:
             start_btn = gr.Button("建立角色", variant="primary")
         with gr.Row(visible=False, elem_classes=["tx-game"]) as game_row:
             with gr.Column(scale=3, elem_classes=["tx-main-col"]):
+                # 分頁按鈕放在**最上面**（企劃者的示意圖就是這樣）：原本藏在右欄，手機上右欄
+                # 排在主欄之後，等於要捲過整個場景與選項才看得到，形同沒有導覽。
+                with gr.Row(elem_classes=["tx-nav"]):
+                    menxia_btn = gr.Button("🏯 門下", size="sm")
+                    craft_nav_btn = gr.Button("🔥 煉製", size="sm")
+                    practice_nav_btn = gr.Button("🥋 鍛鍊", size="sm")
+                    report_btn = gr.Button("⚔ 戰報", size="sm")
+                    map_btn = gr.Button("🗺 輿圖", size="sm")
                 with gr.Row(equal_height=False, elem_classes=["tx-scene-row"]):
                     scene_md = gr.Markdown(scale=3, elem_classes=["tx-scene"])
                     with gr.Column(scale=2, min_width=180, elem_classes=["tx-mini"]):
@@ -734,10 +767,6 @@ def build_demo() -> gr.Blocks:
                 with gr.Accordion("主線與目標", open=True):
                     quest_md = gr.Markdown()
                 status_md = gr.Markdown(elem_classes=["tx-status"])
-                with gr.Row(elem_classes=["tx-nav"]):
-                    menxia_btn = gr.Button("門下")
-                    report_btn = gr.Button("戰報")
-                    map_btn = gr.Button("大地圖")
                 with gr.Tabs():
                     with gr.Tab("江湖大勢"):
                         trends_md = gr.Markdown()
@@ -792,7 +821,7 @@ def build_demo() -> gr.Blocks:
             mx_head_md = gr.Markdown()
             # 動作結果放在最上面：手機上按完按鈕，訊息若在整頁最底下根本看不到
             mx_message_md = gr.Markdown(elem_classes=["tx-card"])
-            with gr.Accordion("練功", open=True):
+            with gr.Accordion("練功", open=True) as practice_acc:
                 gr.Markdown("自創功法（取名決定屬性/威力/成長性，全服不能重名）或鍛鍊已學會的。")
                 with gr.Row(elem_classes=["tx-side-row"]):
                     kind_radio = gr.Radio(label="內功／武學", choices=list(KINDS), value="武學", interactive=True)
@@ -801,7 +830,7 @@ def build_demo() -> gr.Blocks:
                     create_btn = gr.Button("自創功法", variant="primary")
                     practice_btn = gr.Button("鍛鍊")
                     heal_btn = gr.Button("療傷")
-            with gr.Accordion("煉製", open=True):
+            with gr.Accordion("煉製", open=True) as craft_acc:
                 craft_head_md = gr.Markdown()
                 with gr.Row(elem_classes=["tx-side-row"]):
                     craft_mats_dd = gr.Dropdown(
@@ -902,6 +931,13 @@ def build_demo() -> gr.Blocks:
         )
 
         menxia_btn.click(open_menxia, inputs=[game_state], outputs=[game_row, menxia_col] + menxia_outputs)
+        section_outputs = [game_row, menxia_col] + menxia_outputs + [practice_acc, craft_acc]
+        craft_nav_btn.click(
+            lambda g: open_menxia_at(g, "craft"), inputs=[game_state], outputs=section_outputs,
+        )
+        practice_nav_btn.click(
+            lambda g: open_menxia_at(g, "practice"), inputs=[game_state], outputs=section_outputs,
+        )
         back_btn.click(close_menxia, outputs=[game_row, menxia_col])
         report_outputs = [game_row, report_col, report_list_radio, report_detail_md]
         report_btn.click(open_report_page, inputs=[game_state], outputs=report_outputs)

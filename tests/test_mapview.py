@@ -42,7 +42,9 @@ def test_location_views(state, content):
 
 def test_render_map(state, content):
     html_out = render_map(state, content)
-    assert html_out.startswith('<div class="tx-world-map" style="overflow:auto;max-height:75vh">')
+    # max-width:100% 是手機上那個「地圖超出邊界、卡住看不了」的修法：少了它，這個 div 會被
+    # 裡面 680px 的 SVG 撐開、整塊溢出版面，overflow:auto 永遠不會啟動。
+    assert html_out.startswith('<div class="tx-world-map" style="overflow:auto;max-width:100%;max-height:75vh">')
     assert html_out.endswith("</svg></div>")
     m = content.map
     assert f'style="width:{m.width}px;height:{m.height}px;max-width:none;font-family:sans-serif"' in html_out
