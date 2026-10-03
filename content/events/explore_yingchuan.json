@@ -172,7 +172,26 @@
           }
         }
       }
-    ]
+    ],
+    "free_text": {
+      "prompt": "另想法子替老書生申冤",
+      "stat": "wis",
+      "by": "team",
+      "effect": {
+        "text": "訴狀終於遞進了郡府，老書生捧著回執老淚縱橫，圍觀的人都說你仗義。",
+        "stats": {
+          "good": 2,
+          "fame": 1
+        }
+      },
+      "fail_effect": {
+        "text": "門吏嫌你多事，罰了你一筆錢，老書生的訴狀也被扔了出來。",
+        "stats": {
+          "silver": -10,
+          "fame": -1
+        }
+      }
+    }
   },
   {
     "id": "yc_river_overboard",
@@ -223,7 +242,23 @@
           "text": "船家慌忙撐篙，等靠了岸，婦人已被兩個漁夫救起，渾身發抖。"
         }
       }
-    ]
+    ],
+    "free_text": {
+      "prompt": "另想法子把母子救上船",
+      "stat": "agi",
+      "by": "team",
+      "effect": {
+        "text": "婦人和孩子都被拉回了船上，渾身發抖卻保住了命，船上的人紛紛向你道謝。",
+        "stats": {
+          "good": 2,
+          "fame": 1
+        }
+      },
+      "fail_effect": {
+        "text": "你的法子慢了一步，自己也被浪打得渾身濕透，最後是船家撐篙把人撈上來的。",
+        "stamina": -12
+      }
+    }
   },
   {
     "id": "yc_river_teashed",
@@ -321,6 +356,9 @@
           "text": "你一連扯倒三間棚子，火燒到空地就熄了。流民們看著殘骸，卻也知道是你救了大半片棚屋。",
           "stats": {
             "good": 2
+          },
+          "marks": {
+            "yingshui:拆棚": 1
           }
         },
         "fail_effect": {
@@ -335,7 +373,10 @@
         "text": "跟著大家排成一列提水",
         "effect": {
           "text": "一桶桶河水潑上去，燒掉七八間棚子才把火撲滅。",
-          "stamina": -5
+          "stamina": -5,
+          "marks": {
+            "yingshui:救棚": 1
+          }
         }
       }
     ]
@@ -490,7 +531,25 @@
           }
         }
       }
-    ]
+    ],
+    "free_text": {
+      "prompt": "另想法子過這道田埂卡",
+      "stat": "wis",
+      "by": "team",
+      "effect": {
+        "text": "散兵們讓開了路，挑菜的鄉民一個個跟著你過去，沒人掉一隻鞋。",
+        "stats": {
+          "good": 2
+        }
+      },
+      "fail_effect": {
+        "text": "散兵不吃這套，搜走了你身上的錢，還把你推進爛泥溝裡。",
+        "stamina": -10,
+        "stats": {
+          "silver": -10
+        }
+      }
+    }
   },
   {
     "id": "yc_wilds_horse",
@@ -820,7 +879,26 @@
           "text": "他們卸完糧，把牛車推進溝裡，車夫在車轅上掙扎了很久才鬆開繩子。"
         }
       }
-    ]
+    ],
+    "free_text": {
+      "prompt": "另想法子奪回糧車",
+      "stat": "agi",
+      "by": "team",
+      "effect": {
+        "text": "糧車最後回到了官軍手裡，鬆了綁的車夫把一路藏下的幾個錢分給你。",
+        "stats": {
+          "good": 1,
+          "silver": 10
+        },
+        "trend": {
+          "huangjin": -1
+        }
+      },
+      "fail_effect": {
+        "text": "黃巾別部發現了你，你被追得翻過好幾道土坎才脫身。",
+        "stamina": -15
+      }
+    }
   },
   {
     "id": "yc_ac_debate",
@@ -842,6 +920,9 @@
           "stats": {
             "fame": 2,
             "xinde": 10
+          },
+          "marks": {
+            "yingchuan_academy:清議": 1
           }
         },
         "fail_effect": {
@@ -989,7 +1070,26 @@
           }
         }
       }
-    ]
+    ],
+    "free_text": {
+      "prompt": "另想法子還學生清白",
+      "stat": "wis",
+      "by": "team",
+      "effect": {
+        "text": "玉佩的下落水落石出，山長免了那寒門學生的責罰，書院上下都在議論這件事。",
+        "stats": {
+          "good": 2,
+          "fame": 1
+        }
+      },
+      "fail_effect": {
+        "text": "事情沒查明，反倒有人說你跟那學生是一夥的，你在書院裡抬不起頭。",
+        "stamina": -10,
+        "stats": {
+          "fame": -1
+        }
+      }
+    }
   },
   {
     "id": "yc_ac_archery",
@@ -1178,7 +1278,23 @@
           "stamina": -5
         }
       }
-    ]
+    ],
+    "free_text": {
+      "prompt": "另想法子救這蛇咬婦人",
+      "stat": "wis",
+      "by": "team",
+      "effect": {
+        "text": "婦人的臉色漸漸回了血色，她喘著氣說，這條命是你撿回來的。",
+        "stats": {
+          "good": 2,
+          "xinde": 3
+        }
+      },
+      "fail_effect": {
+        "text": "你的法子沒能止住毒，只好一路背她下山找醫匠，累得幾乎虛脫。",
+        "stamina": -12
+      }
+    }
   },
   {
     "id": "yc_sf_stele",
@@ -1354,7 +1470,25 @@
           "text": "你在樹幹上刻了記號，繞路離開。身後的划拳聲一直沒停。"
         }
       }
-    ]
+    ],
+    "free_text": {
+      "prompt": "另想法子救下吊著的山民",
+      "stat": "agi",
+      "by": "team",
+      "effect": {
+        "text": "三個山民都被放了下來，趁著夜色逃進了林子，寨裡的人還在划拳。",
+        "stats": {
+          "good": 2
+        }
+      },
+      "fail_effect": {
+        "text": "寨裡的人被驚動了，你被追進山林，逃跑時還丟了錢袋。",
+        "stamina": -15,
+        "stats": {
+          "silver": -10
+        }
+      }
+    }
   },
   {
     "id": "yc_dm_cypress",
@@ -1572,7 +1706,23 @@
           "text": "孩子嚇了一跳，抱著樑柱慢慢滑了下來，所幸沒事。"
         }
       }
-    ]
+    ],
+    "free_text": {
+      "prompt": "急中生智救下樑上孩子",
+      "stat": "agi",
+      "by": "team",
+      "effect": {
+        "text": "孩子平安落了地，朽樑隨後轟然塌下，他嚇得抱著你的腿直哭。",
+        "stats": {
+          "good": 2,
+          "fame": 1
+        }
+      },
+      "fail_effect": {
+        "text": "朽樑塌得比你想的快，你被碎木砸得滿身是傷，孩子是自己爬下來的。",
+        "stamina": -15
+      }
+    }
   },
   {
     "id": "yc_jc_rain",

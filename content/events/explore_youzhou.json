@@ -74,6 +74,9 @@
           "stats": {
             "good": 2,
             "xinde": 8
+          },
+          "marks": {
+            "zhuo_county:代筆": 1
           }
         },
         "fail_effect": {
@@ -108,6 +111,9 @@
           "stats": {
             "silver": 8,
             "good": -1
+          },
+          "marks": {
+            "zhuo_county:索錢": 1
           }
         }
       }
@@ -170,7 +176,26 @@
           "text": "馬販說幽州邊塞的馬價一月漲了三成，聽說連那個賣草蓆的劉玄德，都有大商人肯出錢替他置辦鞍馬。"
         }
       }
-    ]
+    ],
+    "free_text": {
+      "prompt": "另想法子制住這匹烈馬",
+      "stat": "agi",
+      "by": "team",
+      "effect": {
+        "text": "黑鬃烈馬終於安靜下來，馬販佩服得很，分了你一份賣馬的錢。",
+        "stats": {
+          "silver": 15,
+          "fame": 1
+        }
+      },
+      "fail_effect": {
+        "text": "烈馬一蹄子把你踢翻在地，馬販還要你賠被撞翻的草料。",
+        "stamina": -10,
+        "stats": {
+          "silver": -10
+        }
+      }
+    }
   },
   {
     "id": "yz_market_wrist",
@@ -292,7 +317,24 @@
           }
         }
       }
-    ]
+    ],
+    "free_text": {
+      "prompt": "另想法子替鹽販脫身",
+      "stat": "wis",
+      "by": "team",
+      "effect": {
+        "text": "市吏撲了個空，鹽販帶著擔子出了鎮，遠遠朝你拱了拱手。",
+        "stats": {
+          "good": 1
+        }
+      },
+      "fail_effect": {
+        "text": "市吏識破了你的把戲，罰了你一筆錢，鹽販也被押走了。",
+        "stats": {
+          "silver": -10
+        }
+      }
+    }
   },
   {
     "id": "yz_market_fushui",
@@ -410,7 +452,22 @@
           "text": "村老說，樹下那家姓劉的孩子小時候在這裡玩，指著樹說將來要坐這樣的羽葆蓋車，被他叔父喝止。如今那孩子也大了，在販履織蓆。"
         }
       }
-    ]
+    ],
+    "free_text": {
+      "prompt": "想個法子挪開壓棚斷枝",
+      "stat": "str",
+      "by": "team",
+      "effect": {
+        "text": "斷枝挪開了，蓆棚裡的人家毫髮無傷，村老說這斷枝或許是吉兆。",
+        "stats": {
+          "good": 2
+        }
+      },
+      "fail_effect": {
+        "text": "斷枝紋絲不動，你還被枝杈刮得滿手是血，忙到天黑才放棄。",
+        "stamina": -10
+      }
+    }
   },
   {
     "id": "yz_lou_sandals",
@@ -647,7 +704,25 @@
           }
         }
       }
-    ]
+    ],
+    "free_text": {
+      "prompt": "另想法子讓義勇服氣",
+      "stat": "wis",
+      "by": "team",
+      "effect": {
+        "text": "為首的漢子哈哈大笑，拍著你的肩膀說，往後在結社裡有他一口飯就有你一口。",
+        "stats": {
+          "fame": 1
+        }
+      },
+      "fail_effect": {
+        "text": "義勇們一陣哄笑，說你是嘴上功夫，你在結社裡丟了面子。",
+        "stamina": -10,
+        "stats": {
+          "fame": -1
+        }
+      }
+    }
   },
   {
     "id": "yz_juma_toll",
@@ -721,7 +796,26 @@
           }
         }
       }
-    ]
+    ],
+    "free_text": {
+      "prompt": "另想法子帶百姓過河",
+      "stat": "wis",
+      "by": "team",
+      "effect": {
+        "text": "掏不出錢的百姓都過了拒馬河，蹲在岸邊發愁的那幾個人朝你直作揖。",
+        "stats": {
+          "good": 1,
+          "fame": 1
+        }
+      },
+      "fail_effect": {
+        "text": "水寇識破了你，扣下你身上的錢，還把你推進冰冷的河水裡。",
+        "stamina": -10,
+        "stats": {
+          "silver": -10
+        }
+      }
+    }
   },
   {
     "id": "yz_juma_ironsand",
@@ -916,6 +1010,24 @@
           }
         }
       }
-    ]
+    ],
+    "free_text": {
+      "prompt": "另想法子收攏走散馬群",
+      "stat": "agi",
+      "by": "team",
+      "effect": {
+        "text": "走散的馬群被你攏到了一處，趕下山賣給了馬市，換了一筆錢。",
+        "stats": {
+          "silver": 20
+        }
+      },
+      "fail_effect": {
+        "text": "馬群受了驚四散奔逃，你在山坡上追了半天，一匹也沒攏住。",
+        "stamina": -10,
+        "stats": {
+          "silver": -5
+        }
+      }
+    }
   }
 ]

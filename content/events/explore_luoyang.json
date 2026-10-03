@@ -54,7 +54,24 @@
           }
         }
       }
-    ]
+    ],
+    "free_text": {
+      "prompt": "自己想辦法脫出哨卡",
+      "stat": "wis",
+      "by": "team",
+      "effect": {
+        "text": "戍卒最後揮揮手放你上路，草棚裡的行商看你的眼神都帶了幾分佩服。",
+        "stats": {
+          "fame": 1
+        }
+      },
+      "fail_effect": {
+        "text": "戍卒起了疑心，把你看得更緊，最後還是得掏錢才走得了。",
+        "stats": {
+          "silver": -15
+        }
+      }
+    }
   },
   {
     "id": "ly_road_courier",
@@ -305,7 +322,26 @@
           }
         }
       }
-    ]
+    ],
+    "free_text": {
+      "prompt": "急中生智穩住那根樑",
+      "stat": "str",
+      "by": "team",
+      "effect": {
+        "text": "樑木總算穩穩架上了木架，工匠們鬆了一口氣，管事的僧人送了你一份齋錢。",
+        "stats": {
+          "silver": 10,
+          "good": 1
+        }
+      },
+      "fail_effect": {
+        "text": "樑木一晃，你被繩索甩得撞上木架，滿身擦傷，工匠們還嫌你礙手礙腳。",
+        "stamina": -12,
+        "stats": {
+          "fame": -1
+        }
+      }
+    }
   },
   {
     "id": "ly_palace_carriage",
@@ -364,7 +400,25 @@
           "text": "車駕捲著塵土遠去，老翁蹲在地上撿碎罐子。"
         }
       }
-    ]
+    ],
+    "free_text": {
+      "prompt": "另想法子護住賣漿老翁",
+      "stat": "agi",
+      "by": "team",
+      "effect": {
+        "text": "車駕呼嘯而過，老翁毫髮無傷，坐在路邊抖著手向你道謝。",
+        "stats": {
+          "good": 2
+        }
+      },
+      "fail_effect": {
+        "text": "你沒來得及護住，自己倒挨了一鞭，撒了一地的漿罐也賠了幾個錢。",
+        "stamina": -12,
+        "stats": {
+          "silver": -5
+        }
+      }
+    }
   },
   {
     "id": "ly_palace_nightwatch",
@@ -599,7 +653,26 @@
           }
         }
       }
-    ]
+    ],
+    "free_text": {
+      "prompt": "另想法子過了這碗酒",
+      "stat": "wis",
+      "by": "team",
+      "effect": {
+        "text": "席上哄堂大笑，主人拍著你的肩膀說你是個妙人，臨別還送了一份程儀。",
+        "stats": {
+          "silver": 10,
+          "fame": 2
+        }
+      },
+      "fail_effect": {
+        "text": "這法子沒糊弄過去，席間一片噓聲，你頭昏腦脹地被人架出了別院。",
+        "stamina": -10,
+        "stats": {
+          "fame": -1
+        }
+      }
+    }
   },
   {
     "id": "ly_beimang_collapse",
@@ -657,7 +730,23 @@
           }
         }
       }
-    ]
+    ],
+    "free_text": {
+      "prompt": "另想法子把孩子救出來",
+      "stat": "str",
+      "by": "team",
+      "effect": {
+        "text": "孩子被平安救了出來，只受了些皮肉傷，老卒抱著孫子跪在泥裡給你磕頭。",
+        "stats": {
+          "good": 2,
+          "fame": 1
+        }
+      },
+      "fail_effect": {
+        "text": "塌土又滑下來一片，你折騰到天黑，最後還是靠巡山的兵卒才把孩子挖出來。",
+        "stamina": -12
+      }
+    }
   },
   {
     "id": "ly_mengjin_capsize",
@@ -683,7 +772,10 @@
           "materials": {
             "man_1": 1
           },
-          "stamina": -12
+          "stamina": -12,
+          "marks": {
+            "mengjin_ford:救人": 1
+          }
         },
         "fail_effect": {
           "text": "濁浪一打就把你捲出老遠，你抱著一塊浮木才漂回岸邊，人沒救到，自己差點也沒了。",
@@ -854,6 +946,25 @@
           }
         }
       }
-    ]
+    ],
+    "free_text": {
+      "prompt": "另想法子保住這船粟",
+      "stat": "wis",
+      "by": "team",
+      "effect": {
+        "text": "涼州騎兵最後沒有把粟米拉走，船主捧著帳簿對你千恩萬謝，硬塞了些錢給你。",
+        "stats": {
+          "good": 2,
+          "silver": 10
+        }
+      },
+      "fail_effect": {
+        "text": "軍侯不耐煩地把你推開，粟米照樣被搬走，你還吃了騎兵幾腳。",
+        "stamina": -10,
+        "stats": {
+          "fame": -1
+        }
+      }
+    }
   }
 ]

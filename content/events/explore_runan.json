@@ -165,7 +165,26 @@
           "text": "吵到最後，大族的家奴來了一隊人，佃戶們只好退開。碑立在了田埂上。"
         }
       }
-    ]
+    ],
+    "free_text": {
+      "prompt": "另想法子平息碑前爭執",
+      "stat": "wis",
+      "by": "team",
+      "effect": {
+        "text": "兩邊佃戶各自退開，石碑也重新立起，旁觀的鄉老直說你會做人。",
+        "stats": {
+          "good": 1,
+          "fame": 1
+        }
+      },
+      "fail_effect": {
+        "text": "兩邊誰也不服你，推搡中你還挨了幾拳，鄉里人只當你是來添亂的。",
+        "stamina": -5,
+        "stats": {
+          "fame": -1
+        }
+      }
+    }
   },
   {
     "id": "rn_ac_qingyi",
@@ -281,7 +300,23 @@
           "stamina": -5
         }
       }
-    ]
+    ],
+    "free_text": {
+      "prompt": "想個法子搶救藏書",
+      "stat": "wis",
+      "by": "team",
+      "effect": {
+        "text": "架上的竹簡帛書大多保住了，老書吏捧著一卷乾爽的帛書，差點哭出來。",
+        "stats": {
+          "good": 1,
+          "xinde": 5
+        }
+      },
+      "fail_effect": {
+        "text": "雨勢太大，你手忙腳亂救不了多少，自己也淋得透濕。",
+        "stamina": -10
+      }
+    }
   },
   {
     "id": "rn_hill_diggers",
@@ -460,7 +495,22 @@
           }
         }
       }
-    ]
+    ],
+    "free_text": {
+      "prompt": "另想法子安頓這逃卒",
+      "stat": "wis",
+      "by": "team",
+      "effect": {
+        "text": "那郡兵總算有了著落，他啞著嗓子說，這條命是你給的。",
+        "stats": {
+          "good": 2
+        }
+      },
+      "fail_effect": {
+        "text": "你的法子沒成，折騰了大半天，他的傷反倒更重了。",
+        "stamina": -10
+      }
+    }
   },
   {
     "id": "rn_mkt_rice",
@@ -516,7 +566,26 @@
           }
         }
       }
-    ]
+    ],
+    "free_text": {
+      "prompt": "另想法子壓住米價風波",
+      "stat": "wis",
+      "by": "team",
+      "effect": {
+        "text": "米鋪前的叫罵漸漸平息，百姓們買到了公道價的米，有人記下了你的名號。",
+        "stats": {
+          "good": 2,
+          "fame": 1
+        }
+      },
+      "fail_effect": {
+        "text": "人群反倒更亂了，有人罵你是米商的幫手，你被擠得東倒西歪。",
+        "stamina": -5,
+        "stats": {
+          "fame": -1
+        }
+      }
+    }
   },
   {
     "id": "rn_mkt_silk",
@@ -734,7 +803,23 @@
           "text": "你一喊，碼頭上的船夫划著小船趕來，把孩子撈了上去。"
         }
       }
-    ]
+    ],
+    "free_text": {
+      "prompt": "另想法子把孩子撈上來",
+      "stat": "agi",
+      "by": "team",
+      "effect": {
+        "text": "孩子被撈上了岸，吐了幾口水便哭出聲來，婦人抱著孩子連聲道謝。",
+        "stats": {
+          "good": 2,
+          "fame": 1
+        }
+      },
+      "fail_effect": {
+        "text": "浪頭太急，你嗆了好幾口水，最後是下游的漁船把孩子撈起來的。",
+        "stamina": -12
+      }
+    }
   },
   {
     "id": "rn_qiao_post",
@@ -1015,7 +1100,25 @@
           }
         }
       }
-    ]
+    ],
+    "free_text": {
+      "prompt": "另想法子替佃戶求情減租",
+      "stat": "wis",
+      "by": "team",
+      "effect": {
+        "text": "管事最後鬆了口，答應今年的租子緩一緩，佃戶們跪在穀場上向你磕頭。",
+        "stats": {
+          "good": 2
+        }
+      },
+      "fail_effect": {
+        "text": "管事冷笑著叫家丁把你請出穀場，佃戶們也不敢替你說話。",
+        "stamina": -5,
+        "stats": {
+          "fame": -1
+        }
+      }
+    }
   },
   {
     "id": "rn_wild_cellar",
@@ -1087,7 +1190,28 @@
           "stamina": -15
         }
       }
-    ]
+    ],
+    "free_text": {
+      "prompt": "想法子安頓地窖婦孺",
+      "stat": "wis",
+      "by": "team",
+      "effect": {
+        "text": "地窖裡的婦孺都有了去處，臨走前她們告訴你散部往哪去了。",
+        "stats": {
+          "good": 2
+        },
+        "trend": {
+          "huangjin": -1
+        }
+      },
+      "fail_effect": {
+        "text": "她們始終不信你，你守了半天毫無進展，還被一個孩子偷走了幾個錢。",
+        "stamina": -10,
+        "stats": {
+          "silver": -5
+        }
+      }
+    }
   },
   {
     "id": "rn_wild_signs",
@@ -1293,7 +1417,26 @@
           "stamina": -20
         }
       }
-    ]
+    ],
+    "free_text": {
+      "prompt": "另想法子混進營寨",
+      "stat": "agi",
+      "by": "team",
+      "effect": {
+        "text": "你在營裡摸清了糧倉與望樓的位置，天亮前又悄悄脫身，這些消息官軍會用得上。",
+        "stats": {
+          "fame": 1,
+          "xinde": 3
+        },
+        "trend": {
+          "huangjin": -1
+        }
+      },
+      "fail_effect": {
+        "text": "巡夜的兵卒發現了你，你在霧裡狂奔了半夜才甩掉追兵。",
+        "stamina": -15
+      }
+    }
   },
   {
     "id": "rn_camp_drill",

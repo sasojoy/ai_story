@@ -141,7 +141,26 @@
           "text": "你從旁邊走過，身後老漢的哭喊聲越來越遠。"
         }
       }
-    ]
+    ],
+    "free_text": {
+      "prompt": "另想法子替老漢脫罪",
+      "stat": "wis",
+      "by": "team",
+      "effect": {
+        "text": "守卒收起了繩索，放老漢挑著棗子進城，旁邊的鄉民都對你點頭。",
+        "stats": {
+          "good": 2,
+          "fame": 1
+        }
+      },
+      "fail_effect": {
+        "text": "守卒不信，反倒罰了你一筆錢，老漢還是被押走了。",
+        "stamina": -5,
+        "stats": {
+          "silver": -10
+        }
+      }
+    }
   },
   {
     "id": "ny_road_well",
@@ -221,6 +240,9 @@
           },
           "trend": {
             "huangjin": -1
+          },
+          "marks": {
+            "nanyang_road:護車": 1
           }
         },
         "fail_effect": {
@@ -273,10 +295,28 @@
           "text": "你繞進路旁的麥田，回頭時看見散兵已經圍住了牛車。",
           "stats": {
             "good": -1
+          },
+          "marks": {
+            "nanyang_road:棄車": 1
           }
         }
       }
-    ]
+    ],
+    "free_text": {
+      "prompt": "想法子讓逃難人家脫身",
+      "stat": "wis",
+      "by": "team",
+      "effect": {
+        "text": "逃難的人家趕在散兵到來前離開了官道，領頭的老人回頭朝你作了個揖。",
+        "stats": {
+          "good": 2
+        }
+      },
+      "fail_effect": {
+        "text": "法子不管用，你們被散兵追得四散奔逃，你跑得腿都軟了。",
+        "stamina": -12
+      }
+    }
   },
   {
     "id": "ny_road_postbooth",
@@ -457,7 +497,26 @@
           "text": "道徒看了你一眼，把缽轉給下一個人。"
         }
       }
-    ]
+    ],
+    "free_text": {
+      "prompt": "另想法子應付這缽符水",
+      "stat": "wis",
+      "by": "team",
+      "effect": {
+        "text": "這一關總算過去了，道徒沒再為難你，幾個病人也因你得了照應，病榻邊有人喊你恩人。",
+        "stats": {
+          "good": 1,
+          "xinde": 8
+        }
+      },
+      "fail_effect": {
+        "text": "四周的人起了疑心，推推搡搡把你趕出營帳，一路上被人吐口水。",
+        "stamina": -10,
+        "stats": {
+          "fame": -1
+        }
+      }
+    }
   },
   {
     "id": "ny_yu_nightferry",
@@ -613,6 +672,9 @@
           },
           "trend": {
             "huangjin": -1
+          },
+          "marks": {
+            "yu_river:斷繩": 1
           }
         },
         "fail_effect": {
@@ -631,6 +693,9 @@
           },
           "trend": {
             "huangjin": -1
+          },
+          "marks": {
+            "yu_river:斷繩": 1
           }
         },
         "fail_effect": {
@@ -666,10 +731,35 @@
           "text": "你交了錢，嘍囉在繩上打了個結算是記帳，揮手讓你過去。",
           "stats": {
             "silver": -10
+          },
+          "marks": {
+            "yu_river:交米": 1
           }
         }
       }
-    ]
+    ],
+    "free_text": {
+      "prompt": "另想法子闖過攔繩",
+      "stat": "agi",
+      "by": "team",
+      "effect": {
+        "text": "你過了那道攔繩，後面的漁船也趁亂跟著溜了過去，船上的人朝你大聲叫好。",
+        "stats": {
+          "good": 1,
+          "fame": 1
+        },
+        "trend": {
+          "huangjin": -1
+        }
+      },
+      "fail_effect": {
+        "text": "銅鈴大響，嘍囉圍了上來，你只好交了錢、灰頭土臉地過去。",
+        "stamina": -10,
+        "stats": {
+          "silver": -10
+        }
+      }
+    }
   },
   {
     "id": "ny_xinye_wallgap",
@@ -743,7 +833,23 @@
           }
         }
       }
-    ]
+    ],
+    "free_text": {
+      "prompt": "想個法子讓牆補得快",
+      "stat": "wis",
+      "by": "team",
+      "effect": {
+        "text": "天亮前那段塌牆就補上了，縣尉高興，多給了你一份工錢。",
+        "stats": {
+          "silver": 10,
+          "good": 1
+        }
+      },
+      "fail_effect": {
+        "text": "你的法子沒幫上忙，反倒耽誤了工，挑了一夜土累得直不起腰。",
+        "stamina": -10
+      }
+    }
   },
   {
     "id": "ny_wilds_runaways",
@@ -822,7 +928,26 @@
           }
         }
       }
-    ]
+    ],
+    "free_text": {
+      "prompt": "另想法子打發搜山郡兵",
+      "stat": "wis",
+      "by": "team",
+      "effect": {
+        "text": "郡兵舉著火把往別處去了，洞裡的漢子們長長吐了一口氣，對你千恩萬謝。",
+        "stats": {
+          "good": 2,
+          "xinde": 4
+        }
+      },
+      "fail_effect": {
+        "text": "郡兵不好糊弄，你被扣下盤問了半夜，最後掏錢才脫身。",
+        "stamina": -5,
+        "stats": {
+          "silver": -10
+        }
+      }
+    }
   },
   {
     "id": "ny_wilds_herbcliff",

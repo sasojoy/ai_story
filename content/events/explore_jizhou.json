@@ -54,7 +54,23 @@
           "text": "老漢接過瓢喝了，咳得輕了些，也不知是符水靈驗，還是心裡寬了。"
         }
       }
-    ]
+    ],
+    "free_text": {
+      "prompt": "另想法子替老漢治咳",
+      "stat": "wis",
+      "by": "team",
+      "effect": {
+        "text": "老漢的咳嗽總算緩了下來，拉著你的手直說好人有好報。",
+        "stats": {
+          "good": 2,
+          "xinde": 4
+        }
+      },
+      "fail_effect": {
+        "text": "法子沒能奏效，老漢咳得更凶，你忙前忙後折騰了大半天。",
+        "stamina": -10
+      }
+    }
   },
   {
     "id": "jz_altar_roster",
@@ -188,7 +204,29 @@
           "text": "他苦笑一聲，把黃巾重新繫回頭上，低頭走回營去。"
         }
       }
-    ]
+    ],
+    "free_text": {
+      "prompt": "另想法子送他過壕",
+      "stat": "agi",
+      "by": "team",
+      "effect": {
+        "text": "那年輕人平安過了壕溝，消失在對岸的野地裡，臨走前回頭朝你磕了個頭。",
+        "stats": {
+          "good": 2,
+          "fame": 1
+        },
+        "trend": {
+          "huangjin": -1
+        }
+      },
+      "fail_effect": {
+        "text": "動靜驚動了營壘的哨兵，你們兩人只得分頭逃散，你身上的錢也丟了幾個。",
+        "stamina": -10,
+        "stats": {
+          "silver": -10
+        }
+      }
+    }
   },
   {
     "id": "jz_gz_drumsignal",
@@ -448,7 +486,29 @@
           }
         }
       }
-    ]
+    ],
+    "free_text": {
+      "prompt": "想個法子讓壕挖得快些",
+      "stat": "wis",
+      "by": "team",
+      "effect": {
+        "text": "這一夜的工比往常快了不少，軍侯破天荒沒揮鞭子，收工時多給了你一份錢。",
+        "stats": {
+          "silver": 10,
+          "xinde": 4
+        },
+        "trend": {
+          "huangjin": -1
+        }
+      },
+      "fail_effect": {
+        "text": "白忙一場，工沒快多少，軍侯還嫌你多事，當著民夫的面罵了你一頓。",
+        "stamina": -10,
+        "stats": {
+          "fame": -1
+        }
+      }
+    }
   },
   {
     "id": "jz_xqy_cellar",
@@ -502,7 +562,22 @@
           "text": "哭聲在你身後停了。這一帶，裝作沒聽見才是活命的法子。"
         }
       }
-    ]
+    ],
+    "free_text": {
+      "prompt": "想法子讓窖裡人信你",
+      "stat": "wis",
+      "by": "team",
+      "effect": {
+        "text": "灶台底下的人終於肯出來了，是一個婦人抱著嬰兒，她含淚謝過你，往南邊投親去了。",
+        "stats": {
+          "good": 2
+        }
+      },
+      "fail_effect": {
+        "text": "窖裡的人嚇得再不出聲，你在廢屋邊守了許久，只得悻悻離開。",
+        "stamina": -10
+      }
+    }
   },
   {
     "id": "jz_xqy_wallhaul",
@@ -620,6 +695,9 @@
           "stats": {
             "silver": 20,
             "fame": 1
+          },
+          "marks": {
+            "haozu_fort:驅趕": 1
           }
         },
         "fail_effect": {
@@ -706,7 +784,26 @@
           }
         }
       }
-    ]
+    ],
+    "free_text": {
+      "prompt": "另想辦法保下佃戶女兒",
+      "stat": "wis",
+      "by": "team",
+      "effect": {
+        "text": "管事終究沒把人帶走，佃戶一家抱在一起哭成一團，圍觀的佃農都記住了你。",
+        "stats": {
+          "good": 2,
+          "fame": 1
+        }
+      },
+      "fail_effect": {
+        "text": "管事不吃這一套，叫部曲把你推出堡門，佃農們只敢遠遠看著。",
+        "stamina": -10,
+        "stats": {
+          "fame": -1
+        }
+      }
+    }
   },
   {
     "id": "jz_hz_stonelock",
@@ -874,7 +971,26 @@
           "text": "郡兵磨磨蹭蹭地放了幾箭，水寇搶走兩箱貨就走了。商人坐在船頭，罵官兵比水寇還靠不住。"
         }
       }
-    ]
+    ],
+    "free_text": {
+      "prompt": "另想法子替貨船解圍",
+      "stat": "agi",
+      "by": "team",
+      "effect": {
+        "text": "水寇的快船一陣混亂後撤走了，商人驚魂未定，硬塞給你一包酬謝。",
+        "stats": {
+          "silver": 15,
+          "good": 1
+        }
+      },
+      "fail_effect": {
+        "text": "水寇沒被唬住，撓鉤反把你拖進水裡，你狼狽地爬上岸，錢袋也輕了。",
+        "stamina": -15,
+        "stats": {
+          "silver": -5
+        }
+      }
+    }
   },
   {
     "id": "jz_bm_passcheck",
@@ -898,6 +1014,9 @@
           },
           "trend": {
             "huangjin": -1
+          },
+          "marks": {
+            "baima_ford:盤查": 1
           }
         },
         "fail_effect": {
@@ -920,6 +1039,9 @@
           },
           "trend": {
             "huangjin": 1
+          },
+          "marks": {
+            "baima_ford:放行": 1
           }
         },
         "fail_effect": {

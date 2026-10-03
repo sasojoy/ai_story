@@ -343,6 +343,9 @@
           "stats": {
             "good": 2,
             "fame": 1
+          },
+          "marks": {
+            "haozu_fort:收留": 1
           }
         },
         "fail_effect": {
@@ -361,6 +364,9 @@
           "stats": {
             "silver": -20,
             "good": 2
+          },
+          "marks": {
+            "haozu_fort:收留": 1
           }
         }
       },

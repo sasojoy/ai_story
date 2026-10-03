@@ -1,0 +1,1162 @@
+[
+  {
+    "id": "mk_yingshui_newvillage",
+    "title": "河灘新村",
+    "locations": [
+      "yingshui"
+    ],
+    "condition": {
+      "marks_min": {
+        "yingshui:救棚": 8
+      }
+    },
+    "text": "上回失火的那片河灘沒有散。前後已有{marks:yingshui:救棚}跟著流民提水救棚，棚屋保住了大半，如今流民在灘上夯起土牆、分了地，牆根下種著豆苗。里中推出來的老者迎上來，說春汛快到了，村外那道擋水的土堤還差一截。",
+    "choices": [
+      {
+        "text": "捲起袖子，跟村裡的青壯一起挑土築堤",
+        "check": {
+          "stat": "str",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "你挑了一整天土，堤頭高出水面兩尺。老者讓孫兒捧來一碗豆粥，說這堤往後就叫「客堤」。",
+          "stats": {
+            "good": 2
+          },
+          "stamina": -10,
+          "marks": {
+            "yingshui:救棚": 1
+          }
+        },
+        "fail_effect": {
+          "text": "土籃壓得你腳下一滑，連人帶土滾進泥裡，堤沒築成幾尺，倒累得渾身散架。",
+          "stamina": -15
+        }
+      },
+      {
+        "text": "看看水勢，替他們把堤線改一改",
+        "check": {
+          "stat": "wis",
+          "difficulty": 6,
+          "by": "self"
+        },
+        "effect": {
+          "text": "你指出舊堤正對著回水的彎口，讓他們往上游退十步再築。老者連聲稱是，硬塞給你一把曬乾的蓮子。",
+          "stats": {
+            "good": 1,
+            "xinde": 8
+          },
+          "marks": {
+            "yingshui:救棚": 1
+          }
+        },
+        "fail_effect": {
+          "text": "你說得頭頭是道，老者卻搖頭說那塊地已分給了人家，改不得。你也只好作罷。",
+          "stats": {
+            "xinde": 2
+          }
+        }
+      },
+      {
+        "text": "道聲辛苦，自己走開",
+        "effect": {
+          "text": "你走出好遠，回頭還看得見土牆上晾著的一排漁網。"
+        }
+      }
+    ]
+  },
+  {
+    "id": "mk_yingshui_bareshore",
+    "title": "空灘",
+    "locations": [
+      "yingshui"
+    ],
+    "condition": {
+      "marks_min": {
+        "yingshui:拆棚": 8
+      }
+    },
+    "text": "那片河灘如今空空蕩蕩。先後有{marks:yingshui:拆棚}扯倒過下風的棚子斷火，燒剩的流民沒再搭回來，亭長乾脆在灘上打了木樁，說這是縣裡的官地，要租給城裡的大戶種麻。被趕出去的幾戶人家蹲在渡口邊，一個少年盯著過往的行囊看。",
+    "choices": [
+      {
+        "text": "去找亭長，問問這塊地憑什麼算官地",
+        "check": {
+          "stat": "wis",
+          "difficulty": 7
+        },
+        "effect": {
+          "text": "你翻出亭裡的田籍，那片灘地從來不在冊上。亭長支吾半天，答應先讓那幾戶在灘尾搭棚過冬。",
+          "stats": {
+            "good": 2,
+            "fame": 1
+          }
+        },
+        "fail_effect": {
+          "text": "亭長把田籍往懷裡一揣，說你一個過路人管得也太寬，叫亭卒把你請出了亭舍。",
+          "stats": {
+            "fame": -1
+          }
+        }
+      },
+      {
+        "text": "盯緊那個少年，等他伸手",
+        "check": {
+          "stat": "agi",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "少年的手剛摸上一個客商的錢袋，就被你扣住。你沒送官，只把他帶回渡口那幾戶人家面前，他娘哭著把錢還了，客商反倒分了你幾個錢。",
+          "stats": {
+            "silver": 10,
+            "good": 1
+          }
+        },
+        "fail_effect": {
+          "text": "少年比泥鰍還滑，一扭身鑽進人群，連你腰上的錢囊也一起不見了。",
+          "stats": {
+            "silver": -10
+          }
+        }
+      },
+      {
+        "text": "分他們一點乾糧",
+        "effect": {
+          "text": "幾戶人家接過乾糧，沒有人說話。",
+          "stats": {
+            "silver": -5,
+            "good": 1
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "mk_academy_wallwords",
+    "title": "講堂壁書",
+    "locations": [
+      "yingchuan_academy"
+    ],
+    "condition": {
+      "marks_min": {
+        "yingchuan_academy:清議": 6
+      }
+    },
+    "text": "講堂的論難一場比一場激烈，已有{marks:yingchuan_academy:清議}當堂把話問到了宮裡的常侍頭上。如今講堂後的粉壁上寫滿了字，有人抄了一句「閹豎竊命，州郡為之魚肉」，底下密密麻麻跟著各人的批語。山長看了一眼，什麼也沒說，只叫人把門關上。",
+    "choices": [
+      {
+        "text": "提筆在壁上續一句",
+        "check": {
+          "stat": "wis",
+          "difficulty": 6,
+          "by": "self"
+        },
+        "effect": {
+          "text": "你寫的那句對仗工整、字字有據，路過的學生都停下來念。當晚有人把它抄去，說要傳到汝南學宮。",
+          "stats": {
+            "fame": 2,
+            "xinde": 6
+          },
+          "marks": {
+            "yingchuan_academy:清議": 1
+          }
+        },
+        "fail_effect": {
+          "text": "你寫到一半想不出下句，旁邊一個學生嗤笑一聲，替你續完了。",
+          "stats": {
+            "fame": -1
+          }
+        }
+      },
+      {
+        "text": "趁夜提桶灰漿，把整面壁抹乾淨",
+        "check": {
+          "stat": "con",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "你抹到天亮，粉壁白得像新的。山長清早經過，對你深深一揖，說書院保住了。學生們卻好幾日不肯跟你說話。",
+          "stats": {
+            "good": 1,
+            "fame": -1,
+            "xinde": 4
+          }
+        },
+        "fail_effect": {
+          "text": "灰漿太稀，字跡還透得出來，你倒弄得一身白，被巡夜的學生當成賊追了半個院子。",
+          "stamina": -10
+        }
+      },
+      {
+        "text": "把壁上的字一字不漏抄下，送去郡府",
+        "effect": {
+          "text": "郡府的書佐收下抄本，給了你一包錢，記下了書院的名字。你出門時，沒敢回頭看。",
+          "stats": {
+            "silver": 25,
+            "evil": 2
+          },
+          "marks": {
+            "yingchuan_academy:密告": 1
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "mk_academy_search",
+    "title": "郡吏查院",
+    "locations": [
+      "yingchuan_academy"
+    ],
+    "condition": {
+      "marks_min": {
+        "yingchuan_academy:密告": 5
+      }
+    },
+    "text": "郡府手上的抄本已經不只一份，前後有{marks:yingchuan_academy:密告}把壁上的字送了進去。今日一隊郡吏堵在書院門口，說奉命查抄「訕謗朝廷」的文字，學生們抱著竹簡往後山跑，山長站在講堂前一動不動。",
+    "choices": [
+      {
+        "text": "幫學生把竹簡從後牆遞出去",
+        "check": {
+          "stat": "agi",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "你蹲在牆頭接了一捆又一捆，郡吏衝進藏書樓時，架上只剩幾卷《孝經》。有個學生把一卷手抄的論集塞給你，說替他收著。",
+          "stats": {
+            "good": 2,
+            "xinde": 10
+          }
+        },
+        "fail_effect": {
+          "text": "一捆竹簡從你手裡滑下去，摔散在郡吏腳邊。他們撿起來看了兩眼，冷笑著把你的名號也記上了。",
+          "stats": {
+            "fame": -2
+          }
+        }
+      },
+      {
+        "text": "擋在講堂前，跟郡吏論律條",
+        "check": {
+          "stat": "wis",
+          "difficulty": 7
+        },
+        "effect": {
+          "text": "你一條條指出他們手上的文書沒有太守的印信。領頭的郡吏臉色青白，只封了講堂的門，沒敢抓人。",
+          "stats": {
+            "fame": 2,
+            "good": 1
+          }
+        },
+        "fail_effect": {
+          "text": "郡吏懶得聽你說完，一把推開你，把山長的書案也搬走了。",
+          "stamina": -10,
+          "stats": {
+            "fame": -1
+          }
+        }
+      },
+      {
+        "text": "替郡吏指點哪幾間房藏了書",
+        "effect": {
+          "text": "郡吏照你指的地方一翻一個準，領頭的拍拍你的肩，賞了幾個錢。學生們看你的眼神，像在看一條狗。",
+          "stats": {
+            "silver": 20,
+            "evil": 3
+          },
+          "marks": {
+            "yingchuan_academy:密告": 1
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "mk_mengjin_ferrymen",
+    "title": "船家留座",
+    "locations": [
+      "mengjin_ford"
+    ],
+    "condition": {
+      "marks_min": {
+        "mengjin_ford:救人": 8
+      }
+    },
+    "text": "孟津的船家近來待客不一樣了。這一季已有{marks:mengjin_ford:救人}跳進黃河撈過落水的人，船老大們傳開了：岸上肯下水的客人，船頭得留個座。今日老船工一見你就招手，說要搭他的船不收錢，只求你幫個忙——下游淺灘上擱著一條漏水的貨船。",
+    "choices": [
+      {
+        "text": "下到淺灘，跟船工一起把貨船推回深水",
+        "check": {
+          "stat": "str",
+          "difficulty": 7
+        },
+        "effect": {
+          "text": "你喊著號子跟船工們一推，貨船吱呀一聲滑回了河道。船主拿出一包錢，老船工又從船底刮下一塊黑沉沉的壓艙石塞給你。",
+          "stats": {
+            "silver": 15,
+            "good": 1
+          },
+          "materials": {
+            "man_1": 1
+          },
+          "marks": {
+            "mengjin_ford:救人": 1
+          }
+        },
+        "fail_effect": {
+          "text": "腳下的爛泥把你陷到膝蓋，貨船紋絲不動，最後還是等漲水才浮起來。",
+          "stamina": -15
+        }
+      },
+      {
+        "text": "替他們看看貨船漏在哪裡",
+        "check": {
+          "stat": "wis",
+          "difficulty": 6,
+          "by": "self"
+        },
+        "effect": {
+          "text": "你找出船底一道裂縫，教船工用麻絮和油灰塞上。老船工說孟津的船家都記得你這號人。",
+          "stats": {
+            "good": 1,
+            "xinde": 8
+          }
+        },
+        "fail_effect": {
+          "text": "你在船艙裡摸了半天，愣是沒找出漏水的地方，船工們客客氣氣地送你上了岸。",
+          "stamina": -5
+        }
+      },
+      {
+        "text": "謝過他的好意，照價付錢過河",
+        "effect": {
+          "text": "老船工推辭不過，收了錢，船頭那個座還是留給了你。",
+          "stats": {
+            "silver": -5
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "mk_mengjin_reprisal",
+    "title": "涼州兵的脾氣",
+    "locations": [
+      "mengjin_ford"
+    ],
+    "condition": {
+      "marks_min": {
+        "mengjin_ford:頂撞": 6
+      }
+    },
+    "text": "西涼兵在孟津吃過的虧不少，前後已有{marks:mengjin_ford:頂撞}當面跟他們動過手。如今營帳前立了根木樁，凡是不說涼州話的客人都得在樁前下跪報名。今早一個船夫不肯跪，船被他們拖上岸點了火，黑煙飄了半條河。",
+    "choices": [
+      {
+        "text": "走到木樁前，一腳踹倒它",
+        "combat": "liangzhou_cavalry",
+        "effect": {
+          "text": "你打退了圍上來的騎兵，木樁斷成兩截滾進河裡。船夫們從蘆葦裡探出頭來，好半天才敢出聲叫好。",
+          "stats": {
+            "fame": 2,
+            "good": 1
+          },
+          "marks": {
+            "mengjin_ford:頂撞": 1
+          },
+          "rumor": "孟津渡口那根叫人下跪的木樁，聽說被{name}一腳踹進了黃河。"
+        },
+        "fail_effect": {
+          "text": "騎兵把你按在樁前，逼你跪了半個時辰才放人。",
+          "stamina": -15,
+          "stats": {
+            "fame": -2
+          }
+        }
+      },
+      {
+        "text": "幫船夫把火撲滅，搶出半條船",
+        "check": {
+          "stat": "con",
+          "difficulty": 7
+        },
+        "effect": {
+          "text": "你頂著濃煙一桶桶潑水，總算保住了船頭與龍骨。船夫說修一修還能用，非要請你喝酒。",
+          "stats": {
+            "good": 2
+          },
+          "stamina": -10
+        },
+        "fail_effect": {
+          "text": "火勢太大，你被煙嗆得退了出來，船燒得只剩一根桅桿。",
+          "stamina": -15
+        }
+      },
+      {
+        "text": "混在船夫裡，趁夜把木樁底下的土刨鬆",
+        "check": {
+          "stat": "agi",
+          "difficulty": 7
+        },
+        "effect": {
+          "text": "天亮時一陣河風吹過，木樁自己歪進了泥裡。騎兵罵了半天也不知道是誰幹的，船夫們憋著笑把船撐離了岸。",
+          "stats": {
+            "good": 1,
+            "xinde": 5
+          }
+        },
+        "fail_effect": {
+          "text": "巡夜的騎兵提著燈走過來，你只好丟下鐵鍬跳進河裡，泡了半夜才摸回岸上。",
+          "stamina": -15
+        }
+      },
+      {
+        "text": "低頭跪下報名，早點過河",
+        "effect": {
+          "text": "騎兵笑著在你背上拍了兩下，放你上了船。船上的人都把臉轉向河面。",
+          "stats": {
+            "fame": -1
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "mk_yu_fishmarket",
+    "title": "河灣魚市",
+    "locations": [
+      "yu_river"
+    ],
+    "condition": {
+      "marks_min": {
+        "yu_river:斷繩": 8
+      }
+    },
+    "text": "那道攔河的麻繩再也拉不起來了，前前後後已有{marks:yu_river:斷繩}割過繩、打過守繩的嘍囉。漁戶們趁著河面通了，在窄灣邊搭起一溜魚棚，天一亮就開市。只是嘍囉頭目放出話來，說遲早要回來收這筆帳。",
+    "choices": [
+      {
+        "text": "幫漁戶在灣口打一排木樁，擋住賊船",
+        "check": {
+          "stat": "str",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "木樁一根根楔進河床，賊船再想橫進灣口就得先撞樁。漁戶們湊了一串錢給你，還有一束晾乾的韌絲。",
+          "stats": {
+            "silver": 10,
+            "good": 1
+          },
+          "materials": {
+            "rou_1": 1
+          },
+          "trend": {
+            "huangjin": -1
+          }
+        },
+        "fail_effect": {
+          "text": "木樁打歪了兩根，被水一沖就倒，漁戶們嘆氣說只好再想辦法。",
+          "stamina": -10
+        }
+      },
+      {
+        "text": "替魚市定個規矩，誰家佔哪段河岸",
+        "check": {
+          "stat": "wis",
+          "difficulty": 6,
+          "by": "self"
+        },
+        "effect": {
+          "text": "你照各家的船數分了岸，吵了三天的兩家漁戶總算握手。魚市的老大說，往後你來吃魚不收錢。",
+          "stats": {
+            "good": 1,
+            "fame": 1,
+            "xinde": 5
+          },
+          "marks": {
+            "yu_river:斷繩": 1
+          }
+        },
+        "fail_effect": {
+          "text": "你劃的界線兩家都不服，反倒在你面前打了起來。",
+          "stats": {
+            "fame": -1
+          }
+        }
+      },
+      {
+        "text": "買兩條魚就走",
+        "effect": {
+          "text": "魚販替你用柳條穿好魚鰓，說灣裡的魚今年特別肥。",
+          "stats": {
+            "silver": -3
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "mk_yu_tollhut",
+    "title": "河灣稅亭",
+    "locations": [
+      "yu_river"
+    ],
+    "condition": {
+      "marks_min": {
+        "yu_river:交米": 8
+      }
+    },
+    "text": "交米過繩的船越來越多，已有{marks:yu_river:交米}老老實實交過錢。嘍囉們乾脆在岸邊蓋了間草亭，門口掛塊木牌，寫著「黃天例錢：漁船一斗、糧船三斗」，還有個識字的小頭目坐在裡頭記帳，像模像樣的。",
+    "choices": [
+      {
+        "text": "掀了草亭，砸了木牌",
+        "combat": "louluo",
+        "effect": {
+          "text": "你把亭裡的嘍囉打得滾進河裡，木牌劈成柴火。過往的船家遠遠看著，沒人敢靠近，也沒人去報信。",
+          "stats": {
+            "fame": 2
+          },
+          "trend": {
+            "huangjin": -2
+          }
+        },
+        "fail_effect": {
+          "text": "嘍囉越打越多，你被趕下了河岸，連鞋都丟了一隻。",
+          "stamina": -15,
+          "stats": {
+            "silver": -10
+          }
+        }
+      },
+      {
+        "text": "湊過去看那本帳簿",
+        "check": {
+          "stat": "agi",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "你趁小頭目打盹，翻出帳簿上記著哪天有糧船要運往黃巾大營。你把這頁撕下，送到了宛城。",
+          "stats": {
+            "silver": 15,
+            "fame": 1
+          },
+          "trend": {
+            "huangjin": -1
+          }
+        },
+        "fail_effect": {
+          "text": "小頭目一睜眼，喝令嘍囉把你攆走，還多收了你一斗米錢。",
+          "stats": {
+            "silver": -10
+          }
+        }
+      },
+      {
+        "text": "跟小頭目論一論，這例錢憑的是哪家的律",
+        "check": {
+          "stat": "wis",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "你說得小頭目答不上來，只好說漁船這一斗先免了。後面幾條漁船跟著你的話，也都沒交。",
+          "stats": {
+            "good": 1,
+            "fame": 1
+          }
+        },
+        "fail_effect": {
+          "text": "小頭目聽得不耐煩，揮手叫嘍囉把你架開，還在帳上給你多記了一筆。",
+          "stats": {
+            "silver": -10
+          }
+        }
+      },
+      {
+        "text": "照木牌上的數目交錢",
+        "effect": {
+          "text": "小頭目在帳簿上記了一筆，連你的名號也問了。",
+          "stats": {
+            "silver": -10
+          },
+          "trend": {
+            "huangjin": 1
+          },
+          "marks": {
+            "yu_river:交米": 1
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "mk_nyroad_convoy",
+    "title": "結伴上路",
+    "locations": [
+      "nanyang_road"
+    ],
+    "condition": {
+      "marks_min": {
+        "nanyang_road:護車": 8
+      }
+    },
+    "text": "南陽官道上有了新規矩：逃難的人家不再單獨上路，都聚在燒毀的郵亭邊等，湊滿十來輛車才走。他們說這一帶已有{marks:nanyang_road:護車}替車隊擋過散兵，帶刀的人路過，總得先問一聲肯不肯同行。",
+    "choices": [
+      {
+        "text": "答應護送，走在車隊最前頭",
+        "combat": "shanzei",
+        "effect": {
+          "text": "半路果然撞上一夥散兵，你搶先撲上去打散了他們。車隊平平安安到了宛城，各家湊了一包錢給你。",
+          "stats": {
+            "silver": 20,
+            "good": 1
+          },
+          "marks": {
+            "nanyang_road:護車": 1
+          }
+        },
+        "fail_effect": {
+          "text": "散兵人多，你只擋住了一頭，後面兩輛車被搶了。車主們沒怪你，只是不說話。",
+          "stamina": -15,
+          "stats": {
+            "good": -1
+          }
+        }
+      },
+      {
+        "text": "教他們夜裡把車圍成一圈紮營",
+        "check": {
+          "stat": "wis",
+          "difficulty": 6,
+          "by": "self"
+        },
+        "effect": {
+          "text": "你教他們車轅朝外、牛羊圈在中間，守夜的人輪三班。領頭的老漢說這法子比僱十個人還管用。",
+          "stats": {
+            "good": 2,
+            "xinde": 6
+          }
+        },
+        "fail_effect": {
+          "text": "車太多圈不攏，忙到半夜也沒排好，大家只好擠在郵亭裡過夜。",
+          "stamina": -10
+        }
+      },
+      {
+        "text": "替他們把斷了的車軸、破了的車輪都修好再上路",
+        "check": {
+          "stat": "str",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "你扛車換軸忙了一下午，十來輛車沒有一輛再出毛病。車主們湊了幾個錢給你。",
+          "stats": {
+            "silver": 10,
+            "good": 1
+          }
+        },
+        "fail_effect": {
+          "text": "車身一歪壓到你的腳背，你一瘸一拐地坐到路邊，車隊只好再等一天。",
+          "stamina": -10
+        }
+      },
+      {
+        "text": "說自己趕路，先走一步",
+        "effect": {
+          "text": "車隊的人目送你走遠，又回頭繼續等。"
+        }
+      }
+    ]
+  },
+  {
+    "id": "mk_nyroad_ambush",
+    "title": "攔路倒樹",
+    "locations": [
+      "nanyang_road"
+    ],
+    "condition": {
+      "marks_min": {
+        "nanyang_road:棄車": 6
+      }
+    },
+    "text": "散兵摸清了這條官道的底：出了事沒人管。前後已有{marks:nanyang_road:棄車}看見車隊被圍、自己繞進麥田走了。如今坡下橫著一棵砍倒的大樹，樹後蹲著幾個纏黃巾的漢子，見人就喊「留下買路錢」。",
+    "choices": [
+      {
+        "text": "直接衝過去",
+        "combat": "shanzei",
+        "effect": {
+          "text": "你打得散兵四散奔逃，又一個人把大樹推下了路溝。後面跟上來的行人朝你拱手，這段路總算又通了。",
+          "stats": {
+            "fame": 2,
+            "good": 1
+          },
+          "trend": {
+            "huangjin": -1
+          }
+        },
+        "fail_effect": {
+          "text": "你被打得退回坡上，還是交了買路錢才過去。",
+          "stamina": -15,
+          "stats": {
+            "silver": -15
+          }
+        }
+      },
+      {
+        "text": "從坡後的林子繞過去",
+        "check": {
+          "stat": "agi",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "你貼著林子邊走，散兵一點也沒發覺。繞回官道時，你還順手牽走了他們拴在樹後的一隻雞。",
+          "stats": {
+            "xinde": 4
+          }
+        },
+        "fail_effect": {
+          "text": "腳下踩斷一根枯枝，散兵追了你半里地，你丟了一包乾糧才脫身。",
+          "stamina": -10
+        }
+      },
+      {
+        "text": "跟樹後的漢子攀談，打聽他們是哪一部的",
+        "check": {
+          "stat": "wis",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "幾句話你就聽出他們是散了營的逃兵，連頭目都沒有。你嚇他們說官軍明日要來清路，當夜樹就被他們自己拖走了。",
+          "stats": {
+            "xinde": 6
+          },
+          "trend": {
+            "huangjin": -1
+          }
+        },
+        "fail_effect": {
+          "text": "他們聽出你在套話，一擁而上，搶了你的錢才放你走。",
+          "stats": {
+            "silver": -15
+          }
+        }
+      },
+      {
+        "text": "乖乖交錢",
+        "effect": {
+          "text": "散兵掂了掂錢，笑著揮手讓你過去。你身後又有一輛牛車停了下來。",
+          "stats": {
+            "silver": -15
+          },
+          "marks": {
+            "nanyang_road:棄車": 1
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "mk_zhuo_lettertable",
+    "title": "驛舍書案",
+    "locations": [
+      "zhuo_county"
+    ],
+    "condition": {
+      "marks_min": {
+        "zhuo_county:代筆": 8
+      }
+    },
+    "text": "驛舍旁那張代筆的桌子一直沒撤。老書生病好了，說這一季已有{marks:zhuo_county:代筆}坐下來替少年們寫過家書，他便請縣裡在桌邊立了塊板子，寫著「投軍者家書，不取分文」。今日排隊的不是少年，是一個捧著竹簡的老婦人：南邊寄回來的信，她不識字。",
+    "choices": [
+      {
+        "text": "替她念信",
+        "check": {
+          "stat": "wis",
+          "difficulty": 5,
+          "by": "self"
+        },
+        "effect": {
+          "text": "信是她兒子在冀州寫的，說隨軍圍了廣宗，吃得飽，叫她別掛心。你念得慢，她聽了兩遍，把竹簡貼在胸口走了。",
+          "stats": {
+            "good": 2,
+            "xinde": 6
+          },
+          "marks": {
+            "zhuo_county:代筆": 1
+          }
+        },
+        "fail_effect": {
+          "text": "竹簡泡過水，好幾個字糊了，你念得結結巴巴，老婦人聽完反而更不安了。",
+          "stats": {
+            "xinde": 2
+          }
+        }
+      },
+      {
+        "text": "替排隊的人把回信送到驛站，趕上今天的郵車",
+        "check": {
+          "stat": "agi",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "你抱著一捆竹簡跑到驛站，郵車正要套馬。驛卒看了一眼板子上的字，一文錢都沒收你。",
+          "stats": {
+            "good": 1,
+            "fame": 1
+          }
+        },
+        "fail_effect": {
+          "text": "你趕到時郵車已經走了，一捆信只好等下一趟。",
+          "stamina": -10
+        }
+      },
+      {
+        "text": "看看板子就走",
+        "effect": {
+          "text": "板子上的字是老書生寫的，筆力不濟，卻一筆一畫都很端正。"
+        }
+      }
+    ]
+  },
+  {
+    "id": "mk_zhuo_scribestalls",
+    "title": "代筆行情",
+    "locations": [
+      "zhuo_county"
+    ],
+    "condition": {
+      "marks_min": {
+        "zhuo_county:索錢": 6
+      }
+    },
+    "text": "代人寫家書成了門好生意，已有{marks:zhuo_county:索錢}收過少年們的錢。如今驛舍外一排擺了五六個攤子，一封要價十錢，還有人只寫兩行就收錢。一個少年拿著剛寫好的信回來哭，說攤主把他家的鄉里名字寫錯了。",
+    "choices": [
+      {
+        "text": "拿過信來看，當場揭穿那個攤主",
+        "check": {
+          "stat": "wis",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "你指出整封信是照著同一張底稿抄的，連名字都沒換。圍觀的少年們把錢要了回去，攤主捲了席子溜走。",
+          "stats": {
+            "good": 2,
+            "fame": 1
+          }
+        },
+        "fail_effect": {
+          "text": "攤主咬定是少年自己說錯，其他攤主也幫腔，你吃了一肚子悶氣。",
+          "stats": {
+            "fame": -1
+          }
+        }
+      },
+      {
+        "text": "就地擺張桌子，一封不收錢，寫到天黑",
+        "check": {
+          "stat": "con",
+          "difficulty": 6,
+          "by": "self"
+        },
+        "effect": {
+          "text": "你寫得手腕發抖，隊伍卻越排越長，旁邊幾個攤子只好跟著降價。",
+          "stats": {
+            "good": 2,
+            "xinde": 5
+          },
+          "stamina": -10
+        },
+        "fail_effect": {
+          "text": "寫到一半你就頭昏眼花，字也歪了，只好收攤。",
+          "stamina": -15
+        }
+      },
+      {
+        "text": "跟攤主們說好，替他們招客、抽一成",
+        "effect": {
+          "text": "你在驛舍門口吆喝了一下午，攤主們分了你一把銅錢。",
+          "stats": {
+            "silver": 15,
+            "evil": 1
+          },
+          "marks": {
+            "zhuo_county:索錢": 1
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "mk_haozu_newtenants",
+    "title": "堡內新戶",
+    "locations": [
+      "haozu_fort"
+    ],
+    "condition": {
+      "marks_min": {
+        "haozu_fort:收留": 8
+      }
+    },
+    "text": "塢堡門口說過情、出過錢的人多了，前後已有{marks:haozu_fort:收留}替逃難的佃農求得進門。如今堡內擠得轉不過身，塢主把新來的老弱都趕到牆外開荒，荒地挨著野地，夜裡常有狼。管事愁眉苦臉，說今年的口糧怕撐不到秋收。",
+    "choices": [
+      {
+        "text": "帶著新戶在荒地四周挖一道壕溝",
+        "check": {
+          "stat": "str",
+          "difficulty": 7
+        },
+        "effect": {
+          "text": "壕溝挖成那天，新戶們在溝邊燒了一堆火，請你坐在上首。塢主遠遠看了一眼，派人送來一壺酒。",
+          "stats": {
+            "good": 2,
+            "fame": 1
+          },
+          "stamina": -10,
+          "marks": {
+            "haozu_fort:收留": 1
+          }
+        },
+        "fail_effect": {
+          "text": "凍土硬得像石頭，挖了一天才半丈，你的手掌磨出了血。",
+          "stamina": -15
+        }
+      },
+      {
+        "text": "替管事算一算口糧怎麼分",
+        "check": {
+          "stat": "wis",
+          "difficulty": 7,
+          "by": "self"
+        },
+        "effect": {
+          "text": "你把部曲多領的那份與倉底的陳粟一併算進去，口糧竟還寬裕一個月。管事把你當成了救星。",
+          "stats": {
+            "good": 1,
+            "silver": 15,
+            "xinde": 6
+          }
+        },
+        "fail_effect": {
+          "text": "你算來算去還是差一大截，管事嘆口氣，說只好減新戶的份了。",
+          "stats": {
+            "good": -1
+          }
+        }
+      },
+      {
+        "text": "這是塢主的家事，不插手",
+        "effect": {
+          "text": "你從牆外走過，荒地上幾個老人正用木棍翻土。"
+        }
+      }
+    ]
+  },
+  {
+    "id": "mk_haozu_outlaws",
+    "title": "牆外流寇",
+    "locations": [
+      "haozu_fort"
+    ],
+    "condition": {
+      "marks_min": {
+        "haozu_fort:驅趕": 6
+      }
+    },
+    "text": "被火箭趕走的流民並沒走遠。前後已有{marks:haozu_fort:驅趕}在箭樓上把摸牆的人射跑，他們便在北邊的蘆葦蕩裡聚成一夥，前夜割走了塢堡外田的半片麥子。屯長要你今夜帶部曲去蘆葦蕩搜人，一個被扣下的流民孩子卻拉著你的衣角。",
+    "choices": [
+      {
+        "text": "獨自去蘆葦蕩，跟他們的頭目談",
+        "check": {
+          "stat": "wis",
+          "difficulty": 7
+        },
+        "effect": {
+          "text": "頭目是個斷了手的老佃農。你答應替他們向塢主討一塊荒地，他們答應不再割麥。塢主雖不情願，也知道這比年年防賊省事。",
+          "stats": {
+            "good": 2,
+            "fame": 1
+          }
+        },
+        "fail_effect": {
+          "text": "頭目不信你，蘆葦裡飛出幾塊石頭，你只好退了回來。",
+          "stamina": -10
+        }
+      },
+      {
+        "text": "在麥田邊守一整夜",
+        "check": {
+          "stat": "con",
+          "difficulty": 6,
+          "by": "self"
+        },
+        "effect": {
+          "text": "你在田埂上蹲到天亮，幾次聽見蘆葦響，終究沒人敢出來。屯長照數付了工錢。",
+          "stats": {
+            "silver": 15
+          },
+          "marks": {
+            "haozu_fort:驅趕": 1
+          }
+        },
+        "fail_effect": {
+          "text": "後半夜你睏得睜不開眼，天亮時又少了一片麥子，屯長的臉黑得像鍋底。",
+          "stamina": -10,
+          "stats": {
+            "silver": -10
+          }
+        }
+      },
+      {
+        "text": "放了那個孩子，攔住要去搜人的部曲",
+        "combat": "wubao_buqu",
+        "effect": {
+          "text": "你打退了部曲，孩子一溜煙跑進蘆葦蕩。往後塢堡外的佃農見了你，都偷偷點頭。",
+          "stats": {
+            "good": 2,
+            "fame": 1
+          },
+          "rumor": "豪族塢堡的部曲說，有個叫{name}的外鄉人為了一個流民孩子，跟他們動了手。"
+        },
+        "fail_effect": {
+          "text": "部曲把你按在地上，連那孩子一起關進了柴房，第二天才放你走。",
+          "stamina": -15,
+          "stats": {
+            "fame": -1
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "mk_baima_strictcheck",
+    "title": "津口連坐",
+    "locations": [
+      "baima_ford"
+    ],
+    "condition": {
+      "marks_min": {
+        "baima_ford:盤查": 6
+      }
+    },
+    "text": "郡兵在白馬津嘗到了甜頭，已有{marks:baima_ford:盤查}幫他們認出過假木傳。如今卡子加了一道，凡是冀州口音的一律扣下，十戶連坐，岸邊搭起一排草棚，扣著的人一等就是好幾天。伍長認出你，招手要你過去「再幫著看看」。",
+    "choices": [
+      {
+        "text": "一個個看過去，替冤枉的人作保",
+        "check": {
+          "stat": "wis",
+          "difficulty": 7
+        },
+        "effect": {
+          "text": "你看出大半木傳都是真的，只是縣印模糊。伍長拗不過你，放了二十幾戶上船。草棚裡的人目送你走，沒人敢出聲道謝。",
+          "stats": {
+            "good": 2,
+            "fame": 1
+          }
+        },
+        "fail_effect": {
+          "text": "你看走了眼，替一個真帶著經文的人作了保，伍長罰你一筆錢才了事。",
+          "stats": {
+            "silver": -20
+          }
+        }
+      },
+      {
+        "text": "幫伍長查，查一個算一份錢",
+        "check": {
+          "stat": "agi",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "你眼明手快，從貨箱夾層裡搜出兩卷符書。伍長樂得合不攏嘴，分了你一份賞。",
+          "stats": {
+            "silver": 20,
+            "evil": 1
+          },
+          "trend": {
+            "huangjin": -1
+          },
+          "marks": {
+            "baima_ford:盤查": 1
+          }
+        },
+        "fail_effect": {
+          "text": "你翻了半天一無所獲，倒把一個老漢的麥種撒了一地，岸上一片罵聲。",
+          "stats": {
+            "good": -1
+          }
+        }
+      },
+      {
+        "text": "推說自己也要趕船",
+        "effect": {
+          "text": "伍長揮揮手放你走了，草棚那邊傳來孩子的哭聲。"
+        }
+      }
+    ]
+  },
+  {
+    "id": "mk_baima_nightcrossing",
+    "title": "夜渡暗口",
+    "locations": [
+      "baima_ford"
+    ],
+    "condition": {
+      "marks_min": {
+        "baima_ford:放行": 6
+      }
+    },
+    "text": "白馬津下游的蘆葦裡多了一處暗口，天黑後有小船偷偷載人南渡。船戶說，這一季已有{marks:baima_ford:放行}在卡子上幫人混過去，這條路便傳開了。今夜等船的人裡，有拖家帶口的逃戶，也有幾個頭纏黃布、包袱沉得出奇的漢子。",
+    "choices": [
+      {
+        "text": "幫船戶撐篙，把逃戶一家一家送過河",
+        "check": {
+          "stat": "con",
+          "difficulty": 7,
+          "by": "self"
+        },
+        "effect": {
+          "text": "你撐到後半夜，雙臂已經抬不起來。最後一船的老婦人往你手裡塞了兩枚雞蛋。",
+          "stats": {
+            "good": 2
+          },
+          "stamina": -10,
+          "marks": {
+            "baima_ford:放行": 1
+          }
+        },
+        "fail_effect": {
+          "text": "你一篙沒撐穩，小船在急流裡打了個轉，差點翻覆，船戶不讓你再碰篙了。",
+          "stamina": -15
+        }
+      },
+      {
+        "text": "去掂一掂那幾個漢子的包袱",
+        "check": {
+          "stat": "agi",
+          "difficulty": 7
+        },
+        "effect": {
+          "text": "包袱裡是一捆捆鏽跡斑斑的槍頭。你趁他們上船前割斷包袱帶，鐵器全掉進了河裡，漢子們罵著在泥裡摸了半夜。",
+          "stats": {
+            "fame": 1,
+            "xinde": 5
+          },
+          "trend": {
+            "huangjin": -2
+          }
+        },
+        "fail_effect": {
+          "text": "你的手剛碰到包袱，就被一個漢子反扭住。他們搜走你身上的錢，把你推進了蘆葦。",
+          "stats": {
+            "silver": -15
+          }
+        }
+      },
+      {
+        "text": "去上游通報郡兵",
+        "effect": {
+          "text": "郡兵趕到時暗口已經空了，只剩一地腳印。伍長賞了你幾個錢，說下回早點來。",
+          "stats": {
+            "silver": 10
+          }
+        }
+      }
+    ]
+  }
+]
