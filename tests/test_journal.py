@@ -44,6 +44,21 @@ def test_an_arrival_after_other_entries_gets_its_own_entry(game):
     ]
 
 
+def test_a_trip_finished_after_a_station_entry_is_tagged_as_arrived(game):
+    game.state.world.flags.add("cave_open")
+    game.state.player.tutorial_step = 1  # 「去湖邊」：中途抵達湖邊時有引導訊息
+    game.travel("cave", "walk")
+    game.create_skill("測試長拳", "武學")  # 路上在門下練功：出發那則不再是最新的
+    journey = game.state.player.journey
+    game.advance(journey.arrive_at[0] - game.state.world.time)  # 走到湖邊：另起一則「途中」
+    assert (latest(game).title, latest(game).tag) == ("前往 寶洞（途經 湖邊）", "途中")
+    game.advance(journey.arrive_at[1] - game.state.world.time)  # 走到寶洞：併進那一則，已經走完了
+    entry = latest(game)
+    assert game.state.player.journey is None
+    assert (entry.title, entry.tag) == ("前往 寶洞（途經 湖邊）", "抵達")
+    assert entry.lines[0] == "✔ 引導完成"
+
+
 def test_move_entry_keeps_guide_messages(game):
     game.choose("act:explore")
     game.choose("choice:1")  # 把醉漢打發掉

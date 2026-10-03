@@ -167,7 +167,7 @@ class Game:
         共用賽季的時間/大勢則照「距離上次有人追趕過了多久現實時間」追趕——不管是誰觸發、
         隔多久觸發一次，一份共用時鐘永遠只走一次，不會因為好幾個玩家同時在線就重複推進
         （見 world_state.py::catch_up_season）。也會順便偵測共用賽季是不是已經被別人推到
-        下一輪了（見 _reconcile_season）。"""
+        下一輪了（見 _reconcile_season）。在路上時，抵達時間已經到了的站接著一站一站抵達（見 _arrivals）。"""
         self._reconcile_season()
         msgs = list(self.world.catch_up_season(self.content, now, self.rng))
         self.state.world = self.world.get_season()  # 剛才的追趕可能進一步推進了賽季，拉回最新的一份
@@ -191,7 +191,8 @@ class Game:
         （剛同步過的共用賽季副本）上往前推進 seconds，再存回共用儲存——跟 choose()/travel()
         同一套「本地修改、行動結束後存回」模式，不是用現實時間反推（那是 sync() 的事）。
         籌備中、休季時共用賽季不動，只推進玩家自己的部分。推進途中跨過開戰門檻的戰鬥，
-        存回之後才開（見 world.start_pending_battle），再拉回最新的共用賽季。"""
+        存回之後才開（見 world.start_pending_battle），再拉回最新的共用賽季。在路上時，同 sync 補算
+        抵達時間已經到了的站（見 _arrivals）。"""
         msgs: list[str] = []
         if self.world.season_phase() == "running":
             msgs += advance_world_state(self.state.world, self.content, seconds, self.rng, self.world)

@@ -185,9 +185,12 @@ def add_entry(state: GameState, entry: JournalEntry, merge: bool = False) -> Non
 def add_arrival(state: GameState, entry: JournalEntry, done: bool) -> None:
     """一趟路抵達時的紀錄（sync／advance 補算的抵達）：出發那則（同標題）還是最新的一則就併進去——敘事接上、
     數值變化加總、時間換成抵達的時間、有新的結果標記（例如「喊停，停在 湖邊」）就換新的；不是的話另起一則，
-    結果標記寫「抵達」（走完了）或「途中」（只到了中途的站）。"""
+    結果標記寫「抵達」（走完了）或「途中」（只到了中途的站）；併進的是中途另起的那則「途中」、這次又走完了，
+    標記改成「抵達」。"""
     head = _mergeable_head(state, entry)
     if head is not None:
+        if done and not entry.tag and head.tag == "途中":
+            entry = entry.model_copy(update={"tag": "抵達"})
         state.journal[0] = _merged(head, entry, head.lines + entry.lines, battle_id=head.battle_id)
         return
     add_entry(state, entry.model_copy(update={"tag": entry.tag or ("抵達" if done else "途中")}))
