@@ -1080,8 +1080,10 @@ def test_a_season_that_ends_on_the_road_leaves_you_where_you_got_to(game):
 
 def test_a_stale_journey_is_dropped_on_load(content, game):
     game.state.player.journey = Journey(mode="walk", path=["nowhere"], arrive_at=[60.0])
+    game.state.player.leg_actions = {"think"}
     reloaded = Game(content, game.state, world=game.world)
     assert reloaded.state.player.journey is None
+    assert reloaded.state.player.leg_actions == set()  # 那段路不在了：下次出發是新的一段，路上小事都還能做
 
 
 def test_a_rerouted_journey_whose_road_end_is_gone_is_dropped_on_load(content, game):
@@ -2814,7 +2816,7 @@ def test_road_tasks_are_once_per_leg_and_free(game):
     stamina = game.state.player.stamina
     game.choose("road:think")
     assert game.state.player.stats["xinde"] == 3 and game.state.player.stamina == stamina
-    assert (_task(game, "think").label, _task(game, "think").enabled) == ("邊走邊想（這段路已經想過了）", False)
+    assert (_task(game, "think").label, _task(game, "think").enabled) == ("邊走邊想（想過了，到下一站再說）", False)
     entry = game.state.journal[0]
     assert (entry.title, entry.changes) == ("邊走邊想", ["心得 +3"])
     game.advance(game.state.player.journey.arrive_at[0] - game.state.world.time)  # 到湖邊：換段
@@ -2827,8 +2829,8 @@ def test_turning_back_does_not_hand_out_the_road_tasks_again(game):
     game.choose("road:back")  # 剛出發就掉頭，馬上回到小鎮
     game.advance(0)
     assert game.state.player.location == "town" and game.state.player.journey is None
-    game.choose("move:lake")  # 回到同一段路上：還是做過了
-    assert not _task(game, "think").enabled
+    game.choose("move:lake")  # 再出發：還沒真的到下一站，做過的還是做過了（不然來回折返就能不走路刷完一天的收穫）
+    assert (_task(game, "think").label, _task(game, "think").enabled) == ("邊走邊想（想過了，到下一站再說）", False)
     game.advance(game.state.player.journey.arrive_at[0] - game.state.world.time)  # 真的走到湖邊才換段
     assert game.state.player.leg_actions == set()
 
@@ -2850,7 +2852,7 @@ def test_asking_along_the_road_hears_a_rumor_from_this_part_of_the_land(game):
     ]
     msgs = game.choose("road:ask")
     assert msgs == ["你沿途向人打聽，聽說：湖邊來了個怪客。"]
-    assert (_task(game, "ask").label, _task(game, "ask").enabled) == ("沿途打聽（這段路已經打聽過了）", False)
+    assert (_task(game, "ask").label, _task(game, "ask").enabled) == ("沿途打聽（打聽過了，到下一站再說）", False)
 
 
 def test_asking_with_nothing_to_hear_still_counts(game):
@@ -2937,7 +2939,7 @@ def test_thinking_on_the_road_pays_only_the_first_few_times_a_game_day(content, 
     assert game.choose("road:think") == ["你邊走邊想，今天想得夠多了，沒有新的心得。"]
     assert p.stats["xinde"] == xinde and p.road_rewards_today == {"task": [1, 2]}
     assert game.state.journal[0].changes == []
-    assert (_task(game, "think").label, _task(game, "think").enabled) == ("邊走邊想（這段路已經想過了）", False)
+    assert (_task(game, "think").label, _task(game, "think").enabled) == ("邊走邊想（想過了，到下一站再說）", False)
 
 
 def test_the_road_reward_count_starts_over_the_next_game_day(content, game):

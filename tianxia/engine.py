@@ -171,6 +171,7 @@ class Game:
             or (j.origin is not None and j.origin not in c.locations)  # 改道後半段路的起點（見 atlas.road_spot）
         ):
             p.journey = None
+            p.leg_actions = set()  # 這段路不在了：下次出發是新的一段
         p.surveyed = {loc_id for loc_id in p.surveyed if loc_id in c.locations}
         p.leg_actions &= set(ROAD_TASKS)
         p.recent_sights = [sight_id for sight_id in p.recent_sights if sight_id in c.road_sights]
@@ -431,7 +432,7 @@ class Game:
                 hints[what] = "今天沒有收穫了"  # 不留「心得 +3」：拿滿了就沒有
         done = self.state.player.leg_actions
         return [
-            Option(id=f"road:{what}", label=f"{name}（這段路已經{did}）", enabled=False) if what in done
+            Option(id=f"road:{what}", label=f"{name}（{did}，到下一站再說）", enabled=False) if what in done
             else Option(id=f"road:{what}", label=f"{name}（{hints[what]}）")
             for what, (name, did) in ROAD_TASKS.items()
         ]
@@ -2206,7 +2207,7 @@ class Game:
             return (
                 f"**在路上**{halted}\n\n{self._journey_line()}。\n\n"
                 "路上可以折返，也可以打開輿圖改去別處，或去修練、煉製；邊走邊想、沿途打聽、留意地形、路邊採集，"
-                "每一段路各能做一次。可以先下線，到了會自己抵達。"
+                "到下一站之前各能做一次。可以先下線，到了會自己抵達。"
             )
         return self.location_text()
 
