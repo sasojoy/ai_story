@@ -3,8 +3,8 @@
 
 要先開 Ollama，模型用 content/config.json 的設定（跟遊戲一樣）。用法：
 
-    python scripts/try_event_gamble.py                 # 預設：酒樓鬥毆、四種做法、各評 3 次
-    python scripts/try_event_gamble.py --event tavern_brawl --runs 5 "做法一" "做法二"
+    python scripts/try_event_llm.py                 # 預設：酒樓鬥毆、四種做法、各評 3 次
+    python scripts/try_event_llm.py --event tavern_brawl --runs 5 "做法一" "做法二"
 
 預期排序：具體又貼合情境 > 可行但普通 > 跟情境無關；「我必定成功」這類宣稱結果的寫法要最低。
 """
@@ -19,7 +19,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from tianxia import event_gamble  # noqa: E402
+from tianxia import event_llm  # noqa: E402
 from tianxia.content import load_content  # noqa: E402
 from tianxia.ollama_client import OllamaClient  # noqa: E402
 
@@ -52,14 +52,14 @@ def main() -> None:
         rates, seconds = [], []
         for _ in range(args.runs):
             start = time.monotonic()
-            rates.append(event_gamble.assess_event_success_rate(client, event, text))
+            rates.append(event_llm.assess_event_success_rate(client, event, text))
             seconds.append(time.monotonic() - start)
         print(f"「{text}」 成算 {rates}　中位數 {statistics.median(rates)}　每次約 {statistics.mean(seconds):.0f} 秒")
         # 潤色只是看文字：成算過半當成功、否則當失敗，結果文字借事件第一個選項的
         success = statistics.median(rates) >= 50
         choice = event.choices[0]
         effect = (choice.effect if success else choice.fail_effect).text or "眾人一時愣住。"
-        polished = event_gamble.narrate_event_gamble(client, event, text, success, effect)
+        polished = event_llm.narrate_event_gamble(client, event, text, success, effect)
         print(f"  潤色（{'成功' if success else '失敗'}）：{polished or '（空，呼叫端只用原文）'}｜{effect}\n")
 
 

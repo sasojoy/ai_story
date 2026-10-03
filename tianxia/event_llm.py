@@ -4,7 +4,7 @@
 5%～85% 夾值、擲骰、套用 effect／fail_effect 都是引擎的事，這裡一概不管。
 
 兩個函式都不碰遊戲狀態，只吃事件定義和玩家寫的字，所以可以在行動鎖外面呼叫（本機模型
-評一次要幾十秒）。連不上或格式不對：評估回保底的 40，潤色回空字串讓呼叫端只用 effect 原文。
+評一次要幾十秒）。連不上或格式不對：評估回保底的 40，潤色回 None 讓呼叫端只用 effect 原文。
 """
 from __future__ import annotations
 
@@ -75,13 +75,13 @@ def assess_event_success_rate(client: OllamaClient | None, event: Event, text: s
 
 def narrate_event_gamble(
     client: OllamaClient | None, event: Event, text: str, success: bool, effect_text: str,
-) -> str:
+) -> str | None:
     """擲骰之後的潤色：一兩句話寫玩家照自己的做法行事，呼叫端接在 effect 文字前面。
     effect_text 是成功時的 effect.text 或失敗時的 fail_effect.text。不改任何數值；
-    沒有 client 或生成失敗回空字串，呼叫端就只用 effect 原文。"""
+    沒有 client、生成失敗或生成出空字串都回 None，呼叫端就只用 effect 原文。"""
     action = _clip(text)
     if client is None or not action:
-        return ""
+        return None
     prompt = (
         f"事件情境：{_scene(event)}\n玩家的做法：「{action}」\n"
         f"判定：{'成功' if success else '失敗'}\n結果文字（會接在你寫的句子後面）：{effect_text}"
@@ -90,5 +90,5 @@ def narrate_event_gamble(
     try:
         reply = client.chat_text(messages, temperature=0.8, num_predict=NARRATE_NUM_PREDICT)
     except Exception:
-        return ""
-    return zh.to_traditional(reply.strip().strip('「」"'))
+        return None
+    return zh.to_traditional(reply.strip().strip('「」"')) or None

@@ -2,7 +2,7 @@ from unittest import mock
 
 import pytest
 
-from tianxia import event_gamble as eg
+from tianxia import event_llm as eg
 from tianxia.battle_instance import DEFAULT_FREE_TEXT_SUCCESS_RATE, SuccessRateJudgment
 from tianxia.models import Choice, Event
 
@@ -64,14 +64,17 @@ def test_assess_prompt_carries_the_scene_and_guards_against_claimed_success(even
 # ── narrate_event_gamble：擲骰後潤色 ───────────────────────────────
 
 
-def test_narrate_without_a_client_returns_empty(event):
-    assert eg.narrate_event_gamble(None, event, "大喊官兵來了", True, "兩夥人一哄而散。") == ""
+def test_narrate_without_a_client_returns_none(event):
+    assert eg.narrate_event_gamble(None, event, "大喊官兵來了", True, "兩夥人一哄而散。") is None
 
 
-def test_narrate_falls_back_to_empty_when_the_llm_call_fails(event):
+def test_narrate_returns_none_when_the_llm_call_fails_or_says_nothing(event):
     client = mock.Mock()
     client.chat_text.side_effect = RuntimeError("連不上")
-    assert eg.narrate_event_gamble(client, event, "大喊官兵來了", False, "沒人理你。") == ""
+    assert eg.narrate_event_gamble(client, event, "大喊官兵來了", False, "沒人理你。") is None
+    client.chat_text.side_effect = None
+    client.chat_text.return_value = "  「」 "
+    assert eg.narrate_event_gamble(client, event, "大喊官兵來了", False, "沒人理你。") is None
 
 
 def test_narrate_converts_to_traditional_and_strips_quotes(event):
