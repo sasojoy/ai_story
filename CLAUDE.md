@@ -590,7 +590,8 @@ CLAUDE.md，白繞了一圈。**開工前先 `git worktree list` 核對一次。
   送出走 `/api/answer`，跟人物對話一樣三段：鎖內 `Game.free_text_request` → 鎖外 `event_llm.assess_event_success_rate`
   （失敗一律 40）→ 鎖內 `Game.answer_event` 重驗同一則事件、同一句話才擲骰。成功率 `rules.free_text_rate`
   ＝LLM 分數＋(屬性−5)×4，夾在 5～85；江湖紀錄寫「你：「…」（成算N成）」。`choose("choice:free")` 只回一句提示、不消耗事件。
-  兩種假人都排除這顆（`bot.pick`、`bot_policy.take_turn`）。擲骰後的 LLM 潤色（spec 寫「可以」）這次沒做。
+  兩種假人都排除這顆（`bot.pick`、`bot_policy.take_turn`）。擲骰後再鎖外請模型潤色一兩句（`event_llm.narrate_event_gamble`，LLM 整合寫的），
+  進鎖用 `Game.add_gamble_narration` 插回那一則紀錄；認不到那一則就不插。
 - **地方痕跡**：`Effect.marks`（1～3，只能加）、`Condition.marks_min/max`、`WorldState.marks`（跟賽季 JSON 一起存，
   換季自然清空）。一人一天一次記在 `PlayerState.mark_days`（角色每季重來，跟著清）。門檻在載入時乘
   `Config.mark_threshold_scale` 無條件進位；文字裡的 `{marks:地點:痕跡}` 換成模糊人數（`rules.fill_marks`），不列名字。

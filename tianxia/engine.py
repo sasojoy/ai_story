@@ -46,6 +46,16 @@ class FreeTextRequest(BaseModel):
     text: str
 
 
+class FreeTextOutcome(BaseModel):
+    """擲完骰的結果：server.py 拿它在鎖外請模型潤色，再交回 add_gamble_narration 插進那一則江湖紀錄。"""
+    event_id: str
+    text: str
+    success: bool
+    effect_text: str
+    time: float  # 那一則紀錄的遊戲時間與標題，插潤色前用來認是不是同一則
+    title: str
+
+
 class Game:
     MAP_LAYERS = atlas.LAYERS  # 大地圖的圖層：id → 名稱
 
@@ -64,6 +74,7 @@ class Game:
             presence_penalty=cfg.ollama_presence_penalty, frequency_penalty=cfg.ollama_frequency_penalty,
         )  # companion_agent.py 用；連不上時那輪對話取消，這裡不用先健檢
         self._draft: Draft | None = None  # choose() 進行中那次行動的江湖紀錄草稿
+        self.last_gamble: FreeTextOutcome | None = None  # 上一次 answer_event 擲完骰的結果（server.py 拿去潤色）
         # 主畫面「走法」切換選的走法（步行／趕路／疾行），選單上的「前往」照它出發（見 _move_option）。只是畫面狀態：
         # 不在 GameState 裡、不進存檔。網頁伺服器的同一個角色只有一份 Game（各分頁共用、重新整理也還在），所以走法
         # 由頁面記著、每個請求帶上，server.py 在行動鎖裡逐次 set_move_mode（見 server.MOVE_MODE）；機器人與假人從不改它。
@@ -527,6 +538,7 @@ class Game:
         llm_rate 是鎖外評好的 0～100；沒給（直接呼叫的測試、腳本）就在這裡評，評不到一樣退回 40。
         成功率＝LLM 評分加屬性修正、夾在 5～85（rules.free_text_rate）；擲骰用引擎自己的 rng。"""
         s, c = self.state, self.content
+        self.last_gamble = None
         current = self.free_text_request(request.text)
         if current is None or current.event_id != request.event_id:
             return self._log(["（事情已經過去了，這句話沒派上用場。）"])
@@ -544,14 +556,33 @@ class Game:
             word = "成功" if success else "失敗"
             msgs = [f"你：「{request.text}」（{rate_words(rate)}）", f"（{who}——{word}）"]
             self._outcome(f"{who}・{word}", msgs[-1])
-            msgs += self._apply(choice.effect if success else choice.fail_effect)
+            effect = choice.effect if success else choice.fail_effect
+            msgs += self._apply(effect)
             msgs += check_thresholds(s, c, self.world, self.client, now=self.now)
             journal.add_entry(s, self._draft.entry(s.world.time, msgs))
+            self.last_gamble = FreeTextOutcome(
+                event_id=event.id, text=request.text, success=success, effect_text=fill_marks(effect.text, s),
+                time=s.world.time, title=self._draft.title,
+            )
         finally:
             self._draft = None
         self._record_faction()
         self._save_season()
         return self._log(msgs)
+
+    def add_gamble_narration(self, outcome: FreeTextOutcome, narration: str) -> None:
+        """隨口應對的潤色（鎖外生成）插回那一則江湖紀錄：接在「你：「…」」那一行後面、結果文字前面。
+        認不到那一則（紀錄已經被後來的事併掉或擠到後面）就不插，潤色本來就是錦上添花。"""
+        journal_entries = self.state.journal
+        if not narration or not journal_entries:
+            return
+        entry = journal_entries[0]
+        if entry.time != outcome.time or entry.title != outcome.title:
+            return
+        lines = list(entry.lines)
+        said = next((i for i, line in enumerate(lines) if line.startswith(f"你：「{outcome.text}」")), None)
+        lines.insert(0 if said is None else said + 1, narration)
+        journal_entries[0] = entry.model_copy(update={"lines": lines})
 
     def _action_title(self, kind: str, arg: str) -> str:
         s, c = self.state, self.content

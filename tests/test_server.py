@@ -1084,9 +1084,15 @@ def test_answering_asks_the_model_outside_the_lock(game, at_a_gamble, lock_event
         return 85
 
     game.rng = random.Random(0)
-    with mock.patch.object(server.event_llm, "assess_event_success_rate", side_effect=assess):
+    def narrate(client, event, text, success, effect_text):
+        lock_events.append("narrate")
+        return "你扯開嗓子一喊。"
+
+    with mock.patch.object(server.event_llm, "assess_event_success_rate", side_effect=assess), \
+            mock.patch.object(server.event_llm, "narrate_event_gamble", side_effect=narrate):
         server.answer_event(game, "大喊官兵來了")
-    assert lock_events == ["enter", "exit", "assess:大喊官兵來了", "enter", "exit"]
+    assert lock_events == ["enter", "exit", "assess:大喊官兵來了", "enter", "exit", "narrate", "enter", "exit"]
+    assert game.state.journal[0].lines[1] == "你扯開嗓子一喊。"
     assert game.state.pending_event is None
     assert game.state.journal[0].title == f"{at_a_gamble.title}・隨口應對"
     assert game.state.journal[0].lines[0].startswith("你：「大喊官兵來了」（成算")
