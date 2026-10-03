@@ -216,7 +216,15 @@
     "tags": [
       "山林"
     ],
-    "danger": 2
+    "danger": 2,
+    "enemies": [
+      "yelang",
+      "guan_patrol"
+    ],
+    "materials": [
+      "man_2",
+      "kuai_1"
+    ]
   },
   {
     "id": "mengjin_ford",
@@ -232,7 +240,18 @@
     "tags": [
       "渡口"
     ],
-    "danger": 2
+    "danger": 2,
+    "enemies": [
+      "liangzhou_cavalry",
+      "he_shuikou"
+    ],
+    "train_trend": {
+      "huangjin": 1
+    },
+    "materials": [
+      "kuai_1",
+      "gang_1"
+    ]
   },
   {
     "id": "nanyang_road",
@@ -277,7 +296,18 @@
     "tags": [
       "營寨"
     ],
-    "danger": 3
+    "danger": 3,
+    "enemies": [
+      "shuikou",
+      "huangjin_sishi"
+    ],
+    "train_trend": {
+      "huangjin": -2
+    },
+    "materials": [
+      "gang_2",
+      "man_1"
+    ]
   },
   {
     "id": "yu_river",
@@ -291,6 +321,17 @@
     "y": 1147,
     "tags": [
       "河畔"
+    ],
+    "enemies": [
+      "he_shuikou",
+      "louluo"
+    ],
+    "train_trend": {
+      "huangjin": -1
+    },
+    "materials": [
+      "rou_1",
+      "man_1"
     ]
   },
   {
@@ -324,7 +365,18 @@
     "tags": [
       "野外"
     ],
-    "danger": 2
+    "danger": 2,
+    "enemies": [
+      "shanzei",
+      "jun_bing"
+    ],
+    "train_trend": {
+      "huangjin": -1
+    },
+    "materials": [
+      "kuai_1",
+      "gang_1"
+    ]
   },
   {
     "id": "runan",
@@ -644,6 +696,9 @@
     "y": 118,
     "tags": [
       "里巷"
+    ],
+    "materials": [
+      "rou_1"
     ]
   },
   {
@@ -659,6 +714,9 @@
     "important": true,
     "tags": [
       "結社"
+    ],
+    "enemies": [
+      "yiyong"
     ]
   },
   {
@@ -678,7 +736,18 @@
     "tags": [
       "河畔"
     ],
-    "danger": 2
+    "danger": 2,
+    "enemies": [
+      "he_shuikou",
+      "shanzei"
+    ],
+    "train_trend": {
+      "huangjin": -1
+    },
+    "materials": [
+      "rou_1",
+      "man_1"
+    ]
   },
   {
     "id": "yanshan_foot",
@@ -696,7 +765,18 @@
     "tags": [
       "山林"
     ],
-    "danger": 2
+    "danger": 2,
+    "enemies": [
+      "yan_mazei",
+      "louluo"
+    ],
+    "train_trend": {
+      "huangjin": -1
+    },
+    "materials": [
+      "kuai_1",
+      "man_2"
+    ]
   },
   {
     "id": "julu_altar",
@@ -721,7 +801,17 @@
       "祭壇",
       "營寨"
     ],
-    "danger": 3
+    "danger": 3,
+    "enemies": [
+      "taiping_lishi",
+      "huangjin_sishi"
+    ],
+    "train_trend": {
+      "huangjin": -2
+    },
+    "materials": [
+      "rou_2"
+    ]
   },
   {
     "id": "guangzong",
@@ -742,7 +832,18 @@
       "城池",
       "營寨"
     ],
-    "danger": 3
+    "danger": 3,
+    "enemies": [
+      "huangjin_sishi",
+      "toumu"
+    ],
+    "train_trend": {
+      "huangjin": -2
+    },
+    "materials": [
+      "gang_2",
+      "kuai_2"
+    ]
   },
   {
     "id": "luzhi_camp",
@@ -761,7 +862,17 @@
     "tags": [
       "營寨"
     ],
-    "danger": 2
+    "danger": 2,
+    "enemies": [
+      "beijun_wuzu",
+      "guan_patrol"
+    ],
+    "train_trend": {
+      "huangjin": 1
+    },
+    "materials": [
+      "gang_1"
+    ]
   },
   {
     "id": "xiaquyang",
@@ -780,7 +891,18 @@
     "tags": [
       "城鎮"
     ],
-    "danger": 2
+    "danger": 2,
+    "enemies": [
+      "taiping_lishi",
+      "shanzei"
+    ],
+    "train_trend": {
+      "huangjin": -1
+    },
+    "materials": [
+      "man_1",
+      "gang_1"
+    ]
   },
   {
     "id": "haozu_fort",
@@ -796,7 +918,13 @@
     "tags": [
       "塢堡"
     ],
-    "danger": 2
+    "danger": 2,
+    "enemies": [
+      "wubao_buqu"
+    ],
+    "materials": [
+      "man_1"
+    ]
   },
   {
     "id": "baima_ford",
@@ -825,6 +953,17 @@
     "tags": [
       "渡口"
     ],
-    "danger": 2
+    "danger": 2,
+    "enemies": [
+      "he_shuikou",
+      "jun_bing"
+    ],
+    "train_trend": {
+      "huangjin": 1
+    },
+    "materials": [
+      "rou_1",
+      "kuai_1"
+    ]
   }
 ]

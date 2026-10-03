@@ -331,9 +331,11 @@ def test_the_playtest_admin_is_rayal():
 
 def test_enemy_squads_are_marked_with_the_designers_factions(content):
     factions = {sid: s.faction for sid, s in content.squads.items()}
-    assert {sid for sid, f in factions.items() if f == "huang"} == {"louluo", "shuikou", "toumu", "shanzei", "fanjianglong"}
-    assert {sid for sid, f in factions.items() if f == "guan"} == {"guishou"}
-    assert {sid for sid, f in factions.items() if f == "haoqiang"} == {"xuantie_dizi"}
+    assert {sid for sid, f in factions.items() if f == "huang"} == {
+        "louluo", "shuikou", "toumu", "shanzei", "fanjianglong", "taiping_lishi", "huangjin_sishi",
+    }
+    assert {sid for sid, f in factions.items() if f == "guan"} == {"guishou", "guan_patrol", "jun_bing", "beijun_wuzu", "liangzhou_cavalry"}
+    assert {sid for sid, f in factions.items() if f == "haoqiang"} == {"xuantie_dizi", "wubao_buqu", "yiyong"}
 
 
 def test_season_one_tells_the_dialogue_model_when_it_is(content):

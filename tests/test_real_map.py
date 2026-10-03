@@ -142,3 +142,26 @@ def test_new_locations_have_a_description_and_tags(content):
     for loc_id in NEW_LOCATIONS:
         loc = content.locations[loc_id]
         assert len(loc.description) >= 20 and loc.tags, loc_id
+
+
+TOWNS_WITHOUT_ENEMIES = {"loushang_village", "luoyang_palace", "dajiangjun_fu", "xinye"}  # 城鎮、官署照現有城鎮的慣例不放敵人
+NEW_SQUADS = {
+    "guan_patrol", "jun_bing", "beijun_wuzu", "liangzhou_cavalry", "taiping_lishi",
+    "huangjin_sishi", "wubao_buqu", "yiyong", "yan_mazei", "he_shuikou",
+}
+
+
+def test_new_squads_exist(content):
+    assert NEW_SQUADS <= set(content.squads)
+
+
+def test_new_locations_outside_towns_have_a_faction_squad(content):
+    """設計 7.1：新地點要有標陣營的歷練隊伍（「歷練看陣營」要用）。"""
+    for loc_id in NEW_LOCATIONS - TOWNS_WITHOUT_ENEMIES:
+        squads = [content.squads[s] for s in content.locations[loc_id].enemies]
+        assert any(s.faction for s in squads), loc_id
+
+
+def test_towns_and_offices_have_no_enemies(content):
+    for loc_id in TOWNS_WITHOUT_ENEMIES:
+        assert content.locations[loc_id].enemies == [], loc_id
