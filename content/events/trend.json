@@ -16,7 +16,7 @@
    "text": "官道被黃巾截斷後，往來潁川的軍報全靠小道傳遞。路旁的哨卡空了一半，一個驛卒牽著瘸馬在路邊發愁：他手上的軍書再送不到陽翟，前線就要斷糧了。",
    "choices": [
      {"text": "替他抄山間小路送過去", "check": {"stat": "agi", "difficulty": 7},
-      "effect": {"text": "你翻了兩道山樑，趕在天黑前把軍書交到陽翟。郡吏記下了你的名號。", "stats": {"fame": 2, "silver": 15}, "trend": {"huangjin": -2}, "stamina": -15},
+      "effect": {"text": "你翻了兩道山梁，趕在天黑前把軍書交到陽翟。郡吏記下了你的名號。", "stats": {"fame": 2, "silver": 15}, "trend": {"huangjin": -2}, "stamina": -15},
       "fail_effect": {"text": "小路被一道新挖的壕溝攔住，你繞了大半天，只好把軍書送回驛卒手上。", "stamina": -15}},
      {"text": "看看軍書的封泥，判斷哪一封最急", "check": {"stat": "wis", "difficulty": 6},
       "effect": {"text": "你挑出一封蓋著郡守印的，教驛卒先送這一封、其餘的等官軍護送。他千恩萬謝。", "stats": {"good": 1, "fame": 1}},
@@ -37,9 +37,9 @@
    ]},
   {"id": "trend_zhuo_volunteers", "title": "南下的鄉勇", "locations": ["zhuo_county"],
    "condition": {"trend_min": {"huangjin": 40}},
-   "text": "冀州的黃巾越打越兇，涿郡縣門外每天都有一隊鄉勇整裝南下。今天這一隊連鞋都沒穿齊，帶隊的豪族子弟急著要湊足人數，見你就拉：「好漢，一起去吧！」",
+   "text": "冀州的黃巾越打越兇，涿縣縣門外每天都有一隊鄉勇整裝南下。今天這一隊連鞋都沒穿齊，帶隊的豪族子弟急著要湊足人數，見你就拉：「好漢，一起去吧！」",
    "choices": [
-     {"text": "替他們把隊伍操練出個樣子再走", "check": {"stat": "agi", "difficulty": 6},
+     {"text": "替他們把隊伍操練出個樣子再走", "check": {"stat": "wis", "difficulty": 6},
       "effect": {"text": "你教他們排成三列、聽鼓進退，半天下來總算像支隊伍。帶隊的硬塞了一串錢給你。", "stats": {"fame": 1, "silver": 15}, "trend": {"huangjin": -1}},
       "fail_effect": {"text": "鄉勇們東倒西歪，越練越亂，帶隊的臉色很難看。", "stats": {"fame": -1}}},
      {"text": "跟他們一起扛著糧袋走一段", "check": {"stat": "con", "difficulty": 6, "by": "self"},
@@ -56,7 +56,7 @@
       "fail_effect": {"text": "河水太急，你自己險些被沖走，抓著船纜才爬上來。", "stamina": -20}},
      {"text": "跟船家講價，讓他照舊價分批渡人", "check": {"stat": "wis", "difficulty": 7},
       "effect": {"text": "你算給船家聽：照舊價多跑幾趟，賺得比坐地起價還多，還不會被人砸了船。船家想了想，點頭了。", "stats": {"good": 1, "fame": 1}},
-      "fail_effect": {"text": "船家冷笑一聲，把船撐離了岸。", "stats": {"silver": -5}}},
+      "fail_effect": {"text": "船家冷笑一聲，說聽你囉嗦也得收錢，伸手討了幾個才把船撐離岸。", "stats": {"silver": -5}}},
      {"text": "出高價，自己先上船", "effect": {"text": "你遞上銀子，船家立刻替你在船頭騰了個位子。", "stats": {"silver": -20}}}
    ]}
 ]
