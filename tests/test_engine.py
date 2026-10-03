@@ -320,6 +320,17 @@ def test_add_and_remove_from_team(game):
     assert game.team_members() == [("沈浪", "player"), ("韓鐵", "mate")]
 
 
+def test_you_yourself_are_never_added_to_or_removed_from_the_team(game):
+    """名冊第一列是本人（key "player"）：加入、移出都只回一句話，隊伍裡不會多出一個 "player"。"""
+    game.rng = FixedRandom(0.1)
+    game.choose("act:recruit")
+    for act in (game.add_to_team, game.remove_from_team):
+        msgs = act("player")
+        assert msgs == ["本人一直都在隊伍裡，不用加入，也不能移出。"]
+        assert game.state.player.team == ["mate"]
+        assert game.team_members() == [("沈浪", "player"), ("韓鐵", "mate")]
+
+
 def test_owned_companions_and_roster_lines(game):
     game.rng = FixedRandom(0.1)
     game.choose("act:recruit")
@@ -524,6 +535,51 @@ def test_practicing_with_nothing_learned_says_so_without_finishing_the_step(game
     """FB-007 原本的現場：畫面寫「你還沒學武學」，緊接著卻是「✔ 引導完成」。"""
     _practice_step_game(game, {})
     assert game.practice("武學") == ["你還沒學武學，沒東西可以練。"]
+
+
+def _wugong_step_game(game, worn: dict[str, int]):
+    """把引導換成「看地圖 → 身上要有一門武學（has_wugong）→ 出城」，跟正式內容的 t2_map → t4_practice 同一個
+    順序；身上先配好 worn（種類 → 熟練度），引導停在看地圖那一步。回傳 has_wugong 那一步的獎勵銀兩。"""
+    from tianxia.models import Effect, TutorialGoal, TutorialStep
+
+    for i, (kind, level) in enumerate(worn.items()):
+        game.create_skill(f"測試{kind}{i}", kind)
+        setattr(game.state.player.member, f"{'neigong' if kind == '內功' else 'wugong'}_level", level)
+    reward = 10
+    game.content.tutorial.steps = [
+        TutorialStep(id="t2_map", text="看地圖。", done_when=TutorialGoal(action="view_map")),
+        TutorialStep(
+            id="t4_practice", text="先修練。", done_when=TutorialGoal(has_wugong=True),
+            reward=Effect(stats={"silver": reward}),
+        ),
+        TutorialStep(id="t5_next", text="出城。", done_when=TutorialGoal(action="move")),
+    ]
+    game.state.player.tutorial_step = 0
+    return reward
+
+
+def test_a_maxed_wugong_finishes_the_practice_step_as_soon_as_it_comes_up(game):
+    """W6 Important 1：修練頁的鍛鍊鈕在第十成是灰的，所以走到這一步之前就練滿的人按不了「鍛鍊」。
+    這一步改成「身上有一門武學」：前一步一完成，同一次 note_action 就接著完成它。"""
+    reward = _wugong_step_game(game, {"武學": 10})
+    silver = game.state.player.stats["silver"]
+    msgs = game.view_map()
+    assert msgs.count("✔ 引導完成") == 2
+    assert game.state.player.tutorial_step == 2
+    assert game.state.player.stats["silver"] == silver + reward
+    assert msgs[-1] == f"【{game.content.tutorial.speaker}】出城。"
+
+
+def test_only_a_neigong_never_finishes_the_wugong_step_until_a_wugong_is_created(game):
+    """只有內功時：鍛鍊內功、看地圖、練空著的武學都不算；自創一門武學才算（W5 的規則在這裡有洞：練內功也算）。"""
+    _wugong_step_game(game, {"內功": 10})
+    game.view_map()
+    assert game.state.player.tutorial_step == 1
+    for act in (lambda: game.practice("內功"), lambda: game.practice("武學"), game.view_map):
+        assert "✔ 引導完成" not in act()
+        assert game.state.player.tutorial_step == 1
+    assert "✔ 引導完成" in game.create_skill("回風掌", "武學")
+    assert game.state.player.tutorial_step == 2
 
 
 def test_create_skill_rejects_a_taken_name(game):
@@ -1022,7 +1078,7 @@ def test_a_stale_journey_is_dropped_on_load(content, game):
 
 def _install_battle_def(content):
     from tianxia.models import (
-        BattleAct, BattleActionEffect, BattleAdvanceWhen, BattleDef, BattleFaction, BattleOption, BattleOutcome,
+        BattleAct, BattleActionEffect, BattleDef, BattleFaction, BattleOption, BattleOutcome,
     )
 
     definition = BattleDef(
@@ -1032,7 +1088,6 @@ def _install_battle_def(content):
             BattleAct(
                 id="a1", title="初探", text="雙方試探。", goal="推動戰局",
                 options=[BattleOption(text="穩紮穩打", tag="safe"), BattleOption(text="全力進攻", tag="aggressive")],
-                advance_when=BattleAdvanceWhen(trend_min=90),
             ),
         ],
         action_tags={
@@ -1041,6 +1096,7 @@ def _install_battle_def(content):
         },
         outcomes=[BattleOutcome(faction="guan", title="官軍大勝", text="官軍獲勝。")],
         muster_seconds=600, round_seconds=120,
+        rounds_per_act=1,  # 一幕一回合：第一回合結算完就看戰局收場（保底結果沒有門檻，一定是官軍大勝）
     )
     content.battles[definition.id] = definition
     return definition
@@ -1248,6 +1304,23 @@ def test_a_fighter_who_walks_out_during_the_muster_is_away_until_back(content, g
         assert "你已加入【官軍】" in game.scene_text()
 
 
+def test_the_battle_scene_shows_which_round_of_how_many(content, game):
+    """FB-016：決戰的場景在幕名後面寫第幾回合、一共幾回合，讓人知道還要打多久。"""
+    definition = _install_battle_def(content)
+    definition.rounds_per_act = 3  # 一幕三回合：整場 3 回合
+    game.world.start_battle(definition, now=0.0)
+    with at(game, 0.0):
+        game.choose("battle:join:guan")
+        game.world.mutate_battle(lambda b: battle_instance.join_faction(b, "乙玩家", "huang", neili_cap=100.0))
+    with at(game, definition.muster_seconds + 1):
+        game._battle_status()  # 開打
+        assert "【初探】（第 1／3 回合）雙方試探。" in game.scene_text()
+        game.world.mutate_battle(lambda b: battle_instance.submit_action(b, "乙玩家", "safe"))
+        game.choose("battle:act:safe")  # 兩人都出手了：第 1 回合結算
+        assert game.world.get_battle().round_number == 1
+        assert "【初探】（第 2／3 回合）雙方試探。" in game.scene_text()
+
+
 def test_the_fighting_menu_still_replaces_everything_once_the_muster_closes(content, game):
     definition = _install_battle_def(content)
     game.world.start_battle(definition, now=1000.0)
@@ -1255,6 +1328,25 @@ def test_the_fighting_menu_still_replaces_everything_once_the_muster_closes(cont
         game.choose("battle:join:guan")
     with at(game, 1000.0 + 601):
         assert ids(game) == ["battle:act:safe", "battle:act:aggressive"]
+
+
+def test_an_unfinished_battle_is_dropped_without_its_outcome_when_the_season_ends(content, game):
+    """季一結束，沒打完的決戰直接收掉、不套用結果（這一季勝負已經定了），參戰者回到休季畫面（試玩回饋 FB-015）。"""
+    definition = _install_battle_def(content)
+    game.world.start_battle(definition, now=1000.0)
+    with at(game, 1000.0):
+        game.choose("battle:join:guan")
+    with at(game, 1000.0 + 601):
+        assert ids(game) == ["battle:act:safe", "battle:act:aggressive"]  # 開打了
+    trends = dict(game.world.get_season().trends)
+    game.world.mutate_season(lambda season: (setattr(season, "ended", True), setattr(season, "ending_title", "天下太平")))
+    game.sync(1000.0 + 700)
+    with at(game, 1000.0 + 700):
+        assert ids(game) == ["season:resting"]
+        assert "測試決戰" not in game.scene_text()
+    assert game.world.get_battle() is None
+    assert dict(game.world.get_season().trends) == trends  # 沒有套用決戰的結果
+    assert not any("官軍大勝" in entry.text for entry in game.world.get_season().chronicle)
 
 
 def test_joining_a_faction_during_muster(content, game):
@@ -1313,7 +1405,7 @@ def test_the_player_whose_action_completes_the_round_sees_the_resolution_text(co
 def test_waiting_for_others_returns_a_placeholder_message(content, game):
     """送出行動但還有人沒選完，回合不會結算：至少要有個訊息，不能讓畫面看起來像沒反應。"""
     definition = _install_battle_def(content)
-    definition.outcomes[0] = definition.outcomes[0].model_copy(update={"trend_min": 999})  # 讓這回合分不出勝負
+    definition.rounds_per_act = 3  # 讓這回合分不出勝負
     game.world.start_battle(definition, now=0.0)
     with at(game, 0.0):
         game.choose("battle:join:guan")
@@ -1471,7 +1563,7 @@ def test_arriving_mid_battle_lets_you_join_late(content, game):
 def test_a_fighter_who_leaves_the_region_sits_the_rounds_out_until_back(content, game):
     definition = _install_battle_def(content)
     definition.region = "north"
-    definition.outcomes[0] = definition.outcomes[0].model_copy(update={"trend_min": 999})  # 不要一回合就分出勝負
+    definition.rounds_per_act = 3  # 不要一回合就分出勝負
     _south_cave(content, game)
     game.world.start_battle(definition, now=0.0)
     with at(game, 0.0):
@@ -1686,6 +1778,7 @@ def _install_battle_def_with_free_text(content):
         },
         outcomes=[BattleOutcome(faction="guan", title="官軍大勝", text="官軍獲勝。")],
         muster_seconds=600, round_seconds=120,
+        rounds_per_act=1,  # 一幕一回合，同 _install_battle_def
     )
     content.battles[definition.id] = definition
     return definition
@@ -2153,6 +2246,30 @@ def test_training_with_your_own_factions_squad_is_a_drill(content, game):
     assert game.state.player.member.exp > 0 or game.state.player.member.level > 1
     assert game.state.player.materials == {}
     assert game.state.world.trends["kou"] == 31
+
+
+def test_training_among_your_own_side_is_labelled_a_drill_not_a_fight(content, game):
+    """自己陣營的地盤（只會操練）不寫勝算「必敗」，寫明是操練（試玩回饋 FB-008）。"""
+    _training_factions(content)
+    content.squads["thug"].faction = "huang"
+    game.state.player.faction = "huang"  # 沒學武功：照勝算算是必敗，但操練不會輸
+    walk_to(game, "lake")
+    option = next(o for o in game.options() if o.id == "act:train")
+    assert (option.label, option.enabled) == ("操練（體力 10・零風險）", True)
+    game.state.player.faction = "guan"  # 換成對頭：照樣是要打的歷練，寫對手與勝算
+    option = next(o for o in game.options() if o.id == "act:train")
+    assert option.label.startswith("歷練（體力 10・水寇小隊・")
+
+
+def test_where_some_squads_are_your_own_the_odds_are_for_the_others(content, game):
+    """自己人與外人都有的地方：勝算只看真的會打的那幾路，另外說明也可能是操練。"""
+    _training_factions(content)
+    content.squads["boss"].faction = "huang"  # 翻江龍（難度 200）是自己人：不能拿它算勝算
+    content.locations["lake"].enemies = ["thug", "boss"]
+    game.state.player.faction = "huang"
+    walk_to(game, "lake")
+    label = next(o for o in game.options() if o.id == "act:train").label
+    assert label == f"歷練（體力 10・水寇小隊・{game.odds('thug')}・或與自己人操練）"
 
 
 def test_train_trend_push_previews_the_push_for_your_faction(content, game):

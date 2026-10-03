@@ -110,7 +110,7 @@ def test_catch_up_season_advances_the_shared_clock_by_elapsed_real_time(store, c
 
 def _battle_definition():
     from tianxia.models import (
-        BattleAct, BattleActionEffect, BattleAdvanceWhen, BattleDef, BattleFaction, BattleOption, BattleOutcome,
+        BattleAct, BattleActionEffect, BattleDef, BattleFaction, BattleOption, BattleOutcome,
     )
 
     return BattleDef(

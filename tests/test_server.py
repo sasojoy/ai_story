@@ -571,6 +571,25 @@ def test_the_practice_page_gets_a_card_for_each_worn_art(client):
     assert "你還沒有內功。" in neigong["card"]
 
 
+def test_the_slot_cards_say_whether_each_slot_holds_an_art_and_its_level(client, monkeypatch):
+    """C4／C5：修練頁照目前那一門有沒有功法、練到第幾成，決定自創欄收不收、鍛鍊鈕亮不亮。
+    全程走 API：動作端點會存檔，每次進鎖都從資料庫重讀角色，所以讀到的是存好的那一份。"""
+    monkeypatch.setattr(server.CONTENT.config, "practice_injury_chance", 0.0)
+
+    def slots(cards):
+        return [(c["kind"], c["learned"], c["level"], c["maxed"]) for c in cards]
+
+    _player(client)
+    assert slots(client.get("/api/menxia").json()["slot_cards"]) == [("武學", False, 0, False), ("內功", False, 0, False)]
+    client.post("/api/menxia/create", json={"kind": "武學", "name": "流雲手"})
+    out = client.post("/api/menxia/practice", json={"kind": "武學"}).json()
+    assert slots(out["menxia"]["slot_cards"]) == [("武學", True, 2, False), ("內功", False, 0, False)]
+    assert slots(client.get("/api/menxia").json()["slot_cards"]) == [("武學", True, 2, False), ("內功", False, 0, False)]
+    for _ in range(8):  # 練到第十成：練滿了沒由伺服器照 team.MAX_LEVEL 說，前端不另外記上限
+        out = client.post("/api/menxia/practice", json={"kind": "武學"}).json()
+    assert slots(out["menxia"]["slot_cards"]) == [("武學", True, 10, True), ("內功", False, 0, False)]
+
+
 def _a_player_with_library_arts(client, *arts):
     """新角色，功法庫裡放這幾門功法。功法本體登記進共用世界（煉製、自創都放在那裡），
     角色的功法庫存進資料庫（每次進鎖都從資料庫重讀角色，只改記憶體的話下一個請求就看不到）。"""

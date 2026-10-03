@@ -24,6 +24,7 @@ LEADER_NEWS = 2  # 詳情欄每位龍頭人物最多列幾則最近提到他的�
 LEADER_WHO = "江湖上的龍頭人物，會自己行動，左右江湖大勢"
 LEADER_QUIET = "眼下沒有動靜"
 ODDS_ORDER = ("穩勝", "有把握", "五五波", "難分勝負", "凶險", "必敗")  # 由易到難；「最險」取排在最後的
+DRILL = "操練"  # 自己陣營的隊伍：遇上了一起操練、不會輸，不算勝算（見 foes）
 ARROWS = ("→", "↘", "↓", "↙", "←", "↖", "↑", "↗")  # 從正東起順時針，每 45 度一個（畫面座標 y 向下）
 UNKNOWN = "尚未摸清"
 Odds = Callable[[str], str]  # 敵方隊伍 id → 勝算（Game.odds）
@@ -226,16 +227,22 @@ def recent_news(state: GameState, loc_id: str) -> list[Rumor]:
 # ── 敵情 ──────────────────────────────────────────────
 
 
-def foes(content: Content, loc: Location, odds: Odds) -> list[tuple[str, str]]:
-    """可能遇到的敵方隊伍與勝算：（隊伍名稱, 勝算），同一隊只列一次。
+def foes(content: Content, loc: Location, odds: Odds, faction: str | None = None) -> list[tuple[str, str]]:
+    """可能遇到的隊伍與勝算：（隊伍名稱, 勝算），同一隊只列一次。faction 是自己的陣營：自己陣營的隊伍遇上了是
+    一起操練、不會輸（engine._drill），寫「操練」不算勝算（試玩回饋 FB-008）。
     不檢查視野：呼叫端要先用 is_known 把關，沒摸清的地點不能露出敵人，也不該去算勝算。"""
-    return [(content.squads[squad_id].name, odds(squad_id)) for squad_id in dict.fromkeys(loc.enemies)]
+    listed = []
+    for squad_id in dict.fromkeys(loc.enemies):
+        squad = content.squads[squad_id]
+        own = squad.faction is not None and squad.faction == faction
+        listed.append((squad.name, DRILL if own else odds(squad_id)))
+    return listed
 
 
-def worst_foe(content: Content, loc: Location, odds: Odds) -> tuple[str, str] | None:
-    """最難對付的對手與勝算（勝算最差的；一樣差取排在前面的）；沒有敵人時為 None。
+def worst_foe(content: Content, loc: Location, odds: Odds, faction: str | None = None) -> tuple[str, str] | None:
+    """最難對付的對手與勝算（勝算最差的；一樣差取排在前面的）；沒有敵人、或只有自己陣營的隊伍時為 None。
     不檢查視野：呼叫端要先用 is_known 把關（同 foes）。"""
-    listed = foes(content, loc, odds)
+    listed = [foe for foe in foes(content, loc, odds, faction) if foe[1] != DRILL]
     return max(listed, key=lambda foe: ODDS_ORDER.index(foe[1])) if listed else None
 
 
@@ -444,7 +451,7 @@ def detail_text(state: GameState, content: Content, loc_id: str, odds: Odds) -> 
         parts.append("**局勢**　" + "　｜　".join(situation))
     parts += [leader_text(state, content, name) for name in people]  # 常出沒的人物併在這裡說明，不另外列名字
 
-    listed = foes(content, loc, odds)
+    listed = foes(content, loc, odds, state.player.faction)
     parts.append("**敵情**　" + ("、".join(f"{name} {word}" for name, word in listed) if listed else "沒有人在這裡滋事"))
 
     act = current_act(state, content)

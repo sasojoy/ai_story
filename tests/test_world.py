@@ -3,6 +3,7 @@ from unittest import mock
 
 from tianxia.world import (
     check_thresholds, current_act, current_storyline, end_season, evaluate_ending, sim_active, sim_tick,
+    start_pending_battle,
 )
 
 
@@ -37,6 +38,31 @@ def test_threshold_with_starts_battle_opens_a_shared_battle(state, content, worl
     assert world.get_battle() is not None
     assert world.get_battle().battle_id == "b1"
     assert any("集結號角" in m for m in msgs)
+
+
+def test_a_battle_threshold_during_a_battle_neither_starts_nor_announces_another(state, content, world):
+    """管理者先開了戰，聲勢之後才自然跨過開戰門檻：不另開一場、也不再廣播集結（試玩回饋 FB-015）。"""
+    content.scenario.thresholds[0].starts_battle = "b1"
+    definition = _install_battle_def(content)
+    world.start_battle(definition, now=0.0)
+    before = world.get_battle()
+    state.world.trends["kou"] = 50
+    msgs = check_thresholds(state, content, world, now=100.0)
+    assert msgs == ["【江湖大事】水寇封江！"]  # 門檻照樣觸發（旗標、傳聞），只是不開戰
+    assert world.get_battle() == before
+
+
+def test_a_pending_battle_is_not_started_during_a_battle_or_after_the_season_ended(content, world):
+    definition = _install_battle_def(content)
+    world.start_battle(definition, now=0.0)
+    before = world.get_battle()
+    world.mutate_season(lambda season: setattr(season, "pending_battle", definition.id))
+    assert start_pending_battle(world, content, now=100.0) == []
+    assert world.get_season().pending_battle is None and world.get_battle() == before  # 還是原來那一場
+    world.clear_battle()
+    world.mutate_season(lambda season: (setattr(season, "pending_battle", definition.id), setattr(season, "ended", True)))
+    assert start_pending_battle(world, content, now=200.0) == []
+    assert world.get_battle() is None and world.get_season().pending_battle is None
 
 
 def test_threshold_with_starts_battle_but_no_matching_content_is_a_safe_no_op(state, content, world):
