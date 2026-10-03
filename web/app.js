@@ -118,6 +118,7 @@
   }
 
   function enter(data) {
+    S.moveMode = "walk"; // 登入、重新登入、建角的畫面都是伺服器照步行排的（_entry 不看走法），切換鈕跟著回到步行
     if (data.stage === "game") {
       S.stage = "game";
       setMain(data.main);

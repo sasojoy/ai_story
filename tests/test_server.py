@@ -1023,6 +1023,14 @@ def test_the_menu_walks_unless_this_request_chose_otherwise(game):
     assert moves() == walking  # 同一份 Game 上一次是疾行：這次沒選走法，就回到步行
 
 
+def test_entering_the_game_always_walks(client):
+    """登入、重新整理頁面（/api/me）的畫面照步行排，就算請求帶著別的走法；頁面在 enter() 也把切換鈕放回步行。"""
+    _player(client)
+    entry = client.get("/api/me", headers=HURRY).json()
+    moves = _moves(entry["main"]["options"])
+    assert moves and all(o["id"].count(":") == 1 and "步行" in o["label"] for o in moves)
+
+
 def test_the_move_mode_is_never_saved(client):
     _player(client)
     client.get("/api/main", headers=HURRY)
