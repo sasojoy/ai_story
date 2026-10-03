@@ -2662,6 +2662,32 @@ def test_a_prepared_failure_for_an_audience_refunds_the_cost(content, game):
     assert not game.state.player.picking_audience
 
 
+def test_calling_on_a_figure_never_delivers_the_fortune(content, game):
+    """福緣到期也一樣：求見是指名拜會，直接開口對話，福緣留給交遊或之後自己到。"""
+    _hall(content, game)
+    game.state.player.fortune = False
+    game.state.world.time += 86400 * content.config.fortune_day_min
+    game.choose("act:call")
+    assert game.dialogue_request("call:scholar") is not None
+    with mock.patch.object(companion_agent, "generate_turn", return_value=NEXT_TURN):
+        game.choose("call:scholar")
+    assert game.state.player.pending_companion == "scholar"
+    assert not game.state.player.fortune
+
+
+def test_a_prepared_audience_is_refused_once_the_list_is_closed(content, game):
+    """生成的那段時間另一個分頁按了「返回」：call:<人物> 已經不在選單上，鎖外生成好的這輪不套用、也不扣體力。"""
+    _hall(content, game)
+    game.choose("act:call")
+    prepared = _prepared(game, "call:scholar", turn=NEXT_TURN)
+    game.choose("call:back")
+    before = game.state.player.stamina
+    with _no_model():
+        assert game.choose("call:scholar", prepared=prepared) == ["（此刻無法這麼做。）"]
+    assert game.state.player.pending_companion is None
+    assert game.state.player.stamina == before
+
+
 def test_a_stale_audience_list_is_closed_where_two_figures_no_longer_stand(content, game):
     game.state.player.picking_audience = True  # 夾具的小鎮沒有大勢人物：例如內容改版後讀進來的舊存檔
     reloaded = Game(content, game.state, world=game.world)

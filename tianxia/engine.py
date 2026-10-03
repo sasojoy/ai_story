@@ -295,7 +295,7 @@ class Game:
             # 內傷的代價——不顯示勝算的話，玩家會在開局連輸三場、氣血見底才知道自己不該打。
             opts.append(self._cost_option("act:train", "歷練", cost["train"], note=self._train_note(loc, odds)))
         figures = self._figures_here()
-        if has_events_here(c, loc, "socialize") or len(figures) == 1:
+        if has_events_here(c, loc, "socialize") or 0 < len(figures) < AUDIENCE_HALL_FIGURES:
             # 兩位以上大勢人物的地點，交遊只走福緣與地點事件、從不開口對話（見 _socialize_figure），
             # 所以只在有交遊事件時才給；人物改由下面的「求見」指名
             opts.append(self._cost_option("act:socialize", "交遊", cost["socialize"]))
