@@ -1023,7 +1023,10 @@ def test_hurrying_takes_half_the_time(game):
 def test_on_the_road_you_can_turn_back_but_not_do_what_needs_a_place(game):
     game.choose("move:lake")
     opts = game.options()
-    assert [(o.id, o.enabled) for o in opts] == [("act:on_road", False), ("road:back", True)]
+    assert [(o.id, o.enabled) for o in opts] == [
+        ("act:on_road", False), ("road:back", True),
+        ("road:think", True), ("road:ask", True), ("road:survey", True), ("road:gather", True),
+    ]
     assert "抵達湖邊" in opts[0].label
     assert game.choose("act:explore") == ["（此刻無法這麼做。）"]
     assert game.seclude(4) == ["你現在無法閉關。"]
@@ -2795,6 +2798,177 @@ def test_the_road_scene_says_what_you_can_do_on_the_road(game):
 def test_an_old_journey_without_the_reroute_fields_still_loads():
     j = Journey.model_validate({"mode": "walk", "path": ["lake"], "arrive_at": [180.0]})
     assert (j.origin, j.share) == (None, 0.0)
+
+
+# ── 路上小事（路上設計第四節）──────────────────────────────
+
+
+def _task(game, what):
+    return next(o for o in game.options() if o.id == f"road:{what}")
+
+
+def test_road_tasks_are_once_per_leg_and_free(game):
+    game.state.world.flags.add("cave_open")
+    game.travel("cave")  # 小鎮—湖邊—寶洞兩段
+    assert (_task(game, "think").label, _task(game, "think").enabled) == ("邊走邊想（心得 +3）", True)
+    stamina = game.state.player.stamina
+    game.choose("road:think")
+    assert game.state.player.stats["xinde"] == 3 and game.state.player.stamina == stamina
+    assert (_task(game, "think").label, _task(game, "think").enabled) == ("邊走邊想（這段路已經想過了）", False)
+    entry = game.state.journal[0]
+    assert (entry.title, entry.changes) == ("邊走邊想", ["心得 +3"])
+    game.advance(game.state.player.journey.arrive_at[0] - game.state.world.time)  # 到湖邊：換段
+    assert game.state.player.journey is not None and _task(game, "think").enabled
+
+
+def test_turning_back_does_not_hand_out_the_road_tasks_again(game):
+    game.choose("move:lake")
+    game.choose("road:think")
+    game.choose("road:back")  # 剛出發就掉頭，馬上回到小鎮
+    game.advance(0)
+    assert game.state.player.location == "town" and game.state.player.journey is None
+    game.choose("move:lake")  # 回到同一段路上：還是做過了
+    assert not _task(game, "think").enabled
+    game.advance(game.state.player.journey.arrive_at[0] - game.state.world.time)  # 真的走到湖邊才換段
+    assert game.state.player.leg_actions == set()
+
+
+def test_dashing_has_no_road_tasks(game):
+    game.state.player.journey = Journey(mode="dash", path=["lake"], arrive_at=[1e9])
+    assert not any(o.id.startswith("road:") and o.id != "road:back" for o in game.options())
+    game.state.player.journey = Journey(mode="hurry", path=["lake"], arrive_at=[90.0])
+    assert "road:gather" in ids(game)
+
+
+def test_asking_along_the_road_hears_a_rumor_from_this_part_of_the_land(game):
+    game.choose("move:lake")
+    w = game.state.world
+    w.rumors += [
+        Rumor(time=0, text="南邊鬧水患。", location=None, region="south"),
+        Rumor(time=0, text="官軍在湖邊集結。", location="lake", region="north", faction="guan"),  # 別的陣營的軍情
+        Rumor(time=0, text="湖邊來了個怪客。", location="lake", region="north"),
+    ]
+    msgs = game.choose("road:ask")
+    assert msgs == ["你沿途向人打聽，聽說：湖邊來了個怪客。"]
+    assert (_task(game, "ask").label, _task(game, "ask").enabled) == ("沿途打聽（這段路已經打聽過了）", False)
+
+
+def test_asking_with_nothing_to_hear_still_counts(game):
+    game.choose("move:lake")
+    assert game.choose("road:ask") == ["你沿途問了幾個人，這一帶最近沒什麼新鮮事。"]
+    assert not _task(game, "ask").enabled
+
+
+def test_surveying_marks_the_unknown_places_near_both_ends(content, game):
+    content.config.vision_base = 0  # 只看得見自己那一站
+    game.state.world.flags.add("cave_open")
+    game.choose("move:lake")
+    assert atlas.views(game.state, content)["lake"] == "dot"
+    msgs = game.choose("road:survey")
+    assert msgs == ["你留意沿路的地形，摸清了湖邊、寶洞的位置。"]
+    assert game.state.player.surveyed == {"lake", "cave"}
+    assert atlas.views(game.state, content)["cave"] == "remembered"
+
+
+def test_surveying_with_nothing_left_to_find_still_counts(game):
+    game.choose("move:lake")
+    assert game.choose("road:survey") == ["你留意了一路的地形，附近沒有什麼沒摸清的地方。"]
+    assert not _task(game, "survey").enabled
+
+
+def test_gathering_by_the_road_follows_what_the_two_ends_offer(content, game):
+    content.locations["lake"].materials = ["gang_2"]  # 湖邊出剛的素材：路邊撿到的是剛的一階
+    game.choose("move:lake")
+    game.rng = FixedRandom(0.1)
+    assert game.choose("road:gather") == ["你在路邊翻找了一陣。", "獲得 精鐵砂 ×1"]
+    assert game.state.player.materials == {"gang_1": 1}
+
+
+def test_gathering_can_come_up_empty(game):
+    game.choose("move:lake")
+    game.rng = FixedRandom(0.9)  # 四成機會：沒撿到
+    assert game.choose("road:gather") == ["你在路邊翻找了一陣，沒找到什麼能用的。"]
+    assert game.state.player.materials == {} and not _task(game, "gather").enabled
+
+
+def test_the_road_scene_lists_the_road_tasks(game):
+    game.choose("move:lake")
+    assert "邊走邊想、沿途打聽、留意地形、路邊採集" in game.scene_text()
+
+
+def test_old_saves_without_road_fields_load(content, game):
+    raw = game.state.model_dump(mode="json")
+    del raw["player"]["leg_actions"], raw["player"]["surveyed"], raw["player"]["road_rewards_today"]
+    loaded = GameState.model_validate(raw)
+    assert loaded.player.leg_actions == set() and loaded.player.surveyed == set()
+    assert loaded.player.road_rewards_today == {}
+
+
+# ── 路上收穫的每天上限（企劃者 2026-10-03 決定）──────────────────
+
+
+def _leg(game, dest, *tasks):
+    """從所在的站步行到相鄰的 dest，路上依序做 tasks，一路走到。"""
+    game.choose(f"move:{dest}")
+    for what in tasks:
+        game.choose(f"road:{what}")
+    game.advance(game.state.player.journey.arrive_at[-1] - game.state.world.time)
+
+
+def test_thinking_on_the_road_pays_only_the_first_few_times_a_game_day(content, game):
+    content.config.road_reward_daily_cap = 2
+    p = game.state.player
+    _leg(game, "lake", "think")
+    _leg(game, "town", "think")
+    assert p.road_rewards_today == {"task": [1, 2]}
+    game.choose("move:lake")  # 同一天的第三段路
+    think = _task(game, "think")
+    assert (think.label, think.enabled) == ("邊走邊想（心得 +3・今天沒有收穫了）", True)
+    xinde = p.stats["xinde"]
+    assert game.choose("road:think") == ["你邊走邊想，今天想得夠多了，沒有新的心得。"]
+    assert p.stats["xinde"] == xinde and p.road_rewards_today == {"task": [1, 2]}
+    assert game.state.journal[0].changes == []
+    assert (_task(game, "think").label, _task(game, "think").enabled) == ("邊走邊想（這段路已經想過了）", False)
+
+
+def test_the_road_reward_count_starts_over_the_next_game_day(content, game):
+    content.config.road_reward_daily_cap = 1
+    p = game.state.player
+    _leg(game, "lake", "think")
+    game.state.world.time += DAY  # 隔天：紀錄是前一天的就當沒拿過（跟每天對話輪數同一個算法）
+    game.choose("move:town")
+    assert _task(game, "think").label == "邊走邊想（心得 +3）"
+    xinde = p.stats["xinde"]
+    game.choose("road:think")
+    assert p.stats["xinde"] == xinde + 3 and p.road_rewards_today == {"task": [2, 1]}
+
+
+def test_only_a_material_actually_found_counts_toward_the_day(game):
+    p = game.state.player
+    game.choose("move:lake")
+    game.rng = FixedRandom(0.9)
+    game.choose("road:gather")  # 沒撿到：不算一次
+    assert p.road_rewards_today == {}
+    game.advance(p.journey.arrive_at[-1] - game.state.world.time)
+    game.choose("move:town")
+    game.rng = FixedRandom(0.1)
+    game.choose("road:gather")
+    assert sum(p.materials.values()) == 1 and p.road_rewards_today == {"task": [1, 1]}
+
+
+def test_thinking_and_gathering_share_the_days_road_rewards(content, game):
+    content.config.road_reward_daily_cap = 1
+    p = game.state.player
+    game.choose("move:lake")
+    game.choose("road:think")
+    gather = _task(game, "gather")
+    assert (gather.label, gather.enabled) == ("路邊採集（有機會撿到素材・今天沒有收穫了）", True)
+    game.rng = FixedRandom(0.1)  # 沒到上限的話這一擲撿得到
+    assert game.choose("road:gather") == ["你留心路邊，今天已經撿夠了，沒再去翻。"]
+    assert p.materials == {} and p.road_rewards_today == {"task": [1, 1]}
+    assert not _task(game, "gather").enabled  # 照樣算這段路做過了
+    # 沿途打聽、留意地形沒有經濟上的收穫，不設上限
+    assert [_task(game, what).label for what in ("ask", "survey")] == ["沿途打聽（聽一則這一帶的傳聞）", "留意地形（摸清附近的地點）"]
 
 
 # ── 時間由外面傳入（線上架構設計第四節）──────────────────────

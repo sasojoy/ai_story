@@ -70,8 +70,8 @@ def location_view(loc_id: str, state: GameState, content: Content, visible: set[
         return "current"  # 在路上時沒有哪一站是所在地：人在兩站之間（路上設計 3.4，地圖另外畫「你」）
     if loc_id in visible:
         return "visible"
-    if loc_id in state.player.visited:
-        return "remembered"
+    if loc_id in state.player.visited or loc_id in state.player.surveyed:
+        return "remembered"  # 去過，或在路上留意地形摸清了（路上設計第四節）
     return "outline" if loc.important else "dot"
 
 

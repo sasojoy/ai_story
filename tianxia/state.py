@@ -102,6 +102,13 @@ class PlayerState(BaseModel):
     seclusion_start: float = 0.0
     resting_since: float | None = None  # 打坐坐下時的賽季時間（遊戲秒）；None＝沒在打坐（地圖擴充設計第二節，跟閉關同一種做法）
     journey: Journey | None = None  # 在路上；None＝人在某個地點（location）
+    # 路上小事（路上設計第四節）：這一段路上已經做過的（road: 選項的 id 後半，例如 think）。到了另一站就清空；
+    # 掉頭回到剛離開的那一站不算換段，所以不跟著那一趟 Journey 走，記在玩家身上（不然折返一下就能重做）。
+    leg_actions: set[str] = Field(default_factory=set)
+    surveyed: set[str] = Field(default_factory=set)  # 留意地形摸清的地點：大地圖上跟去過一樣算記得（atlas.location_view）
+    # 路上收穫的每天上限（企劃者 2026-10-03 決定）："task"（邊走邊想、路邊採集）／"sight"（路上見聞）->
+    # [第幾個遊戲日, 當天已拿幾次]，跟 talks_today 同一種寫法；記的是前幾天就當沒拿過
+    road_rewards_today: dict[str, list[int]] = Field(default_factory=dict)
     tutorial_step: int = 0  # 等於引導步數時代表引導結束
     visited: set[str] = Field(default_factory=set)  # 去過的地點
     fortune: bool = False  # 本季的新立門戶福緣已經發生（或已經改送賀禮）

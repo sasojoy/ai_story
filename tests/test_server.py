@@ -1123,6 +1123,16 @@ def test_the_map_arranges_travel_while_on_the_road(client):
     assert game.state.player.journey.path == [start]
 
 
+def test_on_the_road_the_page_offers_the_road_tasks(client):
+    _player(client)
+    client.post("/api/choose", json={"id": "move:yingshui"})
+    client.post("/api/choose", json={"id": "road:think"})
+    main = client.get("/api/main").json()
+    think = next(o for o in main["options"] if o["id"] == "road:think")
+    assert think["enabled"] is False and think["label"] == "邊走邊想（這段路已經想過了）"
+    assert main["status"]["xinde"] == server.CONTENT.config.road_think_xinde
+
+
 # ── 隨口應對（探索的多人與 LLM 玩法 §8.1）────────────────────
 
 

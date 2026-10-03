@@ -31,6 +31,14 @@ from .world_state import WorldStateStore
 HOUR = 3600
 DAY = 86400
 AUDIENCE_HALL_FIGURES = 2  # 一個地點有幾位以上的大勢人物，交遊就不直接找人、改按「求見」指名（企劃者 2026-10-03 決定）
+# 路上小事（路上設計第四節）：road:<id> → (名稱, 這一段做過之後寫的「這段路已經……」)；按鈕上的補充見 _road_task_options
+ROAD_TASKS: dict[str, tuple[str, str]] = {
+    "think": ("邊走邊想", "想過了"),
+    "ask": ("沿途打聽", "打聽過了"),
+    "survey": ("留意地形", "留意過了"),
+    "gather": ("路邊採集", "找過了"),
+}
+ROAD_REWARD_TASKS = ("think", "gather")  # 有經濟收穫、受每天上限管的路上小事（Config.road_reward_daily_cap）
 
 
 class Option(BaseModel):
@@ -162,6 +170,8 @@ class Game:
             or (j.origin is not None and j.origin not in c.locations)  # 改道後半段路的起點（見 atlas.road_spot）
         ):
             p.journey = None
+        p.surveyed = {loc_id for loc_id in p.surveyed if loc_id in c.locations}
+        p.leg_actions &= set(ROAD_TASKS)
         p.team = [k for k in p.team if k in c.characters][: team.MAX_TEAM_COMPANIONS]
         if p.member.neigong_id and p.member.neigong_id not in c.skills and not self.world.is_skill_name_taken(p.member.neigong_id):
             p.member.neigong_id = None
@@ -325,7 +335,7 @@ class Game:
             opts.append(self._back_option())  # 折返（路上設計 3.2）；改去別處在大地圖上安排
             if j.stop_at is None and j.reached < j.last:
                 opts.append(Option(id="act:halt", label=f"喊停（到{c.locations[j.path[j.reached]].name}就停下）"))
-            return opts
+            return opts + self._road_task_options(j)
         if s.player.resting_since is not None:
             return [self._stand_option()]
         loc = c.locations[s.player.location]
@@ -402,6 +412,27 @@ class Game:
         if self.state.player.stamina < cost:
             return Option(id=option_id, label=f"折返 {name}（{atlas.MODES[mode]}・體力不足，要 {cost}）", enabled=False)
         return Option(id=option_id, label=f"折返 {name}（{atlas.mode_text(c, way.minutes, mode)}）")
+
+    def _road_task_options(self, j: Journey) -> list[Option]:
+        """路上小事（路上設計第四節）：步行、趕路時四樣各一顆，不花體力；這一段路做過的灰掉、寫「這段路已經……」。
+        疾行一站一站立刻抵達，沒有。今天的收穫拿滿了（每天上限）的邊走邊想、路邊採集照樣按得下去，補一句「今天沒有收穫了」。"""
+        if j.mode == "dash":
+            return []
+        hints = {
+            "think": f"心得 +{self.content.config.road_think_xinde}",
+            "ask": "聽一則這一帶的傳聞",
+            "survey": "摸清附近的地點",
+            "gather": "有機會撿到素材",
+        }
+        if not self._road_reward_due("task"):
+            for what in ROAD_REWARD_TASKS:
+                hints[what] += "・今天沒有收穫了"
+        done = self.state.player.leg_actions
+        return [
+            Option(id=f"road:{what}", label=f"{name}（這段路已經{did}）", enabled=False) if what in done
+            else Option(id=f"road:{what}", label=f"{name}（{hints[what]}）")
+            for what, (name, did) in ROAD_TASKS.items()
+        ]
 
     def set_move_mode(self, mode: str) -> None:
         """主畫面的「走法」切換：之後選單上的「前往」用這種走法；不認得的走法當成步行。不存檔（見 __init__ 的 move_mode）。"""
@@ -644,7 +675,10 @@ class Game:
         if kind == "call":
             return "收回名帖" if arg == "back" else f"求見・{c.characters[arg].name}"
         if kind == "road":
-            return atlas.journey_title(c, self._back_way().path)  # 折返：跟「前往」同一個標題，抵達時才併得進同一則
+            what = arg.partition(":")[0]
+            if what == "back":
+                return atlas.journey_title(c, self._back_way().path)  # 折返：跟「前往」同一個標題，抵達時才併得進同一則
+            return ROAD_TASKS[what][0]
         here = c.locations[s.player.location].name
         titles = {
             "explore": f"探索{here}", "socialize": f"交遊・{here}", "call": f"求見・{here}", "train": f"歷練・{here}",
@@ -1502,11 +1536,84 @@ class Game:
         return self._depart(atlas.Route((dest_id,), tuple(legs)), mode or "walk")
 
     def _road(self, arg: str) -> list[str]:
-        """路上的選項（路上設計第三節）。road:back[:<走法>] 是折返：回身後那一站，跟大地圖改道走同一條路（見 _depart）。"""
+        """路上的選項（路上設計第三、四節）。road:back[:<走法>] 是折返：回身後那一站，跟大地圖改道走同一條路（見 _depart）。
+        其餘是路上小事（ROAD_TASKS）：記進這一段做過的，結果照既有慣例寫成「心得 +3」這種變化量。"""
         what, _, mode = arg.partition(":")
         if what == "back":
             return self._depart(self._back_way(), mode or "walk")
-        return []
+        self.state.player.leg_actions.add(what)
+        tasks = {"think": self._road_think, "ask": self._road_ask, "survey": self._road_survey, "gather": self._road_gather}
+        return tasks[what]()
+
+    def _road_ends(self) -> tuple[str, str]:
+        """這段路的兩頭：身後那一站、前面那一站。"""
+        spot = atlas.road_spot(self.state, self.content)
+        return spot.behind, spot.ahead
+
+    def _road_rewards_used(self, kind: str) -> int:
+        """今天（遊戲日，跟每天對話輪數同一個算法）路上已經拿過幾次收穫；kind 是 "task"（路上小事）或 "sight"（見聞）。
+        紀錄是前幾天的就當沒拿過。"""
+        record = self.state.player.road_rewards_today.get(kind)
+        return record[1] if record and record[0] == current_day(self.state) else 0
+
+    def _road_reward_due(self, kind: str) -> bool:
+        """今天路上這一種收穫還沒拿滿（企劃者 2026-10-03 決定的每天上限 road_reward_daily_cap）。"""
+        return self._road_rewards_used(kind) < self.content.config.road_reward_daily_cap
+
+    def _count_road_reward(self, kind: str) -> None:
+        """記一次真的給出去的收穫（沒撿到東西的採集不算）。"""
+        self.state.player.road_rewards_today[kind] = [current_day(self.state), self._road_rewards_used(kind) + 1]
+
+    def _road_think(self) -> list[str]:
+        """邊走邊想：心得（一次歷練大約 12～20，這裡刻意少很多）。今天的收穫拿滿了就照樣想，只是沒有心得。"""
+        if not self._road_reward_due("task"):
+            return ["你邊走邊想，今天想得夠多了，沒有新的心得。"]
+        p, amount = self.state.player, self.content.config.road_think_xinde
+        p.stats["xinde"] = p.stats.get("xinde", 0) + amount
+        self._count_road_reward("task")
+        return ["你邊走邊想，把這幾天的見聞在心裡過了一遍。", f"心得 +{amount}"]
+
+    def _road_ask(self) -> list[str]:
+        """沿途打聽：這段路兩頭所在大區（Rumor.region；兩頭不同區時兩區都算）最近幾則傳聞裡隨機挑一則；沒有就寫一句，
+        仍算做過。別的陣營的軍情、寫給別人的個人線索聽不到。"""
+        s, c = self.state, self.content
+        p = s.player
+        regions = {region.id for loc_id in self._road_ends() if (region := atlas.region_of(c, loc_id)) is not None}
+        heard = [
+            r for r in s.world.rumors
+            if r.region in regions and r.faction in (None, p.faction) and r.character in (None, p.name)
+        ][-c.config.road_rumor_pool:]
+        if not heard:
+            return ["你沿途問了幾個人，這一帶最近沒什麼新鮮事。"]
+        return [f"你沿途向人打聽，聽說：{self.rng.choice(heard).text}"]
+
+    def _road_survey(self) -> list[str]:
+        """留意地形：這段路兩頭一站以內、還沒摸清（也已開放）的地點，標成摸清（PlayerState.surveyed，大地圖上跟去過一樣
+        算記得）。沒有可標的就寫一句，仍算做過。"""
+        s, c = self.state, self.content
+        views = atlas.views(s, c)
+        found: list[str] = []
+        for end in self._road_ends():
+            for loc_id in (end, *(str(dest) for dest in c.locations[end].connections)):
+                if views[loc_id] in ("outline", "dot") and loc_id not in found:
+                    found.append(loc_id)
+        if not found:
+            return ["你留意了一路的地形，附近沒有什麼沒摸清的地方。"]
+        s.player.surveyed |= set(found)
+        return [f"你留意沿路的地形，摸清了{'、'.join(c.locations[loc_id].name for loc_id in found)}的位置。"]
+
+    def _road_gather(self) -> list[str]:
+        """路邊採集：一定機率撿到一樣一階素材；屬性照這段路兩頭的地點寫的素材（Location.materials），兩頭都沒寫就隨機。
+        今天的收穫拿滿了就不翻（也不擲骰）；撿到了才算一次收穫。"""
+        s, c = self.state, self.content
+        if not self._road_reward_due("task"):
+            return ["你留心路邊，今天已經撿夠了，沒再去翻。"]
+        if self.rng.random() >= c.config.road_gather_chance:
+            return ["你在路邊翻找了一陣，沒找到什麼能用的。"]
+        kinds = {c.materials[m].attribute for end in self._road_ends() for m in c.locations[end].materials if m in c.materials}
+        pool = [m for m in materials.by_tier(c, 1) if m.attribute in kinds] or materials.by_tier(c, 1)
+        self._count_road_reward("task")
+        return ["你在路邊翻找了一陣。", materials.grant(s, c, self.rng.choice(pool).id)]
 
     def _depart(self, route: atlas.Route, mode: TravelMode) -> list[str]:
         """出發（地圖擴充設計 3.2、3.3）：趕路、疾行的體力出發時一次扣，照走法排好每一站的抵達時間。
@@ -1558,8 +1665,11 @@ class Game:
                 if s.world.ended and not already_over:
                     break  # 剛抵達的那一站觸發了賽季落幕：停在那裡
                 when = j.arrive_at[j.reached]
+                stop = j.path[j.reached]
                 j.reached += 1
-                msgs += self._arrive(j.path[j.reached - 1], final=j.reached > j.last, client=client)
+                if stop != s.player.location:  # 到了另一站：換段，路上小事重新可做（掉頭回到剛離開的那一站不算換段）
+                    s.player.leg_actions = set()
+                msgs += self._arrive(stop, final=j.reached > j.last, client=client)
             done = j.reached > j.last or s.world.ended
             if done:
                 s.player.journey = None
@@ -2054,7 +2164,8 @@ class Game:
             halted = "（已經喊停）" if s.player.journey.stop_at is not None else ""
             return (
                 f"**在路上**{halted}\n\n{self._journey_line()}。\n\n"
-                "路上可以折返，也可以打開輿圖改去別處，或去修練、煉製；可以先下線，到了會自己抵達。"
+                "路上可以折返，也可以打開輿圖改去別處，或去修練、煉製；邊走邊想、沿途打聽、留意地形、路邊採集，"
+                "每一段路各能做一次。可以先下線，到了會自己抵達。"
             )
         return self.location_text()
 
