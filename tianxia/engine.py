@@ -22,7 +22,7 @@ from .models import FREE_TEXT_MAX, BattleDef, Choice, Content, Effect, Event, Lo
 from .ollama_client import OllamaClient
 from .rules import apply_effect, change_trend, check_who, current_day, fill_marks, free_text_rate, rate_words, roll_check
 from .sqlite_world import open_world
-from .state import GameState, JournalEntry, Journey, Rumor, WorldState, new_game_state
+from .state import PLAYER, GameState, JournalEntry, Journey, Rumor, WorldState, new_game_state
 from .world import advance_world_state, check_thresholds, end_season, fire_by_id, sim_tick, start_pending_battle
 from .world_state import WorldStateStore
 
@@ -330,7 +330,7 @@ class Game:
             # 標籤要顯示勝算（跟劇情戰的選項同一套慣例，見 _choice_label）：實機試玩發現
             # 新角色沒有武學時威力是 0，在任何地點歷練都**必敗**，而落敗現在真的要付氣血與
             # 內傷的代價——不顯示勝算的話，玩家會在開局連輸三場、氣血見底才知道自己不該打。
-            opts.append(self._cost_option("act:train", "歷練", cost["train"], note=self._train_note(loc, odds)))
+            opts.append(self._train_option(loc, cost["train"], odds))
         figures = self._figures_here()
         if has_events_here(c, loc, "socialize") or 0 < len(figures) < AUDIENCE_HALL_FIGURES:
             # 兩位以上大勢人物的地點，交遊只走福緣與地點事件、從不開口對話（見 _socialize_figure），
@@ -393,9 +393,20 @@ class Game:
             id=option_id, label=f"{label}（體力 {cost}{extra}）", enabled=self.state.player.stamina >= cost
         )
 
-    def _train_note(self, loc: Location, odds: bool) -> str:
-        """歷練按鈕上的補充說明：對手是誰、勝算多少（勝算的計算比較貴，所以照既有慣例吃 odds 旗標）。"""
+    def _train_option(self, loc: Location, cost: int, odds: bool) -> Option:
+        """歷練的按鈕。遇上自己陣營的隊伍是操練、不會輸（見 _drill），所以只有自己人的地盤寫成「操練・零風險」，
+        不拿自己人去算勝算「必敗」（試玩回饋 FB-008）；自己人與外人都有的地方，勝算只看真的會打的那幾路。"""
         squads = [self.content.squads[sid] for sid in loc.enemies]
+        foes = [squad for squad in squads if not self._drills_with(squad)]
+        if not foes:
+            return self._cost_option("act:train", "操練", cost, note="零風險")
+        note = self._train_note(foes, odds)
+        if len(foes) < len(squads):
+            note += "・或與自己人操練"
+        return self._cost_option("act:train", "歷練", cost, note=note)
+
+    def _train_note(self, squads: list[Squad], odds: bool) -> str:
+        """歷練按鈕上的補充說明：對手是誰、勝算多少（勝算的計算比較貴，所以照既有慣例吃 odds 旗標）。"""
         who = squads[0].name if len(squads) == 1 else f"{len(squads)} 路對手"
         if not odds:
             return who
@@ -924,6 +935,11 @@ class Game:
         raw = self.world.get_battle()
         if raw is None:
             return None
+        if self.state.world.ended:
+            # 季結束了：沒打完的決戰直接收掉、不套用結果（這一季勝負已經定了），參戰者回到休季畫面（試玩回饋 FB-015）
+            if tick and raw.phase != "ended":
+                self.world.clear_battle()
+            return None
         definition = self.content.battles.get(raw.battle_id)
         if definition is None:
             return None
@@ -1118,7 +1134,9 @@ class Game:
                 return f"{header}\n\n你已加入【{side}】，集結還剩 {left}。集結結束就開打，在那之前照常行動{leaving}。"
             return f"{header}\n\n集結中，還剩 {left}。選擇陣營加入；集結期間照常行動。"
         act = battle_instance.current_act(battle, definition)
-        lines = [header, f"【{act.title}】{act.text}"] + battle.narrative_log[-5:]
+        # 第幾回合／一共幾回合（戰鬥系統設計 3.2）：讓人知道還要打多久；收場的決戰不會走到這裡
+        count = f"（第 {battle.round_number + 1}／{battle_instance.total_rounds(definition)} 回合）"
+        lines = [header, f"【{act.title}】{count}{act.text}"] + battle.narrative_log[-5:]
         p = battle.participants.get(self.state.player.name)
         if p is not None and p.eliminated:
             lines.append("（你已經倒下，只能在一旁觀戰。）")
@@ -1729,14 +1747,21 @@ class Game:
     def owned_companions(self) -> list[str]:
         return roster.owned_companions(self.world, self.state.player.name)
 
+    # 名冊第一列是本人（PLAYER）：本人永遠出戰，加入、移出都只回一句話，隊伍裡不會多出一個 "player"
+    SELF_IN_TEAM = "本人一直都在隊伍裡，不用加入，也不能移出。"
+
     def add_to_team(self, companion_id: str) -> list[str]:
         if self._preparing():
             return self._log(["（賽季籌備中，等待管理者開季。）"])
+        if companion_id == PLAYER:
+            return self._log([self.SELF_IN_TEAM])
         return self._log(team.add_to_team(self.state, companion_id))
 
     def remove_from_team(self, companion_id: str) -> list[str]:
         if self._preparing():
             return self._log(["（賽季籌備中，等待管理者開季。）"])
+        if companion_id == PLAYER:
+            return self._log([self.SELF_IN_TEAM])
         return self._log(team.remove_from_team(self.state, companion_id))
 
     # ── 門下頁面：武學說明 ──────────────────────────────────

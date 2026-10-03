@@ -10,7 +10,7 @@ from tianxia.bot_runner import BotRunner
 from tianxia.characters import open_characters
 from tianxia.engine import Game
 from tianxia.models import (
-    BattleAct, BattleActionEffect, BattleAdvanceWhen, BattleDef, BattleFaction, BattleOption, BattleOutcome,
+    BattleAct, BattleActionEffect, BattleDef, BattleFaction, BattleOption, BattleOutcome,
     FactionDef,
 )
 from tianxia.database import Database
@@ -32,7 +32,6 @@ def _install(content):
             BattleAct(
                 id="a1", title="初探", text="雙方試探。", goal="推動戰局",
                 options=[BattleOption(text="穩紮穩打", tag="safe"), BattleOption(text="全力進攻", tag="aggressive")],
-                advance_when=BattleAdvanceWhen(trend_min=90),
             ),
         ],
         action_tags={

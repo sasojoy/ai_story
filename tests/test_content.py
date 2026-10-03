@@ -441,22 +441,47 @@ def test_battle_option_restricted_to_an_unknown_faction_rejected(tmp_path):
         load_content(root)
 
 
-def test_battle_non_final_act_needs_advance_when(tmp_path):
-    root = copy_fixture(tmp_path)
+def _two_act_battle() -> dict:
     battle = json.loads(json.dumps(MINIMAL_BATTLE))
     battle["acts"].append(json.loads(json.dumps(battle["acts"][0])))
     battle["acts"][1]["id"] = "a2"
+    return battle
+
+
+def test_battle_acts_change_by_round_count_so_no_act_needs_advance_when(tmp_path):
+    """戰鬥系統設計 3.2：換幕照回合數走、不看戰局，所以非最後一幕也不寫換幕條件；每幕幾回合、
+    多懸殊提前收場沒寫就是 3 與 40。"""
+    root = copy_fixture(tmp_path)
+    write_battles_json(root, [_two_act_battle()])
+    battle = load_content(root).battles["b1"]
+    assert (battle.rounds_per_act, battle.decisive_margin) == (3, 40)
+
+
+def test_battle_act_no_longer_takes_advance_when(tmp_path):
+    root = copy_fixture(tmp_path)
+    battle = _two_act_battle()
+    battle["acts"][0]["advance_when"] = {"trend_outside": 20}  # 舊的換幕條件：寫了就是內容沒跟上新規則
     write_battles_json(root, [battle])
-    with pytest.raises(ContentError, match="非最後一幕必須有 advance_when"):
+    with pytest.raises(ContentError, match="advance_when"):
         load_content(root)
 
 
-def test_battle_final_act_cannot_have_advance_when(tmp_path):
+def test_battle_reads_rounds_per_act_and_decisive_margin(tmp_path):
+    root = copy_fixture(tmp_path)
+    battle = _two_act_battle()
+    battle.update(rounds_per_act=2, decisive_margin=25)
+    write_battles_json(root, [battle])
+    loaded = load_content(root).battles["b1"]
+    assert (loaded.rounds_per_act, loaded.decisive_margin) == (2, 25)
+
+
+@pytest.mark.parametrize("field", ["rounds_per_act", "decisive_margin"])
+def test_battle_rounds_per_act_and_decisive_margin_must_be_at_least_one(tmp_path, field):
     root = copy_fixture(tmp_path)
     battle = json.loads(json.dumps(MINIMAL_BATTLE))
-    battle["acts"][0]["advance_when"] = {"trend_min": 80}
+    battle[field] = 0
     write_battles_json(root, [battle])
-    with pytest.raises(ContentError, match="最後一幕不能有 advance_when"):
+    with pytest.raises(ContentError, match=rf"{field}[\s\S]*greater than or equal to 1"):
         load_content(root)
 
 

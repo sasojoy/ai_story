@@ -34,7 +34,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from markdown_it import MarkdownIt
 
-from tianxia import companion_agent, event_llm, materials, server_bots
+from tianxia import companion_agent, event_llm, materials, server_bots, team
 from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, AccountStore, normalize
 from tianxia.content import load_content
 from tianxia.characters import open_characters
@@ -259,6 +259,13 @@ def menxia_view(game: Game, person: str | None = None) -> dict:
     lines = game.roster_lines()
     if person not in {key for _, key in lines}:
         person = None
+    member = game.state.player.member
+    # 身上兩門各自有沒有功法、練到第幾成、練滿了沒（C4 自創欄收不收、C5 鍛鍊鈕亮不亮）；還沒學是 False、0、False
+    learned = {"武學": member.wugong_id is not None, "內功": member.neigong_id is not None}
+    level = {
+        "武學": member.wugong_level if learned["武學"] else 0,
+        "內功": member.neigong_level if learned["內功"] else 0,
+    }
     return {
         "xinde": game.state.player.stats.get("xinde", 0),
         "rules": md(game.menxia_rules()),
@@ -275,7 +282,11 @@ def menxia_view(game: Game, person: str | None = None) -> dict:
         "per_craft": MATERIALS_PER_CRAFT,
         # 功法卡（FB-006）：身上兩門各一張，還沒學的那一門是一句「你還沒有內功。」；
         # 功法庫通常只有幾門，卡一起送，點開不必再打一次 API（QA L4：先看卡再改練）
-        "slot_cards": [{"kind": k, "card": md(game.skill_detail(k))} for k in KINDS],
+        "slot_cards": [
+            {"kind": k, "card": md(game.skill_detail(k)), "learned": learned[k], "level": level[k],
+             "maxed": level[k] >= team.MAX_LEVEL}
+            for k in KINDS
+        ],
         "arts": [{"label": label, "id": aid, "card": md(game.art_detail(aid))} for label, aid in game.art_library()],
         "craft_line": md(game.craft_line([], KINDS[0])),
     }

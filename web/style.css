@@ -196,8 +196,22 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 
 /* ── 江湖頁 ── */
-.now { max-height: 24vh; overflow: auto; margin-bottom: 12px; border-radius: var(--radius); }
-.now .tx-now { border-radius: var(--radius); background: var(--card); padding: 10px 14px; }
+/* 「剛剛」（A4）：收著時敘事只露出開頭三行左右、最後一行淡出，右下角「展開全文」；展開後整則攤開，不在卡片裡捲。
+   數值變化（.tx-chgs）被 app.js 搬到敘事外面（.now-text 之後），收著也看得到。卡片的框與底色畫在 .now 上，
+   裡面的 .tx-now 不再自己畫一層。放得下的（.fits）沒有淡出也沒有按鈕（app.js 的 pageJianghu、afterPage） */
+.now {
+  margin-bottom: 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--card);
+  padding: 10px 14px; line-height: 1.6; animation: tx-now-rise 0.28s ease-out;
+}
+.now .tx-now { border: 0; border-radius: 0; background: none; padding: 0; animation: none; }
+.now-text { position: relative; }
+.now.clamp .tx-now {
+  max-height: 8em; overflow: hidden;
+  -webkit-mask-image: linear-gradient(#000 calc(100% - 1.6em), transparent); mask-image: linear-gradient(#000 calc(100% - 1.6em), transparent);
+}
+.now-more { display: block; margin: 0 0 0 auto; }
+.now.clamp .now-more { position: absolute; right: 0; bottom: -6px; padding-left: 1.6em; background: linear-gradient(90deg, transparent, var(--card) 1.4em); }
+.now.fits .now-more { display: none; }
 .battle-card { border-color: var(--accent); }
 .scene { font-size: 15.5px; line-height: 1.75; }
 .scene > p:first-child { font: 600 16px var(--serif); margin-bottom: 2px; }
@@ -206,7 +220,8 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .options .btn { justify-content: flex-start; text-align: left; }
 .options .btn .k { flex: none; width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center; background: var(--card-2); font-size: 12px; color: var(--ink-2); }
 .options .btn.go .k { background: var(--accent); color: #fff; }
-.move-mode { margin-bottom: 8px; } /* 走法切換：一列、緊貼在選項上面 */
+.move-mode { margin-bottom: 8px; } /* 走法切換：一列、緊貼在第一個「前往」上面（排在選項之間，A4） */
+.options > .move-mode { margin: 4px 0 0; }
 .move-mode > span { flex: none; align-self: center; padding: 0 4px 0 9px; font-size: 13px; color: var(--ink-2); }
 .move-mode button { min-height: 48px; } /* 觸控目標跟 .btn 一樣大 */
 .free { display: flex; gap: 8px; margin-bottom: 12px; }
@@ -252,6 +267,11 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .map-wrap .tx-world-map { max-height: none !important; overflow: visible !important; }
 .map-wrap.fit svg { width: 100% !important; height: auto !important; }
 .map-wrap [data-loc] { cursor: pointer; }
+/* 地點的點擊區（E2／E3）：mapview 替每個地點畫了一個透明的圓（r=16）接點擊，這裡再加透明的粗外框：
+   原尺寸時 r=22（直徑約 44px）；整張縮小時外框更粗，r=34——40 個地點裡最近的兩個（嵩山深處與南華觀）相距 68.6，
+   r=34 剛好不會互相蓋住；手機上縮成約 0.39 倍，直徑約 27px */
+.map-wrap [data-loc] > circle[fill-opacity="0"] { stroke: transparent; stroke-width: 12px; pointer-events: all; }
+.map-wrap.fit [data-loc] > circle[fill-opacity="0"] { stroke-width: 36px; }
 .map-tools { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
 .map-tools select { flex: 1; }
 
@@ -271,6 +291,27 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 @keyframes up { from { transform: translateY(40px); opacity: 0; } }
 .toggle { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); margin-bottom: 10px; cursor: pointer; }
 .toggle input { width: 20px; height: 20px; accent-color: var(--accent); }
+/* 管理者工具（G3）：排在一般設定之後、虛線框加淡金底，一眼看得出是另一塊；「開啟下一季」用警示樣式 */
+.admin-zone {
+  margin-top: 24px; padding: 12px 14px 14px; border: 1.5px dashed var(--gold); border-radius: var(--radius);
+  background: color-mix(in srgb, var(--gold) 9%, var(--paper));
+}
+.admin-zone h4 { margin: 0; font-size: 16px; }
+.admin-zone .muted { margin-bottom: 0; }
+.ad-row > .ad-tag { flex: none; align-self: center; font-size: 13px; color: var(--ink-2); }
+.ad-row > .btn { flex: none; }
+.btn.warn { color: var(--bad); border-color: var(--bad); font-weight: 600; }
+/* 確認鈕固定用深一點的朱紅：深色模式的 --bad（#e06a5c）配白字只有 3.3:1，這個顏色兩種模式都是 5.9:1 */
+.btn.danger { background: #b23a2b; border-color: #b23a2b; color: #fff; font-weight: 600; }
+/* 管理者動作的確認框：疊在設定抽屜上面的小抽屜（app.js 的 ask） */
+.ask-layer { position: fixed; inset: 0; z-index: 45; }
+.ask-bg { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.35); animation: fade 0.2s; }
+.ask {
+  position: absolute; left: 0; right: 0; bottom: 0; max-width: 640px; margin: 0 auto;
+  background: var(--paper); border-radius: 18px 18px 0 0; box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.18);
+  padding: 18px 16px calc(20px + var(--bottom)); animation: up 0.25s ease-out;
+}
+.ask p { margin: 0 0 14px; font-size: 15px; }
 
 /* ── 登入 ── */
 .gate { max-width: 420px; margin: 0 auto; padding: calc(48px + var(--top)) 20px 32px; }

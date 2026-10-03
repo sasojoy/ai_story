@@ -15,4 +15,7 @@ CLAUDE.md 裡跟現況對不上的地方。PM 收集，**企劃者同意後**才
 | 7 | 「新方向：自創武功要限次數」那節 | 要限次數，五件事還沒決定 | 已改定成「自創與融合」設計（先不限次數、跟融合一起開，放開觀察），不進第一次 beta | 軍備物資設計 session |
 | 8 | 第 138–140 行 | `tests/test_app.py` 的 flaky 測試（現在式） | `test_app.py` 已刪掉（flaky 的原因後面第三刀也寫了已修） | Infra |
 | 9 | 第 262–264 行 | 門下頁的輸出數量改成 `app.MENXIA_OUTPUTS`（現在式） | `app.py` 已刪掉，那個常數不存在了 | Infra |
+| 13 | 「下一個 session 的待辦」開頭與其他寫到分支名稱的地方 | 分支 `feature/sanguo-companions` | 2026-10-03 起主線改成 `main`（之後直接在 main 上開發；舊遊戲在 `legacy/ai-story-main`，feature/sanguo-companions 不再更新） | PM |
+| 12 | 「全服即時多人戰鬥（黃巾決戰）」第 57～68 行，以及「架構」的 `battle_instance.py` 那行 | 只寫「逐幕逐回合鎖步」、框架是 `acts`/`outcomes`；沒寫回合上限 | 規則沒寫錯，是漏了 FB-016 的新規則。建議補：每幕固定 `rounds_per_act` 回合（黃巾決戰 3 幕 × 3 ＝ 9 回合，約 45 分鐘），換幕只看回合數、不看戰局；打完最後一回合，或某回合戰局偏離起點達 `decisive_margin`（到 90／10），由 `battle_instance.decide_outcome` 看戰局決定結果。「不會把全服卡住」現在主要靠回合上限（以前推力抵銷時戰局停在 50，要等氣血磨光）。框架改寫成 `acts`/`outcomes`/`rounds_per_act`/`decisive_margin`；`battle_instance.py` 的說明可補「回合上限與收場判定」 | Infra |
+| 11 | 約 270 行、298～299 行（無限煉製「拍板的四件事」與真實模型實測） | 繁簡轉換用 OpenCC 的 `s2twp` | FB-014 起改用 `s2tw`：只轉字、不換台灣用語（以前會把「的士卒」轉成「計程車卒」），異體字表照留。本清單第 2 筆的說法也一併以此為準 | Infra |
 | 10 | 「指令」的執行那一行 | 只寫 `server.py` 與 `--share` | Infra 的 W5 起伺服器預設只綁 127.0.0.1，要開放區網加 `--lan`（會多印一行提醒）；`--share` 不受影響。W5 進主線後才成立 | Infra |

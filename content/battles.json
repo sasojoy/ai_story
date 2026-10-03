@@ -10,6 +10,8 @@
     "trend_start": 50,
     "muster_seconds": 1800,
     "round_seconds": 300,
+    "rounds_per_act": 3,
+    "decisive_margin": 40,
     "action_tags": {
       "guan_safe": {"trend_delta": 2, "neili_damage": 15},
       "guan_aggressive": {"trend_delta": 6, "neili_damage": 60, "mitigated_by_power": true},
@@ -37,8 +39,7 @@
           {"text": "死守營寨", "tag": "huang_safe", "faction": "huang"},
           {"text": "捨命衝殺", "tag": "huang_aggressive", "faction": "huang"},
           {"text": "放手一搏（20字內，寫下你想做的事）", "tag": "huang_reckless", "faction": "huang", "free_text": true}
-        ],
-        "advance_when": {"trend_outside": 20}
+        ]
       },
       {
         "id": "showdown_2",
@@ -52,8 +53,7 @@
           {"text": "且戰且退，保存實力", "tag": "huang_safe", "faction": "huang"},
           {"text": "拼死反撲，誓死不退", "tag": "huang_aggressive", "faction": "huang"},
           {"text": "孤注一擲（20字內，寫下你想做的事）", "tag": "huang_reckless", "faction": "huang", "free_text": true}
-        ],
-        "advance_when": {"trend_outside": 35}
+        ]
       },
       {
         "id": "showdown_3",

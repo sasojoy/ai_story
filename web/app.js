@@ -34,6 +34,8 @@
     { id: "hurry", name: "趕路" },
     { id: "dash", name: "疾行" },
   ];
+  // 手機寬度（輿圖預設照原尺寸，見 S.fitMap）；轉向、拉視窗跨過這條線時重新決定（見檔尾的 change 監聽）
+  const PHONE = window.matchMedia ? window.matchMedia("(max-width: 767px)") : null;
 
   const S = {
     stage: "boot",
@@ -41,6 +43,7 @@
     main: null,
     mainKey: "",
     tab: "jianghu",
+    nowOpen: null, // 江湖頁「剛剛」展開的那一則（記內容本身）；換成新的一則就收回（A4）
     busy: false,
     menxia: null,
     message: "",
@@ -52,7 +55,10 @@
     craftLine: "",
     map: null,
     layer: "situation",
-    fitMap: true,
+    // 輿圖整張縮到螢幕寬（E2／FB-012）：手機上縮了地名只剩 5～6px、地點點不到，所以窄螢幕預設照原尺寸、
+    // 捲到選取的地點（afterPage()），寬螢幕才整張；「放大／縮小」照舊可以切，按過之後就照玩家選的（fitChosen）
+    fitMap: !(PHONE && PHONE.matches),
+    fitChosen: false,
     news: "reports",
     reports: null,
     reportOpen: false,
@@ -157,6 +163,7 @@
 
   // ── 整體 ──
   function render() {
+    if (S.stage !== "game" || !S.sheet) closeAsk(); // 管理者確認框只疊在設定抽屜上；抽屜關了、被登出就一起收掉
     if (S.stage === "gate") return renderGate();
     if (S.stage === "create") return renderCreate();
     if (S.stage !== "game") return;
@@ -213,14 +220,21 @@
   }
 
   function afterPage() {
+    if (S.tab === "jianghu") {
+      // 「剛剛」收著卻其實放得下：拿掉底下的淡出與「展開全文」（A4）
+      const now = document.querySelector(".now.clamp");
+      const body = now && now.querySelector(".tx-now");
+      if (body && body.scrollHeight <= body.clientHeight + 1) now.classList.replace("clamp", "fits");
+    }
     if (S.tab === "map") {
       const wrap = document.querySelector(".map-wrap");
       const here = wrap && wrap.querySelector(`[data-loc="${CSS.escape(S.map?.selected || "")}"]`);
       if (wrap && here && !S.fitMap) {
+        // 地點的中心捲到視窗中間（E2：手機上預設不縮，一打開就要看到自己在哪）
         const box = here.getBoundingClientRect();
         const outer = wrap.getBoundingClientRect();
-        wrap.scrollLeft += box.left - outer.left - outer.width / 2;
-        wrap.scrollTop += box.top - outer.top - outer.height / 2;
+        wrap.scrollLeft += box.left + box.width / 2 - outer.left - outer.width / 2;
+        wrap.scrollTop += box.top + box.height / 2 - outer.top - outer.height / 2;
       }
     }
   }
@@ -259,17 +273,35 @@
   }
 
   // ── 江湖 ──
+  const nowMore = (open) => (open ? "收起 ▴" : "展開全文 ▾");
+
+  // 「剛剛」那一則拆成敘事與數值變化（氣血 -96、黃巾聲勢 -2…，journal.card_html 放在 .tx-now 最後）：
+  // 收合只收敘事，數值變化排在收合範圍外面，收著也看得到（W6 review Minor 2）
+  function splitChips(html) {
+    const t = document.createElement("template");
+    t.innerHTML = html;
+    const chips = t.content.querySelector(".tx-now > .tx-chgs");
+    if (chips) chips.remove();
+    return [t.innerHTML, chips ? chips.outerHTML : ""];
+  }
+
   function pageJianghu() {
     const m = S.main;
+    // 「剛剛」（A4）：預設只露出開頭幾行，太長的（例如新角色的開場故事）收著、點「展開全文」看完，不在卡片裡捲。
+    // 展開記在 S.nowOpen（記的是那一則本身），換成新的一則就自動收回；其實放得下的話 afterPage() 會拿掉收合
+    const expanded = S.nowOpen === m.latest;
+    const [text, chips] = !m.card && m.latest ? splitChips(m.latest) : ["", ""];
     const now = m.card
       ? `<div class="card battle-card">${m.card}${m.latest || ""}
            ${m.card_id != null ? `<button class="linkish" data-act="report" data-id="${m.card_id}">看完整戰報 ›</button>` : ""}</div>`
-      : m.latest ? `<div class="now">${m.latest}</div>` : "";
+      : m.latest ? `<div class="now ${expanded ? "open" : "clamp"}"><div class="now-text">${text}<button class="linkish now-more" data-act="now-more" aria-expanded="${expanded}">${nowMore(expanded)}</button></div>${chips}</div>` : "";
     const free = m.free_text != null
       ? `<form class="free" id="free-form"><input class="input" name="text" maxlength="20" placeholder="${esc(m.free_text || "輸入你想做的事（20字內）")}"><button class="btn primary small" type="submit">送出</button></form>`
       : "";
-    // 走法切換：選單上有「前往」才出現（對話、事件、戰鬥的選單沒有）
-    const modes = m.options.some((o) => o.id.startsWith("move:"))
+    // 走法切換：選單上有「前往」才出現（對話、事件、戰鬥的選單沒有），緊貼在第一個「前往」上面——
+    // 它只管「前往」，放在整排選項最上面的話，第一屏就被它擠掉一個選項（A4）
+    const firstMove = m.options.findIndex((o) => o.id.startsWith("move:"));
+    const modes = firstMove >= 0
       ? `<div class="seg move-mode" role="group" aria-label="走法"><span aria-hidden="true">走法</span>${MOVE_MODES.map((x) => `
           <button class="${S.moveMode === x.id ? "on" : ""}" data-act="move-mode" data-mode="${x.id}" aria-pressed="${S.moveMode === x.id}">${x.name}</button>`).join("")}
         </div>`
@@ -279,9 +311,8 @@
       ${now}
       <section class="card scene">${m.scene}</section>
       ${free}
-      ${modes}
       <div class="options">${m.options.map((o, i) => o.id === FREE_TEXT_OPTION && S.answering && o.enabled ? `
-        <form class="free answer" id="answer-form"><input class="input" name="text" maxlength="20" placeholder="${esc(o.label)}（20字內）" aria-label="${esc(o.label)}"><button class="btn primary small" type="submit">說出口</button></form>` : `
+        <form class="free answer" id="answer-form"><input class="input" name="text" maxlength="20" placeholder="${esc(o.label)}（20字內）" aria-label="${esc(o.label)}"><button class="btn primary small" type="submit">說出口</button></form>` : `${i === firstMove ? modes : ""}
         <button class="btn ${o.id.startsWith("move:") ? "go" : ""}" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}>
           <span class="k">${o.id.startsWith("move:") ? "→" : i + 1}</span><span>${esc(o.label)}</span>
         </button>`).join("")}
@@ -297,12 +328,17 @@
     const s = S.main.status;
     // 身上的功法卡（FB-006）：目前切到的那一門放前面
     const slots = x.slot_cards.filter((c) => c.kind === S.kind).concat(x.slot_cards.filter((c) => c.kind !== S.kind));
+    // 目前這一門有沒有功法、練滿了沒（伺服器照 team.MAX_LEVEL 說）：沒有或練滿就不能鍛鍊（C5），有了就不能再自創（C4）
+    const cur = x.slot_cards.find((c) => c.kind === S.kind) || { learned: false, level: 0, maxed: false };
+    const train = !cur.learned ? `還沒有${esc(S.kind)}` : cur.maxed ? "已練到第十成" : "";
+    // 名冊只有本人一列（還沒有同伴）時跟上面的本人卡重複，不畫（C6）
+    const mates = x.roster.length > 1;
     return `
       <div class="msg" id="mx-msg">${S.message}</div>
       <div class="card">
         <div class="seg">${KINDS.map((k) => `<button class="${S.kind === k ? "on" : ""}" data-act="kind" data-kind="${k}">${k}</button>`).join("")}</div>
         <div class="row">
-          <button class="btn primary" data-act="mx" data-op="practice">鍛鍊${esc(S.kind)}</button>
+          <button class="btn ${train ? "" : "primary"}" data-act="mx" data-op="practice" ${train ? "disabled" : ""}>${train || `鍛鍊${esc(S.kind)}`}</button>
           <button class="btn" data-act="mx" data-op="heal" ${s.injury >= 1 ? "" : "disabled"}>療傷</button>
         </div>
         <p class="muted">${x.rules.replace(/<\/?p>/g, "")}</p>
@@ -310,10 +346,12 @@
       <div class="label">身上的功法</div>
       ${slots.map((c) => `<div class="card">${c.card}</div>`).join("")}
       <div class="label">自創功法</div>
-      <form class="card" id="create-skill">
-        <p class="muted">取名就決定了屬性、威力與成長，全服不能重名。目前這一門${esc(S.kind)}的欄位空著才能自創。</p>
+      ${cur.learned
+        ? `<div class="card"><p class="muted">你已經有一門${esc(S.kind)}了。想換別的，可以去煉製，或在功法庫改練。</p></div>`
+        : `<form class="card" id="create-skill">
+        <p class="muted">取名就決定了屬性、威力與成長，全服不能重名。你還沒有${esc(S.kind)}，這一欄空著，可以自創一門。</p>
         <div class="row"><input class="input" name="name" maxlength="12" placeholder="幫你的${esc(S.kind)}取個名字" style="flex:2"><button class="btn" type="submit">自創</button></div>
-      </form>
+      </form>`}
       <div class="label">閉關</div>
       <form class="card" id="seclude">
         <p class="muted">閉關可以得到心得，期間氣血回復加倍；閉關中不能做別的事。</p>
@@ -329,9 +367,10 @@
         : '<p class="muted">煉出來還沒配上身的功法會放在這裡。改練會把目前那一門收回庫裡，熟練度各自保留。</p>'}
       <div class="label">門下</div>
       <details class="fold" open><summary>本人</summary><div class="fold-body">${x.player_card}</div></details>
-      <div class="list">${x.roster.map((r) => `<button class="${x.person === r.key ? "on" : ""}" data-act="person" data-key="${esc(r.key)}">${esc(r.label)}</button>`).join("")}</div>
-      ${x.person ? `<div class="card">${x.person_card}
-        <button class="btn ${x.on_team ? "" : "primary"}" data-act="mx" data-op="${x.on_team ? "leave" : "join"}">${x.on_team ? "移出隊伍" : "加入隊伍"}</button></div>` : ""}`;
+      ${mates ? `<div class="list">${x.roster.map((r) => `<button class="${x.person === r.key ? "on" : ""}" data-act="person" data-key="${esc(r.key)}">${esc(r.label)}</button>`).join("")}</div>` : ""}
+      ${mates && x.person ? `<div class="card">${x.person_card}
+        ${x.person === "player" ? '<p class="muted">本人一直都在隊伍裡。</p>' // 本人不能加入、移出（引擎也會擋）
+          : `<button class="btn ${x.on_team ? "" : "primary"}" data-act="mx" data-op="${x.on_team ? "leave" : "join"}">${x.on_team ? "移出隊伍" : "加入隊伍"}</button>`}</div>` : ""}`;
   }
 
   // ── 煉製 ──
@@ -417,23 +456,73 @@
           <p class="form-msg" role="alert"></p>
           <button class="btn" type="submit">修改密碼</button>
         </form></details>
+        <div class="label">帳號</div>
+        <button class="btn ghost" data-act="logout">登出</button>
         ${S.main.admin ? `
-          <div class="label">管理者</div>
-          <div class="card stack">
-            <div class="row"><button class="btn" data-act="admin" data-op="open_season">開季</button><button class="btn" data-act="admin" data-op="next_season">開啟下一季</button></div>
+          <section class="admin-zone stack" aria-label="管理者工具">
+            <h4>管理者工具（只有你看得到）</h4>
+            <p class="muted">每一項按了都會先問一次才送出；做完會關掉設定、回到江湖頁。</p>
+            <div class="row"><button class="btn" data-act="admin" data-op="open_season">開季</button><button class="btn warn" data-act="admin" data-op="next_season">⚠ 開啟下一季</button></div>
             <p class="muted">時間快轉（全服一起快轉，只在測試時用）</p>
             <div class="row">${[1, 8, 24].map((h) => `<button class="btn small" data-act="admin" data-op="fast_forward" data-hours="${h}">+${h} 小時</button>`).join("")}</div>
             ${a ? `
               <p class="muted">觸發（人少、大勢推不到門檻時用；效果跟自然發生一樣）</p>
-              <div class="row"><select class="input" id="ad-battle">${opts(a.battles)}</select><button class="btn small" data-act="admin" data-op="start_battle">立刻開戰</button></div>
-              <div class="row"><select class="input" id="ad-fire">${opts(a.events)}</select><button class="btn small" data-act="admin" data-op="fire">觸發</button></div>
-              <div class="row"><select class="input" id="ad-trend">${opts(a.trends)}</select><input class="input" id="ad-amount" type="number" value="10" style="max-width:90px"><button class="btn small" data-act="admin" data-op="push_trend">推動</button></div>
+              <div class="row ad-row"><span class="ad-tag">決戰</span><select class="input" id="ad-battle" aria-label="決戰">${opts(a.battles)}</select><button class="btn small" data-act="admin" data-op="start_battle">立刻開戰</button></div>
+              <div class="row ad-row"><span class="ad-tag">事件</span><select class="input" id="ad-fire" aria-label="事件">${opts(a.events)}</select><button class="btn small" data-act="admin" data-op="fire">觸發</button></div>
+              <div class="row ad-row"><span class="ad-tag">大勢</span><select class="input" id="ad-trend" aria-label="大勢">${opts(a.trends)}</select><input class="input" id="ad-amount" type="number" value="10" aria-label="推動量" style="max-width:76px"><button class="btn small" data-act="admin" data-op="push_trend">推動</button></div>
               <p class="muted">重設密碼（朋友忘記密碼時用；臨時密碼私下告訴他）</p>
               <form id="reset-form"><div class="row"><input class="input" name="target" placeholder="帳號或名號"><input class="input" name="temp" placeholder="臨時密碼"><button class="btn small" type="submit">重設</button></div><p class="form-msg" role="alert"></p></form>` : ""}
-          </div>` : ""}
-        <div class="label">帳號</div>
-        <button class="btn ghost" data-act="logout">登出</button>
+          </section>` : ""}
       </div>`;
+  }
+
+  // 管理者動作的確認框（G3）：每一項按了都先問一次、問句說出後果。疊在設定抽屜上面、不重畫抽屜，
+  // 選好的下拉選單、填好的重設密碼欄位都留著；按「取消」或旁邊的暗處就關掉，什麼都不送
+  let askGo = null;
+  function ask(text, yes, go) {
+    closeAsk();
+    askGo = go;
+    document.body.insertAdjacentHTML("beforeend", `
+      <div class="ask-layer">
+        <div class="ask-bg" data-act="ask-no"></div>
+        <div class="ask" role="alertdialog" aria-modal="true" aria-labelledby="ask-text">
+          <p id="ask-text">${esc(text)}</p>
+          <div class="row"><button class="btn" data-act="ask-no">取消</button><button class="btn danger" data-act="ask-yes">${esc(yes)}</button></div>
+        </div>
+      </div>`);
+    document.querySelector('.ask [data-act="ask-no"]').focus();
+  }
+  function closeAsk() {
+    document.querySelector(".ask-layer")?.remove();
+    askGo = null;
+  }
+
+  // 管理者動作的問句與確認鈕（照抽屜裡選好的下拉選單）
+  function adminAsk(op, body) {
+    const picked = (id) => { const el = document.getElementById(id); return el && el.selectedIndex >= 0 ? el.options[el.selectedIndex].text : ""; };
+    const amount = `${body.amount >= 0 ? "+" : ""}${body.amount}`;
+    return {
+      open_season: ["開季：賽季從籌備中正式開始，全服玩家都能行動了，確定？", "確定開季"],
+      // 照 SqliteWorldStore.next_season 實際做的事寫（只在休季有效）
+      next_season: ["開啟下一季（休季才有效）：新的一季立刻開始，同伴全部重獲自由、自創武學名字釋出、煉製配方清空、天機 +1，沒打完的決戰清掉，確定？", "確定開啟下一季"],
+      fast_forward: [`時間快轉 ${body.hours} 小時（全服一起），確定？`, `快轉 ${body.hours} 小時`],
+      start_battle: [`立刻開戰「${picked("ad-battle")}」：全服一起進入集結，確定？`, "確定開戰"],
+      fire: [`觸發「${picked("ad-fire")}」：效果跟自然發生一樣，全服都受影響，確定？`, "確定觸發"],
+      push_trend: [`推動大勢「${picked("ad-trend")}」${amount}：全服一起，確定？`, "確定推動"],
+    }[op] || ["確定要這麼做？", "確定"];
+  }
+
+  // 確認過的管理者動作：做完關掉抽屜、回到江湖頁看結果，結果照舊用提示泡泡講（G4）。
+  // 請求本身沒成（連不上、伺服器出錯）就留在抽屜裡，api() 已經提示過原因
+  async function adminDo(op, body) {
+    await busy(async () => {
+      const r = await api(`/api/do/${op}`, body);
+      S.sheet = false;
+      setMain(r.main);
+      await goTab("jianghu");
+      const text = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+      toast(text || "已完成。");
+    });
   }
 
   // ── 載入各頁 ──
@@ -563,12 +652,12 @@
     });
   }
 
-  async function doMain(op, body = {}, confirm = false) {
+  async function doMain(op, body = {}) {
     await busy(async () => {
       const r = await api(`/api/do/${op}`, body);
       applyMain(r.main);
       const text = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-      if (text || confirm) toast(text || "已完成。");
+      if (text) toast(text);
     });
   }
 
@@ -640,6 +729,17 @@
         case "choose": await choose(el, el.dataset.id); break;
         case "move-mode": await setMoveMode(el.dataset.mode); break;
         case "toggle-more": toggleMore(); break;
+        case "now-more": {
+          // 原地展開／收起，不重畫整頁（重畫會讓「剛剛」再播一次浮現動畫）
+          const box = el.closest(".now");
+          const open = !box.classList.contains("open");
+          S.nowOpen = open ? S.main.latest : null;
+          box.classList.toggle("open", open);
+          box.classList.toggle("clamp", !open);
+          el.textContent = nowMore(open);
+          el.setAttribute("aria-expanded", String(open));
+          break;
+        }
         case "sheet":
           S.sheet = true;
           render();
@@ -653,9 +753,19 @@
           if (op === "start_battle") body.id = document.getElementById("ad-battle").value;
           if (op === "fire") body.id = document.getElementById("ad-fire").value;
           if (op === "push_trend") { body.id = document.getElementById("ad-trend").value; body.amount = Number(document.getElementById("ad-amount").value || 0); }
-          await doMain(op, body, true);
+          const [text, yes] = adminAsk(op, body);
+          ask(text, yes, () => adminDo(op, body)); // 先問一次（G3），按了確定才送
           break;
         }
+        case "ask-yes": {
+          // 上一個動作（例如等模型回話的對話）還沒回來：送了也會被 busy() 丟掉，所以先講一聲、確認框留著再按一次
+          if (S.busy) { toast("正在處理上一個動作，請稍候再按一次。"); break; }
+          const go = askGo;
+          closeAsk();
+          if (go) await go();
+          break;
+        }
+        case "ask-no": closeAsk(); break;
         case "logout": await api("/api/logout", {}); S.sheet = false; S.stage = "gate"; S.main = null; render(); break;
         case "kind": S.kind = el.dataset.kind; renderPage(); break;
         case "mx": await mx(el.dataset.op); break;
@@ -679,7 +789,7 @@
         case "craft-kind": S.craftKind = el.dataset.kind; renderPage(); updateCraftLine(); break;
         case "forge": await forge(); break;
         case "layer": S.layer = el.dataset.layer; await loadMap(S.map?.selected); break;
-        case "fit": S.fitMap = !S.fitMap; renderPage(); break;
+        case "fit": S.fitMap = !S.fitMap; S.fitChosen = true; renderPage(); break;
         case "travel": await travel(el.dataset.mode); break;
         case "news":
           S.news = el.dataset.news;
@@ -712,6 +822,7 @@
     if (keyboard) document.querySelector(".who")?.focus();
   }
   document.addEventListener("keydown", (ev) => {
+    if (ev.key === "Escape" && askGo) { closeAsk(); return; } // 管理者確認框：Esc 等於取消
     if ((ev.key === "Enter" || ev.key === " ") && ev.target instanceof Element && ev.target.matches('.who[data-act="toggle-more"]')) {
       ev.preventDefault();
       toggleMore(true);
@@ -781,10 +892,28 @@
         formMsg(form, r.message, ok);
         if (ok) form.reset();
       } else if (form.id === "reset-form") {
-        const r = await api("/api/admin/reset_password", data);
-        const ok = /^已重設 .+ 的密碼。$/.test(r.message || "");
-        formMsg(form, r.message, ok);
-        if (ok) form.reset();
+        // 重設密碼也先問一次（G3）。結果照舊寫在表單那一行、抽屜不關（失敗時欄位留著改，跟改密碼一樣）
+        const target = (data.target || "").trim();
+        if (!target) { formMsg(form, "先填要重設的帳號或名號。"); return; }
+        ask(`重設 ${target} 的密碼，確定？`, "確定重設", async () => {
+          // 結果寫進「那時候」畫面上的表單：問的期間抽屜可能被重畫過（例如前一個動作剛回來），按下時抓到的那個已經不在了；
+          // 抽屜整個關了就改用提示泡泡講
+          const say = (text, ok = false) => {
+            const now = document.getElementById("reset-form");
+            if (now) formMsg(now, text, ok);
+            else if (text) toast(text);
+            return now;
+          };
+          say("");
+          try {
+            const r = await api("/api/admin/reset_password", data);
+            const ok = /^已重設 .+ 的密碼。$/.test(r.message || "");
+            const now = say(r.message, ok);
+            if (ok && now) now.reset();
+          } catch (e) {
+            say(failText(e));
+          }
+        });
       }
     } catch (e) {
       if (submit) submit.disabled = false;
@@ -895,6 +1024,18 @@
   }
   setInterval(poll, POLL_MS);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) poll(); });
+
+  // 視窗寬度跨過手機的分界（例如橫著打開、再轉直）：玩家還沒自己按過「放大／縮小」，就照新的寬度重新決定整張或原尺寸
+  function phoneChanged() {
+    if (S.fitChosen || S.fitMap === !PHONE.matches) return;
+    S.fitMap = !PHONE.matches;
+    if (S.stage === "game" && S.tab === "map") renderPage(); // 改成原尺寸時 afterPage() 會捲到選取的地點
+  }
+  if (PHONE) {
+    if (PHONE.addEventListener) PHONE.addEventListener("change", phoneChanged);
+    else if (PHONE.addListener) PHONE.addListener(phoneChanged); // 舊版 Safari
+    window.addEventListener("resize", phoneChanged); // 有些瀏覽器（含開發工具的裝置模擬）換寬度時不發 change；寬度沒跨線就什麼都不做
+  }
 
   api("/api/me").then(enter).catch(() => { S.stage = "gate"; render(); });
 })();

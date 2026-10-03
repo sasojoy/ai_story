@@ -4,7 +4,7 @@ from conftest import walk_to
 from tianxia import battle_instance, bot, bot_policy
 from tianxia.engine import Option
 from tianxia.models import (
-    BattleAct, BattleActionEffect, BattleAdvanceWhen, BattleDef, BattleFaction, BattleOption, BattleOutcome, Effect,
+    BattleAct, BattleActionEffect, BattleDef, BattleFaction, BattleOption, BattleOutcome, Effect,
     FactionDef, Location,
 )
 from tianxia.state import BotProfile
@@ -25,7 +25,6 @@ def _install_battle(content):
             BattleAct(
                 id="a1", title="初探", text="雙方試探。", goal="推動戰局",
                 options=[BattleOption(text="穩紮穩打", tag="safe"), BattleOption(text="全力進攻", tag="aggressive")],
-                advance_when=BattleAdvanceWhen(trend_min=90),
             ),
         ],
         action_tags={

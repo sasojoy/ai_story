@@ -282,6 +282,7 @@ def craft(
             if name is None:
                 name = fallback_name(content, key, kind, salt=attempt)
             candidate = generate_from_name(name, kind, name, tianji, weights=weights, attribute=attribute)
+            candidate.origin = "crafted"  # 功法卡寫「煉製（首創者 首創）」，不是「自創」（FB-017）
             candidate.creator = state.player.name
             candidate.note = note
             art, first_time = world.claim_recipe(key, candidate)

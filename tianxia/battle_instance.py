@@ -1,4 +1,5 @@
-"""全服共用的即時多人戰鬥（設計討論：集結選陣營→逐幕逐回合鎖步→決戰幕判定勝負）。
+"""全服共用的即時多人戰鬥（設計討論：集結選陣營→逐幕逐回合鎖步→打完最後一回合、或戰局一面倒時
+判定勝負；每幕固定幾回合，見戰鬥系統設計 3.2 與 resolve_round）。
 
 固定選項（穩守/猛攻）的推進/氣血損耗是查表決定的確定性結果，不信任 LLM 自己算數字；
 自訂行動（放手一搏，見 BattleOption.free_text／FreeTextGamble）則是 LLM 評估一個成功率
@@ -64,6 +65,7 @@ class BattleRoundRecord(BaseModel):
 
     id: int | None = None  # 資料庫的流水號；None＝還沒寫進資料庫
     act_index: int  # 結算前是第幾幕
+    round_number: int = 0  # 這是整場的第幾回合（1 起算）；0＝回合上限之前的舊紀錄
     resolved_real: float  # 結算的現實時間
     actions: dict[str, str] = Field(default_factory=dict)  # 名號 -> tag
     custom_texts: dict[str, str] = Field(default_factory=dict)  # 名號 -> 自訂行動文字
@@ -80,6 +82,7 @@ class BattleInstance(BaseModel):
     participants: dict[str, BattleParticipant] = Field(default_factory=dict)
     trend: int = 50
     act_index: int = 0
+    round_number: int = 0  # 已經結算了幾回合（換幕與最後一回合都照這個數，見 resolve_round）
     round: BattleRound = Field(default_factory=BattleRound)
     narrative_log: list[str] = Field(default_factory=list)
     outcome_title: str | None = None
@@ -162,6 +165,11 @@ def current_act(instance: BattleInstance, definition: BattleDef) -> BattleAct:
     return definition.acts[instance.act_index]
 
 
+def total_rounds(definition: BattleDef) -> int:
+    """整場打幾回合（戰鬥系統設計 3.2）：每幕 rounds_per_act 回合 × 幕數；黃巾決戰是 3 × 3 ＝ 9。"""
+    return definition.rounds_per_act * len(definition.acts)
+
+
 def options_for(instance: BattleInstance, definition: BattleDef, name: str) -> list[BattleOption]:
     """這個人這回合能選的選項：框架給的選項，依陣營篩選（faction=None 的選項雙方都能選）。"""
     p = instance.participants.get(name)
@@ -223,7 +231,11 @@ def _power_mitigation(power: float | None) -> float:
 
 def resolve_round(instance: BattleInstance, definition: BattleDef, rng: random.Random, now: float = 0.0) -> list[str]:
     """結算一回合：依每個人選的 tag 查表推動戰局 trend、扣氣血，氣血歸零的人出局；
-    檢查目前幕的進幕條件，滿足就換下一幕；最後把回合狀態重置給下一回合用（opened_real
+    回合數加一之後照戰鬥系統設計 3.2 決定接下來怎麼走（只有兩個時機判結果）：
+    - 戰局偏離起點到 decisive_margin（壓倒性）：當回合收場，不再換幕——剛好是該換幕的那一回合也一樣；
+    - 打完最後一回合（total_rounds）：看戰局收場；
+    - 都不是、而且這一幕的回合打滿了：換下一幕。換幕只看回合數，不看戰局。
+    最後把回合狀態重置給下一回合用（opened_real
     設成 now，給下一回合的逾時判斷當起點）。威力抵銷（mitigated_by_power）直接讀
     BattleParticipant.power——那是加入戰鬥當下由各自的 Game 執行個體算好快照進來的
     （見 BattleParticipant 的欄位註解），這裡不需要、也不能臨時去查任何人的角色資料。
@@ -270,29 +282,21 @@ def resolve_round(instance: BattleInstance, definition: BattleDef, rng: random.R
         if p.neili <= 0 and not p.eliminated:
             p.eliminated = True
             msgs.append(f"{name}氣血耗盡，倒在戰場上，退出了這場戰鬥（轉為觀戰）。")
-    act = current_act(instance, definition)
-    advanced = False
-    if act.advance_when is not None:
-        aw = act.advance_when
-        if aw.trend_outside is not None:
-            crossed = abs(instance.trend - definition.trend_start) >= aw.trend_outside
-        else:
-            crossed = (aw.trend_min is None or instance.trend >= aw.trend_min) and (
-                aw.trend_max is None or instance.trend <= aw.trend_max
-            )
-        if crossed and instance.act_index < len(definition.acts) - 1:
-            instance.act_index += 1
-            advanced = True
-            msgs.append(f"【{definition.acts[instance.act_index].title}】{definition.acts[instance.act_index].text}")
-    # 剛換到新的一幕時，這一幕還沒有人真的行動過，不該在同一回合裡立刻判終局（至少要讓
-    # 大家在新的一幕裡選過一次行動，才輪到檢查是不是已經分出勝負）。
-    outcome = None if advanced else _check_outcome(instance, definition)
-    if outcome is not None:
-        msgs += _record_outcome(instance, outcome)
+    instance.round_number += 1
+    decisive = abs(instance.trend - definition.trend_start) >= definition.decisive_margin
+    if decisive or instance.round_number >= total_rounds(definition):
+        msgs += _record_outcome(instance, decide_outcome(instance, definition))
+    else:
+        # 只往後換：回合上限之前就開打的舊資料，round_number 從 0 數起，不能把幕倒退回去
+        next_act = min(instance.round_number // definition.rounds_per_act, len(definition.acts) - 1)
+        if next_act > instance.act_index:
+            instance.act_index = next_act
+            act = current_act(instance, definition)
+            msgs.append(f"【{act.title}】{act.text}")
     instance.rounds.append(BattleRoundRecord(
-        act_index=act_index, resolved_real=now, actions=dict(instance.round.pending_actions),
-        custom_texts=dict(instance.round.custom_texts), success_rates=dict(instance.round.success_rates),
-        messages=list(msgs), trend_after=instance.trend,
+        act_index=act_index, round_number=instance.round_number, resolved_real=now,
+        actions=dict(instance.round.pending_actions), custom_texts=dict(instance.round.custom_texts),
+        success_rates=dict(instance.round.success_rates), messages=list(msgs), trend_after=instance.trend,
     ))
     instance.round = BattleRound(opened_real=now)
     return msgs
@@ -320,23 +324,25 @@ def end_without_fighters(instance: BattleInstance, definition: BattleDef, now: f
         return []
     msgs = ["戰場上已經沒有人還能出手，這場戰鬥就此收場。"] + _record_outcome(instance, definition.outcomes[-1])
     instance.narrative_log.append("\n".join(msgs))
+    instance.round_number += 1  # 這一回合逾時過去了，也算一回合
     instance.rounds.append(BattleRoundRecord(
-        act_index=instance.act_index, resolved_real=now, messages=list(msgs), trend_after=instance.trend,
+        act_index=instance.act_index, round_number=instance.round_number, resolved_real=now,
+        messages=list(msgs), trend_after=instance.trend,
     ))
     instance.round = BattleRound(opened_real=now)
     return msgs
 
 
-def _check_outcome(instance: BattleInstance, definition: BattleDef) -> BattleOutcome | None:
-    """只在最後一幕才判斷最終勝負——中間幕的進幕條件只是換場景，不是分勝負（設計上，決戰
-    幕本身的進幕條件通常就是「沒有下一幕了」，呼叫端在內容裡把真正的終局門檻放在最後一幕）。"""
-    if instance.act_index != len(definition.acts) - 1:
-        return None
+def decide_outcome(instance: BattleInstance, definition: BattleDef) -> BattleOutcome:
+    """從戰局決定結果：照 definition.outcomes 的順序，取第一個戰局落在門檻內的。最後那個沒有門檻的保底
+    （content.py::validate 保證有）一定接得住，所以一定有結果。打完最後一回合與壓倒性提前收場都走這裡
+    （戰鬥系統設計 3.2）；之後「伏筆鎖定誰贏」（第四節）也在這裡攔。沒人能打的收場不走這裡，見
+    end_without_fighters。"""
     for outcome in definition.outcomes:
         lo, hi = outcome.trend_min, outcome.trend_max
         if (lo is None or instance.trend >= lo) and (hi is None or instance.trend <= hi):
             return outcome
-    return None
+    return definition.outcomes[-1]
 
 
 def bot_choose_action(instance: BattleInstance, definition: BattleDef, name: str, rng: random.Random) -> str | None:

@@ -6,7 +6,7 @@ import pytest
 from conftest import FixedRandom
 from tianxia import battle_instance as bi
 from tianxia.models import (
-    BattleAct, BattleActionEffect, BattleAdvanceWhen, BattleDef, BattleFaction, BattleOption, BattleOutcome,
+    BattleAct, BattleActionEffect, BattleDef, BattleFaction, BattleOption, BattleOutcome,
 )
 
 
@@ -25,7 +25,6 @@ def definition() -> BattleDef:
                     BattleOption(text="全力進攻", tag="aggressive"),
                     BattleOption(text="單刀衝撞敵營", tag="reckless"),
                 ],
-                advance_when=BattleAdvanceWhen(trend_min=70),
             ),
             BattleAct(
                 id="a2", title="決戰", text="最終決戰。", goal="決出勝負",
@@ -33,7 +32,6 @@ def definition() -> BattleDef:
                     BattleOption(text="穩紮穩打", tag="safe"),
                     BattleOption(text="全力進攻", tag="aggressive"),
                 ],
-                advance_when=None,
             ),
         ],
         action_tags={
@@ -68,6 +66,40 @@ def gamble_definition(definition) -> BattleDef:
         failure_trend_per_risk=0.1, failure_neili_base=20, failure_neili_per_risk=3.0,
     )
     return copy
+
+
+@pytest.fixture
+def showdown() -> BattleDef:
+    """照正式內容的黃巾決戰縮小的骨架：三幕、兩邊各有自己的穩守／猛攻、65／35 兩條門檻加一個無門檻的
+    保底。每幕幾回合、多懸殊就提前收場都用預設值（3 回合一幕、偏離 40），整場 9 回合。"""
+    options = [
+        BattleOption(text="穩守陣線", tag="guan_safe", faction="guan"),
+        BattleOption(text="率先衝鋒", tag="guan_aggressive", faction="guan"),
+        BattleOption(text="死守營寨", tag="huang_safe", faction="huang"),
+        BattleOption(text="捨命衝殺", tag="huang_aggressive", faction="huang"),
+    ]
+    return BattleDef(
+        id="showdown",
+        name="測試決戰",
+        factions=[BattleFaction(id="guan", name="官軍"), BattleFaction(id="huang", name="黃巾")],
+        trend_start=50,
+        acts=[
+            BattleAct(id="s1", title="兩軍對陣", text="兩軍列陣。", goal="推動戰局", options=list(options)),
+            BattleAct(id="s2", title="鏖戰正酣", text="犬牙交錯。", goal="撐過消耗", options=list(options)),
+            BattleAct(id="s3", title="決勝時刻", text="最後一擊。", goal="分出勝負", options=list(options)),
+        ],
+        action_tags={
+            "guan_safe": BattleActionEffect(trend_delta=2, neili_damage=15),
+            "guan_aggressive": BattleActionEffect(trend_delta=6, neili_damage=60),
+            "huang_safe": BattleActionEffect(trend_delta=-2, neili_damage=15),
+            "huang_aggressive": BattleActionEffect(trend_delta=-6, neili_damage=60),
+        },
+        outcomes=[
+            BattleOutcome(faction="guan", trend_min=65, title="官軍大勝", text="官軍獲勝。"),
+            BattleOutcome(faction="huang", trend_max=35, title="黃巾得勢", text="黃巾獲勝。"),
+            BattleOutcome(faction="guan", title="兩軍膠著", text="不分勝負。"),
+        ],
+    )
 
 
 # ── 集結期 ───────────────────────────────────────────────
@@ -434,31 +466,38 @@ def test_options_for_excludes_options_restricted_to_the_other_faction(definition
     assert "黃巾專屬：符水助陣" in huang_tags
 
 
-# ── 進幕與終局判定 ──────────────────────────────────────────
+# ── 進幕與終局判定（戰鬥系統設計 3.2：換幕照回合數走，壓倒性才提前收場）──────────
 
 
-def test_advancing_to_the_next_act_when_trend_crosses_the_threshold(definition):
+def _to_the_last_round(instance: bi.BattleInstance, definition: BattleDef) -> None:
+    """直接跳到最後一幕的最後一回合（結算完就看戰局定結果）。"""
+    instance.act_index = len(definition.acts) - 1
+    instance.round_number = bi.total_rounds(definition) - 1
+
+
+def test_advancing_to_the_next_act_after_its_rounds_are_played(definition):
     instance = _active_battle(definition)
-    instance.trend = 65
-    bi.submit_action(instance, "甲", "aggressive")
-    bi.submit_action(instance, "乙", "safe")
-    msgs = bi.resolve_round(instance, definition, random.Random(0))
+    for _ in range(definition.rounds_per_act):  # 每幕 3 回合（預設）
+        assert instance.act_index == 0
+        bi.submit_action(instance, "甲", "safe")
+        bi.submit_action(instance, "乙", "safe")
+        msgs = bi.resolve_round(instance, definition, random.Random(0))
     assert instance.act_index == 1
     assert any("決戰" in m for m in msgs)
 
 
-def test_outcome_is_only_checked_on_the_final_act(definition):
+def test_a_gauge_past_an_outcome_line_but_short_of_decisive_does_not_end_early(definition):
     instance = _active_battle(definition)
-    instance.trend = 90  # 已經超過第一幕的終局門檻數字，但第一幕本身不判終局
+    instance.trend = 75  # 已經過了「官軍大勝」的 70，但離 90 還遠：第一回合不判結果
     bi.submit_action(instance, "甲", "safe")
     bi.submit_action(instance, "乙", "safe")
     bi.resolve_round(instance, definition, random.Random(0))
-    assert instance.phase == "active"  # 還在打，只是換到第二幕
+    assert instance.phase == "active" and instance.act_index == 0
 
 
-def test_outcome_ends_the_battle_once_on_the_final_act(definition):
+def test_outcome_ends_the_battle_once_on_the_final_round(definition):
     instance = _active_battle(definition)
-    instance.act_index = 1  # 直接跳到決戰幕
+    _to_the_last_round(instance, definition)
     instance.trend = 75
     bi.submit_action(instance, "甲", "safe")
     bi.submit_action(instance, "乙", "safe")
@@ -471,7 +510,7 @@ def test_outcome_copies_the_season_level_consequences_onto_the_instance(definiti
     definition.outcomes[0].world_flags_add = ["huangjin_decisive_win"]
     definition.outcomes[0].trend_delta = {"huangjin": -35}
     instance = _active_battle(definition)
-    instance.act_index = 1
+    _to_the_last_round(instance, definition)
     instance.trend = 75
     bi.submit_action(instance, "甲", "safe")
     bi.submit_action(instance, "乙", "safe")
@@ -480,43 +519,160 @@ def test_outcome_copies_the_season_level_consequences_onto_the_instance(definiti
     assert instance.outcome_trend_delta == {"huangjin": -35}
 
 
-def test_advance_when_trend_outside_triggers_on_either_direction(definition):
-    """trend_outside 是雙向的：不管戰局往哪一方傾斜，偏離中性值夠多就該換幕，不是只有
-    某一方拉開差距才算。"""
-    definition.acts[0].advance_when = BattleAdvanceWhen(trend_outside=20)
+def test_a_decisive_gauge_ends_the_battle_in_either_direction(definition):
+    """壓倒性是雙向的：不管戰局往哪一方傾斜，偏離起點 decisive_margin（預設 40）就當回合收場，
+    不是只有某一方拉開差距才算。"""
     low = _active_battle(definition)
-    low.trend = 25  # |25-50|=25 >= 20
+    low.trend = 8  # 8 + 1 + 1 = 10：|10-50| = 40
     bi.submit_action(low, "甲", "safe")
     bi.submit_action(low, "乙", "safe")
     bi.resolve_round(low, definition, random.Random(0))
-    assert low.act_index == 1
+    assert low.phase == "ended" and low.outcome_title == "黃巾得勝"
 
     high = _active_battle(definition)
-    high.trend = 75  # |75-50|=25 >= 20
+    high.trend = 88  # 88 + 1 + 1 = 90
     bi.submit_action(high, "甲", "safe")
     bi.submit_action(high, "乙", "safe")
     bi.resolve_round(high, definition, random.Random(0))
-    assert high.act_index == 1
+    assert high.phase == "ended" and high.outcome_title == "官軍大勝"
 
 
-def test_advance_when_trend_outside_does_not_trigger_near_neutral(definition):
-    definition.acts[0].advance_when = BattleAdvanceWhen(trend_outside=20)
-    instance = _active_battle(definition)
-    instance.trend = 55  # |55-50|=5 < 20
-    bi.submit_action(instance, "甲", "safe")
-    bi.submit_action(instance, "乙", "safe")
-    bi.resolve_round(instance, definition, random.Random(0))
-    assert instance.act_index == 0
+def test_a_gauge_short_of_the_decisive_margin_neither_ends_nor_changes_act(definition):
+    for start in (87, 11):  # 87 + 2 = 89、11 + 2 = 13：都還差一點
+        instance = _active_battle(definition)
+        instance.trend = start
+        bi.submit_action(instance, "甲", "safe")
+        bi.submit_action(instance, "乙", "safe")
+        bi.resolve_round(instance, definition, random.Random(0))
+        assert instance.phase == "active" and instance.act_index == 0, start
 
 
 def test_the_fallback_outcome_with_no_bounds_catches_a_stalemate(definition):
     instance = _active_battle(definition)
-    instance.act_index = 1
+    _to_the_last_round(instance, definition)
     instance.trend = 50  # 不滿足前兩個 outcome 的範圍，落到保底的「僵持」
     bi.submit_action(instance, "甲", "safe")
     bi.submit_action(instance, "乙", "safe")
     bi.resolve_round(instance, definition, random.Random(0))
     assert instance.outcome_title == "僵持"
+
+
+def _showdown_battle(definition: BattleDef) -> bi.BattleInstance:
+    """甲站官軍、乙站黃巾；氣血給足，打滿九回合也不會有人倒下。"""
+    instance = bi.start_muster(definition, now=0.0)
+    bi.join_faction(instance, "甲", "guan", neili_cap=10_000.0)
+    bi.join_faction(instance, "乙", "huang", neili_cap=10_000.0)
+    bi.close_muster(instance, definition, random.Random(0))
+    return instance
+
+
+def _play(instance: bi.BattleInstance, definition: BattleDef, guan="guan_safe", huang="huang_safe") -> list[str]:
+    """甲、乙各出一招並結算這一回合；預設兩邊都穩守，推力互相抵銷。"""
+    bi.submit_action(instance, "甲", guan)
+    bi.submit_action(instance, "乙", huang)
+    return bi.resolve_round(instance, definition, random.Random(0))
+
+
+def test_a_stalled_gauge_changes_act_every_three_rounds_and_ends_after_the_ninth(showdown):
+    """FB-016：兩邊推力抵銷、戰局停在 50 時，以前永遠停在第一幕，只能拖到氣血磨光；現在照回合數換幕，
+    第 3、6 回合結算完換幕，第 9 回合結算完看戰局收場，第 1～8 回合都不收場。"""
+    instance = _showdown_battle(showdown)
+    acts, phases, act_lines = [], [], []
+    for _ in range(9):
+        msgs = _play(instance, showdown)
+        acts.append(instance.act_index)
+        phases.append(instance.phase)
+        act_lines.append([m for m in msgs if m.startswith("【")])
+    assert instance.trend == 50
+    assert acts == [0, 0, 1, 1, 1, 2, 2, 2, 2]
+    assert phases == ["active"] * 8 + ["ended"]
+    assert act_lines[2] == ["【鏖戰正酣】犬牙交錯。"] and act_lines[5] == ["【決勝時刻】最後一擊。"]
+    assert sum(len(lines) for lines in act_lines) == 2  # 只換兩次幕
+    assert instance.outcome_title == "兩軍膠著"
+
+
+def test_the_final_act_is_fought_for_all_its_rounds(showdown):
+    """以前一進最後一幕就判結果（最後那個無門檻的保底永遠成立），第三幕只打一回合。"""
+    instance = _showdown_battle(showdown)
+    for _ in range(7):  # 第 7 回合是第三幕的第一回合
+        _play(instance, showdown)
+    assert instance.act_index == 2 and instance.phase == "active"
+    _play(instance, showdown)
+    assert instance.phase == "active"
+
+
+@pytest.mark.parametrize("start, guan, huang, title", [
+    (86, "guan_aggressive", "huang_safe", "官軍大勝"),  # 86 + 6 - 2 = 90
+    (14, "guan_safe", "huang_aggressive", "黃巾得勢"),  # 14 + 2 - 6 = 10
+])
+def test_a_lopsided_gauge_ends_the_battle_on_that_round(showdown, start, guan, huang, title):
+    instance = _showdown_battle(showdown)
+    _play(instance, showdown)
+    instance.trend = start
+    msgs = _play(instance, showdown, guan, huang)  # 第 2 回合
+    assert instance.phase == "ended" and instance.outcome_title == title
+    assert instance.round_number == 2 and instance.act_index == 0
+    assert f"══ {title} ══" in msgs
+
+
+def test_a_lopsided_gauge_on_an_act_change_round_ends_instead_of_changing_act(showdown):
+    """剛好在該換幕的那一回合到門檻：當回合收場，不換幕（以前剛換幕的那回合不判終局）。"""
+    instance = _showdown_battle(showdown)
+    _play(instance, showdown)
+    _play(instance, showdown)
+    instance.trend = 88
+    msgs = _play(instance, showdown, "guan_aggressive", "huang_safe")  # 第 3 回合：88 + 4 = 92
+    assert instance.phase == "ended" and instance.outcome_title == "官軍大勝"
+    assert instance.act_index == 0
+    assert not any(m.startswith("【") for m in msgs)
+
+
+@pytest.mark.parametrize("trend, title", [(65, "官軍大勝"), (35, "黃巾得勢"), (64, "兩軍膠著"), (36, "兩軍膠著")])
+def test_the_ninth_round_settles_the_battle_by_where_the_gauge_stands(showdown, trend, title):
+    instance = _showdown_battle(showdown)
+    for _ in range(8):
+        _play(instance, showdown)
+    assert instance.phase == "active"
+    instance.trend = trend
+    _play(instance, showdown)  # 兩邊抵銷，戰局停在 trend
+    assert instance.phase == "ended" and instance.outcome_title == title
+
+
+@pytest.mark.parametrize("trend, title", [
+    (100, "官軍大勝"), (65, "官軍大勝"), (64, "兩軍膠著"), (50, "兩軍膠著"), (36, "兩軍膠著"), (35, "黃巾得勢"), (0, "黃巾得勢"),
+])
+def test_decide_outcome_takes_the_first_outcome_the_gauge_falls_in(showdown, trend, title):
+    instance = _showdown_battle(showdown)
+    instance.trend = trend
+    assert bi.decide_outcome(instance, showdown).title == title
+
+
+def test_round_numbers_are_kept_on_the_battle_and_on_every_round_record(showdown):
+    instance = _showdown_battle(showdown)
+    assert instance.round_number == 0
+    for _ in range(4):
+        _play(instance, showdown)
+    assert instance.round_number == 4
+    assert [r.round_number for r in instance.rounds] == [1, 2, 3, 4]
+    assert [r.act_index for r in instance.rounds] == [0, 0, 0, 1]  # 紀錄的是結算前那一幕
+
+
+def test_rounds_per_act_and_decisive_margin_come_from_the_definition(showdown):
+    showdown.rounds_per_act = 2
+    showdown.decisive_margin = 20
+    assert bi.total_rounds(showdown) == 6
+    stalled = _showdown_battle(showdown)
+    acts = []
+    for _ in range(6):
+        _play(stalled, showdown)
+        acts.append(stalled.act_index)
+    assert acts == [0, 1, 1, 2, 2, 2]
+    assert stalled.phase == "ended" and stalled.round_number == 6
+
+    lopsided = _showdown_battle(showdown)
+    lopsided.trend = 66
+    _play(lopsided, showdown, "guan_aggressive", "huang_safe")  # 66 + 4 = 70：偏離 20 就收場
+    assert lopsided.phase == "ended" and lopsided.outcome_title == "官軍大勝"
 
 
 # ── 沒有人能打：回合逾時就用保底結果收場 ─────────────────────
@@ -649,3 +805,15 @@ def test_ending_without_fighters_records_the_closing_round(definition):
     msgs = bi.end_without_fighters(instance, definition, now=600.0 + definition.round_seconds)
     [record] = instance.rounds
     assert record.actions == {} and record.messages == msgs
+
+
+def test_ending_without_fighters_counts_the_timed_out_round(definition):
+    instance = _active_battle(definition)
+    bi.submit_action(instance, "甲", "safe")
+    bi.submit_action(instance, "乙", "safe")
+    bi.resolve_round(instance, definition, random.Random(0), now=100.0)
+    for p in instance.participants.values():
+        p.eliminated = True
+    bi.end_without_fighters(instance, definition, now=100.0 + definition.round_seconds)
+    assert instance.round_number == 2
+    assert [r.round_number for r in instance.rounds] == [1, 2]
