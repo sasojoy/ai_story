@@ -119,13 +119,13 @@ def test_the_prompt_keeps_the_player_in_the_second_person(content, state, world)
 def test_generated_text_is_converted_to_traditional_chinese(content, state, world):
     client = mock.Mock()
     client.chat_structured.return_value = companion_agent.CompanionTurn(
-        narrative="他说这话时闪过一丝笑意。", options=["说两句话", "告辞", "听他说"],
-        option_tags=["尋常寒暄", "尋常寒暄", "尋常寒暄"], relationship_note_update="交情还算融洽",
+        narrative="他说这话时闪过一丝笑意。", options=["说几句话", "告辞", "听他说"],
+        option_tags=["尋常寒暄", "尋常寒暄", "尋常寒暄"], relationship_note_update="关系还算融洽",
     )
     turn = companion_agent._generate(client, content.characters["mate"], state, content, world, "mate", "閒聊幾句")
     assert turn.narrative == "他說這話時閃過一絲笑意。"
-    assert turn.options[0] == "說兩句話"
-    assert turn.relationship_note_update == "交情還算融洽"
+    assert turn.options[0] == "說幾句話"
+    assert turn.relationship_note_update == "關係還算融洽"
 
 
 def test_generated_tags_are_converted_so_the_affinity_lookup_still_matches(content, state, world):
@@ -198,16 +198,16 @@ def test_a_given_turn_skips_generation_entirely(content, state, world):
 def test_generate_turn_converts_simplified_text_to_traditional():
     client = mock.Mock()
     client.chat_structured.return_value = companion_agent.CompanionTurn(
-        narrative="他说这话时闪过一丝笑意。", options=["说两句话", "告辞", "听他说"],
-        option_tags=["由衷讚赏", "尋常寒暄", "尋常寒暄"], relationship_note_update="交情还算融洽",
+        narrative="他说这话时闪过一丝笑意。", options=["说几句话", "告辞", "听他说"],
+        option_tags=["由衷讚赏", "尋常寒暄", "尋常寒暄"], relationship_note_update="关系还算融洽",
     )
     messages = [{"role": "user", "content": "hi"}]
     turn = companion_agent.generate_turn(client, messages)
     assert client.chat_structured.call_args.args[0] == messages
     assert turn.narrative == "他說這話時閃過一絲笑意。"
-    assert turn.options == ["說兩句話", "告辭", "聽他說"]
+    assert turn.options == ["說幾句話", "告辭", "聽他說"]
     assert turn.option_tags[0] == "由衷讚賞"
-    assert turn.relationship_note_update == "交情還算融洽"
+    assert turn.relationship_note_update == "關係還算融洽"
 
 
 def test_generate_turn_raises_dialogue_unavailable_when_the_client_fails_or_is_missing():

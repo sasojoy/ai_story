@@ -19,18 +19,33 @@
 **繁體輸入原樣通過，只有簡體字才轉（FB-018）**：OpenCC 的 s2t 系列把輸入一律當簡體，
 而「里、斗、了、准、夫、台」這些字本身也是合法的繁體字，所以對本來就是繁體的字會改錯
 （樓桑里→樓桑裡、米斗→米鬥、燈火通明了→燈火通明瞭、船夫→船伕）。模型多半直接寫繁體，
-對話、戰況、煉製與點綴都會被改到。規則：一個字**只存在於簡體**＝它在 OpenCC 的
-`STCharacters.txt`（每行「簡體字\t候選繁體字…」）裡，而且候選裡沒有它自己
-（这→這、军→軍、发→發 髮；而 里→裏 里、斗→鬥 斗 的候選含自己，表示它本身也是繁體字，不動）。
-`to_traditional` 先用 `s2tw` 把整句轉一次（保留詞組的上下文：头发→頭髮而不是頭發），
-再逐字合併：只有原字是「只存在於簡體」的才採用轉完的字，其餘留原字。
-`FALLBACK` 退路表照同一條規則：key 本身也是繁體字的項目一律不放。
+對話、戰況、煉製與點綴都會被改到。字分三種，依 OpenCC 的 `STCharacters.txt`
+（每行「簡體字\t候選繁體字…」）判斷：
+- **只存在於簡體**：在表裡，而且候選裡沒有它自己（这→這、军→軍、发→發 髮）。
+- **繁簡皆可（ambiguous）**：在表裡，而且候選含自己（里→裏 里、斗→鬥 斗、了→了 瞭、几→幾 几）。
+  它本身也是繁體字，但簡體文字裡也用它，光看一個字分不出來。
+- 其餘：不在表裡，沒有簡體問題。
+
+`to_traditional` 先用 `s2tw` 把整句轉一次（保留詞組的上下文：头发→頭髮而不是頭發、
+太后／皇后仍是后），再逐位置合併，原文每個字依序判斷：
+- (a) 只存在於簡體 → 採用轉完的字。
+- (b) 繁簡皆可 → **只有**符合下列之一才採用轉完的字：
+  - (b1) 鄰字規則：原文裡它前面或後面那個字是「只存在於簡體」的字。這個詞是用簡體寫的，
+    所以信 s2tw 的詞組上下文（关系→關係、几个→幾個、确实→確實、种类→種類、以后再说→以後再說）。
+    繁體的「系統」旁邊沒有簡體字，不受影響。
+  - (b2) 它在 `SIMPLIFIED_FIRST` 這張小名單裡：這些字在繁體文字裡幾乎不會單獨出現，
+    所以旁邊沒有簡體字也交給 s2tw 的詞組字典決定（然后→然後，但太后、皇后、拮据、夸父、万俟仍照詞組字典留原字）。
+- (c) 其餘一律留原字（樓桑里、米斗、燈火通明了、船夫、台上、鄉里、哪會准）。
+
+規則的取捨：繁簡皆可、又不在名單裡、旁邊也沒有簡體字的字（例如單獨的「里面」「采取」「干什么」的「干」）
+會留原字——寧可少轉，不要把正確的繁體改錯。`FALLBACK` 退路表照字級規則：只放「只存在於簡體」的字。
 
 **這個依賴壞掉不會讓遊戲壞掉**：import、建構失敗或字典檔讀不到時自動退回 `FALLBACK` 手寫對照表。
 """
 from __future__ import annotations
 
 import os
+from typing import NamedTuple
 
 # OpenCC 不在時的退路：只蓋武俠文字裡最常見的簡體字。刻意不追求完整（完整的事交給 OpenCC），
 # 目的是「就算依賴裝不起來，名字也不會以簡體字的樣子被永久登記」。
@@ -62,22 +77,47 @@ VARIANTS = {
     "続": "續", "図": "圖", "実": "實", "宝": "寶", "将": "將", "撃": "擊", "沪": "滬",
 }
 
+# (b2) 繁簡皆可、但在繁體文字裡幾乎不會單獨出現的字：旁邊沒有簡體字也交給 s2tw 決定（FB-018）。
+# 加字的標準：它在現代台灣文字與三國題材裡的獨立繁體用法很少見；而且 s2tw 的詞組字典認得該字
+# 的繁體詞（太后、皇后、拮据、夸父、万俟、丰姿、叶韻、南宮适、茶几、几案）。
+# 繁體裡常見的字（里 斗 了 准 夫 台 系 采 于 干 余 面 松 谷 范 出 只 制 表，以及姜 征 扎 朴 周 云
+# 這類人名、軍事用字）絕對不能放，否則繁體輸入又會被改。測試會檢查名單裡的字都確實繁簡皆可。
+#   后几极愿适价党胜确种：簡體文字裡最常見的洩漏（然后、几个、极了、愿意、适合、价格、党、胜利、确实、种类）
+#   厂广：廠、廣的簡體；繁體只剩部首名，工厂、广告、广东
+#   据：據的簡體（据说、依据）；繁體只有拮据，詞組字典保護
+#   挂：掛的簡體寫法；台灣正字是掛
+#   夸：誇的簡體（夸张）；繁體只有夸父、夸克，詞組字典保護
+#   叶：葉的簡體（叶子、树叶）；繁體只剩叶韻，詞組字典保護
+#   万：萬的簡體（万一、一万）；繁體只有複姓万俟，詞組字典保護
+#   丰：豐的簡體（丰富、丰收）；繁體只剩丰姿、丰神、丰采，詞組字典保護
+#   蜡蝎虫苹柜帘腊荐：蠟、蠍、蟲、蘋、櫃、簾、臘、薦的簡體（蝎子、虫子、苹果、柜子、窗帘、腊月、推荐）；
+#     台灣正字不用這些寫法
+SIMPLIFIED_FIRST = frozenset("后几极愿适价党胜确种" "厂广据挂夸叶万丰" "蜡蝎虫苹柜帘腊荐")
+
 _CONVERTER: object | None = None
 _TRIED = False
 
-# 「只存在於簡體」的字 → 它的第一個繁體候選（FB-018）；第一次要用時才從 STCharacters.txt 建一次。
-_SIMPLIFIED_ONLY: dict[str, str] | None = None
-_SIMPLIFIED_TRIED = False
+
+class _CharTable(NamedTuple):
+    """STCharacters.txt 的兩個切面（FB-018）。"""
+
+    simplified_only: dict[str, str]  # 只存在於簡體的字 → 它的第一個繁體候選
+    ambiguous: frozenset[str]  # 繁簡皆可的字：在表裡，而且候選含自己
 
 
-def _load_simplified_only() -> dict[str, str] | None:
-    """讀 OpenCC 的 STCharacters.txt：在表裡、而且候選裡沒有它自己的字才算「只存在於簡體」。
-    讀不到字典檔（沒安裝、路徑不對、格式不對）回 None。"""
+# 第一次要用時才從 STCharacters.txt 建一次（跟 `_converter()` 一樣延後、快取）。
+_TABLE: _CharTable | None = None
+_TABLE_TRIED = False
+
+
+def _load_character_table() -> _CharTable | None:
+    """讀 OpenCC 的 STCharacters.txt。讀不到字典檔（沒安裝、路徑不對、格式不對）回 None。"""
     try:
         import opencc  # noqa: PLC0415  故意延後 import：這個依賴缺了也要能跑
 
         path = os.path.join(os.path.dirname(opencc.__file__), "dictionary", "STCharacters.txt")
-        table: dict[str, str] = {}
+        simplified_only: dict[str, str] = {}
+        ambiguous: set[str] = set()
         with open(path, encoding="utf-8") as fh:
             for line in fh:
                 line = line.rstrip("\r\n")
@@ -85,20 +125,24 @@ def _load_simplified_only() -> dict[str, str] | None:
                     continue
                 key, _, rest = line.partition("\t")
                 candidates = rest.split()
-                if key and candidates and key not in candidates:
-                    table[key] = candidates[0]
+                if not key or not candidates:
+                    continue
+                if key in candidates:
+                    ambiguous.add(key)
+                else:
+                    simplified_only[key] = candidates[0]
     except Exception:  # noqa: BLE001  任何原因都當成 OpenCC 不可用
         return None
-    return table or None
+    return _CharTable(simplified_only, frozenset(ambiguous)) if simplified_only else None
 
 
-def _simplified_only() -> dict[str, str] | None:
-    """「只存在於簡體」的字表，延後建構、快取；建不起來就永遠是 None。"""
-    global _SIMPLIFIED_ONLY, _SIMPLIFIED_TRIED
-    if not _SIMPLIFIED_TRIED:
-        _SIMPLIFIED_TRIED = True
-        _SIMPLIFIED_ONLY = _load_simplified_only()
-    return _SIMPLIFIED_ONLY
+def _character_table() -> _CharTable | None:
+    """字表，延後建構、快取；建不起來就永遠是 None。"""
+    global _TABLE, _TABLE_TRIED
+    if not _TABLE_TRIED:
+        _TABLE_TRIED = True
+        _TABLE = _load_character_table()
+    return _TABLE
 
 
 def _converter():
@@ -111,26 +155,44 @@ def _converter():
             import opencc  # noqa: PLC0415  故意延後 import：這個依賴缺了也要能跑
 
             converter = opencc.OpenCC("s2tw")  # 不用 s2twp，理由見模組 docstring（FB-014）
-            _CONVERTER = converter if _simplified_only() is not None else None
+            _CONVERTER = converter if _character_table() is not None else None
         except Exception:  # noqa: BLE001  任何原因（沒安裝、DLL 被封鎖、字典讀不到）都退回手寫表
             _CONVERTER = None
     return _CONVERTER
 
 
+def _merge(text: str, converted: str, table: _CharTable) -> str:
+    """逐位置合併原文與 s2tw 轉完的結果（長度必須相同），規則見模組 docstring 的 (a)(b1)(b2)(c)。"""
+    only = table.simplified_only
+    last = len(text) - 1
+    out: list[str] = []
+    for i, (old, new) in enumerate(zip(text, converted)):
+        if old in only:  # (a)
+            out.append(new)
+        elif old in table.ambiguous and (
+            old in SIMPLIFIED_FIRST  # (b2)
+            or (i > 0 and text[i - 1] in only)  # (b1) 前一個字是簡體字
+            or (i < last and text[i + 1] in only)  # (b1) 後一個字是簡體字
+        ):
+            out.append(new)
+        else:  # (c) 繁體字（含繁簡皆可、但沒有簡體跡象的字）原樣
+            out.append(old)
+    return "".join(out)
+
+
 def to_traditional(text: str) -> str:
     """轉成繁體（台灣正字，不換詞），並把日式異體字一併正規化。
-    已經是繁體的字原樣保留，只有「只存在於簡體」的字才轉（FB-018，見模組 docstring）。"""
+    已經是繁體的字原樣保留，只有簡體字才轉（FB-018，規則見模組 docstring）。"""
     if not text:
         return text
     converter = _converter()
-    only = _simplified_only() if converter is not None else None
-    if converter is not None and only is not None:
+    table = _character_table() if converter is not None else None
+    if converter is not None and table is not None:
         converted = converter.convert(text)  # 整句先轉一次，保留詞組的上下文（头发→頭髮）
         if len(converted) == len(text):
-            # 逐位置合併：只有原字「只存在於簡體」才採用轉完的字，其餘（里、斗、了、准、夫…）留原字
-            text = "".join(new if old in only else old for old, new in zip(text, converted))
-        else:  # 保險：s2tw 理論上不會改變長度，改了就退回逐字轉換，用候選的第一個
-            text = "".join(only.get(ch, ch) for ch in text)
+            text = _merge(text, converted, table)
+        else:  # 保險：s2tw 理論上不會改變長度，改了就退回逐字轉換，只轉「只存在於簡體」的字
+            text = "".join(table.simplified_only.get(ch, ch) for ch in text)
     else:
         text = "".join(FALLBACK.get(ch, ch) for ch in text)
     return "".join(VARIANTS.get(ch, ch) for ch in text)  # OpenCC 不處理異體字，見 VARIANTS

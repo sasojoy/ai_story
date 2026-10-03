@@ -65,6 +65,12 @@ def test_text_that_is_already_traditional_passes_through_unchanged():
         "城中的士兵",
         "他的士氣",
         "信息",
+        "太后",  # 后／系在簡體裡也常見，但 s2tw 的詞組字典認得這些繁體詞，不會改
+        "皇后",
+        "何太后",
+        "鄉里",
+        "系統",
+        "采取",  # 采取：「采」旁邊沒有簡體字、也不在小名單裡，維持原字（已接受的取捨）
     ):
         assert zh.to_traditional(text) == text, text
 
@@ -82,30 +88,87 @@ def test_mixed_text_converts_only_the_simplified_characters():
     assert zh.to_traditional("樓桑里的军士说") == "樓桑里的軍士說"
 
 
+def test_ambiguous_characters_next_to_a_simplified_character_follow_the_phrase_context():
+    """(b1) 鄰字規則：「系、几、确、种、后」這類字繁簡都寫得出來。它前後只要有一個「只存在於簡體」的字，
+    這個詞就是用簡體寫的，改信 s2tw 的詞組上下文。繁體的「系統」旁邊沒有簡體字，不受影響。"""
+    assert zh.to_traditional("关系") == "關係"
+    assert zh.to_traditional("几个") == "幾個"
+    assert zh.to_traditional("确实") == "確實"
+    assert zh.to_traditional("种类") == "種類"
+    assert zh.to_traditional("系统") == "系統"
+    assert zh.to_traditional("以后再说") == "以後再說"
+    assert zh.to_traditional("他們的关系很好") == "他們的關係很好"
+    assert zh.to_traditional("这里") == "這裡"  # 里本身繁簡皆可，但旁邊是简体的「这」
+    assert zh.to_traditional("系統") == "系統"  # 統不是簡體字，所以不觸發
+
+
+def test_characters_on_the_simplified_first_list_follow_s2tw_even_when_standing_alone():
+    """(b2) 小名單：這些字在繁體文字裡幾乎不會單獨出現，所以旁邊沒有簡體字也交給 s2tw 的詞組字典決定
+    （太后、皇后維持后，然后變然後）。"""
+    assert zh.to_traditional("然后") == "然後"
+    assert zh.to_traditional("好极了") == "好極了"
+    assert zh.to_traditional("愿意") == "願意"
+    assert zh.to_traditional("适合") == "適合"
+    assert zh.to_traditional("价格") == "價格"
+    assert zh.to_traditional("党") == "黨"
+    assert zh.to_traditional("胜利") == "勝利"
+    assert zh.to_traditional("丰富") == "豐富"
+    assert zh.to_traditional("万一") == "萬一"
+    assert zh.to_traditional("广告") == "廣告"
+    assert zh.to_traditional("窗帘") == "窗簾"
+    assert zh.to_traditional("苹果") == "蘋果"
+    # 詞組字典認得的繁體詞不會被名單誤改
+    assert zh.to_traditional("太后") == "太后"
+    assert zh.to_traditional("皇后") == "皇后"
+    assert zh.to_traditional("拮据") == "拮据"  # 拮据是繁體詞，据不能被改成據
+    assert zh.to_traditional("夸父追日") == "夸父追日"
+    assert zh.to_traditional("万俟") == "万俟"
+    assert zh.to_traditional("茶几") == "茶几"
+
+
+def test_the_simplified_first_list_only_holds_ambiguous_characters():
+    """名單只放「候選含自己」的字：不然它根本沒作用（簡體字本來就會轉），多半是寫錯了。
+    而繁體裡常見的字（里 斗 了 准 夫 台 系 采 于 干 余 面 松 谷 范 出 只 制 表，以及姜 征 扎 朴 周 云）
+    不能放進去，否則繁體輸入又會被改。"""
+    assert zh.using_opencc() is True
+    ambiguous = _ambiguous_from_the_dictionary()
+    assert sorted(ch for ch in zh.SIMPLIFIED_FIRST if ch not in ambiguous) == []
+    common_in_traditional = set("里斗了准夫台系采于干余面松谷范出只制表姜征扎朴周云")
+    assert sorted(common_in_traditional & set(zh.SIMPLIFIED_FIRST)) == []
+
+
 def test_variant_normalisation_still_applies_to_traditional_input():
     """異體字表照留：「滯鉄心經」仍然變「滯鐵心經」，而「里」不受影響。"""
     assert zh.to_traditional("滯鉄心經") == "滯鐵心經"
     assert zh.to_traditional("鉄里") == "鐵里"
 
 
-def _simplified_only_from_the_dictionary() -> set[str]:
-    """獨立於 zh.py 之外讀 OpenCC 的 STCharacters.txt：「只存在於簡體」的字＝在表裡、
-    而且候選裡沒有它自己。"""
+def _read_the_dictionary() -> tuple[set[str], set[str]]:
+    """獨立於 zh.py 之外讀 OpenCC 的 STCharacters.txt。回傳（只存在於簡體的字, 繁簡皆可的字）：
+    前者在表裡而且候選裡沒有它自己，後者在表裡而且候選裡有它自己。"""
     import os
 
     import opencc
 
     path = os.path.join(os.path.dirname(opencc.__file__), "dictionary", "STCharacters.txt")
     only: set[str] = set()
+    ambiguous: set[str] = set()
     with open(path, encoding="utf-8") as fh:
         for line in fh:
             line = line.rstrip("\r\n")
             if not line:
                 continue
             key, _, candidates = line.partition("\t")
-            if key not in candidates.split():
-                only.add(key)
-    return only
+            (ambiguous if key in candidates.split() else only).add(key)
+    return only, ambiguous
+
+
+def _simplified_only_from_the_dictionary() -> set[str]:
+    return _read_the_dictionary()[0]
+
+
+def _ambiguous_from_the_dictionary() -> set[str]:
+    return _read_the_dictionary()[1]
 
 
 def test_every_fallback_key_is_a_simplified_only_character():
@@ -131,9 +194,9 @@ def test_an_unreadable_dictionary_counts_as_opencc_unavailable():
     with (
         mock.patch.object(zh, "_CONVERTER", None),
         mock.patch.object(zh, "_TRIED", False),
-        mock.patch.object(zh, "_SIMPLIFIED_ONLY", None),
-        mock.patch.object(zh, "_SIMPLIFIED_TRIED", False),
-        mock.patch.object(zh, "_load_simplified_only", return_value=None),
+        mock.patch.object(zh, "_TABLE", None),
+        mock.patch.object(zh, "_TABLE_TRIED", False),
+        mock.patch.object(zh, "_load_character_table", return_value=None),
     ):
         assert zh.using_opencc() is False
         assert zh.to_traditional("米斗") == "米斗"
