@@ -100,6 +100,7 @@ def test_the_tutorial_explains_travel_and_sitting_down(content):
     texts = {step.id: step.text for step in content.tutorial.steps}
     assert all(word in texts["t2_map"] for word in ("步行", "趕路", "疾行", "體力"))
     assert "打坐" in texts["t3_outskirts"]
+    assert all(word in texts["t3_outskirts"] for word in ("邊走邊想", "沿途打聽", "折返"))  # 路上不是乾等（路上設計）
 
 
 def test_every_battle_is_fought_in_the_region_where_it_starts(content):
