@@ -1060,3 +1060,63 @@ def test_the_move_mode_is_never_saved(client):
     _player(client)
     client.get("/api/main", headers=HURRY)
     assert "move_mode" not in open_characters().load("沈青衫").model_dump_json()
+
+
+# ── 隨口應對（探索的多人與 LLM 玩法 §8.1）────────────────────
+
+
+@pytest.fixture
+def at_a_gamble(game, monkeypatch):
+    """正式內容裡挑一則事件掛上隨口應對（劇情還沒寫），玩家正停在這則事件上，角色已經存檔。"""
+    from tianxia.models import Effect, FreeTextChoice
+
+    event = next(iter(server.CONTENT.events.values()))
+    free = FreeTextChoice(prompt="自己想辦法……", stat="str", effect=Effect(text="成了。"), fail_effect=Effect(text="砸了。"))
+    monkeypatch.setattr(event, "free_text", free)
+    game.state.pending_event = event.id
+    open_characters().save(game.state)
+    return event
+
+
+def test_answering_asks_the_model_outside_the_lock(game, at_a_gamble, lock_events):
+    def assess(client, event, text):
+        lock_events.append(f"assess:{text}")
+        return 85
+
+    game.rng = random.Random(0)
+    with mock.patch.object(server.event_llm, "assess_event_success_rate", side_effect=assess):
+        server.answer_event(game, "大喊官兵來了")
+    assert lock_events == ["enter", "exit", "assess:大喊官兵來了", "enter", "exit"]
+    assert game.state.pending_event is None
+    assert game.state.journal[0].title == f"{at_a_gamble.title}・隨口應對"
+    assert game.state.journal[0].lines[0].startswith("你：「大喊官兵來了」（成算")
+    view = server.look(game, server.main_view)
+    assert view["event_free_text"] is None
+
+
+def test_answering_does_nothing_when_the_event_was_dealt_with_meanwhile(game, at_a_gamble):
+    def assess(client, event, text):
+        server.act(game, lambda g: setattr(g.state, "pending_event", None))  # 另一個分頁先選了別的
+        return 85
+
+    with mock.patch.object(server.event_llm, "assess_event_success_rate", side_effect=assess):
+        msgs = server.answer_event(game, "大喊官兵來了")
+    assert "事情已經過去了" in "\n".join(msgs)
+    assert not any(e.title.endswith("隨口應對") for e in game.state.journal)
+
+
+def test_the_page_offers_the_box_and_rejects_empty_words(client, monkeypatch):
+    _player(client)
+    game = next(iter(server.GAMES.values()))
+    from tianxia.models import FreeTextChoice
+
+    event = next(iter(server.CONTENT.events.values()))
+    monkeypatch.setattr(event, "free_text", FreeTextChoice(prompt="自己想辦法……", stat="str"))
+    server.act(game, lambda g: setattr(g.state, "pending_event", event.id))
+    main = client.get("/api/main").json()
+    assert main["event_free_text"] == "自己想辦法……"
+    assert main["options"][-1] == {"id": "choice:free", "label": "自己想辦法……", "enabled": True}
+    assert client.post("/api/answer", json={"text": "  "}).status_code == 400
+    with mock.patch.object(server.event_llm, "assess_event_success_rate", return_value=50):
+        main = client.post("/api/answer", json={"text": "大喊官兵來了"}).json()["main"]
+    assert main["event_free_text"] is None

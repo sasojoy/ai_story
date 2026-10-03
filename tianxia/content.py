@@ -9,9 +9,11 @@ sanguo-companions 合併大幅簡化了這裡的驗證規則（見設計文件�
 from __future__ import annotations
 
 import json
+import math
+import re
 from pathlib import Path
 
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from .companion_agent import DIALOGUE_TAGS
 from .materials import TIER_NAMES
@@ -51,7 +53,32 @@ def load_content(root: Path) -> Content:
         tutorial=Tutorial(**_read(root / "tutorial.json")),
     )
     validate(content)
+    _scale_marks(content, content.config.mark_threshold_scale)
     return content
+
+
+def _scale_marks(obj, scale: float) -> None:
+    """地方痕跡的門檻照伺服器人數換算（探索的多人與LLM玩法 §8.2）：每個 Condition 的 marks_min／marks_max
+    乘上 scale、無條件進位。在載入時做一次，條件判定（rules.check_condition）就不必知道設定。"""
+    if scale == 1:
+        return
+    if isinstance(obj, Condition):
+        for limits in (obj.marks_min, obj.marks_max):
+            for key, value in limits.items():
+                limits[key] = math.ceil(value * scale)
+    if isinstance(obj, BaseModel):
+        for name in type(obj).model_fields:
+            _scale_marks(getattr(obj, name), scale)
+    elif isinstance(obj, dict):
+        for value in obj.values():
+            _scale_marks(value, scale)
+    elif isinstance(obj, list):
+        for value in obj:
+            _scale_marks(value, scale)
+
+
+MARKS_TOKEN = re.compile(r"\{marks:([^{}]+)\}")  # 文字裡的模糊人數（rules.fill_marks）
+FREE_TEXT_REWARDS = ("silver", "fame", "good", "xinde", "str", "agi", "con", "wis")  # 隨口應對的獎勵不能超過檢定選項的這幾項
 
 
 def _read(path: Path):
@@ -110,7 +137,23 @@ def validate(c: Content) -> None:
         for key in keys:
             need(key in valid, f"{where}：未知的{kind} {key}")
 
+    marks_written: dict[str, str] = {}  # 痕跡 → 第一個寫它的地方
+    marks_read: dict[str, str] = {}  # 痕跡 → 第一個讀它的地方（條件或文字裡的模糊人數）
+
+    def check_mark_key(where: str, key: str) -> None:
+        loc, sep, name = key.partition(":")
+        need(bool(sep and name.strip()), f"{where}：痕跡 {key!r} 要寫成「地點 id:痕跡名」")
+        need(loc in c.locations, f"{where}：痕跡 {key!r} 的地點 {loc} 不存在")
+
+    def read_marks_in(where: str, text: str) -> None:
+        for key in MARKS_TOKEN.findall(text):
+            check_mark_key(where, key)
+            marks_read.setdefault(key, where)
+
     def check_condition(where: str, cond: Condition) -> None:
+        for key in [*cond.marks_min, *cond.marks_max]:
+            check_mark_key(where, key)
+            marks_read.setdefault(key, where)
         known(where, [*cond.min_stats, *cond.max_stats], STATS, "屬性")
         known(where, cond.sects, c.sects, "門派")
         known(where, [*cond.skills_all, *cond.skills_none], c.skills, "武學")
@@ -121,6 +164,11 @@ def validate(c: Content) -> None:
             check_condition(where, sub)
 
     def check_effect(where: str, eff: Effect) -> None:
+        for key, n in eff.marks.items():
+            check_mark_key(where, key)
+            need(1 <= n <= 3, f"{where}：痕跡 {key} 一次只能加 1～3（不能減）")
+            marks_written.setdefault(key, where)
+        read_marks_in(where, eff.text)
         known(where, eff.stats, STATS, "屬性")
         known(where, eff.learn_skills, c.skills, "武學")
         known(where, eff.materials, c.materials, "素材")
@@ -133,6 +181,33 @@ def validate(c: Content) -> None:
             known(where, [eff.recruit], c.characters, "人物")
             if eff.recruit in c.characters:
                 need(c.characters[eff.recruit].kind == "recruitable", f"{where}：結識的 {eff.recruit} 不是可招募的同伴")
+
+    def check_free_text(where: str, ev: Event) -> None:
+        """隨口應對（§8.1）：賣的是好玩不是划算，獎勵不能比同一則事件裡最好的檢定選項高；
+        也不能串到下一則事件、結識人物、拜師或改旗標（那些都要靠手寫的選項）。"""
+        ft, fw = ev.free_text, f"{where} 隨口應對"
+        check_effect(fw, ft.effect)
+        check_effect(fw, ft.fail_effect)
+        rivals = [ch.effect for ch in ev.choices if ch.check is not None] or [ch.effect for ch in ev.choices]
+        for key in FREE_TEXT_REWARDS:
+            best = max(eff.stats.get(key, 0) for eff in rivals)
+            need(
+                ft.effect.stats.get(key, 0) <= best,
+                f"{fw}：{key} +{ft.effect.stats.get(key, 0)} 比檢定選項最多的 +{best} 還高",
+            )
+        best_materials = max(sum(eff.materials.values()) for eff in rivals)
+        need(
+            sum(ft.effect.materials.values()) <= best_materials,
+            f"{fw}：素材 {sum(ft.effect.materials.values())} 個比檢定選項最多的 {best_materials} 個還多",
+        )
+        for label, eff in (("effect", ft.effect), ("fail_effect", ft.fail_effect)):
+            banned = [
+                name for name, used in (
+                    ("next_event", eff.next_event), ("recruit", eff.recruit), ("join_sect", eff.join_sect),
+                    ("flags_add", eff.flags_add), ("world_flags_add", eff.world_flags_add),
+                ) if used
+            ]
+            need(not banned, f"{fw} {label}：不能有 {'、'.join(banned)}")
 
     cfg = c.config
     for action in ("explore", "train", "socialize"):
@@ -221,6 +296,9 @@ def validate(c: Content) -> None:
                 known(cw, [ch.combat], c.squads, "敵方隊伍")
             if ch.check:
                 known(cw, [ch.check.stat], STATS, "屬性")
+        read_marks_in(where, ev.text)
+        if ev.free_text is not None:
+            check_free_text(where, ev)
         recruits = {eff.recruit for ch in ev.choices for eff in (ch.effect, ch.fail_effect) if eff.recruit}
         for cid in sorted(recruits):
             need(
@@ -391,6 +469,11 @@ def validate(c: Content) -> None:
     for squad in c.squads.values():
         where = f"敵方隊伍 {squad.id}"
         need(squad.difficulty >= 0, f"{where}：difficulty 不能是負的")
+
+    for key, where in sorted(marks_written.items()):
+        need(key in marks_read, f"{where}：痕跡 {key} 寫了卻沒有任何條件或文字讀它")
+    for key, where in sorted(marks_read.items()):
+        need(key in marks_written, f"{where}：痕跡 {key} 沒有任何效果寫它，條件永遠不會成立")
 
     if errors:
         raise ContentError("內容檔有誤：\n" + "\n".join(errors))

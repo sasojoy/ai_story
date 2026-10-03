@@ -10,7 +10,7 @@ import random
 
 from . import atlas, server_bots
 from .bot import wants_heal
-from .engine import Game, Option
+from .engine import FREE_TEXT_OPTION, Game, Option
 from .models import Effect, FactionDef
 from .state import BotProfile
 
@@ -39,7 +39,7 @@ def take_turn(game: Game, profile: BotProfile, rng: random.Random) -> list[str]:
     rally = _toward_battle(game)
     if rally is not None:
         return rally
-    options = [o for o in game.options(odds=False, tick=False) if o.enabled and o.id not in ("act:rest", "act:halt")]
+    options = [o for o in game.options(odds=False, tick=False) if o.enabled and o.id not in ("act:rest", "act:halt", FREE_TEXT_OPTION)]
     if not options:
         return []
     ids = [o.id for o in options]

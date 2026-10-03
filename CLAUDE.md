@@ -583,6 +583,20 @@ CLAUDE.md，白繞了一圈。**開工前先 `git worktree list` 核對一次。
 
 以下兩節是 Gradio 時期的紀錄，留著當歷史；裡面講的 class 名稱、`MENXIA_OUTPUTS`、`css=` 的坑都已經不存在了。
 
+## 事件的隨口應對與地方痕跡（2026-10-03，`docs/superpowers/specs/2026-10-03-探索的多人與LLM玩法-draft.md` §8）
+
+引擎與介面這一半（劇情寫內容、LLM 整合調提示詞）：
+- **隨口應對**：事件有 `free_text`（`FreeTextChoice`）時，選單最後多一顆 `choice:free`，網頁上按了才出現 20 字輸入框，
+  送出走 `/api/answer`，跟人物對話一樣三段：鎖內 `Game.free_text_request` → 鎖外 `event_llm.assess_event_success_rate`
+  （失敗一律 40）→ 鎖內 `Game.answer_event` 重驗同一則事件、同一句話才擲骰。成功率 `rules.free_text_rate`
+  ＝LLM 分數＋(屬性−5)×4，夾在 5～85；江湖紀錄寫「你：「…」（成算N成）」。`choose("choice:free")` 只回一句提示、不消耗事件。
+  兩種假人都排除這顆（`bot.pick`、`bot_policy.take_turn`）。擲骰後的 LLM 潤色（spec 寫「可以」）這次沒做。
+- **地方痕跡**：`Effect.marks`（1～3，只能加）、`Condition.marks_min/max`、`WorldState.marks`（跟賽季 JSON 一起存，
+  換季自然清空）。一人一天一次記在 `PlayerState.mark_days`（角色每季重來，跟著清）。門檻在載入時乘
+  `Config.mark_threshold_scale` 無條件進位；文字裡的 `{marks:地點:痕跡}` 換成模糊人數（`rules.fill_marks`），不列名字。
+- `content.py::validate`：痕跡鍵要是「存在的地點:名字」，而且寫了的要有人讀（條件或文字）、讀的要有人寫；
+  隨口應對的獎勵不能高過同一則事件最好的檢定選項，也不能有 next_event／recruit／join_sect／flags_add／world_flags_add。
+
 ## 介面：手機排版與小動畫（2026-10-03，Gradio 時期，已被上一節取代）
 
 ### 原本的問題：整個專案沒有自己的樣式表
