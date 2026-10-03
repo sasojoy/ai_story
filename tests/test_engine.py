@@ -2789,7 +2789,7 @@ def test_an_unknown_mode_falls_back_to_walking(game):
 
 
 def test_the_move_mode_is_screen_state_and_never_saved(content, game):
-    """重新整理頁面＝重新登入、讀存檔開新的 Game：走法回到步行（企劃者決定：不存進存檔）。"""
+    """走法不存進存檔（企劃者決定），讀存檔開的 Game 一律從步行開始；網頁上每個請求的走法由 server.py 逐次設定。"""
     game.set_move_mode("hurry")
     assert "move_mode" not in game.state.model_dump_json()
     assert Game(content, game.state, world=game.world).move_mode == "walk"

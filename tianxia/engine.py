@@ -56,7 +56,8 @@ class Game:
         )  # companion_agent.py 用；連不上時那輪對話取消，這裡不用先健檢
         self._draft: Draft | None = None  # choose() 進行中那次行動的江湖紀錄草稿
         # 主畫面「走法」切換選的走法（步行／趕路／疾行），選單上的「前往」照它出發（見 _move_option）。只是畫面狀態：
-        # 不在 GameState 裡、不進存檔，重新整理頁面（重新登入、開新的 Game）就回到步行；機器人與假人從不改它。
+        # 不在 GameState 裡、不進存檔。網頁伺服器的同一個角色只有一份 Game（各分頁共用、重新整理也還在），所以走法
+        # 由頁面記著、每個請求帶上，server.py 在行動鎖裡逐次 set_move_mode（見 server.MOVE_MODE）；機器人與假人從不改它。
         self.move_mode: TravelMode = "walk"
         # 現在的現實時間（秒）：由 sync(now) 傳進來，引擎自己不讀電腦時鐘（線上架構設計第四節）。
         # 讀進來的存檔先用上次同步的時間；開戰的集結截止、回合逾時都看它。
