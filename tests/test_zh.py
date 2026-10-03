@@ -13,13 +13,26 @@ def test_traditional_text_is_left_alone():
     assert zh.to_traditional("裂江訣") == "裂江訣"
 
 
+def test_characters_are_converted_without_swapping_phrases():
+    """FB-014：s2twp 會照台灣用詞字典換詞，把古代語境裡的「的士卒」換成「計程車卒」。
+    現在用 s2tw：只轉字（台灣正字），不換詞。"""
+    assert zh.to_traditional("北军的士卒") == "北軍的士卒"
+    assert zh.to_traditional("城中的士兵") == "城中的士兵"
+    assert zh.to_traditional("他的士气") == "他的士氣"
+    # 已經是繁體的原樣通過，不會被當成要換的詞
+    assert zh.to_traditional("北軍的士卒") == "北軍的士卒"
+    assert zh.to_traditional("城中的士兵") == "城中的士兵"
+    # 同一個原因：台灣現代用語的換詞也不做（信息 != 資訊）
+    assert zh.to_traditional("信息") == "信息"
+
+
 def test_empty_text_is_fine():
     assert zh.to_traditional("") == ""
 
 
 def test_japanese_variants_are_normalised():
     """實測真實模型煉製時回過「滯鉄心經」——「鉄」既不是簡體也不是繁體正字，OpenCC 的
-    s2twp 原樣放過，而這個套件沒附 jp2t 字典，所以 zh.py 自己有一張異體字表。"""
+    s2tw 原樣放過，而這個套件沒附 jp2t 字典，所以 zh.py 自己有一張異體字表。"""
     assert zh.to_traditional("滯鉄心經") == "滯鐵心經"
     assert zh.to_traditional("剣竜沢") == "劍龍澤"
 
