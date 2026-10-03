@@ -266,6 +266,42 @@ def test_a_bot_already_in_the_battle_region_joins_instead_of_travelling(content,
     assert game.state.player.name in game.world.get_battle().participants
 
 
+def test_a_bot_at_a_muster_joins_first_even_when_it_picks_at_random(content, game):
+    """集結時選單照常有探索、移動（FB-009）；假人不靠強度旋鈕，一看到加入就加入，跟以前選單只剩加入時一樣。"""
+    _install_factions(content)
+    definition = _install_battle(content)
+    content.config.bot_strength = 0.0  # 完全隨機挑
+    game.state.player.faction = "guan"
+    name = game.state.player.name
+    game.world.start_battle(definition, now=game.now)
+    assert len([o for o in game.options(odds=False) if o.enabled]) > 1
+    for seed in range(5):
+        game.world.mutate_battle(lambda b: b.participants.pop(name, None))
+        bot_policy.take_turn(game, _profile("guan"), random.Random(seed))
+        assert name in game.world.get_battle().participants
+
+
+def test_a_bot_that_joined_stays_in_the_battle_region_during_the_muster(content, game):
+    """集結時選單照常有前往（FB-009）；參戰的假人在區內照常走動，但不走出決戰的大區，開打時人在現場。"""
+    _install_factions(content)
+    definition = _install_battle(content)
+    definition.region = "north"
+    content.locations["cave"].y = 170  # 寶洞在南區，從湖邊走得到
+    game.state.world.flags.add("cave_open")
+    content.config.bot_strength = 0.0  # 完全隨機挑
+    game.state.player.faction = "guan"
+    walk_to(game, "lake")
+    game.world.start_battle(definition, now=game.now)
+    bot_policy.take_turn(game, _profile("guan"), random.Random(0))
+    assert game.state.player.name in game.world.get_battle().participants
+    assert "move:cave" in [o.id for o in game.options(odds=False) if o.enabled]
+    for seed in range(30):
+        bot_policy.take_turn(game, _profile("guan"), random.Random(seed))
+        journey = game.state.player.journey
+        assert journey is None or "cave" not in journey.path
+        game.state.player.journey = None  # 區內走動就當作已經到了，下一輪接著挑
+
+
 def test_a_bot_with_an_event_to_settle_does_not_rush_off(content, game):
     _battle_in_the_south(content, game)
     game.state.pending_event = "drunk"

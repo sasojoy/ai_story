@@ -43,6 +43,16 @@ def take_turn(game: Game, profile: BotProfile, rng: random.Random) -> list[str]:
     if not options:
         return []
     ids = [o.id for o in options]
+    battle = game.world.get_battle()
+    if battle is not None and s.player.name not in battle.participants:
+        join = next((i for i in ids if i.startswith("battle:join")), None)
+        if join is not None:  # 集結時選單照常有別的事可做（FB-009）；假人一看到加入就加入，不交給強度旋鈕碰運氣
+            return game.choose(join)
+    elif battle is not None and battle.phase == "muster":
+        options = _staying_for_the_battle(game, battle.battle_id, options)
+        if not options:
+            return []
+        ids = [o.id for o in options]
     if s.player.faction is None and profile.faction is not None and not s.pending_event \
             and not any(i.startswith("battle:") for i in ids):
         step = _toward_faction(game, profile.faction, ids)
@@ -133,6 +143,22 @@ def _toward_battle(game: Game) -> list[str] | None:
         if mode in ways and ways[mode].enabled:
             return game.travel(hop, mode)
     return None
+
+
+def _staying_for_the_battle(game: Game, battle_id: str, options: list[Option]) -> list[Option]:
+    """已經參戰的假人在集結時不走出決戰的大區：集結時選單照常有前往（FB-009），但以前選單只有加入、假人一直待在
+    現場，開打時人都在；區內站與站之間照常走。決戰不限地點時不用管。"""
+    region = game.content.battles[battle_id].region
+    if region is None:
+        return options
+
+    def leaves(option_id: str) -> bool:
+        if not option_id.startswith("move:"):
+            return False
+        dest = atlas.region_of(game.content, option_id[len("move:"):].partition(":")[0])
+        return dest is None or dest.id != region
+
+    return [o for o in options if not leaves(o.id)]
 
 
 def next_hop(game: Game, targets: list[str]) -> str | None:

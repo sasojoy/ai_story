@@ -89,6 +89,11 @@ def pick(game: Game, options: list[Option], rng: random.Random) -> str | None:
     跟著變少，一整季要跑完所需的步數暴增到頂到 max_steps 才停，拖垮整個測試套件）。
     act:halt（喊停）同理：機器人只走單站、它不會出現，萬一出現了也不能讓它成為「有選項可選」。"""
     s = game.state
+    battle = game.world.get_battle()
+    if battle is not None and s.player.name not in battle.participants:
+        for option in options:  # 集結時選單照常有別的事可做（FB-009）；還沒參戰就先加入，跟以前選單只剩加入時一樣
+            if option.id.startswith("battle:join"):
+                return option.id
     if s.pending_event:
         choices = game.content.events[s.pending_event].choices
         for option in options:

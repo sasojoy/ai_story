@@ -1012,7 +1012,7 @@ def test_with_factions_the_muster_only_offers_your_own_side(content, game):
     game.state.player.faction = "huang"
     game.world.start_battle(definition, now=1000.0)
     with at(game, 1000.0):
-        assert ids(game) == ["battle:join:huang"]
+        assert [i for i in ids(game) if i.startswith("battle:")] == ["battle:join:huang"]
         assert game.choose("battle:join:guan") == ["（此刻無法這麼做。）"]
         assert "選擇陣營" in game.scene_text()
 
@@ -1119,8 +1119,57 @@ def test_an_active_muster_shows_faction_join_options(content, game):
     definition = _install_battle_def(content)
     game.world.start_battle(definition, now=1000.0)
     with at(game, 1000.0):
-        assert ids(game) == ["battle:join:guan", "battle:join:huang"]
+        assert ids(game)[:2] == ["battle:join:guan", "battle:join:huang"]
         assert "測試決戰" in game.scene_text()
+
+
+def test_the_muster_keeps_the_everyday_menu_under_the_join_buttons(content, game):
+    """集結那段時間（企劃者 2026-10-03 決定，FB-009）：人在戰場的人照常探索、移動、打坐，另外多加入的按鈕；
+    場景上戰場底下接著自己所在的地點。"""
+    definition = _install_battle_def(content)
+    game.world.start_battle(definition, now=1000.0)
+    with at(game, 1000.0):
+        assert ids(game) == ["battle:join:guan", "battle:join:huang"] + [
+            "act:explore", "act:socialize", "act:recruit", "move:lake", "act:rest"]
+        scene = game.scene_text()
+        assert "測試決戰" in scene and "選擇陣營" in scene and "小鎮" in scene
+        game.choose("act:explore")  # 集結中照常探索，不會被擋
+        assert game.state.journal[0].title.startswith("探索")
+
+
+def test_a_fighter_who_joined_sees_it_on_the_button_and_in_the_scene(content, game):
+    definition = _install_battle_def(content)
+    game.world.start_battle(definition, now=1000.0)
+    with at(game, 1000.0):
+        game.choose("battle:join:guan")
+    with at(game, 1000.0 + 125):
+        opts = {o.id: (o.label, o.enabled) for o in game.options()}
+        assert opts["battle:join:guan"] == ("已加入【官軍】", False)
+        assert opts["battle:join:huang"] == ("加入【黃巾】", True)  # 不分陣營的劇本：集結時還能換邊
+        assert opts["act:explore"][1] and "move:lake" in opts
+        scene = game.scene_text()
+        assert "你已加入【官軍】，集結還剩 7 分 55 秒" in scene and "選擇陣營" not in scene
+        assert game.choose("battle:join:guan") == ["（此刻無法這麼做。）"]
+
+
+def test_with_factions_a_fighter_who_joined_only_sees_joined(content, game):
+    _install_factions(content)
+    definition = _install_battle_def(content)
+    game.state.player.faction = "huang"
+    game.world.start_battle(definition, now=1000.0)
+    with at(game, 1000.0):
+        game.choose("battle:join:huang")
+        battle_ids = [o for o in game.options() if o.id.startswith("battle:")]
+        assert [(o.id, o.label, o.enabled) for o in battle_ids] == [("battle:join:huang", "已加入【黃巾】", False)]
+
+
+def test_the_fighting_menu_still_replaces_everything_once_the_muster_closes(content, game):
+    definition = _install_battle_def(content)
+    game.world.start_battle(definition, now=1000.0)
+    with at(game, 1000.0):
+        game.choose("battle:join:guan")
+    with at(game, 1000.0 + 601):
+        assert ids(game) == ["battle:act:safe", "battle:act:aggressive"]
 
 
 def test_joining_a_faction_during_muster(content, game):
@@ -1310,7 +1359,7 @@ def test_you_can_join_a_battle_only_in_its_region(content, game):
         assert "這場決戰在測試南區" in game.scene_text()
         assert game._battle_choose("join:guan") == ["（這場決戰在測試南區，人要到了那裡、不在路上才能加入。）"]
         game.state.player.location = "cave"
-        assert ids(game) == ["battle:join:guan", "battle:join:huang"]
+        assert ids(game)[:2] == ["battle:join:guan", "battle:join:huang"]  # 集結中：加入的按鈕在平常的選單前面
 
 
 def test_nobody_on_the_road_can_join(content, game):
@@ -1430,7 +1479,7 @@ def test_a_sitter_can_still_stand_up_while_the_muster_menu_is_showing(content, g
         assert next(o for o in game.options() if o.id == "act:stand").label == "起身"
         game.choose("act:stand")
         assert game.state.player.resting_since is None
-        assert ids(game) == ["battle:join:guan", "battle:join:huang"]  # 起身不等於加入，戰鬥選單還在
+        assert ids(game)[:2] == ["battle:join:guan", "battle:join:huang"]  # 起身不等於加入，加入的按鈕還在
         assert "沈浪" not in game.world.get_battle().participants
 
 

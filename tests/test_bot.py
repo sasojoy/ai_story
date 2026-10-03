@@ -1,6 +1,9 @@
 import random
 
 from tianxia.bot import pick, play_season, spend_xinde, wants_heal
+from tianxia.models import (
+    BattleAct, BattleActionEffect, BattleAdvanceWhen, BattleDef, BattleFaction, BattleOption, BattleOutcome,
+)
 from tianxia.sqlite_world import open_world
 
 
@@ -103,3 +106,25 @@ def test_the_bot_backs_out_of_an_audience_list_it_cannot_use(content, game):
     options = [o for o in game.options(odds=False) if o.enabled]
     assert [o.id for o in options] == ["call:back"]
     assert pick(game, options, random.Random(0)) == "call:back"
+
+
+def test_the_bot_joins_a_muster_before_doing_anything_else(content, game):
+    """集結時選單照常有別的事可做（FB-009）；機器人還沒參戰就先加入，加入之後才照常隨機挑（不會在兩邊之間一直換）。"""
+    definition = BattleDef(
+        id="t1", name="測試決戰",
+        factions=[BattleFaction(id="guan", name="官軍"), BattleFaction(id="huang", name="黃巾")],
+        acts=[BattleAct(id="a1", title="初探", text="雙方試探。", goal="推動戰局",
+                        options=[BattleOption(text="穩紮穩打", tag="safe")], advance_when=BattleAdvanceWhen(trend_min=90))],
+        action_tags={"safe": BattleActionEffect(trend_delta=1, neili_damage=5)},
+        outcomes=[BattleOutcome(faction="guan", title="官軍大勝", text="官軍獲勝。")],
+        muster_seconds=600, round_seconds=120,
+    )
+    content.battles[definition.id] = definition
+    game.world.start_battle(definition, now=game.now)
+    options = [o for o in game.options(odds=False) if o.enabled]
+    assert len(options) > 2
+    assert all(pick(game, options, random.Random(seed)) == "battle:join:guan" for seed in range(5))
+    game.choose("battle:join:guan")
+    options = [o for o in game.options(odds=False) if o.enabled]
+    picks = {pick(game, options, random.Random(seed)) for seed in range(20)}
+    assert picks - {"battle:join:huang"}  # 已經加入：照常隨機挑，不是每一步都換邊

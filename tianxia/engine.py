@@ -247,13 +247,23 @@ class Game:
     def options(self, odds: bool = True, tick: bool = True) -> list[Option]:
         """tick 照 _battle_status 的規則往下傳：預設 True，這個呼叫順便把全服戰鬥追趕到現實時間；
         只想讀選單、不該推進戰鬥的呼叫端（dialogue_request）傳 False——一次請求只能推進一次。"""
-        s, c = self.state, self.content
         battle_status = self._battle_status(tick=tick)
         if battle_status is not None and not self._watching_battle(*battle_status):
-            battle_menu = self._battle_options(*battle_status)
-            if s.player.resting_since is not None:
+            battle, definition = battle_status
+            if battle.phase == "muster":
+                # 集結那段時間照常遊玩，加入的按鈕（已經加入就是灰的「已加入」）放在平常的選單前面
+                # （企劃者 2026-10-03 決定，FB-009）；走出決戰的大區就照 _watching_battle 算不在場
+                return self._battle_options(battle, definition) + self._everyday_options(odds)
+            battle_menu = self._battle_options(battle, definition)
+            if self.state.player.resting_since is not None:
                 battle_menu.append(self._stand_option())  # 戰鬥選單取代整份選單，隨時可以起身這條規則不能因此掉了
             return battle_menu
+        return self._everyday_options(odds)
+
+    def _everyday_options(self, odds: bool) -> list[Option]:
+        """沒有要親身參與的開打中決戰時的選單：籌備或休季、事件、對話、投靠確認、求見名單、閉關、在路上、打坐，
+        都不是就是在地點上能做的事。"""
+        s, c = self.state, self.content
         if self.world.season_phase() == "preparing":
             return [Option(id="season:preparing", label="賽季籌備中，等待管理者開季", enabled=False)]
         if s.world.ended:
@@ -1011,8 +1021,14 @@ class Game:
         watch_line = self._watch_line(battle, definition)
         if battle.phase == "muster":
             remaining = max(0, int(battle.muster_deadline_real - self.now))
-            countdown = f"集結中，還剩 {remaining // 60} 分 {remaining % 60} 秒"
-            return f"{header}\n\n{countdown}。{watch_line}" if watching else f"{header}\n\n{countdown}選擇陣營。"
+            left = f"{remaining // 60} 分 {remaining % 60} 秒"
+            if watching:
+                return f"{header}\n\n集結中，還剩 {left}。{watch_line}"
+            me = battle.participants.get(self.state.player.name)
+            if me is not None:
+                side = next((f.name for f in definition.factions if f.id == me.faction), me.faction)
+                return f"{header}\n\n你已加入【{side}】，集結還剩 {left}。集結結束就開打，在那之前照常行動；走出這一區就不算在場。"
+            return f"{header}\n\n集結中，還剩 {left}。選擇陣營加入；集結期間照常行動。"
         act = battle_instance.current_act(battle, definition)
         lines = [header, f"【{act.title}】{act.text}"] + battle.narrative_log[-5:]
         p = battle.participants.get(self.state.player.name)
@@ -1025,12 +1041,16 @@ class Game:
     def _battle_options(self, battle: battle_instance.BattleInstance, definition: BattleDef) -> list[Option]:
         """打得了這場仗的人的戰鬥選項（只能觀戰的人不會走到這裡，見 _watching_battle）。"""
         name = self.state.player.name
+        p = battle.participants.get(name)
         if battle.phase == "muster":
             sides = definition.factions
             if self.content.scenario.factions:  # 劇本分陣營：只能站在自己陣營那邊
                 sides = [f for f in definition.factions if f.id == self.state.player.faction]
-            return [Option(id=f"battle:join:{f.id}", label=f"加入【{f.name}】") for f in sides]
-        p = battle.participants.get(name)
+            return [  # 已經加入的那一邊換成灰的「已加入」；不分陣營的劇本集結時還能換到另一邊
+                Option(id=f"battle:join:{f.id}", label=f"已加入【{f.name}】", enabled=False)
+                if p is not None and p.faction == f.id else Option(id=f"battle:join:{f.id}", label=f"加入【{f.name}】")
+                for f in sides
+            ]
         if p is None:
             return [Option(id="battle:join_late", label="加入戰局")]
         if p.eliminated:
@@ -1809,8 +1829,8 @@ class Game:
         if battle_status is None:
             return self._own_scene_text()
         battle_scene = self._battle_scene_text(*battle_status)
-        if not self._watching_battle(*battle_status):
-            return battle_scene
+        if not self._watching_battle(*battle_status) and battle_status[0].phase != "muster":
+            return battle_scene  # 開打後戰場取代整個畫面；集結時照常遊玩，自己眼前的事接在底下
         return f"{battle_scene}\n\n---\n\n{self._own_scene_text()}"
 
     def _own_scene_text(self) -> str:
