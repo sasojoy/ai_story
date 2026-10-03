@@ -160,8 +160,73 @@ def test_submit_action_from_an_eliminated_participant_is_ignored(definition):
 def test_fill_timed_out_actions_defaults_the_missing_ones(definition):
     instance = _active_battle(definition)
     bi.submit_action(instance, "甲", "aggressive")
-    bi.fill_timed_out_actions(instance, definition, default_tag="safe")
+    bi.fill_timed_out_actions(instance, definition)
     assert instance.round.pending_actions == {"甲": "aggressive", "乙": "safe"}
+
+
+def test_an_away_participant_drops_this_rounds_action_and_the_round_does_not_wait(definition):
+    instance = _active_battle(definition)
+    bi.submit_action(instance, "乙", "aggressive", text="衝", success_rate=40)
+    bi.set_away(instance, "乙", True)
+    assert instance.participants["乙"].away
+    assert "乙" not in instance.round.pending_actions and "乙" not in instance.round.custom_texts
+    assert "乙" not in instance.round.success_rates
+    bi.submit_action(instance, "甲", "safe")
+    assert bi.round_is_complete(instance)
+
+
+def test_an_away_participant_cannot_submit_until_they_come_back(definition):
+    instance = _active_battle(definition)
+    bi.set_away(instance, "甲", True)
+    bi.submit_action(instance, "甲", "safe")
+    assert "甲" not in instance.round.pending_actions
+    bi.set_away(instance, "甲", False)
+    bi.submit_action(instance, "甲", "safe")
+    assert instance.round.pending_actions["甲"] == "safe"
+
+
+def test_timed_out_actions_skip_away_participants(definition):
+    instance = _active_battle(definition)
+    bi.set_away(instance, "乙", True)
+    bi.fill_timed_out_actions(instance, definition)
+    assert instance.round.pending_actions == {"甲": "safe"}
+
+
+def test_timed_out_actions_pick_each_sides_own_safest_option(definition):
+    """逾時代選只挑自己陣營能選的招：黃巾那邊不會被代選成官軍的穩守、替對面推戰局。"""
+    definition.acts[0].options = [
+        BattleOption(text="穩守陣線", tag="guan_safe", faction="guan"),
+        BattleOption(text="死守營寨", tag="huang_safe", faction="huang"),
+        BattleOption(text="全力進攻", tag="aggressive"),
+    ]
+    definition.action_tags["guan_safe"] = BattleActionEffect(trend_delta=2, neili_damage=15)
+    definition.action_tags["huang_safe"] = BattleActionEffect(trend_delta=-2, neili_damage=15)
+    instance = _active_battle(definition)
+    bi.fill_timed_out_actions(instance, definition)
+    assert instance.round.pending_actions == {"甲": "guan_safe", "乙": "huang_safe"}
+    bi.resolve_round(instance, definition, random.Random(0))
+    assert instance.trend == 50  # 兩邊各守各的，戰局不動
+
+
+def test_timed_out_actions_fall_back_to_the_mildest_tag_when_no_fixed_option_is_offered(definition):
+    definition.acts[0].options = [BattleOption(text="放手一搏", tag="aggressive", free_text=True)]
+    instance = _active_battle(definition)
+    bi.fill_timed_out_actions(instance, definition)
+    assert instance.round.pending_actions == {"甲": "safe", "乙": "safe"}  # 不能讓回合永遠湊不齊
+
+
+def test_a_battle_everyone_has_walked_away_from_ends_with_its_fallback(definition):
+    instance = _active_battle(definition)
+    for name in ("甲", "乙"):
+        bi.set_away(instance, name, True)
+    bi.end_without_fighters(instance, definition, now=definition.round_seconds)
+    assert instance.phase == "ended" and instance.outcome_title == "僵持"
+
+
+def test_set_away_ignores_someone_not_in_the_battle(definition):
+    instance = _active_battle(definition)
+    bi.set_away(instance, "路人", True)
+    assert "路人" not in instance.participants
 
 
 # ── 回合結算：trend / 氣血 / 出局 ──────────────────────────

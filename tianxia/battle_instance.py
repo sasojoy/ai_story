@@ -43,6 +43,8 @@ class BattleParticipant(BaseModel):
     # 戰局結算只看共用戰鬥狀態本身，不會、也不能回頭去讀別的玩家自己存檔裡的角色資料，
     # 所以威力要在加入當下、由那個玩家自己的 Game 執行個體算好存進來。
     eliminated: bool = False
+    away: bool = False  # 離開了決戰的大區（人在區外，或這一趟路正要走出大區）：這回合不出手，回到大區才再出手（地圖擴充設計第六節）。
+    # 由那個玩家自己的 Game 在出發、抵達時寫進來（見 Game._sync_battle_presence）；戰局結算不會、也不能去讀別人的存檔
     is_bot: bool = False
 
 
@@ -122,7 +124,21 @@ def auto_assign_latecomer(
 
 
 def _active_participants(instance: BattleInstance) -> list[BattleParticipant]:
-    return [p for p in instance.participants.values() if not p.eliminated]
+    """還在場上、這回合要出手的人：沒倒下，也沒離開決戰的大區。"""
+    return [p for p in instance.participants.values() if not p.eliminated and not p.away]
+
+
+def set_away(instance: BattleInstance, name: str, away: bool) -> None:
+    """參戰者離開／回到決戰的大區（地圖擴充設計第六節）：離開的人這回合不出手，已經選好的行動也作廢；
+    回來之後從當下這一回合起照常出手。不在名單上的人不理會。"""
+    p = instance.participants.get(name)
+    if p is None:
+        return
+    p.away = away
+    if away:
+        instance.round.pending_actions.pop(name, None)
+        instance.round.custom_texts.pop(name, None)
+        instance.round.success_rates.pop(name, None)
 
 
 def current_act(instance: BattleInstance, definition: BattleDef) -> BattleAct:
@@ -147,7 +163,7 @@ def submit_action(
     靠這個欄位有沒有值決定這個人這回合是賭局型行動還是一般查表行動，自己不會、也不能
     呼叫 LLM（見模組說明）。"""
     p = instance.participants.get(name)
-    if p is None or p.eliminated or instance.phase != "active":
+    if p is None or p.eliminated or p.away or instance.phase != "active":
         return
     instance.round.pending_actions[name] = tag
     if text:
@@ -162,11 +178,22 @@ def round_is_complete(instance: BattleInstance) -> bool:
     return bool(active) and all(p.name in instance.round.pending_actions for p in active)
 
 
-def fill_timed_out_actions(instance: BattleInstance, definition: BattleDef, default_tag: str) -> None:
-    """逾時：還沒送出行動的在場者，系統代選一個保守行動（呼叫端決定要用哪個 tag 當保守
-    選項，通常是 action_tags 裡 trend_delta/neili_damage 都最溫和的那一個）。"""
+def safest_option_tag(instance: BattleInstance, definition: BattleDef, name: str) -> str | None:
+    """這個人這回合最保守的固定選項（氣血損耗最低；一樣低時取框架裡排前面的）。只看他自己陣營能選的，
+    所以逾時代選不會把黃巾的人代選成官軍的招、替對面推戰局。這一幕沒有他能選的固定選項就回 None。"""
+    options = [o for o in options_for(instance, definition, name) if not o.free_text]
+    if not options:
+        return None
+    return min(options, key=lambda o: definition.action_tags.get(o.tag, BattleActionEffect()).neili_damage).tag
+
+
+def fill_timed_out_actions(instance: BattleInstance, definition: BattleDef) -> None:
+    """逾時：還沒送出行動的在場者（沒倒下、沒離開大區），系統代選他自己陣營最保守的固定選項；
+    這一幕沒有他能選的固定選項時，退回整張 action_tags 裡氣血損耗最低的那個——回合一定要湊得齊。"""
+    mildest = min(definition.action_tags, key=lambda t: definition.action_tags[t].neili_damage)
     for p in _active_participants(instance):
-        instance.round.pending_actions.setdefault(p.name, default_tag)
+        if p.name not in instance.round.pending_actions:
+            instance.round.pending_actions[p.name] = safest_option_tag(instance, definition, p.name) or mildest
 
 
 def _power_mitigation(power: float | None) -> float:

@@ -1206,6 +1206,136 @@ def test_battle_ending_falls_back_to_normal_gameplay_on_the_next_render(content,
     assert ids(game)[0] == "act:explore"
 
 
+# ── 決戰要人在那個大區才打得到（地圖擴充設計第六節）──────────────
+
+
+def _south_cave(content, game):
+    """寶洞搬進南區（夾具的三個地點本來都在北區）並打開。"""
+    content.locations["cave"].y = 170
+    game.state.world.flags.add("cave_open")
+
+
+def test_you_can_join_a_battle_only_in_its_region(content, game):
+    definition = _install_battle_def(content)
+    definition.region = "south"
+    _south_cave(content, game)
+    game.world.start_battle(definition, now=1000.0)
+    with mock.patch("tianxia.engine.time.time", return_value=1000.0):
+        assert "act:explore" in ids(game)  # 人在北區：照常遊玩
+        assert "這場決戰在測試南區" in game.scene_text()
+        assert game._battle_choose("join:guan") == ["（這場決戰在測試南區，人要到了那裡、不在路上才能加入。）"]
+        game.state.player.location = "cave"
+        assert ids(game) == ["battle:join:guan", "battle:join:huang"]
+
+
+def test_nobody_on_the_road_can_join(content, game):
+    definition = _install_battle_def(content)  # 不限地點
+    game.choose("move:lake")  # 先出發：開戰之後選單只剩戰鬥選項
+    game.world.start_battle(definition, now=1000.0)
+    with mock.patch("tianxia.engine.time.time", return_value=1000.0):
+        assert not any(i.startswith("battle:") for i in ids(game))
+        assert game._battle_choose("join:guan") == ["（你還在路上，到了才能加入戰局。）"]
+
+
+def test_arriving_mid_battle_lets_you_join_late(content, game):
+    definition = _install_battle_def(content)
+    definition.region = "south"
+    _south_cave(content, game)
+    game.world.start_battle(definition, now=0.0)
+    with mock.patch("tianxia.engine.time.time", return_value=definition.muster_seconds + 1):
+        assert game._battle_status()[0].phase == "active"
+        assert "act:explore" in ids(game)
+        game.travel("cave", "dash")
+        assert ids(game) == ["battle:join_late"]
+
+
+def test_a_fighter_who_leaves_the_region_sits_the_rounds_out_until_back(content, game):
+    definition = _install_battle_def(content)
+    definition.region = "north"
+    definition.outcomes[0] = definition.outcomes[0].model_copy(update={"trend_min": 999})  # 不要一回合就分出勝負
+    _south_cave(content, game)
+    game.world.start_battle(definition, now=0.0)
+    with mock.patch("tianxia.engine.time.time", return_value=0.0):
+        game.choose("battle:join:guan")
+        game.world.mutate_battle(lambda b: battle_instance.join_faction(b, "乙玩家", "huang", neili_cap=100.0))
+    with mock.patch("tianxia.engine.time.time", return_value=definition.muster_seconds + 1):
+        game._battle_status()  # 開打
+        game.travel("cave", "dash")  # 離開北區
+        battle = game.world.get_battle()
+        assert battle.participants["沈浪"].away
+        assert "act:explore" in ids(game) and "你離開了測試北區" in game.scene_text()
+        assert game.battle_free_text_prompt() is None
+        game.world.mutate_battle(lambda b: battle_instance.submit_action(b, "乙玩家", "safe"))
+        assert battle_instance.round_is_complete(game.world.get_battle())  # 不等離開的人
+        game.travel("lake", "dash")  # 回到北區
+        assert not game.world.get_battle().participants["沈浪"].away
+        assert any(i.startswith("battle:act:") for i in ids(game))
+
+
+def test_walking_inside_the_region_keeps_a_fighter_present(content, game):
+    definition = _install_battle_def(content)
+    definition.region = "north"
+    game.world.start_battle(definition, now=0.0)
+    with mock.patch("tianxia.engine.time.time", return_value=0.0):
+        game.choose("battle:join:guan")
+    game.travel("lake", "walk")  # 小鎮、湖邊都在北區：在路上也還在戰場
+    assert game.state.player.journey is not None
+    assert not game.world.get_battle().participants["沈浪"].away
+    game.advance(game.state.player.journey.arrive_at[-1] - game.state.world.time)
+    assert not game.world.get_battle().participants["沈浪"].away
+
+
+def test_a_fighter_walking_out_of_the_region_is_away_from_the_start_of_the_trip(content, game):
+    definition = _install_battle_def(content)
+    definition.region = "north"
+    _south_cave(content, game)
+    game.world.start_battle(definition, now=0.0)
+    with mock.patch("tianxia.engine.time.time", return_value=0.0):
+        game.choose("battle:join:guan")
+    game.travel("cave", "walk")  # 小鎮—湖邊在北區，終點寶洞在南區：這一趟還沒走到的站有一個在區外
+    assert game.world.get_battle().participants["沈浪"].away
+
+
+def test_a_battle_with_no_region_cannot_be_left(content, game):
+    definition = _install_battle_def(content)  # 不限地點
+    _south_cave(content, game)
+    game.world.start_battle(definition, now=0.0)
+    with mock.patch("tianxia.engine.time.time", return_value=0.0):
+        game.choose("battle:join:guan")
+    game.travel("cave", "walk")
+    assert game.state.player.journey is not None
+    assert not game.world.get_battle().participants["沈浪"].away  # 沒有大區就沒有「離開」
+
+
+def test_joining_a_battle_stands_you_up(content, game):
+    definition = _install_battle_def(content)
+    game.choose("act:rest")
+    game.world.start_battle(definition, now=1000.0)
+    with mock.patch("tianxia.engine.time.time", return_value=1000.0):
+        game.choose("battle:join:guan")
+    assert game.state.player.resting_since is None
+    assert "沈浪" in game.world.get_battle().participants
+
+
+def test_rally_region_names_a_battle_you_should_head_for(content, game):
+    _install_factions(content)
+    definition = _install_battle_def(content)
+    definition.region = "south"
+    _south_cave(content, game)
+    game.state.player.faction = "guan"
+    assert game.rally_region() is None  # 沒有決戰
+    game.world.start_battle(definition, now=time.time())
+    assert game.rally_region() == "south"
+    game.state.player.faction = "haoqiang"
+    assert game.rally_region() is None  # 打不了這場
+    game.state.player.faction = "guan"
+    game.state.player.location = "cave"
+    assert game.rally_region() is None  # 已經在南區
+    definition.region = None
+    game.state.player.location = "town"
+    assert game.rally_region() is None  # 不限地點的決戰不用趕
+
+
 # ── 自訂行動輸入框（設計討論：魯莽該是玩家自己想出來的招，不是固定選單）────────
 
 

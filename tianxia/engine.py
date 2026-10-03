@@ -735,7 +735,7 @@ class Game:
         if battle.phase != "active":
             return []
         for p in list(battle.participants.values()):
-            if p.is_bot and not p.eliminated and p.name not in battle.round.pending_actions:
+            if p.is_bot and not p.eliminated and not p.away and p.name not in battle.round.pending_actions:
                 tag = battle_instance.bot_choose_action(battle, definition, p.name, self.rng)
                 if tag:
                     battle_instance.submit_action(battle, p.name, tag)
@@ -743,8 +743,7 @@ class Game:
         if ended:
             return ended
         if now - battle.round.opened_real >= definition.round_seconds and not battle_instance.round_is_complete(battle):
-            default_tag = min(definition.action_tags, key=lambda t: definition.action_tags[t].neili_damage)
-            battle_instance.fill_timed_out_actions(battle, definition, default_tag)
+            battle_instance.fill_timed_out_actions(battle, definition)
         if not battle_instance.round_is_complete(battle):
             return []
         msgs = battle_instance.resolve_round(battle, definition, self.rng, now=now)
@@ -784,20 +783,99 @@ class Game:
         self.world.mutate_season(_apply)
 
     def _watching_battle(self, battle: battle_instance.BattleInstance, definition: BattleDef) -> bool:
-        """劇本分陣營時，這個人打不了這場仗、只能觀戰：自己的陣營（散人沒有陣營）不是交戰的
-        任何一方，而且還在集結、或已經開打但他不在場上。觀戰的人照常遊玩（options() 不會
-        回傳戰鬥選項），場景上仍看得到這場戰鬥——全服決戰不能把打不了仗的人鎖住。劇本不分
-        陣營時誰都能加入，永遠回傳 False。"""
-        if not self.content.scenario.factions:
+        """這個人此刻打不了這場仗、只能在一旁看（options() 照常給平常的選項，場景上仍看得到戰場）：
+        - 劇本分陣營時，自己的陣營不是交戰的任何一方，而且還在集結、或已經開打但他不在場上；
+        - 參戰者離開了決戰的大區（人在區外，或這一趟路正要走出大區；區內站與站之間走動不算）：這回合不出手，
+          照常遊玩，回來才回到戰場；
+        - 還沒參戰的人不在決戰的大區、或在路上（地圖擴充設計第六節：人要在現場才能加入）。
+        全服決戰不能把打不了仗的人鎖住。"""
+        me = battle.participants.get(self.state.player.name)
+        if self._off_side(definition):
+            if battle.phase == "muster" or me is None:
+                return True
+        if me is not None:
+            return me.away
+        return not self._at_battle(definition)
+
+    def _off_side(self, definition: BattleDef) -> bool:
+        """劇本分陣營、而自己的陣營（散人沒有）不是這場決戰交戰的任何一方。"""
+        return bool(self.content.scenario.factions) and self.state.player.faction not in {f.id for f in definition.factions}
+
+    def _at_battle(self, definition: BattleDef) -> bool:
+        """人在這場決戰的大區、而且不在路上，才算到了戰場（地圖擴充設計第六節）；決戰不限地點時只看在不在路上。
+        這是「加入」的條件，也是還沒參戰的人算不算在場；已經參戰的人看 _in_battle_region。"""
+        if self.state.player.journey is not None:
             return False
-        if self.state.player.faction in {f.id for f in definition.factions}:
-            return False
-        return battle.phase == "muster" or self.state.player.name not in battle.participants
+        if definition.region is None:
+            return True
+        region = atlas.region_of(self.content, self.state.player.location)
+        return region is not None and region.id == definition.region
+
+    def _in_battle_region(self, definition: BattleDef) -> bool:
+        """參戰者還算不算在戰場（地圖擴充設計第六節：只有「離開大區」才讓人這回合不出手）：決戰不限地點時
+        一律算在場；有大區時，所在地和這一趟還沒走到的站都在那個大區才算——在區內站與站之間走動仍在場上，
+        要走出區外的路一出發就算離開。"""
+        if definition.region is None:
+            return True
+        j = self.state.player.journey
+        stops = [self.state.player.location] + ([] if j is None else j.path[j.reached:j.last + 1])
+        return all(
+            (region := atlas.region_of(self.content, stop)) is not None and region.id == definition.region for stop in stops
+        )
+
+    def _battle_region_name(self, definition: BattleDef) -> str:
+        return next((r.name for r in self.content.map.regions if r.id == definition.region), "戰場")
+
+    def _absent_reason(self, definition: BattleDef) -> str:
+        """還沒到戰場、不能加入的原因（不含括號與句號）。"""
+        if definition.region is None:
+            return "你還在路上，到了才能加入戰局"
+        return f"這場決戰在{self._battle_region_name(definition)}，人要到了那裡、不在路上才能加入"
+
+    def _watch_line(self, battle: battle_instance.BattleInstance, definition: BattleDef) -> str:
+        """只能觀戰時，場景上說明為什麼：不是交戰的一方、參戰後離開了大區、或還沒到戰場。"""
+        if self._off_side(definition):
+            return "你不屬於交戰的任何一方，在一旁觀戰。"
+        if self.state.player.name in battle.participants:
+            region = self._battle_region_name(definition)
+            return f"你離開了{region}，這回合不出手；人回到{region}就能再出手。"
+        return f"{self._absent_reason(definition)}。"
+
+    def _sync_battle_presence(self) -> None:
+        """參戰者出發或抵達時，把「人還在不在決戰的大區」記到戰鬥上：離開大區的這回合不出手。"""
+        status = self._battle_status(tick=False)
+        if status is None:
+            return
+        battle, definition = status
+        name = self.state.player.name
+        me = battle.participants.get(name)
+        if me is None:
+            return
+        away = not self._in_battle_region(definition)
+        if me.away != away:
+            self.world.mutate_battle(lambda b: battle_instance.set_away(b, name, away))
+
+    def rally_region(self) -> str | None:
+        """自己這一方正在集結或開打的全服決戰、而自己人不在現場時，回傳那場決戰的大區 id，給伺服器假人決定要不要
+        趕路（地圖擴充設計 3.4）。不在現場的意思：還沒參戰的人不在那個大區或在路上；參戰者離開了大區
+        （見 _in_battle_region）。沒有這種決戰、決戰不限地點、打不了這場、已經在場上或倒下了，都是 None。"""
+        status = self._battle_status(tick=False)
+        if status is None:
+            return None
+        battle, definition = status
+        if definition.region is None:
+            return None
+        if self._off_side(definition):
+            return None
+        me = battle.participants.get(self.state.player.name)
+        if me is not None:
+            return definition.region if me.away and not me.eliminated else None
+        return None if self._at_battle(definition) else definition.region
 
     def _battle_scene_text(self, battle: battle_instance.BattleInstance, definition: BattleDef) -> str:
         header = f"**{definition.name}**"
         watching = self._watching_battle(battle, definition)
-        watch_line = "你不屬於交戰的任何一方，在一旁觀戰。"
+        watch_line = self._watch_line(battle, definition)
         if battle.phase == "muster":
             remaining = max(0, int(battle.muster_deadline_real - time.time()))
             countdown = f"集結中，還剩 {remaining // 60} 分 {remaining % 60} 秒"
@@ -842,7 +920,7 @@ class Game:
         battle, definition = status
         name = self.state.player.name
         p = battle.participants.get(name)
-        if battle.phase != "active" or p is None or p.eliminated or name in battle.round.pending_actions:
+        if battle.phase != "active" or p is None or p.eliminated or p.away or name in battle.round.pending_actions:
             return None
         option = next((o for o in battle_instance.options_for(battle, definition, name) if o.free_text), None)
         return option.text if option else None
@@ -861,7 +939,7 @@ class Game:
         battle, definition = status
         name = self.state.player.name
         p = battle.participants.get(name)
-        if p is None or p.eliminated or name in battle.round.pending_actions:
+        if p is None or p.eliminated or p.away or name in battle.round.pending_actions:
             return ["（此刻無法這麼做。）"]
         option = next((o for o in battle_instance.options_for(battle, definition, name) if o.free_text), None)
         if option is None:
@@ -884,21 +962,25 @@ class Game:
         _, definition = status
         name = self.state.player.name
         kind, _, rest = arg.partition(":")
+        if kind in ("join", "join_late") and not self._at_battle(definition):
+            return [f"（{self._absent_reason(definition)}。）"]
         if kind == "join":
             if self.content.scenario.factions and rest != self.state.player.faction:
                 return ["（你只能站在自己陣營這一邊。）"]
+            stood = self._stand_up() if self.state.player.resting_since is not None else []  # 加入戰局就起身
             self.world.mutate_battle(
                 lambda b: battle_instance.join_faction(b, name, rest, self._battle_neili_cap(), self._battle_power())
             )
-            return ["你加入了這場戰局。"]
+            return stood + ["你加入了這場戰局。"]
         if kind == "join_late":
             own = self.state.player.faction if self.content.scenario.factions else None
+            stood = self._stand_up() if self.state.player.resting_since is not None else []  # 加入戰局就起身
             self.world.mutate_battle(
                 lambda b: battle_instance.auto_assign_latecomer(
                     b, definition, name, self._battle_neili_cap(), self.rng, self._battle_power(), faction=own,
                 )
             )
-            return ["你加入了戰局，這回合先觀戰，下回合開始可以行動。"]
+            return stood + ["你加入了戰局，這回合先觀戰，下回合開始可以行動。"]
         if kind == "act":
             return self._submit_battle_action(name, definition, rest)
         return ["（此刻無法這麼做。）"]
@@ -1106,6 +1188,7 @@ class Game:
         left = atlas.whole_minutes((arrive - s.world.time) / 60)
         msg = f"你動身{atlas.MODES[mode]}前往{c.locations[path[-1]].name}，{battlelog.clock_text(arrive)} 抵達（約 {left} 分鐘後）。"
         self._hide(msg)  # 場景會顯示「在路上」，紀錄只留標題與走法
+        self._sync_battle_presence()
         return [msg]
 
     def _arrivals(self) -> list[str]:
@@ -1145,6 +1228,7 @@ class Game:
         finally:
             if own:
                 self._draft = None
+        self._sync_battle_presence()
         return msgs
 
     def _arrive(self, loc_id: str, final: bool, client: OllamaClient | None = None) -> list[str]:
