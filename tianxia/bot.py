@@ -87,7 +87,9 @@ def pick(game: Game, options: list[Option], rng: random.Random) -> str | None:
     「沒有其他選項可選」這個訊號就永遠不會成立，下面 play_season() 用這個訊號決定要不要
     呼叫 game.advance() 推進遊戲時間的節奏會被打亂（體力耗盡的頻率大幅降低，時間推進
     跟著變少，一整季要跑完所需的步數暴增到頂到 max_steps 才停，拖垮整個測試套件）。
-    act:halt（喊停）同理：機器人只走單站、它不會出現，萬一出現了也不能讓它成為「有選項可選」。"""
+    act:halt（喊停）同理：機器人只走單站、它不會出現，萬一出現了也不能讓它成為「有選項可選」。
+    路上的選項（road: 開頭：折返、路上小事）也一樣排除：機器人不改道、不折返、不做路上小事（路上設計第六節），
+    而折返在路上永遠按得下去，不排除的話「在路上沒事可做就推進時間」這個訊號會失效。"""
     s = game.state
     battle = game.world.get_battle()
     if battle is not None and s.player.name not in battle.participants:
@@ -100,7 +102,7 @@ def pick(game: Game, options: list[Option], rng: random.Random) -> str | None:
         for option in options:
             if option.id.startswith("choice:") and choices[int(option.id.partition(":")[2])].effect.recruit:
                 return option.id
-    options = [o for o in options if o.id not in ("act:rest", "act:halt")]
+    options = [o for o in options if o.id not in ("act:rest", "act:halt") and not o.id.startswith("road:")]
     return rng.choice(options).id if options else None
 
 

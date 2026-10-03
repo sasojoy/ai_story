@@ -39,7 +39,10 @@ def take_turn(game: Game, profile: BotProfile, rng: random.Random) -> list[str]:
     rally = _toward_battle(game)
     if rally is not None:
         return rally
-    options = [o for o in game.options(odds=False, tick=False) if o.enabled and o.id not in ("act:rest", "act:halt", FREE_TEXT_OPTION)]
+    options = [  # road: 開頭的是路上的選項：假人不改道、不做路上小事（路上設計 3.5）
+        o for o in game.options(odds=False, tick=False)
+        if o.enabled and o.id not in ("act:rest", "act:halt", FREE_TEXT_OPTION) and not o.id.startswith("road:")
+    ]
     if not options:
         return []
     ids = [o.id for o in options]

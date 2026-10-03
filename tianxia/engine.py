@@ -316,6 +316,7 @@ class Game:
         if j is not None:
             end = c.locations[j.path[j.last]].name
             opts = [Option(id="act:on_road", label=f"（在路上，{battlelog.clock_text(j.arrive_at[j.last])} 抵達{end}）", enabled=False)]
+            opts.append(self._back_option())  # 折返（路上設計 3.2）；改去別處在大地圖上安排
             if j.stop_at is None and j.reached < j.last:
                 opts.append(Option(id="act:halt", label=f"喊停（到{c.locations[j.path[j.reached]].name}就停下）"))
             return opts
@@ -376,6 +377,25 @@ class Game:
         if self.state.player.stamina < cost:
             return Option(id=option_id, label=f"前往 {dest.name}（{atlas.MODES[mode]}・體力不足，要 {cost}）", enabled=False)
         return Option(id=option_id, label=f"前往 {dest.name}（{atlas.mode_text(c, minutes, mode)}）")
+
+    def _back_way(self) -> atlas.Route:
+        """折返的路：從路上回到身後那一站（路上設計 3.2：折返就是「改去」那一站，見 atlas.way_to）。
+        掉頭那一種走法到身後那一站一定算得出來，所以在路上時不會是 None。"""
+        spot = atlas.road_spot(self.state, self.content)
+        return atlas.way_to(self.state, self.content, spot.behind)
+
+    def _back_option(self) -> Option:
+        """路上的「折返 某站」，照主畫面選的走法（move_mode）：標籤寫這種走法的時間與體力，體力不夠就按不下去、寫明原因
+        （跟「前往」同一個說法，見 _move_option）。id 也跟「前往」一樣：步行是 road:back，趕路、疾行是 road:back:<走法>，
+        所以 choose() 照樣只認選單上真的有的 id。"""
+        c, mode = self.content, self.move_mode
+        way = self._back_way()
+        name = c.locations[way.path[-1]].name
+        option_id = "road:back" if mode == "walk" else f"road:back:{mode}"
+        cost = atlas.travel_stamina(c, way.minutes, mode)
+        if self.state.player.stamina < cost:
+            return Option(id=option_id, label=f"折返 {name}（{atlas.MODES[mode]}・體力不足，要 {cost}）", enabled=False)
+        return Option(id=option_id, label=f"折返 {name}（{atlas.mode_text(c, way.minutes, mode)}）")
 
     def set_move_mode(self, mode: str) -> None:
         """主畫面的「走法」切換：之後選單上的「前往」用這種走法；不認得的走法當成步行。不存檔（見 __init__ 的 move_mode）。"""
@@ -521,6 +541,8 @@ class Game:
                 msgs = self._faction_step(arg)
             elif kind == "call":
                 msgs = self._call(arg, prepared)
+            elif kind == "road":
+                msgs = self._road(arg)
             else:
                 msgs = self._choose(int(arg))
             if kind == "act" and arg != "break":
@@ -615,6 +637,8 @@ class Game:
             return f"交談・{character.name}"
         if kind == "call":
             return "收回名帖" if arg == "back" else f"求見・{c.characters[arg].name}"
+        if kind == "road":
+            return atlas.journey_title(c, self._back_way().path)  # 折返：跟「前往」同一個標題，抵達時才併得進同一則
         here = c.locations[s.player.location].name
         titles = {
             "explore": f"探索{here}", "socialize": f"交遊・{here}", "call": f"求見・{here}", "train": f"歷練・{here}",
@@ -1468,17 +1492,30 @@ class Game:
         """選單上的「前往 某地」：沿直接相連的那條路出發。arg 是 move: 後面那段——只有地點就是步行，
         「地點:走法」是主畫面「走法」切換選的趕路或疾行（見 _move_option）。"""
         dest_id, _, mode = arg.partition(":")
-        return self._depart([dest_id], mode or "walk")
+        legs = atlas.path_legs(self.content, self.state.player.location, [dest_id])
+        return self._depart(atlas.Route((dest_id,), tuple(legs)), mode or "walk")
 
-    def _depart(self, path: list[str], mode: TravelMode) -> list[str]:
+    def _road(self, arg: str) -> list[str]:
+        """路上的選項（路上設計第三節）。road:back[:<走法>] 是折返：回身後那一站，跟大地圖改道走同一條路（見 _depart）。"""
+        what, _, mode = arg.partition(":")
+        if what == "back":
+            return self._depart(self._back_way(), mode or "walk")
+        return []
+
+    def _depart(self, route: atlas.Route, mode: TravelMode) -> list[str]:
         """出發（地圖擴充設計 3.2、3.3）：趕路、疾行的體力出發時一次扣，照走法排好每一站的抵達時間。
-        疾行立刻一站一站抵達；步行、趕路就在路上，之後由 sync／advance 補算抵達（見 _arrivals）。"""
+        疾行立刻一站一站抵達；步行、趕路就在路上，之後由 sync／advance 補算抵達（見 _arrivals）。
+        在路上改道、折返（路上設計 3.1）也從這裡出發：route 的第一段是半段路（origin、share 記著是哪條路、走掉幾成），
+        新路程整個取代原本那一趟；原本已經扣的趕路體力不退。"""
         s, c = self.state, self.content
-        legs = atlas.path_legs(c, s.player.location, path)
-        minutes = sum(legs)
+        rerouting = s.player.journey is not None
+        minutes = route.minutes
         cost = atlas.travel_stamina(c, minutes, mode)
         s.player.stamina -= cost
-        s.player.journey = Journey(mode=mode, path=path, arrive_at=atlas.arrival_times(s.world.time, legs, mode))
+        s.player.journey = Journey(
+            mode=mode, path=list(route.path), arrive_at=atlas.arrival_times(s.world.time, list(route.legs), mode),
+            origin=route.origin, share=route.share,
+        )
         if self._draft is not None:
             self._draft.tag = atlas.MODES[mode] + atlas.mode_when(minutes, mode)
             if cost:
@@ -1487,7 +1524,8 @@ class Game:
             return self._arrivals()
         arrive = s.player.journey.arrive_at[-1]
         left = atlas.whole_minutes((arrive - s.world.time) / 60)
-        msg = f"你動身{atlas.MODES[mode]}前往{c.locations[path[-1]].name}，{battlelog.clock_text(arrive)} 抵達（約 {left} 分鐘後）。"
+        verb = "改道" if rerouting else "動身"
+        msg = f"你{verb}{atlas.MODES[mode]}前往{c.locations[route.path[-1]].name}，{battlelog.clock_text(arrive)} 抵達（約 {left} 分鐘後）。"
         self._hide(msg)  # 場景會顯示「在路上」，紀錄只留標題與走法
         self._sync_battle_presence()
         return [msg]
@@ -1575,16 +1613,17 @@ class Game:
         return msgs
 
     def travel(self, dest_id: str, mode: TravelMode = "walk") -> list[str]:
-        """安排前往（大地圖詳情欄的按鈕）：照路程最短的路線出發，走法見 _depart。"""
+        """安排前往（大地圖詳情欄的按鈕）：照路程最短的路線出發，走法見 _depart。在路上也行（路上設計 3.1）：
+        取掉頭與繼續兩種走法裡路程短的（見 atlas.way_to），新路程從路中間出發。"""
         refusal = self.travel_refusal(dest_id, mode)
         if refusal is not None:
             return self._log([f"（{refusal}。）"])
         s, c = self.state, self.content
-        route = atlas.routes(s, c)[dest_id]
+        route = atlas.way_to(s, c, dest_id)
         s.battle_card = None
         self._draft = Draft(atlas.journey_title(c, route.path))
         try:
-            msgs = self._depart(list(route.path), mode)
+            msgs = self._depart(route, mode)
             journal.add_entry(s, self._draft.entry(s.world.time, msgs))
         finally:
             self._draft = None
@@ -2007,7 +2046,10 @@ class Game:
             return f"**求見**\n\n{self._audience_intro()}"
         if s.player.journey is not None:
             halted = "（已經喊停）" if s.player.journey.stop_at is not None else ""
-            return f"**在路上**{halted}\n\n{self._journey_line()}。\n\n路上不能做事；可以先下線，到了會自己抵達。"
+            return (
+                f"**在路上**{halted}\n\n{self._journey_line()}。\n\n"
+                "路上可以折返，也可以打開輿圖改去別處，或去修練、煉製；可以先下線，到了會自己抵達。"
+            )
         return self.location_text()
 
     def status_data(self) -> dict:

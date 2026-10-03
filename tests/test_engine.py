@@ -5,9 +5,10 @@ from unittest import mock
 import pytest
 
 from conftest import FixedRandom, at, walk_to
-from tianxia import battle_instance, companion_agent, flavor, rules, skillview
+from tianxia import atlas, battle_instance, companion_agent, flavor, rules, skillview
 from tianxia.engine import Game, Option
 from tianxia.martial_arts import MartialArt
+from tianxia.models import Location
 from tianxia.models import ExploreMix
 from tianxia.state import BotProfile, GameState, Journey, Rumor
 from tianxia.sqlite_world import open_world
@@ -1019,14 +1020,14 @@ def test_hurrying_takes_half_the_time(game):
     assert game.state.player.journey.arrive_at == [pytest.approx(90.0), pytest.approx(225.0)]  # (3＋4.5 分鐘) × 30 秒
 
 
-def test_on_the_road_you_cannot_act(game):
+def test_on_the_road_you_can_turn_back_but_not_do_what_needs_a_place(game):
     game.choose("move:lake")
     opts = game.options()
-    assert [(o.id, o.enabled) for o in opts] == [("act:on_road", False)]
+    assert [(o.id, o.enabled) for o in opts] == [("act:on_road", False), ("road:back", True)]
     assert "抵達湖邊" in opts[0].label
     assert game.choose("act:explore") == ["（此刻無法這麼做。）"]
-    assert game.travel("lake") == ["（在路上，不能另外安排前往。）"]
     assert game.seclude(4) == ["你現在無法閉關。"]
+    assert game.travel_refusal("lake") is None  # 路上設計 3.1：在路上也能安排前往（改道）
 
 
 def test_status_and_scene_show_the_arrival_time(game):
@@ -2628,7 +2629,7 @@ def test_choosing_a_prepared_dialogue_option_ticks_the_battle_only_once(content,
 def test_you_can_stop_at_the_next_station(game):
     game.state.world.flags.add("cave_open")
     game.travel("cave", "walk")
-    assert [o.id for o in game.options() if o.enabled] == ["act:halt"]
+    assert "act:halt" in [o.id for o in game.options() if o.enabled]
     assert "喊停（到湖邊就停下）" in [o.label for o in game.options()]
     game.choose("act:halt")
     assert game.state.player.journey.stop_at == 0
@@ -2651,6 +2652,139 @@ def test_stopping_does_not_refund_the_stamina_paid_to_hurry(game):
 def test_there_is_nothing_to_stop_on_the_last_leg(game):
     game.choose("move:lake")
     assert not any(o.id == "act:halt" for o in game.options())
+
+
+# ── 路上：改道與折返（路上設計第三節）──────────────────────────
+
+
+def _add_field(content):
+    """夾具只有一條線（小鎮—湖邊—寶洞）；在小鎮西邊加一塊田（一般路，3 分鐘），讓掉頭之後有別處可去。"""
+    content.locations["field"] = Location(id="field", name="田野", description="一片田。", connections=["town"], x=0, y=100)
+    content.locations["town"].connections.append("field")
+
+
+def _partway(game, share=1 / 3):
+    """從小鎮步行往湖邊（夾具 3 分鐘），把時間推到走了 share 成的那一刻；回傳這一趟。"""
+    game.choose("move:lake")
+    game.advance(180 * share)
+    return game.state.player.journey
+
+
+def _back(game):
+    return next(o for o in game.options() if o.id.startswith("road:back"))
+
+
+def test_turning_back_walks_back_the_part_already_walked(game):
+    _partway(game)  # 走了一成三：回小鎮要 1 分鐘
+    back = _back(game)
+    assert (back.id, back.label, back.enabled) == ("road:back", "折返 小鎮（步行約 1 分鐘）", True)
+    game.choose("road:back")
+    j = game.state.player.journey
+    assert (j.path, j.origin, j.share) == (["town"], "lake", pytest.approx(2 / 3))
+    assert j.arrive_at == [pytest.approx(120.0)]  # 第 60 秒掉頭，再走 60 秒
+    assert (game.state.journal[0].title, game.state.journal[0].tag) == ("前往 小鎮", "步行約 1 分鐘")
+    game.advance(60)
+    assert game.state.player.location == "town" and game.state.player.journey is None
+
+
+def test_rerouting_takes_the_shorter_of_turning_back_and_going_on(content, game):
+    _add_field(content)
+    game.state.world.flags.add("cave_open")
+    _partway(game)  # 小鎮—湖邊走了一成三：回小鎮 1 分鐘、到湖邊 2 分鐘
+    on = atlas.way_to(game.state, content, "cave")  # 繼續：2 ＋ 湖邊—寶洞山路 4.5（掉頭要 1 ＋ 3 ＋ 4.5）
+    assert (on.path, on.origin, on.share) == (("lake", "cave"), "town", pytest.approx(1 / 3))
+    assert on.minutes == pytest.approx(6.5)
+    back = atlas.way_to(game.state, content, "field")  # 掉頭：1 ＋ 小鎮—田野 3（繼續要 2 ＋ 3 ＋ 3）
+    assert (back.path, back.origin, back.share) == (("town", "field"), "lake", pytest.approx(2 / 3))
+    assert back.legs == (pytest.approx(1.0), pytest.approx(3.0))
+
+
+def test_rerouting_to_either_end_of_the_road(game):
+    _partway(game)
+    game.travel("lake")  # 改去前面那一站：照原路走完這一段，抵達時間不變
+    j = game.state.player.journey
+    assert (j.path, j.arrive_at) == (["lake"], [pytest.approx(180.0)])
+    game.travel("town")  # 改去剛離開的那一站：就是折返
+    j = game.state.player.journey
+    assert (j.path, j.origin, j.arrive_at) == (["town"], "lake", [pytest.approx(120.0)])
+
+
+def test_a_reroute_charges_the_new_way_and_refunds_nothing(game):
+    game.state.world.flags.add("cave_open")
+    game.state.player.stamina = 100
+    game.set_move_mode("hurry")
+    game.choose("move:lake:hurry")  # 3 分鐘：3 點
+    game.choose("road:back:hurry")  # 剛出發就掉頭：至少 1 點，原本的 3 點不退
+    assert game.state.player.stamina == 96
+    game.advance(game.state.player.journey.arrive_at[-1] - game.state.world.time)
+    game.choose("move:lake:hurry")
+    game.advance(30)  # 趕路 90 秒的一成三
+    game.travel("cave", "hurry")  # 繼續：2 ＋ 4.5 ＝ 6.5 分鐘，7 點；第一段是半段路
+    assert game.state.player.stamina == pytest.approx(96 - 3 - 7 + 30 / 180)  # 走那 30 秒回了一點點
+    j = game.state.player.journey
+    assert j.arrive_at == [pytest.approx(game.state.world.time + 60), pytest.approx(game.state.world.time + 195)]
+
+
+def test_dashing_from_the_road_reaches_an_end_of_the_road_first(content, game):
+    _add_field(content)
+    _partway(game)
+    game.travel("field", "dash")  # 掉頭比較近：先到小鎮，再到田野
+    p = game.state.player
+    assert p.location == "field" and p.journey is None and "field" in p.visited
+    entry = game.state.journal[0]
+    assert (entry.title, entry.tag, entry.changes) == ("前往 田野（途經 小鎮）", "疾行立刻到", ["體力 -8"])
+
+
+def test_a_rerouted_trip_can_be_halted_like_any_other(content, game):
+    _add_field(content)
+    _partway(game)
+    game.travel("field")  # 小鎮、田野兩站
+    assert "喊停（到小鎮就停下）" in [o.label for o in game.options()]
+    game.choose("act:halt")
+    game.advance(game.state.player.journey.arrive_at[0] - game.state.world.time)
+    assert game.state.player.location == "town" and game.state.player.journey is None
+    assert game.state.journal[0].tag == "喊停，停在 小鎮"
+
+
+def test_rerouting_out_of_the_battle_region_leaves_it_and_turning_back_returns(content, game):
+    definition = _install_battle_def(content)
+    definition.region = "north"
+    _south_cave(content, game)
+    game.world.start_battle(definition, now=0.0)
+    with at(game, 0.0):
+        game.choose("battle:join:guan")
+        _partway(game)
+        game.travel("cave")  # 繼續走：湖邊之後是南區的寶洞
+        assert game.world.get_battle().participants["沈浪"].away
+        game.choose("road:back")  # 掉頭回小鎮：這一趟的站都在北區
+        assert not game.world.get_battle().participants["沈浪"].away
+
+
+def test_turning_back_follows_the_move_mode(game):
+    _partway(game)
+    game.set_move_mode("hurry")
+    assert (_back(game).id, _back(game).label) == ("road:back:hurry", "折返 小鎮（趕路約 1 分鐘・體力 1）")
+    game.set_move_mode("dash")
+    game.state.player.stamina = 1
+    back = _back(game)
+    assert (back.id, back.label, back.enabled) == ("road:back:dash", "折返 小鎮（疾行・體力不足，要 2）", False)
+    assert game.choose("road:back:dash") == ["（此刻無法這麼做。）"]
+    game.state.player.stamina = 10
+    game.choose("road:back:dash")
+    assert game.state.player.location == "town" and game.state.player.journey is None
+    assert game.state.player.stamina == 8
+
+
+def test_the_road_scene_says_what_you_can_do_on_the_road(game):
+    game.choose("move:lake")
+    scene = game.scene_text()
+    assert "路上可以折返" in scene and "修練、煉製" in scene and "到了會自己抵達" in scene
+    assert "路上不能做事" not in scene
+
+
+def test_an_old_journey_without_the_reroute_fields_still_loads():
+    j = Journey.model_validate({"mode": "walk", "path": ["lake"], "arrive_at": [180.0]})
+    assert (j.origin, j.share) == (None, 0.0)
 
 
 # ── 時間由外面傳入（線上架構設計第四節）──────────────────────

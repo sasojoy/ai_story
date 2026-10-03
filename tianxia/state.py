@@ -53,6 +53,10 @@ class Journey(BaseModel):
     arrive_at: list[float]  # 每一站的抵達時間，跟 path 一一對應
     reached: int = 0  # 已經抵達幾站
     stop_at: int | None = None  # 喊停：走到 path 的第幾站（索引）就停；None＝走到終點
+    # 在路上改道、折返（路上設計 3.1）：新路程從路中間出發，第一段走的是 origin—path[0] 那條路剩下的部分。
+    # 舊存檔沒有這兩欄＝從 location 出發的一般路程。
+    origin: str | None = None  # 第一段那條路的另一頭；None＝從 location 出發
+    share: float = 0.0  # 出發時 origin—path[0] 那條路已經走掉的幾成（第一段只走剩下的）
 
     @property
     def last(self) -> int:
