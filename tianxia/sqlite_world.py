@@ -5,6 +5,8 @@
   舊的一季原封不動留著。
 - 傳聞（`rumors` 表）與江湖史（`chronicle` 表）一則一列：寫的時候只新增還沒有流水號的；讀全服狀態時不讀回來，
   只有 get_season() 讀（給畫面看）。江湖史跨季保留。
+- 自創武學（`skills`）、煉製配方（`recipes`）、投靠名冊（`faction_rolls`）一列一筆、記著第幾季：
+  換季不用清空，新的一季自然是空的，上一季的留著。
 - 每個會寫的方法自己是一筆交易；呼叫端已經在 action_lock() 裡時，併進那一筆（見 database.Database）。
 """
 from __future__ import annotations
@@ -105,42 +107,41 @@ class SqliteWorldStore:
 
     # ── 武學命名登記與煉製配方 ──────────────────────────────
 
+    def _season_number(self, conn: Connection) -> int:
+        row = conn.execute("SELECT json_extract(data, '$.season_number') AS number FROM world WHERE id = 1").fetchone()
+        return 1 if row is None or row["number"] is None else int(row["number"])
+
+    def get_skill(self, name: str) -> MartialArt | None:
+        with self.db.snapshot() as conn:
+            row = conn.execute(
+                "SELECT data FROM skills WHERE season = ? AND name = ?", (self._season_number(conn), name.strip()),
+            ).fetchone()
+        return None if row is None else MartialArt.model_validate_json(row["data"])
+
     def is_skill_name_taken(self, name: str) -> bool:
-        return name.strip() in self.read().created_skills
+        return self.get_skill(name) is not None
 
     def claim_skill_name(self, art: MartialArt) -> bool:
-        claimed = {"ok": False}
-
-        def _apply(state: SharedWorldState) -> None:
-            if art.name.strip() in state.created_skills:
-                return
-            state.created_skills[art.name.strip()] = art
-            claimed["ok"] = True
-
-        self.mutate(_apply)
-        return claimed["ok"]
+        with self.db.transaction() as conn:
+            return _insert_skill(conn, self._season_number(conn), art)
 
     def lookup_recipe(self, key: str) -> MartialArt | None:
-        state = self.read()
-        name = state.recipes.get(key)
-        return state.created_skills.get(name) if name else None
+        with self.db.snapshot() as conn:
+            return _recipe(conn, self._season_number(conn), key)
 
     def claim_recipe(self, key: str, art: MartialArt) -> tuple[MartialArt | None, bool]:
-        result: dict[str, object] = {"art": None, "first": False}
-
-        def _apply(state: SharedWorldState) -> None:
-            existing = state.recipes.get(key)
-            if existing:
-                result["art"] = state.created_skills.get(existing)
-                return
-            if art.name in state.created_skills:
-                return  # 名字撞到，呼叫端換名字
-            state.created_skills[art.name] = art
-            state.recipes[key] = art.name
-            result["art"], result["first"] = art, True
-
-        self.mutate(_apply)
-        return result["art"], bool(result["first"])  # type: ignore[return-value]
+        with self.db.transaction() as conn:
+            season = self._season_number(conn)
+            existing = _recipe(conn, season, key)
+            if existing is not None:
+                return existing, False
+            if not _insert_skill(conn, season, art):
+                return None, False  # 名字撞到，呼叫端換名字
+            conn.execute(
+                "INSERT INTO recipes (season, key, skill_name, creator) VALUES (?, ?, ?, ?)",
+                (season, key, art.name.strip(), art.creator),
+            )
+            return art, True
 
     # ── 同伴性情漂移 ──────────────────────────────────────
 
@@ -252,25 +253,23 @@ class SqliteWorldStore:
         return result["ok"]
 
     def next_season(self, content: Content, now: float) -> bool:
-        result = {"ok": False}
-
-        def _apply(state: SharedWorldState) -> None:
+        with self.db.transaction() as conn:
+            state = self._load(conn)
             if state.season_phase() != "resting":
-                return
+                return False
+            line = _first_crafts_line(conn, state.season_number)
+            if line:  # 上一季的煉製首創寫進那一季的江湖史（第一季設計第十四節）
+                state.season.chronicle.append(Rumor(time=state.season.time, text=line))
+                self._save_season(conn, state.season_number, state.season)
             state.season = fresh_season(content)  # 新的一季另起一列（_save 照新的編號寫），舊的那一列不動
             state.season_number += 1
             state.season_opened = True
             state.season_last_real = now
             state.companions = {}  # 跨季不滾雪球第二條：同伴全部重獲自由、等級武學歸零
-            state.created_skills = {}  # 第三條：自創武學名字全部釋出
-            state.recipes = {}  # 煉製配方跟著清空，大家重新發現、首創者重新認定（第一季設計第十四節）
-            state.tianji += 1
+            state.tianji += 1  # 第三條：天機 +1；武學命名、煉製配方、投靠名冊照季分開存，新的一季自然是空的
             state.active_battle = None  # 上一季沒打完（或打完沒清掉）的戰鬥不帶進新的一季
-            state.faction_rolls = {}  # 新的一季大家重新投靠
-            result["ok"] = True
-
-        self.mutate(_apply)
-        return result["ok"]
+            self._save(conn, state)
+            return True
 
     def catch_up_season(self, content: Content, now: float, rng: random.Random) -> list[str]:
         """整段在同一筆交易裡：對時鐘與推進賽季一起成功或一起撤回。實際「推進 N 秒會發生什麼事」在
@@ -295,13 +294,28 @@ class SqliteWorldStore:
     # ── 投靠名冊 ──────────────────────────────────────────
 
     def record_faction(self, name: str, faction_id: str) -> None:
-        self.mutate(lambda state: state.faction_rolls.__setitem__(name, faction_id))
+        with self.db.transaction() as conn:
+            conn.execute(
+                "INSERT INTO faction_rolls (season, character, faction) VALUES (?, ?, ?) "
+                "ON CONFLICT (season, character) DO UPDATE SET faction = excluded.faction",
+                (self._season_number(conn), name, faction_id),
+            )
+
+    def faction_of(self, name: str) -> str | None:
+        with self.db.snapshot() as conn:
+            row = conn.execute(
+                "SELECT faction FROM faction_rolls WHERE season = ? AND character = ?",
+                (self._season_number(conn), name),
+            ).fetchone()
+        return None if row is None else row["faction"]
 
     def faction_counts(self) -> dict[str, int]:
-        counts: dict[str, int] = {}
-        for faction_id in self.read().faction_rolls.values():
-            counts[faction_id] = counts.get(faction_id, 0) + 1
-        return counts
+        with self.db.snapshot() as conn:
+            rows = conn.execute(
+                "SELECT faction, COUNT(*) AS n FROM faction_rolls WHERE season = ? GROUP BY faction",
+                (self._season_number(conn),),
+            ).fetchall()
+        return {row["faction"]: row["n"] for row in rows}
 
     # ── 全服即時多人戰鬥 ──────────────────────────────────
 
@@ -366,6 +380,35 @@ class SqliteWorldStore:
             fn(state.companions.setdefault(companion_id, CompanionProgress()))
 
         return self.mutate(_apply).companions[companion_id]
+
+
+def _insert_skill(conn: Connection, season: int, art: MartialArt) -> bool:
+    """登記一門功法；這一季已經有同名的就不登記（主鍵擋住，不會有兩個人同時取到同一個名字）。"""
+    cursor = conn.execute(
+        "INSERT INTO skills (season, name, creator, data) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING",
+        (season, art.name.strip(), art.creator, art.model_dump_json()),
+    )
+    return cursor.rowcount == 1
+
+
+def _recipe(conn: Connection, season: int, key: str) -> MartialArt | None:
+    row = conn.execute(
+        "SELECT s.data FROM recipes r JOIN skills s ON s.season = r.season AND s.name = r.skill_name "
+        "WHERE r.season = ? AND r.key = ?",
+        (season, key),
+    ).fetchone()
+    return None if row is None else MartialArt.model_validate_json(row["data"])
+
+
+def _first_crafts_line(conn: Connection, season: int) -> str:
+    """這一季每個配方的首創者，寫成一則江湖史；這一季沒有人煉出新配方就是空字串。"""
+    rows = conn.execute(
+        "SELECT skill_name, creator FROM recipes WHERE season = ? ORDER BY rowid", (season,),
+    ).fetchall()
+    if not rows:
+        return ""
+    firsts = "、".join(f"【{row['skill_name']}】{row['creator'] or '無名氏'}" for row in rows)
+    return f"第 {season} 季煉製首創 {len(rows)} 門：{firsts}"
 
 
 def _rumor(row: Row) -> Rumor:

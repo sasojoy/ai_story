@@ -213,7 +213,7 @@ def test_a_simplified_name_is_registered_in_traditional_characters(stocked, cont
     with naming("裂江诀"):  # 「诀」是簡體
         art, _ = craft.craft(stocked, content, world, client, ["gang_1", "gang_1"], "武學")
     assert art is not None and art.name == "裂江訣"
-    assert "裂江訣" in world.read().created_skills
+    assert world.get_skill("裂江訣") is not None
 
 
 # ── 煉製的檢查 ────────────────────────────────────────────
@@ -246,7 +246,7 @@ def test_a_failed_check_changes_nothing(state, content, world):
     client = OllamaClient()
     art, msgs = craft.craft(state, content, world, client, ["gang_1", "gang_1"], "武學")
     assert art is None and len(msgs) == 1
-    assert state.player.materials == {} and world.read().recipes == {}
+    assert state.player.materials == {} and world.lookup_recipe(craft.recipe_key(["gang_1", "gang_1"], "武學")) is None
 
 
 # ── 煉製成功 ──────────────────────────────────────────────
@@ -319,7 +319,7 @@ def test_the_recipe_is_registered_server_wide(stocked, content, world):
     with naming("裂江訣"):
         craft.craft(stocked, content, world, client, ["gang_1", "gang_1"], "武學")
     key = craft.recipe_key(["gang_1", "gang_1"], "武學")
-    assert world.read().recipes[key] == "裂江訣"
+    assert world.lookup_recipe(key).name == "裂江訣"
     assert world.lookup_recipe(key) is not None
 
 
@@ -572,4 +572,4 @@ def test_recipes_are_cleared_every_season_and_rediscovered(content, world):
     assert again is not None, msgs
     assert again.creator == "乙"  # 這一季的首創者
     assert "江湖上第一次煉成" in "\n".join(msgs)
-    assert world.read().recipes == {key: again.name}
+    assert world.lookup_recipe(key).name == again.name

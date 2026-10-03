@@ -702,7 +702,7 @@ class Game:
         """把自己的陣營記進全服投靠名冊（陣營人數看這份）；已經記過就不再寫。choose() 結束時
         與 sync() 都會呼叫，名冊出現之前就投靠了的人（或拜入門派而投靠的人）也會補記進去。"""
         p = self.state.player
-        if p.faction is not None and self.world.read().faction_rolls.get(p.name) != p.faction:
+        if p.faction is not None and self.world.faction_of(p.name) != p.faction:
             self.world.record_faction(p.name, p.faction)
 
     # ── 全服即時多人戰鬥（設計討論：集結選陣營→逐幕逐回合鎖步）──────────

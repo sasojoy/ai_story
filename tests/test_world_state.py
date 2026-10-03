@@ -21,15 +21,15 @@ def store(tmp_path):
 
 
 def test_read_missing_file_returns_empty_state(store):
-    state = store.read()
-    assert state.created_skills == {}
-    assert state.companion_tag_counts == {}
+    assert store.read().companion_tag_counts == {}
+    assert store.get_skill("裂石拳") is None
 
 
 def test_claim_skill_name_succeeds_once(store):
     art = generate_from_name("裂石拳", "武學", "裂石拳")
     assert store.claim_skill_name(art) is True
     assert store.is_skill_name_taken("裂石拳") is True
+    assert store.get_skill("裂石拳").name == "裂石拳"
 
 
 def test_claim_skill_name_fails_when_already_taken(store):
@@ -311,6 +311,8 @@ def test_next_season_releases_every_created_skill_name_and_turns_the_tianji(stor
     store.next_season(content, now=1.0)
     assert store.is_skill_name_taken("驚雷掌") is False
     assert store.read().tianji == 1
+    with store.db.snapshot() as conn:  # 換季不刪資料：上一季的登記留著
+        assert conn.execute("SELECT season FROM skills WHERE name = '驚雷掌'").fetchone()["season"] == 1
 
 
 def test_next_season_clears_the_crafting_recipes(store, content):
@@ -322,7 +324,8 @@ def test_next_season_clears_the_crafting_recipes(store, content):
     assert store.lookup_recipe(key) is not None
     store.mutate_season(lambda season: setattr(season, "ended", True))
     assert store.next_season(content, now=1.0)
-    assert store.read().recipes == {}
+    with store.db.snapshot() as conn:  # 換季不刪資料：上一季的配方留著
+        assert conn.execute("SELECT season FROM recipes WHERE key = ?", (key,)).fetchone()["season"] == 1
     assert store.lookup_recipe(key) is None
 
 
@@ -504,3 +507,35 @@ def test_last_seasons_chronicle_survives_the_next_season(store, content):
     assert store.next_season(content, now=1.0)
     assert store.get_season().chronicle == []
     assert [(n, [e.text for e in entries]) for n, entries in store.chronicle_before(2)] == [(1, ["第一季的大事"])]
+
+
+# ── 武學、配方、投靠名冊一筆一筆加（每季各一份）──────────────────
+
+
+def test_faction_of_reads_this_seasons_roll(store, content):
+    store.seed_first_season(content)
+    store.record_faction("甲", "guan")
+    store.record_faction("甲", "huang")  # 叛投：改記新的陣營
+    assert store.faction_of("甲") == "huang" and store.faction_of("乙") is None
+    assert store.faction_counts() == {"huang": 1}
+
+
+def test_next_season_writes_last_seasons_first_crafts_into_its_chronicle(store, content):
+    """第一季設計第十四節：配方每季清空，上一季的首創紀錄寫進江湖史。"""
+    content.config.auto_open_first_season = True
+    store.seed_first_season(content)
+    art = generate_from_name("玄雷式", "武學", "玄雷式")
+    art.creator = "沈浪"
+    store.claim_recipe("gang_1+gang_1|武學", art)
+    store.mutate_season(lambda season: setattr(season, "ended", True))
+    assert store.next_season(content, now=1.0)
+    [(number, entries)] = store.chronicle_before(2)
+    assert number == 1 and entries[-1].text == "第 1 季煉製首創 1 門：【玄雷式】沈浪"
+
+
+def test_a_season_without_first_crafts_adds_no_chronicle_entry(store, content):
+    content.config.auto_open_first_season = True
+    store.seed_first_season(content)
+    store.mutate_season(lambda season: setattr(season, "ended", True))
+    assert store.next_season(content, now=1.0)
+    assert store.chronicle_before(2) == []

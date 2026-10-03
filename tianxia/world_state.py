@@ -56,8 +56,6 @@ class CompanionProgress(BaseModel):
 
 
 class SharedWorldState(BaseModel):
-    created_skills: dict[str, MartialArt] = Field(default_factory=dict)  # 鍵是武學名稱
-    recipes: dict[str, str] = Field(default_factory=dict)  # 煉製配方鍵 -> 功法名稱（功法本體存在 created_skills）；每季清空，見 next_season
     companion_tag_counts: dict[str, dict[str, int]] = Field(default_factory=dict)  # 人物 id -> {tag: 次數}
     companion_drift_note: dict[str, str] = Field(default_factory=dict)  # 人物 id -> 目前漂移後的一句話性情
     companion_drift_synthesized_at: dict[str, int] = Field(default_factory=dict)  # 人物 id -> 上次語意化時的 tag 總數
@@ -66,17 +64,15 @@ class SharedWorldState(BaseModel):
     jade_seal_fragments: list[JadeSealFragment] = Field(default_factory=list)  # 跨季持久（設計文件九.2）
 
     # ── 共享賽季（真正共享的大勢/門檻/主線/結局，取代原本每個玩家各自獨立的 WorldState）──
-    # 上面那些欄位不跟著 season 整個換掉，但換季時武學命名登記、煉製配方、同伴進度會照
-    # 「跨季不滾雪球」清空，玉璽碎片等才是永遠留著；season 本身每次開新賽季會被整個換掉
-    # （見 next_season）。season_number 從 1 起算，
+    # 上面那些欄位不跟著 season 整個換掉，但換季時同伴進度會照「跨季不滾雪球」清空，玉璽碎片等才是
+    # 永遠留著；武學命名、煉製配方、投靠名冊每季各一份（存在各自的表裡，見 sqlite_world），換季自然是空的。
+    # season 本身每次開新賽季會被整個換掉（見 next_season）。season_number 從 1 起算，
     # season_last_real 是這個賽季的共用時鐘上次對到現實時間的時間點（None＝還沒對過）。
     season: WorldState = Field(default_factory=WorldState)
     season_number: int = 1
     season_last_real: float | None = None
     season_opened: bool = False  # 這一季管理者開季了沒；False＝籌備中（見 season_phase）
     tianji: int = 0  # 天機：每次換季 +1，自創武學「名字 → 數值」的配方跟著換（跨季不滾雪球第三條）
-    faction_rolls: dict[str, str] = Field(default_factory=dict)  # 這一季的投靠名冊：玩家名號 → 陣營 id
-    # （真人與伺服器假人一起記，不記誰是假人；陣營人數看這份，換季清空，見 next_season）
 
     # ── 全服即時多人戰鬥（設計討論：集結選陣營→逐幕逐回合鎖步）────────
     # 同一時間最多一場（先簡化成這樣；真的需要同時好幾場再擴充成 list/dict）。
@@ -124,6 +120,10 @@ class WorldStateStore(Protocol):
         ...
 
     # ── 武學命名登記與煉製配方（這一季）──
+    def get_skill(self, name: str) -> MartialArt | None:
+        """這一季登記過的自創或煉製功法（自創功法的 id 就是它的名字）；沒有就是 None。"""
+        ...
+
     def is_skill_name_taken(self, name: str) -> bool: ...
 
     def claim_skill_name(self, art: MartialArt) -> bool:
@@ -207,8 +207,8 @@ class WorldStateStore(Protocol):
 
     def next_season(self, content: Content, now: float) -> bool:
         """管理者開下一季：只在休季時有效。換上全新的一季、賽季編號 +1、直接開季，賽季時鐘從 now 起算；
-        同伴、自創武學名字、煉製配方、投靠名冊、沒打完的決戰都清掉，天機 +1；玉璽碎片不動。
-        舊的一季整份留著（線上架構設計 3.2：換季不刪資料）。"""
+        同伴全部重獲自由、沒打完的決戰清掉，天機 +1；玉璽碎片不動。武學命名、煉製配方、投靠名冊每季各一份，
+        新的一季自然是空的。舊的一季整份留著（線上架構設計 3.2），上一季的煉製首創寫進那一季的江湖史。"""
         ...
 
     def catch_up_season(self, content: Content, now: float, rng: random.Random) -> list[str]:
@@ -218,6 +218,10 @@ class WorldStateStore(Protocol):
 
     # ── 投靠名冊 ──
     def record_faction(self, name: str, faction_id: str) -> None: ...
+
+    def faction_of(self, name: str) -> str | None:
+        """這一季投靠名冊上這個名號的陣營；還沒記過是 None。"""
+        ...
 
     def faction_counts(self) -> dict[str, int]:
         """這一季各陣營投靠了幾人（只列有人的陣營）。"""

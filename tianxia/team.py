@@ -69,7 +69,7 @@ def resolve_art(skill_id: str | None, content: Content, world: WorldStateStore) 
     if skill_id in content.skills:
         s = content.skills[skill_id]
         return historical_art(skill_id, s.name, s.kind, s.attribute)
-    return world.read().created_skills.get(skill_id)
+    return world.get_skill(skill_id)
 
 
 def team_arts(state: GameState, content: Content, world: WorldStateStore) -> dict[str, MartialArt]:
