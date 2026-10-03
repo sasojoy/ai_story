@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 import server
 from conftest import at
-from tianxia import atlas, battle_instance, companion_agent, database
+from tianxia import atlas, battle_instance, companion_agent, craft, database
 from tianxia.accounts import NAME_TAKEN
 from tianxia.characters import open_characters
 from tianxia.engine import Game
@@ -516,6 +516,44 @@ def test_craft_line_previews_without_crafting(client):
     assert open_characters().load("沈青衫").player.materials == {mid: 2}
     view = client.get("/api/menxia").json()
     assert view["materials"][0]["id"] == mid and view["materials"][0]["count"] == 2
+
+
+def _a_player_with_a_material(client, count, xinde=100):
+    """新角色，背包裡某一種要花心得的（靈品）素材 ×count；存進資料庫（進鎖會重讀）。回傳素材 id。"""
+    _player(client)
+    game = server.game_for("沈青衫")
+    mid = next(m.id for m in server.CONTENT.materials.values() if m.tier == 2)
+    assert game.craft_cost([mid, mid]) > 0  # 要花心得，下面「心得有沒有被扣」才說明得了事情
+    assert game.state.player.member.wugong_id is None and game.state.player.arts == []
+    game.state.player.materials = {mid: count}
+    game.state.player.stats["xinde"] = xinde
+    open_characters().save(game.state)
+    return mid
+
+
+def test_the_forge_takes_the_same_material_twice_when_there_are_two(client):
+    """FB-005：煉製可以重複丟同一樣素材（網頁版的素材格子本來就允許）；伺服器這一端也要收，兩樣都從背包扣。
+    不連模型：conftest 把 chat_structured 假成連不上，首次發現的配方走退路字表取名。"""
+    mid = _a_player_with_a_material(client, 2)
+    price = server.game_for("沈青衫").craft_cost([mid, mid])
+    out = client.post("/api/menxia/craft", json={"materials": [mid, mid], "kind": "武學"})
+    assert out.status_code == 200
+    saved = open_characters().load("沈青衫").player
+    assert saved.materials.get(mid, 0) == 0
+    assert saved.stats["xinde"] == 100 - price
+    art = open_world().lookup_recipe(craft.recipe_key([mid, mid], "武學"))
+    assert art is not None and saved.member.wugong_id == art.id  # 武學欄本來是空的，煉出來的直接配上身
+    assert art.name == craft.fallback_name(server.CONTENT, craft.recipe_key([mid, mid], "武學"), "武學")  # 沒問模型
+
+
+def test_the_forge_does_not_craft_the_same_material_twice_with_only_one(client):
+    mid = _a_player_with_a_material(client, 1)
+    out = client.post("/api/menxia/craft", json={"materials": [mid, mid], "kind": "武學"})
+    assert out.status_code == 200 and "不夠" in out.json()["message"]
+    saved = open_characters().load("沈青衫").player
+    assert saved.materials == {mid: 1}
+    assert saved.stats["xinde"] == 100
+    assert saved.member.wugong_id is None and saved.arts == []
 
 
 def test_travel_sets_off_or_stays_on_the_map_and_says_why(client):
