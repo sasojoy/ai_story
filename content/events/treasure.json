@@ -102,8 +102,9 @@
   {
     "id": "yuxi_dig",
     "title": "循符探查",
-    "tags": [
-      "山林"
+    "locations": [
+      "songshan_foot",
+      "deep_mountain"
     ],
     "condition": {
       "trend_min": {
@@ -144,8 +145,9 @@
   {
     "id": "yuxi_rival",
     "title": "董卓的斥候",
-    "tags": [
-      "山林"
+    "locations": [
+      "songshan_foot",
+      "deep_mountain"
     ],
     "weight": 0.7,
     "condition": {

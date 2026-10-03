@@ -2451,3 +2451,47 @@ def test_the_round_narration_is_kept_with_the_round(content, game):
         game.choose("battle:act:safe")
     battle = game.world.get_battle()
     assert [r.narration for r in game.world.battle_rounds(battle.record_id)] == ["一場惡戰。"]
+
+
+# ── 同伴也拿經驗（試玩回饋 FB-002）────────────────────────────
+
+
+def _companion_on_the_team(game, exp=0):
+    """在小鎮招到韓鐵（帶著出戰），再把他的經驗設成 exp；之後換回一般亂數，免得固定亂數影響走路時的世界推進。"""
+    game.rng = FixedRandom(0.1)  # < 0.35：招募成功
+    game.choose("act:recruit")
+    assert game.state.player.team == ["mate"]
+    game.world.update_companion("mate", lambda progress: setattr(progress, "exp", exp))
+    game.rng = random.Random(0)
+
+
+def test_a_won_training_fight_gives_every_fighter_the_exp(content, game):
+    """戰報寫「經驗 +N（每人）」：帶著的同伴也真的拿到，照同一套規則升級，氣血上限跟著升。"""
+    from tianxia import team
+
+    rules.learn_skill(game.state, game.content, "fist")  # 壓倒性的威力，穩贏
+    _companion_on_the_team(game, exp=90)
+    walk_to(game, "lake")
+    game.rng = FixedRandom(0.99)
+    msgs = game.choose("act:train")
+    record = game.state.battles[0]
+    assert record.tier in ("大勝", "險勝") and record.exp == 20
+    assert game.state.player.member.exp == 20
+    mate = game.world.get_companion("mate")  # 同伴進度存在全服共用的世界（資料庫），不是角色存檔
+    assert (mate.level, mate.exp) == (2, 10)
+    assert "韓鐵升到第 2 級！" in msgs and "韓鐵升到第 2 級！" in record.notes
+    assert team.member_neili(content, mate)[1] == content.config.neili_base + 2 * content.config.neili_per_level
+    assert "🧍 韓鐵　第2級" in game.status_text()
+
+
+def test_a_drill_gives_every_fighter_the_exp_too(content, game):
+    _training_factions(content)
+    content.squads["thug"].faction = "huang"
+    game.state.player.faction = "huang"
+    _companion_on_the_team(game, exp=90)
+    walk_to(game, "lake")
+    msgs = game.choose("act:train")
+    assert any("操軍擺陣" in m for m in msgs)
+    assert game.world.get_companion("mate").level == 2
+    assert "韓鐵升到第 2 級！" in msgs
+    assert "韓鐵升到第 2 級！" in game.state.journal[0].lines

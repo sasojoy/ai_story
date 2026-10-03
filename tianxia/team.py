@@ -261,6 +261,23 @@ def add_exp(content: Content, member, amount: int, name: str) -> list[str]:
     return msgs
 
 
+def add_team_exp(state: GameState, content: Content, world: WorldStateStore, amount: int) -> list[str]:
+    """本隊每個人（本人與帶著出戰的同伴）各得 amount 經驗，照同一套 add_exp 規則升級；回傳升級訊息，
+    本人在前、同伴照隊伍順序（試玩回饋 FB-002：戰報一直寫「經驗 +N（每人）」，以前只有本人真的拿到）。
+
+    同伴的等級與經驗存在全服共用的 CompanionProgress（world.update_companion 當場寫回共用世界，
+    跟著那一筆交易存檔），所以換頁、重新登入都還在；換季時跟其他同伴進度一起清空。氣血上限
+    （neili_cap：基礎＋每級加成）由等級算出來，升級就跟著變高（氣血設計 A1：等級只買氣血上限）；
+    目前氣血不變，不順便回血。"""
+    msgs = add_exp(content, state.player.member, amount, state.player.name)
+    for companion_id in state.player.team:
+        name = content.characters[companion_id].name
+        levels: list[str] = []
+        world.update_companion(companion_id, lambda progress: levels.extend(add_exp(content, progress, amount, name)))
+        msgs += levels
+    return msgs
+
+
 def regen_neili(content: Content, member, fraction: float) -> None:
     """氣血隨時間回復——只回到上蓋（上限 − 內傷），內傷那部分要療傷才清得掉。"""
     if member.neili is None:

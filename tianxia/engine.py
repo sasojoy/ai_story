@@ -1148,7 +1148,7 @@ class Game:
             if self._draft is not None:
                 self._draft.hide(xinde_line)
                 self._draft.changes.append(xinde_line)
-        msgs += team.add_exp(c, p.member, squad.exp, p.name)
+        msgs += team.add_team_exp(s, c, self.world, squad.exp)  # 本人與帶著的同伴都拿（FB-002）
         if self._draft is not None and squad.exp > 0:
             self._draft.changes.append(f"經驗 +{squad.exp}（每人）")
         if self.rng.random() < c.config.train_stat_chance:
@@ -1188,7 +1188,7 @@ class Game:
                 record.materials.append(line.removeprefix("獲得 "))
                 msgs.append(line)
         record.exp = squad.exp
-        levels = team.add_exp(self.content, p.member, squad.exp, p.name)
+        levels = team.add_team_exp(self.state, self.content, self.world, squad.exp)  # 每人都拿（FB-002）
         record.notes += levels
         return msgs + levels
 

@@ -217,11 +217,10 @@
   {
     "id": "kou_blockade",
     "title": "官道封鎖",
-    "tags": [
-      "水路",
-      "渡口"
+    "locations": [
+      "baima_ford"
     ],
-    "weight": 2,
+    "weight": 1,
     "condition": {
       "world_flags_all": [
         "road_blocked"
@@ -230,7 +229,7 @@
         "huangjin_crushed"
       ]
     },
-    "text": "官道被黃巾軍封鎖，驛站擠滿了過不了江的百姓，米價一天漲三次。",
+    "text": "官道被黃巾軍封鎖，驛站擠滿了過不了河的百姓，米價一天漲三次。",
     "choices": [
       {
         "text": "夜襲黃巾軍的哨船",
@@ -246,7 +245,7 @@
           }
         },
         "fail_effect": {
-          "text": "哨船上早有埋伏，你跳江才逃過一劫。",
+          "text": "哨船上早有埋伏，你跳河才逃過一劫。",
           "stamina": -20
         }
       },
