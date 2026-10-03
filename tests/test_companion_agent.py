@@ -1,3 +1,4 @@
+from random import Random
 from unittest import mock
 
 import pytest
@@ -157,3 +158,91 @@ def test_the_prompt_asks_for_a_short_reply(content, state, world):
     prompt = companion_agent.build_system_prompt(content.characters["mate"], state, content, world, "mate")
     assert "兩三句" in prompt and "80~150 字" in prompt
     assert "100~200 字" not in prompt
+
+
+# ── 鎖外生成（對話輪次先在鎖外生成，再進鎖套用）──────────────────
+
+FAKE_TURN = companion_agent.CompanionTurn(
+    narrative="他點了點頭。", options=["閒聊幾句", "就此告辭"], option_tags=["尋常寒暄", "雪中送炭"],
+)
+
+
+def test_start_dialogue_applies_a_given_turn_without_a_client(content, state, world):
+    """給了現成的一輪就不再生成：沒有模型（client=None）也能開始對話；不給時照舊拋 DialogueUnavailable。"""
+    msgs = companion_agent.start_dialogue(None, state, content, world, "mate", Random(0), turn=FAKE_TURN)
+    assert msgs == ["他點了點頭。"]
+    assert state.player.pending_companion == "mate"
+    assert state.player.last_offered_dialogue["mate"] == [["閒聊幾句", "就此告辭"], ["尋常寒暄", "雪中送炭"]]
+    with pytest.raises(companion_agent.DialogueUnavailable):
+        companion_agent.start_dialogue(None, state, content, world, "mate", Random(0))
+
+
+def test_continue_dialogue_applies_a_given_turn_without_a_client(content, state, world):
+    state.player.pending_companion = "mate"
+    state.player.last_offered_dialogue["mate"] = [["誇他兩句", "告辭"], ["雪中送炭", "尋常寒暄"]]
+    msgs = companion_agent.continue_dialogue(None, state, content, world, "mate", 0, Random(0), turn=FAKE_TURN)
+    assert msgs == ["他點了點頭。", "（好感度 +8）"]  # 好感度照玩家選的選項（上一輪的 tag）查表
+    assert state.player.affinities["mate"] == 8
+    assert state.player.dialogue_history["mate"][0] == {"role": "user", "content": "誇他兩句"}
+    assert world.read().companion_tag_counts["mate"] == {"雪中送炭": 1}
+
+
+def test_a_given_turn_skips_generation_entirely(content, state, world):
+    state.player.last_offered_dialogue["mate"] = [["閒聊幾句"], ["尋常寒暄"]]
+    with mock.patch.object(companion_agent, "_generate", side_effect=AssertionError("不該生成")), \
+            mock.patch.object(companion_agent, "generate_turn", side_effect=AssertionError("不該生成")):
+        companion_agent.start_dialogue(None, state, content, world, "mate", Random(0), turn=FAKE_TURN)
+        companion_agent.continue_dialogue(None, state, content, world, "mate", 0, Random(0), turn=FAKE_TURN)
+
+
+def test_generate_turn_converts_simplified_text_to_traditional():
+    client = mock.Mock()
+    client.chat_structured.return_value = companion_agent.CompanionTurn(
+        narrative="他说这话时闪过一丝笑意。", options=["说几句话", "告辞", "听他说"],
+        option_tags=["由衷讚赏", "尋常寒暄", "尋常寒暄"], relationship_note_update="关系还算融洽",
+    )
+    messages = [{"role": "user", "content": "hi"}]
+    turn = companion_agent.generate_turn(client, messages)
+    assert client.chat_structured.call_args.args[0] == messages
+    assert turn.narrative == "他說這話時閃過一絲笑意。"
+    assert turn.options == ["說幾句話", "告辭", "聽他說"]
+    assert turn.option_tags[0] == "由衷讚賞"
+    assert turn.relationship_note_update == "關係還算融洽"
+
+
+def test_generate_turn_raises_dialogue_unavailable_when_the_client_fails_or_is_missing():
+    client = mock.Mock()
+    client.chat_structured.side_effect = RuntimeError("模型 'gemma4:26b' 未找到")
+    with pytest.raises(companion_agent.DialogueUnavailable):
+        companion_agent.generate_turn(client, [])
+    with pytest.raises(companion_agent.DialogueUnavailable):
+        companion_agent.generate_turn(None, [])
+
+
+def test_generate_is_build_messages_plus_generate_turn(content, state, world):
+    """_generate 只是 _build_messages 加 generate_turn：鎖外與鎖內走同一條生成路徑。"""
+    character = content.characters["mate"]
+    expected = companion_agent._build_messages(character, state, content, world, "mate", "閒聊幾句")
+    with mock.patch.object(companion_agent, "generate_turn", return_value=FAKE_TURN) as gen:
+        turn = companion_agent._generate(mock.Mock(), character, state, content, world, "mate", "閒聊幾句")
+    assert turn is FAKE_TURN
+    assert gen.call_args.args[1] == expected
+
+
+def test_build_request_carries_the_same_messages_generate_would_send(content, state, world):
+    request = companion_agent.build_request(state, content, world, "mate", "talk:0", "閒聊幾句")
+    assert (request.option_id, request.companion_id, request.player_action) == ("talk:0", "mate", "閒聊幾句")
+    assert request.messages == companion_agent._build_messages(
+        content.characters["mate"], state, content, world, "mate", "閒聊幾句",
+    )
+
+
+def test_prepare_turn_wraps_the_outcome_and_marks_failure_with_no_turn(content, state, world):
+    request = companion_agent.build_request(state, content, world, "mate", "talk:0", "閒聊幾句")
+    with mock.patch.object(companion_agent, "generate_turn", return_value=FAKE_TURN) as gen:
+        prepared = companion_agent.prepare_turn(mock.Mock(), request)
+    assert gen.call_args.args[1] == request.messages
+    assert prepared == companion_agent.PreparedTurn("talk:0", "mate", "閒聊幾句", FAKE_TURN)
+    with mock.patch.object(companion_agent, "generate_turn", side_effect=companion_agent.DialogueUnavailable("404")):
+        failed = companion_agent.prepare_turn(mock.Mock(), request)
+    assert failed == companion_agent.PreparedTurn("talk:0", "mate", "閒聊幾句", None)

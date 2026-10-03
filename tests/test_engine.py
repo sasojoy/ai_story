@@ -1651,3 +1651,195 @@ def test_a_newcomer_below_the_threshold_gets_the_locations_event_instead_of_a_di
     assert game.state.player.pending_companion is None
     assert game.state.pending_event is not None
     assert "你想求見韓鐵，但人微言輕，被擋在門外（名望 10 以上才見得到）。" not in msgs
+
+
+# ── 鎖外生成：dialogue_request 與 choose(prepared=...) ────────────────
+
+
+def _open_dialogue(content, game):
+    """停在小鎮、已跟韓鐵開了第一輪對話（選項是「閒聊幾句」「就此告辭」）；福緣設成已領，交遊不會先觸發福緣。"""
+    _figure(content)
+    game.state.player.fortune = True
+    with mock.patch.object(companion_agent, "_generate", return_value=FAKE_TURN):
+        game.choose("act:socialize")
+
+
+def _prepared(game, option_id, turn=FAKE_TURN):
+    req = game.dialogue_request(option_id)
+    return companion_agent.PreparedTurn(req.option_id, req.companion_id, req.player_action, turn)
+
+
+NEXT_TURN = companion_agent.CompanionTurn(
+    narrative="他笑了笑。", options=["再聊聊", "起身告辭"], option_tags=["雪中送炭", "尋常寒暄"],
+)
+
+
+def _no_model():
+    """讓任何一條「在鎖內生成」的路徑直接失敗，證明這輪用的是預先生成好的。"""
+    return mock.patch.object(companion_agent, "_generate", side_effect=AssertionError("不該在鎖內生成"))
+
+
+def test_dialogue_request_for_a_talk_option_carries_the_offered_text(content, game):
+    _open_dialogue(content, game)
+    req = game.dialogue_request("talk:0")
+    assert (req.option_id, req.companion_id, req.player_action) == ("talk:0", "mate", "閒聊幾句")
+    assert req.messages[-1]["content"].startswith("玩家的行動：「閒聊幾句」")
+    assert game.dialogue_request("talk:1").player_action == "就此告辭"
+
+
+def test_dialogue_request_is_none_for_leaving_and_for_options_that_are_not_offered(content, game):
+    _open_dialogue(content, game)
+    assert game.dialogue_request("talk:leave") is None
+    assert game.dialogue_request("talk:2") is None  # 只有兩個選項
+    assert game.dialogue_request("talk:x") is None
+    assert game.dialogue_request("act:socialize") is None  # 對話中選單上沒有交遊
+
+
+def test_dialogue_request_for_socialize_is_the_generic_opening(content, game):
+    _figure(content)
+    game.state.player.fortune = True
+    req = game.dialogue_request("act:socialize")
+    assert (req.option_id, req.companion_id, req.player_action) == (
+        "act:socialize", "mate", companion_agent.GENERIC_OPENING,
+    )
+    assert req.messages == companion_agent._build_messages(
+        content.characters["mate"], game.state, content, game.world, "mate", companion_agent.GENERIC_OPENING,
+    )
+
+
+def test_dialogue_request_is_none_when_socialize_would_not_open_a_dialogue(content, game):
+    _figure(content, fame=10)
+    game.state.player.fortune = True
+    assert game.dialogue_request("act:socialize") is None  # 名望不夠，見不到
+    game.state.player.stats["fame"] = 10
+    assert game.dialogue_request("act:socialize") is not None
+    game.state.player.stamina = 0
+    assert game.dialogue_request("act:socialize") is None  # 選項停用
+    game.state.player.stamina = content.config.stamina_max
+    game.state.world.time += 86400 * content.config.fortune_day_min
+    game.state.player.fortune = False
+    assert game.dialogue_request("act:socialize") is None  # 福緣先到，交遊不開對話
+
+
+def test_dialogue_request_is_none_for_a_non_dialogue_option(content, game):
+    _figure(content)
+    game.state.player.fortune = True
+    assert game.dialogue_request("act:explore") is None
+    assert game.dialogue_request("move:lake") is None
+
+
+def test_dialogue_request_does_not_change_the_game(content, game):
+    _open_dialogue(content, game)
+    before = game.state.model_dump()
+    game.dialogue_request("talk:0")
+    game.dialogue_request("act:socialize")
+    assert game.state.model_dump() == before
+
+
+def test_choose_applies_a_prepared_talk_turn_without_calling_the_model(content, game):
+    _open_dialogue(content, game)
+    before = game.state.player.stamina
+    prepared = _prepared(game, "talk:0", turn=NEXT_TURN)
+    with _no_model(), mock.patch.object(game.client, "chat_structured", side_effect=AssertionError("不該呼叫模型")):
+        msgs = game.choose("talk:0", prepared=prepared)
+    assert msgs == ["他笑了笑。", "（好感度 +1）"]
+    assert game.state.player.stamina == before - content.config.talk_stamina
+    assert game._talks_used("mate") == 1  # 這一輪算進今天的輪數
+    assert game.state.player.last_offered_dialogue["mate"] == [["再聊聊", "起身告辭"], ["雪中送炭", "尋常寒暄"]]
+    assert game.state.player.affinities["mate"] == 1
+
+
+def test_choose_applies_a_prepared_opening_without_calling_the_model(content, game):
+    _figure(content)
+    game.state.player.fortune = True
+    before = game.state.player.stamina
+    prepared = _prepared(game, "act:socialize", turn=NEXT_TURN)
+    with _no_model():
+        msgs = game.choose("act:socialize", prepared=prepared)
+    assert msgs == ["他笑了笑。"]
+    assert game.state.player.pending_companion == "mate"
+    assert game.state.player.stamina == before - content.config.action_cost["socialize"]
+    assert ids(game) == ["talk:0", "talk:1", "talk:leave"]
+
+
+def test_a_prepared_failure_for_the_opening_refunds_the_socialize_cost(content, game):
+    """鎖外生成失敗（turn=None）：跟鎖內 DialogueUnavailable 完全一樣——退回交遊體力、不開對話、同一句說明。"""
+    _figure(content)
+    game.state.player.fortune = True
+    before = game.state.player.stamina
+    prepared = _prepared(game, "act:socialize", turn=None)
+    with _no_model():
+        msgs = game.choose("act:socialize", prepared=prepared)
+    assert msgs == ["韓鐵似乎無心多談，你只好先行告辭。"]
+    assert game.state.player.stamina == before
+    assert game.state.player.pending_companion is None
+
+
+def test_a_prepared_failure_for_a_talk_turn_costs_nothing_and_ends_the_talk(content, game):
+    _open_dialogue(content, game)
+    before = game.state.player.stamina
+    prepared = _prepared(game, "talk:0", turn=None)
+    with _no_model():
+        msgs = game.choose("talk:0", prepared=prepared)
+    assert msgs == ["韓鐵似乎無心多談，你只好先行告辭。"]
+    assert game.state.player.stamina == before
+    assert game.state.player.pending_companion is None
+    assert game.state.player.affinities.get("mate", 0) == 0
+    assert game._talks_used("mate") == 0
+    assert "mate" not in game.world.read().companion_tag_counts
+
+
+def test_a_mismatched_prepared_turn_is_ignored_and_the_normal_path_generates(content, game):
+    """對不上（玩家行動不同，例如選項清單已經換了）：丟掉預先生成的，照一般路徑在鎖內生成。"""
+    _open_dialogue(content, game)
+    stale = companion_agent.PreparedTurn("talk:0", "mate", "已經不在選單上的話", FAKE_TURN)
+    with mock.patch.object(companion_agent, "_generate", return_value=NEXT_TURN) as gen:
+        msgs = game.choose("talk:0", prepared=stale)
+    gen.assert_called_once()
+    assert msgs[0] == "他笑了笑。"  # 用的是現生成的，不是 stale 帶的 FAKE_TURN
+
+
+def test_a_mismatched_failed_prepared_turn_does_not_end_the_talk(content, game):
+    """對不上的 prepared 連同它的失敗一起丟掉：不能因為別張單子失敗，就把這輪對話結束掉。"""
+    _open_dialogue(content, game)
+    stale = companion_agent.PreparedTurn("talk:0", "mate", "已經不在選單上的話", None)
+    with mock.patch.object(companion_agent, "_generate", return_value=NEXT_TURN):
+        msgs = game.choose("talk:0", prepared=stale)
+    assert msgs[0] == "他笑了笑。"
+    assert game.state.player.pending_companion == "mate"
+
+
+def test_a_prepared_turn_for_another_companion_or_option_is_ignored(content, game):
+    for stale in (
+        companion_agent.PreparedTurn("talk:0", "someone_else", "閒聊幾句", FAKE_TURN),
+        companion_agent.PreparedTurn("talk:1", "mate", "閒聊幾句", FAKE_TURN),
+    ):
+        _open_dialogue(content, game)
+        with mock.patch.object(companion_agent, "_generate", return_value=NEXT_TURN) as gen:
+            msgs = game.choose("talk:0", prepared=stale)
+        gen.assert_called_once()
+        assert msgs[0] == "他笑了笑。"
+        game.choose("talk:leave")  # 退出這段對話，下一個 stale 重新開
+
+
+def test_a_prepared_opening_goes_stale_once_a_dialogue_is_already_open(content, game):
+    """連點兩下：第二張單子進鎖時對話已經開了，交遊不在選單上，什麼都不做。"""
+    _figure(content)
+    game.state.player.fortune = True
+    first, second = _prepared(game, "act:socialize"), _prepared(game, "act:socialize")
+    with _no_model():
+        game.choose("act:socialize", prepared=first)
+        stamina = game.state.player.stamina
+        assert game.choose("act:socialize", prepared=second) == ["（此刻無法這麼做。）"]
+    assert game.state.player.stamina == stamina
+
+
+def test_a_prepared_turn_is_ignored_by_options_that_do_not_use_it(content, game):
+    _figure(content)
+    game.state.player.fortune = True
+    stray = companion_agent.PreparedTurn("act:explore", "mate", "x", FAKE_TURN)
+    before = game.state.player.stamina
+    with _no_model():
+        game.choose("act:explore", prepared=stray)
+    assert game.state.player.stamina == before - content.config.action_cost["explore"]
+    assert game.state.player.pending_companion is None

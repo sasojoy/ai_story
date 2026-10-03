@@ -309,7 +309,67 @@ class Game:
         認得共用儲存的樣子），行動結束後這裡統一寫回共用賽季一次。"""
         self.world.save_season(self.state.world)
 
-    def choose(self, option_id: str) -> list[str]:
+    def dialogue_request(self, option_id: str) -> companion_agent.DialogueRequest | None:
+        """鎖外生成的階段 A（app.py 在行動鎖內、很快地呼叫）：現在選這個選項，會不會生成一輪對話？
+        會就回傳要送給模型的單子（選項、人物、玩家這一步、messages），不會就是 None。只讀、不改狀態。
+        - `talk:N`：N 是上一輪提供的選項、手上有對話、選項沒停用；`talk:leave` 不生成。
+        - `act:socialize`：選項沒停用、福緣還沒到（福緣先發，見 _act）、這裡有見得到的人物；
+          玩家這一步固定是 GENERIC_OPENING。
+        其他選項都不呼叫對話模型。"""
+        option = {o.id: o for o in self.options(odds=False)}.get(option_id)
+        if option is None or not option.enabled:
+            return None
+        kind, _, arg = option_id.partition(":")
+        if kind == "talk":
+            companion_id = self.state.player.pending_companion
+            if companion_id is None or not arg.isdecimal():
+                return None
+            offered, _ = self.state.player.last_offered_dialogue.get(companion_id, [[], []])
+            if int(arg) >= len(offered):
+                return None
+            player_action = offered[int(arg)]
+        elif option_id == "act:socialize":
+            if roster.fortune_due(self.state, self.content):
+                return None
+            companion_id = self._deep_interaction_target()
+            if companion_id is None:
+                return None
+            player_action = companion_agent.GENERIC_OPENING
+        else:
+            return None
+        return companion_agent.build_request(
+            self.state, self.content, self.world, companion_id, option_id, player_action,
+        )
+
+    def _checked_prepared(
+        self, option_id: str, prepared: companion_agent.PreparedTurn | None,
+    ) -> companion_agent.PreparedTurn | None:
+        """進鎖後重驗鎖外生成的結果：選項、人物、玩家這一步都要跟「現在」重算出來的單子一致才採用；
+        對不上（連點兩下、選項清單已換）就當沒給，走一般路徑在鎖內生成——很少發生，慢一點可以接受。
+        對不上時連它的失敗（turn=None）一起丟掉，不能讓別張單子的失敗結束現在這段對話。"""
+        if prepared is None:
+            return None
+        request = self.dialogue_request(option_id)
+        if request is None:
+            return None
+        same = (prepared.option_id, prepared.companion_id, prepared.player_action) == (
+            request.option_id, request.companion_id, request.player_action,
+        )
+        return prepared if same else None
+
+    @staticmethod
+    def _prepared_turn(prepared: companion_agent.PreparedTurn | None) -> companion_agent.CompanionTurn | None:
+        """採用鎖外生成的結果：有 turn 就交給 companion_agent 套用；生成失敗（turn=None）等同鎖內的
+        DialogueUnavailable；沒有 prepared 就回 None（讓 companion_agent 自己在鎖內生成）。"""
+        if prepared is None:
+            return None
+        if prepared.turn is None:
+            raise companion_agent.DialogueUnavailable("鎖外生成失敗")
+        return prepared.turn
+
+    def choose(self, option_id: str, prepared: companion_agent.PreparedTurn | None = None) -> list[str]:
+        """prepared 是 app.py 在鎖外先生成好的一輪對話（見 dialogue_request／companion_agent.prepare_turn）；
+        只有對話選項用得到，進來先重驗，驗不過就忽略。"""
         option = {o.id: o for o in self.options(odds=False)}.get(option_id)
         if option is None or not option.enabled:
             return self._log(["（此刻無法這麼做。）"])
@@ -317,14 +377,15 @@ class Game:
         kind, _, arg = option_id.partition(":")
         if kind == "battle":
             return self._log(self._battle_choose(arg))
+        prepared = self._checked_prepared(option_id, prepared) if kind in ("act", "talk") else None
         self._draft = Draft(self._action_title(kind, arg))
         try:
             if kind == "act":
-                msgs = self._act(arg)
+                msgs = self._act(arg, prepared)
             elif kind == "move":
                 msgs = self._move(arg)
             elif kind == "talk":
-                msgs = self._talk(arg)
+                msgs = self._talk(arg, prepared)
             elif kind == "faction":
                 msgs = self._faction_step(arg)
             else:
@@ -377,7 +438,7 @@ class Game:
 
     # ── 行動 ──────────────────────────────────────────────
 
-    def _act(self, what: str) -> list[str]:
+    def _act(self, what: str, prepared: companion_agent.PreparedTurn | None = None) -> list[str]:
         cost = self.content.config.action_cost
         if what == "break":
             return self._finish_seclusion(self.state.world.time)
@@ -406,6 +467,7 @@ class Game:
             try:
                 return companion_agent.start_dialogue(
                     self.client, self.state, self.content, self.world, companion_id, self.rng,
+                    turn=self._prepared_turn(prepared),
                 )
             except companion_agent.DialogueUnavailable:
                 self.state.player.stamina += cost[what]  # 生成不出對話：這次交遊不花體力
@@ -527,7 +589,7 @@ class Game:
         self.state.player.pending_companion = None
         return [f"{self.content.characters[companion_id].name}似乎無心多談，你只好先行告辭。"]
 
-    def _talk(self, arg: str) -> list[str]:
+    def _talk(self, arg: str, prepared: companion_agent.PreparedTurn | None = None) -> list[str]:
         companion_id = self.state.player.pending_companion
         if companion_id is None:
             return ["（此刻無法這麼做。）"]
@@ -535,7 +597,8 @@ class Game:
             return companion_agent.leave_dialogue(self.state)
         try:
             msgs = companion_agent.continue_dialogue(
-                self.client, self.state, self.content, self.world, companion_id, int(arg), self.rng
+                self.client, self.state, self.content, self.world, companion_id, int(arg), self.rng,
+                turn=self._prepared_turn(prepared),
             )
         except companion_agent.DialogueUnavailable:
             return self._dialogue_unavailable(companion_id)

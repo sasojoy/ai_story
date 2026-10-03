@@ -22,6 +22,7 @@ from pathlib import Path
 
 import gradio as gr
 
+from tianxia import companion_agent
 from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, AccountStore, normalize
 from tianxia.content import load_content
 from tianxia.craft import MATERIALS_PER_CRAFT
@@ -175,11 +176,30 @@ def act(game: Game | None, action, note: bool = False) -> list:
         return out
 
 
+def prepare_dialogue(game: Game, option_id: str) -> companion_agent.PreparedTurn | None:
+    """對話選項在行動鎖外生成（企劃者 2026-10-03 核准的過渡做法，正解是線上架構第二階段的 LLM 佇列）。
+    模型一輪要 9~10 秒，原本整段包在 act() 的鎖裡，全服玩家與假人程式都得跟著等。分三段：
+      A（鎖內、很快）同步時間，問引擎這個選項現在會不會生成對話，會就拿到送模型的單子；
+      B（鎖外、很慢）呼叫模型，失敗時單子裡的 turn 是 None；
+      C（鎖內、很快）由呼叫端把結果交給 Game.choose(prepared=...)，引擎進鎖後重新核對再套用。
+    這裡做 A 與 B，不會生成對話的選項（包含 talk:leave）回傳 None，由呼叫端走一般的單次 act()。"""
+    with game.world.action_lock():
+        game.sync(time.time())
+        request = game.dialogue_request(option_id)
+    if request is None:
+        return None
+    return companion_agent.prepare_turn(game.client, request)
+
+
 def make_option_handler(index: int):
     def handler(game, ids):
         if game is None or index >= len(ids):
             return [gr.skip()] * N_OUTPUTS
-        return act(game, lambda g: g.choose(ids[index]))
+        option_id = ids[index]
+        prepared = None
+        if option_id.startswith("talk:") or option_id == "act:socialize":  # 只有這兩類可能呼叫對話模型
+            prepared = prepare_dialogue(game, option_id)
+        return act(game, lambda g: g.choose(option_id, prepared=prepared))
 
     return handler
 

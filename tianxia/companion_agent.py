@@ -12,6 +12,7 @@ companion_tag_counts/companion_drift_note，這個模組只負責累積 tag、�
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from random import Random
 
 from pydantic import BaseModel, Field
@@ -60,6 +61,29 @@ class CompanionTurn(BaseModel):
     options: list[str] = Field(default_factory=list)
     option_tags: list[str] = Field(default_factory=list)
     relationship_note_update: str | None = None
+
+
+@dataclass(frozen=True)
+class DialogueRequest:
+    """階段 A（在行動鎖內、很快）：這次按下去會生成一輪對話時留下的單子——哪個選項、跟誰談、
+    玩家這一步做了什麼，以及送給模型的 messages（跟 _generate 平常自己組的一模一樣）。
+    拿著它就能在鎖外呼叫模型，不必再碰遊戲狀態。"""
+
+    option_id: str
+    companion_id: str
+    player_action: str
+    messages: list[dict[str, str]]
+
+
+@dataclass(frozen=True)
+class PreparedTurn:
+    """階段 B（鎖外、很慢）的結果：turn 是生成好的一輪；turn=None 表示生成失敗（等同 DialogueUnavailable）。
+    階段 C 進鎖套用前，會用 option_id／companion_id／player_action 重新核對這張單子還對不對得上。"""
+
+    option_id: str
+    companion_id: str
+    player_action: str
+    turn: CompanionTurn | None
 
 
 class MemoryConsolidation(BaseModel):
@@ -154,6 +178,27 @@ def _build_messages(
     return messages
 
 
+def build_request(
+    state: GameState, content: Content, world: WorldStateStore, companion_id: str, option_id: str, player_action: str,
+) -> DialogueRequest:
+    """階段 A：把這一輪要送給模型的 messages 組好（只讀狀態，不改任何東西）。"""
+    character = content.characters[companion_id]
+    return DialogueRequest(
+        option_id, companion_id, player_action,
+        _build_messages(character, state, content, world, companion_id, player_action),
+    )
+
+
+def prepare_turn(client: OllamaClient | None, request: DialogueRequest) -> PreparedTurn:
+    """階段 B：在行動鎖外呼叫模型生成這一輪（約 10 秒，不能讓別的玩家一起等）。
+    生成不出來時 turn=None，由階段 C 當成 DialogueUnavailable 處理，這裡不拋例外。"""
+    try:
+        turn = generate_turn(client, request.messages)
+    except DialogueUnavailable:
+        turn = None
+    return PreparedTurn(request.option_id, request.companion_id, request.player_action, turn)
+
+
 def _record_turn(state: GameState, companion_id: str, player_action: str, turn: CompanionTurn) -> None:
     p = state.player
     history = p.dialogue_history.setdefault(companion_id, [])
@@ -193,29 +238,33 @@ def _apply_turn(
 
 def start_dialogue(
     client: OllamaClient | None, state: GameState, content: Content, world: WorldStateStore, companion_id: str,
-    rng: Random,
+    rng: Random, turn: CompanionTurn | None = None,
 ) -> list[str]:
     """交遊觸發深度對話的第一回合：用一句通用的「上前攀談」當隱含的玩家行動。
-    先生成、成功了才開始對話；生成不出來（DialogueUnavailable）時不留下任何狀態。"""
+    先生成、成功了才開始對話；生成不出來（DialogueUnavailable）時不留下任何狀態。
+    turn 是鎖外先生成好的一輪（見 prepare_turn）：給了就不再生成，沒給才在這裡生成。"""
     character = content.characters[companion_id]
-    turn = _generate(client, character, state, content, world, companion_id, GENERIC_OPENING)
+    if turn is None:
+        turn = _generate(client, character, state, content, world, companion_id, GENERIC_OPENING)
     state.player.pending_companion = companion_id
     return _apply_turn(state, character, companion_id, GENERIC_OPENING, turn, tag=None)
 
 
 def continue_dialogue(
     client: OllamaClient | None, state: GameState, content: Content, world: WorldStateStore, companion_id: str,
-    choice_index: int, rng: Random,
+    choice_index: int, rng: Random, turn: CompanionTurn | None = None,
 ) -> list[str]:
     """玩家選了上一回合的第 choice_index 個選項：查表套用好感度、繼續生成下一回合。
-    先生成、成功了才記交遊 tag 與好感度；生成不出來（DialogueUnavailable）時這輪當作沒發生。"""
+    先生成、成功了才記交遊 tag 與好感度；生成不出來（DialogueUnavailable）時這輪當作沒發生。
+    turn 是鎖外先生成好的一輪（見 prepare_turn）：給了就不再生成，沒給才在這裡生成。"""
     character = content.characters[companion_id]
     options, tags = state.player.last_offered_dialogue.get(companion_id, [[], []])
     if not (0 <= choice_index < len(options)):
         return ["（此刻無法這麼做。）"]
     player_action, tag = options[choice_index], tags[choice_index] if choice_index < len(tags) else None
 
-    turn = _generate(client, character, state, content, world, companion_id, player_action)
+    if turn is None:
+        turn = _generate(client, character, state, content, world, companion_id, player_action)
     world.record_companion_tag(companion_id, tag or "尋常寒暄")
     msgs = _apply_turn(state, character, companion_id, player_action, turn, tag)
     msgs += _maybe_grant_signature_skill(state, content, character, companion_id)
@@ -309,9 +358,16 @@ def _generate(
     client: OllamaClient | None, character: CharacterDef, state: GameState, content: Content, world: WorldStateStore,
     companion_id: str, player_action: str,
 ) -> CompanionTurn:
-    if client is None:
-        raise DialogueUnavailable(f"{companion_id}：沒有可用的模型")
+    """組 messages 再生成一輪（鎖內的老路徑）；鎖外的路徑是 build_request ＋ prepare_turn，兩邊共用 generate_turn。"""
     messages = _build_messages(character, state, content, world, companion_id, player_action)
+    return generate_turn(client, messages)
+
+
+def generate_turn(client: OllamaClient | None, messages: list[dict[str, str]]) -> CompanionTurn:
+    """呼叫模型生成一輪對話並轉成繁體；任何失敗（沒有模型、連不上、解析失敗）都丟 DialogueUnavailable。
+    只吃 messages、不碰遊戲狀態，所以可以放心在行動鎖外呼叫。"""
+    if client is None:
+        raise DialogueUnavailable("沒有可用的模型")
     try:
         turn = client.chat_structured(messages, CompanionTurn, required_fields=["options"])
         # 模型常夾雜簡體字（提示裡寫了也只部分改善），所以在輸出端確定性地轉成繁體。
@@ -323,7 +379,7 @@ def _generate(
             "relationship_note_update": zh.to_traditional(turn.relationship_note_update) if turn.relationship_note_update else turn.relationship_note_update,
         })
     except Exception as e:
-        logger.warning(f"companion_agent 生成失敗 ({companion_id}): {e}，這輪對話取消")
+        logger.warning(f"companion_agent 生成失敗: {e}，這輪對話取消")
         raise DialogueUnavailable(str(e)) from e
 
 

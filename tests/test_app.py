@@ -1,10 +1,11 @@
+import contextlib
 from unittest import mock
 
 import gradio as gr
 import pytest
 
 import app
-from tianxia import battle_instance, roster
+from tianxia import battle_instance, companion_agent, roster, world_state
 from tianxia.engine import Game
 from tianxia.save import save_game
 from tianxia.state import BotProfile
@@ -675,3 +676,132 @@ def test_full_width_letters_count_as_the_same_name(save_dir, monkeypatch):
     app.register("shen_01", "secret-pw", "secret-pw")
     with pytest.raises(gr.Error, match="這個名號已有人使用。"):
         app.create_character("shen_01", "Ｒａｙａｌ")
+
+
+# ── 對話在行動鎖外生成（一個玩家的模型呼叫不能讓所有人一起等）────────────
+
+
+DIALOGUE_TURN = companion_agent.CompanionTurn(
+    narrative="他點了點頭。", options=["閒聊幾句", "就此告辭"], option_tags=["尋常寒暄", "尋常寒暄"],
+)
+
+
+def _stand_by_a_figure(game):
+    """站到正式內容裡張梁所在的地點，有他的結識旗標所以見得到；福緣設成已領，交遊不會先觸發福緣。"""
+    game.state.player.location = "yingchuan_wilds"
+    game.state.player.flags.add("結識:zhangliang")
+    game.state.player.fortune = True
+    return [o.id for o in game.options()]
+
+
+@pytest.fixture
+def lock_events(monkeypatch):
+    """記錄行動鎖「拿到、放掉」的順序，再讓測試把「生成」插進同一條時間線。"""
+    events = []
+    real = WorldStateStore.action_lock
+
+    @contextlib.contextmanager
+    def spy(self, timeout=None):
+        with real(self, timeout):
+            events.append("enter")
+            yield
+        events.append("exit")
+
+    monkeypatch.setattr(WorldStateStore, "action_lock", spy)
+    return events
+
+
+def test_a_dialogue_option_generates_outside_the_action_lock(game, lock_events):
+    ids = _stand_by_a_figure(game)
+
+    def generate(client, messages):
+        lock_events.append("generate")
+        assert not world_state._ACTION_THREAD_LOCK.locked()  # 程式內的執行緒鎖沒被拿著
+        assert not game.world.action_lock_dir.exists()  # 跨程式的檔案鎖也沒有
+        return DIALOGUE_TURN
+
+    with mock.patch.object(companion_agent, "generate_turn", side_effect=generate) as gen:
+        out = app.make_option_handler(ids.index("act:socialize"))(game, ids)
+    gen.assert_called_once()
+    assert lock_events == ["enter", "exit", "generate", "enter", "exit"]  # 鎖內備料 → 鎖外生成 → 鎖內套用
+    assert len(out) == app.N_OUTPUTS
+    assert game.state.player.pending_companion == "zhangliang"
+
+
+def test_the_generated_turn_is_applied_and_saved(game, save_dir):
+    ids = _stand_by_a_figure(game)
+    with mock.patch.object(companion_agent, "generate_turn", return_value=DIALOGUE_TURN):
+        app.make_option_handler(ids.index("act:socialize"))(game, ids)
+    ids = [o.id for o in game.options()]
+    assert ids == ["talk:0", "talk:1", "talk:leave"]
+    before = game.state.player.stamina
+    with mock.patch.object(companion_agent, "generate_turn", return_value=DIALOGUE_TURN) as gen, \
+            mock.patch.object(companion_agent, "_generate", side_effect=AssertionError("不該在鎖內再生成一次")):
+        out = app.make_option_handler(ids.index("talk:0"))(game, ids)
+    gen.assert_called_once()
+    assert len(out) == app.N_OUTPUTS
+    assert game.state.player.affinities["zhangliang"] == 1
+    assert game.state.player.stamina < before  # 這一輪對話的體力照扣
+    assert game.state.player.dialogue_history["zhangliang"][-2:] == [
+        {"role": "user", "content": "閒聊幾句"}, {"role": "assistant", "content": "他點了點頭。"},
+    ]
+    assert "他點了點頭。" in game.state.journal[0].lines  # 江湖紀錄也記了
+    assert (save_dir / "測試.json").exists()
+
+
+def test_a_failed_generation_ends_the_talk_for_free_through_the_handler(game, lock_events):
+    ids = _stand_by_a_figure(game)
+    before = game.state.player.stamina
+
+    def generate(client, messages):
+        lock_events.append("generate")
+        raise companion_agent.DialogueUnavailable("連不上")
+
+    with mock.patch.object(companion_agent, "generate_turn", side_effect=generate):
+        app.make_option_handler(ids.index("act:socialize"))(game, ids)
+    assert lock_events == ["enter", "exit", "generate", "enter", "exit"]
+    assert game.state.player.pending_companion is None
+    assert game.state.player.stamina == before
+    assert game.state.journal[0].lines == ["張梁似乎無心多談，你只好先行告辭。"]
+
+
+def test_a_changed_option_list_while_generating_falls_back_to_generating_in_the_lock(game):
+    """生成的那十秒內，選單換了（例如連點兩下）：進鎖重驗對不上，丟掉鎖外生成的，改在鎖內現生成。"""
+    ids = _stand_by_a_figure(game)
+    with mock.patch.object(companion_agent, "generate_turn", return_value=DIALOGUE_TURN):
+        app.make_option_handler(ids.index("act:socialize"))(game, ids)
+    ids = [o.id for o in game.options()]
+
+    def generate(client, messages):
+        game.state.player.last_offered_dialogue["zhangliang"] = [["換了一句話", "告辭"], ["尋常寒暄", "尋常寒暄"]]
+        return DIALOGUE_TURN
+
+    fresh = companion_agent.CompanionTurn(
+        narrative="他沉吟片刻。", options=["再聊聊", "告辭"], option_tags=["尋常寒暄", "尋常寒暄"],
+    )
+    with mock.patch.object(companion_agent, "generate_turn", side_effect=generate) as outside, \
+            mock.patch.object(companion_agent, "_generate", return_value=fresh) as in_lock:
+        app.make_option_handler(ids.index("talk:0"))(game, ids)
+    outside.assert_called_once()  # 鎖外先生成過一次，但那一份被丟掉了
+    in_lock.assert_called_once()
+    assert "他沉吟片刻。" in game.state.journal[0].lines
+
+
+def test_a_non_dialogue_option_goes_through_one_act_and_never_asks_the_model(game, lock_events):
+    ids = [o.id for o in game.options()]
+    with mock.patch.object(app, "act", wraps=app.act) as act, \
+            mock.patch.object(companion_agent, "generate_turn", side_effect=AssertionError("不該呼叫模型")):
+        app.make_option_handler(ids.index("act:explore"))(game, ids)
+    act.assert_called_once()
+    assert lock_events == ["enter", "exit"]  # 只拿一次鎖，沒有多餘的備料那一趟
+    assert game.state.player.stamina < 150
+
+
+def test_leaving_a_dialogue_does_not_ask_the_model(game):
+    ids = _stand_by_a_figure(game)
+    with mock.patch.object(companion_agent, "generate_turn", return_value=DIALOGUE_TURN):
+        app.make_option_handler(ids.index("act:socialize"))(game, ids)
+    ids = [o.id for o in game.options()]
+    with mock.patch.object(companion_agent, "generate_turn", side_effect=AssertionError("不該呼叫模型")):
+        app.make_option_handler(ids.index("talk:leave"))(game, ids)
+    assert game.state.player.pending_companion is None
