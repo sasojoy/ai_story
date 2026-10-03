@@ -238,6 +238,107 @@ def test_invalid_option_writes_no_entry(game):
     assert len(game.state.journal) == 1
 
 
+# FB-024：在修練頁完成新手引導的那一步，「✔ 引導完成」、獎勵與說書人的下一步也要進江湖紀錄，
+# 跟在江湖頁（choose()）完成時一樣；沒完成引導的門下動作，紀錄跟以前一模一樣。
+
+GUIDE_REWARD = 7
+GUIDE_XINDE = 5  # 獎勵也給心得：紀錄裡的心得變化只能算一次（門下紀錄自己也會算心得的增減）
+
+
+def _guide_waits_for(game, goal):
+    """把引導換成「第一步＝goal（獎勵銀兩 7、心得 5）、第二步＝出城」，停在第一步。"""
+    from tianxia.models import Effect, TutorialGoal, TutorialStep
+
+    game.content.tutorial.steps = [
+        TutorialStep(
+            id="t4", text="先修練。", done_when=goal,
+            reward=Effect(stats={"silver": GUIDE_REWARD, "xinde": GUIDE_XINDE}),
+        ),
+        TutorialStep(id="t5", text="出城。", done_when=TutorialGoal(action="move")),
+    ]
+    game.state.player.tutorial_step = 0
+
+
+def _speaker(game):
+    return game.content.tutorial.speaker
+
+
+def test_creating_a_skill_that_finishes_a_guide_step_writes_it_into_the_journal(game):
+    from tianxia.models import TutorialGoal
+
+    _guide_waits_for(game, TutorialGoal(has_wugong=True))
+    msgs = game.create_skill("測試長拳", "武學")
+    assert "✔ 引導完成" in msgs  # 修練頁的訊息照舊
+    entry = latest(game)
+    assert entry.title == "門下" and "自創了一門武學" in entry.tag
+    assert entry.lines[-2:] == ["✔ 引導完成", f"【{_speaker(game)}】出城。"]  # 跟 choose() 那條路同一種寫法
+    assert sorted(entry.changes) == sorted([f"銀兩 +{GUIDE_REWARD}", f"心得 +{GUIDE_XINDE}"])  # 獎勵是數值變化，心得沒有算兩次
+    assert game.state.player.tutorial_step == 1
+
+
+def test_practicing_that_finishes_a_guide_step_writes_it_into_the_journal(game):
+    from tianxia.models import TutorialGoal
+
+    game.create_skill("測試長拳", "武學")
+    game.state.player.member.wugong_level = 3
+    _guide_waits_for(game, TutorialGoal(action="practice"))
+    game.practice("武學")
+    entry = latest(game)
+    assert entry.title == "門下"
+    assert entry.lines[-2:] == ["✔ 引導完成", f"【{_speaker(game)}】出城。"]
+    assert f"銀兩 +{GUIDE_REWARD}" in entry.changes and f"心得 +{GUIDE_XINDE}" in entry.changes
+
+
+def test_crafting_that_finishes_a_guide_step_writes_it_into_the_journal(game):
+    from unittest import mock
+
+    from tianxia import craft, materials
+    from tianxia.models import TutorialGoal
+    from tianxia.ollama_client import OllamaClient
+
+    materials.grant(game.state, game.content, "gang_1", 2)
+    _guide_waits_for(game, TutorialGoal(has_wugong=True))
+    naming = lambda self, messages, response_model, **kw: craft.CraftedName(name="鐵腕勁", description="一句話。")
+    with mock.patch.object(OllamaClient, "chat_structured", naming):
+        msgs = game.craft(["gang_1", "gang_1"], "武學")
+    assert "✔ 引導完成" in msgs
+    entry = latest(game)
+    assert entry.title == "門下" and "煉製" in entry.tag
+    assert entry.lines[-2:] == ["✔ 引導完成", f"【{_speaker(game)}】出城。"]
+    assert f"銀兩 +{GUIDE_REWARD}" in entry.changes and f"心得 +{GUIDE_XINDE}" in entry.changes
+
+
+def test_the_guide_lines_do_not_swallow_the_menxia_story_when_entries_merge(game):
+    """連續的門下動作併成一則：引導的那幾行接在對應那次動作後面，之前與之後的動作敘事都還在。"""
+    from tianxia.models import TutorialGoal
+
+    game.create_skill("測試內功", "內功")
+    first_tag = latest(game).tag
+    _guide_waits_for(game, TutorialGoal(has_wugong=True))
+    game.create_skill("測試長拳", "武學")
+    second_tag = latest(game).tag
+    game.practice("武學")
+    entries = [e for e in game.state.journal if e.title == "門下"]
+    assert len(entries) == 1  # 還是併成一則
+    lines = entries[0].lines
+    assert lines.index(first_tag) < lines.index(second_tag) < lines.index("✔ 引導完成") < lines.index(f"【{_speaker(game)}】出城。")
+    assert f"銀兩 +{GUIDE_REWARD}" in entries[0].changes and f"心得 +{GUIDE_XINDE}" in entries[0].changes
+
+
+def test_menxia_without_finishing_a_guide_step_writes_exactly_what_it_used_to(game):
+    from tianxia.models import TutorialGoal
+
+    _guide_waits_for(game, TutorialGoal(action="view_map"))  # 修練頁做的事不會完成這一步
+    game.create_skill("測試長拳", "武學")
+    entry = latest(game)
+    assert entry.title == "門下" and "自創了一門武學" in entry.tag
+    assert entry.lines == [] and entry.changes == []
+    assert game.state.player.tutorial_step == 0
+    game.state.player.tutorial_step = len(game.content.tutorial.steps)  # 引導已走完：同一回事
+    game.practice("武學")
+    assert latest(game).lines == [entry.tag, latest(game).tag]  # 兩次練功併成一則，敘事只有兩次動作自己
+
+
 def test_menxia_changes_are_written_but_failures_are_not(game):
     assert game.create_skill("", "武學") == ["得先取個名字。"]
     assert len(game.state.journal) == 1

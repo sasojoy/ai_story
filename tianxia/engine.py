@@ -1889,8 +1889,7 @@ class Game:
         art, msg = team.create_skill(self.state, self.content, self.world, name, kind)
         msgs = self._log([msg])
         if art is not None:
-            self._menxia_entry(msg, xinde)
-            msgs += note_action(self.state, self.content, self.world, "practice")
+            msgs += self._menxia_entry(msg, xinde, guide=True)
         return msgs
 
     def craft(self, material_ids: list[str], kind: str) -> list[str]:
@@ -1906,8 +1905,7 @@ class Game:
         art, msgs = craft.craft(self.state, self.content, self.world, self.client, material_ids, kind)
         out = self._log(msgs)
         if art is not None:
-            self._menxia_entry(f"煉製【{art.name}】", xinde)
-            out += note_action(self.state, self.content, self.world, "practice")
+            out += self._menxia_entry(f"煉製【{art.name}】", xinde, guide=True)
         return out
 
     def craft_cost(self, material_ids: list[str]) -> int:
@@ -1944,10 +1942,7 @@ class Game:
         # 已經第十成（練無可練）也算（可能在走到這一步前就自創、煉製到滿了，只認「真的加一成」會永遠卡住）。
         has_art = getattr(self.state.player.member, "neigong_id" if kind == "內功" else "wugong_id") is not None
         msgs = self._log(team.practice(self.state, self.content, self.world, kind, self.rng))
-        self._menxia_entry(msgs[0] if msgs else "練功", xinde)
-        if has_art:
-            msgs += note_action(self.state, self.content, self.world, "practice")
-        return msgs
+        return msgs + self._menxia_entry(msgs[0] if msgs else "練功", xinde, guide=has_art)
 
     def heal(self) -> list[str]:
         if self._preparing():
@@ -1960,11 +1955,26 @@ class Game:
     def _xinde(self) -> int:
         return self.state.player.stats.get("xinde", 0)
 
-    def _menxia_entry(self, tag: str, xinde_before: int) -> None:
+    def _menxia_entry(self, tag: str, xinde_before: int, guide: bool = False) -> list[str]:
+        """門下動作寫進江湖紀錄（連續的併成一則）。
+
+        guide=True：這個動作算一次「練功」（自創、煉製、鍛鍊），順便看新手引導有沒有完成（FB-024）。完成了，
+        note_action 回來的「✔ 引導完成」、獎勵與說書人的下一步，跟江湖頁 choose() 那條路一樣寫進這一則
+        （敘事進 lines、獎勵的數字進 changes），並回傳這幾行讓畫面也照舊顯示；沒完成就回傳 []，這一則跟以前一模一樣。
+        心得的增減先算好、才輪到引導獎勵：獎勵本身若給心得，變化只由獎勵那幾行帶進來，不會算兩次。"""
         delta = self._xinde() - xinde_before
         changes = [f"心得 {delta:+d}"] if delta else []
-        entry = JournalEntry(time=self.state.world.time, title=journal.MENXIA, tag=tag, changes=changes)
+        notes = note_action(self.state, self.content, self.world, "practice") if guide else []
+        lines: list[str] = []
+        if notes:
+            reward, story = battlelog.split_changes(notes)
+            changes = journal.combine_changes(changes + reward)
+            # 一則的敘事有 lines 就只認 lines、沒有才拿結果標記（journal._story）：這次動作自己的那句話要先放進 lines，
+            # 不然之後的門下動作併進來時，這句話會被引導那幾行擠掉。
+            lines = [tag, *story]
+        entry = JournalEntry(time=self.state.world.time, title=journal.MENXIA, tag=tag, lines=lines, changes=changes)
         journal.add_entry(self.state, entry, merge=True)
+        return self._log(notes)
 
     # ── 門下與隊伍 ────────────────────────────────────────
 
