@@ -4,11 +4,13 @@
 執行動作、存檔，再整個重畫。「門下」（練功與招募）、「戰報」（歷次戰鬥的列表與完整內容）與
 「大地圖」（江湖輿圖：四個圖層、地點詳情與安排前往）都是另外的整頁，同一時間只顯示一頁（見 PAGES），
 分別由 render_menxia()、戰報頁面與 render_map_page() 重畫。
-左欄由上而下是場景列（左邊是地點或事件，右邊是以你為中心的小地圖與「大地圖」按鈕）、選項按鈕、
-「剛剛」卡片（最新一則江湖紀錄；打完仗時換成戰鬥卡片，卡片沒寫到的補充放在卡片底下）、
-「江湖紀錄」（再來的 5 則，一則一列、可點開看敘事，更早的收在摺疊區裡）。
-按戰鬥卡片的「看完整戰報」或右欄的「戰報」按鈕都能打開戰報頁面；點小地圖、小地圖下方或右欄的「大地圖」按鈕
-打開大地圖。
+左欄由上而下是**功能按鈕列**（煉製／修練／戰報／輿圖，手機上黏在上緣）、場景列（左邊是地點或
+事件，右邊是以你為中心的小地圖）、選項按鈕、「剛剛」卡片（最新一則江湖紀錄；打完仗時換成戰鬥
+卡片，卡片沒寫到的補充放在卡片底下）、「江湖紀錄」（再來的 5 則，一則一列、可點開看敘事，
+更早的收在摺疊區裡）。
+「煉製」與「修練」進的是同一個門下頁，差別只在到站時展開哪一區（見 open_menxia_at）——刻意
+不另外放一顆「門下」，不然就是三顆開同一頁的按鈕。按戰鬥卡片的「看完整戰報」也能打開戰報頁面；
+點小地圖或小地圖下方的按鈕打開大地圖。
 
 sanguo-companions 合併大幅簡化了「門下」頁：不再有多隊切換/換人選單/武學欄配置/招賢分頁，
 同伴全服唯一、練功只有自創功法／鍛鍊兩個按鈕（見設計文件四.4、六.2）。
@@ -83,6 +85,87 @@ MAP_CLICK_JS = (
 
 UNCHANGED = object()  # 動作回傳它表示什麼都沒做：act 不存檔、不重畫（頁面上的訊息也留著）
 KINDS = ("武學", "內功")
+
+# 介面樣式：手機排版與幾個小動畫。
+#
+# 為什麼要特別處理手機：Gradio 的 Row 是 flex，預設在窄螢幕也不會換行，所以「場景文字 ×
+# 小地圖」「左欄 × 右欄」在手機上會各縮成一半，兩邊都讀不動。下面用 elem_classes 掛的
+# class 在窄螢幕把它們改成直排，並把**行動按鈕排在狀態與分頁之前**——手機玩家最常做的事是
+# 「看場景、按一個選項」，那兩件事要在第一屏。
+#
+# 動畫刻意都很小而且只在「有事發生」的地方：剛剛那張紀錄卡片浮現、戰鬥卡片浮現、煉製開爐時
+# 按鈕像爐火一樣明滅、拿到新東西的那一行掃過一道光。全部包在 prefers-reduced-motion 的
+# 保護裡（會動的東西對一部分人是負擔，系統設定說不要動就一律不動）。
+UI_CSS = """
+/* ── 通用：不要讓任何東西把頁面撐寬 ── */
+svg, img, canvas { max-width: 100%; height: auto; }
+.tx-page, .tx-main-col, .tx-side-col { min-width: 0; }
+.tx-act button { min-height: 42px; }
+.tx-nav button { min-height: 40px; }
+
+/* ── 手機（含多數平板直立）：直排、放大觸控目標、行動優先 ── */
+@media (max-width: 760px) {
+  .tx-game { flex-direction: column !important; }
+  .tx-main-col { order: 1; }
+  .tx-side-col { order: 2; }
+  .tx-scene-row { flex-direction: column !important; }
+  .tx-mini { order: 2; max-width: 100% !important; min-width: 0 !important; }
+  .tx-mini svg { width: 100%; }
+  /* 導覽（門下／戰報／大地圖）黏在上緣，拇指永遠按得到 */
+  .tx-nav { position: sticky; top: 0; z-index: 30; padding: 4px 0;
+            background: var(--body-background-fill); }
+  /* 字級：觸控高度要夠（44px），但字不必跟著放大——上一版把按鈕字放到 16px，實機看起來
+     又大又醜。參考圖的按鈕字其實比內文小一號，靠的是間距而不是字級。 */
+  .tx-act button, .tx-page button { min-height: 44px; font-size: 14px; }
+  .tx-nav button { min-height: 38px; font-size: 13px; padding: 4px 6px; }
+  /* 輸入欄維持 16px：低於 16px 時 iOS Safari 會在聚焦時自動放大整頁 */
+  .tx-page input, .tx-page textarea, .tx-page select { min-height: 40px; font-size: 16px; }
+  .tx-scene, .tx-page, .tx-journal { font-size: 14px; }
+  .tx-scene h3, .tx-page h2, .tx-page h3 { font-size: 16px; margin: 4px 0; }
+  .tx-act button { padding: 6px 10px; }
+  .tx-side-row { flex-direction: column !important; }
+  /* ── 一頁到底（參考 infinialchemy 的手機版：資源一列、分頁一排、主操作不用捲）──
+     目標是「開著遊戲時，狀態、場景、所有可按的選項同時看得到」。做法是把**會變長的東西**
+     （場景敘述、小地圖、江湖紀錄）各自限高可捲，**不會變長的東西**（狀態列、選項按鈕）
+     維持原樣——這樣不管玩到哪一天，選項都不會被推到摺線以下。 */
+  .tx-title { display: none; }  /* 標題在手機上只是佔一行，遊戲本身就在畫面裡 */
+  .tx-status p { margin: 1px 0 !important; line-height: 1.45; font-size: 14px; }
+  .tx-status h3 { margin: 0 0 2px !important; font-size: 16px; }
+  .tx-scene { max-height: 26vh; overflow-y: auto; }
+  .tx-mini { max-height: 26vh; overflow: hidden; }
+  .tx-journal { max-height: 30vh; overflow-y: auto; }
+  /* 門下的「開爐煉製」釘在螢幕底部（參考圖的「萃取」按鈕）：選完素材不用捲回去按 */
+  .tx-forge { position: sticky; bottom: 0; z-index: 25; padding: 6px 0 2px;
+              background: var(--body-background-fill); }
+  /* 大地圖的地點詳情在地圖下方，給足寬度 */
+  .tx-place { min-width: 0 !important; }
+  /* 大地圖：整張縮到螢幕寬（手機上原尺寸 680px 要左右拖才看得完，等於看不到全局），
+     同時把圖上的字放大補回縮放損失（680→約 390px 是 57%，字從 12 放到 18 約等於原本的大小）。
+     真的要看細節還是可以在框內左右拖。 */
+  .tx-world-map svg { width: 100% !important; height: auto !important; max-width: 100% !important; }
+  .tx-world-map text { font-size: 18px !important; }
+}
+
+/* ── 小動畫 ── */
+@keyframes tx-rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.tx-card { animation: tx-rise 0.3s ease-out; }
+.tx-page { animation: tx-rise 0.24s ease-out; }
+
+/* 煉製：開爐期間按鈕像爐火明滅（那段等待實測 27~83 秒，要讓玩家知道還活著） */
+@keyframes tx-ember {
+  0%, 100% { box-shadow: 0 0 0 rgba(234, 88, 12, 0); }
+  50% { box-shadow: 0 0 14px 2px rgba(234, 88, 12, 0.75); }
+}
+.tx-forge button[disabled] { animation: tx-ember 1.1s ease-in-out infinite; }
+
+/* 練功／療傷：按下去給一點回饋，不然門下頁完全靜止 */
+.tx-page button:active { transform: scale(0.98); }
+
+@media (prefers-reduced-motion: reduce) {
+  .tx-card, .tx-page, .tx-forge button[disabled] { animation: none !important; }
+  .tx-page button:active { transform: none; }
+}
+"""
 
 
 def save_path(name: str) -> Path:
@@ -269,6 +352,20 @@ def open_menxia(game, person=None):
         return [gr.skip()] * (2 + MENXIA_OUTPUTS)
     with game.world.action_lock():
         return [gr.update(visible=False), gr.update(visible=True)] + render_menxia(game, person, "")
+
+
+def open_menxia_at(game, section: str):
+    """從最上面那排的「煉製」「鍛鍊」進門下：開頁之外，只把對應的那一區展開、另一區收起。
+
+    這兩個動作玩家一天要按很多次，藏在門下頁裡等於每次都要先點門下、再捲到那一區。
+    """
+    if game is None:
+        return [gr.skip()] * (2 + MENXIA_OUTPUTS + 2)
+    crafting = section == "craft"
+    return open_menxia(game) + [
+        gr.update(open=not crafting),  # 練功
+        gr.update(open=crafting),  # 煉製
+    ]
 
 
 def close_menxia():
@@ -643,7 +740,7 @@ def build_demo() -> gr.Blocks:
     with gr.Blocks(title="天下大勢") as demo:
         game_state = gr.State(None)
         ids_state = gr.State([])
-        gr.Markdown("# 天下大勢 · 原型")
+        gr.Markdown("# 天下大勢 · 原型", elem_classes=["tx-title"])
         account_state = gr.State(None)
         with gr.Column(visible=True) as start_col:
             with gr.Tab("登入"):
@@ -655,18 +752,27 @@ def build_demo() -> gr.Blocks:
                 reg_pw_box = gr.Textbox(label="密碼", type="password", placeholder="至少 6 字")
                 reg_pw2_box = gr.Textbox(label="再輸入一次密碼", type="password")
                 reg_btn = gr.Button("註冊", variant="primary")
-        with gr.Column(visible=False) as create_col:
+        with gr.Column(visible=False, elem_classes=["tx-page"]) as create_col:
             gr.Markdown("這個帳號還沒有角色。取一個名號，踏入江湖。")
             name_box = gr.Textbox(label="你的名號", placeholder="例如：沈青衫")
             start_btn = gr.Button("建立角色", variant="primary")
-        with gr.Row(visible=False) as game_row:
-            with gr.Column(scale=3):
-                with gr.Row(equal_height=False):
-                    scene_md = gr.Markdown(scale=3)
-                    with gr.Column(scale=2, min_width=180):
+        with gr.Row(visible=False, elem_classes=["tx-game"]) as game_row:
+            with gr.Column(scale=3, elem_classes=["tx-main-col"]):
+                # 分頁按鈕放在**最上面**（企劃者的示意圖就是這樣）：原本藏在右欄，手機上右欄
+                # 排在主欄之後，等於要捲過整個場景與選項才看得到，形同沒有導覽。
+                with gr.Row(elem_classes=["tx-nav"]):
+                    # 四個各自不同的去處。刻意**沒有**「門下」這一顆：煉製與修練本來就在
+                    # 門下頁裡，再多一個開同一頁的按鈕只是三顆一樣的東西（實機看了就知道）。
+                    craft_nav_btn = gr.Button("🔥 煉製", size="sm")
+                    practice_nav_btn = gr.Button("🥋 修練", size="sm")
+                    report_btn = gr.Button("⚔ 戰報", size="sm")
+                    map_btn = gr.Button("🗺 輿圖", size="sm")
+                with gr.Row(equal_height=False, elem_classes=["tx-scene-row"]):
+                    scene_md = gr.Markdown(scale=3, elem_classes=["tx-scene"])
+                    with gr.Column(scale=2, min_width=180, elem_classes=["tx-mini"]):
                         minimap_html = gr.HTML()  # 預設的 js_on_load：點一下就觸發 click
                         mini_map_btn = gr.Button("大地圖", size="sm")
-                option_btns = [gr.Button(visible=False) for _ in range(MAX_BUTTONS)]
+                option_btns = [gr.Button(visible=False, elem_classes=["tx-act"]) for _ in range(MAX_BUTTONS)]
                 # 全服即時戰鬥的自訂行動（20 字內）：魯莽/放手一搏這類選項是玩家自己想出
                 # 來的招，不是固定清單裡選一個（見設計討論）；平常（不在這種回合）都隱藏。
                 with gr.Row():
@@ -675,20 +781,16 @@ def build_demo() -> gr.Blocks:
                     )
                     battle_text_btn = gr.Button("送出", visible=False, scale=1, variant="primary")
                 # 「剛剛」：最新一則江湖紀錄的卡片；這次行動打了仗時改放戰鬥卡片，latest_html 則放卡片沒寫到的補充。
-                battle_card_md = gr.Markdown(visible=False, container=True)
+                battle_card_md = gr.Markdown(visible=False, container=True, elem_classes=["tx-card"])
                 latest_html = gr.HTML(css_template=JOURNAL_CSS)
                 card_btn = gr.Button("看完整戰報", visible=False)
-                journal_html = gr.HTML(css_template=JOURNAL_CSS)
+                journal_html = gr.HTML(css_template=JOURNAL_CSS, elem_classes=["tx-journal"])
                 with gr.Accordion("展開更早的紀錄", open=False, visible=False) as older_acc:
                     older_html = gr.HTML(css_template=JOURNAL_CSS)
-            with gr.Column(scale=2):
+            with gr.Column(scale=2, elem_classes=["tx-side-col"]):
                 with gr.Accordion("主線與目標", open=True):
                     quest_md = gr.Markdown()
-                status_md = gr.Markdown()
-                with gr.Row():
-                    menxia_btn = gr.Button("門下")
-                    report_btn = gr.Button("戰報")
-                    map_btn = gr.Button("大地圖")
+                status_md = gr.Markdown(elem_classes=["tx-status"])
                 with gr.Tabs():
                     with gr.Tab("江湖大勢"):
                         trends_md = gr.Markdown()
@@ -736,55 +838,62 @@ def build_demo() -> gr.Blocks:
                                 reset_pw_box = gr.Textbox(label="臨時密碼")
                                 reset_btn = gr.Button("重設密碼")
                             reset_md = gr.Markdown()
-        with gr.Column(visible=False) as menxia_col:
+        with gr.Column(visible=False, elem_classes=["tx-page"]) as menxia_col:
             with gr.Row(equal_height=True):
                 gr.Markdown("## 門下", scale=1)
                 back_btn = gr.Button("返回江湖", scale=0, min_width=120)
             mx_head_md = gr.Markdown()
-            with gr.Row():
-                with gr.Column(scale=1):
-                    gr.Markdown("**本人**")
-                    player_card_md = gr.Markdown()
-                    gr.Markdown("**名冊**（本人與已招募的同伴；點名字看角色卡）")
-                    roster_radio = gr.Radio(label="", choices=[], interactive=True)
-                with gr.Column(scale=1):
-                    gr.Markdown("**角色卡**")
-                    person_card_md = gr.Markdown(PERSON_HINT)
-                    team_toggle_btn = gr.Button("加入隊伍", visible=False)
-            gr.Markdown("---")
-            bag_md = gr.Markdown()
-            craft_head_md = gr.Markdown()
-            with gr.Row():
-                craft_mats_dd = gr.Dropdown(
-                    label=f"投入 {MATERIALS_PER_CRAFT} 樣素材（可以選同一種兩次）", choices=[],
-                    multiselect=True, max_choices=MATERIALS_PER_CRAFT, interactive=True,
-                )
-                craft_kind_radio = gr.Radio(label="煉內功／武學", choices=list(KINDS), value=KINDS[0], interactive=True)
-            craft_btn = gr.Button("開爐煉製", variant="primary")
-            gr.Markdown("---\n**功法庫**：煉出來還沒配上身的功法。改練會把目前那一門收回庫裡，熟練度各自保留。")
-            with gr.Row():
-                arts_radio = gr.Radio(label="", choices=[], interactive=True)
-                switch_btn = gr.Button("改練", scale=0, min_width=120)
-            gr.Markdown("---\n**練功**：自創功法（取名決定屬性/威力/成長性，全服不能重名）或鍛鍊已學會的。")
-            with gr.Row():
-                kind_radio = gr.Radio(label="內功／武學", choices=list(KINDS), value="武學", interactive=True)
-                skill_name_tb = gr.Textbox(label="自創功法的名字", placeholder="幫你的武學取個名字")
-            with gr.Row():
-                create_btn = gr.Button("自創功法", variant="primary")
-                practice_btn = gr.Button("鍛鍊")
-                heal_btn = gr.Button("療傷")
-            mx_message_md = gr.Markdown()
-        with gr.Column(visible=False) as report_col:
+            # 動作結果放在最上面：手機上按完按鈕，訊息若在整頁最底下根本看不到
+            mx_message_md = gr.Markdown(elem_classes=["tx-card"])
+            with gr.Accordion("練功", open=True) as practice_acc:
+                gr.Markdown("自創功法（取名決定屬性/威力/成長性，全服不能重名）或鍛鍊已學會的。")
+                with gr.Row(elem_classes=["tx-side-row"]):
+                    kind_radio = gr.Radio(label="內功／武學", choices=list(KINDS), value="武學", interactive=True)
+                    skill_name_tb = gr.Textbox(label="自創功法的名字", placeholder="幫你的武學取個名字")
+                with gr.Row():
+                    create_btn = gr.Button("自創功法", variant="primary")
+                    practice_btn = gr.Button("鍛鍊")
+                    heal_btn = gr.Button("療傷")
+            with gr.Accordion("煉製", open=True) as craft_acc:
+                craft_head_md = gr.Markdown()
+                with gr.Row(elem_classes=["tx-side-row"]):
+                    craft_mats_dd = gr.Dropdown(
+                        label=f"投入 {MATERIALS_PER_CRAFT} 樣素材（可以選同一種兩次）", choices=[],
+                        multiselect=True, max_choices=MATERIALS_PER_CRAFT, interactive=True,
+                    )
+                    craft_kind_radio = gr.Radio(
+                        label="煉內功／武學", choices=list(KINDS), value=KINDS[0], interactive=True,
+                    )
+                craft_btn = gr.Button("開爐煉製", variant="primary", elem_classes=["tx-forge"])
+            with gr.Accordion("煉製素材", open=False):
+                bag_md = gr.Markdown()
+            with gr.Accordion("功法庫", open=False):
+                gr.Markdown("煉出來還沒配上身的功法。改練會把目前那一門收回庫裡，熟練度各自保留。")
+                with gr.Row(elem_classes=["tx-side-row"]):
+                    arts_radio = gr.Radio(label="", choices=[], interactive=True)
+                    switch_btn = gr.Button("改練", scale=0, min_width=120)
+            with gr.Accordion("名冊與角色卡", open=False):
+                with gr.Row(elem_classes=["tx-side-row"]):
+                    with gr.Column(scale=1):
+                        gr.Markdown("**本人**")
+                        player_card_md = gr.Markdown()
+                        gr.Markdown("**名冊**（本人與已招募的同伴；點名字看角色卡）")
+                        roster_radio = gr.Radio(label="", choices=[], interactive=True)
+                    with gr.Column(scale=1):
+                        gr.Markdown("**角色卡**")
+                        person_card_md = gr.Markdown(PERSON_HINT)
+                        team_toggle_btn = gr.Button("加入隊伍", visible=False)
+        with gr.Column(visible=False, elem_classes=["tx-page"]) as report_col:
             with gr.Row(equal_height=True):
                 gr.Markdown("## 戰報", scale=1)
                 gr.Markdown(scale=6)
                 report_back_btn = gr.Button("返回江湖", scale=0, min_width=120)
-            with gr.Row():
+            with gr.Row(elem_classes=["tx-side-row"]):
                 with gr.Column(scale=1):
                     report_list_radio = gr.Radio(label="歷次戰鬥（最新在前）", choices=[], interactive=True)
                 with gr.Column(scale=2):
                     report_detail_md = gr.Markdown()
-        with gr.Column(visible=False) as map_col:
+        with gr.Column(visible=False, elem_classes=["tx-page"]) as map_col:
             with gr.Row(equal_height=True):
                 gr.Markdown("## 江湖輿圖", scale=1)
                 map_head_md = gr.Markdown(scale=6)
@@ -793,10 +902,10 @@ def build_demo() -> gr.Blocks:
                 label="圖層", choices=[(name, key) for key, name in Game.MAP_LAYERS.items()], value=DEFAULT_LAYER,
                 interactive=True,
             )
-            with gr.Row():
+            with gr.Row(elem_classes=["tx-side-row"]):
                 with gr.Column(scale=3):
                     world_map_html = gr.HTML(js_on_load=MAP_CLICK_JS)
-                with gr.Column(scale=2, min_width=260):
+                with gr.Column(scale=2, min_width=260, elem_classes=["tx-place"]):
                     place_dd = gr.Dropdown(label="地點（也可以直接點地圖）", choices=[], interactive=True)
                     place_md = gr.Markdown()
                     with gr.Row():
@@ -849,7 +958,13 @@ def build_demo() -> gr.Blocks:
             admin_trend_handler, inputs=[game_state, admin_trend_dd, admin_trend_nb], outputs=outputs
         )
 
-        menxia_btn.click(open_menxia, inputs=[game_state], outputs=[game_row, menxia_col] + menxia_outputs)
+        section_outputs = [game_row, menxia_col] + menxia_outputs + [practice_acc, craft_acc]
+        craft_nav_btn.click(
+            lambda g: open_menxia_at(g, "craft"), inputs=[game_state], outputs=section_outputs,
+        )
+        practice_nav_btn.click(
+            lambda g: open_menxia_at(g, "practice"), inputs=[game_state], outputs=section_outputs,
+        )
         back_btn.click(close_menxia, outputs=[game_row, menxia_col])
         report_outputs = [game_row, report_col, report_list_radio, report_detail_md]
         report_btn.click(open_report_page, inputs=[game_state], outputs=report_outputs)
@@ -891,4 +1006,5 @@ def build_demo() -> gr.Blocks:
 
 
 if __name__ == "__main__":
-    build_demo().launch(server_name="0.0.0.0", server_port=7861, share=True)
+    # Gradio 6 把 css 從 Blocks 的建構子移到 launch()（不照它搬的話樣式根本不會送出）
+    build_demo().launch(server_name="0.0.0.0", server_port=7861, share=True, css=UI_CSS)

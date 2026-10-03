@@ -842,3 +842,19 @@ def test_sitting_down_always_keeps_a_button_when_there_are_too_many_options():
     assert len(shown) == app.MAX_BUTTONS and shown[-1].id == "act:rest"
     assert [o.id for o in shown[:-1]] == [f"move:p{i}" for i in range(app.MAX_BUTTONS - 1)]
     assert app.visible_options(many[:3]) == many[:3]
+
+
+def test_the_nav_opens_menxia_at_the_right_section(game):
+    """「煉製」「鍛鍊」拉到最上面那排：按下去直接開門下頁，而且只展開對應的那一區。"""
+    craft = app.open_menxia_at(game, "craft")
+    assert len(craft) == 2 + app.MENXIA_OUTPUTS + 2
+    assert craft[0] == {"__type__": "update", "visible": False}  # 藏起江湖畫面
+    assert craft[1] == {"__type__": "update", "visible": True}  # 打開門下
+    assert craft[-2]["open"] is False and craft[-1]["open"] is True  # 練功收起、煉製展開
+
+    practice = app.open_menxia_at(game, "practice")
+    assert practice[-2]["open"] is True and practice[-1]["open"] is False
+
+
+def test_the_section_nav_skips_without_a_game():
+    assert app.open_menxia_at(None, "craft") == [gr.skip()] * (2 + app.MENXIA_OUTPUTS + 2)

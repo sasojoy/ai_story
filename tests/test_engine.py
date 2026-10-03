@@ -2348,3 +2348,29 @@ def test_a_loaded_game_starts_its_clock_at_the_last_sync(content, game):
     game.sync(5000.0)
     assert game.now == 5000.0
     assert Game(content, game.state, world=game.world).now == 5000.0
+
+
+def test_the_training_button_shows_the_odds(game):
+    """實機試玩發現的坑：新角色沒有武學時威力是 0、歷練必敗，而落敗現在真的要付氣血與內傷
+    的代價。按鈕上要先講清楚勝算（跟劇情戰的選項同一套慣例）。"""
+    walk_to(game, "lake")
+    fresh = next(o for o in game.options() if o.id == "act:train")
+    assert "必敗" in fresh.label
+    rules.learn_skill(game.state, game.content, "fist")
+    armed = next(o for o in game.options() if o.id == "act:train")
+    assert "穩勝" in armed.label
+
+
+def test_the_training_button_skips_the_odds_when_asked(game):
+    walk_to(game, "lake")
+    option = next(o for o in game.options(odds=False) if o.id == "act:train")
+    assert "水寇小隊" in option.label and "勝" not in option.label
+
+
+def test_the_training_odds_quote_the_hardest_opponent(game):
+    """寧可低估：多路對手時標籤拿最強的那個算，不要給過度樂觀的承諾。"""
+    game.content.locations["lake"].enemies = ["thug", "boss"]  # 水寇小隊 5、翻江龍 200
+    rules.learn_skill(game.state, game.content, "fist")
+    walk_to(game, "lake")
+    option = next(o for o in game.options() if o.id == "act:train")
+    assert "2 路對手" in option.label and "必敗" in option.label  # 翻江龍打不贏

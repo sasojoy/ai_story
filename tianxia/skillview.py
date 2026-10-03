@@ -110,13 +110,23 @@ def bag_text(state: GameState, content: Content) -> str:
     return "\n".join(lines)
 
 
+def level_bar(level: int) -> str:
+    """熟練度的十格進度條，例如第 4 成是「●●●●○○○○○○」。
+
+    手機上「第4成」三個字要讀過才知道練到哪，一條十格的條子一眼就看得出來還有多少可練——
+    門下頁是玩家反覆回來按鍵的地方，這個資訊值得可以瞄一眼就懂。
+    """
+    level = max(0, min(MAX_LEVEL, level))
+    return "●" * level + "○" * (MAX_LEVEL - level)
+
+
 def _art_label(content: Content, world: WorldStateStore, skill_id: str | None, level: int) -> str:
     if skill_id is None:
         return "（尚未習得）"
     art = team.resolve_art(skill_id, content, world)
     if art is None:
         return skill_id
-    return f"{art.name}（{art.quality}・屬{art.attribute}）第{level}成"
+    return f"{art.name}（{art.quality}・屬{art.attribute}）第{level}成 {level_bar(level)}"
 
 
 def member_card(state: GameState, content: Content, world: WorldStateStore, key: str) -> str:
