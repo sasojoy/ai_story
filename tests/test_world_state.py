@@ -10,6 +10,7 @@ from tianxia import database
 from tianxia.database import Database
 from tianxia.martial_arts import generate_from_name
 from tianxia.sqlite_world import SqliteWorldStore, open_world
+from tianxia.state import Rumor
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -454,3 +455,52 @@ def test_next_season_keeps_the_old_season(store, content):
         rows = conn.execute("SELECT number, data FROM seasons ORDER BY number").fetchall()
     assert [row["number"] for row in rows] == [1, 2]
     assert '"ended":true' in rows[0]["data"]
+
+
+# ── 傳聞與江湖史一筆一筆加（線上架構設計 3.1）──────────────────
+
+
+def test_rumors_and_chronicle_are_added_one_row_at_a_time(store, content):
+    store.seed_first_season(content)
+    season = store.get_season()
+    season.rumors.append(Rumor(time=1, text="甲"))
+    season.chronicle.append(Rumor(time=1, text="史一"))
+    store.save_season(season)
+    assert season.rumors[0].id is not None and season.chronicle[0].id is not None
+    season.rumors.append(Rumor(time=2, text="乙"))
+    store.save_season(season)  # 甲已經寫過，不會再寫一次
+    with store.db.snapshot() as conn:
+        assert [row["text"] for row in conn.execute("SELECT text FROM rumors ORDER BY id")] == ["甲", "乙"]
+        assert "rumors" not in conn.execute("SELECT data FROM seasons WHERE number = 1").fetchone()["data"]
+    assert [r.text for r in store.get_season().rumors] == ["甲", "乙"]
+
+
+def test_a_stale_copy_cannot_erase_rumors_written_since(store, content):
+    store.seed_first_season(content)
+    first, second = store.get_season(), store.get_season()
+    second.rumors.append(Rumor(time=1, text="後來的人寫的"))
+    store.save_season(second)
+    first.rumors.append(Rumor(time=1, text="拿著舊的一份寫的"))
+    store.save_season(first)  # 季的小資料照舊是後寫的蓋掉先寫的，傳聞一則都不會少
+    assert {r.text for r in store.get_season().rumors} == {"後來的人寫的", "拿著舊的一份寫的"}
+
+
+def test_reading_the_world_does_not_load_the_rumors(store, content):
+    store.seed_first_season(content)
+    store.mutate_season(lambda season: season.rumors.append(Rumor(time=0, text="甲")))
+    assert store.read().season.rumors == []  # 只有 get_season 讀回來（給畫面看）
+    assert [r.text for r in store.get_season().rumors] == ["甲"]
+
+
+def test_last_seasons_chronicle_survives_the_next_season(store, content):
+    content.config.auto_open_first_season = True
+    store.seed_first_season(content)
+
+    def _end(season):
+        season.chronicle.append(Rumor(time=0, text="第一季的大事"))
+        season.ended = True
+
+    store.mutate_season(_end)
+    assert store.next_season(content, now=1.0)
+    assert store.get_season().chronicle == []
+    assert [(n, [e.text for e in entries]) for n, entries in store.chronicle_before(2)] == [(1, ["第一季的大事"])]

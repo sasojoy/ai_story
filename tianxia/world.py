@@ -63,7 +63,7 @@ def _fire(
 ) -> list[str]:
     state.world.fired_thresholds.add(fire_id)
     add_world_flags(state, flags)
-    add_rumor(state, text, location)
+    add_rumor(state, text, location, content=content)
     add_chronicle(state, text)
     shown_text = text
     if world is not None:
@@ -125,7 +125,7 @@ def update_storyline(state: GameState, content: Content) -> list[str]:
             if branch.replaces_when is not None and check_condition(branch.replaces_when, state):
                 w.storyline, w.act = branch.id, 0
                 text = f"主線改寫——「{branch.name}」。{branch.intro}"
-                add_rumor(state, text)
+                add_rumor(state, text, content=content)
                 add_chronicle(state, text)
                 msgs.append(f"【主線改寫】{branch.name}：{branch.intro}")
                 break
@@ -162,7 +162,7 @@ def sim_tick(state: GameState, content: Content, hours: int, rng: random.Random)
             if sim.rumors and rng.random() < sim.rumor_chance:
                 text, where = _rumor_place(sim, rng.choice(sim.rumors))  # 和以前一樣只抽一次亂數
                 text = text.format(name=sim.name)
-                add_rumor(state, text, where)
+                add_rumor(state, text, where, content=content, layer="local")
                 msgs.append(f"【江湖傳聞】{text}")
         msgs += check_thresholds(state, content)
         if state.world.ended:

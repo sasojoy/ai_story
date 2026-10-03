@@ -24,7 +24,7 @@ from pydantic import BaseModel, Field
 from .battle_instance import BattleInstance
 from .martial_arts import MartialArt
 from .models import BattleDef, Content
-from .state import WorldState
+from .state import Rumor, WorldState
 
 SeasonPhase = Literal["preparing", "running", "resting"]  # 籌備（管理者還沒開季）／進行中／休季（這一季已結束）
 
@@ -175,7 +175,14 @@ class WorldStateStore(Protocol):
     def jade_seal_summary(self) -> str: ...
 
     # ── 共享賽季 ──
-    def get_season(self) -> WorldState: ...
+    def get_season(self) -> WorldState:
+        """目前這一季，連同這一季全部的傳聞與江湖史（給畫面看）。read()／mutate()／mutate_season()
+        給出的賽季不讀傳聞與江湖史，兩個清單是空的，往裡面加的照樣會寫進去。"""
+        ...
+
+    def chronicle_before(self, season_number: int) -> list[tuple[int, list[Rumor]]]:
+        """season_number 以前每一季的江湖史，新的一季在前（線上架構設計 3.2：江湖史跨季保留）。"""
+        ...
 
     def get_season_number(self) -> int: ...
 

@@ -7,7 +7,7 @@ import pytest
 from conftest import FixedRandom, at, walk_to
 from tianxia import battle_instance, companion_agent, flavor, rules
 from tianxia.engine import Game, Option
-from tianxia.state import BotProfile, GameState, Journey
+from tianxia.state import BotProfile, GameState, Journey, Rumor
 from tianxia.sqlite_world import open_world
 
 HOUR = 3600
@@ -2348,3 +2348,15 @@ def test_a_loaded_game_starts_its_clock_at_the_last_sync(content, game):
     game.sync(5000.0)
     assert game.now == 5000.0
     assert Game(content, game.state, world=game.world).now == 5000.0
+
+
+def test_the_chronicle_lists_earlier_seasons_after_this_one(content, game):
+    """線上架構設計 3.2：江湖史跨季保留。"""
+    season = game.world.get_season()
+    season.chronicle.append(Rumor(time=0, text="第一季的大事"))
+    season.ended = True
+    game.world.save_season(season)
+    assert game.world.next_season(content, now=1.0)
+    game.sync(2.0)
+    text = game.chronicle_text()
+    assert text.index("第 2 季（本季）") < text.index("### 第 1 季") < text.index("第一季的大事")
