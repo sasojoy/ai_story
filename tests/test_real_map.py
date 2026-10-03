@@ -165,3 +165,29 @@ def test_new_locations_outside_towns_have_a_faction_squad(content):
 def test_towns_and_offices_have_no_enemies(content):
     for loc_id in TOWNS_WITHOUT_ENEMIES:
         assert content.locations[loc_id].enemies == [], loc_id
+
+
+FIGURE_PLACES = {  # 設計 7.3、第一季設計 8.1
+    "zhangjiao": "guangzong", "zhangbao": "xiaquyang", "zhangliang": "guangzong", "luzhi": "luzhi_camp",
+    "dongzhuo": "mengjin_ford", "hejin": "dajiangjun_fu", "yuanshao": "dajiangjun_fu",
+    "huangfusong": "changshe", "zhujun": "changshe", "caocao": "qiao_county", "sunjian": "wan_city",
+    "liubei": "zhuo_county", "guanyu": "zhuo_county", "zhangfei": "zhuo_county", "taoqian": "runan_market",
+    "bocai": "huangjin_camp", "zhangmancheng": "nanyang_huangjin_camp", "zhaohong": "nanyang_huangjin_camp",  # 人物誌 §6
+}
+JOIN_POINTS = {  # 設計 7.2、第一季設計 5.1
+    "guan": {"changshe", "wan_city", "luzhi_camp"},
+    "huang": {"huangjin_camp", "julu_altar", "nanyang_huangjin_camp"},
+    "haoqiang": {"zhuo_militia_hall", "cao_manor", "haozu_fort"},
+}
+
+
+def test_figures_stand_where_the_design_puts_them(content):
+    assert {cid: content.characters[cid].talk_at for cid in FIGURE_PLACES} == FIGURE_PLACES
+
+
+def test_each_faction_joins_at_three_places(content):
+    assert {f.id: set(f.join_at) for f in content.scenario.factions} == JOIN_POINTS
+
+
+def test_meeting_yuanshao_happens_where_he_now_stands(content):
+    assert content.events["meet_yuanshao"].locations == ["dajiangjun_fu"]

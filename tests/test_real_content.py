@@ -119,15 +119,15 @@ def test_start_location_has_no_enemies(content):
     assert content.locations[content.scenario.start_location].enemies == []
 
 
-# ── 人物誌：15 位黃巾之亂人物 ─────────────────────────────
+# ── 人物誌：18 位黃巾之亂人物 ─────────────────────────────
 
 
 FORMER_RECRUITABLE = ["caocao", "liubei", "guanyu", "zhangfei", "sunjian", "yuanshao", "taoqian"]
 
 
-def test_all_fifteen_historical_figures_are_locked(content):
-    """第一季設計第一節：大勢人物這一季都不開放招募。"""
-    assert len(content.characters) == 15
+def test_all_eighteen_historical_figures_are_locked(content):
+    """第一季設計第一節：大勢人物這一季都不開放招募（人物誌補遺加了波才、張曼成、趙弘，共 18 位）。"""
+    assert len(content.characters) == 18
     assert all(ch.kind == "locked" for ch in content.characters.values())
 
 
@@ -345,7 +345,7 @@ def test_season_one_tells_the_dialogue_model_when_it_is(content):
 
 def test_every_figure_has_an_audience_threshold(content):
     figures = {cid: ch.audience_fame for cid, ch in content.characters.items() if ch.deep_interaction}
-    assert len(figures) == 15 and all(fame > 0 for fame in figures.values())
+    assert len(figures) == 18 and all(fame > 0 for fame in figures.values())
     assert figures["liubei"] < figures["caocao"] < figures["yuanshao"] < figures["luzhi"] < figures["huangfusong"] < figures["zhangjiao"]
 
 

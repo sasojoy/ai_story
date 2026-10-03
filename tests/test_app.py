@@ -703,8 +703,9 @@ DIALOGUE_TURN = companion_agent.CompanionTurn(
 
 
 def _stand_by_a_figure(game):
-    """站到正式內容裡張梁所在的地點，有他的結識旗標所以見得到；福緣設成已領，交遊不會先觸發福緣。"""
-    game.state.player.location = "yingchuan_wilds"
+    """站到正式內容裡張梁所在的地點（廣宗；張角也在那裡，但名望不到見不到，交遊會找張梁），有他的結識旗標所以見得到；
+    福緣設成已領，交遊不會先觸發福緣。"""
+    game.state.player.location = "guangzong"
     game.state.player.flags.add("結識:zhangliang")
     game.state.player.fortune = True
     return [o.id for o in game.options()]
