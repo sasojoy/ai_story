@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import argparse
 import io
+import os
 import random
 import shutil
 import sys
@@ -51,7 +52,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")  # 不包的話印 ✔ 會噴 cp950
 
-from tianxia import bot, companion_agent, craft, materials  # noqa: E402
+from tianxia import bot, companion_agent, craft, database, materials  # noqa: E402
 from tianxia.content import load_content  # noqa: E402
 from tianxia.engine import Game  # noqa: E402
 from tianxia.ollama_client import OllamaClient  # noqa: E402
@@ -237,11 +238,20 @@ def fake_structured(self, messages, response_model, **kwargs):
     return response_model()
 
 
-def play(content, seed: int, world_dir: Path, *, no_craft=False, no_train=False, allow_recraft=False) -> FunLog:
-    """用隨機機器人（＝什麼都不知道的新玩家）跑完一整季，回傳好玩度紀錄。"""
+def play(content, seed: int, world_dir: Path, **flags) -> FunLog:
+    """用隨機機器人（＝什麼都不知道的新玩家）跑完一整季，回傳好玩度紀錄。
+
+    資料庫開在 world_dir 底下的暫存檔；季末結算榜單時沒指定資料庫就開預設的那個（saves/tianxia.db），
+    所以跑的這段把預設資料庫也用環境變數指到同一個暫存檔，不碰真資料（照 sim_server_bots.py 的做法）。"""
+    db_path = world_dir / "tianxia.db"
+    with mock.patch.dict(os.environ, {database.ENV_VAR: str(db_path)}):
+        return _play(content, seed, db_path, **flags)
+
+
+def _play(content, seed: int, db_path: Path, *, no_craft=False, no_train=False, allow_recraft=False) -> FunLog:
     log = FunLog()
     rng = random.Random(seed)
-    store = open_world(world_dir / "tianxia.db")
+    store = open_world(db_path)
     game = Game.new(content, f"新玩家{seed}", random.Random(seed), store)
     # 遠端新增了「管理者開季」：新世界停在籌備中，沒開季的話選單只有一個 disabled 的
     # 「賽季籌備中」，什麼都做不了（這支腳本第一次跑就是全 0 分，原因就是這個）。
@@ -423,6 +433,7 @@ def main() -> None:
             note = "比狀態之間的差距還大，單一 seed 不能用來下結論" if spread > gap else "小於狀態之間的差距"
             print(f"種子之間的落差：{spread:.0f} 分（狀態之間 {gap:.0f} 分）——{note}")
     finally:
+        database.close_all()  # 不先關連線，Windows 刪不掉暫存資料夾（ignore_errors 會把失敗吞掉，資料夾就留在那裡）
         shutil.rmtree(tmp, ignore_errors=True)
 
 

@@ -10,6 +10,7 @@ from conftest import at
 from tianxia import atlas, battle_instance, companion_agent, roster
 from tianxia.characters import open_characters
 from tianxia.engine import Game, Option
+from tianxia.journal import WORLD_NEWS
 from tianxia.state import BotProfile
 from tianxia.sqlite_world import SqliteWorldStore, open_world
 
@@ -457,6 +458,110 @@ def test_every_action_takes_the_cross_program_action_lock(game, monkeypatch):
     assert not hasattr(app, "ACT_LOCK")
 
 
+# ── 資料庫是唯一的真實來源：動作出錯撤回、同一角色開兩個分頁（線上架構設計 5.1）────────────────
+
+
+@pytest.mark.parametrize("next_step", ["act", "tick"])
+def test_a_failed_action_does_not_leave_its_changes_for_the_next_save(game, next_step):
+    """動作中途丟例外時資料庫整筆撤回，但 Gradio session 裡的 Game 已經被就地改過：下一個動作（包括每十秒的
+    計時器）不能把那份做到一半的狀態存回去。"""
+    app.act(game, lambda g: None)  # 角色先進資料庫
+    before = game.state.player.stats["silver"]
+
+    def broken(g):
+        g.state.player.stats["silver"] = 4242
+        g.state.player.team.append("zhangliang")
+        raise RuntimeError("動作中途出錯")
+
+    with pytest.raises(RuntimeError):
+        app.act(game, broken)
+    assert open_characters().load("測試").player.stats["silver"] == before  # 資料庫撤回了
+    if next_step == "act":
+        app.act(game, lambda g: None)
+    else:
+        app.tick_handler(game, None)
+    stored = open_characters().load("測試").player
+    assert stored.stats["silver"] == before and stored.team == []
+    assert game.state.player.stats["silver"] == before and game.state.player.team == []
+
+
+def test_a_failed_menxia_action_does_not_leave_its_changes_for_the_next_save(game):
+    app.act(game, lambda g: None)
+
+    def broken(g):
+        g.state.player.team.append("zhangliang")
+        raise RuntimeError("動作中途出錯")
+
+    with pytest.raises(RuntimeError):
+        app._menxia_act(game, broken, None)
+    app._menxia_act(game, lambda g: None, None)
+    assert open_characters().load("測試").player.team == [] and game.state.player.team == []
+
+
+def test_two_tabs_of_one_character_do_not_overwrite_each_other(game):
+    """同一個角色開兩個分頁：A 做了動作並存檔，B 接著動作之前先重讀，不會把 A 的改動蓋回去。"""
+    app.act(game, lambda g: None)
+    tab_b = app.open_game("測試")
+    app.act(game, lambda g: g.state.player.stats.__setitem__("silver", 777))
+    app.act(tab_b, lambda g: None)
+    assert open_characters().load("測試").player.stats["silver"] == 777
+    assert tab_b.state.player.stats["silver"] == 777
+
+
+def test_a_render_only_handler_shows_what_the_database_says(game):
+    """只重畫、不存檔的處理函式也先重讀：別的分頁改了角色，這個分頁畫出來的是資料庫裡的樣子；
+    state.world 也要重新指向共用賽季，不然畫面讀到的是空的賽季。"""
+    app.act(game, lambda g: None)
+    tab_b = app.open_game("測試")
+    app.act(tab_b, lambda g: g.state.player.stats.__setitem__("xinde", 321))
+    out = app.open_menxia(game)
+    assert any(isinstance(x, str) and x.startswith("**心得** 321") for x in out)
+    assert game.state.world.storyline  # 指到共用賽季了
+
+
+@pytest.mark.parametrize("handler", ["act", "tick"])
+@pytest.mark.parametrize("stale", ["location", "pending_event"])
+def test_a_stored_character_with_stale_references_is_cleaned_and_not_bricked(save_dir, stale, handler):
+    """內容改版後，存檔裡可能留著已經不存在的地點、事件。Game 建構時會清掉，但進鎖重讀換進來的是資料庫那一列：
+    重讀之後也要再清一次，不然這個角色在每一個處理函式（包括十秒一次的計時器）都會當機。"""
+    old = Game.new(app.CONTENT, "老玩家")
+    if stale == "location":
+        old.state.player.location = "no_such_place"
+    else:
+        old.state.pending_event = "no_such_event"
+    open_characters().save(old.state)
+    game = app.open_game("老玩家")
+    if handler == "act":
+        app.act(game, lambda g: None)
+    else:
+        app.tick_handler(game, None)
+    stored = open_characters().load("老玩家")
+    assert stored.player.location in app.CONTENT.locations
+    assert stored.pending_event is None
+
+
+def test_the_sync_done_while_preparing_a_dialogue_is_saved(game):
+    """對話備料的 A 段會同步時間（共用賽季的推進照樣寫進資料庫，江湖大事也寫進這個角色的江湖紀錄）：A 段結束要把角色存起來，
+    不然 C 段的 act 一重讀，A 段同步出來的紀錄就被資料庫裡舊的那一份蓋掉了。"""
+    app.act(game, lambda g: None)
+    later = game.state.last_real + 200 * 3600  # 實測：這麼久之後同步會冒出「江湖大事」
+    with mock.patch("app.time.time", return_value=later):
+        app.prepare_dialogue(game, "act:socialize")
+        stored = open_characters().load("測試")
+        assert stored.model_dump_json() == game.state.model_dump_json()  # A 段結束，資料庫與記憶體一致
+        assert any(e.title == WORLD_NEWS for e in stored.journal)
+        app.act(game, lambda g: None)  # C 段的 act 重讀
+    assert any(e.title == WORLD_NEWS for e in game.state.journal)
+
+
+def test_a_game_that_was_never_saved_keeps_its_in_memory_character(game):
+    """剛建好、還沒存過的角色資料庫裡沒有：重讀不能把它換成空的。"""
+    assert not open_characters().exists("測試")
+    out = app.open_menxia(game)
+    assert any(isinstance(x, str) and x.startswith("**心得** 0") for x in out)
+    assert game.state.player.name == "測試"
+
+
 def test_open_game_refuses_a_name_that_belongs_to_a_server_bot(save_dir):
     g = app.open_game("周泰安")
     g.state.player.bot = BotProfile(personality="普通", seed=1, faction="guan", season_number=1)
@@ -795,7 +900,10 @@ def test_a_changed_option_list_while_generating_falls_back_to_generating_in_the_
     ids = [o.id for o in game.options()]
 
     def generate(client, messages):
-        game.state.player.last_offered_dialogue["zhangliang"] = [["換了一句話", "告辭"], ["尋常寒暄", "尋常寒暄"]]
+        # 資料庫是唯一的真實來源（進鎖先重讀）：生成的那十秒裡另一個請求（連點兩下、第二個分頁）存了新的選單
+        other = open_characters().load("測試")
+        other.player.last_offered_dialogue["zhangliang"] = [["換了一句話", "告辭"], ["尋常寒暄", "尋常寒暄"]]
+        open_characters().save(other)
         return DIALOGUE_TURN
 
     fresh = companion_agent.CompanionTurn(

@@ -160,7 +160,7 @@ def test_lu_bei_faction_all_gather_at_zhuo_county(content):
 def test_nobody_is_recruitable_anywhere(content):
     from tianxia.sqlite_world import open_world
 
-    world = open_world()  # 讀取用不到磁碟：.read() 找不到檔案時回傳空狀態
+    world = open_world()  # 預設的資料庫是測試用的暫存檔，裡面什麼都還沒有：.read() 回傳空狀態
     for loc_id in content.locations:
         assert roster.recruitable_here(content, world, loc_id) == [], loc_id
 

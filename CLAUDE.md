@@ -8,6 +8,9 @@
 - `app.py`：Gradio 介面，只負責顯示與接線。
 - `tianxia/encounter.py`：單次判定的遭遇戰（`sanguo-companions` 合併後取代了舊的 `battle.py` 三對三全自動戰鬥，那個檔案已經不存在了）；只處理數字，不 import 內容模型。
 - `tianxia/battle_instance.py`：全服即時多人戰鬥（黃巾決戰）的純邏輯——集結選陣營、逐幕逐回合鎖步、回合結算、機器人補位。資料存在共用世界狀態的 `active_battle`。
+- `tianxia/database.py`：SQLite 資料庫（預設 `saves/tianxia.db`，環境變數 `TIANXIA_DB` 可改；線上版與開發版各用各的）：連線、資料表、交易。一個動作＝一筆交易（`BEGIN IMMEDIATE`，出錯整個撤回），同一個執行緒可以巢狀（交易可以巢狀；`WorldStateStore.mutate` 不行，內層寫的會被外層蓋掉、直接丟 `RuntimeError`，見 `world_state.py`）；資料庫結構版本記在 `PRAGMA user_version`。
+- `tianxia/world_state.py`：全服狀態的資料模型與存取介面 `WorldStateStore`（Protocol）；實作是 `tianxia/sqlite_world.py::SqliteWorldStore`（`open_world()`）。小的整份覆寫，會長大的（傳聞、江湖史、自創武學、煉製配方、投靠名冊、決戰回合）一筆一筆加；換季不刪資料，江湖史跨季保留。
+- `tianxia/characters.py`：角色存檔（`CharacterStore`、`open_characters()`），一個角色一列，**不含賽季**（`GameState.world` 只在記憶體）；名號比對不分大小寫。
 - `tianxia/team.py`：門下、內力、心得升級與散功、武學配置；把人物與武學轉成戰鬥單位；檢定由誰出手；戰前勝算（固定種子模擬 40 場，依完整陣容快取）。
 - `tianxia/battlelog.py`：戰鬥紀錄（`GameState.battles`，最近 20 場）、關鍵時刻、場景戰鬥卡片與戰報分頁的文字。
 - `tianxia/skillview.py`：「門下」頁面的說明文字（武學白話說明、人物卡、武學欄、武學庫）；只讀狀態、不改數值，說法以 `battle.py` 的實際規則為準。
@@ -16,28 +19,28 @@
 - `tianxia/server_bots.py`：伺服器假人的名號、個性、作息（純函式，不碰檔案也不 import 引擎）。
 - `tianxia/bot_policy.py`：假人照陣營目標做一個動作，只走 `Game` 的公開行動，不呼叫 LLM。
 - `tianxia/bot_runner.py`：假人程式的核心，每一輪補人（先叫醒退隱的、沒有才新建）、叫醒、讓在線的假人做事。
-- `tianxia/fileio.py`：Windows 檔案被占用時的重試（存檔、全服紀錄共用）。
 - `run_bots.py`：假人程式的入口，每隔 `bot_tick_seconds` 呼叫一次 `BotRunner.tick()`，跟 `app.py` 同時開著。
 
 ## 原則
 - 數值全部由規則引擎決定，執行時不接 LLM。
+- 引擎不讀電腦時鐘：現在時間一律由 `Game.sync(now)`（設定 `Game.now`）或明確的 `now` 參數傳入（線上架構設計第四節）。`tianxia/` 裡只有 `database.py`（等寫入權的期限）、`accounts.py` 與 `bot_runner.py`（注入的 `clock`）碰時間。
 - 武學、人物名稱必須原創，不用金庸等作品的專有名詞。
 - 檢定分兩種：`Check.by` 為 `"team"`（預設，派出戰隊伍中該屬性最高的人）或 `"self"`（修行類，只看本人）。
 - 改內容後跑 `pytest`：`tests/test_real_content.py` 會讓機器人玩完整季，抓出內容錯誤。
-- 賽季由管理者開：全服第一次開局停在「籌備中」，管理者（`content/config.json` 的 `admins` 裡的角色名號）在設定頁按「開季」；季結束進入「休季」，管理者按「開啟下一季」。換季時同伴全部重獲自由、自創武學名字全部釋出、煉製配方清空（大家重新發現、首創者重新認定）、天機 +1（同名長出不同武學，煉製也一樣）。測試內容用 `auto_open_first_season: true` 直接開季。升級前就存在的 `saves/world/state.json` 沒有「已開季」的紀錄，升級後會停在籌備中，管理者按一次「開季」即可；如果那一季在升級前就已經結束，管理者先按「開季」、再按「開啟下一季」。管理者的角色要先用 `scripts/set_password.py` 綁到帳號上，只有登入那個帳號的人進得了；玩家不能取管理者的名號。
+- 賽季由管理者開：全服第一次開局停在「籌備中」，管理者（`content/config.json` 的 `admins` 裡的角色名號）在設定頁按「開季」；季結束進入「休季」，管理者按「開啟下一季」。換季時同伴全部重獲自由、自創武學名字全部釋出、煉製配方清空（大家重新發現、首創者重新認定）、天機 +1（同名長出不同武學，煉製也一樣）。測試內容用 `auto_open_first_season: true` 直接開季。線上架構第 1 期起資料都在資料庫；舊的 `saves/*.json`、`saves/world/state.json`、`saves/accounts/accounts.json` 不再讀取，換版後從零開始（企劃者 2026-10-03 決定不搬）。管理者的角色用 `scripts/set_password.py <帳號> --character <名號>` 建立並綁到帳號上（角色不存在時直接建立），只有登入那個帳號的人進得了；玩家不能取管理者的名號。
 - 陣營（`content/scenario.json` 的 `factions`）：玩家開局是散人，在陣營的 `join_at` 地點按「投靠」，或拜入陣營名下的門派；劇本有分陣營時，全服決戰只能站自己陣營那邊，散人與不在交戰雙方的陣營不能參戰，只在一旁觀戰、照常遊玩。狀態列的名號後面顯示門派、陣營（兩者都有時寫成「門派・陣營」），都沒有才是散人。
 - 伺服器假人（`docs/superpowers/specs/2026-10-02-伺服器假人-design.md`）跟真人完全一樣、看不出來：「是假人」只記在存檔的 `PlayerState.bot`，任何畫面、榜單、戰鬥名單、主控台輸出都不能顯示或透露；假人只透過 `Game` 的公開行動做事，不呼叫 LLM。
-- `app.py` 與 `run_bots.py` 是兩個程式、共用同一份全服紀錄與存檔：每次「補算時間＋做動作＋存檔」都要包在 `WorldStateStore.action_lock()` 裡（伺服器等到拿到為止，假人等不到就跳過）。人物對話例外：先拿鎖準備、在鎖外生成、再拿鎖確認狀態沒變才套用（`app.prepare_dialogue`、`Game.dialogue_request`、`Game.choose(prepared=...)`）。
+- `app.py` 與 `run_bots.py` 是兩個程式、共用同一個資料庫：每次「補算時間＋做動作＋存檔」都要包在 `WorldStateStore.action_lock()` 裡（一筆 SQLite 寫入交易；伺服器等到拿到為止，假人等不到就跳過）。人物對話例外：先拿鎖準備、在鎖外生成、再拿鎖確認狀態沒變才套用（`app.prepare_dialogue`、`Game.dialogue_request`、`Game.choose(prepared=...)`）。
 - 投靠要確認一次（先按 `faction:<id>`，再按 `faction:confirm`）；陣營人數看全服投靠名冊（`WorldStateStore.faction_counts()`）。
 - 管理者（試玩期是 `Rayal`）在設定頁可以立刻開戰、觸發大勢門檻或世界事件、推動大勢線；效果跟自然發生一樣（`Game.admin_start_battle`／`admin_fire`／`admin_push_trend`），也可以幫玩家重設密碼。管理者的角色要先用 `scripts/set_password.py` 綁到帳號上。
-- 登入用帳號密碼（`tianxia/accounts.py`，帳號檔在 `saves/accounts/accounts.json`；設計見 `docs/superpowers/specs/2026-10-03-帳號密碼登入-design.md`）：帳號和名號分開，一個帳號一個角色；帳號不存在與密碼錯、名號被真人或假人用掉，各自回同一句話，避免試出誰是假人。會改帳號檔或建立存檔的動作都包在行動鎖裡。
+- 登入用帳號密碼（`tianxia/accounts.py`；帳號在資料庫的 `accounts`、`logins` 表，帳號密碼是一種登入方式，封測的線上版不開、只留在開發與測試環境；設計見 `docs/superpowers/specs/2026-10-03-帳號密碼登入-design.md`）：帳號和名號分開，一個帳號一個角色；帳號不存在與密碼錯、名號被真人或假人用掉，各自回同一句話，避免試出誰是假人。會改帳號或建立角色的動作都包在同一筆交易裡。
 
 ## 指令
 - 執行：`.venv/Scripts/python.exe app.py`（http://127.0.0.1:7861）
 - 測試：`.venv/Scripts/python.exe -m pytest -q`
 - 伺服器假人：`.venv/Scripts/python.exe run_bots.py`（跟 `app.py` 同時開著）
 - 假人整季模擬：`.venv/Scripts/python.exe scripts/sim_server_bots.py --seasons 2`
-- 幫帳號設密碼（主機端）：`.venv/Scripts/python.exe scripts/set_password.py <帳號> [--character <名號>]`（密碼寫到 `.local/`，不印在畫面上）
+- 幫帳號設密碼（主機端）：`.venv/Scripts/python.exe scripts/set_password.py <帳號> [--character <名號>] [--db <資料庫檔>]`（角色不存在時直接建立；密碼寫到 `.local/`，不印在畫面上）
 - **好玩度量表**：`.venv/Scripts/python.exe scripts/fun_run.py --seeds 1 2 3`／`--calibrate`（見下面「好玩度量表」那節）
 
 ### 開發伺服器的啟動方式（這台機器上的慣例）
@@ -46,7 +49,7 @@
 公開連結出現。**引數一定要加 `-u`**（`python.exe -u app.py`）：stdout 導到檔案時 Python 會
 緩衝，沒有 `-u` 的話服務其實已經在聽 port、但 log 會一直是空的，等不到公開連結。要重啟時先 `netstat -ano | grep ":7861"` 找出真正在聽那個 port 的 PID
 （`Start-Process` 回傳的 PID 常常跟實際佔用 port 的不同），`taskkill //PID <pid> //F` 關掉
-再重新啟動。
+再重新啟動。`app.py` 與 `run_bots.py` 要開同一個資料庫：要用 `saves/tianxia.db` 以外的檔，兩個程式啟動前設同一個 `TIANXIA_DB`。
 
 ## 全服即時多人戰鬥（黃巾決戰）
 
