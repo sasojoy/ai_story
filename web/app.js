@@ -40,6 +40,7 @@
     main: null,
     mainKey: "",
     tab: "jianghu",
+    nowOpen: null, // 江湖頁「剛剛」展開的那一則（記內容本身）；換成新的一則就收回（A4）
     busy: false,
     menxia: null,
     message: "",
@@ -51,7 +52,9 @@
     craftLine: "",
     map: null,
     layer: "situation",
-    fitMap: true,
+    // 輿圖整張縮到螢幕寬（E2／FB-012）：手機上縮了地名只剩 5～6px、地點點不到，所以窄螢幕預設照原尺寸、
+    // 捲到選取的地點（afterPage()），寬螢幕才整張；「放大／縮小」照舊可以切
+    fitMap: !(window.matchMedia && window.matchMedia("(max-width: 767px)").matches),
     news: "reports",
     reports: null,
     reportOpen: false,
@@ -211,14 +214,21 @@
   }
 
   function afterPage() {
+    if (S.tab === "jianghu") {
+      // 「剛剛」收著卻其實放得下：拿掉底下的淡出與「展開全文」（A4）
+      const now = document.querySelector(".now.clamp");
+      const body = now && now.firstElementChild;
+      if (body && body.scrollHeight <= body.clientHeight + 1) now.classList.replace("clamp", "fits");
+    }
     if (S.tab === "map") {
       const wrap = document.querySelector(".map-wrap");
       const here = wrap && wrap.querySelector(`[data-loc="${CSS.escape(S.map?.selected || "")}"]`);
       if (wrap && here && !S.fitMap) {
+        // 地點的中心捲到視窗中間（E2：手機上預設不縮，一打開就要看到自己在哪）
         const box = here.getBoundingClientRect();
         const outer = wrap.getBoundingClientRect();
-        wrap.scrollLeft += box.left - outer.left - outer.width / 2;
-        wrap.scrollTop += box.top - outer.top - outer.height / 2;
+        wrap.scrollLeft += box.left + box.width / 2 - outer.left - outer.width / 2;
+        wrap.scrollTop += box.top + box.height / 2 - outer.top - outer.height / 2;
       }
     }
   }
@@ -257,17 +267,24 @@
   }
 
   // ── 江湖 ──
+  const nowMore = (open) => (open ? "收起 ▴" : "展開全文 ▾");
+
   function pageJianghu() {
     const m = S.main;
+    // 「剛剛」（A4）：預設只露出開頭幾行，太長的（例如新角色的開場故事）收著、點「展開全文」看完，不在卡片裡捲。
+    // 展開記在 S.nowOpen（記的是那一則本身），換成新的一則就自動收回；其實放得下的話 afterPage() 會拿掉收合
+    const expanded = S.nowOpen === m.latest;
     const now = m.card
       ? `<div class="card battle-card">${m.card}${m.latest || ""}
            ${m.card_id != null ? `<button class="linkish" data-act="report" data-id="${m.card_id}">看完整戰報 ›</button>` : ""}</div>`
-      : m.latest ? `<div class="now">${m.latest}</div>` : "";
+      : m.latest ? `<div class="now ${expanded ? "open" : "clamp"}">${m.latest}<button class="linkish now-more" data-act="now-more" aria-expanded="${expanded}">${nowMore(expanded)}</button></div>` : "";
     const free = m.free_text != null
       ? `<form class="free" id="free-form"><input class="input" name="text" maxlength="20" placeholder="${esc(m.free_text || "輸入你想做的事（20字內）")}"><button class="btn primary small" type="submit">送出</button></form>`
       : "";
-    // 走法切換：選單上有「前往」才出現（對話、事件、戰鬥的選單沒有）
-    const modes = m.options.some((o) => o.id.startsWith("move:"))
+    // 走法切換：選單上有「前往」才出現（對話、事件、戰鬥的選單沒有），緊貼在第一個「前往」上面——
+    // 它只管「前往」，放在整排選項最上面的話，第一屏就被它擠掉一個選項（A4）
+    const firstMove = m.options.findIndex((o) => o.id.startsWith("move:"));
+    const modes = firstMove >= 0
       ? `<div class="seg move-mode" role="group" aria-label="走法"><span aria-hidden="true">走法</span>${MOVE_MODES.map((x) => `
           <button class="${S.moveMode === x.id ? "on" : ""}" data-act="move-mode" data-mode="${x.id}" aria-pressed="${S.moveMode === x.id}">${x.name}</button>`).join("")}
         </div>`
@@ -277,8 +294,7 @@
       ${now}
       <section class="card scene">${m.scene}</section>
       ${free}
-      ${modes}
-      <div class="options">${m.options.map((o, i) => `
+      <div class="options">${m.options.map((o, i) => `${i === firstMove ? modes : ""}
         <button class="btn ${o.id.startsWith("move:") ? "go" : ""}" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}>
           <span class="k">${o.id.startsWith("move:") ? "→" : i + 1}</span><span>${esc(o.label)}</span>
         </button>`).join("")}
@@ -612,6 +628,17 @@
         case "choose": await choose(el, el.dataset.id); break;
         case "move-mode": await setMoveMode(el.dataset.mode); break;
         case "toggle-more": toggleMore(); break;
+        case "now-more": {
+          // 原地展開／收起，不重畫整頁（重畫會讓「剛剛」再播一次浮現動畫）
+          const box = el.closest(".now");
+          const open = !box.classList.contains("open");
+          S.nowOpen = open ? S.main.latest : null;
+          box.classList.toggle("open", open);
+          box.classList.toggle("clamp", !open);
+          el.textContent = nowMore(open);
+          el.setAttribute("aria-expanded", String(open));
+          break;
+        }
         case "sheet":
           S.sheet = true;
           render();
