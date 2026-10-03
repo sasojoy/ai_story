@@ -15,7 +15,7 @@
 from __future__ import annotations
 
 import random
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from contextlib import AbstractContextManager
 from typing import Literal, Protocol
 
@@ -250,6 +250,12 @@ class WorldStateStore(Protocol):
     def battle_rounds(self, record_id: int) -> list[BattleRoundRecord]:
         """這一場（BattleInstance.record_id）結算過的每一回合，照先後。BattleInstance.rounds 只放這次讀出來
         之後才結算、還沒寫進資料庫的回合，存檔後讀出來是空的；要看以前的回合查這裡。"""
+        ...
+
+    def ended_battles(self, exclude: Collection[int] = ()) -> list[tuple[int, BattleInstance]]:
+        """收場的決戰（phase 是 ended），不分季別、照先後，每一場連同它是第幾季打的：（季別, 戰鬥），戰鬥帶著
+        record_id。決戰的結果常常就把季收掉，所以參戰者休季、下一季才回來也要補得到（FB-027，見
+        Game._deliver_battle_results）。exclude 裡的流水號不讀（已經補過、或看過不是自己參戰的）。只讀。"""
         ...
 
     # ── 同伴進度與招募 ──

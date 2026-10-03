@@ -613,6 +613,25 @@ def test_each_resolved_round_is_one_row(store):
     assert [r.trend_after for r in store.battle_rounds(battle.record_id)] == [51, 52]
 
 
+def test_ended_battles_lists_every_finished_battle_with_its_season(store, content):
+    """FB-027：收場的決戰不分季別讀得回來（決戰常常把季收掉，下一季才回來的參戰者也要補送），
+    每一場帶著第幾季與流水號；沒打完就被換季清掉的不算；exclude 裡的不讀。"""
+    content.config.auto_open_first_season = True
+    store.seed_first_season(content)
+    first = store.start_battle(_battle_definition(), now=0.0)
+    store.mutate_battle(lambda b: (setattr(b, "phase", "ended"), setattr(b, "outcome_title", "甲方勝")))
+    unfinished = store.start_battle(_battle_definition(), now=1.0)  # 打到一半就換季
+    store.mutate_season(lambda season: setattr(season, "ended", True))
+    store.next_season(content, now=2.0)
+    second = store.start_battle(_battle_definition(), now=3.0)
+    store.mutate_battle(lambda b: setattr(b, "phase", "ended"))
+    found = store.ended_battles()
+    assert [(season, battle.record_id) for season, battle in found] == [(1, first.record_id), (2, second.record_id)]
+    assert found[0][1].outcome_title == "甲方勝"
+    assert unfinished.record_id not in {battle.record_id for _, battle in found}
+    assert [battle.record_id for _, battle in store.ended_battles(exclude=[first.record_id])] == [second.record_id]
+
+
 def test_a_battle_stays_on_record_after_the_next_season(store, content):
     content.config.auto_open_first_season = True
     store.seed_first_season(content)

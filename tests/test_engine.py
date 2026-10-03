@@ -6,6 +6,7 @@ import pytest
 
 from conftest import FixedRandom, at, walk_to
 from tianxia import atlas, battle_instance, companion_agent, flavor, rules, skillview
+from tianxia.characters import open_characters
 from tianxia.engine import Game, Option
 from tianxia.martial_arts import MartialArt
 from tianxia.models import Location
@@ -1539,6 +1540,159 @@ def test_battle_ending_falls_back_to_normal_gameplay_on_the_next_render(content,
     game.world.mutate_battle(lambda b: setattr(b, "phase", "ended"))
     assert game._battle_status() is None
     assert ids(game)[0] == "act:explore"
+
+
+# ── 決戰的結果送到每個參戰者手上（FB-027：下次同步時補）──────────────
+
+
+def _three_round_showdown(content, trend_delta=None):
+    """劇本分陣營、一幕三回合（整場 3 回合；穩紮穩打只推 1，不會提前收場），保底結果官軍大勝。"""
+    _install_factions(content)
+    definition = _install_battle_def(content)
+    definition.rounds_per_act = 3
+    definition.outcomes[0] = definition.outcomes[0].model_copy(update={"trend_delta": trend_delta or {"kou": -20}})
+    return definition
+
+
+def _fighter(content, game, name, faction):
+    """跟沈浪同一個全服世界的另一位玩家（自己的一份 Game），已經投靠 faction。"""
+    other = Game.new(content, name, rng=random.Random(1), world=game.world)
+    other.state.player.faction = faction
+    return other
+
+
+def _fight_to_the_end(game, definition, now):
+    """沈浪每回合自己出手，其他還在場上的人逾時由系統代選，一路打到收場；回傳收場那一刻的時間。"""
+    while True:
+        with at(game, now):
+            game.options()  # 推進：集結關閉，或上一回合逾時、代選、結算
+            battle = game.world.get_battle()
+            if battle.phase == "ended":
+                return now
+            if game.state.player.name not in battle.round.pending_actions:
+                game.choose("battle:act:safe")
+        now = game.world.get_battle().round.opened_real + definition.round_seconds
+
+
+def _showdown_entries(game):
+    return [e for e in game.state.journal if "測試決戰" in e.title]
+
+
+def test_every_fighter_gets_the_showdown_in_their_journal_and_battle_reports(content, game):
+    definition = _three_round_showdown(content)
+    game.state.player.faction = "guan"
+    fallen = _fighter(content, game, "乙", "huang")
+    watcher = Game.new(content, "丙", rng=random.Random(2), world=game.world)  # 散人：打不了，只能觀戰
+    game.world.start_battle(definition, now=0.0)
+    with at(game, 0.0), at(fallen, 0.0):
+        game.choose("battle:join:guan")
+        fallen.choose("battle:join:huang")
+    game.world.mutate_battle(lambda b: setattr(b.participants["乙"], "neili", 8.0))  # 穩紮穩打扣 5：第 2 回合倒下
+    start = definition.muster_seconds + 1
+    for i in range(3):
+        with at(game, start + i), at(fallen, start + i):
+            game.choose("battle:act:safe")
+            if i < 2:
+                fallen.choose("battle:act:safe")  # 兩人都出手了：這一回合結算
+    assert game.world.get_battle().phase == "ended"
+
+    entry = game.state.journal[0]  # 收場那一下出手的人當場就有
+    assert (entry.title, entry.tag) == ("測試決戰・官軍大勝", "你站在官軍")
+    assert entry.lines == ["官軍獲勝。", "你出手 3 回合"]
+    assert entry.changes == ["寇亂 -20"]
+    report = game.state.battles[0]
+    assert report.kind == "showdown" and entry.battle_id == report.id
+    assert (report.opponent, report.side, report.tier) == ("黃巾", "官軍", "官軍大勝")
+    assert game.shows_battle_card()  # 「剛剛」放這一場的卡片，連得到完整戰報
+    assert "威力" not in game.battle_detail(report.id)
+
+    assert _showdown_entries(fallen) == []  # 倒下的那位：下次同步時才補
+    fallen.sync(start + 10)
+    mine = fallen.state.journal[0]
+    assert (mine.title, mine.tag) == ("測試決戰・官軍大勝", "你站在黃巾")
+    assert mine.lines == ["官軍獲勝。", "你出手 2 回合", "你在第 2 回合倒下，轉為觀戰"]
+    assert fallen.state.battles[0].kind == "showdown" and fallen.state.battles[0].opponent == "官軍"
+
+    watcher.sync(start + 10)
+    assert _showdown_entries(watcher) == [] and watcher.state.battles == []
+
+    for g in (game, fallen):  # 再同步一次不會多寫
+        g.sync(start + 20)
+        assert len(_showdown_entries(g)) == 1 and len(g.state.battles) == 1
+
+
+def test_an_offline_fighter_gets_the_showdown_on_the_next_sync_without_the_timed_out_rounds(content, game):
+    """乙出了第 1 回合就下線（角色只在資料庫裡）：後兩回合逾時由系統代選，不算他自己出手；回來第一次同步就補到。"""
+    definition = _three_round_showdown(content)
+    game.state.player.faction = "guan"
+    away = _fighter(content, game, "乙", "huang")
+    game.world.start_battle(definition, now=0.0)
+    with at(game, 0.0), at(away, 0.0):
+        game.choose("battle:join:guan")
+        away.choose("battle:join:huang")
+    start = definition.muster_seconds + 1
+    with at(game, start), at(away, start):
+        game.choose("battle:act:safe")
+        away.choose("battle:act:safe")
+    open_characters().save(away.state)
+    end = _fight_to_the_end(game, definition, start + 1)
+    assert "你出手 3 回合" in game.state.journal[0].lines
+
+    back = Game(content, open_characters().load("乙"), rng=random.Random(3), world=game.world)
+    assert _showdown_entries(back) == []  # 讀回來還沒同步：還沒補
+    back.sync(end + 10)
+    entry = back.state.journal[0]
+    assert entry.title == "測試決戰・官軍大勝" and entry.changes == ["寇亂 -20"]
+    assert "你出手 1 回合" in entry.lines and not any("倒下" in line for line in entry.lines)
+    assert back.state.battles[0].kind == "showdown"
+
+
+def _showdown_ends_the_season(content, game):
+    """寇亂 30 → 80 跨過收季的門檻：決戰收場、季的時鐘再走一個鐘頭，季就收了。乙加入之後就下線。回傳那時的時間。"""
+    definition = _three_round_showdown(content, trend_delta={"kou": 50})
+    game.state.player.faction = "guan"
+    away = _fighter(content, game, "乙", "huang")
+    game.world.start_battle(definition, now=0.0)
+    with at(game, 0.0), at(away, 0.0):
+        game.choose("battle:join:guan")
+        away.choose("battle:join:huang")
+    open_characters().save(away.state)
+    end = _fight_to_the_end(game, definition, definition.muster_seconds + 1)
+    with at(game, end):
+        game.advance(HOUR)
+    assert game.world.season_phase() == "resting"
+    return end
+
+
+def test_a_fighter_back_during_the_off_season_gets_the_showdown_that_ended_it(content, game):
+    end = _showdown_ends_the_season(content, game)
+    back = Game(content, open_characters().load("乙"), rng=random.Random(3), world=game.world)
+    back.sync(end + 10)
+    assert ids(back) == ["season:resting"]
+    entry = back.state.journal[0]
+    assert entry.title == "測試決戰・官軍大勝" and entry.changes == ["寇亂 +50"]  # 還是這一季打的：大勢照常是數值變化
+    assert "你出手 0 回合" in entry.lines
+    open_characters().save(back.state)
+
+    game.world.next_season(content, now=end + 20)  # 補過的那一場，到了下一季不會再補一次
+    again = Game(content, open_characters().load("乙"), rng=random.Random(4), world=game.world)
+    again.sync(end + 30)
+    assert _showdown_entries(again) == [] and again.state.battles == []
+
+
+def test_a_fighter_first_back_next_season_gets_last_seasons_showdown_marked_with_its_season(content, game):
+    end = _showdown_ends_the_season(content, game)
+    game.world.next_season(content, now=end + 20)
+    back = Game(content, open_characters().load("乙"), rng=random.Random(3), world=game.world)
+    back.sync(end + 30)
+    entry = back.state.journal[0]
+    assert (entry.title, entry.tag) == ("第 1 季・測試決戰・官軍大勝", "你站在黃巾")
+    assert entry.changes == []  # 上一季的大勢不放進數值變化：那看起來像剛發生在你身上
+    assert "（第 1 季）寇亂 +50" in entry.lines
+    report = back.state.battles[0]
+    assert report.kind == "showdown" and report.location.startswith("第 1 季・") and report.changes == []
+    back.sync(end + 40)
+    assert len(_showdown_entries(back)) == 1 and len(back.state.battles) == 1
 
 
 # ── 決戰要人在那個大區才打得到（地圖擴充設計第六節）──────────────

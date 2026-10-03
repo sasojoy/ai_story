@@ -437,6 +437,53 @@ def test_eliminated_participant_is_excluded_from_the_next_rounds_requirement(def
     assert bi.round_is_complete(instance)  # 甲已出局，不用等他
 
 
+# FB-027：參戰者自己的戰報要寫出手幾回合、第幾回合倒下；逾時被系統代選的回合不算自己出手。
+
+
+def test_each_resolved_round_a_fighter_chose_for_themselves_counts_as_acting(definition):
+    instance = _active_battle(definition)
+    for _ in range(2):
+        bi.submit_action(instance, "甲", "safe")
+        bi.submit_action(instance, "乙", "safe")
+        bi.resolve_round(instance, definition, random.Random(0))
+    assert instance.participants["甲"].acted_rounds == 2 and instance.participants["乙"].acted_rounds == 2
+
+
+def test_a_timed_out_round_picked_by_the_system_does_not_count_as_acting(definition):
+    instance = _active_battle(definition)
+    bi.submit_action(instance, "甲", "safe")
+    bi.fill_timed_out_actions(instance, definition)  # 乙沒選，系統代選
+    bi.resolve_round(instance, definition, random.Random(0))
+    assert instance.participants["甲"].acted_rounds == 1
+    assert instance.participants["乙"].acted_rounds == 0
+    bi.submit_action(instance, "乙", "safe")  # 下一回合乙自己選了：照算
+    bi.submit_action(instance, "甲", "safe")
+    bi.resolve_round(instance, definition, random.Random(0))
+    assert instance.participants["乙"].acted_rounds == 1
+
+
+def test_a_fighter_who_falls_remembers_the_round(definition):
+    instance = _active_battle(definition)
+    bi.submit_action(instance, "甲", "safe")
+    bi.submit_action(instance, "乙", "safe")
+    bi.resolve_round(instance, definition, random.Random(0))
+    bi.submit_action(instance, "甲", "reckless")  # 氣血 95，扣 200：第 2 回合倒下
+    bi.submit_action(instance, "乙", "safe")
+    bi.resolve_round(instance, definition, random.Random(0))
+    fallen, standing = instance.participants["甲"], instance.participants["乙"]
+    assert fallen.eliminated and fallen.fell_round == 2
+    assert fallen.acted_rounds == 2  # 倒下的那一回合也是自己出的手
+    assert standing.fell_round is None
+
+
+def test_a_battle_saved_before_these_counts_still_loads(definition):
+    old = bi.BattleParticipant(name="甲", faction="guan", neili=100.0, neili_cap=100.0).model_dump()
+    for field in ("acted_rounds", "fell_round"):
+        old.pop(field)
+    loaded = bi.BattleParticipant.model_validate(old)
+    assert loaded.acted_rounds == 0 and loaded.fell_round is None
+
+
 def test_mitigated_by_power_reduces_damage_for_a_powerful_participant(definition):
     instance = _active_battle(definition)
     instance.participants["甲"].power = 100

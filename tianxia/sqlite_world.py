@@ -6,7 +6,8 @@
 - 傳聞（`rumors` 表）與江湖史（`chronicle` 表）一則一列：寫的時候只新增還沒有流水號的；讀全服狀態時不讀回來，
   只有 get_season() 讀（給畫面看）。江湖史跨季保留。
 - 目前的決戰在 `battles` 表（一場一列、整份覆寫，`world.active_battle_id` 指向它），結算過的回合在
-  `battle_rounds` 表一回合一列（只寫不讀回）。換季、開新的一場時舊的那一場留著。
+  `battle_rounds` 表一回合一列（只寫不讀回）。換季、開新的一場時舊的那一場留著；收場的那幾場給參戰者補送戰報
+  （ended_battles）。
 - 自創武學（`skills`）、煉製配方（`recipes`）、投靠名冊（`faction_rolls`）一列一筆、記著第幾季：
   換季不用清空，新的一季自然是空的，上一季的留著。
 - 每個會寫的方法自己是一筆交易；呼叫端已經在 action_lock() 裡時，併進那一筆（見 database.Database）。
@@ -14,7 +15,7 @@
 from __future__ import annotations
 
 import random
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from contextlib import AbstractContextManager
 from pathlib import Path
 from sqlite3 import Connection, Row
@@ -398,6 +399,13 @@ class SqliteWorldStore:
                 "SELECT id, data FROM battle_rounds WHERE battle_id = ? ORDER BY id", (record_id,),
             ).fetchall()
         return [BattleRoundRecord.model_validate_json(row["data"]).model_copy(update={"id": row["id"]}) for row in rows]
+
+    def ended_battles(self, exclude: Collection[int] = ()) -> list[tuple[int, BattleInstance]]:
+        """先只讀流水號與季別，exclude 裡的不解整份資料（一場的參戰者名單可能很長，而每個人每次同步都會問）。"""
+        skip = set(exclude)
+        with self.db.snapshot() as conn:
+            rows = conn.execute("SELECT id, season FROM battles WHERE phase = 'ended' ORDER BY id").fetchall()
+            return [(row["season"], self._load_battle(conn, row["id"])) for row in rows if row["id"] not in skip]
 
     # ── 同伴進度與招募 ────────────────────────────────────
 

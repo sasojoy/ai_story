@@ -25,7 +25,7 @@ from .models import (
 from .ollama_client import OllamaClient
 from .rules import apply_effect, change_trend, check_who, current_day, fill_marks, free_text_rate, rate_words, roll_check
 from .sqlite_world import open_world
-from .state import PLAYER, GameState, JournalEntry, Journey, Rumor, WorldState, new_game_state
+from .state import PLAYER, BattleRecord, GameState, JournalEntry, Journey, Rumor, WorldState, new_game_state
 from .world import advance_world_state, check_thresholds, end_season, fire_by_id, sim_tick, start_pending_battle
 from .world_state import WorldStateStore
 
@@ -141,6 +141,7 @@ class Game:
         fresh.player.used_dialogue_options = old.player.used_dialogue_options
         fresh.player.turns_since_consolidation = old.player.turns_since_consolidation
         fresh.player.bot = old.player.bot  # 伺服器假人的身分與作息跨季保留
+        fresh.player.battle_results_seen = old.player.battle_results_seen  # 補送過的決戰不再補一次（FB-027）
         fresh.player.season_number = season_number
         self.state = fresh
         self.state.player.visited.add(self.state.player.location)
@@ -236,6 +237,7 @@ class Game:
         news = journal.news_entry(self.state.world.time, msgs)
         if news is not None:
             journal.add_entry(self.state, news, merge=True)
+        self._deliver_battle_results()  # 下線時收場的決戰，回來第一次同步就補上（休季、籌備中也一樣，FB-027）
         return self._log(msgs + arrived)
 
     def advance(self, seconds: float) -> list[str]:
@@ -1069,12 +1071,15 @@ class Game:
                     battle_instance.submit_action(battle, p.name, tag)
         ended = battle_instance.end_without_fighters(battle, definition, now)  # 沒人能打、回合逾時：用保底結果收場
         if ended:
+            battle.end_time = self.state.world.time  # 收場時的賽季時間：參戰者的戰報用（FB-027）
             return ended
         if now - battle.round.opened_real >= definition.round_seconds and not battle_instance.round_is_complete(battle):
             battle_instance.fill_timed_out_actions(battle, definition)
         if not battle_instance.round_is_complete(battle):
             return []
         msgs = battle_instance.resolve_round(battle, definition, self.rng, now=now)
+        if battle.phase == "ended":
+            battle.end_time = self.state.world.time
         narration = battle_instance.narrate_round(self.client, definition, battle, msgs)
         if narration:
             battle.narrative_log.append(narration)
@@ -1101,17 +1106,19 @@ class Game:
         結果也要套到自己手上的 self.state.world：結算可能發生在 choose()／travel() 的 options() tick 裡，
         而它們收尾的 _save_season 會把這份記憶體裡的賽季整份寫回去——不跟著改，剛寫進資料庫的大勢與旗標
         就被比較舊的那份蓋掉了（江湖史是另一張表，不受影響，所以只有它倖存）。江湖史那一則只寫資料庫，
-        不寫記憶體，免得存兩次。"""
-        if not (battle.outcome_world_flags or battle.outcome_trend_delta or battle.outcome_title):
-            return
+        不寫記憶體，免得存兩次。
 
-        def _apply(season: WorldState) -> None:
-            self._apply_outcome_trends_and_flags(season, battle)
-            if battle.outcome_title:
-                season.chronicle.append(Rumor(time=season.time, text=f"【{battle.outcome_title}】{battle.outcome_text}"))
+        最後把結果補送給自己（收場那一下的那個人當場就看得到）；別的參戰者各自同步時補（FB-027）。"""
+        if battle.outcome_world_flags or battle.outcome_trend_delta or battle.outcome_title:
 
-        self.world.mutate_season(_apply)
-        self._apply_outcome_trends_and_flags(self.state.world, battle)
+            def _apply(season: WorldState) -> None:
+                self._apply_outcome_trends_and_flags(season, battle)
+                if battle.outcome_title:
+                    season.chronicle.append(Rumor(time=season.time, text=f"【{battle.outcome_title}】{battle.outcome_text}"))
+
+            self.world.mutate_season(_apply)
+            self._apply_outcome_trends_and_flags(self.state.world, battle)
+        self._deliver_battle_results()
 
     @staticmethod
     def _apply_outcome_trends_and_flags(season: WorldState, battle: battle_instance.BattleInstance) -> None:
@@ -1122,6 +1129,61 @@ class Game:
             if flag not in season.flags:
                 season.flags.add(flag)
                 season.flag_times[flag] = season.time
+
+    def _deliver_battle_results(self) -> None:
+        """收場的全服決戰補送到自己手上（FB-027）：自己的名號在參戰名單上（含下線的、中途倒下的；觀戰的不在名單上）、
+        還沒補過的，每一場寫一則江湖紀錄、加一筆戰報。
+
+        為什麼是「下次同步時補」、不是收場那一下去改每個參戰者的角色：那會在一筆交易裡改幾十列，而且跟伺服器、假人
+        程式記憶體裡各自的 Game 打架（它們之後存檔會把別人寫進去的蓋掉）。資料庫是唯一的真實來源，戰鬥也一直留在
+        battles 表裡，所以每個人自己的 Game 在 sync（伺服器每個請求、假人每一輪）與自己收場的那一下自己補。
+        不分季別：決戰的結果常常就把季收掉，休季、下一季才回來的人也要補到。不是自己參戰的那幾場也記成處理過，
+        之後不必再讀（收場的決戰名單不會再變）。"""
+        p = self.state.player
+        fresh = self.world.ended_battles(exclude=p.battle_results_seen)
+        if not fresh:
+            return
+        current = self.world.get_season_number()
+        for season, battle in fresh:
+            me = battle.participants.get(p.name)
+            if me is not None:
+                self._file_showdown(battle, me, None if season == current else season)
+            p.battle_results_seen.append(battle.record_id)
+
+    def _file_showdown(
+        self, battle: battle_instance.BattleInstance, me: battle_instance.BattleParticipant, earlier: int | None,
+    ) -> None:
+        """一場收場的決戰寫成自己的一則江湖紀錄與一筆戰報（kind 是 showdown），「剛剛」放這一場的卡片。
+        earlier 是上一季（或更早）打的那一季的編號，這一季打的是 None：上一季的標明季別，大勢的增減寫進敘事、
+        不放進數值變化——數值變化看起來像剛發生在你身上的。"""
+        c, s = self.content, self.state
+        definition = c.battles.get(battle.battle_id)
+        sides = {f.id: f.name for f in definition.factions} if definition is not None else {}
+        name = definition.name if definition is not None else battle.battle_id
+        side = sides.get(me.faction, me.faction)
+        foes = "、".join(n for fid, n in sides.items() if fid != me.faction) or "敵軍"
+        where = self._battle_region_name(definition) if definition is not None and definition.region else name
+        outcome = battle.outcome_title or "收場"
+        label = "" if earlier is None else f"第 {earlier} 季・"
+        lines = ([battle.outcome_text] if battle.outcome_text else []) + [f"你出手 {me.acted_rounds} 回合"]
+        if me.fell_round is not None:
+            lines.append(f"你在第 {me.fell_round} 回合倒下，轉為觀戰")
+        trends = {t.id: t.name for t in c.scenario.trends}
+        deltas = [f"{trends.get(tid, tid)} {delta:+d}" for tid, delta in battle.outcome_trend_delta.items() if delta]
+        changes = deltas if earlier is None else []
+        if earlier is not None:
+            lines += [f"（第 {earlier} 季）{d}" for d in deltas]
+        time = battle.end_time if battle.end_time is not None else s.world.time
+        record = BattleRecord(
+            id=s.battle_seq + 1, time=time, location=f"{label}{where}", kind="showdown", event=name, opponent=foes,
+            ours=[], tier=outcome, our_power=0.0, difficulty=0.0, side=side, notes=list(lines), changes=list(changes),
+        )
+        battlelog.add_record(s, record)
+        s.battle_card = record.id
+        journal.add_entry(s, JournalEntry(
+            time=time, title=f"{label}{name}・{outcome}", tag=f"你站在{side}", lines=lines, changes=changes,
+            battle_id=record.id,
+        ))
 
     def _watching_battle(self, battle: battle_instance.BattleInstance, definition: BattleDef) -> bool:
         """這個人此刻打不了這場仗、只能在一旁看（options() 照常給平常的選項，場景上仍看得到戰場）：

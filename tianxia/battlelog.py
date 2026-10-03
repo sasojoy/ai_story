@@ -1,5 +1,6 @@
 """遭遇/劇情戰紀錄（sanguo-companions 合併大幅簡化，取代舊的逐回合戰報）：把一次
-encounter.EncounterResult 存成 BattleRecord，並產生場景卡片與戰報列表的文字。
+encounter.EncounterResult 存成 BattleRecord，並產生場景卡片與戰報列表的文字。全服決戰補送給參戰者的那一筆
+（kind 是 showdown，Game._deliver_battle_results 建的）也在這裡畫，沒有威力與難度、改寫站哪一邊與大勢。
 """
 from __future__ import annotations
 
@@ -13,7 +14,7 @@ from .world_state import WorldStateStore
 
 MAX_RECORDS = 20  # 存檔保留最近幾場
 TIER_WORDS = {"大勝": "大勝", "險勝": "險勝", "僵持": "平手", "落敗": "落敗"}
-KIND_WORDS = {"train": "歷練", "event": "劇情", "wild": "探索遇敵"}
+KIND_WORDS = {"train": "歷練", "event": "劇情", "wild": "探索遇敵", "showdown": "決戰"}
 NO_RECORD = "（還沒有戰報。）"
 DAY = 86400
 HOUR = 3600
@@ -75,7 +76,9 @@ def clock_text(time: float) -> str:
 
 
 def outcome_text(record: BattleRecord) -> str:
-    """結果的短句，例如「擊退劫道山賊（大勝）」；江湖紀錄拿它當那一則的結果標記。"""
+    """結果的短句，例如「擊退劫道山賊（大勝）」；江湖紀錄拿它當那一則的結果標記。決戰的結果本身就是一句話（「官軍大勝」）。"""
+    if record.kind == "showdown":
+        return record.tier
     return f"{TIER_WORDS[record.tier]}{record.opponent}"
 
 
@@ -99,6 +102,8 @@ def _when(record: BattleRecord) -> str:
 
 
 def _result_line(record: BattleRecord) -> str:
+    if record.kind == "showdown":  # 全服決戰沒有我方威力與對手難度：寫結果與自己站的那一邊
+        return f"**{record.tier}**　你站在{record.side}"
     return f"**{record.tier}**　我方威力 {record.our_power:.0f}　對手難度 {record.difficulty:.0f}"
 
 
@@ -129,6 +134,14 @@ def _story_block(record: BattleRecord) -> list[str]:
     return [f"**結果**　{story}"] if story else []
 
 
+def _gains_block(record: BattleRecord) -> list[str]:
+    """獲得與損失那一行。全服決戰沒有經驗、銀兩這些得失，只有大勢的增減，寫成「大勢」那一行；上一季打的那一場，
+    大勢的增減寫在結果的敘事裡（標了第幾季），沒有這一行。"""
+    if record.kind == "showdown":
+        return [f"**大勢**　{'　'.join(record.changes)}"] if record.changes else []
+    return [f"**獲得與損失**　{gains_text(record)}"]
+
+
 def card_text(record: BattleRecord) -> str:
     """場景裡的戰鬥卡片（Markdown）：標題、時間與類型、結果、（劇情結果）、獲得與損失。"""
     return "\n\n".join([
@@ -136,7 +149,7 @@ def card_text(record: BattleRecord) -> str:
         _when(record),
         _result_line(record),
         *_story_block(record),
-        f"**獲得與損失**　{gains_text(record)}",
+        *_gains_block(record),
     ])
 
 
@@ -145,12 +158,12 @@ def _ours_line(record: BattleRecord) -> str:
 
 
 def detail_text(record: BattleRecord) -> str:
-    """戰報分頁下方的完整內容（Markdown）：陣容、結果、（劇情結果）、得失。"""
+    """戰報分頁下方的完整內容（Markdown）：陣容、結果、（劇情結果）、得失。全服決戰不列陣容（站哪一邊寫在結果那一行）。"""
     return "\n\n".join([
         _title(record),
         f"{_when(record)}　第 {record.id} 場",
-        f"**我方**　{_ours_line(record)}",
+        *([] if record.kind == "showdown" else [f"**我方**　{_ours_line(record)}"]),
         _result_line(record),
         *_story_block(record),
-        f"**獲得與損失**　{gains_text(record)}",
+        *_gains_block(record),
     ])

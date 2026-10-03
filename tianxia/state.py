@@ -119,6 +119,9 @@ class PlayerState(BaseModel):
     # Game._drop_stale_references() 會知道共用的賽季已經換過一輪，幫這個玩家的角色重開
     # 新的一季（好感度/關係現況保留，角色本身的等級/位置/隊伍重新開始，見設計討論）。
     bot: BotProfile | None = None  # 伺服器假人才有（伺服器假人設計第五節）；任何畫面都不能顯示或透露
+    # 處理過的收場決戰（BattleInstance.record_id）：自己參戰、已經補進江湖紀錄與戰報的，以及看過不是自己參戰的
+    # （FB-027，見 Game._deliver_battle_results）。跨季保留：決戰常常把季收掉，下一季才回來的人也要補、而且只補一次
+    battle_results_seen: list[int] = Field(default_factory=list)
 
 
 RumorLayer = Literal["world", "faction", "local", "personal"]  # 天下大事／陣營軍情／地方傳聞／個人線索（傳聞分層設計第二節）
@@ -167,18 +170,20 @@ class Fighter(BaseModel):
 
 class BattleRecord(BaseModel):
     """一場遭遇/劇情戰的紀錄（sanguo-companions 合併重寫：單次判定，取代舊的逐回合戰報，
-    見 tianxia/encounter.py）。"""
+    見 tianxia/encounter.py）。kind 是 showdown 的是全服決戰補送給參戰者的那一筆（FB-027）：沒有我方威力與
+    對手難度（記 0），tier 是決戰的結果（例如「官軍大勝」），side 是自己站的那一邊，見 battlelog 的畫法。"""
 
     id: int  # 流水號，本季從 1 起算
-    time: float  # 開打時的遊戲時間
-    location: str  # 地點名稱
-    kind: Literal["train", "event", "wild"]  # 歷練／劇情／探索撞上的野怪（舊戰報的 train 不遷移，照舊顯示「歷練」）
-    event: str = ""  # 劇情戰的事件標題
-    opponent: str  # 敵方隊伍名稱
-    ours: list[Fighter]  # 我方陣容，第一位是隊長；等級是開打時的等級
-    tier: str  # 大勝/險勝/僵持/落敗（encounter.EncounterResult.tier）
+    time: float  # 開打時的遊戲時間（決戰是收場時的）
+    location: str  # 地點名稱（決戰是大區名；上一季打的前面加「第 N 季・」）
+    kind: Literal["train", "event", "wild", "showdown"]  # 歷練／劇情／探索撞上的野怪／全服決戰（舊戰報的 train 不遷移，照舊顯示「歷練」）
+    event: str = ""  # 劇情戰的事件標題；決戰是決戰的名稱
+    opponent: str  # 敵方隊伍名稱；決戰是敵方陣營名
+    ours: list[Fighter]  # 我方陣容，第一位是隊長；等級是開打時的等級（決戰不記，是空的）
+    tier: str  # 大勝/險勝/僵持/落敗（encounter.EncounterResult.tier）；決戰是結果的標題
     our_power: float
     difficulty: float
+    side: str = ""  # 決戰時自己站的陣營名；其他 kind 是空字串
     exp: int = 0  # 每人獲得的經驗
     xinde: int = 0
     silver: int = 0  # 正數為獲得、負數為失落

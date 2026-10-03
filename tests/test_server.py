@@ -686,6 +686,31 @@ def test_battle_free_text_shows_and_submits(game):
     assert any("直取波才首級" in line for line in game.world.get_battle().narrative_log)
 
 
+def test_a_fighter_sees_the_finished_showdown_on_the_main_page(client):
+    """FB-027：決戰在這個帳號沒連線時收場（只動了資料庫裡的戰鬥），下一次打 /api/main 就補進江湖紀錄與戰報、
+    「剛剛」放這一場的卡片，而且存進了角色。"""
+    _player(client)
+    definition = server.CONTENT.battles["huangjin_showdown"]
+    world = open_world()
+    world.start_battle(definition, now=0.0)
+
+    def fight(b):
+        battle_instance.join_faction(b, "沈青衫", "guan", neili_cap=320.0)
+        battle_instance.close_muster(b, definition, random.Random(0))
+        while b.phase == "active":
+            battle_instance.submit_action(b, "沈青衫", battle_instance.safest_option_tag(b, definition, "沈青衫"))
+            battle_instance.resolve_round(b, definition, random.Random(0))
+
+    world.mutate_battle(fight)
+    main = client.get("/api/main").json()
+    assert main["card"] is not None and "決戰：黃巾決戰" in main["card"] and "你站在官軍" in main["card"]
+    assert main["card_id"] is not None
+    saved = open_characters().load("沈青衫")
+    assert saved.journal[0].title.startswith("黃巾決戰・") and saved.journal[0].battle_id == main["card_id"]
+    report = client.get(f"/api/reports?id={main['card_id']}").json()
+    assert report["list"][0]["id"] == main["card_id"] and "你站在官軍" in report["detail"]
+
+
 # ── 管理者 ────────────────────────────────────────────
 
 

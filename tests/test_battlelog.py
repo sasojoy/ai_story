@@ -153,6 +153,47 @@ def test_an_old_training_record_still_loads_and_reads_as_training():
     assert BattleRecord.model_validate_json(record(kind="wild").model_dump_json()).kind == "wild"
 
 
+def showdown(**kw):
+    """參戰者手上的全服決戰戰報（FB-027）：沒有我方威力與對手難度，有站哪一邊、結果的敘事與大勢的增減。"""
+    base = dict(
+        kind="showdown", location="潁汝", event="黃巾決戰", opponent="黃巾軍", ours=[], tier="官軍大勝",
+        our_power=0.0, difficulty=0.0, side="官軍", notes=["官軍士氣如虹。", "你出手 3 回合"], changes=["黃巾聲勢 -35"],
+    )
+    return record(**(base | kw))
+
+
+def test_a_showdown_report_shows_the_side_and_the_trends_instead_of_power_and_difficulty():
+    rec = showdown()
+    card = battlelog.card_text(rec)
+    assert card == (
+        "### ⚔ 潁汝・對陣 黃巾軍\n\n第2天 08:30　決戰：黃巾決戰\n\n**官軍大勝**　你站在官軍\n\n"
+        "**結果**　官軍士氣如虹。　你出手 3 回合\n\n**大勢**　黃巾聲勢 -35"
+    )
+    detail = battlelog.detail_text(rec)
+    assert detail == (
+        "### ⚔ 潁汝・對陣 黃巾軍\n\n第2天 08:30　決戰：黃巾決戰　第 3 場\n\n**官軍大勝**　你站在官軍\n\n"
+        "**結果**　官軍士氣如虹。　你出手 3 回合\n\n**大勢**　黃巾聲勢 -35"
+    )
+    for text in (card, detail):
+        assert "威力" not in text and "難度" not in text and "**我方**" not in text and "獲得與損失" not in text
+    assert battlelog.list_label(rec) == "官軍大勝　第3場　第2天 08:30　潁汝　vs 黃巾軍"
+    assert battlelog.outcome_text(rec) == "官軍大勝" and battlelog.summary_line(rec) == "⚔ 潁汝：官軍大勝"
+
+
+def test_a_showdown_without_trend_changes_has_no_trend_line():
+    """上一季打的那一場，大勢的增減寫在敘事裡（標了第幾季），不另起一行「大勢」。"""
+    rec = showdown(location="第 1 季・潁汝", notes=["官軍士氣如虹。", "（第 1 季）黃巾聲勢 -35"], changes=[])
+    for text in (battlelog.card_text(rec), battlelog.detail_text(rec)):
+        assert "**大勢**" not in text and "**結果**　官軍士氣如虹。　（第 1 季）黃巾聲勢 -35" in text
+        assert text.startswith("### ⚔ 第 1 季・潁汝・對陣 黃巾軍")
+
+
+def test_a_showdown_report_saved_before_the_side_field_still_loads():
+    old = record().model_dump()
+    old.pop("side")
+    assert BattleRecord.model_validate(old).side == ""
+
+
 def test_detail_text_lists_multiple_teammates():
     rec = record(ours=[Fighter(name="沈浪", level=3), Fighter(name="韓鐵", level=2)])
     assert "**我方**　沈浪 Lv3、韓鐵 Lv2" in battlelog.detail_text(rec)
