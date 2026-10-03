@@ -1534,6 +1534,23 @@ def test_a_latecomer_can_join_an_already_active_battle(content, game):
     assert "沈浪" in game.world.get_battle().participants
 
 
+def test_a_latecomer_is_told_they_can_act_this_round_and_can(content, game):
+    """FB-028：晚到的人當回合就能出招（企劃者決定改說法、不改規則），提示要照實說。"""
+    definition = _install_battle_def(content)
+    definition.rounds_per_act = 3  # 這一回合不會一結算就收場
+    game.world.start_battle(definition, now=0.0)
+    game.world.mutate_battle(lambda b: battle_instance.join_faction(b, "乙玩家", "huang", neili_cap=100.0))
+    with at(game, definition.muster_seconds + 1):
+        game._battle_status()  # 集結關閉，已經開打
+        assert game.choose("battle:join_late") == ["你趕到了戰場，這一回合就能出手。"]
+        battle = game.world.get_battle()
+        assert battle_instance.options_for(battle, definition, "沈浪")
+        assert ids(game) == ["battle:act:safe", "battle:act:aggressive"]
+        game.choose("battle:act:safe")
+    battle = game.world.get_battle()
+    assert battle.round_number == 0 and battle.round.pending_actions == {"沈浪": "safe"}  # 送出了、等乙玩家
+
+
 def test_battle_ending_falls_back_to_normal_gameplay_on_the_next_render(content, game):
     definition = _install_battle_def(content)
     game.world.start_battle(definition, now=0.0)

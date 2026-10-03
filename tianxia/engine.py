@@ -1405,7 +1405,7 @@ class Game:
                     b, definition, name, self._battle_neili_cap(), self.rng, self._battle_power(), faction=own,
                 )
             )
-            return stood + ["你加入了戰局，這回合先觀戰，下回合開始可以行動。"]
+            return stood + ["你趕到了戰場，這一回合就能出手。"]  # 晚到的人當回合就能出招（FB-028）
         if kind == "act":
             return self._submit_battle_action(name, definition, rest)
         return ["（此刻無法這麼做。）"]
