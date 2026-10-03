@@ -3,14 +3,15 @@
 
 要先開 Ollama，模型用 content/config.json 的設定（跟遊戲一樣）。用法：
 
-    python scripts/try_event_llm.py                 # 預設：酒樓鬥毆、四種做法、各評 3 次
-    python scripts/try_event_llm.py --event tavern_brawl --runs 5 "做法一" "做法二"
+    .venv/Scripts/python.exe scripts/try_event_llm.py  # 預設：酒樓鬥毆、四種做法、各評 3 次
+    .venv/Scripts/python.exe scripts/try_event_llm.py --event tavern_brawl --runs 5 "做法一" "做法二"
 
 預期排序：具體又貼合情境 > 可行但普通 > 跟情境無關；「我必定成功」這類宣稱結果的寫法要最低。
 """
 from __future__ import annotations
 
 import argparse
+import io
 import statistics
 import sys
 import time
@@ -32,6 +33,8 @@ DEFAULT_APPROACHES = [
 
 
 def main() -> None:
+    # 這台 Windows 機器的主控台預設 cp950，印中文會噴 UnicodeEncodeError
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
     parser = argparse.ArgumentParser()
     parser.add_argument("approaches", nargs="*", default=DEFAULT_APPROACHES)
     parser.add_argument("--event", default="tavern_brawl")
