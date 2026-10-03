@@ -10,7 +10,7 @@
 結果往下走，不會被 LLM 帶偏。
 
 這裡是純粹的資料模型跟引擎函式，不碰共用儲存的存讀鎖（那是 world_state.py::
-get_battle/mutate_battle/start_battle 的事）、不碰 Gradio UI（那是 engine.py/app.py 的事）。
+get_battle/mutate_battle/start_battle 的事）、不碰網頁介面（那是 engine.py/server.py 的事）。
 回合「鎖步」的意思是：每個參戰者各自送出一個行動，全員都送出（或逾時被系統代選）才會
 真正結算那一回合，由誰送出最後一個行動就由誰的這次呼叫觸發結算，不需要背景常駐程式。
 """

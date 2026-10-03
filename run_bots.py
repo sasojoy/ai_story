@@ -1,4 +1,4 @@
-"""伺服器假人程式（伺服器假人設計第三節）：跟 app.py 同時開著，每隔 bot_tick_seconds 讓在線的假人做事。
+"""伺服器假人程式（伺服器假人設計第三節）：跟 server.py 同時開著，每隔 bot_tick_seconds 讓在線的假人做事。
 
 執行：.venv/Scripts/python.exe run_bots.py（Ctrl+C 結束）
 

@@ -357,7 +357,7 @@ class Game:
         self.world.save_season(self.state.world)
 
     def dialogue_request(self, option_id: str) -> companion_agent.DialogueRequest | None:
-        """鎖外生成的階段 A（app.py 在行動鎖內、很快地呼叫）：現在選這個選項，會不會生成一輪對話？
+        """鎖外生成的階段 A（server.py 在行動鎖內、很快地呼叫）：現在選這個選項，會不會生成一輪對話？
         會就回傳要送給模型的單子（選項、人物、玩家這一步、messages），不會就是 None。只讀、不改狀態。
         - `talk:N`：N 是上一輪提供的選項、手上有對話、選項沒停用；`talk:leave` 不生成。
         - `act:socialize`：選項沒停用、福緣還沒到（福緣先發，見 _act）、這裡有見得到的人物；
@@ -417,7 +417,7 @@ class Game:
         return prepared.turn
 
     def choose(self, option_id: str, prepared: companion_agent.PreparedTurn | None = None) -> list[str]:
-        """prepared 是 app.py 在鎖外先生成好的一輪對話（見 dialogue_request／companion_agent.prepare_turn）；
+        """prepared 是 server.py 在鎖外先生成好的一輪對話（見 dialogue_request／companion_agent.prepare_turn）；
         只有對話選項用得到，進來先重驗，驗不過就忽略。"""
         option = {o.id: o for o in self.options(odds=False)}.get(option_id)
         if option is None or not option.enabled:
@@ -936,7 +936,7 @@ class Game:
     def battle_free_text_prompt(self) -> str | None:
         """這回合是否有自訂行動的輸入框可以用，有的話回傳提示語（見 BattleOption.free_text
         ——設計討論：魯莽這類選項該是玩家自己想出來的招，不是從清單挑一個）；沒有（不在
-        戰鬥中、集結期、已經出局、這回合已經選過）就回傳 None，app.py 用這個決定輸入框
+        戰鬥中、集結期、已經出局、這回合已經選過）就回傳 None，server.py 用這個決定輸入框
         要不要顯示。"""
         status = self._battle_status(tick=False)
         if status is None:
@@ -1317,7 +1317,7 @@ class Game:
         return self._log(msgs)
 
     def travel_refusal(self, loc_id: str, mode: TravelMode = "walk") -> str | None:
-        """用這種走法安排前往這裡，不行的原因；可以時為 None。app.py 拿它分辨「沒能出發」。"""
+        """用這種走法安排前往這裡，不行的原因；可以時為 None。server.py 拿它分辨「沒能出發」。"""
         if self._preparing():
             return "賽季籌備中，等待管理者開季"
         if loc_id not in self.content.locations or mode not in atlas.MODES:
@@ -1706,51 +1706,78 @@ class Game:
             return f"**在路上**{halted}\n\n{self._journey_line()}。\n\n路上不能做事；可以先下線，到了會自己抵達。"
         return self.location_text()
 
-    def status_text(self) -> str:
+    def status_data(self) -> dict:
+        """狀態列的資料（數字與短字串），網頁前端照這份自己排版；status_text 是同一份資料的文字版。"""
         s, c = self.state, self.content
         p, w = s.player, s.world
         names = c.config.stat_names
         sect = c.sects[p.sect].name if p.sect else None
         faction = next((f.name for f in c.scenario.factions if f.id == p.faction), None)
-        affiliation = "・".join(name for name in (sect, faction) if name) or "散人"
-        day = int(w.time // DAY) + 1
-        clock = f"{int(w.time % DAY // HOUR):02d}:{int(w.time % HOUR // 60):02d}"
+        now, cap = team.member_neili(c, p.member)
+        mates = []
+        for cid in p.team:
+            progress = self.world.get_companion(cid)
+            mate_now, mate_cap = team.member_neili(c, progress)
+            mates.append({"name": c.characters[cid].name, "level": progress.level,
+                          "hp": int(mate_now), "hp_max": int(mate_cap)})
+        return {
+            "name": p.name,
+            "affiliation": "・".join(name for name in (sect, faction) if name) or "散人",
+            "anonymous": p.anonymous,
+            "level": p.member.level,
+            "location": c.locations[p.location].name,
+            "day": int(w.time // DAY) + 1,
+            "clock": f"{int(w.time % DAY // HOUR):02d}:{int(w.time % HOUR // 60):02d}",
+            "season_days": c.config.season_days,
+            "stamina": int(p.stamina),
+            "stamina_max": c.config.stamina_max,
+            "hp": int(now),
+            "hp_max": int(cap),
+            "injury": int(p.member.injury),
+            "silver": p.stats.get("silver", 0),
+            "xinde": p.stats.get("xinde", 0),
+            "minor": [(names[k], p.stats.get(k, 0)) for k in ("fame", "good", "evil")],
+            "attrs": [(names[k], p.stats[k]) for k in ("str", "agi", "con", "wis")],
+            "hint": skillview.practice_hint(s, c),  # 心得擱著沒用、又還有功夫沒練滿時才有
+            "team": mates,
+            "busy_hours": None if p.busy_until is None else round((p.busy_until - w.time) / HOUR, 1),
+            "resting": None if p.resting_since is None else c.config.rest_regen_multiplier,  # 打坐時體力回復的倍數
+            "journey": None if p.journey is None else self._journey_line(),
+        }
+
+    def status_text(self) -> str:
+        d = self.status_data()
+        names = self.content.config.stat_names
         # 排版刻意很緊：這一塊在手機上原本是 13 段 Markdown（每段一個 <p>），光狀態就吃掉
         # 半個螢幕，選項按鈕被推到摺線以下。現在把**玩家真的一直在看的四個數字**（體力、
         # 氣血、銀兩、心得）收成一行，其餘降級到第二行，隊伍只有帶人時才列出來。
-        now, cap = team.member_neili(c, p.member)
         vitals = (
-            f"⚡ 體力 {int(p.stamina)}/{c.config.stamina_max}　"
-            f"❤ 氣血 {int(now)}/{int(cap)}　"
-            f"💰 {names['silver']} {p.stats.get('silver', 0)}　"
-            f"📘 {names['xinde']} {p.stats.get('xinde', 0)}"
+            f"⚡ 體力 {d['stamina']}/{d['stamina_max']}　"
+            f"❤ 氣血 {d['hp']}/{d['hp_max']}　"
+            f"💰 {names['silver']} {d['silver']}　"
+            f"📘 {names['xinde']} {d['xinde']}"
         )
-        if p.member.injury >= 1:
-            vitals += f"　🩹 內傷 {int(p.member.injury)}"
-        minor = "　".join(f"{names[k]} {p.stats.get(k, 0)}" for k in ("fame", "good", "evil"))
-        attrs = "　".join(f"{names[k]} {p.stats[k]}" for k in ("str", "agi", "con", "wis"))
+        if d["injury"] >= 1:
+            vitals += f"　🩹 內傷 {d['injury']}"
+        minor = "　".join(f"{k} {v}" for k, v in d["minor"])
+        attrs = "　".join(f"{k} {v}" for k, v in d["attrs"])
         lines = [
-            f"### {p.name}　·　{affiliation}" + ("（匿名行走）" if p.anonymous else "")
-            + f"　第{p.member.level}級",
-            f"📍 {c.locations[p.location].name}　⏳ 第 {day} 天 {clock}（本季共 {c.config.season_days:g} 天）",
+            f"### {d['name']}　·　{d['affiliation']}" + ("（匿名行走）" if d["anonymous"] else "")
+            + f"　第{d['level']}級",
+            f"📍 {d['location']}　⏳ 第 {d['day']} 天 {d['clock']}（本季共 {d['season_days']:g} 天）",
             vitals,
             f"{minor}　｜　{attrs}",
         ]
-        hint = skillview.practice_hint(s, c)  # 心得擱著沒用、又還有功夫沒練滿時才有這一行
-        if hint is not None:
-            lines.append(hint)
-        for cid in p.team:  # 只有真的帶了同伴才列隊伍，一個人時不佔版面
-            progress = self.world.get_companion(cid)
-            mate_now, mate_cap = team.member_neili(c, progress)
-            lines.append(
-                f"🧍 {c.characters[cid].name}　第{progress.level}級　氣血 {int(mate_now)}/{int(mate_cap)}"
-            )
-        if p.busy_until is not None:
-            lines.append(f"🧘 閉關中，約 {(p.busy_until - w.time) / HOUR:.1f} 小時後出關")
-        if p.resting_since is not None:
-            lines.append(f"🧘 打坐中：體力回復是平常的 {c.config.rest_regen_multiplier:g} 倍，隨時可以起身")
-        if p.journey is not None:
-            lines.append(f"🧭 在路上：{self._journey_line()}")
+        if d["hint"] is not None:
+            lines.append(d["hint"])
+        for mate in d["team"]:  # 只有真的帶了同伴才列隊伍，一個人時不佔版面
+            lines.append(f"🧍 {mate['name']}　第{mate['level']}級　氣血 {mate['hp']}/{mate['hp_max']}")
+        if d["busy_hours"] is not None:
+            lines.append(f"🧘 閉關中，約 {d['busy_hours']:.1f} 小時後出關")
+        if d["resting"] is not None:
+            lines.append(f"🧘 打坐中：體力回復是平常的 {d['resting']:g} 倍，隨時可以起身")
+        if d["journey"] is not None:
+            lines.append(f"🧭 在路上：{d['journey']}")
         return "\n\n".join(lines)
 
     def trends_text(self) -> str:

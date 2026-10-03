@@ -1,11 +1,12 @@
 pydantic>=2.6
 # 呼叫 Ollama（tianxia/ollama_client.py）
 requests>=2.31
-# 因這台機器的 Windows 應用程式控制封鎖了較新版 pandas 的 DLL，以下版本固定為目前已驗證可用的版本
-gradio==6.24.0
-pandas==3.0.5
-numpy==2.5.2
+# 網頁伺服器（server.py）：FastAPI 給資料、uvicorn 跑起來、markdown-it-py 把引擎的 Markdown 轉成 HTML
+fastapi>=0.110
+uvicorn>=0.29
+markdown-it-py>=3.0
 pytest>=8.0
+httpx>=0.27  # tests/test_server.py 的 TestClient 要用
 # 簡繁轉換（tianxia/zh.py）：刻意用純 Python 版，不用官方 opencc 的 C++ binding——它帶編譯好的
-# DLL，而這台機器的應用程式控制已經封鎖過較新版 pandas 的 DLL（見上面那條註解）。
+# DLL，而這台機器的應用程式控制封鎖過較新版 pandas 的 DLL（以前 Gradio 會帶進 pandas）。
 opencc-python-reimplemented>=0.1.7
