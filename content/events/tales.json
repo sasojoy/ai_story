@@ -1,0 +1,584 @@
+[
+  {
+    "id": "tale_yc_riverbank",
+    "title": "新編河灘段子",
+    "actions": [
+      "socialize"
+    ],
+    "locations": [
+      "yingchuan"
+    ],
+    "condition": {
+      "any_of": [
+        {
+          "marks_min": {
+            "yingshui:救棚": 3
+          }
+        },
+        {
+          "marks_min": {
+            "yingshui:拆棚": 3
+          }
+        }
+      ]
+    },
+    "text": "酒肆裡的說書人新編了一段潁水河灘的事：說那片流民棚失火之後，有{marks:yingshui:救棚}提水幫著救，也有{marks:yingshui:拆棚}趁亂幫官府拆。醒木一拍，他問滿堂：「諸位說，這灘上往後是村，還是荒灘？」",
+    "choices": [
+      {
+        "text": "丟幾個錢，請他把後頭的事說完",
+        "effect": {
+          "text": "說書人收了錢，把河灘上誰家搭了新棚、誰家連夜走了講得一清二楚。你聽出這段子是從渡口的船夫那裡聽來的。",
+          "stats": {
+            "silver": -5,
+            "xinde": 4
+          }
+        }
+      },
+      {
+        "text": "站起來替救棚的人說句話",
+        "check": {
+          "stat": "wis",
+          "difficulty": 6,
+          "by": "self"
+        },
+        "effect": {
+          "text": "你說救下的棚是人家過冬的命，滿堂叫好，說書人當場把你這句添進了段子裡。",
+          "stats": {
+            "fame": 1,
+            "good": 1
+          }
+        },
+        "fail_effect": {
+          "text": "你話說得太急，被鄰席一個官吏冷冷頂了回來：「拆棚是郡府的令。」滿堂一靜，你只好坐下。",
+          "stats": {
+            "fame": -1
+          }
+        }
+      },
+      {
+        "text": "陪說書人喝幾碗，套他段子的來歷",
+        "check": {
+          "stat": "con",
+          "difficulty": 6,
+          "by": "self"
+        },
+        "effect": {
+          "text": "三碗下肚，說書人拍著你的肩說，這段子是幾個在河灘幫過忙的人回城後講出來的，他只是添了油加了醋。",
+          "stats": {
+            "xinde": 5
+          }
+        },
+        "fail_effect": {
+          "text": "你先醉了，酒錢還是你付的，段子的來歷一句也沒套出來。",
+          "stats": {
+            "silver": -10
+          },
+          "stamina": -5
+        }
+      },
+      {
+        "text": "聽完就走",
+        "effect": {
+          "text": "說書人收起醒木，說這段子還沒完，明兒請早。"
+        }
+      }
+    ]
+  },
+  {
+    "id": "tale_yc_academy",
+    "title": "書院風聲",
+    "actions": [
+      "socialize"
+    ],
+    "locations": [
+      "yingchuan"
+    ],
+    "condition": {
+      "any_of": [
+        {
+          "marks_min": {
+            "yingchuan_academy:清議": 3
+          }
+        },
+        {
+          "marks_min": {
+            "yingchuan_academy:密告": 3
+          }
+        }
+      ]
+    },
+    "text": "陽翟城裡都在傳書院的事：講堂上已有{marks:yingchuan_academy:清議}當堂議論宮中的常侍，郡府那邊卻也收到過{marks:yingchuan_academy:密告}遞進去的抄本。官署門口兩個小吏壓低了聲音，說郡守還沒拿定主意。",
+    "choices": [
+      {
+        "text": "湊過去聽兩個小吏怎麼說",
+        "check": {
+          "stat": "agi",
+          "difficulty": 5
+        },
+        "effect": {
+          "text": "你裝作等人，挨在牆邊聽了個大概：郡守怕得罪書院的名士，也怕洛陽來人查問，只好先壓著。",
+          "stats": {
+            "xinde": 5
+          }
+        },
+        "fail_effect": {
+          "text": "你靠得太近，小吏回頭瞪你一眼，叫門卒把你趕開，還罰了你幾個錢說你擋了官道。",
+          "stats": {
+            "silver": -5
+          }
+        }
+      },
+      {
+        "text": "找個書院出身的士人，問他怎麼看",
+        "check": {
+          "stat": "wis",
+          "difficulty": 6,
+          "by": "self"
+        },
+        "effect": {
+          "text": "士人嘆氣說，清議是讀書人的本分，可這年頭說話的人多了，告密的人也就跟著多了。他記下了你的名號，說改日請你去書院聽講。",
+          "stats": {
+            "fame": 1,
+            "xinde": 4
+          }
+        },
+        "fail_effect": {
+          "text": "士人疑你是郡府派來探話的，拂袖而去。",
+          "stats": {
+            "fame": -1
+          }
+        }
+      },
+      {
+        "text": "不摻和",
+        "effect": {
+          "text": "你繞開官署門口，心想這事遲早要鬧大。"
+        }
+      }
+    ]
+  },
+  {
+    "id": "tale_wan_road",
+    "title": "官道上的車隊",
+    "actions": [
+      "socialize"
+    ],
+    "locations": [
+      "wan_city"
+    ],
+    "condition": {
+      "any_of": [
+        {
+          "marks_min": {
+            "nanyang_road:護車": 3
+          }
+        },
+        {
+          "marks_min": {
+            "nanyang_road:棄車": 3
+          }
+        }
+      ]
+    },
+    "text": "宛城的酒肆裡，幾個剛從北邊官道下來的車夫在喝悶酒。他們說這條路上已有{marks:nanyang_road:護車}幫逃難的車隊擋過散兵，也有{marks:nanyang_road:棄車}見了圍車掉頭就走。一個車夫捶著案說：「下回出門，得先問清楚是跟誰走。」",
+    "choices": [
+      {
+        "text": "請他們喝一輪，聽聽路上的事",
+        "effect": {
+          "text": "車夫們你一言我一語，把哪段坡路最險、哪處郵亭還有人守都說了。你把這些記在心裡。",
+          "stats": {
+            "silver": -10,
+            "xinde": 5
+          }
+        }
+      },
+      {
+        "text": "跟領頭的車夫掰腕子，贏了請他講仔細",
+        "check": {
+          "stat": "str",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "你把車夫的手腕按在案上，他哈哈大笑，把官道上哪幾個人靠得住、哪幾個靠不住一一說給你聽。",
+          "stats": {
+            "fame": 1,
+            "xinde": 4
+          }
+        },
+        "fail_effect": {
+          "text": "車夫手勁大得嚇人，你輸了，照規矩付了這一輪的酒錢。",
+          "stats": {
+            "silver": -10
+          }
+        }
+      },
+      {
+        "text": "喝完自己的酒",
+        "effect": {
+          "text": "車夫們還在數落那些棄車而走的人，聲音越來越大。"
+        }
+      }
+    ]
+  },
+  {
+    "id": "tale_xy_river",
+    "title": "淯水上的閒話",
+    "actions": [
+      "socialize"
+    ],
+    "locations": [
+      "xinye"
+    ],
+    "condition": {
+      "any_of": [
+        {
+          "marks_min": {
+            "yu_river:斷繩": 3
+          }
+        },
+        {
+          "marks_min": {
+            "yu_river:交米": 3
+          }
+        }
+      ]
+    },
+    "text": "新野縣衙前的告示牆下圍著一群漁戶。他們說淯水河灣那道攔河的纜繩，已有{marks:yu_river:斷繩}砍過，也有{marks:yu_river:交米}乖乖交了米過河。有人說砍繩的是好漢，也有人說砍了繩，嘍囉回頭就拿漁村出氣。",
+    "choices": [
+      {
+        "text": "替漁戶們算一算，交米和砍繩哪個划算",
+        "check": {
+          "stat": "wis",
+          "difficulty": 6,
+          "by": "self"
+        },
+        "effect": {
+          "text": "你把一季要交的米和被報復的損失一筆筆算給他們聽，漁戶們吵了一陣，都說你算得公道。",
+          "stats": {
+            "good": 1,
+            "xinde": 5
+          }
+        },
+        "fail_effect": {
+          "text": "你算到一半就被一個老漁戶打斷：「你又不住在河邊。」眾人哄笑，你訕訕走開。",
+          "stats": {
+            "fame": -1
+          }
+        }
+      },
+      {
+        "text": "幫漁戶把剛收的網扛回縣城",
+        "check": {
+          "stat": "con",
+          "difficulty": 5,
+          "by": "self"
+        },
+        "effect": {
+          "text": "你扛著濕網走了一路，漁戶們跟你熟了，說起河灣嘍囉的換班時辰也不避你。",
+          "stats": {
+            "good": 1,
+            "xinde": 4
+          },
+          "stamina": -8
+        },
+        "fail_effect": {
+          "text": "濕網越扛越沉，走到半路你就撐不住了，漁戶們只好自己扛回去。",
+          "stamina": -10
+        }
+      },
+      {
+        "text": "看看告示就走",
+        "effect": {
+          "text": "告示上寫著徵糧的數目，比上個月又多了兩成。"
+        }
+      }
+    ]
+  },
+  {
+    "id": "tale_mt_scribes",
+    "title": "酒肆裡的家書",
+    "actions": [
+      "socialize"
+    ],
+    "locations": [
+      "market_town"
+    ],
+    "condition": {
+      "any_of": [
+        {
+          "marks_min": {
+            "zhuo_county:代筆": 3
+          }
+        },
+        {
+          "marks_min": {
+            "zhuo_county:索錢": 3
+          }
+        }
+      ]
+    },
+    "text": "鎮上酒肆裡，幾個要去冀州的少年在比誰的家書寫得好。他們說涿縣驛舍旁已有{marks:zhuo_county:代筆}替人白寫家書，也有{marks:zhuo_county:索錢}寫一封收一封的錢。一個少年把竹簡往案上一拍：「我這封就是白寫的，寫得比收錢的還好！」",
+    "choices": [
+      {
+        "text": "替不識字的少年讀他收到的回信",
+        "check": {
+          "stat": "wis",
+          "difficulty": 5,
+          "by": "self"
+        },
+        "effect": {
+          "text": "你把回信一字一句念出來，信裡他娘說家裡的麥子收了。少年眼眶紅了，硬要敬你一碗。",
+          "stats": {
+            "good": 1,
+            "fame": 1
+          }
+        },
+        "fail_effect": {
+          "text": "信上的字潦草得很，你念錯了兩處，被旁邊識字的人指了出來，少年一臉狐疑。",
+          "stats": {
+            "fame": -1
+          }
+        }
+      },
+      {
+        "text": "跟少年們拚酒，替代筆的人爭個面子",
+        "check": {
+          "stat": "con",
+          "difficulty": 6,
+          "by": "self"
+        },
+        "effect": {
+          "text": "你連乾三碗，少年們服了，說往後去驛舍寫信，都先報你的名號。",
+          "stats": {
+            "fame": 1
+          }
+        },
+        "fail_effect": {
+          "text": "你先醉倒在案下，醒來時酒錢已經記在你帳上了。",
+          "stats": {
+            "silver": -10
+          },
+          "stamina": -5
+        }
+      },
+      {
+        "text": "聽著他們吵",
+        "effect": {
+          "text": "少年們吵到最後，說要一起去驛舍，讓代筆的人評一評。"
+        }
+      }
+    ]
+  },
+  {
+    "id": "tale_xqy_fort",
+    "title": "道徒口中的塢堡",
+    "actions": [
+      "socialize"
+    ],
+    "locations": [
+      "xiaquyang"
+    ],
+    "condition": {
+      "any_of": [
+        {
+          "marks_min": {
+            "haozu_fort:收留": 3
+          }
+        },
+        {
+          "marks_min": {
+            "haozu_fort:驅趕": 3
+          }
+        }
+      ]
+    },
+    "text": "下曲陽城門口，一個道徒站在糧車上宣講。他說南邊那座豪族塢堡，有{marks:haozu_fort:收留}替逃難的佃農求得進門，也有{marks:haozu_fort:驅趕}幫著部曲把人趕走。「豪強的牆，擋得住黃天嗎？」底下的城民一陣附和。",
+    "choices": [
+      {
+        "text": "在人群裡問他：收留佃農的那些人，也算豪強嗎",
+        "check": {
+          "stat": "wis",
+          "difficulty": 7,
+          "by": "self"
+        },
+        "effect": {
+          "text": "道徒一時答不上來，支吾了兩句。底下有人小聲說，那些人倒是好心。你看出這城裡的人心並不全向著黃天。",
+          "stats": {
+            "xinde": 6
+          },
+          "trend": {
+            "huangjin": -1
+          }
+        },
+        "fail_effect": {
+          "text": "道徒冷笑說你是豪強的走狗，幾個力士圍過來推搡你，你掏了幾個錢才脫身。",
+          "stats": {
+            "silver": -10,
+            "fame": -1
+          }
+        }
+      },
+      {
+        "text": "幫道徒把糧車推進城，聽他私下怎麼說",
+        "check": {
+          "stat": "str",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "糧車進了城，道徒擦著汗說，塢堡裡的佃農其實有不少是他們的人，只等時機。你把這話記下了。",
+          "stats": {
+            "xinde": 5
+          },
+          "stamina": -8
+        },
+        "fail_effect": {
+          "text": "車輪陷進泥裡，你推了半天推不動，道徒嫌你沒用，罵了你兩句。",
+          "stamina": -10
+        }
+      },
+      {
+        "text": "低頭走開",
+        "effect": {
+          "text": "身後的宣講聲越來越高，城民跟著喊起了「黃天當立」。"
+        }
+      }
+    ]
+  },
+  {
+    "id": "tale_rnmk_ford",
+    "title": "津口的行情",
+    "actions": [
+      "socialize"
+    ],
+    "locations": [
+      "runan_market"
+    ],
+    "condition": {
+      "any_of": [
+        {
+          "marks_min": {
+            "baima_ford:盤查": 3
+          }
+        },
+        {
+          "marks_min": {
+            "baima_ford:放行": 3
+          }
+        }
+      ]
+    },
+    "text": "集市上跑北路的布商在抱怨白馬津：那裡已有{marks:baima_ford:盤查}幫著官兵挨個搜身，也有{marks:baima_ford:放行}偷偷放人過卡。「搜得嚴，貨走不了；放得鬆，又怕黃巾混過來。」他說這一季北上的布，價錢翻了一番。",
+    "choices": [
+      {
+        "text": "買他一點消息，問問現在怎麼過津",
+        "effect": {
+          "text": "布商收了錢，說了幾個船戶的名字，又提醒你過卡時別帶黃色的東西。",
+          "stats": {
+            "silver": -5,
+            "xinde": 5
+          }
+        }
+      },
+      {
+        "text": "替布商盤算，換條路北上划不划算",
+        "check": {
+          "stat": "wis",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "你說走孟津雖然遠，卻少一道卡。布商想了想，說回去就跟夥伴商量，臨走塞給你幾個錢。",
+          "stats": {
+            "silver": 10,
+            "xinde": 3
+          }
+        },
+        "fail_effect": {
+          "text": "你說的路布商早就走過，他搖搖頭，說你沒在北路上跑過。",
+          "stats": {
+            "fame": -1
+          }
+        }
+      },
+      {
+        "text": "聽聽就好",
+        "effect": {
+          "text": "布商嘆了口氣，又去跟別人抱怨了。"
+        }
+      }
+    ]
+  },
+  {
+    "id": "tale_rn_mengjin",
+    "title": "洛陽回來的客人",
+    "actions": [
+      "socialize"
+    ],
+    "locations": [
+      "runan"
+    ],
+    "condition": {
+      "any_of": [
+        {
+          "marks_min": {
+            "mengjin_ford:救人": 3
+          }
+        },
+        {
+          "marks_min": {
+            "mengjin_ford:頂撞": 3
+          }
+        }
+      ]
+    },
+    "text": "汝南城裡一位剛從洛陽回鄉的士人，在宴席上說起孟津渡：涼州兵在那裡扣船徵糧，已有{marks:mengjin_ford:救人}出手替船家解過圍，也有{marks:mengjin_ford:頂撞}當面頂撞過軍侯。他說得眉飛色舞，席上的人卻有一半變了臉色，因為座中有袁家的門客。",
+    "choices": [
+      {
+        "text": "順著話頭，說涼州兵在京畿也太跋扈",
+        "check": {
+          "stat": "wis",
+          "difficulty": 7,
+          "by": "self"
+        },
+        "effect": {
+          "text": "席上一位袁家的門客點頭，說這話說到了他家主人的心坎上。散席時他記下了你的名號。",
+          "stats": {
+            "fame": 2
+          }
+        },
+        "fail_effect": {
+          "text": "你話一出口，就有人咳了一聲。主人家打圓場轉了話題，此後一整晚沒人再理你。",
+          "stats": {
+            "fame": -1
+          }
+        }
+      },
+      {
+        "text": "陪那位士人喝到散席，聽他私下說",
+        "check": {
+          "stat": "con",
+          "difficulty": 6,
+          "by": "self"
+        },
+        "effect": {
+          "text": "他喝到半醉，跟你說涼州兵的軍侯其實也是奉命行事，真正要糧的人在洛陽。",
+          "stats": {
+            "xinde": 6
+          }
+        },
+        "fail_effect": {
+          "text": "你沒撐到散席就醉倒了，醒來時席上只剩殘羹，還得自己付那份賀禮錢。",
+          "stats": {
+            "silver": -10
+          },
+          "stamina": -5
+        }
+      },
+      {
+        "text": "只管吃菜",
+        "effect": {
+          "text": "你埋頭吃菜，聽見身後有人小聲說：「孟津那邊，遲早要出事。」"
+        }
+      }
+    ]
+  }
+]
