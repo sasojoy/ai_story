@@ -8,7 +8,7 @@
 - `app.py`：Gradio 介面，只負責顯示與接線。
 - `tianxia/encounter.py`：單次判定的遭遇戰（`sanguo-companions` 合併後取代了舊的 `battle.py` 三對三全自動戰鬥，那個檔案已經不存在了）；只處理數字，不 import 內容模型。
 - `tianxia/battle_instance.py`：全服即時多人戰鬥（黃巾決戰）的純邏輯——集結選陣營、逐幕逐回合鎖步、回合結算、機器人補位。資料存在共用世界狀態的 `active_battle`。
-- `tianxia/database.py`：SQLite 資料庫（預設 `saves/tianxia.db`，環境變數 `TIANXIA_DB` 可改；線上版與開發版各用各的）：連線、資料表、交易。一個動作＝一筆交易（`BEGIN IMMEDIATE`，出錯整個撤回），同一個執行緒可以巢狀；資料庫結構版本記在 `PRAGMA user_version`。
+- `tianxia/database.py`：SQLite 資料庫（預設 `saves/tianxia.db`，環境變數 `TIANXIA_DB` 可改；線上版與開發版各用各的）：連線、資料表、交易。一個動作＝一筆交易（`BEGIN IMMEDIATE`，出錯整個撤回），同一個執行緒可以巢狀（交易可以巢狀；`WorldStateStore.mutate` 不行，內層寫的會被外層蓋掉、直接丟 `RuntimeError`，見 `world_state.py`）；資料庫結構版本記在 `PRAGMA user_version`。
 - `tianxia/world_state.py`：全服狀態的資料模型與存取介面 `WorldStateStore`（Protocol）；實作是 `tianxia/sqlite_world.py::SqliteWorldStore`（`open_world()`）。小的整份覆寫，會長大的（傳聞、江湖史、自創武學、煉製配方、投靠名冊、決戰回合）一筆一筆加；換季不刪資料，江湖史跨季保留。
 - `tianxia/characters.py`：角色存檔（`CharacterStore`、`open_characters()`），一個角色一列，**不含賽季**（`GameState.world` 只在記憶體）；名號比對不分大小寫。
 - `tianxia/team.py`：門下、內力、心得升級與散功、武學配置；把人物與武學轉成戰鬥單位；檢定由誰出手；戰前勝算（固定種子模擬 40 場，依完整陣容快取）。

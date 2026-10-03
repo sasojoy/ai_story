@@ -186,7 +186,7 @@ class Database:
             try:
                 conn.row_factory = sqlite3.Row
                 conn.execute("PRAGMA journal_mode = WAL")
-                conn.execute("PRAGMA synchronous = NORMAL")
+                conn.execute("PRAGMA synchronous = FULL")  # 每次 COMMIT 都寫進磁碟：WAL 搭 NORMAL 停電時可能少掉最後幾筆已 COMMIT 的
                 conn.execute("PRAGMA foreign_keys = ON")
             except BaseException:
                 conn.close()  # 設定沒做完的連線不留著，不然它沒人管、也不會被回收

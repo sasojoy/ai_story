@@ -29,7 +29,7 @@ from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, Account
 from tianxia.characters import open_characters
 from tianxia.content import load_content
 from tianxia.craft import MATERIALS_PER_CRAFT
-from tianxia.database import open_database
+from tianxia.database import default_path, open_database
 from tianxia.engine import Game, Option
 from tianxia.journal import CSS as JOURNAL_CSS
 
@@ -1016,5 +1016,6 @@ def build_demo() -> gr.Blocks:
 
 
 if __name__ == "__main__":
+    print(f"資料庫：{default_path().resolve()}", flush=True)  # 跟 run_bots.py 要是同一個檔；TIANXIA_DB 設錯時一眼看得出來
     # Gradio 6 把 css 從 Blocks 的建構子移到 launch()（不照它搬的話樣式根本不會送出）
     build_demo().launch(server_name="0.0.0.0", server_port=7861, share=True, css=UI_CSS)

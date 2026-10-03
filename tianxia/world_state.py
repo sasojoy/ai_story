@@ -116,7 +116,10 @@ class WorldStateStore(Protocol):
     def read(self) -> SharedWorldState: ...
 
     def mutate(self, fn: Callable[[SharedWorldState], None]) -> SharedWorldState:
-        """讀取→套用 fn(state)→寫回，同一筆交易，回傳套用後的狀態。fn 直接原地修改 state。"""
+        """讀取→套用 fn(state)→寫回，同一筆交易，回傳套用後的狀態。fn 直接原地修改 state。
+        fn 裡面不能再呼叫會寫入的 store 方法（mutate、mutate_season、mutate_battle、update_companion 等）：
+        內層寫的會被外層最後的整份存檔蓋掉，實作遇到巢狀會直接丟 RuntimeError。交易本身（action_lock）可以巢狀，
+        不可以的只有 mutate 這一類「整份讀、整份寫」的區段。"""
         ...
 
     # ── 武學命名登記與煉製配方（這一季）──
