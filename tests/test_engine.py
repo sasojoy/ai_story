@@ -1078,7 +1078,7 @@ def test_a_stale_journey_is_dropped_on_load(content, game):
 
 def _install_battle_def(content):
     from tianxia.models import (
-        BattleAct, BattleActionEffect, BattleAdvanceWhen, BattleDef, BattleFaction, BattleOption, BattleOutcome,
+        BattleAct, BattleActionEffect, BattleDef, BattleFaction, BattleOption, BattleOutcome,
     )
 
     definition = BattleDef(
@@ -1088,7 +1088,6 @@ def _install_battle_def(content):
             BattleAct(
                 id="a1", title="初探", text="雙方試探。", goal="推動戰局",
                 options=[BattleOption(text="穩紮穩打", tag="safe"), BattleOption(text="全力進攻", tag="aggressive")],
-                advance_when=BattleAdvanceWhen(trend_min=90),
             ),
         ],
         action_tags={
@@ -1097,6 +1096,7 @@ def _install_battle_def(content):
         },
         outcomes=[BattleOutcome(faction="guan", title="官軍大勝", text="官軍獲勝。")],
         muster_seconds=600, round_seconds=120,
+        rounds_per_act=1,  # 一幕一回合：第一回合結算完就看戰局收場（保底結果沒有門檻，一定是官軍大勝）
     )
     content.battles[definition.id] = definition
     return definition
@@ -1369,7 +1369,7 @@ def test_the_player_whose_action_completes_the_round_sees_the_resolution_text(co
 def test_waiting_for_others_returns_a_placeholder_message(content, game):
     """送出行動但還有人沒選完，回合不會結算：至少要有個訊息，不能讓畫面看起來像沒反應。"""
     definition = _install_battle_def(content)
-    definition.outcomes[0] = definition.outcomes[0].model_copy(update={"trend_min": 999})  # 讓這回合分不出勝負
+    definition.rounds_per_act = 3  # 讓這回合分不出勝負
     game.world.start_battle(definition, now=0.0)
     with at(game, 0.0):
         game.choose("battle:join:guan")
@@ -1527,7 +1527,7 @@ def test_arriving_mid_battle_lets_you_join_late(content, game):
 def test_a_fighter_who_leaves_the_region_sits_the_rounds_out_until_back(content, game):
     definition = _install_battle_def(content)
     definition.region = "north"
-    definition.outcomes[0] = definition.outcomes[0].model_copy(update={"trend_min": 999})  # 不要一回合就分出勝負
+    definition.rounds_per_act = 3  # 不要一回合就分出勝負
     _south_cave(content, game)
     game.world.start_battle(definition, now=0.0)
     with at(game, 0.0):
@@ -1742,6 +1742,7 @@ def _install_battle_def_with_free_text(content):
         },
         outcomes=[BattleOutcome(faction="guan", title="官軍大勝", text="官軍獲勝。")],
         muster_seconds=600, round_seconds=120,
+        rounds_per_act=1,  # 一幕一回合，同 _install_battle_def
     )
     content.battles[definition.id] = definition
     return definition

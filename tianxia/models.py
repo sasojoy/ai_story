@@ -561,25 +561,15 @@ class BattleOption(_Strict):
     # （設計討論：「魯莽」這類選項本來就該是玩家自己想出的招，不是從固定清單挑一個）
 
 
-class BattleAdvanceWhen(_Strict):
-    """跟 Condition 不一樣——戰鬥幕只看戰局 trend，不該看哪個玩家的個人屬性/旗標
-    （一場戰鬥是所有參戰者共同經歷的，不該因為某個人的狀態而對其他人判斷出不同結果）。
-    trend_min/trend_max 是「夾在區間內」（AND，例如「停留在中段膠著」）；trend_outside
-    是「偏離中性值夠多」（OR，雙向都算——戰局往任一方明顯傾斜就該進入下一幕，不是只有
-    某一方拉開差距才算，兩種只會擇一使用）。"""
-
-    trend_min: int | None = None
-    trend_max: int | None = None
-    trend_outside: int | None = None  # |trend - BattleDef.trend_start| >= 這個值就算成立
-
-
 class BattleAct(_Strict):
+    """決戰的一幕。換幕照回合數走（BattleDef.rounds_per_act），不看戰局，所以幕本身沒有換幕條件
+    （戰鬥系統設計 3.2；劇情線的幕 Act.advance_when 是另一回事）。"""
+
     id: str
     title: str
     text: str
     goal: str
     options: list[BattleOption] = Field(min_length=1)
-    advance_when: BattleAdvanceWhen | None = None  # None＝最後一幕
 
 
 class BattleOutcome(_Strict):
@@ -612,7 +602,8 @@ class FreeTextGamble(_Strict):
 
 class BattleDef(_Strict):
     """全服共用的即時多人戰鬥骨架（例如「黃巾決戰」）：集結選陣營→逐幕逐回合（框架給
-    選項，查表推動戰局/扣氣血）→決戰幕的戰局數值判定最終勝負。不是自由發展的 LLM 劇情，
+    選項，查表推動戰局/扣氣血；每幕固定幾回合）→打完最後一回合、或戰局一面倒時，看戰局
+    數值判定最終勝負。不是自由發展的 LLM 劇情，
     是固定骨架裡的有限變因（設計討論：「有一個基本框架，玩家可以根據自身影響一些要素，
     但是大框架還是會進行下去」）。
 
@@ -628,6 +619,10 @@ class BattleDef(_Strict):
     trend_name: str = "戰局"
     trend_start: int = 50
     acts: list[BattleAct] = Field(min_length=1)
+    rounds_per_act: int = Field(default=3, ge=1)  # 每幕打幾回合（戰鬥系統設計 3.2）：第 rounds_per_act 回合結算完換下一幕，
+    # 整場 rounds_per_act × 幕數 回合，最後一回合結算完看戰局定結果
+    decisive_margin: int = Field(default=40, ge=1)  # 戰局偏離 trend_start 到這麼多（|trend − trend_start| ≥ 這個值）
+    # 就當回合收場、不再換幕（壓倒性提前收場；起點 50 時是 90／10）
     action_tags: dict[str, BattleActionEffect]
     free_text_gamble: FreeTextGamble | None = None  # 有 free_text 選項時必填
     outcomes: list[BattleOutcome] = Field(min_length=1)

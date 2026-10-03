@@ -315,6 +315,14 @@ def test_the_showdown_gives_scattered_players_time_to_gather(content):
     assert showdown.round_seconds == 5 * 60
 
 
+def test_the_showdown_is_three_acts_of_three_rounds_and_ends_early_at_90_or_10(content):
+    """戰鬥系統設計 3.2（FB-016）：三幕各 3 回合、共 9 回合（每回合最多 5 分鐘，約 45 分鐘）；
+    戰局到 90 以上或 10 以下就提前收場。"""
+    showdown = content.battles["huangjin_showdown"]
+    assert (len(showdown.acts), showdown.rounds_per_act) == (3, 3)
+    assert (showdown.trend_start + showdown.decisive_margin, showdown.trend_start - showdown.decisive_margin) == (90, 10)
+
+
 def test_nobody_can_join_a_faction_at_the_start_location(content):
     """伺服器假人設計第八節第 3 項：開局地點不設投靠點，不然所有人一開場就全投了官軍。"""
     start = content.scenario.start_location

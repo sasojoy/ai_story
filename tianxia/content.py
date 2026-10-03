@@ -324,12 +324,10 @@ def validate(c: Content) -> None:
         )
         act_ids = [a.id for a in battle.acts]
         need(len(set(act_ids)) == len(act_ids), f"{where}：幕 id 重複")
-        for i, act in enumerate(battle.acts):
+        # 換幕照回合數走（rounds_per_act），不看戰局，幕本身沒有換幕條件；rounds_per_act、decisive_margin
+        # 至少 1 由模型的 ge=1 擋（戰鬥系統設計 3.2）
+        for act in battle.acts:
             aw = f"{where} {act.id}"
-            if i == len(battle.acts) - 1:
-                need(act.advance_when is None, f"{aw}：最後一幕不能有 advance_when")
-            else:
-                need(act.advance_when is not None, f"{aw}：非最後一幕必須有 advance_when")
             for option in act.options:
                 if not option.free_text:  # free_text 選項不查表，機制走 FreeTextGamble 擲骰，不需要 action_tags 裡有對應的 tag
                     known(f"{aw} 選項「{option.text}」", [option.tag], battle.action_tags, "行動分類")
