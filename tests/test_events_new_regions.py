@@ -15,6 +15,7 @@ REGIONS = [  # （大區, 新地點, 最少事件數, 最多事件數）
     ("youzhou", {"loushang_village", "zhuo_militia_hall", "juma_river", "yanshan_foot"}, 5, 7),
     ("jizhou", {"julu_altar", "guangzong", "luzhi_camp", "xiaquyang", "haozu_fort", "baima_ford"}, 7, 9),
     ("luoyang", {"luoyang_palace", "dajiangjun_fu", "beimang_hill", "mengjin_ford"}, 5, 7),
+    ("nanyang", {"nanyang_huangjin_camp", "yu_river", "xinye", "nanyang_wilds"}, 5, 7),
 ]
 REGION_IDS = [row[0] for row in REGIONS]
 
