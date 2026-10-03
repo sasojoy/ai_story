@@ -1,639 +1,1063 @@
 [
- {
-  "id": "jz_altar_talisman",
-  "title": "符水療病",
-  "locations": ["julu_altar"],
-  "text": "道壇前擺著一口大陶缸，道人把燒成灰的黃符攪進水裡，一瓢瓢分給排隊的病人。輪到你時，他說：「信者得癒，飲罷叩首思過。」身後一個咳血的老漢等著看你喝不喝。",
-  "choices": [
-   {
-    "text": "一口飲盡，跪下叩首思過",
-    "check": {"stat": "con", "difficulty": 6, "by": "self"},
-    "effect": {
-     "text": "符灰嗆喉，你硬是嚥下去，跪足一炷香。道人點頭，信眾看你的眼神親近了許多，有人塞給你兩個麥餅。",
-     "stats": {"xinde": 8},
-     "trend": {"huangjin": 1}
-    },
-    "fail_effect": {
-     "text": "缸裡的水不知擱了幾天，你喝下去不久就腹中絞痛，蹲在壇後吐了半天。",
-     "stamina": -10
+  {
+    "id": "jz_altar_talisman",
+    "title": "符水療病",
+    "locations": [
+      "julu_altar"
+    ],
+    "text": "道壇前擺著一口大陶缸，道人把燒成灰的黃符攪進水裡，一瓢瓢分給排隊的病人。輪到你時，他說：「信者得癒，飲罷叩首思過。」身後一個咳血的老漢等著看你喝不喝。",
+    "choices": [
+      {
+        "text": "一口飲盡，跪下叩首思過",
+        "check": {
+          "stat": "con",
+          "difficulty": 6,
+          "by": "self"
+        },
+        "effect": {
+          "text": "符灰嗆喉，你硬是嚥下去，跪足一炷香。道人點頭，信眾看你的眼神親近了許多，有人塞給你兩個麥餅。",
+          "stats": {
+            "xinde": 8
+          },
+          "trend": {
+            "huangjin": 1
+          }
+        },
+        "fail_effect": {
+          "text": "缸裡的水不知擱了幾天，你喝下去不久就腹中絞痛，蹲在壇後吐了半天。",
+          "stamina": -10
+        }
+      },
+      {
+        "text": "看道人怎麼調的符水",
+        "check": {
+          "stat": "wis",
+          "difficulty": 7
+        },
+        "effect": {
+          "text": "你看出他往缸裡另撒了一把甘草與黃芩末，真正治咳的是藥。你悄悄告訴老漢去鄉里藥鋪照方抓藥，老漢千恩萬謝。",
+          "stats": {
+            "good": 2,
+            "wis": 1
+          }
+        },
+        "fail_effect": {
+          "text": "你盯著缸子看得太久，執杖的力士過來問你是不是官府的探子，你只得陪笑走開。",
+          "stats": {
+            "fame": -1
+          }
+        }
+      },
+      {
+        "text": "推說自己沒病，讓給老漢",
+        "effect": {
+          "text": "老漢接過瓢喝了，咳得輕了些，也不知是符水靈驗，還是心裡寬了。"
+        }
+      }
+    ],
+    "free_text": {
+      "prompt": "另想法子替老漢治咳",
+      "stat": "wis",
+      "by": "team",
+      "effect": {
+        "text": "老漢的咳嗽總算緩了下來，拉著你的手直說好人有好報。",
+        "stats": {
+          "good": 2,
+          "xinde": 4
+        }
+      },
+      "fail_effect": {
+        "text": "法子沒能奏效，老漢咳得更凶，你忙前忙後折騰了大半天。",
+        "stamina": -10
+      }
     }
-   },
-   {
-    "text": "看道人怎麼調的符水",
-    "check": {"stat": "wis", "difficulty": 7},
-    "effect": {
-     "text": "你看出他往缸裡另撒了一把甘草與黃芩末，真正治咳的是藥。你悄悄告訴老漢去鄉里藥鋪照方抓藥，老漢千恩萬謝。",
-     "stats": {"good": 2, "wis": 1}
-    },
-    "fail_effect": {
-     "text": "你盯著缸子看得太久，執杖的力士過來問你是不是官府的探子，你只得陪笑走開。",
-     "stats": {"fame": -1}
+  },
+  {
+    "id": "jz_altar_roster",
+    "title": "道籍名冊",
+    "locations": [
+      "julu_altar"
+    ],
+    "text": "道壇偏殿的木架上堆著一卷卷名冊，記的是各方信眾的姓名、所屬方與渠帥。今夜守殿的只有一個打盹的小道童，殿外卻不時有力士提燈走過。",
+    "choices": [
+      {
+        "text": "趁巡燈的空檔溜進去抄幾卷",
+        "check": {
+          "stat": "agi",
+          "difficulty": 8
+        },
+        "effect": {
+          "text": "你借著月光抄下兩卷，裡頭有鄰縣幾個鄉里的頭目姓名。這東西拿去官軍營裡，總有人肯出錢。",
+          "stats": {
+            "silver": 30
+          },
+          "trend": {
+            "huangjin": -2
+          }
+        },
+        "fail_effect": {
+          "text": "你剛摸到木架，小道童就醒了，尖叫聲引來提燈的力士，你翻牆逃出，膝蓋磕得一片青紫。",
+          "stamina": -15,
+          "stats": {
+            "fame": -1
+          }
+        }
+      },
+      {
+        "text": "幫道童把散落的竹簡重新編繩",
+        "check": {
+          "stat": "wis",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "你按方別把竹簡理得整整齊齊，道童高興得很，說要在祭酒面前替你美言，還把自己的晚飯分你一半。",
+          "stats": {
+            "good": 1,
+            "xinde": 6
+          },
+          "trend": {
+            "huangjin": 1
+          }
+        },
+        "fail_effect": {
+          "text": "你把兩方的名冊編混了，道童急得快哭，你只好陪他重編到天亮。",
+          "stamina": -10
+        }
+      },
+      {
+        "text": "硬闖偏殿，把名冊燒了",
+        "combat": "taiping_lishi",
+        "effect": {
+          "text": "你打倒衝進來的力士，把一架竹簡推進火盆。往後這一帶誰入過道，再也查不清了。",
+          "stats": {
+            "fame": 2,
+            "evil": 1
+          },
+          "trend": {
+            "huangjin": -3
+          }
+        },
+        "fail_effect": {
+          "text": "力士們的木杖又沉又快，你挨了幾下，被架著丟出道壇大門。",
+          "stamina": -15,
+          "stats": {
+            "silver": -15
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "jz_gz_deserter",
+    "title": "夜渡深壕",
+    "locations": [
+      "guangzong"
+    ],
+    "text": "夜裡壕溝邊伏著一個年輕的黃巾兵，頭上的黃巾已經扯下來塞進懷裡。他說家在清河，老母一人在家，求你幫他泅過壕溝，對岸就是野地。",
+    "choices": [
+      {
+        "text": "背著他泅過冰冷的壕水",
+        "check": {
+          "stat": "con",
+          "difficulty": 8,
+          "by": "self"
+        },
+        "effect": {
+          "text": "壕水冷得刺骨，你咬牙一步步蹚過去，把他推上對岸。他回頭跪了一跪，消失在夜色裡。",
+          "stats": {
+            "good": 2,
+            "con": 1
+          },
+          "trend": {
+            "huangjin": -1
+          }
+        },
+        "fail_effect": {
+          "text": "游到一半你腿抽了筋，兩人狼狽爬回原岸，凍得牙齒打顫，只能等明夜再說。",
+          "stamina": -20
+        }
+      },
+      {
+        "text": "去營壘那頭弄出動靜，引開哨兵",
+        "check": {
+          "stat": "agi",
+          "difficulty": 7
+        },
+        "effect": {
+          "text": "你在遠處踢翻一垛柴草，哨兵提燈趕過去，他趁機摸到壕邊下了水。",
+          "stats": {
+            "good": 1,
+            "fame": 1
+          }
+        },
+        "fail_effect": {
+          "text": "哨兵沒被引走，反倒朝你這邊放了兩箭，你伏在泥裡半個時辰才敢動。",
+          "stamina": -10,
+          "stats": {
+            "silver": -10
+          }
+        }
+      },
+      {
+        "text": "勸他再等等，城裡總有出路",
+        "effect": {
+          "text": "他苦笑一聲，把黃巾重新繫回頭上，低頭走回營去。"
+        }
+      }
+    ],
+    "free_text": {
+      "prompt": "另想法子送他過壕",
+      "stat": "agi",
+      "by": "team",
+      "effect": {
+        "text": "那年輕人平安過了壕溝，消失在對岸的野地裡，臨走前回頭朝你磕了個頭。",
+        "stats": {
+          "good": 2,
+          "fame": 1
+        },
+        "trend": {
+          "huangjin": -1
+        }
+      },
+      "fail_effect": {
+        "text": "動靜驚動了營壘的哨兵，你們兩人只得分頭逃散，你身上的錢也丟了幾個。",
+        "stamina": -10,
+        "stats": {
+          "silver": -10
+        }
+      }
     }
-   },
-   {
-    "text": "推說自己沒病，讓給老漢",
-    "effect": {
-     "text": "老漢接過瓢喝了，咳得輕了些，也不知是符水靈驗，還是心裡寬了。"
+  },
+  {
+    "id": "jz_gz_drumsignal",
+    "title": "營壘鼓號",
+    "locations": [
+      "guangzong"
+    ],
+    "text": "廣宗城外的營壘一座連著一座，每到換更就此起彼落地擂鼓舉火。你蹲在土坡上數著，隱約覺得那鼓點與火把是在互通消息，不只是報時。",
+    "choices": [
+      {
+        "text": "記下三更的鼓點，琢磨其中規律",
+        "check": {
+          "stat": "wis",
+          "difficulty": 8,
+          "by": "self"
+        },
+        "effect": {
+          "text": "連看兩夜，你看懂了：三通鼓是換防，舉雙火是糧車進營。這些記在心裡，往後在廣宗一帶進出就有了分寸。",
+          "stats": {
+            "xinde": 12
+          }
+        },
+        "fail_effect": {
+          "text": "鼓點聽得你頭昏腦脹，天亮時發現自己在土坡上睡著了，渾身露水。",
+          "stamina": -10
+        }
+      },
+      {
+        "text": "摸近最外一座營壘，看清守備",
+        "check": {
+          "stat": "agi",
+          "difficulty": 7
+        },
+        "effect": {
+          "text": "你貼著營壘外的鹿角爬了一圈，看清了哪一面的柵欄最鬆。回頭把這些話賣給來打聽的商販，換了幾個錢。",
+          "stats": {
+            "silver": 20
+          }
+        },
+        "fail_effect": {
+          "text": "鹿角上的倒刺勾住你的衣襟，營上有人喊了一聲，你扯破半幅衣裳才脫身。",
+          "stamina": -10,
+          "stats": {
+            "silver": -10
+          }
+        }
+      },
+      {
+        "text": "截住換防的渠帥一行",
+        "combat": "toumu",
+        "effect": {
+          "text": "你在營壘之間的小路上截住渠帥的親隨，搶下一面令旗。隔天一整段營壘的鼓號都亂了套。",
+          "stats": {
+            "fame": 3
+          },
+          "trend": {
+            "huangjin": -3
+          },
+          "rumor": "廣宗城外有一段黃巾營壘的令旗被人奪了，聽說動手的是{name}。"
+        },
+        "fail_effect": {
+          "text": "渠帥的刀法狠辣，你身上多了兩道口子，連滾帶爬逃進野地。",
+          "stamina": -20,
+          "stats": {
+            "fame": -1
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "jz_gz_forge",
+    "title": "犁頭鑄矛",
+    "locations": [
+      "guangzong"
+    ],
+    "text": "城牆根下搭起一排草棚鐵坊，鄉民繳來的犁頭、鋤刃堆成一座小山，鐵匠們日夜把它們回爐打成矛頭。風箱旁缺人手，坊頭正扯著嗓子招人。",
+    "choices": [
+      {
+        "text": "掄錘打鐵，掙一份工錢",
+        "check": {
+          "stat": "str",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "你掄了一整天大錘，坊頭驗過矛頭，點頭付錢，還順手抓給你一把鍛剩的鐵砂。",
+          "stats": {
+            "silver": 15
+          },
+          "materials": {
+            "gang_1": 1
+          },
+          "trend": {
+            "huangjin": 1
+          }
+        },
+        "fail_effect": {
+          "text": "錘子落偏，砸壞了兩個矛頭，坊頭扣了你的工錢還罵你白吃一頓飯。",
+          "stamina": -10,
+          "stats": {
+            "silver": -10
+          }
+        }
+      },
+      {
+        "text": "守在爐口拉一夜風箱",
+        "check": {
+          "stat": "con",
+          "difficulty": 7,
+          "by": "self"
+        },
+        "effect": {
+          "text": "爐火烤得人皮都要裂了，你一口氣拉到天明，老鐵匠遞給你一碗涼水，說你這身骨頭是塊好料。",
+          "stats": {
+            "silver": 10,
+            "xinde": 8
+          }
+        },
+        "fail_effect": {
+          "text": "熬到半夜你眼前發黑，一頭栽在炭堆邊，被人拖出棚外吹風。",
+          "stamina": -15
+        }
+      },
+      {
+        "text": "看看就走",
+        "effect": {
+          "text": "叮噹聲一路追著你走出好遠。一把犁頭打成一支矛，不知明年春天誰來耕田。"
+        }
+      }
+    ]
+  },
+  {
+    "id": "jz_lz_bamboo",
+    "title": "軍書謄抄",
+    "locations": [
+      "luzhi_camp"
+    ],
+    "text": "盧植營的書佐帳裡堆滿了待發的竹簡，要送往洛陽的軍報與各營的軍令都得謄抄兩份。一個熬紅了眼的書佐見你識字，招手要你幫忙。",
+    "choices": [
+      {
+        "text": "坐下來一字不差地謄抄",
+        "check": {
+          "stat": "wis",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "你抄得又快又工整，書佐鬆了口氣，分了你一份賞錢。抄的時候也看到不少圍城的兵法佈置。",
+          "stats": {
+            "silver": 15,
+            "xinde": 8
+          }
+        },
+        "fail_effect": {
+          "text": "你抄錯了一個營名，被軍司馬當場撕了竹簡，罰你在帳外站了一個時辰。",
+          "stamina": -10,
+          "stats": {
+            "fame": -1
+          }
+        }
+      },
+      {
+        "text": "陪書佐熬夜，把整批軍書趕完",
+        "check": {
+          "stat": "con",
+          "difficulty": 8,
+          "by": "self"
+        },
+        "effect": {
+          "text": "燈油添了三回，你和書佐熬到雞鳴，軍書趕在天亮前封好上路。書佐記下了你的名字，說要報給軍司馬。",
+          "stats": {
+            "silver": 10,
+            "fame": 2
+          }
+        },
+        "fail_effect": {
+          "text": "你熬到後半夜伏案睡著，筆尖在竹簡上拖出一長道墨痕，書佐只得從頭重抄。",
+          "stamina": -15
+        }
+      },
+      {
+        "text": "說自己的字見不得人",
+        "effect": {
+          "text": "書佐嘆口氣，又埋頭抄了起來，帳裡只剩刻刀與筆尖的沙沙聲。"
+        }
+      }
+    ]
+  },
+  {
+    "id": "jz_lz_siegework",
+    "title": "掘壕圍城",
+    "locations": [
+      "luzhi_camp"
+    ],
+    "text": "盧植下令掘長壕、築土圍，要把廣宗團團圍死。營外的工地上，士卒與徵來的民夫並肩挖土，監工的軍侯手裡的鞭子從沒放下過。",
+    "choices": [
+      {
+        "text": "下壕去挖一整夜的土",
+        "check": {
+          "stat": "con",
+          "difficulty": 7,
+          "by": "self"
+        },
+        "effect": {
+          "text": "你挖到手上起了血泡，那一段壕溝比旁邊深了半尺。軍侯走過時多看你一眼，賞你一份口糧錢。",
+          "stats": {
+            "silver": 15,
+            "xinde": 6
+          },
+          "trend": {
+            "huangjin": -1
+          }
+        },
+        "fail_effect": {
+          "text": "半夜壕壁塌了一角，你被土埋到腰，幾個民夫把你拉出來，渾身是泥。",
+          "stamina": -15
+        }
+      },
+      {
+        "text": "扛木樁去築柵",
+        "check": {
+          "stat": "str",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "你一肩扛兩根木樁，一個早上就把柵欄立起一大段，士卒們都叫好。",
+          "stats": {
+            "silver": 10,
+            "fame": 1
+          },
+          "trend": {
+            "huangjin": -1
+          }
+        },
+        "fail_effect": {
+          "text": "木樁滾下肩頭，差點砸到人，軍侯罵你礙手礙腳，把你攆出工地。",
+          "stamina": -10,
+          "stats": {
+            "fame": -1
+          }
+        }
+      },
+      {
+        "text": "巡騎疑你是城裡派來的細作，不肯解釋",
+        "combat": "guan_patrol",
+        "effect": {
+          "text": "你把幾個巡騎打下馬，軍侯趕來問清緣由，反倒笑說營裡正缺這樣的身手。",
+          "stats": {
+            "fame": 2,
+            "evil": 1
+          }
+        },
+        "fail_effect": {
+          "text": "巡騎把你按倒捆了，關進營中押了半日，搜走了身上的錢才放人。",
+          "stamina": -10,
+          "stats": {
+            "silver": -20
+          }
+        }
+      }
+    ],
+    "free_text": {
+      "prompt": "想個法子讓壕挖得快些",
+      "stat": "wis",
+      "by": "team",
+      "effect": {
+        "text": "這一夜的工比往常快了不少，軍侯破天荒沒揮鞭子，收工時多給了你一份錢。",
+        "stats": {
+          "silver": 10,
+          "xinde": 4
+        },
+        "trend": {
+          "huangjin": -1
+        }
+      },
+      "fail_effect": {
+        "text": "白忙一場，工沒快多少，軍侯還嫌你多事，當著民夫的面罵了你一頓。",
+        "stamina": -10,
+        "stats": {
+          "fame": -1
+        }
+      }
     }
-   }
-  ]
- },
- {
-  "id": "jz_altar_roster",
-  "title": "道籍名冊",
-  "locations": ["julu_altar"],
-  "text": "道壇偏殿的木架上堆著一卷卷名冊，記的是各方信眾的姓名、所屬方與渠帥。今夜守殿的只有一個打盹的小道童，殿外卻不時有力士提燈走過。",
-  "choices": [
-   {
-    "text": "趁巡燈的空檔溜進去抄幾卷",
-    "check": {"stat": "agi", "difficulty": 8},
-    "effect": {
-     "text": "你借著月光抄下兩卷，裡頭有鄰縣幾個鄉里的頭目姓名。這東西拿去官軍營裡，總有人肯出錢。",
-     "stats": {"silver": 30},
-     "trend": {"huangjin": -2}
-    },
-    "fail_effect": {
-     "text": "你剛摸到木架，小道童就醒了，尖叫聲引來提燈的力士，你翻牆逃出，膝蓋磕得一片青紫。",
-     "stamina": -15,
-     "stats": {"fame": -1}
+  },
+  {
+    "id": "jz_xqy_cellar",
+    "title": "空村地窖",
+    "locations": [
+      "xiaquyang"
+    ],
+    "text": "下曲陽城外的村子十室九空，門板都被拆去燒火。你經過一戶倒塌的土屋，聽見灶台底下傳出壓低的嬰兒哭聲，又立刻被捂住。",
+    "choices": [
+      {
+        "text": "隔著灶台低聲說明來意",
+        "check": {
+          "stat": "wis",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "躲在地窖裡的是一家四口，怕被拉去城裡做苦役。你指給他們一條往南的小路，婦人把僅有的一塊碎銀硬塞給你。",
+          "stats": {
+            "good": 2,
+            "silver": 5
+          }
+        },
+        "fail_effect": {
+          "text": "地窖裡的人只當你是來抓人的，死也不肯出聲，你在屋外守到天黑也沒等到人。",
+          "stamina": -10
+        }
+      },
+      {
+        "text": "搬開壓在灶上的斷梁",
+        "check": {
+          "stat": "str",
+          "difficulty": 8
+        },
+        "effect": {
+          "text": "你把斷梁一點點撬開，地窖口透進天光。老漢爬出來，從懷裡摸出一塊祖傳的壓甕石送你，說留著也沒用了。",
+          "stats": {
+            "good": 2
+          },
+          "materials": {
+            "man_1": 1
+          }
+        },
+        "fail_effect": {
+          "text": "斷梁一滑壓住你的手，好半天才抽出來，地窖裡的人嚇得再也不敢應聲。",
+          "stamina": -15
+        }
+      },
+      {
+        "text": "裝作沒聽見，走開",
+        "effect": {
+          "text": "哭聲在你身後停了。這一帶，裝作沒聽見才是活命的法子。"
+        }
+      }
+    ],
+    "free_text": {
+      "prompt": "想法子讓窖裡人信你",
+      "stat": "wis",
+      "by": "team",
+      "effect": {
+        "text": "灶台底下的人終於肯出來了，是一個婦人抱著嬰兒，她含淚謝過你，往南邊投親去了。",
+        "stats": {
+          "good": 2
+        }
+      },
+      "fail_effect": {
+        "text": "窖裡的人嚇得再不出聲，你在廢屋邊守了許久，只得悻悻離開。",
+        "stamina": -10
+      }
     }
-   },
-   {
-    "text": "幫道童把散落的竹簡重新編繩",
-    "check": {"stat": "wis", "difficulty": 6},
-    "effect": {
-     "text": "你按方別把竹簡理得整整齊齊，道童高興得很，說要在祭酒面前替你美言，還把自己的晚飯分你一半。",
-     "stats": {"good": 1, "xinde": 6},
-     "trend": {"huangjin": 1}
-    },
-    "fail_effect": {
-     "text": "你把兩方的名冊編混了，道童急得快哭，你只好陪他重編到天亮。",
-     "stamina": -10
+  },
+  {
+    "id": "jz_xqy_wallhaul",
+    "title": "城下徵夫",
+    "locations": [
+      "xiaquyang"
+    ],
+    "text": "張寶的兵馬正加高下曲陽的城牆，凡是路過的青壯一律被攔下，背石運土。城門邊堆著剛徵來的糧袋，守門的兵忙著搬糧，眼睛顧不過來。",
+    "choices": [
+      {
+        "text": "老老實實背一天石頭",
+        "check": {
+          "stat": "str",
+          "difficulty": 7
+        },
+        "effect": {
+          "text": "你背石頭背得比誰都快，管工的頭目放你走時還給了兩升粟米錢，說黃天之下不虧待出力的人。",
+          "stats": {
+            "silver": 10,
+            "xinde": 6
+          },
+          "trend": {
+            "huangjin": 1
+          }
+        },
+        "fail_effect": {
+          "text": "石頭從背上滾下來砸了腳，頭目嫌你沒用，罰你多扛了半天土。",
+          "stamina": -20
+        }
+      },
+      {
+        "text": "混在搬糧的人裡溜進城看看",
+        "check": {
+          "stat": "agi",
+          "difficulty": 8
+        },
+        "effect": {
+          "text": "你扛著糧袋混進城門，看清了糧倉在城東、守倉的不過數十人。出城時順手把那袋糧丟給城外的饑民。",
+          "stats": {
+            "good": 1,
+            "fame": 1
+          },
+          "trend": {
+            "huangjin": -1
+          }
+        },
+        "fail_effect": {
+          "text": "守門的兵認出你不是徵來的民夫，一腳把你踹出城門，身上的錢也被搜了去。",
+          "stamina": -10,
+          "stats": {
+            "silver": -20
+          }
+        }
+      },
+      {
+        "text": "不肯低頭，跟攔路的兵動手",
+        "combat": "shanzei",
+        "effect": {
+          "text": "你把攔路的散兵打得四散，被押著的幾個青壯趁亂跑了。",
+          "stats": {
+            "fame": 2,
+            "good": 1
+          },
+          "trend": {
+            "huangjin": -1
+          }
+        },
+        "fail_effect": {
+          "text": "散兵人多，你被按在地上，硬是背了兩天石頭才找到機會逃走。",
+          "stamina": -20,
+          "stats": {
+            "fame": -1
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "jz_hz_tower",
+    "title": "箭樓守夜",
+    "locations": [
+      "haozu_fort"
+    ],
+    "text": "塢堡四角的箭樓夜夜有人值守，北風從牆垛灌進來，冷得像刀割。部曲的屯長缺人守西北角那座樓，說守到天亮給一份工錢，聽說前幾夜有流民來摸牆。",
+    "choices": [
+      {
+        "text": "裹緊衣裳，在樓上熬到天亮",
+        "check": {
+          "stat": "con",
+          "difficulty": 6,
+          "by": "self"
+        },
+        "effect": {
+          "text": "你在寒風裡硬撐一夜，眼睛沒閉過。天亮換崗時屯長遞給你一碗熱酒和工錢。",
+          "stats": {
+            "silver": 15
+          }
+        },
+        "fail_effect": {
+          "text": "後半夜你凍得打起盹，被查哨的屯長抓個正著，工錢一文也沒拿到。",
+          "stamina": -10,
+          "stats": {
+            "fame": -1
+          }
+        }
+      },
+      {
+        "text": "看見牆下有黑影，放一支火箭照明",
+        "check": {
+          "stat": "agi",
+          "difficulty": 7
+        },
+        "effect": {
+          "text": "火箭釘在牆外的枯草上燒起來，照出幾個想挖牆的流民，他們丟下鐵鍬就跑。塢主聽說後，特地召見了你。",
+          "stats": {
+            "silver": 20,
+            "fame": 1
+          },
+          "marks": {
+            "haozu_fort:驅趕": 1
+          }
+        },
+        "fail_effect": {
+          "text": "火箭射偏，落進堡內的草料堆，眾人提水救了半夜，屯長的臉黑得像鍋底。",
+          "stamina": -15,
+          "stats": {
+            "silver": -15
+          }
+        }
+      },
+      {
+        "text": "推說受了風寒",
+        "effect": {
+          "text": "屯長哼了一聲，另找了個佃農的兒子上樓去。"
+        }
+      }
+    ]
+  },
+  {
+    "id": "jz_hz_rentdebt",
+    "title": "佃戶欠租",
+    "locations": [
+      "haozu_fort"
+    ],
+    "text": "塢堡的管事拿著租簿，在堡門內點名收租。一個去年被黃巾搶光了糧的佃戶跪在地上，說實在繳不出，管事冷笑著要部曲把他的女兒帶去抵債。",
+    "choices": [
+      {
+        "text": "翻看租簿，替佃戶算清舊帳",
+        "check": {
+          "stat": "wis",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "你一筆筆算下來，發現管事把去年遭兵災該免的兩成也算進去了。管事臉上掛不住，只好讓佃戶來年再補。",
+          "stats": {
+            "good": 2,
+            "fame": 1
+          }
+        },
+        "fail_effect": {
+          "text": "管事的帳做得滴水不漏，你挑不出毛病，反被他當眾嘲笑多管閒事。",
+          "stats": {
+            "fame": -1
+          }
+        }
+      },
+      {
+        "text": "掏錢替佃戶先墊上",
+        "check": {
+          "stat": "con",
+          "difficulty": 7
+        },
+        "effect": {
+          "text": "管事嫌錢不夠，要你替佃戶扛完糧倉裡積下的租糧才算數。你扛了一整天，佃戶一家跪著送你出門。",
+          "stats": {
+            "silver": -20,
+            "good": 3
+          }
+        },
+        "fail_effect": {
+          "text": "扛到一半你就撐不住了，管事收了你的錢，卻說只抵得了一半。",
+          "stamina": -15,
+          "stats": {
+            "silver": -20,
+            "good": 1
+          }
+        }
+      },
+      {
+        "text": "擋在佃戶女兒身前",
+        "combat": "wubao_buqu",
+        "effect": {
+          "text": "你打退上前拉人的部曲，堡裡的佃農們都圍過來看。管事不敢再逼，悻悻收起了租簿。",
+          "stats": {
+            "good": 2,
+            "fame": 2
+          }
+        },
+        "fail_effect": {
+          "text": "部曲把你架出堡門，丟在壕溝邊。管事在牆上喊，這塢堡往後不歡迎你。",
+          "stamina": -15,
+          "stats": {
+            "fame": -2
+          }
+        }
+      }
+    ],
+    "free_text": {
+      "prompt": "另想辦法保下佃戶女兒",
+      "stat": "wis",
+      "by": "team",
+      "effect": {
+        "text": "管事終究沒把人帶走，佃戶一家抱在一起哭成一團，圍觀的佃農都記住了你。",
+        "stats": {
+          "good": 2,
+          "fame": 1
+        }
+      },
+      "fail_effect": {
+        "text": "管事不吃這一套，叫部曲把你推出堡門，佃農們只敢遠遠看著。",
+        "stamina": -10,
+        "stats": {
+          "fame": -1
+        }
+      }
     }
-   },
-   {
-    "text": "硬闖偏殿，把名冊燒了",
-    "combat": "taiping_lishi",
-    "effect": {
-     "text": "你打倒衝進來的力士，把一架竹簡推進火盆。往後這一帶誰入過道，再也查不清了。",
-     "stats": {"fame": 2, "evil": 1},
-     "trend": {"huangjin": -3}
-    },
-    "fail_effect": {
-     "text": "力士們的木杖又沉又快，你挨了幾下，被架著丟出道壇大門。",
-     "stamina": -15,
-     "stats": {"silver": -15}
+  },
+  {
+    "id": "jz_hz_stonelock",
+    "title": "部曲試力",
+    "locations": [
+      "haozu_fort"
+    ],
+    "text": "塢主在校場上親自挑部曲，地上擺著大小三個石鎖，最大的那個據說只有塢主的族弟舉過頭頂。圍觀的佃農起鬨，要你這個外鄉人也上去試試。",
+    "choices": [
+      {
+        "text": "去舉那個最大的石鎖",
+        "check": {
+          "stat": "str",
+          "difficulty": 8
+        },
+        "effect": {
+          "text": "你一聲低喝把石鎖舉過頭頂，校場上一片叫好。塢主親手賞你一份錢，說塢堡的門隨時為你開著。",
+          "stats": {
+            "silver": 25,
+            "fame": 2
+          }
+        },
+        "fail_effect": {
+          "text": "石鎖只離地半尺就脫了手，砸得塵土飛揚，你閃了腰，佃農們笑成一片。",
+          "stamina": -15,
+          "stats": {
+            "fame": -1
+          }
+        }
+      },
+      {
+        "text": "說力氣不算本事，比繞箭樓跑圈",
+        "check": {
+          "stat": "agi",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "你沿著堡牆跑了三圈，把部曲裡腳程最快的甩下半圈。塢主大笑，賞了你一碗酒和幾個錢。",
+          "stats": {
+            "silver": 10,
+            "fame": 1
+          }
+        },
+        "fail_effect": {
+          "text": "跑到第二圈你就喘得說不出話，部曲們拍著你的背，笑你外鄉人中看不中用。",
+          "stamina": -10
+        }
+      },
+      {
+        "text": "擺擺手，站在一旁看",
+        "effect": {
+          "text": "塢主的族弟上前把大石鎖舉了起來，部曲們齊聲喝采，聲音傳出牆外好遠。"
+        }
+      }
+    ]
+  },
+  {
+    "id": "jz_bm_goatraft",
+    "title": "羊皮筏子",
+    "locations": [
+      "baima_ford"
+    ],
+    "text": "渡船一天只開兩趟，岸邊有個老船戶吹脹了幾個羊皮囊，綁成筏子偷偷載人過河。今日黃河水急，他看了看水色，說還差一個肯下水推筏的人。",
+    "choices": [
+      {
+        "text": "下水扶著筏子泅過河",
+        "check": {
+          "stat": "con",
+          "difficulty": 8,
+          "by": "self"
+        },
+        "effect": {
+          "text": "黃河水又濁又冷，你扶著筏子硬是撐到對岸。老船戶分你一份船錢，說河上討生活的人裡也少有你這口氣。",
+          "stats": {
+            "silver": 20,
+            "con": 1
+          }
+        },
+        "fail_effect": {
+          "text": "一個浪頭打來，你嗆了幾口泥水被沖開，老船戶拿竹篙把你撈上岸，你吐了半天黃湯。",
+          "stamina": -20
+        }
+      },
+      {
+        "text": "幫老船戶看水路，挑個回水處下筏",
+        "check": {
+          "stat": "wis",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "你看出上游沙洲後面水勢較緩，筏子從那裡下水，一路平平穩穩。過河的一家人謝了你一把乾棗和幾個錢。",
+          "stats": {
+            "silver": 10,
+            "good": 1
+          }
+        },
+        "fail_effect": {
+          "text": "你挑的地方底下全是暗沙，筏子擱淺了兩回，客人罵罵咧咧，船錢少收了一半。",
+          "stamina": -10,
+          "stats": {
+            "silver": -5
+          }
+        }
+      },
+      {
+        "text": "等明天的渡船",
+        "effect": {
+          "text": "你在岸邊坐了一夜，看著羊皮筏子一趟趟消失在濁浪裡。"
+        }
+      }
+    ]
+  },
+  {
+    "id": "jz_bm_pirates",
+    "title": "水寇攔舟",
+    "locations": [
+      "baima_ford"
+    ],
+    "text": "一艘從潁川北上的貨船剛靠近白馬津，就被兩條快船夾住。水寇用撓鉤勾住船舷，船上的商人抱著箱子大喊救命，岸上的郡兵卻慢吞吞地不肯過來。",
+    "choices": [
+      {
+        "text": "踩著撓鉤一路跳上快船",
+        "check": {
+          "stat": "agi",
+          "difficulty": 7
+        },
+        "effect": {
+          "text": "你從貨船躍上快船，一腳把舵手踢下水，水寇們見勢不妙，割斷撓鉤溜了。商人捧出一包錢道謝。",
+          "stats": {
+            "silver": 25,
+            "fame": 1
+          }
+        },
+        "fail_effect": {
+          "text": "你一腳踩空掉進河裡，等你濕淋淋地爬上岸，快船早已載著搶來的貨走遠了。",
+          "stamina": -15,
+          "stats": {
+            "silver": -5
+          }
+        }
+      },
+      {
+        "text": "跳上貨船，搶過船槳往岸邊划",
+        "check": {
+          "stat": "str",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "你一個人划得貨船直往岸邊衝，水寇的撓鉤被扯脫兩支，只好放棄。商人送你一捆貨裡的上好絲綿。",
+          "stats": {
+            "good": 1
+          },
+          "materials": {
+            "rou_1": 1
+          }
+        },
+        "fail_effect": {
+          "text": "船槳在你手裡啪地斷了，貨船被拖走半里，你只能跳水逃回岸上。",
+          "stamina": -15
+        }
+      },
+      {
+        "text": "對岸上的郡兵大喊，催他們出手",
+        "effect": {
+          "text": "郡兵磨磨蹭蹭地放了幾箭，水寇搶走兩箱貨就走了。商人坐在船頭，罵官兵比水寇還靠不住。"
+        }
+      }
+    ],
+    "free_text": {
+      "prompt": "另想法子替貨船解圍",
+      "stat": "agi",
+      "by": "team",
+      "effect": {
+        "text": "水寇的快船一陣混亂後撤走了，商人驚魂未定，硬塞給你一包酬謝。",
+        "stats": {
+          "silver": 15,
+          "good": 1
+        }
+      },
+      "fail_effect": {
+        "text": "水寇沒被唬住，撓鉤反把你拖進水裡，你狼狽地爬上岸，錢袋也輕了。",
+        "stamina": -15,
+        "stats": {
+          "silver": -5
+        }
+      }
     }
-   }
-  ]
- },
- {
-  "id": "jz_gz_deserter",
-  "title": "夜渡深壕",
-  "locations": ["guangzong"],
-  "text": "夜裡壕溝邊伏著一個年輕的黃巾兵，頭上的黃巾已經扯下來塞進懷裡。他說家在清河，老母一人在家，求你幫他泅過壕溝，對岸就是野地。",
-  "choices": [
-   {
-    "text": "背著他泅過冰冷的壕水",
-    "check": {"stat": "con", "difficulty": 8, "by": "self"},
-    "effect": {
-     "text": "壕水冷得刺骨，你咬牙一步步蹚過去，把他推上對岸。他回頭跪了一跪，消失在夜色裡。",
-     "stats": {"good": 2, "con": 1},
-     "trend": {"huangjin": -1}
-    },
-    "fail_effect": {
-     "text": "游到一半你腿抽了筋，兩人狼狽爬回原岸，凍得牙齒打顫，只能等明夜再說。",
-     "stamina": -20
-    }
-   },
-   {
-    "text": "去營壘那頭弄出動靜，引開哨兵",
-    "check": {"stat": "agi", "difficulty": 7},
-    "effect": {
-     "text": "你在遠處踢翻一垛柴草，哨兵提燈趕過去，他趁機摸到壕邊下了水。",
-     "stats": {"good": 1, "fame": 1}
-    },
-    "fail_effect": {
-     "text": "哨兵沒被引走，反倒朝你這邊放了兩箭，你伏在泥裡半個時辰才敢動。",
-     "stamina": -10,
-     "stats": {"silver": -10}
-    }
-   },
-   {
-    "text": "勸他再等等，城裡總有出路",
-    "effect": {
-     "text": "他苦笑一聲，把黃巾重新繫回頭上，低頭走回營去。"
-    }
-   }
-  ]
- },
- {
-  "id": "jz_gz_drumsignal",
-  "title": "營壘鼓號",
-  "locations": ["guangzong"],
-  "text": "廣宗城外的營壘一座連著一座，每到換更就此起彼落地擂鼓舉火。你蹲在土坡上數著，隱約覺得那鼓點與火把是在互通消息，不只是報時。",
-  "choices": [
-   {
-    "text": "記下三更的鼓點，琢磨其中規律",
-    "check": {"stat": "wis", "difficulty": 8, "by": "self"},
-    "effect": {
-     "text": "連看兩夜，你看懂了：三通鼓是換防，舉雙火是糧車進營。這些記在心裡，往後在廣宗一帶進出就有了分寸。",
-     "stats": {"xinde": 12}
-    },
-    "fail_effect": {
-     "text": "鼓點聽得你頭昏腦脹，天亮時發現自己在土坡上睡著了，渾身露水。",
-     "stamina": -10
-    }
-   },
-   {
-    "text": "摸近最外一座營壘，看清守備",
-    "check": {"stat": "agi", "difficulty": 7},
-    "effect": {
-     "text": "你貼著營壘外的鹿角爬了一圈，看清了哪一面的柵欄最鬆。回頭把這些話賣給來打聽的商販，換了幾個錢。",
-     "stats": {"silver": 20}
-    },
-    "fail_effect": {
-     "text": "鹿角上的倒刺勾住你的衣襟，營上有人喊了一聲，你扯破半幅衣裳才脫身。",
-     "stamina": -10,
-     "stats": {"silver": -10}
-    }
-   },
-   {
-    "text": "截住換防的渠帥一行",
-    "combat": "toumu",
-    "effect": {
-     "text": "你在營壘之間的小路上截住渠帥的親隨，搶下一面令旗。隔天一整段營壘的鼓號都亂了套。",
-     "stats": {"fame": 3},
-     "trend": {"huangjin": -3},
-     "rumor": "廣宗城外有一段黃巾營壘的令旗被人奪了，聽說動手的是{name}。"
-    },
-    "fail_effect": {
-     "text": "渠帥的刀法狠辣，你身上多了兩道口子，連滾帶爬逃進野地。",
-     "stamina": -20,
-     "stats": {"fame": -1}
-    }
-   }
-  ]
- },
- {
-  "id": "jz_gz_forge",
-  "title": "犁頭鑄矛",
-  "locations": ["guangzong"],
-  "text": "城牆根下搭起一排草棚鐵坊，鄉民繳來的犁頭、鋤刃堆成一座小山，鐵匠們日夜把它們回爐打成矛頭。風箱旁缺人手，坊頭正扯著嗓子招人。",
-  "choices": [
-   {
-    "text": "掄錘打鐵，掙一份工錢",
-    "check": {"stat": "str", "difficulty": 6},
-    "effect": {
-     "text": "你掄了一整天大錘，坊頭驗過矛頭，點頭付錢，還順手抓給你一把鍛剩的鐵砂。",
-     "stats": {"silver": 15},
-     "materials": {"gang_1": 1},
-     "trend": {"huangjin": 1}
-    },
-    "fail_effect": {
-     "text": "錘子落偏，砸壞了兩個矛頭，坊頭扣了你的工錢還罵你白吃一頓飯。",
-     "stamina": -10,
-     "stats": {"silver": -10}
-    }
-   },
-   {
-    "text": "守在爐口拉一夜風箱",
-    "check": {"stat": "con", "difficulty": 7, "by": "self"},
-    "effect": {
-     "text": "爐火烤得人皮都要裂了，你一口氣拉到天明，老鐵匠遞給你一碗涼水，說你這身骨頭是塊好料。",
-     "stats": {"silver": 10, "xinde": 8}
-    },
-    "fail_effect": {
-     "text": "熬到半夜你眼前發黑，一頭栽在炭堆邊，被人拖出棚外吹風。",
-     "stamina": -15
-    }
-   },
-   {
-    "text": "看看就走",
-    "effect": {
-     "text": "叮噹聲一路追著你走出好遠。一把犁頭打成一支矛，不知明年春天誰來耕田。"
-    }
-   }
-  ]
- },
- {
-  "id": "jz_lz_bamboo",
-  "title": "軍書謄抄",
-  "locations": ["luzhi_camp"],
-  "text": "盧植營的書佐帳裡堆滿了待發的竹簡，要送往洛陽的軍報與各營的軍令都得謄抄兩份。一個熬紅了眼的書佐見你識字，招手要你幫忙。",
-  "choices": [
-   {
-    "text": "坐下來一字不差地謄抄",
-    "check": {"stat": "wis", "difficulty": 6},
-    "effect": {
-     "text": "你抄得又快又工整，書佐鬆了口氣，分了你一份賞錢。抄的時候也看到不少圍城的兵法佈置。",
-     "stats": {"silver": 15, "xinde": 8}
-    },
-    "fail_effect": {
-     "text": "你抄錯了一個營名，被軍司馬當場撕了竹簡，罰你在帳外站了一個時辰。",
-     "stamina": -10,
-     "stats": {"fame": -1}
-    }
-   },
-   {
-    "text": "陪書佐熬夜，把整批軍書趕完",
-    "check": {"stat": "con", "difficulty": 8, "by": "self"},
-    "effect": {
-     "text": "燈油添了三回，你和書佐熬到雞鳴，軍書趕在天亮前封好上路。書佐記下了你的名字，說要報給軍司馬。",
-     "stats": {"silver": 10, "fame": 2}
-    },
-    "fail_effect": {
-     "text": "你熬到後半夜伏案睡著，筆尖在竹簡上拖出一長道墨痕，書佐只得從頭重抄。",
-     "stamina": -15
-    }
-   },
-   {
-    "text": "說自己的字見不得人",
-    "effect": {
-     "text": "書佐嘆口氣，又埋頭抄了起來，帳裡只剩刻刀與筆尖的沙沙聲。"
-    }
-   }
-  ]
- },
- {
-  "id": "jz_lz_siegework",
-  "title": "掘壕圍城",
-  "locations": ["luzhi_camp"],
-  "text": "盧植下令掘長壕、築土圍，要把廣宗團團圍死。營外的工地上，士卒與徵來的民夫並肩挖土，監工的軍侯手裡的鞭子從沒放下過。",
-  "choices": [
-   {
-    "text": "下壕去挖一整夜的土",
-    "check": {"stat": "con", "difficulty": 7, "by": "self"},
-    "effect": {
-     "text": "你挖到手上起了血泡，那一段壕溝比旁邊深了半尺。軍侯走過時多看你一眼，賞你一份口糧錢。",
-     "stats": {"silver": 15, "xinde": 6},
-     "trend": {"huangjin": -1}
-    },
-    "fail_effect": {
-     "text": "半夜壕壁塌了一角，你被土埋到腰，幾個民夫把你拉出來，渾身是泥。",
-     "stamina": -15
-    }
-   },
-   {
-    "text": "扛木樁去築柵",
-    "check": {"stat": "str", "difficulty": 6},
-    "effect": {
-     "text": "你一肩扛兩根木樁，一個早上就把柵欄立起一大段，士卒們都叫好。",
-     "stats": {"silver": 10, "fame": 1},
-     "trend": {"huangjin": -1}
-    },
-    "fail_effect": {
-     "text": "木樁滾下肩頭，差點砸到人，軍侯罵你礙手礙腳，把你攆出工地。",
-     "stamina": -10,
-     "stats": {"fame": -1}
-    }
-   },
-   {
-    "text": "巡騎疑你是城裡派來的細作，不肯解釋",
-    "combat": "guan_patrol",
-    "effect": {
-     "text": "你把幾個巡騎打下馬，軍侯趕來問清緣由，反倒笑說營裡正缺這樣的身手。",
-     "stats": {"fame": 2, "evil": 1}
-    },
-    "fail_effect": {
-     "text": "巡騎把你按倒捆了，關進營中押了半日，搜走了身上的錢才放人。",
-     "stamina": -10,
-     "stats": {"silver": -20}
-    }
-   }
-  ]
- },
- {
-  "id": "jz_xqy_cellar",
-  "title": "空村地窖",
-  "locations": ["xiaquyang"],
-  "text": "下曲陽城外的村子十室九空，門板都被拆去燒火。你經過一戶倒塌的土屋，聽見灶台底下傳出壓低的嬰兒哭聲，又立刻被捂住。",
-  "choices": [
-   {
-    "text": "隔著灶台低聲說明來意",
-    "check": {"stat": "wis", "difficulty": 6},
-    "effect": {
-     "text": "躲在地窖裡的是一家四口，怕被拉去城裡做苦役。你指給他們一條往南的小路，婦人把僅有的一塊碎銀硬塞給你。",
-     "stats": {"good": 2, "silver": 5}
-    },
-    "fail_effect": {
-     "text": "地窖裡的人只當你是來抓人的，死也不肯出聲，你在屋外守到天黑也沒等到人。",
-     "stamina": -10
-    }
-   },
-   {
-    "text": "搬開壓在灶上的斷梁",
-    "check": {"stat": "str", "difficulty": 8},
-    "effect": {
-     "text": "你把斷梁一點點撬開，地窖口透進天光。老漢爬出來，從懷裡摸出一塊祖傳的壓甕石送你，說留著也沒用了。",
-     "stats": {"good": 2},
-     "materials": {"man_1": 1}
-    },
-    "fail_effect": {
-     "text": "斷梁一滑壓住你的手，好半天才抽出來，地窖裡的人嚇得再也不敢應聲。",
-     "stamina": -15
-    }
-   },
-   {
-    "text": "裝作沒聽見，走開",
-    "effect": {
-     "text": "哭聲在你身後停了。這一帶，裝作沒聽見才是活命的法子。"
-    }
-   }
-  ]
- },
- {
-  "id": "jz_xqy_wallhaul",
-  "title": "城下徵夫",
-  "locations": ["xiaquyang"],
-  "text": "張寶的兵馬正加高下曲陽的城牆，凡是路過的青壯一律被攔下，背石運土。城門邊堆著剛徵來的糧袋，守門的兵忙著搬糧，眼睛顧不過來。",
-  "choices": [
-   {
-    "text": "老老實實背一天石頭",
-    "check": {"stat": "str", "difficulty": 7},
-    "effect": {
-     "text": "你背石頭背得比誰都快，管工的頭目放你走時還給了兩升粟米錢，說黃天之下不虧待出力的人。",
-     "stats": {"silver": 10, "xinde": 6},
-     "trend": {"huangjin": 1}
-    },
-    "fail_effect": {
-     "text": "石頭從背上滾下來砸了腳，頭目嫌你沒用，罰你多扛了半天土。",
-     "stamina": -20
-    }
-   },
-   {
-    "text": "混在搬糧的人裡溜進城看看",
-    "check": {"stat": "agi", "difficulty": 8},
-    "effect": {
-     "text": "你扛著糧袋混進城門，看清了糧倉在城東、守倉的不過數十人。出城時順手把那袋糧丟給城外的饑民。",
-     "stats": {"good": 1, "fame": 1},
-     "trend": {"huangjin": -1}
-    },
-    "fail_effect": {
-     "text": "守門的兵認出你不是徵來的民夫，一腳把你踹出城門，身上的錢也被搜了去。",
-     "stamina": -10,
-     "stats": {"silver": -20}
-    }
-   },
-   {
-    "text": "不肯低頭，跟攔路的兵動手",
-    "combat": "shanzei",
-    "effect": {
-     "text": "你把攔路的散兵打得四散，被押著的幾個青壯趁亂跑了。",
-     "stats": {"fame": 2, "good": 1},
-     "trend": {"huangjin": -1}
-    },
-    "fail_effect": {
-     "text": "散兵人多，你被按在地上，硬是背了兩天石頭才找到機會逃走。",
-     "stamina": -20,
-     "stats": {"fame": -1}
-    }
-   }
-  ]
- },
- {
-  "id": "jz_hz_tower",
-  "title": "箭樓守夜",
-  "locations": ["haozu_fort"],
-  "text": "塢堡四角的箭樓夜夜有人值守，北風從牆垛灌進來，冷得像刀割。部曲的屯長缺人守西北角那座樓，說守到天亮給一份工錢，聽說前幾夜有流民來摸牆。",
-  "choices": [
-   {
-    "text": "裹緊衣裳，在樓上熬到天亮",
-    "check": {"stat": "con", "difficulty": 6, "by": "self"},
-    "effect": {
-     "text": "你在寒風裡硬撐一夜，眼睛沒閉過。天亮換崗時屯長遞給你一碗熱酒和工錢。",
-     "stats": {"silver": 15}
-    },
-    "fail_effect": {
-     "text": "後半夜你凍得打起盹，被查哨的屯長抓個正著，工錢一文也沒拿到。",
-     "stamina": -10,
-     "stats": {"fame": -1}
-    }
-   },
-   {
-    "text": "看見牆下有黑影，放一支火箭照明",
-    "check": {"stat": "agi", "difficulty": 7},
-    "effect": {
-     "text": "火箭釘在牆外的枯草上燒起來，照出幾個想挖牆的流民，他們丟下鐵鍬就跑。塢主聽說後，特地召見了你。",
-     "stats": {"silver": 20, "fame": 1}
-    },
-    "fail_effect": {
-     "text": "火箭射偏，落進堡內的草料堆，眾人提水救了半夜，屯長的臉黑得像鍋底。",
-     "stamina": -15,
-     "stats": {"silver": -15}
-    }
-   },
-   {
-    "text": "推說受了風寒",
-    "effect": {
-     "text": "屯長哼了一聲，另找了個佃農的兒子上樓去。"
-    }
-   }
-  ]
- },
- {
-  "id": "jz_hz_rentdebt",
-  "title": "佃戶欠租",
-  "locations": ["haozu_fort"],
-  "text": "塢堡的管事拿著租簿，在堡門內點名收租。一個去年被黃巾搶光了糧的佃戶跪在地上，說實在繳不出，管事冷笑著要部曲把他的女兒帶去抵債。",
-  "choices": [
-   {
-    "text": "翻看租簿，替佃戶算清舊帳",
-    "check": {"stat": "wis", "difficulty": 6},
-    "effect": {
-     "text": "你一筆筆算下來，發現管事把去年遭兵災該免的兩成也算進去了。管事臉上掛不住，只好讓佃戶來年再補。",
-     "stats": {"good": 2, "fame": 1}
-    },
-    "fail_effect": {
-     "text": "管事的帳做得滴水不漏，你挑不出毛病，反被他當眾嘲笑多管閒事。",
-     "stats": {"fame": -1}
-    }
-   },
-   {
-    "text": "掏錢替佃戶先墊上",
-    "check": {"stat": "con", "difficulty": 7},
-    "effect": {
-     "text": "管事嫌錢不夠，要你替佃戶扛完糧倉裡積下的租糧才算數。你扛了一整天，佃戶一家跪著送你出門。",
-     "stats": {"silver": -20, "good": 3}
-    },
-    "fail_effect": {
-     "text": "扛到一半你就撐不住了，管事收了你的錢，卻說只抵得了一半。",
-     "stamina": -15,
-     "stats": {"silver": -20, "good": 1}
-    }
-   },
-   {
-    "text": "擋在佃戶女兒身前",
-    "combat": "wubao_buqu",
-    "effect": {
-     "text": "你打退上前拉人的部曲，堡裡的佃農們都圍過來看。管事不敢再逼，悻悻收起了租簿。",
-     "stats": {"good": 2, "fame": 2}
-    },
-    "fail_effect": {
-     "text": "部曲把你架出堡門，丟在壕溝邊。管事在牆上喊，這塢堡往後不歡迎你。",
-     "stamina": -15,
-     "stats": {"fame": -2}
-    }
-   }
-  ]
- },
- {
-  "id": "jz_hz_stonelock",
-  "title": "部曲試力",
-  "locations": ["haozu_fort"],
-  "text": "塢主在校場上親自挑部曲，地上擺著大小三個石鎖，最大的那個據說只有塢主的族弟舉過頭頂。圍觀的佃農起鬨，要你這個外鄉人也上去試試。",
-  "choices": [
-   {
-    "text": "去舉那個最大的石鎖",
-    "check": {"stat": "str", "difficulty": 8},
-    "effect": {
-     "text": "你一聲低喝把石鎖舉過頭頂，校場上一片叫好。塢主親手賞你一份錢，說塢堡的門隨時為你開著。",
-     "stats": {"silver": 25, "fame": 2}
-    },
-    "fail_effect": {
-     "text": "石鎖只離地半尺就脫了手，砸得塵土飛揚，你閃了腰，佃農們笑成一片。",
-     "stamina": -15,
-     "stats": {"fame": -1}
-    }
-   },
-   {
-    "text": "說力氣不算本事，比繞箭樓跑圈",
-    "check": {"stat": "agi", "difficulty": 6},
-    "effect": {
-     "text": "你沿著堡牆跑了三圈，把部曲裡腳程最快的甩下半圈。塢主大笑，賞了你一碗酒和幾個錢。",
-     "stats": {"silver": 10, "fame": 1}
-    },
-    "fail_effect": {
-     "text": "跑到第二圈你就喘得說不出話，部曲們拍著你的背，笑你外鄉人中看不中用。",
-     "stamina": -10
-    }
-   },
-   {
-    "text": "擺擺手，站在一旁看",
-    "effect": {
-     "text": "塢主的族弟上前把大石鎖舉了起來，部曲們齊聲喝采，聲音傳出牆外好遠。"
-    }
-   }
-  ]
- },
- {
-  "id": "jz_bm_goatraft",
-  "title": "羊皮筏子",
-  "locations": ["baima_ford"],
-  "text": "渡船一天只開兩趟，岸邊有個老船戶吹脹了幾個羊皮囊，綁成筏子偷偷載人過河。今日黃河水急，他看了看水色，說還差一個肯下水推筏的人。",
-  "choices": [
-   {
-    "text": "下水扶著筏子泅過河",
-    "check": {"stat": "con", "difficulty": 8, "by": "self"},
-    "effect": {
-     "text": "黃河水又濁又冷，你扶著筏子硬是撐到對岸。老船戶分你一份船錢，說河上討生活的人裡也少有你這口氣。",
-     "stats": {"silver": 20, "con": 1}
-    },
-    "fail_effect": {
-     "text": "一個浪頭打來，你嗆了幾口泥水被沖開，老船戶拿竹篙把你撈上岸，你吐了半天黃湯。",
-     "stamina": -20
-    }
-   },
-   {
-    "text": "幫老船戶看水路，挑個回水處下筏",
-    "check": {"stat": "wis", "difficulty": 6},
-    "effect": {
-     "text": "你看出上游沙洲後面水勢較緩，筏子從那裡下水，一路平平穩穩。過河的一家人謝了你一把乾棗和幾個錢。",
-     "stats": {"silver": 10, "good": 1}
-    },
-    "fail_effect": {
-     "text": "你挑的地方底下全是暗沙，筏子擱淺了兩回，客人罵罵咧咧，船錢少收了一半。",
-     "stamina": -10,
-     "stats": {"silver": -5}
-    }
-   },
-   {
-    "text": "等明天的渡船",
-    "effect": {
-     "text": "你在岸邊坐了一夜，看著羊皮筏子一趟趟消失在濁浪裡。"
-    }
-   }
-  ]
- },
- {
-  "id": "jz_bm_pirates",
-  "title": "水寇攔舟",
-  "locations": ["baima_ford"],
-  "text": "一艘從潁川北上的貨船剛靠近白馬津，就被兩條快船夾住。水寇用撓鉤勾住船舷，船上的商人抱著箱子大喊救命，岸上的郡兵卻慢吞吞地不肯過來。",
-  "choices": [
-   {
-    "text": "踩著撓鉤一路跳上快船",
-    "check": {"stat": "agi", "difficulty": 7},
-    "effect": {
-     "text": "你從貨船躍上快船，一腳把舵手踢下水，水寇們見勢不妙，割斷撓鉤溜了。商人捧出一包錢道謝。",
-     "stats": {"silver": 25, "fame": 1}
-    },
-    "fail_effect": {
-     "text": "你一腳踩空掉進河裡，等你濕淋淋地爬上岸，快船早已載著搶來的貨走遠了。",
-     "stamina": -15,
-     "stats": {"silver": -5}
-    }
-   },
-   {
-    "text": "跳上貨船，搶過船槳往岸邊划",
-    "check": {"stat": "str", "difficulty": 6},
-    "effect": {
-     "text": "你一個人划得貨船直往岸邊衝，水寇的撓鉤被扯脫兩支，只好放棄。商人送你一捆貨裡的上好絲綿。",
-     "stats": {"good": 1},
-     "materials": {"rou_1": 1}
-    },
-    "fail_effect": {
-     "text": "船槳在你手裡啪地斷了，貨船被拖走半里，你只能跳水逃回岸上。",
-     "stamina": -15
-    }
-   },
-   {
-    "text": "對岸上的郡兵大喊，催他們出手",
-    "effect": {
-     "text": "郡兵磨磨蹭蹭地放了幾箭，水寇搶走兩箱貨就走了。商人坐在船頭，罵官兵比水寇還靠不住。"
-    }
-   }
-  ]
- },
- {
-  "id": "jz_bm_passcheck",
-  "title": "渡口驗傳",
-  "locations": ["baima_ford"],
-  "text": "郡兵在渡口設卡驗看過所，說是嚴防冀州的黃巾南渡。一個自稱潁川布商的中年人遞上木傳，手指卻抖個不停，郡兵的伍長已經瞇起了眼睛。",
-  "choices": [
-   {
-    "text": "湊過去細看那片木傳",
-    "check": {"stat": "wis", "difficulty": 7},
-    "effect": {
-     "text": "你看出木傳上的縣印是新刻的，邊角還沒磨圓。你把話說給伍長聽，布商懷裡果然搜出一卷太平道的經文。伍長賞了你一份錢。",
-     "stats": {"silver": 15, "fame": 1},
-     "trend": {"huangjin": -1}
-    },
-    "fail_effect": {
-     "text": "你看了半天也說不出所以然，伍長嫌你礙事，連你的過所也扣下，罰了錢才放行。",
-     "stats": {"silver": -15}
-    }
-   },
-   {
-    "text": "趁亂引開伍長，讓布商上船",
-    "check": {"stat": "agi", "difficulty": 6},
-    "effect": {
-     "text": "你故意撞翻郡兵的錢箱，銅錢滾了一地，布商趁機跳上渡船。船離岸時，他朝你深深一揖。",
-     "stats": {"good": 1},
-     "trend": {"huangjin": 1}
-    },
-    "fail_effect": {
-     "text": "伍長一把揪住你的衣領，說你跟布商是一夥的，把你押在卡子旁曬了半天太陽。",
-     "stamina": -15,
-     "stats": {"fame": -1}
-    }
-   },
-   {
-    "text": "不關己事，排隊等驗",
-    "effect": {
-     "text": "布商最後被郡兵押走了，是黃巾還是冤枉，渡口上沒人在意。"
-    }
-   }
-  ]
- }
+  },
+  {
+    "id": "jz_bm_passcheck",
+    "title": "渡口驗傳",
+    "locations": [
+      "baima_ford"
+    ],
+    "text": "郡兵在渡口設卡驗看過所，說是嚴防冀州的黃巾南渡。一個自稱潁川布商的中年人遞上木傳，手指卻抖個不停，郡兵的伍長已經瞇起了眼睛。",
+    "choices": [
+      {
+        "text": "湊過去細看那片木傳",
+        "check": {
+          "stat": "wis",
+          "difficulty": 7
+        },
+        "effect": {
+          "text": "你看出木傳上的縣印是新刻的，邊角還沒磨圓。你把話說給伍長聽，布商懷裡果然搜出一卷太平道的經文。伍長賞了你一份錢。",
+          "stats": {
+            "silver": 15,
+            "fame": 1
+          },
+          "trend": {
+            "huangjin": -1
+          },
+          "marks": {
+            "baima_ford:盤查": 1
+          }
+        },
+        "fail_effect": {
+          "text": "你看了半天也說不出所以然，伍長嫌你礙事，連你的過所也扣下，罰了錢才放行。",
+          "stats": {
+            "silver": -15
+          }
+        }
+      },
+      {
+        "text": "趁亂引開伍長，讓布商上船",
+        "check": {
+          "stat": "agi",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "你故意撞翻郡兵的錢箱，銅錢滾了一地，布商趁機跳上渡船。船離岸時，他朝你深深一揖。",
+          "stats": {
+            "good": 1
+          },
+          "trend": {
+            "huangjin": 1
+          },
+          "marks": {
+            "baima_ford:放行": 1
+          }
+        },
+        "fail_effect": {
+          "text": "伍長一把揪住你的衣領，說你跟布商是一夥的，把你押在卡子旁曬了半天太陽。",
+          "stamina": -15,
+          "stats": {
+            "fame": -1
+          }
+        }
+      },
+      {
+        "text": "不關己事，排隊等驗",
+        "effect": {
+          "text": "布商最後被郡兵押走了，是黃巾還是冤枉，渡口上沒人在意。"
+        }
+      }
+    ]
+  }
 ]

@@ -83,3 +83,18 @@ def test_added_events_vary_their_checks_and_stay_within_limits(content, path):
                     assert not eff.get(banned), (e["id"], banned)
                 rumors += bool(eff.get("rumor"))
     assert rumors <= 2
+
+
+def test_every_location_has_one_free_text_explore_event(content):
+    """隨口應對每個地點先開 1 則（探索的多人與 LLM 玩法設計第五節）。"""
+    counts = {
+        loc_id: sum(1 for e in _always_available(content, loc_id) if e.free_text and loc_id in e.locations)
+        for loc_id in content.locations
+    }
+    assert all(n == 1 for n in counts.values()), counts
+
+
+def test_location_traces_lead_somewhere(content):
+    """地方痕跡：至少 8 條，每條都有 marks_min 條件的後果事件。"""
+    readers = {k for e in content.events.values() for k in e.condition.marks_min}
+    assert len({k.split(":")[0] for k in readers}) >= 8
