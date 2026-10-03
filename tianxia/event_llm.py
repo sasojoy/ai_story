@@ -9,12 +9,15 @@
 """
 from __future__ import annotations
 
+import logging
 import re
 
 from . import zh
 from .battle_instance import DEFAULT_FREE_TEXT_SUCCESS_RATE, SuccessRateJudgment
 from .models import Event
 from .ollama_client import OllamaClient
+
+logger = logging.getLogger(__name__)
 
 FREE_TEXT_MAX_CHARS = 20  # 輸入框上限；這裡再截一次，免得一大段話塞進提示詞
 NARRATE_NUM_PREDICT = 150
@@ -69,7 +72,8 @@ def assess_event_success_rate(client: OllamaClient | None, event: Event, text: s
     ]
     try:
         result = client.chat_structured(messages, SuccessRateJudgment, temperature=0.3, required_fields=["success_rate"])
-    except Exception:
+    except Exception as e:
+        logger.warning("隨口應對評估失敗，用保底 %s：%r", DEFAULT_FREE_TEXT_SUCCESS_RATE, e)
         return DEFAULT_FREE_TEXT_SUCCESS_RATE
     return max(0, min(100, result.success_rate))
 
@@ -90,6 +94,7 @@ def narrate_event_gamble(
     messages = [{"role": "system", "content": _NARRATE_SYSTEM_PROMPT}, {"role": "user", "content": prompt}]
     try:
         reply = client.chat_text(messages, temperature=0.8, num_predict=NARRATE_NUM_PREDICT)
-    except Exception:
+    except Exception as e:
+        logger.warning("隨口應對潤色失敗：%r", e)
         return None
     return zh.to_traditional(reply.strip().strip('「」"')) or None

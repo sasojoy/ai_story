@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import io
+import logging
 import statistics
 import sys
 import time
@@ -35,6 +36,7 @@ DEFAULT_APPROACHES = [
 def main() -> None:
     # 這台 Windows 機器的主控台預設 cp950，印中文會噴 UnicodeEncodeError
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+    logging.basicConfig(level=logging.WARNING, format="  ⚠ %(message)s", stream=sys.stdout)  # 模型呼叫失敗的原因要看得到
     parser = argparse.ArgumentParser()
     parser.add_argument("approaches", nargs="*", default=DEFAULT_APPROACHES)
     parser.add_argument("--event", default="tavern_brawl")
