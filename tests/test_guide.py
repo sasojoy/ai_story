@@ -58,6 +58,9 @@ def test_next_hint_hides_stamina_reminder_when_not_idle(state, content):
     state.pending_event = None
     state.world.ended = True
     assert "體力將滿" not in next_hint(state, content)
+    state.world.ended = False
+    state.player.resting_since = 0.0
+    assert "體力將滿" not in next_hint(state, content)
 
 
 def test_quest_text_after_season_end(state, content):

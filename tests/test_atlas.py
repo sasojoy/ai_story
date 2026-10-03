@@ -220,6 +220,11 @@ def test_travel_button_shows_cost_or_reason(state, content):
     assert travel_button(state, content, "lake") is None  # 沒摸清
 
 
+def test_sitting_blocks_travel(state, content):
+    state.player.resting_since = 0.0
+    assert travel_button(state, content, "lake") == ("打坐中，先起身才能安排前往", False)
+
+
 # ── 詳情欄 ────────────────────────────────────────────
 
 

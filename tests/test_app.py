@@ -6,7 +6,7 @@ import pytest
 
 import app
 from tianxia import battle_instance, companion_agent, roster, world_state
-from tianxia.engine import Game
+from tianxia.engine import Game, Option
 from tianxia.save import save_game
 from tianxia.state import BotProfile
 from tianxia.world_state import WorldStateStore
@@ -810,3 +810,11 @@ def test_leaving_a_dialogue_does_not_ask_the_model_or_take_an_extra_lock_round_t
     act.assert_called_once()
     assert lock_events == ["enter", "exit"]  # talk:leave 永遠不會生成對話：跟非對話選項一樣只拿一次鎖
     assert game.state.player.pending_companion is None
+
+
+def test_sitting_down_always_keeps_a_button_when_there_are_too_many_options():
+    many = [Option(id=f"move:p{i}", label=f"前往 {i}") for i in range(12)] + [Option(id="act:rest", label="打坐")]
+    shown = app.visible_options(many)
+    assert len(shown) == app.MAX_BUTTONS and shown[-1].id == "act:rest"
+    assert [o.id for o in shown[:-1]] == [f"move:p{i}" for i in range(app.MAX_BUTTONS - 1)]
+    assert app.visible_options(many[:3]) == many[:3]

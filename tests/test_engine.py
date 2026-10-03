@@ -87,23 +87,61 @@ def test_insufficient_stamina_disables_actions(game):
 
 
 def test_rest_is_always_available_and_never_locks_the_player_out(game):
-    """實機 playtest 發現的卡死情境：體力見底時過去完全沒有選項可點（連移動都不行），
-    玩家只能乾等現實時間過去或自己發現「門下」頁的閉關分頁——新玩家根本不知道要這麼做。
-    act:rest 必須永遠是 enabled，且真的能恢復體力，不管共用賽季時鐘怎麼走。"""
+    """實機 playtest 發現的卡死情境：體力見底時過去完全沒有選項可點，新玩家只能乾等。
+    act:rest（打坐）必須永遠是 enabled，坐下來之後時間過去就真的會回體力。"""
     game.state.player.stamina = 0
-    opts = game.options()
-    rest = next(o for o in opts if o.id == "act:rest")
+    rest = next(o for o in game.options() if o.id == "act:rest")
     assert rest.enabled
     game.choose("act:rest")
+    game.advance(HOUR)
     assert game.state.player.stamina > 0
 
 
-def test_rest_does_not_advance_the_shared_season_clock(game):
-    """跟 advance()（測試用時間快轉，連共用賽季一起推進）不同：一個人缺體力想歇息，
-    不該連帶把全服的大勢/倒數也推走。"""
-    before = game.state.world.time
+# ── 打坐 ──────────────────────────────────────────────
+
+
+def test_sitting_down_is_a_state_you_stand_up_from(game):
     game.choose("act:rest")
-    assert game.state.world.time == before
+    assert game.state.player.resting_since == game.state.world.time
+    assert ids(game) == ["act:stand"]
+    assert game.choose("act:explore") == ["（此刻無法這麼做。）"]
+    assert game.seclude(4) == ["你現在無法閉關。"]
+    assert "打坐中" in game.status_text()
+    game.choose("act:stand")
+    assert game.state.player.resting_since is None
+    assert "act:explore" in ids(game)
+    assert game.state.journal[0].title == "起身"
+
+
+def test_sitting_doubles_the_natural_regen(game):
+    cfg = game.content.config
+    game.state.player.stamina = 0
+    game.choose("act:rest")
+    game.advance(1800)
+    sitting = 1800 / cfg.stamina_regen_seconds * cfg.rest_regen_multiplier
+    assert game.state.player.stamina == pytest.approx(sitting)
+    game.choose("act:stand")
+    game.advance(1800)
+    assert game.state.player.stamina == pytest.approx(sitting + 1800 / cfg.stamina_regen_seconds)
+
+
+def test_sitting_counts_real_time_between_syncs(game):
+    cfg = game.content.config
+    game.sync(1000.0)
+    game.state.player.stamina = 0
+    game.choose("act:rest")
+    game.sync(1000.0 + 1800)
+    assert game.state.player.stamina == pytest.approx(1800 / cfg.stamina_regen_seconds * cfg.rest_regen_multiplier)
+
+
+def test_sitting_ends_by_itself_once_stamina_is_full(game):
+    game.state.player.stamina = game.content.config.stamina_max - 1
+    game.choose("act:rest")
+    game.advance(HOUR)
+    assert game.state.player.resting_since is None
+    assert game.state.player.stamina == game.content.config.stamina_max
+    entry = game.state.journal[0]
+    assert entry.title == "起身" and "回滿" in entry.lines[0]
 
 
 # ── 事件與檢定 ────────────────────────────────────────────

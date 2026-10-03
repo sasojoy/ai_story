@@ -78,6 +78,7 @@ class PlayerState(BaseModel):
     anonymous: bool = False
     busy_until: float | None = None  # 閉關結束的遊戲時間
     seclusion_start: float = 0.0
+    resting_since: float | None = None  # 打坐坐下時的賽季時間（遊戲秒）；None＝沒在打坐（地圖擴充設計第二節，跟閉關同一種做法）
     tutorial_step: int = 0  # 等於引導步數時代表引導結束
     visited: set[str] = Field(default_factory=set)  # 去過的地點
     fortune: bool = False  # 本季的新立門戶福緣已經發生（或已經改送賀禮）

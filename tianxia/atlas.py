@@ -272,13 +272,15 @@ def routes(state: GameState, content: Content) -> dict[str, Route]:
 
 
 def travel_block(state: GameState) -> str | None:
-    """現在不能安排前往的原因（賽季已結束、有事件待處理、閉關中）；可以時為 None。"""
+    """現在不能安排前往的原因（賽季已結束、有事件待處理、閉關中、打坐中）；可以時為 None。"""
     if state.world.ended:
         return "賽季已結束，不能安排前往"
     if state.pending_event:
         return "有事件待處理，不能安排前往"
     if state.player.busy_until is not None:
         return "閉關中，不能安排前往"
+    if state.player.resting_since is not None:
+        return "打坐中，先起身才能安排前往"
     return None
 
 

@@ -26,7 +26,7 @@ from tianxia import companion_agent
 from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, AccountStore, normalize
 from tianxia.content import load_content
 from tianxia.craft import MATERIALS_PER_CRAFT
-from tianxia.engine import Game
+from tianxia.engine import Game, Option
 from tianxia.journal import CSS as JOURNAL_CSS
 from tianxia.save import load_game, path_for, save_game
 from tianxia.world_state import WorldStateStore
@@ -88,9 +88,19 @@ def save_path(name: str) -> Path:
     return path_for(SAVE_DIR, name)
 
 
+def visible_options(options: list[Option]) -> list[Option]:
+    """畫面上最多 MAX_BUTTONS 個按鈕；放不下時「打坐」一定留著（體力見底時至少還有它可以按，
+    地圖擴充設計第二節），其餘照順序取前面的。"""
+    if len(options) <= MAX_BUTTONS:
+        return options
+    rest = [o for o in options if o.id == "act:rest"]
+    others = [o for o in options if o.id != "act:rest"]
+    return others[: MAX_BUTTONS - len(rest)] + rest
+
+
 def render(game: Game) -> list:
     """回傳順序必須和 build_demo() 裡的 outputs 一致。"""
-    options = game.options()[:MAX_BUTTONS]
+    options = visible_options(game.options())
     free_text_prompt = game.battle_free_text_prompt()
     buttons = []
     for i in range(MAX_BUTTONS):

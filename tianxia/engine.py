@@ -200,10 +200,13 @@ class Game:
         return self._log(msgs)
 
     def _advance_player_local(self, seconds: float) -> list[str]:
-        """玩家自己的部分：體力/氣血回復、閉關出關、新立門戶福緣——這些是「我」的進度，
-        不是共用賽季的一部分，照自己經過的時間算，不受共用賽季時鐘怎麼走影響。"""
+        """玩家自己的部分：體力（打坐中加倍）／氣血回復、打坐回滿起身、閉關出關、新立門戶福緣——
+        這些是「我」的進度，不是共用賽季的一部分，照自己經過的時間算，不受共用賽季時鐘怎麼走影響。"""
         cfg, p, w = self.content.config, self.state.player, self.state.world
-        p.stamina = min(cfg.stamina_max, p.stamina + seconds / cfg.stamina_regen_seconds)
+        regen = seconds / cfg.stamina_regen_seconds
+        if p.resting_since is not None:
+            regen *= cfg.rest_regen_multiplier  # 打坐中回復加倍
+        p.stamina = min(cfg.stamina_max, p.stamina + regen)
         rate = seconds / (cfg.neili_regen_hours * HOUR)
         if p.busy_until is not None:
             rate *= 2
@@ -213,6 +216,8 @@ class Game:
         for cid in p.team:
             self.world.update_companion(cid, lambda progress: team.regen_neili(self.content, progress, rate))
         msgs: list[str] = []
+        if p.resting_since is not None and p.stamina >= cfg.stamina_max:
+            msgs += self._stand_up(full=True)
         if p.busy_until is not None and w.time >= p.busy_until:
             msgs += self._finish_seclusion(p.busy_until)
         if roster.fortune_overdue(self.state, self.content):
@@ -249,6 +254,8 @@ class Game:
             ]
         if s.player.busy_until is not None:
             return [Option(id="act:break", label="提前出關")]
+        if s.player.resting_since is not None:
+            return [Option(id="act:stand", label="起身")]
         loc = c.locations[s.player.location]
         cost = c.config.action_cost
         opts = [self._cost_option("act:explore", "探索", cost["explore"])]
@@ -279,7 +286,7 @@ class Game:
             for faction in c.scenario.factions:
                 if s.player.location in faction.join_at:
                     opts.append(Option(id=f"faction:{faction.id}", label=f"投靠{faction.name}"))
-        opts.append(Option(id="act:rest", label="打坐歇息（恢復體力，約一個時辰）"))
+        opts.append(Option(id="act:rest", label="打坐（坐下來回體力，隨時可以起身）"))
         return opts
 
     def _recruit_target(self) -> str | None:
@@ -425,7 +432,7 @@ class Game:
         here = c.locations[s.player.location].name
         titles = {
             "explore": f"探索{here}", "socialize": f"交遊・{here}", "train": f"歷練・{here}",
-            "recruit": f"招募・{here}", "rest": f"打坐歇息・{here}",
+            "recruit": f"招募・{here}", "rest": f"打坐・{here}", "stand": "起身",
         }
         return titles.get(arg, "提前出關")
 
@@ -446,6 +453,8 @@ class Game:
         cost = self.content.config.action_cost
         if what == "break":
             return self._finish_seclusion(self.state.world.time)
+        if what == "stand":
+            return self._stand_up()
         if what == "recruit":
             return self._recruit()
         if what == "rest":
@@ -517,16 +526,25 @@ class Game:
         return msgs
 
     def _rest(self) -> list[str]:
-        """原地打坐歇息一個時辰：只推進玩家自己的進度（體力/氣血），不碰共用賽季時鐘
-        （跟 advance() 不同，advance() 連共用賽季一起快轉，玩家自己缺體力時不該連帶
-        把全服的大勢/倒數也推走）。保證選單上永遠有一個不受體力門檻限制的行動，玩家
-        不會因為體力見底就被晾在原地，每個按鈕都是 disabled（實機 playtest 發現的
-        卡死情境：體力歸零後原本沒有任何選項能點，只能乾等現實時間過去或翻到「門下」
-        頁的閉關分頁，新玩家完全不會知道要這樣做）。"""
-        before = self.state.player.stamina
-        msgs = self._advance_player_local(HOUR)
-        gained = self.state.player.stamina - before
-        return [f"你就地打坐歇息了一個時辰，體力恢復了 {gained:.0f} 點。"] + msgs
+        """坐下來打坐（地圖擴充設計第二節）：進入「打坐中」，之後時間過去時體力回復是平常的
+        rest_regen_multiplier 倍；期間不能做別的事，隨時可以起身。跟閉關同一種做法：狀態記在玩家身上，
+        回復由 _advance_player_local 照經過的時間算，不碰共用賽季時鐘。原本按一下立刻補一個時辰的回復、
+        又不延後自然回復，連按就能無限回體力。選單上永遠有這個選項、不受體力門檻限制——實機 playtest
+        發現過體力歸零後整排按鈕都按不下去、新玩家卡死的情況。"""
+        self.state.player.resting_since = self.state.world.time
+        multiplier = self.content.config.rest_regen_multiplier
+        return [f"你就地坐下打坐，體力回復是平常的 {multiplier:g} 倍；隨時可以起身。"]
+
+    def _stand_up(self, full: bool = False) -> list[str]:
+        """起身：打坐結束，體力回復恢復平常的速度。按「起身」時寫在這次行動的紀錄裡；體力回滿自己起身
+        （sync／advance 裡，沒有進行中的行動）或加入戰局時起身，另寫一則「起身」。"""
+        p = self.state.player
+        minutes = max(0, round((self.state.world.time - p.resting_since) / 60))
+        p.resting_since = None
+        msg = "體力已經回滿，你收功起身。" if full else f"你收功起身（打坐了約 {minutes} 分鐘）。"
+        if self._draft is None:
+            self._write("起身", [msg])
+        return [msg]
 
     def _figures_here(self) -> list[str]:
         """這個地點的大勢人物（不管見不見得到）：可招募的 7 位在 recruit_at，鎖定的 8 位龍頭
@@ -1150,6 +1168,7 @@ class Game:
         s = self.state
         return (
             not self._preparing() and not s.world.ended and s.pending_event is None and s.player.busy_until is None
+            and s.player.resting_since is None
         )
 
     def seclude(self, hours: int) -> list[str]:
@@ -1505,6 +1524,8 @@ class Game:
             lines.append(f"- {c.characters[cid].name}　第{progress.level}級　氣血 {int(now)}/{int(cap)}")
         if p.busy_until is not None:
             lines.append(f"🧘 閉關中，約 {(p.busy_until - w.time) / HOUR:.1f} 小時後出關")
+        if p.resting_since is not None:
+            lines.append(f"🧘 打坐中：體力回復是平常的 {c.config.rest_regen_multiplier:g} 倍，隨時可以起身")
         return "\n\n".join(lines)
 
     def trends_text(self) -> str:
