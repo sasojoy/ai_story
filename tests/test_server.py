@@ -1016,7 +1016,8 @@ def test_the_lan_flag_opens_every_network_card_and_says_so(capsys, monkeypatch):
 
 TUNNEL_URL = "https://abc-def-123.trycloudflare.com"
 URL_ANNOUNCEMENT = f"公開網址：{TUNNEL_URL}（給手機用；有網址的人都進得來，不要外流）"
-NO_URL_NOTICE = "cloudflared 已結束，沒有拿到公開網址（看上面 cloudflared 的輸出找原因）。"
+NO_URL_NOTICE = "cloudflared 已結束，沒有拿到公開網址。它最後的輸出："
+NO_OUTPUT_NOTICE = "cloudflared 沒有任何輸出就結束了。"
 
 CLOUDFLARED_OUTPUT = [
     "2026-10-03T12:00:00Z INF Thank you for trying Cloudflare Tunnel. Doing so, without a Cloudflare account, is a quick way to experiment and try it out.\n",
@@ -1086,18 +1087,54 @@ def test_cloudflared_failing_to_request_a_tunnel_is_not_mistaken_for_the_public_
         'failed to request quick Tunnel: Post "https://api.trycloudflare.com/tunnel": dial tcp: lookup api.trycloudflare.com: no such host\n',
     ]
     server.relay_tunnel_output(failed, emit=printed.append)
-    assert printed == [NO_URL_NOTICE]
+    assert printed == [NO_URL_NOTICE] + [line.rstrip("\n") for line in failed]  # 錯誤訊息本身就是主機端要看的原因
 
 
 def test_output_that_ends_without_any_url_says_so_instead_of_staying_silent():
     printed = []
-    lines = _CountingLines(CLOUDFLARED_OUTPUT[:2] + CLOUDFLARED_OUTPUT[6:7])  # 沒有網址那行
+    no_url = CLOUDFLARED_OUTPUT[:2] + CLOUDFLARED_OUTPUT[6:7]  # 沒有網址那行
+    lines = _CountingLines(no_url)
     server.relay_tunnel_output(lines, emit=printed.append)
     assert lines.read == 3
-    assert printed == [NO_URL_NOTICE]
+    assert printed == [NO_URL_NOTICE] + [line.rstrip("\n") for line in no_url]  # 不到 20 行就全印，去掉行尾換行
+
+
+# 拿不到網址時，「看上面 cloudflared 的輸出」上面其實什麼都沒有（輸出都被吞了）：
+# 所以改成記住最後 20 行，結束時還沒有網址就印出來，原因就在眼前；成功時照樣安靜。
+
+def _numbered_output(count):
+    return [f"2026-10-03T12:00:{n:02d}Z ERR line {n}\n" for n in range(1, count + 1)]
+
+
+def test_without_a_url_the_last_twenty_lines_are_printed_after_the_notice():
+    assert server.TUNNEL_TAIL_LINES == 20
+    output = _numbered_output(25)
+    output[-1] = "2026-10-03T12:00:25Z ERR Failed to dial a quic connection: timeout: no recent network activity\n"
+    printed = []
+    server.relay_tunnel_output(output, emit=printed.append)  # 不丟例外
+    assert printed == [NO_URL_NOTICE] + [line.rstrip("\n") for line in output[5:]]  # 第 6～25 行
+    assert not any(line.endswith(("ERR line 1", "ERR line 5")) for line in printed)  # 前 5 行不在內
+
+
+def test_without_a_url_the_tail_skips_blank_lines_and_trailing_newlines():
+    printed = []
+    server.relay_tunnel_output(["ERR first\r\n", "\n", "   \n", "ERR second\n", "ERR third"], emit=printed.append)
+    assert printed == [NO_URL_NOTICE, "ERR first", "ERR second", "ERR third"]
+
+
+def test_without_a_url_and_without_any_output_it_says_there_was_no_output():
+    printed = []
+    server.relay_tunnel_output([], emit=printed.append)
+    assert printed == [NO_OUTPUT_NOTICE]
     printed.clear()
-    server.relay_tunnel_output([], emit=printed.append)  # 一行都沒有就結束了也一樣
-    assert printed == [NO_URL_NOTICE]
+    server.relay_tunnel_output(["\n", "  \n"], emit=printed.append)  # 只有空行也等於沒有輸出
+    assert printed == [NO_OUTPUT_NOTICE]
+
+
+def test_with_a_url_the_tail_is_not_printed_even_when_the_output_is_long():
+    printed = []
+    server.relay_tunnel_output(_numbered_output(25) + CLOUDFLARED_OUTPUT + _numbered_output(25), emit=printed.append)
+    assert printed == [URL_ANNOUNCEMENT]  # 成功路徑跟以前一樣：只印網址那一句
 
 
 class _FakeProcess:

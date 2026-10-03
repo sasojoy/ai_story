@@ -28,6 +28,7 @@ import subprocess
 import threading
 import time
 import unicodedata
+from collections import deque
 from collections.abc import Callable, Iterable
 from pathlib import Path
 
@@ -677,6 +678,9 @@ TUNNEL_URL = re.compile(r"https://(?!api\.)[a-z0-9-]+\.trycloudflare\.com")
 # 要不到隧道時它的錯誤訊息會帶 https://api.trycloudflare.com（它自己的服務），那個也不是給手機用的。
 
 
+TUNNEL_TAIL_LINES = 20  # 拿不到網址時，結束前印出 cloudflared 最後這幾行，讓主機端看得到原因
+
+
 def _say(text: str) -> None:
     print(text, flush=True)
 
@@ -686,15 +690,27 @@ def relay_tunnel_output(lines: Iterable[str], emit: Callable[[str], None] = _say
 
     一定要把管線讀乾淨：沒人讀的話緩衝寫滿時 cloudflared 會卡住，隧道跟著停。
     所以不提早結束，也不因為任何一行格式怪就丟例外（不認得的行直接跳過）。
-    讀到結束還沒拿到網址就明說，不要無聲無息。"""
+    輸出平常是吞掉的，只記住最後 TUNNEL_TAIL_LINES 行（去掉行尾換行、空行不記），不轉印；
+    讀到結束還沒拿到網址，就先說一句、再把這幾行印出來（錯誤原因通常就在裡面）；
+    連一行輸出都沒有就改說「沒有任何輸出」。拿到網址的路徑完全不印這些。"""
     announced = False
+    tail: deque[str] = deque(maxlen=TUNNEL_TAIL_LINES)
     for line in lines:
         found = TUNNEL_URL.search(line)
         if found and not announced:
             announced = True
             emit(f"公開網址：{found.group()}（給手機用；有網址的人都進得來，不要外流）")
-    if not announced:
-        emit("cloudflared 已結束，沒有拿到公開網址（看上面 cloudflared 的輸出找原因）。")
+        text = line.rstrip()
+        if text:
+            tail.append(text)
+    if announced:
+        return
+    if not tail:
+        emit("cloudflared 沒有任何輸出就結束了。")
+        return
+    emit("cloudflared 已結束，沒有拿到公開網址。它最後的輸出：")
+    for text in tail:
+        emit(text)
 
 
 def start_tunnel(port: int) -> threading.Thread | None:
