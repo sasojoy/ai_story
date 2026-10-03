@@ -11,16 +11,16 @@ import random
 from pydantic import BaseModel
 
 from . import (
-    atlas, battle_instance, battlelog, companion_agent, craft, encounter, flavor, journal, materials, roster,
+    atlas, battle_instance, battlelog, companion_agent, craft, encounter, event_llm, flavor, journal, materials, roster,
     skillview, team,
 )
 from .events import choice_label, has_events_here, pick_event, visible_choices
 from .guide import note_action, quest_text, tutorial_intro
 from .journal import LOG_BREAK, Draft
 from .mapview import render_map, render_minimap
-from .models import BattleDef, Choice, Content, Effect, Event, Location, Squad, TravelMode
+from .models import FREE_TEXT_MAX, BattleDef, Choice, Content, Effect, Event, Location, Squad, TravelMode
 from .ollama_client import OllamaClient
-from .rules import apply_effect, change_trend, check_who, current_day, roll_check
+from .rules import apply_effect, change_trend, check_who, current_day, fill_marks, free_text_rate, rate_words, roll_check
 from .sqlite_world import open_world
 from .state import PLAYER, GameState, JournalEntry, Journey, Rumor, WorldState, new_game_state
 from .world import advance_world_state, check_thresholds, end_season, fire_by_id, sim_tick, start_pending_battle
@@ -35,6 +35,25 @@ class Option(BaseModel):
     id: str
     label: str
     enabled: bool = True
+
+
+FREE_TEXT_OPTION = "choice:free"  # 事件的「隨口應對」：按下去只是叫出輸入框，真正送出走 free_text_request／answer_event
+
+
+class FreeTextRequest(BaseModel):
+    """隨口應對鎖外評估的單子（server.py 的 A 段拿到、B 段送模型、C 段交回 answer_event 重驗）。"""
+    event_id: str
+    text: str
+
+
+class FreeTextOutcome(BaseModel):
+    """擲完骰的結果：server.py 拿它在鎖外請模型潤色，再交回 add_gamble_narration 插進那一則江湖紀錄。"""
+    event_id: str
+    text: str
+    success: bool
+    effect_text: str
+    time: float  # 那一則紀錄的遊戲時間與標題，插潤色前用來認是不是同一則
+    title: str
 
 
 class Game:
@@ -55,6 +74,7 @@ class Game:
             presence_penalty=cfg.ollama_presence_penalty, frequency_penalty=cfg.ollama_frequency_penalty,
         )  # companion_agent.py 用；連不上時那輪對話取消，這裡不用先健檢
         self._draft: Draft | None = None  # choose() 進行中那次行動的江湖紀錄草稿
+        self.last_gamble: FreeTextOutcome | None = None  # 上一次 answer_event 擲完骰的結果（server.py 拿去潤色）
         # 主畫面「走法」切換選的走法（步行／趕路／疾行），選單上的「前往」照它出發（見 _move_option）。只是畫面狀態：
         # 不在 GameState 裡、不進存檔。網頁伺服器的同一個角色只有一份 Game（各分頁共用、重新整理也還在），所以走法
         # 由頁面記著、每個請求帶上，server.py 在行動鎖裡逐次 set_move_mode（見 server.MOVE_MODE）；機器人與假人從不改它。
@@ -270,7 +290,10 @@ class Game:
             return [Option(id="season:resting", label="休季中，等待管理者開啟下一季", enabled=False)]
         if s.pending_event:
             event = c.events[s.pending_event]
-            return [Option(id=f"choice:{i}", label=self._choice_label(ch, odds)) for i, ch in visible_choices(event, s)]
+            opts = [Option(id=f"choice:{i}", label=self._choice_label(ch, odds)) for i, ch in visible_choices(event, s)]
+            if event.free_text is not None:
+                opts.append(Option(id=FREE_TEXT_OPTION, label=event.free_text.prompt))
+            return opts
         if s.player.pending_companion:
             dialogue_options, _ = s.player.last_offered_dialogue.get(s.player.pending_companion, [[], []])
             talk_cost = c.config.talk_stamina
@@ -481,6 +504,8 @@ class Game:
         kind, _, arg = option_id.partition(":")
         if kind == "battle":
             return self._log(self._battle_choose(arg))
+        if option_id == FREE_TEXT_OPTION:
+            return self._log([f"（寫下你的做法，{FREE_TEXT_MAX} 字以內。）"])  # 選項本身只叫出輸入框，不消耗事件
         prepared = self._checked_prepared(option_id, prepared) if kind in ("act", "talk", "call") else None
         self._draft = Draft(self._action_title(kind, arg))
         try:
@@ -507,6 +532,68 @@ class Game:
         self._record_faction()
         self._save_season()
         return self._log(msgs)
+
+    def free_text_request(self, text: str) -> FreeTextRequest | None:
+        """隨口應對的階段 A（server.py 在行動鎖內、很快地呼叫）：眼前的事件可以隨口應對、寫的字是 1～20 字，
+        就回傳要在鎖外送模型評估的單子；不行就是 None。只讀、不改狀態，也不推進戰鬥（理由同 dialogue_request）。"""
+        text = text.strip()
+        event_id = self.state.pending_event
+        if not text or len(text) > FREE_TEXT_MAX or event_id is None:
+            return None
+        if FREE_TEXT_OPTION not in {o.id for o in self.options(odds=False, tick=False) if o.enabled}:
+            return None
+        return FreeTextRequest(event_id=event_id, text=text)
+
+    def answer_event(self, request: FreeTextRequest, llm_rate: int | None = None) -> list[str]:
+        """隨口應對的階段 C（鎖內）：重驗還停在同一則事件、寫的是同一句話，才算成功率、擲骰、套用效果。
+        llm_rate 是鎖外評好的 0～100；沒給（直接呼叫的測試、腳本）就在這裡評，評不到一樣退回 40。
+        成功率＝LLM 評分加屬性修正、夾在 5～85（rules.free_text_rate）；擲骰用引擎自己的 rng。"""
+        s, c = self.state, self.content
+        self.last_gamble = None
+        current = self.free_text_request(request.text)
+        if current is None or current.event_id != request.event_id:
+            return self._log(["（事情已經過去了，這句話沒派上用場。）"])
+        event = c.events[request.event_id]
+        choice = event.free_text
+        if llm_rate is None:
+            llm_rate = event_llm.assess_event_success_rate(self.client, event, request.text)
+        self.state.battle_card = None
+        self._draft = Draft(f"{event.title}・隨口應對")
+        try:
+            s.pending_event = None
+            rate = free_text_rate(llm_rate, choice, s, c, self.world)
+            success = self.rng.random() * 100 < rate
+            who = check_who(choice, s, c, self.world)
+            word = "成功" if success else "失敗"
+            msgs = [f"你：「{request.text}」（{rate_words(rate)}）", f"（{who}——{word}）"]
+            self._outcome(f"{who}・{word}", msgs[-1])
+            effect = choice.effect if success else choice.fail_effect
+            msgs += self._apply(effect)
+            msgs += check_thresholds(s, c, self.world, self.client, now=self.now)
+            journal.add_entry(s, self._draft.entry(s.world.time, msgs))
+            self.last_gamble = FreeTextOutcome(
+                event_id=event.id, text=request.text, success=success, effect_text=fill_marks(effect.text, s),
+                time=s.world.time, title=self._draft.title,
+            )
+        finally:
+            self._draft = None
+        self._record_faction()
+        self._save_season()
+        return self._log(msgs)
+
+    def add_gamble_narration(self, outcome: FreeTextOutcome, narration: str) -> None:
+        """隨口應對的潤色（鎖外生成）插回那一則江湖紀錄：接在「你：「…」」那一行後面、結果文字前面。
+        認不到那一則（紀錄已經被後來的事併掉或擠到後面）就不插，潤色本來就是錦上添花。"""
+        journal_entries = self.state.journal
+        if not narration or not journal_entries:
+            return
+        entry = journal_entries[0]
+        if entry.time != outcome.time or entry.title != outcome.title:
+            return
+        lines = list(entry.lines)
+        said = next((i for i, line in enumerate(lines) if line.startswith(f"你：「{outcome.text}」")), None)
+        lines.insert(0 if said is None else said + 1, narration)
+        journal_entries[0] = entry.model_copy(update={"lines": lines})
 
     def _action_title(self, kind: str, arg: str) -> str:
         s, c = self.state, self.content
@@ -1081,6 +1168,13 @@ class Game:
             for o in battle_instance.options_for(battle, definition, name) if not o.free_text
         ]
 
+    def event_free_text_prompt(self) -> str | None:
+        """眼前的事件可以隨口應對時回傳提示語（選單上那一顆的標籤），否則 None；server.py 用它決定輸入框。"""
+        event_id = self.state.pending_event
+        if event_id is None or self.content.events[event_id].free_text is None:
+            return None
+        return self.content.events[event_id].free_text.prompt
+
     def battle_free_text_prompt(self) -> str | None:
         """這回合是否有自訂行動的輸入框可以用，有的話回傳提示語（見 BattleOption.free_text
         ——設計討論：魯莽這類選項該是玩家自己想出來的招，不是從清單挑一個）；沒有（不在
@@ -1218,11 +1312,11 @@ class Game:
         self.state.pending_event = event.id
         self.state.player.seen_events.add(event.id)
         head = f"✦ 奇遇：{event.title}" if event.qiyu else f"【{event.title}】"
-        text = event.text
+        text = fill_marks(event.text, self.state)
         if is_repeat:
             flourish = flavor.polish_event_repeat(self.client, event.title, event.text)
             if flourish:
-                text = f"{event.text}\n\n{flourish}"
+                text = f"{text}\n\n{flourish}"
         self._outcome(journal.event_marker(event.title, event.qiyu), head)
         self._hide(text)
         return [head, text]
@@ -1869,7 +1963,7 @@ class Game:
             return f"## {s.world.ending_title}\n\n{s.world.ending_text}"
         if s.pending_event:
             event = c.events[s.pending_event]
-            return f"**{event.title}**\n\n{event.text}"
+            return f"**{event.title}**\n\n{fill_marks(event.text, s)}"
         if s.player.pending_companion:
             character = c.characters[s.player.pending_companion]
             history = s.player.dialogue_history.get(s.player.pending_companion, [])

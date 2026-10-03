@@ -92,6 +92,7 @@ class PlayerState(BaseModel):
     art_levels: dict[str, int] = Field(default_factory=dict)  # 每門學過的功法各自的熟練度；改練時存進來／取出來
 
     seen_events: set[str] = Field(default_factory=set)
+    mark_days: dict[str, int] = Field(default_factory=dict)  # 地方痕跡：這個人上次替這個痕跡算進一次是第幾天（一天只算一次；角色每季重來，跟著清空）
     anonymous: bool = False
     busy_until: float | None = None  # 閉關結束的遊戲時間
     seclusion_start: float = 0.0
@@ -141,6 +142,7 @@ class WorldState(BaseModel):
     storyline: str = ""  # 目前主線 id
     act: int = 0  # 目前第幾幕（從 0 起算）
     act_reached: int = 0  # 本季到過的最遠一幕；主線改寫會把 act 歸零，隊伍數與統御上限看這個（見 roster.stage）
+    marks: dict[str, int] = Field(default_factory=dict)  # 地方痕跡：「地點 id:痕跡名」→ 累積次數（全服共用，換季整個重來）
     pending_battle: str | None = None  # 背景推進跨過開戰門檻時記下要開的戰鬥 id；那時人在 mutate_season 的
     # callback 裡，不能再 mutate 開戰（巢狀的 mutate 內層寫的會被蓋掉，會丟錯），callback 結束後由
     # world.start_pending_battle 開戰並清掉
