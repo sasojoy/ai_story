@@ -269,7 +269,7 @@ def play(content, seed: int, world_dir: Path, *, no_craft=False, no_train=False,
             if step % SPEND_XINDE_EVERY == 0:
                 bot.spend_xinde(game, rng)
                 if not no_craft:
-                    known = set(game.world.read().recipes)
+                    known = game.world.recipe_keys()
                     had_arts = {game.state.player.member.neigong_id, game.state.player.member.wugong_id}
                     had_arts |= set(game.state.player.arts)
                     before_spend = (sum(game.state.player.materials.values()),
@@ -284,7 +284,7 @@ def play(content, seed: int, world_dir: Path, *, no_craft=False, no_train=False,
                             bot.craft_and_keep_the_best(game, rng)
                     else:
                         bot.craft_and_keep_the_best(game, rng)
-                    for key in set(game.world.read().recipes) - known:
+                    for key in game.world.recipe_keys() - known:
                         first_crafts.add(key)
                     now_arts = {game.state.player.member.neigong_id, game.state.player.member.wugong_id}
                     now_arts |= set(game.state.player.arts)

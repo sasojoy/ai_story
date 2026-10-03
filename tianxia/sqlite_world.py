@@ -129,6 +129,11 @@ class SqliteWorldStore:
         with self.db.snapshot() as conn:
             return _recipe(conn, self._season_number(conn), key)
 
+    def recipe_keys(self) -> set[str]:
+        with self.db.snapshot() as conn:
+            rows = conn.execute("SELECT key FROM recipes WHERE season = ?", (self._season_number(conn),)).fetchall()
+        return {row["key"] for row in rows}
+
     def claim_recipe(self, key: str, art: MartialArt) -> tuple[MartialArt | None, bool]:
         with self.db.transaction() as conn:
             season = self._season_number(conn)

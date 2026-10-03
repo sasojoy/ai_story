@@ -539,3 +539,17 @@ def test_a_season_without_first_crafts_adds_no_chronicle_entry(store, content):
     store.mutate_season(lambda season: setattr(season, "ended", True))
     assert store.next_season(content, now=1.0)
     assert store.chronicle_before(2) == []
+
+
+def test_recipe_keys_lists_only_this_seasons_recipes(store, content):
+    content.config.auto_open_first_season = True
+    store.seed_first_season(content)
+    key = "gang_1+gang_1|武學"
+    assert store.recipe_keys() == set()
+    store.claim_recipe(key, generate_from_name("玄雷式", "武學", "玄雷式"))
+    assert store.recipe_keys() == {key}
+    store.mutate_season(lambda season: setattr(season, "ended", True))
+    assert store.next_season(content, now=1.0)
+    assert store.recipe_keys() == set()  # 新的一季重新發現
+    with store.db.snapshot() as conn:  # 上一季的那一列還在
+        assert conn.execute("SELECT COUNT(*) AS n FROM recipes WHERE season = 1").fetchone()["n"] == 1

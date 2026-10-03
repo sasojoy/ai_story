@@ -135,6 +135,10 @@ class WorldStateStore(Protocol):
         """這個配方這一季已經有人煉出來過嗎？有就回傳登記在案的那一門（全服看到同一個結果）。"""
         ...
 
+    def recipe_keys(self) -> set[str]:
+        """這一季已經有人煉出來的配方鍵。"""
+        ...
+
     def claim_recipe(self, key: str, art: MartialArt) -> tuple[MartialArt | None, bool]:
         """登記配方與功法，回傳（這個配方的功法, 是不是首創），原子判斷。三種結果：
         - 配方已經有人登記 → 回傳登記在案的那一門與 False（配方的結果全服共享，無限煉製設計 §十二 第 1 點）。
