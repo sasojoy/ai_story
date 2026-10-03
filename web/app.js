@@ -26,6 +26,7 @@
   ];
   const POLL_MS = 10000;
   const KINDS = ["武學", "內功"];
+  const MAX_LEVEL = 10; // 功法最多練到第十成（跟 tianxia/team.py 的 MAX_LEVEL 同一個數）
   // 江湖頁「前往」的走法（跟 atlas.MODES 同一份）。選的走法只放在 S.moveMode：不寫進 localStorage、cookie，
   // 重新整理頁面就回到步行；每個請求都帶著它（見 api()），伺服器照它排選單上的「前往」
   const MOVE_MODES = [
@@ -311,12 +312,17 @@
     const s = S.main.status;
     // 身上的功法卡（FB-006）：目前切到的那一門放前面
     const slots = x.slot_cards.filter((c) => c.kind === S.kind).concat(x.slot_cards.filter((c) => c.kind !== S.kind));
+    // 目前這一門有沒有功法、練到第幾成：沒有就不能鍛鍊（C5），有了就不能再自創（C4）
+    const cur = x.slot_cards.find((c) => c.kind === S.kind) || { learned: false, level: 0 };
+    const train = !cur.learned ? `還沒有${esc(S.kind)}` : cur.level >= MAX_LEVEL ? "已練到第十成" : "";
+    // 名冊只有本人一列（還沒有同伴）時跟上面的本人卡重複，不畫（C6）
+    const mates = x.roster.length > 1;
     return `
       <div class="msg" id="mx-msg">${S.message}</div>
       <div class="card">
         <div class="seg">${KINDS.map((k) => `<button class="${S.kind === k ? "on" : ""}" data-act="kind" data-kind="${k}">${k}</button>`).join("")}</div>
         <div class="row">
-          <button class="btn primary" data-act="mx" data-op="practice">鍛鍊${esc(S.kind)}</button>
+          <button class="btn ${train ? "" : "primary"}" data-act="mx" data-op="practice" ${train ? "disabled" : ""}>${train || `鍛鍊${esc(S.kind)}`}</button>
           <button class="btn" data-act="mx" data-op="heal" ${s.injury >= 1 ? "" : "disabled"}>療傷</button>
         </div>
         <p class="muted">${x.rules.replace(/<\/?p>/g, "")}</p>
@@ -324,10 +330,12 @@
       <div class="label">身上的功法</div>
       ${slots.map((c) => `<div class="card">${c.card}</div>`).join("")}
       <div class="label">自創功法</div>
-      <form class="card" id="create-skill">
-        <p class="muted">取名就決定了屬性、威力與成長，全服不能重名。目前這一門${esc(S.kind)}的欄位空著才能自創。</p>
+      ${cur.learned
+        ? `<div class="card"><p class="muted">你已經有一門${esc(S.kind)}了。想換別的，可以去煉製，或在功法庫改練。</p></div>`
+        : `<form class="card" id="create-skill">
+        <p class="muted">取名就決定了屬性、威力與成長，全服不能重名。你還沒有${esc(S.kind)}，這一欄空著，可以自創一門。</p>
         <div class="row"><input class="input" name="name" maxlength="12" placeholder="幫你的${esc(S.kind)}取個名字" style="flex:2"><button class="btn" type="submit">自創</button></div>
-      </form>
+      </form>`}
       <div class="label">閉關</div>
       <form class="card" id="seclude">
         <p class="muted">閉關可以得到心得，期間氣血回復加倍；閉關中不能做別的事。</p>
@@ -343,8 +351,8 @@
         : '<p class="muted">煉出來還沒配上身的功法會放在這裡。改練會把目前那一門收回庫裡，熟練度各自保留。</p>'}
       <div class="label">門下</div>
       <details class="fold" open><summary>本人</summary><div class="fold-body">${x.player_card}</div></details>
-      <div class="list">${x.roster.map((r) => `<button class="${x.person === r.key ? "on" : ""}" data-act="person" data-key="${esc(r.key)}">${esc(r.label)}</button>`).join("")}</div>
-      ${x.person ? `<div class="card">${x.person_card}
+      ${mates ? `<div class="list">${x.roster.map((r) => `<button class="${x.person === r.key ? "on" : ""}" data-act="person" data-key="${esc(r.key)}">${esc(r.label)}</button>`).join("")}</div>` : ""}
+      ${mates && x.person ? `<div class="card">${x.person_card}
         <button class="btn ${x.on_team ? "" : "primary"}" data-act="mx" data-op="${x.on_team ? "leave" : "join"}">${x.on_team ? "移出隊伍" : "加入隊伍"}</button></div>` : ""}`;
   }
 
