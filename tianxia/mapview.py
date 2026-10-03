@@ -412,6 +412,7 @@ def render_map(
     odds: Odds | None = None,
 ) -> str:
     """大地圖：layer 是 atlas.LAYERS 其中之一，selected 是被選的地點（加粗標示）。
+    大地圖照原尺寸畫在可捲動的框裡（地圖上的遠近就是真正的路程，縮到欄寬字會太小；見地圖擴充與移動設計）。
     敵情層要傳 odds（Game.odds）才會寫出「最險」；其餘圖層不用、也不會算勝算。
 
     地點名字（連同底下的小字）擺在不壓到大區名稱、大勢、河名、地點記號（含所在地與選定的圓圈）、圖例與
@@ -423,8 +424,9 @@ def render_map(
     prefixes, notes, fills = _layer_marks(state, content, layer, views, odds)
     legend_top = m.height - 50
     out = [
+        '<div class="tx-world-map" style="overflow:auto;max-height:75vh">'
         f'<svg viewBox="0 0 {m.width} {m.height}" xmlns="http://www.w3.org/2000/svg" '
-        'style="width:100%;height:auto;font-family:sans-serif">',
+        f'style="width:{m.width}px;height:{m.height}px;max-width:none;font-family:sans-serif">',
         f'<rect x="0" y="0" width="{m.width}" height="{m.height}" rx="12" fill="{bg}"/>',
     ]
     taken: list[Taken] = []  # 已經佔用的範圍：擺地點名字時要避開
@@ -477,7 +479,7 @@ def render_map(
         for note_text, size in note:
             out.append(_text(x, y + LINE_GAP, note_text, size, NOTE_FILL, bg, anchor, attrs=attrs))
     out.append(_legend(bg, legend_top, m.width, layer))
-    out.append("</svg>")
+    out.append("</svg></div>")
     return "".join(out)
 
 

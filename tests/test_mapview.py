@@ -41,8 +41,12 @@ def test_location_views(state, content):
 
 
 def test_render_map(state, content):
-    svg = render_map(state, content)
-    assert svg.startswith("<svg") and svg.endswith("</svg>")
+    html_out = render_map(state, content)
+    assert html_out.startswith('<div class="tx-world-map" style="overflow:auto;max-height:75vh">')
+    assert html_out.endswith("</svg></div>")
+    m = content.map
+    assert f'style="width:{m.width}px;height:{m.height}px;max-width:none;font-family:sans-serif"' in html_out
+    svg = html_out
     assert "小鎮" in svg and "湖邊" in svg and "測試區" in svg
     assert "寶洞" not in svg  # 尚未解鎖
     content.config.vision_base = 0
