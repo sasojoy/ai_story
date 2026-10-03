@@ -536,9 +536,9 @@ def supplied(content, name: str):
 def test_the_tianji_decides_what_a_recipe_grows_into(content, world, tmp_path):
     """同一個配方、同一個名字，天機不同就長出不同的功法（每季換一次天機，同名長出不同武學）。
     fixture 的剛＋剛武學在天機 0 與天機 1 的品質剛好不同，所以差異是確定的、不靠運氣。"""
-    from tianxia.world_state import WorldStateStore
+    from tianxia.sqlite_world import open_world
 
-    later = WorldStateStore(path=tmp_path / "later" / "state.json")
+    later = open_world(tmp_path / "later.db")
     later.mutate(lambda state: setattr(state, "tianji", 1))
     client = OllamaClient()
     with llm_down():

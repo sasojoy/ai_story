@@ -29,7 +29,7 @@ from tianxia.craft import MATERIALS_PER_CRAFT
 from tianxia.engine import Game, Option
 from tianxia.journal import CSS as JOURNAL_CSS
 from tianxia.save import load_game, path_for, save_game
-from tianxia.world_state import WorldStateStore
+from tianxia.sqlite_world import open_world
 
 ROOT = Path(__file__).parent
 CONTENT = load_content(ROOT / "content")
@@ -577,7 +577,7 @@ def register(login_name, password, again):
     if (password or "") != (again or ""):
         raise gr.Error(PASSWORDS_DIFFER)
     try:
-        with WorldStateStore().action_lock():
+        with open_world().action_lock():
             account_store().register(login_name, password)
     except AccountError as exc:
         raise gr.Error(str(exc))
@@ -594,7 +594,7 @@ def create_character(account_key, name):
     if len(name) > NAME_MAX or any(unicodedata.category(ch) in ("Cc", "Cf") for ch in name):
         raise gr.Error(BAD_NAME)
     store = account_store()
-    with WorldStateStore().action_lock():
+    with open_world().action_lock():
         account = store.get(account_key)
         if account is None:
             raise gr.Error("請先登入。")
@@ -616,7 +616,7 @@ def change_password_handler(account_key, old, new, again):
     if (new or "") != (again or ""):
         return [PASSWORDS_DIFFER, "", "", ""]
     try:
-        with WorldStateStore().action_lock():
+        with open_world().action_lock():
             account_store().change_password(account_key, old, new)
     except AccountError as exc:
         return [str(exc), "", "", ""]
@@ -629,7 +629,7 @@ def reset_password_handler(game, target, temp):
         return ["（只有管理者能重設密碼。）", ""]
     store = account_store()
     try:
-        with WorldStateStore().action_lock():
+        with open_world().action_lock():
             key = store.find(target)
             if key is None:
                 return ["找不到這個帳號或名號。", ""]

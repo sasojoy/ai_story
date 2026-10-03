@@ -1,23 +1,22 @@
-import os
 import random
 import subprocess
 import sys
 import threading
-import time
 from pathlib import Path
 
 import pytest
 
-from tianxia import world_state
+from tianxia import database
+from tianxia.database import Database
 from tianxia.martial_arts import generate_from_name
-from tianxia.world_state import WorldStateStore, _locked
+from tianxia.sqlite_world import SqliteWorldStore, open_world
 
 ROOT = Path(__file__).resolve().parent.parent
 
 
 @pytest.fixture
 def store(tmp_path):
-    return WorldStateStore(path=tmp_path / "world" / "state.json")
+    return open_world(tmp_path / "world.db")
 
 
 def test_read_missing_file_returns_empty_state(store):
@@ -40,11 +39,11 @@ def test_claim_skill_name_fails_when_already_taken(store):
 
 
 def test_claim_skill_name_persists_across_store_instances(tmp_path):
-    path = tmp_path / "world" / "state.json"
+    path = tmp_path / "world.db"
     art = generate_from_name("驚鴻一劍", "武學", "驚鴻一劍")
-    WorldStateStore(path=path).claim_skill_name(art)
-    reopened = WorldStateStore(path=path)
-    assert reopened.is_skill_name_taken("驚鴻一劍") is True
+    open_world(path).claim_skill_name(art)
+    database.close_all()  # 關掉再開：真的是從檔案讀回來
+    assert open_world(path).is_skill_name_taken("驚鴻一劍") is True
 
 
 def test_record_companion_tag_accumulates_counts(store):
@@ -61,26 +60,18 @@ def test_companion_drift_note_round_trips(store):
     assert store.get_companion_drift_note("dongzhuo") == "漸露驕縱之色"
 
 
-def test_lock_is_reclaimed_after_stale_timeout(tmp_path):
-    lock_dir = tmp_path / "stale.lock"
-    lock_dir.mkdir()
-    old = time.time() - 999
-    import os
-    os.utime(lock_dir, (old, old))
-    # 鎖已經存在但夠舊，_locked 應該強制回收而不是等到逾時炸掉。
-    with _locked(lock_dir):
-        assert lock_dir.exists()
-    assert not lock_dir.exists()
-
-
-def test_lock_prevents_concurrent_mutation_from_corrupting_state(tmp_path):
-    path = tmp_path / "world" / "state.json"
-    store_a = WorldStateStore(path=path)
-    store_b = WorldStateStore(path=path)
-    for i in range(20):
-        art = generate_from_name(f"武學{i}", "武學", f"武學{i}")
-        (store_a if i % 2 == 0 else store_b).claim_skill_name(art)
-    assert len(store_a.read().created_skills) == 20
+def test_two_stores_on_one_file_see_each_others_writes(tmp_path):
+    path = tmp_path / "world.db"
+    store_a = open_world(path)
+    other_db = Database(path)  # 另一組連線，像另一個程式
+    store_b = SqliteWorldStore(other_db)
+    try:
+        for i in range(20):
+            art = generate_from_name(f"武學{i}", "武學", f"武學{i}")
+            (store_a if i % 2 == 0 else store_b).claim_skill_name(art)
+        assert all(store_a.is_skill_name_taken(f"武學{i}") for i in range(20))
+    finally:
+        other_db.close()
 
 
 # ── 共享賽季（真正共享的大勢/門檻/主線，取代每個玩家各自的 WorldState）──────────
@@ -346,45 +337,12 @@ def test_next_season_clears_a_leftover_battle(store, content):
 # ── 兩個程式同時讀寫（伺服器假人設計第九節）──────────────────
 
 
-def test_read_retries_while_another_program_has_the_file_open(store, monkeypatch):
-    store.mutate(lambda s: setattr(s, "tianji", 3))
-    real_read = Path.read_text
-    calls = {"n": 0}
-
-    def busy_twice(self, *args, **kwargs):
-        calls["n"] += 1
-        if calls["n"] <= 2:
-            raise PermissionError("另一個程式正在用這個檔案")
-        return real_read(self, *args, **kwargs)
-
-    monkeypatch.setattr(Path, "read_text", busy_twice)
-    assert store.read().tianji == 3
-    assert calls["n"] == 3
-
-
-def test_write_retries_while_another_program_has_the_file_open(store, monkeypatch):
-    store.mutate(lambda s: None)
-    real_replace = Path.replace
-    calls = {"n": 0}
-
-    def busy_twice(self, target):
-        calls["n"] += 1
-        if calls["n"] <= 2:
-            raise PermissionError("另一個程式正在讀這個檔案")
-        return real_replace(self, target)
-
-    monkeypatch.setattr(Path, "replace", busy_twice)
-    store.mutate(lambda s: setattr(s, "tianji", 5))
-    assert calls["n"] == 3
-    assert store.read().tianji == 5
-
-
 def test_the_action_lock_is_released_afterwards(store):
     with store.action_lock(timeout=1):
-        assert store.action_lock_dir.exists()
-    assert not store.action_lock_dir.exists()
-    with store.action_lock(timeout=1):
+        store.record_faction("甲", "guan")
+    with store.action_lock(timeout=1):  # 放掉了才拿得到第二次
         pass
+    assert store.faction_counts() == {"guan": 1}
 
 
 def test_the_action_lock_times_out_while_another_thread_holds_it(store):
@@ -404,161 +362,22 @@ def test_the_action_lock_times_out_while_another_thread_holds_it(store):
     assert len(errors) == 1
 
 
-def test_an_action_lock_held_for_two_minutes_is_not_mistaken_for_a_crash(store):
-    """真人的行動可能在等 LLM：全服紀錄的鎖 30 秒就回收，行動鎖不能這樣搶走別人的鎖。"""
-    store.action_lock_dir.mkdir(parents=True)
-    two_minutes_ago = time.time() - 120
-    os.utime(store.action_lock_dir, (two_minutes_ago, two_minutes_ago))
-    with pytest.raises(TimeoutError):
-        with store.action_lock(timeout=0.2):
-            pass
-
-
-def test_an_abandoned_action_lock_is_reclaimed(store):
-    store.action_lock_dir.mkdir(parents=True)
-    long_ago = time.time() - world_state.ACTION_LOCK_STALE_AFTER - 1
-    os.utime(store.action_lock_dir, (long_ago, long_ago))
-    with store.action_lock(timeout=1):
-        pass
-
-
-@pytest.fixture
-def dead_pid():
-    """一個已經結束的程式的 PID。Popen 物件留到測試結束：Windows 上它握著那個程式的 handle，
-    這段期間這個 PID 不會被別的程式拿去用。"""
-    proc = subprocess.Popen([sys.executable, "-c", "pass"])
-    proc.wait(timeout=60)
-    yield proc.pid
-
-
-def test_an_action_lock_left_by_a_killed_program_is_reclaimed_at_once(store, dead_pid):
-    """程式被強制結束（關掉終端機分頁、taskkill /F）時 finally 不會跑，鎖目錄留在原地。鎖裡
-    記著拿鎖的程式的 PID；那個程式已經不在了，就馬上回收，不必等 600 秒。"""
-    store.action_lock_dir.mkdir(parents=True)  # 剛剛才拿的鎖：只看存在多久的話要等 600 秒
-    (store.action_lock_dir / "owner").write_text(str(dead_pid), encoding="ascii")
-    started = time.monotonic()
-    with store.action_lock(timeout=1):
-        assert (store.action_lock_dir / "owner").read_text(encoding="ascii") == str(os.getpid())
-    assert time.monotonic() - started < 1
-    assert not store.action_lock_dir.exists()
-
-
-def test_a_lock_held_by_a_running_program_is_not_broken_until_it_ends(store):
-    """記在鎖裡的程式還在跑，就照舊等（不能搶）；那個程式一結束，鎖就能回收。"""
-    proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
-    try:
-        store.action_lock_dir.mkdir(parents=True)
-        (store.action_lock_dir / "owner").write_text(str(proc.pid), encoding="ascii")
-        with pytest.raises(TimeoutError):
-            with store.action_lock(timeout=0.3):
-                pass
-        assert (store.action_lock_dir / "owner").read_text(encoding="ascii") == str(proc.pid)
-    finally:
-        proc.kill()  # 測試自己開的程式，結束它（不是拿 os.kill 問程式在不在）
-        proc.wait(timeout=60)
-    with store.action_lock(timeout=1):
-        pass
-
-
-def test_a_lock_held_by_another_thread_of_this_program_is_not_broken(store):
-    """拿鎖的是同一個程式裡的另一個執行緒：PID 是自己的、程式還在，照舊等到逾時。"""
-    held, release = threading.Event(), threading.Event()
-    stale_after = world_state.ACTION_LOCK_STALE_AFTER
-
-    def holder():
-        with _locked(store.action_lock_dir, timeout=1, stale_after=stale_after):
-            held.set()
-            release.wait(10)
-
-    thread = threading.Thread(target=holder)
-    thread.start()
-    try:
-        assert held.wait(5)
-        with pytest.raises(TimeoutError):
-            with _locked(store.action_lock_dir, timeout=0.2, stale_after=stale_after):
-                pass
-        assert store.action_lock_dir.is_dir()
-    finally:
-        release.set()
-        thread.join(5)
-    assert not store.action_lock_dir.exists()
-
-
-def test_a_lock_retaken_while_someone_was_reclaiming_it_is_left_alone(store, dead_pid):
-    """好幾個人同時發現同一把死鎖：第一個人回收完、自己拿到鎖之後，晚一步的人（剛才讀到的還是
-    死掉的主人）重讀會看到換人了，不能把第一個人剛拿到的鎖刪掉。"""
-    stale_after = world_state.ACTION_LOCK_STALE_AFTER
-    with store.action_lock(timeout=1):  # 第一個人已經回收完、拿到鎖
-        assert not world_state._break_lock(store.action_lock_dir, dead_pid, stale_after)
-        assert (store.action_lock_dir / "owner").read_text(encoding="ascii") == str(os.getpid())
-
-
-def test_only_one_program_reclaims_a_lock_at_a_time(store, dead_pid):
-    """有人正在回收（守門目錄在）就讓他回收；守門目錄是回收到一半被強制結束留下的，過一陣子清掉。"""
-    guard = store.action_lock_dir.with_name(store.action_lock_dir.name + ".break")
-    store.action_lock_dir.mkdir(parents=True)
-    (store.action_lock_dir / "owner").write_text(str(dead_pid), encoding="ascii")
-    guard.mkdir()
-    with pytest.raises(TimeoutError):
-        with store.action_lock(timeout=0.2):
-            pass
-    long_ago = time.time() - world_state.LOCK_STALE_AFTER - 1
-    os.utime(guard, (long_ago, long_ago))
-    with store.action_lock(timeout=1):
-        pass
-    assert not guard.exists() and not store.action_lock_dir.exists()
-
-
-def test_taking_a_lock_waits_while_windows_is_still_deleting_the_last_one(tmp_path, monkeypatch):
-    """Windows 上，上一個人剛放掉、還在刪除中的鎖目錄，再 mkdir 會丟 PermissionError（不是
-    FileExistsError）：稍等重試就好，不能變成行動出錯。"""
-    lock_dir = tmp_path / "busy.lock"
-    real_mkdir = Path.mkdir
-    calls = {"n": 0}
-
-    def pending_delete_once(self, *args, **kwargs):
-        if self == lock_dir:
-            calls["n"] += 1
-            if calls["n"] == 1:
-                raise PermissionError("拒絕存取：這個目錄正在刪除")
-        return real_mkdir(self, *args, **kwargs)
-
-    monkeypatch.setattr(Path, "mkdir", pending_delete_once)
-    with _locked(lock_dir, timeout=1):
-        assert lock_dir.is_dir()
-    assert calls["n"] == 2
-    assert not lock_dir.exists()
-
-
-def test_releasing_a_lock_retries_while_windows_still_holds_the_directory(tmp_path, monkeypatch):
-    """放鎖時 rmdir 一時被擋（防毒或另一個程式正在看這個目錄）：重試到刪掉為止，不能默默留著
-    鎖——行動鎖留著的話，大家要多等 600 秒。"""
-    lock_dir = tmp_path / "busy.lock"
-    real_rmdir = Path.rmdir
-    calls = {"n": 0}
-
-    def busy_once(self):
-        if self == lock_dir:
-            calls["n"] += 1
-            if calls["n"] == 1:
-                raise PermissionError("另一個程式正在用這個目錄")
-        return real_rmdir(self)
-
-    monkeypatch.setattr(Path, "rmdir", busy_once)
-    with _locked(lock_dir, timeout=1):
-        pass
-    assert calls["n"] == 2
-    assert not lock_dir.exists()
-
-
 _WRITER = """
-import sys
+import sys, time
 from pathlib import Path
-from tianxia.world_state import WorldStateStore
-store = WorldStateStore(Path(sys.argv[1]))
+from tianxia.sqlite_world import open_world
+store = open_world(Path(sys.argv[1]))
+go = Path(sys.argv[3])
+print("ready", flush=True)
+deadline = time.monotonic() + 120
+while not go.exists():  # 等起跑訊號：兩邊同時開跑，不會一邊跑完了另一邊才啟動
+    if time.monotonic() > deadline:
+        sys.exit(3)
+    time.sleep(0.0005)
 for _ in range(int(sys.argv[2])):
     with store.action_lock(timeout=60):
         season = store.get_season()  # 跟 Game 一樣：讀一份、改、整份寫回
+        time.sleep(0.001)  # 讀與寫之間留一段空檔：沒有寫入權擋著的話，另一邊一定會插進來
         season.time += 1
         store.save_season(season)
 """
@@ -566,22 +385,40 @@ for _ in range(int(sys.argv[2])):
 _READER = """
 import sys
 from pathlib import Path
-from tianxia.world_state import WorldStateStore
-store = WorldStateStore(Path(sys.argv[1]))
+from tianxia.sqlite_world import open_world
+store = open_world(Path(sys.argv[1]))
 for _ in range(int(sys.argv[2])):
     store.read()
 """
 
 
-def test_two_programs_acting_at_once_lose_no_updates_and_never_trip_over_the_file(tmp_path):
-    """伺服器與假人程式同時對同一份全服紀錄「讀一份、改、整份寫回」，另一個程式同時一直在讀：
-    行動鎖讓兩邊一個一個來（一次都不少），讀寫重試讓 Windows 不會報檔案被占用。"""
-    path = tmp_path / "world" / "state.json"
-    WorldStateStore(path).mutate(lambda s: None)
-    procs = [subprocess.Popen([sys.executable, "-c", _WRITER, str(path), "40"], cwd=ROOT) for _ in range(2)]
-    procs.append(subprocess.Popen([sys.executable, "-c", _READER, str(path), "400"], cwd=ROOT))
-    assert [p.wait(timeout=180) for p in procs] == [0, 0, 0]
-    assert WorldStateStore(path).get_season().time == 80
+def test_two_programs_acting_at_once_lose_no_updates(tmp_path):
+    """伺服器與假人程式同時對全服狀態「讀一份、改、整份寫回」，另一個程式同時一直在讀：
+    寫入交易讓兩邊一個一個來（一次都不少），讀的人不用等。"""
+    path = tmp_path / "world.db"
+    go = tmp_path / "go"
+    open_world(path).mutate(lambda s: None)
+    writers = [
+        subprocess.Popen(
+            [sys.executable, "-c", _WRITER, str(path), "100", str(go)], cwd=ROOT, stdout=subprocess.PIPE, text=True,
+        )
+        for _ in range(2)
+    ]
+    reader = subprocess.Popen([sys.executable, "-c", _READER, str(path), "400"], cwd=ROOT)
+    procs = [*writers, reader]
+    try:
+        for proc in writers:
+            assert proc.stdout.readline().strip() == "ready"
+        go.write_text("go")  # 兩個寫的都就緒了才一起開跑
+        assert [proc.wait(timeout=180) for proc in procs] == [0, 0, 0]
+    finally:
+        for proc in procs:
+            if proc.poll() is None:
+                proc.kill()
+                proc.wait(timeout=60)
+        for proc in writers:
+            proc.stdout.close()
+    assert open_world(path).get_season().time == 200
 
 
 def test_next_season_clears_the_faction_roll(store, content):
@@ -593,3 +430,27 @@ def test_next_season_clears_the_faction_roll(store, content):
     store.mutate_season(lambda season: setattr(season, "ended", True))
     assert store.next_season(content, now=1.0)
     assert store.faction_counts() == {}
+
+
+def test_one_action_is_one_transaction(store, content):
+    """一個動作＝一筆交易（線上架構設計 3.1）：中途出錯，這個動作寫過的全部撤回。"""
+    store.seed_first_season(content)
+    with pytest.raises(ZeroDivisionError):
+        with store.action_lock():
+            store.record_companion_tag("dongzhuo", "真誠切磋")
+            store.mutate_season(lambda season: season.trends.__setitem__("kou", 99))
+            1 / 0
+    assert store.read().companion_tag_counts == {}
+    assert store.get_season().trends.get("kou") != 99
+
+
+def test_next_season_keeps_the_old_season(store, content):
+    """換季不刪資料：賽季編號加一，舊的一季整份留著（線上架構設計 3.2）。"""
+    content.config.auto_open_first_season = True
+    store.seed_first_season(content)
+    store.mutate_season(lambda season: setattr(season, "ended", True))
+    assert store.next_season(content, now=1.0)
+    with store.db.snapshot() as conn:
+        rows = conn.execute("SELECT number, data FROM seasons ORDER BY number").fetchall()
+    assert [row["number"] for row in rows] == [1, 2]
+    assert '"ended":true' in rows[0]["data"]

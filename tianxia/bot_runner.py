@@ -22,6 +22,7 @@ from . import bot_policy, leaderboard, server_bots
 from .engine import Game
 from .models import Content
 from .save import load_game, path_for, save_game
+from .sqlite_world import open_world
 from .state import BotProfile, GameState
 from .world_state import WorldStateStore
 
@@ -55,7 +56,7 @@ class BotRunner:
         rng: random.Random | None = None, clock: Callable[[], float] = time.time,
     ):
         self.content = content
-        self.world = world or WorldStateStore()
+        self.world = world or open_world()
         self.saves_dir = Path(saves_dir) if saves_dir else leaderboard.DEFAULT_SAVES_DIR
         self.rng = rng or random.Random()
         self.clock = clock

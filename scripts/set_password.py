@@ -15,7 +15,7 @@ sys.path.insert(0, str(ROOT))
 
 from tianxia.accounts import AccountError, AccountStore, check_login, normalize  # noqa: E402
 from tianxia.save import load_game, path_for  # noqa: E402
-from tianxia.world_state import WorldStateStore  # noqa: E402
+from tianxia.sqlite_world import open_world  # noqa: E402
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -30,7 +30,7 @@ def main(argv: list[str] | None = None) -> int:
     password = secrets.token_urlsafe(9)  # 12 個字
     try:
         check_login(args.account)
-        with WorldStateStore(saves_dir / "world" / "state.json").action_lock():
+        with open_world(saves_dir / "tianxia.db").action_lock():
             existing = store.get(args.account)
             if args.character:
                 save = path_for(saves_dir, args.character)

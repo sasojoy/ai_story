@@ -1,55 +1,30 @@
-"""共用世界狀態：獨立於各玩家存檔之外、所有玩家共讀共寫的一份資料（設計文件四.3／四.4／六.2）。
+"""全服狀態：所有玩家共讀共寫的一份資料（設計文件四.3／四.4／六.2）——資料模型與存取介面。
 
-存四件事：
-- **自創武學命名登記**：武學名稱全服不能重名，這裡是唯一的「這個名字有沒有被用過」的
-  真相來源（`martial_arts.generate_from_name()` 本身是純函式，不會、也不該自己記狀態）。
-- **同伴性情漂移**：歷史人物的「當下性情」是全服玩家共同形塑的，不是存在單一玩家存檔裡。
-  這裡只存原始的 tag 累積計數；把計數轉成一句話性情描述的語意判斷留給
-  `companion_agent.py`（還沒實作），這個模組只負責資料的共用讀寫與鎖。
-- **同伴進度與招募狀態**：設計文件四.4 定案「每位歷史人物全服唯一」之後，同伴的等級／
-  武學／熟練度是這個人物本身的屬性，不是某個玩家存檔裡的副本——被誰招走了，屬性也還是
-  同一份，換人招募不會歸零。`PlayerState`（見 state.py）只留「這個玩家對這位人物的好感度」，
-  跟他有沒有被招募、等級多高完全無關（好感度不管你招不招得到他都在累積，見設計文件七.1）。
+存的東西：
+- **自創武學命名登記與煉製配方**：武學名稱同一季全服不能重名；配方的結果全服共享，第一個煉出來的人定義它。
+- **同伴性情漂移**：歷史人物的「當下性情」是全服玩家共同形塑的；這裡只存 tag 累積計數與語意化後的一句話
+  （把計數轉成一句話是 companion_agent.py 的事）。
+- **同伴進度與招募狀態**：每位歷史人物全服唯一（設計文件四.4），等級／武學是人物本身的屬性，不是某個玩家
+  存檔裡的副本；玩家存檔只留「我對這位人物的好感度」。
+- **共享賽季**（大勢、門檻、主線、結局）、投靠名冊、全服決戰，以及跨季的傳國玉璽碎片。
 
-因為 tianxia 是一個 Gradio process 服務所有連進來的玩家（見設計文件八.1），不需要真正的
-client-server 架構，用檔案鎖保護一份共用 JSON 檔即可。鎖用 mkdir（在 POSIX 跟 Windows
-上都是原子操作，不需要額外套件），逾時會強制回收，避免程式異常結束後鎖永遠卡住。
-
-伺服器假人程式（`run_bots.py`）是第二個程式，跟 `app.py` 讀寫同一份檔案：兩邊每次行動
-（補算時間＋做動作＋存檔）都要包在 `action_lock()` 裡，一個一個來；`mutate` 的檔案鎖保護的
-只是單次的讀改寫。
+怎麼存不在這個模組：`WorldStateStore` 是介面（線上架構設計第二、三節）。第 1 期的實作是
+`sqlite_world.SqliteWorldStore`：每個會寫的方法自己是一筆交易，呼叫端在 action_lock() 裡時併進那一筆。
+第 2 期的世界主迴圈會換成「記憶體裡一份＋每個動作寫進資料庫」，介面不變。
 """
 from __future__ import annotations
 
-import contextlib
-import functools
-import os
-import threading
-import time
-from pathlib import Path
-from typing import Literal
+import random
+from collections.abc import Callable
+from contextlib import AbstractContextManager
+from typing import Literal, Protocol
 
 from pydantic import BaseModel, Field
 
 from .battle_instance import BattleInstance
-from .fileio import retry_sharing
 from .martial_arts import MartialArt
 from .models import BattleDef, Content
 from .state import WorldState
-
-ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_PATH = ROOT / "saves" / "world" / "state.json"
-
-LOCK_TIMEOUT = 5.0  # 等鎖最多幾秒
-LOCK_STALE_AFTER = 30.0  # 鎖目錄存在超過這麼久視為前一個行程異常結束，強制回收
-LOCK_POLL_INTERVAL = 0.05
-ACTION_LOCK_STALE_AFTER = 600.0  # 行動鎖存在超過這麼久才視為程式異常結束：真人的行動可能在等 LLM（見 action_lock）
-_ACTION_THREAD_LOCK = threading.Lock()  # 同一個程式裡的執行緒先排這個隊，再去搶跨程式的檔案鎖
-LOCK_OWNER_FILE = "owner"  # 鎖目錄裡記著拿鎖程式 PID 的檔案（見 _locked）
-
-_PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
-_STILL_ACTIVE = 259
-_ERROR_ACCESS_DENIED = 5
 
 SeasonPhase = Literal["preparing", "running", "resting"]  # 籌備（管理者還沒開季）／進行中／休季（這一季已結束）
 
@@ -113,133 +88,7 @@ class SharedWorldState(BaseModel):
         return "resting" if self.season.ended else "running"
 
 
-@functools.cache
-def _kernel32():
-    import ctypes
-    from ctypes import wintypes
-
-    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-    kernel32.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
-    kernel32.OpenProcess.restype = wintypes.HANDLE
-    kernel32.GetExitCodeProcess.argtypes = (wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD))
-    kernel32.GetExitCodeProcess.restype = wintypes.BOOL
-    kernel32.CloseHandle.argtypes = (wintypes.HANDLE,)
-    kernel32.CloseHandle.restype = wintypes.BOOL
-    return kernel32
-
-
-def _process_alive(pid: int) -> bool:
-    """這個 PID 的程式還在不在。Windows 用 OpenProcess＋GetExitCodeProcess 問（Windows 上的
-    os.kill 會直接把程式結束掉，絕對不能拿來問）；其他系統送 0 號訊號問。問不清楚（權限不足、
-    查不到結束碼）都當作還在：寧可照舊等，也不搶一個可能還有人拿著的鎖。"""
-    if os.name == "nt":
-        import ctypes
-        from ctypes import wintypes
-
-        kernel32 = _kernel32()
-        handle = kernel32.OpenProcess(_PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
-        if not handle:
-            return ctypes.get_last_error() == _ERROR_ACCESS_DENIED
-        try:
-            code = wintypes.DWORD()
-            if not kernel32.GetExitCodeProcess(handle, ctypes.byref(code)):
-                return True
-            return code.value == _STILL_ACTIVE
-        finally:
-            kernel32.CloseHandle(handle)
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
-    return True
-
-
-def _lock_owner(owner_file: Path) -> int | None:
-    """鎖裡記的 PID；沒有這個檔（剛建好鎖還沒寫、或舊版程式的鎖）、讀不到或內容不對都回 None。"""
-    try:
-        pid = int(owner_file.read_text(encoding="ascii").strip())
-    except (OSError, ValueError):
-        return None
-    return pid if pid > 0 else None
-
-
-def _abandoned(lock_dir: Path, owner: int | None, stale_after: float) -> bool:
-    """這把鎖是不是被丟下了：記的程式已經不在，或鎖存在超過 stale_after（owner＝鎖裡記的 PID）。"""
-    if owner is not None and not _process_alive(owner):
-        return True
-    try:
-        return time.time() - lock_dir.stat().st_mtime > stale_after
-    except OSError:
-        return False
-
-
-def _break_lock(lock_dir: Path, owner: int | None, stale_after: float) -> bool:
-    """回收一把被丟下的鎖，鎖目錄刪掉了才回傳 True。owner 是剛才讀到的拿鎖程式（None＝鎖裡沒記）。
-
-    同一時間只能有一個人回收：先拿旁邊的守門目錄（<鎖>.break），拿到了再讀一次 owner 檔，還是
-    剛才那個主人、而且還是被丟下的才刪。好幾個人同時發現同一把死鎖時，第一個人回收完、自己拿到鎖
-    寫上新主人之後，後面的人重讀就會看到換人了，不會把第一個人剛拿到的鎖也刪掉。守門目錄只在回收
-    那一瞬間存在；回收到一半被強制結束留下的，過了 LOCK_STALE_AFTER 就清掉。"""
-    guard = lock_dir.with_name(lock_dir.name + ".break")
-    owner_file = lock_dir / LOCK_OWNER_FILE
-    try:
-        guard.mkdir()
-    except FileExistsError:
-        with contextlib.suppress(OSError):
-            if time.time() - guard.stat().st_mtime > LOCK_STALE_AFTER:
-                guard.rmdir()
-        return False
-    except OSError:
-        return False
-    try:
-        if _lock_owner(owner_file) != owner or not _abandoned(lock_dir, owner, stale_after):
-            return False  # 等守門目錄的這段時間，鎖已經換人或放掉了
-        retry_sharing(lambda: owner_file.unlink(missing_ok=True))  # 沒記主人的也可能有寫到一半的空檔
-        retry_sharing(lock_dir.rmdir)
-        return True
-    except OSError:
-        return False
-    finally:
-        with contextlib.suppress(OSError):
-            retry_sharing(guard.rmdir)
-
-
-@contextlib.contextmanager
-def _locked(lock_dir: Path, timeout: float | None = LOCK_TIMEOUT, stale_after: float = LOCK_STALE_AFTER):
-    """timeout=None 時一直等到拿到為止。
-
-    拿到鎖（mkdir 成功）就在鎖目錄裡寫一個 owner 檔，記自己的 PID；放鎖時先刪 owner 檔再刪目錄。
-    等別人的鎖時：記的那個程式已經不在了（被強制結束：關掉終端機分頁、taskkill /F，finally 沒跑到、
-    鎖沒放），馬上回收；程式還在、或鎖裡沒記主人（剛建好還沒寫、讀不到、舊版程式的鎖），照舊等到
-    鎖存在超過 stale_after 才回收（見 _break_lock）。Windows 上還在刪除中的目錄，mkdir／rmdir 會丟
-    PermissionError（不是 FileExistsError），用 retry_sharing 稍等重試。"""
-    deadline = None if timeout is None else time.monotonic() + timeout
-    while True:
-        try:
-            retry_sharing(lambda: lock_dir.mkdir(parents=True, exist_ok=False))
-            break
-        except FileExistsError:
-            owner = _lock_owner(lock_dir / LOCK_OWNER_FILE)
-            if _abandoned(lock_dir, owner, stale_after) and _break_lock(lock_dir, owner, stale_after):
-                continue
-            if deadline is not None and time.monotonic() >= deadline:
-                raise TimeoutError(f"等不到鎖：{lock_dir}")
-            time.sleep(LOCK_POLL_INTERVAL)
-    owner_file = lock_dir / LOCK_OWNER_FILE
-    try:
-        with contextlib.suppress(OSError):  # 寫不進去也照樣拿著鎖，只是別人只能照存在多久判斷
-            owner_file.write_text(str(os.getpid()), encoding="ascii")
-        yield
-    finally:
-        with contextlib.suppress(OSError):
-            retry_sharing(lambda: owner_file.unlink(missing_ok=True))
-        with contextlib.suppress(OSError):
-            retry_sharing(lock_dir.rmdir)
-
-
-def _fresh_season(content: Content) -> WorldState:
+def fresh_season(content: Content) -> WorldState:
     """照劇本種出一季全新的共用賽季（大勢起始值、公開的大勢線、第一條主線）。"""
     trends = content.scenario.trends
     return WorldState(
@@ -249,384 +98,150 @@ def _fresh_season(content: Content) -> WorldState:
     )
 
 
-class WorldStateStore:
-    """共用世界狀態的讀寫入口。每個行程可以共用一個實例，也可以每次都重新建立——
-    狀態本身在檔案裡，不在記憶體，不會因為重建實例而遺失。"""
+def jade_seal_summary(fragments: list[JadeSealFragment]) -> str:
+    if not fragments:
+        return "傳國玉璽的七塊碎片，至今尚無人尋獲過一塊。"
+    lines = [f"傳國玉璽：{len(fragments)}/{JADE_SEAL_FRAGMENT_COUNT} 塊碎片已現世——"]
+    lines += [f"　第 {f.number} 塊：{f.finder}（{f.season_name}）{f.text}" for f in fragments]
+    return "\n".join(lines)
 
-    def __init__(self, path: Path | None = None):
-        self.path = Path(path) if path else DEFAULT_PATH
-        self.lock_dir = self.path.with_suffix(".lock")
-        self.action_lock_dir = self.path.with_name(self.path.stem + ".action.lock")
 
-    def read(self) -> SharedWorldState:
-        if not self.path.exists():
-            return SharedWorldState()
-        return SharedWorldState.model_validate_json(retry_sharing(lambda: self.path.read_text(encoding="utf-8")))
+class WorldStateStore(Protocol):
+    """全服狀態的存取介面。引擎只認這個介面，實作見 sqlite_world.SqliteWorldStore。
 
-    def _write(self, state: SharedWorldState) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = self.path.with_suffix(".tmp")
-        tmp.write_text(state.model_dump_json(indent=1), encoding="utf-8")
-        retry_sharing(lambda: tmp.replace(self.path))
+    交易：每個會寫的方法自己就是一筆交易（讀→改→寫回一起成功或一起撤回）；呼叫端在 action_lock()
+    裡時，併進那一筆。「補算時間＋做動作＋存檔」整段一律包在 action_lock() 裡（app.py、假人程式）。"""
 
-    def mutate(self, fn) -> SharedWorldState:
-        """在鎖保護下讀取→套用 fn(state)→寫回，回傳套用後的狀態。fn 直接原地修改 state。"""
-        with _locked(self.lock_dir):
-            state = self.read()
-            fn(state)
-            self._write(state)
-            return state
+    def action_lock(self, timeout: float | None = None) -> AbstractContextManager[object]:
+        """一個動作＝一筆交易（線上架構設計 3.1）。timeout=None 等到拿到為止（伺服器）；給秒數時等不到就丟
+        TimeoutError（假人程式跳過這一輪，不卡住正在等 LLM 的真人）。出錯時整個動作一起撤回。可以巢狀。"""
+        ...
 
-    @contextlib.contextmanager
-    def action_lock(self, timeout: float | None = None):
-        """跨程式的行動鎖（伺服器假人設計第九節）：app.py 與假人程式每次「補算時間＋做動作＋
-        存檔」都包在這裡面。玩家每次行動完會把整份賽季寫回（Game._save_season），兩個程式同時
-        行動時後寫的會蓋掉先寫的；拿同一把鎖就一個一個來。timeout=None 等到拿到為止（伺服器）；
-        給秒數時等不到就丟 TimeoutError（假人程式跳過這一輪，不卡住正在等 LLM 的真人）。
-        不可重入：同一個執行緒拿著鎖時不能再拿一次。"""
-        if not _ACTION_THREAD_LOCK.acquire(timeout=-1 if timeout is None else timeout):
-            raise TimeoutError("等不到行動鎖（同一個程式裡的其他執行緒還拿著）")
-        try:
-            with _locked(self.action_lock_dir, timeout=timeout, stale_after=ACTION_LOCK_STALE_AFTER):
-                yield
-        finally:
-            _ACTION_THREAD_LOCK.release()
+    def read(self) -> SharedWorldState: ...
 
-    # ── 武學命名登記 ──────────────────────────────────────
+    def mutate(self, fn: Callable[[SharedWorldState], None]) -> SharedWorldState:
+        """讀取→套用 fn(state)→寫回，同一筆交易，回傳套用後的狀態。fn 直接原地修改 state。"""
+        ...
 
-    def is_skill_name_taken(self, name: str) -> bool:
-        return name.strip() in self.read().created_skills
+    # ── 武學命名登記與煉製配方（這一季）──
+    def is_skill_name_taken(self, name: str) -> bool: ...
 
     def claim_skill_name(self, art: MartialArt) -> bool:
-        """把 art.name 登記進共用名錄；名字已被用過就不登記，回傳是否成功（在鎖內原子判斷，
-        不會有兩個玩家同時取到同一個名字都成功的競態）。"""
-        claimed = {"ok": False}
-
-        def _apply(state: SharedWorldState) -> None:
-            if art.name.strip() in state.created_skills:
-                return
-            state.created_skills[art.name.strip()] = art
-            claimed["ok"] = True
-
-        self.mutate(_apply)
-        return claimed["ok"]
-
-    # ── 煉製配方登記（無限煉製設計 §5.1：第一個煉出來的人替全服定義它）────
+        """把 art 登記成這一季的自創武學；名字已經有人用過就不登記。回傳有沒有登記成功（原子判斷，
+        不會有兩個玩家同時取到同一個名字都成功）。"""
+        ...
 
     def lookup_recipe(self, key: str) -> MartialArt | None:
-        """這個配方已經被人煉出來過嗎？有就回傳登記在案的那一門（全服所有人看到同一個結果）。"""
-        state = self.read()
-        name = state.recipes.get(key)
-        return state.created_skills.get(name) if name else None
+        """這個配方這一季已經有人煉出來過嗎？有就回傳登記在案的那一門（全服看到同一個結果）。"""
+        ...
 
     def claim_recipe(self, key: str, art: MartialArt) -> tuple[MartialArt | None, bool]:
-        """登記配方與功法，回傳（這個配方的功法, 是不是首創）。全部在檔案鎖內原子判斷。
+        """登記配方與功法，回傳（這個配方的功法, 是不是首創），原子判斷。三種結果：
+        - 配方已經有人登記 → 回傳登記在案的那一門與 False（配方的結果全服共享，無限煉製設計 §十二 第 1 點）。
+        - 配方還沒人登記、art.name 也還沒被占用 → 登記，回傳 (art, True)。
+        - 配方還沒人登記、但 art.name 已經被別人的自創功法或別的配方占用 → 回傳 (None, False)，
+          呼叫端換一個名字再試（取名自創仍然是獨佔的）。"""
+        ...
 
-        三種結果：
-        - 配方已經有人登記 → 回傳**登記在案的那一門**與 False（這是正確行為，不是錯誤：
-          配方的結果全服共享，見設計 §十二 第 1 點）。
-        - 配方還沒人登記，而 `art.name` 也還沒被占用 → 登記，回傳 (art, True)。
-        - 配方還沒人登記，但 `art.name` 已經被別人的自創功法或別的配方占用 → 回傳
-          (None, False)，呼叫端要換一個名字再試（取名自創仍然是獨佔的）。
-        """
-        result: dict[str, object] = {"art": None, "first": False}
+    # ── 同伴性情漂移 ──
+    def record_companion_tag(self, companion_id: str, tag: str) -> None: ...
 
-        def _apply(state: SharedWorldState) -> None:
-            existing = state.recipes.get(key)
-            if existing:
-                result["art"] = state.created_skills.get(existing)
-                return
-            if art.name in state.created_skills:
-                return  # 名字撞到，呼叫端換名字
-            state.created_skills[art.name] = art
-            state.recipes[key] = art.name
-            result["art"], result["first"] = art, True
+    def get_companion_drift_note(self, companion_id: str) -> str: ...
 
-        self.mutate(_apply)
-        return result["art"], bool(result["first"])  # type: ignore[return-value]
-
-    # ── 同伴性情漂移 ──────────────────────────────────────
-
-    def record_companion_tag(self, companion_id: str, tag: str) -> None:
-        """累積一次交遊 tag；轉成漂移後的性情描述是 companion_agent.py 的事，這裡只記數。"""
-        def _apply(state: SharedWorldState) -> None:
-            counts = state.companion_tag_counts.setdefault(companion_id, {})
-            counts[tag] = counts.get(tag, 0) + 1
-
-        self.mutate(_apply)
-
-    def get_companion_drift_note(self, companion_id: str) -> str:
-        return self.read().companion_drift_note.get(companion_id, "")
-
-    def set_companion_drift_note(self, companion_id: str, note: str) -> None:
-        def _apply(state: SharedWorldState) -> None:
-            state.companion_drift_note[companion_id] = note
-
-        self.mutate(_apply)
+    def set_companion_drift_note(self, companion_id: str, note: str) -> None: ...
 
     def tag_counts_since_last_drift(self, companion_id: str) -> int:
-        """自上次語意化以來，全服玩家又新累積了幾次交遊 tag（給 companion_agent.py 判斷
-        要不要觸發一次漂移語意化；用「總次數」而非時間排程，不管同時有幾個玩家在玩，
-        誰的這次互動剛好跨過門檻就由誰觸發）。"""
-        read = self.read()
-        total = sum(read.companion_tag_counts.get(companion_id, {}).values())
-        return total - read.companion_drift_synthesized_at.get(companion_id, 0)
+        """自上次語意化以來，全服玩家又新累積了幾次交遊 tag（用總次數而非時間排程：誰的這次互動剛好跨過門檻就由誰觸發）。"""
+        ...
 
     def record_drift_synthesis(self, companion_id: str, note: str) -> None:
-        """語意化完成後，原子性地把新的一句話性情跟「這次是在累積到多少次時算的」一起
-        寫回（鎖內讀當下總數，避免跟 record_companion_tag 之間有競態，把門檻標記設過頭
-        或設不夠）。"""
-        def _apply(state: SharedWorldState) -> None:
-            state.companion_drift_note[companion_id] = note
-            total = sum(state.companion_tag_counts.get(companion_id, {}).values())
-            state.companion_drift_synthesized_at[companion_id] = total
+        """語意化完成後，把新的一句話性情跟「這次是在累積到多少次時算的」一起寫回（同一筆交易裡讀當下總數）。"""
+        ...
 
-        self.mutate(_apply)
-
-    # ── 江湖大事潤色（全服共用一次）───────────────────────────
-
-    def get_event_flavor(self, fire_id: str) -> str:
-        return self.read().event_flavor.get(fire_id, "")
+    # ── 江湖大事潤色（全服共用一次）──
+    def get_event_flavor(self, fire_id: str) -> str: ...
 
     def set_event_flavor(self, fire_id: str, text: str) -> None:
-        """只在這個江湖大事還沒有人潤色過時才寫入（鎖內判斷），避免兩個玩家前後腳都觸發
-        同一個門檻時各自呼叫一次 LLM、最後互相覆蓋彼此的結果——全服應該永遠只看到同一份。"""
-        def _apply(state: SharedWorldState) -> None:
-            state.event_flavor.setdefault(fire_id, text)
+        """只在這個江湖大事還沒有人潤色過時才寫入：全服永遠只看到同一份。"""
+        ...
 
-        self.mutate(_apply)
-
-    # ── 傳國玉璽碎片（跨季，設計文件九）───────────────────────
-
+    # ── 傳國玉璽碎片（跨季）──
     def record_jade_seal_fragment(self, finder: str, season_name: str, text: str) -> JadeSealFragment | None:
-        """記錄一塊新找到的碎片；七塊都找完之後回傳 None（不再記錄，這條跨季長線到此結束）。
-        在鎖內判斷「現在是第幾塊」，避免兩個玩家幾乎同時觸發時編號重複或漏編。"""
-        result: dict[str, JadeSealFragment | None] = {"fragment": None}
+        """記錄一塊新找到的碎片（編號在交易裡決定，不會重複或漏編）；七塊都找完之後回傳 None。"""
+        ...
 
-        def _apply(state: SharedWorldState) -> None:
-            if len(state.jade_seal_fragments) >= JADE_SEAL_FRAGMENT_COUNT:
-                return
-            fragment = JadeSealFragment(
-                number=len(state.jade_seal_fragments) + 1, finder=finder, season_name=season_name, text=text,
-            )
-            state.jade_seal_fragments.append(fragment)
-            result["fragment"] = fragment
+    def get_jade_seal_fragments(self) -> list[JadeSealFragment]: ...
 
-        self.mutate(_apply)
-        return result["fragment"]
+    def jade_seal_summary(self) -> str: ...
 
-    def get_jade_seal_fragments(self) -> list[JadeSealFragment]:
-        return self.read().jade_seal_fragments
+    # ── 共享賽季 ──
+    def get_season(self) -> WorldState: ...
 
-    def jade_seal_summary(self) -> str:
-        fragments = self.get_jade_seal_fragments()
-        if not fragments:
-            return "傳國玉璽的七塊碎片，至今尚無人尋獲過一塊。"
-        lines = [f"傳國玉璽：{len(fragments)}/{JADE_SEAL_FRAGMENT_COUNT} 塊碎片已現世——"]
-        lines += [f"　第 {f.number} 塊：{f.finder}（{f.season_name}）{f.text}" for f in fragments]
-        return "\n".join(lines)
+    def get_season_number(self) -> int: ...
 
-    # ── 共享賽季 ──────────────────────────────────────────
-
-    def get_season(self) -> WorldState:
-        return self.read().season
-
-    def get_season_number(self) -> int:
-        return self.read().season_number
-
-    def mutate_season(self, fn) -> WorldState:
-        """在鎖保護下讀取共用賽季→套用 fn(season)→寫回，回傳套用後的狀態。fn 直接原地
-        修改 season（一個 WorldState）。寫動作本身是唯一需要鎖的地方——app.py 與假人程式的
-        每次行動都包在跨程式的 action_lock() 裡，一個一個來；這裡的檔案鎖保護的是單次讀改寫，
-        給沒有 action_lock 的場合用（CLI、測試），兩者不衝突。"""
-        def _apply(state: SharedWorldState) -> None:
-            fn(state.season)
-
-        return self.mutate(_apply).season
+    def mutate_season(self, fn: Callable[[WorldState], None]) -> WorldState:
+        """讀取共用賽季→套用 fn(season)→寫回，同一筆交易。"""
+        ...
 
     def save_season(self, season: WorldState) -> None:
-        """整份覆寫共用賽季：呼叫端（engine.py）已經在自己的流程裡把 state.world 指向
-        get_season() 讀回的那一份、就地修改過，這裡單純寫回，不需要再做一次 fn 包裝。"""
-        def _apply(state: SharedWorldState) -> None:
-            state.season = season
+        """寫回共用賽季：呼叫端（engine.py）把 state.world 指向 get_season() 讀回的那一份、就地修改過，這裡寫回。"""
+        ...
 
-        self.mutate(_apply)
-
-    def season_phase(self) -> SeasonPhase:
-        return self.read().season_phase()
+    def season_phase(self) -> SeasonPhase: ...
 
     def seed_first_season(self, content: Content) -> WorldState:
-        """全服第一次開局：照劇本種出第 1 季。預設停在籌備中等管理者開季；內容設定
-        auto_open_first_season 時直接開季。已經種過就原封不動回傳。"""
-        def _apply(state: SharedWorldState) -> None:
-            if state.season.storyline:
-                return
-            state.season = _fresh_season(content)
-            state.season_opened = content.config.auto_open_first_season
-
-        return self.mutate(_apply).season
+        """全服第一次開局：照劇本種出第 1 季。預設停在籌備中等管理者開季；內容設定 auto_open_first_season
+        時直接開季。已經種過就原封不動回傳。"""
+        ...
 
     def open_season(self, now: float) -> bool:
         """管理者開季：籌備中 → 進行中，賽季時鐘從 now 起算。還沒種、或已經開過，回傳 False。"""
-        result = {"ok": False}
-
-        def _apply(state: SharedWorldState) -> None:
-            if not state.season.storyline or state.season_opened:
-                return
-            state.season_opened = True
-            state.season_last_real = now
-            result["ok"] = True
-
-        self.mutate(_apply)
-        return result["ok"]
+        ...
 
     def next_season(self, content: Content, now: float) -> bool:
-        """管理者開下一季：只在休季時有效。換上全新的一季、賽季編號 +1、直接開季，
-        賽季時鐘從 now 起算；同伴、自創武學名字、煉製配方清空，天機 +1；跨季保留的東西
-        （玉璽碎片等）不動。
+        """管理者開下一季：只在休季時有效。換上全新的一季、賽季編號 +1、直接開季，賽季時鐘從 now 起算；
+        同伴、自創武學名字、煉製配方、投靠名冊、沒打完的決戰都清掉，天機 +1；玉璽碎片不動。
+        舊的一季整份留著（線上架構設計 3.2：換季不刪資料）。"""
+        ...
 
-        上一季的配方首創紀錄還沒寫進江湖史：江湖史（`WorldState.chronicle`）放在 season 裡、
-        換季時跟著整個換掉，目前沒有跨季保存的江湖史可以寫。"""
-        result = {"ok": False}
+    def catch_up_season(self, content: Content, now: float, rng: random.Random) -> list[str]:
+        """被動的現實時間追趕：把共用賽季依「距離上次有人追趕過了多久現實時間」往前推進，世界的時間
+        永遠只走一份。時鐘只會往前：拿比上次對過的還早的時間來追趕，不推進、也不把時鐘撥回去。"""
+        ...
 
-        def _apply(state: SharedWorldState) -> None:
-            if state.season_phase() != "resting":
-                return
-            state.season = _fresh_season(content)
-            state.season_number += 1
-            state.season_opened = True
-            state.season_last_real = now
-            state.companions = {}  # 跨季不滾雪球第二條：同伴全部重獲自由、等級武學歸零
-            state.created_skills = {}  # 第三條：自創武學名字全部釋出
-            state.recipes = {}  # 煉製配方跟著清空，大家重新發現、首創者重新認定（第一季設計第十四節）
-            state.tianji += 1
-            state.active_battle = None  # 上一季沒打完（或打完沒清掉）的戰鬥不帶進新的一季
-            state.faction_rolls = {}  # 新的一季大家重新投靠
-            result["ok"] = True
-
-        self.mutate(_apply)
-        return result["ok"]
-
-    def catch_up_season(self, content, now: float, rng) -> list[str]:
-        """被動的現實時間追趕：不管是誰在這一刻跟伺服器互動，都把共用賽季依「距離上次
-        有人追趕過了多久現實時間」往前推進，而不是依呼叫者自己的步調——這樣不管幾個玩家
-        同時在線、各自多久互動一次，世界的時間永遠只走一份，不會重複計算也不會停滯。
-        實際的「推進 N 秒會發生什麼事」邏輯在 world.py::advance_season（避免循環 import：
-        world.py 已經 import 這個模組，不能反過來由這裡 import world.py）。
-
-        時鐘只會往前：拿比上次對過的還早的時間來追趕（例如假人程式在真人行動之前讀的錶），
-        不推進、也不把時鐘撥回去——撥回去的話，下一個人會把那一段再算一次。"""
-        from . import world as world_module
-
-        result: dict[str, list[str] | float] = {"msgs": [], "elapsed": 0.0}
-
-        def _apply(state: SharedWorldState) -> None:
-            last = state.season_last_real
-            state.season_last_real = now if last is None else max(last, now)
-            if last is None or state.season_phase() != "running":
-                return
-            result["elapsed"] = max(0.0, now - last) * content.config.time_scale
-
-        self.mutate(_apply)
-        elapsed = result["elapsed"]
-        if elapsed <= 0:
-            return []
-        return world_module.advance_season(self, content, elapsed, rng, now)
-
-    # ── 投靠名冊（伺服器假人設計第八節第 3 項）──────────────────
-
-    def record_faction(self, name: str, faction_id: str) -> None:
-        def _apply(state: SharedWorldState) -> None:
-            state.faction_rolls[name] = faction_id
-
-        self.mutate(_apply)
+    # ── 投靠名冊 ──
+    def record_faction(self, name: str, faction_id: str) -> None: ...
 
     def faction_counts(self) -> dict[str, int]:
         """這一季各陣營投靠了幾人（只列有人的陣營）。"""
-        counts: dict[str, int] = {}
-        for faction_id in self.read().faction_rolls.values():
-            counts[faction_id] = counts.get(faction_id, 0) + 1
-        return counts
+        ...
 
-    # ── 全服即時多人戰鬥 ──────────────────────────────────
+    # ── 全服即時多人戰鬥 ──
+    def get_battle(self) -> BattleInstance | None: ...
 
-    def get_battle(self) -> BattleInstance | None:
-        return self.read().active_battle
-
-    def mutate_battle(self, fn) -> BattleInstance | None:
-        """在鎖保護下讀取目前這場戰鬥→套用 fn(battle)→寫回；戰鬥不存在時 fn 不會被呼叫，
-        直接回傳 None（呼叫端自己決定要不要把「沒有進行中的戰鬥」當錯誤處理）。"""
-        result: dict[str, BattleInstance | None] = {"battle": None}
-
-        def _apply(state: SharedWorldState) -> None:
-            if state.active_battle is None:
-                return
-            fn(state.active_battle)
-            result["battle"] = state.active_battle
-
-        self.mutate(_apply)
-        return result["battle"]
+    def mutate_battle(self, fn: Callable[[BattleInstance], None]) -> BattleInstance | None:
+        """讀取目前這場戰鬥→套用 fn(battle)→寫回；沒有戰鬥時 fn 不會被呼叫，直接回傳 None。"""
+        ...
 
     def start_battle(self, definition: BattleDef, now: float) -> BattleInstance:
-        """開一場新戰鬥；已經有一場還沒結束的戰鬥時，原封不動回傳那一場（鎖內判斷，
-        避免兩個觸發點前後腳都想開戰，結果互相蓋掉彼此的集結名單）。"""
-        from .battle_instance import start_muster
+        """開一場新戰鬥；已經有一場還沒結束的戰鬥時，原封不動回傳那一場。"""
+        ...
 
-        result: dict[str, BattleInstance] = {}
+    def clear_battle(self) -> None: ...
 
-        def _apply(state: SharedWorldState) -> None:
-            if state.active_battle is not None and state.active_battle.phase != "ended":
-                result["battle"] = state.active_battle
-                return
-            state.active_battle = start_muster(definition, now)
-            result["battle"] = state.active_battle
-
-        self.mutate(_apply)
-        return result["battle"]
-
-    def clear_battle(self) -> None:
-        """戰鬥結束、大家都看過結果之後清掉，讓下一場能夠開始（不清的話 start_battle
-        會因為「還有一場 phase != ended」卡住——但 ended 的戰鬥本來就不會卡住
-        start_battle，這裡單純是不想讓共用狀態一直留著打完的舊戰鬥）。"""
-        def _apply(state: SharedWorldState) -> None:
-            state.active_battle = None
-
-        self.mutate(_apply)
-
-    # ── 同伴進度與招募 ────────────────────────────────────
-
+    # ── 同伴進度與招募 ──
     def get_companion(self, companion_id: str) -> CompanionProgress:
-        """讀目前進度；還沒有人動過這位人物時回傳一份預設值（不會寫回檔案，純讀取）。"""
-        return self.read().companions.get(companion_id, CompanionProgress())
+        """讀目前進度；還沒有人動過這位人物時回傳一份預設值（不寫回）。"""
+        ...
 
     def try_recruit(self, companion_id: str, player_name: str) -> bool:
-        """嘗試把 owner 設成 player_name；已經有主的話失敗（設計文件四.4：唯一、可搶）。
-        判定「招募難不難、會不會惹惱對方要求決鬥」是呼叫端（engine.py）的事，這裡只負責
-        「搶到了沒」這個最終的原子操作，避免兩個玩家同時搶到同一個人。"""
-        result = {"ok": False}
-
-        def _apply(state: SharedWorldState) -> None:
-            progress = state.companions.setdefault(companion_id, CompanionProgress())
-            if progress.owner is not None:
-                return
-            progress.owner = player_name
-            result["ok"] = True
-
-        self.mutate(_apply)
-        return result["ok"]
+        """把 owner 設成 player_name；已經有主的話失敗（設計文件四.4：唯一、可搶）。"""
+        ...
 
     def release_companion(self, companion_id: str) -> None:
-        """放走同伴（離隊/戰敗失去等）：只清 owner，等級/武學等進度原封不動保留。"""
-        def _apply(state: SharedWorldState) -> None:
-            if companion_id in state.companions:
-                state.companions[companion_id].owner = None
+        """放走同伴：只清 owner，等級/武學等進度原封不動。"""
+        ...
 
-        self.mutate(_apply)
-
-    def update_companion(self, companion_id: str, fn) -> CompanionProgress:
-        """在鎖保護下修改某位同伴的進度（升級、配置武學等），fn 直接原地修改 CompanionProgress。"""
-        def _apply(state: SharedWorldState) -> None:
-            progress = state.companions.setdefault(companion_id, CompanionProgress())
-            fn(progress)
-
-        return self.mutate(_apply).companions[companion_id]
+    def update_companion(
+        self, companion_id: str, fn: Callable[[CompanionProgress], None],
+    ) -> CompanionProgress: ...

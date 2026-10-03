@@ -14,8 +14,9 @@ from tianxia.models import (
     FactionDef,
 )
 from tianxia.save import load_game, path_for, save_game
+from tianxia.database import Database
+from tianxia.sqlite_world import open_world
 from tianxia.state import BotProfile
-from tianxia.world_state import WorldStateStore
 
 START = 1_791_198_000.0  # 2026-10-05 19:00 台灣時間
 
@@ -53,7 +54,7 @@ def clock():
 
 @pytest.fixture
 def world(content):
-    store = WorldStateStore()
+    store = open_world()
     store.seed_first_season(content)  # 測試內容會直接開季
     return store
 
@@ -133,8 +134,12 @@ def test_a_bot_skips_its_turn_while_a_player_holds_the_action_lock(runner, world
     runner.tick()
     before = [s.model_dump() for s in _bots(tmp_path)]
     clock[0] += 60
-    with world.action_lock():
-        report = runner.tick()
+    holder = Database(world.db.path)  # 另一組連線，像真人那邊的程式拿著寫入權
+    try:
+        with holder.transaction():
+            report = runner.tick()
+    finally:
+        holder.close()
     assert report.acted == 0 and report.skipped >= 2
     assert [s.model_dump() for s in _bots(tmp_path)] == before
 
@@ -252,7 +257,7 @@ def test_a_bot_whose_own_catch_up_ends_the_season_saves_but_does_not_act(
 def test_bots_do_nothing_until_the_admin_opens_the_season(content, tmp_path, clock):
     _install(content)
     content.config.auto_open_first_season = False
-    store = WorldStateStore()
+    store = open_world()
     store.seed_first_season(content)
     runner = BotRunner(content, store, tmp_path / "saves", random.Random(1), clock=lambda: clock[0])
     assert runner.tick().added == 0

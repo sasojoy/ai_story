@@ -1,7 +1,7 @@
 import random
 
 from tianxia.bot import pick, play_season, spend_xinde, wants_heal
-from tianxia.world_state import WorldStateStore
+from tianxia.sqlite_world import open_world
 
 
 def test_wants_heal_only_with_internal_injury(game):
@@ -59,8 +59,8 @@ def test_play_season_completes_a_full_season(content):
 def test_play_season_is_deterministic_for_a_given_seed(tmp_path, content):
     """同一顆種子要重現一模一樣的結果——各自給獨立的共用世界狀態，不然招募/取名的
     競態結果會因為兩次呼叫共用同一份檔案而互相汙染，讓比較失去意義。"""
-    a = play_season(content, 1, max_steps=200, world=WorldStateStore(tmp_path / "a.json"))
-    b = play_season(content, 1, max_steps=200, world=WorldStateStore(tmp_path / "b.json"))
+    a = play_season(content, 1, max_steps=200, world=open_world(tmp_path / "a.db"))
+    b = play_season(content, 1, max_steps=200, world=open_world(tmp_path / "b.db"))
     assert a.state.player.member.level == b.state.player.member.level
     assert a.state.world.time == b.state.world.time
 

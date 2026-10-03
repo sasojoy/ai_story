@@ -6,7 +6,7 @@ from tianxia.martial_arts import (
     historical_art,
     power_at,
 )
-from tianxia.world_state import WorldStateStore
+from tianxia.sqlite_world import open_world
 
 
 def test_generate_from_name_is_deterministic():
@@ -96,7 +96,7 @@ def test_create_skill_uses_the_current_tianji(content, tmp_path):
     from tianxia import team
     from tianxia.state import new_game_state
 
-    store = WorldStateStore(tmp_path / "world.json")
+    store = open_world(tmp_path / "world.db")
     store.mutate(lambda state: setattr(state, "tianji", 3))
     state = new_game_state(content, "甲")
     art, _ = team.create_skill(state, content, store, "驚雷掌", "武學")

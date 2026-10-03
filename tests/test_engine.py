@@ -8,7 +8,7 @@ from conftest import FixedRandom, at, walk_to
 from tianxia import battle_instance, companion_agent, flavor, rules
 from tianxia.engine import Game, Option
 from tianxia.state import BotProfile, GameState, Journey
-from tianxia.world_state import WorldStateStore
+from tianxia.sqlite_world import open_world
 
 HOUR = 3600
 DAY = 86400
@@ -673,7 +673,7 @@ def test_admin_next_season_needs_the_season_to_be_over(game):
 
 
 def test_new_game_starts_tutorial_at_step_zero(content):
-    fresh = Game.new(content, "新人", world=WorldStateStore(None))
+    fresh = Game.new(content, "新人", world=open_world())
     assert fresh.state.player.tutorial_step == 0
 
 
@@ -2325,9 +2325,11 @@ def test_the_engine_never_reads_the_wall_clock():
     """引擎不自己讀電腦時鐘：現在時間一律由外面傳進來（sync(now) 或明確的 now 參數）。"""
     import tianxia.bot
     import tianxia.engine
+    import tianxia.sqlite_world
     import tianxia.world
+    import tianxia.world_state
 
-    for module in (tianxia.engine, tianxia.world, tianxia.bot):
+    for module in (tianxia.engine, tianxia.world, tianxia.bot, tianxia.world_state, tianxia.sqlite_world):
         assert not hasattr(module, "time"), module.__name__
 
 

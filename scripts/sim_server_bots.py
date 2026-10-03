@@ -18,12 +18,12 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from tianxia import bot, leaderboard, server_bots  # noqa: E402
+from tianxia import bot, database, leaderboard, server_bots  # noqa: E402
 from tianxia.bot_runner import BotRunner  # noqa: E402
 from tianxia.content import load_content  # noqa: E402
 from tianxia.engine import Game  # noqa: E402
 from tianxia.save import load_game, path_for, save_game  # noqa: E402
-from tianxia.world_state import WorldStateStore  # noqa: E402
+from tianxia.sqlite_world import open_world  # noqa: E402
 
 START = 1_791_198_000.0  # 2026-10-05 19:00 台灣時間
 HUMANS = ("沈青衫", "柳如煙")
@@ -51,7 +51,7 @@ def human_turn(game: Game, rng: random.Random) -> None:
 
 def run_season(content, workdir: Path, seed: int, tick: float) -> dict:
     now = [START]
-    world = WorldStateStore(workdir / "world" / "state.json")
+    world = open_world(workdir / "tianxia.db")
     saves = workdir / "saves"
     rng = random.Random(seed)  # 模擬自己用的亂數；假人程式與「真人」另用不同的種子，三者互不牽動
     sides: Counter = Counter()
@@ -108,6 +108,7 @@ def main() -> None:
         content.config.bot_tick_seconds = args.tick
         with tempfile.TemporaryDirectory() as tmp:
             result = run_season(content, Path(tmp), seed=i, tick=args.tick)
+            database.close_all()  # 不先關連線，Windows 刪不掉暫存資料夾
         print(f"第 {i + 1} 季：{result}", flush=True)
 
 

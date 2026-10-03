@@ -158,9 +158,9 @@ def test_lu_bei_faction_all_gather_at_zhuo_county(content):
 
 
 def test_nobody_is_recruitable_anywhere(content):
-    from tianxia.world_state import WorldStateStore
+    from tianxia.sqlite_world import open_world
 
-    world = WorldStateStore(None)  # 讀取用不到磁碟：.read() 找不到檔案時回傳空狀態
+    world = open_world()  # 讀取用不到磁碟：.read() 找不到檔案時回傳空狀態
     for loc_id in content.locations:
         assert roster.recruitable_here(content, world, loc_id) == [], loc_id
 
@@ -175,9 +175,9 @@ def test_meeting_events_mark_the_acquaintance_instead_of_handing_out_companions(
 
 
 def test_the_fortune_turns_into_a_gift_when_nobody_can_be_recruited(content, tmp_path):
-    from tianxia.world_state import WorldStateStore
+    from tianxia.sqlite_world import open_world
 
-    game = Game.new(content, "測試俠客", rng=random.Random(0), world=WorldStateStore(tmp_path / "world.json"))
+    game = Game.new(content, "測試俠客", rng=random.Random(0), world=open_world(tmp_path / "world.db"))
     msgs = game._deliver_fortune()
     assert any("賀禮" in m for m in msgs)
     assert game.state.player.team == []
@@ -188,18 +188,18 @@ def test_the_fortune_turns_into_a_gift_when_nobody_can_be_recruited(content, tmp
 
 @pytest.mark.parametrize("seed", [1, 2, 3])
 def test_bot_plays_a_full_season(content, seed, tmp_path):
-    from tianxia.world_state import WorldStateStore
+    from tianxia.sqlite_world import open_world
 
-    game = play_season(content, seed, world=WorldStateStore(tmp_path / f"world-{seed}.json"))
+    game = play_season(content, seed, world=open_world(tmp_path / f"world-{seed}.db"))
     assert game.state.world.ended
     assert game.state.world.ending_title
     assert len(game.state.player.seen_events) >= 3
 
 
 def test_bot_grows_its_arts_with_xinde(content, tmp_path):
-    from tianxia.world_state import WorldStateStore
+    from tianxia.sqlite_world import open_world
 
-    game = play_season(content, 1, world=WorldStateStore(tmp_path / "world.json"))
+    game = play_season(content, 1, world=open_world(tmp_path / "world.db"))
     member = game.state.player.member
     assert member.neigong_level > 1 or member.wugong_level > 1
 

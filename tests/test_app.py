@@ -1,4 +1,5 @@
 import contextlib
+import sqlite3
 from unittest import mock
 
 import gradio as gr
@@ -6,11 +7,11 @@ import pytest
 
 import app
 from conftest import at
-from tianxia import atlas, battle_instance, companion_agent, roster, world_state
+from tianxia import atlas, battle_instance, companion_agent, roster
 from tianxia.engine import Game, Option
 from tianxia.save import save_game
 from tianxia.state import BotProfile
-from tianxia.world_state import WorldStateStore
+from tianxia.sqlite_world import SqliteWorldStore, open_world
 
 SKIP = {"__type__": "update"}
 
@@ -433,10 +434,8 @@ def test_next_season_handler_runs_the_admin_rollover(game, monkeypatch):
 
 
 def test_open_season_handler_only_works_for_admins(tmp_path, monkeypatch):
-    from tianxia.world_state import WorldStateStore
-
     monkeypatch.setattr(app.CONTENT.config, "auto_open_first_season", False)
-    fresh = Game.new(app.CONTENT, "路人", world=WorldStateStore(tmp_path / "world.json"))
+    fresh = Game.new(app.CONTENT, "路人", world=open_world(tmp_path / "world.db"))
     assert fresh.world.season_phase() == "preparing"
     out = app.open_season_handler(fresh)
     assert len(out) == app.N_OUTPUTS
@@ -449,13 +448,13 @@ def test_open_season_handler_only_works_for_admins(tmp_path, monkeypatch):
 def test_every_action_takes_the_cross_program_action_lock(game, monkeypatch):
     """伺服器假人設計第九節：伺服器的行動鎖要讓假人程式也看得到，不能只是程式內的執行緒鎖。"""
     calls = []
-    real = WorldStateStore.action_lock
+    real = SqliteWorldStore.action_lock
 
     def spy(self, timeout=None):
         calls.append(timeout)
         return real(self, timeout)
 
-    monkeypatch.setattr(WorldStateStore, "action_lock", spy)
+    monkeypatch.setattr(SqliteWorldStore, "action_lock", spy)
     app.act(game, lambda g: None)
     app.tick_handler(game, None)
     assert calls == [None, None]
@@ -718,7 +717,7 @@ def _stand_by_a_figure(game):
 def lock_events(monkeypatch):
     """記錄行動鎖「拿到、放掉」的順序，再讓測試把「生成」插進同一條時間線。"""
     events = []
-    real = WorldStateStore.action_lock
+    real = SqliteWorldStore.action_lock
 
     @contextlib.contextmanager
     def spy(self, timeout=None):
@@ -727,7 +726,7 @@ def lock_events(monkeypatch):
             yield
         events.append("exit")
 
-    monkeypatch.setattr(WorldStateStore, "action_lock", spy)
+    monkeypatch.setattr(SqliteWorldStore, "action_lock", spy)
     return events
 
 
@@ -736,8 +735,13 @@ def test_a_dialogue_option_generates_outside_the_action_lock(game, lock_events):
 
     def generate(client, messages):
         lock_events.append("generate")
-        assert not world_state._ACTION_THREAD_LOCK.locked()  # 程式內的執行緒鎖沒被拿著
-        assert not game.world.action_lock_dir.exists()  # 跨程式的檔案鎖也沒有
+        assert not game.world.db.writing()  # 這個執行緒沒拿著寫入交易
+        probe = sqlite3.connect(game.world.db.path, timeout=0)
+        try:
+            probe.execute("BEGIN IMMEDIATE")  # 別的程式也拿得到寫入權：沒有人卡著
+            probe.execute("ROLLBACK")
+        finally:
+            probe.close()
         return DIALOGUE_TURN
 
     with mock.patch.object(companion_agent, "generate_turn", side_effect=generate) as gen:

@@ -21,6 +21,7 @@ from .mapview import render_map, render_minimap
 from .models import BattleDef, Choice, Content, Effect, Event, Location, Squad, TravelMode
 from .ollama_client import OllamaClient
 from .rules import apply_effect, change_trend, check_who, current_day, roll_check
+from .sqlite_world import open_world
 from .state import GameState, JournalEntry, Journey, Rumor, new_game_state
 from .world import advance_world_state, check_thresholds, end_season, fire_by_id, sim_tick, start_pending_battle
 from .world_state import WorldStateStore
@@ -45,7 +46,7 @@ class Game:
         self.content = content
         self.state = state
         self.rng = rng or random.Random()
-        self.world = world or WorldStateStore()
+        self.world = world or open_world()
         cfg = content.config
         self.client = OllamaClient(
             base_url=cfg.ollama_url, model=cfg.ollama_model, timeout=cfg.ollama_timeout, think=cfg.ollama_think,
