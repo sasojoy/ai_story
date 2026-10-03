@@ -239,11 +239,21 @@ def test_a_bot_hurries_toward_its_sides_battle_in_another_region(content, game):
     assert journey is not None and journey.path == ["lake"] and journey.mode == "hurry"
 
 
-def test_a_bot_walks_to_the_battle_when_it_cannot_afford_to_hurry(content, game):
+def test_a_bot_walks_to_the_battle_when_it_cannot_afford_to_hurry(content, game, monkeypatch):
+    """體力 0 時平常的挑選也會走路（那是唯一能點的選項），所以光看「有走」分不出是不是趕往戰場：
+    小鎮多一條通往死路山丘的出口，並把平常的挑選釘死在山丘；只有 _toward_battle 會走向戰場那一站。"""
     _battle_in_the_south(content, game)
+    content.locations["hill"] = Location(
+        id="hill", name="山丘", description="死路上的小山丘。", connections=["town"], x=200, y=50
+    )
+    content.locations["town"].connections.append("hill")
     game.state.player.stamina = 0
+    monkeypatch.setattr(bot_policy, "pick", lambda game, options, profile, rng: "move:hill")
+    enabled = {o.id for o in game.options(odds=False) if o.enabled}
+    assert {"move:lake", "move:hill"} <= enabled  # 平常的挑選兩條路都走得了
     bot_policy.take_turn(game, _profile("guan"), random.Random(0))
-    assert game.state.player.journey.mode == "walk"
+    journey = game.state.player.journey
+    assert journey is not None and journey.path == ["lake"] and journey.mode == "walk"
 
 
 def test_a_bot_already_in_the_battle_region_joins_instead_of_travelling(content, game):

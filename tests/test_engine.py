@@ -1285,6 +1285,22 @@ def test_walking_inside_the_region_keeps_a_fighter_present(content, game):
     assert not game.world.get_battle().participants["沈浪"].away
 
 
+def test_a_fighter_walking_inside_the_region_can_still_change_sides_during_the_muster(content, game):
+    """已經報名的人在區內站與站之間走動，集結期還看得到改選陣營的按鈕；按下去是改選、不是「加入」，
+    不能被「人要到了那裡、不在路上才能加入」擋下。"""
+    definition = _install_battle_def(content)
+    definition.region = "north"
+    game.world.start_battle(definition, now=0.0)
+    with mock.patch("tianxia.engine.time.time", return_value=0.0):
+        game.choose("battle:join:guan")
+        game.travel("lake", "walk")
+        assert game.state.player.journey is not None
+        assert "battle:join:huang" in ids(game)
+        assert game.choose("battle:join:huang") == ["你加入了這場戰局。"]
+    participant = game.world.get_battle().participants["沈浪"]
+    assert participant.faction == "huang" and not participant.away
+
+
 def test_a_fighter_walking_out_of_the_region_is_away_from_the_start_of_the_trip(content, game):
     definition = _install_battle_def(content)
     definition.region = "north"
@@ -1315,6 +1331,42 @@ def test_joining_a_battle_stands_you_up(content, game):
         game.choose("battle:join:guan")
     assert game.state.player.resting_since is None
     assert "沈浪" in game.world.get_battle().participants
+
+
+def test_a_sitter_can_still_stand_up_while_the_muster_menu_is_showing(content, game):
+    """打坐中碰上集結：戰鬥選單會整個取代平常的選單，起身不能因此消失——不然人坐著出不去，
+    連旅程都安排不了（打坐中不能前往），只能硬加入戰局。規則是隨時可以起身。"""
+    definition = _install_battle_def(content)
+    definition.region = "north"
+    game.choose("act:rest")
+    game.world.start_battle(definition, now=1000.0)
+    with mock.patch("tianxia.engine.time.time", return_value=1000.0):
+        assert "act:stand" in ids(game)
+        assert next(o for o in game.options() if o.id == "act:stand").label == "起身"
+        game.choose("act:stand")
+        assert game.state.player.resting_since is None
+        assert ids(game) == ["battle:join:guan", "battle:join:huang"]  # 起身不等於加入，戰鬥選單還在
+        assert "沈浪" not in game.world.get_battle().participants
+
+
+def test_a_sitter_can_stand_up_while_the_late_join_menu_is_showing(content, game):
+    definition = _install_battle_def(content)
+    definition.region = "north"
+    game.choose("act:rest")
+    game.world.start_battle(definition, now=0.0)
+    with mock.patch("tianxia.engine.time.time", return_value=definition.muster_seconds + 1):
+        assert game._battle_status()[0].phase == "active"
+        assert ids(game) == ["battle:join_late", "act:stand"]
+        game.choose("act:stand")
+        assert game.state.player.resting_since is None
+        assert ids(game) == ["battle:join_late"]
+
+
+def test_a_standing_player_gets_no_stand_option_on_the_battle_menu(content, game):
+    definition = _install_battle_def(content)
+    game.world.start_battle(definition, now=1000.0)
+    with mock.patch("tianxia.engine.time.time", return_value=1000.0):
+        assert "act:stand" not in ids(game)
 
 
 def test_rally_region_names_a_battle_you_should_head_for(content, game):

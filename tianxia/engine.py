@@ -239,7 +239,10 @@ class Game:
         s, c = self.state, self.content
         battle_status = self._battle_status(tick=tick)
         if battle_status is not None and not self._watching_battle(*battle_status):
-            return self._battle_options(*battle_status)
+            battle_menu = self._battle_options(*battle_status)
+            if s.player.resting_since is not None:
+                battle_menu.append(self._stand_option())  # 戰鬥選單取代整份選單，隨時可以起身這條規則不能因此掉了
+            return battle_menu
         if self.world.season_phase() == "preparing":
             return [Option(id="season:preparing", label="賽季籌備中，等待管理者開季", enabled=False)]
         if s.world.ended:
@@ -269,7 +272,7 @@ class Game:
                 opts.append(Option(id="act:halt", label=f"喊停（到{c.locations[j.path[j.reached]].name}就停下）"))
             return opts
         if s.player.resting_since is not None:
-            return [Option(id="act:stand", label="起身")]
+            return [self._stand_option()]
         loc = c.locations[s.player.location]
         cost = c.config.action_cost
         opts = [self._cost_option("act:explore", "探索", cost["explore"])]
@@ -303,6 +306,10 @@ class Game:
                     opts.append(Option(id=f"faction:{faction.id}", label=f"投靠{faction.name}"))
         opts.append(Option(id="act:rest", label="打坐（坐下來回體力，隨時可以起身）"))
         return opts
+
+    @staticmethod
+    def _stand_option() -> Option:
+        return Option(id="act:stand", label="起身")
 
     def _recruit_target(self) -> str | None:
         """這個地點目前能嘗試招募的人（自由之身、recruit_at 是這裡）；沒有就是 None。"""
@@ -959,10 +966,12 @@ class Game:
         status = self._battle_status(tick=False)
         if status is None:
             return ["（此刻無法這麼做。）"]
-        _, definition = status
+        battle, definition = status
         name = self.state.player.name
         kind, _, rest = arg.partition(":")
-        if kind in ("join", "join_late") and not self._at_battle(definition):
+        # 已經報名的人在區內走動時改選陣營不是「加入」，不用再驗人在不在戰場（_at_battle 在路上一律是否）
+        changing_sides = kind == "join" and name in battle.participants
+        if kind in ("join", "join_late") and not changing_sides and not self._at_battle(definition):
             return [f"（{self._absent_reason(definition)}。）"]
         if kind == "join":
             if self.content.scenario.factions and rest != self.state.player.faction:
