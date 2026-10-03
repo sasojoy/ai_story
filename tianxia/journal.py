@@ -260,6 +260,14 @@ def _lines(lines: list[str]) -> str:
     )
 
 
+def _body(entry: JournalEntry) -> list[str]:
+    """一則要畫出來的敘事：第一行跟結果標記一字不差時不再畫一次（FB-029）。門下動作完成引導時，那次動作自己的那句話
+    既是結果標記、也放在 lines 第一行——存著是為了之後併進來的門下動作擠不掉它（見 engine.Game._menxia_entry），
+    畫的時候標記已經寫過了。只看第一行：其他紀錄存的東西與畫法都不變。"""
+    lines = entry.lines
+    return lines[1:] if lines and entry.tag and lines[0] == entry.tag else lines
+
+
 def _chips(changes: list[str], tag: str) -> str:
     if not changes:
         return ""
@@ -274,7 +282,7 @@ def card_html(entry: JournalEntry) -> str:
     when = "舊紀錄" if entry.time < 0 else f"剛剛　{clock_text(entry.time)}"
     return (
         f'<div class="tx-now"><div class="tx-when">{when}</div><div class="tx-head">{_heading(entry)}</div>'
-        f'{_lines(entry.lines)}{_chips(entry.changes, "div")}</div>'
+        f'{_lines(_body(entry))}{_chips(entry.changes, "div")}</div>'
     )
 
 
@@ -291,11 +299,12 @@ def _row(entry: JournalEntry) -> str:
         f'<span class="tx-time">{_when(entry.time)}</span>'
         f'<span class="tx-main">{_heading(entry)}{_chips(entry.changes, "span")}</span>'
     )
-    if not entry.lines:
+    body = _body(entry)
+    if not body:
         return f'<div class="tx-row"><div class="tx-sum">{head}</div></div>'
     return (
         f'<details class="tx-row"><summary class="tx-sum">{head}</summary>'
-        f'<div class="tx-body">{_lines(entry.lines)}</div></details>'
+        f'<div class="tx-body">{_lines(body)}</div></details>'
     )
 
 

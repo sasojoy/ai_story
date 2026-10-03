@@ -339,6 +339,42 @@ def test_menxia_without_finishing_a_guide_step_writes_exactly_what_it_used_to(ga
     assert latest(game).lines == [entry.tag, latest(game).tag]  # 兩次練功併成一則，敘事只有兩次動作自己
 
 
+# FB-029：完成引導的門下動作，那次動作自己的那句話也放在 lines 第一行（之後併進來的門下動作才擠不掉它），
+# 「剛剛」與紀錄列畫這一則時，那句話只出現一次。
+
+
+def test_a_menxia_action_that_finishes_a_guide_step_shows_its_sentence_once(game):
+    import html
+
+    from tianxia.models import TutorialGoal
+
+    _guide_waits_for(game, TutorialGoal(has_wugong=True))
+    game.create_skill("測試長拳", "武學")
+    said = latest(game).tag
+    assert latest(game).lines[0] == said  # 存的時候照舊放在第一行
+    assert game.latest_entry_html().count(html.escape(said)) == 1
+    assert "✔ 引導完成" in game.latest_entry_html()
+    assert journal.rows_html([latest(game)]).count(html.escape(said)) == 1
+
+    game.practice("武學")  # 接著再做一個門下動作：併進同一則，那句話還在、仍只一次
+    entries = [e for e in game.state.journal if e.title == "門下"]
+    assert len(entries) == 1 and said in entries[0].lines
+    assert game.latest_entry_html().count(html.escape(said)) == 1
+    assert journal.rows_html(entries).count(html.escape(said)) == 1
+
+
+def test_menxia_entries_that_finish_no_guide_step_render_as_before(game):
+    from tianxia.models import TutorialGoal
+
+    _guide_waits_for(game, TutorialGoal(action="view_map"))
+    game.create_skill("測試長拳", "武學")
+    assert 'class="tx-line' not in game.latest_entry_html()  # 只有結果標記，沒有敘事
+    game.practice("武學")
+    entry = latest(game)
+    assert entry.lines[0] != entry.tag
+    assert journal._lines(entry.lines) in game.latest_entry_html()  # 兩次動作的敘事照舊一行一行畫出來
+
+
 def test_menxia_changes_are_written_but_failures_are_not(game):
     assert game.create_skill("", "武學") == ["得先取個名字。"]
     assert len(game.state.journal) == 1
