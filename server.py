@@ -12,8 +12,9 @@
   動作中途出錯撤回時，做到一半的改動也不會被下一個請求存回去（線上架構設計 5.1）。
 - 人物對話照舊在行動鎖外生成（`prepare_dialogue`），模型的 9~10 秒不會卡住全服。
 
-執行：`.venv/Scripts/python.exe server.py`（http://127.0.0.1:7861）。要讓外面的手機連進來，
-加 `--share`：會用 cloudflared 開一個臨時的公開網址（要先裝 cloudflared，見 CLAUDE.md）。
+執行：`.venv/Scripts/python.exe server.py`（http://127.0.0.1:7861，預設只聽這台電腦）。要讓外面的手機連進來，
+加 `--share`：會用 cloudflared 開一個臨時的公開網址（要先裝 cloudflared，見 CLAUDE.md）；
+或加 `--lan`：讓同一個區網的裝置直接連過來（有網址的人都進得來）。
 """
 from __future__ import annotations
 
@@ -647,12 +648,18 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="天下大勢網頁伺服器")
     parser.add_argument("--port", type=int, default=PORT)
     parser.add_argument("--share", action="store_true", help="用 cloudflared 開一個臨時的公開網址")
+    parser.add_argument(
+        "--lan", action="store_true",
+        help="讓同一個區網的裝置也連得到（綁在所有網卡上；有網址的人都進得來，沒加就只聽這台電腦）",
+    )
     args = parser.parse_args(argv)
     if args.share:
-        start_tunnel(args.port)
+        start_tunnel(args.port)  # cloudflared 連的是 http://127.0.0.1:{port}，只聽本機也照常運作
     print(f"天下大勢：http://127.0.0.1:{args.port}", flush=True)
     print(f"資料庫：{default_path().resolve()}", flush=True)  # 跟 run_bots.py 要是同一個檔；TIANXIA_DB 設錯時一眼看得出來
-    uvicorn.run(app, host="0.0.0.0", port=args.port, log_level="warning")
+    if args.lan:
+        print("已開放區網連線：同一個網路裡的裝置都連得到。", flush=True)
+    uvicorn.run(app, host="0.0.0.0" if args.lan else "127.0.0.1", port=args.port, log_level="warning")
 
 
 if __name__ == "__main__":

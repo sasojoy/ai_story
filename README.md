@@ -9,7 +9,10 @@ python -m venv .venv
 .venv/Scripts/python.exe -m pip install -r requirements.txt
 .venv/Scripts/python.exe server.py            # 只在這台電腦玩
 .venv/Scripts/python.exe server.py --share    # 另外開一個臨時公開網址給手機（要先裝 cloudflared）
+.venv/Scripts/python.exe server.py --lan      # 讓同一個區網的裝置也連得到（見下方提醒）
 ```
+
+伺服器預設只聽這台電腦（127.0.0.1），同一個網路裡的其他裝置連不到。加 `--lan` 會綁在所有網卡上，同一個區網的裝置只要知道這台電腦的位址就進得來，沒有任何額外的把關，只在信得過的網路使用；`--share` 走 cloudflared，不受影響。
 
 打開 http://127.0.0.1:7861 ，註冊帳號、取一個名號即可開始；存檔在 `saves/`。
 

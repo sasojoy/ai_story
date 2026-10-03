@@ -966,6 +966,31 @@ def test_starting_the_server_prints_the_database_path(capsys, monkeypatch):
     assert str(database.default_path().resolve()) in capsys.readouterr().out
 
 
+def _host_passed_to_uvicorn(monkeypatch, argv):
+    import uvicorn
+
+    ran = []
+    monkeypatch.setattr(uvicorn, "run", lambda *args, **kwargs: ran.append(kwargs["host"]))
+    server.main(argv)
+    return ran
+
+
+def test_the_server_listens_on_localhost_by_default(capsys, monkeypatch):
+    """預設只聽本機：沒加 --lan，同一個區網的裝置連不到。--share 走 cloudflared（連的就是 127.0.0.1），不受影響。"""
+    assert _host_passed_to_uvicorn(monkeypatch, []) == ["127.0.0.1"]
+    out = capsys.readouterr().out
+    assert f"http://127.0.0.1:{server.PORT}" in out
+    assert "區網" not in out
+
+
+def test_the_lan_flag_opens_every_network_card_and_says_so(capsys, monkeypatch):
+    assert _host_passed_to_uvicorn(monkeypatch, ["--lan"]) == ["0.0.0.0"]
+    out = capsys.readouterr().out
+    assert "已開放區網連線：同一個網路裡的裝置都連得到。" in out
+    assert f"http://127.0.0.1:{server.PORT}" in out
+    assert str(database.default_path().resolve()) in out
+
+
 # ── 主畫面的走法切換（步行／趕路／疾行）──────────────────────
 # 頁面記著走法、每個請求都帶上 X-Move-Mode；伺服器在行動鎖裡照它排選單（server.MOVE_MODE），從不存檔。
 
