@@ -1,0 +1,311 @@
+[
+  {
+    "id": "luoyang_palace_whispers",
+    "title": "宮門傳言",
+    "locations": [
+      "luoyang_palace"
+    ],
+    "text": "宮門外的槐樹下聚著幾個小吏，壓低了聲音說宮裡又有詔書下來。一個說是要調兵，一個說是要赦免黨人，爭得面紅耳赤。",
+    "choices": [
+      {
+        "text": "湊過去細聽",
+        "check": {
+          "stat": "wis",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "你從他們的話裡理出了頭緒，轉頭說給城南的商隊聽，換了一頓飯錢。",
+          "stats": {
+            "silver": 15
+          }
+        },
+        "fail_effect": {
+          "text": "小吏們發覺你在偷聽，一下子散了，還回頭罵你是哪家派來的耳目。",
+          "stats": {
+            "fame": -1
+          }
+        }
+      },
+      {
+        "text": "插嘴說潁川的黃巾已經逼近",
+        "effect": {
+          "text": "小吏們臉色發白，匆匆散去。不到半日，城裡就傳得滿街都是。",
+          "stats": {
+            "evil": 1
+          }
+        }
+      },
+      {
+        "text": "走開",
+        "effect": {
+          "text": "宮門的衛士朝這邊看了一眼，小吏們也各自散了。"
+        }
+      }
+    ]
+  },
+  {
+    "id": "luoyang_palace_broker",
+    "title": "宮中門路",
+    "locations": [
+      "luoyang_palace"
+    ],
+    "text": "一個穿綢衣的門客攔住你，說他家主人在宮中當差，只要奉上些許「心意」，便能替你在郎官的名冊上添個名字。",
+    "choices": [
+      {
+        "text": "奉上銀子",
+        "condition": {
+          "min_stats": {
+            "silver": 30
+          }
+        },
+        "effect": {
+          "text": "門客收了錢，要你回去等消息。幾天後街上果然有人喊你一聲「郎君」，除此之外，什麼也沒有。",
+          "stats": {
+            "silver": -30,
+            "fame": 1,
+            "evil": 1
+          }
+        }
+      },
+      {
+        "text": "當眾問他主人姓甚名誰",
+        "check": {
+          "stat": "wis",
+          "difficulty": 7
+        },
+        "effect": {
+          "text": "你一句句追問，他答得前言不搭後語。圍觀的人都笑了，門客灰溜溜地走了。",
+          "stats": {
+            "good": 1,
+            "fame": 1
+          }
+        },
+        "fail_effect": {
+          "text": "門客臉一沉，喚來兩個宮門衛士，把你趕到了街口。",
+          "stats": {
+            "fame": -1
+          }
+        }
+      },
+      {
+        "text": "婉拒",
+        "effect": {
+          "text": "門客撇撇嘴，又去攔下一個人。"
+        }
+      }
+    ]
+  },
+  {
+    "id": "luoyang_fu_petition",
+    "title": "府前請命",
+    "locations": [
+      "dajiangjun_fu"
+    ],
+    "text": "大將軍府門前跪著一群從潁川逃來的鄉紳，捧著血書請朝廷發兵。門吏不耐煩地驅趕，說大將軍正在議事，誰也不見。",
+    "choices": [
+      {
+        "text": "想辦法把血書遞進府裡",
+        "check": {
+          "stat": "wis",
+          "difficulty": 7
+        },
+        "effect": {
+          "text": "你找到一個肯收錢辦事的府吏，把血書夾進了今天的奏報裡。鄉紳們向你千恩萬謝。",
+          "stats": {
+            "good": 2,
+            "fame": 1
+          }
+        },
+        "fail_effect": {
+          "text": "門吏一把奪過血書，扔回了臺階下。"
+        }
+      },
+      {
+        "text": "幫門吏把他們趕走",
+        "effect": {
+          "text": "門吏賞了你幾個錢，鄉紳們在背後罵你是走狗。",
+          "stats": {
+            "silver": 10,
+            "evil": 2
+          }
+        }
+      },
+      {
+        "text": "給他們一些盤纏",
+        "condition": {
+          "min_stats": {
+            "silver": 15
+          }
+        },
+        "effect": {
+          "text": "領頭的老鄉紳收下錢，說若能回到潁川，必定記得你。",
+          "stats": {
+            "silver": -15,
+            "good": 2
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "luoyang_beimang_diggers",
+    "title": "夜半掘墓",
+    "locations": [
+      "beimang_hill"
+    ],
+    "text": "夜裡的北邙山上，一座封土旁亮著微弱的燈火。幾個人影輪著鋤頭往下挖，旁邊堆著剛刨出來的陶罐。",
+    "choices": [
+      {
+        "text": "出聲喝止",
+        "combat": "yelang",
+        "effect": {
+          "text": "盜墓的人丟下鋤頭四散而逃。天亮後，你把陶罐交給了巡山的兵卒。",
+          "stats": {
+            "good": 2,
+            "fame": 1
+          }
+        },
+        "fail_effect": {
+          "text": "他們人多，掄著鋤頭把你逼退，連燈都沒熄就接著挖。",
+          "stamina": -15
+        }
+      },
+      {
+        "text": "悄悄下山，去叫巡山的兵卒",
+        "check": {
+          "stat": "agi",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "你摸黑下山找到巡山的兵卒，他們趕到時正好把人堵在坑裡。",
+          "stats": {
+            "good": 1,
+            "fame": 1
+          }
+        },
+        "fail_effect": {
+          "text": "你踩落了一塊石頭，盜墓的人聽見動靜，熄了燈跑了。"
+        }
+      },
+      {
+        "text": "要他們分你一份",
+        "effect": {
+          "text": "他們塞給你一個陶罐要你閉嘴。你拿到城裡，換了些錢。",
+          "stats": {
+            "silver": 25,
+            "evil": 3
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "luoyang_beimang_search",
+    "title": "陵道搜身",
+    "locations": [
+      "beimang_hill"
+    ],
+    "text": "一隊巡山的騎兵把你攔在陵道上，說近來陵墓屢屢被盜，要搜你的行囊。帶隊的伍長，眼睛一直盯著你的錢袋。",
+    "choices": [
+      {
+        "text": "由他搜",
+        "effect": {
+          "text": "伍長翻了半天，順手摸走幾枚錢，揮手放你過去。",
+          "stats": {
+            "silver": -10
+          }
+        }
+      },
+      {
+        "text": "說自己是大將軍府派來的",
+        "check": {
+          "stat": "wis",
+          "difficulty": 7
+        },
+        "effect": {
+          "text": "伍長半信半疑，不敢再攔，賠著笑讓開了路。"
+        },
+        "fail_effect": {
+          "text": "伍長冷笑一聲，把你的行囊翻了個底朝天，還罰了你一筆錢。",
+          "stats": {
+            "silver": -20
+          }
+        }
+      },
+      {
+        "text": "推開伍長",
+        "combat": "guan_patrol",
+        "effect": {
+          "text": "騎兵被你打退，伍長撂下一句狠話，帶著人往山下去了。",
+          "stats": {
+            "fame": 1,
+            "evil": 1
+          }
+        },
+        "fail_effect": {
+          "text": "騎兵們把你按在陵道上，搜走了錢袋才罷休。",
+          "stamina": -10,
+          "stats": {
+            "silver": -15
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "luoyang_mengjin_horse",
+    "title": "渡口烈馬",
+    "locations": [
+      "mengjin_ford"
+    ],
+    "text": "孟津渡口紮著西涼兵的營帳，高頭大馬拴了一排。幾個騎兵拿船夫取樂，逼他把一匹烈馬牽上渡船。",
+    "choices": [
+      {
+        "text": "上前替船夫牽馬",
+        "check": {
+          "stat": "agi",
+          "difficulty": 7
+        },
+        "effect": {
+          "text": "烈馬在你手裡安靜下來。騎兵們吹了聲口哨，丟給你幾個錢，還有一包釘馬掌剩下的鐵砂。",
+          "stats": {
+            "silver": 10,
+            "fame": 1
+          },
+          "materials": {
+            "gang_1": 1
+          }
+        },
+        "fail_effect": {
+          "text": "烈馬一蹄把你踢翻在泥裡，騎兵們笑得更大聲了。",
+          "stamina": -10
+        }
+      },
+      {
+        "text": "責備他們欺負百姓",
+        "combat": "liangzhou_cavalry",
+        "effect": {
+          "text": "幾個騎兵被你打得灰頭土臉，牽著馬悻悻回營。船夫跪在地上向你磕頭。",
+          "stats": {
+            "good": 2,
+            "fame": 2
+          },
+          "rumor": "有人說{name}在孟津渡口當面頂撞了西涼騎兵。"
+        },
+        "fail_effect": {
+          "text": "西涼騎兵下手又快又狠，你被打得爬不起來。",
+          "stamina": -15,
+          "stats": {
+            "fame": -1
+          }
+        }
+      },
+      {
+        "text": "別過頭去",
+        "effect": {
+          "text": "船夫被烈馬拖進了水裡，好半天才爬上岸。"
+        }
+      }
+    ]
+  }
+]
