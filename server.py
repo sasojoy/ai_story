@@ -238,6 +238,8 @@ def main_view(game: Game) -> dict:
         "quest": md(game.quest_text()),
         "scene": md(game.scene_text()),
         "options": [o.model_dump() for o in game.options()],
+        # 在路上（路上設計 3.3）：頁面在選項底下多放三個捷徑（輿圖、修練、煉製），那是頁面切換、不是引擎的行動
+        "on_road": game.state.player.journey is not None,
         "free_text": game.battle_free_text_prompt(),
         "event_free_text": game.event_free_text_prompt(),  # 眼前事件的隨口應對：選單上那一顆按下去叫出輸入框
         # 「剛剛」：這次行動打了仗就放戰鬥卡片，卡片沒寫到的補充放在 latest；沒打仗時 latest 是最新一則紀錄

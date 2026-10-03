@@ -1081,6 +1081,45 @@ def test_the_move_mode_is_never_saved(client):
     assert "move_mode" not in open_characters().load("沈青衫").model_dump_json()
 
 
+# ── 路上（路上設計第三節）──────────────────────────────
+
+
+def test_on_the_road_the_page_is_told_so_and_can_turn_back(client):
+    _player(client)
+    assert client.get("/api/main").json()["on_road"] is False
+    client.post("/api/choose", json={"id": "move:yingshui"})
+    main = client.get("/api/main").json()
+    assert main["on_road"] is True  # 頁面照它放輿圖、修練、煉製三個捷徑
+    assert "road:back" in [o["id"] for o in main["options"]]
+    assert "路上可以折返" in main["scene"]
+
+
+def test_turning_back_follows_the_move_mode_header(client):
+    _player(client)
+    game = server.game_for("沈青衫")
+    start = game.state.player.location
+    client.post("/api/choose", json={"id": "move:yingshui"})
+    back = [o for o in client.get("/api/main", headers=HURRY).json()["options"] if o["id"].startswith("road:back")]
+    assert [o["id"] for o in back] == ["road:back:hurry"] and "趕路" in back[0]["label"]
+    client.post("/api/choose", json={"id": "road:back:hurry"})  # 沒帶走法：步行的選單上沒有這個 id
+    assert game.state.player.journey.path == ["yingshui"]
+    client.post("/api/choose", json={"id": "road:back:hurry"}, headers=HURRY)
+    j = game.state.player.journey
+    assert (j.mode, j.path) == ("hurry", [start])
+
+
+def test_the_map_arranges_travel_while_on_the_road(client):
+    _player(client)
+    game = server.game_for("沈青衫")
+    start = game.state.player.location
+    client.post("/api/choose", json={"id": "move:yingshui"})
+    view = client.get(f"/api/map?place={start}").json()
+    assert view["selected"] == start and view["travel"][0]["enabled"] is True  # 剛離開的那一站：就是折返
+    out = client.post("/api/travel", json={"place": start}).json()
+    assert out["arrived"] is True
+    assert game.state.player.journey.path == [start]
+
+
 # ── 隨口應對（探索的多人與 LLM 玩法 §8.1）────────────────────
 
 

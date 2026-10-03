@@ -34,6 +34,14 @@
     { id: "hurry", name: "趕路" },
     { id: "dash", name: "疾行" },
   ];
+  // 照「走法」切換的選項：「前往」與路上的「折返」（路上設計 3.2）。切換鈕緊貼在第一個這種選項上面（A4／W6）
+  const followsMode = (id) => id.startsWith("move:") || id.startsWith("road:back");
+  // 路上的江湖頁多三個捷徑（路上設計 3.3）：是頁面切換，不是引擎的行動
+  const ROAD_LINKS = [
+    { tab: "map", name: "打開輿圖改去別處" },
+    { tab: "practice", name: "去修練" },
+    { tab: "craft", name: "去煉製" },
+  ];
   // 手機寬度（輿圖預設照原尺寸，見 S.fitMap）；轉向、拉視窗跨過這條線時重新決定（見檔尾的 change 監聽）
   const PHONE = window.matchMedia ? window.matchMedia("(max-width: 767px)") : null;
 
@@ -298,9 +306,13 @@
     const free = m.free_text != null
       ? `<form class="free" id="free-form"><input class="input" name="text" maxlength="20" placeholder="${esc(m.free_text || "輸入你想做的事（20字內）")}"><button class="btn primary small" type="submit">送出</button></form>`
       : "";
-    // 走法切換：選單上有「前往」才出現（對話、事件、戰鬥的選單沒有），緊貼在第一個「前往」上面——
-    // 它只管「前往」，放在整排選項最上面的話，第一屏就被它擠掉一個選項（A4）
-    const firstMove = m.options.findIndex((o) => o.id.startsWith("move:"));
+    // 走法切換：選單上有「前往」或路上的「折返」才出現（對話、事件、戰鬥的選單沒有），緊貼在第一個這種選項上面——
+    // 它只管這兩種，放在整排選項最上面的話，第一屏就被它擠掉一個選項（A4）
+    const firstMove = m.options.findIndex((o) => followsMode(o.id));
+    const links = m.on_road
+      ? `<div class="road-links" role="group" aria-label="路上可以去的地方">${ROAD_LINKS.map((x) =>
+        `<button class="btn ghost small" data-act="tab" data-tab="${x.tab}">${x.name}</button>`).join("")}</div>`
+      : "";
     const modes = firstMove >= 0
       ? `<div class="seg move-mode" role="group" aria-label="走法"><span aria-hidden="true">走法</span>${MOVE_MODES.map((x) => `
           <button class="${S.moveMode === x.id ? "on" : ""}" data-act="move-mode" data-mode="${x.id}" aria-pressed="${S.moveMode === x.id}">${x.name}</button>`).join("")}
@@ -313,10 +325,11 @@
       ${free}
       <div class="options">${m.options.map((o, i) => o.id === FREE_TEXT_OPTION && S.answering && o.enabled ? `
         <form class="free answer" id="answer-form"><input class="input" name="text" maxlength="20" placeholder="${esc(o.label)}（20字內）" aria-label="${esc(o.label)}"><button class="btn primary small" type="submit">說出口</button></form>` : `${i === firstMove ? modes : ""}
-        <button class="btn ${o.id.startsWith("move:") ? "go" : ""}" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}>
-          <span class="k">${o.id.startsWith("move:") ? "→" : i + 1}</span><span>${esc(o.label)}</span>
+        <button class="btn ${followsMode(o.id) ? "go" : ""}" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}>
+          <span class="k">${o.id.startsWith("move:") ? "→" : o.id.startsWith("road:back") ? "↩" : i + 1}</span><span>${esc(o.label)}</span>
         </button>`).join("")}
       </div>
+      ${links}
       <div class="mini" data-act="tab" data-tab="map" role="button" aria-label="展開輿圖">${m.minimap}</div>
       <button class="linkish" data-act="news" data-news="journal">看江湖紀錄 ›</button>`;
   }
