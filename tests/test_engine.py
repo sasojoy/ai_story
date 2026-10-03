@@ -927,6 +927,7 @@ def test_texts_render(game):
     assert "小鎮" in game.scene_text()
     assert "寇亂" in game.trends_text() and "寶藏" not in game.trends_text()
     assert game.rumors_text() == "（尚無傳聞。）"
+    _explore_finds_events(game)
     game.choose("act:explore")
     assert "醉漢" in game.scene_text()
 
@@ -1186,6 +1187,7 @@ def test_a_watcher_still_sees_their_own_event_below_the_battle(content, game):
     _install_factions(content)
     definition = _install_battle_def(content)
     game.world.start_battle(definition, now=1000.0)
+    _explore_finds_events(game)
     with at(game, 1000.0):
         game.choose("act:explore")
         event = content.events[game.state.pending_event]

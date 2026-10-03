@@ -16,6 +16,12 @@ def latest(game):
     return game.state.journal[0]
 
 
+def _explore_only(game, branch):
+    """探索三選一：讓探索一定走某一支（"event"／"wild"／"material"）。這些測試看的是事件或戰鬥寫成的紀錄，
+    不是探索抽到哪一支；不指定的話就要靠亂數剛好落在那一支的比例裡。"""
+    game.content.config.explore_mix = [ExploreMix(kind="wild", tags=[], weights={branch: 1})]
+
+
 # ── 每種行動寫成的紀錄 ─────────────────────────────────
 
 
@@ -61,6 +67,7 @@ def test_a_trip_finished_after_a_station_entry_is_tagged_as_arrived(game):
 
 
 def test_move_entry_keeps_guide_messages(game):
+    _explore_only(game, "event")
     game.choose("act:explore")
     game.choose("choice:1")  # 把醉漢打發掉
     walk_to(game, "lake")
@@ -70,6 +77,7 @@ def test_move_entry_keeps_guide_messages(game):
 
 
 def test_explore_that_meets_an_event_tags_it_and_drops_the_intro(game):
+    _explore_only(game, "event")
     game.choose("act:explore")
     entry = latest(game)
     assert (entry.title, entry.tag) == ("探索小鎮", "遇上【醉漢】")
@@ -130,7 +138,7 @@ def test_train_entry_carries_the_battle_summary_and_gains(game):
 
 
 def test_choice_entry_names_the_event_and_the_check(game):
-    game.content.config.explore_mix = [ExploreMix(kind="wild", tags=[], weights={"event": 1})]  # 探索一定走事件那一支
+    _explore_only(game, "event")
     game.rng = FixedRandom(0.0)  # 檢定必定成功
     game.choose("act:explore")
     game.choose("choice:0")
@@ -194,6 +202,7 @@ def test_breaking_seclusion_early(game):
 
 
 def test_seclusion_refused_is_still_written(game):
+    _explore_only(game, "event")
     game.choose("act:explore")  # 有事件待處理，不能閉關
     game.seclude(4)
     assert (latest(game).title, latest(game).lines) == ("閉關", ["你現在無法閉關。"])
@@ -396,7 +405,7 @@ def test_old_save_file_without_a_journal_loads_and_converts(content, game):
 
 
 def test_journal_survives_a_save_round_trip(game):
-    game.content.config.train_event_chance = 1.0
+    _explore_only(game, "wild")  # 在湖邊探索撞上野怪，打一場
     game.state.player.seen_events.add("scroll")
     _give_player_a_winning_wugong(game)
     from conftest import FixedRandom
@@ -476,7 +485,7 @@ def test_rows_html_one_line_per_entry_with_the_story_folded_inside():
 
 
 def test_game_html_helpers(game):
-    game.content.config.train_event_chance = 1.0
+    _explore_only(game, "wild")  # 在湖邊探索撞上野怪，打一場
     game.state.player.seen_events.add("scroll")
     from conftest import FixedRandom
 
