@@ -14,7 +14,8 @@ import pytest
 from conftest import FixedRandom
 from tianxia import rules, team
 from tianxia.content import load_content
-from tianxia.models import ExploreMix, FactionDef
+from tianxia.engine import FREE_TEXT_OPTION
+from tianxia.models import Condition, ExploreMix, FactionDef, FreeTextChoice
 
 N = 2000
 
@@ -171,6 +172,30 @@ def test_a_seen_once_event_never_comes_back(game):
     game.choose("choice:0")
     counts = _explore_many(game, 300)
     assert counts["event:scroll"] == 0 and counts["event:drunk"] > 0  # 奇遇池空了，回到三選一
+
+
+# ── 事件那一支：地方痕跡與隨口應對（探索的多人與 LLM 玩法 §8，跟探索三選一疊在一起）──
+
+
+def test_the_event_branch_still_reads_place_marks(game):
+    """地方痕跡的後果事件是可重複事件、帶 marks_min：痕跡不夠時事件那一支抽不到它，夠了才抽得到。"""
+    _lake(game)
+    _only(game, material=0, wild=0, event=1)
+    game.content.events["drunk"].condition = Condition(marks_min={"lake:棚屋": 2})
+    game.content.locations["lake"].enemies = []
+    assert _explore_many(game, 20) == Counter(nothing=20)  # 唯一的可重複事件被痕跡擋住：事件那一支做不了
+    game.state.world.marks["lake:棚屋"] = 2
+    counts = _explore_many(game, 20)
+    assert counts["event:drunk"] == 20
+
+
+def test_a_free_text_event_from_the_event_branch_offers_its_free_answer(game):
+    _lake(game)
+    _only(game, material=0, wild=0, event=1)
+    game.content.events["drunk"].free_text = FreeTextChoice(prompt="自己想辦法……", stat="str")
+    game.choose("act:explore")
+    assert game.state.pending_event == "drunk"
+    assert FREE_TEXT_OPTION in [o.id for o in game.options()]
 
 
 # ── 野怪 ──────────────────────────────────────────────
