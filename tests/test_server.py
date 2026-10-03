@@ -1,6 +1,7 @@
 import contextlib
 import random
 import sqlite3
+import time
 from unittest import mock
 
 import pytest
@@ -684,6 +685,81 @@ def test_battle_free_text_shows_and_submits(game):
         with mock.patch("server.time.time", return_value=after_muster):
             server.act(game, lambda g: server.MAIN_ACTIONS["battle_text"](g, {"text": "直取波才首級"}))
     assert any("直取波才首級" in line for line in game.world.get_battle().narrative_log)
+
+
+# ── 決戰選項的回話（FB-030）：網頁上要看得到按下去發生了什麼 ──────────────
+
+
+def _a_showdown_fighter(client, started=False):
+    """官軍的新角色，黃巾決戰剛開（started＝集結已經結束、正在打），另有一位黃巾的真人在場、所以回合會等人。"""
+    _player(client)
+    game = server.game_for("沈青衫")
+    game.state.player.faction = "guan"
+    open_characters().save(game.state)
+    definition = server.CONTENT.battles["huangjin_showdown"]
+    open_world().start_battle(definition, now=time.time() - (definition.muster_seconds + 1 if started else 0))
+    open_world().mutate_battle(lambda b: battle_instance.join_faction(b, "乙玩家", "huang", neili_cap=320.0))
+    return definition
+
+
+def _journal_titles(name="沈青衫"):
+    return [e.title for e in open_characters().load(name).journal]
+
+
+def test_joining_the_muster_tells_the_page_and_is_journaled(client):
+    _a_showdown_fighter(client)
+    before = _journal_titles()
+    out = client.post("/api/choose", json={"id": "battle:join:guan"}).json()
+    assert "你加入了這場戰局。" in out["message"]
+    assert "黃巾決戰・加入官軍" in out["main"]["latest"]
+    assert _journal_titles() == ["黃巾決戰・加入官軍"] + before
+
+
+def test_joining_late_shows_the_line_on_the_page_data_and_journals_it(client):
+    """FB-028 的驗收：「你趕到了戰場，這一回合就能出手。」要在畫面資料裡找得到（回話與江湖紀錄兩處）。"""
+    _a_showdown_fighter(client, started=True)
+    before = _journal_titles()
+    out = client.post("/api/choose", json={"id": "battle:join_late"}).json()
+    line = "你趕到了戰場，這一回合就能出手。"
+    assert line in out["message"]
+    main = client.get("/api/main").json()
+    assert line in main["latest"] and line in out["main"]["latest"]
+    assert _journal_titles() == ["黃巾決戰・趕到戰場"] + before
+
+
+def test_a_rounds_action_replies_but_is_not_journaled(client):
+    _a_showdown_fighter(client, started=True)
+    client.post("/api/choose", json={"id": "battle:join_late"})
+    before = _journal_titles()
+    options = client.get("/api/main").json()["options"]
+    act_id = next(o["id"] for o in options if o["id"].startswith("battle:act:"))
+    out = client.post("/api/choose", json={"id": act_id}).json()
+    assert "等待其他人" in out["message"]
+    assert _journal_titles() == before
+
+
+def test_the_free_text_action_already_replies_and_is_not_journaled(client):
+    """放手一搏走 /api/do/battle_text，回話本來就從 api_do 的 message 回來、前端的 doMain 也會跳出來；不寫江湖紀錄。"""
+    _a_showdown_fighter(client, started=True)
+    client.post("/api/choose", json={"id": "battle:join_late"})
+    before = _journal_titles()
+    assert client.get("/api/main").json()["free_text"]
+    out = client.post("/api/do/battle_text", json={"text": "直取波才首級"}).json()
+    assert "等待其他人" in out["message"]
+    assert _journal_titles() == before
+
+
+def test_an_ordinary_option_does_not_come_back_with_a_message(client):
+    """它的話已經在江湖紀錄與「剛剛」裡，再跳一句提示會重複。"""
+    _player(client)
+    out = client.post("/api/choose", json={"id": "act:explore"}).json()
+    assert "message" not in out
+
+
+def test_a_showdown_option_that_is_no_longer_there_still_says_so(client):
+    _a_showdown_fighter(client)
+    out = client.post("/api/choose", json={"id": "battle:act:safe"}).json()
+    assert "此刻無法" in out["message"]
 
 
 def test_a_fighter_sees_the_finished_showdown_on_the_main_page(client):

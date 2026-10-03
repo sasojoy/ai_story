@@ -1551,6 +1551,82 @@ def test_a_latecomer_is_told_they_can_act_this_round_and_can(content, game):
     assert battle.round_number == 0 and battle.round.pending_actions == {"沈浪": "safe"}  # 送出了、等乙玩家
 
 
+# ── 決戰選項的江湖紀錄（FB-030：加入與趕到各寫一則，每回合出招不寫）──────────────
+
+
+def test_joining_a_side_in_the_muster_writes_one_journal_entry(content, game):
+    definition = _install_battle_def(content)
+    game.world.start_battle(definition, now=0.0)
+    before = len(game.state.journal)
+    with at(game, 0.0):
+        msgs = game.choose("battle:join:guan")
+    assert msgs == ["你加入了這場戰局。"]  # 回話照舊
+    assert len(game.state.journal) == before + 1
+    entry = game.state.journal[0]
+    assert entry.title == "測試決戰・加入官軍" and entry.lines == ["你加入了這場戰局。"]
+
+
+def test_changing_sides_in_the_muster_writes_its_own_entry(content, game):
+    definition = _install_battle_def(content)
+    game.world.start_battle(definition, now=0.0)
+    with at(game, 0.0):
+        game.choose("battle:join:guan")
+        before = len(game.state.journal)
+        game.choose("battle:join:huang")
+    assert len(game.state.journal) == before + 1
+    assert game.state.journal[0].title == "測試決戰・改選黃巾"
+
+
+def test_a_refused_join_writes_nothing(content, game):
+    _install_factions(content)
+    definition = _install_battle_def(content)
+    game.state.player.faction = "huang"
+    game.world.start_battle(definition, now=1000.0)
+    before = len(game.state.journal)
+    with at(game, 1000.0):
+        assert game.choose("battle:join:guan") == ["（此刻無法這麼做。）"]
+    assert len(game.state.journal) == before
+
+
+def test_joining_late_writes_one_journal_entry_with_the_line_it_returns(content, game):
+    definition = _install_battle_def(content)
+    definition.rounds_per_act = 3
+    game.world.start_battle(definition, now=0.0)
+    game.world.mutate_battle(lambda b: battle_instance.join_faction(b, "乙玩家", "huang", neili_cap=100.0))
+    before = len(game.state.journal)
+    with at(game, definition.muster_seconds + 1):
+        game._battle_status()
+        msgs = game.choose("battle:join_late")
+    assert msgs == ["你趕到了戰場，這一回合就能出手。"]
+    assert len(game.state.journal) == before + 1
+    entry = game.state.journal[0]
+    assert entry.title == "測試決戰・趕到戰場" and entry.lines == msgs
+
+
+def test_a_rounds_action_is_not_journaled(content, game):
+    """每回合一句太吵：戰局的敘事在場景裡，收場後補送的那一則才留下完整的結果。"""
+    definition = _install_battle_def(content)
+    definition.rounds_per_act = 3
+    game.world.start_battle(definition, now=0.0)
+    game.world.mutate_battle(lambda b: battle_instance.join_faction(b, "乙玩家", "huang", neili_cap=100.0))
+    with at(game, definition.muster_seconds + 1):
+        game._battle_status()
+        game.choose("battle:join_late")
+        before = len(game.state.journal)
+        assert game.choose("battle:act:safe") == ["你選擇了行動，等待其他人……"]
+    assert len(game.state.journal) == before
+
+
+def test_the_join_entry_is_what_the_just_now_card_shows(content, game):
+    """加入寫的那則不是戰鬥紀錄（沒有 battle_id）：「剛剛」放那一則本身，不放戰鬥卡片。"""
+    definition = _install_battle_def(content)
+    game.world.start_battle(definition, now=0.0)
+    with at(game, 0.0):
+        game.choose("battle:join:guan")
+        assert not game.shows_battle_card()
+        assert "加入官軍" in game.latest_entry_html()
+
+
 def test_battle_ending_falls_back_to_normal_gameplay_on_the_next_render(content, game):
     definition = _install_battle_def(content)
     game.world.start_battle(definition, now=0.0)
@@ -1592,7 +1668,8 @@ def _fight_to_the_end(game, definition, now):
 
 
 def _showdown_entries(game):
-    return [e for e in game.state.journal if "測試決戰" in e.title]
+    """收場補送的那一則（掛著戰報的 battle_id）；加入、趕到寫的紀錄（FB-030）標題也有決戰的名字，但不是戰報。"""
+    return [e for e in game.state.journal if "測試決戰" in e.title and e.battle_id is not None]
 
 
 def test_every_fighter_gets_the_showdown_in_their_journal_and_battle_reports(content, game):

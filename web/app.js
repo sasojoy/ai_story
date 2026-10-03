@@ -615,6 +615,9 @@
       S.answering = false;
       applyMain(r.main);
       window.scrollTo({ top: 0, behavior: "smooth" });
+      // 決戰選項（加入、趕到、出招）伺服器會回一句 message；一般選項的話在江湖紀錄裡，不回
+      const text = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+      if (text) toast(text);
     });
     if (document.querySelector(".options .btn.busy")) renderPage(); // 失敗了：把按鈕還原
   }

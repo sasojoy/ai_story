@@ -542,8 +542,14 @@ ADMIN_ACTIONS = {
 @app.post("/api/choose")
 def api_choose(request: Request, body: dict = Body(...)):
     game = _game(request)
-    choose(game, str(body.get("id", "")))
-    return {"main": look(game, main_view)}
+    option_id = str(body.get("id", ""))
+    msgs = choose(game, option_id)
+    out = {"main": look(game, main_view)}
+    if option_id.startswith("battle:"):
+        # 決戰選項（加入、趕到、每回合的出招）：按下去發生了什麼只有這句回話（FB-030），前端拿它跳一句提示。
+        # 其他選項的話已經寫進江湖紀錄、「剛剛」看得到，再回一句會重複，所以不回。
+        out["message"] = joined(msgs)
+    return out
 
 
 @app.post("/api/answer")

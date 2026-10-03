@@ -566,7 +566,7 @@ class Game:
             return self._log(["（此刻無法這麼做。）"])
         self.state.battle_card = None
         kind, _, arg = option_id.partition(":")
-        if kind == "battle":
+        if kind == "battle":  # 決戰選項不走 Draft：加入與趕到由 _battle_choose 自己寫一則紀錄，每回合的出招不寫（FB-030）
             return self._log(self._battle_choose(arg))
         if option_id == FREE_TEXT_OPTION:
             return self._log([f"（寫下你的做法，{FREE_TEXT_MAX} 字以內。）"])  # 選項本身只叫出輸入框，不消耗事件
@@ -1397,7 +1397,10 @@ class Game:
             self.world.mutate_battle(
                 lambda b: battle_instance.join_faction(b, name, rest, self._battle_neili_cap(), self._battle_power())
             )
-            return stood + ["你加入了這場戰局。"]
+            msgs = stood + ["你加入了這場戰局。"]
+            side = next((f.name for f in definition.factions if f.id == rest), rest)
+            self._write(f"{definition.name}・{'改選' if changing_sides else '加入'}{side}", msgs)  # 加入與改選各留一則（FB-030）
+            return msgs
         if kind == "join_late":
             own = self.state.player.faction if self.content.scenario.factions else None
             stood = self._stand_up() if self.state.player.resting_since is not None else []  # 加入戰局就起身
@@ -1406,7 +1409,9 @@ class Game:
                     b, definition, name, self._battle_neili_cap(), self.rng, self._battle_power(), faction=own,
                 )
             )
-            return stood + ["你趕到了戰場，這一回合就能出手。"]  # 晚到的人當回合就能出招（FB-028）
+            msgs = stood + ["你趕到了戰場，這一回合就能出手。"]  # 晚到的人當回合就能出招（FB-028）
+            self._write(f"{definition.name}・趕到戰場", msgs)  # 趕到也留一則（FB-030）；每回合的出招不寫，太吵
+            return msgs
         if kind == "act":
             return self._submit_battle_action(name, definition, rest)
         return ["（此刻無法這麼做。）"]
