@@ -17,6 +17,7 @@ sanguo-companions 合併大幅簡化了「門下」頁：不再有多隊切換/�
 """
 from __future__ import annotations
 
+import contextlib
 import time
 import unicodedata
 from pathlib import Path
@@ -242,8 +243,29 @@ def render_menxia(game: Game, person: str | None = None, message: str | None = N
     return out
 
 
+def _reload(game: Game) -> None:
+    """動作開始前從資料庫重新讀這個角色：上一個動作出錯撤回時，記憶體裡的 Game 還帶著做到一半的改動，
+    不重讀的話下一次存檔會把它存回去；同一個角色開兩個分頁也不會再互相覆蓋（線上架構設計 5.1）。
+    還沒存過的新角色（剛建好、第一次 act 之前）資料庫裡沒有，照舊用記憶體裡那一份。
+    讀回來的角色不帶賽季（GameState.world 不進存檔），所以接著把它指回共用賽季；之後的 sync 會再對齊一次。"""
+    stored = open_characters().load(game.state.player.name)
+    if stored is not None:
+        game.state = stored
+    game._reconcile_season()
+
+
+@contextlib.contextmanager
+def _locked(game: Game):
+    """拿行動鎖，並先重讀角色（見 _reload）。這支程式裡每一個要用 game.state 的處理函式都從這裡進鎖，
+    不另外呼叫 game.world.action_lock()：資料庫是唯一的真實來源，記憶體裡的 Game 只是這一個動作的工作副本。"""
+    with game.world.action_lock():
+        _reload(game)
+        yield
+
+
 def act(game: Game | None, action, note: bool = False) -> list:
     """同步時間 → 執行動作 → 存檔 → 重畫。開一筆寫入交易（假人程式寫同一個資料庫），避免計時器、按鈕點擊與假人同時操作。
+    進鎖先從資料庫重讀角色（見 _reload）：動作丟例外時整筆撤回，下一個動作不會把失敗的改動存回去。
 
     note=True 時連門下頁面一起重畫，動作回傳的訊息顯示在門下頁面的訊息區；
     回傳 UNCHANGED 時什麼都不存、不重畫。
@@ -252,7 +274,7 @@ def act(game: Game | None, action, note: bool = False) -> list:
     n = N_OUTPUTS if not note else N_OUTPUTS + MENXIA_OUTPUTS
     if game is None:
         return [gr.skip()] * n
-    with game.world.action_lock():
+    with _locked(game):
         game.sync(time.time())
         msgs = action(game)
         if msgs is UNCHANGED:
@@ -271,7 +293,7 @@ def prepare_dialogue(game: Game, option_id: str) -> companion_agent.PreparedTurn
       B（鎖外、很慢）呼叫模型，失敗時單子裡的 turn 是 None；
       C（鎖內、很快）由呼叫端把結果交給 Game.choose(prepared=...)，引擎進鎖後重新核對再套用。
     這裡做 A 與 B，不會生成對話的選項（包含 talk:leave）回傳 None，由呼叫端走一般的單次 act()。"""
-    with game.world.action_lock():
+    with _locked(game):
         game.sync(time.time())
         request = game.dialogue_request(option_id)
     if request is None:
@@ -344,7 +366,7 @@ def open_menxia(game, person=None):
     """「門下」：藏起江湖畫面、打開門下頁面並重畫。"""
     if game is None:
         return [gr.skip()] * (2 + MENXIA_OUTPUTS)
-    with game.world.action_lock():
+    with _locked(game):
         return [gr.update(visible=False), gr.update(visible=True)] + render_menxia(game, person, "")
 
 
@@ -371,7 +393,7 @@ def roster_pick_handler(game, person):
     """在名冊點一個人：重畫門下頁面（不算行動、不存檔）。"""
     if game is None:
         return [gr.skip()] * MENXIA_OUTPUTS
-    with game.world.action_lock():
+    with _locked(game):
         return render_menxia(game, person, "")
 
 
@@ -385,7 +407,7 @@ def toggle_team_handler(game, person):
 
 def _menxia_act(game: Game, action, person: str | None) -> list:
     """門下頁面專屬的動作（加入/移出隊伍、練功、療傷）：同步、動作、存檔、只重畫門下頁面。"""
-    with game.world.action_lock():
+    with _locked(game):
         game.sync(time.time())
         msgs = action(game)
         open_characters().save(game.state)
@@ -458,7 +480,7 @@ def open_report_page(game):
     """右欄「戰報」按鈕：打開戰報頁面，選好最新一場。"""
     if game is None:
         return [gr.skip()] * 4
-    with game.world.action_lock():
+    with _locked(game):
         return _report_page(game.latest_battle_id(), game)
 
 
@@ -466,7 +488,7 @@ def open_report_handler(game):
     """場景卡片上的「看完整戰報」：打開戰報頁面，並選好卡片上的這一場。"""
     if game is None:
         return [gr.skip()] * 4
-    with game.world.action_lock():
+    with _locked(game):
         return _report_page(game.battle_card_id(), game)
 
 
@@ -479,7 +501,7 @@ def report_pick_handler(game, record_id):
     """在戰報列表點選一場：右邊顯示這一場的完整內容。"""
     if game is None:
         return gr.skip()
-    with game.world.action_lock():
+    with _locked(game):
         return game.battle_detail(record_id)
 
 
@@ -524,7 +546,7 @@ def open_world_map(game):
     if game is None:
         return [gr.skip()] * (N_OUTPUTS + len(PAGES) + MAP_OUTPUTS)
     out = act(game, lambda g: g.view_map())
-    with game.world.action_lock():
+    with _locked(game):
         return out + show_page("map") + render_map_page(game, DEFAULT_LAYER, None)
 
 
@@ -532,7 +554,7 @@ def map_page_handler(game, layer, selected):
     """切換圖層，或從下拉選單選地點：重畫大地圖頁面（不算行動，不存檔）。"""
     if game is None:
         return [gr.skip()] * MAP_OUTPUTS
-    with game.world.action_lock():
+    with _locked(game):
         return render_map_page(game, layer, selected)
 
 
@@ -550,7 +572,7 @@ def map_click_handler(game, layer, evt: gr.EventData):
     loc_id = clicked_place(evt)
     if game is None or loc_id not in {place for _, place in game.map_places()}:
         return [gr.skip()] * MAP_OUTPUTS
-    with game.world.action_lock():
+    with _locked(game):
         return render_map_page(game, layer, loc_id)
 
 
@@ -570,7 +592,7 @@ def travel_handler(game, layer, selected, mode="walk"):
     out = act(game, go)
     if not refused:
         return out + show_page("main") + [gr.skip()] * MAP_OUTPUTS
-    with game.world.action_lock():
+    with _locked(game):
         return out + show_page("map") + render_map_page(game, layer, selected, f"**沒能出發**：{refused[0]}")
 
 
@@ -594,7 +616,7 @@ def tick_handler(game, person):
     """計時器：同步時間，連同門下頁面一起重畫（保留目前的選取，氣血等數字才會跟著走）。"""
     if game is None:
         return [gr.skip()] * (N_OUTPUTS + MENXIA_OUTPUTS)
-    with game.world.action_lock():
+    with _locked(game):
         game.sync(time.time())
         open_characters().save(game.state)
         return render(game) + render_menxia(game, person, None)

@@ -22,7 +22,7 @@ from .models import BattleDef, Choice, Content, Effect, Event, Location, Squad, 
 from .ollama_client import OllamaClient
 from .rules import apply_effect, change_trend, check_who, current_day, roll_check
 from .sqlite_world import open_world
-from .state import GameState, JournalEntry, Journey, Rumor, new_game_state
+from .state import GameState, JournalEntry, Journey, Rumor, WorldState, new_game_state
 from .world import advance_world_state, check_thresholds, end_season, fire_by_id, sim_tick, start_pending_battle
 from .world_state import WorldStateStore
 
@@ -791,21 +791,32 @@ class Game:
         江湖史——這裡故意不在 mutate_battle 的 callback 裡面做（寫入交易雖然可以巢狀，但 mutate 的
         callback 裡再呼叫 mutate_season，內層寫的會被外層的整份存檔蓋掉，database.rewriting 會直接丟
         RuntimeError），所以是呼叫端在拿到 mutate_battle 的結果、callback 已經結束之後才呼叫，
-        順序上一定晚於戰鬥本身的結算。"""
+        順序上一定晚於戰鬥本身的結算。
+
+        結果也要套到自己手上的 self.state.world：結算可能發生在 choose()／travel() 的 options() tick 裡，
+        而它們收尾的 _save_season 會把這份記憶體裡的賽季整份寫回去——不跟著改，剛寫進資料庫的大勢與旗標
+        就被比較舊的那份蓋掉了（江湖史是另一張表，不受影響，所以只有它倖存）。江湖史那一則只寫資料庫，
+        不寫記憶體，免得存兩次。"""
         if not (battle.outcome_world_flags or battle.outcome_trend_delta or battle.outcome_title):
             return
 
-        def _apply(season) -> None:
-            for trend_id, delta in battle.outcome_trend_delta.items():
-                season.trends[trend_id] = max(0, min(100, season.trends.get(trend_id, 0) + delta))
-            for flag in battle.outcome_world_flags:
-                if flag not in season.flags:
-                    season.flags.add(flag)
-                    season.flag_times[flag] = season.time
+        def _apply(season: WorldState) -> None:
+            self._apply_outcome_trends_and_flags(season, battle)
             if battle.outcome_title:
                 season.chronicle.append(Rumor(time=season.time, text=f"【{battle.outcome_title}】{battle.outcome_text}"))
 
         self.world.mutate_season(_apply)
+        self._apply_outcome_trends_and_flags(self.state.world, battle)
+
+    @staticmethod
+    def _apply_outcome_trends_and_flags(season: WorldState, battle: battle_instance.BattleInstance) -> None:
+        """決戰結果的大勢變化與世界旗標，套到 season 上（資料庫裡的那份與記憶體裡的那份共用這一段）。"""
+        for trend_id, delta in battle.outcome_trend_delta.items():
+            season.trends[trend_id] = max(0, min(100, season.trends.get(trend_id, 0) + delta))
+        for flag in battle.outcome_world_flags:
+            if flag not in season.flags:
+                season.flags.add(flag)
+                season.flag_times[flag] = season.time
 
     def _watching_battle(self, battle: battle_instance.BattleInstance, definition: BattleDef) -> bool:
         """這個人此刻打不了這場仗、只能在一旁看（options() 照常給平常的選項，場景上仍看得到戰場）：

@@ -1174,6 +1174,52 @@ def test_battle_outcome_applies_trend_delta_and_flags_to_the_shared_season(conte
     assert any("官軍大勝" in r.text for r in season.chronicle)
 
 
+def test_a_battle_that_ends_inside_a_normal_choice_keeps_its_trend_and_flags(content, game):
+    """旁觀者按一般選項時，options() 的決戰 tick 剛好讓決戰收場：結果寫進共用賽季之後，choose() 最後的
+    _save_season 不能拿記憶體裡比較舊的賽季把大勢與旗標蓋掉（總審查重現過：kou 停在原值、旗標不見）。"""
+    _install_factions(content)
+    definition = _install_battle_def(content)
+    definition.outcomes[0] = definition.outcomes[0].model_copy(
+        update={"world_flags_add": ["huangjin_decisive_win"], "trend_delta": {"kou": -40}}
+    )
+    game.world.start_battle(definition, now=0.0)
+    game.world.mutate_battle(lambda b: battle_instance.join_faction(b, "官軍機器人", "guan", neili_cap=100.0, is_bot=True))
+    game.world.mutate_battle(lambda b: battle_instance.join_faction(b, "黃巾機器人", "huang", neili_cap=100.0, is_bot=True))
+    game.sync(0.0)
+    before = game.state.world.trends["kou"]
+    assert before > 0  # 才看得出被扣掉
+    with at(game, definition.muster_seconds + 1):  # 集結關閉、兩個機器人補位、這一回合就分出勝負——全在 options() 的 tick 裡
+        game.choose("act:explore")
+    assert game.world.get_battle().phase == "ended"
+    season = game.world.get_season()
+    assert season.trends["kou"] == max(0, before - 40)
+    assert "huangjin_decisive_win" in season.flags and "huangjin_decisive_win" in season.flag_times
+    assert sum("官軍大勝" in r.text for r in season.chronicle) == 1  # 江湖史只寫一則
+    assert game.state.world.trends["kou"] == season.trends["kou"]  # 記憶體裡的那份也跟上了
+
+
+def test_a_battle_ended_by_a_tick_survives_a_later_travel_save(content, game):
+    """同一個根因的另一條路：先有一次 options() 的 tick 把決戰收了場，之後 travel() 的 _save_season 也不能蓋掉它。"""
+    _install_factions(content)
+    definition = _install_battle_def(content)
+    definition.outcomes[0] = definition.outcomes[0].model_copy(
+        update={"world_flags_add": ["huangjin_decisive_win"], "trend_delta": {"kou": -40}}
+    )
+    game.world.start_battle(definition, now=0.0)
+    game.world.mutate_battle(lambda b: battle_instance.join_faction(b, "官軍機器人", "guan", neili_cap=100.0, is_bot=True))
+    game.world.mutate_battle(lambda b: battle_instance.join_faction(b, "黃巾機器人", "huang", neili_cap=100.0, is_bot=True))
+    game.sync(0.0)
+    before = game.state.world.trends["kou"]
+    with at(game, definition.muster_seconds + 1):
+        game.options()  # 決戰在這裡的 tick 收場
+        game.travel("lake")
+        assert game.state.player.journey is not None  # 真的出發了，_save_season 才跑得到
+    season = game.world.get_season()
+    assert game.world.get_battle().phase == "ended"
+    assert season.trends["kou"] == max(0, before - 40)
+    assert "huangjin_decisive_win" in season.flags
+
+
 def test_an_eliminated_participant_sees_a_spectate_only_option(content, game):
     definition = _install_battle_def(content)
     game.world.start_battle(definition, now=0.0)
