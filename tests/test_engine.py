@@ -5,8 +5,9 @@ from unittest import mock
 import pytest
 
 from conftest import FixedRandom, at, walk_to
-from tianxia import battle_instance, companion_agent, flavor, rules
+from tianxia import battle_instance, companion_agent, flavor, rules, skillview
 from tianxia.engine import Game, Option
+from tianxia.martial_arts import MartialArt
 from tianxia.state import BotProfile, GameState, Journey, Rumor
 from tianxia.sqlite_world import open_world
 
@@ -466,6 +467,44 @@ def test_create_skill_rejects_a_taken_name(game):
     other.state.player.member.wugong_id = None
     msgs = other.create_skill("龍吟九霄", "內功")
     assert "已經有人取走了" in msgs[0]
+
+
+def test_art_detail_of_a_worn_art_uses_the_slots_level(game):
+    """FB-006：功法卡。配在身上的那一門，熟練度看身上那一欄（內功、武學各一欄）。"""
+    game.create_skill("龍吟九霄", "武學")
+    game.create_skill("太虛吐納", "內功")
+    game.state.player.member.wugong_level = 5
+    game.state.player.member.neigong_level = 7
+    wugong = game.art_detail("龍吟九霄")
+    assert wugong.startswith("【龍吟九霄】") and "\n第5成 " in wugong
+    assert "\n第7成 " in game.art_detail("太虛吐納")
+
+
+def test_art_detail_of_a_library_art_uses_its_own_kept_level(game):
+    """功法庫裡的那一門用換下來時存的熟練度（art_levels）；沒存過的從第一成算（見 team.switch_art）。"""
+    stored = MartialArt(
+        id="沉柳纏勁", name="沉柳纏勁", kind="武學", quality="上品", attribute="柔",
+        base_power=28.0, top_power=72.0, creator="沈浪", note="以柔勁纏住兵刃，借力卸力。",
+    )
+    assert game.world.claim_skill_name(stored)
+    game.state.player.arts.append(stored.id)
+    assert game.art_detail(stored.id) == skillview.art_card(stored, 1)
+    game.state.player.art_levels[stored.id] = 4
+    card = game.art_detail(stored.id)
+    assert card == skillview.art_card(stored, 4)
+    assert card.endswith("以柔勁纏住兵刃，借力卸力。")
+
+
+def test_art_detail_of_an_art_that_is_not_yours_is_not_found(game):
+    other = MartialArt(
+        id="鐵柳纏勁", name="鐵柳纏勁", kind="武學", quality="中品", attribute="剛",
+        base_power=16.0, top_power=44.0, creator="別人",
+    )
+    assert game.world.claim_skill_name(other)
+    assert game.art_detail("鐵柳纏勁") == "（找不到這門功法。）"  # 世界裡有，但不是你的
+    assert game.art_detail("ghost") == "（找不到這門功法。）"
+    game.state.player.arts.append("ghost")  # 庫裡記著、內容與世界裡都沒有
+    assert game.art_detail("ghost") == "（找不到這門功法。）"
 
 
 def test_heal(game):

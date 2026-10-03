@@ -1606,6 +1606,22 @@ class Game:
     def skill_detail(self, kind: str) -> str:
         return skillview.detail(self.state, self.content, self.world, kind)
 
+    def art_detail(self, art_id: str) -> str:
+        """這個角色擁有的一門功法的功法卡（FB-006；功法庫先看卡再改練）。熟練度：配在身上的看身上
+        那一欄，功法庫裡的看換下來時存的 art_levels（沒存過從第一成算，跟 team.switch_art 一致）。
+        不是自己的、或內容與共用世界裡都找不到時回一句話。"""
+        member = self.state.player.member
+        if art_id == member.neigong_id:
+            level = member.neigong_level
+        elif art_id == member.wugong_id:
+            level = member.wugong_level
+        elif art_id in self.state.player.arts:
+            level = self.state.player.art_levels.get(art_id, 1)
+        else:
+            return "（找不到這門功法。）"
+        art = team.resolve_art(art_id, self.content, self.world)
+        return "（找不到這門功法。）" if art is None else skillview.art_card(art, level)
+
     def member_card(self, key: str) -> str:
         return skillview.member_card(self.state, self.content, self.world, key)
 

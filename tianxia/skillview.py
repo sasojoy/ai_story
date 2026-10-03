@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from . import craft, materials, team
-from .martial_arts import MAX_LEVEL, power_at
+from .martial_arts import MAX_LEVEL, MartialArt, power_at
 from .models import Content
 from .state import PLAYER, GameState
 from .world_state import WorldStateStore
@@ -170,12 +170,27 @@ def detail(state: GameState, content: Content, world: WorldStateStore, kind: str
     art = team.resolve_art(skill_id, content, world)
     if art is None:
         return f"（找不到武學資料：{skill_id}）"
-    now = power_at(art, level)
-    nxt = "已達第十成" if level >= 10 else f"{power_at(art, level + 1):.1f}"
+    return art_card(art, level)
+
+
+def art_card(art: MartialArt, level: int) -> str:
+    """一門功法的功法卡（無限煉製設計 §8；FB-006）：名字・品質・屬性、目前熟練度與威力、
+    第一成／第十成的威力、來源，最後是煉製時模型寫的那句說明。
+
+    煉製出來的功法也是 origin == "created"、creator 是首創者，所以一樣寫「自創（某某所創）」。
+    說明句只有真的有字時才有那一行：退路字表取名的功法、自創與本命武學都沒有說明，
+    這時整行省略——不留空行、不出現 None（QA 寫進 FB-006 的驗收）。
+    """
+    nxt = "已達第十成" if level >= MAX_LEVEL else f"{power_at(art, level + 1):.1f}"
     origin = "自創" if art.origin == "created" else "本命武學"
     creator = f"（{art.creator} 所創）" if art.creator else ""
-    return (
-        f"【{art.name}】{art.quality}・屬{art.attribute}\n"
-        f"第{level}成，威力 {now:.1f}（下一成：{nxt}）\n"
-        f"來源：{origin}{creator}"
-    )
+    lines = [
+        f"【{art.name}】{art.quality}・屬{art.attribute}",
+        f"第{level}成 {level_bar(level)}，威力 {power_at(art, level):.1f}（下一成：{nxt}）",
+        f"第一成 {power_at(art, 1):.1f}　第十成 {power_at(art, MAX_LEVEL):.1f}",
+        f"來源：{origin}{creator}",
+    ]
+    note = art.note.strip()
+    if note:
+        lines.append(note)
+    return "\n".join(lines)

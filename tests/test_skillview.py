@@ -1,4 +1,5 @@
 from tianxia import rules, skillview, team
+from tianxia.martial_arts import MartialArt, power_at
 
 
 def test_rules_line():
@@ -44,7 +45,13 @@ def test_detail_before_learning_says_so(state, content, world):
 def test_detail_of_a_historical_skill(state, content, world):
     rules.learn_skill(state, content, "fist")
     text = skillview.detail(state, content, world, "武學")
-    assert text == "【長拳】絕學・屬剛\n第1成，威力 50.0（下一成：57.8）\n來源：本命武學"
+    # FB-006：detail 改用功法卡，多了十格條、第一成／第十成兩個數字；本命武學沒有說明句，那一行整行省略
+    assert text == (
+        "【長拳】絕學・屬剛\n"
+        "第1成 ●○○○○○○○○○，威力 50.0（下一成：57.8）\n"
+        "第一成 50.0　第十成 120.0\n"
+        "來源：本命武學"
+    )
 
 
 def test_detail_at_the_tenth_level_has_no_next_tier(state, content, world):
@@ -64,6 +71,45 @@ def test_detail_of_a_self_created_skill_says_so(state, content, world):
 def test_detail_of_a_missing_skill_reference_is_a_placeholder(state, content, world):
     state.player.member.wugong_id = "ghost"
     assert skillview.detail(state, content, world, "武學") == "（找不到武學資料：ghost）"
+
+
+# ── 功法卡（FB-006：看得到威力與模型寫的那句說明）──────────────
+
+
+def _crafted(note: str) -> MartialArt:
+    """一門煉出來的功法：origin 是 created、creator 是首創者（煉製跟自創共用這兩個欄位）。"""
+    return MartialArt(
+        id="沉柳纏勁", name="沉柳纏勁", kind="武學", quality="上品", attribute="柔",
+        base_power=28.0, top_power=72.0, origin="created", creator="沈浪", note=note,
+    )
+
+
+def test_an_art_card_ends_with_the_models_note():
+    card = skillview.art_card(_crafted("以柔勁纏住兵刃，借力卸力。"), 3)
+    lines = card.split("\n")
+    assert lines[0] == "【沉柳纏勁】上品・屬柔"
+    assert lines[1].startswith("第3成 ●●●○○○○○○○，威力 ")
+    assert lines[3] == "來源：自創（沈浪 所創）"
+    assert lines[-1] == "以柔勁纏住兵刃，借力卸力。"
+
+
+def test_an_art_card_without_a_note_drops_the_whole_line():
+    """退路字表取名的功法沒有說明句：不留空行、不出現 None，整行省略（FB-006 驗收）。"""
+    with_note = skillview.art_card(_crafted("以柔勁纏住兵刃，借力卸力。"), 3)
+    for blank in ("", "   "):
+        card = skillview.art_card(_crafted(blank), 3)
+        assert "None" not in card
+        assert all(line.strip() for line in card.split("\n"))
+        assert not card.endswith("\n")
+        assert len(card.split("\n")) == len(with_note.split("\n")) - 1
+
+
+def test_an_art_card_shows_the_first_and_tenth_level_power():
+    art = _crafted("")
+    card = skillview.art_card(art, 3)
+    assert f"第一成 {power_at(art, 1):.1f}　第十成 {power_at(art, 10):.1f}" in card.split("\n")
+    assert f"威力 {power_at(art, 3):.1f}（下一成：{power_at(art, 4):.1f}）" in card
+    assert "（下一成：已達第十成）" in skillview.art_card(art, 10)
 
 
 # ── 練功提示（心得目前沒有用途，提示把它接回門下）──────────────
