@@ -144,6 +144,19 @@ def test_worst_foe_is_the_one_with_the_worst_odds(content):
     assert worst_foe(content, content.locations["town"], no_odds) is None
 
 
+def test_your_own_factions_squads_are_a_drill_not_a_foe(content):
+    """自己陣營的隊伍遇上了是操練、不會輸：敵情寫「操練」不算勝算，「最險」也不拿它算（試玩回饋 FB-008）。"""
+    lake = content.locations["lake"]
+    lake.enemies = ["thug", "boss"]
+    content.squads["boss"].faction = "huang"
+    words = {"thug": "穩勝", "boss": "必敗"}
+    assert foes(content, lake, words.get, "huang") == [("水寇小隊", "穩勝"), ("翻江龍", "操練")]
+    assert worst_foe(content, lake, words.get, "huang") == ("水寇小隊", "穩勝")
+    assert worst_foe(content, lake, words.get, None) == ("翻江龍", "必敗")  # 散人沒有自己人：照常要打
+    lake.enemies = ["boss"]
+    assert worst_foe(content, lake, words.get, "huang") is None  # 只有自己人：沒有「最險」
+
+
 # ── 路線 ──────────────────────────────────────────────
 
 

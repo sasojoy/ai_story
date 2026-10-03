@@ -266,7 +266,7 @@ def _layer_marks(
         for loc_id in known:
             loc = content.locations[loc_id]
             fills[loc_id] = DANGER_RING[loc.danger]
-            worst = atlas.worst_foe(content, loc, odds) if odds is not None else None
+            worst = atlas.worst_foe(content, loc, odds, state.player.faction) if odds is not None else None
             if worst:
                 notes[loc_id] = f"最險：{worst[0]} {worst[1]}"
     elif layer == "story":
