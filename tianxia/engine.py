@@ -55,6 +55,9 @@ class Game:
             presence_penalty=cfg.ollama_presence_penalty, frequency_penalty=cfg.ollama_frequency_penalty,
         )  # companion_agent.py 用；連不上時那輪對話取消，這裡不用先健檢
         self._draft: Draft | None = None  # choose() 進行中那次行動的江湖紀錄草稿
+        # 主畫面「走法」切換選的走法（步行／趕路／疾行），選單上的「前往」照它出發（見 _move_option）。只是畫面狀態：
+        # 不在 GameState 裡、不進存檔，重新整理頁面（重新登入、開新的 Game）就回到步行；機器人與假人從不改它。
+        self.move_mode: TravelMode = "walk"
         # 現在的現實時間（秒）：由 sync(now) 傳進來，引擎自己不讀電腦時鐘（線上架構設計第四節）。
         # 讀進來的存檔先用上次同步的時間；開戰的集結截止、回合逾時都看它。
         self.now: float = state.last_real if state.last_real is not None else 0.0
@@ -313,8 +316,7 @@ class Game:
             dest = c.locations[dest_id]
             if dest.unlock_flag and dest.unlock_flag not in s.world.flags:
                 continue
-            minutes = atlas.leg_minutes(c, loc.id, dest_id)
-            opts.append(Option(id=f"move:{dest_id}", label=f"前往 {dest.name}（{atlas.mode_text(c, minutes, 'walk')}）"))
+            opts.append(self._move_option(loc.id, dest_id))
         if s.player.faction is None:
             for faction in c.scenario.factions:
                 if s.player.location in faction.join_at:
@@ -325,6 +327,23 @@ class Game:
     @staticmethod
     def _stand_option() -> Option:
         return Option(id="act:stand", label="起身")
+
+    def _move_option(self, here: str, dest_id: str) -> Option:
+        """選單上的「前往 相鄰地點」，照主畫面選的走法（move_mode）：標籤寫這種走法的時間與體力，體力不夠就按不下去、
+        寫明原因（跟大地圖的「安排前往」按鈕同一個說法）。步行的 id 維持 move:<地點>（機器人、假人與舊的呼叫端
+        只認這個）；趕路、疾行是 move:<地點>:<走法>，所以 choose() 照樣只認選單上真的有的 id。"""
+        c, mode = self.content, self.move_mode
+        dest = c.locations[dest_id]
+        minutes = atlas.leg_minutes(c, here, dest_id)
+        option_id = f"move:{dest_id}" if mode == "walk" else f"move:{dest_id}:{mode}"
+        cost = atlas.travel_stamina(c, minutes, mode)
+        if self.state.player.stamina < cost:
+            return Option(id=option_id, label=f"前往 {dest.name}（{atlas.MODES[mode]}・體力不足，要 {cost}）", enabled=False)
+        return Option(id=option_id, label=f"前往 {dest.name}（{atlas.mode_text(c, minutes, mode)}）")
+
+    def set_move_mode(self, mode: str) -> None:
+        """主畫面的「走法」切換：之後選單上的「前往」用這種走法；不認得的走法當成步行。不存檔（見 __init__ 的 move_mode）。"""
+        self.move_mode = mode if mode in atlas.MODES else "walk"
 
     def _recruit_target(self) -> str | None:
         """這個地點目前能嘗試招募的人（自由之身、recruit_at 是這裡）；沒有就是 None。"""
@@ -476,7 +495,7 @@ class Game:
                 return "再想想"
             return f"考慮投靠{self._faction(arg).name}"
         if kind == "move":
-            return f"前往 {c.locations[arg].name}"
+            return f"前往 {c.locations[arg.partition(':')[0]].name}"
         if kind == "choice":
             event = c.events[s.pending_event]
             return f"{event.title}・{event.choices[int(arg)].text}"
@@ -1280,9 +1299,11 @@ class Game:
                 self._draft.changes.append(f"經驗 +{record.exp}（每人）")
         return line
 
-    def _move(self, dest_id: str) -> list[str]:
-        """選單上的「前往 某地」：沿直接相連的那條路步行出發（趕路、疾行在大地圖的安排前往）。"""
-        return self._depart([dest_id], "walk")
+    def _move(self, arg: str) -> list[str]:
+        """選單上的「前往 某地」：沿直接相連的那條路出發。arg 是 move: 後面那段——只有地點就是步行，
+        「地點:走法」是主畫面「走法」切換選的趕路或疾行（見 _move_option）。"""
+        dest_id, _, mode = arg.partition(":")
+        return self._depart([dest_id], mode or "walk")
 
     def _depart(self, path: list[str], mode: TravelMode) -> list[str]:
         """出發（地圖擴充設計 3.2、3.3）：趕路、疾行的體力出發時一次扣，照走法排好每一站的抵達時間。

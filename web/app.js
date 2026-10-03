@@ -26,6 +26,13 @@
   ];
   const POLL_MS = 10000;
   const KINDS = ["武學", "內功"];
+  // 江湖頁「前往」的走法（跟 atlas.MODES 同一份）。選的走法只放在 S.moveMode：不寫進 localStorage、cookie，
+  // 重新整理頁面就回到步行；每個請求都帶著它（見 api()），伺服器照它排選單上的「前往」
+  const MOVE_MODES = [
+    { id: "walk", name: "步行" },
+    { id: "hurry", name: "趕路" },
+    { id: "dash", name: "疾行" },
+  ];
 
   const S = {
     stage: "boot",
@@ -52,6 +59,7 @@
     admin: null,
     unseen: false,
     offline: false,
+    moveMode: "walk",
   };
 
   const $app = document.getElementById("app");
@@ -70,9 +78,10 @@
   }
 
   async function api(path, body) {
+    const headers = { "X-Move-Mode": S.moveMode }; // 走法跟著每個請求走，兩個分頁各走各的（見 MOVE_MODES）
     const opts = body === undefined
-      ? { credentials: "same-origin" }
-      : { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
+      ? { credentials: "same-origin", headers }
+      : { method: "POST", credentials: "same-origin", headers: { ...headers, "Content-Type": "application/json" }, body: JSON.stringify(body) };
     let res;
     try {
       res = await fetch(path, opts);
@@ -235,11 +244,18 @@
     const free = m.free_text != null
       ? `<form class="free" id="free-form"><input class="input" name="text" maxlength="20" placeholder="${esc(m.free_text || "輸入你想做的事（20字內）")}"><button class="btn primary small" type="submit">送出</button></form>`
       : "";
+    // 走法切換：選單上有「前往」才出現（對話、事件、戰鬥的選單沒有）
+    const modes = m.options.some((o) => o.id.startsWith("move:"))
+      ? `<div class="seg move-mode" role="group" aria-label="走法"><span aria-hidden="true">走法</span>${MOVE_MODES.map((x) => `
+          <button class="${S.moveMode === x.id ? "on" : ""}" data-act="move-mode" data-mode="${x.id}" aria-pressed="${S.moveMode === x.id}">${x.name}</button>`).join("")}
+        </div>`
+      : "";
     return `
       <details class="fold quest"><summary>📜 主線與目標</summary><div class="fold-body">${m.quest}</div></details>
       ${now}
       <section class="card scene">${m.scene}</section>
       ${free}
+      ${modes}
       <div class="options">${m.options.map((o, i) => `
         <button class="btn ${o.id.startsWith("move:") ? "go" : ""}" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}>
           <span class="k">${o.id.startsWith("move:") ? "→" : i + 1}</span><span>${esc(o.label)}</span>
@@ -469,6 +485,23 @@
     if (document.querySelector(".options .btn.busy")) renderPage(); // 失敗了：把按鈕還原
   }
 
+  // 換走法：帶著新的走法重抓一次江湖畫面，「前往」的時間、體力與按不按得下去才會跟著換
+  async function setMoveMode(mode) {
+    if (mode === S.moveMode || S.busy) return;
+    const before = S.moveMode;
+    await busy(async () => {
+      S.moveMode = mode;
+      try {
+        setMain(await api("/api/main"));
+      } catch (e) {
+        S.moveMode = before; // 沒拿到新走法的選單：留在原本的走法，切換鈕才跟按鈕上的字對得上
+        throw e;
+      }
+      renderTop();
+    });
+    if (S.tab === "jianghu") renderPage();
+  }
+
   async function mx(op, extra = {}) {
     await busy(async () => {
       const r = await api(`/api/menxia/${op}`, { person: S.person, kind: S.kind, ...extra });
@@ -551,6 +584,7 @@
         case "gate": S.gateMode = el.dataset.mode; renderGate(); break;
         case "tab": await goTab(el.dataset.tab); break;
         case "choose": await choose(el, el.dataset.id); break;
+        case "move-mode": await setMoveMode(el.dataset.mode); break;
         case "toggle-more": S.showMore = !S.showMore; renderTop(); break;
         case "sheet":
           S.sheet = true;
@@ -652,8 +686,9 @@
     if (S.stage !== "game" || S.busy || document.hidden) return;
     const typing = document.activeElement && ["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement.tagName);
     try {
+      const mode = S.moveMode;
       const main = await api("/api/main");
-      if (!setMain(main)) return;
+      if (mode !== S.moveMode || !setMain(main)) return; // 等回應的時候換了走法：這份是舊走法的選單，不用
       renderTop();
       if (S.tab === "jianghu" && !typing) renderPage();
     } catch (e) { /* 下一輪再試 */ }

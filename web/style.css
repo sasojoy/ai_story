@@ -194,6 +194,9 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .options .btn { justify-content: flex-start; text-align: left; }
 .options .btn .k { flex: none; width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center; background: var(--card-2); font-size: 12px; color: var(--ink-2); }
 .options .btn.go .k { background: var(--accent); color: #fff; }
+.move-mode { margin-bottom: 8px; } /* 走法切換：一列、緊貼在選項上面 */
+.move-mode > span { flex: none; align-self: center; padding: 0 4px 0 9px; font-size: 13px; color: var(--ink-2); }
+.move-mode button { min-height: 48px; } /* 觸控目標跟 .btn 一樣大 */
 .free { display: flex; gap: 8px; margin-bottom: 12px; }
 .free .input { flex: 1; }
 .mini { border-radius: var(--radius); overflow: hidden; border: 1px solid var(--line); margin-bottom: 12px; cursor: pointer; position: relative; }

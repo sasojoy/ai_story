@@ -2731,3 +2731,65 @@ def test_a_stale_audience_list_is_closed_where_two_figures_no_longer_stand(conte
     game.state.player.picking_audience = True  # 夾具的小鎮沒有大勢人物：例如內容改版後讀進來的舊存檔
     reloaded = Game(content, game.state, world=game.world)
     assert not reloaded.state.player.picking_audience
+
+
+# ── 主畫面的走法切換（步行／趕路／疾行）──────────────────────
+
+
+def _move_to_lake(game):
+    return next(o for o in game.options() if o.id.startswith("move:lake"))
+
+
+def test_the_menu_walks_by_default(game):
+    assert game.move_mode == "walk"
+    move = _move_to_lake(game)
+    assert (move.id, move.label, move.enabled) == ("move:lake", "前往 湖邊（步行約 3 分鐘）", True)
+
+
+def test_hurrying_from_the_menu_shows_and_spends_its_stamina(game):
+    game.set_move_mode("hurry")
+    move = _move_to_lake(game)
+    assert (move.id, move.label, move.enabled) == ("move:lake:hurry", "前往 湖邊（趕路約 2 分鐘・體力 3）", True)
+    game.choose("move:lake:hurry")
+    p = game.state.player
+    assert p.journey.mode == "hurry" and p.journey.arrive_at == [pytest.approx(90.0)]
+    assert p.stamina == 147
+    assert (game.state.journal[0].title, game.state.journal[0].tag) == ("前往 湖邊", "趕路約 2 分鐘")
+
+
+def test_dashing_from_the_menu_arrives_at_once(game):
+    game.set_move_mode("dash")
+    assert _move_to_lake(game).label == "前往 湖邊（疾行立刻到・體力 6）"
+    game.choose("move:lake:dash")
+    p = game.state.player
+    assert p.location == "lake" and p.journey is None and p.stamina == 144
+
+
+def test_a_mode_you_cannot_afford_disables_the_move_and_says_why(game):
+    game.set_move_mode("dash")
+    game.state.player.stamina = 5
+    move = _move_to_lake(game)
+    assert (move.label, move.enabled) == ("前往 湖邊（疾行・體力不足，要 6）", False)
+    assert game.choose("move:lake:dash") == ["（此刻無法這麼做。）"]
+    assert game.state.player.location == "town" and game.state.player.stamina == 5
+
+
+def test_the_move_mode_changes_labels_not_the_number_of_options(game):
+    walking = ids(game)
+    for mode in ("hurry", "dash"):
+        game.set_move_mode(mode)
+        assert len(ids(game)) == len(walking)
+        assert f"move:lake:{mode}" in ids(game) and "move:lake" not in ids(game)
+    assert game.choose("move:lake") == ["（此刻無法這麼做。）"]  # 選單上已經不是步行：舊按鈕的 id 不算數
+
+
+def test_an_unknown_mode_falls_back_to_walking(game):
+    game.set_move_mode("fly")
+    assert game.move_mode == "walk" and "move:lake" in ids(game)
+
+
+def test_the_move_mode_is_screen_state_and_never_saved(content, game):
+    """重新整理頁面＝重新登入、讀存檔開新的 Game：走法回到步行（企劃者決定：不存進存檔）。"""
+    game.set_move_mode("hurry")
+    assert "move_mode" not in game.state.model_dump_json()
+    assert Game(content, game.state, world=game.world).move_mode == "walk"

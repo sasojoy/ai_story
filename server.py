@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import contextvars
 import secrets
 import shutil
 import subprocess
@@ -133,6 +134,13 @@ def _reload(game: Game) -> None:
     game._drop_stale_references()
 
 
+# 這次請求的頁面選的走法（主畫面的「走法」切換：步行／趕路／疾行）。走法歸頁面管：頁面自己記著、每個請求都帶上
+# （X-Move-Mode，見 _game），這裡在行動鎖裡套到 Game 上再排選單（見 _locked）。所以重新整理頁面就回到步行，
+# 同一個角色開兩個分頁也各走各的、不會互相蓋掉——GAMES 裡一個角色只有一份 Game，走法只記在那份物件上就做不到。
+# FastAPI 的同步端點各自在複製出來的 context 裡跑，設了只在這次請求裡有效；不經過 _game 的（登入、/api/me）就是步行。
+MOVE_MODE: contextvars.ContextVar[str] = contextvars.ContextVar("move_mode", default="walk")
+
+
 @contextlib.contextmanager
 def _locked(game: Game):
     """拿行動鎖，並先重讀角色（見 _reload）。這支程式裡每一個要用 game.state 的地方都從這裡進鎖
@@ -141,6 +149,7 @@ def _locked(game: Game):
     可能同時進來；行動鎖是 BEGIN IMMEDIATE，不同執行緒就一個一個來，重讀與動作不會交錯。"""
     with game.world.action_lock():
         _reload(game)
+        game.set_move_mode(MOVE_MODE.get())  # 這次請求選的走法（見 MOVE_MODE）：之後的選單與 choose() 都照它
         yield
 
 
@@ -392,6 +401,7 @@ def _game(request: Request) -> Game:
     account = account_store().get(_account(request))
     if account is None or account.character is None:
         raise HTTPException(409, "這個帳號還沒有角色。")
+    MOVE_MODE.set(request.headers.get("X-Move-Mode", "walk"))  # 頁面選的走法，只在這次請求裡有效（見 MOVE_MODE）
     return game_for(account.character)
 
 

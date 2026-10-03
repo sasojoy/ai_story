@@ -964,3 +964,66 @@ def test_starting_the_server_prints_the_database_path(capsys, monkeypatch):
     server.main([])
     assert ran == [server.PORT]
     assert str(database.default_path().resolve()) in capsys.readouterr().out
+
+
+# ── 主畫面的走法切換（步行／趕路／疾行）──────────────────────
+# 頁面記著走法、每個請求都帶上 X-Move-Mode；伺服器在行動鎖裡照它排選單（server.MOVE_MODE），從不存檔。
+
+HURRY = {"X-Move-Mode": "hurry"}
+
+
+def _moves(options):
+    return [o for o in options if o["id"].startswith("move:")]
+
+
+def test_the_move_mode_header_switches_the_travel_options(client):
+    _player(client)
+    walking = client.get("/api/main").json()["options"]
+    hurrying = client.get("/api/main", headers=HURRY).json()["options"]
+    assert len(hurrying) == len(walking)  # 只換「前往」的走法，按鈕數不變
+    moves = _moves(hurrying)
+    assert moves and all(o["id"].count(":") == 2 and o["id"].endswith(":hurry") for o in moves)
+    assert all("趕路" in o["label"] for o in moves)
+
+
+def test_the_move_mode_lasts_one_request_like_two_tabs(client):
+    _player(client)
+    client.get("/api/main", headers={"X-Move-Mode": "dash"})
+    moves = _moves(client.get("/api/main").json()["options"])  # 另一個分頁沒選走法：照樣步行，不會被上一個請求帶走
+    assert moves and all(o["id"].count(":") == 1 and "步行" in o["label"] for o in moves)
+    unknown = _moves(client.get("/api/main", headers={"X-Move-Mode": "fly"}).json()["options"])
+    assert [o["id"] for o in unknown] == [o["id"] for o in moves]  # 不認得的走法當成步行
+
+
+def test_a_hurried_move_departs_only_from_the_hurry_menu(client):
+    _player(client)
+    game = server.game_for("沈青衫")
+    start = game.state.player.location
+    assert "move:yingshui:hurry" in [o["id"] for o in client.get("/api/main", headers=HURRY).json()["options"]]
+    client.post("/api/choose", json={"id": "move:yingshui:hurry"})  # 沒帶走法：步行的選單上沒有這個 id
+    assert game.state.player.location == start and game.state.player.journey is None
+    minutes = atlas.leg_minutes(game.content, start, "yingshui")
+    client.post("/api/choose", json={"id": "move:yingshui:hurry"}, headers=HURRY)
+    assert game.state.player.journey.mode == "hurry" and game.state.player.journey.path == ["yingshui"]
+    cost = atlas.travel_stamina(game.content, minutes, "hurry")
+    assert game.state.player.stamina == game.content.config.stamina_max - cost
+
+
+def test_the_menu_walks_unless_this_request_chose_otherwise(game):
+    def moves():
+        return [o["id"] for o in _moves(server.look(game, server.main_view)["options"])]
+
+    walking = moves()
+    assert walking and all(option_id.count(":") == 1 for option_id in walking)
+    token = server.MOVE_MODE.set("dash")
+    try:
+        assert moves() == [f"{option_id}:dash" for option_id in walking]
+    finally:
+        server.MOVE_MODE.reset(token)
+    assert moves() == walking  # 同一份 Game 上一次是疾行：這次沒選走法，就回到步行
+
+
+def test_the_move_mode_is_never_saved(client):
+    _player(client)
+    client.get("/api/main", headers=HURRY)
+    assert "move_mode" not in open_characters().load("沈青衫").model_dump_json()
