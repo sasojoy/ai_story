@@ -1598,9 +1598,13 @@ class Game:
         if self._preparing():
             return self._log(["（賽季籌備中，等待管理者開季。）"])
         xinde = self._xinde()
+        # FB-007：引導那一步要的是「你有一門功夫了」，所以看練之前那一欄有沒有功法——沒學過就練不到、不算；
+        # 已經第十成（練無可練）也算（可能在走到這一步前就自創、煉製到滿了，只認「真的加一成」會永遠卡住）。
+        has_art = getattr(self.state.player.member, "neigong_id" if kind == "內功" else "wugong_id") is not None
         msgs = self._log(team.practice(self.state, self.content, self.world, kind, self.rng))
         self._menxia_entry(msgs[0] if msgs else "練功", xinde)
-        msgs += note_action(self.state, self.content, self.world, "practice")
+        if has_art:
+            msgs += note_action(self.state, self.content, self.world, "practice")
         return msgs
 
     def heal(self) -> list[str]:

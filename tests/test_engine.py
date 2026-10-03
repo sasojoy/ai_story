@@ -461,6 +461,71 @@ def test_create_skill_and_practice(game):
     assert game.state.journal[0].title == "門下"  # 併進同一則
 
 
+def _practice_step_game(game, worn: dict[str, int]):
+    """把引導換成「第 1 步＝鍛鍊」（fixture 的引導沒有這一步，照 _install_* 的慣例直接裝進內容），
+    身上先配好 worn（種類 → 熟練度）。回傳（引導步驟的獎勵銀兩）。
+
+    先自創再換引導：自創本身也會記一次 practice 動作，引導還在別的步驟時不會被它推進。
+    """
+    from tianxia.models import Effect, TutorialGoal, TutorialStep
+
+    for i, (kind, level) in enumerate(worn.items()):
+        game.create_skill(f"測試{kind}{i}", kind)
+        slot = "neigong" if kind == "內功" else "wugong"
+        setattr(game.state.player.member, f"{slot}_level", level)
+    reward = 10
+    game.content.tutorial.steps = [
+        TutorialStep(
+            id="t4_practice", text="先修練。", done_when=TutorialGoal(action="practice"),
+            reward=Effect(stats={"silver": reward}),
+        ),
+        TutorialStep(id="t5_next", text="出城。", done_when=TutorialGoal(action="move")),
+    ]
+    game.state.player.tutorial_step = 0
+    return reward
+
+
+@pytest.mark.parametrize(
+    "worn, kind, counts",
+    [
+        ({}, "武學", False),  # FB-007：沒學過就練不到，不能算完成這一步
+        ({}, "內功", False),
+        ({"內功": 3}, "武學", False),  # 只有內功時，練「武學」那一欄還是空的
+        ({"武學": 3}, "內功", False),
+        ({"武學": 1}, "武學", True),  # 有功法、練了一成
+        ({"內功": 1}, "內功", True),
+        ({"武學": 10}, "武學", True),  # 第十成「練無可練」也算：這一步要的是「你有一門功夫了」
+    ],
+)
+def test_the_practice_tutorial_step_counts_only_when_that_slot_has_an_art(game, worn, kind, counts):
+    reward = _practice_step_game(game, worn)
+    silver = game.state.player.stats["silver"]
+    msgs = game.practice(kind)
+    joined = "\n".join(msgs)
+    if counts:
+        assert game.state.player.tutorial_step == 1
+        assert "✔ 引導完成" in joined
+        assert game.state.player.stats["silver"] == silver + reward
+    else:
+        assert game.state.player.tutorial_step == 0
+        assert "✔ 引導完成" not in joined
+        assert game.state.player.stats["silver"] == silver
+
+
+def test_the_practice_tutorial_step_counts_a_maxed_art_and_says_so(game):
+    _practice_step_game(game, {"武學": 10})
+    msgs = game.practice("武學")
+    assert "練無可練" in msgs[0]
+    assert "✔ 引導完成" in msgs
+    assert game.state.player.tutorial_step == 1
+
+
+def test_practicing_with_nothing_learned_says_so_without_finishing_the_step(game):
+    """FB-007 原本的現場：畫面寫「你還沒學武學」，緊接著卻是「✔ 引導完成」。"""
+    _practice_step_game(game, {})
+    assert game.practice("武學") == ["你還沒學武學，沒東西可以練。"]
+
+
 def test_create_skill_rejects_a_taken_name(game):
     game.create_skill("龍吟九霄", "武學")
     other = Game(game.content, GameState(player=game.state.player.model_copy(), world=game.state.world), world=game.world)
