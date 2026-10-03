@@ -1304,6 +1304,23 @@ def test_a_fighter_who_walks_out_during_the_muster_is_away_until_back(content, g
         assert "你已加入【官軍】" in game.scene_text()
 
 
+def test_the_battle_scene_shows_which_round_of_how_many(content, game):
+    """FB-016：決戰的場景在幕名後面寫第幾回合、一共幾回合，讓人知道還要打多久。"""
+    definition = _install_battle_def(content)
+    definition.rounds_per_act = 3  # 一幕三回合：整場 3 回合
+    game.world.start_battle(definition, now=0.0)
+    with at(game, 0.0):
+        game.choose("battle:join:guan")
+        game.world.mutate_battle(lambda b: battle_instance.join_faction(b, "乙玩家", "huang", neili_cap=100.0))
+    with at(game, definition.muster_seconds + 1):
+        game._battle_status()  # 開打
+        assert "【初探】（第 1／3 回合）雙方試探。" in game.scene_text()
+        game.world.mutate_battle(lambda b: battle_instance.submit_action(b, "乙玩家", "safe"))
+        game.choose("battle:act:safe")  # 兩人都出手了：第 1 回合結算
+        assert game.world.get_battle().round_number == 1
+        assert "【初探】（第 2／3 回合）雙方試探。" in game.scene_text()
+
+
 def test_the_fighting_menu_still_replaces_everything_once_the_muster_closes(content, game):
     definition = _install_battle_def(content)
     game.world.start_battle(definition, now=1000.0)

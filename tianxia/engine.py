@@ -1031,7 +1031,9 @@ class Game:
                 return f"{header}\n\n你已加入【{side}】，集結還剩 {left}。集結結束就開打，在那之前照常行動{leaving}。"
             return f"{header}\n\n集結中，還剩 {left}。選擇陣營加入；集結期間照常行動。"
         act = battle_instance.current_act(battle, definition)
-        lines = [header, f"【{act.title}】{act.text}"] + battle.narrative_log[-5:]
+        # 第幾回合／一共幾回合（戰鬥系統設計 3.2）：讓人知道還要打多久；收場的決戰不會走到這裡
+        count = f"（第 {battle.round_number + 1}／{battle_instance.total_rounds(definition)} 回合）"
+        lines = [header, f"【{act.title}】{count}{act.text}"] + battle.narrative_log[-5:]
         p = battle.participants.get(self.state.player.name)
         if p is not None and p.eliminated:
             lines.append("（你已經倒下，只能在一旁觀戰。）")
