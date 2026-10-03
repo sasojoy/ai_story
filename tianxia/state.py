@@ -106,6 +106,7 @@ class PlayerState(BaseModel):
     # 掉頭回到剛離開的那一站不算換段，所以不跟著那一趟 Journey 走，記在玩家身上（不然折返一下就能重做）。
     leg_actions: set[str] = Field(default_factory=set)
     surveyed: set[str] = Field(default_factory=set)  # 留意地形摸清的地點：大地圖上跟去過一樣算記得（atlas.location_view）
+    recent_sights: list[str] = Field(default_factory=list)  # 最近看過的路上見聞 id（舊的在前）；挑的時候先排除（路上設計第五節）
     # 路上收穫的每天上限（企劃者 2026-10-03 決定）："task"（邊走邊想、路邊採集）／"sight"（路上見聞）->
     # [第幾個遊戲日, 當天已拿幾次]，跟 talks_today 同一種寫法；記的是前幾天就當沒拿過
     road_rewards_today: dict[str, list[int]] = Field(default_factory=dict)

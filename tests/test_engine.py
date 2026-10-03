@@ -2980,6 +2980,142 @@ def test_thinking_and_gathering_share_the_days_road_rewards(content, game):
     assert [_task(game, what).label for what in ("ask", "survey")] == ["沿途打聽（聽一則這一帶的傳聞）", "留意地形（摸清附近的地點）"]
 
 
+# ── 路上見聞（路上設計第五節）──────────────────────────────
+# 夾具的 road_sight_chance 是 0（其他測試的亂數序列才不會被打亂），這裡的測試自己設機率。
+
+
+def test_a_road_sight_comes_on_arrival_at_the_set_chance(content, game):
+    content.config.road_sight_chance = 0.3
+    game.rng = FixedRandom(0.31)  # 沒擲進三成
+    walk_to(game, "lake")
+    assert game.state.player.recent_sights == []
+    game.rng = FixedRandom(0.29)  # 擲進三成：看見一則
+    walk_to(game, "town")
+    (seen,) = game.state.player.recent_sights
+    assert seen in {"sight_crow", "sight_wind", "sight_north_peddler"}  # 一般路、北區能挑的三則
+    assert content.road_sights[seen].text in game.state.journal[0].lines
+
+
+def test_road_sights_follow_the_kind_of_road(content, game):
+    content.config.road_sight_chance = 1.0
+    game.state.world.flags.add("cave_open")
+    walk_to(game, "lake")
+    game.state.player.recent_sights = ["sight_crow", "sight_wind"]  # 通用的兩則剛看過
+    silver = game.state.player.stats["silver"]
+    walk_to(game, "cave")  # 湖邊—寶洞是山路：剩下山路那一則
+    assert game.state.player.recent_sights[-1] == "sight_cliff"
+    assert game.state.player.stats["silver"] == silver + 5
+    assert "銀兩 +5" in game.state.journal[0].changes
+
+
+def test_road_sights_follow_the_region_of_the_stop_just_reached(content, game):
+    content.config.road_sight_chance = 1.0
+    content.locations["cave"].y = 170  # 寶洞搬進南區
+    game.state.world.flags.add("cave_open")
+    walk_to(game, "lake")
+    game.state.player.recent_sights = ["sight_crow", "sight_wind", "sight_cliff"]
+    walk_to(game, "cave")
+    assert game.state.player.recent_sights[-1] == "sight_south_feather"
+    assert game.state.player.materials == {"kuai_1": 1}
+
+
+def test_recent_road_sights_wait_until_the_pool_runs_out(content, game):
+    content.config.road_sight_chance = 1.0
+    for dest in ("lake", "town", "lake"):
+        walk_to(game, dest)
+    assert set(game.state.player.recent_sights) == {"sight_crow", "sight_wind", "sight_north_peddler"}
+    for dest in ("town", "lake", "town"):
+        walk_to(game, dest)  # 池子用完了才重複
+    assert len(game.state.player.recent_sights) == 5
+
+
+def test_a_road_sight_seen_while_offline_is_dated_at_the_arrival(content, game):
+    content.config.road_sight_chance = 1.0
+    game.sync(1000.0)
+    game.choose("move:lake")  # 第 0 秒出發，第 180 秒抵達
+    game.sync(1000.0 + 3600)  # 下線一小時才回來
+    sight = content.road_sights[game.state.player.recent_sights[-1]]
+    entry = next(e for e in game.state.journal if sight.text in e.lines)
+    assert entry.time == pytest.approx(180.0)
+
+
+def test_dashing_still_rolls_a_road_sight_at_every_stop(content, game):
+    content.config.road_sight_chance = 1.0
+    game.state.world.flags.add("cave_open")
+    game.travel("cave", "dash")  # 湖邊、寶洞兩站立刻抵達
+    assert len(game.state.player.recent_sights) == 2
+
+
+def test_old_saves_without_recent_sights_load(game):
+    raw = game.state.model_dump(mode="json")
+    del raw["player"]["recent_sights"]
+    assert GameState.model_validate(raw).player.recent_sights == []
+
+
+# ── 路上見聞的每天上限與折返（企劃者 2026-10-03 決定）──────────────
+# 夾具在小鎮—湖邊（北區的一般路）能挑的是烏鴉（心得 +1）、起風（沒有收穫）、貨郎（心得 +2）三則；
+# 把其餘的標成剛看過，下一則就一定是想要的那一則。
+
+
+def _sight_rewards(entry):
+    """一則江湖紀錄裡，路上見聞會給的那幾種收穫行。"""
+    return [line for line in entry.lines + entry.changes if line.startswith(("心得 +", "銀兩 +", "獲得"))]
+
+
+def test_road_sight_rewards_stop_at_the_days_cap_but_the_text_stays(content, game):
+    content.config.road_sight_chance = 1.0
+    content.config.road_reward_daily_cap = 1
+    p = game.state.player
+    xinde = p.stats["xinde"]
+    p.recent_sights = ["sight_wind", "sight_north_peddler"]  # 只剩烏鴉
+    walk_to(game, "lake")
+    assert p.stats["xinde"] == xinde + 1 and p.road_rewards_today == {"sight": [1, 1]}
+    p.recent_sights = ["sight_crow", "sight_wind"]  # 同一天走回小鎮：只剩貨郎，但今天的收穫拿滿了
+    walk_to(game, "town")
+    entry = game.state.journal[0]
+    assert content.road_sights["sight_north_peddler"].text in entry.lines  # 文字照寫
+    assert _sight_rewards(entry) == []  # 沒有收穫、也沒有多一句
+    assert p.stats["xinde"] == xinde + 1 and p.road_rewards_today == {"sight": [1, 1]}
+    assert p.recent_sights[-1] == "sight_north_peddler"
+
+
+def test_road_sight_rewards_start_over_the_next_game_day(content, game):
+    content.config.road_sight_chance = 1.0
+    content.config.road_reward_daily_cap = 1
+    p = game.state.player
+    p.recent_sights = ["sight_wind", "sight_north_peddler"]
+    walk_to(game, "lake")
+    game.state.world.time += DAY  # 隔天：紀錄是前一天的就當沒拿過
+    p.recent_sights = ["sight_wind", "sight_north_peddler"]
+    xinde = p.stats["xinde"]
+    walk_to(game, "town")
+    assert p.stats["xinde"] == xinde + 1 and p.road_rewards_today == {"sight": [2, 1]}
+    assert _sight_rewards(game.state.journal[0]) == ["心得 +1"]
+
+
+def test_a_road_sight_without_a_reward_never_counts_toward_the_day(content, game):
+    content.config.road_sight_chance = 1.0
+    p = game.state.player
+    p.recent_sights = ["sight_crow", "sight_north_peddler"]  # 只剩起風
+    walk_to(game, "lake")
+    assert p.recent_sights[-1] == "sight_wind" and p.road_rewards_today == {}
+
+
+def test_turning_back_at_once_brings_no_road_sight(content, game):
+    """剛出發就掉頭回到剛離開的那一站（不花時間也不花體力）不擲見聞：跟路上小事不換段是同一條規則。"""
+    content.config.road_sight_chance = 1.0
+    p = game.state.player
+    game.choose("move:lake")
+    game.choose("road:back")
+    game.advance(0)
+    assert p.location == "town" and p.journey is None
+    assert p.recent_sights == []
+    texts = {sight.text for sight in content.road_sights.values()}
+    assert not any(line in texts for entry in game.state.journal for line in entry.lines)
+    walk_to(game, "lake")  # 真的走到另一站才有
+    assert len(p.recent_sights) == 1
+
+
 # ── 時間由外面傳入（線上架構設計第四節）──────────────────────
 
 

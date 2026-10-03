@@ -622,6 +622,58 @@ def test_a_material_only_a_location_offers_is_still_reachable(tmp_path):
     edit_json(root / "locations.json", lambda d: d[0].update(materials=["gang_3"]))
     load_content(root)
 
+
+def test_road_sights_load_from_their_own_file(content):
+    assert {"sight_crow", "sight_cliff"} <= set(content.road_sights)
+    assert content.road_sights["sight_cliff"].roads == ["山路"]
+    assert content.road_sights["sight_wind"].effect.stats == {}
+
+
+def test_every_kind_of_road_in_every_region_needs_two_road_sights(tmp_path):
+    root = copy_fixture(tmp_path)
+    edit_json(root / "road_sights.json", lambda d: d.remove(next(s for s in d if s["id"] == "sight_wind")))
+    with pytest.raises(ContentError, match="路上見聞：官道・north 只有 1 則可挑"):
+        load_content(root)
+
+
+@pytest.mark.parametrize(("effect", "message"), [
+    ({"stats": {"silver": 11}}, "銀兩 1～10 或心得 1～5"),
+    ({"stats": {"xinde": 6}}, "銀兩 1～10 或心得 1～5"),
+    ({"stats": {"fame": 1}}, "銀兩 1～10 或心得 1～5"),
+    ({"materials": {"gang_2": 1}}, "一階 1 個"),
+    ({"materials": {"gang_1": 2}}, "一階 1 個"),
+    ({"stats": {"xinde": 1}, "materials": {"gang_1": 1}}, "最多一種"),
+    ({"rumor": "有人說了什麼。"}, "只能用 stats 或 materials"),
+    ({"text": "你笑了。"}, "只能用 stats 或 materials"),
+])
+def test_a_road_sight_reward_must_stay_small(tmp_path, effect, message):
+    root = copy_fixture(tmp_path)
+    edit_json(root / "road_sights.json", lambda d: d[0].update(effect=effect))
+    with pytest.raises(ContentError, match=f"路上見聞 sight_crow：.*{message}"):
+        load_content(root)
+
+
+def test_a_road_sight_in_simplified_characters_is_rejected(tmp_path):
+    root = copy_fixture(tmp_path)
+    edit_json(root / "road_sights.json", lambda d: d[0].update(text="这条路上说话的人很多。"))
+    with pytest.raises(ContentError, match="路上見聞 sight_crow：text 只能用繁體中文"):
+        load_content(root)
+
+
+def test_a_road_sight_in_an_unknown_region_is_rejected(tmp_path):
+    root = copy_fixture(tmp_path)
+    edit_json(root / "road_sights.json", lambda d: d[0].update(regions=["mars"]))
+    with pytest.raises(ContentError, match="路上見聞 sight_crow：未知的大區 mars"):
+        load_content(root)
+
+
+def test_a_road_sight_on_an_unknown_kind_of_road_is_rejected(tmp_path):
+    root = copy_fixture(tmp_path)
+    edit_json(root / "road_sights.json", lambda d: d[0].update(roads=["小徑"]))
+    with pytest.raises(ContentError, match="(?s)RoadSight sight_crow.*roads"):
+        load_content(root)
+
+
 def test_validate_rejects_a_squad_of_an_unknown_faction(content):
     content.scenario.factions = [FactionDef(id="guan", name="官軍")]
     content.squads["thug"].faction = "ghost"

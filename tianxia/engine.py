@@ -19,7 +19,8 @@ from .guide import note_action, quest_text, tutorial_intro
 from .journal import LOG_BREAK, Draft
 from .mapview import render_map, render_minimap
 from .models import (
-    EXPLORE_BRANCHES, FREE_TEXT_MAX, BattleDef, Choice, Content, Effect, Event, ExploreBranch, Location, Squad, TravelMode,
+    EXPLORE_BRANCHES, FREE_TEXT_MAX, BattleDef, Choice, Content, Effect, Event, ExploreBranch, Location, RoadKind, Squad,
+    TravelMode,
 )
 from .ollama_client import OllamaClient
 from .rules import apply_effect, change_trend, check_who, current_day, fill_marks, free_text_rate, rate_words, roll_check
@@ -172,6 +173,7 @@ class Game:
             p.journey = None
         p.surveyed = {loc_id for loc_id in p.surveyed if loc_id in c.locations}
         p.leg_actions &= set(ROAD_TASKS)
+        p.recent_sights = [sight_id for sight_id in p.recent_sights if sight_id in c.road_sights]
         p.team = [k for k in p.team if k in c.characters][: team.MAX_TEAM_COMPANIONS]
         if p.member.neigong_id and p.member.neigong_id not in c.skills and not self.world.is_skill_name_taken(p.member.neigong_id):
             p.member.neigong_id = None
@@ -1668,10 +1670,16 @@ class Game:
                     break  # 剛抵達的那一站觸發了賽季落幕：停在那裡
                 when = j.arrive_at[j.reached]
                 stop = j.path[j.reached]
+                came_from = j.origin if j.reached == 0 and j.origin is not None else s.player.location
                 j.reached += 1
-                if stop != s.player.location:  # 到了另一站：換段，路上小事重新可做（掉頭回到剛離開的那一站不算換段）
+                # 到了另一站：換段，路上小事重新可做，也可能看見路上見聞。掉頭回到剛離開的那一站不算換段、也不擲見聞
+                # （剛出發就折返不花時間也不花體力，不能拿來刷見聞）
+                new_leg = stop != s.player.location
+                if new_leg:
                     s.player.leg_actions = set()
                 msgs += self._arrive(stop, final=j.reached > j.last, client=client)
+                if new_leg:
+                    msgs += self._road_sight(c.locations[came_from].road_to(stop), stop)
             done = j.reached > j.last or s.world.ended
             if done:
                 s.player.journey = None
@@ -1704,6 +1712,32 @@ class Game:
                 text = f"{text}\n\n{flourish}"
         self._hide(text)
         return [text] + note_action(s, c, self.world, "move") + check_thresholds(s, c, self.world, client, now=self.now)
+
+    def _road_sight(self, road: RoadKind, loc_id: str) -> list[str]:
+        """路上見聞（路上設計第五節）：抵達一站時有 road_sight_chance 的機會，從符合這段路的種類、剛抵達那一站所在大區的
+        見聞裡平均挑一則（最近看過的 road_sight_recent 則先排除，池子不夠才重複）。文字寫進這次抵達的紀錄，小收穫照慣例
+        接在後面。寫好的文字、不呼叫模型，下線補算時照樣發生。機率是 0 或池子是空的時候連骰子都不擲。
+        有收穫的見聞受每天上限管（企劃者 2026-10-03 決定，跟路上小事各算各的）：今天的 "sight" 收穫拿滿了，文字照寫、
+        不給收穫也不多一句；真的給了才算一次。沒有收穫的見聞不算次數。"""
+        s, c = self.state, self.content
+        region = atlas.region_of(c, loc_id)
+        area = region.id if region is not None else None
+        pool = [
+            sight for sight in c.road_sights.values()
+            if (not sight.roads or road in sight.roads) and (not sight.regions or area in sight.regions)
+        ]
+        chance = c.config.road_sight_chance
+        if not pool or chance <= 0 or self.rng.random() >= chance:
+            return []
+        recent = s.player.recent_sights
+        sight = self.rng.choice([x for x in pool if x.id not in recent] or pool)
+        keep = c.config.road_sight_recent
+        s.player.recent_sights = (recent + [sight.id])[-keep:] if keep else []
+        rewarded = bool(sight.effect.stats or sight.effect.materials)  # 載入檢查保證見聞只會有這兩種效果
+        if not rewarded or not self._road_reward_due("sight"):
+            return [sight.text]
+        self._count_road_reward("sight")
+        return [sight.text] + apply_effect(sight.effect, s, c, self.world)
 
     def _journey_line(self) -> str:
         """在路上的那一句（狀態列、場景共用）：「往寶洞（步行），第1天 00:08 抵達，還要約 8 分鐘；下一站湖邊」。"""
