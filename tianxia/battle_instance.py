@@ -58,6 +58,21 @@ class BattleRound(BaseModel):
     opened_real: float = 0.0  # 這回合開放選擇的時間點，逾時代選判斷用
 
 
+class BattleRoundRecord(BaseModel):
+    """結算過的一回合（線上架構設計 3.1：戰鬥回合一筆一筆加）。只寫不讀回：寫進資料庫之後，下次讀出來的
+    BattleInstance.rounds 是空的；要看以前的回合用 WorldStateStore.battle_rounds。"""
+
+    id: int | None = None  # 資料庫的流水號；None＝還沒寫進資料庫
+    act_index: int  # 結算前是第幾幕
+    resolved_real: float  # 結算的現實時間
+    actions: dict[str, str] = Field(default_factory=dict)  # 名號 -> tag
+    custom_texts: dict[str, str] = Field(default_factory=dict)  # 名號 -> 自訂行動文字
+    success_rates: dict[str, int] = Field(default_factory=dict)  # 名號 -> LLM 評估的成功率
+    messages: list[str] = Field(default_factory=list)  # 系統判定的結算訊息
+    narration: str = ""  # LLM 潤色的敘事（engine 結算完才補上；沒有就是空字串）
+    trend_after: int  # 結算後的戰局
+
+
 class BattleInstance(BaseModel):
     battle_id: str
     phase: Phase = "muster"
@@ -74,6 +89,8 @@ class BattleInstance(BaseModel):
     # 呼叫端 engine.py 的事，見 Game._apply_battle_outcome；這裡存一份複本給它讀，不用
     # 重新比對一次是哪個 BattleOutcome）。
     outcome_trend_delta: dict[str, int] = Field(default_factory=dict)  # 同上，複製自 BattleOutcome.trend_delta
+    record_id: int | None = None  # 資料庫裡這一場的流水號；None＝還沒寫進資料庫（見 sqlite_world）
+    rounds: list[BattleRoundRecord] = Field(default_factory=list)  # 這次讀出來之後才結算、還沒寫進資料庫的回合
 
 
 def start_muster(definition: BattleDef, now: float) -> BattleInstance:
@@ -214,6 +231,7 @@ def resolve_round(instance: BattleInstance, definition: BattleDef, rng: random.R
     narrative_log——那兩件事都是呼叫端的事，見 narrate_round：呼叫端通常是先結算拿到
     msgs，請 LLM 潤色成一段敘事，再把潤色後的文字（或潤色失敗時的 msgs 本身）加進
     narrative_log，這裡不越俎代庖）。"""
+    act_index = instance.act_index
     msgs: list[str] = []
     positive_faction = definition.factions[0].id
     for name, tag in list(instance.round.pending_actions.items()):
@@ -271,6 +289,11 @@ def resolve_round(instance: BattleInstance, definition: BattleDef, rng: random.R
     outcome = None if advanced else _check_outcome(instance, definition)
     if outcome is not None:
         msgs += _record_outcome(instance, outcome)
+    instance.rounds.append(BattleRoundRecord(
+        act_index=act_index, resolved_real=now, actions=dict(instance.round.pending_actions),
+        custom_texts=dict(instance.round.custom_texts), success_rates=dict(instance.round.success_rates),
+        messages=list(msgs), trend_after=instance.trend,
+    ))
     instance.round = BattleRound(opened_real=now)
     return msgs
 
@@ -297,6 +320,9 @@ def end_without_fighters(instance: BattleInstance, definition: BattleDef, now: f
         return []
     msgs = ["戰場上已經沒有人還能出手，這場戰鬥就此收場。"] + _record_outcome(instance, definition.outcomes[-1])
     instance.narrative_log.append("\n".join(msgs))
+    instance.rounds.append(BattleRoundRecord(
+        act_index=instance.act_index, resolved_real=now, messages=list(msgs), trend_after=instance.trend,
+    ))
     instance.round = BattleRound(opened_real=now)
     return msgs
 

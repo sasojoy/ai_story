@@ -2386,3 +2386,19 @@ def test_the_chronicle_lists_earlier_seasons_after_this_one(content, game):
     game.sync(2.0)
     text = game.chronicle_text()
     assert text.index("第 2 季（本季）") < text.index("### 第 1 季") < text.index("第一季的大事")
+
+
+def test_the_round_narration_is_kept_with_the_round(content, game):
+    definition = _install_battle_def(content)
+    game.world.start_battle(definition, now=0.0)
+    with at(game, 0.0):
+        game.choose("battle:join:guan")
+        game.world.mutate_battle(
+            lambda b: battle_instance.join_faction(b, "機器人", "huang", neili_cap=100.0, is_bot=True)
+        )
+    after_muster = definition.muster_seconds + 1
+    with at(game, after_muster), mock.patch.object(battle_instance, "narrate_round", return_value="一場惡戰。"):
+        game._battle_status()
+        game.choose("battle:act:safe")
+    battle = game.world.get_battle()
+    assert [r.narration for r in game.world.battle_rounds(battle.record_id)] == ["一場惡戰。"]

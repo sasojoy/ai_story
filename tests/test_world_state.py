@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from tianxia import database
+from tianxia.battle_instance import BattleRoundRecord
 from tianxia.database import Database
 from tianxia.martial_arts import generate_from_name
 from tianxia.sqlite_world import SqliteWorldStore, open_world
@@ -553,3 +554,27 @@ def test_recipe_keys_lists_only_this_seasons_recipes(store, content):
     assert store.recipe_keys() == set()  # 新的一季重新發現
     with store.db.snapshot() as conn:  # 上一季的那一列還在
         assert conn.execute("SELECT COUNT(*) AS n FROM recipes WHERE season = 1").fetchone()["n"] == 1
+
+
+# ── 全服決戰與回合紀錄 ─────────────────────────────────────
+
+
+def test_each_resolved_round_is_one_row(store):
+    battle = store.start_battle(_battle_definition(), now=0.0)
+    assert battle.record_id is not None
+    store.mutate_battle(lambda b: b.rounds.append(BattleRoundRecord(act_index=0, resolved_real=1.0, trend_after=51)))
+    store.mutate_battle(lambda b: b.rounds.append(BattleRoundRecord(act_index=0, resolved_real=2.0, trend_after=52)))
+    assert store.get_battle().rounds == []  # 只寫不讀回
+    assert [r.trend_after for r in store.battle_rounds(battle.record_id)] == [51, 52]
+
+
+def test_a_battle_stays_on_record_after_the_next_season(store, content):
+    content.config.auto_open_first_season = True
+    store.seed_first_season(content)
+    battle = store.start_battle(_battle_definition(), now=0.0)
+    store.mutate_season(lambda season: setattr(season, "ended", True))
+    store.next_season(content, now=1.0)
+    assert store.get_battle() is None
+    with store.db.snapshot() as conn:
+        row = conn.execute("SELECT season, battle_def FROM battles WHERE id = ?", (battle.record_id,)).fetchone()
+    assert (row["season"], row["battle_def"]) == (1, "b1")

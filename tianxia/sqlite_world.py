@@ -5,6 +5,8 @@
   舊的一季原封不動留著。
 - 傳聞（`rumors` 表）與江湖史（`chronicle` 表）一則一列：寫的時候只新增還沒有流水號的；讀全服狀態時不讀回來，
   只有 get_season() 讀（給畫面看）。江湖史跨季保留。
+- 目前的決戰在 `battles` 表（一場一列、整份覆寫，`world.active_battle_id` 指向它），結算過的回合在
+  `battle_rounds` 表一回合一列（只寫不讀回）。換季、開新的一場時舊的那一場留著。
 - 自創武學（`skills`）、煉製配方（`recipes`）、投靠名冊（`faction_rolls`）一列一筆、記著第幾季：
   換季不用清空，新的一季自然是空的，上一季的留著。
 - 每個會寫的方法自己是一筆交易；呼叫端已經在 action_lock() 裡時，併進那一筆（見 database.Database）。
@@ -17,7 +19,7 @@ from contextlib import AbstractContextManager
 from pathlib import Path
 from sqlite3 import Connection, Row
 
-from .battle_instance import BattleInstance, start_muster
+from .battle_instance import BattleInstance, BattleRoundRecord, start_muster
 from .database import Database, open_database
 from .martial_arts import MartialArt
 from .models import BattleDef, Content
@@ -54,15 +56,19 @@ class SqliteWorldStore:
             return state
 
     def _load(self, conn: Connection, logs: bool = False) -> SharedWorldState:
-        row = conn.execute("SELECT data FROM world WHERE id = 1").fetchone()
+        row = conn.execute("SELECT data, active_battle_id FROM world WHERE id = 1").fetchone()
         state = SharedWorldState() if row is None else SharedWorldState.model_validate_json(row["data"])
         state.season = self._load_season(conn, state.season_number, logs)
+        if row is not None and row["active_battle_id"] is not None:
+            state.active_battle = self._load_battle(conn, row["active_battle_id"])
         return state
 
     def _save(self, conn: Connection, state: SharedWorldState) -> None:
+        battle_id = self._save_battle(conn, state.season_number, state.active_battle)  # 先寫決戰：world 要指向它
         conn.execute(
-            "INSERT INTO world (id, data) VALUES (1, ?) ON CONFLICT (id) DO UPDATE SET data = excluded.data",
-            (state.model_dump_json(exclude={"season"}),),
+            "INSERT INTO world (id, data, active_battle_id) VALUES (1, ?, ?) "
+            "ON CONFLICT (id) DO UPDATE SET data = excluded.data, active_battle_id = excluded.active_battle_id",
+            (state.model_dump_json(exclude={"season", "active_battle"}), battle_id),
         )
         self._save_season(conn, state.season_number, state.season)
 
@@ -104,6 +110,35 @@ class SqliteWorldStore:
                     "INSERT INTO chronicle (season, time, location, text) VALUES (?, ?, ?, ?)",
                     (number, entry.time, entry.location, entry.text),
                 ).lastrowid
+
+    def _load_battle(self, conn: Connection, battle_id: int) -> BattleInstance:
+        row = conn.execute("SELECT data FROM battles WHERE id = ?", (battle_id,)).fetchone()
+        battle = BattleInstance.model_validate_json(row["data"])
+        battle.record_id = battle_id
+        return battle
+
+    def _save_battle(self, conn: Connection, season: int, battle: BattleInstance | None) -> int | None:
+        """決戰整份覆寫（不含回合紀錄），回傳它的流水號；結算過的回合只新增還沒有流水號的。"""
+        if battle is None:
+            return None
+        data = battle.model_dump_json(exclude={"record_id", "rounds"})
+        if battle.record_id is None:
+            battle.record_id = conn.execute(
+                "INSERT INTO battles (season, battle_def, phase, outcome_title, data) VALUES (?, ?, ?, ?, ?)",
+                (season, battle.battle_id, battle.phase, battle.outcome_title, data),
+            ).lastrowid
+        else:
+            conn.execute(
+                "UPDATE battles SET phase = ?, outcome_title = ?, data = ? WHERE id = ?",
+                (battle.phase, battle.outcome_title, data, battle.record_id),
+            )
+        for record in battle.rounds:
+            if record.id is None:
+                record.id = conn.execute(
+                    "INSERT INTO battle_rounds (battle_id, data) VALUES (?, ?)",
+                    (battle.record_id, record.model_dump_json(exclude={"id"})),
+                ).lastrowid
+        return battle.record_id
 
     # ── 武學命名登記與煉製配方 ──────────────────────────────
 
@@ -354,6 +389,13 @@ class SqliteWorldStore:
 
     def clear_battle(self) -> None:
         self.mutate(lambda state: setattr(state, "active_battle", None))
+
+    def battle_rounds(self, record_id: int) -> list[BattleRoundRecord]:
+        with self.db.snapshot() as conn:
+            rows = conn.execute(
+                "SELECT id, data FROM battle_rounds WHERE battle_id = ? ORDER BY id", (record_id,),
+            ).fetchall()
+        return [BattleRoundRecord.model_validate_json(row["data"]).model_copy(update={"id": row["id"]}) for row in rows]
 
     # ── 同伴進度與招募 ────────────────────────────────────
 

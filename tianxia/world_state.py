@@ -21,7 +21,7 @@ from typing import Literal, Protocol
 
 from pydantic import BaseModel, Field
 
-from .battle_instance import BattleInstance
+from .battle_instance import BattleInstance, BattleRoundRecord
 from .martial_arts import MartialArt
 from .models import BattleDef, Content
 from .state import Rumor, WorldState
@@ -243,6 +243,11 @@ class WorldStateStore(Protocol):
         ...
 
     def clear_battle(self) -> None: ...
+
+    def battle_rounds(self, record_id: int) -> list[BattleRoundRecord]:
+        """這一場（BattleInstance.record_id）結算過的每一回合，照先後。BattleInstance.rounds 只放這次讀出來
+        之後才結算、還沒寫進資料庫的回合，存檔後讀出來是空的；要看以前的回合查這裡。"""
+        ...
 
     # ── 同伴進度與招募 ──
     def get_companion(self, companion_id: str) -> CompanionProgress:

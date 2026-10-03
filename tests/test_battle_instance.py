@@ -627,3 +627,25 @@ def test_the_free_text_judge_is_set_in_the_late_han(definition):
     bi.assess_action_success_rate(client, bi.current_act(instance, definition), "官軍", "從側翼包抄")
     system = client.chat_structured.call_args.args[0][0]["content"]
     assert "漢末" in system and "三國時代" not in system
+
+
+# ── 回合紀錄（線上架構設計 3.1：戰鬥回合一筆一筆加）────────────────
+
+
+def test_resolving_a_round_records_it(definition):
+    instance = _active_battle(definition)
+    bi.submit_action(instance, "甲", "safe")
+    bi.submit_action(instance, "乙", "aggressive", text="直取波才首級")
+    msgs = bi.resolve_round(instance, definition, random.Random(0), now=700.0)
+    [record] = instance.rounds
+    assert (record.act_index, record.resolved_real, record.trend_after) == (0, 700.0, instance.trend)
+    assert record.actions == {"甲": "safe", "乙": "aggressive"}
+    assert record.custom_texts == {"乙": "直取波才首級"}
+    assert record.messages == msgs and record.id is None
+
+
+def test_ending_without_fighters_records_the_closing_round(definition):
+    instance = _empty_active_battle(definition, now=600.0)
+    msgs = bi.end_without_fighters(instance, definition, now=600.0 + definition.round_seconds)
+    [record] = instance.rounds
+    assert record.actions == {} and record.messages == msgs

@@ -773,6 +773,7 @@ class Game:
         narration = battle_instance.narrate_round(self.client, definition, battle, msgs)
         if narration:
             battle.narrative_log.append(narration)
+            battle.rounds[-1].narration = narration  # resolve_round 剛記下這一回合
         return [narration] if narration else msgs
 
     def _run_battle_tick(self, definition: BattleDef) -> tuple[battle_instance.BattleInstance | None, list[str]]:
