@@ -1,0 +1,62 @@
+[
+  {"id": "trend_yingchuan_refugees", "title": "城門閉早", "locations": ["yingchuan"],
+   "condition": {"trend_min": {"huangjin": 40}},
+   "text": "黃巾聲勢一天比一天大，陽翟的城門申時就關了。門外擠滿從長社逃來的百姓，守門的屯長隔著門縫喊：「再擠，就放箭了！」門內有人在罵，門外有孩子在哭。",
+   "choices": [
+     {"text": "爬上城頭，替屯長點清人數、一批批放進來", "check": {"stat": "wis", "difficulty": 6},
+      "effect": {"text": "你把人分成老弱與青壯，老弱先進、青壯編去搬土修城。屯長鬆了口氣，城外的哭聲也小了。", "stats": {"good": 2, "fame": 1}, "trend": {"huangjin": -1}},
+      "fail_effect": {"text": "人群一擁而上，門縫被擠得大開，你在混亂裡被撞下兩級台階，只好退開。", "stamina": -10}},
+     {"text": "整夜守在門外，替排隊的人擋住趁亂打劫的潰兵", "check": {"stat": "con", "difficulty": 7, "by": "self"},
+      "effect": {"text": "天亮時你眼睛熬得通紅，門外沒出一件事。一個老婦塞給你一把炒豆。", "stats": {"good": 2}, "stamina": -15},
+      "fail_effect": {"text": "後半夜你撐不住打了個盹，醒來時已有兩家人被搶了包袱。", "stamina": -15}},
+     {"text": "趁亂收些銀錢，替人走後門", "effect": {"text": "幾家富戶從側門進了城，你袖裡沉甸甸的。", "stats": {"silver": 25, "evil": 2}}}
+   ]},
+  {"id": "trend_luoyang_road_cut", "title": "官道斷絕", "locations": ["luoyang_road"],
+   "condition": {"world_flags_all": ["road_blocked"]},
+   "text": "官道被黃巾截斷後，往來潁川的軍報全靠小道傳遞。路旁的哨卡空了一半，一個驛卒牽著瘸馬在路邊發愁：他手上的軍書再送不到陽翟，前線就要斷糧了。",
+   "choices": [
+     {"text": "替他抄山間小路送過去", "check": {"stat": "agi", "difficulty": 7},
+      "effect": {"text": "你翻了兩道山樑，趕在天黑前把軍書交到陽翟。郡吏記下了你的名號。", "stats": {"fame": 2, "silver": 15}, "trend": {"huangjin": -2}, "stamina": -15},
+      "fail_effect": {"text": "小路被一道新挖的壕溝攔住，你繞了大半天，只好把軍書送回驛卒手上。", "stamina": -15}},
+     {"text": "看看軍書的封泥，判斷哪一封最急", "check": {"stat": "wis", "difficulty": 6},
+      "effect": {"text": "你挑出一封蓋著郡守印的，教驛卒先送這一封、其餘的等官軍護送。他千恩萬謝。", "stats": {"good": 1, "fame": 1}},
+      "fail_effect": {"text": "封泥的字你一個也認不出來，驛卒嘆口氣，自己牽著馬走了。"}},
+     {"text": "說官道斷了，誰也幫不上", "effect": {"text": "驛卒望著北邊，一句話也沒說。"}}
+   ]},
+  {"id": "trend_nanyang_road_quiet", "title": "流民返鄉", "locations": ["nanyang_road"],
+   "condition": {"trend_max": {"huangjin": 15}},
+   "text": "各路義士連番剿討，黃巾在南陽一帶的聲勢退了。官道上開始有人推著獨輪車往回走，車上綁著鍋碗和孩子。一戶人家的車軸在坑裡卡住，全家人圍著發愁。",
+   "choices": [
+     {"text": "把車連人一起扛出坑", "check": {"stat": "str", "difficulty": 6},
+      "effect": {"text": "你一聲低喝，車輪滾出了坑。那家的男人說，等秋收了一定要請你喝一碗新米酒。", "stats": {"good": 2}},
+      "fail_effect": {"text": "車軸喀嚓一聲斷了，你只好幫他們把東西搬下來，陪他們走了一段。", "stamina": -10}},
+     {"text": "教他們削一根新軸湊合著用", "check": {"stat": "wis", "difficulty": 5, "by": "self"},
+      "effect": {"text": "你挑了根硬木削成軸，車子又能走了。那家人一路回頭向你揮手。", "stats": {"good": 1, "xinde": 5}},
+      "fail_effect": {"text": "削出來的軸粗細不合，你白忙了一場。", "stamina": -5}},
+     {"text": "繼續趕路", "effect": {"text": "你從他們身旁走過，聽見孩子在唱一首鄉下的歌。"}}
+   ]},
+  {"id": "trend_zhuo_volunteers", "title": "南下的鄉勇", "locations": ["zhuo_county"],
+   "condition": {"trend_min": {"huangjin": 40}},
+   "text": "冀州的黃巾越打越兇，涿郡縣門外每天都有一隊鄉勇整裝南下。今天這一隊連鞋都沒穿齊，帶隊的豪族子弟急著要湊足人數，見你就拉：「好漢，一起去吧！」",
+   "choices": [
+     {"text": "替他們把隊伍操練出個樣子再走", "check": {"stat": "agi", "difficulty": 6},
+      "effect": {"text": "你教他們排成三列、聽鼓進退，半天下來總算像支隊伍。帶隊的硬塞了一串錢給你。", "stats": {"fame": 1, "silver": 15}, "trend": {"huangjin": -1}},
+      "fail_effect": {"text": "鄉勇們東倒西歪，越練越亂，帶隊的臉色很難看。", "stats": {"fame": -1}}},
+     {"text": "跟他們一起扛著糧袋走一段", "check": {"stat": "con", "difficulty": 6, "by": "self"},
+      "effect": {"text": "你扛著糧袋走了二十里才折回來，肩頭磨破了皮。鄉勇們說這一路沒人掉隊。", "stats": {"good": 1}, "stamina": -15},
+      "fail_effect": {"text": "走到半路你腿一軟，糧袋滾進溝裡，還得大家幫你撈。", "stamina": -15}},
+     {"text": "說自己另有要事", "effect": {"text": "隊伍走遠了，揚起的塵土半天沒落。"}}
+   ]},
+  {"id": "trend_baima_ford_panic", "title": "爭渡", "locations": ["baima_ford"],
+   "condition": {"trend_min": {"huangjin": 50}},
+   "text": "黃巾聲勢浩大，冀州的大戶都想渡河南逃。白馬津只剩三條渡船，船家把價錢喊到一人十兩，岸邊推擠成一團，已經有人被擠下水。",
+   "choices": [
+     {"text": "跳下水把落水的人拖上岸", "check": {"stat": "con", "difficulty": 7, "by": "self"},
+      "effect": {"text": "你連拖了三個人上岸，凍得嘴唇發紫。岸上的人自動讓出一條路，讓老弱先上船。", "stats": {"good": 2, "fame": 1}, "stamina": -15},
+      "fail_effect": {"text": "河水太急，你自己險些被沖走，抓著船纜才爬上來。", "stamina": -20}},
+     {"text": "跟船家講價，讓他照舊價分批渡人", "check": {"stat": "wis", "difficulty": 7},
+      "effect": {"text": "你算給船家聽：照舊價多跑幾趟，賺得比坐地起價還多，還不會被人砸了船。船家想了想，點頭了。", "stats": {"good": 1, "fame": 1}},
+      "fail_effect": {"text": "船家冷笑一聲，把船撐離了岸。", "stats": {"silver": -5}}},
+     {"text": "出高價，自己先上船", "effect": {"text": "你遞上銀子，船家立刻替你在船頭騰了個位子。", "stats": {"silver": -20}}}
+   ]}
+]

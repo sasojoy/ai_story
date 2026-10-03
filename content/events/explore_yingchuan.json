@@ -1,0 +1,1633 @@
+[
+  {
+    "id": "yc_city_courier",
+    "title": "驛卒墜馬",
+    "locations": [
+      "yingchuan"
+    ],
+    "text": "城門口一匹驛馬口吐白沫，驛卒從鞍上栽下來，背上竹筒封著郡府的泥印。他抓著你的袖子說，這是給官署的急報，耽擱一刻就要掉腦袋。",
+    "choices": [
+      {
+        "text": "背起他穿過擁擠的街市，送到官署",
+        "check": {
+          "stat": "con",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "你背著他一路擠到官署階前，署吏接過竹筒，賞了你一串錢，還記下你的名號。",
+          "stats": {
+            "silver": 10,
+            "fame": 1,
+            "good": 1
+          }
+        },
+        "fail_effect": {
+          "text": "走到半路你兩腿發軟，只好把人放下歇了半天，到官署時署吏臉色很難看。",
+          "stamina": -15
+        }
+      },
+      {
+        "text": "接過竹筒，騎他的馬先跑一趟",
+        "check": {
+          "stat": "agi",
+          "difficulty": 7
+        },
+        "effect": {
+          "text": "你伏在馬背上穿過三條街，竹筒準時遞進官署。據說那是潁川各縣黃巾聚眾的名冊。",
+          "stats": {
+            "fame": 2
+          },
+          "trend": {
+            "huangjin": -1
+          }
+        },
+        "fail_effect": {
+          "text": "那匹馬早已力竭，跑不到半條街就跪倒，你摔得滿身是土，還被巡街的兵拉去盤問。",
+          "stamina": -10,
+          "stats": {
+            "fame": -1
+          }
+        }
+      },
+      {
+        "text": "喊守門的兵來接手",
+        "effect": {
+          "text": "守門兵罵罵咧咧地把驛卒架走了，竹筒也一併帶去，沒人多看你一眼。"
+        }
+      }
+    ]
+  },
+  {
+    "id": "yc_city_axle",
+    "title": "輜車斷軸",
+    "locations": [
+      "yingchuan"
+    ],
+    "text": "官署前的大街上，一輛滿載箭桿的輜車斷了軸，橫在路中，後頭的車隊排出半里。押車的軍候急得拿馬鞭抽地，說今日日落前必須出城。",
+    "choices": [
+      {
+        "text": "鑽到車底，用肩膀頂起車身換軸",
+        "check": {
+          "stat": "str",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "你咬牙把車身頂起一尺，車夫趁機換上新軸。軍候拍拍你的肩膀，塞給你一把錢。",
+          "stats": {
+            "silver": 15
+          }
+        },
+        "fail_effect": {
+          "text": "車身才抬起一點又壓下來，你閃得快沒被砸到，肩膀卻腫了一大塊。",
+          "stamina": -15
+        }
+      },
+      {
+        "text": "細看斷口，覺得斷得太整齊",
+        "check": {
+          "stat": "wis",
+          "difficulty": 7
+        },
+        "effect": {
+          "text": "你指給軍候看：斷口一半齊整，是被人先鋸過的。軍候臉色一變，當場把車隊裡一個新雇的車夫綁了。",
+          "stats": {
+            "fame": 1
+          },
+          "trend": {
+            "huangjin": -1
+          }
+        },
+        "fail_effect": {
+          "text": "你說斷口有蹊蹺，卻說不出所以然，軍候反倒疑心是你在搗亂，盤問了你好一陣，還罰了錢。",
+          "stamina": -10,
+          "stats": {
+            "silver": -10
+          }
+        }
+      },
+      {
+        "text": "繞到小巷走",
+        "effect": {
+          "text": "你從小巷繞了過去，身後還聽得到軍候的叫罵聲。"
+        }
+      }
+    ]
+  },
+  {
+    "id": "yc_city_petition",
+    "title": "署前投牒",
+    "locations": [
+      "yingchuan"
+    ],
+    "text": "郡府門外，一位鬚髮斑白的老書生捧著訴狀，說鄉里豪強借募兵的名目，把他家祖田劃進了自家莊園。門吏橫著戟，不放他進去。",
+    "choices": [
+      {
+        "text": "替他重寫訴狀，句句扣住律條",
+        "check": {
+          "stat": "wis",
+          "difficulty": 6,
+          "by": "self"
+        },
+        "effect": {
+          "text": "你把狀子改得條理分明，門吏看了一眼，竟不敢攔，收下送了進去。老書生拉著你的手說不出話。",
+          "stats": {
+            "good": 2,
+            "xinde": 10
+          }
+        },
+        "fail_effect": {
+          "text": "狀子寫得引經據典，門吏只瞄了一眼就丟還給你，說這不是講學的地方。",
+          "stats": {
+            "fame": -1
+          }
+        }
+      },
+      {
+        "text": "趁門吏換班，帶他從側門溜進去",
+        "check": {
+          "stat": "agi",
+          "difficulty": 5
+        },
+        "effect": {
+          "text": "你們趁換班的空檔閃進側門，正好撞見郡丞，狀子當面遞了上去。",
+          "stats": {
+            "good": 1,
+            "fame": 1
+          }
+        },
+        "fail_effect": {
+          "text": "你才拉著老書生跨過門檻就被扭住，罰了錢才放人。",
+          "stats": {
+            "silver": -15
+          }
+        }
+      },
+      {
+        "text": "塞給他幾個錢，勸他先回去",
+        "effect": {
+          "text": "老書生收下錢，嘆了口氣，把訴狀小心收進懷裡。",
+          "stats": {
+            "silver": -5,
+            "good": 1
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "yc_river_overboard",
+    "title": "渡船落水",
+    "locations": [
+      "yingshui"
+    ],
+    "text": "渡口的船家貪錢，一船擠了二十多人。船到河心一晃，一個抱著孩子的流民婦人翻了下去，春汛的潁水又急又冷，孩子還在她懷裡哭。",
+    "choices": [
+      {
+        "text": "脫了外衣跳下水去",
+        "check": {
+          "stat": "con",
+          "difficulty": 7
+        },
+        "effect": {
+          "text": "你頂著刺骨的河水把母子拖上岸。婦人跪在泥裡磕頭，渡口茶棚的人都圍過來看。",
+          "stats": {
+            "good": 2,
+            "fame": 1
+          }
+        },
+        "fail_effect": {
+          "text": "水冷得你手腳抽筋，嗆了好幾口才被人拉上岸。母子倆是被下游的漁網撈起來的。",
+          "stamina": -20
+        }
+      },
+      {
+        "text": "抓起船上的纜繩甩過去",
+        "check": {
+          "stat": "agi",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "纜繩正落在婦人手邊，你和船家合力把她拉回船上。",
+          "stats": {
+            "good": 2
+          }
+        },
+        "fail_effect": {
+          "text": "纜繩甩偏了，你自己差點被船舷絆下水，最後是別人跳下去救的人。",
+          "stamina": -10
+        }
+      },
+      {
+        "text": "喝令船家趕快靠岸",
+        "effect": {
+          "text": "船家慌忙撐篙，等靠了岸，婦人已被兩個漁夫救起，渾身發抖。"
+        }
+      }
+    ]
+  },
+  {
+    "id": "yc_river_teashed",
+    "title": "茶棚暗語",
+    "locations": [
+      "yingshui"
+    ],
+    "text": "渡口茶棚裡，兩個挑擔的漢子壓低聲音說話，什麼「甲子」「蒼天」。擔子底下露出一角黃布，他們不時抬頭看渡船什麼時候來。",
+    "choices": [
+      {
+        "text": "伏在桌上裝睡，聽他們說什麼",
+        "check": {
+          "stat": "wis",
+          "difficulty": 6,
+          "by": "self"
+        },
+        "effect": {
+          "text": "你聽出他們要把一擔黃布送到對岸的村子，約了三日後聚眾。你把話傳給渡口的亭長，亭長給了你一些錢。",
+          "stats": {
+            "silver": 15
+          },
+          "trend": {
+            "huangjin": -1
+          }
+        },
+        "fail_effect": {
+          "text": "他們說的盡是暗話，你聽得一頭霧水，還被其中一人發覺，一碗熱茶潑在你背上。",
+          "stamina": -10
+        }
+      },
+      {
+        "text": "端著烈酒過去，陪他們喝個痛快",
+        "check": {
+          "stat": "con",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "三碗下肚，兩人把你當自己人，分你幾個錢，叫你到了對岸找他們的渠帥。",
+          "stats": {
+            "silver": 10
+          },
+          "trend": {
+            "huangjin": 1
+          }
+        },
+        "fail_effect": {
+          "text": "你先醉倒了，醒來時兩人早過了河，你的錢袋也輕了一大半。",
+          "stats": {
+            "silver": -15
+          }
+        }
+      },
+      {
+        "text": "喝完茶，自己走",
+        "effect": {
+          "text": "渡船來了，兩人挑起擔子上船，黃布在擔子底下晃了一下。"
+        }
+      }
+    ]
+  },
+  {
+    "id": "yc_river_shacks",
+    "title": "棚屋起火",
+    "locations": [
+      "yingshui"
+    ],
+    "text": "河灘上的流民棚屋一間挨一間，不知誰家煮粥的灶火燎著了草頂，河風一吹，火往下游一路燒過去。一間棚子裡還傳出老人的咳嗽聲。",
+    "choices": [
+      {
+        "text": "用濕布蒙臉衝進去",
+        "check": {
+          "stat": "agi",
+          "difficulty": 7
+        },
+        "effect": {
+          "text": "你在濃煙裡摸到老人，背著他衝了出來，身後的草頂轟然塌下。",
+          "stats": {
+            "good": 2,
+            "fame": 1
+          },
+          "rumor": "潁水河畔的棚屋失火，聽說{name}衝進火裡背出一位老人。"
+        },
+        "fail_effect": {
+          "text": "煙嗆得你睜不開眼，退出來時手臂燎起一片水泡，老人是被鄰人從後牆拖出來的。",
+          "stamina": -15
+        }
+      },
+      {
+        "text": "拆倒下風的幾間棚子，斷開火路",
+        "check": {
+          "stat": "str",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "你一連扯倒三間棚子，火燒到空地就熄了。流民們看著殘骸，卻也知道是你救了大半片棚屋。",
+          "stats": {
+            "good": 2
+          }
+        },
+        "fail_effect": {
+          "text": "棚柱埋得太深，你拔不動，火從你身邊燒了過去。",
+          "stamina": -10,
+          "stats": {
+            "good": -1
+          }
+        }
+      },
+      {
+        "text": "跟著大家排成一列提水",
+        "effect": {
+          "text": "一桶桶河水潑上去，燒掉七八間棚子才把火撲滅。",
+          "stamina": -5
+        }
+      }
+    ]
+  },
+  {
+    "id": "yc_wilds_plow",
+    "title": "人拉犁",
+    "locations": [
+      "yingchuan_wilds"
+    ],
+    "text": "荒田邊，一個老漢把犁繩套在自己肩上，兒媳在後頭扶犁。他說耕牛前幾天被一夥散兵牽走了，再不下種，秋天全家都得餓死。",
+    "choices": [
+      {
+        "text": "接過犁繩，替他拉一段",
+        "check": {
+          "stat": "str",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "你拉著犁走完一整壟，泥土翻出新的顏色。老漢硬塞給你兩個麥餅。",
+          "stats": {
+            "good": 2,
+            "xinde": 5
+          }
+        },
+        "fail_effect": {
+          "text": "犁頭卡進石縫，你使勁一扯，腰閃了一下，半天直不起來。",
+          "stamina": -15
+        }
+      },
+      {
+        "text": "教他打木樁、繞繩子，省一半力氣",
+        "check": {
+          "stat": "wis",
+          "difficulty": 6,
+          "by": "self"
+        },
+        "effect": {
+          "text": "你在田頭打下一根木樁，把犁繩繞過去，一個人就拉得動。老漢連說這法子能傳給全村。",
+          "stats": {
+            "good": 1,
+            "xinde": 8
+          }
+        },
+        "fail_effect": {
+          "text": "木樁埋得不深，繩子一緊整根拔起來，打在你小腿上。",
+          "stamina": -10
+        }
+      },
+      {
+        "text": "問清散兵往哪去了，追上去討牛",
+        "combat": "dipi",
+        "effect": {
+          "text": "你在破廟後頭追上那夥流寇，把牛奪了回來。老漢牽著牛，眼淚都流下來了。",
+          "stats": {
+            "good": 2,
+            "fame": 1
+          }
+        },
+        "fail_effect": {
+          "text": "流寇人多，你被打得退回田邊，老漢反過來安慰你。",
+          "stamina": -15,
+          "stats": {
+            "silver": -10
+          }
+        }
+      },
+      {
+        "text": "嘆口氣，繼續趕路",
+        "effect": {
+          "text": "你走出很遠，回頭還看得見老漢彎著腰的身影。"
+        }
+      }
+    ]
+  },
+  {
+    "id": "yc_wilds_toll",
+    "title": "田埂設卡",
+    "locations": [
+      "yingchuan_wilds"
+    ],
+    "text": "田埂上橫著一根枯木，三個頭纏黃巾的散兵坐在一旁，對過路的人說：「交十個錢，或者留下一隻鞋。」後頭排著幾個挑菜的鄉民，不敢作聲。",
+    "choices": [
+      {
+        "text": "跟他們說，鄉民跟他們一樣是窮人",
+        "check": {
+          "stat": "wis",
+          "difficulty": 7
+        },
+        "effect": {
+          "text": "為首的散兵搔搔頭，揮手讓鄉民過去，嘴裡嘟囔著「大賢良師也說過不欺貧苦」。",
+          "stats": {
+            "good": 2
+          }
+        },
+        "fail_effect": {
+          "text": "他們聽得不耐煩，把你的錢袋搶去倒了個乾淨，才放你走。",
+          "stats": {
+            "silver": -10,
+            "fame": -1
+          }
+        }
+      },
+      {
+        "text": "脫了鞋，涉過旁邊的爛泥溝繞過去",
+        "check": {
+          "stat": "con",
+          "difficulty": 6,
+          "by": "self"
+        },
+        "effect": {
+          "text": "爛泥沒到大腿，你硬是蹚了過去。散兵在後面笑你，你也不在乎。",
+          "stats": {
+            "xinde": 5
+          }
+        },
+        "fail_effect": {
+          "text": "你在泥裡陷到腰，被散兵一路拖回田埂，錢照交，還挨了一頓嘲笑。",
+          "stamina": -10,
+          "stats": {
+            "silver": -10
+          }
+        }
+      },
+      {
+        "text": "一腳踢開枯木",
+        "combat": "shanzei",
+        "effect": {
+          "text": "你把三個散兵打得四散奔逃，挑菜的鄉民們這才敢過田埂，一路向你道謝。",
+          "stats": {
+            "good": 1,
+            "fame": 1
+          },
+          "trend": {
+            "huangjin": -1
+          }
+        },
+        "fail_effect": {
+          "text": "他們纏住你打了好一陣，你身上的錢被搜走一半。",
+          "stamina": -10,
+          "stats": {
+            "silver": -15
+          }
+        }
+      },
+      {
+        "text": "乖乖交錢",
+        "effect": {
+          "text": "你數了十個錢給他們，散兵挪開枯木讓你過去。",
+          "stats": {
+            "silver": -10
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "yc_wilds_horse",
+    "title": "無主戰馬",
+    "locations": [
+      "yingchuan_wilds"
+    ],
+    "text": "荒草裡一匹棗紅戰馬拖著斷韁吃草，鞍上的皮囊插著半截斷箭，馬腹有血跡，不知道主人是死是活。遠處的土丘上好像有人影晃動。",
+    "choices": [
+      {
+        "text": "壓低身子，慢慢靠過去套住牠",
+        "check": {
+          "stat": "agi",
+          "difficulty": 7
+        },
+        "effect": {
+          "text": "你一把抓住斷韁，戰馬甩了幾下頭就安靜了。你把牠牽回城裡，官署按例給了賞錢。",
+          "stats": {
+            "silver": 25
+          }
+        },
+        "fail_effect": {
+          "text": "戰馬受驚，後蹄正中你的大腿，一溜煙跑進了荒草裡。",
+          "stamina": -15
+        }
+      },
+      {
+        "text": "先翻看皮囊裡的東西",
+        "check": {
+          "stat": "wis",
+          "difficulty": 6,
+          "by": "self"
+        },
+        "effect": {
+          "text": "皮囊裡是一封潰散的漢軍屯長寫的求援書，說他們困在西邊的土堡。你把信送到軍營，援兵當天就出發了。",
+          "stats": {
+            "fame": 1
+          },
+          "trend": {
+            "huangjin": -1
+          }
+        },
+        "fail_effect": {
+          "text": "書信被血浸得字跡模糊，你辨了半天，戰馬早跑遠了。",
+          "stamina": -5
+        }
+      },
+      {
+        "text": "土丘上有人，別管閒事",
+        "effect": {
+          "text": "你繞開那片荒草，人影一直沒有動。"
+        }
+      }
+    ]
+  },
+  {
+    "id": "yc_cs_nightwatch",
+    "title": "營外守夜",
+    "locations": [
+      "changshe"
+    ],
+    "text": "官軍營中缺人守夜，屯長把一支長戟塞給你，要你在營柵上站一更到天明。對面黃巾別部的營火連成一片，一夜都沒有熄。",
+    "choices": [
+      {
+        "text": "站到天亮，眼睛都不閉一下",
+        "check": {
+          "stat": "con",
+          "difficulty": 7,
+          "by": "self"
+        },
+        "effect": {
+          "text": "天亮換崗時屯長看你還站得筆直，按規矩給了你一份口糧錢，還記了一筆。",
+          "stats": {
+            "silver": 20,
+            "fame": 1
+          }
+        },
+        "fail_effect": {
+          "text": "四更天你靠著營柵打了個盹，被巡營的屯長一鞭子抽醒，當著眾人罵了一頓。",
+          "stamina": -15,
+          "stats": {
+            "fame": -1
+          }
+        }
+      },
+      {
+        "text": "溜出營柵，摸近去數清對面的營火",
+        "check": {
+          "stat": "agi",
+          "difficulty": 8
+        },
+        "effect": {
+          "text": "你在焦黑的田壟間伏了半夜，數清了對面的營帳和馬匹。軍司馬聽完回報，賞了你錢。",
+          "stats": {
+            "silver": 10,
+            "fame": 2
+          },
+          "trend": {
+            "huangjin": -1
+          }
+        },
+        "fail_effect": {
+          "text": "你踩斷一根枯枝，對面一陣亂箭射來，你連滾帶爬逃回營柵，衣袖被釘穿了。",
+          "stamina": -20
+        }
+      },
+      {
+        "text": "推說另有要事",
+        "effect": {
+          "text": "屯長哼了一聲，把長戟塞給了別人。"
+        }
+      }
+    ]
+  },
+  {
+    "id": "yc_cs_old_rampart",
+    "title": "舊壘鏽鐵",
+    "locations": [
+      "changshe"
+    ],
+    "text": "營外有一段不知哪一朝留下的舊壘，塌土裡埋著鏽爛的箭鏃和戟頭。營中的鐵匠缺鐵，按斤收廢鐵；不過黃巾的嘍囉也常來這裡翻撿。",
+    "choices": [
+      {
+        "text": "掘開塌土，挖出整塊的鐵料",
+        "check": {
+          "stat": "str",
+          "difficulty": 7
+        },
+        "effect": {
+          "text": "你挖到一具半埋的鐵甲，敲下來的鐵片沉甸甸的，鐵匠挑出最好的一塊還給你，剩下的折成了錢。",
+          "stats": {
+            "silver": 10
+          },
+          "materials": {
+            "gang_1": 1
+          }
+        },
+        "fail_effect": {
+          "text": "塌土一鬆，半堵土牆壓了下來，你從土裡爬出來時灰頭土臉。",
+          "stamina": -15
+        }
+      },
+      {
+        "text": "蹲下細看，挑出還能回爐的好鐵",
+        "check": {
+          "stat": "wis",
+          "difficulty": 6,
+          "by": "self"
+        },
+        "effect": {
+          "text": "你在一堆朽鐵裡認出一截古戟的芯子，鏽皮底下黑亮如新。鐵匠看了直嘖嘖稱奇。",
+          "stats": {
+            "silver": 5
+          },
+          "materials": {
+            "gang_2": 1
+          }
+        },
+        "fail_effect": {
+          "text": "你挑了一大袋，鐵匠翻了翻說全是朽到底的，一個錢也不給。",
+          "stamina": -10
+        }
+      },
+      {
+        "text": "趕走在舊壘下翻撿的嘍囉",
+        "combat": "louluo",
+        "effect": {
+          "text": "幾個嘍囉被你打得丟下麻袋就跑，麻袋裡是他們剛撿的鐵。",
+          "stats": {
+            "silver": 15
+          },
+          "trend": {
+            "huangjin": -1
+          }
+        },
+        "fail_effect": {
+          "text": "嘍囉們叫來了同伴，你寡不敵眾，只好退回營柵。",
+          "stamina": -15,
+          "stats": {
+            "silver": -10
+          }
+        }
+      },
+      {
+        "text": "回營去",
+        "effect": {
+          "text": "你看了一眼舊壘上的烏鴉，轉身回營。"
+        }
+      }
+    ]
+  },
+  {
+    "id": "yc_cs_deserter",
+    "title": "桑林逃卒",
+    "locations": [
+      "changshe"
+    ],
+    "text": "營後那片燒得焦黑的桑林裡，躲著一個剛徵來的新卒。他說隊率剋扣口糧，自己三天沒吃飽了，想逃回家種地。可抓到逃兵，按軍法是要斬的。",
+    "choices": [
+      {
+        "text": "去找隊率，當面說清口糧的帳",
+        "check": {
+          "stat": "wis",
+          "difficulty": 7
+        },
+        "effect": {
+          "text": "你把每人每日該領的糧算給隊率聽，旁邊的兵都聽見了。隊率只好補發口糧，新卒也回了營。",
+          "stats": {
+            "good": 2,
+            "fame": 1
+          }
+        },
+        "fail_effect": {
+          "text": "隊率說你煽動軍心，叫人把你轟出營門，還放話要你好看。",
+          "stamina": -10,
+          "stats": {
+            "fame": -2
+          }
+        }
+      },
+      {
+        "text": "趁夜帶他穿過兩軍之間的空地",
+        "check": {
+          "stat": "agi",
+          "difficulty": 8
+        },
+        "effect": {
+          "text": "你們貼著焦土一路摸過去，天亮前到了潁水邊。新卒跪下磕了三個頭，往北走了。",
+          "stats": {
+            "good": 2,
+            "evil": 1
+          }
+        },
+        "fail_effect": {
+          "text": "巡哨的火把照過來，你們被追了大半夜，新卒最後還是被抓了回去。",
+          "stamina": -20,
+          "stats": {
+            "fame": -1
+          }
+        }
+      },
+      {
+        "text": "分他一塊乾糧，勸他回營",
+        "effect": {
+          "text": "新卒狼吞虎嚥地吃完，猶豫了很久，還是低著頭回了營。",
+          "stats": {
+            "good": 1
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "yc_cs_grain_cart",
+    "title": "截糧牛車",
+    "locations": [
+      "changshe"
+    ],
+    "text": "一輛往官軍營中送糧的牛車在焦土邊被截住了，十來個黃巾別部的人正在卸麻袋，車夫被綁在車轅上。牛受了驚，一直在原地打轉。",
+    "choices": [
+      {
+        "text": "正面衝上去",
+        "combat": "shuikou",
+        "effect": {
+          "text": "你衝散了卸糧的人，搶回大半車糧。營中的人都在說這件事。",
+          "stats": {
+            "fame": 2,
+            "silver": 15
+          },
+          "trend": {
+            "huangjin": -2
+          },
+          "rumor": "長社營外有人單槍匹馬搶回了一車軍糧，說是{name}。"
+        },
+        "fail_effect": {
+          "text": "對方人多，你被逼退到焦土裡，糧車被趕走了。",
+          "stamina": -20,
+          "stats": {
+            "silver": -15
+          }
+        }
+      },
+      {
+        "text": "繞到後頭割斷繩子，趕著牛車就跑",
+        "check": {
+          "stat": "agi",
+          "difficulty": 7
+        },
+        "effect": {
+          "text": "你跳上車轅一刀割斷繩子，牛車一路狂奔回營，留下一地麻袋。",
+          "stats": {
+            "good": 1,
+            "silver": 10
+          },
+          "trend": {
+            "huangjin": -1
+          }
+        },
+        "fail_effect": {
+          "text": "牛一直打轉不肯走，對方發現了你，你只好跳車逃命。",
+          "stamina": -15
+        }
+      },
+      {
+        "text": "扛起車夫就跑",
+        "check": {
+          "stat": "str",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "你扛著車夫跑回營柵，他說這輩子都記得你。糧雖然丟了，人保住了。",
+          "stats": {
+            "good": 2
+          }
+        },
+        "fail_effect": {
+          "text": "車夫比你想的重，你跑不遠就被追上，兩個人都挨了打。",
+          "stamina": -15,
+          "stats": {
+            "fame": -1
+          }
+        }
+      },
+      {
+        "text": "伏在土坎後看著",
+        "effect": {
+          "text": "他們卸完糧，把牛車推進溝裡，車夫在車轅上掙扎了很久才鬆開繩子。"
+        }
+      }
+    ]
+  },
+  {
+    "id": "yc_ac_debate",
+    "title": "講堂論難",
+    "locations": [
+      "yingchuan_academy"
+    ],
+    "text": "書院講堂上，兩位名士正為「天下之亂，起於宦官還是起於豪強兼併」爭得面紅耳赤。山長撫著鬍鬚，示意旁聽的人也可以發問。",
+    "choices": [
+      {
+        "text": "站起來，引經據典提一問",
+        "check": {
+          "stat": "wis",
+          "difficulty": 7,
+          "by": "self"
+        },
+        "effect": {
+          "text": "你問到兩人都愣了一下，山長點頭說「此問有骨」。散席後有幾個學生來向你請教。",
+          "stats": {
+            "fame": 2,
+            "xinde": 10
+          }
+        },
+        "fail_effect": {
+          "text": "你的問題被一位名士三言兩語駁倒，滿堂學生都笑了。",
+          "stats": {
+            "fame": -1
+          }
+        }
+      },
+      {
+        "text": "在後排跪坐整日，一字不漏地聽完",
+        "check": {
+          "stat": "con",
+          "difficulty": 5,
+          "by": "self"
+        },
+        "effect": {
+          "text": "一整日下來，你腿麻了，心裡卻像多開了幾扇窗。",
+          "stats": {
+            "xinde": 12
+          }
+        },
+        "fail_effect": {
+          "text": "到午後你腿麻得撐不住，起身時一個踉蹌撞翻了書案。",
+          "stamina": -10
+        }
+      },
+      {
+        "text": "悄悄離席",
+        "effect": {
+          "text": "你退出講堂，身後的爭論聲隔著竹簾還聽得清清楚楚。"
+        }
+      }
+    ]
+  },
+  {
+    "id": "yc_ac_copying",
+    "title": "藏書樓抄書",
+    "locations": [
+      "yingchuan_academy"
+    ],
+    "text": "書院藏書樓缺人抄書，一卷給一百錢。管書的老先生說得清楚：今夜抄完，明早校對，錯一個字就不給錢，污了竹簡還要賠。",
+    "choices": [
+      {
+        "text": "點著油燈熬一整夜，一筆一畫抄完",
+        "check": {
+          "stat": "con",
+          "difficulty": 6,
+          "by": "self"
+        },
+        "effect": {
+          "text": "天亮時你眼睛通紅，老先生校了一遍，一個錯字都沒有，爽快地付了錢。",
+          "stats": {
+            "silver": 25,
+            "xinde": 5
+          }
+        },
+        "fail_effect": {
+          "text": "四更天你趴在案上睡著了，墨汁淌了一卷竹簡，只好賠錢。",
+          "stats": {
+            "silver": -10
+          }
+        }
+      },
+      {
+        "text": "邊抄邊細讀卷中的兵法",
+        "check": {
+          "stat": "wis",
+          "difficulty": 7,
+          "by": "self"
+        },
+        "effect": {
+          "text": "那是一卷前人注的兵書，你抄完時已能默誦大半，老先生也照數付了錢。",
+          "stats": {
+            "silver": 10,
+            "xinde": 15
+          }
+        },
+        "fail_effect": {
+          "text": "你讀得入了神，抄漏了整整一行，老先生罰你賠簡。",
+          "stats": {
+            "silver": -15
+          }
+        }
+      },
+      {
+        "text": "說自己字寫得醜，推掉",
+        "effect": {
+          "text": "老先生點點頭，把竹簡交給一個寒門學生。"
+        }
+      }
+    ]
+  },
+  {
+    "id": "yc_ac_well",
+    "title": "井中玉佩",
+    "locations": [
+      "yingchuan_academy"
+    ],
+    "text": "一個寒門學生被同窗指為偷了玉佩，按門規要在階前罰跪三日。他說玉佩是同窗自己掉進了院後的古井，可井深數丈，沒人肯下去撈。",
+    "choices": [
+      {
+        "text": "攀著井繩下到井底去撈",
+        "check": {
+          "stat": "str",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "你在井底的淤泥裡摸到了玉佩，上來時滿身是泥。真相大白，山長當眾免了那學生的罰。",
+          "stats": {
+            "good": 2,
+            "fame": 1
+          }
+        },
+        "fail_effect": {
+          "text": "井繩吃不住力，你下到一半就滑了下去，被人拉上來時摔得渾身痠痛。",
+          "stamina": -15
+        }
+      },
+      {
+        "text": "入夜後暗中跟著那位同窗",
+        "check": {
+          "stat": "agi",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "你看見他偷偷把一個布包埋在竹林裡——玉佩根本沒丟，是他想陷害人。你把布包交給了山長。",
+          "stats": {
+            "good": 2
+          }
+        },
+        "fail_effect": {
+          "text": "你被他發現，他大喊抓賊，你在書院裡被當成了賊，好不容易才說清楚。",
+          "stats": {
+            "fame": -2
+          }
+        }
+      },
+      {
+        "text": "去替那學生向山長求情",
+        "effect": {
+          "text": "山長聽完，只把三日改成了一日。那學生跪在階前，向你點了點頭。",
+          "stats": {
+            "good": 1
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "yc_ac_archery",
+    "title": "射圃鄉射",
+    "locations": [
+      "yingchuan_academy"
+    ],
+    "text": "書院依古禮設了射圃，今日行鄉射禮，學生們揖讓升降，一板一眼。司射看你站在圃邊，邀你也上場射一輪，頭彩是一束上好的箭羽。",
+    "choices": [
+      {
+        "text": "依禮上場，四矢連射",
+        "check": {
+          "stat": "agi",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "四矢有三矢中鵠，學生們依禮向你作揖，司射把那束箭羽交到你手上。",
+          "stats": {
+            "fame": 1
+          },
+          "materials": {
+            "kuai_1": 1
+          }
+        },
+        "fail_effect": {
+          "text": "你一緊張，連射兩矢都脫靶，引來一陣竊笑。",
+          "stats": {
+            "fame": -1
+          }
+        }
+      },
+      {
+        "text": "去拉牆上那張沒人拉得開的老弓",
+        "check": {
+          "stat": "str",
+          "difficulty": 7
+        },
+        "effect": {
+          "text": "你把老弓拉成滿月，滿圃的學生都安靜了。司射說這張弓已經十年沒人拉開過。",
+          "stats": {
+            "fame": 2
+          }
+        },
+        "fail_effect": {
+          "text": "弓弦只拉開一半，你的手臂抖個不停，只好訕訕地放下。",
+          "stamina": -10,
+          "stats": {
+            "fame": -1
+          }
+        }
+      },
+      {
+        "text": "站在圃邊觀禮",
+        "effect": {
+          "text": "禮畢，司射向觀禮的人一一作揖，你也還了一禮。"
+        }
+      }
+    ]
+  },
+  {
+    "id": "yc_sf_caravan",
+    "title": "商旅結伴",
+    "locations": [
+      "songshan_foot"
+    ],
+    "text": "嵩山腳的山口聚著一隊販麻布的商旅，等湊足人手才敢過山。領頭的商人說最近山匪鬧得凶，願意出錢雇人扛貨押隊。",
+    "choices": [
+      {
+        "text": "扛起一擔麻布，跟著走一整天山路",
+        "check": {
+          "stat": "con",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "翻過山坳時你肩膀磨破了皮，但貨一件沒少，商人照數給了工錢。",
+          "stats": {
+            "silver": 25
+          }
+        },
+        "fail_effect": {
+          "text": "走到半山你就喘不過氣，貨擔只好分給別人，工錢也少了一半。",
+          "stamina": -20,
+          "stats": {
+            "silver": 5
+          }
+        }
+      },
+      {
+        "text": "走在隊伍最前頭探路",
+        "check": {
+          "stat": "agi",
+          "difficulty": 7
+        },
+        "effect": {
+          "text": "你提早發現了岔道上的絆索，帶著商隊繞了過去，商人多給了你一份錢。",
+          "stats": {
+            "silver": 20,
+            "fame": 1
+          }
+        },
+        "fail_effect": {
+          "text": "你錯把獵戶的小徑當成了山道，害大家多走了半日，商人扣了你的工錢。",
+          "stamina": -10,
+          "stats": {
+            "silver": -5
+          }
+        }
+      },
+      {
+        "text": "答應護隊，迎上攔路的山匪",
+        "combat": "yelang",
+        "effect": {
+          "text": "山匪從林子裡跳出來，被你打得四散奔逃。商人說下回過山還要找你。",
+          "stats": {
+            "silver": 35,
+            "fame": 1
+          }
+        },
+        "fail_effect": {
+          "text": "山匪人多，你護不住貨，商人損失了兩擔麻布，臉色很難看。",
+          "stamina": -15,
+          "stats": {
+            "silver": -15
+          }
+        }
+      },
+      {
+        "text": "不接這趟活",
+        "effect": {
+          "text": "商隊又等了半日，湊足了人才上路。"
+        }
+      }
+    ]
+  },
+  {
+    "id": "yc_sf_herbwife",
+    "title": "採藥婦人",
+    "locations": [
+      "songshan_foot"
+    ],
+    "text": "林邊一個採藥的婦人被蛇咬了腳踝，臉色發青，手裡還攥著一把剛採的草。她說這山裡長著治蛇毒的草，可她頭暈得認不出是哪一株了。",
+    "choices": [
+      {
+        "text": "在她的竹簍裡認出解毒的草，替她嚼碎敷上",
+        "check": {
+          "stat": "wis",
+          "difficulty": 6,
+          "by": "self"
+        },
+        "effect": {
+          "text": "你認出一株葉背帶紫的草，敷上不久，她腳踝的青色就退了。她說你比山下的醫匠還懂。",
+          "stats": {
+            "good": 2,
+            "xinde": 5
+          }
+        },
+        "fail_effect": {
+          "text": "你敷錯了草，她的腳腫得更厲害，你只好背著她下山找醫匠。",
+          "stamina": -15
+        }
+      },
+      {
+        "text": "背起她，一口氣跑下山找醫匠",
+        "check": {
+          "stat": "str",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "你背著她跑了三里山路，醫匠說再晚一刻就保不住那條腿了。",
+          "stats": {
+            "good": 2
+          }
+        },
+        "fail_effect": {
+          "text": "山路濕滑，你跌了一跤，兩人都滾進了草叢，耽擱了好一陣才下山。",
+          "stamina": -15
+        }
+      },
+      {
+        "text": "替她吸出毒血，綁緊小腿",
+        "effect": {
+          "text": "你照著老獵戶的法子替她處理了傷口，她能自己拄著棍子慢慢走下山了。",
+          "stats": {
+            "good": 1
+          },
+          "stamina": -5
+        }
+      }
+    ]
+  },
+  {
+    "id": "yc_sf_stele",
+    "title": "林中殘碑",
+    "locations": [
+      "songshan_foot"
+    ],
+    "text": "古木間倒著一塊殘碑，碑頂斜斜長出一棵小松，碑面爬滿青苔。過路的樵夫說，碑上記的是前漢天子來嵩山祭祀時的事。",
+    "choices": [
+      {
+        "text": "爬上小松，從上往下看清整塊碑",
+        "check": {
+          "stat": "agi",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "從高處看下去，青苔間露出的字連成了句子，你默記下一段祭文。",
+          "stats": {
+            "xinde": 10
+          }
+        },
+        "fail_effect": {
+          "text": "松枝太細，你踩斷一根摔了下來，屁股疼了半天。",
+          "stamina": -10
+        }
+      },
+      {
+        "text": "一點點刮去青苔，辨認碑文",
+        "check": {
+          "stat": "wis",
+          "difficulty": 7,
+          "by": "self"
+        },
+        "effect": {
+          "text": "你辨了一整個下午，讀出碑文寫的是祭山時的禮儀與山川之序，心中若有所悟。",
+          "stats": {
+            "xinde": 15
+          }
+        },
+        "fail_effect": {
+          "text": "刮到天黑，只認出七八個字，你只好摸黑下山。",
+          "stamina": -10
+        }
+      },
+      {
+        "text": "坐在碑旁歇一會兒",
+        "effect": {
+          "text": "林間很靜，只有松針落在碑面上的聲音。"
+        }
+      }
+    ]
+  },
+  {
+    "id": "yc_dm_coldpool",
+    "title": "寒潭一夜",
+    "locations": [
+      "deep_mountain"
+    ],
+    "text": "山徑上遇到一個背柴的老者，說再往裡走有一位隱者，從不見外人；想見他，得先在他門前的寒潭邊坐上一夜，天亮時還沒走才肯開門。",
+    "choices": [
+      {
+        "text": "找到寒潭，坐到天明",
+        "check": {
+          "stat": "con",
+          "difficulty": 8,
+          "by": "self"
+        },
+        "effect": {
+          "text": "寒氣浸透了你的骨頭，你咬牙撐到天亮。柴門開了一條縫，裡頭的人只說了一句「回去吧」，你卻覺得渾身筋骨都換過了一般。",
+          "stats": {
+            "con": 1
+          }
+        },
+        "fail_effect": {
+          "text": "後半夜你凍得牙齒打顫，終於起身離開。下山時才發現發起了燒。",
+          "stamina": -20
+        }
+      },
+      {
+        "text": "琢磨老者話裡的意思",
+        "check": {
+          "stat": "wis",
+          "difficulty": 7,
+          "by": "self"
+        },
+        "effect": {
+          "text": "你想了半晌，忽然明白他說的「坐一夜」不在寒潭，在心。老者聽了你的回答，笑著走了。",
+          "stats": {
+            "xinde": 12
+          }
+        },
+        "fail_effect": {
+          "text": "你追問了好幾句，老者只是搖頭，背著柴走遠了。",
+          "stamina": -10
+        }
+      },
+      {
+        "text": "謝過老者",
+        "effect": {
+          "text": "老者擺擺手，背著柴消失在古木間。"
+        }
+      }
+    ]
+  },
+  {
+    "id": "yc_dm_stockade",
+    "title": "木寨擄人",
+    "locations": [
+      "deep_mountain"
+    ],
+    "text": "古木圍出一座木寨，寨門外吊著三個被擄來的山民，說是交不出山貨抵債。寨裡傳出喝酒划拳的聲音，門口只有一個人在打盹。",
+    "choices": [
+      {
+        "text": "提刀闖進去",
+        "combat": "heixiong",
+        "effect": {
+          "text": "你打翻了寨裡那夥悍匪，放下吊著的山民。他們把寨裡搶來的財物分了一些給你。",
+          "stats": {
+            "good": 2,
+            "fame": 2,
+            "silver": 20
+          }
+        },
+        "fail_effect": {
+          "text": "寨裡的人比你想的多，你被打出寨門，連滾帶爬地逃進林子。",
+          "stamina": -20,
+          "stats": {
+            "silver": -20
+          }
+        }
+      },
+      {
+        "text": "從寨後掀開一根朽木鑽進去",
+        "check": {
+          "stat": "str",
+          "difficulty": 8
+        },
+        "effect": {
+          "text": "你撼動了那根半朽的寨木，從縫隙鑽進去，悄悄解開繩索，帶著山民從原路溜走。",
+          "stats": {
+            "good": 2
+          }
+        },
+        "fail_effect": {
+          "text": "寨木紋絲不動，你使力過猛扭傷了手腕。",
+          "stamina": -15
+        }
+      },
+      {
+        "text": "等守門的睡熟，摸過去割斷繩子",
+        "check": {
+          "stat": "agi",
+          "difficulty": 7
+        },
+        "effect": {
+          "text": "你貓著腰摸到寨門，三刀割斷繩子，三個山民跟著你鑽進了林子。他們事後湊了點錢謝你。",
+          "stats": {
+            "good": 1,
+            "silver": 15
+          }
+        },
+        "fail_effect": {
+          "text": "守門的忽然醒了，大喊一聲，你只好丟下山民逃走，還跑丟了錢袋。",
+          "stamina": -15,
+          "stats": {
+            "silver": -10
+          }
+        }
+      },
+      {
+        "text": "記下位置，悄悄離開",
+        "effect": {
+          "text": "你在樹幹上刻了記號，繞路離開。身後的划拳聲一直沒停。"
+        }
+      }
+    ]
+  },
+  {
+    "id": "yc_dm_cypress",
+    "title": "古柏樹洞",
+    "locations": [
+      "deep_mountain"
+    ],
+    "text": "一棵十人合抱的古柏，樹洞裡供著一塊沒有字的木牌，木牌下壓著幾卷蟲蛀的竹簡，四周擺著山果和乾肉。連山匪也不敢碰這裡的祭品。",
+    "choices": [
+      {
+        "text": "小心取出竹簡細讀",
+        "check": {
+          "stat": "wis",
+          "difficulty": 8,
+          "by": "self"
+        },
+        "effect": {
+          "text": "竹簡上是一位不知名的隱者記下的吐納之法，你讀了三遍，閉上眼還能看見那些字。",
+          "stats": {
+            "xinde": 15
+          }
+        },
+        "fail_effect": {
+          "text": "竹簡上的字古怪難辨，你讀得頭昏腦脹，還不慎扯斷了一根簡繩。",
+          "stamina": -10
+        }
+      },
+      {
+        "text": "爬上古柏樹頂，辨認出山的方向",
+        "check": {
+          "stat": "agi",
+          "difficulty": 7
+        },
+        "effect": {
+          "text": "你在樹頂看清了群山的走勢，還在一個空鷹巢裡撿到幾根硬挺的翎羽。",
+          "materials": {
+            "kuai_1": 1
+          },
+          "stats": {
+            "xinde": 5
+          }
+        },
+        "fail_effect": {
+          "text": "爬到一半，樹皮一片片剝落，你滑下來擦傷了手臂。",
+          "stamina": -15
+        }
+      },
+      {
+        "text": "合掌一拜，放下一點乾糧",
+        "effect": {
+          "text": "你把乾糧放在木牌前。轉身時，林間吹過一陣涼風。",
+          "stats": {
+            "good": 1
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "yc_jc_pilgrim",
+    "title": "遠道香客",
+    "locations": [
+      "jade_cave"
+    ],
+    "text": "一個從汝南走來的老香客跪在荒廢的正殿前，說兒子被裹進了黃巾，求老仙保佑他活著回來。供桌早已塌了，他只好把兩個饅頭擺在地上。",
+    "choices": [
+      {
+        "text": "幫他把倒塌的供桌扶正",
+        "check": {
+          "stat": "str",
+          "difficulty": 7
+        },
+        "effect": {
+          "text": "你扛起沉重的石供桌，把它重新立好。老香客擺上饅頭，對著殿中空空的神座拜了又拜。",
+          "stats": {
+            "good": 2
+          }
+        },
+        "fail_effect": {
+          "text": "供桌比你想的重，才抬起一角就壓了下來，砸得你腳背生疼。",
+          "stamina": -15
+        }
+      },
+      {
+        "text": "坐下來陪他說話，勸他親自去尋兒子",
+        "check": {
+          "stat": "wis",
+          "difficulty": 6,
+          "by": "self"
+        },
+        "effect": {
+          "text": "你告訴他，黃巾裡不少人是被裹挾的，有家人去找，往往肯放回來。老香客擦乾眼淚，說明天就動身。",
+          "stats": {
+            "good": 1,
+            "xinde": 5
+          },
+          "trend": {
+            "huangjin": -1
+          }
+        },
+        "fail_effect": {
+          "text": "你越勸他哭得越凶，最後連你自己也說不下去了。",
+          "stamina": -10
+        }
+      },
+      {
+        "text": "分他一些乾糧",
+        "effect": {
+          "text": "老香客收下乾糧，堅持把一個饅頭留給你。",
+          "stats": {
+            "good": 1
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "yc_jc_scrolls",
+    "title": "梁上道書",
+    "locations": [
+      "jade_cave"
+    ],
+    "text": "偏殿的梁上掛著一隻竹篋，被老鼠咬穿了一角，露出幾卷發黃的道書。取下來一看，講的是吐納導引，字跡古拙，有幾處還畫著人形圖。",
+    "choices": [
+      {
+        "text": "搬來斷梯取下竹篋，逐卷細讀",
+        "check": {
+          "stat": "wis",
+          "difficulty": 7,
+          "by": "self"
+        },
+        "effect": {
+          "text": "你在殘卷間讀出一套調息的次第，照著試了幾遍，氣息果然順了許多。",
+          "stats": {
+            "xinde": 15
+          }
+        },
+        "fail_effect": {
+          "text": "殘卷缺漏太多，你讀得前後不接，反倒把自己的呼吸弄亂了。",
+          "stamina": -10
+        }
+      },
+      {
+        "text": "照著人形圖站樁，站到天亮",
+        "check": {
+          "stat": "con",
+          "difficulty": 8,
+          "by": "self"
+        },
+        "effect": {
+          "text": "雙腿從痠到麻、從麻到熱，天亮時你發覺自己站得比任何時候都穩。",
+          "stats": {
+            "con": 1
+          }
+        },
+        "fail_effect": {
+          "text": "站到半夜你就撐不住了，坐倒在地，腿抖了好久才能走路。",
+          "stamina": -20
+        }
+      },
+      {
+        "text": "把竹篋放回原處",
+        "effect": {
+          "text": "你把竹篋掛回梁上，偏殿裡又只剩下老鼠窸窸窣窣的聲音。"
+        }
+      }
+    ]
+  },
+  {
+    "id": "yc_jc_bell",
+    "title": "半塌鐘樓",
+    "locations": [
+      "jade_cave"
+    ],
+    "text": "觀中的鐘樓塌了半邊，一口銅鐘斜掛在朽樑上，風一吹就嗡嗡作響。樑底下有個山裡的孩子爬上去掏鳥窩，朽樑正吱吱地往下沉。",
+    "choices": [
+      {
+        "text": "衝上去把孩子拽下來",
+        "check": {
+          "stat": "agi",
+          "difficulty": 7
+        },
+        "effect": {
+          "text": "你搶在朽樑斷裂前把孩子拽了下來，銅鐘轟然砸地，餘音在山谷裡迴盪了很久。",
+          "stats": {
+            "good": 2
+          }
+        },
+        "fail_effect": {
+          "text": "你攀上去時腳下一滑，摔進碎瓦堆裡，孩子自己慌慌張張地爬了下來。",
+          "stamina": -15
+        }
+      },
+      {
+        "text": "用肩膀頂住朽樑，喊孩子快下來",
+        "check": {
+          "stat": "con",
+          "difficulty": 7
+        },
+        "effect": {
+          "text": "朽樑壓在你肩上，你咬牙撐住，直到孩子跳下地。孩子的爹趕來，硬要請你吃一頓飯。",
+          "stats": {
+            "good": 2,
+            "fame": 1
+          }
+        },
+        "fail_effect": {
+          "text": "朽樑太沉，你撐不了多久就被壓得跪倒，孩子是被趕來的大人抱下來的。",
+          "stamina": -20
+        }
+      },
+      {
+        "text": "站在遠處喊他下來",
+        "effect": {
+          "text": "孩子嚇了一跳，抱著樑柱慢慢滑了下來，所幸沒事。"
+        }
+      }
+    ]
+  },
+  {
+    "id": "yc_jc_rain",
+    "title": "夜雨借宿",
+    "locations": [
+      "jade_cave"
+    ],
+    "text": "山雨驟至，幾個挑山貨的腳夫和一個赴洛陽應舉落第回鄉的書生，都擠進了觀中漏雨的迴廊。書生渾身濕透，燒得說起胡話。",
+    "choices": [
+      {
+        "text": "把乾衣讓給書生，守著火堆熬一夜",
+        "check": {
+          "stat": "con",
+          "difficulty": 6,
+          "by": "self"
+        },
+        "effect": {
+          "text": "你守著火堆添了一夜柴，天亮時書生的燒退了，他把一卷隨身的書簡送給你。",
+          "stats": {
+            "good": 2,
+            "xinde": 5
+          }
+        },
+        "fail_effect": {
+          "text": "你自己也淋得濕透，熬到後半夜就發起冷來，兩個人一起病倒在迴廊下。",
+          "stamina": -15
+        }
+      },
+      {
+        "text": "在觀後的雨地裡尋草藥煎湯",
+        "check": {
+          "stat": "wis",
+          "difficulty": 7,
+          "by": "self"
+        },
+        "effect": {
+          "text": "你在牆根下找到幾株退熱的草藥，煎了一碗濃湯灌下去，順手又採了一團纏在藥草上的柔絲。",
+          "stats": {
+            "good": 2
+          },
+          "materials": {
+            "rou_1": 1
+          }
+        },
+        "fail_effect": {
+          "text": "雨夜裡你認不清草葉，採回來的全是野菜，自己倒淋了一身雨。",
+          "stamina": -10
+        }
+      },
+      {
+        "text": "找個乾燥的角落睡覺",
+        "effect": {
+          "text": "雨聲很大，你半夜醒來，看見腳夫們輪流替書生換額上的濕布。"
+        }
+      }
+    ]
+  }
+]

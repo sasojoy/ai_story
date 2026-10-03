@@ -1,0 +1,1372 @@
+[
+ {
+  "id": "rn_yuedan",
+  "title": "月旦品評",
+  "locations": [
+   "runan"
+  ],
+  "text": "每月初一，汝南名士聚在里中品評鄉里人物，一句評語能定一個人半生的名聲。今日席外擠滿了投刺的年輕人，門生正一個個唱名，輪到誰才許進去答話。",
+  "choices": [
+   {
+    "text": "進席應對，聽憑品評",
+    "check": {
+     "stat": "wis",
+     "difficulty": 7,
+     "by": "self"
+    },
+    "effect": {
+     "text": "你答得不卑不亢，席上一位老名士點頭，說你「器識可觀」。這四個字當天就在里巷間傳開了。",
+     "stats": {
+      "fame": 2
+     }
+    },
+    "fail_effect": {
+     "text": "你一緊張答非所問，席間有人掩口而笑，評語只得「浮躁」二字。",
+     "stats": {
+      "fame": -1
+     }
+    }
+   },
+   {
+    "text": "替門生搬酒甕、在席外站一整天",
+    "check": {
+     "stat": "con",
+     "difficulty": 5
+    },
+    "effect": {
+     "text": "你從清晨站到日落，耳朵沒閒著，席間議論的天下事聽了一肚子。",
+     "stats": {
+      "xinde": 6
+     },
+     "stamina": -10
+    },
+    "fail_effect": {
+     "text": "日頭毒，你站到午後就頭暈眼花，被人扶到樹下歇著，什麼也沒聽到。",
+     "stamina": -10
+    }
+   },
+   {
+    "text": "遠遠聽一會兒就走",
+    "effect": {
+     "text": "隔著人牆只聽見幾句「某某才堪治郡」，大家紛紛記在心上。",
+     "stats": {
+      "xinde": 2
+     }
+    }
+   }
+  ]
+ },
+ {
+  "id": "rn_yuan_slips",
+  "title": "袁府簡牘",
+  "locations": [
+   "runan"
+  ],
+  "text": "袁氏府門前車馬不斷，四世三公的門第，連看門的蒼頭都比縣吏體面。府裡一位老管事要找人把幾擔舊簡牘挑去城東別業，嫌家奴手腳粗笨，在門口挑人。",
+  "choices": [
+   {
+    "text": "挑起擔子，一口氣走到城東",
+    "check": {
+     "stat": "con",
+     "difficulty": 6
+    },
+    "effect": {
+     "text": "一擔竹簡沉得像石頭，你一路沒歇腳。老管事點清了數目，多賞了你一串錢。",
+     "stats": {
+      "silver": 20
+     },
+     "stamina": -10
+    },
+    "fail_effect": {
+     "text": "走到半路肩膀磨破了皮，擔子只得放下歇了三回，老管事嫌慢，工錢打了對折。",
+     "stats": {
+      "silver": 5
+     },
+     "stamina": -15
+    }
+   },
+   {
+    "text": "幫他把簡牘的篇目重新編次",
+    "check": {
+     "stat": "wis",
+     "difficulty": 5
+    },
+    "effect": {
+     "text": "你把散亂的篇目理得井井有條。老管事對你另眼相看，說府裡的門客也未必做得這麼細。",
+     "stats": {
+      "fame": 1,
+      "xinde": 5
+     }
+    },
+    "fail_effect": {
+     "text": "你排了半天，把兩卷家譜混在一起，老管事板著臉請你出去。",
+     "stats": {
+      "fame": -1
+     }
+    }
+   },
+   {
+    "text": "不湊這個熱鬧",
+    "effect": {
+     "text": "你看著一群人爭著擠到老管事面前，搖搖頭走開了。"
+    }
+   }
+  ]
+ },
+ {
+  "id": "rn_stele_quarrel",
+  "title": "碑前爭地",
+  "locations": [
+   "runan"
+  ],
+  "text": "城外大族為先人立碑頌德，碑址卻壓到鄰家佃戶的田埂。兩邊佃戶推搡起來，剛運到的石碑從車上滑下，斜插在泥地裡，碑上還寫著「清德」兩個大字。",
+  "choices": [
+   {
+    "text": "一個人把石碑扶正",
+    "check": {
+     "stat": "str",
+     "difficulty": 7
+    },
+    "effect": {
+     "text": "你蹲身扛住碑腳，硬是把石碑推回車上。兩邊的人都看傻了，吵也吵不下去了。",
+     "stats": {
+      "fame": 1,
+      "good": 1
+     }
+    },
+    "fail_effect": {
+     "text": "石碑紋絲不動，你閃了腰，被兩邊的人一起笑話。",
+     "stamina": -15
+    }
+   },
+   {
+    "text": "把兩邊帶頭的人拉開說理",
+    "check": {
+     "stat": "wis",
+     "difficulty": 5
+    },
+    "effect": {
+     "text": "你讓碑址往後挪三步，兩家都有臺階下。帶頭的佃戶塞給你一把炒豆，說你比縣裡的嗇夫公道。",
+     "stats": {
+      "good": 1
+     }
+    },
+    "fail_effect": {
+     "text": "兩邊都嫌你偏袒對方，一把把你推進了田溝。",
+     "stats": {
+      "fame": -1
+     },
+     "stamina": -5
+    }
+   },
+   {
+    "text": "看完熱鬧就走",
+    "effect": {
+     "text": "吵到最後，大族的家奴來了一隊人，佃戶們只好退開。碑立在了田埂上。"
+    }
+   }
+  ]
+ },
+ {
+  "id": "rn_ac_qingyi",
+  "title": "黨錮初解",
+  "locations": [
+   "runan_academy"
+  ],
+  "text": "朝廷為了對付黃巾，解除了關了十幾年的黨錮。學宮講堂裡擠得水洩不通，一派說該乘勢清算宦官，一派說兵荒馬亂先求安定，吵得面紅耳赤。",
+  "choices": [
+   {
+    "text": "起身陳說自己的看法",
+    "check": {
+     "stat": "wis",
+     "difficulty": 7,
+     "by": "self"
+    },
+    "effect": {
+     "text": "你引經據典說了一番，兩派都有人點頭。散會後還有士人追出來，跟你約日再談。",
+     "stats": {
+      "fame": 2,
+      "xinde": 6
+     }
+    },
+    "fail_effect": {
+     "text": "你話說到一半就被人駁倒，堂上一片噓聲，你訕訕坐下。",
+     "stats": {
+      "fame": -1
+     }
+    }
+   },
+   {
+    "text": "連夜把兩派的議論抄錄下來",
+    "check": {
+     "stat": "con",
+     "difficulty": 5,
+     "by": "self"
+    },
+    "effect": {
+     "text": "你點著油燈抄到雞鳴，把一天的議論記得一字不漏，抄著抄著也想通了不少事。",
+     "stats": {
+      "xinde": 10
+     },
+     "stamina": -10
+    },
+    "fail_effect": {
+     "text": "抄到三更你就趴在案上睡著了，燈油打翻，半卷都汙了。",
+     "stamina": -10
+    }
+   },
+   {
+    "text": "坐在角落聽",
+    "effect": {
+     "text": "聽到後來，你發現兩派爭的其實是誰來當這個太守。",
+     "stats": {
+      "xinde": 3
+     }
+    }
+   }
+  ]
+ },
+ {
+  "id": "rn_ac_leak",
+  "title": "藏書漏雨",
+  "locations": [
+   "runan_academy"
+  ],
+  "text": "一夜大雨，學宮藏書閣的屋瓦被風掀開一角，雨水順著樑柱往下淌。看守的老書吏急得直跺腳，架上的竹簡、帛書要是泡了水，就再也補不回來了。",
+  "choices": [
+   {
+    "text": "攀上屋頂把瓦補好",
+    "check": {
+     "stat": "agi",
+     "difficulty": 5
+    },
+    "effect": {
+     "text": "你踩著濕滑的屋脊把瓦片一片片壓回去，雨水不漏了。老書吏請你喝了碗熱湯，還塞給你一些錢。",
+     "stats": {
+      "good": 1,
+      "silver": 10
+     }
+    },
+    "fail_effect": {
+     "text": "你腳下一滑從屋簷摔下，跌進泥水裡，渾身是傷。",
+     "stamina": -15
+    }
+   },
+   {
+    "text": "把書箱一箱箱扛到乾處",
+    "check": {
+     "stat": "str",
+     "difficulty": 6
+    },
+    "effect": {
+     "text": "你來回搬了二十幾趟，一箱也沒泡壞。書吏讓你隨意借閱一卷兵書作謝。",
+     "stats": {
+      "good": 1,
+      "xinde": 8
+     },
+     "stamina": -10
+    },
+    "fail_effect": {
+     "text": "一箱竹簡太沉，你手一鬆，編繩斷了，竹簡散了一地泡在水裡。老書吏心疼得說不出話。",
+     "stats": {
+      "good": -1
+     },
+     "stamina": -10
+    }
+   },
+   {
+    "text": "幫著拿盆接水",
+    "effect": {
+     "text": "你忙了一夜，接滿了七八個盆，總算保住了靠牆的一架書。",
+     "stamina": -5
+    }
+   }
+  ]
+ },
+ {
+  "id": "rn_hill_diggers",
+  "title": "舊壘掘土",
+  "locations": [
+   "hilltop_wilds"
+  ],
+  "text": "荒丘上的前朝營壘只剩一道道土埂。幾個衣衫破爛的漢子打著火把在壕溝裡挖土，挖出來的盡是鏽爛的箭鏃、斷戟，一見有人來，紛紛握緊了鋤頭。",
+  "choices": [
+   {
+    "text": "下壕溝幫他們一起挖",
+    "check": {
+     "stat": "con",
+     "difficulty": 6
+    },
+    "effect": {
+     "text": "你挖到後半夜，雙手磨出血泡。漢子們分了你幾塊還能回爐的鐵料，說這些拿去鐵匠鋪能換口糧。",
+     "stamina": -10,
+     "materials": {
+      "gang_1": 1
+     }
+    },
+    "fail_effect": {
+     "text": "壕溝塌了一角，土埋到你胸口，好不容易才爬出來。",
+     "stamina": -15
+    }
+   },
+   {
+    "text": "看看夯土的層次，指點他們往哪挖",
+    "check": {
+     "stat": "wis",
+     "difficulty": 7
+    },
+    "effect": {
+     "text": "你看出營壘的兵器庫該在背風的一側。他們照著挖，果然掘出一捆還算完好的矛頭，硬分了你一份錢。",
+     "stats": {
+      "silver": 15
+     }
+    },
+    "fail_effect": {
+     "text": "你指的地方挖下去全是碎陶片，漢子們罵罵咧咧地把你趕走了。",
+     "stats": {
+      "fame": -1
+     }
+    }
+   },
+   {
+    "text": "他們是流寇，上前喝問",
+    "combat": "dipi",
+    "effect": {
+     "text": "漢子們丟下鋤頭四散，原來是剛被打散的流寇在找兵器。坑邊留下一堆鐵料。",
+     "stats": {
+      "good": 1
+     },
+     "materials": {
+      "gang_1": 1
+     }
+    },
+    "fail_effect": {
+     "text": "對方人多，一陣鋤頭亂砸，你只得退下荒丘。",
+     "stats": {
+      "silver": -10
+     },
+     "stamina": -15
+    }
+   }
+  ]
+ },
+ {
+  "id": "rn_hill_beacon",
+  "title": "烽燧殘臺",
+  "locations": [
+   "hilltop_wilds"
+  ],
+  "text": "荒丘頂上立著一座半塌的烽燧臺，夯土牆被雨水沖出一道道裂縫。據說站上臺頂，汝南四野的炊煙和道路都看得清清楚楚，只是臺階早就塌了。",
+  "choices": [
+   {
+    "text": "沿著裂縫攀上臺頂",
+    "check": {
+     "stat": "agi",
+     "difficulty": 7
+    },
+    "effect": {
+     "text": "你站在臺頂，看見東南幾股煙柱正往同一個方向移動，那是黃巾散部在聚攏。你把方向記牢，下去報給了路過的亭長。",
+     "stats": {
+      "fame": 1,
+      "xinde": 5
+     },
+     "trend": {
+      "huangjin": -1
+     }
+    },
+    "fail_effect": {
+     "text": "攀到一半，土塊崩落，你連人帶土滑了下來。",
+     "stamina": -15
+    }
+   },
+   {
+    "text": "搬開堵住臺門的亂石",
+    "check": {
+     "stat": "str",
+     "difficulty": 6
+    },
+    "effect": {
+     "text": "亂石後面是當年守卒的小屋，牆角還壓著一塊沉甸甸的黑石，摸上去冰涼。",
+     "stamina": -5,
+     "materials": {
+      "man_1": 1
+     }
+    },
+    "fail_effect": {
+     "text": "石頭太沉，你搬得腰痠背痛，門還是只露出一條縫。",
+     "stamina": -10
+    }
+   },
+   {
+    "text": "在臺下歇歇腳",
+    "effect": {
+     "text": "風從臺頂呼嘯而過，你坐在牆根下，看著遠處汝南城的影子發了一會兒呆。"
+    }
+   }
+  ]
+ },
+ {
+  "id": "rn_hill_deserter",
+  "title": "壕中逃卒",
+  "locations": [
+   "hilltop_wilds"
+  ],
+  "text": "舊營壕裡蜷著一個郡兵，腿上插著半截箭，嘴唇乾裂。他說隊伍在潁川被黃巾沖散，他不敢回營，怕被當成逃兵斬首，只求一口水。",
+  "choices": [
+   {
+    "text": "替他拔箭敷藥",
+    "check": {
+     "stat": "wis",
+     "difficulty": 6,
+     "by": "self"
+    },
+    "effect": {
+     "text": "你按住傷口，一下把箭頭剜了出來，又嚼了草藥敷上。他緩過氣來，拉著你的手說來世做牛做馬。",
+     "stats": {
+      "good": 2
+     }
+    },
+    "fail_effect": {
+     "text": "你手一抖，傷口血流不止，他痛得昏了過去。你守了他半夜，他才醒轉。",
+     "stamina": -10
+    }
+   },
+   {
+    "text": "背他到汝南城外的鄉亭",
+    "check": {
+     "stat": "con",
+     "difficulty": 7
+    },
+    "effect": {
+     "text": "你背著他走了二十里，鄉亭的亭長認得他，答應替他說情。",
+     "stats": {
+      "good": 2,
+      "fame": 1
+     },
+     "stamina": -15
+    },
+    "fail_effect": {
+     "text": "走到一半你實在背不動了，只能把他放在路邊的茅棚裡，自己回頭找人。",
+     "stamina": -15
+    }
+   },
+   {
+    "text": "給他一口水，順手翻翻他的行囊",
+    "effect": {
+     "text": "你餵他喝了水，順手摸走了他行囊裡的幾串錢。他看見了，沒力氣說話。",
+     "stats": {
+      "silver": 15,
+      "evil": 1
+     }
+    }
+   }
+  ]
+ },
+ {
+  "id": "rn_mkt_rice",
+  "title": "米價一日三漲",
+  "locations": [
+   "runan_market"
+  ],
+  "text": "外地來的米商在集市口開了一家米鋪，說是潁川打仗、糧道斷了，米價一天漲三回。買米的百姓擠在鋪前叫罵，夥計還是不緊不慢地用斗量米。",
+  "choices": [
+   {
+    "text": "盯著夥計量米，看他的斗有沒有鬼",
+    "check": {
+     "stat": "wis",
+     "difficulty": 6
+    },
+    "effect": {
+     "text": "你一把搶過斗來比給大家看，斗底墊高了一指。百姓一擁而上，米商只好按平價賣了。",
+     "stats": {
+      "good": 2,
+      "fame": 1
+     }
+    },
+    "fail_effect": {
+     "text": "你看不出破綻，反被夥計指著鼻子罵擾亂市集，被市吏趕了出來。",
+     "stats": {
+      "fame": -1
+     }
+    }
+   },
+   {
+    "text": "擠進人群護住被推倒的老婦",
+    "check": {
+     "stat": "str",
+     "difficulty": 5
+    },
+    "effect": {
+     "text": "你用肩膀頂開人潮，把老婦扶到牆邊。她的米袋破了，你幫她把米一把把捧回去。",
+     "stats": {
+      "good": 1
+     }
+    },
+    "fail_effect": {
+     "text": "人潮太猛，你也被擠倒，身上被踩了好幾腳。",
+     "stamina": -10
+    }
+   },
+   {
+    "text": "跟著大家買一斗米",
+    "effect": {
+     "text": "你咬牙付了錢，扛著一斗米走出人群。",
+     "stats": {
+      "silver": -10
+     }
+    }
+   }
+  ]
+ },
+ {
+  "id": "rn_mkt_silk",
+  "title": "絹布裝車",
+  "locations": [
+   "runan_market"
+  ],
+  "text": "布商的十幾車絹布要趕在天黑前裝好，運往陳國。車夫只來了一半，布商站在車轅上喊：「誰幫著扛，一匹一文！」旁邊有個瘦小子一直盯著車尾。",
+  "choices": [
+   {
+    "text": "捲起袖子扛到天黑",
+    "check": {
+     "stat": "con",
+     "difficulty": 6
+    },
+    "effect": {
+     "text": "你扛了上百匹，肩膀腫得像饅頭。布商點清了數，給的錢比說好的還多。",
+     "stats": {
+      "silver": 25
+     },
+     "stamina": -15
+    },
+    "fail_effect": {
+     "text": "扛到一半腰就直不起來了，布商只付了你一半的工錢。",
+     "stats": {
+      "silver": 8
+     },
+     "stamina": -15
+    }
+   },
+   {
+    "text": "盯住那個瘦小子",
+    "check": {
+     "stat": "agi",
+     "difficulty": 5
+    },
+    "effect": {
+     "text": "瘦小子剛抽出一匹絹要跑，你一個箭步追上按住。布商大喜，賞你半匹料子，你轉手賣了。",
+     "stats": {
+      "silver": 15,
+      "fame": 1
+     }
+    },
+    "fail_effect": {
+     "text": "你追進巷子，他翻牆跑了，你還撞翻了一個賣陶罐的攤子，賠了錢。",
+     "stats": {
+      "silver": -10
+     }
+    }
+   },
+   {
+    "text": "看著別人扛",
+    "effect": {
+     "text": "天黑前車總算裝完了，布商罵罵咧咧地上路。"
+    }
+   }
+  ]
+ },
+ {
+  "id": "rn_mkt_jiaodi",
+  "title": "市中角抵",
+  "locations": [
+   "runan_market"
+  ],
+  "text": "集市空地上圍了一圈人，兩個赤膊漢子在角抵，旁邊有人坐莊收注。贏了三場的大個子拍著胸口叫陣：「有誰敢下場？贏我一場，莊上給三十錢！」",
+  "choices": [
+   {
+    "text": "脫了外衣下場",
+    "check": {
+     "stat": "str",
+     "difficulty": 7
+    },
+    "effect": {
+     "text": "你抱住他的腰，一聲大喝把他摔出圈外。四周一片叫好，莊家只得掏錢。",
+     "stats": {
+      "silver": 30,
+      "fame": 1
+     }
+    },
+    "fail_effect": {
+     "text": "大個子把你壓在地上動彈不得，你付了下場的錢，還被笑了一個下午。",
+     "stats": {
+      "silver": -15
+     },
+     "stamina": -10
+    }
+   },
+   {
+    "text": "看出莊家和大個子是一夥的",
+    "check": {
+     "stat": "wis",
+     "difficulty": 5
+    },
+    "effect": {
+     "text": "你看出每回賭注一大，大個子就故意輸。你跟著反著押，贏了一小筆就走。",
+     "stats": {
+      "silver": 15
+     }
+    },
+    "fail_effect": {
+     "text": "你自以為看穿了，反著押了一注，結果大個子這回真贏了。",
+     "stats": {
+      "silver": -15
+     }
+    }
+   },
+   {
+    "text": "看一會兒熱鬧",
+    "effect": {
+     "text": "你看了好幾場，大個子始終沒輸，圍觀的人慢慢散了。"
+    }
+   }
+  ]
+ },
+ {
+  "id": "rn_qiao_archery",
+  "title": "門客較射",
+  "locations": [
+   "qiao_county"
+  ],
+  "text": "曹家門前的空地上，幾個門客正在比射，說誰能連中三箭，就引見給管事的曹氏族人。靶子立在八十步外，風從渦水那邊吹來，箭總是偏。",
+  "choices": [
+   {
+    "text": "借一張弓，連射三箭",
+    "check": {
+     "stat": "agi",
+     "difficulty": 7
+    },
+    "effect": {
+     "text": "你算準了風，三箭都釘在靶心。門客們紛紛拱手，說要把你的名字報上去。",
+     "stats": {
+      "fame": 2
+     }
+    },
+    "fail_effect": {
+     "text": "三箭有兩箭飛出了靶外，旁人哄笑，說譙縣的風專吹外鄉人。",
+     "stats": {
+      "fame": -1
+     }
+    }
+   },
+   {
+    "text": "替他們把靶子扛到百步之外",
+    "check": {
+     "stat": "str",
+     "difficulty": 5
+    },
+    "effect": {
+     "text": "你一手一個扛著靶子走到百步外插好，門客們嘖嘖稱奇，請你喝了一壺酒。",
+     "stats": {
+      "silver": 5,
+      "fame": 1
+     }
+    },
+    "fail_effect": {
+     "text": "靶架太沉，你扛到一半就倒了，靶子滾進了水溝。",
+     "stamina": -10
+    }
+   },
+   {
+    "text": "在一旁看",
+    "effect": {
+     "text": "比到日落，沒有一個人連中三箭，門客們悻悻散了。"
+    }
+   }
+  ]
+ },
+ {
+  "id": "rn_qiao_guoshui",
+  "title": "渦水救童",
+  "locations": [
+   "qiao_county"
+  ],
+  "text": "譙縣城外的渦水正漲，一個放鵝的孩子追著鵝下了水，一個浪頭打過來就不見了。岸上的婦人尖聲呼救，水面上只看得見一根竹竿在打轉。",
+  "choices": [
+   {
+    "text": "跳下水去撈人",
+    "check": {
+     "stat": "con",
+     "difficulty": 7
+    },
+    "effect": {
+     "text": "河水冰涼刺骨，你憋著氣潛下去，抓住孩子的衣領把他拖上了岸。他吐了幾口水，哇地哭出聲來。",
+     "stats": {
+      "good": 2,
+      "fame": 1
+     },
+     "stamina": -10
+    },
+    "fail_effect": {
+     "text": "你被暗流捲出十幾丈遠，嗆了好幾口水才爬上岸。孩子被下游的漁夫撈起了。",
+     "stamina": -20
+    }
+   },
+   {
+    "text": "沿岸奔跑，拋繩過去",
+    "check": {
+     "stat": "agi",
+     "difficulty": 5
+    },
+    "effect": {
+     "text": "你追著竹竿跑了一段，看準時機把繩子拋過去，孩子死死抓住，被你拉了回來。",
+     "stats": {
+      "good": 1
+     }
+    },
+    "fail_effect": {
+     "text": "繩子拋了幾次都落空，等你回頭，孩子已經被漁夫救起了。",
+     "stamina": -5
+    }
+   },
+   {
+    "text": "大聲喊人來幫忙",
+    "effect": {
+     "text": "你一喊，碼頭上的船夫划著小船趕來，把孩子撈了上去。"
+    }
+   }
+  ]
+ },
+ {
+  "id": "rn_qiao_post",
+  "title": "驛馬倒斃",
+  "locations": [
+   "qiao_county"
+  ],
+  "text": "城外官道上，一匹驛馬口吐白沫倒在路邊，驛卒急得團團轉。他背的郵袋裡有曹家在京中為官的子弟寄回的家書，今日要是送不到，他要挨板子。",
+  "choices": [
+   {
+    "text": "扛起郵袋，替他送進城",
+    "check": {
+     "stat": "str",
+     "difficulty": 6
+    },
+    "effect": {
+     "text": "郵袋裡全是竹簡，沉得很。你一路扛到曹家門口，門房接了信，給了你一串賞錢。",
+     "stats": {
+      "silver": 15,
+      "fame": 1
+     },
+     "stamina": -10
+    },
+    "fail_effect": {
+     "text": "你扛到半路就累得走不動，只好陪著驛卒慢慢挪，天黑才到，驛卒還是挨了罵。",
+     "stamina": -15
+    }
+   },
+   {
+    "text": "看看馬是怎麼了",
+    "check": {
+     "stat": "wis",
+     "difficulty": 5
+    },
+    "effect": {
+     "text": "你看出馬是吃了路邊的毒草，灌了些鹽水和泥漿，馬竟慢慢站了起來。驛卒千恩萬謝。",
+     "stats": {
+      "good": 1,
+      "xinde": 5
+     }
+    },
+    "fail_effect": {
+     "text": "你忙了半天，馬還是斷了氣。",
+     "stamina": -5
+    }
+   },
+   {
+    "text": "指給他城門的方向",
+    "effect": {
+     "text": "驛卒謝過你，自己背著郵袋一瘸一拐地往城裡走。"
+    }
+   }
+  ]
+ },
+ {
+  "id": "rn_cao_drill",
+  "title": "護院考校",
+  "locations": [
+   "cao_manor"
+  ],
+  "text": "莊院的場院裡，護院教頭正在考校新來的家丁，木棍掄得呼呼生風。他瞧見你在牆外張望，招手道：「外面那位，有膽子進來接我三棍嗎？點到為止。」",
+  "choices": [
+   {
+    "text": "站定了硬接三棍",
+    "check": {
+     "stat": "str",
+     "difficulty": 7
+    },
+    "effect": {
+     "text": "三棍砸在你架起的木棒上，震得虎口發麻，你一步沒退。教頭哈哈大笑，把幾個練力氣的法子教給了你。",
+     "stats": {
+      "xinde": 8,
+      "fame": 1
+     }
+    },
+    "fail_effect": {
+     "text": "第二棍就把你的棒子砸飛了，教頭搖搖頭，說回去再練幾年。",
+     "stats": {
+      "fame": -1
+     },
+     "stamina": -15
+    }
+   },
+   {
+    "text": "繞著他遊走閃避",
+    "check": {
+     "stat": "agi",
+     "difficulty": 6
+    },
+    "effect": {
+     "text": "你左閃右躲，三棍都落了空。家丁們看得直叫好，教頭也拱手說你腳下乾淨。",
+     "stats": {
+      "xinde": 6
+     }
+    },
+    "fail_effect": {
+     "text": "你閃了兩棍，第三棍正掃在你腿上，一瘸一拐地出了莊院。",
+     "stamina": -10
+    }
+   },
+   {
+    "text": "拱手說不敢",
+    "effect": {
+     "text": "教頭也不勉強，轉身又去吼那些家丁了。"
+    }
+   }
+  ]
+ },
+ {
+  "id": "rn_cao_night",
+  "title": "夜巡莊牆",
+  "locations": [
+   "cao_manor"
+  ],
+  "text": "近來莊外常有黃巾探子窺伺，莊上入夜要加人巡牆。你跟著兩個家丁提燈巡到後院，牆頭上忽然有個黑影一晃，翻到了外面的高粱地裡。",
+  "choices": [
+   {
+    "text": "翻牆追進高粱地",
+    "check": {
+     "stat": "agi",
+     "difficulty": 7
+    },
+    "effect": {
+     "text": "你在高粱地裡追上那人，搜出一條寫著暗號的黃布。管事連夜派人去報了縣尉。",
+     "stats": {
+      "fame": 1
+     },
+     "trend": {
+      "huangjin": -1
+     }
+    },
+    "fail_effect": {
+     "text": "高粱葉子割得滿臉是血，那人早就沒影了。",
+     "stamina": -10
+    }
+   },
+   {
+    "text": "留在牆下細看他的腳印",
+    "check": {
+     "stat": "wis",
+     "difficulty": 6
+    },
+    "effect": {
+     "text": "腳印一深一淺，是個跛子，還沾著南邊黃泥。管事順著這條線，第二天就把莊裡通風報信的佃戶揪了出來。",
+     "stats": {
+      "xinde": 5,
+      "silver": 10
+     }
+    },
+    "fail_effect": {
+     "text": "你蹲著看了半天，腳印被家丁踩亂了，什麼也看不出來。"
+    }
+   },
+   {
+    "text": "吹哨叫醒莊丁",
+    "effect": {
+     "text": "莊上燈火通明了大半夜，那人沒再出現。",
+     "stamina": -5
+    }
+   }
+  ]
+ },
+ {
+  "id": "rn_cao_feast",
+  "title": "莊上鬥酒",
+  "locations": [
+   "cao_manor"
+  ],
+  "text": "曹家宴請譙縣幾家豪強，商議合力築塢自保。酒過三巡，一個滿臉虯鬚的塢主舉著大碗嚷道：「誰能陪我喝乾這一罈，我塢上的部曲就聽他調派一天！」",
+  "choices": [
+   {
+    "text": "陪他一碗一碗喝到底",
+    "check": {
+     "stat": "con",
+     "difficulty": 7,
+     "by": "self"
+    },
+    "effect": {
+     "text": "一罈烈酒見了底，虯鬚塢主先趴下了。滿堂豪強大笑，第二天全譙縣都在說這件事。",
+     "stats": {
+      "fame": 2
+     },
+     "rumor": "曹家莊上，{name}一個人喝倒了譙縣最能喝的塢主。"
+    },
+    "fail_effect": {
+     "text": "喝到第五碗你就吐了一地，被家丁扶到廂房睡到隔天中午。",
+     "stats": {
+      "fame": -1
+     },
+     "stamina": -15
+    }
+   },
+   {
+    "text": "在席間替兩家塢主調停分攤",
+    "check": {
+     "stat": "wis",
+     "difficulty": 6
+    },
+    "effect": {
+     "text": "你替幾家算清了築塢各出多少人、多少糧，曹家管事很滿意，封了一份禮給你。",
+     "stats": {
+      "silver": 20
+     }
+    },
+    "fail_effect": {
+     "text": "你一開口就得罪了兩家，席上氣氛僵住，管事暗暗瞪了你一眼。",
+     "stats": {
+      "fame": -1
+     }
+    }
+   },
+   {
+    "text": "只是陪著喝兩碗",
+    "effect": {
+     "text": "你淺嘗兩碗，聽滿座豪強大談黃巾什麼時候會打到譙縣。"
+    }
+   }
+  ]
+ },
+ {
+  "id": "rn_cao_rent",
+  "title": "秋後收租",
+  "locations": [
+   "cao_manor"
+  ],
+  "text": "莊上的管事帶著家丁挨家收租，佃戶們跪在穀場上，說今年旱了一夏，交了租就熬不過冬。管事拿著帳冊冷笑：「去年也是這套說辭。」",
+  "choices": [
+   {
+    "text": "替佃戶算一筆帳，勸管事減租",
+    "check": {
+     "stat": "wis",
+     "difficulty": 6
+    },
+    "effect": {
+     "text": "你算給管事看，逼死了佃戶明年就沒人種地。管事想了想，減了兩成。佃戶們跪著向你道謝。",
+     "stats": {
+      "good": 2
+     }
+    },
+    "fail_effect": {
+     "text": "管事聽都不聽，叫家丁把你請了出去。",
+     "stats": {
+      "fame": -1
+     }
+    }
+   },
+   {
+    "text": "幫著把交上來的糧扛進倉",
+    "check": {
+     "stat": "str",
+     "difficulty": 5
+    },
+    "effect": {
+     "text": "你扛了一下午糧袋，管事給了你一份工錢，佃戶們看你的眼神卻有些冷。",
+     "stats": {
+      "silver": 15
+     },
+     "stamina": -10
+    },
+    "fail_effect": {
+     "text": "糧袋破了，穀子撒了一地，管事要你賠。",
+     "stats": {
+      "silver": -10
+     },
+     "stamina": -10
+    }
+   },
+   {
+    "text": "幫管事吆喝著逼租",
+    "effect": {
+     "text": "租是收齊了，夜裡卻聽說有兩戶佃戶收拾包袱，往黃巾那邊投去了。",
+     "stats": {
+      "silver": 25,
+      "evil": 2
+     },
+     "trend": {
+      "huangjin": 1
+     }
+    }
+   }
+  ]
+ },
+ {
+  "id": "rn_wild_cellar",
+  "title": "地窖裡的人",
+  "locations": [
+   "runan_wilds"
+  ],
+  "text": "一個剛被黃巾散部劫過的村子，房子燒得只剩焦黑的梁柱。你聽見一間塌屋底下有壓低的哭聲，掀開草蓆，地窖裡擠著十幾個婦孺，見了你嚇得直往裡縮。",
+  "choices": [
+   {
+    "text": "把受傷的人一個個背出來，送往汝南",
+    "check": {
+     "stat": "con",
+     "difficulty": 7,
+     "by": "self"
+    },
+    "effect": {
+     "text": "你來回背了好幾趟，雙腿像灌了鉛。汝南城外的鄉亭收留了他們。",
+     "stats": {
+      "good": 2
+     },
+     "stamina": -15
+    },
+    "fail_effect": {
+     "text": "背到第三個人你就撐不住了，只好讓他們先在原地等著。",
+     "stamina": -15
+    }
+   },
+   {
+    "text": "好言安撫，問清散部往哪去了",
+    "check": {
+     "stat": "wis",
+     "difficulty": 6
+    },
+    "effect": {
+     "text": "一個老婦告訴你，那夥人往北邊的河灣去了，帶著搶來的牛。你把消息報給了巡路的鄉勇。",
+     "stats": {
+      "good": 1
+     },
+     "trend": {
+      "huangjin": -1
+     }
+    },
+    "fail_effect": {
+     "text": "他們嚇得一句話也不肯說，你只好留下一點乾糧離開。",
+     "stats": {
+      "silver": -5
+     }
+    }
+   },
+   {
+    "text": "追上劫掠的那夥嘍囉",
+    "combat": "louluo",
+    "effect": {
+     "text": "你在河灣追上了那夥嘍囉，把搶走的牛趕了回來。村人哭著向你叩頭。",
+     "stats": {
+      "good": 2,
+      "fame": 1
+     },
+     "trend": {
+      "huangjin": -1
+     }
+    },
+    "fail_effect": {
+     "text": "嘍囉人多，你被打得退回村子，身上掛了彩。",
+     "stats": {
+      "silver": -10
+     },
+     "stamina": -15
+    }
+   }
+  ]
+ },
+ {
+  "id": "rn_wild_signs",
+  "title": "黃巾暗記",
+  "locations": [
+   "runan_wilds"
+  ],
+  "text": "荒野路口的老槐樹上綁著一條褪色黃布，樹下用石子排成三長一短的記號，旁邊還插著一根削尖的竹枝，指向東南。這是黃巾散部互通消息的暗記。",
+  "choices": [
+   {
+    "text": "蹲下來推敲這些記號",
+    "check": {
+     "stat": "wis",
+     "difficulty": 7,
+     "by": "self"
+    },
+    "effect": {
+     "text": "你想通了：三長一短是三天後聚眾，竹枝指的是集合地點。你把石子打亂，又把消息傳給了鄉亭。",
+     "stats": {
+      "xinde": 6
+     },
+     "trend": {
+      "huangjin": -2
+     }
+    },
+    "fail_effect": {
+     "text": "你猜不透其中的意思，反倒被一個路過的樵夫盯著看了半天，心裡發毛。",
+     "stamina": -5
+    }
+   },
+   {
+    "text": "躲在樹後，等送信的人來",
+    "check": {
+     "stat": "con",
+     "difficulty": 6
+    },
+    "effect": {
+     "text": "你在草叢裡趴了一整夜，天亮時果然來了一個背簍的漢子，換了記號就走。你記下了他的模樣。",
+     "stats": {
+      "xinde": 5,
+      "fame": 1
+     },
+     "trend": {
+      "huangjin": -1
+     }
+    },
+    "fail_effect": {
+     "text": "夜裡露水又冷又重，你凍得直打哆嗦，天亮前就撐不住走了。",
+     "stamina": -15
+    }
+   },
+   {
+    "text": "順著竹枝找過去",
+    "combat": "shuikou",
+    "effect": {
+     "text": "竹枝指向的窪地裡藏著一隊黃巾別部，你殺進去打散了他們，沒讓他們聚成。",
+     "stats": {
+      "fame": 2
+     },
+     "trend": {
+      "huangjin": -2
+     }
+    },
+    "fail_effect": {
+     "text": "窪地裡人比你想的多得多，你被追出好幾里才甩掉。",
+     "stats": {
+      "silver": -15
+     },
+     "stamina": -20
+    }
+   }
+  ]
+ },
+ {
+  "id": "rn_camp_fushui",
+  "title": "營外符水",
+  "locations": [
+   "huangjin_camp"
+  ],
+  "text": "營寨柵門外排著長長一列病人，頭纏黃巾的道人端著陶碗，碗裡是燒過符紙的水，喝之前要先叩頭認罪。排在你前面的老漢咳得直不起腰。",
+  "choices": [
+   {
+    "text": "幫著把病人抬進營邊的草棚，熬一夜",
+    "check": {
+     "stat": "con",
+     "difficulty": 7,
+     "by": "self"
+    },
+    "effect": {
+     "text": "你守著病人熬到天亮，替他們餵水擦身。道人拍拍你的肩，說黃天有眼。",
+     "stats": {
+      "good": 2
+     },
+     "stamina": -15,
+     "trend": {
+      "huangjin": 1
+     }
+    },
+    "fail_effect": {
+     "text": "熬到半夜你自己也發起燒來，被人抬到草棚角落躺著。",
+     "stamina": -15
+    }
+   },
+   {
+    "text": "嘗一口符水，看看裡面是什麼",
+    "check": {
+     "stat": "wis",
+     "difficulty": 8,
+     "by": "self"
+    },
+    "effect": {
+     "text": "你嘗出不過是灶灰兌井水，可病人喝了心裡就踏實了幾分。你忽然明白了這道為什麼能聚起幾十萬人。",
+     "stats": {
+      "xinde": 12
+     }
+    },
+    "fail_effect": {
+     "text": "你皺著眉吐掉符水，被旁邊的信徒看見，一群人圍著罵你褻瀆黃天。",
+     "stats": {
+      "fame": -1
+     },
+     "stamina": -10
+    }
+   },
+   {
+    "text": "扶那老漢排到前頭",
+    "effect": {
+     "text": "老漢喝了符水，向你連連道謝。道人看你一眼，沒說什麼。",
+     "stats": {
+      "good": 1
+     }
+    }
+   }
+  ]
+ },
+ {
+  "id": "rn_camp_palisade",
+  "title": "夜探營柵",
+  "locations": [
+   "huangjin_camp"
+  ],
+  "text": "營寨的柵欄比人高出一倍，削尖的木頭上掛著風乾的黃布條。入夜後山谷裡起了霧，望樓上的火把一明一滅，巡夜的兵卒換班時總有一陣空隙。",
+  "choices": [
+   {
+    "text": "趁換班翻過柵欄",
+    "check": {
+     "stat": "agi",
+     "difficulty": 8
+    },
+    "effect": {
+     "text": "你摸進營裡，數清了糧倉和馬廄的位置，天亮前翻了出來，把這些畫在一塊木片上交給了官軍的斥候。",
+     "stats": {
+      "fame": 1
+     },
+     "trend": {
+      "huangjin": -2
+     },
+     "rumor": "黃巾別部營寨的布置被人畫了出去，聽說是{name}摸進營裡看的。"
+    },
+    "fail_effect": {
+     "text": "你剛翻上柵頂，望樓上就喊了起來，只好跳下去拚命逃，摔得一身傷。",
+     "stamina": -20
+    }
+   },
+   {
+    "text": "趴在柵外的溝裡，數巡哨的人頭",
+    "check": {
+     "stat": "con",
+     "difficulty": 6
+    },
+    "effect": {
+     "text": "你在冰冷的泥溝裡趴了半夜，把巡哨的班次記得清清楚楚。",
+     "stats": {
+      "xinde": 6
+     },
+     "stamina": -10,
+     "trend": {
+      "huangjin": -1
+     }
+    },
+    "fail_effect": {
+     "text": "溝裡的水越積越深，你凍得渾身發抖，什麼也沒數清就退了回去。",
+     "stamina": -15
+    }
+   },
+   {
+    "text": "拔刀砍開一道柵門",
+    "combat": "shuikou",
+    "effect": {
+     "text": "你砍翻了守門的兵卒，營裡大亂，你趁亂撤走。黃巾連夜加固了營門，好幾天不敢出營劫掠。",
+     "stats": {
+      "fame": 2
+     },
+     "trend": {
+      "huangjin": -2
+     }
+    },
+    "fail_effect": {
+     "text": "營裡湧出一隊人，你被逼回霧裡，身上多了幾道口子。",
+     "stats": {
+      "silver": -15
+     },
+     "stamina": -20
+    }
+   }
+  ]
+ },
+ {
+  "id": "rn_camp_drill",
+  "title": "谷中操兵",
+  "locations": [
+   "huangjin_camp"
+  ],
+  "text": "山谷的空地上，一個黃巾渠帥正操練剛入營的流民，木棍當矛，喊殺聲震得山壁回響。他看見你在營邊轉，咧嘴一笑：「看你像是有把力氣的，過來試試那塊石鎖？」",
+  "choices": [
+   {
+    "text": "舉起石鎖給他看",
+    "check": {
+     "stat": "str",
+     "difficulty": 7
+    },
+    "effect": {
+     "text": "你把石鎖舉過頭頂，繞場走了一圈。渠帥大喜，硬塞給你一包錢，叫你考慮考慮入夥。",
+     "stats": {
+      "silver": 20
+     },
+     "trend": {
+      "huangjin": 1
+     }
+    },
+    "fail_effect": {
+     "text": "石鎖舉到胸口就砸了下來，險些砸了腳，流民們笑成一片。",
+     "stats": {
+      "fame": -1
+     },
+     "stamina": -10
+    }
+   },
+   {
+    "text": "站在一旁看他怎麼排陣",
+    "check": {
+     "stat": "wis",
+     "difficulty": 7,
+     "by": "self"
+    },
+    "effect": {
+     "text": "你看出他們的陣法是把鄉里同村的人編在一起，誰也不肯先跑。這個道理你琢磨了很久。",
+     "stats": {
+      "xinde": 10
+     }
+    },
+    "fail_effect": {
+     "text": "看了半天，只看出一團亂，還被巡營的人當成奸細盤問了好久。",
+     "stamina": -10
+    }
+   },
+   {
+    "text": "說要跟渠帥本人過招",
+    "combat": "toumu",
+    "effect": {
+     "text": "你和渠帥鬥了幾十回合，終於把他打翻在地。流民們目瞪口呆，好些人當夜就溜出了營。",
+     "stats": {
+      "fame": 2
+     },
+     "trend": {
+      "huangjin": -2
+     },
+     "materials": {
+      "gang_2": 1
+     }
+    },
+    "fail_effect": {
+     "text": "渠帥身法快得出奇，一棍掃在你肋下，你被一群人架著丟出了營門。",
+     "stats": {
+      "fame": -1
+     },
+     "stamina": -20
+    }
+   }
+  ]
+ }
+]
