@@ -2,7 +2,7 @@
 並產生左欄「剛剛」卡片、戰鬥卡片底下的補充與紀錄列的 HTML。
 
 原始訊息仍照舊寫進 GameState.log；紀錄只是給畫面看的整理，由 engine 在知道是什麼行動的地方建立。
-這裡只產生 HTML 字串與樣式，不 import gradio。
+這裡只產生 HTML 字串與樣式，不 import 網頁框架；server.py 把它們原樣送給網頁。
 """
 from __future__ import annotations
 
@@ -308,9 +308,9 @@ def rows_html(entries: list[JournalEntry], heading: str = "", empty: str = "") -
     return f'<div class="tx-journal">{"".join(parts)}</div>'
 
 
-# 卡片與紀錄列的樣式（介面層交給 gr.HTML 的 css_template，會自動限定在該元件內）。
-# css_template 會先經過 Handlebars 再當成 JS 樣板字串，所以這裡不能出現反引號、「${」或「{{」。
-# 顏色用 Gradio 主題變數，亮色與暗色主題都讀得清楚；增減用淡色底加框線表示，文字維持主題的字色。
+# 卡片與紀錄列的樣式：server.py 在 /journal.css 原樣送出（Gradio 時期是交給 gr.HTML 的 css_template）。
+# 顏色沿用 Gradio 主題變數的名稱（--border-color-primary 等），web/style.css 把它們接到網頁自己的顏色，
+# 亮色與暗色主題都讀得清楚；增減用淡色底加框線表示，文字維持主題的字色。
 CSS = """
 .tx-now { border: 1px solid var(--border-color-primary); border-radius: 8px; padding: 8px 12px;
   background: var(--background-fill-secondary); line-height: 1.6;

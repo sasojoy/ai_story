@@ -465,7 +465,7 @@ def test_a_nested_mutate_raises_instead_of_losing_the_inner_write(store):
 
 
 def test_a_nested_mutate_through_another_store_on_the_same_file_raises(tmp_path):
-    """測試與 app.py 隨手就建新的 store：兩個 store 開在同一個檔案上，共用同一個資料庫與同一條連線，巢狀照樣擋得到。"""
+    """測試與 server.py 隨手就建新的 store：兩個 store 開在同一個檔案上，共用同一個資料庫與同一條連線，巢狀照樣擋得到。"""
     path = tmp_path / "world.db"
     store_a, store_b = open_world(path), open_world(path)
     assert store_a is not store_b

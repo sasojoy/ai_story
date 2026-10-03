@@ -193,7 +193,7 @@ def test_a_snapshot_never_writes(tmp_path):
 
 
 def test_a_thread_that_ends_gives_its_connection_back(tmp_path):
-    """Gradio 的工作執行緒會來來去去：執行緒結束時，它那條連線也要跟著關掉。"""
+    """網頁伺服器的工作執行緒會來來去去：執行緒結束時，它那條連線也要跟著關掉。"""
     db = open_database(tmp_path / "t.db")
     conns = []
 
