@@ -1330,6 +1330,25 @@ def test_the_fighting_menu_still_replaces_everything_once_the_muster_closes(cont
         assert ids(game) == ["battle:act:safe", "battle:act:aggressive"]
 
 
+def test_an_unfinished_battle_is_dropped_without_its_outcome_when_the_season_ends(content, game):
+    """季一結束，沒打完的決戰直接收掉、不套用結果（這一季勝負已經定了），參戰者回到休季畫面（試玩回饋 FB-015）。"""
+    definition = _install_battle_def(content)
+    game.world.start_battle(definition, now=1000.0)
+    with at(game, 1000.0):
+        game.choose("battle:join:guan")
+    with at(game, 1000.0 + 601):
+        assert ids(game) == ["battle:act:safe", "battle:act:aggressive"]  # 開打了
+    trends = dict(game.world.get_season().trends)
+    game.world.mutate_season(lambda season: (setattr(season, "ended", True), setattr(season, "ending_title", "天下太平")))
+    game.sync(1000.0 + 700)
+    with at(game, 1000.0 + 700):
+        assert ids(game) == ["season:resting"]
+        assert "測試決戰" not in game.scene_text()
+    assert game.world.get_battle() is None
+    assert dict(game.world.get_season().trends) == trends  # 沒有套用決戰的結果
+    assert not any("官軍大勝" in entry.text for entry in game.world.get_season().chronicle)
+
+
 def test_joining_a_faction_during_muster(content, game):
     definition = _install_battle_def(content)
     game.world.start_battle(definition, now=1000.0)
@@ -2227,6 +2246,30 @@ def test_training_with_your_own_factions_squad_is_a_drill(content, game):
     assert game.state.player.member.exp > 0 or game.state.player.member.level > 1
     assert game.state.player.materials == {}
     assert game.state.world.trends["kou"] == 31
+
+
+def test_training_among_your_own_side_is_labelled_a_drill_not_a_fight(content, game):
+    """自己陣營的地盤（只會操練）不寫勝算「必敗」，寫明是操練（試玩回饋 FB-008）。"""
+    _training_factions(content)
+    content.squads["thug"].faction = "huang"
+    game.state.player.faction = "huang"  # 沒學武功：照勝算算是必敗，但操練不會輸
+    walk_to(game, "lake")
+    option = next(o for o in game.options() if o.id == "act:train")
+    assert (option.label, option.enabled) == ("操練（體力 10・零風險）", True)
+    game.state.player.faction = "guan"  # 換成對頭：照樣是要打的歷練，寫對手與勝算
+    option = next(o for o in game.options() if o.id == "act:train")
+    assert option.label.startswith("歷練（體力 10・水寇小隊・")
+
+
+def test_where_some_squads_are_your_own_the_odds_are_for_the_others(content, game):
+    """自己人與外人都有的地方：勝算只看真的會打的那幾路，另外說明也可能是操練。"""
+    _training_factions(content)
+    content.squads["boss"].faction = "huang"  # 翻江龍（難度 200）是自己人：不能拿它算勝算
+    content.locations["lake"].enemies = ["thug", "boss"]
+    game.state.player.faction = "huang"
+    walk_to(game, "lake")
+    label = next(o for o in game.options() if o.id == "act:train").label
+    assert label == f"歷練（體力 10・水寇小隊・{game.odds('thug')}・或與自己人操練）"
 
 
 def test_train_trend_push_previews_the_push_for_your_faction(content, game):

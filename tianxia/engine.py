@@ -307,7 +307,7 @@ class Game:
             # 標籤要顯示勝算（跟劇情戰的選項同一套慣例，見 _choice_label）：實機試玩發現
             # 新角色沒有武學時威力是 0，在任何地點歷練都**必敗**，而落敗現在真的要付氣血與
             # 內傷的代價——不顯示勝算的話，玩家會在開局連輸三場、氣血見底才知道自己不該打。
-            opts.append(self._cost_option("act:train", "歷練", cost["train"], note=self._train_note(loc, odds)))
+            opts.append(self._train_option(loc, cost["train"], odds))
         figures = self._figures_here()
         if has_events_here(c, loc, "socialize") or 0 < len(figures) < AUDIENCE_HALL_FIGURES:
             # 兩位以上大勢人物的地點，交遊只走福緣與地點事件、從不開口對話（見 _socialize_figure），
@@ -370,9 +370,20 @@ class Game:
             id=option_id, label=f"{label}（體力 {cost}{extra}）", enabled=self.state.player.stamina >= cost
         )
 
-    def _train_note(self, loc: Location, odds: bool) -> str:
-        """歷練按鈕上的補充說明：對手是誰、勝算多少（勝算的計算比較貴，所以照既有慣例吃 odds 旗標）。"""
+    def _train_option(self, loc: Location, cost: int, odds: bool) -> Option:
+        """歷練的按鈕。遇上自己陣營的隊伍是操練、不會輸（見 _drill），所以只有自己人的地盤寫成「操練・零風險」，
+        不拿自己人去算勝算「必敗」（試玩回饋 FB-008）；自己人與外人都有的地方，勝算只看真的會打的那幾路。"""
         squads = [self.content.squads[sid] for sid in loc.enemies]
+        foes = [squad for squad in squads if not self._drills_with(squad)]
+        if not foes:
+            return self._cost_option("act:train", "操練", cost, note="零風險")
+        note = self._train_note(foes, odds)
+        if len(foes) < len(squads):
+            note += "・或與自己人操練"
+        return self._cost_option("act:train", "歷練", cost, note=note)
+
+    def _train_note(self, squads: list[Squad], odds: bool) -> str:
+        """歷練按鈕上的補充說明：對手是誰、勝算多少（勝算的計算比較貴，所以照既有慣例吃 odds 旗標）。"""
         who = squads[0].name if len(squads) == 1 else f"{len(squads)} 路對手"
         if not odds:
             return who
@@ -836,6 +847,11 @@ class Game:
         兩回合，而不是一回合）。沒有進行中的戰鬥，或戰鬥已經結束，回傳 None。"""
         raw = self.world.get_battle()
         if raw is None:
+            return None
+        if self.state.world.ended:
+            # 季結束了：沒打完的決戰直接收掉、不套用結果（這一季勝負已經定了），參戰者回到休季畫面（試玩回饋 FB-015）
+            if tick and raw.phase != "ended":
+                self.world.clear_battle()
             return None
         definition = self.content.battles.get(raw.battle_id)
         if definition is None:
