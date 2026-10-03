@@ -1,5 +1,5 @@
 from tianxia import rules, skillview, team
-from tianxia.martial_arts import MartialArt, power_at
+from tianxia.martial_arts import MartialArt, historical_art, power_at
 
 
 def test_rules_line():
@@ -77,10 +77,10 @@ def test_detail_of_a_missing_skill_reference_is_a_placeholder(state, content, wo
 
 
 def _crafted(note: str) -> MartialArt:
-    """一門煉出來的功法：origin 是 created、creator 是首創者（煉製跟自創共用這兩個欄位）。"""
+    """一門煉出來的功法：origin 是 crafted、creator 是第一個煉出這個配方的人（FB-017）。"""
     return MartialArt(
         id="沉柳纏勁", name="沉柳纏勁", kind="武學", quality="上品", attribute="柔",
-        base_power=28.0, top_power=72.0, origin="created", creator="沈浪", note=note,
+        base_power=28.0, top_power=72.0, origin="crafted", creator="沈浪", note=note,
     )
 
 
@@ -89,8 +89,20 @@ def test_an_art_card_ends_with_the_models_note():
     lines = card.split("\n")
     assert lines[0] == "【沉柳纏勁】上品・屬柔"
     assert lines[1].startswith("第3成 ●●●○○○○○○○，威力 ")
-    assert lines[3] == "來源：自創（沈浪 所創）"
+    assert lines[3] == "來源：煉製（沈浪 首創）"
     assert lines[-1] == "以柔勁纏住兵刃，借力卸力。"
+
+
+def test_an_art_card_says_where_the_art_came_from():
+    """FB-017：煉出來的寫「煉製（首創者 首創）」，取名自創的寫「自創（取名者 所創）」，其他是本命武學。"""
+    def source(art: MartialArt) -> str:
+        return skillview.art_card(art, 1).split("\n")[3]
+
+    crafted = _crafted("")
+    assert source(crafted) == "來源：煉製（沈浪 首創）"
+    assert source(crafted.model_copy(update={"creator": None})) == "來源：煉製"
+    assert source(crafted.model_copy(update={"origin": "created"})) == "來源：自創（沈浪 所創）"
+    assert source(historical_art("龍吟九霄", "龍吟九霄", "武學", "剛")) == "來源：本命武學"
 
 
 def test_an_art_card_without_a_note_drops_the_whole_line():

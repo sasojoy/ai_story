@@ -282,6 +282,18 @@ def test_the_crafted_art_records_who_first_made_it(stocked, content, world):
     assert "江湖上第一次煉成" in "\n".join(msgs)
 
 
+def test_a_crafted_art_is_marked_as_crafted_new_or_from_the_recipe_book(stocked, content, world):
+    """FB-017：煉出來的功法 origin 是 crafted（功法卡寫「煉製」、不是「自創」），配方查表拿到的那一門也是。"""
+    client = OllamaClient()
+    with naming("裂江訣"):
+        first, _ = craft.craft(stocked, content, world, client, ["gang_1", "gang_1"], "武學")
+    assert first is not None and first.origin == "crafted"
+    assert world.lookup_recipe(craft.recipe_key(["gang_1", "gang_1"], "武學")).origin == "crafted"
+    stocked.player.member.wugong_id = None  # 散功：這樣這個配方才又煉得起來
+    second, _ = craft.craft(stocked, content, world, client, ["gang_1", "gang_1"], "武學")
+    assert second is not None and second.origin == "crafted"
+
+
 def test_an_empty_slot_gets_the_art_equipped_right_away(stocked, content, world):
     client = OllamaClient()
     with naming("裂江訣"):

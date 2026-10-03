@@ -35,8 +35,9 @@ class MartialArt(BaseModel):
     attribute: str  # ATTRIBUTES 其中之一
     base_power: float
     top_power: float
-    origin: str = "created"  # "historical"（本命武學，內容手寫）或 "created"（玩家自創）
-    creator: str | None = None  # 自創功法的取名者（玩家名號），本命武學為 None
+    # "historical"（本命武學，內容手寫）、"created"（玩家取名自創）或 "crafted"（煉製，craft.py 設的）
+    origin: str = "created"
+    creator: str | None = None  # 自創功法的取名者、煉製功法的首創者（玩家名號），本命武學為 None
     note: str = ""  # 煉製時由 LLM 寫的一句話描述（只有語意、沒有數字）；自創與本命武學是空的
 
 

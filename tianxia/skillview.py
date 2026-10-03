@@ -177,18 +177,23 @@ def art_card(art: MartialArt, level: int) -> str:
     """一門功法的功法卡（無限煉製設計 §8；FB-006）：名字・品質・屬性、目前熟練度與威力、
     第一成／第十成的威力、來源，最後是煉製時模型寫的那句說明。
 
-    煉製出來的功法也是 origin == "created"、creator 是首創者，所以一樣寫「自創（某某所創）」。
+    來源分三種（FB-017）：煉製（origin == "crafted"）寫「煉製（某某 首創）」，creator 是第一個煉出這個配方的人；
+    取名自創（"created"）寫「自創（某某 所創）」；其他是本命武學。
     說明句只有真的有字時才有那一行：退路字表取名的功法、自創與本命武學都沒有說明，
     這時整行省略——不留空行、不出現 None（QA 寫進 FB-006 的驗收）。
     """
     nxt = "已達第十成" if level >= MAX_LEVEL else f"{power_at(art, level + 1):.1f}"
-    origin = "自創" if art.origin == "created" else "本命武學"
-    creator = f"（{art.creator} 所創）" if art.creator else ""
+    if art.origin == "crafted":
+        source = "煉製" + (f"（{art.creator} 首創）" if art.creator else "")
+    elif art.origin == "created":
+        source = "自創" + (f"（{art.creator} 所創）" if art.creator else "")
+    else:
+        source = "本命武學"
     lines = [
         f"【{art.name}】{art.quality}・屬{art.attribute}",
         f"第{level}成 {level_bar(level)}，威力 {power_at(art, level):.1f}（下一成：{nxt}）",
         f"第一成 {power_at(art, 1):.1f}　第十成 {power_at(art, MAX_LEVEL):.1f}",
-        f"來源：{origin}{creator}",
+        f"來源：{source}",
     ]
     note = art.note.strip()
     if note:
