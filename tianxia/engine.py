@@ -14,11 +14,13 @@ from . import (
     atlas, battle_instance, battlelog, companion_agent, craft, encounter, event_llm, flavor, journal, materials, roster,
     skillview, team,
 )
-from .events import choice_label, has_events_here, pick_event, visible_choices
+from .events import choice_label, event_candidates, has_events_here, pick_event, visible_choices
 from .guide import note_action, quest_text, tutorial_intro
 from .journal import LOG_BREAK, Draft
 from .mapview import render_map, render_minimap
-from .models import FREE_TEXT_MAX, BattleDef, Choice, Content, Effect, Event, Location, Squad, TravelMode
+from .models import (
+    EXPLORE_BRANCHES, FREE_TEXT_MAX, BattleDef, Choice, Content, Effect, Event, ExploreBranch, Location, Squad, TravelMode,
+)
 from .ollama_client import OllamaClient
 from .rules import apply_effect, change_trend, check_who, current_day, fill_marks, free_text_rate, rate_words, roll_check
 from .sqlite_world import open_world
@@ -691,19 +693,45 @@ class Game:
             return self._dialogue_unavailable(companion_id)
 
     def _explore(self) -> list[str]:
-        """探索：先滾一次煉製素材，再走一般的遭遇流程（事件／敵人／一無所獲）。
+        """探索三選一（FB-013，docs/superpowers/specs/2026-10-03-探索三選一-design.md）。
 
-        素材的判定**刻意放在事件之前、而且不管接下來發生什麼都會滾**：原本照設計文件
-        §4.2 掛在「一無所獲」那條分支上，但用真實內容跑完整季實測，100 次探索有 100 次
-        都撞到手寫事件或敵人，那條分支一次都沒執行到（整季只拿到打贏掉的 3 個素材）。
-        改成探索本身就有機會撿到東西，一季約 30 個，對得上設計文件 §4.4 的產出目標。
+        1. 奇遇判定最優先：這裡有還能遇上的一次性或奇遇事件時，先滾 `rare_explore_chance`，中了就是它。
+        2. 沒中就照地點類型（`Config.explore_mix`）的比例抽素材、野怪、事件三支之一；做不了的那一支
+           （沒有會打的對手、沒有可重複的事件）從候選裡拿掉，用剩下的比例重抽——等於把它的比例按比例分給另外兩支。
+        3. 三支都做不了才是一無所獲。
+
+        以前是「先滾三成素材，再一定撞到一個事件」：40 個地點有 38 個探索 100% 跳事件，荒郊野外跟
+        城裡的手感一樣（QA 量過）。奇遇事件只走第 1 步、不進事件那一支，所以一直是稀有的。
         """
-        loc = self.content.locations[self.state.player.location]
-        found = materials.roll_explore_drop(loc, self.content, self.rng)
-        line = materials.grant(self.state, self.content, found) if found is not None else None
-        nothing = "你四處走走，一無所獲。" if line is None else f"你在{loc.name}翻找了一陣。"
-        msgs = self._encounter("explore", nothing)
-        return msgs + [line] if line is not None else msgs
+        s, c = self.state, self.content
+        loc = c.locations[s.player.location]
+        if event_candidates(s, c, "explore", "rare") and self.rng.random() < c.config.rare_explore_chance:
+            return self._present(pick_event(s, c, "explore", self.rng, "rare"))
+        mix = c.config.explore_mix_of(loc.tags).weights
+        branches = [b for b in EXPLORE_BRANCHES if mix.get(b, 0) > 0 and self._explore_can(b, loc)]
+        if not branches:
+            return ["你四處走走，一無所獲。"]
+        branch = self.rng.choices(branches, weights=[mix[b] for b in branches])[0]
+        if branch == "material":
+            found = materials.roll_explore_drop(loc, c, self.rng)
+            return [f"你在{loc.name}翻找了一陣。", materials.grant(s, c, found)]
+        if branch == "wild":
+            squad = min(self._wild_foes(loc), key=lambda foe: foe.difficulty)  # 同分取這裡列的第一路
+            return [f"你在{loc.name}走著，{squad.name}突然殺出！"] + self._squad_encounter(squad.id, wild=True)
+        return self._present(pick_event(s, c, "explore", self.rng, "common"))
+
+    def _explore_can(self, branch: ExploreBranch, loc: Location) -> bool:
+        """探索三選一的這一支在這裡做不做得了。"""
+        if branch == "material":
+            return bool(materials.explore_pool(loc, self.content))
+        if branch == "wild":
+            return bool(self._wild_foes(loc))
+        return bool(event_candidates(self.state, self.content, "explore", "common"))
+
+    def _wild_foes(self, loc: Location) -> list[Squad]:
+        """探索時可能殺出來的野怪：這裡的敵人裡不是自己陣營的那幾路（自己人不會突然殺出來，也不在這裡操練）。"""
+        squads = [self.content.squads[sid] for sid in loc.enemies]
+        return [squad for squad in squads if not self._drills_with(squad)]
 
     def _train(self) -> list[str]:
         """歷練：找這個地點的敵人打一場，**必定開打**；打完有機率接一段戰後的餘韻事件。
@@ -1299,12 +1327,10 @@ class Game:
         return msgs
 
     def _encounter(self, action: str, nothing: str) -> list[str]:
+        """交遊沒碰上人物時：抽一則事件，沒有就是 nothing（探索另有三選一，見 _explore）。"""
         event = pick_event(self.state, self.content, action, self.rng)
         if event:
             return self._present(event)
-        loc = self.content.locations[self.state.player.location]
-        if action == "explore" and loc.enemies and self.rng.random() < self.content.config.train_event_chance:
-            return self._squad_encounter(self.rng.choice(loc.enemies))
         return [nothing]
 
     def _present(self, event: Event) -> list[str]:
@@ -1321,8 +1347,12 @@ class Game:
         self._hide(text)
         return [head, text]
 
-    def _squad_encounter(self, squad_id: str) -> list[str]:
-        """遭遇一支敵方隊伍：單次判定，勝得對手獎勵與屬性機會，落敗失落一成銀兩；自己陣營的隊伍改成操練（見 _drill）。"""
+    def _squad_encounter(self, squad_id: str, wild: bool = False) -> list[str]:
+        """遭遇一支敵方隊伍：單次判定，勝得對手獎勵與屬性機會，落敗失落一成銀兩；自己陣營的隊伍改成操練（見 _drill）。
+
+        wild：探索時撞上的野怪（探索三選一設計 4.2）——扣氣血打折（`wild_neili_loss_factor`，內傷照比例）、
+        打贏**不推大勢**（歷練推大勢的量已經讓黃巾早早稱霸，探索不能再加碼）；獎勵、掉落、屬性機會、落敗的
+        一成銀兩都照常。戰後事件本來就只在 _train 裡接，野怪不走那裡。歷練不帶這個旗標，一點都不變。"""
         s, c = self.state, self.content
         p = s.player
         loc = c.locations[p.location]
@@ -1340,8 +1370,9 @@ class Game:
                 key = self.rng.choice(["str", "agi", "con"])
                 p.stats[key] += 1
                 extra.append(f"{c.config.stat_names[key]} +1")
-            for trend_id, delta in loc.train_trend.items():
-                extra += change_trend(s, c, trend_id, self._train_push(trend_id, delta))
+            if not wild:
+                for trend_id, delta in loc.train_trend.items():
+                    extra += change_trend(s, c, trend_id, self._train_push(trend_id, delta))
             changes, notes = battlelog.split_changes(extra)
             record.changes += changes
             record.notes += notes
@@ -1352,7 +1383,7 @@ class Game:
             record.silver = -loss
             if loss:
                 msgs.append(f"銀兩 -{loss}")
-        toll = team.take_encounter_toll(s, c, self.world, result.tier)
+        toll = team.take_encounter_toll(s, c, self.world, result.tier, wild=wild)
         record.changes += toll
         msgs += toll
         msgs.insert(0, self._file_battle(record))

@@ -8,6 +8,7 @@ from conftest import FixedRandom, at, walk_to
 from tianxia import battle_instance, companion_agent, flavor, rules, skillview
 from tianxia.engine import Game, Option
 from tianxia.martial_arts import MartialArt
+from tianxia.models import ExploreMix
 from tianxia.state import BotProfile, GameState, Journey, Rumor
 from tianxia.sqlite_world import open_world
 
@@ -151,7 +152,13 @@ def test_sitting_ends_by_itself_once_stamina_is_full(game):
 # ── 事件與檢定 ────────────────────────────────────────────
 
 
+def _explore_finds_events(game):
+    """探索三選一：讓探索一定走「事件」那一支（這些測試看的是事件本身，不是探索抽到哪一支）。"""
+    game.content.config.explore_mix = [ExploreMix(kind="wild", tags=[], weights={"event": 1})]
+
+
 def test_explore_presents_event_and_resolves_check(game):
+    _explore_finds_events(game)
     game.rng = FixedRandom(0.0)  # 檢定必定成功
     game.choose("act:explore")
     assert game.state.pending_event == "drunk"
@@ -239,9 +246,8 @@ def test_train_win_is_recorded_with_rewards(game):
     rules.learn_skill(game.state, game.content, "fist")  # 壓倒性的威力，穩贏
     game.content.config.train_event_chance = 1.0
     walk_to(game, "lake")
-    game.state.player.seen_events.add("scroll")  # 避開探索遇到殘卷奇遇
     game.rng = FixedRandom(0.3)
-    game.choose("act:explore")
+    game.choose("act:train")
     record = game.state.battles[0]
     assert (record.kind, record.location, record.opponent) == ("train", "湖邊", "水寇小隊")
     assert record.tier in ("大勝", "險勝")
@@ -255,12 +261,11 @@ def test_train_loss_costs_a_tenth_of_the_silver(game):
     game.content.locations["lake"].enemies = ["boss"]  # 換成打不贏的翻江龍
     game.content.config.train_event_chance = 1.0
     walk_to(game, "lake")
-    game.state.player.seen_events.add("scroll")
     game.rng = FixedRandom(0.0)
-    game.choose("act:explore")
+    game.choose("act:train")
     record = game.state.battles[0]
     assert record.tier == "落敗" and record.silver == -5
-    assert game.state.player.stats["silver"] == 50  # -5 落敗損失，+5 這一步剛好完成新手引導第一步的獎勵
+    assert game.state.player.stats["silver"] == 45
 
 
 def test_train_win_stat_bonus_is_recorded_as_a_change_not_a_note(game):
@@ -268,9 +273,8 @@ def test_train_win_stat_bonus_is_recorded_as_a_change_not_a_note(game):
     game.content.config.train_stat_chance = 1.0
     game.content.config.train_event_chance = 1.0
     walk_to(game, "lake")
-    game.state.player.seen_events.add("scroll")
     game.rng = FixedRandom(0.3)
-    game.choose("act:explore")
+    game.choose("act:train")
     record = game.state.battles[0]
     assert record.tier in ("大勝", "險勝")
     assert record.changes and record.changes[0].split(" ")[1] == "+1"
@@ -280,8 +284,10 @@ def test_train_win_stat_bonus_is_recorded_as_a_change_not_a_note(game):
 def test_train_event_chain(game):
     game.content.config.train_event_chance = 1.0
     walk_to(game, "lake")
-    game.choose("act:explore")
-    assert game.state.pending_event == "scroll"
+    game.choose("act:train")
+    assert game.state.pending_event == "chain_a"  # 打完接上戰後的事件
+    game.choose("choice:0")
+    assert game.state.pending_event == "chain_b"  # 再串到下一則
 
 
 # ── 招募與隊伍 ────────────────────────────────────────────
@@ -2084,9 +2090,8 @@ def test_train_win_drops_a_material_into_the_bag_and_the_report(game):
     rules.learn_skill(game.state, game.content, "fist")  # 壓倒性的威力，穩贏
     game.content.config.train_event_chance = 1.0
     walk_to(game, "lake")
-    game.state.player.seen_events.add("scroll")  # 避開探索遇到殘卷奇遇
     game.rng = FixedRandom(0.3)  # 水寇小隊難度 5：預設掉落表 50% 掉一個一階素材
-    msgs = game.choose("act:explore")
+    msgs = game.choose("act:train")
     record = game.state.battles[0]
     assert record.materials == ["精鐵砂 ×1"]
     assert game.state.player.materials == {"gang_1": 1}
@@ -2096,11 +2101,9 @@ def test_train_win_drops_a_material_into_the_bag_and_the_report(game):
 def test_a_hard_fought_loss_drops_nothing(game):
     game.content.locations["lake"].enemies = ["boss"]  # 打不贏的翻江龍
     game.content.config.train_event_chance = 1.0
-    game.content.config.explore_material_chance = 0.0  # 只看戰鬥那條路，不要被探索自己撿到的混進來
     walk_to(game, "lake")
-    game.state.player.seen_events.add("scroll")
     game.rng = FixedRandom(0.0)
-    game.choose("act:explore")
+    game.choose("act:train")
     assert game.state.battles[0].tier == "落敗"
     assert game.state.player.materials == {}
 
@@ -2115,23 +2118,14 @@ def test_exploring_a_quiet_place_can_still_turn_up_a_material(game):
 
 
 def test_exploring_and_finding_nothing_still_says_so(game):
+    """探索三選一：三支都做不了才是一無所獲——山洞沒有敵人、沒有事件，再把素材那一支的比例設成 0。"""
     game.state.player.location = "cave"
-    game.content.config.explore_material_chance = 0.0
+    game.content.config.explore_mix = [ExploreMix(kind="wild", tags=[], weights={"material": 0, "wild": 35, "event": 25})]
     game.rng = FixedRandom(0.99)
     msgs = game.choose("act:explore")
     assert msgs[0] == "你四處走走，一無所獲。"
     assert not any("獲得" in m for m in msgs)
     assert game.state.player.materials == {}
-
-
-def test_exploring_picks_up_a_material_even_when_an_event_fires(game):
-    """素材的判定在事件之前：實測整季 100 次探索都撞到事件，掛在「一無所獲」上等於沒做。"""
-    game.content.locations["town"].materials = ["gang_3"]
-    game.rng = FixedRandom(0.0)  # 必中素材，也必定撞到鎮上的事件
-    msgs = game.choose("act:explore")  # 訊息串後面還會接新手引導的進度
-    assert any("【" in m for m in msgs)  # 真的有事件
-    assert "獲得 隕鐵膽 ×1" in msgs
-    assert game.state.player.materials == {"gang_3": 1}
 
 
 # ── 歷練（第二層：遭遇戰的唯一管道）──────────────────────────

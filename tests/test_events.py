@@ -26,6 +26,33 @@ def test_pick_event_skips_seen_once_events(state, content):
     assert pick_event(state, content, "explore", rng) is None
 
 
+def test_the_common_pool_never_holds_once_or_qiyu_events(state, content):
+    """探索三選一：事件那一支只從可重複的事件抽，一次性與奇遇只走奇遇那一步（探索三選一設計 4.3）。"""
+    state.player.location = "lake"  # 湖邊的探索事件只有殘卷（一次性＋奇遇）
+    rng = random.Random(0)
+    assert pick_event(state, content, "explore", rng, pool="common") is None
+    assert pick_event(state, content, "explore", rng, pool="rare").id == "scroll"
+    assert pick_event(state, content, "explore", rng).id == "scroll"  # 不指定池子＝照舊（歷練、交遊用）
+    content.events["scroll"].once = False  # 只是奇遇、不是一次性：一樣不進可重複的池子
+    assert pick_event(state, content, "explore", rng, pool="common") is None
+    content.events["scroll"].once, content.events["scroll"].qiyu = True, False  # 只是一次性
+    assert pick_event(state, content, "explore", rng, pool="common") is None
+    state.player.location = "town"
+    assert {pick_event(state, content, "explore", rng, pool="common").id for _ in range(20)} == {"drunk"}
+    assert pick_event(state, content, "explore", rng, pool="rare") is None
+
+
+def test_a_seen_qiyu_stays_in_the_rare_pool_but_a_seen_once_event_does_not(state, content):
+    """企劃者 2026-10-03 改：奇遇看過之後還能再遇到；標了 once 的照舊只有一次。"""
+    state.player.location = "lake"
+    rng = random.Random(0)
+    content.events["scroll"].once = False
+    state.player.seen_events.add("scroll")
+    assert pick_event(state, content, "explore", rng, pool="rare").id == "scroll"
+    content.events["scroll"].once = True
+    assert pick_event(state, content, "explore", rng, pool="rare") is None
+
+
 def test_pick_event_respects_condition(state, content):
     state.player.sect = "cloud"
     assert pick_event(state, content, "socialize", random.Random(0)) is None

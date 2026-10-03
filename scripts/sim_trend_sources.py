@@ -95,11 +95,12 @@ def main() -> None:
         actions[season["n"]][("操練", self.state.player.faction)] += 1
         return original_drill(self, squad)
 
-    def encounter(self, squad_id):
+    def encounter(self, squad_id, wild=False):
         squad = self.content.squads[squad_id]
         if not (squad.faction is not None and squad.faction == self.state.player.faction):
-            actions[season["n"]][("真打", self.state.player.faction)] += 1
-        return original_encounter(self, squad_id)
+            kind = "野怪" if wild else "真打"  # 野怪：探索三選一撞上的，不推大勢
+            actions[season["n"]][(kind, self.state.player.faction)] += 1
+        return original_encounter(self, squad_id, wild=wild)
 
     engine.Game._drill, engine.Game._squad_encounter = drill, encounter
 

@@ -6,6 +6,7 @@ from conftest import FixedRandom, walk_to
 from tianxia import journal
 from tianxia.engine import LOG_BREAK, Game
 from tianxia.characters import name_key, open_characters
+from tianxia.models import ExploreMix
 from tianxia.state import JournalEntry
 
 HOUR = 3600
@@ -81,6 +82,8 @@ def test_explore_that_finds_nothing(game):
     game.state.player.tutorial_step = 3  # 引導已走完，不會多出引導的訊息
     walk_to(game, "lake")
     game.state.player.seen_events.add("scroll")  # 湖邊唯一的探索事件只出現一次
+    game.content.locations["lake"].enemies = []  # 探索三選一：三支都做不了才是一無所獲
+    game.content.config.explore_mix = [ExploreMix(kind="wild", tags=[], weights={"material": 0, "wild": 35, "event": 25})]
     game.choose("act:explore")
     entry = latest(game)
     assert (entry.title, entry.tag, entry.lines) == ("探索湖邊", "", ["你四處走走，一無所獲。"])
@@ -88,6 +91,7 @@ def test_explore_that_finds_nothing(game):
 
 def test_qiyu_is_tagged_as_such(game):
     walk_to(game, "lake")
+    game.content.config.rare_explore_chance = 1.0  # 探索三選一：奇遇判定最優先
     game.choose("act:explore")
     assert latest(game).tag == "遇上奇遇【殘卷】"
 
@@ -126,6 +130,7 @@ def test_train_entry_carries_the_battle_summary_and_gains(game):
 
 
 def test_choice_entry_names_the_event_and_the_check(game):
+    game.content.config.explore_mix = [ExploreMix(kind="wild", tags=[], weights={"event": 1})]  # 探索一定走事件那一支
     game.rng = FixedRandom(0.0)  # 檢定必定成功
     game.choose("act:explore")
     game.choose("choice:0")
@@ -271,18 +276,15 @@ def test_notice_and_skip_tutorial(game):
 
 
 def guided_train(game):
-    """湖邊探索剛好遇上遭遇戰、順便完成一步新手引導（獎勵銀兩 5）：把唯一的湖邊探索事件
-    標成已經看過，逼 explore 落到隨機遭遇戰那條路（見 engine.py::_encounter），
-    train_event_chance=1.0 保證真的觸發。"""
-    game.content.tutorial.steps[0].done_when.action = "explore"
-    game.content.config.train_event_chance = 1.0
-    game.state.player.seen_events.add("scroll")
+    """湖邊歷練打一場、順便完成一步新手引導（獎勵銀兩 5）：把引導第一步改成「歷練」。
+    （以前是逼探索落到隨機遭遇戰那條路；探索三選一之後那條路沒了，打仗就是歷練。）"""
+    game.content.tutorial.steps[0].done_when.action = "train"
     _give_player_a_winning_wugong(game)
     from conftest import FixedRandom
 
     game.rng = FixedRandom(0.99)
     walk_to(game, "lake")
-    game.choose("act:explore")
+    game.choose("act:train")
 
 
 def test_changes_with_the_same_label_are_added_up(game):
@@ -305,15 +307,13 @@ def test_battle_card_extra_shows_what_the_card_does_not(game):
 
 def test_battle_card_extra_skips_card_notes_and_event_markers(game):
     game.state.player.tutorial_step = 1  # 跳過第一步，這次遭遇戰不該混進引導訊息
-    game.content.config.train_event_chance = 1.0
-    game.state.player.seen_events.add("scroll")
     _give_player_a_winning_wugong(game)
     from conftest import FixedRandom
 
     game.rng = FixedRandom(0.99)
     game.state.player.member.exp = 90
     walk_to(game, "lake")
-    game.choose("act:explore")
+    game.choose("act:train")
     assert "沈浪升到第 2 級！" in latest(game).lines and "沈浪升到第 2 級！" in game.state.battles[0].notes
     assert game.battle_extra_html() == ""  # 升級已經寫在卡片的「結果」裡
     walk_to(game, "town")
