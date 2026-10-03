@@ -302,6 +302,19 @@ def test_a_bot_that_joined_stays_in_the_battle_region_during_the_muster(content,
         game.state.player.journey = None  # 區內走動就當作已經到了，下一輪接著挑
 
 
+def test_a_bot_that_joined_never_switches_sides_during_the_muster(content, game):
+    """不分陣營的劇本集結時還看得到另一邊的加入；參戰的假人不換邊（加入分數最高，不擋的話每一輪都會換）。"""
+    definition = _install_battle(content)
+    content.config.bot_strength = 1.0  # 一定挑最高分
+    name = game.state.player.name
+    game.world.start_battle(definition, now=game.now)
+    bot_policy.take_turn(game, _profile(None), random.Random(0))
+    side = game.world.get_battle().participants[name].faction
+    for seed in range(5):
+        bot_policy.take_turn(game, _profile(None), random.Random(seed))
+        assert game.world.get_battle().participants[name].faction == side
+
+
 def test_a_bot_with_an_event_to_settle_does_not_rush_off(content, game):
     _battle_in_the_south(content, game)
     game.state.pending_event = "drunk"

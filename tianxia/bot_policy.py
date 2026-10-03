@@ -49,7 +49,8 @@ def take_turn(game: Game, profile: BotProfile, rng: random.Random) -> list[str]:
         if join is not None:  # 集結時選單照常有別的事可做（FB-009）；假人一看到加入就加入，不交給強度旋鈕碰運氣
             return game.choose(join)
     elif battle is not None and battle.phase == "muster":
-        options = _staying_for_the_battle(game, battle.battle_id, options)
+        # 已經參戰：不換邊（不分陣營的劇本集結時還看得到另一邊的加入），也不走出決戰的大區
+        options = [o for o in _staying_for_the_battle(game, battle.battle_id, options) if not o.id.startswith("battle:join")]
         if not options:
             return []
         ids = [o.id for o in options]
@@ -148,7 +149,8 @@ def _toward_battle(game: Game) -> list[str] | None:
 def _staying_for_the_battle(game: Game, battle_id: str, options: list[Option]) -> list[Option]:
     """已經參戰的假人在集結時不走出決戰的大區：集結時選單照常有前往（FB-009），但以前選單只有加入、假人一直待在
     現場，開打時人都在；區內站與站之間照常走。決戰不限地點時不用管。"""
-    region = game.content.battles[battle_id].region
+    definition = game.content.battles.get(battle_id)
+    region = definition.region if definition is not None else None
     if region is None:
         return options
 

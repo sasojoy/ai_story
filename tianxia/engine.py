@@ -261,8 +261,8 @@ class Game:
         return self._everyday_options(odds)
 
     def _everyday_options(self, odds: bool) -> list[Option]:
-        """沒有要親身參與的開打中決戰時的選單：籌備或休季、事件、對話、投靠確認、求見名單、閉關、在路上、打坐，
-        都不是就是在地點上能做的事。"""
+        """平常的選單（沒有要親身參與、已經開打的決戰時；集結時接在加入的按鈕後面）：籌備或休季、事件、對話、
+        投靠確認、求見名單、閉關、在路上、打坐，都不是就是在地點上能做的事。"""
         s, c = self.state, self.content
         if self.world.season_phase() == "preparing":
             return [Option(id="season:preparing", label="賽季籌備中，等待管理者開季", enabled=False)]
@@ -1027,7 +1027,8 @@ class Game:
             me = battle.participants.get(self.state.player.name)
             if me is not None:
                 side = next((f.name for f in definition.factions if f.id == me.faction), me.faction)
-                return f"{header}\n\n你已加入【{side}】，集結還剩 {left}。集結結束就開打，在那之前照常行動；走出這一區就不算在場。"
+                leaving = "；走出這一區就不算在場" if definition.region is not None else ""
+                return f"{header}\n\n你已加入【{side}】，集結還剩 {left}。集結結束就開打，在那之前照常行動{leaving}。"
             return f"{header}\n\n集結中，還剩 {left}。選擇陣營加入；集結期間照常行動。"
         act = battle_instance.current_act(battle, definition)
         lines = [header, f"【{act.title}】{act.text}"] + battle.narrative_log[-5:]

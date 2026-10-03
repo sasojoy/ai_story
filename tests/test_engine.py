@@ -1163,6 +1163,26 @@ def test_with_factions_a_fighter_who_joined_only_sees_joined(content, game):
         assert [(o.id, o.label, o.enabled) for o in battle_ids] == [("battle:join:huang", "已加入【黃巾】", False)]
 
 
+def test_a_fighter_who_walks_out_during_the_muster_is_away_until_back(content, game):
+    """集結時已經加入的人照常可以走動；走出決戰的大區就不在場（沒有加入的按鈕、場景說明離開了），回來就又是「已加入」。"""
+    definition = _install_battle_def(content)
+    definition.region = "north"
+    _south_cave(content, game)
+    walk_to(game, "lake")
+    game.world.start_battle(definition, now=1000.0)
+    with at(game, 1000.0):
+        game.choose("battle:join:guan")
+        game.set_move_mode("dash")
+        game.choose("move:cave:dash")
+        assert game.state.player.location == "cave"
+        assert not any(i.startswith("battle:") for i in ids(game))
+        assert "你離開了測試北區" in game.scene_text()
+        game.choose("move:lake:dash")
+        opts = {o.id: (o.label, o.enabled) for o in game.options()}
+        assert opts["battle:join:guan"] == ("已加入【官軍】", False)
+        assert "你已加入【官軍】" in game.scene_text()
+
+
 def test_the_fighting_menu_still_replaces_everything_once_the_muster_closes(content, game):
     definition = _install_battle_def(content)
     game.world.start_battle(definition, now=1000.0)
@@ -1364,7 +1384,7 @@ def test_you_can_join_a_battle_only_in_its_region(content, game):
 
 def test_nobody_on_the_road_can_join(content, game):
     definition = _install_battle_def(content)  # 不限地點
-    game.choose("move:lake")  # 先出發：開戰之後選單只剩戰鬥選項
+    game.choose("move:lake")  # 先出發：在路上的人不算到了戰場
     game.world.start_battle(definition, now=1000.0)
     with at(game, 1000.0):
         assert not any(i.startswith("battle:") for i in ids(game))
@@ -1468,8 +1488,8 @@ def test_joining_a_battle_stands_you_up(content, game):
 
 
 def test_a_sitter_can_still_stand_up_while_the_muster_menu_is_showing(content, game):
-    """打坐中碰上集結：戰鬥選單會整個取代平常的選單，起身不能因此消失——不然人坐著出不去，
-    連旅程都安排不了（打坐中不能前往），只能硬加入戰局。規則是隨時可以起身。"""
+    """打坐中碰上集結：加入的按鈕旁邊一定還有起身（集結時平常的選單接在後面，打坐中就是起身）——
+    不然人坐著出不去，只能硬加入戰局。規則是隨時可以起身。"""
     definition = _install_battle_def(content)
     definition.region = "north"
     game.choose("act:rest")

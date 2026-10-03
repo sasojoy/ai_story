@@ -127,4 +127,4 @@ def test_the_bot_joins_a_muster_before_doing_anything_else(content, game):
     game.choose("battle:join:guan")
     options = [o for o in game.options(odds=False) if o.enabled]
     picks = {pick(game, options, random.Random(seed)) for seed in range(20)}
-    assert picks - {"battle:join:huang"}  # 已經加入：照常隨機挑，不是每一步都換邊
+    assert len(picks - {"battle:join:huang"}) >= 2  # 已經加入：照常在平常的選項裡隨機挑，不是每一步都換邊
