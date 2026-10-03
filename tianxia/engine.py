@@ -221,9 +221,11 @@ class Game:
 
     # ── 選項 ──────────────────────────────────────────────
 
-    def options(self, odds: bool = True) -> list[Option]:
+    def options(self, odds: bool = True, tick: bool = True) -> list[Option]:
+        """tick 照 _battle_status 的規則往下傳：預設 True，這個呼叫順便把全服戰鬥追趕到現實時間；
+        只想讀選單、不該推進戰鬥的呼叫端（dialogue_request）傳 False——一次請求只能推進一次。"""
         s, c = self.state, self.content
-        battle_status = self._battle_status()
+        battle_status = self._battle_status(tick=tick)
         if battle_status is not None and not self._watching_battle(*battle_status):
             return self._battle_options(*battle_status)
         if self.world.season_phase() == "preparing":
@@ -315,8 +317,10 @@ class Game:
         - `talk:N`：N 是上一輪提供的選項、手上有對話、選項沒停用；`talk:leave` 不生成。
         - `act:socialize`：選項沒停用、福緣還沒到（福緣先發，見 _act）、這裡有見得到的人物；
           玩家這一步固定是 GENERIC_OPENING。
-        其他選項都不呼叫對話模型。"""
-        option = {o.id: o for o in self.options(odds=False)}.get(option_id)
+        其他選項都不呼叫對話模型。
+        只讀：選單用 tick=False 取，不推進戰鬥（推進可能結算一回合並呼叫 LLM 潤色，而且備料與
+        進鎖重驗各會呼叫這個方法一次；一次請求的那一次推進留給 choose() 開頭）。"""
+        option = {o.id: o for o in self.options(odds=False, tick=False)}.get(option_id)
         if option is None or not option.enabled:
             return None
         kind, _, arg = option_id.partition(":")

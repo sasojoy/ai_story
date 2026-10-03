@@ -797,11 +797,16 @@ def test_a_non_dialogue_option_goes_through_one_act_and_never_asks_the_model(gam
     assert game.state.player.stamina < 150
 
 
-def test_leaving_a_dialogue_does_not_ask_the_model(game):
+def test_leaving_a_dialogue_does_not_ask_the_model_or_take_an_extra_lock_round_trip(game, lock_events):
     ids = _stand_by_a_figure(game)
     with mock.patch.object(companion_agent, "generate_turn", return_value=DIALOGUE_TURN):
         app.make_option_handler(ids.index("act:socialize"))(game, ids)
     ids = [o.id for o in game.options()]
-    with mock.patch.object(companion_agent, "generate_turn", side_effect=AssertionError("不該呼叫模型")):
+    lock_events.clear()
+    with mock.patch.object(companion_agent, "generate_turn", side_effect=AssertionError("不該呼叫模型")), \
+            mock.patch.object(app, "prepare_dialogue", side_effect=AssertionError("告辭不必備料")), \
+            mock.patch.object(app, "act", wraps=app.act) as act:
         app.make_option_handler(ids.index("talk:leave"))(game, ids)
+    act.assert_called_once()
+    assert lock_events == ["enter", "exit"]  # talk:leave 永遠不會生成對話：跟非對話選項一樣只拿一次鎖
     assert game.state.player.pending_companion is None

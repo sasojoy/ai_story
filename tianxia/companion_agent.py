@@ -194,7 +194,8 @@ def prepare_turn(client: OllamaClient | None, request: DialogueRequest) -> Prepa
     生成不出來時 turn=None，由階段 C 當成 DialogueUnavailable 處理，這裡不拋例外。"""
     try:
         turn = generate_turn(client, request.messages)
-    except DialogueUnavailable:
+    except DialogueUnavailable as e:
+        logger.warning(f"companion_agent 鎖外生成失敗 ({request.companion_id}): {e}，這輪對話取消")
         turn = None
     return PreparedTurn(request.option_id, request.companion_id, request.player_action, turn)
 

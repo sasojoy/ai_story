@@ -197,7 +197,8 @@ def make_option_handler(index: int):
             return [gr.skip()] * N_OUTPUTS
         option_id = ids[index]
         prepared = None
-        if option_id.startswith("talk:") or option_id == "act:socialize":  # 只有這兩類可能呼叫對話模型
+        # 只有 talk:N 與交遊可能呼叫對話模型；talk:leave 永遠不會，不必多繞一趟備料的鎖
+        if (option_id.startswith("talk:") and option_id != "talk:leave") or option_id == "act:socialize":
             prepared = prepare_dialogue(game, option_id)
         return act(game, lambda g: g.choose(option_id, prepared=prepared))
 

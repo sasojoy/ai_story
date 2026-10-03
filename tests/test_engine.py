@@ -1822,8 +1822,9 @@ def test_a_prepared_turn_for_another_companion_or_option_is_ignored(content, gam
         game.choose("talk:leave")  # 退出這段對話，下一個 stale 重新開
 
 
-def test_a_prepared_opening_goes_stale_once_a_dialogue_is_already_open(content, game):
-    """連點兩下：第二張單子進鎖時對話已經開了，交遊不在選單上，什麼都不做。"""
+def test_choose_rejects_a_second_opening_once_a_dialogue_is_already_open(content, game):
+    """連點兩下：第二張單子進鎖時對話已經開了，交遊不在選單上——這是 choose() 自己的「選項可用」檢查擋下的，
+    不是 prepared 的重驗（重驗見下一個測試）。"""
     _figure(content)
     game.state.player.fortune = True
     first, second = _prepared(game, "act:socialize"), _prepared(game, "act:socialize")
@@ -1843,3 +1844,62 @@ def test_a_prepared_turn_is_ignored_by_options_that_do_not_use_it(content, game)
         game.choose("act:explore", prepared=stray)
     assert game.state.player.stamina == before - content.config.action_cost["explore"]
     assert game.state.player.pending_companion is None
+
+
+def test_a_prepared_opening_is_dropped_by_the_recheck_when_the_fortune_comes_due_meanwhile(content, game):
+    """生成的那段時間福緣到期：交遊選項還在、還能按，但這次交遊會先發福緣、不開對話——這才是重驗擋下來的情況。"""
+    _figure(content)
+    game.state.player.fortune = True
+    prepared = _prepared(game, "act:socialize")
+    game.state.player.fortune = False
+    game.state.world.time += 86400 * content.config.fortune_day_min
+    assert any(o.id == "act:socialize" and o.enabled for o in game.options())
+    assert game._checked_prepared("act:socialize", prepared) is None
+    with _no_model():
+        game.choose("act:socialize", prepared=prepared)
+    assert game.state.player.pending_companion is None
+    assert game.state.player.fortune  # 走的是福緣那條路，不是對話
+
+
+def _spy_battle_status(game):
+    """記下每次 _battle_status 是用 tick=True 還是 tick=False 呼叫的。"""
+    calls = []
+    real = type(game)._battle_status
+
+    def spy(self, tick=True):
+        calls.append(tick)
+        return real(self, tick=tick)
+
+    return calls, mock.patch.object(type(game), "_battle_status", spy)
+
+
+def test_options_passes_tick_through_to_the_battle_status(game):
+    calls, patched = _spy_battle_status(game)
+    with patched:
+        game.options(odds=False, tick=False)
+        assert calls == [False]
+        game.options(odds=False)
+        game.options()
+    assert calls == [False, True, True]  # 預設還是 tick=True，其他呼叫端的行為不變
+
+
+def test_dialogue_request_and_the_recheck_never_tick_the_battle(content, game):
+    """一次請求只能推進一次戰鬥（推進可能結算一回合、呼叫 LLM 潤色，而且是握著鎖呼叫）：
+    備料（階段 A）與進鎖後的重驗都只讀，推進交給 choose() 自己開頭那一次。"""
+    _open_dialogue(content, game)
+    prepared = _prepared(game, "talk:0")
+    calls, patched = _spy_battle_status(game)
+    with patched:
+        game.dialogue_request("talk:0")
+        game.dialogue_request("act:socialize")
+        game._checked_prepared("talk:0", prepared)
+    assert calls and True not in calls
+
+
+def test_choosing_a_prepared_dialogue_option_ticks_the_battle_only_once(content, game):
+    _open_dialogue(content, game)
+    prepared = _prepared(game, "talk:0")
+    calls, patched = _spy_battle_status(game)
+    with patched, _no_model():
+        game.choose("talk:0", prepared=prepared)
+    assert calls.count(True) == 1
