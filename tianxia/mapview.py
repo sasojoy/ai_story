@@ -298,15 +298,16 @@ def _you(content: Content, spot: atlas.RoadSpot) -> tuple[float, float, str]:
 
 
 def _you_mark(content: Content, spot: atlas.RoadSpot, you: tuple[float, float, str], taken: list[Taken]) -> str:
-    """路上的「你」：從你到前面那一站的虛線（還沒走的那一截，看得出走向）與一個圓點；把圓點佔的範圍加進 taken。"""
+    """路上的「你」：從你到前面那一站的虛線（還沒走的那一截，看得出走向）與一個圓點；把圓點佔的範圍加進 taken。
+    兩個都不接點擊（pointer-events="none"）：它們畫在地點上面，不然會擋住點前後那兩站。"""
     x, y, _ = you
     ahead = content.locations[spot.ahead]
     taken.append(((x - YOU_SIZE, y - YOU_SIZE, x + YOU_SIZE, y + YOU_SIZE), 1))
     return (
         f'<line x1="{x:g}" y1="{y:g}" x2="{ahead.x}" y2="{ahead.y}" stroke="{ROUTE_STROKE}" stroke-width="4" '
-        'stroke-dasharray="6 4" stroke-linecap="round"/>'
+        'stroke-dasharray="6 4" stroke-linecap="round" pointer-events="none"/>'
         f'<circle class="tx-you" cx="{x:g}" cy="{y:g}" r="{YOU_SIZE}" fill="{NODE_FILL["current"]}" '
-        'stroke="#FFFFFF" stroke-width="2"/>'
+        'stroke="#FFFFFF" stroke-width="2" pointer-events="none"/>'
     )
 
 

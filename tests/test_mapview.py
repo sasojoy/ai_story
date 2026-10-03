@@ -364,6 +364,10 @@ def test_on_the_road_the_map_draws_you_between_the_two_stops(state, content):
     assert f'<circle class="tx-you" cx="150" cy="100" r="{YOU_SIZE}"' in svg  # 小鎮與湖邊的正中間
     assert f'<line x1="150" y1="100" x2="200" y2="100" stroke="{ROUTE_STROKE}"' in svg  # 還沒走的那一截，看得出走向
     assert ">你→<" in svg
+    # 圓點與虛線畫在地點上面，不能擋住點前後那兩站（網頁照 [data-loc] 認點擊）
+    circle = re.search(r'<circle class="tx-you"[^>]*>', svg).group(0)
+    line = re.search(r'<line x1="150" y1="100"[^>]*>', svg).group(0)
+    assert 'pointer-events="none"' in circle and 'pointer-events="none"' in line
     assert "小鎮（你）" not in svg  # 在路上：小鎮只是身後那一站
     state.player.journey = Journey(mode="walk", path=["town"], arrive_at=[180.0], origin="lake", share=0.5)
     svg = render_map(state, content)  # 在正中間掉頭回小鎮：箭頭朝西
