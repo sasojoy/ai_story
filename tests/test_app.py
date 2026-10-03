@@ -10,6 +10,7 @@ from conftest import at
 from tianxia import atlas, battle_instance, companion_agent, roster
 from tianxia.characters import open_characters
 from tianxia.engine import Game, Option
+from tianxia.journal import WORLD_NEWS
 from tianxia.state import BotProfile
 from tianxia.sqlite_world import SqliteWorldStore, open_world
 
@@ -516,6 +517,41 @@ def test_a_render_only_handler_shows_what_the_database_says(game):
     out = app.open_menxia(game)
     assert any(isinstance(x, str) and x.startswith("**心得** 321") for x in out)
     assert game.state.world.storyline  # 指到共用賽季了
+
+
+@pytest.mark.parametrize("handler", ["act", "tick"])
+@pytest.mark.parametrize("stale", ["location", "pending_event"])
+def test_a_stored_character_with_stale_references_is_cleaned_and_not_bricked(save_dir, stale, handler):
+    """內容改版後，存檔裡可能留著已經不存在的地點、事件。Game 建構時會清掉，但進鎖重讀換進來的是資料庫那一列：
+    重讀之後也要再清一次，不然這個角色在每一個處理函式（包括十秒一次的計時器）都會當機。"""
+    old = Game.new(app.CONTENT, "老玩家")
+    if stale == "location":
+        old.state.player.location = "no_such_place"
+    else:
+        old.state.pending_event = "no_such_event"
+    open_characters().save(old.state)
+    game = app.open_game("老玩家")
+    if handler == "act":
+        app.act(game, lambda g: None)
+    else:
+        app.tick_handler(game, None)
+    stored = open_characters().load("老玩家")
+    assert stored.player.location in app.CONTENT.locations
+    assert stored.pending_event is None
+
+
+def test_the_sync_done_while_preparing_a_dialogue_is_saved(game):
+    """對話備料的 A 段會同步時間（共用賽季的推進照樣寫進資料庫，江湖大事也寫進這個角色的江湖紀錄）：A 段結束要把角色存起來，
+    不然 C 段的 act 一重讀，A 段同步出來的紀錄就被資料庫裡舊的那一份蓋掉了。"""
+    app.act(game, lambda g: None)
+    later = game.state.last_real + 200 * 3600  # 實測：這麼久之後同步會冒出「江湖大事」
+    with mock.patch("app.time.time", return_value=later):
+        app.prepare_dialogue(game, "act:socialize")
+        stored = open_characters().load("測試")
+        assert stored.model_dump_json() == game.state.model_dump_json()  # A 段結束，資料庫與記憶體一致
+        assert any(e.title == WORLD_NEWS for e in stored.journal)
+        app.act(game, lambda g: None)  # C 段的 act 重讀
+    assert any(e.title == WORLD_NEWS for e in game.state.journal)
 
 
 def test_a_game_that_was_never_saved_keeps_its_in_memory_character(game):

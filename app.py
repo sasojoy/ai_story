@@ -247,11 +247,13 @@ def _reload(game: Game) -> None:
     """動作開始前從資料庫重新讀這個角色：上一個動作出錯撤回時，記憶體裡的 Game 還帶著做到一半的改動，
     不重讀的話下一次存檔會把它存回去；同一個角色開兩個分頁也不會再互相覆蓋（線上架構設計 5.1）。
     還沒存過的新角色（剛建好、第一次 act 之前）資料庫裡沒有，照舊用記憶體裡那一份。
-    讀回來的角色不帶賽季（GameState.world 不進存檔），所以接著把它指回共用賽季；之後的 sync 會再對齊一次。"""
+    讀回來的角色不帶賽季（GameState.world 不進存檔），而且是資料庫裡原樣的那一列、沒經過 Game 建構時的清理
+    （內容改版後存檔裡可能留著已經不存在的地點、事件、武學），所以接著跑一次 _drop_stale_references：
+    它先把角色指回共用賽季（_reconcile_season），再清掉過時的引用；之後的 sync 會再對齊一次。"""
     stored = open_characters().load(game.state.player.name)
     if stored is not None:
         game.state = stored
-    game._reconcile_season()
+    game._drop_stale_references()
 
 
 @contextlib.contextmanager
@@ -289,13 +291,15 @@ def act(game: Game | None, action, note: bool = False) -> list:
 def prepare_dialogue(game: Game, option_id: str) -> companion_agent.PreparedTurn | None:
     """對話選項在行動鎖外生成（企劃者 2026-10-03 核准的過渡做法，正解是線上架構第二階段的 LLM 佇列）。
     模型一輪要 9~10 秒，原本整段包在 act() 的鎖裡，全服玩家與假人程式都得跟著等。分三段：
-      A（鎖內、很快）同步時間，問引擎這個選項現在會不會生成對話，會就拿到送模型的單子；
+      A（鎖內、很快）同步時間，問引擎這個選項現在會不會生成對話，會就拿到送模型的單子；同步的結果（共用賽季的推進
+        已經寫進資料庫、江湖大事寫進這個角色的江湖紀錄）要存起來，不然 C 段進鎖重讀就把它丟了；
       B（鎖外、很慢）呼叫模型，失敗時單子裡的 turn 是 None；
       C（鎖內、很快）由呼叫端把結果交給 Game.choose(prepared=...)，引擎進鎖後重新核對再套用。
     這裡做 A 與 B，不會生成對話的選項（包含 talk:leave）回傳 None，由呼叫端走一般的單次 act()。"""
     with _locked(game):
         game.sync(time.time())
         request = game.dialogue_request(option_id)
+        open_characters().save(game.state)
     if request is None:
         return None
     return companion_agent.prepare_turn(game.client, request)
