@@ -245,8 +245,19 @@ def _heading(entry: JournalEntry) -> str:
     return f'<span class="tx-title">{_esc(entry.title)}</span>{tag}'
 
 
+_NEW_THING = re.compile(r"^獲得 |煉成|自創了|習得了|第一次煉成|改練【")
+# 「拿到新東西」的那一行：掃過一道光。玩家一次行動常常吐出五六行訊息，而其中真正值得注意的
+# 就是這一行（新素材、新功法、第一次煉成某個配方）——好玩度量表量的也正是這件事。
+
+
+def _line_class(line: str) -> str:
+    return "tx-line tx-new" if _NEW_THING.search(line) else "tx-line"
+
+
 def _lines(lines: list[str]) -> str:
-    return "".join(f'<div class="tx-line">{_esc(line).replace(chr(10), "<br>")}</div>' for line in lines)
+    return "".join(
+        f'<div class="{_line_class(line)}">{_esc(line).replace(chr(10), "<br>")}</div>' for line in lines
+    )
 
 
 def _chips(changes: list[str], tag: str) -> str:
@@ -302,7 +313,21 @@ def rows_html(entries: list[JournalEntry], heading: str = "", empty: str = "") -
 # 顏色用 Gradio 主題變數，亮色與暗色主題都讀得清楚；增減用淡色底加框線表示，文字維持主題的字色。
 CSS = """
 .tx-now { border: 1px solid var(--border-color-primary); border-radius: 8px; padding: 8px 12px;
-  background: var(--background-fill-secondary); line-height: 1.6; }
+  background: var(--background-fill-secondary); line-height: 1.6;
+  animation: tx-now-rise 0.28s ease-out; }
+/* 「剛剛」那張卡片的內容每次行動都會換掉，所以這個動畫每次都會重播——等於「這是剛發生的事」
+   的視覺提示。更早的紀錄列（.tx-row）刻意不動，不然整頁都在閃。 */
+@keyframes tx-now-rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+/* 拿到新東西的那一行：掃過一道光，只播一次（見 _line_class） */
+@keyframes tx-shine { from { background-position: -150% 0; } to { background-position: 250% 0; } }
+.tx-new { border-radius: 4px; background-image: linear-gradient(
+    90deg, transparent 0%, rgba(250, 204, 21, 0.30) 45%, rgba(250, 204, 21, 0.30) 55%, transparent 100%);
+  background-size: 220% 100%; background-repeat: no-repeat;
+  animation: tx-shine 1.15s ease-out 1 both; }
+@media (prefers-reduced-motion: reduce) {
+  .tx-now, .tx-new { animation: none !important; }
+  .tx-new { background-image: none; box-shadow: inset 3px 0 0 rgba(250, 204, 21, 0.9); padding-left: 8px; }
+}
 .tx-when { font-size: 12px; opacity: 0.7; }
 .tx-head { margin: 2px 0; }
 .tx-title { font-weight: 600; }
