@@ -1,6 +1,8 @@
 """在主機上幫帳號設一組新的隨機密碼（帳號密碼登入設計第五節）：沒有這個帳號就建立，可以順便綁角色。
 
 密碼寫到 .local/<小寫帳號>_password.txt（.local/ 不進程式碼庫），畫面上只印檔案位置，不印密碼。
+--character 的角色還不存在時，直接建立一個新角色再綁上去：管理者的名號在畫面上取不到（名號檢查會擋），
+線上架構第 1 期換版從零開始之後（企劃者 2026-10-03 決定不搬舊存檔），管理者的角色只能這樣建。
 執行：.venv/Scripts/python.exe scripts/set_password.py Rayal --character Rayal
 """
 from __future__ import annotations
@@ -14,31 +16,37 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from tianxia.accounts import AccountError, AccountStore, check_login, normalize  # noqa: E402
-from tianxia.characters import open_characters  # noqa: E402
-from tianxia.sqlite_world import open_world  # noqa: E402
+from tianxia.characters import CharacterStore  # noqa: E402
+from tianxia.content import load_content  # noqa: E402
+from tianxia.database import default_path, open_database  # noqa: E402
+from tianxia.engine import Game  # noqa: E402
+from tianxia.sqlite_world import SqliteWorldStore  # noqa: E402
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="幫帳號設一組新的隨機密碼（沒有這個帳號就建立）")
     parser.add_argument("account", help="帳號（英文字母、數字、底線，3～20 字）")
-    parser.add_argument("--character", help="順便把這個名號的角色綁到帳號上：存檔要已經存在、不能是伺服器假人")
-    parser.add_argument("--saves-dir", default=str(ROOT / "saves"))
+    parser.add_argument("--character", help="順便把這個名號的角色綁到帳號上：還沒有這個角色就建立一個；不能是伺服器假人")
+    parser.add_argument("--db", default=None, help="資料庫檔（預設：環境變數 TIANXIA_DB，沒設就是 saves/tianxia.db）")
     parser.add_argument("--local-dir", default=str(ROOT / ".local"))
     args = parser.parse_args(argv)
-    saves_dir = Path(args.saves_dir)
-    store = AccountStore(saves_dir / "accounts" / "accounts.json")
-    characters = open_characters(saves_dir / "tianxia.db")
+    db = open_database(Path(args.db) if args.db else default_path())
+    store = AccountStore(db)
+    characters = CharacterStore(db)
     password = secrets.token_urlsafe(9)  # 12 個字
+    created = False
     try:
         check_login(args.account)
-        with open_world(saves_dir / "tianxia.db").action_lock():
+        with db.transaction():  # 跟伺服器、假人程式寫同一個資料庫：一筆交易做完，不會跟假人取名撞在一起
             existing = store.get(args.account)
+            state = None
             if args.character:
-                state = characters.load(args.character)
-                if state is None:
-                    print(f"找不到角色「{args.character}」的存檔。")
+                try:
+                    state = characters.load(args.character)
+                except ValueError:  # pydantic 的 ValidationError
+                    print(f"角色「{args.character}」的存檔讀不懂，先處理那份存檔。")
                     return 1
-                if state.player.bot is not None:
+                if state is not None and state.player.bot is not None:
                     print(f"「{args.character}」是伺服器假人的存檔，不能綁到帳號上。")
                     return 1
                 if store.owner_of(args.character) not in (None, normalize(args.account)):
@@ -52,6 +60,10 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 store.set_password(args.account, password)
             if args.character:
+                if state is None:
+                    game = Game.new(load_content(ROOT / "content"), args.character, world=SqliteWorldStore(db))
+                    characters.save(game.state)
+                    created = True
                 store.bind_character(args.account, args.character)
     except AccountError as exc:
         print(exc)
@@ -59,6 +71,8 @@ def main(argv: list[str] | None = None) -> int:
     out = Path(args.local_dir) / f"{normalize(args.account)}_password.txt"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(password + "\n", encoding="utf-8")
+    if created:
+        print(f"角色「{args.character}」原本不存在，已經建立新角色。")
     print(f"已設定帳號 {args.account} 的密碼，寫在 {out}")
     return 0
 

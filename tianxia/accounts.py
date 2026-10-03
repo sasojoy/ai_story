@@ -1,23 +1,23 @@
 """帳號與密碼（帳號密碼登入設計，docs/superpowers/specs/2026-10-03-帳號密碼登入-design.md）。
 
 帳號和名號分開：一個帳號一個角色，名號在建立角色時才綁上去。密碼用 scrypt 加鹽雜湊，只存鹽和雜湊值。
-這裡只管帳號檔（saves/accounts/accounts.json）的讀寫，不 import gradio；會改帳號檔的動作由呼叫端包在
-WorldStateStore.action_lock() 裡（設計第六節）。之後接 LINE／Google 時，是在同一個帳號上多一種登入方式。
+帳號存在資料庫（線上架構設計第三、六節）：`accounts` 表一個帳號一列，`logins` 表是帳號的登入方式——
+第 1 期只有 password（帳號密碼），第 3 期在同一個帳號上加 line、google。封測的線上版不開帳號密碼登入，
+只留在開發與測試環境（企劃者 2026-10-03）。不 import gradio；會改帳號的動作由呼叫端包在交易裡。
 """
 from __future__ import annotations
 
 import hashlib
 import hmac
-import json
 import re
 import secrets
 import threading
 import time
 from collections.abc import Callable
-from dataclasses import asdict, dataclass, fields
-from pathlib import Path
+from dataclasses import dataclass
 
-from .fileio import retry_sharing
+from .characters import name_key
+from .database import Database
 
 LOGIN_PATTERN = re.compile(r"[A-Za-z0-9_]{3,20}")
 PASSWORD_MIN = 6
@@ -48,7 +48,7 @@ class AccountError(ValueError):
 
 @dataclass
 class Account:
-    login: str  # 註冊時打的寫法（顯示用）；檔案裡的鍵是小寫
+    login: str  # 註冊時打的寫法（顯示用）；資料庫裡的鍵是小寫
     salt: str  # hex
     hash: str  # hex
     character: str | None = None  # 綁定的角色名號；還沒建角色時是 None
@@ -56,7 +56,7 @@ class Account:
 
 
 def normalize(login: str | None) -> str:
-    """帳號不分大小寫：檔案裡的鍵一律用小寫。"""
+    """帳號不分大小寫：資料庫裡的鍵一律用小寫。"""
     return (login or "").strip().lower()
 
 
@@ -91,59 +91,54 @@ def _matches(account: Account, password: str) -> bool:
 
 
 class AccountStore:
-    """帳號檔的讀寫。failures 是擋猜密碼的紀錄（小寫帳號 → 最近幾次登入失敗的時間），只放在記憶體、
+    """帳號的讀寫。failures 是擋猜密碼的紀錄（小寫帳號 → 最近幾次登入失敗的時間），只放在記憶體、
     重開就歸零；伺服器每次建新的 AccountStore 時傳同一個 dict 進來，讓它們共用。"""
 
     def __init__(
-        self, path: Path, clock: Callable[[], float] = time.time,
+        self, db: Database, clock: Callable[[], float] = time.time,
         failures: dict[str, list[float]] | None = None,
     ):
-        self.path = Path(path)
+        self.db = db
         self.clock = clock
         self.failures = {} if failures is None else failures
 
-    # ── 檔案 ──────────────────────────────────────
-
-    def _load(self) -> dict[str, Account]:
-        """讀帳號檔；看不懂的檔案（版本不對、形狀不對）直接丟錯，不當成空的——不然下一次寫入會把它蓋掉。
-        紀錄裡多出來、這一版不認得的欄位略過（例如之後才加的 LINE／Google 綁定）。"""
-        if not self.path.exists():
-            return {}
-        raw = json.loads(retry_sharing(lambda: self.path.read_text(encoding="utf-8")))
-        if not isinstance(raw, dict) or raw.get("version") != 1 or not isinstance(raw.get("accounts"), dict):
-            raise ValueError(f"看不懂的帳號檔：{self.path}")
-        known = {f.name for f in fields(Account)}
-        return {
-            key: Account(**{k: v for k, v in data.items() if k in known})
-            for key, data in raw["accounts"].items()
-        }
-
-    def _save(self, accounts: dict[str, Account]) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        payload = {"version": 1, "accounts": {key: asdict(a) for key, a in accounts.items()}}
-        tmp = self.path.with_name(self.path.name + ".tmp")
-        tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-        retry_sharing(lambda: tmp.replace(self.path))
-
     # ── 查詢 ──────────────────────────────────────
 
+    def _get(self, conn, key: str) -> Account | None:
+        row = conn.execute(
+            "SELECT l.display, l.salt, l.hash, a.character, a.created FROM logins l "
+            "JOIN accounts a ON a.id = l.account_id WHERE l.provider = 'password' AND l.subject = ?",
+            (key,),
+        ).fetchone()
+        if row is None:
+            return None
+        return Account(
+            login=row["display"], salt=row["salt"], hash=row["hash"], character=row["character"], created=row["created"],
+        )
+
+    def _owner(self, conn, name: str) -> str | None:
+        row = conn.execute(
+            "SELECT l.subject FROM accounts a JOIN logins l ON l.account_id = a.id AND l.provider = 'password' "
+            "WHERE a.character_key = ?",
+            (name_key(name),),
+        ).fetchone()
+        return None if row is None else row["subject"]
+
     def get(self, login: str | None) -> Account | None:
-        return self._load().get(normalize(login))
+        with self.db.snapshot() as conn:
+            return self._get(conn, normalize(login))
 
     def owner_of(self, name: str) -> str | None:
         """綁定這個名號的帳號（小寫鍵）；名號比對不分大小寫。沒有就是 None。"""
-        wanted = (name or "").strip().casefold()
-        for key, account in self._load().items():
-            if account.character is not None and account.character.casefold() == wanted:
-                return key
-        return None
+        with self.db.snapshot() as conn:
+            return self._owner(conn, name)
 
     def find(self, login_or_name: str | None) -> str | None:
         """管理者重設密碼用：先照帳號找，找不到再照名號找；都沒有就是 None。"""
         text = (login_or_name or "").strip()
         if not text:
             return None
-        if normalize(text) in self._load():
+        if self.get(text) is not None:
             return normalize(text)
         return self.owner_of(text)
 
@@ -152,15 +147,19 @@ class AccountStore:
     def register(self, login: str | None, password: str | None) -> Account:
         shown = check_login(login)
         check_password(password)
-        accounts = self._load()
         key = normalize(shown)
-        if key in accounts:
-            raise AccountError(LOGIN_TAKEN)
-        salt, digest = _new_secret(password)
-        account = Account(login=shown, salt=salt, hash=digest, created=self.clock())
-        accounts[key] = account
-        self._save(accounts)
-        return account
+        salt, digest = _new_secret(password)  # scrypt 很慢，先算好再進交易
+        created = self.clock()
+        with self.db.transaction() as conn:
+            if self._get(conn, key) is not None:
+                raise AccountError(LOGIN_TAKEN)
+            account_id = conn.execute("INSERT INTO accounts (created) VALUES (?)", (created,)).lastrowid
+            conn.execute(
+                "INSERT INTO logins (provider, subject, account_id, display, salt, hash) "
+                "VALUES ('password', ?, ?, ?, ?, ?)",
+                (key, account_id, shown, salt, digest),
+            )
+        return Account(login=shown, salt=salt, hash=digest, created=created)
 
     def authenticate(self, login: str | None, password: str | None) -> Account:
         """帳號不存在和密碼錯是同一句話、花一樣的時間；10 分鐘內錯 5 次就先不收（不存在的帳號也照算）。
@@ -179,7 +178,7 @@ class AccountStore:
         if len(password) > PASSWORD_MAX:  # 不會有帳號的密碼這麼長：照樣花一次雜湊的時間，但只雜湊前面一段
             hash_password(password[:PASSWORD_MAX], _DUMMY_SALT)
             raise AccountError(LOGIN_FAILED)
-        account = self._load().get(key) if bucket == key else None
+        account = self.get(key) if bucket == key else None
         if account is None:
             hash_password(password, _DUMMY_SALT)
             raise AccountError(LOGIN_FAILED)
@@ -190,40 +189,46 @@ class AccountStore:
         return account
 
     def bind_character(self, login: str, name: str) -> None:
-        accounts = self._load()
         key = normalize(login)
-        account = accounts.get(key)
-        if account is None:
-            raise KeyError(login)
-        if self.owner_of(name) not in (None, key):
-            raise AccountError(NAME_TAKEN)
-        if account.character not in (None, name):
-            raise AccountError(HAS_CHARACTER)
-        account.character = name
-        self._save(accounts)
+        with self.db.transaction() as conn:
+            account = self._get(conn, key)
+            if account is None:
+                raise KeyError(login)
+            if self._owner(conn, name) not in (None, key):
+                raise AccountError(NAME_TAKEN)
+            if account.character not in (None, name):
+                raise AccountError(HAS_CHARACTER)
+            conn.execute(
+                "UPDATE accounts SET character = ?, character_key = ? WHERE id = "
+                "(SELECT account_id FROM logins WHERE provider = 'password' AND subject = ?)",
+                (name, name_key(name), key),
+            )
 
     # ── 密碼 ──────────────────────────────────────
 
+    def _replace_secret(self, key: str, new: str) -> None:
+        salt, digest = _new_secret(new)
+        with self.db.transaction() as conn:
+            conn.execute(
+                "UPDATE logins SET salt = ?, hash = ? WHERE provider = 'password' AND subject = ?", (salt, digest, key),
+            )
+
     def change_password(self, login: str | None, old: str | None, new: str | None) -> None:
-        accounts = self._load()
-        account = accounts.get(normalize(login))
+        key = normalize(login)
+        account = self.get(key)
         if account is None or not _matches(account, old or ""):
             raise AccountError(WRONG_OLD_PASSWORD)
         check_password(new)
-        account.salt, account.hash = _new_secret(new)
-        self._save(accounts)
+        self._replace_secret(key, new)
 
     def set_password(self, login: str | None, new: str | None) -> None:
         """管理者重設、scripts/set_password.py 用：不必知道舊密碼；順便解除擋猜密碼。
 
         擋猜密碼的紀錄只在同一個程式的記憶體裡：從 scripts/set_password.py 重設，不會解除正在跑的伺服器裡的鎖定（最多再等 10 分鐘）；在遊戲裡由管理者重設才會。"""
-        accounts = self._load()
         key = normalize(login)
-        account = accounts.get(key)
-        if account is None:
+        if self.get(key) is None:
             raise KeyError(login)
         check_password(new)
-        account.salt, account.hash = _new_secret(new)
-        self._save(accounts)
+        self._replace_secret(key, new)
         with _THROTTLE_LOCK:
             self.failures.pop(key, None)

@@ -28,13 +28,12 @@ from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, Account
 from tianxia.characters import open_characters
 from tianxia.content import load_content
 from tianxia.craft import MATERIALS_PER_CRAFT
+from tianxia.database import open_database
 from tianxia.engine import Game, Option
 from tianxia.journal import CSS as JOURNAL_CSS
-from tianxia.sqlite_world import open_world
 
 ROOT = Path(__file__).parent
 CONTENT = load_content(ROOT / "content")
-SAVE_DIR = ROOT / "saves"
 MAX_BUTTONS = 10
 # game_state、任務區塊、狀態文字、場景文字、「剛剛」卡片（打完仗時是戰鬥卡片底下的補充）、小地圖、大勢、傳聞、江湖史、
 # 選項 id 清單、匿名勾選框、戰鬥卡片、「看完整戰報」按鈕、江湖紀錄、更早的紀錄、「展開更早的紀錄」摺疊區，
@@ -624,7 +623,7 @@ BAD_NAME = f"名號最多 {NAME_MAX} 字，也不能有看不見的字元。"  #
 
 
 def account_store() -> AccountStore:
-    return AccountStore(SAVE_DIR / "accounts" / "accounts.json", failures=LOGIN_FAILURES)
+    return AccountStore(open_database(), failures=LOGIN_FAILURES)
 
 
 def name_taken(name: str) -> bool:
@@ -665,7 +664,7 @@ def register(login_name, password, again):
     if (password or "") != (again or ""):
         raise gr.Error(PASSWORDS_DIFFER)
     try:
-        with open_world().action_lock():
+        with open_database().transaction():
             account_store().register(login_name, password)
     except AccountError as exc:
         raise gr.Error(str(exc))
@@ -673,7 +672,7 @@ def register(login_name, password, again):
 
 
 def create_character(account_key, name):
-    """建立角色：檢查名號沒人用 → 建存檔 → 綁到帳號，三步在同一把行動鎖裡做完（不跟假人程式取名撞在一起）。"""
+    """建立角色：檢查名號沒人用 → 建存檔 → 綁到帳號，三步在同一筆交易裡做完（不跟假人程式取名撞在一起）。"""
     if not account_key:
         raise gr.Error("請先登入。")
     name = unicodedata.normalize("NFKC", name or "").strip()  # 全形英數字當成一般英數字：不能用「Ｒａｙａｌ」冒充「Rayal」
@@ -682,7 +681,7 @@ def create_character(account_key, name):
     if len(name) > NAME_MAX or any(unicodedata.category(ch) in ("Cc", "Cf") for ch in name):
         raise gr.Error(BAD_NAME)
     store = account_store()
-    with open_world().action_lock():
+    with open_database().transaction():
         account = store.get(account_key)
         if account is None:
             raise gr.Error("請先登入。")
@@ -704,7 +703,7 @@ def change_password_handler(account_key, old, new, again):
     if (new or "") != (again or ""):
         return [PASSWORDS_DIFFER, "", "", ""]
     try:
-        with open_world().action_lock():
+        with open_database().transaction():
             account_store().change_password(account_key, old, new)
     except AccountError as exc:
         return [str(exc), "", "", ""]
@@ -717,7 +716,7 @@ def reset_password_handler(game, target, temp):
         return ["（只有管理者能重設密碼。）", ""]
     store = account_store()
     try:
-        with open_world().action_lock():
+        with open_database().transaction():
             key = store.find(target)
             if key is None:
                 return ["找不到這個帳號或名號。", ""]

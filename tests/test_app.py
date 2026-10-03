@@ -17,8 +17,7 @@ SKIP = {"__type__": "update"}
 
 
 @pytest.fixture(autouse=True)
-def save_dir(tmp_path, monkeypatch):
-    monkeypatch.setattr(app, "SAVE_DIR", tmp_path)
+def save_dir(tmp_path):
     return tmp_path
 
 
