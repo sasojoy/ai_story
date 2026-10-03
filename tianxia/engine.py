@@ -848,6 +848,11 @@ class Game:
         raw = self.world.get_battle()
         if raw is None:
             return None
+        if self.state.world.ended:
+            # 季結束了：沒打完的決戰直接收掉、不套用結果（這一季勝負已經定了），參戰者回到休季畫面（試玩回饋 FB-015）
+            if tick and raw.phase != "ended":
+                self.world.clear_battle()
+            return None
         definition = self.content.battles.get(raw.battle_id)
         if definition is None:
             return None
