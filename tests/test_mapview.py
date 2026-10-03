@@ -3,7 +3,7 @@ import re
 
 from tianxia.atlas import location_view, vision_range, visible_locations
 from tianxia.mapview import (
-    LEGEND_LAYERS, MINI_HEIGHT, MINI_WINDOW, NODE_FILL, ROUTE_STROKE, SELECT_STROKE, node_shape, render_map,
+    LEGEND_LAYERS, MINI_HEIGHT, NODE_FILL, ROUTE_STROKE, SELECT_STROKE, node_shape, render_map,
     render_minimap, text_box, text_width,
 )
 from tianxia.models import Location
@@ -230,7 +230,7 @@ def test_minimap_is_a_window_centred_on_the_player(state, content):
     svg = render_minimap(state, content)
     assert svg.startswith("<svg") and svg.endswith("</svg>")
     left, top, right, bottom = window(svg)
-    assert (right - left, bottom - top) == MINI_WINDOW
+    assert (right - left, bottom - top) == tuple(content.map.mini_window)
     assert ((left + right) / 2, (top + bottom) / 2) == (100, 100)  # 小鎮在正中間
     assert f"height:{MINI_HEIGHT}px" in svg and "height:auto" not in svg  # 畫面上固定高度
     size = f'width="{right - left:g}" height="{bottom - top:g}"'
@@ -239,6 +239,12 @@ def test_minimap_is_a_window_centred_on_the_player(state, content):
     state.player.location = "lake"
     left, top, right, bottom = window(render_minimap(state, content))
     assert ((left + right) / 2, (top + bottom) / 2) == (200, 100)
+
+
+def test_minimap_window_follows_the_map(state, content):
+    content.map.mini_window = (300, 200)
+    left, top, right, bottom = window(render_minimap(state, content))
+    assert (right - left, bottom - top) == (300, 200)
 
 
 def test_minimap_draws_the_big_map_around_the_player(state, content):

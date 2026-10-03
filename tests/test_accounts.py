@@ -1,9 +1,10 @@
-import json
 import threading
 
 import pytest
 
+from tianxia import database
 from tianxia.accounts import AccountError, AccountStore
+from tianxia.database import open_database
 
 
 class Clock:
@@ -21,18 +22,18 @@ def clock():
 
 @pytest.fixture
 def store(tmp_path, clock):
-    return AccountStore(tmp_path / "accounts" / "accounts.json", clock=clock)
+    return AccountStore(open_database(tmp_path / "a.db"), clock=clock)
 
 
 def test_register_stores_a_salted_hash_not_the_password(store):
     store.register("Rayal_01", "secret-pw")
-    text = store.path.read_text(encoding="utf-8")
-    assert "secret-pw" not in text
-    data = json.loads(text)
-    record = data["accounts"]["rayal_01"]
-    assert data["version"] == 1
-    assert record["login"] == "Rayal_01" and record["character"] is None and record["created"] == 1_000.0
-    assert len(bytes.fromhex(record["salt"])) == 16 and len(bytes.fromhex(record["hash"])) == 32
+    with store.db.snapshot() as conn:
+        everything = [tuple(row) for table in ("accounts", "logins") for row in conn.execute(f"SELECT * FROM {table}")]
+        login = conn.execute("SELECT * FROM logins WHERE provider = 'password' AND subject = 'rayal_01'").fetchone()
+        account = conn.execute("SELECT * FROM accounts WHERE id = ?", (login["account_id"],)).fetchone()
+    assert "secret-pw" not in repr(everything)
+    assert login["display"] == "Rayal_01" and account["character"] is None and account["created"] == 1_000.0
+    assert len(bytes.fromhex(login["salt"])) == 16 and len(bytes.fromhex(login["hash"])) == 32
 
 
 def test_the_same_password_gets_a_different_salt(store):
@@ -105,12 +106,12 @@ def test_a_success_clears_the_failures(store):
 
 def test_stores_built_on_the_same_failures_dict_share_the_count(tmp_path, clock):
     failures: dict[str, list[float]] = {}
-    path = tmp_path / "accounts.json"
+    db = open_database(tmp_path / "a.db")
     for _ in range(5):
         with pytest.raises(AccountError):
-            AccountStore(path, clock=clock, failures=failures).authenticate("x_y", "whatever1")
+            AccountStore(db, clock=clock, failures=failures).authenticate("x_y", "whatever1")
     with pytest.raises(AccountError, match="嘗試太多次"):
-        AccountStore(path, clock=clock, failures=failures).authenticate("x_y", "whatever1")
+        AccountStore(db, clock=clock, failures=failures).authenticate("x_y", "whatever1")
 
 
 def test_bind_a_character_and_find_by_login_or_name(store):
@@ -159,16 +160,15 @@ def test_set_password_needs_no_old_one_and_lifts_the_lock(store):
     assert store.authenticate("alpha", "temp-pass").login == "alpha"
 
 
-def test_a_missing_file_is_an_empty_store(store):
+def test_an_empty_database_has_no_accounts(store):
     assert store.get("alpha") is None
     assert store.find("alpha") is None
-    assert not store.path.exists()
 
 
 def test_parallel_guesses_cannot_slip_past_the_throttle(tmp_path):
     """同時送很多個錯的猜測：最多 5 個拿到「帳號或密碼不對」，其他都被擋。"""
-    path = tmp_path / "accounts.json"
-    AccountStore(path).register("alpha", "secret-pw")
+    db = open_database(tmp_path / "a.db")
+    AccountStore(db).register("alpha", "secret-pw")
     failures: dict[str, list[float]] = {}
     barrier = threading.Barrier(20)
     results: list[str] = []
@@ -176,7 +176,7 @@ def test_parallel_guesses_cannot_slip_past_the_throttle(tmp_path):
     def guess():
         barrier.wait()
         try:
-            AccountStore(path, failures=failures).authenticate("alpha", "wrong-guess")
+            AccountStore(db, failures=failures).authenticate("alpha", "wrong-guess")
         except AccountError as exc:
             results.append(str(exc))
 
@@ -208,25 +208,9 @@ def test_odd_characters_in_a_password_do_not_crash(store):
     assert store.authenticate("alpha", "\ud800abcdef").login == "alpha"
 
 
-def test_an_unreadable_accounts_file_is_refused_not_overwritten(store):
-    store.path.parent.mkdir(parents=True, exist_ok=True)
-    store.path.write_text('{"version": 2, "accounts": {}}', encoding="utf-8")
-    with pytest.raises(ValueError, match="看不懂的帳號檔"):
-        store.register("alpha", "secret-pw")
-    assert store.path.read_text(encoding="utf-8") == '{"version": 2, "accounts": {}}'
-
-
-def test_unknown_fields_in_a_record_are_ignored(store):
-    store.register("alpha", "secret-pw")
-    data = json.loads(store.path.read_text(encoding="utf-8"))
-    data["accounts"]["alpha"]["line_id"] = "U123"
-    store.path.write_text(json.dumps(data), encoding="utf-8")
-    assert store.authenticate("alpha", "secret-pw").login == "alpha"
-
-
 def test_huge_logins_and_passwords_cannot_grow_memory(tmp_path):
     failures: dict[str, list[float]] = {}
-    store = AccountStore(tmp_path / "accounts.json", failures=failures)
+    store = AccountStore(open_database(tmp_path / "a.db"), failures=failures)
     for i in range(3):
         with pytest.raises(AccountError, match="帳號或密碼不對。"):
             store.authenticate(f"{i}" + "x" * 5_000_000, "whatever1")
@@ -235,3 +219,15 @@ def test_huge_logins_and_passwords_cannot_grow_memory(tmp_path):
     with pytest.raises(AccountError, match="帳號或密碼不對。"):
         store.authenticate("alpha", "y" * 5_000_000)
     assert store.authenticate("alpha", "secret-pw").login == "alpha"
+
+
+def test_accounts_survive_reopening_the_database(tmp_path, clock):
+    AccountStore(open_database(tmp_path / "a.db"), clock=clock).register("alpha", "secret-pw")
+    database.close_all()
+    assert AccountStore(open_database(tmp_path / "a.db")).authenticate("alpha", "secret-pw").login == "alpha"
+
+
+def test_names_are_matched_ignoring_case(store):
+    store.register("alpha", "secret-pw")
+    store.bind_character("alpha", "Rayal")
+    assert store.owner_of("rayal") == "alpha" and store.find("RAYAL") == "alpha"

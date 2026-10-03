@@ -69,7 +69,7 @@ def content():
 
 def test_real_content_loads():
     c = load_content(CONTENT_DIR)
-    assert 20 <= len(c.locations) <= 30
+    assert 30 <= len(c.locations) <= 40
     assert {t.id for t in c.scenario.trends} == {"huangjin", "yuxi"}
 
 
@@ -119,15 +119,15 @@ def test_start_location_has_no_enemies(content):
     assert content.locations[content.scenario.start_location].enemies == []
 
 
-# ── 人物誌：15 位黃巾之亂人物 ─────────────────────────────
+# ── 人物誌：18 位黃巾之亂人物 ─────────────────────────────
 
 
 FORMER_RECRUITABLE = ["caocao", "liubei", "guanyu", "zhangfei", "sunjian", "yuanshao", "taoqian"]
 
 
-def test_all_fifteen_historical_figures_are_locked(content):
-    """第一季設計第一節：大勢人物這一季都不開放招募。"""
-    assert len(content.characters) == 15
+def test_all_eighteen_historical_figures_are_locked(content):
+    """第一季設計第一節：大勢人物這一季都不開放招募（人物誌補遺加了波才、張曼成、趙弘，共 18 位）。"""
+    assert len(content.characters) == 18
     assert all(ch.kind == "locked" for ch in content.characters.values())
 
 
@@ -160,7 +160,7 @@ def test_lu_bei_faction_all_gather_at_zhuo_county(content):
 def test_nobody_is_recruitable_anywhere(content):
     from tianxia.sqlite_world import open_world
 
-    world = open_world()  # 讀取用不到磁碟：.read() 找不到檔案時回傳空狀態
+    world = open_world()  # 預設的資料庫是測試用的暫存檔，裡面什麼都還沒有：.read() 回傳空狀態
     for loc_id in content.locations:
         assert roster.recruitable_here(content, world, loc_id) == [], loc_id
 
@@ -331,9 +331,11 @@ def test_the_playtest_admin_is_rayal():
 
 def test_enemy_squads_are_marked_with_the_designers_factions(content):
     factions = {sid: s.faction for sid, s in content.squads.items()}
-    assert {sid for sid, f in factions.items() if f == "huang"} == {"louluo", "shuikou", "toumu", "shanzei", "fanjianglong"}
-    assert {sid for sid, f in factions.items() if f == "guan"} == {"guishou"}
-    assert {sid for sid, f in factions.items() if f == "haoqiang"} == {"xuantie_dizi"}
+    assert {sid for sid, f in factions.items() if f == "huang"} == {
+        "louluo", "shuikou", "toumu", "shanzei", "fanjianglong", "taiping_lishi", "huangjin_sishi",
+    }
+    assert {sid for sid, f in factions.items() if f == "guan"} == {"guishou", "guan_patrol", "jun_bing", "beijun_wuzu", "liangzhou_cavalry"}
+    assert {sid for sid, f in factions.items() if f == "haoqiang"} == {"xuantie_dizi", "wubao_buqu", "yiyong"}
 
 
 def test_season_one_tells_the_dialogue_model_when_it_is(content):
@@ -343,7 +345,7 @@ def test_season_one_tells_the_dialogue_model_when_it_is(content):
 
 def test_every_figure_has_an_audience_threshold(content):
     figures = {cid: ch.audience_fame for cid, ch in content.characters.items() if ch.deep_interaction}
-    assert len(figures) == 15 and all(fame > 0 for fame in figures.values())
+    assert len(figures) == 18 and all(fame > 0 for fame in figures.values())
     assert figures["liubei"] < figures["caocao"] < figures["yuanshao"] < figures["luzhi"] < figures["huangfusong"] < figures["zhangjiao"]
 
 

@@ -156,7 +156,8 @@
       <div class="top-row">
         <div class="who" data-act="toggle-more">
           <div class="who-name">${esc(s.name)}<small>${esc(s.affiliation)}${s.anonymous ? "・匿名" : ""}・第${s.level}級</small></div>
-          <div class="where">📍 ${esc(s.location)}　第 ${s.day} 天 ${esc(s.clock)}${s.busy_hours != null ? `　🧘 閉關中，約 ${s.busy_hours} 小時後出關` : ""}</div>
+          <div class="where">📍 ${esc(s.location)}　第 ${s.day}／${s.season_days} 天 ${esc(s.clock)}${s.busy_hours != null ? `　🧘 閉關中，約 ${s.busy_hours} 小時後出關` : ""}${s.resting != null ? `　🧘 打坐中（體力回復 ${s.resting} 倍）` : ""}</div>
+          ${s.journey ? `<div class="where">🧭 ${esc(s.journey)}</div>` : ""}
         </div>
         <button class="icon-btn" data-act="sheet" aria-label="設定">⚙</button>
       </div>

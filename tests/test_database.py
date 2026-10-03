@@ -31,6 +31,14 @@ def test_a_new_file_gets_every_table(tmp_path):
     assert TABLES <= names
 
 
+def test_every_connection_syncs_to_disk_on_each_commit(tmp_path):
+    """設計 3.1：停電或當機最多少掉當下那一個動作。WAL 搭 NORMAL 可能少掉最後幾筆已經 COMMIT 的，要用 FULL（2）。"""
+    db = open_database(tmp_path / "t.db")
+    with db.snapshot() as conn:
+        assert conn.execute("PRAGMA synchronous").fetchone()[0] == 2
+        assert conn.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
+
+
 def test_one_file_is_one_database_in_a_program(tmp_path):
     assert open_database(tmp_path / "t.db") is open_database(tmp_path / "t.db")
 
@@ -232,6 +240,34 @@ def test_an_unknown_schema_version_is_refused(tmp_path):
     conn.close()
     with pytest.raises(RuntimeError, match="第 99 版"):
         Database(path)
+
+
+def test_a_connection_whose_setup_fails_is_closed(tmp_path, monkeypatch):
+    """連上了、但設定用的 PRAGMA 出錯：剛開的連線要先關掉再把錯丟出去，不能留著沒人管。"""
+    real_connect = sqlite3.connect
+    made = []
+
+    class SetupFails:
+        row_factory = None
+
+        def __init__(self, real):
+            self.real = real
+            self.closed = False
+
+        def execute(self, sql, *args):
+            if "foreign_keys" in sql:
+                raise sqlite3.OperationalError("設定失敗")
+            return self.real.execute(sql, *args)
+
+        def close(self):
+            self.closed = True
+            self.real.close()
+
+    monkeypatch.setattr(sqlite3, "connect", lambda *a, **k: made.append(SetupFails(real_connect(*a, **k))) or made[-1])
+    with pytest.raises(sqlite3.OperationalError, match="設定失敗"):
+        Database(tmp_path / "t.db")
+    assert len(made) == 1
+    assert made[0].closed
 
 
 _HOLDER = """

@@ -1,0 +1,437 @@
+[
+  {
+    "id": "jizhou_altar_oath",
+    "title": "壇前立誓",
+    "locations": [
+      "julu_altar"
+    ],
+    "text": "壇前跪著一排新入道的人，輪流對著香爐立誓。排在你前面的少年手抖得厲害，回頭小聲問你：「立了誓，是不是就回不了家了？」",
+    "choices": [
+      {
+        "text": "告訴他黃天會護著他",
+        "effect": {
+          "text": "少年咬牙立了誓，道人替他在額上纏起黃巾。",
+          "trend": {
+            "huangjin": 1
+          }
+        }
+      },
+      {
+        "text": "趁亂把他拉出隊伍",
+        "check": {
+          "stat": "agi",
+          "difficulty": 7
+        },
+        "effect": {
+          "text": "你拉著少年鑽出人群，一路跑到壇外的麥田邊。他說家中還有老母，向你磕了個頭，往南去了。",
+          "stats": {
+            "good": 2
+          }
+        },
+        "fail_effect": {
+          "text": "壇前的力士一把揪住你們，少年被押回隊伍，你被推出了壇外。",
+          "stamina": -10,
+          "stats": {
+            "fame": -1
+          }
+        }
+      },
+      {
+        "text": "不作聲",
+        "effect": {
+          "text": "少年轉回頭去，香爐裡的煙燻得人睜不開眼。"
+        }
+      }
+    ]
+  },
+  {
+    "id": "jizhou_altar_sermon",
+    "title": "夜半講經",
+    "locations": [
+      "julu_altar"
+    ],
+    "text": "入夜，道壇後的草棚裡點著油燈，一位黃衣道人向信眾講說「太平」二字：來日天下無飢，人人有田可耕。棚外守著幾個執杖的力士。",
+    "choices": [
+      {
+        "text": "坐下細聽",
+        "check": {
+          "stat": "wis",
+          "difficulty": 6,
+          "by": "self"
+        },
+        "effect": {
+          "text": "你聽出那些流離的人信的不是符水，是一口飯、一塊田。這一夜你想了很多。",
+          "stats": {
+            "wis": 1
+          }
+        },
+        "fail_effect": {
+          "text": "你聽得昏昏欲睡，被道人點名問話，答不上來，惹來一片白眼。"
+        }
+      },
+      {
+        "text": "起身質問他拿什麼讓人人有田",
+        "combat": "taiping_lishi",
+        "effect": {
+          "text": "力士圍上來被你打退，你趁亂走出草棚。信眾們望著你，眼神又懼又疑。",
+          "stats": {
+            "fame": 1
+          },
+          "trend": {
+            "huangjin": -1
+          }
+        },
+        "fail_effect": {
+          "text": "力士把你架出草棚，丟在壇外的泥地上。",
+          "stamina": -15
+        }
+      },
+      {
+        "text": "捐些錢添燈油",
+        "condition": {
+          "min_stats": {
+            "silver": 10
+          }
+        },
+        "effect": {
+          "text": "道人向你稽首，說黃天記得每一個心誠的人。",
+          "stats": {
+            "silver": -10
+          },
+          "trend": {
+            "huangjin": 1
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "jizhou_guangzong_moat",
+    "title": "壕溝之外",
+    "locations": [
+      "guangzong"
+    ],
+    "text": "廣宗城外的壕溝又深又闊，黃巾兵驅趕著民夫往營壘上挑土。監工的頭目看你閒著，揚鞭要你也去挑。",
+    "choices": [
+      {
+        "text": "低頭挑土，暗中記下營壘的布置",
+        "check": {
+          "stat": "wis",
+          "difficulty": 7
+        },
+        "effect": {
+          "text": "一整天下來，你把城東幾座營壘的位置記了個大概，夜裡託人送去了城外的官軍營中。",
+          "stamina": -10,
+          "stats": {
+            "fame": 1
+          },
+          "trend": {
+            "huangjin": -2
+          }
+        },
+        "fail_effect": {
+          "text": "監工看你東張西望，一鞭抽在你背上。",
+          "stamina": -15
+        }
+      },
+      {
+        "text": "替咳得直不起腰的老民夫多挑幾擔",
+        "effect": {
+          "text": "你多挑了幾擔，老民夫總算靠著土堆歇了口氣，悄悄把半塊餅塞給你。",
+          "stamina": -15,
+          "stats": {
+            "good": 2
+          }
+        }
+      },
+      {
+        "text": "推開監工，衝出營壘",
+        "combat": "huangjin_sishi",
+        "effect": {
+          "text": "追來的死士被你打倒在壕溝邊，你翻過土堆，消失在城外的蘆葦裡。",
+          "stats": {
+            "fame": 2
+          },
+          "trend": {
+            "huangjin": -1
+          }
+        },
+        "fail_effect": {
+          "text": "死士們把你按在溝底打了一頓，搜走了錢袋才放你走。",
+          "stamina": -15,
+          "stats": {
+            "silver": -10
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "jizhou_luzhi_enlist",
+    "title": "轅門投軍",
+    "locations": [
+      "luzhi_camp"
+    ],
+    "text": "盧植營的轅門外排著投軍的人，書吏一個個登記姓名籍貫。你前面那個漢子報不出籍貫，支支吾吾，旁邊的軍侯已經按住了刀柄。",
+    "choices": [
+      {
+        "text": "替他作保",
+        "check": {
+          "stat": "wis",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "你說他村子被燒，連戶籍都沒了，一路逃到這裡。書吏寫下了名字，漢子紅著眼向你作揖。",
+          "stats": {
+            "good": 2,
+            "fame": 1
+          }
+        },
+        "fail_effect": {
+          "text": "軍侯冷冷看你一眼：「你也報上籍貫來。」你們兩個都被轟出了轅門。",
+          "stats": {
+            "fame": -1
+          }
+        }
+      },
+      {
+        "text": "提醒軍侯多盤問幾句",
+        "effect": {
+          "text": "漢子被帶去盤問，從他的包袱裡搜出一條黃布。軍侯朝你點了點頭。",
+          "stats": {
+            "fame": 1
+          },
+          "trend": {
+            "huangjin": -1
+          }
+        }
+      },
+      {
+        "text": "不管閒事",
+        "effect": {
+          "text": "書吏喊了下一個名字。"
+        }
+      }
+    ]
+  },
+  {
+    "id": "jizhou_camp_archery",
+    "title": "營中較射",
+    "locations": [
+      "luzhi_camp"
+    ],
+    "text": "北軍的士卒在營中空地較射，靶子立在百步之外。一個屯長見你看得認真，把弓遞過來：「射中一箭，賞你一頓酒肉錢。」",
+    "choices": [
+      {
+        "text": "接弓試射",
+        "check": {
+          "stat": "agi",
+          "difficulty": 7
+        },
+        "effect": {
+          "text": "箭正中靶心，四周一陣喝采，屯長拍著你的肩膀把錢塞給你。",
+          "stats": {
+            "silver": 15,
+            "fame": 1
+          }
+        },
+        "fail_effect": {
+          "text": "箭擦著靶邊飛了出去，士卒們笑得前仰後合。"
+        }
+      },
+      {
+        "text": "說射箭不算本事，要比就比拳腳",
+        "combat": "beijun_wuzu",
+        "effect": {
+          "text": "你連勝三個士卒，屯長收起了笑臉，親手給你倒了一碗酒。",
+          "stats": {
+            "silver": 20,
+            "fame": 2
+          }
+        },
+        "fail_effect": {
+          "text": "北軍的士卒個個是練家子，你被摔得渾身是土。",
+          "stamina": -15,
+          "stats": {
+            "fame": -1
+          }
+        }
+      },
+      {
+        "text": "推說自己不會射箭",
+        "effect": {
+          "text": "屯長聳聳肩，把弓遞給了下一個人。"
+        }
+      }
+    ]
+  },
+  {
+    "id": "jizhou_seed_grain",
+    "title": "徵糧車隊",
+    "locations": [
+      "xiaquyang"
+    ],
+    "text": "一隊黃巾兵押著糧車往城裡去，車後跟著幾個哭喊的農婦，說那是她們留著開春下地的種糧。押車的兵頭揚鞭驅趕，路人都低頭避開。",
+    "choices": [
+      {
+        "text": "攔下糧車",
+        "combat": "taiping_lishi",
+        "effect": {
+          "text": "你打散了押車的力士，把種糧還給了農婦。",
+          "stats": {
+            "good": 3,
+            "fame": 1
+          },
+          "trend": {
+            "huangjin": -2
+          },
+          "rumor": "聽說有人在下曲陽城外截下了黃巾的徵糧車，帶頭的是{name}。"
+        },
+        "fail_effect": {
+          "text": "力士人多，你被打倒在路邊，糧車吱吱呀呀地進了城。",
+          "stamina": -15
+        }
+      },
+      {
+        "text": "跟在車後，割斷一袋糧的繩子",
+        "check": {
+          "stat": "agi",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "一袋糧滾進了路邊的溝裡。等車隊走遠，你把糧扛去還給了農婦。",
+          "stats": {
+            "good": 2
+          }
+        },
+        "fail_effect": {
+          "text": "兵頭回頭看見了你，一鞭抽在你手上。",
+          "stamina": -10
+        }
+      },
+      {
+        "text": "幫著推車進城",
+        "effect": {
+          "text": "兵頭賞了你幾個錢，車後的哭聲漸漸遠了。",
+          "stats": {
+            "silver": 10,
+            "evil": 1
+          },
+          "trend": {
+            "huangjin": 1
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "jizhou_wubao_gate",
+    "title": "塢堡收人",
+    "locations": [
+      "haozu_fort"
+    ],
+    "text": "塢堡門前擠滿了逃難的佃農，部曲只開一道小門，一個個查看手腳。粗壯的放進去做工，老弱的被擋在牆外。",
+    "choices": [
+      {
+        "text": "跟守門的頭目說情",
+        "check": {
+          "stat": "wis",
+          "difficulty": 7
+        },
+        "effect": {
+          "text": "你說堡裡也要有人紡線餵豬，頭目想了想，多放了十幾個老人孩子進門。",
+          "stats": {
+            "good": 2,
+            "fame": 1
+          }
+        },
+        "fail_effect": {
+          "text": "頭目冷笑：「堡裡的糧又不是你出的。」"
+        }
+      },
+      {
+        "text": "拿銀子替幾戶人家買個進門的名額",
+        "condition": {
+          "min_stats": {
+            "silver": 20
+          }
+        },
+        "effect": {
+          "text": "部曲收了銀子，放了三戶人家進門。",
+          "stats": {
+            "silver": -20,
+            "good": 2
+          }
+        }
+      },
+      {
+        "text": "跟頭目打賭：比試贏了就放人",
+        "combat": "wubao_buqu",
+        "effect": {
+          "text": "頭目輸得心服，開門放了一批人進去。",
+          "stats": {
+            "good": 2,
+            "fame": 2
+          }
+        },
+        "fail_effect": {
+          "text": "部曲們把你架起來，扔出了門外。",
+          "stamina": -10
+        }
+      }
+    ]
+  },
+  {
+    "id": "jizhou_baima_crossing",
+    "title": "白馬津爭渡",
+    "locations": [
+      "baima_ford"
+    ],
+    "text": "白馬津只剩一條渡船，南逃的人擠在岸邊。把守渡口的郡兵說要查過了才准上船，實則伸手要錢。",
+    "choices": [
+      {
+        "text": "當眾揭穿郡兵勒索",
+        "combat": "jun_bing",
+        "effect": {
+          "text": "你打翻了帶頭勒索的郡兵，船夫趁機把岸邊的人一船船送過了河。",
+          "stats": {
+            "good": 2,
+            "fame": 2
+          }
+        },
+        "fail_effect": {
+          "text": "郡兵把你按在地上搜身，錢袋被搶了個精光。",
+          "stats": {
+            "silver": -20
+          }
+        }
+      },
+      {
+        "text": "幫船夫撐篙，多渡幾趟",
+        "check": {
+          "stat": "con",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "你跟船夫輪流撐篙到天黑，多渡了三趟。船夫從河灘折了一把柳絲送你，說是編繩最韌的料。",
+          "stats": {
+            "good": 1
+          },
+          "materials": {
+            "rou_1": 1
+          }
+        },
+        "fail_effect": {
+          "text": "撐到第二趟你就手臂發軟，差點把船撐翻。",
+          "stamina": -10
+        }
+      },
+      {
+        "text": "跟著人群慢慢等",
+        "effect": {
+          "text": "你在岸邊等到傍晚，才擠上了最後一船。"
+        }
+      }
+    ]
+  }
+]

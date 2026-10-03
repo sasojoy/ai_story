@@ -1,0 +1,328 @@
+[
+  {
+    "id": "nanyang_camp_conscripts",
+    "title": "裹挾入營",
+    "locations": [
+      "nanyang_huangjin_camp"
+    ],
+    "text": "黃巾兵用繩子牽著一串村裡的青壯進營，走在最後的是個瘸腿的後生，跟不上就挨鞭子。他娘跟在後頭，一路哭求放人。",
+    "choices": [
+      {
+        "text": "跟押人的什長說，瘸子上不了陣",
+        "check": {
+          "stat": "wis",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "什長想想也是，解開繩子把後生推了出來。他娘拉著兒子，向你連連磕頭。",
+          "stats": {
+            "good": 2
+          }
+        },
+        "fail_effect": {
+          "text": "什長罵你多管閒事，叫人把你也綁了，你掙開繩子才跑掉。",
+          "stamina": -10
+        }
+      },
+      {
+        "text": "拔刀砍斷繩子",
+        "combat": "shuikou",
+        "effect": {
+          "text": "押人的黃巾兵被你打退，一串青壯趁亂四散奔逃。",
+          "stats": {
+            "good": 2,
+            "fame": 1
+          },
+          "trend": {
+            "huangjin": -2
+          }
+        },
+        "fail_effect": {
+          "text": "營裡衝出一隊人，把你打倒在營門外。",
+          "stamina": -15,
+          "stats": {
+            "fame": -1
+          }
+        }
+      },
+      {
+        "text": "跟在隊伍後面進營看看",
+        "effect": {
+          "text": "營裡到處是剛纏上黃巾的面孔，伙夫舀給你一碗稀粥，沒問你是誰。"
+        }
+      }
+    ]
+  },
+  {
+    "id": "nanyang_camp_ledger",
+    "title": "糧倉對帳",
+    "locations": [
+      "nanyang_huangjin_camp"
+    ],
+    "text": "營後的糧倉堆得像小山，管糧的小頭目對著一串木牘發愁：糧草的數目怎麼也對不上，他自己又不識幾個字。",
+    "choices": [
+      {
+        "text": "幫他把帳算清楚",
+        "check": {
+          "stat": "wis",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "你一夜就把帳理清了。小頭目塞給你一包錢，說營裡正缺識字的人。",
+          "stats": {
+            "silver": 20
+          },
+          "trend": {
+            "huangjin": 1
+          }
+        },
+        "fail_effect": {
+          "text": "你越算越亂，小頭目氣得把木牘摔了一地。"
+        }
+      },
+      {
+        "text": "趁夜放火燒糧",
+        "combat": "huangjin_sishi",
+        "effect": {
+          "text": "火從糧倉一角燒起來，你殺退守倉的死士，趁亂逃出營外。身後的火光映紅了半邊天。",
+          "stats": {
+            "fame": 2
+          },
+          "trend": {
+            "huangjin": -3
+          },
+          "rumor": "南陽黃巾營的糧倉夜裡起了火，有人說放火的是{name}。"
+        },
+        "fail_effect": {
+          "text": "火還沒點起來，守倉的死士就圍了上來，你帶著一身傷翻出了營牆。",
+          "stamina": -15,
+          "stats": {
+            "silver": -10
+          }
+        }
+      },
+      {
+        "text": "推說自己也不識字",
+        "effect": {
+          "text": "小頭目嘆了口氣，又低頭數起木牘來。"
+        }
+      }
+    ]
+  },
+  {
+    "id": "nanyang_yu_grainboat",
+    "title": "淺灘糧船",
+    "locations": [
+      "yu_river"
+    ],
+    "text": "淯水上一條運糧船擱淺在淺灘，十幾個黃巾嘍囉正蹚水往船上爬。船家抱著桅桿，扯著嗓子喊救命。",
+    "choices": [
+      {
+        "text": "衝上去救人",
+        "combat": "louluo",
+        "effect": {
+          "text": "嘍囉們被你打下了水，船家千恩萬謝，硬塞給你一串錢。",
+          "stats": {
+            "silver": 15,
+            "good": 1
+          },
+          "trend": {
+            "huangjin": -1
+          }
+        },
+        "fail_effect": {
+          "text": "嘍囉們搶光了糧，連你的錢袋也順走了。",
+          "stamina": -10,
+          "stats": {
+            "silver": -10
+          }
+        }
+      },
+      {
+        "text": "蹚進河裡，幫船家把船推離淺灘",
+        "check": {
+          "stat": "str",
+          "difficulty": 7
+        },
+        "effect": {
+          "text": "你奮力一推，糧船順流滑了出去，嘍囉們撲了個空。爬上岸時，你發現手裡還攥著一塊從河底摸上來的沉甸甸的圓石。",
+          "stats": {
+            "good": 2
+          },
+          "materials": {
+            "man_1": 1
+          }
+        },
+        "fail_effect": {
+          "text": "船紋絲不動，你被嘍囉們用竹篙打回了岸上。",
+          "stamina": -10
+        }
+      },
+      {
+        "text": "站在岸邊看",
+        "effect": {
+          "text": "嘍囉們扛著糧袋走了，船家坐在船頭發愣。"
+        }
+      }
+    ]
+  },
+  {
+    "id": "nanyang_xinye_notice",
+    "title": "徵糧告示",
+    "locations": [
+      "xinye"
+    ],
+    "text": "縣衙前新貼了徵糧的告示，每戶要再交三斗米。圍著看的都是逃難來的人，一個老者念完告示，蹲在地上半天沒起來。",
+    "choices": [
+      {
+        "text": "進縣衙替百姓說話",
+        "check": {
+          "stat": "wis",
+          "difficulty": 7
+        },
+        "effect": {
+          "text": "縣丞聽你說完逃難人家的苦處，答應寬限一個月。告示前的人都向你拱手。",
+          "stats": {
+            "good": 2,
+            "fame": 1
+          }
+        },
+        "fail_effect": {
+          "text": "縣丞拍案說軍糧誤不得，叫差役把你轟了出來。"
+        }
+      },
+      {
+        "text": "替老者交了這三斗米",
+        "condition": {
+          "min_stats": {
+            "silver": 10
+          }
+        },
+        "effect": {
+          "text": "老者拉著你的袖子，嘴唇抖了半天，說不出一句話。",
+          "stats": {
+            "silver": -10,
+            "good": 2
+          }
+        }
+      },
+      {
+        "text": "一把撕下告示",
+        "effect": {
+          "text": "圍觀的人一陣叫好，差役追了你半條街。",
+          "stamina": -10,
+          "stats": {
+            "fame": 1
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "nanyang_xinye_lost_child",
+    "title": "城牆下",
+    "locations": [
+      "xinye"
+    ],
+    "text": "低矮的城牆根下擠著逃難的人家。一個孩子拉住你的衣角，說他在宛城外跟爹娘走散了，不知道他們有沒有逃到這裡。",
+    "choices": [
+      {
+        "text": "帶著他在逃難的人群裡四處打聽",
+        "check": {
+          "stat": "wis",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "問了一下午，總算在城東的破廟裡找到了他娘。孩子撲進娘懷裡，哭得說不出話。",
+          "stats": {
+            "good": 2,
+            "fame": 1
+          }
+        },
+        "fail_effect": {
+          "text": "你們問遍了城裡，誰也沒見過那樣一對夫婦。孩子坐回了牆根下。"
+        }
+      },
+      {
+        "text": "買兩個餅給他",
+        "condition": {
+          "min_stats": {
+            "silver": 5
+          }
+        },
+        "effect": {
+          "text": "孩子捧著餅，先掰了一半揣進懷裡，說要留給娘。",
+          "stats": {
+            "silver": -5,
+            "good": 1
+          }
+        }
+      },
+      {
+        "text": "甩開他的手",
+        "effect": {
+          "text": "孩子愣在原地，又去拉下一個人的衣角。",
+          "stats": {
+            "evil": 1
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "nanyang_wilds_scout",
+    "title": "草叢傷兵",
+    "locations": [
+      "nanyang_wilds"
+    ],
+    "text": "丘陵間的小路旁，一個受傷的斥候倒在草叢裡，看不出是官軍還是黃巾的人。遠處隱約傳來馬蹄聲，正往這邊來。",
+    "choices": [
+      {
+        "text": "把他藏好，替他引開追兵",
+        "check": {
+          "stat": "agi",
+          "difficulty": 7
+        },
+        "effect": {
+          "text": "你往反方向跑了一段，故意弄出聲響，追兵果然跟了過去。回來時斥候已經不見了，地上留著幾枚錢。",
+          "stats": {
+            "silver": 10,
+            "good": 2
+          }
+        },
+        "fail_effect": {
+          "text": "追兵沒上當，把斥候拖走了，還把你攆出好幾里地。",
+          "stamina": -15
+        }
+      },
+      {
+        "text": "守在他身前，等追兵到來",
+        "combat": "shanzei",
+        "effect": {
+          "text": "追來的是一隊黃巾散兵，被你殺退了。斥候說他是郡府派出來探路的，向你道了謝。",
+          "stats": {
+            "good": 1,
+            "fame": 1
+          },
+          "trend": {
+            "huangjin": -1
+          }
+        },
+        "fail_effect": {
+          "text": "黃巾散兵把你們兩個都打翻在地，搶走了斥候身上的東西。",
+          "stamina": -15
+        }
+      },
+      {
+        "text": "搜他身上的錢袋",
+        "effect": {
+          "text": "斥候已經沒力氣反抗，只是死死瞪著你。",
+          "stats": {
+            "silver": 15,
+            "evil": 2
+          }
+        }
+      }
+    ]
+  }
+]

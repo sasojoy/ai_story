@@ -9,6 +9,7 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
+from tianxia import database
 from tianxia.bot_runner import BotRunner, TickReport, log_failure
 from tianxia.content import load_content
 
@@ -21,6 +22,7 @@ def main(ticks: int | None = None) -> None:
     content = load_content(ROOT / "content")
     runner = BotRunner(content)
     print(f"伺服器假人程式啟動：每 {content.config.bot_tick_seconds:g} 秒巡一輪（Ctrl+C 結束）", flush=True)
+    print(f"資料庫：{database.default_path().resolve()}", flush=True)  # 跟 server.py 要是同一個檔；TIANXIA_DB 設錯時一眼看得出來
     done = 0
     try:
         while ticks is None or done < ticks:

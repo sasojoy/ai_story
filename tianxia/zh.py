@@ -5,7 +5,7 @@
 那是模型行為的限制，不是 prompt 寫法問題，所以要在**輸出端**做確定性的轉換。
 
 煉製讓這件事從「難看」變成「不能接受」：煉出來的功法名字會**永久登記進全服的配方表**
-（`world_state.created_skills`），第二個煉同一個配方的人看到的就是那個名字，而且事後改不掉。
+（資料庫的 `skills` 與 `recipes` 表），第二個煉同一個配方的人看到的就是那個名字，而且事後改不掉。
 
 用純 Python 的 `opencc-python-reimplemented`（`s2twp` 模式，連用詞一起轉：軟件→軟體），
 刻意不用官方 `opencc` 的 C++ binding——它帶編譯好的 DLL，而這台機器的 Windows 應用程式控制

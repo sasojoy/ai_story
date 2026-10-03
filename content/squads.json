@@ -11,5 +11,15 @@
   {"id": "guishou", "name": "董卓帳下斥候", "difficulty": 60, "attribute": "虛", "reward_xinde": 40, "exp": 40, "faction": "guan"},
   {"id": "shoumu", "name": "南華觀看守者", "difficulty": 120, "attribute": "柔", "reward_xinde": 100, "exp": 80,
    "drops": [{"material": "rou_2"}, {"material": "rou_3", "chance": 0.3}]},
-  {"id": "xuantie_dizi", "name": "曹家護院", "difficulty": 25, "attribute": "剛", "reward_xinde": 20, "exp": 20, "faction": "haoqiang"}
+  {"id": "xuantie_dizi", "name": "曹家護院", "difficulty": 25, "attribute": "剛", "reward_xinde": 20, "exp": 20, "faction": "haoqiang"},
+  {"id": "guan_patrol", "name": "官軍巡騎", "difficulty": 20, "attribute": "快", "reward_silver": 8, "reward_xinde": 14, "exp": 18, "faction": "guan"},
+  {"id": "jun_bing", "name": "郡國兵", "difficulty": 35, "attribute": "剛", "reward_silver": 15, "reward_xinde": 20, "exp": 25, "faction": "guan"},
+  {"id": "beijun_wuzu", "name": "北軍五校", "difficulty": 55, "attribute": "實", "reward_silver": 25, "reward_xinde": 30, "exp": 35, "faction": "guan"},
+  {"id": "liangzhou_cavalry", "name": "涼州鐵騎", "difficulty": 65, "attribute": "快", "reward_silver": 30, "reward_xinde": 35, "exp": 40, "faction": "guan"},
+  {"id": "taiping_lishi", "name": "太平道力士", "difficulty": 40, "attribute": "剛", "reward_silver": 15, "reward_xinde": 22, "exp": 28, "faction": "huang"},
+  {"id": "huangjin_sishi", "name": "黃巾死士", "difficulty": 60, "attribute": "剛", "reward_silver": 25, "reward_xinde": 32, "exp": 38, "faction": "huang"},
+  {"id": "wubao_buqu", "name": "塢堡部曲", "difficulty": 30, "attribute": "實", "reward_silver": 12, "reward_xinde": 18, "exp": 22, "faction": "haoqiang"},
+  {"id": "yiyong", "name": "涿郡義勇", "difficulty": 25, "attribute": "快", "reward_silver": 10, "reward_xinde": 16, "exp": 20, "faction": "haoqiang"},
+  {"id": "yan_mazei", "name": "燕山馬賊", "difficulty": 25, "attribute": "快", "reward_silver": 12, "reward_xinde": 15, "exp": 20},
+  {"id": "he_shuikou", "name": "河上水寇", "difficulty": 20, "attribute": "柔", "reward_silver": 10, "reward_xinde": 12, "exp": 16}
 ]

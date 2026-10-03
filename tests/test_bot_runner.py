@@ -4,7 +4,7 @@ import random
 import pytest
 
 import run_bots
-from tianxia import bot_policy, bot_runner, server_bots
+from tianxia import bot_policy, bot_runner, database, server_bots
 from tianxia.battle_instance import BattleParticipant
 from tianxia.bot_runner import BotRunner
 from tianxia.characters import open_characters
@@ -291,6 +291,13 @@ def test_run_bots_starts_and_runs_a_round(monkeypatch, capsys):
     run_bots.main(ticks=1)
     out = capsys.readouterr().out
     assert "伺服器假人程式啟動" in out
+
+
+def test_run_bots_says_which_database_file_it_uses(monkeypatch, capsys):
+    """兩支程式要用同一個資料庫檔；TIANXIA_DB 設錯時，開機畫面一眼就看得出來（只印路徑，不印任何名號）。"""
+    monkeypatch.setattr(run_bots.time, "sleep", lambda seconds: None)
+    run_bots.main(ticks=1)
+    assert str(database.default_path().resolve()) in capsys.readouterr().out
 
 
 def _identity_free(name: str, capsys, caplog) -> bool:

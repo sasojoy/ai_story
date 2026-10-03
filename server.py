@@ -7,8 +7,8 @@
   在這裡轉成 HTML 再送出（`md()`，原始 HTML 一律跳脫，名號裡的 `<` 不會變成標籤）。
   江湖紀錄、地圖沿用引擎產生的 HTML／SVG（線上架構設計第七節的混合做法）。
 - 登入狀態放在 cookie（`tx_session`），伺服器記憶體裡對應到帳號；重開伺服器要重新登入。
-- 同一個角色只有一份 `Game`（`GAMES`）：同一個帳號開兩個分頁、換手機再登入，看到的都是同一份，
-  不再有「兩個分頁各一份、最後存的蓋掉前面」。
+- 資料庫是唯一的真實來源：每個要用角色的請求進鎖時先從資料庫重讀（`_locked`），所以動作出錯撤回時
+  記憶體裡做到一半的改動不會被下一次存回去。`GAMES` 只是每個角色一份的工作副本。
 - 人物對話照舊在行動鎖外生成（`prepare_dialogue`），模型的 9~10 秒不會卡住全服。
 
 執行：`.venv/Scripts/python.exe server.py`（http://127.0.0.1:7861）。要讓外面的手機連進來，
@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import secrets
 import shutil
 import subprocess
@@ -34,15 +35,14 @@ from tianxia import companion_agent, materials
 from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, AccountStore, normalize
 from tianxia.content import load_content
 from tianxia.craft import MATERIALS_PER_CRAFT
+from tianxia.database import default_path, open_database
 from tianxia.engine import Game
 from tianxia.journal import CSS as JOURNAL_CSS
 from tianxia.characters import open_characters
-from tianxia.sqlite_world import open_world
 
 ROOT = Path(__file__).parent
 WEB = ROOT / "web"
 CONTENT = load_content(ROOT / "content")
-SAVE_DIR = ROOT / "saves"
 PORT = 7861
 COOKIE = "tx_session"
 RECENT_ROWS = 5  # 「剛剛」之後直接列出幾則江湖紀錄
@@ -71,7 +71,7 @@ def md(text: str | None) -> str:
 
 
 def account_store() -> AccountStore:
-    return AccountStore(SAVE_DIR / "accounts" / "accounts.json", failures=LOGIN_FAILURES)
+    return AccountStore(open_database(), failures=LOGIN_FAILURES)
 
 
 # ── 角色與存檔 ──────────────────────────────────────────
@@ -111,10 +111,29 @@ def name_taken(name: str) -> bool:
     return open_characters().exists(name) or account_store().owner_of(name) is not None or name.casefold() in admins
 
 
-def act(game: Game, action) -> list[str] | None:
-    """同步時間 → 執行動作 → 存檔。拿跨程式的行動鎖（假人程式也拿同一把），計時器、按鈕與假人就一個一個來。
-    回傳動作的訊息；動作回傳 UNCHANGED 時不存檔。"""
+def _reload(game: Game) -> None:
+    """進鎖後先從資料庫重新讀這個角色：上一個動作出錯撤回時，記憶體裡的 Game 還帶著做到一半的改動，
+    不重讀的話下一次存檔會把它存回去（線上架構設計 5.1）。還沒存過的新角色資料庫裡沒有，照舊用記憶體裡那一份。
+    讀回來的那一列不帶賽季、也沒經過 Game 建構時的清理（內容改版後可能留著已經不存在的地點、事件、武學），
+    所以接著跑一次 _drop_stale_references：先把角色指回共用賽季，再清掉過時的引用。"""
+    stored = open_characters().load(game.state.player.name)
+    if stored is not None:
+        game.state = stored
+    game._drop_stale_references()
+
+
+@contextlib.contextmanager
+def _locked(game: Game):
+    """拿跨程式的行動鎖（假人程式也拿同一把），並先重讀角色（見 _reload）。每一個要用 game.state 的地方都從這裡進鎖。"""
     with game.world.action_lock():
+        _reload(game)
+        yield
+
+
+def act(game: Game, action) -> list[str] | None:
+    """同步時間 → 執行動作 → 存檔，計時器、按鈕與假人就一個一個來。
+    回傳動作的訊息；動作回傳 UNCHANGED 時不存檔。"""
+    with _locked(game):
         game.sync(time.time())
         msgs = action(game)
         if msgs is UNCHANGED:
@@ -124,21 +143,23 @@ def act(game: Game, action) -> list[str] | None:
 
 
 def look(game: Game, view):
-    """只讀的畫面（點名冊、切圖層、看戰報）：拿鎖但不同步、不存檔。"""
-    with game.world.action_lock():
+    """只讀的畫面（點名冊、切圖層、看戰報）：拿鎖、重讀，但不同步、不存檔。"""
+    with _locked(game):
         return view(game)
 
 
 def prepare_dialogue(game: Game, option_id: str) -> companion_agent.PreparedTurn | None:
     """對話選項在行動鎖外生成（企劃者 2026-10-03 核准的過渡做法，正解是線上架構第二階段的 LLM 佇列）。
     模型一輪要 9~10 秒，整段包在鎖裡的話全服玩家與假人程式都得跟著等。分三段：
-      A（鎖內、很快）同步時間，問引擎這個選項現在會不會生成對話，會就拿到送模型的單子；
+      A（鎖內、很快）同步時間，問引擎這個選項現在會不會生成對話，會就拿到送模型的單子；同步的結果要存起來，
+        不然 C 段進鎖重讀就把它丟了（共用賽季的推進已經寫進資料庫、江湖大事寫進這個角色的江湖紀錄）；
       B（鎖外、很慢）呼叫模型，失敗時單子裡的 turn 是 None；
       C（鎖內、很快）由呼叫端把結果交給 Game.choose(prepared=...)，引擎進鎖後重新核對再套用。
     這裡做 A 與 B，不會生成對話的選項（包含 talk:leave）回傳 None，由呼叫端走一般的 act()。"""
-    with game.world.action_lock():
+    with _locked(game):
         game.sync(time.time())
         request = game.dialogue_request(option_id)
+        open_characters().save(game.state)
     if request is None:
         return None
     return companion_agent.prepare_turn(game.client, request)
@@ -272,22 +293,21 @@ def register(login_name: str, password: str, again: str) -> str:
     if (password or "") != (again or ""):
         raise GameError(PASSWORDS_DIFFER)
     try:
-        with open_world().action_lock():
-            account_store().register(login_name, password)
+        account_store().register(login_name, password)  # 自己是一筆交易；不另外包一層：scrypt 很慢，不能握著寫入權算
     except AccountError as exc:
         raise GameError(str(exc))
     return normalize(login_name)
 
 
 def create_character(account_key: str, name: str) -> Game:
-    """建立角色：檢查名號沒人用 → 建存檔 → 綁到帳號，三步在同一把行動鎖裡做完（不跟假人程式取名撞在一起）。"""
+    """建立角色：檢查名號沒人用 → 建存檔 → 綁到帳號，三步在同一筆交易裡做完（不跟假人程式取名撞在一起）。"""
     name = unicodedata.normalize("NFKC", name or "").strip()  # 全形英數字當成一般英數字：不能用「Ｒａｙａｌ」冒充「Rayal」
     if not name:
         raise GameError("請先輸入你的名號。")
     if len(name) > NAME_MAX or any(unicodedata.category(ch) in ("Cc", "Cf") for ch in name):
         raise GameError(BAD_NAME)
     store = account_store()
-    with open_world().action_lock():
+    with open_database().transaction():
         account = store.get(account_key)
         if account is None:
             raise GameError("請先登入。")
@@ -306,8 +326,7 @@ def change_password(account_key: str, old: str, new: str, again: str) -> str:
     if (new or "") != (again or ""):
         return PASSWORDS_DIFFER
     try:
-        with open_world().action_lock():
-            account_store().change_password(account_key, old, new)
+        account_store().change_password(account_key, old, new)  # 同上：自己是一筆交易，慢的雜湊不在交易裡算
     except AccountError as exc:
         return str(exc)
     return "密碼已更新。"
@@ -319,7 +338,7 @@ def reset_password(game: Game, target: str, temp: str) -> str:
         return "（只有管理者能重設密碼。）"
     store = account_store()
     try:
-        with open_world().action_lock():
+        with open_database().transaction():
             key = store.find(target)
             if key is None:
                 return "找不到這個帳號或名號。"
@@ -593,5 +612,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
     if args.share:
         start_tunnel(args.port)
+    print(f"資料庫：{default_path().resolve()}", flush=True)  # 跟 run_bots.py 要是同一個檔；TIANXIA_DB 設錯時一眼看得出來
     print(f"天下大勢：http://127.0.0.1:{args.port}", flush=True)
     uvicorn.run(app, host="0.0.0.0", port=args.port, log_level="warning")

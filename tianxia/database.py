@@ -155,12 +155,13 @@ class _ThreadState:
     """一個執行緒在這個資料庫上的連線與交易狀態。放在 threading.local 裡：執行緒結束、local 被釋放時，
     這個物件被回收，登記的 weakref.finalize 就把連線關掉。"""
 
-    __slots__ = ("conn", "depth", "reading", "__weakref__")
+    __slots__ = ("conn", "depth", "reading", "rewriting", "__weakref__")
 
     def __init__(self, conn: sqlite3.Connection):
         self.conn = conn
         self.depth = 0  # 寫入交易的巢狀深度，0 表示不在寫入交易裡
         self.reading = False  # 是不是在 snapshot() 的最外層
+        self.rewriting = False  # 是不是在 rewriting() 的區段裡（整份讀出、改、整份寫回）
 
 
 class Database:
@@ -182,10 +183,14 @@ class Database:
         if state is None:
             self.path.parent.mkdir(parents=True, exist_ok=True)
             conn = sqlite3.connect(self.path, timeout=BUSY_SLICE, autocommit=True, check_same_thread=False)
-            conn.row_factory = sqlite3.Row
-            conn.execute("PRAGMA journal_mode = WAL")
-            conn.execute("PRAGMA synchronous = NORMAL")
-            conn.execute("PRAGMA foreign_keys = ON")
+            try:
+                conn.row_factory = sqlite3.Row
+                conn.execute("PRAGMA journal_mode = WAL")
+                conn.execute("PRAGMA synchronous = FULL")  # 每次 COMMIT 都寫進磁碟：WAL 搭 NORMAL 停電時可能少掉最後幾筆已 COMMIT 的
+                conn.execute("PRAGMA foreign_keys = ON")
+            except BaseException:
+                conn.close()  # 設定沒做完的連線不留著，不然它沒人管、也不會被回收
+                raise
             state = _ThreadState(conn)
             weakref.finalize(state, conn.close)  # 執行緒結束、state 被回收時關連線（不能參照 state 本身）
             local.state = state
@@ -220,6 +225,23 @@ class Database:
         except BaseException:
             self._rollback(conn)  # COMMIT 失敗時交易還開著：不撤掉，這條連線就永遠握著寫入權
             raise
+
+    @contextlib.contextmanager
+    def rewriting(self) -> Iterator[None]:
+        """整份讀出、改、整份寫回（SqliteWorldStore.mutate）的區段，同一個執行緒不能巢狀：內層寫的東西
+        會被外層最後的整份存檔蓋掉、悄悄不見。同一個檔案的所有 store 共用同一個 Database，所以不同的 store
+        物件之間巢狀也擋得到。要巢狀就改成在同一個 mutate 裡一次改完。"""
+        state = self._thread()
+        if state.rewriting:
+            raise RuntimeError(
+                "mutate 不能巢狀：裡面再呼叫一次 mutate（或靠它實作的方法），內層寫的會被外層的整份存檔蓋掉；"
+                "請在同一個 mutate 的函式裡一次改完"
+            )
+        state.rewriting = True
+        try:
+            yield
+        finally:
+            state.rewriting = False
 
     @staticmethod
     def _rollback(conn: sqlite3.Connection) -> None:

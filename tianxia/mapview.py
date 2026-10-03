@@ -62,13 +62,12 @@ LEGEND_LAYERS = {
 RIVER_STROKE = "#7FA9D6"
 RIVER_TEXT = "#6F93BA"
 RIVER_SIZE = 13  # 河名
-MINI_WINDOW = (270, 180)  # 小地圖：以所在地為中心，從大地圖截多寬、多高（地圖單位）；大約看得到一兩站路
 MINI_HEIGHT = 200  # 小地圖在畫面上固定的高度（px）；寬度隨欄寬，圖置中
 MINI_HOPS = 2  # 視窗外、幾站路以內的摸清地點，在視窗邊緣標出方向
 MINI_ARROWS = 4  # 視窗邊緣最多標幾個方向
 ARROW_SIZE = 13  # 視窗邊緣方向的字級
 ARROW_SLIDE = 6  # 方向擠不下時，沿著邊緣滑開一次滑多遠
-ARROW_SLIDES = 10  # 往每一邊最多滑幾次
+ARROW_SLIDES = 20  # 往每一邊最多滑幾次（40 個地點的地圖，兩站外同方向的地點常常擠在同一邊）
 
 
 def node_shape(loc: Location) -> str:
@@ -529,7 +528,7 @@ def _edge_spots(start: Location, end: Location, text: str, size: int, bounds: Bo
 
 
 def render_minimap(state: GameState, content: Content) -> str:
-    """場景旁的小地圖：以所在地為中心，從大地圖截一塊 MINI_WINDOW 大的視窗（超出地圖的地方填底色），
+    """場景旁的小地圖：以所在地為中心，從大地圖截一塊 content.map.mini_window 大的視窗（超出地圖的地方填底色），
     畫法同大地圖：大區底色（照原色，不依大勢變紅）、河、路，以及整個落在視窗裡的大區名稱與河名。
     中心落在視窗裡的地點依視野畫記號：摸清的寫名字（所在地寫「名字（你）」並加粗），畫出輪廓的未知地點寫
     「名字？」，淡點不寫名字；未開放的地點與通往它的路不畫。視窗外的地點不畫記號，只有路通出去；
@@ -541,7 +540,7 @@ def render_minimap(state: GameState, content: Content) -> str:
     bg = m.background
     views = atlas.views(state, content)
     here = content.locations[state.player.location]
-    width, height = MINI_WINDOW
+    width, height = m.mini_window
     left, top = here.x - width / 2, here.y - height / 2
     window = (left, top, left + width, top + height)
     bounds = _grow(window, -EDGE)
