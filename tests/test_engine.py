@@ -3079,6 +3079,32 @@ def test_road_sight_rewards_stop_at_the_days_cap_but_the_text_stays(content, gam
     assert p.recent_sights[-1] == "sight_north_peddler"
 
 
+def test_at_the_days_cap_sights_that_hand_you_something_stay_away(content, game):
+    """拿滿了：給銀兩、素材的見聞，文字寫的就是拿到東西，那天不再出現；給心得的照寫文字、不給心得（見上一則）。"""
+    content.config.road_sight_chance = 0.0
+    game.state.world.flags.add("cave_open")
+    walk_to(game, "lake")
+    content.config.road_sight_chance = 1.0
+    content.config.road_reward_daily_cap = 1
+    p = game.state.player
+    p.road_rewards_today = {"sight": [1, 1]}  # 今天的見聞收穫已經拿滿
+    p.recent_sights = ["sight_crow", "sight_wind"]  # 湖邊—寶洞是山路：沒看過的只剩峭壁（給銀兩）
+    walk_to(game, "cave")
+    assert p.recent_sights[-1] != "sight_cliff"
+    assert content.road_sights["sight_cliff"].text not in game.state.journal[0].lines
+
+
+def test_the_road_sight_cap_counts_the_day_of_the_arrival(content, game):
+    """下線補算跨過午夜：第 1 天 23:58 抵達的那一站，收穫算第 1 天（紀錄上寫的也是那一刻）。"""
+    content.config.road_sight_chance = 1.0
+    p = game.state.player
+    p.recent_sights = ["sight_wind", "sight_north_peddler"]  # 只剩烏鴉（心得 +1）
+    game.advance(DAY - 300 - game.state.world.time)  # 第 1 天 23:55
+    game.choose("move:lake")  # 走三分鐘，23:58 抵達
+    game.advance(600)  # 第 2 天 00:05 才補算
+    assert p.road_rewards_today == {"sight": [1, 1]}
+
+
 def test_road_sight_rewards_start_over_the_next_game_day(content, game):
     content.config.road_sight_chance = 1.0
     content.config.road_reward_daily_cap = 1

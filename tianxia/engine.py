@@ -1552,19 +1552,20 @@ class Game:
         spot = atlas.road_spot(self.state, self.content)
         return spot.behind, spot.ahead
 
-    def _road_rewards_used(self, kind: str) -> int:
-        """今天（遊戲日，跟每天對話輪數同一個算法）路上已經拿過幾次收穫；kind 是 "task"（路上小事）或 "sight"（見聞）。
-        紀錄是前幾天的就當沒拿過。"""
+    def _road_rewards_used(self, kind: str, day: int | None = None) -> int:
+        """這一天（遊戲日，跟每天對話輪數同一個算法；不給就是今天）路上已經拿過幾次收穫；kind 是 "task"（路上小事）或
+        "sight"（見聞）。紀錄是別天的就當沒拿過。"""
         record = self.state.player.road_rewards_today.get(kind)
-        return record[1] if record and record[0] == current_day(self.state) else 0
+        return record[1] if record and record[0] == (day or current_day(self.state)) else 0
 
-    def _road_reward_due(self, kind: str) -> bool:
-        """今天路上這一種收穫還沒拿滿（企劃者 2026-10-03 決定的每天上限 road_reward_daily_cap）。"""
-        return self._road_rewards_used(kind) < self.content.config.road_reward_daily_cap
+    def _road_reward_due(self, kind: str, day: int | None = None) -> bool:
+        """這一天路上這一種收穫還沒拿滿（企劃者 2026-10-03 決定的每天上限 road_reward_daily_cap）。"""
+        return self._road_rewards_used(kind, day) < self.content.config.road_reward_daily_cap
 
-    def _count_road_reward(self, kind: str) -> None:
+    def _count_road_reward(self, kind: str, day: int | None = None) -> None:
         """記一次真的給出去的收穫（沒撿到東西的採集不算）。"""
-        self.state.player.road_rewards_today[kind] = [current_day(self.state), self._road_rewards_used(kind) + 1]
+        day = day or current_day(self.state)
+        self.state.player.road_rewards_today[kind] = [day, self._road_rewards_used(kind, day) + 1]
 
     def _road_think(self) -> list[str]:
         """邊走邊想：心得（一次歷練大約 12～20，這裡刻意少很多）。今天的收穫拿滿了就照樣想，只是沒有心得。"""
@@ -1679,7 +1680,7 @@ class Game:
                     s.player.leg_actions = set()
                 msgs += self._arrive(stop, final=j.reached > j.last, client=client)
                 if new_leg:
-                    msgs += self._road_sight(c.locations[came_from].road_to(stop), stop)
+                    msgs += self._road_sight(c.locations[came_from].road_to(stop), stop, when)
             done = j.reached > j.last or s.world.ended
             if done:
                 s.player.journey = None
@@ -1713,18 +1714,22 @@ class Game:
         self._hide(text)
         return [text] + note_action(s, c, self.world, "move") + check_thresholds(s, c, self.world, client, now=self.now)
 
-    def _road_sight(self, road: RoadKind, loc_id: str) -> list[str]:
+    def _road_sight(self, road: RoadKind, loc_id: str, when: float | None = None) -> list[str]:
         """路上見聞（路上設計第五節）：抵達一站時有 road_sight_chance 的機會，從符合這段路的種類、剛抵達那一站所在大區的
         見聞裡平均挑一則（最近看過的 road_sight_recent 則先排除，池子不夠才重複）。文字寫進這次抵達的紀錄，小收穫照慣例
         接在後面。寫好的文字、不呼叫模型，下線補算時照樣發生。機率是 0 或池子是空的時候連骰子都不擲。
-        有收穫的見聞受每天上限管（企劃者 2026-10-03 決定，跟路上小事各算各的）：今天的 "sight" 收穫拿滿了，文字照寫、
-        不給收穫也不多一句；真的給了才算一次。沒有收穫的見聞不算次數。"""
+        有收穫的見聞受每天上限管（企劃者 2026-10-03 決定，跟路上小事各算各的）：抵達那一天（when，下線補算時是當時的
+        抵達時間）的 "sight" 收穫拿滿了，給銀兩、素材的見聞就不挑（文字寫的就是拿到東西），給心得的照寫文字、不給心得；
+        真的給了才算一次。沒有收穫的見聞不算次數。"""
         s, c = self.state, self.content
+        day = int(when // DAY) + 1 if when is not None else current_day(s)
+        capped = not self._road_reward_due("sight", day)
         region = atlas.region_of(c, loc_id)
         area = region.id if region is not None else None
         pool = [
             sight for sight in c.road_sights.values()
             if (not sight.roads or road in sight.roads) and (not sight.regions or area in sight.regions)
+            and not (capped and (sight.effect.materials or sight.effect.stats.get("silver")))
         ]
         chance = c.config.road_sight_chance
         if not pool or chance <= 0 or self.rng.random() >= chance:
@@ -1734,9 +1739,9 @@ class Game:
         keep = c.config.road_sight_recent
         s.player.recent_sights = (recent + [sight.id])[-keep:] if keep else []
         rewarded = bool(sight.effect.stats or sight.effect.materials)  # 載入檢查保證見聞只會有這兩種效果
-        if not rewarded or not self._road_reward_due("sight"):
+        if not rewarded or capped:
             return [sight.text]
-        self._count_road_reward("sight")
+        self._count_road_reward("sight", day)
         return [sight.text] + apply_effect(sight.effect, s, c, self.world)
 
     def _journey_line(self) -> str:
