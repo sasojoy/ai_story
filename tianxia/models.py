@@ -8,6 +8,7 @@ from pydantic_core import core_schema
 
 STATS = ("str", "agi", "con", "wis", "silver", "good", "evil", "fame", "xinde")
 ActionKind = Literal["explore", "train", "socialize"]
+TravelMode = Literal["walk", "hurry", "dash"]  # 步行／趕路／疾行（地圖擴充設計 3.2）
 # sanguo-companions 合併：同伴不再分天地玄黃品階，改成「龍頭人物」（劇情鎖定，不可招募，
 # 見設計文件四.4）跟「可招募」兩種，決定要不要出現在招募流程裡。
 CompanionKind = Literal["locked", "recruitable"]

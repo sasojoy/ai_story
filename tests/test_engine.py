@@ -67,10 +67,12 @@ def test_recruit_option_shows_the_real_odds_and_tracks_affinity(game):
     assert "成功率約 85%" in label()  # 基礎 35% + 好感度 100 的加成 50%
 
 
-def test_move_costs_stamina(game):
+def test_walking_to_a_neighbour_costs_no_stamina(game):
+    game.state.player.stamina = 0
+    move = next(o for o in game.options() if o.id == "move:lake")
+    assert move.enabled and move.label == "前往 湖邊（步行約 3 分鐘）"
     game.choose("move:lake")
-    assert game.state.player.location == "lake"
-    assert game.state.player.stamina == 145
+    assert game.state.player.stamina == 0
 
 
 def test_invalid_option_rejected(game):
@@ -81,7 +83,8 @@ def test_invalid_option_rejected(game):
 def test_insufficient_stamina_disables_actions(game):
     game.state.player.stamina = 4
     opts = game.options()
-    assert all(not o.enabled for o in opts if o.id != "act:rest")
+    assert all(not o.enabled for o in opts if o.id != "act:rest" and not o.id.startswith("move:"))
+    assert all(o.enabled for o in opts if o.id.startswith("move:"))  # 步行不花體力
     game.choose("act:explore")
     assert game.state.player.stamina == 4
 
@@ -760,38 +763,32 @@ def test_visited_and_map(game):
 # ── 安排前往 ──────────────────────────────────────────────
 
 
-def test_travel_walks_hop_by_hop_and_writes_one_entry(game):
+@pytest.mark.parametrize(("mode", "cost"), [("walk", 0), ("hurry", 8), ("dash", 15)])
+def test_travel_charges_the_stamina_of_the_chosen_way_up_front(game, mode, cost):
+    game.state.world.flags.add("cave_open")  # 小鎮—湖邊 3 分鐘＋湖邊—寶洞山路 4.5 分鐘
+    game.state.player.stamina = 100
+    game.travel("cave", mode)
+    assert game.state.player.stamina == 100 - cost
+
+
+def test_dash_arrives_at_once_and_writes_one_entry(game):
     game.state.world.flags.add("cave_open")
     before = len(game.state.journal)
-    msgs = game.travel("cave")
+    msgs = game.travel("cave", "dash")
     p = game.state.player
-    assert p.location == "cave" and p.stamina == 140  # 湖邊 5 ＋ 寶洞 5
-    assert {"lake", "cave"} <= p.visited
+    assert p.location == "cave" and {"lake", "cave"} <= p.visited
     assert len(game.state.journal) == before + 1
     entry = game.state.journal[0]
-    assert entry.title == "前往 寶洞（途經 湖邊）" and entry.lines == []
+    assert (entry.title, entry.tag, entry.lines, entry.changes) == ("前往 寶洞（途經 湖邊）", "疾行立刻到", [], ["體力 -15"])
     assert msgs[-1] == game.location_text() == game.scene_text()
 
 
-def test_travel_to_a_neighbour_has_a_plain_title(game):
-    game.travel("lake")
-    assert game.state.journal[0].title == "前往 湖邊"
-
-
-def test_travel_stops_when_the_next_hop_is_unaffordable(game):
-    game.state.world.flags.add("cave_open")
-    game.state.player.stamina = 7
-    game.travel("cave")
-    assert game.state.player.location == "lake" and game.state.player.stamina == 2
-    assert game.state.journal[0].title == "前往 寶洞（體力不足，停在 湖邊）"
-
-
-def test_travel_stops_when_the_season_ends_on_the_way(game):
+def test_dash_stops_when_the_season_ends_on_the_way(game):
     game.state.world.flags.add("cave_open")
     game.state.world.trends["kou"] = 80  # 一走到湖邊就觸發「水寇稱霸」，賽季落幕
-    game.travel("cave")
+    game.travel("cave", "dash")
     assert game.state.world.ended and game.state.player.location == "lake"
-    assert game.state.journal[0].title == "前往 寶洞（賽季落幕，停在 湖邊）"
+    assert game.state.journal[0].tag == "賽季落幕，停在 湖邊"
 
 
 def test_travel_is_refused_with_a_reason(game):
@@ -808,9 +805,11 @@ def test_travel_is_refused_with_a_reason(game):
     assert game.travel("town") == ["（無法安排前往這裡。）"]  # 所在地
     assert game.travel("cave") == ["（無法安排前往這裡。）"]  # 未開放
     assert game.travel("nowhere") == ["（無法安排前往這裡。）"]
-    game.state.player.stamina = 3
-    assert game.travel("lake") == ["（體力不足，第一站要 5 體力。）"]
-    assert game.state.player.location == "town" and game.state.player.stamina == 3
+    assert game.travel("lake", "fly") == ["（無法安排前往這裡。）"]
+    game.state.player.stamina = 5
+    assert game.travel("lake", "dash") == ["（體力不足，疾行要 6 體力。）"]
+    assert game.travel_refusal("lake", "hurry") is None
+    assert game.state.player.location == "town" and game.state.player.stamina == 5
     assert len(game.state.journal) == before
 
 

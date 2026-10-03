@@ -1,4 +1,4 @@
-"""江湖輿圖的資料（純資料與文字，不依賴介面框架）：視野、大區歸屬、最省體力的路線、
+"""江湖輿圖的資料（純資料與文字，不依賴介面框架）：視野、大區歸屬、路程最短的路線與三種走法的時間、體力、
 大地圖四個圖層要標的東西、地點詳情與「安排前往」的條件。畫圖在 mapview.py。
 
 沒摸清（看不見也沒去過）的地點在每個圖層都只畫輪廓與「？」，詳情只寫「尚未摸清」；未開放的地點照舊完全不畫。
@@ -12,7 +12,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from .battlelog import clock_text
-from .models import Content, Location, MapRegion, SimPlayer
+from .models import Content, Location, MapRegion, SimPlayer, TravelMode
 from .state import GameState, Rumor
 from .world import current_act, sim_active
 
@@ -27,7 +27,6 @@ ODDS_ORDER = ("穩勝", "有把握", "五五波", "難分勝負", "凶險", "必
 ARROWS = ("→", "↘", "↓", "↙", "←", "↖", "↑", "↗")  # 從正東起順時針，每 45 度一個（畫面座標 y 向下）
 UNKNOWN = "尚未摸清"
 Odds = Callable[[str], str]  # 敵方隊伍 id → 勝算（Game.odds）
-HOP_STAMINA = 5  # 每走一站扣的體力：拿掉各地點的 move_cost 之後、計時移動上線之前，先統一用原本的預設值
 
 
 # ── 視野 ──────────────────────────────────────────────
@@ -234,6 +233,9 @@ def worst_foe(content: Content, loc: Location, odds: Odds) -> tuple[str, str] | 
 
 # ── 路線與安排前往 ────────────────────────────────────
 
+MODES: dict[str, str] = {"walk": "步行", "hurry": "趕路", "dash": "疾行"}  # 三種走法（地圖擴充設計 3.2），依序是詳情欄按鈕的順序
+TIME_SHARE: dict[str, float] = {"walk": 1.0, "hurry": 0.5, "dash": 0.0}  # 各花全程的幾成時間
+
 
 def leg_minutes(content: Content, a: str, b: str) -> float:
     """相鄰兩地 a、b 之間的路程（步行幾分鐘）：地圖上的距離 × 路的種類係數 × 換算比例（地圖擴充設計 3.1）。"""
@@ -243,10 +245,43 @@ def leg_minutes(content: Content, a: str, b: str) -> float:
     return distance * cfg.road_factor[start.road_to(b)] * cfg.travel_minutes_per_unit
 
 
+def whole_minutes(minutes: float) -> int:
+    """給玩家看的分鐘數：四捨五入（.5 進位），至少 1 分鐘。"""
+    return max(1, math.floor(minutes + 0.5))
+
+
+def travel_seconds(minutes: float, mode: TravelMode) -> float:
+    """走完 minutes 分鐘的路程要幾秒（遊戲時間）：步行全程、趕路一半、疾行立刻到。"""
+    return minutes * 60 * TIME_SHARE[mode]
+
+
+def travel_stamina(content: Content, minutes: float, mode: TravelMode) -> int:
+    """這種走法出發時一次扣的體力：步行 0；趕路、疾行照每分鐘路程的點數算，四捨五入（.5 進位）、至少 1 點。"""
+    cfg = content.config
+    rate = {"walk": 0.0, "hurry": cfg.hurry_stamina_per_minute, "dash": cfg.dash_stamina_per_minute}[mode]
+    return 0 if rate <= 0 else max(1, math.floor(minutes * rate + 0.5))
+
+
+def mode_when(minutes: float, mode: TravelMode) -> str:
+    """這種走法要花多久：「約 5 分鐘」「立刻到」。"""
+    return "立刻到" if mode == "dash" else f"約 {whole_minutes(minutes * TIME_SHARE[mode])} 分鐘"
+
+
+def mode_text(content: Content, minutes: float, mode: TravelMode) -> str:
+    """「步行約 9 分鐘」「趕路約 5 分鐘・體力 9」「疾行立刻到・體力 18」：選單與詳情欄用。"""
+    stamina = travel_stamina(content, minutes, mode)
+    return MODES[mode] + mode_when(minutes, mode) + (f"・體力 {stamina}" if stamina else "")
+
+
 @dataclass(frozen=True)
 class Route:
     path: tuple[str, ...]  # 依序要走的地點，最後一個是目的地（不含所在地）；所在地本身是空的
-    cost: int  # 每一站 HOP_STAMINA 的加總
+    legs: tuple[float, ...] = ()  # 每一段的路程（步行分鐘），跟 path 一一對應
+
+    @property
+    def minutes(self) -> float:
+        """全程的路程（步行分鐘）。"""
+        return sum(self.legs)
 
     @property
     def via(self) -> tuple[str, ...]:
@@ -254,29 +289,51 @@ class Route:
         return self.path[:-1]
 
 
-def routes(state: GameState, content: Content) -> dict[str, Route]:
-    """從所在地出發、只走摸清且已開放的地點，到每個摸清地點最省體力的走法。
-    一樣省時取站數少的，再一樣時比地點 id 的順序，結果固定。"""
-    allowed = known_locations(state, content)
+def shortest_routes(state: GameState, content: Content, allowed: set[str] | None = None) -> dict[str, Route]:
+    """從所在地出發、只走 allowed 裡的地點（None＝所有已開放的地點），到每個地點路程最短（步行分鐘最少）
+    的走法（地圖擴充設計 3.2）。一樣近取站數少的，再一樣時比地點 id 的順序，結果固定。"""
+    if allowed is None:
+        allowed = {loc_id for loc_id, loc in content.locations.items() if is_unlocked(loc, state)}
     best: dict[str, Route] = {}
-    heap: list[tuple[int, int, tuple[str, ...], str]] = [(0, 0, (), state.player.location)]
+    heap: list[tuple[float, int, tuple[str, ...], tuple[float, ...], str]] = [(0.0, 0, (), (), state.player.location)]
     while heap:
-        cost, hops, path, here = heapq.heappop(heap)
+        minutes, hops, path, legs, here = heapq.heappop(heap)
         if here in best:
             continue
-        best[here] = Route(path, cost)
+        best[here] = Route(path, legs)
         for dest in content.locations[here].connections:
-            if dest in allowed and dest not in best:
-                heapq.heappush(heap, (cost + HOP_STAMINA, hops + 1, path + (dest,), dest))
+            dest_id = str(dest)
+            if dest_id in allowed and dest_id not in best:
+                leg = leg_minutes(content, here, dest_id)
+                # 分鐘數取到小數第 6 位再比，免得一樣長的路因為浮點誤差分出先後
+                heapq.heappush(heap, (round(minutes + leg, 6), hops + 1, path + (dest_id,), legs + (leg,), dest_id))
     return best
 
 
+def routes(state: GameState, content: Content) -> dict[str, Route]:
+    """從所在地出發、只走摸清且已開放的地點，到每個摸清地點路程最短的走法（取代原本最省體力的路線）。"""
+    return shortest_routes(state, content, known_locations(state, content))
+
+
+@dataclass(frozen=True)
+class TravelOption:
+    """詳情欄底下的一個「安排前往」按鈕。"""
+
+    mode: TravelMode
+    label: str
+    enabled: bool
+
+
 def travel_block(state: GameState) -> str | None:
-    """現在不能安排前往的原因（賽季已結束、有事件待處理、閉關中、打坐中）；可以時為 None。"""
+    """現在不能安排前往的原因（賽季已結束、有事件待處理、交談中、投靠待確認、閉關中、打坐中）；可以時為 None。"""
     if state.world.ended:
         return "賽季已結束，不能安排前往"
     if state.pending_event:
         return "有事件待處理，不能安排前往"
+    if state.player.pending_companion:
+        return "交談中，先告辭才能安排前往"
+    if state.player.pending_faction:
+        return "投靠還沒決定，先決定再安排前往"
     if state.player.busy_until is not None:
         return "閉關中，不能安排前往"
     if state.player.resting_since is not None:
@@ -284,17 +341,44 @@ def travel_block(state: GameState) -> str | None:
     return None
 
 
-def travel_button(state: GameState, content: Content, loc_id: str) -> tuple[str, bool] | None:
-    """詳情欄最下方的按鈕：（文字, 按得下去）。所在地、沒摸清或未開放的地點不顯示按鈕（None）。"""
+def travel_refusal(state: GameState, content: Content, loc_id: str, mode: TravelMode) -> str | None:
+    """用這種走法安排前往這裡，不行的原因；可以時為 None。"""
+    route = routes(state, content).get(loc_id)
+    if route is None or not route.path:
+        return "無法安排前往這裡"
+    reason = travel_block(state)
+    if reason:
+        return reason
+    cost = travel_stamina(content, route.minutes, mode)
+    if state.player.stamina < cost:
+        return f"體力不足，{MODES[mode]}要 {cost} 體力"
+    return None
+
+
+def travel_options(state: GameState, content: Content, loc_id: str) -> list[TravelOption] | None:
+    """詳情欄底下的按鈕：步行、趕路、疾行各一個，寫時間與體力，體力不夠的按不下去（地圖擴充設計 3.2）。
+    所在地、沒摸清或未開放的地點不顯示按鈕（None）；現在不能安排前往時只有一個按不下去的按鈕，寫原因。"""
     route = routes(state, content).get(loc_id)
     if route is None or not route.path:
         return None
     reason = travel_block(state)
     if reason:
-        return reason, False
-    if state.player.stamina < HOP_STAMINA:
-        return f"體力不足，第一站要 {HOP_STAMINA} 體力", False
-    return f"安排前往（約 {route.cost} 體力）", True
+        return [TravelOption("walk", reason, False)]
+    out: list[TravelOption] = []
+    for mode in MODES:
+        cost = travel_stamina(content, route.minutes, mode)
+        if state.player.stamina < cost:
+            out.append(TravelOption(mode, f"{MODES[mode]}（體力不足，要 {cost}）", False))
+        else:
+            price = f"・體力 {cost}" if cost else ""
+            out.append(TravelOption(mode, f"{MODES[mode]}（{mode_when(route.minutes, mode)}{price}）", True))
+    return out
+
+
+def journey_title(content: Content, path) -> str:
+    """江湖紀錄裡一趟路的標題：「前往 終點」，途經別的站時加上「（途經 A、B）」。"""
+    title = f"前往 {content.locations[path[-1]].name}"
+    return f"{title}（途經 {_names(content, path[:-1])}）" if len(path) > 1 else title
 
 
 # ── 畫面文字 ──────────────────────────────────────────
@@ -350,6 +434,7 @@ def detail_text(state: GameState, content: Content, loc_id: str, odds: Odds) -> 
     elif route is None:
         way = "沒有摸清的路可以過去"
     else:
-        way = f"約 {route.cost} 體力" + (f"，途經 {_names(content, route.via)}" if route.via else "")
+        way = "、".join(mode_text(content, route.minutes, mode) for mode in MODES)
+        way += f"，途經 {_names(content, route.via)}" if route.via else ""
     parts.append("**路線**　" + way)
     return "\n\n".join(parts)

@@ -57,7 +57,7 @@ LEGEND_LAYERS = {
     "situation": "⚑ 龍頭人物（會自己行動的江湖人物）常出沒　大區越紅，大勢越凶",
     "enemies": "底色同外圈　最險：最難對付的對手與勝算",
     "story": f"★ 這一幕主線的目標　✦ 最近 {atlas.NEWS_DAYS} 天的大事與傳聞",
-    "routes": "數字：走過去最省的體力　粗線：到選定地點的路",
+    "routes": "數字：步行要幾分鐘（走路程最短的路）　粗線：到選定地點的路",
 }
 RIVER_STROKE = "#7FA9D6"
 RIVER_TEXT = "#6F93BA"
@@ -278,7 +278,7 @@ def _layer_marks(
                 prefixes[loc_id] = f"{marks} "
     elif layer == "routes":
         for loc_id, route in atlas.routes(state, content).items():
-            notes[loc_id] = f"{route.cost} 體力" if route.path else "所在地"
+            notes[loc_id] = f"{atlas.whole_minutes(route.minutes)} 分鐘" if route.path else "所在地"
     return prefixes, notes, fills
 
 

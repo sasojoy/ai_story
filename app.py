@@ -22,7 +22,7 @@ from pathlib import Path
 
 import gradio as gr
 
-from tianxia import companion_agent
+from tianxia import atlas, companion_agent
 from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, AccountStore, normalize
 from tianxia.content import load_content
 from tianxia.craft import MATERIALS_PER_CRAFT
@@ -63,14 +63,15 @@ MENXIA_OUTPUTS = 10  # render_menxia 的輸出數量（見上面的順序）；o
 # 整頁：江湖畫面、門下、戰報、大地圖；同一時間只顯示一頁（見 show_page），順序同 build_demo() 的 pages。
 PAGES = ("main", "menxia", "report", "map")
 
-# 大地圖頁面（render_map_page）的輸出順序：時間與體力、圖層、大地圖、地點下拉選單、地點詳情、「安排前往」按鈕。
+# 大地圖頁面（render_map_page）的輸出順序：時間與體力、圖層、大地圖、地點下拉選單、地點詳情、「安排前往」的三個按鈕（步行、趕路、疾行）。
 MAP_HEAD_INDEX = 0
 MAP_LAYER_INDEX = 1
 MAP_SVG_INDEX = 2
 MAP_PLACE_INDEX = 3
 MAP_DETAIL_INDEX = 4
-MAP_TRAVEL_INDEX = 5
-MAP_OUTPUTS = 6
+MAP_TRAVEL_INDEX = 5  # 第一個「安排前往」按鈕（步行）；趕路、疾行接在後面
+TRAVEL_MODES = tuple(atlas.MODES)  # 地點詳情底下的三個按鈕（步行、趕路、疾行），順序跟 atlas.MODES 一樣
+MAP_OUTPUTS = MAP_TRAVEL_INDEX + len(TRAVEL_MODES)
 DEFAULT_LAYER = "situation"
 # 點大地圖上的地點：地點包在 data-loc 裡（見 mapview.render_map），把它的 id 當成 click 事件的資料送回 Python。
 MAP_CLICK_JS = (
@@ -408,14 +409,19 @@ def render_map_page(game: Game, layer: str, selected: str | None, notice: str = 
         selected = game.state.player.location
     if layer not in Game.MAP_LAYERS:
         layer = DEFAULT_LAYER
-    button = game.travel_button(selected)
+    by_mode = {option.mode: option for option in game.travel_options(selected) or []}
+    buttons = [
+        gr.update(visible=True, value=by_mode[mode].label, interactive=by_mode[mode].enabled)
+        if mode in by_mode else gr.update(visible=False)
+        for mode in TRAVEL_MODES
+    ]
     out = [
         game.map_header(),
         gr.update(value=layer),
         game.world_map_svg(layer, selected),
         gr.update(choices=places, value=selected),
         (f"{notice}\n\n" if notice else "") + game.place_detail(selected),
-        gr.update(visible=False) if button is None else gr.update(visible=True, value=button[0], interactive=button[1]),
+        *buttons,
     ]
     assert len(out) == MAP_OUTPUTS
     return out
@@ -457,26 +463,31 @@ def map_click_handler(game, layer, evt: gr.EventData):
         return render_map_page(game, layer, loc_id)
 
 
-def travel_handler(game, layer, selected):
-    """「安排前往」：一站一站走過去，走完回到江湖畫面，場景顯示抵達的地點（大地圖頁面藏起來，不用重畫）。
-    按鈕是舊的而走不成時（例如打開大地圖之後才冒出事件），留在大地圖，地點詳情最上面寫出原因。"""
+def travel_handler(game, layer, selected, mode="walk"):
+    """「安排前往」的三個按鈕（步行、趕路、疾行）：出發後回到江湖畫面，場景顯示路上或抵達的地點（大地圖頁面
+    藏起來，不用重畫）。按鈕是舊的而走不成時（例如打開大地圖之後才冒出事件），留在大地圖，地點詳情最上面寫出原因。"""
     if game is None:
         return [gr.skip()] * (N_OUTPUTS + len(PAGES) + MAP_OUTPUTS)
     refused: list[str] = []
 
     def go(g: Game) -> list[str]:
-        start = g.state.player.location
-        msgs = g.travel(selected)
-        if g.state.player.location == start:  # 走得成一定會走出第一站；沒動就是被擋下來了
-            refused.extend(msgs)
-        return msgs
+        reason = g.travel_refusal(selected, mode)
+        if reason is not None:
+            refused.append(reason)
+        return g.travel(selected, mode)
 
     out = act(game, go)
     if not refused:
         return out + show_page("main") + [gr.skip()] * MAP_OUTPUTS
-    reason = refused[0].strip("（）")
     with game.world.action_lock():
-        return out + show_page("map") + render_map_page(game, layer, selected, f"**沒能出發**：{reason}")
+        return out + show_page("map") + render_map_page(game, layer, selected, f"**沒能出發**：{refused[0]}")
+
+
+def make_travel_handler(mode: str):
+    def handler(game, layer, selected):
+        return travel_handler(game, layer, selected, mode)
+
+    return handler
 
 
 def close_world_map():
@@ -788,7 +799,11 @@ def build_demo() -> gr.Blocks:
                 with gr.Column(scale=2, min_width=260):
                     place_dd = gr.Dropdown(label="地點（也可以直接點地圖）", choices=[], interactive=True)
                     place_md = gr.Markdown()
-                    travel_btn = gr.Button("安排前往", variant="primary", visible=False)
+                    with gr.Row():
+                        travel_btns = [
+                            gr.Button(visible=False, variant="primary" if mode == "walk" else "secondary")
+                            for mode in TRAVEL_MODES
+                        ]
 
         outputs = [
             game_state, quest_md, status_md, scene_md, latest_html, minimap_html, trends_md, rumors_md, chronicle_md,
@@ -799,7 +814,7 @@ def build_demo() -> gr.Blocks:
         assert len(outputs) == N_OUTPUTS
         pages = [game_row, menxia_col, report_col, map_col]
         assert len(pages) == len(PAGES)
-        map_outputs = [map_head_md, layer_radio, world_map_html, place_dd, place_md, travel_btn]
+        map_outputs = [map_head_md, layer_radio, world_map_html, place_dd, place_md, *travel_btns]
         assert len(map_outputs) == MAP_OUTPUTS
         menxia_outputs = [
             mx_head_md, player_card_md, roster_radio, person_card_md, team_toggle_btn, bag_md, mx_message_md,
@@ -849,9 +864,10 @@ def build_demo() -> gr.Blocks:
         layer_radio.input(map_page_handler, inputs=[game_state, layer_radio, place_dd], outputs=map_outputs)
         place_dd.input(map_page_handler, inputs=[game_state, layer_radio, place_dd], outputs=map_outputs)
         world_map_html.click(map_click_handler, inputs=[game_state, layer_radio], outputs=map_outputs)
-        travel_btn.click(
-            travel_handler, inputs=[game_state, layer_radio, place_dd], outputs=outputs + pages + map_outputs
-        )
+        for mode, btn in zip(TRAVEL_MODES, travel_btns):
+            btn.click(
+                make_travel_handler(mode), inputs=[game_state, layer_radio, place_dd], outputs=outputs + pages + map_outputs,
+            )
         roster_radio.input(roster_pick_handler, inputs=[game_state, roster_radio], outputs=menxia_outputs)
         team_toggle_btn.click(toggle_team_handler, inputs=[game_state, roster_radio], outputs=menxia_outputs)
         create_btn.click(

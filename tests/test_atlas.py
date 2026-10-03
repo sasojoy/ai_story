@@ -1,8 +1,9 @@
 import pytest
 
 from tianxia.atlas import (
-    HOP_STAMINA, Route, detail_text, direction, foes, goal_places, haunters, is_known, known_locations, leg_minutes,
-    place_choices, recent_news, region_of, region_trends, road_hops, routes, travel_button, worst_foe,
+    Route, TravelOption, detail_text, direction, foes, goal_places, haunters, is_known, known_locations, leg_minutes,
+    place_choices, recent_news, region_of, region_trends, road_hops, routes, travel_options, travel_refusal,
+    travel_seconds, travel_stamina, whole_minutes, worst_foe,
 )
 from tianxia.models import Condition, Connection, Location, SimPlayer
 from tianxia.state import Rumor
@@ -146,14 +147,6 @@ def test_worst_foe_is_the_one_with_the_worst_odds(content):
 # ── 路線 ──────────────────────────────────────────────
 
 
-def add_place(content, loc_id: str, links: list[str]) -> None:
-    content.locations[loc_id] = Location(
-        id=loc_id, name=loc_id, description="測試地點。", connections=list(links), x=150, y=50
-    )
-    for other in links:
-        content.locations[other].connections.append(loc_id)
-
-
 def test_leg_minutes_follow_distance_and_road(content):
     per_unit = content.config.travel_minutes_per_unit  # 夾具 0.03：每站 100 單位
     assert leg_minutes(content, "town", "lake") == pytest.approx(100 * 1.0 * per_unit)
@@ -163,66 +156,106 @@ def test_leg_minutes_follow_distance_and_road(content):
     assert leg_minutes(content, "town", "lake") == pytest.approx(100 * 0.8 * per_unit)
 
 
-def test_routes_count_every_stop_the_same(state, content):
-    """計時移動上線前，每一站都扣 HOP_STAMINA。"""
-    add_hill(content)
+def test_travel_math_for_the_three_ways():
+    assert (travel_seconds(9, "walk"), travel_seconds(9, "hurry"), travel_seconds(9, "dash")) == (540, 270, 0)
+    assert (whole_minutes(0.2), whole_minutes(2.5), whole_minutes(4.49)) == (1, 3, 4)
+
+
+def test_travel_stamina_follows_the_route_minutes(content):
+    assert [travel_stamina(content, 9, mode) for mode in ("walk", "hurry", "dash")] == [0, 9, 18]
+    assert travel_stamina(content, 0.2, "hurry") == 1  # 至少 1 點
+
+
+def test_routes_take_the_quickest_way(state, content):
     state.world.flags.add("cave_open")
     found = routes(state, content)
-    assert found["town"] == Route((), 0)
-    assert found["lake"] == Route(("lake",), HOP_STAMINA)
-    assert found["cave"] == Route(("hill", "cave"), 2 * HOP_STAMINA)  # 兩條路都兩站：比地點 id，hill 在 lake 前面
-    assert found["cave"].via == ("hill",)
+    assert found["town"] == Route((), ())
+    assert found["cave"].path == ("lake", "cave") and found["cave"].via == ("lake",)
+    assert found["cave"].minutes == pytest.approx(3.0 + 4.5)  # 湖邊—寶洞是山路
+    add_hill(content)  # 一樣兩站，但不用走山路
+    quick = routes(state, content)["cave"]
+    assert quick.path == ("hill", "cave") and quick.minutes == pytest.approx(2 * leg_minutes(content, "town", "hill"))
 
 
 def test_routes_only_pass_known_and_open_places(state, content):
     assert "cave" not in routes(state, content)  # 未開放
     content.config.vision_base = 0
-    assert routes(state, content) == {"town": Route((), 0)}  # 湖邊沒摸清
+    assert routes(state, content) == {"town": Route((), ())}  # 湖邊沒摸清
     state.player.visited.add("lake")
-    assert routes(state, content)["lake"] == Route(("lake",), HOP_STAMINA)
-    add_hill(content)  # 山丘沒摸清：走不過去
+    assert routes(state, content)["lake"].path == ("lake",)
+    add_hill(content)  # 比較快，但山丘沒摸清
     state.world.flags.add("cave_open")
     state.player.visited.add("cave")
-    assert routes(state, content)["cave"] == Route(("lake", "cave"), 2 * HOP_STAMINA)
+    assert routes(state, content)["cave"].path == ("lake", "cave")
 
 
-def test_routes_break_ties_by_id(state, content):
-    """每一站同價，兩條路的花費與站數都一樣時比地點 id（Task 3 把整組路線測試換成依路程分鐘的版本）。"""
+def test_routes_prefer_fewer_stops_when_equally_quick(state, content):
     state.world.flags.add("cave_open")
     content.config.vision_base = 3
-    add_place(content, "hill", links=["town", "cave"])  # 湖邊與山丘一樣兩站
-    assert routes(state, content)["cave"] == Route(("hill", "cave"), 2 * HOP_STAMINA)  # 一樣時比地點 id
+    content.locations["lake"].connections = ["town", "cave"]  # 湖邊—寶洞改成一般路：小鎮→寶洞 6 分鐘
+    content.locations["cave"].connections = ["lake"]
+    for loc_id, x in (("aa", 150), ("ab", 250)):  # 同一直線上多兩站：小鎮—aa—ab—寶洞，一樣 6 分鐘
+        content.locations[loc_id] = Location(id=loc_id, name=loc_id, description="測試地點。", connections=[], x=x, y=100)
+    for a, b in (("town", "aa"), ("aa", "ab"), ("ab", "cave")):
+        content.locations[a].connections.append(b)
+        content.locations[b].connections.append(a)
+    assert routes(state, content)["cave"].path == ("lake", "cave")  # 一樣近時站數少的贏，即使另一條路的 id 排在前面
+
+
+def test_routes_break_remaining_ties_by_id(state, content):
+    state.world.flags.add("cave_open")
+    for loc_id, y in (("hill", 50), ("dale", 150)):  # 上下對稱的兩條路：一樣近、一樣兩站，都比走湖邊—寶洞的山路快
+        content.locations[loc_id] = Location(
+            id=loc_id, name=loc_id, description="測試地點。", connections=["town", "cave"], x=200, y=y
+        )
+        content.locations["town"].connections.append(loc_id)
+        content.locations["cave"].connections.append(loc_id)
+    assert routes(state, content)["cave"].path == ("dale", "cave")  # 比地點 id：dale 在 hill 前面
     for loc in content.locations.values():
         loc.connections.reverse()
-    assert routes(state, content)["cave"] == Route(("hill", "cave"), 2 * HOP_STAMINA)  # 和連線寫的順序無關
+    assert routes(state, content)["cave"].path == ("dale", "cave")  # 和連線寫的順序無關
 
 
 # ── 安排前往 ──────────────────────────────────────────
 
 
-def test_travel_button_shows_cost_or_reason(state, content):
-    assert travel_button(state, content, "town") is None  # 所在地
-    assert travel_button(state, content, "cave") is None  # 未開放
-    assert travel_button(state, content, "lake") == ("安排前往（約 5 體力）", True)
-    state.player.stamina = 3
-    assert travel_button(state, content, "lake") == ("體力不足，第一站要 5 體力", False)
-    state.player.stamina = 150
-    state.pending_event = "drunk"
-    assert travel_button(state, content, "lake") == ("有事件待處理，不能安排前往", False)
-    state.pending_event = None
-    state.player.busy_until = 3600
-    assert travel_button(state, content, "lake") == ("閉關中，不能安排前往", False)
-    state.player.busy_until = None
-    state.world.ended = True
-    assert travel_button(state, content, "lake") == ("賽季已結束，不能安排前往", False)
-    state.world.ended = False
+def test_travel_options_offer_walking_hurrying_and_dashing(state, content):
+    assert travel_options(state, content, "town") is None  # 所在地
+    assert travel_options(state, content, "cave") is None  # 未開放
+    assert travel_options(state, content, "lake") == [
+        TravelOption("walk", "步行（約 3 分鐘）", True),
+        TravelOption("hurry", "趕路（約 2 分鐘・體力 3）", True),
+        TravelOption("dash", "疾行（立刻到・體力 6）", True),
+    ]
+    state.player.stamina = 4
+    assert travel_options(state, content, "lake")[2] == TravelOption("dash", "疾行（體力不足，要 6）", False)
+    state.player.stamina = 2
+    assert travel_options(state, content, "lake")[1] == TravelOption("hurry", "趕路（體力不足，要 3）", False)
+    assert travel_options(state, content, "lake")[0].enabled  # 步行不花體力
     content.config.vision_base = 0
-    assert travel_button(state, content, "lake") is None  # 沒摸清
+    assert travel_options(state, content, "lake") is None  # 沒摸清
 
 
-def test_sitting_blocks_travel(state, content):
-    state.player.resting_since = 0.0
-    assert travel_button(state, content, "lake") == ("打坐中，先起身才能安排前往", False)
+def test_travel_options_and_refusal_explain_why_you_cannot_go(state, content):
+    for setup, reason in (
+        (lambda: setattr(state, "pending_event", "drunk"), "有事件待處理，不能安排前往"),
+        (lambda: setattr(state.player, "busy_until", 3600.0), "閉關中，不能安排前往"),
+        (lambda: setattr(state.player, "resting_since", 0.0), "打坐中，先起身才能安排前往"),
+        (lambda: setattr(state.player, "pending_companion", "someone"), "交談中，先告辭才能安排前往"),
+        (lambda: setattr(state.player, "pending_faction", "guan"), "投靠還沒決定，先決定再安排前往"),
+        (lambda: setattr(state.world, "ended", True), "賽季已結束，不能安排前往"),
+    ):
+        state.pending_event, state.player.busy_until, state.player.resting_since = None, None, None
+        state.player.pending_companion, state.player.pending_faction = None, None
+        state.world.ended = False
+        setup()
+        assert travel_options(state, content, "lake") == [TravelOption("walk", reason, False)]
+        assert travel_refusal(state, content, "lake", "walk") == reason
+    state.world.ended = False
+    assert travel_refusal(state, content, "town", "walk") == "無法安排前往這裡"
+    state.player.stamina = 5
+    assert travel_refusal(state, content, "lake", "dash") == "體力不足，疾行要 6 體力"
+    assert travel_refusal(state, content, "lake", "hurry") is None
 
 
 # ── 詳情欄 ────────────────────────────────────────────
@@ -259,7 +292,7 @@ def test_detail_lists_situation_enemies_story_and_route(state, content):
     assert "**敵情**　水寇小隊 穩勝" in text
     assert "★ 這一幕主線的目標：壓制寇亂" in text
     assert "✦ 最近 3 天的大事與傳聞：\n- 第1天 00:00　翻江龍又劫了一艘船。" in text
-    assert text.endswith("**路線**　約 5 體力")
+    assert text.endswith("**路線**　步行約 3 分鐘、趕路約 2 分鐘・體力 3、疾行立刻到・體力 6")
     here = detail_text(state, content, "town", no_odds)  # 沒有敵人：不算勝算
     assert here.startswith("### 小鎮（所在地）　危險 ★")
     assert "沒有龍頭人物在此出沒" in here and "沒有人在這裡滋事" in here
@@ -363,7 +396,9 @@ def test_detail_of_an_unknown_place_still_says_nothing_about_leaders(state, cont
 
 def test_detail_names_the_places_on_the_way(state, content):
     state.world.flags.add("cave_open")
-    assert detail_text(state, content, "cave", no_odds).endswith("**路線**　約 10 體力，途經 湖邊")
+    assert detail_text(state, content, "cave", no_odds).endswith(
+        "**路線**　步行約 8 分鐘、趕路約 4 分鐘・體力 8、疾行立刻到・體力 15，途經 湖邊"
+    )
 
 
 def test_game_map_helpers(game):
@@ -371,4 +406,4 @@ def test_game_map_helpers(game):
     assert game.map_header() == "⏳ 第1天 00:00　**體力** 150 / 150"
     assert game.map_places() == [("小鎮（所在地）", "town"), ("湖邊", "lake")]
     assert "**敵情**　水寇小隊" in game.place_detail("lake")  # 用 Game.odds；具體勝算數字待平衡調整
-    assert game.travel_button("lake") == ("安排前往（約 5 體力）", True)
+    assert game.travel_options("lake")[0] == TravelOption("walk", "步行（約 3 分鐘）", True)

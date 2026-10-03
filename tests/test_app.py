@@ -5,7 +5,7 @@ import gradio as gr
 import pytest
 
 import app
-from tianxia import battle_instance, companion_agent, roster, world_state
+from tianxia import atlas, battle_instance, companion_agent, roster, world_state
 from tianxia.engine import Game, Option
 from tianxia.save import save_game
 from tianxia.state import BotProfile
@@ -300,6 +300,25 @@ def test_travel_handler_refused_stays_on_the_map_and_explains_why(game):
 def test_travel_handler_with_no_game_skips():
     n = app.N_OUTPUTS + len(app.PAGES) + app.MAP_OUTPUTS
     assert app.travel_handler(None, "situation", "yingshui") == [gr.skip()] * n
+
+
+def test_the_map_offers_walking_hurrying_and_dashing(game):
+    out = app.render_map_page(game, "situation", "yingshui")
+    assert len(out) == app.MAP_OUTPUTS
+    walk, hurry, dash = out[app.MAP_TRAVEL_INDEX:app.MAP_TRAVEL_INDEX + 3]
+    assert walk["value"].startswith("步行（約 ") and walk["interactive"] is True
+    assert hurry["value"].startswith("趕路（約 ") and "體力" in hurry["value"]
+    assert dash["value"].startswith("疾行（立刻到・體力 ")
+    here = app.render_map_page(game, "situation", game.state.player.location)
+    assert all(button["visible"] is False for button in here[app.MAP_TRAVEL_INDEX:])
+
+
+def test_travel_handler_dashes_when_asked(game):
+    minutes = atlas.routes(game.state, game.content)["yingshui"].minutes
+    cost = atlas.travel_stamina(game.content, minutes, "dash")
+    app.travel_handler(game, "situation", "yingshui", "dash")
+    assert game.state.player.location == "yingshui"
+    assert game.state.player.stamina == game.content.config.stamina_max - cost
 
 
 def test_close_world_map():

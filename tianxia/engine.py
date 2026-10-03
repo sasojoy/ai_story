@@ -19,7 +19,7 @@ from .events import choice_label, has_events_here, pick_event, visible_choices
 from .guide import note_action, quest_text, tutorial_intro
 from .journal import LOG_BREAK, Draft
 from .mapview import render_map, render_minimap
-from .models import BattleDef, Choice, Content, Effect, Event, Location, Squad
+from .models import BattleDef, Choice, Content, Effect, Event, Location, Squad, TravelMode
 from .ollama_client import OllamaClient
 from .rules import apply_effect, change_trend, check_who, current_day, roll_check
 from .state import GameState, JournalEntry, Rumor, new_game_state
@@ -281,7 +281,8 @@ class Game:
             dest = c.locations[dest_id]
             if dest.unlock_flag and dest.unlock_flag not in s.world.flags:
                 continue
-            opts.append(self._cost_option(f"move:{dest_id}", f"前往 {dest.name}", atlas.HOP_STAMINA))
+            minutes = atlas.leg_minutes(c, loc.id, dest_id)
+            opts.append(Option(id=f"move:{dest_id}", label=f"前往 {dest.name}（{atlas.mode_text(c, minutes, 'walk')}）"))
         if s.player.faction is None:
             for faction in c.scenario.factions:
                 if s.player.location in faction.join_at:
@@ -1071,7 +1072,6 @@ class Game:
     def _move(self, dest_id: str) -> list[str]:
         dest = self.content.locations[dest_id]
         is_revisit = dest_id in self.state.player.visited
-        self.state.player.stamina -= atlas.HOP_STAMINA
         self.state.player.location = dest_id
         self.state.player.visited.add(dest_id)
         text = self.location_text()
@@ -1082,40 +1082,42 @@ class Game:
         self._hide(text)
         return [text]
 
-    def travel(self, dest_id: str) -> list[str]:
-        if self._preparing():
-            return self._log(["（賽季籌備中，等待管理者開季。）"])
+    def travel(self, dest_id: str, mode: TravelMode = "walk") -> list[str]:
+        """安排前往（大地圖詳情欄的按鈕）：走路程最短的路線；趕路、疾行的體力出發時一次扣（地圖擴充設計 3.2）。"""
+        refusal = self.travel_refusal(dest_id, mode)
+        if refusal is not None:
+            return self._log([f"（{refusal}。）"])
         s, c = self.state, self.content
-        button = atlas.travel_button(s, c, dest_id) if dest_id in c.locations else None
-        if button is None or not button[1]:
-            return self._log([f"（{button[0] if button else '無法安排前往這裡'}。）"])
         route = atlas.routes(s, c)[dest_id]
+        cost = atlas.travel_stamina(c, route.minutes, mode)
         s.battle_card = None
-        self._draft = Draft(f"前往 {c.locations[dest_id].name}")
+        self._draft = Draft(atlas.journey_title(c, route.path), atlas.MODES[mode] + atlas.mode_when(route.minutes, mode))
+        if cost:
+            self._draft.changes.append(f"體力 -{cost}")
         try:
+            s.player.stamina -= cost
             msgs: list[str] = []
             for hop in route.path:
-                if s.world.ended or s.player.stamina < atlas.HOP_STAMINA:
+                if s.world.ended:
                     break
                 msgs += self._move(hop)
                 msgs += note_action(s, c, self.world, "move")
                 msgs += check_thresholds(s, c, self.world, self.client)
-            self._draft.title = self._travel_title(dest_id, route)
+            if s.player.location != dest_id:
+                self._draft.tag = f"賽季落幕，停在 {c.locations[s.player.location].name}"
             journal.add_entry(s, self._draft.entry(s.world.time, msgs))
         finally:
             self._draft = None
         self._save_season()
         return self._log(msgs)
 
-    def _travel_title(self, dest_id: str, route: atlas.Route) -> str:
-        c, here = self.content, self.state.player.location
-        title = f"前往 {c.locations[dest_id].name}"
-        if here != dest_id:
-            why = "賽季落幕" if self.state.world.ended else "體力不足"
-            return f"{title}（{why}，停在 {c.locations[here].name}）"
-        if route.via:
-            return f"{title}（途經 {'、'.join(c.locations[loc_id].name for loc_id in route.via)}）"
-        return title
+    def travel_refusal(self, loc_id: str, mode: TravelMode = "walk") -> str | None:
+        """用這種走法安排前往這裡，不行的原因；可以時為 None。app.py 拿它分辨「沒能出發」。"""
+        if self._preparing():
+            return "賽季籌備中，等待管理者開季"
+        if loc_id not in self.content.locations or mode not in atlas.MODES:
+            return "無法安排前往這裡"
+        return atlas.travel_refusal(self.state, self.content, loc_id, mode)
 
     def _choose(self, index: int) -> list[str]:
         s, c = self.state, self.content
@@ -1383,8 +1385,8 @@ class Game:
     def place_detail(self, loc_id: str) -> str:
         return atlas.detail_text(self.state, self.content, loc_id, self.odds)
 
-    def travel_button(self, loc_id: str) -> tuple[str, bool] | None:
-        return atlas.travel_button(self.state, self.content, loc_id)
+    def travel_options(self, loc_id: str) -> list[atlas.TravelOption] | None:
+        return atlas.travel_options(self.state, self.content, loc_id)
 
     # ── 管理者 ────────────────────────────────────────────
 

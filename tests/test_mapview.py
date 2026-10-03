@@ -170,7 +170,8 @@ def test_story_layer_marks_goals_and_recent_news(state, content):
 def test_routes_layer_shows_costs_and_the_selected_path(state, content):
     state.world.flags.add("cave_open")
     svg = render_map(state, content, "routes", selected="cave")
-    assert ">所在地<" in svg and ">5 體力<" in svg and ">10 體力<" in svg
+    # 路線層標步行分鐘：湖邊 3 分鐘、寶洞 3＋4.5＝7.5 分鐘（四捨五入 8）
+    assert ">所在地<" in svg and ">3 分鐘<" in svg and ">8 分鐘<" in svg
     assert f'<polyline points="100,100 200,100 300,100" fill="none" stroke="{ROUTE_STROKE}"' in svg
     assert ROUTE_STROKE + '" stroke-width="5"' not in render_map(state, content, "routes", selected="town")
 
