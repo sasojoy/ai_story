@@ -286,6 +286,26 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 @keyframes up { from { transform: translateY(40px); opacity: 0; } }
 .toggle { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); margin-bottom: 10px; cursor: pointer; }
 .toggle input { width: 20px; height: 20px; accent-color: var(--accent); }
+/* 管理者工具（G3）：排在一般設定之後、虛線框加淡金底，一眼看得出是另一塊；「開啟下一季」用警示樣式 */
+.admin-zone {
+  margin-top: 24px; padding: 12px 14px 14px; border: 1.5px dashed var(--gold); border-radius: var(--radius);
+  background: color-mix(in srgb, var(--gold) 9%, var(--paper));
+}
+.admin-zone h4 { margin: 0; font-size: 16px; }
+.admin-zone .muted { margin-bottom: 0; }
+.ad-row > .ad-tag { flex: none; align-self: center; font-size: 13px; color: var(--ink-2); }
+.ad-row > .btn { flex: none; }
+.btn.warn { color: var(--bad); border-color: var(--bad); font-weight: 600; }
+.btn.danger { background: var(--bad); border-color: var(--bad); color: #fff; font-weight: 600; }
+/* 管理者動作的確認框：疊在設定抽屜上面的小抽屜（app.js 的 ask） */
+.ask-layer { position: fixed; inset: 0; z-index: 45; }
+.ask-bg { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.35); animation: fade 0.2s; }
+.ask {
+  position: absolute; left: 0; right: 0; bottom: 0; max-width: 640px; margin: 0 auto;
+  background: var(--paper); border-radius: 18px 18px 0 0; box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.18);
+  padding: 18px 16px calc(20px + var(--bottom)); animation: up 0.25s ease-out;
+}
+.ask p { margin: 0 0 14px; font-size: 15px; }
 
 /* ── 登入 ── */
 .gate { max-width: 420px; margin: 0 auto; padding: calc(48px + var(--top)) 20px 32px; }

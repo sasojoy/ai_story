@@ -158,6 +158,7 @@
 
   // ── 整體 ──
   function render() {
+    if (S.stage !== "game" || !S.sheet) closeAsk(); // 管理者確認框只疊在設定抽屜上；抽屜關了、被登出就一起收掉
     if (S.stage === "gate") return renderGate();
     if (S.stage === "create") return renderCreate();
     if (S.stage !== "game") return;
@@ -430,23 +431,72 @@
           <p class="form-msg" role="alert"></p>
           <button class="btn" type="submit">修改密碼</button>
         </form></details>
+        <div class="label">帳號</div>
+        <button class="btn ghost" data-act="logout">登出</button>
         ${S.main.admin ? `
-          <div class="label">管理者</div>
-          <div class="card stack">
-            <div class="row"><button class="btn" data-act="admin" data-op="open_season">開季</button><button class="btn" data-act="admin" data-op="next_season">開啟下一季</button></div>
+          <section class="admin-zone stack" aria-label="管理者工具">
+            <h4>管理者工具（只有你看得到）</h4>
+            <p class="muted">每一項按了都會先問一次才送出；做完會關掉設定、回到江湖頁。</p>
+            <div class="row"><button class="btn" data-act="admin" data-op="open_season">開季</button><button class="btn warn" data-act="admin" data-op="next_season">⚠ 開啟下一季</button></div>
             <p class="muted">時間快轉（全服一起快轉，只在測試時用）</p>
             <div class="row">${[1, 8, 24].map((h) => `<button class="btn small" data-act="admin" data-op="fast_forward" data-hours="${h}">+${h} 小時</button>`).join("")}</div>
             ${a ? `
               <p class="muted">觸發（人少、大勢推不到門檻時用；效果跟自然發生一樣）</p>
-              <div class="row"><select class="input" id="ad-battle">${opts(a.battles)}</select><button class="btn small" data-act="admin" data-op="start_battle">立刻開戰</button></div>
-              <div class="row"><select class="input" id="ad-fire">${opts(a.events)}</select><button class="btn small" data-act="admin" data-op="fire">觸發</button></div>
-              <div class="row"><select class="input" id="ad-trend">${opts(a.trends)}</select><input class="input" id="ad-amount" type="number" value="10" style="max-width:90px"><button class="btn small" data-act="admin" data-op="push_trend">推動</button></div>
+              <div class="row ad-row"><span class="ad-tag">決戰</span><select class="input" id="ad-battle" aria-label="決戰">${opts(a.battles)}</select><button class="btn small" data-act="admin" data-op="start_battle">立刻開戰</button></div>
+              <div class="row ad-row"><span class="ad-tag">事件</span><select class="input" id="ad-fire" aria-label="事件">${opts(a.events)}</select><button class="btn small" data-act="admin" data-op="fire">觸發</button></div>
+              <div class="row ad-row"><span class="ad-tag">大勢</span><select class="input" id="ad-trend" aria-label="大勢">${opts(a.trends)}</select><input class="input" id="ad-amount" type="number" value="10" aria-label="推動量" style="max-width:76px"><button class="btn small" data-act="admin" data-op="push_trend">推動</button></div>
               <p class="muted">重設密碼（朋友忘記密碼時用；臨時密碼私下告訴他）</p>
               <form id="reset-form"><div class="row"><input class="input" name="target" placeholder="帳號或名號"><input class="input" name="temp" placeholder="臨時密碼"><button class="btn small" type="submit">重設</button></div><p class="form-msg" role="alert"></p></form>` : ""}
-          </div>` : ""}
-        <div class="label">帳號</div>
-        <button class="btn ghost" data-act="logout">登出</button>
+          </section>` : ""}
       </div>`;
+  }
+
+  // 管理者動作的確認框（G3）：每一項按了都先問一次、問句說出後果。疊在設定抽屜上面、不重畫抽屜，
+  // 選好的下拉選單、填好的重設密碼欄位都留著；按「取消」或旁邊的暗處就關掉，什麼都不送
+  let askGo = null;
+  function ask(text, yes, go) {
+    closeAsk();
+    askGo = go;
+    document.body.insertAdjacentHTML("beforeend", `
+      <div class="ask-layer">
+        <div class="ask-bg" data-act="ask-no"></div>
+        <div class="ask" role="alertdialog" aria-modal="true" aria-labelledby="ask-text">
+          <p id="ask-text">${esc(text)}</p>
+          <div class="row"><button class="btn" data-act="ask-no">取消</button><button class="btn danger" data-act="ask-yes">${esc(yes)}</button></div>
+        </div>
+      </div>`);
+    document.querySelector('.ask [data-act="ask-no"]').focus();
+  }
+  function closeAsk() {
+    document.querySelector(".ask-layer")?.remove();
+    askGo = null;
+  }
+
+  // 管理者動作的問句與確認鈕（照抽屜裡選好的下拉選單）
+  function adminAsk(op, body) {
+    const picked = (id) => { const el = document.getElementById(id); return el && el.selectedIndex >= 0 ? el.options[el.selectedIndex].text : ""; };
+    const amount = `${body.amount >= 0 ? "+" : ""}${body.amount}`;
+    return {
+      open_season: ["開季：賽季從籌備中正式開始，全服玩家都能行動了，確定？", "確定開季"],
+      next_season: ["開啟下一季：同伴全部重獲自由、自創武學名字釋出、煉製配方清空，確定？", "確定開啟下一季"],
+      fast_forward: [`時間快轉 ${body.hours} 小時（全服一起），確定？`, `快轉 ${body.hours} 小時`],
+      start_battle: [`立刻開戰「${picked("ad-battle")}」：全服一起進入集結，確定？`, "確定開戰"],
+      fire: [`觸發「${picked("ad-fire")}」：效果跟自然發生一樣，全服都受影響，確定？`, "確定觸發"],
+      push_trend: [`推動大勢「${picked("ad-trend")}」${amount}：全服一起，確定？`, "確定推動"],
+    }[op] || ["確定要這麼做？", "確定"];
+  }
+
+  // 確認過的管理者動作：做完關掉抽屜、回到江湖頁看結果，結果照舊用提示泡泡講（G4）。
+  // 請求本身沒成（連不上、伺服器出錯）就留在抽屜裡，api() 已經提示過原因
+  async function adminDo(op, body) {
+    await busy(async () => {
+      const r = await api(`/api/do/${op}`, body);
+      S.sheet = false;
+      setMain(r.main);
+      await goTab("jianghu");
+      const text = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+      toast(text || "已完成。");
+    });
   }
 
   // ── 載入各頁 ──
@@ -551,12 +601,12 @@
     });
   }
 
-  async function doMain(op, body = {}, confirm = false) {
+  async function doMain(op, body = {}) {
     await busy(async () => {
       const r = await api(`/api/do/${op}`, body);
       applyMain(r.main);
       const text = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-      if (text || confirm) toast(text || "已完成。");
+      if (text) toast(text);
     });
   }
 
@@ -652,9 +702,17 @@
           if (op === "start_battle") body.id = document.getElementById("ad-battle").value;
           if (op === "fire") body.id = document.getElementById("ad-fire").value;
           if (op === "push_trend") { body.id = document.getElementById("ad-trend").value; body.amount = Number(document.getElementById("ad-amount").value || 0); }
-          await doMain(op, body, true);
+          const [text, yes] = adminAsk(op, body);
+          ask(text, yes, () => adminDo(op, body)); // 先問一次（G3），按了確定才送
           break;
         }
+        case "ask-yes": {
+          const go = askGo;
+          closeAsk();
+          if (go) await go();
+          break;
+        }
+        case "ask-no": closeAsk(); break;
         case "logout": await api("/api/logout", {}); S.sheet = false; S.stage = "gate"; S.main = null; render(); break;
         case "kind": S.kind = el.dataset.kind; renderPage(); break;
         case "mx": await mx(el.dataset.op); break;
@@ -711,6 +769,7 @@
     if (keyboard) document.querySelector(".who")?.focus();
   }
   document.addEventListener("keydown", (ev) => {
+    if (ev.key === "Escape" && askGo) { closeAsk(); return; } // 管理者確認框：Esc 等於取消
     if ((ev.key === "Enter" || ev.key === " ") && ev.target instanceof Element && ev.target.matches('.who[data-act="toggle-more"]')) {
       ev.preventDefault();
       toggleMore(true);
@@ -777,10 +836,20 @@
         formMsg(form, r.message, ok);
         if (ok) form.reset();
       } else if (form.id === "reset-form") {
-        const r = await api("/api/admin/reset_password", data);
-        const ok = /^已重設 .+ 的密碼。$/.test(r.message || "");
-        formMsg(form, r.message, ok);
-        if (ok) form.reset();
+        // 重設密碼也先問一次（G3）。結果照舊寫在表單那一行、抽屜不關（失敗時欄位留著改，跟改密碼一樣）
+        const target = (data.target || "").trim();
+        if (!target) { formMsg(form, "先填要重設的帳號或名號。"); return; }
+        ask(`重設 ${target} 的密碼，確定？`, "確定重設", async () => {
+          formMsg(form, "");
+          try {
+            const r = await api("/api/admin/reset_password", data);
+            const ok = /^已重設 .+ 的密碼。$/.test(r.message || "");
+            formMsg(form, r.message, ok);
+            if (ok) form.reset();
+          } catch (e) {
+            formMsg(form, failText(e));
+          }
+        });
       }
     } catch (e) {
       if (submit) submit.disabled = false;
