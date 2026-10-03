@@ -4,10 +4,10 @@ from unittest import mock
 
 import pytest
 
-from conftest import FixedRandom
+from conftest import FixedRandom, walk_to
 from tianxia import battle_instance, companion_agent, flavor, rules
 from tianxia.engine import Game, Option
-from tianxia.state import BotProfile, GameState
+from tianxia.state import BotProfile, GameState, Journey
 from tianxia.world_state import WorldStateStore
 
 HOUR = 3600
@@ -34,7 +34,7 @@ def test_town_options(game):
 
 
 def test_locked_location_hidden_until_flag(game):
-    game.choose("move:lake")
+    walk_to(game, "lake")
     assert "move:cave" not in ids(game)
     game.state.world.flags.add("cave_open")
     assert "move:cave" in ids(game)
@@ -42,14 +42,14 @@ def test_locked_location_hidden_until_flag(game):
 
 def test_socialize_hidden_when_no_events_here(game):
     game.state.world.flags.add("cave_open")
-    game.choose("move:lake")
+    walk_to(game, "lake")
     game.state.player.location = "cave"
     assert "act:socialize" not in ids(game)
 
 
 def test_recruit_option_follows_who_is_free_at_this_location(game):
     assert "招募【韓鐵】（體力 15・成功率約 35%）" in [o.label for o in game.options() if o.id == "act:recruit"]
-    game.choose("move:lake")
+    walk_to(game, "lake")
     assert "招募【琴師】（體力 15・成功率約 35%）" in [o.label for o in game.options() if o.id == "act:recruit"]
     game.world.try_recruit("friend", "李四")
     game.world.try_recruit("hero", "李四")
@@ -189,7 +189,7 @@ def test_declining_the_sect_leaves_the_player_unaffiliated(game):
 
 
 def test_event_battle_is_fully_automatic_and_a_loss_applies_the_fail_effect(game):
-    game.choose("move:lake")
+    walk_to(game, "lake")
     game.choose("act:socialize")
     assert game.state.pending_event == "duel"
     game.choose("choice:0")  # 應戰翻江龍：必敗，全自動打完
@@ -207,7 +207,7 @@ def test_event_battle_is_fully_automatic_and_a_loss_applies_the_fail_effect(game
 def test_event_battle_win_pays_squad_rewards_once_and_applies_choice_effect(game):
     game.content.events["duel"].choices[0].combat = "thug"  # 換成打得贏的水寇小隊
     rules.learn_skill(game.state, game.content, "fist")  # 沒武學＝威力 0，門檻改成比例後真的打不贏
-    game.choose("move:lake")
+    walk_to(game, "lake")
     game.choose("act:socialize")
     game.rng = FixedRandom(1.0)  # 最佳運氣：穩穩打贏
     game.choose("choice:0")
@@ -224,7 +224,7 @@ def test_event_battle_win_splits_story_from_numeric_changes(game):
     rules.learn_skill(game.state, game.content, "fist")
     game.content.events["duel"].choices[0].effect.stats = {"fame": 3}
     game.content.events["duel"].choices[0].effect.rumor = "{name}擊敗了翻江龍！"
-    game.choose("move:lake")
+    walk_to(game, "lake")
     game.choose("act:socialize")
     game.rng = FixedRandom(1.0)
     game.choose("choice:0")
@@ -237,7 +237,7 @@ def test_event_battle_win_splits_story_from_numeric_changes(game):
 def test_train_win_is_recorded_with_rewards(game):
     rules.learn_skill(game.state, game.content, "fist")  # 壓倒性的威力，穩贏
     game.content.config.train_event_chance = 1.0
-    game.choose("move:lake")
+    walk_to(game, "lake")
     game.state.player.seen_events.add("scroll")  # 避開探索遇到殘卷奇遇
     game.rng = FixedRandom(0.3)
     game.choose("act:explore")
@@ -253,7 +253,7 @@ def test_train_win_is_recorded_with_rewards(game):
 def test_train_loss_costs_a_tenth_of_the_silver(game):
     game.content.locations["lake"].enemies = ["boss"]  # 換成打不贏的翻江龍
     game.content.config.train_event_chance = 1.0
-    game.choose("move:lake")
+    walk_to(game, "lake")
     game.state.player.seen_events.add("scroll")
     game.rng = FixedRandom(0.0)
     game.choose("act:explore")
@@ -266,7 +266,7 @@ def test_train_win_stat_bonus_is_recorded_as_a_change_not_a_note(game):
     rules.learn_skill(game.state, game.content, "fist")
     game.content.config.train_stat_chance = 1.0
     game.content.config.train_event_chance = 1.0
-    game.choose("move:lake")
+    walk_to(game, "lake")
     game.state.player.seen_events.add("scroll")
     game.rng = FixedRandom(0.3)
     game.choose("act:explore")
@@ -278,7 +278,7 @@ def test_train_win_stat_bonus_is_recorded_as_a_change_not_a_note(game):
 
 def test_train_event_chain(game):
     game.content.config.train_event_chance = 1.0
-    game.choose("move:lake")
+    walk_to(game, "lake")
     game.choose("act:explore")
     assert game.state.pending_event == "scroll"
 
@@ -383,30 +383,52 @@ def test_locked_figures_use_talk_at_instead_of_recruit_at_for_dialogue(content, 
 
 def test_first_visit_to_a_location_does_not_call_flavor(game):
     with mock.patch.object(flavor, "polish_revisit") as polish:
-        game.choose("move:lake")  # 第一次去湖邊，不是重遊
+        walk_to(game, "lake")  # 第一次去湖邊，不是重遊
     polish.assert_not_called()
 
 
 def test_revisiting_a_location_appends_the_flavor_sentence(game):
-    game.choose("move:lake")
+    walk_to(game, "lake")
     with mock.patch.object(flavor, "polish_revisit", return_value="風又吹起了。"):
-        msgs = game.choose("move:town")  # 小鎮開局就去過，這次是重遊
-    assert msgs[0].endswith("\n\n風又吹起了。")
+        msgs = game.travel("town", "dash")  # 疾行：在這次行動裡抵達終點；小鎮開局就去過，是重遊，補一句
+    assert f"{game.location_text()}\n\n風又吹起了。" in msgs
+
+
+def test_a_timed_arrival_never_calls_the_model(game):
+    """計時器的 sync 拿著全服行動鎖：路上抵達不叫模型（重遊點綴句、江湖大事潤色都不叫）。"""
+    walk_to(game, "lake")
+    with mock.patch.object(flavor, "polish_revisit") as revisit, \
+            mock.patch.object(flavor, "polish_world_event") as news:
+        game.choose("move:town")  # 小鎮開局就去過：重遊
+        game.state.world.trends["kou"] = 50  # 抵達時才跨過「水寇封江」
+        game.advance(game.state.player.journey.arrive_at[-1] - game.state.world.time)
+    assert "blocked" in game.state.world.flags  # 門檻照樣觸發，只是沒潤色
+    revisit.assert_not_called()
+    news.assert_not_called()
 
 
 def test_revisiting_an_important_location_skips_flavor(content, game):
     content.locations["town"].important = True
-    game.choose("move:lake")
+    walk_to(game, "lake")
     with mock.patch.object(flavor, "polish_revisit") as polish:
-        game.choose("move:town")
+        game.travel("town", "dash")
     polish.assert_not_called()
 
 
 def test_revisiting_skips_the_sentence_when_flavor_comes_back_empty(game):
-    game.choose("move:lake")
+    walk_to(game, "lake")
     with mock.patch.object(flavor, "polish_revisit", return_value=""):
-        msgs = game.choose("move:town")
-    assert msgs[0] == game.location_text()  # 失敗就整句省略，不多附加任何東西
+        msgs = game.travel("town", "dash")
+    assert game.location_text() in msgs  # 失敗就整句省略，不多附加任何東西
+
+
+def test_only_the_last_stop_of_a_trip_gets_the_flavor_sentence(game):
+    game.state.world.flags.add("cave_open")
+    game.state.player.visited |= {"lake", "cave"}
+    with mock.patch.object(flavor, "polish_revisit", return_value="風又吹起了。") as polish:
+        game.travel("cave", "dash")
+    polish.assert_called_once()
+    assert polish.call_args.args[1] == "寶洞"
 
 
 def test_presenting_an_event_for_the_first_time_does_not_call_flavor(game):
@@ -667,7 +689,7 @@ def test_tutorial_runs_through_engine(game):
     assert game.state.player.tutorial_step == 1
     if game.state.pending_event:
         game.choose(ids(game)[-1])
-    game.choose("move:lake")
+    walk_to(game, "lake")
     assert game.state.player.tutorial_step == 2
     game.view_map()
     assert game.state.player.tutorial_step == 3
@@ -754,7 +776,7 @@ def test_status_text_shows_the_practice_hint_only_when_xinde_is_idle(game):
 
 def test_visited_and_map(game):
     assert game.state.player.visited == {"town"}
-    game.choose("move:lake")
+    walk_to(game, "lake")
     assert game.state.player.visited == {"town", "lake"}
     assert "<svg" in game.world_map_svg()
     assert "<svg" in game.minimap_svg()
@@ -813,6 +835,84 @@ def test_travel_is_refused_with_a_reason(game):
     assert len(game.state.journal) == before
 
 
+def test_walking_takes_time_and_arrives_on_the_next_sync(game):
+    game.sync(1000.0)
+    game.choose("move:lake")  # 夾具：小鎮—湖邊 3 分鐘
+    p = game.state.player
+    assert p.location == "town" and p.journey.path == ["lake"] and p.journey.arrive_at == [180.0]
+    game.sync(1000.0 + 60)
+    assert p.location == "town" and p.journey is not None  # 還在路上
+    game.sync(1000.0 + 200)
+    assert p.location == "lake" and p.journey is None and "lake" in p.visited
+
+
+def test_hurrying_takes_half_the_time(game):
+    game.state.world.flags.add("cave_open")
+    game.travel("cave", "hurry")
+    assert game.state.player.journey.arrive_at == [pytest.approx(90.0), pytest.approx(225.0)]  # (3＋4.5 分鐘) × 30 秒
+
+
+def test_on_the_road_you_cannot_act(game):
+    game.choose("move:lake")
+    opts = game.options()
+    assert [(o.id, o.enabled) for o in opts] == [("act:on_road", False)]
+    assert "抵達湖邊" in opts[0].label
+    assert game.choose("act:explore") == ["（此刻無法這麼做。）"]
+    assert game.travel("lake") == ["（在路上，不能另外安排前往。）"]
+    assert game.seclude(4) == ["你現在無法閉關。"]
+
+
+def test_status_and_scene_show_the_arrival_time(game):
+    game.choose("move:lake")
+    assert "🧭 在路上：往湖邊（步行），第1天 00:03 抵達，還要約 3 分鐘" in game.status_text()
+    scene = game.scene_text()
+    assert scene.startswith("**在路上**") and "第1天 00:03 抵達" in scene and "到了會自己抵達" in scene
+
+
+def test_every_station_on_the_way_fires_the_arrival_rules(game):
+    game.state.world.flags.add("cave_open")
+    game.state.player.tutorial_step = 1  # 下一步是「去湖邊」
+    game.travel("cave", "walk")
+    game.advance(game.state.player.journey.arrive_at[0] - game.state.world.time)  # 只走到湖邊
+    p = game.state.player
+    assert p.location == "lake" and "lake" in p.visited and p.journey.reached == 1
+    assert p.tutorial_step == 2  # 抵達湖邊就完成這一步，不必等到終點
+    game.advance(p.journey.arrive_at[1] - game.state.world.time)
+    assert p.location == "cave" and p.journey is None
+
+
+def test_departing_is_not_arriving_for_the_tutorial(game):
+    game.state.player.tutorial_step = 1  # 「去湖邊」
+    game.choose("move:lake")
+    assert game.state.player.tutorial_step == 1
+    game.advance(game.state.player.journey.arrive_at[-1] - game.state.world.time)
+    assert game.state.player.tutorial_step == 2
+
+
+def test_a_threshold_crossed_on_arrival_reaches_the_shared_season(game):
+    game.sync(1000.0)
+    game.choose("move:lake")
+    # sync 會先換成共用賽季的那一份，所以改共用的；追趕那 200 秒不滿一小時，世界本身不檢查門檻
+    game.world.mutate_season(lambda season: season.trends.__setitem__("kou", 80))
+    game.sync(1000.0 + 200)  # 抵達時才檢查：水寇稱霸，賽季落幕
+    assert game.state.world.ended and game.world.get_season().ended
+
+
+def test_a_season_that_ends_on_the_road_leaves_you_where_you_got_to(game):
+    game.state.world.flags.add("cave_open")
+    game.travel("cave", "walk")
+    game.state.world.ended = True
+    game.advance(0)  # 時鐘停在落幕那一刻：還沒到的站不會再到
+    assert game.state.player.journey is None and game.state.player.location == "town"
+    assert game.state.journal[0].tag == "賽季落幕，停在 小鎮"
+
+
+def test_a_stale_journey_is_dropped_on_load(content, game):
+    game.state.player.journey = Journey(mode="walk", path=["nowhere"], arrive_at=[60.0])
+    reloaded = Game(content, game.state, world=game.world)
+    assert reloaded.state.player.journey is None
+
+
 # ── 全服即時多人戰鬥（設計討論：集結選陣營→逐幕逐回合鎖步）──────────
 
 
@@ -863,7 +963,7 @@ def test_a_free_agent_can_join_a_faction_where_it_recruits(content, game):
 
 def test_the_join_option_only_shows_at_the_factions_own_places(content, game):
     _install_factions(content)
-    game.choose("move:lake")
+    walk_to(game, "lake")
     assert not any(i.startswith("faction:") for i in ids(game))
 
 
@@ -1438,7 +1538,7 @@ def test_triggers_wait_for_the_season_to_run(content, game):
 def test_train_win_drops_a_material_into_the_bag_and_the_report(game):
     rules.learn_skill(game.state, game.content, "fist")  # 壓倒性的威力，穩贏
     game.content.config.train_event_chance = 1.0
-    game.choose("move:lake")
+    walk_to(game, "lake")
     game.state.player.seen_events.add("scroll")  # 避開探索遇到殘卷奇遇
     game.rng = FixedRandom(0.3)  # 水寇小隊難度 5：預設掉落表 50% 掉一個一階素材
     msgs = game.choose("act:explore")
@@ -1452,7 +1552,7 @@ def test_a_hard_fought_loss_drops_nothing(game):
     game.content.locations["lake"].enemies = ["boss"]  # 打不贏的翻江龍
     game.content.config.train_event_chance = 1.0
     game.content.config.explore_material_chance = 0.0  # 只看戰鬥那條路，不要被探索自己撿到的混進來
-    game.choose("move:lake")
+    walk_to(game, "lake")
     game.state.player.seen_events.add("scroll")
     game.rng = FixedRandom(0.0)
     game.choose("act:explore")
@@ -1495,7 +1595,7 @@ def test_exploring_picks_up_a_material_even_when_an_event_fires(game):
 def test_train_is_offered_only_where_there_are_enemies(game):
     ids = [o.id for o in game.options()]
     assert "act:train" not in ids  # 鎮上沒有敵人
-    game.choose("move:lake")  # 湖邊有水寇小隊
+    walk_to(game, "lake")  # 湖邊有水寇小隊
     option = next(o for o in game.options() if o.id == "act:train")
     assert "歷練" in option.label and "水寇小隊" in option.label
 
@@ -1504,7 +1604,7 @@ def test_training_always_fights_even_though_an_event_would_have_fired(game):
     """探索永遠會撞到事件（pick_event 只在完全沒有候選時才回 None），所以掛在探索後面的
     遭遇戰分支一次都不會執行——歷練就是為了這件事存在的。"""
     rules.learn_skill(game.state, game.content, "fist")
-    game.choose("move:lake")
+    walk_to(game, "lake")
     game.rng = FixedRandom(0.99)  # 高到不會觸發戰後事件
     msgs = game.choose("act:train")
     assert game.state.battles and game.state.battles[0].opponent == "水寇小隊"
@@ -1513,7 +1613,7 @@ def test_training_always_fights_even_though_an_event_would_have_fired(game):
 
 
 def test_training_costs_the_configured_stamina(game):
-    game.choose("move:lake")
+    walk_to(game, "lake")
     before = game.state.player.stamina
     game.rng = FixedRandom(0.99)
     game.choose("act:train")
@@ -1525,7 +1625,7 @@ def test_a_post_battle_event_can_follow_the_fight(game):
     game.content.events["chain_a"].actions = ["train"]  # fixture 裡唯一掛在 train 上的事件
     game.content.config.train_event_chance = 1.0
     rules.learn_skill(game.state, game.content, "fist")
-    game.choose("move:lake")
+    walk_to(game, "lake")
     game.rng = FixedRandom(0.3)
     game.choose("act:train")
     assert game.state.battles  # 先打了一場
@@ -1534,7 +1634,7 @@ def test_a_post_battle_event_can_follow_the_fight(game):
 
 def test_the_journal_calls_it_a_training_trip(game):
     rules.learn_skill(game.state, game.content, "fist")
-    game.choose("move:lake")
+    walk_to(game, "lake")
     game.rng = FixedRandom(0.99)
     game.choose("act:train")
     assert any(entry.title == "歷練・湖邊" for entry in game.state.journal)
@@ -1580,7 +1680,7 @@ def test_winning_a_training_fight_pushes_the_trend_your_factions_way(content, ga
     _training_factions(content)
     game.state.player.faction = faction
     rules.learn_skill(game.state, game.content, "fist")  # 壓倒性的威力，穩贏
-    game.choose("move:lake")
+    walk_to(game, "lake")
     game.choose("act:train")  # 湖邊的對手是水寇小隊（不屬於任何陣營），train_trend kou:-1
     assert game.state.battles[0].kind == "train"
     assert game.state.world.trends["kou"] == expected
@@ -1591,7 +1691,7 @@ def test_training_with_your_own_factions_squad_is_a_drill(content, game):
     _training_factions(content)
     content.squads["thug"].faction = "huang"
     game.state.player.faction = "huang"  # 沒學武功也沒關係：操練不會輸
-    game.choose("move:lake")
+    walk_to(game, "lake")
     silver, xinde = game.state.player.stats["silver"], game.state.player.stats.get("xinde", 0)
     msgs = game.choose("act:train")
     assert any("操軍擺陣" in m for m in msgs)
@@ -1615,7 +1715,7 @@ def test_a_drill_is_journaled_as_a_drill_without_a_battle_card(content, game):
     _training_factions(content)
     content.squads["thug"].faction = "huang"
     game.state.player.faction = "huang"
-    game.choose("move:lake")
+    walk_to(game, "lake")
     game.choose("act:train")
     entry = game.state.journal[0]
     assert (entry.title, entry.tag, entry.battle_id) == ("歷練・湖邊", "操練", None)
@@ -1629,7 +1729,7 @@ def test_a_drill_is_not_followed_by_a_post_fight_event(content, game):
     content.squads["thug"].faction = "huang"
     content.config.train_event_chance = 1.0
     game.state.player.faction = "huang"
-    game.choose("move:lake")
+    walk_to(game, "lake")
     msgs = game.choose("act:train")
     assert any("操軍擺陣" in m for m in msgs)
     assert game.state.pending_event is None

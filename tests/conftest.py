@@ -81,3 +81,11 @@ def game(content):
     content.config.train_event_chance = 0.0
     content.config.train_stat_chance = 0.0
     return Game.new(content, "沈浪", rng=random.Random(0))
+
+
+def walk_to(game, dest: str) -> list[str]:
+    """步行到相鄰的 dest：從選單出發，再把時間推到抵達那一刻（地圖擴充：移動要花時間）。回傳抵達時的訊息。"""
+    game.choose(f"move:{dest}")
+    journey = game.state.player.journey
+    assert journey is not None, f"沒有出發：選單上沒有 move:{dest}"
+    return game.advance(journey.arrive_at[-1] - game.state.world.time)

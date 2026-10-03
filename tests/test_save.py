@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 
+from conftest import walk_to
 from tianxia.engine import Game
 from tianxia.save import load_game, save_game
 
@@ -16,7 +17,7 @@ def test_roundtrip(tmp_path, game):
 
 
 def test_roundtrip_keeps_battle_records(tmp_path, game):
-    game.choose("move:lake")
+    walk_to(game, "lake")
     game._squad_encounter("thug")  # 直接觸發遭遇，不依賴 explore 的隨機事件/遭遇機率
     path = tmp_path / "saves" / "沈浪.json"
     save_game(game.state, path)
@@ -36,14 +37,14 @@ def test_1a_save_without_battle_records_still_loads(tmp_path, content, game):
     assert (state.battles, state.battle_seq, state.battle_card) == ([], 0, None)
     assert "last_report" not in state.model_dump()
     old = Game(content, state)
-    old.choose("move:lake")
+    walk_to(old, "lake")
     old._squad_encounter("thug")
     assert [r.id for r in old.state.battles] == [1]
 
 
 def test_pre_fix_battle_record_without_changes_field_still_loads(tmp_path, game):
     """在「結果／獲得與損失」拆分上線前存的戰報，BattleRecord 還沒有 changes 欄位；讀檔不能炸。"""
-    game.choose("move:lake")
+    walk_to(game, "lake")
     game._squad_encounter("thug")
     dump = game.state.model_dump(mode="json")
     del dump["battles"][0]["changes"]  # 模擬舊版存檔

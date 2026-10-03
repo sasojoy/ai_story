@@ -85,6 +85,12 @@ def test_travel_settings_follow_the_map_design(content):
     assert cfg.travel_minutes_per_unit > 0  # 跟著地圖座標走（第二步重畫地圖時 PM 會改），這裡不寫死
 
 
+def test_the_tutorial_explains_travel_and_sitting_down(content):
+    texts = {step.id: step.text for step in content.tutorial.steps}
+    assert all(word in texts["t2_map"] for word in ("步行", "趕路", "疾行", "體力"))
+    assert "打坐" in texts["t3_outskirts"]
+
+
 def test_every_battle_is_fought_in_the_region_where_it_starts(content):
     for th in content.scenario.thresholds:
         if th.starts_battle and th.location:

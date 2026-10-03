@@ -283,7 +283,7 @@ def test_open_world_map_with_no_game_skips():
 def test_travel_handler_succeeds_and_returns_to_the_main_page(game):
     out = app.travel_handler(game, "situation", "yingshui")
     assert len(out) == app.N_OUTPUTS + len(app.PAGES) + app.MAP_OUTPUTS
-    assert game.state.player.location == "yingshui"
+    assert game.state.player.journey.path == ["yingshui"]  # 步行：在路上
     pages = out[app.N_OUTPUTS:app.N_OUTPUTS + len(app.PAGES)]
     assert [p.get("visible") for p in pages] == [name == "main" for name in app.PAGES]
 

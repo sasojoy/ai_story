@@ -50,7 +50,7 @@ def note_action(state: GameState, content: Content, world: WorldStateStore, acti
 def _idle(state: GameState) -> bool:
     return (
         not state.world.ended and state.pending_event is None and state.player.busy_until is None
-        and state.player.resting_since is None
+        and state.player.resting_since is None and state.player.journey is None
     )
 
 

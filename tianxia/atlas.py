@@ -325,7 +325,7 @@ class TravelOption:
 
 
 def travel_block(state: GameState) -> str | None:
-    """現在不能安排前往的原因（賽季已結束、有事件待處理、交談中、投靠待確認、閉關中、打坐中）；可以時為 None。"""
+    """現在不能安排前往的原因（賽季已結束、有事件待處理、交談中、投靠待確認、閉關中、在路上、打坐中）；可以時為 None。"""
     if state.world.ended:
         return "賽季已結束，不能安排前往"
     if state.pending_event:
@@ -336,6 +336,8 @@ def travel_block(state: GameState) -> str | None:
         return "投靠還沒決定，先決定再安排前往"
     if state.player.busy_until is not None:
         return "閉關中，不能安排前往"
+    if state.player.journey is not None:
+        return "在路上，不能另外安排前往"
     if state.player.resting_since is not None:
         return "打坐中，先起身才能安排前往"
     return None
@@ -379,6 +381,22 @@ def journey_title(content: Content, path) -> str:
     """江湖紀錄裡一趟路的標題：「前往 終點」，途經別的站時加上「（途經 A、B）」。"""
     title = f"前往 {content.locations[path[-1]].name}"
     return f"{title}（途經 {_names(content, path[:-1])}）" if len(path) > 1 else title
+
+
+def path_legs(content: Content, start: str, path: list[str]) -> list[float]:
+    """從 start 照 path 一站一站走，每一段的路程（步行分鐘）。"""
+    stops = [start, *path]
+    return [leg_minutes(content, a, b) for a, b in zip(stops, stops[1:])]
+
+
+def arrival_times(now: float, legs: list[float], mode: TravelMode) -> list[float]:
+    """now 出發、照這種走法，每一站的抵達時間（遊戲秒）；疾行全都是 now。"""
+    times: list[float] = []
+    t = now
+    for leg in legs:
+        t += travel_seconds(leg, mode)
+        times.append(t)
+    return times
 
 
 # ── 畫面文字 ──────────────────────────────────────────

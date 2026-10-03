@@ -157,18 +157,40 @@ def _story(entry: JournalEntry) -> list[str]:
     return entry.lines or ([entry.tag] if entry.tag else [])
 
 
+def _mergeable_head(state: GameState, entry: JournalEntry) -> JournalEntry | None:
+    """最新的一則，同標題（而且不是舊存檔轉來、不知道時間的）才能把 entry 併進去；不能就是 None。"""
+    head = state.journal[0] if state.journal else None
+    return head if head is not None and head.title == entry.title and head.time >= 0 else None
+
+
+def _merged(head: JournalEntry, entry: JournalEntry, lines: list[str], battle_id: int | None = None) -> JournalEntry:
+    """head 與 entry 併成的一則：時間與結果標記用新的（entry 沒有標記就沿用 head 的）、數值變化加總。"""
+    return JournalEntry(
+        time=entry.time, title=entry.title, tag=entry.tag or head.tag, lines=lines,
+        changes=combine_changes(head.changes + entry.changes), battle_id=battle_id,
+    )
+
+
 def add_entry(state: GameState, entry: JournalEntry, merge: bool = False) -> None:
     """最新的放最前面，只留最近 MAX_ENTRIES 則。
     merge=True 且最新一則是同一類（同標題）時併進那一則：敘事依序接上、數值變化加總、時間與結果標記用新的。"""
-    head = state.journal[0] if state.journal else None
-    if merge and head is not None and head.title == entry.title and head.time >= 0:
-        state.journal[0] = JournalEntry(
-            time=entry.time, title=entry.title, tag=entry.tag or head.tag, lines=_story(head) + _story(entry),
-            changes=combine_changes(head.changes + entry.changes),
-        )
+    head = _mergeable_head(state, entry) if merge else None
+    if head is not None:
+        state.journal[0] = _merged(head, entry, _story(head) + _story(entry))
         return
     state.journal.insert(0, entry)
     del state.journal[MAX_ENTRIES:]
+
+
+def add_arrival(state: GameState, entry: JournalEntry, done: bool) -> None:
+    """一趟路抵達時的紀錄（sync／advance 補算的抵達）：出發那則（同標題）還是最新的一則就併進去——敘事接上、
+    數值變化加總、時間換成抵達的時間、有新的結果標記（例如「喊停，停在 湖邊」）就換新的；不是的話另起一則，
+    結果標記寫「抵達」（走完了）或「途中」（只到了中途的站）。"""
+    head = _mergeable_head(state, entry)
+    if head is not None:
+        state.journal[0] = _merged(head, entry, head.lines + entry.lines, battle_id=head.battle_id)
+        return
+    add_entry(state, entry.model_copy(update={"tag": entry.tag or ("抵達" if done else "途中")}))
 
 
 def from_legacy_log(log: list[str]) -> list[JournalEntry]:

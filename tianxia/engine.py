@@ -22,7 +22,7 @@ from .mapview import render_map, render_minimap
 from .models import BattleDef, Choice, Content, Effect, Event, Location, Squad, TravelMode
 from .ollama_client import OllamaClient
 from .rules import apply_effect, change_trend, check_who, current_day, roll_check
-from .state import GameState, JournalEntry, Rumor, new_game_state
+from .state import GameState, JournalEntry, Journey, Rumor, new_game_state
 from .world import advance_world_state, check_thresholds, end_season, fire_by_id, sim_tick, start_pending_battle
 from .world_state import WorldStateStore
 
@@ -122,6 +122,8 @@ class Game:
             p.pending_faction = None
         if p.location not in c.locations:
             p.location = c.scenario.start_location
+        if p.journey is not None and any(loc_id not in c.locations for loc_id in p.journey.path):
+            p.journey = None
         p.team = [k for k in p.team if k in c.characters][: team.MAX_TEAM_COMPANIONS]
         if p.member.neigong_id and p.member.neigong_id not in c.skills and not self.world.is_skill_name_taken(p.member.neigong_id):
             p.member.neigong_id = None
@@ -176,10 +178,13 @@ class Game:
             elapsed = max(0.0, now - self.state.last_real) * self.content.config.time_scale
             self.state.last_real = now
             msgs += self._advance_player_local(elapsed)
+        arrived = self._arrivals()  # 抵達的站自己寫一則江湖紀錄（途中觸發的大事也寫在那裡），不併進下面的「江湖大事」
+        if arrived:
+            self._save_season()  # 抵達時觸發的大勢門檻改了共用賽季
         news = journal.news_entry(self.state.world.time, msgs)
         if news is not None:
             journal.add_entry(self.state, news, merge=True)
-        return self._log(msgs)
+        return self._log(msgs + arrived)
 
     def advance(self, seconds: float) -> list[str]:
         """玩家主動「等待」固定一段遊戲時間（快轉按鈕）：進行中時，直接在 self.state.world
@@ -191,13 +196,14 @@ class Game:
         if self.world.season_phase() == "running":
             msgs += advance_world_state(self.state.world, self.content, seconds, self.rng, self.world)
         msgs += self._advance_player_local(seconds)
+        arrived = self._arrivals()  # 同 sync：抵達自己寫紀錄
         self._save_season()
         msgs += start_pending_battle(self.world, self.content)
         self.state.world = self.world.get_season()
         news = journal.news_entry(self.state.world.time, msgs)
         if news is not None:
             journal.add_entry(self.state, news, merge=True)
-        return self._log(msgs)
+        return self._log(msgs + arrived)
 
     def _advance_player_local(self, seconds: float) -> list[str]:
         """玩家自己的部分：體力（打坐中加倍）／氣血回復、打坐回滿起身、閉關出關、新立門戶福緣——
@@ -254,6 +260,10 @@ class Game:
             ]
         if s.player.busy_until is not None:
             return [Option(id="act:break", label="提前出關")]
+        j = s.player.journey
+        if j is not None:
+            end = c.locations[j.path[j.last]].name
+            return [Option(id="act:on_road", label=f"（在路上，{battlelog.clock_text(j.arrive_at[j.last])} 抵達{end}）", enabled=False)]
         if s.player.resting_since is not None:
             return [Option(id="act:stand", label="起身")]
         loc = c.locations[s.player.location]
@@ -404,8 +414,6 @@ class Game:
                 msgs = self._choose(int(arg))
             if kind == "act" and arg != "break":
                 msgs += note_action(self.state, self.content, self.world, arg)
-            elif kind == "move":
-                msgs += note_action(self.state, self.content, self.world, "move")
             msgs += check_thresholds(self.state, self.content, self.world, self.client)
             journal.add_entry(self.state, self._draft.entry(self.state.world.time, msgs))
         finally:
@@ -1070,41 +1078,111 @@ class Game:
         return line
 
     def _move(self, dest_id: str) -> list[str]:
-        dest = self.content.locations[dest_id]
-        is_revisit = dest_id in self.state.player.visited
-        self.state.player.location = dest_id
-        self.state.player.visited.add(dest_id)
+        """選單上的「前往 某地」：沿直接相連的那條路步行出發（趕路、疾行在大地圖的安排前往）。"""
+        return self._depart([dest_id], "walk")
+
+    def _depart(self, path: list[str], mode: TravelMode) -> list[str]:
+        """出發（地圖擴充設計 3.2、3.3）：趕路、疾行的體力出發時一次扣，照走法排好每一站的抵達時間。
+        疾行立刻一站一站抵達；步行、趕路就在路上，之後由 sync／advance 補算抵達（見 _arrivals）。"""
+        s, c = self.state, self.content
+        legs = atlas.path_legs(c, s.player.location, path)
+        minutes = sum(legs)
+        cost = atlas.travel_stamina(c, minutes, mode)
+        s.player.stamina -= cost
+        s.player.journey = Journey(mode=mode, path=path, arrive_at=atlas.arrival_times(s.world.time, legs, mode))
+        if self._draft is not None:
+            self._draft.tag = atlas.MODES[mode] + atlas.mode_when(minutes, mode)
+            if cost:
+                self._draft.changes.append(f"體力 -{cost}")
+        if mode == "dash":
+            return self._arrivals()
+        arrive = s.player.journey.arrive_at[-1]
+        left = atlas.whole_minutes((arrive - s.world.time) / 60)
+        msg = f"你動身{atlas.MODES[mode]}前往{c.locations[path[-1]].name}，{battlelog.clock_text(arrive)} 抵達（約 {left} 分鐘後）。"
+        self._hide(msg)  # 場景會顯示「在路上」，紀錄只留標題與走法
+        return [msg]
+
+    def _arrivals(self) -> list[str]:
+        """在路上：抵達時間已經到了的站，一站一站抵達（地圖擴充設計 3.3）。走到這一趟的最後一站（終點或喊停的
+        那一站）就下馬。賽季已經落幕時，落幕前就該到的站照樣抵達（時鐘停在落幕那一刻，之後的站不會再到），
+        然後停在當下那一站；抵達某一站時觸發了賽季落幕，就停在那一站。不在行動裡（sync、advance）時自己寫
+        江湖紀錄（見 journal.add_arrival），而且不叫模型——它們在計時器裡、拿著全服行動鎖；疾行在
+        travel() 的行動裡，寫在那次行動的紀錄，照原本的規則可以叫模型。"""
+        s, c = self.state, self.content
+        j = s.player.journey
+        if j is None or (j.arrive_at[j.reached] > s.world.time and not s.world.ended):
+            return []
+        own = self._draft is None
+        client = None if own else self.client  # sync／advance 的抵達（計時器、備料都拿著行動鎖）不叫模型；只有疾行在玩家自己這次行動裡
+        if own:
+            self._draft = Draft(atlas.journey_title(c, j.path))
+        try:
+            already_over = s.world.ended
+            msgs: list[str] = []
+            when = s.world.time
+            while j.reached <= j.last and j.arrive_at[j.reached] <= s.world.time:
+                if s.world.ended and not already_over:
+                    break  # 剛抵達的那一站觸發了賽季落幕：停在那裡
+                when = j.arrive_at[j.reached]
+                j.reached += 1
+                msgs += self._arrive(j.path[j.reached - 1], final=j.reached > j.last, client=client)
+            done = j.reached > j.last or s.world.ended
+            if done:
+                s.player.journey = None
+                if s.player.location != j.path[-1]:
+                    reason = "賽季落幕" if s.world.ended else "喊停"
+                    self._draft.tag = f"{reason}，停在 {c.locations[s.player.location].name}"
+            if own:
+                entry = self._draft.entry(when, msgs)
+                if done or entry.lines or entry.changes:  # 只到了中途的站、又沒有別的事，不另寫一則
+                    journal.add_arrival(s, entry, done)
+        finally:
+            if own:
+                self._draft = None
+        return msgs
+
+    def _arrive(self, loc_id: str, final: bool, client: OllamaClient | None = None) -> list[str]:
+        """抵達一站：照原本走到一個地點的規則——地點描寫、新手引導、大勢門檻。終點是重遊的一般地點時才多請模型
+        補一句此刻的小細節（中途的站不補，省得一趟路叫好幾次模型）。client 是這次抵達可以用的模型：
+        None（計時器的抵達）就完全不叫模型，重遊點綴句與江湖大事的潤色都省掉；門檻照樣觸發。"""
+        s, c = self.state, self.content
+        dest = c.locations[loc_id]
+        is_revisit = loc_id in s.player.visited
+        s.player.location = loc_id
+        s.player.visited.add(loc_id)
         text = self.location_text()
-        if is_revisit and not dest.important:
-            flourish = flavor.polish_revisit(self.client, dest.name, dest.description)
+        if final and is_revisit and not dest.important and client is not None:
+            flourish = flavor.polish_revisit(client, dest.name, dest.description)
             if flourish:
                 text = f"{text}\n\n{flourish}"
         self._hide(text)
-        return [text]
+        return [text] + note_action(s, c, self.world, "move") + check_thresholds(s, c, self.world, client)
+
+    def _journey_line(self) -> str:
+        """在路上的那一句（狀態列、場景共用）：「往寶洞（步行），第1天 00:08 抵達，還要約 8 分鐘；下一站湖邊」。"""
+        s, c = self.state, self.content
+        j = s.player.journey
+        end = j.arrive_at[j.last]
+        left = atlas.whole_minutes(max(0.0, end - s.world.time) / 60)
+        line = (
+            f"往{c.locations[j.path[j.last]].name}（{atlas.MODES[j.mode]}），"
+            f"{battlelog.clock_text(end)} 抵達，還要約 {left} 分鐘"
+        )
+        if j.reached < j.last:
+            line += f"；下一站{c.locations[j.path[j.reached]].name}"
+        return line
 
     def travel(self, dest_id: str, mode: TravelMode = "walk") -> list[str]:
-        """安排前往（大地圖詳情欄的按鈕）：走路程最短的路線；趕路、疾行的體力出發時一次扣（地圖擴充設計 3.2）。"""
+        """安排前往（大地圖詳情欄的按鈕）：照路程最短的路線出發，走法見 _depart。"""
         refusal = self.travel_refusal(dest_id, mode)
         if refusal is not None:
             return self._log([f"（{refusal}。）"])
         s, c = self.state, self.content
         route = atlas.routes(s, c)[dest_id]
-        cost = atlas.travel_stamina(c, route.minutes, mode)
         s.battle_card = None
-        self._draft = Draft(atlas.journey_title(c, route.path), atlas.MODES[mode] + atlas.mode_when(route.minutes, mode))
-        if cost:
-            self._draft.changes.append(f"體力 -{cost}")
+        self._draft = Draft(atlas.journey_title(c, route.path))
         try:
-            s.player.stamina -= cost
-            msgs: list[str] = []
-            for hop in route.path:
-                if s.world.ended:
-                    break
-                msgs += self._move(hop)
-                msgs += note_action(s, c, self.world, "move")
-                msgs += check_thresholds(s, c, self.world, self.client)
-            if s.player.location != dest_id:
-                self._draft.tag = f"賽季落幕，停在 {c.locations[s.player.location].name}"
+            msgs = self._depart(list(route.path), mode)
             journal.add_entry(s, self._draft.entry(s.world.time, msgs))
         finally:
             self._draft = None
@@ -1170,7 +1248,7 @@ class Game:
         s = self.state
         return (
             not self._preparing() and not s.world.ended and s.pending_event is None and s.player.busy_until is None
-            and s.player.resting_since is None
+            and s.player.resting_since is None and s.player.journey is None
         )
 
     def seclude(self, hours: int) -> list[str]:
@@ -1496,6 +1574,8 @@ class Game:
         if s.player.pending_faction:
             faction = self._faction(s.player.pending_faction)
             return f"**投靠{faction.name}**\n\n{self._faction_prompt(faction)}"
+        if s.player.journey is not None:
+            return f"**在路上**\n\n{self._journey_line()}。\n\n路上不能做事；可以先下線，到了會自己抵達。"
         return self.location_text()
 
     def status_text(self) -> str:
@@ -1528,6 +1608,8 @@ class Game:
             lines.append(f"🧘 閉關中，約 {(p.busy_until - w.time) / HOUR:.1f} 小時後出關")
         if p.resting_since is not None:
             lines.append(f"🧘 打坐中：體力回復是平常的 {c.config.rest_regen_multiplier:g} 倍，隨時可以起身")
+        if p.journey is not None:
+            lines.append(f"🧭 在路上：{self._journey_line()}")
         return "\n\n".join(lines)
 
     def trends_text(self) -> str:

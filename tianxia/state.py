@@ -5,7 +5,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from .models import Content
+from .models import Content, TravelMode
 
 PLAYER = "player"  # 沿用舊名，指玩家本人；同伴不再用 key 存在 PlayerState 裡（見下）
 
@@ -44,6 +44,22 @@ class BotProfile(BaseModel):
     season_number: int = 0
 
 
+class Journey(BaseModel):
+    """在路上（地圖擴充設計 3.3）：出發時排好的路線與每一站的抵達時間。時間記在賽季時鐘上（WorldState.time
+    的遊戲秒數，跟閉關的 busy_until 一樣），sync／advance 推進時鐘之後補算抵達。"""
+
+    mode: TravelMode
+    path: list[str]  # 出發時排好的路線（不含出發地），最後一個是終點
+    arrive_at: list[float]  # 每一站的抵達時間，跟 path 一一對應
+    reached: int = 0  # 已經抵達幾站
+    stop_at: int | None = None  # 喊停：走到 path 的第幾站（索引）就停；None＝走到終點
+
+    @property
+    def last(self) -> int:
+        """這一趟最後要抵達的那一站（path 的索引）。"""
+        return len(self.path) - 1 if self.stop_at is None else self.stop_at
+
+
 class PlayerState(BaseModel):
     name: str
     location: str
@@ -79,6 +95,7 @@ class PlayerState(BaseModel):
     busy_until: float | None = None  # 閉關結束的遊戲時間
     seclusion_start: float = 0.0
     resting_since: float | None = None  # 打坐坐下時的賽季時間（遊戲秒）；None＝沒在打坐（地圖擴充設計第二節，跟閉關同一種做法）
+    journey: Journey | None = None  # 在路上；None＝人在某個地點（location）
     tutorial_step: int = 0  # 等於引導步數時代表引導結束
     visited: set[str] = Field(default_factory=set)  # 去過的地點
     fortune: bool = False  # 本季的新立門戶福緣已經發生（或已經改送賀禮）

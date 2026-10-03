@@ -1,4 +1,5 @@
 from tianxia.guide import next_hint, note_action, quest_text, tutorial_active, tutorial_intro
+from tianxia.state import Journey
 
 
 def test_intro_is_first_step(content):
@@ -60,6 +61,9 @@ def test_next_hint_hides_stamina_reminder_when_not_idle(state, content):
     assert "體力將滿" not in next_hint(state, content)
     state.world.ended = False
     state.player.resting_since = 0.0
+    assert "體力將滿" not in next_hint(state, content)
+    state.player.resting_since = None
+    state.player.journey = Journey(mode="walk", path=["lake"], arrive_at=[180.0])
     assert "體力將滿" not in next_hint(state, content)
 
 

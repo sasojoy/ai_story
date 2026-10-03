@@ -1,7 +1,7 @@
 """江湖紀錄：每次行動寫成一則 JournalEntry（engine），舊存檔的 log 轉成紀錄，以及「剛剛」卡片與紀錄列的 HTML。"""
 import json
 
-from conftest import FixedRandom
+from conftest import FixedRandom, walk_to
 
 from tianxia import journal
 from tianxia.engine import LOG_BREAK, Game
@@ -27,17 +27,27 @@ def test_new_game_opens_with_the_season_intro(game):
 
 
 def test_move_entry_drops_the_location_description(game):
-    game.choose("move:lake")
+    walk_to(game, "lake")
     entry = latest(game)
-    assert (entry.title, entry.tag, entry.lines, entry.changes) == ("前往 湖邊", "", [], [])
+    assert (entry.title, entry.tag, entry.lines, entry.changes) == ("前往 湖邊", "步行約 3 分鐘", [], [])
     assert game.location_text() in game.state.log  # 原始訊息照舊留在 log
-    assert len(game.state.journal) == 2
+    assert len(game.state.journal) == 2  # 出發那則，抵達時併進同一則
+    assert entry.time == 180.0  # 時間換成抵達的時間
+
+
+def test_an_arrival_after_other_entries_gets_its_own_entry(game):
+    game.choose("move:lake")
+    game.create_skill("測試長拳", "武學")  # 路上在門下練功：紀錄多了一則
+    game.advance(game.state.player.journey.arrive_at[-1] - game.state.world.time)
+    assert [(e.title, e.tag) for e in game.state.journal[:3]] == [
+        ("前往 湖邊", "抵達"), ("門下", game.state.journal[1].tag), ("前往 湖邊", "步行約 3 分鐘"),
+    ]
 
 
 def test_move_entry_keeps_guide_messages(game):
     game.choose("act:explore")
     game.choose("choice:1")  # 把醉漢打發掉
-    game.choose("move:lake")
+    walk_to(game, "lake")
     entry = latest(game)
     assert entry.title == "前往 湖邊"
     assert entry.lines == ["✔ 引導完成", "【說書人】看看地圖。"]
@@ -54,7 +64,7 @@ def test_explore_that_meets_an_event_tags_it_and_drops_the_intro(game):
 
 def test_explore_that_finds_nothing(game):
     game.state.player.tutorial_step = 3  # 引導已走完，不會多出引導的訊息
-    game.choose("move:lake")
+    walk_to(game, "lake")
     game.state.player.seen_events.add("scroll")  # 湖邊唯一的探索事件只出現一次
     game.choose("act:explore")
     entry = latest(game)
@@ -62,7 +72,7 @@ def test_explore_that_finds_nothing(game):
 
 
 def test_qiyu_is_tagged_as_such(game):
-    game.choose("move:lake")
+    walk_to(game, "lake")
     game.choose("act:explore")
     assert latest(game).tag == "遇上奇遇【殘卷】"
 
@@ -80,7 +90,7 @@ def _give_player_a_winning_wugong(game):
 def test_train_entry_carries_the_battle_summary_and_gains(game):
     from conftest import FixedRandom
 
-    game.choose("move:lake")
+    walk_to(game, "lake")
     _give_player_a_winning_wugong(game)
     game.rng = FixedRandom(0.99)  # 好運氣，確保是大勝或險勝（算進 WIN_TIERS）
     game._draft = journal.Draft("歷練・湖邊")
@@ -120,7 +130,7 @@ def test_self_check_choice_entry(game):
 
 
 def test_choice_entry_with_a_battle(game):
-    game.choose("move:lake")
+    walk_to(game, "lake")
     game.choose("act:socialize")
     game.choose("choice:0")
     record = game.state.battles[0]
@@ -214,7 +224,7 @@ def test_menxia_changes_are_written_but_failures_are_not(game):
 def test_menxia_entries_merge_only_when_nothing_else_happened_in_between(game):
     game.create_skill("測試長拳", "武學")
     game.state.world.time = 600
-    game.choose("move:lake")
+    walk_to(game, "lake")
     game.practice("武學")
     game.state.world.time = 1200
     game.practice("武學")
@@ -256,7 +266,7 @@ def guided_train(game):
     from conftest import FixedRandom
 
     game.rng = FixedRandom(0.99)
-    game.choose("move:lake")
+    walk_to(game, "lake")
     game.choose("act:explore")
 
 
@@ -287,17 +297,17 @@ def test_battle_card_extra_skips_card_notes_and_event_markers(game):
 
     game.rng = FixedRandom(0.99)
     game.state.player.member.exp = 90
-    game.choose("move:lake")
+    walk_to(game, "lake")
     game.choose("act:explore")
     assert "沈浪升到第 2 級！" in latest(game).lines and "沈浪升到第 2 級！" in game.state.battles[0].notes
     assert game.battle_extra_html() == ""  # 升級已經寫在卡片的「結果」裡
-    game.choose("move:town")
+    walk_to(game, "town")
     assert game.battle_extra_html() == ""  # 沒有顯示戰鬥卡片時沒有補充
 
 
 def test_new_season_starts_a_fresh_journal(game):
     game.content.config.admins = [game.state.player.name]
-    game.choose("move:lake")
+    walk_to(game, "lake")
     game.advance(2 * 24 * HOUR)
     game.admin_next_season(now=0.0)
     assert [e.title for e in game.state.journal] == ["測試劇本"]
@@ -306,7 +316,7 @@ def test_new_season_starts_a_fresh_journal(game):
 def test_journal_keeps_the_newest_thirty(game):
     for i in range(40):
         game.state.player.stamina = 150
-        game.choose("move:lake" if i % 2 == 0 else "move:town")
+        walk_to(game, "lake" if i % 2 == 0 else "town")
     entries = game.state.journal
     assert len(entries) == journal.MAX_ENTRIES == 30
     assert entries[0].title == "前往 小鎮" and entries[1].title == "前往 湖邊"  # 最新的在前
@@ -355,7 +365,7 @@ def test_legacy_log_without_breaks_and_the_cap(content, game):
 
 
 def test_old_save_file_without_a_journal_loads_and_converts(tmp_path, content, game):
-    game.choose("move:lake")
+    walk_to(game, "lake")
     dump = game.state.model_dump(mode="json")
     del dump["journal"]
     path = tmp_path / "old.json"
@@ -363,7 +373,7 @@ def test_old_save_file_without_a_journal_loads_and_converts(tmp_path, content, g
     state = load_game(path)
     assert state.journal == []
     entries = Game(content, state).state.journal
-    assert [e.title for e in entries] == ["【湖邊】危險 ★★", "══ 測試劇本 ══"]
+    assert entries[0].title == "【湖邊】危險 ★★" and entries[-1].title == "══ 測試劇本 ══"
 
 
 def test_journal_survives_a_save_round_trip(tmp_path, game):
@@ -373,7 +383,7 @@ def test_journal_survives_a_save_round_trip(tmp_path, game):
     from conftest import FixedRandom
 
     game.rng = FixedRandom(0.99)
-    game.choose("move:lake")
+    walk_to(game, "lake")
     game.choose("act:explore")
     path = tmp_path / "沈浪.json"
     save_game(game.state, path)
@@ -453,7 +463,7 @@ def test_game_html_helpers(game):
     from conftest import FixedRandom
 
     game.rng = FixedRandom(0.99)
-    game.choose("move:lake")
+    walk_to(game, "lake")
     assert "前往 湖邊" in game.latest_entry_html()
     rows = game.journal_html(1, 5)
     assert rows.count('class="tx-row"') == 1 and "測試劇本" in rows

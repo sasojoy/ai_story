@@ -1,6 +1,7 @@
 import random
 import time
 
+from conftest import walk_to
 from tianxia import battle_instance, bot_policy
 from tianxia.engine import Option
 from tianxia.models import (
@@ -82,6 +83,9 @@ def test_a_bot_walks_to_its_factions_join_point_and_joins(content, game):
     profile = _profile("huang")
     rng = random.Random(0)
     bot_policy.take_turn(game, profile, rng)
+    journey = game.state.player.journey
+    assert journey is not None and journey.path == ["lake"]  # 步行出發，路上要花時間
+    game.advance(journey.arrive_at[-1] - game.state.world.time)
     assert game.state.player.location == "lake"
     bot_policy.take_turn(game, profile, rng)
     assert game.state.player.pending_faction == "huang"
@@ -148,7 +152,7 @@ def test_look_after_creates_arts_with_ordinary_looking_names(content, game):
 def test_a_bot_trains_where_training_helps_its_faction(content, game):
     _install_factions(content)  # 官軍 goals kou -1、黃巾 goals kou +1
     game.state.player.faction = "huang"
-    game.choose("move:lake")  # 湖邊 train_trend kou -1：黃巾的人在這裡歷練會往 +1 推
+    walk_to(game, "lake")  # 湖邊 train_trend kou -1：黃巾的人在這裡歷練會往 +1 推
     train = bot_policy.score(game, Option(id="act:train", label=""), _profile("huang"))
     explore = bot_policy.score(game, Option(id="act:explore", label=""), _profile("huang"))
     assert train > explore
