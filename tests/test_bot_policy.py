@@ -2,11 +2,11 @@ import random
 import time
 
 from conftest import walk_to
-from tianxia import battle_instance, bot_policy
+from tianxia import battle_instance, bot, bot_policy
 from tianxia.engine import Option
 from tianxia.models import (
     BattleAct, BattleActionEffect, BattleAdvanceWhen, BattleDef, BattleFaction, BattleOption, BattleOutcome, Effect,
-    FactionDef,
+    FactionDef, Location,
 )
 from tianxia.state import BotProfile
 
@@ -198,3 +198,87 @@ def test_a_bot_still_socializes_where_the_location_has_events(content, game):
     content.characters["mate"].audience_fame = 10  # 小鎮有交遊事件（拜師），見不到韓鐵也不白跑
     assert not game.socialize_is_futile()
     assert bot_policy.score(game, Option(id="act:socialize", label=""), _profile("guan")) == bot_policy.ACT_SCORES["socialize"]
+
+
+def _battle_in_the_south(content, game):
+    """寶洞搬進南區、打開；官軍的假人在北區的小鎮，自己這一方的決戰在南區集結。"""
+    _install_factions(content)
+    definition = _install_battle(content)
+    definition.region = "south"
+    content.locations["cave"].y = 170
+    game.state.world.flags.add("cave_open")
+    game.state.player.faction = "guan"
+    game.world.start_battle(definition, now=time.time())
+    return definition
+
+
+def test_a_bot_on_the_road_skips_its_turn(content, game):
+    game.choose("move:lake")
+    before = (len(game.state.journal), game.state.player.member.wugong_id)
+    assert bot_policy.take_turn(game, _profile("guan"), random.Random(0)) == []
+    assert (len(game.state.journal), game.state.player.member.wugong_id) == before  # 連自創功法這種照顧動作都不做
+
+
+def test_a_bot_on_the_road_still_ticks_the_shared_battle(content, game):
+    """在路上的假人也替全服戰鬥追趕時間：不然全是假人的戰鬥，集結截止會一直等到有人刷新畫面。"""
+    _install_factions(content)
+    definition = _install_battle(content)
+    game.state.player.faction = "guan"
+    game.choose("move:lake")
+    game.world.start_battle(definition, now=time.time() - definition.muster_seconds - 1)  # 集結早就該截止了
+    assert game.world.get_battle().phase == "muster"
+    assert bot_policy.take_turn(game, _profile("guan"), random.Random(0)) == []
+    assert game.world.get_battle().phase != "muster"
+
+
+def test_a_bot_hurries_toward_its_sides_battle_in_another_region(content, game):
+    _battle_in_the_south(content, game)
+    game.state.player.stamina = 100
+    bot_policy.take_turn(game, _profile("guan"), random.Random(0))
+    journey = game.state.player.journey
+    assert journey is not None and journey.path == ["lake"] and journey.mode == "hurry"
+
+
+def test_a_bot_walks_to_the_battle_when_it_cannot_afford_to_hurry(content, game):
+    _battle_in_the_south(content, game)
+    game.state.player.stamina = 0
+    bot_policy.take_turn(game, _profile("guan"), random.Random(0))
+    assert game.state.player.journey.mode == "walk"
+
+
+def test_a_bot_already_in_the_battle_region_joins_instead_of_travelling(content, game):
+    _install_factions(content)
+    definition = _install_battle(content)
+    definition.region = "north"
+    game.state.player.faction = "guan"
+    game.world.start_battle(definition, now=time.time())
+    bot_policy.take_turn(game, _profile("guan"), random.Random(0))
+    assert game.state.player.journey is None
+    assert game.state.player.name in game.world.get_battle().participants
+
+
+def test_a_bot_with_an_event_to_settle_does_not_rush_off(content, game):
+    _battle_in_the_south(content, game)
+    game.state.pending_event = "drunk"
+    bot_policy.take_turn(game, _profile("guan"), random.Random(0))
+    assert game.state.player.journey is None and game.state.pending_event is None  # 先把事件選完
+
+
+def test_next_hop_takes_the_quickest_road(content, game):
+    game.state.world.flags.add("cave_open")
+    assert bot_policy.next_hop(game, ["cave"]) == "lake"
+    content.locations["hill"] = Location(
+        id="hill", name="山丘", description="小山丘。", connections=["town", "cave"], x=200, y=50
+    )
+    content.locations["town"].connections.append("hill")
+    content.locations["cave"].connections.append("hill")
+    assert bot_policy.next_hop(game, ["cave"]) == "hill"  # 一樣兩站，山丘那條不用走湖邊—寶洞的山路
+
+
+def test_bots_never_pick_the_halt_or_rest_options_meant_for_humans(content, game, monkeypatch):
+    """喊停、打坐是修給真人的：假人只走單站、喊停不會出現，萬一出現了也不選，不然整季模擬「沒有能做的事就推進時間」的訊號會失效。"""
+    human_only = [Option(id="act:halt", label="喊停", enabled=True), Option(id="act:rest", label="打坐", enabled=True)]
+    assert bot.pick(game, human_only, random.Random(0)) is None
+    monkeypatch.setattr(game, "options", lambda **kwargs: human_only)
+    assert bot_policy.take_turn(game, _profile("guan"), random.Random(0)) == []
+    assert game.state.player.journey is None and game.state.player.resting_since is None

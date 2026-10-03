@@ -7,9 +7,8 @@
 from __future__ import annotations
 
 import random
-from collections import deque
 
-from . import server_bots
+from . import atlas, server_bots
 from .bot import wants_heal
 from .engine import Game, Option
 from .models import Effect, FactionDef
@@ -28,12 +27,19 @@ SKILL_NAME_TRIES = 5
 
 
 def take_turn(game: Game, profile: BotProfile, rng: random.Random) -> list[str]:
-    """做一個動作（外加不受強度影響的照顧動作）；沒有能做的事（例如體力不夠）就什麼都不做，回傳空清單。"""
+    """做一個動作（外加不受強度影響的照顧動作）；沒有能做的事（例如體力不夠）就什麼都不做，回傳空清單。
+    在路上的假人這一輪跳過，連照顧動作都不做（地圖擴充設計 3.4）。"""
+    game.options(odds=False)  # 每一輪先替全服戰鬥追趕一次時間（集結截止、回合逾時），跟真人的畫面刷新一樣；在路上、趕路的假人也不例外
+    if game.state.player.journey is not None:
+        return []
     look_after(game, rng)
     s = game.state
     if s.player.pending_companion:
         return game.choose("talk:leave")
-    options = [o for o in game.options(odds=False) if o.enabled and o.id != "act:rest"]
+    rally = _toward_battle(game)
+    if rally is not None:
+        return rally
+    options = [o for o in game.options(odds=False, tick=False) if o.enabled and o.id not in ("act:rest", "act:halt")]
     if not options:
         return []
     ids = [o.id for o in options]
@@ -108,33 +114,39 @@ def _train_value(game: Game, profile: BotProfile, loc_id: str | None = None) -> 
     return TREND_WEIGHT * sum(goals.get(t, 0) * d for t, d in game.train_trend_push(loc_id).items())
 
 
-def next_hop(game: Game, targets: list[str]) -> str | None:
-    """從所在地往最近的目標走的下一站：照地圖連線、跳過還沒開放的地點（不管摸清了沒）；
-    已經在目標上或走不到時回傳 None。"""
-    s, c = game.state, game.content
-    start = s.player.location
-    if start in targets:
+def _toward_battle(game: Game) -> list[str] | None:
+    """自己這一方的全服決戰在集結或開打、自己人卻不在現場（見 Game.rally_region）：往那個大區路程最近的地點走一站，體力夠就趕路、
+    不夠就步行（地圖擴充設計 3.4：陣營目標急的時候趕路；假人不疾行）。不是這種情況、走不過去、或現在不能
+    安排前往（例如有事件待處理）就回傳 None，照平常挑選項。"""
+    region = game.rally_region()
+    if region is None:
         return None
-    first: dict[str, str] = {}
-    seen = {start}
-    queue = deque([start])
-    while queue:
-        here = queue.popleft()
-        for nxt in c.locations[here].connections:
-            loc = c.locations[nxt]
-            if nxt in seen or (loc.unlock_flag and loc.unlock_flag not in s.world.flags):
-                continue
-            seen.add(nxt)
-            first[nxt] = first.get(here, nxt)
-            if nxt in targets:
-                return first[nxt]
-            queue.append(nxt)
+    hop = next_hop(game, atlas.region_locations(game.content, region))
+    if hop is None:
+        return None
+    ways = {option.mode: option for option in game.travel_options(hop) or []}
+    for mode in ("hurry", "walk"):
+        if mode in ways and ways[mode].enabled:
+            return game.travel(hop, mode)
     return None
+
+
+def next_hop(game: Game, targets: list[str]) -> str | None:
+    """從所在地往路程最近的目標走的下一站：照地圖連線走路程最短的路（地圖擴充設計 3.2）、跳過還沒開放的地點
+    （不管摸清了沒）；已經在目標上或走不到時回傳 None。"""
+    if game.state.player.location in targets:
+        return None
+    found = atlas.shortest_routes(game.state, game.content)
+    reachable = [found[t] for t in targets if t in found and found[t].path]
+    if not reachable:
+        return None
+    best = min(reachable, key=lambda route: (round(route.minutes, 6), len(route.path), route.path))
+    return best.path[0]
 
 
 def _toward_faction(game: Game, faction_id: str, ids: list[str]) -> str | None:
     """還沒投靠這一季效力的陣營：確認畫面就確認（不是自己的陣營就作罷）；在投靠點就投靠；
-    不然往最近的投靠點走一站（體力不夠走不了就回傳 None）。"""
+    不然往最近的投靠點走一站（走不過去就回傳 None）。"""
     p = game.state.player
     if p.pending_faction is not None:
         return "faction:confirm" if p.pending_faction == faction_id else "faction:cancel"

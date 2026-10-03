@@ -141,6 +141,14 @@ def region_of(content: Content, loc_id: str) -> MapRegion | None:
     return min(regions, key=lambda region: _edge_distance(loc.x, loc.y, region.points))
 
 
+def region_locations(content: Content, region_id: str) -> list[str]:
+    """屬於這個大區的地點 id（照內容順序；區外的地點歸最近的大區，同 region_of）。"""
+    return [
+        loc_id for loc_id in content.locations
+        if (region := region_of(content, loc_id)) is not None and region.id == region_id
+    ]
+
+
 def direction(start: tuple[float, float], end: tuple[float, float]) -> str:
     """從 start 看 end 的八方位箭頭。"""
     angle = math.degrees(math.atan2(end[1] - start[1], end[0] - start[0]))
