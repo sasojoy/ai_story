@@ -4,11 +4,14 @@
 
 做法是 `server.py --share`：伺服器會叫 cloudflared 開一個 trycloudflare 臨時公開網址。不用帳號、不用設定，但**每次重開，網址都會換**。
 
-> 標「待實測」的地方，QA 還沒在這台電腦上試過。cloudflared 裝好後會實測，再改成確定的說法。
+> QA 2026-10-04 在這台電腦上實測過（main `0335664`，7890 埠、全新資料庫）。結果見下面各節，以及 [試玩回饋.md](試玩回饋.md) 的 FB-011、FB-020、FB-021。
 
 ## 第一次要先做的
 
-1. **裝 cloudflared**：在 PowerShell 打 `winget install Cloudflare.cloudflared`。裝完**另開一個新的** PowerShell 視窗，打 `cloudflared --version`，看到版本號就好了。
+1. **裝 cloudflared**：
+   - 在 PowerShell 打 `winget install Cloudflare.cloudflared`。這台已經裝好了，版本 2026.9.3，裝在 `C:\Program Files (x86)\cloudflared`。
+   - 裝之前就開著的 PowerShell 視窗或 Claude session 找不到它，要**另開一個新的** PowerShell 視窗，打 `cloudflared --version`，看到版本號就好了。
+   - session 沒辦法重開時，在啟動伺服器之前先補一行：`$env:Path += ";C:\Program Files (x86)\cloudflared"`。
 2. **電腦不能睡眠**：電腦一睡，伺服器和網址都會斷。
    - Windows 設定 → 系統 → 電源 →「螢幕、睡眠與休眠逾時」：把接上電源時的睡眠設成「永不」。螢幕關掉沒關係。
    - 筆電闔上蓋子也會睡：控制台 →「電源選項」→「選擇闔上螢幕時的行為」，接上電源時改成「不執行任何動作」。
@@ -40,16 +43,16 @@ $env:TIANXIA_DB = "C:\Ray\tianxia-play\tianxia.db"
 
 ## 網址在哪、怎麼給 joy
 
-- 伺服器視窗會先印「天下大勢：http://127.0.0.1:7861」和「資料庫：…」，過幾秒再印：
+- 伺服器視窗會先印「天下大勢：http://127.0.0.1:7861」和「資料庫：…」，**大約 7 秒後**再印：
   `公開網址：https://xxxx.trycloudflare.com（給手機用；有網址的人都進得來，不要外流）`
 - 把 `https://` 開頭那一串複製給 joy。企劃者自己在這台電腦上玩，照樣開 http://127.0.0.1:7861 就好。
-- **伺服器一重開，網址就會換**，要把新網址重新給 joy。舊網址會不會失效：待實測。
+- **伺服器一重開，網址就會換**，要把新網址重新給 joy。舊網址在 cloudflared 跟著關掉之後就失效，打開會看到 Cloudflare 的錯誤頁（HTTP 530）。
 - 伺服器重開後**每個人都要重新登入一次**。帳號、角色、進度都還在。
 - 有網址的人都能進來註冊，所以網址只私下給，不要貼在公開的地方。
 
 ## 怎麼停
 
-在兩個視窗各按一次 **Ctrl+C**。cloudflared 會不會跟著關：待實測。
+在兩個視窗各按一次 **Ctrl+C**。伺服器和 cloudflared 會一起關掉，不會留下東西。直接關掉視窗也可以。
 
 ## 怎麼備份資料庫
 
@@ -66,19 +69,21 @@ Copy-Item C:\Ray\tianxia-play\tianxia.db* $dst
 
 ## 給 session 用：不開視窗的啟動與停止
 
-Claude session 不能開互動視窗，改用 `Start-Process` 在背景啟動，輸出寫進 log：
+Claude session 不能開互動視窗，改用 `Start-Process` 在背景啟動，輸出寫進 log。**記下回傳的 PID**，停的時候要用：
 
 ```powershell
 cd C:\Ray\專案\天下大勢
 $env:TIANXIA_DB = "C:\Ray\tianxia-play\tianxia.db"
-Start-Process .venv\Scripts\python.exe -ArgumentList "-u","server.py","--port","7861","--share" -RedirectStandardOutput server_out.log -RedirectStandardError server_err.log -WindowStyle Hidden
-Start-Process .venv\Scripts\python.exe -ArgumentList "-u","run_bots.py" -RedirectStandardOutput bots_out.log -RedirectStandardError bots_err.log -WindowStyle Hidden
+$srv = Start-Process .venv\Scripts\python.exe -ArgumentList "-u","server.py","--port","7861","--share" -RedirectStandardOutput server_out.log -RedirectStandardError server_err.log -WindowStyle Hidden -PassThru
+$bots = Start-Process .venv\Scripts\python.exe -ArgumentList "-u","run_bots.py" -RedirectStandardOutput bots_out.log -RedirectStandardError bots_err.log -WindowStyle Hidden -PassThru
+"server $($srv.Id)  bots $($bots.Id)"
 ```
 
-- 公開網址印在 `server_out.log`，要等幾秒才會出現。
+- 公開網址印在 `server_out.log`，大約 7 秒後出現。用 `Get-Content server_out.log -Encoding UTF8` 讀，不加 `-Encoding UTF8` 中文會變亂碼。
 - `-u` 一定要加。沒加的話，Python 寫檔時會先存在緩衝裡，伺服器其實已經開好了，log 卻一直是空的。
-- 停的時候：用 `netstat -ano | findstr :7861` 找出真正在聽這個埠的 PID，`taskkill /PID <pid> /F` 關掉。`Start-Process` 回傳的 PID 常常不是這一個。
-- cloudflared 是伺服器開出來的子程式，伺服器被強制關掉時，它可能還留著（待實測）。留著的話要另外關：
+- **停的時候用 `/T` 關整棵**：`taskkill /PID <server 的 PID> /T /F`，假人也一樣。實測這樣會連 cloudflared 一起關掉。
+- **不要只關「正在聽 7861 的那個 PID」**：`.venv` 的 python.exe 會再開一個真正的 python，cloudflared 是那個 python 開出來的。只關它的話，cloudflared 會留著、繼續連 7861，**重開後舊網址照樣進得到新伺服器**（FB-021）。
+- 不確定有沒有殘留時，先停掉伺服器，再跑下面這行清掉，**最後才重開**。順序不能倒過來：這行會把連到 7861 的 cloudflared 全部關掉，包括新開的那個。
 
 ```powershell
 Get-CimInstance Win32_Process -Filter "Name='cloudflared.exe'" | Where-Object CommandLine -match '127.0.0.1:7861' | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
@@ -86,5 +91,8 @@ Get-CimInstance Win32_Process -Filter "Name='cloudflared.exe'" | Where-Object Co
 
 ## 已知限制
 
-- trycloudflare 是 Cloudflare 給測試用的免費服務，不保證不斷線。斷了就重開伺服器，再給一次新網址。
-- 本機 AI 回得慢時（煉製新配方取名實測過 27～83 秒），經過公開網址會不會逾時：待實測。
+- trycloudflare 是 Cloudflare 給測試用的免費服務，不保證不斷線。斷了就重開伺服器，再給一次新網址。實測開著 22 分鐘，每分鐘從外面打一次，都正常（每次 0.4～1.5 秒）。
+- Cloudflare 對單一請求大約只等 100 秒。實測本機 AI 都遠低於這個數字（模型 `gemma4:26b` 已載入時），經過公開網址也一樣：
+  - 求見人物：11.5 秒；交談一輪：11～12 秒。
+  - 隨口應對：9 秒；5 個人同時送，最慢 27 秒。
+  - 煉製新配方取名：4 秒。
