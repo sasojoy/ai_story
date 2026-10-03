@@ -678,9 +678,14 @@ def start_tunnel(port: int) -> None:
 
     def relay() -> None:
         for line in proc.stdout:
-            if "trycloudflare.com" in line:
-                url = line[line.find("https://"):].split()[0]
-                print(f"公開網址：{url}（給手機用；有網址的人都進得來，不要外流）", flush=True)
+            # 兩個條件都要：cloudflared 一開始會先印「Requesting new quick Tunnel on
+            # trycloudflare.com...」——有網域名但**沒有 https://**，只看網域名的話
+            # line.find() 會回 -1、line[-1:] 取到換行字元、split() 拿到空清單，整個中繼
+            # 執行緒就 IndexError 掛掉，公開網址再也印不出來（實測踩到）。
+            if "trycloudflare.com" not in line or "https://" not in line:
+                continue
+            url = line[line.find("https://"):].split()[0]
+            print(f"公開網址：{url}（給手機用；有網址的人都進得來，不要外流）", flush=True)
 
     threading.Thread(target=relay, daemon=True).start()
 

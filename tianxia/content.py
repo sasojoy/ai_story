@@ -52,6 +52,7 @@ def load_content(root: Path) -> Content:
         map=MapLayout(**_read(root / "map.json")),
         tutorial=Tutorial(**_read(root / "tutorial.json")),
     )
+    content.config.admins = _with_local_admins(content.config.admins)
     validate(content)
     _scale_marks(content, content.config.mark_threshold_scale)
     return content
@@ -79,6 +80,35 @@ def _scale_marks(obj, scale: float) -> None:
 
 MARKS_TOKEN = re.compile(r"\{marks:([^{}]+)\}")  # 文字裡的模糊人數（rules.fill_marks）
 FREE_TEXT_REWARDS = ("silver", "fame", "good", "xinde", "str", "agi", "con", "wis")  # 隨口應對的獎勵不能超過檢定選項的這幾項
+
+
+LOCAL_DIR = Path(__file__).resolve().parent.parent / ".local"
+ADMINS_FILE = LOCAL_DIR / "admins.txt"
+
+
+def _with_local_admins(admins: list[str]) -> list[str]:
+    """`config.json` 的管理者名單，加上這台機器自己的 `.local/admins.txt` 與 `TIANXIA_ADMINS`。
+
+    為什麼不要直接改 `content/config.json`：那是版控裡的檔案，每次 pull 下來都會被蓋回去，
+    等於每次更新都要重設一次自己的管理者（企劃者實際踩到）。`.local/` 已經在 `.gitignore`
+    裡（密碼也放那），所以放這裡的設定不會進版控、也不會被 pull 覆蓋。
+
+    - `.local/admins.txt`：一行一個名號，`#` 開頭當註解。設一次就一直有效，是推薦的做法。
+    - `TIANXIA_ADMINS`：逗號分隔，臨時或 CI 用。
+    兩邊都是**附加**，不會蓋掉 config.json 原本的名單。
+    """
+    import os  # noqa: PLC0415  只有這裡用得到
+
+    extra: list[str] = []
+    if ADMINS_FILE.exists():
+        extra += [
+            line.strip() for line in ADMINS_FILE.read_text(encoding="utf-8").splitlines()
+            if line.strip() and not line.lstrip().startswith("#")
+        ]
+    extra += [name.strip() for name in os.environ.get("TIANXIA_ADMINS", "").split(",") if name.strip()]
+    out = list(admins)
+    out += [name for name in extra if name not in out]
+    return out
 
 
 def _read(path: Path):

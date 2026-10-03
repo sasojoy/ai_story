@@ -41,6 +41,11 @@
 - 測試：`.venv/Scripts/python.exe -m pytest -q`
 - 伺服器假人：`.venv/Scripts/python.exe run_bots.py`（跟 `server.py` 同時開著）
 - 假人整季模擬：`.venv/Scripts/python.exe scripts/sim_server_bots.py --seasons 2`
+- **把自己設成管理者（這台機器）**：在 `.local/admins.txt` 一行寫一個名號（`#` 開頭是註解）。
+  `.local/` 在 `.gitignore` 裡，所以**不會進版控、pull 下來也不會被蓋掉**——直接改
+  `content/config.json` 的 `admins` 會每次更新都要重設一次。臨時用也可以設環境變數
+  `TIANXIA_ADMINS=甲,乙`。兩者都是**附加**在 `config.json` 原本的名單（`Rayal`）之上。
+  管理者目前是**認角色名號**不是認帳號（`engine.is_admin()`），線上架構之後會換成帳號權限。
 - 幫帳號設密碼（主機端）：`.venv/Scripts/python.exe scripts/set_password.py <帳號> [--character <名號>] [--db <資料庫檔>]`（角色不存在時直接建立；密碼寫到 `.local/`，不印在畫面上）
 - **好玩度量表**：`.venv/Scripts/python.exe scripts/fun_run.py --seeds 1 2 3`／`--calibrate`（見下面「好玩度量表」那節）
 
