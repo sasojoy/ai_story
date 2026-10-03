@@ -5,8 +5,13 @@
 timeout=None 等到拿到為止（伺服器），給秒數時等不到就丟 TimeoutError（假人程式跳過這一輪）。
 程式被強制結束時，沒 COMMIT 的交易由 SQLite 自己撤掉，不會留下卡住別人的鎖。
 
-每個執行緒一條連線。同一個執行緒裡巢狀的 transaction() 併進最外層那一筆（可重入）；
-snapshot() 是唯讀交易：幾句 SELECT 看到同一個時間點，也不擋寫入的人（WAL 模式）。
+每個執行緒一條連線，執行緒結束時那條連線跟著關掉（Gradio 的工作執行緒會來來去去）。同一個執行緒裡
+巢狀的 transaction() 併進最外層那一筆（可重入）；snapshot() 是唯讀交易：幾句 SELECT 看到同一個時間點，
+也不擋寫入的人（WAL 模式），離開時一律 ROLLBACK，在裡面誤寫的東西不會留下來。
+
+COMMIT 失敗（例如延後檢查的外鍵到這時才出錯）時交易還開著，這裡會接著 ROLLBACK 再把 COMMIT 的錯丟出去，
+不會讓這條連線永遠握著寫入權；SQLite 已經自己撤掉交易（磁碟滿、I/O 錯誤）時就不再下 ROLLBACK，
+免得另一個錯把本來的錯蓋掉。
 
 資料庫結構的版本記在 PRAGMA user_version。第 1 期做完之前還沒有正式的資料庫，結構有改就直接改
 SCHEMA；之後每次改結構都要加版本號與搬資料的步驟（線上架構設計 8.2）。
@@ -18,6 +23,7 @@ import os
 import sqlite3
 import threading
 import time
+import weakref
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -145,87 +151,118 @@ def default_path() -> Path:
     return Path(override) if override else DEFAULT_PATH
 
 
+class _ThreadState:
+    """一個執行緒在這個資料庫上的連線與交易狀態。放在 threading.local 裡：執行緒結束、local 被釋放時，
+    這個物件被回收，登記的 weakref.finalize 就把連線關掉。"""
+
+    __slots__ = ("conn", "depth", "reading", "__weakref__")
+
+    def __init__(self, conn: sqlite3.Connection):
+        self.conn = conn
+        self.depth = 0  # 寫入交易的巢狀深度，0 表示不在寫入交易裡
+        self.reading = False  # 是不是在 snapshot() 的最外層
+
+
 class Database:
     def __init__(self, path: Path):
         self.path = Path(path)
         self._local = threading.local()
-        self._connections: list[sqlite3.Connection] = []
-        self._connections_lock = threading.Lock()
+        self._states: weakref.WeakSet[_ThreadState] = weakref.WeakSet()
+        self._states_lock = threading.Lock()
         try:
             self._ensure_schema()
         except BaseException:
             self.close()  # 版本不對時也要把剛開的連線關掉
             raise
 
-    def _thread(self) -> threading.local:
+    def _thread(self) -> _ThreadState:
         """這個執行緒的連線與交易狀態；第一次用時開連線。"""
         local = self._local
-        if not hasattr(local, "conn"):
+        state = getattr(local, "state", None)
+        if state is None:
             self.path.parent.mkdir(parents=True, exist_ok=True)
             conn = sqlite3.connect(self.path, timeout=BUSY_SLICE, autocommit=True, check_same_thread=False)
             conn.row_factory = sqlite3.Row
             conn.execute("PRAGMA journal_mode = WAL")
             conn.execute("PRAGMA synchronous = NORMAL")
             conn.execute("PRAGMA foreign_keys = ON")
-            local.conn, local.depth, local.reading = conn, 0, False
-            with self._connections_lock:
-                self._connections.append(conn)
-        return local
+            state = _ThreadState(conn)
+            weakref.finalize(state, conn.close)  # 執行緒結束、state 被回收時關連線（不能參照 state 本身）
+            local.state = state
+            with self._states_lock:
+                self._states.add(state)
+        return state
 
     @contextlib.contextmanager
     def transaction(self, timeout: float | None = None) -> Iterator[sqlite3.Connection]:
-        local = self._thread()
-        if local.reading:
+        state = self._thread()  # 進出都用同一個 state：離開時不重新查 threading.local
+        conn = state.conn
+        if state.reading:
             raise RuntimeError("讀取快照裡不能寫入：先離開 snapshot() 再開交易")
-        if local.depth:
-            local.depth += 1
+        if state.depth:
+            state.depth += 1
             try:
-                yield local.conn
+                yield conn
             finally:
-                local.depth -= 1
+                state.depth -= 1
             return
-        self._begin(local.conn, timeout)
-        local.depth = 1
+        self._begin(conn, timeout)
+        state.depth = 1
         try:
-            yield local.conn
+            yield conn
         except BaseException:
-            local.depth = 0
-            local.conn.execute("ROLLBACK")
+            state.depth = 0
+            self._rollback(conn)
             raise
-        local.depth = 0
-        local.conn.execute("COMMIT")
+        state.depth = 0
+        try:
+            conn.execute("COMMIT")
+        except BaseException:
+            self._rollback(conn)  # COMMIT 失敗時交易還開著：不撤掉，這條連線就永遠握著寫入權
+            raise
+
+    @staticmethod
+    def _rollback(conn: sqlite3.Connection) -> None:
+        """撤掉還開著的交易；SQLite 已經自己撤掉了（磁碟滿、I/O 錯誤）就什麼都不做。"""
+        if conn.in_transaction:
+            conn.execute("ROLLBACK")
 
     def _begin(self, conn: sqlite3.Connection, timeout: float | None) -> None:
         deadline = None if timeout is None else time.monotonic() + timeout
-        while True:
-            wait = BUSY_SLICE if deadline is None else max(0.0, deadline - time.monotonic())
-            conn.execute(f"PRAGMA busy_timeout = {int(wait * 1000)}")
-            try:
-                conn.execute("BEGIN IMMEDIATE")
-                return
-            except sqlite3.OperationalError as exc:
-                if exc.sqlite_errorcode & 0xFF not in (sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED):
-                    raise
-                if deadline is not None and time.monotonic() >= deadline:
-                    raise TimeoutError(f"等不到資料庫的寫入權：{self.path}") from exc
+        try:
+            while True:
+                wait = BUSY_SLICE if deadline is None else max(0.0, deadline - time.monotonic())
+                conn.execute(f"PRAGMA busy_timeout = {int(wait * 1000)}")
+                try:
+                    conn.execute("BEGIN IMMEDIATE")
+                    return
+                except sqlite3.OperationalError as exc:
+                    if exc.sqlite_errorcode & 0xFF not in (sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED):
+                        raise
+                    if deadline is not None and time.monotonic() >= deadline:
+                        raise TimeoutError(f"等不到資料庫的寫入權：{self.path}") from exc
+        finally:
+            conn.execute(f"PRAGMA busy_timeout = {int(BUSY_SLICE * 1000)}")  # 別把剩下的零頭留給之後的讀取
 
     @contextlib.contextmanager
     def snapshot(self) -> Iterator[sqlite3.Connection]:
-        local = self._thread()
-        if local.depth or local.reading:
-            yield local.conn
+        state = self._thread()
+        conn = state.conn
+        if state.depth or state.reading:
+            yield conn
             return
-        local.conn.execute("BEGIN")  # DEFERRED：第一句 SELECT 才拿讀取的快照，不擋寫入的人
-        local.reading = True
+        conn.execute("BEGIN")  # DEFERRED：第一句 SELECT 才拿讀取的快照，不擋寫入的人
+        state.reading = True
         try:
-            yield local.conn
+            yield conn
         finally:
-            local.reading = False
-            local.conn.execute("COMMIT")
+            state.reading = False
+            self._rollback(conn)  # 唯讀：一律 ROLLBACK，不 COMMIT
 
     def writing(self) -> bool:
-        """這個執行緒現在是不是在寫入交易裡。"""
-        return bool(self._thread().depth)
+        """這個執行緒現在是不是在寫入交易裡（沒碰過資料庫的執行緒不會因為問這句而開連線）。"""
+        state = getattr(self._local, "state", None)
+        return state is not None and state.depth > 0
 
     def _ensure_schema(self) -> None:
         with self.transaction() as conn:  # 拿到寫入權再看版本：兩支程式同時開新檔也只建一次
@@ -241,10 +278,12 @@ class Database:
             conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
 
     def close(self) -> None:
-        with self._connections_lock:
-            connections, self._connections = self._connections, []
-        for conn in connections:
-            conn.close()
+        """關掉所有還活著的執行緒的連線（關兩次也沒事）。"""
+        with self._states_lock:
+            states = list(self._states)
+            self._states.clear()
+        for state in states:
+            state.conn.close()
         self._local = threading.local()
 
 
