@@ -885,7 +885,7 @@ class Game:
         p = battle.participants.get(self.state.player.name)
         if p is not None and p.eliminated:
             lines.append("（你已經倒下，只能在一旁觀戰。）")
-        if watching:
+        elif watching:  # 倒下的人不會再出手，不必再說「回到大區就能再出手」
             lines.append(watch_line)
         return "\n\n".join(lines)
 
@@ -1270,6 +1270,7 @@ class Game:
         msgs = [f"你喊停，到了{c.locations[j.path[j.reached]].name}就停下來。"]
         if j.mode == "hurry":
             msgs.append("（趕路已經花掉的體力不退。）")
+        self._sync_battle_presence()  # 這一趟縮短了：最後一站落在決戰的大區內，就不再算離開
         return msgs
 
     def travel(self, dest_id: str, mode: TravelMode = "walk") -> list[str]:

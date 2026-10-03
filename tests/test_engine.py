@@ -1336,6 +1336,57 @@ def test_rally_region_names_a_battle_you_should_head_for(content, game):
     assert game.rally_region() is None  # 不限地點的決戰不用趕
 
 
+def test_halting_inside_the_region_brings_an_away_fighter_back(content, game):
+    """出發時這一趟有站在區外就記成離開；喊停之後最後一站落在區內，就不該再被當成離開、坐著等整段路。"""
+    definition = _install_battle_def(content)
+    definition.region = "north"
+    _south_cave(content, game)
+    game.world.start_battle(definition, now=0.0)
+    with mock.patch("tianxia.engine.time.time", return_value=0.0):
+        game.choose("battle:join:guan")
+    with mock.patch("tianxia.engine.time.time", return_value=definition.muster_seconds + 1):
+        game._battle_status()  # 開打
+        game.travel("cave", "walk")  # 小鎮出發：湖邊在北區、終點寶洞在南區
+        assert game.world.get_battle().participants["沈浪"].away
+        assert "act:halt" in ids(game)
+        game.choose("act:halt")  # 下一站湖邊還在北區
+        assert game.state.player.journey.stop_at == 0
+        assert not game.world.get_battle().participants["沈浪"].away
+        assert "你離開了" not in game.scene_text()
+
+
+def test_a_fallen_fighter_who_left_the_region_is_not_promised_a_return_to_action(content, game):
+    definition = _install_battle_def(content)
+    definition.region = "north"
+    _south_cave(content, game)
+    game.world.start_battle(definition, now=0.0)
+    with mock.patch("tianxia.engine.time.time", return_value=0.0):
+        game.choose("battle:join:guan")
+    with mock.patch("tianxia.engine.time.time", return_value=definition.muster_seconds + 1):
+        game._battle_status()  # 開打
+        game.travel("cave", "dash")  # 離開北區
+        assert "人回到測試北區就能再出手" in game.scene_text()
+        game.world.mutate_battle(lambda b: setattr(b.participants["沈浪"], "eliminated", True))
+        scene = game.scene_text()
+        assert "你已經倒下" in scene and "再出手" not in scene
+
+
+def test_rally_region_sends_a_fighter_who_left_the_region_back_unless_they_have_fallen(content, game):
+    definition = _install_battle_def(content)
+    definition.region = "north"
+    _south_cave(content, game)
+    game.world.start_battle(definition, now=0.0)
+    with mock.patch("tianxia.engine.time.time", return_value=0.0):
+        game.choose("battle:join:guan")
+    with mock.patch("tianxia.engine.time.time", return_value=definition.muster_seconds + 1):
+        game._battle_status()  # 開打
+        assert game.rally_region() is None  # 人在戰場上
+        game.travel("cave", "dash")  # 離開北區
+        assert game.rally_region() == "north"  # 參戰了卻離開大區：該趕回去
+        game.world.mutate_battle(lambda b: setattr(b.participants["沈浪"], "eliminated", True))
+        assert game.rally_region() is None  # 已經倒下，趕回去也沒得打
+
+
 # ── 自訂行動輸入框（設計討論：魯莽該是玩家自己想出來的招，不是固定選單）────────
 
 
