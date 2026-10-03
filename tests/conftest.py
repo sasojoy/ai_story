@@ -46,14 +46,17 @@ def no_real_ollama_flavor_calls(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def isolated_world_state(tmp_path, monkeypatch):
-    """每個測試都用自己的暫存共用世界狀態檔，不會讀寫到真正的 saves/world/state.json，
-    測試之間也不會互相汙染（例如武學命名去重、同伴招募狀態）；同時把 leaderboard.py
-    預設掃描的存檔目錄也隔開，不會讓 end_season() 意外讀到這台機器真正的玩家存檔。"""
-    from tianxia import leaderboard, world_state
+def isolated_database(tmp_path, monkeypatch):
+    """每個測試用自己的暫存資料庫，不會讀寫到真正的 saves/tianxia.db，測試之間也不會互相汙染；
+    測試結束時關掉所有連線（Windows 才刪得掉暫存檔）。"""
+    from tianxia import database, leaderboard, world_state
 
-    monkeypatch.setattr(world_state, "DEFAULT_PATH", tmp_path / "world" / "state.json")
-    monkeypatch.setattr(leaderboard, "DEFAULT_SAVES_DIR", tmp_path / "saves")
+    monkeypatch.delenv(database.ENV_VAR, raising=False)
+    monkeypatch.setattr(database, "DEFAULT_PATH", tmp_path / "tianxia.db")
+    monkeypatch.setattr(world_state, "DEFAULT_PATH", tmp_path / "world" / "state.json")  # Task 3 拿掉
+    monkeypatch.setattr(leaderboard, "DEFAULT_SAVES_DIR", tmp_path / "saves")  # Task 7 拿掉
+    yield
+    database.close_all()
 
 
 @pytest.fixture
