@@ -16,22 +16,36 @@
 「他的士氣」很常見，`s2twp` 會把它們換成「北軍計程車卒」「城中計程車兵」「他計程車氣」。
 `s2tw` 不換詞，只轉字（孙坚说这话题→孫堅說這話題）。
 
-**這個依賴壞掉不會讓遊戲壞掉**：import 或建構失敗時自動退回 `FALLBACK` 手寫對照表。
+**繁體輸入原樣通過，只有簡體字才轉（FB-018）**：OpenCC 的 s2t 系列把輸入一律當簡體，
+而「里、斗、了、准、夫、台」這些字本身也是合法的繁體字，所以對本來就是繁體的字會改錯
+（樓桑里→樓桑裡、米斗→米鬥、燈火通明了→燈火通明瞭、船夫→船伕）。模型多半直接寫繁體，
+對話、戰況、煉製與點綴都會被改到。規則：一個字**只存在於簡體**＝它在 OpenCC 的
+`STCharacters.txt`（每行「簡體字\t候選繁體字…」）裡，而且候選裡沒有它自己
+（这→這、军→軍、发→發 髮；而 里→裏 里、斗→鬥 斗 的候選含自己，表示它本身也是繁體字，不動）。
+`to_traditional` 先用 `s2tw` 把整句轉一次（保留詞組的上下文：头发→頭髮而不是頭發），
+再逐字合併：只有原字是「只存在於簡體」的才採用轉完的字，其餘留原字。
+`FALLBACK` 退路表照同一條規則：key 本身也是繁體字的項目一律不放。
+
+**這個依賴壞掉不會讓遊戲壞掉**：import、建構失敗或字典檔讀不到時自動退回 `FALLBACK` 手寫對照表。
 """
 from __future__ import annotations
 
+import os
+
 # OpenCC 不在時的退路：只蓋武俠文字裡最常見的簡體字。刻意不追求完整（完整的事交給 OpenCC），
 # 目的是「就算依賴裝不起來，名字也不會以簡體字的樣子被永久登記」。
+# 規則（FB-018）：key 必須是「只存在於簡體」的字。斗、岳、云、叶、万本身也是繁體字
+# （米斗、岳飛、云云、叶韻、万俟），刀則轉了等於沒轉，所以都不放；測試會對照 STCharacters.txt 檢查。
 FALLBACK = {
     "孙": "孫", "坚": "堅", "这": "這", "说": "說", "话": "話", "题": "題", "闻": "聞",
-    "龙": "龍", "无": "無", "雾": "霧", "剑": "劍", "刀": "刀", "气": "氣", "内": "內",
-    "风": "風", "云": "雲", "电": "電", "铁": "鐵", "钢": "鋼", "银": "銀", "门": "門",
+    "龙": "龍", "无": "無", "雾": "霧", "剑": "劍", "气": "氣", "内": "內",
+    "风": "風", "电": "電", "铁": "鐵", "钢": "鋼", "银": "銀", "门": "門",
     "阴": "陰", "阳": "陽", "刚": "剛", "虚": "虛", "实": "實", "灵": "靈", "术": "術",
-    "决": "決", "诀": "訣", "击": "擊", "杀": "殺", "战": "戰", "斗": "鬥", "华": "華",
+    "决": "決", "诀": "訣", "击": "擊", "杀": "殺", "战": "戰", "华": "華",
     "惊": "驚", "惧": "懼", "灭": "滅", "开": "開", "关": "關", "离": "離", "归": "歸",
     "乱": "亂", "义": "義", "兴": "興", "汉": "漢", "马": "馬", "鱼": "魚", "鸟": "鳥",
-    "树": "樹", "叶": "葉", "泽": "澤", "渊": "淵", "岳": "嶽", "镇": "鎮", "寿": "壽",
-    "万": "萬", "众": "眾", "师": "師", "传": "傳", "经": "經", "书": "書", "学": "學",
+    "树": "樹", "泽": "澤", "渊": "淵", "镇": "鎮", "寿": "壽",
+    "众": "眾", "师": "師", "传": "傳", "经": "經", "书": "書", "学": "學",
     "艺": "藝", "练": "練", "炼": "煉", "烧": "燒", "断": "斷", "续": "續", "变": "變",
     "转": "轉", "动": "動", "静": "靜", "随": "隨", "应": "應", "击": "擊", "势": "勢",
 }
@@ -51,28 +65,72 @@ VARIANTS = {
 _CONVERTER: object | None = None
 _TRIED = False
 
+# 「只存在於簡體」的字 → 它的第一個繁體候選（FB-018）；第一次要用時才從 STCharacters.txt 建一次。
+_SIMPLIFIED_ONLY: dict[str, str] | None = None
+_SIMPLIFIED_TRIED = False
+
+
+def _load_simplified_only() -> dict[str, str] | None:
+    """讀 OpenCC 的 STCharacters.txt：在表裡、而且候選裡沒有它自己的字才算「只存在於簡體」。
+    讀不到字典檔（沒安裝、路徑不對、格式不對）回 None。"""
+    try:
+        import opencc  # noqa: PLC0415  故意延後 import：這個依賴缺了也要能跑
+
+        path = os.path.join(os.path.dirname(opencc.__file__), "dictionary", "STCharacters.txt")
+        table: dict[str, str] = {}
+        with open(path, encoding="utf-8") as fh:
+            for line in fh:
+                line = line.rstrip("\r\n")
+                if not line:
+                    continue
+                key, _, rest = line.partition("\t")
+                candidates = rest.split()
+                if key and candidates and key not in candidates:
+                    table[key] = candidates[0]
+    except Exception:  # noqa: BLE001  任何原因都當成 OpenCC 不可用
+        return None
+    return table or None
+
+
+def _simplified_only() -> dict[str, str] | None:
+    """「只存在於簡體」的字表，延後建構、快取；建不起來就永遠是 None。"""
+    global _SIMPLIFIED_ONLY, _SIMPLIFIED_TRIED
+    if not _SIMPLIFIED_TRIED:
+        _SIMPLIFIED_TRIED = True
+        _SIMPLIFIED_ONLY = _load_simplified_only()
+    return _SIMPLIFIED_ONLY
+
 
 def _converter():
-    """第一次要用時才建構（約 0.08 秒），建構失敗就永遠走 FALLBACK。"""
+    """第一次要用時才建構（約 0.08 秒），建構失敗就永遠走 FALLBACK。
+    字典檔讀不到、判斷不了哪些字只存在於簡體時，也一併視為 OpenCC 不可用。"""
     global _CONVERTER, _TRIED
     if not _TRIED:
         _TRIED = True
         try:
             import opencc  # noqa: PLC0415  故意延後 import：這個依賴缺了也要能跑
 
-            _CONVERTER = opencc.OpenCC("s2tw")  # 不用 s2twp，理由見模組 docstring（FB-014）
+            converter = opencc.OpenCC("s2tw")  # 不用 s2twp，理由見模組 docstring（FB-014）
+            _CONVERTER = converter if _simplified_only() is not None else None
         except Exception:  # noqa: BLE001  任何原因（沒安裝、DLL 被封鎖、字典讀不到）都退回手寫表
             _CONVERTER = None
     return _CONVERTER
 
 
 def to_traditional(text: str) -> str:
-    """轉成繁體（台灣正字，不換詞），並把日式異體字一併正規化。已經是繁體正字的原樣保留。"""
+    """轉成繁體（台灣正字，不換詞），並把日式異體字一併正規化。
+    已經是繁體的字原樣保留，只有「只存在於簡體」的字才轉（FB-018，見模組 docstring）。"""
     if not text:
         return text
     converter = _converter()
-    if converter is not None:
-        text = converter.convert(text)
+    only = _simplified_only() if converter is not None else None
+    if converter is not None and only is not None:
+        converted = converter.convert(text)  # 整句先轉一次，保留詞組的上下文（头发→頭髮）
+        if len(converted) == len(text):
+            # 逐位置合併：只有原字「只存在於簡體」才採用轉完的字，其餘（里、斗、了、准、夫…）留原字
+            text = "".join(new if old in only else old for old, new in zip(text, converted))
+        else:  # 保險：s2tw 理論上不會改變長度，改了就退回逐字轉換，用候選的第一個
+            text = "".join(only.get(ch, ch) for ch in text)
     else:
         text = "".join(FALLBACK.get(ch, ch) for ch in text)
     return "".join(VARIANTS.get(ch, ch) for ch in text)  # OpenCC 不處理異體字，見 VARIANTS
