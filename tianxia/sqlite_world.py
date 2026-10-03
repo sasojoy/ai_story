@@ -49,7 +49,9 @@ class SqliteWorldStore:
             return self._load(conn)
 
     def mutate(self, fn: Callable[[SharedWorldState], None]) -> SharedWorldState:
-        with self.db.transaction() as conn:
+        """整份讀出、交給 fn 改、整份寫回。fn 裡面不能再呼叫 mutate、mutate_season、mutate_battle 或靠它們
+        實作的方法：內層寫的會被這裡最後的存檔蓋掉，所以巢狀時直接丟 RuntimeError（見 Database.rewriting）。"""
+        with self.db.rewriting(), self.db.transaction() as conn:
             state = self._load(conn)
             fn(state)
             self._save(conn, state)

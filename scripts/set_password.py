@@ -37,6 +37,7 @@ def main(argv: list[str] | None = None) -> int:
     created = False
     try:
         check_login(args.account)
+        content = load_content(ROOT / "content") if args.character else None  # 讀內容檔很慢：在交易外先讀好
         with db.transaction():  # 跟伺服器、假人程式寫同一個資料庫：一筆交易做完，不會跟假人取名撞在一起
             existing = store.get(args.account)
             state = None
@@ -61,7 +62,7 @@ def main(argv: list[str] | None = None) -> int:
                 store.set_password(args.account, password)
             if args.character:
                 if state is None:
-                    game = Game.new(load_content(ROOT / "content"), args.character, world=SqliteWorldStore(db))
+                    game = Game.new(content, args.character, world=SqliteWorldStore(db))
                     characters.save(game.state)
                     created = True
                 store.bind_character(args.account, args.character)

@@ -449,6 +449,51 @@ def test_one_action_is_one_transaction(store, content):
     assert store.get_season().trends.get("kou") != 99
 
 
+def test_a_nested_mutate_raises_instead_of_losing_the_inner_write(store):
+    """mutate 整份讀出、改、整份寫回：裡面再呼叫一次 mutate（或靠它實作的方法），內層寫的會被外層的存檔蓋掉。
+    巢狀的呼叫直接丟錯，外層那筆交易跟著撤回，什麼都沒留下。"""
+
+    def outer(state):
+        state.companion_drift_note["dongzhuo"] = "外層寫的"
+        store.record_companion_tag("dongzhuo", "真誠切磋")  # 內層：用 mutate 實作的方法
+
+    with pytest.raises(RuntimeError, match="巢狀"):
+        store.mutate(outer)
+    state = store.read()
+    assert state.companion_drift_note == {}
+    assert state.companion_tag_counts == {}
+
+
+def test_a_nested_mutate_through_another_store_on_the_same_file_raises(tmp_path):
+    """測試與 app.py 隨手就建新的 store：兩個 store 開在同一個檔案上，共用同一個資料庫與同一條連線，巢狀照樣擋得到。"""
+    path = tmp_path / "world.db"
+    store_a, store_b = open_world(path), open_world(path)
+    assert store_a is not store_b
+
+    with pytest.raises(RuntimeError, match="巢狀"):
+        store_a.mutate(lambda state: store_b.mutate_season(lambda season: setattr(season, "ended", True)))
+    assert store_a.get_season().ended is False
+
+
+def test_the_nested_mutate_guard_is_released_afterwards(store):
+    """擋下巢狀、外層出錯之後，同一個執行緒下一次 mutate 照常能用；正常結束的 mutate 也不留旗標。"""
+    with pytest.raises(RuntimeError):
+        store.mutate(lambda state: store.mutate(lambda inner: None))
+    store.record_companion_tag("dongzhuo", "真誠切磋")
+    with pytest.raises(ZeroDivisionError):
+        store.mutate(lambda state: 1 / 0)  # 外層自己出別的錯，旗標也要放掉
+    store.record_companion_tag("dongzhuo", "真誠切磋")
+    assert store.read().companion_tag_counts["dongzhuo"] == {"真誠切磋": 2}
+
+
+def test_mutate_inside_an_action_lock_is_still_fine(store):
+    """action_lock 是交易、不是 mutate：同一筆交易裡一個接一個的 mutate 照舊可以。"""
+    with store.action_lock():
+        store.record_companion_tag("dongzhuo", "真誠切磋")
+        store.record_companion_tag("dongzhuo", "強攻鋪墊")
+    assert store.read().companion_tag_counts["dongzhuo"] == {"真誠切磋": 1, "強攻鋪墊": 1}
+
+
 def test_next_season_keeps_the_old_season(store, content):
     """換季不刪資料：賽季編號加一，舊的一季整份留著（線上架構設計 3.2）。"""
     content.config.auto_open_first_season = True

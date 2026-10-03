@@ -664,8 +664,7 @@ def register(login_name, password, again):
     if (password or "") != (again or ""):
         raise gr.Error(PASSWORDS_DIFFER)
     try:
-        with open_database().transaction():
-            account_store().register(login_name, password)
+        account_store().register(login_name, password)  # 自己是一筆交易；不另外包一層：scrypt 很慢，不能握著寫入權算
     except AccountError as exc:
         raise gr.Error(str(exc))
     return _needs_character(normalize(login_name))
@@ -703,8 +702,7 @@ def change_password_handler(account_key, old, new, again):
     if (new or "") != (again or ""):
         return [PASSWORDS_DIFFER, "", "", ""]
     try:
-        with open_database().transaction():
-            account_store().change_password(account_key, old, new)
+        account_store().change_password(account_key, old, new)  # 同上：自己是一筆交易，慢的雜湊不在交易裡算
     except AccountError as exc:
         return [str(exc), "", "", ""]
     return ["密碼已更新。", "", "", ""]

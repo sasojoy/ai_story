@@ -234,6 +234,34 @@ def test_an_unknown_schema_version_is_refused(tmp_path):
         Database(path)
 
 
+def test_a_connection_whose_setup_fails_is_closed(tmp_path, monkeypatch):
+    """連上了、但設定用的 PRAGMA 出錯：剛開的連線要先關掉再把錯丟出去，不能留著沒人管。"""
+    real_connect = sqlite3.connect
+    made = []
+
+    class SetupFails:
+        row_factory = None
+
+        def __init__(self, real):
+            self.real = real
+            self.closed = False
+
+        def execute(self, sql, *args):
+            if "foreign_keys" in sql:
+                raise sqlite3.OperationalError("設定失敗")
+            return self.real.execute(sql, *args)
+
+        def close(self):
+            self.closed = True
+            self.real.close()
+
+    monkeypatch.setattr(sqlite3, "connect", lambda *a, **k: made.append(SetupFails(real_connect(*a, **k))) or made[-1])
+    with pytest.raises(sqlite3.OperationalError, match="設定失敗"):
+        Database(tmp_path / "t.db")
+    assert len(made) == 1
+    assert made[0].closed
+
+
 _HOLDER = """
 import os, sys
 from pathlib import Path
