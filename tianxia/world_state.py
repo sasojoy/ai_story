@@ -106,7 +106,7 @@ class WorldStateStore(Protocol):
     """全服狀態的存取介面。引擎只認這個介面，實作見 sqlite_world.SqliteWorldStore。
 
     交易：每個會寫的方法自己就是一筆交易（讀→改→寫回一起成功或一起撤回）；呼叫端在 action_lock()
-    裡時，併進那一筆。「補算時間＋做動作＋存檔」整段一律包在 action_lock() 裡（app.py、假人程式）。"""
+    裡時，併進那一筆。「補算時間＋做動作＋存檔」整段一律包在 action_lock() 裡（server.py、假人程式）。"""
 
     def action_lock(self, timeout: float | None = None) -> AbstractContextManager[object]:
         """一個動作＝一筆交易（線上架構設計 3.1）。timeout=None 等到拿到為止（伺服器）；給秒數時等不到就丟

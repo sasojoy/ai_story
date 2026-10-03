@@ -3,9 +3,10 @@
 《天下大勢》文字武俠原型。權威文件：`docs/superpowers/specs/2026-09-27-天下大勢-design.md`（設計）、`docs/superpowers/plans/`（實作計畫）。
 
 ## 架構
-- `tianxia/`：純 Python 規則引擎，**不得 import gradio**。`engine.Game` 是唯一對外門面。
+- `tianxia/`：純 Python 規則引擎，**不得 import 任何網頁框架**（fastapi 等）。`engine.Game` 是唯一對外門面。
 - `content/`：所有遊戲內容（JSON），載入時由 `tianxia/content.py::validate` 交叉檢查。
-- `app.py`：Gradio 介面，只負責顯示與接線。
+- `server.py`：網頁伺服器（FastAPI），只負責登入、行動鎖與把畫面要的東西整理成 JSON；引擎的 Markdown 在這裡轉成 HTML（原始 HTML 一律跳脫）。
+- `web/`：手機優先的單頁網頁（`index.html`／`style.css`／`app.js`，沒有建置步驟、不靠外部函式庫）。見下面「介面：拿掉 Gradio」那節。
 - `tianxia/encounter.py`：單次判定的遭遇戰（`sanguo-companions` 合併後取代了舊的 `battle.py` 三對三全自動戰鬥，那個檔案已經不存在了）；只處理數字，不 import 內容模型。
 - `tianxia/battle_instance.py`：全服即時多人戰鬥（黃巾決戰）的純邏輯——集結選陣營、逐幕逐回合鎖步、回合結算、機器人補位。資料存在共用世界狀態的 `active_battle`。
 - `tianxia/database.py`：SQLite 資料庫（預設 `saves/tianxia.db`，環境變數 `TIANXIA_DB` 可改；線上版與開發版各用各的）：連線、資料表、交易。一個動作＝一筆交易（`BEGIN IMMEDIATE`，出錯整個撤回），同一個執行緒可以巢狀（交易可以巢狀；`WorldStateStore.mutate` 不行，內層寫的會被外層蓋掉、直接丟 `RuntimeError`，見 `world_state.py`）；資料庫結構版本記在 `PRAGMA user_version`。
@@ -19,7 +20,7 @@
 - `tianxia/server_bots.py`：伺服器假人的名號、個性、作息（純函式，不碰檔案也不 import 引擎）。
 - `tianxia/bot_policy.py`：假人照陣營目標做一個動作，只走 `Game` 的公開行動，不呼叫 LLM。
 - `tianxia/bot_runner.py`：假人程式的核心，每一輪補人（先叫醒退隱的、沒有才新建）、叫醒、讓在線的假人做事。
-- `run_bots.py`：假人程式的入口，每隔 `bot_tick_seconds` 呼叫一次 `BotRunner.tick()`，跟 `app.py` 同時開著。
+- `run_bots.py`：假人程式的入口，每隔 `bot_tick_seconds` 呼叫一次 `BotRunner.tick()`，跟 `server.py` 同時開著。
 
 ## 原則
 - 數值全部由規則引擎決定，執行時不接 LLM。
@@ -30,26 +31,26 @@
 - 賽季由管理者開：全服第一次開局停在「籌備中」，管理者（`content/config.json` 的 `admins` 裡的角色名號）在設定頁按「開季」；季結束進入「休季」，管理者按「開啟下一季」。換季時同伴全部重獲自由、自創武學名字全部釋出、煉製配方清空（大家重新發現、首創者重新認定）、天機 +1（同名長出不同武學，煉製也一樣）。測試內容用 `auto_open_first_season: true` 直接開季。線上架構第 1 期起資料都在資料庫；舊的 `saves/*.json`、`saves/world/state.json`、`saves/accounts/accounts.json` 不再讀取，換版後從零開始（企劃者 2026-10-03 決定不搬）。管理者的角色用 `scripts/set_password.py <帳號> --character <名號>` 建立並綁到帳號上（角色不存在時直接建立），只有登入那個帳號的人進得了；玩家不能取管理者的名號。
 - 陣營（`content/scenario.json` 的 `factions`）：玩家開局是散人，在陣營的 `join_at` 地點按「投靠」，或拜入陣營名下的門派；劇本有分陣營時，全服決戰只能站自己陣營那邊，散人與不在交戰雙方的陣營不能參戰，只在一旁觀戰、照常遊玩。狀態列的名號後面顯示門派、陣營（兩者都有時寫成「門派・陣營」），都沒有才是散人。
 - 伺服器假人（`docs/superpowers/specs/2026-10-02-伺服器假人-design.md`）跟真人完全一樣、看不出來：「是假人」只記在存檔的 `PlayerState.bot`，任何畫面、榜單、戰鬥名單、主控台輸出都不能顯示或透露；假人只透過 `Game` 的公開行動做事，不呼叫 LLM。
-- `app.py` 與 `run_bots.py` 是兩個程式、共用同一個資料庫：每次「補算時間＋做動作＋存檔」都要包在 `WorldStateStore.action_lock()` 裡（一筆 SQLite 寫入交易；伺服器等到拿到為止，假人等不到就跳過）。人物對話例外：先拿鎖準備、在鎖外生成、再拿鎖確認狀態沒變才套用（`app.prepare_dialogue`、`Game.dialogue_request`、`Game.choose(prepared=...)`）。
+- `server.py` 與 `run_bots.py` 是兩個程式、共用同一個資料庫：每次「補算時間＋做動作＋存檔」都要包在 `WorldStateStore.action_lock()` 裡（一筆 SQLite 寫入交易；伺服器等到拿到為止，假人等不到就跳過）。伺服器每次進鎖先從資料庫重讀角色（`server._locked`）：資料庫是唯一的真實來源，`server.GAMES` 只是每個角色那份 `Game` 物件放的地方。人物對話例外：先拿鎖準備、在鎖外生成、再拿鎖確認狀態沒變才套用（`server.prepare_dialogue`、`Game.dialogue_request`、`Game.choose(prepared=...)`）。
 - 投靠要確認一次（先按 `faction:<id>`，再按 `faction:confirm`）；陣營人數看全服投靠名冊（`WorldStateStore.faction_counts()`）。
 - 管理者（試玩期是 `Rayal`）在設定頁可以立刻開戰、觸發大勢門檻或世界事件、推動大勢線；效果跟自然發生一樣（`Game.admin_start_battle`／`admin_fire`／`admin_push_trend`），也可以幫玩家重設密碼。管理者的角色要先用 `scripts/set_password.py` 綁到帳號上。
 - 登入用帳號密碼（`tianxia/accounts.py`；帳號在資料庫的 `accounts`、`logins` 表，帳號密碼是一種登入方式，封測的線上版不開、只留在開發與測試環境；設計見 `docs/superpowers/specs/2026-10-03-帳號密碼登入-design.md`）：帳號和名號分開，一個帳號一個角色；帳號不存在與密碼錯、名號被真人或假人用掉，各自回同一句話，避免試出誰是假人。會改帳號或建立角色的動作都包在同一筆交易裡。
 
 ## 指令
-- 執行：`.venv/Scripts/python.exe app.py`（http://127.0.0.1:7861）
+- 執行：`.venv/Scripts/python.exe server.py`（http://127.0.0.1:7861）；要給手機用行動網路連：加 `--share`（cloudflared 臨時公開網址）
 - 測試：`.venv/Scripts/python.exe -m pytest -q`
-- 伺服器假人：`.venv/Scripts/python.exe run_bots.py`（跟 `app.py` 同時開著）
+- 伺服器假人：`.venv/Scripts/python.exe run_bots.py`（跟 `server.py` 同時開著）
 - 假人整季模擬：`.venv/Scripts/python.exe scripts/sim_server_bots.py --seasons 2`
 - 幫帳號設密碼（主機端）：`.venv/Scripts/python.exe scripts/set_password.py <帳號> [--character <名號>] [--db <資料庫檔>]`（角色不存在時直接建立；密碼寫到 `.local/`，不印在畫面上）
 - **好玩度量表**：`.venv/Scripts/python.exe scripts/fun_run.py --seeds 1 2 3`／`--calibrate`（見下面「好玩度量表」那節）
 
 ### 開發伺服器的啟動方式（這台機器上的慣例）
-不要用 Bash 工具背景執行 `app.py`（會被背景任務追蹤器砍掉）。用 PowerShell `Start-Process`
-完全分離啟動，輸出導到 `server_out.log`/`server_err.log`，再輪詢 log 等 `*.gradio.live`
-公開連結出現。**引數一定要加 `-u`**（`python.exe -u app.py`）：stdout 導到檔案時 Python 會
+不要用 Bash 工具背景執行 `server.py`（會被背景任務追蹤器砍掉）。用 PowerShell `Start-Process`
+完全分離啟動，輸出導到 `server_out.log`/`server_err.log`，再輪詢 log 等 `公開網址：https://…trycloudflare.com`
+出現（要加 `--share`，而且這台機器要先 `winget install Cloudflare.cloudflared`）。**引數一定要加 `-u`**（`python.exe -u server.py --share`）：stdout 導到檔案時 Python 會
 緩衝，沒有 `-u` 的話服務其實已經在聽 port、但 log 會一直是空的，等不到公開連結。要重啟時先 `netstat -ano | grep ":7861"` 找出真正在聽那個 port 的 PID
 （`Start-Process` 回傳的 PID 常常跟實際佔用 port 的不同），`taskkill //PID <pid> //F` 關掉
-再重新啟動。`app.py` 與 `run_bots.py` 要開同一個資料庫：要用 `saves/tianxia.db` 以外的檔，兩個程式啟動前設同一個 `TIANXIA_DB`。
+再重新啟動。`server.py` 與 `run_bots.py` 要開同一個資料庫：要用 `saves/tianxia.db` 以外的檔，兩個程式啟動前設同一個 `TIANXIA_DB`（兩個程式啟動時都會印出資料庫路徑，設錯一眼看得出來）。
 
 ## 全服即時多人戰鬥（黃巾決戰）
 
@@ -559,7 +560,30 @@ CLAUDE.md，白繞了一圈。**開工前先 `git worktree list` 核對一次。
 - **這類坑只有實機試玩抓得到**：單元測試都是先把狀態設好再驗單一行為，不會發現「新角色照著
   引導走會把自己打死」。CLAUDE.md 上面那段「實機試玩找出並修掉的卡關點」是同一個教訓。
 
-## 介面：手機排版與小動畫（2026-10-03，企劃者交辦「大改一下 UI，尤其對手機用戶」）
+## 介面：拿掉 Gradio，改成獨立網頁（2026-10-03，企劃者交辦「推翻現有 UI 架構，重構一個真正簡潔、適合手機遊玩、操作用戶友善的新版 UI」）
+
+前面三次在 Gradio 上的手機改版（排版、功能列、煉製／修練分頁）都卡在同一個地方：Gradio 的元件
+自己決定 DOM 與樣式，我們只能從外面用 CSS 硬拗，而且每次重畫都是整排元件一起換。所以這次直接照
+線上架構設計第七節的方向，**伺服器只給資料、畫面自己做**：
+
+- `app.py`（Gradio）與 `tests/test_app.py` 刪掉，換成 `server.py`（FastAPI）＋ `web/`（單頁網頁）＋
+  `tests/test_server.py`。`requirements.txt` 不再裝 gradio／pandas／numpy（之前 DLL 被封鎖的就是 Gradio 帶進來的 pandas）。
+- 第七節寫 Vue 3【預設】；**實際用的是沒有建置步驟的原生 JavaScript**（`web/app.js` 一個檔）：
+  這個專案沒有 node 工具鏈，畫面也只有五頁，多一套建置流程不划算。之後真的要拆元件再換 Vue。
+- 版面：頂上狀態列（體力、氣血兩條＋銀兩、心得；點名號展開屬性與隊伍）、底部五個分頁
+  **江湖／修練／煉製／輿圖／見聞**（見聞＝戰報、大勢、傳聞、江湖史、江湖紀錄），設定與管理者工具收在右上角齒輪。
+  修練與煉製維持企劃者 10/3 定的「兩個各自獨立的去處」，門下名冊與功法庫放在修練頁。
+- 同一個角色在伺服器上只有一份 `Game`（`server.GAMES`）：同帳號兩個分頁、換手機再登入，看到的都是同一份。`GAMES` 只是放 `Game` 物件的地方，資料庫才是真實來源：每次進鎖都把它的 `state` 換成資料庫裡存好的那一份（`server._locked`），拿來做決定的讀取（例如加入／移出隊伍前核對名冊）都在鎖裡。
+- 登入狀態是 cookie，伺服器記憶體裡對應帳號；**重開伺服器要重新登入**（跟 Gradio 時一樣）。
+- 計時器改成前端每 10 秒打 `/api/main`，內容沒變就不重畫（不會一直重播動畫）；分頁在背景時不打。
+- 引擎多了 `Game.status_data()`（狀態列的結構化資料），`status_text()` 改成由它組字串，輸出不變。
+- 公開網址：Gradio 的 `share=True` 沒了，改成 `server.py --share` 叫 cloudflared 開 trycloudflare 臨時網址（線上架構設計第六節本來就選 Cloudflare）。
+- 線上架構第 1 期（SQLite）在 `app.py` 上做的改動都已經搬到 `server.py`：角色用 `characters.open_characters()`、全服狀態用 `sqlite_world.open_world()`，壞檔搬進 `character_backups` 表；帳號用資料庫的 `accounts`／`logins` 表（`AccountStore(open_database())`，註冊與改密碼不包外層交易、建角與重設密碼包在 `open_database().transaction()` 裡）；啟動時印出資料庫路徑；每次進鎖先從資料庫重讀角色並清掉失效引用（`server._locked`／`_reload`），對話備料的第一段也存檔。第 1 期計畫與之後的計畫凡是寫 `app.py` 的地方，都要讀成 `server.py`。
+- 輿圖的「安排前往」是步行／趕路／疾行三個按鈕（`/api/travel` 帶 `mode`），跟 Gradio 版一樣照 `Game.travel_options()` 畫。
+
+以下兩節是 Gradio 時期的紀錄，留著當歷史；裡面講的 class 名稱、`MENXIA_OUTPUTS`、`css=` 的坑都已經不存在了。
+
+## 介面：手機排版與小動畫（2026-10-03，Gradio 時期，已被上一節取代）
 
 ### 原本的問題：整個專案沒有自己的樣式表
 

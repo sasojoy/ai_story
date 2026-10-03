@@ -1,4 +1,4 @@
-"""伺服器假人程式（伺服器假人設計第三節）：跟 app.py 同時開著，每隔 bot_tick_seconds 讓在線的假人做事。
+"""伺服器假人程式（伺服器假人設計第三節）：跟 server.py 同時開著，每隔 bot_tick_seconds 讓在線的假人做事。
 
 執行：.venv/Scripts/python.exe run_bots.py（Ctrl+C 結束）
 
@@ -22,7 +22,7 @@ def main(ticks: int | None = None) -> None:
     content = load_content(ROOT / "content")
     runner = BotRunner(content)
     print(f"伺服器假人程式啟動：每 {content.config.bot_tick_seconds:g} 秒巡一輪（Ctrl+C 結束）", flush=True)
-    print(f"資料庫：{database.default_path().resolve()}", flush=True)  # 跟 app.py 要是同一個檔；TIANXIA_DB 設錯時一眼看得出來
+    print(f"資料庫：{database.default_path().resolve()}", flush=True)  # 跟 server.py 要是同一個檔；TIANXIA_DB 設錯時一眼看得出來
     done = 0
     try:
         while ticks is None or done < ticks:
