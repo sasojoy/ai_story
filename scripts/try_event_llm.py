@@ -62,7 +62,8 @@ def main() -> None:
     try:
         client.chat_text([{"role": "user", "content": "好"}], num_predict=1)
     except Exception as e:
-        print(f"載入失敗：{e!r}\n請先確認 `ollama run {cfg.ollama_model}` 能正常對話，再跑這支腳本。")
+        body = getattr(getattr(e, "response", None), "text", "")  # Ollama 的 500 會在內文寫真正的原因
+        print(f"載入失敗：{e!r} {body}\n請先確認 `ollama run {cfg.ollama_model}` 能正常對話，再跑這支腳本。")
         return
     client.timeout = timeout
     print(f"載入完成（{time.monotonic() - start:.0f} 秒）\n")
