@@ -1224,12 +1224,15 @@ def test_turning_back_follows_the_move_mode_header(client):
     _player(client)
     game = server.game_for("沈青衫")
     start = game.state.player.location
-    client.post("/api/choose", json={"id": "move:yingshui"})
-    back = [o for o in client.get("/api/main", headers=HURRY).json()["options"] if o["id"].startswith("road:back")]
-    assert [o["id"] for o in back] == ["road:back:hurry"] and "趕路" in back[0]["label"]
-    client.post("/api/choose", json={"id": "road:back:hurry"})  # 沒帶走法：步行的選單上沒有這個 id
-    assert game.state.player.journey.path == ["yingshui"]
-    client.post("/api/choose", json={"id": "road:back:hurry"}, headers=HURRY)
+    t0 = server.time.time()
+    with mock.patch("server.time.time", return_value=t0):
+        client.post("/api/choose", json={"id": "move:yingshui"})
+    with mock.patch("server.time.time", return_value=t0 + 60):  # 走了一分鐘才掉頭：不是剛出發就折返（那種立刻回原地，FB-025）
+        back = [o for o in client.get("/api/main", headers=HURRY).json()["options"] if o["id"].startswith("road:back")]
+        assert [o["id"] for o in back] == ["road:back:hurry"] and "趕路" in back[0]["label"]
+        client.post("/api/choose", json={"id": "road:back:hurry"})  # 沒帶走法：步行的選單上沒有這個 id
+        assert game.state.player.journey.path == ["yingshui"]
+        client.post("/api/choose", json={"id": "road:back:hurry"}, headers=HURRY)
     j = game.state.player.journey
     assert (j.mode, j.path) == ("hurry", [start])
 
@@ -1241,9 +1244,10 @@ def test_the_map_arranges_travel_while_on_the_road(client):
     client.post("/api/choose", json={"id": "move:yingshui"})
     view = client.get(f"/api/map?place={start}").json()
     assert view["selected"] == start and view["travel"][0]["enabled"] is True  # 剛離開的那一站：就是折返
+    assert view["travel"][0]["label"] == "步行（立刻到）"  # 剛出發：當下就回到原地（FB-025）
     out = client.post("/api/travel", json={"place": start}).json()
     assert out["arrived"] is True
-    assert game.state.player.journey.path == [start]
+    assert game.state.player.journey is None and game.state.player.location == start
 
 
 def test_on_the_road_the_page_offers_the_road_tasks(client):

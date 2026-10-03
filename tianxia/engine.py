@@ -411,10 +411,10 @@ class Game:
         way = self._back_way()
         name = c.locations[way.path[-1]].name
         option_id = "road:back" if mode == "walk" else f"road:back:{mode}"
-        cost = atlas.travel_stamina(c, way.minutes, mode)
+        cost = atlas.route_stamina(self.state, c, way, mode)
         if self.state.player.stamina < cost:
             return Option(id=option_id, label=f"折返 {name}（{atlas.MODES[mode]}・體力不足，要 {cost}）", enabled=False)
-        return Option(id=option_id, label=f"折返 {name}（{atlas.mode_text(c, way.minutes, mode)}）")
+        return Option(id=option_id, label=f"折返 {name}（{atlas.route_text(self.state, c, way, mode)}）")
 
     def _road_task_options(self, j: Journey) -> list[Option]:
         """路上小事（路上設計第四節）：步行、趕路時四樣各一顆，不花體力；這一段路做過的灰掉、寫「這段路已經……」。
@@ -1625,21 +1625,23 @@ class Game:
         """出發（地圖擴充設計 3.2、3.3）：趕路、疾行的體力出發時一次扣，照走法排好每一站的抵達時間。
         疾行立刻一站一站抵達；步行、趕路就在路上，之後由 sync／advance 補算抵達（見 _arrivals）。
         在路上改道、折返（路上設計 3.1）也從這裡出發：route 的第一段是半段路（origin、share 記著是哪條路、走掉幾成），
-        新路程整個取代原本那一趟；原本已經扣的趕路體力不退。"""
+        新路程整個取代原本那一趟；原本已經扣的趕路體力不退。剛出發就折返（見 atlas.returns_at_once）不扣體力、當下就回到原地。"""
         s, c = self.state, self.content
         rerouting = s.player.journey is not None
         minutes = route.minutes
-        cost = atlas.travel_stamina(c, minutes, mode)
+        at_once = atlas.returns_at_once(s, c, route)  # 要在換掉原本那一趟之前看：它看的是現在在路上的位置
+        cost = atlas.route_stamina(s, c, route, mode)
         s.player.stamina -= cost
+        legs = [0.0] if at_once else list(route.legs)
         s.player.journey = Journey(
-            mode=mode, path=list(route.path), arrive_at=atlas.arrival_times(s.world.time, list(route.legs), mode),
+            mode=mode, path=list(route.path), arrive_at=atlas.arrival_times(s.world.time, legs, mode),
             origin=route.origin, share=route.share,
         )
         if self._draft is not None:
-            self._draft.tag = atlas.MODES[mode] + atlas.mode_when(minutes, mode)
+            self._draft.tag = "立刻折返" if at_once else atlas.MODES[mode] + atlas.mode_when(minutes, mode)
             if cost:
                 self._draft.changes.append(f"體力 -{cost}")
-        if mode == "dash":
+        if mode == "dash" or at_once:
             return self._arrivals()
         arrive = s.player.journey.arrive_at[-1]
         left = atlas.whole_minutes((arrive - s.world.time) / 60)

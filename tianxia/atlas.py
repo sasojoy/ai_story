@@ -384,6 +384,30 @@ def way_to(state: GameState, content: Content, loc_id: str) -> Route | None:
     return best
 
 
+RETURN_AT_ONCE_MINUTES = 0.5  # 剛出發就折返：回程不到這麼多分鐘路程（趕路的體力四捨五入正好是 0）
+
+
+def returns_at_once(state: GameState, content: Content, route: Route) -> bool:
+    """這條路是不是「剛出發就折返」（FB-025）：在路上、只回到自己最後待過的那一站、回程不到 RETURN_AT_ONCE_MINUTES
+    分鐘路程。是的話哪種走法都不扣體力、當下就回到原地（路上裁決：剛出發就折返，立刻回原地、不花體力）。
+    掉頭後馬上又掉頭時，身後那一站是剛才要去的那一站、不是自己待過的，不算——不然走到快到時連掉兩次頭就能白白抵達。"""
+    spot = road_spot(state, content)
+    return (
+        spot is not None and spot.behind == state.player.location and tuple(route.path) == (spot.behind,)
+        and route.minutes < RETURN_AT_ONCE_MINUTES
+    )
+
+
+def route_stamina(state: GameState, content: Content, route: Route, mode: TravelMode) -> int:
+    """照這條路、這種走法出發要扣的體力；剛出發就折返不扣（見 returns_at_once）。"""
+    return 0 if returns_at_once(state, content, route) else travel_stamina(content, route.minutes, mode)
+
+
+def route_text(state: GameState, content: Content, route: Route, mode: TravelMode) -> str:
+    """選單「前往／折返」括號裡的字（見 mode_text）；剛出發就折返是「立刻到」。"""
+    return "立刻到" if returns_at_once(state, content, route) else mode_text(content, route.minutes, mode)
+
+
 @dataclass(frozen=True)
 class TravelOption:
     """詳情欄底下的一個「安排前往」按鈕。"""
@@ -421,7 +445,7 @@ def travel_refusal(state: GameState, content: Content, loc_id: str, mode: Travel
     reason = travel_block(state)
     if reason:
         return reason
-    cost = travel_stamina(content, route.minutes, mode)
+    cost = route_stamina(state, content, route, mode)
     if state.player.stamina < cost:
         return f"體力不足，{MODES[mode]}要 {cost} 體力"
     return None
@@ -438,13 +462,15 @@ def travel_options(state: GameState, content: Content, loc_id: str) -> list[Trav
     if reason:
         return [TravelOption("walk", reason, False)]
     out: list[TravelOption] = []
+    at_once = returns_at_once(state, content, route)
     for mode in MODES:
-        cost = travel_stamina(content, route.minutes, mode)
+        cost = route_stamina(state, content, route, mode)
         if state.player.stamina < cost:
             out.append(TravelOption(mode, f"{MODES[mode]}（體力不足，要 {cost}）", False))
         else:
             price = f"・體力 {cost}" if cost else ""
-            out.append(TravelOption(mode, f"{MODES[mode]}（{mode_when(route.minutes, mode)}{price}）", True))
+            when = "立刻到" if at_once else mode_when(route.minutes, mode)
+            out.append(TravelOption(mode, f"{MODES[mode]}（{when}{price}）", True))
     return out
 
 
@@ -522,6 +548,8 @@ def detail_text(state: GameState, content: Content, loc_id: str, odds: Odds) -> 
         way = "你就在這裡"
     elif route is None:
         way = "沒有摸清的路可以過去"
+    elif returns_at_once(state, content, route):
+        way = "剛出發，折返立刻到"
     else:
         way = "、".join(mode_text(content, route.minutes, mode) for mode in MODES)
         way += f"，途經 {_names(content, route.via)}" if route.via else ""
