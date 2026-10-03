@@ -178,10 +178,17 @@ def prepare_dialogue(game: Game, option_id: str) -> companion_agent.PreparedTurn
     return companion_agent.prepare_turn(game.client, request)
 
 
+def may_generate_dialogue(option_id: str) -> bool:
+    """這個選項按下去可能呼叫對話模型，要走鎖外生成（見 prepare_dialogue）：交遊、對話的 talk:N、求見時指名的
+    call:<人物>。告辭（talk:leave）與收起求見名單（call:back）永遠不會，不必多繞一趟備料的鎖。"""
+    if option_id == "act:socialize":
+        return True
+    return option_id.startswith(("talk:", "call:")) and option_id not in ("talk:leave", "call:back")
+
+
 def choose(game: Game, option_id: str) -> list[str] | None:
     prepared = None
-    # 只有 talk:N 與交遊可能呼叫對話模型；talk:leave 永遠不會，不必多繞一趟備料的鎖
-    if (option_id.startswith("talk:") and option_id != "talk:leave") or option_id == "act:socialize":
+    if may_generate_dialogue(option_id):
         prepared = prepare_dialogue(game, option_id)
     return act(game, lambda g: g.choose(option_id, prepared=prepared))
 

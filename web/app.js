@@ -450,7 +450,8 @@
     await busy(async () => {
       document.querySelectorAll(".options .btn").forEach((b) => { b.disabled = true; });
       btn.classList.add("busy");
-      const talking = (id.startsWith("talk:") && id !== "talk:leave") || id === "act:socialize";
+      // 跟 server.py 的 may_generate_dialogue 同一個判斷：這些選項要等模型回話
+      const talking = id === "act:socialize" || ((id.startsWith("talk:") || id.startsWith("call:")) && id !== "talk:leave" && id !== "call:back");
       if (talking) btn.lastElementChild.textContent = "對方沉吟中…";
       const r = await api("/api/choose", { id });
       applyMain(r.main);
