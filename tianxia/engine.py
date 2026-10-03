@@ -506,7 +506,10 @@ class Game:
         到 explore，於是在集市散步也會冒出來。現在它們回到正確的位置。
         """
         loc = self.content.locations[self.state.player.location]
-        msgs = self._squad_encounter(self.rng.choice(loc.enemies))
+        squad = self.content.squads[self.rng.choice(loc.enemies)]
+        msgs = self._squad_encounter(squad.id)
+        if self._drills_with(squad):
+            return msgs  # 操練沒有打架，不接「一番苦戰之後」這類戰後事件（試玩回饋 FB-001）
         if self.rng.random() < self.content.config.train_event_chance:
             event = pick_event(self.state, self.content, "train", self.rng)
             if event is not None:
@@ -941,7 +944,7 @@ class Game:
         p = s.player
         loc = c.locations[p.location]
         squad = c.squads[squad_id]
-        if squad.faction is not None and squad.faction == p.faction:
+        if self._drills_with(squad):
             return self._drill(squad)
         result = team.fight(s, c, self.world, squad.id, self.rng)
         record = battlelog.new_record(s, c, self.world, squad, result, "train")
@@ -971,6 +974,10 @@ class Game:
         msgs += toll
         msgs.insert(0, self._file_battle(record))
         return msgs
+
+    def _drills_with(self, squad: Squad) -> bool:
+        """這支隊伍是自己陣營的：遇上了不打，改成一起操練（見 _drill）。"""
+        return squad.faction is not None and squad.faction == self.state.player.faction
 
     def _drill(self, squad: Squad) -> list[str]:
         """在自己陣營的地方歷練：不打自己人，一起操軍擺陣（企劃者 2026-10-02 決定）。不會輸、不扣氣血；
