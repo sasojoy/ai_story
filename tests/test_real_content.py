@@ -69,7 +69,7 @@ def content():
 
 def test_real_content_loads():
     c = load_content(CONTENT_DIR)
-    assert 20 <= len(c.locations) <= 30
+    assert 30 <= len(c.locations) <= 40
     assert {t.id for t in c.scenario.trends} == {"huangjin", "yuxi"}
 
 
