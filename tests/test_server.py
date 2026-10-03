@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 import server
 from conftest import at
 from tianxia import atlas, battle_instance, companion_agent, database
+from tianxia.accounts import NAME_TAKEN
 from tianxia.characters import open_characters
 from tianxia.engine import Game
 from tianxia.journal import WORLD_NEWS
@@ -156,8 +157,7 @@ def test_every_action_takes_the_cross_program_action_lock(game, monkeypatch):
     assert calls == [None, None]
 
 
-def test_act_saves_unless_the_action_changed_nothing(game, save_dir):
-    assert server.act(game, lambda g: server.UNCHANGED) is None
+def test_act_saves_the_character(game, save_dir):
     assert not open_characters().exists("測試")
     server.act(game, lambda g: g.choose("act:explore"))
     assert open_characters().exists("測試")
@@ -229,11 +229,14 @@ def test_two_games_of_one_character_do_not_overwrite_each_other(game):
 
 
 def test_two_sessions_of_one_character_keep_each_others_changes(client):
-    """同一個帳號開兩個分頁（兩個 session）：A 改了存檔，B 下一個動作保留 A 的改動、畫面也看得到。"""
+    """同一個帳號開兩個分頁（兩個 session）：A 改了存檔，B 下一個動作保留 A 的改動、畫面也看得到。
+    A 的改動經由另一份 Game 存進資料庫（不是 GAMES 裡共用的那一份）：兩個 session 共用同一份 Game，
+    改動只在那一份的記憶體裡的話，不重讀也看得到，就測不到「資料庫才是真實來源」。"""
     _player(client)
     tab_b = TestClient(server.app)
     tab_b.post("/api/login", json={"login": "shen_01", "password": "secret-pw"})
-    client.post("/api/do/anonymous", json={"value": True})
+    assert tab_b.get("/api/main").json()["status"]["anonymous"] is False  # B 已經用過共用的那份 Game
+    server.act(server.open_game("沈青衫"), lambda g: g.set_anonymous(True))  # A 的分頁存好的
     out = tab_b.post("/api/choose", json={"id": "act:rest"}).json()
     assert out["main"]["status"]["anonymous"] is True
     assert open_characters().load("沈青衫").player.anonymous is True
@@ -294,6 +297,22 @@ def test_a_game_that_was_never_saved_keeps_its_in_memory_character(game):
     assert not open_characters().exists("測試")
     assert server.look(game, server.menxia_view)["xinde"] == 0
     assert game.state.player.name == "測試"
+
+
+@pytest.mark.parametrize("path", ["/api/main", "/api/menxia"])  # act、look
+def test_a_reload_never_hands_a_bots_save_to_a_player(client, path):
+    """資料庫裡這個名號的那一列變成假人的存檔時（例如壞檔備份走之後，假人程式拿同一個名號建了角色），
+    重讀不能把假人的角色換進真人的 Game：跟 open_game 一樣回「名號已有人使用」（伺服器假人設計第五節）。"""
+    _player(client)
+    game = server.game_for("沈青衫")
+    bot = Game.new(server.CONTENT, "沈青衫")
+    bot.state.player.bot = BotProfile(personality="普通", seed=1, faction="guan", season_number=1)
+    bot.state.player.stats["silver"] = 4242
+    open_characters().save(bot.state)
+    out = client.get(path)
+    assert out.status_code == 400 and out.json() == {"error": NAME_TAKEN}
+    assert game.state.player.bot is None and game.state.player.stats["silver"] != 4242
+    assert open_characters().load("沈青衫").player.bot is not None  # 假人的存檔原樣留著
 
 
 def test_join_and_leave_check_the_roster_inside_the_actions_own_lock(client, monkeypatch, lock_events):

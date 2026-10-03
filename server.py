@@ -53,7 +53,6 @@ DEFAULT_LAYER = "situation"
 NAME_MAX = 16  # 角色名號的長度上限
 BAD_NAME = f"名號最多 {NAME_MAX} 字，也不能有看不見的字元。"  # 看不見的字元（零寬、控制、雙向排版）會讓兩個名號看起來一樣
 REPORT_EMPTY_TEXT = "還沒有戰報。打一場遭遇戰或劇情戰之後，這裡會列出每一場。"
-UNCHANGED = object()  # 動作回傳它表示什麼都沒做：不存檔
 
 _MD = MarkdownIt("commonmark", {"html": False, "breaks": True}).enable("table")
 
@@ -122,8 +121,12 @@ def _reload(game: Game) -> None:
     （線上架構設計 5.1）。還沒存過的新角色資料庫裡沒有，照舊用記憶體裡那一份。
     讀回來的角色不帶賽季（GameState.world 不進存檔），而且是資料庫裡原樣的那一列、沒經過 Game 建構時的清理
     （內容改版後存檔裡可能留著已經不存在的地點、事件、武學），所以接著跑一次 _drop_stale_references：
-    它先把角色指回共用賽季（_reconcile_season），再清掉過時的引用；之後的 sync 會再對齊一次。"""
+    它先把角色指回共用賽季（_reconcile_season），再清掉過時的引用；之後的 sync 會再對齊一次。
+    資料庫裡這個名號的那一列是假人的存檔時，不換進來、跟 open_game 一樣回「名號已有人使用」：
+    真人不能接手假人的角色（伺服器假人設計第五節）。"""
     stored = open_characters().load(game.state.player.name)
+    if stored is not None and stored.player.bot is not None:
+        raise GameError(NAME_TAKEN)
     if stored is not None:
         game.state = stored
     game._drop_stale_references()
@@ -143,12 +146,10 @@ def _locked(game: Game):
 def act(game: Game, action) -> list[str] | None:
     """同步時間 → 執行動作 → 存檔。開一筆寫入交易（假人程式寫同一個資料庫），計時器、按鈕與假人就一個一個來。
     進鎖先從資料庫重讀角色（見 _reload）：動作丟例外時整筆撤回，下一個動作不會把失敗的改動存回去。
-    回傳動作的訊息；動作回傳 UNCHANGED 時不存檔。"""
+    回傳動作的訊息。動作之後一律存檔：同步寫進江湖紀錄的江湖大事，不能因為動作本身沒改東西就被下一次重讀丟掉。"""
     with _locked(game):
         game.sync(time.time())
         msgs = action(game)
-        if msgs is UNCHANGED:
-            return None
         open_characters().save(game.state)
         return msgs
 
