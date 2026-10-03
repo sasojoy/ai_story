@@ -27,7 +27,6 @@ def _put_raw(characters, name: str, data: str) -> None:
 def test_roundtrip(characters, game):
     game.choose("act:socialize")
     game.choose("choice:0")
-    game.state.world.flags.add("blocked")
     game.state.player.member.neili = 12.5
     characters.save(game.state)
     assert characters.load("沈浪").model_dump() == game.state.model_dump()  # 賽季不存檔，比對存得下來的部分

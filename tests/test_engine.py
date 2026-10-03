@@ -2112,10 +2112,13 @@ def test_dialogue_request_is_none_for_a_non_dialogue_option(content, game):
 
 def test_dialogue_request_does_not_change_the_game(content, game):
     _open_dialogue(content, game)
-    before = game.state.model_dump()
+    def snapshot():  # 角色存檔不含賽季（GameState.world 不進 model_dump），賽季要另外比：記憶體裡的與全服共用的那一份
+        return game.state.model_dump(), game.state.world.model_dump(), game.world.get_season().model_dump()
+
+    before = snapshot()
     game.dialogue_request("talk:0")
     game.dialogue_request("act:socialize")
-    assert game.state.model_dump() == before
+    assert snapshot() == before
 
 
 def test_choose_applies_a_prepared_talk_turn_without_calling_the_model(content, game):
