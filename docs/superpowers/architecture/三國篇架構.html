@@ -143,7 +143,7 @@ details.sub:not([open]) > summary .name::after { content: " ▸"; }
 <div class="wrap">
   <header>
     <h1>天下大勢・三國篇 遊戲架構</h1>
-    <p class="meta">資料截至 2026-10-03・分支 feature/sanguo-companions（2b3c6d8）・1113 個自動測試全部通過</p>
+    <p class="meta">資料截至 2026-10-03・分支 feature/sanguo-companions（b5b3455）・1113 個自動測試全部通過</p>
     <div class="legend" id="legend" aria-label="依狀態篩選"></div>
     <div class="defs">
       <span><b style="color:var(--done)">已完成</b>：做好了，現在就能玩</span>
@@ -276,7 +276,9 @@ const TREE = [
       { name: "兩樣素材煉一門功法，配方全服共享、第一個煉出的人定義", s: "done" },
       { name: "凡品配方不花心得，有靈品、天品才花", s: "done" },
       { name: "配方每季清空、擲骰吃這一季的天機", s: "done" },
-      { name: "名字過濾與繁體轉換", s: "done" } ] },
+      { name: "名字過濾與繁體轉換", s: "done" },
+      { name: "煉製可以把同一樣素材放兩次", s: "dev", note: "QA 的 FB-005：規則本來就允許，畫面的選單卻只能各選一次，156 個配方裡同種的 24 個煉不到；進第一次 beta" },
+      { name: "煉出來的功法看得到說明：威力、下一成、首創者、模型寫的那句話", s: "dev", note: "QA 的 FB-006，你問「在哪個介面可以看到技能的說明」；說明本來就寫好了，畫面沒接上；進第一次 beta" } ] },
     { name: "功法＋功法再合成", s: "plan" },
     { name: "軍備物資：探索與合成產出可以捐給陣營的物資", s: "plan", note: "你已審閱設計全文；實作排在貢獻帳之後，分三段：造軍備＋捐獻＋公庫 → 公庫自動補軍令 → 第四階調度", c: [
       { name: "捐的當下記個人貢獻（不設每日上限），物資也進陣營公庫；任何據點都能捐", s: "plan" },
