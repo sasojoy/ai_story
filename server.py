@@ -21,12 +21,14 @@ from __future__ import annotations
 import argparse
 import contextlib
 import contextvars
+import re
 import secrets
 import shutil
 import subprocess
 import threading
 import time
 import unicodedata
+from collections.abc import Callable, Iterable
 from pathlib import Path
 
 from fastapi import Body, FastAPI, HTTPException, Request, Response
@@ -670,24 +672,46 @@ app.mount("/static", StaticFiles(directory=WEB), name="static")
 # ── 啟動 ──────────────────────────────────────────
 
 
-def start_tunnel(port: int) -> None:
-    """用 cloudflared 開臨時公開網址（trycloudflare，免帳號）。網址出現在它的輸出裡，原樣轉印出來。"""
+TUNNEL_URL = re.compile(r"https://(?!api\.)[a-z0-9-]+\.trycloudflare\.com")
+# cloudflared 第一行「Requesting new quick Tunnel on trycloudflare.com...」有網域、沒有 https://，所以只認完整的網址；
+# 要不到隧道時它的錯誤訊息會帶 https://api.trycloudflare.com（它自己的服務），那個也不是給手機用的。
+
+
+def _say(text: str) -> None:
+    print(text, flush=True)
+
+
+def relay_tunnel_output(lines: Iterable[str], emit: Callable[[str], None] = _say) -> None:
+    """把 cloudflared 的輸出逐行讀到結束（EOF）：第一次看到公開網址就印一次，其他輸出照舊安靜。
+
+    一定要把管線讀乾淨：沒人讀的話緩衝寫滿時 cloudflared 會卡住，隧道跟著停。
+    所以不提早結束，也不因為任何一行格式怪就丟例外（不認得的行直接跳過）。
+    讀到結束還沒拿到網址就明說，不要無聲無息。"""
+    announced = False
+    for line in lines:
+        found = TUNNEL_URL.search(line)
+        if found and not announced:
+            announced = True
+            emit(f"公開網址：{found.group()}（給手機用；有網址的人都進得來，不要外流）")
+    if not announced:
+        emit("cloudflared 已結束，沒有拿到公開網址（看上面 cloudflared 的輸出找原因）。")
+
+
+def start_tunnel(port: int) -> threading.Thread | None:
+    """用 cloudflared 開臨時公開網址（trycloudflare，免帳號）。網址出現在它的輸出裡，原樣轉印出來。
+
+    回傳讀 cloudflared 輸出的執行緒（沒裝 cloudflared 時回傳 None）；main() 不必理會，測試用它 join。"""
     exe = shutil.which("cloudflared")
     if exe is None:
         print("找不到 cloudflared，沒有開公開網址。Windows 可以用 `winget install Cloudflare.cloudflared` 安裝。")
-        return
+        return None
     proc = subprocess.Popen(
         [exe, "tunnel", "--url", f"http://127.0.0.1:{port}"],
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace",
     )
-
-    def relay() -> None:
-        for line in proc.stdout:
-            if "trycloudflare.com" in line:
-                url = line[line.find("https://"):].split()[0]
-                print(f"公開網址：{url}（給手機用；有網址的人都進得來，不要外流）", flush=True)
-
-    threading.Thread(target=relay, daemon=True).start()
+    thread = threading.Thread(target=relay_tunnel_output, args=(proc.stdout,), daemon=True)
+    thread.start()
+    return thread
 
 
 def main(argv: list[str] | None = None) -> None:

@@ -1010,6 +1010,129 @@ def test_the_lan_flag_opens_every_network_card_and_says_so(capsys, monkeypatch):
     assert str(database.default_path().resolve()) in out
 
 
+# ── --share：把 cloudflared 的輸出讀完、只從有網址的那一行取網址（FB-020）──────────
+# cloudflared 第一行是「Requesting new quick Tunnel on trycloudflare.com...」：有網域、沒有 https://。
+# 舊的 relay 在那一行 IndexError 就死了，三秒後真正的網址那行沒人讀。
+
+TUNNEL_URL = "https://abc-def-123.trycloudflare.com"
+URL_ANNOUNCEMENT = f"公開網址：{TUNNEL_URL}（給手機用；有網址的人都進得來，不要外流）"
+NO_URL_NOTICE = "cloudflared 已結束，沒有拿到公開網址（看上面 cloudflared 的輸出找原因）。"
+
+CLOUDFLARED_OUTPUT = [
+    "2026-10-03T12:00:00Z INF Thank you for trying Cloudflare Tunnel. Doing so, without a Cloudflare account, is a quick way to experiment and try it out.\n",
+    "2026-10-03T12:00:00Z INF Requesting new quick Tunnel on trycloudflare.com...\n",
+    "2026-10-03T12:00:03Z INF +--------------------------------------------------------------------------------------------+\n",
+    "2026-10-03T12:00:03Z INF |  Your quick Tunnel has been created! Visit it at (it may take some time to be reachable):  |\n",
+    f"2026-10-03T12:00:03Z INF |  {TUNNEL_URL}                                                  |\n",
+    "2026-10-03T12:00:03Z INF +--------------------------------------------------------------------------------------------+\n",
+    "2026-10-03T12:00:03Z INF Version 2025.9.0\n",
+    "2026-10-03T12:00:04Z INF Registered tunnel connection connIndex=0 location=tpe01 protocol=quic\n",
+    "2026-10-03T12:00:05Z INF Registered tunnel connection connIndex=1 location=tpe02 protocol=quic\n",
+]
+
+
+class _CountingLines:
+    """像 proc.stdout 一樣一行一行吐；記下總共被讀了幾行（用來證明網址之後的行也被讀完）。"""
+
+    def __init__(self, lines):
+        self.lines = list(lines)
+        self.read = 0
+
+    def __iter__(self):
+        for line in self.lines:
+            self.read += 1
+            yield line
+
+
+def test_the_tunnel_url_is_printed_once_from_the_line_that_has_it():
+    printed = []
+    server.relay_tunnel_output(CLOUDFLARED_OUTPUT, emit=printed.append)
+    assert printed == [URL_ANNOUNCEMENT]  # 「Requesting …on trycloudflare.com」那行不是網址；cloudflared 其他輸出照舊安靜
+
+
+def test_the_relay_keeps_reading_after_the_url_until_the_pipe_ends():
+    """網址印出後還要把管線讀乾淨：沒人讀的話緩衝寫滿時 cloudflared 會卡住，隧道跟著停。"""
+    lines = _CountingLines(CLOUDFLARED_OUTPUT)
+    printed = []
+    server.relay_tunnel_output(lines, emit=printed.append)
+    assert lines.read == len(CLOUDFLARED_OUTPUT)
+    assert printed == [URL_ANNOUNCEMENT]  # 讀完了也沒有再多說一句「沒拿到網址」
+
+
+def test_a_url_that_cloudflared_prints_again_is_announced_only_once():
+    printed = []
+    server.relay_tunnel_output(CLOUDFLARED_OUTPUT + CLOUDFLARED_OUTPUT[4:5] * 2, emit=printed.append)
+    assert printed == [URL_ANNOUNCEMENT]
+
+
+def test_an_odd_line_is_skipped_instead_of_killing_the_relay():
+    printed = []
+    odd = [
+        "\n",
+        "INF see https:// trycloudflare.com for details\n",  # 有網域、有 https://，但不是一個網址
+        "INF https://.trycloudflare.com\n",
+        "\ufffd\ufffd INF �\n",
+        "INF trycloudflare.com\n",
+    ]
+    server.relay_tunnel_output(odd + CLOUDFLARED_OUTPUT, emit=printed.append)
+    assert printed == [URL_ANNOUNCEMENT]
+
+
+def test_cloudflared_failing_to_request_a_tunnel_is_not_mistaken_for_the_public_url():
+    """要不到隧道時 cloudflared 的錯誤訊息會帶 https://api.trycloudflare.com：那是它自己的服務、不是給手機用的網址。"""
+    printed = []
+    failed = [
+        "2026-10-03T12:00:00Z INF Requesting new quick Tunnel on trycloudflare.com...\n",
+        'failed to request quick Tunnel: Post "https://api.trycloudflare.com/tunnel": dial tcp: lookup api.trycloudflare.com: no such host\n',
+    ]
+    server.relay_tunnel_output(failed, emit=printed.append)
+    assert printed == [NO_URL_NOTICE]
+
+
+def test_output_that_ends_without_any_url_says_so_instead_of_staying_silent():
+    printed = []
+    lines = _CountingLines(CLOUDFLARED_OUTPUT[:2] + CLOUDFLARED_OUTPUT[6:7])  # 沒有網址那行
+    server.relay_tunnel_output(lines, emit=printed.append)
+    assert lines.read == 3
+    assert printed == [NO_URL_NOTICE]
+    printed.clear()
+    server.relay_tunnel_output([], emit=printed.append)  # 一行都沒有就結束了也一樣
+    assert printed == [NO_URL_NOTICE]
+
+
+class _FakeProcess:
+    def __init__(self, stdout):
+        self.stdout = stdout
+
+
+def test_start_tunnel_prints_the_url_and_hands_back_the_relay_thread(capsys, monkeypatch):
+    import io
+    import subprocess
+
+    launched = []
+
+    def fake_popen(command, **kwargs):
+        launched.append(command)
+        return _FakeProcess(io.StringIO("".join(CLOUDFLARED_OUTPUT)))
+
+    monkeypatch.setattr(server.shutil, "which", lambda name: "C:/fake/cloudflared.exe")
+    monkeypatch.setattr(subprocess, "Popen", fake_popen)
+    thread = server.start_tunnel(7890)
+    thread.join(timeout=5)
+    assert not thread.is_alive()  # 讀到 EOF 就正常結束，不是死在某一行上
+    assert launched == [["C:/fake/cloudflared.exe", "tunnel", "--url", "http://127.0.0.1:7890"]]
+    assert capsys.readouterr().out.splitlines() == [URL_ANNOUNCEMENT]
+
+
+def test_start_tunnel_without_cloudflared_says_so_and_starts_nothing(capsys, monkeypatch):
+    import subprocess
+
+    monkeypatch.setattr(server.shutil, "which", lambda name: None)
+    monkeypatch.setattr(subprocess, "Popen", lambda *args, **kwargs: pytest.fail("沒有 cloudflared 不該開子程序"))
+    assert server.start_tunnel(7890) is None
+    assert "找不到 cloudflared" in capsys.readouterr().out
+
+
 # ── 主畫面的走法切換（步行／趕路／疾行）──────────────────────
 # 頁面記著走法、每個請求都帶上 X-Move-Mode；伺服器在行動鎖裡照它排選單（server.MOVE_MODE），從不存檔。
 
