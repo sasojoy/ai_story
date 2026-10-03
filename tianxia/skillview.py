@@ -68,11 +68,17 @@ def craft_line(
     """門下煉製那一塊的說明：成本、目前心得，或者為什麼還不能開爐。"""
     xinde = state.player.stats.get("xinde", 0)
     if len(material_ids) != craft.MATERIALS_PER_CRAFT:
-        return f"**煉製**　選 {craft.MATERIALS_PER_CRAFT} 樣素材煉成一門功法。目前心得 {xinde}。"
+        return (
+            f"**煉製**　選 {craft.MATERIALS_PER_CRAFT} 樣素材煉成一門功法。凡品配方不花心得；"
+            f"用到靈品、天品要花心得（歷練打贏、操練、閉關都能得到）。目前心得 {xinde}。"
+        )
     price = craft.cost(content, material_ids)
     names = "＋".join(content.materials[mid].name for mid in material_ids if mid in content.materials)
     problem = craft.can_craft(state, content, material_ids, kind, world)
-    head = f"**煉製**　{names} → 一門{kind}，花 {price} 點心得（你有 {xinde} 點）。"
+    if price == 0:
+        head = f"**煉製**　{names} → 一門{kind}，凡品配方不花心得。"
+    else:
+        head = f"**煉製**　{names} → 一門{kind}，花 {price} 點心得（你有 {xinde} 點）。"
     return head if problem is None else f"{head}\n⚠ {problem}"
 
 

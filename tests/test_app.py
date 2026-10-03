@@ -514,10 +514,10 @@ def test_craft_handler_crafts_and_redraws(game):
 def test_craft_preview_shows_the_cost_without_crafting(game):
     from tianxia import materials
 
-    materials.grant(game.state, game.content, "gang_1", 2)
-    line = app.craft_preview_handler(game, ["gang_1", "gang_1"], "武學")
+    materials.grant(game.state, game.content, "gang_3", 2)  # 天品才要心得（凡品免心得）
+    line = app.craft_preview_handler(game, ["gang_3", "gang_3"], "武學")
     assert "花" in line and "點心得" in line
-    assert game.state.player.materials == {"gang_1": 2}  # 什麼都沒扣
+    assert game.state.player.materials == {"gang_3": 2}  # 什麼都沒扣
 
 
 def test_craft_and_switch_handlers_skip_without_a_game():

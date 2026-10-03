@@ -51,8 +51,25 @@ def test_recipe_key_separates_the_two_kinds(content):
 def test_cost_counts_the_tiers(content):
     cfg = content.config
     cfg.craft_xinde_base, cfg.craft_xinde_per_tier = 5, 3
-    assert craft.cost(content, ["gang_1", "gang_1"]) == 5 * 2 + 3 * 2
+    assert craft.cost(content, ["gang_1", "gang_3"]) == 5 * 2 + 3 * 4
     assert craft.cost(content, ["gang_3", "gang_3"]) == 5 * 2 + 3 * 6
+
+
+def test_an_all_common_recipe_costs_no_xinde(content):
+    """企劃者 2026-10-03 決定「凡品免心得」：素材先到、心得後到，撿到凡品就該煉得動。"""
+    assert craft.cost(content, ["gang_1", "gang_1"]) == 0
+    assert craft.cost(content, ["gang_1", "kuai_1"]) == 0
+    assert craft.cost(content, ["gang_1", "gang_2"]) > 0  # 有一樣靈品就照公式收
+
+
+def test_a_common_recipe_can_be_crafted_with_no_xinde(state, content, world):
+    materials.grant(state, content, "gang_1", 2)
+    state.player.stats["xinde"] = 0
+    assert craft.can_craft(state, content, ["gang_1", "gang_1"], "武學") is None
+    with naming("裂江訣"):
+        art, msgs = craft.craft(state, content, world, OllamaClient(), ["gang_1", "gang_1"], "武學")
+    assert art is not None and state.player.stats["xinde"] == 0
+    assert not any(m.startswith("心得 -") for m in msgs)
 
 
 # ── 品質：素材的階位移機率分佈（整個系統的平衡核心）────────
@@ -220,8 +237,8 @@ def test_crafting_needs_the_materials_in_hand(state, content):
 
 
 def test_crafting_needs_enough_xinde(stocked, content):
-    stocked.player.stats["xinde"] = craft.cost(content, ["gang_1", "gang_1"]) - 1
-    problem = craft.can_craft(stocked, content, ["gang_1", "gang_1"], "武學")
+    stocked.player.stats["xinde"] = craft.cost(content, ["gang_3", "gang_3"]) - 1
+    problem = craft.can_craft(stocked, content, ["gang_3", "gang_3"], "武學")
     assert problem is not None and "心得不足" in problem
 
 
@@ -239,11 +256,11 @@ def test_crafting_spends_the_materials_and_the_xinde(stocked, content, world):
     client = OllamaClient()
     before = stocked.player.stats["xinde"]
     with naming("裂江訣"):
-        art, msgs = craft.craft(stocked, content, world, client, ["gang_1", "gang_1"], "武學")
+        art, msgs = craft.craft(stocked, content, world, client, ["gang_3", "gang_3"], "武學")
     assert art is not None
-    assert materials.held(stocked, "gang_1") == 2  # 原本 4 個，吃掉 2 個
-    assert stocked.player.stats["xinde"] == before - craft.cost(content, ["gang_1", "gang_1"])
-    assert f"心得 -{craft.cost(content, ['gang_1', 'gang_1'])}" in msgs
+    assert materials.held(stocked, "gang_3") == 2  # 原本 4 個，吃掉 2 個
+    assert stocked.player.stats["xinde"] == before - craft.cost(content, ["gang_3", "gang_3"])
+    assert f"心得 -{craft.cost(content, ['gang_3', 'gang_3'])}" in msgs
 
 
 def test_the_materials_decide_the_attribute_not_the_name(stocked, content, world):

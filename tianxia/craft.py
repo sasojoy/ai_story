@@ -61,15 +61,19 @@ def recipe_key(material_ids: list[str], kind: str) -> str:
 
 
 def cost(content: Content, material_ids: list[str]) -> int:
-    """煉製要花多少心得（設計 §5.5）：base × 素材數 + per_tier × 階總和。
+    """煉製要花多少心得（設計 §5.5）：全是凡品的配方不花心得；用到靈品或天品時是
+    base × 素材數 + per_tier × 階總和。
 
-    照實測校準：整季心得收入 20~96，兩個凡品 16、兩個天品 51，所以一季能煉 1~6 次，
-    想多煉就得刻意閉關。**不沿用 `Config.xinde_cost_factor`**（那是為「練功要花心得」訂的，
-    單門練滿要 900，跟實際收入差 20 倍以上）。
+    凡品免心得是企劃者 2026-10-03 試玩後的決定：素材先到、心得後到（整季心得收入只有 20~96，
+    素材卻有二十來個），新角色撿到凡品卻煉不動。靈品、天品照舊吃心得（兩個天品 28），
+    好東西還是要刻意攢心得或閉關。**不沿用 `Config.xinde_cost_factor`**（那是為「練功要花心得」
+    訂的，單門練滿要 900，跟實際收入差 20 倍以上）。
     """
     cfg = content.config
-    tiers = sum(content.materials[mid].tier for mid in material_ids if mid in content.materials)
-    return cfg.craft_xinde_base * len(material_ids) + cfg.craft_xinde_per_tier * tiers
+    tiers = [content.materials[mid].tier for mid in material_ids if mid in content.materials]
+    if all(tier <= 1 for tier in tiers):
+        return 0
+    return cfg.craft_xinde_base * len(material_ids) + cfg.craft_xinde_per_tier * sum(tiers)
 
 
 def mean_tier(a: Material, b: Material) -> float:
@@ -291,7 +295,7 @@ def craft(
     price = cost(content, material_ids)
     state.player.stats["xinde"] = max(0, state.player.stats.get("xinde", 0) - price)
 
-    msgs = [_result_line(art, a, b, first_time), f"心得 -{price}"]
+    msgs = [_result_line(art, a, b, first_time)] + ([f"心得 -{price}"] if price else [])
     msgs += _store(state, art)
     return art, msgs
 
