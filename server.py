@@ -34,7 +34,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from markdown_it import MarkdownIt
 
-from tianxia import companion_agent, event_llm, materials, server_bots
+from tianxia import companion_agent, event_llm, materials, server_bots, team
 from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, AccountStore, normalize
 from tianxia.content import load_content
 from tianxia.characters import open_characters
@@ -208,15 +208,23 @@ def answer_event(game: Game, text: str) -> list[str] | None:
     """事件的隨口應對（探索的多人與 LLM 玩法 §8.1），跟 prepare_dialogue 一樣分三段：
       A（鎖內、很快）同步時間，問引擎這句話現在能不能送；能就拿到單子（事件 id＋這句話），同步的結果照樣存起來；
       B（鎖外、很慢）請模型評這個做法的成功率，失敗一律 40；
-      C（鎖內、很快）Game.answer_event 重驗還停在同一則事件、同一句話，才擲骰套用（對不上就不套用）。"""
+      C（鎖內、很快）Game.answer_event 重驗還停在同一則事件、同一句話，才擲骰套用（對不上就不套用）；
+      D、E 擲骰之後在鎖外請模型潤色一兩句，再進鎖插回那一則江湖紀錄（Game.add_gamble_narration）。"""
     with _locked(game):
         game.sync(time.time())
         request = game.free_text_request(text)
         open_characters().save(game.state)
     if request is None:
         raise GameError(f"寫一句 1～{FREE_TEXT_MAX} 字的做法；眼前的事已經過去的話，就不必再寫了。")
-    rate = event_llm.assess_event_success_rate(game.client, CONTENT.events[request.event_id], request.text)
-    return act(game, lambda g: g.answer_event(request, rate))
+    event = CONTENT.events[request.event_id]
+    rate = event_llm.assess_event_success_rate(game.client, event, request.text)
+    msgs = act(game, lambda g: g.answer_event(request, rate))
+    outcome = game.last_gamble
+    if outcome is not None:  # D（鎖外）擲骰之後請模型潤色一兩句，E（鎖內）插回那一則紀錄；失敗就只留結果文字
+        narration = event_llm.narrate_event_gamble(game.client, event, outcome.text, outcome.success, outcome.effect_text)
+        if narration:
+            act(game, lambda g: g.add_gamble_narration(outcome, narration))
+    return msgs
 
 
 # ── 畫面資料 ──────────────────────────────────────────
@@ -251,6 +259,13 @@ def menxia_view(game: Game, person: str | None = None) -> dict:
     lines = game.roster_lines()
     if person not in {key for _, key in lines}:
         person = None
+    member = game.state.player.member
+    # 身上兩門各自有沒有功法、練到第幾成、練滿了沒（C4 自創欄收不收、C5 鍛鍊鈕亮不亮）；還沒學是 False、0、False
+    learned = {"武學": member.wugong_id is not None, "內功": member.neigong_id is not None}
+    level = {
+        "武學": member.wugong_level if learned["武學"] else 0,
+        "內功": member.neigong_level if learned["內功"] else 0,
+    }
     return {
         "xinde": game.state.player.stats.get("xinde", 0),
         "rules": md(game.menxia_rules()),
@@ -267,7 +282,11 @@ def menxia_view(game: Game, person: str | None = None) -> dict:
         "per_craft": MATERIALS_PER_CRAFT,
         # 功法卡（FB-006）：身上兩門各一張，還沒學的那一門是一句「你還沒有內功。」；
         # 功法庫通常只有幾門，卡一起送，點開不必再打一次 API（QA L4：先看卡再改練）
-        "slot_cards": [{"kind": k, "card": md(game.skill_detail(k))} for k in KINDS],
+        "slot_cards": [
+            {"kind": k, "card": md(game.skill_detail(k)), "learned": learned[k], "level": level[k],
+             "maxed": level[k] >= team.MAX_LEVEL}
+            for k in KINDS
+        ],
         "arts": [{"label": label, "id": aid, "card": md(game.art_detail(aid))} for label, aid in game.art_library()],
         "craft_line": md(game.craft_line([], KINDS[0])),
     }

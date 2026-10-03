@@ -140,6 +140,28 @@ def test_without_a_judged_rate_the_engine_assesses_and_falls_back_to_forty(gambl
     assert f"（{rate_words(rate)}）" in g.state.journal[0].lines[0]
 
 
+def test_the_narration_goes_between_the_words_and_the_result(gamble_game):
+    g = gamble_game
+    g.rng = FixedRandom(0.0)
+    g.answer_event(g.free_text_request("大喊官兵來了"), 60)
+    outcome = g.last_gamble
+    assert (outcome.success, outcome.effect_text) == (True, "醉漢被你唬住了。")
+    g.add_gamble_narration(outcome, "你扯開嗓子一喊。")
+    lines = g.state.journal[0].lines
+    assert lines.index("你扯開嗓子一喊。") == lines.index("醉漢被你唬住了。") - 1
+    assert lines[lines.index("你扯開嗓子一喊。") - 1].startswith("你：「大喊官兵來了」")
+
+
+def test_the_narration_is_dropped_when_another_entry_came_first(gamble_game):
+    g = gamble_game
+    g.answer_event(g.free_text_request("大喊官兵來了"), 60)
+    outcome = g.last_gamble
+    g.choose("act:explore")
+    before = [list(e.lines) for e in g.state.journal]
+    g.add_gamble_narration(outcome, "你扯開嗓子一喊。")
+    assert [list(e.lines) for e in g.state.journal] == before
+
+
 def test_bots_never_pick_the_free_text_option(gamble_game):
     free_only = [o for o in gamble_game.options() if o.id == FREE_TEXT_OPTION]
     assert bot.pick(gamble_game, free_only, random.Random(0)) is None

@@ -22,7 +22,7 @@ from .models import FREE_TEXT_MAX, BattleDef, Choice, Content, Effect, Event, Lo
 from .ollama_client import OllamaClient
 from .rules import apply_effect, change_trend, check_who, current_day, fill_marks, free_text_rate, rate_words, roll_check
 from .sqlite_world import open_world
-from .state import GameState, JournalEntry, Journey, Rumor, WorldState, new_game_state
+from .state import PLAYER, GameState, JournalEntry, Journey, Rumor, WorldState, new_game_state
 from .world import advance_world_state, check_thresholds, end_season, fire_by_id, sim_tick, start_pending_battle
 from .world_state import WorldStateStore
 
@@ -46,6 +46,16 @@ class FreeTextRequest(BaseModel):
     text: str
 
 
+class FreeTextOutcome(BaseModel):
+    """擲完骰的結果：server.py 拿它在鎖外請模型潤色，再交回 add_gamble_narration 插進那一則江湖紀錄。"""
+    event_id: str
+    text: str
+    success: bool
+    effect_text: str
+    time: float  # 那一則紀錄的遊戲時間與標題，插潤色前用來認是不是同一則
+    title: str
+
+
 class Game:
     MAP_LAYERS = atlas.LAYERS  # 大地圖的圖層：id → 名稱
 
@@ -64,6 +74,7 @@ class Game:
             presence_penalty=cfg.ollama_presence_penalty, frequency_penalty=cfg.ollama_frequency_penalty,
         )  # companion_agent.py 用；連不上時那輪對話取消，這裡不用先健檢
         self._draft: Draft | None = None  # choose() 進行中那次行動的江湖紀錄草稿
+        self.last_gamble: FreeTextOutcome | None = None  # 上一次 answer_event 擲完骰的結果（server.py 拿去潤色）
         # 主畫面「走法」切換選的走法（步行／趕路／疾行），選單上的「前往」照它出發（見 _move_option）。只是畫面狀態：
         # 不在 GameState 裡、不進存檔。網頁伺服器的同一個角色只有一份 Game（各分頁共用、重新整理也還在），所以走法
         # 由頁面記著、每個請求帶上，server.py 在行動鎖裡逐次 set_move_mode（見 server.MOVE_MODE）；機器人與假人從不改它。
@@ -319,7 +330,7 @@ class Game:
             # 標籤要顯示勝算（跟劇情戰的選項同一套慣例，見 _choice_label）：實機試玩發現
             # 新角色沒有武學時威力是 0，在任何地點歷練都**必敗**，而落敗現在真的要付氣血與
             # 內傷的代價——不顯示勝算的話，玩家會在開局連輸三場、氣血見底才知道自己不該打。
-            opts.append(self._cost_option("act:train", "歷練", cost["train"], note=self._train_note(loc, odds)))
+            opts.append(self._train_option(loc, cost["train"], odds))
         figures = self._figures_here()
         if has_events_here(c, loc, "socialize") or 0 < len(figures) < AUDIENCE_HALL_FIGURES:
             # 兩位以上大勢人物的地點，交遊只走福緣與地點事件、從不開口對話（見 _socialize_figure），
@@ -382,9 +393,20 @@ class Game:
             id=option_id, label=f"{label}（體力 {cost}{extra}）", enabled=self.state.player.stamina >= cost
         )
 
-    def _train_note(self, loc: Location, odds: bool) -> str:
-        """歷練按鈕上的補充說明：對手是誰、勝算多少（勝算的計算比較貴，所以照既有慣例吃 odds 旗標）。"""
+    def _train_option(self, loc: Location, cost: int, odds: bool) -> Option:
+        """歷練的按鈕。遇上自己陣營的隊伍是操練、不會輸（見 _drill），所以只有自己人的地盤寫成「操練・零風險」，
+        不拿自己人去算勝算「必敗」（試玩回饋 FB-008）；自己人與外人都有的地方，勝算只看真的會打的那幾路。"""
         squads = [self.content.squads[sid] for sid in loc.enemies]
+        foes = [squad for squad in squads if not self._drills_with(squad)]
+        if not foes:
+            return self._cost_option("act:train", "操練", cost, note="零風險")
+        note = self._train_note(foes, odds)
+        if len(foes) < len(squads):
+            note += "・或與自己人操練"
+        return self._cost_option("act:train", "歷練", cost, note=note)
+
+    def _train_note(self, squads: list[Squad], odds: bool) -> str:
+        """歷練按鈕上的補充說明：對手是誰、勝算多少（勝算的計算比較貴，所以照既有慣例吃 odds 旗標）。"""
         who = squads[0].name if len(squads) == 1 else f"{len(squads)} 路對手"
         if not odds:
             return who
@@ -527,6 +549,7 @@ class Game:
         llm_rate 是鎖外評好的 0～100；沒給（直接呼叫的測試、腳本）就在這裡評，評不到一樣退回 40。
         成功率＝LLM 評分加屬性修正、夾在 5～85（rules.free_text_rate）；擲骰用引擎自己的 rng。"""
         s, c = self.state, self.content
+        self.last_gamble = None
         current = self.free_text_request(request.text)
         if current is None or current.event_id != request.event_id:
             return self._log(["（事情已經過去了，這句話沒派上用場。）"])
@@ -544,14 +567,33 @@ class Game:
             word = "成功" if success else "失敗"
             msgs = [f"你：「{request.text}」（{rate_words(rate)}）", f"（{who}——{word}）"]
             self._outcome(f"{who}・{word}", msgs[-1])
-            msgs += self._apply(choice.effect if success else choice.fail_effect)
+            effect = choice.effect if success else choice.fail_effect
+            msgs += self._apply(effect)
             msgs += check_thresholds(s, c, self.world, self.client, now=self.now)
             journal.add_entry(s, self._draft.entry(s.world.time, msgs))
+            self.last_gamble = FreeTextOutcome(
+                event_id=event.id, text=request.text, success=success, effect_text=fill_marks(effect.text, s),
+                time=s.world.time, title=self._draft.title,
+            )
         finally:
             self._draft = None
         self._record_faction()
         self._save_season()
         return self._log(msgs)
+
+    def add_gamble_narration(self, outcome: FreeTextOutcome, narration: str) -> None:
+        """隨口應對的潤色（鎖外生成）插回那一則江湖紀錄：接在「你：「…」」那一行後面、結果文字前面。
+        認不到那一則（紀錄已經被後來的事併掉或擠到後面）就不插，潤色本來就是錦上添花。"""
+        journal_entries = self.state.journal
+        if not narration or not journal_entries:
+            return
+        entry = journal_entries[0]
+        if entry.time != outcome.time or entry.title != outcome.title:
+            return
+        lines = list(entry.lines)
+        said = next((i for i, line in enumerate(lines) if line.startswith(f"你：「{outcome.text}」")), None)
+        lines.insert(0 if said is None else said + 1, narration)
+        journal_entries[0] = entry.model_copy(update={"lines": lines})
 
     def _action_title(self, kind: str, arg: str) -> str:
         s, c = self.state, self.content
@@ -893,6 +935,11 @@ class Game:
         raw = self.world.get_battle()
         if raw is None:
             return None
+        if self.state.world.ended:
+            # 季結束了：沒打完的決戰直接收掉、不套用結果（這一季勝負已經定了），參戰者回到休季畫面（試玩回饋 FB-015）
+            if tick and raw.phase != "ended":
+                self.world.clear_battle()
+            return None
         definition = self.content.battles.get(raw.battle_id)
         if definition is None:
             return None
@@ -1087,7 +1134,9 @@ class Game:
                 return f"{header}\n\n你已加入【{side}】，集結還剩 {left}。集結結束就開打，在那之前照常行動{leaving}。"
             return f"{header}\n\n集結中，還剩 {left}。選擇陣營加入；集結期間照常行動。"
         act = battle_instance.current_act(battle, definition)
-        lines = [header, f"【{act.title}】{act.text}"] + battle.narrative_log[-5:]
+        # 第幾回合／一共幾回合（戰鬥系統設計 3.2）：讓人知道還要打多久；收場的決戰不會走到這裡
+        count = f"（第 {battle.round_number + 1}／{battle_instance.total_rounds(definition)} 回合）"
+        lines = [header, f"【{act.title}】{count}{act.text}"] + battle.narrative_log[-5:]
         p = battle.participants.get(self.state.player.name)
         if p is not None and p.eliminated:
             lines.append("（你已經倒下，只能在一旁觀戰。）")
@@ -1698,14 +1747,21 @@ class Game:
     def owned_companions(self) -> list[str]:
         return roster.owned_companions(self.world, self.state.player.name)
 
+    # 名冊第一列是本人（PLAYER）：本人永遠出戰，加入、移出都只回一句話，隊伍裡不會多出一個 "player"
+    SELF_IN_TEAM = "本人一直都在隊伍裡，不用加入，也不能移出。"
+
     def add_to_team(self, companion_id: str) -> list[str]:
         if self._preparing():
             return self._log(["（賽季籌備中，等待管理者開季。）"])
+        if companion_id == PLAYER:
+            return self._log([self.SELF_IN_TEAM])
         return self._log(team.add_to_team(self.state, companion_id))
 
     def remove_from_team(self, companion_id: str) -> list[str]:
         if self._preparing():
             return self._log(["（賽季籌備中，等待管理者開季。）"])
+        if companion_id == PLAYER:
+            return self._log([self.SELF_IN_TEAM])
         return self._log(team.remove_from_team(self.state, companion_id))
 
     # ── 門下頁面：武學說明 ──────────────────────────────────

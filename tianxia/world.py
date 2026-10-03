@@ -4,7 +4,7 @@ from __future__ import annotations
 import random
 
 from . import flavor, leaderboard
-from .models import Act, Content, Ending, SimPlayer, SimRumor, Storyline
+from .models import Act, BattleDef, Content, Ending, SimPlayer, SimRumor, Storyline
 from .ollama_client import OllamaClient
 from .rules import add_chronicle, add_rumor, add_world_flags, change_trend, check_condition
 from .state import GameState, PlayerState, WorldState
@@ -78,8 +78,7 @@ def _fire(
     msgs = [f"【江湖大事】{shown_text}"]
     if starts_battle and starts_battle in content.battles:
         if world is not None:
-            world.start_battle(content.battles[starts_battle], now=_now_for_battle(now))
-            msgs.append(f"🛡️ 【全服戰報】{content.battles[starts_battle].name}的集結號角已經吹響！")
+            msgs += _open_battle(world, content.battles[starts_battle], _now_for_battle(now))
         else:  # 背景推進（sim_tick）：先記下來，mutate 結束後由 start_pending_battle 開戰
             state.world.pending_battle = starts_battle
     if ends_season:
@@ -247,16 +246,27 @@ def start_pending_battle(world: WorldStateStore, content: Content, now: float) -
     if world.get_season().pending_battle is None:
         return []
     taken: dict[str, str | None] = {"id": None}
+    ended = {"value": False}
 
     def _apply(season: WorldState) -> None:
         taken["id"], season.pending_battle = season.pending_battle, None
+        ended["value"] = season.ended
 
     world.mutate_season(_apply)
     battle_id = taken["id"]
-    if battle_id is None or battle_id not in content.battles:
+    if battle_id is None or battle_id not in content.battles or ended["value"]:  # 季已經結束：不開戰
         return []
-    world.start_battle(content.battles[battle_id], now=now)
-    return [f"🛡️ 【全服戰報】{content.battles[battle_id].name}的集結號角已經吹響！"]
+    return _open_battle(world, content.battles[battle_id], now)
+
+
+def _open_battle(world: WorldStateStore, definition: BattleDef, now: float) -> list[str]:
+    """開一場全服決戰並廣播集結。已經有一場在集結或開打（例如管理者先開了戰，聲勢之後才跨過開戰門檻），
+    就不另開、也不再廣播（試玩回饋 FB-015）。"""
+    current = world.get_battle()
+    if current is not None and current.phase != "ended":
+        return []
+    world.start_battle(definition, now=now)
+    return [f"🛡️ 【全服戰報】{definition.name}的集結號角已經吹響！"]
 
 
 def advance_season(
