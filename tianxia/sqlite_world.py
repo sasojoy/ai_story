@@ -15,7 +15,7 @@
 from __future__ import annotations
 
 import random
-from collections.abc import Callable, Collection
+from collections.abc import Callable
 from contextlib import AbstractContextManager
 from pathlib import Path
 from sqlite3 import Connection, Row
@@ -400,12 +400,14 @@ class SqliteWorldStore:
             ).fetchall()
         return [BattleRoundRecord.model_validate_json(row["data"]).model_copy(update={"id": row["id"]}) for row in rows]
 
-    def ended_battles(self, exclude: Collection[int] = ()) -> list[tuple[int, BattleInstance]]:
-        """先只讀流水號與季別，exclude 裡的不解整份資料（一場的參戰者名單可能很長，而每個人每次同步都會問）。"""
-        skip = set(exclude)
+    def ended_battles(self, after: int = 0) -> list[tuple[int, BattleInstance]]:
+        """每個人每次同步（包括畫面每 10 秒的計時器）都會問，所以只讀流水號比 after 大的那幾列（主鍵的範圍查詢），
+        通常一列都沒有。流水號是 INTEGER PRIMARY KEY、這張表從不刪列，新的一場永遠比舊的大。"""
         with self.db.snapshot() as conn:
-            rows = conn.execute("SELECT id, season FROM battles WHERE phase = 'ended' ORDER BY id").fetchall()
-            return [(row["season"], self._load_battle(conn, row["id"])) for row in rows if row["id"] not in skip]
+            rows = conn.execute(
+                "SELECT id, season FROM battles WHERE id > ? AND phase = 'ended' ORDER BY id", (after,),
+            ).fetchall()
+            return [(row["season"], self._load_battle(conn, row["id"])) for row in rows]
 
     # ── 同伴進度與招募 ────────────────────────────────────
 

@@ -1138,9 +1138,10 @@ class Game:
         程式記憶體裡各自的 Game 打架（它們之後存檔會把別人寫進去的蓋掉）。資料庫是唯一的真實來源，戰鬥也一直留在
         battles 表裡，所以每個人自己的 Game 在 sync（伺服器每個請求、假人每一輪）與自己收場的那一下自己補。
         不分季別：決戰的結果常常就把季收掉，休季、下一季才回來的人也要補到。不是自己參戰的那幾場也記成處理過，
-        之後不必再讀（收場的決戰名單不會再變）。"""
+        之後不必再讀（收場的決戰名單不會再變）。只讀處理過的最大流水號之後收場的：決戰照開戰的先後收場，比它小的
+        不會再有新收場的（見 WorldStateStore.ended_battles）。"""
         p = self.state.player
-        fresh = self.world.ended_battles(exclude=p.battle_results_seen)
+        fresh = self.world.ended_battles(after=max(p.battle_results_seen, default=0))
         if not fresh:
             return
         current = self.world.get_season_number()

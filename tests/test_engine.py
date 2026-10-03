@@ -1708,6 +1708,10 @@ def test_a_fighter_first_back_next_season_gets_last_seasons_showdown_marked_with
     assert "（第 1 季）寇亂 +50" in entry.lines
     report = back.state.battles[0]
     assert report.kind == "showdown" and report.location.startswith("第 1 季・") and report.changes == []
+    (_, battle), = game.world.ended_battles()
+    assert battle.end_time is not None
+    assert entry.time == report.time == battle.end_time  # 收場時（第 1 季）的時間，不是補送這一刻
+    assert battle.end_time != back.state.world.time  # 這一季的時鐘
     back.sync(end + 40)
     assert len(_showdown_entries(back)) == 1 and len(back.state.battles) == 1
 

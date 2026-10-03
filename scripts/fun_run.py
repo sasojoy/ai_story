@@ -215,8 +215,10 @@ def observe_step(game: Game, log: FunLog, before: tuple, option_id: str, before_
     for art_id in [s.player.member.neigong_id, s.player.member.wugong_id, *s.player.arts]:
         if art_id:
             log.add_novelty("配方查表", art_id, day, True)
-    if s.battles:
-        log.add_novelty("對手", s.battles[0].opponent, day, True)
+    # 全服決戰補送的戰報（kind="showdown"，FB-027）不算對手：那是敵方陣營名，不是四處闖蕩撞上的人
+    encounters = [r for r in s.battles if r.kind != "showdown"]
+    if encounters:
+        log.add_novelty("對手", encounters[0].opponent, day, True)
     log.add_novelty("地點", s.player.location, day, True)
     if option_id.startswith("move:"):
         log.chance("地點")
@@ -225,7 +227,8 @@ def observe_step(game: Game, log: FunLog, before: tuple, option_id: str, before_
     # 劇情事件的「應戰」不算：那是事件管道的一部分（事件那邊已經記了一次機會），而且算進來的話，校準狀態 ②
     # （一季只有幾場劇情戰）的對手管道會從「整季沒出現」變成一季十來場、幾乎場場新面孔，反而拿高分——
     # 這條管道要量的是「四處闖蕩撞上的對手」新不新鮮，不是劇情安排的那幾場。
-    fights = s.battle_seq - before[9]  # 快照第 9 項是 battle_seq
+    # 快照第 9 項是 battle_seq：這一步新增的戰報。同一步剛好補送到的決戰戰報不算打了一場（見上面「對手」）
+    fights = sum(1 for r in encounters if r.id > before[9])
     if fights > 0 and option_id in ("act:train", "act:explore"):
         log.chance("對手", fights)
 

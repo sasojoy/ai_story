@@ -483,6 +483,16 @@ def test_a_battle_saved_before_these_counts_still_loads(definition):
     loaded = bi.BattleParticipant.model_validate(old)
     assert loaded.acted_rounds == 0 and loaded.fell_round is None
 
+    stored = _active_battle(definition).model_dump()  # 整場：收場時間與這回合代選了誰也是後來才有的
+    stored.pop("end_time")
+    stored["round"].pop("auto_picked")
+    for p in stored["participants"].values():
+        p.pop("acted_rounds")
+        p.pop("fell_round")
+    battle = bi.BattleInstance.model_validate(stored)
+    assert battle.end_time is None and battle.round.auto_picked == []
+    assert all(p.acted_rounds == 0 and p.fell_round is None for p in battle.participants.values())
+
 
 def test_mitigated_by_power_reduces_damage_for_a_powerful_participant(definition):
     instance = _active_battle(definition)
