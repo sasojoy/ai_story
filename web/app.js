@@ -45,6 +45,7 @@
     message: "",
     person: null,
     kind: "武學",
+    artOpen: null, // 修練頁功法庫裡點開的那一門（id）；切分頁、改練成功之後收起
     craftKind: "武學",
     craftSel: [],
     craftLine: "",
@@ -68,6 +69,20 @@
   // ── 工具 ──
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const pct = (a, b) => (b > 0 ? Math.max(0, Math.min(100, (a / b) * 100)) : 0);
+  // 本季天數：整數不帶小數點（14.0 → 14），不是整數照原樣（14.5）
+  const dayCount = (n) => String(Number(n));
+  // 焦點在輸入框、下拉選單：玩家正在填東西，輪詢不動畫面
+  const typing = () => !!document.activeElement && ["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement.tagName);
+
+  // 表單的結果訊息（QA L3）：寫在表單裡那一行，留到下一次送出；錯誤醒目、成功用一般文字色
+  function formMsg(form, text, ok = false) {
+    const el = form.querySelector(".form-msg");
+    if (!el) return;
+    el.textContent = text || "";
+    el.classList.toggle("ok", ok);
+  }
+  // 請求的錯誤寫成玩家看得懂的一句：伺服器回的原因照登（api() 丟的），連不上（fetch 自己丟的 TypeError）另外講
+  const failText = (e) => (e instanceof TypeError ? "連不上伺服器，請稍後再試。" : (e && e.message) || "出了點問題，請再試一次。");
 
   let toastTimer = 0;
   function toast(text) {
@@ -164,9 +179,10 @@
     const team = s.team.map((m) => `🧍 ${esc(m.name)} 第${m.level}級 氣血 ${m.hp}/${m.hp_max}`).join("　");
     return `
       <div class="top-row">
-        <div class="who" data-act="toggle-more">
-          <div class="who-name">${esc(s.name)}<small>${esc(s.affiliation)}${s.anonymous ? "・匿名" : ""}・第${s.level}級</small></div>
-          <div class="where">📍 ${esc(s.location)}　第 ${s.day} 天 ${esc(s.clock)}${s.busy_hours != null ? `　🧘 閉關中，約 ${s.busy_hours} 小時後出關` : ""}</div>
+        <div class="who" data-act="toggle-more" role="button" aria-expanded="${S.showMore}">
+          <div class="who-name"><span>${esc(s.name)}<small>${esc(s.affiliation)}${s.anonymous ? "・匿名" : ""}・第${s.level}級</small></span><i class="more-ico" aria-hidden="true">${S.showMore ? "▴" : "▾"}</i></div>
+          <div class="where">📍 ${esc(s.location)}　第 ${s.day} 天 ${esc(s.clock)}<small>／共 ${dayCount(s.season_days)} 天</small>${s.resting != null ? "　🧘 打坐中" : ""}${s.busy_hours != null ? `　🧘 閉關中，約 ${s.busy_hours} 小時後出關` : ""}</div>
+          ${s.journey != null ? `<div class="where journey">🐎 ${esc(s.journey)}</div>` : ""}
         </div>
         <button class="icon-btn" data-act="sheet" aria-label="設定">⚙</button>
       </div>
@@ -218,6 +234,7 @@
           <label class="field"><span>帳號</span><input class="input" name="login" autocomplete="username" autocapitalize="off" ${reg ? 'placeholder="英文字母、數字、底線，3～20 字"' : ""} required></label>
           <label class="field"><span>密碼</span><input class="input" type="password" name="password" autocomplete="${reg ? "new-password" : "current-password"}" ${reg ? 'placeholder="至少 6 字"' : ""} required></label>
           ${reg ? '<label class="field"><span>再輸入一次密碼</span><input class="input" type="password" name="again" autocomplete="new-password" required></label>' : ""}
+          <p class="form-msg" role="alert"></p>
           <button class="btn primary" type="submit">${reg ? "註冊" : "登入"}</button>
         </form>
       </div>`;
@@ -229,6 +246,7 @@
         <div class="brand"><div class="seal">勢</div><h1>天下大勢</h1><p>這個帳號還沒有角色</p></div>
         <form id="create-form" class="card">
           <label class="field"><span>取一個名號，踏入江湖</span><input class="input" name="name" maxlength="16" placeholder="例如：沈青衫" required></label>
+          <p class="form-msg" role="alert"></p>
           <button class="btn primary" type="submit">建立角色</button>
         </form>
         <button class="linkish" data-act="logout">換一個帳號</button>
@@ -271,9 +289,6 @@
     const x = S.menxia;
     if (!x) return '<p class="muted">載入中…</p>';
     const s = S.main.status;
-    // 功法庫展開的那一門（S.artOpen，QA L4）從別的分頁切回來時收起：切分頁是 render() 重畫整個畫面、#page 是空的，
-    // 頁內的重畫（切內功／武學、鍛鍊、展開另一門）則還留著上一次的功法庫（#art-lib）。改練之後在點擊的 "switch" 那裡清。
-    if (!document.getElementById("art-lib")) S.artOpen = null;
     // 身上的功法卡（FB-006）：目前切到的那一門放前面
     const slots = x.slot_cards.filter((c) => c.kind === S.kind).concat(x.slot_cards.filter((c) => c.kind !== S.kind));
     return `
@@ -301,7 +316,7 @@
           <button class="btn small" type="submit">開始閉關</button>
         </div>
       </form>
-      <div class="label" id="art-lib">功法庫</div>
+      <div class="label">功法庫</div>
       ${x.arts.length ? `<div class="list">${x.arts.map((a) => `
         <button class="art ${S.artOpen === a.id ? "on" : ""}" data-act="art" data-id="${esc(a.id)}">${esc(a.label)}</button>
         ${S.artOpen === a.id ? `<div class="art-body">${a.card}<button class="btn primary" data-act="switch" data-id="${esc(a.id)}">改練這一門</button></div>` : ""}`).join("")}</div>`
@@ -393,6 +408,7 @@
           <label class="field"><span>舊密碼</span><input class="input" type="password" name="old" autocomplete="current-password"></label>
           <label class="field"><span>新密碼</span><input class="input" type="password" name="new" autocomplete="new-password"></label>
           <label class="field"><span>再輸入一次新密碼</span><input class="input" type="password" name="again" autocomplete="new-password"></label>
+          <p class="form-msg" role="alert"></p>
           <button class="btn" type="submit">修改密碼</button>
         </form></details>
         ${S.main.admin ? `
@@ -407,7 +423,7 @@
               <div class="row"><select class="input" id="ad-fire">${opts(a.events)}</select><button class="btn small" data-act="admin" data-op="fire">觸發</button></div>
               <div class="row"><select class="input" id="ad-trend">${opts(a.trends)}</select><input class="input" id="ad-amount" type="number" value="10" style="max-width:90px"><button class="btn small" data-act="admin" data-op="push_trend">推動</button></div>
               <p class="muted">重設密碼（朋友忘記密碼時用；臨時密碼私下告訴他）</p>
-              <form class="row" id="reset-form"><input class="input" name="target" placeholder="帳號或名號"><input class="input" name="temp" placeholder="臨時密碼"><button class="btn small" type="submit">重設</button></form>` : ""}
+              <form id="reset-form"><div class="row"><input class="input" name="target" placeholder="帳號或名號"><input class="input" name="temp" placeholder="臨時密碼"><button class="btn small" type="submit">重設</button></div><p class="form-msg" role="alert"></p></form>` : ""}
           </div>` : ""}
         <div class="label">帳號</div>
         <button class="btn ghost" data-act="logout">登出</button>
@@ -436,6 +452,7 @@
   async function goTab(tab) {
     S.tab = tab;
     S.message = "";
+    S.artOpen = null;
     S.mapNotice = "";
     if (tab === "news") S.unseen = false;
     render();
@@ -610,7 +627,13 @@
           S.person = S.person === el.dataset.key ? null : el.dataset.key;
           await loadMenxia();
           break;
-        case "switch": S.artOpen = null; await mx("switch", { art: el.dataset.id }); break;
+        case "switch": {
+          // 改練真的送出了（mx 換上伺服器回來的那一份 menxia）才收起卡片；還在忙（mx 直接返回）或請求失敗就照舊開著
+          const was = S.menxia;
+          await mx("switch", { art: el.dataset.id });
+          if (S.menxia !== was) { S.artOpen = null; if (S.tab === "practice") renderPage(); }
+          break;
+        }
         case "art": S.artOpen = S.artOpen === el.dataset.id ? null : el.dataset.id; renderPage(); break;
         case "slot":
           if (S.craftSel.length < (S.menxia?.per_craft || 2)) { S.craftSel.push(el.dataset.id); renderPage(); updateCraftLine(); }
@@ -651,6 +674,7 @@
     const form = ev.target;
     const data = Object.fromEntries(new FormData(form));
     const submit = form.querySelector("[type=submit]");
+    formMsg(form, ""); // 上一次的結果訊息留到這次送出為止
     try {
       if (form.id === "gate-form") {
         submit.disabled = true;
@@ -665,34 +689,132 @@
         if (!data.name.trim()) { toast("先幫你的功法取個名字。"); return; }
         await mx("create", { name: data.name });
       } else if (form.id === "seclude") {
-        await doMain("seclude", { hours: Number(data.hours) });
-        S.tab = "jianghu";
-        render();
+        // 閉關（QA L9）：真的進了閉關（busy_hours 有值）才回江湖頁。引擎不讓閉關（在路上、打坐、事件進行中）
+        // 也是 200 加一句原因，那就留在修練頁、原因寫在頁面上方；請求本身失敗也留在這頁（api() 提示過）
+        await busy(async () => {
+          const r = await api("/api/do/seclude", { hours: Number(data.hours) });
+          if (r.main.status.busy_hours != null) {
+            S.tab = "jianghu";
+            applyMain(r.main);
+            window.scrollTo(0, 0);
+            const text = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+            if (text) toast(text);
+          } else {
+            S.message = r.message || "";
+            setMain(r.main);
+            renderTop();
+            redrawPage(); // 選好的時數、填到一半的功法名字照舊，改好原因再按一次就行
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          }
+        });
       } else if (form.id === "pw-form") {
+        // 改密碼、重設密碼一律回 200，訊息就是結果（失敗時寫原因）；成功才清空欄位，失敗留著讓人改
         const r = await api("/api/password", data);
-        form.reset();
-        toast(r.message);
+        const ok = r.message === "密碼已更新。";
+        formMsg(form, r.message, ok);
+        if (ok) form.reset();
       } else if (form.id === "reset-form") {
         const r = await api("/api/admin/reset_password", data);
-        form.reset();
-        toast(r.message);
+        const ok = /^已重設 .+ 的密碼。$/.test(r.message || "");
+        formMsg(form, r.message, ok);
+        if (ok) form.reset();
       }
     } catch (e) {
       if (submit) submit.disabled = false;
+      formMsg(form, failText(e)); // 沒有訊息行的表單（自創、閉關…）不受影響
     }
   });
 
   // ── 計時器：體力、氣血跟著時間走；別人推動的大勢也會進來 ──
   async function poll() {
     if (S.stage !== "game" || S.busy || document.hidden) return;
-    const typing = document.activeElement && ["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement.tagName);
+    const was = S.main;
     try {
       const mode = S.moveMode;
       const main = await api("/api/main");
-      if (mode !== S.moveMode || !setMain(main)) return; // 等回應的時候換了走法：這份是舊走法的選單，不用
+      if (mode !== S.moveMode) return; // 等回應的時候換了走法：這份是舊走法的選單，不用
+      // 等回應時玩家做了動作：S.main 已經換成動作回來的那一份（比這份新），這一輪作廢
+      if (S.stage !== "game" || S.busy || S.main !== was) return;
+      if (!setMain(main)) return;
       renderTop();
-      if (S.tab === "jianghu" && !typing) renderPage();
-    } catch (e) { /* 下一輪再試 */ }
+      if (!typing()) await refreshPage(was);
+    } catch (e) { /* api() 提示過；下一輪再試 */ }
+  }
+
+  // 輪詢拿到有變的 main 之後，照目前的分頁補上（QA L1）。江湖、見聞從 S.main 畫；修練、煉製、輿圖重抓自己那一份。
+  // 重抓回來時玩家若已經切了分頁、按了別的（那份資料已經換過）、正在忙或正在打字，就不動畫面，下一輪再說。
+  async function refreshPage(old) {
+    const tab = S.tab;
+    if (tab === "jianghu") return renderPage();
+    if (tab === "news") {
+      // 戰報子分頁畫的是 S.reports，不用重抓；其他子分頁只在它畫的那幾欄真的變了才重畫
+      const fields = { trends: ["trends"], rumors: ["rumors"], chronicle: ["chronicle"], journal: ["latest", "journal", "older"] }[S.news] || [];
+      if (fields.some((k) => old[k] !== S.main[k])) redrawPage();
+      return;
+    }
+    if (tab === "practice" || tab === "craft") {
+      const was = S.menxia;
+      if (!was) return; // 還在載入，goTab 會畫
+      const x = await api(`/api/menxia${S.person ? `?person=${encodeURIComponent(S.person)}` : ""}`);
+      if (S.tab !== tab || S.busy || S.menxia !== was || typing()) return;
+      S.menxia = x;
+      const trimmed = trimCraftSel();
+      if (S.artOpen && !x.arts.some((a) => a.id === S.artOpen)) S.artOpen = null; // 那一門已經不在庫裡
+      if (!S.craftSel.length) S.craftLine = ""; // 爐是空的：用伺服器剛給的那一行（心得是新的）
+      const changed = trimmed || JSON.stringify(x) !== JSON.stringify(was)
+        || (tab === "practice" && old.status.injury !== S.main.status.injury); // 療傷鈕看的是內傷
+      if (!changed) return;
+      redrawPage();
+      // 爐裡有東西：成本說明裡的心得、能不能開爐也跟著更新
+      if (S.craftSel.length && (trimmed || tab === "craft")) updateCraftLine();
+      return;
+    }
+    if (tab === "map") {
+      const was = S.map;
+      if (!was) return;
+      const q = new URLSearchParams({ layer: S.layer });
+      if (was.selected) q.set("place", was.selected);
+      const m = await api(`/api/map?${q}`);
+      if (S.tab !== tab || S.busy || S.map !== was || typing()) return;
+      S.map = m;
+      S.layer = m.layer;
+      if (JSON.stringify(m) !== JSON.stringify(was)) redrawPage();
+    }
+  }
+
+  // 重畫這一頁但保留玩家正在做的事（輪詢、閉關被拒時用）：填到一半的欄位（自創功法的名字、閉關時數）、
+  // 摺疊區的開合，以及輿圖捲到的位置（afterPage() 每次重畫都會把選取的地點置中，這裡再捲回原處）
+  function redrawPage() {
+    const page = document.getElementById("page");
+    if (!page) return;
+    const fields = [...page.querySelectorAll("form[id] input[name], form[id] select[name], form[id] textarea[name]")]
+      .map((el) => [el.form.id, el.name, el.value]);
+    const folds = [...page.querySelectorAll("details > summary")].map((s) => [s.textContent, s.parentElement.open]);
+    const wrap = page.querySelector(".map-wrap");
+    const scroll = wrap && [wrap.scrollLeft, wrap.scrollTop];
+    renderPage();
+    for (const [form, name, value] of fields) {
+      const el = page.querySelector(`#${CSS.escape(form)} [name="${CSS.escape(name)}"]`);
+      if (el) el.value = value;
+    }
+    for (const [text, open] of folds) {
+      const s = [...page.querySelectorAll("details > summary")].find((x) => x.textContent === text);
+      if (s) s.parentElement.open = open;
+    }
+    const now = page.querySelector(".map-wrap");
+    if (scroll && now) [now.scrollLeft, now.scrollTop] = scroll;
+  }
+
+  // 重抓素材之後，爐裡放的若已經不夠（別處用掉了）就拿掉多的那幾個；有拿掉回 true
+  function trimCraftSel() {
+    const left = Object.fromEntries((S.menxia?.materials || []).map((m) => [m.id, m.count]));
+    const keep = [];
+    for (const id of S.craftSel) {
+      if ((left[id] || 0) > 0) { left[id] -= 1; keep.push(id); }
+    }
+    const trimmed = keep.length !== S.craftSel.length;
+    S.craftSel = keep;
+    return trimmed;
   }
   setInterval(poll, POLL_MS);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) poll(); });
