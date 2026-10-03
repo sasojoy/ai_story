@@ -23,6 +23,8 @@ def _step_done(state: GameState, content: Content, step: TutorialStep, action: s
         return False
     if goal.locations and state.player.location not in goal.locations:
         return False
+    if goal.has_wugong and state.player.member.wugong_id is None:
+        return False
     return check_condition(goal.condition, state)
 
 

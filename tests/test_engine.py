@@ -320,6 +320,17 @@ def test_add_and_remove_from_team(game):
     assert game.team_members() == [("沈浪", "player"), ("韓鐵", "mate")]
 
 
+def test_you_yourself_are_never_added_to_or_removed_from_the_team(game):
+    """名冊第一列是本人（key "player"）：加入、移出都只回一句話，隊伍裡不會多出一個 "player"。"""
+    game.rng = FixedRandom(0.1)
+    game.choose("act:recruit")
+    for act in (game.add_to_team, game.remove_from_team):
+        msgs = act("player")
+        assert msgs == ["本人一直都在隊伍裡，不用加入，也不能移出。"]
+        assert game.state.player.team == ["mate"]
+        assert game.team_members() == [("沈浪", "player"), ("韓鐵", "mate")]
+
+
 def test_owned_companions_and_roster_lines(game):
     game.rng = FixedRandom(0.1)
     game.choose("act:recruit")
@@ -524,6 +535,51 @@ def test_practicing_with_nothing_learned_says_so_without_finishing_the_step(game
     """FB-007 原本的現場：畫面寫「你還沒學武學」，緊接著卻是「✔ 引導完成」。"""
     _practice_step_game(game, {})
     assert game.practice("武學") == ["你還沒學武學，沒東西可以練。"]
+
+
+def _wugong_step_game(game, worn: dict[str, int]):
+    """把引導換成「看地圖 → 身上要有一門武學（has_wugong）→ 出城」，跟正式內容的 t2_map → t4_practice 同一個
+    順序；身上先配好 worn（種類 → 熟練度），引導停在看地圖那一步。回傳 has_wugong 那一步的獎勵銀兩。"""
+    from tianxia.models import Effect, TutorialGoal, TutorialStep
+
+    for i, (kind, level) in enumerate(worn.items()):
+        game.create_skill(f"測試{kind}{i}", kind)
+        setattr(game.state.player.member, f"{'neigong' if kind == '內功' else 'wugong'}_level", level)
+    reward = 10
+    game.content.tutorial.steps = [
+        TutorialStep(id="t2_map", text="看地圖。", done_when=TutorialGoal(action="view_map")),
+        TutorialStep(
+            id="t4_practice", text="先修練。", done_when=TutorialGoal(has_wugong=True),
+            reward=Effect(stats={"silver": reward}),
+        ),
+        TutorialStep(id="t5_next", text="出城。", done_when=TutorialGoal(action="move")),
+    ]
+    game.state.player.tutorial_step = 0
+    return reward
+
+
+def test_a_maxed_wugong_finishes_the_practice_step_as_soon_as_it_comes_up(game):
+    """W6 Important 1：修練頁的鍛鍊鈕在第十成是灰的，所以走到這一步之前就練滿的人按不了「鍛鍊」。
+    這一步改成「身上有一門武學」：前一步一完成，同一次 note_action 就接著完成它。"""
+    reward = _wugong_step_game(game, {"武學": 10})
+    silver = game.state.player.stats["silver"]
+    msgs = game.view_map()
+    assert msgs.count("✔ 引導完成") == 2
+    assert game.state.player.tutorial_step == 2
+    assert game.state.player.stats["silver"] == silver + reward
+    assert msgs[-1] == f"【{game.content.tutorial.speaker}】出城。"
+
+
+def test_only_a_neigong_never_finishes_the_wugong_step_until_a_wugong_is_created(game):
+    """只有內功時：鍛鍊內功、看地圖、練空著的武學都不算；自創一門武學才算（W5 的規則在這裡有洞：練內功也算）。"""
+    _wugong_step_game(game, {"內功": 10})
+    game.view_map()
+    assert game.state.player.tutorial_step == 1
+    for act in (lambda: game.practice("內功"), lambda: game.practice("武學"), game.view_map):
+        assert "✔ 引導完成" not in act()
+        assert game.state.player.tutorial_step == 1
+    assert "✔ 引導完成" in game.create_skill("回風掌", "武學")
+    assert game.state.player.tutorial_step == 2
 
 
 def test_create_skill_rejects_a_taken_name(game):

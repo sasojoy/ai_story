@@ -31,7 +31,7 @@
       "id": "t4_practice",
       "text": "先按底下的「修練」開一門功夫：自創一門武學（取名就決定了屬性與威力），再鍛鍊幾成。沒有武學的人，出城遇上誰都只有挨打的份。",
       "done_when": {
-        "action": "practice"
+        "has_wugong": true
       },
       "reward": {
         "stats": {

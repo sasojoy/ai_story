@@ -390,11 +390,12 @@ class Milestone(_Strict):
 
 
 class TutorialGoal(_Strict):
-    """三項都要符合才算完成；空的欄位不檢查。"""
+    """每一項都要符合才算完成；空的（或 False 的）欄位不檢查。"""
 
     action: Literal["explore", "socialize", "move", "view_map", "recruit", "practice"] | None = None
     locations: list[str] = Field(default_factory=list)
     condition: Condition = Field(default_factory=Condition)
+    has_wugong: bool = False  # 身上要有一門武學才算（沒有武學威力是 0，出城只有挨打的份）
 
 
 class TutorialStep(_Strict):

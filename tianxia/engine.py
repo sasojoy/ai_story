@@ -22,7 +22,7 @@ from .models import BattleDef, Choice, Content, Effect, Event, Location, Squad, 
 from .ollama_client import OllamaClient
 from .rules import apply_effect, change_trend, check_who, current_day, roll_check
 from .sqlite_world import open_world
-from .state import GameState, JournalEntry, Journey, Rumor, WorldState, new_game_state
+from .state import PLAYER, GameState, JournalEntry, Journey, Rumor, WorldState, new_game_state
 from .world import advance_world_state, check_thresholds, end_season, fire_by_id, sim_tick, start_pending_battle
 from .world_state import WorldStateStore
 
@@ -1635,14 +1635,21 @@ class Game:
     def owned_companions(self) -> list[str]:
         return roster.owned_companions(self.world, self.state.player.name)
 
+    # 名冊第一列是本人（PLAYER）：本人永遠出戰，加入、移出都只回一句話，隊伍裡不會多出一個 "player"
+    SELF_IN_TEAM = "本人一直都在隊伍裡，不用加入，也不能移出。"
+
     def add_to_team(self, companion_id: str) -> list[str]:
         if self._preparing():
             return self._log(["（賽季籌備中，等待管理者開季。）"])
+        if companion_id == PLAYER:
+            return self._log([self.SELF_IN_TEAM])
         return self._log(team.add_to_team(self.state, companion_id))
 
     def remove_from_team(self, companion_id: str) -> list[str]:
         if self._preparing():
             return self._log(["（賽季籌備中，等待管理者開季。）"])
+        if companion_id == PLAYER:
+            return self._log([self.SELF_IN_TEAM])
         return self._log(team.remove_from_team(self.state, companion_id))
 
     # ── 門下頁面：武學說明 ──────────────────────────────────
