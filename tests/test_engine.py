@@ -1586,6 +1586,18 @@ def test_a_drill_is_journaled_as_a_drill_without_a_battle_card(content, game):
     assert game.state.battle_card is None
 
 
+def test_a_drill_is_not_followed_by_a_post_fight_event(content, game):
+    """操練不是打架，不該接「一番苦戰之後」這類戰後事件（試玩回饋 FB-001）。"""
+    _training_factions(content)
+    content.squads["thug"].faction = "huang"
+    content.config.train_event_chance = 1.0
+    game.state.player.faction = "huang"
+    game.choose("move:lake")
+    msgs = game.choose("act:train")
+    assert any("操軍擺陣" in m for m in msgs)
+    assert game.state.pending_event is None
+
+
 def _figure(content, fame=0):
     ch = content.characters["mate"]
     ch.deep_interaction = True
