@@ -5,7 +5,7 @@ import random
 
 from . import materials, roster, team  # 與 roster 互相 import：只能引入整個模組、呼叫時才取屬性，不能 from .roster import …
 from .models import Check, Condition, Content, Effect
-from .state import PLAYER, GameState, Rumor
+from .state import PLAYER, GameState, Rumor, RumorLayer
 from .world_state import JADE_SEAL_FRAGMENT_COUNT, WorldStateStore
 
 DAY = 86400
@@ -88,8 +88,21 @@ def check_who(check: Check, state: GameState, content: Content, world: WorldStat
     return "本人出手" if key == PLAYER else f"{team.member_name(state, content, key)}出手"
 
 
-def add_rumor(state: GameState, text: str, location: str | None = None) -> None:
-    state.world.rumors.append(Rumor(time=state.world.time, text=text, location=location))
+def add_rumor(
+    state: GameState, text: str, location: str | None = None, *, content: Content | None = None,
+    layer: RumorLayer = "world", named: bool = True,
+) -> None:
+    """記一則傳聞（傳聞分層設計第二節）。給了 content 與地點時，順便記下地點所在的大區。
+    第 1 期只先把資料記對；誰看得到哪一層，是傳聞分層的規則實作（線上架構第 2 期之後）。"""
+    from . import atlas  # atlas → world → rules：在函式裡 import，避免循環
+
+    region = None
+    if content is not None and location is not None and location in content.locations:
+        found = atlas.region_of(content, location)
+        region = found.id if found is not None else None
+    state.world.rumors.append(
+        Rumor(time=state.world.time, text=text, location=location, layer=layer, region=region, named=named)
+    )
 
 
 def add_chronicle(state: GameState, text: str) -> None:
@@ -185,7 +198,9 @@ def apply_effect(effect: Effect, state: GameState, content: Content, world: Worl
     name = display_name(state)
     if effect.rumor:
         text = effect.rumor.format(name=name)
-        add_rumor(state, text, state.player.location)  # 玩家觸發的傳聞記在當時所在地
+        add_rumor(  # 玩家觸發的傳聞記在當時所在地：地方傳聞的單獨事件，觸發者可以選匿名（傳聞分層設計第七節）
+            state, text, state.player.location, content=content, layer="local", named=not state.player.anonymous,
+        )
         msgs.append(f"【江湖傳聞】{text}")
     if effect.chronicle:
         add_chronicle(state, effect.chronicle.format(name=name))
