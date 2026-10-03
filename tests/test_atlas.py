@@ -1,8 +1,10 @@
+import pytest
+
 from tianxia.atlas import (
-    Route, detail_text, direction, foes, goal_places, haunters, is_known, known_locations, place_choices, recent_news,
-    region_of, region_trends, road_hops, routes, travel_button, worst_foe,
+    HOP_STAMINA, Route, detail_text, direction, foes, goal_places, haunters, is_known, known_locations, leg_minutes,
+    place_choices, recent_news, region_of, region_trends, road_hops, routes, travel_button, worst_foe,
 )
-from tianxia.models import Condition, Location, SimPlayer
+from tianxia.models import Condition, Connection, Location, SimPlayer
 from tianxia.state import Rumor
 
 DAY = 86400
@@ -12,10 +14,10 @@ def region(content, region_id):
     return next(r for r in content.map.regions if r.id == region_id)
 
 
-def add_hill(content, cost: int) -> None:
+def add_hill(content) -> None:
     """夾具只有一條線（小鎮—湖邊—寶洞）；加一座山丘，讓小鎮到寶洞多一條路。"""
     content.locations["hill"] = Location(
-        id="hill", name="山丘", description="小山丘。", connections=["town", "cave"], x=150, y=50, move_cost=cost
+        id="hill", name="山丘", description="小山丘。", connections=["town", "cave"], x=200, y=50
     )
     content.locations["town"].connections.append("hill")
     content.locations["cave"].connections.append("hill")
@@ -71,7 +73,7 @@ def test_road_hops_count_stops_over_open_roads(state, content):
     state.world.flags.add("cave_open")
     assert road_hops(state, content, 2) == {"town": 0, "lake": 1, "cave": 2}
     assert road_hops(state, content, 1) == {"town": 0, "lake": 1}
-    add_hill(content, 5)
+    add_hill(content)
     assert road_hops(state, content, 2) == {"town": 0, "lake": 1, "hill": 1, "cave": 2}
 
 
@@ -144,15 +146,32 @@ def test_worst_foe_is_the_one_with_the_worst_odds(content):
 # ── 路線 ──────────────────────────────────────────────
 
 
-def test_routes_take_the_cheapest_way(state, content):
-    add_hill(content, cost=9)
+def add_place(content, loc_id: str, links: list[str]) -> None:
+    content.locations[loc_id] = Location(
+        id=loc_id, name=loc_id, description="測試地點。", connections=list(links), x=150, y=50
+    )
+    for other in links:
+        content.locations[other].connections.append(loc_id)
+
+
+def test_leg_minutes_follow_distance_and_road(content):
+    per_unit = content.config.travel_minutes_per_unit  # 夾具 0.03：每站 100 單位
+    assert leg_minutes(content, "town", "lake") == pytest.approx(100 * 1.0 * per_unit)
+    assert leg_minutes(content, "lake", "cave") == pytest.approx(100 * 1.5 * per_unit)  # 山路
+    assert leg_minutes(content, "cave", "lake") == leg_minutes(content, "lake", "cave")
+    content.locations["town"].connections = [Connection("lake", "官道")]
+    assert leg_minutes(content, "town", "lake") == pytest.approx(100 * 0.8 * per_unit)
+
+
+def test_routes_count_every_stop_the_same(state, content):
+    """計時移動上線前，每一站都扣 HOP_STAMINA。"""
+    add_hill(content)
     state.world.flags.add("cave_open")
     found = routes(state, content)
     assert found["town"] == Route((), 0)
-    assert found["cave"] == Route(("lake", "cave"), 10)
-    assert found["cave"].via == ("lake",)
-    content.locations["lake"].move_cost = 12
-    assert routes(state, content)["cave"] == Route(("hill", "cave"), 14)
+    assert found["lake"] == Route(("lake",), HOP_STAMINA)
+    assert found["cave"] == Route(("hill", "cave"), 2 * HOP_STAMINA)  # 兩條路都兩站：比地點 id，hill 在 lake 前面
+    assert found["cave"].via == ("hill",)
 
 
 def test_routes_only_pass_known_and_open_places(state, content):
@@ -160,38 +179,22 @@ def test_routes_only_pass_known_and_open_places(state, content):
     content.config.vision_base = 0
     assert routes(state, content) == {"town": Route((), 0)}  # 湖邊沒摸清
     state.player.visited.add("lake")
-    assert routes(state, content)["lake"] == Route(("lake",), 5)
-    add_hill(content, cost=1)  # 更省，但山丘沒摸清
-    content.locations["lake"].move_cost = 12
+    assert routes(state, content)["lake"] == Route(("lake",), HOP_STAMINA)
+    add_hill(content)  # 山丘沒摸清：走不過去
     state.world.flags.add("cave_open")
     state.player.visited.add("cave")
-    assert routes(state, content)["cave"] == Route(("lake", "cave"), 17)
+    assert routes(state, content)["cave"] == Route(("lake", "cave"), 2 * HOP_STAMINA)
 
 
-def add_place(content, loc_id: str, cost: int, links: list[str]) -> None:
-    content.locations[loc_id] = Location(
-        id=loc_id, name=loc_id, description="測試地點。", connections=list(links), x=150, y=50, move_cost=cost
-    )
-    for other in links:
-        content.locations[other].connections.append(loc_id)
-
-
-def test_routes_break_ties_by_fewer_hops_then_by_id(state, content):
+def test_routes_break_ties_by_id(state, content):
+    """每一站同價，兩條路的花費與站數都一樣時比地點 id（Task 3 把整組路線測試換成依路程分鐘的版本）。"""
     state.world.flags.add("cave_open")
     content.config.vision_base = 3
-    content.locations["lake"].move_cost = 6
-    content.locations["cave"].move_cost = 5
-    add_place(content, "aa", cost=3, links=["town"])  # 另一條路：小鎮—aa—ab—寶洞，同樣 11 體力，但多一站
-    add_place(content, "ab", cost=3, links=["aa", "cave"])
-    found = routes(state, content)["cave"]
-    assert found == Route(("lake", "cave"), 11)  # 一樣省時站數少的贏，即使另一條路的地點 id 排在前面
-
-    content.locations["lake"].move_cost = 5
-    add_place(content, "hill", cost=5, links=["town", "cave"])  # 湖邊與山丘一樣 10 體力、一樣兩站
-    assert routes(state, content)["cave"] == Route(("hill", "cave"), 10)  # 再一樣時比地點 id：hill 在 lake 前面
+    add_place(content, "hill", links=["town", "cave"])  # 湖邊與山丘一樣兩站
+    assert routes(state, content)["cave"] == Route(("hill", "cave"), 2 * HOP_STAMINA)  # 一樣時比地點 id
     for loc in content.locations.values():
         loc.connections.reverse()
-    assert routes(state, content)["cave"] == Route(("hill", "cave"), 10)  # 和連線寫的順序無關
+    assert routes(state, content)["cave"] == Route(("hill", "cave"), 2 * HOP_STAMINA)  # 和連線寫的順序無關
 
 
 # ── 安排前往 ──────────────────────────────────────────

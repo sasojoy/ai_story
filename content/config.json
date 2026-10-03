@@ -1,6 +1,11 @@
 {
   "stamina_max": 150,
-  "stamina_regen_seconds": 300,
+  "stamina_regen_seconds": 180,
+  "rest_regen_multiplier": 2,
+  "travel_minutes_per_unit": 0.0375,
+  "road_factor": {"官道": 0.8, "路": 1.0, "山路": 1.5},
+  "hurry_stamina_per_minute": 1,
+  "dash_stamina_per_minute": 2,
   "action_cost": {"explore": 10, "train": 10, "socialize": 5},
   "ollama_model": "gemma4:26b",
   "ollama_think": false,

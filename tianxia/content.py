@@ -16,7 +16,7 @@ from pydantic import ValidationError
 from .companion_agent import DIALOGUE_TAGS
 from .materials import TIER_NAMES
 from .models import (
-    STATS, BattleDef, CharacterDef, Condition, Config, Content, CraftNames, Effect, Event, Location,
+    ROADS, STATS, BattleDef, CharacterDef, Condition, Config, Content, CraftNames, Effect, Event, Location,
     MapLayout, Material, Scenario, Sect, SimRumor, SkillDef, Squad, Tutorial,
 )
 
@@ -139,14 +139,23 @@ def validate(c: Content) -> None:
         need(action in cfg.action_cost, f"config.action_cost 缺少 {action}")
     for stat in STATS:
         need(stat in cfg.start_stats, f"config.start_stats 缺少 {stat}")
+    missing_roads = [road for road in ROADS if road not in cfg.road_factor]
+    need(not missing_roads, f"config.road_factor 缺少 {'、'.join(missing_roads)}")
+    need(all(factor > 0 for factor in cfg.road_factor.values()), "config.road_factor 的係數都要大於 0")
 
     for loc in c.locations.values():
         where = f"地點 {loc.id}"
+        need(len(set(loc.connections)) == len(loc.connections), f"{where}：connections 重複列了同一個地點")
         for dest in loc.connections:
             if dest not in c.locations:
                 errors.append(f"{where}：連到不存在的地點 {dest}")
             elif loc.id not in c.locations[dest].connections:
                 errors.append(f"地點 {loc.id} 連到 {dest}，但 {dest} 沒有連回來")
+            elif loc.road_to(dest) != c.locations[dest].road_to(loc.id) and loc.id < dest:
+                errors.append(
+                    f"地點 {loc.id} 到 {dest} 寫的是{loc.road_to(dest)}，{dest} 回來寫的是"
+                    f"{c.locations[dest].road_to(loc.id)}（一條路兩頭要寫同一種）"
+                )
         known(where, loc.enemies, c.squads, "敵方隊伍")
         known(where, loc.train_trend, trend_ids, "大勢線")
         known(where, loc.materials, c.materials, "素材")
@@ -307,6 +316,12 @@ def validate(c: Content) -> None:
         need(len(set(faction_ids)) == len(faction_ids), f"{where}：陣營 id 重複")
         if scenario_faction_ids:
             known(where, faction_ids, scenario_faction_ids, "陣營")
+        if battle.region is not None:
+            known(where, [battle.region], region_ids, "大區")
+        need(
+            battle.region is not None or not c.map.regions,
+            f"{where}：要寫 region（決戰所在的大區；人要在那裡才能加入）",
+        )
         act_ids = [a.id for a in battle.acts]
         need(len(set(act_ids)) == len(act_ids), f"{where}：幕 id 重複")
         for i, act in enumerate(battle.acts):

@@ -447,7 +447,7 @@ def test_cannot_seclude_while_busy_with_something_else(game):
 def test_stamina_regenerates_with_time(game):
     game.state.player.stamina = 0
     game.advance(600)
-    assert game.state.player.stamina == pytest.approx(2)
+    assert game.state.player.stamina == pytest.approx(600 / game.content.config.stamina_regen_seconds)
 
 
 def test_sync_uses_real_clock_and_time_scale(game):
@@ -456,7 +456,7 @@ def test_sync_uses_real_clock_and_time_scale(game):
     game.sync(1000.0)
     game.sync(1010.0)
     assert game.state.world.time == pytest.approx(600)
-    assert game.state.player.stamina == pytest.approx(2)
+    assert game.state.player.stamina == pytest.approx(600 / game.content.config.stamina_regen_seconds)
 
 
 def test_season_ends_by_time(game):

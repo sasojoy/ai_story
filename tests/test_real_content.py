@@ -16,6 +16,7 @@ from unittest import mock
 import pytest
 
 from tianxia import companion_agent, roster
+from tianxia.atlas import region_of
 from tianxia.bot import play_season
 from tianxia.content import load_content
 from tianxia.engine import Game
@@ -74,6 +75,20 @@ def test_real_content_loads():
 
 def test_real_content_waits_for_the_admin_to_open_the_season():
     assert load_content(CONTENT_DIR).config.auto_open_first_season is False
+
+
+def test_travel_settings_follow_the_map_design(content):
+    cfg = content.config
+    assert cfg.stamina_regen_seconds == 180 and cfg.rest_regen_multiplier == 2
+    assert cfg.road_factor == {"官道": 0.8, "路": 1.0, "山路": 1.5}
+    assert (cfg.hurry_stamina_per_minute, cfg.dash_stamina_per_minute) == (1, 2)
+    assert cfg.travel_minutes_per_unit > 0  # 跟著地圖座標走（第二步重畫地圖時 PM 會改），這裡不寫死
+
+
+def test_every_battle_is_fought_in_the_region_where_it_starts(content):
+    for th in content.scenario.thresholds:
+        if th.starts_battle and th.location:
+            assert content.battles[th.starts_battle].region == region_of(content, th.location).id, th.id
 
 
 def test_all_locations_reachable_from_start(content):

@@ -260,7 +260,6 @@
       "山林"
     ],
     "danger": 2,
-    "move_cost": 8,
     "enemies": [
       "yelang",
       "heixiong"
@@ -284,7 +283,6 @@
       "洞窟"
     ],
     "danger": 3,
-    "move_cost": 8,
     "unlock_flag": "xi_open",
     "materials": [
       "man_2",
@@ -379,7 +377,6 @@
       "營寨"
     ],
     "danger": 3,
-    "move_cost": 10,
     "enemies": [
       "shuikou",
       "toumu"

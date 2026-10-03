@@ -274,7 +274,7 @@ class Game:
             dest = c.locations[dest_id]
             if dest.unlock_flag and dest.unlock_flag not in s.world.flags:
                 continue
-            opts.append(self._cost_option(f"move:{dest_id}", f"前往 {dest.name}", dest.move_cost))
+            opts.append(self._cost_option(f"move:{dest_id}", f"前往 {dest.name}", atlas.HOP_STAMINA))
         if s.player.faction is None:
             for faction in c.scenario.factions:
                 if s.player.location in faction.join_at:
@@ -1053,7 +1053,7 @@ class Game:
     def _move(self, dest_id: str) -> list[str]:
         dest = self.content.locations[dest_id]
         is_revisit = dest_id in self.state.player.visited
-        self.state.player.stamina -= dest.move_cost
+        self.state.player.stamina -= atlas.HOP_STAMINA
         self.state.player.location = dest_id
         self.state.player.visited.add(dest_id)
         text = self.location_text()
@@ -1077,7 +1077,7 @@ class Game:
         try:
             msgs: list[str] = []
             for hop in route.path:
-                if s.world.ended or s.player.stamina < c.locations[hop].move_cost:
+                if s.world.ended or s.player.stamina < atlas.HOP_STAMINA:
                     break
                 msgs += self._move(hop)
                 msgs += note_action(s, c, self.world, "move")

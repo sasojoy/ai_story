@@ -3,5 +3,6 @@
   "ollama_url": "http://127.0.0.1:1",
   "ollama_timeout": 3,
   "auto_open_first_season": true,
-  "level_exp": 100
+  "level_exp": 100,
+  "travel_minutes_per_unit": 0.03
 }

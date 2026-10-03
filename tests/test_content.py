@@ -2,6 +2,7 @@ import json
 import shutil
 
 import pytest
+from pydantic import ValidationError
 
 from conftest import FIXTURE
 from tianxia.content import ContentError, load_content, validate
@@ -226,10 +227,86 @@ def test_unknown_sim_rumor_place_rejected(tmp_path):
         load_content(root)
 
 
-def test_negative_move_cost_rejected(tmp_path):
+def test_connections_may_name_the_kind_of_road(content):
+    lake = content.locations["lake"]
+    assert lake.connections == ["town", "cave"]  # 照樣能當地點 id 清單用
+    assert all(isinstance(c, str) for c in lake.connections)  # 讀路的種類要用 .road，不能拿 isinstance(c, str) 分辨
+    assert [(c.to, c.road) for c in lake.connections] == [("town", "路"), ("cave", "山路")]
+    assert lake.road_to("cave") == "山路" and lake.road_to("town") == "路"
+    assert content.locations["cave"].road_to("lake") == "山路"
+    assert lake.road_to("nowhere") == "路"
+
+
+def test_a_road_must_be_the_same_kind_at_both_ends(tmp_path):
     root = copy_fixture(tmp_path)
-    edit_json(root / "locations.json", lambda d: d[1].update(move_cost=-1))
+    edit_json(root / "locations.json", lambda d: d[2].update(connections=["lake"]))  # 寶洞那頭寫成一般路
+    with pytest.raises(ContentError, match="地點 cave 到 lake 寫的是路，lake 回來寫的是山路"):
+        load_content(root)
+
+
+def test_an_unknown_kind_of_road_is_rejected(tmp_path):
+    root = copy_fixture(tmp_path)
+    edit_json(root / "locations.json", lambda d: d[0].update(connections=[{"to": "lake", "road": "高速公路"}]))
+    with pytest.raises(ContentError, match="(?s)Location town.*road"):
+        load_content(root)
+
+
+def test_a_connection_object_needs_a_destination(tmp_path):
+    root = copy_fixture(tmp_path)
+    edit_json(root / "locations.json", lambda d: d[0].update(connections=[{"road": "官道"}]))
+    with pytest.raises(ContentError, match="(?s)Location town.*to"):
+        load_content(root)
+
+
+def test_the_same_place_cannot_be_listed_twice(tmp_path):
+    root = copy_fixture(tmp_path)
+    edit_json(root / "locations.json", lambda d: d[0].update(connections=["lake", {"to": "lake", "road": "路"}]))
+    with pytest.raises(ContentError, match="地點 town：connections 重複列了同一個地點"):
+        load_content(root)
+
+
+def test_move_cost_is_no_longer_a_location_field(tmp_path):
+    root = copy_fixture(tmp_path)
+    edit_json(root / "locations.json", lambda d: d[1].update(move_cost=5))
     with pytest.raises(ContentError, match="(?s)Location lake.*move_cost"):
+        load_content(root)
+
+
+def test_road_factor_must_cover_every_kind_of_road(tmp_path):
+    root = copy_fixture(tmp_path)
+    edit_json(root / "config.json", lambda d: d.update(road_factor={"官道": 0.8, "路": 1.0}))
+    with pytest.raises(ContentError, match="config.road_factor 缺少 山路"):
+        load_content(root)
+
+
+def test_road_factor_rejects_an_unknown_kind_of_road(tmp_path):
+    root = copy_fixture(tmp_path)
+    edit_json(root / "config.json", lambda d: d.update(road_factor={"官道": 0.8, "路": 1.0, "山路": 1.5, "小徑": 2}))
+    with pytest.raises(ValidationError, match="road_factor"):
+        load_content(root)
+
+
+def test_a_battle_names_its_region(tmp_path):
+    root = copy_fixture(tmp_path)
+    write_battles_json(root)
+    assert load_content(root).battles["b1"].region == "north"
+
+
+def test_a_battle_in_an_unknown_region_is_rejected(tmp_path):
+    root = copy_fixture(tmp_path)
+    battle = json.loads(json.dumps(MINIMAL_BATTLE))
+    battle["region"] = "mars"
+    write_battles_json(root, [battle])
+    with pytest.raises(ContentError, match="戰鬥 b1：未知的大區 mars"):
+        load_content(root)
+
+
+def test_a_battle_must_name_its_region_when_the_map_has_regions(tmp_path):
+    root = copy_fixture(tmp_path)
+    battle = json.loads(json.dumps(MINIMAL_BATTLE))
+    del battle["region"]
+    write_battles_json(root, [battle])
+    with pytest.raises(ContentError, match="戰鬥 b1：要寫 region"):
         load_content(root)
 
 
@@ -302,6 +379,7 @@ def test_roster_content_errors_name_the_culprit(tmp_path, filename, edit, messag
 
 MINIMAL_BATTLE = {
     "id": "b1", "name": "測試決戰",
+    "region": "north",
     "factions": [{"id": "a", "name": "甲方"}, {"id": "b", "name": "乙方"}],
     "acts": [
         {

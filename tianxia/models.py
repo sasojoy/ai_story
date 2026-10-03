@@ -1,9 +1,10 @@
 """內容資料模型：content/ 底下所有 JSON 設定的結構定義。"""
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, GetCoreSchemaHandler
+from pydantic_core import core_schema
 
 STATS = ("str", "agi", "con", "wis", "silver", "good", "evil", "fame", "xinde")
 ActionKind = Literal["explore", "train", "socialize"]
@@ -130,21 +131,86 @@ class Event(_Strict):
     choices: list[Choice] = Field(min_length=1)
 
 
+RoadKind = Literal["官道", "路", "山路"]
+ROADS: tuple[RoadKind, ...] = ("官道", "路", "山路")  # 路的種類（地圖擴充設計 3.1）；沒標的是一般的「路」
+
+
+class _ConnectionSpec(_Strict):
+    """內容檔裡寫成物件的一條路：{"to": 地點 id, "road": 路的種類}。"""
+
+    to: str
+    road: RoadKind = "路"
+
+
+class Connection(str):
+    """一條路（Location.connections 的一筆）：字串本身就是目的地的地點 id，另外帶路的種類 road。
+
+    做成 str 的子類別，是為了讓既有把 connections 當成地點 id 清單用的程式（大地圖、視野、假人、
+    內容檢查）一行都不用改；要路的種類讀 .road，要純字串的地點 id 讀 .to。內容檔裡寫成字串（一般路）
+    或 {"to": 地點 id, "road": "官道"|"路"|"山路"}（地圖擴充設計 3.1），寫回去也是同一個樣子。
+    注意：不支援產生 JSON schema（Location.model_json_schema() 會報錯）；目前沒有任何地方用到。"""
+
+    road: RoadKind
+
+    def __new__(cls, to: str, road: RoadKind = "路") -> Connection:
+        obj = super().__new__(cls, to)
+        obj.road = road
+        return obj
+
+    @property
+    def to(self) -> str:
+        return str(self)
+
+    def __repr__(self) -> str:
+        return f"Connection({self.to!r}, {self.road!r})"
+
+    def __reduce__(self):
+        return (type(self), (self.to, self.road))
+
+    @classmethod
+    def _parse(cls, value: Any) -> Connection:
+        if isinstance(value, Connection):
+            return value
+        if isinstance(value, str):
+            return cls(value)
+        if isinstance(value, dict):
+            spec = _ConnectionSpec(**value)  # 欄位拼錯、路的種類寫錯時這裡就報錯
+            return cls(spec.to, spec.road)
+        raise ValueError('連線要寫成地點 id，或 {"to": 地點 id, "road": 路的種類}')
+
+    @staticmethod
+    def _dump(value: str) -> str | dict[str, str]:
+        road = getattr(value, "road", "路")  # 程式或測試直接塞進清單的一般字串也當一般路
+        return str(value) if road == "路" else {"to": str(value), "road": road}
+
+    @classmethod
+    def __get_pydantic_core_schema__(cls, source: Any, handler: GetCoreSchemaHandler) -> core_schema.CoreSchema:
+        return core_schema.no_info_plain_validator_function(
+            cls._parse, serialization=core_schema.plain_serializer_function_ser_schema(cls._dump),
+        )
+
+
 class Location(_Strict):
     id: str
     name: str
     description: str
-    connections: list[str]
+    connections: list[Connection]  # 相鄰的地點，每一筆是一條路（見 Connection）
     x: int
     y: int
     tags: list[str] = Field(default_factory=list)
     danger: int = Field(default=1, ge=1, le=3)
-    move_cost: int = Field(default=5, ge=0)
     important: bool = False
     enemies: list[str] = Field(default_factory=list)
     train_trend: dict[str, int] = Field(default_factory=dict)  # 歷練打贏／操練推大勢的量；正負是散人的方向，有陣營目標的人照自己的目標推（Game._train_push）
     materials: list[str] = Field(default_factory=list)  # 在這裡探索可能撿到的素材；留空則給隨機的一階素材
     unlock_flag: str | None = None  # 設定後，需該世界旗標成立才能前往
+
+    def road_to(self, dest: str) -> RoadKind:
+        """到相鄰地點 dest 的路的種類；清單裡是一般字串（測試直接塞的）或沒連到 dest 時當一般路。"""
+        for conn in self.connections:
+            if conn == dest:
+                return getattr(conn, "road", "路")
+        return "路"
 
 
 class SkillDef(_Strict):
@@ -372,7 +438,15 @@ class Scenario(_Strict):
 
 class Config(_Strict):
     stamina_max: int = 150
-    stamina_regen_seconds: float = 300
+    stamina_regen_seconds: float = 180  # 自然回復：每幾秒（遊戲時間）回 1 點體力（地圖擴充設計第二節：每 3 分鐘 1 點）
+    rest_regen_multiplier: float = Field(default=2, ge=1)  # 打坐中體力回復是平常的幾倍
+    # 地圖座標 1 單位＝步行幾分鐘：現有 22 個地點的 21 條路平均 79.34 單位，一站約 3 分鐘（0.0375 × 79.34 ≈ 2.98）
+    travel_minutes_per_unit: float = Field(default=0.0375, gt=0)
+    road_factor: dict[RoadKind, float] = Field(
+        default_factory=lambda: {"官道": 0.8, "路": 1.0, "山路": 1.5}
+    )  # 路程＝距離 × 路的種類係數 × travel_minutes_per_unit（地圖擴充設計 3.1）
+    hurry_stamina_per_minute: float = Field(default=1, ge=0)  # 趕路：每分鐘路程扣幾點體力（時間減半）
+    dash_stamina_per_minute: float = Field(default=2, ge=0)  # 疾行：每分鐘路程扣幾點體力（立刻到）
     ollama_url: str = "http://localhost:11434"  # companion_agent.py 深度對話用；連不上時那輪對話取消
     ollama_model: str = "qwen2.5:14b"
     ollama_timeout: int = 120
@@ -545,6 +619,8 @@ class BattleDef(_Strict):
 
     id: str
     name: str
+    region: str | None = None  # 決戰所在的大區（MapRegion.id）：人要在這個大區、不在路上才能加入（地圖擴充設計第六節）；
+    # None＝不限地點，只有測試用的戰鬥這樣寫——地圖有大區時內容檢查要求一定要寫
     factions: list[BattleFaction] = Field(min_length=2)
     trend_name: str = "戰局"
     trend_start: int = 50

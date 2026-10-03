@@ -27,6 +27,7 @@ ODDS_ORDER = ("穩勝", "有把握", "五五波", "難分勝負", "凶險", "必
 ARROWS = ("→", "↘", "↓", "↙", "←", "↖", "↑", "↗")  # 從正東起順時針，每 45 度一個（畫面座標 y 向下）
 UNKNOWN = "尚未摸清"
 Odds = Callable[[str], str]  # 敵方隊伍 id → 勝算（Game.odds）
+HOP_STAMINA = 5  # 每走一站扣的體力：拿掉各地點的 move_cost 之後、計時移動上線之前，先統一用原本的預設值
 
 
 # ── 視野 ──────────────────────────────────────────────
@@ -234,10 +235,18 @@ def worst_foe(content: Content, loc: Location, odds: Odds) -> tuple[str, str] | 
 # ── 路線與安排前往 ────────────────────────────────────
 
 
+def leg_minutes(content: Content, a: str, b: str) -> float:
+    """相鄰兩地 a、b 之間的路程（步行幾分鐘）：地圖上的距離 × 路的種類係數 × 換算比例（地圖擴充設計 3.1）。"""
+    cfg = content.config
+    start, end = content.locations[a], content.locations[b]
+    distance = math.hypot(start.x - end.x, start.y - end.y)
+    return distance * cfg.road_factor[start.road_to(b)] * cfg.travel_minutes_per_unit
+
+
 @dataclass(frozen=True)
 class Route:
     path: tuple[str, ...]  # 依序要走的地點，最後一個是目的地（不含所在地）；所在地本身是空的
-    cost: int  # 每一站 move_cost 的加總
+    cost: int  # 每一站 HOP_STAMINA 的加總
 
     @property
     def via(self) -> tuple[str, ...]:
@@ -258,8 +267,7 @@ def routes(state: GameState, content: Content) -> dict[str, Route]:
         best[here] = Route(path, cost)
         for dest in content.locations[here].connections:
             if dest in allowed and dest not in best:
-                step = content.locations[dest].move_cost
-                heapq.heappush(heap, (cost + step, hops + 1, path + (dest,), dest))
+                heapq.heappush(heap, (cost + HOP_STAMINA, hops + 1, path + (dest,), dest))
     return best
 
 
@@ -282,9 +290,8 @@ def travel_button(state: GameState, content: Content, loc_id: str) -> tuple[str,
     reason = travel_block(state)
     if reason:
         return reason, False
-    first = content.locations[route.path[0]].move_cost
-    if state.player.stamina < first:
-        return f"體力不足，第一站要 {first} 體力", False
+    if state.player.stamina < HOP_STAMINA:
+        return f"體力不足，第一站要 {HOP_STAMINA} 體力", False
     return f"安排前往（約 {route.cost} 體力）", True
 
 
