@@ -150,3 +150,10 @@ def test_the_prompt_frames_the_figure_as_late_han_not_the_three_kingdoms(content
     assert "漢末真實歷史人物" in prompt
     assert "貼合漢末時代語境" in prompt
     assert "三國時代" not in prompt
+
+
+def test_the_prompt_asks_for_a_short_reply(content, state, world):
+    """企劃者 2026-10-03：每輪控制在兩三句，縮短等待（gemma4:26b 每輪原本約 11 秒）。"""
+    prompt = companion_agent.build_system_prompt(content.characters["mate"], state, content, world, "mate")
+    assert "兩三句" in prompt and "80~150 字" in prompt
+    assert "100~200 字" not in prompt

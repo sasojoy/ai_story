@@ -324,3 +324,11 @@ def test_every_figure_has_an_audience_threshold(content):
     figures = {cid: ch.audience_fame for cid, ch in content.characters.items() if ch.deep_interaction}
     assert len(figures) == 15 and all(fame > 0 for fame in figures.values())
     assert figures["liubei"] < figures["caocao"] < figures["yuanshao"] < figures["luzhi"] < figures["huangfusong"] < figures["zhangjiao"]
+
+
+def test_figure_dialogue_runs_on_gemma4_without_thinking_or_repetition_penalties(content):
+    """2026-10-03 實測：gemma4:26b 內容最好；重複懲罰會讓它夾英文、關掉思考才不會每輪多等。"""
+    cfg = content.config
+    assert cfg.ollama_model == "gemma4:26b"
+    assert cfg.ollama_think is False
+    assert cfg.ollama_repeat_penalty == 1.0 and cfg.ollama_presence_penalty == 0.0 and cfg.ollama_frequency_penalty == 0.0

@@ -376,6 +376,13 @@ class Config(_Strict):
     ollama_url: str = "http://localhost:11434"  # companion_agent.py 深度對話用；連不上時那輪對話取消
     ollama_model: str = "qwen2.5:14b"
     ollama_timeout: int = 120
+    # 2026-10-03 實測（gemma4:26b）：有思考模式的模型要關掉思考，不然每輪多等好幾秒；None 表示不送這個欄位
+    ollama_think: bool | None = None
+    ollama_keep_alive: str = "30m"  # 模型閒置多久後卸載；大模型重新載入要十幾秒
+    # 重複懲罰：太重時模型會改用英文字避開已經用過的中文字（gemma4 實測），換模型時一起調
+    ollama_repeat_penalty: float = 1.18
+    ollama_presence_penalty: float = 0.3
+    ollama_frequency_penalty: float = 0.3
     action_cost: dict[str, int] = Field(
         default_factory=lambda: {"explore": 10, "train": 10, "socialize": 5}
     )

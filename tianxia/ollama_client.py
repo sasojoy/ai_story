@@ -111,12 +111,18 @@ def _ensure_required_present(data: dict, response_model: type, required: list[st
 class OllamaClient:
     def __init__(
         self, base_url: str = "http://localhost:11434", model: str = "qwen2.5:14b",
-        timeout: int = 120, context_length: int = 8192,
+        timeout: int = 120, context_length: int = 8192, think: bool | None = None, keep_alive: str = "30m",
+        repeat_penalty: float = 1.18, presence_penalty: float = 0.3, frequency_penalty: float = 0.3,
     ):
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.timeout = timeout
         self.context_length = context_length
+        self.think = think  # None：不送 think 欄位（沒有思考模式的模型）
+        self.keep_alive = keep_alive
+        self.repeat_penalty = repeat_penalty
+        self.presence_penalty = presence_penalty
+        self.frequency_penalty = frequency_penalty
 
     def check_health(self) -> bool:
         try:
@@ -134,18 +140,20 @@ class OllamaClient:
             "model": self.model,
             "messages": messages,
             "stream": False,
-            "keep_alive": "30m",
+            "keep_alive": self.keep_alive,
             "options": {
                 "temperature": temperature,
-                "repeat_penalty": 1.18,
+                "repeat_penalty": self.repeat_penalty,
                 "repeat_last_n": self.context_length,
                 "top_p": 0.9,
-                "presence_penalty": 0.3,
-                "frequency_penalty": 0.3,
+                "presence_penalty": self.presence_penalty,
+                "frequency_penalty": self.frequency_penalty,
                 "num_predict": num_predict,
                 "num_ctx": self.context_length,
             },
         }
+        if self.think is not None:
+            payload["think"] = self.think
         if json_schema is not None:
             payload["format"] = json_schema
         return payload

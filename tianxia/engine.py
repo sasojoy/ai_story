@@ -47,8 +47,11 @@ class Game:
         self.state = state
         self.rng = rng or random.Random()
         self.world = world or WorldStateStore()
+        cfg = content.config
         self.client = OllamaClient(
-            base_url=content.config.ollama_url, model=content.config.ollama_model, timeout=content.config.ollama_timeout,
+            base_url=cfg.ollama_url, model=cfg.ollama_model, timeout=cfg.ollama_timeout, think=cfg.ollama_think,
+            keep_alive=cfg.ollama_keep_alive, repeat_penalty=cfg.ollama_repeat_penalty,
+            presence_penalty=cfg.ollama_presence_penalty, frequency_penalty=cfg.ollama_frequency_penalty,
         )  # companion_agent.py 用；連不上時那輪對話取消，這裡不用先健檢
         self._draft: Draft | None = None  # choose() 進行中那次行動的江湖紀錄草稿
         self._drop_stale_references()
