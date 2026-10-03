@@ -5,7 +5,7 @@ from tianxia.models import Config
 from tianxia import server_bots
 from tianxia.server_bots import (
     DAY, GIVEN, SURNAMES, TZ_OFFSET, act_chance, active, attends_battle, is_online, make_name, make_skill_name,
-    pick_personality, schedule, strength,
+    pick_personality, reserved_names, schedule, strength,
 )
 from tianxia.state import BotProfile
 
@@ -17,6 +17,14 @@ def _bot(personality="普通", seed=7, faction="guan", season_number=1):
 def _at(minute_of_day: int, day: int = 20000) -> float:
     """台灣時間第 day 天的第 minute_of_day 分鐘，換成現實時間戳。"""
     return day * DAY + minute_of_day * 60 - TZ_OFFSET
+
+
+def test_reserved_names_cover_famous_people_figures_in_the_content_and_admins(content):
+    content.config.admins = ["掌門"]
+    reserved = reserved_names(content)
+    assert "曹操" in reserved and "張角" in reserved  # 三國名人
+    assert all(ch.name in reserved for ch in content.characters.values())  # 遊戲裡的人物，跟著內容走
+    assert "掌門" in reserved
 
 
 def test_names_look_like_han_names_and_avoid_taken_ones():

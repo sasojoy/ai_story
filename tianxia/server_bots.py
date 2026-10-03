@@ -9,7 +9,7 @@ from __future__ import annotations
 import random
 from dataclasses import dataclass
 
-from .models import Config
+from .models import Config, Content
 from .state import BotProfile, Personality
 
 DAY = 86400
@@ -63,6 +63,11 @@ PERSONALITY_WEIGHTS: dict[Personality, int] = {"積極": 20, "普通": 50, "懶�
 
 def pick_personality(rng: random.Random) -> Personality:
     return rng.choices(list(PERSONALITY_WEIGHTS), weights=list(PERSONALITY_WEIGHTS.values()), k=1)[0]
+
+
+def reserved_names(content: Content) -> frozenset[str]:
+    """不能拿來當名號的名字（真人與假人共用，FB-004）：三國名人、遊戲內容裡的人物（跟著內容走）、管理者的名號。"""
+    return FAMOUS_NAMES | {ch.name for ch in content.characters.values()} | frozenset(content.config.admins)
 
 
 def make_name(rng: random.Random, taken: set[str]) -> str:

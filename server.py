@@ -32,7 +32,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from markdown_it import MarkdownIt
 
-from tianxia import companion_agent, materials
+from tianxia import companion_agent, materials, server_bots
 from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, AccountStore, normalize
 from tianxia.content import load_content
 from tianxia.characters import open_characters
@@ -109,10 +109,11 @@ def game_for(name: str) -> Game:
 
 
 def name_taken(name: str) -> bool:
-    """名號有人用：已經有存檔（真人或假人一樣）、綁在某個帳號上，或是管理者的名號。
-    假人與真人回同一句話，就沒辦法用名號試出誰是假人（帳號密碼登入設計第三節）。"""
-    admins = {a.casefold() for a in CONTENT.config.admins}
-    return open_characters().exists(name) or account_store().owner_of(name) is not None or name.casefold() in admins
+    """名號不能用：已經有角色（真人或假人一樣）、綁在某個帳號上，或是保留的名號（三國名人、遊戲裡的人物、
+    管理者，見 server_bots.reserved_names，FB-004）。全部回同一句話，就沒辦法用名號試出誰是假人、名單裡有誰
+    （帳號密碼登入設計第三節）。"""
+    reserved = {n.casefold() for n in server_bots.reserved_names(CONTENT)}
+    return open_characters().exists(name) or account_store().owner_of(name) is not None or name.casefold() in reserved
 
 
 def _reload(game: Game) -> None:

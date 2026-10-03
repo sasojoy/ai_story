@@ -174,8 +174,7 @@ class BotRunner:
             game = Game(self.content, self.rng.choice(retired), self.rng, self.world)
         else:
             # 名號不能撞到任何一個角色，包括讀不出來（損毀、舊格式）的存檔——不然新假人會把它蓋掉
-            taken = self.characters.names()
-            taken |= {ch.name for ch in self.content.characters.values()} | set(self.content.config.admins)
+            taken = self.characters.names() | server_bots.reserved_names(self.content)
             name = server_bots.make_name(self.rng, taken)
             game = Game.new(self.content, name, rng=self.rng, world=self.world)
             game.state.player.bot = BotProfile(

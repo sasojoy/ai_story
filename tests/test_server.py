@@ -399,6 +399,15 @@ def test_a_bot_name_a_player_name_and_an_admin_name_are_refused_with_the_same_wo
     assert server.account_store().get("second").character is None
 
 
+def test_famous_people_and_figures_in_the_content_are_refused_with_the_same_words(client):
+    """FB-004：真人不能取名人或遊戲人物的名號；訊息跟名號被用掉時一字不差，不透露是哪一份名單。"""
+    figure = next(iter(server.CONTENT.characters.values())).name
+    client.post("/api/register", json={"login": "first", "password": "secret-pw", "again": "secret-pw"})
+    for name in ("曹操", figure):
+        assert client.post("/api/character", json={"name": name}).json() == {"error": "這個名號已有人使用。"}
+    assert server.account_store().get("first").character is None
+
+
 def test_names_with_invisible_characters_or_too_long_are_refused(client):
     client.post("/api/register", json={"login": "shen_01", "password": "secret-pw", "again": "secret-pw"})
     for bad in ("Ray​al", "‮Rayal", "名" * 17):
