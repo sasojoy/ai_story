@@ -196,17 +196,21 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 
 /* ── 江湖頁 ── */
-/* 「剛剛」（A4）：收著時只露出開頭三行左右、底下淡出，右下角「展開全文」；展開後整則攤開，不在卡片裡捲。
-   放得下的（.fits）沒有淡出也沒有按鈕（app.js 的 pageJianghu、afterPage） */
-.now { position: relative; margin-bottom: 12px; border-radius: var(--radius); }
-.now .tx-now { border-radius: var(--radius); background: var(--card); padding: 10px 14px; }
-.now.clamp .tx-now { max-height: 9.4em; overflow: hidden; }
-.now.clamp::after {
-  content: ""; position: absolute; left: 1px; right: 1px; bottom: 1px; height: 3em; pointer-events: none;
-  border-radius: 0 0 var(--radius) var(--radius); background: linear-gradient(transparent, var(--card) 70%);
+/* 「剛剛」（A4）：收著時敘事只露出開頭三行左右、最後一行淡出，右下角「展開全文」；展開後整則攤開，不在卡片裡捲。
+   數值變化（.tx-chgs）被 app.js 搬到敘事外面（.now-text 之後），收著也看得到。卡片的框與底色畫在 .now 上，
+   裡面的 .tx-now 不再自己畫一層。放得下的（.fits）沒有淡出也沒有按鈕（app.js 的 pageJianghu、afterPage） */
+.now {
+  margin-bottom: 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--card);
+  padding: 10px 14px; line-height: 1.6; animation: tx-now-rise 0.28s ease-out;
+}
+.now .tx-now { border: 0; border-radius: 0; background: none; padding: 0; animation: none; }
+.now-text { position: relative; }
+.now.clamp .tx-now {
+  max-height: 8em; overflow: hidden;
+  -webkit-mask-image: linear-gradient(#000 calc(100% - 1.6em), transparent); mask-image: linear-gradient(#000 calc(100% - 1.6em), transparent);
 }
 .now-more { display: block; margin: 0 0 0 auto; }
-.now.clamp .now-more { position: absolute; right: 12px; bottom: 1px; z-index: 1; }
+.now.clamp .now-more { position: absolute; right: 0; bottom: -6px; padding-left: 1.6em; background: linear-gradient(90deg, transparent, var(--card) 1.4em); }
 .now.fits .now-more { display: none; }
 .battle-card { border-color: var(--accent); }
 .scene { font-size: 15.5px; line-height: 1.75; }
@@ -264,9 +268,10 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .map-wrap.fit svg { width: 100% !important; height: auto !important; }
 .map-wrap [data-loc] { cursor: pointer; }
 /* 地點的點擊區（E2／E3）：mapview 替每個地點畫了一個透明的圓（r=16）接點擊，這裡再加透明的粗外框：
-   原尺寸時直徑約 44px；整張縮小時外框更粗（r=35，最近的兩個地點相距 70，不會互相蓋住），手機上約 27px */
+   原尺寸時 r=22（直徑約 44px）；整張縮小時外框更粗，r=34——40 個地點裡最近的兩個（嵩山深處與南華觀）相距 68.6，
+   r=34 剛好不會互相蓋住；手機上縮成約 0.39 倍，直徑約 27px */
 .map-wrap [data-loc] > circle[fill-opacity="0"] { stroke: transparent; stroke-width: 12px; pointer-events: all; }
-.map-wrap.fit [data-loc] > circle[fill-opacity="0"] { stroke-width: 38px; }
+.map-wrap.fit [data-loc] > circle[fill-opacity="0"] { stroke-width: 36px; }
 .map-tools { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
 .map-tools select { flex: 1; }
 
@@ -296,7 +301,8 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .ad-row > .ad-tag { flex: none; align-self: center; font-size: 13px; color: var(--ink-2); }
 .ad-row > .btn { flex: none; }
 .btn.warn { color: var(--bad); border-color: var(--bad); font-weight: 600; }
-.btn.danger { background: var(--bad); border-color: var(--bad); color: #fff; font-weight: 600; }
+/* 確認鈕固定用深一點的朱紅：深色模式的 --bad（#e06a5c）配白字只有 3.3:1，這個顏色兩種模式都是 5.9:1 */
+.btn.danger { background: #b23a2b; border-color: #b23a2b; color: #fff; font-weight: 600; }
 /* 管理者動作的確認框：疊在設定抽屜上面的小抽屜（app.js 的 ask） */
 .ask-layer { position: fixed; inset: 0; z-index: 45; }
 .ask-bg { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.35); animation: fade 0.2s; }

@@ -26,7 +26,6 @@
   ];
   const POLL_MS = 10000;
   const KINDS = ["武學", "內功"];
-  const MAX_LEVEL = 10; // 功法最多練到第十成（跟 tianxia/team.py 的 MAX_LEVEL 同一個數）
   // 江湖頁「前往」的走法（跟 atlas.MODES 同一份）。選的走法只放在 S.moveMode：不寫進 localStorage、cookie，
   // 重新整理頁面就回到步行；每個請求都帶著它（見 api()），伺服器照它排選單上的「前往」
   const MOVE_MODES = [
@@ -34,6 +33,8 @@
     { id: "hurry", name: "趕路" },
     { id: "dash", name: "疾行" },
   ];
+  // 手機寬度（輿圖預設照原尺寸，見 S.fitMap）；轉向、拉視窗跨過這條線時重新決定（見檔尾的 change 監聽）
+  const PHONE = window.matchMedia ? window.matchMedia("(max-width: 767px)") : null;
 
   const S = {
     stage: "boot",
@@ -54,8 +55,9 @@
     map: null,
     layer: "situation",
     // 輿圖整張縮到螢幕寬（E2／FB-012）：手機上縮了地名只剩 5～6px、地點點不到，所以窄螢幕預設照原尺寸、
-    // 捲到選取的地點（afterPage()），寬螢幕才整張；「放大／縮小」照舊可以切
-    fitMap: !(window.matchMedia && window.matchMedia("(max-width: 767px)").matches),
+    // 捲到選取的地點（afterPage()），寬螢幕才整張；「放大／縮小」照舊可以切，按過之後就照玩家選的（fitChosen）
+    fitMap: !(PHONE && PHONE.matches),
+    fitChosen: false,
     news: "reports",
     reports: null,
     reportOpen: false,
@@ -219,7 +221,7 @@
     if (S.tab === "jianghu") {
       // 「剛剛」收著卻其實放得下：拿掉底下的淡出與「展開全文」（A4）
       const now = document.querySelector(".now.clamp");
-      const body = now && now.firstElementChild;
+      const body = now && now.querySelector(".tx-now");
       if (body && body.scrollHeight <= body.clientHeight + 1) now.classList.replace("clamp", "fits");
     }
     if (S.tab === "map") {
@@ -271,15 +273,26 @@
   // ── 江湖 ──
   const nowMore = (open) => (open ? "收起 ▴" : "展開全文 ▾");
 
+  // 「剛剛」那一則拆成敘事與數值變化（氣血 -96、黃巾聲勢 -2…，journal.card_html 放在 .tx-now 最後）：
+  // 收合只收敘事，數值變化排在收合範圍外面，收著也看得到（W6 review Minor 2）
+  function splitChips(html) {
+    const t = document.createElement("template");
+    t.innerHTML = html;
+    const chips = t.content.querySelector(".tx-now > .tx-chgs");
+    if (chips) chips.remove();
+    return [t.innerHTML, chips ? chips.outerHTML : ""];
+  }
+
   function pageJianghu() {
     const m = S.main;
     // 「剛剛」（A4）：預設只露出開頭幾行，太長的（例如新角色的開場故事）收著、點「展開全文」看完，不在卡片裡捲。
     // 展開記在 S.nowOpen（記的是那一則本身），換成新的一則就自動收回；其實放得下的話 afterPage() 會拿掉收合
     const expanded = S.nowOpen === m.latest;
+    const [text, chips] = !m.card && m.latest ? splitChips(m.latest) : ["", ""];
     const now = m.card
       ? `<div class="card battle-card">${m.card}${m.latest || ""}
            ${m.card_id != null ? `<button class="linkish" data-act="report" data-id="${m.card_id}">看完整戰報 ›</button>` : ""}</div>`
-      : m.latest ? `<div class="now ${expanded ? "open" : "clamp"}">${m.latest}<button class="linkish now-more" data-act="now-more" aria-expanded="${expanded}">${nowMore(expanded)}</button></div>` : "";
+      : m.latest ? `<div class="now ${expanded ? "open" : "clamp"}"><div class="now-text">${text}<button class="linkish now-more" data-act="now-more" aria-expanded="${expanded}">${nowMore(expanded)}</button></div>${chips}</div>` : "";
     const free = m.free_text != null
       ? `<form class="free" id="free-form"><input class="input" name="text" maxlength="20" placeholder="${esc(m.free_text || "輸入你想做的事（20字內）")}"><button class="btn primary small" type="submit">送出</button></form>`
       : "";
@@ -312,9 +325,9 @@
     const s = S.main.status;
     // 身上的功法卡（FB-006）：目前切到的那一門放前面
     const slots = x.slot_cards.filter((c) => c.kind === S.kind).concat(x.slot_cards.filter((c) => c.kind !== S.kind));
-    // 目前這一門有沒有功法、練到第幾成：沒有就不能鍛鍊（C5），有了就不能再自創（C4）
-    const cur = x.slot_cards.find((c) => c.kind === S.kind) || { learned: false, level: 0 };
-    const train = !cur.learned ? `還沒有${esc(S.kind)}` : cur.level >= MAX_LEVEL ? "已練到第十成" : "";
+    // 目前這一門有沒有功法、練滿了沒（伺服器照 team.MAX_LEVEL 說）：沒有或練滿就不能鍛鍊（C5），有了就不能再自創（C4）
+    const cur = x.slot_cards.find((c) => c.kind === S.kind) || { learned: false, level: 0, maxed: false };
+    const train = !cur.learned ? `還沒有${esc(S.kind)}` : cur.maxed ? "已練到第十成" : "";
     // 名冊只有本人一列（還沒有同伴）時跟上面的本人卡重複，不畫（C6）
     const mates = x.roster.length > 1;
     return `
@@ -353,7 +366,8 @@
       <details class="fold" open><summary>本人</summary><div class="fold-body">${x.player_card}</div></details>
       ${mates ? `<div class="list">${x.roster.map((r) => `<button class="${x.person === r.key ? "on" : ""}" data-act="person" data-key="${esc(r.key)}">${esc(r.label)}</button>`).join("")}</div>` : ""}
       ${mates && x.person ? `<div class="card">${x.person_card}
-        <button class="btn ${x.on_team ? "" : "primary"}" data-act="mx" data-op="${x.on_team ? "leave" : "join"}">${x.on_team ? "移出隊伍" : "加入隊伍"}</button></div>` : ""}`;
+        ${x.person === "player" ? '<p class="muted">本人一直都在隊伍裡。</p>' // 本人不能加入、移出（引擎也會擋）
+          : `<button class="btn ${x.on_team ? "" : "primary"}" data-act="mx" data-op="${x.on_team ? "leave" : "join"}">${x.on_team ? "移出隊伍" : "加入隊伍"}</button>`}</div>` : ""}`;
   }
 
   // ── 煉製 ──
@@ -486,7 +500,8 @@
     const amount = `${body.amount >= 0 ? "+" : ""}${body.amount}`;
     return {
       open_season: ["開季：賽季從籌備中正式開始，全服玩家都能行動了，確定？", "確定開季"],
-      next_season: ["開啟下一季：同伴全部重獲自由、自創武學名字釋出、煉製配方清空，確定？", "確定開啟下一季"],
+      // 照 SqliteWorldStore.next_season 實際做的事寫（只在休季有效）
+      next_season: ["開啟下一季（休季才有效）：新的一季立刻開始，同伴全部重獲自由、自創武學名字釋出、煉製配方清空、天機 +1，沒打完的決戰清掉，確定？", "確定開啟下一季"],
       fast_forward: [`時間快轉 ${body.hours} 小時（全服一起），確定？`, `快轉 ${body.hours} 小時`],
       start_battle: [`立刻開戰「${picked("ad-battle")}」：全服一起進入集結，確定？`, "確定開戰"],
       fire: [`觸發「${picked("ad-fire")}」：效果跟自然發生一樣，全服都受影響，確定？`, "確定觸發"],
@@ -715,6 +730,8 @@
           break;
         }
         case "ask-yes": {
+          // 上一個動作（例如等模型回話的對話）還沒回來：送了也會被 busy() 丟掉，所以先講一聲、確認框留著再按一次
+          if (S.busy) { toast("正在處理上一個動作，請稍候再按一次。"); break; }
           const go = askGo;
           closeAsk();
           if (go) await go();
@@ -744,7 +761,7 @@
         case "craft-kind": S.craftKind = el.dataset.kind; renderPage(); updateCraftLine(); break;
         case "forge": await forge(); break;
         case "layer": S.layer = el.dataset.layer; await loadMap(S.map?.selected); break;
-        case "fit": S.fitMap = !S.fitMap; renderPage(); break;
+        case "fit": S.fitMap = !S.fitMap; S.fitChosen = true; renderPage(); break;
         case "travel": await travel(el.dataset.mode); break;
         case "news":
           S.news = el.dataset.news;
@@ -848,14 +865,22 @@
         const target = (data.target || "").trim();
         if (!target) { formMsg(form, "先填要重設的帳號或名號。"); return; }
         ask(`重設 ${target} 的密碼，確定？`, "確定重設", async () => {
-          formMsg(form, "");
+          // 結果寫進「那時候」畫面上的表單：問的期間抽屜可能被重畫過（例如前一個動作剛回來），按下時抓到的那個已經不在了；
+          // 抽屜整個關了就改用提示泡泡講
+          const say = (text, ok = false) => {
+            const now = document.getElementById("reset-form");
+            if (now) formMsg(now, text, ok);
+            else if (text) toast(text);
+            return now;
+          };
+          say("");
           try {
             const r = await api("/api/admin/reset_password", data);
             const ok = /^已重設 .+ 的密碼。$/.test(r.message || "");
-            formMsg(form, r.message, ok);
-            if (ok) form.reset();
+            const now = say(r.message, ok);
+            if (ok && now) now.reset();
           } catch (e) {
-            formMsg(form, failText(e));
+            say(failText(e));
           }
         });
       }
@@ -968,6 +993,18 @@
   }
   setInterval(poll, POLL_MS);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) poll(); });
+
+  // 視窗寬度跨過手機的分界（例如橫著打開、再轉直）：玩家還沒自己按過「放大／縮小」，就照新的寬度重新決定整張或原尺寸
+  function phoneChanged() {
+    if (S.fitChosen || S.fitMap === !PHONE.matches) return;
+    S.fitMap = !PHONE.matches;
+    if (S.stage === "game" && S.tab === "map") renderPage(); // 改成原尺寸時 afterPage() 會捲到選取的地點
+  }
+  if (PHONE) {
+    if (PHONE.addEventListener) PHONE.addEventListener("change", phoneChanged);
+    else if (PHONE.addListener) PHONE.addListener(phoneChanged); // 舊版 Safari
+    window.addEventListener("resize", phoneChanged); // 有些瀏覽器（含開發工具的裝置模擬）換寬度時不發 change；寬度沒跨線就什麼都不做
+  }
 
   api("/api/me").then(enter).catch(() => { S.stage = "gate"; render(); });
 })();

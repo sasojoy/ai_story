@@ -577,14 +577,17 @@ def test_the_slot_cards_say_whether_each_slot_holds_an_art_and_its_level(client,
     monkeypatch.setattr(server.CONTENT.config, "practice_injury_chance", 0.0)
 
     def slots(cards):
-        return [(c["kind"], c["learned"], c["level"]) for c in cards]
+        return [(c["kind"], c["learned"], c["level"], c["maxed"]) for c in cards]
 
     _player(client)
-    assert slots(client.get("/api/menxia").json()["slot_cards"]) == [("武學", False, 0), ("內功", False, 0)]
+    assert slots(client.get("/api/menxia").json()["slot_cards"]) == [("武學", False, 0, False), ("內功", False, 0, False)]
     client.post("/api/menxia/create", json={"kind": "武學", "name": "流雲手"})
     out = client.post("/api/menxia/practice", json={"kind": "武學"}).json()
-    assert slots(out["menxia"]["slot_cards"]) == [("武學", True, 2), ("內功", False, 0)]
-    assert slots(client.get("/api/menxia").json()["slot_cards"]) == [("武學", True, 2), ("內功", False, 0)]
+    assert slots(out["menxia"]["slot_cards"]) == [("武學", True, 2, False), ("內功", False, 0, False)]
+    assert slots(client.get("/api/menxia").json()["slot_cards"]) == [("武學", True, 2, False), ("內功", False, 0, False)]
+    for _ in range(8):  # 練到第十成：練滿了沒由伺服器照 team.MAX_LEVEL 說，前端不另外記上限
+        out = client.post("/api/menxia/practice", json={"kind": "武學"}).json()
+    assert slots(out["menxia"]["slot_cards"]) == [("武學", True, 10, True), ("內功", False, 0, False)]
 
 
 def _a_player_with_library_arts(client, *arts):
