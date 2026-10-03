@@ -2229,6 +2229,30 @@ def test_training_with_your_own_factions_squad_is_a_drill(content, game):
     assert game.state.world.trends["kou"] == 31
 
 
+def test_training_among_your_own_side_is_labelled_a_drill_not_a_fight(content, game):
+    """自己陣營的地盤（只會操練）不寫勝算「必敗」，寫明是操練（試玩回饋 FB-008）。"""
+    _training_factions(content)
+    content.squads["thug"].faction = "huang"
+    game.state.player.faction = "huang"  # 沒學武功：照勝算算是必敗，但操練不會輸
+    walk_to(game, "lake")
+    option = next(o for o in game.options() if o.id == "act:train")
+    assert (option.label, option.enabled) == ("操練（體力 10・零風險）", True)
+    game.state.player.faction = "guan"  # 換成對頭：照樣是要打的歷練，寫對手與勝算
+    option = next(o for o in game.options() if o.id == "act:train")
+    assert option.label.startswith("歷練（體力 10・水寇小隊・")
+
+
+def test_where_some_squads_are_your_own_the_odds_are_for_the_others(content, game):
+    """自己人與外人都有的地方：勝算只看真的會打的那幾路，另外說明也可能是操練。"""
+    _training_factions(content)
+    content.squads["boss"].faction = "huang"  # 翻江龍（難度 200）是自己人：不能拿它算勝算
+    content.locations["lake"].enemies = ["thug", "boss"]
+    game.state.player.faction = "huang"
+    walk_to(game, "lake")
+    label = next(o for o in game.options() if o.id == "act:train").label
+    assert label == f"歷練（體力 10・水寇小隊・{game.odds('thug')}・或與自己人操練）"
+
+
 def test_train_trend_push_previews_the_push_for_your_faction(content, game):
     _training_factions(content)
     game.state.player.faction = "huang"
