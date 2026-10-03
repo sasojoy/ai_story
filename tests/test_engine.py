@@ -2891,6 +2891,15 @@ def test_gathering_can_come_up_empty(game):
     assert game.state.player.materials == {} and not _task(game, "gather").enabled
 
 
+def test_gathering_without_any_tier_one_material_finds_nothing(content, game):
+    """內容裡沒有一階素材時，採集當成沒找到，不會出錯，也不算今天的收穫。"""
+    content.materials = {k: m for k, m in content.materials.items() if m.tier != 1}
+    game.choose("move:lake")
+    game.rng = FixedRandom(0.1)
+    assert game.choose("road:gather") == ["你在路邊翻找了一陣，沒找到什麼能用的。"]
+    assert game.state.player.road_rewards_today.get("task") is None
+
+
 def test_the_road_scene_lists_the_road_tasks(game):
     game.choose("move:lake")
     assert "邊走邊想、沿途打聽、留意地形、路邊採集" in game.scene_text()
@@ -2923,7 +2932,7 @@ def test_thinking_on_the_road_pays_only_the_first_few_times_a_game_day(content, 
     assert p.road_rewards_today == {"task": [1, 2]}
     game.choose("move:lake")  # 同一天的第三段路
     think = _task(game, "think")
-    assert (think.label, think.enabled) == ("邊走邊想（心得 +3・今天沒有收穫了）", True)
+    assert (think.label, think.enabled) == ("邊走邊想（今天沒有收穫了）", True)
     xinde = p.stats["xinde"]
     assert game.choose("road:think") == ["你邊走邊想，今天想得夠多了，沒有新的心得。"]
     assert p.stats["xinde"] == xinde and p.road_rewards_today == {"task": [1, 2]}
@@ -2962,7 +2971,7 @@ def test_thinking_and_gathering_share_the_days_road_rewards(content, game):
     game.choose("move:lake")
     game.choose("road:think")
     gather = _task(game, "gather")
-    assert (gather.label, gather.enabled) == ("路邊採集（有機會撿到素材・今天沒有收穫了）", True)
+    assert (gather.label, gather.enabled) == ("路邊採集（今天沒有收穫了）", True)
     game.rng = FixedRandom(0.1)  # 沒到上限的話這一擲撿得到
     assert game.choose("road:gather") == ["你留心路邊，今天已經撿夠了，沒再去翻。"]
     assert p.materials == {} and p.road_rewards_today == {"task": [1, 1]}

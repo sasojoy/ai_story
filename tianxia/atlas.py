@@ -1,7 +1,7 @@
 """江湖輿圖的資料（純資料與文字，不依賴介面框架）：視野、大區歸屬、路程最短的路線與三種走法的時間、體力、
 大地圖四個圖層要標的東西、地點詳情與「安排前往」的條件。畫圖在 mapview.py。
 
-沒摸清（看不見也沒去過）的地點在每個圖層都只畫輪廓與「？」，詳情只寫「尚未摸清」；未開放的地點照舊完全不畫。
+沒摸清（看不見、沒去過、也沒在路上留意地形摸清）的地點在每個圖層都只畫輪廓與「？」，詳情只寫「尚未摸清」；未開放的地點照舊完全不畫。
 勝算只在呼叫端傳入 odds 函式時才算（敵情層與詳情欄），平常重畫不模擬。
 """
 from __future__ import annotations
@@ -82,12 +82,12 @@ def views(state: GameState, content: Content) -> dict[str, str]:
 
 
 def known_locations(state: GameState, content: Content) -> set[str]:
-    """摸清的地點：看得見或去過，而且已開放。"""
+    """摸清的地點：看得見、去過或在路上留意地形摸清（PlayerState.surveyed），而且已開放。"""
     return {loc_id for loc_id, view in views(state, content).items() if view in KNOWN}
 
 
 def is_known(state: GameState, content: Content, loc_id: str) -> bool:
-    """這個地點摸清了嗎（看得見或去過，而且已開放）。沒摸清的地點不能洩漏敵人、勝算、路線或名字：
+    """這個地點摸清了嗎（看得見、去過或留意地形摸清，而且已開放）。沒摸清的地點不能洩漏敵人、勝算、路線或名字：
     下面局勢、劇情、敵情的資料函式本身不檢查，呼叫端（圖層、詳情欄）要先用這個把關。"""
     return location_view(loc_id, state, content, visible_locations(state, content)) in KNOWN
 

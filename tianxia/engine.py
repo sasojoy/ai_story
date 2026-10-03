@@ -415,7 +415,7 @@ class Game:
 
     def _road_task_options(self, j: Journey) -> list[Option]:
         """路上小事（路上設計第四節）：步行、趕路時四樣各一顆，不花體力；這一段路做過的灰掉、寫「這段路已經……」。
-        疾行一站一站立刻抵達，沒有。今天的收穫拿滿了（每天上限）的邊走邊想、路邊採集照樣按得下去，補一句「今天沒有收穫了」。"""
+        疾行一站一站立刻抵達，沒有。今天的收穫拿滿了（每天上限）的邊走邊想、路邊採集照樣按得下去，補充改寫「今天沒有收穫了」。"""
         if j.mode == "dash":
             return []
         hints = {
@@ -426,7 +426,7 @@ class Game:
         }
         if not self._road_reward_due("task"):
             for what in ROAD_REWARD_TASKS:
-                hints[what] += "・今天沒有收穫了"
+                hints[what] = "今天沒有收穫了"  # 不留「心得 +3」：拿滿了就沒有
         done = self.state.player.leg_actions
         return [
             Option(id=f"road:{what}", label=f"{name}（這段路已經{did}）", enabled=False) if what in done
@@ -1612,6 +1612,8 @@ class Game:
             return ["你在路邊翻找了一陣，沒找到什麼能用的。"]
         kinds = {c.materials[m].attribute for end in self._road_ends() for m in c.locations[end].materials if m in c.materials}
         pool = [m for m in materials.by_tier(c, 1) if m.attribute in kinds] or materials.by_tier(c, 1)
+        if not pool:  # 內容裡沒有一階素材：當成沒找到
+            return ["你在路邊翻找了一陣，沒找到什麼能用的。"]
         self._count_road_reward("task")
         return ["你在路邊翻找了一陣。", materials.grant(s, c, self.rng.choice(pool).id)]
 
