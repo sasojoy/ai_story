@@ -182,7 +182,7 @@ details.sub:not([open]) > summary .name::after { content: " ▸"; }
 <div class="wrap">
   <header>
     <h1>天下大勢・三國篇 遊戲架構</h1>
-    <p class="meta">資料截至 2026-10-03・分支 main（9b3c19e）・1306 個自動測試全部通過</p>
+    <p class="meta">資料截至 2026-10-03・分支 main（d906e33）・1306 個自動測試全部通過</p>
     <div class="legend" id="legend" aria-label="依狀態篩選"></div>
     <div class="defs">
       <span><b style="color:var(--done)">已完成</b>：做好了，現在就能玩</span>
@@ -511,7 +511,7 @@ const TREE = [
       { name: "補人的速度（現在每陣營每小時 1 人）", s: "talk", note: "新的一季開頭很空" } ] },
     { name: "現行：兩支程式共用存檔，跨程式行動鎖", s: "done", note: "可以試玩，撐不住三千人" },
     { name: "伺服器預設只讓這台電腦連，加 --lan 才開放區網", s: "done", note: "地圖擴充開發發現新網頁原本開給整個區網，10/3 照「伺服器只綁本機」的規矩改回來；--share 照常走 Cloudflare，不受影響" },
-    { name: "試玩對外連結改用 Cloudflare 臨時網址", s: "dev", note: "新網頁的 --share 會開 trycloudflare 網址取代 gradio.live。QA 本機實測：沒裝 cloudflared 時伺服器照開、只是沒有公開網址（FB-011）。你裝好之後，換版時由地圖擴充開發試開一次" },
+    { name: "試玩對外連結改用 Cloudflare 臨時網址", s: "dev", note: "新網頁的 --share 會開 trycloudflare 網址取代 gradio.live。QA 本機實測：沒裝 cloudflared 時伺服器照開、只是沒有公開網址（FB-011）。你 10/3 要讓 joy 從外面連進來玩：QA 寫好了主機端操作（feedback/beta-主機端操作.md）與給朋友的連線說明；等你裝好 cloudflared，QA 實測重開後網址會不會失效、AI 慢的請求會不會被 Cloudflare 的約 100 秒逾時切掉" },
     { name: "線上架構（② 設計你已同意）", s: "dev", c: [
       { name: "第 1 期引擎改造：時間由外部傳入、全服狀態與帳號改存 SQLite、江湖史跨季保存", s: "done", note: "9 個任務與整條分支總審查都完成（1141 個測試）：角色存檔不夾帶賽季、帳號兩張表、每個動作先重讀角色、決戰結果不再被舊賽季蓋掉。第一次 beta 換上" },
       { name: "第 1 期換上試玩伺服器時不搬舊存檔，從零開始", s: "dev", note: "你在 10/3 定的；管理者的角色改由設密碼的腳本直接建立" },
