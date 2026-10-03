@@ -423,7 +423,7 @@ def render_map(
     prefixes, notes, fills = _layer_marks(state, content, layer, views, odds)
     legend_top = m.height - 50
     out = [
-        # max-width:100% 是必要的：少了它，這個 div 會被裡面 680px 的 SVG 撐開、整塊溢出版面，
+        # max-width:100% 是必要的：少了它，這個 div 會被裡面整張地圖寬的 SVG 撐開、整塊溢出版面，
         # 於是 overflow:auto 永遠不會啟動——畫面上就是「地圖超出邊界、卡住看不了」（手機實測）。
         '<div class="tx-world-map" style="overflow:auto;max-width:100%;max-height:75vh">'
         f'<svg viewBox="0 0 {m.width} {m.height}" xmlns="http://www.w3.org/2000/svg" '

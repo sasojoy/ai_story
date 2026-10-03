@@ -442,7 +442,7 @@ class Config(_Strict):
     stamina_max: int = 150
     stamina_regen_seconds: float = 180  # 自然回復：每幾秒（遊戲時間）回 1 點體力（地圖擴充設計第二節：每 3 分鐘 1 點）
     rest_regen_multiplier: float = Field(default=2, ge=1)  # 打坐中體力回復是平常的幾倍
-    # 地圖座標 1 單位＝步行幾分鐘：現有 22 個地點的 21 條路平均 79.34 單位，一站約 3 分鐘（0.0375 × 79.34 ≈ 2.98）
+    # 地圖座標 1 單位＝步行幾分鐘：現行內容（40 個地點的地圖）取 0.04，也就是 25 個單位約 1 分鐘；這裡的預設值只是沒寫時的退路
     travel_minutes_per_unit: float = Field(default=0.0375, gt=0)
     road_factor: dict[RoadKind, float] = Field(
         default_factory=lambda: {"官道": 0.8, "路": 1.0, "山路": 1.5}

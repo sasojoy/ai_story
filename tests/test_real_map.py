@@ -9,6 +9,7 @@ import pytest
 
 from tianxia.atlas import leg_minutes, region_of, shortest_routes
 from tianxia.content import load_content
+from tianxia.events import event_matches_location
 from tianxia.state import new_game_state
 
 CONTENT_DIR = Path(__file__).parent.parent / "content"
@@ -191,3 +192,26 @@ def test_each_faction_joins_at_three_places(content):
 
 def test_meeting_yuanshao_happens_where_he_now_stands(content):
     assert content.events["meet_yuanshao"].locations == ["dajiangjun_fu"]
+
+
+APPROVED_TAG_MATCHED_EVENTS = {  # 新地點靠 tags 撞上沒寫 locations 的舊事件，一律要先在這裡核准
+    "beggar", "herb", "tavern_brawl", "teahouse", "train_insight", "train_onlooker", "waterfall", "wolves",
+    "yingchuan_rule",
+}
+
+
+def test_old_tag_matched_events_on_the_new_places_are_approved(content):
+    """事件靠 tags 找地點（沒 tags 也沒 locations 就到處都有），地點只要 id 在 locations 裡也算數，兩者是「或」。
+    地圖重排時新地點的 tags 可能撞上舊事件（例如 山林 的玉璽挖寶、水路／渡口 的封鎖），那些劇情是為特定地方寫的。
+    能被任何行動（探索／歷練／交遊）抽到、而且不是靠 locations 點名到新地點的事件，集合必須剛好等於核准名單
+    （只加 locations 沒拿掉 tags 的事件仍會靠 tags 撞進來，這裡一樣抓得到）。"""
+    matched = {
+        e.id
+        for e in content.events.values()
+        if e.actions
+        and any(
+            loc_id not in e.locations and event_matches_location(e, content.locations[loc_id])
+            for loc_id in NEW_LOCATIONS
+        )
+    }
+    assert matched == APPROVED_TAG_MATCHED_EVENTS
