@@ -89,8 +89,8 @@ ul { padding-left: 1.3em; margin: 0.4em 0; }
 .who-name .more-ico { flex: none; font: 400 11px var(--sans); color: var(--ink-2); }
 .where { font-size: 12px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .where small { font-size: 10.5px; }
-/* 在路上那一句比較長，手機上可以折成兩行，不要把抵達時間省略掉 */
-.where.journey { white-space: normal; font-size: 11px; line-height: 1.45; }
+/* 狀態列底下的小字行：閉關剩幾小時、在路上那一句（比較長，手機上可以折成兩行，不要把抵達時間省略掉） */
+.where.sub { white-space: normal; font-size: 11px; line-height: 1.45; }
 .icon-btn {
   flex: none; width: 40px; height: 40px; border-radius: 12px; border: 1px solid var(--line);
   background: var(--card); display: grid; place-items: center; cursor: pointer; font-size: 18px;
@@ -192,6 +192,7 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 
 .msg { border-left: 3px solid var(--accent); background: var(--accent-soft); border-radius: 8px; padding: 8px 12px; margin-bottom: 12px; font-size: 14px; animation: rise 0.25s ease-out; }
 .msg:empty { display: none; }
+.msg.still { animation: none; } /* 輪詢重畫時訊息沒變，不重播浮現（app.js 的 redrawPage） */
 @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 
 /* ── 江湖頁 ── */

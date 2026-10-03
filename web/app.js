@@ -81,8 +81,10 @@
     el.textContent = text || "";
     el.classList.toggle("ok", ok);
   }
-  // 請求的錯誤寫成玩家看得懂的一句：伺服器回的原因照登（api() 丟的），連不上（fetch 自己丟的 TypeError）另外講
-  const failText = (e) => (e instanceof TypeError ? "連不上伺服器，請稍後再試。" : (e && e.message) || "出了點問題，請再試一次。");
+  // 請求的錯誤寫成玩家看得懂的一句：連不上（api() 已經標成離線）另外講；api() 自己丟的 Error 帶著伺服器的原因，照登；
+  // 其他錯誤（程式出錯，例如 TypeError）不要說成網路問題，也不要把英文的錯誤訊息丟給玩家
+  const failText = (e) => (S.offline ? "連不上伺服器，請稍後再試。"
+    : e && e.constructor === Error && e.message ? e.message : "出了點問題，請再試一次。");
 
   let toastTimer = 0;
   function toast(text) {
@@ -179,10 +181,11 @@
     const team = s.team.map((m) => `🧍 ${esc(m.name)} 第${m.level}級 氣血 ${m.hp}/${m.hp_max}`).join("　");
     return `
       <div class="top-row">
-        <div class="who" data-act="toggle-more" role="button" aria-expanded="${S.showMore}">
+        <div class="who" data-act="toggle-more" role="button" tabindex="0" aria-expanded="${S.showMore}">
           <div class="who-name"><span>${esc(s.name)}<small>${esc(s.affiliation)}${s.anonymous ? "・匿名" : ""}・第${s.level}級</small></span><i class="more-ico" aria-hidden="true">${S.showMore ? "▴" : "▾"}</i></div>
-          <div class="where">📍 ${esc(s.location)}　第 ${s.day} 天 ${esc(s.clock)}<small>／共 ${dayCount(s.season_days)} 天</small>${s.resting != null ? "　🧘 打坐中" : ""}${s.busy_hours != null ? `　🧘 閉關中，約 ${s.busy_hours} 小時後出關` : ""}</div>
-          ${s.journey != null ? `<div class="where journey">🐎 ${esc(s.journey)}</div>` : ""}
+          <div class="where">📍 ${esc(s.location)}　第 ${s.day} 天 ${esc(s.clock)}<small>／共 ${dayCount(s.season_days)} 天</small>${s.resting != null ? "　🧘 打坐中" : ""}</div>
+          ${s.busy_hours != null ? `<div class="where sub">🧘 閉關中，約 ${s.busy_hours} 小時後出關</div>` : ""}
+          ${s.journey != null ? `<div class="where sub">🐎 ${esc(s.journey)}</div>` : ""}
         </div>
         <button class="icon-btn" data-act="sheet" aria-label="設定">⚙</button>
       </div>
@@ -541,9 +544,14 @@
     });
   }
 
+  // 放素材、換種類與輪詢都會問成本說明，回應可能晚到：只用最後一次請求的回應，而且爐子要還是問的那一爐
+  let craftLineSeq = 0;
   async function updateCraftLine() {
+    const seq = ++craftLineSeq;
+    const pot = JSON.stringify([S.craftSel, S.craftKind]);
     try {
       const r = await api("/api/craft_line", { materials: S.craftSel, kind: S.craftKind });
+      if (seq !== craftLineSeq || pot !== JSON.stringify([S.craftSel, S.craftKind])) return;
       S.craftLine = r.line;
       const el = document.getElementById("craft-line");
       if (el) el.innerHTML = r.line;
@@ -603,7 +611,7 @@
         case "tab": await goTab(el.dataset.tab); break;
         case "choose": await choose(el, el.dataset.id); break;
         case "move-mode": await setMoveMode(el.dataset.mode); break;
-        case "toggle-more": S.showMore = !S.showMore; renderTop(); break;
+        case "toggle-more": toggleMore(); break;
         case "sheet":
           S.sheet = true;
           render();
@@ -669,6 +677,19 @@
     if (ev.target.id === "anon") await doMain("anonymous", { value: ev.target.checked });
   });
 
+  // 狀態列點名號展開／收起更多數值（S1）。鍵盤也按得到（Enter、空白鍵）；狀態列整塊重畫，所以按完把焦點放回去
+  function toggleMore(keyboard = false) {
+    S.showMore = !S.showMore;
+    renderTop();
+    if (keyboard) document.querySelector(".who")?.focus();
+  }
+  document.addEventListener("keydown", (ev) => {
+    if ((ev.key === "Enter" || ev.key === " ") && ev.target instanceof Element && ev.target.matches('.who[data-act="toggle-more"]')) {
+      ev.preventDefault();
+      toggleMore(true);
+    }
+  });
+
   document.addEventListener("submit", async (ev) => {
     ev.preventDefault();
     const form = ev.target;
@@ -690,21 +711,36 @@
         await mx("create", { name: data.name });
       } else if (form.id === "seclude") {
         // 閉關（QA L9）：真的進了閉關（busy_hours 有值）才回江湖頁。引擎不讓閉關（在路上、打坐、事件進行中）
-        // 也是 200 加一句原因，那就留在修練頁、原因寫在頁面上方；請求本身失敗也留在這頁（api() 提示過）
+        // 也是 200 加一句原因，請求本身失敗也一樣：留在修練頁、原因寫在頁面上方。
+        // 等回應時玩家換到別的分頁（#mx-msg 煉製頁也有），原因就只用提示泡泡講，不寫到別頁上
+        const tab = S.tab;
         await busy(async () => {
-          const r = await api("/api/do/seclude", { hours: Number(data.hours) });
+          let r;
+          try {
+            r = await api("/api/do/seclude", { hours: Number(data.hours) });
+          } catch (e) {
+            if (S.stage === "game" && S.tab === tab) {
+              S.message = esc(failText(e));
+              const el = document.getElementById("mx-msg");
+              if (el) { el.innerHTML = S.message; el.classList.remove("still"); } // 新的一句，照常浮現
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }
+            return;
+          }
+          const text = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
           if (r.main.status.busy_hours != null) {
             S.tab = "jianghu";
             applyMain(r.main);
             window.scrollTo(0, 0);
-            const text = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
             if (text) toast(text);
-          } else {
+          } else if (S.tab === tab) {
             S.message = r.message || "";
             setMain(r.main);
             renderTop();
             redrawPage(); // 選好的時數、填到一半的功法名字照舊，改好原因再按一次就行
             window.scrollTo({ top: 0, behavior: "smooth" });
+          } else if (text) {
+            toast(text); // S.main 不動，換過去的那一頁交給下一輪輪詢照它自己的方式補上
           }
         });
       } else if (form.id === "pw-form") {
@@ -749,22 +785,23 @@
     if (tab === "news") {
       // 戰報子分頁畫的是 S.reports，不用重抓；其他子分頁只在它畫的那幾欄真的變了才重畫
       const fields = { trends: ["trends"], rumors: ["rumors"], chronicle: ["chronicle"], journal: ["latest", "journal", "older"] }[S.news] || [];
-      if (fields.some((k) => old[k] !== S.main[k])) redrawPage();
+      if (fields.some((k) => old[k] !== S.main[k])) redrawPage(true);
       return;
     }
     if (tab === "practice" || tab === "craft") {
       const was = S.menxia;
       if (!was) return; // 還在載入，goTab 會畫
       const x = await api(`/api/menxia${S.person ? `?person=${encodeURIComponent(S.person)}` : ""}`);
-      if (S.tab !== tab || S.busy || S.menxia !== was || typing()) return;
+      if (S.stage !== "game" || S.tab !== tab || S.busy || S.menxia !== was || typing()) return;
       S.menxia = x;
       const trimmed = trimCraftSel();
       if (S.artOpen && !x.arts.some((a) => a.id === S.artOpen)) S.artOpen = null; // 那一門已經不在庫裡
       if (!S.craftSel.length) S.craftLine = ""; // 爐是空的：用伺服器剛給的那一行（心得是新的）
-      const changed = trimmed || JSON.stringify(x) !== JSON.stringify(was)
+      const shown = (m) => JSON.stringify(MENXIA_SHOWN[tab].map((k) => m[k]));
+      const changed = trimmed || shown(x) !== shown(was)
         || (tab === "practice" && old.status.injury !== S.main.status.injury); // 療傷鈕看的是內傷
       if (!changed) return;
-      redrawPage();
+      redrawPage(true);
       // 爐裡有東西：成本說明裡的心得、能不能開爐也跟著更新
       if (S.craftSel.length && (trimmed || tab === "craft")) updateCraftLine();
       return;
@@ -775,16 +812,24 @@
       const q = new URLSearchParams({ layer: S.layer });
       if (was.selected) q.set("place", was.selected);
       const m = await api(`/api/map?${q}`);
-      if (S.tab !== tab || S.busy || S.map !== was || typing()) return;
+      if (S.stage !== "game" || S.tab !== tab || S.busy || S.map !== was || typing()) return;
       S.map = m;
       S.layer = m.layer;
-      if (JSON.stringify(m) !== JSON.stringify(was)) redrawPage();
+      if (JSON.stringify(m) !== JSON.stringify(was)) redrawPage(true);
     }
   }
 
+  // 修練、煉製兩頁各自畫了 menxia 的哪幾欄（照 pagePractice／pageCraft）：輪詢只在這幾欄變了才重畫。
+  // 不比整份，是因為本人卡上的氣血一直在回，整份 menxia 幾乎每分鐘都不一樣，煉製頁根本沒畫那張卡
+  const MENXIA_SHOWN = {
+    practice: ["rules", "slot_cards", "arts", "player_card", "roster", "person", "person_card", "on_team"],
+    craft: ["materials", "per_craft", "bag", "craft_line", "xinde"],
+  };
+
   // 重畫這一頁但保留玩家正在做的事（輪詢、閉關被拒時用）：填到一半的欄位（自創功法的名字、閉關時數）、
-  // 摺疊區的開合，以及輿圖捲到的位置（afterPage() 每次重畫都會把選取的地點置中，這裡再捲回原處）
-  function redrawPage() {
+  // 摺疊區的開合，以及輿圖捲到的位置（afterPage() 每次重畫都會把選取的地點置中，這裡再捲回原處）。
+  // quiet：輪詢的重畫，頁面上方那一行訊息沒有變，不要再播一次浮現動畫
+  function redrawPage(quiet = false) {
     const page = document.getElementById("page");
     if (!page) return;
     const fields = [...page.querySelectorAll("form[id] input[name], form[id] select[name], form[id] textarea[name]")]
@@ -793,6 +838,7 @@
     const wrap = page.querySelector(".map-wrap");
     const scroll = wrap && [wrap.scrollLeft, wrap.scrollTop];
     renderPage();
+    if (quiet) page.querySelectorAll(".msg").forEach((el) => el.classList.add("still"));
     for (const [form, name, value] of fields) {
       const el = page.querySelector(`#${CSS.escape(form)} [name="${CSS.escape(name)}"]`);
       if (el) el.value = value;
