@@ -1491,23 +1491,36 @@ class Game:
         affiliation = "・".join(name for name in (sect, faction) if name) or "散人"
         day = int(w.time // DAY) + 1
         clock = f"{int(w.time % DAY // HOUR):02d}:{int(w.time % HOUR // 60):02d}"
+        # 排版刻意很緊：這一塊在手機上原本是 13 段 Markdown（每段一個 <p>），光狀態就吃掉
+        # 半個螢幕，選項按鈕被推到摺線以下。現在把**玩家真的一直在看的四個數字**（體力、
+        # 氣血、銀兩、心得）收成一行，其餘降級到第二行，隊伍只有帶人時才列出來。
+        now, cap = team.member_neili(c, p.member)
+        vitals = (
+            f"⚡ 體力 {int(p.stamina)}/{c.config.stamina_max}　"
+            f"❤ 氣血 {int(now)}/{int(cap)}　"
+            f"💰 {names['silver']} {p.stats.get('silver', 0)}　"
+            f"📘 {names['xinde']} {p.stats.get('xinde', 0)}"
+        )
+        if p.member.injury >= 1:
+            vitals += f"　🩹 內傷 {int(p.member.injury)}"
+        minor = "　".join(f"{names[k]} {p.stats.get(k, 0)}" for k in ("fame", "good", "evil"))
+        attrs = "　".join(f"{names[k]} {p.stats[k]}" for k in ("str", "agi", "con", "wis"))
         lines = [
-            f"### {p.name}　·　{affiliation}" + ("（匿名行走）" if p.anonymous else ""),
+            f"### {p.name}　·　{affiliation}" + ("（匿名行走）" if p.anonymous else "")
+            + f"　第{p.member.level}級",
             f"📍 {c.locations[p.location].name}　⏳ 第 {day} 天 {clock}（本季共 {c.config.season_days:g} 天）",
-            f"**體力** {int(p.stamina)} / {c.config.stamina_max}",
-            "　".join(f"{names[k]} {p.stats[k]}" for k in ("str", "agi", "con", "wis")),
-            "　".join(f"{names[k]} {p.stats.get(k, 0)}" for k in ("silver", "good", "evil", "fame", "xinde")),
+            vitals,
+            f"{minor}　｜　{attrs}",
         ]
         hint = skillview.practice_hint(s, c)  # 心得擱著沒用、又還有功夫沒練滿時才有這一行
         if hint is not None:
             lines.append(hint)
-        lines.append("**隊伍**")
-        now, cap = team.member_neili(c, p.member)
-        lines.append(f"- {p.name}（隊長）　第{p.member.level}級　氣血 {int(now)}/{int(cap)}")
-        for cid in p.team:
+        for cid in p.team:  # 只有真的帶了同伴才列隊伍，一個人時不佔版面
             progress = self.world.get_companion(cid)
-            now, cap = team.member_neili(c, progress)
-            lines.append(f"- {c.characters[cid].name}　第{progress.level}級　氣血 {int(now)}/{int(cap)}")
+            mate_now, mate_cap = team.member_neili(c, progress)
+            lines.append(
+                f"🧍 {c.characters[cid].name}　第{progress.level}級　氣血 {int(mate_now)}/{int(mate_cap)}"
+            )
         if p.busy_until is not None:
             lines.append(f"🧘 閉關中，約 {(p.busy_until - w.time) / HOUR:.1f} 小時後出關")
         return "\n\n".join(lines)

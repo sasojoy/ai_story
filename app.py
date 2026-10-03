@@ -115,8 +115,19 @@ svg, img, canvas { max-width: 100%; height: auto; }
   /* 欄位與選單在手機上給足高度，避免誤觸 */
   .tx-page input, .tx-page textarea, .tx-page select { min-height: 42px; font-size: 16px; }
   .tx-side-row { flex-direction: column !important; }
-  /* 江湖紀錄限高可捲：不限的話它會把底下的東西（與下一次的選項）一路推出螢幕 */
-  .tx-journal { max-height: 42vh; overflow-y: auto; }
+  /* ── 一頁到底（參考 infinialchemy 的手機版：資源一列、分頁一排、主操作不用捲）──
+     目標是「開著遊戲時，狀態、場景、所有可按的選項同時看得到」。做法是把**會變長的東西**
+     （場景敘述、小地圖、江湖紀錄）各自限高可捲，**不會變長的東西**（狀態列、選項按鈕）
+     維持原樣——這樣不管玩到哪一天，選項都不會被推到摺線以下。 */
+  .tx-title { display: none; }  /* 標題在手機上只是佔一行，遊戲本身就在畫面裡 */
+  .tx-status p { margin: 1px 0 !important; line-height: 1.45; font-size: 14px; }
+  .tx-status h3 { margin: 0 0 2px !important; font-size: 16px; }
+  .tx-scene { max-height: 26vh; overflow-y: auto; }
+  .tx-mini { max-height: 26vh; overflow: hidden; }
+  .tx-journal { max-height: 30vh; overflow-y: auto; }
+  /* 門下的「開爐煉製」釘在螢幕底部（參考圖的「萃取」按鈕）：選完素材不用捲回去按 */
+  .tx-forge { position: sticky; bottom: 0; z-index: 25; padding: 6px 0 2px;
+              background: var(--body-background-fill); }
   /* 大地圖的地點詳情在地圖下方，給足寬度 */
   .tx-place { min-width: 0 !important; }
 }
@@ -681,7 +692,7 @@ def build_demo() -> gr.Blocks:
     with gr.Blocks(title="天下大勢") as demo:
         game_state = gr.State(None)
         ids_state = gr.State([])
-        gr.Markdown("# 天下大勢 · 原型")
+        gr.Markdown("# 天下大勢 · 原型", elem_classes=["tx-title"])
         account_state = gr.State(None)
         with gr.Column(visible=True) as start_col:
             with gr.Tab("登入"):
@@ -700,7 +711,7 @@ def build_demo() -> gr.Blocks:
         with gr.Row(visible=False, elem_classes=["tx-game"]) as game_row:
             with gr.Column(scale=3, elem_classes=["tx-main-col"]):
                 with gr.Row(equal_height=False, elem_classes=["tx-scene-row"]):
-                    scene_md = gr.Markdown(scale=3)
+                    scene_md = gr.Markdown(scale=3, elem_classes=["tx-scene"])
                     with gr.Column(scale=2, min_width=180, elem_classes=["tx-mini"]):
                         minimap_html = gr.HTML()  # 預設的 js_on_load：點一下就觸發 click
                         mini_map_btn = gr.Button("大地圖", size="sm")
@@ -722,7 +733,7 @@ def build_demo() -> gr.Blocks:
             with gr.Column(scale=2, elem_classes=["tx-side-col"]):
                 with gr.Accordion("主線與目標", open=True):
                     quest_md = gr.Markdown()
-                status_md = gr.Markdown()
+                status_md = gr.Markdown(elem_classes=["tx-status"])
                 with gr.Row(elem_classes=["tx-nav"]):
                     menxia_btn = gr.Button("門下")
                     report_btn = gr.Button("戰報")
