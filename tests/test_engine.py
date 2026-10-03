@@ -4,7 +4,7 @@ from unittest import mock
 
 import pytest
 
-from conftest import FixedRandom, walk_to
+from conftest import FixedRandom, at, walk_to
 from tianxia import battle_instance, companion_agent, flavor, rules
 from tianxia.engine import Game, Option
 from tianxia.state import BotProfile, GameState, Journey
@@ -972,7 +972,7 @@ def test_with_factions_the_muster_only_offers_your_own_side(content, game):
     definition = _install_battle_def(content)
     game.state.player.faction = "huang"
     game.world.start_battle(definition, now=1000.0)
-    with mock.patch("tianxia.engine.time.time", return_value=1000.0):
+    with at(game, 1000.0):
         assert ids(game) == ["battle:join:huang"]
         assert game.choose("battle:join:guan") == ["（此刻無法這麼做。）"]
         assert "選擇陣營" in game.scene_text()
@@ -992,7 +992,7 @@ def test_with_factions_a_free_agent_or_an_outside_faction_watches_and_keeps_play
     _install_factions(content)
     definition = _install_battle_def(content)
     game.world.start_battle(definition, now=1000.0)
-    with mock.patch("tianxia.engine.time.time", return_value=1000.0):
+    with at(game, 1000.0):
         for faction in (None, "haoqiang"):
             game.state.player.faction = faction
             assert "act:explore" in ids(game)
@@ -1006,7 +1006,7 @@ def test_with_factions_a_free_agent_can_leave_the_sidelines_once_the_battle_is_u
     definition = _install_battle_def(content)
     game.world.start_battle(definition, now=0.0)
     game.world.mutate_battle(lambda b: battle_instance.join_faction(b, "乙玩家", "huang", neili_cap=100.0))
-    with mock.patch("tianxia.engine.time.time", return_value=definition.muster_seconds + 1):
+    with at(game, definition.muster_seconds + 1):
         assert game._battle_status()[0].phase == "active"
         assert "act:explore" in ids(game)
         assert not any(i.startswith("battle:") for i in ids(game))
@@ -1020,7 +1020,7 @@ def test_a_watcher_still_sees_their_own_event_below_the_battle(content, game):
     _install_factions(content)
     definition = _install_battle_def(content)
     game.world.start_battle(definition, now=1000.0)
-    with mock.patch("tianxia.engine.time.time", return_value=1000.0):
+    with at(game, 1000.0):
         game.choose("act:explore")
         event = content.events[game.state.pending_event]
         scene = game.scene_text()
@@ -1034,7 +1034,7 @@ def test_with_factions_a_latecomer_joins_their_own_side(content, game):
     game.world.start_battle(definition, now=0.0)
     # 黃巾已經有人了，單看人數平衡會把後來的人分去官軍；玩家仍要站在自己的黃巾這一邊。
     game.world.mutate_battle(lambda b: battle_instance.join_faction(b, "乙玩家", "huang", neili_cap=100.0))
-    with mock.patch("tianxia.engine.time.time", return_value=definition.muster_seconds + 1):
+    with at(game, definition.muster_seconds + 1):
         game._battle_status()
         game.choose("battle:join_late")
     assert game.world.get_battle().participants["沈浪"].faction == "huang"
@@ -1045,11 +1045,11 @@ def test_a_battle_with_no_fighters_ends_with_its_fallback_outcome_once_the_round
     definition = _install_battle_def(content)
     game.world.start_battle(definition, now=0.0)
     closed = definition.muster_seconds + 1
-    with mock.patch("tianxia.engine.time.time", return_value=closed):
+    with at(game, closed):
         assert game._battle_status()[0].phase == "active"
-    with mock.patch("tianxia.engine.time.time", return_value=closed + definition.round_seconds - 1):
+    with at(game, closed + definition.round_seconds - 1):
         assert game._battle_status() is not None  # 回合還沒逾時，不提前收場
-    with mock.patch("tianxia.engine.time.time", return_value=closed + definition.round_seconds):
+    with at(game, closed + definition.round_seconds):
         assert "act:explore" in ids(game)
     assert game.world.get_battle().phase == "ended"
     assert any("官軍大勝" in r.text for r in game.world.get_season().chronicle)
@@ -1079,7 +1079,7 @@ def test_no_active_battle_leaves_normal_gameplay_untouched(content, game):
 def test_an_active_muster_shows_faction_join_options(content, game):
     definition = _install_battle_def(content)
     game.world.start_battle(definition, now=1000.0)
-    with mock.patch("tianxia.engine.time.time", return_value=1000.0):
+    with at(game, 1000.0):
         assert ids(game) == ["battle:join:guan", "battle:join:huang"]
         assert "測試決戰" in game.scene_text()
 
@@ -1087,7 +1087,7 @@ def test_an_active_muster_shows_faction_join_options(content, game):
 def test_joining_a_faction_during_muster(content, game):
     definition = _install_battle_def(content)
     game.world.start_battle(definition, now=1000.0)
-    with mock.patch("tianxia.engine.time.time", return_value=1000.0):
+    with at(game, 1000.0):
         game.choose("battle:join:guan")
     assert game.world.get_battle().participants["沈浪"].faction == "guan"
 
@@ -1095,9 +1095,9 @@ def test_joining_a_faction_during_muster(content, game):
 def test_muster_auto_closes_once_the_deadline_passes(content, game):
     definition = _install_battle_def(content)
     game.world.start_battle(definition, now=1000.0)
-    with mock.patch("tianxia.engine.time.time", return_value=1000.0):
+    with at(game, 1000.0):
         game.choose("battle:join:guan")
-    with mock.patch("tianxia.engine.time.time", return_value=1000.0 + definition.muster_seconds + 1):
+    with at(game, 1000.0 + definition.muster_seconds + 1):
         status = game._battle_status()
     assert status is not None and status[0].phase == "active"
 
@@ -1105,13 +1105,13 @@ def test_muster_auto_closes_once_the_deadline_passes(content, game):
 def test_submitting_an_action_and_a_bot_auto_fills_then_the_round_resolves(content, game):
     definition = _install_battle_def(content)
     game.world.start_battle(definition, now=0.0)
-    with mock.patch("tianxia.engine.time.time", return_value=0.0):
+    with at(game, 0.0):
         game.choose("battle:join:guan")
         game.world.mutate_battle(
             lambda b: battle_instance.join_faction(b, "機器人", "huang", neili_cap=100.0, is_bot=True)
         )
     after_muster = definition.muster_seconds + 1
-    with mock.patch("tianxia.engine.time.time", return_value=after_muster):
+    with at(game, after_muster):
         game._battle_status()  # 推進一次，確保集結已關閉、進入 active
         game.choose("battle:act:safe")  # 人類送出，機器人在同一次 tick 裡自動補上，回合應該已經結算
     battle = game.world.get_battle()
@@ -1124,13 +1124,13 @@ def test_the_player_whose_action_completes_the_round_sees_the_resolution_text(co
     （不能是空清單）——不管這回合只是普通推進，還是剛好把戰鬥打完。"""
     definition = _install_battle_def(content)
     game.world.start_battle(definition, now=0.0)
-    with mock.patch("tianxia.engine.time.time", return_value=0.0):
+    with at(game, 0.0):
         game.choose("battle:join:guan")
         game.world.mutate_battle(
             lambda b: battle_instance.join_faction(b, "機器人", "huang", neili_cap=100.0, is_bot=True)
         )
     after_muster = definition.muster_seconds + 1
-    with mock.patch("tianxia.engine.time.time", return_value=after_muster):
+    with at(game, after_muster):
         game._battle_status()
         msgs = game.choose("battle:act:safe")
     assert msgs != []
@@ -1142,11 +1142,11 @@ def test_waiting_for_others_returns_a_placeholder_message(content, game):
     definition = _install_battle_def(content)
     definition.outcomes[0] = definition.outcomes[0].model_copy(update={"trend_min": 999})  # 讓這回合分不出勝負
     game.world.start_battle(definition, now=0.0)
-    with mock.patch("tianxia.engine.time.time", return_value=0.0):
+    with at(game, 0.0):
         game.choose("battle:join:guan")
         game.world.mutate_battle(lambda b: battle_instance.join_faction(b, "乙玩家", "huang", neili_cap=100.0))
     after_muster = definition.muster_seconds + 1
-    with mock.patch("tianxia.engine.time.time", return_value=after_muster):
+    with at(game, after_muster):
         game._battle_status()
         msgs = game.choose("battle:act:safe")
     assert msgs == ["你選擇了行動，等待其他人……"]
@@ -1158,14 +1158,14 @@ def test_battle_outcome_applies_trend_delta_and_flags_to_the_shared_season(conte
         update={"world_flags_add": ["huangjin_decisive_win"], "trend_delta": {"kou": -40}}
     )
     game.world.start_battle(definition, now=0.0)
-    with mock.patch("tianxia.engine.time.time", return_value=0.0):
+    with at(game, 0.0):
         game.choose("battle:join:guan")
         game.world.mutate_battle(
             lambda b: battle_instance.join_faction(b, "機器人", "huang", neili_cap=100.0, is_bot=True)
         )
     before = game.world.get_season().trends["kou"]
     after_muster = definition.muster_seconds + 1
-    with mock.patch("tianxia.engine.time.time", return_value=after_muster):
+    with at(game, after_muster):
         game._battle_status()
         game.choose("battle:act:safe")
     season = game.world.get_season()
@@ -1177,13 +1177,13 @@ def test_battle_outcome_applies_trend_delta_and_flags_to_the_shared_season(conte
 def test_an_eliminated_participant_sees_a_spectate_only_option(content, game):
     definition = _install_battle_def(content)
     game.world.start_battle(definition, now=0.0)
-    with mock.patch("tianxia.engine.time.time", return_value=0.0):
+    with at(game, 0.0):
         game.choose("battle:join:guan")
     after_muster = definition.muster_seconds + 1
-    with mock.patch("tianxia.engine.time.time", return_value=after_muster):
+    with at(game, after_muster):
         game._battle_status()  # 讓集結自動關閉
     game.world.mutate_battle(lambda b: setattr(b.participants["沈浪"], "eliminated", True))
-    with mock.patch("tianxia.engine.time.time", return_value=after_muster):
+    with at(game, after_muster):
         opts = game.options()
     assert opts == [Option(id="battle:spectate", label="（觀戰中，無法行動）", enabled=False)]
 
@@ -1191,7 +1191,7 @@ def test_an_eliminated_participant_sees_a_spectate_only_option(content, game):
 def test_a_latecomer_can_join_an_already_active_battle(content, game):
     definition = _install_battle_def(content)
     game.world.start_battle(definition, now=0.0)
-    with mock.patch("tianxia.engine.time.time", return_value=definition.muster_seconds + 1):
+    with at(game, definition.muster_seconds + 1):
         game._battle_status()  # 讓集結自動關閉，模擬戰鬥已經開打
         assert ids(game) == ["battle:join_late"]
         game.choose("battle:join_late")
@@ -1220,7 +1220,7 @@ def test_you_can_join_a_battle_only_in_its_region(content, game):
     definition.region = "south"
     _south_cave(content, game)
     game.world.start_battle(definition, now=1000.0)
-    with mock.patch("tianxia.engine.time.time", return_value=1000.0):
+    with at(game, 1000.0):
         assert "act:explore" in ids(game)  # 人在北區：照常遊玩
         assert "這場決戰在測試南區" in game.scene_text()
         assert game._battle_choose("join:guan") == ["（這場決戰在測試南區，人要到了那裡、不在路上才能加入。）"]
@@ -1232,7 +1232,7 @@ def test_nobody_on_the_road_can_join(content, game):
     definition = _install_battle_def(content)  # 不限地點
     game.choose("move:lake")  # 先出發：開戰之後選單只剩戰鬥選項
     game.world.start_battle(definition, now=1000.0)
-    with mock.patch("tianxia.engine.time.time", return_value=1000.0):
+    with at(game, 1000.0):
         assert not any(i.startswith("battle:") for i in ids(game))
         assert game._battle_choose("join:guan") == ["（你還在路上，到了才能加入戰局。）"]
 
@@ -1242,7 +1242,7 @@ def test_arriving_mid_battle_lets_you_join_late(content, game):
     definition.region = "south"
     _south_cave(content, game)
     game.world.start_battle(definition, now=0.0)
-    with mock.patch("tianxia.engine.time.time", return_value=definition.muster_seconds + 1):
+    with at(game, definition.muster_seconds + 1):
         assert game._battle_status()[0].phase == "active"
         assert "act:explore" in ids(game)
         game.travel("cave", "dash")
@@ -1255,10 +1255,10 @@ def test_a_fighter_who_leaves_the_region_sits_the_rounds_out_until_back(content,
     definition.outcomes[0] = definition.outcomes[0].model_copy(update={"trend_min": 999})  # 不要一回合就分出勝負
     _south_cave(content, game)
     game.world.start_battle(definition, now=0.0)
-    with mock.patch("tianxia.engine.time.time", return_value=0.0):
+    with at(game, 0.0):
         game.choose("battle:join:guan")
         game.world.mutate_battle(lambda b: battle_instance.join_faction(b, "乙玩家", "huang", neili_cap=100.0))
-    with mock.patch("tianxia.engine.time.time", return_value=definition.muster_seconds + 1):
+    with at(game, definition.muster_seconds + 1):
         game._battle_status()  # 開打
         game.travel("cave", "dash")  # 離開北區
         battle = game.world.get_battle()
@@ -1276,7 +1276,7 @@ def test_walking_inside_the_region_keeps_a_fighter_present(content, game):
     definition = _install_battle_def(content)
     definition.region = "north"
     game.world.start_battle(definition, now=0.0)
-    with mock.patch("tianxia.engine.time.time", return_value=0.0):
+    with at(game, 0.0):
         game.choose("battle:join:guan")
     game.travel("lake", "walk")  # 小鎮、湖邊都在北區：在路上也還在戰場
     assert game.state.player.journey is not None
@@ -1291,7 +1291,7 @@ def test_a_fighter_walking_inside_the_region_can_still_change_sides_during_the_m
     definition = _install_battle_def(content)
     definition.region = "north"
     game.world.start_battle(definition, now=0.0)
-    with mock.patch("tianxia.engine.time.time", return_value=0.0):
+    with at(game, 0.0):
         game.choose("battle:join:guan")
         game.travel("lake", "walk")
         assert game.state.player.journey is not None
@@ -1306,7 +1306,7 @@ def test_a_fighter_walking_out_of_the_region_is_away_from_the_start_of_the_trip(
     definition.region = "north"
     _south_cave(content, game)
     game.world.start_battle(definition, now=0.0)
-    with mock.patch("tianxia.engine.time.time", return_value=0.0):
+    with at(game, 0.0):
         game.choose("battle:join:guan")
     game.travel("cave", "walk")  # 小鎮—湖邊在北區，終點寶洞在南區：這一趟還沒走到的站有一個在區外
     assert game.world.get_battle().participants["沈浪"].away
@@ -1316,7 +1316,7 @@ def test_a_battle_with_no_region_cannot_be_left(content, game):
     definition = _install_battle_def(content)  # 不限地點
     _south_cave(content, game)
     game.world.start_battle(definition, now=0.0)
-    with mock.patch("tianxia.engine.time.time", return_value=0.0):
+    with at(game, 0.0):
         game.choose("battle:join:guan")
     game.travel("cave", "walk")
     assert game.state.player.journey is not None
@@ -1327,7 +1327,7 @@ def test_joining_a_battle_stands_you_up(content, game):
     definition = _install_battle_def(content)
     game.choose("act:rest")
     game.world.start_battle(definition, now=1000.0)
-    with mock.patch("tianxia.engine.time.time", return_value=1000.0):
+    with at(game, 1000.0):
         game.choose("battle:join:guan")
     assert game.state.player.resting_since is None
     assert "沈浪" in game.world.get_battle().participants
@@ -1340,7 +1340,7 @@ def test_a_sitter_can_still_stand_up_while_the_muster_menu_is_showing(content, g
     definition.region = "north"
     game.choose("act:rest")
     game.world.start_battle(definition, now=1000.0)
-    with mock.patch("tianxia.engine.time.time", return_value=1000.0):
+    with at(game, 1000.0):
         assert "act:stand" in ids(game)
         assert next(o for o in game.options() if o.id == "act:stand").label == "起身"
         game.choose("act:stand")
@@ -1354,7 +1354,7 @@ def test_a_sitter_can_stand_up_while_the_late_join_menu_is_showing(content, game
     definition.region = "north"
     game.choose("act:rest")
     game.world.start_battle(definition, now=0.0)
-    with mock.patch("tianxia.engine.time.time", return_value=definition.muster_seconds + 1):
+    with at(game, definition.muster_seconds + 1):
         assert game._battle_status()[0].phase == "active"
         assert ids(game) == ["battle:join_late", "act:stand"]
         game.choose("act:stand")
@@ -1365,7 +1365,7 @@ def test_a_sitter_can_stand_up_while_the_late_join_menu_is_showing(content, game
 def test_a_standing_player_gets_no_stand_option_on_the_battle_menu(content, game):
     definition = _install_battle_def(content)
     game.world.start_battle(definition, now=1000.0)
-    with mock.patch("tianxia.engine.time.time", return_value=1000.0):
+    with at(game, 1000.0):
         assert "act:stand" not in ids(game)
 
 
@@ -1394,9 +1394,9 @@ def test_halting_inside_the_region_brings_an_away_fighter_back(content, game):
     definition.region = "north"
     _south_cave(content, game)
     game.world.start_battle(definition, now=0.0)
-    with mock.patch("tianxia.engine.time.time", return_value=0.0):
+    with at(game, 0.0):
         game.choose("battle:join:guan")
-    with mock.patch("tianxia.engine.time.time", return_value=definition.muster_seconds + 1):
+    with at(game, definition.muster_seconds + 1):
         game._battle_status()  # 開打
         game.travel("cave", "walk")  # 小鎮出發：湖邊在北區、終點寶洞在南區
         assert game.world.get_battle().participants["沈浪"].away
@@ -1412,9 +1412,9 @@ def test_a_fallen_fighter_who_left_the_region_is_not_promised_a_return_to_action
     definition.region = "north"
     _south_cave(content, game)
     game.world.start_battle(definition, now=0.0)
-    with mock.patch("tianxia.engine.time.time", return_value=0.0):
+    with at(game, 0.0):
         game.choose("battle:join:guan")
-    with mock.patch("tianxia.engine.time.time", return_value=definition.muster_seconds + 1):
+    with at(game, definition.muster_seconds + 1):
         game._battle_status()  # 開打
         game.travel("cave", "dash")  # 離開北區
         assert "人回到測試北區就能再出手" in game.scene_text()
@@ -1428,9 +1428,9 @@ def test_rally_region_sends_a_fighter_who_left_the_region_back_unless_they_have_
     definition.region = "north"
     _south_cave(content, game)
     game.world.start_battle(definition, now=0.0)
-    with mock.patch("tianxia.engine.time.time", return_value=0.0):
+    with at(game, 0.0):
         game.choose("battle:join:guan")
-    with mock.patch("tianxia.engine.time.time", return_value=definition.muster_seconds + 1):
+    with at(game, definition.muster_seconds + 1):
         game._battle_status()  # 開打
         assert game.rally_region() is None  # 人在戰場上
         game.travel("cave", "dash")  # 離開北區
@@ -1474,13 +1474,13 @@ def _install_battle_def_with_free_text(content):
 
 def _join_and_open(content, game, definition):
     game.world.start_battle(definition, now=0.0)
-    with mock.patch("tianxia.engine.time.time", return_value=0.0):
+    with at(game, 0.0):
         game.choose("battle:join:guan")
         game.world.mutate_battle(
             lambda b: battle_instance.join_faction(b, "機器人", "huang", neili_cap=100.0, is_bot=True)
         )
     after_muster = definition.muster_seconds + 1
-    with mock.patch("tianxia.engine.time.time", return_value=after_muster):
+    with at(game, after_muster):
         game._battle_status()
     return after_muster
 
@@ -1488,14 +1488,14 @@ def _join_and_open(content, game, definition):
 def test_free_text_option_is_excluded_from_the_button_list(content, game):
     definition = _install_battle_def_with_free_text(content)
     after_muster = _join_and_open(content, game, definition)
-    with mock.patch("tianxia.engine.time.time", return_value=after_muster):
+    with at(game, after_muster):
         assert [o.label for o in game.options()] == ["穩紮穩打"]  # 自訂行動不是按鈕
 
 
 def test_battle_free_text_prompt_shows_when_available(content, game):
     definition = _install_battle_def_with_free_text(content)
     after_muster = _join_and_open(content, game, definition)
-    with mock.patch("tianxia.engine.time.time", return_value=after_muster):
+    with at(game, after_muster):
         assert game.battle_free_text_prompt() == "放手一搏（20字內）"
 
 
@@ -1506,7 +1506,7 @@ def test_battle_free_text_prompt_is_none_outside_battle(content, game):
 def test_battle_free_text_prompt_is_none_after_submitting(content, game):
     definition = _install_battle_def_with_free_text(content)
     after_muster = _join_and_open(content, game, definition)
-    with mock.patch("tianxia.engine.time.time", return_value=after_muster):
+    with at(game, after_muster):
         game.submit_battle_custom_action("直取波才首級")
         assert game.battle_free_text_prompt() is None
 
@@ -1518,7 +1518,7 @@ def test_submit_battle_custom_action_truncates_to_20_characters(content, game):
     definition = _install_battle_def_with_free_text(content)
     after_muster = _join_and_open(content, game, definition)
     long_text = "一二三四五六七八九十" * 3  # 30 字
-    with mock.patch("tianxia.engine.time.time", return_value=after_muster):
+    with at(game, after_muster):
         game.submit_battle_custom_action(long_text)
     battle = game.world.get_battle()
     assert any(long_text[:20] in line for line in battle.narrative_log)
@@ -1528,7 +1528,7 @@ def test_submit_battle_custom_action_truncates_to_20_characters(content, game):
 def test_submit_battle_custom_action_rejects_empty_input(content, game):
     definition = _install_battle_def_with_free_text(content)
     after_muster = _join_and_open(content, game, definition)
-    with mock.patch("tianxia.engine.time.time", return_value=after_muster):
+    with at(game, after_muster):
         msgs = game.submit_battle_custom_action("   ")
     assert msgs == ["（請先輸入你想做的事。）"]
     assert "沈浪" not in game.world.get_battle().round.pending_actions
@@ -1546,13 +1546,13 @@ def test_submit_battle_custom_action_works_even_as_the_very_first_call_after_mus
     自己其實白打了一輪字。"""
     definition = _install_battle_def_with_free_text(content)
     game.world.start_battle(definition, now=0.0)
-    with mock.patch("tianxia.engine.time.time", return_value=0.0):
+    with at(game, 0.0):
         game.choose("battle:join:guan")
         game.world.mutate_battle(
             lambda b: battle_instance.join_faction(b, "機器人", "huang", neili_cap=100.0, is_bot=True)
         )
     after_muster = definition.muster_seconds + 1
-    with mock.patch("tianxia.engine.time.time", return_value=after_muster):
+    with at(game, after_muster):
         # 注意：這裡故意不先呼叫 game.options()/game._battle_status() 暖身，
         # 直接送出自訂行動，模擬「這是逾時後第一個進來的請求」。
         msgs = game.submit_battle_custom_action("直取波才首級")
@@ -1568,7 +1568,7 @@ def test_custom_action_mechanics_match_the_fixed_tag_regardless_of_text(content,
     見 test_submit_battle_custom_action_assesses_success_rate_and_feeds_the_gamble。"""
     definition = _install_battle_def_with_free_text(content)
     after_muster = _join_and_open(content, game, definition)
-    with mock.patch("tianxia.engine.time.time", return_value=after_muster):
+    with at(game, after_muster):
         game.submit_battle_custom_action("直取波才首級")
     battle = game.world.get_battle()
     cap = game._battle_neili_cap()  # 玩家真實的氣血上限（join 時是這樣算的，不是隨便假設的數字）
@@ -1595,7 +1595,7 @@ def test_submit_battle_custom_action_assesses_success_rate_and_feeds_the_gamble(
     battle_instance.assess_action_success_rate → resolve_round 的賭局分支）真的接起來了。"""
     definition = _install_battle_def_with_gamble(content)
     after_muster = _join_and_open(content, game, definition)
-    with mock.patch("tianxia.engine.time.time", return_value=after_muster), \
+    with at(game, after_muster), \
          mock.patch.object(game.client, "chat_structured", return_value=battle_instance.SuccessRateJudgment(success_rate=20)):
         game.submit_battle_custom_action("直取波才首級")
     battle = game.world.get_battle()
@@ -1615,7 +1615,7 @@ def test_a_battle_threshold_crossed_in_the_background_starts_the_battle(content,
     definition = _install_battle_def(content)
     content.scenario.thresholds[0].starts_battle = definition.id  # kou50
     game.world.mutate_season(lambda season: season.trends.__setitem__("kou", 60))
-    msgs = advance_season(game.world, content, 3600, random.Random(0))
+    msgs = advance_season(game.world, content, 3600, random.Random(0), now=0.0)
     battle = game.world.get_battle()
     assert battle is not None and battle.battle_id == definition.id and battle.phase == "muster"
     assert any("集結號角" in m for m in msgs)
@@ -2316,3 +2316,33 @@ def test_stopping_does_not_refund_the_stamina_paid_to_hurry(game):
 def test_there_is_nothing_to_stop_on_the_last_leg(game):
     game.choose("move:lake")
     assert not any(o.id == "act:halt" for o in game.options())
+
+
+# ── 時間由外面傳入（線上架構設計第四節）──────────────────────
+
+
+def test_the_engine_never_reads_the_wall_clock():
+    """引擎不自己讀電腦時鐘：現在時間一律由外面傳進來（sync(now) 或明確的 now 參數）。"""
+    import tianxia.bot
+    import tianxia.engine
+    import tianxia.world
+
+    for module in (tianxia.engine, tianxia.world, tianxia.bot):
+        assert not hasattr(module, "time"), module.__name__
+
+
+def test_the_muster_closes_by_the_time_passed_to_sync(content, game):
+    definition = _install_battle_def(content)
+    game.world.start_battle(definition, now=0.0)
+    game.sync(1.0)
+    game.choose("battle:join:guan")
+    assert game._battle_status()[0].phase == "muster"
+    game.sync(definition.muster_seconds + 1)
+    assert game._battle_status()[0].phase == "active"
+
+
+def test_a_loaded_game_starts_its_clock_at_the_last_sync(content, game):
+    assert game.now == 0.0  # 新角色還沒同步過
+    game.sync(5000.0)
+    assert game.now == 5000.0
+    assert Game(content, game.state, world=game.world).now == 5000.0

@@ -1,3 +1,4 @@
+import contextlib
 import random
 from pathlib import Path
 
@@ -89,3 +90,10 @@ def walk_to(game, dest: str) -> list[str]:
     journey = game.state.player.journey
     assert journey is not None, f"沒有出發：選單上沒有 move:{dest}"
     return game.advance(journey.arrive_at[-1] - game.state.world.time)
+
+
+@contextlib.contextmanager
+def at(game, now: float):
+    """把這個 Game 的現在時間設成 now（線上架構第 1 期：引擎不讀電腦時鐘，取代以前 mock 掉 time.time）。"""
+    game.now = now
+    yield game

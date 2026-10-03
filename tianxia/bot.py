@@ -9,7 +9,6 @@ Ollama）；只有「結識」一定接受；心得攢夠一定步數就拿去�
 from __future__ import annotations
 
 import random
-import time
 from collections.abc import Callable
 
 from . import craft, materials, team
@@ -101,14 +100,13 @@ def pick(game: Game, options: list[Option], rng: random.Random) -> str | None:
 
 def play_season(
     content: Content, seed: int, max_steps: int = 20000, observe: Callable[[Game], None] | None = None,
-    world: WorldStateStore | None = None,
+    world: WorldStateStore | None = None, now: float = 0.0,
 ) -> Game:
     """玩完一季：隨機挑選項、遇到結識一定接受、每隔幾步把攢下的心得拿去練功。
     observe 不是 None 時，開始玩之前呼叫一次（開季的樣子），之後每一步之後都呼叫一次
     （模擬器用來記錄名冊與交手的時間點）。"""
     game = Game.new(content, f"機器人{seed}", rng=random.Random(seed), world=world)
-    game.world.open_season(now=time.time())  # 模擬時機器人自己就是管理者：籌備中就直接開季，已經開了則什麼都不做；
-    # 用現實時間開季，臨時拿真的世界檔跑機器人時，下一次真人 sync 才不會把開季以來幾十年的遊戲時間一口氣追趕上來
+    game.world.open_season(now=now)  # 模擬時機器人自己就是管理者：籌備中就直接開季，已經開了則什麼都不做
     rng = random.Random(seed)
     if observe is not None:
         observe(game)

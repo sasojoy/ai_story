@@ -531,7 +531,7 @@ class WorldStateStore:
         elapsed = result["elapsed"]
         if elapsed <= 0:
             return []
-        return world_module.advance_season(self, content, elapsed, rng)
+        return world_module.advance_season(self, content, elapsed, rng, now)
 
     # ── 投靠名冊（伺服器假人設計第八節第 3 項）──────────────────
 

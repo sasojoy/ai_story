@@ -33,7 +33,7 @@ def test_threshold_with_starts_battle_opens_a_shared_battle(state, content, worl
     content.scenario.thresholds[0].starts_battle = "b1"
     _install_battle_def(content)
     state.world.trends["kou"] = 50
-    msgs = check_thresholds(state, content, world)
+    msgs = check_thresholds(state, content, world, now=0.0)
     assert world.get_battle() is not None
     assert world.get_battle().battle_id == "b1"
     assert any("集結號角" in m for m in msgs)

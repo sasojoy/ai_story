@@ -5,6 +5,7 @@ import gradio as gr
 import pytest
 
 import app
+from conftest import at
 from tianxia import atlas, battle_instance, companion_agent, roster, world_state
 from tianxia.engine import Game, Option
 from tianxia.save import save_game
@@ -384,10 +385,10 @@ def test_battle_textbox_shows_the_prompt_once_free_text_is_available(game):
     definition = app.CONTENT.battles["huangjin_showdown"]
     game.state.player.faction = "guan"  # 劇本分陣營：散人只能觀戰，要先投靠才有得加入
     game.world.start_battle(definition, now=0.0)
-    with mock.patch("tianxia.engine.time.time", return_value=0.0):
+    with at(game, 0.0):
         game.choose("battle:join:guan")
     after_muster = definition.muster_seconds + 1
-    with mock.patch("tianxia.engine.time.time", return_value=after_muster):
+    with at(game, after_muster):
         out = app.render(game)
     assert out[app.BATTLE_TEXT_INDEX]["visible"] is True
     assert out[app.BATTLE_TEXT_INDEX]["label"] == game.battle_free_text_prompt()
@@ -398,13 +399,13 @@ def test_battle_text_handler_submits_the_custom_action(game, save_dir):
     definition = app.CONTENT.battles["huangjin_showdown"]
     game.state.player.faction = "guan"  # 劇本分陣營：散人只能觀戰，要先投靠才有得加入
     game.world.start_battle(definition, now=0.0)
-    with mock.patch("tianxia.engine.time.time", return_value=0.0):
+    with at(game, 0.0):
         game.choose("battle:join:guan")
         game.world.mutate_battle(
             lambda b: battle_instance.join_faction(b, "機器人", "huang", neili_cap=320.0, is_bot=True)
         )
     after_muster = definition.muster_seconds + 1
-    with mock.patch("tianxia.engine.time.time", return_value=after_muster):
+    with at(game, after_muster), mock.patch("app.time.time", return_value=after_muster):
         out = app.battle_text_handler(game, "直取波才首級")
     assert len(out) == app.N_OUTPUTS
     battle = game.world.get_battle()

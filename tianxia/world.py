@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import random
-import time
 
 from . import flavor, leaderboard
 from .models import Act, Content, Ending, SimPlayer, SimRumor, Storyline
@@ -15,8 +14,16 @@ HOUR = 3600
 DAY = 86400
 
 
+def _now_for_battle(now: float | None) -> float:
+    """開戰要知道現在的現實時間（集結截止時間從這裡算）。引擎不自己讀電腦時鐘，呼叫端要傳 now。"""
+    if now is None:
+        raise ValueError("開戰要知道現在的現實時間：呼叫端請傳 now（線上架構設計第四節）")
+    return now
+
+
 def check_thresholds(
     state: GameState, content: Content, world: WorldStateStore | None = None, client: OllamaClient | None = None,
+    now: float | None = None,
 ) -> list[str]:
     """依序處理大勢門檻、世界事件（各只觸發一次），最後更新主線進度。world/client 給
     _fire() 用來潤色江湖大事的傳聞文字（設計文件 8.2 第 4 點）；不傳就是原本的純文字，
@@ -33,7 +40,7 @@ def check_thresholds(
             continue
         msgs += _fire(
             state, content, th.id, th.text, th.world_flags_add, th.ends_season, th.starts_battle, th.location,
-            world, client,
+            world, client, now,
         )
         if w.ended:
             return msgs
@@ -42,7 +49,7 @@ def check_thresholds(
             continue
         msgs += _fire(
             state, content, event.id, event.text, event.world_flags_add, event.ends_season, event.starts_battle,
-            event.location, world, client,
+            event.location, world, client, now,
         )
         if w.ended:
             return msgs
@@ -52,7 +59,7 @@ def check_thresholds(
 def _fire(
     state: GameState, content: Content, fire_id: str, text: str, flags: list[str], ends_season: bool,
     starts_battle: str | None = None, location: str | None = None, world: WorldStateStore | None = None,
-    client: OllamaClient | None = None,
+    client: OllamaClient | None = None, now: float | None = None,
 ) -> list[str]:
     state.world.fired_thresholds.add(fire_id)
     add_world_flags(state, flags)
@@ -71,7 +78,7 @@ def _fire(
     msgs = [f"【江湖大事】{shown_text}"]
     if starts_battle and starts_battle in content.battles:
         if world is not None:
-            world.start_battle(content.battles[starts_battle], now=time.time())
+            world.start_battle(content.battles[starts_battle], now=_now_for_battle(now))
             msgs.append(f"🛡️ 【全服戰報】{content.battles[starts_battle].name}的集結號角已經吹響！")
         else:  # 背景推進（sim_tick）：先記下來，鎖放開後由 start_pending_battle 開戰
             state.world.pending_battle = starts_battle
@@ -82,7 +89,7 @@ def _fire(
 
 def fire_by_id(
     state: GameState, content: Content, fire_id: str, world: WorldStateStore | None = None,
-    client: OllamaClient | None = None,
+    client: OllamaClient | None = None, now: float | None = None,
 ) -> list[str] | None:
     """管理者手動觸發：照 id 找大勢門檻或世界事件，照自然觸發的方式觸發一次（旗標、傳聞、江湖史、
     開戰、結束賽季都一樣），再更新主線。已經發生過、或找不到這個 id，回傳 None。"""
@@ -95,7 +102,7 @@ def fire_by_id(
         return None
     msgs = _fire(
         state, content, source.id, source.text, source.world_flags_add, source.ends_season, source.starts_battle,
-        source.location, world, client,
+        source.location, world, client, now,
     )
     return msgs if state.world.ended else msgs + update_storyline(state, content)
 
@@ -234,7 +241,7 @@ def advance_world_state(
     return msgs
 
 
-def start_pending_battle(world: WorldStateStore, content: Content) -> list[str]:
+def start_pending_battle(world: WorldStateStore, content: Content, now: float) -> list[str]:
     """背景推進跨過開戰門檻時只在賽季上記下要開哪一場（見 _fire）；呼叫端放開全服紀錄的鎖
     之後呼叫這裡，真的開戰並清掉記號。沒有待開的戰鬥就什麼都不寫。"""
     if world.get_season().pending_battle is None:
@@ -248,15 +255,17 @@ def start_pending_battle(world: WorldStateStore, content: Content) -> list[str]:
     battle_id = taken["id"]
     if battle_id is None or battle_id not in content.battles:
         return []
-    world.start_battle(content.battles[battle_id], now=time.time())
+    world.start_battle(content.battles[battle_id], now=now)
     return [f"🛡️ 【全服戰報】{content.battles[battle_id].name}的集結號角已經吹響！"]
 
 
-def advance_season(world: WorldStateStore, content: Content, seconds: float, rng: random.Random) -> list[str]:
+def advance_season(
+    world: WorldStateStore, content: Content, seconds: float, rng: random.Random, now: float,
+) -> list[str]:
     """跟 advance_world_state 做一樣的事，差別是這裡直接鎖住共用賽季本身來源、修改、
     寫回——給被動的現實時間追趕用（world_state.py::catch_up_season），那條路徑沒有
     哪個玩家的 self.state.world 可以操作，只能直接對著共用儲存動手。鎖放開之後才開
     推進途中跨過門檻的戰鬥（見 start_pending_battle）。"""
     msgs: list[str] = []
     world.mutate_season(lambda season: msgs.extend(advance_world_state(season, content, seconds, rng, world)))
-    return msgs + start_pending_battle(world, content)
+    return msgs + start_pending_battle(world, content, now)

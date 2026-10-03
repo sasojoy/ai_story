@@ -7,7 +7,6 @@ sanguo-companions 合併大幅重寫：拿掉 battle.py 的 3v3 全自動戰鬥�
 from __future__ import annotations
 
 import random
-import time
 
 from pydantic import BaseModel
 
@@ -54,6 +53,9 @@ class Game:
             presence_penalty=cfg.ollama_presence_penalty, frequency_penalty=cfg.ollama_frequency_penalty,
         )  # companion_agent.py 用；連不上時那輪對話取消，這裡不用先健檢
         self._draft: Draft | None = None  # choose() 進行中那次行動的江湖紀錄草稿
+        # 現在的現實時間（秒）：由 sync(now) 傳進來，引擎自己不讀電腦時鐘（線上架構設計第四節）。
+        # 讀進來的存檔先用上次同步的時間；開戰的集結截止、回合逾時都看它。
+        self.now: float = state.last_real if state.last_real is not None else 0.0
         self._drop_stale_references()
 
     @classmethod
@@ -168,6 +170,7 @@ class Game:
         隔多久觸發一次，一份共用時鐘永遠只走一次，不會因為好幾個玩家同時在線就重複推進
         （見 world_state.py::catch_up_season）。也會順便偵測共用賽季是不是已經被別人推到
         下一輪了（見 _reconcile_season）。在路上時，抵達時間已經到了的站接著一站一站抵達（見 _arrivals）。"""
+        self.now = now
         self._reconcile_season()
         msgs = list(self.world.catch_up_season(self.content, now, self.rng))
         self.state.world = self.world.get_season()  # 剛才的追趕可能進一步推進了賽季，拉回最新的一份
@@ -199,7 +202,7 @@ class Game:
         msgs += self._advance_player_local(seconds)
         arrived = self._arrivals()  # 同 sync：抵達自己寫紀錄
         self._save_season()
-        msgs += start_pending_battle(self.world, self.content)
+        msgs += start_pending_battle(self.world, self.content, self.now)
         self.state.world = self.world.get_season()
         news = journal.news_entry(self.state.world.time, msgs)
         if news is not None:
@@ -425,7 +428,7 @@ class Game:
                 msgs = self._choose(int(arg))
             if kind == "act" and arg != "break":
                 msgs += note_action(self.state, self.content, self.world, arg)
-            msgs += check_thresholds(self.state, self.content, self.world, self.client)
+            msgs += check_thresholds(self.state, self.content, self.world, self.client, now=self.now)
             journal.add_entry(self.state, self._draft.entry(self.state.world.time, msgs))
         finally:
             self._draft = None
@@ -736,7 +739,7 @@ class Game:
         _run_battle_tick()（被動追趕，options()/scene_text() 用）跟 _battle_choose()
         的 act 分支（玩家自己送出行動，可能剛好湊滿全員）共用的同一份邏輯，確保兩條
         路徑的推進規則完全一致——只是呼叫的時間點跟是否先 submit_action 不同。"""
-        now = time.time()
+        now = self.now
         if battle.phase == "muster" and now >= battle.muster_deadline_real:
             battle_instance.close_muster(battle, definition, self.rng, now)
         if battle.phase != "active":
@@ -884,7 +887,7 @@ class Game:
         watching = self._watching_battle(battle, definition)
         watch_line = self._watch_line(battle, definition)
         if battle.phase == "muster":
-            remaining = max(0, int(battle.muster_deadline_real - time.time()))
+            remaining = max(0, int(battle.muster_deadline_real - self.now))
             countdown = f"集結中，還剩 {remaining // 60} 分 {remaining % 60} 秒"
             return f"{header}\n\n{countdown}。{watch_line}" if watching else f"{header}\n\n{countdown}選擇陣營。"
         act = battle_instance.current_act(battle, definition)
@@ -1255,7 +1258,7 @@ class Game:
             if flourish:
                 text = f"{text}\n\n{flourish}"
         self._hide(text)
-        return [text] + note_action(s, c, self.world, "move") + check_thresholds(s, c, self.world, client)
+        return [text] + note_action(s, c, self.world, "move") + check_thresholds(s, c, self.world, client, now=self.now)
 
     def _journey_line(self) -> str:
         """在路上的那一句（狀態列、場景共用）：「往寶洞（步行），第1天 00:08 抵達，還要約 8 分鐘；下一站湖邊」。"""
@@ -1632,7 +1635,7 @@ class Game:
             return self._log(refusal)
         if fire_id in self.state.world.fired_thresholds:
             return self._log(["（這件大事已經發生過了。）"])
-        msgs = fire_by_id(self.state, self.content, fire_id, self.world, self.client)
+        msgs = fire_by_id(self.state, self.content, fire_id, self.world, self.client, now=self.now)
         if msgs is None:
             return self._log(["（沒有這件大事。）"])
         self._write("觸發大事", msgs, tag="管理者")
@@ -1647,7 +1650,7 @@ class Game:
         if trend_id not in {t.id for t in self.content.scenario.trends}:
             return self._log(["（沒有這條大勢線。）"])
         msgs = change_trend(self.state, self.content, trend_id, delta)
-        msgs += check_thresholds(self.state, self.content, self.world, self.client)
+        msgs += check_thresholds(self.state, self.content, self.world, self.client, now=self.now)
         self._write("推動大勢", msgs or ["大勢紋絲不動。"], tag="管理者")
         self._save_season()
         return self._log(msgs)

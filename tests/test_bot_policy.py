@@ -1,5 +1,4 @@
 import random
-import time
 
 from conftest import walk_to
 from tianxia import battle_instance, bot, bot_policy
@@ -110,7 +109,7 @@ def test_a_bot_joins_its_own_side_of_a_battle_as_an_ordinary_fighter(content, ga
     _install_factions(content)
     definition = _install_battle(content)
     game.state.player.faction = "guan"
-    game.world.start_battle(definition, now=time.time())
+    game.world.start_battle(definition, now=game.now)
     bot_policy.take_turn(game, _profile("guan"), random.Random(0))
     fighter = game.world.get_battle().participants[game.state.player.name]
     assert fighter.faction == "guan" and not fighter.is_bot
@@ -118,7 +117,7 @@ def test_a_bot_joins_its_own_side_of_a_battle_as_an_ordinary_fighter(content, ga
 
 def _active_battle_with(game, definition, faction):
     game.state.player.faction = faction
-    game.world.start_battle(definition, now=0.0)  # 集結早就截止：下一次刷新就開打
+    game.world.start_battle(definition, now=game.now - definition.muster_seconds - 1)  # 集結早就截止：下一次刷新就開打
     name = game.state.player.name
     game.world.mutate_battle(lambda b: battle_instance.join_faction(b, name, faction, neili_cap=100.0))
     other = "huang" if faction == "guan" else "guan"
@@ -208,7 +207,7 @@ def _battle_in_the_south(content, game):
     content.locations["cave"].y = 170
     game.state.world.flags.add("cave_open")
     game.state.player.faction = "guan"
-    game.world.start_battle(definition, now=time.time())
+    game.world.start_battle(definition, now=game.now)
     return definition
 
 
@@ -225,7 +224,7 @@ def test_a_bot_on_the_road_still_ticks_the_shared_battle(content, game):
     definition = _install_battle(content)
     game.state.player.faction = "guan"
     game.choose("move:lake")
-    game.world.start_battle(definition, now=time.time() - definition.muster_seconds - 1)  # 集結早就該截止了
+    game.world.start_battle(definition, now=game.now - definition.muster_seconds - 1)  # 集結早就該截止了
     assert game.world.get_battle().phase == "muster"
     assert bot_policy.take_turn(game, _profile("guan"), random.Random(0)) == []
     assert game.world.get_battle().phase != "muster"
@@ -261,7 +260,7 @@ def test_a_bot_already_in_the_battle_region_joins_instead_of_travelling(content,
     definition = _install_battle(content)
     definition.region = "north"
     game.state.player.faction = "guan"
-    game.world.start_battle(definition, now=time.time())
+    game.world.start_battle(definition, now=game.now)
     bot_policy.take_turn(game, _profile("guan"), random.Random(0))
     assert game.state.player.journey is None
     assert game.state.player.name in game.world.get_battle().participants
