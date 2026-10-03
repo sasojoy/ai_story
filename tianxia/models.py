@@ -351,6 +351,7 @@ class MapLayout(_Strict):
     regions: list[MapRegion] = Field(default_factory=list)
     rivers: list[list[list[int]]] = Field(default_factory=list)  # 每條河是一串 [x, y] 點
     labels: list[MapLabel] = Field(default_factory=list)
+    mini_window: tuple[int, int] = (270, 180)  # 小地圖以所在地為中心截多寬、多高（地圖單位）；地圖畫得越疏，要截得越大才看得到一兩站路
 
 
 class WorldEvent(_Strict):

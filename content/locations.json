@@ -6,10 +6,15 @@
     "connections": [
       "yingshui",
       "yingchuan_wilds",
-      "luoyang_road"
+      "songshan_foot",
+      "yingchuan_academy",
+      {
+        "to": "luoyang_road",
+        "road": "官道"
+      }
     ],
-    "x": 330,
-    "y": 80,
+    "x": 464,
+    "y": 940,
     "important": true,
     "tags": [
       "城鎮"
@@ -20,10 +25,12 @@
     "name": "潁水河畔",
     "description": "潁水緩緩流過，兩岸多是逃難而來的流民搭起的棚屋。江湖傳聞與軍情消息，常在渡口的茶棚裡流轉。",
     "connections": [
-      "yingchuan"
+      "yingchuan",
+      "yingchuan_wilds",
+      "hilltop_wilds"
     ],
-    "x": 250,
-    "y": 55,
+    "x": 488,
+    "y": 1012,
     "tags": [
       "河畔"
     ],
@@ -38,10 +45,11 @@
     "description": "出了城便是荒蕪的田野，許多良田早已無人耕種。黃巾散兵與趁亂打劫的流寇，時常在此出沒。",
     "connections": [
       "yingchuan",
+      "yingshui",
       "changshe"
     ],
-    "x": 410,
-    "y": 60,
+    "x": 541,
+    "y": 962,
     "tags": [
       "野外"
     ],
@@ -59,10 +67,19 @@
     "name": "長社",
     "description": "皇甫嵩曾在此夜縱大火、大破黃巾的古戰場，焦土至今未能全復。附近仍有黃巾別部盤踞，伺機而動。",
     "connections": [
-      "yingchuan_wilds"
+      "yingchuan_wilds",
+      "huangjin_camp",
+      {
+        "to": "runan_wilds",
+        "road": "官道"
+      },
+      {
+        "to": "baima_ford",
+        "road": "官道"
+      }
     ],
-    "x": 490,
-    "y": 40,
+    "x": 598,
+    "y": 1019,
     "tags": [
       "古戰場"
     ],
@@ -84,11 +101,17 @@
     "name": "洛陽官道",
     "description": "通往洛陽的官道，快馬與軍報川流不息。朝廷對這條路格外看重，沿途設有哨卡盤查行人。",
     "connections": [
-      "yingchuan",
-      "wan_city"
+      {
+        "to": "baima_temple",
+        "road": "官道"
+      },
+      {
+        "to": "yingchuan",
+        "road": "官道"
+      }
     ],
-    "x": 330,
-    "y": 140,
+    "x": 223,
+    "y": 870,
     "important": true,
     "tags": [
       "官道"
@@ -109,13 +132,16 @@
     "name": "宛城",
     "description": "南陽郡治，城池雄厚，是漢軍南線的重鎮。近來城中盛傳，有一位江東來的少年將領在此立下戰功。",
     "connections": [
-      "luoyang_road",
-      "baima_temple",
-      "nanyang_road",
-      "runan_market"
+      {
+        "to": "nanyang_road",
+        "road": "官道"
+      },
+      "nanyang_huangjin_camp",
+      "yu_river",
+      "nanyang_wilds"
     ],
-    "x": 330,
-    "y": 205,
+    "x": 172,
+    "y": 1137,
     "important": true,
     "tags": [
       "城鎮"
@@ -126,10 +152,15 @@
     "name": "白馬寺",
     "description": "新建不久的佛寺，香火尚淺，卻已有不少士人來此清談避世。亂世之中，這裡難得清靜。",
     "connections": [
-      "wan_city"
+      "luoyang_palace",
+      "mengjin_ford",
+      {
+        "to": "luoyang_road",
+        "road": "官道"
+      }
     ],
-    "x": 255,
-    "y": 192,
+    "x": 184,
+    "y": 786,
     "tags": [
       "寺院"
     ],
@@ -139,15 +170,87 @@
     ]
   },
   {
+    "id": "luoyang_palace",
+    "name": "洛陽宮城",
+    "description": "漢室的宮城，宮門重重，宦官往來。朝中的消息多從這裡傳出，真假難辨。",
+    "connections": [
+      "beimang_hill",
+      "dajiangjun_fu",
+      "baima_temple",
+      {
+        "to": "nanyang_wilds",
+        "road": "山路"
+      }
+    ],
+    "x": 123,
+    "y": 838,
+    "important": true,
+    "tags": [
+      "官署"
+    ]
+  },
+  {
+    "id": "dajiangjun_fu",
+    "name": "大將軍府",
+    "description": "大將軍何進的府邸，門前車馬喧囂，各地的奏報與請命的人絡繹不絕。",
+    "connections": [
+      "luoyang_palace"
+    ],
+    "x": 60,
+    "y": 794,
+    "important": true,
+    "tags": [
+      "官署"
+    ]
+  },
+  {
+    "id": "beimang_hill",
+    "name": "北邙山",
+    "description": "洛陽城北的山嶺，王侯陵墓錯落其間。山道上偶有盜墓的歹人與巡山的兵卒。",
+    "connections": [
+      "mengjin_ford",
+      "luoyang_palace"
+    ],
+    "x": 120,
+    "y": 755,
+    "tags": [
+      "山林"
+    ],
+    "danger": 2
+  },
+  {
+    "id": "mengjin_ford",
+    "name": "孟津渡",
+    "description": "洛陽北面的黃河渡口，是北上河內、轉往冀州的要道。近來常見西涼兵馬在此駐紮。",
+    "connections": [
+      "beimang_hill",
+      "baima_temple",
+      "haozu_fort"
+    ],
+    "x": 186,
+    "y": 708,
+    "tags": [
+      "渡口"
+    ],
+    "danger": 2
+  },
+  {
     "id": "nanyang_road",
     "name": "南陽官道",
     "description": "通往宛城的官道，路旁時見兵禍留下的殘破村落。",
     "connections": [
-      "wan_city",
-      "runan"
+      {
+        "to": "wan_city",
+        "road": "官道"
+      },
+      "nanyang_huangjin_camp",
+      {
+        "to": "hilltop_wilds",
+        "road": "官道"
+      }
     ],
-    "x": 230,
-    "y": 255,
+    "x": 237,
+    "y": 1076,
     "tags": [
       "官道",
       "野外"
@@ -161,17 +264,79 @@
     ]
   },
   {
+    "id": "nanyang_huangjin_camp",
+    "name": "南陽黃巾營",
+    "description": "南陽黃巾渠帥張曼成的大營，營中旗幟寫著「黃天當立」。附近村落的青壯多被裹挾入營。",
+    "connections": [
+      "nanyang_road",
+      "wan_city"
+    ],
+    "x": 246,
+    "y": 1153,
+    "important": true,
+    "tags": [
+      "營寨"
+    ],
+    "danger": 3
+  },
+  {
+    "id": "yu_river",
+    "name": "淯水河畔",
+    "description": "淯水繞過宛城南流，河岸平緩，漁船與運糧船往來。黃巾的嘍囉不時沿河劫掠。",
+    "connections": [
+      "wan_city",
+      "xinye"
+    ],
+    "x": 83,
+    "y": 1147,
+    "tags": [
+      "河畔"
+    ]
+  },
+  {
+    "id": "xinye",
+    "name": "新野",
+    "description": "宛城南邊的小縣，城牆低矮，縣中百姓多是逃難而來。縣衙前常貼著徵糧的告示。",
+    "connections": [
+      "yu_river",
+      "nanyang_wilds"
+    ],
+    "x": 134,
+    "y": 1195,
+    "tags": [
+      "城鎮"
+    ]
+  },
+  {
+    "id": "nanyang_wilds",
+    "name": "南陽郊野",
+    "description": "宛城西北的丘陵荒野，往北的山路可通洛陽。官軍與黃巾的斥候都在這一帶出沒。",
+    "connections": [
+      "wan_city",
+      "xinye",
+      {
+        "to": "luoyang_palace",
+        "road": "山路"
+      }
+    ],
+    "x": 121,
+    "y": 1088,
+    "tags": [
+      "野外"
+    ],
+    "danger": 2
+  },
+  {
     "id": "runan",
     "name": "汝南",
     "description": "「四世三公」袁氏的根基所在，城中名士雲集，清議之風極盛。誰能得汝南士人相助，誰就多了幾分號召天下的底氣。",
     "connections": [
-      "nanyang_road",
+      "runan_wilds",
       "runan_academy",
-      "hilltop_wilds",
-      "songshan_foot"
+      "runan_market"
     ],
-    "x": 150,
-    "y": 270,
+    "x": 651,
+    "y": 1168,
     "important": true,
     "tags": [
       "城鎮"
@@ -182,10 +347,11 @@
     "name": "汝南學宮",
     "description": "士人講學論道之處，終日高談闊論。這裡的清議，往往比朝廷的詔令更能左右天下人心。",
     "connections": [
-      "runan"
+      "runan",
+      "runan_market"
     ],
-    "x": 90,
-    "y": 315,
+    "x": 618,
+    "y": 1235,
     "tags": [
       "城鎮"
     ]
@@ -195,10 +361,15 @@
     "name": "荒丘",
     "description": "城外的一片荒丘，據說前朝曾在此駐軍。近來常有人在丘上挖掘，不知所為何事。",
     "connections": [
-      "runan"
+      "yingshui",
+      "runan_wilds",
+      {
+        "to": "nanyang_road",
+        "road": "官道"
+      }
     ],
-    "x": 160,
-    "y": 345,
+    "x": 544,
+    "y": 1065,
     "tags": [
       "野外"
     ],
@@ -215,12 +386,15 @@
     "name": "嵩山腳",
     "description": "嵩山山腳，林木蒼鬱，山道蜿蜒而上。山匪不時出沒，往來商旅多結伴而行。",
     "connections": [
-      "runan",
+      "yingchuan",
       "yingchuan_academy",
-      "deep_mountain"
+      {
+        "to": "deep_mountain",
+        "road": "山路"
+      }
     ],
-    "x": 110,
-    "y": 210,
+    "x": 395,
+    "y": 901,
     "tags": [
       "山林"
     ],
@@ -237,10 +411,11 @@
     "name": "潁川書院",
     "description": "潁川名士講學授徒之處，門規嚴謹，出入者多是飽讀詩書的士子。",
     "connections": [
+      "yingchuan",
       "songshan_foot"
     ],
-    "x": 55,
-    "y": 188,
+    "x": 396,
+    "y": 974,
     "important": true,
     "tags": [
       "書院"
@@ -251,11 +426,17 @@
     "name": "嵩山深處",
     "description": "人跡罕至的深山，古木參天。傳說前朝曾有異人在此隱居，留下不少奇談。",
     "connections": [
-      "songshan_foot",
-      "jade_cave"
+      {
+        "to": "songshan_foot",
+        "road": "山路"
+      },
+      {
+        "to": "jade_cave",
+        "road": "山路"
+      }
     ],
-    "x": 40,
-    "y": 245,
+    "x": 326,
+    "y": 910,
     "tags": [
       "山林"
     ],
@@ -274,10 +455,13 @@
     "name": "南華觀",
     "description": "藏在深山中的一座荒廢道觀，相傳「南華老仙」曾在此隱居。觀後石壁上，隱約可見符文刻痕。",
     "connections": [
-      "deep_mountain"
+      {
+        "to": "deep_mountain",
+        "road": "山路"
+      }
     ],
-    "x": 25,
-    "y": 290,
+    "x": 285,
+    "y": 965,
     "important": true,
     "tags": [
       "洞窟"
@@ -294,11 +478,15 @@
     "name": "汝南集市",
     "description": "汝南城外的集市，米糧布匹交易熱絡，是這一帶少有還算太平的地方。",
     "connections": [
-      "wan_city",
-      "qiao_county"
+      "runan",
+      "runan_academy",
+      {
+        "to": "qiao_county",
+        "road": "官道"
+      }
     ],
-    "x": 420,
-    "y": 245,
+    "x": 694,
+    "y": 1230,
     "tags": [
       "城鎮"
     ],
@@ -312,12 +500,14 @@
     "name": "譙縣",
     "description": "沛國譙縣，曹氏家族世代經營之地。城中曹家的宅院氣派，往來的門客也不少。",
     "connections": [
-      "runan_market",
-      "cao_manor",
-      "runan_wilds"
+      {
+        "to": "runan_market",
+        "road": "官道"
+      },
+      "cao_manor"
     ],
-    "x": 480,
-    "y": 285,
+    "x": 764,
+    "y": 1167,
     "important": true,
     "tags": [
       "城鎮"
@@ -330,8 +520,8 @@
     "connections": [
       "qiao_county"
     ],
-    "x": 570,
-    "y": 260,
+    "x": 813,
+    "y": 1109,
     "important": true,
     "tags": [
       "莊院"
@@ -342,12 +532,15 @@
     "name": "汝南荒野",
     "description": "汝南城外的荒野，黃巾散部時常流竄至此劫掠村落。",
     "connections": [
-      "qiao_county",
-      "zhuo_county",
-      "huangjin_camp"
+      {
+        "to": "changshe",
+        "road": "官道"
+      },
+      "hilltop_wilds",
+      "runan"
     ],
-    "x": 460,
-    "y": 345,
+    "x": 601,
+    "y": 1113,
     "tags": [
       "野外"
     ],
@@ -369,10 +562,10 @@
     "name": "黃巾別部營寨",
     "description": "黃巾別部在山谷間紮下的營寨，柵欄高聳、旌旗獵獵。這是這一帶黃巾勢力最大的據點。",
     "connections": [
-      "runan_wilds"
+      "changshe"
     ],
-    "x": 545,
-    "y": 380,
+    "x": 657,
+    "y": 971,
     "tags": [
       "營寨"
     ],
@@ -394,11 +587,24 @@
     "name": "涿郡",
     "description": "幽州涿郡，遠離中原戰事，卻也有不少熱血少年正在招募鄉勇、準備投軍討賊。",
     "connections": [
-      "runan_wilds",
-      "market_town"
+      "loushang_village",
+      "juma_river",
+      "zhuo_militia_hall",
+      {
+        "to": "yanshan_foot",
+        "road": "山路"
+      },
+      {
+        "to": "market_town",
+        "road": "官道"
+      },
+      {
+        "to": "julu_altar",
+        "road": "官道"
+      }
     ],
-    "x": 610,
-    "y": 318,
+    "x": 584,
+    "y": 118,
     "important": true,
     "tags": [
       "城鎮"
@@ -409,10 +615,15 @@
     "name": "集市小鎮",
     "description": "涿郡城外的小鎮，鎮上的酒肆里，常有意氣風發的年輕人高談討賊立功之志。",
     "connections": [
-      "zhuo_county"
+      "yanshan_foot",
+      {
+        "to": "zhuo_county",
+        "road": "官道"
+      },
+      "zhuo_militia_hall"
     ],
-    "x": 650,
-    "y": 300,
+    "x": 678,
+    "y": 109,
     "tags": [
       "城鎮"
     ],
@@ -420,5 +631,200 @@
       "gang_1",
       "kuai_1"
     ]
+  },
+  {
+    "id": "loushang_village",
+    "name": "樓桑里",
+    "description": "涿郡城外的小村，村口一株大桑樹，枝葉如車蓋。織蓆販履的人家多住在這一帶，近來常有鄉勇在樹下操練。",
+    "connections": [
+      "zhuo_county",
+      "juma_river"
+    ],
+    "x": 509,
+    "y": 118,
+    "tags": [
+      "里巷"
+    ]
+  },
+  {
+    "id": "zhuo_militia_hall",
+    "name": "鄉里結社",
+    "description": "涿郡豪族出錢出糧聚起的鄉里結社，名為保境安民，實則招兵買馬。廳前常有遊俠與豪族子弟往來。",
+    "connections": [
+      "zhuo_county",
+      "market_town"
+    ],
+    "x": 637,
+    "y": 172,
+    "important": true,
+    "tags": [
+      "結社"
+    ]
+  },
+  {
+    "id": "juma_river",
+    "name": "拒馬河畔",
+    "description": "拒馬河水流湍急，兩岸蘆葦叢生。往南的山路從這裡翻過丘陵，通往冀州下曲陽。",
+    "connections": [
+      "loushang_village",
+      "zhuo_county",
+      {
+        "to": "xiaquyang",
+        "road": "山路"
+      }
+    ],
+    "x": 543,
+    "y": 186,
+    "tags": [
+      "河畔"
+    ],
+    "danger": 2
+  },
+  {
+    "id": "yanshan_foot",
+    "name": "燕山腳",
+    "description": "燕山南麓，山勢連綿，林間常有馬賊出沒。山腳下有獵戶的木屋，偶爾收留過路的旅人。",
+    "connections": [
+      {
+        "to": "zhuo_county",
+        "road": "山路"
+      },
+      "market_town"
+    ],
+    "x": 621,
+    "y": 60,
+    "tags": [
+      "山林"
+    ],
+    "danger": 2
+  },
+  {
+    "id": "julu_altar",
+    "name": "鉅鹿道壇",
+    "description": "鉅鹿郡的太平道壇，香火日夜不絕。黃巾信眾在此受符水、聽講經，入道的人須在壇前立誓。",
+    "connections": [
+      {
+        "to": "baima_ford",
+        "road": "官道"
+      },
+      "guangzong",
+      "xiaquyang",
+      {
+        "to": "zhuo_county",
+        "road": "官道"
+      }
+    ],
+    "x": 534,
+    "y": 484,
+    "important": true,
+    "tags": [
+      "祭壇",
+      "營寨"
+    ],
+    "danger": 3
+  },
+  {
+    "id": "guangzong",
+    "name": "廣宗",
+    "description": "天公將軍張角坐鎮的城池，城外壕溝深闊、營壘相連。黃巾主力屯駐於此，是冀州戰局的樞紐。",
+    "connections": [
+      "julu_altar",
+      {
+        "to": "baima_ford",
+        "road": "官道"
+      },
+      "luzhi_camp"
+    ],
+    "x": 612,
+    "y": 471,
+    "important": true,
+    "tags": [
+      "城池",
+      "營寨"
+    ],
+    "danger": 3
+  },
+  {
+    "id": "luzhi_camp",
+    "name": "盧植營",
+    "description": "北中郎將盧植圍攻廣宗所設的大營，營中軍紀森嚴。投軍的人在轅門外登記姓名。",
+    "connections": [
+      "guangzong",
+      {
+        "to": "baima_ford",
+        "road": "官道"
+      }
+    ],
+    "x": 672,
+    "y": 520,
+    "important": true,
+    "tags": [
+      "營寨"
+    ],
+    "danger": 2
+  },
+  {
+    "id": "xiaquyang",
+    "name": "下曲陽",
+    "description": "冀州北部的城邑，地公將軍張寶的兵馬在此盤踞。城外村落十室九空，糧草都被徵進城中。",
+    "connections": [
+      "julu_altar",
+      "haozu_fort",
+      {
+        "to": "juma_river",
+        "road": "山路"
+      }
+    ],
+    "x": 467,
+    "y": 445,
+    "tags": [
+      "城鎮"
+    ],
+    "danger": 2
+  },
+  {
+    "id": "haozu_fort",
+    "name": "豪族塢堡",
+    "description": "冀州大族修築的塢堡，高牆箭樓，部曲私兵守衛森嚴。亂世之中，這裡收留了不少逃難的佃農。",
+    "connections": [
+      "xiaquyang",
+      "mengjin_ford"
+    ],
+    "x": 406,
+    "y": 497,
+    "important": true,
+    "tags": [
+      "塢堡"
+    ],
+    "danger": 2
+  },
+  {
+    "id": "baima_ford",
+    "name": "白馬津",
+    "description": "黃河南岸的渡口，渡船往來不絕。往南的官道從這裡通往潁川，往北是黃巾縱橫的冀州。",
+    "connections": [
+      {
+        "to": "julu_altar",
+        "road": "官道"
+      },
+      {
+        "to": "guangzong",
+        "road": "官道"
+      },
+      {
+        "to": "luzhi_camp",
+        "road": "官道"
+      },
+      {
+        "to": "changshe",
+        "road": "官道"
+      }
+    ],
+    "x": 586,
+    "y": 558,
+    "tags": [
+      "渡口"
+    ],
+    "danger": 2
   }
 ]

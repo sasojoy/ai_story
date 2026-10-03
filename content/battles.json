@@ -2,7 +2,7 @@
   {
     "id": "huangjin_showdown",
     "name": "黃巾決戰",
-    "region": "yingchuan_area",
+    "region": "yingru",
     "factions": [
       {"id": "guan", "name": "官軍"},
       {"id": "huang", "name": "黃巾軍"}
