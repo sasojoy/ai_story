@@ -1092,6 +1092,9 @@ def test_on_the_road_the_page_is_told_so_and_can_turn_back(client):
     assert main["on_road"] is True  # 頁面照它放輿圖、修練、煉製三個捷徑
     assert "road:back" in [o["id"] for o in main["options"]]
     assert "路上可以折返" in main["scene"]
+    with mock.patch("server.time.time", return_value=server.time.time() + 6 * 3600):  # 早就到了：捷徑收起來、回到平常的選單
+        main = client.get("/api/main").json()
+    assert main["on_road"] is False and "act:explore" in [o["id"] for o in main["options"]]
 
 
 def test_turning_back_follows_the_move_mode_header(client):

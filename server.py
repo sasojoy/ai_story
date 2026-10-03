@@ -233,13 +233,16 @@ def answer_event(game: Game, text: str) -> list[str] | None:
 def main_view(game: Game) -> dict:
     """江湖畫面與頂上的狀態列；每次動作、每次計時器都回這一份。呼叫端要拿著行動鎖。"""
     card = game.battle_card() if game.shows_battle_card() else None
+    status, quest, scene = game.status_data(), md(game.quest_text()), md(game.scene_text())
+    options = game.options()  # 照原本的順序：狀態、主線、場景先讀，選單（會推進全服戰鬥）最後
     return {
-        "status": game.status_data(),
-        "quest": md(game.quest_text()),
-        "scene": md(game.scene_text()),
-        "options": [o.model_dump() for o in game.options()],
-        # 在路上（路上設計 3.3）：頁面在選項底下多放三個捷徑（輿圖、修練、煉製），那是頁面切換、不是引擎的行動
-        "on_road": game.state.player.journey is not None,
+        "status": status,
+        "quest": quest,
+        "scene": scene,
+        "options": [o.model_dump() for o in options],
+        # 在路上（路上設計 3.3）：頁面在選項底下多放三個捷徑（輿圖、修練、煉製），那是頁面切換、不是引擎的行動。
+        # 看的是選單本身：參戰者在決戰大區裡走動時選單是戰鬥選項，那時不放捷徑
+        "on_road": any(o.id == "act:on_road" for o in options),
         "free_text": game.battle_free_text_prompt(),
         "event_free_text": game.event_free_text_prompt(),  # 眼前事件的隨口應對：選單上那一顆按下去叫出輸入框
         # 「剛剛」：這次行動打了仗就放戰鬥卡片，卡片沒寫到的補充放在 latest；沒打仗時 latest 是最新一則紀錄
