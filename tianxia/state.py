@@ -140,8 +140,9 @@ class WorldState(BaseModel):
     storyline: str = ""  # 目前主線 id
     act: int = 0  # 目前第幾幕（從 0 起算）
     act_reached: int = 0  # 本季到過的最遠一幕；主線改寫會把 act 歸零，隊伍數與統御上限看這個（見 roster.stage）
-    pending_battle: str | None = None  # 背景推進跨過開戰門檻時記下要開的戰鬥 id；那時正握著全服紀錄的鎖，
-    # 不能在鎖裡開戰（鎖不可重入），鎖放開後由 world.start_pending_battle 開戰並清掉
+    pending_battle: str | None = None  # 背景推進跨過開戰門檻時記下要開的戰鬥 id；那時人在 mutate_season 的
+    # callback 裡，不能再 mutate 開戰（巢狀的 mutate 內層寫的會被蓋掉，會丟錯），callback 結束後由
+    # world.start_pending_battle 開戰並清掉
 
 
 class Fighter(BaseModel):

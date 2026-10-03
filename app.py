@@ -243,7 +243,7 @@ def render_menxia(game: Game, person: str | None = None, message: str | None = N
 
 
 def act(game: Game | None, action, note: bool = False) -> list:
-    """同步時間 → 執行動作 → 存檔 → 重畫。拿跨程式的行動鎖（假人程式也拿同一把），避免計時器、按鈕點擊與假人同時操作。
+    """同步時間 → 執行動作 → 存檔 → 重畫。開一筆寫入交易（假人程式寫同一個資料庫），避免計時器、按鈕點擊與假人同時操作。
 
     note=True 時連門下頁面一起重畫，動作回傳的訊息顯示在門下頁面的訊息區；
     回傳 UNCHANGED 時什麼都不存、不重畫。

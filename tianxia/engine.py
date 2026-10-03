@@ -745,7 +745,7 @@ class Game:
         return battle, definition
 
     def _advance_battle_round(self, battle: battle_instance.BattleInstance, definition: BattleDef) -> list[str]:
-        """核心推進邏輯（在呼叫端已經握有 mutate_battle 鎖的前提下原地修改 battle）：
+        """核心推進邏輯（在呼叫端的 mutate_battle callback 裡原地修改 battle）：
         集結逾時自動分配、機器人補位、場上沒人能打又逾時就用保底結果收場、回合逾時代選
         保守行動、全員到齊就結算並請 LLM 潤色。回傳這次呼叫如果真的結算了一回合（或收場）
         的敘事訊息，沒有結算就是空清單。這是
@@ -777,7 +777,7 @@ class Game:
         return [narration] if narration else msgs
 
     def _run_battle_tick(self, definition: BattleDef) -> tuple[battle_instance.BattleInstance | None, list[str]]:
-        """在鎖保護下跑一次 _advance_battle_round，給被動追趕（options()/scene_text()）用。"""
+        """在 mutate_battle 裡跑一次 _advance_battle_round，給被動追趕（options()/scene_text()）用。"""
         captured: dict[str, list[str]] = {"msgs": []}
 
         def _apply(b: battle_instance.BattleInstance) -> None:
@@ -788,9 +788,10 @@ class Game:
 
     def _apply_battle_outcome(self, battle: battle_instance.BattleInstance) -> None:
         """戰鬥剛結束這一刻，把結果套用到共用賽季（大勢推動／世界旗標），順便留一筆
-        江湖史——這裡故意不在 mutate_battle 的 callback 裡面做（兩者用同一把檔案鎖，
-        不是可重入的，巢狀呼叫 mutate_season 會自我鎖死），所以是呼叫端在拿到
-        mutate_battle 的結果、確定鎖已經釋放之後才呼叫，順序上一定晚於戰鬥本身的結算。"""
+        江湖史——這裡故意不在 mutate_battle 的 callback 裡面做（寫入交易雖然可以巢狀，但 mutate 的
+        callback 裡再呼叫 mutate_season，內層寫的會被外層的整份存檔蓋掉，database.rewriting 會直接丟
+        RuntimeError），所以是呼叫端在拿到 mutate_battle 的結果、callback 已經結束之後才呼叫，
+        順序上一定晚於戰鬥本身的結算。"""
         if not (battle.outcome_world_flags or battle.outcome_trend_delta or battle.outcome_title):
             return
 

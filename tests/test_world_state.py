@@ -21,7 +21,7 @@ def store(tmp_path):
     return open_world(tmp_path / "world.db")
 
 
-def test_read_missing_file_returns_empty_state(store):
+def test_read_from_a_fresh_database_returns_empty_state(store):
     assert store.read().companion_tag_counts == {}
     assert store.get_skill("裂石拳") is None
 

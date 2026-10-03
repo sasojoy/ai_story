@@ -80,7 +80,7 @@ def _fire(
         if world is not None:
             world.start_battle(content.battles[starts_battle], now=_now_for_battle(now))
             msgs.append(f"🛡️ 【全服戰報】{content.battles[starts_battle].name}的集結號角已經吹響！")
-        else:  # 背景推進（sim_tick）：先記下來，鎖放開後由 start_pending_battle 開戰
+        else:  # 背景推進（sim_tick）：先記下來，mutate 結束後由 start_pending_battle 開戰
             state.world.pending_battle = starts_battle
     if ends_season:
         msgs += end_season(state, content, world)
@@ -220,10 +220,10 @@ def advance_world_state(
     """把一份 WorldState（不管是共用賽季的副本，還是——理論上——任何 WorldState）原地
     往前推進 seconds 秒：逐小時推進、累積滿一小時才跑一次虛擬玩家模擬（避免長時間快轉時
     事件/門檻判斷太粗），照搬原本 engine.py::_advance_step 的世界部分。純函式性質（除了
-    原地修改傳入的 season），不處理鎖——鎖是呼叫端的事：Game.advance() 直接對
+    原地修改傳入的 season），不碰儲存——存不存、怎麼存是呼叫端的事：Game.advance() 直接對
     self.state.world 呼叫這個函式再自己存回共用儲存（跟 choose()/travel() 同一套模式）；
     被動的現實時間追趕（world_state.py::catch_up_season）則透過下面的 advance_season
-    包一層鎖再呼叫。"""
+    包在 mutate_season 裡再呼叫。"""
     vehicle = _season_vehicle(content, season)
     msgs: list[str] = []
     remaining = seconds
@@ -242,8 +242,8 @@ def advance_world_state(
 
 
 def start_pending_battle(world: WorldStateStore, content: Content, now: float) -> list[str]:
-    """背景推進跨過開戰門檻時只在賽季上記下要開哪一場（見 _fire）；呼叫端放開全服紀錄的鎖
-    之後呼叫這裡，真的開戰並清掉記號。沒有待開的戰鬥就什麼都不寫。"""
+    """背景推進跨過開戰門檻時只在賽季上記下要開哪一場（見 _fire）；呼叫端的 mutate_season
+    結束之後呼叫這裡（mutate 不能巢狀），真的開戰並清掉記號。沒有待開的戰鬥就什麼都不寫。"""
     if world.get_season().pending_battle is None:
         return []
     taken: dict[str, str | None] = {"id": None}
@@ -262,9 +262,9 @@ def start_pending_battle(world: WorldStateStore, content: Content, now: float) -
 def advance_season(
     world: WorldStateStore, content: Content, seconds: float, rng: random.Random, now: float,
 ) -> list[str]:
-    """跟 advance_world_state 做一樣的事，差別是這裡直接鎖住共用賽季本身來源、修改、
-    寫回——給被動的現實時間追趕用（world_state.py::catch_up_season），那條路徑沒有
-    哪個玩家的 self.state.world 可以操作，只能直接對著共用儲存動手。鎖放開之後才開
+    """跟 advance_world_state 做一樣的事，差別是這裡直接對共用賽季本身讀出、修改、
+    寫回（mutate_season）——給被動的現實時間追趕用（world_state.py::catch_up_season），那條路徑沒有
+    哪個玩家的 self.state.world 可以操作，只能直接對著共用儲存動手。mutate_season 結束之後才開
     推進途中跨過門檻的戰鬥（見 start_pending_battle）。"""
     msgs: list[str] = []
     world.mutate_season(lambda season: msgs.extend(advance_world_state(season, content, seconds, rng, world)))
