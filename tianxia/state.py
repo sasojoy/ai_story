@@ -172,7 +172,7 @@ class BattleRecord(BaseModel):
     id: int  # 流水號，本季從 1 起算
     time: float  # 開打時的遊戲時間
     location: str  # 地點名稱
-    kind: Literal["train", "event"]  # 歷練／劇情
+    kind: Literal["train", "event", "wild"]  # 歷練／劇情／探索撞上的野怪（舊戰報的 train 不遷移，照舊顯示「歷練」）
     event: str = ""  # 劇情戰的事件標題
     opponent: str  # 敵方隊伍名稱
     ours: list[Fighter]  # 我方陣容，第一位是隊長；等級是開打時的等級

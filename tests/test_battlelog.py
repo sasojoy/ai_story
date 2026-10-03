@@ -127,6 +127,32 @@ def test_detail_text_includes_the_lineup_and_battle_number():
     assert "**大勝**　我方威力 40　對手難度 5" in detail
 
 
+def test_a_wild_fight_is_worded_as_a_wild_encounter_not_as_training():
+    """探索撞上的野怪（kind="wild"）在卡片與詳情寫「探索遇敵」，歷練仍寫「歷練」（FB-023）。"""
+    assert battlelog.KIND_WORDS["wild"] == "探索遇敵"
+    wild = record(kind="wild")
+    assert battlelog.card_text(wild).split("\n\n")[1] == "第2天 08:30　探索遇敵"
+    assert "第2天 08:30　探索遇敵　第 3 場" in battlelog.detail_text(wild)
+    assert "歷練" not in battlelog.card_text(wild) and "歷練" not in battlelog.detail_text(wild)
+    assert battlelog.card_text(record(kind="train")).split("\n\n")[1] == "第2天 08:30　歷練"
+
+
+def test_every_kind_a_record_can_have_has_a_word():
+    """BattleRecord.kind 新增一種值時，這裡會提醒：KIND_WORDS 少一個就是畫面上的 KeyError。"""
+    from typing import get_args
+
+    assert set(get_args(BattleRecord.model_fields["kind"].annotation)) == set(battlelog.KIND_WORDS)
+
+
+def test_an_old_training_record_still_loads_and_reads_as_training():
+    """FB-023 不遷移舊戰報：存檔裡 kind="train" 的紀錄照舊讀得進來、顯示「歷練」。"""
+    old = record(kind="train")
+    loaded = BattleRecord.model_validate_json(old.model_dump_json())
+    assert loaded.kind == "train" and "第2天 08:30　歷練" in battlelog.detail_text(loaded)
+    assert BattleRecord.model_validate_json(record(kind="event").model_dump_json()).kind == "event"
+    assert BattleRecord.model_validate_json(record(kind="wild").model_dump_json()).kind == "wild"
+
+
 def test_detail_text_lists_multiple_teammates():
     rec = record(ours=[Fighter(name="沈浪", level=3), Fighter(name="韓鐵", level=2)])
     assert "**我方**　沈浪 Lv3、韓鐵 Lv2" in battlelog.detail_text(rec)

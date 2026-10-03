@@ -13,7 +13,7 @@ from .world_state import WorldStateStore
 
 MAX_RECORDS = 20  # 存檔保留最近幾場
 TIER_WORDS = {"大勝": "大勝", "險勝": "險勝", "僵持": "平手", "落敗": "落敗"}
-KIND_WORDS = {"train": "歷練", "event": "劇情"}
+KIND_WORDS = {"train": "歷練", "event": "劇情", "wild": "探索遇敵"}
 NO_RECORD = "（還沒有戰報。）"
 DAY = 86400
 HOUR = 3600

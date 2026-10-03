@@ -1427,7 +1427,7 @@ class Game:
         if self._drills_with(squad):
             return self._drill(squad)
         result = team.fight(s, c, self.world, squad.id, self.rng)
-        record = battlelog.new_record(s, c, self.world, squad, result, "train")
+        record = battlelog.new_record(s, c, self.world, squad, result, "wild" if wild else "train")
         msgs: list[str] = []
         if result.tier in team.WIN_TIERS:
             rewards = self._battle_rewards(squad, record)

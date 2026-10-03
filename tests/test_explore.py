@@ -277,6 +277,25 @@ def test_a_wild_win_pays_like_training_but_leaves_the_trend_and_no_post_fight_ev
     assert game.state.world.trends["kou"] == 29 and game.state.pending_event == "chain_a"
 
 
+def test_a_wild_fight_is_recorded_as_wild_and_shown_as_a_wild_encounter(content, game):
+    """FB-023：探索撞上的野怪戰報 kind 是 wild、顯示「探索遇敵」；歷練照舊 train／「歷練」。"""
+    from tianxia import battlelog
+
+    rules.learn_skill(game.state, content, "fist")
+    _lake(game, with_event=False)
+    _only(game, material=0, wild=1, event=0)
+    game.rng = FixedRandom(0.99)
+    game.choose("act:explore")
+    record = game.state.battles[0]
+    assert record.kind == "wild"
+    assert "探索遇敵" in battlelog.card_text(record) and "歷練" not in battlelog.card_text(record)
+    assert "探索遇敵" in battlelog.detail_text(record)
+    game.choose("act:train")
+    trained = game.state.battles[0]
+    assert trained.id != record.id and trained.kind == "train"
+    assert "歷練" in battlelog.detail_text(trained) and "探索遇敵" not in battlelog.detail_text(trained)
+
+
 def test_the_journal_files_it_under_exploring(content, game):
     rules.learn_skill(game.state, content, "fist")
     _lake(game, with_event=False)
