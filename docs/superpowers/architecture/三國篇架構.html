@@ -138,12 +138,51 @@ details.sub:not([open]) > summary .name::after { content: " ▸"; }
 .flow.topicflow { min-width: 0; max-width: none; }
 .flow.topicflow .lab { paint-order: stroke; stroke: var(--surface); stroke-width: 4px; stroke-linejoin: round; }
 .none { color: var(--muted); font-size: 14px; }
+
+/* 畫面流程子頁：一段流程一條可以橫捲的截圖帶，點圖放大 */
+#screens { display: grid; grid-template-columns: minmax(0, 1fr); gap: 30px; }
+#screens .panel p, #screens .plain li { overflow-wrap: anywhere; }
+#screens h3 { margin: 0; font-family: var(--display); font-size: 18px; }
+#screens h4 { margin: 6px 0 0; font-size: 14px; color: var(--muted); letter-spacing: .06em; }
+.flowidx { display: flex; flex-wrap: wrap; gap: 6px; }
+.flowidx a { font-size: 13px; text-decoration: none; color: var(--accent); border: 1px solid var(--line); background: var(--surface);
+  border-radius: 6px; padding: 3px 9px; white-space: nowrap; }
+.flowidx a:hover { border-color: var(--accent); }
+.shotflow { scroll-margin-top: 12px; }
+.strip { display: flex; gap: 16px; overflow-x: auto; scroll-snap-type: x proximity; padding: 2px 2px 12px; }
+.strip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.shot { flex: 0 0 210px; margin: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; align-content: start; scroll-snap-align: start; min-width: 0; }
+.shot-img { padding: 0; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: var(--surface); cursor: zoom-in; display: block; width: 100%; }
+.shot-img img { display: block; width: 100%; height: auto; aspect-ratio: 390 / 844; }
+.shot-img:hover { border-color: var(--accent); }
+.shot-img:focus-visible, .sidchip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.shot figcaption { font-size: 13px; line-height: 1.5; }
+.sid { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-weight: 700; color: var(--accent); }
+.shot .act { font-size: 13px; color: var(--accent); font-weight: 500; }
+.shot .obs { font-size: 12.5px; color: var(--muted); line-height: 1.55; }
+.obs-k { display: inline-block; font-size: 11px; font-weight: 700; color: var(--talk); background: var(--talk-bg); border-radius: 999px;
+  padding: 1px 7px; margin-right: 6px; letter-spacing: .04em; }
+.issues { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.issues li { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: baseline; }
+.issues .itxt { flex: 1 1 260px; min-width: 0; font-size: 14px; }
+.chips { display: inline-flex; gap: 4px; }
+.sidchip { font: 700 12px ui-monospace, "Cascadia Mono", Consolas, monospace; color: var(--accent); background: var(--surface);
+  border: 1px solid var(--line); border-radius: 6px; padding: 2px 7px; cursor: zoom-in; }
+.sidchip:hover { border-color: var(--accent); }
+.hot { font-size: 11.5px; font-weight: 700; color: var(--dev); background: var(--dev-bg); border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
+#shotbox { border: 0; padding: 0; background: transparent; width: min(94vw, 460px); max-width: none; }
+#shotbox::backdrop { background: rgb(0 0 0 / .72); }
+#shotbox .inner { background: var(--surface); color: var(--ink); border-radius: 12px; padding: 10px; display: grid; gap: 8px; }
+#shotbox .boxhead { display: flex; justify-content: space-between; gap: 10px; align-items: start; }
+#shotbox .cap { font-size: 13px; min-width: 0; }
+#shotclose { flex: none; white-space: nowrap; }
+#shotbox img { width: 100%; height: auto; max-height: 80vh; object-fit: contain; display: block; border-radius: 8px; }
 </style>
 
 <div class="wrap">
   <header>
     <h1>天下大勢・三國篇 遊戲架構</h1>
-    <p class="meta">資料截至 2026-10-03・分支 feature/sanguo-companions（04fb8d7）・1141 個自動測試全部通過</p>
+    <p class="meta">資料截至 2026-10-03・分支 feature/sanguo-companions（b9da8df）・1145 個自動測試全部通過</p>
     <div class="legend" id="legend" aria-label="依狀態篩選"></div>
     <div class="defs">
       <span><b style="color:var(--done)">已完成</b>：做好了，現在就能玩</span>
@@ -176,7 +215,7 @@ details.sub:not([open]) > summary .name::after { content: " ▸"; }
   <section aria-labelledby="next-h">
     <h2 id="next-h">接下來</h2>
     <div class="next">
-      <div class="step"><span class="k">現在的目標・你定的</span><h3>第一次 beta：開發收斂</h3><p>線上架構第 1 期＋地圖 40 個地點一起上，一次從零開始；介面改用新網頁（手機優先、Cloudflare 臨時網址）；你和幾個朋友用帳號密碼來玩。已完成：第 1 期、地圖第 2、3 步，兩邊的總審查都過了；新網頁也接上主線了（Gradio 版拿掉）。進行中：① Infra 做畫面改動與三個小修 ② 地圖擴充開發先做三項引擎改動（同伴拿經驗、指名求見的引擎都已完成 → 求見接伺服器 → 走法），連畫面一起做；擋名人名號、煉製同素材放兩次已完成，功法說明做進功法卡 ③ QA 已照新網頁改好清單，正在本機跑第一輪 ④ 換上試玩伺服器、從零開季。換版前你要先在這台電腦裝 cloudflared。朋友的回報傳到 LINE 群組給你（你 10/3 定的）。平衡你決定先不調，一季可能一兩天就被黃巾收掉，收掉時管理者開下一季。新設計不進這次 beta。</p></div>
+      <div class="step"><span class="k">現在的目標・你定的</span><h3>第一次 beta：開發收斂</h3><p>線上架構第 1 期＋地圖 40 個地點一起上，一次從零開始；介面改用新網頁（手機優先、Cloudflare 臨時網址）；你和幾個朋友用帳號密碼來玩。已完成：第 1 期、地圖第 2、3 步，兩邊的總審查都過了；新網頁也接上主線了（Gradio 版拿掉）。進行中：① Infra 做畫面改動與三個小修 ② 地圖擴充開發先做三項引擎改動（同伴拿經驗、指名求見都已完成 → 走法），連畫面一起做；擋名人名號、煉製同素材放兩次已完成，功法說明做進功法卡 ③ QA 已照新網頁改好清單，正在本機跑第一輪 ④ 換上試玩伺服器、從零開季。換版前你要先在這台電腦裝 cloudflared。朋友的回報傳到 LINE 群組給你（你 10/3 定的）。平衡你決定先不調，一季可能一兩天就被黃巾收掉，收掉時管理者開下一季。新設計不進這次 beta。</p><a class="topiclink" href="#screens">看新網頁的畫面流程 →</a></div>
       <div class="step"><span class="k">第 1～3 步完成・接著做 beta 三項</span><h3>地圖擴充與移動</h3><p>「地圖擴充開發」session 負責。第 1 步規則已完成，試玩伺服器跑這一版（1640c1e，固定在 playtest/step1 分支，QA 第 2 輪試玩中）：自然回復改每 3 分鐘 1 點、打坐真的坐下來、步行／趕路／疾行、在路上、喊停、決戰要人在現場。地圖重排成五大區 40 個地點、補 18 個新地點的內容（第 2、3 步）都做完了，總審查也過了：舊事件不會再跑到新地點（玉璽挖寶回嵩山、封鎖渡口只在白馬津）。整季模擬（第 4 步）量過了，你決定 beta 先不調。現在接著做 beta 的三項引擎改動。</p><a class="topiclink" href="#journey">看「遊歷與地圖」→</a></div>
       <div class="step"><span class="k">第 1 期與新網頁都進主線・接著改畫面</span><h3>線上架構第 1 期與新網頁</h3><p>線上架構設計你已同意（封測不保留帳號密碼登入）。第 1 期 9 個任務與總審查都完成：時間由外部傳入、全服狀態與帳號改存 SQLite、角色存檔拿掉賽季副本、江湖史跨季保存。「Infra 架構」也把新網頁（取代 Gradio，手機優先）接上主線了。擋名人名號和「同素材放兩次」的確認測試已完成；接下來依序：功法卡（功法庫先看卡再改練）→ 三個小修（其他分頁跟著刷新、狀態列露出打坐中／在路上／本季共幾天、登入錯誤留在表單下）。換上試玩伺服器時從零開始，朋友要重新註冊。</p><a class="topiclink" href="#multi">看「多人、帳號與線上架構」→</a></div>
       <div class="step"><span class="k">設計已定・排在貢獻帳之後</span><h3>軍備物資與合成表</h3><p>軍備物資設計你已審閱全文：四種軍備、份量 1：3：9、造軍備花 5 點體力、捐了記貢獻也進共用公庫、公庫最多補軍令總額度一半。實作分三段，排在貢獻帳之後。</p><a class="topiclink" href="#growth">看「交鋒、練功與煉製」→</a></div>
@@ -191,6 +230,7 @@ details.sub:not([open]) > summary .name::after { content: " ▸"; }
           <li>情誼到 70 傳授本命武學的舊機制要留還是拿掉（第一季設計說情誼不影響數值）</li>
           <li>二十季大綱草稿要換、合併或拆開哪幾季</li>
           <li>商業模式：抽卡拿掉後怎麼收費</li>
+          <li>畫面流程頁最下面拍到的 22 點，哪些要在 beta 前改（PM 建議三點：第一屏要往下捲才看得到選項、大地圖在手機上讀不到、管理者的快轉和立刻開戰沒有再確認）</li>
           <li>江湖頁只留「剛剛」一則，要不要在 beta 加一個收起來的「前幾則紀錄」（Infra 建議留到第 4 期）</li>
           <li>CLAUDE.md 有 9 處跟現況對不上（清單在 architecture/CLAUDE-md-待修清單.md），要不要讓我請各 session 照清單改</li>
         </ul>
@@ -211,6 +251,8 @@ details.sub:not([open]) > summary .name::after { content: " ▸"; }
   </main>
 
   <main id="topic" hidden></main>
+  <main id="screens" hidden></main>
+  <dialog id="shotbox" aria-label="放大的畫面"><div class="inner"><div class="boxhead"><p class="cap"></p><button type="button" class="btn" id="shotclose">關閉</button></div><img alt=""></div></dialog>
 </div>
 
 <script>
@@ -310,7 +352,7 @@ const TREE = [
     { name: "交遊對話", s: "done", c: [
       { name: "AI 深度對話：每輪一段敘事＋3 個選項", s: "done" },
       { name: "求見門檻：名望不夠見不到，透過結識事件認識的人可以破例", s: "done", note: "劉關張 5 到何進、張角 30" },
-      { name: "指名求見：有兩位以上大勢人物的地點，「求見」按了再選人", s: "dev", note: "你定的；廣宗、大將軍府、長社、南陽黃巾營、涿郡五處，每人各算門檻與每天 3 輪，還見不到的人反灰、標出門檻；進第一次 beta。引擎層 10/3 完成：按「求見」打開名單，每人一個按鈕加「返回」，名望不夠或今天談滿的反灰並寫原因；求見扣交遊的體力，AI 沒回話就退回，不會觸發福緣。名單開著時不能趕路、閉關。交遊只在有交遊事件的地方出現，所以大將軍府袁紹的結識事件現在觸發得到；廣宗、長社、南陽黃巾營沒有交遊事件，那三處只剩求見。接著接伺服器（AI 在鎖外生成）" },
+      { name: "指名求見：有兩位以上大勢人物的地點，「求見」按了再選人", s: "done", note: "你定的；廣宗、大將軍府、長社、南陽黃巾營、涿郡五處，每人各算門檻與每天 3 輪，還見不到的人反灰、標出門檻；10/3 完成（引擎與伺服器），第一次 beta 換上：按「求見」打開名單，每人一個按鈕加「返回」，名望不夠或今天談滿的反灰並寫原因；求見扣交遊的體力，AI 沒回話就退回，不會觸發福緣。名單開著時不能趕路、閉關。交遊只在有交遊事件的地方出現，所以大將軍府袁紹的結識事件現在觸發得到；廣宗、長社、南陽黃巾營沒有交遊事件，那三處只剩求見。AI 回話在全服鎖外生成，等待時按鈕顯示「對方沉吟中…」" },
       { name: "同一位人物每天最多聊 3 輪，每輪扣 2 點體力", s: "done" },
       { name: "模型叫不動時那一輪不扣體力、對話結束", s: "done" },
       { name: "對話錨定在 184 年、稱玩家為「你」、一律轉繁體", s: "done" },
@@ -481,20 +523,26 @@ const TREE = [
     { name: "上千人同時對話的規模與費用", s: "talk", note: "子項目三，還沒談" },
     { name: "每週從軍令模板挑選的「軍令導演」", s: "plan" } ] },
 
-  { id: "ui", name: "介面與紀錄", desc: "玩家看到的畫面與江湖紀錄。", items: [
-    { name: "江湖紀錄：剛剛卡片、最近 5 則、最多 30 則", s: "done" },
-    { name: "整頁：門下（含煉製）、戰報、大地圖；決戰時接管畫面", s: "done" },
-    { name: "右欄：江湖大勢、傳聞、江湖史、閉關、設定", s: "done" },
-    { name: "管理者區塊：開季、下一季、快轉、手動開戰、觸發大事、推大勢、重設密碼", s: "done" },
-    { name: "手機版面：直排、選項排在狀態前、門下／戰報／大地圖黏在上緣、觸控按鈕 48px、紀錄限高可捲", s: "done", note: "sasojoy 照設計參考圖做的；試玩伺服器下次換版才會有" },
-    { name: "門下頁分成可收合的區塊，「煉製」「修練」是真的去處，修練深度十格", s: "done", note: "sasojoy 做的；動作結果移到最上面" },
-    { name: "小動畫：新內容浮現、煉製等待時爐火明滅、拿到新東西那行掃光", s: "done", note: "減少動態模式下改成靜態色條" },
-    { name: "第一次 beta 改用新網頁：伺服器只給資料、手機網頁自己畫，取代 Gradio", s: "done", note: "你 10/3 決定，Infra 10/3 接上主線：FastAPI 加不用建置的單頁網頁，下方五個分頁（江湖、修練、煉製、輿圖、見聞），體力氣血是長條，同一角色所有分頁共用一份。Gradio 版刪掉，第 1 期的改動都搬過來了。試玩伺服器 beta 換版時換上" },
-    { name: "正式版網頁前端：Vue、手機為主，地圖沿用伺服器畫的 SVG", s: "dev", note: "線上架構第 4 期；beta 先用不用建置的原生網頁、每 10 秒輪詢，要不要換成 Vue（可用 CDN 載入、照樣不用建置）、改即時推送之後再定" },
+  { id: "ui", name: "介面與紀錄", desc: "玩家看到的畫面與江湖紀錄。第一次 beta 用的手機網頁，實際操作的樣子看「畫面流程」。", items: [
+    { name: "新網頁：伺服器只給資料、手機網頁自己畫，取代 Gradio", s: "done", note: "你 10/3 決定，Infra 10/3 接上主線：FastAPI 加不用建置的單頁網頁，同一角色所有分頁、裝置共用一份。Gradio 版刪掉，第 1 期的改動都搬過來了；舊介面的手機排版、門下整頁、小動畫都不再用。試玩伺服器 beta 換版時換上" },
+    { name: "畫面架構", s: "done", c: [
+      { name: "登入頁：登入、註冊共用一個表單，註冊後取名號", s: "done" },
+      { name: "頂上狀態列：名號、陣營、所在地、時間，體力氣血是長條，銀兩心得；點開看名望、善惡、屬性", s: "done" },
+      { name: "下方五個分頁：江湖、修練、煉製、輿圖、見聞；有新戰報時見聞亮紅點", s: "done" },
+      { name: "右上 ⚙ 設定抽屜：匿名行走、略過引導、改密碼、登出；管理者多一塊管理者工具", s: "done" } ] },
+    { name: "各分頁", s: "done", c: [
+      { name: "江湖：「剛剛」卡片、場景、選項；打仗時換成戰鬥卡片，決戰時多一個 20 字的放手一搏", s: "done" },
+      { name: "修練：鍛鍊、療傷、自創、閉關、功法庫、門下名冊與角色卡", s: "done" },
+      { name: "煉製：兩格爐位、素材卡（同一種可以點兩次），首次煉成時爐火正旺", s: "done" },
+      { name: "輿圖：大地圖四個圖層，點地點看詳情與步行／趕路／疾行三個按鈕", s: "done" },
+      { name: "見聞：戰報、大勢、傳聞、江湖史、紀錄（江湖紀錄最多 30 則）", s: "done" } ] },
+    { name: "畫面流程：46 張實際操作截圖，附重拍腳本", s: "done", note: "PM 10/3 拍的（主線 56c0eeb）。每張框出下一步要按的地方、有編號，討論時直接說編號；求見、走法、功法卡做好後重拍" },
+    { name: "拍的時候看到、可以討論的 22 點", s: "talk", note: "還沒排進修正。PM 建議 beta 前改三點：第一屏要往下捲才看得到選項、大地圖在手機上字只有 5～6 px、管理者的快轉和立刻開戰沒有再確認。清單在「畫面流程」頁最下面" },
     { name: "新網頁 beta 前要修：其他分頁不跟著刷新、狀態列沒有打坐中／在路上／本季共幾天、登入錯誤只閃 3 秒、閉關沒成功也跳回江湖頁", s: "dev", note: "QA 列的十點，Infra 實測後分類：這四點都只改網頁幾行，排在功法卡之後一起改。例：管理者推了聲勢，見聞的大勢數字要切一次分頁才更新；在路上按閉關，畫面跳回江湖頁，看不到「你現在無法閉關」" },
     { name: "江湖頁只留「剛剛」一則，更早的要點「看江湖紀錄」到見聞頁", s: "talk", note: "QA 的 L10。新網頁刻意做得簡潔；Gradio 版會列最近 5 則。Infra 建議留到第 4 期，你想在 beta 就加，只要幾行（底下加一個收起來的「前幾則紀錄」），等地圖擴充改完江湖頁再做" },
     { name: "新網頁留到第 4 期：閉關只能選 1／2／4／6／8／12 小時、管理者下拉選單沒標籤、改密碼不會登出其他裝置、重開伺服器全部登出", s: "plan", note: "Infra 判定不影響 beta；重開要重新登入你 beta 已接受" },
-    { name: "新網頁之後要補：每次輪詢都是一筆寫入、cookie 要設 secure、登入狀態放記憶體（伺服器重開要重新登入）", s: "plan", note: "beta 幾個人沒問題；第 2 期改成伺服器推送、第 3 期補登入" } ] },
+    { name: "新網頁之後要補：每次輪詢都是一筆寫入、cookie 要設 secure、登入狀態放記憶體（伺服器重開要重新登入）", s: "plan", note: "beta 幾個人沒問題；第 2 期改成伺服器推送、第 3 期補登入" },
+    { name: "正式版網頁前端：要不要換成 Vue、改成伺服器推送", s: "dev", note: "線上架構第 4 期；beta 先用不用建置的原生網頁、每 10 秒輪詢" } ] },
 
   { id: "product", name: "開發、測試與分工", desc: "撐起開發、測試與營運的部分，以及各 session 怎麼分工、回報。", items: [
     { name: "規則引擎與介面分離、內容 JSON 載入時檢查", s: "done" },
@@ -604,7 +652,7 @@ const TOPICS = {
     ],
     next: [
       "第 1～3 步都完成（1142 個測試）：移動與體力的新規則、五大區 40 個地點、18 個新地點的內容，舊事件不再跑到新地點",
-      "beta 三項引擎改動：同伴也拿經驗（已完成）→ 指名求見（引擎已完成，接著接伺服器；同一處有好幾位人物時，按一個「求見」再挑人；還見不到的人反灰、標出門檻）→ 走法切換（步行／趕路／疾行，重新整理回到步行）",
+      "beta 三項引擎改動：同伴也拿經驗（已完成）→ 指名求見（已完成；同一處有好幾位人物時，按一個「求見」再挑人；還見不到的人反灰、標出門檻）→ 走法切換（步行／趕路／疾行，重新整理回到步行）",
       "新網頁接上主線後，把指名求見和走法做進畫面；新手引導的文字改寫成新的移動與體力",
       "整季模擬（第 4 步）量過了，你決定第一次 beta 先不調；等 beta 回報再談",
     ],
@@ -1284,62 +1332,70 @@ const TOPICS = {
   },
 
   ui: {
-    lead: "玩家看到的畫面：左邊是場景、選項和江湖紀錄，右邊是大勢、傳聞、江湖史、閉關、設定幾個分頁；門下、戰報、大地圖是另外的整頁。這是試玩伺服器上舊的 Gradio 介面。第一次 beta 改用的手機網頁已經接上主線（下方五個分頁：江湖、修練、煉製、輿圖、見聞），實際操作的畫面流程拍好後，這一頁會整頁改寫。",
+    lead: "第一次 beta 用的手機網頁：伺服器只給資料，網頁自己畫。頂上是狀態列，底下五個分頁（江湖、修練、煉製、輿圖、見聞），右上 ⚙ 是設定與管理者工具。實際操作一遍的 46 張截圖在「畫面流程」頁，每張都有編號，討論畫面時直接說編號。",
     flow: {
       nodes: [
-        { id: "scene", col: 0, row: 0, t: "主畫面", sub: "場景、小地圖", s: "done", st: "已完成" },
-        { id: "opts", col: 1, row: 0, t: "選項按鈕", sub: "最多 10 個", s: "done", st: "已完成" },
-        { id: "log", col: 2, row: 0, t: "江湖紀錄", sub: "剛剛＋最近 5 則", s: "done", st: "已完成" },
-        { id: "battle", col: 0, row: 1, t: "決戰畫面", sub: "戰場＋20 字輸入", s: "done", st: "已完成" },
-        { id: "side", col: 1, row: 1, t: "右欄", sub: "大勢、傳聞、江湖史", s: "done", st: "已完成" },
-        { id: "pages", col: 2, row: 1, t: "整頁", sub: "門下、戰報、大地圖", s: "done", st: "已完成" },
-        { id: "admin", col: 1, row: 2, t: "管理者區", sub: "設定分頁裡才看得到", s: "done", st: "已完成" },
-        { id: "web", col: 2, row: 2, t: "正式版前端", sub: "Vue、手機為主", s: "dev", st: "開發中・第 4 期" },
+        { id: "login", col: 0, row: 0, t: "登入", sub: "註冊、取名號", s: "done", st: "已完成" },
+        { id: "jh", col: 1, row: 0, t: "江湖", sub: "剛剛、場景、選項", s: "done", st: "已完成" },
+        { id: "practice", col: 2, row: 0, t: "修練", sub: "鍛鍊、自創、閉關", s: "done", st: "已完成" },
+        { id: "craft", col: 3, row: 0, t: "煉製", sub: "兩格爐位、素材卡", s: "done", st: "已完成" },
+        { id: "status", col: 0, row: 1, t: "狀態列", sub: "每一頁頂上", s: "done", st: "已完成・缺打坐和在路上" },
+        { id: "map", col: 1, row: 1, t: "輿圖", sub: "四圖層、三種走法", s: "done", st: "已完成・手機上字太小" },
+        { id: "news", col: 2, row: 1, t: "見聞", sub: "戰報、大勢、紀錄", s: "done", st: "已完成" },
+        { id: "gear", col: 3, row: 1, t: "⚙ 設定", sub: "改密碼、管理者工具", s: "done", st: "已完成" },
+        { id: "battle", col: 1, row: 2, t: "決戰", sub: "江湖頁換成戰場", s: "done", st: "已完成" },
+        { id: "next", col: 3, row: 2, t: "正式版前端", sub: "Vue、伺服器推送", s: "dev", st: "開發中・第 4 期" },
       ],
       edges: [
-        { from: "scene", to: "opts" },
-        { from: "opts", to: "log" },
-        { from: "scene", to: "battle", lab: "決戰時接管" },
-        { from: "log", to: "pages", lab: "看完整戰報" },
-        { from: "side", to: "pages" },
-        { from: "side", to: "admin", lab: "只有管理者" },
-        { from: "pages", to: "web", soft: true, lab: "第 4 期改寫" },
+        { from: "login", to: "jh", lab: "登入" },
+        { from: "jh", to: "practice", lab: "下方分頁" },
+        { from: "practice", to: "craft" },
+        { from: "jh", to: "map", lab: "下方分頁" },
+        { from: "map", to: "news" },
+        { from: "status", to: "jh", lab: "頂上" },
+        { from: "jh", to: "battle", lab: "決戰時" },
+        { from: "news", to: "next", soft: true, lab: "第 4 期再定" },
       ],
-      note: "實線是現在的試玩介面（已完成）；虛線是線上架構第 4 期要換上的正式版前端。地圖上畫什麼在「遊歷與地圖」，戰報與決戰的規則在「交鋒、練功與煉製」「全服決戰」。",
+      note: "實線是第一次 beta 的新網頁（已完成）；虛線是線上架構第 4 期要不要換成 Vue、改成伺服器推送，之後再定。地圖上畫什麼在「遊歷與地圖」，戰報與決戰的規則在「交鋒、練功與煉製」「全服決戰」。",
     },
     rules: [
-      "主畫面左欄由上而下：場景文字（右邊是以你為中心的小地圖和「大地圖」按鈕）、最多 10 個選項按鈕、「剛剛」卡片、江湖紀錄。",
-      "「剛剛」放最新一則紀錄；這次行動打了仗，就換成戰鬥卡片，按「看完整戰報」進戰報頁。",
-      "江湖紀錄：「剛剛」底下直接列 5 則，一則一列，點開看敘事；更早的收在摺疊區，存檔最多留 30 則。",
-      "整頁同一時間只顯示一頁：江湖畫面、門下（名冊、背包、煉製、功法庫、自創與鍛鍊、療傷）、戰報（最近 20 場）、大地圖（四個圖層，點地點看詳情、安排前往）。",
-      "右欄由上而下：主線與目標、狀態列（名號後面接門派・陣營，都沒有才是散人）、門下／戰報／大地圖三個按鈕，再下面是江湖大勢、江湖傳聞、江湖史、閉關（1～12 小時）、設定五個分頁。",
-      "設定分頁有匿名行走、略過新手引導、修改密碼。管理者多一塊：開季、開啟下一季、快轉 +1／+8／+24 小時、立刻開戰、觸發大事、推動大勢、幫人重設密碼。",
-      "決戰時大家都看得到戰場。能參戰的人，選項換成穩守、猛攻，外加一個 20 字的放手一搏輸入框；不能參戰的人，戰場在上、自己的場景在下，照常遊玩。",
-      "按下煉製後，按鈕先變成「爐火正旺…」並鎖住，因為全服第一次煉出的配方要等 AI 取名。",
-      "現在畫面每 10 秒整個重畫一次（38 個區塊，約 14.5 KB）；正式版改成伺服器只推有變化的部分。",
-      "正式版用 Vue 做登入、場景與選項（不再限 10 個）、狀態列、大勢、傳聞、對話、門下、決戰、管理者面板；大地圖、小地圖、江湖紀錄、戰報詳情沿用伺服器畫好的畫面。",
-      "正式版以手機為主：主畫面是場景加選項，底部一排分頁切換地圖、門下、傳聞、江湖史、戰報；在電腦上地圖和場景並排。右上角顯示連線狀態；斷線時動作先排著，重連後自動送出。",
+      "登入頁：登入、註冊共用一個表單，靠頂上的分段按鈕切換；註冊後取名號（最多 16 字，不能用三國名人和遊戲裡人物的名字），一個帳號一個角色。重新整理不用重新登入，伺服器重開才要。",
+      "每一頁頂上都是狀態列：名號、陣營、所在地、遊戲時間，體力和氣血是長條（有內傷時氣血條右端畫斜線、寫「傷 N」），旁邊是銀兩、心得；點名號那一塊展開名望、善惡、四項屬性。",
+      "江湖：最上面是「剛剛」卡片（最新一則紀錄，打了仗就換成戰鬥卡片），接著是場景描述與選項。選項有數字編號，「前往」用箭頭；事件沒處理完時只剩事件選項。更早的紀錄要點「看江湖紀錄」到見聞頁。",
+      "修練：武學／內功切換、鍛鍊、療傷、自創、閉關（1／2／4／6／8／12 小時）、功法庫、門下名冊與角色卡；按完的結果寫在最上面。",
+      "煉製：上面兩格爐位，下面是背包的素材卡，同一種有兩個就能點兩次；兩格放滿才能開爐。全服第一次煉出的配方要等 AI 取名，這段時間按鈕會發光（實測約 4 秒）。",
+      "輿圖：大地圖有局勢、敵情、劇情、路線四個圖層，可以放大；點地點看局勢、敵情、劇情與路線，下面是步行、趕路、疾行三個按鈕，疾行立刻到並跳回江湖頁。",
+      "見聞：戰報（清單點進去看詳情）、大勢、傳聞、江湖史、紀錄；有新戰報時分頁亮紅點。",
+      "決戰時江湖頁換成戰場：能參戰的人選穩守、猛攻，或寫一句 20 字以內的放手一搏；不能參戰的人照常遊玩。",
+      "⚙ 設定抽屜：匿名行走、略過新手引導、改密碼、登出。管理者多一塊：開季、開啟下一季（只在休季有效）、快轉 +1／+8／+24 小時、立刻開戰、觸發大事、推動大勢、幫人重設密碼。",
+      "畫面每 10 秒向伺服器要一次最新狀態，同一個角色開幾個分頁、幾台裝置都看同一份。",
     ],
     owners: [
-      { who: "測試與試玩回饋", what: "這一輪驗大地圖捲動" },
-      { who: "Infra 架構", what: "新網頁已接上主線、擋名人名號已完成；接著做功法卡、三個小修" },
-      { who: "地圖擴充開發", what: "指名求見與走法的引擎層做完後，畫面做進新網頁" },
+      { who: "Infra 架構", what: "新網頁已接上主線、擋名人名號已完成；接著做功法卡和四個小修" },
+      { who: "地圖擴充開發", what: "指名求見已完成；接著做走法（引擎、伺服器、網頁一起）" },
+      { who: "測試與試玩回饋", what: "照新網頁改好驗收清單，正在本機跑第一輪" },
+      { who: "PM", what: "拍畫面流程；畫面改好後用同一支腳本重拍" },
     ],
     next: [
-      "新網頁的畫面改動：功法卡、指名求見、走法切換，加上三個小修",
-      "拍實際操作的畫面流程，放進這一頁，方便討論哪裡怎麼改",
-      "第 2 期把 API 定好之後，第 4 期再決定要不要換成 Vue、改成伺服器推送",
+      "功法卡：功法庫先看卡、再按「改練」（Infra）",
+      "走法切換（地圖擴充開發）",
+      "四個小修：其他分頁跟著刷新、狀態列露出打坐中／在路上／本季共幾天、登入錯誤留在表單下、閉關沒成功就留在修練頁（Infra）",
+      "畫面都改好之後，重拍畫面流程",
     ],
-    asks: [],
+    asks: [
+      "「畫面流程」頁最下面那 22 點，哪些要在 beta 前改（PM 建議三點：第一屏要往下捲才看得到選項、大地圖在手機上讀不到、管理者的快轉和立刻開戰沒有再確認）",
+      "江湖頁要不要在「剛剛」下面加一個收起來的「前幾則紀錄」",
+    ],
     docs: [
+      { path: "architecture/screens/manifest.json", sec: "畫面流程的原始資料；重拍用同一個資料夾的 capture_screens.py" },
+      { path: "feedback/beta-驗收清單.md", sec: "開頭「新網頁的樣子」、L 節" },
       { path: "specs/2026-10-02-線上架構-design.md", sec: "第七節（網頁前端）、5.3（推送）" },
-      { path: "specs/2026-09-29-大地圖-design.md", sec: "第二節（大地圖整頁）、第五節（場景小地圖與左欄）" },
-      { path: "specs/2026-10-01-無限煉製-design.md", sec: "第八節（門下頁的煉製區塊）" },
+      { path: "specs/2026-09-29-大地圖-design.md", sec: "第二節（大地圖）、第五節（小地圖）" },
     ],
   },
 
   product: {
-    lead: "專案是這樣運作的：你試玩、拍板；PM 規劃、派工，並維護這張圖；開發和四條設計線各開一個 session 平行做，QA 收試玩回饋。改了程式要先過 1141 個自動測試和機器人整季模擬，再由 PM 併回主線、更新流程圖。",
+    lead: "專案是這樣運作的：你試玩、拍板；PM 規劃、派工，並維護這張圖；開發和四條設計線各開一個 session 平行做，QA 收試玩回饋。改了程式要先過 1145 個自動測試和機器人整季模擬，再由 PM 併回主線、更新流程圖。",
     flow: {
       nodes: [
         { id: "planner", col: 0, row: 1, t: "企劃者", sub: "試玩、拍板", s: "done", st: "已完成" },
@@ -1656,19 +1712,461 @@ function renderTopic(id) {
   root.append(pager);
   applyFilter();
 }
+const SCREENS = {
+ "source": "56c0eeb",
+ "captured": "2026-10-03",
+ "count": 46,
+ "flows": [
+  {
+   "id": "A",
+   "title": "第一次進來",
+   "steps": [
+    {
+     "id": "A1",
+     "screen": "登入頁（預設在「登入」）",
+     "action": "按「註冊」",
+     "note": "登入與註冊共用一個表單，靠頂上的分段按鈕切換；沒有「忘記密碼」的說明（實際上只能找管理者重設）。"
+    },
+    {
+     "id": "A2",
+     "screen": "註冊表單已填好（帳號、密碼、再輸入一次）",
+     "action": "按「註冊」",
+     "note": "帳號規則（英文字母、數字、底線，3～20 字）與密碼規則（至少 6 字）只寫在輸入框的提示字裡，一開始輸入就看不到。"
+    },
+    {
+     "id": "A3",
+     "screen": "取名號頁，已輸入「試劍客」",
+     "action": "按「建立角色」"
+    },
+    {
+     "id": "A4",
+     "screen": "進入江湖的第一個畫面（第一屏）",
+     "action": "往下捲",
+     "note": "第一屏幾乎全是開場故事（「剛剛」卡片本身限高、裡面還要捲）和地點描述，第一個能按的選項要往下捲才看得到。"
+    },
+    {
+     "id": "A5",
+     "screen": "第一個畫面往下捲：選項、小地圖、看江湖紀錄",
+     "note": "選項編號會跳號：探索 1、交遊 2，中間五個「前往」改用箭頭，打坐就變成 8；打坐排在所有「前往」之後、最底下。"
+    }
+   ]
+  },
+  {
+   "id": "B",
+   "title": "江湖的一回合",
+   "steps": [
+    {
+     "id": "B1",
+     "screen": "江湖頁，準備探索",
+     "action": "按「探索」"
+    },
+    {
+     "id": "B2",
+     "screen": "探索的結果：「剛剛」卡片與遇上的事件（酒樓鬥毆）",
+     "action": "往下捲看事件選項",
+     "note": "「剛剛」卡片大半是新手引導（老說書人教你看地圖），跟這次探索遇到的事件擠在同一張卡片；卡片限高，引導文字被切掉一截。"
+    },
+    {
+     "id": "B3",
+     "screen": "事件的選項（還沒處理完之前，其他選項都不見了）",
+     "action": "按「找個角落看熱鬧」",
+     "note": "事件沒處理完之前，探索、移動、打坐全部消失，只剩事件選項；選項沒寫會花什麼、有什麼風險，只有「（本人出手）」幾個字。"
+    },
+    {
+     "id": "B4",
+     "screen": "事件處理完，回到一般選項；打坐排在選項最底下",
+     "action": "按「打坐」"
+    },
+    {
+     "id": "B5",
+     "screen": "打坐中：體力回復加倍，選項只剩「起身」",
+     "action": "按「起身」",
+     "note": "打坐中只剩「起身」，看不到已經回了多少體力；馬上起身的結果寫「打坐了約 0 分鐘」。"
+    },
+    {
+     "id": "B6",
+     "screen": "從輿圖疾行到潁川郊野，自動跳回江湖頁；歷練按鈕寫著體力、對手數與勝算",
+     "action": "按「歷練」",
+     "note": "小地圖上「潁川郊野（你）」的字貼在潁川郡的方塊旁邊，真正標「你」的圓圈在右邊，一眼看去像標錯地方。"
+    },
+    {
+     "id": "B7",
+     "screen": "遭遇戰的戰鬥卡片（放在「剛剛」的位置），下面接著場景與選項",
+     "note": "戰鬥卡片資訊清楚（威力對難度、升級、掉落）；氣血、內傷的損失跟收穫寫在同一行。見聞分頁同時亮起紅點。"
+    },
+    {
+     "id": "B8",
+     "screen": "江湖頁的「前往」選項（步行，不花體力只花時間）",
+     "action": "按「前往 潁川郡（陽翟）（步行約 3 分鐘）」"
+    },
+    {
+     "id": "B9",
+     "screen": "在路上：選項只剩一個灰的「在路上」，到了會自己抵達",
+     "note": "步行的 3 分鐘是真實時間，路上什麼都不能做（畫面說可以先下線）；整份截圖都在幾分鐘內拍完，所以遊戲時鐘一直停在「第 1 天 00:00」。"
+    }
+   ]
+  },
+  {
+   "id": "J",
+   "title": "交遊（只拍到按下去之前）",
+   "steps": [
+    {
+     "id": "J1",
+     "screen": "起身之後回到江湖頁；交遊會找這裡的龍頭人物說話",
+     "action": "（不按：按下去要等本機模型生成對話）",
+     "note": "需要本機模型，這次沒拍按下去之後的畫面"
+    }
+   ]
+  },
+  {
+   "id": "C",
+   "title": "修練",
+   "steps": [
+    {
+     "id": "C1",
+     "screen": "江湖頁",
+     "action": "按底下的「修練」分頁"
+    },
+    {
+     "id": "C2",
+     "screen": "修練頁剛打開（武學／內功切換、鍛鍊、療傷、自創、閉關、功法庫、門下）",
+     "action": "往下捲到「自創功法」",
+     "note": "「療傷」是灰的但沒說為什麼（因為沒有內傷）；規則說明一長句擠在按鈕底下。"
+    },
+    {
+     "id": "C3",
+     "screen": "自創功法：已輸入「回風掌」",
+     "action": "按「自創」"
+    },
+    {
+     "id": "C4",
+     "screen": "自創的結果寫在最上面",
+     "action": "按「鍛鍊武學」",
+     "note": "自創成功之後，自創欄還是可以輸入，說明也照樣寫「欄位空著才能自創」，沒有變灰或改口。"
+    },
+    {
+     "id": "C5",
+     "screen": "連按「鍛鍊武學」練到第十成之後的修練頁（每按一次只換掉最上面那一句）",
+     "action": "往下捲看「本人」角色卡",
+     "note": "連按十次「鍛鍊武學」不花體力、沒有冷卻，幾秒就練到第十成；每按一次只換掉最上面那一句，看不到進度條。練滿之後按鈕仍然亮著。"
+    },
+    {
+     "id": "C6",
+     "screen": "修練頁下半：功法庫與「本人」角色卡",
+     "note": "「門下」名冊只有「本人」一列，跟上面展開的「本人」角色卡重複。"
+    }
+   ]
+  },
+  {
+   "id": "D",
+   "title": "煉製",
+   "steps": [
+    {
+     "id": "D1",
+     "screen": "江湖頁（先歷練、探索湊了幾樣素材）",
+     "action": "按底下的「煉製」分頁"
+    },
+    {
+     "id": "D2",
+     "screen": "煉製頁：上面兩格爐位、底下是背包裡的素材",
+     "action": "點第一樣素材放進爐裡",
+     "note": "兩格爐位都空、開爐是灰的，但沒寫為什麼不能按（要放滿兩樣）；素材說明收在摺疊裡。"
+    },
+    {
+     "id": "D3",
+     "screen": "放進一樣之後：左邊爐位填上了，底下的素材數量少一個",
+     "action": "再點一樣素材",
+     "note": "放第一樣時成本說明沒有變化，要兩樣都放進去才更新；用掉的素材留在原地顯示「×0」。"
+    },
+    {
+     "id": "D4",
+     "screen": "兩格都放好了：開爐亮起來",
+     "action": "按「開爐煉製」"
+    },
+    {
+     "id": "D5",
+     "screen": "爐火正旺：等本機模型幫新配方取名（按鈕會發光）"
+    },
+    {
+     "id": "D6",
+     "screen": "煉製的結果寫在最上面",
+     "note": "這一爐從按下到出爐約 4 秒。結果訊息很長：煉成的內容之外，還夾著兩次「✓ 引導完成」、兩筆銀兩與老說書人的下一步提示，真正的結果被擠在系統訊息裡。底部黏住的「開爐煉製」按鈕蓋住「背包裡還沒有素材」那行字與「素材說明」。"
+    }
+   ]
+  },
+  {
+   "id": "E",
+   "title": "輿圖",
+   "steps": [
+    {
+     "id": "E1",
+     "screen": "修練頁",
+     "action": "按底下的「輿圖」分頁"
+    },
+    {
+     "id": "E2",
+     "screen": "輿圖剛打開（局勢圖層，整張縮小到螢幕寬）",
+     "action": "按「敵情」圖層",
+     "note": "40 個地點整張縮到手機寬，地名和敵情的小字只有 5～6 px，幾乎讀不到；按「放大」才看得清楚，但放大後要上下左右捲。"
+    },
+    {
+     "id": "E3",
+     "screen": "敵情圖層",
+     "action": "在地圖上點「潁川郊野」",
+     "note": "地圖上的點很小，手指不好點；點之前，下面的詳情一直顯示所在地。"
+    },
+    {
+     "id": "E4",
+     "screen": "選了潁川郊野：地點詳情與步行／趕路／疾行三個按鈕",
+     "action": "按「疾行」（立刻抵達、自動跳回江湖頁，接 B 流程的歷練）",
+     "note": "「步行」是主按鈕（又大又紅），「疾行」要體力但立刻到；詳情的「路線」那行已經把三種走法的時間與體力寫過一次，按鈕上又寫一次。"
+    }
+   ]
+  },
+  {
+   "id": "F",
+   "title": "見聞",
+   "steps": [
+    {
+     "id": "F1",
+     "screen": "煉製頁（見聞分頁上有紅點：有新戰報）",
+     "action": "按底下的「見聞」分頁"
+    },
+    {
+     "id": "F2",
+     "screen": "見聞・戰報清單",
+     "action": "點第一場戰報",
+     "note": "每一場的標題太長，「vs 流寇散兵」被折成兩行；時間全都是「第1天 00:00」（測試在幾分鐘內打完，遊戲時鐘沒走）。"
+    },
+    {
+     "id": "F3",
+     "screen": "一場戰報的詳細內容",
+     "action": "按「大勢」",
+     "note": "戰報詳細頁跟江湖頁的戰鬥卡片內容幾乎一樣。"
+    },
+    {
+     "id": "F4",
+     "screen": "見聞・大勢",
+     "action": "按「傳聞」"
+    },
+    {
+     "id": "F5",
+     "screen": "見聞・傳聞",
+     "action": "按「江湖史」",
+     "note": "傳聞是空的。新服、只有一個真人時（這次沒開假人程式），見聞頁大半是空的。"
+    },
+    {
+     "id": "F6",
+     "screen": "見聞・江湖史",
+     "action": "按「紀錄」",
+     "note": "江湖史也幾乎是空的。"
+    },
+    {
+     "id": "F7",
+     "screen": "見聞・紀錄（江湖紀錄）",
+     "note": "紀錄裡「內傷 +3」用了跟收穫一樣的綠色標籤（其實是損失）；「翻看地圖」記成一筆「體力 +10」。"
+    }
+   ]
+  },
+  {
+   "id": "S",
+   "title": "狀態列與設定（一般玩家）",
+   "steps": [
+    {
+     "id": "S1",
+     "screen": "江湖頁頂上的狀態列",
+     "action": "點名號那一塊（展開更多數值）",
+     "note": "狀態列可以點開看更多數值，但畫面上沒有任何提示（沒有箭頭或「更多」）。氣血條有內傷時，右端的斜線區塊很窄，看起來像一個小破圖；「傷 N」的字壓在紅條與底色交界上，不好讀。"
+    },
+    {
+     "id": "S2",
+     "screen": "狀態列展開：名望、善惡、四項屬性",
+     "action": "按右上角的 ⚙"
+    },
+    {
+     "id": "S3",
+     "screen": "一般玩家的設定抽屜：匿名、略過引導、改密碼、登出"
+    }
+   ]
+  },
+  {
+   "id": "G",
+   "title": "管理者開季",
+   "steps": [
+    {
+     "id": "G1",
+     "screen": "登入頁，管理者的帳號密碼已填好（密碼顯示成圓點）",
+     "action": "按「登入」"
+    },
+    {
+     "id": "G2",
+     "screen": "管理者進到江湖頁：賽季還在籌備中，唯一的選項是灰的",
+     "action": "按右上角的 ⚙",
+     "note": "「剛剛」卡片已經寫著「黃巾之亂 賽季開始……亂世江湖，就從這裡開始」，唯一的選項卻是灰的「賽季籌備中，等待管理者開季」，兩句互相矛盾。管理者的狀態列也是「散人・第1級」，看不出是管理者。"
+    },
+    {
+     "id": "G3",
+     "screen": "設定抽屜（管理者多一塊「管理者」）",
+     "action": "按「開季」",
+     "note": "管理者工具（開季、時間快轉、立刻開戰、觸發、推動大勢、重設密碼）跟一般設定擠在同一個抽屜；「開季」和「開啟下一季」並排、長得一樣，沒有二次確認。"
+    },
+    {
+     "id": "G4",
+     "screen": "開季之後：底下跳出一句提示，抽屜還開著",
+     "action": "按「關閉」",
+     "note": "開季的回饋只有底下一句幾秒就消失的提示；抽屜還蓋著江湖頁，看不到賽季真的開了，要自己按「關閉」。"
+    },
+    {
+     "id": "G5",
+     "screen": "管理者的江湖頁：賽季開始，選項都出來了",
+     "note": "提示框蓋在選項按鈕上面。"
+    }
+   ]
+  }
+ ]
+};
+
+// 畫面流程：拍的時候看到、可以拿來討論的地方（hot＝PM 建議 beta 前改）
+const SCREEN_ISSUES = [
+  { g: "第一次進來", items: [
+    { ids: ["A4", "A5"], hot: true, t: "第一屏幾乎全是開場故事和地點描述，第一個能按的選項要往下捲才看得到。朋友第一次進來看到的就是這一屏。" },
+    { ids: ["A2"], t: "帳號、密碼的規則只寫在輸入框的提示字裡，一開始打字就看不到。" },
+    { ids: ["A1"], t: "沒有「忘記密碼」的說明；實際上要找管理者重設。" } ] },
+  { g: "江湖頁", items: [
+    { ids: ["A5", "B4"], t: "選項編號會跳號（探索 1、交遊 2、打坐 8），打坐排在所有「前往」之後、最底下。" },
+    { ids: ["B2"], t: "「剛剛」卡片把新手引導和這次遇到的事件擠在一起；卡片限高，引導文字被切掉。" },
+    { ids: ["B3"], t: "事件沒處理完之前，其他選項全部消失；事件選項沒寫會花什麼、有什麼風險。" },
+    { ids: ["B5"], t: "打坐中只剩「起身」，看不到回了多少體力；馬上起身會寫「打坐了約 0 分鐘」。" },
+    { ids: ["B6"], t: "小地圖上「（你）」的字貼在別的地點旁邊，看起來像標錯地方。" } ] },
+  { g: "修練與煉製", items: [
+    { ids: ["C2", "D2"], t: "療傷、開爐是灰的，但沒寫為什麼不能按。" },
+    { ids: ["C4"], t: "自創之後自創欄還能輸入，說明照樣寫「欄位空著才能自創」。" },
+    { ids: ["C5"], t: "鍛鍊連按十次就練滿，每按一次只換掉最上面一句、看不到進度；練滿了按鈕還亮著。" },
+    { ids: ["C6"], t: "門下名冊只有「本人」一列，跟上面的角色卡重複。" },
+    { ids: ["D3"], t: "放第一樣素材時成本說明不會變；用完的素材留在原地顯示「×0」。" },
+    { ids: ["D6"], t: "煉製結果夾著兩次「引導完成」、兩筆銀兩和說書人的提示，煉出什麼被擠在中間；底部的「開爐」按鈕蓋住下面的字。" } ] },
+  { g: "輿圖", items: [
+    { ids: ["E2", "E3"], hot: true, t: "40 個地點縮到手機寬，地名只有 5～6 px，幾乎讀不到，地點也點不準；要按「放大」再上下左右捲。" },
+    { ids: ["E4"], t: "「步行」是最顯眼的大按鈕；路線那行已經寫過三種走法，按鈕上又寫一次。" } ] },
+  { g: "見聞與狀態列", items: [
+    { ids: ["F7"], t: "紀錄裡「內傷 +3」用了收穫的綠色；「翻看地圖」記成一筆「體力 +10」。" },
+    { ids: ["F2", "F3"], t: "戰報標題折成兩行；戰報詳情跟江湖頁的戰鬥卡片幾乎一樣。" },
+    { ids: ["S1"], t: "狀態列可以點開看更多數值，但畫面上沒有提示；有內傷時氣血條右端的斜線像破圖，「傷 N」不好讀。" } ] },
+  { g: "管理者", items: [
+    { ids: ["G3"], hot: true, t: "管理者工具跟一般設定在同一個抽屜；快轉、立刻開戰、推動大勢按下去就全服生效，沒有再確認一次。（「開啟下一季」只在休季時有效，賽季中按到不會清掉這一季。）" },
+    { ids: ["G2"], t: "籌備中時「剛剛」寫「賽季開始」，選項卻是灰的「等待管理者開季」；管理者的狀態列也看不出是管理者。" },
+    { ids: ["G4", "G5"], t: "開季的回饋只有一句幾秒就消失的提示，抽屜還蓋著畫面；提示框會蓋在選項上。" } ] },
+];
+const SCREEN_PENDING = [
+  "指名求見：有好幾位人物的地點按「求見」，再挑人（已完成，下次重拍補上）",
+  "走法切換：江湖頁選步行、趕路或疾行，底下每條路的按鈕跟著換（地圖擴充開發）",
+  "功法卡：功法庫先看卡、再按「改練」（Infra）",
+  "四個小修：其他分頁跟著刷新、狀態列露出打坐中／在路上／本季共幾天、登入錯誤留在表單下、閉關沒成功就留在修練頁（Infra）",
+];
+const SCREEN_MISSED = ["交遊按下去之後的 AI 對話：要開著本機模型才拍得到，這次只拍到按下去之前（J1）"];
+
+function shotSrc(id) { return "screens/" + id + ".jpg"; }
+function findShot(id) {
+  for (const f of SCREENS.flows) for (const s of f.steps) if (s.id === id) return s;
+  return null;
+}
+function openShot(id) {
+  const s = findShot(id), box = document.getElementById("shotbox");
+  if (!s) return;
+  box.querySelector("img").src = shotSrc(id);
+  box.querySelector("img").alt = id + "：" + s.screen;
+  box.querySelector(".cap").replaceChildren(hEl("b", "sid", id), document.createTextNode(" " + s.screen + (s.action ? "　→ " + s.action : "")));
+  if (typeof box.showModal === "function") box.showModal(); else box.setAttribute("open", "");
+}
+function shotChip(id) {
+  const b = hEl("button", "sidchip", id); b.type = "button";
+  b.setAttribute("aria-label", "放大 " + id);
+  b.addEventListener("click", () => openShot(id));
+  return b;
+}
+function renderScreens(focus) {
+  const root = document.getElementById("screens");
+  if (!root.dataset.built) {
+    root.dataset.built = "1";
+    const head = hEl("section", "topic-head");
+    const back = hEl("a", "topiclink", "← 回到整體架構"); back.href = "#";
+    head.append(back, hEl("h2", null, "畫面流程：新網頁實際操作"),
+      hEl("p", "meta", `主線 ${SCREENS.source}・${SCREENS.captured} 用手機尺寸（390×844）實際操作拍的・${SCREENS.count} 張`),
+      hEl("p", "lead", "從註冊、江湖的一回合，到修練、煉製、輿圖、見聞，照真的按下去的順序排。每張圖裡框起來、標著編號的，就是下一步要按的地方；圖下的「→」寫著按了什麼。討論時直接說編號，例如「B3 的事件選項」。點圖可以放大。"));
+    const idx = hEl("nav", "flowidx"); idx.setAttribute("aria-label", "畫面流程的段落");
+    SCREENS.flows.forEach(f => { const a = hEl("a", null, f.id + " " + f.title); a.href = "#screens-" + f.id; idx.append(a); });
+    head.append(idx);
+    root.append(head);
+
+    for (const f of SCREENS.flows) {
+      const sec = hEl("section", "shotflow"); sec.id = "screens-" + f.id;
+      sec.append(hEl("h3", null, f.id + "　" + f.title));
+      const strip = hEl("div", "strip"); strip.tabIndex = 0;
+      strip.setAttribute("aria-label", f.title + "：往右捲看下一步");
+      for (const s of f.steps) {
+        const fig = hEl("figure", "shot");
+        const btn = hEl("button", "shot-img"); btn.type = "button";
+        btn.setAttribute("aria-label", "放大 " + s.id);
+        const img = hEl("img"); img.src = shotSrc(s.id); img.alt = s.id + "：" + s.screen; img.loading = "lazy"; img.width = 390; img.height = 844;
+        btn.append(img); btn.addEventListener("click", () => openShot(s.id));
+        const cap = hEl("figcaption"); cap.append(hEl("b", "sid", s.id), document.createTextNode(" " + s.screen));
+        fig.append(btn, cap);
+        if (s.action) fig.append(hEl("p", "act", "→ " + s.action));
+        if (s.note) { const o = hEl("p", "obs"); o.append(hEl("span", "obs-k", "觀察"), document.createTextNode(s.note)); fig.append(o); }
+        strip.append(fig);
+      }
+      sec.append(strip);
+      root.append(sec);
+    }
+
+    const talk = hEl("section", "panel");
+    talk.append(hEl("h3", null, "拍的時候看到、可以討論的地方"),
+      hEl("p", "muted", "還沒排進任何修正。標「建議 beta 前改」的是 PM 的建議：朋友第一次進來就會碰到，或管理者手滑會影響全服。點編號看那張圖。"));
+    for (const grp of SCREEN_ISSUES) {
+      talk.append(hEl("h4", null, grp.g));
+      const ul = hEl("ul", "issues");
+      for (const it of grp.items) {
+        const li = hEl("li");
+        const chips = hEl("span", "chips"); it.ids.forEach(id => chips.append(shotChip(id)));
+        li.append(chips);
+        if (it.hot) li.append(hEl("span", "hot", "建議 beta 前改"));
+        li.append(hEl("span", "itxt", it.t));
+        ul.append(li);
+      }
+      talk.append(ul);
+    }
+    const cols = hEl("div", "topic-cols");
+    const pend = hEl("section", "panel");
+    pend.append(hEl("h3", null, "還沒做進來，做好後重拍"), listOf("ul", "plain", SCREEN_PENDING));
+    const miss = hEl("section", "panel");
+    miss.append(hEl("h3", null, "這次沒拍到"), listOf("ul", "plain", SCREEN_MISSED),
+      hEl("p", "muted", "重拍用同一支腳本：docs/superpowers/architecture/screens/capture_screens.py。遊戲有亂數，每次拍到的事件、戰果、素材會不一樣。"));
+    cols.append(pend, miss);
+    root.append(talk, cols);
+  }
+  const target = focus ? document.getElementById(focus) : null;
+  if (target) target.scrollIntoView(); else window.scrollTo(0, 0);
+}
+
 function renderTopicNav() {
   const nav = document.getElementById("topicnav");
   const home = hEl("a", null, "整體"); home.href = "#"; home.dataset.id = "";
   nav.append(home);
+  const sc = hEl("a", null, "畫面流程"); sc.href = "#screens"; sc.dataset.id = "screens";
+  nav.append(sc);
   TREE.forEach(s => { const a = topicLink(s.id, s.name); a.className = ""; a.dataset.id = s.id; nav.append(a); });
 }
 function route() {
   const id = decodeURIComponent(location.hash.slice(1));
   const isTopic = TREE.some(s => s.id === id);
-  document.getElementById("home").hidden = isTopic;
+  const isScreens = id === "screens" || id.startsWith("screens-");
+  document.getElementById("home").hidden = isTopic || isScreens;
   document.getElementById("topic").hidden = !isTopic;
+  document.getElementById("screens").hidden = !isScreens;
   if (isTopic) renderTopic(id);
-  document.querySelectorAll("#topicnav a").forEach(a => a.setAttribute("aria-current", a.dataset.id === (isTopic ? id : "") ? "page" : "false"));
+  const cur = isScreens ? "screens" : isTopic ? id : "";
+  document.querySelectorAll("#topicnav a").forEach(a => a.setAttribute("aria-current", a.dataset.id === cur ? "page" : "false"));
+  if (isScreens) { renderScreens(id === "screens" ? null : id); return; }
   const anchor = !isTopic && id ? document.getElementById(id) : null;
   if (anchor) { if (anchor.tagName === "DETAILS") anchor.open = true; anchor.scrollIntoView(); }
   else window.scrollTo(0, 0);
@@ -1681,5 +2179,8 @@ renderTopicNav();
 document.getElementById("expand").addEventListener("click", () => setAll(true));
 document.getElementById("collapse").addEventListener("click", () => setAll(false));
 window.addEventListener("hashchange", route);
+const shotbox = document.getElementById("shotbox");
+document.getElementById("shotclose").addEventListener("click", () => shotbox.close ? shotbox.close() : shotbox.removeAttribute("open"));
+shotbox.addEventListener("click", e => { if (e.target === shotbox && shotbox.close) shotbox.close(); });
 route();
 </script>
