@@ -13,6 +13,7 @@ from tianxia.accounts import NAME_TAKEN
 from tianxia.characters import open_characters
 from tianxia.engine import Game
 from tianxia.journal import WORLD_NEWS
+from tianxia.martial_arts import MartialArt
 from tianxia.sqlite_world import SqliteWorldStore, open_world
 from tianxia.state import BotProfile
 
@@ -555,6 +556,54 @@ def test_the_forge_does_not_craft_the_same_material_twice_with_only_one(client):
     assert saved.materials == {mid: 1}
     assert saved.stats["xinde"] == 100
     assert saved.member.wugong_id is None and saved.arts == []
+
+
+# ── 功法卡（FB-006）與功法庫先看卡再改練（QA L4）────────────────
+
+
+def test_the_practice_page_gets_a_card_for_each_worn_art(client):
+    _player(client)
+    client.post("/api/menxia/create", json={"kind": "武學", "name": "流雲手"})
+    cards = client.get("/api/menxia").json()["slot_cards"]
+    assert [c["kind"] for c in cards] == list(server.KINDS)
+    wugong, neigong = cards
+    assert "流雲手" in wugong["card"] and "第一成" in wugong["card"]  # 第一成／第十成那一行是功法卡才有的
+    assert "你還沒有內功。" in neigong["card"]
+
+
+def _a_player_with_library_arts(client, *arts):
+    """新角色，功法庫裡放這幾門功法。功法本體登記進共用世界（煉製、自創都放在那裡），
+    角色的功法庫存進資料庫（每次進鎖都從資料庫重讀角色，只改記憶體的話下一個請求就看不到）。"""
+    _player(client)
+    game = server.game_for("沈青衫")
+    for art in arts:
+        assert open_world().claim_skill_name(art)
+        game.state.player.arts.append(art.id)
+    open_characters().save(game.state)
+
+
+def _library_art(name: str, note: str) -> MartialArt:
+    return MartialArt(
+        id=name, name=name, kind="武學", quality="上品", attribute="柔",
+        base_power=28.0, top_power=72.0, creator="沈浪", note=note,
+    )
+
+
+def test_a_library_art_comes_with_its_card_and_note(client):
+    _a_player_with_library_arts(client, _library_art("沉柳纏勁", "以柔勁纏住兵刃，<b>借力</b>卸力。"))
+    (item,) = client.get("/api/menxia").json()["arts"]
+    assert item["id"] == "沉柳纏勁"
+    assert "【沉柳纏勁】" in item["card"] and "第1成" in item["card"]
+    assert "以柔勁纏住兵刃，&lt;b&gt;借力&lt;/b&gt;卸力。" in item["card"]  # 模型寫的說明句也一律跳脫
+
+
+def test_a_library_art_without_a_note_leaves_no_blank_line(client):
+    """退路字表取名的功法沒有說明句：整行省略，不出現 None、不留空的 <br> 行（FB-006 驗收）。"""
+    _a_player_with_library_arts(client, _library_art("鐵柳纏勁", ""))
+    card = client.get("/api/menxia").json()["arts"][0]["card"]
+    assert "None" not in card
+    assert "<br />\n<br />" not in card and "<br />\n</p>" not in card
+    assert card.rstrip().endswith("來源：自創（沈浪 所創）</p>")
 
 
 def test_travel_sets_off_or_stays_on_the_map_and_says_why(client):

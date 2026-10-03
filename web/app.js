@@ -254,6 +254,11 @@
     const x = S.menxia;
     if (!x) return '<p class="muted">載入中…</p>';
     const s = S.main.status;
+    // 功法庫展開的那一門（S.artOpen，QA L4）從別的分頁切回來時收起：切分頁是 render() 重畫整個畫面、#page 是空的，
+    // 頁內的重畫（切內功／武學、鍛鍊、展開另一門）則還留著上一次的功法庫（#art-lib）。改練之後在點擊的 "switch" 那裡清。
+    if (!document.getElementById("art-lib")) S.artOpen = null;
+    // 身上的功法卡（FB-006）：目前切到的那一門放前面
+    const slots = x.slot_cards.filter((c) => c.kind === S.kind).concat(x.slot_cards.filter((c) => c.kind !== S.kind));
     return `
       <div class="msg" id="mx-msg">${S.message}</div>
       <div class="card">
@@ -264,6 +269,8 @@
         </div>
         <p class="muted">${x.rules.replace(/<\/?p>/g, "")}</p>
       </div>
+      <div class="label">身上的功法</div>
+      ${slots.map((c) => `<div class="card">${c.card}</div>`).join("")}
       <div class="label">自創功法</div>
       <form class="card" id="create-skill">
         <p class="muted">取名就決定了屬性、威力與成長，全服不能重名。目前這一門${esc(S.kind)}的欄位空著才能自創。</p>
@@ -277,8 +284,10 @@
           <button class="btn small" type="submit">開始閉關</button>
         </div>
       </form>
-      <div class="label">功法庫</div>
-      ${x.arts.length ? `<div class="list">${x.arts.map((a) => `<button data-act="switch" data-id="${esc(a.id)}">改練：${esc(a.label)}</button>`).join("")}</div>`
+      <div class="label" id="art-lib">功法庫</div>
+      ${x.arts.length ? `<div class="list">${x.arts.map((a) => `
+        <button class="art ${S.artOpen === a.id ? "on" : ""}" data-act="art" data-id="${esc(a.id)}">${esc(a.label)}</button>
+        ${S.artOpen === a.id ? `<div class="art-body">${a.card}<button class="btn primary" data-act="switch" data-id="${esc(a.id)}">改練這一門</button></div>` : ""}`).join("")}</div>`
         : '<p class="muted">煉出來還沒配上身的功法會放在這裡。改練會把目前那一門收回庫裡，熟練度各自保留。</p>'}
       <div class="label">門下</div>
       <details class="fold" open><summary>本人</summary><div class="fold-body">${x.player_card}</div></details>
@@ -566,7 +575,8 @@
           S.person = S.person === el.dataset.key ? null : el.dataset.key;
           await loadMenxia();
           break;
-        case "switch": await mx("switch", { art: el.dataset.id }); break;
+        case "switch": S.artOpen = null; await mx("switch", { art: el.dataset.id }); break;
+        case "art": S.artOpen = S.artOpen === el.dataset.id ? null : el.dataset.id; renderPage(); break;
         case "slot":
           if (S.craftSel.length < (S.menxia?.per_craft || 2)) { S.craftSel.push(el.dataset.id); renderPage(); updateCraftLine(); }
           else toast("爐裡已經放滿了，點上面的素材拿出來再換。");

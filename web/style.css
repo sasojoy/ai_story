@@ -201,6 +201,15 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .mini::after { content: "展開輿圖 ›"; position: absolute; right: 8px; bottom: 8px; font-size: 12px; background: var(--card); border: 1px solid var(--line); padding: 2px 8px; border-radius: 8px; }
 .linkish { border: 0; background: none; color: var(--accent); cursor: pointer; padding: 6px 2px; font-size: 14px; }
 
+/* ── 修練 ── */
+/* 功法庫：點一門展開它的功法卡，卡底下才有「改練這一門」（QA L4）。改練鈕在 .list 裡，要蓋掉 .list button 的列樣式 */
+.list button.art.on::after { content: "▾"; }
+.list .art-body { padding: 10px 14px 12px; border-bottom: 1px solid var(--line); background: var(--card-2); overflow-wrap: anywhere; }
+.list .art-body:last-child { border-bottom: 0; }
+.list .art-body > :first-child { margin-top: 0; }
+.list .art-body .btn { border: 1px solid var(--accent); margin-top: 10px; }
+.list .art-body .btn::after { content: none; }
+
 /* ── 煉製 ── */
 .slots { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; margin-bottom: 12px; }
 .slot { min-height: 64px; border: 2px dashed var(--line); border-radius: var(--radius); display: grid; place-items: center; padding: 6px; text-align: center; font-size: 14px; cursor: pointer; background: var(--card); }

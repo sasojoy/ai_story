@@ -238,7 +238,10 @@ def menxia_view(game: Game, person: str | None = None) -> dict:
             for m, n in materials.bag_contents(game.state, game.content)
         ],
         "per_craft": MATERIALS_PER_CRAFT,
-        "arts": [{"label": label, "id": aid} for label, aid in game.art_library()],
+        # 功法卡（FB-006）：身上兩門各一張，還沒學的那一門是一句「你還沒有內功。」；
+        # 功法庫通常只有幾門，卡一起送，點開不必再打一次 API（QA L4：先看卡再改練）
+        "slot_cards": [{"kind": k, "card": md(game.skill_detail(k))} for k in KINDS],
+        "arts": [{"label": label, "id": aid, "card": md(game.art_detail(aid))} for label, aid in game.art_library()],
         "craft_line": md(game.craft_line([], KINDS[0])),
     }
 
