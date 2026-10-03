@@ -12,7 +12,7 @@ import random
 from collections.abc import Callable
 
 from . import craft, materials, team
-from .engine import Game, Option
+from .engine import FREE_TEXT_OPTION, Game, Option
 from .models import Content
 from .world_state import WorldStateStore
 
@@ -94,6 +94,7 @@ def pick(game: Game, options: list[Option], rng: random.Random) -> str | None:
         for option in options:  # 集結時選單照常有別的事可做（FB-009）；還沒參戰就先加入，跟以前選單只剩加入時一樣
             if option.id.startswith("battle:join"):
                 return option.id
+    options = [o for o in options if o.id != FREE_TEXT_OPTION]  # 隨口應對要寫一句話，機器人寫不出有意義的做法（同決戰的 free_text）
     if s.pending_event:
         choices = game.content.events[s.pending_event].choices
         for option in options:

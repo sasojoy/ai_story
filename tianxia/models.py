@@ -42,6 +42,10 @@ class Condition(_Strict):
     revealed_none: list[str] = Field(default_factory=list)
     flag_age_hours: dict[str, int] = Field(default_factory=dict)  # 世界旗標成立後至少經過幾小時
     members_none: list[str] = Field(default_factory=list)  # 這些人物都還沒入門（結識事件用它排除已入門的人）
+    # 地方痕跡（「地點 id:痕跡名」→ 次數，全服共用、每季清空）：至少／至多幾次。數字在載入時乘上
+    # Config.mark_threshold_scale（無條件進位，見 content.load_content），所以這裡寫的是「開發期小伺服器」的門檻
+    marks_min: dict[str, int] = Field(default_factory=dict)
+    marks_max: dict[str, int] = Field(default_factory=dict)
     any_of: list[Condition] = Field(default_factory=list)  # 非空時，至少一個子條件成立
 
 
@@ -64,6 +68,8 @@ class Effect(_Strict):
     next_event: str | None = None
     recruit: str | None = None  # 結識某人（同伴 id）：入門；已入門時改給心得（見 roster.recruit）
     materials: dict[str, int] = Field(default_factory=dict)  # 給煉製素材（素材 id -> 數量）；手寫劇情是天品素材的主要來源
+    # 在地方上留下痕跡（「地點 id:痕跡名」→ 1～3，只能加）：全服共用、每季清空；同一個人對同一個痕跡一天只算一次
+    marks: dict[str, int] = Field(default_factory=dict)
 
 
 class Material(_Strict):
@@ -117,6 +123,20 @@ class Choice(_Strict):
     fail_effect: Effect = Field(default_factory=Effect)  # 檢定失敗／戰鬥落敗
 
 
+FREE_TEXT_MAX = 20  # 隨口應對最多幾個字（跟決戰的放手一搏一樣）
+
+
+class FreeTextChoice(_Strict):
+    """隨口應對（探索的多人與LLM玩法 §8.1）：事件多一個自己寫一句話的選項。LLM 只評估成功率，
+    引擎再按 stat 修正、夾在 5%～85% 之後擲骰：成功套 effect，失敗套 fail_effect。"""
+
+    prompt: str  # 選單上的標籤，例如「自己想辦法……」
+    stat: Literal["str", "agi", "con", "wis"]
+    by: Literal["team", "self"] = "team"  # 跟 Check.by 一樣：team 派隊伍中這項屬性最高的人，self 只看本人
+    effect: Effect = Field(default_factory=Effect)
+    fail_effect: Effect = Field(default_factory=Effect)
+
+
 class Event(_Strict):
     id: str
     title: str
@@ -130,6 +150,7 @@ class Event(_Strict):
     fortune: bool = False  # 新立門戶福緣：不會被隨機抽到，由 engine 在交遊時觸發（actions 必須是空的）
     condition: Condition = Field(default_factory=Condition)
     choices: list[Choice] = Field(min_length=1)
+    free_text: FreeTextChoice | None = None
 
 
 RoadKind = Literal["官道", "路", "山路"]
@@ -443,6 +464,8 @@ class Config(_Strict):
     stamina_max: int = 150
     stamina_regen_seconds: float = 180  # 自然回復：每幾秒（遊戲時間）回 1 點體力（地圖擴充設計第二節：每 3 分鐘 1 點）
     rest_regen_multiplier: float = Field(default=2, ge=1)  # 打坐中體力回復是平常的幾倍
+    # 地方痕跡的門檻倍數（Condition.marks_min/max 的數字乘上它、無條件進位）：開發期 1，正式伺服器依人數調大
+    mark_threshold_scale: float = Field(default=1.0, gt=0)
     # 地圖座標 1 單位＝步行幾分鐘：現行內容（40 個地點的地圖）取 0.04，也就是 25 個單位約 1 分鐘；這裡的預設值只是沒寫時的退路
     travel_minutes_per_unit: float = Field(default=0.0375, gt=0)
     road_factor: dict[RoadKind, float] = Field(

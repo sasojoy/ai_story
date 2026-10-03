@@ -28,6 +28,7 @@
   const KINDS = ["武學", "內功"];
   // 江湖頁「前往」的走法（跟 atlas.MODES 同一份）。選的走法只放在 S.moveMode：不寫進 localStorage、cookie，
   // 重新整理頁面就回到步行；每個請求都帶著它（見 api()），伺服器照它排選單上的「前往」
+  const FREE_TEXT_OPTION = "choice:free"; // 事件的隨口應對（engine.FREE_TEXT_OPTION）
   const MOVE_MODES = [
     { id: "walk", name: "步行" },
     { id: "hurry", name: "趕路" },
@@ -152,6 +153,7 @@
   }
 
   function setMain(main) {
+    if (main.event_free_text == null) S.answering = false; // 事件過去了，輸入框跟著收起
     const key = JSON.stringify(main);
     const changed = key !== S.mainKey;
     S.main = main;
@@ -309,7 +311,8 @@
       ${now}
       <section class="card scene">${m.scene}</section>
       ${free}
-      <div class="options">${m.options.map((o, i) => `${i === firstMove ? modes : ""}
+      <div class="options">${m.options.map((o, i) => o.id === FREE_TEXT_OPTION && S.answering && o.enabled ? `
+        <form class="free answer" id="answer-form"><input class="input" name="text" maxlength="20" placeholder="${esc(o.label)}（20字內）" aria-label="${esc(o.label)}"><button class="btn primary small" type="submit">說出口</button></form>` : `${i === firstMove ? modes : ""}
         <button class="btn ${o.id.startsWith("move:") ? "go" : ""}" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}>
           <span class="k">${o.id.startsWith("move:") ? "→" : i + 1}</span><span>${esc(o.label)}</span>
         </button>`).join("")}
@@ -582,6 +585,13 @@
   }
 
   async function choose(btn, id) {
+    if (id === FREE_TEXT_OPTION) { // 隨口應對：先叫出輸入框，寫好再送（見 answer）
+      S.answering = true;
+      renderPage();
+      const input = document.querySelector("#answer-form .input");
+      if (input) input.focus();
+      return;
+    }
     await busy(async () => {
       document.querySelectorAll(".options .btn").forEach((b) => { b.disabled = true; });
       btn.classList.add("busy");
@@ -589,10 +599,28 @@
       const talking = id === "act:socialize" || ((id.startsWith("talk:") || id.startsWith("call:")) && id !== "talk:leave" && id !== "call:back");
       if (talking) btn.lastElementChild.textContent = "對方沉吟中…";
       const r = await api("/api/choose", { id });
+      S.answering = false;
       applyMain(r.main);
       window.scrollTo({ top: 0, behavior: "smooth" });
     });
     if (document.querySelector(".options .btn.busy")) renderPage(); // 失敗了：把按鈕還原
+  }
+
+  // 隨口應對：送出後要等模型評這個做法，首次常要好幾秒，按鈕先寫「思量中……」
+  async function answer(form, text) {
+    await busy(async () => {
+      form.querySelectorAll("input, button").forEach((el) => { el.disabled = true; });
+      form.querySelector("[type=submit]").textContent = "思量中……";
+      try {
+        const r = await api("/api/answer", { text });
+        S.answering = false;
+        applyMain(r.main);
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      } finally {
+        form.querySelectorAll("input, button").forEach((el) => { el.disabled = false; });
+        form.querySelector("[type=submit]").textContent = "說出口";
+      }
+    });
   }
 
   // 換走法：帶著新的走法重抓一次江湖畫面，「前往」的時間、體力與按不按得下去才會跟著換
@@ -814,6 +842,9 @@
       } else if (form.id === "create-form") {
         submit.disabled = true;
         enter(await api("/api/character", data));
+      } else if (form.id === "answer-form") {
+        if (!data.text.trim()) return;
+        await answer(form, data.text.trim());
       } else if (form.id === "free-form") {
         if (!data.text.trim()) return;
         await doMain("battle_text", { text: data.text });

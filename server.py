@@ -34,13 +34,14 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from markdown_it import MarkdownIt
 
-from tianxia import companion_agent, materials, server_bots, team
+from tianxia import companion_agent, event_llm, materials, server_bots, team
 from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, AccountStore, normalize
 from tianxia.content import load_content
 from tianxia.characters import open_characters
 from tianxia.craft import MATERIALS_PER_CRAFT
 from tianxia.database import default_path, open_database
 from tianxia.engine import Game
+from tianxia.models import FREE_TEXT_MAX
 from tianxia.journal import CSS as JOURNAL_CSS
 
 ROOT = Path(__file__).parent
@@ -203,6 +204,29 @@ def choose(game: Game, option_id: str) -> list[str] | None:
     return act(game, lambda g: g.choose(option_id, prepared=prepared))
 
 
+def answer_event(game: Game, text: str) -> list[str] | None:
+    """事件的隨口應對（探索的多人與 LLM 玩法 §8.1），跟 prepare_dialogue 一樣分三段：
+      A（鎖內、很快）同步時間，問引擎這句話現在能不能送；能就拿到單子（事件 id＋這句話），同步的結果照樣存起來；
+      B（鎖外、很慢）請模型評這個做法的成功率，失敗一律 40；
+      C（鎖內、很快）Game.answer_event 重驗還停在同一則事件、同一句話，才擲骰套用（對不上就不套用）；
+      D、E 擲骰之後在鎖外請模型潤色一兩句，再進鎖插回那一則江湖紀錄（Game.add_gamble_narration）。"""
+    with _locked(game):
+        game.sync(time.time())
+        request = game.free_text_request(text)
+        open_characters().save(game.state)
+    if request is None:
+        raise GameError(f"寫一句 1～{FREE_TEXT_MAX} 字的做法；眼前的事已經過去的話，就不必再寫了。")
+    event = CONTENT.events[request.event_id]
+    rate = event_llm.assess_event_success_rate(game.client, event, request.text)
+    msgs = act(game, lambda g: g.answer_event(request, rate))
+    outcome = game.last_gamble
+    if outcome is not None:  # D（鎖外）擲骰之後請模型潤色一兩句，E（鎖內）插回那一則紀錄；失敗就只留結果文字
+        narration = event_llm.narrate_event_gamble(game.client, event, outcome.text, outcome.success, outcome.effect_text)
+        if narration:
+            act(game, lambda g: g.add_gamble_narration(outcome, narration))
+    return msgs
+
+
 # ── 畫面資料 ──────────────────────────────────────────
 
 
@@ -215,6 +239,7 @@ def main_view(game: Game) -> dict:
         "scene": md(game.scene_text()),
         "options": [o.model_dump() for o in game.options()],
         "free_text": game.battle_free_text_prompt(),
+        "event_free_text": game.event_free_text_prompt(),  # 眼前事件的隨口應對：選單上那一顆按下去叫出輸入框
         # 「剛剛」：這次行動打了仗就放戰鬥卡片，卡片沒寫到的補充放在 latest；沒打仗時 latest 是最新一則紀錄
         "card": md(card) if card is not None else None,
         "card_id": game.battle_card_id() if card is not None else None,
@@ -510,6 +535,13 @@ ADMIN_ACTIONS = {
 def api_choose(request: Request, body: dict = Body(...)):
     game = _game(request)
     choose(game, str(body.get("id", "")))
+    return {"main": look(game, main_view)}
+
+
+@app.post("/api/answer")
+def api_answer(request: Request, body: dict = Body(...)):
+    game = _game(request)
+    answer_event(game, str(body.get("text", "")))
     return {"main": look(game, main_view)}
 
 
