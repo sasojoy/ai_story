@@ -1,7 +1,7 @@
 """伺服器假人程式的核心（伺服器假人設計第三、四、六節）：一輪一輪地補人、讓在線的假人做事。
 
 run_bots.py 只負責每隔 bot_tick_seconds 呼叫一次 tick()。每個假人做一個動作都跟真人按一次
-按鈕一樣：拿跨程式的行動鎖 → 讀存檔 → 補算時間 → 做動作 → 存檔 → 放鎖。拿不到鎖（真人正在
+按鈕一樣：開一筆寫入交易 → 讀角色 → 補算時間 → 做動作 → 存角色 → 交易結束。拿不到寫入權（真人正在
 等 LLM）就跳過這個假人的這一輪，不卡住真人。
 
 補人：每個陣營（投靠名冊上的真人與假人，加上這一季已派去、還在路上的假人）不到最少人數，就補
@@ -16,12 +16,11 @@ import time
 import traceback
 from collections.abc import Callable
 from dataclasses import dataclass
-from pathlib import Path
 
-from . import bot_policy, leaderboard, server_bots
+from . import bot_policy, server_bots
+from .characters import CharacterStore, open_characters
 from .engine import Game
 from .models import Content
-from .save import load_game, path_for, save_game
 from .sqlite_world import open_world
 from .state import BotProfile, GameState
 from .world_state import WorldStateStore
@@ -52,12 +51,12 @@ class TickReport:
 
 class BotRunner:
     def __init__(
-        self, content: Content, world: WorldStateStore | None = None, saves_dir: Path | None = None,
+        self, content: Content, world: WorldStateStore | None = None, characters: CharacterStore | None = None,
         rng: random.Random | None = None, clock: Callable[[], float] = time.time,
     ):
         self.content = content
         self.world = world or open_world()
-        self.saves_dir = Path(saves_dir) if saves_dir else leaderboard.DEFAULT_SAVES_DIR
+        self.characters = characters or open_characters()
         self.rng = rng or random.Random()
         self.clock = clock
         self.last_added: dict[str, float] = {}  # 陣營 id -> 上次補人的現實時間
@@ -77,7 +76,7 @@ class BotRunner:
             report.failed += 1
         season = self.world.get_season_number()
         battle = self._battle_sides()
-        for path, state in self._saves():
+        for state in self.characters.all(bots_only=True):
             profile = state.player.bot
             if profile is None or not server_bots.active(profile, season):
                 continue
@@ -88,8 +87,8 @@ class BotRunner:
                 continue
             try:
                 with self.world.action_lock(timeout=LOCK_WAIT):
-                    # 拿到鎖之後才看錶：上一個假人放鎖到現在，真人可能已經把共用時鐘對到更晚了
-                    acted = self._take_turn(path, self.clock())
+                    # 拿到寫入權之後才看錶：上一個假人做完到現在，真人可能已經把共用時鐘對到更晚了
+                    acted = self._take_turn(state.player.name, self.clock())
                 if acted:
                     report.acted += 1
             except TimeoutError:
@@ -99,25 +98,25 @@ class BotRunner:
                 report.failed += 1
         return report
 
-    def _take_turn(self, path: Path, now: float) -> bool:
-        """拿著行動鎖做一個動作，真的出手才回傳 True。這一輪開頭查過的賽季可能已經變了（各個假人
-        之間會放鎖）：季已經結束、或管理者開了下一季（這個假人就算退隱了），就什麼都不做、也不存檔；
+    def _take_turn(self, name: str, now: float) -> bool:
+        """在寫入交易裡做一個動作，真的出手才回傳 True。這一輪開頭查過的賽季可能已經變了（各個假人之間
+        會結束交易）：季已經結束、或管理者開了下一季（這個假人就算退隱了），就什麼都不做、也不存檔；
         自己補算時間時走到季末，存下補算的結果，但不在休季時做事。"""
-        state = load_game(path)
+        state = self.characters.load(name)
         shared = self.world.read()
-        profile = state.player.bot
-        if shared.season_phase() != "running":
+        if state is None or shared.season_phase() != "running":
             return False
+        profile = state.player.bot
         if profile is None or not server_bots.active(profile, shared.season_number):
             return False
         game = Game(self.content, state, self.rng, self.world)
         game.client = None  # 假人不呼叫 LLM（伺服器假人設計第三節）
         game.sync(now)
         if game.state.world.ended:
-            save_game(game.state, path)
+            self.characters.save(game.state)
             return False
         bot_policy.take_turn(game, game.state.player.bot, self.rng)
-        save_game(game.state, path)
+        self.characters.save(game.state)
         return True
 
     def _online(
@@ -148,24 +147,13 @@ class BotRunner:
         out = {p.name for p in battle.participants.values() if p.eliminated}
         return battle.muster_deadline_real, {f.id for f in definition.factions}, out
 
-    def _saves(self) -> list[tuple[Path, GameState]]:
-        if not self.saves_dir.is_dir():
-            return []
-        found: list[tuple[Path, GameState]] = []
-        for path in sorted(self.saves_dir.glob("*.json")):
-            try:
-                found.append((path, load_game(path)))
-            except Exception:
-                continue  # 損毀／格式不相容的存檔跳過（跟榜單一樣）
-        return found
-
     def _fill(self, now: float, report: TickReport) -> None:
         """補人；補成一個就記一個進 report.added（中途出錯時，已經補成的仍算數）。"""
         cfg = self.content.config
         season = self.world.get_season_number()
-        saves = self._saves()
+        bots = self.characters.all(bots_only=True)
         counts = self.world.faction_counts()
-        for _, state in saves:  # 已派去、還在路上沒投靠的假人也算，免得同一個缺額一直重複補
+        for state in bots:  # 已派去、還在路上沒投靠的假人也算，免得同一個缺額一直重複補
             bot = state.player.bot
             if bot is not None and server_bots.active(bot, season) and state.player.faction is None:
                 counts[bot.faction] = counts.get(bot.faction, 0) + 1
@@ -175,34 +163,28 @@ class BotRunner:
             last = self.last_added.get(faction.id)
             if last is not None and now - last < cfg.bot_fill_seconds:
                 continue
-            saves = self._add_bot(faction.id, season, saves, now)
+            bots = self._add_bot(faction.id, season, bots, now)
             self.last_added[faction.id] = now
             report.added += 1
 
-    def _add_bot(
-        self, faction_id: str, season: int, saves: list[tuple[Path, GameState]], now: float,
-    ) -> list[tuple[Path, GameState]]:
-        """先叫醒一位退隱的假人（沿用名號，像老玩家回鍋），沒有才新建一位；回傳更新後的存檔清單。"""
-        retired = [
-            (path, state) for path, state in saves
-            if state.player.bot is not None and not server_bots.active(state.player.bot, season)
-        ]
+    def _add_bot(self, faction_id: str, season: int, bots: list[GameState], now: float) -> list[GameState]:
+        """先叫醒一位退隱的假人（沿用名號，像老玩家回鍋），沒有才新建一位；回傳更新後的假人清單。"""
+        retired = [s for s in bots if s.player.bot is not None and not server_bots.active(s.player.bot, season)]
         if retired:
-            path, state = self.rng.choice(retired)
-            game = Game(self.content, state, self.rng, self.world)
+            game = Game(self.content, self.rng.choice(retired), self.rng, self.world)
         else:
-            # 名號不能撞到任何一個存檔檔名，包括讀不出來（損毀、舊格式）的玩家存檔——不然新假人會把它蓋掉
-            taken = {path.stem for path in self.saves_dir.glob("*.json")}
+            # 名號不能撞到任何一個角色，包括讀不出來（損毀、舊格式）的存檔——不然新假人會把它蓋掉
+            taken = self.characters.names()
             taken |= {ch.name for ch in self.content.characters.values()} | set(self.content.config.admins)
             name = server_bots.make_name(self.rng, taken)
             game = Game.new(self.content, name, rng=self.rng, world=self.world)
             game.state.player.bot = BotProfile(
                 personality=server_bots.pick_personality(self.rng), seed=self.rng.randrange(2**31),
             )
-            path = path_for(self.saves_dir, name)
         game.client = None
         bot = game.state.player.bot
         bot.faction, bot.season_number = faction_id, season
         game.sync(now)
-        save_game(game.state, path)
-        return [(p, s) for p, s in saves if p != path] + [(path, game.state)]
+        self.characters.save(game.state)
+        name = game.state.player.name
+        return [s for s in bots if s.player.name != name] + [game.state]

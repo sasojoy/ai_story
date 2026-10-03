@@ -17,7 +17,6 @@ sanguo-companions 合併大幅簡化了「門下」頁：不再有多隊切換/�
 """
 from __future__ import annotations
 
-import shutil
 import time
 import unicodedata
 from pathlib import Path
@@ -26,11 +25,11 @@ import gradio as gr
 
 from tianxia import atlas, companion_agent
 from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, AccountStore, normalize
+from tianxia.characters import open_characters
 from tianxia.content import load_content
 from tianxia.craft import MATERIALS_PER_CRAFT
 from tianxia.engine import Game, Option
 from tianxia.journal import CSS as JOURNAL_CSS
-from tianxia.save import load_game, path_for, save_game
 from tianxia.sqlite_world import open_world
 
 ROOT = Path(__file__).parent
@@ -168,10 +167,6 @@ svg, img, canvas { max-width: 100%; height: auto; }
 """
 
 
-def save_path(name: str) -> Path:
-    return path_for(SAVE_DIR, name)
-
-
 def visible_options(options: list[Option]) -> list[Option]:
     """畫面上最多 MAX_BUTTONS 個按鈕；放不下時「打坐」一定留著（體力見底時至少還有它可以按，
     地圖擴充設計第二節），其餘照順序取前面的。"""
@@ -263,7 +258,7 @@ def act(game: Game | None, action, note: bool = False) -> list:
         msgs = action(game)
         if msgs is UNCHANGED:
             return [gr.skip()] * n
-        save_game(game.state, save_path(game.state.player.name))
+        open_characters().save(game.state)
         out = render(game)
         if note:
             out += render_menxia(game, None, None if msgs is None else "\n\n".join(msgs))
@@ -394,7 +389,7 @@ def _menxia_act(game: Game, action, person: str | None) -> list:
     with game.world.action_lock():
         game.sync(time.time())
         msgs = action(game)
-        save_game(game.state, save_path(game.state.player.name))
+        open_characters().save(game.state)
         return render_menxia(game, person, "\n\n".join(msgs) if msgs else "")
 
 
@@ -602,29 +597,25 @@ def tick_handler(game, person):
         return [gr.skip()] * (N_OUTPUTS + MENXIA_OUTPUTS)
     with game.world.action_lock():
         game.sync(time.time())
-        save_game(game.state, save_path(game.state.player.name))
+        open_characters().save(game.state)
         return render(game) + render_menxia(game, person, None)
 
 
 def open_game(name: str) -> Game:
-    """讀取存檔；舊格式讀不進來時，先把原檔備份到 saves/backup/ 再開新角色，不刪除任何東西。"""
-    path = save_path(name)
-    if not path.exists():
-        return Game.new(CONTENT, name)
+    """讀取角色；舊格式讀不進來時，先把那一列搬到備份表再開新角色，不刪除任何東西。"""
+    characters = open_characters()
     try:
-        state = load_game(path)
-        if state.player.bot is not None:  # 伺服器假人的存檔：不讓真人接手（伺服器假人設計第五節）
-            raise gr.Error(NAME_TAKEN)
-        return Game(CONTENT, state)
-    except gr.Error:  # gr.Error 也是 ValueError 的子類別：不先放行，下面會把假人的存檔當成壞檔備份掉
-        raise
+        state = characters.load(name)
     except ValueError:  # pydantic 的 ValidationError 屬於 ValueError
-        backup = SAVE_DIR / "backup" / f"{path.stem}-{int(time.time())}.json"
-        backup.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(path, backup)
+        characters.backup(name)
         game = Game.new(CONTENT, name)
-        game.notice(f"（舊存檔的格式已不相容，已備份到 saves/backup/{backup.name}；這是新的開始。）", "舊存檔已備份")
+        game.notice("（舊存檔的格式已不相容，已備份起來；這是新的開始。）", "舊存檔已備份")
         return game
+    if state is None:
+        return Game.new(CONTENT, name)
+    if state.player.bot is not None:  # 伺服器假人的存檔：不讓真人接手（伺服器假人設計第五節）
+        raise gr.Error(NAME_TAKEN)
+    return Game(CONTENT, state)
 
 
 LOGIN_FAILURES: dict[str, list[float]] = {}  # 擋猜密碼的紀錄，整個伺服器共用、只放記憶體（帳號密碼登入設計第三節）
@@ -640,7 +631,7 @@ def name_taken(name: str) -> bool:
     """名號有人用：已經有存檔（真人或假人一樣）、綁在某個帳號上，或是管理者的名號。
     假人與真人回同一句話，就沒辦法用名號試出誰是假人（帳號密碼登入設計第三節）。"""
     admins = {a.casefold() for a in CONTENT.config.admins}
-    return save_path(name).exists() or account_store().owner_of(name) is not None or name.casefold() in admins
+    return open_characters().exists(name) or account_store().owner_of(name) is not None or name.casefold() in admins
 
 
 def _entered(game: Game, account_key: str) -> list:
@@ -701,7 +692,7 @@ def create_character(account_key, name):
             if name_taken(name):
                 raise gr.Error(NAME_TAKEN)
             game = Game.new(CONTENT, name)
-            save_game(game.state, save_path(name))
+            open_characters().save(game.state)
             store.bind_character(account_key, name)
     return _entered(game, account_key)
 

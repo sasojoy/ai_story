@@ -8,7 +8,7 @@ import set_password  # noqa: E402
 
 from tianxia.accounts import AccountStore  # noqa: E402
 from tianxia.engine import Game  # noqa: E402
-from tianxia.save import path_for, save_game  # noqa: E402
+from tianxia.characters import open_characters  # noqa: E402
 from tianxia.state import BotProfile  # noqa: E402
 
 
@@ -20,8 +20,12 @@ def _store(tmp_path):
     return AccountStore(tmp_path / "saves" / "accounts" / "accounts.json")
 
 
+def _save(tmp_path, state):
+    open_characters(tmp_path / "saves" / "tianxia.db").save(state)
+
+
 def test_creates_the_account_binds_the_character_and_only_writes_the_password_to_a_file(tmp_path, capsys, content):
-    save_game(Game.new(content, "Rayal").state, path_for(tmp_path / "saves", "Rayal"))
+    _save(tmp_path, Game.new(content, "Rayal").state)
     assert _run(tmp_path, "Rayal", "--character", "Rayal") == 0
     password = (tmp_path / "local" / "rayal_password.txt").read_text(encoding="utf-8").strip()
     out = capsys.readouterr().out
@@ -31,7 +35,7 @@ def test_creates_the_account_binds_the_character_and_only_writes_the_password_to
 
 
 def test_running_again_replaces_the_password(tmp_path, content):
-    save_game(Game.new(content, "Rayal").state, path_for(tmp_path / "saves", "Rayal"))
+    _save(tmp_path, Game.new(content, "Rayal").state)
     _run(tmp_path, "Rayal", "--character", "Rayal")
     first = (tmp_path / "local" / "rayal_password.txt").read_text(encoding="utf-8").strip()
     assert _run(tmp_path, "Rayal") == 0
@@ -43,7 +47,7 @@ def test_running_again_replaces_the_password(tmp_path, content):
 def test_refuses_to_bind_a_server_bot_or_a_missing_save(tmp_path, capsys, content):
     bot = Game.new(content, "周泰安")
     bot.state.player.bot = BotProfile(personality="普通", seed=1, faction="guan", season_number=1)
-    save_game(bot.state, path_for(tmp_path / "saves", "周泰安"))
+    _save(tmp_path, bot.state)
     assert _run(tmp_path, "someone", "--character", "周泰安") == 1
     assert _run(tmp_path, "someone", "--character", "沒有這個人") == 1
     assert _store(tmp_path).get("someone") is None
@@ -51,7 +55,7 @@ def test_refuses_to_bind_a_server_bot_or_a_missing_save(tmp_path, capsys, conten
 
 
 def test_refuses_a_name_another_account_owns(tmp_path, content):
-    save_game(Game.new(content, "沈青衫").state, path_for(tmp_path / "saves", "沈青衫"))
+    _save(tmp_path, Game.new(content, "沈青衫").state)
     store = _store(tmp_path)
     store.register("owner", "secret-pw")
     store.bind_character("owner", "沈青衫")
@@ -61,7 +65,7 @@ def test_refuses_a_name_another_account_owns(tmp_path, content):
 
 def test_refuses_to_move_an_account_to_another_character(tmp_path, content):
     for name in ("沈青衫", "柳如煙"):
-        save_game(Game.new(content, name).state, path_for(tmp_path / "saves", name))
+        _save(tmp_path, Game.new(content, name).state)
     _run(tmp_path, "shen", "--character", "沈青衫")
     first = (tmp_path / "local" / "shen_password.txt").read_text(encoding="utf-8").strip()
     assert _run(tmp_path, "shen", "--character", "柳如煙") == 1

@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from tianxia.accounts import AccountError, AccountStore, check_login, normalize  # noqa: E402
-from tianxia.save import load_game, path_for  # noqa: E402
+from tianxia.characters import open_characters  # noqa: E402
 from tianxia.sqlite_world import open_world  # noqa: E402
 
 
@@ -27,17 +27,18 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     saves_dir = Path(args.saves_dir)
     store = AccountStore(saves_dir / "accounts" / "accounts.json")
+    characters = open_characters(saves_dir / "tianxia.db")
     password = secrets.token_urlsafe(9)  # 12 個字
     try:
         check_login(args.account)
         with open_world(saves_dir / "tianxia.db").action_lock():
             existing = store.get(args.account)
             if args.character:
-                save = path_for(saves_dir, args.character)
-                if not save.exists():
+                state = characters.load(args.character)
+                if state is None:
                     print(f"找不到角色「{args.character}」的存檔。")
                     return 1
-                if load_game(save).player.bot is not None:
+                if state.player.bot is not None:
                     print(f"「{args.character}」是伺服器假人的存檔，不能綁到帳號上。")
                     return 1
                 if store.owner_of(args.character) not in (None, normalize(args.account)):

@@ -5,7 +5,7 @@ from conftest import FixedRandom, walk_to
 
 from tianxia import journal
 from tianxia.engine import LOG_BREAK, Game
-from tianxia.save import load_game, save_game
+from tianxia.characters import name_key, open_characters
 from tianxia.state import JournalEntry
 
 HOUR = 3600
@@ -379,19 +379,23 @@ def test_legacy_log_without_breaks_and_the_cap(content, game):
     assert [e.title for e in kept] == ["心得不足：【吐納法】升到第2成需要 20。"]  # 同一組裡還有別的事：照常轉
 
 
-def test_old_save_file_without_a_journal_loads_and_converts(tmp_path, content, game):
+def test_old_save_file_without_a_journal_loads_and_converts(content, game):
     walk_to(game, "lake")
     dump = game.state.model_dump(mode="json")
     del dump["journal"]
-    path = tmp_path / "old.json"
-    path.write_text(json.dumps(dump, ensure_ascii=False), encoding="utf-8")
-    state = load_game(path)
+    characters = open_characters()
+    with characters.db.transaction() as conn:
+        conn.execute(
+            "INSERT INTO characters (key, name, is_bot, faction, data) VALUES (?, '沈浪', 0, NULL, ?)",
+            (name_key("沈浪"), json.dumps(dump, ensure_ascii=False)),
+        )
+    state = characters.load("沈浪")
     assert state.journal == []
     entries = Game(content, state).state.journal
     assert entries[0].title == "【湖邊】危險 ★★" and entries[-1].title == "══ 測試劇本 ══"
 
 
-def test_journal_survives_a_save_round_trip(tmp_path, game):
+def test_journal_survives_a_save_round_trip(game):
     game.content.config.train_event_chance = 1.0
     game.state.player.seen_events.add("scroll")
     _give_player_a_winning_wugong(game)
@@ -400,9 +404,8 @@ def test_journal_survives_a_save_round_trip(tmp_path, game):
     game.rng = FixedRandom(0.99)
     walk_to(game, "lake")
     game.choose("act:explore")
-    path = tmp_path / "沈浪.json"
-    save_game(game.state, path)
-    loaded = load_game(path)
+    open_characters().save(game.state)
+    loaded = open_characters().load("沈浪")
     assert loaded.journal == game.state.journal and loaded.journal[0].battle_id == 1
 
 

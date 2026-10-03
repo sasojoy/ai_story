@@ -8,8 +8,8 @@ import pytest
 import app
 from conftest import at
 from tianxia import atlas, battle_instance, companion_agent, roster
+from tianxia.characters import open_characters
 from tianxia.engine import Game, Option
-from tianxia.save import save_game
 from tianxia.state import BotProfile
 from tianxia.sqlite_world import SqliteWorldStore, open_world
 
@@ -67,13 +67,6 @@ def test_render_map_page_shape(game):
     assert out[app.MAP_PLACE_INDEX]["value"] == game.state.player.location
 
 
-# ── save_path ──────────────────────────────────────────
-
-
-def test_save_path_strips_unsafe_characters():
-    assert app.save_path("沈/浪?").name == "沈_浪_.json"
-
-
 # ── act() 與選項按鈕 ──────────────────────────────────────
 
 
@@ -85,14 +78,14 @@ def test_act_with_no_game_skips_every_output():
 def test_act_runs_saves_and_renders(game, save_dir):
     out = app.act(game, lambda g: g.choose("act:explore"))
     assert len(out) == app.N_OUTPUTS
-    assert (save_dir / "測試.json").exists()
+    assert open_characters().exists("測試")
     assert game.state.player.stamina < 150
 
 
 def test_act_returning_unchanged_skips_everything(game, save_dir):
     out = app.act(game, lambda g: app.UNCHANGED)
     assert out == [gr.skip()] * app.N_OUTPUTS
-    assert not (save_dir / "測試.json").exists()
+    assert not open_characters().exists("測試")
 
 
 def test_make_option_handler_dispatches_to_the_right_option(game):
@@ -274,7 +267,7 @@ def test_map_click_handler_selects_a_known_place(game):
 def test_open_world_map(game, save_dir):
     out = app.open_world_map(game)
     assert len(out) == app.N_OUTPUTS + len(app.PAGES) + app.MAP_OUTPUTS
-    assert (save_dir / "測試.json").exists()
+    assert open_characters().exists("測試")
 
 
 def test_open_world_map_with_no_game_skips():
@@ -340,7 +333,7 @@ def test_skip_tutorial_handler(game):
 def test_tick_handler_syncs_and_saves(game, save_dir):
     out = app.tick_handler(game, None)
     assert len(out) == app.N_OUTPUTS + app.MENXIA_OUTPUTS
-    assert (save_dir / "測試.json").exists()
+    assert open_characters().exists("測試")
 
 
 def test_tick_handler_with_no_game_skips():
@@ -359,17 +352,21 @@ def test_open_game_creates_a_new_character_when_no_save_exists(save_dir):
 def test_open_game_loads_an_existing_save(save_dir):
     g = app.open_game("新玩家")
     g.state.player.stamina = 42.0
-    save_game(g.state, app.save_path("新玩家"))
+    open_characters().save(g.state)
     reloaded = app.open_game("新玩家")
     assert reloaded.state.player.stamina == 42.0
 
 
 def test_open_game_backs_up_a_corrupt_save_and_starts_fresh(save_dir):
-    bad = app.save_path("壞掉的")
-    bad.write_text("{not json", encoding="utf-8")
+    characters = open_characters()
+    with characters.db.transaction() as conn:
+        conn.execute(
+            "INSERT INTO characters (key, name, is_bot, faction, data) VALUES ('壞掉的', '壞掉的', 0, NULL, '{not json')"
+        )
     g = app.open_game("壞掉的")
     assert g.state.player.name == "壞掉的"
-    assert list((save_dir / "backup").glob("壞掉的-*.json"))
+    with characters.db.snapshot() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM character_backups").fetchone()[0] == 1
     assert any("已備份" in line for line in g.state.log)
 
 
@@ -464,10 +461,11 @@ def test_every_action_takes_the_cross_program_action_lock(game, monkeypatch):
 def test_open_game_refuses_a_name_that_belongs_to_a_server_bot(save_dir):
     g = app.open_game("周泰安")
     g.state.player.bot = BotProfile(personality="普通", seed=1, faction="guan", season_number=1)
-    save_game(g.state, app.save_path("周泰安"))
+    open_characters().save(g.state)
     with pytest.raises(gr.Error, match="這個名號已有人使用"):
         app.open_game("周泰安")
-    assert not (save_dir / "backup").exists()  # 假人的存檔不能被當成壞檔備份走
+    with open_characters().db.snapshot() as conn:  # 假人的存檔不能被當成壞檔備份走
+        assert conn.execute("SELECT COUNT(*) FROM character_backups").fetchone()[0] == 0
 
 
 def test_admin_trigger_handlers(game, monkeypatch):
@@ -586,7 +584,7 @@ def test_register_then_create_a_character_enters_the_game(save_dir):
     assert _pages(out) == [name == "main" for name in app.PAGES]
     assert out[-2]["visible"] is False  # 一般玩家看不到管理者區塊
     assert out[-1] == "shen_01"
-    assert app.save_path("沈青衫").exists()
+    assert open_characters().exists("沈青衫")
     assert app.account_store().get("shen_01").character == "沈青衫"
 
 
@@ -633,7 +631,7 @@ def test_a_bot_name_a_player_name_and_an_admin_name_are_refused_with_the_same_wo
     monkeypatch.setattr(app.CONTENT.config, "admins", ["掌門"])
     bot = app.open_game("周泰安")
     bot.state.player.bot = BotProfile(personality="普通", seed=1, faction="guan", season_number=1)
-    save_game(bot.state, app.save_path("周泰安"))
+    open_characters().save(bot.state)
     app.register("first", "secret-pw", "secret-pw")
     app.create_character("first", "沈青衫")
     app.register("second", "secret-pw", "secret-pw")
@@ -649,7 +647,7 @@ def test_a_bot_name_a_player_name_and_an_admin_name_are_refused_with_the_same_wo
 def test_an_admin_account_sees_the_admin_tools(save_dir, monkeypatch):
     monkeypatch.setattr(app.CONTENT.config, "admins", ["掌門"])
     boss = app.open_game("掌門")
-    save_game(boss.state, app.save_path("掌門"))
+    open_characters().save(boss.state)
     store = app.account_store()
     store.register("boss", "secret-pw")
     store.bind_character("boss", "掌門")  # 管理者的帳號由主機端腳本綁（scripts/set_password.py）
@@ -770,7 +768,7 @@ def test_the_generated_turn_is_applied_and_saved(game, save_dir):
         {"role": "user", "content": "閒聊幾句"}, {"role": "assistant", "content": "他點了點頭。"},
     ]
     assert "他點了點頭。" in game.state.journal[0].lines  # 江湖紀錄也記了
-    assert (save_dir / "測試.json").exists()
+    assert open_characters().exists("測試")
 
 
 def test_a_failed_generation_ends_the_talk_for_free_through_the_handler(game, lock_events):

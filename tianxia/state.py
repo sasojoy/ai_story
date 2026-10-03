@@ -184,7 +184,9 @@ class JournalEntry(BaseModel):
 
 class GameState(BaseModel):
     player: PlayerState
-    world: WorldState
+    # 共用賽季：只在記憶體裡，不進角色存檔（線上架構設計 3.1）。Game 建構與每次 sync 都把它指向全服狀態裡的
+    # 那一份（Game._reconcile_season）；舊存檔裡夾帶的 world 讀得進來，但隨即被取代。
+    world: WorldState = Field(default_factory=WorldState, exclude=True)
     pending_event: str | None = None
     battles: list[BattleRecord] = Field(default_factory=list)  # 最近的戰鬥紀錄，最新的在前
     battle_seq: int = 0  # 最近一場戰鬥的流水號

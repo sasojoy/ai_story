@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import random
 import sys
 import tempfile
@@ -18,11 +19,11 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from tianxia import bot, database, leaderboard, server_bots  # noqa: E402
+from tianxia import bot, database, server_bots  # noqa: E402
 from tianxia.bot_runner import BotRunner  # noqa: E402
+from tianxia.characters import open_characters  # noqa: E402
 from tianxia.content import load_content  # noqa: E402
 from tianxia.engine import Game  # noqa: E402
-from tianxia.save import load_game, path_for, save_game  # noqa: E402
 from tianxia.sqlite_world import open_world  # noqa: E402
 
 START = 1_791_198_000.0  # 2026-10-05 19:00 台灣時間
@@ -51,19 +52,21 @@ def human_turn(game: Game, rng: random.Random) -> None:
 
 def run_season(content, workdir: Path, seed: int, tick: float) -> dict:
     now = [START]
-    world = open_world(workdir / "tianxia.db")
-    saves = workdir / "saves"
+    db_path = workdir / "tianxia.db"
+    world = open_world(db_path)
+    characters = open_characters(db_path)
     rng = random.Random(seed)  # 模擬自己用的亂數；假人程式與「真人」另用不同的種子，三者互不牽動
     sides: Counter = Counter()
     battle_started_day = None
-    # 季末結算榜單時，leaderboard 沒指定存檔夾就會讀真的 saves/；改指到這次的暫存夾，不碰真資料
-    with mock.patch("time.time", lambda: now[0]), mock.patch.object(leaderboard, "DEFAULT_SAVES_DIR", saves):
+    # 季末結算榜單時沒指定資料庫就開預設的那個；用環境變數指到這次的暫存檔，不碰真資料。
+    # 引擎已經不讀電腦時鐘（假人程式用 clock，「真人」sync 時傳 now），不用再 mock time.time。
+    with mock.patch.dict(os.environ, {database.ENV_VAR: str(db_path)}):
         world.seed_first_season(content)
         world.open_season(now[0])
         humans = [Game.new(content, name, rng=random.Random(seed + 2000 + i), world=world) for i, name in enumerate(HUMANS)]
         for game in humans:
             game.client = None
-        runner = BotRunner(content, world, saves, random.Random(seed + 1000), clock=lambda: now[0])
+        runner = BotRunner(content, world, characters, random.Random(seed + 1000), clock=lambda: now[0])
         while not world.get_season().ended and now[0] - START < MAX_REAL_DAYS * 86400:
             runner.tick()
             hour = int((now[0] + server_bots.TZ_OFFSET) % 86400 // 3600)
@@ -72,7 +75,7 @@ def run_season(content, workdir: Path, seed: int, tick: float) -> dict:
                     with world.action_lock():
                         game.sync(now[0])
                         human_turn(game, rng)
-                        save_game(game.state, path_for(saves, game.state.player.name))
+                        characters.save(game.state)
             battle = world.get_battle()
             if battle is not None:
                 if battle_started_day is None:
@@ -80,8 +83,7 @@ def run_season(content, workdir: Path, seed: int, tick: float) -> dict:
                 sides = Counter(p.faction for p in battle.participants.values())
             now[0] += tick
         season = world.get_season()
-        bots = [load_game(p) for p in saves.glob("*.json")]
-        bots = [s for s in bots if s.player.bot is not None]
+        bots = characters.all(bots_only=True)
     return {
         "ended": season.ended,
         "day": season.time / 86400,
@@ -107,8 +109,10 @@ def main() -> None:
         content.config.time_scale = args.time_scale
         content.config.bot_tick_seconds = args.tick
         with tempfile.TemporaryDirectory() as tmp:
-            result = run_season(content, Path(tmp), seed=i, tick=args.tick)
-            database.close_all()  # 不先關連線，Windows 刪不掉暫存資料夾
+            try:
+                result = run_season(content, Path(tmp), seed=i, tick=args.tick)
+            finally:
+                database.close_all()  # 不先關連線，Windows 刪不掉暫存資料夾（這一季出錯時也一樣）
         print(f"第 {i + 1} 季：{result}", flush=True)
 
 
