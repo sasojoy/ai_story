@@ -117,6 +117,17 @@ def test_goal_places_follow_the_current_act(state, content):
     assert goal_places(state, content) == ["cave"]
 
 
+def test_goal_places_are_empty_for_a_storyline_season_one_turns_off(state, content):
+    """計畫 T8：第一季不觸發的 beta 主線不在大地圖上標目標；開關關著照舊。"""
+    from tianxia.models import SeasonOneOff
+
+    content.scenario.season_one_off = SeasonOneOff(storylines=["main"])
+    state.world.season_one = True
+    assert goal_places(state, content) == ["lake"]  # 開關關著
+    content.config.season_one = True
+    assert goal_places(state, content) == []
+
+
 def test_recent_news_keeps_the_last_three_days(state, content):
     rumors = state.world.rumors
     rumors.append(Rumor(time=0.5 * DAY, text="太舊了", location="lake"))

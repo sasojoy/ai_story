@@ -719,3 +719,71 @@ def test_wancheng_guan_lock_cells_read_named_part_then_tier_sentence():
         "城門從裡面打開，趙弘死在亂軍之中。"
         "黃巾的 乙 送進城的糧，最後沒能派上用場。"
     )
+
+
+# ── 第一季不觸發的 beta 內容（計畫 T8；控制者 2026-10-04）──────────────────────────────
+
+
+def _beta_season(c, tmp_path, name: str):
+    """一季剛開（照 c 的開關蓋章）、一位管理者 Rayal 的 Game 與它的資料庫；季的事與虛擬玩家先拿掉，只看門檻。"""
+    from tianxia.sqlite_world import open_world
+
+    c.scenario.sim_players = []
+    c.config.auto_open_first_season = True
+    game = Game.new(c, "Rayal", rng=random.Random(0), world=open_world(tmp_path / f"{name}.db"))
+    game.now = 0.0
+    return game
+
+
+def _push_huangjin_to(game, value: int) -> None:
+    """黃巾聲勢推到 value：開關開著時它由三條戰線合成，三條都設成 value；關著時直接設。"""
+    from tianxia.rules import recompute_trends
+
+    w = game.state.world
+    for key in ("yingru", "nanyang", "jizhou") if w.season_one else ("huangjin",):
+        w.trends[key] = value
+    recompute_trends(w, game.content)
+
+
+def test_season_one_off_blocks_thresholds_storyline_and_beta_battle(tmp_path):
+    """開關打開、季蓋了章：黃巾聲勢推到 50／60／80／10 都不觸發（沒有 road_blocked、不開戰、不收季、沒有
+    huangjin_crushed）；「主線與目標」沒有黃巾之亂；管理者的開戰選單沒有 beta 那場、也開不了。開關關著時四個門檻與主線照舊。"""
+    from tianxia.guide import quest_text
+    from tianxia.world import check_thresholds
+
+    c = load_content(CONTENT_DIR, profile="weekend")
+    off = c.scenario.season_one_off
+    assert (off.thresholds, off.storylines, off.battles) == (
+        ["huangjin_50", "huangjin_60", "huangjin_80", "huangjin_10"], ["huangjin_line"], ["huangjin_showdown"],
+    )
+    game = _beta_season(c, tmp_path, "on")
+    w = game.state.world
+    assert w.season_one
+    for value in (50, 60, 80, 10):
+        _push_huangjin_to(game, value)
+        check_thresholds(game.state, c, game.world, now=0.0)
+    assert not ({"huangjin_50", "huangjin_60", "huangjin_80", "huangjin_10"} & w.fired_thresholds)
+    assert not ({"road_blocked", "huangjin_win", "huangjin_crushed"} & w.flags) and not w.ended
+    assert game.world.get_battle() is None
+    assert (w.storyline, w.act) == ("huangjin_line", 0)
+    assert "黃巾之亂" not in quest_text(game.state, c) and "黃巾橫行" not in quest_text(game.state, c)
+    assert "huangjin_showdown" not in [b.id for b in game.admin_battles()]
+    assert "huangjin_60" not in [x.id for x in game.admin_fires()]
+    assert game.admin_start_battle("huangjin_showdown", now=0.0) == ["（沒有這場戰鬥。）"]
+    assert game.world.get_battle() is None
+
+    beta = load_content(CONTENT_DIR)  # 開關關著：beta 那一季照舊
+    game = _beta_season(beta, tmp_path, "off")
+    w = game.state.world
+    assert not w.season_one and "黃巾之亂" in quest_text(game.state, beta)
+    _push_huangjin_to(game, 60)
+    check_thresholds(game.state, beta, game.world, now=0.0)
+    assert {"huangjin_50", "huangjin_60"} <= w.fired_thresholds and "road_blocked" in w.flags
+    assert game.world.get_battle().battle_id == "huangjin_showdown"
+    assert "huangjin_showdown" in [b.id for b in game.admin_battles()]
+    _push_huangjin_to(game, 10)
+    check_thresholds(game.state, beta, game.world, now=0.0)
+    assert "huangjin_crushed" in w.flags
+    _push_huangjin_to(game, 80)
+    check_thresholds(game.state, beta, game.world, now=0.0)
+    assert w.ended and "huangjin_win" in w.flags

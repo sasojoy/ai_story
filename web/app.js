@@ -439,7 +439,10 @@
     const scene = `<section class="card scene">${m.scene}</section>`;
     const tail = `<div class="mini" data-act="tab" data-tab="map" role="button" aria-label="展開輿圖">${m.minimap}</div>
       <button class="linkish" data-act="news" data-news="journal">看江湖紀錄 ›</button>`;
-    const quest = `<details class="fold quest"><summary>📜 主線與目標</summary><div class="fold-body">${m.quest}</div></details>`;
+    // 第一季把 beta 的主線關掉、其他也都沒有東西時，quest 是空的：這一塊不畫，由本週大事卡與倒數撐著（計畫 T8）
+    const quest = m.quest && m.quest.trim()
+      ? `<details class="fold quest"><summary>📜 主線與目標</summary><div class="fold-body">${m.quest}</div></details>`
+      : "";
     // 公告卡（第一季）：這一週已經發生的大事，新的在前；排在最上面、「剛剛」之前。沒有就不畫。
     // 預設縮成一行「📣 本週江湖大事（2）：標題、標題」（放不下截斷加「…」），點了才展開全文（FB-039）：兩件大事的全文
     // 加上戰鬥卡片，會把整排行動擠到分頁列底下。展開與否記在 S.boardOpen（鍵是週次，toggle 監聽見下面），

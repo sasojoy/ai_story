@@ -426,6 +426,34 @@ def test_threshold_starts_battle_with_known_id_loads(tmp_path):
     assert content.scenario.thresholds[0].starts_battle == "b1"
 
 
+def test_season_one_off_loads_and_defaults_to_nothing(tmp_path, content):
+    """第一季不觸發的清單（控制者 2026-10-04，與 T4 說好的格式）：四種各自寫那一種內容的 id；沒寫就是空的。"""
+    assert content.scenario.season_one_off.model_dump() == {"thresholds": [], "storylines": [], "battles": [], "events": []}
+    root = copy_fixture(tmp_path)
+    write_battles_json(root)
+    edit_json(root / "scenario.json", lambda d: d.update(season_one_off={
+        "thresholds": ["kou50"], "storylines": ["main"], "battles": ["b1"], "events": ["drunk"],
+    }))
+    off = load_content(root).scenario.season_one_off
+    assert (off.thresholds, off.storylines, off.battles, off.events) == (["kou50"], ["main"], ["b1"], ["drunk"])
+
+
+@pytest.mark.parametrize(("kind", "ghost", "message"), [
+    ("thresholds", "kou99", "門檻 kou99"),
+    ("storylines", "side", "主線 side"),
+    ("battles", "b9", "戰鬥 b9"),
+    ("events", "ghost_event", "事件 ghost_event"),
+    ("thresholds", "main", "門檻 main"),  # 照種類各自檢查：主線的 id 不能寫在門檻那一欄
+    ("battles", "kou50", "戰鬥 kou50"),
+])
+def test_season_one_off_ids_are_checked(tmp_path, kind, ghost, message):
+    root = copy_fixture(tmp_path)
+    write_battles_json(root)
+    edit_json(root / "scenario.json", lambda d: d.update(season_one_off={kind: [ghost]}))
+    with pytest.raises(ContentError, match=f"第一季不觸發.*未知的{message}"):
+        load_content(root)
+
+
 def test_battle_option_with_unknown_tag_rejected(tmp_path):
     root = copy_fixture(tmp_path)
     battle = json.loads(json.dumps(MINIMAL_BATTLE))

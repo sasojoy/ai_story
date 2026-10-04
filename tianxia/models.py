@@ -508,6 +508,20 @@ class FactionDef(_Strict):
     goals: dict[str, int] = Field(default_factory=dict)  # 大勢線 id → 1 推高／-1 壓低；伺服器假人照這個行動
 
 
+class SeasonOneOff(_Strict):
+    """第一季不觸發的 beta 內容（控制者與地圖擴充 T4 說好的格式，2026-10-04）：只在 rules.season_one 成立時生效
+    （開關開著、這一季開季時也蓋了「開」的章）；開關關著時 beta 那一季照舊。四種各自是那一種內容的 id。
+    - thresholds：大勢門檻不觸發（管理者也觸發不了）；
+    - storylines：主線不推進，「主線與目標」不顯示那條主線；
+    - battles：大勢門檻的 starts_battle 不開，管理者「立刻開戰」的選單不列；
+    - events：探索的事件抽選跳過（T4 做；這裡只定欄位，id 一樣在載入時檢查）。"""
+
+    thresholds: list[str] = Field(default_factory=list)
+    storylines: list[str] = Field(default_factory=list)
+    battles: list[str] = Field(default_factory=list)
+    events: list[str] = Field(default_factory=list)
+
+
 class Scenario(_Strict):
     id: str
     name: str
@@ -523,6 +537,7 @@ class Scenario(_Strict):
     endings: list[Ending]
     milestones: list[Milestone] = Field(default_factory=list)
     jade_seal_flag: str | None = None  # 這個世界旗標代表玩家親手取得了這一季的玉璽碎片（設計文件九），記進跨季持久紀錄
+    season_one_off: SeasonOneOff = Field(default_factory=SeasonOneOff)  # 第一季不觸發的 beta 門檻、主線、決戰、事件
 
 
 ExploreBranch = Literal["material", "wild", "event"]

@@ -343,16 +343,15 @@ def reports_view(game: Game, record_id: int | None) -> dict:
 
 
 def admin_choices(game: Game) -> dict:
-    """管理者觸發區的三個下拉選單（戰鬥、大事、大勢線）。戰鬥與大事照內容固定（已經發生過的大事按下去會被引擎拒絕）；
+    """管理者觸發區的三個下拉選單（戰鬥、大事、大勢線）。戰鬥與大事照引擎給的（Game.admin_battles／admin_fires：
+    內容的順序，第一季不觸發的 beta 決戰與門檻不列；已經發生過的大事按下去會被引擎拒絕）；
     大勢線照這一季的規則（第一季濃縮版要開關開著、而且這一季蓋了「開」的章）。呼叫端要拿著行動鎖（look）。"""
-    scenario = CONTENT.scenario
     world = game.state.world
     return {
-        "battles": [{"label": b.name, "id": b.id} for b in CONTENT.battles.values()],
-        "events": [{"label": f"{x.text[:30]}（{x.id}）", "id": x.id}
-                   for x in [*scenario.thresholds, *scenario.world_events]],
+        "battles": [{"label": b.name, "id": b.id} for b in game.admin_battles()],
+        "events": [{"label": f"{x.text[:30]}（{x.id}）", "id": x.id} for x in game.admin_fires()],
         # 照開關：關著時不列第一季才有的線；開著時不列黃巾聲勢（由三條戰線合成，不能直接推）
-        "trends": [{"label": t.name, "id": t.id} for t in scenario.trends if rules.pushable(CONTENT, world, t.id)],
+        "trends": [{"label": t.name, "id": t.id} for t in CONTENT.scenario.trends if rules.pushable(CONTENT, world, t.id)],
     }
 
 

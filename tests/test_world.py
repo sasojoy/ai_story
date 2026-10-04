@@ -328,3 +328,69 @@ def test_an_unstamped_season_keeps_the_length_it_opened_with(content):
     assert season_length_days(fresh_season(content), content) == 2.5  # 蓋了章的照章
     content.config.season_days = 9
     assert season_length_days(old, content) == 14 and season_length_days(fresh_season(content), content) == 9
+
+
+# ── 第一季不觸發的 beta 內容（計畫 T8；控制者 2026-10-04 的 season_one_off）────────────────
+
+
+def _season_one(content, state, **off):
+    """開關打開、這一季也蓋了「開」的章（rules.season_one 成立），再寫第一季不觸發的清單。"""
+    from tianxia.models import SeasonOneOff
+
+    content.config.season_one = True
+    state.world.season_one = True
+    content.scenario.season_one_off = SeasonOneOff(**off)
+
+
+def test_beta_showdown_gone_only_when_switch_on(state, content, world):
+    """開關打開時，beta 那場決戰的開戰門檻照樣觸發（旗標、傳聞），但不開戰、背景推進也不記待開；開關關著照舊開。"""
+    from tianxia.state import GameState
+    from tianxia.world_state import fresh_season
+
+    content.scenario.thresholds[0].starts_battle = "b1"
+    _install_battle_def(content)
+    _season_one(content, state, battles=["b1"])
+    state.world.trends["kou"] = 50
+    assert check_thresholds(state, content, world, now=0.0) == ["【江湖大事】水寇封江！"]
+    assert world.get_battle() is None
+    background = GameState(player=state.player, world=fresh_season(content))  # 背景推進（沒有 store）：不記待開
+    background.world.trends["kou"] = 50
+    check_thresholds(background, content)
+    assert background.world.pending_battle is None and "blocked" in background.world.flags
+    world.mutate_season(lambda s: (setattr(s, "season_one", True), setattr(s, "pending_battle", "b1")))  # 開關打開前記下的
+    assert start_pending_battle(world, content, now=0.0) == [] and world.get_battle() is None
+
+    content.config.season_one = False  # 開關關著：beta 那場照舊
+    state.world.fired_thresholds.clear()
+    assert any("集結號角" in m for m in check_thresholds(state, content, world, now=0.0))
+    assert world.get_battle().battle_id == "b1"
+
+
+def test_season_one_off_thresholds_never_fire_even_by_the_admin(state, content):
+    from tianxia.world import fire_by_id
+
+    _season_one(content, state, thresholds=["kou50", "kou80"])
+    state.world.trends["kou"] = 90
+    check_thresholds(state, content)
+    w = state.world
+    assert not ({"kou50", "kou80"} & w.fired_thresholds) and not ({"blocked", "kou_win"} & w.flags) and not w.ended
+    assert fire_by_id(state, content, "kou80") is None and not w.ended  # 管理者也觸發不了
+    content.config.season_one = False  # 開關關著：照舊
+    check_thresholds(state, content)
+    assert {"blocked", "kou_win"} <= w.flags and w.ended
+
+
+def test_season_one_off_storyline_does_not_advance(state, content):
+    """清單裡的主線不推進；支線照舊可以取代它（其餘照舊）。開關關著照舊推進。"""
+    from tianxia.world import update_storyline
+
+    _season_one(content, state, storylines=["main"])
+    state.world.trends["kou"] = 60
+    assert update_storyline(state, content) == [] and state.world.act == 0
+    content.config.season_one = False
+    assert any("運河封鎖" in m for m in update_storyline(state, content)) and state.world.act == 1
+    content.config.season_one = True
+    state.world.act = 0
+    state.world.revealed.add("bao")
+    update_storyline(state, content)
+    assert state.world.storyline == "treasure"

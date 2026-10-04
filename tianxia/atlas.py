@@ -15,7 +15,7 @@ from .calendar import stamp_text
 from .models import Content, Location, MapRegion, SimPlayer, TravelMode
 from .rules import is_revealed, resolve_trend, resolve_trends, trend_value
 from .state import GameState, Rumor
-from .world import current_act, sim_active
+from .world import current_act, sim_active, storyline_off
 
 DAY = 86400
 KNOWN = ("current", "visible", "remembered")  # 摸清的地點
@@ -219,9 +219,9 @@ def leader_text(state: GameState, content: Content, name: str) -> str:
 
 
 def goal_places(state: GameState, content: Content) -> list[str]:
-    """目前這一幕主線的目標地點。隱藏主線要等大勢浮現、取代主線後，才會是「目前這一幕」。
-    不檢查視野：呼叫端要用 is_known 把關，沒摸清的目標不能標出來。"""
-    return list(current_act(state, content).places)
+    """目前這一幕主線的目標地點。隱藏主線要等大勢浮現、取代主線後，才會是「目前這一幕」。第一季不觸發的 beta 主線
+    （計畫 T8）沒有目標。不檢查視野：呼叫端要用 is_known 把關，沒摸清的目標不能標出來。"""
+    return [] if storyline_off(state, content) else list(current_act(state, content).places)
 
 
 def recent_news(state: GameState, loc_id: str) -> list[Rumor]:
@@ -543,7 +543,7 @@ def detail_text(state: GameState, content: Content, loc_id: str, odds: Odds) -> 
     parts.append("**敵情**　" + ("、".join(f"{name} {word}" for name, word in listed) if listed else "沒有人在這裡滋事"))
 
     act = current_act(state, content)
-    story = [f"★ 這一幕主線的目標：{act.goal}" if loc_id in act.places else "不是這一幕主線的目標"]
+    story = [f"★ 這一幕主線的目標：{act.goal}" if loc_id in goal_places(state, content) else "不是這一幕主線的目標"]
     news = recent_news(state, loc_id)
     if news:
         story.append(f"✦ 最近 {NEWS_DAYS} 天的大事與傳聞：\n" + "\n".join(f"- {stamp_text(r.time, content, state.world)}　{r.text}" for r in news))

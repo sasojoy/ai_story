@@ -135,6 +135,20 @@ def test_admin_choices_follow_the_switch(game, monkeypatch):
     assert listed() == ["yingru", "nanyang", "jizhou", "geju", "yuxi"]
 
 
+def test_admin_choices_leave_out_the_beta_battle_and_thresholds_in_season_one(game, monkeypatch):
+    """計畫 T8：開戰與觸發大事的下拉選單照 Game.admin_battles／admin_fires——這一季蓋了「開」的章時，
+    beta 那場決戰與四個黃巾聲勢門檻不列；開關關著照舊。"""
+    def listed(kind):
+        return [x["id"] for x in server.look(game, server.admin_choices)[kind]]
+
+    assert "huangjin_showdown" in listed("battles") and "huangjin_60" in listed("events")
+    monkeypatch.setattr(server.CONTENT.config, "season_one", True)
+    game.world.mutate_season(lambda season: setattr(season, "season_one", True))
+    assert "huangjin_showdown" not in listed("battles")
+    assert not {"huangjin_50", "huangjin_60", "huangjin_80", "huangjin_10"} & set(listed("events"))
+    assert {"yuxi_50", "yuxi_100"} <= set(listed("events"))
+
+
 def test_menxia_view_falls_back_to_no_person_for_an_unknown_one(game):
     view = server.look(game, lambda g: server.menxia_view(g, "沒這個人"))
     assert view["person"] is None and view["person_card"] is None

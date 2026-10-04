@@ -10,7 +10,7 @@ from .models import Act, BattleDef, Content, Ending, SimPlayer, SimRumor, Storyl
 from .ollama_client import OllamaClient
 from .rules import (
     add_chronicle, add_rumor, add_world_flags, change_trend, check_condition, geju_tick, recompute_trends,
-    resolve_trends, trend_value,
+    resolve_trends, season_one_off, trend_value,
 )
 from .state import GameState, PlayerState, WorldState
 from .world_state import WorldStateStore, season_length_days
@@ -41,8 +41,9 @@ def check_thresholds(
     msgs: list[str] = []
     if w.ended:
         return msgs
+    off = season_one_off(content, w, "thresholds")  # 第一季不觸發的 beta 門檻（計畫 T8）
     for th in content.scenario.thresholds:
-        if th.id in w.fired_thresholds:
+        if th.id in w.fired_thresholds or th.id in off:
             continue
         value = trend_value(state, content, th.trend)  # 開關開著時黃巾聲勢是三條戰線的加權
         if not (value >= th.value if th.op == ">=" else value <= th.value):
@@ -85,6 +86,8 @@ def _fire(
         if flourish:
             shown_text = f"{text}\n\n{flourish}"
     msgs = [f"【江湖大事】{shown_text}"]
+    if starts_battle in season_one_off(content, state.world, "battles"):  # 第一季不開 beta 那場決戰（計畫 T8）
+        starts_battle = None
     if starts_battle and starts_battle in content.battles:
         if world is not None:
             msgs += _open_battle(world, content.battles[starts_battle], _now_for_battle(now))
@@ -100,8 +103,8 @@ def fire_by_id(
     client: OllamaClient | None = None, now: float | None = None,
 ) -> list[str] | None:
     """管理者手動觸發：照 id 找大勢門檻或世界事件，照自然觸發的方式觸發一次（旗標、傳聞、江湖史、
-    開戰、結束賽季都一樣），再更新主線。已經發生過、或找不到這個 id，回傳 None。"""
-    if fire_id in state.world.fired_thresholds:
+    開戰、結束賽季都一樣），再更新主線。已經發生過、找不到這個 id、或是第一季不觸發的 beta 門檻，回傳 None。"""
+    if fire_id in state.world.fired_thresholds or fire_id in season_one_off(content, state.world, "thresholds"):
         return None
     source = next((th for th in content.scenario.thresholds if th.id == fire_id), None)
     if source is None:
@@ -123,8 +126,14 @@ def current_act(state: GameState, content: Content) -> Act:
     return current_storyline(state, content).acts[state.world.act]
 
 
+def storyline_off(state: GameState, content: Content) -> bool:
+    """目前這條主線是第一季不觸發的 beta 主線（計畫 T8）：幕不推進，「主線與目標」與大地圖都不顯示它。"""
+    return state.world.storyline in season_one_off(content, state.world, "storylines")
+
+
 def update_storyline(state: GameState, content: Content) -> list[str]:
-    """還在主線時，檢查是否被支線主線取代；接著一路推進已滿足條件的幕。"""
+    """還在主線時，檢查是否被支線主線取代；接著一路推進已滿足條件的幕。第一季不觸發的主線（計畫 T8）不推進幕，
+    支線照舊可以取代它。"""
     w = state.world
     msgs: list[str] = []
     main = content.scenario.storylines[0]
@@ -138,6 +147,8 @@ def update_storyline(state: GameState, content: Content) -> list[str]:
                 msgs.append(f"【主線改寫】{branch.name}：{branch.intro}")
                 break
     line = current_storyline(state, content)
+    if storyline_off(state, content):
+        return msgs
     while w.act < len(line.acts) - 1:
         act = line.acts[w.act]
         if act.advance_when is None or not check_condition(act.advance_when, state):
@@ -313,6 +324,8 @@ def start_pending_battle(world: WorldStateStore, content: Content, now: float) -
     world.mutate_season(_apply)
     battle_id = taken["id"]
     if battle_id is None or battle_id not in content.battles or ended["value"]:  # 季已經結束：不開戰
+        return []
+    if battle_id in season_one_off(content, world.get_season(), "battles"):  # 開關打開前記下的 beta 那場：第一季不開
         return []
     return _open_battle(world, content.battles[battle_id], now)
 

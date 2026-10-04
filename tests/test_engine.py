@@ -2628,6 +2628,25 @@ def test_an_admin_push_crosses_thresholds_like_any_push(content, game):
     assert game.admin_push_trend("no_such_trend", 5) == ["（沒有這條大勢線。）"]
 
 
+def test_the_admin_menus_leave_out_what_season_one_turns_off(content, game):
+    """計畫 T8：開關打開、這一季蓋了「開」的章時，第一季不觸發的決戰與門檻不列在管理者的選單上、也觸發不了；
+    開關關著照舊。"""
+    from tianxia.models import SeasonOneOff
+
+    definition = _install_battle_def(content)
+    _admin(content, game)
+    content.scenario.season_one_off = SeasonOneOff(thresholds=["kou50"], battles=[definition.id])
+    assert [b.id for b in game.admin_battles()] == [definition.id]  # 開關關著：照舊
+    assert [x.id for x in game.admin_fires()] == ["kou50", "kou80", "bao100", "grab"]
+    content.config.season_one = True
+    game.world.mutate_season(lambda season: setattr(season, "season_one", True))
+    game.sync(time.time())
+    assert game.admin_battles() == [] and [x.id for x in game.admin_fires()] == ["kou80", "bao100", "grab"]
+    assert game.admin_start_battle(definition.id, now=time.time()) == ["（沒有這場戰鬥。）"]
+    assert game.admin_fire("kou50") == ["（沒有這件大事。）"]
+    assert game.world.get_battle() is None and "kou50" not in game.world.get_season().fired_thresholds
+
+
 def test_triggers_wait_for_the_season_to_run(content, game):
     _admin(content, game)
     game.world.mutate_season(lambda season: setattr(season, "ended", True))

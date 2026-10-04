@@ -4,7 +4,7 @@ from __future__ import annotations
 from .models import Content, TutorialStep
 from .rules import apply_effect, check_condition
 from .state import GameState
-from .world import current_act, current_storyline
+from .world import current_act, current_storyline, storyline_off
 from .world_state import WorldStateStore
 
 
@@ -57,13 +57,15 @@ def _idle(state: GameState) -> bool:
 
 
 def next_hint(state: GameState, content: Content) -> str:
+    """引導還沒做完就是引導的下一步；否則是這一幕主線的目標（第一季不觸發的主線沒有，計畫 T8），體力將滿時加一句提醒。
+    兩者都沒有時是空字串。"""
     if tutorial_active(state, content):
         t = content.tutorial
         return f"（{t.speaker}）{t.steps[state.player.tutorial_step].text}"
-    hint = current_act(state, content).goal
+    hints = [] if storyline_off(state, content) else [current_act(state, content).goal]
     if state.player.stamina >= content.config.stamina_max * 0.9 and _idle(state):
-        hint += "　體力將滿，別讓它浪費。"
-    return hint
+        hints.append("體力將滿，別讓它浪費。")
+    return "　".join(hints)
 
 
 def quest_text(state: GameState, content: Content) -> str:
@@ -71,13 +73,13 @@ def quest_text(state: GameState, content: Content) -> str:
     if w.ended:
         return f"### 賽季落幕：{w.ending_title}\n\n{w.ending_text}"
     line = current_storyline(state, content)
-    act = current_act(state, content)
-    parts = [
-        f"### 主線：{line.name}　第{w.act + 1}/{len(line.acts)}幕「{act.title}」",
-        act.text,
-        f"**目標**：{act.goal}",
-    ]
-    endings = [e for e in content.scenario.endings if e.storyline in (None, line.id) and e.hint]
+    parts: list[str] = []
+    lines: tuple[str | None, ...] = (None,)  # 結局只列不分主線的，與目前這條主線的
+    if not storyline_off(state, content):  # 第一季不觸發的 beta 主線（計畫 T8）：不顯示它，其餘照舊
+        act = current_act(state, content)
+        parts += [f"### 主線：{line.name}　第{w.act + 1}/{len(line.acts)}幕「{act.title}」", act.text, f"**目標**：{act.goal}"]
+        lines = (None, line.id)
+    endings = [e for e in content.scenario.endings if e.storyline in lines and e.hint]
     if endings:
         parts.append("**可能的結局**\n\n" + "\n".join(f"- {e.title}：{e.hint}" for e in endings))
     milestones = content.scenario.milestones
@@ -85,5 +87,7 @@ def quest_text(state: GameState, content: Content) -> str:
         parts.append("**個人目標**\n\n" + "\n".join(
             f"- {'☑' if check_condition(m.condition, state) else '☐'} {m.text}" for m in milestones
         ))
-    parts.append(f"**下一步**：{next_hint(state, content)}")
-    return "\n\n".join(parts)
+    hint = next_hint(state, content)
+    if hint:
+        parts.append(f"**下一步**：{hint}")
+    return "\n\n".join(parts)  # 全部都被跳過時是空字串：網頁不畫「主線與目標」那一塊

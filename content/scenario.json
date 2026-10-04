@@ -75,6 +75,11 @@
      "text": "董卓率眾闖入南華觀，傳國玉璽的碎片落入他手！", "world_flags_add": ["shard_lost"], "location": "jade_cave"}
   ],
   "jade_seal_flag": "shard_taken",
+  "season_one_off": {
+    "thresholds": ["huangjin_50", "huangjin_60", "huangjin_80", "huangjin_10"],
+    "storylines": ["huangjin_line"],
+    "battles": ["huangjin_showdown"]
+  },
   "milestones": [
     {"id": "join_sect", "text": "投身潁川書院或曹氏莊院", "condition": {"sects": ["yingchuan_academy", "cao_manor"]}},
     {"id": "fame_10", "text": "名望達到 10", "condition": {"min_stats": {"fame": 10}}},

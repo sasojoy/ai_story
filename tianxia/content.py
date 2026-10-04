@@ -830,6 +830,15 @@ def validate(c: Content) -> None:
             known(f"世界事件 {event.id}", [event.location], c.locations, "地點")
         if event.starts_battle:
             known(f"世界事件 {event.id}", [event.starts_battle], c.battles, "戰鬥")
+    # 第一季不觸發的 beta 內容（計畫 T8、與 T4 說好的格式）：照種類各自檢查 id 存在，不跨種類比對
+    off = c.scenario.season_one_off
+    for kind, ids, valid, label in (
+        ("thresholds", off.thresholds, {t.id for t in c.scenario.thresholds}, "門檻"),
+        ("storylines", off.storylines, line_ids, "主線"),
+        ("battles", off.battles, c.battles, "戰鬥"),
+        ("events", off.events, c.events, "事件"),
+    ):
+        known(f"第一季不觸發的 {kind}", ids, valid, label)
 
     scenario_faction_ids = [f.id for f in c.scenario.factions]
     need(len(set(scenario_faction_ids)) == len(scenario_faction_ids), "劇本：陣營 id 重複")

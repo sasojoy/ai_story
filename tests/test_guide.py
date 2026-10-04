@@ -94,3 +94,36 @@ def test_location_only_step_completes_regardless_of_action(state, content, world
     msgs = note_action(state, content, world, "explore")
     assert state.player.tutorial_step == 2
     assert msgs[0] == "✔ 引導完成"
+
+
+def _storyline_off(state, content):
+    """開關打開、這一季蓋了「開」的章，第一季不觸發的清單裡有主線 main（計畫 T8，控制者 2026-10-04）。"""
+    from tianxia.models import SeasonOneOff
+
+    content.config.season_one = True
+    state.world.season_one = True
+    content.scenario.season_one_off = SeasonOneOff(storylines=["main"])
+    state.player.tutorial_step = len(content.tutorial.steps)
+    state.player.stamina = 50
+
+
+def test_quest_text_skips_a_storyline_turned_off_in_season_one(state, content):
+    """清單裡的主線不顯示（標題、幕、目標、下一步的幕目標、只屬於它的結局）；其餘照舊。開關關著照舊。"""
+    _storyline_off(state, content)
+    text = quest_text(state, content)
+    assert "主線" not in text and "水寇橫行" not in text and "壓制寇亂" not in text
+    assert "水寇稱霸：寇亂達 80" in text and "☐ 拜入門派" in text  # 不分主線的結局與個人目標照舊
+    assert next_hint(state, content) == ""
+    content.config.season_one = False
+    assert "水寇橫行" in quest_text(state, content) and next_hint(state, content) == "壓制寇亂"
+
+
+def test_quest_text_is_empty_when_everything_is_skipped(state, content):
+    """全部都被跳過時，「主線與目標」那一塊不畫（quest_text 是空字串），由本週大事卡與倒數撐著。"""
+    _storyline_off(state, content)
+    content.scenario.milestones = []
+    for ending in content.scenario.endings:
+        ending.hint = ""
+    assert quest_text(state, content) == ""
+    state.player.stamina = 150  # 只剩「體力將滿」的提醒時照樣畫
+    assert "體力將滿" in quest_text(state, content)

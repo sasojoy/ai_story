@@ -4,6 +4,7 @@ from __future__ import annotations
 import random
 import re
 from collections.abc import Callable
+from typing import Literal
 
 from . import calendar, materials, roster, team  # 與 roster 互相 import：只能引入整個模組、呼叫時才取屬性，不能 from .roster import …
 from .models import FRONT_KEY, Check, Condition, Content, Effect, Trend
@@ -201,6 +202,17 @@ def season_one(content: Content, world: WorldState) -> bool:
     """第一季濃縮版的規則在這一季開了沒：開關開著，而且這一季開季時也蓋了「開」的章（T2 的 calendar.season_one_on）。
     開關打開時還在跑的 beta 那一季照舊用 beta 的規則，新規則從開關打開後開的下一季起算（PM 2026-10-04）。"""
     return calendar.season_one_on(world, content)
+
+
+OffKind = Literal["thresholds", "storylines", "battles", "events"]
+
+
+def season_one_off(content: Content, world: WorldState, kind: OffKind) -> frozenset[str]:
+    """第一季不觸發的那一種 beta 內容（Scenario.season_one_off 的 thresholds／storylines／battles／events）的 id。
+    只在 season_one 成立時有東西：開關關著、或這一季開季時沒開（beta 那一季），一律是空的，beta 照舊。"""
+    if not season_one(content, world):
+        return frozenset()
+    return frozenset(getattr(content.scenario.season_one_off, kind))
 
 
 def _trend(content: Content, trend_id: str) -> Trend | None:

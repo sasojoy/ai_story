@@ -21,13 +21,13 @@ from .journal import LOG_BREAK, Draft
 from .mapview import render_map, render_minimap
 from .models import (
     EXPLORE_BRANCHES, FREE_TEXT_MAX, BattleDef, Choice, Content, Effect, Event, ExploreBranch, Location, RoadKind, Squad,
-    TravelMode,
+    Threshold, TravelMode, WorldEvent,
 )
 from .ollama_client import OllamaClient
 from .rules import (
     GEJU, apply_effect, change_trend, check_who, current_day, fill_marks, free_text_rate, front_ids, in_chaos, is_revealed,
-    pushable, rate_words, recompute_trends, resolve_goals, resolve_trend, resolve_trends, roll_check, season_one, stances,
-    trend_name, trend_shown, trend_value, world_trend_value,
+    pushable, rate_words, recompute_trends, resolve_goals, resolve_trend, resolve_trends, roll_check, season_one,
+    season_one_off, stances, trend_name, trend_shown, trend_value, world_trend_value,
 )
 from .sqlite_world import open_world
 from .state import PLAYER, BattleRecord, GameState, JournalEntry, Journey, Rumor, WorldState, new_game_state
@@ -2445,12 +2445,22 @@ class Game:
             return ["（賽季沒有在進行，無法觸發。）"]
         return None
 
+    def admin_battles(self) -> list[BattleDef]:
+        """管理者「立刻開戰」的選單：照內容的順序，第一季不觸發的 beta 決戰不列（計畫 T8）。"""
+        off = season_one_off(self.content, self.state.world, "battles")
+        return [b for b in self.content.battles.values() if b.id not in off]
+
+    def admin_fires(self) -> list[Threshold | WorldEvent]:
+        """管理者「觸發大事」的選單：大勢門檻與世界事件，第一季不觸發的 beta 門檻不列（計畫 T8）。"""
+        off = season_one_off(self.content, self.state.world, "thresholds")
+        return [x for x in [*self.content.scenario.thresholds, *self.content.scenario.world_events] if x.id not in off]
+
     def admin_start_battle(self, battle_id: str, now: float) -> list[str]:
-        """管理者直接開一場全服戰鬥（試玩時人少、大勢推不到門檻也能開戰）。"""
+        """管理者直接開一場全服戰鬥（試玩時人少、大勢推不到門檻也能開戰）。選單上沒有的（第一季不觸發的 beta 決戰）開不了。"""
         refusal = self._admin_refusal("開戰")
         if refusal:
             return self._log(refusal)
-        definition = self.content.battles.get(battle_id)
+        definition = next((b for b in self.admin_battles() if b.id == battle_id), None)
         if definition is None:
             return self._log(["（沒有這場戰鬥。）"])
         current = self.world.get_battle()
