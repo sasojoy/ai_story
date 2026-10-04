@@ -78,7 +78,8 @@
   "season_one_off": {
     "thresholds": ["huangjin_50", "huangjin_60", "huangjin_80", "huangjin_10"],
     "storylines": ["huangjin_line"],
-    "battles": ["huangjin_showdown"], "milestones": ["beat_bocai", "crush_huangjin", "showdown_win", "showdown_loss"]
+    "battles": ["huangjin_showdown"], "milestones": ["beat_bocai", "crush_huangjin", "showdown_win", "showdown_loss"],
+    "events": ["kou_boss"]
   },
   "milestones": [
     {"id": "join_sect", "text": "投身潁川書院或曹氏莊院", "condition": {"sects": ["yingchuan_academy", "cao_manor"]}},

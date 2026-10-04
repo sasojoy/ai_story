@@ -15,6 +15,7 @@ from conftest import FixedRandom
 from tianxia import atlas, battle_instance, bot_policy, calendar, figures, rules, team, timetable, world
 from tianxia.encounter import EncounterResult
 from tianxia.engine import Game, Option
+from tianxia.events import event_candidates
 from tianxia.state import BotProfile, FigureState, GameState, PlayerState
 from tianxia.content import ContentError, load_content, validate
 from tianxia.models import Config, FigureChange
@@ -650,3 +651,17 @@ def test_bot_challenges_target_figure(on, world):
     with mock.patch.object(Game, "challenge_odds", return_value="穩勝"), _fight():
         bot_policy.take_turn(bot, profile, random.Random(0))
     assert "hejin" in bot.state.player.snubbed_until and world.get_season().figures["hejin"].prestige == 65
+
+# ── Task 7：第一季不發生的 beta 事件 ─────────────────────
+
+
+def test_kou_boss_does_not_fire_in_season_one(on, world):
+    """beta 的「波才」事件（kou_boss，一季一次的挑戰波才）在第一季的規則開著時抽不到——挑戰本人取代它；開關關著時照舊
+    抽得到（PM 2026-10-04）。清單在 scenario.json 的 season_one_off.events（格式是 T8 定的）。"""
+    assert on.scenario.season_one_off.events == ["kou_boss"]
+    assert "beat_bocai" in on.scenario.season_one_off.milestones  # 挑戰本人不寫 bocai_defeated，擊敗波才照樣做不到
+    game = _player(on, world, "官甲", "guan", "huangjin_camp")
+    game.state.player.stats["fame"] = 10
+    assert "kou_boss" not in [e.id for e in event_candidates(game.state, on, "explore")]
+    on.config.season_one = False
+    assert "kou_boss" in [e.id for e in event_candidates(game.state, on, "explore")]
