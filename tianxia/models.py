@@ -376,13 +376,21 @@ class SimPlayer(_Strict):
     haunts: list[str] = Field(default_factory=list)  # 常出沒的地點（固定不動）
 
 
+StanceSide = Literal["guan", "huang", "haoqiang"]  # 三方態勢（rules.stances，第一季設計 4.4）
+
+
 class Ending(_Strict):
     id: str
     title: str
-    text: str
+    text: str  # 結局的一句；第一季接在季末公告的開頭後面（時刻表結算第 12 週）
     storyline: str | None = None  # 只在這條主線下成立；None＝任何主線
     hint: str = ""  # 顯示在任務區塊：怎麼達成這個結局
     condition: Condition = Field(default_factory=Condition)
+    # ── 第一季濃縮版（計畫 T9）：只在 rules.season_one 成立時算；beta 季只看沒標的那幾筆。同一季清單的最後一筆是保底 ──
+    season_one: bool = False
+    stance_min: dict[StanceSide, int] = Field(default_factory=dict)  # 態勢至少（決定性勝利：季中一到就收季）
+    stance_max: dict[StanceSide, int] = Field(default_factory=dict)  # 態勢至多（同上）
+    stance_top: StanceSide | None = None  # 季末比態勢：這一方最高（平手時照清單順序，排前面的先成立）
 
 
 class MapLabel(_Strict):
@@ -909,6 +917,10 @@ class TimetableEvent(_Strict):
     locked_chronicle: dict[str, str] = Field(default_factory=dict)
     # 豪強做完伏筆時另外記的一行江湖史（例：「{name} 取得新野」；多人用「、」接），不論誰贏都記
     third_party_chronicle: str | None = None
+    # ── 季末大事（kind＝finale，計畫 T9；別的種類不能寫）──
+    early_preface: str = ""  # 季中就收季（決定性勝利、管理者提早收季）時取代 preface 的開頭
+    out_lines: dict[str, str] = Field(default_factory=dict)  # 人物 id → 那位人物退場或重創時接在最後的一句（董卓兵敗）
+    ending_chronicle: str = ""  # 江湖史那一行，{結局} 換成結局標題
 
 
 FsKind = Literal["天時地利", "推理", "反直覺抉擇", "拼圖", "累積", "情誼", "集體密謀"]  # 第一季設計 11.3 的類型（只是標記）

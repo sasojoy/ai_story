@@ -550,6 +550,22 @@ def test_real_timetable_matches_settlement_doc():
     assert events["zhangjiao_dies"].lock_result == {"guan": "成", "huang": "不成"}
 
 
+def test_real_endings_valid(content):
+    """第一季的六種結局（第一季設計 13.1，不含玉璽）照順序；beta 的保底照舊；季末大事的三種句子（時刻表結算第 12 週）。"""
+    s1 = [e for e in content.scenario.endings if e.season_one]
+    assert [e.title for e in s1] == ["黃天當立（無璽）", "黃巾平定", "群雄並起", "黃巾坐地", "黃巾敗退", "豪強坐大"]
+    assert [e.stance_min or e.stance_max for e in s1[:3]] == [{"huang": 85}, {"huang": 15}, {"haoqiang": 85}]
+    assert [e.stance_top for e in s1[3:]] == ["huang", "guan", "haoqiang"]
+    assert s1[4].text == "下曲陽破了，可冀州的山裡仍有黃旗。"
+    beta = [e for e in content.scenario.endings if not e.season_one]
+    assert beta[-1].id == "default"
+    finale = next(e for e in content.timetable if e.kind == "finale")
+    assert finale.preface == "史書上，皇甫嵩攻下曲陽，斬張寶，黃巾之亂至此平定。這一次……"
+    assert finale.early_preface == "戰事提前收束。"
+    assert finale.out_lines == {"dongzhuo": "董卓兵敗，涼州軍元氣大傷。"}
+    assert finale.ending_chronicle == "甲子年冬，第一季黃巾之亂落幕：{結局}。"
+
+
 def test_wancheng_after_a_government_win_reads_that_the_turbans_withdrew(content):
     """濃縮版內容表 4.7：宛城之戰官軍打贏（甲版破城、乙版解圍，大勝險勝都算）寫 wancheng_guan_holds，
     宛城的描寫換成「黃巾退了」那一段，排在第 3 週的版本描寫前面；黃巾打贏的四格不寫。"""

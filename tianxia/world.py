@@ -10,7 +10,7 @@ from .models import Act, BattleDef, Content, Ending, SimPlayer, SimRumor, Storyl
 from .ollama_client import OllamaClient
 from .rules import (
     add_chronicle, add_rumor, add_world_flags, change_trend, check_condition, geju_tick, recompute_trends,
-    resolve_trends, season_one_off, trend_value,
+    resolve_trends, season_one, season_one_off, stances, trend_value,
 )
 from .state import GameState, PlayerState, WorldState
 from .world_state import WorldStateStore, season_length_days
@@ -196,13 +196,44 @@ def _rumor_place(sim: SimPlayer, rumor: str | SimRumor) -> tuple[str, str | None
     return rumor, sim.haunts[0] if sim.haunts else None
 
 
+def season_endings(state: GameState, content: Content) -> list[Ending]:
+    """這一季算的結局：第一季（開關開著＋這一季的章）只看標了 season_one 的，beta 季只看沒標的。清單照劇本的順序，
+    最後一筆是那一季的保底（content.validate 檢查）。內容沒寫第一季的結局（測試夾具）時，第一季照 beta 那一份。"""
+    on = season_one(content, state.world)
+    chosen = [e for e in content.scenario.endings if e.season_one == on]
+    return chosen or [e for e in content.scenario.endings if not e.season_one]
+
+
+def stance_holds(ending: Ending, standing: dict[str, int]) -> bool:
+    """結局的態勢條件（第一季設計 4.4、13.1）：至少、至多，以及「這一方最高」——平手也算最高，誰先成立交給清單順序。"""
+    if any(standing[side] < value for side, value in ending.stance_min.items()):
+        return False
+    if any(standing[side] > value for side, value in ending.stance_max.items()):
+        return False
+    return ending.stance_top is None or standing[ending.stance_top] >= max(standing.values())
+
+
 def evaluate_ending(state: GameState, content: Content) -> Ending:
-    for ending in content.scenario.endings:
+    """照清單順序第一個成立的結局；都不成立就是這一季清單的最後一筆（保底）。第一季另外看三方態勢（rules.stances）。"""
+    endings = season_endings(state, content)
+    standing = stances(state, content) if season_one(content, state.world) else {}
+    for ending in endings:
         if ending.storyline not in (None, state.world.storyline):
             continue
-        if check_condition(ending.condition, state):
+        if check_condition(ending.condition, state) and (not ending.season_one or stance_holds(ending, standing)):
             return ending
-    return content.scenario.endings[-1]
+    return endings[-1]
+
+
+def decisive_ending(state: GameState, content: Content) -> Ending | None:
+    """決定性勝利（有 stance_min／stance_max 的結局）此刻成立了沒（計畫 T9：季的事每曆時看一次）；第一季以外一律 None。"""
+    if not season_one(content, state.world):
+        return None
+    standing = stances(state, content)
+    return next(
+        (e for e in season_endings(state, content) if (e.stance_min or e.stance_max) and stance_holds(e, standing)),
+        None,
+    )
 
 
 def end_season(

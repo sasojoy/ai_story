@@ -1165,3 +1165,38 @@ def test_location_desc_when_is_checked(tmp_path):
     edit_json(root / "locations.json", lambda d: d[0].update(desc_when=[{"world_flag": "fallen", "text": "城头换了旗。"}]))
     with pytest.raises(ContentError, match="繁體"):
         load_content(root)
+
+
+# ── 第一季的結局與季末大事（計畫 T9）──────────────────────────
+
+
+def _real_copy(tmp_path):
+    """真實內容的一份副本（fixture 內容沒有第一季的結局與季末大事）。"""
+    from pathlib import Path
+
+    root = tmp_path / "content"
+    shutil.copytree(Path(__file__).parent.parent / "content", root)
+    return root
+
+
+def test_stance_fields_only_on_season_one_endings(tmp_path):
+    root = _real_copy(tmp_path)
+    edit_json(root / "scenario.json", lambda d: d["endings"][0].update(stance_top="guan"))
+    with pytest.raises(ContentError, match="第一季"):
+        load_content(root)
+
+
+def test_finale_fields_only_on_the_finale(tmp_path):
+    root = _real_copy(tmp_path)
+    edit_json(root / "timetable.json", lambda d: d[0].update(early_preface="提早了。"))
+    with pytest.raises(ContentError, match="季末"):
+        load_content(root)
+
+
+def test_each_season_keeps_its_own_fallback_ending(tmp_path):
+    """beta 季與第一季各自清單的最後一筆是保底：第一季多一筆有門檻的結局排在最後，就沒有保底。"""
+    root = _real_copy(tmp_path)
+    edit_json(root / "scenario.json", lambda d: d["endings"].append(
+        {"id": "x", "season_one": True, "title": "多的", "text": "多的。", "stance_min": {"huang": 99}}))
+    with pytest.raises(ContentError, match="保底"):
+        load_content(root)

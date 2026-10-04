@@ -202,6 +202,10 @@ class WorldState(BaseModel):
     ended: bool = False
     ending_title: str = ""
     ending_text: str = ""
+    ending_id: str = ""  # 收季時的結局 id（Ending.id）；舊存檔是空的
+    # 第一季的結算畫面（計畫 T9）：收季那一刻的戰況（顯示中的每條線）與各陣營出力前五（名號或「某位少俠」, 貢獻）
+    final_trends: dict[str, int] = Field(default_factory=dict)
+    final_rankings: dict[str, list[tuple[str, int]]] = Field(default_factory=dict)
     storyline: str = ""  # 目前主線 id
     act: int = 0  # 目前第幾幕（從 0 起算）
     act_reached: int = 0  # 本季到過的最遠一幕；主線改寫會把 act 歸零，隊伍數與統御上限看這個（見 roster.stage）

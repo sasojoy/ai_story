@@ -238,7 +238,7 @@ def check_timetable(c: Content, need, known, front_ids: list[str], trend_ids: se
             known(where, [ev.skip_if_out], c.characters, "人物")
         versions = list(dict.fromkeys(ev.versions.values()))
         base = TIMETABLE_KEYS.get(ev.kind)
-        if base is not None:  # 季末的結局句由 T9 寫在劇本的結局裡
+        if base is not None:  # 季末的結局句寫在劇本的結局（Ending.text），其餘句子在 early_preface、out_lines、ending_chronicle
             expected = [f"{v}:{k}" for v in versions for k in base] if versions else base
             missing = [k for k in expected if k not in ev.outcomes]
             extra = [k for k in ev.outcomes if k not in expected]
@@ -250,6 +250,12 @@ def check_timetable(c: Content, need, known, front_ids: list[str], trend_ids: se
                  f"{where}：lock_result 指到不存在的結果 {key}")
         known(where, ev.third_party_trends, trends, "大勢線")
         check_text(where, ev.preface)
+        if ev.kind != "finale":  # 季末大事的三種句子（計畫 T9）
+            need(not (ev.early_preface or ev.out_lines or ev.ending_chronicle),
+                 f"{where}：early_preface、out_lines、ending_chronicle 只有季末大事能寫")
+        known(where, ev.out_lines, c.characters, "人物")
+        for text in (ev.early_preface, ev.ending_chronicle, *ev.out_lines.values()):
+            check_text(where, text)
         check_text(where, ev.third_party_text)
         check_text(where, ev.third_party_chronicle)
         need(all(side in TIMETABLE_SIDES for side in ev.locked_chronicle), f"{where}：locked_chronicle 的鍵只能是 guan 或 huang")
@@ -802,6 +808,11 @@ def validate(c: Content) -> None:
         check_condition(where, sim.condition)
     for ending in c.scenario.endings:
         check_condition(f"結局 {ending.id}", ending.condition)
+        if not ending.season_one:
+            need(
+                not (ending.stance_min or ending.stance_max or ending.stance_top),
+                f"結局 {ending.id}：stance_min／stance_max／stance_top 只有第一季的結局（season_one）能寫",
+            )
 
     line_ids = [s.id for s in c.scenario.storylines]
     need(len(set(line_ids)) == len(line_ids), "主線 id 重複")
@@ -918,11 +929,16 @@ def validate(c: Content) -> None:
         if battle.timetable_event is not None:
             check_showdown_battle(battle, where)
 
-    last = c.scenario.endings[-1] if c.scenario.endings else None
-    need(
-        last is not None and last.condition == Condition() and last.storyline is None,
-        "劇本的最後一個結局必須沒有條件、也不限主線（作為保底結局）",
-    )
+    for season_one in (False, True):  # beta 季與第一季各自的保底：那一季清單裡的最後一筆（world.evaluate_ending，計畫 T9）
+        endings = [e for e in c.scenario.endings if e.season_one == season_one]
+        if season_one and not endings:
+            continue
+        last = endings[-1] if endings else None
+        need(
+            last is not None and last.condition == Condition() and last.storyline is None
+            and not last.stance_min and not last.stance_max,
+            f"劇本{'第一季' if season_one else ''}的最後一個結局必須沒有條件、也不限主線（作為保底結局）",
+        )
 
     for milestone in c.scenario.milestones:
         check_condition(f"個人目標 {milestone.id}", milestone.condition)

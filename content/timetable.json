@@ -342,6 +342,9 @@
     "front": "jizhou",
     "title": "下曲陽・季末",
     "kind": "finale",
-    "preface": "史書上，皇甫嵩攻下曲陽，斬張寶，黃巾之亂至此平定。這一次……"
+    "preface": "史書上，皇甫嵩攻下曲陽，斬張寶，黃巾之亂至此平定。這一次……",
+    "early_preface": "戰事提前收束。",
+    "out_lines": {"dongzhuo": "董卓兵敗，涼州軍元氣大傷。"},
+    "ending_chronicle": "甲子年冬，第一季黃巾之亂落幕：{結局}。"
   }
 ]
