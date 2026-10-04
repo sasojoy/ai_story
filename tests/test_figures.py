@@ -12,13 +12,13 @@ import random
 from unittest import mock
 
 from conftest import FixedRandom
-from tianxia import atlas, battle_instance, calendar, figures, rules, team, timetable, world
+from tianxia import atlas, battle_instance, bot_policy, calendar, figures, rules, team, timetable, world
 from tianxia.encounter import EncounterResult
-from tianxia.engine import Game
+from tianxia.engine import Game, Option
+from tianxia.state import BotProfile, FigureState, GameState, PlayerState
 from tianxia.content import ContentError, load_content, validate
 from tianxia.models import Config, FigureChange
 from tianxia.server_bots import reserved_names
-from tianxia.state import FigureState, GameState, PlayerState
 from tianxia.world_state import fresh_season
 
 CONTENT_DIR = Path(__file__).parent.parent / "content"
@@ -630,3 +630,23 @@ def test_nothing_changes_with_the_switch_off(real, world):
     assert world.get_season().figures == {}
     game.state.player.location = "mengjin_ford"
     assert game._figures_here() == ["dongzhuo"]
+
+
+# ── Task 6：假人偶爾挑戰 ─────────────────────────────────
+
+
+def test_bot_challenges_target_figure(on, world):
+    """假人只挑打得贏的大勢人物（勝算穩勝或有把握），分數比探索、交友高、比推大勢的遊歷低——前線上照舊遊歷，前線以外
+    遇上了才挑戰（洛陽沒有戰況，遊歷不推大勢）。打不贏的不碰：輸了要賠銀兩、扣氣血。"""
+    bot = _player(on, world, "黃假", "huang", "dajiangjun_fu")
+    profile = BotProfile(personality="普通", seed=1, faction="huang", season_number=1)
+    challenge = Option(id="act:challenge:hejin", label="挑戰何進")
+    with mock.patch.object(Game, "challenge_odds", return_value="凶險"):
+        assert bot_policy.score(bot, challenge, profile) is None
+    with mock.patch.object(Game, "challenge_odds", return_value="有把握"):
+        assert bot_policy.score(bot, challenge, profile) == bot_policy.CHALLENGE_SCORE
+        assert bot_policy.score(bot, Option(id="act:explore", label="探索"), profile) < bot_policy.CHALLENGE_SCORE
+    on.config.bot_strength = 1.0  # 一定挑最高分
+    with mock.patch.object(Game, "challenge_odds", return_value="穩勝"), _fight():
+        bot_policy.take_turn(bot, profile, random.Random(0))
+    assert "hejin" in bot.state.player.snubbed_until and world.get_season().figures["hejin"].prestige == 65
