@@ -98,12 +98,16 @@ def fresh_season(content: Content) -> WorldState:
 def stamp_season(season: WorldState, content: Content) -> None:
     """把當下的開關與季長蓋章在這一季上（計畫 T2「舊季不會被補算」）：之後換了設定，這一季照它自己的章走。
     開關開著時順便填決戰與季末的預設時間（管理者開季後可以改，T10）。只在季還沒開始時呼叫：種季、換季、開季。"""
+    from .figures import seed  # noqa: PLC0415  延後 import：figures → rules → world_state
     from .timetable import default_schedule  # noqa: PLC0415  延後 import：timetable → rules → world_state
 
     cfg = content.config
     season.season_one = cfg.season_one
     season.length_days = cfg.season_days
     season.schedule = default_schedule(content, season) if cfg.season_one else {}  # 照剛蓋好的季長排
+    season.figures = {}
+    if cfg.season_one:  # 大勢人物照人物表種好（T4）：時刻表的 only_if、伏筆的出面人物從第一刻起就看得到每一位
+        seed(season, content)
 
 
 def season_length_days(season: WorldState, content: Content) -> float:

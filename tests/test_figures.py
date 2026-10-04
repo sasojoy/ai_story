@@ -8,9 +8,12 @@ from pathlib import Path
 
 import pytest
 
+from tianxia import figures, timetable
 from tianxia.content import ContentError, load_content, validate
 from tianxia.models import Config, FigureChange
 from tianxia.server_bots import reserved_names
+from tianxia.state import FigureState, GameState, PlayerState
+from tianxia.world_state import fresh_season
 
 CONTENT_DIR = Path(__file__).parent.parent / "content"
 
@@ -130,3 +133,105 @@ def test_timetable_figures_are_checked_against_the_figure_table(real):
 def test_figure_names_are_reserved(real):
     """彭脫、韓忠沒有對話人物，名字照樣不能拿來當名號（公告寫的就是他們）。"""
     assert {"彭脫", "韓忠", "波才"} <= reserved_names(real)
+
+
+# ── Task 2：種人物、讀人物 ───────────────────────────────
+
+
+def _season(content) -> GameState:
+    """真實內容的一季（照當下的設定蓋章、種人物）＋季的事用的那種空殼玩家。"""
+    player = PlayerState(name="", location=content.scenario.start_location, stats={}, stamina=0)
+    return GameState(player=player, world=fresh_season(content))
+
+
+def test_figures_are_seeded_when_the_season_opens_with_the_switch_on(on):
+    season = fresh_season(on)
+    assert list(season.figures) == list(FIGURE_TABLE)
+    assert season.figures["bocai"] == FigureState(prestige=60, status="active", front="yingru", location="huangjin_camp")
+    assert season.figures["pengtuo"].status == "away"
+    assert season.figures["zhaohong"] == FigureState(prestige=50, front=None, location="nanyang_huangjin_camp")  # 在地圖上、不推
+
+
+def test_no_figures_are_seeded_with_the_switch_off(real):
+    assert fresh_season(real).figures == {}  # beta 那一季的存檔跟以前一樣
+
+
+def test_opening_a_season_seeded_with_the_switch_off_seeds_the_figures(real, world):
+    """第一次啟動忘了設 weekend：籌備中的季蓋的是「關」、沒有人物；設好重開、管理者開季時照新的章種好。"""
+    real.config.auto_open_first_season = False
+    world.seed_first_season(real)
+    assert world.get_season().figures == {}
+    real.config.season_one = True
+    assert world.open_season(real, now=0.0)
+    assert list(world.get_season().figures) == list(FIGURE_TABLE)
+
+
+def test_state_of_reads_the_table_for_a_figure_the_season_never_seeded(on):
+    """Review Focus 2：T4 之前就蓋了「開」的章的季（或季中才加進人物表的人）存檔裡沒有他——照人物表的起始值讀，
+    主將、難度都算得出來，讀了也不寫回存檔。"""
+    s = _season(on)
+    s.world.figures = {}
+    assert figures.state_of(s, on, "huangfusong") == FigureState(
+        prestige=70, status="active", front="yingru", location="changshe",
+    )
+    assert figures.commander(s, on, "yingru", "guan") == "huangfusong"
+    assert figures.difficulty(s, on, "huangfusong") == 128  # 150 × (0.5 + 0.5 × 0.70) = 127.5 → 128
+    assert figures.present_at(s, on, "huangjin_camp") == ["bocai"]
+    assert s.world.figures == {}
+
+
+def test_only_if_reads_the_table_for_an_unseeded_figure(on):
+    """朱儁到任南陽的條件（皇甫嵩還在潁川）：沒種過的皇甫嵩照人物表算他在潁川（T2 審查的提醒）；轉往冀州之後就不成立。"""
+    s = _season(on)
+    s.world.figures = {}
+    change = FigureChange(fate="到任", front="nanyang", location="wan_city", only_if={"huangfusong": "yingru"})
+    assert figures.holds(s, on, change)
+    s.world.figures["huangfusong"] = FigureState(prestige=40, front="jizhou", location="luzhi_camp")
+    assert not figures.holds(s, on, change)
+
+
+def test_commander_is_the_senior_figure_on_that_front(on):
+    s = _season(on)
+    w = s.world
+    assert figures.commander(s, on, "yingru", "guan") == "huangfusong"  # 皇甫嵩在朱儁前
+    assert figures.commander(s, on, "jizhou", "huang") == "zhangjiao"
+    assert figures.commander(s, on, "nanyang", "guan") == "sunjian"
+    w.figures["zhujun"].front, w.figures["zhujun"].location = "nanyang", "wan_city"  # 第 7 週朱儁到任南陽
+    assert figures.commander(s, on, "nanyang", "guan") == "zhujun"  # 宛城的 {官軍主將}「通常就是朱儁」
+    w.figures["huangfusong"].status = "retired"
+    assert figures.commander(s, on, "yingru", "guan") is None  # 潁川沒有官軍的人物了
+    assert figures.commander(s, on, None, "guan") is None
+
+
+def test_commander_slot_names_the_figure_from_the_table(on):
+    s = _season(on)
+    wancheng = next(e for e in on.timetable if e.id == "wancheng")
+    changshe = next(e for e in on.timetable if e.id == "changshe_fire")
+    assert timetable.fill_slots(s, on, wancheng, "{官軍主將}也在。") == "孫堅也在。"
+    s.world.figures["bocai"].status = "retired"
+    s.world.figures["pengtuo"].status, s.world.figures["pengtuo"].front = "active", "yingru"
+    assert timetable.fill_slots(s, on, changshe, "{黃巾主將}收攏殘部。") == "彭脫收攏殘部。"  # 沒有對話人物也寫名字
+
+
+def test_difficulty_follows_prestige(on):
+    s = _season(on)
+    assert figures.difficulty(s, on, "bocai") == 120  # 150 × (0.5 + 0.5 × 0.60)
+    s.world.figures["bocai"].prestige = 100
+    assert figures.difficulty(s, on, "bocai") == 150
+    s.world.figures["bocai"].prestige = 0
+    assert figures.difficulty(s, on, "bocai") == 75
+    squad = figures.squad_of(s, on, "bocai")
+    assert (squad.id, squad.name, squad.difficulty) == ("figure_bocai", "波才", 75)
+    assert on.squads["figure_bocai"].difficulty == 150  # 內容本身不動
+
+
+def test_who_stands_where(on):
+    s = _season(on)
+    assert figures.present_at(s, on, "changshe") == ["huangfusong", "zhujun"]
+    assert figures.present_at(s, on, "huangjin_camp") == ["bocai"]  # 彭脫還沒出場
+    s.world.figures["luzhi"].status = "jailed"
+    placed = figures.placed_characters(s, on)
+    assert placed["luzhi"] is None and placed["dongzhuo"] == "mengjin_ford" and "pengtuo" not in placed
+    assert figures.of_character(on, "luzhi") == "luzhi" and figures.of_character(on, "caocao") is None
+    on.config.season_one = False  # 規則沒開（開關關了，這一季的章也不算數）：大家照 talk_at
+    assert figures.placed_characters(s, on) == {}
