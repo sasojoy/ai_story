@@ -5,7 +5,7 @@ import math
 import random
 from collections.abc import Callable
 
-from . import battle_instance, calendar, figures, flavor, leaderboard, timetable
+from . import battle_instance, calendar, figures, flavor, leaderboard, orders, timetable
 from .models import Act, BattleDef, Content, Ending, SimPlayer, SimRumor, Storyline, TimetableEvent
 from .ollama_client import OllamaClient
 from .rules import (
@@ -19,8 +19,11 @@ HOUR = 3600
 DAY = 86400
 EPS_CAL_HOURS = 1e-9  # 找下一個曆時交界時的浮點誤差（以曆時為單位）：剛好停在交界上的時間不能被算成上一個曆時
 
-# 週初的掛鉤：季曆每跨進新的一週（週一 00:00）各跑一次，照週次、在那一刻的大事之前。T6 的 orders.issue 掛這裡。
-WEEK_HOOKS: list[Callable[[GameState, Content, random.Random], list[str]]] = []
+# 週初的掛鉤：季曆每跨進新的一週（週一 00:00）各跑一次，照週次、在那一刻的大事之前。T6 的軍令掛這裡
+# （跑的時候 hooked_week 已經是剛跨進的那一週）。
+WEEK_HOOKS: list[Callable[[GameState, Content, random.Random], list[str]]] = [
+    lambda state, content, rng: orders.issue(state, content, state.world.hooked_week, rng),
+]
 
 
 def _now_for_battle(now: float | None) -> float:

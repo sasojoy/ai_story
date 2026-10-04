@@ -175,10 +175,11 @@ def check_who(check: Check, state: GameState, content: Content, world: WorldStat
 
 def add_rumor(
     state: GameState, text: str, location: str | None = None, *, content: Content | None = None,
-    layer: RumorLayer = "world", named: bool = True,
+    layer: RumorLayer = "world", named: bool = True, faction: str | None = None,
 ) -> None:
     """記一則傳聞（傳聞分層設計第二節）。給了 content 與地點時，順便記下地點所在的大區。
-    第 1 期只先把資料記對；誰看得到哪一層，是傳聞分層的規則實作（線上架構第 2 期之後）。"""
+    第 1 期只先把資料記對；誰看得到哪一層，是傳聞分層的規則實作（線上架構第 2 期之後）。
+    faction：陣營軍情只給這個陣營的人看（Game.rumors_text 照它過濾，計畫 T6）。"""
     from . import atlas  # atlas → world → rules：在函式裡 import，避免循環
 
     region = None
@@ -186,7 +187,7 @@ def add_rumor(
         found = atlas.region_of(content, location)
         region = found.id if found is not None else None
     state.world.rumors.append(
-        Rumor(time=state.world.time, text=text, location=location, layer=layer, region=region, named=named)
+        Rumor(time=state.world.time, text=text, location=location, layer=layer, region=region, named=named, faction=faction)
     )
 
 

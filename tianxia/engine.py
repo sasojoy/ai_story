@@ -2920,7 +2920,11 @@ class Game:
         return "\n\n".join(parts) or "（江湖暫時風平浪靜。）"
 
     def rumors_text(self, limit: int = 30) -> str:
-        return _timeline(self.state.world.rumors[-limit:][::-1], self._day_stamp) or "（尚無傳聞。）"
+        """見聞頁的傳聞：陣營軍情只給那個陣營、個人線索只給那個人（跟沿途打聽同一個規則，見 _road_ask；計畫 T6）。
+        開關關著時沒有這兩種傳聞，畫面一樣。"""
+        p = self.state.player
+        heard = [r for r in self.state.world.rumors if r.faction in (None, p.faction) and r.character in (None, p.name)]
+        return _timeline(heard[-limit:][::-1], self._day_stamp) or "（尚無傳聞。）"
 
     def chronicle_text(self) -> str:
         """江湖史：這一季在最前面，往前每一季各一段（線上架構設計 3.2：江湖史跨季保留），最後是玉璽碎片。"""
