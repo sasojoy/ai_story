@@ -193,15 +193,21 @@ def _push(state: GameState, content: Content, trend_id: str, delta: int) -> None
 
 def _headline(
     state: GameState, content: Content, event: TimetableEvent, outcome: TimetableOutcome, lock: Lock | None,
-    losers: list[str],
 ) -> str:
-    """公告的主體：有人鎖定、這個結果也有他那一方的具名版本時用具名版本（加上搶輸的一句），否則用開頭＋公告。"""
+    """公告的主體：有人鎖定、這個結果也有他那一方的具名版本時用具名版本，否則用開頭＋公告。"""
     if lock is None or lock.side not in outcome.locked_text:
         return fill_slots(state, content, event, event.preface + outcome.text)
-    text = fill_slots(state, content, event, outcome.locked_text[lock.side]).replace("{name}", lock.name)
-    if losers and lock.side in outcome.loser_text:
-        text += fill_slots(state, content, event, outcome.loser_text[lock.side]).replace("{loser}", "、".join(losers))
-    return text
+    return fill_slots(state, content, event, outcome.locked_text[lock.side]).replace("{name}", lock.name)
+
+
+def _loser_line(
+    state: GameState, content: Content, event: TimetableEvent, outcome: TimetableOutcome, lock: Lock | None,
+    losers: list[str],
+) -> str:
+    """搶輸的一筆：有具名版本、有另一方搶輸的人，而且這一格寫了才有。"""
+    if lock is None or lock.side not in outcome.locked_text or not losers or lock.side not in outcome.loser_text:
+        return ""
+    return fill_slots(state, content, event, outcome.loser_text[lock.side]).replace("{loser}", "、".join(losers))
 
 
 def resolve(
@@ -223,7 +229,9 @@ def resolve(
     named = lock is not None and lock.side in outcome.locked_text
     losers = [x.name for x in w.lock_losers.get(event.id, []) if lock is not None and x.side != lock.side]
     # 文字先填好再套效果：{官軍主將} 指的是這件事發生「之前」的主將（例：廣宗黃巾大勝，重挫的就是他）
-    text = _headline(state, content, event, outcome, lock, losers) + fill_slots(state, content, event, outcome.note)
+    # 公告的組法（伏筆文件 3.4、5.4）：具名的一段＋這一檔的結果（含 note 與人物的後話）＋搶輸的一筆＋豪強的一筆
+    text = _headline(state, content, event, outcome, lock) + fill_slots(state, content, event, outcome.note)
+    loser_line = _loser_line(state, content, event, outcome, lock, losers)
     chronicle = fill_slots(state, content, event, outcome.chronicle)
     for trend_id, delta in outcome.trends.items():
         _push(state, content, trend_id, delta)
@@ -235,6 +243,7 @@ def resolve(
     for target, mod in outcome.chance_mods.items():
         w.event_bonus[target] = w.event_bonus.get(target, 0.0) + mod
     add_world_flags(state, outcome.world_flags_add)
+    text += loser_line
     third = w.third_party.get(event.id, [])
     if third:  # 豪強是第三方：不論誰贏，每個做完的名字各套一次自己的效果（伏筆文件 2.6）
         for _ in third:
