@@ -12,7 +12,7 @@ CLAUDE.md 裡跟現況對不上的地方。PM 收集，**企劃者同意後**才
 | 4 | 無限煉製那節 | 「一次煉製 16~51」，沒寫凡品配方 | 凡品配方不花心得；成本算例已改（兩個天品 ＝ 28） | PM |
 | 5 | 架構 `team.py` 那行 | 戰前勝算「依完整陣容快取」 | 沒有快取，每次重算 40 場 | PM |
 | 6 | 「下一個 session 的待辦」開頭 | 工作目錄 `C:\Users\User\Documents\ai_story-tianxia`；架構圖 artifact `c63483c5…` | PM 在 `C:\Ray\專案\天下大勢`，開發在 `C:\Ray\專案\ai遊戲`；架構圖改成 `docs/superpowers/architecture/三國篇架構.html` 發佈的 artifact | PM |
-| 7 | 「新方向：自創武功要限次數」那節 | 要限次數，五件事還沒決定 | 已改定成「自創與融合」設計（先不限次數、跟融合一起開，放開觀察），不進第一次 beta | 軍備物資設計 session |
+| 7 | 「新方向：自創武功要限次數」那節 | 要限次數，五件事還沒決定 | 方向已經改了兩次：10/3 改定成「自創與融合」設計；2026-10-05 企劃者在「武學與成長」設計定了**取消自創**，改成「武學＋意境 → 衍生新武學」，《自創與融合》整份作廢。這節整段可以刪掉，改成一行指向 `specs/2026-10-05-武學與成長-design.md`。程式改完之前，現有的自創仍照舊運作 | 武學與成長設計 session |
 | 8 | 第 138–140 行 | `tests/test_app.py` 的 flaky 測試（現在式） | `test_app.py` 已刪掉（flaky 的原因後面第三刀也寫了已修） | Infra |
 | 9 | 第 262–264 行 | 門下頁的輸出數量改成 `app.MENXIA_OUTPUTS`（現在式） | `app.py` 已刪掉，那個常數不存在了 | Infra |
 | 13 | 「下一個 session 的待辦」開頭與其他寫到分支名稱的地方 | 分支 `feature/sanguo-companions` | 2026-10-03 起主線改成 `main`（之後直接在 main 上開發；舊遊戲在 `legacy/ai-story-main`，feature/sanguo-companions 不再更新） | PM |
