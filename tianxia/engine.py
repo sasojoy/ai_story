@@ -2211,6 +2211,7 @@ class Game:
         if battle is not None and battle.phase != "ended":
             self.world.clear_battle()
         self.state.world = self.world.get_season()  # 讀回完整的一份（mutate_season 回傳的不含傳聞與江湖史）
+        self._write("收季", msgs, tag="管理者")  # 跟開季一樣，管理者自己的江湖紀錄留一則
         return self._log(msgs)
 
     def admin_next_season(self, now: float) -> list[str]:

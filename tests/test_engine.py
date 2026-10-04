@@ -898,6 +898,7 @@ def test_admin_end_season_only_while_running(content, world):
     season = world.get_season()
     assert season.ended and season.time == before.time  # 季的時間停在收季那一刻
     assert admin.state.world.ended  # 管理者自己的畫面也跟著進休季
+    assert admin.state.journal[0].title == "收季" and admin.state.journal[0].tag == "管理者"  # 跟開季一樣留一則（最新的在最前面）
 
     ended = world.get_season()
     assert admin.admin_end_season(now=3.0) == not_running  # 休季
