@@ -35,7 +35,7 @@ def event_candidates(
     state: GameState, content: Content, action: str, pool: EventPool | None = None,
 ) -> list[Event]:
     """這裡、現在可以抽的事件（依內容順序）。pool 給探索三選一用："rare" 只要一次性與奇遇，
-    "common" 只要可重複的；None 是全部（歷練、交遊照舊用這個）。
+    "common" 只要可重複的；None 是全部（遊歷、交友照舊用這個）。
     看過的一次性事件不再出現；奇遇沒標 once 的看過也照樣留著（企劃者 2026-10-03 改）。"""
     location = content.locations[state.player.location]
     candidates: list[Event] = []

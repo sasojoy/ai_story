@@ -313,7 +313,7 @@ def validate(c: Content) -> None:
                 f"{where}：結識 {cid} 的事件，condition.members_none 要列出 {cid}（已入門就不該再遇到）",
             )
         if ev.fortune:
-            need(not ev.actions, f"{where}：福緣事件只由交遊觸發，actions 要是空的")
+            need(not ev.actions, f"{where}：福緣事件只由交友觸發，actions 要是空的")
             need(all(ch.effect.recruit for ch in ev.choices), f"{where}：福緣事件的每個選項都要結識一個人")
             for i, ch in enumerate(ev.choices):
                 need(
@@ -501,7 +501,7 @@ def validate(c: Content) -> None:
             need(ch.kind == "locked", f"{where}：只有 kind=locked 的龍頭人物需要 talk_at（可招募的同伴用 recruit_at）")
         if ch.affinity_tag_deltas:
             for tag in ch.affinity_tag_deltas:
-                need(tag in DIALOGUE_TAGS, f"{where}：affinity_tag_deltas 的 {tag!r} 不是合法的交遊 tag")
+                need(tag in DIALOGUE_TAGS, f"{where}：affinity_tag_deltas 的 {tag!r} 不是合法的交友 tag")
     for squad in c.squads.values():
         where = f"敵方隊伍 {squad.id}"
         need(squad.difficulty >= 0, f"{where}：difficulty 不能是負的")

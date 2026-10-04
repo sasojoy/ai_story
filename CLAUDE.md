@@ -23,6 +23,7 @@
 - `run_bots.py`：假人程式的入口，每隔 `bot_tick_seconds` 呼叫一次 `BotRunner.tick()`，跟 `server.py` 同時開著。
 
 ## 原則
+- 行動名稱（企劃者 2026-10-04 定）：「遊歷」（舊稱歷練，`act:train`）、「交友」（舊稱交遊，`act:socialize`）；移動維持步行／趕路／疾行三種。下面各節的舊紀錄仍寫舊名，指的是同一個行動。
 - 數值全部由規則引擎決定，執行時不接 LLM。
 - 引擎不讀電腦時鐘：現在時間一律由 `Game.sync(now)`（設定 `Game.now`）或明確的 `now` 參數傳入（線上架構設計第四節）。`tianxia/` 裡只有 `database.py`（等寫入權的期限）、`accounts.py` 與 `bot_runner.py`（注入的 `clock`）碰時間。
 - 武學、人物名稱必須原創，不用金庸等作品的專有名詞。

@@ -31,7 +31,7 @@ from .world_state import WorldStateStore
 
 HOUR = 3600
 DAY = 86400
-AUDIENCE_HALL_FIGURES = 2  # 一個地點有幾位以上的大勢人物，交遊就不直接找人、改按「求見」指名（企劃者 2026-10-03 決定）
+AUDIENCE_HALL_FIGURES = 2  # 一個地點有幾位以上的大勢人物，交友就不直接找人、改按「求見」指名（企劃者 2026-10-03 決定）
 # 路上小事（路上設計第四節）：road:<id> → (名稱, 這一段做過之後寫的「這段路已經……」)；按鈕上的補充見 _road_task_options
 ROAD_TASKS: dict[str, tuple[str, str]] = {
     "think": ("邊走邊想", "想過了"),
@@ -347,19 +347,19 @@ class Game:
         cost = c.config.action_cost
         opts = [self._cost_option("act:explore", "探索", cost["explore"])]
         if loc.enemies:
-            # 歷練：這個地點的敵人，必定開打（見 _train）。sanguo-companions 合併時這個行動被
+            # 遊歷：這個地點的敵人，必定開打（見 _train）。sanguo-companions 合併時這個行動被
             # 整個拿掉，於是 Location.enemies／action_cost["train"]／train_event_chance 三個設定
             # 一起變成死的，而遭遇戰只剩劇情事件的 combat 選項——實測整季只打 3 場。
             #
             # 標籤要顯示勝算（跟劇情戰的選項同一套慣例，見 _choice_label）：實機試玩發現
-            # 新角色沒有武學時威力是 0，在任何地點歷練都**必敗**，而落敗現在真的要付氣血與
+            # 新角色沒有武學時威力是 0，在任何地點遊歷都**必敗**，而落敗現在真的要付氣血與
             # 內傷的代價——不顯示勝算的話，玩家會在開局連輸三場、氣血見底才知道自己不該打。
             opts.append(self._train_option(loc, cost["train"], odds))
         figures = self._figures_here()
         if has_events_here(c, loc, "socialize") or 0 < len(figures) < AUDIENCE_HALL_FIGURES:
-            # 兩位以上大勢人物的地點，交遊只走福緣與地點事件、從不開口對話（見 _socialize_figure），
-            # 所以只在有交遊事件時才給；人物改由下面的「求見」指名
-            opts.append(self._cost_option("act:socialize", "交遊", cost["socialize"]))
+            # 兩位以上大勢人物的地點，交友只走福緣與地點事件、從不開口對話（見 _socialize_figure），
+            # 所以只在有交友事件時才給；人物改由下面的「求見」指名
+            opts.append(self._cost_option("act:socialize", "交友", cost["socialize"]))
         if len(figures) >= AUDIENCE_HALL_FIGURES:
             opts.append(Option(id="act:call", label="求見"))  # 只是打開第二層選單，不花體力（見 _audience_options）
         target = self._recruit_target()
@@ -458,7 +458,7 @@ class Game:
         )
 
     def _train_option(self, loc: Location, cost: int, odds: bool) -> Option:
-        """歷練的按鈕。遇上自己陣營的隊伍是操練、不會輸（見 _drill），所以只有自己人的地盤寫成「操練・零風險」，
+        """遊歷的按鈕。遇上自己陣營的隊伍是操練、不會輸（見 _drill），所以只有自己人的地盤寫成「操練・零風險」，
         不拿自己人去算勝算「必敗」（試玩回饋 FB-008）；自己人與外人都有的地方，勝算只看真的會打的那幾路。"""
         squads = [self.content.squads[sid] for sid in loc.enemies]
         foes = [squad for squad in squads if not self._drills_with(squad)]
@@ -467,10 +467,10 @@ class Game:
         note = self._train_note(foes, odds)
         if len(foes) < len(squads):
             note += "・或與自己人操練"
-        return self._cost_option("act:train", "歷練", cost, note=note)
+        return self._cost_option("act:train", "遊歷", cost, note=note)
 
     def _train_note(self, squads: list[Squad], odds: bool) -> str:
-        """歷練按鈕上的補充說明：對手是誰、勝算多少（勝算的計算比較貴，所以照既有慣例吃 odds 旗標）。"""
+        """遊歷按鈕上的補充說明：對手是誰、勝算多少（勝算的計算比較貴，所以照既有慣例吃 odds 旗標）。"""
         who = squads[0].name if len(squads) == 1 else f"{len(squads)} 路對手"
         if not odds:
             return who
@@ -499,7 +499,7 @@ class Game:
         會就回傳要送給模型的單子（選項、人物、玩家這一步、messages），不會就是 None。只讀、不改狀態。
         - `talk:N`：N 是上一輪提供的選項、手上有對話、選項沒停用；`talk:leave` 不生成。
         - `act:socialize`：選項沒停用、福緣還沒到（福緣先發，見 _act）、這裡只有一位大勢人物而且見得到
-          （兩位以上的地點交遊不開口，見 _socialize_figure）；玩家這一步固定是 GENERIC_OPENING。
+          （兩位以上的地點交友不開口，見 _socialize_figure）；玩家這一步固定是 GENERIC_OPENING。
         - `call:<人物>`：求見選單上按得下去的那位人物（選項沒停用＝見得到、今天還沒談滿、體力夠）；
           玩家這一步固定是 GENERIC_OPENING。`call:back` 不生成。
         其他選項都不呼叫對話模型。
@@ -590,7 +590,7 @@ class Game:
             if kind == "act" and arg != "break":
                 msgs += note_action(self.state, self.content, self.world, arg)
             if kind == "call" and arg != "back":
-                msgs += note_action(self.state, self.content, self.world, "socialize")  # 指名求見算一次交遊（新手引導、任務）
+                msgs += note_action(self.state, self.content, self.world, "socialize")  # 指名求見算一次交友（新手引導、任務）
             msgs += check_thresholds(self.state, self.content, self.world, self.client, now=self.now)
             journal.add_entry(self.state, self._draft.entry(self.state.world.time, msgs))
         finally:
@@ -686,7 +686,7 @@ class Game:
             return ROAD_TASKS[what][0]
         here = c.locations[s.player.location].name
         titles = {
-            "explore": f"探索{here}", "socialize": f"交遊・{here}", "call": f"求見・{here}", "train": f"歷練・{here}",
+            "explore": f"探索{here}", "socialize": f"交友・{here}", "call": f"求見・{here}", "train": f"遊歷・{here}",
             "recruit": f"招募・{here}", "rest": f"打坐・{here}", "stand": "起身", "halt": "喊停",
         }
         return titles.get(arg, "提前出關")
@@ -741,9 +741,9 @@ class Game:
         return self._encounter("socialize", self._no_audience_line())
 
     def _call(self, arg: str, prepared: companion_agent.PreparedTurn | None = None) -> list[str]:
-        """求見選單上的選擇：「返回」收起選單；選了一位人物就跟他開口對話，跟交遊碰上人物時一模一樣——
-        花交遊的體力、生成不出對話就退回（見 _open_dialogue）。福緣不在這裡發：指名求見就是要見這個人
-        （福緣照舊由交遊先發，或到期自己送上門，見 _advance_player_local）。"""
+        """求見選單上的選擇：「返回」收起選單；選了一位人物就跟他開口對話，跟交友碰上人物時一模一樣——
+        花交友的體力、生成不出對話就退回（見 _open_dialogue）。福緣不在這裡發：指名求見就是要見這個人
+        （福緣照舊由交友先發，或到期自己送上門，見 _advance_player_local）。"""
         self.state.player.picking_audience = False
         if arg == "back":
             return ["你收回名帖，暫且不求見了。"]
@@ -751,7 +751,7 @@ class Game:
         return self._open_dialogue(arg, prepared)
 
     def _open_dialogue(self, companion_id: str, prepared: companion_agent.PreparedTurn | None) -> list[str]:
-        """跟一位大勢人物開口對話（呼叫端已經扣了交遊的體力）：生成不出對話時退回那份體力，對話不開始。"""
+        """跟一位大勢人物開口對話（呼叫端已經扣了交友的體力）：生成不出對話時退回那份體力，對話不開始。"""
         try:
             return companion_agent.start_dialogue(
                 self.client, self.state, self.content, self.world, companion_id, self.rng,
@@ -803,7 +803,7 @@ class Game:
         return [squad for squad in squads if not self._drills_with(squad)]
 
     def _train(self) -> list[str]:
-        """歷練：找這個地點的敵人打一場，**必定開打**；打完有機率接一段戰後的餘韻事件。
+        """遊歷：找這個地點的敵人打一場，**必定開打**；打完有機率接一段戰後的餘韻事件。
 
         這個行動在 sanguo-companions 合併時被整個移除，後果是整條隨機遭遇戰的路斷掉：
         `pick_event()` 只在「完全沒有合格候選」時才回 None，而有三個事件是「任何地點、
@@ -885,12 +885,12 @@ class Game:
         return None
 
     def _audience_hall(self) -> bool:
-        """這裡有兩位以上的大勢人物：交遊不再直接找第一位見得到的人，改按「求見」指名（企劃者 2026-10-03 決定）。"""
+        """這裡有兩位以上的大勢人物：交友不再直接找第一位見得到的人，改按「求見」指名（企劃者 2026-10-03 決定）。"""
         return len(self._figures_here()) >= AUDIENCE_HALL_FIGURES
 
     def _socialize_figure(self) -> str | None:
-        """交遊會直接開口對話的那位人物：只有這裡至多一位大勢人物時才有（見得到、今天還沒談滿，見
-        _deep_interaction_target）；兩位以上的地點交遊只走福緣與地點事件，人物要按「求見」指名。"""
+        """交友會直接開口對話的那位人物：只有這裡至多一位大勢人物時才有（見得到、今天還沒談滿，見
+        _deep_interaction_target）；兩位以上的地點交友只走福緣與地點事件，人物要按「求見」指名。"""
         if self._audience_hall():
             return None
         return self._deep_interaction_target()
@@ -922,8 +922,8 @@ class Game:
         return f"{here}有好幾位人物，挑一位求見。每位人物每天最多談 {per_day} 輪，各算各的；名望不夠的見不到，談滿的明天再來。"
 
     def _no_audience_line(self) -> str:
-        """交遊時見不到這裡的大勢人物時的說明；這裡沒有大勢人物就是原本的「此地無人可訪」；
-        兩位以上大勢人物的地點交遊不找人，提醒要按「求見」。"""
+        """交友時見不到這裡的大勢人物時的說明；這裡沒有大勢人物就是原本的「此地無人可訪」；
+        兩位以上大勢人物的地點交友不找人，提醒要按「求見」。"""
         if self._audience_hall():
             return "你四處結交了一番，沒遇上什麼事；想拜會此地的人物，請按「求見」指名。"
         for companion_id in self._figures_here():
@@ -935,12 +935,12 @@ class Game:
         return "此地無人可訪，你只好悻悻離去。"
 
     def socialize_starts_dialogue(self) -> bool:
-        """在這裡交遊會直接跟大勢人物對話（伺服器假人不閒聊大勢人物，見 bot_policy）。"""
+        """在這裡交友會直接跟大勢人物對話（伺服器假人不閒聊大勢人物，見 bot_policy）。"""
         return self._socialize_figure() is not None
 
     def socialize_is_futile(self) -> bool:
-        """在這裡交遊注定白跑一趟（伺服器假人不該去按）：這個地點沒有交遊事件、沒有見得到的大勢人物，
-        而且福緣還沒到期（交遊最先發福緣，見 _act）。"""
+        """在這裡交友注定白跑一趟（伺服器假人不該去按）：這個地點沒有交友事件、沒有見得到的大勢人物，
+        而且福緣還沒到期（交友最先發福緣，見 _act）。"""
         s, c = self.state, self.content
         return (
             not has_events_here(c, c.locations[s.player.location], "socialize")
@@ -1462,7 +1462,7 @@ class Game:
         return msgs
 
     def _encounter(self, action: str, nothing: str) -> list[str]:
-        """交遊沒碰上人物時：抽一則事件，沒有就是 nothing（探索另有三選一，見 _explore）。"""
+        """交友沒碰上人物時：抽一則事件，沒有就是 nothing（探索另有三選一，見 _explore）。"""
         event = pick_event(self.state, self.content, action, self.rng)
         if event:
             return self._present(event)
@@ -1486,8 +1486,8 @@ class Game:
         """遭遇一支敵方隊伍：單次判定，勝得對手獎勵與屬性機會，落敗失落一成銀兩；自己陣營的隊伍改成操練（見 _drill）。
 
         wild：探索時撞上的野怪（探索三選一設計 4.2）——扣氣血打折（`wild_neili_loss_factor`，內傷照比例）、
-        打贏**不推大勢**（歷練推大勢的量已經讓黃巾早早稱霸，探索不能再加碼）；獎勵、掉落、屬性機會、落敗的
-        一成銀兩都照常。戰後事件本來就只在 _train 裡接，野怪不走那裡。歷練不帶這個旗標，一點都不變。"""
+        打贏**不推大勢**（遊歷推大勢的量已經讓黃巾早早稱霸，探索不能再加碼）；獎勵、掉落、屬性機會、落敗的
+        一成銀兩都照常。戰後事件本來就只在 _train 裡接，野怪不走那裡。遊歷不帶這個旗標，一點都不變。"""
         s, c = self.state, self.content
         p = s.player
         loc = c.locations[p.location]
@@ -1529,7 +1529,7 @@ class Game:
         return squad.faction is not None and squad.faction == self.state.player.faction
 
     def _drill(self, squad: Squad) -> list[str]:
-        """在自己陣營的地方歷練：不打自己人，一起操軍擺陣（企劃者 2026-10-02 決定）。不會輸、不扣氣血；
+        """在自己陣營的地方遊歷：不打自己人，一起操軍擺陣（企劃者 2026-10-02 決定）。不會輸、不扣氣血；
         給經驗與心得、有機會加屬性；不給銀兩、不掉素材（不搶自己人）；地點的大勢推動往自己陣營有利的方向推。"""
         s, c = self.state, self.content
         p = s.player
@@ -1556,14 +1556,14 @@ class Game:
         return msgs
 
     def _train_push(self, trend_id: str, delta: int) -> int:
-        """歷練（打贏或操練）推大勢：量照地點設定；自己陣營對這條線有目標就往目標方向推，散人和
+        """遊歷（打贏或操練）推大勢：量照地點設定；自己陣營對這條線有目標就往目標方向推，散人和
         沒有這條線目標的陣營照地點原本的方向（企劃者 2026-10-02 決定）。"""
         faction = next((f for f in self.content.scenario.factions if f.id == self.state.player.faction), None)
         goal = faction.goals.get(trend_id, 0) if faction is not None else 0
         return abs(delta) * goal if goal else delta
 
     def train_trend_push(self, loc_id: str | None = None) -> dict[str, int]:
-        """在這個地點（預設所在地）歷練打贏或操練時，各條大勢線會被推多少（照自己的陣營，見 _train_push）。"""
+        """在這個地點（預設所在地）遊歷打贏或操練時，各條大勢線會被推多少（照自己的陣營，見 _train_push）。"""
         loc = self.content.locations[loc_id or self.state.player.location]
         return {trend_id: self._train_push(trend_id, delta) for trend_id, delta in loc.train_trend.items()}
 
@@ -1637,7 +1637,7 @@ class Game:
         self.state.player.road_rewards_today[kind] = [day, self._road_rewards_used(kind, day) + 1]
 
     def _road_think(self) -> list[str]:
-        """邊走邊想：心得（一次歷練大約 12～20，這裡刻意少很多）。今天的收穫拿滿了就照樣想，只是沒有心得。"""
+        """邊走邊想：心得（一次遊歷大約 12～20，這裡刻意少很多）。今天的收穫拿滿了就照樣想，只是沒有心得。"""
         if not self._road_reward_due("task"):
             return ["你邊走邊想，今天想得夠多了，沒有新的心得。"]
         p, amount = self.state.player, self.content.config.road_think_xinde

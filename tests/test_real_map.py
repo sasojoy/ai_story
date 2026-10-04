@@ -157,7 +157,7 @@ def test_new_squads_exist(content):
 
 
 def test_new_locations_outside_towns_have_a_faction_squad(content):
-    """設計 7.1：新地點要有標陣營的歷練隊伍（「歷練看陣營」要用）。"""
+    """設計 7.1：新地點要有標陣營的遊歷隊伍（「遊歷看陣營」要用）。"""
     for loc_id in NEW_LOCATIONS - TOWNS_WITHOUT_ENEMIES:
         squads = [content.squads[s] for s in content.locations[loc_id].enemies]
         assert any(s.faction for s in squads), loc_id
@@ -203,7 +203,7 @@ APPROVED_TAG_MATCHED_EVENTS = {  # 新地點靠 tags 撞上沒寫 locations 的�
 def test_old_tag_matched_events_on_the_new_places_are_approved(content):
     """事件靠 tags 找地點（沒 tags 也沒 locations 就到處都有），地點只要 id 在 locations 裡也算數，兩者是「或」。
     地圖重排時新地點的 tags 可能撞上舊事件（例如 山林 的玉璽挖寶、水路／渡口 的封鎖），那些劇情是為特定地方寫的。
-    能被任何行動（探索／歷練／交遊）抽到、而且不是靠 locations 點名到新地點的事件，集合必須剛好等於核准名單
+    能被任何行動（探索／遊歷／交友）抽到、而且不是靠 locations 點名到新地點的事件，集合必須剛好等於核准名單
     （只加 locations 沒拿掉 tags 的事件仍會靠 tags 撞進來，這裡一樣抓得到）。"""
     matched = {
         e.id

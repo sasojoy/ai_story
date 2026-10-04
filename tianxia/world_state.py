@@ -158,7 +158,7 @@ class WorldStateStore(Protocol):
     def set_companion_drift_note(self, companion_id: str, note: str) -> None: ...
 
     def tag_counts_since_last_drift(self, companion_id: str) -> int:
-        """自上次語意化以來，全服玩家又新累積了幾次交遊 tag（用總次數而非時間排程：誰的這次互動剛好跨過門檻就由誰觸發）。"""
+        """自上次語意化以來，全服玩家又新累積了幾次交友 tag（用總次數而非時間排程：誰的這次互動剛好跨過門檻就由誰觸發）。"""
         ...
 
     def record_drift_synthesis(self, companion_id: str, note: str) -> None:

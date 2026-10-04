@@ -176,7 +176,7 @@ class BattleRecord(BaseModel):
     id: int  # 流水號，本季從 1 起算
     time: float  # 開打時的遊戲時間（決戰是收場時的）
     location: str  # 地點名稱（決戰是大區名；上一季打的前面加「第 N 季・」）
-    kind: Literal["train", "event", "wild", "showdown"]  # 歷練／劇情／探索撞上的野怪／全服決戰（舊戰報的 train 不遷移，照舊顯示「歷練」）
+    kind: Literal["train", "event", "wild", "showdown"]  # 遊歷／劇情／探索撞上的野怪／全服決戰（舊戰報的 train 不遷移，照舊顯示「遊歷」）
     event: str = ""  # 劇情戰的事件標題；決戰是決戰的名稱
     opponent: str  # 敵方隊伍名稱；決戰是敵方陣營名
     ours: list[Fighter]  # 我方陣容，第一位是隊長；等級是開打時的等級（決戰不記，是空的）
@@ -196,7 +196,7 @@ class JournalEntry(BaseModel):
     """江湖紀錄的一則：玩家的一次行動，整理成給畫面看的樣子（原始訊息仍照舊寫在 GameState.log）。"""
 
     time: float  # 行動時的遊戲時間；舊存檔轉來的紀錄沒有時間，記為 journal.LEGACY_TIME
-    title: str  # 例如「前往 揚州城」「歷練・揚州城郊」「酒樓鬥毆・上前勸架」
+    title: str  # 例如「前往 揚州城」「遊歷・揚州城郊」「酒樓鬥毆・上前勸架」
     tag: str = ""  # 簡短的結果，例如「遇上【酒樓鬥毆】」「擊退劫道山賊（4 回合）」「韓鐵出手・失敗」
     lines: list[str] = Field(default_factory=list)  # 敘事文字
     changes: list[str] = Field(default_factory=list)  # 數值變化，例如「銀兩 -5」「心得 +12」

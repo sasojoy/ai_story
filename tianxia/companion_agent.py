@@ -1,4 +1,4 @@
-"""深度對話（設計文件四.3）：LLM 即時生成跟歷史人物的交遊對話，好感度變化查表決定
+"""深度對話（設計文件四.3）：LLM 即時生成跟歷史人物的交友對話，好感度變化查表決定
 （不信任 LLM 自報數字），從 ai_story（征服路線引擎）的 src/npc_agent.py 移植並大幅簡化：
 拿掉性愛/黑化/終極結局相關的一切，好感度改成 0~100 單向，玩家最多同時帶一段對話。
 
@@ -29,7 +29,7 @@ MAX_HISTORY_MESSAGES = 40
 MEMORY_CONSOLIDATION_INTERVAL = 20
 MAX_RETRIES = 3
 SIGNATURE_SKILL_AFFINITY_THRESHOLD = 70  # 情誼達到這個門檻，才能向對方習得本命武學（設計文件七.1）
-DRIFT_SYNTHESIS_INTERVAL = 15  # 全服玩家對這位人物又新累積了幾次交遊 tag，就該重新語意化一次性情漂移
+DRIFT_SYNTHESIS_INTERVAL = 15  # 全服玩家對這位人物又新累積了幾次交友 tag，就該重新語意化一次性情漂移
 
 # 好感度 tag 查表（設計文件七.1／五.1 一貫原則：好感度變化只信任封閉分類查表，
 # 不信任 LLM 自報數字）。目前是全部人物共用同一張表，之後如果要每位歷史人物有不同的
@@ -55,7 +55,7 @@ class DialogueUnavailable(Exception):
 
 
 class CompanionTurn(BaseModel):
-    """交遊一回合的 LLM 輸出：敘事 + 3 個帶 tag 的選項，好感度查表覆寫，不信任這裡任何數字。"""
+    """交友一回合的 LLM 輸出：敘事 + 3 個帶 tag 的選項，好感度查表覆寫，不信任這裡任何數字。"""
 
     narrative: str = ""
     options: list[str] = Field(default_factory=list)
@@ -138,7 +138,7 @@ def build_system_prompt(
 
     return (
         f"你是文字角色扮演遊戲的敘事引擎，正在扮演漢末真實歷史人物「{character.name}」，"
-        f"跟玩家進行一段交遊對話。\n"
+        f"跟玩家進行一段交友對話。\n"
         f"【{character.name}的出身】{character.background}\n"
         f"【{character.name}此時的處境】{character.situation}\n"
         f"【{character.name}的性格】{character.personality}{drift_str}\n"
@@ -241,7 +241,7 @@ def start_dialogue(
     client: OllamaClient | None, state: GameState, content: Content, world: WorldStateStore, companion_id: str,
     rng: Random, turn: CompanionTurn | None = None,
 ) -> list[str]:
-    """交遊觸發深度對話的第一回合：用一句通用的「上前攀談」當隱含的玩家行動。
+    """交友觸發深度對話的第一回合：用一句通用的「上前攀談」當隱含的玩家行動。
     先生成、成功了才開始對話；生成不出來（DialogueUnavailable）時不留下任何狀態。
     turn 是鎖外先生成好的一輪（見 prepare_turn）：給了就不再生成，沒給才在這裡生成。"""
     character = content.characters[companion_id]
@@ -256,7 +256,7 @@ def continue_dialogue(
     choice_index: int, rng: Random, turn: CompanionTurn | None = None,
 ) -> list[str]:
     """玩家選了上一回合的第 choice_index 個選項：查表套用好感度、繼續生成下一回合。
-    先生成、成功了才記交遊 tag 與好感度；生成不出來（DialogueUnavailable）時這輪當作沒發生。
+    先生成、成功了才記交友 tag 與好感度；生成不出來（DialogueUnavailable）時這輪當作沒發生。
     turn 是鎖外先生成好的一輪（見 prepare_turn）：給了就不再生成，沒給才在這裡生成。"""
     character = content.characters[companion_id]
     options, tags = state.player.last_offered_dialogue.get(companion_id, [[], []])
@@ -313,7 +313,7 @@ def _maybe_consolidate_memory(client: OllamaClient | None, state: GameState, cha
 
 def _maybe_synthesize_drift(client: OllamaClient | None, character: CharacterDef, companion_id: str, world: WorldStateStore) -> None:
     """性情漂移語意化（設計文件四.3，先前只累積原始 tag 計數、沒有語意判斷的部分）：
-    每當全服玩家對這位人物又新累積了 DRIFT_SYNTHESIS_INTERVAL 次交遊 tag，獨立呼叫一次
+    每當全服玩家對這位人物又新累積了 DRIFT_SYNTHESIS_INTERVAL 次交友 tag，獨立呼叫一次
     LLM，把「大家最近對他做了什麼」的分佈濃縮成一句漂移後的性情描述，寫回共用世界狀態
     （build_system_prompt 已經會讀取並顯示給下一輪對話參考）。這是全服共用的判斷，不是
     某個玩家專屬的，所以不回傳訊息給玩家看——純粹背景更新，失敗就跳過，下次互動再試。"""

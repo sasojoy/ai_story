@@ -407,7 +407,7 @@
         <button class="chip r${m.rank} ${used(m.id) >= m.count ? "used" : ""}" data-act="slot" data-id="${esc(m.id)}" ${used(m.id) >= m.count ? "disabled" : ""}>
           <span class="n">×${m.count - used(m.id)}</span><b>${esc(m.name)}</b><small>${esc(m.tier)}・屬${esc(m.attribute)}</small>
         </button>`).join("")}</div>`
-        : '<p class="muted">背包裡還沒有素材。去探索、歷練打贏，或是碰上奇遇都拿得到。</p>'}
+        : '<p class="muted">背包裡還沒有素材。去探索、遊歷打贏，或是碰上奇遇都拿得到。</p>'}
       <details class="fold"><summary>素材說明</summary><div class="fold-body">${x.bag}</div></details>
       <div class="sticky-act"><button class="btn primary" id="forge" data-act="forge" ${ready ? "" : "disabled"}>開爐煉製</button></div>`;
   }
