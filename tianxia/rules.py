@@ -204,11 +204,11 @@ def season_one(content: Content, world: WorldState) -> bool:
     return calendar.season_one_on(world, content)
 
 
-OffKind = Literal["thresholds", "storylines", "battles", "events"]
+OffKind = Literal["thresholds", "storylines", "battles", "events", "milestones"]
 
 
 def season_one_off(content: Content, world: WorldState, kind: OffKind) -> frozenset[str]:
-    """第一季不觸發的那一種 beta 內容（Scenario.season_one_off 的 thresholds／storylines／battles／events）的 id。
+    """第一季不觸發的那一種 beta 內容（Scenario.season_one_off 的 thresholds／storylines／battles／events／milestones）的 id。
     只在 season_one 成立時有東西：開關關著、或這一季開季時沒開（beta 那一季），一律是空的，beta 照舊。"""
     if not season_one(content, world):
         return frozenset()

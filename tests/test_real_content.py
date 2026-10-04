@@ -761,6 +761,8 @@ def test_season_one_off_blocks_thresholds_storyline_and_beta_battle(tmp_path):
     assert (off.thresholds, off.storylines, off.battles) == (
         ["huangjin_50", "huangjin_60", "huangjin_80", "huangjin_10"], ["huangjin_line"], ["huangjin_showdown"],
     )
+    # 個人目標裡那四個也做不到了（波才的舊事件、平定門檻、beta 那場決戰都關了）：不列（PM：主線與目標不顯示做不到的目標）
+    assert off.milestones == ["beat_bocai", "crush_huangjin", "showdown_win", "showdown_loss"]
     game = _beta_season(c, tmp_path, "on")
     w = game.state.world
     assert w.season_one
@@ -772,6 +774,9 @@ def test_season_one_off_blocks_thresholds_storyline_and_beta_battle(tmp_path):
     assert game.world.get_battle() is None
     assert (w.storyline, w.act) == ("huangjin_line", 0)
     assert "黃巾之亂" not in quest_text(game.state, c) and "黃巾橫行" not in quest_text(game.state, c)
+    goals = quest_text(game.state, c)
+    assert "投身潁川書院或曹氏莊院" in goals and "名望達到 10" in goals  # 做得到的照列
+    assert not any(t in goals for t in ("擊敗波才", "平定黃巾", "打贏黃巾決戰", "黃巾決戰落敗"))
     assert "huangjin_showdown" not in [b.id for b in game.admin_battles()]
     assert "huangjin_60" not in [x.id for x in game.admin_fires()]
     assert game.admin_start_battle("huangjin_showdown", now=0.0) == ["（沒有這場戰鬥。）"]
@@ -781,6 +786,7 @@ def test_season_one_off_blocks_thresholds_storyline_and_beta_battle(tmp_path):
     game = _beta_season(beta, tmp_path, "off")
     w = game.state.world
     assert not w.season_one and "黃巾之亂" in quest_text(game.state, beta)
+    assert all(t in quest_text(game.state, beta) for t in ("擊敗波才", "平定黃巾", "打贏黃巾決戰", "黃巾決戰落敗"))
     _push_huangjin_to(game, 60)
     check_thresholds(game.state, beta, game.world, now=0.0)
     assert {"huangjin_50", "huangjin_60"} <= w.fired_thresholds and "road_blocked" in w.flags

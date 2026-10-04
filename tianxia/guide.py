@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from .models import Content, TutorialStep
-from .rules import apply_effect, check_condition
+from .rules import apply_effect, check_condition, season_one_off
 from .state import GameState
 from .world import current_act, current_storyline, storyline_off
 from .world_state import WorldStateStore
@@ -82,7 +82,8 @@ def quest_text(state: GameState, content: Content) -> str:
     endings = [e for e in content.scenario.endings if e.storyline in lines and e.hint]
     if endings:
         parts.append("**可能的結局**\n\n" + "\n".join(f"- {e.title}：{e.hint}" for e in endings))
-    milestones = content.scenario.milestones
+    hidden = season_one_off(content, w, "milestones")  # 第一季做不到的 beta 個人目標不列（計畫 T8）
+    milestones = [m for m in content.scenario.milestones if m.id not in hidden]
     if milestones:
         parts.append("**個人目標**\n\n" + "\n".join(
             f"- {'☑' if check_condition(m.condition, state) else '☐'} {m.text}" for m in milestones
