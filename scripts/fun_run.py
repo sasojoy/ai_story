@@ -282,8 +282,8 @@ def _play(content, seed: int, db_path: Path, *, no_craft=False, no_train=False, 
 
     real_can_craft = craft.can_craft
 
-    def lenient_can_craft(state, cnt, ids, kind, world=None):
-        return real_can_craft(state, cnt, ids, kind, None)  # 重現舊行為：不檢查「這門你已經有了」
+    def lenient_can_craft(state, cnt, ids, world=None):
+        return real_can_craft(state, cnt, ids, None)  # 重現舊行為：不檢查「這門你已經有了」
 
     for step in range(MAX_STEPS):
         if game.state.world.ended:

@@ -175,7 +175,7 @@ def test_bag_text_lists_what_you_hold_high_tier_first(state, content):
 
 
 def test_craft_line_asks_for_two_materials_first(state, content):
-    line = skillview.craft_line(state, content, [], "武學")
+    line = skillview.craft_line(state, content, [])
     assert "選 2 樣素材" in line and "目前心得 0" in line
     assert "凡品配方不花心得" in line and "閉關" in line  # 告訴玩家心得從哪裡來
 
@@ -185,8 +185,8 @@ def test_craft_line_shows_the_cost_and_what_you_have(state, content):
 
     materials.grant(state, content, "gang_3", 2)
     state.player.stats["xinde"] = 100
-    line = skillview.craft_line(state, content, ["gang_3", "gang_3"], "武學")
-    assert "隕鐵膽＋隕鐵膽 → 一門武學" in line and "你有 100 點" in line
+    line = skillview.craft_line(state, content, ["gang_3", "gang_3"])
+    assert "隕鐵膽＋隕鐵膽 → 一門功法" in line and "開爐才知道" in line and "你有 100 點" in line
     assert "⚠" not in line
 
 
@@ -194,8 +194,8 @@ def test_craft_line_says_a_common_recipe_is_free(state, content):
     from tianxia import materials
 
     materials.grant(state, content, "gang_1", 2)
-    line = skillview.craft_line(state, content, ["gang_1", "gang_1"], "武學")
-    assert "精鐵砂＋精鐵砂 → 一門武學" in line and "不花心得" in line
+    line = skillview.craft_line(state, content, ["gang_1", "gang_1"])
+    assert "精鐵砂＋精鐵砂 → 一門功法" in line and "不花心得" in line
     assert "⚠" not in line
 
 
@@ -204,7 +204,7 @@ def test_craft_line_explains_why_it_cannot_be_done(state, content):
 
     materials.grant(state, content, "gang_3", 2)
     state.player.stats["xinde"] = 0
-    line = skillview.craft_line(state, content, ["gang_3", "gang_3"], "武學")
+    line = skillview.craft_line(state, content, ["gang_3", "gang_3"])
     assert "⚠" in line and "心得不足" in line
 
 
