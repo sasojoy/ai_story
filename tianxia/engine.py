@@ -13,7 +13,7 @@ from pydantic import BaseModel
 
 from . import (
     atlas, battle_instance, battlelog, calendar, companion_agent, craft, encounter, event_llm, figures, flavor, foreshadow,
-    journal, materials, orders, push, roster, skillview, team, timetable,
+    journal, materials, orders, push, ranks, roster, skillview, team, timetable,
 )
 from .events import choice_label, event_candidates, has_events_here, pick_event, visible_choices
 from .guide import base_step_count, note_action, quest_text, tutorial_intro
@@ -2880,7 +2880,7 @@ class Game:
                           "hp": int(mate_now), "hp_max": int(mate_cap)})
         data = {
             "name": p.name,
-            "affiliation": "・".join(name for name in (sect, faction) if name) or "散人",
+            "affiliation": "・".join(name for name in (sect, faction, ranks.title(c, s)) if name) or "散人",
             "anonymous": p.anonymous,
             "level": p.member.level,
             "location": c.locations[p.location].name,
