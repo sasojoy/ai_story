@@ -11,7 +11,7 @@ import random
 from . import atlas, rules, server_bots
 from .bot import wants_heal
 from .engine import FREE_TEXT_OPTION, Game, Option
-from .models import Effect, FactionDef
+from .models import Content, Effect, FactionDef
 from .state import BotProfile
 
 REWARD_STATS = ("str", "agi", "con", "wis", "silver", "fame", "xinde")
@@ -19,7 +19,7 @@ TREND_WEIGHT = 10.0  # 推大勢一點，抵得過十點獎勵
 JOIN_BATTLE_SCORE = 100.0
 ACT_SCORES = {"explore": 1.0, "socialize": 0.8}
 TRAIN_SCORE = 0.6  # 遊歷本身的分數（低於探索）；對自己陣營有利的地點再加上大勢分
-HOME_MOVE_SCORE = 0.3  # 往自己陣營投靠點一帶走
+HOME_MOVE_SCORE = 0.3  # 往自己陣營的地盤走（投靠點一帶；第一季濃縮版是輸得最多的那條戰線，離得還遠時是往那邊的下一站）
 AWAY_MOVE_SCORE = 0.1
 TRAIN_MOVE_SCORE = 0.5  # 往「遊歷對自己陣營有利」的地點走，額外加分
 PRACTICE_CHANCE = 0.2  # 每次行動順便鍛鍊一門的機率（練功不花心得，不能每次都練）
@@ -108,7 +108,7 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
     if kind == "call":
         return 0.0 if arg == "back" else None  # 假人不求見大勢人物（不呼叫模型）；萬一停在求見選單上，只會按返回
     if kind == "move":
-        base = HOME_MOVE_SCORE if arg in _home(game, profile) else AWAY_MOVE_SCORE
+        base = HOME_MOVE_SCORE if arg == _front_hop(game, profile) or arg in _home(game, profile) else AWAY_MOVE_SCORE
         return base + (TRAIN_MOVE_SCORE if _train_value(game, profile, arg) > 0 else 0.0)
     if kind == "act":
         if arg == "call":
@@ -232,9 +232,22 @@ def _home(game: Game, profile: BotProfile) -> set[str]:
         return set()
     front = _losing_front(game, faction_id)
     if front is not None:
-        return {loc_id for loc_id in game.content.locations if rules.front_of(game.content, loc_id) == front}
+        return set(_front_locations(game.content, front))
     join_at = _faction(game, faction_id).join_at
     return set(join_at) | {n for loc_id in join_at for n in game.content.locations[loc_id].connections}
+
+
+def _front_locations(content: Content, front: str) -> list[str]:
+    """這條戰線上的所有地點（照內容檔的順序）。"""
+    return [loc_id for loc_id in content.locations if rules.front_of(content, loc_id) == front]
+
+
+def _front_hop(game: Game, profile: BotProfile) -> str | None:
+    """第一季濃縮版：假人還沒到己方輸得最多的那條戰線上，往那條戰線路程最近的地點走的下一站（鄰居裡沒有戰線上的地點時，
+    光看「目的地在不在地盤」沒有方向，會亂走）；已經在戰線上、走不到、沒有這種戰線（開關關著、豪強、散人）時是 None。"""
+    faction_id = game.state.player.faction or profile.faction
+    front = _losing_front(game, faction_id) if faction_id is not None else None
+    return None if front is None else next_hop(game, _front_locations(game.content, front))
 
 
 def _losing_front(game: Game, faction_id: str) -> str | None:

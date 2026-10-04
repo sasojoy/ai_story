@@ -472,3 +472,45 @@ def test_bot_heads_to_the_losing_front(real):
     assert {"changshe", "huangjin_camp"} <= home
     assert {rules.front_of(real, loc) for loc in home} == {"yingru"}
     assert bot_policy._home(game, warlord) == _join_home(real, "haoqiang")  # 豪強對戰線沒有目標：照投靠點
+
+
+def test_bot_far_from_the_losing_front_takes_the_step_toward_it(real):
+    """離戰線還遠的假人（官軍在南陽宛城，冀州輸最多）：只有「往那條戰線路程最近的地點走的下一站」拿 HOME_MOVE_SCORE，
+    鄰居都不在冀州，光靠「目的地在地盤裡」的一步偏好沒有方向；已經在戰線上、或開關關著，照舊。"""
+    real.config.season_one = True
+    game = _game(real)
+    game.state.world.season_one = True
+    _set_fronts(game.state, 30, 35, 80)
+    game.state.player.faction = "guan"
+    game.state.player.location = "wan_city"
+    profile = BotProfile(personality="普通", seed=1, faction="guan", season_number=1)
+    jizhou = [loc for loc in real.locations if rules.front_of(real, loc) == "jizhou"]
+
+    def tier(dest):
+        """移動選項的分數去掉「遊歷對自己有利」那一份加分，剩下的是 HOME／AWAY 哪一檔（用同一道加法還原，不留浮點誤差）。"""
+        value = bot_policy.score(game, next(o for o in game.options(odds=False) if o.id == f"move:{dest}"), profile)
+        for base in (bot_policy.HOME_MOVE_SCORE, bot_policy.AWAY_MOVE_SCORE):
+            if value in (base, base + bot_policy.TRAIN_MOVE_SCORE):
+                return base
+        raise AssertionError(f"move:{dest} scored {value}, neither tier")
+
+    hop = bot_policy.next_hop(game, jizhou)
+    neighbours = [str(n) for n in real.locations["wan_city"].connections]
+    assert hop in neighbours and hop not in bot_policy._home(game, profile)  # 一步偏好看不到它
+    assert bot_policy._front_hop(game, profile) == hop and tier(hop) == bot_policy.HOME_MOVE_SCORE
+    assert [tier(n) for n in neighbours if n != hop] == [bot_policy.AWAY_MOVE_SCORE] * (len(neighbours) - 1)
+
+    game.state.player.location = "guangzong"  # 已經在冀州：照舊，往戰線上的地點走拿 HOME
+    assert bot_policy.next_hop(game, jizhou) is None and bot_policy._front_hop(game, profile) is None
+    here = [str(n) for n in real.locations["guangzong"].connections]
+    assert any(rules.front_of(real, n) == "jizhou" for n in here)
+    for n in here:
+        expected = bot_policy.HOME_MOVE_SCORE if rules.front_of(real, n) == "jizhou" else bot_policy.AWAY_MOVE_SCORE
+        assert tier(n) == expected
+
+    game.state.player.location = "wan_city"  # 這一季沒蓋章：照舊，只看投靠點一帶，沒有往戰線的下一站
+    game.state.world.season_one = False
+    assert bot_policy._front_hop(game, profile) is None
+    old_home = _join_home(real, "guan")
+    for n in neighbours:
+        assert tier(n) == (bot_policy.HOME_MOVE_SCORE if n in old_home else bot_policy.AWAY_MOVE_SCORE)
