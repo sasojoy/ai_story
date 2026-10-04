@@ -305,7 +305,7 @@
       <g class="w-shake">
         <g class="w-flames${ready ? " hot" : ""}">${flames}</g>
         <circle r="${r + 3}" class="w-hub-rim"/>
-        <g class="w-spin w-taichi" style="${spinAt(ready ? 3 : 28)}">
+        <g class="w-spin w-taichi${ready ? " hot" : ""}" style="${spinAt(ready ? 3 : 28)}">
           <circle r="${r}" class="w-yang"/>
           <path d="M0,${-r} A${r},${r} 0 0 1 0,${r} A${r / 2},${r / 2} 0 0 1 0,0 A${r / 2},${r / 2} 0 0 0 0,${-r} Z" class="w-yin"/>
           <circle cy="${-r / 2}" r="${r / 7}" class="w-yang"/><circle cy="${r / 2}" r="${r / 7}" class="w-yin"/>
@@ -363,6 +363,15 @@
     const here = extras.length ? `<details class="fold here"><summary>此地還能做 ${extras.length} 件事</summary><div class="fold-body options">${extras.map((o) => `
         <button class="btn" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}><span>${esc(o.label)}</span></button>`).join("")}</div></details>` : "";
     return `<div class="act-bar" role="group" aria-label="行動">${cells.join("")}</div>${moveCard}${here}`;
+  }
+
+  // 展開移動之後，把走法與目的地那張卡捲到剛好露出來（W18 的作法搬過來：狀態列有心得提示時整頁往下推，
+  // 卡片下緣會落到底部分頁列底下）。block: "nearest"：本來就看得到就不動；離分頁列多遠由 CSS 的 scroll-margin-bottom 決定
+  function revealMoveCard() {
+    const card = document.querySelector("#page .act-move");
+    if (!card) return;
+    const calm = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    card.scrollIntoView({ block: "nearest", behavior: calm ? "auto" : "smooth" });
   }
 
   function pageJianghu() {
@@ -1109,7 +1118,11 @@
           if (S.craftSel.length === (S.menxia?.per_craft || 2)) await forge();
           else toast("先挑兩樣素材放進爐裡。");
           break;
-        case "wheel": S.wheelSel = S.wheelSel === el.dataset.key ? null : el.dataset.key; renderPage(); break;
+        case "wheel":
+          S.wheelSel = S.wheelSel === el.dataset.key ? null : el.dataset.key;
+          renderPage();
+          if (S.wheelSel) revealMoveCard(); // 收起（再點一次）不捲
+          break;
         case "layer": S.layer = el.dataset.layer; await loadMap(S.map?.selected); break;
         case "map-zoom": mapZoom(el.dataset.step); break;
         case "map-home": mapHome(); break;
