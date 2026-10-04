@@ -266,6 +266,12 @@ def main_view(game: Game) -> dict:
     }
     if "fronts" in status:  # 第一季濃縮版才有：江湖頁的三條戰況（開關關著時不送，頁面照舊）
         view["fronts"] = status["fronts"]
+    result = game.season_result()  # 第一季休季：江湖頁最上面的結算卡（計畫 T9；開關關著、進行中都不送）
+    if result is not None:
+        view["season_result"] = {
+            **result, "text": md(result["text"]),
+            "timeline": [{**row, "text": md(row["text"])} for row in result["timeline"]],
+        }
     return view
 
 

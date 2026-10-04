@@ -235,3 +235,72 @@ def test_an_idle_season_lasts_to_week_ten(on):
         game.advance(3600)
     w = game.state.world
     assert calendar.point(w.time, on, w).week >= on.config.decisive_from_week
+
+
+# ── Task 3：休季的結算卡 ─────────────────────────────────────
+
+
+def test_season_result_view(on):
+    game = _game(on)
+    game.state.player.faction = "guan"
+    _stances(game, huangjin_fronts=40, geju=20)
+    _to_finale(game, 30)
+    game.advance(120)
+    result = game.season_result()
+    assert result["title"] == "黃巾敗退" and result["text"].startswith(PREFACE)
+    assert [(s["side"], s["name"], s["value"]) for s in result["stances"]] == [
+        ("guan", "官軍", 60), ("huang", "黃巾軍", 40), ("haoqiang", "地方豪強", 20),
+    ]
+    assert [(f["name"], f["value"]) for f in result["fronts"]] == [("潁川汝南", 40), ("南陽", 40), ("冀州", 40)]
+    rows = result["timeline"]
+    assert len(rows) == 12 and (rows[-1]["week"], rows[-1]["title"]) == (12, "下曲陽・季末")
+    assert rows[-1]["text"].startswith(PREFACE) and rows[-1]["locked_by"] is None
+    assert rows[0]["text"] == "（這一季沒有發生。）"  # 這個測試把季末以前的大事都記成跳過了
+    assert [r["faction"] for r in result["rankings"]] == ["guan", "huang", "haoqiang"]  # RF5：沒人出力也有那一格
+    assert all(r["rows"] == [] for r in result["rankings"])
+
+
+def test_season_result_names_the_locker_as_shown(on):
+    """時刻表那一列寫公告上的名字：匿名鎖定的人寫「某位少俠」，不是真名。"""
+    from tianxia.state import Lock
+
+    game = _game(on)
+    _stances(game, huangjin_fronts=40, geju=20)
+    _quiet_until_finale(game)
+    w = game.state.world
+    w.timeline["changshe_fire"].locked_by = "趙甲"
+    w.timeline["changshe_fire"].text = "長社的公告。"
+    w.locks["changshe_fire"] = Lock(side="guan", name="趙甲", time=0.0, shown="某位少俠")
+    w.time = w.schedule["finale"] - 30
+    game.advance(120)
+    row = next(r for r in game.season_result()["timeline"] if r["title"] == "長社火攻")
+    assert row["locked_by"] == "某位少俠" and row["text"] == "長社的公告。"
+
+
+def test_season_result_after_an_early_end_marks_what_never_came(on):
+    on.config.admins = ["管"]
+    admin = _game(on, "管")
+    admin.advance(200)  # 跨過第一個曆時交界（約 107 秒）：第 1 週的大事結算了
+    admin.admin_end_season(now=admin.now)
+    rows = admin.season_result()["timeline"]
+    assert rows[0]["text"] and rows[0]["text"] != "（季已落幕，沒有發生。）"  # 第 1 週起義在收季之前發生了
+    assert rows[5]["text"] == "（季已落幕，沒有發生。）"  # 第 7 週的事沒輪到
+
+
+def test_season_result_only_when_resting_in_season_one(on):
+    assert _game(on).season_result() is None  # 還在進行
+
+
+def test_switch_off_season_end_has_no_result_card(real):
+    off = _game(real, "乙")
+    off.advance(14 * 86400 + 60)
+    assert off.state.world.ended and off.season_result() is None  # beta 季收季：沒有結算卡
+
+
+def test_no_next_event_countdown_once_the_season_rests(on):
+    """休季時狀態列不再倒數下一件大事（收季之後沒有下一件了）。"""
+    on.config.admins = ["管"]
+    admin = _game(on, "管")
+    assert admin.status_data()["next_event"] is not None
+    admin.admin_end_season(now=admin.now)
+    assert admin.status_data()["next_event"] is None

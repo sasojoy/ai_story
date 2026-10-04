@@ -398,6 +398,22 @@
     return (strong || box.content).textContent.trim();
   }
 
+  // 第一季的結算卡（休季才有，計畫 T9）：結局與季末公告、最終態勢與三條戰況；十二件大事與各陣營出力前五收在摺疊裡
+  function resultHtml(r) {
+    const bars = (rows, label) => `<div class="fronts" role="group" aria-label="${label}">${rows.map((x) => `
+      <div class="front"><div class="front-head"><span>${esc(x.name)}</span><b>${x.value}</b></div>
+        <div class="front-bar" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${x.value}" aria-label="${esc(x.name)}"><i style="width:${pct(x.value, 100)}%"></i></div></div>`).join("")}</div>`;
+    const events = r.timeline.map((e) => `<div class="result-event"><b>第 ${e.week} 週・${esc(e.title)}</b>${
+      e.locked_by ? `<small>${esc(e.locked_by)} 改寫</small>` : ""}${e.text}</div>`).join("");
+    const ranks = r.rankings.map((f) => `<div class="result-rank"><b>${esc(f.name)}</b>${f.rows.length
+      ? `<ol>${f.rows.map(([n, v]) => `<li><span>${esc(n)}</span><i>${v}</i></li>`).join("")}</ol>`
+      : "<p>（沒有人出力）</p>"}</div>`).join("");
+    return `<section class="card result"><h2>賽季落幕：${esc(r.title)}</h2><div class="result-text">${r.text}</div>
+      <h3>最終態勢</h3>${bars(r.stances, "最終態勢")}<h3>最終戰況</h3>${bars(r.fronts, "最終戰況")}
+      <details class="fold"><summary>這一季的十二件大事</summary><div class="fold-body">${events}</div></details>
+      <details class="fold"><summary>各陣營出力前五</summary><div class="fold-body result-ranks">${ranks}</div></details></section>`;
+  }
+
   // 第一季濃縮版的三條戰況（伺服器有送 fronts 才畫）：0 是官軍穩控、100 是黃巾控制，條上黃的那一截是黃巾佔的
   function frontsHtml(fronts) {
     return `<div class="fronts" role="group" aria-label="戰況：0 官軍穩控，100 黃巾控制">${fronts.map((f) => `
@@ -455,9 +471,10 @@
       : "";
     // 三條戰況排在行動列下面、小地圖上面，不擠掉第一屏的公告卡、「剛剛」、場景與行動列
     const fronts = m.fronts ? frontsHtml(m.fronts) : "";
+    const resultCard = m.season_result ? resultHtml(m.season_result) : "";  // 休季的結算卡排在最上面（計畫 T9）
     // 劇情文字在上、行動在下（企劃者 2026-10-04）。行動列只有一排，375×812 上「剛剛」、場景與整排行動都在第一屏。
     // 路上的三個捷徑（links）緊貼在選項底下，戰況條排在捷徑之後，不要把它插到選項與捷徑中間
-    return `${board}${quest}${now}${scene}${free}${menu}${links}${fronts}${tail}`;
+    return `${resultCard}${board}${quest}${now}${scene}${free}${menu}${links}${fronts}${tail}`;
   }
 
   // ── 修練 ──

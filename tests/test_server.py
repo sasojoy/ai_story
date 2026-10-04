@@ -1683,3 +1683,22 @@ def test_the_page_offers_the_box_and_rejects_empty_words(client, monkeypatch):
     with mock.patch.object(server.event_llm, "assess_event_success_rate", return_value=50):
         main = client.post("/api/answer", json={"text": "大喊官兵來了"}).json()["main"]
     assert main["event_free_text"] is None
+
+
+def test_main_view_sends_the_season_result_only_when_season_one_rests(game, monkeypatch):
+    """第一季（開關開著、這一季蓋了章）收季之後才有結算卡；進行中、開關關著收季都沒有（計畫 T9）。"""
+    monkeypatch.setattr(server.CONTENT.config, "admins", ["測試"])
+    assert "season_result" not in server.look(game, server.main_view)
+    monkeypatch.setattr(server.CONTENT.config, "season_one", True)
+    game.world.mutate_season(lambda season: setattr(season, "season_one", True))
+    assert "season_result" not in server.look(game, server.main_view)  # 還在進行
+    game.admin_end_season(now=game.now)
+    result = server.look(game, server.main_view)["season_result"]
+    assert result["title"] and result["text"].startswith("<p>戰事提前收束。")
+    assert len(result["timeline"]) == 12 and all(row["text"].startswith("<p>") for row in result["timeline"])
+
+
+def test_switch_off_season_end_sends_no_result_card(game, monkeypatch):
+    monkeypatch.setattr(server.CONTENT.config, "admins", ["測試"])
+    game.admin_end_season(now=game.now)
+    assert game.state.world.ended and "season_result" not in server.look(game, server.main_view)

@@ -257,6 +257,24 @@ details.fold.bulletin > .fold-body { border-color: var(--gold); max-height: 50vh
 .front-head b { font-variant-numeric: tabular-nums; }
 .front-bar { height: 6px; margin-top: 4px; border-radius: 3px; background: var(--kuai); overflow: hidden; }
 .front-bar > i { display: block; height: 100%; background: var(--gold); transition: width 0.4s ease; }
+/* 第一季的結算卡（休季，計畫 T9） */
+.result h2 { margin: 0 0 6px; font-size: 18px; }
+.result h3 { margin: 10px 0 4px; font-size: 13px; color: var(--ink-2); font-weight: 600; }
+.result-text { line-height: 1.6; }
+.result-text p { margin: 0; }
+.result .fronts { margin-bottom: 4px; }
+.result .fold { margin-top: 8px; }
+.result-event { padding: 6px 0; border-top: 1px solid var(--line); font-size: 13px; line-height: 1.5; }
+.result-event:first-child { border-top: 0; padding-top: 0; }
+.result-event b { display: block; }
+.result-event small { display: block; color: var(--ink-2); }
+.result-event p { margin: 2px 0 0; }
+.result-ranks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; font-size: 13px; }
+.result-rank ol { margin: 4px 0 0; padding-left: 18px; }
+.result-rank li { display: flex; justify-content: space-between; gap: 4px; }
+.result-rank li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.result-rank li i { font-style: normal; font-variant-numeric: tabular-nums; color: var(--ink-2); }
+.result-rank p { margin: 4px 0 0; color: var(--ink-2); }
 .linkish { border: 0; background: none; color: var(--accent); cursor: pointer; padding: 6px 2px; font-size: 14px; }
 
 /* ── 修練 ── */
