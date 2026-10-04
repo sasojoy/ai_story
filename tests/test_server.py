@@ -847,6 +847,21 @@ def test_next_season_runs_the_admin_rollover(client, monkeypatch):
     assert game.state.player.season_number == 2
 
 
+def test_server_admin_end_season(client, monkeypatch):
+    """立刻收季：只有管理者的帳號行；一般玩家打同一個網址被擋下（跟其他管理者動作同一種回法），季照舊在進行。"""
+    _player(client)
+    game = server.game_for("沈青衫")
+    refused = client.post("/api/do/end_season", json={})
+    assert refused.status_code == 400 and refused.json() == {"error": "只有管理者能這麼做。"}
+    assert game.world.season_phase() == "running"
+
+    _admin(client, monkeypatch)
+    out = client.post("/api/do/end_season", json={})
+    assert out.status_code == 200
+    assert game.world.season_phase() == "resting"
+    assert "賽季落幕" in out.json()["message"]
+
+
 def test_open_season_only_works_for_admins(tmp_path, monkeypatch):
     monkeypatch.setattr(server.CONTENT.config, "auto_open_first_season", False)
     fresh = Game.new(server.CONTENT, "路人", world=open_world(tmp_path / "world.db"))

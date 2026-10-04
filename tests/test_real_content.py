@@ -75,6 +75,13 @@ def test_real_content_loads():
     assert {t.id for t in c.scenario.trends} == {"huangjin", "yuxi"}
 
 
+def test_the_season_one_switch_stays_off_until_the_condensed_build_ships():
+    """濃縮版做到一半時 main 也會換上試玩伺服器：開關關著、季長照舊，正在跑的那一季才不會被提早收掉或套上半套規則。"""
+    config = load_content(CONTENT_DIR).config
+    assert config.season_one is False
+    assert config.season_days == 14
+
+
 def test_real_content_waits_for_the_admin_to_open_the_season():
     assert load_content(CONTENT_DIR).config.auto_open_first_season is False
 

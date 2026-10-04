@@ -26,7 +26,9 @@ from .ollama_client import OllamaClient
 from .rules import apply_effect, change_trend, check_who, current_day, fill_marks, free_text_rate, rate_words, roll_check
 from .sqlite_world import open_world
 from .state import PLAYER, BattleRecord, GameState, JournalEntry, Journey, Rumor, WorldState, new_game_state
-from .world import advance_world_state, check_thresholds, end_season, fire_by_id, sim_tick, start_pending_battle
+from .world import (
+    _season_vehicle, advance_world_state, check_thresholds, end_season, fire_by_id, sim_tick, start_pending_battle,
+)
 from .world_state import WorldStateStore
 
 HOUR = 3600
@@ -114,8 +116,8 @@ class Game:
         原本每個玩家各自獨立的 WorldState）。全服第一次開局（還沒有任何共用賽季）在這裡
         種出第一季，預設停在籌備中等管理者開季；共用賽季已經換過一輪（不管是自己剛開下一季，
         還是連線期間別的玩家觸發的）時，幫這個玩家的角色也開新的一季——角色本身（等級/位置/隊伍）
-        重新開始，但跟同伴的好感度/關係現況/對話歷史是「我跟他的交情」，不是賽季道具，
-        保留下來。__init__ 時（讀存檔／新角色）要呼叫，之後每次 sync() 也要呼叫，這樣連線
+        重新開始；跟同伴的關係現況/對話歷史是「我跟他的交情」，不是賽季道具，保留下來，
+        好感度只帶一成（見 _reset_player_for_new_season）。__init__ 時（讀存檔／新角色）要呼叫，之後每次 sync() 也要呼叫，這樣連線
         途中別人把賽季推到下一輪時，我才不會一直停在上一季的畫面。"""
         shared = self.world.get_season()
         if not shared.storyline:  # 全服第一次開局：種出第一季（要不要直接開季看內容設定）
@@ -129,13 +131,16 @@ class Game:
         """新一季：玩家整個 GameState 重新開始（角色、江湖紀錄、戰報都是上一季的事了），
         只保留現實時間同步點（last_real，不然下次 sync 會把一整季沒上線的時間都當成
         流逝掉）跟幾項明確認定「跟賽季無關、是我自己的」的東西——新手引導進度、跟同伴的
-        好感度/關係現況/對話歷史（見設計討論：好感度跨季保留，只重組隊伍）。world 欄位
-        這裡不用管，呼叫端（_reconcile_season）緊接著就會把它指向共用賽季。"""
+        關係現況/對話歷史（整份保留）；好感度則只帶一成（Config.affinity_carry_ratio、無條件捨去，
+        80→8、5→0：第一季設計第十四節，下一季最多從 10 起步，交情要重新經營）。world 欄位
+        這裡不用管，呼叫端（_reconcile_season）緊接著就會把它指向共用賽季。
+        之後新增的 PlayerState 欄位預設就跟著新角色重來；要跨季保留的才加進下面這份清單。"""
         old = self.state
         fresh = new_game_state(self.content, old.player.name)
         fresh.last_real = old.last_real
         fresh.player.tutorial_step = old.player.tutorial_step
-        fresh.player.affinities = old.player.affinities
+        ratio = self.content.config.affinity_carry_ratio
+        fresh.player.affinities = {key: int(value * ratio) for key, value in old.player.affinities.items()}
         fresh.player.relationship_notes = old.player.relationship_notes
         fresh.player.dialogue_history = old.player.dialogue_history
         fresh.player.used_dialogue_options = old.player.used_dialogue_options
@@ -2186,6 +2191,27 @@ class Game:
             return self._log(["（現在不是籌備期，無法開季。）"])
         msgs = [f"══ {self.content.scenario.name}・開季 ══"]
         self._write("開季", msgs, tag="管理者")
+        return self._log(msgs)
+
+    def admin_end_season(self, now: float) -> list[str]:
+        """管理者立刻收季：進行中 → 休季（之後再由 admin_next_season 開下一季）。照自然收季的做法算結局、
+        寫江湖史、附武學榜（world.end_season），只是不必等季末或快轉十幾天——試玩伺服器要收掉這一季用的。
+        不推進時間：季的時間停在收季那一刻。now 跟 admin_open_season／admin_next_season 同一種簽名，收季本身用不到。"""
+        if not self.is_admin():
+            return self._log(["（只有管理者能收季。）"])
+        if self.world.season_phase() != "running":
+            return self._log(["（賽季不在進行中，沒有可以收的。）"])
+        msgs: list[str] = []
+        self.world.mutate_season(
+            lambda s: msgs.extend(end_season(_season_vehicle(self.content, s), self.content, self.world))
+        )
+        # 沒打完的決戰直接收掉、不套用結果（這一季勝負已經定了，跟自然收季一樣，見 _battle_status，FB-015）。
+        # 放在 mutate_season 外面：mutate 不能巢狀，內層寫的會被外層整份存檔蓋掉
+        battle = self.world.get_battle()
+        if battle is not None and battle.phase != "ended":
+            self.world.clear_battle()
+        self.state.world = self.world.get_season()  # 讀回完整的一份（mutate_season 回傳的不含傳聞與江湖史）
+        self._write("收季", msgs, tag="管理者")  # 跟開季一樣，管理者自己的江湖紀錄留一則
         return self._log(msgs)
 
     def admin_next_season(self, now: float) -> list[str]:
