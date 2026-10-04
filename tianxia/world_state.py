@@ -105,7 +105,7 @@ def stamp_season(season: WorldState, content: Content) -> None:
     cfg = content.config
     season.season_one = cfg.season_one
     season.length_days = cfg.season_days
-    season.schedule = default_schedule(content) if cfg.season_one else {}
+    season.schedule = default_schedule(content, season) if cfg.season_one else {}  # 照剛蓋好的季長排
 
 
 def season_length_days(season: WorldState, content: Content) -> float:

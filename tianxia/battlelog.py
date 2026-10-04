@@ -5,8 +5,9 @@ encounter.EncounterResult 存成 BattleRecord，並產生場景卡片與戰報�
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 
-from . import team
+from . import calendar, team
 from .encounter import EncounterResult, describe_result
 from .models import Content, Squad
 from .state import BattleRecord, Fighter, GameState
@@ -71,8 +72,8 @@ def find(state: GameState, record_id: int | None) -> BattleRecord | None:
 
 
 def clock_text(time: float) -> str:
-    """遊戲時間，例如「第2天 14:05」。"""
-    return f"第{int(time // DAY) + 1}天 {int(time % DAY // HOUR):02d}:{int(time % HOUR // 60):02d}"
+    """遊戲時間，例如「第2天 14:05」。第一季的季曆寫法由呼叫端用 calendar.stamp_text 換掉（見 list_label 的 when）。"""
+    return calendar.day_clock_text(time)
 
 
 def outcome_text(record: BattleRecord) -> str:
@@ -87,18 +88,18 @@ def summary_line(record: BattleRecord) -> str:
     return f"⚔ {record.location}：{outcome_text(record)}"
 
 
-def list_label(record: BattleRecord) -> str:
-    """戰報列表的一列：「大勝　第12場　第1天 08:30　揚州城郊　vs 劫道山賊」。"""
-    return f"{record.tier}　第{record.id}場　{clock_text(record.time)}　{record.location}　vs {record.opponent}"
+def list_label(record: BattleRecord, when: Callable[[float], str] = clock_text) -> str:
+    """戰報列表的一列：「大勝　第12場　第1天 08:30　揚州城郊　vs 劫道山賊」。when 是時間的寫法（第一季給季曆）。"""
+    return f"{record.tier}　第{record.id}場　{when(record.time)}　{record.location}　vs {record.opponent}"
 
 
 def _title(record: BattleRecord) -> str:
     return f"### ⚔ {record.location}・對陣 {record.opponent}"
 
 
-def _when(record: BattleRecord) -> str:
+def _when(record: BattleRecord, when: Callable[[float], str]) -> str:
     kind = KIND_WORDS[record.kind] + (f"：{record.event}" if record.event else "")
-    return f"{clock_text(record.time)}　{kind}"
+    return f"{when(record.time)}　{kind}"
 
 
 def _result_line(record: BattleRecord) -> str:
@@ -142,11 +143,11 @@ def _gains_block(record: BattleRecord) -> list[str]:
     return [f"**獲得與損失**　{gains_text(record)}"]
 
 
-def card_text(record: BattleRecord) -> str:
-    """場景裡的戰鬥卡片（Markdown）：標題、時間與類型、結果、（劇情結果）、獲得與損失。"""
+def card_text(record: BattleRecord, when: Callable[[float], str] = clock_text) -> str:
+    """場景裡的戰鬥卡片（Markdown）：標題、時間與類型、結果、（劇情結果）、獲得與損失。when 是時間的寫法（見 list_label）。"""
     return "\n\n".join([
         _title(record),
-        _when(record),
+        _when(record, when),
         _result_line(record),
         *_story_block(record),
         *_gains_block(record),
@@ -157,11 +158,12 @@ def _ours_line(record: BattleRecord) -> str:
     return "、".join(f"{f.name} Lv{f.level}" for f in record.ours)
 
 
-def detail_text(record: BattleRecord) -> str:
-    """戰報分頁下方的完整內容（Markdown）：陣容、結果、（劇情結果）、得失。全服決戰不列陣容（站哪一邊寫在結果那一行）。"""
+def detail_text(record: BattleRecord, when: Callable[[float], str] = clock_text) -> str:
+    """戰報分頁下方的完整內容（Markdown）：陣容、結果、（劇情結果）、得失。全服決戰不列陣容（站哪一邊寫在結果那一行）。
+    when 是時間的寫法（第一季給季曆，見 list_label）。"""
     return "\n\n".join([
         _title(record),
-        f"{_when(record)}　第 {record.id} 場",
+        f"{_when(record, when)}　第 {record.id} 場",
         *([] if record.kind == "showdown" else [f"**我方**　{_ours_line(record)}"]),
         _result_line(record),
         *_story_block(record),

@@ -11,7 +11,7 @@ import math
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from .battlelog import clock_text
+from .calendar import stamp_text
 from .models import Content, Location, MapRegion, SimPlayer, TravelMode
 from .state import GameState, Rumor
 from .world import current_act, sim_active
@@ -205,7 +205,7 @@ def leader_text(state: GameState, content: Content, name: str) -> str:
     lines = [f"**龍頭人物**　{name}（常出沒在此）", f"- {LEADER_WHO}。", f"- 現在：{leader_activity(state, content, name)}。"]
     news = leader_news(state, name)
     if news:
-        lines += ["- 最近：", *(f"  - {clock_text(r.time)}　{r.text}" for r in news)]
+        lines += ["- 最近：", *(f"  - {stamp_text(r.time, content, state.world)}　{r.text}" for r in news)]
     return "\n".join(lines)
 
 
@@ -501,7 +501,7 @@ def arrival_times(now: float, legs: list[float], mode: TravelMode) -> list[float
 
 def header_text(state: GameState, content: Content) -> str:
     """大地圖頁面上方：目前時間與體力。"""
-    return f"⏳ {clock_text(state.world.time)}　**體力** {int(state.player.stamina)} / {content.config.stamina_max}"
+    return f"⏳ {stamp_text(state.world.time, content, state.world)}　**體力** {int(state.player.stamina)} / {content.config.stamina_max}"
 
 
 def _names(content: Content, loc_ids) -> str:
@@ -538,7 +538,7 @@ def detail_text(state: GameState, content: Content, loc_id: str, odds: Odds) -> 
     story = [f"★ 這一幕主線的目標：{act.goal}" if loc_id in act.places else "不是這一幕主線的目標"]
     news = recent_news(state, loc_id)
     if news:
-        story.append(f"✦ 最近 {NEWS_DAYS} 天的大事與傳聞：\n" + "\n".join(f"- {clock_text(r.time)}　{r.text}" for r in news))
+        story.append(f"✦ 最近 {NEWS_DAYS} 天的大事與傳聞：\n" + "\n".join(f"- {stamp_text(r.time, content, state.world)}　{r.text}" for r in news))
     else:
         story.append(f"最近 {NEWS_DAYS} 天沒有大事或傳聞")
     parts.append("**劇情**　" + "\n\n".join(story))

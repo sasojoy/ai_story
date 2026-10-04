@@ -11,7 +11,7 @@ from tianxia.engine import Game, Option
 from tianxia.martial_arts import MartialArt
 from tianxia.models import Location
 from tianxia.models import ExploreMix
-from tianxia.state import BotProfile, GameState, Journey, Rumor, new_game_state
+from tianxia.state import BotProfile, FigureState, GameState, Journey, Rumor, new_game_state
 from tianxia.sqlite_world import open_world
 
 HOUR = 3600
@@ -3954,6 +3954,8 @@ def test_old_season_not_replayed_when_switch_turns_on(content, world):
     admin.sync(180.0 + calendar.cal_hour_seconds(content))
     assert list(world.get_season().timeline) == ["uprising"]  # 新的一季才照季曆跑
     assert admin.status_data()["calendar"]["week"] == 1
+    past, current = admin.chronicle_text().split("### 第 1 季")[::-1][:2]  # 本季的時間寫季曆，上一季照舊寫天數
+    assert "第1週・週一 01:00　張角率三十六方同時起義。" in current and "第6天　賽季落幕" in past
 
 
 def test_status_shows_calendar_and_next_event(content, world):
@@ -3998,3 +4000,36 @@ def test_open_season_restamps_with_current_profile(content, world):
     admin.sync(100.0 + calendar.cal_hour_seconds(content))
     assert list(world.get_season().timeline) == ["uprising"]
     assert admin.status_data()["calendar"]["week"] == 1
+
+
+
+def test_skipped_events_stay_off_the_bulletin(content, world):
+    """張曼成已經退場：第 7 週秦頡那件記成跳過，公告卡只有同一週的盧植圍廣宗。"""
+    install_season_one(content)
+    game = Game.new(content, "沈浪", rng=random.Random(0), world=world)
+    game.state.world.figures["zhangmancheng"] = FigureState(status="retired")
+    game.advance(calendar.week_start(7, content) + calendar.cal_hour_seconds(content))
+    assert game.state.world.timeline["qinjie"].key == "skip"
+    assert [b.split("**")[1] for b in game.bulletin()] == ["盧植圍廣宗"]
+
+
+def test_timestamps_read_like_the_calendar_when_the_season_is_season_one(content, world):
+    """第一季（開關開著、這一季也蓋了章）：江湖紀錄（含「剛剛」）、江湖史、傳聞、戰報的時間都寫成季曆。"""
+    install_season_one(content)
+    game = Game.new(content, "沈浪", rng=random.Random(0), world=world)
+    game.sync(0.0)
+    game.sync(calendar.cal_hour_seconds(content))  # 第 1 週週一 01:00：三十六方起義
+    assert "剛剛　第1週・週一 01:00" in game.latest_entry_html()
+    assert "第1週・週一 01:00　張角率三十六方同時起義。" in game.chronicle_text()
+    assert "第1週・週一 01:00　三十六方同日起事。" in game.rumors_text()
+    assert "第1週・週一 00:00" in game.journal_html(1, 5)  # 開季那一則
+    assert "第1週・週一 01:00" in atlas.header_text(game.state, content)
+
+
+def test_timestamps_are_unchanged_with_the_switch_off(game):
+    game.advance(HOUR + 5 * 60)
+    game.state.world.chronicle.append(Rumor(time=game.state.world.time, text="測試大事。"))
+    game.notice("測試")
+    assert "剛剛　第1天 01:05" in game.latest_entry_html()
+    assert "第1天　測試大事。" in game.chronicle_text()
+    assert "第1天 01:05" in atlas.header_text(game.state, game.content)

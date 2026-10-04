@@ -7,6 +7,7 @@ sanguo-companions 合併大幅重寫：拿掉 battle.py 的 3v3 全自動戰鬥�
 from __future__ import annotations
 
 import random
+from collections.abc import Callable
 
 from pydantic import BaseModel
 
@@ -342,7 +343,7 @@ class Game:
         j = s.player.journey
         if j is not None:
             end = c.locations[j.path[j.last]].name
-            opts = [Option(id="act:on_road", label=f"（在路上，{battlelog.clock_text(j.arrive_at[j.last])} 抵達{end}）", enabled=False)]
+            opts = [Option(id="act:on_road", label=f"（在路上，{self.stamp(j.arrive_at[j.last])} 抵達{end}）", enabled=False)]
             opts.append(self._back_option())  # 折返（路上設計 3.2）；改去別處在大地圖上安排
             if j.stop_at is None and j.reached < j.last:
                 opts.append(Option(id="act:halt", label=f"喊停（到{c.locations[j.path[j.reached]].name}就停下）"))
@@ -1720,7 +1721,7 @@ class Game:
         arrive = s.player.journey.arrive_at[-1]
         left = atlas.whole_minutes((arrive - s.world.time) / 60)
         verb = "改道" if rerouting else "動身"
-        msg = f"你{verb}{atlas.MODES[mode]}前往{c.locations[route.path[-1]].name}，{battlelog.clock_text(arrive)} 抵達（約 {left} 分鐘後）。"
+        msg = f"你{verb}{atlas.MODES[mode]}前往{c.locations[route.path[-1]].name}，{self.stamp(arrive)} 抵達（約 {left} 分鐘後）。"
         self._hide(msg)  # 場景會顯示「在路上」，紀錄只留標題與走法
         self._sync_battle_presence()
         return [msg]
@@ -1829,7 +1830,7 @@ class Game:
         left = atlas.whole_minutes(max(0.0, end - s.world.time) / 60)
         line = (
             f"往{c.locations[j.path[j.last]].name}（{atlas.MODES[j.mode]}），"
-            f"{battlelog.clock_text(end)} 抵達，還要約 {left} 分鐘"
+            f"{self.stamp(end)} 抵達，還要約 {left} 分鐘"
         )
         if j.reached < j.last:
             line += f"；下一站{c.locations[j.path[j.reached]].name}"
@@ -2115,7 +2116,7 @@ class Game:
 
     def battle_card(self) -> str | None:
         record = battlelog.find(self.state, self.state.battle_card)
-        return battlelog.card_text(record) if record else None
+        return battlelog.card_text(record, self.stamp) if record else None
 
     def battle_card_id(self) -> int | None:
         record = battlelog.find(self.state, self.state.battle_card)
@@ -2125,12 +2126,12 @@ class Game:
         return self.state.battles[0].id if self.state.battles else None
 
     def battle_list(self) -> list[tuple[str, int]]:
-        return [(battlelog.list_label(r), r.id) for r in self.state.battles]
+        return [(battlelog.list_label(r, self.stamp), r.id) for r in self.state.battles]
 
     def battle_detail(self, record_id: int | None = None) -> str:
         s = self.state
         record = battlelog.find(s, record_id) or (s.battles[0] if s.battles else None)
-        return battlelog.detail_text(record) if record else battlelog.NO_RECORD
+        return battlelog.detail_text(record, self.stamp) if record else battlelog.NO_RECORD
 
     def notice(self, text: str, title: str = "提醒") -> list[str]:
         self._write(title, [text])
@@ -2363,7 +2364,7 @@ class Game:
         w, c = self.state.world, self.content
         if not calendar.season_one_on(w, c):
             return {}
-        at = calendar.point(w.time, c)
+        at = calendar.point(w.time, c, w)
         upcoming = timetable.next_event(self.state, c)
         return {
             "calendar": {
@@ -2382,11 +2383,15 @@ class Game:
         w, c = self.state.world, self.content
         if not calendar.season_one_on(w, c):
             return []
-        start = calendar.week_start(calendar.point(w.time, c).week, c) - calendar.EPS
+        start = calendar.week_start(calendar.point(w.time, c, w).week, c, w) - calendar.EPS_SECONDS
         titles = {e.id: e.title for e in c.timetable}
         done = [(i, eid, r) for i, (eid, r) in enumerate(w.timeline.items()) if r.text and r.time >= start]
         done.sort(key=lambda item: (item[2].time, item[0]), reverse=True)
         return [f"**{titles.get(eid, eid)}**\n\n{r.text}" for _, eid, r in done[:BULLETIN_MAX]]
+
+    def stamp(self, time: float, clock: bool = True) -> str:
+        """玩家看得到的遊戲時間（江湖紀錄、江湖史、傳聞、戰報、路上）：第一季寫成季曆，其他時候照舊（calendar.stamp_text）。"""
+        return calendar.stamp_text(time, self.content, self.state.world, clock=clock)
 
     @staticmethod
     def _when_text(d: dict) -> str:
@@ -2444,26 +2449,30 @@ class Game:
         return "\n\n".join(parts) or "（江湖暫時風平浪靜。）"
 
     def rumors_text(self, limit: int = 30) -> str:
-        return _timeline(self.state.world.rumors[-limit:][::-1]) or "（尚無傳聞。）"
+        return _timeline(self.state.world.rumors[-limit:][::-1], self._day_stamp) or "（尚無傳聞。）"
 
     def chronicle_text(self) -> str:
         """江湖史：這一季在最前面，往前每一季各一段（線上架構設計 3.2：江湖史跨季保留），最後是玉璽碎片。"""
         number = self.world.get_season_number()
-        current = _timeline(self.state.world.chronicle) or "（江湖史尚無記載。）"
+        current = _timeline(self.state.world.chronicle, self._day_stamp) or "（江湖史尚無記載。）"
         past = self.world.chronicle_before(number)
         parts = [f"### 第 {number} 季（本季）\n\n{current}" if past else current]
-        parts += [f"### 第 {n} 季\n\n{_timeline(entries)}" for n, entries in past]
+        parts += [f"### 第 {n} 季\n\n{_timeline(entries, calendar.day_text)}" for n, entries in past]  # 上一季照舊寫「第N天」
         parts.append(self.world.jade_seal_summary())
         return "\n\n---\n\n".join(parts)
 
     # ── 江湖紀錄 ──────────────────────────────────────────
 
+    def _day_stamp(self, time: float) -> str:
+        """江湖史與傳聞的時間：沒有季曆時只寫天數（「第2天」），第一季寫季曆。"""
+        return self.stamp(time, clock=False)
+
     def latest_entry_html(self) -> str:
         entries = self.state.journal
-        return journal.card_html(entries[0]) if entries else ""
+        return journal.card_html(entries[0], self.stamp) if entries else ""
 
     def journal_html(self, start: int = 1, limit: int = 5, heading: str = "", empty: str = "") -> str:
-        return journal.rows_html(self.state.journal[start:start + limit], heading, empty)
+        return journal.rows_html(self.state.journal[start:start + limit], heading, empty, self.stamp)
 
     def shows_battle_card(self) -> bool:
         s = self.state
@@ -2488,5 +2497,6 @@ class Game:
         return msgs
 
 
-def _timeline(entries: list[Rumor]) -> str:
-    return "\n\n".join(f"第{int(e.time // DAY) + 1}天　{e.text}" for e in entries)
+def _timeline(entries: list[Rumor], when: Callable[[float], str]) -> str:
+    return "\n\n".join(f"{when(e.time)}　{e.text}" for e in entries)
+

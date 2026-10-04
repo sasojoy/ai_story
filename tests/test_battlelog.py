@@ -197,3 +197,16 @@ def test_a_showdown_report_saved_before_the_side_field_still_loads():
 def test_detail_text_lists_multiple_teammates():
     rec = record(ours=[Fighter(name="沈浪", level=3), Fighter(name="韓鐵", level=2)])
     assert "**我方**　沈浪 Lv3、韓鐵 Lv2" in battlelog.detail_text(rec)
+
+
+
+def test_report_list_and_detail_take_the_calendar_stamp():
+    """戰報的列表與詳情用呼叫端給的時間寫法（第一季是季曆）；不給時照舊「第N天 HH:MM」。"""
+    from tianxia.state import BattleRecord, Fighter
+
+    record = BattleRecord(id=3, time=3900, location="湖邊", kind="train", opponent="水寇", ours=[Fighter(name="沈浪", level=1)],
+                          tier="大勝", our_power=50, difficulty=10)
+    assert "第1天 01:05" in battlelog.list_label(record) and "第1天 01:05" in battlelog.detail_text(record)
+    stamp = lambda t: "第1週・週一 01:05"  # noqa: E731
+    assert battlelog.list_label(record, stamp) == "大勝　第3場　第1週・週一 01:05　湖邊　vs 水寇"
+    assert "第1週・週一 01:05　遊歷" in battlelog.detail_text(record, stamp)

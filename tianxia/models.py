@@ -582,8 +582,10 @@ class Config(_Strict):
     # 全部做完、開測前由 PM 跟季長（season_days 改 2.5）一起打開（計畫 2026-10-04-第一季濃縮版）
     season_one: bool = False
     season_weeks: int = Field(default=12, ge=1)  # 季曆：一季壓成幾週（計畫第六節：季曆秒＝世界秒 × 週數 × 7 ÷ season_days）
-    # 時刻表的人物結局扣多少聲威（時刻表結算文件第一節；退場、重創是聲威歸零，下獄、到任不動聲威）
-    fate_prestige: dict[str, int] = Field(default_factory=lambda: {"重挫": -30, "聲威大減": -30, "受挫": -15})
+    # 時刻表的人物結局扣多少聲威（時刻表結算文件第一節）：只有這三種用詞會扣；退場、重創是聲威歸零，下獄、到任不動聲威
+    fate_prestige: dict[Literal["重挫", "聲威大減", "受挫"], int] = Field(
+        default_factory=lambda: {"重挫": -30, "聲威大減": -30, "受挫": -15}
+    )
     train_stat_chance: float = 0.3
     train_event_chance: float = 0.3
     qiyu_weight_multiplier: float = 1.5

@@ -111,6 +111,9 @@ LUZHI_LOSER = {
     "huang": "官軍的 {loser} 蒐齊的證據送進了大將軍府，何進卻遲遲沒有動作。",
 }
 
+CHANGSHE_LOCKED = "史書上，皇甫嵩趁夜縱火，大破波才於長社。這一次，{name} 讓史書沒有落空。"
+CHANGSHE_LOSER = "黃巾的 {loser} 曾看破火攻，可惜晚了一步。"
+
 
 def season_one_events() -> list:
     """縮小的時刻表，照結算文件的寫法（固定、擲骰、決戰、版本、鎖定、豪強、人物效果各有一件）。"""
@@ -136,8 +139,10 @@ def season_one_events() -> list:
             preface="史書上，皇甫嵩趁夜縱火，大破波才於長社。",
             third_party_text="事後才有人發現，兩軍吃的糧出自同一家：{name} 的糧車。", third_party_trends={"geju": 10},
             outcomes={
-                "guan:大勝": O(text="這一次也一樣：火光燭天。", chronicle="皇甫嵩火攻長社。", trends={"yingru": -15}),
-                "guan:險勝": O(text="這一次，只燒了半座營。", chronicle="波才敗走陽翟。", trends={"yingru": -8}),
+                "guan:大勝": O(text="這一次也一樣：火光燭天。", chronicle="皇甫嵩火攻長社。", trends={"yingru": -15},
+                              locked_text={"guan": CHANGSHE_LOCKED}, loser_text={"guan": CHANGSHE_LOSER}),
+                "guan:險勝": O(text="這一次，只燒了半座營。", chronicle="波才敗走陽翟。", trends={"yingru": -8},
+                              locked_text={"guan": CHANGSHE_LOCKED}, loser_text={"guan": CHANGSHE_LOSER}),
                 "huang:大勝": O(
                     text="這一次，火攻沒有成。", note="潁川得手之後，波才分兵北上，往廣宗去了。", chronicle="長社火攻失利。",
                     trends={"yingru": 15, "jizhou": 5}, chance_mods={"luzhi_siege": -0.10},

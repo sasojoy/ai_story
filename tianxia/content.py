@@ -182,6 +182,8 @@ def check_timetable(c: Content, need, known, region_ids: list[str], trend_ids: s
     need(not duplicated, f"時刻表 id 重複：{'、'.join(duplicated)}")
     trends = trend_ids | SEASON_ONE_TRENDS
     earlier: dict[str, TimetableEvent] = {}
+    order = {e.id: i for i, e in enumerate(c.timetable)}
+    rolled = {e.id for e in c.timetable if e.roll_side is not None}
 
     def check_text(where: str, text: str | None) -> None:
         if text:
@@ -242,7 +244,11 @@ def check_timetable(c: Content, need, known, region_ids: list[str], trend_ids: s
         for key, outcome in ev.outcomes.items():
             ow = f"{where} 結果 {key}"
             known(ow, outcome.trends, trends, "大勢線")
-            known(ow, outcome.chance_mods, ids, "時刻表大事")
+            for target in outcome.chance_mods:  # 修正只對之後還要擲骰的大事有意義（例：長社黃巾大勝讓盧植圍廣宗更難）
+                need(
+                    target in rolled and order[target] > order[ev.id],
+                    f"{ow}：chance_mods 的 {target} 要是排在後面、照擲骰結算的大事",
+                )
             for label, texts in (("locked_text", outcome.locked_text), ("loser_text", outcome.loser_text)):
                 need(all(side in TIMETABLE_SIDES for side in texts), f"{ow}：{label} 的鍵只能是 guan 或 huang")
             need(set(outcome.loser_text) <= set(outcome.locked_text), f"{ow}：有搶輸的一句就要有那一方的具名公告")

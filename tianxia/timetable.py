@@ -14,7 +14,7 @@ from typing import Literal
 from . import calendar, figures
 from .models import Content, TimetableEvent, TimetableOutcome
 from .rules import add_chronicle, add_rumor, add_world_flags, change_trend
-from .state import GameState, Lock, TimelineResult
+from .state import GameState, Lock, TimelineResult, WorldState
 from .world_state import season_length_days
 
 HOUR = 3600
@@ -28,21 +28,22 @@ COMMANDER_SLOTS = {"{官軍主將}": "guan", "{黃巾主將}": "huang"}
 COMMANDER_KEY = "@commander:"  # 人物效果的鍵「@commander:<戰線>:<guan|huang>」＝當時那條戰線那一方的主將
 SHOWDOWN_HOUR = 20  # 決戰預設在那一週週四 20:00（季曆，計畫第六節）
 SHOWDOWN_WEEKDAY = 3
-EPS = 1e-6  # 世界秒的浮點誤差：剛好在大事時刻的那一個曆時要算「到了」
 
 
 # ── 什麼時候 ─────────────────────────────────────────────
 
 
-def _showdown_default(event: TimetableEvent, content: Content) -> float:
-    offset = (SHOWDOWN_WEEKDAY * DAY + SHOWDOWN_HOUR * HOUR) / calendar.cal_scale(content)
-    return calendar.week_start(event.week, content) + offset
+def _showdown_default(event: TimetableEvent, content: Content, season: WorldState | None) -> float:
+    offset = (SHOWDOWN_WEEKDAY * DAY + SHOWDOWN_HOUR * HOUR) / calendar.cal_scale(content, season)
+    return calendar.week_start(event.week, content, season) + offset
 
 
-def default_schedule(content: Content) -> dict[str, float]:
-    """開季時填進 WorldState.schedule 的預設值：決戰在那一週的週四 20:00（季曆），季末在 season_days 整。"""
-    schedule = {e.id: _showdown_default(e, content) for e in content.timetable if e.kind == "showdown"}
-    schedule["finale"] = content.config.season_days * DAY
+def default_schedule(content: Content, season: WorldState | None = None) -> dict[str, float]:
+    """開季時填進 WorldState.schedule 的預設值：決戰在那一週的週四 20:00（季曆），季末在季長整。
+    季長照 season 蓋的章（world_state.stamp_season 先蓋章再呼叫這裡）；不給 season 時照設定。"""
+    days = season_length_days(season, content) if season is not None else content.config.season_days
+    schedule = {e.id: _showdown_default(e, content, season) for e in content.timetable if e.kind == "showdown"}
+    schedule["finale"] = days * DAY
     return schedule
 
 
@@ -50,10 +51,10 @@ def when(state: GameState, content: Content, event: TimetableEvent) -> float:
     """這件大事的世界秒。決戰與季末看排定的時間（舊季沒排就用預設），其他看季曆。伏筆的時間窗（T7）也用它。"""
     schedule = state.world.schedule
     if event.kind == "showdown":
-        return schedule.get(event.id, _showdown_default(event, content))
+        return schedule.get(event.id, _showdown_default(event, content, state.world))
     if event.kind == "finale":
         return schedule.get("finale", season_length_days(state.world, content) * DAY)
-    return calendar.event_time(event, content)
+    return calendar.event_time(event, content, state.world)
 
 
 def _pending(state: GameState, content: Content) -> list[TimetableEvent]:
@@ -64,7 +65,7 @@ def _pending(state: GameState, content: Content) -> list[TimetableEvent]:
 
 def due(state: GameState, content: Content) -> list[TimetableEvent]:
     """時間到了、還沒結算、不是決戰或季末的大事，照時間排序。"""
-    now = state.world.time + EPS
+    now = state.world.time + calendar.EPS_SECONDS
     return [e for e in _pending(state, content) if e.kind not in NOT_BY_SEASON_HOUR and when(state, content, e) <= now]
 
 
@@ -230,7 +231,7 @@ def resolve(
         fid = _commander_target(state, content, target_key)
         if fid is None or not figures.holds(state, change):
             continue
-        text += "".join(figures.apply(state, content, fid, change)) + change.note
+        text += "".join(figures.apply(state, content, fid, change)) + fill_slots(state, content, event, change.note)
     for target, mod in outcome.chance_mods.items():
         w.event_bonus[target] = w.event_bonus.get(target, 0.0) + mod
     add_world_flags(state, outcome.world_flags_add)

@@ -5,7 +5,7 @@ import random
 
 import pytest
 
-from conftest import LUZHI_LOCKED, LUZHI_LOSER, FixedRandom, install_season_one
+from conftest import CHANGSHE_LOCKED, CHANGSHE_LOSER, LUZHI_LOCKED, LUZHI_LOSER, FixedRandom, install_season_one
 from tianxia import calendar, figures, timetable
 from tianxia.models import FigureChange, TimetableEvent
 from tianxia.state import FigureState, GameState, Lock, PlayerState
@@ -36,7 +36,7 @@ def event(content, event_id: str) -> TimetableEvent:
 
 def advance_to_week(state: GameState, content, week: int) -> list[str]:
     """把季推進到第 week 週週一的第一個曆時（那一週週一凌晨的大事都已經結算）。"""
-    target = calendar.week_start(week, content) + calendar.cal_hour_seconds(content)
+    target = calendar.week_start(week, content, state.world) + calendar.cal_hour_seconds(content, state.world)
     return advance_world_state(state.world, content, target - state.world.time, random.Random(0))
 
 
@@ -139,6 +139,38 @@ def test_lock_beats_the_roll_and_names_the_locker(s1, season):
     assert msgs == ["【江湖大事】" + LUZHI_LOCKED["guan"].replace("{name}", "甲")
                     + LUZHI_LOSER["guan"].replace("{loser}", "乙、丙")]
     assert w.trends["jizhou"] == 50  # 照「不成」的效果：冀州往官軍偏 5
+
+
+def test_same_side_late_finishers_are_not_named_as_losers(s1, season):
+    """同陣營後來才做完的人照樣做完、記貢獻，但公告裡「搶輸的一句」只寫對手那一方（伏筆文件 2.4）。"""
+    w = season.world
+    w.locks["luzhi_jailed"] = Lock(side="guan", name="甲", time=0.0)
+    w.lock_losers["luzhi_jailed"] = [Lock(side="guan", name="丁", time=1.0), Lock(side="huang", name="乙", time=2.0)]
+    msgs = timetable.resolve(season, s1, event(s1, "luzhi_jailed"), FixedRandom(0.0))
+    assert msgs == ["【江湖大事】" + LUZHI_LOCKED["guan"].replace("{name}", "甲") + LUZHI_LOSER["guan"].replace("{loser}", "乙")]
+    assert w.timeline["luzhi_jailed"].losers == ["乙"] and "丁" not in msgs[0]
+
+
+def test_a_showdown_resolved_with_a_key_uses_the_named_version_when_locked(s1, season):
+    """決戰由 T8 給結果鍵（鎖定方一定贏，戰場上定大勝或險勝）：有人鎖定時照樣用具名公告，開頭不再接 preface。"""
+    w = season.world
+    w.locks["changshe_fire"] = Lock(side="guan", name="甲", time=0.0)
+    w.lock_losers["changshe_fire"] = [Lock(side="huang", name="乙", time=1.0)]
+    msgs = timetable.resolve(season, s1, event(s1, "changshe_fire"), random.Random(0), key="guan:險勝")
+    assert msgs == ["【江湖大事】" + CHANGSHE_LOCKED.replace("{name}", "甲") + CHANGSHE_LOSER.replace("{loser}", "乙")]
+    assert (w.timeline["changshe_fire"].key, w.timeline["changshe_fire"].locked_by) == ("guan:險勝", "甲")
+    assert w.trends["yingru"] == 32  # 效果照險勝那一格
+
+
+def test_a_figure_note_fills_the_commander_slot(s1, season, monkeypatch):
+    """人物效果接在公告後面的那一句也經過 fill_slots（跟公告的其他部分一樣）。"""
+    qinjie = event(s1, "qinjie")
+    for outcome in qinjie.outcomes.values():
+        outcome.figures["zhujun"] = outcome.figures["zhujun"].model_copy(update={"note": "{官軍主將}也領兵南下。"})
+    season.world.figures["huangfusong"] = FigureState(front="yingru")
+    season.world.timeline["zhangmancheng"] = timetable.TimelineResult(key="成", time=0.0)
+    msgs = timetable.resolve(season, s1, qinjie, random.Random(0))
+    assert msgs == ["【江湖大事】新任南陽太守秦頡引兵來攻。官軍也領兵南下。"]
 
 
 def test_lock_without_losers_has_no_loser_line(s1, season):
@@ -342,3 +374,30 @@ def test_add_mod_ignores_events_without_roll(s1, season):
     for event_id in ("qinjie", "changshe_fire", "xiaquyang"):  # 固定、決戰、季末
         timetable.add_mod(season, s1, event_id, "guan", 0.05)
     assert season.world.event_mods == {}
+
+
+# ── 季曆照這一季蓋的章（fix round 2）──────────────────────────────
+
+
+def test_calendar_follows_the_season_stamp_not_the_profile(s1):
+    """這一季蓋的是 2.5 天：設定中途換成 5 天，正在跑的這一季週次、時刻、大事的時間都不動。"""
+    season_world = fresh_season(s1)  # 蓋章 2.5 天
+    state = GameState(player=_player(), world=season_world)
+    t = 40000.0
+    before = (
+        calendar.point(t, s1, season_world), calendar.week_start(5, s1, season_world),
+        calendar.event_time(event(s1, "bocai"), s1, season_world), calendar.cal_hour_seconds(s1, season_world),
+        calendar.is_night(t, s1, season_world), timetable.when(state, s1, event(s1, "bocai")),
+        timetable.default_schedule(s1, season_world),
+    )
+    s1.config.season_days = 5  # 設定換了
+    after = (
+        calendar.point(t, s1, season_world), calendar.week_start(5, s1, season_world),
+        calendar.event_time(event(s1, "bocai"), s1, season_world), calendar.cal_hour_seconds(s1, season_world),
+        calendar.is_night(t, s1, season_world), timetable.when(state, s1, event(s1, "bocai")),
+        timetable.default_schedule(s1, season_world),
+    )
+    assert after == before
+    assert calendar.week_start(5, s1) == pytest.approx(2 * calendar.week_start(5, s1, season_world))  # 沒給季才照設定
+    advance_to_week(state, s1, 4)  # 季的事也照蓋的章切曆時：第 4 週週一的大事準時結算
+    assert state.world.timeline["bocai"].time == pytest.approx(calendar.week_start(4, s1, season_world))
