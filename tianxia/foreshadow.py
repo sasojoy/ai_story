@@ -22,7 +22,7 @@ from .journal import fragment_line
 from .models import (
     Check, Content, FsAsk, FsChain, FsFinal, FsFragment, FsItem, FsRequires, FsStep, FsWrong, Squad,
 )
-from .rules import check_chance, check_who, display_name
+from .rules import can_meet, check_chance, check_who, display_name
 from .state import GameState, Lock
 from .world_state import WorldStateStore
 
@@ -35,6 +35,7 @@ TIANJI: dict[str, tuple[str, ...]] = {
     "disguise": ("鹽車", "棺木", "香客", "商隊"),
 }
 TIANJI_SLOTS = {"{風向}": "wind", "{偽裝}": "disguise"}  # 文字裡的插槽
+OVERHEARD = "聽說{name}說過："  # 名望不夠求見不到的人，對話片段從行動偷聽到時，原文前面加的這一句（內容表 4.0）
 FIGURE_SLOT = "{人物}"  # 最後一步的敘事裡「出面的那位」：figure 在那條戰線上就是他，否則是 stand_in
 TIANJI_ANSWER = "tianji:"  # 答案寫成 tianji:<key>
 LOCK_SIDES = tuple(timetable.SIDE_NAMES)  # 會鎖定大事的兩方（官軍、黃巾）；其他陣營（豪強）是第三方
@@ -214,23 +215,42 @@ def _fragment_text(state: GameState, content: Content, c: FsChain, fragment: FsF
 # ── 片段 ─────────────────────────────────────────────────
 
 
+def _overheard_from(state: GameState, content: Content, f: FsFragment) -> str | None:
+    """對話片段走「行動偷聽」這條路時，聽說的是誰說的（人物 id）；這一片不走這條路就是 None。
+    條件：片段是對話（source=talk）、那時候出面的那位存在（_speaker：主角色退場、重創或下獄時是 stand_in）、
+    而且玩家求見不到他（rules.can_meet：名望不到 audience_fame、也沒結識過；引擎的求見用同一個判斷）。
+    求見得到的人照舊在對話裡用 talk:clue 直接問，行動不抽這一片，免得兩條路都在跑（內容表 4.0）。"""
+    speaker = _speaker(state, f) if f.source == "talk" else None
+    return None if speaker is None or can_meet(state, content, speaker) else speaker
+
+
 def hear_after_action(
     state: GameState, content: Content, region: str | None, rng: random.Random, world: WorldStateStore | None = None,
 ) -> list[str]:
-    """每次花體力的行動之後（Game 呼叫），在所在的大區抽一次：做得了、還沒聽過、來源是行動、大區是這裡的片段裡
-    隨機一則，機率 fragment_chance。寫進江湖紀錄的那一句（「你聽到一件事：…」），不發任何傳聞。
+    """每次花體力的行動之後（Game 呼叫），在所在的大區抽一次：做得了、還沒聽過、大區是這裡、來源是行動的片段，
+    加上名望不夠求見不到那位人物的對話片段（_overheard_from）裡隨機一則，機率 fragment_chance。
+    寫進江湖紀錄的那一句（「你聽到一件事：…」；偷聽到的對話在原文前面加「聽說{人物}說過：」），不發任何傳聞。
+    聽過就是聽過：偷聽到與當面問到記的是同一個序號（fragments[鏈]），之後兩條路都不再給這一片。
     沒有可聽的片段時連骰子都不擲（不打亂別的擲骰）。"""
     if region is None:
         return []
-    pool = [
-        (c, i, f) for c in _capable_chains(state, content) for i, f in enumerate(c.fragments)
-        if f.source == "action" and f.region == region and not _heard(state, c.id, i)
-    ]
+    pool: list[tuple[FsChain, int, FsFragment, str | None]] = []  # 最後一格是偷聽的那位人物，行動片段是 None
+    for c in _capable_chains(state, content):
+        for i, f in enumerate(c.fragments):
+            if f.region != region or _heard(state, c.id, i):
+                continue
+            if f.source == "action":
+                pool.append((c, i, f, None))
+            elif (speaker := _overheard_from(state, content, f)) is not None:
+                pool.append((c, i, f, speaker))
     if not pool or rng.random() >= fragment_chance(content):
         return []
-    c, i, f = rng.choice(pool)
+    c, i, f, speaker = rng.choice(pool)
     _mark_heard(state, c.id, i)
-    return [fragment_line(_fragment_text(state, content, c, f, world))]
+    text = _fragment_text(state, content, c, f, world)
+    if speaker is not None:
+        text = OVERHEARD.format(name=_figure_name(content, speaker)) + text
+    return [fragment_line(text)]
 
 
 def hear_from_event(state: GameState, content: Content, event_id: str, world: WorldStateStore | None = None) -> list[str]:
@@ -560,7 +580,8 @@ def _succeed(
     state: GameState, content: Content, c: FsChain, index: int, trip: FsStep, now: float, world: WorldStateStore | None,
 ) -> list[str]:
     """這一趟成了：多趟時交出這一趟自己的條件、記下這一趟，還沒全部做完就回這一趟的那句；全部做完（或單趟）時
-    交出整條的條件（final.requires）連同這一趟的、完成這條鏈，回完成的敘事。要交的照「一起算」重算一次：
+    交出整條的條件（final.requires）連同這一趟的、完成這條鏈，回完成的敘事——多趟時是後完成的這一趟自己的句子，
+    後面接整條完成的那一句（final.success_text，內容表 4.6；兩趟先後不限）。要交的照「一起算」重算一次：
     交不出來（不該發生，檢查時已經一起算過）就什麼都不做、不完成。"""
     p = state.player
     multi = trip is not c.final
@@ -575,7 +596,10 @@ def _succeed(
             return [fill(state, content, c, trip.success_text, world)] + spent
     _complete(state, content, c, now)
     text = c.final.success_versions.get(_version(state, content, c) or "", c.final.success_text)
-    return [fill(state, content, c, text, world)] + spent
+    done = [fill(state, content, c, text, world)]
+    if multi and trip.success_text:  # 完成句寫在內容裡；這一趟自己的句子在前，先完成的那一趟不會走到這裡
+        done.insert(0, fill(state, content, c, trip.success_text, world))
+    return done + spent
 
 
 def _complete(state: GameState, content: Content, c: FsChain, now: float) -> None:

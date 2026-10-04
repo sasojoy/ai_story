@@ -25,9 +25,9 @@ from .models import (
 )
 from .ollama_client import OllamaClient
 from .rules import (
-    GEJU, apply_effect, change_trend, check_who, current_day, fill_marks, free_text_rate, front_ids, in_chaos, is_revealed,
-    pushable, rate_words, recompute_trends, resolve_goals, resolve_trend, resolve_trends, roll_check, season_one,
-    season_one_off, stances, trend_name, trend_shown, trend_value, world_trend_value,
+    GEJU, apply_effect, can_meet, change_trend, check_who, current_day, fill_marks, free_text_rate, front_ids, in_chaos,
+    is_revealed, pushable, rate_words, recompute_trends, resolve_goals, resolve_trend, resolve_trends, roll_check,
+    season_one, season_one_off, stances, trend_name, trend_shown, trend_value, world_trend_value,
 )
 from .sqlite_world import open_world
 from .state import PLAYER, BattleRecord, GameState, JournalEntry, Journey, Rumor, WorldState, new_game_state
@@ -909,9 +909,9 @@ class Game:
         ]
 
     def _can_meet(self, companion_id: str) -> bool:
-        """見得到這位人物：名望到了他的求見門檻，或是透過他的「結識」事件認識過（企劃者 2026-10-02 決定）。"""
-        p = self.state.player
-        return f"結識:{companion_id}" in p.flags or p.stats.get("fame", 0) >= self.content.characters[companion_id].audience_fame
+        """見得到這位人物：名望到了他的求見門檻，或是透過他的「結識」事件認識過（企劃者 2026-10-02 決定）。
+        判斷在 rules.can_meet，伏筆的偷聽也用它。"""
+        return can_meet(self.state, self.content, companion_id)
 
     def _talks_used(self, companion_id: str) -> int:
         """今天（遊戲日，跟福緣用同一個算法）已經跟這位人物聊了幾輪；紀錄是前幾天的就當沒聊過。"""

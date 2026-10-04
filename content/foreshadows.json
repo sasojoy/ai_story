@@ -161,7 +161,7 @@
         {"region": "yingru", "source": "action", "text": "宛城東北角的城牆年久失修，雨後塌過一回，補的是新土。"}
       ],
       "final": {
-        "location": "wan_city", "label": "見孫堅",
+        "location": "wan_city", "label": "請纓",
         "requires": {"affinity": {"sunjian": 50}},
         "question": "孫堅：「我是要第一個上的，你跟不跟？」",
         "options": [

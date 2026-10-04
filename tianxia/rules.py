@@ -18,6 +18,14 @@ def display_name(state: GameState) -> str:
     return "某位少俠" if state.player.anonymous else state.player.name
 
 
+def can_meet(state: GameState, content: Content, companion_id: str) -> bool:
+    """見得到這位大勢人物：名望到了他的求見門檻（CharacterDef.audience_fame），或是透過他的「結識」事件認識過
+    （企劃者 2026-10-02 決定）。引擎的求見與交友對話、伏筆的對話片段（名望不夠的人改從行動偷聽，foreshadow.hear_after_action）
+    都用這一個判斷，不要在別處再寫一份。"""
+    p = state.player
+    return f"結識:{companion_id}" in p.flags or p.stats.get("fame", 0) >= content.characters[companion_id].audience_fame
+
+
 def current_day(state: GameState) -> int:
     """賽季第幾天（從 1 開始）。"""
     return int(state.world.time // DAY) + 1

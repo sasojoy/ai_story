@@ -278,6 +278,63 @@ def test_talk_clue_goes_to_the_stand_in_when_the_figure_is_out(fs, world):
     assert ids(huang) == ["talk:0", "talk:1", "talk:leave"]
 
 
+def only_unheard(fs, game: Game, *keep: tuple[str, int]) -> None:
+    """所有鏈的所有片段都記成聽過，只留 keep 的那幾片：行動抽片段時只剩這幾片可抽。"""
+    game.state.player.fragments = {
+        ch.id: [i for i in range(len(ch.fragments)) if (ch.id, i) not in keep] for ch in fs.foreshadows.chains
+    }
+
+
+OVERHEARD_TALK = "你聽到一件事：聽說皇甫嵩說過：「賊依草結營，若有引火之物，一夜可破。」"
+
+
+def test_can_meet_is_one_predicate_for_the_engine_and_the_overhearing(fs, world):
+    """見得到一位大勢人物只有一個判斷（rules.can_meet：名望到他的 audience_fame，或有他的「結識」旗標）：引擎的交友對話
+    與伏筆的偷聽都看它——見得到的人行動不偷聽、見不到的才偷聽；名望的邊界與結識旗標，兩邊一起動。"""
+    fs.characters["huangfusong"].audience_fame = 30
+    game = player(fs, world, "甲", "guan", "lake")
+    p = game.state.player
+    for fame, flags, meet in (
+        (0, [], False), (29, [], False), (30, [], True), (99, [], True),
+        (0, ["結識:huangfusong"], True), (0, ["結識:zhujun"], False),
+    ):
+        p.stats["fame"], p.flags = fame, set(flags)
+        only_unheard(fs, game, ("fs_fire_guan", 2))
+        assert rules.can_meet(game.state, fs, "huangfusong") is meet
+        assert game.socialize_starts_dialogue() is meet  # 引擎：見得到才會開口對話
+        heard = foreshadow.hear_after_action(game.state, fs, "north", FixedRandom(0.0), world)
+        assert heard == ([] if meet else [OVERHEARD_TALK]), (fame, flags)
+        assert (2 in p.fragments["fs_fire_guan"]) is (not meet)  # 偷聽到才記成聽過
+
+
+def test_overhearing_rides_on_the_same_gates_as_every_other_fragment(fs, world):
+    """偷聽只是把對話片段多放進行動的來源：還是只有做得了這條鏈的人聽得到（散人、別的陣營沒有）、情誼不設限（見不到的人本來就
+    沒有情誼）、文字照填天機的插槽、機率照舊、沒人出面（退場又沒有接手的）就沒有得聽、開關關著什麼都不做。"""
+    chain = next(c for c in fs.foreshadows.chains if c.id == "fs_fire_guan")
+    fs.characters["huangfusong"].audience_fame = 30
+    chain.fragments[2].text = "「風從{風向}邊來，賊依草結營。」"
+    said = f"你聽到一件事：聽說皇甫嵩說過：「風從{wind(world)}邊來，賊依草結營。」"
+    for faction in ("huang", "haoqiang", None):
+        other = player(fs, world, f"外{faction}", faction, "lake")
+        other.state.player.fragments = {c.id: list(range(len(c.fragments))) for c in fs.foreshadows.chains if c is not chain}
+        assert foreshadow.hear_after_action(other.state, fs, "north", FixedRandom(0.0), world) == [], faction
+    game = player(fs, world, "甲", "guan", "lake")
+    only_unheard(fs, game, ("fs_fire_guan", 2))
+    assert game.state.player.affinities.get("huangfusong", 0) == 0  # 情誼門檻（6）不擋偷聽
+    assert foreshadow.hear_after_action(game.state, fs, "north", FixedRandom(foreshadow.fragment_chance(fs) + 0.001), world) == []
+    assert foreshadow.hear_after_action(game.state, fs, "north", FixedRandom(0.0), world) == [said]
+    nobody = player(fs, world, "乙", "guan", "lake")
+    chain.fragments[2].stand_in = None
+    nobody.state.world.figures["huangfusong"] = FigureState(status="retired")
+    only_unheard(fs, nobody, ("fs_fire_guan", 2))
+    assert foreshadow.hear_after_action(nobody.state, fs, "north", FixedRandom(0.0), world) == []  # 沒人出面
+    fs.config.season_one = False
+    off = player(fs, world, "丙", "guan", "lake")
+    only_unheard(fs, off, ("fs_fire_guan", 2))
+    assert foreshadow.hear_after_action(off.state, fs, "north", FixedRandom(0.0), world) == []
+    assert off.state.player.fragments["fs_fire_guan"] == [0, 1, 3]
+
+
 # ── 最後一步 ─────────────────────────────────────────────
 
 
@@ -545,7 +602,8 @@ def test_requirements_in_final_and_a_step_add_up(fs, world):
     p.materials = {"man_1": 4}
     game.rng = FixedRandom(0.0)
     assert game.choose("fs:fs_fire_haoqiang") == [
-        "（本人——成功）", "兩邊的帳房都在你的契上按了手印。不論那一夜誰勝誰敗，他們都欠你一份人情。", "粗糧 -4",
+        "（本人——成功）", "黃巾的帳房在你的契上按了手印。",
+        "兩邊的帳房都在你的契上按了手印。不論那一夜誰勝誰敗，他們都欠你一份人情。", "粗糧 -4",
     ]
     assert p.materials == {} and "fs_fire_haoqiang" in p.fs_done
 
@@ -596,7 +654,8 @@ def test_haoqiang_chain_is_third_party(fs, world):
     assert p.fs_done == ["fs_fire_haoqiang:0"] and option(game, "fs:fs_fire_haoqiang") is None  # 長社這一趟做完了
     p.location = "lake"
     assert game.choose("fs:fs_fire_haoqiang") == [
-        "（本人——成功）", "兩邊的帳房都在你的契上按了手印。不論那一夜誰勝誰敗，他們都欠你一份人情。", "粗糧 -2",
+        "（本人——成功）", "黃巾的帳房在你的契上按了手印。",
+        "兩邊的帳房都在你的契上按了手印。不論那一夜誰勝誰敗，他們都欠你一份人情。", "粗糧 -2",
     ]
     assert p.fs_done == ["fs_fire_haoqiang:0", "fs_fire_haoqiang:1", "fs_fire_haoqiang"]
     assert w.third_party["changshe_fire"] == ["甲"]
