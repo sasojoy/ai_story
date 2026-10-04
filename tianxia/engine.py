@@ -26,7 +26,7 @@ from .models import (
 )
 from .ollama_client import OllamaClient
 from .rules import (
-    GEJU, HUANGJIN, apply_effect, can_meet, change_trend, check_who, current_day, display_name, fill_marks, free_text_rate,
+    GEJU, HUANGJIN, apply_effect, can_hear, can_meet, change_trend, check_who, current_day, display_name, fill_marks, free_text_rate,
     front_ids, front_of, in_chaos,
     is_revealed, pushable, rate_words, recompute_trends, resolve_goals, resolve_trend, resolve_trends, roll_check,
     season_one, season_one_off, stances, trend_name, trend_shown, trend_value, world_trend_value,
@@ -923,7 +923,10 @@ class Game:
         if duty is not None and front_of(c, loc.id) is not None:
             opts.append(self._cost_option("act:duty", duty.name, c.config.duty_stamina))
         escort = orders.escort_at(s, c, p.faction, loc.id)
-        if escort is not None and p.convoy is None:  # 一次押一車
+        if escort is not None and p.convoy is not None:  # 一次押一車：寫明手上那一車要送去哪（T6 審查 I3）
+            dest = c.locations[p.convoy.to_loc].name
+            opts.append(Option(id="act:convoy", enabled=False, label=f"接下糧車（你還押著一車糧，要送到{dest}）"))
+        elif escort is not None:
             need, have = c.config.convoy_grain, materials.grain_of(s, c)
             dest = c.locations[escort.end].name
             if have < need:
@@ -932,7 +935,8 @@ class Game:
                     label=f"接下糧車（送到{dest}・糧草不夠：要 {need} 份，你有 {have} 份；糧草是慢屬性的素材）",
                 ))
             else:
-                opts.append(Option(id="act:convoy", label=f"接下糧車（送到{dest}・交出糧草 {need} 份）"))
+                used = "、".join(f"{c.materials[mid].name} ×{n}" for mid, n in materials.grain_plan(s, c, need))
+                opts.append(Option(id="act:convoy", label=f"接下糧車（送到{dest}・交出糧草 {need} 份：{used}）"))
         return opts
 
     def _order_credit(self, **kw) -> list[str]:
@@ -1174,8 +1178,11 @@ class Game:
             if p.location not in faction.join_at:
                 return ["（你已經不在投靠的地方了。）"]
             p.faction = faction.id
-            # 投靠這一刻就推一次新手引導：第一季「投靠、看一眼本週軍令」那一步只看陣營（計畫 T6）
-            return [f"你投靠了{faction.name}。"] + note_action(self.state, self.content, self.world, "join")
+            # 投靠這一刻就推一次新手引導：第一季「投靠、看一眼本週軍令」那一步只看陣營（計畫 T6）；beta 照舊等下一個行動
+            msgs = [f"你投靠了{faction.name}。"]
+            if season_one(self.content, self.state.world):
+                msgs += note_action(self.state, self.content, self.world, "join")
+            return msgs
         faction = self._faction(arg)
         p.pending_faction = faction.id
         return [self._faction_prompt(faction)]
@@ -2140,8 +2147,7 @@ class Game:
         p = s.player
         regions = {region.id for loc_id in self._road_ends() if (region := atlas.region_of(c, loc_id)) is not None}
         heard = [
-            r for r in s.world.rumors
-            if r.region in regions and r.faction in (None, p.faction) and r.character in (None, p.name)
+            r for r in s.world.rumors if r.region in regions and can_hear(r, s)
         ][-c.config.road_rumor_pool:]
         if not heard:
             return ["你沿途問了幾個人，這一帶最近沒什麼新鮮事。"]
@@ -2930,6 +2936,14 @@ class Game:
         done.sort(key=lambda item: (item[2].time, item[0]), reverse=True)
         return [f"**{titles.get(eid, eid)}**\n\n{r.text}" for _, eid, r in done[:BULLETIN_MAX]]
 
+    def convoy_line(self) -> str | None:
+        """押著的糧車要送去哪（江湖頁軍令卡上的一行；T6 審查 I3）：那一道軍令已經達成或換週清掉了也照樣寫，
+        送到了照樣記捐獻與貢獻。沒有押車時是 None。"""
+        convoy = self.state.player.convoy
+        if convoy is None:
+            return None
+        return f"你押著一車糧（{convoy.grain} 份），要送到{self.content.locations[convoy.to_loc].name}。"
+
     def orders_view(self) -> list[dict]:
         """江湖頁的「本週軍令」卡（計畫 T6）：自己陣營這週的軍令，只給自己陣營看；散人、開關關著是空的。
         截止是下週一 00:00（最後一週寫成季末那一刻，calendar.point 會夾住）。"""
@@ -3045,8 +3059,7 @@ class Game:
     def rumors_text(self, limit: int = 30) -> str:
         """見聞頁的傳聞：陣營軍情只給那個陣營、個人線索只給那個人（跟沿途打聽同一個規則，見 _road_ask；計畫 T6）。
         開關關著時沒有這兩種傳聞，畫面一樣。"""
-        p = self.state.player
-        heard = [r for r in self.state.world.rumors if r.faction in (None, p.faction) and r.character in (None, p.name)]
+        heard = [r for r in self.state.world.rumors if can_hear(r, self.state)]
         return _timeline(heard[-limit:][::-1], self._day_stamp) or "（尚無傳聞。）"
 
     def chronicle_text(self) -> str:

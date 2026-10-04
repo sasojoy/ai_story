@@ -266,6 +266,7 @@ details.fold.bulletin > .fold-body { border-color: var(--gold); max-height: 50vh
 .order-bar { height: 5px; margin-top: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
 .order-bar > i { display: block; height: 100%; background: var(--gold); transition: width 0.4s ease; }
 .order-meta { margin-top: 4px; font-size: 12px; color: var(--ink-2); }
+.order-cart { padding-bottom: 8px; font-size: 13px; color: var(--ink); }
 .order.done .order-head b::after { content: " ✔"; color: var(--gold); }
 /* 第一季的結算卡（休季，計畫 T9） */
 .result h2 { margin: 0 0 6px; font-size: 18px; }

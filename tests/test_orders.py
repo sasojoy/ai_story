@@ -464,11 +464,13 @@ def test_convoy_needs_four_grain_and_says_why(on):
     assert option.label == "接下糧車（送到宛城・糧草不夠：要 4 份，你有 3 份；糧草是慢屬性的素材）"
     game.state.player.materials = {"man_3": 1}
     option = next(o for o in game.options() if o.id == "act:convoy")
-    assert option.enabled and option.label == "接下糧車（送到宛城・交出糧草 4 份）"
+    top = on.materials["man_3"].name
+    assert option.enabled and option.label == f"接下糧車（送到宛城・交出糧草 4 份：{top} ×1）"  # 會用掉哪一個寫出來（審查 M6）
     game.choose("act:convoy")
     assert game.state.player.materials.get("man_3", 0) == 0
     assert game.state.player.convoy == Convoy(order=game.state.world.orders[-1].id, grain=4, from_loc="xinye", to_loc="wan_city")
-    assert "act:convoy" not in [o.id for o in game.options()]  # 一次押一車
+    again = next(o for o in game.options() if o.id == "act:convoy")  # 一次押一車：按不下去，寫明手上那一車（T6 審查 I3）
+    assert not again.enabled and again.label == "接下糧車（你還押著一車糧，要送到宛城）"
 
 
 def test_escort_takes_grain_and_records_donation(on):
@@ -670,3 +672,78 @@ def test_new_player_can_join_and_finish_an_order_in_week_one(on):
     assert target.progress.get("甲") == 1
     assert orders.week_of(game.state, on) == 1
     assert game.state.player.tutorial_step == 8
+
+
+# ── 審查修正 ───────────────────────────────────────────────
+
+
+def test_map_place_detail_hides_other_sides_orders(on):
+    """T6 審查 C1：輿圖地點詳情的「龍頭人物最近的傳聞」不能露出別陣營的軍令與軍情（跟見聞頁、沿途打聽同一個規則）。"""
+    game = _game(on, faction="huang")
+    game.advance(200)  # 第 1 週發令
+    others = [o.text for o in game.state.world.orders if o.faction != "huang"]
+    assert others
+    game.state.player.visited |= set(on.locations)  # 每個地點都算去過，詳情欄才會寫人物與傳聞
+    for loc_id in on.locations:
+        detail = game.place_detail(loc_id)
+        assert not any(text in detail for text in others), loc_id
+
+
+def test_no_siege_where_the_enemy_has_no_squad(on):
+    """T6 審查 I2：潁川汝南沒有任何一支官軍隊伍，黃巾在那裡打不贏「敵方陣營的隊伍」，攻城永遠湊不滿：不發。
+    假人也只往打得到敵方隊伍的地點走、只在那裡把遊歷算成攻城。"""
+    assert orders.siege_places(on, "huang", "yingru") == []
+    assert "nanyang_wilds" in orders.siege_places(on, "huang", "nanyang")
+    assert "changshe" in orders.siege_places(on, "guan", "yingru")
+    game = _game(on, faction="huang", at="changshe")
+    _fronts(game, 55, 55, 55)
+    _at_week(game, 1)
+    _issue_now(game)
+    assert ("siege", "yingru") not in _kinds(game, "huang") and len(_kinds(game, "huang")) == 3
+    game.state.world.orders = []  # 只看攻城這一道
+    _order(game, "siege", "huang", front="nanyang")
+    assert not orders.win_counts(game.state, on, "huang", "xinye")  # 新野在南陽、但沒有官軍隊伍
+    assert orders.win_counts(game.state, on, "huang", "nanyang_wilds")
+    assert orders.targets(game.state, on, "huang") == orders.siege_places(on, "huang", "nanyang")
+
+
+def test_a_cart_whose_order_is_gone_is_still_shown_and_delivered(on):
+    """T6 審查 I3：押著的糧車那一道已經達成或換週清掉了，選單、軍令卡照樣看得到它要送去哪；新的護糧起點寫明
+    為什麼接不了；假人照樣把它送到。"""
+    game = _game(on, faction="guan", at="xinye")
+    first = _order(game, "escort", "guan", front="nanyang", start="xinye", end="wan_city")
+    game.state.player.materials["man_1"] = 8
+    game.choose("act:convoy")
+    first.done = True  # 別人湊滿了
+    _order(game, "escort", "guan", front="yingru", start="xinye", end="changshe")  # 同一個起點又有一道
+    option = next(o for o in game.options() if o.id == "act:convoy")
+    assert not option.enabled and option.label == "接下糧車（你還押著一車糧，要送到宛城）"
+    assert game.convoy_line() == "你押著一車糧（4 份），要送到宛城。"
+    assert "wan_city" in orders.targets(game.state, on, "guan")
+    assert _game(on, "乙", faction="guan").convoy_line() is None
+
+
+def test_switch_off_joining_does_not_touch_the_tutorial(real):
+    """T6 審查 M4：投靠那一刻推引導是第一季才有的（t7_orders 只看陣營）；beta 照舊等下一個行動才檢查。"""
+    game = _game(real, at="changshe")
+    steps = [s.id for s in real.tutorial.steps]
+    game.state.player.tutorial_step = steps.index("t4_practice")
+    game.state.player.member.wugong_id = "xingwu_qiang"  # 例如煉製來的武學：煉製不推引導
+    game.choose("faction:guan")
+    game.choose("faction:confirm")
+    assert game.state.player.tutorial_step == steps.index("t4_practice")
+
+
+def test_cart_button_names_the_materials_it_uses(on):
+    """T6 審查 M6：按鈕寫明會用掉哪些素材（從低階的用起，多的不找），免得不知不覺交掉唯一的天品。"""
+    from tianxia import materials
+
+    game = _game(on, faction="guan", at="xinye")
+    _order(game, "escort", "guan", front="nanyang", start="xinye", end="wan_city")
+    low, top = on.materials["man_1"].name, on.materials["man_3"].name
+    game.state.player.materials.update({"man_1": 3, "man_3": 1})
+    assert materials.grain_plan(game.state, on, 4) == [("man_1", 3), ("man_3", 1)]
+    label = next(o for o in game.options() if o.id == "act:convoy").label
+    assert label == f"接下糧車（送到宛城・交出糧草 4 份：{low} ×3、{top} ×1）"
+    game.choose("act:convoy")
+    assert game.state.player.materials.get("man_1", 0) == 0 and game.state.player.materials.get("man_3", 0) == 0

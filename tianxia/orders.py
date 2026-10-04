@@ -109,8 +109,21 @@ def _enemy_sieged_last_week(state: GameState, side: str, front: str, week: int) 
     )
 
 
+def siege_places(content: Content, faction: str, front: str) -> list[str]:
+    """這條戰線上打得到敵方陣營隊伍的地點（攻城的個人部分只算打贏敵方陣營的隊伍）；照內容檔的地點順序。
+    T6 審查 I2：潁川汝南沒有官軍隊伍，黃巾的攻城在那裡永遠湊不滿，所以沒有這種地點的戰線不發攻城。"""
+    enemy = ENEMY.get(faction)
+    return [
+        loc_id for loc_id, loc in content.locations.items()
+        if rules.front_of(content, loc_id) == front
+        and any(content.squads[sid].faction == enemy for sid in loc.enemies if sid in content.squads)
+    ]
+
+
 def _issuable(state: GameState, content: Content, t: OrderTemplate, front: str, week: int) -> bool:
-    """這種軍令這週在這條戰線發不發得出來（濃縮版內容表 3.1「什麼時候發」）。"""
+    """這種軍令這週在這條戰線發不發得出來（濃縮版內容表 3.1「什麼時候發」）；攻城另外要那條戰線打得到敵方隊伍。"""
+    if t.kind == "siege" and not siege_places(content, t.side, front):
+        return False
     when, v = t.when, _value(state, content, front)
     if when.front_min is not None and v < when.front_min:
         return False
@@ -375,7 +388,7 @@ def win_counts(state: GameState, content: Content, faction: str | None, loc_id: 
     for o in current(state, content, faction):
         if o.done:
             continue
-        if o.template == "siege" and o.front == front:
+        if o.template == "siege" and o.front == front and loc_id in siege_places(content, o.faction, o.front):
             return True
         if o.template == "intercept" and o.location is not None and loc_id in neighbors(content, o.location):
             return True
@@ -399,18 +412,18 @@ def targets(state: GameState, content: Content, faction: str | None) -> list[str
     from .materials import grain_of  # noqa: PLC0415  只有這裡用得到
 
     p = state.player
-    wanted: set[str] = set()
+    wanted: set[str] = {p.convoy.to_loc} if p.convoy is not None else set()  # 押著的車一定送到（那一道沒了也照送，T6 審查 I3）
     for o in current(state, content, faction):
         if o.done:
             continue
-        if o.template in ("siege", "defend"):
+        if o.template == "siege":
+            wanted |= set(siege_places(content, o.faction, o.front))
+        elif o.template == "defend":
             wanted |= {loc for loc in content.locations if rules.front_of(content, loc) == o.front}
         elif o.template == "intercept" and o.location is not None:
             wanted |= neighbors(content, o.location)
         elif o.template == "escort":
-            if p.convoy is not None and p.convoy.order == o.id:
-                wanted.add(p.convoy.to_loc)
-            elif p.convoy is None and o.start is not None and grain_of(state, content) >= content.config.convoy_grain:
+            if p.convoy is None and o.start is not None and grain_of(state, content) >= content.config.convoy_grain:
                 wanted.add(o.start)
         elif o.template == "strike" and o.figure is not None:
             fs = figures.state_of(state, content, o.figure)

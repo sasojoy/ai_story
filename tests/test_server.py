@@ -1730,3 +1730,14 @@ def test_switch_off_main_view_has_no_orders(game):
     game.state.player.faction = "guan"
     game.advance(7 * 86400)
     assert "orders" not in server.main_view(game)
+
+
+def test_main_view_shows_the_cart_being_carried(game, monkeypatch):
+    from tianxia.state import Convoy
+
+    _season_one_now(game, monkeypatch)
+    game.state.player.faction = "guan"
+    game.state.player.convoy = Convoy(order="x", grain=4, from_loc="xinye", to_loc="wan_city")
+    assert server.main_view(game)["convoy"] == "你押著一車糧（4 份），要送到宛城。"
+    game.state.player.convoy = None
+    assert "convoy" not in server.main_view(game)

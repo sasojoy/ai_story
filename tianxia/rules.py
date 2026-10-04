@@ -191,6 +191,13 @@ def add_rumor(
     )
 
 
+def can_hear(rumor: Rumor, state: GameState) -> bool:
+    """這個人聽不聽得到這則傳聞：陣營軍情只給那個陣營、個人線索只給那個人（傳聞分層設計第二節）。
+    見聞頁、沿途打聽、輿圖的地點詳情都照這一個規則（T6 審查 C1：軍令寫成陣營軍情之後，任何列傳聞的地方都要過它）。"""
+    p = state.player
+    return rumor.faction in (None, p.faction) and rumor.character in (None, p.name)
+
+
 def add_chronicle(state: GameState, text: str) -> None:
     state.world.chronicle.append(Rumor(time=state.world.time, text=text))
 

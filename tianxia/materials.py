@@ -8,6 +8,8 @@
 """
 from __future__ import annotations
 
+import math
+
 import random
 
 from .models import Content, Location, Material, Squad
@@ -87,22 +89,32 @@ def grain_of(state: GameState, content: Content) -> int:
     return sum(_grain_value(content, m) * n for m, n in _grain_in_bag(state, content))
 
 
-def take_grain(state: GameState, content: Content, amount: int) -> bool:
-    """交出 amount 份糧草：從低階的慢屬性素材開始用，一個一個拿到夠為止（最後一個的份量可能超過，多的不找）。
-    不夠就什麼都不動、回 False；amount <= 0 什麼都不拿、回 True。"""
-    if amount <= 0:
-        return True
-    if grain_of(state, content) < amount:
-        return False
+def grain_plan(state: GameState, content: Content, amount: int) -> list[tuple[str, int]]:
+    """交 amount 份糧草會用掉哪些素材（素材 id, 個數）：從低階的慢屬性素材開始，一個一個拿到夠為止（最後一個的份量可能
+    超過，多的不找）。不動背包；不夠時回空串列。按鈕先寫給玩家看（T6 審查 M6），take_grain 照同一份拿。"""
+    if amount <= 0 or grain_of(state, content) < amount:
+        return []
+    plan: list[tuple[str, int]] = []
     left = amount
     for material, n in _grain_in_bag(state, content):
-        value = _grain_value(content, material)
-        while n > 0 and left > 0:
-            take(state, material.id)
-            n -= 1
-            left -= value
+        used = min(n, math.ceil(left / _grain_value(content, material)))
+        if used:
+            plan.append((material.id, used))
+            left -= used * _grain_value(content, material)
         if left <= 0:
             break
+    return plan
+
+
+def take_grain(state: GameState, content: Content, amount: int) -> bool:
+    """交出 amount 份糧草（照 grain_plan）。不夠就什麼都不動、回 False；amount <= 0 什麼都不拿、回 True。"""
+    if amount <= 0:
+        return True
+    plan = grain_plan(state, content, amount)
+    if not plan:
+        return False
+    for material_id, count in plan:
+        take(state, material_id, count)
     return True
 
 

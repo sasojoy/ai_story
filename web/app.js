@@ -403,8 +403,9 @@
   }
 
   // 第一季濃縮版的「本週軍令」（計畫 T6；伺服器只送自己陣營的，散人沒有）：預設展開，收起來的狀態照週次記住（同公告卡）
-  function ordersHtml(list, week) {
+  function ordersHtml(list, week, convoy) {
     const done = list.filter((o) => o.done).length;
+    const cart = convoy ? `<div class="order-cart">🛒 ${esc(convoy)}</div>` : "";  // 押著的糧車（那一道沒了也照樣寫）
     const rows = list.map((o) => `
       <div class="order${o.done ? " done" : ""}">
         <div class="order-head"><b>${esc(o.title)}</b><span>${o.done ? "已達成" : `陣營 ${o.progress}／${o.quota}`}</span></div>
@@ -413,7 +414,7 @@
         <div class="order-meta">你做了 ${o.mine} 次・截止 ${esc(o.deadline)}</div>
       </div>`).join("");
     return `<details class="fold orders" data-week="${week}" ${S.ordersShut === week ? "" : "open"}>
-      <summary>📜 本週軍令（${list.length}${done ? `，已達成 ${done}` : ""}）</summary><div class="fold-body">${rows}</div></details>`;
+      <summary>📜 本週軍令（${list.length}${done ? `，已達成 ${done}` : ""}）</summary><div class="fold-body">${cart}${rows}</div></details>`;
   }
 
   // 第一季的結算卡（休季才有，計畫 T9）：結局與季末公告、最終態勢與三條戰況；十二件大事與各陣營出力前五收在摺疊裡
@@ -491,7 +492,7 @@
     const fronts = m.fronts ? frontsHtml(m.fronts) : "";
     const resultCard = m.season_result ? resultHtml(m.season_result) : "";  // 休季的結算卡排在最上面（計畫 T9）
     // 本週軍令排在行動列（與路上捷徑）下面、三條戰況上面：不擠掉第一屏的公告、「剛剛」、場景與行動列（計畫 T6）
-    const orderCard = m.orders ? ordersHtml(m.orders, week) : "";
+    const orderCard = m.orders || m.convoy ? ordersHtml(m.orders || [], week, m.convoy) : "";
     // 劇情文字在上、行動在下（企劃者 2026-10-04）。行動列只有一排，375×812 上「剛剛」、場景與整排行動都在第一屏。
     // 路上的三個捷徑（links）緊貼在選項底下，戰況條排在捷徑之後，不要把它插到選項與捷徑中間
     return `${resultCard}${board}${quest}${now}${scene}${free}${menu}${links}${orderCard}${fronts}${tail}`;
