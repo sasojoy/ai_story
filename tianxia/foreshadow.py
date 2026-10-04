@@ -560,7 +560,8 @@ def _succeed(
     state: GameState, content: Content, c: FsChain, index: int, trip: FsStep, now: float, world: WorldStateStore | None,
 ) -> list[str]:
     """這一趟成了：多趟時交出這一趟自己的條件、記下這一趟，還沒全部做完就回這一趟的那句；全部做完（或單趟）時
-    交出整條的條件（final.requires）連同這一趟的、完成這條鏈，回完成的敘事。要交的照「一起算」重算一次：
+    交出整條的條件（final.requires）連同這一趟的、完成這條鏈，回完成的敘事——多趟時是後完成的這一趟自己的句子，
+    後面接整條完成的那一句（final.success_text，內容表 4.6；兩趟先後不限）。要交的照「一起算」重算一次：
     交不出來（不該發生，檢查時已經一起算過）就什麼都不做、不完成。"""
     p = state.player
     multi = trip is not c.final
@@ -575,7 +576,10 @@ def _succeed(
             return [fill(state, content, c, trip.success_text, world)] + spent
     _complete(state, content, c, now)
     text = c.final.success_versions.get(_version(state, content, c) or "", c.final.success_text)
-    return [fill(state, content, c, text, world)] + spent
+    done = [fill(state, content, c, text, world)]
+    if multi and trip.success_text:  # 完成句寫在內容裡；這一趟自己的句子在前，先完成的那一趟不會走到這裡
+        done.insert(0, fill(state, content, c, trip.success_text, world))
+    return done + spent
 
 
 def _complete(state: GameState, content: Content, c: FsChain, now: float) -> None:

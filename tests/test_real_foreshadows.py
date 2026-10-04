@@ -484,8 +484,35 @@ def test_changshe_haoqiang_two_trips_and_two_checks(fs_content, world):
     assert game.choose("fs:fs_changshe_haoqiang") == ["（本人——成功）", chain.final.steps[0].success_text, "沉淵石 -1"]
     assert p.fs_done == ["fs_changshe_haoqiang:0"] and fs_option(game, "fs:fs_changshe_haoqiang") is None
     p.location = "huangjin_camp"
-    assert game.choose("fs:fs_changshe_haoqiang") == ["（本人——成功）", chain.final.success_text, "沉淵石 -1"]
+    assert game.choose("fs:fs_changshe_haoqiang") == [
+        "（本人——成功）", chain.final.steps[1].success_text, chain.final.success_text, "沉淵石 -1",
+    ]  # 後完成的那一趟：自己的句子，再接整條完成的那一句（內容表 4.6）
     assert "fs_changshe_haoqiang" in p.fs_done and world.get_season().third_party["changshe_fire"] == ["甲"]
+
+
+JOINT_LINE = "兩邊的帳房都在你的契上按了手印。不論那一夜誰勝誰敗，他們都欠你一份人情。"
+
+
+@pytest.mark.parametrize("first, second", [("changshe", "huangjin_camp"), ("huangjin_camp", "changshe")])
+def test_two_buyers_second_trip_adds_the_joint_line(fs_content, world, first, second):
+    """兩頭賣糧兩趟都完成的那一下，後完成的那一趟在自己的句子後面接「兩邊的帳房都在你的契上按了手印……」（內容表 4.6）；
+    先完成的那一趟照舊只有自己的句子。兩趟先後不限；完成句寫在內容裡（final.success_text），不是程式裡的字串。"""
+    c = fs_content
+    chain = fs_chain(c, "fs_changshe_haoqiang")
+    own = {t.location: t.success_text for t in chain.final.steps}
+    assert chain.final.success_text == JOINT_LINE and own == {
+        "changshe": "長社的帳房在你的契上按了手印。", "huangjin_camp": "黃巾的帳房在你的契上按了手印。"}
+    game = fs_ready(c, world, "fs_changshe_haoqiang", f"買{first}", rng=FixedRandom(0.0))
+    p = game.state.player
+    p.location = first
+    p.visited.add(first)
+    assert game.choose("fs:fs_changshe_haoqiang") == ["（本人——成功）", own[first], "沉淵石 -1"]  # 先完成的：沒有完成句
+    assert "fs_changshe_haoqiang" not in p.fs_done and not game.state.world.third_party
+    p.location = second
+    p.visited.add(second)
+    assert game.choose("fs:fs_changshe_haoqiang") == ["（本人——成功）", own[second], JOINT_LINE, "沉淵石 -1"]
+    assert "fs_changshe_haoqiang" in p.fs_done
+    assert game.choose("fs:fs_changshe_haoqiang") == ["（此刻無法這麼做。）"]  # 做完就沒有了
 
 
 def test_two_buyers_event_only_the_last_choice_opens_the_chain(fs_content, world, monkeypatch):
@@ -582,6 +609,22 @@ def test_wancheng_guan_reads_the_version_the_week_three_roll_picked(fs_content, 
     huang = fs_chain(c, "fs_wancheng_huang").fragments[3]
     assert huang.versions["甲"].startswith("城裡的人說，官軍圍城最怕拖") and huang.text == huang.versions["甲"]
     assert huang.versions["乙"].startswith("圍城的弟兄說，城裡的糧比我們少")
+
+
+@pytest.mark.parametrize("version, key", [("甲", "成"), ("乙", "不成")])
+def test_wancheng_guan_label_is_qingying(fs_content, world, version, key):
+    """宛城官軍最後一步的選單標籤是「請纓」（內容表 4.6；原本是「見孫堅」），甲、乙兩版一樣：選單、看題的標題、江湖紀錄的標題都是。"""
+    c = fs_content
+    assert fs_chain(c, "fs_wancheng_guan").final.label == "請纓"
+    game = fs_ready(c, world, "fs_wancheng_guan", f"請纓{version}")
+    game.state.world.timeline["zhangmancheng_wan"] = timetable.TimelineResult(key=key, time=0.0)
+    assert fs_option(game, "fs:fs_wancheng_guan").label == "請纓"
+    game.choose("fs:fs_wancheng_guan")
+    assert game.scene_text().startswith("**請纓**")
+    game.choose("fs:fs_wancheng_guan:1")
+    game.choose("fs:fs_wancheng_guan:東北角")
+    assert game.state.journal[0].title == "請纓・宛城"
+    assert fs_chain(c, "fs_wancheng_guan").final.success_versions[version] in game.state.journal[0].lines
 
 
 def test_wancheng_huang_counts_only_donations_to_the_huang_camp(fs_content, world):

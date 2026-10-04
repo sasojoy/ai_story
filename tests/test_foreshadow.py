@@ -545,7 +545,8 @@ def test_requirements_in_final_and_a_step_add_up(fs, world):
     p.materials = {"man_1": 4}
     game.rng = FixedRandom(0.0)
     assert game.choose("fs:fs_fire_haoqiang") == [
-        "（本人——成功）", "兩邊的帳房都在你的契上按了手印。不論那一夜誰勝誰敗，他們都欠你一份人情。", "粗糧 -4",
+        "（本人——成功）", "黃巾的帳房在你的契上按了手印。",
+        "兩邊的帳房都在你的契上按了手印。不論那一夜誰勝誰敗，他們都欠你一份人情。", "粗糧 -4",
     ]
     assert p.materials == {} and "fs_fire_haoqiang" in p.fs_done
 
@@ -596,7 +597,8 @@ def test_haoqiang_chain_is_third_party(fs, world):
     assert p.fs_done == ["fs_fire_haoqiang:0"] and option(game, "fs:fs_fire_haoqiang") is None  # 長社這一趟做完了
     p.location = "lake"
     assert game.choose("fs:fs_fire_haoqiang") == [
-        "（本人——成功）", "兩邊的帳房都在你的契上按了手印。不論那一夜誰勝誰敗，他們都欠你一份人情。", "粗糧 -2",
+        "（本人——成功）", "黃巾的帳房在你的契上按了手印。",
+        "兩邊的帳房都在你的契上按了手印。不論那一夜誰勝誰敗，他們都欠你一份人情。", "粗糧 -2",
     ]
     assert p.fs_done == ["fs_fire_haoqiang:0", "fs_fire_haoqiang:1", "fs_fire_haoqiang"]
     assert w.third_party["changshe_fire"] == ["甲"]

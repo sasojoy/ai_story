@@ -1002,7 +1002,7 @@ class FsStep(_Strict):
     answer: str | None = None
     then: list[FsAsk] = Field(default_factory=list)
     wrong: FsWrong = Field(default_factory=FsWrong)  # 答錯（選項沒有自己的 wrong 時）與檢定失敗
-    success_text: str = ""  # 多趟時：這一趟做完、整條還沒完成時的那句（單趟的看 final.success_text）
+    success_text: str = ""  # 多趟時：這一趟做完的那句；整條還沒完成就只有這句，最後完成的這一趟則接在 final.success_text 前面（單趟的看 final.success_text）
 
 
 class FsFinal(FsStep):
