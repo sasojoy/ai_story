@@ -345,7 +345,7 @@
       <g class="w-shake">
         <g class="w-flames${ready ? " hot" : ""}">${flames}</g>
         <circle r="${r + 3}" class="w-hub-rim"/>
-        <g class="w-spin w-taichi" style="${spinAt(ready ? 3 : 28)}">
+        <g class="w-spin w-taichi${ready ? " hot" : ""}" style="${spinAt(ready ? 3 : 28)}">
           <circle r="${r}" class="w-yang"/>
           <path d="M0,${-r} A${r},${r} 0 0 1 0,${r} A${r / 2},${r / 2} 0 0 1 0,0 A${r / 2},${r / 2} 0 0 0 0,${-r} Z" class="w-yin"/>
           <circle cy="${-r / 2}" r="${r / 7}" class="w-yang"/><circle cy="${r / 2}" r="${r / 7}" class="w-yin"/>
