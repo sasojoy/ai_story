@@ -212,6 +212,19 @@ def test_figure_fates_minimal(s1, season):
     assert figures.commander(season, s1, "jizhou", "guan") is None  # 最小版一律沒有主將
 
 
+def test_unseeded_figures_count_as_present_on_their_front(s1, season):
+    """T4 的最小版（伏筆讀它）：還沒種的人物不算退場、當成在場；種過的看狀態與所在戰線，戰線看不出來也當在場。"""
+    w = season.world
+    assert not figures.is_out(season, "huangfusong") and figures.on_front(season, "huangfusong", "yingru")
+    w.figures["huangfusong"] = FigureState(front="yingru")
+    assert figures.on_front(season, "huangfusong", "yingru") and not figures.on_front(season, "huangfusong", "jizhou")
+    w.figures["zhujun"] = FigureState()  # 時刻表套效果時才建的一筆：戰線是空的，看不出來就當在場
+    assert figures.on_front(season, "zhujun", "yingru")
+    for status in ("retired", "crippled", "jailed", "away"):
+        w.figures["luzhi"] = FigureState(front="jizhou", status=status)
+        assert not figures.on_front(season, "luzhi", "jizhou")
+
+
 def test_bonus_from_outcome(s1, season):
     w = season.world
     msgs = timetable.resolve(season, s1, event(s1, "changshe_fire"), random.Random(0), key="huang:大勝")

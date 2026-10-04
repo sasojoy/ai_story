@@ -43,8 +43,19 @@ def holds(state: GameState, change: FigureChange) -> bool:
 
 
 def is_out(state: GameState, fid: str) -> bool:
+    """退場或重創。還沒種過的人物（T4 開季時才種）不算，當成在場。"""
     figure = state.world.figures.get(fid)
     return figure is not None and figure.status in OUT
+
+
+def on_front(state: GameState, fid: str, front: str) -> bool:
+    """這位人物此刻在不在 front 這條戰線（伏筆的「主角色不在時改由接手的人出面」用它）。T4 之前的最小版：
+    還沒種過的人物當成在他的預設戰線（看不出來就當在場）；種過的要在場（active），而且所在戰線是 front——
+    戰線是空的（時刻表套效果時才建的那一筆）一樣看不出來，當成在。T4 種人物之後照同一個規則讀。"""
+    figure = state.world.figures.get(fid)
+    if figure is None:
+        return True
+    return figure.status == "active" and figure.front in (None, front)
 
 
 def commander(state: GameState, content: Content, front: str | None, faction: str) -> str | None:

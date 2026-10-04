@@ -596,6 +596,8 @@ class Config(_Strict):
     over_cap_contrib_ratio: float = Field(default=0.2, ge=0, le=1)  # 超過每日上限的部分，貢獻只記幾成
     contrib_per_push: int = Field(default=10, ge=0)  # 推 1 點大勢記幾點貢獻（不打人數緩衝的折）
     active_window_days: float = Field(default=1, gt=0)  # 陣營人數緩衝的「活躍」時窗：幾個曆日內推過大勢的成員才算
+    # 糧草（計畫 T6；這一版沒有軍備物資，糧草＝背包裡的慢屬性素材，濃縮版內容表 4.0）：凡、靈、天一個各算幾份
+    grain_values: list[int] = Field(default_factory=lambda: [1, 3, 9])
     train_stat_chance: float = 0.3
     train_event_chance: float = 0.3
     qiyu_weight_multiplier: float = 1.5
