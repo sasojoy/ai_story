@@ -29,7 +29,7 @@ from .state import PLAYER, BattleRecord, GameState, JournalEntry, Journey, Rumor
 from .world import (
     _season_vehicle, advance_world_state, check_thresholds, end_season, fire_by_id, sim_tick, start_pending_battle,
 )
-from .world_state import WorldStateStore
+from .world_state import WorldStateStore, season_length_days
 
 HOUR = 3600
 DAY = 86400
@@ -2339,7 +2339,7 @@ class Game:
             "location": c.locations[p.location].name,
             "day": int(w.time // DAY) + 1,
             "clock": f"{int(w.time % DAY // HOUR):02d}:{int(w.time % HOUR // 60):02d}",
-            "season_days": c.config.season_days,
+            "season_days": season_length_days(w, c),  # 這一季蓋章的季長（舊季照它自己的章，不跟著設定變）
             "stamina": int(p.stamina),
             "stamina_max": c.config.stamina_max,
             "hp": int(now),

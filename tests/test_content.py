@@ -5,7 +5,7 @@ import pytest
 from pydantic import ValidationError
 
 from conftest import FIXTURE
-from tianxia.content import ContentError, load_content, validate
+from tianxia.content import ContentError, load_content, profile_line, validate
 from tianxia.models import FactionDef
 
 
@@ -764,3 +764,36 @@ def test_compass_must_be_on_the_map(tmp_path):
     edit_json(root / "map.json", lambda d: d.update(compass=[401, 120]))
     with pytest.raises(ContentError, match="指北針"):
         load_content(root)
+
+
+# ── 週末設定（計畫 T2「總開關與週末設定」）：一次切換，不手改 content/config.json ──
+CONTENT_DIR = FIXTURE.parent.parent.parent / "content"
+WEEKEND_KEYS = {"season_one", "season_days", "server_max_players"}
+
+
+def test_weekend_profile_overrides_three_settings():
+    base = load_content(CONTENT_DIR).config
+    weekend = load_content(CONTENT_DIR, profile="weekend").config
+    assert (weekend.season_one, weekend.season_days, weekend.server_max_players) == (True, 2.5, 2)
+    assert (base.season_one, base.season_days, base.server_max_players) == (False, 14, 30)  # 不給 profile 時照 config.json
+    assert weekend.model_dump(exclude=WEEKEND_KEYS) == base.model_dump(exclude=WEEKEND_KEYS)  # 其他設定一個都不動
+
+
+def test_profile_with_unknown_key_fails_to_load(tmp_path):
+    root = copy_fixture(tmp_path)
+    (root / "profiles").mkdir()
+    (root / "profiles" / "typo.json").write_text('{"season_one": true, "season_dayz": 2.5}', encoding="utf-8")
+    with pytest.raises(ContentError, match="season_dayz"):
+        load_content(root, profile="typo")
+
+
+def test_a_profile_that_does_not_exist_fails_to_load(tmp_path):
+    with pytest.raises(ContentError, match="nope"):
+        load_content(copy_fixture(tmp_path), profile="nope")
+
+
+def test_the_profile_line_says_what_the_profile_turns_on():
+    assert profile_line(load_content(CONTENT_DIR), None) == "設定：預設"
+    assert profile_line(load_content(CONTENT_DIR, profile="weekend"), "weekend") == (
+        "設定：weekend（第一季濃縮版規則開啟、季長 2.5 天、人數上限 2）"
+    )

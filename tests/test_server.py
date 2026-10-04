@@ -1181,6 +1181,23 @@ def test_starting_the_server_prints_the_database_path(capsys, monkeypatch):
     assert str(database.default_path().resolve()) in capsys.readouterr().out
 
 
+def test_server_prints_the_profile_at_startup(capsys, monkeypatch):
+    """跟資料庫路徑一起印出用的是哪一份設定（計畫 T2）：TIANXIA_PROFILE 設錯時一眼看得出來。"""
+    import uvicorn
+
+    from tianxia.content import load_content
+
+    monkeypatch.setattr(uvicorn, "run", lambda *args, **kwargs: None)
+    monkeypatch.setattr(server, "PROFILE", None)
+    server.main([])
+    out = capsys.readouterr().out
+    assert "設定：預設" in out and str(database.default_path().resolve()) in out
+    monkeypatch.setattr(server, "PROFILE", "weekend")
+    monkeypatch.setattr(server, "CONTENT", load_content(server.ROOT / "content", profile="weekend"))
+    server.main([])
+    assert "設定：weekend（第一季濃縮版規則開啟、季長 2.5 天、人數上限 2）" in capsys.readouterr().out
+
+
 def _host_passed_to_uvicorn(monkeypatch, argv):
     import uvicorn
 

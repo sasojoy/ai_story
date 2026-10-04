@@ -8,7 +8,7 @@ from .models import Act, BattleDef, Content, Ending, SimPlayer, SimRumor, Storyl
 from .ollama_client import OllamaClient
 from .rules import add_chronicle, add_rumor, add_world_flags, change_trend, check_condition
 from .state import GameState, PlayerState, WorldState
-from .world_state import WorldStateStore
+from .world_state import WorldStateStore, season_length_days
 
 HOUR = 3600
 DAY = 86400
@@ -235,7 +235,7 @@ def advance_world_state(
         if hours:
             season.sim_accum -= hours * HOUR
             msgs += sim_tick(vehicle, content, hours, rng)
-        if not season.ended and season.time >= content.config.season_days * DAY:
+        if not season.ended and season.time >= season_length_days(season, content) * DAY:
             msgs += end_season(vehicle, content, world)
     return msgs
 

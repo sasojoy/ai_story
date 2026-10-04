@@ -32,7 +32,14 @@ class ContentError(Exception):
     pass
 
 
-def load_content(root: Path) -> Content:
+# 設定覆寫檔（content/profiles/<名字>.json）的環境變數。server.py、run_bots.py、scripts/sim_*.py 讀它傳進
+# load_content；引擎自己不讀環境變數（計畫 T2「總開關與週末設定」）。
+PROFILE_ENV = "TIANXIA_PROFILE"
+
+
+def load_content(root: Path, profile: str | None = None) -> Content:
+    """profile 給了就把 profiles/<profile>.json 的鍵蓋在 config.json 上（例如週末設定一次打開季曆與 2.5 天的季），
+    不必手改 config.json；覆寫檔只能寫 Config 有的欄位，拼錯在載入當下就報錯。"""
     root = Path(root)
     events: dict[str, Event] = {}
     for path in sorted((root / "events").glob("*.json")):
@@ -42,7 +49,7 @@ def load_content(root: Path) -> Content:
                 raise ContentError(f"事件 id 重複：{event.id}（{path.name}）")
             events[event.id] = event
     content = Content(
-        config=Config(**_read(root / "config.json")),
+        config=_config(root, profile),
         scenario=Scenario(**_read(root / "scenario.json")),
         locations=_index(Location, _read(root / "locations.json")),
         skills=_index(SkillDef, _read(root / "skills.json")),
@@ -61,6 +68,29 @@ def load_content(root: Path) -> Content:
     validate(content)
     _scale_marks(content, content.config.mark_threshold_scale)
     return content
+
+
+def _config(root: Path, profile: str | None) -> Config:
+    raw = _read(root / "config.json")
+    if profile is not None:
+        path = root / "profiles" / f"{profile}.json"
+        if not path.exists():
+            raise ContentError(f"找不到設定覆寫檔 {profile}（應該在 {path}）")
+        overrides = _read(path)
+        unknown = sorted(set(overrides) - set(Config.model_fields))
+        if unknown:
+            raise ContentError(f"設定覆寫檔 {path.name} 有 Config 沒有的欄位：{'、'.join(unknown)}")
+        raw = {**raw, **overrides}
+    return Config(**raw)  # 值寫錯照舊由模型擋（跟 config.json 本身寫錯一樣丟 ValidationError）
+
+
+def profile_line(content: Content, profile: str | None) -> str:
+    """啟動時跟資料庫路徑一起印的那一行：用的是哪一份設定、打開了什麼。設錯時一眼看得出來。"""
+    if profile is None:
+        return "設定：預設"
+    cfg = content.config
+    switch = "開啟" if cfg.season_one else "關閉"
+    return f"設定：{profile}（第一季濃縮版規則{switch}、季長 {cfg.season_days:g} 天、人數上限 {cfg.server_max_players}）"
 
 
 def _scale_marks(obj, scale: float) -> None:

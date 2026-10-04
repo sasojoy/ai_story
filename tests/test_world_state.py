@@ -661,3 +661,16 @@ def test_a_battle_stays_on_record_after_the_next_season(store, content):
     with store.db.snapshot() as conn:
         row = conn.execute("SELECT season, battle_def FROM battles WHERE id = ?", (battle.record_id,)).fetchone()
     assert (row["season"], row["battle_def"]) == (1, "b1")
+
+
+def test_a_season_is_stamped_with_the_settings_it_opened_under(store, content):
+    """開季時把當下的開關與季長蓋章在那一季上（計畫 T2「舊季不會被補算」）：之後換了設定，舊季照它自己的章走。"""
+    content.config.auto_open_first_season = True
+    content.config.season_one, content.config.season_days = False, 14
+    store.seed_first_season(content)
+    assert (store.get_season().season_one, store.get_season().length_days) == (False, 14)
+    content.config.season_one, content.config.season_days = True, 2.5  # 換成週末設定：正在跑的這一季不變
+    assert (store.get_season().season_one, store.get_season().length_days) == (False, 14)
+    store.mutate_season(lambda season: setattr(season, "ended", True))
+    assert store.next_season(content, now=1.0)
+    assert (store.get_season().season_one, store.get_season().length_days) == (True, 2.5)

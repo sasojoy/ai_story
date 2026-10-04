@@ -85,13 +85,22 @@ class SharedWorldState(BaseModel):
 
 
 def fresh_season(content: Content) -> WorldState:
-    """照劇本種出一季全新的共用賽季（大勢起始值、公開的大勢線、第一條主線）。"""
+    """照劇本種出一季全新的共用賽季（大勢起始值、公開的大勢線、第一條主線），並把當下的開關與季長蓋章在
+    這一季上（seed_first_season、next_season 都走這裡）：之後換了設定，這一季照它自己的章走。"""
     trends = content.scenario.trends
+    cfg = content.config
     return WorldState(
         trends={t.id: t.start for t in trends},
         revealed={t.id for t in trends if not t.hidden},
         storyline=content.scenario.storylines[0].id,
+        season_one=cfg.season_one,
+        length_days=cfg.season_days,
     )
+
+
+def season_length_days(season: WorldState, content: Content) -> float:
+    """這一季有幾個遊戲日：照開季時蓋的章；T2 之前開的季沒有章，照現在的設定。"""
+    return season.length_days if season.length_days is not None else content.config.season_days
 
 
 def jade_seal_summary(fragments: list[JadeSealFragment]) -> str:

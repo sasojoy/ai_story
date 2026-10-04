@@ -3923,3 +3923,28 @@ def test_the_move_mode_is_screen_state_and_never_saved(content, game):
     game.set_move_mode("hurry")
     assert "move_mode" not in game.state.model_dump_json()
     assert Game(content, game.state, world=game.world).move_mode == "walk"
+
+
+# ── 第一季濃縮版的總開關（計畫 T2「總開關與週末設定」）──────────────────
+
+
+def test_old_season_not_replayed_when_switch_turns_on(content, world):
+    """QA 要的保險：開關關著、季長 14 天時開的季，換成週末設定之後照它自己的章走——不會因為季長變成 2.5 天
+    就一口氣收掉；管理者收季、開下一季之後，新的一季才照週末設定。"""
+    content.scenario.sim_players = []  # 虛擬玩家推過門檻也會收季，這裡只看時間與開關
+    content.config.admins = ["管理者"]
+    content.config.season_one, content.config.season_days = False, 14
+    admin = Game.new(content, "管理者", rng=random.Random(1), world=world)
+    admin.sync(0.0)
+    admin.advance(5 * DAY)
+
+    content.config.season_one, content.config.season_days = True, 2.5  # 換成週末設定再同步
+    admin.sync(60.0)
+    season = world.get_season()
+    assert not season.ended and season.time >= 5 * DAY
+    assert (season.season_one, season.length_days) == (False, 14)
+
+    admin.admin_end_season(now=120.0)
+    admin.admin_next_season(now=180.0)
+    season = world.get_season()
+    assert (season.season_one, season.length_days) == (True, 2.5)
