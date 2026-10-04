@@ -8,20 +8,17 @@ from __future__ import annotations
 import math
 from html import escape
 
-from . import atlas
+from . import atlas, mapart
 from .atlas import KNOWN, Odds
+from .mapart import fmt
 from .models import Content, Location, MapLabel, MapLayout, MapRegion
 from .state import GameState
 
-NODE_FILL = {
-    "current": "#D85A30",
-    "visible": "#1D9E75",
-    "remembered": "#7F77DD",
-    "outline": "#B4B2A9",
-    "dot": "#C9C3B2",
-}
-NODE_SIZE = {"current": 11, "visible": 8, "remembered": 8, "outline": 7, "dot": 4}
+NODE_SIZE = {"current": 13, "visible": 13, "remembered": 13, "outline": 11, "dot": 4}  # 摸清的是圓盤半徑，未知是剪影
+LOOKS = {"current": "full", "visible": "full", "remembered": "faded", "outline": "ghost"}  # 圖示的畫法（mapart.icon）
+CURRENT_RING = 17  # 所在地的紅圈
 DANGER_RING = {1: "#639922", 2: "#BA7517", 3: "#A32D2D"}
+ENEMY_DISC = 0.5  # 敵情層：圓盤是危險色往圓盤原色淡幾成
 TEXT_DARK = "#2C2C2A"
 TEXT_MUTED = "#8A8577"
 NOTE_FILL = "#8C3B2A"  # 名字底下那行小字（常出沒、最險、體力）
@@ -35,7 +32,8 @@ LABEL_GAP = 5  # 名字離地點記號（含外圈）多遠
 LABEL_PAD = 0.5  # 擺名字時，和別的文字、記號至少隔多遠
 EDGE = 4  # 文字離畫布邊緣至少多遠
 OUTSIDE_WEIGHT = 10  # 找不到空位時，出界比壓到別的東西更糟
-SLIDE_STEP = 10  # 名字擺在地點上方或下方時，往左滑開一次滑多遠
+SLIDE_STEP = 10  # 名字擺在地點上方或下方時，往左（或往右）滑開一次滑多遠
+SHIFTS = (1, -1, 2, -2, 3, -3)  # 名字擺在左右兩邊、原本的位置都擠不下時，上下錯開幾個半行（往下為正）
 SEARCH_LIMIT = 400  # 擺名字時最多試幾個位置，再多就改成一個一個擺
 Box = tuple[float, float, float, float]  # 左、上、右、下
 Spot = tuple[float, float, str]  # 文字的 x、第一行的基線 y、對齊（start／middle／end）
@@ -50,17 +48,17 @@ ROUTE_STROKE = "#D85A30"
 TREND_RED = "#C0392B"
 TREND_TINT = 0.6  # 大勢 100 時，大區顏色往紅色靠六成
 TREND_TEXT = "#A32D2D"
-LEGEND_STATES = [("current", "所在地"), ("visible", "看得見"), ("remembered", "去過／摸清"), ("outline", "未知")]
-LEGEND_SHAPES = "■ 城鎮　◆ 門派　● 野外"
-LEGEND_RING = "外圈：綠安全／橙危險／紅兇險　⚔ 可歷練"
+LEGEND_ICONS = [("town", "城鎮"), ("roof", "寺院書院"), ("camp", "營寨"), ("ferry", "渡口"), ("peak", "山林"), ("flag", "野外")]
+LEGEND_STATES = "全彩：看得見　淡色：去過／摸清　灰：未知　紅旗：所在地"
+LEGEND_TEXT = "#5F5E5A"
+LEGEND_RING = "外圈：綠安全／橙危險／紅兇險　⚔ 可遊歷"
 LEGEND_LAYERS = {
     "situation": "⚑ 龍頭人物（會自己行動的江湖人物）常出沒　大區越紅，大勢越凶",
     "enemies": "底色同外圈　最險：最難對付的對手與勝算",
     "story": f"★ 這一幕主線的目標　✦ 最近 {atlas.NEWS_DAYS} 天的大事與傳聞",
     "routes": "數字：步行要幾分鐘（走路程最短的路）　粗線：到選定地點的路",
 }
-RIVER_STROKE = "#7FA9D6"
-RIVER_TEXT = "#6F93BA"
+RIVER_TEXT = "#4F7FA3"
 RIVER_SIZE = 13  # 河名
 MINI_HEIGHT = 200  # 小地圖在畫面上固定的高度（px）；寬度隨欄寬，圖置中
 MINI_HOPS = 2  # 視窗外、幾站路以內的摸清地點，在視窗邊緣標出方向
@@ -68,16 +66,11 @@ MINI_ARROWS = 4  # 視窗邊緣最多標幾個方向
 ARROW_SIZE = 13  # 視窗邊緣方向的字級
 ARROW_SLIDE = 6  # 方向擠不下時，沿著邊緣滑開一次滑多遠
 ARROW_SLIDES = 20  # 往每一邊最多滑幾次（40 個地點的地圖，兩站外同方向的地點常常擠在同一邊）
+LEGEND_X = mapart.FRAME_INSIDE  # 圖例框的左緣：在外框裡面
+LEGEND_HEIGHT = 46
 YOU_SIZE = 7  # 路上的「你」：圓點的半徑（路上設計 3.4）
+YOU_FILL = "#D85A30"
 Point = tuple[float, float]
-
-
-def node_shape(loc: Location) -> str:
-    if "城鎮" in loc.tags:
-        return "town"
-    if "門派" in loc.tags:
-        return "sect"
-    return "wild"
 
 
 def text_width(text: str, size: int) -> float:
@@ -193,16 +186,6 @@ def _grow(box: Box, pad: float) -> Box:
     return box[0] - pad, box[1] - pad, box[2] + pad, box[3] + pad
 
 
-def _shape(shape: str, x: int, y: int, size: int, fill: str, ring: str | None) -> str:
-    stroke = f' stroke="{ring}" stroke-width="3"' if ring else ""
-    if shape == "town":
-        return f'<rect x="{x - size}" y="{y - size}" width="{size * 2}" height="{size * 2}" rx="3" fill="{fill}"{stroke}/>'
-    if shape == "sect":
-        s = size + 2
-        return f'<path d="M{x} {y - s} L{x + s} {y} L{x} {y + s} L{x - s} {y} Z" fill="{fill}"{stroke}/>'
-    return f'<circle cx="{x}" cy="{y}" r="{size}" fill="{fill}"{stroke}/>'
-
-
 def _text(
     x: float, y: float, text: str, size: int, fill: str, halo: str, anchor: str = "start", bold: bool = False,
     attrs: str = "",
@@ -223,41 +206,52 @@ def _label(loc: Location, view: str, fights: bool = True) -> str:
 
 def _tint(color: str, value: int) -> str:
     """大勢越高，大區顏色越往紅色靠。"""
-    ratio = TREND_TINT * max(0, min(100, value)) / 100
-    mixed = (
-        round(int(color[i:i + 2], 16) * (1 - ratio) + int(TREND_RED[i:i + 2], 16) * ratio) for i in (1, 3, 5)
-    )
-    return "#" + "".join(f"{v:02X}" for v in mixed)
+    return mapart.mix(color, TREND_RED, TREND_TINT * max(0, min(100, value)) / 100)
 
 
 def _legend_line(layer: str) -> str:
     return f"{LEGEND_RING}　{LEGEND_LAYERS[layer]}"
 
 
+def _legend_xs() -> list[int]:
+    """圖例第一行：六個小圖示各自的中心 x，最後再多一個：視野狀態那段字從哪裡寫起。"""
+    xs = [LEGEND_X + 14]
+    for _, text in LEGEND_ICONS:
+        xs.append(xs[-1] + 26 + round(text_width(text, 12)))
+    xs[-1] += 6
+    return xs
+
+
 def _legend_width(width: int, layer: str) -> float:
-    return min(width - 16, max(400, text_width(_legend_line(layer), 12) + 24))
+    """圖例框的寬：裝得下兩行字（第一行的圖示與視野狀態、第二行的外圈與圖層說明），但不超出地圖。"""
+    first = _legend_xs()[-1] - LEGEND_X + text_width(LEGEND_STATES, 12) + 10
+    return min(width - 2 * LEGEND_X, max(400, first, text_width(_legend_line(layer), 12) + 24))
 
 
-def _legend(bg: str, top: int, width: int, layer: str) -> str:
-    line = _legend_line(layer)
+def _legend(top: int, width: int, layer: str) -> str:
+    """圖例：第一行是六種地點圖示（縮成七成）與視野狀態的畫法，第二行是外圈與這一層的說明。"""
     box = _legend_width(width, layer)
-    parts = [f'<rect x="8" y="{top}" width="{box:g}" height="46" rx="6" fill="{bg}" fill-opacity="0.9"/>']
-    for i, (view, text) in enumerate(LEGEND_STATES):
-        x = 18 + i * 72
-        parts.append(f'<circle cx="{x}" cy="{top + 13}" r="5" fill="{NODE_FILL[view]}"/>')
-        parts.append(f'<text x="{x + 9}" y="{top + 17}" font-size="12" fill="#5F5E5A">{text}</text>')
-    parts.append(f'<text x="{18 + len(LEGEND_STATES) * 72}" y="{top + 17}" font-size="12" fill="#5F5E5A">{LEGEND_SHAPES}</text>')
-    parts.append(f'<text x="14" y="{top + 38}" font-size="12" fill="#5F5E5A">{escape(line)}</text>')
+    parts = [
+        f'<rect x="{LEGEND_X}" y="{top}" width="{box:g}" height="{LEGEND_HEIGHT}" rx="6" fill="{mapart.DISC}" fill-opacity="0.92" '
+        'stroke="#B9AD8E" stroke-width="1"/>'
+    ]
+    xs, cy = _legend_xs(), top + 13
+    for (kind, text), x in zip(LEGEND_ICONS, xs):
+        icon = mapart.icon(kind, x, cy, "full")
+        parts.append(f'<g transform="translate({x},{cy}) scale(0.7) translate({-x},{-cy})">{icon}</g>')
+        parts.append(f'<text x="{x + 10}" y="{top + 17}" font-size="12" fill="{LEGEND_TEXT}">{text}</text>')
+    parts.append(f'<text x="{xs[-1]}" y="{top + 17}" font-size="12" fill="{LEGEND_TEXT}">{LEGEND_STATES}</text>')
+    parts.append(f'<text x="{LEGEND_X + 6}" y="{top + 38}" font-size="12" fill="{LEGEND_TEXT}">{escape(_legend_line(layer))}</text>')
     return "".join(parts)
 
 
 def _layer_marks(
     state: GameState, content: Content, layer: str, views: dict[str, str], odds: Odds | None
 ) -> tuple[dict[str, str], dict[str, str], dict[str, str]]:
-    """這一層要加的東西，只給摸清的地點：（名字前的記號, 名字底下的小字, 節點底色）。"""
+    """這一層要加的東西，只給摸清的地點：（名字前的記號, 名字底下的小字, 圓盤換的顏色）。"""
     prefixes: dict[str, str] = {}
     notes: dict[str, str] = {}
-    fills: dict[str, str] = {}
+    discs: dict[str, str] = {}
     known = [loc_id for loc_id, view in views.items() if view in KNOWN]
     if layer == "situation":
         for loc_id in known:
@@ -267,7 +261,7 @@ def _layer_marks(
     elif layer == "enemies":
         for loc_id in known:
             loc = content.locations[loc_id]
-            fills[loc_id] = DANGER_RING[loc.danger]
+            discs[loc_id] = mapart.mix(DANGER_RING[loc.danger], mapart.DISC, ENEMY_DISC)
             worst = atlas.worst_foe(content, loc, odds, state.player.faction) if odds is not None else None
             if worst:
                 notes[loc_id] = f"最險：{worst[0]} {worst[1]}"
@@ -286,52 +280,75 @@ def _layer_marks(
                 way = atlas.way_to(state, content, loc_id)
                 if way is not None:
                     notes[loc_id] = f"{atlas.whole_minutes(way.minutes)} 分鐘"
-    return prefixes, notes, fills
+    return prefixes, notes, discs
+
+
+def _road_curve(content: Content, spot: atlas.RoadSpot) -> tuple[Point, Point, Point]:
+    """你所在的那條路畫出來的曲線：（身後那一站, 控制點, 前面那一站）。"""
+    a, b = content.locations[spot.behind], content.locations[spot.ahead]
+    return (a.x, a.y), mapart.road_control(content, spot.behind, spot.ahead), (b.x, b.y)
 
 
 def _you(content: Content, spot: atlas.RoadSpot) -> tuple[float, float, str]:
-    """路上的「你」畫在哪裡（路上設計 3.4）：身後那一站往前面那一站走了 done 成的那一點，以及往前走的方向箭頭。"""
-    a, b = content.locations[spot.behind], content.locations[spot.ahead]
-    x = a.x + (b.x - a.x) * spot.done
-    y = a.y + (b.y - a.y) * spot.done
-    return x, y, atlas.direction((a.x, a.y), (b.x, b.y))
+    """路上的「你」畫在哪裡（路上設計 3.4）：沿著畫出來的那條路（曲線），從身後那一站往前面那一站走了 done 成的
+    那一點，以及往前走的方向箭頭（照兩站的直線方向）。"""
+    behind, control, ahead = _road_curve(content, spot)
+    x, y = mapart.bezier_point(behind, control, ahead, spot.done)
+    return x, y, atlas.direction(behind, ahead)
 
 
 def _you_mark(content: Content, spot: atlas.RoadSpot, you: tuple[float, float, str], taken: list[Taken]) -> str:
-    """路上的「你」：從你到前面那一站的虛線（還沒走的那一截，看得出走向）與一個圓點；把圓點佔的範圍加進 taken。
-    兩個都不接點擊（pointer-events="none"）：它們畫在地點上面，不然會擋住點前後那兩站。"""
+    """路上的「你」：從你沿著那條路到前面那一站的虛線（還沒走的那一截，看得出走向）與一個圓點；把圓點佔的範圍加進
+    taken。兩個都不接點擊（pointer-events="none"）：它們畫在地點上面，不然會擋住點前後那兩站。"""
     x, y, _ = you
-    ahead = content.locations[spot.ahead]
+    behind, control, ahead = _road_curve(content, spot)
+    _, (cx, cy) = mapart.bezier_tail(behind, control, ahead, spot.done)
     taken.append(((x - YOU_SIZE, y - YOU_SIZE, x + YOU_SIZE, y + YOU_SIZE), 1))
     return (
-        f'<line x1="{x:g}" y1="{y:g}" x2="{ahead.x}" y2="{ahead.y}" stroke="{ROUTE_STROKE}" stroke-width="4" '
-        'stroke-dasharray="6 4" stroke-linecap="round" pointer-events="none"/>'
-        f'<circle class="tx-you" cx="{x:g}" cy="{y:g}" r="{YOU_SIZE}" fill="{NODE_FILL["current"]}" '
+        f'<path d="M{fmt(x)},{fmt(y)} Q{fmt(cx)},{fmt(cy)} {fmt(ahead[0])},{fmt(ahead[1])}" fill="none" '
+        f'stroke="{ROUTE_STROKE}" stroke-width="4" stroke-dasharray="6 4" stroke-linecap="round" pointer-events="none"/>'
+        f'<circle class="tx-you" cx="{fmt(x)}" cy="{fmt(y)}" r="{YOU_SIZE}" fill="{YOU_FILL}" '
         'stroke="#FFFFFF" stroke-width="2" pointer-events="none"/>'
     )
 
 
-def _route_line(state: GameState, content: Content, selected: str | None, start: Point) -> str:
-    """路線層：從 start（所在地，或路上的「你」）到選定地點的那條路（粗線）；選的是所在地或走不到時是空字串。
-    在路上時走改道的那一條（見 atlas.way_to）。"""
+def _route_line(state: GameState, content: Content, selected: str | None, spot: atlas.RoadSpot | None) -> str:
+    """路線層：從所在地（在路上時是路上的「你」）沿著畫出來的路（每一段都是那條路的曲線）到選定地點的粗線；
+    選的是所在地或走不到時是空字串。在路上時走改道的那一條（見 atlas.way_to）：第一段是你所在那條路剩下的一截——
+    往前走是到前面那一站的那一截，掉頭是同一條曲線倒回身後那一站。"""
     route = atlas.way_to(state, content, selected) if selected else None
     if route is None:
         return ""
-    stops = [start] + [(content.locations[loc_id].x, content.locations[loc_id].y) for loc_id in route.path]
-    points = " ".join(f"{x:g},{y:g}" for x, y in stops)
+    if spot is None:
+        here = content.locations[state.player.location]
+        d, prev, legs = f"M{here.x},{here.y}", state.player.location, route.path
+    else:
+        behind, control, ahead = _road_curve(content, spot)
+        if route.path[0] == spot.ahead:
+            start, bend = mapart.bezier_tail(behind, control, ahead, spot.done)
+        else:  # 掉頭
+            start, bend = mapart.bezier_tail(ahead, control, behind, 1 - spot.done)
+        first = content.locations[route.path[0]]
+        d = f"M{fmt(start[0])},{fmt(start[1])} Q{fmt(bend[0])},{fmt(bend[1])} {first.x},{first.y}"
+        prev, legs = route.path[0], route.path[1:]
+    for loc_id in legs:
+        loc = content.locations[loc_id]
+        cx, cy = mapart.road_control(content, prev, loc_id)
+        d += f" Q{fmt(cx)},{fmt(cy)} {loc.x},{loc.y}"
+        prev = loc_id
     return (
-        f'<polyline points="{points}" fill="none" stroke="{ROUTE_STROKE}" stroke-width="5" stroke-opacity="0.7" '
+        f'<path d="{d}" fill="none" stroke="{ROUTE_STROKE}" stroke-width="5" stroke-opacity="0.7" '
         'stroke-linecap="round" stroke-linejoin="round"/>'
     )
 
 
-def _reach(loc: Location, view: str, selected: bool) -> tuple[float, float]:
-    """地點記號從中心往外畫到多遠：（記號本身與危險外圈, 連同所在地、選定地點的圓圈）。"""
+def _reach(view: str, selected: bool) -> tuple[float, float]:
+    """地點記號從中心往外畫到多遠：（記號本身（摸清的到圓盤外圈）, 連同所在地的紅圈、選定地點的圓圈）。"""
     size = NODE_SIZE[view]
-    mark = size + (2 if view != "dot" and node_shape(loc) == "sect" else 0) + (1.5 if view in KNOWN else 0)
+    mark = size + (1 if view in KNOWN else 0)  # 圓盤的外圈：線寬 2
     ring = mark
     if view == "current":
-        ring = max(ring, size + 8)  # 所在地的圓圈：半徑 size + 7，線寬 2
+        ring = max(ring, CURRENT_RING + 1)  # 紅圈：線寬 2
     if selected:
         ring = max(ring, size + 11.5)  # 選定的圓圈：半徑 size + 10，線寬 3
     return mark, ring
@@ -339,8 +356,11 @@ def _reach(loc: Location, view: str, selected: bool) -> tuple[float, float]:
 
 def _label_spots(x: int, y: int, reach: float, lines: list[tuple[str, int]], edge: float = EDGE) -> list[Spot]:
     """地點名字（連同底下的小字）可以擺的位置，依偏好排好：右、左、左下、右下；都擠不下時再試
-    右邊與左邊高一行（小字在記號旁、名字在它上面）、右上、左上，最後把下方與上方的字往左滑開，
-    最遠滑到 edge（文字能擺到的最左邊）。"""
+    右邊與左邊高一行（小字在記號旁、名字在它上面）、右上、左上，再把下方與上方的字往左滑開，
+    最遠滑到 edge（文字能擺到的最左邊）。還是擠不下時：左右兩邊上下錯開半行到一行半、正下方與正上方置中、
+    四個斜角，最後是下方與上方另一組滑開的位置（從右下、右上那頭算起，跟往左滑開的錯開，補上中間的空隙）。
+    地點擠在一起時，原本那幾個位置常常全都壓到隔壁的圓盤。新位置排在後面，但多了選擇會改變 _place_labels
+    先擺誰，所以擠的地方（例如潁川一帶）本來擺得下的名字也可能換到別的空位。"""
     gap = reach + LABEL_GAP
     clear = reach + LABEL_PAD + 1  # 上下擺時，文字離記號中心至少多遠
     below = y + clear + lines[0][1] * ASCENT
@@ -354,7 +374,15 @@ def _label_spots(x: int, y: int, reach: float, lines: list[tuple[str, int]], edg
     lefts = [left for left in lefts if left >= edge]
     if x + reach - width < edge < x - reach:
         lefts.append(edge)  # 貼著畫布左邊
-    return spots + [(left, base, "start") for base in (below, above) for left in lefts]
+    spots += [(left, base, "start") for base in (below, above) for left in lefts]
+    for half in SHIFTS:  # 左右兩邊上下錯開
+        dy = half * LINE_GAP / 2
+        spots += [(x + gap, y + 5 + dy, "start"), (x - gap, y + 5 + dy, "end")]
+    spots += [(x, below, "middle"), (x, above, "middle")]
+    spots += [(x + gap, below, "start"), (x - gap, below, "end"), (x + gap, above, "start"), (x - gap, above, "end")]
+    rights = [x + reach + d - width for d in range(SLIDE_STEP, math.ceil(width - 2 * reach), SLIDE_STEP)]
+    spots += [(right, base, "start") for base in (below, above) for right in rights]
+    return list(dict.fromkeys(spots))  # 去掉重複的位置（一行字時有幾個會重疊），順序照舊
 
 
 def _region_labels(
@@ -377,19 +405,52 @@ def _region_labels(
 
 
 def _polygons(m: MapLayout, tints: dict[str, str]) -> list[str]:
-    """大區的底色；tints 是換過的顏色（大區 id → 顏色），其餘照原色。"""
-    return [
-        f'<polygon points="{" ".join(f"{x},{y}" for x, y in region.points)}" fill="{tints.get(region.id, region.fill)}"/>'
-        for region in m.regions
-    ]
+    """大區：削角的底色塊（只是外觀，歸屬照舊用原始多邊形）；tints 是換過的顏色（大區 id → 顏色），其餘照原色。"""
+    return [mapart.region_shape(region.points, tints.get(region.id, region.fill), region.fill) for region in m.regions]
 
 
 def _rivers(m: MapLayout) -> list[str]:
-    return [
-        f'<polyline points="{" ".join(f"{x},{y}" for x, y in river)}" fill="none" stroke="{RIVER_STROKE}" '
-        'stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>'
-        for river in m.rivers
-    ]
+    """河：從上游往下游漸寬的平滑色帶（黃河土黃，其他藍色）。"""
+    return [mapart.river_shape(river) for river in m.rivers]
+
+
+def _terrain_names(m: MapLayout, taken: list[Taken], bounds: Box | None = None) -> list[str]:
+    """有名字的地形寫成淡綠小字（位置見 mapart.terrain_name_spot），佔的範圍加進 taken，地點名字會讓開；
+    給了 bounds（小地圖）時只寫整個落在裡面的。畫在地點記號上面，所以不接點擊（pointer-events="none"）。"""
+    out = []
+    for piece in m.terrain:
+        if not piece.name:
+            continue
+        x, y = mapart.terrain_name_spot(piece)
+        box = _terrain_name_box(piece.name, x, y)
+        if bounds is not None and _outside(box, bounds):
+            continue
+        out.append(
+            f'<text x="{fmt(x)}" y="{fmt(y)}" font-size="{mapart.TERRAIN_NAME_SIZE}" fill="{mapart.TERRAIN_TEXT}" '
+            f'text-anchor="middle" letter-spacing="{mapart.TERRAIN_NAME_SPACING}" stroke="{m.background}" '
+            f'stroke-width="3" stroke-linejoin="round" style="paint-order:stroke" pointer-events="none">'
+            f"{escape(piece.name)}</text>"
+        )
+        taken.append((box, TEXT_WEIGHT))
+    return out
+
+
+def _terrain_name_box(name: str, x: float, y: float) -> Box:
+    """山名佔的範圍：有字距，比 text_box 估的寬一點。"""
+    left, top, right, bottom = text_box(x, y, name, mapart.TERRAIN_NAME_SIZE, "middle")
+    pad = mapart.TERRAIN_NAME_SPACING * len(name) / 2
+    return left - pad, top, right + pad, bottom
+
+
+def _compass(m: MapLayout, taken: list[Taken]) -> str:
+    """指北針（map.json 寫了 compass 才畫），把它與「北」字佔的範圍加進 taken。"""
+    if m.compass is None:
+        return ""
+    x, y = m.compass
+    r, n = mapart.COMPASS_RADIUS, mapart.COMPASS_NEEDLE
+    taken.append(((x - r, y - n, x + r, y + n), 1))
+    taken.append((text_box(x, y - mapart.NORTH_RISE, "北", mapart.NORTH_SIZE, "middle"), TEXT_WEIGHT))
+    return mapart.compass(x, y)
 
 
 def _river_label(label: MapLabel) -> tuple[str, Box]:
@@ -399,41 +460,51 @@ def _river_label(label: MapLabel) -> tuple[str, Box]:
 
 
 def _roads(content: Content, views: dict[str, str]) -> list[str]:
-    """地點之間的路：兩頭都畫得出來（不是未開放）才畫；有一頭摸清時是實線，不然是淡虛線。"""
+    """地點之間的路：兩頭都畫得出來（不是未開放）才畫，畫成彎一點的二次曲線（mapart.road_control，兩個方向同一條）。
+    有一頭摸清時照路的種類畫（官道、一般的路、山路），不然是淡色點線。"""
     out = []
     for a_id, a in content.locations.items():
         for b_id in a.connections:
             if a_id > b_id or "hidden" in (views[a_id], views[b_id]):
                 continue
             b = content.locations[b_id]
-            if views[a_id] in KNOWN or views[b_id] in KNOWN:
-                style = 'stroke="#8A8577" stroke-width="2"'
-            else:
-                style = 'stroke="#C9C3B2" stroke-width="1.5" stroke-dasharray="4 4"'
-            out.append(f'<line x1="{a.x}" y1="{a.y}" x2="{b.x}" y2="{b.y}" {style}/>')
+            known = views[a_id] in KNOWN or views[b_id] in KNOWN
+            color, width, dash = mapart.ROAD_STYLE[a.road_to(b_id)] if known else mapart.FAINT_ROAD
+            cx, cy = mapart.road_control(content, a_id, b_id)
+            out.append(
+                f'<path d="M{a.x},{a.y} Q{fmt(cx)},{fmt(cy)} {b.x},{b.y}" fill="none" stroke="{color}" '
+                f'stroke-width="{width:g}" stroke-dasharray="{dash}" stroke-linecap="round"/>'
+            )
     return out
 
 
-def _node(loc: Location, view: str, fill: str, selected: bool, taken: list[Taken]) -> tuple[list[str], float]:
-    """地點記號：所在地的圓圈、依視野畫的形狀（摸清的加危險外圈）、選定的圓圈。
-    把記號佔的範圍加進 taken，回傳（SVG 片段, 記號往外畫到多遠）。"""
-    size = NODE_SIZE[view]
-    mark, reach = _reach(loc, view, selected)
-    taken.append(((loc.x - mark, loc.y - mark, loc.x + mark, loc.y + mark), 1))
+def _node(loc: Location, view: str, disc: str | None, selected: bool, taken: list[Taken]) -> tuple[list[str], float]:
+    """地點記號（輿圖美術設計 2.6、2.7）：摸清的底下一個圓盤，外圈是危險色（去過／摸清的圓盤與外圈淡一點；
+    disc 是圖層換的圓盤顏色，例如敵情層），上面照標籤畫圖示（看得見全彩、去過／摸清淡色、未知灰色剪影）；
+    淡點只是一個小灰點。所在地加紅圈、插紅旗，選定的加深色圓圈。
+    把記號與紅旗佔的範圍加進 taken，回傳（SVG 片段, 記號往外畫到多遠）。"""
+    x, y, size = loc.x, loc.y, NODE_SIZE[view]
+    mark, reach = _reach(view, selected)
+    taken.append(((x - mark, y - mark, x + mark, y + mark), 1))
     if reach > mark:  # 所在地、選定的圓圈：壓到細圓圈沒有壓到實心記號那麼糟
-        taken.append(((loc.x - reach, loc.y - reach, loc.x + reach, loc.y + reach), RING_WEIGHT))
+        taken.append(((x - reach, y - reach, x + reach, y + reach), RING_WEIGHT))
     parts = []
+    if view == "dot":
+        parts.append(f'<circle cx="{x}" cy="{y}" r="{size}" fill="{mapart.DOT}"/>')
+    else:
+        if view in KNOWN:
+            ring, fill = DANGER_RING[loc.danger], disc or mapart.DISC
+            if view == "remembered":
+                ring, fill = mapart.mix(ring, mapart.PAPER, mapart.RING_FADE), disc or mapart.DISC_FADED
+            parts.append(f'<circle cx="{x}" cy="{y}" r="{size}" fill="{fill}" stroke="{ring}" stroke-width="2"/>')
+        parts.append(mapart.icon(mapart.icon_kind(loc), x, y, LOOKS[view]))
     if view == "current":
-        parts.append(
-            f'<circle cx="{loc.x}" cy="{loc.y}" r="{size + 7}" fill="none" stroke="{NODE_FILL["current"]}" stroke-width="2"/>'
-        )
-    shape = "wild" if view == "dot" else node_shape(loc)
-    ring = DANGER_RING.get(loc.danger) if view in KNOWN else None
-    parts.append(_shape(shape, loc.x, loc.y, size, fill, ring))
+        parts.append(f'<circle cx="{x}" cy="{y}" r="{CURRENT_RING}" fill="none" stroke="{mapart.BANNER}" stroke-width="2"/>')
+        parts.append(mapart.banner(x, y))
+        left, top, right, bottom = mapart.BANNER_BOX
+        taken.append(((x + left, y + top, x + right, y + bottom), TEXT_WEIGHT))  # 名字壓到紅旗，跟壓到別的名字一樣糟
     if selected:
-        parts.append(
-            f'<circle cx="{loc.x}" cy="{loc.y}" r="{size + 10}" fill="none" stroke="{SELECT_STROKE}" stroke-width="3"/>'
-        )
+        parts.append(f'<circle cx="{x}" cy="{y}" r="{size + 10}" fill="none" stroke="{SELECT_STROKE}" stroke-width="3"/>')
     return parts, reach
 
 
@@ -445,18 +516,18 @@ def render_map(
     大地圖照原尺寸畫在可捲動的框裡（地圖上的遠近就是真正的路程，縮到欄寬字會太小；見地圖擴充與移動設計）。
     敵情層要傳 odds（Game.odds）才會寫出「最險」；其餘圖層不用、也不會算勝算。
 
-    地點名字（連同底下的小字）擺在不壓到大區名稱、大勢、河名、地點記號（含所在地與選定的圓圈）、圖例與
-    其他名字，也不出界的地方：所在地先擺，每個名字依序試右、左、左下、右下，擠不下再試其他位置
+    底下是紙色，大區、河、山頭與樹、雙線外框、大區名稱與大勢、河名、路依序畫上去（輿圖美術設計）：外框蓋在山頭上面、
+    所有字下面，字的底色蓋得住框線；map.json 寫了 compass 才畫指北針。
+    地點名字（連同底下的小字）擺在不壓到大區名稱、大勢、河名、山名、指北針、地點記號（含所在地與選定的圓圈）、
+    圖例與其他名字，也不出界的地方：所在地先擺，每個名字依序試右、左、左下、右下，擠不下再試其他位置
     （見 _label_spots、_place_labels）。選定地點的名字擺在選定圓圈外面。"""
     m = content.map
     bg = m.background
     views = atlas.views(state, content)
-    prefixes, notes, fills = _layer_marks(state, content, layer, views, odds)
+    prefixes, notes, discs = _layer_marks(state, content, layer, views, odds)
     spot = atlas.road_spot(state, content)
     you = _you(content, spot) if spot is not None else None  # 在路上：「你」畫在兩站之間（路上設計 3.4）
-    here_loc = content.locations[state.player.location]
-    start = (you[0], you[1]) if you is not None else (here_loc.x, here_loc.y)
-    legend_top = m.height - 50
+    legend_top = m.height - mapart.FRAME_INSIDE - LEGEND_HEIGHT  # 圖例在外框裡面，不蓋住外框
     out = [
         # max-width:100% 是必要的：少了它，這個 div 會被裡面整張地圖寬的 SVG 撐開、整塊溢出版面，
         # 於是 overflow:auto 永遠不會啟動——畫面上就是「地圖超出邊界、卡住看不了」（手機實測）。
@@ -474,21 +545,24 @@ def render_map(
             tints[region.id] = _tint(region.fill, max(value for _, value in trends))
         region_texts.append(text)
     out += _polygons(m, tints)
-    out += region_texts  # 大區名稱畫在所有大區上面，不會被相鄰的大區蓋住
     out += _rivers(m)
+    out += [piece.svg for piece in mapart.terrain(content)]
+    out.append(mapart.frame(m.width, m.height))  # 外框蓋在山頭與樹上面（靠邊的山不探出框外），在所有字下面
+    out += region_texts  # 大區名稱與大勢畫在所有大區上面、外框上面：不被相鄰的大區蓋住，字的底色也蓋得住框線
     for label in m.labels:
         text, box = _river_label(label)
         out.append(text)
         taken.append((box, TEXT_WEIGHT))
     out += _roads(content, views)
+    out.append(_compass(m, taken))
     if layer == "routes":
-        out.append(_route_line(state, content, selected, start))
+        out.append(_route_line(state, content, selected, spot))
     reach: dict[str, float] = {}
     for loc in content.locations.values():
         view = views[loc.id]
         if view == "hidden":
             continue
-        parts, reach[loc.id] = _node(loc, view, fills.get(loc.id, NODE_FILL[view]), loc.id == selected, taken)
+        parts, reach[loc.id] = _node(loc, view, discs.get(loc.id), loc.id == selected, taken)
         if view in SELECTABLE:
             hit = f'<circle cx="{loc.x}" cy="{loc.y}" r="{HIT_RADIUS}" fill="#000000" fill-opacity="0"/>'
             out.append(f'<g data-loc="{loc.id}" style="cursor:pointer">{hit}{"".join(parts)}</g>')
@@ -496,7 +570,8 @@ def render_map(
             out.extend(parts)
     if you is not None:
         out.append(_you_mark(content, spot, you, taken))
-    taken.append(((8, legend_top, 8 + _legend_width(m.width, layer), legend_top + 46), TEXT_WEIGHT))
+    out += _terrain_names(m, taken)
+    taken.append(((LEGEND_X, legend_top, LEGEND_X + _legend_width(m.width, layer), legend_top + LEGEND_HEIGHT), TEXT_WEIGHT))
     here = state.player.location
     placed = []  # （地點, 狀態, 幾行字）：所在地排第一個
     for loc in sorted(content.locations.values(), key=lambda loc: loc.id != here):
@@ -522,7 +597,7 @@ def render_map(
     if you is not None:
         x, y, anchor = spots[-1]
         out.append(_text(x, y, f"你{you[2]}", LABEL_SIZE, TEXT_DARK, bg, anchor, bold=True))
-    out.append(_legend(bg, legend_top, m.width, layer))
+    out.append(_legend(legend_top, m.width, layer))
     out.append("</svg></div>")
     return "".join(out)
 
@@ -573,7 +648,8 @@ def _edge_spots(start: Point, end: Location, text: str, size: int, bounds: Box) 
 
 def render_minimap(state: GameState, content: Content) -> str:
     """場景旁的小地圖：以所在地為中心，從大地圖截一塊 content.map.mini_window 大的視窗（超出地圖的地方填底色），
-    畫法同大地圖：大區底色（照原色，不依大勢變紅）、河、路，以及整個落在視窗裡的大區名稱與河名。
+    畫法同大地圖：大區底色（照原色，不依大勢變紅）、河、碰到視窗的山頭與樹（地形算一次就快取，每次重畫只挑出來，
+    也不把整張地圖的山都塞進來）、路，以及整個落在視窗裡的大區名稱、河名與山名；沒有外框、指北針。
     中心落在視窗裡的地點依視野畫記號：摸清的寫名字（所在地寫「名字（你）」並加粗），畫出輪廓的未知地點寫
     「名字？」，淡點不寫名字；未開放的地點與通往它的路不畫。視窗外的地點不畫記號，只有路通出去；
     其中 MINI_HOPS 站以內的摸清地點，在視窗邊緣朝它的方向寫「箭頭 名字」（見 _edge_targets）。
@@ -603,12 +679,15 @@ def render_minimap(state: GameState, content: Content) -> str:
         *_polygons(m, {}),
     ]
     taken: list[Taken] = []  # 已經佔用的範圍：擺名字與方向時要避開
+    region_texts = []
     for region in m.regions:
         box = text_box(region.label_x, region.label_y, region.name, REGION_SIZE)
         if not _outside(box, bounds):
-            out.append(_text(region.label_x, region.label_y, region.name, REGION_SIZE, region.text_fill, bg))
+            region_texts.append(_text(region.label_x, region.label_y, region.name, REGION_SIZE, region.text_fill, bg))
             taken.append((box, TEXT_WEIGHT))
     out += _rivers(m)
+    out += [piece.svg for piece in mapart.terrain(content) if _overlap(piece.extent, window)]
+    out += region_texts  # 大區名稱畫在河與山頭上面（大地圖也是這個順序）；擺位置還是先算大區、再算河名
     for label in m.labels:
         text, box = _river_label(label)
         if not _outside(box, bounds):
@@ -621,10 +700,11 @@ def render_minimap(state: GameState, content: Content) -> str:
     reach: dict[str, float] = {}
     for loc in shown:
         view = views[loc.id]
-        parts, reach[loc.id] = _node(loc, view, NODE_FILL[view], False, taken)
+        parts, reach[loc.id] = _node(loc, view, None, False, taken)
         out += parts
     if you is not None:
         out.append(_you_mark(content, spot, you, taken))
+    out += _terrain_names(m, taken, bounds)
     labels: list[Label] = []
     looks = []  # 每段字的（顏色, 加粗）
     for loc in sorted(shown, key=lambda loc: loc.id != here.id):  # 所在地排第一個

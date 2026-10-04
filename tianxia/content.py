@@ -25,6 +25,7 @@ from .zh import to_traditional
 
 ROAD_SIGHTS_PER_SPOT = 2  # 路上見聞：每一種路、每一個大區的組合至少要有幾則可挑（路上設計第五節）
 ROAD_SIGHT_CAPS = {"silver": 10, "xinde": 5}  # 路上見聞的小收穫上限
+TERRAIN_SIZE = (8, 40)  # 山脈、丘陵的山頭高度範圍（輿圖美術設計第四節）
 
 
 class ContentError(Exception):
@@ -343,7 +344,7 @@ def validate(c: Content) -> None:
                 f"{where}：結識 {cid} 的事件，condition.members_none 要列出 {cid}（已入門就不該再遇到）",
             )
         if ev.fortune:
-            need(not ev.actions, f"{where}：福緣事件只由交遊觸發，actions 要是空的")
+            need(not ev.actions, f"{where}：福緣事件只由交友觸發，actions 要是空的")
             need(all(ch.effect.recruit for ch in ev.choices), f"{where}：福緣事件的每個選項都要結識一個人")
             for i, ch in enumerate(ev.choices):
                 need(
@@ -361,6 +362,26 @@ def validate(c: Content) -> None:
             len(region.points) >= 3 and all(len(point) == 2 for point in region.points),
             f"{where}：多邊形至少要有 3 個 [x, y] 點",
         )
+
+    # 河流、地形、指北針（輿圖美術設計第四節）：座標都要在地圖範圍內。
+    def on_map(points) -> bool:
+        return all(len(p) == 2 and 0 <= p[0] <= c.map.width and 0 <= p[1] <= c.map.height for p in points)
+
+    for i, river in enumerate(c.map.rivers):
+        where = f"河流 {river.name}" if river.name else f"河流第 {i + 1} 條"
+        need(len(river.points) >= 2, f"{where}：至少要有 2 個 [x, y] 點")
+        need(on_map(river.points), f"{where}：座標超出地圖範圍")
+        need(0 < river.width[0] <= river.width[1], f"{where}：width 寫 [上游寬, 下游寬]，都要大於 0、往下游不能變窄")
+    for i, piece in enumerate(c.map.terrain):
+        where = f"地形 {piece.name}" if piece.name else f"地形第 {i + 1} 筆"
+        if piece.kind == "forest":
+            need(len(piece.points) >= 3, f"{where}：林地的 points 至少要有 3 個 [x, y] 點")
+        else:
+            need(len(piece.spine) >= 2, f"{where}：spine 至少要有 2 個 [x, y] 點")
+            low, high = TERRAIN_SIZE
+            need(low <= piece.size <= high, f"{where}：size 要在 {low}～{high} 之間（寫的是 {piece.size}）")
+        need(on_map(piece.spine + piece.points), f"{where}：座標超出地圖範圍")
+    need(c.map.compass is None or on_map([c.map.compass]), f"指北針 {c.map.compass} 超出地圖範圍")
 
     # 路上見聞（路上設計第五節）：每一種路、每一個大區的組合都要有幾則可挑；小收穫不超過上限、一則最多一種、
     # 不能有別的效果（不發傳聞：每人每站都可能觸發，發到傳聞板會洗版）；文字只用繁體中文。
@@ -531,7 +552,7 @@ def validate(c: Content) -> None:
             need(ch.kind == "locked", f"{where}：只有 kind=locked 的龍頭人物需要 talk_at（可招募的同伴用 recruit_at）")
         if ch.affinity_tag_deltas:
             for tag in ch.affinity_tag_deltas:
-                need(tag in DIALOGUE_TAGS, f"{where}：affinity_tag_deltas 的 {tag!r} 不是合法的交遊 tag")
+                need(tag in DIALOGUE_TAGS, f"{where}：affinity_tag_deltas 的 {tag!r} 不是合法的交友 tag")
     for squad in c.squads.values():
         where = f"敵方隊伍 {squad.id}"
         need(squad.difficulty >= 0, f"{where}：difficulty 不能是負的")

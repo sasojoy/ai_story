@@ -21,6 +21,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import contextvars
+import hashlib
 import re
 import secrets
 import shutil
@@ -33,7 +34,7 @@ from collections.abc import Callable, Iterable
 from pathlib import Path
 
 from fastapi import Body, FastAPI, HTTPException, Request, Response
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from markdown_it import MarkdownIt
 
@@ -193,7 +194,7 @@ def prepare_dialogue(game: Game, option_id: str) -> companion_agent.PreparedTurn
 
 
 def may_generate_dialogue(option_id: str) -> bool:
-    """這個選項按下去可能呼叫對話模型，要走鎖外生成（見 prepare_dialogue）：交遊、對話的 talk:N、求見時指名的
+    """這個選項按下去可能呼叫對話模型，要走鎖外生成（見 prepare_dialogue）：交友、對話的 talk:N、求見時指名的
     call:<人物>。告辭（talk:leave）與收起求見名單（call:back）永遠不會，不必多繞一趟備料的鎖。"""
     if option_id == "act:socialize":
         return True
@@ -296,7 +297,7 @@ def menxia_view(game: Game, person: str | None = None) -> dict:
             for k in KINDS
         ],
         "arts": [{"label": label, "id": aid, "card": md(game.art_detail(aid))} for label, aid in game.art_library()],
-        "craft_line": md(game.craft_line([], KINDS[0])),
+        "craft_line": md(game.craft_line([])),
     }
 
 
@@ -468,14 +469,50 @@ def _entry(account_key: str) -> dict:
     return {"stage": "game", "main": look(game, main_view), "kinds": KINDS}
 
 
+def content_version(content: bytes) -> str:
+    """檔案內容的雜湊（前十碼）：內容沒變、版本就不變，所以只動引擎的更版不會讓手機重抓。"""
+    return hashlib.sha256(content).hexdigest()[:10]
+
+
+def asset_version(url_path: str) -> str:
+    """頁面引用的網址（/journal.css 或 /static/<檔名>）對應的版本；檔案不存在就丟 FileNotFoundError。"""
+    if url_path == "/journal.css":
+        return content_version(JOURNAL_CSS.encode("utf-8"))
+    return content_version((WEB / url_path.removeprefix("/static/")).read_bytes())
+
+
+# 頁面裡指向我們自己檔案的網址；不碰 data:、外部網址，也不碰已經帶了 ? 的
+OWN_ASSET = re.compile(r"""(src|href)=(["'])(/static/[^"'?#]+|/journal\.css)\2""")
+
+
+def versioned_page(html: str, version_of: Callable[[str], str]) -> str:
+    """把頁面裡指向我們自己檔案的網址都加上 ?v=<版本>。
+    新網址就是新的快取鍵：手機上已經快取了舊檔，也會因為網址變了而重抓。"""
+    return OWN_ASSET.sub(lambda m: f"{m[1]}={m[2]}{m[3]}?v={version_of(m[3])}{m[2]}", html)
+
+
+# 啟動時算一次；index.html 指到 web/ 裡沒有的檔，這裡就丟例外
+PAGE = versioned_page((WEB / "index.html").read_bytes().decode("utf-8"), asset_version)
+NO_CACHE = {"Cache-Control": "no-cache"}  # 每次都向伺服器確認（有 ETag，沒變就是 304）；不用 immutable：開發時改了檔沒重開，會被瀏覽器釘死
+
+
+class WebFiles(StaticFiles):
+    """/static 的每個回應都加 no-cache；不然瀏覽器會用啟發式快取，更版後留著舊檔好幾個小時。"""
+
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
 @app.get("/")
 def index():
-    return FileResponse(WEB / "index.html", headers={"Cache-Control": "no-cache"})
+    return HTMLResponse(PAGE, headers=NO_CACHE)
 
 
 @app.get("/journal.css")
 def journal_css():
-    return Response(JOURNAL_CSS, media_type="text/css")
+    return Response(JOURNAL_CSS, media_type="text/css", headers=NO_CACHE)
 
 
 @app.get("/api/me")
@@ -577,7 +614,7 @@ MENXIA_ACTIONS = {
     "create": lambda g, b: g.create_skill(str(b.get("name") or ""), str(b.get("kind") or KINDS[0])),
     "practice": lambda g, b: g.practice(str(b.get("kind") or KINDS[0])),
     "heal": lambda g, b: g.heal(),
-    "craft": lambda g, b: g.craft([str(m) for m in b.get("materials") or []], str(b.get("kind") or KINDS[0])),
+    "craft": lambda g, b: g.craft([str(m) for m in b.get("materials") or []]),  # 內功／武學開爐才揭曉，body 的 kind 不看
     "switch": lambda g, b: g.switch_art(str(b.get("art") or "")),
     "join": lambda g, b: g.add_to_team(str(b.get("person") or "")),
     "leave": lambda g, b: g.remove_from_team(str(b.get("person") or "")),
@@ -617,7 +654,7 @@ def api_craft_line(request: Request, body: dict = Body(default={})):
     """選了素材、換了種類就更新成本說明（不算行動、不存檔）。"""
     game = _game(request)
     materials = [str(m) for m in body.get("materials") or []]
-    return {"line": look(game, lambda g: md(g.craft_line(materials, str(body.get("kind") or KINDS[0]))))}
+    return {"line": look(game, lambda g: md(g.craft_line(materials)))}
 
 
 @app.get("/api/reports")
@@ -673,7 +710,7 @@ def api_reset_password(request: Request, body: dict = Body(...)):
     return {"message": reset_password(_game(request), str(body.get("target", "")), str(body.get("temp", "")))}
 
 
-app.mount("/static", StaticFiles(directory=WEB), name="static")
+app.mount("/static", WebFiles(directory=WEB), name="static")
 
 
 # ── 啟動 ──────────────────────────────────────────

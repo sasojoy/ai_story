@@ -128,7 +128,7 @@ def test_winning_big_costs_much_less_than_losing(state, content, world):
 
 
 def test_a_wild_fight_costs_half_the_blood_and_half_the_injury(state, content, world):
-    """探索時撞上的野怪只扣歷練的一半（wild_neili_loss_factor），內傷照同一個比例（探索三選一設計 4.2）。"""
+    """探索時撞上的野怪只扣遊歷的一半（wild_neili_loss_factor），內傷照同一個比例（探索三選一設計 4.2）。"""
     from copy import deepcopy
 
     trained, ambushed = deepcopy(state), deepcopy(state)

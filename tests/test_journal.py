@@ -106,7 +106,7 @@ def test_qiyu_is_tagged_as_such(game):
 
 def test_socialize_entry(game):
     game.choose("act:socialize")
-    assert (latest(game).title, latest(game).tag) == ("交遊・小鎮", "遇上【拜師】")
+    assert (latest(game).title, latest(game).tag) == ("交友・小鎮", "遇上【拜師】")
 
 
 def _give_player_a_winning_wugong(game):
@@ -120,14 +120,14 @@ def test_train_entry_carries_the_battle_summary_and_gains(game):
     walk_to(game, "lake")
     _give_player_a_winning_wugong(game)
     game.rng = FixedRandom(0.99)  # 好運氣，確保是大勝或險勝（算進 WIN_TIERS）
-    game._draft = journal.Draft("歷練・湖邊")
+    game._draft = journal.Draft("遊歷・湖邊")
     msgs = game._squad_encounter("thug")
     journal.add_entry(game.state, game._draft.entry(game.state.world.time, msgs))
     game._log(msgs)
     game._draft = None
     record = game.state.battles[0]
     entry = latest(game)
-    assert entry.title == "歷練・湖邊"
+    assert entry.title == "遊歷・湖邊"
     assert entry.tag == f"{record.tier}水寇小隊"
     assert entry.battle_id == record.id == 1
     assert entry.changes == [
@@ -172,7 +172,7 @@ def test_choice_entry_with_a_battle(game):
 def test_choice_that_leads_to_another_event(game):
     """chain_a/chain_b 事件鏈：直接把 chain_a 設成待處理事件，不依賴哪個行動觸發它
     （新制度下 explore/socialize 才會隨機遇上事件，跟事件骨架裡的 actions 標記已經沒有
-    「歷練」這個分類，chain_a 原本標的 actions=["train"] 在新制度下不會被任何行動觸發，
+    「遊歷」這個分類，chain_a 原本標的 actions=["train"] 在新制度下不會被任何行動觸發，
     這裡只測「選項串接下一個事件」本身這件事，跳過「怎麼遇到 chain_a」）。"""
     game.state.pending_event = "chain_a"
     game.choose("choice:0")
@@ -299,8 +299,9 @@ def test_crafting_that_finishes_a_guide_step_writes_it_into_the_journal(game):
     materials.grant(game.state, game.content, "gang_1", 2)
     _guide_waits_for(game, TutorialGoal(has_wugong=True))
     naming = lambda self, messages, response_model, **kw: craft.CraftedName(name="鐵腕勁", description="一句話。")
-    with mock.patch.object(OllamaClient, "chat_structured", naming):
-        msgs = game.craft(["gang_1", "gang_1"], "武學")
+    with mock.patch.object(OllamaClient, "chat_structured", naming), \
+         mock.patch.object(craft, "result_kind", lambda a, b, tianji: "武學"):  # 這一步等的是武學
+        msgs = game.craft(["gang_1", "gang_1"])
     assert "✔ 引導完成" in msgs
     entry = latest(game)
     assert entry.title == "門下" and "煉製" in entry.tag
@@ -422,8 +423,8 @@ def test_notice_and_skip_tutorial(game):
 
 
 def guided_train(game):
-    """湖邊歷練打一場、順便完成一步新手引導（獎勵銀兩 5）：把引導第一步改成「歷練」。
-    （以前是逼探索落到隨機遭遇戰那條路；探索三選一之後那條路沒了，打仗就是歷練。）"""
+    """湖邊遊歷打一場、順便完成一步新手引導（獎勵銀兩 5）：把引導第一步改成「遊歷」。
+    （以前是逼探索落到隨機遭遇戰那條路；探索三選一之後那條路沒了，打仗就是遊歷。）"""
     game.content.tutorial.steps[0].done_when.action = "train"
     _give_player_a_winning_wugong(game)
     from conftest import FixedRandom

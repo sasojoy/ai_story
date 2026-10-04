@@ -16,6 +16,9 @@
   --bad: #b23a2b;
   --stam: #c08a1e;
   --hp: #b23a2b;
+  /* 輪盤：墨色圓盤與四種礦物顏料（朱、石青、石綠、赭），四格依序是剛／快／柔／慢，也是江湖頁的探索／遊歷／交友／打坐 */
+  --disk: #2a241d; --disk-2: #3a3128;
+  --gang: #a8322a; --kuai: #2f5d8a; --rou: #3f7d5c; --man: #9a6a2a;
   --shadow: 0 1px 2px rgba(60, 40, 20, 0.08), 0 2px 8px rgba(60, 40, 20, 0.06);
   --radius: 14px;
   --serif: "Noto Serif TC", "Songti TC", "PMingLiU", "MingLiU", serif;
@@ -42,6 +45,8 @@
     --bad: #e06a5c;
     --stam: #d6a548;
     --hp: #e06a5c;
+    --disk: #0d0b09; --disk-2: #1d1914;
+    --gang: #c2473c; --kuai: #4a7cae; --rou: #55a079; --man: #b98634;
     --shadow: none;
     color-scheme: dark;
   }
@@ -229,7 +234,7 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .road-links .btn { flex: 1 1 auto; min-height: 48px; }
 .free { display: flex; gap: 8px; margin-bottom: 12px; }
 .free .input { flex: 1; }
-.mini { border-radius: var(--radius); overflow: hidden; border: 1px solid var(--line); margin-bottom: 12px; cursor: pointer; position: relative; }
+.mini { border-radius: var(--radius); overflow: hidden; border: 1px solid var(--line); margin-bottom: 12px; cursor: pointer; position: relative; background: #e9e2cc; }
 .mini svg { height: 150px !important; }
 .mini::after { content: "展開輿圖 ›"; position: absolute; right: 8px; bottom: 8px; font-size: 12px; background: var(--card); border: 1px solid var(--line); padding: 2px 8px; border-radius: 8px; }
 .linkish { border: 0; background: none; color: var(--accent); cursor: pointer; padding: 6px 2px; font-size: 14px; }
@@ -244,11 +249,6 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .list .art-body .btn::after { content: none; }
 
 /* ── 煉製 ── */
-.slots { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; margin-bottom: 12px; }
-.slot { min-height: 64px; border: 2px dashed var(--line); border-radius: var(--radius); display: grid; place-items: center; padding: 6px; text-align: center; font-size: 14px; cursor: pointer; background: var(--card); }
-.slot.full { border-style: solid; border-color: var(--gold); }
-.slot small { display: block; font-size: 11px; color: var(--ink-2); }
-.plus { font: 600 20px var(--serif); color: var(--ink-2); }
 .chips { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; margin-bottom: 12px; }
 .chip { border: 1px solid var(--line); background: var(--card); border-radius: 12px; padding: 8px 10px; text-align: left; cursor: pointer; min-height: 52px; }
 .chip b { display: block; font-weight: 600; font-size: 14px; }
@@ -266,16 +266,37 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 @keyframes ember { 0%, 100% { box-shadow: 0 0 0 rgba(214, 120, 40, 0); } 50% { box-shadow: 0 0 18px rgba(214, 120, 40, 0.75); } }
 
 /* ── 輿圖 ── */
-.map-wrap { border-radius: var(--radius); border: 1px solid var(--line); overflow: auto; margin-bottom: 12px; background: #f6f1e4; max-height: 62vh; }
-.map-wrap .tx-world-map { max-height: none !important; overflow: visible !important; }
-.map-wrap.fit svg { width: 100% !important; height: auto !important; }
+/* 地圖框（W16）：固定高度的視窗，地圖照原本的像素大小放在裡面，靠 transform 平移、縮放（app.js 的 applyMapView）。
+   框裡的手勢全歸地圖（touch-action: none）：不捲頁面、不放大整頁；長按不跳選字、不跳 iOS 的選單 */
+/* 框高：第一屏要整個露在底部分頁列上面。框頂約在 280px（狀態列、說明卡、圖層、下拉選單），分頁列約 55px，
+   再留一點空隙，所以是 100svh − 340px；第一個 62vh 給不認得 svh 的瀏覽器 */
+.map-wrap {
+  position: relative; overflow: hidden; height: 62vh; height: min(62vh, calc(100svh - 340px)); min-height: 260px; margin-bottom: 12px;
+  border-radius: var(--radius); border: 1px solid var(--line); background: #e9e2cc;
+  touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; cursor: grab;
+}
+/* 伺服器包的那一層 div 自帶捲軸與限高（overflow:auto、max-height:75vh），這裡蓋掉，免得裁到地圖或冒出捲軸 */
+.map-wrap .tx-world-map { position: absolute; left: 0; top: 0; overflow: visible !important; max-width: none !important; max-height: none !important; }
+.map-wrap .tx-world-map > svg { display: block; transform-origin: 0 0; }
+/* 拖移、雙指縮放中才升成合成層（不常駐：停下來還開著的話字會糊）；按鈕、下拉選單的移動滑一下，手勢與滾輪中不滑 */
+.map-wrap.moving .tx-world-map > svg { will-change: transform; }
+.map-wrap.glide .tx-world-map > svg { transition: transform 0.15s ease-out; }
 .map-wrap [data-loc] { cursor: pointer; }
-/* 地點的點擊區（E2／E3）：mapview 替每個地點畫了一個透明的圓（r=16）接點擊，這裡再加透明的粗外框：
-   原尺寸時 r=22（直徑約 44px）；整張縮小時外框更粗，r=34——40 個地點裡最近的兩個（嵩山深處與南華觀）相距 68.6，
-   r=34 剛好不會互相蓋住；手機上縮成約 0.39 倍，直徑約 27px */
-.map-wrap [data-loc] > circle[fill-opacity="0"] { stroke: transparent; stroke-width: 12px; pointer-events: all; }
-.map-wrap.fit [data-loc] > circle[fill-opacity="0"] { stroke-width: 36px; }
-.map-tools { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+.map-wrap.grabbing, .map-wrap.grabbing [data-loc] { cursor: grabbing !important; }
+/* 地點的點擊區（E2／E3）：mapview 替每個地點畫了一個透明的圓（r=16）接點擊，這裡再加透明的粗外框。
+   外框寬 --hit 由 app.js 跟著倍率算：半徑 R＝22÷倍率，夾在 22～34（地圖單位），螢幕上至少約 22px；
+   上限 34 是因為 40 個地點裡最近的兩個（嵩山深處與南華觀）相距 68.6，再大會互相蓋住 */
+.map-wrap [data-loc] > circle[fill-opacity="0"] { stroke: transparent; stroke-width: var(--hit, 12px); pointer-events: all; }
+/* 右上角的按鈕（回到所在地、放大、縮小）：疊在地圖上，不另佔一列；觸控目標 44px。
+   放上面不放下面：框底可能落在固定的底部分頁列後面，按鈕會被蓋住 */
+.map-ctl { position: absolute; top: 8px; right: 8px; display: flex; flex-direction: column; gap: 6px; }
+.map-ctl button {
+  width: 44px; height: 44px; padding: 0; display: grid; place-items: center; cursor: pointer;
+  border-radius: 12px; border: 1px solid var(--line); background: var(--card); color: var(--ink); box-shadow: var(--shadow);
+}
+.map-ctl button:disabled { opacity: 0.45; cursor: default; }
+.map-ctl svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; }
+.map-tools { display: flex; margin-bottom: 8px; }
 .map-tools select { flex: 1; }
 
 /* ── 戰報／見聞 ── */
@@ -334,6 +355,69 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 @media (min-width: 900px) {
   .page { padding-top: 16px; }
 }
+
+/* ── 輪盤（江湖頁的行動、煉製頁的素材）：四格固定，外圈八卦與中心圖案在轉 ── */
+.wheel-wrap { width: 100%; max-width: 340px; margin: 4px auto 0; aspect-ratio: 1; }
+.wheel { width: 100%; height: 100%; display: block; overflow: visible; touch-action: manipulation; -webkit-user-select: none; user-select: none; }
+.wheel text { text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+.w-rim { fill: none; stroke: var(--gold); stroke-width: 1; opacity: 0.7; }
+.w-ring { transform-origin: 0 0; animation: w-turn 60s linear infinite reverse; }
+.w-tick { stroke: var(--gold); stroke-width: 0.7; opacity: 0.6; }
+.w-ring-line { fill: none; stroke: var(--gold); stroke-width: 0.6; opacity: 0.45; }
+.w-gua line { stroke: var(--gold); stroke-width: 1.8; }
+.w-sector { cursor: pointer; transition: transform 0.22s cubic-bezier(0.3, 1.4, 0.5, 1), filter 0.22s; }
+.w-sector.on { transform: translate(var(--dx), var(--dy)); filter: drop-shadow(0 0 7px var(--glow)); }
+.w-face { stroke: var(--gold); stroke-width: 1.4; }
+.w-sector.off .w-face { opacity: 0.3; }
+.w-lab { font-family: var(--serif); font-weight: 700; fill: #fbf7ef; }
+.w-sub { font-size: 10.5px; fill: rgba(251, 247, 239, 0.85); }
+.w-sector.off .w-lab, .w-sector.off .w-sub { fill: rgba(251, 247, 239, 0.55); }
+.w-hub { cursor: pointer; }
+.w-hub.off { cursor: default; }
+.w-hub-rim { fill: var(--disk); stroke: var(--gold); stroke-width: 1.4; }
+.w-hub.on .w-hub-rim { filter: drop-shadow(0 0 6px var(--gold)); }
+.w-yang { fill: #efe6d5; }
+.w-yin { fill: #2a241d; }
+.w-eye-lit { fill: var(--gold); }
+.w-spin { transform-origin: 0 0; animation: w-turn 28s linear infinite; }
+.w-spin.hot { animation-duration: 3s; }
+.w-dial-line { fill: none; stroke: #b7862b; stroke-width: 0.8; }
+.w-tick-s { stroke: #6b6155; stroke-width: 0.6; }
+.w-tick-b { stroke: #6b6155; stroke-width: 1.2; }
+.w-dir { font-size: 9px; fill: #6b6155; font-family: var(--serif); }
+.w-needle { transform-origin: 0 0; animation: w-seek 7s ease-in-out infinite; }
+.w-needle-n { fill: #a8322a; }
+.w-pin { fill: #b7862b; }
+.w-hub-lab { font-family: var(--serif); font-weight: 700; font-size: 11px; fill: var(--gold); }
+.w-hub.off .w-needle { animation: none; opacity: 0.4; }
+@keyframes w-turn { to { transform: rotate(360deg); } }
+@keyframes w-seek { 0%, 100% { transform: rotate(-8deg); } 30% { transform: rotate(10deg); } 60% { transform: rotate(-3deg); } 80% { transform: rotate(5deg); } }
+/* 太極火爐（煉製頁中心）：外圈火舌明滅，左右兩格放素材；開爐等結果時整座爐子晃動 */
+.w-flames path { fill: none; stroke: #e0782a; stroke-width: 3; stroke-linecap: round; opacity: 0.75; transform-origin: 0 0; animation: w-flicker 0.9s ease-in-out infinite alternate; }
+.w-flames.hot path, .w-furnace.forging .w-flames path { stroke: #f0a23a; stroke-width: 4; animation-duration: 0.35s; }
+@keyframes w-flicker { from { opacity: 0.45; transform: scale(0.97); } to { opacity: 0.95; transform: scale(1.04); } }
+.w-slot rect { fill: rgba(42, 36, 29, 0.78); stroke: var(--gold); stroke-width: 1; stroke-dasharray: 3 2; }
+.w-slot.full rect { fill: rgba(42, 36, 29, 0.92); stroke-dasharray: none; stroke-width: 1.4; }
+.w-slot.full { cursor: pointer; }
+.w-slot.full.r3 rect { stroke: #f0c060; stroke-width: 2; }
+.w-slot-name { font-family: var(--serif); font-weight: 700; font-size: 10.5px; fill: #fbf7ef; }
+.w-slot-sub { font-size: 7.5px; fill: rgba(251, 247, 239, 0.75); }
+.w-furnace-lab { font-family: var(--serif); font-size: 9px; fill: var(--gold); paint-order: stroke; stroke: var(--disk); stroke-width: 3px; }
+.w-furnace.ready .w-furnace-lab { font-weight: 700; }
+.w-furnace.forging .w-shake { animation: w-shake 0.42s linear infinite; }
+@keyframes w-shake {
+  0% { transform: translate(0, 0) rotate(0); } 20% { transform: translate(-2px, 1px) rotate(-1.5deg); }
+  40% { transform: translate(2px, -1px) rotate(1.5deg); } 60% { transform: translate(-1.5px, -1px) rotate(-1deg); }
+  80% { transform: translate(1.5px, 1px) rotate(1deg); } 100% { transform: translate(0, 0) rotate(0); }
+}
+.w-card { margin-top: 10px; }
+.w-card .options { margin: 8px 0 0; }
+.w-card .move-mode { margin: 8px 0 0; }
+.w-title { margin: 0; font-size: 17px; }
+.w-title small { font-family: var(--sans); font-size: 12px; font-weight: 400; color: var(--ink-2); }
+/* 此地才有的行動（求見、招募、投靠）：朱紅印章 */
+.options.seals { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn.seal { width: auto; flex: 1 1 auto; min-height: 44px; border: 1.5px solid var(--accent); color: var(--accent); background: transparent; font-family: var(--serif); border-radius: 8px; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }

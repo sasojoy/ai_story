@@ -157,7 +157,7 @@ def test_new_squads_exist(content):
 
 
 def test_new_locations_outside_towns_have_a_faction_squad(content):
-    """設計 7.1：新地點要有標陣營的歷練隊伍（「歷練看陣營」要用）。"""
+    """設計 7.1：新地點要有標陣營的遊歷隊伍（「遊歷看陣營」要用）。"""
     for loc_id in NEW_LOCATIONS - TOWNS_WITHOUT_ENEMIES:
         squads = [content.squads[s] for s in content.locations[loc_id].enemies]
         assert any(s.faction for s in squads), loc_id
@@ -203,7 +203,7 @@ APPROVED_TAG_MATCHED_EVENTS = {  # 新地點靠 tags 撞上沒寫 locations 的�
 def test_old_tag_matched_events_on_the_new_places_are_approved(content):
     """事件靠 tags 找地點（沒 tags 也沒 locations 就到處都有），地點只要 id 在 locations 裡也算數，兩者是「或」。
     地圖重排時新地點的 tags 可能撞上舊事件（例如 山林 的玉璽挖寶、水路／渡口 的封鎖），那些劇情是為特定地方寫的。
-    能被任何行動（探索／歷練／交遊）抽到、而且不是靠 locations 點名到新地點的事件，集合必須剛好等於核准名單
+    能被任何行動（探索／遊歷／交友）抽到、而且不是靠 locations 點名到新地點的事件，集合必須剛好等於核准名單
     （只加 locations 沒拿掉 tags 的事件仍會靠 tags 撞進來，這裡一樣抓得到）。"""
     matched = {
         e.id
@@ -215,3 +215,22 @@ def test_old_tag_matched_events_on_the_new_places_are_approved(content):
         )
     }
     assert matched == APPROVED_TAG_MATCHED_EVENTS
+
+
+def test_rivers_widen_downstream_and_the_yellow_river_is_yellow(content):
+    """輿圖美術設計第四節：河流寫成物件，從上游寫到下游；只有黃河是土黃色。"""
+    rivers = {river.name: river for river in content.map.rivers}
+    assert list(rivers) == ["黃河", "潁水", "淯水", "拒馬河"]
+    assert {name for name, river in rivers.items() if river.color == "yellow"} == {"黃河"}
+    assert all(river.width[0] < river.width[1] for river in rivers.values())
+
+
+def test_terrain_follows_eastern_han_geography(content):
+    """輿圖美術設計第四節的初版擺法：七條有名字的山、兩段沒名字的（太行山南端的丘陵、嵩山南段）、四片林地，
+    指北針在右側中段的空白，紙色底。"""
+    m = content.map
+    named = [t.name for t in m.terrain if t.name]
+    assert named == ["燕山", "太行山", "呂梁山", "邙山", "嵩山", "伏牛山", "桐柏山"]
+    assert [t.kind for t in m.terrain].count("forest") == 4
+    assert len(m.terrain) == 13
+    assert m.compass == (845, 680) and m.background == "#E9E2CC"

@@ -4,7 +4,7 @@ run_season）跑幾季，把每一筆黃巾聲勢的實際變動記下來源（�
 不改程式）：
   --variant zero   操練不推大勢
   --variant half   操練推的量減半
-  --cap N          每個角色每遊戲日只有頭 N 次歷練（真打或操練）推大勢
+  --cap N          每個角色每遊戲日只有頭 N 次遊歷（真打或操練）推大勢
 執行：.venv/Scripts/python.exe scripts/sim_trend_sources.py --seasons 4 [--variant zero|half] [--cap 3]
 結果與結論見 docs/superpowers/rulings/2026-10-03-第4步平衡模擬.md。
 """
@@ -75,7 +75,7 @@ def main() -> None:
         value = original_push(self, trend_id, delta)
         training = _caller(TRAINING, 4)
         if training is None or trend_id != TREND:
-            return value  # 假人評估地點時也會呼叫，只有真的歷練才算
+            return value  # 假人評估地點時也會呼叫，只有真的遊歷才算
         if training == "_drill" and args.variant == "zero":
             return 0
         if training == "_drill" and args.variant == "half":
@@ -113,7 +113,7 @@ def main() -> None:
               f"陣營 {result['factions']}，決戰開打 {result['battle_day']}")
         top = sorted(sources[n].items(), key=lambda kv: -abs(kv[1]))[:5]
         print("    聲勢來源：", "、".join(f"{kind}/{faction} {value:+d}" for (kind, faction), value in top))
-        print("    歷練次數：", dict(actions[n]))
+        print("    遊歷次數：", dict(actions[n]))
         points = trajectory[n]
         if points:
             high = max(points, key=lambda p: p[1])

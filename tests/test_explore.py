@@ -231,7 +231,7 @@ def test_a_tie_goes_to_the_first_foe_listed_here(content, game):
 
 
 def test_a_wild_fight_costs_half_of_a_training_fight(content, game):
-    """同樣落敗：歷練扣上限的三成、兩成變內傷；探索撞上的野怪只扣一半。"""
+    """同樣落敗：遊歷扣上限的三成、兩成變內傷；探索撞上的野怪只扣一半。"""
     _lake(game, with_event=False)
     _only(game, material=0, wild=1, event=0)
     game.rng = FixedRandom(0.0)  # 沒有武學、運氣最差：兩場都是落敗
@@ -259,7 +259,7 @@ def test_a_wild_loss_still_costs_a_tenth_of_the_silver(content, game):
 
 def test_a_wild_win_pays_like_training_but_leaves_the_trend_and_no_post_fight_event(content, game):
     rules.learn_skill(game.state, content, "fist")
-    content.events["chain_a"].actions = ["train"]  # 歷練打完會接的戰後事件
+    content.events["chain_a"].actions = ["train"]  # 遊歷打完會接的戰後事件
     content.config.train_event_chance = 1.0
     content.config.train_stat_chance = 1.0
     _lake(game, with_event=False)
@@ -273,12 +273,12 @@ def test_a_wild_win_pays_like_training_but_leaves_the_trend_and_no_post_fight_ev
     assert any(line.endswith("+1") and line[:2] in ("臂力", "身法", "根骨") for line in msgs)  # 屬性機會照常
     assert game.state.world.trends["kou"] == 30  # 不推大勢（湖邊 train_trend kou:-1）
     assert game.state.pending_event is None  # 不接戰後事件
-    game.choose("act:train")  # 對照：歷練會推大勢、會接戰後事件
+    game.choose("act:train")  # 對照：遊歷會推大勢、會接戰後事件
     assert game.state.world.trends["kou"] == 29 and game.state.pending_event == "chain_a"
 
 
 def test_a_wild_fight_is_recorded_as_wild_and_shown_as_a_wild_encounter(content, game):
-    """FB-023：探索撞上的野怪戰報 kind 是 wild、顯示「探索遇敵」；歷練照舊 train／「歷練」。"""
+    """FB-023：探索撞上的野怪戰報 kind 是 wild、顯示「探索遇敵」；遊歷照舊 train／「遊歷」。"""
     from tianxia import battlelog
 
     rules.learn_skill(game.state, content, "fist")
@@ -288,12 +288,12 @@ def test_a_wild_fight_is_recorded_as_wild_and_shown_as_a_wild_encounter(content,
     game.choose("act:explore")
     record = game.state.battles[0]
     assert record.kind == "wild"
-    assert "探索遇敵" in battlelog.card_text(record) and "歷練" not in battlelog.card_text(record)
+    assert "探索遇敵" in battlelog.card_text(record) and "遊歷" not in battlelog.card_text(record)
     assert "探索遇敵" in battlelog.detail_text(record)
     game.choose("act:train")
     trained = game.state.battles[0]
     assert trained.id != record.id and trained.kind == "train"
-    assert "歷練" in battlelog.detail_text(trained) and "探索遇敵" not in battlelog.detail_text(trained)
+    assert "遊歷" in battlelog.detail_text(trained) and "探索遇敵" not in battlelog.detail_text(trained)
 
 
 def test_the_journal_files_it_under_exploring(content, game):

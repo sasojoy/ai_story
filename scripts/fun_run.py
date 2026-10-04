@@ -3,7 +3,7 @@
 
 為什麼要這個：既有的量法全是資源計數（素材 21 個、心得 167 點），那些數字完全說不出「玩起來
 有沒有東西看」。而這個專案反覆踩到的坑本質上就是重複——探索 100 次撞到同幾個事件、17 爐裡
-8 爐在重煉已知配方、歷練機制上不會發生所以戰鬥內容從沒出現過。單一個指標會一次抓到這三個。
+8 爐在重煉已知配方、遊歷機制上不會發生所以戰鬥內容從沒出現過。單一個指標會一次抓到這三個。
 
 實作時刻意處理了四件會讓指標量錯的事：
 
@@ -11,7 +11,7 @@
    那是有新鮮感但沒有收穫（實測過改練更強的功法威力會先掉）。所以首見的加分要乘上「這次行動
    有沒有真的改變什麼」——沒有改變任何狀態的首見只拿一半分。
 2. **重複分兩種**：敘事內容的重複（同一段事件文字、同一門功法）真的該扣；機制動作的重複
-   （移動、歷練、練功、療傷）不扣——那是遊戲的骨幹，遭遇戰每次結果不同，玩家不會因為「打
+   （移動、遊歷、練功、療傷）不扣——那是遊戲的骨幹，遭遇戰每次結果不同，玩家不會因為「打
    第二場」就無聊。不分開的話指標會把核心循環本身判成扣分來源。
 3. **遞增懲罰要有上限**：一季約數百個行動，懲罰若一路線性成長，分數會被尾段支配，等於變成
    「賽季長度」的代理變數。所以第 n 次重複扣 (n-1) × STEP，但夾在 REPEAT_CAP。
@@ -25,8 +25,8 @@
 
 | 旗標 | 重現哪個歷史狀態 |
 |---|---|
-| `--no-craft --no-train` | 0716d8b 之前：沒有煉製、也沒有歷練 |
-| `--no-train` | 239bdf8 之前：有煉製，但遭遇戰一季只有 3 場（歷練與探索三選一的野怪都關掉） |
+| `--no-craft --no-train` | 0716d8b 之前：沒有煉製、也沒有遊歷 |
+| `--no-train` | 239bdf8 之前：有煉製，但遭遇戰一季只有 3 場（遊歷與探索三選一的野怪都關掉） |
 | `--allow-recraft` | 2b05b47 之前：47% 的爐在重煉已知配方 |
 | （無旗標） | 現在 |
 
@@ -222,8 +222,8 @@ def observe_step(game: Game, log: FunLog, before: tuple, option_id: str, before_
     log.add_novelty("地點", s.player.location, day, True)
     if option_id.startswith("move:"):
         log.chance("地點")
-    # 對手的機會＝遭遇行動真的打了一場（戰報多了幾筆就是幾次）：歷練，以及探索三選一撞上的野怪。
-    # 以前只在按「歷練」時算，探索打到的新對手只加分子不加分母，分數會灌水；在自己人地盤的操練不打架，也不算。
+    # 對手的機會＝遭遇行動真的打了一場（戰報多了幾筆就是幾次）：遊歷，以及探索三選一撞上的野怪。
+    # 以前只在按「遊歷」時算，探索打到的新對手只加分子不加分母，分數會灌水；在自己人地盤的操練不打架，也不算。
     # 劇情事件的「應戰」不算：那是事件管道的一部分（事件那邊已經記了一次機會），而且算進來的話，校準狀態 ②
     # （一季只有幾場劇情戰）的對手管道會從「整季沒出現」變成一季十來場、幾乎場場新面孔，反而拿高分——
     # 這條管道要量的是「四處闖蕩撞上的對手」新不新鮮，不是劇情安排的那幾場。
@@ -282,8 +282,8 @@ def _play(content, seed: int, db_path: Path, *, no_craft=False, no_train=False, 
 
     real_can_craft = craft.can_craft
 
-    def lenient_can_craft(state, cnt, ids, kind, world=None):
-        return real_can_craft(state, cnt, ids, kind, None)  # 重現舊行為：不檢查「這門你已經有了」
+    def lenient_can_craft(state, cnt, ids, world=None):
+        return real_can_craft(state, cnt, ids, None)  # 重現舊行為：不檢查「這門你已經有了」
 
     for step in range(MAX_STEPS):
         if game.state.world.ended:
@@ -402,7 +402,7 @@ def main() -> None:
     ap.add_argument("--seeds", type=int, nargs="+", default=[1, 2, 3])
     ap.add_argument("--no-craft", action="store_true")
     ap.add_argument("--no-train", action="store_true",
-                    help="不打遭遇戰：不選歷練，探索三選一的野怪那一支也關掉（重現一季只有 3 場戰鬥的狀態）")
+                    help="不打遭遇戰：不選遊歷，探索三選一的野怪那一支也關掉（重現一季只有 3 場戰鬥的狀態）")
     ap.add_argument("--allow-recraft", action="store_true")
     ap.add_argument("--calibrate", action="store_true", help="跑四個已知狀態，驗指標排序對不對")
     args = ap.parse_args()
@@ -423,7 +423,7 @@ def main() -> None:
                 return
 
             cases = [
-                ("① 沒有煉製也沒有歷練（0716d8b 之前）", {"no_craft": True, "no_train": True}),
+                ("① 沒有煉製也沒有遊歷（0716d8b 之前）", {"no_craft": True, "no_train": True}),
                 ("② 有煉製但遭遇戰一季 3 場（239bdf8 之前）", {"no_train": True}),
                 ("③ 會重煉已知配方、47% 白燒（2b05b47 之前）", {"allow_recraft": True}),
                 ("④ 現在", {}),

@@ -26,6 +26,7 @@
   ];
   const POLL_MS = 10000;
   const KINDS = ["武學", "內功"];
+  const CRAFT_ATTRS = [["剛", "gang"], ["快", "kuai"], ["柔", "rou"], ["慢", "man"]]; // 煉製輪盤由上順時針，相剋的面對面
   // 江湖頁「前往」的走法（跟 atlas.MODES 同一份）。選的走法只放在 S.moveMode：不寫進 localStorage、cookie，
   // 重新整理頁面就回到步行；每個請求都帶著它（見 api()），伺服器照它排選單上的「前往」
   const FREE_TEXT_OPTION = "choice:free"; // 事件的隨口應對（engine.FREE_TEXT_OPTION）
@@ -42,7 +43,7 @@
     { tab: "practice", name: "去修練" },
     { tab: "craft", name: "去煉製" },
   ];
-  // 手機寬度（輿圖預設照原尺寸，見 S.fitMap）；轉向、拉視窗跨過這條線時重新決定（見檔尾的 change 監聽）
+  // 手機寬度：第一次打開輿圖時，手機照原尺寸，寬螢幕照框寬（最多原尺寸），都對準所在地（見 mapReady）
   const PHONE = window.matchMedia ? window.matchMedia("(max-width: 767px)") : null;
 
   const S = {
@@ -58,15 +59,15 @@
     person: null,
     kind: "武學",
     artOpen: null, // 修練頁功法庫裡點開的那一門（id）；切分頁、改練成功之後收起
-    craftKind: "武學",
     craftSel: [],
+    craftAttr: null, // 煉製輪盤點開的那一種屬性；null＝列出全部素材
+    wheelSel: null, // 江湖輪盤點開的那一格（explore／train／rest／social／move）
     craftLine: "",
     map: null,
     layer: "situation",
-    // 輿圖整張縮到螢幕寬（E2／FB-012）：手機上縮了地名只剩 5～6px、地點點不到，所以窄螢幕預設照原尺寸、
-    // 捲到選取的地點（afterPage()），寬螢幕才整張；「放大／縮小」照舊可以切，按過之後就照玩家選的（fitChosen）
-    fitMap: !(PHONE && PHONE.matches),
-    fitChosen: false,
+    // 輿圖的視圖（W16）：{ s 倍率, cx, cy 視窗中心對著的地圖座標 }。這次載入網頁後第一次打開輿圖才決定（mapReady：
+    // 對準所在地，手機原尺寸、寬螢幕照框寬，都不給整張），之後切分頁、輪詢重畫、換圖層、點地點都留著
+    mapView: null,
     news: "reports",
     reports: null,
     reportOpen: false,
@@ -234,17 +235,7 @@
       const body = now && now.querySelector(".tx-now");
       if (body && body.scrollHeight <= body.clientHeight + 1) now.classList.replace("clamp", "fits");
     }
-    if (S.tab === "map") {
-      const wrap = document.querySelector(".map-wrap");
-      const here = wrap && wrap.querySelector(`[data-loc="${CSS.escape(S.map?.selected || "")}"]`);
-      if (wrap && here && !S.fitMap) {
-        // 地點的中心捲到視窗中間（E2：手機上預設不縮，一打開就要看到自己在哪）
-        const box = here.getBoundingClientRect();
-        const outer = wrap.getBoundingClientRect();
-        wrap.scrollLeft += box.left + box.width / 2 - outer.left - outer.width / 2;
-        wrap.scrollTop += box.top + box.height / 2 - outer.top - outer.height / 2;
-      }
-    }
+    if (S.tab === "map") mapReady();
   }
 
   // ── 登入與取名號 ──
@@ -293,6 +284,138 @@
     return [t.innerHTML, chips ? chips.outerHTML : ""];
   }
 
+  // ── 輪盤（江湖頁的行動、煉製頁的素材，企劃者 2026-10-04 定稿）──
+  // 四格固定不動，只有外圈的八卦線與中心的圖案在轉（玩家要按得到）。每次重畫都是新的 SVG，
+  // 所以轉動用負的 animation-delay 接上時鐘，重畫不會讓圖案跳回原位。
+  const W_R0 = 64, W_R1 = 150, W_GAP = 2.2;
+  const TRIGRAMS = [[1, 1, 1], [0, 1, 1], [1, 0, 1], [1, 1, 0], [0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]]; // 乾巽離兌坤震坎艮，由內往外
+  const wpt = (r, deg) => { const a = (deg - 90) * Math.PI / 180; return [+(r * Math.cos(a)).toFixed(2), +(r * Math.sin(a)).toFixed(2)]; };
+  const spinAt = (secs) => `animation-delay:-${((performance.now() / 1000) % secs).toFixed(2)}s`;
+  function wheelArc(a0, a1) {
+    const [x0, y0] = wpt(W_R1, a0), [x1, y1] = wpt(W_R1, a1), [x2, y2] = wpt(W_R0, a1), [x3, y3] = wpt(W_R0, a0);
+    return `M${x0},${y0} A${W_R1},${W_R1} 0 0 1 ${x1},${y1} L${x2},${y2} A${W_R0},${W_R0} 0 0 0 ${x3},${y3} Z`;
+  }
+  function wheelRing() {
+    const ticks = Array.from({ length: 72 }, (_, k) => {
+      const [x0, y0] = wpt(165, k * 5), [x1, y1] = wpt(k % 9 ? 163 : 161, k * 5);
+      return `<line x1="${x0}" y1="${y0}" x2="${x1}" y2="${y1}" class="w-tick"/>`;
+    }).join("");
+    const bars = TRIGRAMS.map((lines, i) => `<g transform="rotate(${i * 45 + 22.5})">${lines.map((yang, j) => {
+      const y = -154 - j * 3.2;
+      return yang ? `<line x1="-8" y1="${y}" x2="8" y2="${y}"/>` : `<line x1="-8" y1="${y}" x2="-1.8" y2="${y}"/><line x1="1.8" y1="${y}" x2="8" y2="${y}"/>`;
+    }).join("")}</g>`).join("");
+    return `<g class="w-ring" style="${spinAt(60)}">${ticks}<circle r="152" class="w-ring-line"/><g class="w-gua">${bars}</g></g>`;
+  }
+  // sectors：四格，由上順時針；每格 { label, sub, tone, attrs, on, off }。hub：中心那一塊的 SVG（含自己的 data-act）
+  function wheelSvg(name, sectors, hub) {
+    const faces = sectors.map((s, i) => {
+      const mid = i * 90;
+      const [lx, ly] = wpt((W_R0 + W_R1) / 2 + 6, mid);
+      const [dx, dy] = wpt(9, mid);
+      const big = s.label.length > 1 ? 24 : 34;
+      return `<g class="w-sector${s.on ? " on" : ""}${s.off ? " off" : ""}" style="--dx:${dx}px;--dy:${dy}px;--glow:var(--${s.tone})" ${s.attrs} role="button" aria-label="${esc(s.label)}${s.sub ? `，${esc(s.sub)}` : ""}">
+        <path d="${wheelArc(mid - 45 + W_GAP, mid + 45 - W_GAP)}" fill="url(#wg-${s.tone})" class="w-face"/>
+        <text x="${lx}" y="${ly - 4}" class="w-lab" font-size="${big}">${esc(s.label)}</text>
+        ${s.sub ? `<text x="${lx}" y="${ly + (big === 24 ? 20 : 26)}" class="w-sub">${esc(s.sub)}</text>` : ""}
+      </g>`;
+    }).join("");
+    const grads = ["gang", "kuai", "rou", "man"].map((t) => `<radialGradient id="wg-${t}" cx="0" cy="0" r="${W_R1}" gradientUnits="userSpaceOnUse">
+      <stop offset="${(W_R0 / W_R1).toFixed(2)}" style="stop-color:var(--${t});stop-opacity:.55"/><stop offset="1" style="stop-color:var(--${t})"/></radialGradient>`).join("");
+    return `<div class="wheel-wrap"><svg class="wheel" viewBox="-170 -170 340 340" role="group" aria-label="${esc(name)}">
+      <defs>${grads}<radialGradient id="wg-disk"><stop offset="0" style="stop-color:var(--disk-2)"/><stop offset="1" style="stop-color:var(--disk)"/></radialGradient></defs>
+      <circle r="166" fill="url(#wg-disk)"/><circle r="163" class="w-rim"/>
+      ${wheelRing()}${faces}${hub}</svg></div>`;
+  }
+  // 煉製頁的中心：太極火爐（企劃者 2026-10-04）。太極在爐裡慢慢轉，外圈是一圈火舌；左右兩個是放素材的位置，
+  // 點有東西的那一格拿出來，點爐身開爐。開爐後等結果的這段時間整座爐子晃動（見 forge()）
+  function furnaceHub(slots, ready) {
+    const r = 54;
+    const flames = Array.from({ length: 16 }, (_, k) => {
+      const a = k * 22.5, [x0, y0] = wpt(r + 3, a - 7), [x1, y1] = wpt(r + 10, a), [x2, y2] = wpt(r + 3, a + 7);
+      return `<path d="M${x0},${y0} Q${x1},${y1} ${x2},${y2}" style="animation-delay:-${(k % 4) * 0.23}s"/>`;
+    }).join("");
+    const slot = (m, i) => {
+      const x = i ? 26 : -26;
+      return m
+        ? `<g class="w-slot full r${m.rank}" data-act="unslot" data-i="${i}" role="button" aria-label="拿出${esc(m.name)}">
+            <rect x="${x - 23}" y="-14" width="46" height="28" rx="7"/><text x="${x}" y="-3" class="w-slot-name">${esc(m.name)}</text><text x="${x}" y="8" class="w-slot-sub">${esc(m.tier)}・${esc(m.attribute)}</text></g>`
+        : `<g class="w-slot"><rect x="${x - 23}" y="-14" width="46" height="28" rx="7"/><text x="${x}" y="0" class="w-slot-sub">放入素材</text></g>`;
+    };
+    return `<g class="w-hub w-furnace${ready ? " ready" : ""}" data-act="forge-hub" role="button" aria-label="太極火爐，開爐">
+      <g class="w-shake">
+        <g class="w-flames${ready ? " hot" : ""}">${flames}</g>
+        <circle r="${r + 3}" class="w-hub-rim"/>
+        <g class="w-spin w-taichi" style="${spinAt(ready ? 3 : 28)}">
+          <circle r="${r}" class="w-yang"/>
+          <path d="M0,${-r} A${r},${r} 0 0 1 0,${r} A${r / 2},${r / 2} 0 0 1 0,0 A${r / 2},${r / 2} 0 0 0 0,${-r} Z" class="w-yin"/>
+          <circle cy="${-r / 2}" r="${r / 7}" class="w-yang"/><circle cy="${r / 2}" r="${r / 7}" class="w-yin"/>
+        </g>
+        ${slot(slots[0], 0)}${slot(slots[1], 1)}
+        <text y="${r - 12}" class="w-furnace-lab">${ready ? "點爐開火" : "太極火爐"}</text>
+      </g></g>`;
+  }
+  // 江湖頁的中心：羅盤就是「移動」。刻度盤慢慢轉、指針輕輕擺
+  function compassHub(on, off) {
+    const r = 44;
+    const ticks = Array.from({ length: 24 }, (_, k) => {
+      const [x0, y0] = wpt(r - 1, k * 15), [x1, y1] = wpt(r - (k % 6 ? 4 : 7), k * 15);
+      return `<line x1="${x0}" y1="${y0}" x2="${x1}" y2="${y1}" class="${k % 6 ? "w-tick-s" : "w-tick-b"}"/>`;
+    }).join("");
+    const dirs = ["北", "東", "南", "西"].map((c, k) => { const [x, y] = wpt(r - 15, k * 90); return `<text x="${x}" y="${y}" class="w-dir">${c}</text>`; }).join("");
+    return `<g class="w-hub${on ? " on" : ""}${off ? " off" : ""}" data-act="wheel" data-key="move" role="button" aria-label="移動">
+      <circle r="${r + 5}" class="w-hub-rim"/><circle r="${r}" class="w-yang"/><circle r="${r - 7}" class="w-dial-line"/>
+      <g class="w-spin" style="${spinAt(28)}">${ticks}</g>${dirs}
+      <g class="w-needle"><path d="M0,${-(r - 20)} L5,0 L-5,0 Z" class="w-needle-n"/><path d="M0,${r - 20} L5,0 L-5,0 Z" class="w-yin"/><circle r="3" class="w-pin"/></g>
+      <text y="${r + 12}" class="w-hub-lab">移動</text></g>`;
+  }
+  // 選項標籤「探索（體力 5・…）」拆成名字與括號裡的說明
+  const optParts = (o) => { const m = /^(.*?)（(.*)）$/.exec(o.label); return m ? [m[1], m[2]] : [o.label, ""]; };
+  // 江湖頁的四格（由上順時針）：探索、遊歷、打坐、交友；每格對到選單上哪一顆、沒有時寫為什麼
+  const ACT_SECTORS = [
+    { key: "explore", tone: "gang", ids: ["act:explore"], name: "探索", none: "現在不能探索" },
+    { key: "train", tone: "kuai", ids: ["act:train"], name: "遊歷", none: "這裡沒有對手" },
+    { key: "rest", tone: "man", ids: ["act:rest"], name: "打坐", none: "現在不能打坐" },
+    { key: "social", tone: "rou", ids: ["act:socialize", "act:call"], name: "交友", none: "這裡沒有人可以結交" },
+  ];
+  const SHORT_SUB = { "act:rest": "回體力", "act:call": "挑人求見" };
+  // 選單上有「打坐」就是平常閒著的時候：用輪盤。事件、對話、路上、決戰的選項每次都不一樣，照舊排成一列按鈕
+  const idleMenu = (m) => m.options.some((o) => o.id === "act:rest");
+
+  function actionWheel(m) {
+    const byId = Object.fromEntries(m.options.map((o) => [o.id, o]));
+    const used = new Set();
+    const sectors = ACT_SECTORS.map((d) => {
+      const o = d.ids.map((id) => byId[id]).find(Boolean);
+      if (o) used.add(o.id);
+      const [name, detail] = o ? optParts(o) : [d.name, ""];
+      const sub = o ? (SHORT_SUB[o.id] || detail.replace(/^體力 (\d+).*$/, "體力 $1")) : "";
+      return { ...d, opt: o, name, detail, label: name, sub, on: S.wheelSel === d.key, off: !o || !o.enabled, attrs: `data-act="wheel" data-key="${d.key}"` };
+    });
+    const moves = m.options.filter((o) => followsMode(o.id));
+    moves.forEach((o) => used.add(o.id));
+    const extras = m.options.filter((o) => !used.has(o.id));
+    const pick = sectors.find((s) => s.key === S.wheelSel);
+    let card;
+    if (S.wheelSel === "move") {
+      card = moves.length ? `<div class="seg move-mode" role="group" aria-label="走法">${MOVE_MODES.map((x) => `
+          <button class="${S.moveMode === x.id ? "on" : ""}" data-act="move-mode" data-mode="${x.id}" aria-pressed="${S.moveMode === x.id}">${x.name}</button>`).join("")}</div>
+        <div class="options">${moves.map((o) => `<button class="btn go" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}>
+          <span class="k">→</span><span>${esc(o.label)}</span></button>`).join("")}</div>`
+        : '<p class="muted">這裡沒有路可以走。</p>';
+      card = `<h3 class="w-title">移動 <small>選一個目的地</small></h3>${card}`;
+    } else if (pick) {
+      card = `<h3 class="w-title">${esc(pick.name)}${pick.detail ? ` <small>${esc(pick.detail)}</small>` : ""}</h3>
+        ${pick.opt ? `<div class="options"><button class="btn primary" data-act="choose" data-id="${esc(pick.opt.id)}" ${pick.opt.enabled ? "" : "disabled"}><span>${esc(pick.opt.enabled ? pick.name : "體力不夠")}</span></button></div>`
+          : `<p class="muted">${esc(pick.none)}。</p>`}`;
+    } else {
+      card = '<p class="muted">點輪盤上的一格看要花多少體力，再按一次確定；中間的羅盤是移動。</p>';
+    }
+    return `${wheelSvg("行動", sectors, compassHub(S.wheelSel === "move", !moves.length))}
+      <div class="card w-card">${card}</div>
+      ${extras.length ? `<div class="label">此地</div><div class="options seals">${extras.map((o) => `
+        <button class="btn seal" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}><span>${esc(o.label)}</span></button>`).join("")}</div>` : ""}`;
+  }
+
   function pageJianghu() {
     const m = S.main;
     // 「剛剛」（A4）：預設只露出開頭幾行，太長的（例如新角色的開場故事）收著、點「展開全文」看完，不在卡片裡捲。
@@ -318,20 +441,23 @@
           <button class="${S.moveMode === x.id ? "on" : ""}" data-act="move-mode" data-mode="${x.id}" aria-pressed="${S.moveMode === x.id}">${x.name}</button>`).join("")}
         </div>`
       : "";
-    return `
-      <details class="fold quest"><summary>📜 主線與目標</summary><div class="fold-body">${m.quest}</div></details>
-      ${now}
-      <section class="card scene">${m.scene}</section>
-      ${free}
-      <div class="options">${m.options.map((o, i) => o.id === FREE_TEXT_OPTION && S.answering && o.enabled ? `
+    const wheel = idleMenu(m);
+    const menu = wheel ? actionWheel(m) : `<div class="options">${m.options.map((o, i) => o.id === FREE_TEXT_OPTION && S.answering && o.enabled ? `
         <form class="free answer" id="answer-form"><input class="input" name="text" maxlength="20" placeholder="${esc(o.label)}（20字內）" aria-label="${esc(o.label)}"><button class="btn primary small" type="submit">說出口</button></form>` : `${i === firstMove ? modes : ""}
         <button class="btn ${followsMode(o.id) ? "go" : ""}" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}>
           <span class="k">${o.id.startsWith("move:") ? "→" : o.id.startsWith("road:back") ? "↩" : i + 1}</span><span>${esc(o.label)}</span>
         </button>`).join("")}
-      </div>
-      ${links}
+      </div>`;
+    const scene = `<section class="card scene">${m.scene}</section>`;
+    const tail = `${links}
       <div class="mini" data-act="tab" data-tab="map" role="button" aria-label="展開輿圖">${m.minimap}</div>
       <button class="linkish" data-act="news" data-news="journal">看江湖紀錄 ›</button>`;
+    const quest = `<details class="fold quest"><summary>📜 主線與目標</summary><div class="fold-body">${m.quest}</div></details>`;
+    // 手機上平常有輪盤時，輪盤排在「剛剛」與場景之前（W17／QA）：375×812 的第一屏只有 668px，「剛剛」和場景加起來把輪盤擠到分頁列下面，
+    // 打坐（體力見底時唯一的出路）要往下捲才按得到，而且位置隨上一個結果的長短忽上忽下。排在主線正下方，位置固定、確認卡也在第一屏。
+    // 事件、對話等選項是在回答場景文字，一律照舊排在場景後面
+    if (wheel && PHONE && PHONE.matches) return `${quest}${menu}${now}${scene}${free}${tail}`;
+    return `${quest}${now}${scene}${free}${menu}${tail}`;
   }
 
   // ── 修練 ──
@@ -392,22 +518,26 @@
     if (!x) return '<p class="muted">載入中…</p>';
     const name = (id) => x.materials.find((m) => m.id === id);
     const used = (id) => S.craftSel.filter((s) => s === id).length;
-    const slot = (i) => {
-      const m = name(S.craftSel[i]);
-      return m ? `<div class="slot full" data-act="unslot" data-i="${i}">${esc(m.name)}<small>${esc(m.tier)}・屬${esc(m.attribute)}　點一下拿出</small></div>`
-        : `<div class="slot muted">放入素材</div>`;
-    };
     const ready = S.craftSel.length === x.per_craft;
+    // 輪盤四格是素材的四種屬性，相剋的兩種面對面（剛↔柔、快↔慢）；點一格只列那種屬性的素材，再點一次列回全部
+    const held = (a) => x.materials.filter((m) => m.attribute === a).reduce((n, m) => n + m.count - used(m.id), 0);
+    const inPot = new Set(S.craftSel.map((id) => name(id)?.attribute));
+    const sectors = CRAFT_ATTRS.map(([a, tone]) => ({
+      label: a, tone, sub: held(a) ? `${held(a)} 樣` : "沒有", on: S.craftAttr === a || inPot.has(a), off: !x.materials.some((m) => m.attribute === a),
+      attrs: `data-act="craft-attr" data-attr="${a}"`,
+    }));
+    const shown = S.craftAttr ? x.materials.filter((m) => m.attribute === S.craftAttr) : x.materials;
     return `
       <div class="msg" id="mx-msg">${S.message}</div>
-      <div class="slots">${slot(0)}<span class="plus">＋</span>${slot(1)}</div>
-      <div class="seg">${KINDS.map((k) => `<button class="${S.craftKind === k ? "on" : ""}" data-act="craft-kind" data-kind="${k}">煉${k}</button>`).join("")}</div>
+      ${wheelSvg("素材", sectors, furnaceHub([name(S.craftSel[0]), name(S.craftSel[1])], ready))}
       <div class="card" id="craft-line">${S.craftLine || x.craft_line}</div>
-      ${x.materials.length ? `<div class="chips">${x.materials.map((m) => `
+      ${S.craftAttr ? `<div class="label">屬${esc(S.craftAttr)}的素材 <button class="linkish" data-act="craft-attr" data-attr="${esc(S.craftAttr)}">看全部 ›</button></div>` : ""}
+      ${S.craftAttr && !shown.length ? `<p class="muted">身上沒有屬${esc(S.craftAttr)}的素材。打屬${esc(S.craftAttr)}的對手、四處探索都可能拿到。</p>` : ""}
+      ${x.materials.length ? `<div class="chips">${shown.map((m) => `
         <button class="chip r${m.rank} ${used(m.id) >= m.count ? "used" : ""}" data-act="slot" data-id="${esc(m.id)}" ${used(m.id) >= m.count ? "disabled" : ""}>
           <span class="n">×${m.count - used(m.id)}</span><b>${esc(m.name)}</b><small>${esc(m.tier)}・屬${esc(m.attribute)}</small>
         </button>`).join("")}</div>`
-        : '<p class="muted">背包裡還沒有素材。去探索、歷練打贏，或是碰上奇遇都拿得到。</p>'}
+        : '<p class="muted">背包裡還沒有素材。去探索、遊歷打贏，或是碰上奇遇都拿得到。</p>'}
       <details class="fold"><summary>素材說明</summary><div class="fold-body">${x.bag}</div></details>
       <div class="sticky-act"><button class="btn primary" id="forge" data-act="forge" ${ready ? "" : "disabled"}>開爐煉製</button></div>`;
   }
@@ -421,13 +551,230 @@
       <div class="seg">${m.layers.map((l) => `<button class="${m.layer === l.id ? "on" : ""}" data-act="layer" data-layer="${esc(l.id)}">${esc(l.name)}</button>`).join("")}</div>
       <div class="map-tools">
         <select class="input" id="place">${m.places.map((p) => `<option value="${esc(p.id)}" ${p.id === m.selected ? "selected" : ""}>${esc(p.label)}</option>`).join("")}</select>
-        <button class="btn small" data-act="fit">${S.fitMap ? "放大" : "縮小"}</button>
       </div>
-      <div class="map-wrap ${S.fitMap ? "fit" : ""}" id="map">${m.svg}</div>
+      <div class="map-wrap" id="map">${m.svg}${MAP_CTL}</div>
       <div class="msg">${S.mapNotice || ""}</div>
       <div class="card">${m.detail}</div>
       ${m.travel ? `<div class="sticky-act travel-row">${m.travel.map((t) =>
         `<button class="btn ${t.mode === "walk" ? "primary" : ""}" data-act="travel" data-mode="${esc(t.mode)}" ${t.enabled ? "" : "disabled"}>${esc(t.label)}</button>`).join("")}</div>` : ""}`;
+  }
+
+  // 地圖框右上角的按鈕（給不會手勢的人，像一般地圖 App）：回到所在地、放大、縮小
+  const MAP_CTL = `<div class="map-ctl">
+    <button type="button" data-act="map-home" aria-label="回到所在地" title="回到所在地"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="6.5"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg></button>
+    <button type="button" data-act="map-zoom" data-step="in" aria-label="放大" title="放大"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg></button>
+    <button type="button" data-act="map-zoom" data-step="out" aria-label="縮小" title="縮小"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg></button>
+  </div>`;
+
+  // ── 輿圖的視圖（W16）：純數學，不碰 DOM ──
+  // 視圖 v = { s 倍率, cx, cy 視窗中心對著的地圖座標 }，地圖座標＝原尺寸的 px。存中心不存位移：視窗寬高變了（轉向、拉視窗）還對得上。
+  // vw、vh 是視窗（地圖框）的大小，W、H 是地圖的大小（svg 的 viewBox）。手勢、滾輪、按鈕都走這幾個函式
+  const MAP_MAX = 2; // 最多放到原尺寸的兩倍
+  const fitScale = (vw, vh, W, H) => Math.min(vw / W, vh / H); // 整張看得完的倍率（也是最小倍率）
+  const clampScale = (s, vw, vh, W, H) => Math.min(MAP_MAX, Math.max(fitScale(vw, vh, W, H), s));
+  // 夾住：某一軸的地圖比視窗小就置中；比視窗大就不能拖到露出地圖外面
+  function clampView(v, vw, vh, W, H) {
+    const s = clampScale(v.s, vw, vh, W, H);
+    const axis = (c, view, size) => {
+      const half = view / 2 / s; // 視窗的一半，換成地圖單位
+      return size * s <= view ? size / 2 : Math.min(size - half, Math.max(half, c));
+    };
+    return { s, cx: axis(v.cx, vw, W), cy: axis(v.cy, vh, H) };
+  }
+  // 視窗裡 (px, py) 底下的地圖座標；反過來，倍率 s 時要讓地圖座標 m 落在 (px, py)，中心該在哪
+  const mapPoint = (v, px, py, vw, vh) => [v.cx + (px - vw / 2) / v.s, v.cy + (py - vh / 2) / v.s];
+  const pinView = (s, m, px, py, vw, vh) => ({ s, cx: m[0] - (px - vw / 2) / s, cy: m[1] - (py - vh / 2) / s });
+  // 以視窗裡 (px, py) 為準縮放：縮放前後那一點底下的地圖座標不變（碰到地圖邊緣被夾住時例外）
+  function zoomAt(v, factor, px, py, vw, vh, W, H) {
+    const s = clampScale(v.s * factor, vw, vh, W, H);
+    return clampView(pinView(s, mapPoint(v, px, py, vw, vh), px, py, vw, vh), vw, vh, W, H);
+  }
+  // 地點點擊區的半徑（地圖單位）：螢幕上至少約 22px；上限 34，最近的兩個地點相距 68.6，再大會互相蓋住
+  const hitRadius = (s) => Math.min(34, Math.max(22, 22 / s));
+
+  // ── 輿圖的手勢（W16）──
+  // 地圖照原本的像素大小放在固定高度的框裡，用 transform 平移、縮放（不改 viewBox：手勢中每一幀重描整張山水，手機會卡）。
+  // 一指或滑鼠左鍵拖移、雙指縮放、滾輪縮放；按下到放開都沒移超過 8px、也從沒有第二指，才算點了一下（選地點）。
+  // pointermove／up 掛在 document：重畫換掉了地圖框，手勢也接得下去（mapReady 會把指標抓回新的框）
+  const TAP_SLOP = 8;
+  const grip = { pts: new Map(), tap: null, ref: null, frame: 0 }; // 按著的指標（id → [x, y]）、點一下的候選、起點、排好的那一幀
+  const mapHeld = () => grip.pts.size > 0;
+  let mapBox = null; // 上次套用時的地圖框大小 [寬, 高]：大小變了而原本是整張，就維持整張
+  let glideTimer = 0;
+
+  // 地圖框與地圖的大小、框的內緣在畫面上的位置；地圖還沒畫出來（或框沒有大小）回 null
+  function mapGeom(wrap) {
+    const svg = wrap && wrap.querySelector(".tx-world-map > svg");
+    const vb = svg && svg.viewBox && svg.viewBox.baseVal;
+    if (!vb || !vb.width || !vb.height || !wrap.clientWidth || !wrap.clientHeight) return null;
+    const r = wrap.getBoundingClientRect();
+    return { wrap, svg, vw: wrap.clientWidth, vh: wrap.clientHeight, W: vb.width, H: vb.height, x0: r.left + wrap.clientLeft, y0: r.top + wrap.clientTop };
+  }
+  const circleAt = (c) => {
+    const p = c && [Number(c.getAttribute("cx")), Number(c.getAttribute("cy"))];
+    return p && p.every(Number.isFinite) ? p : null;
+  };
+  // 地點的中心：它那一組裡第一個透明的點擊圓
+  const placePoint = (svg, id) => (id ? circleAt(svg.querySelector(`g[data-loc="${CSS.escape(id)}"] > circle[fill-opacity="0"]`)) : null);
+  // 所在地：在路上用「你」那個點，否則用所在的地點，都找不到就用地圖中心
+  const herePoint = (g) => circleAt(g.svg.querySelector("circle.tx-you")) || placePoint(g.svg, S.map && S.map.here) || [g.W / 2, g.H / 2];
+
+  // 把 S.mapView 夾住、套到地圖上；glide：按鈕、下拉選單的移動滑一下（≤150ms），手勢與滾輪中不滑
+  function applyMapView(glide = false, g = mapGeom(document.getElementById("map"))) {
+    if (!g || !S.mapView) return;
+    const { wrap, vw, vh, W, H } = g;
+    // 地圖框大小變了（轉向、拉視窗，也可能是在別的分頁時變的）而原本是整張：維持整張
+    if (mapBox && (mapBox[0] !== vw || mapBox[1] !== vh) && S.mapView.s <= fitScale(mapBox[0], mapBox[1], W, H) + 1e-9) {
+      S.mapView = { ...S.mapView, s: fitScale(vw, vh, W, H) };
+    }
+    mapBox = [vw, vh];
+    const v = (S.mapView = clampView(S.mapView, vw, vh, W, H));
+    clearTimeout(glideTimer);
+    wrap.classList.toggle("glide", glide);
+    if (glide) glideTimer = setTimeout(() => wrap.classList.remove("glide"), 200);
+    g.svg.style.transform = `translate(${vw / 2 - v.cx * v.s}px, ${vh / 2 - v.cy * v.s}px) scale(${v.s})`;
+    // 點擊區跟著縮放：透明圓 r=16，外框寬 2×(R−16) 把它撐到半徑 R（style.css 的 --hit）
+    const hit = `${Math.round(2 * (hitRadius(v.s) - 16))}px`;
+    if (wrap.style.getPropertyValue("--hit") !== hit) wrap.style.setProperty("--hit", hit);
+    // 到頂、到底那一顆按不下去（看得出已經到頭了）
+    wrap.querySelector('[data-step="in"]').disabled = v.s >= MAP_MAX - 1e-9;
+    wrap.querySelector('[data-step="out"]').disabled = v.s <= fitScale(vw, vh, W, H) + 1e-9;
+  }
+
+  // 輿圖頁每次畫好（afterPage）：第一次打開就決定視圖，之後照舊套用；掛上這個框自己的監聽
+  function mapReady() {
+    const wrap = document.getElementById("map");
+    if (!wrap) return;
+    // 手勢的監聽都掛在捕獲階段：不冒泡的事件（例如測試用 new PointerEvent 送的）也收得到
+    wrap.addEventListener("pointerdown", gripDown, true);
+    wrap.addEventListener("wheel", mapWheel, { passive: false, capture: true });
+    // 舊版 iOS Safari 的捏合手勢、拖到地圖上的字開始原生拖曳，都擋掉
+    for (const t of ["gesturestart", "gesturechange", "dragstart"]) wrap.addEventListener(t, (ev) => ev.preventDefault());
+    for (const id of grip.pts.keys()) {
+      try { wrap.setPointerCapture(id); } catch (e) { /* 那一指已經放開了 */ }
+    }
+    const g = mapGeom(wrap);
+    if (g && !S.mapView) {
+      // 這次載入網頁後第一次打開，對準所在地：手機照原尺寸；寬螢幕照框寬（最多原尺寸）。都不給整張——
+      // 整張只有約 0.37 倍，地名剩 5px 上下（E2／FB-012），寬螢幕的橫框也一樣
+      const phone = !!(PHONE && PHONE.matches);
+      const [cx, cy] = herePoint(g);
+      S.mapView = { s: phone ? 1 : Math.min(1, g.vw / g.W), cx, cy };
+    }
+    applyMapView(false, g);
+  }
+
+  function gripDown(ev) {
+    if (ev.button !== 0 || ev.target.closest(".map-ctl")) return; // 只收滑鼠左鍵、觸控、筆；角落的按鈕照常按
+    if (grip.pts.has(ev.pointerId)) gripEnd(); // 同一個指標又按下：上一次沒收到放開（例如在視窗外放開），重新來過
+    if (grip.pts.size >= 2) return; // 第三指不管
+    gripFlush();
+    const wrap = ev.currentTarget;
+    try { wrap.setPointerCapture(ev.pointerId); } catch (e) { /* 合成的事件抓不住；放開照樣由 document 收 */ }
+    grip.pts.set(ev.pointerId, [ev.clientX, ev.clientY]);
+    grip.tap = grip.pts.size === 1 ? { id: ev.pointerId, x: ev.clientX, y: ev.clientY, target: ev.target } : null;
+    wrap.classList.remove("glide");
+    wrap.classList.add("grabbing");
+    if (!grip.tap) wrap.classList.add("moving");
+    gripBase();
+  }
+
+  // 指標數變了（按下、放開一指）：從現在的位置與視圖重新記起點。一指記上一幀的位置（拖移）；
+  // 兩指記開始時的視圖、兩指距離，以及兩指中點底下的地圖座標（之後要一直跟著中點走）
+  function gripBase() {
+    const pts = [...grip.pts.values()];
+    const g = mapGeom(document.getElementById("map"));
+    grip.ref = null;
+    if (!g || !S.mapView || !pts.length) return;
+    if (pts.length === 1) { grip.ref = { at: pts[0] }; return; }
+    const [[ax, ay], [bx, by]] = pts;
+    grip.ref = { v: S.mapView, d: Math.max(1, Math.hypot(bx - ax, by - ay)), m: mapPoint(S.mapView, (ax + bx) / 2 - g.x0, (ay + by) / 2 - g.y0, g.vw, g.vh) };
+  }
+
+  // 一幀套用一次（同一幀的多次移動合併）
+  function gripStep() {
+    grip.frame = 0;
+    const g = mapGeom(document.getElementById("map"));
+    const ref = grip.ref;
+    const pts = [...grip.pts.values()];
+    if (!g || !ref || !S.mapView) return;
+    if (pts.length === 1 && ref.at) {
+      // 地圖跟著手指（游標）走
+      const [x, y] = pts[0];
+      const v = S.mapView;
+      S.mapView = clampView({ s: v.s, cx: v.cx - (x - ref.at[0]) / v.s, cy: v.cy - (y - ref.at[1]) / v.s }, g.vw, g.vh, g.W, g.H);
+      ref.at = [x, y];
+    } else if (pts.length === 2 && ref.m) {
+      const [[ax, ay], [bx, by]] = pts;
+      const s = clampScale(ref.v.s * Math.hypot(bx - ax, by - ay) / ref.d, g.vw, g.vh, g.W, g.H);
+      S.mapView = clampView(pinView(s, ref.m, (ax + bx) / 2 - g.x0, (ay + by) / 2 - g.y0, g.vw, g.vh), g.vw, g.vh, g.W, g.H);
+    } else return;
+    applyMapView(false, g);
+  }
+  // 還沒套用的那一幀先套上（指標數要變了、或要放開了）
+  function gripFlush() {
+    if (!grip.frame) return;
+    cancelAnimationFrame(grip.frame);
+    gripStep();
+  }
+
+  function gripUp(ev) {
+    if (!grip.pts.has(ev.pointerId)) return;
+    gripFlush();
+    grip.pts.delete(ev.pointerId);
+    const tap = grip.tap;
+    if (grip.pts.size) { grip.tap = null; gripBase(); return; } // 雙指放開一指：剩下那一指接著拖，不算點選
+    gripEnd();
+    if (ev.type === "pointerup" && tap && tap.id === ev.pointerId) mapPick(tap.target);
+  }
+  function gripEnd() {
+    if (grip.frame) cancelAnimationFrame(grip.frame);
+    grip.pts.clear();
+    grip.tap = grip.ref = null;
+    grip.frame = 0;
+    document.getElementById("map")?.classList.remove("grabbing", "moving");
+  }
+
+  // 在地圖上點了一下：選那個地點，視圖不動
+  async function mapPick(target) {
+    const loc = target && target.closest && target.closest("[data-loc]");
+    if (!loc) return;
+    S.mapNotice = "";
+    try { await loadMap(loc.getAttribute("data-loc")); } catch (e) { /* 提示過 */ }
+  }
+
+  // 滾輪以游標為準縮放；觸控板雙指捏合在 Chrome／Edge 是帶 ctrlKey 的 wheel，一樣處理（也因此擋掉瀏覽器自己的整頁放大）
+  function mapWheel(ev) {
+    ev.preventDefault();
+    const g = mapGeom(ev.currentTarget);
+    if (!g || !S.mapView) return;
+    const dy = ev.deltaY * (ev.deltaMode === 1 ? 16 : ev.deltaMode === 2 ? g.vh : 1);
+    S.mapView = zoomAt(S.mapView, Math.exp(-dy * 0.0015), ev.clientX - g.x0, ev.clientY - g.y0, g.vw, g.vh, g.W, g.H);
+    applyMapView(false, g);
+  }
+
+  // 角落的按鈕：以視窗中心縮放 1.5 倍
+  function mapZoom(step) {
+    const g = mapGeom(document.getElementById("map"));
+    if (!g || !S.mapView) return;
+    S.mapView = zoomAt(S.mapView, step === "out" ? 1 / 1.5 : 1.5, g.vw / 2, g.vh / 2, g.vw, g.vh, g.W, g.H);
+    applyMapView(true, g);
+  }
+  // 回到所在地：倍率照舊（比原尺寸小就拉到原尺寸），中心移到所在地
+  function mapHome() {
+    const g = mapGeom(document.getElementById("map"));
+    if (!g || !S.mapView) return;
+    const [cx, cy] = herePoint(g);
+    S.mapView = { s: Math.max(1, S.mapView.s), cx, cy };
+    applyMapView(true, g);
+  }
+  // 下拉選單選了地點：倍率照舊，中心移到那個地點（它可能在視窗外）
+  function mapCenterOn(id) {
+    const g = mapGeom(document.getElementById("map"));
+    const p = g && placePoint(g.svg, id);
+    if (!p || !S.mapView) return;
+    S.mapView = { ...S.mapView, cx: p[0], cy: p[1] };
+    applyMapView(true, g);
   }
 
   // ── 見聞 ──
@@ -682,10 +1029,10 @@
   let craftLineSeq = 0;
   async function updateCraftLine() {
     const seq = ++craftLineSeq;
-    const pot = JSON.stringify([S.craftSel, S.craftKind]);
+    const pot = JSON.stringify(S.craftSel);
     try {
-      const r = await api("/api/craft_line", { materials: S.craftSel, kind: S.craftKind });
-      if (seq !== craftLineSeq || pot !== JSON.stringify([S.craftSel, S.craftKind])) return;
+      const r = await api("/api/craft_line", { materials: S.craftSel });
+      if (seq !== craftLineSeq || pot !== JSON.stringify(S.craftSel)) return;
       S.craftLine = r.line;
       const el = document.getElementById("craft-line");
       if (el) el.innerHTML = r.line;
@@ -698,9 +1045,12 @@
       btn.disabled = true;
       btn.textContent = "爐火正旺…";
       btn.classList.add("forging");
+      // 等結果的這段時間（首次發現的配方要等模型取名）整座爐子晃動、火舌竄高、太極快轉
+      document.querySelector(".wheel .w-furnace")?.classList.add("forging");
+      document.querySelector(".wheel .w-taichi")?.classList.add("hot");
       S.message = "爐火正旺。若這個配方是江湖上第一次煉成，取名要花上一分鐘，請稍候。";
       document.getElementById("mx-msg").textContent = S.message;
-      const r = await api("/api/menxia/craft", { materials: S.craftSel, kind: S.craftKind });
+      const r = await api("/api/menxia/craft", { materials: S.craftSel });
       S.menxia = r.menxia;
       S.message = r.message;
       S.craftSel = [];
@@ -729,13 +1079,8 @@
   }
 
   // ── 事件 ──
+  // 輿圖上選地點不走 click：pointer capture 之後 click 的目標會變，選取只在 gripUp 判斷「點了一下」時做
   document.addEventListener("click", async (ev) => {
-    const loc = ev.target.closest("#map [data-loc]");
-    if (loc) {
-      S.mapNotice = "";
-      try { await loadMap(loc.getAttribute("data-loc")); } catch (e) { /* 提示過 */ }
-      return;
-    }
     const el = ev.target.closest("[data-act]");
     if (!el) return;
     const act = el.dataset.act;
@@ -802,11 +1147,17 @@
           if (S.craftSel.length < (S.menxia?.per_craft || 2)) { S.craftSel.push(el.dataset.id); renderPage(); updateCraftLine(); }
           else toast("爐裡已經放滿了，點上面的素材拿出來再換。");
           break;
-        case "unslot": S.craftSel.splice(Number(el.dataset.i), 1); renderPage(); updateCraftLine(); break;
-        case "craft-kind": S.craftKind = el.dataset.kind; renderPage(); updateCraftLine(); break;
+        case "unslot": if (S.busy) break; S.craftSel.splice(Number(el.dataset.i), 1); renderPage(); updateCraftLine(); break;
         case "forge": await forge(); break;
+        case "forge-hub":
+          if (S.craftSel.length === (S.menxia?.per_craft || 2)) await forge();
+          else toast("先挑兩樣素材放進爐裡。");
+          break;
+        case "craft-attr": S.craftAttr = S.craftAttr === el.dataset.attr ? null : el.dataset.attr; renderPage(); break;
+        case "wheel": S.wheelSel = S.wheelSel === el.dataset.key ? null : el.dataset.key; renderPage(); break;
         case "layer": S.layer = el.dataset.layer; await loadMap(S.map?.selected); break;
-        case "fit": S.fitMap = !S.fitMap; S.fitChosen = true; renderPage(); break;
+        case "map-zoom": mapZoom(el.dataset.step); break;
+        case "map-home": mapHome(); break;
         case "travel": await travel(el.dataset.mode); break;
         case "news":
           S.news = el.dataset.news;
@@ -828,9 +1179,28 @@
   });
 
   document.addEventListener("change", async (ev) => {
-    if (ev.target.id === "place") { S.mapNotice = ""; await loadMap(ev.target.value).catch(() => {}); }
+    if (ev.target.id === "place") {
+      const id = ev.target.value;
+      S.mapNotice = "";
+      await loadMap(id).then(() => { if (S.tab === "map") mapCenterOn(id); }, () => {});
+    }
     if (ev.target.id === "anon") await doMain("anonymous", { value: ev.target.checked });
   });
+
+  // 輿圖的手勢：按下在地圖框上（gripDown），移動、放開在這裡收
+  document.addEventListener("pointermove", (ev) => {
+    if (!grip.pts.has(ev.pointerId)) return;
+    grip.pts.set(ev.pointerId, [ev.clientX, ev.clientY]);
+    const t = grip.tap;
+    if (t && Math.hypot(ev.clientX - t.x, ev.clientY - t.y) > TAP_SLOP) {
+      grip.tap = null; // 超過 8px 就是拖移，放開時不選地點
+      document.getElementById("map")?.classList.add("moving"); // 拖的時候才升成合成層
+    }
+    if (!grip.frame) grip.frame = requestAnimationFrame(gripStep);
+  }, true);
+  document.addEventListener("pointerup", gripUp, true);
+  document.addEventListener("pointercancel", gripUp, true);
+  window.addEventListener("blur", gripEnd); // 拖到一半切走視窗：放開可能收不到，手勢作廢
 
   // 狀態列點名號展開／收起更多數值（S1）。鍵盤也按得到（Enter、空白鍵）；狀態列整塊重畫，所以按完把焦點放回去
   function toggleMore(keyboard = false) {
@@ -986,10 +1356,14 @@
     if (tab === "map") {
       const was = S.map;
       if (!was) return;
+      // 手指（滑鼠）還按在地圖上：重畫會換掉手指底下的地圖、pointer capture 跟著斷，這一輪不畫。
+      // 清掉 mainKey，下一輪的 main 就算沒變也會再來補畫
+      if (mapHeld()) { S.mainKey = ""; return; }
       const q = new URLSearchParams({ layer: S.layer });
       if (was.selected) q.set("place", was.selected);
       const m = await api(`/api/map?${q}`);
       if (S.stage !== "game" || S.tab !== tab || S.busy || S.map !== was || typing()) return;
+      if (mapHeld()) { S.mainKey = ""; return; } // 等回應時開始了手勢
       S.map = m;
       S.layer = m.layer;
       if (JSON.stringify(m) !== JSON.stringify(was)) redrawPage(true);
@@ -1004,7 +1378,7 @@
   };
 
   // 重畫這一頁但保留玩家正在做的事（輪詢、閉關被拒時用）：填到一半的欄位（自創功法的名字、閉關時數）、
-  // 摺疊區的開合，以及輿圖捲到的位置（afterPage() 每次重畫都會把選取的地點置中，這裡再捲回原處）。
+  // 摺疊區的開合（輿圖的視圖本來就存在 S.mapView，重畫照舊套用）。
   // quiet：輪詢的重畫，頁面上方那一行訊息沒有變，不要再播一次浮現動畫
   function redrawPage(quiet = false) {
     const page = document.getElementById("page");
@@ -1012,8 +1386,6 @@
     const fields = [...page.querySelectorAll("form[id] input[name], form[id] select[name], form[id] textarea[name]")]
       .map((el) => [el.form.id, el.name, el.value]);
     const folds = [...page.querySelectorAll("details > summary")].map((s) => [s.textContent, s.parentElement.open]);
-    const wrap = page.querySelector(".map-wrap");
-    const scroll = wrap && [wrap.scrollLeft, wrap.scrollTop];
     renderPage();
     if (quiet) page.querySelectorAll(".msg").forEach((el) => el.classList.add("still"));
     for (const [form, name, value] of fields) {
@@ -1024,8 +1396,6 @@
       const s = [...page.querySelectorAll("details > summary")].find((x) => x.textContent === text);
       if (s) s.parentElement.open = open;
     }
-    const now = page.querySelector(".map-wrap");
-    if (scroll && now) [now.scrollLeft, now.scrollTop] = scroll;
   }
 
   // 重抓素材之後，爐裡放的若已經不夠（別處用掉了）就拿掉多的那幾個；有拿掉回 true
@@ -1042,17 +1412,11 @@
   setInterval(poll, POLL_MS);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) poll(); });
 
-  // 視窗寬度跨過手機的分界（例如橫著打開、再轉直）：玩家還沒自己按過「放大／縮小」，就照新的寬度重新決定整張或原尺寸
-  function phoneChanged() {
-    if (S.fitChosen || S.fitMap === !PHONE.matches) return;
-    S.fitMap = !PHONE.matches;
-    if (S.stage === "game" && S.tab === "map") renderPage(); // 改成原尺寸時 afterPage() 會捲到選取的地點
-  }
-  if (PHONE) {
-    if (PHONE.addEventListener) PHONE.addEventListener("change", phoneChanged);
-    else if (PHONE.addListener) PHONE.addListener(phoneChanged); // 舊版 Safari
-    window.addEventListener("resize", phoneChanged); // 有些瀏覽器（含開發工具的裝置模擬）換寬度時不發 change；寬度沒跨線就什麼都不做
-  }
+  // 視窗大小變了（轉向、拉視窗）：輿圖開著就重新夾住、套用；原本是整張就維持整張（applyMapView）
+  window.addEventListener("resize", () => { if (S.stage === "game" && S.tab === "map") applyMapView(); });
+  // 寬度跨過手機分界（轉向、拉視窗）：江湖頁的排列順序不同（pageJianghu 的輪盤），要重畫
+  const onPhoneChange = () => { if (S.stage === "game" && S.tab === "jianghu") renderPage(); };
+  if (PHONE) { if (PHONE.addEventListener) PHONE.addEventListener("change", onPhoneChange); else PHONE.addListener(onPhoneChange); }
 
   api("/api/me").then(enter).catch(() => { S.stage = "gate"; render(); });
 })();

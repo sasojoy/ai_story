@@ -150,7 +150,7 @@ def test_look_after_creates_arts_with_ordinary_looking_names(content, game):
 def test_a_bot_trains_where_training_helps_its_faction(content, game):
     _install_factions(content)  # 官軍 goals kou -1、黃巾 goals kou +1
     game.state.player.faction = "huang"
-    walk_to(game, "lake")  # 湖邊 train_trend kou -1：黃巾的人在這裡歷練會往 +1 推
+    walk_to(game, "lake")  # 湖邊 train_trend kou -1：黃巾的人在這裡遊歷會往 +1 推
     train = bot_policy.score(game, Option(id="act:train", label=""), _profile("huang"))
     explore = bot_policy.score(game, Option(id="act:explore", label=""), _profile("huang"))
     assert train > explore
@@ -172,7 +172,7 @@ def test_a_bot_heads_for_a_place_where_training_helps(content, game):
 
 
 def test_a_bot_does_not_socialize_where_it_would_only_be_turned_away(content, game):
-    """名望不夠的假人在只有大勢人物、沒有交遊事件的地方，交遊只會白扣體力；福緣到期時交遊會先送福緣，就另當別論。"""
+    """名望不夠的假人在只有大勢人物、沒有交友事件的地方，交友只會白扣體力；福緣到期時交友會先送福緣，就另當別論。"""
     ch = content.characters["mate"]
     ch.deep_interaction, ch.audience_fame = True, 10
     ch.kind, ch.recruit_at, ch.talk_at = "locked", None, "cave"
@@ -181,19 +181,19 @@ def test_a_bot_does_not_socialize_where_it_would_only_be_turned_away(content, ga
     socialize = Option(id="act:socialize", label="")
     assert game.socialize_is_futile() and not game.socialize_starts_dialogue()
     assert bot_policy.score(game, socialize, profile) is None
-    game.state.world.time = 86400  # 第二天：福緣到期，交遊會先送福緣
+    game.state.world.time = 86400  # 第二天：福緣到期，交友會先送福緣
     assert not game.socialize_is_futile()
     assert bot_policy.score(game, socialize, profile) == bot_policy.ACT_SCORES["socialize"]
     game.state.player.fortune = True  # 福緣給過了：又是白跑一趟
     assert game.socialize_is_futile()
-    game.state.player.stats["fame"] = 10  # 名望到了：見得到他，不白跑，但交遊會開口對話，照舊不去
+    game.state.player.stats["fame"] = 10  # 名望到了：見得到他，不白跑，但交友會開口對話，照舊不去
     assert not game.socialize_is_futile() and game.socialize_starts_dialogue()
     assert bot_policy.score(game, socialize, profile) is None
 
 
 def test_a_bot_still_socializes_where_the_location_has_events(content, game):
     content.characters["mate"].deep_interaction = True
-    content.characters["mate"].audience_fame = 10  # 小鎮有交遊事件（拜師），見不到韓鐵也不白跑
+    content.characters["mate"].audience_fame = 10  # 小鎮有交友事件（拜師），見不到韓鐵也不白跑
     assert not game.socialize_is_futile()
     assert bot_policy.score(game, Option(id="act:socialize", label=""), _profile("guan")) == bot_policy.ACT_SCORES["socialize"]
 

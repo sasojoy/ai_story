@@ -147,7 +147,7 @@ class Event(_Strict):
     weight: float = 1.0
     once: bool = False
     qiyu: bool = False
-    fortune: bool = False  # 新立門戶福緣：不會被隨機抽到，由 engine 在交遊時觸發（actions 必須是空的）
+    fortune: bool = False  # 新立門戶福緣：不會被隨機抽到，由 engine 在交友時觸發（actions 必須是空的）
     condition: Condition = Field(default_factory=Condition)
     choices: list[Choice] = Field(min_length=1)
     free_text: FreeTextChoice | None = None
@@ -223,7 +223,7 @@ class Location(_Strict):
     danger: int = Field(default=1, ge=1, le=3)
     important: bool = False
     enemies: list[str] = Field(default_factory=list)
-    train_trend: dict[str, int] = Field(default_factory=dict)  # 歷練打贏／操練推大勢的量；正負是散人的方向，有陣營目標的人照自己的目標推（Game._train_push）
+    train_trend: dict[str, int] = Field(default_factory=dict)  # 遊歷打贏／操練推大勢的量；正負是散人的方向，有陣營目標的人照自己的目標推（Game._train_push）
     materials: list[str] = Field(default_factory=list)  # 在這裡探索可能撿到的素材；留空則給隨機的一階素材
     unlock_flag: str | None = None  # 設定後，需該世界旗標成立才能前往
 
@@ -378,14 +378,48 @@ class MapRegion(_Strict):
     label_y: int
 
 
+class MapRiver(_Strict):
+    """一條河（輿圖美術設計第四節）：points 從上游寫到下游，畫的時候照這個方向由 width[0] 漸寬到 width[1]。
+    舊格式（每條河只是一串 [x, y] 點）照樣讀，當成藍色、寬 4→8（見 MapLayout._legacy_rivers）。"""
+
+    name: str = ""  # 只給寫內容的人看；河名照舊寫在 MapLayout.labels
+    points: list[list[int]]
+    width: tuple[float, float] = (4, 8)  # 上游寬、下游寬
+    color: Literal["blue", "yellow"] = "blue"  # yellow 只給黃河
+
+
+TerrainKind = Literal["mountains", "hills", "forest"]  # 山脈、丘陵、林地
+
+
+class Terrain(_Strict):
+    """輿圖上的一片地形（輿圖美術設計第四節，純裝飾：不改路程也不改視野）。山脈、丘陵沿 spine（山腳線）排山頭，
+    size 是山頭高度；林地在 points 圍成的多邊形裡排樹叢。山頭與樹自己讓開地點、路與河（mapart.terrain）。"""
+
+    kind: TerrainKind
+    name: str = ""  # 選填：畫成淡綠小字
+    spine: list[list[int]] = Field(default_factory=list)  # 山脈、丘陵用
+    size: int = 0  # 山脈、丘陵用，8～40
+    points: list[list[int]] = Field(default_factory=list)  # 林地用
+
+
 class MapLayout(_Strict):
     width: int = 680
     height: int = 420
-    background: str = Field(default="#F6F1E4", pattern=HEX_COLOR)
+    background: str = Field(default="#E9E2CC", pattern=HEX_COLOR)  # 紙色（輿圖美術設計 2.1）
     regions: list[MapRegion] = Field(default_factory=list)
-    rivers: list[list[list[int]]] = Field(default_factory=list)  # 每條河是一串 [x, y] 點
+    rivers: list[MapRiver] = Field(default_factory=list)
+    terrain: list[Terrain] = Field(default_factory=list)
+    compass: tuple[int, int] | None = None  # 指北針的位置；不寫就不畫
     labels: list[MapLabel] = Field(default_factory=list)
     mini_window: tuple[int, int] = (270, 180)  # 小地圖以所在地為中心截多寬、多高（地圖單位）；地圖畫得越疏，要截得越大才看得到一兩站路
+
+    @field_validator("rivers", mode="before")
+    @classmethod
+    def _legacy_rivers(cls, rivers: Any) -> Any:
+        """舊格式的河是一串 [x, y] 點（純陣列）：包成 {"points": ...}，其餘照預設（藍色、寬 4→8）。"""
+        if isinstance(rivers, list):
+            return [{"points": river} if isinstance(river, list) else river for river in rivers]
+        return rivers
 
 
 class WorldEvent(_Strict):
@@ -522,7 +556,7 @@ class Config(_Strict):
     hurry_stamina_per_minute: float = Field(default=1, ge=0)  # 趕路：每分鐘路程扣幾點體力（時間減半）
     dash_stamina_per_minute: float = Field(default=2, ge=0)  # 疾行：每分鐘路程扣幾點體力（立刻到）
     # 路上小事（路上設計第四節）：收入要明顯低於在站上做事，不然一直趕路會變成最賺的玩法
-    road_think_xinde: int = Field(default=3, ge=0)  # 邊走邊想：心得（一次歷練大約 12～20）
+    road_think_xinde: int = Field(default=3, ge=0)  # 邊走邊想：心得（一次遊歷大約 12～20）
     road_rumor_pool: int = Field(default=5, ge=1)  # 沿途打聽：從這一帶最近幾則傳聞裡挑一則
     road_gather_chance: float = Field(default=0.4, ge=0, le=1)  # 路邊採集：撿到一樣一階素材的機率
     road_sight_chance: float = Field(default=0.3, ge=0, le=1)  # 路上見聞：每抵達一站有幾成機會看見一則（路上設計第五節）
@@ -580,7 +614,7 @@ class Config(_Strict):
     # 設好之後量到：每人每季碰到奇遇那一步 0.58 次，至少一次的約四成六。正式內容的值寫在 content/config.json。
     rare_explore_chance: float = Field(default=0.025, ge=0, le=1)
     explore_mix: list[ExploreMix] = Field(default_factory=_default_explore_mix)  # 地點類型 -> 素材／野怪／事件的比例
-    wild_neili_loss_factor: float = Field(default=0.5, ge=0, le=1)  # 探索撞上的野怪扣氣血是歷練的幾倍（內傷照同一個比例）
+    wild_neili_loss_factor: float = Field(default=0.5, ge=0, le=1)  # 探索撞上的野怪扣氣血是遊歷的幾倍（內傷照同一個比例）
     craft_xinde_base: int = 5  # 煉製成本 = base × 素材數 + per_tier × 階總和（見無限煉製設計 §5.5）
     craft_xinde_per_tier: int = 3
     level_exp: int = 10  # 第 n 級升 n+1 級需要 level_exp × n
@@ -604,7 +638,7 @@ class Config(_Strict):
     duel_chance_on_fail: float = 0.4  # 招募失敗時，額外觸發對方要求決鬥的機率
     duel_fail_silver_loss: int = 15  # 決鬥吃虧：賠的銀兩（原本只有「你惹上了一場決鬥」的文字，沒有任何實際代價）
     recruit_consolation_xinde: int = 30  # 劇情事件想結識的人已經被別人招走時，改給的心得
-    fortune_day_min: int = 2  # 新立門戶福緣：第幾天起交遊必定先觸發
+    fortune_day_min: int = 2  # 新立門戶福緣：第幾天起交友必定先觸發
     fortune_day_max: int = 7  # 新立門戶福緣：第幾天結束還沒發生就直接送上門
     # ── 賽季生命週期（第一季設計第十四節）──
     admins: list[str] = Field(default_factory=list)  # 管理者的名號；暫時用名號認人，線上架構會換成帳號權限

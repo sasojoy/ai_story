@@ -49,7 +49,7 @@ def test_attempt_recruit_succeeds_and_seeds_the_starting_skill(state, content, w
 
 def test_attempt_recruit_can_fail_without_a_duel(state, content, world):
     msgs = roster.attempt_recruit(state, content, world, "mate", FixedRandom(0.4))  # 招募失敗、決鬥骰也沒過
-    assert msgs == ["【韓鐵】婉拒了你這次的招攬，看來還需要多花心思——先多來幾趟「交遊」，培養交情再試，成功率會更高。"]
+    assert msgs == ["【韓鐵】婉拒了你這次的招攬，看來還需要多花心思——先多來幾趟「交友」，培養交情再試，成功率會更高。"]
     assert state.player.team == [] and roster.owned_by(world, "mate") is None
 
 

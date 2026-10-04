@@ -14,7 +14,7 @@ from .world_state import WorldStateStore
 
 MAX_RECORDS = 20  # 存檔保留最近幾場
 TIER_WORDS = {"大勝": "大勝", "險勝": "險勝", "僵持": "平手", "落敗": "落敗"}
-KIND_WORDS = {"train": "歷練", "event": "劇情", "wild": "探索遇敵", "showdown": "決戰"}
+KIND_WORDS = {"train": "遊歷", "event": "劇情", "wild": "探索遇敵", "showdown": "決戰"}
 NO_RECORD = "（還沒有戰報。）"
 DAY = 86400
 HOUR = 3600
@@ -22,7 +22,7 @@ _NUMERIC_CHANGE = re.compile(r"^\S+ [+-]\d+(\.\d+)?$")  # 例如「名望 +3」�
 
 
 def split_changes(msgs: list[str]) -> tuple[list[str], list[str]]:
-    """把一串訊息（apply_effect、歷練加成……的回傳）分成（數值變化, 敘事文字）兩份，各自保留原順序。
+    """把一串訊息（apply_effect、遊歷加成……的回傳）分成（數值變化, 敘事文字）兩份，各自保留原順序。
     數值變化是「標籤 + 正負號 + 數字」這種格式，例如「名望 +3」；其餘一律算敘事文字。"""
     changes = [m for m in msgs if _NUMERIC_CHANGE.match(m)]
     notes = [m for m in msgs if not _NUMERIC_CHANGE.match(m)]
