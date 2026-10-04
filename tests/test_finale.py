@@ -304,3 +304,25 @@ def test_no_next_event_countdown_once_the_season_rests(on):
     assert admin.status_data()["next_event"] is not None
     admin.admin_end_season(now=admin.now)
     assert admin.status_data()["next_event"] is None
+
+
+def test_a_decisive_end_keeps_the_ending_that_triggered_it(on):
+    """T9 審查 M1：決定性勝利那一刻剛好有決戰該開（還沒開成、在等）：收季時照起點結算那場決戰會把戰況拉回門檻下，
+    但季是因為門檻收的，結局要是觸發收季的那一種，公告不能變成「戰事提前收束。……黃巾坐地」這種自相矛盾的組合。"""
+    from tianxia.state import Lock, TimelineResult
+
+    game = _game(on)
+    w = game.state.world
+    for event in on.timetable:
+        if event.id not in ("guangzong", "xiaquyang"):
+            w.timeline.setdefault(event.id, TimelineResult(key="skip", time=0.0))
+    w.hooked_week = on.config.season_weeks
+    w.trends.update(yingru=100, nanyang=100, jizhou=62, geju=10)  # 黃巾聲勢 85：到門檻
+    rules.recompute_trends(w, on)
+    w.locks["guangzong"] = Lock(side="guan", name="趙甲", time=0.0)  # 廣宗照鎖定判官軍：冀州往官軍 10
+    w.time = w.schedule["guangzong"] - 0.5
+    game.advance(10)
+    w = game.state.world
+    assert w.ended and w.ending_id == "s1_huangtian"
+    assert w.timeline["xiaquyang"].text == "戰事提前收束。下曲陽沒有破，黃巾的聲勢席捲了半個天下。"
+    assert "guangzong" in w.timeline  # 廣宗照樣結算了（收季前把等著的決戰判掉）

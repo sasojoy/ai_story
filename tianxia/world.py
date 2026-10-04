@@ -242,6 +242,7 @@ def decisive_ending(state: GameState, content: Content) -> Ending | None:
 
 def end_season(
     state: GameState, content: Content, world: WorldStateStore | None = None, rng: random.Random | None = None,
+    ending: Ending | None = None,
 ) -> list[str]:
     """world 給的話，順便算一次天下武學榜／內功榜附在結局後面（設計文件 6.5）；不傳就是
     原本的純結局文字，選填不影響既有呼叫端或測試。
@@ -252,7 +253,9 @@ def end_season(
     if w.ended:
         return []
     msgs = settle_waiting_showdowns(state, content, rng or random.Random(0))
-    ending = evaluate_ending(state, content)
+    # 決定性勝利收季時，結局就是觸發收季的那一種：上面照起點判掉的決戰可能把戰況拉回門檻下（T9 審查 M1），
+    # 那時再算一次會得到「戰事提前收束。……黃巾坐地」這種自相矛盾的公告
+    ending = ending or evaluate_ending(state, content)
     w.ended = True
     w.ending_id = ending.id
     w.ending_title = ending.title
@@ -538,8 +541,9 @@ def advance_world_state(
             msgs += sim_tick(vehicle, content, hours, rng)
         if crossed and not season.ended:
             msgs += season_hour(vehicle, content, rng)
-            if not season.ended and decisive_ending(vehicle, content) is not None:  # 決定性勝利：當曆時收季（計畫 T9）
-                msgs += end_season(vehicle, content, world, rng)
+            decisive = None if season.ended else decisive_ending(vehicle, content)
+            if decisive is not None:  # 決定性勝利：當曆時收季，結局就是它（計畫 T9）
+                msgs += end_season(vehicle, content, world, rng, ending=decisive)
         if not season.ended and _season_due(season, content):
             msgs += end_season(vehicle, content, world, rng)
     return msgs
