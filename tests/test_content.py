@@ -1246,3 +1246,28 @@ def test_season_one_tutorial_steps_must_come_last(tmp_path):
     edit_json(root / "tutorial.json", lambda d: d["steps"][0].update(season_one=True))
     with pytest.raises(ContentError, match="排在最後"):
         load_content(root)
+
+
+# ── 晉升（計畫 T5）──────────────────────────────────────────
+
+
+def test_promote_only_on_promotion_scenes(tmp_path):
+    root = _real_copy(tmp_path)
+    edit_json(root / "events" / "general.json", lambda d: d[0]["choices"][0].setdefault("effect", {}).update(promote=2))
+    with pytest.raises(ContentError, match="晉升奇遇"):
+        load_content(root)
+
+
+def test_promotion_followers_must_be_that_sides(tmp_path):
+    root = _real_copy(tmp_path)
+    edit_json(root / "events" / "promotion.json",
+              lambda d: d[0]["choices"][0]["effect"].update(followers=["follower_huang_believer", "follower_guan_spear"]))
+    with pytest.raises(ContentError, match="給的部下要是 guan 的"):
+        load_content(root)
+
+
+def test_promotion_handoff_needs_its_scene_and_summons(tmp_path):
+    root = _real_copy(tmp_path)
+    edit_json(root / "promotions.json", lambda d: d[0].update(summons_handoff=None))
+    with pytest.raises(ContentError, match="接手"):
+        load_content(root)

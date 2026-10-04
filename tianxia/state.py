@@ -73,6 +73,16 @@ class Convoy(BaseModel):
     to_loc: str
 
 
+class Summons(BaseModel):
+    """收到的召見（計畫 T5、晉升文件第一節）：沒有期限；到了 location、演完那一階的奇遇才晉升。
+    figure 是發召見那一刻出面的人（江湖紀錄寫他）；到了現場照當下再挑一次（ranks.presenter）。"""
+
+    rank: int
+    figure: str | None = None
+    location: str
+    since: float = 0.0
+
+
 class PlayerState(BaseModel):
     name: str
     location: str
@@ -143,6 +153,10 @@ class PlayerState(BaseModel):
     # ── 捐獻紀錄（計畫 T6，軍備文件 4.1）：「據點 id:糧草」→ 累積的份量。T7 的伏筆只讀它；寫入是 T6 護糧的事 ──
     donations: dict[str, int] = Field(default_factory=dict)
     convoy: Convoy | None = None  # 押著的糧車（計畫 T6 護糧）；None＝沒有。角色每季重來，跟著清空
+    # ── 晉升（計畫 T5）；角色每季重來 ──
+    rank: int = 0  # 晉升過的階；0 是還沒晉升過（有陣營時算第 1 階，見 ranks.rank_of）
+    summons: Summons | None = None  # 還沒去的召見
+    followers: list[str] = Field(default_factory=list)  # 部下（followers.json 的模板 id）
 
     # ── 大勢人物（計畫 T4、軍令文件 4.5）：剛被你打敗的人物 id → 到哪個「現實」時間（秒，Game.now）之前不見你、也不跟你交手。
     # 看現實時間、不看賽季時鐘（管理者快轉不會讓他提早見你）；角色每季重來，跟著清空 ──
@@ -271,6 +285,8 @@ class WorldState(BaseModel):
     showdowns_opened: dict[str, str] = Field(default_factory=dict)  # 開過集結的決戰 id → 開的那一筆 BattleDef；開過就不再開
     figures: dict[str, FigureState] = Field(default_factory=dict)  # 大勢人物 id → 聲威、狀態、所在（T4 開季時種）
     orders: list[Order] = Field(default_factory=list)  # 陣營軍令（計畫 T6）：這一週的，加上之前達成的
+    # 升第 2 階的每日彙整（計畫 T5）：「陣營:曆日」→ 顯示名；過了那個曆日由季的事發成一則陣營軍情（傳聞只能新增，不能改）
+    promoted_today: dict[str, list[str]] = Field(default_factory=dict)
     # ── 推力規則（計畫 T3）──
     trend_accum: dict[str, float] = Field(default_factory=dict)  # 不足一點的推力（全服共用，滿一點才真的推；正負會抵銷）：大勢線 id、"geju"、"fig:<人物 id>"（大勢人物每天的推動）、"prestige:<人物 id>"（挑戰打贏扣聲威不足一點的部分）
     active_pushers: dict[str, dict[str, float]] = Field(default_factory=dict)  # 陣營 id → 名號 → 最後一次推大勢的世界秒（人數緩衝用，過期的順手清掉）

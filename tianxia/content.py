@@ -19,7 +19,7 @@ from .companion_agent import DIALOGUE_TAGS
 from .materials import TIER_NAMES
 from .models import (
     FRONT_KEY, ROADS, STATS, BattleDef, CharacterDef, Condition, Config, Content, CraftNames, Effect, Event, FigureDef,
-    Foreshadows, Location, OrdersContent,
+    FollowerDef, Foreshadows, Location, OrdersContent, PromotionDef,
     MapLayout, Material, RoadSight, Scenario, Sect, SimRumor, SkillDef, Squad, TimetableEvent, Tutorial,
 )
 from .zh import to_traditional
@@ -72,6 +72,10 @@ def load_content(root: Path, profile: str | None = None) -> Content:
         if (root / "timetable.json").exists() else [],
         foreshadows=_foreshadows(root / "foreshadows.json"),
         orders=_orders(root / "orders.json"),
+        promotions=[_build(PromotionDef, raw) for raw in _read(root / "promotions.json")]
+        if (root / "promotions.json").exists() else [],
+        followers={raw["id"]: _build(FollowerDef, raw) for raw in _read(root / "followers.json")}
+        if (root / "followers.json").exists() else {},
         figures=_index(FigureDef, _read(root / "figures.json")) if (root / "figures.json").exists() else {},
         events=events,
         map=MapLayout(**_read(root / "map.json")),
@@ -368,6 +372,44 @@ def check_orders(c: Content, need, known, front_ids: list[str]) -> None:
         squad = c.squads.get(squad_id)
         need(squad is not None and squad.faction == side, f"orders.json 的 convoy_squads：{side} 的糧隊 {squad_id} 不存在或不屬於這個陣營")
     known("orders.json 的 callers", [x.figure for x in o.callers if x.figure is not None], c.figures, "人物")
+
+
+def check_promotions(c: Content, need, known) -> None:
+    """晉升（content/promotions.json、followers.json，計畫 T5）：陣營在劇本裡、每陣營每階一筆；人物在人物表；地點存在
+    （或 nearest_base）；奇遇存在；有接手的人就要有接手版的奇遇與召見；部下的陣營存在、武學在 skills.json；
+    promote／followers 只寫在晉升奇遇的選項上，給的部下是那個陣營的。"""
+    factions = {f.id for f in c.scenario.factions}
+    seen: set[tuple[str, int]] = set()
+    promo_events: dict[str, str] = {}
+    for promo in c.promotions:
+        where = f"promotions.json 的 {promo.faction}／第 {promo.rank} 階"
+        need(promo.faction in factions, f"{where}：陣營不在劇本裡")
+        need((promo.faction, promo.rank) not in seen, f"{where}：同一個陣營的同一階寫了兩筆")
+        seen.add((promo.faction, promo.rank))
+        known(where, [x for x in (promo.figure, promo.successor) if x is not None], c.figures, "人物")
+        if promo.location != "nearest_base":
+            known(where, [promo.location], c.locations, "地點")
+        need(
+            (promo.successor is None) == (promo.event_handoff is None) == (promo.summons_handoff is None),
+            f"{where}：有接手的人就要有接手版的奇遇與召見，沒有就都不寫",
+        )
+        for event_id in filter(None, (promo.event_main, promo.event_handoff)):
+            known(where, [event_id], c.events, "事件")
+            promo_events[event_id] = promo.faction
+    for fid, follower in c.followers.items():
+        where = f"followers.json 的 {fid}"
+        need(follower.faction in factions, f"{where}：陣營不在劇本裡")
+        known(where, [follower.wugong], c.skills, "武學")
+    for event in c.events.values():
+        for choice in event.choices:
+            if choice.effect.promote is None and not choice.effect.followers:
+                continue
+            where = f"事件 {event.id}"
+            need(event.id in promo_events, f"{where}：promote／followers 只能寫在晉升奇遇（promotions.json 的事件）")
+            known(where, choice.effect.followers, c.followers, "部下")
+            side = promo_events.get(event.id)
+            need(all(c.followers[f].faction == side for f in choice.effect.followers if f in c.followers),
+                 f"{where}：給的部下要是 {side} 的")
 
 
 def check_foreshadows(
@@ -1079,6 +1121,7 @@ def validate(c: Content) -> None:
     check_figures(c, need, known, front_ids)
     check_foreshadows(c, need, known, region_ids, front_ids, counters_written)
     check_orders(c, need, known, front_ids)
+    check_promotions(c, need, known)
 
     for key, where in sorted(marks_written.items()):
         need(key in marks_read, f"{where}：痕跡 {key} 寫了卻沒有任何條件或文字讀它")

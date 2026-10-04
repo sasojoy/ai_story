@@ -83,6 +83,10 @@ class Effect(_Strict):
     # 伏筆（計畫 T7）的準備事件用；第一季開關關著時兩個都不發生（不給也不寫任何字）
     clue_items: dict[str, int] = Field(default_factory=dict)  # 伏筆專用物品（foreshadows.json 的 items）：正數給、負數收走
     fs_counters: dict[str, int] = Field(default_factory=dict)  # 伏筆的隱藏計數（例：豪強兩頭賣糧的起點 two_buyers）：加多少，不寫字
+    # ── 晉升（計畫 T5）：只寫在晉升奇遇的選項上（content.validate 檢查）──
+    promote: int | None = None  # 演完晉升到第幾階（清掉召見、接結尾那一句、記進當天的彙整）
+    followers: list[str] = Field(default_factory=list)  # 給的部下（followers.json 的模板 id）
+    affinity: dict[str, int] = Field(default_factory=dict)  # 人物 id → 情誼增減（夾在 0～100，訊息「皇甫嵩情誼 +10」）
 
 
 class Material(_Strict):
@@ -675,6 +679,7 @@ class Config(_Strict):
     convoy_ambush_chance: float = Field(default=0.2, ge=0, le=1)  # 糧車送到終點前先撞上敵方截糧隊的機率
     convoy_grain: int = Field(default=4, ge=1)  # 接一車糧要交出幾份糧草（軍令文件 3.4：份量 ≥ 4）
     duty_stamina: int = Field(default=10, ge=0)  # 第 1 階守勢行動（巡哨、傳道、保境安民）的體力
+    rank2_contrib: int = Field(default=300, ge=0)  # 升第 2 階的貢獻門檻（計畫 T5、第五節：推 30 點大勢）
     # ── 伏筆（計畫 T7、伏筆文件 2.8）──
     # 需求量照 server_max_players 換算：人數上限「未滿」第一個數時用第二個數當係數，照順序找第一個符合的；
     # 都不符合（1000 人以上）就是 1。片段的機率反過來除以它（foreshadow.scale、foreshadow.need）
@@ -1180,6 +1185,34 @@ class OrdersContent(_Strict):
     convoy_squads: dict[str, str] = Field(default_factory=dict)  # 陣營 id → 自己的運糧隊（截糧打的是對方的）
 
 
+class PromotionDef(_Strict):
+    """一階的晉升（濃縮版內容表 2.1、2.2；計畫 T5）。figure 是出面的大勢人物（豪強的馬商不是人物，空著），不在時由
+    successor 出面、演 event_handoff。location 是地點 id，或 "nearest_base"（豪強：離自己最近的投靠點）。
+    召見文字放這裡（{據點} 換成地點名）；結尾那一句（closing）接在選項的反應後面。"""
+
+    faction: str
+    rank: int = Field(ge=2)
+    figure: str | None = None
+    successor: str | None = None
+    location: str
+    event_main: str
+    event_handoff: str | None = None
+    summons_text: str
+    summons_handoff: str | None = None
+    closing: str
+
+
+class FollowerDef(_Strict):
+    """部下的模板（濃縮版內容表 2.4）：原創的無名稱呼；不能對話、不能散功，只算威力（計畫 T5）。"""
+
+    id: str
+    faction: str
+    name: str
+    stats: dict[str, int] = Field(default_factory=dict)
+    wugong: str  # skills.json 的武學
+    wugong_level: int = Field(ge=1, le=10)
+
+
 class Content(_Strict):
     config: Config
     scenario: Scenario
@@ -1198,5 +1231,7 @@ class Content(_Strict):
     figures: dict[str, FigureDef] = Field(default_factory=dict)  # 大勢人物（content/figures.json，計畫 T4）；沒有這個檔就是空的
     foreshadows: Foreshadows = Field(default_factory=Foreshadows)  # 關鍵伏筆（content/foreshadows.json，計畫 T7）
     orders: OrdersContent = Field(default_factory=OrdersContent)  # 陣營軍令（content/orders.json，計畫 T6）
+    promotions: list[PromotionDef] = Field(default_factory=list)  # 晉升（content/promotions.json，計畫 T5）
+    followers: dict[str, FollowerDef] = Field(default_factory=dict)  # 部下模板（content/followers.json，計畫 T5）
     map: MapLayout
     tutorial: Tutorial
