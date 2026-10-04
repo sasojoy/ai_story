@@ -494,6 +494,13 @@ def test_a_battle_saved_before_these_counts_still_loads(definition):
     assert all(p.acted_rounds == 0 and p.fell_round is None for p in battle.participants.values())
 
 
+def test_a_battle_saved_before_unfinished_existed_is_not_unfinished(definition):
+    """FB-035：季終收兵的決戰另外標記；舊資料沒有這一欄，一律當作正常收場（或還在打）。"""
+    stored = _active_battle(definition).model_dump()
+    assert stored.pop("unfinished") is False
+    assert bi.BattleInstance.model_validate(stored).unfinished is False
+
+
 def test_mitigated_by_power_reduces_damage_for_a_powerful_participant(definition):
     instance = _active_battle(definition)
     instance.participants["甲"].power = 100

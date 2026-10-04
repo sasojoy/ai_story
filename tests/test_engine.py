@@ -1934,6 +1934,130 @@ def test_a_fighter_first_back_next_season_gets_last_seasons_showdown_marked_with
     assert len(_showdown_entries(back)) == 1 and len(back.state.battles) == 1
 
 
+# ── 季終時沒打完的決戰：不算勝負，但參戰者補一則江湖紀錄（FB-035）──────────────
+
+SHELVED_LINE = "季終了，這場決戰沒打完就各自收兵，不算勝負。"
+
+
+def _showdown_under_way(content, game):
+    """一幕三回合的決戰打到第 2 回合還在等人：沈浪（官軍、在線）與乙（黃巾，出完第 1 回合就下線，角色只在資料庫裡）
+    各出手 1 回合；散人丙在一旁觀戰。回傳（丙, 現在的時間）。"""
+    definition = _three_round_showdown(content)
+    game.state.player.faction = "guan"
+    away = _fighter(content, game, "乙", "huang")
+    watcher = Game.new(content, "丙", rng=random.Random(2), world=game.world)
+    game.world.start_battle(definition, now=0.0)
+    with at(game, 0.0), at(away, 0.0):
+        game.choose("battle:join:guan")
+        away.choose("battle:join:huang")
+    start = definition.muster_seconds + 1
+    with at(game, start), at(away, start):
+        game.choose("battle:act:safe")
+        away.choose("battle:act:safe")  # 兩人都出手了：第 1 回合結算
+    open_characters().save(away.state)
+    battle = game.world.get_battle()
+    assert battle.phase == "active" and battle.round_number == 1
+    return watcher, start
+
+
+def _assert_got_the_shelved_note(fighter, side, label=""):
+    """補到的是一則只有江湖紀錄的交代：沒有戰報、沒有「剛剛」的戰鬥卡片、沒有數值變化；再同步也不重複。"""
+    entry = fighter.state.journal[0]
+    assert (entry.title, entry.tag) == (f"{label}測試決戰・未分勝負", f"你站在{side}")
+    assert entry.lines == [SHELVED_LINE, "你出手 1 回合"]
+    assert entry.changes == [] and entry.battle_id is None
+    assert fighter.state.battles == [] and fighter.state.battle_card is None and not fighter.shows_battle_card()
+    fighter.sync(entry.time + 1000.0)
+    assert [e.title for e in fighter.state.journal].count(entry.title) == 1
+
+
+def test_admin_ending_the_season_tells_each_fighter_the_battle_was_shelved(content, game):
+    content.config.admins = ["管理者"]
+    admin = Game.new(content, "管理者", rng=random.Random(5), world=game.world)
+    watcher, now = _showdown_under_way(content, game)
+    season = game.world.get_season()
+    trends, flags, chronicle = dict(season.trends), set(season.flags), len(season.chronicle)
+
+    admin.admin_end_season(now=now)
+
+    assert game.world.get_battle() is None
+    after = game.world.get_season()
+    assert dict(after.trends) == trends and set(after.flags) == flags  # 不套任何結果
+    assert not any("未分勝負" in entry.text or "官軍大勝" in entry.text for entry in after.chronicle[chronicle:])
+    (_, shelved), = game.world.ended_battles()  # 標成收場、才補送得到；但記著它沒打完
+    assert shelved.unfinished and shelved.outcome_title == "未分勝負" and shelved.outcome_text is None
+    assert shelved.end_time == after.time
+    assert not any("未分勝負" in e.title for e in admin.state.journal)  # 管理者沒參戰：什麼都沒有
+
+    online = game
+    offline = Game(content, open_characters().load("乙"), rng=random.Random(3), world=game.world)
+    assert not any("未分勝負" in e.title for e in offline.state.journal)  # 讀回來還沒同步：還沒補
+    online.sync(now + 10)
+    offline.sync(now + 10)
+    _assert_got_the_shelved_note(online, "官軍")
+    _assert_got_the_shelved_note(offline, "黃巾")
+    watcher.sync(now + 10)  # 觀戰的人照舊什麼都沒有
+    assert not any("未分勝負" in e.title for e in watcher.state.journal) and watcher.state.battles == []
+
+
+def test_a_season_that_ends_on_its_own_tells_each_fighter_too(content, game):
+    watcher, now = _showdown_under_way(content, game)
+    with at(game, now):
+        game.advance(2 * DAY)  # 快轉到季末，季自己收了
+    assert game.state.world.ended and game.world.get_battle() is not None  # 還沒有人刷新畫面：決戰還掛著
+    trends = dict(game.world.get_season().trends)
+
+    with at(game, now + 1):
+        assert ids(game) == ["season:resting"]  # 畫面刷新那一下把沒打完的收起來
+    assert game.world.get_battle() is None
+    assert dict(game.world.get_season().trends) == trends  # 官軍大勝的 -20 沒有套
+    (_, shelved), = game.world.ended_battles()
+    assert shelved.unfinished and shelved.outcome_title == "未分勝負"
+
+    offline = Game(content, open_characters().load("乙"), rng=random.Random(3), world=game.world)
+    game.sync(now + 10)
+    offline.sync(now + 10)
+    _assert_got_the_shelved_note(game, "官軍")
+    _assert_got_the_shelved_note(offline, "黃巾")
+    watcher.sync(now + 10)
+    assert not any("未分勝負" in e.title for e in watcher.state.journal)
+
+
+def test_a_fighter_first_back_next_season_gets_the_shelved_note_marked_with_its_season(content, game):
+    content.config.admins = ["管理者"]
+    admin = Game.new(content, "管理者", rng=random.Random(5), world=game.world)
+    _, now = _showdown_under_way(content, game)
+    admin.admin_end_season(now=now)
+    admin.admin_next_season(now=now + 5)
+    back = Game(content, open_characters().load("乙"), rng=random.Random(3), world=game.world)
+    back.sync(now + 10)
+    assert back.state.player.season_number == 2
+    _assert_got_the_shelved_note(back, "黃巾", label="第 1 季・")
+    (_, shelved), = game.world.ended_battles()
+    assert back.state.journal[0].time == shelved.end_time  # 收季那一刻（第 1 季）的時間，不是補送這一刻
+
+
+def test_a_shelved_battle_that_is_still_linked_is_not_taken_for_a_normal_finish(content, game):
+    """收季時「標成 ended＋unfinished」與「清掉」是兩步（同一筆交易裡）。就算有人在兩步之間看到它還掛著，也不能當成
+    剛打完去套結果：_battle_status 看到的是本來就 ended 的，_apply_battle_outcome 認得 unfinished、直接不動。"""
+    definition = _three_round_showdown(content, trend_delta={"kou": -20})
+    game.state.player.faction = "guan"
+    game.world.start_battle(definition, now=0.0)
+    with at(game, 0.0):
+        game.choose("battle:join:guan")
+    game.world.mutate_battle(lambda b: (
+        setattr(b, "phase", "ended"), setattr(b, "unfinished", True), setattr(b, "outcome_title", "未分勝負"),
+    ))
+    season = game.world.get_season()
+    trends, chronicle = dict(season.trends), len(season.chronicle)
+    with at(game, 1.0):
+        assert game._battle_status() is None
+    game._apply_battle_outcome(game.world.get_battle())
+    after = game.world.get_season()
+    assert dict(after.trends) == trends and len(after.chronicle) == chronicle
+    assert dict(game.state.world.trends) == trends
+
+
 # ── 決戰要人在那個大區才打得到（地圖擴充設計第六節）──────────────
 
 

@@ -281,7 +281,11 @@ class WorldStateStore(Protocol):
         after 是呼叫端已經處理過的最大流水號：決戰照開戰的先後收場，所以比它小的不會再有新收場的。理由——
         同一時間只有一場還沒收場（start_battle 在它收場或被清掉之前不另開），被清掉的（換季 next_season、季終
         clear_battle）不再指到、永遠不會收場，而新開的一場流水號一定比之前的都大（實作要保證這一點，SQLite 版是
-        從不刪列的 INTEGER PRIMARY KEY）。所以一場收場時，它比之前收場的每一場都大。"""
+        從不刪列的 INTEGER PRIMARY KEY）。所以一場收場時，它比之前收場的每一場都大。
+
+        季終沒打完的決戰，Game 先用 mutate_battle 標成 ended 且 unfinished（沒有結果、不套用）再 clear_battle，
+        所以它也列在這裡（FB-035）；用的人要看 BattleInstance.unfinished 分辨。它收場的那一刻仍是同時唯一還沒收場的那一場，
+        流水號的先後前提不變。"""
         ...
 
     # ── 同伴進度與招募 ──

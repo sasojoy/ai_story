@@ -1043,9 +1043,10 @@ class Game:
         if raw is None:
             return None
         if self.state.world.ended:
-            # 季結束了：沒打完的決戰直接收掉、不套用結果（這一季勝負已經定了），參戰者回到休季畫面（試玩回饋 FB-015）
+            # 季結束了：沒打完的決戰直接收掉、不套用結果（這一季勝負已經定了），參戰者回到休季畫面（試玩回饋 FB-015）；
+            # 參戰者各補一則「沒打完、不算勝負」的江湖紀錄（FB-035）
             if tick and raw.phase != "ended":
-                self.world.clear_battle()
+                self._shelve_unfinished_battle()
             return None
         definition = self.content.battles.get(raw.battle_id)
         if definition is None:
@@ -1060,6 +1061,28 @@ class Game:
                 self._apply_battle_outcome(battle)
             return None
         return battle, definition
+
+    def _shelve_unfinished_battle(self) -> None:
+        """季終時還沒打完的決戰收起來（自然收季見 _battle_status、管理者收季見 admin_end_season；呼叫端先確認
+        有一場還沒收場的）。不算結果：不動大勢、不寫旗標、不寫江湖史、不加戰報（FB-015）；但每個參戰者要有交代（FB-035）。
+
+        做法是先在 battles 表把它標成 ended＋unfinished、end_time 記收季那一刻，再從共用狀態拿掉：
+        ended_battles 讀得到它，參戰者各自同步時用 _deliver_battle_results 補一則江湖紀錄（下線的、跨季才回來的也補得到）。
+        兩步不能併成一次 mutate：決戰拿掉之後，存檔就不再寫那一列了，標記會丟掉。
+        標成 ended 不會被當成「剛打完」套結果：_battle_status 對本來就 ended 的不再套（was_ended）、
+        _apply_battle_outcome 認得 unfinished 直接不動，而且拿掉之後 get_battle 本來就看不到它。
+        最後也補給自己，跟 _apply_battle_outcome 一樣：收場那一下的那個人當場就看得到。"""
+        end_time = self.state.world.time
+
+        def _mark(b: battle_instance.BattleInstance) -> None:
+            b.phase = "ended"
+            b.unfinished = True
+            b.outcome_title = battle_instance.UNFINISHED_TITLE
+            b.end_time = end_time
+
+        self.world.mutate_battle(_mark)
+        self.world.clear_battle()
+        self._deliver_battle_results()
 
     def _advance_battle_round(self, battle: battle_instance.BattleInstance, definition: BattleDef) -> list[str]:
         """核心推進邏輯（在呼叫端的 mutate_battle callback 裡原地修改 battle）：
@@ -1118,7 +1141,11 @@ class Game:
         就被比較舊的那份蓋掉了（江湖史是另一張表，不受影響，所以只有它倖存）。江湖史那一則只寫資料庫，
         不寫記憶體，免得存兩次。
 
-        最後把結果補送給自己（收場那一下的那個人當場就看得到）；別的參戰者各自同步時補（FB-027）。"""
+        最後把結果補送給自己（收場那一下的那個人當場就看得到）；別的參戰者各自同步時補（FB-027）。
+
+        季終收兵的決戰（unfinished，見 _shelve_unfinished_battle）沒有結果可套，不會走到這裡；萬一走到，直接不動。"""
+        if battle.unfinished:
+            return
         if battle.outcome_world_flags or battle.outcome_trend_delta or battle.outcome_title:
 
             def _apply(season: WorldState) -> None:
@@ -1149,7 +1176,8 @@ class Game:
         battles 表裡，所以每個人自己的 Game 在 sync（伺服器每個請求、假人每一輪）與自己收場的那一下自己補。
         不分季別：決戰的結果常常就把季收掉，休季、下一季才回來的人也要補到。不是自己參戰的那幾場也記成處理過，
         之後不必再讀（收場的決戰名單不會再變）。只讀處理過的最大流水號之後收場的：決戰照開戰的先後收場，比它小的
-        不會再有新收場的（見 WorldStateStore.ended_battles）。"""
+        不會再有新收場的（見 WorldStateStore.ended_battles）。季終沒打完就收起來的決戰（unfinished）也在這裡補，
+        內容只是一則「不算勝負」的江湖紀錄（FB-035，見 _file_showdown）。"""
         p = self.state.player
         fresh = self.world.ended_battles(after=max(p.battle_results_seen, default=0))
         if not fresh:
@@ -1166,7 +1194,9 @@ class Game:
     ) -> None:
         """一場收場的決戰寫成自己的一則江湖紀錄與一筆戰報（kind 是 showdown），「剛剛」放這一場的卡片。
         earlier 是上一季（或更早）打的那一季的編號，這一季打的是 None：上一季的標明季別，大勢的增減寫進敘事、
-        不放進數值變化——數值變化看起來像剛發生在你身上的。"""
+        不放進數值變化——數值變化看起來像剛發生在你身上的。
+
+        季終收兵的決戰（unfinished，FB-035）沒有結果：只寫一則江湖紀錄交代一聲，不加戰報、不放「剛剛」的戰鬥卡片。"""
         c, s = self.content, self.state
         definition = c.battles.get(battle.battle_id)
         sides = {f.id: f.name for f in definition.factions} if definition is not None else {}
@@ -1176,6 +1206,11 @@ class Game:
         where = self._battle_region_name(definition) if definition is not None and definition.region else name
         outcome = battle.outcome_title or "收場"
         label = "" if earlier is None else f"第 {earlier} 季・"
+        time = battle.end_time if battle.end_time is not None else s.world.time
+        if battle.unfinished:
+            lines = [battle_instance.UNFINISHED_TEXT] + ([f"你出手 {me.acted_rounds} 回合"] if me.acted_rounds else [])
+            journal.add_entry(s, JournalEntry(time=time, title=f"{label}{name}・{outcome}", tag=f"你站在{side}", lines=lines))
+            return
         lines = ([battle.outcome_text] if battle.outcome_text else []) + [f"你出手 {me.acted_rounds} 回合"]
         if me.fell_round is not None:
             lines.append(f"你在第 {me.fell_round} 回合倒下，轉為觀戰")
@@ -1184,7 +1219,6 @@ class Game:
         changes = deltas if earlier is None else []
         if earlier is not None:
             lines += [f"（第 {earlier} 季）{d}" for d in deltas]
-        time = battle.end_time if battle.end_time is not None else s.world.time
         record = BattleRecord(
             id=s.battle_seq + 1, time=time, location=f"{label}{where}", kind="showdown", event=name, opponent=foes,
             ours=[], tier=outcome, our_power=0.0, difficulty=0.0, side=side, notes=list(lines), changes=list(changes),
@@ -2210,12 +2244,13 @@ class Game:
         self.world.mutate_season(
             lambda s: msgs.extend(end_season(_season_vehicle(self.content, s), self.content, self.world))
         )
-        # 沒打完的決戰直接收掉、不套用結果（這一季勝負已經定了，跟自然收季一樣，見 _battle_status，FB-015）。
-        # 放在 mutate_season 外面：mutate 不能巢狀，內層寫的會被外層整份存檔蓋掉
+        self.state.world = self.world.get_season()  # 讀回完整的一份（mutate_season 回傳的不含傳聞與江湖史）
+        # 沒打完的決戰直接收掉、不套用結果（這一季勝負已經定了，跟自然收季一樣，見 _battle_status，FB-015），
+        # 參戰者各補一則「不算勝負」的江湖紀錄（FB-035）。放在 mutate_season 外面：mutate 不能巢狀，
+        # 內層寫的會被外層整份存檔蓋掉；放在讀回賽季之後：收場時間記的是收季那一刻的季時間
         battle = self.world.get_battle()
         if battle is not None and battle.phase != "ended":
-            self.world.clear_battle()
-        self.state.world = self.world.get_season()  # 讀回完整的一份（mutate_season 回傳的不含傳聞與江湖史）
+            self._shelve_unfinished_battle()
         self._write("收季", msgs, tag="管理者")  # 跟開季一樣，管理者自己的江湖紀錄留一則
         return self._log(msgs)
 
