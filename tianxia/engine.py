@@ -132,15 +132,18 @@ class Game:
     def _reset_player_for_new_season(self, season_number: int) -> None:
         """新一季：玩家整個 GameState 重新開始（角色、江湖紀錄、戰報都是上一季的事了），
         只保留現實時間同步點（last_real，不然下次 sync 會把一整季沒上線的時間都當成
-        流逝掉）跟幾項明確認定「跟賽季無關、是我自己的」的東西——新手引導進度、跟同伴的
-        關係現況/對話歷史（整份保留）；好感度則只帶一成（Config.affinity_carry_ratio、無條件捨去，
-        80→8、5→0：第一季設計第十四節，下一季最多從 10 起步，交情要重新經營）。world 欄位
-        這裡不用管，呼叫端（_reconcile_season）緊接著就會把它指向共用賽季。
+        流逝掉）跟幾項明確認定「跟賽季無關、是我自己的」的東西——跟同伴的關係現況/對話歷史
+        （整份保留）；好感度則只帶一成（Config.affinity_carry_ratio、無條件捨去，
+        80→8、5→0：第一季設計第十四節，下一季最多從 10 起步，交情要重新經營）。
+        新手引導：做完或略過的人照舊不再出現；還沒做完的人跟著新角色從起始步重來——
+        新角色沒有武學，接著上一季做到一半的下一步（例如出城遊歷）會把他推進必敗的路（FB-034）。
+        world 欄位這裡不用管，呼叫端（_reconcile_season）緊接著就會把它指向共用賽季。
         之後新增的 PlayerState 欄位預設就跟著新角色重來；要跨季保留的才加進下面這份清單。"""
         old = self.state
         fresh = new_game_state(self.content, old.player.name)
         fresh.last_real = old.last_real
-        fresh.player.tutorial_step = old.player.tutorial_step
+        if old.player.tutorial_step >= len(self.content.tutorial.steps):  # 做完或略過（skip_tutorial 也是設成步數）
+            fresh.player.tutorial_step = old.player.tutorial_step
         ratio = self.content.config.affinity_carry_ratio
         fresh.player.affinities = {key: int(value * ratio) for key, value in old.player.affinities.items()}
         fresh.player.relationship_notes = old.player.relationship_notes

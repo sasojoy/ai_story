@@ -5,7 +5,7 @@ from unittest import mock
 import pytest
 
 from conftest import FixedRandom, at, install_season_one, walk_to
-from tianxia import atlas, battle_instance, calendar, companion_agent, flavor, rules, skillview
+from tianxia import atlas, battle_instance, calendar, companion_agent, flavor, guide, rules, skillview
 from tianxia.characters import open_characters
 from tianxia.engine import Game, Option
 from tianxia.martial_arts import MartialArt
@@ -872,8 +872,48 @@ def test_season_roll_resets_the_character(content, world):
     assert p.affinities == {"mate": 8, "friend": 0}  # 80→8、5→0
     assert p.relationship_notes == {"mate": "並肩作戰過的朋友"}
     assert p.dialogue_history == {"mate": [{"role": "user", "content": "久仰"}]}
-    assert p.tutorial_step == 2
+    assert p.tutorial_step == fresh.tutorial_step  # 2 還沒做完（共 3 步）：換季是新角色，引導從頭來（FB-034）
     assert "賽季落幕" in player.chronicle_text()
+
+
+def _roll_one_season(content, world, tutorial_step=None, skip=False):
+    """建一個玩家、把引導調到指定的一步（或略過），管理者收季再開下一季，玩家同步一次；回傳玩家的 Game。"""
+    content.config.admins = ["管理者"]
+    admin = Game.new(content, "管理者", rng=random.Random(1), world=world)
+    player = Game.new(content, "玩家", rng=random.Random(2), world=world)
+    if tutorial_step is not None:
+        player.state.player.tutorial_step = tutorial_step
+    if skip:
+        player.skip_tutorial()
+    admin.admin_end_season(now=200.0)
+    admin.admin_next_season(now=300.0)
+    player.sync(400.0)
+    assert player.state.player.season_number == 2
+    return player
+
+
+@pytest.mark.parametrize("unfinished", [0, 1, 2], ids=["first", "second", "last"])
+def test_season_roll_restarts_an_unfinished_tutorial(content, world, unfinished):
+    """引導做到一半的人，新一季是新角色、沒有武學：下一步不能再叫他出城遊歷，要回到新角色的起始步（FB-034）。"""
+    assert unfinished < len(content.tutorial.steps)
+    start = new_game_state(content, "玩家").player.tutorial_step  # 照新角色的起始值，不寫死 0
+    player = _roll_one_season(content, world, tutorial_step=unfinished)
+    assert player.state.player.tutorial_step == start
+    assert guide.tutorial_active(player.state, content)
+    assert guide.next_hint(player.state, content) == f"（說書人）{content.tutorial.steps[start].text}"
+
+
+def test_season_roll_keeps_a_finished_tutorial_finished(content, world):
+    steps = len(content.tutorial.steps)
+    player = _roll_one_season(content, world, tutorial_step=steps)
+    assert player.state.player.tutorial_step == steps
+    assert not guide.tutorial_active(player.state, content)  # 引導不再出現
+
+
+def test_season_roll_keeps_a_skipped_tutorial_skipped(content, world):
+    player = _roll_one_season(content, world, skip=True)
+    assert player.state.player.tutorial_step == len(content.tutorial.steps)
+    assert not guide.tutorial_active(player.state, content)
 
 
 def test_admin_end_season_only_while_running(content, world):
