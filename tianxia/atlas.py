@@ -11,9 +11,10 @@ import math
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from .calendar import stamp_text
+from . import figures
+from .calendar import point, stamp_text
 from .models import Content, Location, MapRegion, SimPlayer, TravelMode
-from .rules import is_revealed, resolve_trend, resolve_trends, trend_value
+from .rules import is_revealed, resolve_trend, resolve_trends, season_one, trend_value
 from .state import GameState, Rumor
 from .world import current_act, sim_active, storyline_off
 
@@ -179,14 +180,20 @@ def sim_shown(sim: SimPlayer, state: GameState) -> bool:
 
 
 def haunters(state: GameState, content: Content, loc_id: str) -> list[str]:
-    """常出沒在這個地點、而且已經該露面的龍頭人物名字（同名只列一次）。不檢查視野：呼叫端要先用 is_known 把關。"""
+    """常出沒在這個地點、而且已經該露面的龍頭人物名字（同名只列一次）。第一季的規則開著時是此刻站在這裡的大勢人物
+    （figures.present_at；虛擬玩家那時不出手，也不再標）。不檢查視野：呼叫端要先用 is_known 把關。"""
+    if season_one(content, state.world):
+        return [content.figures[fid].name for fid in figures.present_at(state, content, loc_id)]
     names = [sim.name for sim in content.scenario.sim_players if loc_id in sim.haunts and sim_shown(sim, state)]
     return list(dict.fromkeys(names))
 
 
 def leader_activity(state: GameState, content: Content, name: str) -> str:
     """龍頭人物現在在做什麼：他名下此刻會行動的設定（和世界模擬同一條規則，見 world.sim_active），
-    寫成「每天約出手 N 次，讓某某大勢上升／下降」。只寫已浮現的大勢，隱藏大勢不提；沒有一條會行動時寫「眼下沒有動靜」。"""
+    寫成「每天約出手 N 次，讓某某大勢上升／下降」。只寫已浮現的大勢，隱藏大勢不提；沒有一條會行動時寫「眼下沒有動靜」。
+    第一季的規則開著時照大勢人物的推動寫（_figure_activity）。"""
+    if season_one(content, state.world):
+        return _figure_activity(state, content, name)
     trend_names = {t.id: t.name for t in content.scenario.trends}
     doing = []
     for sim in content.scenario.sim_players:
@@ -200,6 +207,25 @@ def leader_activity(state: GameState, content: Content, name: str) -> str:
     return "；".join(doing) or LEADER_QUIET
 
 
+def _figure_id(content: Content, name: str) -> str | None:
+    return next((fid for fid, fig in content.figures.items() if fig.name == name), None)
+
+
+def _figure_activity(state: GameState, content: Content, name: str) -> str:
+    """第一季：大勢人物在做什麼（figures.tick 的規則）——「每天約出手 N 次，讓某戰線上升／下降」，還沒到出兵那一週時
+    後面接「（第 N 週起）」；不推的（沒有戰線、何進）寫「眼下沒有動靜」。"""
+    fid = _figure_id(content, name)
+    goal = figures.push_goal(state, content, fid) if fid is not None else 0
+    if not goal:
+        return LEADER_QUIET
+    fig, front = content.figures[fid], figures.state_of(state, content, fid).front
+    front_name = next((t.name for t in content.scenario.trends if t.id == front), front)
+    text = f"每天約出手 {fig.actions_per_day:g} 次，讓{front_name}{'上升' if goal > 0 else '下降'}"
+    if point(state.world.time, content, state.world).week < fig.active_from_week:
+        text += f"（第 {fig.active_from_week} 週起）"
+    return text
+
+
 def leader_news(state: GameState, name: str) -> list[Rumor]:
     """最近提到這位龍頭人物的傳聞（不分地點、不限天數），最新的在前，最多 LEADER_NEWS 則。"""
     return [r for r in reversed(state.world.rumors) if name in r.text][:LEADER_NEWS]
@@ -208,7 +234,11 @@ def leader_news(state: GameState, name: str) -> list[Rumor]:
 def leader_text(state: GameState, content: Content, name: str) -> str:
     """詳情欄裡一位常出沒在此的龍頭人物：他是誰、現在在做什麼、最近的傳聞（沒有就不寫）。
     和 haunters 一樣不檢查視野與是否該露面：呼叫端要先把關。"""
-    lines = [f"**龍頭人物**　{name}（常出沒在此）", f"- {LEADER_WHO}。", f"- 現在：{leader_activity(state, content, name)}。"]
+    lines = [f"**龍頭人物**　{name}（常出沒在此）", f"- {LEADER_WHO}。"]
+    fid = _figure_id(content, name) if season_one(content, state.world) else None
+    if fid is not None:  # 第一季：聲威寫出來，挑戰本人之前看得到好不好打
+        lines.append(f"- 聲威 {figures.state_of(state, content, fid).prestige}（越高越難打）。")
+    lines.append(f"- 現在：{leader_activity(state, content, name)}。")
     news = leader_news(state, name)
     if news:
         lines += ["- 最近：", *(f"  - {stamp_text(r.time, content, state.world)}　{r.text}" for r in news)]

@@ -10,8 +10,9 @@ state 是 GameState（季的事用的是 world._season_vehicle 那個空殼玩�
 人物表沒有的 id（測試夾具）照 T2 最小版的規則：FigureState 的預設值、只改欄位。"""
 from __future__ import annotations
 
+from . import calendar
 from .models import Content, FigureChange, FigureDef, Squad
-from .rules import season_one
+from .rules import change_trend, season_one, trend_value
 from .state import FigureState, GameState, WorldState
 
 OUT = ("retired", "crippled")  # 退場（非天命）、重創（天命）：本季不再出現；下獄不算（時刻表結算 5.2）
@@ -111,6 +112,54 @@ def difficulty(state: GameState, content: Content, fid: str) -> int:
 def squad_of(state: GameState, content: Content, fid: str) -> Squad:
     """挑戰本人時的對手：代表本人的隊伍，難度換成照聲威算的那一個（勝算、戰報、掉落都看它）。"""
     return content.squads[content.figures[fid].squad].model_copy(update={"difficulty": difficulty(state, content, fid)})
+
+
+# ── 每曆時的推動 ─────────────────────────────────────────
+
+
+def push_goal(state: GameState, content: Content, fid: str) -> int:
+    """這位人物此刻往哪個方向推所在的戰線：在場、有戰線、每次推得動（push、actions_per_day 都大於 0），自己陣營對這條
+    戰線也有目標時，是那個目標（黃巾 +1、官軍 −1）；否則 0——何進、開季時的趙弘與董卓、還沒出場的、下獄或退場的都不推。
+    不看週次（active_from_week 由 tick 判斷）。"""
+    fig = content.figures[fid]
+    now = state_of(state, content, fid)
+    if now.status != "active" or now.front is None or fig.push <= 0 or fig.actions_per_day <= 0:
+        return 0
+    faction = next((f for f in content.scenario.factions if f.id == fig.faction), None)
+    return faction.goals.get(now.front, 0) if faction is not None else 0
+
+
+def tick(state: GameState, content: Content, cal_hours: float) -> None:
+    """大勢人物的日常推動（第一季設計 8.2 第 1、2 條，總計畫 T4）：決定性的累積，不擲骰。每位推得動的人物把
+    actions_per_day × cal_hours ÷ 24 累積進 trend_accum["fig:<id>"]，每滿 1 就往自己陣營的方向推所在戰線 push 點；
+    戰線偏向對方 figure_reaction_lean 以上時累積乘 figure_reaction_mult（反應規則：輸得多時推得勤，人都不在時戰線
+    慢慢回到中段）。active_from_week 之前不推（官軍三將與孫堅第 2 週才出兵）；週次看這一段時間的中點，所以週一
+    00:00 那一刻結束的那個曆時算上一週。
+    直接走 change_trend、不經過 T3 的人數緩衝（大勢人物不受玩家人數影響，第一季設計第七節），也不回傳訊息——背景推動
+    跟以前的虛擬玩家一樣安靜，不洗版。由 world.season_hour 每曆時呼叫一次（cal_hours＝1）；規則沒開時什麼都不做。"""
+    w = state.world
+    if not season_one(content, w):
+        return
+    cfg = content.config
+    middle = max(0.0, w.time - cal_hours * calendar.cal_hour_seconds(content, w) / 2)
+    week = calendar.point(middle, content, w).week
+    for fid, fig in content.figures.items():
+        goal = push_goal(state, content, fid)
+        if not goal or week < fig.active_from_week:
+            continue
+        front = state_of(state, content, fid).front
+        losing = (50 - trend_value(state, content, front)) * goal >= cfg.figure_reaction_lean
+        rate = fig.actions_per_day * (cfg.figure_reaction_mult if losing else 1.0)
+        key = f"fig:{fid}"
+        pending = w.trend_accum.get(key, 0.0) + rate * cal_hours / 24
+        whole = int(pending + 1e-9)  # 容一點浮點誤差：24 個 1/24 才剛好湊成 1（同 rules.geju_tick；累積不先四捨五入，誤差才不會越滾越大）
+        rest = max(0.0, pending - whole)
+        if rest:
+            w.trend_accum[key] = rest
+        else:
+            w.trend_accum.pop(key, None)
+        if whole:
+            change_trend(state, content, front, whole * fig.push * goal, reveal=False)
 
 
 # ── 時刻表的人物結局 ─────────────────────────────────────

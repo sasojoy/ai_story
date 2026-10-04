@@ -8,7 +8,10 @@ from pathlib import Path
 
 import pytest
 
-from tianxia import figures, timetable
+import random
+
+from conftest import FixedRandom
+from tianxia import atlas, calendar, figures, rules, timetable, world
 from tianxia.content import ContentError, load_content, validate
 from tianxia.models import Config, FigureChange
 from tianxia.server_bots import reserved_names
@@ -235,3 +238,122 @@ def test_who_stands_where(on):
     assert figures.of_character(on, "luzhi") == "luzhi" and figures.of_character(on, "caocao") is None
     on.config.season_one = False  # 規則沒開（開關關了，這一季的章也不算數）：大家照 talk_at
     assert figures.placed_characters(s, on) == {}
+
+
+# ── Task 3：每曆時的推動 ─────────────────────────────────
+
+
+def _only(content, fid: str, **changes) -> None:
+    """人物表只留這一位（其他人不推，數字才寫得死）；changes 改他的設定。"""
+    content.figures = {fid: content.figures[fid].model_copy(update=changes)}
+
+
+def _ticks(state, content, n: int) -> None:
+    for _ in range(n):
+        figures.tick(state, content, 1)
+
+
+def test_figure_pushes_its_front_each_calendar_day(on):
+    _only(on, "bocai", actions_per_day=2)
+    s = _season(on)
+    s.world.trends["yingru"] = 50
+    _ticks(s, on, 24)  # 一曆日
+    assert s.world.trends["yingru"] == 52
+    _ticks(s, on, 12)  # 半曆日
+    assert s.world.trends["yingru"] == 53
+    _ticks(s, on, 11)  # 不足一次：先累積
+    assert s.world.trends["yingru"] == 53 and s.world.trend_accum["fig:bocai"] == pytest.approx(11 / 12)
+
+
+def test_figure_reacts_when_losing(on):
+    """戰線偏向對方 20（潁川 30，黃巾輸）：推得加倍勤，一曆日 4 點。"""
+    _only(on, "bocai", actions_per_day=2)
+    s = _season(on)
+    s.world.trends["yingru"] = 30
+    _ticks(s, on, 24)
+    assert s.world.trends["yingru"] == 34
+
+
+def test_a_losing_guan_general_reacts_too(on):
+    """官軍那邊同理：潁川 70（偏黃巾 20），皇甫嵩一曆日推回 4 點。"""
+    _only(on, "huangfusong", actions_per_day=2, active_from_week=1)
+    s = _season(on)
+    s.world.trends["yingru"] = 70
+    _ticks(s, on, 24)
+    assert s.world.trends["yingru"] == 66
+
+
+def test_figures_that_do_not_push(on):
+    """何進（push 0）、趙弘與董卓（開季時沒有戰線）、彭脫（還沒出場）、下獄的盧植都不推。"""
+    s = _season(on)
+    for fid in ("hejin", "zhaohong", "dongzhuo", "pengtuo"):
+        assert figures.push_goal(s, on, fid) == 0, fid
+    assert (figures.push_goal(s, on, "bocai"), figures.push_goal(s, on, "luzhi")) == (1, -1)
+    s.world.figures["luzhi"].status = "jailed"
+    assert figures.push_goal(s, on, "luzhi") == 0
+
+
+def test_guan_generals_start_week_two(on):
+    """第 1 週只有黃巾在推；第 2 週「朝廷出兵」之後皇甫嵩、朱儁、盧植、孫堅才開始推（濃縮版內容表 1.2）。"""
+    on.timetable = []  # 只看人物的推動
+    s = _season(on)
+    s.world.trends.update(yingru=50, nanyang=50, jizhou=45)
+    week = calendar.week_start(2, on, s.world)
+    world.advance_world_state(s.world, on, week, random.Random(0))
+    assert [s.world.trends[f] for f in ("yingru", "nanyang", "jizhou")] == [57, 57, 54]  # 7 曆日：+7、+7、三兄弟各 3.5→3
+    world.advance_world_state(s.world, on, week, random.Random(0))
+    # 潁川：波才 +7、皇甫嵩 −7、朱儁 3.5→−3；南陽：張曼成 +7、孫堅 −7；冀州：三兄弟各 (0.5＋3.5)→+4、盧植 −7
+    assert [s.world.trends[f] for f in ("yingru", "nanyang", "jizhou")] == [54, 57, 59]
+
+
+def test_figures_tick_once_per_calendar_hour_on_the_season_clock(on):
+    """figures.tick 掛在 season_hour（每曆時一次）：季長 14 天時一個真實小時是 6 個曆時。每小時那一步若也掛了會多一次。
+    開季那一刻只跑 season_events，不推。"""
+    on.timetable = []
+    _only(on, "bocai", actions_per_day=24)  # 每曆時一次
+    s = _season(on)
+    s.world.trends["yingru"] = 50
+    world.settle_season_start(s.world, on, random.Random(0))
+    assert s.world.trends["yingru"] == 50 and not any(key.startswith("fig:") for key in s.world.trend_accum)
+    world.advance_world_state(s.world, on, 3600, random.Random(0))
+    assert s.world.trends["yingru"] == 56
+
+
+def test_figures_do_not_push_with_the_switch_off(real):
+    s = _season(real)
+    before = dict(s.world.trends)
+    _ticks(s, real, 48)
+    assert s.world.trends == before and s.world.trend_accum == {}
+
+
+def test_sim_players_stand_down_in_season_one(on):
+    """第一季：大勢人物取代虛擬玩家，虛擬玩家不推大勢、不發傳聞；門檻照舊每小時檢查（黃巾聲勢到 50 照樣斷官道）。"""
+    on.figures = {}
+    s = _season(on)
+    before = dict(s.world.trends)
+    world.sim_tick(s, on, 24, FixedRandom(0.0))  # 0.0：沒停下來的話每一小時都出手
+    assert s.world.trends == before and s.world.rumors == []
+    s.world.trends.update(yingru=55, nanyang=55, jizhou=55)
+    rules.recompute_trends(s.world, on)
+    world.sim_tick(s, on, 1, FixedRandom(0.0))
+    assert "huangjin_50" in s.world.fired_thresholds
+
+
+def test_the_map_shows_the_figures_where_they_stand(on):
+    s = _season(on)
+    assert atlas.haunters(s, on, "changshe") == ["皇甫嵩", "朱儁"]
+    assert atlas.haunters(s, on, "mengjin_ford") == ["董卓"]  # 不推戰線也在地圖上（內容表 1.1）
+    assert atlas.haunters(s, on, "deep_mountain") == []  # beta 的虛擬玩家董卓不再標在嵩山深處
+    assert atlas.leader_activity(s, on, "波才") == "每天約出手 1 次，讓潁川汝南上升"
+    assert atlas.leader_activity(s, on, "皇甫嵩") == "每天約出手 1 次，讓潁川汝南下降（第 2 週起）"
+    assert atlas.leader_activity(s, on, "董卓") == atlas.LEADER_QUIET
+    assert "- 聲威 60（越高越難打）。" in atlas.leader_text(s, on, "波才")
+    s.world.figures["luzhi"].status = "jailed"
+    assert atlas.haunters(s, on, "luzhi_camp") == []
+
+
+def test_the_map_keeps_the_sim_players_with_the_switch_off(real):
+    s = _season(real)
+    assert atlas.haunters(s, real, "huangjin_camp") == ["波才"]
+    assert atlas.haunters(s, real, "mengjin_ford") == []
+    assert "聲威" not in atlas.leader_text(s, real, "波才")
