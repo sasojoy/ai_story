@@ -577,6 +577,10 @@ class Config(_Strict):
     )
     time_scale: float = 1.0
     season_days: float = 14
+    # 第一季濃縮版的規則（預設關，beta 那一季照舊）：季曆、時刻表、三條戰線都掛在這個開關後面。
+    # 做到一半的 main 也會換上試玩伺服器，開關關著才不會把正在跑的那一季弄壞；
+    # 全部做完、開測前由 PM 跟季長（season_days 改 2.5）一起打開（計畫 2026-10-04-第一季濃縮版）
+    season_one: bool = False
     train_stat_chance: float = 0.3
     train_event_chance: float = 0.3
     qiyu_weight_multiplier: float = 1.5
