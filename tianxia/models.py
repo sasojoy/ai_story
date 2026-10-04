@@ -928,7 +928,7 @@ class FsFragment(_Strict):
     text 可以寫 {風向}、{偽裝}（天機，foreshadow.tianji_answer）；versions 是有版本的大事（宛城甲、乙）的分版文字，
     鍵是版本（timetable 的 versions 的值），那件大事還沒定版本時用史書那一版（第一個）。"""
 
-    region: str  # 大區 id（map.json 的 regions）；action 照它抽，event、talk 只是標記
+    region: str  # 大區 id（map.json 的 regions）；action 照它抽，talk 在這個大區的行動裡讓求見不到那位人物的人偷聽，event 只是標記
     source: FsSource
     text: str
     versions: dict[str, str] = Field(default_factory=dict)

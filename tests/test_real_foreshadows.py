@@ -416,6 +416,119 @@ def test_zhangjiao_guan_talk_goes_to_dongzhuo_once_luzhi_is_jailed(fs_content, w
     assert foreshadow.talk_options(game.state, c, "dongzhuo") == []
 
 
+# ── 名望不夠、求見不到的人，對話片段改從行動偷聽到（內容表 4.0 最後一列；T7c） ──
+
+
+def leave_unheard(game: Game, c, *keep: tuple[str, int]) -> None:
+    """所有鏈的所有片段都記成聽過，只留下 keep 的那幾片：行動抽片段時只剩這幾片可抽。"""
+    game.state.player.fragments = {
+        ch.id: [i for i in range(len(ch.fragments)) if (ch.id, i) not in keep] for ch in c.foreshadows.chains
+    }
+
+
+def test_low_fame_overhears_talk_fragment(fs_content, world):
+    """名望不夠求見張梁（15）的長社黃巾玩家，在冀州花體力的行動後，抽得到張梁那一片，開頭是「聽說張梁說過：」；
+    名望夠、或結識過他的人行動抽不到這一片，對話裡照樣有固定選項。"""
+    c = fs_content
+    chain = fs_chain(c, "fs_changshe_huang")
+    frag = chain.fragments[3]
+    assert (frag.source, frag.character, frag.region, c.characters["zhangliang"].audience_fame) == ("talk", "zhangliang", "jizhou", 15)
+    game = fs_game(c, world, "甲", "huang", "guangzong")
+    p = game.state.player
+    assert p.stats.get("fame", 0) < 15
+    leave_unheard(game, c, ("fs_changshe_huang", 3))
+    assert foreshadow.hear_after_action(game.state, c, "yingru", FixedRandom(0.0), world) == []  # 別的大區聽不到
+    assert foreshadow.hear_after_action(game.state, c, "jizhou", FixedRandom(0.99), world) == []  # 機率跟別的行動片段一樣
+    assert foreshadow.hear_after_action(game.state, c, "jizhou", FixedRandom(0.0), world) == [f"你聽到一件事：聽說張梁說過：{frag.text}"]
+    assert p.fragments["fs_changshe_huang"] == [0, 1, 2, 3]
+    assert foreshadow.hear_after_action(game.state, c, "jizhou", FixedRandom(0.0), world) == []  # 聽過就不再抽
+
+    for who, setup in (("乙", {"fame": 15}), ("丙", {"flag": "結識:zhangliang"})):  # 名望剛好夠／透過結識事件認識
+        met = fs_game(c, world, who, "huang", "guangzong")
+        if "fame" in setup:
+            met.state.player.stats["fame"] = setup["fame"]
+        else:
+            met.state.player.flags.add(setup["flag"])
+        leave_unheard(met, c, ("fs_changshe_huang", 3))
+        assert foreshadow.hear_after_action(met.state, c, "jizhou", FixedRandom(0.0), world) == [], who
+        assert met.state.player.fragments["fs_changshe_huang"] == [0, 1, 2]  # 沒被記成聽過
+        met.state.player.pending_companion = "zhangliang"
+        assert "talk:clue:fs_changshe_huang:3" in [o.id for o in met.options()], who
+
+
+def test_overheard_in_a_real_action_goes_into_the_journal(fs_content, world):
+    """真的在冀州探索一次（花體力）：偷聽到的那一句寫進這次行動的江湖紀錄，不發傳聞。"""
+    c = fs_content
+    game = fs_game(c, world, "甲", "huang", "guangzong", rng=FixedRandom(0.0))
+    leave_unheard(game, c, ("fs_changshe_huang", 3))
+    rumors = list(world.get_season().rumors)
+    before = game.state.player.stamina
+    game.choose("act:explore")
+    assert game.state.player.stamina < before
+    assert any(line.startswith("你聽到一件事：聽說張梁說過：") for line in game.state.journal[0].lines)
+    assert world.get_season().rumors == rumors
+
+
+def test_overheard_and_asked_are_the_same_fragment(fs_content, world):
+    """偷聽到之後，對話裡不再有那一片的選項；當面問到之後，行動也不再抽那一片。兩條路記的是同一個序號。"""
+    c = fs_content
+    frag = fs_chain(c, "fs_changshe_huang").fragments[3]
+    heard_first = fs_game(c, world, "甲", "huang", "guangzong")
+    leave_unheard(heard_first, c, ("fs_changshe_huang", 3))
+    assert len(foreshadow.hear_after_action(heard_first.state, c, "jizhou", FixedRandom(0.0), world)) == 1  # 偷聽到
+    p = heard_first.state.player
+    p.stats["fame"] = 15  # 之後名望夠了、見得到張梁
+    p.pending_companion = "zhangliang"
+    assert "talk:clue:fs_changshe_huang:3" not in [o.id for o in heard_first.options()]
+    assert "talk:clue:fs_changshe_huang:3" not in [o.id for o in foreshadow.talk_options(heard_first.state, c, "zhangliang")]
+    assert foreshadow.hear_talk(heard_first.state, c, "zhangliang", "fs_changshe_huang", 3, world) == []
+    assert p.fragments["fs_changshe_huang"] == [0, 1, 2, 3]
+
+    asked_first = fs_game(c, world, "乙", "huang", "guangzong")
+    asked_first.state.player.stats["fame"] = 15
+    leave_unheard(asked_first, c, ("fs_changshe_huang", 3))
+    said = foreshadow.hear_talk(asked_first.state, c, "zhangliang", "fs_changshe_huang", 3, world)
+    assert said == [f"張梁說：{frag.text}"]
+    asked_first.state.player.stats["fame"] = 0  # 假設之後見不到了：行動也不會再把同一片當成新的給他
+    assert foreshadow.hear_after_action(asked_first.state, c, "jizhou", FixedRandom(0.0), world) == []
+    assert asked_first.state.player.fragments["fs_changshe_huang"] == [0, 1, 2, 3]
+
+
+def test_overheard_uses_stand_in(fs_content, world):
+    """{人物} 寫那時候會出面的那位：盧植下獄後冀州官軍主將是董卓；皇甫嵩重創後長社官軍的那一片是朱儁。
+    見不見得到也看出面的那位（盧植 20、董卓 25、朱儁 20）。"""
+    c = fs_content
+    zhangjiao = fs_chain(c, "fs_zhangjiao_guan").fragments[1]
+    assert (zhangjiao.character, zhangjiao.stand_in, zhangjiao.region) == ("luzhi", "dongzhuo", "jizhou")
+    game = fs_game(c, world, "甲", "guan", "luzhi_camp")
+    leave_unheard(game, c, ("fs_zhangjiao_guan", 1))
+    assert foreshadow.hear_after_action(game.state, c, "jizhou", FixedRandom(0.0), world) == [
+        f"你聽到一件事：聽說盧植說過：{zhangjiao.text}"]
+
+    for name, fame, jailed, expect in (
+        ("乙", 0, True, "董卓"),   # 盧植下獄：董卓出面
+        ("丙", 20, True, "董卓"),  # 見得到盧植（20），可是出面的是董卓（25）：還是偷聽
+        ("丁", 25, True, None),    # 見得到董卓：當面問
+        ("戊", 20, False, None),   # 盧植還在，見得到盧植：當面問
+    ):
+        other = fs_game(c, world, name, "guan", "luzhi_camp")
+        other.state.player.stats["fame"] = fame
+        if jailed:
+            other.state.world.figures["luzhi"] = FigureState(status="jailed")
+        leave_unheard(other, c, ("fs_zhangjiao_guan", 1))
+        heard = foreshadow.hear_after_action(other.state, c, "jizhou", FixedRandom(0.0), world)
+        assert heard == ([f"你聽到一件事：聽說{expect}說過：{zhangjiao.text}"] if expect else []), name
+
+    huangfusong = fs_chain(c, "fs_changshe_guan").fragments[3]
+    assert (huangfusong.character, huangfusong.stand_in) == ("huangfusong", "zhujun")
+    for status, name in (("active", "皇甫嵩"), ("crippled", "朱儁"), ("retired", "朱儁")):
+        other = fs_game(c, world, f"官{status}", "guan", "changshe")
+        other.state.world.figures["huangfusong"] = FigureState(status=status)
+        leave_unheard(other, c, ("fs_changshe_guan", 3))
+        assert foreshadow.hear_after_action(other.state, c, "yingru", FixedRandom(0.0), world) == [
+            f"你聽到一件事：聽說{name}說過：{huangfusong.text}"], status
+
+
 # ── 最後一步：每一條都做得完 ─────────────────────────────
 
 
