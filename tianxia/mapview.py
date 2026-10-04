@@ -485,7 +485,7 @@ def _node(loc: Location, view: str, disc: str | None, selected: bool, taken: lis
         parts.append(f'<circle cx="{x}" cy="{y}" r="{CURRENT_RING}" fill="none" stroke="{mapart.BANNER}" stroke-width="2"/>')
         parts.append(mapart.banner(x, y))
         left, top, right, bottom = mapart.BANNER_BOX
-        taken.append(((x + left, y + top, x + right, y + bottom), 1))
+        taken.append(((x + left, y + top, x + right, y + bottom), TEXT_WEIGHT))  # 名字壓到紅旗，跟壓到別的名字一樣糟
     if selected:
         parts.append(f'<circle cx="{x}" cy="{y}" r="{size + 10}" fill="none" stroke="{SELECT_STROKE}" stroke-width="3"/>')
     return parts, reach
