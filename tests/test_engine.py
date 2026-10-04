@@ -2037,6 +2037,25 @@ def test_a_fighter_first_back_next_season_gets_the_shelved_note_marked_with_its_
     assert back.state.journal[0].time == shelved.end_time  # 收季那一刻（第 1 季）的時間，不是補送這一刻
 
 
+def test_opening_the_next_season_shelves_a_battle_nobody_ticked_after_the_natural_end(content, game):
+    """季自然結束、到管理者開下一季之前沒有人同步過（沒人走到 _battle_status 收掉它）：開下一季先把它收起來，
+    參戰者照樣補得到「不算勝負」那一則，不會被換季靜靜清掉（FB-035）。"""
+    content.config.admins = ["管理者"]
+    admin = Game.new(content, "管理者", rng=random.Random(5), world=game.world)
+    _, now = _showdown_under_way(content, game)
+    game.world.mutate_season(lambda season: (setattr(season, "ended", True), setattr(season, "ending_title", "天下太平")))
+    ended_at = game.world.get_season().time
+
+    admin.admin_next_season(now=now + 5)
+
+    assert game.world.get_season_number() == 2
+    (_, shelved), = game.world.ended_battles()
+    assert shelved.unfinished and shelved.end_time == ended_at
+    back = Game(content, open_characters().load("乙"), rng=random.Random(3), world=game.world)
+    back.sync(now + 10)
+    _assert_got_the_shelved_note(back, "黃巾", label="第 1 季・")
+
+
 def test_a_shelved_battle_that_is_still_linked_is_not_taken_for_a_normal_finish(content, game):
     """收季時「標成 ended＋unfinished」與「清掉」是兩步（同一筆交易裡）。就算有人在兩步之間看到它還掛著，也不能當成
     剛打完去套結果：_battle_status 看到的是本來就 ended 的，_apply_battle_outcome 認得 unfinished、直接不動。"""

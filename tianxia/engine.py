@@ -2258,6 +2258,12 @@ class Game:
         """管理者開下一季：只在休季時有效；管理者自己的角色跟著換季（其他玩家下次同步時換）。"""
         if not self.is_admin():
             return self._log(["（只有管理者能開啟下一季。）"])
+        battle = self.world.get_battle()
+        if self.world.season_phase() == "resting" and battle is not None and battle.phase != "ended":
+            # 季自然結束之後沒有人同步過、沒人走到 _battle_status 收掉它：換季會直接清掉，先收起來，
+            # 參戰者才補得到「不算勝負」那一則（FB-035）。收場時間記收掉的那一季的時間，所以先讀回賽季
+            self.state.world = self.world.get_season()
+            self._shelve_unfinished_battle()
         if not self.world.next_season(self.content, now):
             return self._log(["（這一季還沒結束，無法開啟下一季。）"])
         self._reconcile_season()
