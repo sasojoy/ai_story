@@ -30,6 +30,7 @@
   "fortune_day_min": 2,
   "fortune_day_max": 7,
   "admins": ["Rayal"],
+  "affinity_carry_ratio": 0.1,
   "server_max_players": 30,
   "rank4_seat_ratio": 0.008,
   "talk_stamina": 2,

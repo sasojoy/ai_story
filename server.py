@@ -568,6 +568,7 @@ MAIN_ACTIONS = {
 }
 ADMIN_ACTIONS = {
     "open_season": lambda g, b: g.admin_open_season(time.time()),
+    "end_season": lambda g, b: g.admin_end_season(time.time()),
     "next_season": lambda g, b: g.admin_next_season(time.time()),
     "fast_forward": lambda g, b: g.advance(_int(b.get("hours"), 1) * 3600),
     "start_battle": lambda g, b: g.admin_start_battle(str(b.get("id", "")), time.time()),

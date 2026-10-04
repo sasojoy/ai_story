@@ -43,6 +43,21 @@ def test_compute_leaderboard_skips_unreadable_saves(content, world):
     assert [row[0] for row in board["武學"]] == ["正常玩家"]
 
 
+def test_leaderboard_skips_characters_from_earlier_seasons(content, world):
+    """這一季沒上線的人，存檔裡還是上一季的武學，不能混進這一季的榜（換季重來的缺口之一）。"""
+    world.seed_first_season(content)
+    world.mutate_season(lambda season: setattr(season, "ended", True))
+    assert world.next_season(content, now=0.0) and world.get_season_number() == 2
+    stale = _player(content, "上一季的人", wugong_id="fist", wugong_level=10)
+    stale.player.season_number = 1
+    current = _player(content, "這一季的人", wugong_id="fist", wugong_level=1)
+    current.player.season_number = 2
+    open_characters().save(stale)
+    open_characters().save(current)
+    board = leaderboard.compute_leaderboard(content, world)
+    assert [row[0] for row in board["武學"]] == ["這一季的人"]
+
+
 def test_compute_leaderboard_caps_at_top_n(content, world):
     for i in range(leaderboard.TOP_N + 5):
         open_characters().save(_player(content, f"玩家{i}", wugong_id="fist", wugong_level=1 + i % 10))

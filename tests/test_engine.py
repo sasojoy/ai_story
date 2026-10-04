@@ -11,7 +11,7 @@ from tianxia.engine import Game, Option
 from tianxia.martial_arts import MartialArt
 from tianxia.models import Location
 from tianxia.models import ExploreMix
-from tianxia.state import BotProfile, GameState, Journey, Rumor
+from tianxia.state import BotProfile, GameState, Journey, Rumor, new_game_state
 from tianxia.sqlite_world import open_world
 
 HOUR = 3600
@@ -757,7 +757,7 @@ def test_new_season_propagates_to_another_player_on_their_next_sync(content, wor
     b.sync(1000.0)  # 乙完全沒點任何東西，只是連線期間剛好同步到
     assert b.state.player.season_number == 2
     assert not b.state.world.ended
-    assert b.state.player.affinities["mate"] == 42  # 好感度保留
+    assert b.state.player.affinities["mate"] == 4  # 好感度只帶一成（Config.affinity_carry_ratio），無條件捨去
     assert b.state.player.member.level == 1  # 角色本身重新開始
 
 
@@ -835,6 +835,106 @@ def test_players_cannot_start_the_next_season_themselves(game):
 def test_admin_next_season_needs_the_season_to_be_over(game):
     game.content.config.admins = ["沈浪"]
     assert game.admin_next_season(now=0.0) == ["（這一季還沒結束，無法開啟下一季。）"]
+
+
+# ── 換季重來（企劃者 2026-10-04：試玩伺服器的帳號與江湖史保留，角色照換季規則重來）──
+
+
+def test_season_roll_resets_the_character(content, world):
+    """管理者立刻收季、開下一季，玩家下次同步時角色整份重來：陣營、武學、素材、銀兩、心得回到新角色的樣子；
+    只留引導進度、對話紀錄，與一成的好感度（無條件捨去）；上一季的江湖史跨季看得到。"""
+    _install_factions(content)
+    content.config.admins = ["管理者"]
+    admin = Game.new(content, "管理者", rng=random.Random(1), world=world)
+    player = Game.new(content, "玩家", rng=random.Random(2), world=world)
+    fresh = new_game_state(content, "玩家").player
+    p = player.state.player
+    p.faction = "guan"
+    p.member.wugong_id, p.member.wugong_level = "fist", 3
+    p.materials = {"gang_1": 2}
+    p.stats["silver"], p.stats["xinde"] = 999, 77
+    p.affinities = {"mate": 80, "friend": 5}
+    p.relationship_notes = {"mate": "並肩作戰過的朋友"}
+    p.dialogue_history = {"mate": [{"role": "user", "content": "久仰"}]}
+    p.tutorial_step = 2
+    player.sync(100.0)  # 投靠名冊記下他的陣營
+    assert world.faction_counts() == {"guan": 1}
+
+    admin.admin_end_season(now=200.0)
+    admin.admin_next_season(now=300.0)
+    player.sync(400.0)
+
+    p = player.state.player
+    assert p.season_number == world.get_season_number() == 2
+    assert p.faction is None and world.faction_counts() == {}  # 新的一季又是散人，名冊也是新的
+    assert p.member.wugong_id is None and p.materials == {}
+    assert p.stats == fresh.stats  # 銀兩、心得回到新角色的值
+    assert p.affinities == {"mate": 8, "friend": 0}  # 80→8、5→0
+    assert p.relationship_notes == {"mate": "並肩作戰過的朋友"}
+    assert p.dialogue_history == {"mate": [{"role": "user", "content": "久仰"}]}
+    assert p.tutorial_step == 2
+    assert "賽季落幕" in player.chronicle_text()
+
+
+def test_admin_end_season_only_while_running(content, world):
+    content.config.auto_open_first_season = False
+    content.config.admins = ["管理者"]
+    player = Game.new(content, "甲", rng=random.Random(1), world=world)
+    admin = Game.new(content, "管理者", rng=random.Random(2), world=world)
+    not_running = ["（賽季不在進行中，沒有可以收的。）"]
+
+    before = world.get_season()
+    assert admin.admin_end_season(now=0.0) == not_running  # 籌備中
+    assert world.season_phase() == "preparing" and world.get_season() == before
+
+    admin.admin_open_season(now=0.0)
+    before = world.get_season()
+    assert player.admin_end_season(now=1.0) == ["（只有管理者能收季。）"]  # 非管理者
+    assert world.season_phase() == "running" and world.get_season() == before
+
+    msgs = admin.admin_end_season(now=2.0)
+    assert world.season_phase() == "resting"
+    assert any("賽季落幕" in m for m in msgs) and "【天下武學榜】" in msgs  # 結局與武學榜都在
+    season = world.get_season()
+    assert season.ended and season.time == before.time  # 季的時間停在收季那一刻
+    assert admin.state.world.ended  # 管理者自己的畫面也跟著進休季
+
+    ended = world.get_season()
+    assert admin.admin_end_season(now=3.0) == not_running  # 休季
+    assert world.get_season() == ended
+
+
+@pytest.mark.parametrize("under_way", [False, True], ids=["muster", "active"])
+def test_admin_end_season_with_battle_running(content, game, under_way):
+    """決戰還在集結或開打時收季：照自然收季的做法（試玩回饋 FB-015）直接清掉、不套用結果，戰況不變。"""
+    definition = _install_battle_def(content)
+    content.config.admins = ["沈浪"]
+    game.world.start_battle(definition, now=1000.0)
+    with at(game, 1000.0):
+        game.choose("battle:join:guan")
+    if under_way:
+        with at(game, 1000.0 + 601):
+            assert ids(game) == ["battle:act:safe", "battle:act:aggressive"]  # 開打了
+    trends = dict(game.world.get_season().trends)
+
+    game.admin_end_season(now=1000.0 + 700)
+
+    assert game.world.get_battle() is None
+    assert game.world.season_phase() == "resting"
+    assert dict(game.world.get_season().trends) == trends  # 沒有套用決戰的結果
+    assert not any("官軍大勝" in entry.text for entry in game.world.get_season().chronicle)
+    assert ids(game) == ["season:resting"]
+
+
+def test_admin_end_season_leaves_a_finished_battle_alone(content, game):
+    """已經打完的決戰不是「沒打完」：收季不去動它（跟 _battle_status 一樣只清沒打完的）。"""
+    definition = _install_battle_def(content)
+    content.config.admins = ["沈浪"]
+    game.world.start_battle(definition, now=1000.0)
+    game.world.mutate_battle(lambda b: setattr(b, "phase", "ended"))
+    game.admin_end_season(now=1000.0)
+    battle = game.world.get_battle()
+    assert battle is not None and battle.phase == "ended"
 
 
 # ── 新手引導 ──────────────────────────────────────────────

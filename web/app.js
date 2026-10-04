@@ -768,7 +768,7 @@
           <section class="admin-zone stack" aria-label="管理者工具">
             <h4>管理者工具（只有你看得到）</h4>
             <p class="muted">每一項按了都會先問一次才送出；做完會關掉設定、回到江湖頁。</p>
-            <div class="row"><button class="btn" data-act="admin" data-op="open_season">開季</button><button class="btn warn" data-act="admin" data-op="next_season">⚠ 開啟下一季</button></div>
+            <div class="row"><button class="btn" data-act="admin" data-op="open_season">開季</button><button class="btn warn" data-act="admin" data-op="end_season">⚠ 立刻收季</button><button class="btn warn" data-act="admin" data-op="next_season">⚠ 開啟下一季</button></div>
             <p class="muted">時間快轉（全服一起快轉，只在測試時用）</p>
             <div class="row">${[1, 8, 24].map((h) => `<button class="btn small" data-act="admin" data-op="fast_forward" data-hours="${h}">+${h} 小時</button>`).join("")}</div>
             ${a ? `
@@ -809,6 +809,8 @@
     const amount = `${body.amount >= 0 ? "+" : ""}${body.amount}`;
     return {
       open_season: ["開季：賽季從籌備中正式開始，全服玩家都能行動了，確定？", "確定開季"],
+      // 照 Game.admin_end_season 實際做的事寫（只在進行中有效）
+      end_season: ["立刻收季：這一季馬上結束、算出結局與武學榜，全服進入休季（之後再按「開啟下一季」）；沒打完的決戰直接收掉、不算結果，確定？", "確定收季"],
       // 照 SqliteWorldStore.next_season 實際做的事寫（只在休季有效）
       next_season: ["開啟下一季（休季才有效）：新的一季立刻開始，同伴全部重獲自由、自創武學名字釋出、煉製配方清空、天機 +1，沒打完的決戰清掉，確定？", "確定開啟下一季"],
       fast_forward: [`時間快轉 ${body.hours} 小時（全服一起），確定？`, `快轉 ${body.hours} 小時`],
