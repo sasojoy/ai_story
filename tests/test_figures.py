@@ -327,16 +327,15 @@ def test_figures_do_not_push_with_the_switch_off(real):
 
 
 def test_sim_players_stand_down_in_season_one(on):
-    """第一季：大勢人物取代虛擬玩家，虛擬玩家不推大勢、不發傳聞；門檻照舊每小時檢查（黃巾聲勢到 50 照樣斷官道）。"""
+    """第一季：大勢人物取代虛擬玩家，虛擬玩家不推大勢、不發傳聞；門檻照舊每小時檢查（玉璽線索到 50 照樣觸發；黃巾聲勢的舊門檻第一季由 T8 關掉）。"""
     on.figures = {}
     s = _season(on)
     before = dict(s.world.trends)
     world.sim_tick(s, on, 24, FixedRandom(0.0))  # 0.0：沒停下來的話每一小時都出手
     assert s.world.trends == before and s.world.rumors == []
-    s.world.trends.update(yingru=55, nanyang=55, jizhou=55)
-    rules.recompute_trends(s.world, on)
+    s.world.trends["yuxi"] = 50
     world.sim_tick(s, on, 1, FixedRandom(0.0))
-    assert "huangjin_50" in s.world.fired_thresholds
+    assert "yuxi_50" in s.world.fired_thresholds
 
 
 def test_the_map_shows_the_figures_where_they_stand(on):
