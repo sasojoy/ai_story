@@ -182,9 +182,10 @@ def _material_sources(c: Content) -> set[str]:
 
 
 def check_timetable(c: Content, need, known, region_ids: list[str], trend_ids: set[str]) -> None:
-    """時刻表（content/timetable.json，計畫 T2）：戰線是大區 id（不檢查是不是大勢線，三條戰線是 T1 加的）、
-    結果鍵照種類齊全、鎖定對得到結果、人物與修正的對象存在、文字只用繁體中文。人物先認 characters.json 的 id，
-    T4 的人物表進來後改認它。"""
+    """時刻表（content/timetable.json，計畫 T2）：戰線寫的是大區 id（只檢查它是存在的大區，不檢查它是不是同名的
+    大勢線——三條戰線的大勢線與大區同名是約定，不是這裡驗的）、結果鍵照種類齊全、鎖定對得到結果、人物與修正的
+    對象存在、文字只用繁體中文。大勢線的推動（第三方、結果）要是存在的線、而且不能是衍生線（黃巾聲勢由三條戰線合成）。
+    人物先認 characters.json 的 id，T4 的人物表進來後改認它。"""
     ids = [e.id for e in c.timetable]
     duplicated = sorted({eid for eid in ids if ids.count(eid) > 1})
     need(not duplicated, f"時刻表 id 重複：{'、'.join(duplicated)}")
@@ -449,6 +450,7 @@ def validate(c: Content) -> None:
     trend_ids = {t.id for t in c.scenario.trends}
     hidden = {t.id for t in c.scenario.trends if t.hidden}
     derived = {t.id for t in c.scenario.trends if t.derived}  # 衍生線（第一季濃縮版的黃巾聲勢）
+    season_one_trends = {t.id for t in c.scenario.trends if t.season_one}  # 第一季才有的線（三條戰線、豪強割據）
     region_fronts = {region.front for region in c.map.regions if region.front}  # 戰線
     # 大區多邊形都寫得對（至少 3 個 [x, y] 點）：查地點在哪個大區（atlas.region_of）要拆每個點，寫壞了會炸成 ValueError，
     # 所以要先確定沒壞才查；壞的由後面的大區檢查照舊回報
@@ -501,6 +503,12 @@ def validate(c: Content) -> None:
         known(where, cond.sects, c.sects, "門派")
         known(where, [*cond.skills_all, *cond.skills_none], c.skills, "武學")
         known(where, [*cond.trend_min, *cond.trend_max], trend_ids, "大勢線")
+        for key in [*cond.trend_min, *cond.trend_max]:
+            need(
+                key not in season_one_trends,
+                f"{where}：條件不能讀第一季的線 {key}（條件讀的是大勢的原數字：開關關著時戰線與割據沒有值、"
+                "季中才開季的那一季讀不到起始值；要讀就讀黃巾聲勢這種衍生線或一般的線）",
+            )
         known(where, [*cond.revealed_all, *cond.revealed_none], trend_ids, "大勢線")
         known(where, cond.members_none, c.characters, "人物")
         known(where, cond.factions, faction_ids, "陣營")
@@ -569,6 +577,10 @@ def validate(c: Content) -> None:
     missing_roads = [road for road in ROADS if road not in cfg.road_factor]
     need(not missing_roads, f"config.road_factor 缺少 {'、'.join(missing_roads)}")
     need(all(factor > 0 for factor in cfg.road_factor.values()), "config.road_factor 的係數都要大於 0")
+    need(
+        cfg.chaos_low <= cfg.chaos_high,
+        f"config.chaos_low 不能大於 chaos_high（{cfg.chaos_low} > {cfg.chaos_high}：亂局的區間是空的，割據只會一路回落）",
+    )
 
     for loc in c.locations.values():
         where = f"地點 {loc.id}"
@@ -678,6 +690,10 @@ def validate(c: Content) -> None:
                 )
 
     for trend in c.scenario.trends:
+        need(
+            trend.id != FRONT_KEY,
+            f"大勢線 {trend.id}：id 不能叫 {FRONT_KEY}（那是效果與歷練裡「所在大區的戰線」的特殊鍵，撞名會分不出推的是哪一條）",
+        )
         if not trend.derived:
             continue
         where = f"大勢線 {trend.id}"
@@ -755,6 +771,10 @@ def validate(c: Content) -> None:
     for th in c.scenario.thresholds:
         where = f"門檻 {th.id}"
         known(where, [th.trend], trend_ids, "大勢線")
+        need(
+            th.trend not in season_one_trends,
+            f"{where}：不能掛在第一季的線 {th.trend}（門檻看的是原數字：開關關著時戰線與割據沒有值；要掛就掛衍生線或一般的線）",
+        )
         if th.location:
             known(where, [th.location], c.locations, "地點")
         if th.starts_battle:

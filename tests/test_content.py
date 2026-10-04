@@ -7,7 +7,8 @@ from pydantic import ValidationError
 from conftest import FIXTURE
 from tianxia.content import ContentError, load_content, profile_line, validate
 from tianxia.models import (
-    BattleAct, BattleActionEffect, BattleDef, BattleFaction, BattleOption, BattleOutcome, FactionDef, Trend,
+    BattleAct, BattleActionEffect, BattleDef, BattleFaction, BattleOption, BattleOutcome, Condition, Config, FactionDef,
+    Threshold, Trend,
 )
 
 
@@ -866,6 +867,86 @@ def test_validate_rejects_the_front_key_when_no_trend_is_built_from_fronts(conte
     content.events["drunk"].choices[0].effect.trend = {"front": 1}  # 夾具原樣：沒有衍生線
     with pytest.raises(ContentError, match="用了 front"):
         validate(content)
+
+
+@pytest.mark.parametrize("bound", ["trend_min", "trend_max"])
+@pytest.mark.parametrize("where", ["event", "any_of", "choice", "ending", "storyline", "milestone"])
+def test_validate_rejects_a_condition_on_a_season_one_trend(content, where, bound):
+    """條件讀的是 world.trends 的原數字：開關關著時戰線沒有值（讀成 0）、季中才開季的那一季讀不到起始值，
+    所以條件不能掛在第一季的線上（戰線、割據）；要讀就讀衍生線（黃巾聲勢）或一般的線。"""
+    content = _with_fronts(content)
+    cond = Condition(**{bound: {"east": 50}})
+    if where == "event":
+        content.events["drunk"].condition = cond
+    elif where == "any_of":
+        content.events["drunk"].condition = Condition(any_of=[cond])
+    elif where == "choice":
+        content.events["drunk"].choices[0].condition = cond
+    elif where == "ending":
+        content.scenario.endings[0].condition = cond
+    elif where == "storyline":
+        content.scenario.storylines[0].acts[0].advance_when = cond
+    else:
+        content.scenario.milestones[0].condition = cond
+    with pytest.raises(ContentError, match="條件不能讀第一季的線 east"):
+        validate(content)
+
+
+def test_validate_names_the_place_of_a_condition_on_a_season_one_trend(content):
+    content = _with_fronts(content)
+    content.events["drunk"].condition = Condition(trend_min={"west": 50})
+    with pytest.raises(ContentError, match="事件 drunk：條件不能讀第一季的線 west"):
+        validate(content)
+
+
+def test_validate_still_lets_conditions_read_derived_and_ordinary_trends(content):
+    content = _with_fronts(content)
+    content.events["drunk"].condition = Condition(trend_min={"total": 40, "kou": 10}, trend_max={"total": 90})
+    validate(content)
+
+
+def test_validate_rejects_a_threshold_on_a_season_one_trend(content):
+    content = _with_fronts(content)
+    content.scenario.trends.append(Trend(id="geju", name="豪強割據", season_one=True))
+    content.scenario.thresholds.append(
+        Threshold(id="geju60", trend="geju", op=">=", value=60, text="豪強割據一方！")
+    )
+    with pytest.raises(ContentError, match="門檻 geju60：不能掛在第一季的線 geju"):
+        validate(content)
+
+
+def test_validate_lets_a_threshold_sit_on_a_derived_trend(content):
+    content = _with_fronts(content)
+    content.scenario.thresholds.append(
+        Threshold(id="total60", trend="total", op=">=", value=60, text="總勢過六成。")
+    )
+    validate(content)
+
+
+def test_validate_rejects_a_trend_named_front(content):
+    """front 是效果與歷練裡「所在大區的戰線」的特殊鍵：真有一條大勢線叫 front，推它與推本地戰線就分不出來。"""
+    content.scenario.trends.append(Trend(id="front", name="撞名"))
+    with pytest.raises(ContentError, match="大勢線 front：id 不能叫 front"):
+        validate(content)
+
+
+def test_validate_rejects_chaos_bounds_that_cross(content):
+    """亂局是 chaos_low～chaos_high 之間：下界比上界高就永遠沒有戰線在亂局，割據只會一路回落。"""
+    content.config.chaos_low, content.config.chaos_high = 70, 30
+    with pytest.raises(ContentError, match="chaos_low 不能大於 chaos_high"):
+        validate(content)
+
+
+def test_validate_lets_chaos_bounds_meet(content):
+    content.config.chaos_low = content.config.chaos_high = 50
+    validate(content)
+
+
+@pytest.mark.parametrize("field", ["geju_chaos_per_day", "geju_calm_per_day"])
+def test_config_rejects_negative_geju_rates(field):
+    with pytest.raises(ValidationError):
+        Config(**{field: -0.5})
+    assert getattr(Config(**{field: 0}), field) == 0
 
 
 def test_validate_reports_a_malformed_region_polygon_instead_of_crashing(tmp_path):

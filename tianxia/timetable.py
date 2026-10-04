@@ -185,7 +185,8 @@ def _pick_key(state: GameState, content: Content, event: TimetableEvent, lock: L
 
 
 def _push(state: GameState, content: Content, trend_id: str, delta: int) -> None:
-    """戰況移動。劇本還沒有這條線（T1 之前的真實內容）就略過；推動的文字不另外顯示，公告已經寫了。"""
+    """戰況移動。劇本沒有這條線（沒寫三條戰線的內容，例如測試夾具）就略過；真實內容的三條戰線與豪強割據都在，
+    照 change_trend 推（時刻表只在第一季開關開著時結算，那時這些線才有值）；推動的文字不另外顯示，公告已經寫了。"""
     if any(t.id == trend_id for t in content.scenario.trends):
         change_trend(state, content, trend_id, delta)
 
