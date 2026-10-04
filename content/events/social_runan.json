@@ -1,0 +1,834 @@
+[
+  {
+    "id": "sc_rn_feast",
+    "title": "袁門故吏宴",
+    "actions": [
+      "socialize"
+    ],
+    "locations": [
+      "runan"
+    ],
+    "text": "袁氏一位門生故吏升了郡吏，在城東宅中大宴賓客，堂下擺滿酒甕。座中多是受過袁家提攜的人，酒過三巡，主人舉爵要與新客一一對飲。",
+    "choices": [
+      {
+        "text": "舉爵奉陪，一爵接一爵",
+        "check": {
+          "stat": "con",
+          "difficulty": 6,
+          "by": "self"
+        },
+        "effect": {
+          "text": "你連飲十餘爵面不改色，主人拍案稱快，當席把你引見給幾位郡中掾吏，臨別還贈了一份程儀。",
+          "stats": {
+            "fame": 2,
+            "silver": 15
+          },
+          "rumor": "聽說汝南袁氏故吏設宴，有個叫{name}的外客連飲十餘爵不倒，滿座側目。"
+        },
+        "fail_effect": {
+          "text": "幾爵下肚你便天旋地轉，伏在案上睡到宴散，被僕役扶出門外，頭痛了大半天。",
+          "stamina": -15,
+          "stats": {
+            "fame": -1
+          }
+        }
+      },
+      {
+        "text": "以酒為題，即席作一段頌辭",
+        "check": {
+          "stat": "wis",
+          "difficulty": 7
+        },
+        "effect": {
+          "text": "你從袁氏累世公卿說到主人新任，辭句得體，座中老吏頻頻點頭，有人私下約你改日論學。",
+          "stats": {
+            "fame": 1,
+            "xinde": 8
+          }
+        },
+        "fail_effect": {
+          "text": "你一時詞窮，頌辭說得顛三倒四，鄰座的士人掩口而笑。",
+          "stats": {
+            "fame": -2
+          }
+        }
+      },
+      {
+        "text": "只淺酌一爵，靜聽席間議論",
+        "effect": {
+          "text": "你聽了一席郡中人事，誰得袁家青眼、誰被冷落，心裡多少有了數。",
+          "stats": {
+            "xinde": 3
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "sc_rn_mourning",
+    "title": "名士弔喪",
+    "actions": [
+      "socialize"
+    ],
+    "locations": [
+      "runan"
+    ],
+    "text": "城中一位老名士之母過世，四方士人聞訊奔弔，門前車馬堵了半條街。按禮弔客要投刺入門，可人擠人，連門檻都摸不著，守靈的子弟已在門內哭到失聲。",
+    "choices": [
+      {
+        "text": "側身鑽過人群，把名刺遞進門去",
+        "check": {
+          "stat": "agi",
+          "difficulty": 5
+        },
+        "effect": {
+          "text": "你在車輪與人肩間鑽了過去，名刺送到主人手中，得以入內行禮。主人記下了你這個遠來的弔客。",
+          "stats": {
+            "fame": 2,
+            "good": 1
+          }
+        },
+        "fail_effect": {
+          "text": "你擠到一半被人潮推倒，衣袍扯破、名刺也踩爛了，只得狼狽退出。",
+          "stamina": -10,
+          "stats": {
+            "fame": -1
+          }
+        }
+      },
+      {
+        "text": "留下來替主家守夜，陪靈到天明",
+        "check": {
+          "stat": "con",
+          "difficulty": 6,
+          "by": "self"
+        },
+        "effect": {
+          "text": "你在靈前跪坐通宵，香火未斷。天明時主家子弟向你長揖，說汝南不會忘了這份情。",
+          "stats": {
+            "good": 2,
+            "fame": 1,
+            "xinde": 5
+          }
+        },
+        "fail_effect": {
+          "text": "後半夜你撐不住打起盹來，額頭磕在棺前的几上，滿堂弔客都聽見了，你羞得天沒亮就告辭。",
+          "stamina": -10,
+          "stats": {
+            "fame": -2
+          }
+        }
+      },
+      {
+        "text": "在門外致哀，留下賻錢便走",
+        "effect": {
+          "text": "你把一點賻錢交給門房，在街口遙遙一拜。禮數不算周到，總也盡了心。",
+          "stats": {
+            "silver": -5,
+            "good": 1
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "sc_rn_dispute",
+    "title": "酒肆清議",
+    "actions": [
+      "socialize"
+    ],
+    "locations": [
+      "runan"
+    ],
+    "text": "黨錮方解，酒肆裡兩個士人越說越高聲：一個說朝廷既已解禁，正該應州郡辟召出來做事；另一個罵他趨炎附勢，宦官未除，出仕便是同流合汙。兩人都已拍案起身，旁人不敢插嘴。",
+    "choices": [
+      {
+        "text": "引經據典，替兩人找個台階",
+        "check": {
+          "stat": "wis",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "你說出處各有其時、進退皆可守節，兩人各退一步，竟同坐對飲起來，還邀你一起論了半夜。",
+          "stats": {
+            "fame": 2,
+            "xinde": 6
+          }
+        },
+        "fail_effect": {
+          "text": "你話說得不夠圓，兩人反倒一齊轉過頭來數落你，你只好賠著笑退開。",
+          "stats": {
+            "fame": -1
+          }
+        }
+      },
+      {
+        "text": "趁兩人動手前，一把架開醉得最凶的那個",
+        "check": {
+          "stat": "str",
+          "difficulty": 5
+        },
+        "effect": {
+          "text": "你攔腰把人架回座上，他掙了兩下沒掙脫，酒也醒了大半。酒家主人謝你免了一場打砸，送你一壺好酒。",
+          "stats": {
+            "good": 1,
+            "silver": 5
+          }
+        },
+        "fail_effect": {
+          "text": "那人一甩手，酒爵翻倒，潑了旁座一身，你被拉著賠了一身衣錢。",
+          "stats": {
+            "silver": -15
+          }
+        }
+      },
+      {
+        "text": "不蹚渾水，結了酒錢出門",
+        "effect": {
+          "text": "你出門時還聽見裡頭在吵，汝南的清議，向來比別處都燙。"
+        }
+      }
+    ],
+    "free_text": {
+      "prompt": "另想法子勸開兩人",
+      "stat": "wis",
+      "by": "team",
+      "effect": {
+        "text": "你一句話落地，兩人愣了一愣，竟都笑出聲來，各自坐回席上。",
+        "stats": {
+          "fame": 1,
+          "xinde": 4
+        }
+      },
+      "fail_effect": {
+        "text": "你的話沒人聽進去，兩人吵得更凶，你夾在中間被推搡了好一陣。",
+        "stamina": -10,
+        "stats": {
+          "fame": -1
+        }
+      }
+    }
+  },
+  {
+    "id": "sc_rnac_question",
+    "title": "講經問難",
+    "actions": [
+      "socialize"
+    ],
+    "locations": [
+      "runan_academy"
+    ],
+    "text": "學宮堂上一位經師講完《春秋》一章，照例讓後進起身問難。前排幾個世家子弟問得四平八穩，經師有些倦了，目光掃到你這個生面孔身上。",
+    "choices": [
+      {
+        "text": "起身直問經師講漏的一處義理",
+        "check": {
+          "stat": "wis",
+          "difficulty": 7,
+          "by": "self"
+        },
+        "effect": {
+          "text": "你問到要害處，經師停頓片刻，撫鬚大笑，當眾與你往復辯了數回，散講後還留你說話。",
+          "stats": {
+            "fame": 2,
+            "xinde": 10
+          }
+        },
+        "fail_effect": {
+          "text": "你問得急了，把傳文記錯了一句，經師淡淡糾正，堂下一陣竊笑。",
+          "stats": {
+            "fame": -2
+          }
+        }
+      },
+      {
+        "text": "講後留下，替經師連夜謄錄講義",
+        "check": {
+          "stat": "con",
+          "difficulty": 5,
+          "by": "self"
+        },
+        "effect": {
+          "text": "你在燈下抄到雞鳴，竹簡上的經義一字不差。經師翻看後讚你肯下苦功，許你隨時來聽講。",
+          "stats": {
+            "xinde": 8,
+            "good": 1
+          }
+        },
+        "fail_effect": {
+          "text": "抄到後半夜你眼皮打架，漏了好幾行，只得重抄，白熬了一夜。",
+          "stamina": -15
+        }
+      },
+      {
+        "text": "坐著聽完，不出頭",
+        "effect": {
+          "text": "你把今日講的義理默記在心，散講時隨人潮出了學宮。",
+          "stats": {
+            "xinde": 3
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "sc_rnac_pitchpot",
+    "title": "學宮投壺",
+    "actions": [
+      "socialize"
+    ],
+    "locations": [
+      "runan_academy"
+    ],
+    "text": "春日講學既畢，幾位士人在廊下設壺行禮，賓主輪流投矢，不中者罰飲。輪到你這個外客，眾人放下酒爵，等著看你投壺。",
+    "choices": [
+      {
+        "text": "挽袖投矢，連投四矢",
+        "check": {
+          "stat": "agi",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "四矢連中，壺口嗡嗡作響。眾人擊節叫好，說汝南許久沒見過這樣的手法，當場請你入座。",
+          "stats": {
+            "fame": 2,
+            "xinde": 4
+          }
+        },
+        "fail_effect": {
+          "text": "矢矢落空，按禮連罰數爵，你喝得面紅耳赤，還被記作今日笑談。",
+          "stamina": -10,
+          "stats": {
+            "fame": -1
+          }
+        }
+      },
+      {
+        "text": "自承手拙，改以吟詠代投",
+        "check": {
+          "stat": "wis",
+          "difficulty": 5
+        },
+        "effect": {
+          "text": "你吟了一段《詩》中的〈賓之初筵〉，眾人說你知禮，罰酒也免了。",
+          "stats": {
+            "fame": 1,
+            "xinde": 5
+          }
+        },
+        "fail_effect": {
+          "text": "你吟錯了一句，被當場罰了雙份酒，頭昏了半日。",
+          "stamina": -10
+        }
+      },
+      {
+        "text": "在一旁替眾人計籌",
+        "effect": {
+          "text": "你替賓主記勝負籌數，一來二去也和幾位士人攀上了話。"
+        }
+      }
+    ]
+  },
+  {
+    "id": "sc_rnac_recommend",
+    "title": "寒士求薦",
+    "actions": [
+      "socialize"
+    ],
+    "locations": [
+      "runan_academy"
+    ],
+    "text": "一個布衣書生抱著一捆竹簡在學宮門外徘徊。他說今年郡中要舉孝廉，可他出身寒微，連名士的門都進不去，只求有人替他把文章遞到一位主講面前。",
+    "choices": [
+      {
+        "text": "替主講搬運學宮新到的書簡，順道帶他進門",
+        "check": {
+          "stat": "str",
+          "difficulty": 5
+        },
+        "effect": {
+          "text": "你扛著一擔擔書簡進出，管書的老吏見你勤快，放你和書生一同入內，書生的文章遞上去了。",
+          "stats": {
+            "good": 2,
+            "fame": 1
+          }
+        },
+        "fail_effect": {
+          "text": "一擔竹簡太沉，繩子一斷散了滿地，你被老吏罰了賠繩索簡牘的錢，書生也沒能進門。",
+          "stats": {
+            "silver": -15
+          }
+        }
+      },
+      {
+        "text": "親自在主講面前替他說項",
+        "check": {
+          "stat": "wis",
+          "difficulty": 7
+        },
+        "effect": {
+          "text": "你把書生的品行文章說得有憑有據，主講答應看他的文章。書生對你深深一揖，說來日必報。",
+          "stats": {
+            "good": 2,
+            "fame": 2
+          }
+        },
+        "fail_effect": {
+          "text": "主講聽你說了兩句就皺眉，說學宮不是請託之地，你碰了一鼻子灰。",
+          "stats": {
+            "fame": -2
+          }
+        }
+      },
+      {
+        "text": "送他一點盤纏，勸他另尋門路",
+        "effect": {
+          "text": "書生收下錢，紅著眼眶道謝，抱著竹簡往城裡去了。",
+          "stats": {
+            "silver": -5,
+            "good": 1
+          }
+        }
+      }
+    ],
+    "free_text": {
+      "prompt": "替書生說項",
+      "stat": "wis",
+      "by": "team",
+      "effect": {
+        "text": "主講聽完沉吟片刻，讓書生把文章留下。書生在門外等到你出來，連聲道謝。",
+        "stats": {
+          "good": 1,
+          "fame": 1
+        }
+      },
+      "fail_effect": {
+        "text": "主講不置可否，揮手讓你退下，書生在門外等了半天也沒等到消息。",
+        "stamina": -10,
+        "stats": {
+          "fame": -1
+        }
+      }
+    }
+  },
+  {
+    "id": "sc_rnmk_thief",
+    "title": "市中扒手",
+    "actions": [
+      "socialize"
+    ],
+    "locations": [
+      "runan_market"
+    ],
+    "text": "集市正午最擠，一個賣漆器的老婦忽然尖叫，說錢囊被割了。人群裡一個短衣少年低頭往米市那頭擠，腳步比旁人快了半拍。",
+    "choices": [
+      {
+        "text": "穿過人縫追上去",
+        "check": {
+          "stat": "agi",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "你在攤棚間追了兩條巷子，一把揪住少年後領，錢囊物歸原主。老婦硬塞給你一份謝禮，市人都說你手腳俐落。",
+          "stats": {
+            "good": 2,
+            "silver": 10
+          }
+        },
+        "fail_effect": {
+          "text": "你撞翻了一攤陶碗，人沒追上，倒被陶販扯住賠了碗錢。",
+          "stats": {
+            "silver": -15
+          }
+        }
+      },
+      {
+        "text": "先看清那少年的同夥往哪去",
+        "check": {
+          "stat": "wis",
+          "difficulty": 5
+        },
+        "effect": {
+          "text": "你看出接贓的是個挑擔的漢子，喊住市吏一攔，連人帶贓都截了下來。市吏記下你的名號。",
+          "stats": {
+            "good": 1,
+            "fame": 2
+          }
+        },
+        "fail_effect": {
+          "text": "你指錯了人，被那挑擔漢子當眾罵了一頓，市吏也嫌你多事。",
+          "stats": {
+            "fame": -1
+          }
+        }
+      },
+      {
+        "text": "扶老婦到一旁坐下，替她叫市吏",
+        "effect": {
+          "text": "老婦哭了一陣，市吏說會留意，只是錢多半追不回來了。",
+          "stats": {
+            "good": 1
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "sc_rnmk_measure",
+    "title": "斛量之爭",
+    "actions": [
+      "socialize"
+    ],
+    "locations": [
+      "runan_market"
+    ],
+    "text": "糧行門前圍了一圈人，一個賣糧的老農扯著糧商的袖子不放，說他收糧用大斛、賣糧用小斛，一進一出坑了鄉人。糧商冷笑說斛是官制，誰敢亂動。",
+    "choices": [
+      {
+        "text": "借來市吏的官斛，當眾比量",
+        "check": {
+          "stat": "wis",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "你兩斛一比，糧商那隻果然大了一圈。市吏沒收了私斛，鄉人對你千恩萬謝。",
+          "stats": {
+            "good": 2,
+            "fame": 2
+          }
+        },
+        "fail_effect": {
+          "text": "你比量時手不穩，米撒了一地，反被糧商說是存心攪局，還被市吏罰了錢。",
+          "stats": {
+            "silver": -10,
+            "fame": -1
+          }
+        }
+      },
+      {
+        "text": "一把抬起滿斛的米，倒進空斛裡量給眾人看",
+        "check": {
+          "stat": "str",
+          "difficulty": 5
+        },
+        "effect": {
+          "text": "一斛米沉甸甸地倒過去，滿溢出一大截，眾人譁然，糧商臉色鐵青，只得補足老農的米錢。",
+          "stats": {
+            "good": 2
+          }
+        },
+        "fail_effect": {
+          "text": "那斛米太沉，你一個踉蹌連斛帶米摔在地上，賠了糧商半斛米錢。",
+          "stats": {
+            "silver": -15
+          }
+        }
+      },
+      {
+        "text": "替老農出錢補足差價",
+        "effect": {
+          "text": "你掏錢補了老農的虧，他連連作揖。糧商哼了一聲，生意照做。",
+          "stats": {
+            "silver": -10,
+            "good": 1
+          }
+        }
+      }
+    ],
+    "free_text": {
+      "prompt": "調解這場斛量之爭",
+      "stat": "wis",
+      "by": "team",
+      "effect": {
+        "text": "一番話說得兩邊都下得了台，糧商答應以官斛重量，老農也鬆了手。",
+        "stats": {
+          "good": 1,
+          "fame": 1
+        }
+      },
+      "fail_effect": {
+        "text": "兩邊都不買帳，反把你也扯進來吵了大半個時辰。",
+        "stamina": -10,
+        "stats": {
+          "fame": -1
+        }
+      }
+    }
+  },
+  {
+    "id": "sc_rnmk_wedding",
+    "title": "鄉人迎親",
+    "actions": [
+      "socialize"
+    ],
+    "locations": [
+      "runan_market"
+    ],
+    "text": "集市邊一戶農家今日娶婦，親友在曬穀場上擺了酒席。新郎家人手不夠，正在路邊拉過往的人來幫忙：有的抬嫁妝、有的陪客飲酒，說是沾沾喜氣。",
+    "choices": [
+      {
+        "text": "坐上席陪新郎家的長輩飲酒",
+        "check": {
+          "stat": "con",
+          "difficulty": 6,
+          "by": "self"
+        },
+        "effect": {
+          "text": "你陪幾位老人家喝到日落，話越說越多。臨走時新郎父親硬塞給你一袋新米和幾枚喜錢。",
+          "stats": {
+            "good": 1,
+            "silver": 10,
+            "xinde": 3
+          }
+        },
+        "fail_effect": {
+          "text": "鄉間的濁酒後勁大，你喝到一半就醉倒在穀堆旁，醒來錢囊被頑童掏去了一些。",
+          "stamina": -10,
+          "stats": {
+            "silver": -10
+          }
+        }
+      },
+      {
+        "text": "幫忙搶在日落前把嫁妝抬進門",
+        "check": {
+          "stat": "agi",
+          "difficulty": 5
+        },
+        "effect": {
+          "text": "你腳下飛快，幾趟就把箱籠搬完，新婦家的人直誇你手腳俐落，請你上席。",
+          "stats": {
+            "good": 2
+          }
+        },
+        "fail_effect": {
+          "text": "你一腳踩進泥溝，箱籠一歪磕破了角，只好賠了修箱的錢。",
+          "stats": {
+            "silver": -10
+          },
+          "stamina": -5
+        }
+      },
+      {
+        "text": "隨禮道賀，不多逗留",
+        "effect": {
+          "text": "你留下一點賀錢，向新人道了聲喜。在這亂年頭還能辦喜事，也算難得。",
+          "stats": {
+            "silver": -5,
+            "good": 1
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "sc_qiao_levy",
+    "title": "曹門召勇",
+    "actions": [
+      "socialize"
+    ],
+    "locations": [
+      "qiao_county"
+    ],
+    "text": "譙縣縣門前貼出告示：曹氏族人出錢糧，召鄉里子弟往潁川助討黃巾。告示前圍滿了年輕人，曹家的門客在一旁擺了一塊鑿了握口的大石，說要先看氣力，再登名籍。",
+    "choices": [
+      {
+        "text": "上前舉起大石示力",
+        "check": {
+          "stat": "str",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "你把大石高舉過頂、連舉三回，門客們喝了一聲采，當場請你到曹家門下吃一頓酒。鄉里子弟見狀，報名的又多了一排。",
+          "stats": {
+            "fame": 2,
+            "silver": 10
+          },
+          "trend": {
+            "huangjin": -1
+          },
+          "rumor": "譙縣縣門募勇那天，有個叫{name}的外鄉人連舉三回大石，曹家門客都看直了眼。"
+        },
+        "fail_effect": {
+          "text": "大石舉到胸口就沉了下去，差點砸了腳，圍觀的子弟哄笑成一片。",
+          "stamina": -10,
+          "stats": {
+            "fame": -1
+          }
+        }
+      },
+      {
+        "text": "替門客登錄名籍，核對鄉里戶貫",
+        "check": {
+          "stat": "wis",
+          "difficulty": 5
+        },
+        "effect": {
+          "text": "你把應募者的里籍、年歲一一記清，還挑出兩個冒名頂替的。門客說曹家正缺這樣細心的人。",
+          "stats": {
+            "fame": 1,
+            "xinde": 6
+          },
+          "trend": {
+            "huangjin": -1
+          }
+        },
+        "fail_effect": {
+          "text": "你把兩戶人家的名字寫混了，鬧得兩家父老找上門來，門客只好重新登錄。",
+          "stats": {
+            "fame": -1
+          }
+        }
+      },
+      {
+        "text": "在人群外看熱鬧",
+        "effect": {
+          "text": "你聽鄉人議論，譙縣子弟多半願意跟著曹家走，這一帶的人心，曹氏攏得很牢。"
+        }
+      }
+    ]
+  },
+  {
+    "id": "sc_qiao_betrothal",
+    "title": "亭中退聘",
+    "actions": [
+      "socialize"
+    ],
+    "locations": [
+      "qiao_county"
+    ],
+    "text": "縣城南亭裡吵成一團：一戶人家說兒子要從軍，想把婚期延後；女方父親當成悔婚，要把聘禮擲回去。亭長勸不住，見你是外鄉人，說旁觀者清，請你評評理。",
+    "choices": [
+      {
+        "text": "把禮法與人情一條條說清",
+        "check": {
+          "stat": "wis",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "你說延期不是悔婚，聘禮當留，從軍歸來再行親迎。兩家父老聽了都點頭，亭長當場寫了約。",
+          "stats": {
+            "good": 2,
+            "fame": 2
+          }
+        },
+        "fail_effect": {
+          "text": "你偏了一句，女方父親當你是男家請來的說客，把你一併罵了出去。",
+          "stats": {
+            "fame": -2
+          }
+        }
+      },
+      {
+        "text": "陪兩家父老坐下來，一爵一爵喝到消氣",
+        "check": {
+          "stat": "con",
+          "difficulty": 5,
+          "by": "self"
+        },
+        "effect": {
+          "text": "酒喝到夜深，兩個老人家從互罵說到當年一同耕田，最後摟著肩膀哭了。婚事保住了。",
+          "stats": {
+            "good": 2,
+            "xinde": 4
+          }
+        },
+        "fail_effect": {
+          "text": "你先醉倒了，兩家父老也沒談攏，你倒賠上了一夜的酒錢。",
+          "stamina": -10,
+          "stats": {
+            "silver": -10
+          }
+        }
+      },
+      {
+        "text": "請亭長改日再議，先勸眾人散去",
+        "effect": {
+          "text": "眾人罵罵咧咧地散了，這事是拖下來了，也沒算解決。"
+        }
+      }
+    ],
+    "free_text": {
+      "prompt": "勸和這兩家人",
+      "stat": "wis",
+      "by": "team",
+      "effect": {
+        "text": "你一番話說完，兩家人面面相覷，最後還是坐了下來商量婚期。",
+        "stats": {
+          "good": 1,
+          "fame": 1
+        }
+      },
+      "fail_effect": {
+        "text": "兩家越吵越僵，連亭長都埋怨你多嘴，你在亭中耗了大半天。",
+        "stamina": -10,
+        "stats": {
+          "fame": -1
+        }
+      }
+    }
+  },
+  {
+    "id": "sc_qiao_liubo",
+    "title": "門客六博",
+    "actions": [
+      "socialize"
+    ],
+    "locations": [
+      "qiao_county"
+    ],
+    "text": "曹家宅院旁的酒肆裡，幾個門客圍著一張博局擲箸行棋，錢在局邊堆成一疊。一個佩刀的門客招手要你下場，說外鄉人手氣旺，旁人卻都笑而不語。",
+    "choices": [
+      {
+        "text": "下場擲箸，拚手上功夫",
+        "check": {
+          "stat": "agi",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "你出手又快又準，連贏幾局，門客們服氣地把錢推給你，還說改日要再領教。",
+          "stats": {
+            "silver": 25,
+            "fame": 1
+          }
+        },
+        "fail_effect": {
+          "text": "箸落得不順，幾局下來輸掉了不少錢，門客們笑著把錢收走。",
+          "stats": {
+            "silver": -25
+          }
+        }
+      },
+      {
+        "text": "先在旁邊看兩局，瞧瞧有沒有門道",
+        "check": {
+          "stat": "wis",
+          "difficulty": 7
+        },
+        "effect": {
+          "text": "你看出那佩刀門客的箸有一根削過，當眾點破時說得客氣，滿座大笑，他只好請你喝酒賠罪。",
+          "stats": {
+            "fame": 2,
+            "silver": 5
+          }
+        },
+        "fail_effect": {
+          "text": "你看了半天看不出名堂，忍不住下場試了一局，輸掉了錢還被笑是光看不練。",
+          "stats": {
+            "silver": -15
+          }
+        }
+      },
+      {
+        "text": "拱手謝絕，只請眾人一壺酒",
+        "effect": {
+          "text": "你出錢請了一壺酒，門客們也不勉強，跟你聊起譙縣的掌故。",
+          "stats": {
+            "silver": -5,
+            "fame": 1
+          }
+        }
+      }
+    ]
+  }
+]
