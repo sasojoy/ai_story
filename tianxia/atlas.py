@@ -188,14 +188,13 @@ def leader_activity(state: GameState, content: Content, name: str) -> str:
     """龍頭人物現在在做什麼：他名下此刻會行動的設定（和世界模擬同一條規則，見 world.sim_active），
     寫成「每天約出手 N 次，讓某某大勢上升／下降」。只寫已浮現的大勢，隱藏大勢不提；沒有一條會行動時寫「眼下沒有動靜」。"""
     trend_names = {t.id: t.name for t in content.scenario.trends}
-    revealed = state.world.revealed
     doing = []
     for sim in content.scenario.sim_players:
         if sim.name != name or not sim_active(sim, state):
             continue
         moves = resolve_trends(content, state.world, sim.trend)  # 開關關著時戰線都算黃巾聲勢
-        ups = [trend_names[t] for t, delta in moves.items() if delta > 0 and t in revealed]
-        downs = [trend_names[t] for t, delta in moves.items() if delta < 0 and t in revealed]
+        ups = [trend_names[t] for t, delta in moves.items() if delta > 0 and is_revealed(state.world, content, t)]
+        downs = [trend_names[t] for t, delta in moves.items() if delta < 0 and is_revealed(state.world, content, t)]
         pushes = ([f"讓{'、'.join(ups)}上升"] if ups else []) + ([f"讓{'、'.join(downs)}下降"] if downs else [])
         doing.append("，".join([f"每天約出手 {sim.actions_per_day:g} 次", *pushes]))
     return "；".join(doing) or LEADER_QUIET

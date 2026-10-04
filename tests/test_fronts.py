@@ -235,6 +235,17 @@ def test_old_world_without_fronts_reads_start_values_and_pushes(on):
     assert game.push_trend("nanyang", -2, source="train") == ["（南陽 -2）"]  # T3 的推動也不把它當沒浮現的線
 
 
+def test_old_world_leader_activity_still_names_the_front_pushes(on):
+    """同一種舊季（存檔的 revealed 沒有三條戰線）：龍頭人物的活動說明照樣寫出他推哪條戰線，不會把公開的戰線當成還沒浮現。"""
+    game = _game(on)
+    s = game.state
+    assert "潁川汝南下降" in atlas.leader_activity(s, on, "皇甫嵩")  # 新的一季：基準
+    s.world.trends = {"huangjin": 25, "yuxi": 0}
+    s.world.revealed = {"huangjin"}
+    assert "潁川汝南下降" in atlas.leader_activity(s, on, "皇甫嵩")
+    assert "潁川汝南上升" in atlas.leader_activity(s, on, "波才")
+
+
 def test_front_key_at_luoyang_pushes_nothing_when_on(on):
     """Review Focus 2：洛陽沒有戰況，推「所在戰線」的效果什麼都不推、不丟例外；到了長社就推潁川。"""
     game = _game(on)
