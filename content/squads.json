@@ -6,7 +6,7 @@
   {"id": "louluo", "name": "黃巾嘍囉", "difficulty": 15, "attribute": "剛", "reward_silver": 8, "reward_xinde": 12, "exp": 15, "faction": "huang"},
   {"id": "shuikou", "name": "黃巾別部", "difficulty": 35, "attribute": "剛", "reward_silver": 15, "reward_xinde": 20, "exp": 25, "faction": "huang"},
   {"id": "toumu", "name": "黃巾渠帥", "difficulty": 70, "attribute": "快", "reward_silver": 40, "reward_xinde": 35, "exp": 40, "faction": "huang"},
-  {"id": "fanjianglong", "name": "波才", "difficulty": 150, "attribute": "剛", "reward_xinde": 80, "exp": 80, "faction": "huang",
+  {"id": "fanjianglong", "name": "波才親兵", "difficulty": 150, "attribute": "剛", "reward_xinde": 80, "exp": 80, "faction": "huang",
    "drops": [{"material": "gang_2"}, {"material": "gang_3", "chance": 0.35}]},
   {"id": "guishou", "name": "董卓帳下斥候", "difficulty": 60, "attribute": "虛", "reward_xinde": 40, "exp": 40, "faction": "guan"},
   {"id": "shoumu", "name": "南華觀看守者", "difficulty": 120, "attribute": "柔", "reward_xinde": 100, "exp": 80,
