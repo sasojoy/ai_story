@@ -8,8 +8,9 @@ from __future__ import annotations
 import math
 from html import escape
 
-from . import atlas
+from . import atlas, mapart
 from .atlas import KNOWN, Odds
+from .mapart import fmt
 from .models import Content, Location, MapLabel, MapLayout, MapRegion
 from .state import GameState
 
@@ -59,8 +60,7 @@ LEGEND_LAYERS = {
     "story": f"★ 這一幕主線的目標　✦ 最近 {atlas.NEWS_DAYS} 天的大事與傳聞",
     "routes": "數字：步行要幾分鐘（走路程最短的路）　粗線：到選定地點的路",
 }
-RIVER_STROKE = "#7FA9D6"
-RIVER_TEXT = "#6F93BA"
+RIVER_TEXT = "#4F7FA3"
 RIVER_SIZE = 13  # 河名
 MINI_HEIGHT = 200  # 小地圖在畫面上固定的高度（px）；寬度隨欄寬，圖置中
 MINI_HOPS = 2  # 視窗外、幾站路以內的摸清地點，在視窗邊緣標出方向
@@ -223,11 +223,7 @@ def _label(loc: Location, view: str, fights: bool = True) -> str:
 
 def _tint(color: str, value: int) -> str:
     """大勢越高，大區顏色越往紅色靠。"""
-    ratio = TREND_TINT * max(0, min(100, value)) / 100
-    mixed = (
-        round(int(color[i:i + 2], 16) * (1 - ratio) + int(TREND_RED[i:i + 2], 16) * ratio) for i in (1, 3, 5)
-    )
-    return "#" + "".join(f"{v:02X}" for v in mixed)
+    return mapart.mix(color, TREND_RED, TREND_TINT * max(0, min(100, value)) / 100)
 
 
 def _legend_line(layer: str) -> str:
@@ -289,38 +285,61 @@ def _layer_marks(
     return prefixes, notes, fills
 
 
-def _you(content: Content, spot: atlas.RoadSpot) -> tuple[float, float, str]:
-    """路上的「你」畫在哪裡（路上設計 3.4）：身後那一站往前面那一站走了 done 成的那一點，以及往前走的方向箭頭。"""
+def _road_curve(content: Content, spot: atlas.RoadSpot) -> tuple[Point, Point, Point]:
+    """你所在的那條路畫出來的曲線：（身後那一站, 控制點, 前面那一站）。"""
     a, b = content.locations[spot.behind], content.locations[spot.ahead]
-    x = a.x + (b.x - a.x) * spot.done
-    y = a.y + (b.y - a.y) * spot.done
-    return x, y, atlas.direction((a.x, a.y), (b.x, b.y))
+    return (a.x, a.y), mapart.road_control(content, spot.behind, spot.ahead), (b.x, b.y)
+
+
+def _you(content: Content, spot: atlas.RoadSpot) -> tuple[float, float, str]:
+    """路上的「你」畫在哪裡（路上設計 3.4）：沿著畫出來的那條路（曲線），從身後那一站往前面那一站走了 done 成的
+    那一點，以及往前走的方向箭頭（照兩站的直線方向）。"""
+    behind, control, ahead = _road_curve(content, spot)
+    x, y = mapart.bezier_point(behind, control, ahead, spot.done)
+    return x, y, atlas.direction(behind, ahead)
 
 
 def _you_mark(content: Content, spot: atlas.RoadSpot, you: tuple[float, float, str], taken: list[Taken]) -> str:
-    """路上的「你」：從你到前面那一站的虛線（還沒走的那一截，看得出走向）與一個圓點；把圓點佔的範圍加進 taken。
-    兩個都不接點擊（pointer-events="none"）：它們畫在地點上面，不然會擋住點前後那兩站。"""
+    """路上的「你」：從你沿著那條路到前面那一站的虛線（還沒走的那一截，看得出走向）與一個圓點；把圓點佔的範圍加進
+    taken。兩個都不接點擊（pointer-events="none"）：它們畫在地點上面，不然會擋住點前後那兩站。"""
     x, y, _ = you
-    ahead = content.locations[spot.ahead]
+    behind, control, ahead = _road_curve(content, spot)
+    _, (cx, cy) = mapart.bezier_tail(behind, control, ahead, spot.done)
     taken.append(((x - YOU_SIZE, y - YOU_SIZE, x + YOU_SIZE, y + YOU_SIZE), 1))
     return (
-        f'<line x1="{x:g}" y1="{y:g}" x2="{ahead.x}" y2="{ahead.y}" stroke="{ROUTE_STROKE}" stroke-width="4" '
-        'stroke-dasharray="6 4" stroke-linecap="round" pointer-events="none"/>'
-        f'<circle class="tx-you" cx="{x:g}" cy="{y:g}" r="{YOU_SIZE}" fill="{NODE_FILL["current"]}" '
+        f'<path d="M{fmt(x)},{fmt(y)} Q{fmt(cx)},{fmt(cy)} {fmt(ahead[0])},{fmt(ahead[1])}" fill="none" '
+        f'stroke="{ROUTE_STROKE}" stroke-width="4" stroke-dasharray="6 4" stroke-linecap="round" pointer-events="none"/>'
+        f'<circle class="tx-you" cx="{fmt(x)}" cy="{fmt(y)}" r="{YOU_SIZE}" fill="{NODE_FILL["current"]}" '
         'stroke="#FFFFFF" stroke-width="2" pointer-events="none"/>'
     )
 
 
-def _route_line(state: GameState, content: Content, selected: str | None, start: Point) -> str:
-    """路線層：從 start（所在地，或路上的「你」）到選定地點的那條路（粗線）；選的是所在地或走不到時是空字串。
-    在路上時走改道的那一條（見 atlas.way_to）。"""
+def _route_line(state: GameState, content: Content, selected: str | None, spot: atlas.RoadSpot | None) -> str:
+    """路線層：從所在地（在路上時是路上的「你」）沿著畫出來的路（每一段都是那條路的曲線）到選定地點的粗線；
+    選的是所在地或走不到時是空字串。在路上時走改道的那一條（見 atlas.way_to）：第一段是你所在那條路剩下的一截——
+    往前走是到前面那一站的那一截，掉頭是同一條曲線倒回身後那一站。"""
     route = atlas.way_to(state, content, selected) if selected else None
     if route is None:
         return ""
-    stops = [start] + [(content.locations[loc_id].x, content.locations[loc_id].y) for loc_id in route.path]
-    points = " ".join(f"{x:g},{y:g}" for x, y in stops)
+    if spot is None:
+        here = content.locations[state.player.location]
+        d, prev, legs = f"M{here.x},{here.y}", state.player.location, route.path
+    else:
+        behind, control, ahead = _road_curve(content, spot)
+        if route.path[0] == spot.ahead:
+            start, bend = mapart.bezier_tail(behind, control, ahead, spot.done)
+        else:  # 掉頭
+            start, bend = mapart.bezier_tail(ahead, control, behind, 1 - spot.done)
+        first = content.locations[route.path[0]]
+        d = f"M{fmt(start[0])},{fmt(start[1])} Q{fmt(bend[0])},{fmt(bend[1])} {first.x},{first.y}"
+        prev, legs = route.path[0], route.path[1:]
+    for loc_id in legs:
+        loc = content.locations[loc_id]
+        cx, cy = mapart.road_control(content, prev, loc_id)
+        d += f" Q{fmt(cx)},{fmt(cy)} {loc.x},{loc.y}"
+        prev = loc_id
     return (
-        f'<polyline points="{points}" fill="none" stroke="{ROUTE_STROKE}" stroke-width="5" stroke-opacity="0.7" '
+        f'<path d="{d}" fill="none" stroke="{ROUTE_STROKE}" stroke-width="5" stroke-opacity="0.7" '
         'stroke-linecap="round" stroke-linejoin="round"/>'
     )
 
@@ -377,19 +396,13 @@ def _region_labels(
 
 
 def _polygons(m: MapLayout, tints: dict[str, str]) -> list[str]:
-    """大區的底色；tints 是換過的顏色（大區 id → 顏色），其餘照原色。"""
-    return [
-        f'<polygon points="{" ".join(f"{x},{y}" for x, y in region.points)}" fill="{tints.get(region.id, region.fill)}"/>'
-        for region in m.regions
-    ]
+    """大區：削角的底色塊（只是外觀，歸屬照舊用原始多邊形）；tints 是換過的顏色（大區 id → 顏色），其餘照原色。"""
+    return [mapart.region_shape(region.points, tints.get(region.id, region.fill), region.fill) for region in m.regions]
 
 
 def _rivers(m: MapLayout) -> list[str]:
-    return [
-        f'<polyline points="{" ".join(f"{x},{y}" for x, y in river.points)}" fill="none" stroke="{RIVER_STROKE}" '
-        'stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>'
-        for river in m.rivers
-    ]
+    """河：從上游往下游漸寬的平滑色帶（黃河土黃，其他藍色）。"""
+    return [mapart.river_shape(river) for river in m.rivers]
 
 
 def _river_label(label: MapLabel) -> tuple[str, Box]:
@@ -399,18 +412,21 @@ def _river_label(label: MapLabel) -> tuple[str, Box]:
 
 
 def _roads(content: Content, views: dict[str, str]) -> list[str]:
-    """地點之間的路：兩頭都畫得出來（不是未開放）才畫；有一頭摸清時是實線，不然是淡虛線。"""
+    """地點之間的路：兩頭都畫得出來（不是未開放）才畫，畫成彎一點的二次曲線（mapart.road_control，兩個方向同一條）。
+    有一頭摸清時照路的種類畫（官道、一般的路、山路），不然是淡色點線。"""
     out = []
     for a_id, a in content.locations.items():
         for b_id in a.connections:
             if a_id > b_id or "hidden" in (views[a_id], views[b_id]):
                 continue
             b = content.locations[b_id]
-            if views[a_id] in KNOWN or views[b_id] in KNOWN:
-                style = 'stroke="#8A8577" stroke-width="2"'
-            else:
-                style = 'stroke="#C9C3B2" stroke-width="1.5" stroke-dasharray="4 4"'
-            out.append(f'<line x1="{a.x}" y1="{a.y}" x2="{b.x}" y2="{b.y}" {style}/>')
+            known = views[a_id] in KNOWN or views[b_id] in KNOWN
+            color, width, dash = mapart.ROAD_STYLE[a.road_to(b_id)] if known else mapart.FAINT_ROAD
+            cx, cy = mapart.road_control(content, a_id, b_id)
+            out.append(
+                f'<path d="M{a.x},{a.y} Q{fmt(cx)},{fmt(cy)} {b.x},{b.y}" fill="none" stroke="{color}" '
+                f'stroke-width="{width:g}" stroke-dasharray="{dash}" stroke-linecap="round"/>'
+            )
     return out
 
 
@@ -454,8 +470,6 @@ def render_map(
     prefixes, notes, fills = _layer_marks(state, content, layer, views, odds)
     spot = atlas.road_spot(state, content)
     you = _you(content, spot) if spot is not None else None  # 在路上：「你」畫在兩站之間（路上設計 3.4）
-    here_loc = content.locations[state.player.location]
-    start = (you[0], you[1]) if you is not None else (here_loc.x, here_loc.y)
     legend_top = m.height - 50
     out = [
         # max-width:100% 是必要的：少了它，這個 div 會被裡面整張地圖寬的 SVG 撐開、整塊溢出版面，
@@ -482,7 +496,7 @@ def render_map(
         taken.append((box, TEXT_WEIGHT))
     out += _roads(content, views)
     if layer == "routes":
-        out.append(_route_line(state, content, selected, start))
+        out.append(_route_line(state, content, selected, spot))
     reach: dict[str, float] = {}
     for loc in content.locations.values():
         view = views[loc.id]

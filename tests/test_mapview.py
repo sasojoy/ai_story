@@ -1,12 +1,16 @@
 import html
+import math
 import re
 
+import pytest
+
 from tianxia.atlas import location_view, vision_range, visible_locations
+from tianxia.mapart import bezier_point, bezier_tail, fmt, mix, road_control
 from tianxia.mapview import (
     LEGEND_LAYERS, MINI_HEIGHT, NODE_FILL, ROUTE_STROKE, SELECT_STROKE, YOU_SIZE, node_shape, render_map,
     render_minimap, text_box, text_width,
 )
-from tianxia.models import Location
+from tianxia.models import Connection, Location
 from tianxia.state import Journey, Rumor
 
 
@@ -174,7 +178,9 @@ def test_routes_layer_shows_costs_and_the_selected_path(state, content):
     svg = render_map(state, content, "routes", selected="cave")
     # 路線層標步行分鐘：湖邊 3 分鐘、寶洞 3＋4.5＝7.5 分鐘（四捨五入 8）
     assert ">所在地<" in svg and ">3 分鐘<" in svg and ">8 分鐘<" in svg
-    assert f'<polyline points="100,100 200,100 300,100" fill="none" stroke="{ROUTE_STROKE}"' in svg
+    (ax, ay), (bx, by) = road_control(content, "town", "lake"), road_control(content, "lake", "cave")
+    path = f"M100,100 Q{fmt(ax)},{fmt(ay)} 200,100 Q{fmt(bx)},{fmt(by)} 300,100"  # 每一段都沿著那條路的曲線
+    assert f'<path d="{path}" fill="none" stroke="{ROUTE_STROKE}" stroke-width="5"' in svg
     assert ROUTE_STROKE + '" stroke-width="5"' not in render_map(state, content, "routes", selected="town")
 
 
@@ -251,8 +257,8 @@ def test_minimap_draws_the_big_map_around_the_player(state, content):
     svg = render_minimap(state, content)
     assert 'fill="#EFE5CB"' in svg and 'fill="#E2EAF1"' in svg  # 兩個大區都在視窗裡
     assert 'fill="#E7C6AE"' not in svg  # 大區照原色，不依大勢變紅
-    assert 'stroke="#7FA9D6"' in svg  # 河
-    assert '<line x1="200" y1="100" x2="100" y2="100"' in svg  # 湖邊—小鎮的路
+    assert 'fill="#6FA0C2"' in svg  # 河
+    assert '<path d="M200,100 Q' in svg  # 湖邊—小鎮的路
     assert re.search(r'font-weight="bold"[^>]*>小鎮（你）<', svg)  # 所在地最醒目
     assert f'r="18" fill="none" stroke="{NODE_FILL["current"]}"' in svg  # 所在地的圓圈（同大地圖）
     assert f'rx="3" fill="{NODE_FILL["current"]}"' in svg  # 小鎮是城鎮：方塊
@@ -278,7 +284,7 @@ def test_minimap_fog_matches_the_big_map(state, content):
     cave = content.locations["cave"]
     cave.x, cave.y = 150, 60  # 挪進視窗，但還沒開放
     svg = render_minimap(state, content)
-    assert "寶洞" not in svg and 'cx="150"' not in svg and 'x1="150"' not in svg and 'x2="150"' not in svg
+    assert "寶洞" not in svg and 'cx="150"' not in svg and "150,60" not in svg  # 記號與通往它的路都不畫
     state.world.flags.add("cave_open")
     content.config.vision_base = 2
     assert ">寶洞<" in render_minimap(state, content)
@@ -319,7 +325,7 @@ def test_minimap_places_just_beyond_the_edge_get_an_arrow_not_a_clipped_mark(sta
     content.locations["cave"].x = 240  # 中心在視窗右緣外 5：記號會露出一半
     svg = render_minimap(state, content)
     assert 'cx="240"' not in svg and ARROW_RE.findall(svg) == [("→", "寶洞")]
-    assert '<line x1="240" y1="100" x2="200" y2="100"' in svg  # 路照樣通到邊緣外
+    assert '<path d="M240,100 Q' in svg  # 路照樣通到邊緣外
 
 
 def test_minimap_points_to_at_most_four_places_nearest_first(state, content):
@@ -346,7 +352,7 @@ def test_minimap_keeps_showing_the_player_during_an_event(state, content):
 def test_minimap_without_regions_still_shows_the_player(state, content):
     content.map.regions = []
     svg = render_minimap(state, content)
-    assert "<polygon" not in svg and ">小鎮（你）<" in svg
+    assert 'fill="#EFE5CB"' not in svg and 'fill="#E2EAF1"' not in svg and ">小鎮（你）<" in svg
 
 
 # ── 路上的「你」（路上設計 3.4）──────────────────────────────
@@ -361,30 +367,80 @@ def _walking(state, at=90.0):
 def test_on_the_road_the_map_draws_you_between_the_two_stops(state, content):
     _walking(state)
     svg = render_map(state, content)
-    assert f'<circle class="tx-you" cx="150" cy="100" r="{YOU_SIZE}"' in svg  # 小鎮與湖邊的正中間
-    assert f'<line x1="150" y1="100" x2="200" y2="100" stroke="{ROUTE_STROKE}"' in svg  # 還沒走的那一截，看得出走向
+    town, lake, bend = (100, 100), (200, 100), road_control(content, "town", "lake")
+    (x, y), (cx, cy) = bezier_tail(town, bend, lake, 0.5)  # 走了一半：那條路（曲線）的正中間
+    assert f'<circle class="tx-you" cx="{fmt(x)}" cy="{fmt(y)}" r="{YOU_SIZE}"' in svg
+    ahead = f'<path d="M{fmt(x)},{fmt(y)} Q{fmt(cx)},{fmt(cy)} 200,100" fill="none" stroke="{ROUTE_STROKE}"'
+    assert ahead in svg  # 還沒走的那一截，沿著同一條曲線，看得出走向
     assert ">你→<" in svg
     # 圓點與虛線畫在地點上面，不能擋住點前後那兩站（網頁照 [data-loc] 認點擊）
     circle = re.search(r'<circle class="tx-you"[^>]*>', svg).group(0)
-    line = re.search(r'<line x1="150" y1="100"[^>]*>', svg).group(0)
+    line = re.search(re.escape(ahead) + r"[^>]*>", svg).group(0)
     assert 'pointer-events="none"' in circle and 'pointer-events="none"' in line
     assert "小鎮（你）" not in svg  # 在路上：小鎮只是身後那一站
     state.player.journey = Journey(mode="walk", path=["town"], arrive_at=[180.0], origin="lake", share=0.5)
-    svg = render_map(state, content)  # 在正中間掉頭回小鎮：箭頭朝西
-    assert ">你←<" in svg and f'<line x1="150" y1="100" x2="100" y2="100" stroke="{ROUTE_STROKE}"' in svg
+    svg = render_map(state, content)  # 在正中間掉頭回小鎮：箭頭朝西，虛線沿同一條曲線倒回小鎮
+    (x, y), (cx, cy) = bezier_tail(lake, bend, town, 0.5)
+    assert ">你←<" in svg and f'<path d="M{fmt(x)},{fmt(y)} Q{fmt(cx)},{fmt(cy)} 100,100" fill="none" stroke="{ROUTE_STROKE}"' in svg
 
 
 def test_on_the_road_the_routes_layer_counts_from_where_you_are(state, content):
-    _walking(state, at=60.0)  # 走了一成三：回小鎮 1 分鐘、到湖邊 2 分鐘
+    _walking(state, at=60.0)  # 走了三分之一：回小鎮 1 分鐘、到湖邊 2 分鐘
     svg = render_map(state, content, "routes", selected="lake")
     assert ">1 分鐘<" in svg and ">2 分鐘<" in svg  # 小鎮、湖邊各自從路上算
-    assert f'<polyline points="133.333,100 200,100" fill="none" stroke="{ROUTE_STROKE}"' in svg
+    town, lake, bend = (100, 100), (200, 100), road_control(content, "town", "lake")
+    (x, y), (cx, cy) = bezier_tail(town, bend, lake, 1 / 3)  # 粗線從路上的「你」沿著曲線走完剩下那一截
+    assert f'<path d="M{fmt(x)},{fmt(y)} Q{fmt(cx)},{fmt(cy)} 200,100" fill="none" stroke="{ROUTE_STROKE}" stroke-width="5"' in svg
+    svg = render_map(state, content, "routes", selected="town")  # 掉頭：同一條曲線倒回小鎮
+    (x, y), (cx, cy) = bezier_tail(lake, bend, town, 2 / 3)
+    assert f'<path d="M{fmt(x)},{fmt(y)} Q{fmt(cx)},{fmt(cy)} 100,100" fill="none" stroke="{ROUTE_STROKE}" stroke-width="5"' in svg
 
 
 def test_on_the_road_the_minimap_is_centred_on_you(state, content):
     _walking(state)
     svg = render_minimap(state, content)
     left, top, right, bottom = window(svg)
-    assert ((left + right) / 2, (top + bottom) / 2) == (150, 100)
-    assert '<circle class="tx-you" cx="150" cy="100"' in svg
+    x, y = bezier_point((100, 100), road_control(content, "town", "lake"), (200, 100), 0.5)
+    assert ((left + right) / 2, (top + bottom) / 2) == pytest.approx((x, y))
+    assert f'<circle class="tx-you" cx="{fmt(x)}" cy="{fmt(y)}"' in svg
     assert [text for text, _ in texts(svg)] == ["小鎮", "湖邊", "你→"]
+
+
+# ── 大區、河、路（輿圖美術設計 2.2～2.4）──────────────────────
+
+
+def test_regions_have_cut_corners_and_a_darker_edge(state, content):
+    svg = render_map(state, content)  # 局勢層：北區依寇亂 30 往紅色靠，描邊照原本的底色加深
+    edge = mix("#EFE5CB", "#6B5A3A", 0.35)
+    north = re.search(rf'<path d="(M[^"]+ Z)" fill="#E7C6AE" stroke="{edge}" stroke-width="1.4"', svg)
+    assert north and north[1].count(" L") == 4 * 2 ** 3 - 1  # 四個角各切 3 輪
+    assert not north[1].startswith("M0,0 ")  # 角削掉了：不從原本的角 (0, 0) 起筆
+
+
+def test_rivers_are_ribbons_that_widen_downstream(state, content):
+    svg = render_map(state, content)  # 夾具的河是舊格式：藍色、寬 4→8
+    body = re.search(r'<path d="M([^"]+) Z" fill="#6FA0C2" stroke="#6FA0C2"', svg)[1]
+    points = [tuple(map(float, p.split(","))) for p in body.split(" L")]
+    half = len(points) // 2  # 前一半是一側的岸，後一半倒過來是另一側
+    assert math.dist(points[0], points[-1]) == pytest.approx(4, abs=0.15)  # 上游寬 4
+    assert math.dist(points[half - 1], points[half]) == pytest.approx(8, abs=0.15)  # 下游寬 8
+    assert 'stroke="#A9C9DE" stroke-width="1.5"' in svg  # 中間的亮線
+    content.map.rivers[0].color = "yellow"
+    svg = render_map(state, content)
+    assert 'fill="#C9A867"' in svg and 'stroke="#E2CB94"' in svg and 'fill="#6FA0C2"' not in svg
+
+
+def test_roads_bend_and_are_drawn_by_their_kind(state, content):
+    state.world.flags.add("cave_open")
+    svg = render_map(state, content)  # 小鎮—湖邊是一般的路，湖邊—寶洞是山路
+    (ax, ay), (bx, by) = road_control(content, "town", "lake"), road_control(content, "lake", "cave")
+    road = f'<path d="M200,100 Q{fmt(ax)},{fmt(ay)} 100,100" fill="none" stroke="#9C7E58" stroke-width="1.8" stroke-dasharray="5 4"'
+    trail = f'<path d="M300,100 Q{fmt(bx)},{fmt(by)} 200,100" fill="none" stroke="#86704F" stroke-width="1.9" stroke-dasharray="1.5 4"'
+    assert road in svg and trail in svg
+    assert svg.count(f"Q{fmt(ax)},{fmt(ay)} ") == 1  # 一條路只畫一次
+    content.locations["town"].connections = [Connection("lake", "官道")]
+    content.locations["lake"].connections = [Connection("town", "官道"), Connection("cave", "山路")]
+    assert 'stroke="#8E6B45" stroke-width="2.6" stroke-dasharray="8 4"' in render_map(state, content)
+    content.config.vision_base = 0  # 湖邊、寶洞都成了淡點：兩頭都沒摸清的路畫成淡色點線
+    faint = f'<path d="M300,100 Q{fmt(bx)},{fmt(by)} 200,100" fill="none" stroke="#C2B394" stroke-width="1.4" stroke-dasharray="1.5 4"'
+    assert faint in render_map(state, content)

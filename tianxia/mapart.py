@@ -3,9 +3,10 @@
 """
 from __future__ import annotations
 
+import math
 import zlib
 
-from .models import Content
+from .models import Content, MapRiver
 
 Point = tuple[float, float]
 
@@ -77,3 +78,64 @@ def chaikin(points: list[list[int]], rounds: int = REGION_ROUNDS, cut: float = R
             out += [(x1 + (x2 - x1) * cut, y1 + (y2 - y1) * cut), (x2 + (x1 - x2) * cut, y2 + (y1 - y2) * cut)]
         pts = out
     return pts
+
+
+# ── 大區、河 ─────────────────────────────────────────
+
+REGION_INK = "#6B5A3A"  # 大區描邊：原本的底色往這個顏色加深
+REGION_EDGE = 0.35  # 加深幾成
+RIVER_STEPS = 12  # 河的平滑線：每兩點之間切幾段
+RIVER_COLORS = {"blue": ("#6FA0C2", "#A9C9DE"), "yellow": ("#C9A867", "#E2CB94")}  # 河身、中間的亮線
+
+
+def path_d(points: list[Point], closed: bool = False) -> str:
+    """一串點寫成 <path> 的 d（直線連起來；closed 時收口）。"""
+    return "M" + " L".join(f"{fmt(x)},{fmt(y)}" for x, y in points) + (" Z" if closed else "")
+
+
+def region_shape(points: list[list[int]], fill: str, base: str) -> str:
+    """一塊大區：削角（chaikin）的底色塊，fill 是要塗的顏色（局勢層會往紅色靠），描邊用原本的底色 base 往墨色加深。"""
+    edge = mix(base, REGION_INK, REGION_EDGE)
+    return (
+        f'<path d="{path_d(chaikin(points), closed=True)}" fill="{fill}" stroke="{edge}" stroke-width="1.4" '
+        'stroke-linejoin="round"/>'
+    )
+
+
+def river_line(river: MapRiver) -> list[Point]:
+    """河的平滑中線，從上游到下游。"""
+    return catmull_rom(river.points, RIVER_STEPS)
+
+
+def river_shape(river: MapRiver) -> str:
+    """一條河：中線往兩側各推半個河寬圍成的色帶（從上游的 width[0] 漸寬到下游的 width[1]），中間一條淺色亮線。"""
+    body, light = RIVER_COLORS[river.color]
+    line = river_line(river)
+    w0, w1 = river.width
+    last = len(line) - 1
+    left: list[Point] = []
+    right: list[Point] = []
+    for i, (x, y) in enumerate(line):
+        (ax, ay), (bx, by) = line[max(i - 1, 0)], line[min(i + 1, last)]
+        length = math.hypot(bx - ax, by - ay) or 1
+        half = (w0 + (w1 - w0) * i / last) / 2
+        nx, ny = -(by - ay) / length * half, (bx - ax) / length * half  # 中線的法線，長度是半個河寬
+        left.append((x + nx, y + ny))
+        right.append((x - nx, y - ny))
+    shine = " ".join(f"{fmt(x)},{fmt(y)}" for x, y in line)
+    return (
+        f'<path d="{path_d(left + right[::-1], closed=True)}" fill="{body}" stroke="{body}" stroke-width="1" '
+        'stroke-linejoin="round"/>'
+        f'<polyline points="{shine}" fill="none" stroke="{light}" stroke-width="{fmt(max(1.5, w0 * 0.3))}" '
+        'stroke-linecap="round" stroke-linejoin="round"/>'
+    )
+
+
+# ── 路 ───────────────────────────────────────────────
+
+ROAD_STYLE = {  # 路的種類：顏色、粗細、虛線
+    "官道": ("#8E6B45", 2.6, "8 4"),
+    "路": ("#9C7E58", 1.8, "5 4"),
+    "山路": ("#86704F", 1.9, "1.5 4"),
+}
+FAINT_ROAD = ("#C2B394", 1.4, "1.5 4")  # 兩頭都沒摸清的路
