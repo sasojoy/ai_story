@@ -206,6 +206,7 @@
     "versions": {"成": "甲", "不成": "乙"},
     "third_party_text": "宛城殺聲震天的時候，新野縣衙的冊子換了主人：{name} 開倉放糧，縣裡的人自己把冊子捧了出來。",
     "third_party_trends": {"geju": 10},
+    "third_party_chronicle": "{name} 取得新野",
     "outcomes": {
       "甲:guan:大勝": {
         "text": "史書上，孫堅身當一面，登城先入，大破宛城。這一次也一樣：江東子弟攀上東北角的城牆，城門從裡面打開了。",

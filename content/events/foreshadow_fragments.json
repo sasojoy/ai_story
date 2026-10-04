@@ -1,0 +1,49 @@
+[
+  {
+    "id": "fs_ev_boatman",
+    "title": "老船夫",
+    "tags": ["待joy寫"],
+    "locations": ["yingshui"],
+    "text": "潁水邊的老船夫在補船，一邊補一邊跟你聊起天氣。",
+    "choices": [
+      {"text": "聽老船夫聊天氣", "effect": {"text": "老船夫說得興起，手上的活卻一刻沒停。"}}
+    ]
+  },
+  {
+    "id": "fs_ev_xinye_doctor",
+    "title": "新野老醫",
+    "tags": ["待joy寫"],
+    "locations": ["xinye"],
+    "condition": {"factions": ["huang"]},
+    "text": "新野城裡一個逃難來的老醫，手上有一張南華老仙留下的方子。",
+    "choices": [
+      {"text": "聽老醫把方子說完", "effect": {"text": "老醫把方子一字一句說給你聽，說完又嘆了口氣。"}}
+    ]
+  },
+  {
+    "id": "fs_ev_xinye_clerk",
+    "title": "新野老縣吏",
+    "tags": ["待joy寫"],
+    "locations": ["xinye"],
+    "condition": {"factions": ["haoqiang"]},
+    "text": "縣令早就跑了，縣衙裡只剩一個老縣吏守著戶籍地契冊，誰來都不肯鬆手。",
+    "choices": [
+      {"text": "跟老縣吏攀談", "effect": {"text": "老縣吏抱著冊子，嘴裡只反覆唸著同一句話。"}}
+    ]
+  },
+  {
+    "id": "fs_ev_two_buyers",
+    "title": "兩路買家",
+    "tags": ["待joy寫"],
+    "locations": ["runan_market"],
+    "condition": {"factions": ["haoqiang"], "week_min": 4, "week_max": 6},
+    "text": "官軍的軍需官與黃巾的頭目先後來到集市上買糧，兩邊都出了價。",
+    "choices": [
+      {"text": "賣給官軍", "effect": {"text": "你把糧賣給了官軍的軍需官。"}},
+      {"text": "賣給黃巾", "effect": {"text": "你把糧賣給了黃巾的頭目。"}},
+      {"text": "都不賣，關門囤糧", "effect": {"text": "你關起門來，一粒糧也沒賣。"}},
+      {"text": "兩邊都賣，誰也別讓誰知道",
+       "effect": {"text": "你兩邊都收了訂金，暗地裡把兩份帳分開記。", "fs_counters": {"two_buyers": 1}}}
+    ]
+  }
+]

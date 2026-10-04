@@ -1,0 +1,120 @@
+[
+  {
+    "id": "fs_prep_reeds",
+    "title": "河灘蘆葦",
+    "tags": ["待joy寫"],
+    "locations": ["yingshui", "yingchuan_wilds"],
+    "condition": {"factions": ["guan"]},
+    "text": "河灘的蘆葦曬得乾透，一叢一叢立在風裡。",
+    "choices": [
+      {"text": "割幾捆帶走", "effect": {"text": "你割了幾捆曬乾的蘆葦，捆好帶走。", "clue_items": {"fs_reeds": 1}}},
+      {"text": "不理它", "effect": {"text": "你沒有停下腳步。"}}
+    ]
+  },
+  {
+    "id": "fs_prep_oil",
+    "title": "油坊",
+    "tags": ["待joy寫"],
+    "locations": ["runan_market"],
+    "condition": {"factions": ["guan"]},
+    "text": "油坊掌櫃在鋪子前吆喝賣膏油，說最近官軍買得兇。",
+    "choices": [
+      {"text": "買一罐膏油（銀兩 10）", "condition": {"min_stats": {"silver": 10}},
+       "effect": {"text": "你付了十兩銀子，提了一罐膏油。", "stats": {"silver": -10}, "clue_items": {"fs_oil": 1}}},
+      {"text": "不買", "effect": {"text": "你擺擺手走開了。"}}
+    ]
+  },
+  {
+    "id": "fs_prep_dry_reeds",
+    "title": "城頭的乾葦",
+    "tags": ["待joy寫"],
+    "locations": ["changshe"],
+    "condition": {"factions": ["huang"]},
+    "text": "你摸到長社城下，城頭堆著捆好的乾葦，離牆頭不遠。",
+    "choices": [
+      {"text": "抽一束乾葦下來當證物", "check": {"stat": "agi", "difficulty": 6, "by": "self"},
+       "effect": {"text": "你悄悄抽下一束乾葦，揣進懷裡。", "clue_items": {"fs_dry_reeds": 1}},
+       "fail_effect": {"text": "這次沒成，可以再來。"}},
+      {"text": "不冒這個險", "effect": {"text": "你退回暗處，沒有動手。"}}
+    ]
+  },
+  {
+    "id": "fs_prep_blood_letter",
+    "title": "塢堡裡的前任郡丞",
+    "tags": ["待joy寫"],
+    "locations": ["haozu_fort"],
+    "condition": {"factions": ["guan"]},
+    "text": "被左豐逼到家破的前任郡丞躲在塢堡裡，不肯輕易拿出血書。",
+    "choices": [
+      {"text": "好言相勸，請他交出血書", "check": {"stat": "wis", "difficulty": 6, "by": "self"},
+       "effect": {"text": "前任郡丞沉默良久，把血書交到你手上。", "clue_items": {"fs_blood_letter": 1}},
+       "fail_effect": {"text": "這次沒成，可以再來。"}},
+      {"text": "不打擾他", "effect": {"text": "你悄悄退了出去。"}}
+    ]
+  },
+  {
+    "id": "fs_prep_ledger",
+    "title": "渡口的帳房",
+    "tags": ["待joy寫"],
+    "locations": ["mengjin_ford"],
+    "condition": {"factions": ["guan"], "night": true},
+    "text": "送進左府的財貨都從這裡過河，夜裡渡口的帳房還亮著燈。",
+    "choices": [
+      {"text": "偷抄渡口的帳本", "check": {"stat": "agi", "difficulty": 6, "by": "self"},
+       "effect": {"text": "你趁帳房打盹，把帳本抄下一份。", "clue_items": {"fs_ledger": 1}},
+       "fail_effect": {"text": "這次沒成，可以再來。"}},
+      {"text": "不碰帳本", "effect": {"text": "你在渡口邊站了站，轉身離開。"}}
+    ]
+  },
+  {
+    "id": "fs_prep_witness",
+    "title": "不合的小黃門",
+    "tags": ["待joy寫"],
+    "locations": ["luoyang_palace"],
+    "condition": {"factions": ["guan"]},
+    "text": "一個跟左豐不和的小黃門願意作證，開了價。",
+    "choices": [
+      {"text": "付他三十兩銀子（銀兩 30）", "condition": {"min_stats": {"silver": 30}},
+       "effect": {"text": "你付了三十兩，小黃門點頭答應作證。", "stats": {"silver": -30}, "clue_items": {"fs_witness": 1}}},
+      {"text": "不付", "effect": {"text": "小黃門聳聳肩，轉身走了。"}}
+    ]
+  },
+  {
+    "id": "fs_prep_herb",
+    "title": "背陰崖下的草",
+    "tags": ["待joy寫"],
+    "locations": ["deep_mountain"],
+    "condition": {"factions": ["huang"]},
+    "text": "背陰的崖下長著一種草，老道士說是南華老仙煉藥用的。",
+    "choices": [
+      {"text": "採下一把", "effect": {"text": "你小心採下一把嵩陰草，收進懷裡。", "clue_items": {"fs_herb": 1}}},
+      {"text": "不採", "effect": {"text": "你看了那草一眼，沒有動手。"}}
+    ]
+  },
+  {
+    "id": "fs_prep_ash",
+    "title": "南華觀的老道",
+    "tags": ["待joy寫"],
+    "locations": ["jade_cave"],
+    "condition": {"factions": ["huang"]},
+    "text": "看守的白髮老道問了一個太平道的問題，答得上來才讓你取丹爐裡的灰。",
+    "choices": [
+      {"text": "回答老道的問題", "check": {"stat": "wis", "difficulty": 7, "by": "self"},
+       "effect": {"text": "老道點點頭，讓你取了一撮丹爐灰。", "clue_items": {"fs_ash": 1}},
+       "fail_effect": {"text": "這次沒成，可以再來。"}},
+      {"text": "不答，轉身離開", "effect": {"text": "你向老道拱了拱手，退了出來。"}}
+    ]
+  },
+  {
+    "id": "fs_prep_fungus",
+    "title": "老樹根下",
+    "tags": ["待joy寫"],
+    "locations": ["yu_river"],
+    "condition": {"factions": ["huang"]},
+    "text": "老樹根下長著白苓，得耐心找。",
+    "choices": [
+      {"text": "蹲下來慢慢找", "effect": {"text": "你找了好一陣，終於挖到一株淯水白苓。", "clue_items": {"fs_fungus": 1}}},
+      {"text": "不找了", "effect": {"text": "你直起腰，往別處去了。"}}
+    ]
+  }
+]

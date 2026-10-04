@@ -1,0 +1,272 @@
+{
+  "items": [
+    {"id": "fs_reeds", "name": "葦束"},
+    {"id": "fs_oil", "name": "膏油"},
+    {"id": "fs_dry_reeds", "name": "長社的乾葦"},
+    {"id": "fs_blood_letter", "name": "郡守的血書"},
+    {"id": "fs_ledger", "name": "渡口的貨帳"},
+    {"id": "fs_witness", "name": "宮中的證人"},
+    {"id": "fs_herb", "name": "嵩陰草"},
+    {"id": "fs_ash", "name": "丹爐灰"},
+    {"id": "fs_fungus", "name": "淯水白苓"}
+  ],
+  "guanyin": {
+    "side": "huang",
+    "squad_faction": "guan",
+    "regions": ["jizhou", "yingru"],
+    "text": "你從官軍的行囊裡摸出一小錠官銀，悄悄收進懷裡。"
+  },
+  "chains": [
+    {
+      "id": "fs_changshe_guan", "event": "changshe_fire", "side": "guan", "kind": "天時地利", "front": "yingru",
+      "fragments": [
+        {"region": "yingru", "source": "action", "text": "黃巾在長社城外紮營，營帳全搭在去年沒割的荒草坡上，風一吹，草浪一直漫到營門口。"},
+        {"region": "yingru", "source": "event", "event": "fs_ev_boatman", "text": "「這時節的大風，都是半夜從{風向}邊刮過來的，刮起來連船都拴不住。」"},
+        {"region": "luoyang", "source": "action", "text": "靈台的太史私下說，今年五月夜裡多大風，風從{風向}來。"},
+        {"region": "yingru", "source": "talk", "character": "huangfusong", "stand_in": "zhujun", "topic": "問起破敵之策", "affinity_min": 20,
+         "text": "「兵有奇變，不在眾寡。賊依草結營，若有引火之物，一夜可破。」"}
+      ],
+      "final": {
+        "location": "changshe", "label": "束苣乘城", "night": true,
+        "requires": {"clue_items": {"fs_reeds": 3, "fs_oil": 2}},
+        "question": "軍司馬問：「火從哪一面放？」",
+        "options": [{"id": "東", "text": "東"}, {"id": "南", "text": "南"}, {"id": "西", "text": "西"}, {"id": "北", "text": "北"}],
+        "answer": "tianji:wind",
+        "figure": "huangfusong", "stand_in": "zhujun",
+        "success_text": "你把葦束膏油交進營中，又在沙盤上畫了風向。{人物}看了很久，只說：「就等那一夜。」",
+        "wrong": {"text": "軍司馬搖頭：「這一面放火，燒的是我們自己。」", "lose_items": ["fs_reeds", "fs_oil"]}
+      }
+    },
+    {
+      "id": "fs_changshe_huang", "event": "changshe_fire", "side": "huang", "kind": "推理", "front": "yingru",
+      "invalid_if": {"figure_out": "bocai"},
+      "fragments": [
+        {"region": "yingru", "source": "action", "text": "汝南的油坊這幾天被官軍包了，膏油一車一車往長社送。"},
+        {"region": "yingru", "source": "action", "text": "長社城頭這幾夜堆了好些乾葦，捆得整整齊齊，不像是要燒飯的。"},
+        {"region": "yingru", "source": "event", "event": "fs_ev_boatman", "text": "「前兩天官軍把我叫去，問的全是颳風的事。這時節夜裡的風都從{風向}邊來。」"},
+        {"region": "jizhou", "source": "talk", "character": "zhangliang", "topic": "問起兵法", "affinity_min": 0,
+         "text": "「紮營先看風。草深的地方不能住人，要住就住上風處。」"}
+      ],
+      "final": {
+        "location": "huangjin_camp", "label": "勸營",
+        "requires": {"any_of": [{"clue_items": {"fs_dry_reeds": 1}}, {"affinity": {"bocai": 30}}]},
+        "unready": "官軍縮在城裡，我還怕他放火？",
+        "question": "波才問：「那你說，營往哪邊挪？」",
+        "options": [{"id": "東", "text": "東"}, {"id": "南", "text": "南"}, {"id": "西", "text": "西"}, {"id": "北", "text": "北"}],
+        "answer": "tianji:wind",
+        "success_text": "波才盯著那束乾葦看了半晌，啐了一口：「拔營。」",
+        "wrong": {"text": "「挪到那邊？官軍做夢都要笑醒。」", "affinity": {"bocai": -5}}
+      }
+    },
+    {
+      "id": "fs_changshe_haoqiang", "event": "changshe_fire", "side": "haoqiang", "kind": "反直覺抉擇", "front": "yingru",
+      "fragments": [
+        {"region": "yingru", "source": "action", "text": "長社城裡的官軍已經在殺馬吃了。"},
+        {"region": "yingru", "source": "action", "text": "波才的人在汝南四處搶糧，連來年的種子都搶。"},
+        {"region": "luoyang", "source": "action", "text": "大司農的倉吏說，往潁川的軍糧扣在半路，等一道蓋印的公文。"},
+        {"region": "yingru", "source": "talk", "character": "caocao", "topic": "談起糧草", "affinity_min": 0,
+         "text": "「打仗缺的是糧。手上有糧的人，兩邊都得對他客氣。」"}
+      ],
+      "final": {
+        "requires": {"counters": {"two_buyers": 1}},
+        "steps": [
+          {"location": "changshe", "label": "交糧", "requires": {"grain": 4, "check": {"stat": "wis", "dc": 6}},
+           "wrong": {"text": "帳房翻了兩頁就看穿了假帳，糧車被扣下了。", "lose_grain": true},
+           "success_text": "長社的帳房在你的契上按了手印。"},
+          {"location": "huangjin_camp", "label": "交糧", "requires": {"grain": 4, "check": {"stat": "agi", "dc": 6}},
+           "wrong": {"text": "半路撞上官軍斥候，糧車被扣下了。", "lose_grain": true},
+           "success_text": "黃巾的帳房在你的契上按了手印。"}
+        ],
+        "success_text": "兩邊的帳房都在你的契上按了手印。不論那一夜誰勝誰敗，他們都欠你一份人情。"
+      }
+    },
+    {
+      "id": "fs_luzhi_guan", "event": "luzhi_jailed", "side": "guan", "kind": "拼圖", "front": "jizhou",
+      "invalid_if": {"figure_out": "luzhi"},
+      "fragments": [
+        {"region": "jizhou", "source": "action", "text": "聽說朝廷要派個小黃門來監軍，叫左豐。上一個被他監過的郡守，傾家蕩產才保住官。"},
+        {"region": "jizhou", "source": "talk", "character": "luzhi", "topic": "問起監軍", "affinity_min": 0,
+         "text": "「軍中一錢一粟都是將士的命，我拿什麼去填宦官的口？」"},
+        {"region": "luoyang", "source": "action", "text": "左豐家這半年起了三進大宅，錢從哪來，大家心裡有數。"},
+        {"region": "luoyang", "source": "action", "text": "大將軍府的掾屬說：大將軍不聽什麼冤不冤，只聽扳倒誰對他有好處。"}
+      ],
+      "final": {
+        "location": "dajiangjun_fu", "label": "呈證",
+        "requires": {"clue_items": {"fs_blood_letter": 1, "fs_ledger": 1, "fs_witness": 1}},
+        "question": "掾屬問：「你打算怎麼跟大將軍說？」",
+        "options": [
+          {"id": "1", "text": "盧中郎冤枉", "wrong": {"text": "何進聳聳肩，把證物退還給你。"}},
+          {"id": "2", "text": "扳倒左豐，宮裡就少一個跟大將軍作對的人"},
+          {"id": "3", "text": "不辦的話，證據就送到別人手上", "wrong": {"text": "何進大怒，「宮中的證人」被收走了。", "lose_items": ["fs_witness"]}}
+        ],
+        "answer": "2",
+        "success_text": "何進把三樣東西翻來覆去看了幾遍，叫人收進匣子：「這件事，本將軍自有主張。」"
+      }
+    },
+    {
+      "id": "fs_luzhi_huang", "event": "luzhi_jailed", "side": "huang", "kind": "累積", "front": "jizhou",
+      "invalid_if": {"figure_out": "luzhi"},
+      "fragments": [
+        {"region": "jizhou", "source": "action", "text": "官軍營裡傳出來的：朝廷派來監軍的左豐，要的不是戰功，是錢。"},
+        {"region": "jizhou", "source": "talk", "character": "zhangbao", "topic": "問起洛陽", "affinity_min": 0,
+         "text": "「宮裡也有黃天的信徒，大賢良師早年埋下的。馬元義的事之後，他們都躲得很深。」"},
+        {"region": "luoyang", "source": "action", "text": "白馬寺後門有個掃地的老宦官，牆上常有一個小小的黃圈，旁人只當是孩子亂畫。"},
+        {"region": "luoyang", "source": "action", "text": "左豐收錢有規矩：不收銅錢，只收金帛，而且要宮外的人轉手。"}
+      ],
+      "final": {
+        "location": "baima_temple", "label": "黃圈",
+        "requires": {"counters": {"guanyin": 5}},
+        "question": "老宦官在掃地，牆上有個黃圈。",
+        "options": [
+          {"id": "1", "text": "在牆上也畫一個黃圈，等他來"},
+          {"id": "2", "text": "直接把包袱塞給他", "wrong": {"text": "他裝作不認識你。"}},
+          {"id": "3", "text": "亮出黃巾", "wrong": {"text": "他嚇得跑了，一個遊戲日內不會再出現。", "cooldown_days": 1}}
+        ],
+        "answer": "1",
+        "success_text": "老宦官接過包袱掂了掂，沒有多看你一眼：「話會帶到。」"
+      }
+    },
+    {
+      "id": "fs_luzhi_haoqiang", "event": "luzhi_jailed", "side": "haoqiang", "kind": "情誼", "front": "jizhou",
+      "fragments": [
+        {"region": "luoyang", "source": "action", "text": "太學的諸生在議論：盧中郎若真因為不肯行賄下獄，天下讀書人的心就寒了。"},
+        {"region": "yingru", "source": "action", "text": "汝南的士人說，本初公子最看重的是名聲。四世三公的門楣，他比誰都看得重。"},
+        {"region": "luoyang", "source": "action", "text": "袁本初在大將軍府走動得勤，何進的話，他說得上三分。"},
+        {"region": "luoyang", "source": "talk", "character": "yuanshao", "topic": "談起時局", "affinity_min": 0,
+         "text": "「宦官弄權，忠良受辱，袁家世受國恩，豈能坐視？只是……此事牽連甚廣。」"}
+      ],
+      "final": {
+        "location": "dajiangjun_fu", "label": "說袁",
+        "requires": {"affinity": {"yuanshao": 40}},
+        "question": "袁紹沉吟：「此事牽連甚廣……」",
+        "options": [
+          {"id": "1", "text": "盧中郎是天下名士，救他，清議會記住袁家"},
+          {"id": "2", "text": "宦官該殺", "wrong": {"text": "袁紹變色：「牽連甚廣。」", "affinity": {"yuanshao": -5}}},
+          {"id": "3", "text": "救下盧植，北中郎將的兵就欠袁家人情",
+           "wrong": {"text": "說得太露骨，他外寬內忌最忌被看穿。", "affinity": {"yuanshao": -5}}}
+        ],
+        "answer": "1",
+        "success_text": "袁紹撫著案上的竹簡沉吟良久：「此事，袁家不能不說話。」"
+      }
+    },
+    {
+      "id": "fs_wancheng_guan", "event": "wancheng", "side": "guan", "kind": "情誼", "front": "nanyang",
+      "invalid_if": {"figure_out": "sunjian"},
+      "fragments": [
+        {"region": "nanyang", "source": "action", "text": "孫司馬帶來的江東子弟打起仗來不要命，說是要讓中原人看看江東的本事。"},
+        {"region": "nanyang", "source": "talk", "character": "sunjian", "topic": "問起江東", "affinity_min": 0,
+         "text": "「我十七歲在錢唐單刀趕走海賊，那時就知道，打仗第一個衝上去的人才有名字。」"},
+        {"region": "yingru", "source": "talk", "character": "zhujun", "topic": "問起南陽", "affinity_min": 0,
+         "text": "「孫文臺勇則勇矣，就怕他衝得太前面，沒人跟得上。給他一隊肯跟著他的人，他什麼城都上得去。」"},
+        {"region": "yingru", "source": "action", "text": "宛城東北角的城牆年久失修，雨後塌過一回，補的是新土。"}
+      ],
+      "final": {
+        "location": "wan_city", "label": "見孫堅",
+        "requires": {"affinity": {"sunjian": 50}},
+        "question": "孫堅：「我是要第一個上的，你跟不跟？」",
+        "options": [
+          {"id": "1", "text": "我帶一隊人跟在你後面"},
+          {"id": "2", "text": "主將不必親自先登", "wrong": {"text": "孫堅嗤之以鼻。", "affinity": {"sunjian": -5}}},
+          {"id": "3", "text": "讓我先上", "wrong": {"text": "你這一句是在搶他的功，孫堅的臉沉了下來。", "affinity": {"sunjian": -5}}}
+        ],
+        "answer": "1",
+        "then": [
+          {"question": "孫堅：「從哪裡下手？」",
+           "options": [{"id": "東北角", "text": "東北角"}, {"id": "正門", "text": "正門"}, {"id": "西牆", "text": "西牆"}],
+           "answer": "東北角"}
+        ],
+        "success_text": "孫堅大笑，拍著你的肩：「好！東北角，雞鳴時分，你帶人跟緊了。」",
+        "success_versions": {
+          "甲": "孫堅大笑，拍著你的肩：「好！東北角，雞鳴時分，你帶人跟緊了。」",
+          "乙": "孫堅把繩子在手上繞了兩圈：「下雨那夜，東北角，你帶人跟緊了。」"
+        },
+        "wrong": {"text": "孫堅搖了搖頭。", "affinity": {"sunjian": -5}}
+      }
+    },
+    {
+      "id": "fs_wancheng_huang", "event": "wancheng", "side": "huang", "kind": "累積", "front": "nanyang",
+      "invalid_if": {"figure_out": "zhaohong"},
+      "fragments": [
+        {"region": "nanyang", "source": "action", "text": "南陽黃巾營的糧只夠吃到秋天。趙將軍每天親自去數糧袋。"},
+        {"region": "nanyang", "source": "talk", "character": "zhaohong", "topic": "問起糧", "affinity_min": 0,
+         "text": "「城牆再高，沒糧也守不過一個月。我當郡兵那幾年，看過太多城是餓開的。」"},
+        {"region": "yingru", "source": "action", "text": "往南陽的糧要走荒丘那條官道，官軍的巡騎常在那裡截。"},
+        {"region": "nanyang", "source": "action", "text": "城裡的人說，官軍圍城最怕拖，拖到秋收他們的兵就要散。",
+         "versions": {
+           "甲": "城裡的人說，官軍圍城最怕拖，拖到秋收他們的兵就要散。",
+           "乙": "圍城的弟兄說，城裡的糧比我們少，誰先斷糧誰就輸。"
+         }}
+      ],
+      "final": {
+        "location": "nanyang_huangjin_camp", "label": "點糧",
+        "requires": {"donations": {"nanyang_huangjin_camp:糧草": 24}},
+        "success_text": "趙弘一袋一袋點過去，點到最後抬頭看了你一眼。他很少看人。「夠了。」"
+      }
+    },
+    {
+      "id": "fs_wancheng_haoqiang", "event": "wancheng", "side": "haoqiang", "kind": "天時地利", "front": "nanyang",
+      "fragments": [
+        {"region": "nanyang", "source": "action", "text": "新野的縣令早就跑了，縣衙裡只剩幾個老吏在看門。"},
+        {"region": "nanyang", "source": "action", "text": "等宛城那一仗打起來，南陽郡的兵全都會調進城，周邊的縣就空了。"},
+        {"region": "luoyang", "source": "action", "text": "南陽各縣的戶籍與地契冊，正本都在縣衙裡。誰拿著冊子，誰就說了算。"},
+        {"region": "nanyang", "source": "event", "event": "fs_ev_xinye_clerk", "text": "「誰能讓縣裡的人吃上飯，冊子就交給誰。」"}
+      ],
+      "final": {
+        "location": "xinye", "label": "接冊", "window": "during_muster",
+        "requires": {"grain": 4},
+        "question": "老縣吏抱著冊子不放。",
+        "options": [
+          {"id": "1", "text": "開倉放糧，讓縣裡的人自己推你"},
+          {"id": "2", "text": "帶人進縣衙直接拿冊子", "wrong": {"text": "老吏把冊子扔進火盆，這次不算。"}}
+        ],
+        "answer": "1",
+        "success_text": "老縣吏把冊子捧出來的時候，縣衙外跪了一地的人。"
+      }
+    },
+    {
+      "id": "fs_zhangjiao_guan", "event": "zhangjiao_dies", "side": "guan", "kind": "推理", "front": "jizhou",
+      "fragments": [
+        {"region": "jizhou", "source": "action", "text": "大賢良師已經一個月沒在壇前露面了，夜裡常聽見他咳。"},
+        {"region": "jizhou", "source": "talk", "character": "luzhi", "stand_in": "dongzhuo", "topic": "問起廣宗", "affinity_min": 0,
+         "text": "「張角的藥要是斷了，廣宗不攻自破。」"},
+        {"region": "yingru", "source": "action", "text": "嵩山的採藥人說，今年有人出高價收一種只長在背陰崖下的草，收了就往北送。"},
+        {"region": "jizhou", "source": "action", "text": "白馬津的船家說，這陣子往北渡河的{偽裝}特別多，船錢給得也大方。"}
+      ],
+      "final": {
+        "location": "baima_ford", "label": "盤查",
+        "question": "渡口排著一長串車馬。",
+        "options": [
+          {"id": "鹽車", "text": "搜鹽車"}, {"id": "棺木", "text": "搜棺木"}, {"id": "香客", "text": "搜香客"}, {"id": "商隊", "text": "搜商隊"}
+        ],
+        "answer": "tianji:disguise",
+        "success_text": "你從{偽裝}的夾層裡翻出一包包曬乾的草藥，按規矩當眾燒了。船家們看著火，沒人敢出聲。",
+        "wrong": {"text": "什麼都沒搜到。", "cooldown_days": 1}
+      }
+    },
+    {
+      "id": "fs_zhangjiao_huang", "event": "zhangjiao_dies", "side": "huang", "kind": "拼圖", "front": "jizhou",
+      "invalid_if": {"figure_out": "zhangjiao"},
+      "fragments": [
+        {"region": "jizhou", "source": "action", "text": "大賢良師病了。壇前的道士不讓人說，可是煎藥的味道整條街都聞得到。"},
+        {"region": "jizhou", "source": "talk", "character": "zhangliang", "topic": "問起大哥", "affinity_min": 0,
+         "text": "「大哥說這病是天數。我不信天數，我只信藥。南華老仙留過一張方子，聽說在南陽一個老醫手上。」"},
+        {"region": "nanyang", "source": "action", "text": "淯水邊的老樹根下長白苓，南陽的醫家說是好東西，只是難找。"},
+        {"region": "nanyang", "source": "event", "event": "fs_ev_xinye_doctor",
+         "text": "「這方子要三味：嵩山背陰崖下的草、南華觀丹爐裡的灰、淯水的白苓。先煎苓，後下草，灰化在符水裡。順序錯了就是毒。」"}
+      ],
+      "final": {
+        "location": "guangzong", "label": "煎藥",
+        "requires": {"clue_items": {"fs_herb": 1, "fs_ash": 1, "fs_fungus": 1}},
+        "question": "張梁捧著藥罐問：「怎麼煎？」",
+        "options": [
+          {"id": "1", "text": "三味一起下鍋"},
+          {"id": "2", "text": "先煎苓，後下草，灰化在符水裡"},
+          {"id": "3", "text": "先煎草，後下苓，灰撒在藥上"}
+        ],
+        "answer": "2",
+        "success_text": "張梁接過藥碗，親手端進內室。過了很久，裡面傳出一聲咳，接著是一句很輕的話。張梁出來時，眼眶是紅的。",
+        "wrong": {"text": "藥煎壞了，三味全都廢了。", "lose_all": true}
+      }
+    }
+  ]
+}
