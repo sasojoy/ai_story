@@ -364,3 +364,56 @@ def escort_at(state: GameState, content: Content, faction: str | None, loc_id: s
 def ambusher(content: Content, faction: str | None) -> str | None:
     """護糧路上撞上的敵方截糧隊：對方的運糧隊。沒有對手陣營（豪強、散人）是 None。"""
     return content.orders.convoy_squads.get(ENEMY.get(faction or "", ""))
+
+
+# ── 給假人的查詢（計畫 T6「假人」）──────────────────────────────
+
+
+def win_counts(state: GameState, content: Content, faction: str | None, loc_id: str) -> bool:
+    """在這裡遊歷打贏，可能替這週還沒達成的攻城或截糧記一次。"""
+    front = rules.front_of(content, loc_id)
+    for o in current(state, content, faction):
+        if o.done:
+            continue
+        if o.template == "siege" and o.front == front:
+            return True
+        if o.template == "intercept" and o.location is not None and loc_id in neighbors(content, o.location):
+            return True
+    return False
+
+
+def duty_counts(state: GameState, content: Content, faction: str | None, loc_id: str) -> bool:
+    """在這裡做守勢行動，會替這週還沒達成的守城記一次。"""
+    front = rules.front_of(content, loc_id)
+    return any(o.template == "defend" and not o.done and o.front == front for o in current(state, content, faction))
+
+
+def strike_on(state: GameState, content: Content, faction: str | None, fid: str) -> bool:
+    """這週有還沒達成、打這位人物的打擊軍令。"""
+    return any(o.template == "strike" and not o.done and o.figure == fid for o in current(state, content, faction))
+
+
+def targets(state: GameState, content: Content, faction: str | None) -> list[str]:
+    """假人往哪裡走：這週還沒達成的軍令要去的地點（攻城、守城：那條戰線的地點；截糧：{地點} 與相鄰站；護糧：身上有
+    這一道的糧車就是終點，沒有而且糧草夠就是起點；打擊：人物當下的所在），照內容檔的地點順序。"""
+    from .materials import grain_of  # noqa: PLC0415  只有這裡用得到
+
+    p = state.player
+    wanted: set[str] = set()
+    for o in current(state, content, faction):
+        if o.done:
+            continue
+        if o.template in ("siege", "defend"):
+            wanted |= {loc for loc in content.locations if rules.front_of(content, loc) == o.front}
+        elif o.template == "intercept" and o.location is not None:
+            wanted |= neighbors(content, o.location)
+        elif o.template == "escort":
+            if p.convoy is not None and p.convoy.order == o.id:
+                wanted.add(p.convoy.to_loc)
+            elif p.convoy is None and o.start is not None and grain_of(state, content) >= content.config.convoy_grain:
+                wanted.add(o.start)
+        elif o.template == "strike" and o.figure is not None:
+            fs = figures.state_of(state, content, o.figure)
+            if fs.status == "active" and fs.location:
+                wanted.add(fs.location)
+    return [loc for loc in content.locations if loc in wanted]

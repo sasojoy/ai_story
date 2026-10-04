@@ -597,3 +597,76 @@ def test_a_returning_player_who_finished_the_base_steps_keeps_going(on):
     game.state.player.tutorial_step = 6
     game._reset_player_for_new_season(2)
     assert game.state.player.tutorial_step == 6
+
+
+# ── Task 9：假人照軍令出力、第一週走完一道軍令 ─────────────────────
+
+
+def _bot_pick(game, faction):
+    from tianxia import bot_policy
+    from tianxia.state import BotProfile
+
+    game.content.config.bot_strength = 1.0  # 永遠挑最高分
+    profile = BotProfile(personality="普通", seed=1, faction=faction, season_number=1)
+    options = [o for o in game.options(odds=False) if o.enabled and o.id != "act:rest"]
+    return bot_policy.pick(game, options, profile, random.Random(0))
+
+
+def test_bot_does_duty_for_a_defend_order(on):
+    game = _game(on, faction="guan", at="changshe")
+    _order(game, "defend", "guan", front="yingru")
+    assert _bot_pick(game, "guan") == "act:duty"
+
+
+def test_bot_heads_for_its_intercept_place_and_fights_there(on):
+    game = _game(on, faction="guan", at="nanyang_road")
+    _order(game, "intercept", "guan", front="nanyang", location="nanyang_wilds")
+    assert _bot_pick(game, "guan") == "move:wan_city"  # 宛城是南陽郊野的相鄰站，截糧在那裡也算
+    game.state.player.location = "wan_city"
+    assert _bot_pick(game, "guan") == "act:train"  # 宛城本來沒有敵人，只有軍令帶來的糧隊
+
+
+def test_bot_takes_a_cart_when_it_has_grain(on):
+    game = _game(on, faction="guan", at="xinye")
+    _order(game, "escort", "guan", front="nanyang", start="xinye", end="wan_city")
+    game.state.player.materials["man_1"] = 4
+    assert _bot_pick(game, "guan") == "act:convoy"
+
+
+def test_bot_challenges_a_strike_target_at_even_odds(on):
+    from tianxia import bot_policy
+
+    game = _game(on, faction="guan")
+    game.state.player.location = figures.state_of(game.state, on, "bocai").location
+    with mock.patch.object(Game, "challenge_odds", return_value="五五波"):
+        assert bot_policy.score(game, next(o for o in game.options(odds=False) if o.id == "act:challenge:bocai"),
+                                None) is None  # 沒有軍令：五五波不打
+        _order(game, "strike", "guan", front="yingru", figure="bocai")
+        assert _bot_pick(game, "guan") == "act:challenge:bocai"
+
+
+def test_new_player_can_join_and_finish_an_order_in_week_one(on):
+    """版本目標第四節第 2 條（真實內容）：新角色第 1 週內投靠官軍、看到三道軍令、完成其中一道的個人部分。
+    移動用疾行（只看規則，不看路程）。"""
+    game = _game(on, at="yingchuan")
+    game.state.player.tutorial_step = 6
+    game.advance(200)  # 跨過開季後第一個曆時交界：第 1 週發令
+    game.state.player.stamina = 150
+    game.travel("changshe", "dash")
+    game.choose("faction:guan")
+    game.choose("faction:confirm")
+    assert len(game.orders_view()) == 3
+    target = next(o for o in orders.current(game.state, on, "guan") if o.template in ("intercept", "siege"))
+    place = target.location if target.template == "intercept" else next(
+        loc for loc in on.locations if rules.front_of(on, loc) == target.front and on.locations[loc].enemies
+    )
+    game.state.player.location = place  # 輿圖只能安排去看得見的地方；這裡只看軍令的規則，直接站過去
+    for _ in range(40):
+        if target.progress:
+            break
+        game.state.player.stamina = 150
+        with _win():
+            game.choose("act:train")
+    assert target.progress.get("甲") == 1
+    assert orders.week_of(game.state, on) == 1
+    assert game.state.player.tutorial_step == 8

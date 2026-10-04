@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import random
 
-from . import atlas, rules, server_bots
+from . import atlas, orders, rules, server_bots
 from .bot import wants_heal
 from .engine import FREE_TEXT_OPTION, Game, Option
 from .models import Content, Effect, FactionDef
@@ -26,6 +26,12 @@ TRAIN_MOVE_SCORE = 0.5  # 往「遊歷對自己陣營有利」的地點走，額
 # 前線以外遇上了才打；「打擊大勢人物」軍令讓假人專程去找人是 T6 的事
 CHALLENGE_SCORE = 1.5
 CHALLENGE_ODDS = ("穩勝", "有把握")  # 假人只挑這兩種勝算的人物（輸了要賠銀兩、扣氣血）
+# 軍令（計畫 T6）：替這週的軍令記一次，比推三點大勢還值得；往軍令要去的地方走，比就地推一點大勢值得——
+# 不然假人永遠就地遊歷推大勢，軍令湊不滿（整季模擬 T11 照實回報）
+ORDER_SCORE = 30.0
+ORDER_MOVE_SCORE = 12.0
+DUTY_SCORE = 0.5  # 守勢行動本身（不替軍令記功時）：低於探索，不然假人整天巡哨
+STRIKE_ODDS = CHALLENGE_ODDS + ("五五波",)  # 有打擊軍令點名這位人物時，五五波也去打
 PRACTICE_CHANCE = 0.2  # 每次行動順便鍛鍊一門的機率（練功不花心得，不能每次都練）
 SKILL_NAME_TRIES = 5
 
@@ -113,16 +119,28 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
         return 0.0 if arg == "back" else None  # 假人不求見大勢人物（不呼叫模型）；萬一停在求見選單上，只會按返回
     if kind == "move":
         base = HOME_MOVE_SCORE if arg == _front_hop(game, profile) or arg in _home(game, profile) else AWAY_MOVE_SCORE
-        return base + (TRAIN_MOVE_SCORE if _train_value(game, profile, arg) > 0 else 0.0)
+        order_hop = ORDER_MOVE_SCORE if arg.partition(":")[0] == _order_hop(game) else 0.0  # 往軍令要去的地方（計畫 T6）
+        return base + order_hop + (TRAIN_MOVE_SCORE if _train_value(game, profile, arg) > 0 else 0.0)
     if kind == "act":
         if arg.startswith("challenge:"):  # 挑戰本人：打得贏才去（打不贏的、閉門不見的按不下去，本來就不在候選裡）
-            return CHALLENGE_SCORE if game.challenge_odds(arg.partition(":")[2]) in CHALLENGE_ODDS else None
+            fid = arg.partition(":")[2]
+            odds = game.challenge_odds(fid)
+            if orders.strike_on(game.state, game.content, game.state.player.faction, fid):  # 打擊軍令點名他（計畫 T6）
+                return ORDER_SCORE + CHALLENGE_SCORE if odds in STRIKE_ODDS else None
+            return CHALLENGE_SCORE if odds in CHALLENGE_ODDS else None
         if arg == "call":
             return None
         if arg == "socialize" and (game.socialize_starts_dialogue() or game.socialize_is_futile()):
             return None
         if arg == "train":
-            return TRAIN_SCORE + _train_value(game, profile)
+            s = game.state
+            bonus = ORDER_SCORE if orders.win_counts(s, game.content, s.player.faction, s.player.location) else 0.0
+            return TRAIN_SCORE + _train_value(game, profile) + bonus
+        if arg == "duty":  # 守勢行動（計畫 T6）：替守城記功才值得做
+            s = game.state
+            return DUTY_SCORE + (ORDER_SCORE if orders.duty_counts(s, game.content, s.player.faction, s.player.location) else 0.0)
+        if arg == "convoy":  # 接下糧車：只在有護糧軍令的起點出現
+            return ORDER_SCORE
         return ACT_SCORES.get(arg, 0.0)
     return None
 
@@ -267,3 +285,9 @@ def _losing_front(game: Game, faction_id: str) -> str | None:
     if not fronts:
         return None
     return max(fronts, key=lambda front: -goals[front] * rules.trend_value(game.state, content, front))
+
+
+def _order_hop(game: Game) -> str | None:
+    """往這週軍令要去的地方，路程最近的那一站；已經在、沒有軍令、走不到時是 None（計畫 T6）。"""
+    places = orders.targets(game.state, game.content, game.state.player.faction)
+    return next_hop(game, places) if places else None
