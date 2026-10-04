@@ -177,6 +177,23 @@ def test_locked_chronicle_names_the_locker_and_falls_back(s1, season):
     assert [r.text for r in forced.world.chronicle] == ["長社火攻失利。"] and forced.world.timeline["changshe_fire"].locked_by is None
 
 
+def test_shown_names_go_into_the_text_and_real_names_into_the_timeline(s1, season):
+    """匿名的鎖定者（Lock.shown 是「某位少俠」）：公告、搶輸的一句、改寫的江湖史、豪強的一句都寫 shown；
+    時間軸的 locked_by、losers 留真名。舊資料沒有 shown（None）照舊寫名號；豪強的顯示名記在 third_party_shown。"""
+    w = season.world
+    w.locks["luzhi_jailed"] = Lock(side="guan", name="甲", time=0.0, shown="某位少俠")
+    w.lock_losers["luzhi_jailed"] = [Lock(side="huang", name="乙", time=1.0, shown="某位少俠"), Lock(side="huang", name="丙", time=2.0)]
+    w.third_party["luzhi_jailed"] = ["豪甲", "豪乙"]
+    w.third_party_shown["luzhi_jailed"] = {"豪甲": "某位少俠"}
+    msgs = timetable.resolve(season, s1, event(s1, "luzhi_jailed"), FixedRandom(0.0))
+    third = "朝中替盧中郎說話最力的是袁本初。{name} 在他府上坐了三個晚上。".replace("{name}", "某位少俠、豪乙")
+    assert msgs == ["【江湖大事】" + LUZHI_LOCKED["guan"].replace("{name}", "某位少俠")
+                    + LUZHI_LOSER["guan"].replace("{loser}", "某位少俠、丙") + third]
+    result = w.timeline["luzhi_jailed"]
+    assert (result.locked_by, result.losers) == ("甲", ["乙", "丙"])
+    assert [r.text for r in w.chronicle] == ["盧植續圍廣宗。（某位少俠改寫）"]
+
+
 def test_a_showdown_resolved_with_a_key_uses_the_named_version_when_locked(s1, season):
     """決戰由 T8 給結果鍵（鎖定方一定贏，戰場上定大勝或險勝）：有人鎖定時照樣用具名公告，開頭不再接 preface。"""
     w = season.world

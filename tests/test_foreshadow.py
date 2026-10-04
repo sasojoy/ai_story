@@ -9,15 +9,13 @@ import random
 import pytest
 
 import server
-from conftest import FixedRandom, install_foreshadows
-from tianxia import battle_instance, bot, bot_policy, calendar, foreshadow, rules, skillview, team
+from conftest import CHANGSHE_LOCKED, CHANGSHE_LOSER, FixedRandom, install_foreshadows
+from tianxia import bot, bot_policy, calendar, companion_agent, foreshadow, rules, skillview, team, timetable
 from tianxia.content import ContentError, load_content, validate
 from tianxia.encounter import EncounterResult
 from tianxia.engine import Game, Option
-from tianxia.models import (
-    BattleAct, BattleActionEffect, BattleDef, BattleFaction, BattleOption, BattleOutcome, Condition, Effect, Foreshadows,
-)
-from tianxia.state import BotProfile, FigureState, Lock, TimelineResult
+from tianxia.models import Condition, Effect, Foreshadows
+from tianxia.state import BotProfile, FigureState, GameState, Lock, TimelineResult
 
 DAY = 86400
 
@@ -136,28 +134,60 @@ def test_fragment_never_repeats_and_writes_journal_not_rumor(fs, world):
     assert all("聽到一件事" not in r.text for r in world.get_season().rumors)
 
 
-def test_fragment_rolls_after_every_stamina_spending_action(fs, world, monkeypatch):
-    """探索、遊歷、趕路（輿圖的安排前往）都花體力，花了就抽；打坐、起身、步行不花，不抽。"""
+def test_fragment_rolls_exactly_once_after_every_stamina_spending_action(fs, world, monkeypatch):
+    """每一個花體力的行動之後抽「剛好一次」：探索、遊歷、交友、求見、對話、招募、選單的趕路、折返、輿圖的安排前往；
+    不花體力的（打坐、起身、步行、遞名帖、收回名帖、對話的片段選項）一次都不抽。用 spy 數呼叫次數，不靠抽中與否。"""
     monkeypatch.setattr(team, "fight", lambda *a, **k: EncounterResult(tier="大勝", margin=50, our_power=60, difficulty=1))
-    game = player(fs, world, "甲", "guan", "lake", rng=FixedRandom(0.0))
+    monkeypatch.setattr(companion_agent, "start_dialogue", lambda *a, **k: ["你們寒暄了幾句。"])
+    monkeypatch.setattr(companion_agent, "continue_dialogue", lambda *a, **k: ["他點點頭。"])
+    real = foreshadow.hear_after_action
+    calls: list[str | None] = []
+
+    def spy(state, content, region, rng, world=None):
+        calls.append(region)
+        return real(state, content, region, rng, world)
+
+    monkeypatch.setattr(foreshadow, "hear_after_action", spy)
+    fs.characters["zhujun"].talk_at = "lake"  # 湖邊有兩位人物：交友不直接找人、改按求見
+    game = player(fs, world, "甲", "guan", "lake", rng=FixedRandom(0.99))
     p = game.state.player
 
-    def heard_after(action) -> bool:
-        p.fragments = {}
+    def calls_after(action) -> int:
+        p.stamina = 150.0
+        calls.clear()
         action()
-        return p.fragments != {}
+        return len(calls)
 
-    assert heard_after(lambda: game.choose("act:train"))
-    assert heard_after(lambda: game.choose("act:explore"))
+    assert calls_after(lambda: game.choose("act:explore")) == 1
     game.state.pending_event = None
-    assert not heard_after(lambda: game.choose("act:rest"))
-    assert not heard_after(lambda: game.choose("act:stand"))
+    assert calls_after(lambda: game.choose("act:train")) == 1
+    assert calls_after(lambda: game.choose("act:call")) == 0  # 遞名帖不花體力
+    assert calls_after(lambda: game.choose("call:back")) == 0
+    game.choose("act:call")
+    assert calls_after(lambda: game.choose("call:huangfusong")) == 1  # 求見
+    _talking(game, "huangfusong", 6)
+    assert calls_after(lambda: game.choose("talk:clue:fs_fire_guan:2")) == 0  # 片段選項不花體力
+    assert calls_after(lambda: game.choose("talk:0")) == 1  # 對話一輪
+    game.choose("talk:leave")
+    assert calls_after(lambda: game.choose("act:rest")) == 0
+    assert calls_after(lambda: game.choose("act:stand")) == 0
     game.set_move_mode("walk")
-    assert not heard_after(lambda: game.choose("move:town"))  # 步行不花體力
-    game.choose("road:back")  # 掉頭回湖邊（剛出發，立刻回到原地）
-    assert game.state.player.journey is None and p.location == "lake"
-    assert heard_after(lambda: game.travel("town", "hurry"))  # 輿圖的安排前往：趕路花體力
-    assert p.fragments == {"fs_fire_guan": [0]}  # 抽的是出發那一站（湖邊，北區）
+    assert calls_after(lambda: walk_to_town(game)) == 0  # 步行不花體力
+    assert calls_after(lambda: game.choose("act:socialize")) == 1  # 小鎮只有波才一位：交友直接找他
+    assert calls_after(lambda: game.choose("act:recruit")) == 1
+    game.set_move_mode("hurry")
+    assert calls_after(lambda: game.choose("move:lake:hurry")) == 1  # 選單的趕路
+    game.advance(60)  # 走了一段（趕路 3 分鐘的路要 90 秒）
+    assert calls_after(lambda: game.choose("road:back:hurry")) == 1  # 折返也是趕路
+    game.advance(600)
+    assert p.journey is None and p.location == "town"
+    assert calls_after(lambda: game.travel("lake", "hurry")) == 1  # 輿圖的安排前往
+    assert calls == ["north"]  # 抽的是出發那一站的大區
+
+
+def walk_to_town(game: Game) -> None:
+    game.choose("move:town")
+    game.advance(game.state.player.journey.arrive_at[-1] - game.state.world.time)
 
 
 def test_event_fragment_goes_to_each_faction_its_own(fs, world):
@@ -342,35 +372,72 @@ def test_first_finisher_locks_later_ones_are_losers(fs, world):
 
 def test_lock_is_invisible(fs, world):
     """Review Focus 3：甲鎖定前後，第三人（同陣營、同一個地點、什麼都還沒準備）的 main_view 一字不差
-    （場景、傳聞、江湖史、大勢、公告、江湖紀錄、選單），決戰的起點與選項也一樣。"""
+    （場景、傳聞、江湖史、大勢、公告、江湖紀錄、選單）。決戰的起點與選項不讀 locks（只有 timetable.resolve 讀），
+    所以這裡改驗揭曉：鎖定真的寫下了，而且要到大事當天的公告與江湖史才看得到甲的名號。"""
     t = night_in_window(fs)
     jia = player(fs, world, "甲", "guan", "lake", time=t)
     jia.state.player.clue_items = {"fs_reeds": 1, "fs_oil": 1}
     jia._save_season()
     ding = player(fs, world, "丁", "guan", "lake", time=t)
-    definition = BattleDef(
-        id="changshe", name="長社之戰", region="yingru",
-        factions=[BattleFaction(id="guan", name="官軍"), BattleFaction(id="huang", name="黃巾")],
-        acts=[BattleAct(id="a1", title="夜火", text="長社城下。", goal="守住", options=[
-            BattleOption(text="穩守", tag="hold"), BattleOption(text="縱火", tag="fire", faction="guan"),
-        ])],
-        action_tags={"hold": BattleActionEffect(), "fire": BattleActionEffect(trend_delta=3)},
-        outcomes=[BattleOutcome(faction="guan", title="官軍勝", text="火光燭天。")],
-    )
-
-    def battle_start() -> tuple:
-        instance = battle_instance.start_muster(definition, now=100.0)
-        battle_instance.join_faction(instance, "丁", "guan", neili_cap=300)
-        return instance.model_dump(), battle_instance.options_for(instance, definition, "丁")
-
     refresh(ding)
-    before, battle_before = server.main_view(ding), battle_start()
+    before = server.main_view(ding)
     finish_fire_guan(jia, wind(world))
-    assert world.get_season().locks["changshe_fire"].name == "甲"
     refresh(ding)
     assert server.main_view(ding) == before
-    assert battle_start() == battle_before
-    assert option(ding, "fs:fs_fire_guan").label == "束苣乘城（東西還沒備齊）"  # 丁照樣做得了，只是會搶輸
+    assert "甲" not in str(before) and option(ding, "fs:fs_fire_guan").label == "束苣乘城（東西還沒備齊）"  # 丁照樣做得了
+
+    season = world.get_season()
+    reveal = GameState(player=ding.state.player, world=season)
+    msgs = timetable.resolve(reveal, fs, next(e for e in fs.timetable if e.id == "changshe_fire"), FixedRandom(0.5),
+                             key="guan:大勝")
+    assert msgs == ["【江湖大事】" + CHANGSHE_LOCKED.replace("{name}", "甲")]
+    assert season.timeline["changshe_fire"].locked_by == "甲"
+    assert [r.text for r in season.chronicle][-1] == "皇甫嵩火攻長社。（甲改寫）"
+
+
+def test_anonymous_lockers_stay_anonymous_in_the_announcement(fs, world):
+    """匿名的人鎖定、搶輸、做完豪強那一條：公告、江湖史都寫「某位少俠」；時間軸的 locked_by、losers 與 third_party 留真名
+    （T9 的稱號要用）。不匿名的照舊寫名號。"""
+    t = night_in_window(fs)
+    direction = wind(world)
+    changshe = next(e for e in fs.timetable if e.id == "changshe_fire")
+    changshe.locked_chronicle = {"guan": "火具是{name}備下的。"}
+    changshe.third_party_chronicle = "{name} 收了兩邊的糧錢。"
+    jia = player(fs, world, "甲", "guan", "lake", time=t)
+    jia.state.player.anonymous = True
+    jia.state.player.clue_items = {"fs_reeds": 1, "fs_oil": 1}
+    finish_fire_guan(jia, direction)
+    yi = player(fs, world, "乙", "huang", "town", time=t)
+    yi.state.player.anonymous = True
+    yi.state.player.clue_items = {"fs_dry_reeds": 1}
+    yi.choose("fs:fs_fire_huang")
+    yi.choose(f"fs:fs_fire_huang:{direction}")
+    bing = player(fs, world, "丙", "haoqiang", "town", rng=FixedRandom(0.0), time=t)
+    bing.state.player.anonymous = True
+    bing.state.player.fs_counters = {"two_buyers": 1}
+    bing.state.player.materials = {"man_1": 4}
+    bing.choose("fs:fs_fire_haoqiang")
+    bing.state.player.location = "lake"
+    bing.choose("fs:fs_fire_haoqiang")
+    ding = player(fs, world, "丁", "haoqiang", "town", rng=FixedRandom(0.0), time=t)  # 不匿名的豪強
+    ding.state.player.fs_counters = {"two_buyers": 1}
+    ding.state.player.materials = {"man_1": 4}
+    ding.choose("fs:fs_fire_haoqiang")
+    ding.state.player.location = "lake"
+    ding.choose("fs:fs_fire_haoqiang")
+
+    season = world.get_season()
+    assert season.locks["changshe_fire"] == Lock(side="guan", name="甲", time=t, shown="某位少俠")
+    assert season.lock_losers["changshe_fire"] == [Lock(side="huang", name="乙", time=t, shown="某位少俠")]
+    assert season.third_party["changshe_fire"] == ["丙", "丁"]
+    reveal = GameState(player=ding.state.player, world=season)
+    msgs = timetable.resolve(reveal, fs, changshe, FixedRandom(0.5), key="guan:大勝")
+    assert msgs == ["【江湖大事】" + CHANGSHE_LOCKED.replace("{name}", "某位少俠") + CHANGSHE_LOSER.replace("{loser}", "某位少俠")
+                    + changshe.third_party_text.replace("{name}", "某位少俠、丁")]
+    assert [r.text for r in season.chronicle][-2:] == ["火具是某位少俠備下的。", "某位少俠、丁 收了兩邊的糧錢。"]
+    result = season.timeline["changshe_fire"]
+    assert (result.locked_by, result.losers) == ("甲", ["乙"])
+    assert not any(name in msgs[0] for name in "甲乙丙")
 
 
 def test_wrong_answer_penalties(fs, world):
@@ -451,10 +518,64 @@ def test_leaving_the_question_and_follow_up_questions(fs, world):
 
 
 def timetable_when(game: Game, event_id: str) -> float:
-    from tianxia import timetable
-
     event = next(e for e in game.content.timetable if e.id == event_id)
     return timetable.when(game.state, game.content, event)
+
+
+def test_requirements_in_final_and_a_step_add_up(fs, world):
+    """審查 M1：整條另要 4 份糧草（final.requires）、每一趟也要 4 份（係數 0.3：2＋2＋2＝6）。條件照「這一趟加整條」一起算，
+    整條的那份等完成才交，交不夠就不能完成；檢定失敗只沒收這一趟的 2 份。"""
+    chain = next(c for c in fs.foreshadows.chains if c.id == "fs_fire_haoqiang")
+    chain.final.requires.grain = 4
+    validate(fs)
+    t = night_in_window(fs)
+    game = player(fs, world, "甲", "haoqiang", "town", rng=FixedRandom(0.0), time=t)
+    p = game.state.player
+    p.fs_counters = {"two_buyers": 1}
+    p.materials = {"man_1": 4}
+    assert option(game, "fs:fs_fire_haoqiang").enabled  # 這一趟 2 ＋ 整條 2
+    assert game.choose("fs:fs_fire_haoqiang") == ["（本人——成功）", "長社的帳房在你的契上按了手印。", "粗糧 -2"]
+    p.location = "lake"
+    assert option(game, "fs:fs_fire_haoqiang").label == "交糧（東西還沒備齊）"  # 只剩 2 份：不夠這一趟加整條
+    assert game.choose("fs:fs_fire_haoqiang") == ["（此刻無法這麼做。）"]
+    assert "fs_fire_haoqiang" not in p.fs_done and p.materials == {"man_1": 2}
+    p.materials = {"man_1": 4}
+    game.rng = FixedRandom(0.99)
+    assert game.choose("fs:fs_fire_haoqiang") == ["（本人——失敗）", "半路撞上官軍斥候，糧車被扣下。", "粗糧 -2"]
+    p.materials = {"man_1": 4}
+    game.rng = FixedRandom(0.0)
+    assert game.choose("fs:fs_fire_haoqiang") == [
+        "（本人——成功）", "兩邊的帳房都在你的契上按了手印。不論那一夜誰勝誰敗，他們都欠你一份人情。", "粗糧 -4",
+    ]
+    assert p.materials == {} and "fs_fire_haoqiang" in p.fs_done
+
+
+def test_any_of_branch_counts_items_on_top_of_the_rest(fs, world):
+    """any_of 的那一組跟上一層要同一樣東西時，要夠兩份才算（上一層 1 ＋ 乾葦那一組 1）；用情誼那一組就只要 1。"""
+    chain = next(c for c in fs.foreshadows.chains if c.id == "fs_fire_huang")
+    chain.final.requires.clue_items = {"fs_dry_reeds": 1}
+    game = player(fs, world, "乙", "huang", "town", time=night_in_window(fs))
+    p = game.state.player
+    p.clue_items = {"fs_dry_reeds": 1}
+    assert option(game, "fs:fs_fire_huang").label == "勸營（官軍縮在城裡，我還怕他放火？）"
+    p.affinities["bocai"] = 9
+    assert option(game, "fs:fs_fire_huang").enabled
+    p.affinities["bocai"] = 0
+    p.clue_items = {"fs_dry_reeds": 2}
+    game.choose("fs:fs_fire_huang")
+    assert game.choose(f"fs:fs_fire_huang:{wind(world)}")[-1] == "長社的乾葦 -2"
+    assert p.clue_items == {}
+
+
+def test_cannot_seclude_while_answering(fs, world):
+    """審查 M6：看題之後不能去閉關（跟事件待處理一樣）；作罷之後才行。"""
+    game = player(fs, world, "丙", "huang", "port", time=cal(fs, 7, 2))
+    game.state.player.fs_counters = {"guanyin": 2}
+    game.choose("fs:fs_jail_huang")
+    assert game.seclude(2) == ["你現在無法閉關。"] and game.state.player.busy_until is None
+    game.choose("fs:leave")
+    game.seclude(2)
+    assert game.state.player.busy_until is not None
 
 
 def test_haoqiang_chain_is_third_party(fs, world):
@@ -554,27 +675,70 @@ def test_guanyin_on_win_against_guan_squad(fs, world, monkeypatch):
     assert lost.state.player.fs_counters == {}  # 沒打贏
 
 
+def test_guanyin_stops_once_no_open_chain_reads_it(fs, world, monkeypatch):
+    """審查 M3：讀官銀的那條鏈做完了、失效了、或那件大事已經發生，官銀就不再掉（也不擲那一下）。"""
+    _won(monkeypatch)
+    fs.locations["lake"].enemies = ["guan_patrol"]
+    text = fs.foreshadows.guanyin.text
+    done = player(fs, world, "乙", "huang", "lake", rng=FixedRandom(0.0))
+    done.state.player.fs_done = ["fs_jail_huang"]
+    done.choose("act:train")
+    assert done.state.player.fs_counters == {} and text not in done.state.journal[0].lines
+    out = player(fs, world, "丙", "huang", "lake", rng=FixedRandom(0.0))
+    out.state.world.figures["luzhi"] = FigureState(status="retired")
+    out.choose("act:train")
+    assert out.state.player.fs_counters == {}
+    resolved = player(fs, world, "丁", "huang", "lake", rng=FixedRandom(0.0))
+    resolved.state.world.timeline["luzhi_jailed"] = TimelineResult(key="成", time=0.0)
+    resolved.choose("act:train")
+    assert resolved.state.player.fs_counters == {}
+
+
 def test_no_guanyin_or_foreshadow_items_leak_when_no_chain_reads_them(fs, world, monkeypatch):
     """QA：開關開著、季也蓋了章，黃巾在北區打贏官軍的隊伍，但沒有任何鏈讀官銀：江湖紀錄、增減、戰報、背包都看不到
-    官銀或伏筆物品，也不擲那一下骰；有一條鏈讀官銀時，同樣的勝仗才擲得到。"""
+    官銀，也不擲那一下骰；有一條鏈讀官銀時，同樣的勝仗才擲得到。物品那一半（審查 M4）：一條鏈都沒有時，準備事件與
+    片段事件不出現，就算眼前已經是那則準備事件，選了也不給葦束、不寫字。"""
     _won(monkeypatch)
     fs.locations["lake"].enemies = ["guan_patrol"]
     leaks = ("官銀", "guanyin", "葦束", "膏油", "乾葦", "血書", "貨帳", "證人")
+
+    def shown(game: Game) -> list[str]:
+        entry = game.state.journal[0]
+        texts = entry.lines + entry.changes + [entry.tag, skillview.bag_text(game.state, fs)]
+        if game.state.battles:
+            record = game.state.battles[0]
+            texts += record.notes + record.changes + record.materials
+        return texts
+
     reading = [c for c in fs.foreshadows.chains if c.id == "fs_jail_huang"]
     fs.foreshadows.chains = [c for c in fs.foreshadows.chains if c.id != "fs_jail_huang"]
     game = player(fs, world, "乙", "huang", "lake", rng=FixedRandom(0.0))
-    game.state.player.fragments = {"fs_fire_huang": [0, 1]}  # 片段都聽過了：這裡只看官銀與物品
+    game.state.player.fragments = {"fs_fire_huang": [0, 1]}  # 片段都聽過了：這裡只看官銀
     assert calendar.season_one_on(game.state.world, fs)
     game.choose("act:train")
-    entry, record = game.state.journal[0], game.state.battles[0]
-    shown = entry.lines + entry.changes + [entry.tag] + record.notes + record.changes + record.materials
-    shown.append(skillview.bag_text(game.state, fs))
-    assert not any(word in text for text in shown for word in leaks)
-    assert game.state.player.fs_counters == {} and game.state.player.clue_items == {}
+    assert not any(word in text for text in shown(game) for word in leaks)
+    assert game.state.player.fs_counters == {}
     fs.foreshadows.chains += reading
     game.choose("act:train")
     assert game.state.player.fs_counters == {"guanyin": 1}
     assert fs.foreshadows.guanyin.text in game.state.journal[0].lines
+
+    chains, fs.foreshadows.chains = fs.foreshadows.chains, []  # 物品與事件都在、一條鏈都沒有
+    guan = player(fs, world, "甲", "guan", "lake", rng=FixedRandom(0.0))
+    assert calendar.season_one_on(guan.state.world, fs) and not foreshadow.active(guan.state, fs)
+    from tianxia.events import event_candidates
+
+    candidates = [e.id for e in event_candidates(guan.state, fs, "explore")]
+    assert "fs_prep_reeds" not in candidates  # 會給伏筆物品的事件不出現
+    # 老船夫只是因為有鏈引用它才算伏筆事件；一條鏈都沒有時它就是一則不帶線索的一般事件，出現也不會給任何東西
+    guan.state.pending_event = "fs_prep_reeds"  # 眼前已經是那則準備事件（例如鏈在中途被拿掉）
+    guan.choose("choice:0")
+    assert guan.state.player.clue_items == {}
+    assert not any(word in text for text in shown(guan) for word in leaks)
+    fs.foreshadows.chains = chains  # 有鏈時同一個選項才給
+    guan.state.pending_event = "fs_prep_reeds"
+    guan.choose("choice:0")
+    assert guan.state.player.clue_items == {"fs_reeds": 1} and "獲得 葦束 ×1" in guan.state.journal[0].lines
 
 
 # ── 條件、效果、開關 ─────────────────────────────────────
@@ -722,6 +886,36 @@ def test_validate_catches_broken_chains(fs, break_it, message):
     chain = next(c for c in fs.foreshadows.chains if c.id == "fs_fire_guan")
     break_it(chain)
     with pytest.raises(ContentError, match=message):
+        validate(fs)
+
+
+def test_validate_catches_the_review_gaps(fs):
+    """審查 M5：題目沒有選項、對話片段的人物沒有對話的地方、鏈沒有戰況可看、官軍／黃巾的鏈鎖不到那件大事、
+    物品沒有任何一條鏈讀它，都要在載入當下報 ContentError。"""
+    guan = next(c for c in fs.foreshadows.chains if c.id == "fs_fire_guan")
+    jail = next(c for c in fs.foreshadows.chains if c.id == "fs_jail_huang")
+    options = list(guan.final.options)
+    cases = [
+        (lambda: setattr(guan.final, "options", []), lambda: setattr(guan.final, "options", options), "題目要有選項"),
+        (lambda: setattr(guan.fragments[2], "character", "luzhi"), lambda: setattr(guan.fragments[2], "character", "huangfusong"),
+         "talk_at"),
+        (lambda: setattr(guan.fragments[2], "stand_in", "dongzhuo"), lambda: setattr(guan.fragments[2], "stand_in", "zhujun"),
+         "talk_at"),
+        (lambda: setattr(jail, "front", None), lambda: setattr(jail, "front", "jizhou"), "戰況"),
+    ]
+    for break_it, fix_it, message in cases:
+        break_it()
+        with pytest.raises(ContentError, match=message):
+            validate(fs)
+        fix_it()
+        validate(fs)
+    luzhi = next(e for e in fs.timetable if e.id == "luzhi_jailed")
+    luzhi.lock_result = {"guan": "不成"}
+    with pytest.raises(ContentError, match="lock_result"):
+        validate(fs)
+    luzhi.lock_result = {"huang": "成", "guan": "不成"}
+    fs.foreshadows.items.append(fs.foreshadows.items[0].model_copy(update={"id": "fs_spare", "name": "多出來的東西"}))
+    with pytest.raises(ContentError, match="fs_spare"):
         validate(fs)
 
 

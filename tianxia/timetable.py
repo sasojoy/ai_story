@@ -192,13 +192,18 @@ def _push(state: GameState, content: Content, trend_id: str, delta: int) -> None
         change_trend(state, content, trend_id, delta)
 
 
+def shown(lock: Lock) -> str:
+    """公告與江湖史上寫的名字：鎖定時匿名的人是「某位少俠」（Lock.shown）；舊資料沒有 shown 就寫名號。"""
+    return lock.shown or lock.name
+
+
 def _headline(
     state: GameState, content: Content, event: TimetableEvent, outcome: TimetableOutcome, lock: Lock | None,
 ) -> str:
     """公告的主體：有人鎖定、這個結果也有他那一方的具名版本時用具名版本，否則用開頭＋公告。"""
     if lock is None or lock.side not in outcome.locked_text:
         return fill_slots(state, content, event, event.preface + outcome.text)
-    return fill_slots(state, content, event, outcome.locked_text[lock.side]).replace("{name}", lock.name)
+    return fill_slots(state, content, event, outcome.locked_text[lock.side]).replace("{name}", shown(lock))
 
 
 def _loser_line(
@@ -228,11 +233,12 @@ def resolve(
     if outcome is None:
         raise ValueError(f"大事 {event.id} 沒有結果 {full_key}")
     named = lock is not None and lock.side in outcome.locked_text
-    losers = [x.name for x in w.lock_losers.get(event.id, []) if lock is not None and x.side != lock.side]
+    losing = [x for x in w.lock_losers.get(event.id, []) if lock is not None and x.side != lock.side]
+    losers = [x.name for x in losing]  # 時間軸留真名（T9 的稱號）；公告寫顯示名（匿名的是「某位少俠」）
     # 文字先填好再套效果：{官軍主將} 指的是這件事發生「之前」的主將（例：廣宗黃巾大勝，重挫的就是他）
     # 公告的組法（伏筆文件 3.4、5.4）：具名的一段＋這一檔的結果（含 note 與人物的後話）＋搶輸的一筆＋豪強的一筆
     text = _headline(state, content, event, outcome, lock) + fill_slots(state, content, event, outcome.note)
-    loser_line = _loser_line(state, content, event, outcome, lock, losers)
+    loser_line = _loser_line(state, content, event, outcome, lock, [shown(x) for x in losing])
     chronicle = _chronicle(state, content, event, outcome, lock if named else None)
     for trend_id, delta in outcome.trends.items():
         _push(state, content, trend_id, delta)
@@ -246,13 +252,14 @@ def resolve(
     add_world_flags(state, outcome.world_flags_add)
     text += loser_line
     third = w.third_party.get(event.id, [])
+    third_names = "、".join(w.third_party_shown.get(event.id, {}).get(name, name) for name in third)
     if third:  # 豪強是第三方：不論誰贏，每個做完的名字各套一次自己的效果（伏筆文件 2.6）
         for _ in third:
             for trend_id, delta in event.third_party_trends.items():
                 _push(state, content, trend_id, delta)
         line = outcome.third_party_text or event.third_party_text
         if line:
-            text += fill_slots(state, content, event, line).replace("{name}", "、".join(third))
+            text += fill_slots(state, content, event, line).replace("{name}", third_names)
     w.timeline[event.id] = TimelineResult(
         key=full_key, time=w.time, locked_by=lock.name if named else None, losers=losers if named else [], text=text,
     )
@@ -261,7 +268,7 @@ def resolve(
         add_chronicle(state, chronicle)
     if third and event.third_party_chronicle:  # 豪強另記一行（例：「{name} 取得新野」），不論誰贏
         line = fill_slots(state, content, event, event.third_party_chronicle)
-        add_chronicle(state, line.replace("{name}", "、".join(third)))
+        add_chronicle(state, line.replace("{name}", third_names))
     return [f"【江湖大事】{text}"]
 
 
@@ -274,5 +281,5 @@ def _chronicle(
     if named is None:
         return plain
     if named.side in event.locked_chronicle:
-        return fill_slots(state, content, event, event.locked_chronicle[named.side]).replace("{name}", named.name)
-    return f"{plain}（{named.name}改寫）" if plain else plain
+        return fill_slots(state, content, event, event.locked_chronicle[named.side]).replace("{name}", shown(named))
+    return f"{plain}（{shown(named)}改寫）" if plain else plain

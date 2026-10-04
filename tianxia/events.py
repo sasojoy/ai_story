@@ -4,7 +4,7 @@ from __future__ import annotations
 import random
 from typing import Literal
 
-from . import calendar, foreshadow
+from . import foreshadow
 from .models import Choice, Content, Event, Location
 from .rules import check_condition, check_who
 from .state import GameState
@@ -38,9 +38,9 @@ def event_candidates(
     """這裡、現在可以抽的事件（依內容順序）。pool 給探索三選一用："rare" 只要一次性與奇遇，
     "common" 只要可重複的；None 是全部（遊歷、交友照舊用這個）。
     看過的一次性事件不再出現；奇遇沒標 once 的看過也照樣留著（企劃者 2026-10-03 改）。
-    伏筆的事件（片段事件、準備事件，foreshadow.event_ids）掛在第一季開關後面：開關關著時不出現（計畫 T7）。"""
+    伏筆的事件（片段事件、準備事件，foreshadow.event_ids）只在伏筆在跑時出現（foreshadow.active：開關、蓋章、有鏈）。"""
     location = content.locations[state.player.location]
-    hidden = set() if calendar.season_one_on(state.world, content) else foreshadow.event_ids(content)
+    hidden = set() if foreshadow.active(state, content) else foreshadow.event_ids(content)
     candidates: list[Event] = []
     for event in content.events.values():
         if action not in event.actions:

@@ -1,8 +1,9 @@
 """關鍵伏筆（計畫 T7；伏筆文件第二節；濃縮版內容表第四節）：聽片段、對話裡的片段選項、最後一步、暗中鎖定、
 豪強第三方、天機、官銀。內容在 content/foreshadows.json（models.Foreshadows）。
 
-全部掛在第一季開關後面：calendar.season_one_on 不成立（或沒有任何鏈）時，這裡的每個入口都什麼都不做、
-不擲骰、不寫字——beta 那一季一個字都不變。
+全部掛在同一個判斷後面（active：第一季開關開著、這一季開季時也是開的、而且有鏈）：不成立時這裡的每個入口
+（片段、對話的片段選項、最後一步、官銀、準備事件的物品與計數、伏筆事件出不出現）都什麼都不做、不擲骰、不寫字——
+beta 那一季一個字都不變。
 
 鎖定不能露出來（伏筆文件 2.4、計畫 Review Focus 3）：最後一步答對時只寫 locks／lock_losers／third_party，
 不發任何傳聞、不推大勢；玩家看到的敘事不論先完成還是搶輸都一模一樣。只有大事當天的公告與江湖史揭曉（timetable）。
@@ -21,7 +22,7 @@ from .journal import fragment_line
 from .models import (
     Check, Content, FsAsk, FsChain, FsFinal, FsFragment, FsRequires, FsStep, FsWrong, Squad,
 )
-from .rules import check_chance, check_who
+from .rules import check_chance, check_who, display_name
 from .state import GameState, Lock
 from .world_state import WorldStateStore
 
@@ -84,8 +85,9 @@ def _tianji(world: WorldStateStore | None) -> int:
 # ── 找東西 ───────────────────────────────────────────────
 
 
-def on(state: GameState, content: Content) -> bool:
-    """伏筆有沒有在跑：第一季開關開著、這一季開季時也是開的，而且 foreshadows.json 有鏈。"""
+def active(state: GameState, content: Content) -> bool:
+    """伏筆有沒有在跑：第一季開關開著、這一季開季時也是開的（蓋了章），而且 foreshadows.json 至少有一條鏈。
+    所有入口都只看這一個判斷（審查 M4）。"""
     return bool(content.foreshadows.chains) and calendar.season_one_on(state.world, content)
 
 
@@ -117,9 +119,9 @@ def _all_requires(requires: FsRequires) -> Iterator[FsRequires]:
         yield from _all_requires(sub)
 
 
-def reads_counter(content: Content, key: str) -> bool:
-    """有沒有任何一條鏈的條件讀這個計數（官銀只在有人讀時才擲）。"""
-    for c in content.foreshadows.chains:
+def reads_counter(chains: list[FsChain], key: str) -> bool:
+    """這幾條鏈裡有沒有哪一條的條件讀這個計數（官銀只在自己還做得了的鏈讀它時才擲）。"""
+    for c in chains:
         for trip in trips(c.final):
             for req in _requires_of(c.final, trip):
                 if any(key in r.counters for r in _all_requires(req)):
@@ -145,7 +147,7 @@ def event_ids(content: Content) -> set[str]:
 
 def capable(state: GameState, content: Content, c: FsChain) -> bool:
     """這個玩家做得了這條鏈：開關開著、是那個陣營的人（散人與其他陣營都不行）、大事還沒發生、依賴的人物還在、還沒做完。"""
-    if not calendar.season_one_on(state.world, content) or state.player.faction != c.side:
+    if not active(state, content) or state.player.faction != c.side:
         return False
     if c.event in state.world.timeline or _event(content, c.event) is None:
         return False
@@ -155,8 +157,6 @@ def capable(state: GameState, content: Content, c: FsChain) -> bool:
 
 
 def _capable_chains(state: GameState, content: Content) -> list[FsChain]:
-    if not on(state, content):
-        return []
     return [c for c in content.foreshadows.chains if capable(state, content, c)]
 
 
@@ -302,23 +302,46 @@ def _front_ok(state: GameState, content: Content, c: FsChain) -> bool:
     return low <= timetable._front_value(state, content, front) <= high  # noqa: SLF001  T1 換成 rules.trend_value
 
 
-def _one_requires_ok(state: GameState, content: Content, req: FsRequires) -> bool:
+Plan = tuple[dict[str, int], int]  # 這一趟要交出去的（物品 id → 數量, 糧草份量），換算後的量
+
+
+def _plan_one(state: GameState, content: Content, req: FsRequires, plan: Plan) -> Plan | None:
+    """在已經要交的 plan 之上再加這一組條件：物品與糧草跟前面的加在一起才跟背包比（同一樣東西兩處都要，就要夠兩份）；
+    情誼、計數、捐獻只看不交。any_of 照順序挑第一組加得上去的。不成立是 None。"""
     p = state.player
-    if any(p.clue_items.get(k, 0) < need(content, v) for k, v in req.clue_items.items()):
-        return False
-    if materials.grain_of(state, content) < need(content, req.grain):
-        return False
+    items, grain = dict(plan[0]), plan[1] + need(content, req.grain)
+    for item_id, n in req.clue_items.items():
+        items[item_id] = items.get(item_id, 0) + need(content, n)
+    if any(p.clue_items.get(k, 0) < n for k, n in items.items()) or materials.grain_of(state, content) < grain:
+        return None
     if any(p.donations.get(k, 0) < need(content, v) for k, v in req.donations.items()):
-        return False
+        return None
     if any(p.affinities.get(k, 0) < need(content, v) for k, v in req.affinity.items()):
-        return False
+        return None
     if any(p.fs_counters.get(k, 0) < need(content, v) for k, v in req.counters.items()):
-        return False
-    return not req.any_of or any(_one_requires_ok(state, content, sub) for sub in req.any_of)
+        return None
+    if not req.any_of:
+        return items, grain
+    for sub in req.any_of:
+        planned = _plan_one(state, content, sub, (items, grain))
+        if planned is not None:
+            return planned
+    return None
+
+
+def _plan(state: GameState, content: Content, reqs: list[FsRequires]) -> Plan | None:
+    """這幾組條件一起要交出去的東西；有一組不成立就是 None（審查 M1：整條的與這一趟的加在一起算，不是各算各的）。"""
+    plan: Plan | None = ({}, 0)
+    for req in reqs:
+        plan = _plan_one(state, content, req, plan)
+        if plan is None:
+            return None
+    return plan
 
 
 def _requires_ok(state: GameState, content: Content, c: FsChain, trip: FsStep) -> bool:
-    return all(_one_requires_ok(state, content, req) for req in _requires_of(c.final, trip))
+    """這一趟做得了：整條的（final.requires）加上這一趟的，一起夠。整條的那份要等完成才交，但現在就要算進去。"""
+    return _plan(state, content, _requires_of(c.final, trip)) is not None
 
 
 def _trip_here(state: GameState, c: FsChain, loc_id: str) -> tuple[int, FsStep] | None:
@@ -367,7 +390,8 @@ def final_options(state: GameState, content: Content, loc_id: str) -> list:
 def _asks(trip: FsStep) -> list[FsAsk]:
     if not trip.question:
         return []
-    return [FsAsk(question=trip.question, options=trip.options, answer=trip.answer or ""), *trip.then]
+    main = FsAsk.model_construct(question=trip.question, options=list(trip.options), answer=trip.answer or "")
+    return [main, *trip.then]
 
 
 def _current_ask(state: GameState, content: Content) -> tuple[FsChain, FsAsk] | None:
@@ -453,8 +477,7 @@ def attempt(
             p.fs_asked += 1
             return msgs + [fill(state, content, c, asks[p.fs_asked].question, world)]
     p.fs_asking, p.fs_asked = None, 0
-    check = next((r.check for r in _requires_of(c.final, trip) if r.check is not None), None)
-    if check is not None:
+    for check in [r.check for r in _requires_of(c.final, trip) if r.check is not None]:  # 整條的先、這一趟的後，每個都擲
         roll = Check(stat=check.stat, difficulty=check.dc, by="self")
         success = rng.random() < check_chance(roll, state, content, world)
         msgs.append(f"（{check_who(roll, state, content, world)}——{'成功' if success else '失敗'}）")
@@ -492,8 +515,9 @@ def _spend_grain(state: GameState, content: Content, amount: int) -> list[str]:
     return lines
 
 
-def _trip_grain(content: Content, c: FsChain, trip: FsStep) -> int:
-    return sum(need(content, req.grain) for req in _requires_of(c.final, trip))
+def _trip_grain(content: Content, trip: FsStep) -> int:
+    """這一趟自己的糧草（單趟的鏈就是 final 的）；整條另外要的那份不算這一趟的。"""
+    return need(content, trip.requires.grain)
 
 
 def _punish(state: GameState, content: Content, c: FsChain, trip: FsStep, wrong: FsWrong, now: float) -> list[str]:
@@ -505,8 +529,8 @@ def _punish(state: GameState, content: Content, c: FsChain, trip: FsStep, wrong:
         for req in _requires_of(c.final, trip):
             lost += [k for r in _all_requires(req) for k in r.clue_items]
     lines += _take_items(state, content, list(dict.fromkeys(lost)))
-    if wrong.lose_grain:
-        lines += _spend_grain(state, content, _trip_grain(content, c, trip))
+    if wrong.lose_grain:  # 沒收這一趟的糧草；手上不夠就有多少收多少（不會因為不夠就一份都不收）
+        lines += _spend_grain(state, content, min(_trip_grain(content, trip), materials.grain_of(state, content)))
     for cid, delta in wrong.affinity.items():
         before = p.affinities.get(cid, 0)
         p.affinities[cid] = max(0, min(100, before + delta))
@@ -517,29 +541,29 @@ def _punish(state: GameState, content: Content, c: FsChain, trip: FsStep, wrong:
     return lines
 
 
-def _hand_over(state: GameState, content: Content, req: FsRequires) -> list[str]:
-    """答對時交出條件裡的物品與糧草（換算後的量）；any_of 只交第一組成立的（交之前先挑）。情誼、計數、捐獻只看不扣。"""
-    satisfied = next((sub for sub in req.any_of if _one_requires_ok(state, content, sub)), None)
-    lines = _take_items(state, content, list(req.clue_items), {k: need(content, v) for k, v in req.clue_items.items()})
-    lines += _spend_grain(state, content, need(content, req.grain))
-    if satisfied is not None:
-        lines += _hand_over(state, content, satisfied)
-    return lines
+def _hand_over(state: GameState, content: Content, plan: Plan) -> list[str]:
+    """照 _plan 算好的交出物品與糧草（換算後的量）。回傳「葦束 -1」「粗糧 -2」這種變化量。"""
+    items, grain = plan
+    return _take_items(state, content, list(items), items) + _spend_grain(state, content, grain)
 
 
 def _succeed(
     state: GameState, content: Content, c: FsChain, index: int, trip: FsStep, now: float, world: WorldStateStore | None,
 ) -> list[str]:
     """這一趟成了：多趟時交出這一趟自己的條件、記下這一趟，還沒全部做完就回這一趟的那句；全部做完（或單趟）時
-    交出整條的條件（final.requires）、完成這條鏈，回完成的敘事。交出去的東西接在敘事後面（「葦束 -1」）。"""
+    交出整條的條件（final.requires）連同這一趟的、完成這條鏈，回完成的敘事。要交的照「一起算」重算一次：
+    交不出來（不該發生，檢查時已經一起算過）就什麼都不做、不完成。"""
     p = state.player
-    spent: list[str] = []
-    if trip is not c.final:
-        spent += _hand_over(state, content, trip.requires)
+    multi = trip is not c.final
+    last = not multi or all(f"{c.id}:{i}" in p.fs_done for i in range(len(c.final.steps)) if i != index)
+    plan = _plan(state, content, _requires_of(c.final, trip) if last else [trip.requires])
+    if plan is None:
+        return [NOT_NOW]
+    spent = _hand_over(state, content, plan)
+    if multi:
         p.fs_done.append(f"{c.id}:{index}")
-        if not all(f"{c.id}:{i}" in p.fs_done for i in range(len(c.final.steps))):
+        if not last:
             return [fill(state, content, c, trip.success_text, world)] + spent
-    spent += _hand_over(state, content, c.final.requires)
     _complete(state, content, c, now)
     text = c.final.success_versions.get(_version(state, content, c) or "", c.final.success_text)
     return [fill(state, content, c, text, world)] + spent
@@ -555,8 +579,9 @@ def _complete(state: GameState, content: Content, c: FsChain, now: float) -> Non
         week = calendar.point(now, content, w).week
         p.contrib += gained
         p.contrib_weeks[week] = p.contrib_weeks.get(week, 0) + gained
+    shown = display_name(state) if p.anonymous else None  # 匿名的人在公告與江湖史上是「某位少俠」；真名照記（T9 的稱號）
     if c.side in LOCK_SIDES:
-        lock = Lock(side=c.side, name=p.name, time=now)
+        lock = Lock(side=c.side, name=p.name, time=now, shown=shown)
         if c.event not in w.locks:
             w.locks[c.event] = lock
         else:
@@ -565,6 +590,8 @@ def _complete(state: GameState, content: Content, c: FsChain, now: float) -> Non
         names = w.third_party.setdefault(c.event, [])
         if p.name not in names:
             names.append(p.name)
+            if shown is not None:
+                w.third_party_shown.setdefault(c.event, {})[p.name] = shown
 
 
 # ── 官銀 ─────────────────────────────────────────────────
@@ -572,11 +599,14 @@ def _complete(state: GameState, content: Content, c: FsChain, now: float) -> Non
 
 def after_win(state: GameState, content: Content, squad: Squad, rng: random.Random, region: str | None) -> list[str]:
     """遊歷打贏之後（Game._squad_encounter 呼叫，探索撞上的野怪不算）：官銀的規則（foreshadows.json 的 guanyin）——
-    那個陣營的人、在那幾個大區、打贏那個陣營的隊伍，而且有鏈讀官銀時，才擲 Config.guanyin_chance；中了計數 +1、寫一句。"""
+    那個陣營的人、在那幾個大區、打贏那個陣營的隊伍，而且自己還做得了的鏈裡有讀官銀的，才擲 Config.guanyin_chance；
+    中了計數 +1、寫一句。"""
     rule = content.foreshadows.guanyin
-    if rule is None or not on(state, content) or state.player.faction != rule.side:
+    if rule is None or not active(state, content) or state.player.faction != rule.side:
         return []
-    if squad.faction != rule.squad_faction or region not in rule.regions or not reads_counter(content, GUANYIN):
+    if squad.faction != rule.squad_faction or region not in rule.regions:
+        return []
+    if not reads_counter(_capable_chains(state, content), GUANYIN):  # 讀官銀的鏈都做完、失效或大事已過：不再掉（審查 M3）
         return []
     if rng.random() >= content.config.guanyin_chance:
         return []
@@ -589,9 +619,9 @@ def after_win(state: GameState, content: Content, squad: Squad, rng: random.Rand
 
 
 def grant(state: GameState, content: Content, clue_items: dict[str, int], counters: dict[str, int]) -> list[str]:
-    """Effect.clue_items／fs_counters：開關關著時什麼都不做、不寫字。物品給的寫「獲得 葦束 ×1」、收的寫「葦束 -1」
-    （不夠就收到 0）；計數是隱藏的，不寫字。"""
-    if not calendar.season_one_on(state.world, content):
+    """Effect.clue_items／fs_counters：伏筆沒在跑（active 不成立）時什麼都不做、不寫字。物品給的寫「獲得 葦束 ×1」、
+    收的寫「葦束 -1」（不夠就收到 0）；計數是隱藏的，不寫字。"""
+    if not active(state, content):
         return []
     lines = []
     bag = state.player.clue_items

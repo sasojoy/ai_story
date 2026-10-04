@@ -299,9 +299,11 @@ def check_foreshadows(c: Content, need, known, region_ids: list[str], counters_w
         check_text(f"伏筆物品 {item.id}", item.name)
 
     counters_read: set[str] = set()
+    items_read: set[str] = set()
 
     def check_requires(where: str, req, top: bool = True) -> None:
         known(where, req.clue_items, item_ids, "伏筆物品")
+        items_read.update(req.clue_items)
         known(where, req.affinity, c.characters, "人物")
         for key in req.donations:
             loc, sep, kind = key.partition(":")
@@ -346,6 +348,12 @@ def check_foreshadows(c: Content, need, known, region_ids: list[str], counters_w
         versions = set(event.versions.values()) if event is not None else set()
         if ch.front is not None:
             known(where, [ch.front], region_ids, "大區")
+        need(
+            ch.front is not None or event is None or event.front is not None,
+            f"{where}：要寫 front（{ch.event} 沒有戰線，最後一步的戰況看不到任何一條線）",
+        )
+        if event is not None and event.kind != "showdown" and ch.side in TIMETABLE_SIDES:  # 決戰的結果由 T8 給鍵
+            need(ch.side in event.lock_result, f"{where}：{ch.event} 的 lock_result 沒有 {ch.side}，鎖定了也改不了結果")
         if ch.invalid_if.figure_out is not None:
             known(where, [ch.invalid_if.figure_out], c.characters, "人物")
         for i, f in enumerate(ch.fragments):
@@ -363,7 +371,14 @@ def check_foreshadows(c: Content, need, known, region_ids: list[str], counters_w
                 need(f.event is None, f"{fw}：只有來源是 event 的才寫 event")
             if f.source == "talk":
                 need(f.character is not None and bool(f.topic.strip()), f"{fw}：來源是 talk 就要寫 character 與 topic")
-                known(fw, [x for x in (f.character, f.stand_in) if x is not None], c.characters, "人物")
+                speakers = [x for x in (f.character, f.stand_in) if x is not None]
+                known(fw, speakers, c.characters, "人物")
+                for fid in speakers:  # 對話得找得到人：要有對話的地方（talk_at）而且能深度對話
+                    who = c.characters.get(fid)
+                    need(
+                        who is None or (who.talk_at is not None and who.deep_interaction),
+                        f"{fw}：{fid} 沒有 talk_at（或不能深度對話），這一則永遠聽不到",
+                    )
                 check_text(fw, f.topic)
             else:
                 need(
@@ -396,11 +411,14 @@ def check_foreshadows(c: Content, need, known, region_ids: list[str], counters_w
                 bool(trip.question) or (not trip.options and trip.answer is None and not trip.then),
                 f"{tw}：有選項、答案或追問就要寫 question",
             )
+            need(not trip.question or bool(trip.options), f"{tw}：題目要有選項")
+            need(not trip.question or trip.answer is not None, f"{tw}：題目要有答案（answer）")
             check_wrong(tw, trip.wrong)
             for text in (trip.label, trip.unready, trip.success_text):
                 check_text(tw, text)
         for aw, ask in asks_of(ch):
-            check_ask(f"{where} {aw}", ask)
+            if ask.options:  # 沒有選項的題上面已經報了
+                check_ask(f"{where} {aw}", ask)
         need(bool(final.success_text.strip()), f"{where}：要寫 success_text（完成時的敘事）")
         check_text(where, final.success_text)
         for text in final.success_versions.values():
@@ -421,6 +439,8 @@ def check_foreshadows(c: Content, need, known, region_ids: list[str], counters_w
         counters_written.setdefault(GUANYIN, "伏筆的官銀")
     for key, where in sorted(counters_written.items()):
         need(key in counters_read, f"{where}：伏筆計數 {key} 寫了卻沒有任何一條鏈讀它")
+    for item_id in item_ids:
+        need(item_id in items_read, f"伏筆物品 {item_id}：沒有任何一條鏈的條件讀它")
     for key in sorted(counters_read - set(counters_written)):
         need(False, f"伏筆計數 {key}：有鏈讀它，卻沒有任何效果（或官銀的規則）寫它")
 

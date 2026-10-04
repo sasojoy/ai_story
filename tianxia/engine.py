@@ -784,7 +784,7 @@ class Game:
         體力比行動前少了才抽（探索、遊歷、交友、求見、對話、招募、趕路、疾行；打坐、步行、生成不出對話退回體力的都不算）。
         抽的是行動後所在地點的大區；沒有伏筆在跑（開關關著、沒有鏈）就什麼都不做。"""
         s, c = self.state, self.content
-        if s.player.stamina >= before or not foreshadow.on(s, c):
+        if s.player.stamina >= before or not foreshadow.active(s, c):
             return []
         region = atlas.region_of(c, s.player.location)
         return foreshadow.hear_after_action(s, c, region.id if region is not None else None, self.rng, self.world)
@@ -2087,6 +2087,7 @@ class Game:
         return (
             not self._preparing() and not s.world.ended and s.pending_event is None and s.player.busy_until is None
             and s.player.resting_since is None and s.player.journey is None and not s.player.picking_audience
+            and s.player.fs_asking is None  # 伏筆的最後一步正在答題：跟事件待處理一樣，先答完或作罷
         )
 
     def seclude(self, hours: int) -> list[str]:
