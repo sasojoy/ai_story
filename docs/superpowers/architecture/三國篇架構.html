@@ -182,7 +182,7 @@ details.sub:not([open]) > summary .name::after { content: " ▸"; }
 <div class="wrap">
   <header>
     <h1>天下大勢・三國篇 遊戲架構</h1>
-    <p class="meta">資料截至 2026-10-04・分支 main（3f34e77）・1526 個自動測試全部通過</p>
+    <p class="meta">資料截至 2026-10-04・分支 main（cf31ada）・1526 個自動測試全部通過</p>
     <div class="legend" id="legend" aria-label="依狀態篩選"></div>
     <div class="defs">
       <span><b style="color:var(--done)">已完成</b>：做好了，現在就能玩</span>
@@ -223,6 +223,7 @@ details.sub:not([open]) > summary .name::after { content: " ▸"; }
       <div class="step"><span class="k">設計中・等你回去繼續談</span><h3>戰鬥系統設計</h3><p>「戰鬥系統」session 照順序跟你談七題。第 1 題「上千人怎麼打」大部分已定：每回合 5 分鐘、固定 9 回合（beta 已先做這段）、強攻固守奇襲三招互剋、武學決定出招份量、沒出手的照作戰方針或 AI 代挑；還差推力與氣血的數字、上千人的放手一搏。接著是伏筆定勝負後贏多少、三場大戲、豪強第三方、參戰誘因、遭遇戰平衡。程式排在第一季階段八（線上架構第 2 期之後）。</p><a class="topiclink" href="#battle">看「全服決戰」的設計規劃 →</a></div>
       <div class="step"><span class="k">等你決定</span><h3>待回覆的事</h3>
         <ul class="asks">
+          <li>joy 把「歷練」改名「遊歷」、「交遊」改名「交友」（PR #7）：你同意的話，設計文件和流程圖跟著改</li>
           <li>伺服器假人與帳號登入兩份計畫的 35 條裁決；分支要合併、開 PR，還是維持原樣</li>
           <li>地圖擴充第 1 步與地圖重排的裁決紀錄（rulings/2026-10-03-地圖擴充第一步-裁決.md、rulings/2026-10-03-地圖重排-裁決.md）</li>
           <li>補假人要不要加快（現在每陣營每小時補 1 人）</li>
@@ -554,6 +555,8 @@ const TREE = [
       { name: "右上 ⚙ 設定抽屜：匿名行走、略過引導、改密碼、登出；管理者多一塊管理者工具", s: "done" } ] },
     { name: "各分頁", s: "done", c: [
       { name: "江湖：「剛剛」卡片、場景、選項；打仗時換成戰鬥卡片，決戰時多一個 20 字的放手一搏", s: "done" },
+      { name: "江湖頁平常的行動改成輪盤、煉製頁改成屬性輪盤", s: "done", note: "sasojoy 10/4 在 GitHub 合併的（PR #7）：探索、遊歷、打坐、交友四格，中間羅盤是移動，只在此地才有的行動排在下面的印章列；點一格先看說明再按。煉製頁四格是剛快柔慢（相剋的面對面），中間太極是爐子。四格固定不動，只有外圈和中心在轉。事件、對話、路上、決戰的選單照舊是一排按鈕。還沒換上試玩伺服器" },
+      { name: "「歷練」改名「遊歷」、「交遊」改名「交友」", s: "talk", note: "sasojoy 10/4 在 PR #7 改的，commit 寫「Joy chose the new names」，CLAUDE.md 卻寫成企劃者定的。設計文件、流程圖、各 session 都還用舊名；要不要照這個改名等你確認" },
       { name: "修練：鍛鍊、療傷、自創、閉關、功法庫、門下名冊與角色卡", s: "done" },
       { name: "煉製：兩格爐位、素材卡（同一種可以點兩次），首次煉成時爐火正旺", s: "done" },
       { name: "輿圖：大地圖四個圖層，點地點看詳情與步行／趕路／疾行三個按鈕", s: "done" },
