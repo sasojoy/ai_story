@@ -426,20 +426,23 @@
           <button class="${S.moveMode === x.id ? "on" : ""}" data-act="move-mode" data-mode="${x.id}" aria-pressed="${S.moveMode === x.id}">${x.name}</button>`).join("")}
         </div>`
       : "";
-    return `
-      <details class="fold quest"><summary>📜 主線與目標</summary><div class="fold-body">${m.quest}</div></details>
-      ${now}
-      <section class="card scene">${m.scene}</section>
-      ${free}
-      ${idleMenu(m) ? actionWheel(m) : `<div class="options">${m.options.map((o, i) => o.id === FREE_TEXT_OPTION && S.answering && o.enabled ? `
+    const wheel = idleMenu(m);
+    const menu = wheel ? actionWheel(m) : `<div class="options">${m.options.map((o, i) => o.id === FREE_TEXT_OPTION && S.answering && o.enabled ? `
         <form class="free answer" id="answer-form"><input class="input" name="text" maxlength="20" placeholder="${esc(o.label)}（20字內）" aria-label="${esc(o.label)}"><button class="btn primary small" type="submit">說出口</button></form>` : `${i === firstMove ? modes : ""}
         <button class="btn ${followsMode(o.id) ? "go" : ""}" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}>
           <span class="k">${o.id.startsWith("move:") ? "→" : o.id.startsWith("road:back") ? "↩" : i + 1}</span><span>${esc(o.label)}</span>
         </button>`).join("")}
-      </div>`}
-      ${links}
+      </div>`;
+    const scene = `<section class="card scene">${m.scene}</section>`;
+    const tail = `${links}
       <div class="mini" data-act="tab" data-tab="map" role="button" aria-label="展開輿圖">${m.minimap}</div>
       <button class="linkish" data-act="news" data-news="journal">看江湖紀錄 ›</button>`;
+    const quest = `<details class="fold quest"><summary>📜 主線與目標</summary><div class="fold-body">${m.quest}</div></details>`;
+    // 手機上平常有輪盤時，輪盤排在「剛剛」與場景之前（W17／QA）：375×812 的第一屏只有 668px，「剛剛」和場景加起來把輪盤擠到分頁列下面，
+    // 打坐（體力見底時唯一的出路）要往下捲才按得到，而且位置隨上一個結果的長短忽上忽下。排在主線正下方，位置固定、確認卡也在第一屏。
+    // 事件、對話等選項是在回答場景文字，一律照舊排在場景後面
+    if (wheel && PHONE && PHONE.matches) return `${quest}${menu}${now}${scene}${free}${tail}`;
+    return `${quest}${now}${scene}${free}${menu}${tail}`;
   }
 
   // ── 修練 ──
@@ -1402,6 +1405,9 @@
 
   // 視窗大小變了（轉向、拉視窗）：輿圖開著就重新夾住、套用；原本是整張就維持整張（applyMapView）
   window.addEventListener("resize", () => { if (S.stage === "game" && S.tab === "map") applyMapView(); });
+  // 寬度跨過手機分界（轉向、拉視窗）：江湖頁的排列順序不同（pageJianghu 的輪盤），要重畫
+  const onPhoneChange = () => { if (S.stage === "game" && S.tab === "jianghu") renderPage(); };
+  if (PHONE) { if (PHONE.addEventListener) PHONE.addEventListener("change", onPhoneChange); else PHONE.addListener(onPhoneChange); }
 
   api("/api/me").then(enter).catch(() => { S.stage = "gate"; render(); });
 })();
