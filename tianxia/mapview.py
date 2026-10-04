@@ -14,15 +14,11 @@ from .mapart import fmt
 from .models import Content, Location, MapLabel, MapLayout, MapRegion
 from .state import GameState
 
-NODE_FILL = {
-    "current": "#D85A30",
-    "visible": "#1D9E75",
-    "remembered": "#7F77DD",
-    "outline": "#B4B2A9",
-    "dot": "#C9C3B2",
-}
-NODE_SIZE = {"current": 11, "visible": 8, "remembered": 8, "outline": 7, "dot": 4}
+NODE_SIZE = {"current": 13, "visible": 13, "remembered": 13, "outline": 11, "dot": 4}  # 摸清的是圓盤半徑，未知是剪影
+LOOKS = {"current": "full", "visible": "full", "remembered": "faded", "outline": "ghost"}  # 圖示的畫法（mapart.icon）
+CURRENT_RING = 17  # 所在地的紅圈
 DANGER_RING = {1: "#639922", 2: "#BA7517", 3: "#A32D2D"}
+ENEMY_DISC = 0.5  # 敵情層：圓盤是危險色往圓盤原色淡幾成
 TEXT_DARK = "#2C2C2A"
 TEXT_MUTED = "#8A8577"
 NOTE_FILL = "#8C3B2A"  # 名字底下那行小字（常出沒、最險、體力）
@@ -51,8 +47,9 @@ ROUTE_STROKE = "#D85A30"
 TREND_RED = "#C0392B"
 TREND_TINT = 0.6  # 大勢 100 時，大區顏色往紅色靠六成
 TREND_TEXT = "#A32D2D"
-LEGEND_STATES = [("current", "所在地"), ("visible", "看得見"), ("remembered", "去過／摸清"), ("outline", "未知")]
-LEGEND_SHAPES = "■ 城鎮　◆ 門派　● 野外"
+LEGEND_ICONS = [("town", "城鎮"), ("roof", "寺院書院"), ("camp", "營寨"), ("ferry", "渡口"), ("peak", "山林"), ("flag", "野外")]
+LEGEND_STATES = "全彩：看得見　淡色：去過／摸清　灰：未知　紅旗：所在地"
+LEGEND_TEXT = "#5F5E5A"
 LEGEND_RING = "外圈：綠安全／橙危險／紅兇險　⚔ 可歷練"
 LEGEND_LAYERS = {
     "situation": "⚑ 龍頭人物（會自己行動的江湖人物）常出沒　大區越紅，大勢越凶",
@@ -69,15 +66,8 @@ ARROW_SIZE = 13  # 視窗邊緣方向的字級
 ARROW_SLIDE = 6  # 方向擠不下時，沿著邊緣滑開一次滑多遠
 ARROW_SLIDES = 20  # 往每一邊最多滑幾次（40 個地點的地圖，兩站外同方向的地點常常擠在同一邊）
 YOU_SIZE = 7  # 路上的「你」：圓點的半徑（路上設計 3.4）
+YOU_FILL = "#D85A30"
 Point = tuple[float, float]
-
-
-def node_shape(loc: Location) -> str:
-    if "城鎮" in loc.tags:
-        return "town"
-    if "門派" in loc.tags:
-        return "sect"
-    return "wild"
 
 
 def text_width(text: str, size: int) -> float:
@@ -193,16 +183,6 @@ def _grow(box: Box, pad: float) -> Box:
     return box[0] - pad, box[1] - pad, box[2] + pad, box[3] + pad
 
 
-def _shape(shape: str, x: int, y: int, size: int, fill: str, ring: str | None) -> str:
-    stroke = f' stroke="{ring}" stroke-width="3"' if ring else ""
-    if shape == "town":
-        return f'<rect x="{x - size}" y="{y - size}" width="{size * 2}" height="{size * 2}" rx="3" fill="{fill}"{stroke}/>'
-    if shape == "sect":
-        s = size + 2
-        return f'<path d="M{x} {y - s} L{x + s} {y} L{x} {y + s} L{x - s} {y} Z" fill="{fill}"{stroke}/>'
-    return f'<circle cx="{x}" cy="{y}" r="{size}" fill="{fill}"{stroke}/>'
-
-
 def _text(
     x: float, y: float, text: str, size: int, fill: str, halo: str, anchor: str = "start", bold: bool = False,
     attrs: str = "",
@@ -230,30 +210,45 @@ def _legend_line(layer: str) -> str:
     return f"{LEGEND_RING}　{LEGEND_LAYERS[layer]}"
 
 
+def _legend_xs() -> list[int]:
+    """圖例第一行：六個小圖示各自的中心 x，最後再多一個：視野狀態那段字從哪裡寫起。"""
+    xs = [22]
+    for _, text in LEGEND_ICONS:
+        xs.append(xs[-1] + 26 + round(text_width(text, 12)))
+    xs[-1] += 6
+    return xs
+
+
 def _legend_width(width: int, layer: str) -> float:
-    return min(width - 16, max(400, text_width(_legend_line(layer), 12) + 24))
+    """圖例框的寬：裝得下兩行字（第一行的圖示與視野狀態、第二行的外圈與圖層說明），但不超出地圖。"""
+    first = _legend_xs()[-1] + text_width(LEGEND_STATES, 12) + 2
+    return min(width - 16, max(400, first, text_width(_legend_line(layer), 12) + 24))
 
 
-def _legend(bg: str, top: int, width: int, layer: str) -> str:
-    line = _legend_line(layer)
+def _legend(top: int, width: int, layer: str) -> str:
+    """圖例：第一行是六種地點圖示（縮小七成）與視野狀態的畫法，第二行是外圈與這一層的說明。"""
     box = _legend_width(width, layer)
-    parts = [f'<rect x="8" y="{top}" width="{box:g}" height="46" rx="6" fill="{bg}" fill-opacity="0.9"/>']
-    for i, (view, text) in enumerate(LEGEND_STATES):
-        x = 18 + i * 72
-        parts.append(f'<circle cx="{x}" cy="{top + 13}" r="5" fill="{NODE_FILL[view]}"/>')
-        parts.append(f'<text x="{x + 9}" y="{top + 17}" font-size="12" fill="#5F5E5A">{text}</text>')
-    parts.append(f'<text x="{18 + len(LEGEND_STATES) * 72}" y="{top + 17}" font-size="12" fill="#5F5E5A">{LEGEND_SHAPES}</text>')
-    parts.append(f'<text x="14" y="{top + 38}" font-size="12" fill="#5F5E5A">{escape(line)}</text>')
+    parts = [
+        f'<rect x="8" y="{top}" width="{box:g}" height="46" rx="6" fill="{mapart.DISC}" fill-opacity="0.92" '
+        'stroke="#B9AD8E" stroke-width="1"/>'
+    ]
+    xs, cy = _legend_xs(), top + 13
+    for (kind, text), x in zip(LEGEND_ICONS, xs):
+        icon = mapart.icon(kind, x, cy, "full")
+        parts.append(f'<g transform="translate({x},{cy}) scale(0.7) translate({-x},{-cy})">{icon}</g>')
+        parts.append(f'<text x="{x + 10}" y="{top + 17}" font-size="12" fill="{LEGEND_TEXT}">{text}</text>')
+    parts.append(f'<text x="{xs[-1]}" y="{top + 17}" font-size="12" fill="{LEGEND_TEXT}">{LEGEND_STATES}</text>')
+    parts.append(f'<text x="14" y="{top + 38}" font-size="12" fill="{LEGEND_TEXT}">{escape(_legend_line(layer))}</text>')
     return "".join(parts)
 
 
 def _layer_marks(
     state: GameState, content: Content, layer: str, views: dict[str, str], odds: Odds | None
 ) -> tuple[dict[str, str], dict[str, str], dict[str, str]]:
-    """這一層要加的東西，只給摸清的地點：（名字前的記號, 名字底下的小字, 節點底色）。"""
+    """這一層要加的東西，只給摸清的地點：（名字前的記號, 名字底下的小字, 圓盤換的顏色）。"""
     prefixes: dict[str, str] = {}
     notes: dict[str, str] = {}
-    fills: dict[str, str] = {}
+    discs: dict[str, str] = {}
     known = [loc_id for loc_id, view in views.items() if view in KNOWN]
     if layer == "situation":
         for loc_id in known:
@@ -263,7 +258,7 @@ def _layer_marks(
     elif layer == "enemies":
         for loc_id in known:
             loc = content.locations[loc_id]
-            fills[loc_id] = DANGER_RING[loc.danger]
+            discs[loc_id] = mapart.mix(DANGER_RING[loc.danger], mapart.DISC, ENEMY_DISC)
             worst = atlas.worst_foe(content, loc, odds, state.player.faction) if odds is not None else None
             if worst:
                 notes[loc_id] = f"最險：{worst[0]} {worst[1]}"
@@ -282,7 +277,7 @@ def _layer_marks(
                 way = atlas.way_to(state, content, loc_id)
                 if way is not None:
                     notes[loc_id] = f"{atlas.whole_minutes(way.minutes)} 分鐘"
-    return prefixes, notes, fills
+    return prefixes, notes, discs
 
 
 def _road_curve(content: Content, spot: atlas.RoadSpot) -> tuple[Point, Point, Point]:
@@ -309,7 +304,7 @@ def _you_mark(content: Content, spot: atlas.RoadSpot, you: tuple[float, float, s
     return (
         f'<path d="M{fmt(x)},{fmt(y)} Q{fmt(cx)},{fmt(cy)} {fmt(ahead[0])},{fmt(ahead[1])}" fill="none" '
         f'stroke="{ROUTE_STROKE}" stroke-width="4" stroke-dasharray="6 4" stroke-linecap="round" pointer-events="none"/>'
-        f'<circle class="tx-you" cx="{fmt(x)}" cy="{fmt(y)}" r="{YOU_SIZE}" fill="{NODE_FILL["current"]}" '
+        f'<circle class="tx-you" cx="{fmt(x)}" cy="{fmt(y)}" r="{YOU_SIZE}" fill="{YOU_FILL}" '
         'stroke="#FFFFFF" stroke-width="2" pointer-events="none"/>'
     )
 
@@ -344,13 +339,13 @@ def _route_line(state: GameState, content: Content, selected: str | None, spot: 
     )
 
 
-def _reach(loc: Location, view: str, selected: bool) -> tuple[float, float]:
-    """地點記號從中心往外畫到多遠：（記號本身與危險外圈, 連同所在地、選定地點的圓圈）。"""
+def _reach(view: str, selected: bool) -> tuple[float, float]:
+    """地點記號從中心往外畫到多遠：（記號本身（摸清的到圓盤外圈）, 連同所在地的紅圈、選定地點的圓圈）。"""
     size = NODE_SIZE[view]
-    mark = size + (2 if view != "dot" and node_shape(loc) == "sect" else 0) + (1.5 if view in KNOWN else 0)
+    mark = size + (1 if view in KNOWN else 0)  # 圓盤的外圈：線寬 2
     ring = mark
     if view == "current":
-        ring = max(ring, size + 8)  # 所在地的圓圈：半徑 size + 7，線寬 2
+        ring = max(ring, CURRENT_RING + 1)  # 紅圈：線寬 2
     if selected:
         ring = max(ring, size + 11.5)  # 選定的圓圈：半徑 size + 10，線寬 3
     return mark, ring
@@ -466,26 +461,33 @@ def _roads(content: Content, views: dict[str, str]) -> list[str]:
     return out
 
 
-def _node(loc: Location, view: str, fill: str, selected: bool, taken: list[Taken]) -> tuple[list[str], float]:
-    """地點記號：所在地的圓圈、依視野畫的形狀（摸清的加危險外圈）、選定的圓圈。
-    把記號佔的範圍加進 taken，回傳（SVG 片段, 記號往外畫到多遠）。"""
-    size = NODE_SIZE[view]
-    mark, reach = _reach(loc, view, selected)
-    taken.append(((loc.x - mark, loc.y - mark, loc.x + mark, loc.y + mark), 1))
+def _node(loc: Location, view: str, disc: str | None, selected: bool, taken: list[Taken]) -> tuple[list[str], float]:
+    """地點記號（輿圖美術設計 2.6、2.7）：摸清的底下一個圓盤，外圈是危險色（去過／摸清的圓盤與外圈淡一點；
+    disc 是圖層換的圓盤顏色，例如敵情層），上面照標籤畫圖示（看得見全彩、去過／摸清淡色、未知灰色剪影）；
+    淡點只是一個小灰點。所在地加紅圈、插紅旗，選定的加深色圓圈。
+    把記號與紅旗佔的範圍加進 taken，回傳（SVG 片段, 記號往外畫到多遠）。"""
+    x, y, size = loc.x, loc.y, NODE_SIZE[view]
+    mark, reach = _reach(view, selected)
+    taken.append(((x - mark, y - mark, x + mark, y + mark), 1))
     if reach > mark:  # 所在地、選定的圓圈：壓到細圓圈沒有壓到實心記號那麼糟
-        taken.append(((loc.x - reach, loc.y - reach, loc.x + reach, loc.y + reach), RING_WEIGHT))
+        taken.append(((x - reach, y - reach, x + reach, y + reach), RING_WEIGHT))
     parts = []
+    if view == "dot":
+        parts.append(f'<circle cx="{x}" cy="{y}" r="{size}" fill="{mapart.DOT}"/>')
+    else:
+        if view in KNOWN:
+            ring, fill = DANGER_RING[loc.danger], disc or mapart.DISC
+            if view == "remembered":
+                ring, fill = mapart.mix(ring, mapart.PAPER, mapart.RING_FADE), disc or mapart.DISC_FADED
+            parts.append(f'<circle cx="{x}" cy="{y}" r="{size}" fill="{fill}" stroke="{ring}" stroke-width="2"/>')
+        parts.append(mapart.icon(mapart.icon_kind(loc), x, y, LOOKS[view]))
     if view == "current":
-        parts.append(
-            f'<circle cx="{loc.x}" cy="{loc.y}" r="{size + 7}" fill="none" stroke="{NODE_FILL["current"]}" stroke-width="2"/>'
-        )
-    shape = "wild" if view == "dot" else node_shape(loc)
-    ring = DANGER_RING.get(loc.danger) if view in KNOWN else None
-    parts.append(_shape(shape, loc.x, loc.y, size, fill, ring))
+        parts.append(f'<circle cx="{x}" cy="{y}" r="{CURRENT_RING}" fill="none" stroke="{mapart.BANNER}" stroke-width="2"/>')
+        parts.append(mapart.banner(x, y))
+        left, top, right, bottom = mapart.BANNER_BOX
+        taken.append(((x + left, y + top, x + right, y + bottom), 1))
     if selected:
-        parts.append(
-            f'<circle cx="{loc.x}" cy="{loc.y}" r="{size + 10}" fill="none" stroke="{SELECT_STROKE}" stroke-width="3"/>'
-        )
+        parts.append(f'<circle cx="{x}" cy="{y}" r="{size + 10}" fill="none" stroke="{SELECT_STROKE}" stroke-width="3"/>')
     return parts, reach
 
 
@@ -504,7 +506,7 @@ def render_map(
     m = content.map
     bg = m.background
     views = atlas.views(state, content)
-    prefixes, notes, fills = _layer_marks(state, content, layer, views, odds)
+    prefixes, notes, discs = _layer_marks(state, content, layer, views, odds)
     spot = atlas.road_spot(state, content)
     you = _you(content, spot) if spot is not None else None  # 在路上：「你」畫在兩站之間（路上設計 3.4）
     legend_top = m.height - 50
@@ -542,7 +544,7 @@ def render_map(
         view = views[loc.id]
         if view == "hidden":
             continue
-        parts, reach[loc.id] = _node(loc, view, fills.get(loc.id, NODE_FILL[view]), loc.id == selected, taken)
+        parts, reach[loc.id] = _node(loc, view, discs.get(loc.id), loc.id == selected, taken)
         if view in SELECTABLE:
             hit = f'<circle cx="{loc.x}" cy="{loc.y}" r="{HIT_RADIUS}" fill="#000000" fill-opacity="0"/>'
             out.append(f'<g data-loc="{loc.id}" style="cursor:pointer">{hit}{"".join(parts)}</g>')
@@ -577,7 +579,7 @@ def render_map(
     if you is not None:
         x, y, anchor = spots[-1]
         out.append(_text(x, y, f"你{you[2]}", LABEL_SIZE, TEXT_DARK, bg, anchor, bold=True))
-    out.append(_legend(bg, legend_top, m.width, layer))
+    out.append(_legend(legend_top, m.width, layer))
     out.append("</svg></div>")
     return "".join(out)
 
@@ -676,7 +678,7 @@ def render_minimap(state: GameState, content: Content) -> str:
     reach: dict[str, float] = {}
     for loc in shown:
         view = views[loc.id]
-        parts, reach[loc.id] = _node(loc, view, NODE_FILL[view], False, taken)
+        parts, reach[loc.id] = _node(loc, view, None, False, taken)
         out += parts
     if you is not None:
         out.append(_you_mark(content, spot, you, taken))

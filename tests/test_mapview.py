@@ -7,10 +7,10 @@ import pytest
 
 from tianxia.atlas import location_view, vision_range, visible_locations
 from tianxia.content import load_content
-from tianxia.mapart import bezier_point, bezier_tail, fmt, mix, road_control, terrain
+from tianxia.mapart import bezier_point, bezier_tail, fmt, icon_kind, mix, road_control, terrain
 from tianxia.mapview import (
-    LEGEND_LAYERS, MINI_HEIGHT, NODE_FILL, ROUTE_STROKE, SELECT_STROKE, YOU_SIZE, node_shape, render_map,
-    render_minimap, text_box, text_width,
+    LEGEND_LAYERS, LEGEND_STATES, MINI_HEIGHT, ROUTE_STROKE, SELECT_STROKE, YOU_SIZE, render_map, render_minimap,
+    text_box, text_width,
 )
 from tianxia.models import Connection, Location, MapRiver, Terrain
 from tianxia.state import Journey, Rumor
@@ -62,11 +62,18 @@ def test_render_map(state, content):
     assert "湖邊？" in render_map(state, content)
 
 
-def test_node_shapes_follow_tags(content):
-    assert node_shape(content.locations["town"]) == "town"
-    assert node_shape(content.locations["lake"]) == "wild"
-    content.locations["lake"].tags.append("門派")
-    assert node_shape(content.locations["lake"]) == "sect"
+def test_icons_follow_tags_and_the_first_match_wins(content):
+    lake = content.locations["lake"]
+    for tags, kind in [
+        (["城鎮"], "town"), (["官署"], "town"), (["城池", "營寨"], "town"),  # 廣宗：先符合城池，畫城牆
+        (["營寨"], "camp"), (["祭壇", "營寨"], "camp"),
+        (["寺院"], "roof"), (["書院"], "roof"), (["門派"], "roof"),
+        (["渡口"], "ferry"), (["河畔"], "ferry"),
+        (["山林"], "peak"), (["洞窟"], "peak"),
+        (["野外"], "flag"), (["湖畔"], "flag"), ([], "flag"),
+    ]:
+        lake.tags = tags
+        assert icon_kind(lake) == kind, tags
 
 
 def test_text_width():
@@ -82,7 +89,7 @@ def test_render_map_new_look(state, content):
     assert 'stroke="#BA7517"' in svg  # 湖邊危險 2 → 橙色外圈
     assert "湖邊 ⚔" in svg and "★" not in svg
     assert "paint-order:stroke" in svg
-    assert "<rect" in svg  # 小鎮（城鎮）畫成方塊
+    assert 'fill="#B9604A"' in place(svg, "town") and 'fill="#A0522D"' in place(svg, "lake")  # 城鎮畫城牆，湖畔畫小旗
 
 
 def label_box(svg: str, loc_id: str):
@@ -98,17 +105,22 @@ def overlap(a, b) -> bool:
     return a[0] < b[2] and b[0] < a[2] and a[1] < b[3] and b[1] < a[3]
 
 
+def place(svg: str, loc_id: str) -> str:
+    """大地圖上一個地點的記號（<g data-loc> 那一組；圖例裡也有全彩的圖示，所以要只看這一組）。"""
+    return re.search(rf'<g data-loc="{loc_id}"[^>]*>(.*?)</g>', svg)[1]
+
+
 def test_labels_step_aside_for_other_places_and_labels(state, content):
     content.locations["lake"].x = 150  # 湖邊緊貼在小鎮右邊：小鎮的名字擺右邊會壓到湖邊的記號
     svg = render_map(state, content, "routes")
     town, lake = label_box(svg, "town"), label_box(svg, "lake")
-    assert not overlap(town, lake) and not overlap(town, (140.5, 90.5, 159.5, 109.5))
-    assert town[0] != 100 + 11 + 8 + 5  # 不是原本右邊的位置
+    assert not overlap(town, lake) and not overlap(town, (136, 86, 164, 114))  # 湖邊的圓盤：半徑 13，外圈 2
+    assert town[0] != 100 + 18 + 5  # 不是原本右邊的位置（所在地的紅圈半徑 17，外加線寬）
 
 
 def test_selected_label_sits_outside_the_selection_ring(state, content):
     svg = render_map(state, content, selected="lake")
-    assert label_box(svg, "lake")[0] >= 200 + 8 + 10 + 1.5  # 選定的圓圈：半徑 18、線寬 3
+    assert label_box(svg, "lake")[0] >= 200 + 13 + 10 + 1.5  # 選定的圓圈：半徑 23、線寬 3
 
 
 def test_region_names_have_a_halo_so_they_read_on_any_tint(state, content):
@@ -126,13 +138,60 @@ def test_legend_sits_at_the_bottom(state, content):
     assert f'<rect x="8" y="{content.map.height - 50}"' in svg
 
 
-def test_remembered_color_is_distinct_from_visible(state, content):
-    from tianxia.mapview import NODE_FILL
-
-    assert NODE_FILL["remembered"] == "#7F77DD"  # 紫色，和看得見的綠色明顯不同
+def test_view_states_are_full_faded_ghost_and_dot(state, content):
+    lake = place(render_map(state, content), "lake")  # 看得見：全彩的小旗，圓盤外圈是危險色
+    assert 'fill="#A0522D"' in lake and 'r="13" fill="#F4EFDF" stroke="#BA7517"' in lake
     content.config.vision_base = 0
-    state.player.visited.add("lake")
-    assert 'fill="#7F77DD"' in render_map(state, content)
+    state.player.visited.add("lake")  # 去過但看不見：同一個圖示淡一點，圓盤與外圈也淡
+    lake = place(render_map(state, content), "lake")
+    flag, ring = mix("#A0522D", "#E9E2CC", 0.58), mix("#BA7517", "#E9E2CC", 0.45)
+    assert f'fill="{flag}"' in lake and f'r="13" fill="#EDE7D4" stroke="{ring}"' in lake and 'fill="#A0522D"' not in lake
+    state.player.visited.discard("lake")
+    content.locations["lake"].important = True  # 未知、畫出輪廓：灰色剪影，沒有圓盤
+    svg = render_map(state, content)
+    assert 'fill="#B6AE99"' in place(svg, "lake") and 'r="13"' not in place(svg, "lake") and "湖邊？" in svg
+    content.locations["lake"].important = False  # 淡點：小灰點
+    assert '<circle cx="200" cy="100" r="4" fill="#C2BAA4"/>' in render_map(state, content)
+
+
+def test_current_place_has_a_red_ring_and_a_red_flag_that_names_avoid(state, content):
+    svg = render_map(state, content)
+    assert '<circle cx="100" cy="100" r="17" fill="none" stroke="#C0392B" stroke-width="2"/>' in svg
+    assert '<path d="M111,66 L125,71 L111,76 Z" fill="#C0392B"/>' in svg  # 紅旗插在小鎮右上
+    lake = content.locations["lake"]
+    lake.x, lake.y = 60, 75  # 湖邊的名字本來擺右邊，正好壓到紅旗
+    assert not overlap(label_box(render_map(state, content), "lake"), (109, 65, 126, 91))
+
+
+def test_legend_shows_the_six_icons_and_how_views_are_drawn(state, content):
+    content.map.width = 900  # 夾具的地圖太窄，擺不下整行圖例
+    svg = render_map(state, content)
+    assert svg.count("scale(0.7)") == 6
+    assert all(f">{text}<" in svg for text in ("城鎮", "寺院書院", "營寨", "渡口", "山林", "野外"))
+    states = re.search(rf'<text x="(\d+)" y="\d+" font-size="12" fill="#5F5E5A">{LEGEND_STATES}</text>', svg)
+    box = re.search(r'<rect x="8" y="\d+" width="([\d.]+)"', svg)
+    assert int(states[1]) + text_width(LEGEND_STATES, 12) <= 8 + float(box[1])  # 圖例框裝得下第一行
+
+
+def test_places_keep_their_tap_circle_first_for_phones(state, content):
+    svg = render_map(state, content)  # web/style.css 靠「[data-loc] 底下第一層、fill-opacity="0" 的圓」放大點擊範圍
+    assert '<g data-loc="lake" style="cursor:pointer"><circle cx="200" cy="100" r="16" fill="#000000" fill-opacity="0"/>' in svg
+    assert svg.count('fill-opacity="0"') == 2  # 只有小鎮、湖邊的點擊圓是透明的：圓盤、紅圈、選定的圓圈都不是
+
+
+def test_selected_current_place_keeps_its_name_off_the_rings_and_the_flag(state, content):
+    svg = render_map(state, content, selected="town")
+    assert 'r="23" fill="none" stroke="#2C2C2A"' in svg and 'r="17" fill="none" stroke="#C0392B"' in svg
+    town = label_box(svg, "town")
+    assert not overlap(town, (75.5, 75.5, 124.5, 124.5)) and not overlap(town, (109, 65, 126, 91))
+
+
+def test_enemies_layer_tints_remembered_places_too(state, content):
+    content.config.vision_base = 0
+    state.player.visited.add("lake")  # 去過但看不見
+    lake = place(render_map(state, content, "enemies", odds={"thug": "穩勝"}.get), "lake")
+    disc, ring = mix("#BA7517", "#F4EFDF", 0.5), mix("#BA7517", "#E9E2CC", 0.45)
+    assert f'r="13" fill="{disc}" stroke="{ring}"' in lake  # 圓盤照樣是危險色（這一層要看的就是危險），外圈照去過的淡色
 
 
 # ── 大地圖的圖層 ─────────────────────────────────────
@@ -141,7 +200,7 @@ def test_remembered_color_is_distinct_from_visible(state, content):
 def test_every_layer_has_its_own_legend(state, content):
     for layer, line in LEGEND_LAYERS.items():
         svg = render_map(state, content, layer, odds={"thug": "穩勝"}.get)
-        assert line in svg and "外圈：綠安全／橙危險／紅兇險" in svg and "■ 城鎮" in svg
+        assert line in svg and "外圈：綠安全／橙危險／紅兇險" in svg and LEGEND_STATES in svg
         assert all(other not in svg for other in LEGEND_LAYERS.values() if other != line)
 
 
@@ -162,8 +221,8 @@ def test_situation_layer_tints_regions_and_flags_haunts(state, content):
 def test_enemies_layer_colours_by_danger_and_names_the_worst_foe(state, content):
     svg = render_map(state, content, "enemies", odds={"thug": "穩勝"}.get)
     assert "最險：水寇小隊 穩勝" in svg
-    assert f'r="8" fill="{NODE_FILL["visible"]}"' not in svg  # 湖邊改用危險度的顏色
-    assert 'fill="#BA7517" stroke="#BA7517"' in svg
+    disc = mix("#BA7517", "#F4EFDF", 0.5)  # 湖邊危險 2：圓盤是橙色往圓盤原色淡一半
+    assert f'r="13" fill="{disc}" stroke="#BA7517"' in svg and 'r="13" fill="#F4EFDF" stroke="#BA7517"' not in svg
     bare = render_map(state, content, "enemies").replace(LEGEND_LAYERS["enemies"], "")
     assert "最險" not in bare  # 沒給 odds：不寫、也不算
 
@@ -188,7 +247,7 @@ def test_routes_layer_shows_costs_and_the_selected_path(state, content):
 
 def test_selected_place_is_outlined_and_places_are_clickable(state, content):
     svg = render_map(state, content, selected="lake")
-    assert f'r="18" fill="none" stroke="{SELECT_STROKE}" stroke-width="3"' in svg  # 湖邊 8 ＋ 10
+    assert f'r="23" fill="none" stroke="{SELECT_STROKE}" stroke-width="3"' in svg  # 湖邊 13 ＋ 10
     assert svg.count('<g data-loc="town"') == 1 and svg.count('<g data-loc="lake"') == 1
     assert 'data-loc="cave"' not in svg  # 未開放：不畫
     content.config.vision_base = 0
@@ -262,8 +321,8 @@ def test_minimap_draws_the_big_map_around_the_player(state, content):
     assert 'fill="#6FA0C2"' in svg  # 河
     assert '<path d="M200,100 Q' in svg  # 湖邊—小鎮的路
     assert re.search(r'font-weight="bold"[^>]*>小鎮（你）<', svg)  # 所在地最醒目
-    assert f'r="18" fill="none" stroke="{NODE_FILL["current"]}"' in svg  # 所在地的圓圈（同大地圖）
-    assert f'rx="3" fill="{NODE_FILL["current"]}"' in svg  # 小鎮是城鎮：方塊
+    assert 'r="17" fill="none" stroke="#C0392B"' in svg and 'fill="#C0392B"/>' in svg  # 所在地的紅圈與紅旗（同大地圖）
+    assert 'fill="#B9604A"' in svg  # 小鎮是城鎮：城牆
     assert ">湖邊<" in svg and 'stroke="#BA7517"' in svg  # 看得見的地點寫名字、畫危險外圈
 
 
@@ -280,7 +339,7 @@ def test_minimap_names_regions_and_rivers_only_when_they_fit(state, content):
 def test_minimap_fog_matches_the_big_map(state, content):
     content.config.vision_base = 0
     svg = render_minimap(state, content)
-    assert "湖邊" not in svg and f'<circle cx="200" cy="100" r="4" fill="{NODE_FILL["dot"]}"/>' in svg  # 沒名字的淡點
+    assert "湖邊" not in svg and '<circle cx="200" cy="100" r="4" fill="#C2BAA4"/>' in svg  # 沒名字的淡點
     content.locations["lake"].important = True
     assert ">湖邊？<" in render_minimap(state, content)  # 畫出輪廓的未知地點
     cave = content.locations["cave"]

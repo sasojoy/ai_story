@@ -7,7 +7,7 @@ import math
 import zlib
 from dataclasses import dataclass
 
-from .models import Content, MapRiver, Terrain
+from .models import Content, Location, MapRiver, Terrain
 
 Point = tuple[float, float]
 
@@ -386,3 +386,75 @@ def compass(x: int, y: int) -> str:
         f'<path d="M{x},{y - n} L{x + 6},{y} L{x - 6},{y} Z" fill="{BANNER}"/>'
         f'<text x="{x}" y="{y - NORTH_RISE}" font-size="{NORTH_SIZE}" fill="#7A6640" text-anchor="middle">北</text>'
     )
+
+
+# ── 地點圖示 ─────────────────────────────────────────
+
+ICON_TAGS = (  # 地點圖示照標籤，由上往下判斷，先符合的算數；都不符合是小旗（flag）
+    ("town", {"城鎮", "城池", "官署", "塢堡"}),
+    ("camp", {"營寨"}),
+    ("roof", {"寺院", "書院", "莊院", "結社", "門派"}),
+    ("ferry", {"渡口", "河畔"}),
+    ("peak", {"山林", "洞窟"}),
+)
+ICON_COLORS = {  # 主色、第二色
+    "town": ("#B9604A", "#7E3B2C"),  # 城牆、城門
+    "camp": ("#8C6A44", "#5E4529"),  # 營帳、帳門
+    "roof": ("#5B6E8C", "#C9B994"),  # 屋頂、牆
+    "ferry": ("#7A5A3A", "#F1E9D3"),  # 船身、帆
+    "peak": ("#6E9580", "#4F7564"),  # 山頭、陰面
+    "flag": ("#A0522D", "#5A3A2A"),  # 旗、旗桿
+}
+FADE = (0.58, 0.5)  # 去過／摸清：主色、第二色各往紙色淡幾成
+SILHOUETTE = "#B6AE99"  # 未知（輪廓）的灰色剪影
+DISC = "#F4EFDF"  # 摸清的地點底下的圓盤
+DISC_FADED = "#EDE7D4"  # 去過／摸清的圓盤
+RING_FADE = 0.45  # 去過／摸清：危險外圈往紙色淡幾成
+DOT = "#C2BAA4"  # 淡點
+BANNER_BOX = (9, -35, 26, -9)  # 所在地的紅旗佔的範圍（相對地點中心的左、上、右、下）
+
+
+def icon_kind(loc: Location) -> str:
+    """地點畫哪一種圖示（ICON_TAGS）：例如廣宗「城池、營寨」先符合城池，畫城牆。"""
+    tags = set(loc.tags)
+    return next((kind for kind, wanted in ICON_TAGS if tags & wanted), "flag")
+
+
+def icon(kind: str, x: int, y: int, look: str) -> str:
+    """地點圖示，中心在 x、y。look：full 全彩（所在地、看得見）、faded 淡色（去過／摸清）、ghost 灰色剪影（未知，
+    門、陰面這些細節不畫）。"""
+    main, second = ICON_COLORS[kind]
+    if look == "faded":
+        main, second = mix(main, PAPER, FADE[0]), mix(second, PAPER, FADE[1])
+    elif look == "ghost":
+        main = second = SILHOUETTE
+    detail = look != "ghost"
+    if kind == "town":
+        gate = _fill(f"M{x - 2},{y + 7} v-4 a2,2 0 0 1 4,0 v4 Z", second) if detail else ""
+        return _fill(f"M{x - 9},{y + 7} v-9 h3 v-3 h3 v3 h3 v-3 h3 v3 h3 v-3 h3 v3 v9 Z", main) + gate
+    if kind == "camp":
+        door = _fill(f"M{x - 3},{y + 7} L{x},{y + 1} L{x + 3},{y + 7} Z", second) if detail else ""
+        return _fill(f"M{x - 10},{y + 7} L{x},{y - 8} L{x + 10},{y + 7} Z", main) + door
+    if kind == "roof":
+        roof = f"M{x - 11},{y - 1} Q{x - 6},{y - 2} {x - 4},{y - 8} L{x + 4},{y - 8} Q{x + 6},{y - 2} {x + 11},{y - 1} Z"
+        return _fill(f"M{x - 7},{y - 1} h14 v8 h-14 Z", second) + _fill(roof, main)
+    if kind == "ferry":
+        hull = f"M{x - 11},{y + 2} L{x + 11},{y + 2} L{x + 7},{y + 8} L{x - 7},{y + 8} Z"
+        return _fill(hull, main) + _fill(f"M{x - 1},{y + 1} L{x - 1},{y - 10} L{x + 8},{y + 1} Z", second)
+    if kind == "peak":
+        shade = _fill(f"M{x - 1},{y - 9} L{x + 10},{y + 7} L{x + 3},{y + 7} Z", second) if detail else ""
+        return _fill(f"M{x - 10},{y + 7} L{x - 1},{y - 9} L{x + 10},{y + 7} Z", main) + shade
+    pole = f'<path d="M{x - 4},{y + 8} V{y - 9}" stroke="{second}" stroke-width="1.8"/>'
+    return pole + _fill(f"M{x - 4},{y - 9} L{x + 8},{y - 5} L{x - 4},{y - 1} Z", main)
+
+
+def banner(x: int, y: int) -> str:
+    """所在地插的紅旗，插在記號右上（佔的範圍是 BANNER_BOX）。"""
+    return (
+        f'<path d="M{x + 11},{y - 9} V{y - 34}" stroke="#5A3A2A" stroke-width="1.8"/>'
+        f'<path d="M{x + 11},{y - 34} L{x + 25},{y - 29} L{x + 11},{y - 24} Z" fill="{BANNER}"/>'
+    )
+
+
+def _fill(d: str, color: str) -> str:
+    return f'<path d="{d}" fill="{color}"/>'
