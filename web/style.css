@@ -411,6 +411,8 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
   80% { transform: translate(1.5px, 1px) rotate(1deg); } 100% { transform: translate(0, 0) rotate(0); }
 }
 .w-card { margin-top: 10px; }
+/* 點輪盤一格後 revealWheelAction() 會把確認卡或印章列捲到剛好露出：分頁列約 55px 加 safe-area，再留一點空隙 */
+.w-card, .options.seals { scroll-margin-bottom: calc(64px + var(--bottom)); }
 .w-card .options { margin: 8px 0 0; }
 .w-card .move-mode { margin: 8px 0 0; }
 .w-title { margin: 0; font-size: 17px; }

@@ -416,6 +416,18 @@
         <button class="btn seal" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}><span>${esc(o.label)}</span></button>`).join("")}</div>` : ""}`;
   }
 
+  // 點了輪盤的一格之後，把那一塊動作區的最後一個元素（有「此地」印章列就是它，否則是確認卡）捲到剛好露出來。
+  // W18／QA：狀態列有心得提示時多一行、整頁往下推，點格之後確認卡變高，印章列的下緣落到底部分頁列底下；
+  // 頁底留白（.page 的 padding-bottom）管的是捲到底的情況，這裡是第一屏的位置。
+  // block: "nearest"：本來就看得到就不動，所以平常（沒有提示、大螢幕）什麼都不會發生；
+  // 離分頁列多遠由 CSS 的 scroll-margin-bottom 決定。只在點格子時呼叫，輪詢重畫與其他按鈕都不捲
+  function revealWheelAction() {
+    const last = document.querySelector("#page .options.seals") || document.querySelector("#page .w-card");
+    if (!last) return;
+    const calm = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    last.scrollIntoView({ block: "nearest", behavior: calm ? "auto" : "smooth" });
+  }
+
   function pageJianghu() {
     const m = S.main;
     // 「剛剛」（A4）：預設只露出開頭幾行，太長的（例如新角色的開場故事）收著、點「展開全文」看完，不在卡片裡捲。
@@ -1154,7 +1166,11 @@
           else toast("先挑兩樣素材放進爐裡。");
           break;
         case "craft-attr": S.craftAttr = S.craftAttr === el.dataset.attr ? null : el.dataset.attr; renderPage(); break;
-        case "wheel": S.wheelSel = S.wheelSel === el.dataset.key ? null : el.dataset.key; renderPage(); break;
+        case "wheel":
+          S.wheelSel = S.wheelSel === el.dataset.key ? null : el.dataset.key;
+          renderPage();
+          if (S.wheelSel) revealWheelAction(); // 取消選取（再點同一格）不捲
+          break;
         case "layer": S.layer = el.dataset.layer; await loadMap(S.map?.selected); break;
         case "map-zoom": mapZoom(el.dataset.step); break;
         case "map-home": mapHome(); break;
