@@ -246,3 +246,128 @@ def test_unstamped_season_issues_nothing(real):
     real.config.season_one = True
     game.advance(6 * 3600)
     assert game.state.world.orders == []
+
+
+# ── Task 3：記功與達成效果 ─────────────────────────────────
+
+
+def test_siege_credit_by_win_at_front_only_against_the_enemy(on):
+    game = _game(on, faction="guan")
+    siege = _order(game, "siege", "guan", front="yingru")
+    s, c = game.state, on
+    assert orders.credit(s, c, "guan", "甲", kind="win", front="yingru", squad_faction="huang") == [
+        "（軍令「攻城・潁川汝南」：你 1 次，陣營 1／4）",
+    ]
+    assert orders.credit(s, c, "guan", "甲", kind="win", front="nanyang", squad_faction="huang") == []  # 別的戰線
+    assert orders.credit(s, c, "guan", "甲", kind="win", front="yingru", squad_faction=None) == []  # 流寇不是敵方陣營
+    assert orders.credit(s, c, "guan", "甲", kind="duty", front="yingru") == []  # 守勢行動不算攻城
+    assert orders.credit(s, c, None, "丙", kind="win", front="yingru", squad_faction="huang") == []  # 散人
+    assert siege.progress == {"甲": 1}
+
+
+def test_order_done_applies_effect_once_and_names_top_three(on):
+    game = _game(on, faction="guan")
+    _fronts(game, 50, 50, 50)
+    siege = _order(game, "siege", "guan", front="yingru")
+    s, c = game.state, on
+    for name, times in (("甲", 1), ("乙", 2)):
+        for _ in range(times):
+            orders.credit(s, c, "guan", name, kind="win", front="yingru", squad_faction="huang")
+    msgs = orders.credit(s, c, "guan", "丙", kind="win", front="yingru", squad_faction="huang", shown="某位少俠")
+    assert siege.done and siege.applied == 8
+    assert rules.trend_value(s, c, "yingru") == 42
+    assert any("【軍令達成】潁川汝南的黃巾營壘被我軍連拔數處。出力最多：乙、甲、某位少俠。" in m for m in msgs)
+    assert any("（潁川汝南 -8）" in m for m in msgs)
+    news = [r for r in s.world.rumors if r.layer == "faction" and "軍令達成" in r.text]
+    assert len(news) == 1 and news[0].faction == "guan"
+    leak = [r for r in s.world.rumors if r.layer == "local" and "連破黃巾" in r.text]
+    assert len(leak) == 1 and leak[0].region == "yingru" and leak[0].named is False and "乙" not in leak[0].text
+    assert orders.credit(s, c, "guan", "甲", kind="win", front="yingru", squad_faction="huang") == []  # 達成了不再記
+    assert rules.trend_value(s, c, "yingru") == 42
+
+
+def test_defend_halves_the_enemy_siege(on):
+    """守城達成：敵方這週還沒攻下就戰況往己方 3；已經攻下就收回對方攻城的一半；守住之後對方才攻下只得一半。"""
+    game = _game(on, faction="guan")
+    s, c = game.state, on
+    _fronts(game, 50, 50, 50)
+    siege = _order(game, "siege", "huang", front="yingru", quota=1)
+    orders.credit(s, c, "huang", "乙", kind="win", front="yingru", squad_faction="guan")
+    assert rules.trend_value(s, c, "yingru") == 58
+    defend = _order(game, "defend", "guan", front="yingru", quota=1)
+    orders.credit(s, c, "guan", "甲", kind="duty", front="yingru")
+    assert rules.trend_value(s, c, "yingru") == 54 and siege.applied == 4 and defend.applied == 4
+
+    _fronts(game, 50, 50, 50)
+    _order(game, "defend", "guan", front="nanyang", quota=1)
+    orders.credit(s, c, "guan", "甲", kind="duty", front="nanyang")
+    assert rules.trend_value(s, c, "nanyang") == 47
+    late = _order(game, "siege", "huang", front="nanyang", quota=1)
+    orders.credit(s, c, "huang", "乙", kind="win", front="nanyang", squad_faction="guan")
+    assert late.applied == 4 and rules.trend_value(s, c, "nanyang") == 51
+
+
+def test_intercept_counts_only_the_enemy_convoy_near_the_place(on):
+    game = _game(on, faction="guan")
+    s, c = game.state, on
+    _order(game, "intercept", "guan", front="nanyang", location="nanyang_wilds")
+    kw = dict(kind="win", front="nanyang", squad_faction="huang")
+    assert orders.credit(s, c, "guan", "甲", location="nanyang_wilds", squad="huang_grain_convoy", **kw)
+    assert orders.credit(s, c, "guan", "甲", location="xinye", squad="huang_grain_convoy", **kw)  # 相鄰的站
+    assert not orders.credit(s, c, "guan", "甲", location="nanyang_wilds", squad="shanzei", **kw)  # 不是糧隊
+    assert not orders.credit(s, c, "guan", "甲", location="changshe", squad="huang_grain_convoy", kind="win",
+                             front="yingru", squad_faction="huang")  # 太遠
+    assert orders.extra_enemies(s, c, "xinye", "guan") == ["huang_grain_convoy"]
+    assert orders.extra_enemies(s, c, "changshe", "guan") == []
+    assert orders.extra_enemies(s, c, "xinye", "huang") == []  # 黃巾沒有截糧軍令
+    assert orders.extra_enemies(s, c, "xinye", None) == []
+
+
+def test_intercept_and_escort_both_done_cancel_mods(on):
+    """同一週、同一條戰線雙方都達成截糧、護糧：一般伏筆的修正互相抵銷。"""
+    game = _game(on, faction="guan")
+    s, c = game.state, on
+    _at_week(game, 2)
+    event = timetable.next_event_on(s, c, "nanyang")
+    assert event.id == "zhangmancheng_wan"
+    _order(game, "intercept", "guan", front="nanyang", location="nanyang_wilds", quota=1)
+    orders.credit(s, c, "guan", "甲", kind="win", location="nanyang_wilds", front="nanyang",
+                  squad="huang_grain_convoy", squad_faction="huang")
+    assert s.world.event_mods[event.id] == pytest.approx(-0.05)  # 「成」對黃巾有利：官軍 +5% 是 −0.05
+    escort = _order(game, "escort", "huang", front="nanyang", start="nanyang_wilds", end="nanyang_huangjin_camp", quota=1)
+    orders.credit(s, c, "huang", "乙", kind="convoy", location="nanyang_huangjin_camp", front="nanyang", order=escort.id)
+    assert s.world.event_mods[event.id] == pytest.approx(0.0)
+
+
+def test_escort_counts_only_its_own_order(on):
+    game = _game(on, faction="guan")
+    s, c = game.state, on
+    escort = _order(game, "escort", "guan", front="nanyang", start="xinye", end="wan_city")
+    assert orders.credit(s, c, "guan", "甲", kind="convoy", location="wan_city", front="nanyang", order=escort.id)
+    assert not orders.credit(s, c, "guan", "甲", kind="convoy", location="wan_city", front="nanyang", order="1:guan:escort:old")
+    assert orders.escort_at(s, c, "guan", "xinye") is escort
+    assert orders.escort_at(s, c, "guan", "wan_city") is None
+    assert orders.ambusher(c, "guan") == "huang_grain_convoy" and orders.ambusher(c, "haoqiang") is None
+
+
+def test_strike_figure_credit_and_extra_prestige(on):
+    game = _game(on, faction="guan")
+    s, c = game.state, on
+    before = figures.state_of(s, c, "bocai").prestige
+    _order(game, "strike", "guan", front="yingru", figure="bocai", quota=1)
+    assert not orders.credit(s, c, "guan", "甲", kind="challenge", figure="zhangmancheng")
+    orders.credit(s, c, "guan", "甲", kind="challenge", figure="bocai")
+    assert figures.state_of(s, c, "bocai").prestige == before - 15
+
+
+def test_strike_done_after_the_figure_retired(on):
+    """RF3：目標在軍令期間已經退場：達成照樣發軍情，但不再扣他、不丟例外。"""
+    game = _game(on, faction="guan")
+    s, c = game.state, on
+    order = _order(game, "strike", "guan", front="yingru", figure="bocai", quota=1)
+    figures.state_of(s, c, "bocai")  # 種好
+    s.world.figures["bocai"].status = "retired"
+    s.world.figures["bocai"].prestige = 0
+    msgs = orders.credit(s, c, "guan", "甲", kind="challenge", figure="bocai")
+    assert order.done and any("軍令達成" in m for m in msgs)
+    assert s.world.figures["bocai"].prestige == 0

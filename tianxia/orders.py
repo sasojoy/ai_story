@@ -237,3 +237,130 @@ def issue(state: GameState, content: Content, week: int, rng: random.Random) -> 
             w.orders.append(order)
             _faction_news(state, faction.id, f"{ISSUED}{order.text}")
     return []
+
+
+# ── 記功與達成 ────────────────────────────────────────────
+
+PERSONAL = {"siege": "win", "defend": "duty", "intercept": "win", "escort": "convoy", "strike": "challenge"}
+
+
+def _counts(
+    content: Content, o: Order, kind: str, location: str | None, front: str | None, squad: str | None,
+    squad_faction: str | None, figure: str | None, order: str | None,
+) -> bool:
+    """這一次個人行動算不算這道軍令的一次（軍令文件 3.1～3.4、4.5）。"""
+    if PERSONAL.get(o.template) != kind:
+        return False
+    if o.template == "siege":  # 在那條戰線遊歷打贏一場敵方陣營的隊伍（操練、流寇不算）
+        return front == o.front and squad_faction is not None and squad_faction == ENEMY.get(o.faction)
+    if o.template == "intercept":  # 在 {地點} 與相鄰站打贏敵方的運糧隊
+        enemy = content.orders.convoy_squads.get(ENEMY.get(o.faction, ""))
+        return squad is not None and squad == enemy and location is not None and o.location is not None \
+            and location in neighbors(content, o.location)
+    if o.template == "defend":  # 在那條戰線做守勢行動
+        return front == o.front
+    if o.template == "escort":  # 這一道的糧車送到（糧車記著自己是哪一道，見 Convoy.order）
+        return order == o.id
+    if o.template == "strike":  # 挑戰那位人物本人打贏
+        return figure is not None and figure == o.figure
+    return False
+
+
+def _enemy_order(state: GameState, o: Order, template: str) -> Order | None:
+    """同一週、同一條戰線，敵方已經達成的那一種軍令。"""
+    enemy = ENEMY.get(o.faction)
+    return next(
+        (x for x in state.world.orders
+         if x.faction == enemy and x.week == o.week and x.front == o.front and x.template == template and x.done),
+        None,
+    )
+
+
+def _leak(state: GameState, content: Content, o: Order, text: str) -> None:
+    """達成時在那一帶外洩一則不寫名字的地方傳聞（傳聞分層 3.3）：有地點就照地點的大區，沒有（攻城、守城）就照戰線的大區
+    （戰線 id 跟它主要的大區同名）。"""
+    rules.add_rumor(state, text, o.location, content=content, layer="local", named=False)
+    rumor = state.world.rumors[-1]
+    if rumor.region is None:
+        rumor.region = o.front
+
+
+def _complete(state: GameState, content: Content, o: Order) -> list[str]:
+    """湊滿額度：效果只套一次（濃縮版內容表 3.1），發陣營軍情（列前三名）與地方外洩。"""
+    o.done, o.done_time = True, state.world.time
+    t = template_of(content, o)
+    effect, sign = t.effect, SIGN.get(o.faction, 0)
+    msgs: list[str] = []
+    if o.template == "siege":
+        defend = _enemy_order(state, o, "defend")
+        halved = defend is not None and template_of(content, defend).effect.halve_enemy_siege
+        o.applied = effect.trend // 2 if halved else effect.trend
+        msgs += rules.change_trend(state, content, o.front, sign * o.applied)
+    elif o.template == "defend":
+        siege = _enemy_order(state, o, "siege") if effect.halve_enemy_siege else None
+        if siege is not None:  # 敵方已經攻下：收回一半
+            back = siege.applied - siege.applied // 2
+            siege.applied -= back
+            o.applied = back
+        else:  # 敵方這週還沒攻下：往己方 3（之後敵方才攻下，只得一半，見上面）
+            o.applied = effect.trend
+        msgs += rules.change_trend(state, content, o.front, sign * o.applied)
+    elif o.template in ("intercept", "escort"):
+        o.applied = effect.trend
+        msgs += rules.change_trend(state, content, o.front, sign * o.applied)
+        event = timetable.next_event_on(state, content, o.front)
+        if event is not None and o.faction in SIGN:
+            timetable.add_mod(state, content, event.id, o.faction, effect.event_mod)  # 沒有 roll_side 的大事 add_mod 自己略過
+    elif o.template == "strike" and o.figure is not None:
+        if figures.state_of(state, content, o.figure).status == "active":  # 已經退場、下獄的不再扣（RF3）
+            msgs += figures.defeat(state, content, o.figure, -effect.figure_prestige)
+    top = sorted(o.progress.items(), key=lambda item: -item[1])[:TOP]  # 同次數照先出力的順序（sorted 是穩定的）
+    names = "、".join(o.shown.get(name, name) for name, _ in top)
+    news = f"【軍令達成】{fill(state, content, o, t.faction_rumor)}出力最多：{names}。"
+    _faction_news(state, o.faction, news)
+    _leak(state, content, o, fill(state, content, o, t.leak_rumor))
+    return [news] + msgs
+
+
+def credit(
+    state: GameState, content: Content, faction: str | None, name: str, *, kind: str, location: str | None = None,
+    front: str | None = None, squad: str | None = None, squad_faction: str | None = None, figure: str | None = None,
+    order: str | None = None, weight: int = 1, shown: str | None = None,
+) -> list[str]:
+    """一次個人行動替這週的軍令記功（軍令文件第二節）：每道符合、還沒達成的加 weight 次（這一版只有第 1 階的行動，都是 1）。
+    貢獻不在這裡記——那次行動本身的推動已經經過 Game.push_trend 記過；護糧沒有推動，由引擎另記。
+    shown 是軍情列名用的名字（匿名時「某位少俠」），不給就用名號。散人、開關關著回空。"""
+    msgs: list[str] = []
+    for o in current(state, content, faction):
+        if o.done or not _counts(content, o, kind, location, front, squad, squad_faction, figure, order):
+            continue
+        o.progress[name] = o.progress.get(name, 0) + weight
+        o.shown[name] = shown or name
+        total = sum(o.progress.values())
+        msgs.append(f"（軍令「{title(content, o)}」：你 {o.progress[name]} 次，陣營 {min(total, o.quota)}／{o.quota}）")
+        if total >= o.quota:
+            msgs += _complete(state, content, o)
+    return msgs
+
+
+def extra_enemies(state: GameState, content: Content, loc_id: str, faction: str | None) -> list[str]:
+    """遊歷時多出來的對手：這週有截糧軍令、人在 {地點} 或相鄰的站，就可能遇上敵方的運糧隊（達成之後這週也照樣遇得到）。"""
+    enemy = content.orders.convoy_squads.get(ENEMY.get(faction or "", ""))
+    if enemy is None:
+        return []
+    for o in current(state, content, faction):
+        if o.template == "intercept" and o.location is not None and loc_id in neighbors(content, o.location):
+            return [enemy]
+    return []
+
+
+def escort_at(state: GameState, content: Content, faction: str | None, loc_id: str) -> Order | None:
+    """這週在這裡可以接的糧車：還沒達成、起點是這裡的護糧軍令。"""
+    return next(
+        (o for o in current(state, content, faction) if o.template == "escort" and not o.done and o.start == loc_id), None,
+    )
+
+
+def ambusher(content: Content, faction: str | None) -> str | None:
+    """護糧路上撞上的敵方截糧隊：對方的運糧隊。沒有對手陣營（豪強、散人）是 None。"""
+    return content.orders.convoy_squads.get(ENEMY.get(faction or "", ""))
