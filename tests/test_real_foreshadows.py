@@ -162,11 +162,14 @@ def fs_prepare(c, game: Game, chain) -> None:
 
 
 def fs_ready(c, world, chain_id: str, name: str = "甲", *, give: bool = True, rng=None) -> Game:
-    """站在那條鏈最後一步的地點、陣營對、時間窗裡，手上有（give）這條鏈要的東西的玩家。"""
+    """站在那條鏈最後一步的地點、陣營對、時間窗裡、戰況合格，手上有（give）這條鏈要的東西的玩家。
+    戰況設成 50：官軍 ≤60、黃巾 ≥40、豪強 35～65 都合格。起始戰況照劇本（T1：南陽 35），黃巾在南陽一開季就不合格。"""
     chain = fs_chain(c, chain_id)
     trip = foreshadow.trips(chain.final)[0]
     game = fs_game(c, world, name, chain.side, trip.location, rng=rng)
     game.state.world.time = fs_window_time(c, game, chain)
+    front = chain.front or next(e.front for e in c.timetable if e.id == chain.event)
+    game.state.world.trends[front] = 50
     if give:
         fs_prepare(c, game, chain)
     return game
@@ -741,7 +744,7 @@ def test_end_to_end_one_chain(world):
         game.state.player.visited.add(at)
 
     guan_chain, huang_chain = fs_chain(c, "fs_changshe_guan"), fs_chain(c, "fs_changshe_huang")
-    # 管理者快轉：第 5 週週五 00:30（長社排在第 6 週週四 20:00：前 7 天的時間窗裡、子時以後）
+    # 管理者快轉：第 6 週週一 00:30（長社排在第 6 週週四 20:00：前 7 天的時間窗裡、子時以後）
     admin.advance(fs_window_time(c, jia, guan_chain) - world.get_season().time)
     for game in (jia, yi):
         game.state.world = world.get_season()
