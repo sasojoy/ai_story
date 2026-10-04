@@ -59,7 +59,6 @@
     person: null,
     kind: "武學",
     artOpen: null, // 修練頁功法庫裡點開的那一門（id）；切分頁、改練成功之後收起
-    craftKind: "武學",
     craftSel: [],
     craftAttr: null, // 煉製輪盤點開的那一種屬性；null＝列出全部素材
     wheelSel: null, // 江湖輪盤點開的那一格（explore／train／rest／social／move）
@@ -338,16 +337,32 @@
       <circle r="166" fill="url(#wg-disk)"/><circle r="163" class="w-rim"/>
       ${wheelRing()}${faces}${hub}</svg></div>`;
   }
-  // 煉製頁的中心：太極就是爐子，兩個魚眼是兩個素材槽；放滿兩樣轉得快，點下去開爐
-  function taichiHub(filled, hot) {
-    const r = 50;
-    return `<g class="w-hub" data-act="forge-hub" role="button" aria-label="開爐">
-      <circle r="${r + 5}" class="w-hub-rim"/>
-      <g class="w-spin${hot ? " hot" : ""}" style="${spinAt(hot ? 3 : 28)}">
-        <circle r="${r}" class="w-yang"/>
-        <path d="M0,${-r} A${r},${r} 0 0 1 0,${r} A${r / 2},${r / 2} 0 0 1 0,0 A${r / 2},${r / 2} 0 0 0 0,${-r} Z" class="w-yin"/>
-        <circle cy="${-r / 2}" r="${r / 7}" class="${filled > 0 ? "w-eye-lit" : "w-yin"}"/>
-        <circle cy="${r / 2}" r="${r / 7}" class="${filled > 1 ? "w-eye-lit" : "w-yang"}"/>
+  // 煉製頁的中心：太極火爐（企劃者 2026-10-04）。太極在爐裡慢慢轉，外圈是一圈火舌；左右兩個是放素材的位置，
+  // 點有東西的那一格拿出來，點爐身開爐。開爐後等結果的這段時間整座爐子晃動（見 forge()）
+  function furnaceHub(slots, ready) {
+    const r = 54;
+    const flames = Array.from({ length: 16 }, (_, k) => {
+      const a = k * 22.5, [x0, y0] = wpt(r + 3, a - 7), [x1, y1] = wpt(r + 10, a), [x2, y2] = wpt(r + 3, a + 7);
+      return `<path d="M${x0},${y0} Q${x1},${y1} ${x2},${y2}" style="animation-delay:-${(k % 4) * 0.23}s"/>`;
+    }).join("");
+    const slot = (m, i) => {
+      const x = i ? 26 : -26;
+      return m
+        ? `<g class="w-slot full r${m.rank}" data-act="unslot" data-i="${i}" role="button" aria-label="拿出${esc(m.name)}">
+            <rect x="${x - 23}" y="-14" width="46" height="28" rx="7"/><text x="${x}" y="-3" class="w-slot-name">${esc(m.name)}</text><text x="${x}" y="8" class="w-slot-sub">${esc(m.tier)}・${esc(m.attribute)}</text></g>`
+        : `<g class="w-slot"><rect x="${x - 23}" y="-14" width="46" height="28" rx="7"/><text x="${x}" y="0" class="w-slot-sub">放入素材</text></g>`;
+    };
+    return `<g class="w-hub w-furnace${ready ? " ready" : ""}" data-act="forge-hub" role="button" aria-label="太極火爐，開爐">
+      <g class="w-shake">
+        <g class="w-flames${ready ? " hot" : ""}">${flames}</g>
+        <circle r="${r + 3}" class="w-hub-rim"/>
+        <g class="w-spin w-taichi" style="${spinAt(ready ? 3 : 28)}">
+          <circle r="${r}" class="w-yang"/>
+          <path d="M0,${-r} A${r},${r} 0 0 1 0,${r} A${r / 2},${r / 2} 0 0 1 0,0 A${r / 2},${r / 2} 0 0 0 0,${-r} Z" class="w-yin"/>
+          <circle cy="${-r / 2}" r="${r / 7}" class="w-yang"/><circle cy="${r / 2}" r="${r / 7}" class="w-yin"/>
+        </g>
+        ${slot(slots[0], 0)}${slot(slots[1], 1)}
+        <text y="${r - 12}" class="w-furnace-lab">${ready ? "點爐開火" : "太極火爐"}</text>
       </g></g>`;
   }
   // 江湖頁的中心：羅盤就是「移動」。刻度盤慢慢轉、指針輕輕擺
@@ -511,11 +526,6 @@
     if (!x) return '<p class="muted">載入中…</p>';
     const name = (id) => x.materials.find((m) => m.id === id);
     const used = (id) => S.craftSel.filter((s) => s === id).length;
-    const slot = (i) => {
-      const m = name(S.craftSel[i]);
-      return m ? `<div class="slot full" data-act="unslot" data-i="${i}">${esc(m.name)}<small>${esc(m.tier)}・屬${esc(m.attribute)}　點一下拿出</small></div>`
-        : `<div class="slot muted">放入素材</div>`;
-    };
     const ready = S.craftSel.length === x.per_craft;
     // 輪盤四格是素材的四種屬性，相剋的兩種面對面（剛↔柔、快↔慢）；點一格只列那種屬性的素材，再點一次列回全部
     const held = (a) => x.materials.filter((m) => m.attribute === a).reduce((n, m) => n + m.count - used(m.id), 0);
@@ -527,9 +537,7 @@
     const shown = S.craftAttr ? x.materials.filter((m) => m.attribute === S.craftAttr) : x.materials;
     return `
       <div class="msg" id="mx-msg">${S.message}</div>
-      ${wheelSvg("素材", sectors, taichiHub(S.craftSel.length, ready))}
-      <div class="slots">${slot(0)}<span class="plus">＋</span>${slot(1)}</div>
-      <div class="seg">${KINDS.map((k) => `<button class="${S.craftKind === k ? "on" : ""}" data-act="craft-kind" data-kind="${k}">煉${k}</button>`).join("")}</div>
+      ${wheelSvg("素材", sectors, furnaceHub([name(S.craftSel[0]), name(S.craftSel[1])], ready))}
       <div class="card" id="craft-line">${S.craftLine || x.craft_line}</div>
       ${S.craftAttr ? `<div class="label">屬${esc(S.craftAttr)}的素材 <button class="linkish" data-act="craft-attr" data-attr="${esc(S.craftAttr)}">看全部 ›</button></div>` : ""}
       ${S.craftAttr && !shown.length ? `<p class="muted">身上沒有屬${esc(S.craftAttr)}的素材。打屬${esc(S.craftAttr)}的對手、四處探索都可能拿到。</p>` : ""}
@@ -812,10 +820,10 @@
   let craftLineSeq = 0;
   async function updateCraftLine() {
     const seq = ++craftLineSeq;
-    const pot = JSON.stringify([S.craftSel, S.craftKind]);
+    const pot = JSON.stringify(S.craftSel);
     try {
-      const r = await api("/api/craft_line", { materials: S.craftSel, kind: S.craftKind });
-      if (seq !== craftLineSeq || pot !== JSON.stringify([S.craftSel, S.craftKind])) return;
+      const r = await api("/api/craft_line", { materials: S.craftSel });
+      if (seq !== craftLineSeq || pot !== JSON.stringify(S.craftSel)) return;
       S.craftLine = r.line;
       const el = document.getElementById("craft-line");
       if (el) el.innerHTML = r.line;
@@ -828,10 +836,12 @@
       btn.disabled = true;
       btn.textContent = "爐火正旺…";
       btn.classList.add("forging");
-      document.querySelector(".wheel .w-spin")?.classList.add("hot", "forging"); // 等取名的這段時間太極一直快轉
+      // 等結果的這段時間（首次發現的配方要等模型取名）整座爐子晃動、火舌竄高、太極快轉
+      document.querySelector(".wheel .w-furnace")?.classList.add("forging");
+      document.querySelector(".wheel .w-taichi")?.classList.add("hot");
       S.message = "爐火正旺。若這個配方是江湖上第一次煉成，取名要花上一分鐘，請稍候。";
       document.getElementById("mx-msg").textContent = S.message;
-      const r = await api("/api/menxia/craft", { materials: S.craftSel, kind: S.craftKind });
+      const r = await api("/api/menxia/craft", { materials: S.craftSel });
       S.menxia = r.menxia;
       S.message = r.message;
       S.craftSel = [];
@@ -933,8 +943,7 @@
           if (S.craftSel.length < (S.menxia?.per_craft || 2)) { S.craftSel.push(el.dataset.id); renderPage(); updateCraftLine(); }
           else toast("爐裡已經放滿了，點上面的素材拿出來再換。");
           break;
-        case "unslot": S.craftSel.splice(Number(el.dataset.i), 1); renderPage(); updateCraftLine(); break;
-        case "craft-kind": S.craftKind = el.dataset.kind; renderPage(); updateCraftLine(); break;
+        case "unslot": if (S.busy) break; S.craftSel.splice(Number(el.dataset.i), 1); renderPage(); updateCraftLine(); break;
         case "forge": await forge(); break;
         case "forge-hub":
           if (S.craftSel.length === (S.menxia?.per_craft || 2)) await forge();

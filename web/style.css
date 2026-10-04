@@ -249,11 +249,6 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .list .art-body .btn::after { content: none; }
 
 /* ── 煉製 ── */
-.slots { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; margin-bottom: 12px; }
-.slot { min-height: 64px; border: 2px dashed var(--line); border-radius: var(--radius); display: grid; place-items: center; padding: 6px; text-align: center; font-size: 14px; cursor: pointer; background: var(--card); }
-.slot.full { border-style: solid; border-color: var(--gold); }
-.slot small { display: block; font-size: 11px; color: var(--ink-2); }
-.plus { font: 600 20px var(--serif); color: var(--ink-2); }
 .chips { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; margin-bottom: 12px; }
 .chip { border: 1px solid var(--line); background: var(--card); border-radius: 12px; padding: 8px 10px; text-align: left; cursor: pointer; min-height: 52px; }
 .chip b { display: block; font-weight: 600; font-size: 14px; }
@@ -376,6 +371,24 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .w-hub.off .w-needle { animation: none; opacity: 0.4; }
 @keyframes w-turn { to { transform: rotate(360deg); } }
 @keyframes w-seek { 0%, 100% { transform: rotate(-8deg); } 30% { transform: rotate(10deg); } 60% { transform: rotate(-3deg); } 80% { transform: rotate(5deg); } }
+/* 太極火爐（煉製頁中心）：外圈火舌明滅，左右兩格放素材；開爐等結果時整座爐子晃動 */
+.w-flames path { fill: none; stroke: #e0782a; stroke-width: 3; stroke-linecap: round; opacity: 0.75; transform-origin: 0 0; animation: w-flicker 0.9s ease-in-out infinite alternate; }
+.w-flames.hot path, .w-furnace.forging .w-flames path { stroke: #f0a23a; stroke-width: 4; animation-duration: 0.35s; }
+@keyframes w-flicker { from { opacity: 0.45; transform: scale(0.97); } to { opacity: 0.95; transform: scale(1.04); } }
+.w-slot rect { fill: rgba(42, 36, 29, 0.78); stroke: var(--gold); stroke-width: 1; stroke-dasharray: 3 2; }
+.w-slot.full rect { fill: rgba(42, 36, 29, 0.92); stroke-dasharray: none; stroke-width: 1.4; }
+.w-slot.full { cursor: pointer; }
+.w-slot.full.r3 rect { stroke: #f0c060; stroke-width: 2; }
+.w-slot-name { font-family: var(--serif); font-weight: 700; font-size: 10.5px; fill: #fbf7ef; }
+.w-slot-sub { font-size: 7.5px; fill: rgba(251, 247, 239, 0.75); }
+.w-furnace-lab { font-family: var(--serif); font-size: 9px; fill: var(--gold); paint-order: stroke; stroke: var(--disk); stroke-width: 3px; }
+.w-furnace.ready .w-furnace-lab { font-weight: 700; }
+.w-furnace.forging .w-shake { animation: w-shake 0.42s linear infinite; }
+@keyframes w-shake {
+  0% { transform: translate(0, 0) rotate(0); } 20% { transform: translate(-2px, 1px) rotate(-1.5deg); }
+  40% { transform: translate(2px, -1px) rotate(1.5deg); } 60% { transform: translate(-1.5px, -1px) rotate(-1deg); }
+  80% { transform: translate(1.5px, 1px) rotate(1deg); } 100% { transform: translate(0, 0) rotate(0); }
+}
 .w-card { margin-top: 10px; }
 .w-card .options { margin: 8px 0 0; }
 .w-card .move-mode { margin: 8px 0 0; }
