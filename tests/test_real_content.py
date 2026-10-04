@@ -549,7 +549,8 @@ def test_real_timetable_matches_settlement_doc():
 
 
 def test_real_timetable_runs_a_whole_condensed_season():
-    """週末設定下把真實內容的一季從頭推到尾：除了決戰與季末（T8、T9），每件大事都結算一次、照週次。"""
+    """週末設定下把真實內容的一季從頭推到尾：除了決戰與季末（T8、T9），每件大事都結算一次、照週次。這裡沒有 store，
+    三場決戰開不了集結，記號一路等到季末：收季前照起點結算（T8 fix round 0），所以排在時間軸最後、照時間先後。"""
     import random as _random
 
     from tianxia.state import GameState, PlayerState
@@ -562,8 +563,11 @@ def test_real_timetable_runs_a_whole_condensed_season():
                       world=fresh_season(c))
     msgs = advance_world_state(state.world, c, 2.5 * 86400, _random.Random(0))
     expected = [e.id for e in c.timetable if e.kind not in ("showdown", "finale")]
-    assert list(state.world.timeline) == expected
-    assert sum(m.startswith("【江湖大事】") for m in msgs) == len(expected) - (state.world.timeline["qinjie_slays_zhangmancheng"].key == "skip")
+    showdowns = ["changshe_fire", "wancheng", "guangzong"]
+    assert list(state.world.timeline) == expected + showdowns
+    assert all(state.world.timeline[e].time == state.world.time for e in showdowns) and state.world.showdowns_waiting == []
+    announced = len(expected) + len(showdowns) - (state.world.timeline["qinjie_slays_zhangmancheng"].key == "skip")
+    assert sum(m.startswith("【江湖大事】") for m in msgs) == announced
     assert state.world.ended  # 季末照舊收季（T9 換成下曲陽）
 
 

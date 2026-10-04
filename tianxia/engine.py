@@ -2479,7 +2479,10 @@ class Game:
         battle = self.world.get_battle()
         if battle is not None and battle.phase != "ended":
             self._shelve_unfinished_battle()
-        self._write("收季", msgs, tag="管理者")  # 跟開季一樣，管理者自己的江湖紀錄留一則
+        # 收季前結算的、從沒開成的決戰（world.settle_waiting_showdowns）：公告跟別的大事一樣走 _deliver_big_events，
+        # 收季那一則不再重複一次
+        self._deliver_big_events()
+        self._write("收季", self._without_timetable(msgs), tag="管理者")  # 跟開季一樣，管理者自己的江湖紀錄留一則
         return self._log(msgs)
 
     def admin_next_season(self, now: float) -> list[str]:

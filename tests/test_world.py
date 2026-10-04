@@ -509,3 +509,49 @@ def test_a_showdown_waits_while_another_battle_runs(content, world):
     world.mutate_battle(lambda b: setattr(b, "phase", "ended"))
     assert open_waiting_showdown(world, content, now=20.0) == ["🛡️ 【全服戰報】長社火攻的集結號角已經吹響！"]
     assert world.get_battle().battle_id == "changshe_fire" and world.get_season().showdowns_waiting == []
+
+
+# ── 從沒開成的決戰在季末收季前照起點結算（T8 fix round 0，控制者裁定）────────────────
+
+
+def _season_to_the_end(content, locks=None):
+    """第一季內容＋時刻表決戰的 BattleDef；第 3、4 週的擲骰先記成跳過（潁川停在 40）。沒有 store：一次推進就從開季
+    推到季末，跨過長社、宛城的時間與季末——決戰沒有人能開（開集結要 store），記號還在等時季就到了。回傳那一份賽季。"""
+    from conftest import install_season_one, install_showdowns
+    from tianxia.state import GameState
+    from tianxia.world import advance_world_state
+    from tianxia.world_state import fresh_season, season_length_days
+
+    install_season_one(content)
+    install_showdowns(content)
+    state = GameState(player=_player(content), world=fresh_season(content))
+    w = state.world
+    w.timeline.update({e: TimelineResult(key="skip", time=0.0) for e in ("zhangmancheng", "bocai")})
+    w.locks.update(locks or {})
+    advance_world_state(w, content, season_length_days(w, content) * 86400, random.Random(0))
+    return w
+
+
+def test_waiting_showdown_is_settled_before_the_season_ends(content):
+    """Review Focus 1、2：一次追趕同時跨過決戰的時間與季末，決戰從沒開成也不能沒有結果：收季之前照前線算出的起點判
+    （長社：潁川 40 → 55 → 官軍險勝；宛城：南陽 35 − 秦頡 3 → 59 → 甲版官軍險勝），交給時刻表結算，再算結局。"""
+    w = _season_to_the_end(content)
+    assert w.ended
+    assert (w.timeline["changshe_fire"].key, w.timeline["wancheng"].key) == ("guan:險勝", "甲:guan:險勝")
+    assert w.timeline["changshe_fire"].time == w.time and w.trends["yingru"] == 40 - 8
+    assert w.showdowns_waiting == [] and w.showdowns_opened == {}
+    lines = [r.text for r in w.chronicle]
+    assert lines.index("波才敗走陽翟。") < lines.index(next(t for t in lines if t.startswith("賽季落幕")))  # 結局看得到結果
+
+
+def test_a_locked_waiting_showdown_goes_to_the_locker_at_the_season_end(content):
+    """同上，有人鎖定：照 decide_result，鎖定方一定贏——起點 55（戰場上是官軍）時黃巾鎖定是黃巾險勝；
+    宛城起點 59，官軍鎖定時戰場上也是官軍，是官軍大勝。"""
+    from tianxia.state import Lock
+
+    w = _season_to_the_end(content, locks={
+        "changshe_fire": Lock(side="huang", name="乙", time=0.0, shown="某位少俠"),
+        "wancheng": Lock(side="guan", name="甲", time=0.0),
+    })
+    assert (w.timeline["changshe_fire"].key, w.timeline["wancheng"].key) == ("huang:險勝", "甲:guan:大勝")
+    assert w.ended and w.showdowns_waiting == []

@@ -387,12 +387,17 @@ def decide_result(
       偏離 50 達 BIG_WIN_MARGIN（65 以上、35 以下）是大勝，否則險勝。
     - 有人鎖定（lock_side 是交戰的一方）：鎖定方一定贏，戰場上也贏是大勝、打輸是險勝。
     只有收場這一刻看鎖定（呼叫端讀 WorldState.locks 傳進來）；起點、推力、選項都不看，鎖定才不會在戰場上露出來（4.3）。"""
+    return result_at(instance.trend, definition, lock_side, defender)
+
+
+def result_at(trend: int, definition: BattleDef, lock_side: str | None, defender: str) -> tuple[str, str]:
+    """decide_result 的本體，戰局直接給數字：從沒開成的決戰在季末收季前照起點判（world.settle_waiting_showdowns）也用它。"""
     first, second = definition.factions[0].id, definition.factions[1].id
-    if instance.trend == CENTER:
+    if trend == CENTER:
         field = defender
     else:
-        field = first if instance.trend > CENTER else second
-    big = abs(instance.trend - CENTER) >= BIG_WIN_MARGIN
+        field = first if trend > CENTER else second
+    big = abs(trend - CENTER) >= BIG_WIN_MARGIN
     if lock_side not in (first, second):
         return field, "大勝" if big else "險勝"
     return lock_side, "大勝" if field == lock_side else "險勝"

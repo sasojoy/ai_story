@@ -205,18 +205,24 @@ def evaluate_ending(state: GameState, content: Content) -> Ending:
     return content.scenario.endings[-1]
 
 
-def end_season(state: GameState, content: Content, world: WorldStateStore | None = None) -> list[str]:
+def end_season(
+    state: GameState, content: Content, world: WorldStateStore | None = None, rng: random.Random | None = None,
+) -> list[str]:
     """world 給的話，順便算一次天下武學榜／內功榜附在結局後面（設計文件 6.5）；不傳就是
-    原本的純結局文字，選填不影響既有呼叫端或測試。"""
+    原本的純結局文字，選填不影響既有呼叫端或測試。
+
+    第一季：收季之前先把時間到了卻從沒開成的決戰照起點結算（settle_waiting_showdowns，T8 fix round 0），結局看得到
+    它們的結果；正在打的那一場不在這裡，照 FB-035 收兵、不算結果。只動 state.world，不碰 store（常在 mutate 裡）。"""
     w = state.world
     if w.ended:
         return []
+    msgs = settle_waiting_showdowns(state, content, rng or random.Random(0))
     ending = evaluate_ending(state, content)
     w.ended = True
     w.ending_title = ending.title
     w.ending_text = ending.text
     add_chronicle(state, f"賽季落幕：{ending.title}")
-    msgs = [f"══ 賽季落幕：{ending.title} ══", ending.text]
+    msgs += [f"══ 賽季落幕：{ending.title} ══", ending.text]
     if world is not None:
         board = leaderboard.compute_leaderboard(content, world)
         msgs += leaderboard.format_lines(board)
@@ -248,11 +254,46 @@ def season_events(state: GameState, content: Content, rng: random.Random) -> lis
             msgs += hook(state, content, rng)
     for event in timetable.due(state, content):
         msgs += timetable.resolve(state, content, event, rng)
+    _note_due_showdowns(state, content)
+    return msgs
+
+
+def _note_due_showdowns(state: GameState, content: Content) -> None:
+    """時間到了、還沒收場、還沒開過、內容有那一筆 BattleDef 的決戰，照時間記進 showdowns_waiting（已經記過的不重複）。
+    時刻表上有、內容沒寫那一場的不記（測試夾具）。"""
+    w = state.world
     for event in timetable.due_showdowns(state, content):
         if event.id in w.showdowns_waiting or event.id in w.showdowns_opened:
             continue
-        if showdown_battle(state, content, event) is not None:  # 時刻表上有、內容沒寫那一場的不記（測試夾具）
+        if showdown_battle(state, content, event) is not None:
             w.showdowns_waiting.append(event.id)
+
+
+def settle_waiting_showdowns(state: GameState, content: Content, rng: random.Random) -> list[str]:
+    """季要收了，時間到了卻從沒開成的決戰（還在 showdowns_waiting，時間軸上沒有結果）不能就這樣沒有結果
+    （Review Focus 1「決戰不能被跳過」、2「開不成或沒人打照鎖定或照起點收場」，控制者 2026-10-04 的裁定）：
+    照沒人參戰的那條路判——起點照此刻前線的戰況算（showdown_start），有人鎖定照鎖定（battle_instance.result_at），
+    再交給 timetable.resolve，照時間先後一件一件來，記號清掉。正在打（已經開過）的不在這裡，照 FB-035 收兵、不算結果。
+    開關關著、或這一季開季時沒開，什麼都不做。回傳公告。只動 state.world，不碰 store。"""
+    w = state.world
+    if not calendar.season_one_on(w, content):
+        return []
+    _note_due_showdowns(state, content)  # 剛好停在決戰時刻、還沒跑到季的事的那一件也算
+    msgs: list[str] = []
+    while w.showdowns_waiting:
+        event_id = w.showdowns_waiting.pop(0)
+        event = next((e for e in content.timetable if e.id == event_id and e.kind == "showdown"), None)
+        if event is None or event_id in w.timeline or event_id in w.showdowns_opened:
+            continue
+        definition = showdown_battle(state, content, event)
+        if definition is None:
+            continue
+        lock = w.locks.get(event_id)
+        winner, margin = battle_instance.result_at(
+            showdown_start(state, content, definition), definition, lock.side if lock is not None else None,
+            definition.defender or definition.factions[0].id,
+        )
+        msgs += timetable.resolve(state, content, event, rng, key=f"{winner}:{margin}")
     return msgs
 
 
@@ -392,7 +433,7 @@ def advance_world_state(
         if crossed and not season.ended:
             msgs += season_hour(vehicle, content, rng)
         if not season.ended and season.time >= season_length_days(season, content) * DAY:
-            msgs += end_season(vehicle, content, world)
+            msgs += end_season(vehicle, content, world, rng)
     return msgs
 
 

@@ -4648,3 +4648,33 @@ def test_admin_can_open_a_showdown_by_hand_once(content, world):
     assert world.get_battle().record_id == record and world.get_season().showdowns_waiting == []
     content.config.season_one = False
     assert game.admin_battles() == []
+
+
+def test_admin_end_season_settles_a_waiting_showdown_and_shelves_a_running_one(content, world):
+    """T8 fix round 0：管理者「立刻收季」——長社正在打（沒打完：收兵、不算結果，FB-035），排在後面等它的宛城從沒開成
+    （收季前照起點結算：南陽 35 − 秦頡 3 → 59 → 甲版官軍險勝），記號清掉；結算的公告照樣進江湖紀錄、只有一則。"""
+    game = _showdown_game(content, world)
+    content.config.admins = ["沈浪"]
+    _to_showdown(game, "wancheng")
+    assert world.get_battle().battle_id == "changshe_fire" and world.get_season().showdowns_waiting == ["wancheng"]
+    game.admin_end_season(now=game.now)
+    season = world.get_season()
+    assert season.ended and season.timeline["wancheng"].key == "甲:guan:險勝"
+    assert "changshe_fire" not in season.timeline and season.showdowns_waiting == []
+    assert [(b.battle_id, b.unfinished) for _, b in world.ended_battles()] == [("changshe_fire", True)]
+    announced = season.timeline["wancheng"].text
+    assert sum(announced in e.tag + "".join(e.lines) for e in game.state.journal) == 1
+    game.sync(game.now + 5)
+    assert sum(announced in e.tag + "".join(e.lines) for e in game.state.journal) == 1
+
+
+def test_admin_end_season_with_only_a_waiting_showdown_settles_it(content, world):
+    """沒有決戰在打、長社的時間到了卻還在等（例：開集結之前就收季）：收季前照起點結算（潁川 40 → 55 → 官軍險勝）。"""
+    game = _showdown_game(content, world)
+    content.config.admins = ["沈浪"]
+    world.mutate_season(lambda s: s.showdowns_waiting.append("changshe_fire"))  # 記號在、還沒開（開在 mutate 之後）
+    game.state.world = world.get_season()
+    game.admin_end_season(now=0.0)
+    season = world.get_season()
+    assert season.ended and season.timeline["changshe_fire"].key == "guan:險勝" and season.showdowns_waiting == []
+    assert world.get_battle() is None
