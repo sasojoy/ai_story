@@ -321,3 +321,84 @@ def test_map_tints_each_region_by_its_front(on):
     for region_id, value in (("yingru", 30), ("nanyang", 70), ("jizhou", 90), ("youzhou", 90)):
         assert mapview._tint(fills[region_id], value) in svg, region_id
     assert "黃巾聲勢" not in svg
+
+
+# ── Task 4：遊歷照陣營推所在戰線；每一種推動之後黃巾聲勢都對 ──────────
+
+
+@pytest.mark.parametrize("faction, place, squad, moved", [
+    ("guan", "changshe", "louluo", {"yingru": 39}),  # 官軍在長社打贏黃巾：潁川往 0 推
+    ("huang", "nanyang_wilds", "jun_bing", {"nanyang": 36}),  # 黃巾在南陽郊野打贏郡國兵：南陽往 100 推
+    (None, "changshe", "louluo", {"yingru": 39}),  # 散人照地點原本的方向（長社寫 -1）
+    ("haoqiang", "changshe", "louluo", {"geju": 11}),  # 豪強：潁川 40 在亂局，推割據、不動潁川
+])
+def test_training_pushes_the_local_front_by_faction(on, faction, place, squad, moved):
+    game = _game(on)
+    s = game.state
+    s.player.faction = faction
+    s.player.location = place
+    before = dict(s.world.trends)
+    with _win():
+        game._squad_encounter(squad)
+    changed = {k: v for k, v in s.world.trends.items() if before.get(k) != v and k != "huangjin"}
+    assert changed == moved
+    assert s.world.trends["huangjin"] == rules.trend_value(s, on, "huangjin")
+
+
+def test_warlords_push_nothing_where_the_front_is_settled(on):
+    game = _game(on)
+    s = game.state
+    s.player.faction = "haoqiang"
+    s.player.location = "guangzong"
+    s.world.trends["jizhou"] = 80  # 冀州穩在黃巾手上：不是亂局
+    before = dict(s.world.trends)
+    assert game.train_trend_push() == {}
+    with _win():
+        game._squad_encounter("toumu")
+    assert s.world.trends == before
+
+
+def test_training_at_luoyang_pushes_nothing_when_on(on):
+    """Review Focus 2：洛陽官道寫的是 front，洛陽沒有戰況——打贏了也什麼都不推。"""
+    game = _game(on)
+    s = game.state
+    s.player.faction = "guan"
+    s.player.location = "luoyang_road"
+    before = dict(s.world.trends)
+    assert game.train_trend_push() == {}
+    with _win():
+        game._squad_encounter("louluo")
+    assert s.world.trends == before
+
+
+def test_huangjin_stays_the_weighted_value_after_every_kind_of_push(on):
+    """Review Focus 3：事件效果、遊歷、虛擬玩家、決戰結果（直接寫賽季、不經 change_trend）、管理者推戰線、
+    割據漲落——每一條路之後，存下來的黃巾聲勢都等於三條戰線的加權。"""
+    on.scenario.sim_players = on.scenario.sim_players[:1]  # 波才：潁川 +1
+    admin = _game(on, "Rayal")
+    s = admin.state
+
+    def consistent() -> bool:
+        w = s.world.trends
+        expected = int(round(w["yingru"] * 0.35 + w["nanyang"] * 0.25 + w["jizhou"] * 0.40, 6) + 0.5)
+        return w["huangjin"] == expected == rules.trend_value(s, on, "huangjin")
+
+    s.player.location = "changshe"
+    rules.apply_effect(Effect(trend={"front": -7}), s, on, admin.world)  # 潁川 33
+    assert consistent()
+    s.player.faction = "guan"
+    with _win():
+        admin._squad_encounter("louluo")  # 32
+    assert consistent()
+    world.sim_tick(s, on, 1, FixedRandom(0.0))  # 波才 +1：33
+    assert consistent()
+    battle = battle_instance.BattleInstance(battle_id="huangjin_showdown", outcome_trend_delta={"yingru": -35})
+    admin._apply_outcome_trends_and_flags(s.world, battle)
+    assert s.world.trends["yingru"] == 0
+    assert consistent()
+    admin.admin_push_trend("nanyang", 20)
+    assert s.world.trends["nanyang"] == 55
+    assert consistent()
+    for _ in range(24):
+        rules.geju_tick(s, on, 1)
+    assert consistent()

@@ -25,8 +25,9 @@ from .models import (
 )
 from .ollama_client import OllamaClient
 from .rules import (
-    apply_effect, change_trend, check_who, current_day, fill_marks, free_text_rate, is_revealed, pushable, rate_words,
-    resolve_goals, resolve_trend, resolve_trends, roll_check, trend_name, trend_shown, trend_value, world_trend_value,
+    GEJU, apply_effect, change_trend, check_who, current_day, fill_marks, free_text_rate, front_ids, in_chaos, is_revealed,
+    pushable, rate_words, recompute_trends, resolve_goals, resolve_trend, resolve_trends, roll_check, season_one,
+    trend_name, trend_shown, trend_value, world_trend_value,
 )
 from .sqlite_world import open_world
 from .state import PLAYER, BattleRecord, GameState, JournalEntry, Journey, Rumor, WorldState, new_game_state
@@ -1208,6 +1209,7 @@ class Game:
         內容寫的是戰線：照 rules.resolve_trends 換鍵（開關關著時是黃巾聲勢）；存檔沒有那條線時從起始值算起。"""
         for trend_id, delta in resolve_trends(self.content, season, battle.outcome_trend_delta).items():
             season.trends[trend_id] = max(0, min(100, world_trend_value(season, self.content, trend_id) + delta))
+        recompute_trends(season, self.content)  # 開關開著時推了戰線，黃巾聲勢跟著重算（這裡不經 change_trend）
         for flag in battle.outcome_world_flags:
             if flag not in season.flags:
                 season.flags.add(flag)
@@ -1696,9 +1698,20 @@ class Game:
         pushes: dict[str, int] = {}
         for key, delta in loc.train_trend.items():
             target = resolve_trend(self.content, self.state.world, key, loc.id)
+            if target is not None and self._backs_the_chaos(target):
+                # 第一季濃縮版的豪強：那條戰線在亂局才推割據，不在亂局什麼都不推（第一季設計第七節）
+                target, delta = (GEJU, abs(delta)) if in_chaos(self.state, self.content, target) else (None, 0)
             if target is not None:
                 pushes[target] = pushes.get(target, 0) + self._train_push(target, delta)
         return pushes
+
+    def _backs_the_chaos(self, trend_id: str) -> bool:
+        """開關開著、這是一條戰線，而自己的陣營對它沒有目標、只想推割據（第一季濃縮版的豪強）。"""
+        goals = self._goals()
+        return (
+            season_one(self.content, self.state.world) and trend_id in front_ids(self.content)
+            and trend_id not in goals and GEJU in goals
+        )
 
     def push_trend(self, trend_id: str, delta: int, *, source: str) -> list[str]:
         """玩家自己造成的大勢推動一律走這裡（遊歷、操練、事件效果；sim_tick、時刻表、決戰、管理者不是個人推動，不走）。
