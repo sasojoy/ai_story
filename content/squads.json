@@ -21,5 +21,19 @@
   {"id": "wubao_buqu", "name": "塢堡部曲", "difficulty": 30, "attribute": "實", "reward_silver": 12, "reward_xinde": 18, "exp": 22, "faction": "haoqiang"},
   {"id": "yiyong", "name": "涿郡義勇", "difficulty": 25, "attribute": "快", "reward_silver": 10, "reward_xinde": 16, "exp": 20, "faction": "haoqiang"},
   {"id": "yan_mazei", "name": "燕山馬賊", "difficulty": 25, "attribute": "快", "reward_silver": 12, "reward_xinde": 15, "exp": 20},
-  {"id": "he_shuikou", "name": "河上水寇", "difficulty": 20, "attribute": "柔", "reward_silver": 10, "reward_xinde": 12, "exp": 16}
+  {"id": "he_shuikou", "name": "河上水寇", "difficulty": 20, "attribute": "柔", "reward_silver": 10, "reward_xinde": 12, "exp": 16},
+  {"id": "figure_bocai", "name": "波才", "difficulty": 150, "attribute": "剛", "reward_xinde": 80, "exp": 80, "faction": "huang"},
+  {"id": "figure_pengtuo", "name": "彭脫", "difficulty": 110, "attribute": "剛", "reward_xinde": 80, "exp": 80, "faction": "huang"},
+  {"id": "figure_zhangmancheng", "name": "張曼成", "difficulty": 130, "attribute": "柔", "reward_xinde": 80, "exp": 80, "faction": "huang"},
+  {"id": "figure_zhaohong", "name": "趙弘", "difficulty": 130, "attribute": "實", "reward_xinde": 80, "exp": 80, "faction": "huang"},
+  {"id": "figure_hanzhong", "name": "韓忠", "difficulty": 110, "attribute": "實", "reward_xinde": 80, "exp": 80, "faction": "huang"},
+  {"id": "figure_zhangjiao", "name": "張角", "difficulty": 160, "attribute": "柔", "reward_xinde": 80, "exp": 80, "faction": "huang"},
+  {"id": "figure_zhangbao", "name": "張寶", "difficulty": 140, "attribute": "快", "reward_xinde": 80, "exp": 80, "faction": "huang"},
+  {"id": "figure_zhangliang", "name": "張梁", "difficulty": 150, "attribute": "剛", "reward_xinde": 80, "exp": 80, "faction": "huang"},
+  {"id": "figure_huangfusong", "name": "皇甫嵩", "difficulty": 150, "attribute": "實", "reward_xinde": 80, "exp": 80, "faction": "guan"},
+  {"id": "figure_zhujun", "name": "朱儁", "difficulty": 140, "attribute": "實", "reward_xinde": 80, "exp": 80, "faction": "guan"},
+  {"id": "figure_luzhi", "name": "盧植", "difficulty": 140, "attribute": "柔", "reward_xinde": 80, "exp": 80, "faction": "guan"},
+  {"id": "figure_sunjian", "name": "孫堅", "difficulty": 150, "attribute": "快", "reward_xinde": 80, "exp": 80, "faction": "guan"},
+  {"id": "figure_hejin", "name": "何進", "difficulty": 100, "attribute": "虛", "reward_xinde": 80, "exp": 80, "faction": "guan"},
+  {"id": "figure_dongzhuo", "name": "董卓", "difficulty": 160, "attribute": "剛", "reward_xinde": 80, "exp": 80, "faction": "guan"}
 ]

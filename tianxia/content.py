@@ -18,7 +18,8 @@ from pydantic import BaseModel, ValidationError
 from .companion_agent import DIALOGUE_TAGS
 from .materials import TIER_NAMES
 from .models import (
-    FRONT_KEY, ROADS, STATS, BattleDef, CharacterDef, Condition, Config, Content, CraftNames, Effect, Event, Foreshadows, Location,
+    FRONT_KEY, ROADS, STATS, BattleDef, CharacterDef, Condition, Config, Content, CraftNames, Effect, Event, FigureDef,
+    Foreshadows, Location,
     MapLayout, Material, RoadSight, Scenario, Sect, SimRumor, SkillDef, Squad, TimetableEvent, Tutorial,
 )
 from .zh import to_traditional
@@ -70,6 +71,7 @@ def load_content(root: Path, profile: str | None = None) -> Content:
         timetable=[_build(TimetableEvent, raw) for raw in _read(root / "timetable.json")]
         if (root / "timetable.json").exists() else [],
         foreshadows=_foreshadows(root / "foreshadows.json"),
+        figures=_index(FigureDef, _read(root / "figures.json")) if (root / "figures.json").exists() else {},
         events=events,
         map=MapLayout(**_read(root / "map.json")),
         tutorial=Tutorial(**_read(root / "tutorial.json")),
@@ -186,7 +188,8 @@ def check_timetable(c: Content, need, known, front_ids: list[str], trend_ids: se
     寫的是戰線 id（大區的 front，T1：yingru／nanyang／jizhou），不是大區 id——幽州是大區、它的戰線是冀州，寫 youzhou
     讀戰況時會讀到固定的 50；結果鍵照種類齊全、鎖定對得到結果、人物與修正的
     對象存在、文字只用繁體中文。大勢線的推動（第三方、結果）要是存在的線、而且不能是衍生線（黃巾聲勢由三條戰線合成）。
-    人物先認 characters.json 的 id，T4 的人物表進來後改認它。"""
+    人物認人物表（figures.json，T4）的 id；沒有人物表的內容（測試夾具）照舊認 characters.json。"""
+    figure_ids = c.figures or c.characters
     ids = [e.id for e in c.timetable]
     duplicated = sorted({eid for eid in ids if ids.count(eid) > 1})
     need(not duplicated, f"時刻表 id 重複：{'、'.join(duplicated)}")
@@ -205,14 +208,14 @@ def check_timetable(c: Content, need, known, front_ids: list[str], trend_ids: se
             known(where, [front], front_ids, "戰線")
             need(side in TIMETABLE_SIDES, f"{where}：{key} 的那一方只能是 guan 或 huang")
         else:
-            known(where, [key], c.characters, "人物")
+            known(where, [key], figure_ids, "人物")
         if change.front is not None:
             known(where, [change.front], front_ids, "戰線")
         if change.location is not None:
             known(where, [change.location], c.locations, "地點")
         if change.fate == "到任":
             need(change.front is not None and change.location is not None, f"{where}：{key} 到任要寫 front 與 location")
-        known(where, change.only_if, c.characters, "人物")
+        known(where, change.only_if, figure_ids, "人物")
         known(where, change.only_if.values(), front_ids, "戰線")
         check_text(where, change.note)
 
@@ -235,7 +238,7 @@ def check_timetable(c: Content, need, known, front_ids: list[str], trend_ids: se
         else:
             need(not ev.versions, f"{where}：有 versions 就要寫 version_from")
         if ev.skip_if_out is not None:
-            known(where, [ev.skip_if_out], c.characters, "人物")
+            known(where, [ev.skip_if_out], figure_ids, "人物")
         versions = list(dict.fromkeys(ev.versions.values()))
         base = TIMETABLE_KEYS.get(ev.kind)
         if base is not None:  # 季末的結局句由 T9 寫在劇本的結局裡
@@ -272,6 +275,40 @@ def check_timetable(c: Content, need, known, front_ids: list[str], trend_ids: se
                          *outcome.locked_text.values(), *outcome.loser_text.values()):
                 check_text(ow, text)
         earlier[ev.id] = ev
+
+
+def check_figures(c: Content, need, known, front_ids: list[str]) -> None:
+    """大勢人物（content/figures.json，計畫 T4）：對話人物、陣營、戰線（戰線 id，不是大區）、地點、代表本人的隊伍都存在，
+    隊伍跟人物同一個陣營；一個對話人物只能是一位大勢人物；接位的人存在、同一個陣營、接位鏈不繞回來；名字只用繁體中文。"""
+    faction_ids = [f.id for f in c.scenario.factions]
+    owner: dict[str, str] = {}  # 對話人物 → 第一個用它的大勢人物
+    for fid, fig in c.figures.items():
+        where = f"大勢人物 {fid}"
+        if fig.character is not None:
+            known(where, [fig.character], c.characters, "人物")
+            need(owner.setdefault(fig.character, fid) == fid, f"{where}：人物 {fig.character} 已經是 {owner[fig.character]} 了")
+        known(where, [fig.faction], faction_ids, "陣營")
+        if fig.front is not None:
+            known(where, [fig.front], front_ids, "戰線")
+        known(where, [fig.location], c.locations, "地點")
+        known(where, [fig.squad], c.squads, "敵方隊伍")
+        squad = c.squads.get(fig.squad)
+        need(squad is None or squad.faction == fig.faction, f"{where}：隊伍 {fig.squad} 的陣營要跟人物一樣（{fig.faction}）")
+        need(
+            fig.active_from_week <= c.config.season_weeks,
+            f"{where}：第 {fig.active_from_week} 週超出季曆的 {c.config.season_weeks} 週",
+        )
+        need(to_traditional(fig.name) == fig.name, f"{where}：名字只能用繁體中文（{fig.name}）")
+        if fig.successor is None:
+            continue
+        known(where, [fig.successor], c.figures, "大勢人物")
+        heir = c.figures.get(fig.successor)
+        need(heir is None or heir.faction == fig.faction, f"{where}：接位的 {fig.successor} 要跟他同一個陣營")
+        chain, nxt = [fid], fig.successor
+        while nxt in c.figures and nxt not in chain:
+            chain.append(nxt)
+            nxt = c.figures[nxt].successor
+        need(nxt not in chain, f"{where}：接位鏈繞回來了（{'→'.join(chain)}→{nxt}）")
 
 
 def check_foreshadows(
@@ -965,6 +1002,7 @@ def validate(c: Content) -> None:
 
     front_ids = sorted(region_fronts)  # 戰線 id 照 T1 的大區 front，不另寫一份清單
     check_timetable(c, need, known, front_ids, trend_ids)
+    check_figures(c, need, known, front_ids)
     check_foreshadows(c, need, known, region_ids, front_ids, counters_written)
 
     for key, where in sorted(marks_written.items()):
