@@ -225,9 +225,26 @@ def _goals(game: Game, profile: BotProfile) -> dict[str, int]:
 
 
 def _home(game: Game, profile: BotProfile) -> set[str]:
-    """陣營的地盤：投靠點與相鄰的地點（第一季階段二有了戰線後改成往前線去）。"""
+    """陣營的地盤（假人往這一帶走）。第一季濃縮版（開關開著）：己方輸得最多的那條戰線上的所有地點（第一季設計
+    第七節：假人照陣營目標往前線去）；陣營對戰線沒有目標（豪強）或開關關著時：投靠點與相鄰的地點。"""
     faction_id = game.state.player.faction or profile.faction
     if faction_id is None:
         return set()
+    front = _losing_front(game, faction_id)
+    if front is not None:
+        return {loc_id for loc_id in game.content.locations if rules.front_of(game.content, loc_id) == front}
     join_at = _faction(game, faction_id).join_at
     return set(join_at) | {n for loc_id in join_at for n in game.content.locations[loc_id].connections}
+
+
+def _losing_front(game: Game, faction_id: str) -> str | None:
+    """己方輸得最多的戰線：目標是壓低（官軍）就挑戰況最高的、推高（黃巾）就挑最低的，同分取劇本排前面的。
+    開關關著、或這個陣營對戰線沒有目標時是 None。"""
+    content = game.content
+    if not rules.season_one(content, game.state.world):
+        return None
+    goals = _faction(game, faction_id).goals
+    fronts = [front for front in rules.front_ids(content) if goals.get(front)]
+    if not fronts:
+        return None
+    return max(fronts, key=lambda front: -goals[front] * rules.trend_value(game.state, content, front))

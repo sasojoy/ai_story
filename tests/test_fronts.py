@@ -444,3 +444,31 @@ def test_switch_on_but_season_unstamped_behaves_like_switch_off(real):
     regions = {r.id: atlas.region_trends(s, real, r) for r in real.map.regions}
     assert regions["jizhou"] == [("黃巾聲勢", 30)] and regions["luoyang"] == []
     assert "潁川汝南" not in game.trends_text()
+
+
+# ── Task 6：假人往輸得最多的戰線走 ─────────────────────────
+
+
+def _join_home(content, faction_id):
+    """開關關著時假人的地盤（T1 之前的算法）：投靠點與相鄰的地點。"""
+    join_at = next(f for f in content.scenario.factions if f.id == faction_id).join_at
+    return set(join_at) | {n for loc in join_at for n in content.locations[loc].connections}
+
+
+def test_bot_heads_to_the_losing_front(real):
+    game = _game(real)
+    guan, huang, warlord = (
+        BotProfile(personality="普通", seed=1, faction=f, season_number=1) for f in ("guan", "huang", "haoqiang")
+    )
+    assert bot_policy._home(game, guan) == _join_home(real, "guan")  # 開關關著：照舊
+    real.config.season_one = True
+    assert bot_policy._home(game, guan) == _join_home(real, "guan")  # 這一季沒蓋「開」的章：照舊
+    game.state.world.season_one = True
+    _set_fronts(game.state, 30, 35, 80)  # 官軍在冀州輸得最多；黃巾在潁川輸得最多
+    home = bot_policy._home(game, guan)
+    assert {"guangzong", "julu_altar", "zhuo_county"} <= home and "changshe" not in home
+    assert {rules.front_of(real, loc) for loc in home} == {"jizhou"}
+    home = bot_policy._home(game, huang)
+    assert {"changshe", "huangjin_camp"} <= home
+    assert {rules.front_of(real, loc) for loc in home} == {"yingru"}
+    assert bot_policy._home(game, warlord) == _join_home(real, "haoqiang")  # 豪強對戰線沒有目標：照投靠點
