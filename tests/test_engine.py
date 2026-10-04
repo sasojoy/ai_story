@@ -820,7 +820,7 @@ def test_nothing_personal_can_be_done_while_preparing(content, world):
     assert game.state.player.member.wugong_id is None
     game.state.player.materials = {"gang_1": 2}
     game.state.player.stats["xinde"] = 500
-    assert game.craft(["gang_1", "gang_1"], "武學") == waiting
+    assert game.craft(["gang_1", "gang_1"]) == waiting
     assert game.state.player.materials == {"gang_1": 2}
     assert game.switch_art("驚雷掌") == waiting
 

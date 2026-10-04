@@ -28,6 +28,18 @@ def llm_down():
     return mock.patch.object(OllamaClient, "chat_structured", boom)
 
 
+def brew(state, content, world, client, material_ids, kind="武學"):
+    """開爐，並把這一爐擲出的種類釘成 `kind`（種類由 `craft.result_kind` 擲，測試要的是確定的結果）。"""
+    with mock.patch.object(craft, "result_kind", lambda a, b, tianji: kind):
+        return craft.craft(state, content, world, client, material_ids)
+
+
+def can(state, content, material_ids, kind="武學", world=None):
+    """`craft.can_craft`，同樣把擲出的種類釘成 `kind`（只有給了 world、要查配方表時才用得到）。"""
+    with mock.patch.object(craft, "result_kind", lambda a, b, tianji: kind):
+        return craft.can_craft(state, content, material_ids, world)
+
+
 @pytest.fixture
 def stocked(state, content):
     """背包裡每種素材各 4 個、心得 500，夠煉好幾次。"""
@@ -65,9 +77,9 @@ def test_an_all_common_recipe_costs_no_xinde(content):
 def test_a_common_recipe_can_be_crafted_with_no_xinde(state, content, world):
     materials.grant(state, content, "gang_1", 2)
     state.player.stats["xinde"] = 0
-    assert craft.can_craft(state, content, ["gang_1", "gang_1"], "武學") is None
+    assert can(state, content, ["gang_1", "gang_1"], "武學") is None
     with naming("裂江訣"):
-        art, msgs = craft.craft(state, content, world, OllamaClient(), ["gang_1", "gang_1"], "武學")
+        art, msgs = brew(state, content, world, OllamaClient(), ["gang_1", "gang_1"], "武學")
     assert art is not None and state.player.stats["xinde"] == 0
     assert not any(m.startswith("心得 -") for m in msgs)
 
@@ -203,7 +215,7 @@ def test_the_fallback_name_differs_by_kind_and_salt(content):
 def test_a_banned_name_from_the_llm_falls_back_to_the_deterministic_one(stocked, content, world):
     client = OllamaClient()
     with naming("九陰真經"):
-        art, msgs = craft.craft(stocked, content, world, client, ["gang_1", "gang_1"], "武學")
+        art, msgs = brew(stocked, content, world, client, ["gang_1", "gang_1"], "武學")
     assert art is not None and art.name != "九陰真經"
     assert art.name == craft.fallback_name(content, craft.recipe_key(["gang_1", "gang_1"], "武學"), "武學")
 
@@ -211,7 +223,7 @@ def test_a_banned_name_from_the_llm_falls_back_to_the_deterministic_one(stocked,
 def test_a_simplified_name_is_registered_in_traditional_characters(stocked, content, world):
     client = OllamaClient()
     with naming("裂江诀"):  # 「诀」是簡體
-        art, _ = craft.craft(stocked, content, world, client, ["gang_1", "gang_1"], "武學")
+        art, _ = brew(stocked, content, world, client, ["gang_1", "gang_1"], "武學")
     assert art is not None and art.name == "裂江訣"
     assert world.get_skill("裂江訣") is not None
 
@@ -220,31 +232,27 @@ def test_a_simplified_name_is_registered_in_traditional_characters(stocked, cont
 
 
 def test_crafting_needs_two_materials(state, content):
-    assert craft.can_craft(state, content, ["gang_1"], "武學") is not None
-    assert craft.can_craft(state, content, ["gang_1", "gang_1", "gang_1"], "武學") is not None
-
-
-def test_crafting_needs_a_real_kind(stocked, content):
-    assert craft.can_craft(stocked, content, ["gang_1", "gang_1"], "輕功") is not None
+    assert can(state, content, ["gang_1"], "武學") is not None
+    assert can(state, content, ["gang_1", "gang_1", "gang_1"], "武學") is not None
 
 
 def test_crafting_needs_the_materials_in_hand(state, content):
     state.player.stats["xinde"] = 500
     materials.grant(state, content, "gang_1", 1)
-    assert craft.can_craft(state, content, ["gang_1", "gang_1"], "武學") is not None  # 只有一個
+    assert can(state, content, ["gang_1", "gang_1"], "武學") is not None  # 只有一個
     materials.grant(state, content, "gang_1", 1)
-    assert craft.can_craft(state, content, ["gang_1", "gang_1"], "武學") is None
+    assert can(state, content, ["gang_1", "gang_1"], "武學") is None
 
 
 def test_crafting_needs_enough_xinde(stocked, content):
     stocked.player.stats["xinde"] = craft.cost(content, ["gang_3", "gang_3"]) - 1
-    problem = craft.can_craft(stocked, content, ["gang_3", "gang_3"], "武學")
+    problem = can(stocked, content, ["gang_3", "gang_3"], "武學")
     assert problem is not None and "心得不足" in problem
 
 
 def test_a_failed_check_changes_nothing(state, content, world):
     client = OllamaClient()
-    art, msgs = craft.craft(state, content, world, client, ["gang_1", "gang_1"], "武學")
+    art, msgs = brew(state, content, world, client, ["gang_1", "gang_1"], "武學")
     assert art is None and len(msgs) == 1
     assert state.player.materials == {} and world.lookup_recipe(craft.recipe_key(["gang_1", "gang_1"], "武學")) is None
 
@@ -256,7 +264,7 @@ def test_crafting_spends_the_materials_and_the_xinde(stocked, content, world):
     client = OllamaClient()
     before = stocked.player.stats["xinde"]
     with naming("裂江訣"):
-        art, msgs = craft.craft(stocked, content, world, client, ["gang_3", "gang_3"], "武學")
+        art, msgs = brew(stocked, content, world, client, ["gang_3", "gang_3"], "武學")
     assert art is not None
     assert materials.held(stocked, "gang_3") == 2  # 原本 4 個，吃掉 2 個
     assert stocked.player.stats["xinde"] == before - craft.cost(content, ["gang_3", "gang_3"])
@@ -266,7 +274,7 @@ def test_crafting_spends_the_materials_and_the_xinde(stocked, content, world):
 def test_the_materials_decide_the_attribute_not_the_name(stocked, content, world):
     client = OllamaClient()
     with naming("裂江訣"):
-        art, _ = craft.craft(stocked, content, world, client, ["gang_1", "gang_3"], "武學")
+        art, _ = brew(stocked, content, world, client, ["gang_1", "gang_3"], "武學")
     by_name_alone = generate_from_name("裂江訣", "武學", "裂江訣")
     assert art is not None and art.attribute == "剛"
     # 名字單獨生成時剛好不是剛，才證明屬性真的來自素材（fixture 的名字是挑過的）
@@ -276,7 +284,7 @@ def test_the_materials_decide_the_attribute_not_the_name(stocked, content, world
 def test_the_crafted_art_records_who_first_made_it(stocked, content, world):
     client = OllamaClient()
     with naming("裂江訣"):
-        art, msgs = craft.craft(stocked, content, world, client, ["gang_1", "gang_1"], "武學")
+        art, msgs = brew(stocked, content, world, client, ["gang_1", "gang_1"], "武學")
     assert art is not None and art.creator == stocked.player.name
     assert art.note == "一句話說明。"
     assert "江湖上第一次煉成" in "\n".join(msgs)
@@ -286,18 +294,18 @@ def test_a_crafted_art_is_marked_as_crafted_new_or_from_the_recipe_book(stocked,
     """FB-017：煉出來的功法 origin 是 crafted（功法卡寫「煉製」、不是「自創」），配方查表拿到的那一門也是。"""
     client = OllamaClient()
     with naming("裂江訣"):
-        first, _ = craft.craft(stocked, content, world, client, ["gang_1", "gang_1"], "武學")
+        first, _ = brew(stocked, content, world, client, ["gang_1", "gang_1"], "武學")
     assert first is not None and first.origin == "crafted"
     assert world.lookup_recipe(craft.recipe_key(["gang_1", "gang_1"], "武學")).origin == "crafted"
     stocked.player.member.wugong_id = None  # 散功：這樣這個配方才又煉得起來
-    second, _ = craft.craft(stocked, content, world, client, ["gang_1", "gang_1"], "武學")
+    second, _ = brew(stocked, content, world, client, ["gang_1", "gang_1"], "武學")
     assert second is not None and second.origin == "crafted"
 
 
 def test_an_empty_slot_gets_the_art_equipped_right_away(stocked, content, world):
     client = OllamaClient()
     with naming("裂江訣"):
-        art, msgs = craft.craft(stocked, content, world, client, ["gang_1", "gang_1"], "武學")
+        art, msgs = brew(stocked, content, world, client, ["gang_1", "gang_1"], "武學")
     assert stocked.player.member.wugong_id == art.id
     assert stocked.player.member.wugong_level == 1
     assert stocked.player.arts == []
@@ -306,9 +314,9 @@ def test_an_empty_slot_gets_the_art_equipped_right_away(stocked, content, world)
 def test_a_second_art_of_the_same_kind_goes_to_the_library(stocked, content, world):
     client = OllamaClient()
     with naming("裂江訣"):
-        craft.craft(stocked, content, world, client, ["gang_1", "gang_1"], "武學")
+        brew(stocked, content, world, client, ["gang_1", "gang_1"], "武學")
     with naming("沉山勢"):
-        art2, msgs = craft.craft(stocked, content, world, client, ["gang_2", "gang_2"], "武學")
+        art2, msgs = brew(stocked, content, world, client, ["gang_2", "gang_2"], "武學")
     assert art2 is not None and stocked.player.arts == [art2.id]
     assert "功法庫" in "\n".join(msgs)
 
@@ -316,11 +324,76 @@ def test_a_second_art_of_the_same_kind_goes_to_the_library(stocked, content, wor
 def test_a_neigong_and_a_wugong_both_get_equipped(stocked, content, world):
     client = OllamaClient()
     with naming("裂江訣"):
-        craft.craft(stocked, content, world, client, ["gang_1", "gang_1"], "武學")
+        brew(stocked, content, world, client, ["gang_1", "gang_1"], "武學")
     with naming("玄淵經"):
-        craft.craft(stocked, content, world, client, ["gang_1", "gang_1"], "內功")
+        brew(stocked, content, world, client, ["gang_1", "gang_1"], "內功")
     member = stocked.player.member
     assert member.wugong_id == "裂江訣" and member.neigong_id == "玄淵經"
+
+
+# ── 種類開爐才揭曉（企劃者 2026-10-04：取消開爐前選內功／武學）────────
+
+
+def _mat(mid: str, attribute: str):
+    from tianxia.models import Material
+
+    return Material(id=mid, name=mid, attribute=attribute, tier=1, description="")
+
+
+def test_hard_and_fast_lean_to_wugong_soft_and_slow_to_neigong():
+    gang, kuai, rou, man, xu = (_mat(f"m_{a}", a) for a in "剛快柔慢虛")
+    assert craft.wugong_chance(gang, kuai) == pytest.approx(0.8)
+    assert craft.wugong_chance(gang, rou) == pytest.approx(0.5)  # 一剛一柔：五五波
+    assert craft.wugong_chance(rou, man) == pytest.approx(0.2)
+    assert craft.wugong_chance(gang, xu) == pytest.approx(0.65)  # 四個以外的屬性不推
+
+
+def test_the_kind_roll_is_fixed_for_a_recipe_within_a_season():
+    """同一組素材同一季永遠同一種：首創者定下的那門功法，後來的人照著煉拿到同一門。"""
+    a, b = _mat("x1", "剛"), _mat("x2", "柔")
+    assert craft.result_kind(a, b, 3) == craft.result_kind(b, a, 3) == craft.result_kind(a, b, 3)
+
+
+def test_the_kind_roll_follows_the_lean_and_changes_with_the_tianji():
+    pairs = [(_mat(f"g{i}", "剛"), _mat(f"k{i}", "快")) for i in range(400)]
+    wugong = sum(craft.result_kind(a, b, 0) == "武學" for a, b in pairs) / len(pairs)
+    assert 0.72 < wugong < 0.88  # 八成武學，抽樣誤差內
+    soft = [(_mat(f"r{i}", "柔"), _mat(f"m{i}", "慢")) for i in range(400)]
+    assert sum(craft.result_kind(a, b, 0) == "武學" for a, b in soft) / len(soft) < 0.28
+    # 換季（天機變了）就重擲：同一批配方總會有一些換了種類
+    assert any(craft.result_kind(a, b, 0) != craft.result_kind(a, b, 1) for a, b in pairs)
+
+
+def test_crafting_without_choosing_lands_on_the_rolled_kind(stocked, content, world):
+    a, b = content.materials["gang_1"], content.materials["kuai_1"]
+    kind = craft.result_kind(a, b, world.read().tianji)
+    with naming("裂江訣"):
+        art, msgs = craft.craft(stocked, content, world, OllamaClient(), ["gang_1", "kuai_1"])
+    assert art.kind == kind and f"煉成了一門{kind}【裂江訣】" in msgs[0]
+    assert world.lookup_recipe(craft.recipe_key(["gang_1", "kuai_1"], kind)).id == art.id
+
+
+def test_a_second_player_gets_the_same_kind_and_the_same_art(stocked, content, world, state):
+    """隨機出貨不能打壞「配方全服共享」：第二個人煉同一組素材拿到同一門（同一種）功法。"""
+    with naming("裂江訣"):
+        first, _ = craft.craft(stocked, content, world, OllamaClient(), ["gang_1", "kuai_1"])
+    other = state.model_copy(deep=True)
+    other.player.name, other.player.arts = "乙", []
+    other.player.member.neigong_id = other.player.member.wugong_id = None
+    materials.grant(other, content, "gang_1", 1)
+    materials.grant(other, content, "kuai_1", 1)
+    with naming("別的名字"):
+        second, msgs = craft.craft(other, content, world, OllamaClient(), ["kuai_1", "gang_1"])
+    assert second.id == first.id and second.kind == first.kind
+    assert "首創" in msgs[0]
+
+
+def test_the_rolled_recipe_still_refuses_a_recraft(stocked, content, world):
+    """擋重煉看的是擲出來那一種的配方：煉過、功法還在身上，就不准再白燒一爐。"""
+    with naming("裂江訣"):
+        craft.craft(stocked, content, world, OllamaClient(), ["gang_1", "kuai_1"])
+    problem = craft.can_craft(stocked, content, ["gang_1", "kuai_1"], world)
+    assert problem is not None and "裂江訣" in problem
 
 
 # ── 配方快取：全服共享（設計 §十二 第 1 點）──────────────────
@@ -329,7 +402,7 @@ def test_a_neigong_and_a_wugong_both_get_equipped(stocked, content, world):
 def test_the_recipe_is_registered_server_wide(stocked, content, world):
     client = OllamaClient()
     with naming("裂江訣"):
-        craft.craft(stocked, content, world, client, ["gang_1", "gang_1"], "武學")
+        brew(stocked, content, world, client, ["gang_1", "gang_1"], "武學")
     key = craft.recipe_key(["gang_1", "gang_1"], "武學")
     assert world.lookup_recipe(key).name == "裂江訣"
     assert world.lookup_recipe(key) is not None
@@ -338,10 +411,10 @@ def test_the_recipe_is_registered_server_wide(stocked, content, world):
 def test_a_cached_recipe_never_calls_the_llm_again(stocked, content, world):
     client = OllamaClient()
     with naming("裂江訣"):
-        first, _ = craft.craft(stocked, content, world, client, ["gang_1", "gang_1"], "武學")
+        first, _ = brew(stocked, content, world, client, ["gang_1", "gang_1"], "武學")
     stocked.player.member.wugong_id = None  # 散功：這樣這個配方才又煉得起來（否則會被擋，見下面那個測試）
     with mock.patch.object(OllamaClient, "chat_structured", side_effect=AssertionError("不該再呼叫 LLM")):
-        second, msgs = craft.craft(stocked, content, world, client, ["gang_1", "gang_1"], "武學")
+        second, msgs = brew(stocked, content, world, client, ["gang_1", "gang_1"], "武學")
     assert second is not None and second.name == first.name
     assert second.quality == first.quality and second.attribute == first.attribute
     assert "首創" in "\n".join(msgs)
@@ -353,13 +426,13 @@ def test_another_player_crafting_the_same_recipe_gets_the_same_art(stocked, cont
 
     client = OllamaClient()
     with naming("裂江訣"):
-        mine, _ = craft.craft(stocked, content, world, client, ["gang_1", "gang_1"], "武學")
+        mine, _ = brew(stocked, content, world, client, ["gang_1", "gang_1"], "武學")
 
     other = new_game_state(content, "另一個玩家")
     materials.grant(other, content, "gang_1", 2)
     other.player.stats["xinde"] = 500
     with mock.patch.object(OllamaClient, "chat_structured", side_effect=AssertionError("不該再呼叫 LLM")):
-        theirs, msgs = craft.craft(other, content, world, client, ["gang_1", "gang_1"], "武學")
+        theirs, msgs = brew(other, content, world, client, ["gang_1", "gang_1"], "武學")
     assert theirs is not None and theirs.name == mine.name
     assert theirs.creator == stocked.player.name  # 仍然記著首創者
     assert "首創" in "\n".join(msgs)
@@ -372,7 +445,7 @@ def test_a_name_already_taken_by_someone_elses_self_created_art_is_worked_around
     team.create_skill(stocked, content, world, "裂江訣", "內功")  # 別人（這裡是自己）先占走名字
     client = OllamaClient()
     with naming("裂江訣"):
-        art, _ = craft.craft(stocked, content, world, client, ["gang_1", "gang_1"], "武學")
+        art, _ = brew(stocked, content, world, client, ["gang_1", "gang_1"], "武學")
     assert art is not None and art.name != "裂江訣"
     # LLM 的名字用掉了第一次嘗試，所以退路組名從 salt=1 開始（仍然是決定性的）
     assert art.name == craft.fallback_name(content, craft.recipe_key(["gang_1", "gang_1"], "武學"), "武學", salt=1)
@@ -384,7 +457,7 @@ def test_a_name_already_taken_by_someone_elses_self_created_art_is_worked_around
 def test_crafting_works_with_the_llm_down(stocked, content, world):
     client = OllamaClient()
     with llm_down():
-        art, msgs = craft.craft(stocked, content, world, client, ["gang_1", "gang_1"], "武學")
+        art, msgs = brew(stocked, content, world, client, ["gang_1", "gang_1"], "武學")
     assert art is not None
     assert art.name == craft.fallback_name(content, craft.recipe_key(["gang_1", "gang_1"], "武學"), "武學")
     assert art.note == ""
@@ -393,16 +466,16 @@ def test_crafting_works_with_the_llm_down(stocked, content, world):
 def test_the_llm_returning_nothing_also_falls_back(stocked, content, world):
     client = OllamaClient()
     with mock.patch.object(OllamaClient, "chat_structured", return_value=None):
-        art, _ = craft.craft(stocked, content, world, client, ["gang_1", "gang_1"], "武學")
+        art, _ = brew(stocked, content, world, client, ["gang_1", "gang_1"], "武學")
     assert art is not None
 
 
 def test_the_same_recipe_crafted_offline_twice_is_identical(stocked, content, world):
     client = OllamaClient()
     with llm_down():
-        first, _ = craft.craft(stocked, content, world, client, ["gang_2", "gang_2"], "內功")
+        first, _ = brew(stocked, content, world, client, ["gang_2", "gang_2"], "內功")
         stocked.player.member.neigong_id = None  # 散功，不然同一門功法不准重煉
-        second, _ = craft.craft(stocked, content, world, client, ["gang_2", "gang_2"], "內功")
+        second, _ = brew(stocked, content, world, client, ["gang_2", "gang_2"], "內功")
     assert first is not None and second is not None
     assert (first.name, first.quality, first.attribute) == (second.name, second.quality, second.attribute)
 
@@ -414,9 +487,9 @@ def craft_two_wugong(state, content, world):
     """煉兩門武學：第一門自動配上身，第二門進功法庫。"""
     client = OllamaClient()
     with naming("裂江訣"):
-        first, _ = craft.craft(state, content, world, client, ["gang_1", "gang_1"], "武學")
+        first, _ = brew(state, content, world, client, ["gang_1", "gang_1"], "武學")
     with naming("沉山勢"):
-        second, _ = craft.craft(state, content, world, client, ["gang_2", "gang_2"], "武學")
+        second, _ = brew(state, content, world, client, ["gang_2", "gang_2"], "武學")
     return first, second
 
 
@@ -449,7 +522,7 @@ def test_switching_into_an_empty_slot_needs_no_swap(stocked, content, world):
 
     client = OllamaClient()
     with naming("玄淵經"):
-        art, _ = craft.craft(stocked, content, world, client, ["gang_1", "gang_1"], "內功")
+        art, _ = brew(stocked, content, world, client, ["gang_1", "gang_1"], "內功")
     stocked.player.member.neigong_id = None  # 假裝這門內功只在庫裡
     stocked.player.arts.append(art.id)
     msgs = team.switch_art(stocked, content, world, art.id)
@@ -468,9 +541,9 @@ def test_a_neigong_in_the_library_does_not_displace_a_wugong(stocked, content, w
 
     client = OllamaClient()
     with naming("裂江訣"):
-        wugong, _ = craft.craft(stocked, content, world, client, ["gang_1", "gang_1"], "武學")
+        wugong, _ = brew(stocked, content, world, client, ["gang_1", "gang_1"], "武學")
     with naming("玄淵經"):
-        neigong, _ = craft.craft(stocked, content, world, client, ["gang_1", "gang_1"], "內功")
+        neigong, _ = brew(stocked, content, world, client, ["gang_1", "gang_1"], "內功")
     stocked.player.member.neigong_id = None
     stocked.player.arts.append(neigong.id)
     team.switch_art(stocked, content, world, neigong.id)
@@ -486,10 +559,10 @@ def test_recrafting_an_art_you_already_practise_is_refused(stocked, content, wor
     同時在身上也在功法庫裡（實測機器人一季 17 爐有 8 爐是這種）。"""
     client = OllamaClient()
     with naming("裂江訣"):
-        art, _ = craft.craft(stocked, content, world, client, ["gang_1", "gang_1"], "武學")
+        art, _ = brew(stocked, content, world, client, ["gang_1", "gang_1"], "武學")
     before_materials = dict(stocked.player.materials)
     before_xinde = stocked.player.stats["xinde"]
-    again, msgs = craft.craft(stocked, content, world, client, ["gang_1", "gang_1"], "武學")
+    again, msgs = brew(stocked, content, world, client, ["gang_1", "gang_1"], "武學")
     assert again is None
     assert art.name in msgs[0] and "你已經有了" in msgs[0]
     assert stocked.player.materials == before_materials  # 什麼都沒扣
@@ -500,11 +573,11 @@ def test_recrafting_an_art_you_already_practise_is_refused(stocked, content, wor
 def test_recrafting_something_only_in_your_library_is_also_refused(stocked, content, world):
     client = OllamaClient()
     with naming("裂江訣"):
-        craft.craft(stocked, content, world, client, ["gang_1", "gang_1"], "武學")
+        brew(stocked, content, world, client, ["gang_1", "gang_1"], "武學")
     with naming("沉山勢"):
-        second, _ = craft.craft(stocked, content, world, client, ["gang_2", "gang_2"], "武學")
+        second, _ = brew(stocked, content, world, client, ["gang_2", "gang_2"], "武學")
     assert stocked.player.arts == [second.id]  # 在庫裡
-    again, msgs = craft.craft(stocked, content, world, client, ["gang_2", "gang_2"], "武學")
+    again, msgs = brew(stocked, content, world, client, ["gang_2", "gang_2"], "武學")
     assert again is None and "你已經有了" in msgs[0]
 
 
@@ -514,13 +587,13 @@ def test_a_recipe_someone_else_discovered_can_still_be_crafted(stocked, content,
 
     client = OllamaClient()
     with naming("裂江訣"):
-        mine, _ = craft.craft(stocked, content, world, client, ["gang_1", "gang_1"], "武學")
+        mine, _ = brew(stocked, content, world, client, ["gang_1", "gang_1"], "武學")
     other = new_game_state(content, "另一個玩家")
     materials.grant(other, content, "gang_1", 2)
     other.player.stats["xinde"] = 500
-    assert craft.can_craft(other, content, ["gang_1", "gang_1"], "武學", world) is None
+    assert can(other, content, ["gang_1", "gang_1"], "武學", world) is None
     with mock.patch.object(OllamaClient, "chat_structured", side_effect=AssertionError("不該呼叫 LLM")):
-        theirs, _ = craft.craft(other, content, world, client, ["gang_1", "gang_1"], "武學")
+        theirs, _ = brew(other, content, world, client, ["gang_1", "gang_1"], "武學")
     assert theirs is not None and theirs.name == mine.name
 
 
@@ -528,8 +601,8 @@ def test_can_craft_without_a_world_skips_the_duplicate_check(stocked, content, w
     """沒傳 world 時只做素材與心得的檢查（舊呼叫端不會壞）。"""
     client = OllamaClient()
     with naming("裂江訣"):
-        craft.craft(stocked, content, world, client, ["gang_1", "gang_1"], "武學")
-    assert craft.can_craft(stocked, content, ["gang_1", "gang_1"], "武學") is None
+        brew(stocked, content, world, client, ["gang_1", "gang_1"], "武學")
+    assert can(stocked, content, ["gang_1", "gang_1"], "武學") is None
 
 
 # ── 換季：配方每季清空、煉製吃天機（第一季設計第十四節）──────────
@@ -554,8 +627,8 @@ def test_the_tianji_decides_what_a_recipe_grows_into(content, world, tmp_path):
     later.mutate(lambda state: setattr(state, "tianji", 1))
     client = OllamaClient()
     with llm_down():
-        before, _ = craft.craft(supplied(content, "甲"), content, world, client, ["gang_1", "gang_1"], "武學")
-        after, _ = craft.craft(supplied(content, "乙"), content, later, client, ["gang_1", "gang_1"], "武學")
+        before, _ = brew(supplied(content, "甲"), content, world, client, ["gang_1", "gang_1"], "武學")
+        after, _ = brew(supplied(content, "乙"), content, later, client, ["gang_1", "gang_1"], "武學")
     assert before is not None and after is not None
     assert before.name == after.name  # 退路組名只看配方，所以名字一樣
     assert before.quality != after.quality
@@ -574,13 +647,13 @@ def test_recipes_are_cleared_every_season_and_rediscovered(content, world):
     client = OllamaClient()
     key = craft.recipe_key(["gang_1", "gang_1"], "武學")
     with llm_down():
-        first, _ = craft.craft(supplied(content, "甲"), content, world, client, ["gang_1", "gang_1"], "武學")
+        first, _ = brew(supplied(content, "甲"), content, world, client, ["gang_1", "gang_1"], "武學")
     assert first is not None and first.creator == "甲"
     world.mutate_season(lambda season: setattr(season, "ended", True))
     assert world.next_season(content, now=1.0)
 
     with llm_down():
-        again, msgs = craft.craft(supplied(content, "乙"), content, world, client, ["gang_1", "gang_1"], "武學")
+        again, msgs = brew(supplied(content, "乙"), content, world, client, ["gang_1", "gang_1"], "武學")
     assert again is not None, msgs
     assert again.creator == "乙"  # 這一季的首創者
     assert "江湖上第一次煉成" in "\n".join(msgs)
