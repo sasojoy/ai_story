@@ -411,6 +411,10 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
   80% { transform: translate(1.5px, 1px) rotate(1deg); } 100% { transform: translate(0, 0) rotate(0); }
 }
 .w-card { margin-top: 10px; }
+/* 手機上「剛剛」排在輪盤正下方（按完一格之後確認卡收起來，結果接在這裡）*/
+.wheel-wrap + .now, .wheel-wrap + .battle-card, .w-card + .now, .w-card + .battle-card { margin-top: 10px; }
+/* 煉製頁的太極火爐：自己一張圖，挑素材在下面的列表 */
+.furnace-wrap { width: 100%; max-width: 250px; margin: 4px auto 10px; aspect-ratio: 1; }
 .w-card .options { margin: 8px 0 0; }
 .w-card .move-mode { margin: 8px 0 0; }
 .w-title { margin: 0; font-size: 17px; }

@@ -26,7 +26,6 @@
   ];
   const POLL_MS = 10000;
   const KINDS = ["武學", "內功"];
-  const CRAFT_ATTRS = [["剛", "gang"], ["快", "kuai"], ["柔", "rou"], ["慢", "man"]]; // 煉製輪盤由上順時針，相剋的面對面
   // 江湖頁「前往」的走法（跟 atlas.MODES 同一份）。選的走法只放在 S.moveMode：不寫進 localStorage、cookie，
   // 重新整理頁面就回到步行；每個請求都帶著它（見 api()），伺服器照它排選單上的「前往」
   const FREE_TEXT_OPTION = "choice:free"; // 事件的隨口應對（engine.FREE_TEXT_OPTION）
@@ -60,7 +59,6 @@
     kind: "武學",
     artOpen: null, // 修練頁功法庫裡點開的那一門（id）；切分頁、改練成功之後收起
     craftSel: [],
-    craftAttr: null, // 煉製輪盤點開的那一種屬性；null＝列出全部素材
     wheelSel: null, // 江湖輪盤點開的那一格（explore／train／rest／social／move）
     craftLine: "",
     map: null,
@@ -354,6 +352,12 @@
         <text y="${r - 12}" class="w-furnace-lab">${ready ? "點爐開火" : "太極火爐"}</text>
       </g></g>`;
   }
+  // 煉製頁的太極火爐自己一張圖：外面不再圍四格屬性（挑素材回到下面的素材列表）
+  function furnaceSvg(slots, ready) {
+    return `<div class="furnace-wrap"><svg class="wheel furnace" viewBox="-74 -74 148 148" role="group" aria-label="太極火爐">
+      <defs><radialGradient id="wg-disk"><stop offset="0" style="stop-color:var(--disk-2)"/><stop offset="1" style="stop-color:var(--disk)"/></radialGradient></defs>
+      <circle r="72" fill="url(#wg-disk)"/><circle r="70" class="w-rim"/>${furnaceHub(slots, ready)}</svg></div>`;
+  }
   // 江湖頁的中心：羅盤就是「移動」。刻度盤慢慢轉、指針輕輕擺
   function compassHub(on, off) {
     const r = 44;
@@ -381,7 +385,8 @@
   // 選單上有「打坐」就是平常閒著的時候：用輪盤。事件、對話、路上、決戰的選項每次都不一樣，照舊排成一列按鈕
   const idleMenu = (m) => m.options.some((o) => o.id === "act:rest");
 
-  function actionWheel(m) {
+  // now：手機上「剛剛」那一則排在輪盤正下方（見 pageJianghu）；寬螢幕傳空字串，照舊排在場景上面
+  function actionWheel(m, now = "") {
     const byId = Object.fromEntries(m.options.map((o) => [o.id, o]));
     const used = new Set();
     const sectors = ACT_SECTORS.map((d) => {
@@ -407,11 +412,11 @@
       card = `<h3 class="w-title">${esc(pick.name)}${pick.detail ? ` <small>${esc(pick.detail)}</small>` : ""}</h3>
         ${pick.opt ? `<div class="options"><button class="btn primary" data-act="choose" data-id="${esc(pick.opt.id)}" ${pick.opt.enabled ? "" : "disabled"}><span>${esc(pick.opt.enabled ? pick.name : "體力不夠")}</span></button></div>`
           : `<p class="muted">${esc(pick.none)}。</p>`}`;
-    } else {
+    } else if (!now) {
       card = '<p class="muted">點輪盤上的一格看要花多少體力，再按一次確定；中間的羅盤是移動。</p>';
     }
     return `${wheelSvg("行動", sectors, compassHub(S.wheelSel === "move", !moves.length))}
-      <div class="card w-card">${card}</div>
+      ${card ? `<div class="card w-card">${card}</div>` : ""}${now}
       ${extras.length ? `<div class="label">此地</div><div class="options seals">${extras.map((o) => `
         <button class="btn seal" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}><span>${esc(o.label)}</span></button>`).join("")}</div>` : ""}`;
   }
@@ -456,7 +461,8 @@
     // 手機上平常有輪盤時，輪盤排在「剛剛」與場景之前（W17／QA）：375×812 的第一屏只有 668px，「剛剛」和場景加起來把輪盤擠到分頁列下面，
     // 打坐（體力見底時唯一的出路）要往下捲才按得到，而且位置隨上一個結果的長短忽上忽下。排在主線正下方，位置固定、確認卡也在第一屏。
     // 事件、對話等選項是在回答場景文字，一律照舊排在場景後面
-    if (wheel && PHONE && PHONE.matches) return `${quest}${menu}${now}${scene}${free}${tail}`;
+    // 按完一格之後（choose() 會收起點開的那一格），結果就排在輪盤正下方、確認卡原本的位置：不用往下捲就看得到做了什麼（企劃者 2026-10-04）
+    if (wheel && PHONE && PHONE.matches) return `${quest}${actionWheel(m, now)}${scene}${free}${tail}`;
     return `${quest}${now}${scene}${free}${menu}${tail}`;
   }
 
@@ -519,21 +525,13 @@
     const name = (id) => x.materials.find((m) => m.id === id);
     const used = (id) => S.craftSel.filter((s) => s === id).length;
     const ready = S.craftSel.length === x.per_craft;
-    // 輪盤四格是素材的四種屬性，相剋的兩種面對面（剛↔柔、快↔慢）；點一格只列那種屬性的素材，再點一次列回全部
-    const held = (a) => x.materials.filter((m) => m.attribute === a).reduce((n, m) => n + m.count - used(m.id), 0);
-    const inPot = new Set(S.craftSel.map((id) => name(id)?.attribute));
-    const sectors = CRAFT_ATTRS.map(([a, tone]) => ({
-      label: a, tone, sub: held(a) ? `${held(a)} 樣` : "沒有", on: S.craftAttr === a || inPot.has(a), off: !x.materials.some((m) => m.attribute === a),
-      attrs: `data-act="craft-attr" data-attr="${a}"`,
-    }));
-    const shown = S.craftAttr ? x.materials.filter((m) => m.attribute === S.craftAttr) : x.materials;
+    // 太極火爐只管放素材與開爐；挑素材在下面的素材列表（企劃者 2026-10-04：「選素材不要也在那邊，用舊的模式來顯示素材」）
     return `
       <div class="msg" id="mx-msg">${S.message}</div>
-      ${wheelSvg("素材", sectors, furnaceHub([name(S.craftSel[0]), name(S.craftSel[1])], ready))}
+      ${furnaceSvg([name(S.craftSel[0]), name(S.craftSel[1])], ready)}
       <div class="card" id="craft-line">${S.craftLine || x.craft_line}</div>
-      ${S.craftAttr ? `<div class="label">屬${esc(S.craftAttr)}的素材 <button class="linkish" data-act="craft-attr" data-attr="${esc(S.craftAttr)}">看全部 ›</button></div>` : ""}
-      ${S.craftAttr && !shown.length ? `<p class="muted">身上沒有屬${esc(S.craftAttr)}的素材。打屬${esc(S.craftAttr)}的對手、四處探索都可能拿到。</p>` : ""}
-      ${x.materials.length ? `<div class="chips">${shown.map((m) => `
+      <div class="label">素材 <small class="muted">點一樣放進爐裡</small></div>
+      ${x.materials.length ? `<div class="chips">${x.materials.map((m) => `
         <button class="chip r${m.rank} ${used(m.id) >= m.count ? "used" : ""}" data-act="slot" data-id="${esc(m.id)}" ${used(m.id) >= m.count ? "disabled" : ""}>
           <span class="n">×${m.count - used(m.id)}</span><b>${esc(m.name)}</b><small>${esc(m.tier)}・屬${esc(m.attribute)}</small>
         </button>`).join("")}</div>`
@@ -960,6 +958,7 @@
       if (talking) btn.lastElementChild.textContent = "對方沉吟中…";
       const r = await api("/api/choose", { id });
       S.answering = false;
+      S.wheelSel = null; // 輪盤上按的：收起確認卡，讓結果排到輪盤正下方
       applyMain(r.main);
       window.scrollTo({ top: 0, behavior: "smooth" });
       // 決戰選項（加入、趕到、出招）伺服器會回一句 message；一般選項的話在江湖紀錄裡，不回
@@ -1046,8 +1045,8 @@
       btn.textContent = "爐火正旺…";
       btn.classList.add("forging");
       // 等結果的這段時間（首次發現的配方要等模型取名）整座爐子晃動、火舌竄高、太極快轉
-      document.querySelector(".wheel .w-furnace")?.classList.add("forging");
-      document.querySelector(".wheel .w-taichi")?.classList.add("hot");
+      document.querySelector(".furnace .w-furnace")?.classList.add("forging");
+      document.querySelector(".furnace .w-taichi")?.classList.add("hot");
       S.message = "爐火正旺。若這個配方是江湖上第一次煉成，取名要花上一分鐘，請稍候。";
       document.getElementById("mx-msg").textContent = S.message;
       const r = await api("/api/menxia/craft", { materials: S.craftSel });
@@ -1153,7 +1152,6 @@
           if (S.craftSel.length === (S.menxia?.per_craft || 2)) await forge();
           else toast("先挑兩樣素材放進爐裡。");
           break;
-        case "craft-attr": S.craftAttr = S.craftAttr === el.dataset.attr ? null : el.dataset.attr; renderPage(); break;
         case "wheel": S.wheelSel = S.wheelSel === el.dataset.key ? null : el.dataset.key; renderPage(); break;
         case "layer": S.layer = el.dataset.layer; await loadMap(S.map?.selected); break;
         case "map-zoom": mapZoom(el.dataset.step); break;
