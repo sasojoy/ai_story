@@ -52,6 +52,7 @@
     mainKey: "",
     tab: "jianghu",
     nowOpen: null, // 江湖頁「剛剛」展開的那一則（記內容本身）；換成新的一則就收回（A4）
+    boardOpen: null, // 江湖頁公告卡展開著的那一週（週次）；收起或換週就不再對得上（FB-039）
     busy: false,
     menxia: null,
     message: "",
@@ -386,6 +387,14 @@
     card.scrollIntoView({ block: "nearest", behavior: calm ? "auto" : "smooth" });
   }
 
+  // 公告的標題：伺服器給的每則是「**標題**＋空行＋全文」轉成的 HTML，標題在第一個 <strong> 裡（Game.bulletin）
+  function bulletinTitle(html) {
+    const box = document.createElement("template");
+    box.innerHTML = html;
+    const strong = box.content.querySelector("strong");
+    return (strong || box.content).textContent.trim();
+  }
+
   function pageJianghu() {
     const m = S.main;
     // 「剛剛」（A4）：預設只露出開頭幾行，太長的（例如新角色的開場故事）收著、點「展開全文」看完，不在卡片裡捲。
@@ -422,9 +431,15 @@
       <div class="mini" data-act="tab" data-tab="map" role="button" aria-label="展開輿圖">${m.minimap}</div>
       <button class="linkish" data-act="news" data-news="journal">看江湖紀錄 ›</button>`;
     const quest = `<details class="fold quest"><summary>📜 主線與目標</summary><div class="fold-body">${m.quest}</div></details>`;
-    // 公告卡（第一季）：這一週已經發生的大事，新的在前；排在最上面、「剛剛」之前。沒有就不畫
+    // 公告卡（第一季）：這一週已經發生的大事，新的在前；排在最上面、「剛剛」之前。沒有就不畫。
+    // 預設縮成一行「📣 本週江湖大事（2）：標題、標題」（放不下截斷加「…」），點了才展開全文（FB-039）：兩件大事的全文
+    // 加上戰鬥卡片，會把整排行動擠到分頁列底下。展開與否記在 S.boardOpen（鍵是週次，toggle 監聽見下面），
+    // 輪詢重畫不會把它關掉，換週就回到收起
+    const week = m.status && m.status.calendar ? m.status.calendar.week : 0;
     const board = m.bulletin && m.bulletin.length
-      ? `<section class="card bulletin" aria-label="本週江湖大事"><div class="bulletin-head">📣 本週江湖大事</div>${m.bulletin.map((b) => `<div class="bulletin-item">${b}</div>`).join("")}</section>`
+      ? `<details class="fold bulletin" data-week="${week}" ${S.boardOpen === week ? "open" : ""}>
+          <summary><span class="bulletin-head">📣 本週江湖大事（${m.bulletin.length}）</span><span class="bulletin-titles">${esc(m.bulletin.map(bulletinTitle).join("、"))}</span></summary>
+          <div class="fold-body">${m.bulletin.map((b) => `<div class="bulletin-item">${b}</div>`).join("")}</div></details>`
       : "";
     // 劇情文字在上、行動在下（企劃者 2026-10-04）。行動列只有一排，375×812 上「剛剛」、場景與整排行動都在第一屏
     return `${board}${quest}${now}${scene}${free}${menu}${tail}`;
@@ -1400,6 +1415,13 @@
   }
   setInterval(poll, POLL_MS);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) poll(); });
+
+  // 公告卡的展開與否（FB-039）：toggle 不冒泡，用捕獲階段接。記的是週次：換週之後新畫的卡週次對不上，自然收起；
+  // 重畫（輪詢、換分頁回來）時照 S.boardOpen 補回 open，那一下補出來的 toggle 記下的還是同一週，不會繞圈
+  document.addEventListener("toggle", (ev) => {
+    const box = ev.target;
+    if (box instanceof Element && box.matches("details.bulletin")) S.boardOpen = box.open ? Number(box.dataset.week) : null;
+  }, true);
 
   // 視窗大小變了（轉向、拉視窗）：輿圖開著就重新夾住、套用；原本是整張就維持整張（applyMapView）
   window.addEventListener("resize", () => { if (S.stage === "game" && S.tab === "map") applyMapView(); });

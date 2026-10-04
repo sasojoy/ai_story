@@ -218,9 +218,14 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .now.clamp .now-more { position: absolute; right: 0; bottom: -6px; padding-left: 1.6em; background: linear-gradient(90deg, transparent, var(--card) 1.4em); }
 .now.fits .now-more { display: none; }
 .battle-card { border-color: var(--accent); }
-/* 公告卡（第一季，計畫 T2）：這一週已經發生的江湖大事，排在江湖頁最上面；一則一段，新的在前 */
-.bulletin { border-color: var(--gold); padding: 10px 14px; }
-.bulletin-head { font: 600 13px var(--sans); color: var(--gold); margin-bottom: 4px; }
+/* 公告卡（第一季，計畫 T2）：這一週已經發生的江湖大事，排在江湖頁最上面。
+   預設縮成一行（FB-039）：「📣 本週江湖大事（2）：標題、標題」，放不下的標題截斷加「…」；兩件大事的全文加上戰鬥卡片，
+   會把整排行動擠到分頁列底下。點了才展開全文，一則一段、新的在前；用 details.fold 的外觀。
+   選擇器要寫成 details.fold.bulletin：details.fold > summary 的權重比 .bulletin > summary 高，只寫後者會被蓋掉 */
+details.fold.bulletin > summary { border-color: var(--gold); font-size: 14px; padding: 8px 14px; min-height: 44px; box-sizing: border-box; }
+details.fold.bulletin > .fold-body { border-color: var(--gold); max-height: 50vh; overflow: auto; }
+.bulletin-head { flex: none; color: var(--gold); white-space: nowrap; }
+.bulletin-titles { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 400; color: var(--ink-2); }
 .bulletin-item { font-size: 14px; line-height: 1.65; }
 .bulletin-item + .bulletin-item { border-top: 1px dashed var(--line); margin-top: 8px; padding-top: 8px; }
 .bulletin-item p { margin: 0 0 4px; }
