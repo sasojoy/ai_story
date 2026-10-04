@@ -329,6 +329,11 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 }
 .admin-zone h4 { margin: 0; font-size: 16px; }
 .admin-zone .muted { margin-bottom: 0; }
+/* 管理者區的按鈕字不斷開（FB-033）：375 寬時「立刻收季」「開啟下一季」被擠成一排會折成兩行字 */
+.admin-zone .btn { white-space: nowrap; }
+/* 開季／收季／開下一季三顆：照字寬排，擠不下就整顆換到下一行（每顆長滿它那一行，不留空）；只動這一列、不動別頁的 .row */
+.admin-zone .row.seasons { flex-wrap: wrap; }
+.admin-zone .row.seasons > .btn { flex: 1 1 auto; width: auto; }
 .ad-row > .ad-tag { flex: none; align-self: center; font-size: 13px; color: var(--ink-2); }
 .ad-row > .btn { flex: none; }
 .btn.warn { color: var(--bad); border-color: var(--bad); font-weight: 600; }
