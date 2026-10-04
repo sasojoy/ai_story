@@ -371,3 +371,77 @@ def test_strike_done_after_the_figure_retired(on):
     msgs = orders.credit(s, c, "guan", "甲", kind="challenge", figure="bocai")
     assert order.done and any("軍令達成" in m for m in msgs)
     assert s.world.figures["bocai"].prestige == 0
+
+
+# ── Task 4：遊歷記功、運糧隊、守勢行動 ───────────────────────
+
+
+def _issue_now(game):
+    orders.issue(game.state, game.content, orders.week_of(game.state, game.content), random.Random(0))
+
+
+def test_win_at_front_counts_for_siege_but_a_drill_does_not(on):
+    game = _game(on, faction="guan", at="changshe")
+    _order(game, "siege", "guan", front="yingru")
+    with _win():
+        msgs = game.choose("act:train")
+    assert any("軍令「攻城・潁川汝南」：你 1 次" in m for m in msgs)
+    on.squads["louluo"].faction = "guan"  # 自己人：操練不算
+    on.squads["shuikou"].faction = "guan"
+    game.state.player.stamina = 150
+    msgs = game.choose("act:train")
+    assert not any("軍令" in m for m in msgs)
+
+
+def test_intercept_convoy_squad_appears_and_counts(on):
+    game = _game(on, faction="guan", at="nanyang_wilds")
+    on.locations["nanyang_wilds"].enemies = []  # 只剩糧隊，看得出它是軍令帶來的
+    assert "act:train" not in [o.id for o in game.options()]
+    _order(game, "intercept", "guan", front="nanyang", location="nanyang_wilds")
+    assert "act:train" in [o.id for o in game.options()]
+    with _win():
+        msgs = game.choose("act:train")
+    assert any("黃巾糧隊" in m for m in msgs)
+    assert any("軍令「截糧・南陽郊野」：你 1 次" in m for m in msgs)
+
+
+def test_duty_pushes_the_front_and_counts_for_defend(on):
+    game = _game(on, faction="huang", at="changshe")
+    _fronts(game, 50, 50, 50)
+    _order(game, "defend", "huang", front="yingru")
+    option = next(o for o in game.options() if o.id == "act:duty")
+    assert option.label == "傳道（體力 10）"
+    msgs = game.choose("act:duty")
+    assert msgs[0].startswith("你在長社的村口講了一段黃天的道理")
+    assert any("（潁川汝南 +1）" in m for m in msgs)
+    assert any("軍令「守城・潁川汝南」：你 1 次" in m for m in msgs)
+    assert game.state.player.stamina == 140
+    assert game.state.player.contrib == 10  # 推 1 點記 10 貢獻（T3）
+    assert game.state.journal[0].title == "傳道・長社"
+
+
+def test_haoqiang_duty_pushes_geju_only_in_chaos(on):
+    game = _game(on, faction="haoqiang", at="changshe")
+    _fronts(game, 50, 50, 50)
+    geju = rules.trend_value(game.state, on, "geju")
+    game.choose("act:duty")
+    assert rules.trend_value(game.state, on, "geju") == geju + 1
+    _fronts(game, 80, 50, 50)
+    game.state.player.stamina = 150
+    game.choose("act:duty")
+    assert rules.trend_value(game.state, on, "geju") == geju + 1  # 潁川不在亂局：什麼都不推
+
+
+def test_duty_only_for_members_on_a_front(on):
+    assert "act:duty" not in [o.id for o in _game(on, at="changshe").options()]  # 散人
+    assert "act:duty" not in [o.id for o in _game(on, "乙", faction="guan", at="luoyang_palace").options()]  # 洛陽沒有戰線
+
+
+def test_switch_off_no_duty_no_convoy_squad_same_draws(real):
+    """開關關著：沒有守勢行動，遊歷的對手清單一樣（亂數抽法一樣），沒有任何軍令的字。"""
+    game = _game(real, faction="guan", at="nanyang_wilds")
+    assert "act:duty" not in [o.id for o in game.options()]
+    assert game._train_squad_ids(real.locations["nanyang_wilds"]) == real.locations["nanyang_wilds"].enemies
+    with _win():
+        msgs = game.choose("act:train")
+    assert not any("軍令" in m for m in msgs)
