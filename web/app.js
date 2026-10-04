@@ -437,8 +437,7 @@
         </button>`).join("")}
       </div>`;
     const scene = `<section class="card scene">${m.scene}</section>`;
-    const tail = `${links}
-      <div class="mini" data-act="tab" data-tab="map" role="button" aria-label="展開輿圖">${m.minimap}</div>
+    const tail = `<div class="mini" data-act="tab" data-tab="map" role="button" aria-label="展開輿圖">${m.minimap}</div>
       <button class="linkish" data-act="news" data-news="journal">看江湖紀錄 ›</button>`;
     const quest = `<details class="fold quest"><summary>📜 主線與目標</summary><div class="fold-body">${m.quest}</div></details>`;
     // 公告卡（第一季）：這一週已經發生的大事，新的在前；排在最上面、「剛剛」之前。沒有就不畫。
@@ -453,8 +452,9 @@
       : "";
     // 三條戰況排在行動列下面、小地圖上面，不擠掉第一屏的公告卡、「剛剛」、場景與行動列
     const fronts = m.fronts ? frontsHtml(m.fronts) : "";
-    // 劇情文字在上、行動在下（企劃者 2026-10-04）。行動列只有一排，375×812 上「剛剛」、場景與整排行動都在第一屏
-    return `${board}${quest}${now}${scene}${free}${menu}${fronts}${tail}`;
+    // 劇情文字在上、行動在下（企劃者 2026-10-04）。行動列只有一排，375×812 上「剛剛」、場景與整排行動都在第一屏。
+    // 路上的三個捷徑（links）緊貼在選項底下，戰況條排在捷徑之後，不要把它插到選項與捷徑中間
+    return `${board}${quest}${now}${scene}${free}${menu}${links}${fronts}${tail}`;
   }
 
   // ── 修練 ──
