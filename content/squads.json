@@ -35,5 +35,15 @@
   {"id": "figure_luzhi", "name": "盧植", "difficulty": 140, "attribute": "柔", "reward_xinde": 80, "exp": 80, "faction": "guan"},
   {"id": "figure_sunjian", "name": "孫堅", "difficulty": 150, "attribute": "快", "reward_xinde": 80, "exp": 80, "faction": "guan"},
   {"id": "figure_hejin", "name": "何進", "difficulty": 100, "attribute": "虛", "reward_xinde": 80, "exp": 80, "faction": "guan"},
-  {"id": "figure_dongzhuo", "name": "董卓", "difficulty": 160, "attribute": "剛", "reward_xinde": 80, "exp": 80, "faction": "guan"}
+  {"id": "figure_dongzhuo", "name": "董卓", "difficulty": 160, "attribute": "剛", "reward_xinde": 80, "exp": 80, "faction": "guan"},
+  {
+    "id": "guan_grain_convoy", "name": "官軍糧隊", "difficulty": 30, "attribute": "實", "faction": "guan",
+    "reward_silver": 12, "reward_xinde": 18, "exp": 22, "drops": [{"material": "man_1"}],
+    "desc": "十幾輛牛車，押車的郡兵比牛還累，糧袋上蓋著官印。"
+  },
+  {
+    "id": "huang_grain_convoy", "name": "黃巾糧隊", "difficulty": 30, "attribute": "慢", "faction": "huang",
+    "reward_silver": 12, "reward_xinde": 18, "exp": 22, "drops": [{"material": "man_1"}],
+    "desc": "推獨輪車的信眾，糧袋上縫著黃布，前後各有幾個拿刀的力士。"
+  }
 ]

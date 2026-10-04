@@ -175,10 +175,11 @@ def check_who(check: Check, state: GameState, content: Content, world: WorldStat
 
 def add_rumor(
     state: GameState, text: str, location: str | None = None, *, content: Content | None = None,
-    layer: RumorLayer = "world", named: bool = True,
+    layer: RumorLayer = "world", named: bool = True, faction: str | None = None,
 ) -> None:
     """記一則傳聞（傳聞分層設計第二節）。給了 content 與地點時，順便記下地點所在的大區。
-    第 1 期只先把資料記對；誰看得到哪一層，是傳聞分層的規則實作（線上架構第 2 期之後）。"""
+    第 1 期只先把資料記對；誰看得到哪一層，是傳聞分層的規則實作（線上架構第 2 期之後）。
+    faction：陣營軍情只給這個陣營的人看（Game.rumors_text 照它過濾，計畫 T6）。"""
     from . import atlas  # atlas → world → rules：在函式裡 import，避免循環
 
     region = None
@@ -186,8 +187,15 @@ def add_rumor(
         found = atlas.region_of(content, location)
         region = found.id if found is not None else None
     state.world.rumors.append(
-        Rumor(time=state.world.time, text=text, location=location, layer=layer, region=region, named=named)
+        Rumor(time=state.world.time, text=text, location=location, layer=layer, region=region, named=named, faction=faction)
     )
+
+
+def can_hear(rumor: Rumor, state: GameState) -> bool:
+    """這個人聽不聽得到這則傳聞：陣營軍情只給那個陣營、個人線索只給那個人（傳聞分層設計第二節）。
+    見聞頁、沿途打聽、輿圖的地點詳情都照這一個規則（T6 審查 C1：軍令寫成陣營軍情之後，任何列傳聞的地方都要過它）。"""
+    p = state.player
+    return rumor.faction in (None, p.faction) and rumor.character in (None, p.name)
 
 
 def add_chronicle(state: GameState, text: str) -> None:

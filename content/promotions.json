@@ -1,0 +1,38 @@
+[
+  {
+    "faction": "guan",
+    "rank": 2,
+    "figure": "huangfusong",
+    "successor": "zhujun",
+    "location": "changshe",
+    "event_main": "promo_guan_2",
+    "event_handoff": "promo_guan_2_handoff",
+    "summons_text": "皇甫嵩召你到長社營中。",
+    "summons_handoff": "朱儁召你到長社營中。",
+    "closing": "兩個鄉勇被叫到你面前：「從今天起，他們跟你。」"
+  },
+  {
+    "faction": "huang",
+    "rank": 2,
+    "figure": "bocai",
+    "successor": "pengtuo",
+    "location": "huangjin_camp",
+    "event_main": "promo_huang_2",
+    "event_handoff": "promo_huang_2_handoff",
+    "summons_text": "波才傳話，要你到黃巾別部營寨見他。",
+    "summons_handoff": "彭脫傳話，要你到黃巾別部營寨。",
+    "closing": "一個信眾、一個力士被帶到你身後：「小帥，以後聽你的。」"
+  },
+  {
+    "faction": "haoqiang",
+    "rank": 2,
+    "figure": null,
+    "successor": null,
+    "location": "nearest_base",
+    "event_main": "promo_haoqiang_2",
+    "event_handoff": null,
+    "summons_text": "中山的馬商張世平、蘇雙到了{據點}，指名要見你。",
+    "summons_handoff": null,
+    "closing": "馬商替你招來的兩個人到了：一個門客、一個部曲。"
+  }
+]

@@ -83,6 +83,10 @@ class Effect(_Strict):
     # 伏筆（計畫 T7）的準備事件用；第一季開關關著時兩個都不發生（不給也不寫任何字）
     clue_items: dict[str, int] = Field(default_factory=dict)  # 伏筆專用物品（foreshadows.json 的 items）：正數給、負數收走
     fs_counters: dict[str, int] = Field(default_factory=dict)  # 伏筆的隱藏計數（例：豪強兩頭賣糧的起點 two_buyers）：加多少，不寫字
+    # ── 晉升（計畫 T5）：只寫在晉升奇遇的選項上（content.validate 檢查）──
+    promote: int | None = None  # 演完晉升到第幾階（清掉召見、接結尾那一句、記進當天的彙整）
+    followers: list[str] = Field(default_factory=list)  # 給的部下（followers.json 的模板 id）
+    affinity: dict[str, int] = Field(default_factory=dict)  # 人物 id → 情誼增減（夾在 0～100，訊息「皇甫嵩情誼 +10」）
 
 
 class Material(_Strict):
@@ -331,6 +335,7 @@ class Squad(_Strict):
     exp: int = 0
     drops: list[Drop] = Field(default_factory=list)  # 留空則走 materials.py 依難度的預設掉落表
     faction: str | None = None  # 這支隊伍屬於哪個陣營（Scenario.factions 的 id）；自己陣營的人遇到時改成操練、不開打
+    desc: str = ""  # 一句描述（運糧隊這類有特別來歷的對手才寫；遇上時接在戰鬥那一行後面，濃縮版內容表 3.3）
 
 
 class Trend(_Strict):
@@ -498,7 +503,7 @@ class Milestone(_Strict):
 class TutorialGoal(_Strict):
     """每一項都要符合才算完成；空的（或 False 的）欄位不檢查。"""
 
-    action: Literal["explore", "socialize", "move", "view_map", "recruit", "practice"] | None = None
+    action: Literal["explore", "socialize", "move", "view_map", "recruit", "practice", "order"] | None = None  # order：替軍令記到一次（計畫 T6）
     locations: list[str] = Field(default_factory=list)
     condition: Condition = Field(default_factory=Condition)
     has_wugong: bool = False  # 身上要有一門武學才算（沒有武學威力是 0，出城只有挨打的份）
@@ -509,6 +514,7 @@ class TutorialStep(_Strict):
     text: str
     done_when: TutorialGoal
     reward: Effect = Field(default_factory=Effect)
+    season_one: bool = False  # 只在第一季濃縮版才有的步驟（開關開著、這一季也蓋了章，計畫 T6）；一律排在最後（content.validate）
 
 
 class Tutorial(_Strict):
@@ -667,6 +673,13 @@ class Config(_Strict):
     active_window_days: float = Field(default=1, gt=0)  # 陣營人數緩衝的「活躍」時窗：幾個曆日內推過大勢的成員才算
     # 糧草（計畫 T6；這一版沒有軍備物資，糧草＝背包裡的慢屬性素材，濃縮版內容表 4.0）：凡、靈、天一個各算幾份
     grain_values: list[int] = Field(default_factory=lambda: [1, 3, 9])
+    # ── 軍令（計畫 T6、軍令文件第二節、濃縮版內容表第三節；掛在 season_one 後面）──
+    orders_per_week: int = Field(default=3, ge=0)  # 每個陣營每週同時有幾道（豪強這一版只有打擊一種，最多一道）
+    order_quota_min: int = Field(default=4, ge=1)  # 陣營總額度最少幾次（軍令文件寫 5；週末兩人時太滿，總計畫待決 3 先用 4）
+    convoy_ambush_chance: float = Field(default=0.2, ge=0, le=1)  # 糧車送到終點前先撞上敵方截糧隊的機率
+    convoy_grain: int = Field(default=4, ge=1)  # 接一車糧要交出幾份糧草（軍令文件 3.4：份量 ≥ 4）
+    duty_stamina: int = Field(default=10, ge=0)  # 第 1 階守勢行動（巡哨、傳道、保境安民）的體力
+    rank2_contrib: int = Field(default=300, ge=0)  # 升第 2 階的貢獻門檻（計畫 T5、第五節：推 30 點大勢）
     # ── 伏筆（計畫 T7、伏筆文件 2.8）──
     # 需求量照 server_max_players 換算：人數上限「未滿」第一個數時用第二個數當係數，照順序找第一個符合的；
     # 都不符合（1000 人以上）就是 1。片段的機率反過來除以它（foreshadow.scale、foreshadow.need）
@@ -1094,6 +1107,112 @@ class Foreshadows(_Strict):
     guanyin: FsGuanyin | None = None
 
 
+OrderKind = Literal["siege", "defend", "intercept", "escort", "strike"]  # 攻城、守城、截糧、護糧、打擊大勢人物
+PersonalKind = Literal["win", "duty", "convoy", "challenge"]  # 遊歷打贏、守勢行動、糧車送到、挑戰打贏
+
+
+class OrderWhen(_Strict):
+    """什麼時候發（濃縮版內容表 3.1）；寫了的每一項都要成立（or_enemy_siege 只放寬 losing_by）。
+    front_min／front_max：那條戰線的戰況在這個區間（含兩端）；打擊是看目標人物所在戰線。
+    losing_by：戰線偏向對方超過多少（官軍：戰況 ≥ 50＋n；黃巾：≤ 50－n）。
+    or_enemy_siege：或者敵方上週在這條戰線達成了攻城（守城）。
+    event_within_weeks：這條戰線的下一件時刻表大事在幾週內（季曆）。
+    always：每週固定一道（豪強的打擊）。"""
+
+    front_min: int | None = None
+    front_max: int | None = None
+    losing_by: int | None = None
+    or_enemy_siege: bool = False
+    event_within_weeks: float | None = None
+    always: bool = False
+
+
+class OrderEffect(_Strict):
+    """達成時的效果（濃縮版內容表 3.1）。trend：戰況往己方偏幾點；守城的 trend 只在敵方這週還沒達成攻城時才給，
+    已經達成就改成把對方攻城的效果收回一半（halve_enemy_siege）。event_mod：那條戰線下一件時刻表大事己方 +多少。
+    figure_prestige：打擊的人物聲威再扣多少（負數）。"""
+
+    trend: int = 0
+    event_mod: float = 0.0
+    figure_prestige: int = 0
+    halve_enemy_siege: bool = False
+
+
+class OrderTemplate(_Strict):
+    """一種軍令對一個陣營（濃縮版內容表 3.1 的一列）。文字的插槽：{戰線}{地點}{起點}{終點}{主將}{人物}{號令}。"""
+
+    kind: OrderKind
+    side: str  # 陣營 id
+    priority: int  # 數字小的先發
+    when: OrderWhen = Field(default_factory=OrderWhen)
+    text: str  # 發布文字
+    personal: PersonalKind  # 個人部分怎樣算一次（跟 kind 是固定的對應，content.validate 檢查）
+    quota_base: int = Field(ge=1)  # 陣營總額度（3000 人的量）
+    effect: OrderEffect = Field(default_factory=OrderEffect)
+    faction_rumor: str  # 達成時的陣營軍情（後面接「出力最多：…」）
+    leak_rumor: str  # 達成時在那一帶外洩的地方傳聞（不寫名字）
+
+
+class OrderSlots(_Strict):
+    """一條戰線、一個陣營的地點插槽（濃縮版內容表 3.2）。"""
+
+    intercept: str  # 截糧的 {地點}：在這裡與相鄰站遊歷可能遇上敵方糧隊
+    escort: tuple[str, str]  # 護糧的 {起點}、{終點}（終點是己方據點）
+
+
+class Duty(_Strict):
+    """第 1 階守勢行動（濃縮版內容表 2.6）：選單上的名字與一句敘事（{地點} 換成所在地點）。"""
+
+    name: str
+    text: str
+
+
+class OrderCaller(_Strict):
+    """黃巾發令的人（{號令}）：照順序第一個沒退場的（figure 是 None 的那一筆是最後的退路）。"""
+
+    figure: str | None = None
+    text: str
+
+
+class OrdersContent(_Strict):
+    """content/orders.json（計畫 T6）。不存在時是空的：沒有軍令、沒有守勢行動。"""
+
+    templates: list[OrderTemplate] = Field(default_factory=list)
+    slots: dict[str, dict[str, OrderSlots]] = Field(default_factory=dict)  # 戰線 id → 陣營 id → 插槽
+    duties: dict[str, Duty] = Field(default_factory=dict)  # 陣營 id → 守勢行動
+    commander_fallback: dict[str, str] = Field(default_factory=dict)  # 陣營 id → 沒有主將時 {主將} 寫的泛稱
+    callers: list[OrderCaller] = Field(default_factory=list)  # {號令}
+    convoy_squads: dict[str, str] = Field(default_factory=dict)  # 陣營 id → 自己的運糧隊（截糧打的是對方的）
+
+
+class PromotionDef(_Strict):
+    """一階的晉升（濃縮版內容表 2.1、2.2；計畫 T5）。figure 是出面的大勢人物（豪強的馬商不是人物，空著），不在時由
+    successor 出面、演 event_handoff。location 是地點 id，或 "nearest_base"（豪強：離自己最近的投靠點）。
+    召見文字放這裡（{據點} 換成地點名）；結尾那一句（closing）接在選項的反應後面。"""
+
+    faction: str
+    rank: int = Field(ge=2)
+    figure: str | None = None
+    successor: str | None = None
+    location: str
+    event_main: str
+    event_handoff: str | None = None
+    summons_text: str
+    summons_handoff: str | None = None
+    closing: str
+
+
+class FollowerDef(_Strict):
+    """部下的模板（濃縮版內容表 2.4）：原創的無名稱呼；不能對話、不能散功，只算威力（計畫 T5）。"""
+
+    id: str
+    faction: str
+    name: str
+    stats: dict[str, int] = Field(default_factory=dict)
+    wugong: str  # skills.json 的武學
+    wugong_level: int = Field(ge=1, le=10)
+
+
 class Content(_Strict):
     config: Config
     scenario: Scenario
@@ -1111,5 +1230,8 @@ class Content(_Strict):
     timetable: list[TimetableEvent] = Field(default_factory=list)  # 第一季的時刻表（content/timetable.json，計畫 T2）
     figures: dict[str, FigureDef] = Field(default_factory=dict)  # 大勢人物（content/figures.json，計畫 T4）；沒有這個檔就是空的
     foreshadows: Foreshadows = Field(default_factory=Foreshadows)  # 關鍵伏筆（content/foreshadows.json，計畫 T7）
+    orders: OrdersContent = Field(default_factory=OrdersContent)  # 陣營軍令（content/orders.json，計畫 T6）
+    promotions: list[PromotionDef] = Field(default_factory=list)  # 晉升（content/promotions.json，計畫 T5）
+    followers: dict[str, FollowerDef] = Field(default_factory=dict)  # 部下模板（content/followers.json，計畫 T5）
     map: MapLayout
     tutorial: Tutorial

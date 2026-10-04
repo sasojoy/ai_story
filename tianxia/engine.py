@@ -13,10 +13,11 @@ from pydantic import BaseModel
 
 from . import (
     atlas, battle_instance, battlelog, calendar, companion_agent, craft, encounter, event_llm, figures, flavor, foreshadow,
-    journal, materials, push, roster, skillview, team, timetable,
+    journal, materials, orders, push, roster, skillview, team, timetable,
 )
 from .events import choice_label, event_candidates, has_events_here, pick_event, visible_choices
-from .guide import note_action, quest_text, tutorial_intro
+from .guide import base_step_count, note_action, quest_text, tutorial_intro
+from .guide import steps as tutorial_steps
 from .journal import LOG_BREAK, Draft
 from .mapview import render_map, render_minimap
 from .models import (
@@ -25,12 +26,13 @@ from .models import (
 )
 from .ollama_client import OllamaClient
 from .rules import (
-    GEJU, HUANGJIN, apply_effect, can_meet, change_trend, check_who, current_day, fill_marks, free_text_rate, front_ids, in_chaos,
+    GEJU, HUANGJIN, apply_effect, can_hear, can_meet, change_trend, check_who, current_day, display_name, fill_marks, free_text_rate,
+    front_ids, front_of, in_chaos,
     is_revealed, pushable, rate_words, recompute_trends, resolve_goals, resolve_trend, resolve_trends, roll_check,
     season_one, season_one_off, stances, trend_name, trend_shown, trend_value, world_trend_value,
 )
 from .sqlite_world import open_world
-from .state import PLAYER, BattleRecord, GameState, JournalEntry, Journey, Rumor, WorldState, new_game_state
+from .state import PLAYER, BattleRecord, Convoy, GameState, JournalEntry, Journey, Rumor, WorldState, new_game_state
 from .world import (
     _season_vehicle, advance_world_state, check_thresholds, end_season, fire_by_id, open_showdown, open_waiting_showdown,
     settle_season_start, showdown_battle, showdown_key, sim_tick, start_pending_battle,
@@ -148,7 +150,8 @@ class Game:
         old = self.state
         fresh = new_game_state(self.content, old.player.name)
         fresh.last_real = old.last_real
-        if old.player.tutorial_step >= len(self.content.tutorial.steps):  # 做完或略過（skip_tutorial 也是設成步數）
+        # 做完或略過（skip_tutorial 也是設成步數）：看不分季的那幾步；第一季多的兩步排在後面，回鍋的人接著做（計畫 T6）
+        if old.player.tutorial_step >= base_step_count(self.content):
             fresh.player.tutorial_step = old.player.tutorial_step
         ratio = self.content.config.affinity_carry_ratio
         fresh.player.affinities = {key: int(value * ratio) for key, value in old.player.affinities.items()}
@@ -374,7 +377,7 @@ class Game:
         loc = c.locations[s.player.location]
         cost = c.config.action_cost
         opts = [self._cost_option("act:explore", "探索", cost["explore"])]
-        if loc.enemies:
+        if self._train_squad_ids(loc):
             # 遊歷：這個地點的敵人，必定開打（見 _train）。sanguo-companions 合併時這個行動被
             # 整個拿掉，於是 Location.enemies／action_cost["train"]／train_event_chance 三個設定
             # 一起變成死的，而遭遇戰只剩劇情事件的 combat 選項——實測整季只打 3 場。
@@ -408,6 +411,7 @@ class Game:
             for faction in c.scenario.factions:
                 if s.player.location in faction.join_at:
                     opts.append(Option(id=f"faction:{faction.id}", label=f"投靠{faction.name}"))
+        opts += self._order_options(loc)  # 軍令（計畫 T6）：守勢行動、接糧車；開關關著、散人沒有
         opts += foreshadow.final_options(s, c, loc.id)  # 伏筆的最後一步（計畫 T7）：做得了的人在那個地點才有
         opts.append(Option(id="act:rest", label="打坐（坐下來回體力，隨時可以起身）"))
         return opts
@@ -501,7 +505,7 @@ class Game:
     def _train_option(self, loc: Location, cost: int, odds: bool) -> Option:
         """遊歷的按鈕。遇上自己陣營的隊伍是操練、不會輸（見 _drill），所以只有自己人的地盤寫成「操練・零風險」，
         不拿自己人去算勝算「必敗」（試玩回饋 FB-008）；自己人與外人都有的地方，勝算只看真的會打的那幾路。"""
-        squads = [self.content.squads[sid] for sid in loc.enemies]
+        squads = [self.content.squads[sid] for sid in self._train_squad_ids(loc)]
         foes = [squad for squad in squads if not self._drills_with(squad)]
         if not foes:
             return self._cost_option("act:train", "操練", cost, note="零風險")
@@ -735,9 +739,11 @@ class Game:
         if kind == "act" and arg.startswith("challenge:"):
             return f"挑戰・{figures.name_of(c, arg.partition(':')[2])}"
         here = c.locations[s.player.location].name
+        duty = c.orders.duties.get(s.player.faction or "")  # 守勢行動的標題寫陣營自己的名字（巡哨、傳道、保境安民）
         titles = {
             "explore": f"探索{here}", "socialize": f"交友・{here}", "call": f"求見・{here}", "train": f"遊歷・{here}",
             "recruit": f"招募・{here}", "rest": f"打坐・{here}", "stand": "起身", "halt": "喊停",
+            "duty": f"{duty.name if duty else '守勢'}・{here}", "convoy": f"接下糧車・{here}",
         }
         return titles.get(arg, "提前出關")
 
@@ -766,6 +772,10 @@ class Game:
             return self._recruit()
         if what == "rest":
             return self._rest()
+        if what == "duty":
+            return self._duty()
+        if what == "convoy":
+            return self._take_convoy()
         if what == "call":
             self.state.player.picking_audience = True  # 打開求見選單（見 _audience_options），不花體力
             return [f"你遞上名帖，準備求見{self.content.locations[self.state.player.location].name}的人物。"]
@@ -886,7 +896,7 @@ class Game:
         到 explore，於是在集市散步也會冒出來。現在它們回到正確的位置。
         """
         loc = self.content.locations[self.state.player.location]
-        squad = self.content.squads[self.rng.choice(loc.enemies)]
+        squad = self.content.squads[self.rng.choice(self._train_squad_ids(loc))]
         msgs = self._squad_encounter(squad.id)
         if self._drills_with(squad):
             return msgs  # 操練沒有打架，不接「一番苦戰之後」這類戰後事件（試玩回饋 FB-001）
@@ -895,6 +905,105 @@ class Game:
             if event is not None:
                 msgs += self._present(event)
         return msgs
+
+    def _train_squad_ids(self, loc: Location) -> list[str]:
+        """遊歷可能遇上的對手：地點的敵人，加上軍令帶來的（截糧時那一帶的敵方運糧隊，計畫 T6）。
+        開關關著、沒有截糧軍令時就是 loc.enemies 本身，亂數的抽法跟以前一樣。"""
+        extra = orders.extra_enemies(self.state, self.content, loc.id, self.state.player.faction)
+        return loc.enemies + [sid for sid in extra if sid not in loc.enemies] if extra else loc.enemies
+
+    def _order_options(self, loc: Location) -> list[Option]:
+        """軍令的兩個行動（計畫 T6）：在有戰線的地方做第 1 階守勢行動；在護糧的起點接糧車。開關關著、散人沒有。"""
+        s, c = self.state, self.content
+        p = s.player
+        if not orders.active(s, c) or p.faction is None:
+            return []
+        opts: list[Option] = []
+        duty = c.orders.duties.get(p.faction)
+        if duty is not None and front_of(c, loc.id) is not None:
+            opts.append(self._cost_option("act:duty", duty.name, c.config.duty_stamina))
+        escort = orders.escort_at(s, c, p.faction, loc.id)
+        if escort is not None and p.convoy is not None:  # 一次押一車：寫明手上那一車要送去哪（T6 審查 I3）
+            dest = c.locations[p.convoy.to_loc].name
+            opts.append(Option(id="act:convoy", enabled=False, label=f"接下糧車（你還押著一車糧，要送到{dest}）"))
+        elif escort is not None:
+            need, have = c.config.convoy_grain, materials.grain_of(s, c)
+            dest = c.locations[escort.end].name
+            if have < need:
+                opts.append(Option(
+                    id="act:convoy", enabled=False,
+                    label=f"接下糧車（送到{dest}・糧草不夠：要 {need} 份，你有 {have} 份；糧草是慢屬性的素材）",
+                ))
+            else:
+                used = "、".join(f"{c.materials[mid].name} ×{n}" for mid, n in materials.grain_plan(s, c, need))
+                opts.append(Option(id="act:convoy", label=f"接下糧車（送到{dest}・交出糧草 {need} 份：{used}）"))
+        return opts
+
+    def _order_credit(self, **kw) -> list[str]:
+        """替自己記一次軍令（orders.credit）；真的記到了就推新手引導的「完成一次軍令的個人部分」（計畫 T6 Task 8）。"""
+        s, c = self.state, self.content
+        msgs = orders.credit(s, c, s.player.faction, s.player.name, shown=display_name(s), **kw)
+        if msgs:
+            msgs += note_action(s, c, self.world, "order")
+        return msgs
+
+    def _duty(self) -> list[str]:
+        """第 1 階守勢行動（官軍巡哨、黃巾傳道、豪強保境安民；軍令文件 3.2、濃縮版內容表 2.6）：體力 duty_stamina，
+        往己方推所在戰線 1 點（豪強在亂局時推割據，不在亂局什麼都不推），算守城的個人部分。推力走 push_trend
+        （緩衝、上限、貢獻）。"""
+        s, c = self.state, self.content
+        p = s.player
+        loc = c.locations[p.location]
+        duty = c.orders.duties[p.faction]
+        front = front_of(c, loc.id)
+        p.stamina -= c.config.duty_stamina
+        text = duty.text.replace("{地點}", loc.name)
+        self._outcome(duty.name, text)
+        msgs = [text]
+        goals = self._goals()
+        if goals.get(front):
+            msgs += self.push_trend(front, goals[front], source="duty")
+        elif goals.get(GEJU) and in_chaos(s, c, front):
+            msgs += self.push_trend(GEJU, 1, source="duty")
+        return msgs + self._order_credit(kind="duty", front=front)
+
+    def _take_convoy(self) -> list[str]:
+        """接下糧車（護糧，軍令文件 3.4）：交出 convoy_grain 份糧草（從低階的慢屬性素材用起，多的不找），記下要送到哪裡。
+        不花體力；抵達終點才算數（見 _convoy_arrives）。"""
+        s, c = self.state, self.content
+        p = s.player
+        escort = orders.escort_at(s, c, p.faction, p.location)
+        need = c.config.convoy_grain
+        if escort is None or p.convoy is not None or not materials.take_grain(s, c, need):
+            return ["（這裡沒有糧車可接。）"]
+        p.convoy = Convoy(order=escort.id, grain=need, from_loc=p.location, to_loc=escort.end)
+        text = f"你把 {need} 份糧草裝上車，要送到{c.locations[escort.end].name}。路上當心截糧的。"
+        self._outcome("接下糧車", text)
+        return [text]
+
+    def _convoy_arrives(self, loc_id: str) -> list[str]:
+        """糧車到了終點（路過也算）：先有 convoy_ambush_chance 機率撞上敵方截糧隊（探索撞上野怪的打法：不推大勢、
+        扣氣血打折），打輸糧車被劫、不算數；打贏或沒遇上就交進營中——記捐獻（軍備文件 4.1）、記一次推動的貢獻、
+        替它自己那一道護糧記一次（RF4：已經換週清掉就不算）。"""
+        s, c = self.state, self.content
+        p = s.player
+        convoy = p.convoy
+        if convoy is None or convoy.to_loc != loc_id:
+            return []
+        p.convoy = None
+        msgs: list[str] = []
+        enemy = orders.ambusher(c, p.faction)
+        if enemy is not None and self.rng.random() < c.config.convoy_ambush_chance:
+            msgs.append("快到營門時，半路殺出一隊截糧的人馬！")
+            msgs += self._squad_encounter(enemy, wild=True)
+            if s.battles[0].tier not in team.WIN_TIERS:
+                return msgs + ["糧車被劫走了，這一趟不算數。"]
+        key = f"{loc_id}:糧草"
+        p.donations[key] = p.donations.get(key, 0) + convoy.grain
+        # 護糧沒有推動，另記一次第 1 階推動的貢獻（總計畫 T6）
+        push.add_contribution(p, orders.week_of(s, c), c.config.contrib_per_push)
+        msgs.append(f"糧車送進了{c.locations[loc_id].name}，一粒不少。")
+        return msgs + self._order_credit(kind="convoy", location=loc_id, front=front_of(c, loc_id), order=convoy.order)
 
     def _rest(self) -> list[str]:
         """坐下來打坐（地圖擴充設計第二節）：進入「打坐中」，之後時間過去時體力回復是平常的
@@ -1069,7 +1178,11 @@ class Game:
             if p.location not in faction.join_at:
                 return ["（你已經不在投靠的地方了。）"]
             p.faction = faction.id
-            return [f"你投靠了{faction.name}。"]
+            # 投靠這一刻就推一次新手引導：第一季「投靠、看一眼本週軍令」那一步只看陣營（計畫 T6）；beta 照舊等下一個行動
+            msgs = [f"你投靠了{faction.name}。"]
+            if season_one(self.content, self.state.world):
+                msgs += note_action(self.state, self.content, self.world, "join")
+            return msgs
         faction = self._faction(arg)
         p.pending_faction = faction.id
         return [self._faction_prompt(faction)]
@@ -1719,6 +1832,9 @@ class Game:
                     extra += self.push_trend(trend_id, delta, source="train")
                 region = atlas.region_of(c, p.location)  # 官銀（伏筆，濃縮版內容表 4.0）：只有遊歷打贏才擲
                 extra += foreshadow.after_win(s, c, squad, self.rng, region.id if region is not None else None)
+                extra += self._order_credit(  # 軍令（計畫 T6）：攻城看戰線與敵方陣營，截糧看地點與運糧隊
+                    kind="win", location=loc.id, front=front_of(c, loc.id), squad=squad.id, squad_faction=squad.faction,
+                )
             changes, notes = battlelog.split_changes(extra)
             record.changes += changes
             record.notes += notes
@@ -1729,6 +1845,8 @@ class Game:
         record.changes += toll
         msgs += toll
         msgs.insert(0, self._file_battle(record))
+        if squad.desc:  # 有來歷的對手（運糧隊）多一句描述，接在戰鬥那一行後面
+            msgs.insert(1, f"（{squad.name}：{squad.desc}）")
         return msgs
 
     def _drills_with(self, squad: Squad) -> bool:
@@ -1854,14 +1972,10 @@ class Game:
             if p.affinities[fig.character] != before:
                 msgs.append(f"{fig.name}情誼 {p.affinities[fig.character] - before:+d}")
         p.snubbed_until[fid] = self.now + cfg.snub_hours * HOUR
-        gained = cfg.figure_defeat_prestige * cfg.contrib_per_push
-        if gained:
-            week = calendar.point(w.time, c, w).week
-            p.contrib += gained
-            p.contrib_weeks[week] = p.contrib_weeks.get(week, 0) + gained
-        # T6 的呼叫點：「打擊大勢人物」軍令在這裡記一次進度——
-        #   msgs += orders.credit(s, c, p.faction, p.name, kind="challenge", location=p.location,
-        #                         front=figures.state_of(s, c, fid).front, figure=fid)
+        push.add_contribution(p, calendar.point(w.time, c, w).week, cfg.figure_defeat_prestige * cfg.contrib_per_push)
+        msgs += self._order_credit(  # 「打擊大勢人物」軍令（計畫 T6）：只算目標本人
+            kind="challenge", location=p.location, front=figures.state_of(s, c, fid).front, figure=fid,
+        )
         return msgs
 
     def _train_push(self, trend_id: str, delta: int) -> int:
@@ -1943,9 +2057,7 @@ class Game:
             goal = faction.goals.get(trend_id, 0) if faction is not None else 0
             if goal and (goal > 0) == (delta > 0):  # 替自己陣營的目標方向推；逆著推、這條線沒有目標都不記
                 gained = push.contribution(abs(delta), pushed, moved, cfg.contrib_per_push, cfg.over_cap_contrib_ratio)
-                if gained:
-                    p.contrib += gained
-                    p.contrib_weeks[at.week] = p.contrib_weeks.get(at.week, 0) + gained
+                push.add_contribution(p, at.week, gained)
             w.active_pushers.setdefault(p.faction, {})[p.name] = now
         w.active_pushers = push.drop_stale(w.active_pushers, now, window)  # 順手清掉超過時窗的人，名單不會一直長
         return msgs
@@ -2035,8 +2147,7 @@ class Game:
         p = s.player
         regions = {region.id for loc_id in self._road_ends() if (region := atlas.region_of(c, loc_id)) is not None}
         heard = [
-            r for r in s.world.rumors
-            if r.region in regions and r.faction in (None, p.faction) and r.character in (None, p.name)
+            r for r in s.world.rumors if r.region in regions and can_hear(r, s)
         ][-c.config.road_rumor_pool:]
         if not heard:
             return ["你沿途問了幾個人，這一帶最近沒什麼新鮮事。"]
@@ -2166,7 +2277,10 @@ class Game:
             if flourish:
                 text = f"{text}\n\n{flourish}"
         self._hide(text)
-        return [text] + note_action(s, c, self.world, "move") + check_thresholds(s, c, self.world, client, now=self.now)
+        return (  # 糧車到了終點（路過也算）先交糧，再照原本的新手引導與門檻（計畫 T6）
+            [text] + self._convoy_arrives(loc_id) + note_action(s, c, self.world, "move")
+            + check_thresholds(s, c, self.world, client, now=self.now)
+        )
 
     def _road_sight(self, road: RoadKind, loc_id: str, when: float | None = None) -> list[str]:
         """路上見聞（路上設計第五節）：抵達一站時有 road_sight_chance 的機會，從符合這段路的種類、剛抵達那一站所在大區的
@@ -2520,7 +2634,7 @@ class Game:
         self.state.player.anonymous = bool(value)
 
     def skip_tutorial(self) -> list[str]:
-        steps = len(self.content.tutorial.steps)
+        steps = len(tutorial_steps(self.state, self.content))
         if self.state.player.tutorial_step >= steps:
             return []
         self.state.player.tutorial_step = steps
@@ -2822,6 +2936,29 @@ class Game:
         done.sort(key=lambda item: (item[2].time, item[0]), reverse=True)
         return [f"**{titles.get(eid, eid)}**\n\n{r.text}" for _, eid, r in done[:BULLETIN_MAX]]
 
+    def convoy_line(self) -> str | None:
+        """押著的糧車要送去哪（江湖頁軍令卡上的一行；T6 審查 I3）：那一道軍令已經達成或換週清掉了也照樣寫，
+        送到了照樣記捐獻與貢獻。沒有押車時是 None。"""
+        convoy = self.state.player.convoy
+        if convoy is None:
+            return None
+        return f"你押著一車糧（{convoy.grain} 份），要送到{self.content.locations[convoy.to_loc].name}。"
+
+    def orders_view(self) -> list[dict]:
+        """江湖頁的「本週軍令」卡（計畫 T6）：自己陣營這週的軍令，只給自己陣營看；散人、開關關著是空的。
+        截止是下週一 00:00（最後一週寫成季末那一刻，calendar.point 會夾住）。"""
+        s, c = self.state, self.content
+        name = s.player.name
+        views = []
+        for o in orders.current(s, c, s.player.faction):
+            total = sum(o.progress.values())
+            views.append({
+                "id": o.id, "title": orders.title(c, o), "text": o.text, "mine": o.progress.get(name, 0),
+                "progress": min(total, o.quota), "quota": o.quota, "done": o.done,
+                "deadline": self.stamp(calendar.week_start(o.week + 1, c, s.world)),
+            })
+        return views
+
     def season_result(self) -> dict | None:
         """休季時江湖頁最上面的結算卡（計畫 T9）：結局與季末公告、最終三方態勢與三條戰況、時刻表每一件的結果（誰改寫的）、
         各陣營出力前五。只有第一季（開關開著＋這一季的章）收季之後才有；資料在收季那一刻存好（world.end_season），這裡只讀。
@@ -2920,7 +3057,10 @@ class Game:
         return "\n\n".join(parts) or "（江湖暫時風平浪靜。）"
 
     def rumors_text(self, limit: int = 30) -> str:
-        return _timeline(self.state.world.rumors[-limit:][::-1], self._day_stamp) or "（尚無傳聞。）"
+        """見聞頁的傳聞：陣營軍情只給那個陣營、個人線索只給那個人（跟沿途打聽同一個規則，見 _road_ask；計畫 T6）。
+        開關關著時沒有這兩種傳聞，畫面一樣。"""
+        heard = [r for r in self.state.world.rumors if can_hear(r, self.state)]
+        return _timeline(heard[-limit:][::-1], self._day_stamp) or "（尚無傳聞。）"
 
     def chronicle_text(self) -> str:
         """江湖史：這一季在最前面，往前每一季各一段（線上架構設計 3.2：江湖史跨季保留），最後是玉璽碎片。"""

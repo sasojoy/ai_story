@@ -1200,3 +1200,74 @@ def test_each_season_keeps_its_own_fallback_ending(tmp_path):
         {"id": "x", "season_one": True, "title": "多的", "text": "多的。", "stance_min": {"huang": 99}}))
     with pytest.raises(ContentError, match="保底"):
         load_content(root)
+
+
+# ── 軍令（計畫 T6）──────────────────────────────────────────
+
+
+def test_orders_slot_must_be_on_its_front(tmp_path):
+    root = _real_copy(tmp_path)
+    edit_json(root / "orders.json", lambda d: d["slots"]["yingru"]["guan"].update(intercept="nanyang_wilds"))
+    with pytest.raises(ContentError, match="截糧"):
+        load_content(root)
+
+
+def test_orders_escort_must_end_at_a_base_of_its_side(tmp_path):
+    root = _real_copy(tmp_path)
+    edit_json(root / "orders.json", lambda d: d["slots"]["yingru"]["guan"].update(escort=["luoyang_road", "huangjin_camp"]))
+    with pytest.raises(ContentError, match="護糧"):
+        load_content(root)
+
+
+def test_orders_personal_kind_must_match(tmp_path):
+    root = _real_copy(tmp_path)
+    edit_json(root / "orders.json", lambda d: d["templates"][0].update(personal="convoy"))
+    with pytest.raises(ContentError, match="個人部分"):
+        load_content(root)
+
+
+def test_orders_text_slots_must_be_known(tmp_path):
+    root = _real_copy(tmp_path)
+    edit_json(root / "orders.json", lambda d: d["templates"][0].update(text="{將軍}傳令"))
+    with pytest.raises(ContentError, match="插槽"):
+        load_content(root)
+
+
+def test_orders_convoy_squad_must_belong_to_its_side(tmp_path):
+    root = _real_copy(tmp_path)
+    edit_json(root / "orders.json", lambda d: d["convoy_squads"].update(guan="huang_grain_convoy"))
+    with pytest.raises(ContentError, match="糧隊"):
+        load_content(root)
+
+
+def test_season_one_tutorial_steps_must_come_last(tmp_path):
+    """存檔記的是第幾步：第一季才有的步驟插在中間，開關一開一關，同一個數字就指到不同的步驟（計畫 T6 Task 8）。"""
+    root = copy_fixture(tmp_path)
+    edit_json(root / "tutorial.json", lambda d: d["steps"][0].update(season_one=True))
+    with pytest.raises(ContentError, match="排在最後"):
+        load_content(root)
+
+
+# ── 晉升（計畫 T5）──────────────────────────────────────────
+
+
+def test_promote_only_on_promotion_scenes(tmp_path):
+    root = _real_copy(tmp_path)
+    edit_json(root / "events" / "general.json", lambda d: d[0]["choices"][0].setdefault("effect", {}).update(promote=2))
+    with pytest.raises(ContentError, match="晉升奇遇"):
+        load_content(root)
+
+
+def test_promotion_followers_must_be_that_sides(tmp_path):
+    root = _real_copy(tmp_path)
+    edit_json(root / "events" / "promotion.json",
+              lambda d: d[0]["choices"][0]["effect"].update(followers=["follower_huang_believer", "follower_guan_spear"]))
+    with pytest.raises(ContentError, match="給的部下要是 guan 的"):
+        load_content(root)
+
+
+def test_promotion_handoff_needs_its_scene_and_summons(tmp_path):
+    root = _real_copy(tmp_path)
+    edit_json(root / "promotions.json", lambda d: d[0].update(summons_handoff=None))
+    with pytest.raises(ContentError, match="接手"):
+        load_content(root)

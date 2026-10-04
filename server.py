@@ -266,6 +266,12 @@ def main_view(game: Game) -> dict:
     }
     if "fronts" in status:  # 第一季濃縮版才有：江湖頁的三條戰況（開關關著時不送，頁面照舊）
         view["fronts"] = status["fronts"]
+    orders = game.orders_view()  # 第一季：自己陣營的本週軍令（計畫 T6；散人、別陣營、開關關著時都沒有這個鍵）
+    if orders:
+        view["orders"] = orders
+    convoy = game.convoy_line()  # 押著的糧車（T6 審查 I3）：軍令卡上寫一行
+    if convoy is not None:
+        view["convoy"] = convoy
     result = game.season_result()  # 第一季休季：江湖頁最上面的結算卡（計畫 T9；開關關著、進行中都不送）
     if result is not None:
         view["season_result"] = {

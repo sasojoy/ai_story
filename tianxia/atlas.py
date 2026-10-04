@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from . import figures
 from .calendar import point, stamp_text
 from .models import Content, Location, MapRegion, SimPlayer, TravelMode
-from .rules import is_revealed, resolve_trend, resolve_trends, season_one, trend_value
+from .rules import can_hear, is_revealed, resolve_trend, resolve_trends, season_one, trend_value
 from .state import GameState, Rumor
 from .world import current_act, sim_active, storyline_off
 
@@ -227,8 +227,9 @@ def _figure_activity(state: GameState, content: Content, name: str) -> str:
 
 
 def leader_news(state: GameState, name: str) -> list[Rumor]:
-    """最近提到這位龍頭人物的傳聞（不分地點、不限天數），最新的在前，最多 LEADER_NEWS 則。"""
-    return [r for r in reversed(state.world.rumors) if name in r.text][:LEADER_NEWS]
+    """最近提到這位龍頭人物的傳聞（不分地點、不限天數），最新的在前，最多 LEADER_NEWS 則。別陣營的軍情、寫給別人的
+    個人線索聽不到（rules.can_hear）。"""
+    return [r for r in reversed(state.world.rumors) if name in r.text and can_hear(r, state)][:LEADER_NEWS]
 
 
 def leader_text(state: GameState, content: Content, name: str) -> str:
@@ -257,7 +258,10 @@ def goal_places(state: GameState, content: Content) -> list[str]:
 def recent_news(state: GameState, loc_id: str) -> list[Rumor]:
     """這個地點最近 NEWS_DAYS 天的江湖大事與傳聞，最新的在前。不檢查視野：呼叫端要先用 is_known 把關。"""
     now = state.world.time
-    return [r for r in reversed(state.world.rumors) if r.location == loc_id and now - r.time <= NEWS_DAYS * DAY]
+    return [
+        r for r in reversed(state.world.rumors)
+        if r.location == loc_id and now - r.time <= NEWS_DAYS * DAY and can_hear(r, state)
+    ]
 
 
 # ── 敵情 ──────────────────────────────────────────────

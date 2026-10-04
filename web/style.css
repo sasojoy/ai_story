@@ -257,6 +257,17 @@ details.fold.bulletin > .fold-body { border-color: var(--gold); max-height: 50vh
 .front-head b { font-variant-numeric: tabular-nums; }
 .front-bar { height: 6px; margin-top: 4px; border-radius: 3px; background: var(--kuai); overflow: hidden; }
 .front-bar > i { display: block; height: 100%; background: var(--gold); transition: width 0.4s ease; }
+/* 第一季的本週軍令（計畫 T6） */
+.orders .order { padding: 8px 0; border-top: 1px solid var(--line); }
+.orders .order:first-child { border-top: 0; padding-top: 0; }
+.order-head { display: flex; justify-content: space-between; gap: 8px; font-size: 14px; }
+.order-head span { color: var(--ink-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.order-text { margin-top: 2px; font-size: 13px; line-height: 1.5; color: var(--ink-2); }
+.order-bar { height: 5px; margin-top: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.order-bar > i { display: block; height: 100%; background: var(--gold); transition: width 0.4s ease; }
+.order-meta { margin-top: 4px; font-size: 12px; color: var(--ink-2); }
+.order-cart { padding-bottom: 8px; font-size: 13px; color: var(--ink); }
+.order.done .order-head b::after { content: " ✔"; color: var(--gold); }
 /* 第一季的結算卡（休季，計畫 T9） */
 .result h2 { margin: 0 0 6px; font-size: 18px; }
 .result h3 { margin: 10px 0 4px; font-size: 13px; color: var(--ink-2); font-weight: 600; }

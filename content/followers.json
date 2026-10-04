@@ -1,0 +1,80 @@
+[
+  {
+    "id": "follower_guan_spear",
+    "faction": "guan",
+    "name": "持矛鄉勇",
+    "stats": {
+      "str": 6,
+      "agi": 4,
+      "con": 6,
+      "wis": 3
+    },
+    "wugong": "xingwu_qiang",
+    "wugong_level": 3
+  },
+  {
+    "id": "follower_guan_crossbow",
+    "faction": "guan",
+    "name": "弩手鄉勇",
+    "stats": {
+      "str": 4,
+      "agi": 6,
+      "con": 4,
+      "wis": 4
+    },
+    "wugong": "qiangnu",
+    "wugong_level": 3
+  },
+  {
+    "id": "follower_huang_believer",
+    "faction": "huang",
+    "name": "黃巾信眾",
+    "stats": {
+      "str": 4,
+      "agi": 4,
+      "con": 5,
+      "wis": 5
+    },
+    "wugong": "taiping_gun",
+    "wugong_level": 3
+  },
+  {
+    "id": "follower_huang_strongman",
+    "faction": "huang",
+    "name": "太平力士",
+    "stats": {
+      "str": 7,
+      "agi": 3,
+      "con": 7,
+      "wis": 2
+    },
+    "wugong": "lishi_chui",
+    "wugong_level": 3
+  },
+  {
+    "id": "follower_haoqiang_retainer",
+    "faction": "haoqiang",
+    "name": "豪族門客",
+    "stats": {
+      "str": 4,
+      "agi": 6,
+      "con": 4,
+      "wis": 6
+    },
+    "wugong": "menke_jian",
+    "wugong_level": 3
+  },
+  {
+    "id": "follower_haoqiang_buqu",
+    "faction": "haoqiang",
+    "name": "家養部曲",
+    "stats": {
+      "str": 6,
+      "agi": 4,
+      "con": 6,
+      "wis": 3
+    },
+    "wugong": "buqu_dao",
+    "wugong_level": 3
+  }
+]

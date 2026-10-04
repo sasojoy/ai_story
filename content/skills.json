@@ -110,5 +110,47 @@
     "kind": "內功",
     "attribute": "陽",
     "desc": "南華觀藏著的失傳內功，渾厚無比，只有取得傳國玉璽碎片才能習得。"
+  },
+  {
+    "id": "xingwu_qiang",
+    "name": "行伍槍法",
+    "kind": "武學",
+    "attribute": "剛",
+    "desc": "軍中操練的長矛刺法，十個人站成一排，一起往前捅。"
+  },
+  {
+    "id": "qiangnu",
+    "name": "強弩射法",
+    "kind": "武學",
+    "attribute": "快",
+    "desc": "漢軍的看家本事，上弦慢，射得遠。"
+  },
+  {
+    "id": "taiping_gun",
+    "name": "太平棍法",
+    "kind": "武學",
+    "attribute": "柔",
+    "desc": "信眾拿扁擔、竹竿練出來的棍法，不講招式，講人多。"
+  },
+  {
+    "id": "lishi_chui",
+    "name": "力士錘法",
+    "kind": "武學",
+    "attribute": "剛",
+    "desc": "力士掄大錘的路數，一錘下去，盾牌連人一起倒。"
+  },
+  {
+    "id": "menke_jian",
+    "name": "門客劍法",
+    "kind": "武學",
+    "attribute": "虛",
+    "desc": "豪族養的門客防身用的劍法，虛晃的多，真刺的少。"
+  },
+  {
+    "id": "buqu_dao",
+    "name": "部曲刀法",
+    "kind": "武學",
+    "attribute": "實",
+    "desc": "塢堡私兵練的刀法，守門守牆，一步不退。"
   }
 ]

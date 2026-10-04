@@ -19,7 +19,7 @@ from .companion_agent import DIALOGUE_TAGS
 from .materials import TIER_NAMES
 from .models import (
     FRONT_KEY, ROADS, STATS, BattleDef, CharacterDef, Condition, Config, Content, CraftNames, Effect, Event, FigureDef,
-    Foreshadows, Location,
+    FollowerDef, Foreshadows, Location, OrdersContent, PromotionDef,
     MapLayout, Material, RoadSight, Scenario, Sect, SimRumor, SkillDef, Squad, TimetableEvent, Tutorial,
 )
 from .zh import to_traditional
@@ -71,6 +71,11 @@ def load_content(root: Path, profile: str | None = None) -> Content:
         timetable=[_build(TimetableEvent, raw) for raw in _read(root / "timetable.json")]
         if (root / "timetable.json").exists() else [],
         foreshadows=_foreshadows(root / "foreshadows.json"),
+        orders=_orders(root / "orders.json"),
+        promotions=[_build(PromotionDef, raw) for raw in _read(root / "promotions.json")]
+        if (root / "promotions.json").exists() else [],
+        followers={raw["id"]: _build(FollowerDef, raw) for raw in _read(root / "followers.json")}
+        if (root / "followers.json").exists() else {},
         figures=_index(FigureDef, _read(root / "figures.json")) if (root / "figures.json").exists() else {},
         events=events,
         map=MapLayout(**_read(root / "map.json")),
@@ -140,6 +145,16 @@ def _foreshadows(path: Path) -> Foreshadows:
         return Foreshadows(**_read(path))
     except ValidationError as e:
         raise ContentError(f"foreshadows.json：{e}") from e
+
+
+def _orders(path: Path) -> OrdersContent:
+    """content/orders.json（計畫 T6）：不存在時當成沒有軍令（測試夾具沒有這個檔）。"""
+    if not path.exists():
+        return OrdersContent()
+    try:
+        return OrdersContent(**_read(path))
+    except ValidationError as e:
+        raise ContentError(f"orders.json：{e}") from e
 
 
 def _build(model, raw: dict):
@@ -317,6 +332,84 @@ def check_figures(c: Content, need, known, front_ids: list[str]) -> None:
             chain.append(nxt)
             nxt = c.figures[nxt].successor
         need(nxt not in chain, f"{where}：接位鏈繞回來了（{'→'.join(chain)}→{nxt}）")
+
+
+ORDER_SLOTS = ("{戰線}", "{地點}", "{起點}", "{終點}", "{主將}", "{人物}", "{號令}")
+ORDER_PERSONAL = {"siege": "win", "defend": "duty", "intercept": "win", "escort": "convoy", "strike": "challenge"}
+
+
+def check_orders(c: Content, need, known, front_ids: list[str]) -> None:
+    """軍令（content/orders.json，計畫 T6）：模板的陣營在劇本裡、同一個陣營每種一筆、個人部分照種類；文字只用認得的插槽；
+    插槽的戰線與陣營存在，截糧的地點在那條戰線上、護糧的終點是那個陣營的投靠點；守勢行動的陣營存在；
+    運糧隊存在、屬於那個陣營；號令的人物在人物表裡。"""
+    from .atlas import region_of  # noqa: PLC0415  同 validate：atlas → world → rules，延後載入
+
+    o = c.orders
+    factions = {f.id: f for f in c.scenario.factions}
+    seen: set[tuple[str, str]] = set()
+    for t in o.templates:
+        where = f"orders.json 的 {t.kind}／{t.side}"
+        need(t.side in factions, f"{where}：陣營 {t.side} 不在劇本裡")
+        need((t.kind, t.side) not in seen, f"{where}：同一個陣營的同一種軍令寫了兩筆")
+        seen.add((t.kind, t.side))
+        need(t.personal == ORDER_PERSONAL[t.kind], f"{where}：個人部分應該是 {ORDER_PERSONAL[t.kind]}，寫的是 {t.personal}")
+        for text in (t.text, t.faction_rumor, t.leak_rumor):
+            for slot in re.findall(r"\{[^{}]*\}", text):
+                need(slot in ORDER_SLOTS, f"{where}：不認得的插槽 {slot}")
+    for front, by_side in o.slots.items():
+        need(front in front_ids, f"orders.json 的 slots：{front} 不是戰線")
+        for side, slot in by_side.items():
+            where = f"orders.json 的 slots.{front}.{side}"
+            need(side in factions, f"{where}：陣營 {side} 不在劇本裡")
+            known(where, [slot.intercept, *slot.escort], c.locations, "地點")
+            if slot.intercept in c.locations:
+                region = region_of(c, slot.intercept)
+                need(region is not None and region.front == front, f"{where}：截糧的地點 {slot.intercept} 不在這條戰線上")
+            if side in factions:
+                need(slot.escort[1] in factions[side].join_at, f"{where}：護糧的終點 {slot.escort[1]} 不是這個陣營的據點")
+    known("orders.json 的 duties", o.duties, factions, "陣營")
+    for side, squad_id in o.convoy_squads.items():
+        squad = c.squads.get(squad_id)
+        need(squad is not None and squad.faction == side, f"orders.json 的 convoy_squads：{side} 的糧隊 {squad_id} 不存在或不屬於這個陣營")
+    known("orders.json 的 callers", [x.figure for x in o.callers if x.figure is not None], c.figures, "人物")
+
+
+def check_promotions(c: Content, need, known) -> None:
+    """晉升（content/promotions.json、followers.json，計畫 T5）：陣營在劇本裡、每陣營每階一筆；人物在人物表；地點存在
+    （或 nearest_base）；奇遇存在；有接手的人就要有接手版的奇遇與召見；部下的陣營存在、武學在 skills.json；
+    promote／followers 只寫在晉升奇遇的選項上，給的部下是那個陣營的。"""
+    factions = {f.id for f in c.scenario.factions}
+    seen: set[tuple[str, int]] = set()
+    promo_events: dict[str, str] = {}
+    for promo in c.promotions:
+        where = f"promotions.json 的 {promo.faction}／第 {promo.rank} 階"
+        need(promo.faction in factions, f"{where}：陣營不在劇本裡")
+        need((promo.faction, promo.rank) not in seen, f"{where}：同一個陣營的同一階寫了兩筆")
+        seen.add((promo.faction, promo.rank))
+        known(where, [x for x in (promo.figure, promo.successor) if x is not None], c.figures, "人物")
+        if promo.location != "nearest_base":
+            known(where, [promo.location], c.locations, "地點")
+        need(
+            (promo.successor is None) == (promo.event_handoff is None) == (promo.summons_handoff is None),
+            f"{where}：有接手的人就要有接手版的奇遇與召見，沒有就都不寫",
+        )
+        for event_id in filter(None, (promo.event_main, promo.event_handoff)):
+            known(where, [event_id], c.events, "事件")
+            promo_events[event_id] = promo.faction
+    for fid, follower in c.followers.items():
+        where = f"followers.json 的 {fid}"
+        need(follower.faction in factions, f"{where}：陣營不在劇本裡")
+        known(where, [follower.wugong], c.skills, "武學")
+    for event in c.events.values():
+        for choice in event.choices:
+            if choice.effect.promote is None and not choice.effect.followers:
+                continue
+            where = f"事件 {event.id}"
+            need(event.id in promo_events, f"{where}：promote／followers 只能寫在晉升奇遇（promotions.json 的事件）")
+            known(where, choice.effect.followers, c.followers, "部下")
+            side = promo_events.get(event.id)
+            need(all(c.followers[f].faction == side for f in choice.effect.followers if f in c.followers),
+                 f"{where}：給的部下要是 {side} 的")
 
 
 def check_foreshadows(
@@ -932,10 +1025,10 @@ def validate(c: Content) -> None:
 
     for battle in c.battles.values():
         where = f"戰鬥 {battle.id}"
-        faction_ids = [f.id for f in battle.factions]
-        need(len(set(faction_ids)) == len(faction_ids), f"{where}：陣營 id 重複")
+        battle_sides = [f.id for f in battle.factions]  # 不能叫 faction_ids：那是劇本陣營的名單，後面的條件檢查還要用
+        need(len(set(battle_sides)) == len(battle_sides), f"{where}：陣營 id 重複")
         if scenario_faction_ids:
-            known(where, faction_ids, scenario_faction_ids, "陣營")
+            known(where, battle_sides, scenario_faction_ids, "陣營")
         if battle.region is not None:
             known(where, [battle.region], region_ids, "大區")
         need(
@@ -952,13 +1045,13 @@ def validate(c: Content) -> None:
                 if not option.free_text:  # free_text 選項不查表，機制走 FreeTextGamble 擲骰，不需要 action_tags 裡有對應的 tag
                     known(f"{aw} 選項「{option.text}」", [option.tag], battle.action_tags, "行動分類")
                 if option.faction is not None:
-                    known(f"{aw} 選項「{option.text}」", [option.faction], faction_ids, "陣營")
+                    known(f"{aw} 選項「{option.text}」", [option.faction], battle_sides, "陣營")
         need(
             battle.free_text_gamble is not None or not any(o.free_text for a in battle.acts for o in a.options),
             f"{where}：有 free_text 選項，必須設定 free_text_gamble",
         )
         for outcome in battle.outcomes:
-            known(f"{where} 結果「{outcome.title}」", [outcome.faction], faction_ids, "陣營")
+            known(f"{where} 結果「{outcome.title}」", [outcome.faction], battle_sides, "陣營")
             known(f"{where} 結果「{outcome.title}」", outcome.trend_delta, trend_ids, "大勢線")
             not_derived(f"{where} 結果「{outcome.title}」", outcome.trend_delta)
         need(
@@ -981,6 +1074,11 @@ def validate(c: Content) -> None:
 
     for milestone in c.scenario.milestones:
         check_condition(f"個人目標 {milestone.id}", milestone.condition)
+    flags = [step.season_one for step in c.tutorial.steps]
+    need(
+        flags == sorted(flags),
+        "tutorial.json：第一季才有的步驟（season_one）要排在最後——存檔記的是第幾步，插在中間會指到不同的步驟",
+    )
     for step in c.tutorial.steps:
         where = f"新手引導 {step.id}"
         known(where, step.done_when.locations, c.locations, "地點")
@@ -1022,6 +1120,8 @@ def validate(c: Content) -> None:
     check_timetable(c, need, known, front_ids, trend_ids)
     check_figures(c, need, known, front_ids)
     check_foreshadows(c, need, known, region_ids, front_ids, counters_written)
+    check_orders(c, need, known, front_ids)
+    check_promotions(c, need, known)
 
     for key, where in sorted(marks_written.items()):
         need(key in marks_read, f"{where}：痕跡 {key} 寫了卻沒有任何條件或文字讀它")

@@ -486,7 +486,10 @@ def test_the_playtest_admin_is_rayal():
     assert load_content(CONTENT_DIR).config.admins == ["Rayal"]
 
 def test_enemy_squads_are_marked_with_the_designers_factions(content):
-    factions = {sid: s.faction for sid, s in content.squads.items() if not sid.startswith("figure_")}  # 本人的隊伍見 test_figures
+    factions = {  # 本人的隊伍見 test_figures；運糧隊（截糧、護糧，T6）見 test_orders
+        sid: s.faction for sid, s in content.squads.items()
+        if not sid.startswith("figure_") and not sid.endswith("_grain_convoy")
+    }
     assert {sid for sid, f in factions.items() if f == "huang"} == {
         "louluo", "shuikou", "toumu", "shanzei", "fanjianglong", "taiping_lishi", "huangjin_sishi",
     }
