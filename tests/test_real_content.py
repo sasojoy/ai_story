@@ -550,6 +550,21 @@ def test_real_timetable_matches_settlement_doc():
     assert events["zhangjiao_dies"].lock_result == {"guan": "成", "huang": "不成"}
 
 
+def test_wancheng_after_a_government_win_reads_that_the_turbans_withdrew(content):
+    """濃縮版內容表 4.7：宛城之戰官軍打贏（甲版破城、乙版解圍，大勝險勝都算）寫 wancheng_guan_holds，
+    宛城的描寫換成「黃巾退了」那一段，排在第 3 週的版本描寫前面；黃巾打贏的四格不寫。"""
+    outcomes = next(e for e in content.timetable if e.id == "wancheng").outcomes
+    for key, outcome in outcomes.items():
+        holds = "wancheng_guan_holds" in outcome.world_flags_add
+        assert holds == (":guan:" in key), key
+    wan = content.locations["wan_city"]
+    text = "南陽郡治，黃巾退了。城牆上到處是刀砍火燒的痕跡，郡兵正忙著修補；城中人人都在說，那位江東來的將領是怎麼帶頭打贏這一仗的。"
+    assert wan.desc_when[0].world_flag == "wancheng_guan_holds" and wan.desc_when[0].text == text
+    for version in ("wan_version_jia", "wan_version_yi"):
+        assert wan.describe({version, "wancheng_guan_holds"}) == text
+        assert wan.describe({version}) != text
+
+
 def test_real_timetable_runs_a_whole_condensed_season():
     """週末設定下把真實內容的一季從頭推到尾：除了季末（T9），每件大事都結算一次、照週次。這裡沒有 store，三場決戰開不了
     集結：長社、宛城在之後那件大事結算之前照起點結算（T8 fix round 1），廣宗之後沒有大事、等到收季前才結算（fix round 0）。"""

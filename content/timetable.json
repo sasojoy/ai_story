@@ -216,7 +216,8 @@
         "loser_text": {"guan": "黃巾的 {loser} 送進城的糧，最後沒能派上用場。"},
         "chronicle": "孫堅先登，宛城破。",
         "trends": {"nanyang": -15},
-        "figures": {"zhaohong": {"fate": "退場"}}
+        "figures": {"zhaohong": {"fate": "退場"}},
+        "world_flags_add": ["wancheng_guan_holds"]
       },
       "甲:guan:險勝": {
         "text": "史書上，孫堅先登，大破宛城。這一次，宛城是破了，可趙弘帶著殘部從南門突圍。",
@@ -224,7 +225,8 @@
         "loser_text": {"guan": "黃巾的 {loser} 送進城的糧，最後沒能派上用場。"},
         "chronicle": "孫堅先登，宛城破。",
         "trends": {"nanyang": -8},
-        "figures": {"zhaohong": {"fate": "聲威大減"}}
+        "figures": {"zhaohong": {"fate": "聲威大減"}},
+        "world_flags_add": ["wancheng_guan_holds"]
       },
       "甲:huang:大勝": {
         "text": "史書上，孫堅先登，宛城被破。這一次，官軍的雲梯一架架被推倒，圍城的兵先散了。",
@@ -246,14 +248,16 @@
         "locked_text": {"guan": "這一次，宛城在官軍手裡。黃巾圍城數十日，{name} 跟著孫堅在一個雨夜縋城而出，直撲黃巾連營。趙弘死在亂軍之中，圍城不攻自解。"},
         "chronicle": "孫堅夜襲，解宛城之圍。",
         "trends": {"nanyang": -15},
-        "figures": {"zhaohong": {"fate": "退場"}}
+        "figures": {"zhaohong": {"fate": "退場"}},
+        "world_flags_add": ["wancheng_guan_holds"]
       },
       "乙:guan:險勝": {
         "text": "這一次，宛城在官軍手裡。黃巾的連營被孫堅衝亂，趙弘退兵三十里。",
         "locked_text": {"guan": "這一次，宛城在官軍手裡。黃巾圍城數十日，{name} 跟著孫堅在一個雨夜縋城而出，直撲黃巾連營。黃巾的連營被衝亂，趙弘退兵三十里。"},
         "chronicle": "孫堅夜襲，解宛城之圍。",
         "trends": {"nanyang": -8},
-        "figures": {"zhaohong": {"fate": "受挫"}}
+        "figures": {"zhaohong": {"fate": "受挫"}},
+        "world_flags_add": ["wancheng_guan_holds"]
       },
       "乙:huang:大勝": {
         "text": "宛城被圍數十日，城中糧盡，終於開了門。{官軍主將}的援軍晚到了一步。",
