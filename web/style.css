@@ -229,7 +229,7 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .road-links .btn { flex: 1 1 auto; min-height: 48px; }
 .free { display: flex; gap: 8px; margin-bottom: 12px; }
 .free .input { flex: 1; }
-.mini { border-radius: var(--radius); overflow: hidden; border: 1px solid var(--line); margin-bottom: 12px; cursor: pointer; position: relative; }
+.mini { border-radius: var(--radius); overflow: hidden; border: 1px solid var(--line); margin-bottom: 12px; cursor: pointer; position: relative; background: #e9e2cc; }
 .mini svg { height: 150px !important; }
 .mini::after { content: "展開輿圖 ›"; position: absolute; right: 8px; bottom: 8px; font-size: 12px; background: var(--card); border: 1px solid var(--line); padding: 2px 8px; border-radius: 8px; }
 .linkish { border: 0; background: none; color: var(--accent); cursor: pointer; padding: 6px 2px; font-size: 14px; }
