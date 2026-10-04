@@ -226,7 +226,7 @@ def _legend_width(width: int, layer: str) -> float:
 
 
 def _legend(top: int, width: int, layer: str) -> str:
-    """圖例：第一行是六種地點圖示（縮小七成）與視野狀態的畫法，第二行是外圈與這一層的說明。"""
+    """圖例：第一行是六種地點圖示（縮成七成）與視野狀態的畫法，第二行是外圈與這一層的說明。"""
     box = _legend_width(width, layer)
     parts = [
         f'<rect x="8" y="{top}" width="{box:g}" height="46" rx="6" fill="{mapart.DISC}" fill-opacity="0.92" '
@@ -502,7 +502,8 @@ def render_map(
     大地圖照原尺寸畫在可捲動的框裡（地圖上的遠近就是真正的路程，縮到欄寬字會太小；見地圖擴充與移動設計）。
     敵情層要傳 odds（Game.odds）才會寫出「最險」；其餘圖層不用、也不會算勝算。
 
-    底下是紙色、雙線外框，大區、河、山頭與樹、路依序畫上去（輿圖美術設計）；map.json 寫了 compass 才畫指北針。
+    底下是紙色，大區、河、山頭與樹、雙線外框、大區名稱與大勢、河名、路依序畫上去（輿圖美術設計）：外框蓋在山頭上面、
+    所有字下面，字的底色蓋得住框線；map.json 寫了 compass 才畫指北針。
     地點名字（連同底下的小字）擺在不壓到大區名稱、大勢、河名、山名、指北針、地點記號（含所在地與選定的圓圈）、
     圖例與其他名字，也不出界的地方：所在地先擺，每個名字依序試右、左、左下、右下，擠不下再試其他位置
     （見 _label_spots、_place_labels）。選定地點的名字擺在選定圓圈外面。"""
@@ -530,15 +531,15 @@ def render_map(
             tints[region.id] = _tint(region.fill, max(value for _, value in trends))
         region_texts.append(text)
     out += _polygons(m, tints)
-    out += region_texts  # 大區名稱畫在所有大區上面，不會被相鄰的大區蓋住
     out += _rivers(m)
     out += [piece.svg for piece in mapart.terrain(content)]
+    out.append(mapart.frame(m.width, m.height))  # 外框蓋在山頭與樹上面（靠邊的山不探出框外），在所有字下面
+    out += region_texts  # 大區名稱與大勢畫在所有大區上面、外框上面：不被相鄰的大區蓋住，字的底色也蓋得住框線
     for label in m.labels:
         text, box = _river_label(label)
         out.append(text)
         taken.append((box, TEXT_WEIGHT))
     out += _roads(content, views)
-    out.append(mapart.frame(m.width, m.height))
     out.append(_compass(m, taken))
     if layer == "routes":
         out.append(_route_line(state, content, selected, spot))
@@ -664,13 +665,15 @@ def render_minimap(state: GameState, content: Content) -> str:
         *_polygons(m, {}),
     ]
     taken: list[Taken] = []  # 已經佔用的範圍：擺名字與方向時要避開
+    region_texts = []
     for region in m.regions:
         box = text_box(region.label_x, region.label_y, region.name, REGION_SIZE)
         if not _outside(box, bounds):
-            out.append(_text(region.label_x, region.label_y, region.name, REGION_SIZE, region.text_fill, bg))
+            region_texts.append(_text(region.label_x, region.label_y, region.name, REGION_SIZE, region.text_fill, bg))
             taken.append((box, TEXT_WEIGHT))
     out += _rivers(m)
     out += [piece.svg for piece in mapart.terrain(content) if _overlap(piece.extent, window)]
+    out += region_texts  # 大區名稱畫在河與山頭上面（大地圖也是這個順序）；擺位置還是先算大區、再算河名
     for label in m.labels:
         text, box = _river_label(label)
         if not _outside(box, bounds):

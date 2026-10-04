@@ -599,6 +599,36 @@ def test_the_map_has_a_double_frame_and_a_compass_where_the_map_says(state, cont
     assert not overlap(label_box(svg, "lake"), (228, 70, 272, 130))  # 湖邊的名字讓開指北針
 
 
+def test_the_frame_is_drawn_above_the_terrain_and_under_every_name_and_trend(state, content):
+    content.map.terrain = [WOODS]
+    svg = render_map(state, content)
+    frame = svg.index('<rect x="5" y="5" width="390"')
+    assert svg.rindex(terrain(content)[-1].svg) < frame  # 山頭與樹在框下面：靠邊的山不會探出框外
+    assert frame < svg.index(">測試北區<") < svg.index('<path d="M200,100 Q')  # 大區名稱在框上面：名字的底色蓋得住框線
+    assert frame < svg.index(">寇亂 30<")  # 大勢那一行也在框上面
+
+
+def test_real_map_frame_is_under_the_region_names_and_trends(real):
+    state = new_game_state(real, "測試")
+    svg = render_map(state, real)
+    frame = svg.index('<rect x="5" y="5" ')
+    assert svg.rindex(terrain(real)[-1].svg) < frame  # 靠邊的山（如伏牛山）不探出框外
+    names = [svg.index(f">{region.name}<") for region in real.map.regions]
+    trends = [m.start() for m in re.finditer(r'<text [^>]*fill="#A32D2D"[^>]*>', svg)]
+    assert trends and all(frame < at for at in names + trends)
+
+
+def test_minimap_draws_the_region_names_over_the_rivers_and_terrain(state, content):
+    content.map.terrain = [WOODS]
+    content.map.regions[0].label_x, content.map.regions[0].label_y = 120, 60  # 名字落進視窗
+    svg = render_minimap(state, content)
+    left, top, right, bottom = window(svg)
+    inside = [p for p in terrain(content) if p.extent[0] < right and left < p.extent[2] and p.extent[1] < bottom and top < p.extent[3]]
+    name = svg.index(">測試北區<")
+    assert inside and svg.index('fill="#6FA0C2" stroke="#6FA0C2"') < name  # 河在名字下面
+    assert svg.rindex(inside[-1].svg) < name < svg.index('<path d="M200,100 Q')  # 山頭與樹在名字下面，路在名字上面
+
+
 def test_terrain_is_the_same_before_and_after_a_place_unlocks(state, content):
     content.map.terrain = [WOODS]
     tree = re.compile(r'<circle [^>]*fill="#7FA36A"/>')
