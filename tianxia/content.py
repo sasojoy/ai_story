@@ -19,20 +19,36 @@ from .companion_agent import DIALOGUE_TAGS
 from .materials import TIER_NAMES
 from .models import (
     ROADS, STATS, BattleDef, CharacterDef, Condition, Config, Content, CraftNames, Effect, Event, Location,
-    MapLayout, Material, RoadSight, Scenario, Sect, SimRumor, SkillDef, Squad, Tutorial,
+    MapLayout, Material, RoadSight, Scenario, Sect, SimRumor, SkillDef, Squad, TimetableEvent, Tutorial,
 )
 from .zh import to_traditional
 
 ROAD_SIGHTS_PER_SPOT = 2  # 路上見聞：每一種路、每一個大區的組合至少要有幾則可挑（路上設計第五節）
 ROAD_SIGHT_CAPS = {"silver": 10, "xinde": 5}  # 路上見聞的小收穫上限
 TERRAIN_SIZE = (8, 40)  # 山脈、丘陵的山頭高度範圍（輿圖美術設計第四節）
+# 時刻表的戰況鍵先也認這幾條：三條戰線與豪強割據由 T1（地圖擴充開發）加進 scenario 的 trends，T2 跟它平行開發。
+# T1 併進來之後拿掉，只認劇本裡的大勢線（時刻表推一條劇本沒有的線時 timetable 直接略過）。
+SEASON_ONE_TRENDS = {"yingru", "nanyang", "jizhou", "geju"}
+TIMETABLE_SIDES = ("guan", "huang")  # 時刻表的鎖定、決戰、@commander 只有官軍與黃巾兩方（豪強是第三方）
+TIMETABLE_KEYS = {  # 每種大事該有的結果鍵（不含版本；有版本時每個版本各一套）
+    "fixed": ["fixed"],
+    "roll": ["成", "不成"],
+    "showdown": [f"{side}:{tier}" for side in TIMETABLE_SIDES for tier in ("大勝", "險勝")],
+}
 
 
 class ContentError(Exception):
     pass
 
 
-def load_content(root: Path) -> Content:
+# 設定覆寫檔（content/profiles/<名字>.json）的環境變數。server.py、run_bots.py、scripts/sim_*.py 讀它傳進
+# load_content；引擎自己不讀環境變數（計畫 T2「總開關與週末設定」）。
+PROFILE_ENV = "TIANXIA_PROFILE"
+
+
+def load_content(root: Path, profile: str | None = None) -> Content:
+    """profile 給了就把 profiles/<profile>.json 的鍵蓋在 config.json 上（例如週末設定一次打開季曆與 2.5 天的季），
+    不必手改 config.json；覆寫檔只能寫 Config 有的欄位，拼錯在載入當下就報錯。"""
     root = Path(root)
     events: dict[str, Event] = {}
     for path in sorted((root / "events").glob("*.json")):
@@ -42,7 +58,7 @@ def load_content(root: Path) -> Content:
                 raise ContentError(f"事件 id 重複：{event.id}（{path.name}）")
             events[event.id] = event
     content = Content(
-        config=Config(**_read(root / "config.json")),
+        config=_config(root, profile),
         scenario=Scenario(**_read(root / "scenario.json")),
         locations=_index(Location, _read(root / "locations.json")),
         skills=_index(SkillDef, _read(root / "skills.json")),
@@ -54,6 +70,8 @@ def load_content(root: Path) -> Content:
         squads=_index(Squad, _read(root / "squads.json")),
         battles=_index(BattleDef, _read(root / "battles.json")) if (root / "battles.json").exists() else {},
         road_sights=_index(RoadSight, _read(root / "road_sights.json")),
+        timetable=[_build(TimetableEvent, raw) for raw in _read(root / "timetable.json")]
+        if (root / "timetable.json").exists() else [],
         events=events,
         map=MapLayout(**_read(root / "map.json")),
         tutorial=Tutorial(**_read(root / "tutorial.json")),
@@ -62,6 +80,29 @@ def load_content(root: Path) -> Content:
     validate(content)
     _scale_marks(content, content.config.mark_threshold_scale)
     return content
+
+
+def _config(root: Path, profile: str | None) -> Config:
+    raw = _read(root / "config.json")
+    if profile is not None:
+        path = root / "profiles" / f"{profile}.json"
+        if not path.exists():
+            raise ContentError(f"找不到設定覆寫檔 {profile}（應該在 {path}）")
+        overrides = _read(path)
+        unknown = sorted(set(overrides) - set(Config.model_fields))
+        if unknown:
+            raise ContentError(f"設定覆寫檔 {path.name} 有 Config 沒有的欄位：{'、'.join(unknown)}")
+        raw = {**raw, **overrides}
+    return Config(**raw)  # 值寫錯照舊由模型擋（跟 config.json 本身寫錯一樣丟 ValidationError）
+
+
+def profile_line(content: Content, profile: str | None) -> str:
+    """啟動時跟資料庫路徑一起印的那一行：用的是哪一份設定、打開了什麼。設錯時一眼看得出來。"""
+    if profile is None:
+        return "設定：預設"
+    cfg = content.config
+    switch = "開啟" if cfg.season_one else "關閉"
+    return f"設定：{profile}（第一季濃縮版規則{switch}、季長 {cfg.season_days:g} 天、人數上限 {cfg.server_max_players}）"
 
 
 def _scale_marks(obj, scale: float) -> None:
@@ -160,6 +201,93 @@ def _material_sources(c: Content) -> set[str]:
     for sight in c.road_sights.values():
         reachable |= set(sight.effect.materials)
     return reachable
+
+
+def check_timetable(c: Content, need, known, region_ids: list[str], trend_ids: set[str]) -> None:
+    """時刻表（content/timetable.json，計畫 T2）：戰線是大區 id（不檢查是不是大勢線，三條戰線是 T1 加的）、
+    結果鍵照種類齊全、鎖定對得到結果、人物與修正的對象存在、文字只用繁體中文。人物先認 characters.json 的 id，
+    T4 的人物表進來後改認它。"""
+    ids = [e.id for e in c.timetable]
+    duplicated = sorted({eid for eid in ids if ids.count(eid) > 1})
+    need(not duplicated, f"時刻表 id 重複：{'、'.join(duplicated)}")
+    trends = trend_ids | SEASON_ONE_TRENDS
+    earlier: dict[str, TimetableEvent] = {}
+    order = {e.id: i for i, e in enumerate(c.timetable)}
+    rolled = {e.id for e in c.timetable if e.roll_side is not None}
+
+    def check_text(where: str, text: str | None) -> None:
+        if text:
+            need(to_traditional(text) == text, f"{where}：文字只能用繁體中文（「{text[:12]}…」）")
+
+    def check_figure(where: str, key: str, change) -> None:
+        if key.startswith("@commander:"):
+            front, _, side = key.removeprefix("@commander:").partition(":")
+            known(where, [front], region_ids, "大區")
+            need(side in TIMETABLE_SIDES, f"{where}：{key} 的那一方只能是 guan 或 huang")
+        else:
+            known(where, [key], c.characters, "人物")
+        if change.front is not None:
+            known(where, [change.front], region_ids, "大區")
+        if change.location is not None:
+            known(where, [change.location], c.locations, "地點")
+        if change.fate == "到任":
+            need(change.front is not None and change.location is not None, f"{where}：{key} 到任要寫 front 與 location")
+        known(where, change.only_if, c.characters, "人物")
+        known(where, change.only_if.values(), region_ids, "大區")
+        check_text(where, change.note)
+
+    for ev in c.timetable:
+        where = f"時刻表 {ev.id}"
+        need(ev.week <= c.config.season_weeks, f"{where}：第 {ev.week} 週超出季曆的 {c.config.season_weeks} 週")
+        if ev.front is not None:
+            known(where, [ev.front], region_ids, "大區")
+        if ev.kind == "roll":
+            need(ev.roll_side is not None, f"{where}：擲骰的大事要寫 roll_side（成對哪一方有利）")
+            need(ev.front is not None or ev.base_chance is not None, f"{where}：沒有戰線時要寫 base_chance")
+        else:
+            need(ev.roll_side is None and ev.base_chance is None, f"{where}：只有擲骰的大事寫 roll_side、base_chance")
+        if ev.version_from is not None:
+            known(where, [ev.version_from], earlier, "（更早的）時刻表大事")
+            source = earlier.get(ev.version_from)
+            if source is not None:
+                known(where, ev.versions, source.outcomes, f"{ev.version_from} 的結果")
+            need(bool(ev.versions), f"{where}：有 version_from 就要寫 versions")
+        else:
+            need(not ev.versions, f"{where}：有 versions 就要寫 version_from")
+        if ev.skip_if_out is not None:
+            known(where, [ev.skip_if_out], c.characters, "人物")
+        versions = list(dict.fromkeys(ev.versions.values()))
+        base = TIMETABLE_KEYS.get(ev.kind)
+        if base is not None:  # 季末的結局句由 T9 寫在劇本的結局裡
+            expected = [f"{v}:{k}" for v in versions for k in base] if versions else base
+            missing = [k for k in expected if k not in ev.outcomes]
+            extra = [k for k in ev.outcomes if k not in expected]
+            need(not missing, f"{where}：缺少結果 {'、'.join(missing)}")
+            need(not extra, f"{where}：多了不認得的結果 {'、'.join(extra)}")
+        for side, key in ev.lock_result.items():
+            need(side in TIMETABLE_SIDES, f"{where}：lock_result 的鎖定方只能是 guan 或 huang（寫的是 {side}）")
+            need(all(f"{v}:{key}" in ev.outcomes for v in versions) if versions else key in ev.outcomes,
+                 f"{where}：lock_result 指到不存在的結果 {key}")
+        known(where, ev.third_party_trends, trends, "大勢線")
+        check_text(where, ev.preface)
+        check_text(where, ev.third_party_text)
+        for key, outcome in ev.outcomes.items():
+            ow = f"{where} 結果 {key}"
+            known(ow, outcome.trends, trends, "大勢線")
+            for target in outcome.chance_mods:  # 修正只對之後還要擲骰的大事有意義（例：長社黃巾大勝讓盧植圍廣宗更難）
+                need(
+                    target in rolled and order[target] > order[ev.id],
+                    f"{ow}：chance_mods 的 {target} 要是排在後面、照擲骰結算的大事",
+                )
+            for label, texts in (("locked_text", outcome.locked_text), ("loser_text", outcome.loser_text)):
+                need(all(side in TIMETABLE_SIDES for side in texts), f"{ow}：{label} 的鍵只能是 guan 或 huang")
+            need(set(outcome.loser_text) <= set(outcome.locked_text), f"{ow}：有搶輸的一句就要有那一方的具名公告")
+            for fid, change in outcome.figures.items():
+                check_figure(ow, fid, change)
+            for text in (outcome.text, outcome.note, outcome.chronicle, outcome.third_party_text,
+                         *outcome.locked_text.values(), *outcome.loser_text.values()):
+                check_text(ow, text)
+        earlier[ev.id] = ev
 
 
 def validate(c: Content) -> None:
@@ -556,6 +684,8 @@ def validate(c: Content) -> None:
     for squad in c.squads.values():
         where = f"敵方隊伍 {squad.id}"
         need(squad.difficulty >= 0, f"{where}：difficulty 不能是負的")
+
+    check_timetable(c, need, known, region_ids, trend_ids)
 
     for key, where in sorted(marks_written.items()):
         need(key in marks_read, f"{where}：痕跡 {key} 寫了卻沒有任何條件或文字讀它")

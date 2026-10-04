@@ -117,7 +117,7 @@ class PlayerState(BaseModel):
     # ── 共享賽季（跨玩家，見 world_state.py::SharedWorldState.season）────
     season_number: int = 1  # 這個玩家的角色屬於第幾季；跟共用賽季的編號對不上時，
     # Game._drop_stale_references() 會知道共用的賽季已經換過一輪，幫這個玩家的角色重開
-    # 新的一季（好感度/關係現況保留，角色本身的等級/位置/隊伍重新開始，見設計討論）。
+    # 新的一季（關係現況/對話紀錄保留、好感度只帶一成，角色本身的等級/位置/隊伍重新開始，見設計討論）。
     bot: BotProfile | None = None  # 伺服器假人才有（伺服器假人設計第五節）；任何畫面都不能顯示或透露
     # 處理過的收場決戰（BattleInstance.record_id）：自己參戰、已經補進江湖紀錄與戰報的，以及看過不是自己參戰的
     # （FB-027，見 Game._deliver_battle_results）。跨季保留：決戰常常把季收掉，下一季才回來的人也要補、而且只補一次
@@ -141,6 +141,33 @@ class Rumor(BaseModel):
     named: bool = True  # 具名；觸發者選了匿名（「某位少俠」）時是 False
 
 
+class TimelineResult(BaseModel):
+    """一件大事結算的結果（時刻表，計畫 T2）。key 是結果鍵（"成"、"甲:guan:大勝"…；跳過的是 timetable.SKIPPED）。"""
+
+    key: str
+    time: float  # 結算的世界秒
+    locked_by: str | None = None  # 鎖定者的名號（江湖史、結算畫面的稱號依據）；沒人鎖定是 None
+    losers: list[str] = Field(default_factory=list)  # 搶輸的人
+    text: str = ""  # 公告全文（不含「【江湖大事】」）；跳過的是空的
+
+
+class Lock(BaseModel):
+    """關鍵伏筆的鎖定（伏筆文件 2.4；T7 寫入，T2 結算時讀）。"""
+
+    side: str  # 陣營 id
+    name: str  # 名號
+    time: float
+
+
+class FigureState(BaseModel):
+    """大勢人物當下的樣子（計畫 T4；T2 先放最小版，時刻表結果改它）。"""
+
+    prestige: int = 60
+    status: Literal["active", "away", "retired", "crippled", "jailed"] = "active"  # 在場／未出場／退場／重創／下獄
+    front: str | None = None  # 在推哪條戰線
+    location: str = ""
+
+
 class WorldState(BaseModel):
     time: float = 0.0  # 賽季開始後經過的遊戲秒數
     trends: dict[str, int] = Field(default_factory=dict)
@@ -161,6 +188,21 @@ class WorldState(BaseModel):
     pending_battle: str | None = None  # 背景推進跨過開戰門檻時記下要開的戰鬥 id；那時人在 mutate_season 的
     # callback 裡，不能再 mutate 開戰（巢狀的 mutate 內層寫的會被蓋掉，會丟錯），callback 結束後由
     # world.start_pending_battle 開戰並清掉
+    # ── 開季時蓋的章（計畫 T2「舊季不會被補算」）：world_state.stamp_season 照當下的 Config 寫入——種季、換季時蓋，
+    # 籌備中的季在管理者開季時再蓋一次（第一次啟動忘了設 TIANXIA_PROFILE 也救得回來）──
+    # 開關打開時還在跑的舊季照它自己的章走：不跑季曆與時刻表，也不會因為設定的季長變短就一口氣收掉。
+    season_one: bool = False  # 這一季開季時第一季濃縮版的規則是不是開著
+    length_days: float | None = None  # 這一季的長度（遊戲日）；None＝T2 之前開的季，照 Config.season_days
+    # ── 時刻表（計畫 T2；鎖定、搶輸、豪強、一般伏筆修正由 T7 寫入）──
+    timeline: dict[str, TimelineResult] = Field(default_factory=dict)  # 大事 id → 結算結果（有就不再結算）
+    locks: dict[str, Lock] = Field(default_factory=dict)  # 大事 id → 第一個做完關鍵伏筆的人
+    lock_losers: dict[str, list[Lock]] = Field(default_factory=dict)  # 大事 id → 之後才做完的人
+    third_party: dict[str, list[str]] = Field(default_factory=dict)  # 大事 id → 做完豪強伏筆的名號
+    event_mods: dict[str, float] = Field(default_factory=dict)  # 大事 id → 一般伏筆、軍令的成功率修正（合計夾在 ±0.20）
+    event_bonus: dict[str, float] = Field(default_factory=dict)  # 大事 id → 時刻表結果帶來的修正（例：波才北上，不夾）
+    schedule: dict[str, float] = Field(default_factory=dict)  # 決戰 id 與 "finale" → 世界秒；開季時填預設、管理者可改
+    hooked_week: int = 0  # 週初的掛鉤（world.WEEK_HOOKS）已經跑到第幾週；0＝還沒跑過
+    figures: dict[str, FigureState] = Field(default_factory=dict)  # 大勢人物 id → 聲威、狀態、所在（T4 開季時種）
 
 
 class Fighter(BaseModel):

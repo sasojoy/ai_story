@@ -5,7 +5,7 @@ import pytest
 from pydantic import ValidationError
 
 from conftest import FIXTURE
-from tianxia.content import ContentError, load_content, validate
+from tianxia.content import ContentError, load_content, profile_line, validate
 from tianxia.models import FactionDef
 
 
@@ -763,6 +763,110 @@ def test_compass_must_be_on_the_map(tmp_path):
     root = copy_fixture(tmp_path)
     edit_json(root / "map.json", lambda d: d.update(compass=[401, 120]))
     with pytest.raises(ContentError, match="指北針"):
+        load_content(root)
+
+
+# ── 週末設定（計畫 T2「總開關與週末設定」）：一次切換，不手改 content/config.json ──
+CONTENT_DIR = FIXTURE.parent.parent.parent / "content"
+WEEKEND_KEYS = {"season_one", "season_days", "server_max_players"}
+
+
+def test_weekend_profile_overrides_three_settings():
+    base = load_content(CONTENT_DIR).config
+    weekend = load_content(CONTENT_DIR, profile="weekend").config
+    assert (weekend.season_one, weekend.season_days, weekend.server_max_players) == (True, 2.5, 2)
+    assert (base.season_one, base.season_days, base.server_max_players) == (False, 14, 30)  # 不給 profile 時照 config.json
+    assert weekend.model_dump(exclude=WEEKEND_KEYS) == base.model_dump(exclude=WEEKEND_KEYS)  # 其他設定一個都不動
+
+
+def test_profile_with_unknown_key_fails_to_load(tmp_path):
+    root = copy_fixture(tmp_path)
+    (root / "profiles").mkdir()
+    (root / "profiles" / "typo.json").write_text('{"season_one": true, "season_dayz": 2.5}', encoding="utf-8")
+    with pytest.raises(ContentError, match="season_dayz"):
+        load_content(root, profile="typo")
+
+
+def test_a_profile_that_does_not_exist_fails_to_load(tmp_path):
+    with pytest.raises(ContentError, match="nope"):
+        load_content(copy_fixture(tmp_path), profile="nope")
+
+
+def test_the_profile_line_says_what_the_profile_turns_on():
+    assert profile_line(load_content(CONTENT_DIR), None) == "設定：預設"
+    assert profile_line(load_content(CONTENT_DIR, profile="weekend"), "weekend") == (
+        "設定：weekend（第一季濃縮版規則開啟、季長 2.5 天、人數上限 2）"
+    )
+
+
+# ── 時刻表（content/timetable.json，計畫 T2）──────────────────────────
+
+
+def _timetable() -> list[dict]:
+    """測試夾具用的小時刻表：一件固定、一件擲骰（有鎖定與豪強）、一件看版本的決戰。"""
+    return [
+        {"id": "start", "week": 1, "title": "開場", "kind": "fixed", "outcomes": {"fixed": {"text": "開場了。"}}},
+        {"id": "raid", "week": 2, "front": "north", "title": "劫江", "kind": "roll", "roll_side": "huang",
+         "lock_result": {"huang": "成", "guan": "不成"}, "third_party_trends": {"kou": 3},
+         "outcomes": {
+             "成": {"text": "劫成了。", "chronicle": "水寇劫江。", "trends": {"kou": 8},
+                   "locked_text": {"huang": "{name} 劫成了。"}, "loser_text": {"huang": "{loser} 沒擋住。"},
+                   "figures": {"mate": {"fate": "受挫"}}, "chance_mods": {"ambush": -0.1}},
+             "不成": {"text": "沒劫成。", "trends": {"kou": -5}},
+         }},
+        {"id": "ambush", "week": 3, "front": "south", "title": "伏擊", "kind": "roll", "roll_side": "guan",
+         "outcomes": {"成": {"text": "伏擊成了。"}, "不成": {"text": "伏擊落空。"}}},
+        {"id": "siege", "week": 3, "front": "south", "title": "圍城", "kind": "showdown", "version_from": "raid",
+         "versions": {"成": "甲", "不成": "乙"},
+         "outcomes": {f"{v}:{side}:{tier}": {"text": "打完了。", "figures": {"@commander:south:guan": {"fate": "受挫"}}}
+                      for v in ("甲", "乙") for side in ("guan", "huang") for tier in ("大勝", "險勝")}},
+    ]
+
+
+def _with_timetable(tmp_path, edit=None):
+    root = copy_fixture(tmp_path)
+    events = _timetable()
+    if edit is not None:
+        edit(events)
+    (root / "timetable.json").write_text(json.dumps(events, ensure_ascii=False), encoding="utf-8")
+    return root
+
+
+def test_the_timetable_loads_and_is_optional(tmp_path):
+    assert load_content(copy_fixture(tmp_path / "a")).timetable == []  # 沒有 timetable.json 的內容照舊載得進來
+    loaded = load_content(_with_timetable(tmp_path / "b"))
+    assert [e.id for e in loaded.timetable] == ["start", "raid", "ambush", "siege"]
+
+
+@pytest.mark.parametrize(("edit", "message"), [
+    (lambda ev: ev[1].update(front="nowhere"), "nowhere"),  # 戰線要是大區 id
+    (lambda ev: ev[1]["outcomes"].pop("不成"), "不成"),  # 擲骰要有成與不成
+    (lambda ev: ev[3]["outcomes"].pop("乙:huang:險勝"), "乙:huang:險勝"),  # 決戰每個版本四格
+    (lambda ev: ev.append(dict(ev[0])), "start"),  # id 重複
+    (lambda ev: ev[1].update(roll_side=None), "roll_side"),
+    (lambda ev: ev[0].update(roll_side="guan"), "roll_side"),  # 不擲骰的不寫 roll_side（軍令的修正靠它判斷）
+    (lambda ev: ev[1]["outcomes"]["成"]["trends"].update(nowhere=3), "nowhere"),  # 未知的大勢線
+    (lambda ev: ev[1]["outcomes"]["成"]["figures"].update(ghost={"fate": "受挫"}), "ghost"),  # 未知的人物
+    (lambda ev: ev[3]["outcomes"]["甲:guan:大勝"]["figures"].update({"@commander:nowhere:guan": {"fate": "受挫"}}), "nowhere"),
+    (lambda ev: ev[1]["outcomes"]["成"]["chance_mods"].update(ghost=0.1), "ghost"),  # 修正要加在時刻表上的大事
+    (lambda ev: ev[1]["lock_result"].update(guan="大勝"), "大勝"),  # 鎖定要對到一個結果
+    (lambda ev: ev[3].update(version_from="ghost"), "ghost"),
+    (lambda ev: ev[1]["outcomes"]["成"].update(chance_mods={"siege": -0.1}), "siege"),  # 決戰不擲骰：修正沒有意義
+    (lambda ev: ev[2]["outcomes"]["成"].update(chance_mods={"raid": -0.1}), "raid"),  # 要加在之後的大事上
+    (lambda ev: ev[1]["outcomes"]["成"]["figures"].update(mate={"fate": "到任"}), "到任"),  # 到任要寫戰線與地點
+    (lambda ev: ev[1].update(week=13), "13"),  # 季曆只有 12 週
+    (lambda ev: ev[0]["outcomes"]["fixed"].update(text="开场了。"), "繁體"),  # 公告只能用繁體中文
+])
+def test_timetable_cross_references_are_checked(tmp_path, edit, message):
+    with pytest.raises(ContentError, match=message):
+        load_content(_with_timetable(tmp_path, edit))
+
+
+def test_fate_prestige_only_knows_the_three_fate_words(tmp_path):
+    """Config.fate_prestige 只能寫重挫、聲威大減、受挫（退場、重創是歸零，下獄、到任不動聲威）。"""
+    root = copy_fixture(tmp_path)
+    edit_json(root / "config.json", lambda d: d.update(fate_prestige={"重挫": -30, "重創": -60}))
+    with pytest.raises(ValidationError, match="fate_prestige"):
         load_content(root)
 
 

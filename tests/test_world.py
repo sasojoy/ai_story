@@ -293,3 +293,21 @@ def test_a_threshold_rumor_is_world_news(state, content):
     state.world.trends["kou"] = 50
     check_thresholds(state, content)
     assert state.world.rumors[-1].layer == "world"
+
+
+def test_the_season_ends_at_its_own_stamped_length(content):
+    """季末照那一季蓋章的季長；換成 2.5 天的設定時，蓋 14 天章的那一季不會一口氣收掉。舊季沒有章就照設定。"""
+    from tianxia.world import advance_world_state
+    from tianxia.world_state import fresh_season
+
+    content.scenario.sim_players = []  # 虛擬玩家推過門檻也會收季，這裡只看時間
+    content.config.season_days = 14
+    stamped = fresh_season(content)
+    content.config.season_days = 2.5
+    advance_world_state(stamped, content, 5 * 86400, random.Random(0))
+    assert not stamped.ended
+    advance_world_state(stamped, content, 9 * 86400, random.Random(0))
+    assert stamped.ended
+    old = fresh_season(content).model_copy(update={"length_days": None})  # T2 之前開的季：沒有章
+    advance_world_state(old, content, 2.5 * 86400, random.Random(0))
+    assert old.ended

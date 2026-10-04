@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import inspect
 import io
+import os
 import sys
 import tempfile
 from collections import Counter, defaultdict
@@ -25,7 +26,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import sim_server_bots as sim  # noqa: E402
 from tianxia import engine, rules  # noqa: E402
 from tianxia import world as worldmod  # noqa: E402
-from tianxia.content import load_content  # noqa: E402
+from tianxia.content import PROFILE_ENV, load_content, profile_line  # noqa: E402
 
 TREND = "huangjin"
 TRAINING = ("_drill", "_squad_encounter")
@@ -42,6 +43,7 @@ def main() -> None:
     ap.add_argument("--seasons", type=int, default=4)
     ap.add_argument("--variant", choices=("none", "zero", "half"), default="none")
     ap.add_argument("--cap", type=int, default=0)
+    ap.add_argument("--profile", default=os.environ.get(PROFILE_ENV) or None, help="設定覆寫檔，例如 weekend（預設讀 TIANXIA_PROFILE）")
     args = ap.parse_args()
 
     season = {"n": 0}
@@ -104,7 +106,8 @@ def main() -> None:
 
     engine.Game._drill, engine.Game._squad_encounter = drill, encounter
 
-    content = load_content(ROOT / "content")
+    content = load_content(ROOT / "content", profile=args.profile)
+    print(profile_line(content, args.profile), flush=True)
     for n in range(1, args.seasons + 1):
         season["n"] = n
         workdir = Path(tempfile.mkdtemp())  # SQLite 檔在 Windows 上還被占用時刪不掉，留給系統清

@@ -22,7 +22,7 @@ sys.path.insert(0, str(ROOT))
 from tianxia import bot, database, server_bots  # noqa: E402
 from tianxia.bot_runner import BotRunner  # noqa: E402
 from tianxia.characters import open_characters  # noqa: E402
-from tianxia.content import load_content  # noqa: E402
+from tianxia.content import PROFILE_ENV, load_content, profile_line  # noqa: E402
 from tianxia.engine import Game  # noqa: E402
 from tianxia.sqlite_world import open_world  # noqa: E402
 
@@ -62,7 +62,7 @@ def run_season(content, workdir: Path, seed: int, tick: float) -> dict:
     # 引擎已經不讀電腦時鐘（假人程式用 clock，「真人」sync 時傳 now），不用再 mock time.time。
     with mock.patch.dict(os.environ, {database.ENV_VAR: str(db_path)}):
         world.seed_first_season(content)
-        world.open_season(now[0])
+        world.open_season(content, now[0])
         humans = [Game.new(content, name, rng=random.Random(seed + 2000 + i), world=world) for i, name in enumerate(HUMANS)]
         for game in humans:
             game.client = None
@@ -103,9 +103,11 @@ def main() -> None:
     parser.add_argument("--seasons", type=int, default=2)
     parser.add_argument("--time-scale", type=float, default=6.0)
     parser.add_argument("--tick", type=float, default=60.0)
+    parser.add_argument("--profile", default=os.environ.get(PROFILE_ENV) or None, help="設定覆寫檔，例如 weekend（預設讀 TIANXIA_PROFILE）")
     args = parser.parse_args()
+    print(profile_line(load_content(ROOT / "content", profile=args.profile), args.profile), flush=True)
     for i in range(args.seasons):
-        content = load_content(ROOT / "content")
+        content = load_content(ROOT / "content", profile=args.profile)
         content.config.time_scale = args.time_scale
         content.config.bot_tick_seconds = args.tick
         with tempfile.TemporaryDirectory() as tmp:

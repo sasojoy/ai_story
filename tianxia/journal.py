@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import html
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from .battlelog import clock_text, split_changes
@@ -236,8 +237,8 @@ def _esc(text: str) -> str:
     return html.escape(text)
 
 
-def _when(time: float) -> str:
-    return "舊紀錄" if time < 0 else clock_text(time)
+def _when(time: float, when: Callable[[float], str]) -> str:
+    return "舊紀錄" if time < 0 else when(time)
 
 
 def _heading(entry: JournalEntry) -> str:
@@ -277,9 +278,10 @@ def _chips(changes: list[str], tag: str) -> str:
     return f'<{tag} class="tx-chgs">{chips}</{tag}>'
 
 
-def card_html(entry: JournalEntry) -> str:
-    """「剛剛」卡片：時間、標題與結果標記、敘事、數值變化（綠增紅減）。舊存檔轉來的紀錄寫「舊紀錄」。"""
-    when = "舊紀錄" if entry.time < 0 else f"剛剛　{clock_text(entry.time)}"
+def card_html(entry: JournalEntry, when_text: Callable[[float], str] = clock_text) -> str:
+    """「剛剛」卡片：時間、標題與結果標記、敘事、數值變化（綠增紅減）。舊存檔轉來的紀錄寫「舊紀錄」。
+    when_text 是時間的寫法：第一季由 engine 給季曆（calendar.stamp_text），不給時照舊「第N天 HH:MM」。"""
+    when = "舊紀錄" if entry.time < 0 else f"剛剛　{when_text(entry.time)}"
     return (
         f'<div class="tx-now"><div class="tx-when">{when}</div><div class="tx-head">{_heading(entry)}</div>'
         f'{_lines(_body(entry))}{_chips(entry.changes, "div")}</div>'
@@ -293,10 +295,10 @@ def extra_html(lines: list[str], changes: list[str]) -> str:
     return f'<div class="tx-extra">{_lines(lines)}{_chips(changes, "div")}</div>'
 
 
-def _row(entry: JournalEntry) -> str:
+def _row(entry: JournalEntry, when: Callable[[float], str]) -> str:
     """紀錄的一列：時間一欄、標題與結果標記、數值變化。有敘事的一列可以點開，敘事收在裡面。"""
     head = (
-        f'<span class="tx-time">{_when(entry.time)}</span>'
+        f'<span class="tx-time">{_when(entry.time, when)}</span>'
         f'<span class="tx-main">{_heading(entry)}{_chips(entry.changes, "span")}</span>'
     )
     body = _body(entry)
@@ -308,12 +310,14 @@ def _row(entry: JournalEntry) -> str:
     )
 
 
-def rows_html(entries: list[JournalEntry], heading: str = "", empty: str = "") -> str:
-    """一則一列（最新的在前）；沒有紀錄時顯示 empty。什麼都沒有時回傳空字串。"""
+def rows_html(
+    entries: list[JournalEntry], heading: str = "", empty: str = "", when: Callable[[float], str] = clock_text,
+) -> str:
+    """一則一列（最新的在前）；沒有紀錄時顯示 empty。什麼都沒有時回傳空字串。when 是時間的寫法（見 card_html）。"""
     if not entries and not heading and not empty:
         return ""
     parts = [f'<div class="tx-heading">{_esc(heading)}</div>'] if heading else []
-    parts += [_row(e) for e in entries] or ([f'<div class="tx-empty">{_esc(empty)}</div>'] if empty else [])
+    parts += [_row(e, when) for e in entries] or ([f'<div class="tx-empty">{_esc(empty)}</div>'] if empty else [])
     return f'<div class="tx-journal">{"".join(parts)}</div>'
 
 

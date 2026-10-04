@@ -577,6 +577,15 @@ class Config(_Strict):
     )
     time_scale: float = 1.0
     season_days: float = 14
+    # 第一季濃縮版的規則（預設關，beta 那一季照舊）：季曆、時刻表、三條戰線都掛在這個開關後面。
+    # 做到一半的 main 也會換上試玩伺服器，開關關著才不會把正在跑的那一季弄壞；
+    # 全部做完、開測前由 PM 跟季長（season_days 改 2.5）一起打開（計畫 2026-10-04-第一季濃縮版）
+    season_one: bool = False
+    season_weeks: int = Field(default=12, ge=1)  # 季曆：一季壓成幾週（計畫第六節：季曆秒＝世界秒 × 週數 × 7 ÷ season_days）
+    # 時刻表的人物結局扣多少聲威（時刻表結算文件第一節）：只有這三種用詞會扣；退場、重創是聲威歸零，下獄、到任不動聲威
+    fate_prestige: dict[Literal["重挫", "聲威大減", "受挫"], int] = Field(
+        default_factory=lambda: {"重挫": -30, "聲威大減": -30, "受挫": -15}
+    )
     train_stat_chance: float = 0.3
     train_event_chance: float = 0.3
     qiyu_weight_multiplier: float = 1.5
@@ -643,6 +652,7 @@ class Config(_Strict):
     # ── 賽季生命週期（第一季設計第十四節）──
     admins: list[str] = Field(default_factory=list)  # 管理者的名號；暫時用名號認人，線上架構會換成帳號權限
     auto_open_first_season: bool = False  # True＝全服第一次開局就直接開季（測試內容用）；正式內容由管理者開季
+    affinity_carry_ratio: float = 0.1  # 換季重來時，每位人物的好感度乘上這個數、無條件捨去後帶進下一季（第一季設計第十四節：最多從 10 起步）
     # ── 伺服器規模（伺服器假人設計第八節第 5 項；第一季設計 5.4、十二）──
     server_max_players: int = 30  # 伺服器人數上限；第四階席次、之後的軍令陣營額度照它等比例換算
     rank4_seat_ratio: float = 0.008  # 每陣營第四階席次＝上限 × 這個比例（四捨五入，最少 1 席）
@@ -767,6 +777,59 @@ class BattleDef(_Strict):
     round_seconds: float = 120  # 每回合等待所有參戰者選擇的時間，逾時系統代選保守行動
 
 
+FigureFate = Literal["退場", "重創", "重挫", "聲威大減", "受挫", "下獄", "到任"]  # 用詞照時刻表結算文件第一節
+TimetableKind = Literal["fixed", "roll", "showdown", "finale"]  # 固定發生／照戰況擲骰／全服決戰／季末
+
+
+class FigureChange(_Strict):
+    """時刻表結果對一位大勢人物的效果（計畫 T2 先定義，T4 補完接手規則）。"""
+
+    fate: FigureFate | None = None
+    prestige: int = 0  # fate 之外另加減的聲威
+    front: str | None = None  # 重挫轉往、到任接手的戰線（大區 id）；重挫時 None＝退出戰線
+    location: str | None = None  # 轉往、到任的地點
+    only_if: dict[str, str] = Field(default_factory=dict)  # 人物 id → 那位人物當下必須在的戰線；條件不合整筆略過
+    note: str = ""  # 這筆真的套用時接在公告後面的一句（例：朱儁到任南陽）
+
+
+class TimetableOutcome(_Strict):
+    """一件大事的一種結果：結算文件第五節一列的「公告」「江湖史」「效果」。"""
+
+    text: str  # 沒人鎖定時的公告（接在 TimetableEvent.preface 後面）
+    locked_text: dict[str, str] = Field(default_factory=dict)  # 鎖定方 → 具名公告（整句，含開頭；{name} 是鎖定者，伏筆文件）
+    loser_text: dict[str, str] = Field(default_factory=dict)  # 鎖定方 → 搶輸那一方的一句（{loser} 是搶輸的人）
+    note: str = ""  # 不論有沒有人鎖定都接在公告後面的一句（例：長社黃巾大勝的「波才北上」）
+    chronicle: str = ""  # 江湖史一行
+    trends: dict[str, int] = Field(default_factory=dict)  # 戰況移動，往黃巾為正
+    figures: dict[str, FigureChange] = Field(default_factory=dict)  # 人物 id 或「@commander:<戰線>:<guan|huang>」
+    chance_mods: dict[str, float] = Field(default_factory=dict)  # 之後那件大事的成功率修正（寫進 event_bonus，不佔 ±0.20 上限）
+    world_flags_add: list[str] = Field(default_factory=list)
+    third_party_text: str | None = None  # 這個結果專用的豪強那一句，蓋過 TimetableEvent.third_party_text（盧植下獄分兩版）
+
+
+class TimetableEvent(_Strict):
+    """時刻表上的一件大事（content/timetable.json，照時刻表結算文件第五節逐件轉）。
+
+    outcomes 的鍵：固定的是 "fixed"；擲骰的是 "成"／"不成"；決戰的是 "guan:大勝" 這類；有版本時前面加 "甲:"。"""
+
+    id: str
+    week: int = Field(ge=1)
+    day: float = Field(default=0, ge=0, lt=7)  # 那一週的第幾曆日發生；0＝週一凌晨
+    front: str | None = None  # 戰線（大區 id）；None＝不在戰線上（例：洛陽的盧植下獄）
+    title: str
+    kind: TimetableKind
+    roll_side: Literal["guan", "huang"] | None = None  # 擲骰的「成」對哪一方有利；成功率就是這一方的機率
+    base_chance: float | None = Field(default=None, ge=0, le=1)  # 沒有戰線時的基礎成功率
+    preface: str = ""  # 沒人鎖定時公告共用的開頭（例：長社的「史書上，……」）
+    version_from: str | None = None  # 看哪一件大事的結果決定版本（例：宛城看第 3 週）
+    versions: dict[str, str] = Field(default_factory=dict)  # 那件的結果鍵 → 版本（例：{"成": "甲", "不成": "乙"}）
+    skip_if_out: str | None = None  # 這位人物已經退場（或重創）就跳過，不公告
+    outcomes: dict[str, TimetableOutcome] = Field(default_factory=dict)
+    lock_result: dict[str, str] = Field(default_factory=dict)  # 鎖定方 → 結果鍵（不含版本）；決戰不寫，由 T8 給鍵
+    third_party_text: str | None = None  # 豪強做完伏筆時接在公告後面的一句（{name} 是豪強那邊的人）
+    third_party_trends: dict[str, int] = Field(default_factory=dict)  # 豪強每個名字各套一次的效果
+
+
 class Content(_Strict):
     config: Config
     scenario: Scenario
@@ -781,5 +844,6 @@ class Content(_Strict):
     squads: dict[str, Squad]
     battles: dict[str, BattleDef] = Field(default_factory=dict)  # 內容尚未撰寫，先留介面（見設計討論，骨架做完再回頭寫黃巾決戰）
     road_sights: dict[str, RoadSight] = Field(default_factory=dict)  # 路上見聞（content/road_sights.json，路上設計第五節）
+    timetable: list[TimetableEvent] = Field(default_factory=list)  # 第一季的時刻表（content/timetable.json，計畫 T2）
     map: MapLayout
     tutorial: Tutorial

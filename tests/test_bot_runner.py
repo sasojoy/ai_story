@@ -299,6 +299,18 @@ def test_run_bots_says_which_database_file_it_uses(monkeypatch, capsys):
     assert str(database.default_path().resolve()) in capsys.readouterr().out
 
 
+def test_run_bots_reads_the_profile_from_the_environment(monkeypatch, capsys):
+    """跟 server.py 用同一份設定（TIANXIA_PROFILE），啟動時印出來；沒設就是預設。"""
+    monkeypatch.setattr(run_bots.time, "sleep", lambda seconds: None)
+    monkeypatch.setattr(BotRunner, "tick", lambda self: bot_runner.TickReport())
+    monkeypatch.delenv("TIANXIA_PROFILE", raising=False)
+    run_bots.main(ticks=1)
+    assert "設定：預設" in capsys.readouterr().out
+    monkeypatch.setenv("TIANXIA_PROFILE", "weekend")
+    run_bots.main(ticks=1)
+    assert "設定：weekend（第一季濃縮版規則開啟、季長 2.5 天、人數上限 2）" in capsys.readouterr().out
+
+
 def _identity_free(name: str, capsys, caplog) -> bool:
     """名號不能出現在任何地方：主控台輸出、log 的訊息與例外文字都算。"""
     out = capsys.readouterr()

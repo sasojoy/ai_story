@@ -85,13 +85,32 @@ class SharedWorldState(BaseModel):
 
 
 def fresh_season(content: Content) -> WorldState:
-    """照劇本種出一季全新的共用賽季（大勢起始值、公開的大勢線、第一條主線）。"""
+    """照劇本種出一季全新的共用賽季（大勢起始值、公開的大勢線、第一條主線），並蓋上當下的章（stamp_season）。
+    seed_first_season、next_season 都走這裡；籌備中的季在管理者開季時再蓋一次（open_season）。"""
     trends = content.scenario.trends
-    return WorldState(
+    season = WorldState(
         trends={t.id: t.start for t in trends},
         revealed={t.id for t in trends if not t.hidden},
         storyline=content.scenario.storylines[0].id,
     )
+    stamp_season(season, content)
+    return season
+
+
+def stamp_season(season: WorldState, content: Content) -> None:
+    """把當下的開關與季長蓋章在這一季上（計畫 T2「舊季不會被補算」）：之後換了設定，這一季照它自己的章走。
+    開關開著時順便填決戰與季末的預設時間（管理者開季後可以改，T10）。只在季還沒開始時呼叫：種季、換季、開季。"""
+    from .timetable import default_schedule  # noqa: PLC0415  延後 import：timetable → rules → world_state
+
+    cfg = content.config
+    season.season_one = cfg.season_one
+    season.length_days = cfg.season_days
+    season.schedule = default_schedule(content, season) if cfg.season_one else {}  # 照剛蓋好的季長排
+
+
+def season_length_days(season: WorldState, content: Content) -> float:
+    """這一季有幾個遊戲日：照開季時蓋的章；T2 之前開的季沒有章，照現在的設定。"""
+    return season.length_days if season.length_days is not None else content.config.season_days
 
 
 def jade_seal_summary(fragments: list[JadeSealFragment]) -> str:
@@ -208,8 +227,10 @@ class WorldStateStore(Protocol):
         時直接開季。已經種過就原封不動回傳。"""
         ...
 
-    def open_season(self, now: float) -> bool:
-        """管理者開季：籌備中 → 進行中，賽季時鐘從 now 起算。還沒種、或已經開過，回傳 False。"""
+    def open_season(self, content: Content, now: float) -> bool:
+        """管理者開季：籌備中 → 進行中，賽季時鐘從 now 起算。還沒種、或已經開過，回傳 False。
+        開季時照現在的設定重新蓋章（stamp_season）：第一次啟動忘了設 TIANXIA_PROFILE、種下的季蓋的是「關」，
+        設好重開之後開季，這一季照新的設定跑。籌備中的季時間是 0、什麼都還沒跑，重蓋是安全的。"""
         ...
 
     def next_season(self, content: Content, now: float) -> bool:
@@ -260,7 +281,11 @@ class WorldStateStore(Protocol):
         after 是呼叫端已經處理過的最大流水號：決戰照開戰的先後收場，所以比它小的不會再有新收場的。理由——
         同一時間只有一場還沒收場（start_battle 在它收場或被清掉之前不另開），被清掉的（換季 next_season、季終
         clear_battle）不再指到、永遠不會收場，而新開的一場流水號一定比之前的都大（實作要保證這一點，SQLite 版是
-        從不刪列的 INTEGER PRIMARY KEY）。所以一場收場時，它比之前收場的每一場都大。"""
+        從不刪列的 INTEGER PRIMARY KEY）。所以一場收場時，它比之前收場的每一場都大。
+
+        季終沒打完的決戰，Game 先用 mutate_battle 標成 ended 且 unfinished（沒有結果、不套用）再 clear_battle，
+        所以它也列在這裡（FB-035）；用的人要看 BattleInstance.unfinished 分辨。它收場的那一刻仍是同時唯一還沒收場的那一場，
+        流水號的先後前提不變。"""
         ...
 
     # ── 同伴進度與招募 ──

@@ -10,8 +10,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 import server
-from conftest import at
-from tianxia import atlas, battle_instance, companion_agent, craft, database
+from conftest import at, season_one_events
+from tianxia import atlas, battle_instance, calendar, companion_agent, craft, database
 from tianxia.accounts import NAME_TAKEN
 from tianxia.characters import open_characters
 from tianxia.engine import Game
@@ -58,6 +58,41 @@ def _player(client, login="shen_01", name="沈青衫"):
 
 
 # ── 畫面資料 ────────────────────────────────────────────
+
+
+def _fixed(event_id: str, week: int, day: float = 0):
+    from tianxia.models import TimetableEvent, TimetableOutcome
+
+    return TimetableEvent(id=event_id, week=week, day=day, title=f"{event_id}事", kind="fixed",
+                          outcomes={"fixed": TimetableOutcome(text=f"{event_id}事的公告。")})
+
+
+def test_main_view_bulletin_this_week(monkeypatch):
+    """江湖頁最上面的公告卡：這一週已經發生的大事（Markdown 轉成 HTML），最多 3 則、新的在前。"""
+    content = server.CONTENT
+    monkeypatch.setattr(content.config, "season_one", True)
+    monkeypatch.setattr(content.config, "season_days", 2.5)
+    monkeypatch.setattr(content, "timetable", [_fixed("甲", 1), *(_fixed(x, 2, day) for x, day in (("乙", 0), ("丙", 1), ("丁", 2), ("戊", 3)))])
+    game = Game.new(content, "測試")
+    assert server.main_view(game)["bulletin"] == []
+    hour = calendar.cal_hour_seconds(content)
+    game.advance(hour)
+    bulletin = server.main_view(game)["bulletin"]
+    assert len(bulletin) == 1 and "<strong>甲事</strong>" in bulletin[0] and "甲事的公告。" in bulletin[0]
+    game.advance(calendar.week_start(2, content) + 3 * 86400 / 33.6 + hour - game.state.world.time)
+    bulletin = server.main_view(game)["bulletin"]
+    assert [re.search(r"<strong>(.)事</strong>", b).group(1) for b in bulletin] == ["戊", "丁", "丙"]  # 上一週的甲不在
+
+
+def test_season_one_off_changes_nothing(game, monkeypatch):
+    """開關關著（現在的試玩伺服器）：推進一週，時刻表不跑、狀態列沒有季曆、公告卡是空的。"""
+    monkeypatch.setattr(server.CONTENT, "timetable", season_one_events())
+    assert server.CONTENT.config.season_one is False
+    game.advance(7 * 86400)
+    assert game.state.world.timeline == {} and game.state.world.schedule == {}
+    view = server.main_view(game)
+    assert "calendar" not in view["status"] and "next_event" not in view["status"]
+    assert view["bulletin"] == []
 
 
 def test_main_view_has_everything_the_page_draws(game):
@@ -847,6 +882,21 @@ def test_next_season_runs_the_admin_rollover(client, monkeypatch):
     assert game.state.player.season_number == 2
 
 
+def test_server_admin_end_season(client, monkeypatch):
+    """立刻收季：只有管理者的帳號行；一般玩家打同一個網址被擋下（跟其他管理者動作同一種回法），季照舊在進行。"""
+    _player(client)
+    game = server.game_for("沈青衫")
+    refused = client.post("/api/do/end_season", json={})
+    assert refused.status_code == 400 and refused.json() == {"error": "只有管理者能這麼做。"}
+    assert game.world.season_phase() == "running"
+
+    _admin(client, monkeypatch)
+    out = client.post("/api/do/end_season", json={})
+    assert out.status_code == 200
+    assert game.world.season_phase() == "resting"
+    assert "賽季落幕" in out.json()["message"]
+
+
 def test_open_season_only_works_for_admins(tmp_path, monkeypatch):
     monkeypatch.setattr(server.CONTENT.config, "auto_open_first_season", False)
     fresh = Game.new(server.CONTENT, "路人", world=open_world(tmp_path / "world.db"))
@@ -1164,6 +1214,23 @@ def test_starting_the_server_prints_the_database_path(capsys, monkeypatch):
     server.main([])
     assert ran == [server.PORT]
     assert str(database.default_path().resolve()) in capsys.readouterr().out
+
+
+def test_server_prints_the_profile_at_startup(capsys, monkeypatch):
+    """跟資料庫路徑一起印出用的是哪一份設定（計畫 T2）：TIANXIA_PROFILE 設錯時一眼看得出來。"""
+    import uvicorn
+
+    from tianxia.content import load_content
+
+    monkeypatch.setattr(uvicorn, "run", lambda *args, **kwargs: None)
+    monkeypatch.setattr(server, "PROFILE", None)
+    server.main([])
+    out = capsys.readouterr().out
+    assert "設定：預設" in out and str(database.default_path().resolve()) in out
+    monkeypatch.setattr(server, "PROFILE", "weekend")
+    monkeypatch.setattr(server, "CONTENT", load_content(server.ROOT / "content", profile="weekend"))
+    server.main([])
+    assert "設定：weekend（第一季濃縮版規則開啟、季長 2.5 天、人數上限 2）" in capsys.readouterr().out
 
 
 def _host_passed_to_uvicorn(monkeypatch, argv):

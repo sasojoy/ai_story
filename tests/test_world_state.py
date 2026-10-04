@@ -250,14 +250,14 @@ def test_seed_first_season_is_a_no_op_once_seeded(store, content):
 def test_open_season_moves_preparing_to_running_once(store, content):
     content.config.auto_open_first_season = False
     store.seed_first_season(content)
-    assert store.open_season(now=500.0) is True
+    assert store.open_season(content, now=500.0) is True
     assert store.season_phase() == "running"
     assert store.read().season_last_real == 500.0
-    assert store.open_season(now=600.0) is False
+    assert store.open_season(content, now=600.0) is False
 
 
-def test_open_season_needs_a_seeded_season(store):
-    assert store.open_season(now=1.0) is False
+def test_open_season_needs_a_seeded_season(store, content):
+    assert store.open_season(content, now=1.0) is False
     assert store.season_phase() == "preparing"
 
 
@@ -661,3 +661,16 @@ def test_a_battle_stays_on_record_after_the_next_season(store, content):
     with store.db.snapshot() as conn:
         row = conn.execute("SELECT season, battle_def FROM battles WHERE id = ?", (battle.record_id,)).fetchone()
     assert (row["season"], row["battle_def"]) == (1, "b1")
+
+
+def test_a_season_is_stamped_with_the_settings_it_opened_under(store, content):
+    """開季時把當下的開關與季長蓋章在那一季上（計畫 T2「舊季不會被補算」）：之後換了設定，舊季照它自己的章走。"""
+    content.config.auto_open_first_season = True
+    content.config.season_one, content.config.season_days = False, 14
+    store.seed_first_season(content)
+    assert (store.get_season().season_one, store.get_season().length_days) == (False, 14)
+    content.config.season_one, content.config.season_days = True, 2.5  # 換成週末設定：正在跑的這一季不變
+    assert (store.get_season().season_one, store.get_season().length_days) == (False, 14)
+    store.mutate_season(lambda season: setattr(season, "ended", True))
+    assert store.next_season(content, now=1.0)
+    assert (store.get_season().season_one, store.get_season().length_days) == (True, 2.5)

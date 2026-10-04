@@ -22,6 +22,7 @@ import argparse
 import contextlib
 import contextvars
 import hashlib
+import os
 import re
 import secrets
 import shutil
@@ -40,7 +41,7 @@ from markdown_it import MarkdownIt
 
 from tianxia import companion_agent, event_llm, materials, server_bots, team
 from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, AccountStore, normalize
-from tianxia.content import load_content
+from tianxia.content import PROFILE_ENV, load_content, profile_line
 from tianxia.characters import open_characters
 from tianxia.craft import MATERIALS_PER_CRAFT
 from tianxia.database import default_path, open_database
@@ -50,7 +51,8 @@ from tianxia.journal import CSS as JOURNAL_CSS
 
 ROOT = Path(__file__).parent
 WEB = ROOT / "web"
-CONTENT = load_content(ROOT / "content")
+PROFILE = os.environ.get(PROFILE_ENV) or None  # 設定覆寫檔（例如 weekend）；run_bots.py 要設同一個
+CONTENT = load_content(ROOT / "content", profile=PROFILE)
 PORT = 7861
 COOKIE = "tx_session"
 RECENT_ROWS = 5  # 「剛剛」之後直接列出幾則江湖紀錄
@@ -256,6 +258,7 @@ def main_view(game: Game) -> dict:
         "journal": game.journal_html(1, RECENT_ROWS),
         "older": game.journal_html(1 + RECENT_ROWS, OLDER_ROWS),
         "minimap": game.minimap_svg(),
+        "bulletin": [md(text) for text in game.bulletin()],  # 江湖頁最上面的公告卡：這一週的大事；開關關著是空的
         "trends": md(game.trends_text()),
         "rumors": md(game.rumors_text()),
         "chronicle": md(game.chronicle_text()),
@@ -568,6 +571,7 @@ MAIN_ACTIONS = {
 }
 ADMIN_ACTIONS = {
     "open_season": lambda g, b: g.admin_open_season(time.time()),
+    "end_season": lambda g, b: g.admin_end_season(time.time()),
     "next_season": lambda g, b: g.admin_next_season(time.time()),
     "fast_forward": lambda g, b: g.advance(_int(b.get("hours"), 1) * 3600),
     "start_battle": lambda g, b: g.admin_start_battle(str(b.get("id", "")), time.time()),
@@ -788,6 +792,7 @@ def main(argv: list[str] | None = None) -> None:
         start_tunnel(args.port)  # cloudflared 連的是 http://127.0.0.1:{port}，只聽本機也照常運作
     print(f"天下大勢：http://127.0.0.1:{args.port}", flush=True)
     print(f"資料庫：{default_path().resolve()}", flush=True)  # 跟 run_bots.py 要是同一個檔；TIANXIA_DB 設錯時一眼看得出來
+    print(profile_line(CONTENT, PROFILE), flush=True)  # TIANXIA_PROFILE 也是：兩個程式要用同一份設定
     if args.lan:
         print("已開放區網連線：同一個網路裡的裝置都連得到。", flush=True)
     uvicorn.run(app, host="0.0.0.0" if args.lan else "127.0.0.1", port=args.port, log_level="warning")

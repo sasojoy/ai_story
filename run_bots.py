@@ -6,12 +6,13 @@
 """
 from __future__ import annotations
 
+import os
 import time
 from pathlib import Path
 
 from tianxia import database
 from tianxia.bot_runner import BotRunner, TickReport, log_failure
-from tianxia.content import load_content
+from tianxia.content import PROFILE_ENV, load_content, profile_line
 
 ROOT = Path(__file__).parent
 
@@ -19,10 +20,12 @@ ROOT = Path(__file__).parent
 def main(ticks: int | None = None) -> None:
     """ticks=None 一直跑下去；給數字時跑完那麼多輪就結束（測試用）。
     某一輪出錯只記一筆（不含名號，見 bot_runner.log_failure）就繼續下一輪；Ctrl+C 乾淨結束。"""
-    content = load_content(ROOT / "content")
+    profile = os.environ.get(PROFILE_ENV) or None  # 跟 server.py 用同一份設定覆寫檔
+    content = load_content(ROOT / "content", profile=profile)
     runner = BotRunner(content)
     print(f"伺服器假人程式啟動：每 {content.config.bot_tick_seconds:g} 秒巡一輪（Ctrl+C 結束）", flush=True)
     print(f"資料庫：{database.default_path().resolve()}", flush=True)  # 跟 server.py 要是同一個檔；TIANXIA_DB 設錯時一眼看得出來
+    print(profile_line(content, profile), flush=True)
     done = 0
     try:
         while ticks is None or done < ticks:

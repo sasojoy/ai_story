@@ -26,7 +26,6 @@
   ];
   const POLL_MS = 10000;
   const KINDS = ["武學", "內功"];
-  const CRAFT_ATTRS = [["剛", "gang"], ["快", "kuai"], ["柔", "rou"], ["慢", "man"]]; // 煉製輪盤由上順時針，相剋的面對面
   // 江湖頁「前往」的走法（跟 atlas.MODES 同一份）。選的走法只放在 S.moveMode：不寫進 localStorage、cookie，
   // 重新整理頁面就回到步行；每個請求都帶著它（見 api()），伺服器照它排選單上的「前往」
   const FREE_TEXT_OPTION = "choice:free"; // 事件的隨口應對（engine.FREE_TEXT_OPTION）
@@ -60,8 +59,7 @@
     kind: "武學",
     artOpen: null, // 修練頁功法庫裡點開的那一門（id）；切分頁、改練成功之後收起
     craftSel: [],
-    craftAttr: null, // 煉製輪盤點開的那一種屬性；null＝列出全部素材
-    wheelSel: null, // 江湖輪盤點開的那一格（explore／train／rest／social／move）
+    wheelSel: null, // 江湖頁行動列展開的那一格（目前只有 move）
     craftLine: "",
     map: null,
     layer: "situation",
@@ -87,6 +85,15 @@
   const pct = (a, b) => (b > 0 ? Math.max(0, Math.min(100, (a / b) * 100)) : 0);
   // 本季天數：整數不帶小數點（14.0 → 14），不是整數照原樣（14.5）
   const dayCount = (n) => String(Number(n));
+  // 第一季的季曆（計畫 T2）：狀態列寫「第 3 週・週二 21:40」，旁邊是下一件大事的倒數（現實時間）
+  const WEEKDAYS = "一二三四五六日";
+  const countdown = (sec) => {
+    const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60);
+    if (sec < 60) return "就在眼前";
+    return h > 0 ? `約 ${h} 小時 ${m} 分後` : `約 ${m} 分後`;
+  };
+  // 江湖頁畫的東西有沒有變：狀態列（時鐘、季曆每次輪詢都在走）另外重畫，不讓「剛剛」一直重播浮現
+  const pageKey = (m) => JSON.stringify({ ...m, status: null });
   // 焦點在輸入框、下拉選單：玩家正在填東西，輪詢不動畫面
   const typing = () => !!document.activeElement && ["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement.tagName);
 
@@ -201,7 +208,10 @@
       <div class="top-row">
         <div class="who" data-act="toggle-more" role="button" tabindex="0" aria-expanded="${S.showMore}">
           <div class="who-name"><span>${esc(s.name)}<small>${esc(s.affiliation)}${s.anonymous ? "・匿名" : ""}・第${s.level}級</small></span><i class="more-ico" aria-hidden="true">${S.showMore ? "▴" : "▾"}</i></div>
-          <div class="where">📍 ${esc(s.location)}　第 ${s.day} 天 ${esc(s.clock)}<small>／共 ${dayCount(s.season_days)} 天</small>${s.resting != null ? "　🧘 打坐中" : ""}</div>
+          <div class="where">📍 ${esc(s.location)}　${s.calendar
+            ? `第 ${s.calendar.week} 週・週${WEEKDAYS[s.calendar.weekday]} ${esc(s.calendar.clock)}`
+            : `第 ${s.day} 天 ${esc(s.clock)}<small>／共 ${dayCount(s.season_days)} 天</small>`}${s.resting != null ? "　🧘 打坐中" : ""}</div>
+          ${s.calendar && s.next_event ? `<div class="where sub">下一件：${esc(s.next_event.title)}，${countdown(s.next_event.in_seconds)}</div>` : ""}
           ${s.busy_hours != null ? `<div class="where sub">🧘 閉關中，約 ${s.busy_hours} 小時後出關</div>` : ""}
           ${s.journey != null ? `<div class="where sub">🐎 ${esc(s.journey)}</div>` : ""}
         </div>
@@ -284,49 +294,11 @@
     return [t.innerHTML, chips ? chips.outerHTML : ""];
   }
 
-  // ── 輪盤（江湖頁的行動、煉製頁的素材，企劃者 2026-10-04 定稿）──
-  // 四格固定不動，只有外圈的八卦線與中心的圖案在轉（玩家要按得到）。每次重畫都是新的 SVG，
-  // 所以轉動用負的 animation-delay 接上時鐘，重畫不會讓圖案跳回原位。
-  const W_R0 = 64, W_R1 = 150, W_GAP = 2.2;
-  const TRIGRAMS = [[1, 1, 1], [0, 1, 1], [1, 0, 1], [1, 1, 0], [0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]]; // 乾巽離兌坤震坎艮，由內往外
+  // ── 太極火爐（煉製頁）──
+  // 每次重畫都是新的 SVG，所以轉動用負的 animation-delay 接上時鐘，重畫不會讓圖案跳回原位
   const wpt = (r, deg) => { const a = (deg - 90) * Math.PI / 180; return [+(r * Math.cos(a)).toFixed(2), +(r * Math.sin(a)).toFixed(2)]; };
   const spinAt = (secs) => `animation-delay:-${((performance.now() / 1000) % secs).toFixed(2)}s`;
-  function wheelArc(a0, a1) {
-    const [x0, y0] = wpt(W_R1, a0), [x1, y1] = wpt(W_R1, a1), [x2, y2] = wpt(W_R0, a1), [x3, y3] = wpt(W_R0, a0);
-    return `M${x0},${y0} A${W_R1},${W_R1} 0 0 1 ${x1},${y1} L${x2},${y2} A${W_R0},${W_R0} 0 0 0 ${x3},${y3} Z`;
-  }
-  function wheelRing() {
-    const ticks = Array.from({ length: 72 }, (_, k) => {
-      const [x0, y0] = wpt(165, k * 5), [x1, y1] = wpt(k % 9 ? 163 : 161, k * 5);
-      return `<line x1="${x0}" y1="${y0}" x2="${x1}" y2="${y1}" class="w-tick"/>`;
-    }).join("");
-    const bars = TRIGRAMS.map((lines, i) => `<g transform="rotate(${i * 45 + 22.5})">${lines.map((yang, j) => {
-      const y = -154 - j * 3.2;
-      return yang ? `<line x1="-8" y1="${y}" x2="8" y2="${y}"/>` : `<line x1="-8" y1="${y}" x2="-1.8" y2="${y}"/><line x1="1.8" y1="${y}" x2="8" y2="${y}"/>`;
-    }).join("")}</g>`).join("");
-    return `<g class="w-ring" style="${spinAt(60)}">${ticks}<circle r="152" class="w-ring-line"/><g class="w-gua">${bars}</g></g>`;
-  }
-  // sectors：四格，由上順時針；每格 { label, sub, tone, attrs, on, off }。hub：中心那一塊的 SVG（含自己的 data-act）
-  function wheelSvg(name, sectors, hub) {
-    const faces = sectors.map((s, i) => {
-      const mid = i * 90;
-      const [lx, ly] = wpt((W_R0 + W_R1) / 2 + 6, mid);
-      const [dx, dy] = wpt(9, mid);
-      const big = s.label.length > 1 ? 24 : 34;
-      return `<g class="w-sector${s.on ? " on" : ""}${s.off ? " off" : ""}" style="--dx:${dx}px;--dy:${dy}px;--glow:var(--${s.tone})" ${s.attrs} role="button" aria-label="${esc(s.label)}${s.sub ? `，${esc(s.sub)}` : ""}">
-        <path d="${wheelArc(mid - 45 + W_GAP, mid + 45 - W_GAP)}" fill="url(#wg-${s.tone})" class="w-face"/>
-        <text x="${lx}" y="${ly - 4}" class="w-lab" font-size="${big}">${esc(s.label)}</text>
-        ${s.sub ? `<text x="${lx}" y="${ly + (big === 24 ? 20 : 26)}" class="w-sub">${esc(s.sub)}</text>` : ""}
-      </g>`;
-    }).join("");
-    const grads = ["gang", "kuai", "rou", "man"].map((t) => `<radialGradient id="wg-${t}" cx="0" cy="0" r="${W_R1}" gradientUnits="userSpaceOnUse">
-      <stop offset="${(W_R0 / W_R1).toFixed(2)}" style="stop-color:var(--${t});stop-opacity:.55"/><stop offset="1" style="stop-color:var(--${t})"/></radialGradient>`).join("");
-    return `<div class="wheel-wrap"><svg class="wheel" viewBox="-170 -170 340 340" role="group" aria-label="${esc(name)}">
-      <defs>${grads}<radialGradient id="wg-disk"><stop offset="0" style="stop-color:var(--disk-2)"/><stop offset="1" style="stop-color:var(--disk)"/></radialGradient></defs>
-      <circle r="166" fill="url(#wg-disk)"/><circle r="163" class="w-rim"/>
-      ${wheelRing()}${faces}${hub}</svg></div>`;
-  }
-  // 煉製頁的中心：太極火爐（企劃者 2026-10-04）。太極在爐裡慢慢轉，外圈是一圈火舌；左右兩個是放素材的位置，
+  // 煉製頁的太極火爐（企劃者 2026-10-04）。太極在爐裡慢慢轉，外圈是一圈火舌；左右兩個是放素材的位置，
   // 點有東西的那一格拿出來，點爐身開爐。開爐後等結果的這段時間整座爐子晃動（見 forge()）
   function furnaceHub(slots, ready) {
     const r = 54;
@@ -345,7 +317,7 @@
       <g class="w-shake">
         <g class="w-flames${ready ? " hot" : ""}">${flames}</g>
         <circle r="${r + 3}" class="w-hub-rim"/>
-        <g class="w-spin w-taichi" style="${spinAt(ready ? 3 : 28)}">
+        <g class="w-spin w-taichi${ready ? " hot" : ""}" style="${spinAt(ready ? 3 : 28)}">
           <circle r="${r}" class="w-yang"/>
           <path d="M0,${-r} A${r},${r} 0 0 1 0,${r} A${r / 2},${r / 2} 0 0 1 0,0 A${r / 2},${r / 2} 0 0 0 0,${-r} Z" class="w-yin"/>
           <circle cy="${-r / 2}" r="${r / 7}" class="w-yang"/><circle cy="${r / 2}" r="${r / 7}" class="w-yin"/>
@@ -354,66 +326,64 @@
         <text y="${r - 12}" class="w-furnace-lab">${ready ? "點爐開火" : "太極火爐"}</text>
       </g></g>`;
   }
-  // 江湖頁的中心：羅盤就是「移動」。刻度盤慢慢轉、指針輕輕擺
-  function compassHub(on, off) {
-    const r = 44;
-    const ticks = Array.from({ length: 24 }, (_, k) => {
-      const [x0, y0] = wpt(r - 1, k * 15), [x1, y1] = wpt(r - (k % 6 ? 4 : 7), k * 15);
-      return `<line x1="${x0}" y1="${y0}" x2="${x1}" y2="${y1}" class="${k % 6 ? "w-tick-s" : "w-tick-b"}"/>`;
-    }).join("");
-    const dirs = ["北", "東", "南", "西"].map((c, k) => { const [x, y] = wpt(r - 15, k * 90); return `<text x="${x}" y="${y}" class="w-dir">${c}</text>`; }).join("");
-    return `<g class="w-hub${on ? " on" : ""}${off ? " off" : ""}" data-act="wheel" data-key="move" role="button" aria-label="移動">
-      <circle r="${r + 5}" class="w-hub-rim"/><circle r="${r}" class="w-yang"/><circle r="${r - 7}" class="w-dial-line"/>
-      <g class="w-spin" style="${spinAt(28)}">${ticks}</g>${dirs}
-      <g class="w-needle"><path d="M0,${-(r - 20)} L5,0 L-5,0 Z" class="w-needle-n"/><path d="M0,${r - 20} L5,0 L-5,0 Z" class="w-yin"/><circle r="3" class="w-pin"/></g>
-      <text y="${r + 12}" class="w-hub-lab">移動</text></g>`;
+  // 煉製頁的太極火爐自己一張圖：外面不再圍四格屬性（挑素材回到下面的素材列表）
+  function furnaceSvg(slots, ready) {
+    return `<div class="furnace-wrap"><svg class="wheel furnace" viewBox="-74 -74 148 148" role="group" aria-label="太極火爐">
+      <defs><radialGradient id="wg-disk"><stop offset="0" style="stop-color:var(--disk-2)"/><stop offset="1" style="stop-color:var(--disk)"/></radialGradient></defs>
+      <circle r="72" fill="url(#wg-disk)"/><circle r="70" class="w-rim"/>${furnaceHub(slots, ready)}</svg></div>`;
   }
+
+  // ── 江湖頁的行動列（企劃者 2026-10-04：輪盤太大，改成一排五顆，樣式是她給的「水墨氣勁」）──
   // 選項標籤「探索（體力 5・…）」拆成名字與括號裡的說明
   const optParts = (o) => { const m = /^(.*?)（(.*)）$/.exec(o.label); return m ? [m[1], m[2]] : [o.label, ""]; };
-  // 江湖頁的四格（由上順時針）：探索、遊歷、打坐、交友；每格對到選單上哪一顆、沒有時寫為什麼
-  const ACT_SECTORS = [
-    { key: "explore", tone: "gang", ids: ["act:explore"], name: "探索", none: "現在不能探索" },
-    { key: "train", tone: "kuai", ids: ["act:train"], name: "遊歷", none: "這裡沒有對手" },
-    { key: "rest", tone: "man", ids: ["act:rest"], name: "打坐", none: "現在不能打坐" },
-    { key: "social", tone: "rou", ids: ["act:socialize", "act:call"], name: "交友", none: "這裡沒有人可以結交" },
+  // 前四顆對到選單上哪一顆、沒有時寫什麼；第五顆是移動（點了在下面展開走法與目的地）
+  const ACT_CELLS = [
+    { key: "explore", ids: ["act:explore"], name: "探索", none: "不能探索", icon: '<circle cx="12" cy="12" r="9"/><path d="M12 3v3m0 12v3M3 12h3m12 0h3M15 9l-4 2-2 4 4-2z"/>' },
+    { key: "train", ids: ["act:train"], name: "遊歷", none: "沒有對手", icon: '<path d="M14.5 4h-5L7 7h10zM12 7v13M8 12h8"/>' },
+    { key: "rest", ids: ["act:rest"], name: "打坐", none: "不能打坐", icon: '<circle cx="12" cy="7" r="2.5"/><path d="M8 20c0-3 3-4 4-4s4 1 4 4M5 15l3-2m11 2l-3-2"/>' },
+    { key: "social", ids: ["act:socialize", "act:call"], name: "交友", none: "沒有人", icon: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>' },
   ];
-  const SHORT_SUB = { "act:rest": "回體力", "act:call": "挑人求見" };
-  // 選單上有「打坐」就是平常閒著的時候：用輪盤。事件、對話、路上、決戰的選項每次都不一樣，照舊排成一列按鈕
+  const MOVE_ICON = '<path d="M13 3l-3 7h5l-4 11 8-10h-5z"/>';
+  const SHORT_SUB = { "act:rest": "回體力", "act:call": "求見" };
+  // 選單上有「打坐」就是平常閒著的時候：用行動列。事件、對話、路上、決戰的選項每次都不一樣，照舊排成一列按鈕
   const idleMenu = (m) => m.options.some((o) => o.id === "act:rest");
+  const inkCell = (key, name, sub, icon, attrs, cls) => `<button class="act-ink${cls}" data-key="${key}" ${attrs}>
+      <svg class="ink-icon" viewBox="0 0 24 24" aria-hidden="true">${icon}</svg><b>${esc(name)}</b><small>${esc(sub)}</small></button>`;
 
-  function actionWheel(m) {
+  function actionBar(m) {
     const byId = Object.fromEntries(m.options.map((o) => [o.id, o]));
     const used = new Set();
-    const sectors = ACT_SECTORS.map((d) => {
+    const cells = ACT_CELLS.map((d) => {
       const o = d.ids.map((id) => byId[id]).find(Boolean);
-      if (o) used.add(o.id);
-      const [name, detail] = o ? optParts(o) : [d.name, ""];
-      const sub = o ? (SHORT_SUB[o.id] || detail.replace(/^體力 (\d+).*$/, "體力 $1")) : "";
-      return { ...d, opt: o, name, detail, label: name, sub, on: S.wheelSel === d.key, off: !o || !o.enabled, attrs: `data-act="wheel" data-key="${d.key}"` };
+      if (!o) return inkCell(d.key, d.name, d.none, d.icon, "disabled", " off");
+      used.add(o.id);
+      const [name, detail] = optParts(o);
+      const sub = o.enabled ? (SHORT_SUB[o.id] || detail.replace(/^體力 (\d+).*$/, "體力 $1")) : "體力不夠";
+      return inkCell(d.key, name, sub, d.icon, o.enabled ? `data-act="choose" data-id="${esc(o.id)}"` : "disabled", o.enabled ? "" : " off");
     });
     const moves = m.options.filter((o) => followsMode(o.id));
     moves.forEach((o) => used.add(o.id));
-    const extras = m.options.filter((o) => !used.has(o.id));
-    const pick = sectors.find((s) => s.key === S.wheelSel);
-    let card;
-    if (S.wheelSel === "move") {
-      card = moves.length ? `<div class="seg move-mode" role="group" aria-label="走法">${MOVE_MODES.map((x) => `
+    const open = S.wheelSel === "move";
+    cells.push(inkCell("move", "移動", moves.length ? `${moves.length} 條路` : "沒有路", MOVE_ICON,
+      moves.length ? `data-act="wheel" data-key="move" aria-expanded="${open}"` : "disabled", (open ? " on" : "") + (moves.length ? "" : " off")));
+    const moveCard = !open ? "" : `<div class="card act-move"><div class="seg move-mode" role="group" aria-label="走法">${MOVE_MODES.map((x) => `
           <button class="${S.moveMode === x.id ? "on" : ""}" data-act="move-mode" data-mode="${x.id}" aria-pressed="${S.moveMode === x.id}">${x.name}</button>`).join("")}</div>
         <div class="options">${moves.map((o) => `<button class="btn go" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}>
-          <span class="k">→</span><span>${esc(o.label)}</span></button>`).join("")}</div>`
-        : '<p class="muted">這裡沒有路可以走。</p>';
-      card = `<h3 class="w-title">移動 <small>選一個目的地</small></h3>${card}`;
-    } else if (pick) {
-      card = `<h3 class="w-title">${esc(pick.name)}${pick.detail ? ` <small>${esc(pick.detail)}</small>` : ""}</h3>
-        ${pick.opt ? `<div class="options"><button class="btn primary" data-act="choose" data-id="${esc(pick.opt.id)}" ${pick.opt.enabled ? "" : "disabled"}><span>${esc(pick.opt.enabled ? pick.name : "體力不夠")}</span></button></div>`
-          : `<p class="muted">${esc(pick.none)}。</p>`}`;
-    } else {
-      card = '<p class="muted">點輪盤上的一格看要花多少體力，再按一次確定；中間的羅盤是移動。</p>';
-    }
-    return `${wheelSvg("行動", sectors, compassHub(S.wheelSel === "move", !moves.length))}
-      <div class="card w-card">${card}</div>
-      ${extras.length ? `<div class="label">此地</div><div class="options seals">${extras.map((o) => `
-        <button class="btn seal" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}><span>${esc(o.label)}</span></button>`).join("")}</div>` : ""}`;
+          <span class="k">→</span><span>${esc(o.label)}</span></button>`).join("")}</div></div>`;
+    // 其他只在此地才有的行動（招募、投靠、多出來的求見）收在摺疊裡，不佔行動列的高度
+    const extras = m.options.filter((o) => !used.has(o.id));
+    const here = extras.length ? `<details class="fold here"><summary>此地還能做 ${extras.length} 件事</summary><div class="fold-body options">${extras.map((o) => `
+        <button class="btn" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}><span>${esc(o.label)}</span></button>`).join("")}</div></details>` : "";
+    return `<div class="act-bar" role="group" aria-label="行動">${cells.join("")}</div>${moveCard}${here}`;
+  }
+
+  // 展開移動之後，把走法與目的地那張卡捲到剛好露出來（W18 的作法搬過來：狀態列有心得提示時整頁往下推，
+  // 卡片下緣會落到底部分頁列底下）。block: "nearest"：本來就看得到就不動；離分頁列多遠由 CSS 的 scroll-margin-bottom 決定
+  function revealMoveCard() {
+    const card = document.querySelector("#page .act-move");
+    if (!card) return;
+    const calm = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    card.scrollIntoView({ block: "nearest", behavior: calm ? "auto" : "smooth" });
   }
 
   function pageJianghu() {
@@ -441,8 +411,7 @@
           <button class="${S.moveMode === x.id ? "on" : ""}" data-act="move-mode" data-mode="${x.id}" aria-pressed="${S.moveMode === x.id}">${x.name}</button>`).join("")}
         </div>`
       : "";
-    const wheel = idleMenu(m);
-    const menu = wheel ? actionWheel(m) : `<div class="options">${m.options.map((o, i) => o.id === FREE_TEXT_OPTION && S.answering && o.enabled ? `
+    const menu = idleMenu(m) ? actionBar(m) : `<div class="options">${m.options.map((o, i) => o.id === FREE_TEXT_OPTION && S.answering && o.enabled ? `
         <form class="free answer" id="answer-form"><input class="input" name="text" maxlength="20" placeholder="${esc(o.label)}（20字內）" aria-label="${esc(o.label)}"><button class="btn primary small" type="submit">說出口</button></form>` : `${i === firstMove ? modes : ""}
         <button class="btn ${followsMode(o.id) ? "go" : ""}" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}>
           <span class="k">${o.id.startsWith("move:") ? "→" : o.id.startsWith("road:back") ? "↩" : i + 1}</span><span>${esc(o.label)}</span>
@@ -453,11 +422,12 @@
       <div class="mini" data-act="tab" data-tab="map" role="button" aria-label="展開輿圖">${m.minimap}</div>
       <button class="linkish" data-act="news" data-news="journal">看江湖紀錄 ›</button>`;
     const quest = `<details class="fold quest"><summary>📜 主線與目標</summary><div class="fold-body">${m.quest}</div></details>`;
-    // 手機上平常有輪盤時，輪盤排在「剛剛」與場景之前（W17／QA）：375×812 的第一屏只有 668px，「剛剛」和場景加起來把輪盤擠到分頁列下面，
-    // 打坐（體力見底時唯一的出路）要往下捲才按得到，而且位置隨上一個結果的長短忽上忽下。排在主線正下方，位置固定、確認卡也在第一屏。
-    // 事件、對話等選項是在回答場景文字，一律照舊排在場景後面
-    if (wheel && PHONE && PHONE.matches) return `${quest}${menu}${now}${scene}${free}${tail}`;
-    return `${quest}${now}${scene}${free}${menu}${tail}`;
+    // 公告卡（第一季）：這一週已經發生的大事，新的在前；排在最上面、「剛剛」之前。沒有就不畫
+    const board = m.bulletin && m.bulletin.length
+      ? `<section class="card bulletin" aria-label="本週江湖大事"><div class="bulletin-head">📣 本週江湖大事</div>${m.bulletin.map((b) => `<div class="bulletin-item">${b}</div>`).join("")}</section>`
+      : "";
+    // 劇情文字在上、行動在下（企劃者 2026-10-04）。行動列只有一排，375×812 上「剛剛」、場景與整排行動都在第一屏
+    return `${board}${quest}${now}${scene}${free}${menu}${tail}`;
   }
 
   // ── 修練 ──
@@ -519,21 +489,13 @@
     const name = (id) => x.materials.find((m) => m.id === id);
     const used = (id) => S.craftSel.filter((s) => s === id).length;
     const ready = S.craftSel.length === x.per_craft;
-    // 輪盤四格是素材的四種屬性，相剋的兩種面對面（剛↔柔、快↔慢）；點一格只列那種屬性的素材，再點一次列回全部
-    const held = (a) => x.materials.filter((m) => m.attribute === a).reduce((n, m) => n + m.count - used(m.id), 0);
-    const inPot = new Set(S.craftSel.map((id) => name(id)?.attribute));
-    const sectors = CRAFT_ATTRS.map(([a, tone]) => ({
-      label: a, tone, sub: held(a) ? `${held(a)} 樣` : "沒有", on: S.craftAttr === a || inPot.has(a), off: !x.materials.some((m) => m.attribute === a),
-      attrs: `data-act="craft-attr" data-attr="${a}"`,
-    }));
-    const shown = S.craftAttr ? x.materials.filter((m) => m.attribute === S.craftAttr) : x.materials;
+    // 太極火爐只管放素材與開爐；挑素材在下面的素材列表（企劃者 2026-10-04：「選素材不要也在那邊，用舊的模式來顯示素材」）
     return `
       <div class="msg" id="mx-msg">${S.message}</div>
-      ${wheelSvg("素材", sectors, furnaceHub([name(S.craftSel[0]), name(S.craftSel[1])], ready))}
+      ${furnaceSvg([name(S.craftSel[0]), name(S.craftSel[1])], ready)}
       <div class="card" id="craft-line">${S.craftLine || x.craft_line}</div>
-      ${S.craftAttr ? `<div class="label">屬${esc(S.craftAttr)}的素材 <button class="linkish" data-act="craft-attr" data-attr="${esc(S.craftAttr)}">看全部 ›</button></div>` : ""}
-      ${S.craftAttr && !shown.length ? `<p class="muted">身上沒有屬${esc(S.craftAttr)}的素材。打屬${esc(S.craftAttr)}的對手、四處探索都可能拿到。</p>` : ""}
-      ${x.materials.length ? `<div class="chips">${shown.map((m) => `
+      <div class="label">素材 <small class="muted">點一樣放進爐裡</small></div>
+      ${x.materials.length ? `<div class="chips">${x.materials.map((m) => `
         <button class="chip r${m.rank} ${used(m.id) >= m.count ? "used" : ""}" data-act="slot" data-id="${esc(m.id)}" ${used(m.id) >= m.count ? "disabled" : ""}>
           <span class="n">×${m.count - used(m.id)}</span><b>${esc(m.name)}</b><small>${esc(m.tier)}・屬${esc(m.attribute)}</small>
         </button>`).join("")}</div>`
@@ -822,7 +784,7 @@
           <section class="admin-zone stack" aria-label="管理者工具">
             <h4>管理者工具（只有你看得到）</h4>
             <p class="muted">每一項按了都會先問一次才送出；做完會關掉設定、回到江湖頁。</p>
-            <div class="row"><button class="btn" data-act="admin" data-op="open_season">開季</button><button class="btn warn" data-act="admin" data-op="next_season">⚠ 開啟下一季</button></div>
+            <div class="row seasons"><button class="btn" data-act="admin" data-op="open_season">開季</button><button class="btn warn" data-act="admin" data-op="end_season">⚠ 立刻收季</button><button class="btn warn" data-act="admin" data-op="next_season">⚠ 開啟下一季</button></div>
             <p class="muted">時間快轉（全服一起快轉，只在測試時用）</p>
             <div class="row">${[1, 8, 24].map((h) => `<button class="btn small" data-act="admin" data-op="fast_forward" data-hours="${h}">+${h} 小時</button>`).join("")}</div>
             ${a ? `
@@ -863,6 +825,8 @@
     const amount = `${body.amount >= 0 ? "+" : ""}${body.amount}`;
     return {
       open_season: ["開季：賽季從籌備中正式開始，全服玩家都能行動了，確定？", "確定開季"],
+      // 照 Game.admin_end_season 實際做的事寫（只在進行中有效）
+      end_season: ["立刻收季：這一季馬上結束、算出結局與武學榜，全服進入休季（之後再按「開啟下一季」）；沒打完的決戰直接收掉、不算結果，確定？", "確定收季"],
       // 照 SqliteWorldStore.next_season 實際做的事寫（只在休季有效）
       next_season: ["開啟下一季（休季才有效）：新的一季立刻開始，同伴全部重獲自由、自創武學名字釋出、煉製配方清空、天機 +1，沒打完的決戰清掉，確定？", "確定開啟下一季"],
       fast_forward: [`時間快轉 ${body.hours} 小時（全服一起），確定？`, `快轉 ${body.hours} 小時`],
@@ -960,6 +924,7 @@
       if (talking) btn.lastElementChild.textContent = "對方沉吟中…";
       const r = await api("/api/choose", { id });
       S.answering = false;
+      S.wheelSel = null; // 收起展開的移動
       applyMain(r.main);
       window.scrollTo({ top: 0, behavior: "smooth" });
       // 決戰選項（加入、趕到、出招）伺服器會回一句 message；一般選項的話在江湖紀錄裡，不回
@@ -1046,8 +1011,8 @@
       btn.textContent = "爐火正旺…";
       btn.classList.add("forging");
       // 等結果的這段時間（首次發現的配方要等模型取名）整座爐子晃動、火舌竄高、太極快轉
-      document.querySelector(".wheel .w-furnace")?.classList.add("forging");
-      document.querySelector(".wheel .w-taichi")?.classList.add("hot");
+      document.querySelector(".furnace .w-furnace")?.classList.add("forging");
+      document.querySelector(".furnace .w-taichi")?.classList.add("hot");
       S.message = "爐火正旺。若這個配方是江湖上第一次煉成，取名要花上一分鐘，請稍候。";
       document.getElementById("mx-msg").textContent = S.message;
       const r = await api("/api/menxia/craft", { materials: S.craftSel });
@@ -1080,10 +1045,28 @@
 
   // ── 事件 ──
   // 輿圖上選地點不走 click：pointer capture 之後 click 的目標會變，選取只在 gripUp 判斷「點了一下」時做
+  // 行動列點下去的水墨漣漪：記下位置，重畫之後（例如展開移動）畫在新的那一顆上
+  function inkRipple(key, x, y) {
+    const cell = document.querySelector(`.act-ink[data-key="${key}"]`);
+    if (!cell) return;
+    const r = cell.getBoundingClientRect();
+    const drop = document.createElement("span");
+    drop.className = "ink-drop";
+    drop.style.left = `${x - r.left}px`;
+    drop.style.top = `${y - r.top}px`;
+    cell.appendChild(drop);
+    setTimeout(() => drop.remove(), 650);
+  }
+
   document.addEventListener("click", async (ev) => {
     const el = ev.target.closest("[data-act]");
     if (!el) return;
     const act = el.dataset.act;
+    if (el.classList.contains("act-ink")) {
+      const [key, x, y] = [el.dataset.key, ev.clientX, ev.clientY];
+      if (act === "wheel") requestAnimationFrame(() => inkRipple(key, x, y)); // 展開移動會重畫整頁
+      else inkRipple(key, x, y);
+    }
     try {
       switch (act) {
         case "gate": S.gateMode = el.dataset.mode; renderGate(); break;
@@ -1153,8 +1136,11 @@
           if (S.craftSel.length === (S.menxia?.per_craft || 2)) await forge();
           else toast("先挑兩樣素材放進爐裡。");
           break;
-        case "craft-attr": S.craftAttr = S.craftAttr === el.dataset.attr ? null : el.dataset.attr; renderPage(); break;
-        case "wheel": S.wheelSel = S.wheelSel === el.dataset.key ? null : el.dataset.key; renderPage(); break;
+        case "wheel":
+          S.wheelSel = S.wheelSel === el.dataset.key ? null : el.dataset.key;
+          renderPage();
+          if (S.wheelSel) revealMoveCard(); // 收起（再點一次）不捲
+          break;
         case "layer": S.layer = el.dataset.layer; await loadMap(S.map?.selected); break;
         case "map-zoom": mapZoom(el.dataset.step); break;
         case "map-home": mapHome(); break;
@@ -1328,7 +1314,10 @@
   // 重抓回來時玩家若已經切了分頁、按了別的（那份資料已經換過）、正在忙或正在打字，就不動畫面，下一輪再說。
   async function refreshPage(old) {
     const tab = S.tab;
-    if (tab === "jianghu") return renderPage();
+    if (tab === "jianghu") {
+      if (pageKey(old) !== pageKey(S.main)) renderPage(); // 只有狀態列變了（時鐘在走）：上面 renderTop 已經畫過
+      return;
+    }
     if (tab === "news") {
       // 戰報子分頁畫的是 S.reports，不用重抓；其他子分頁只在它畫的那幾欄真的變了才重畫
       const fields = { trends: ["trends"], rumors: ["rumors"], chronicle: ["chronicle"], journal: ["latest", "journal", "older"] }[S.news] || [];

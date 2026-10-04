@@ -22,8 +22,13 @@ LeaderboardRow = tuple[str, str, str, float]  # (玩家名號, 功法名稱, 品
 def compute_leaderboard(
     content: Content, world: WorldStateStore, characters: CharacterStore | None = None,
 ) -> dict[str, list[LeaderboardRow]]:
+    """只算這一季的角色：換季時角色要等本人下次上線才重來，這一季沒上線的人存檔裡還是上一季的武學，
+    混進榜裡就成了上一季的成就占這一季的名次，所以跳過 season_number 跟目前賽季對不上的存檔。"""
     board: dict[str, list[LeaderboardRow]] = {"內功": [], "武學": []}
+    season_number = world.get_season_number()
     for state in (characters or open_characters()).all():  # 讀不懂的存檔 all() 已經跳過
+        if state.player.season_number != season_number:
+            continue
         member = state.player.member
         for slot, kind in (("neigong_id", "內功"), ("wugong_id", "武學")):
             skill_id = getattr(member, slot)

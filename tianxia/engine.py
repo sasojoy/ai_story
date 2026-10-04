@@ -7,12 +7,13 @@ sanguo-companions 合併大幅重寫：拿掉 battle.py 的 3v3 全自動戰鬥�
 from __future__ import annotations
 
 import random
+from collections.abc import Callable
 
 from pydantic import BaseModel
 
 from . import (
-    atlas, battle_instance, battlelog, companion_agent, craft, encounter, event_llm, flavor, journal, materials, roster,
-    skillview, team,
+    atlas, battle_instance, battlelog, calendar, companion_agent, craft, encounter, event_llm, flavor, journal, materials,
+    roster, skillview, team, timetable,
 )
 from .events import choice_label, event_candidates, has_events_here, pick_event, visible_choices
 from .guide import note_action, quest_text, tutorial_intro
@@ -26,11 +27,14 @@ from .ollama_client import OllamaClient
 from .rules import apply_effect, change_trend, check_who, current_day, fill_marks, free_text_rate, rate_words, roll_check
 from .sqlite_world import open_world
 from .state import PLAYER, BattleRecord, GameState, JournalEntry, Journey, Rumor, WorldState, new_game_state
-from .world import advance_world_state, check_thresholds, end_season, fire_by_id, sim_tick, start_pending_battle
-from .world_state import WorldStateStore
+from .world import (
+    _season_vehicle, advance_world_state, check_thresholds, end_season, fire_by_id, sim_tick, start_pending_battle,
+)
+from .world_state import WorldStateStore, season_length_days
 
 HOUR = 3600
 DAY = 86400
+BULLETIN_MAX = 3  # 江湖頁最上面的公告卡最多放這一週的幾則大事（計畫 T2）
 AUDIENCE_HALL_FIGURES = 2  # 一個地點有幾位以上的大勢人物，交友就不直接找人、改按「求見」指名（企劃者 2026-10-03 決定）
 # 路上小事（路上設計第四節）：road:<id> → (名稱, 這一段做過之後寫的「這段路已經……」)；按鈕上的補充見 _road_task_options
 ROAD_TASKS: dict[str, tuple[str, str]] = {
@@ -114,8 +118,8 @@ class Game:
         原本每個玩家各自獨立的 WorldState）。全服第一次開局（還沒有任何共用賽季）在這裡
         種出第一季，預設停在籌備中等管理者開季；共用賽季已經換過一輪（不管是自己剛開下一季，
         還是連線期間別的玩家觸發的）時，幫這個玩家的角色也開新的一季——角色本身（等級/位置/隊伍）
-        重新開始，但跟同伴的好感度/關係現況/對話歷史是「我跟他的交情」，不是賽季道具，
-        保留下來。__init__ 時（讀存檔／新角色）要呼叫，之後每次 sync() 也要呼叫，這樣連線
+        重新開始；跟同伴的關係現況/對話歷史是「我跟他的交情」，不是賽季道具，保留下來，
+        好感度只帶一成（見 _reset_player_for_new_season）。__init__ 時（讀存檔／新角色）要呼叫，之後每次 sync() 也要呼叫，這樣連線
         途中別人把賽季推到下一輪時，我才不會一直停在上一季的畫面。"""
         shared = self.world.get_season()
         if not shared.storyline:  # 全服第一次開局：種出第一季（要不要直接開季看內容設定）
@@ -128,14 +132,20 @@ class Game:
     def _reset_player_for_new_season(self, season_number: int) -> None:
         """新一季：玩家整個 GameState 重新開始（角色、江湖紀錄、戰報都是上一季的事了），
         只保留現實時間同步點（last_real，不然下次 sync 會把一整季沒上線的時間都當成
-        流逝掉）跟幾項明確認定「跟賽季無關、是我自己的」的東西——新手引導進度、跟同伴的
-        好感度/關係現況/對話歷史（見設計討論：好感度跨季保留，只重組隊伍）。world 欄位
-        這裡不用管，呼叫端（_reconcile_season）緊接著就會把它指向共用賽季。"""
+        流逝掉）跟幾項明確認定「跟賽季無關、是我自己的」的東西——跟同伴的關係現況/對話歷史
+        （整份保留）；好感度則只帶一成（Config.affinity_carry_ratio、無條件捨去，
+        80→8、5→0：第一季設計第十四節，下一季最多從 10 起步，交情要重新經營）。
+        新手引導：做完或略過的人照舊不再出現；還沒做完的人跟著新角色從起始步重來——
+        新角色沒有武學，接著上一季做到一半的下一步（例如出城遊歷）會把他推進必敗的路（FB-034）。
+        world 欄位這裡不用管，呼叫端（_reconcile_season）緊接著就會把它指向共用賽季。
+        之後新增的 PlayerState 欄位預設就跟著新角色重來；要跨季保留的才加進下面這份清單。"""
         old = self.state
         fresh = new_game_state(self.content, old.player.name)
         fresh.last_real = old.last_real
-        fresh.player.tutorial_step = old.player.tutorial_step
-        fresh.player.affinities = old.player.affinities
+        if old.player.tutorial_step >= len(self.content.tutorial.steps):  # 做完或略過（skip_tutorial 也是設成步數）
+            fresh.player.tutorial_step = old.player.tutorial_step
+        ratio = self.content.config.affinity_carry_ratio
+        fresh.player.affinities = {key: int(value * ratio) for key, value in old.player.affinities.items()}
         fresh.player.relationship_notes = old.player.relationship_notes
         fresh.player.dialogue_history = old.player.dialogue_history
         fresh.player.used_dialogue_options = old.player.used_dialogue_options
@@ -336,7 +346,7 @@ class Game:
         j = s.player.journey
         if j is not None:
             end = c.locations[j.path[j.last]].name
-            opts = [Option(id="act:on_road", label=f"（在路上，{battlelog.clock_text(j.arrive_at[j.last])} 抵達{end}）", enabled=False)]
+            opts = [Option(id="act:on_road", label=f"（在路上，{self.stamp(j.arrive_at[j.last])} 抵達{end}）", enabled=False)]
             opts.append(self._back_option())  # 折返（路上設計 3.2）；改去別處在大地圖上安排
             if j.stop_at is None and j.reached < j.last:
                 opts.append(Option(id="act:halt", label=f"喊停（到{c.locations[j.path[j.reached]].name}就停下）"))
@@ -1033,9 +1043,10 @@ class Game:
         if raw is None:
             return None
         if self.state.world.ended:
-            # 季結束了：沒打完的決戰直接收掉、不套用結果（這一季勝負已經定了），參戰者回到休季畫面（試玩回饋 FB-015）
+            # 季結束了：沒打完的決戰直接收掉、不套用結果（這一季勝負已經定了），參戰者回到休季畫面（試玩回饋 FB-015）；
+            # 參戰者各補一則「沒打完、不算勝負」的江湖紀錄（FB-035）
             if tick and raw.phase != "ended":
-                self.world.clear_battle()
+                self._shelve_unfinished_battle()
             return None
         definition = self.content.battles.get(raw.battle_id)
         if definition is None:
@@ -1050,6 +1061,28 @@ class Game:
                 self._apply_battle_outcome(battle)
             return None
         return battle, definition
+
+    def _shelve_unfinished_battle(self) -> None:
+        """季終時還沒打完的決戰收起來（自然收季見 _battle_status、管理者收季見 admin_end_season；呼叫端先確認
+        有一場還沒收場的）。不算結果：不動大勢、不寫旗標、不寫江湖史、不加戰報（FB-015）；但每個參戰者要有交代（FB-035）。
+
+        做法是先在 battles 表把它標成 ended＋unfinished、end_time 記收季那一刻，再從共用狀態拿掉：
+        ended_battles 讀得到它，參戰者各自同步時用 _deliver_battle_results 補一則江湖紀錄（下線的、跨季才回來的也補得到）。
+        兩步不能併成一次 mutate：決戰拿掉之後，存檔就不再寫那一列了，標記會丟掉。
+        標成 ended 不會被當成「剛打完」套結果：_battle_status 對本來就 ended 的不再套（was_ended）、
+        _apply_battle_outcome 認得 unfinished 直接不動，而且拿掉之後 get_battle 本來就看不到它。
+        最後也補給自己，跟 _apply_battle_outcome 一樣：收場那一下的那個人當場就看得到。"""
+        end_time = self.state.world.time
+
+        def _mark(b: battle_instance.BattleInstance) -> None:
+            b.phase = "ended"
+            b.unfinished = True
+            b.outcome_title = battle_instance.UNFINISHED_TITLE
+            b.end_time = end_time
+
+        self.world.mutate_battle(_mark)
+        self.world.clear_battle()
+        self._deliver_battle_results()
 
     def _advance_battle_round(self, battle: battle_instance.BattleInstance, definition: BattleDef) -> list[str]:
         """核心推進邏輯（在呼叫端的 mutate_battle callback 裡原地修改 battle）：
@@ -1108,7 +1141,11 @@ class Game:
         就被比較舊的那份蓋掉了（江湖史是另一張表，不受影響，所以只有它倖存）。江湖史那一則只寫資料庫，
         不寫記憶體，免得存兩次。
 
-        最後把結果補送給自己（收場那一下的那個人當場就看得到）；別的參戰者各自同步時補（FB-027）。"""
+        最後把結果補送給自己（收場那一下的那個人當場就看得到）；別的參戰者各自同步時補（FB-027）。
+
+        季終收兵的決戰（unfinished，見 _shelve_unfinished_battle）沒有結果可套，不會走到這裡；萬一走到，直接不動。"""
+        if battle.unfinished:
+            return
         if battle.outcome_world_flags or battle.outcome_trend_delta or battle.outcome_title:
 
             def _apply(season: WorldState) -> None:
@@ -1139,7 +1176,8 @@ class Game:
         battles 表裡，所以每個人自己的 Game 在 sync（伺服器每個請求、假人每一輪）與自己收場的那一下自己補。
         不分季別：決戰的結果常常就把季收掉，休季、下一季才回來的人也要補到。不是自己參戰的那幾場也記成處理過，
         之後不必再讀（收場的決戰名單不會再變）。只讀處理過的最大流水號之後收場的：決戰照開戰的先後收場，比它小的
-        不會再有新收場的（見 WorldStateStore.ended_battles）。"""
+        不會再有新收場的（見 WorldStateStore.ended_battles）。季終沒打完就收起來的決戰（unfinished）也在這裡補，
+        內容只是一則「不算勝負」的江湖紀錄（FB-035，見 _file_showdown）。"""
         p = self.state.player
         fresh = self.world.ended_battles(after=max(p.battle_results_seen, default=0))
         if not fresh:
@@ -1156,7 +1194,9 @@ class Game:
     ) -> None:
         """一場收場的決戰寫成自己的一則江湖紀錄與一筆戰報（kind 是 showdown），「剛剛」放這一場的卡片。
         earlier 是上一季（或更早）打的那一季的編號，這一季打的是 None：上一季的標明季別，大勢的增減寫進敘事、
-        不放進數值變化——數值變化看起來像剛發生在你身上的。"""
+        不放進數值變化——數值變化看起來像剛發生在你身上的。
+
+        季終收兵的決戰（unfinished，FB-035）沒有結果：只寫一則江湖紀錄交代一聲，不加戰報、不放「剛剛」的戰鬥卡片。"""
         c, s = self.content, self.state
         definition = c.battles.get(battle.battle_id)
         sides = {f.id: f.name for f in definition.factions} if definition is not None else {}
@@ -1166,6 +1206,11 @@ class Game:
         where = self._battle_region_name(definition) if definition is not None and definition.region else name
         outcome = battle.outcome_title or "收場"
         label = "" if earlier is None else f"第 {earlier} 季・"
+        time = battle.end_time if battle.end_time is not None else s.world.time
+        if battle.unfinished:
+            lines = [battle_instance.UNFINISHED_TEXT] + ([f"你出手 {me.acted_rounds} 回合"] if me.acted_rounds else [])
+            journal.add_entry(s, JournalEntry(time=time, title=f"{label}{name}・{outcome}", tag=f"你站在{side}", lines=lines))
+            return
         lines = ([battle.outcome_text] if battle.outcome_text else []) + [f"你出手 {me.acted_rounds} 回合"]
         if me.fell_round is not None:
             lines.append(f"你在第 {me.fell_round} 回合倒下，轉為觀戰")
@@ -1174,7 +1219,6 @@ class Game:
         changes = deltas if earlier is None else []
         if earlier is not None:
             lines += [f"（第 {earlier} 季）{d}" for d in deltas]
-        time = battle.end_time if battle.end_time is not None else s.world.time
         record = BattleRecord(
             id=s.battle_seq + 1, time=time, location=f"{label}{where}", kind="showdown", event=name, opponent=foes,
             ours=[], tier=outcome, our_power=0.0, difficulty=0.0, side=side, notes=list(lines), changes=list(changes),
@@ -1714,7 +1758,7 @@ class Game:
         arrive = s.player.journey.arrive_at[-1]
         left = atlas.whole_minutes((arrive - s.world.time) / 60)
         verb = "改道" if rerouting else "動身"
-        msg = f"你{verb}{atlas.MODES[mode]}前往{c.locations[route.path[-1]].name}，{battlelog.clock_text(arrive)} 抵達（約 {left} 分鐘後）。"
+        msg = f"你{verb}{atlas.MODES[mode]}前往{c.locations[route.path[-1]].name}，{self.stamp(arrive)} 抵達（約 {left} 分鐘後）。"
         self._hide(msg)  # 場景會顯示「在路上」，紀錄只留標題與走法
         self._sync_battle_presence()
         return [msg]
@@ -1823,7 +1867,7 @@ class Game:
         left = atlas.whole_minutes(max(0.0, end - s.world.time) / 60)
         line = (
             f"往{c.locations[j.path[j.last]].name}（{atlas.MODES[j.mode]}），"
-            f"{battlelog.clock_text(end)} 抵達，還要約 {left} 分鐘"
+            f"{self.stamp(end)} 抵達，還要約 {left} 分鐘"
         )
         if j.reached < j.last:
             line += f"；下一站{c.locations[j.path[j.reached]].name}"
@@ -2109,7 +2153,7 @@ class Game:
 
     def battle_card(self) -> str | None:
         record = battlelog.find(self.state, self.state.battle_card)
-        return battlelog.card_text(record) if record else None
+        return battlelog.card_text(record, self.stamp) if record else None
 
     def battle_card_id(self) -> int | None:
         record = battlelog.find(self.state, self.state.battle_card)
@@ -2119,12 +2163,12 @@ class Game:
         return self.state.battles[0].id if self.state.battles else None
 
     def battle_list(self) -> list[tuple[str, int]]:
-        return [(battlelog.list_label(r), r.id) for r in self.state.battles]
+        return [(battlelog.list_label(r, self.stamp), r.id) for r in self.state.battles]
 
     def battle_detail(self, record_id: int | None = None) -> str:
         s = self.state
         record = battlelog.find(s, record_id) or (s.battles[0] if s.battles else None)
-        return battlelog.detail_text(record) if record else battlelog.NO_RECORD
+        return battlelog.detail_text(record, self.stamp) if record else battlelog.NO_RECORD
 
     def notice(self, text: str, title: str = "提醒") -> list[str]:
         self._write(title, [text])
@@ -2182,16 +2226,44 @@ class Game:
         """管理者開季：籌備中 → 進行中。"""
         if not self.is_admin():
             return self._log(["（只有管理者能開季。）"])
-        if not self.world.open_season(now):
+        if not self.world.open_season(self.content, now):
             return self._log(["（現在不是籌備期，無法開季。）"])
         msgs = [f"══ {self.content.scenario.name}・開季 ══"]
         self._write("開季", msgs, tag="管理者")
+        return self._log(msgs)
+
+    def admin_end_season(self, now: float) -> list[str]:
+        """管理者立刻收季：進行中 → 休季（之後再由 admin_next_season 開下一季）。照自然收季的做法算結局、
+        寫江湖史、附武學榜（world.end_season），只是不必等季末或快轉十幾天——試玩伺服器要收掉這一季用的。
+        不推進時間：季的時間停在收季那一刻。now 跟 admin_open_season／admin_next_season 同一種簽名，收季本身用不到。"""
+        if not self.is_admin():
+            return self._log(["（只有管理者能收季。）"])
+        if self.world.season_phase() != "running":
+            return self._log(["（賽季不在進行中，沒有可以收的。）"])
+        msgs: list[str] = []
+        self.world.mutate_season(
+            lambda s: msgs.extend(end_season(_season_vehicle(self.content, s), self.content, self.world))
+        )
+        self.state.world = self.world.get_season()  # 讀回完整的一份（mutate_season 回傳的不含傳聞與江湖史）
+        # 沒打完的決戰直接收掉、不套用結果（這一季勝負已經定了，跟自然收季一樣，見 _battle_status，FB-015），
+        # 參戰者各補一則「不算勝負」的江湖紀錄（FB-035）。放在 mutate_season 外面：mutate 不能巢狀，
+        # 內層寫的會被外層整份存檔蓋掉；放在讀回賽季之後：收場時間記的是收季那一刻的季時間
+        battle = self.world.get_battle()
+        if battle is not None and battle.phase != "ended":
+            self._shelve_unfinished_battle()
+        self._write("收季", msgs, tag="管理者")  # 跟開季一樣，管理者自己的江湖紀錄留一則
         return self._log(msgs)
 
     def admin_next_season(self, now: float) -> list[str]:
         """管理者開下一季：只在休季時有效；管理者自己的角色跟著換季（其他玩家下次同步時換）。"""
         if not self.is_admin():
             return self._log(["（只有管理者能開啟下一季。）"])
+        battle = self.world.get_battle()
+        if self.world.season_phase() == "resting" and battle is not None and battle.phase != "ended":
+            # 季自然結束之後沒有人同步過、沒人走到 _battle_status 收掉它：換季會直接清掉，先收起來，
+            # 參戰者才補得到「不算勝負」那一則（FB-035）。收場時間記收掉的那一季的時間，所以先讀回賽季
+            self.state.world = self.world.get_season()
+            self._shelve_unfinished_battle()
         if not self.world.next_season(self.content, now):
             return self._log(["（這一季還沒結束，無法開啟下一季。）"])
         self._reconcile_season()
@@ -2313,7 +2385,7 @@ class Game:
             "location": c.locations[p.location].name,
             "day": int(w.time // DAY) + 1,
             "clock": f"{int(w.time % DAY // HOUR):02d}:{int(w.time % HOUR // 60):02d}",
-            "season_days": c.config.season_days,
+            "season_days": season_length_days(w, c),  # 這一季蓋章的季長（舊季照它自己的章，不跟著設定變）
             "stamina": int(p.stamina),
             "stamina_max": c.config.stamina_max,
             "hp": int(now),
@@ -2328,7 +2400,49 @@ class Game:
             "busy_hours": None if p.busy_until is None else round((p.busy_until - w.time) / HOUR, 1),
             "resting": None if p.resting_since is None else c.config.rest_regen_multiplier,  # 打坐時體力回復的倍數
             "journey": None if p.journey is None else self._journey_line(),
+            **self._calendar_status(),  # 第一季：季曆與下一件大事的倒數；開關關著時沒有這兩欄
         }
+
+    def _calendar_status(self) -> dict:
+        """狀態列的季曆（第 N 週、週幾、幾點）與下一件大事的倒數。倒數是現實秒：(大事時刻 − 世界秒) ÷ time_scale。"""
+        w, c = self.state.world, self.content
+        if not calendar.season_one_on(w, c):
+            return {}
+        at = calendar.point(w.time, c, w)
+        upcoming = timetable.next_event(self.state, c)
+        return {
+            "calendar": {
+                "week": at.week, "weekday": at.weekday, "clock": f"{at.hour:02d}:{at.minute:02d}",
+                "weeks": c.config.season_weeks,
+            },
+            "next_event": None if upcoming is None else {
+                "title": upcoming.title,
+                "in_seconds": round((timetable.when(self.state, c, upcoming) - w.time) / c.config.time_scale),
+            },
+        }
+
+    def bulletin(self) -> list[str]:
+        """江湖頁最上面的公告卡（Markdown）：這一週已經發生的大事，新的在前、最多 BULLETIN_MAX 則。
+        江湖紀錄裡的「江湖大事」只寫進剛好在場同步到的那個人，這張卡讓每個人都看得到。開關關著時是空的。"""
+        w, c = self.state.world, self.content
+        if not calendar.season_one_on(w, c):
+            return []
+        start = calendar.week_start(calendar.point(w.time, c, w).week, c, w) - calendar.EPS_SECONDS
+        titles = {e.id: e.title for e in c.timetable}
+        done = [(i, eid, r) for i, (eid, r) in enumerate(w.timeline.items()) if r.text and r.time >= start]
+        done.sort(key=lambda item: (item[2].time, item[0]), reverse=True)
+        return [f"**{titles.get(eid, eid)}**\n\n{r.text}" for _, eid, r in done[:BULLETIN_MAX]]
+
+    def stamp(self, time: float, clock: bool = True) -> str:
+        """玩家看得到的遊戲時間（江湖紀錄、江湖史、傳聞、戰報、路上）：第一季寫成季曆，其他時候照舊（calendar.stamp_text）。"""
+        return calendar.stamp_text(time, self.content, self.state.world, clock=clock)
+
+    @staticmethod
+    def _when_text(d: dict) -> str:
+        cal = d.get("calendar")
+        if cal is None:
+            return f"第 {d['day']} 天 {d['clock']}（本季共 {d['season_days']:g} 天）"
+        return f"第 {cal['week']} 週・週{calendar.WEEKDAYS[cal['weekday']]} {cal['clock']}"
 
     def status_text(self) -> str:
         d = self.status_data()
@@ -2349,7 +2463,7 @@ class Game:
         lines = [
             f"### {d['name']}　·　{d['affiliation']}" + ("（匿名行走）" if d["anonymous"] else "")
             + f"　第{d['level']}級",
-            f"📍 {d['location']}　⏳ 第 {d['day']} 天 {d['clock']}（本季共 {d['season_days']:g} 天）",
+            f"📍 {d['location']}　⏳ {self._when_text(d)}",
             vitals,
             f"{minor}　｜　{attrs}",
         ]
@@ -2379,26 +2493,30 @@ class Game:
         return "\n\n".join(parts) or "（江湖暫時風平浪靜。）"
 
     def rumors_text(self, limit: int = 30) -> str:
-        return _timeline(self.state.world.rumors[-limit:][::-1]) or "（尚無傳聞。）"
+        return _timeline(self.state.world.rumors[-limit:][::-1], self._day_stamp) or "（尚無傳聞。）"
 
     def chronicle_text(self) -> str:
         """江湖史：這一季在最前面，往前每一季各一段（線上架構設計 3.2：江湖史跨季保留），最後是玉璽碎片。"""
         number = self.world.get_season_number()
-        current = _timeline(self.state.world.chronicle) or "（江湖史尚無記載。）"
+        current = _timeline(self.state.world.chronicle, self._day_stamp) or "（江湖史尚無記載。）"
         past = self.world.chronicle_before(number)
         parts = [f"### 第 {number} 季（本季）\n\n{current}" if past else current]
-        parts += [f"### 第 {n} 季\n\n{_timeline(entries)}" for n, entries in past]
+        parts += [f"### 第 {n} 季\n\n{_timeline(entries, calendar.day_text)}" for n, entries in past]  # 上一季照舊寫「第N天」
         parts.append(self.world.jade_seal_summary())
         return "\n\n---\n\n".join(parts)
 
     # ── 江湖紀錄 ──────────────────────────────────────────
 
+    def _day_stamp(self, time: float) -> str:
+        """江湖史與傳聞的時間：沒有季曆時只寫天數（「第2天」），第一季寫季曆。"""
+        return self.stamp(time, clock=False)
+
     def latest_entry_html(self) -> str:
         entries = self.state.journal
-        return journal.card_html(entries[0]) if entries else ""
+        return journal.card_html(entries[0], self.stamp) if entries else ""
 
     def journal_html(self, start: int = 1, limit: int = 5, heading: str = "", empty: str = "") -> str:
-        return journal.rows_html(self.state.journal[start:start + limit], heading, empty)
+        return journal.rows_html(self.state.journal[start:start + limit], heading, empty, self.stamp)
 
     def shows_battle_card(self) -> bool:
         s = self.state
@@ -2423,5 +2541,6 @@ class Game:
         return msgs
 
 
-def _timeline(entries: list[Rumor]) -> str:
-    return "\n\n".join(f"第{int(e.time // DAY) + 1}天　{e.text}" for e in entries)
+def _timeline(entries: list[Rumor], when: Callable[[float], str]) -> str:
+    return "\n\n".join(f"{when(e.time)}　{e.text}" for e in entries)
+

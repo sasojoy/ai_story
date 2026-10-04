@@ -218,6 +218,13 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .now.clamp .now-more { position: absolute; right: 0; bottom: -6px; padding-left: 1.6em; background: linear-gradient(90deg, transparent, var(--card) 1.4em); }
 .now.fits .now-more { display: none; }
 .battle-card { border-color: var(--accent); }
+/* 公告卡（第一季，計畫 T2）：這一週已經發生的江湖大事，排在江湖頁最上面；一則一段，新的在前 */
+.bulletin { border-color: var(--gold); padding: 10px 14px; }
+.bulletin-head { font: 600 13px var(--sans); color: var(--gold); margin-bottom: 4px; }
+.bulletin-item { font-size: 14px; line-height: 1.65; }
+.bulletin-item + .bulletin-item { border-top: 1px dashed var(--line); margin-top: 8px; padding-top: 8px; }
+.bulletin-item p { margin: 0 0 4px; }
+.bulletin-item p:last-child { margin-bottom: 0; }
 .scene { font-size: 15.5px; line-height: 1.75; }
 .scene > p:first-child { font: 600 16px var(--serif); margin-bottom: 2px; }
 .scene h2, .scene h3 { font-size: 18px; }
@@ -322,6 +329,11 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 }
 .admin-zone h4 { margin: 0; font-size: 16px; }
 .admin-zone .muted { margin-bottom: 0; }
+/* 管理者區的按鈕字不斷開（FB-033）：375 寬時「立刻收季」「開啟下一季」被擠成一排會折成兩行字 */
+.admin-zone .btn { white-space: nowrap; }
+/* 開季／收季／開下一季三顆：照字寬排，擠不下就整顆換到下一行（每顆長滿它那一行，不留空）；只動這一列、不動別頁的 .row */
+.admin-zone .row.seasons { flex-wrap: wrap; }
+.admin-zone .row.seasons > .btn { flex: 1 1 auto; width: auto; }
 .ad-row > .ad-tag { flex: none; align-self: center; font-size: 13px; color: var(--ink-2); }
 .ad-row > .btn { flex: none; }
 .btn.warn { color: var(--bad); border-color: var(--bad); font-weight: 600; }
@@ -356,43 +368,18 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
   .page { padding-top: 16px; }
 }
 
-/* ── 輪盤（江湖頁的行動、煉製頁的素材）：四格固定，外圈八卦與中心圖案在轉 ── */
-.wheel-wrap { width: 100%; max-width: 340px; margin: 4px auto 0; aspect-ratio: 1; }
+/* ── 太極火爐（煉製頁）：外圈火舌明滅，太極在爐裡慢慢轉，左右兩格放素材；開爐等結果時整座爐子晃動 ── */
+.furnace-wrap { width: 100%; max-width: 250px; margin: 4px auto 10px; aspect-ratio: 1; }
 .wheel { width: 100%; height: 100%; display: block; overflow: visible; touch-action: manipulation; -webkit-user-select: none; user-select: none; }
 .wheel text { text-anchor: middle; dominant-baseline: central; pointer-events: none; }
 .w-rim { fill: none; stroke: var(--gold); stroke-width: 1; opacity: 0.7; }
-.w-ring { transform-origin: 0 0; animation: w-turn 60s linear infinite reverse; }
-.w-tick { stroke: var(--gold); stroke-width: 0.7; opacity: 0.6; }
-.w-ring-line { fill: none; stroke: var(--gold); stroke-width: 0.6; opacity: 0.45; }
-.w-gua line { stroke: var(--gold); stroke-width: 1.8; }
-.w-sector { cursor: pointer; transition: transform 0.22s cubic-bezier(0.3, 1.4, 0.5, 1), filter 0.22s; }
-.w-sector.on { transform: translate(var(--dx), var(--dy)); filter: drop-shadow(0 0 7px var(--glow)); }
-.w-face { stroke: var(--gold); stroke-width: 1.4; }
-.w-sector.off .w-face { opacity: 0.3; }
-.w-lab { font-family: var(--serif); font-weight: 700; fill: #fbf7ef; }
-.w-sub { font-size: 10.5px; fill: rgba(251, 247, 239, 0.85); }
-.w-sector.off .w-lab, .w-sector.off .w-sub { fill: rgba(251, 247, 239, 0.55); }
 .w-hub { cursor: pointer; }
-.w-hub.off { cursor: default; }
 .w-hub-rim { fill: var(--disk); stroke: var(--gold); stroke-width: 1.4; }
-.w-hub.on .w-hub-rim { filter: drop-shadow(0 0 6px var(--gold)); }
 .w-yang { fill: #efe6d5; }
 .w-yin { fill: #2a241d; }
-.w-eye-lit { fill: var(--gold); }
 .w-spin { transform-origin: 0 0; animation: w-turn 28s linear infinite; }
 .w-spin.hot { animation-duration: 3s; }
-.w-dial-line { fill: none; stroke: #b7862b; stroke-width: 0.8; }
-.w-tick-s { stroke: #6b6155; stroke-width: 0.6; }
-.w-tick-b { stroke: #6b6155; stroke-width: 1.2; }
-.w-dir { font-size: 9px; fill: #6b6155; font-family: var(--serif); }
-.w-needle { transform-origin: 0 0; animation: w-seek 7s ease-in-out infinite; }
-.w-needle-n { fill: #a8322a; }
-.w-pin { fill: #b7862b; }
-.w-hub-lab { font-family: var(--serif); font-weight: 700; font-size: 11px; fill: var(--gold); }
-.w-hub.off .w-needle { animation: none; opacity: 0.4; }
 @keyframes w-turn { to { transform: rotate(360deg); } }
-@keyframes w-seek { 0%, 100% { transform: rotate(-8deg); } 30% { transform: rotate(10deg); } 60% { transform: rotate(-3deg); } 80% { transform: rotate(5deg); } }
-/* 太極火爐（煉製頁中心）：外圈火舌明滅，左右兩格放素材；開爐等結果時整座爐子晃動 */
 .w-flames path { fill: none; stroke: #e0782a; stroke-width: 3; stroke-linecap: round; opacity: 0.75; transform-origin: 0 0; animation: w-flicker 0.9s ease-in-out infinite alternate; }
 .w-flames.hot path, .w-furnace.forging .w-flames path { stroke: #f0a23a; stroke-width: 4; animation-duration: 0.35s; }
 @keyframes w-flicker { from { opacity: 0.45; transform: scale(0.97); } to { opacity: 0.95; transform: scale(1.04); } }
@@ -410,14 +397,39 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
   40% { transform: translate(2px, -1px) rotate(1.5deg); } 60% { transform: translate(-1.5px, -1px) rotate(-1deg); }
   80% { transform: translate(1.5px, 1px) rotate(1deg); } 100% { transform: translate(0, 0) rotate(0); }
 }
-.w-card { margin-top: 10px; }
-.w-card .options { margin: 8px 0 0; }
-.w-card .move-mode { margin: 8px 0 0; }
-.w-title { margin: 0; font-size: 17px; }
-.w-title small { font-family: var(--sans); font-size: 12px; font-weight: 400; color: var(--ink-2); }
-/* 此地才有的行動（求見、招募、投靠）：朱紅印章 */
-.options.seals { display: flex; flex-wrap: wrap; gap: 8px; }
-.btn.seal { width: auto; flex: 1 1 auto; min-height: 44px; border: 1.5px solid var(--accent); color: var(--accent); background: transparent; font-family: var(--serif); border-radius: 8px; }
+
+/* ── 江湖頁的行動列：一排五顆「水墨氣勁」（企劃者 2026-10-04 給的樣式），黑底金邊、圖示、底下一行消耗 ── */
+.act-bar { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; padding: 8px 4px; margin-bottom: 12px;
+  background: color-mix(in srgb, var(--disk) 5%, transparent); border: 1px dashed var(--line); border-radius: 12px; }
+.act-ink { position: relative; overflow: hidden; min-height: 72px; padding: 8px 2px 6px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: var(--disk); border: 1px solid color-mix(in srgb, var(--gold) 25%, transparent); border-radius: 10px; cursor: pointer; color: #ede2d3;
+  font: inherit; transition: transform 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease, background 0.22s ease; -webkit-tap-highlight-color: transparent; }
+.act-ink::after { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity 0.3s ease;
+  background: radial-gradient(circle at 50% 25%, color-mix(in srgb, var(--gold) 18%, transparent), transparent 70%); }
+.ink-icon { width: 22px; height: 22px; margin-bottom: 2px; fill: none; stroke: #d0c4b2; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round;
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), stroke 0.2s ease; }
+.act-ink b { font-size: 13px; font-weight: 800; letter-spacing: 0.5px; }
+.act-ink small { font-size: 10px; color: #9e8e7c; margin-top: 2px; white-space: nowrap; }
+/* 選到的（展開的移動、按下去等結果的那一顆）往上浮 4px、金邊 */
+.act-ink.on, .act-ink.busy { background: #171310; border-color: var(--gold); transform: translateY(-4px);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--gold) 22%, transparent), inset 0 0 12px color-mix(in srgb, var(--gold) 15%, transparent); }
+.act-ink.on::after, .act-ink.busy::after { opacity: 1; }
+.act-ink.on .ink-icon, .act-ink.busy .ink-icon { stroke: #f5d77f; transform: scale(1.15); }
+.act-ink.on b, .act-ink.busy b { color: #f5d77f; }
+.act-ink.on small, .act-ink.busy small { color: var(--gold); font-weight: 600; }
+.act-ink:active:not(:disabled) { transform: translateY(-1px) scale(0.95); }
+/* 不能用的：灰掉 */
+.act-ink:disabled { opacity: 0.4; filter: grayscale(100%); cursor: not-allowed; border-color: rgba(255, 255, 255, 0.06); }
+.act-ink:disabled .ink-icon { stroke: #666; }
+/* 點下去的水墨漣漪 */
+.ink-drop { position: absolute; width: 10px; height: 10px; border-radius: 50%; pointer-events: none; background: color-mix(in srgb, var(--gold) 45%, transparent);
+  transform: translate(-50%, -50%) scale(0); animation: ink-burst 0.6s cubic-bezier(0.1, 0.8, 0.2, 1) forwards; }
+@keyframes ink-burst { 0% { transform: translate(-50%, -50%) scale(1); opacity: 0.8; } 100% { transform: translate(-50%, -50%) scale(16); opacity: 0; } }
+.act-move { margin-bottom: 12px; scroll-margin-bottom: calc(64px + var(--bottom)); }
+.act-move .options { margin: 8px 0 0; }
+.act-move .move-mode { margin: 0; }
+.fold.here summary { font-size: 14px; }
+.fold.here .options { margin: 0; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
