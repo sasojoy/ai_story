@@ -39,6 +39,10 @@ QUALITY_ANCHORS: dict[float, dict[str, float]] = {
     2.0: {"下品": 28.0, "中品": 44.0, "上品": 26.0, "絕學": 2.0},
     3.0: {"下品": 8.0, "中品": 37.0, "上品": 48.0, "絕學": 7.0},
 }
+# 開爐才知道是內功還是武學（企劃者 2026-10-04）：剛、快偏武學，柔、慢偏內功。每樣素材往自己那邊
+# 推 KIND_LEAN，兩樣都剛快＝八成武學，一剛一柔＝五五波，兩樣都柔慢＝八成內功；其他屬性不推。
+KIND_LEAN = 0.15
+WUGONG_LEANING = {"剛": 1, "快": 1, "柔": -1, "慢": -1}
 COUNTER_TIER_BONUS = 0.5  # 兩樣素材相剋時，平均階額外 +0.5（「相剋相生」，設計 §5.3）
 MAX_TIER = 3.0
 
@@ -60,6 +64,24 @@ class CraftedName(BaseModel):
 def recipe_key(material_ids: list[str], kind: str) -> str:
     """配方鍵：素材 id 排序後接起來，再加上要煉的種類。排序保證 A+B 與 B+A 是同一個配方。"""
     return "+".join(sorted(material_ids)) + "|" + kind
+
+
+def wugong_chance(a: Material, b: Material) -> float:
+    """這兩樣素材煉出武學的機率（其餘是內功）。"""
+    lean = WUGONG_LEANING.get(a.attribute, 0) + WUGONG_LEANING.get(b.attribute, 0)
+    return 0.5 + KIND_LEAN * lean
+
+
+def result_kind(a: Material, b: Material, tianji: int) -> str:
+    """開爐後出的是內功還是武學。
+
+    玩家開爐前不選種類，但這一擲是**決定性的**：素材 id 排序後加上這一季的天機去雜湊。
+    所以同一組素材在同一季永遠煉出同一種——第一個開爐的人定下來的那門功法，後來的人照著煉
+    拿到的是同一門（配方共享、首創者照舊成立），換季天機變了才重擲。
+    """
+    digest = hashlib.sha256(f"{tianji}|kind|{'+'.join(sorted((a.id, b.id)))}".encode()).digest()
+    roll = int.from_bytes(digest[:4], "big") / 2**32
+    return "武學" if roll < wugong_chance(a, b) else "內功"
 
 
 def cost(content: Content, material_ids: list[str]) -> int:
@@ -224,7 +246,7 @@ def already_have(state: GameState, art: MartialArt) -> bool:
 
 
 def can_craft(
-    state: GameState, content: Content, material_ids: list[str], kind: str,
+    state: GameState, content: Content, material_ids: list[str],
     world: WorldStateStore | None = None,
 ) -> str | None:
     """不能煉的原因；None＝可以煉。
@@ -234,8 +256,6 @@ def can_craft(
     一季 17 爐裡有 8 爐是這種，而且舊版會讓同一門功法同時在身上也在功法庫裡）。
     配方已經被別人首創、但自己還沒有那門功法時**仍然可以煉**，那正是全服共享配方的價值。
     """
-    if kind not in KINDS:
-        return f"只能煉內功或武學，不是「{kind}」。"
     if len(material_ids) != MATERIALS_PER_CRAFT:
         return f"一次要投入 {MATERIALS_PER_CRAFT} 樣素材。"
     for mid in set(material_ids):
@@ -247,7 +267,8 @@ def can_craft(
     if state.player.stats.get("xinde", 0) < price:
         return f"心得不足：煉製需要 {price} 點，你只有 {state.player.stats.get('xinde', 0)} 點。"
     if world is not None:
-        known = world.lookup_recipe(recipe_key(material_ids, kind))
+        a, b = (content.materials[mid] for mid in material_ids)
+        known = world.lookup_recipe(recipe_key(material_ids, result_kind(a, b, world.read().tianji)))
         if known is not None and already_have(state, known):
             return f"這一爐煉出來還是【{known.name}】，你已經有了——換一組素材吧。"
     return None
@@ -255,20 +276,23 @@ def can_craft(
 
 def craft(
     state: GameState, content: Content, world: WorldStateStore, client: OllamaClient,
-    material_ids: list[str], kind: str,
+    material_ids: list[str],
 ) -> tuple[MartialArt | None, list[str]]:
     """煉製一門功法，回傳（功法, 訊息）；不能煉時回傳 (None, [原因])。
 
+    種類（內功／武學）不由玩家選，開爐時由 `result_kind` 決定。
     流程（設計 §5.2）：檢查 → 查配方快取 → 命中就直接用登記在案的那一門（零 LLM）→
     沒命中才請 LLM 命名 → 過濾 → 依素材決定屬性與品質權重、用名字＋這一季的天機擲骰 →
     交易內登記 → 扣素材與心得。配方表每季一份（新的一季從空表開始，見 `WorldStateStore.next_season`），
     所以同一個配方每季都要重新發現，換了天機也會長出不同的功法。
     """
-    problem = can_craft(state, content, material_ids, kind, world)
+    problem = can_craft(state, content, material_ids, world)
     if problem is not None:
         return None, [problem]
 
     a, b = (content.materials[mid] for mid in material_ids)
+    tianji = world.read().tianji  # 這一季的天機：同一個名字每季長出不同的功法，種類也每季重擲
+    kind = result_kind(a, b, tianji)
     key = recipe_key(material_ids, kind)
 
     art = world.lookup_recipe(key)
@@ -277,7 +301,6 @@ def craft(
         name, note = propose_name(client, content, a, b, kind)
         weights = quality_weights(mean_tier(a, b))
         attribute = result_attribute(a, b)
-        tianji = world.read().tianji  # 這一季的天機：同一個名字每季長出不同的功法
         for attempt in range(CLAIM_ATTEMPTS):
             if name is None:
                 name = fallback_name(content, key, kind, salt=attempt)

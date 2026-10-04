@@ -58,11 +58,10 @@ def craft_and_keep_the_best(game: Game, rng: random.Random) -> None:
     candidates = [held[: craft.MATERIALS_PER_CRAFT]]
     candidates += [[rng.choice(held), rng.choice(held)] for _ in range(CRAFT_TRIES - 1)]
     for pair in candidates:
-        for kind in rng.sample(craft.KINDS, len(craft.KINDS)):
-            if craft.can_craft(game.state, game.content, pair, kind, game.world) is None:
-                game.craft(pair, kind)
-                _switch_to_the_strongest(game)
-                return
+        if craft.can_craft(game.state, game.content, pair, game.world) is None:
+            game.craft(pair)
+            _switch_to_the_strongest(game)
+            return
 
 
 def _switch_to_the_strongest(game: Game) -> None:

@@ -299,8 +299,9 @@ def test_crafting_that_finishes_a_guide_step_writes_it_into_the_journal(game):
     materials.grant(game.state, game.content, "gang_1", 2)
     _guide_waits_for(game, TutorialGoal(has_wugong=True))
     naming = lambda self, messages, response_model, **kw: craft.CraftedName(name="鐵腕勁", description="一句話。")
-    with mock.patch.object(OllamaClient, "chat_structured", naming):
-        msgs = game.craft(["gang_1", "gang_1"], "武學")
+    with mock.patch.object(OllamaClient, "chat_structured", naming), \
+         mock.patch.object(craft, "result_kind", lambda a, b, tianji: "武學"):  # 這一步等的是武學
+        msgs = game.craft(["gang_1", "gang_1"])
     assert "✔ 引導完成" in msgs
     entry = latest(game)
     assert entry.title == "門下" and "煉製" in entry.tag

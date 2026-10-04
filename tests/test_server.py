@@ -541,14 +541,18 @@ def test_the_forge_takes_the_same_material_twice_when_there_are_two(client):
     不連模型：conftest 把 chat_structured 假成連不上，首次發現的配方走退路字表取名。"""
     mid = _a_player_with_a_material(client, 2)
     price = server.game_for("沈青衫").craft_cost([mid, mid])
-    out = client.post("/api/menxia/craft", json={"materials": [mid, mid], "kind": "武學"})
+    out = client.post("/api/menxia/craft", json={"materials": [mid, mid]})
     assert out.status_code == 200
     saved = open_characters().load("沈青衫").player
     assert saved.materials.get(mid, 0) == 0
     assert saved.stats["xinde"] == 100 - price
-    art = open_world().lookup_recipe(craft.recipe_key([mid, mid], "武學"))
-    assert art is not None and saved.member.wugong_id == art.id  # 武學欄本來是空的，煉出來的直接配上身
-    assert art.name == craft.fallback_name(server.CONTENT, craft.recipe_key([mid, mid], "武學"), "武學")  # 沒問模型
+    material = server.CONTENT.materials[mid]
+    kind = craft.result_kind(material, material, open_world().read().tianji)  # 開爐才揭曉的種類
+    key = craft.recipe_key([mid, mid], kind)
+    art = open_world().lookup_recipe(key)
+    slot = saved.member.wugong_id if kind == "武學" else saved.member.neigong_id
+    assert art is not None and art.kind == kind and slot == art.id  # 欄位本來是空的，煉出來的直接配上身
+    assert art.name == craft.fallback_name(server.CONTENT, key, kind)  # 沒問模型
 
 
 def test_the_forge_does_not_craft_the_same_material_twice_with_only_one(client):

@@ -1960,8 +1960,8 @@ class Game:
             msgs += self._menxia_entry(msg, xinde, guide=True)
         return msgs
 
-    def craft(self, material_ids: list[str], kind: str) -> list[str]:
-        """煉製：兩樣素材煉成一門功法，花心得（見 tianxia/craft.py）。
+    def craft(self, material_ids: list[str]) -> list[str]:
+        """煉製：兩樣素材煉成一門功法，花心得（見 tianxia/craft.py）；內功還是武學開爐才揭曉。
 
         LLM 只在「全服第一次煉出這個配方」時被呼叫一次，而且只負責取名字；配方命中就是純
         查表。呼叫在這裡而不是在 `craft.py` 裡拿 client，是為了跟其他門下動作一樣由 Game
@@ -1970,7 +1970,7 @@ class Game:
         if self._preparing():
             return self._log(["（賽季籌備中，等待管理者開季。）"])
         xinde = self._xinde()
-        art, msgs = craft.craft(self.state, self.content, self.world, self.client, material_ids, kind)
+        art, msgs = craft.craft(self.state, self.content, self.world, self.client, material_ids)
         out = self._log(msgs)
         if art is not None:
             out += self._menxia_entry(f"煉製【{art.name}】", xinde, guide=True)
@@ -1979,8 +1979,8 @@ class Game:
     def craft_cost(self, material_ids: list[str]) -> int:
         return craft.cost(self.content, material_ids)
 
-    def craft_line(self, material_ids: list[str], kind: str) -> str:
-        return skillview.craft_line(self.state, self.content, material_ids, kind, self.world)
+    def craft_line(self, material_ids: list[str]) -> str:
+        return skillview.craft_line(self.state, self.content, material_ids, self.world)
 
     def material_choices(self) -> list[tuple[str, str]]:
         """煉製選單的素材選項：（顯示文字, 素材 id），階高的排前面。"""

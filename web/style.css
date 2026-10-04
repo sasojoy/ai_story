@@ -266,16 +266,37 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 @keyframes ember { 0%, 100% { box-shadow: 0 0 0 rgba(214, 120, 40, 0); } 50% { box-shadow: 0 0 18px rgba(214, 120, 40, 0.75); } }
 
 /* ── 輿圖 ── */
-.map-wrap { border-radius: var(--radius); border: 1px solid var(--line); overflow: auto; margin-bottom: 12px; background: #e9e2cc; max-height: 62vh; }
-.map-wrap .tx-world-map { max-height: none !important; overflow: visible !important; }
-.map-wrap.fit svg { width: 100% !important; height: auto !important; }
+/* 地圖框（W16）：固定高度的視窗，地圖照原本的像素大小放在裡面，靠 transform 平移、縮放（app.js 的 applyMapView）。
+   框裡的手勢全歸地圖（touch-action: none）：不捲頁面、不放大整頁；長按不跳選字、不跳 iOS 的選單 */
+/* 框高：第一屏要整個露在底部分頁列上面。框頂約在 280px（狀態列、說明卡、圖層、下拉選單），分頁列約 55px，
+   再留一點空隙，所以是 100svh − 340px；第一個 62vh 給不認得 svh 的瀏覽器 */
+.map-wrap {
+  position: relative; overflow: hidden; height: 62vh; height: min(62vh, calc(100svh - 340px)); min-height: 260px; margin-bottom: 12px;
+  border-radius: var(--radius); border: 1px solid var(--line); background: #e9e2cc;
+  touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; cursor: grab;
+}
+/* 伺服器包的那一層 div 自帶捲軸與限高（overflow:auto、max-height:75vh），這裡蓋掉，免得裁到地圖或冒出捲軸 */
+.map-wrap .tx-world-map { position: absolute; left: 0; top: 0; overflow: visible !important; max-width: none !important; max-height: none !important; }
+.map-wrap .tx-world-map > svg { display: block; transform-origin: 0 0; }
+/* 拖移、雙指縮放中才升成合成層（不常駐：停下來還開著的話字會糊）；按鈕、下拉選單的移動滑一下，手勢與滾輪中不滑 */
+.map-wrap.moving .tx-world-map > svg { will-change: transform; }
+.map-wrap.glide .tx-world-map > svg { transition: transform 0.15s ease-out; }
 .map-wrap [data-loc] { cursor: pointer; }
-/* 地點的點擊區（E2／E3）：mapview 替每個地點畫了一個透明的圓（r=16）接點擊，這裡再加透明的粗外框：
-   原尺寸時 r=22（直徑約 44px）；整張縮小時外框更粗，r=34——40 個地點裡最近的兩個（嵩山深處與南華觀）相距 68.6，
-   r=34 剛好不會互相蓋住；手機上縮成約 0.39 倍，直徑約 27px */
-.map-wrap [data-loc] > circle[fill-opacity="0"] { stroke: transparent; stroke-width: 12px; pointer-events: all; }
-.map-wrap.fit [data-loc] > circle[fill-opacity="0"] { stroke-width: 36px; }
-.map-tools { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+.map-wrap.grabbing, .map-wrap.grabbing [data-loc] { cursor: grabbing !important; }
+/* 地點的點擊區（E2／E3）：mapview 替每個地點畫了一個透明的圓（r=16）接點擊，這裡再加透明的粗外框。
+   外框寬 --hit 由 app.js 跟著倍率算：半徑 R＝22÷倍率，夾在 22～34（地圖單位），螢幕上至少約 22px；
+   上限 34 是因為 40 個地點裡最近的兩個（嵩山深處與南華觀）相距 68.6，再大會互相蓋住 */
+.map-wrap [data-loc] > circle[fill-opacity="0"] { stroke: transparent; stroke-width: var(--hit, 12px); pointer-events: all; }
+/* 右上角的按鈕（回到所在地、放大、縮小）：疊在地圖上，不另佔一列；觸控目標 44px。
+   放上面不放下面：框底可能落在固定的底部分頁列後面，按鈕會被蓋住 */
+.map-ctl { position: absolute; top: 8px; right: 8px; display: flex; flex-direction: column; gap: 6px; }
+.map-ctl button {
+  width: 44px; height: 44px; padding: 0; display: grid; place-items: center; cursor: pointer;
+  border-radius: 12px; border: 1px solid var(--line); background: var(--card); color: var(--ink); box-shadow: var(--shadow);
+}
+.map-ctl button:disabled { opacity: 0.45; cursor: default; }
+.map-ctl svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; }
+.map-tools { display: flex; margin-bottom: 8px; }
 .map-tools select { flex: 1; }
 
 /* ── 戰報／見聞 ── */
