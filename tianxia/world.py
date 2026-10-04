@@ -5,14 +5,14 @@ import math
 import random
 from collections.abc import Callable
 
-from . import battle_instance, calendar, flavor, leaderboard, timetable
+from . import battle_instance, calendar, figures, flavor, leaderboard, timetable
 from .models import Act, BattleDef, Content, Ending, SimPlayer, SimRumor, Storyline, TimetableEvent
 from .ollama_client import OllamaClient
 from .rules import (
     add_chronicle, add_rumor, add_world_flags, change_trend, check_condition, geju_tick, recompute_trends,
-    resolve_trends, season_one, season_one_off, stances, trend_value,
+    resolve_trends, season_one, season_one_off, stances, trend_shown, trend_value,
 )
-from .state import GameState, PlayerState, WorldState
+from .state import GameState, PlayerState, TimelineResult, WorldState
 from .world_state import WorldStateStore, season_length_days
 
 HOUR = 3600
@@ -250,14 +250,56 @@ def end_season(
     msgs = settle_waiting_showdowns(state, content, rng or random.Random(0))
     ending = evaluate_ending(state, content)
     w.ended = True
+    w.ending_id = ending.id
     w.ending_title = ending.title
-    w.ending_text = ending.text
-    add_chronicle(state, f"賽季落幕：{ending.title}")
-    msgs += [f"══ 賽季落幕：{ending.title} ══", ending.text]
+    if season_one(content, w):
+        # 第一季（計畫 T9）：季末公告寫進時間軸（_finale；季中收季的開頭是「戰事提前收束。」），江湖史是季末大事的那一行，
+        # 記下最終戰況與各陣營出力前五，給休季的結算畫面讀
+        early = w.time < season_end_time(w, content) - calendar.EPS_SECONDS
+        text = _finale(state, content, ending, early)
+        w.ending_text = text or ending.text
+        if not any(e.kind == "finale" and e.ending_chronicle for e in content.timetable):
+            add_chronicle(state, f"賽季落幕：{ending.title}")  # 內容沒寫季末的江湖史句型（測試夾具）：照舊記一行，江湖史不會沒有結局
+        w.final_trends = {
+            t.id: trend_value(state, content, t.id) for t in content.scenario.trends if trend_shown(content, w, t.id)
+        }
+        if world is not None:
+            w.final_rankings = leaderboard.contribution_rankings(content, world)
+        msgs += ([f"【江湖大事】{text}"] if text else []) + [f"══ 賽季落幕：{ending.title} ══"]
+    else:
+        w.ending_text = ending.text
+        add_chronicle(state, f"賽季落幕：{ending.title}")
+        msgs += [f"══ 賽季落幕：{ending.title} ══", ending.text]
     if world is not None:
         board = leaderboard.compute_leaderboard(content, world)
         msgs += leaderboard.format_lines(board)
     return msgs
+
+
+def season_end_time(season: WorldState, content: Content) -> float:
+    """這一季在世界時鐘上何時收：第一季照排定的季末（schedule["finale"]，管理者可改，計畫 T10；舊季沒排就是季長），
+    其他照季長（沒蓋章的舊季 14 天）。"""
+    if calendar.season_one_on(season, content) and any(e.kind == "finale" for e in content.timetable):
+        return season.schedule.get("finale", season_length_days(season, content) * DAY)
+    return season_length_days(season, content) * DAY
+
+
+def _finale(state: GameState, content: Content, ending: Ending, early: bool) -> str:
+    """季末公告（時刻表結算第 12 週）：開頭（季中就收季時是 early_preface）＋結局句＋退場人物的後話（董卓兵敗）。
+    寫進時間軸（key 是結局 id；公告卡與 _deliver_big_events 照舊補給每個人）、天下大事傳聞與江湖史一行。
+    沒有季末大事、或已經寫過時回空字串。"""
+    w = state.world
+    event = next((e for e in content.timetable if e.kind == "finale"), None)
+    if event is None or event.id in w.timeline:
+        return ""
+    head = event.early_preface if early and event.early_preface else event.preface
+    after = "".join(line for fid, line in event.out_lines.items() if figures.is_out(state, fid))
+    text = head + ending.text + after
+    w.timeline[event.id] = TimelineResult(key=ending.id, time=w.time, text=text)
+    add_rumor(state, text, content=content, layer="world")
+    if event.ending_chronicle:
+        add_chronicle(state, event.ending_chronicle.replace("{結局}", ending.title))
+    return text
 
 
 def _season_vehicle(content: Content, season: WorldState) -> GameState:
@@ -450,6 +492,13 @@ def settle_season_start(season: WorldState, content: Content, rng: random.Random
     return season_events(_season_vehicle(content, season), content, rng)
 
 
+def _season_due(season: WorldState, content: Content) -> bool:
+    """收季的時間到了：第一季照排定的季末（容一點浮點誤差：排定的時刻不一定落在曆時交界上），其他照季長（跟以前一字不差）。"""
+    if calendar.season_one_on(season, content):
+        return season.time >= season_end_time(season, content) - calendar.EPS_SECONDS
+    return season.time >= season_length_days(season, content) * DAY
+
+
 def _to_next_cal_hour(time: float, cal_hour: float) -> float:
     """從 time 到下一個曆時交界還有幾個世界秒。"""
     return (math.floor(time / cal_hour + EPS_CAL_HOURS) + 1) * cal_hour - time
@@ -485,7 +534,9 @@ def advance_world_state(
             msgs += sim_tick(vehicle, content, hours, rng)
         if crossed and not season.ended:
             msgs += season_hour(vehicle, content, rng)
-        if not season.ended and season.time >= season_length_days(season, content) * DAY:
+            if not season.ended and decisive_ending(vehicle, content) is not None:  # 決定性勝利：當曆時收季（計畫 T9）
+                msgs += end_season(vehicle, content, world, rng)
+        if not season.ended and _season_due(season, content):
             msgs += end_season(vehicle, content, world, rng)
     return msgs
 

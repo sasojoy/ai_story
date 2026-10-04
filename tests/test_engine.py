@@ -4736,3 +4736,40 @@ def test_a_shelved_showdown_opens_again_next_season_once(content, world):
         game.advance(calendar.cal_hour_seconds(content) * 7)
         assert world.get_battle().record_id == battle.record_id
     assert world.get_season().showdowns_opened == {"changshe_fire": "changshe_fire"}
+
+
+# ── 季末時決戰還在打（計畫 T9 Review Focus 5）──────────────────────
+
+
+def test_ending_once_when_battle_running(content, world):
+    """第一季排定的季末到了、長社還在打：結局只算一次、季末公告一則、決戰收兵不算結果（戰況不動）、
+    參戰者之後同步收到「沒打完、不算勝負」那一則（沒有戰報）、階段是休季。"""
+    game = _showdown_game(content, world)
+    _to_showdown(game, "changshe_fire", after=2.0)
+    with at(game, game.now):
+        game.choose("battle:join:guan")
+    start = game.world.get_battle().muster_deadline_real + 1
+    with at(game, start):
+        game.choose("battle:act:guan_safe")  # 打到一半：還在交戰
+    assert game.world.get_battle().phase == "active"
+    trends = dict(game.world.get_season().trends)
+
+    game.advance(game.state.world.schedule["finale"] + 1 - game.state.world.time)
+    season = game.world.get_season()
+    assert season.ended and season.ending_id and season.timeline["xiaquyang"].key == season.ending_id
+    assert sum(1 for r in season.chronicle if r.text == f"賽季落幕：{season.ending_title}") <= 1
+    assert game.world.season_phase() == "resting"
+
+    with at(game, start + 1):
+        assert ids(game) == ["season:resting"]  # 畫面刷新那一下把沒打完的收起來
+    assert game.world.get_battle() is None
+    after = game.world.get_season()
+    # 決戰的結果沒有套：潁川（長社的戰線）沒動，時間軸沒有長社（之後別的大事照常動了南陽、冀州）
+    assert after.trends["yingru"] == trends["yingru"] and "changshe_fire" not in after.timeline
+    (_, shelved), = [b for b in game.world.ended_battles() if b[1].battle_id == "changshe_fire"]
+    assert shelved.unfinished
+    game.sync(start + 10)
+    assert SHELVED_LINE in game.state.journal[0].lines and game.state.journal[0].battle_id is None
+    assert game.state.battles == []
+    game.advance(60)  # 收季之後再推也不會再收一次
+    assert game.world.get_season().ending_id == season.ending_id

@@ -592,11 +592,13 @@ def test_real_timetable_runs_a_whole_condensed_season():
 
     c = load_content(CONTENT_DIR, profile="weekend")
     c.scenario.sim_players, c.scenario.thresholds, c.scenario.world_events = [], [], []  # 只看時刻表：舊聲勢門檻收季另外測
+    c.config.geju_chaos_per_day = 0.0  # 割據不漲：沒人玩時三條戰線一直在亂局，割據到 85 會在第 5 週以「群雄並起」收季（T9，已回報 PM 待決）；這裡測的不是它
     state = GameState(player=PlayerState(name="", location=c.scenario.start_location, stats={}, stamina=0),
                       world=fresh_season(c))
     msgs = advance_world_state(state.world, c, 2.5 * 86400, _random.Random(0))
-    expected = [e.id for e in c.timetable if e.kind != "finale"]  # timetable.json 照週次排
+    expected = [e.id for e in c.timetable]  # timetable.json 照週次排；季末那件（下曲陽）收季時由 T9 寫在最後
     assert list(state.world.timeline) == expected and state.world.showdowns_waiting == []
+    assert state.world.timeline["xiaquyang"].key == state.world.ending_id
     assert state.world.timeline["guangzong"].time == state.world.time  # 廣宗之後沒有大事：收季前才結算
     announced = len(expected) - (state.world.timeline["qinjie_slays_zhangmancheng"].key == "skip")
     assert sum(m.startswith("【江湖大事】") for m in msgs) == announced
@@ -928,6 +930,7 @@ def test_a_real_weekend_season_opens_and_settles_the_three_showdowns(tmp_path):
 
     c = load_content(CONTENT_DIR, profile="weekend")
     c.config.auto_open_first_season = True
+    c.config.geju_chaos_per_day = 0.0  # 割據不漲：沒人玩時三條戰線一直在亂局，割據到 85 會在第 5 週以「群雄並起」收季（T9，已回報 PM 待決）；這裡測的不是它
     world = open_world(tmp_path / "weekend.db")
     game = Game.new(c, "Rayal", rng=random.Random(0), world=world)
     game.now = 0.0
