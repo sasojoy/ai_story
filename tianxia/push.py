@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 
-from .state import GameState
+from .state import GameState, PlayerState
 
 FRACTION_DIGITS = 9  # 浮點誤差：1.9999999999 要算成 2，不能少推一點
 
@@ -64,3 +64,12 @@ def take_whole(accum: float, added: float) -> tuple[int, float]:
     total = round(accum + added, FRACTION_DIGITS)
     whole = math.trunc(total)
     return whole, round(total - whole, FRACTION_DIGITS)
+
+
+def add_contribution(player: PlayerState, week: int, points: int) -> None:
+    """記貢獻：本季總數與那一週（季曆）的帳。推大勢（Game.push_trend）、挑戰打贏（Game._rout）、伏筆做完、
+    護糧送到都經過這裡，只有這一份寫法（T4 交接備註第 2 條）。0 點什麼都不記（不留下空的一週）。"""
+    if not points:
+        return
+    player.contrib += points
+    player.contrib_weeks[week] = player.contrib_weeks.get(week, 0) + points

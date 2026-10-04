@@ -1911,11 +1911,7 @@ class Game:
             if p.affinities[fig.character] != before:
                 msgs.append(f"{fig.name}情誼 {p.affinities[fig.character] - before:+d}")
         p.snubbed_until[fid] = self.now + cfg.snub_hours * HOUR
-        gained = cfg.figure_defeat_prestige * cfg.contrib_per_push
-        if gained:
-            week = calendar.point(w.time, c, w).week
-            p.contrib += gained
-            p.contrib_weeks[week] = p.contrib_weeks.get(week, 0) + gained
+        push.add_contribution(p, calendar.point(w.time, c, w).week, cfg.figure_defeat_prestige * cfg.contrib_per_push)
         # T6 的呼叫點：「打擊大勢人物」軍令在這裡記一次進度——
         #   msgs += orders.credit(s, c, p.faction, p.name, kind="challenge", location=p.location,
         #                         front=figures.state_of(s, c, fid).front, figure=fid)
@@ -2000,9 +1996,7 @@ class Game:
             goal = faction.goals.get(trend_id, 0) if faction is not None else 0
             if goal and (goal > 0) == (delta > 0):  # 替自己陣營的目標方向推；逆著推、這條線沒有目標都不記
                 gained = push.contribution(abs(delta), pushed, moved, cfg.contrib_per_push, cfg.over_cap_contrib_ratio)
-                if gained:
-                    p.contrib += gained
-                    p.contrib_weeks[at.week] = p.contrib_weeks.get(at.week, 0) + gained
+                push.add_contribution(p, at.week, gained)
             w.active_pushers.setdefault(p.faction, {})[p.name] = now
         w.active_pushers = push.drop_stale(w.active_pushers, now, window)  # 順手清掉超過時窗的人，名單不會一直長
         return msgs

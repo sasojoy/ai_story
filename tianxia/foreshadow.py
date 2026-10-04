@@ -17,7 +17,7 @@ import math
 import random
 from collections.abc import Iterator
 
-from . import calendar, figures, materials, timetable
+from . import calendar, figures, materials, push, timetable
 from .journal import fragment_line
 from .models import (
     Check, Content, FsAsk, FsChain, FsFinal, FsFragment, FsItem, FsRequires, FsStep, FsWrong, Squad,
@@ -607,11 +607,7 @@ def _complete(state: GameState, content: Content, c: FsChain, now: float) -> Non
     其他陣營寫第三方。不發任何傳聞、不推大勢（伏筆文件 2.4）。"""
     p, w = state.player, state.world
     p.fs_done.append(c.id)
-    gained = content.config.foreshadow_contrib
-    if gained:
-        week = calendar.point(now, content, w).week
-        p.contrib += gained
-        p.contrib_weeks[week] = p.contrib_weeks.get(week, 0) + gained
+    push.add_contribution(p, calendar.point(now, content, w).week, content.config.foreshadow_contrib)
     shown = display_name(state) if p.anonymous else None  # 匿名的人在公告與江湖史上是「某位少俠」；真名照記（T9 的稱號）
     if c.side in LOCK_SIDES:
         lock = Lock(side=c.side, name=p.name, time=now, shown=shown)

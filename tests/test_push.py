@@ -428,3 +428,14 @@ def test_the_new_fields_survive_a_save_and_reload(s1, world):
     world.save_season(season)
     stored = world.get_season()
     assert (stored.trend_accum, stored.active_pushers) == ({"kou": 0.25}, {"huang": {"沈浪": 123.5}})
+
+
+def test_add_contribution_records_the_total_and_the_week():
+    """貢獻帳只有一份寫法（T4 交接備註第 2 條）：推大勢、挑戰打贏、伏筆、護糧都經過它。"""
+    from tianxia.state import PlayerState
+
+    p = PlayerState(name="甲", location="x", stats={}, stamina=0)
+    push.add_contribution(p, 3, 10)
+    push.add_contribution(p, 3, 5)
+    push.add_contribution(p, 4, 0)  # 0 不留下空的一週
+    assert p.contrib == 15 and p.contrib_weeks == {3: 15}
