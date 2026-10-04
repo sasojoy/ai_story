@@ -112,6 +112,16 @@ def test_markdown_from_the_engine_cannot_inject_html():
     assert server.md("**名號** <script>x</script>") == "<p><strong>名號</strong> &lt;script&gt;x&lt;/script&gt;</p>\n"
 
 
+def test_main_view_sends_the_fronts_only_with_the_switch_on(game, monkeypatch):
+    assert "fronts" not in server.look(game, server.main_view)  # 開關關著：江湖頁照舊
+    monkeypatch.setattr(server.CONTENT.config, "season_one", True)
+    assert "fronts" not in server.look(game, server.main_view)  # 這一季沒蓋「開」的章：照舊
+    game.world.mutate_season(lambda season: setattr(season, "season_one", True))
+    view = server.look(game, server.main_view)
+    assert [(f["name"], f["value"]) for f in view["fronts"]] == [("潁川汝南", 40), ("南陽", 35), ("冀州", 55)]
+    assert view["status"]["stances"] == {"guan": 55, "huang": 45, "haoqiang": 10}
+
+
 def test_admin_choices_follow_the_switch(game, monkeypatch):
     """管理者推大勢的下拉選單：開關關著跟 beta 一樣；開關打開但這一季沒蓋章也一樣；這一季蓋了「開」的章時
     列三條戰線與割據，不列黃巾聲勢（由戰線合成）。"""

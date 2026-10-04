@@ -249,6 +249,14 @@ details.fold.bulletin > .fold-body { border-color: var(--gold); max-height: 50vh
 .mini { border-radius: var(--radius); overflow: hidden; border: 1px solid var(--line); margin-bottom: 12px; cursor: pointer; position: relative; background: #e9e2cc; }
 .mini svg { height: 150px !important; }
 .mini::after { content: "展開輿圖 ›"; position: absolute; right: 8px; bottom: 8px; font-size: 12px; background: var(--card); border: 1px solid var(--line); padding: 2px 8px; border-radius: 8px; }
+/* 江湖頁的三條戰況（第一季濃縮版，伺服器有送才畫）：三格並排一行；條的底色是官軍（石青），黃的那一截是黃巾 */
+.fronts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px; }
+.front { min-width: 0; padding: 6px 8px 7px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
+.front-head { display: flex; justify-content: space-between; gap: 4px; font-size: 12px; line-height: 1.4; }
+.front-head span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-2); }
+.front-head b { font-variant-numeric: tabular-nums; }
+.front-bar { height: 6px; margin-top: 4px; border-radius: 3px; background: var(--kuai); overflow: hidden; }
+.front-bar > i { display: block; height: 100%; background: var(--gold); transition: width 0.4s ease; }
 .linkish { border: 0; background: none; color: var(--accent); cursor: pointer; padding: 6px 2px; font-size: 14px; }
 
 /* ── 修練 ── */

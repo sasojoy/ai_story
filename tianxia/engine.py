@@ -26,7 +26,7 @@ from .models import (
 from .ollama_client import OllamaClient
 from .rules import (
     GEJU, apply_effect, change_trend, check_who, current_day, fill_marks, free_text_rate, front_ids, in_chaos, is_revealed,
-    pushable, rate_words, recompute_trends, resolve_goals, resolve_trend, resolve_trends, roll_check, season_one,
+    pushable, rate_words, recompute_trends, resolve_goals, resolve_trend, resolve_trends, roll_check, season_one, stances,
     trend_name, trend_shown, trend_value, world_trend_value,
 )
 from .sqlite_world import open_world
@@ -2545,7 +2545,7 @@ class Game:
             mate_now, mate_cap = team.member_neili(c, progress)
             mates.append({"name": c.characters[cid].name, "level": progress.level,
                           "hp": int(mate_now), "hp_max": int(mate_cap)})
-        return {
+        data = {
             "name": p.name,
             "affiliation": "・".join(name for name in (sect, faction) if name) or "散人",
             "anonymous": p.anonymous,
@@ -2570,6 +2570,12 @@ class Game:
             "journey": None if p.journey is None else self._journey_line(),
             **self._calendar_status(),  # 第一季：季曆與下一件大事的倒數；開關關著時沒有這兩欄
         }
+        if season_one(c, w):  # 第一季濃縮版：江湖頁的三條戰況與三方態勢；開關關著時沒有這兩個鍵，畫面照舊
+            data["fronts"] = [
+                {"id": tid, "name": trend_name(c, tid), "value": trend_value(s, c, tid)} for tid in front_ids(c)
+            ]
+            data["stances"] = stances(s, c)
+        return data
 
     def _calendar_status(self) -> dict:
         """狀態列的季曆（第 N 週、週幾、幾點）與下一件大事的倒數。倒數是現實秒：(大事時刻 − 世界秒) ÷ time_scale。"""

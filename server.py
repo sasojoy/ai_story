@@ -241,7 +241,7 @@ def main_view(game: Game) -> dict:
     card = game.battle_card() if game.shows_battle_card() else None
     status, quest, scene = game.status_data(), md(game.quest_text()), md(game.scene_text())
     options = game.options()  # 照原本的順序：狀態、主線、場景先讀，選單（會推進全服戰鬥）最後
-    return {
+    view = {
         "status": status,
         "quest": quest,
         "scene": scene,
@@ -264,6 +264,9 @@ def main_view(game: Game) -> dict:
         "chronicle": md(game.chronicle_text()),
         "admin": game.is_admin(),
     }
+    if "fronts" in status:  # 第一季濃縮版才有：江湖頁的三條戰況（開關關著時不送，頁面照舊）
+        view["fronts"] = status["fronts"]
+    return view
 
 
 def menxia_view(game: Game, person: str | None = None) -> dict:

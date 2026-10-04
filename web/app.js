@@ -42,6 +42,8 @@
     { tab: "practice", name: "去修練" },
     { tab: "craft", name: "去煉製" },
   ];
+  // 三方態勢（第一季設計 4.4，status.stances 的鍵）：狀態列展開時那一行；第一季濃縮版才有
+  const STANCE_NAMES = [["guan", "官軍"], ["huang", "黃巾"], ["haoqiang", "豪強"]];
   // 手機寬度：第一次打開輿圖時，手機照原尺寸，寬螢幕照框寬（最多原尺寸），都對準所在地（見 mapReady）
   const PHONE = window.matchMedia ? window.matchMedia("(max-width: 767px)") : null;
 
@@ -227,6 +229,7 @@
       ${S.showMore ? `<div class="more-stats">
         ${s.minor.map(([k, v]) => `${esc(k)} ${v}`).join("　")}　｜　${s.attrs.map(([k, v]) => `${esc(k)} ${v}`).join("　")}
         ${team ? `<br>${team}` : ""}
+        ${s.stances ? `<br>態勢　${STANCE_NAMES.map(([id, name]) => `${name} ${s.stances[id]}`).join("・")}` : ""}
       </div>` : ""}
       ${s.hint ? `<div class="more-stats"><span class="hint">${esc(s.hint)}</span></div>` : ""}`;
   }
@@ -395,6 +398,13 @@
     return (strong || box.content).textContent.trim();
   }
 
+  // 第一季濃縮版的三條戰況（伺服器有送 fronts 才畫）：0 是官軍穩控、100 是黃巾控制，條上黃的那一截是黃巾佔的
+  function frontsHtml(fronts) {
+    return `<div class="fronts" role="group" aria-label="戰況：0 官軍穩控，100 黃巾控制">${fronts.map((f) => `
+      <div class="front"><div class="front-head"><span>${esc(f.name)}</span><b>${f.value}</b></div>
+        <div class="front-bar" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${f.value}" aria-label="${esc(f.name)}"><i style="width:${pct(f.value, 100)}%"></i></div></div>`).join("")}</div>`;
+  }
+
   function pageJianghu() {
     const m = S.main;
     // 「剛剛」（A4）：預設只露出開頭幾行，太長的（例如新角色的開場故事）收著、點「展開全文」看完，不在卡片裡捲。
@@ -441,8 +451,10 @@
           <summary><span class="bulletin-head">📣 本週江湖大事（${m.bulletin.length}）</span><span class="bulletin-titles">${esc(m.bulletin.map(bulletinTitle).join("、"))}</span></summary>
           <div class="fold-body">${m.bulletin.map((b) => `<div class="bulletin-item">${b}</div>`).join("")}</div></details>`
       : "";
+    // 三條戰況排在行動列下面、小地圖上面，不擠掉第一屏的公告卡、「剛剛」、場景與行動列
+    const fronts = m.fronts ? frontsHtml(m.fronts) : "";
     // 劇情文字在上、行動在下（企劃者 2026-10-04）。行動列只有一排，375×812 上「剛剛」、場景與整排行動都在第一屏
-    return `${board}${quest}${now}${scene}${free}${menu}${tail}`;
+    return `${board}${quest}${now}${scene}${free}${menu}${fronts}${tail}`;
   }
 
   // ── 修練 ──

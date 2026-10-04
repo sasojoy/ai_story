@@ -402,3 +402,45 @@ def test_huangjin_stays_the_weighted_value_after_every_kind_of_push(on):
     for _ in range(24):
         rules.geju_tick(s, on, 1)
     assert consistent()
+
+
+# ── Task 5：狀態列 ───────────────────────────────────────
+
+
+def test_status_shows_three_fronts_and_stances(real):
+    game = _game(real)
+    data = game.status_data()
+    assert "fronts" not in data and "stances" not in data  # 開關關著：狀態列照舊
+    real.config.season_one = True
+    game.state.world.season_one = True  # 開季時才補蓋「開」的章的季：割據沒存過，讀起始值 10
+    _set_fronts(game.state, 30, 70, 90)
+    data = game.status_data()
+    assert data["fronts"] == [
+        {"id": "yingru", "name": "潁川汝南", "value": 30},
+        {"id": "nanyang", "name": "南陽", "value": 70},
+        {"id": "jizhou", "name": "冀州", "value": 90},
+    ]
+    assert data["stances"] == {"guan": 36, "huang": 64, "haoqiang": 10}  # 10.5＋17.5＋36＝64
+
+
+def test_switch_on_but_season_unstamped_behaves_like_switch_off(real):
+    """Review Focus 1(a)：開關打開時 beta 那一季還在跑（章是「關」）——一切照 beta：黃巾聲勢不跳成加權值、戰線都算
+    黃巾聲勢、遊歷推黃巾聲勢、推黃巾聲勢不丟例外、狀態列、地圖、大勢頁照舊。新規則等開關打開後開的下一季。"""
+    real.scenario.sim_players = []
+    game = _game(real)
+    s = game.state
+    real.config.season_one = True
+    assert s.world.season_one is False and not rules.season_one(real, s.world)
+    world.advance_world_state(s.world, real, 3600, random.Random(0))
+    assert s.world.trends == {"huangjin": 25, "yuxi": 0}  # 沒有重算成 45、沒有割據
+    assert rules.trend_value(s, real, "huangjin") == 25
+    assert rules.resolve_trend(real, s.world, "front", "changshe") == "huangjin"
+    s.player.faction = "guan"
+    s.player.location = "changshe"
+    assert game.train_trend_push() == {"huangjin": -1}
+    rules.change_trend(s, real, "huangjin", 5)  # 照 beta 推得動
+    assert s.world.trends["huangjin"] == 30
+    assert "fronts" not in game.status_data() and "stances" not in game.status_data()
+    regions = {r.id: atlas.region_trends(s, real, r) for r in real.map.regions}
+    assert regions["jizhou"] == [("黃巾聲勢", 30)] and regions["luoyang"] == []
+    assert "潁川汝南" not in game.trends_text()
