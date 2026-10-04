@@ -12,7 +12,7 @@ from tianxia.mapview import (
     LEGEND_LAYERS, MINI_HEIGHT, NODE_FILL, ROUTE_STROKE, SELECT_STROKE, YOU_SIZE, node_shape, render_map,
     render_minimap, text_box, text_width,
 )
-from tianxia.models import Connection, Location, Terrain
+from tianxia.models import Connection, Location, MapRiver, Terrain
 from tianxia.state import Journey, Rumor
 
 
@@ -487,6 +487,21 @@ def test_terrain_steps_aside_for_places_and_roads(content):
 def test_real_terrain_steps_aside_for_every_place_and_road(real):
     pieces = terrain(real)
     assert len(pieces) > 300 and trampled(pieces, real) == []
+
+
+def test_terrain_steps_aside_for_rivers(content):
+    content.map.terrain = [WOODS]
+    content.map.rivers = []
+    dry = terrain(content)
+    content.map.rivers = [MapRiver(points=[[20, 150], [380, 150]], width=(6, 10))]  # 橫過林地、離地點與路都很遠
+    pieces = terrain(content)
+    bank = 10 / 2 + 2  # 河岸：從河中線算，下游河寬的一半再加 2
+
+    def wet(found):
+        return [p.box for p in found if p.box[1] < 150 + bank and p.box[3] > 150 - bank]
+
+    assert wet(dry)  # 沒有河時這一帶種著樹：下面的斷言才真的咬得到
+    assert wet(pieces) == [] and 0 < len(pieces) < len(dry)  # 有河時，河岸讓出來，兩岸照樣有樹
 
 
 def test_terrain_is_worked_out_once_per_content_but_never_stale(content):
