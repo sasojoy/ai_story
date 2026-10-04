@@ -542,6 +542,11 @@ def _default_explore_mix() -> list[ExploreMix]:
     ]
 
 
+# T2 之前開的季沒有蓋章，那些季都是用預設設定開的，所以長度就是這個預設值（FB-037）。
+# 不是「現在載入的設定」：週末設定的 2.5 天只管有蓋章的新季。
+DEFAULT_SEASON_DAYS = 14
+
+
 class Config(_Strict):
     stamina_max: int = 150
     stamina_regen_seconds: float = 180  # 自然回復：每幾秒（遊戲時間）回 1 點體力（地圖擴充設計第二節：每 3 分鐘 1 點）
@@ -576,7 +581,7 @@ class Config(_Strict):
         default_factory=lambda: {"explore": 10, "train": 10, "socialize": 5}
     )
     time_scale: float = 1.0
-    season_days: float = 14
+    season_days: float = DEFAULT_SEASON_DAYS
     # 第一季濃縮版的規則（預設關，beta 那一季照舊）：季曆、時刻表、三條戰線都掛在這個開關後面。
     # 做到一半的 main 也會換上試玩伺服器，開關關著才不會把正在跑的那一季弄壞；
     # 全部做完、開測前由 PM 跟季長（season_days 改 2.5）一起打開（計畫 2026-10-04-第一季濃縮版）

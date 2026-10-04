@@ -308,6 +308,23 @@ def test_the_season_ends_at_its_own_stamped_length(content):
     assert not stamped.ended
     advance_world_state(stamped, content, 9 * 86400, random.Random(0))
     assert stamped.ended
-    old = fresh_season(content).model_copy(update={"length_days": None})  # T2 之前開的季：沒有章
-    advance_world_state(old, content, 2.5 * 86400, random.Random(0))
+    old = fresh_season(content).model_copy(update={"length_days": None})  # T2 之前開的季：沒有章，一律照開季時的長度
+    advance_world_state(old, content, 2.5 * 86400, random.Random(0))  # 換成 2.5 天的設定也不收（FB-037）
+    assert not old.ended
+    advance_world_state(old, content, 12 * 86400, random.Random(0))
     assert old.ended
+
+
+def test_an_unstamped_season_keeps_the_length_it_opened_with(content):
+    """FB-037：T2 之前開的季（length_days 是 None）都是用預設設定開的，所以一律是 Config.season_days 的預設值 14 天，
+    不管現在載入的設定是多少（週末設定 2.5 天只管有蓋章的新季）；蓋了章的季照章。"""
+    from tianxia.models import DEFAULT_SEASON_DAYS
+    from tianxia.world_state import fresh_season, season_length_days
+
+    assert DEFAULT_SEASON_DAYS == 14
+    content.config.season_days = 2.5
+    old = fresh_season(content).model_copy(update={"length_days": None})
+    assert season_length_days(old, content) == 14
+    assert season_length_days(fresh_season(content), content) == 2.5  # 蓋了章的照章
+    content.config.season_days = 9
+    assert season_length_days(old, content) == 14 and season_length_days(fresh_season(content), content) == 9

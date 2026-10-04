@@ -23,7 +23,7 @@ from pydantic import BaseModel, Field
 
 from .battle_instance import BattleInstance, BattleRoundRecord
 from .martial_arts import MartialArt
-from .models import BattleDef, Content
+from .models import DEFAULT_SEASON_DAYS, BattleDef, Content
 from .state import Rumor, WorldState
 
 SeasonPhase = Literal["preparing", "running", "resting"]  # 籌備（管理者還沒開季）／進行中／休季（這一季已結束）
@@ -109,8 +109,9 @@ def stamp_season(season: WorldState, content: Content) -> None:
 
 
 def season_length_days(season: WorldState, content: Content) -> float:
-    """這一季有幾個遊戲日：照開季時蓋的章；T2 之前開的季沒有章，照現在的設定。"""
-    return season.length_days if season.length_days is not None else content.config.season_days
+    """這一季有幾個遊戲日：照開季時蓋的章；T2 之前開的季沒有章，一律照它開季時的長度（DEFAULT_SEASON_DAYS，
+    那些季都是用預設設定開的），不跟著現在載入的設定走——換成週末設定的 2.5 天也不會把它收掉（FB-037）。"""
+    return season.length_days if season.length_days is not None else DEFAULT_SEASON_DAYS
 
 
 def jade_seal_summary(fragments: list[JadeSealFragment]) -> str:

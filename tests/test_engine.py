@@ -4141,6 +4141,25 @@ def test_old_season_not_replayed_when_switch_turns_on(content, world):
     assert "第1週・週一 01:00　張角率三十六方同時起義。" in current and "第6天　賽季落幕" in past
 
 
+def test_an_unstamped_season_is_not_cut_short_by_the_weekend_profile(content, world):
+    """FB-037：沒蓋章的舊季（T2 之前開的，例如試玩伺服器那一季）一套週末設定，不會因為設定的季長是 2.5 天，
+    第 4 天就自己收掉，狀態列也還是寫「共 14 天」。蓋了章的季才照章（見 test_world 與 test_status_shows_calendar…）。"""
+    install_season_one(content)  # 設定是週末的：開、2.5 天
+    game = Game.new(content, "沈浪", rng=random.Random(1), world=world)
+    game.sync(0.0)
+    world.mutate_season(lambda s: (setattr(s, "season_one", False), setattr(s, "length_days", None), s.schedule.clear()))
+    game.sync(1.0)  # 拉回改過章的那一份
+    game.advance(4 * DAY)
+    season = world.get_season()
+    assert not season.ended and season.time >= 4 * DAY
+    assert world.season_phase() == "running"
+    assert game.status_data()["season_days"] == 14
+    assert "共 14 天" in game.status_text()
+    assert "calendar" not in game.status_data()  # 時刻表照舊不跑
+    game.advance(11 * DAY)  # 開季時就是 14 天
+    assert world.get_season().ended
+
+
 def test_status_shows_calendar_and_next_event(content, world):
     """狀態列的季曆與下一件大事的倒數（真實秒）；決戰照排定的時間算。舊的 day／clock／season_days 照舊在。"""
     install_season_one(content)
