@@ -873,8 +873,8 @@ DIALOGUE_TURN = companion_agent.CompanionTurn(
 
 
 def _stand_by_a_figure(game):
-    """站到正式內容裡盧植所在的地點（盧植營，只有他一位大勢人物：交遊直接找他），有他的結識旗標所以見得到；
-    福緣設成已領，交遊不會先觸發福緣。兩位以上人物的地點（例如廣宗）交遊不開口，要「求見」指名。"""
+    """站到正式內容裡盧植所在的地點（盧植營，只有他一位大勢人物：交友直接找他），有他的結識旗標所以見得到；
+    福緣設成已領，交友不會先觸發福緣。兩位以上人物的地點（例如廣宗）交友不開口，要「求見」指名。"""
     game.state.player.location = "luzhi_camp"
     game.state.player.flags.add("結識:luzhi")
     game.state.player.fortune = True
@@ -978,7 +978,7 @@ def test_a_changed_option_list_while_generating_falls_back_to_generating_in_the_
 
 
 def _stand_in_a_hall(game):
-    """站到廣宗（張角、張梁兩位大勢人物：交遊不開口，要「求見」指名），有張梁的結識旗標所以見得到他，
+    """站到廣宗（張角、張梁兩位大勢人物：交友不開口，要「求見」指名），有張梁的結識旗標所以見得到他，
     張角名望不到見不到；福緣設成已領。"""
     game.state.player.location = "guangzong"
     game.state.player.flags.add("結識:zhangliang")
@@ -987,7 +987,7 @@ def _stand_in_a_hall(game):
 
 def test_opening_and_closing_the_audience_list_never_asks_the_model(game, lock_events):
     _stand_in_a_hall(game)
-    assert "act:socialize" not in [o.id for o in game.options()]  # 廣宗沒有交遊事件：兩位人物都要求見
+    assert "act:socialize" not in [o.id for o in game.options()]  # 廣宗沒有交友事件：兩位人物都要求見
     with mock.patch.object(server, "prepare_dialogue", side_effect=AssertionError("打開或收起名單不必備料")), \
             mock.patch.object(companion_agent, "generate_turn", side_effect=AssertionError("不該呼叫模型")):
         server.choose(game, "act:call")
@@ -1033,15 +1033,15 @@ class _PicksEvent(random.Random):
 
 
 def test_socializing_at_the_generals_mansion_reaches_yuanshaos_meeting(game):
-    """大將軍府有何進、袁紹兩位人物，也有袁紹的結識事件：交遊只走事件、從不開口，所以結識事件發得出來。"""
+    """大將軍府有何進、袁紹兩位人物，也有袁紹的結識事件：交友只走事件、從不開口，所以結識事件發得出來。"""
     game.state.player.location = "dajiangjun_fu"
-    game.state.player.stats["fame"] = 99  # 兩位都見得到也一樣：交遊不找人
+    game.state.player.stats["fame"] = 99  # 兩位都見得到也一樣：交友不找人
     game.state.player.fortune = True
     ids = [o.id for o in game.options()]
     assert "act:socialize" in ids and "act:call" in ids
     assert not game.socialize_starts_dialogue()
     game.rng = _PicksEvent("meet_yuanshao")
-    with mock.patch.object(companion_agent, "_generate", side_effect=AssertionError("交遊不該開口對話")):
+    with mock.patch.object(companion_agent, "_generate", side_effect=AssertionError("交友不該開口對話")):
         game.choose("act:socialize")
     assert game.state.pending_event == "meet_yuanshao"
     assert game.state.player.pending_companion is None

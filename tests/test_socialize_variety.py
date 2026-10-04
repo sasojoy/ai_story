@@ -1,4 +1,4 @@
-"""城鎮的交遊不能每次都抽到「茶館說書」（2026-10-03：一季重複約 22 次，因為城鎮除了它沒有別的無條件交遊事件）。
+"""城鎮的交友不能每次都抽到「茶館說書」（2026-10-03：一季重複約 22 次，因為城鎮除了它沒有別的無條件交友事件）。
 
 補寫的事件放在 content/events/social_<大區>.json；說書人轉述地方痕跡的段子放在 content/events/tales.json。"""
 from __future__ import annotations
@@ -23,7 +23,7 @@ def content():
 
 
 def _always_available(content, loc_id):
-    """沒有條件、不是一次性的交遊事件：任何玩家在這裡交遊都可能抽到。"""
+    """沒有條件、不是一次性的交友事件：任何玩家在這裡交友都可能抽到。"""
     location = content.locations[loc_id]
     return [
         e for e in content.events.values()
@@ -55,7 +55,7 @@ def test_every_town_has_one_free_text_socialize_event(content):
 
 
 def test_storytellers_retell_every_location_trace(content):
-    """每條地方痕跡都有一則城鎮交遊的說書段子在轉述（多人同服：別人做過的事會在城裡傳開）。"""
+    """每條地方痕跡都有一則城鎮交友的說書段子在轉述（多人同服：別人做過的事會在城裡傳開）。"""
     told = set()
     for e in content.events.values():
         if "socialize" in e.actions:

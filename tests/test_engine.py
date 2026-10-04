@@ -33,7 +33,7 @@ def test_new_game(game):
 
 
 def test_town_options(game):
-    # 小鎮有事件可交遊（拜師）、有可招募的人（韓鐵），沒有敵人所以不能歷練
+    # 小鎮有事件可交友（拜師）、有可招募的人（韓鐵），沒有敵人所以不能遊歷
     assert ids(game) == ["act:explore", "act:socialize", "act:recruit", "move:lake", "act:rest"]
 
 
@@ -381,7 +381,7 @@ def test_continuing_and_leaving_a_dialogue(content, game):
 
 
 def test_socializing_without_a_deep_interaction_companion_falls_through_to_events(game):
-    """小鎮的韓鐵沒有標 deep_interaction：交遊照舊走一般事件（例如拜師），不會誤觸發對話。"""
+    """小鎮的韓鐵沒有標 deep_interaction：交友照舊走一般事件（例如拜師），不會誤觸發對話。"""
     game.choose("act:socialize")
     assert game.state.pending_event == "join"
     assert game.state.player.pending_companion is None
@@ -2398,7 +2398,7 @@ def test_exploring_and_finding_nothing_still_says_so(game):
     assert game.state.player.materials == {}
 
 
-# ── 歷練（第二層：遭遇戰的唯一管道）──────────────────────────
+# ── 遊歷（第二層：遭遇戰的唯一管道）──────────────────────────
 
 
 def test_train_is_offered_only_where_there_are_enemies(game):
@@ -2406,12 +2406,12 @@ def test_train_is_offered_only_where_there_are_enemies(game):
     assert "act:train" not in ids  # 鎮上沒有敵人
     walk_to(game, "lake")  # 湖邊有水寇小隊
     option = next(o for o in game.options() if o.id == "act:train")
-    assert "歷練" in option.label and "水寇小隊" in option.label
+    assert "遊歷" in option.label and "水寇小隊" in option.label
 
 
 def test_training_always_fights_even_though_an_event_would_have_fired(game):
     """探索永遠會撞到事件（pick_event 只在完全沒有候選時才回 None），所以掛在探索後面的
-    遭遇戰分支一次都不會執行——歷練就是為了這件事存在的。"""
+    遭遇戰分支一次都不會執行——遊歷就是為了這件事存在的。"""
     rules.learn_skill(game.state, game.content, "fist")
     walk_to(game, "lake")
     game.rng = FixedRandom(0.99)  # 高到不會觸發戰後事件
@@ -2446,11 +2446,11 @@ def test_the_journal_calls_it_a_training_trip(game):
     walk_to(game, "lake")
     game.rng = FixedRandom(0.99)
     game.choose("act:train")
-    assert any(entry.title == "歷練・湖邊" for entry in game.state.journal)
+    assert any(entry.title == "遊歷・湖邊" for entry in game.state.journal)
 
 
 def test_an_unavailable_dialogue_turn_costs_nothing_and_ends_the_talk(content, game):
-    """模型叫不動：這輪不扣體力、不記好感度與交遊 tag，對話直接結束（不再卡在同一句保底反應裡）。"""
+    """模型叫不動：這輪不扣體力、不記好感度與交友 tag，對話直接結束（不再卡在同一句保底反應裡）。"""
     content.characters["mate"].deep_interaction = True
     with mock.patch.object(companion_agent, "_generate", return_value=FAKE_TURN):
         game.choose("act:socialize")
@@ -2485,7 +2485,7 @@ def _training_factions(content):
 
 @pytest.mark.parametrize("faction, expected", [("huang", 31), ("guan", 29), ("haoqiang", 29), (None, 29)])
 def test_winning_a_training_fight_pushes_the_trend_your_factions_way(content, game, faction, expected):
-    """企劃者決定：歷練推大勢的量照地點，方向照自己陣營的目標；散人和沒有這條線目標的陣營照地點原本的方向。"""
+    """企劃者決定：遊歷推大勢的量照地點，方向照自己陣營的目標；散人和沒有這條線目標的陣營照地點原本的方向。"""
     _training_factions(content)
     game.state.player.faction = faction
     rules.learn_skill(game.state, game.content, "fist")  # 壓倒性的威力，穩贏
@@ -2520,9 +2520,9 @@ def test_training_among_your_own_side_is_labelled_a_drill_not_a_fight(content, g
     walk_to(game, "lake")
     option = next(o for o in game.options() if o.id == "act:train")
     assert (option.label, option.enabled) == ("操練（體力 10・零風險）", True)
-    game.state.player.faction = "guan"  # 換成對頭：照樣是要打的歷練，寫對手與勝算
+    game.state.player.faction = "guan"  # 換成對頭：照樣是要打的遊歷，寫對手與勝算
     option = next(o for o in game.options() if o.id == "act:train")
-    assert option.label.startswith("歷練（體力 10・水寇小隊・")
+    assert option.label.startswith("遊歷（體力 10・水寇小隊・")
 
 
 def test_where_some_squads_are_your_own_the_odds_are_for_the_others(content, game):
@@ -2533,7 +2533,7 @@ def test_where_some_squads_are_your_own_the_odds_are_for_the_others(content, gam
     game.state.player.faction = "huang"
     walk_to(game, "lake")
     label = next(o for o in game.options() if o.id == "act:train").label
-    assert label == f"歷練（體力 10・水寇小隊・{game.odds('thug')}・或與自己人操練）"
+    assert label == f"遊歷（體力 10・水寇小隊・{game.odds('thug')}・或與自己人操練）"
 
 
 def test_train_trend_push_previews_the_push_for_your_faction(content, game):
@@ -2551,7 +2551,7 @@ def test_a_drill_is_journaled_as_a_drill_without_a_battle_card(content, game):
     walk_to(game, "lake")
     game.choose("act:train")
     entry = game.state.journal[0]
-    assert (entry.title, entry.tag, entry.battle_id) == ("歷練・湖邊", "操練", None)
+    assert (entry.title, entry.tag, entry.battle_id) == ("遊歷・湖邊", "操練", None)
     assert entry.changes == ["心得 +10", "經驗 +20（每人）"] and entry.lines == ["（寇亂 +1）"]
     assert game.state.battle_card is None
 
@@ -2600,7 +2600,7 @@ def test_enough_fame_or_a_prior_meeting_opens_the_door(content, game):
 
 def test_three_turns_a_day_with_the_same_figure(content, game):
     _figure(content)
-    game.state.player.fortune = True  # 第二天起交遊會先觸發新立門戶福緣，這裡只測輪數上限
+    game.state.player.fortune = True  # 第二天起交友會先觸發新立門戶福緣，這裡只測輪數上限
     with mock.patch.object(companion_agent, "_generate", return_value=FAKE_TURN):
         game.choose("act:socialize")
         game.choose("talk:0")
@@ -2617,7 +2617,7 @@ def test_three_turns_a_day_with_the_same_figure(content, game):
 
 
 def test_socialize_is_offered_where_a_figure_stands_even_if_you_cannot_meet_him(content, game):
-    """寶洞沒有交遊事件：沒有大勢人物時不給交遊；有一位見不到的大勢人物時照樣給，按下去才知道為什麼見不到。"""
+    """寶洞沒有交友事件：沒有大勢人物時不給交友；有一位見不到的大勢人物時照樣給，按下去才知道為什麼見不到。"""
     game.state.player.location = "cave"
     assert "act:socialize" not in ids(game)
     ch = _figure(content, fame=10)
@@ -2627,7 +2627,7 @@ def test_socialize_is_offered_where_a_figure_stands_even_if_you_cannot_meet_him(
 
 
 def test_a_newcomer_below_the_threshold_gets_the_locations_event_instead_of_a_dialogue(content, game):
-    """小鎮有交遊事件（拜師）也有一位名望不夠的大勢人物：不 mock pick_event，交遊照地點事件走，不算被擋在門外。"""
+    """小鎮有交友事件（拜師）也有一位名望不夠的大勢人物：不 mock pick_event，交友照地點事件走，不算被擋在門外。"""
     _figure(content, fame=10)
     msgs = game.choose("act:socialize")
     assert game.state.player.pending_companion is None
@@ -2639,7 +2639,7 @@ def test_a_newcomer_below_the_threshold_gets_the_locations_event_instead_of_a_di
 
 
 def _open_dialogue(content, game):
-    """停在小鎮、已跟韓鐵開了第一輪對話（選項是「閒聊幾句」「就此告辭」）；福緣設成已領，交遊不會先觸發福緣。"""
+    """停在小鎮、已跟韓鐵開了第一輪對話（選項是「閒聊幾句」「就此告辭」）；福緣設成已領，交友不會先觸發福緣。"""
     _figure(content)
     game.state.player.fortune = True
     with mock.patch.object(companion_agent, "_generate", return_value=FAKE_TURN):
@@ -2674,7 +2674,7 @@ def test_dialogue_request_is_none_for_leaving_and_for_options_that_are_not_offer
     assert game.dialogue_request("talk:leave") is None
     assert game.dialogue_request("talk:2") is None  # 只有兩個選項
     assert game.dialogue_request("talk:x") is None
-    assert game.dialogue_request("act:socialize") is None  # 對話中選單上沒有交遊
+    assert game.dialogue_request("act:socialize") is None  # 對話中選單上沒有交友
 
 
 def test_dialogue_request_for_socialize_is_the_generic_opening(content, game):
@@ -2700,7 +2700,7 @@ def test_dialogue_request_is_none_when_socialize_would_not_open_a_dialogue(conte
     game.state.player.stamina = content.config.stamina_max
     game.state.world.time += 86400 * content.config.fortune_day_min
     game.state.player.fortune = False
-    assert game.dialogue_request("act:socialize") is None  # 福緣先到，交遊不開對話
+    assert game.dialogue_request("act:socialize") is None  # 福緣先到，交友不開對話
 
 
 def test_dialogue_request_is_none_for_a_non_dialogue_option(content, game):
@@ -2748,7 +2748,7 @@ def test_choose_applies_a_prepared_opening_without_calling_the_model(content, ga
 
 
 def test_a_prepared_failure_for_the_opening_refunds_the_socialize_cost(content, game):
-    """鎖外生成失敗（turn=None）：跟鎖內 DialogueUnavailable 完全一樣——退回交遊體力、不開對話、同一句說明。"""
+    """鎖外生成失敗（turn=None）：跟鎖內 DialogueUnavailable 完全一樣——退回交友體力、不開對話、同一句說明。"""
     _figure(content)
     game.state.player.fortune = True
     before = game.state.player.stamina
@@ -2808,7 +2808,7 @@ def test_a_prepared_turn_for_another_companion_or_option_is_ignored(content, gam
 
 
 def test_choose_rejects_a_second_opening_once_a_dialogue_is_already_open(content, game):
-    """連點兩下：第二張單子進鎖時對話已經開了，交遊不在選單上——這是 choose() 自己的「選項可用」檢查擋下的，
+    """連點兩下：第二張單子進鎖時對話已經開了，交友不在選單上——這是 choose() 自己的「選項可用」檢查擋下的，
     不是 prepared 的重驗（重驗見下一個測試）。"""
     _figure(content)
     game.state.player.fortune = True
@@ -2832,7 +2832,7 @@ def test_a_prepared_turn_is_ignored_by_options_that_do_not_use_it(content, game)
 
 
 def test_a_prepared_opening_is_dropped_by_the_recheck_when_the_fortune_comes_due_meanwhile(content, game):
-    """生成的那段時間福緣到期：交遊選項還在、還能按，但這次交遊會先發福緣、不開對話——這才是重驗擋下來的情況。"""
+    """生成的那段時間福緣到期：交友選項還在、還能按，但這次交友會先發福緣、不開對話——這才是重驗擋下來的情況。"""
     _figure(content)
     game.state.player.fortune = True
     prepared = _prepared(game, "act:socialize")
@@ -3468,7 +3468,7 @@ def test_a_loaded_game_starts_its_clock_at_the_last_sync(content, game):
 
 
 def test_the_training_button_shows_the_odds(game):
-    """實機試玩發現的坑：新角色沒有武學時威力是 0、歷練必敗，而落敗現在真的要付氣血與內傷
+    """實機試玩發現的坑：新角色沒有武學時威力是 0、遊歷必敗，而落敗現在真的要付氣血與內傷
     的代價。按鈕上要先講清楚勝算（跟劇情戰的選項同一套慣例）。"""
     walk_to(game, "lake")
     fresh = next(o for o in game.options() if o.id == "act:train")
@@ -3569,8 +3569,8 @@ def test_a_drill_gives_every_fighter_the_exp_too(content, game):
 
 
 def _hall(content, game, mate_fame=0, scholar_fame=0):
-    """把小鎮變成兩位大勢人物的地點：韓鐵、書生（recruit_at 本來就是小鎮）都開深度對話。小鎮有交遊事件（拜師）；
-    福緣設成已領，交遊不會先送福緣。"""
+    """把小鎮變成兩位大勢人物的地點：韓鐵、書生（recruit_at 本來就是小鎮）都開深度對話。小鎮有交友事件（拜師）；
+    福緣設成已領，交友不會先送福緣。"""
     for cid, fame in (("mate", mate_fame), ("scholar", scholar_fame)):
         content.characters[cid].deep_interaction = True
         content.characters[cid].audience_fame = fame
@@ -3591,7 +3591,7 @@ def test_a_place_with_two_figures_and_no_socialize_events_has_no_socialize_optio
     for cid in ("mate", "scholar"):
         ch = content.characters[cid]
         ch.kind, ch.recruit_at, ch.talk_at, ch.deep_interaction = "locked", None, "cave", True
-    game.state.player.location = "cave"  # 寶洞沒有交遊事件
+    game.state.player.location = "cave"  # 寶洞沒有交友事件
     assert "act:socialize" not in ids(game) and "act:call" in ids(game)
 
 
@@ -3599,9 +3599,9 @@ def test_socializing_where_two_figures_stand_never_opens_a_dialogue(content, gam
     _hall(content, game)
     assert not game.socialize_starts_dialogue()
     assert game.dialogue_request("act:socialize") is None
-    with mock.patch.object(companion_agent, "_generate", side_effect=AssertionError("交遊不該開口對話")):
+    with mock.patch.object(companion_agent, "_generate", side_effect=AssertionError("交友不該開口對話")):
         game.choose("act:socialize")
-    assert game.state.pending_event == "join"  # 小鎮的交遊事件（拜師）照常發生
+    assert game.state.pending_event == "join"  # 小鎮的交友事件（拜師）照常發生
     assert game.state.player.pending_companion is None
     game.state.pending_event = None
     with mock.patch("tianxia.engine.pick_event", return_value=None):
@@ -3644,7 +3644,7 @@ def test_calling_on_a_figure_starts_the_dialogue_with_that_figure(content, game)
     assert ids(game) == ["talk:0", "talk:1", "talk:leave"]
     assert game.state.journal[0].title == "求見・書生"
     noted.assert_called_once()
-    assert noted.call_args.args[3] == "socialize"  # 指名求見算一次交遊（新手引導、任務）
+    assert noted.call_args.args[3] == "socialize"  # 指名求見算一次交友（新手引導、任務）
 
 
 def test_the_daily_limit_counts_per_figure(content, game):
@@ -3731,7 +3731,7 @@ def test_a_prepared_failure_for_an_audience_refunds_the_cost(content, game):
 
 
 def test_calling_on_a_figure_never_delivers_the_fortune(content, game):
-    """福緣到期也一樣：求見是指名拜會，直接開口對話，福緣留給交遊或之後自己到。"""
+    """福緣到期也一樣：求見是指名拜會，直接開口對話，福緣留給交友或之後自己到。"""
     _hall(content, game)
     game.state.player.fortune = False
     game.state.world.time += 86400 * content.config.fortune_day_min

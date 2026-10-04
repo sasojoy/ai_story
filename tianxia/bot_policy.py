@@ -18,10 +18,10 @@ REWARD_STATS = ("str", "agi", "con", "wis", "silver", "fame", "xinde")
 TREND_WEIGHT = 10.0  # 推大勢一點，抵得過十點獎勵
 JOIN_BATTLE_SCORE = 100.0
 ACT_SCORES = {"explore": 1.0, "socialize": 0.8}
-TRAIN_SCORE = 0.6  # 歷練本身的分數（低於探索）；對自己陣營有利的地點再加上大勢分
+TRAIN_SCORE = 0.6  # 遊歷本身的分數（低於探索）；對自己陣營有利的地點再加上大勢分
 HOME_MOVE_SCORE = 0.3  # 往自己陣營投靠點一帶走
 AWAY_MOVE_SCORE = 0.1
-TRAIN_MOVE_SCORE = 0.5  # 往「歷練對自己陣營有利」的地點走，額外加分
+TRAIN_MOVE_SCORE = 0.5  # 往「遊歷對自己陣營有利」的地點走，額外加分
 PRACTICE_CHANCE = 0.2  # 每次行動順便鍛鍊一門的機率（練功不花心得，不能每次都練）
 SKILL_NAME_TRIES = 5
 
@@ -94,7 +94,7 @@ def pick(game: Game, options: list[Option], profile: BotProfile, rng: random.Ran
 
 
 def score(game: Game, option: Option, profile: BotProfile) -> float | None:
-    """選項的分數；None＝假人不會選（別的陣營的投靠、閒聊或求見大勢人物、只會被擋在門外的交遊、投靠的確認畫面另外處理）。"""
+    """選項的分數；None＝假人不會選（別的陣營的投靠、閒聊或求見大勢人物、只會被擋在門外的交友、投靠的確認畫面另外處理）。"""
     kind, _, arg = option.id.partition(":")
     if kind == "battle":
         return _battle_score(game, arg)
@@ -127,7 +127,7 @@ def effect_score(effect: Effect, goals: dict[str, int]) -> float:
 
 
 def _train_value(game: Game, profile: BotProfile, loc_id: str | None = None) -> float:
-    """在這個地點（預設所在地）歷練對自己陣營的大勢分（同 effect_score 的一點抵十分）。"""
+    """在這個地點（預設所在地）遊歷對自己陣營的大勢分（同 effect_score 的一點抵十分）。"""
     goals = _goals(game, profile)
     return TREND_WEIGHT * sum(goals.get(t, 0) * d for t, d in game.train_trend_push(loc_id).items())
 

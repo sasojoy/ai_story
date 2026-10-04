@@ -194,7 +194,7 @@ def prepare_dialogue(game: Game, option_id: str) -> companion_agent.PreparedTurn
 
 
 def may_generate_dialogue(option_id: str) -> bool:
-    """這個選項按下去可能呼叫對話模型，要走鎖外生成（見 prepare_dialogue）：交遊、對話的 talk:N、求見時指名的
+    """這個選項按下去可能呼叫對話模型，要走鎖外生成（見 prepare_dialogue）：交友、對話的 talk:N、求見時指名的
     call:<人物>。告辭（talk:leave）與收起求見名單（call:back）永遠不會，不必多繞一趟備料的鎖。"""
     if option_id == "act:socialize":
         return True

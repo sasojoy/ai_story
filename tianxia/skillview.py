@@ -70,7 +70,7 @@ def craft_line(
     if len(material_ids) != craft.MATERIALS_PER_CRAFT:
         return (
             f"**煉製**　選 {craft.MATERIALS_PER_CRAFT} 樣素材煉成一門功法。凡品配方不花心得；"
-            f"用到靈品、天品要花心得（歷練打贏、操練、閉關都能得到）。目前心得 {xinde}。"
+            f"用到靈品、天品要花心得（遊歷打贏、操練、閉關都能得到）。目前心得 {xinde}。"
         )
     price = craft.cost(content, material_ids)
     names = "＋".join(content.materials[mid].name for mid in material_ids if mid in content.materials)

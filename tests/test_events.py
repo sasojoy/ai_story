@@ -32,7 +32,7 @@ def test_the_common_pool_never_holds_once_or_qiyu_events(state, content):
     rng = random.Random(0)
     assert pick_event(state, content, "explore", rng, pool="common") is None
     assert pick_event(state, content, "explore", rng, pool="rare").id == "scroll"
-    assert pick_event(state, content, "explore", rng).id == "scroll"  # 不指定池子＝照舊（歷練、交遊用）
+    assert pick_event(state, content, "explore", rng).id == "scroll"  # 不指定池子＝照舊（遊歷、交友用）
     content.events["scroll"].once = False  # 只是奇遇、不是一次性：一樣不進可重複的池子
     assert pick_event(state, content, "explore", rng, pool="common") is None
     content.events["scroll"].once, content.events["scroll"].qiyu = True, False  # 只是一次性
