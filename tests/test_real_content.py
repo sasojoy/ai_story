@@ -530,3 +530,157 @@ def test_real_timetable_runs_a_whole_condensed_season():
     assert list(state.world.timeline) == expected
     assert sum(m.startswith("【江湖大事】") for m in msgs) == len(expected) - (state.world.timeline["qinjie_slays_zhangmancheng"].key == "skip")
     assert state.world.ended  # 季末照舊收季（T9 換成下曲陽）
+
+
+# ── 時刻表：有人鎖定時的公告（伏筆文件 3.4、5.4；2026-10-04 S1 的四欄表）──────────────────
+#
+# 組法：具名的一段＋這一檔（大勝或險勝）的結果句＋搶輸的一筆＋豪強的一筆；「波才北上」由 note 接、只出現一次。
+# 下面三張表是照伏筆文件逐字抄的（具名的一段、大勝接、險勝接、搶輸的一筆），不是從 content 反推。
+
+SHOWDOWN_NAMED = {
+    ("changshe_fire", "", "guan"): "史書上，皇甫嵩趁夜縱火，大破波才於長社。這一次，{name} 讓史書沒有落空：葦束膏油早已備下，風起之時火光燭天。",
+    ("changshe_fire", "", "huang"): "史書上，皇甫嵩趁夜縱火，大破波才於長社。這一次，{name} 看破了火攻，先一步勸波才移營，那一夜燒的是一座空營。",
+    ("wancheng", "甲", "guan"): "史書上，孫堅身當一面，登城先入，大破宛城。這一次，{name} 帶著一隊人跟在孫文臺身後，從東北角新補的城牆攀了上去。",
+    ("wancheng", "甲", "huang"): "史書上，孫堅先登，宛城被破。這一次，城裡的糧倉是滿的，{name} 一袋一袋囤下的糧讓宛城撐過了最難的一個月。",
+    ("wancheng", "乙", "guan"): "這一次，宛城在官軍手裡。黃巾圍城數十日，{name} 跟著孫堅在一個雨夜縋城而出，直撲黃巾連營。",
+    ("wancheng", "乙", "huang"): "圍城的黃巾糧足，城裡的官軍先斷了糧。{name} 替趙弘囤下的糧，比攻城梯還管用，宛城開了門。",
+}
+SHOWDOWN_TIER = {  # 大勝接、險勝接。長社黃巾大勝的「波才分兵北上」不在這裡：那一句在 note 上，不論有沒有鎖定都接
+    ("changshe_fire", "", "guan"): ("騎都尉曹操的援兵恰好趕到，黃巾的草營燒成一片火海。", "只是風向不定，火只燒了半座營，波才敗走陽翟。"),
+    ("changshe_fire", "", "huang"): ("黃巾反從上風殺出，皇甫嵩重挫退走，潁川交給了朱儁。", "黃巾趁亂反撲，官軍折損甚重，皇甫嵩重挫退走。"),
+    ("wancheng", "甲", "guan"): ("城門從裡面打開，趙弘死在亂軍之中。", "宛城是破了，可趙弘帶著殘部從南門突圍。"),
+    ("wancheng", "甲", "huang"): ("官軍的雲梯一架架被推倒，{官軍主將}的兵先散了。", "宛城守住了，只是城裡的糧也快見底了。"),
+    ("wancheng", "乙", "guan"): ("趙弘死在亂軍之中，圍城不攻自解。", "黃巾的連營被衝亂，趙弘退兵三十里。"),
+    ("wancheng", "乙", "huang"): ("{官軍主將}的援軍晚到了一步。", "但黃巾也死傷慘重。"),
+}
+SHOWDOWN_LOSER = {  # 搶輸的一筆；乙版沒有
+    ("changshe_fire", "", "guan"): "黃巾的 {loser} 曾看破火攻、勸波才移營，可惜晚了一步。",
+    ("changshe_fire", "", "huang"): "官軍的 {loser} 費盡心思備下的火具，燒掉的只是幾頂空帳。",
+    ("wancheng", "甲", "guan"): "黃巾的 {loser} 送進城的糧，最後沒能派上用場。",
+    ("wancheng", "甲", "huang"): "孫堅帶著 {loser} 攀上東北角，城頭的守兵卻吃得飽、站得穩。",
+}
+SHOWDOWN_CELLS = [(eid, ver, side, tier) for (eid, ver, side) in SHOWDOWN_NAMED for tier in ("大勝", "險勝")]
+
+
+def _cell_key(ver: str, side: str, tier: str) -> str:
+    return f"{ver}:{side}:{tier}" if ver else f"{side}:{tier}"
+
+
+def _announce(event_id, key, *, version="", lock=None, losers=(), third=(), commander=None):
+    """用真實內容（週末設定）結算一件決戰，回傳公告那一段。lock 是 (陣營, 名號)；losers 是 [(陣營, 名號)]。"""
+    from tianxia import figures, timetable
+    from tianxia.state import GameState, Lock, PlayerState
+    from tianxia.world_state import fresh_season
+
+    c = load_content(CONTENT_DIR, profile="weekend")
+    state = GameState(player=PlayerState(name="", location=c.scenario.start_location, stats={}, stamina=0),
+                      world=fresh_season(c))
+    if version:  # 宛城的版本看「張曼成攻殺南陽太守」那件的結果
+        state.world.timeline["zhangmancheng_wan"] = timetable.TimelineResult(key={"甲": "成", "乙": "不成"}[version], time=0.0)
+    if lock is not None:
+        state.world.locks[event_id] = Lock(side=lock[0], name=lock[1], time=0.0)
+        state.world.lock_losers[event_id] = [Lock(side=s, name=n, time=1.0) for s, n in losers]
+    if third:
+        state.world.third_party[event_id] = list(third)
+    event = next(e for e in c.timetable if e.id == event_id)
+    with mock.patch.object(figures, "commander", lambda *a: commander):
+        msgs = timetable.resolve(state, c, event, random.Random(0), key=key)
+    assert len(msgs) == 1 and msgs[0].startswith("【江湖大事】")
+    return msgs[0].removeprefix("【江湖大事】"), c
+
+
+def test_every_locked_showdown_cell_is_the_named_part_plus_that_tiers_result_sentence():
+    """長社四格、宛城八格：locked_text ＝ 具名的一段＋這一檔的結果句，只有贏家那一方有；搶輸的一筆照表，乙版沒有。"""
+    c = load_content(CONTENT_DIR, profile="weekend")
+    events = {e.id: e for e in c.timetable}
+    assert len(SHOWDOWN_CELLS) == 12
+    for eid, ver, side, tier in SHOWDOWN_CELLS:
+        outcome = events[eid].outcomes[_cell_key(ver, side, tier)]
+        named, (big, narrow), loser = SHOWDOWN_NAMED[eid, ver, side], SHOWDOWN_TIER[eid, ver, side], SHOWDOWN_LOSER.get((eid, ver, side))
+        assert outcome.locked_text == {side: named + (big if tier == "大勝" else narrow)}, (eid, ver, side, tier)
+        assert outcome.loser_text == ({side: loser} if loser else {}), (eid, ver, side, tier)
+
+
+def test_no_locked_announcement_is_left_with_an_ellipsis():
+    """S1 節錄時的「……」不是定稿；真實內容所有具名公告與搶輸的一筆都寫完整。"""
+    c = load_content(CONTENT_DIR, profile="weekend")
+    for e in c.timetable:
+        for key, o in e.outcomes.items():
+            for text in [*o.locked_text.values(), *o.loser_text.values(), o.text, o.note]:
+                assert "……" not in text, (e.id, key, text)
+
+
+def test_changshe_guan_lock_narrow_win_reads_named_part_then_the_narrow_sentence_then_the_loser_line():
+    text, _ = _announce("changshe_fire", "guan:險勝", lock=("guan", "甲"), losers=[("huang", "乙")])
+    assert text == (
+        "史書上，皇甫嵩趁夜縱火，大破波才於長社。這一次，甲 讓史書沒有落空：葦束膏油早已備下，風起之時火光燭天。"
+        "只是風向不定，火只燒了半座營，波才敗走陽翟。"
+        "黃巾的 乙 曾看破火攻、勸波才移營，可惜晚了一步。"
+    )
+
+
+def test_changshe_guan_lock_big_win_with_the_baron_adds_his_line_last():
+    text, _ = _announce("changshe_fire", "guan:大勝", lock=("guan", "甲"), losers=[("huang", "乙"), ("huang", "丙")], third=["豪甲"])
+    assert text == (
+        "史書上，皇甫嵩趁夜縱火，大破波才於長社。這一次，甲 讓史書沒有落空：葦束膏油早已備下，風起之時火光燭天。"
+        "騎都尉曹操的援兵恰好趕到，黃巾的草營燒成一片火海。"
+        "黃巾的 乙、丙 曾看破火攻、勸波才移營，可惜晚了一步。"
+        "事後才有人發現，兩軍那幾天吃的糧竟出自同一家：豪甲 的糧車。"
+    )
+
+
+def test_changshe_huang_lock_big_win_says_the_northward_march_exactly_once():
+    text, _ = _announce("changshe_fire", "huang:大勝", lock=("huang", "甲"), losers=[("guan", "乙")], third=["豪甲"])
+    assert text.count("波才分兵北上") == 1
+    assert text == (
+        "史書上，皇甫嵩趁夜縱火，大破波才於長社。這一次，甲 看破了火攻，先一步勸波才移營，那一夜燒的是一座空營。"
+        "黃巾反從上風殺出，皇甫嵩重挫退走，潁川交給了朱儁。"
+        "官軍的 乙 費盡心思備下的火具，燒掉的只是幾頂空帳。"
+        "潁川得手之後，波才分兵北上，往廣宗去了。"
+        "事後才有人發現，兩軍那幾天吃的糧竟出自同一家：豪甲 的糧車。"
+    )
+    unlocked, _ = _announce("changshe_fire", "huang:大勝")  # 沒人鎖定的黃巾大勝：note 照樣接、也只有一次
+    assert unlocked.count("波才分兵北上") == 1 and unlocked.endswith("潁川得手之後，波才分兵北上，往廣宗去了。")
+
+
+def test_changshe_huang_lock_narrow_win_has_no_northward_march():
+    text, _ = _announce("changshe_fire", "huang:險勝", lock=("huang", "甲"))
+    assert text == (
+        "史書上，皇甫嵩趁夜縱火，大破波才於長社。這一次，甲 看破了火攻，先一步勸波才移營，那一夜燒的是一座空營。"
+        "黃巾趁亂反撲，官軍折損甚重，皇甫嵩重挫退走。"
+    )
+
+
+def test_wancheng_yi_huang_lock_big_win_fills_the_commander_and_has_no_loser_line():
+    text, _ = _announce("wancheng", "huang:大勝", version="乙", lock=("huang", "甲"), losers=[("guan", "乙")], commander="zhujun")
+    assert text == (
+        "圍城的黃巾糧足，城裡的官軍先斷了糧。甲 替趙弘囤下的糧，比攻城梯還管用，宛城開了門。"
+        "朱儁的援軍晚到了一步。"  # {官軍主將} 填朱儁；乙版沒有搶輸的一筆，所以官軍的乙不出現
+    )
+    assert "{" not in text and "乙" not in text
+
+
+def test_wancheng_jia_lock_cells_fill_the_commander_slot_and_keep_the_loser_line():
+    text, _ = _announce("wancheng", "huang:險勝", version="甲", lock=("huang", "甲"), losers=[("guan", "乙")], commander="zhujun")
+    assert text == (
+        "史書上，孫堅先登，宛城被破。這一次，城裡的糧倉是滿的，甲 一袋一袋囤下的糧讓宛城撐過了最難的一個月。"
+        "宛城守住了，只是城裡的糧也快見底了。"
+        "孫堅帶著 乙 攀上東北角，城頭的守兵卻吃得飽、站得穩。"
+    )
+    text, _ = _announce("wancheng", "huang:大勝", version="甲", lock=("huang", "甲"))  # 沒有主將時 {官軍主將} 填「官軍」
+    assert text.endswith("官軍的雲梯一架架被推倒，官軍的兵先散了。")
+
+
+def test_wancheng_guan_lock_cells_read_named_part_then_tier_sentence():
+    text, _ = _announce("wancheng", "guan:險勝", version="乙", lock=("guan", "甲"), losers=[("huang", "乙")], third=["豪甲"])
+    assert text == (
+        "這一次，宛城在官軍手裡。黃巾圍城數十日，甲 跟著孫堅在一個雨夜縋城而出，直撲黃巾連營。"
+        "黃巾的連營被衝亂，趙弘退兵三十里。"
+        "宛城殺聲震天的時候，新野縣衙的冊子換了主人：豪甲 開倉放糧，縣裡的人自己把冊子捧了出來。"
+    )
+    text, _ = _announce("wancheng", "guan:大勝", version="甲", lock=("guan", "甲"), losers=[("huang", "乙")])
+    assert text == (
+        "史書上，孫堅身當一面，登城先入，大破宛城。這一次，甲 帶著一隊人跟在孫文臺身後，從東北角新補的城牆攀了上去。"
+        "城門從裡面打開，趙弘死在亂軍之中。"
+        "黃巾的 乙 送進城的糧，最後沒能派上用場。"
+    )
