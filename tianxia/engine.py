@@ -16,7 +16,8 @@ from . import (
     journal, materials, orders, push, roster, skillview, team, timetable,
 )
 from .events import choice_label, event_candidates, has_events_here, pick_event, visible_choices
-from .guide import note_action, quest_text, tutorial_intro
+from .guide import base_step_count, note_action, quest_text, tutorial_intro
+from .guide import steps as tutorial_steps
 from .journal import LOG_BREAK, Draft
 from .mapview import render_map, render_minimap
 from .models import (
@@ -149,7 +150,8 @@ class Game:
         old = self.state
         fresh = new_game_state(self.content, old.player.name)
         fresh.last_real = old.last_real
-        if old.player.tutorial_step >= len(self.content.tutorial.steps):  # 做完或略過（skip_tutorial 也是設成步數）
+        # 做完或略過（skip_tutorial 也是設成步數）：看不分季的那幾步；第一季多的兩步排在後面，回鍋的人接著做（計畫 T6）
+        if old.player.tutorial_step >= base_step_count(self.content):
             fresh.player.tutorial_step = old.player.tutorial_step
         ratio = self.content.config.affinity_carry_ratio
         fresh.player.affinities = {key: int(value * ratio) for key, value in old.player.affinities.items()}
@@ -1172,7 +1174,8 @@ class Game:
             if p.location not in faction.join_at:
                 return ["（你已經不在投靠的地方了。）"]
             p.faction = faction.id
-            return [f"你投靠了{faction.name}。"]
+            # 投靠這一刻就推一次新手引導：第一季「投靠、看一眼本週軍令」那一步只看陣營（計畫 T6）
+            return [f"你投靠了{faction.name}。"] + note_action(self.state, self.content, self.world, "join")
         faction = self._faction(arg)
         p.pending_faction = faction.id
         return [self._faction_prompt(faction)]
@@ -2625,7 +2628,7 @@ class Game:
         self.state.player.anonymous = bool(value)
 
     def skip_tutorial(self) -> list[str]:
-        steps = len(self.content.tutorial.steps)
+        steps = len(tutorial_steps(self.state, self.content))
         if self.state.player.tutorial_step >= steps:
             return []
         self.state.player.tutorial_step = steps

@@ -983,10 +983,10 @@ def validate(c: Content) -> None:
 
     for battle in c.battles.values():
         where = f"戰鬥 {battle.id}"
-        faction_ids = [f.id for f in battle.factions]
-        need(len(set(faction_ids)) == len(faction_ids), f"{where}：陣營 id 重複")
+        battle_sides = [f.id for f in battle.factions]  # 不能叫 faction_ids：那是劇本陣營的名單，後面的條件檢查還要用
+        need(len(set(battle_sides)) == len(battle_sides), f"{where}：陣營 id 重複")
         if scenario_faction_ids:
-            known(where, faction_ids, scenario_faction_ids, "陣營")
+            known(where, battle_sides, scenario_faction_ids, "陣營")
         if battle.region is not None:
             known(where, [battle.region], region_ids, "大區")
         need(
@@ -1003,13 +1003,13 @@ def validate(c: Content) -> None:
                 if not option.free_text:  # free_text 選項不查表，機制走 FreeTextGamble 擲骰，不需要 action_tags 裡有對應的 tag
                     known(f"{aw} 選項「{option.text}」", [option.tag], battle.action_tags, "行動分類")
                 if option.faction is not None:
-                    known(f"{aw} 選項「{option.text}」", [option.faction], faction_ids, "陣營")
+                    known(f"{aw} 選項「{option.text}」", [option.faction], battle_sides, "陣營")
         need(
             battle.free_text_gamble is not None or not any(o.free_text for a in battle.acts for o in a.options),
             f"{where}：有 free_text 選項，必須設定 free_text_gamble",
         )
         for outcome in battle.outcomes:
-            known(f"{where} 結果「{outcome.title}」", [outcome.faction], faction_ids, "陣營")
+            known(f"{where} 結果「{outcome.title}」", [outcome.faction], battle_sides, "陣營")
             known(f"{where} 結果「{outcome.title}」", outcome.trend_delta, trend_ids, "大勢線")
             not_derived(f"{where} 結果「{outcome.title}」", outcome.trend_delta)
         need(
@@ -1032,6 +1032,11 @@ def validate(c: Content) -> None:
 
     for milestone in c.scenario.milestones:
         check_condition(f"個人目標 {milestone.id}", milestone.condition)
+    flags = [step.season_one for step in c.tutorial.steps]
+    need(
+        flags == sorted(flags),
+        "tutorial.json：第一季才有的步驟（season_one）要排在最後——存檔記的是第幾步，插在中間會指到不同的步驟",
+    )
     for step in c.tutorial.steps:
         where = f"新手引導 {step.id}"
         known(where, step.done_when.locations, c.locations, "地點")

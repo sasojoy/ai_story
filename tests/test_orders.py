@@ -566,3 +566,34 @@ def test_orders_view_shows_own_side_with_deadline(on):
     assert (first["mine"], first["progress"], first["quota"], first["done"]) == (0, 0, 4, False)
     assert first["deadline"] == "第2週・週一 00:00"
     assert _game(on, "丙").orders_view() == []  # 散人
+
+
+# ── Task 8：新手引導多兩步（只在第一季）────────────────────────
+
+
+def test_two_tutorial_steps_after_joining_only_in_season_one(on):
+    from tianxia import guide
+
+    game = _game(on, at="changshe")
+    off = load_content(CONTENT_DIR)  # 同一份存檔，開關關著的內容
+    assert len(guide.steps(game.state, off)) == 6  # 開關關著：照舊 6 步
+    steps = guide.steps(game.state, on)
+    assert [s.id for s in steps][-2:] == ["t7_orders", "t8_order_done"]
+    assert steps[-2].text.startswith("如今天下分成了三邊")  # 濃縮版內容表 3.4（S1 審過）
+    game.state.player.tutorial_step = 6  # 前面六步做完了
+    game.choose("faction:guan")
+    msgs = game.choose("faction:confirm")
+    assert game.state.player.tutorial_step == 7  # 投靠完成「看一眼本週軍令」那一步
+    assert any("軍令上寫什麼，就照著做一次" in m for m in msgs)  # 接著出現下一步的說明
+    _order(game, "siege", "guan", front="yingru")
+    with _win():
+        game.choose("act:train")
+    assert game.state.player.tutorial_step == 8 and not guide.tutorial_active(game.state, on)
+
+
+def test_a_returning_player_who_finished_the_base_steps_keeps_going(on):
+    """換季重來時，做完不分季的六步就算做完引導（FB-034 照舊不重來）；第一季多的兩步接著做。"""
+    game = _game(on)
+    game.state.player.tutorial_step = 6
+    game._reset_player_for_new_season(2)
+    assert game.state.player.tutorial_step == 6
