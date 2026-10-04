@@ -6,7 +6,9 @@ from pydantic import ValidationError
 
 from conftest import FIXTURE
 from tianxia.content import ContentError, load_content, profile_line, validate
-from tianxia.models import FactionDef
+from tianxia.models import (
+    BattleAct, BattleActionEffect, BattleDef, BattleFaction, BattleOption, BattleOutcome, FactionDef, Trend,
+)
 
 
 def copy_fixture(tmp_path):
@@ -764,6 +766,106 @@ def test_compass_must_be_on_the_map(tmp_path):
     edit_json(root / "map.json", lambda d: d.update(compass=[401, 120]))
     with pytest.raises(ContentError, match="指北針"):
         load_content(root)
+
+
+# ── 第一季濃縮版：戰線與衍生線（T1）──────────────────────────
+
+
+def _with_fronts(content):
+    """夾具改成第一季濃縮版的樣子：北邊大區的戰線 east、南邊的 west，兩條合成 total（各半）。三個地點都在北邊。"""
+    content.scenario.trends += [
+        Trend(id="east", name="東線", start=40, season_one=True),
+        Trend(id="west", name="西線", start=60, season_one=True),
+        Trend(id="total", name="總勢", start=25, derived={"east": 0.5, "west": 0.5}),
+    ]
+    content.map.regions[0].front = "east"
+    content.map.regions[1].front = "west"
+    return content
+
+
+def _battle(trend_delta):
+    return BattleDef(
+        id="t1", name="測試決戰", region="north",
+        factions=[BattleFaction(id="guan", name="官軍"), BattleFaction(id="huang", name="黃巾")],
+        acts=[BattleAct(id="a1", title="初探", text="雙方試探。", goal="推動戰局",
+                        options=[BattleOption(text="穩紮穩打", tag="safe")])],
+        action_tags={"safe": BattleActionEffect(trend_delta=1, neili_damage=5)},
+        outcomes=[BattleOutcome(faction="guan", title="官軍大勝", text="官軍獲勝。", trend_delta=trend_delta)],
+        muster_seconds=600, round_seconds=120,
+    )
+
+
+def test_validate_accepts_fronts_and_a_derived_trend(content):
+    validate(_with_fronts(content))
+
+
+def test_validate_rejects_derived_weights_that_do_not_add_up_to_one(content):
+    _with_fronts(content).scenario.trends[-1].derived = {"east": 0.5, "west": 0.4}
+    with pytest.raises(ContentError, match="權重加起來要是 1"):
+        validate(content)
+
+
+def test_validate_rejects_a_derived_trend_built_from_another_derived_trend(content):
+    _with_fronts(content).scenario.trends.append(Trend(id="meta", name="套娃", derived={"total": 1.0}))
+    with pytest.raises(ContentError, match="大勢線 meta：來源不能是另一條衍生線"):
+        validate(content)
+
+
+@pytest.mark.parametrize("front", ["total", "ghost"])
+def test_validate_rejects_a_region_front_that_is_derived_or_unknown(content, front):
+    _with_fronts(content).map.regions[0].front = front
+    with pytest.raises(ContentError, match="大區 north"):
+        validate(content)
+
+
+def test_validate_rejects_training_that_pushes_another_regions_front(content):
+    _with_fronts(content).locations["lake"].train_trend = {"west": -1}  # 湖邊在北邊，戰線是 east
+    with pytest.raises(ContentError, match="地點 lake：train_trend 的 west 不是這個地點所在大區的戰線"):
+        validate(content)
+
+
+@pytest.mark.parametrize("where", ["train_trend", "sim", "goals", "outcome"])
+def test_validate_rejects_pushes_on_a_derived_trend(content, where):
+    content = _with_fronts(content)
+    if where == "train_trend":
+        content.locations["lake"].train_trend = {"total": -1}
+    elif where == "sim":
+        content.scenario.sim_players[0].trend = {"total": 1}
+    elif where == "goals":
+        content.scenario.factions = [FactionDef(id="guan", name="官軍", goals={"total": -1})]
+    else:
+        content.battles["t1"] = _battle({"total": -5})
+    with pytest.raises(ContentError, match="不能推衍生線 total"):
+        validate(content)
+
+
+def test_validate_lets_effects_and_training_push_the_local_front(content):
+    content = _with_fronts(content)
+    content.locations["lake"].train_trend = {"front": -1}
+    content.events["drunk"].choices[0].effect.trend = {"front": 1}
+    content.battles["t1"] = _battle({"east": -5})
+    validate(content)
+
+
+@pytest.mark.parametrize("where", ["sim", "goals", "outcome", "region"])
+def test_validate_rejects_the_front_key_outside_effects_and_training(content, where):
+    content = _with_fronts(content)
+    if where == "sim":
+        content.scenario.sim_players[0].trend = {"front": 1}
+    elif where == "goals":
+        content.scenario.factions = [FactionDef(id="guan", name="官軍", goals={"front": -1})]
+    elif where == "outcome":
+        content.battles["t1"] = _battle({"front": -5})
+    else:
+        content.map.regions[0].trends = ["front"]
+    with pytest.raises(ContentError, match="未知的大勢線 front"):
+        validate(content)
+
+
+def test_validate_rejects_the_front_key_when_no_trend_is_built_from_fronts(content):
+    content.events["drunk"].choices[0].effect.trend = {"front": 1}  # 夾具原樣：沒有衍生線
+    with pytest.raises(ContentError, match="用了 front"):
+        validate(content)
 
 
 # ── 週末設定（計畫 T2「總開關與週末設定」）：一次切換，不手改 content/config.json ──

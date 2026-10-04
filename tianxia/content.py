@@ -18,7 +18,7 @@ from pydantic import BaseModel, ValidationError
 from .companion_agent import DIALOGUE_TAGS
 from .materials import TIER_NAMES
 from .models import (
-    ROADS, STATS, BattleDef, CharacterDef, Condition, Config, Content, CraftNames, Effect, Event, Foreshadows, Location,
+    FRONT_KEY, ROADS, STATS, BattleDef, CharacterDef, Condition, Config, Content, CraftNames, Effect, Event, Foreshadows, Location,
     MapLayout, Material, RoadSight, Scenario, Sect, SimRumor, SkillDef, Squad, TimetableEvent, Tutorial,
 )
 from .zh import to_traditional
@@ -447,8 +447,12 @@ def check_foreshadows(c: Content, need, known, region_ids: list[str], counters_w
 
 def validate(c: Content) -> None:
     errors: list[str] = []
+    from .atlas import region_of  # noqa: PLC0415  延後 import：atlas → world → rules 一路載入，content 不必一開始就依賴它們
+
     trend_ids = {t.id for t in c.scenario.trends}
     hidden = {t.id for t in c.scenario.trends if t.hidden}
+    derived = {t.id for t in c.scenario.trends if t.derived}  # 衍生線（第一季濃縮版的黃巾聲勢）
+    region_fronts = {region.front for region in c.map.regions if region.front}  # 戰線
 
     def need(ok: bool, message: str) -> None:
         if not ok:
@@ -461,6 +465,19 @@ def validate(c: Content) -> None:
     faction_ids = [f.id for f in c.scenario.factions]
     item_ids = [item.id for item in c.foreshadows.items]
     counters_written: dict[str, str] = {}  # 伏筆計數 → 第一個寫它的地方（效果的 fs_counters）
+
+    def not_derived(where: str, keys, field: str = "") -> None:
+        """衍生線（開關開著時由來源線合成的黃巾聲勢）不能被直接推，要推就推它的來源線。"""
+        for key in keys:
+            need(key not in derived, f"{where}：{field}不能推衍生線 {key}（要推就推它的來源線）")
+
+    def front_needs_total(where: str, keys) -> None:
+        """front 在開關關著時要算進由戰線合成的那條線，所以劇本得有一條衍生線。"""
+        need(
+            FRONT_KEY not in keys or bool(derived),
+            f"{where}：用了 front，劇本卻沒有由戰線合成的大勢線（開關關著時 front 要算進它）",
+        )
+
     marks_written: dict[str, str] = {}  # 痕跡 → 第一個寫它的地方
     marks_read: dict[str, str] = {}  # 痕跡 → 第一個讀它的地方（條件或文字裡的模糊人數）
 
@@ -500,7 +517,8 @@ def validate(c: Content) -> None:
         known(where, eff.stats, STATS, "屬性")
         known(where, eff.learn_skills, c.skills, "武學")
         known(where, eff.materials, c.materials, "素材")
-        known(where, eff.trend, trend_ids, "大勢線")
+        known(where, eff.trend, trend_ids | {FRONT_KEY}, "大勢線")
+        front_needs_total(where, eff.trend)
         known(where, eff.clue_items, item_ids, "伏筆物品")
         for key in eff.fs_counters:
             counters_written.setdefault(key, where)
@@ -563,7 +581,17 @@ def validate(c: Content) -> None:
                     f"{c.locations[dest].road_to(loc.id)}（一條路兩頭要寫同一種）"
                 )
         known(where, loc.enemies, c.squads, "敵方隊伍")
-        known(where, loc.train_trend, trend_ids, "大勢線")
+        known(where, loc.train_trend, trend_ids | {FRONT_KEY}, "大勢線")
+        not_derived(where, loc.train_trend, "train_trend ")
+        front_needs_total(where, loc.train_trend)
+        local = region_of(c, loc.id)
+        local_front = local.front if local is not None else None
+        for key in loc.train_trend:
+            if key in region_fronts:
+                need(
+                    key == local_front,
+                    f"{where}：train_trend 的 {key} 不是這個地點所在大區的戰線（{local_front or '這裡沒有戰況'}）",
+                )
         known(where, loc.materials, c.materials, "素材")
         need(
             0 <= loc.x <= c.map.width and 0 <= loc.y <= c.map.height,
@@ -645,12 +673,25 @@ def validate(c: Content) -> None:
                     f"{where} 選項{i}：福緣事件的選項不能有檢定或戰鬥（福緣自己送上門時直接套用第一個選項的效果）",
                 )
 
+    for trend in c.scenario.trends:
+        if not trend.derived:
+            continue
+        where = f"大勢線 {trend.id}"
+        known(where, trend.derived, trend_ids, "大勢線")
+        need(not set(trend.derived) & derived, f"{where}：來源不能是另一條衍生線")
+        need(all(weight > 0 for weight in trend.derived.values()), f"{where}：權重都要大於 0")
+        total = sum(trend.derived.values())
+        need(abs(total - 1) < 1e-6, f"{where}：權重加起來要是 1（現在是 {total:g}）")
+
     region_ids = [region.id for region in c.map.regions]
     duplicated = sorted({rid for rid in region_ids if region_ids.count(rid) > 1})
     need(not duplicated, f"大區 id 重複：{'、'.join(duplicated)}")
     for region in c.map.regions:
         where = f"大區 {region.id}"
         known(where, region.trends, trend_ids, "大勢線")
+        if region.front is not None:
+            known(where, [region.front], trend_ids, "大勢線")
+            need(region.front not in derived, f"{where}：front 不能是衍生線 {region.front}")
         need(
             len(region.points) >= 3 and all(len(point) == 2 for point in region.points),
             f"{where}：多邊形至少要有 3 個 [x, y] 點",
@@ -721,6 +762,7 @@ def validate(c: Content) -> None:
     for sim in c.scenario.sim_players:
         where = f"虛擬玩家 {sim.name}"
         known(where, sim.trend, trend_ids, "大勢線")
+        not_derived(where, sim.trend)
         if sim.requires_revealed:
             known(where, [sim.requires_revealed], trend_ids, "大勢線")
         known(where, sim.haunts, c.locations, "地點")
@@ -768,6 +810,7 @@ def validate(c: Content) -> None:
         known(f"陣營 {faction.id}", faction.join_at, c.locations, "地點")
         known(f"陣營 {faction.id}", faction.sects, c.sects, "門派")
         known(f"陣營 {faction.id}", faction.goals, trend_ids, "大勢線")
+        not_derived(f"陣營 {faction.id}", faction.goals, "goals ")
         need(all(d in (-1, 1) for d in faction.goals.values()), f"陣營 {faction.id}：goals 的方向只能是 1 或 -1")
 
     for battle in c.battles.values():
@@ -800,6 +843,7 @@ def validate(c: Content) -> None:
         for outcome in battle.outcomes:
             known(f"{where} 結果「{outcome.title}」", [outcome.faction], faction_ids, "陣營")
             known(f"{where} 結果「{outcome.title}」", outcome.trend_delta, trend_ids, "大勢線")
+            not_derived(f"{where} 結果「{outcome.title}」", outcome.trend_delta)
         need(
             battle.outcomes[-1].trend_min is None and battle.outcomes[-1].trend_max is None,
             f"{where}：最後一個結果必須沒有數值門檻（作為保底結果，一定要能命中）",

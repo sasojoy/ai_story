@@ -59,6 +59,9 @@ class Condition(_Strict):
 Condition.model_rebuild()
 
 
+FRONT_KEY = "front"  # Effect.trend／Location.train_trend 的特殊鍵：效果發生地所在大區的戰線（rules.resolve_trend）
+
+
 class Effect(_Strict):
     text: str = ""
     stats: dict[str, int] = Field(default_factory=dict)
@@ -324,6 +327,10 @@ class Trend(_Strict):
     desc: str = ""
     start: int = Field(default=0, ge=0, le=100)
     hidden: bool = False
+    # 衍生線（第一季濃縮版的黃巾聲勢）：來源線 id → 權重，加起來是 1。開關（Config.season_one）開著時它的值一律是
+    # 來源線的加權和（rules.recompute_trends），不能直接推；開關關著時它是一般的線，照 start 起算
+    derived: dict[str, float] = Field(default_factory=dict)
+    season_one: bool = False  # 第一季濃縮版才有的線（三條戰線、豪強割據）：開關關著時不顯示、不推（rules.trend_shown）
 
 
 class Threshold(_Strict):
@@ -381,6 +388,7 @@ class MapRegion(_Strict):
     id: str
     name: str
     trends: list[str] = Field(default_factory=list)  # 對應的大勢線：大地圖局勢層依它上色
+    front: str | None = None  # 這一區的戰況算在哪條戰線（第一季濃縮版）；洛陽這類沒有戰況的大區是 None
     points: list[list[int]]
     fill: str = Field(pattern=HEX_COLOR)
     text_fill: str = Field(pattern=HEX_COLOR)
@@ -596,6 +604,11 @@ class Config(_Strict):
     # 做到一半的 main 也會換上試玩伺服器，開關關著才不會把正在跑的那一季弄壞；
     # 全部做完、開測前由 PM 跟季長（season_days 改 2.5）一起打開（計畫 2026-10-04-第一季濃縮版）
     season_one: bool = False
+    # 三條戰線與豪強割據（計畫 2026-10-04-T1；開關關著時沒人讀它們）
+    geju_chaos_per_day: float = 1.0  # 每有一條戰線在亂局，豪強割據每曆日漲幾點
+    geju_calm_per_day: float = 1.0  # 三條戰線都穩下來時，豪強割據每曆日回落幾點
+    chaos_low: int = 35  # 亂局：戰況在 chaos_low～chaos_high 之間（含兩端，第一季設計 4.2）
+    chaos_high: int = 65
     season_weeks: int = Field(default=12, ge=1)  # 季曆：一季壓成幾週（計畫第六節：季曆秒＝世界秒 × 週數 × 7 ÷ season_days）
     # 時刻表的人物結局扣多少聲威（時刻表結算文件第一節）：只有這三種用詞會扣；退場、重創是聲威歸零，下獄、到任不動聲威
     fate_prestige: dict[Literal["重挫", "聲威大減", "受挫"], int] = Field(
