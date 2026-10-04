@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import html
+import math
 import random
 import re
 from collections import deque
@@ -20,7 +21,8 @@ from tianxia.atlas import region_of
 from tianxia.bot import play_season
 from tianxia.content import load_content
 from tianxia.engine import Game
-from tianxia.mapview import render_map, render_minimap, text_width
+from tianxia.mapart import BANNER_BOX
+from tianxia.mapview import CURRENT_RING, NODE_SIZE, render_map, render_minimap, text_width
 from tianxia.ollama_client import OllamaClient
 from tianxia.team import fight
 
@@ -256,15 +258,32 @@ TEXT_RE = re.compile(r'<text x="([-\d.]+)" y="([-\d.]+)" font-size="(\d+)"([^>]*
 Box = tuple[float, float, float, float]
 
 
+def _text_box(m: re.Match) -> Box:
+    x, y, size, text = float(m[1]), float(m[2]), int(m[3]), html.unescape(m[5])
+    anchor = re.search(r'text-anchor="(\w+)"', m[4])
+    width = text_width(text, size)
+    left = x - {"start": 0, "middle": width / 2, "end": width}[anchor[1] if anchor else "start"]
+    return left, y - size * 0.85, left + width, y + size * 0.15
+
+
 def _text_boxes(svg: str) -> list[tuple[str, Box]]:
-    out = []
-    for m in TEXT_RE.finditer(svg):
-        x, y, size, text = float(m[1]), float(m[2]), int(m[3]), html.unescape(m[5])
-        anchor = re.search(r'text-anchor="(\w+)"', m[4])
-        width = text_width(text, size)
-        left = x - {"start": 0, "middle": width / 2, "end": width}[anchor[1] if anchor else "start"]
-        out.append((text, (left, y - size * 0.85, left + width, y + size * 0.15)))
-    return out
+    return [(html.unescape(m[5]), _text_box(m)) for m in TEXT_RE.finditer(svg)]
+
+
+def _placed_texts(svg: str) -> list[tuple[str, Box, str | None]]:
+    """地點的名字與小字（帶 data-loc，第三項是它屬於哪個地點）和山名（帶字距，第三項是 None）：
+    大區名稱、大勢、河名的位置是內容寫死的，不是擺出來的，所以不在這裡。"""
+    return [
+        (html.unescape(m[5]), _text_box(m), owner[1] if owner else None)
+        for m in TEXT_RE.finditer(svg)
+        if (owner := re.search(r'data-loc="(\w+)"', m[4])) or "letter-spacing" in m[4]
+    ]
+
+
+def _touches_circle(box: Box, cx: float, cy: float, radius: float, allow: float = 1.0) -> bool:
+    """文字範圍有沒有壓進圓裡（圓心到範圍最近的一點比半徑近超過 allow）。"""
+    nearest_x, nearest_y = min(max(cx, box[0]), box[2]), min(max(cy, box[1]), box[3])
+    return math.hypot(cx - nearest_x, cy - nearest_y) < radius - allow
 
 
 def _overlaps(a: Box, b: Box, allow: float = 1.0) -> bool:
@@ -291,6 +310,37 @@ def test_world_map_labels_never_collide_or_leave_the_canvas_at_the_start(content
     for selected in [None, *(loc_id for _, loc_id in game.map_places())]:
         svg = render_map(game.state, content, layer, selected, game.odds if layer == "enemies" else None)
         assert _collisions(svg, canvas) == [], selected
+
+
+# 每個地點都當所在地、而且選定（玩家一打開地圖看到的就是這個）時，名字壓到「別的地點的圓盤」的次數上限。
+# 圓盤半徑 14（13 加外圈的一半），新野、南陽官道這幾處的地點離得近、名字又長，沒有空位，只好壓到邊緣：
+# 淯水河畔的名字壓到新野（四個圖層都有）、敵情層再多三處（潁川郊野的小字、南陽郊野、荒丘的小字）。
+# 調高記號在 taken 裡的權重沒有用：每個權重掃過，壓到圓盤變少的同時，名字壓到紅旗、出界或壓到別的名字就跟著出現。
+DISC_OVERLAPS = {"situation": 1, "enemies": 4, "story": 1, "routes": 1}
+
+
+@pytest.mark.parametrize("layer", list(DISC_OVERLAPS))
+def test_current_place_marks_stay_clear_of_names_from_any_location(content, layer):
+    """所在地的紅旗、紅圈與選定的圓圈上面不會有字（名字、小字、山名）；別的地點的圓盤也盡量不被名字壓到。"""
+    game = Game.new(content, "測試俠客", rng=random.Random(0))
+    game.state.player.visited.update(content.locations)  # 每個地點都去過：全都畫成圓盤
+    game.state.world.flags.update(loc.unlock_flag for loc in content.locations.values() if loc.unlock_flag)
+    left, top, right, bottom = BANNER_BOX
+    red_ring, select_ring, disc = CURRENT_RING + 1, NODE_SIZE["current"] + 11.5, NODE_SIZE["visible"] + 1
+    disc_overlaps = 0
+    for loc in content.locations.values():
+        game.state.player.location = loc.id
+        svg = render_map(game.state, content, layer, loc.id, game.odds if layer == "enemies" else None)
+        for text, box, owner in _placed_texts(svg):
+            assert not _overlaps(box, (loc.x + left, loc.y + top, loc.x + right, loc.y + bottom)), (loc.id, text, "紅旗")
+            assert not _touches_circle(box, loc.x, loc.y, red_ring), (loc.id, text, "紅圈")
+            assert not _touches_circle(box, loc.x, loc.y, select_ring), (loc.id, text, "選定的圓圈")
+            if owner is not None:
+                disc_overlaps += sum(
+                    _touches_circle(box, other.x, other.y, disc)
+                    for other in content.locations.values() if other.id not in (loc.id, owner)
+                )
+    assert disc_overlaps <= DISC_OVERLAPS[layer]
 
 
 def test_minimap_never_collides_from_any_location(content):

@@ -215,3 +215,22 @@ def test_old_tag_matched_events_on_the_new_places_are_approved(content):
         )
     }
     assert matched == APPROVED_TAG_MATCHED_EVENTS
+
+
+def test_rivers_widen_downstream_and_the_yellow_river_is_yellow(content):
+    """輿圖美術設計第四節：河流寫成物件，從上游寫到下游；只有黃河是土黃色。"""
+    rivers = {river.name: river for river in content.map.rivers}
+    assert list(rivers) == ["黃河", "潁水", "淯水", "拒馬河"]
+    assert {name for name, river in rivers.items() if river.color == "yellow"} == {"黃河"}
+    assert all(river.width[0] < river.width[1] for river in rivers.values())
+
+
+def test_terrain_follows_eastern_han_geography(content):
+    """輿圖美術設計第四節的初版擺法：七條有名字的山、兩段沒名字的（太行山南端的丘陵、嵩山南段）、四片林地，
+    指北針在右側中段的空白，紙色底。"""
+    m = content.map
+    named = [t.name for t in m.terrain if t.name]
+    assert named == ["燕山", "太行山", "呂梁山", "邙山", "嵩山", "伏牛山", "桐柏山"]
+    assert [t.kind for t in m.terrain].count("forest") == 4
+    assert len(m.terrain) == 13
+    assert m.compass == (845, 680) and m.background == "#E9E2CC"

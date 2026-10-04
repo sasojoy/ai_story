@@ -378,14 +378,48 @@ class MapRegion(_Strict):
     label_y: int
 
 
+class MapRiver(_Strict):
+    """一條河（輿圖美術設計第四節）：points 從上游寫到下游，畫的時候照這個方向由 width[0] 漸寬到 width[1]。
+    舊格式（每條河只是一串 [x, y] 點）照樣讀，當成藍色、寬 4→8（見 MapLayout._legacy_rivers）。"""
+
+    name: str = ""  # 只給寫內容的人看；河名照舊寫在 MapLayout.labels
+    points: list[list[int]]
+    width: tuple[float, float] = (4, 8)  # 上游寬、下游寬
+    color: Literal["blue", "yellow"] = "blue"  # yellow 只給黃河
+
+
+TerrainKind = Literal["mountains", "hills", "forest"]  # 山脈、丘陵、林地
+
+
+class Terrain(_Strict):
+    """輿圖上的一片地形（輿圖美術設計第四節，純裝飾：不改路程也不改視野）。山脈、丘陵沿 spine（山腳線）排山頭，
+    size 是山頭高度；林地在 points 圍成的多邊形裡排樹叢。山頭與樹自己讓開地點、路與河（mapart.terrain）。"""
+
+    kind: TerrainKind
+    name: str = ""  # 選填：畫成淡綠小字
+    spine: list[list[int]] = Field(default_factory=list)  # 山脈、丘陵用
+    size: int = 0  # 山脈、丘陵用，8～40
+    points: list[list[int]] = Field(default_factory=list)  # 林地用
+
+
 class MapLayout(_Strict):
     width: int = 680
     height: int = 420
-    background: str = Field(default="#F6F1E4", pattern=HEX_COLOR)
+    background: str = Field(default="#E9E2CC", pattern=HEX_COLOR)  # 紙色（輿圖美術設計 2.1）
     regions: list[MapRegion] = Field(default_factory=list)
-    rivers: list[list[list[int]]] = Field(default_factory=list)  # 每條河是一串 [x, y] 點
+    rivers: list[MapRiver] = Field(default_factory=list)
+    terrain: list[Terrain] = Field(default_factory=list)
+    compass: tuple[int, int] | None = None  # 指北針的位置；不寫就不畫
     labels: list[MapLabel] = Field(default_factory=list)
     mini_window: tuple[int, int] = (270, 180)  # 小地圖以所在地為中心截多寬、多高（地圖單位）；地圖畫得越疏，要截得越大才看得到一兩站路
+
+    @field_validator("rivers", mode="before")
+    @classmethod
+    def _legacy_rivers(cls, rivers: Any) -> Any:
+        """舊格式的河是一串 [x, y] 點（純陣列）：包成 {"points": ...}，其餘照預設（藍色、寬 4→8）。"""
+        if isinstance(rivers, list):
+            return [{"points": river} if isinstance(river, list) else river for river in rivers]
+        return rivers
 
 
 class WorldEvent(_Strict):
