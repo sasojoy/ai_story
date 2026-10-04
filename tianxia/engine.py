@@ -12,8 +12,8 @@ from collections.abc import Callable
 from pydantic import BaseModel
 
 from . import (
-    atlas, battle_instance, battlelog, calendar, companion_agent, craft, encounter, event_llm, flavor, foreshadow, journal,
-    materials, push, roster, skillview, team, timetable,
+    atlas, battle_instance, battlelog, calendar, companion_agent, craft, encounter, event_llm, figures, flavor, foreshadow,
+    journal, materials, push, roster, skillview, team, timetable,
 )
 from .events import choice_label, event_candidates, has_events_here, pick_event, visible_choices
 from .guide import note_action, quest_text, tutorial_intro
@@ -41,6 +41,7 @@ HOUR = 3600
 DAY = 86400
 BULLETIN_MAX = 3  # 江湖頁最上面的公告卡最多放這一週的幾則大事（計畫 T2）
 AUDIENCE_HALL_FIGURES = 2  # 一個地點有幾位以上的大勢人物，交友就不直接找人、改按「求見」指名（企劃者 2026-10-03 決定）
+SNUB_NOTE = "剛吃了敗仗，閉門不見"  # 挑戰本人打贏之後，他對打贏的人關上門（軍令文件 4.5）：求見、交友、挑戰的按鈕寫這一句
 # 路上小事（路上設計第四節）：road:<id> → (名稱, 這一段做過之後寫的「這段路已經……」)；按鈕上的補充見 _road_task_options
 ROAD_TASKS: dict[str, tuple[str, str]] = {
     "think": ("邊走邊想", "想過了"),
@@ -209,6 +210,7 @@ class Game:
         items = {item.id for item in c.foreshadows.items}
         p.clue_items = {k: v for k, v in p.clue_items.items() if k in items and v > 0}
         p.fragments = {k: v for k, v in p.fragments.items() if k in chains}
+        p.snubbed_until = {k: v for k, v in p.snubbed_until.items() if k in c.figures}  # 內容改版拿掉的大勢人物（T4）
         if p.fs_asking is not None and p.fs_asking not in chains:
             p.fs_asking, p.fs_asked = None, 0
         line_ids = [line.id for line in c.scenario.storylines]
@@ -381,12 +383,13 @@ class Game:
             # 新角色沒有武學時威力是 0，在任何地點遊歷都**必敗**，而落敗現在真的要付氣血與
             # 內傷的代價——不顯示勝算的話，玩家會在開局連輸三場、氣血見底才知道自己不該打。
             opts.append(self._train_option(loc, cost["train"], odds))
-        figures = self._figures_here()
-        if has_events_here(c, loc, "socialize") or 0 < len(figures) < AUDIENCE_HALL_FIGURES:
+        opts += self._challenge_options(odds)  # 挑戰本人（T4）：第一季、有陣營、這裡站著敵方的大勢人物時才有
+        people = self._figures_here()
+        if has_events_here(c, loc, "socialize") or 0 < len(people) < AUDIENCE_HALL_FIGURES:
             # 兩位以上大勢人物的地點，交友只走福緣與地點事件、從不開口對話（見 _socialize_figure），
             # 所以只在有交友事件時才給；人物改由下面的「求見」指名
-            opts.append(self._cost_option("act:socialize", "交友", cost["socialize"]))
-        if len(figures) >= AUDIENCE_HALL_FIGURES:
+            opts.append(self._socialize_option(people, cost["socialize"]))
+        if len(people) >= AUDIENCE_HALL_FIGURES:
             opts.append(Option(id="act:call", label="求見"))  # 只是打開第二層選單，不花體力（見 _audience_options）
         target = self._recruit_target()
         if target is not None:
@@ -483,6 +486,17 @@ class Game:
         return Option(
             id=option_id, label=f"{label}（體力 {cost}{extra}）", enabled=self.state.player.stamina >= cost
         )
+
+    def _socialize_option(self, people: list[str], cost: int) -> Option:
+        """交友的按鈕。這裡只有一位大勢人物、沒有交友事件、福緣也還沒到，而他剛被你打敗、閉門不見（T4）時，交友只會
+        撲空——按不下去、寫明原因。其他時候照舊。"""
+        s, c = self.state, self.content
+        if (
+            len(people) == 1 and self._snubbed_character(people[0])
+            and not has_events_here(c, c.locations[s.player.location], "socialize") and not roster.fortune_due(s, c)
+        ):
+            return Option(id="act:socialize", label=f"交友（{SNUB_NOTE}）", enabled=False)
+        return self._cost_option("act:socialize", "交友", cost)
 
     def _train_option(self, loc: Location, cost: int, odds: bool) -> Option:
         """遊歷的按鈕。遇上自己陣營的隊伍是操練、不會輸（見 _drill），所以只有自己人的地盤寫成「操練・零風險」，
@@ -718,6 +732,8 @@ class Game:
             if what == "back":
                 return atlas.journey_title(c, self._back_way().path)  # 折返：跟「前往」同一個標題，抵達時才併得進同一則
             return ROAD_TASKS[what][0]
+        if kind == "act" and arg.startswith("challenge:"):
+            return f"挑戰・{figures.name_of(c, arg.partition(':')[2])}"
         here = c.locations[s.player.location].name
         titles = {
             "explore": f"探索{here}", "socialize": f"交友・{here}", "call": f"求見・{here}", "train": f"遊歷・{here}",
@@ -753,6 +769,8 @@ class Game:
         if what == "call":
             self.state.player.picking_audience = True  # 打開求見選單（見 _audience_options），不花體力
             return [f"你遞上名帖，準備求見{self.content.locations[self.state.player.location].name}的人物。"]
+        if what.startswith("challenge:"):
+            return self._challenge(what.partition(":")[2])
         self.state.player.stamina -= cost[what]
         if what == "explore":
             return self._explore()
@@ -900,12 +918,15 @@ class Game:
         return [msg]
 
     def _figures_here(self) -> list[str]:
-        """這個地點的大勢人物（不管見不見得到）：可招募的 7 位在 recruit_at，鎖定的 8 位龍頭
-        人物在 talk_at（不可招募，見「還要改進」第 5 點）。"""
+        """這個地點的大勢人物（不管見不見得到）：可招募的 7 位在 recruit_at，鎖定的龍頭人物在 talk_at（不可招募，見
+        「還要改進」第 5 點）。第一季的規則開著時，人物表上的人照他此刻的所在與狀態（figures.placed_characters，T4）：
+        轉往冀州的皇甫嵩、到任的董卓在盧植營；下獄、退場、重創的不在任何地方。規則沒開時一個字都不變。"""
         s, c = self.state, self.content
+        here = s.player.location
+        placed = figures.placed_characters(s, c)
         return [
             cid for cid, ch in c.characters.items()
-            if ch.deep_interaction and s.player.location in (ch.recruit_at, ch.talk_at)
+            if ch.deep_interaction and (placed[cid] == here if cid in placed else here in (ch.recruit_at, ch.talk_at))
         ]
 
     def _can_meet(self, companion_id: str) -> bool:
@@ -931,9 +952,9 @@ class Game:
         return [f"天色已晚，{self.content.characters[companion_id].name}起身送客，改日再敘。"]
 
     def _deep_interaction_target(self) -> str | None:
-        """這個地點此刻能深度對話的人物 id：見得到（名望或結識），而且今天還沒聊滿；沒有就是 None。"""
+        """這個地點此刻能深度對話的人物 id：見得到（名望或結識）、今天還沒聊滿，也沒在對你閉門不見（T4）；沒有就是 None。"""
         for companion_id in self._figures_here():
-            if self._can_meet(companion_id) and self._talks_left(companion_id) > 0:
+            if self._can_meet(companion_id) and self._talks_left(companion_id) > 0 and not self._snubbed_character(companion_id):
                 return companion_id
         return None
 
@@ -959,7 +980,9 @@ class Game:
             ch = c.characters[companion_id]
             option_id = f"call:{companion_id}"
             left = self._talks_left(companion_id)
-            if not self._can_meet(companion_id):
+            if self._snubbed_character(companion_id):
+                opts.append(Option(id=option_id, label=f"{ch.name}（{SNUB_NOTE}）", enabled=False))
+            elif not self._can_meet(companion_id):
                 opts.append(Option(id=option_id, label=f"{ch.name}（名望 {ch.audience_fame} 以上才見得到）", enabled=False))
             elif left == 0:
                 opts.append(Option(id=option_id, label=f"{ch.name}（今天已經談滿 {per_day} 輪，明天再來）", enabled=False))
@@ -981,6 +1004,8 @@ class Game:
             return "你四處結交了一番，沒遇上什麼事；想拜會此地的人物，請按「求見」指名。"
         for companion_id in self._figures_here():
             ch = self.content.characters[companion_id]
+            if self._snubbed_character(companion_id):
+                return f"{ch.name}{SNUB_NOTE}。"
             if not self._can_meet(companion_id):
                 return f"你想求見{ch.name}，但人微言輕，被擋在門外（名望 {ch.audience_fame} 以上才見得到）。"
             if self._talks_left(companion_id) == 0:
@@ -1699,11 +1724,7 @@ class Game:
             record.notes += notes
             msgs += extra
         elif result.tier == "落敗":
-            loss = p.stats["silver"] // 10
-            p.stats["silver"] -= loss
-            record.silver = -loss
-            if loss:
-                msgs.append(f"銀兩 -{loss}")
+            msgs += self._lose_silver(record)
         toll = team.take_encounter_toll(s, c, self.world, result.tier, wild=wild)
         record.changes += toll
         msgs += toll
@@ -1739,6 +1760,108 @@ class Game:
             msgs.append(f"{c.config.stat_names[key]} +1")
         for trend_id, delta in self.train_trend_push(loc.id).items():
             msgs += self.push_trend(trend_id, delta, source="drill")
+        return msgs
+
+    def _lose_silver(self, record) -> list[str]:
+        """落敗失落一成銀兩（遊歷與挑戰本人共用），記在戰報上。"""
+        p = self.state.player
+        loss = p.stats["silver"] // 10
+        p.stats["silver"] -= loss
+        record.silver = -loss
+        return [f"銀兩 -{loss}"] if loss else []
+
+    # ── 挑戰大勢人物本人（計畫 T4、軍令文件 4.5）─────────────
+
+    def _snubbed(self, fid: str) -> bool:
+        """這位人物剛被你打敗、還在閉門不見（snub_hours 個現實小時內）。看的是現實時間（self.now，sync 傳進來的），
+        不是賽季時鐘：管理者快轉、補算時間都不會讓他提早見你；紀錄存在角色存檔，伺服器重開也照樣記得。
+        第一季的規則沒開（beta 那一季）就沒有閉門不見這回事。"""
+        return season_one(self.content, self.state.world) and self.now < self.state.player.snubbed_until.get(fid, 0.0)
+
+    def _snubbed_character(self, character_id: str) -> bool:
+        """這個對話人物（求見、交友用的 id）是不是剛被你打敗、還在閉門不見的大勢人物。"""
+        fid = figures.of_character(self.content, character_id)
+        return fid is not None and self._snubbed(fid)
+
+    def _challenge_options(self, odds: bool) -> list[Option]:
+        """挑戰本人：第一季的規則開著、自己有陣營時，這裡每一位在場的敵方大勢人物一個選項（體力照遊歷；odds 時寫勝算，
+        難度跟著聲威走）。剛被你打敗、閉門不見的那幾位按不下去、寫明原因。散人沒有；同陣營的人不打。"""
+        s, c = self.state, self.content
+        p = s.player
+        if p.faction is None or not season_one(c, s.world):
+            return []
+        cost = c.config.action_cost["train"]
+        opts = []
+        for fid in figures.present_at(s, c, p.location):
+            fig = c.figures[fid]
+            if fig.faction == p.faction:
+                continue
+            option_id = f"act:challenge:{fid}"
+            if self._snubbed(fid):
+                opts.append(Option(id=option_id, label=f"挑戰{fig.name}（{SNUB_NOTE}）", enabled=False))
+            else:
+                opts.append(self._cost_option(option_id, f"挑戰{fig.name}", cost, note=self.challenge_odds(fid) if odds else ""))
+        return opts
+
+    def challenge_odds(self, fid: str) -> str:
+        """挑戰這位人物的勝算（跟遊歷同一套說法）：對手是代表本人的隊伍，難度照他此刻的聲威（figures.difficulty）。"""
+        squad = self.content.figures[fid].squad
+        return team.estimate(self.state, self.content, self.world, squad, difficulty=figures.difficulty(self.state, self.content, fid))
+
+    def _challenge(self, fid: str) -> list[str]:
+        """挑戰本人（軍令文件 4.5，企劃者 2026-10-04 改定）：跟他本人打一場單次判定，花遊歷的體力。打贏他敗走（_rout），
+        拿那支隊伍的獎勵；落敗失落一成銀兩；不論勝負都照結果扣氣血（同遊歷）。可以重複打，只是打贏的人要等他消氣。
+        不推戰線（推戰線的是遊歷；打擊人物削的是聲威），也不擲官銀（那是遊歷打贏官軍隊伍才有）。"""
+        s, c = self.state, self.content
+        fig = c.figures[fid]
+        squad = figures.squad_of(s, c, fid)
+        s.player.stamina -= c.config.action_cost["train"]
+        result = team.fight(s, c, self.world, fig.squad, self.rng, difficulty=squad.difficulty)
+        record = battlelog.new_record(s, c, self.world, squad, result, "event", event=f"挑戰{fig.name}")
+        msgs: list[str] = []
+        if result.tier in team.WIN_TIERS:
+            msgs += self._battle_rewards(squad, record)
+            extra = self._rout(fid)
+            changes, notes = battlelog.split_changes(extra)
+            record.changes += changes
+            record.notes += notes
+            msgs += extra
+        elif result.tier == "落敗":
+            msgs += self._lose_silver(record)
+        toll = team.take_encounter_toll(s, c, self.world, result.tier)
+        record.changes += toll
+        msgs += toll
+        msgs.insert(0, self._file_battle(record))
+        return msgs
+
+    def _rout(self, fid: str) -> list[str]:
+        """打贏了，他敗走：
+        1. 聲威扣 figure_defeat_prestige，照陣營人數緩衝（push.buffered，n＝自己陣營活躍時窗內推過大勢的人，含自己）；
+           扣到 0 退場或重創、由接位的人接手（figures.defeat）；
+        2. 打贏的人跟他的情誼扣 figure_defeat_affinity（沒有對話人物的彭脫、韓忠沒有情誼）；
+        3. snub_hours 個現實小時內他不見你、也不跟你交手（其他人照常）；
+        4. 記貢獻：照推 figure_defeat_prestige 點大勢算（contrib_per_push，不打人數緩衝的折），記在這一週。"""
+        s, c = self.state, self.content
+        p, w, cfg = s.player, s.world, c.config
+        fig = c.figures[fid]
+        window = cfg.active_window_days * DAY / calendar.cal_scale(c, w)
+        n = push.active_count(s, p.faction, w.time, window)
+        msgs = [f"{fig.name}敗走。"]
+        msgs += figures.defeat(s, c, fid, push.buffered(cfg.figure_defeat_prestige, n))
+        if fig.character is not None:
+            before = p.affinities.get(fig.character, 0)
+            p.affinities[fig.character] = max(0, before - cfg.figure_defeat_affinity)
+            if p.affinities[fig.character] != before:
+                msgs.append(f"{fig.name}情誼 {p.affinities[fig.character] - before:+d}")
+        p.snubbed_until[fid] = self.now + cfg.snub_hours * HOUR
+        gained = cfg.figure_defeat_prestige * cfg.contrib_per_push
+        if gained:
+            week = calendar.point(w.time, c, w).week
+            p.contrib += gained
+            p.contrib_weeks[week] = p.contrib_weeks.get(week, 0) + gained
+        # T6 的呼叫點：「打擊大勢人物」軍令在這裡記一次進度——
+        #   msgs += orders.credit(s, c, p.faction, p.name, kind="challenge", location=p.location,
+        #                         front=figures.state_of(s, c, fid).front, figure=fid)
         return msgs
 
     def _train_push(self, trend_id: str, delta: int) -> int:

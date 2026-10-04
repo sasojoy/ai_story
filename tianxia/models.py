@@ -653,6 +653,13 @@ class Config(_Strict):
     fate_prestige: dict[Literal["重挫", "聲威大減", "受挫"], int] = Field(
         default_factory=lambda: {"重挫": -30, "聲威大減": -30, "受挫": -15}
     )
+    # 大勢人物（計畫 T4、總計畫第五節；掛在 season_one 後面，開關關著時沒人讀）
+    figure_reaction_lean: int = Field(default=15, ge=0)  # 戰線偏向對方這麼多時，人物推得更勤（反應規則，第一季設計 8.2）
+    figure_reaction_mult: float = Field(default=2.0, ge=1)  # 推得更勤的倍數
+    figure_defeat_prestige: int = Field(default=5, ge=0)  # 挑戰本人打贏一次扣幾點聲威（照陣營人數緩衝）
+    figure_defeat_affinity: int = Field(default=5, ge=0)  # 打贏的人跟他的情誼扣多少（軍令文件 4.5）
+    snub_hours: float = Field(default=2, ge=0)  # 打贏之後幾個「現實」小時內他不見你、也不跟你交手（軍令文件 4.5）
+    figure_difficulty_floor: float = Field(default=0.5, ge=0, le=1)  # 挑戰本人的難度：聲威 0 時是隊伍難度的幾成（100 時原值，中間線性）
     # 推力規則（第一季設計第七節、計畫 T3；掛在 season_one 後面，開關關著時推大勢跟以前一樣）
     daily_push_cap: float = Field(default=10, gt=0)  # 每人每曆日、每條線推得動多少（人數緩衝之後的量）
     over_cap_contrib_ratio: float = Field(default=0.2, ge=0, le=1)  # 超過每日上限的部分，貢獻只記幾成
@@ -878,6 +885,25 @@ class FigureChange(_Strict):
     note: str = ""  # 這筆真的套用時接在公告後面的一句（例：朱儁到任南陽）
 
 
+class FigureDef(_Strict):
+    """一位大勢人物（content/figures.json，計畫 T4、濃縮版內容表 1.1）：開季時照這裡種進 WorldState.figures。"""
+
+    id: str
+    character: str | None = None  # 對話用的人物（characters.json）；輕量接位者（彭脫、韓忠）是 None，不開放對話
+    name: str
+    faction: str  # 陣營 id（Scenario.factions）
+    front: str | None = None  # 開季時推哪條戰線（戰線 id）；None＝在地圖上、能見能打，只是不推（何進、趙弘、董卓）
+    location: str  # 開季時在哪個地點
+    destiny: bool = False  # 天命人物：聲威歸零是重創，不是退場
+    start_prestige: int = Field(default=60, ge=0, le=100)
+    actions_per_day: float = Field(default=1.0, ge=0)  # 每曆日推幾次（季曆）
+    push: int = Field(default=1, ge=0)  # 每次推幾點
+    successor: str | None = None  # 空出戰線時由誰接（人物表的 id）
+    squad: str  # 挑戰本人時的對手（squads.json）；難度是聲威 100 時的值
+    active_from_week: int = Field(default=1, ge=1)  # 第幾週起才推（官軍三將與孫堅是第 2 週「朝廷出兵」之後）
+    start_status: Literal["active", "away"] = "active"  # 輕量接位者開季時還沒出場，接手時才出現
+
+
 class TimetableOutcome(_Strict):
     """一件大事的一種結果：結算文件第五節一列的「公告」「江湖史」「效果」。"""
 
@@ -1083,6 +1109,7 @@ class Content(_Strict):
     battles: dict[str, BattleDef] = Field(default_factory=dict)  # 內容尚未撰寫，先留介面（見設計討論，骨架做完再回頭寫黃巾決戰）
     road_sights: dict[str, RoadSight] = Field(default_factory=dict)  # 路上見聞（content/road_sights.json，路上設計第五節）
     timetable: list[TimetableEvent] = Field(default_factory=list)  # 第一季的時刻表（content/timetable.json，計畫 T2）
+    figures: dict[str, FigureDef] = Field(default_factory=dict)  # 大勢人物（content/figures.json，計畫 T4）；沒有這個檔就是空的
     foreshadows: Foreshadows = Field(default_factory=Foreshadows)  # 關鍵伏筆（content/foreshadows.json，計畫 T7）
     map: MapLayout
     tutorial: Tutorial

@@ -22,6 +22,10 @@ TRAIN_SCORE = 0.6  # 遊歷本身的分數（低於探索）；對自己陣營�
 HOME_MOVE_SCORE = 0.3  # 往自己陣營的地盤走（投靠點一帶；第一季濃縮版是輸得最多的那條戰線，離得還遠時是往那邊的下一站）
 AWAY_MOVE_SCORE = 0.1
 TRAIN_MOVE_SCORE = 0.5  # 往「遊歷對自己陣營有利」的地點走，額外加分
+# 挑戰打得贏的大勢人物本人（T4）：比探索、交友高，比推大勢的遊歷低（一點大勢抵十分）——前線上照舊遊歷，
+# 前線以外遇上了才打；「打擊大勢人物」軍令讓假人專程去找人是 T6 的事
+CHALLENGE_SCORE = 1.5
+CHALLENGE_ODDS = ("穩勝", "有把握")  # 假人只挑這兩種勝算的人物（輸了要賠銀兩、扣氣血）
 PRACTICE_CHANCE = 0.2  # 每次行動順便鍛鍊一門的機率（練功不花心得，不能每次都練）
 SKILL_NAME_TRIES = 5
 
@@ -111,6 +115,8 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
         base = HOME_MOVE_SCORE if arg == _front_hop(game, profile) or arg in _home(game, profile) else AWAY_MOVE_SCORE
         return base + (TRAIN_MOVE_SCORE if _train_value(game, profile, arg) > 0 else 0.0)
     if kind == "act":
+        if arg.startswith("challenge:"):  # 挑戰本人：打得贏才去（打不贏的、閉門不見的按不下去，本來就不在候選裡）
+            return CHALLENGE_SCORE if game.challenge_odds(arg.partition(":")[2]) in CHALLENGE_ODDS else None
         if arg == "call":
             return None
         if arg == "socialize" and (game.socialize_starts_dialogue() or game.socialize_is_futile()):
