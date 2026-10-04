@@ -18,7 +18,7 @@ from pydantic import BaseModel, ValidationError
 from .companion_agent import DIALOGUE_TAGS
 from .materials import TIER_NAMES
 from .models import (
-    ROADS, STATS, BattleDef, CharacterDef, Condition, Config, Content, CraftNames, Effect, Event, Location,
+    ROADS, STATS, BattleDef, CharacterDef, Condition, Config, Content, CraftNames, Effect, Event, Foreshadows, Location,
     MapLayout, Material, RoadSight, Scenario, Sect, SimRumor, SkillDef, Squad, TimetableEvent, Tutorial,
 )
 from .zh import to_traditional
@@ -72,6 +72,7 @@ def load_content(root: Path, profile: str | None = None) -> Content:
         road_sights=_index(RoadSight, _read(root / "road_sights.json")),
         timetable=[_build(TimetableEvent, raw) for raw in _read(root / "timetable.json")]
         if (root / "timetable.json").exists() else [],
+        foreshadows=_foreshadows(root / "foreshadows.json"),
         events=events,
         map=MapLayout(**_read(root / "map.json")),
         tutorial=Tutorial(**_read(root / "tutorial.json")),
@@ -130,6 +131,16 @@ FREE_TEXT_REWARDS = ("silver", "fame", "good", "xinde", "str", "agi", "con", "wi
 
 def _read(path: Path):
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _foreshadows(path: Path) -> Foreshadows:
+    """content/foreshadows.json（計畫 T7）：不存在或是空的檔案都當成沒有伏筆。"""
+    if not path.exists() or not path.read_text(encoding="utf-8").strip():
+        return Foreshadows()
+    try:
+        return Foreshadows(**_read(path))
+    except ValidationError as e:
+        raise ContentError(f"foreshadows.json：{e}") from e
 
 
 def _build(model, raw: dict):
@@ -241,6 +252,10 @@ def check_timetable(c: Content, need, known, region_ids: list[str], trend_ids: s
         known(where, ev.third_party_trends, trends, "大勢線")
         check_text(where, ev.preface)
         check_text(where, ev.third_party_text)
+        check_text(where, ev.third_party_chronicle)
+        need(all(side in TIMETABLE_SIDES for side in ev.locked_chronicle), f"{where}：locked_chronicle 的鍵只能是 guan 或 huang")
+        for text in ev.locked_chronicle.values():
+            check_text(where, text)
         for key, outcome in ev.outcomes.items():
             ow = f"{where} 結果 {key}"
             known(ow, outcome.trends, trends, "大勢線")
@@ -260,6 +275,156 @@ def check_timetable(c: Content, need, known, region_ids: list[str], trend_ids: s
         earlier[ev.id] = ev
 
 
+def check_foreshadows(c: Content, need, known, region_ids: list[str], counters_written: dict[str, str]) -> None:
+    """伏筆（content/foreshadows.json，計畫 T7）：鏈的大事在時刻表上、陣營在劇本裡；片段的大區是大區、事件與人物存在；
+    最後一步的地點、物品、人物存在，答案是選項之一或 tianji:<天機>（天機的選項要剛好是候選）；文字只用繁體中文。
+    伏筆計數：效果寫的要有鏈讀，鏈讀的要有效果寫（官銀由 guanyin 的規則寫）。"""
+    from .foreshadow import FIGURE_SLOT, GUANYIN, TIANJI, TIANJI_ANSWER, asks_of, trips  # noqa: PLC0415  延後 import
+
+    fs = c.foreshadows
+    faction_ids = [f.id for f in c.scenario.factions]
+    item_ids = [item.id for item in fs.items]
+    chain_ids = [ch.id for ch in fs.chains]
+    for label, ids in (("伏筆物品", item_ids), ("伏筆", chain_ids)):
+        duplicated = sorted({x for x in ids if ids.count(x) > 1})
+        need(not duplicated, f"{label} id 重複：{'、'.join(duplicated)}")
+    events = {e.id: e for e in c.timetable}
+
+    def check_text(where: str, text: str | None) -> None:
+        if text:
+            need(to_traditional(text) == text, f"{where}：文字只能用繁體中文（「{text[:12]}…」）")
+
+    for item in fs.items:
+        need(bool(item.name.strip()), f"伏筆物品 {item.id}：name 不能是空的")
+        check_text(f"伏筆物品 {item.id}", item.name)
+
+    counters_read: set[str] = set()
+
+    def check_requires(where: str, req, top: bool = True) -> None:
+        known(where, req.clue_items, item_ids, "伏筆物品")
+        known(where, req.affinity, c.characters, "人物")
+        for key in req.donations:
+            loc, sep, kind = key.partition(":")
+            need(bool(sep and kind), f"{where}：捐獻 {key!r} 要寫成「據點 id:種類」")
+            known(where, [loc], c.locations, "地點")
+        counters_read.update(req.counters)
+        amounts = [*req.clue_items.values(), *req.donations.values(), *req.affinity.values(), *req.counters.values()]
+        need(req.grain >= 0 and all(n >= 0 for n in amounts), f"{where}：條件的數量不能是負的")
+        need(top or req.check is None, f"{where}：檢定不能寫在 any_of 裡")
+        for sub in req.any_of:
+            check_requires(where, sub, top=False)
+
+    def check_wrong(where: str, wrong) -> None:
+        known(where, wrong.lose_items, item_ids, "伏筆物品")
+        known(where, wrong.affinity, c.characters, "人物")
+        check_text(where, wrong.text)
+
+    def check_ask(where: str, ask) -> None:
+        option_ids = [o.id for o in ask.options]
+        need(len(set(option_ids)) == len(option_ids), f"{where}：選項 id 重複")
+        check_text(where, ask.question)
+        for o in ask.options:
+            check_text(where, o.text)
+            if o.wrong is not None:
+                check_wrong(f"{where} 選項 {o.id}", o.wrong)
+        if ask.answer.startswith(TIANJI_ANSWER):
+            key = ask.answer.removeprefix(TIANJI_ANSWER)
+            known(where, [key], TIANJI, "天機")
+            if key in TIANJI:
+                need(
+                    sorted(option_ids) == sorted(TIANJI[key]),
+                    f"{where}：天機 {key} 的選項要剛好是{'、'.join(TIANJI[key])}（寫的是{'、'.join(option_ids)}）",
+                )
+        else:
+            need(ask.answer in option_ids, f"{where}：答案 {ask.answer} 不是選項之一，也不是 tianji:<天機>")
+
+    for ch in fs.chains:
+        where = f"伏筆 {ch.id}"
+        known(where, [ch.event], events, "時刻表大事")
+        known(where, [ch.side], faction_ids, "陣營")
+        event = events.get(ch.event)
+        versions = set(event.versions.values()) if event is not None else set()
+        if ch.front is not None:
+            known(where, [ch.front], region_ids, "大區")
+        if ch.invalid_if.figure_out is not None:
+            known(where, [ch.invalid_if.figure_out], c.characters, "人物")
+        for i, f in enumerate(ch.fragments):
+            fw = f"{where} 片段{i + 1}"
+            known(fw, [f.region], region_ids, "大區")
+            check_text(fw, f.text)
+            for text in f.versions.values():
+                check_text(fw, text)
+            known(fw, f.versions, versions, "版本")
+            if f.source == "event":
+                need(f.event is not None, f"{fw}：來源是 event 就要寫 event")
+                if f.event is not None:
+                    known(fw, [f.event], c.events, "事件")
+            else:
+                need(f.event is None, f"{fw}：只有來源是 event 的才寫 event")
+            if f.source == "talk":
+                need(f.character is not None and bool(f.topic.strip()), f"{fw}：來源是 talk 就要寫 character 與 topic")
+                known(fw, [x for x in (f.character, f.stand_in) if x is not None], c.characters, "人物")
+                check_text(fw, f.topic)
+            else:
+                need(
+                    f.character is None and f.stand_in is None and not f.topic and f.affinity_min == 0,
+                    f"{fw}：只有來源是 talk 的才寫 character、stand_in、topic、affinity_min",
+                )
+        final = ch.final
+        if final.steps:
+            need(final.location is None, f"{where}：寫了 steps 就不要在 final 上寫 location（每一趟各寫各的）")
+            need(
+                not (final.question or final.options or final.answer or final.then or final.label),
+                f"{where}：寫了 steps 就把 label、題目寫在每一趟裡",
+            )
+        else:
+            need(final.location is not None, f"{where}：最後一步要寫 location（或寫 steps）")
+        check_requires(f"{where} 最後一步", final.requires)
+        seen: set[str] = set()
+        for i, trip in enumerate(trips(final)):
+            tw = f"{where} 第 {i + 1} 趟" if final.steps else f"{where} 最後一步"
+            if trip.location is not None:
+                known(tw, [trip.location], c.locations, "地點")
+                need(trip.location not in seen, f"{where}：兩趟不能在同一個地點（{trip.location}）")
+                seen.add(trip.location)
+            else:
+                need(not final.steps, f"{tw}：每一趟都要寫 location")
+            need(bool(trip.label.strip()), f"{tw}：要寫 label（選單上的字）")
+            if trip is not final:
+                check_requires(tw, trip.requires)
+            need(
+                bool(trip.question) or (not trip.options and trip.answer is None and not trip.then),
+                f"{tw}：有選項、答案或追問就要寫 question",
+            )
+            check_wrong(tw, trip.wrong)
+            for text in (trip.label, trip.unready, trip.success_text):
+                check_text(tw, text)
+        for aw, ask in asks_of(ch):
+            check_ask(f"{where} {aw}", ask)
+        need(bool(final.success_text.strip()), f"{where}：要寫 success_text（完成時的敘事）")
+        check_text(where, final.success_text)
+        for text in final.success_versions.values():
+            check_text(where, text)
+        known(where, final.success_versions, versions, "版本")
+        known(where, [x for x in (final.figure, final.stand_in) if x is not None], c.characters, "人物")
+        texts = [final.success_text, *final.success_versions.values(), *(step.success_text for step in final.steps)]
+        uses_figure = any(FIGURE_SLOT in text for text in texts)
+        need(final.figure is not None or not uses_figure, f"{where}：用了 {FIGURE_SLOT} 就要寫 figure")
+        if final.window == "during_muster":
+            need(event is None or event.kind == "showdown", f"{where}：window 是 during_muster 的只能用在決戰（{ch.event} 不是）")
+
+    rule = fs.guanyin
+    if rule is not None:
+        known("伏筆的官銀", [rule.side, rule.squad_faction], faction_ids, "陣營")
+        known("伏筆的官銀", rule.regions, region_ids, "大區")
+        check_text("伏筆的官銀", rule.text)
+        counters_written.setdefault(GUANYIN, "伏筆的官銀")
+    for key, where in sorted(counters_written.items()):
+        need(key in counters_read, f"{where}：伏筆計數 {key} 寫了卻沒有任何一條鏈讀它")
+    for key in sorted(counters_read - set(counters_written)):
+        need(False, f"伏筆計數 {key}：有鏈讀它，卻沒有任何效果（或官銀的規則）寫它")
+
+
 def validate(c: Content) -> None:
     errors: list[str] = []
     trend_ids = {t.id for t in c.scenario.trends}
@@ -273,6 +438,9 @@ def validate(c: Content) -> None:
         for key in keys:
             need(key in valid, f"{where}：未知的{kind} {key}")
 
+    faction_ids = [f.id for f in c.scenario.factions]
+    item_ids = [item.id for item in c.foreshadows.items]
+    counters_written: dict[str, str] = {}  # 伏筆計數 → 第一個寫它的地方（效果的 fs_counters）
     marks_written: dict[str, str] = {}  # 痕跡 → 第一個寫它的地方
     marks_read: dict[str, str] = {}  # 痕跡 → 第一個讀它的地方（條件或文字裡的模糊人數）
 
@@ -296,6 +464,10 @@ def validate(c: Content) -> None:
         known(where, [*cond.trend_min, *cond.trend_max], trend_ids, "大勢線")
         known(where, [*cond.revealed_all, *cond.revealed_none], trend_ids, "大勢線")
         known(where, cond.members_none, c.characters, "人物")
+        known(where, cond.factions, faction_ids, "陣營")
+        known(where, cond.clue_items, item_ids, "伏筆物品")
+        for week in (cond.week_min, cond.week_max):
+            need(week is None or 1 <= week <= c.config.season_weeks, f"{where}：週次 {week} 不在 1～{c.config.season_weeks} 之間")
         for sub in cond.any_of:
             check_condition(where, sub)
 
@@ -309,6 +481,9 @@ def validate(c: Content) -> None:
         known(where, eff.learn_skills, c.skills, "武學")
         known(where, eff.materials, c.materials, "素材")
         known(where, eff.trend, trend_ids, "大勢線")
+        known(where, eff.clue_items, item_ids, "伏筆物品")
+        for key in eff.fs_counters:
+            counters_written.setdefault(key, where)
         if eff.join_sect:
             known(where, [eff.join_sect], c.sects, "門派")
         if eff.next_event:
@@ -656,6 +831,7 @@ def validate(c: Content) -> None:
         need(squad.difficulty >= 0, f"{where}：difficulty 不能是負的")
 
     check_timetable(c, need, known, region_ids, trend_ids)
+    check_foreshadows(c, need, known, region_ids, counters_written)
 
     for key, where in sorted(marks_written.items()):
         need(key in marks_read, f"{where}：痕跡 {key} 寫了卻沒有任何條件或文字讀它")

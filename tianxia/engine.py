@@ -12,8 +12,8 @@ from collections.abc import Callable
 from pydantic import BaseModel
 
 from . import (
-    atlas, battle_instance, battlelog, calendar, companion_agent, craft, encounter, event_llm, flavor, journal, materials,
-    push, roster, skillview, team, timetable,
+    atlas, battle_instance, battlelog, calendar, companion_agent, craft, encounter, event_llm, flavor, foreshadow, journal,
+    materials, push, roster, skillview, team, timetable,
 )
 from .events import choice_label, event_candidates, has_events_here, pick_event, visible_choices
 from .guide import note_action, quest_text, tutorial_intro
@@ -201,6 +201,12 @@ class Game:
         ]
         p.art_levels = {k: v for k, v in p.art_levels.items() if team.resolve_art(k, c, self.world) is not None}
         p.materials = {k: v for k, v in p.materials.items() if k in c.materials and v > 0}
+        chains = {ch.id for ch in c.foreshadows.chains}  # 伏筆：內容改版後拿掉的鏈與物品
+        items = {item.id for item in c.foreshadows.items}
+        p.clue_items = {k: v for k, v in p.clue_items.items() if k in items and v > 0}
+        p.fragments = {k: v for k, v in p.fragments.items() if k in chains}
+        if p.fs_asking is not None and p.fs_asking not in chains:
+            p.fs_asking, p.fs_asked = None, 0
         line_ids = [line.id for line in c.scenario.storylines]
         if s.world.storyline not in line_ids:
             s.world.storyline, s.world.act = line_ids[0], 0
@@ -326,7 +332,7 @@ class Game:
             return [Option(id="season:resting", label="休季中，等待管理者開啟下一季", enabled=False)]
         if s.pending_event:
             event = c.events[s.pending_event]
-            opts = [Option(id=f"choice:{i}", label=self._choice_label(ch, odds)) for i, ch in visible_choices(event, s)]
+            opts = [Option(id=f"choice:{i}", label=self._choice_label(ch, odds)) for i, ch in visible_choices(event, s, c)]
             if event.free_text is not None:
                 opts.append(Option(id=FREE_TEXT_OPTION, label=event.free_text.prompt))
             return opts
@@ -334,6 +340,7 @@ class Game:
             dialogue_options, _ = s.player.last_offered_dialogue.get(s.player.pending_companion, [[], []])
             talk_cost = c.config.talk_stamina
             opts = [self._cost_option(f"talk:{i}", text, talk_cost) for i, text in enumerate(dialogue_options)]
+            opts += foreshadow.talk_options(s, c, s.player.pending_companion)  # 伏筆的片段：固定文字、不花體力（計畫 T7）
             opts.append(Option(id="talk:leave", label="告辭"))
             return opts
         if s.player.pending_faction:
@@ -344,6 +351,8 @@ class Game:
             ]
         if s.player.picking_audience:
             return self._audience_options()
+        if s.player.fs_asking is not None:
+            return foreshadow.asking_options(s, c)  # 伏筆的最後一步正在答題：只有答案與「作罷」
         if s.player.busy_until is not None:
             return [Option(id="act:break", label="提前出關")]
         j = s.player.journey
@@ -392,6 +401,7 @@ class Game:
             for faction in c.scenario.factions:
                 if s.player.location in faction.join_at:
                     opts.append(Option(id=f"faction:{faction.id}", label=f"投靠{faction.name}"))
+        opts += foreshadow.final_options(s, c, loc.id)  # 伏筆的最後一步（計畫 T7）：做得了的人在那個地點才有
         opts.append(Option(id="act:rest", label="打坐（坐下來回體力，隨時可以起身）"))
         return opts
 
@@ -585,6 +595,7 @@ class Game:
             return self._log([f"（寫下你的做法，{FREE_TEXT_MAX} 字以內。）"])  # 選項本身只叫出輸入框，不消耗事件
         prepared = self._checked_prepared(option_id, prepared) if kind in ("act", "talk", "call") else None
         self._draft = Draft(self._action_title(kind, arg))
+        stamina = self.state.player.stamina
         try:
             if kind == "act":
                 msgs = self._act(arg, prepared)
@@ -598,8 +609,11 @@ class Game:
                 msgs = self._call(arg, prepared)
             elif kind == "road":
                 msgs = self._road(arg)
+            elif kind == "fs":
+                msgs = self._foreshadow(arg)
             else:
                 msgs = self._choose(int(arg))
+            msgs += self._hear_after_stamina(stamina)
             if kind == "act" and arg != "break":
                 msgs += note_action(self.state, self.content, self.world, arg)
             if kind == "call" and arg != "back":
@@ -692,6 +706,9 @@ class Game:
             return f"交談・{character.name}"
         if kind == "call":
             return "收回名帖" if arg == "back" else f"求見・{c.characters[arg].name}"
+        if kind == "fs":
+            here = c.locations[s.player.location].name
+            return "作罷" if arg == "leave" else f"{foreshadow.trip_label(s, c, arg.partition(':')[0])}・{here}"
         if kind == "road":
             what = arg.partition(":")[0]
             if what == "back":
@@ -752,6 +769,25 @@ class Game:
         if companion_id is not None:
             return self._open_dialogue(companion_id, prepared)
         return self._encounter("socialize", self._no_audience_line())
+
+    def _foreshadow(self, arg: str) -> list[str]:
+        """伏筆的最後一步（計畫 T7）：fs:<鏈> 看題（沒有題的直接做）、fs:<鏈>:<選項> 答題、fs:leave 作罷。"""
+        if arg == "leave":
+            return foreshadow.leave(self.state)
+        chain_id, _, option_id = arg.partition(":")
+        return foreshadow.attempt(
+            self.state, self.content, chain_id, option_id or None, self.state.world.time, self.rng, self.world,
+        )
+
+    def _hear_after_stamina(self, before: float) -> list[str]:
+        """每次花體力的行動之後抽一次伏筆片段（計畫 T7）：選單的每一個行動（choose）與輿圖的安排前往（travel）都經過這裡，
+        體力比行動前少了才抽（探索、遊歷、交友、求見、對話、招募、趕路、疾行；打坐、步行、生成不出對話退回體力的都不算）。
+        抽的是行動後所在地點的大區；沒有伏筆在跑（開關關著、沒有鏈）就什麼都不做。"""
+        s, c = self.state, self.content
+        if s.player.stamina >= before or not foreshadow.on(s, c):
+            return []
+        region = atlas.region_of(c, s.player.location)
+        return foreshadow.hear_after_action(s, c, region.id if region is not None else None, self.rng, self.world)
 
     def _call(self, arg: str, prepared: companion_agent.PreparedTurn | None = None) -> list[str]:
         """求見選單上的選擇：「返回」收起選單；選了一位人物就跟他開口對話，跟交友碰上人物時一模一樣——
@@ -973,6 +1009,10 @@ class Game:
             return ["（此刻無法這麼做。）"]
         if arg == "leave":
             return companion_agent.leave_dialogue(self.state)
+        if arg.startswith("clue:"):  # 伏筆的片段：固定文字，不經模型、不扣體力、不算對話輪數（計畫 T7）
+            chain_id, _, index = arg.removeprefix("clue:").rpartition(":")
+            heard = foreshadow.hear_talk(self.state, self.content, companion_id, chain_id, int(index), self.world)
+            return heard or ["（此刻無法這麼做。）"]
         try:
             msgs = companion_agent.continue_dialogue(
                 self.client, self.state, self.content, self.world, companion_id, int(arg), self.rng,
@@ -1557,7 +1597,7 @@ class Game:
                 text = f"{text}\n\n{flourish}"
         self._outcome(journal.event_marker(event.title, event.qiyu), head)
         self._hide(text)
-        return [head, text]
+        return [head, text] + foreshadow.hear_from_event(self.state, self.content, event.id, self.world)  # 片段事件（計畫 T7）
 
     def _squad_encounter(self, squad_id: str, wild: bool = False) -> list[str]:
         """遭遇一支敵方隊伍：單次判定，勝得對手獎勵與屬性機會，落敗失落一成銀兩；自己陣營的隊伍改成操練（見 _drill）。
@@ -1585,6 +1625,8 @@ class Game:
             if not wild:
                 for trend_id, delta in loc.train_trend.items():
                     extra += self.push_trend(trend_id, self._train_push(trend_id, delta), source="train")
+                region = atlas.region_of(c, p.location)  # 官銀（伏筆，濃縮版內容表 4.0）：只有遊歷打贏才擲
+                extra += foreshadow.after_win(s, c, squad, self.rng, region.id if region is not None else None)
             changes, notes = battlelog.split_changes(extra)
             record.changes += changes
             record.notes += notes
@@ -1975,8 +2017,10 @@ class Game:
         route = atlas.way_to(s, c, dest_id)
         s.battle_card = None
         self._draft = Draft(atlas.journey_title(c, route.path))
+        stamina = s.player.stamina
         try:
             msgs = self._depart(route, mode)
+            msgs += self._hear_after_stamina(stamina)
             journal.add_entry(s, self._draft.entry(s.world.time, msgs))
         finally:
             self._draft = None
@@ -2445,6 +2489,9 @@ class Game:
             return f"**投靠{faction.name}**\n\n{self._faction_prompt(faction)}"
         if s.player.picking_audience:
             return f"**求見**\n\n{self._audience_intro()}"
+        asking = foreshadow.asking_text(s, c, self.world) if s.player.fs_asking is not None else None
+        if asking is not None:
+            return asking
         if s.player.journey is not None:
             halted = "（已經喊停）" if s.player.journey.stop_at is not None else ""
             return (

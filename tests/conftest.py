@@ -212,3 +212,66 @@ def install_season_one(content):
     ]
     content.timetable = season_one_events()
     return content
+
+
+# ── 伏筆（計畫 T7a）：fixture 的幾條鏈與準備事件，掛在上面的第一季內容上 ─────────────
+
+FORESHADOW_FIXTURE = Path(__file__).parent / "fixtures" / "foreshadow"
+
+
+def install_foreshadows(content):
+    """第一季內容（install_season_one）加上伏筆要的東西，最後整份跑一次 content.validate：
+    - 三個陣營 guan（小鎮投靠）、huang（湖邊投靠）、haoqiang；遊歷不接戰後事件、不加屬性；
+    - 戰線 yingru、nanyang、jizhou 也當大區（地圖右上角的小三角，不蓋到任何地點），時刻表的檢查才認得；
+    - 南區的「渡口」（port，連小鎮），加上時刻表會用到的盧植營、宛城；
+    - 大勢人物：皇甫嵩在湖邊、朱儁在渡口、波才在小鎮可以對話，盧植、董卓、張曼成只是時刻表的人物；
+    - 慢屬性三階（凡 1、靈 3、天 9 份糧草）與一支官軍的巡邏隊；
+    - tests/fixtures/foreshadow/foreshadows.json 的六條鏈與 events.json 的三則事件。"""
+    import json
+
+    from tianxia.content import validate
+    from tianxia.models import (
+        CharacterDef, Connection, Drop, Event, FactionDef, Foreshadows, Location, MapRegion, Material, Squad,
+    )
+
+    install_season_one(content)
+    content.config.train_event_chance = 0.0
+    content.config.train_stat_chance = 0.0
+    content.scenario.factions = [
+        FactionDef(id="guan", name="官軍", join_at=["town"]),
+        FactionDef(id="huang", name="黃巾", join_at=["lake"]),
+        FactionDef(id="haoqiang", name="地方豪強"),
+    ]
+    for i, (rid, name) in enumerate((("yingru", "潁川汝南"), ("nanyang", "南陽"), ("jizhou", "冀州"))):
+        x = 360 + i * 12
+        content.map.regions.append(MapRegion(
+            id=rid, name=name, points=[[x, 0], [x + 10, 0], [x + 10, 8]], fill="#EEEEEE", text_fill="#999999",
+            label_x=x, label_y=4,
+        ))
+    content.locations["port"] = Location(
+        id="port", name="渡口", description="南邊的渡口。", connections=["town"], tags=["城鎮"], x=100, y=170,
+    )
+    content.locations["town"].connections.append(Connection("port"))
+    for loc_id, name, x in (("luzhi_camp", "盧植營", 40), ("wan_city", "宛城", 60)):
+        content.locations[loc_id] = Location(id=loc_id, name=name, description=f"{name}。", connections=[], x=x, y=170)
+    stats = {"str": 6, "agi": 6, "con": 6, "wis": 6}
+    for cid, name, talk_at in (
+        ("huangfusong", "皇甫嵩", "lake"), ("zhujun", "朱儁", "port"), ("bocai", "波才", "town"),
+        ("luzhi", "盧植", None), ("dongzhuo", "董卓", None), ("zhangmancheng", "張曼成", None),
+    ):
+        content.characters[cid] = CharacterDef(
+            id=cid, name=name, kind="locked", deep_interaction=talk_at is not None, talk_at=talk_at, stats=stats,
+        )
+    for tier, name in ((1, "粗糧"), (2, "細糧"), (3, "軍糧")):
+        content.materials[f"man_{tier}"] = Material(id=f"man_{tier}", name=name, attribute="慢", tier=tier)
+    content.squads["guan_patrol"] = Squad(
+        id="guan_patrol", name="官軍巡邏隊", difficulty=1, attribute="慢", faction="guan",
+        drops=[Drop(material="man_2", chance=0.0), Drop(material="man_3", chance=0.0)],  # 只為了讓靈、天兩階有來源
+    )
+    content.foreshadows = Foreshadows.model_validate(
+        json.loads((FORESHADOW_FIXTURE / "foreshadows.json").read_text(encoding="utf-8"))
+    )
+    for raw in json.loads((FORESHADOW_FIXTURE / "events.json").read_text(encoding="utf-8")):
+        content.events[raw["id"]] = Event(**raw)
+    validate(content)
+    return content

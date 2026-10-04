@@ -1,0 +1,17 @@
+[
+  {"id": "fs_ev_boatman", "title": "老船夫", "text": "湖邊的老船夫在補船，跟你聊起天氣。", "locations": ["lake"], "choices": [
+    {"text": "道謝離開"}
+  ]},
+  {"id": "fs_prep_reeds", "title": "河灘蘆葦", "text": "河灘的蘆葦曬得乾透。", "locations": ["lake"],
+   "condition": {"factions": ["guan"]}, "choices": [
+    {"text": "割幾捆帶走", "effect": {"clue_items": {"fs_reeds": 1}}},
+    {"text": "不理它"}
+  ]},
+  {"id": "fs_ev_two_buyers", "title": "兩路買家", "text": "官軍的軍需官與黃巾的頭目先後來買糧。", "locations": ["town"],
+   "condition": {"factions": ["haoqiang"], "week_min": 4, "week_max": 6}, "choices": [
+    {"text": "賣給官軍"},
+    {"text": "賣給黃巾"},
+    {"text": "都不賣，關門囤糧"},
+    {"text": "兩邊都賣，誰也別讓誰知道", "effect": {"fs_counters": {"two_buyers": 1}}}
+  ]}
+]

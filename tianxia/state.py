@@ -134,6 +134,15 @@ class PlayerState(BaseModel):
     # ── 捐獻紀錄（計畫 T6，軍備文件 4.1）：「據點 id:糧草」→ 累積的份量。T7 的伏筆只讀它；寫入是 T6 護糧的事 ──
     donations: dict[str, int] = Field(default_factory=dict)
 
+    # ── 伏筆（計畫 T7、伏筆文件）；角色每季重來，跟著新角色清空（不在跨季保留的清單上）──
+    fragments: dict[str, list[int]] = Field(default_factory=dict)  # 鏈 id → 聽過的片段（fragments 的索引）
+    clue_items: dict[str, int] = Field(default_factory=dict)  # 伏筆專用物品 id → 數量
+    fs_counters: dict[str, int] = Field(default_factory=dict)  # 隱藏計數：guanyin（官銀）、two_buyers（豪強兩頭賣糧的起點）
+    fs_done: list[str] = Field(default_factory=list)  # 做完的鏈 id；多趟的鏈每做完一趟另記「鏈 id:第幾趟」（從 0 起）
+    fs_cooldown_until: dict[str, float] = Field(default_factory=dict)  # 鏈 id → 答錯之後要等到哪個世界秒才能再做
+    fs_asking: str | None = None  # 正在答最後一步的題的那條鏈；None＝沒在答（選單照常）
+    fs_asked: int = 0  # 答到第幾題（0＝question，1 起是 then 的追問）
+
 
 RumorLayer = Literal["world", "faction", "local", "personal"]  # 天下大事／陣營軍情／地方傳聞／個人線索（傳聞分層設計第二節）
 

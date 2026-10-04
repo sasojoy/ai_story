@@ -4,6 +4,7 @@ from __future__ import annotations
 import random
 from typing import Literal
 
+from . import calendar, foreshadow
 from .models import Choice, Content, Event, Location
 from .rules import check_condition, check_who
 from .state import GameState
@@ -36,8 +37,10 @@ def event_candidates(
 ) -> list[Event]:
     """這裡、現在可以抽的事件（依內容順序）。pool 給探索三選一用："rare" 只要一次性與奇遇，
     "common" 只要可重複的；None 是全部（遊歷、交友照舊用這個）。
-    看過的一次性事件不再出現；奇遇沒標 once 的看過也照樣留著（企劃者 2026-10-03 改）。"""
+    看過的一次性事件不再出現；奇遇沒標 once 的看過也照樣留著（企劃者 2026-10-03 改）。
+    伏筆的事件（片段事件、準備事件，foreshadow.event_ids）掛在第一季開關後面：開關關著時不出現（計畫 T7）。"""
     location = content.locations[state.player.location]
+    hidden = set() if calendar.season_one_on(state.world, content) else foreshadow.event_ids(content)
     candidates: list[Event] = []
     for event in content.events.values():
         if action not in event.actions:
@@ -48,7 +51,9 @@ def event_candidates(
             continue
         if event.once and event.id in state.player.seen_events:
             continue
-        if not check_condition(event.condition, state):
+        if event.id in hidden:
+            continue
+        if not check_condition(event.condition, state, content):
             continue
         candidates.append(event)
     return candidates
@@ -68,11 +73,12 @@ def pick_event(
 
 def fortune_events(state: GameState, content: Content) -> list[Event]:
     """還能觸發的新立門戶福緣事件（條件成立，也就是那位地品還沒入門），依內容順序。"""
-    return [e for e in content.events.values() if e.fortune and check_condition(e.condition, state)]
+    return [e for e in content.events.values() if e.fortune and check_condition(e.condition, state, content)]
 
 
-def visible_choices(event: Event, state: GameState) -> list[tuple[int, Choice]]:
-    return [(i, c) for i, c in enumerate(event.choices) if check_condition(c.condition, state)]
+def visible_choices(event: Event, state: GameState, content: Content | None = None) -> list[tuple[int, Choice]]:
+    """content 給了才判得了季曆的條件（night、week_*，見 rules.check_condition）。"""
+    return [(i, c) for i, c in enumerate(event.choices) if check_condition(c.condition, state, content)]
 
 
 def choice_label(choice: Choice, state: GameState, content: Content, world: WorldStateStore) -> str:

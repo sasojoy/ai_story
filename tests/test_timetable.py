@@ -151,6 +151,32 @@ def test_same_side_late_finishers_are_not_named_as_losers(s1, season):
     assert w.timeline["luzhi_jailed"].losers == ["乙"] and "丁" not in msgs[0]
 
 
+def test_locked_chronicle_names_the_locker_and_falls_back(s1, season):
+    """江湖史具名（計畫 T7、伏筆文件 2.4）：有人鎖定、而且是他那一方的具名公告時，江湖史用這件大事寫給那一方的那一行；
+    那一方沒寫就在原本那一行後面接「（名號改寫）」。沒人鎖定、或管理者給了另一方的結果（公告沒有具名），照原本那一行。
+    豪強做完的人另外記一行（多人用「、」接），不論誰贏。"""
+    changshe, luzhi = event(s1, "changshe_fire"), event(s1, "luzhi_jailed")
+    changshe.locked_chronicle = {"guan": "皇甫嵩火攻長社；火具是{name}備下的。"}
+    changshe.third_party_chronicle = "{name} 趁亂收了兩邊的糧錢。"
+    w = season.world
+    w.locks["changshe_fire"] = Lock(side="guan", name="甲", time=0.0)
+    w.third_party["changshe_fire"] = ["豪甲", "豪乙"]
+    timetable.resolve(season, s1, changshe, random.Random(0), key="guan:大勝")
+    w.locks["luzhi_jailed"] = Lock(side="huang", name="乙", time=0.0)
+    timetable.resolve(season, s1, luzhi, FixedRandom(0.99))  # 擲骰本來會「不成」，鎖定定成「成」
+    assert [r.text for r in w.chronicle] == [
+        "皇甫嵩火攻長社；火具是甲備下的。", "豪甲、豪乙 趁亂收了兩邊的糧錢。", "盧植被誣下獄。（乙改寫）",
+    ]
+
+    plain = GameState(player=_player(), world=fresh_season(s1))
+    timetable.resolve(plain, s1, luzhi, FixedRandom(0.0))  # 沒人鎖定
+    forced = GameState(player=_player(), world=fresh_season(s1))
+    forced.world.locks["changshe_fire"] = Lock(side="guan", name="甲", time=0.0)
+    timetable.resolve(forced, s1, changshe, random.Random(0), key="huang:險勝")  # 管理者給了另一方的結果
+    assert [r.text for r in plain.world.chronicle] == ["盧植被誣下獄。"]
+    assert [r.text for r in forced.world.chronicle] == ["長社火攻失利。"] and forced.world.timeline["changshe_fire"].locked_by is None
+
+
 def test_a_showdown_resolved_with_a_key_uses_the_named_version_when_locked(s1, season):
     """決戰由 T8 給結果鍵（鎖定方一定贏，戰場上定大勝或險勝）：有人鎖定時照樣用具名公告，開頭不再接 preface。"""
     w = season.world

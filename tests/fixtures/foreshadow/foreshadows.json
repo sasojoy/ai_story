@@ -1,0 +1,131 @@
+{
+  "items": [
+    {"id": "fs_reeds", "name": "葦束"},
+    {"id": "fs_oil", "name": "膏油"},
+    {"id": "fs_dry_reeds", "name": "長社的乾葦"},
+    {"id": "fs_letter", "name": "郡守的血書"},
+    {"id": "fs_ledger", "name": "渡口的貨帳"},
+    {"id": "fs_witness", "name": "宮中的證人"}
+  ],
+  "guanyin": {"side": "huang", "squad_faction": "guan", "regions": ["north"], "text": "你從官軍的行囊裡摸出一小錠官銀，悄悄收進懷裡。"},
+  "chains": [
+    {
+      "id": "fs_fire_guan", "event": "changshe_fire", "side": "guan", "kind": "天時地利", "front": "yingru",
+      "fragments": [
+        {"region": "north", "source": "action", "text": "黃巾的營帳全搭在荒草坡上，風一吹，草浪一直漫到營門口。"},
+        {"region": "north", "source": "event", "event": "fs_ev_boatman", "text": "「這時節的大風，都是半夜從{風向}邊刮過來的。」"},
+        {"region": "north", "source": "talk", "character": "huangfusong", "stand_in": "zhujun", "topic": "問起破敵之策",
+         "affinity_min": 20, "text": "「賊依草結營，若有引火之物，一夜可破。」"},
+        {"region": "south", "source": "action", "text": "靈台的太史說，今年夜裡的風從{風向}來。"}
+      ],
+      "final": {
+        "location": "lake", "label": "束苣乘城", "night": true,
+        "requires": {"clue_items": {"fs_reeds": 3, "fs_oil": 2}},
+        "question": "軍司馬問：「火從哪一面放？」",
+        "options": [{"id": "東", "text": "東"}, {"id": "南", "text": "南"}, {"id": "西", "text": "西"}, {"id": "北", "text": "北"}],
+        "answer": "tianji:wind",
+        "figure": "huangfusong", "stand_in": "zhujun",
+        "success_text": "你把葦束膏油交進營中，又在沙盤上畫了風向。{人物}看了很久，只說：「就等那一夜。」",
+        "wrong": {"text": "軍司馬搖頭：「這一面放火，燒的是我們自己。」", "lose_items": ["fs_reeds", "fs_oil"]}
+      }
+    },
+    {
+      "id": "fs_fire_huang", "event": "changshe_fire", "side": "huang", "kind": "推理", "front": "yingru",
+      "invalid_if": {"figure_out": "bocai"},
+      "fragments": [
+        {"region": "north", "source": "action", "text": "汝南的油坊這幾天被官軍包了，膏油一車一車往長社送。"},
+        {"region": "north", "source": "event", "event": "fs_ev_boatman", "text": "「前兩天官軍把我叫去，問的全是颳風的事。夜裡的風都從{風向}邊來。」"}
+      ],
+      "final": {
+        "location": "town", "label": "勸營",
+        "requires": {"any_of": [{"clue_items": {"fs_dry_reeds": 1}}, {"affinity": {"bocai": 30}}]},
+        "unready": "官軍縮在城裡，我還怕他放火？",
+        "question": "波才問：「那你說，營往哪邊挪？」",
+        "options": [{"id": "東", "text": "東"}, {"id": "南", "text": "南"}, {"id": "西", "text": "西"}, {"id": "北", "text": "北"}],
+        "answer": "tianji:wind",
+        "success_text": "波才盯著那束乾葦看了半晌，啐了一口：「拔營。」",
+        "wrong": {"text": "「挪到那邊？官軍做夢都要笑醒。」", "affinity": {"bocai": -5}}
+      }
+    },
+    {
+      "id": "fs_fire_haoqiang", "event": "changshe_fire", "side": "haoqiang", "kind": "反直覺抉擇", "front": "yingru",
+      "fragments": [
+        {"region": "north", "source": "action", "text": "長社城裡的官軍已經在殺馬吃了。"}
+      ],
+      "final": {
+        "requires": {"counters": {"two_buyers": 1}},
+        "steps": [
+          {"location": "town", "label": "交糧", "requires": {"grain": 4, "check": {"stat": "wis", "dc": 6}},
+           "wrong": {"text": "帳房翻了兩頁就看穿了假帳，糧車被扣下。", "lose_grain": true},
+           "success_text": "長社的帳房在你的契上按了手印。"},
+          {"location": "lake", "label": "交糧", "requires": {"grain": 4, "check": {"stat": "agi", "dc": 6}},
+           "wrong": {"text": "半路撞上官軍斥候，糧車被扣下。", "lose_grain": true},
+           "success_text": "黃巾的帳房在你的契上按了手印。"}
+        ],
+        "success_text": "兩邊的帳房都在你的契上按了手印。不論那一夜誰勝誰敗，他們都欠你一份人情。"
+      }
+    },
+    {
+      "id": "fs_jail_huang", "event": "luzhi_jailed", "side": "huang", "kind": "累積", "front": "jizhou",
+      "invalid_if": {"figure_out": "luzhi"},
+      "fragments": [
+        {"region": "south", "source": "action", "text": "左豐收錢有規矩：不收銅錢，只收金帛。"}
+      ],
+      "final": {
+        "location": "port", "label": "送金帛",
+        "requires": {"counters": {"guanyin": 5}},
+        "question": "老宦官在掃地，牆上有個黃圈。",
+        "options": [
+          {"id": "1", "text": "在牆上也畫一個黃圈，等他來"},
+          {"id": "2", "text": "直接把包袱塞給他", "wrong": {"text": "他裝作不認識你。"}},
+          {"id": "3", "text": "亮出黃巾", "wrong": {"text": "他嚇得跑了。", "cooldown_days": 1}}
+        ],
+        "answer": "1",
+        "success_text": "老宦官接過包袱掂了掂，沒有多看你一眼：「話會帶到。」"
+      }
+    },
+    {
+      "id": "fs_jail_guan", "event": "luzhi_jailed", "side": "guan", "kind": "拼圖", "front": "jizhou",
+      "fragments": [
+        {"region": "south", "source": "action", "text": "左豐家這半年起了三進大宅，錢從哪來，大家心裡有數。"}
+      ],
+      "final": {
+        "location": "port", "label": "進大將軍府",
+        "requires": {"clue_items": {"fs_letter": 1, "fs_ledger": 1, "fs_witness": 1}},
+        "question": "掾屬問：「你打算怎麼跟大將軍說？」",
+        "options": [
+          {"id": "1", "text": "盧中郎冤枉", "wrong": {"text": "何進聳聳肩，證物退還給你。"}},
+          {"id": "2", "text": "扳倒左豐，宮裡就少一個跟大將軍作對的人"},
+          {"id": "3", "text": "不辦的話，證據就送到別人手上"}
+        ],
+        "answer": "2",
+        "success_text": "何進把三樣東西翻來覆去看了幾遍，叫人收進匣子：「這件事，本將軍自有主張。」",
+        "wrong": {"text": "何進大怒，三樣東西全被收走了。", "lose_all": true}
+      }
+    },
+    {
+      "id": "fs_wan_haoqiang", "event": "wancheng", "side": "haoqiang", "kind": "天時地利", "front": "nanyang",
+      "fragments": [
+        {"region": "south", "source": "action", "text": "新野的縣令早就跑了。",
+         "versions": {"乙": "新野的縣令早就跑了，縣衙裡只剩幾個老吏。"}}
+      ],
+      "final": {
+        "location": "port", "label": "討冊子", "window": "during_muster",
+        "requires": {"grain": 4},
+        "question": "老縣吏抱著冊子不放。",
+        "options": [
+          {"id": "1", "text": "開倉放糧，讓縣裡的人自己推你"},
+          {"id": "2", "text": "帶人進縣衙直接拿冊子", "wrong": {"text": "老吏把冊子扔進火盆，這次不算。"}}
+        ],
+        "answer": "1",
+        "then": [
+          {"question": "老縣吏又問：「糧從哪裡來？」",
+           "options": [{"id": "倉", "text": "從自家倉裡出"}, {"id": "搶", "text": "從黃巾手上搶"}], "answer": "倉"}
+        ],
+        "success_text": "老縣吏把冊子捧出來的時候，縣衙外跪了一地的人。",
+        "success_versions": {"乙": "老縣吏把冊子捧出來，城外的官軍還沒走遠。"},
+        "wrong": {"text": "老縣吏搖頭。"}
+      }
+    }
+  ]
+}

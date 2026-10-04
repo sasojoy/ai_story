@@ -46,6 +46,13 @@ class Condition(_Strict):
     # Config.mark_threshold_scale（無條件進位，見 content.load_content），所以這裡寫的是「開發期小伺服器」的門檻
     marks_min: dict[str, int] = Field(default_factory=dict)
     marks_max: dict[str, int] = Field(default_factory=dict)
+    # ── 伏筆的準備事件、片段事件用（計畫 T7）；預設都是不限 ──
+    factions: list[str] = Field(default_factory=list)  # 玩家的陣營在裡面才成立；空的＝不限（散人也行）
+    # 季曆（calendar）的時刻：第一季開關關著（或這一季開季時沒開）時，寫了這三個的條件一律不成立——beta 季沒有季曆
+    night: bool | None = None  # calendar.is_night 要等於它（True＝只在夜裡，False＝只在白天）
+    week_min: int | None = None  # calendar.point(...).week 至少／至多第幾週
+    week_max: int | None = None
+    clue_items: dict[str, int] = Field(default_factory=dict)  # 伏筆專用物品至少幾個（原數字，不照伺服器規模換算）
     any_of: list[Condition] = Field(default_factory=list)  # 非空時，至少一個子條件成立
 
 
@@ -70,6 +77,9 @@ class Effect(_Strict):
     materials: dict[str, int] = Field(default_factory=dict)  # 給煉製素材（素材 id -> 數量）；手寫劇情是天品素材的主要來源
     # 在地方上留下痕跡（「地點 id:痕跡名」→ 1～3，只能加）：全服共用、每季清空；同一個人對同一個痕跡一天只算一次
     marks: dict[str, int] = Field(default_factory=dict)
+    # 伏筆（計畫 T7）的準備事件用；第一季開關關著時兩個都不發生（不給也不寫任何字）
+    clue_items: dict[str, int] = Field(default_factory=dict)  # 伏筆專用物品（foreshadows.json 的 items）：正數給、負數收走
+    fs_counters: dict[str, int] = Field(default_factory=dict)  # 伏筆的隱藏計數（例：豪強兩頭賣糧的起點 two_buyers）：加多少，不寫字
 
 
 class Material(_Strict):
@@ -598,6 +608,12 @@ class Config(_Strict):
     active_window_days: float = Field(default=1, gt=0)  # 陣營人數緩衝的「活躍」時窗：幾個曆日內推過大勢的成員才算
     # 糧草（計畫 T6；這一版沒有軍備物資，糧草＝背包裡的慢屬性素材，濃縮版內容表 4.0）：凡、靈、天一個各算幾份
     grain_values: list[int] = Field(default_factory=lambda: [1, 3, 9])
+    # ── 伏筆（計畫 T7、伏筆文件 2.8）──
+    # 需求量照 server_max_players 換算：人數上限「未滿」第一個數時用第二個數當係數，照順序找第一個符合的；
+    # 都不符合（1000 人以上）就是 1。片段的機率反過來除以它（foreshadow.scale、foreshadow.need）
+    foreshadow_tiers: list[tuple[int, float]] = Field(default_factory=lambda: [(10, 0.2), (100, 0.3), (1000, 0.6)])
+    foreshadow_contrib: int = Field(default=50, ge=0)  # 最後一步答對記多少貢獻（五點推力的量；先完成、搶輸、同陣營後到都照記）
+    guanyin_chance: float = Field(default=0.3, ge=0, le=1)  # 黃巾遊歷打贏官軍的隊伍時拿到一錠官銀的機率（濃縮版內容表 4.0）
     train_stat_chance: float = 0.3
     train_event_chance: float = 0.3
     qiyu_weight_multiplier: float = 1.5
@@ -840,6 +856,154 @@ class TimetableEvent(_Strict):
     lock_result: dict[str, str] = Field(default_factory=dict)  # 鎖定方 → 結果鍵（不含版本）；決戰不寫，由 T8 給鍵
     third_party_text: str | None = None  # 豪強做完伏筆時接在公告後面的一句（{name} 是豪強那邊的人）
     third_party_trends: dict[str, int] = Field(default_factory=dict)  # 豪強每個名字各套一次的效果
+    # 江湖史具名（計畫 T7、伏筆文件 2.4）：有人鎖定、結果是他那一方的具名公告時，江湖史用這一方的這一行（{name} 是鎖定者）；
+    # 這一方沒寫就在原本那一行後面接「（{name}改寫）」
+    locked_chronicle: dict[str, str] = Field(default_factory=dict)
+    # 豪強做完伏筆時另外記的一行江湖史（例：「{name} 取得新野」；多人用「、」接），不論誰贏都記
+    third_party_chronicle: str | None = None
+
+
+FsKind = Literal["天時地利", "推理", "反直覺抉擇", "拼圖", "累積", "情誼", "集體密謀"]  # 第一季設計 11.3 的類型（只是標記）
+FsSource = Literal["action", "event", "talk"]  # 片段從哪裡聽到：在那個大區花體力的行動／那則事件／跟那位人物對話
+
+
+class FsItem(_Strict):
+    """伏筆專用物品（伏筆文件第八節）：名字固定，不進煉製、不進軍備；存在 PlayerState.clue_items，換季清空。"""
+
+    id: str
+    name: str
+
+
+class FsFragment(_Strict):
+    """一則線索片段（伏筆文件 2.2）。只發給做得了這條鏈的陣營成員；同一個人每則只聽一次。
+
+    text 可以寫 {風向}、{偽裝}（天機，foreshadow.tianji_answer）；versions 是有版本的大事（宛城甲、乙）的分版文字，
+    鍵是版本（timetable 的 versions 的值），那件大事還沒定版本時用史書那一版（第一個）。"""
+
+    region: str  # 大區 id（map.json 的 regions）；action 照它抽，event、talk 只是標記
+    source: FsSource
+    text: str
+    versions: dict[str, str] = Field(default_factory=dict)
+    event: str | None = None  # source=event：哪一則事件（事件觸發時給，foreshadow.hear_from_event）
+    character: str | None = None  # source=talk：人物 id；在不在那裡照對話（_deep_interaction_target／talk_at）
+    stand_in: str | None = None  # source=talk：主角色退場、重創或下獄時改由他出面（例：盧植下獄後董卓）
+    topic: str = ""  # source=talk：對話選單上的標籤（例：「問起破敵之策」）
+    affinity_min: int = Field(default=0, ge=0)  # source=talk：跟出面那位人物的情誼門檻（基準量，照 foreshadow.need 換算）
+
+
+class FsCheck(_Strict):
+    """最後一步的屬性檢定（只看本人，伏筆是個人做的）：答完題、要交出東西之前擲。"""
+
+    stat: Literal["str", "agi", "con", "wis"]
+    dc: int
+
+
+class FsRequires(_Strict):
+    """最後一步的條件積木（伏筆文件 2.2：片段是知識不是門票，只檢查這些）。數字是 1000 人以上那一檔的基準量，
+    檢查時照 foreshadow.need 換算（無條件進位、最少 1；寫 0 就是不要）。"""
+
+    clue_items: dict[str, int] = Field(default_factory=dict)  # 物品 id → 數量；答對時交出（扣掉換算後的量）
+    grain: int = 0  # 糧草份量（materials.grain_of）；答對時交出
+    donations: dict[str, int] = Field(default_factory=dict)  # 「據點 id:糧草」→ 至少捐過多少（PlayerState.donations）；不扣
+    affinity: dict[str, int] = Field(default_factory=dict)  # 人物 id → 情誼至少多少；不扣
+    counters: dict[str, int] = Field(default_factory=dict)  # 隱藏計數（PlayerState.fs_counters）→ 至少多少；不扣
+    check: FsCheck | None = None  # 檢定（不是門檻：照樣顯示可以做，答完題才擲；失敗照 wrong 處理）
+    any_of: list[FsRequires] = Field(default_factory=list)  # 非空時至少一組成立（例：乾葦證物，或波才情誼 30）；答對時交出第一組成立的
+
+
+FsRequires.model_rebuild()
+
+
+class FsWrong(_Strict):
+    """答錯（或檢定失敗）的懲罰；之後可以再來。全部空的就是「沒有損失」。"""
+
+    text: str = ""
+    lose_items: list[str] = Field(default_factory=list)  # 這幾樣物品全部收走
+    lose_all: bool = False  # 這一步條件裡寫到的物品全部作廢（含 any_of 的每一組）
+    lose_grain: bool = False  # 這一步要交的糧草沒收（份量照條件換算）
+    affinity: dict[str, int] = Field(default_factory=dict)  # 人物 id → 情誼增減（例：波才 -5）
+    cooldown_days: float = Field(default=0, ge=0)  # 幾個曆日之內不能再做這條鏈
+
+
+class FsOption(_Strict):
+    id: str  # 答案用 tianji:<key> 時要是那個天機的候選（例：東、南、西、北）
+    text: str
+    wrong: FsWrong | None = None  # 選了這個（而且答錯）時用它，蓋過那一步的 wrong
+
+
+class FsAsk(_Strict):
+    """一道題：question 是場景上的問句，options 是選單；answer 是正解的選項 id，或 tianji:<key>（天機決定，伏筆文件 2.9）。"""
+
+    question: str
+    options: list[FsOption] = Field(min_length=1)
+    answer: str
+
+
+class FsStep(_Strict):
+    """最後一步的一趟（在一個地點做完的事）。單趟的鏈把這些欄位直接寫在 final 上；兩頭賣糧要兩趟，寫成 final.steps。
+
+    question 沒寫：按下選單上的 label 就直接做（例：交糧、點糧）。question 寫了：先問題，答對再接 then 的追問
+    （例：孫堅的第二問），全對才擲檢定、交東西、完成。"""
+
+    location: str | None = None  # 在哪個地點做（steps 的每一趟、或單趟的 final 都要寫）
+    label: str = ""  # 選單上的字（例：「束苣乘城」「交糧」）
+    requires: FsRequires = Field(default_factory=FsRequires)
+    unready: str = ""  # 條件不夠時選單上按不下去寫的那句（例：「官軍縮在城裡，我還怕他放火？」）；沒寫就是「東西還沒備齊」
+    question: str = ""
+    options: list[FsOption] = Field(default_factory=list)
+    answer: str | None = None
+    then: list[FsAsk] = Field(default_factory=list)
+    wrong: FsWrong = Field(default_factory=FsWrong)  # 答錯（選項沒有自己的 wrong 時）與檢定失敗
+    success_text: str = ""  # 多趟時：這一趟做完、整條還沒完成時的那句（單趟的看 final.success_text）
+
+
+class FsFinal(FsStep):
+    """最後一步（伏筆文件 2.3）：時間窗、夜裡、戰況，加上一趟（直接寫在這裡）或好幾趟（steps）。"""
+
+    window_days: float = Field(default=7, gt=0)  # 時間窗：大事前幾個曆日內（timetable.when 往前算）
+    window: Literal["before_event", "during_muster"] = "before_event"  # during_muster：決戰排定的時間到了、還沒收場（新野）
+    night: bool = False  # 要在季曆的夜裡（子時到寅時，calendar.is_night）
+    front_rule: Literal["side"] = "side"  # 戰況：官軍 ≤ 60、黃巾 ≥ 40、其他（豪強）35～65
+    steps: list[FsStep] = Field(default_factory=list)  # 兩趟以上時寫這裡，final 自己的 location 留空；final.requires 每一趟都要
+    success_text: str = ""  # 整條完成時看到的敘事（不論先完成還是搶輸都一樣）；可以寫 {風向}、{偽裝}、{人物}
+    success_versions: dict[str, str] = Field(default_factory=dict)  # 有版本的大事：版本 → 完成的敘事
+    figure: str | None = None  # {人物}：這位人物在那條戰線上（figures.on_front）時寫他的名字，否則寫 stand_in
+    stand_in: str | None = None
+
+
+class FsInvalidIf(_Strict):
+    figure_out: str | None = None  # 這位人物退場或重創（figures.is_out）後，整條鏈失效：片段、選項都不再出現
+
+
+class FsChain(_Strict):
+    """一條關鍵伏筆鏈（伏筆文件第二～六節，濃縮版內容表第四節）。"""
+
+    id: str
+    event: str  # 時刻表大事 id（content/timetable.json）
+    side: str  # 誰能做：劇本的陣營 id（guan、huang 會鎖定那件大事；其他陣營是第三方，寫進 third_party）
+    kind: FsKind
+    front: str | None = None  # 戰況看哪條線；沒寫就看那件大事的戰線（盧植下獄、張角病逝要寫 jizhou）
+    fragments: list[FsFragment] = Field(default_factory=list)
+    final: FsFinal
+    invalid_if: FsInvalidIf = Field(default_factory=FsInvalidIf)
+
+
+class FsGuanyin(_Strict):
+    """官銀（濃縮版內容表 4.0）：side 的人在 regions 的大區遊歷打贏 squad_faction 的隊伍時，有 Config.guanyin_chance
+    的機率 fs_counters["guanyin"] +1，寫 text 這一句。只在某條鏈的條件讀 guanyin 時才擲。"""
+
+    side: str = "huang"
+    squad_faction: str = "guan"
+    regions: list[str] = Field(default_factory=list)
+    text: str
+
+
+class Foreshadows(_Strict):
+    """content/foreshadows.json（計畫 T7）。檔案不存在或是空的就是這個空的預設值：什麼都不發生。"""
+
+    items: list[FsItem] = Field(default_factory=list)
+    chains: list[FsChain] = Field(default_factory=list)
+    guanyin: FsGuanyin | None = None
 
 
 class Content(_Strict):
@@ -857,5 +1021,6 @@ class Content(_Strict):
     battles: dict[str, BattleDef] = Field(default_factory=dict)  # 內容尚未撰寫，先留介面（見設計討論，骨架做完再回頭寫黃巾決戰）
     road_sights: dict[str, RoadSight] = Field(default_factory=dict)  # 路上見聞（content/road_sights.json，路上設計第五節）
     timetable: list[TimetableEvent] = Field(default_factory=list)  # 第一季的時刻表（content/timetable.json，計畫 T2）
+    foreshadows: Foreshadows = Field(default_factory=Foreshadows)  # 關鍵伏筆（content/foreshadows.json，計畫 T7）
     map: MapLayout
     tutorial: Tutorial

@@ -430,6 +430,8 @@ def travel_block(state: GameState) -> str | None:
         return "求見中，先返回才能安排前往"
     if state.player.pending_faction:
         return "投靠還沒決定，先決定再安排前往"
+    if state.player.fs_asking is not None:
+        return "正在答話，先作罷才能安排前往"
     if state.player.busy_until is not None:
         return "閉關中，不能安排前往"
     if state.player.resting_since is not None:

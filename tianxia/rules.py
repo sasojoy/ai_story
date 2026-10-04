@@ -5,7 +5,7 @@ import random
 import re
 from collections.abc import Callable
 
-from . import materials, roster, team  # 與 roster 互相 import：只能引入整個模組、呼叫時才取屬性，不能 from .roster import …
+from . import calendar, materials, roster, team  # 與 roster 互相 import：只能引入整個模組、呼叫時才取屬性，不能 from .roster import …
 from .models import Check, Condition, Content, Effect
 from .state import PLAYER, GameState, Rumor, RumorLayer
 from .world_state import JADE_SEAL_FRAGMENT_COUNT, WorldStateStore
@@ -31,7 +31,9 @@ def add_world_flags(state: GameState, flags) -> None:
             w.flag_times[flag] = w.time
 
 
-def check_condition(cond: Condition, state: GameState) -> bool:
+def check_condition(cond: Condition, state: GameState, content: Content | None = None) -> bool:
+    """content 只有季曆的條件（night、week_min、week_max）用得到：沒給，或第一季開關關著（這一季開季時沒開）時，
+    寫了這三個的條件一律不成立——beta 季沒有季曆（計畫 T7）。"""
     p, w = state.player, state.world
     if any(p.stats.get(k, 0) < v for k, v in cond.min_stats.items()):
         return False
@@ -70,7 +72,19 @@ def check_condition(cond: Condition, state: GameState) -> bool:
         return False
     if any(w.marks.get(k, 0) > v for k, v in cond.marks_max.items()):
         return False
-    if cond.any_of and not any(check_condition(sub, state) for sub in cond.any_of):
+    if cond.factions and p.faction not in cond.factions:
+        return False
+    if any(p.clue_items.get(k, 0) < v for k, v in cond.clue_items.items()):
+        return False
+    if cond.night is not None or cond.week_min is not None or cond.week_max is not None:
+        if content is None or not calendar.season_one_on(w, content):
+            return False
+        if cond.night is not None and calendar.is_night(w.time, content, w) != cond.night:
+            return False
+        week = calendar.point(w.time, content, w).week
+        if (cond.week_min is not None and week < cond.week_min) or (cond.week_max is not None and week > cond.week_max):
+            return False
+    if cond.any_of and not any(check_condition(sub, state, content) for sub in cond.any_of):
         return False
     return True
 
@@ -263,6 +277,10 @@ def apply_effect(
     )
     add_world_flags(state, effect.world_flags_add)
     add_marks(effect.marks, state)
+    if effect.clue_items or effect.fs_counters:  # 伏筆的準備事件：開關關著時什麼都不給、不寫字（foreshadow.grant）
+        from . import foreshadow  # noqa: PLC0415  foreshadow → rules：在函式裡 import，避免循環
+
+        msgs += foreshadow.grant(state, content, effect.clue_items, effect.fs_counters)
     name = display_name(state)
     if effect.rumor:
         text = effect.rumor.format(name=name)

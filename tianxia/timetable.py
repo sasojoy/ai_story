@@ -233,7 +233,7 @@ def resolve(
     # 公告的組法（伏筆文件 3.4、5.4）：具名的一段＋這一檔的結果（含 note 與人物的後話）＋搶輸的一筆＋豪強的一筆
     text = _headline(state, content, event, outcome, lock) + fill_slots(state, content, event, outcome.note)
     loser_line = _loser_line(state, content, event, outcome, lock, losers)
-    chronicle = fill_slots(state, content, event, outcome.chronicle)
+    chronicle = _chronicle(state, content, event, outcome, lock if named else None)
     for trend_id, delta in outcome.trends.items():
         _push(state, content, trend_id, delta)
     for target_key, change in outcome.figures.items():
@@ -259,4 +259,20 @@ def resolve(
     add_rumor(state, text, content=content, layer="world")
     if chronicle:
         add_chronicle(state, chronicle)
+    if third and event.third_party_chronicle:  # 豪強另記一行（例：「{name} 取得新野」），不論誰贏
+        line = fill_slots(state, content, event, event.third_party_chronicle)
+        add_chronicle(state, line.replace("{name}", "、".join(third)))
     return [f"【江湖大事】{text}"]
+
+
+def _chronicle(
+    state: GameState, content: Content, event: TimetableEvent, outcome: TimetableOutcome, named: Lock | None,
+) -> str:
+    """江湖史那一行（計畫 T7、伏筆文件 2.4）：公告具名（named 是鎖定者）時，用這件大事寫給鎖定方的那一行；
+    那一方沒寫就在原本那一行後面接「（名號改寫）」。沒人鎖定、或結果不是鎖定方的（公告沒有具名）照原本那一行。"""
+    plain = fill_slots(state, content, event, outcome.chronicle)
+    if named is None:
+        return plain
+    if named.side in event.locked_chronicle:
+        return fill_slots(state, content, event, event.locked_chronicle[named.side]).replace("{name}", named.name)
+    return f"{plain}（{named.name}改寫）" if plain else plain
