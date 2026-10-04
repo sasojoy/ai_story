@@ -64,6 +64,15 @@ class Journey(BaseModel):
         return len(self.path) - 1 if self.stop_at is None else self.stop_at
 
 
+class Convoy(BaseModel):
+    """身上押著的糧車（護糧，計畫 T6）：送到 to_loc 才算數。"""
+
+    order: str  # 哪一道護糧軍令（Order.id）
+    grain: int  # 交出去的糧草份量
+    from_loc: str
+    to_loc: str
+
+
 class PlayerState(BaseModel):
     name: str
     location: str
@@ -133,6 +142,7 @@ class PlayerState(BaseModel):
 
     # ── 捐獻紀錄（計畫 T6，軍備文件 4.1）：「據點 id:糧草」→ 累積的份量。T7 的伏筆只讀它；寫入是 T6 護糧的事 ──
     donations: dict[str, int] = Field(default_factory=dict)
+    convoy: Convoy | None = None  # 押著的糧車（計畫 T6 護糧）；None＝沒有。角色每季重來，跟著清空
 
     # ── 大勢人物（計畫 T4、軍令文件 4.5）：剛被你打敗的人物 id → 到哪個「現實」時間（秒，Game.now）之前不見你、也不跟你交手。
     # 看現實時間、不看賽季時鐘（管理者快轉不會讓他提早見你）；角色每季重來，跟著清空 ──
@@ -193,6 +203,29 @@ class FigureState(BaseModel):
     location: str = ""
 
 
+class Order(BaseModel):
+    """一道軍令（計畫 T6）：每週一發、期限到下週一。陣營的進度＝progress 加總；湊滿 quota 那一刻達成、套一次效果。
+    text 是發的那一刻填好插槽的發布文字（主將之後換人也不改）。applied 是達成時實際推了戰況幾點（守城收回對方攻城的
+    一半時讀它）。上週沒達成的在下週一清掉；達成的留到季末（守城看「敵方上週達成攻城」、整季模擬數軍令都讀它）。"""
+
+    id: str
+    template: str  # 種類（OrderTemplate.kind）；同一個陣營每種只有一筆模板
+    faction: str
+    week: int
+    front: str | None = None  # 戰線（打擊是目標人物發令時所在的戰線）
+    location: str | None = None  # 截糧的 {地點}、護糧的 {起點}、打擊時人物的所在
+    start: str | None = None  # 護糧的 {起點}
+    end: str | None = None  # 護糧的 {終點}
+    figure: str | None = None  # 打擊的 {人物}
+    quota: int
+    text: str
+    progress: dict[str, int] = Field(default_factory=dict)  # 名號 → 做了幾次
+    shown: dict[str, str] = Field(default_factory=dict)  # 名號 → 軍情寫的名字（匿名時是「某位少俠」）
+    done: bool = False
+    done_time: float | None = None
+    applied: int = 0
+
+
 class WorldState(BaseModel):
     time: float = 0.0  # 賽季開始後經過的遊戲秒數
     trends: dict[str, int] = Field(default_factory=dict)
@@ -237,6 +270,7 @@ class WorldState(BaseModel):
     showdowns_waiting: list[str] = Field(default_factory=list)  # 時間到了、還沒開成的決戰 id，照時間先後（另一場還在打就等）
     showdowns_opened: dict[str, str] = Field(default_factory=dict)  # 開過集結的決戰 id → 開的那一筆 BattleDef；開過就不再開
     figures: dict[str, FigureState] = Field(default_factory=dict)  # 大勢人物 id → 聲威、狀態、所在（T4 開季時種）
+    orders: list[Order] = Field(default_factory=list)  # 陣營軍令（計畫 T6）：這一週的，加上之前達成的
     # ── 推力規則（計畫 T3）──
     trend_accum: dict[str, float] = Field(default_factory=dict)  # 不足一點的推力（全服共用，滿一點才真的推；正負會抵銷）：大勢線 id、"geju"、"fig:<人物 id>"（大勢人物每天的推動）、"prestige:<人物 id>"（挑戰打贏扣聲威不足一點的部分）
     active_pushers: dict[str, dict[str, float]] = Field(default_factory=dict)  # 陣營 id → 名號 → 最後一次推大勢的世界秒（人數緩衝用，過期的順手清掉）

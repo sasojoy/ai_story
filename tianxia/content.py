@@ -19,7 +19,7 @@ from .companion_agent import DIALOGUE_TAGS
 from .materials import TIER_NAMES
 from .models import (
     FRONT_KEY, ROADS, STATS, BattleDef, CharacterDef, Condition, Config, Content, CraftNames, Effect, Event, FigureDef,
-    Foreshadows, Location,
+    Foreshadows, Location, OrdersContent,
     MapLayout, Material, RoadSight, Scenario, Sect, SimRumor, SkillDef, Squad, TimetableEvent, Tutorial,
 )
 from .zh import to_traditional
@@ -71,6 +71,7 @@ def load_content(root: Path, profile: str | None = None) -> Content:
         timetable=[_build(TimetableEvent, raw) for raw in _read(root / "timetable.json")]
         if (root / "timetable.json").exists() else [],
         foreshadows=_foreshadows(root / "foreshadows.json"),
+        orders=_orders(root / "orders.json"),
         figures=_index(FigureDef, _read(root / "figures.json")) if (root / "figures.json").exists() else {},
         events=events,
         map=MapLayout(**_read(root / "map.json")),
@@ -140,6 +141,16 @@ def _foreshadows(path: Path) -> Foreshadows:
         return Foreshadows(**_read(path))
     except ValidationError as e:
         raise ContentError(f"foreshadows.json：{e}") from e
+
+
+def _orders(path: Path) -> OrdersContent:
+    """content/orders.json（計畫 T6）：不存在時當成沒有軍令（測試夾具沒有這個檔）。"""
+    if not path.exists():
+        return OrdersContent()
+    try:
+        return OrdersContent(**_read(path))
+    except ValidationError as e:
+        raise ContentError(f"orders.json：{e}") from e
 
 
 def _build(model, raw: dict):
@@ -317,6 +328,46 @@ def check_figures(c: Content, need, known, front_ids: list[str]) -> None:
             chain.append(nxt)
             nxt = c.figures[nxt].successor
         need(nxt not in chain, f"{where}：接位鏈繞回來了（{'→'.join(chain)}→{nxt}）")
+
+
+ORDER_SLOTS = ("{戰線}", "{地點}", "{起點}", "{終點}", "{主將}", "{人物}", "{號令}")
+ORDER_PERSONAL = {"siege": "win", "defend": "duty", "intercept": "win", "escort": "convoy", "strike": "challenge"}
+
+
+def check_orders(c: Content, need, known, front_ids: list[str]) -> None:
+    """軍令（content/orders.json，計畫 T6）：模板的陣營在劇本裡、同一個陣營每種一筆、個人部分照種類；文字只用認得的插槽；
+    插槽的戰線與陣營存在，截糧的地點在那條戰線上、護糧的終點是那個陣營的投靠點；守勢行動的陣營存在；
+    運糧隊存在、屬於那個陣營；號令的人物在人物表裡。"""
+    from .atlas import region_of  # noqa: PLC0415  同 validate：atlas → world → rules，延後載入
+
+    o = c.orders
+    factions = {f.id: f for f in c.scenario.factions}
+    seen: set[tuple[str, str]] = set()
+    for t in o.templates:
+        where = f"orders.json 的 {t.kind}／{t.side}"
+        need(t.side in factions, f"{where}：陣營 {t.side} 不在劇本裡")
+        need((t.kind, t.side) not in seen, f"{where}：同一個陣營的同一種軍令寫了兩筆")
+        seen.add((t.kind, t.side))
+        need(t.personal == ORDER_PERSONAL[t.kind], f"{where}：個人部分應該是 {ORDER_PERSONAL[t.kind]}，寫的是 {t.personal}")
+        for text in (t.text, t.faction_rumor, t.leak_rumor):
+            for slot in re.findall(r"\{[^{}]*\}", text):
+                need(slot in ORDER_SLOTS, f"{where}：不認得的插槽 {slot}")
+    for front, by_side in o.slots.items():
+        need(front in front_ids, f"orders.json 的 slots：{front} 不是戰線")
+        for side, slot in by_side.items():
+            where = f"orders.json 的 slots.{front}.{side}"
+            need(side in factions, f"{where}：陣營 {side} 不在劇本裡")
+            known(where, [slot.intercept, *slot.escort], c.locations, "地點")
+            if slot.intercept in c.locations:
+                region = region_of(c, slot.intercept)
+                need(region is not None and region.front == front, f"{where}：截糧的地點 {slot.intercept} 不在這條戰線上")
+            if side in factions:
+                need(slot.escort[1] in factions[side].join_at, f"{where}：護糧的終點 {slot.escort[1]} 不是這個陣營的據點")
+    known("orders.json 的 duties", o.duties, factions, "陣營")
+    for side, squad_id in o.convoy_squads.items():
+        squad = c.squads.get(squad_id)
+        need(squad is not None and squad.faction == side, f"orders.json 的 convoy_squads：{side} 的糧隊 {squad_id} 不存在或不屬於這個陣營")
+    known("orders.json 的 callers", [x.figure for x in o.callers if x.figure is not None], c.figures, "人物")
 
 
 def check_foreshadows(
@@ -1022,6 +1073,7 @@ def validate(c: Content) -> None:
     check_timetable(c, need, known, front_ids, trend_ids)
     check_figures(c, need, known, front_ids)
     check_foreshadows(c, need, known, region_ids, front_ids, counters_written)
+    check_orders(c, need, known, front_ids)
 
     for key, where in sorted(marks_written.items()):
         need(key in marks_read, f"{where}：痕跡 {key} 寫了卻沒有任何條件或文字讀它")

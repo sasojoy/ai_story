@@ -1200,3 +1200,41 @@ def test_each_season_keeps_its_own_fallback_ending(tmp_path):
         {"id": "x", "season_one": True, "title": "多的", "text": "多的。", "stance_min": {"huang": 99}}))
     with pytest.raises(ContentError, match="保底"):
         load_content(root)
+
+
+# ── 軍令（計畫 T6）──────────────────────────────────────────
+
+
+def test_orders_slot_must_be_on_its_front(tmp_path):
+    root = _real_copy(tmp_path)
+    edit_json(root / "orders.json", lambda d: d["slots"]["yingru"]["guan"].update(intercept="nanyang_wilds"))
+    with pytest.raises(ContentError, match="截糧"):
+        load_content(root)
+
+
+def test_orders_escort_must_end_at_a_base_of_its_side(tmp_path):
+    root = _real_copy(tmp_path)
+    edit_json(root / "orders.json", lambda d: d["slots"]["yingru"]["guan"].update(escort=["luoyang_road", "huangjin_camp"]))
+    with pytest.raises(ContentError, match="護糧"):
+        load_content(root)
+
+
+def test_orders_personal_kind_must_match(tmp_path):
+    root = _real_copy(tmp_path)
+    edit_json(root / "orders.json", lambda d: d["templates"][0].update(personal="convoy"))
+    with pytest.raises(ContentError, match="個人部分"):
+        load_content(root)
+
+
+def test_orders_text_slots_must_be_known(tmp_path):
+    root = _real_copy(tmp_path)
+    edit_json(root / "orders.json", lambda d: d["templates"][0].update(text="{將軍}傳令"))
+    with pytest.raises(ContentError, match="插槽"):
+        load_content(root)
+
+
+def test_orders_convoy_squad_must_belong_to_its_side(tmp_path):
+    root = _real_copy(tmp_path)
+    edit_json(root / "orders.json", lambda d: d["convoy_squads"].update(guan="huang_grain_convoy"))
+    with pytest.raises(ContentError, match="糧隊"):
+        load_content(root)
