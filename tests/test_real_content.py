@@ -369,9 +369,10 @@ def test_a_new_player_at_the_first_fight_sees_the_camp_next_door(content):
     game = Game.new(content, "測試俠客", rng=random.Random(0))
     game.state.player.visited.update(["yingchuan", "yingchuan_wilds", "yingshui", "changshe", "songshan_foot", "yingchuan_academy", "huangjin_camp"])
     game.state.player.location = "yingchuan_wilds"
-    svg = render_map(game.state, content, "enemies", "yingchuan_wilds", game.odds)
-    assert "最險" in svg
-    assert _disc_overlaps(game, content, svg, _placed_texts(svg)) == []
+    for selected in ("yingchuan_wilds", "huangjin_camp"):  # 打開地圖時選的是所在地；點了營寨之後選的是營寨
+        svg = render_map(game.state, content, "enemies", selected, game.odds)
+        assert "最險" in svg
+        assert _disc_overlaps(game, content, svg, _placed_texts(svg)) == [], selected
 
 
 def _owner_by_name(content, text: str) -> str | None:
