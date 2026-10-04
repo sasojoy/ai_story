@@ -50,7 +50,7 @@ TREND_TEXT = "#A32D2D"
 LEGEND_ICONS = [("town", "城鎮"), ("roof", "寺院書院"), ("camp", "營寨"), ("ferry", "渡口"), ("peak", "山林"), ("flag", "野外")]
 LEGEND_STATES = "全彩：看得見　淡色：去過／摸清　灰：未知　紅旗：所在地"
 LEGEND_TEXT = "#5F5E5A"
-LEGEND_RING = "外圈：綠安全／橙危險／紅兇險　⚔ 可歷練"
+LEGEND_RING = "外圈：綠安全／橙危險／紅兇險　⚔ 可遊歷"
 LEGEND_LAYERS = {
     "situation": "⚑ 龍頭人物（會自己行動的江湖人物）常出沒　大區越紅，大勢越凶",
     "enemies": "底色同外圈　最險：最難對付的對手與勝算",

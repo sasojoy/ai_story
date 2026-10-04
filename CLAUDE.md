@@ -23,6 +23,7 @@
 - `run_bots.py`：假人程式的入口，每隔 `bot_tick_seconds` 呼叫一次 `BotRunner.tick()`，跟 `server.py` 同時開著。
 
 ## 原則
+- 行動名稱（企劃者 2026-10-04 定）：「遊歷」（舊稱歷練，`act:train`）、「交友」（舊稱交遊，`act:socialize`）；移動維持步行／趕路／疾行三種。下面各節的舊紀錄仍寫舊名，指的是同一個行動。
 - 數值全部由規則引擎決定，執行時不接 LLM。
 - 引擎不讀電腦時鐘：現在時間一律由 `Game.sync(now)`（設定 `Game.now`）或明確的 `now` 參數傳入（線上架構設計第四節）。`tianxia/` 裡只有 `database.py`（等寫入權的期限）、`accounts.py` 與 `bot_runner.py`（注入的 `clock`）碰時間。
 - 武學、人物名稱必須原創，不用金庸等作品的專有名詞。
@@ -580,6 +581,7 @@ CLAUDE.md，白繞了一圈。**開工前先 `git worktree list` 核對一次。
 - 公開網址：Gradio 的 `share=True` 沒了，改成 `server.py --share` 叫 cloudflared 開 trycloudflare 臨時網址（線上架構設計第六節本來就選 Cloudflare）。
 - 線上架構第 1 期（SQLite）在 `app.py` 上做的改動都已經搬到 `server.py`：角色用 `characters.open_characters()`、全服狀態用 `sqlite_world.open_world()`，壞檔搬進 `character_backups` 表；帳號用資料庫的 `accounts`／`logins` 表（`AccountStore(open_database())`，註冊與改密碼不包外層交易、建角與重設密碼包在 `open_database().transaction()` 裡）；啟動時印出資料庫路徑；每次進鎖先從資料庫重讀角色並清掉失效引用（`server._locked`／`_reload`），對話備料的第一段也存檔。第 1 期計畫與之後的計畫凡是寫 `app.py` 的地方，都要讀成 `server.py`。
 - 輿圖的「安排前往」是步行／趕路／疾行三個按鈕（`/api/travel` 帶 `mode`），跟 Gradio 版一樣照 `Game.travel_options()` 畫。
+- **輪盤**（企劃者 2026-10-04 定稿）：江湖頁平常閒著時（選單上有「打坐」）的行動是一個輪盤，四格由上順時針是探索、遊歷、打坐、交友（沒有交友時那格是求見），中心的羅盤是移動（點了列出「前往」與走法切換）；其他只在此地才有的行動（招募、投靠、多出來的求見）排在下面的「此地」印章列。點一格先看說明與體力，再按卡片上的按鈕才做。事件、對話、路上、決戰的選單照舊是一排按鈕。煉製頁的輪盤四格是素材屬性剛／快／柔／慢（相剋的面對面），點一格只列那種素材，中心的太極是爐子（放滿兩樣轉快、點了開爐）。**四格固定不動，只有外圈八卦線與中心圖案在轉**（企劃者明確要求，選項跟著轉就按不到了）。程式在 `web/app.js` 的 `wheelSvg`／`actionWheel`／`pageCraft`。
 
 以下兩節是 Gradio 時期的紀錄，留著當歷史；裡面講的 class 名稱、`MENXIA_OUTPUTS`、`css=` 的坑都已經不存在了。
 

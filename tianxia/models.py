@@ -147,7 +147,7 @@ class Event(_Strict):
     weight: float = 1.0
     once: bool = False
     qiyu: bool = False
-    fortune: bool = False  # 新立門戶福緣：不會被隨機抽到，由 engine 在交遊時觸發（actions 必須是空的）
+    fortune: bool = False  # 新立門戶福緣：不會被隨機抽到，由 engine 在交友時觸發（actions 必須是空的）
     condition: Condition = Field(default_factory=Condition)
     choices: list[Choice] = Field(min_length=1)
     free_text: FreeTextChoice | None = None
@@ -223,7 +223,7 @@ class Location(_Strict):
     danger: int = Field(default=1, ge=1, le=3)
     important: bool = False
     enemies: list[str] = Field(default_factory=list)
-    train_trend: dict[str, int] = Field(default_factory=dict)  # 歷練打贏／操練推大勢的量；正負是散人的方向，有陣營目標的人照自己的目標推（Game._train_push）
+    train_trend: dict[str, int] = Field(default_factory=dict)  # 遊歷打贏／操練推大勢的量；正負是散人的方向，有陣營目標的人照自己的目標推（Game._train_push）
     materials: list[str] = Field(default_factory=list)  # 在這裡探索可能撿到的素材；留空則給隨機的一階素材
     unlock_flag: str | None = None  # 設定後，需該世界旗標成立才能前往
 
@@ -556,7 +556,7 @@ class Config(_Strict):
     hurry_stamina_per_minute: float = Field(default=1, ge=0)  # 趕路：每分鐘路程扣幾點體力（時間減半）
     dash_stamina_per_minute: float = Field(default=2, ge=0)  # 疾行：每分鐘路程扣幾點體力（立刻到）
     # 路上小事（路上設計第四節）：收入要明顯低於在站上做事，不然一直趕路會變成最賺的玩法
-    road_think_xinde: int = Field(default=3, ge=0)  # 邊走邊想：心得（一次歷練大約 12～20）
+    road_think_xinde: int = Field(default=3, ge=0)  # 邊走邊想：心得（一次遊歷大約 12～20）
     road_rumor_pool: int = Field(default=5, ge=1)  # 沿途打聽：從這一帶最近幾則傳聞裡挑一則
     road_gather_chance: float = Field(default=0.4, ge=0, le=1)  # 路邊採集：撿到一樣一階素材的機率
     road_sight_chance: float = Field(default=0.3, ge=0, le=1)  # 路上見聞：每抵達一站有幾成機會看見一則（路上設計第五節）
@@ -614,7 +614,7 @@ class Config(_Strict):
     # 設好之後量到：每人每季碰到奇遇那一步 0.58 次，至少一次的約四成六。正式內容的值寫在 content/config.json。
     rare_explore_chance: float = Field(default=0.025, ge=0, le=1)
     explore_mix: list[ExploreMix] = Field(default_factory=_default_explore_mix)  # 地點類型 -> 素材／野怪／事件的比例
-    wild_neili_loss_factor: float = Field(default=0.5, ge=0, le=1)  # 探索撞上的野怪扣氣血是歷練的幾倍（內傷照同一個比例）
+    wild_neili_loss_factor: float = Field(default=0.5, ge=0, le=1)  # 探索撞上的野怪扣氣血是遊歷的幾倍（內傷照同一個比例）
     craft_xinde_base: int = 5  # 煉製成本 = base × 素材數 + per_tier × 階總和（見無限煉製設計 §5.5）
     craft_xinde_per_tier: int = 3
     level_exp: int = 10  # 第 n 級升 n+1 級需要 level_exp × n
@@ -638,7 +638,7 @@ class Config(_Strict):
     duel_chance_on_fail: float = 0.4  # 招募失敗時，額外觸發對方要求決鬥的機率
     duel_fail_silver_loss: int = 15  # 決鬥吃虧：賠的銀兩（原本只有「你惹上了一場決鬥」的文字，沒有任何實際代價）
     recruit_consolation_xinde: int = 30  # 劇情事件想結識的人已經被別人招走時，改給的心得
-    fortune_day_min: int = 2  # 新立門戶福緣：第幾天起交遊必定先觸發
+    fortune_day_min: int = 2  # 新立門戶福緣：第幾天起交友必定先觸發
     fortune_day_max: int = 7  # 新立門戶福緣：第幾天結束還沒發生就直接送上門
     # ── 賽季生命週期（第一季設計第十四節）──
     admins: list[str] = Field(default_factory=list)  # 管理者的名號；暫時用名號認人，線上架構會換成帳號權限
