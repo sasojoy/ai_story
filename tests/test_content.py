@@ -679,3 +679,88 @@ def test_validate_rejects_a_squad_of_an_unknown_faction(content):
     content.squads["thug"].faction = "ghost"
     with pytest.raises(ContentError, match="ghost"):
         validate(content)
+
+
+# ── 輿圖美術：河流、地形、指北針（輿圖美術設計第四節）──────────────────
+
+
+def test_rivers_read_the_old_plain_point_lists_as_blue(content):
+    (river,) = content.map.rivers  # 夾具的 map.json 還是舊格式：一串 [x, y] 點
+    assert (river.points, river.width, river.color) == ([[0, 150], [400, 150]], (4, 8), "blue")
+
+
+def test_rivers_read_the_new_objects(tmp_path):
+    root = copy_fixture(tmp_path)
+    river = {"name": "大河", "points": [[0, 20], [400, 40]], "width": [6, 12], "color": "yellow"}
+    edit_json(root / "map.json", lambda d: d.update(rivers=[river]))
+    (loaded,) = load_content(root).map.rivers
+    assert (loaded.name, loaded.points, loaded.width, loaded.color) == ("大河", [[0, 20], [400, 40]], (6, 12), "yellow")
+
+
+def test_river_colour_is_blue_or_yellow(tmp_path):
+    root = copy_fixture(tmp_path)
+    edit_json(root / "map.json", lambda d: d.update(rivers=[{"points": [[0, 20], [400, 40]], "color": "green"}]))
+    with pytest.raises(ValidationError, match="Input should be 'blue' or 'yellow'"):
+        load_content(root)
+
+
+@pytest.mark.parametrize("river", [
+    {"name": "大河", "points": [[0, 20]]},  # 一個點畫不成河
+    {"name": "大河", "points": [[0, 20], [999, 40]]},  # 出界
+    {"name": "大河", "points": [[0, 20], [400, 40]], "width": [9, 5]},  # 往下游變窄
+    {"name": "大河", "points": [[0, 20], [400, 40]], "width": [0, 5]},
+])
+def test_bad_rivers_rejected(tmp_path, river):
+    root = copy_fixture(tmp_path)
+    edit_json(root / "map.json", lambda d: d.update(rivers=[river]))
+    with pytest.raises(ContentError, match="河流 大河"):
+        load_content(root)
+
+
+TERRAIN = [
+    {"kind": "mountains", "name": "測試嶺", "spine": [[20, 60], [120, 50]], "size": 20},
+    {"kind": "hills", "spine": [[250, 170], [330, 175]], "size": 10},
+    {"kind": "forest", "points": [[300, 20], [380, 20], [380, 70]]},
+]
+
+
+def test_terrain_and_compass_load(tmp_path):
+    root = copy_fixture(tmp_path)
+    edit_json(root / "map.json", lambda d: d.update(terrain=TERRAIN, compass=[370, 120]))
+    m = load_content(root).map
+    assert [(t.kind, t.name) for t in m.terrain] == [("mountains", "測試嶺"), ("hills", ""), ("forest", "")]
+    assert m.terrain[0].spine == [[20, 60], [120, 50]] and m.terrain[2].points == [[300, 20], [380, 20], [380, 70]]
+    assert m.compass == (370, 120)
+
+
+def test_terrain_and_compass_are_optional(content):
+    assert content.map.terrain == [] and content.map.compass is None
+
+
+def test_terrain_kind_must_be_one_of_three(tmp_path):
+    root = copy_fixture(tmp_path)
+    edit_json(root / "map.json", lambda d: d.update(terrain=[{"kind": "volcano", "spine": [[20, 60], [120, 50]], "size": 20}]))
+    with pytest.raises(ValidationError, match="Input should be 'mountains', 'hills' or 'forest'"):
+        load_content(root)
+
+
+@pytest.mark.parametrize("piece, message", [
+    ({"kind": "mountains", "name": "測試嶺", "spine": [[20, 60]], "size": 20}, "地形 測試嶺：spine"),
+    ({"kind": "hills", "spine": [[20, 60], [120, 50]], "size": 7}, "地形第 1 筆：size"),
+    ({"kind": "mountains", "name": "測試嶺", "spine": [[20, 60], [120, 50]], "size": 41}, "地形 測試嶺：size"),
+    ({"kind": "mountains", "name": "測試嶺", "spine": [[20, 60], [420, 50]], "size": 20}, "地形 測試嶺：座標超出"),
+    ({"kind": "forest", "points": [[300, 20], [380, 20]]}, "地形第 1 筆：林地"),
+    ({"kind": "forest", "points": [[300, 20], [380, 20], [380, -1]]}, "地形第 1 筆：座標超出"),
+])
+def test_bad_terrain_rejected(tmp_path, piece, message):
+    root = copy_fixture(tmp_path)
+    edit_json(root / "map.json", lambda d: d.update(terrain=[piece]))
+    with pytest.raises(ContentError, match=message):
+        load_content(root)
+
+
+def test_compass_must_be_on_the_map(tmp_path):
+    root = copy_fixture(tmp_path)
+    edit_json(root / "map.json", lambda d: d.update(compass=[401, 120]))
+    with pytest.raises(ContentError, match="指北針"):
+        load_content(root)

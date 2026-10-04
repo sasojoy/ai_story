@@ -386,7 +386,7 @@ def _polygons(m: MapLayout, tints: dict[str, str]) -> list[str]:
 
 def _rivers(m: MapLayout) -> list[str]:
     return [
-        f'<polyline points="{" ".join(f"{x},{y}" for x, y in river)}" fill="none" stroke="{RIVER_STROKE}" '
+        f'<polyline points="{" ".join(f"{x},{y}" for x, y in river.points)}" fill="none" stroke="{RIVER_STROKE}" '
         'stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>'
         for river in m.rivers
     ]

@@ -71,7 +71,7 @@ def test_text_width():
 
 def test_render_map_new_look(state, content):
     svg = render_map(state, content, "routes")  # 路線層的大區保持原色
-    assert 'fill="#F6F1E4"' in svg  # 固定淺色底
+    assert 'fill="#E9E2CC"' in svg  # 紙色底（輿圖美術設計 2.1）
     assert "測試北區" in svg and 'fill="#EFE5CB"' in svg  # 區域
     assert 'stroke="#BA7517"' in svg  # 湖邊危險 2 → 橙色外圈
     assert "湖邊 ⚔" in svg and "★" not in svg
@@ -107,7 +107,7 @@ def test_selected_label_sits_outside_the_selection_ring(state, content):
 
 def test_region_names_have_a_halo_so_they_read_on_any_tint(state, content):
     svg = render_map(state, content)
-    assert re.search(r'<text [^>]*fill="#C9B98F"[^>]*stroke="#F6F1E4"[^>]*>測試北區</text>', svg)
+    assert re.search(r'<text [^>]*fill="#C9B98F"[^>]*stroke="#E9E2CC"[^>]*>測試北區</text>', svg)
 
 
 def test_label_flips_left_near_right_edge(state, content):
@@ -234,7 +234,7 @@ def test_minimap_is_a_window_centred_on_the_player(state, content):
     assert ((left + right) / 2, (top + bottom) / 2) == (100, 100)  # 小鎮在正中間
     assert f"height:{MINI_HEIGHT}px" in svg and "height:auto" not in svg  # 畫面上固定高度
     size = f'width="{right - left:g}" height="{bottom - top:g}"'
-    assert f'<rect x="{left:g}" y="{top:g}" {size} fill="#F6F1E4"/>' in svg  # 地圖外面用底色
+    assert f'<rect x="{left:g}" y="{top:g}" {size} fill="#E9E2CC"/>' in svg  # 地圖外面用底色
     assert 'clip-path="url(#' in svg  # 視窗外的東西不露出來
     state.player.location = "lake"
     left, top, right, bottom = window(render_minimap(state, content))
