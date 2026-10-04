@@ -142,6 +142,43 @@ def test_menxia_view_falls_back_to_no_person_for_an_unknown_one(game):
     assert view["per_craft"] == 2
 
 
+def _clue_items(game):
+    return server.look(game, server.menxia_view)["clue_items"]
+
+
+def test_menxia_view_lists_the_foreshadow_items_in_the_content_order(monkeypatch):
+    """煉製頁素材旁的「伏筆物品」（T7b）：開關開著、這一季蓋了章、手上有的才列；每樣名字加數量，照 foreshadows.json 的順序，
+    不列數量 0 的。沒有說明句：兩份文件都沒寫，不自己編。"""
+    monkeypatch.setattr(server.CONTENT.config, "season_one", True)
+    game = Game.new(server.CONTENT, "測試")  # 開關開著時開的季：蓋了章
+    assert _clue_items(game) == []  # 手上什麼都沒有：整塊不出現
+    game.state.player.clue_items = {"fs_oil": 1, "fs_reeds": 3, "fs_ash": 0}
+    assert _clue_items(game) == [
+        {"id": "fs_reeds", "name": "葦束", "count": 3},
+        {"id": "fs_oil", "name": "膏油", "count": 1},
+    ]
+
+
+def test_menxia_view_hides_the_foreshadow_items_when_the_switch_is_off(game, monkeypatch):
+    """開關關著（現在的試玩伺服器）：就算手上有東西也是空的。開關是後來才開的：這一季沒蓋章，一樣是空的。"""
+    game.state.player.clue_items = {"fs_oil": 1}
+    assert not server.CONTENT.config.season_one and _clue_items(game) == []
+    monkeypatch.setattr(server.CONTENT.config, "season_one", True)  # 這一季開季時開關是關的：不會跑
+    assert _clue_items(game) == []
+
+
+def test_menxia_endpoint_carries_the_foreshadow_items(client, monkeypatch):
+    monkeypatch.setattr(server.CONTENT.config, "season_one", True)
+    _player(client)
+    game = server.game_for("沈青衫")
+    assert client.get("/api/menxia").json()["clue_items"] == []
+    game.state.player.clue_items = {"fs_witness": 1}
+    open_characters().save(game.state)  # 資料庫是唯一的真實來源：進鎖先重讀
+    assert client.get("/api/menxia").json()["clue_items"] == [{"id": "fs_witness", "name": "宮中的證人", "count": 1}]
+    monkeypatch.setattr(server.CONTENT.config, "season_one", False)
+    assert client.get("/api/menxia").json()["clue_items"] == []
+
+
 def test_map_view_selects_your_location_by_default(game):
     view = server.look(game, lambda g: server.map_view(g, "沒這層", None))
     assert view["layer"] == server.DEFAULT_LAYER

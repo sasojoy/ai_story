@@ -527,6 +527,8 @@
           <span class="n">×${m.count - used(m.id)}</span><b>${esc(m.name)}</b><small>${esc(m.tier)}・屬${esc(m.attribute)}</small>
         </button>`).join("")}</div>`
         : '<p class="muted">背包裡還沒有素材。去探索、遊歷打贏，或是碰上奇遇都拿得到。</p>'}
+      ${x.clue_items?.length ? `<div class="label">伏筆物品</div>
+      <div class="chips clues">${x.clue_items.map((i) => `<div class="clue"><b>${esc(i.name)}</b><span>×${i.count}</span></div>`).join("")}</div>` : ""}
       <details class="fold"><summary>素材說明</summary><div class="fold-body">${x.bag}</div></details>
       <div class="sticky-act"><button class="btn primary" id="forge" data-act="forge" ${ready ? "" : "disabled"}>開爐煉製</button></div>`;
   }
@@ -1390,7 +1392,7 @@
   // 不比整份，是因為本人卡上的氣血一直在回，整份 menxia 幾乎每分鐘都不一樣，煉製頁根本沒畫那張卡
   const MENXIA_SHOWN = {
     practice: ["rules", "slot_cards", "arts", "player_card", "roster", "person", "person_card", "on_team"],
-    craft: ["materials", "per_craft", "bag", "craft_line", "xinde"],
+    craft: ["materials", "clue_items", "per_craft", "bag", "craft_line", "xinde"],
   };
 
   // 重畫這一頁但保留玩家正在做的事（輪詢、閉關被拒時用）：填到一半的欄位（自創功法的名字、閉關時數）、

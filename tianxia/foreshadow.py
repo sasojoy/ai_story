@@ -20,7 +20,7 @@ from collections.abc import Iterator
 from . import calendar, figures, materials, timetable
 from .journal import fragment_line
 from .models import (
-    Check, Content, FsAsk, FsChain, FsFinal, FsFragment, FsRequires, FsStep, FsWrong, Squad,
+    Check, Content, FsAsk, FsChain, FsFinal, FsFragment, FsItem, FsRequires, FsStep, FsWrong, Squad,
 )
 from .rules import check_chance, check_who, display_name
 from .state import GameState, Lock
@@ -101,6 +101,15 @@ def _event(content: Content, event_id: str):
 
 def item_name(content: Content, item_id: str) -> str:
     return next((i.name for i in content.foreshadows.items if i.id == item_id), item_id)
+
+
+def held_items(state: GameState, content: Content) -> list[tuple[FsItem, int]]:
+    """手上的伏筆物品（煉製頁素材旁的「伏筆物品」畫面用，T7b）：照 foreshadows.json 的順序、不列數量 0 的。
+    伏筆沒在跑（active 不成立：開關關著、這一季沒蓋章、沒有鏈）時是空的，就算背包裡有東西。"""
+    if not active(state, content):
+        return []
+    bag = state.player.clue_items
+    return [(item, bag[item.id]) for item in content.foreshadows.items if bag.get(item.id, 0) > 0]
 
 
 def trips(final: FsFinal) -> list[FsStep]:
