@@ -62,7 +62,7 @@ def run_season(content, workdir: Path, seed: int, tick: float) -> dict:
     # 引擎已經不讀電腦時鐘（假人程式用 clock，「真人」sync 時傳 now），不用再 mock time.time。
     with mock.patch.dict(os.environ, {database.ENV_VAR: str(db_path)}):
         world.seed_first_season(content)
-        world.open_season(now[0])
+        world.open_season(content, now[0])
         humans = [Game.new(content, name, rng=random.Random(seed + 2000 + i), world=world) for i, name in enumerate(HUMANS)]
         for game in humans:
             game.client = None

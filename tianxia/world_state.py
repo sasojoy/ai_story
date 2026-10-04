@@ -85,20 +85,27 @@ class SharedWorldState(BaseModel):
 
 
 def fresh_season(content: Content) -> WorldState:
-    """照劇本種出一季全新的共用賽季（大勢起始值、公開的大勢線、第一條主線），並把當下的開關與季長蓋章在
-    這一季上（seed_first_season、next_season 都走這裡）：之後換了設定，這一季照它自己的章走。"""
-    from .timetable import default_schedule  # noqa: PLC0415  延後 import：timetable → rules → world_state
-
+    """照劇本種出一季全新的共用賽季（大勢起始值、公開的大勢線、第一條主線），並蓋上當下的章（stamp_season）。
+    seed_first_season、next_season 都走這裡；籌備中的季在管理者開季時再蓋一次（open_season）。"""
     trends = content.scenario.trends
-    cfg = content.config
-    return WorldState(
+    season = WorldState(
         trends={t.id: t.start for t in trends},
         revealed={t.id for t in trends if not t.hidden},
         storyline=content.scenario.storylines[0].id,
-        season_one=cfg.season_one,
-        length_days=cfg.season_days,
-        schedule=default_schedule(content) if cfg.season_one else {},  # 決戰與季末的預設時間，管理者開季後可以改（T10）
     )
+    stamp_season(season, content)
+    return season
+
+
+def stamp_season(season: WorldState, content: Content) -> None:
+    """把當下的開關與季長蓋章在這一季上（計畫 T2「舊季不會被補算」）：之後換了設定，這一季照它自己的章走。
+    開關開著時順便填決戰與季末的預設時間（管理者開季後可以改，T10）。只在季還沒開始時呼叫：種季、換季、開季。"""
+    from .timetable import default_schedule  # noqa: PLC0415  延後 import：timetable → rules → world_state
+
+    cfg = content.config
+    season.season_one = cfg.season_one
+    season.length_days = cfg.season_days
+    season.schedule = default_schedule(content) if cfg.season_one else {}
 
 
 def season_length_days(season: WorldState, content: Content) -> float:
@@ -220,8 +227,10 @@ class WorldStateStore(Protocol):
         時直接開季。已經種過就原封不動回傳。"""
         ...
 
-    def open_season(self, now: float) -> bool:
-        """管理者開季：籌備中 → 進行中，賽季時鐘從 now 起算。還沒種、或已經開過，回傳 False。"""
+    def open_season(self, content: Content, now: float) -> bool:
+        """管理者開季：籌備中 → 進行中，賽季時鐘從 now 起算。還沒種、或已經開過，回傳 False。
+        開季時照現在的設定重新蓋章（stamp_season）：第一次啟動忘了設 TIANXIA_PROFILE、種下的季蓋的是「關」，
+        設好重開之後開季，這一季照新的設定跑。籌備中的季時間是 0、什麼都還沒跑，重蓋是安全的。"""
         ...
 
     def next_season(self, content: Content, now: float) -> bool:

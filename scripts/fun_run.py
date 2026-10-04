@@ -276,7 +276,7 @@ def _play(content, seed: int, db_path: Path, *, no_craft=False, no_train=False, 
     game = Game.new(content, f"新玩家{seed}", random.Random(seed), store)
     # 遠端新增了「管理者開季」：新世界停在籌備中，沒開季的話選單只有一個 disabled 的
     # 「賽季籌備中」，什麼都做不了（這支腳本第一次跑就是全 0 分，原因就是這個）。
-    store.open_season(0.0)
+    store.open_season(content, 0.0)
     game.state.world = store.get_season()
     first_crafts: set[str] = set()
 

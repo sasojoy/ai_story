@@ -3977,3 +3977,24 @@ def test_status_shows_calendar_and_next_event(content, world):
     assert game.status_data()["next_event"] == {"title": "長社火攻", "in_seconds": round(showdown - game.state.world.time)}
     content.config.time_scale = 2  # 1 時等於現實 2 秒：倒數是現實秒
     assert game.status_data()["next_event"]["in_seconds"] == round((showdown - game.state.world.time) / 2)
+
+
+def test_open_season_restamps_with_current_profile(content, world):
+    """第一次啟動忘了設 TIANXIA_PROFILE：籌備中的季種下時蓋的是「關」。換成週末設定重開、管理者開季時重新蓋章，
+    這一季照週末設定跑（開季前時間是 0、什麼都還沒跑，重蓋是安全的）。"""
+    install_season_one(content)
+    content.config.admins = ["管理者"]
+    content.config.auto_open_first_season = False
+    content.config.season_one, content.config.season_days = False, 14  # 沒設 profile 的第一次啟動
+    admin = Game.new(content, "管理者", rng=random.Random(1), world=world)
+    assert world.season_phase() == "preparing"
+    assert (world.get_season().season_one, world.get_season().length_days) == (False, 14)
+
+    content.config.season_one, content.config.season_days = True, 2.5  # 設好 weekend 重開
+    admin.admin_open_season(now=100.0)
+    season = world.get_season()
+    assert (season.season_one, season.length_days, season.time) == (True, 2.5, 0)
+    assert season.schedule["finale"] == pytest.approx(2.5 * DAY)  # 決戰與季末的預設時間也一起補上
+    admin.sync(100.0 + calendar.cal_hour_seconds(content))
+    assert list(world.get_season().timeline) == ["uprising"]
+    assert admin.status_data()["calendar"]["week"] == 1

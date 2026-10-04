@@ -2188,7 +2188,7 @@ class Game:
         """管理者開季：籌備中 → 進行中。"""
         if not self.is_admin():
             return self._log(["（只有管理者能開季。）"])
-        if not self.world.open_season(now):
+        if not self.world.open_season(self.content, now):
             return self._log(["（現在不是籌備期，無法開季。）"])
         msgs = [f"══ {self.content.scenario.name}・開季 ══"]
         self._write("開季", msgs, tag="管理者")

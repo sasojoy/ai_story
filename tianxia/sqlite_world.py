@@ -27,7 +27,7 @@ from .models import BattleDef, Content
 from .state import Rumor, WorldState
 from .world_state import (
     JADE_SEAL_FRAGMENT_COUNT, CompanionProgress, JadeSealFragment, SeasonPhase, SharedWorldState, fresh_season,
-    jade_seal_summary,
+    jade_seal_summary, stamp_season,
 )
 
 
@@ -282,12 +282,13 @@ class SqliteWorldStore:
 
         return self.mutate(_apply).season
 
-    def open_season(self, now: float) -> bool:
+    def open_season(self, content: Content, now: float) -> bool:
         result = {"ok": False}
 
         def _apply(state: SharedWorldState) -> None:
             if not state.season.storyline or state.season_opened:
                 return
+            stamp_season(state.season, content)  # 種下之後設定可能換過（例如重開時才設 weekend）
             state.season_opened = True
             state.season_last_real = now
             result["ok"] = True

@@ -188,7 +188,8 @@ class WorldState(BaseModel):
     pending_battle: str | None = None  # 背景推進跨過開戰門檻時記下要開的戰鬥 id；那時人在 mutate_season 的
     # callback 裡，不能再 mutate 開戰（巢狀的 mutate 內層寫的會被蓋掉，會丟錯），callback 結束後由
     # world.start_pending_battle 開戰並清掉
-    # ── 開季時蓋的章（計畫 T2「舊季不會被補算」）：world_state.fresh_season 照當下的 Config 寫入 ──
+    # ── 開季時蓋的章（計畫 T2「舊季不會被補算」）：world_state.stamp_season 照當下的 Config 寫入——種季、換季時蓋，
+    # 籌備中的季在管理者開季時再蓋一次（第一次啟動忘了設 TIANXIA_PROFILE 也救得回來）──
     # 開關打開時還在跑的舊季照它自己的章走：不跑季曆與時刻表，也不會因為設定的季長變短就一口氣收掉。
     season_one: bool = False  # 這一季開季時第一季濃縮版的規則是不是開著
     length_days: float | None = None  # 這一季的長度（遊戲日）；None＝T2 之前開的季，照 Config.season_days

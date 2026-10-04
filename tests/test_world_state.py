@@ -250,14 +250,14 @@ def test_seed_first_season_is_a_no_op_once_seeded(store, content):
 def test_open_season_moves_preparing_to_running_once(store, content):
     content.config.auto_open_first_season = False
     store.seed_first_season(content)
-    assert store.open_season(now=500.0) is True
+    assert store.open_season(content, now=500.0) is True
     assert store.season_phase() == "running"
     assert store.read().season_last_real == 500.0
-    assert store.open_season(now=600.0) is False
+    assert store.open_season(content, now=600.0) is False
 
 
-def test_open_season_needs_a_seeded_season(store):
-    assert store.open_season(now=1.0) is False
+def test_open_season_needs_a_seeded_season(store, content):
+    assert store.open_season(content, now=1.0) is False
     assert store.season_phase() == "preparing"
 
 
