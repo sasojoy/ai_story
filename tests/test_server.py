@@ -1,5 +1,7 @@
 import contextlib
+import hashlib
 import random
+import re
 import sqlite3
 import time
 from unittest import mock
@@ -1073,6 +1075,80 @@ def test_the_page_and_its_files_are_served(client):
     assert client.get("/static/app.js").status_code == 200
     assert client.get("/static/style.css").status_code == 200
     assert ".tx-now" in client.get("/journal.css").text
+
+
+def _version_of(content: bytes) -> str:
+    """測試自己算期望的版本號，不拿 server 的函式去比 server 的函式。"""
+    return hashlib.sha256(content).hexdigest()[:10]
+
+
+def test_the_page_names_every_file_with_a_version_from_its_content(client):
+    """更版後手機要拿到新檔：網址帶檔案內容的雜湊，新網址就是新的快取鍵（舊的快取不會被用到）。"""
+    page = client.get("/")
+    assert page.status_code == 200
+    assert page.headers["Cache-Control"] == "no-cache"
+    app_js = _version_of((server.WEB / "app.js").read_bytes())
+    style_css = _version_of((server.WEB / "style.css").read_bytes())
+    journal_css = _version_of(server.JOURNAL_CSS.encode("utf-8"))
+    assert f'src="/static/app.js?v={app_js}"' in page.text
+    assert f'href="/static/style.css?v={style_css}"' in page.text
+    assert f'href="/journal.css?v={journal_css}"' in page.text
+    # 以後有人在 index.html 加一個沒有版本號的資源，這裡會抓到
+    urls = re.findall(r"""(?:src|href)=["'](/[^"']*)["']""", page.text)
+    assert urls and all("?v=" in url for url in urls)
+
+
+def test_the_versioned_urls_are_served_and_the_browser_must_ask_each_time(client):
+    """no-cache：每次都向伺服器確認（/static 有 ETag，沒變就是 304）；改了檔沒重開伺服器也不會被瀏覽器釘住舊檔。"""
+    app_js = _version_of((server.WEB / "app.js").read_bytes())
+    style_css = _version_of((server.WEB / "style.css").read_bytes())
+    journal_css = _version_of(server.JOURNAL_CSS.encode("utf-8"))
+    for url in (f"/static/app.js?v={app_js}", f"/static/style.css?v={style_css}", f"/journal.css?v={journal_css}"):
+        got = client.get(url)
+        assert got.status_code == 200, url
+        assert got.headers["Cache-Control"] == "no-cache", url
+
+
+def test_the_unversioned_urls_are_not_cached_either(client):
+    """舊網址（沒帶版本號）也一樣不能被啟發式快取。"""
+    assert client.get("/static/app.js").headers["Cache-Control"] == "no-cache"
+    assert client.get("/journal.css").headers["Cache-Control"] == "no-cache"
+
+
+def test_the_version_follows_the_content():
+    assert server.content_version(b"abc") == server.content_version(b"abc")
+    assert server.content_version(b"abc") != server.content_version(b"abd")
+    assert server.content_version(b"abc") == _version_of(b"abc")
+
+
+def test_versioned_page_marks_our_own_files_and_leaves_everything_else():
+    html = (
+        '<link rel="icon" href="data:image/svg+xml,%3Csvg%3E">'
+        '<link rel="stylesheet" href="/journal.css">'
+        '<link rel="stylesheet" href="/static/style.css">'
+        '<script src="/static/app.js"></script>'
+        '<script src="https://example.com/x.js"></script>'
+    )
+    out = server.versioned_page(html, lambda url: "v" + url.replace("/", "_"))
+    assert 'href="/journal.css?v=v_journal.css"' in out
+    assert 'href="/static/style.css?v=v_static_style.css"' in out
+    assert 'src="/static/app.js?v=v_static_app.js"' in out
+    assert 'href="data:image/svg+xml,%3Csvg%3E"' in out
+    assert 'src="https://example.com/x.js"' in out
+    assert out.count("?v=") == 3
+    # 已經帶版本號的不會再加一次
+    assert server.versioned_page(out, lambda url: "other") == out
+
+
+def test_versioned_page_refuses_a_file_that_does_not_exist():
+    """index.html 指到 web/ 裡沒有的檔：啟動時就丟例外，不要默默送出壞網址。"""
+    with pytest.raises(FileNotFoundError):
+        server.versioned_page('<script src="/static/no_such_file.js"></script>', server.asset_version)
+
+
+def test_asset_version_reads_the_files_the_server_really_sends():
+    assert server.asset_version("/static/app.js") == _version_of((server.WEB / "app.js").read_bytes())
+    assert server.asset_version("/journal.css") == _version_of(server.JOURNAL_CSS.encode("utf-8"))
 
 
 def test_starting_the_server_prints_the_database_path(capsys, monkeypatch):
