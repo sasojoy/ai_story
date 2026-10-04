@@ -72,7 +72,7 @@ def content():
 def test_real_content_loads():
     c = load_content(CONTENT_DIR)
     assert 30 <= len(c.locations) <= 40
-    assert {t.id for t in c.scenario.trends} == {"huangjin", "yuxi"}
+    assert {t.id for t in c.scenario.trends} == {"huangjin", "yuxi", "yingru", "nanyang", "jizhou", "geju"}
 
 
 def test_the_season_one_switch_stays_off_until_the_condensed_build_ships():
@@ -439,8 +439,43 @@ def test_nobody_can_join_a_faction_at_the_start_location(content):
 
 
 def test_each_side_of_the_war_wants_the_yellow_turbans_to_go_its_way(content):
+    """官軍把三條戰線往 0 壓、黃巾往 100 推，豪強只推割據（第一季設計 4.4、總計畫 T1）。"""
     goals = {f.id: f.goals for f in content.scenario.factions}
-    assert goals == {"guan": {"huangjin": -1}, "huang": {"huangjin": 1}, "haoqiang": {}}
+    fronts = ("yingru", "nanyang", "jizhou")
+    assert goals == {"guan": dict.fromkeys(fronts, -1), "huang": dict.fromkeys(fronts, 1), "haoqiang": {"geju": 1}}
+
+
+# 遊歷推大勢：數字跟遷移前一模一樣，鍵換成所在大區的戰線；洛陽沒有戰況，寫 front
+EXPECTED_TRAINING = {
+    "changshe": {"yingru": -1}, "luoyang_road": {"front": -1}, "mengjin_ford": {"front": 1},
+    "nanyang_huangjin_camp": {"nanyang": -2}, "yu_river": {"nanyang": -1}, "nanyang_wilds": {"nanyang": -1},
+    "runan_wilds": {"yingru": -1}, "huangjin_camp": {"yingru": -2}, "juma_river": {"jizhou": -1},
+    "yanshan_foot": {"jizhou": -1}, "julu_altar": {"jizhou": -2}, "guangzong": {"jizhou": -2},
+    "luzhi_camp": {"jizhou": 1}, "xiaquyang": {"jizhou": -1}, "baima_ford": {"jizhou": 1},
+}
+
+
+def test_real_content_fronts(content):
+    """三條戰線的起始值與權重照第一季設計 4.1，割據從 10 起；大區對戰線；遊歷指向所在戰線；
+    虛擬玩家與決戰結果改推潁川汝南（數字不變）。"""
+    trends = {t.id: t for t in content.scenario.trends}
+    starts = {key: trends[key].start for key in ("yingru", "nanyang", "jizhou", "geju")}
+    assert starts == {"yingru": 40, "nanyang": 35, "jizhou": 55, "geju": 10}
+    assert trends["huangjin"].derived == {"yingru": 0.35, "nanyang": 0.25, "jizhou": 0.40}
+    assert trends["huangjin"].start == 25 and not trends["huangjin"].season_one
+    assert all(trends[key].season_one for key in ("yingru", "nanyang", "jizhou", "geju"))
+    assert {r.id: r.front for r in content.map.regions} == {
+        "youzhou": "jizhou", "jizhou": "jizhou", "luoyang": None, "yingru": "yingru", "nanyang": "nanyang",
+    }
+    assert {r.id: r.trends for r in content.map.regions} == {
+        "youzhou": ["jizhou"], "jizhou": ["jizhou"], "luoyang": [], "yingru": ["yingru", "yuxi"], "nanyang": ["nanyang"],
+    }
+    assert {lid: loc.train_trend for lid, loc in content.locations.items() if loc.train_trend} == EXPECTED_TRAINING
+    for lid, pushes in EXPECTED_TRAINING.items():
+        assert set(pushes) == {region_of(content, lid).front or "front"}, lid
+    assert [s.trend for s in content.scenario.sim_players] == [{"yingru": 1}, {"yingru": -1}, {"yuxi": 2}]
+    outcomes = [o.trend_delta for o in content.battles["huangjin_showdown"].outcomes]
+    assert outcomes == [{"yingru": -35}, {"yingru": 25}, {"yingru": -5}]
 
 
 def test_the_playtest_admin_is_rayal():

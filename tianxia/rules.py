@@ -6,8 +6,8 @@ import re
 from collections.abc import Callable
 
 from . import calendar, materials, roster, team  # 與 roster 互相 import：只能引入整個模組、呼叫時才取屬性，不能 from .roster import …
-from .models import Check, Condition, Content, Effect
-from .state import PLAYER, GameState, Rumor, RumorLayer
+from .models import FRONT_KEY, Check, Condition, Content, Effect, Trend
+from .state import PLAYER, GameState, Rumor, RumorLayer, WorldState
 from .world_state import JADE_SEAL_FRAGMENT_COUNT, WorldStateStore
 
 DAY = 86400
@@ -189,6 +189,108 @@ def trend_name(content: Content, trend_id: str) -> str:
     return next(t.name for t in content.scenario.trends if t.id == trend_id)
 
 
+# ── 第一季濃縮版：戰線與開關（2026-10-04 計畫 T1）─────────────────
+# 內容只寫一份（三條戰線、豪強割據、front 鍵）。第一季的規則沒開時（開關關著，或這一季開季時沒蓋「開」的章），
+# 下面的換算讓規則與畫面跟 beta 那一季一模一樣：三條戰線與 front 都算黃巾聲勢，第一季才有的其他線（豪強割據）不存在。
+
+HUANGJIN = "huangjin"  # 黃巾聲勢：開關開著時是三條戰線的加權（Trend.derived）
+GEJU = "geju"  # 豪強割據
+
+
+def season_one(content: Content, world: WorldState) -> bool:
+    """第一季濃縮版的規則在這一季開了沒：開關開著，而且這一季開季時也蓋了「開」的章（T2 的 calendar.season_one_on）。
+    開關打開時還在跑的 beta 那一季照舊用 beta 的規則，新規則從開關打開後開的下一季起算（PM 2026-10-04）。"""
+    return calendar.season_one_on(world, content)
+
+
+def _trend(content: Content, trend_id: str) -> Trend | None:
+    return next((t for t in content.scenario.trends if t.id == trend_id), None)
+
+
+def front_of(content: Content, loc_id: str) -> str | None:
+    """地點所在大區的戰線（MapRegion.front）；洛陽這類沒有戰況的大區、或地圖沒有大區時是 None。只讀內容，開關關著也照算。"""
+    from . import atlas  # atlas → world → rules：在函式裡 import，避免循環
+
+    region = atlas.region_of(content, loc_id)
+    return region.front if region is not None else None
+
+
+def front_ids(content: Content) -> list[str]:
+    """戰線：地圖上有大區把它當 front 的線，照劇本 trends 的順序。"""
+    used = {region.front for region in content.map.regions if region.front}
+    return [t.id for t in content.scenario.trends if t.id in used]
+
+
+def trend_shown(content: Content, world: WorldState, trend_id: str) -> bool:
+    """這條線在這一季的規則下存在嗎：第一季的規則沒開時，第一季才有的線（Trend.season_one）不顯示、不推。"""
+    trend = _trend(content, trend_id)
+    return trend is not None and (season_one(content, world) or not trend.season_one)
+
+
+def pushable(content: Content, world: WorldState, trend_id: str) -> bool:
+    """可以直接推的線：存在，而且不是第一季規則下的衍生線（黃巾聲勢由三條戰線合成）。"""
+    trend = _trend(content, trend_id)
+    return trend_shown(content, world, trend_id) and not (trend.derived and season_one(content, world))
+
+
+def resolve_trend(content: Content, world: WorldState, key: str, location: str | None = None) -> str | None:
+    """內容寫的大勢鍵 → 這一次真的要推（或讀）的那條線；None＝這次不推。
+    第一季的規則開著（season_one）：front 是 location 所在大區的戰線（洛陽沒有戰況→None），其他照寫。
+    沒開（beta 照舊）：front 與三條戰線都算它們合成的那條線（黃巾聲勢），第一季才有的其他線（豪強割據）→None。"""
+    if season_one(content, world):
+        if key == FRONT_KEY:
+            return front_of(content, location) if location is not None else None
+        return key
+    if key == FRONT_KEY:
+        return next((t.id for t in content.scenario.trends if t.derived), None)
+    total = next((t.id for t in content.scenario.trends if key in t.derived), None)
+    if total is not None:
+        return total
+    return key if trend_shown(content, world, key) else None
+
+
+def resolve_trends(
+    content: Content, world: WorldState, trends: dict[str, int], location: str | None = None,
+) -> dict[str, int]:
+    """一整份推動照 resolve_trend 換鍵：換到同一條線的加總，換成 None 的丟掉。"""
+    out: dict[str, int] = {}
+    for key, delta in trends.items():
+        target = resolve_trend(content, world, key, location)
+        if target is not None:
+            out[target] = out.get(target, 0) + delta
+    return out
+
+
+def resolve_goals(content: Content, world: WorldState, goals: dict[str, int]) -> dict[str, int]:
+    """陣營目標照 resolve_trend 換鍵（開關關著時三條戰線都算黃巾聲勢）：目標只有方向，換到同一條線時留第一個。"""
+    out: dict[str, int] = {}
+    for key, direction in goals.items():
+        target = resolve_trend(content, world, key)
+        if target is not None:
+            out.setdefault(target, direction)
+    return out
+
+
+def world_trend_value(world: WorldState, content: Content, trend_id: str) -> int:
+    """一條線現在的值；存檔裡沒有這條線（內容改版前開的那一季）時用劇本的起始值。"""
+    if trend_id in world.trends:
+        return world.trends[trend_id]
+    trend = _trend(content, trend_id)
+    return trend.start if trend is not None else 0
+
+
+def trend_value(state: GameState, content: Content, trend_id: str) -> int:
+    """同 world_trend_value，讀這個角色看到的那一份賽季。讀戰線、黃巾聲勢、割據一律走這裡。"""
+    return world_trend_value(state.world, content, trend_id)
+
+
+def seed_trends(world: WorldState, content: Content) -> None:
+    """一季剛開始的大勢：照劇本的起始值，公開的線記成已浮現；第一季的規則沒開時不放第一季才有的線（照這一季的章，所以要先蓋章再種）。"""
+    trends = [t for t in content.scenario.trends if trend_shown(content, world, t.id)]
+    world.trends = {t.id: t.start for t in trends}
+    world.revealed = {t.id for t in trends if not t.hidden}
+
+
 def change_trend(
     state: GameState, content: Content, trend_id: str, delta: int, reveal: bool = True
 ) -> list[str]:
@@ -269,7 +371,8 @@ def apply_effect(
         p.sect = None
     if effect.recruit:
         msgs += roster.recruit(state, content, world, effect.recruit)
-    for trend_id, delta in effect.trend.items():
+    for trend_id, delta in resolve_trends(content, state.world, effect.trend, state.player.location).items():
+        # front 與戰線先照這一季的規則換成真的要推的線，再照舊交給 push（Game.push_trend，T3）或 change_trend
         msgs += change_trend(state, content, trend_id, delta) if push is None else push(trend_id, delta, source="event")
     jade_seal_flag = content.scenario.jade_seal_flag
     newly_found_shard = (

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import random
 
-from . import atlas, server_bots
+from . import atlas, rules, server_bots
 from .bot import wants_heal
 from .engine import FREE_TEXT_OPTION, Game, Option
 from .models import Effect, FactionDef
@@ -100,7 +100,9 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
         return _battle_score(game, arg)
     if kind == "choice":
         event = game.content.events[game.state.pending_event]
-        return effect_score(event.choices[int(arg)].effect, _goals(game, profile))
+        effect = event.choices[int(arg)].effect
+        moved = rules.resolve_trends(game.content, game.state.world, effect.trend, game.state.player.location)
+        return effect_score(effect, _goals(game, profile), moved)
     if kind == "talk":
         return 0.0 if arg == "leave" else None
     if kind == "call":
@@ -119,9 +121,11 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
     return None
 
 
-def effect_score(effect: Effect, goals: dict[str, int]) -> float:
-    """選項效果的分數：把大勢往陣營想要的方向推，一點抵十分；能力、心得、銀兩、名望等獎勵每點 0.1 分。"""
-    push = sum(goals.get(trend_id, 0) * delta for trend_id, delta in effect.trend.items())
+def effect_score(effect: Effect, goals: dict[str, int], trend: dict[str, int] | None = None) -> float:
+    """選項效果的分數：把大勢往陣營想要的方向推，一點抵十分；能力、心得、銀兩、名望等獎勵每點 0.1 分。
+    trend 是照 rules.resolve_trends 換過鍵的推動（front 換成所在戰線）；不給就照效果原本寫的。"""
+    pushes = effect.trend if trend is None else trend
+    push = sum(goals.get(trend_id, 0) * delta for trend_id, delta in pushes.items())
     reward = sum(max(0, effect.stats.get(key, 0)) for key in REWARD_STATS)
     return TREND_WEIGHT * push + reward / 10
 
@@ -217,7 +221,7 @@ def _goals(game: Game, profile: BotProfile) -> dict[str, int]:
     faction_id = game.state.player.faction or profile.faction
     if faction_id is None:
         return {}
-    return _faction(game, faction_id).goals
+    return rules.resolve_goals(game.content, game.state.world, _faction(game, faction_id).goals)  # 開關關著時三條戰線都算黃巾聲勢
 
 
 def _home(game: Game, profile: BotProfile) -> set[str]:

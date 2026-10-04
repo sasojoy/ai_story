@@ -77,7 +77,7 @@
         "title": "官軍大勝",
         "text": "官軍士氣如虹，黃巾軍全線潰散，波才的主力在這一戰中土崩瓦解——潁川的危局，就此解除大半。",
         "world_flags_add": ["huangjin_decisive_win"],
-        "trend_delta": {"huangjin": -35}
+        "trend_delta": {"yingru": -35}
       },
       {
         "faction": "huang",
@@ -85,14 +85,14 @@
         "title": "黃巾得勢",
         "text": "黃巾軍殺出重圍，官軍損兵折將，潁川城下一片狼藉——波才的聲勢，反而因此更加浩大。",
         "world_flags_add": ["huangjin_decisive_loss"],
-        "trend_delta": {"huangjin": 25}
+        "trend_delta": {"yingru": 25}
       },
       {
         "faction": "guan",
         "title": "兩軍膠著",
         "text": "鏖戰半日，雙方都已疲憊不堪，各自鳴金收兵——這一戰沒能分出勝負，但官軍總算守住了陣線。",
         "world_flags_add": [],
-        "trend_delta": {"huangjin": -5}
+        "trend_delta": {"yingru": -5}
       }
     ]
   }

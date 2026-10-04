@@ -39,7 +39,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from markdown_it import MarkdownIt
 
-from tianxia import companion_agent, event_llm, materials, server_bots, team
+from tianxia import companion_agent, event_llm, materials, rules, server_bots, team
 from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, AccountStore, normalize
 from tianxia.content import PROFILE_ENV, load_content, profile_line
 from tianxia.characters import open_characters
@@ -335,14 +335,17 @@ def reports_view(game: Game, record_id: int | None) -> dict:
     }
 
 
-def admin_choices() -> dict:
-    """管理者觸發區的三個下拉選單（戰鬥、大事、大勢線）。照內容固定；已經發生過的大事按下去會被引擎拒絕。"""
+def admin_choices(game: Game) -> dict:
+    """管理者觸發區的三個下拉選單（戰鬥、大事、大勢線）。戰鬥與大事照內容固定（已經發生過的大事按下去會被引擎拒絕）；
+    大勢線照這一季的規則（第一季濃縮版要開關開著、而且這一季蓋了「開」的章）。呼叫端要拿著行動鎖（look）。"""
     scenario = CONTENT.scenario
+    world = game.state.world
     return {
         "battles": [{"label": b.name, "id": b.id} for b in CONTENT.battles.values()],
         "events": [{"label": f"{x.text[:30]}（{x.id}）", "id": x.id}
                    for x in [*scenario.thresholds, *scenario.world_events]],
-        "trends": [{"label": t.name, "id": t.id} for t in scenario.trends],
+        # 照開關：關著時不列第一季才有的線；開著時不列黃巾聲勢（由三條戰線合成，不能直接推）
+        "trends": [{"label": t.name, "id": t.id} for t in scenario.trends if rules.pushable(CONTENT, world, t.id)],
     }
 
 
@@ -704,9 +707,10 @@ def api_password(request: Request, body: dict = Body(...)):
 
 @app.get("/api/admin")
 def api_admin(request: Request):
-    if not _game(request).is_admin():
+    game = _game(request)
+    if not game.is_admin():
         raise HTTPException(403)
-    return admin_choices()
+    return look(game, admin_choices)
 
 
 @app.post("/api/admin/reset_password")

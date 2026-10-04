@@ -14,7 +14,7 @@ from typing import Literal
 
 from . import calendar, figures
 from .models import Content, TimetableEvent, TimetableOutcome
-from .rules import add_chronicle, add_rumor, add_world_flags, change_trend
+from .rules import add_chronicle, add_rumor, add_world_flags, change_trend, trend_value
 from .state import GameState, Lock, TimelineResult, WorldState
 from .world_state import season_length_days
 
@@ -85,12 +85,10 @@ def next_event_on(state: GameState, content: Content, front: str) -> TimetableEv
 
 
 def _front_value(state: GameState, content: Content, front: str) -> int:
-    """戰線的戰況。T1 的 rules.trend_value 進來後換掉（規則相同：有存值回存值，沒有回劇本的起始值）；
-    劇本也沒有這條線（T1 之前的真實內容）才當 50。"""
-    if front in state.world.trends:
-        return state.world.trends[front]
-    trend = next((t for t in content.scenario.trends if t.id == front), None)
-    return trend.start if trend is not None else 50
+    """戰線的戰況：rules.trend_value（有存值回存值，沒有回劇本的起始值）。劇本也沒有這條線（測試夾具）才當 50。"""
+    if not any(t.id == front for t in content.scenario.trends):
+        return 50
+    return trend_value(state, content, front)
 
 
 def apply_mods(p: float, m: float) -> float:

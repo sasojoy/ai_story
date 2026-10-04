@@ -26,9 +26,6 @@ from .zh import to_traditional
 ROAD_SIGHTS_PER_SPOT = 2  # 路上見聞：每一種路、每一個大區的組合至少要有幾則可挑（路上設計第五節）
 ROAD_SIGHT_CAPS = {"silver": 10, "xinde": 5}  # 路上見聞的小收穫上限
 TERRAIN_SIZE = (8, 40)  # 山脈、丘陵的山頭高度範圍（輿圖美術設計第四節）
-# 時刻表的戰況鍵先也認這幾條：三條戰線與豪強割據由 T1（地圖擴充開發）加進 scenario 的 trends，T2 跟它平行開發。
-# T1 併進來之後拿掉，只認劇本裡的大勢線（時刻表推一條劇本沒有的線時 timetable 直接略過）。
-SEASON_ONE_TRENDS = {"yingru", "nanyang", "jizhou", "geju"}
 TIMETABLE_SIDES = ("guan", "huang")  # 時刻表的鎖定、決戰、@commander 只有官軍與黃巾兩方（豪強是第三方）
 TIMETABLE_KEYS = {  # 每種大事該有的結果鍵（不含版本；有版本時每個版本各一套）
     "fixed": ["fixed"],
@@ -191,7 +188,7 @@ def check_timetable(c: Content, need, known, region_ids: list[str], trend_ids: s
     ids = [e.id for e in c.timetable]
     duplicated = sorted({eid for eid in ids if ids.count(eid) > 1})
     need(not duplicated, f"時刻表 id 重複：{'、'.join(duplicated)}")
-    trends = trend_ids | SEASON_ONE_TRENDS
+    trends = trend_ids - {t.id for t in c.scenario.trends if t.derived}  # 衍生線（黃巾聲勢）由三條戰線合成，時刻表不能直接推
     earlier: dict[str, TimetableEvent] = {}
     order = {e.id: i for i, e in enumerate(c.timetable)}
     rolled = {e.id for e in c.timetable if e.roll_side is not None}

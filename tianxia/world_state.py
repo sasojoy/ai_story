@@ -87,13 +87,11 @@ class SharedWorldState(BaseModel):
 def fresh_season(content: Content) -> WorldState:
     """照劇本種出一季全新的共用賽季（大勢起始值、公開的大勢線、第一條主線），並蓋上當下的章（stamp_season）。
     seed_first_season、next_season 都走這裡；籌備中的季在管理者開季時再蓋一次（open_season）。"""
-    trends = content.scenario.trends
-    season = WorldState(
-        trends={t.id: t.start for t in trends},
-        revealed={t.id for t in trends if not t.hidden},
-        storyline=content.scenario.storylines[0].id,
-    )
-    stamp_season(season, content)
+    from .rules import seed_trends  # rules → world_state：在函式裡 import，避免循環
+
+    season = WorldState(storyline=content.scenario.storylines[0].id)
+    stamp_season(season, content)  # 先蓋章：種哪些大勢線看這一季的章（rules.seed_trends）
+    seed_trends(season, content)
     return season
 
 

@@ -5,12 +5,16 @@
   "era_note": "東漢靈帝光和七年（公元184年，年底改元中平）春，張角的太平道在八州同時起事，史稱黃巾之亂。朝廷派皇甫嵩、朱儁、盧植領兵討伐。此時曹操是騎都尉，劉備、關羽、張飛還是涿郡鄉間的豪俠，孫堅在朱儁麾下任佐軍司馬，袁紹在洛陽與士人往來、尚未統兵，董卓是朝廷派在邊地的將領。諸葛亮、周瑜、陸遜都還是孩童；董卓入京、群雄討董、官渡、赤壁、三顧茅廬、三分天下，都是很多年以後的事。",
   "start_location": "yingchuan",
   "factions": [
-    {"id": "guan", "name": "官軍", "join_at": ["changshe", "wan_city", "luzhi_camp"], "sects": ["yingchuan_academy"], "goals": {"huangjin": -1}},
-    {"id": "huang", "name": "黃巾軍", "join_at": ["huangjin_camp", "julu_altar", "nanyang_huangjin_camp"], "goals": {"huangjin": 1}},
-    {"id": "haoqiang", "name": "地方豪強", "join_at": ["zhuo_militia_hall", "cao_manor", "haozu_fort"], "sects": ["cao_manor"]}
+    {"id": "guan", "name": "官軍", "join_at": ["changshe", "wan_city", "luzhi_camp"], "sects": ["yingchuan_academy"], "goals": {"yingru": -1, "nanyang": -1, "jizhou": -1}},
+    {"id": "huang", "name": "黃巾軍", "join_at": ["huangjin_camp", "julu_altar", "nanyang_huangjin_camp"], "goals": {"yingru": 1, "nanyang": 1, "jizhou": 1}},
+    {"id": "haoqiang", "name": "地方豪強", "join_at": ["zhuo_militia_hall", "cao_manor", "haozu_fort"], "sects": ["cao_manor"], "goals": {"geju": 1}}
   ],
   "trends": [
-    {"id": "huangjin", "name": "黃巾聲勢", "desc": "黃巾軍在潁川一帶的聲勢。到 50 官道將被切斷，到 80 潁川恐將淪陷。剿討能讓它下降。", "start": 25},
+    {"id": "huangjin", "name": "黃巾聲勢", "desc": "黃巾軍在潁川一帶的聲勢。到 50 官道將被切斷，到 80 潁川恐將淪陷。剿討能讓它下降。", "start": 25, "derived": {"yingru": 0.35, "nanyang": 0.25, "jizhou": 0.40}},
+    {"id": "yingru", "name": "潁川汝南", "desc": "潁川、汝南一帶的戰況：0 是官軍穩控，100 是黃巾控制。", "start": 40, "season_one": true},
+    {"id": "nanyang", "name": "南陽", "desc": "南陽一帶的戰況：0 是官軍穩控，100 是黃巾控制。", "start": 35, "season_one": true},
+    {"id": "jizhou", "name": "冀州", "desc": "冀州（含幽州）的戰況：0 是官軍穩控，100 是黃巾控制。", "start": 55, "season_one": true},
+    {"id": "geju", "name": "豪強割據", "desc": "地方豪強割據的程度：有戰線在亂局（戰況 35～65）時自然上漲，三條戰線都穩下來時慢慢回落。", "start": 10, "season_one": true},
     {"id": "yuxi", "name": "玉璽碎片線索", "desc": "傳國玉璽碎片下落的線索拼湊進度。湊齊時，碎片的下落將會現世。", "start": 0, "hidden": true}
   ],
   "thresholds": [
@@ -22,14 +26,14 @@
     {"id": "yuxi_100", "trend": "yuxi", "op": ">=", "value": 100, "text": "線索終於湊齊！嵩山深處的「南華觀」現世，觀內符文石壁後，隱約可見寒光。", "world_flags_add": ["xi_open"], "location": "jade_cave"}
   ],
   "sim_players": [
-    {"name": "波才", "actions_per_day": 8, "trend": {"huangjin": 1}, "rumor_chance": 0.25, "haunts": ["huangjin_camp"],
+    {"name": "波才", "actions_per_day": 8, "trend": {"yingru": 1}, "rumor_chance": 0.25, "haunts": ["huangjin_camp"],
      "condition": {"world_flags_none": ["bocai_defeated", "huangjin_crushed"], "revealed_none": ["yuxi"]},
      "rumors": [
       "黃巾別部又劫了一支糧隊，據說是波才親自帶的人。",
       "波才在營寨放話：「潁川的天，從今往後是黃天！」",
       "官道上又有商旅失蹤，人人都說是波才的手筆。"
     ]},
-    {"name": "皇甫嵩", "actions_per_day": 3, "trend": {"huangjin": -1}, "rumor_chance": 0.3, "haunts": ["changshe", "yingchuan"], "rumors": [
+    {"name": "皇甫嵩", "actions_per_day": 3, "trend": {"yingru": -1}, "rumor_chance": 0.3, "haunts": ["changshe", "yingchuan"], "rumors": [
       "皇甫嵩在長社夜縱大火，又燒了黃巾一座營寨。",
       {"text": "有人看見皇甫嵩親自巡視潁川城防，軍紀肅然。", "location": "yingchuan"}
     ]},

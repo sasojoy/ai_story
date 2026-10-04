@@ -89,7 +89,7 @@
       "shuikou"
     ],
     "train_trend": {
-      "huangjin": -1
+      "yingru": -1
     },
     "materials": [
       "gang_2",
@@ -120,7 +120,7 @@
       "louluo"
     ],
     "train_trend": {
-      "huangjin": -1
+      "front": -1
     },
     "materials": [
       "kuai_1",
@@ -246,7 +246,7 @@
       "he_shuikou"
     ],
     "train_trend": {
-      "huangjin": 1
+      "front": 1
     },
     "materials": [
       "kuai_1",
@@ -302,7 +302,7 @@
       "huangjin_sishi"
     ],
     "train_trend": {
-      "huangjin": -2
+      "nanyang": -2
     },
     "materials": [
       "gang_2",
@@ -327,7 +327,7 @@
       "louluo"
     ],
     "train_trend": {
-      "huangjin": -1
+      "nanyang": -1
     },
     "materials": [
       "rou_1",
@@ -371,7 +371,7 @@
       "jun_bing"
     ],
     "train_trend": {
-      "huangjin": -1
+      "nanyang": -1
     },
     "materials": [
       "kuai_1",
@@ -602,7 +602,7 @@
       "shuikou"
     ],
     "train_trend": {
-      "huangjin": -1
+      "yingru": -1
     },
     "materials": [
       "man_1",
@@ -627,7 +627,7 @@
       "toumu"
     ],
     "train_trend": {
-      "huangjin": -2
+      "yingru": -2
     },
     "materials": [
       "gang_2",
@@ -742,7 +742,7 @@
       "shanzei"
     ],
     "train_trend": {
-      "huangjin": -1
+      "jizhou": -1
     },
     "materials": [
       "rou_1",
@@ -771,7 +771,7 @@
       "louluo"
     ],
     "train_trend": {
-      "huangjin": -1
+      "jizhou": -1
     },
     "materials": [
       "kuai_1",
@@ -807,7 +807,7 @@
       "huangjin_sishi"
     ],
     "train_trend": {
-      "huangjin": -2
+      "jizhou": -2
     },
     "materials": [
       "rou_2"
@@ -838,7 +838,7 @@
       "toumu"
     ],
     "train_trend": {
-      "huangjin": -2
+      "jizhou": -2
     },
     "materials": [
       "gang_2",
@@ -868,7 +868,7 @@
       "guan_patrol"
     ],
     "train_trend": {
-      "huangjin": 1
+      "jizhou": 1
     },
     "materials": [
       "gang_1"
@@ -897,7 +897,7 @@
       "shanzei"
     ],
     "train_trend": {
-      "huangjin": -1
+      "jizhou": -1
     },
     "materials": [
       "man_1",
@@ -959,7 +959,7 @@
       "jun_bing"
     ],
     "train_trend": {
-      "huangjin": 1
+      "jizhou": 1
     },
     "materials": [
       "rou_1",

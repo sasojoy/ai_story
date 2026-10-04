@@ -24,7 +24,10 @@ from .models import (
     TravelMode,
 )
 from .ollama_client import OllamaClient
-from .rules import apply_effect, change_trend, check_who, current_day, fill_marks, free_text_rate, rate_words, roll_check
+from .rules import (
+    apply_effect, change_trend, check_who, current_day, fill_marks, free_text_rate, pushable, rate_words, resolve_goals,
+    resolve_trend, resolve_trends, roll_check, trend_name, trend_shown, trend_value, world_trend_value,
+)
 from .sqlite_world import open_world
 from .state import PLAYER, BattleRecord, GameState, JournalEntry, Journey, Rumor, WorldState, new_game_state
 from .world import (
@@ -1200,11 +1203,11 @@ class Game:
             self._apply_outcome_trends_and_flags(self.state.world, battle)
         self._deliver_battle_results()
 
-    @staticmethod
-    def _apply_outcome_trends_and_flags(season: WorldState, battle: battle_instance.BattleInstance) -> None:
-        """決戰結果的大勢變化與世界旗標，套到 season 上（資料庫裡的那份與記憶體裡的那份共用這一段）。"""
-        for trend_id, delta in battle.outcome_trend_delta.items():
-            season.trends[trend_id] = max(0, min(100, season.trends.get(trend_id, 0) + delta))
+    def _apply_outcome_trends_and_flags(self, season: WorldState, battle: battle_instance.BattleInstance) -> None:
+        """決戰結果的大勢變化與世界旗標，套到 season 上（資料庫裡的那份與記憶體裡的那份共用這一段）。
+        內容寫的是戰線：照 rules.resolve_trends 換鍵（開關關著時是黃巾聲勢）；存檔沒有那條線時從起始值算起。"""
+        for trend_id, delta in resolve_trends(self.content, season, battle.outcome_trend_delta).items():
+            season.trends[trend_id] = max(0, min(100, world_trend_value(season, self.content, trend_id) + delta))
         for flag in battle.outcome_world_flags:
             if flag not in season.flags:
                 season.flags.add(flag)
@@ -1288,7 +1291,8 @@ class Game:
         if me.fell_round is not None:
             lines.append(f"你在第 {me.fell_round} 回合倒下，轉為觀戰")
         trends = {t.id: t.name for t in c.scenario.trends}
-        deltas = [f"{trends.get(tid, tid)} {delta:+d}" for tid, delta in battle.outcome_trend_delta.items() if delta]
+        moved = resolve_trends(c, s.world, battle.outcome_trend_delta)  # 開關關著時戰線都寫成黃巾聲勢
+        deltas = [f"{trends.get(tid, tid)} {delta:+d}" for tid, delta in moved.items() if delta]
         changes = deltas if earlier is None else []
         if earlier is not None:
             lines += [f"（第 {earlier} 季）{d}" for d in deltas]
@@ -1623,8 +1627,8 @@ class Game:
                 p.stats[key] += 1
                 extra.append(f"{c.config.stat_names[key]} +1")
             if not wild:
-                for trend_id, delta in loc.train_trend.items():
-                    extra += self.push_trend(trend_id, self._train_push(trend_id, delta), source="train")
+                for trend_id, delta in self.train_trend_push(loc.id).items():  # 換算過的線，照舊交給 T3 的 push_trend
+                    extra += self.push_trend(trend_id, delta, source="train")
                 region = atlas.region_of(c, p.location)  # 官銀（伏筆，濃縮版內容表 4.0）：只有遊歷打贏才擲
                 extra += foreshadow.after_win(s, c, squad, self.rng, region.id if region is not None else None)
             changes, notes = battlelog.split_changes(extra)
@@ -1670,21 +1674,31 @@ class Game:
             key = self.rng.choice(["str", "agi", "con"])
             p.stats[key] += 1
             msgs.append(f"{c.config.stat_names[key]} +1")
-        for trend_id, delta in loc.train_trend.items():
-            msgs += self.push_trend(trend_id, self._train_push(trend_id, delta), source="drill")
+        for trend_id, delta in self.train_trend_push(loc.id).items():
+            msgs += self.push_trend(trend_id, delta, source="drill")
         return msgs
 
     def _train_push(self, trend_id: str, delta: int) -> int:
         """遊歷（打贏或操練）推大勢：量照地點設定；自己陣營對這條線有目標就往目標方向推，散人和
-        沒有這條線目標的陣營照地點原本的方向（企劃者 2026-10-02 決定）。"""
-        faction = next((f for f in self.content.scenario.factions if f.id == self.state.player.faction), None)
-        goal = faction.goals.get(trend_id, 0) if faction is not None else 0
+        沒有這條線目標的陣營照地點原本的方向（企劃者 2026-10-02 決定）。trend_id 是換算過、真的會動的那條線。"""
+        goal = self._goals().get(trend_id, 0)
         return abs(delta) * goal if goal else delta
 
+    def _goals(self) -> dict[str, int]:
+        """自己陣營的目標，照 rules.resolve_goals 換過鍵（開關關著時三條戰線都算黃巾聲勢）；散人是空的。"""
+        faction = next((f for f in self.content.scenario.factions if f.id == self.state.player.faction), None)
+        return resolve_goals(self.content, self.state.world, faction.goals) if faction is not None else {}
+
     def train_trend_push(self, loc_id: str | None = None) -> dict[str, int]:
-        """在這個地點（預設所在地）遊歷打贏或操練時，各條大勢線會被推多少（照自己的陣營，見 _train_push）。"""
+        """在這個地點（預設所在地）遊歷打贏或操練時，各條大勢線會被推多少（照自己的陣營，見 _train_push）。
+        鍵是真的會動的那條線：內容寫的戰線或 front 先照 rules.resolve_trend 換過（開關關著時一律是黃巾聲勢）。"""
         loc = self.content.locations[loc_id or self.state.player.location]
-        return {trend_id: self._train_push(trend_id, delta) for trend_id, delta in loc.train_trend.items()}
+        pushes: dict[str, int] = {}
+        for key, delta in loc.train_trend.items():
+            target = resolve_trend(self.content, self.state.world, key, loc.id)
+            if target is not None:
+                pushes[target] = pushes.get(target, 0) + self._train_push(target, delta)
+        return pushes
 
     def push_trend(self, trend_id: str, delta: int, *, source: str) -> list[str]:
         """玩家自己造成的大勢推動一律走這裡（遊歷、操練、事件效果；sim_tick、時刻表、決戰、管理者不是個人推動，不走）。
@@ -2448,8 +2462,10 @@ class Game:
         refusal = self._admin_refusal("推動大勢")
         if refusal:
             return self._log(refusal)
-        if trend_id not in {t.id for t in self.content.scenario.trends}:
+        if not trend_shown(self.content, self.state.world, trend_id):
             return self._log(["（沒有這條大勢線。）"])
+        if not pushable(self.content, self.state.world, trend_id):  # 開關開著時的黃巾聲勢由三條戰線合成，change_trend 推它會丟 ValueError
+            return self._log([f"（{trend_name(self.content, trend_id)}由三條戰線合成，不能直接推；請推其中一條戰線。）"])
         msgs = change_trend(self.state, self.content, trend_id, delta)
         msgs += check_thresholds(self.state, self.content, self.world, self.client, now=self.now)
         self._write("推動大勢", msgs or ["大勢紋絲不動。"], tag="管理者")
@@ -2622,9 +2638,9 @@ class Game:
         w = self.state.world
         parts = []
         for trend in self.content.scenario.trends:
-            if trend.id not in w.revealed:
+            if trend.id not in w.revealed or not trend_shown(self.content, w, trend.id):
                 continue
-            value = w.trends[trend.id]
+            value = trend_value(self.state, self.content, trend.id)
             bar = "█" * (value // 5) + "░" * (20 - value // 5)
             parts.append(f"**{trend.name}** {value}/100\n\n`{bar}`\n\n{trend.desc}")
         if w.ended:

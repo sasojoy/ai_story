@@ -8,7 +8,7 @@ from collections.abc import Callable
 from . import calendar, flavor, leaderboard, timetable
 from .models import Act, BattleDef, Content, Ending, SimPlayer, SimRumor, Storyline
 from .ollama_client import OllamaClient
-from .rules import add_chronicle, add_rumor, add_world_flags, change_trend, check_condition
+from .rules import add_chronicle, add_rumor, add_world_flags, change_trend, check_condition, resolve_trends
 from .state import GameState, PlayerState, WorldState
 from .world_state import WorldStateStore, season_length_days
 
@@ -162,7 +162,7 @@ def sim_tick(state: GameState, content: Content, hours: int, rng: random.Random)
                 continue
             if rng.random() >= sim.actions_per_day / 24:
                 continue
-            for trend_id, delta in sim.trend.items():
+            for trend_id, delta in resolve_trends(content, state.world, sim.trend).items():  # 規則沒開時戰線都算黃巾聲勢
                 change_trend(state, content, trend_id, delta, reveal=False)
             if sim.rumors and rng.random() < sim.rumor_chance:
                 text, where = _rumor_place(sim, rng.choice(sim.rumors))  # 和以前一樣只抽一次亂數

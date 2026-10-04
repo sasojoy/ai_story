@@ -4,11 +4,11 @@
   "mini_window": [360, 240],
   "background": "#E9E2CC",
   "regions": [
-    {"id": "youzhou", "name": "幽州", "trends": ["huangjin"], "points": [[454, 111], [639, 8], [731, 96], [674, 213], [505, 226]], "fill": "#E2EAF1", "text_fill": "#9FB3C6", "label_x": 700, "label_y": 40},
-    {"id": "jizhou", "name": "冀州", "trends": ["huangjin"], "points": [[351, 497], [421, 415], [663, 449], [726, 530], [615, 605]], "fill": "#EFE5CB", "text_fill": "#A08A58", "label_x": 380, "label_y": 420},
+    {"id": "youzhou", "name": "幽州", "front": "jizhou", "trends": ["jizhou"], "points": [[454, 111], [639, 8], [731, 96], [674, 213], [505, 226]], "fill": "#E2EAF1", "text_fill": "#9FB3C6", "label_x": 700, "label_y": 40},
+    {"id": "jizhou", "name": "冀州", "front": "jizhou", "trends": ["jizhou"], "points": [[351, 497], [421, 415], [663, 449], [726, 530], [615, 605]], "fill": "#EFE5CB", "text_fill": "#A08A58", "label_x": 380, "label_y": 420},
     {"id": "luoyang", "name": "洛陽", "trends": [], "points": [[5, 789], [207, 657], [264, 907], [91, 883]], "fill": "#EDE3EE", "text_fill": "#A893AE", "label_x": 30, "label_y": 870},
-    {"id": "yingru", "name": "潁川汝南", "trends": ["huangjin", "yuxi"], "points": [[233, 947], [279, 881], [355, 864], [695, 932], [867, 1120], [812, 1193], [727, 1274], [633, 1288]], "fill": "#E4EDDC", "text_fill": "#A9BE9C", "label_x": 700, "label_y": 960},
-    {"id": "nanyang", "name": "南陽", "trends": ["huangjin"], "points": [[29, 1157], [82, 1049], [281, 1043], [299, 1167], [110, 1245]], "fill": "#F2E6DA", "text_fill": "#B89A80", "label_x": 40, "label_y": 1240}
+    {"id": "yingru", "name": "潁川汝南", "front": "yingru", "trends": ["yingru", "yuxi"], "points": [[233, 947], [279, 881], [355, 864], [695, 932], [867, 1120], [812, 1193], [727, 1274], [633, 1288]], "fill": "#E4EDDC", "text_fill": "#A9BE9C", "label_x": 700, "label_y": 960},
+    {"id": "nanyang", "name": "南陽", "front": "nanyang", "trends": ["nanyang"], "points": [[29, 1157], [82, 1049], [281, 1043], [299, 1167], [110, 1245]], "fill": "#F2E6DA", "text_fill": "#B89A80", "label_x": 40, "label_y": 1240}
   ],
   "rivers": [
     {"name": "黃河", "points": [[0, 690], [186, 708], [300, 650], [420, 600], [586, 558], [760, 545], [900, 540]], "width": [9, 16], "color": "yellow"},

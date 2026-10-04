@@ -112,6 +112,19 @@ def test_markdown_from_the_engine_cannot_inject_html():
     assert server.md("**名號** <script>x</script>") == "<p><strong>名號</strong> &lt;script&gt;x&lt;/script&gt;</p>\n"
 
 
+def test_admin_choices_follow_the_switch(game, monkeypatch):
+    """管理者推大勢的下拉選單：開關關著跟 beta 一樣；開關打開但這一季沒蓋章也一樣；這一季蓋了「開」的章時
+    列三條戰線與割據，不列黃巾聲勢（由戰線合成）。"""
+    def listed():
+        return [t["id"] for t in server.look(game, server.admin_choices)["trends"]]
+
+    assert listed() == ["huangjin", "yuxi"]
+    monkeypatch.setattr(server.CONTENT.config, "season_one", True)
+    assert listed() == ["huangjin", "yuxi"]
+    game.world.mutate_season(lambda season: setattr(season, "season_one", True))
+    assert listed() == ["yingru", "nanyang", "jizhou", "geju", "yuxi"]
+
+
 def test_menxia_view_falls_back_to_no_person_for_an_unknown_one(game):
     view = server.look(game, lambda g: server.menxia_view(g, "沒這個人"))
     assert view["person"] is None and view["person_card"] is None
@@ -846,7 +859,7 @@ def test_an_admin_account_sees_the_admin_tools(client, monkeypatch):
     choices = client.get("/api/admin").json()
     assert [b["id"] for b in choices["battles"]] == list(server.CONTENT.battles)
     assert len(choices["events"]) == len(server.CONTENT.scenario.thresholds) + len(server.CONTENT.scenario.world_events)
-    assert [t["id"] for t in choices["trends"]] == [t.id for t in server.CONTENT.scenario.trends]
+    assert [t["id"] for t in choices["trends"]] == ["huangjin", "yuxi"]  # 開關關著：第一季才有的線不列
 
 
 def test_admin_triggers_work_for_admins(client, monkeypatch):

@@ -13,6 +13,7 @@ from dataclasses import dataclass
 
 from .calendar import stamp_text
 from .models import Content, Location, MapRegion, SimPlayer, TravelMode
+from .rules import resolve_trend, resolve_trends, trend_value
 from .state import GameState, Rumor
 from .world import current_act, sim_active
 
@@ -160,10 +161,15 @@ def direction(start: tuple[float, float], end: tuple[float, float]) -> str:
 
 
 def region_trends(state: GameState, content: Content, region: MapRegion) -> list[tuple[str, int]]:
-    """大區對應、而且已經浮現的大勢：（名稱, 數值）；隱藏的大勢浮現前不列。"""
-    w = state.world
+    """大區對應、而且已經浮現的大勢：（名稱, 數值）；隱藏的大勢浮現前不列。地圖寫的戰線照 rules.resolve_trend 換
+    （開關關著時三條戰線都是黃巾聲勢），換到同一條的只列一次。"""
     names = {t.id: t.name for t in content.scenario.trends}
-    return [(names[trend_id], w.trends.get(trend_id, 0)) for trend_id in region.trends if trend_id in w.revealed]
+    shown: list[str] = []
+    for key in region.trends:
+        trend_id = resolve_trend(content, state.world, key)
+        if trend_id is not None and trend_id not in shown and trend_id in state.world.revealed:
+            shown.append(trend_id)
+    return [(names[trend_id], trend_value(state, content, trend_id)) for trend_id in shown]
 
 
 def sim_shown(sim: SimPlayer, state: GameState) -> bool:
@@ -187,8 +193,9 @@ def leader_activity(state: GameState, content: Content, name: str) -> str:
     for sim in content.scenario.sim_players:
         if sim.name != name or not sim_active(sim, state):
             continue
-        ups = [trend_names[t] for t, delta in sim.trend.items() if delta > 0 and t in revealed]
-        downs = [trend_names[t] for t, delta in sim.trend.items() if delta < 0 and t in revealed]
+        moves = resolve_trends(content, state.world, sim.trend)  # 開關關著時戰線都算黃巾聲勢
+        ups = [trend_names[t] for t, delta in moves.items() if delta > 0 and t in revealed]
+        downs = [trend_names[t] for t, delta in moves.items() if delta < 0 and t in revealed]
         pushes = ([f"讓{'、'.join(ups)}上升"] if ups else []) + ([f"讓{'、'.join(downs)}下降"] if downs else [])
         doing.append("，".join([f"每天約出手 {sim.actions_per_day:g} 次", *pushes]))
     return "；".join(doing) or LEADER_QUIET

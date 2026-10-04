@@ -289,8 +289,9 @@ def new_game_state(content: Content, name: str) -> GameState:
     """同伴全服唯一（設計文件四.4），開局不再自動塞給玩家任何一位——每個新玩家都是孤身
     一人起步，招募是要在遊戲裡真的去搶的行動，不是開局贈品（不然「唯一」第一時間就矛盾：
     每個新玩家都自動擁有同一位歷史人物是不可能的）。"""
+    from .rules import seed_trends  # rules → state：在函式裡 import，避免循環
+
     cfg = content.config
-    trends = content.scenario.trends
     player = PlayerState(
         name=name,
         location=content.scenario.start_location,
@@ -299,9 +300,6 @@ def new_game_state(content: Content, name: str) -> GameState:
         tutorial_step=0,
         member=Member(),
     )
-    world = WorldState(
-        trends={t.id: t.start for t in trends},
-        revealed={t.id for t in trends if not t.hidden},
-        storyline=content.scenario.storylines[0].id,
-    )
+    world = WorldState(storyline=content.scenario.storylines[0].id)
+    seed_trends(world, content)
     return GameState(player=player, world=world)
