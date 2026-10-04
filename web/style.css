@@ -273,8 +273,10 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 /* ── 輿圖 ── */
 /* 地圖框（W16）：固定高度的視窗，地圖照原本的像素大小放在裡面，靠 transform 平移、縮放（app.js 的 applyMapView）。
    框裡的手勢全歸地圖（touch-action: none）：不捲頁面、不放大整頁；長按不跳選字、不跳 iOS 的選單 */
+/* 框高：第一屏要整個露在底部分頁列上面。框頂約在 280px（狀態列、說明卡、圖層、下拉選單），分頁列約 55px，
+   再留一點空隙，所以是 100svh − 340px；第一個 62vh 給不認得 svh 的瀏覽器 */
 .map-wrap {
-  position: relative; overflow: hidden; height: 62vh; min-height: 260px; margin-bottom: 12px;
+  position: relative; overflow: hidden; height: 62vh; height: min(62vh, calc(100svh - 340px)); min-height: 260px; margin-bottom: 12px;
   border-radius: var(--radius); border: 1px solid var(--line); background: #e9e2cc;
   touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; cursor: grab;
 }
@@ -290,8 +292,9 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
    外框寬 --hit 由 app.js 跟著倍率算：半徑 R＝22÷倍率，夾在 22～34（地圖單位），螢幕上至少約 22px；
    上限 34 是因為 40 個地點裡最近的兩個（嵩山深處與南華觀）相距 68.6，再大會互相蓋住 */
 .map-wrap [data-loc] > circle[fill-opacity="0"] { stroke: transparent; stroke-width: var(--hit, 12px); pointer-events: all; }
-/* 右下角的按鈕（回到所在地、放大、縮小）：疊在地圖上，不另佔一列；觸控目標 44px */
-.map-ctl { position: absolute; right: 8px; bottom: 8px; display: flex; flex-direction: column; gap: 6px; }
+/* 右上角的按鈕（回到所在地、放大、縮小）：疊在地圖上，不另佔一列；觸控目標 44px。
+   放上面不放下面：框底可能落在固定的底部分頁列後面，按鈕會被蓋住 */
+.map-ctl { position: absolute; top: 8px; right: 8px; display: flex; flex-direction: column; gap: 6px; }
 .map-ctl button {
   width: 44px; height: 44px; padding: 0; display: grid; place-items: center; cursor: pointer;
   border-radius: 12px; border: 1px solid var(--line); background: var(--card); color: var(--ink); box-shadow: var(--shadow);

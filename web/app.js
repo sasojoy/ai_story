@@ -43,7 +43,7 @@
     { tab: "practice", name: "去修練" },
     { tab: "craft", name: "去煉製" },
   ];
-  // 手機寬度：第一次打開輿圖時，手機照原尺寸、對準所在地，寬螢幕整張（見 mapReady）
+  // 手機寬度：第一次打開輿圖時，手機照原尺寸，寬螢幕照框寬（最多原尺寸），都對準所在地（見 mapReady）
   const PHONE = window.matchMedia ? window.matchMedia("(max-width: 767px)") : null;
 
   const S = {
@@ -66,8 +66,8 @@
     craftLine: "",
     map: null,
     layer: "situation",
-    // 輿圖的視圖（W16）：{ s 倍率, cx, cy 視窗中心對著的地圖座標 }。這次載入網頁後第一次打開輿圖才決定（mapReady），
-    // 之後切分頁、輪詢重畫、換圖層、點地點都留著
+    // 輿圖的視圖（W16）：{ s 倍率, cx, cy 視窗中心對著的地圖座標 }。這次載入網頁後第一次打開輿圖才決定（mapReady：
+    // 對準所在地，手機原尺寸、寬螢幕照框寬，都不給整張），之後切分頁、輪詢重畫、換圖層、點地點都留著
     mapView: null,
     news: "reports",
     reports: null,
@@ -548,7 +548,7 @@
         `<button class="btn ${t.mode === "walk" ? "primary" : ""}" data-act="travel" data-mode="${esc(t.mode)}" ${t.enabled ? "" : "disabled"}>${esc(t.label)}</button>`).join("")}</div>` : ""}`;
   }
 
-  // 地圖框右下角的按鈕（給不會手勢的人，像一般地圖 App）：回到所在地、放大、縮小
+  // 地圖框右上角的按鈕（給不會手勢的人，像一般地圖 App）：回到所在地、放大、縮小
   const MAP_CTL = `<div class="map-ctl">
     <button type="button" data-act="map-home" aria-label="回到所在地" title="回到所在地"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="6.5"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg></button>
     <button type="button" data-act="map-zoom" data-step="in" aria-label="放大" title="放大"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg></button>
@@ -644,10 +644,11 @@
     }
     const g = mapGeom(wrap);
     if (g && !S.mapView) {
-      // 這次載入網頁後第一次打開：手機照原尺寸、對準所在地（縮成整張地名只剩 5～6px，E2／FB-012）；寬螢幕整張
+      // 這次載入網頁後第一次打開，對準所在地：手機照原尺寸；寬螢幕照框寬（最多原尺寸）。都不給整張——
+      // 整張只有約 0.37 倍，地名剩 5px 上下（E2／FB-012），寬螢幕的橫框也一樣
       const phone = !!(PHONE && PHONE.matches);
-      const [cx, cy] = phone ? herePoint(g) : [g.W / 2, g.H / 2];
-      S.mapView = { s: phone ? 1 : fitScale(g.vw, g.vh, g.W, g.H), cx, cy };
+      const [cx, cy] = herePoint(g);
+      S.mapView = { s: phone ? 1 : Math.min(1, g.vw / g.W), cx, cy };
     }
     applyMapView(false, g);
   }
