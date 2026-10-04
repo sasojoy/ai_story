@@ -922,6 +922,7 @@ def test_end_to_end_one_chain(world):
     guan_chain, huang_chain = fs_chain(c, "fs_changshe_guan"), fs_chain(c, "fs_changshe_huang")
     # 管理者快轉：第 6 週週一 00:30（長社排在第 6 週週四 20:00：前 7 天的時間窗裡、子時以後）
     admin.advance(fs_window_time(c, jia, guan_chain) - world.get_season().time)
+    world.mutate_season(lambda s: s.trends.update(yingru=50))  # 大勢人物推了五週（T4）：放回官軍 ≤60、黃巾 ≥40 都合格的 50
     for game in (jia, yi):
         game.state.world = world.get_season()
     assert calendar.is_night(jia.state.world.time, c, jia.state.world) and "changshe_fire" not in jia.state.world.timeline

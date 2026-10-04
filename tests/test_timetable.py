@@ -233,7 +233,7 @@ def test_skip_if_figure_out(s1, season):
 
 
 def test_figure_fates_minimal(s1, season):
-    """T2 的最小版：只改 WorldState.figures 的聲威與狀態；接手留給 T4。"""
+    """測試夾具沒有人物表（content.figures 是空的）：時刻表的人物結局只改 WorldState.figures 的聲威與狀態，沒有接位鏈、也就沒有接手。"""
     w = season.world
     w.figures["zhujun"] = FigureState(prestige=60)
     figures.apply(season, s1, "zhujun", FigureChange(fate="受挫"))
@@ -252,11 +252,11 @@ def test_figure_fates_minimal(s1, season):
     assert w.figures["bocai"].status == "retired" and w.figures["bocai"].prestige == 0 and figures.is_out(season, "bocai")
     figures.apply(season, s1, "dongzhuo", FigureChange(fate="到任", front="jizhou", location="luzhi_camp"))
     assert w.figures["dongzhuo"].front == "jizhou" and w.figures["dongzhuo"].location == "luzhi_camp"
-    assert figures.commander(season, s1, "jizhou", "guan") is None  # 最小版一律沒有主將
+    assert figures.commander(season, s1, "jizhou", "guan") is None  # 沒有人物表就沒有主將，也沒有人接手
 
 
 def test_unseeded_figures_count_as_present_on_their_front(s1, season):
-    """T4 的最小版（伏筆讀它）：還沒種的人物不算退場、當成在場；種過的看狀態與所在戰線，戰線看不出來也當在場。"""
+    """伏筆讀的 is_out／on_front（夾具沒有人物表）：還沒種的人物不算退場、當成在場；種過的看狀態與所在戰線，戰線看不出來也當在場。"""
     w = season.world
     assert not figures.is_out(season, "huangfusong") and figures.on_front(season, "huangfusong", "yingru")
     w.figures["huangfusong"] = FigureState(front="yingru")

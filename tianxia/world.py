@@ -5,12 +5,12 @@ import math
 import random
 from collections.abc import Callable
 
-from . import battle_instance, calendar, flavor, leaderboard, timetable
+from . import battle_instance, calendar, figures, flavor, leaderboard, timetable
 from .models import Act, BattleDef, Content, Ending, SimPlayer, SimRumor, Storyline, TimetableEvent
 from .ollama_client import OllamaClient
 from .rules import (
     add_chronicle, add_rumor, add_world_flags, change_trend, check_condition, geju_tick, recompute_trends,
-    resolve_trends, season_one_off, trend_value,
+    resolve_trends, season_one, season_one_off, trend_value,
 )
 from .state import GameState, PlayerState, WorldState
 from .world_state import WorldStateStore, season_length_days
@@ -169,9 +169,12 @@ def sim_active(sim: SimPlayer, state: GameState) -> bool:
 
 
 def sim_tick(state: GameState, content: Content, hours: int, rng: random.Random) -> list[str]:
+    """虛擬玩家每小時出手、發傳聞，再檢查一次門檻。第一季的規則開著時虛擬玩家不出手——大勢人物每曆時的推動
+    （figures.tick，T4）取代它們；門檻照舊每小時檢查。開關關著時一個字都不變（beta 的 scenario.json 照留）。"""
     msgs: list[str] = []
+    sims = [] if season_one(content, state.world) else content.scenario.sim_players
     for _ in range(hours):
-        for sim in content.scenario.sim_players:
+        for sim in sims:
             if not sim_active(sim, state):
                 continue
             if rng.random() >= sim.actions_per_day / 24:
@@ -402,10 +405,11 @@ def _open_claimed(
 def season_hour(state: GameState, content: Content, rng: random.Random) -> list[str]:
     """第一季「季的事」，每跨過一個曆時跑一次（advance_world_state 照曆時切段呼叫；開關關著或舊季不跑）：
     先跑每曆時才有的事，再跑 season_events（週初掛鉤、到了的大事）。
-    每曆時的 tick 一律放在 season_events 之前：T1 的 geju_tick 在這裡，T4 的 figures.tick 之後也加在它旁邊——
-    開季那一刻只跑 season_events（settle_season_start），不跑這一段，才不會多算一次割據變動。"""
+    每曆時的 tick 一律放在 season_events 之前：T1 的 geju_tick、T4 的 figures.tick——開季那一刻只跑
+    season_events（settle_season_start），不跑這一段，才不會多算一次割據變動與人物推動。"""
     msgs: list[str] = []
     geju_tick(state, content, 1)  # T1：豪強割據每曆時一次，在週初掛鉤與大事之前
+    figures.tick(state, content, 1)  # T4：大勢人物每曆時累積一次推動（取代每小時的虛擬玩家）
     return msgs + season_events(state, content, rng)
 
 

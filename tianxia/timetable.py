@@ -140,8 +140,7 @@ def _event(content: Content, event_id: str) -> TimetableEvent:
 
 
 def _figure_name(content: Content, fid: str) -> str:
-    character = content.characters.get(fid)
-    return character.name if character is not None else fid
+    return figures.name_of(content, fid)  # 人物表的名字（彭脫、韓忠沒有對話人物）
 
 
 def fill_slots(state: GameState, content: Content, event: TimetableEvent, text: str) -> str:
@@ -249,7 +248,7 @@ def resolve(
         _push(state, content, trend_id, delta)
     for target_key, change in outcome.figures.items():
         fid = _commander_target(state, content, target_key)
-        if fid is None or not figures.holds(state, change):
+        if fid is None or not figures.holds(state, content, change):
             continue
         text += "".join(figures.apply(state, content, fid, change)) + fill_slots(state, content, event, change.note)
     for target, mod in outcome.chance_mods.items():

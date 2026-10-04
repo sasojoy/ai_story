@@ -342,13 +342,15 @@ def _apply_toll(content: Content, member, fraction: float) -> tuple[float, float
 
 def fight(
     state: GameState, content: Content, world: WorldStateStore, squad_id: str, rng: random.Random,
+    *, difficulty: float | None = None,
 ) -> encounter.EncounterResult:
+    """difficulty 給了就取代隊伍的難度（挑戰大勢人物本人：難度跟著聲威走，見 figures.difficulty）。"""
     squad = content.squads[squad_id]
     arts = team_arts(state, content, world)
     power = encounter.team_power(
         team_participants(state, world), arts, squad.attribute, team_conditions(state, content, world),
     )
-    return encounter.resolve_encounter(power, squad.difficulty, rng)
+    return encounter.resolve_encounter(power, squad.difficulty if difficulty is None else difficulty, rng)
 
 
 def odds_word(power: float, squad: Squad, rng_seed: int = ESTIMATE_SEED) -> str:
@@ -371,8 +373,13 @@ def _odds_text(wins: int, draws: int, runs: int) -> str:
     return "必敗"
 
 
-def estimate(state: GameState, content: Content, world: WorldStateStore, squad_id: str) -> str:
+def estimate(
+    state: GameState, content: Content, world: WorldStateStore, squad_id: str, *, difficulty: float | None = None,
+) -> str:
+    """勝算的文字；difficulty 同 fight。"""
     squad = content.squads[squad_id]
+    if difficulty is not None:
+        squad = squad.model_copy(update={"difficulty": difficulty})
     arts = team_arts(state, content, world)
     power = encounter.team_power(
         team_participants(state, world), arts, squad.attribute, team_conditions(state, content, world),

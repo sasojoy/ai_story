@@ -255,7 +255,9 @@ def test_a_hero_with_a_signature_skill_still_cannot_beat_bocai(content):
 
 
 def test_bocai_is_the_hardest_squad_by_difficulty(content):
-    assert max(content.squads.values(), key=lambda s: s.difficulty).id == "fanjianglong"
+    """代表大勢人物本人的隊伍（figure_<id>，T4）不算：難度跟著聲威走，見 tests/test_figures.py。"""
+    squads = [s for s in content.squads.values() if not s.id.startswith("figure_")]
+    assert max(squads, key=lambda s: s.difficulty).id == "fanjianglong"
 
 
 # ── 大地圖 ────────────────────────────────────────────────
@@ -484,7 +486,7 @@ def test_the_playtest_admin_is_rayal():
     assert load_content(CONTENT_DIR).config.admins == ["Rayal"]
 
 def test_enemy_squads_are_marked_with_the_designers_factions(content):
-    factions = {sid: s.faction for sid, s in content.squads.items()}
+    factions = {sid: s.faction for sid, s in content.squads.items() if not sid.startswith("figure_")}  # 本人的隊伍見 test_figures
     assert {sid for sid, f in factions.items() if f == "huang"} == {
         "louluo", "shuikou", "toumu", "shanzei", "fanjianglong", "taiping_lishi", "huangjin_sishi",
     }

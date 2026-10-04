@@ -66,8 +66,10 @@ def pick_personality(rng: random.Random) -> Personality:
 
 
 def reserved_names(content: Content) -> frozenset[str]:
-    """不能拿來當名號的名字（真人與假人共用，FB-004）：三國名人、遊戲內容裡的人物（跟著內容走）、管理者的名號。"""
-    return FAMOUS_NAMES | {ch.name for ch in content.characters.values()} | frozenset(content.config.admins)
+    """不能拿來當名號的名字（真人與假人共用，FB-004）：三國名人、遊戲內容裡的人物與大勢人物（跟著內容走；彭脫、韓忠
+    沒有對話人物，公告照樣寫他們的名字）、管理者的名號。"""
+    figures = {fig.name for fig in content.figures.values()}
+    return FAMOUS_NAMES | {ch.name for ch in content.characters.values()} | figures | frozenset(content.config.admins)
 
 
 def make_name(rng: random.Random, taken: set[str]) -> str:
