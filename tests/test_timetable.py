@@ -324,6 +324,41 @@ def test_week_hooks_run_once_per_week_in_order(s1, season, monkeypatch):
     assert len(seen) == 3  # 同一週不再跑
 
 
+def test_the_opening_settles_week_one_but_not_the_per_hour_part(s1, season, monkeypatch):
+    """FB-040：開季那一刻只跑「週初掛鉤＋到了的大事」（season_events），不跑每曆時的事——T1 的割據變動掛在
+    每曆時那一段，開季多跑一次就會多一次。第一次之後 hooked_week 不是 0，再呼叫什麼都不做。"""
+    from tianxia import world
+
+    hours: list[int] = []
+    monkeypatch.setattr(world, "season_hour", lambda *a, **k: hours.append(1) or [])  # 每曆時的那一段（含 season_events）
+    msgs = world.settle_season_start(season.world, s1, random.Random(0))
+    assert msgs == ["【江湖大事】三十六方同日起事。"] and hours == []
+    w = season.world
+    assert w.hooked_week == 1 and list(w.timeline) == ["uprising"] and w.timeline["uprising"].time == 0
+    assert world.settle_season_start(w, s1, random.Random(0)) == [] and list(w.timeline) == ["uprising"]
+
+
+def test_the_opening_settles_nothing_with_the_switch_off_or_on_an_unstamped_season(s1):
+    from tianxia import world
+
+    stamped = fresh_season(s1)
+    s1.config.season_one = False
+    assert world.settle_season_start(stamped, s1, random.Random(0)) == []  # 開關關著
+    s1.config.season_one = True
+    old = fresh_season(s1).model_copy(update={"season_one": False})  # 開季時開關是關的
+    assert world.settle_season_start(old, s1, random.Random(0)) == []
+    assert (stamped.timeline, stamped.hooked_week, old.timeline, old.hooked_week) == ({}, 0, {}, 0)
+
+
+def test_season_hour_runs_the_per_hour_part_first_and_then_the_season_events(s1, season, monkeypatch):
+    """每曆時的 tick 放在 season_events 之前（T1 的 geju_tick 掛在前面）；season_events 本身是週初掛鉤＋到了的大事。"""
+    from tianxia import world
+
+    order: list[str] = []
+    monkeypatch.setattr(world, "season_events", lambda state, content, rng: order.append("events") or ["大事"])
+    assert world.season_hour(season, s1, random.Random(0)) == ["大事"] and order == ["events"]
+
+
 def test_season_one_off_runs_no_calendar(s1):
     """開關關著（或這一季開季時沒開）：照舊每真實小時跑，季曆、時刻表、週初掛鉤都不動。"""
     s1.config.season_one = False

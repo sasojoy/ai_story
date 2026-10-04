@@ -219,10 +219,10 @@ def _season_vehicle(content: Content, season: WorldState) -> GameState:
     return GameState(player=player, world=season)
 
 
-def season_hour(state: GameState, content: Content, rng: random.Random) -> list[str]:
-    """第一季「季的事」，每跨過一個曆時跑一次（advance_world_state 照曆時切段呼叫；開關關著或舊季不跑）：
-    先補跑還沒跑過的週初掛鉤（每週一次），再照時間順序結算到了的大事（決戰與季末不在這裡，見 T8、T9）。
-    T1 的 geju_tick、T4 的 figures.tick 之後也掛在這裡（週初掛鉤之後、大事之前），每曆時一次。"""
+def season_events(state: GameState, content: Content, rng: random.Random) -> list[str]:
+    """第一季「季的事」裡跟時間點有關的那一半：先補跑還沒跑過的週初掛鉤（每週一次），再照時間順序結算到了的
+    大事（決戰與季末不在這裡，見 T8、T9）。每曆時的交界（season_hour）與開季那一刻（settle_season_start）都跑它；
+    重複呼叫是安全的——掛鉤看 hooked_week、大事看 timeline，跑過的不再跑。"""
     w = state.world
     msgs: list[str] = []
     week = calendar.point(w.time, content, w).week
@@ -233,6 +233,27 @@ def season_hour(state: GameState, content: Content, rng: random.Random) -> list[
     for event in timetable.due(state, content):
         msgs += timetable.resolve(state, content, event, rng)
     return msgs
+
+
+def season_hour(state: GameState, content: Content, rng: random.Random) -> list[str]:
+    """第一季「季的事」，每跨過一個曆時跑一次（advance_world_state 照曆時切段呼叫；開關關著或舊季不跑）：
+    先跑每曆時才有的事，再跑 season_events（週初掛鉤、到了的大事）。
+    每曆時的 tick 一律放在 season_events 之前：T1 的 geju_tick、T4 的 figures.tick 加在下面標出的位置——
+    開季那一刻只跑 season_events（settle_season_start），不跑這一段，才不會多算一次割據變動。
+    目前還沒有每曆時才有的事。"""
+    msgs: list[str] = []
+    # ← 每曆時的 tick 放這裡（在 season_events 之前）
+    return msgs + season_events(state, content, rng)
+
+
+def settle_season_start(season: WorldState, content: Content, rng: random.Random) -> list[str]:
+    """開季那一刻（世界秒 0）結算第 1 週週一 00:00 的事（FB-040）：只跑 season_events（週初掛鉤＋到了的大事），
+    不跑每曆時的事。不補這一下，要等到第一個曆時交界（約 1 分 47 秒）第一件大事才出現，公告卡那時還是空的。
+    開關關著、這一季開季時沒開（舊季）、或已經跑過（hooked_week 不是 0：週初掛鉤從沒跑過才是還沒開季結算）時什麼都不做，
+    所以重複呼叫也安全。呼叫端在開季之後、不在任何 mutate 裡（見 Game._settle_season_start）。"""
+    if not calendar.season_one_on(season, content) or season.hooked_week != 0 or season.ended:
+        return []
+    return season_events(_season_vehicle(content, season), content, rng)
 
 
 def _to_next_cal_hour(time: float, cal_hour: float) -> float:

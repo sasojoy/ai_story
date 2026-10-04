@@ -28,7 +28,8 @@ from .rules import apply_effect, change_trend, check_who, current_day, fill_mark
 from .sqlite_world import open_world
 from .state import PLAYER, BattleRecord, GameState, JournalEntry, Journey, Rumor, WorldState, new_game_state
 from .world import (
-    _season_vehicle, advance_world_state, check_thresholds, end_season, fire_by_id, sim_tick, start_pending_battle,
+    _season_vehicle, advance_world_state, check_thresholds, end_season, fire_by_id, settle_season_start, sim_tick,
+    start_pending_battle,
 )
 from .world_state import WorldStateStore, season_length_days
 
@@ -2278,7 +2279,19 @@ class Game:
             return self._log(["（現在不是籌備期，無法開季。）"])
         msgs = [f"══ {self.content.scenario.name}・開季 ══"]
         self._write("開季", msgs, tag="管理者")
-        return self._log(msgs)
+        return self._log(msgs + self._settle_season_start())
+
+    def _settle_season_start(self) -> list[str]:
+        """開季那一刻（世界秒 0）結算第 1 週週一 00:00 的大事（FB-040，見 world.settle_season_start），開季的人那一次
+        請求就跑；之後每曆時的交界才跑每曆時的事。放在 open_season／next_season 之後、不在任何 mutate 裡（mutate 不能巢狀）。
+        開關關著或舊季什麼都不會發生。公告照一般推進的樣子併進自己的江湖紀錄。"""
+        msgs: list[str] = []
+        self.world.mutate_season(lambda season: msgs.extend(settle_season_start(season, self.content, self.rng)))
+        self.state.world = self.world.get_season()
+        news = journal.news_entry(self.state.world.time, msgs)
+        if news is not None:
+            journal.add_entry(self.state, news, merge=True)
+        return msgs
 
     def admin_end_season(self, now: float) -> list[str]:
         """管理者立刻收季：進行中 → 休季（之後再由 admin_next_season 開下一季）。照自然收季的做法算結局、
@@ -2315,7 +2328,7 @@ class Game:
         if not self.world.next_season(self.content, now):
             return self._log(["（這一季還沒結束，無法開啟下一季。）"])
         self._reconcile_season()
-        return self._log([f"══ 第 {self.world.get_season_number()} 季開始 ══"])
+        return self._log([f"══ 第 {self.world.get_season_number()} 季開始 ══"] + self._settle_season_start())
 
     def _admin_refusal(self, action: str) -> list[str] | None:
         """管理者觸發的共同檢查：不是管理者、或賽季沒有在進行，回傳要顯示的拒絕訊息；可以做就回傳 None。"""

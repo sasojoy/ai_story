@@ -4138,7 +4138,7 @@ def test_old_season_not_replayed_when_switch_turns_on(content, world):
     assert list(world.get_season().timeline) == ["uprising"]  # 新的一季才照季曆跑
     assert admin.status_data()["calendar"]["week"] == 1
     past, current = admin.chronicle_text().split("### 第 1 季")[::-1][:2]  # 本季的時間寫季曆，上一季照舊寫天數
-    assert "第1週・週一 01:00　張角率三十六方同時起義。" in current and "第6天　賽季落幕" in past
+    assert "第1週・週一 00:00　張角率三十六方同時起義。" in current and "第6天　賽季落幕" in past
 
 
 def test_an_unstamped_season_is_not_cut_short_by_the_weekend_profile(content, world):
@@ -4203,6 +4203,47 @@ def test_open_season_restamps_with_current_profile(content, world):
     assert list(world.get_season().timeline) == ["uprising"]
     assert admin.status_data()["calendar"]["week"] == 1
 
+
+
+def test_week_one_is_settled_the_moment_a_stamped_season_opens(content, world):
+    """FB-040：開季那一刻（世界秒 0）就結算第 1 週週一 00:00 的大事，不必等到第一個曆時交界：時間軸、傳聞、江湖史、
+    公告卡都在，狀態列的下一件是第 2 週那件；再推進一個曆時不會重複結算。下一季開出來也一樣。"""
+    install_season_one(content)
+    content.config.admins = ["管理者"]
+    content.config.auto_open_first_season = False
+    admin = Game.new(content, "管理者", rng=random.Random(1), world=world)
+    assert world.season_phase() == "preparing"
+    admin.admin_open_season(now=100.0)  # 沒有推進任何時間
+
+    season = world.get_season()
+    assert season.time == 0 and list(season.timeline) == ["uprising"] and season.timeline["uprising"].time == 0
+    assert season.hooked_week == 1
+    assert "第1週・週一 00:00　三十六方同日起事。" in admin.rumors_text()
+    assert "第1週・週一 00:00　張角率三十六方同時起義。" in admin.chronicle_text()
+    assert [b.split("**")[1] for b in admin.bulletin()] == ["三十六方起義"]
+    assert admin.status_data()["next_event"]["title"] == "張曼成攻殺南陽太守"  # 第一件已經結算，倒數指向下一件
+
+    admin.sync(100.0 + calendar.cal_hour_seconds(content))  # 跨過第一個曆時：不會再結算一次
+    assert list(world.get_season().timeline) == ["uprising"]
+    assert admin.chronicle_text().count("張角率三十六方同時起義。") == 1
+    assert admin.rumors_text().count("三十六方同日起事。") == 1
+
+    admin.admin_end_season(now=200.0)
+    admin.admin_next_season(now=300.0)  # 新的一季：開季那一刻照樣結算
+    season = world.get_season()
+    assert season.time == 0 and list(season.timeline) == ["uprising"] and season.hooked_week == 1
+    assert "第1週・週一 00:00　張角率三十六方同時起義。" in admin.chronicle_text().split("### 第 1 季")[0]
+
+
+def test_opening_a_season_with_the_switch_off_settles_nothing(content, world):
+    install_season_one(content)
+    content.config.admins = ["管理者"]
+    content.config.auto_open_first_season = False
+    content.config.season_one = False
+    admin = Game.new(content, "管理者", rng=random.Random(1), world=world)
+    admin.admin_open_season(now=100.0)
+    season = world.get_season()
+    assert season.timeline == {} and season.hooked_week == 0 and "calendar" not in admin.status_data()
 
 
 def test_skipped_events_stay_off_the_bulletin(content, world):
