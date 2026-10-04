@@ -836,8 +836,8 @@ class BattleDef(_Strict):
     acts: list[BattleAct] = Field(min_length=1)
     rounds_per_act: int = Field(default=3, ge=1)  # 每幕打幾回合（戰鬥系統設計 3.2）：第 rounds_per_act 回合結算完換下一幕，
     # 整場 rounds_per_act × 幕數 回合，最後一回合結算完看戰局定結果
-    decisive_margin: int = Field(default=40, ge=1)  # 戰局偏離 trend_start 到這麼多（|trend − trend_start| ≥ 這個值）
-    # 就當回合收場、不再換幕（壓倒性提前收場；起點 50 時是 90／10）
+    decisive_margin: int = Field(default=40, ge=1)  # 戰局偏離中線 50 到這麼多（|trend − 50| ≥ 這個值，battle_instance.CENTER）
+    # 就當回合收場、不再換幕（壓倒性提前收場：40 時是 90／10；看中線、不看這一場的起點，戰鬥系統 5.3）
     action_tags: dict[str, BattleActionEffect]
     free_text_gamble: FreeTextGamble | None = None  # 有 free_text 選項時必填
     outcomes: list[BattleOutcome] = Field(min_length=1)  # 時刻表決戰只留一筆保底：實際的結果與效果走時刻表

@@ -241,9 +241,12 @@ def _season_vehicle(content: Content, season: WorldState) -> GameState:
 
 def season_events(state: GameState, content: Content, rng: random.Random) -> list[str]:
     """第一季「季的事」裡跟時間點有關的那一半：先補跑還沒跑過的週初掛鉤（每週一次），再照時間順序結算到了的
-    大事（季末不在這裡，見 T9），最後把時間到了的決戰記進 showdowns_waiting（T8）——決戰不在這裡結算，也不在這裡開：
+    大事（季末不在這裡，見 T9），最後把時間到了的決戰記進 showdowns_waiting（T8）——決戰平常不在這裡結算，也不在這裡開：
     這裡常在 mutate_season 裡，開集結是 store 的另一次寫入，要等 mutate 結束（start_pending_battle 開，見
-    open_waiting_showdown）。每曆時的交界（season_hour）與開季那一刻（settle_season_start）都跑它；
+    open_waiting_showdown）。例外（T8 fix round 1，控制者裁定）：這一趟要結算的大事排在一件從沒開成的決戰之後時，
+    先照起點把那件決戰結算掉再結算它（settle_waiting_showdowns 的 before）——追趕得到後面那件大事，表示這一整段沒有人在
+    （連假人都沒推過時間），真有人在也是沒人參戰、照起點收場；這樣才照週次、決戰帶給之後大事的修正也不會丟掉。
+    每曆時的交界（season_hour）與開季那一刻（settle_season_start）都跑它；
     重複呼叫是安全的——掛鉤看 hooked_week、大事看 timeline、決戰看 timeline 與 showdowns_opened，跑過的不再跑。"""
     w = state.world
     msgs: list[str] = []
@@ -253,6 +256,7 @@ def season_events(state: GameState, content: Content, rng: random.Random) -> lis
         for hook in WEEK_HOOKS:
             msgs += hook(state, content, rng)
     for event in timetable.due(state, content):
+        msgs += settle_waiting_showdowns(state, content, rng, before=event)
         msgs += timetable.resolve(state, content, event, rng)
     _note_due_showdowns(state, content)
     return msgs
@@ -269,20 +273,32 @@ def _note_due_showdowns(state: GameState, content: Content) -> None:
             w.showdowns_waiting.append(event.id)
 
 
-def settle_waiting_showdowns(state: GameState, content: Content, rng: random.Random) -> list[str]:
-    """季要收了，時間到了卻從沒開成的決戰（還在 showdowns_waiting，時間軸上沒有結果）不能就這樣沒有結果
-    （Review Focus 1「決戰不能被跳過」、2「開不成或沒人打照鎖定或照起點收場」，控制者 2026-10-04 的裁定）：
-    照沒人參戰的那條路判——起點照此刻前線的戰況算（showdown_start），有人鎖定照鎖定（battle_instance.result_at），
-    再交給 timetable.resolve，照時間先後一件一件來，記號清掉。正在打（已經開過）的不在這裡，照 FB-035 收兵、不算結果。
-    開關關著、或這一季開季時沒開，什麼都不做。回傳公告。只動 state.world，不碰 store。"""
+def settle_waiting_showdowns(
+    state: GameState, content: Content, rng: random.Random, before: TimetableEvent | None = None,
+) -> list[str]:
+    """時間到了卻從沒開成的決戰（還在 showdowns_waiting，時間軸上沒有結果）照沒人參戰的那條路結算——起點照此刻前線的
+    戰況算（showdown_start），有人鎖定照鎖定（battle_instance.result_at），再交給 timetable.resolve，照時間先後一件一件來，
+    記號清掉、不會再開（Review Focus 1「決戰不能被跳過」、2「開不成或沒人打照鎖定或照起點收場」，控制者 2026-10-04 的裁定）。
+    兩個地方用它，同一條路：
+    - 收季之前（end_season，before 是 None）：還在等的全部結算（fix round 0）；
+    - 季的事要結算 before 這件大事之前（season_events）：只結算排在 before 前面的（照時刻、同一刻照時刻表的順序，fix round 1）。
+    正在打（已經開過）的不在這裡：季終照 FB-035 收兵、不算結果。開關關著、或這一季開季時沒開，什麼都不做。
+    回傳公告。只動 state.world，不碰 store。"""
     w = state.world
     if not calendar.season_one_on(w, content):
         return []
     _note_due_showdowns(state, content)  # 剛好停在決戰時刻、還沒跑到季的事的那一件也算
+    order = {e.id: i for i, e in enumerate(content.timetable)}
+
+    def place(event: TimetableEvent) -> tuple[float, int]:
+        return timetable.when(state, content, event), order[event.id]
+
     msgs: list[str] = []
-    while w.showdowns_waiting:
-        event_id = w.showdowns_waiting.pop(0)
+    for event_id in list(w.showdowns_waiting):
         event = next((e for e in content.timetable if e.id == event_id and e.kind == "showdown"), None)
+        if event is not None and before is not None and place(event) >= place(before):
+            continue  # 排在 before 之後的照舊等著開
+        w.showdowns_waiting.remove(event_id)
         if event is None or event_id in w.timeline or event_id in w.showdowns_opened:
             continue
         definition = showdown_battle(state, content, event)
@@ -293,8 +309,14 @@ def settle_waiting_showdowns(state: GameState, content: Content, rng: random.Ran
             showdown_start(state, content, definition), definition, lock.side if lock is not None else None,
             definition.defender or definition.factions[0].id,
         )
-        msgs += timetable.resolve(state, content, event, rng, key=f"{winner}:{margin}")
+        msgs += timetable.resolve(state, content, event, rng, key=showdown_key(definition, winner, margin))
     return msgs
+
+
+def showdown_key(definition: BattleDef, winner: str, margin: str) -> str:
+    """時刻表決戰交給 timetable.resolve 的結果鍵。分版本的帶上這一筆的版本（實際打的、或照起點判的那一版）：
+    不讓 resolve 照收場當下的版本重算——管理者在第 3 週之前開的宛城，收場時第 3 週可能已經換了版本（審查 M-1）。"""
+    return f"{definition.version}:{winner}:{margin}" if definition.version else f"{winner}:{margin}"
 
 
 def showdown_battle(state: GameState, content: Content, event: TimetableEvent) -> BattleDef | None:

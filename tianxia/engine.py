@@ -33,7 +33,7 @@ from .sqlite_world import open_world
 from .state import PLAYER, BattleRecord, GameState, JournalEntry, Journey, Rumor, WorldState, new_game_state
 from .world import (
     _season_vehicle, advance_world_state, check_thresholds, end_season, fire_by_id, open_showdown, open_waiting_showdown,
-    settle_season_start, showdown_battle, sim_tick, start_pending_battle,
+    settle_season_start, showdown_battle, showdown_key, sim_tick, start_pending_battle,
 )
 from .world_state import WorldStateStore, season_length_days
 
@@ -1234,7 +1234,8 @@ class Game:
             result["title"] = f"{timetable.SIDE_NAMES.get(winner, winner)}{margin}"
             if event is None:
                 return
-            timetable.resolve(_season_vehicle(self.content, season), self.content, event, self.rng, key=f"{winner}:{margin}")
+            key = showdown_key(definition, winner, margin)  # 帶上實際打的那一版（審查 M-1）
+            timetable.resolve(_season_vehicle(self.content, season), self.content, event, self.rng, key=key)
             done = season.timeline.get(event.id)
             outcome = event.outcomes.get(done.key) if done is not None else None
             result["text"] = done.text if done is not None else ""

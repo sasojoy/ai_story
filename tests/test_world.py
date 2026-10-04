@@ -463,10 +463,12 @@ def test_showdown_is_marked_waiting_when_its_time_comes(content):
     season_events(state, content, random.Random(0))
     season_events(state, content, random.Random(0))  # 重複呼叫不重複記
     assert w.showdowns_waiting == ["changshe_fire"] and "changshe_fire" not in w.timeline
+    w.showdowns_waiting.clear()  # 長社開了（開集結在 mutate 外面，這裡直接記成開過）
+    w.showdowns_opened["changshe_fire"] = "changshe_fire"
     del content.battles["wancheng_jia"], content.battles["wancheng_yi"]
     w.time = w.schedule["wancheng"]
     season_events(state, content, random.Random(0))
-    assert w.showdowns_waiting == ["changshe_fire"]
+    assert w.showdowns_waiting == [] and "wancheng" not in w.timeline
 
 
 def test_wancheng_version_from_week_three(content, world):
@@ -533,12 +535,14 @@ def _season_to_the_end(content, locks=None):
 
 
 def test_waiting_showdown_is_settled_before_the_season_ends(content):
-    """Review Focus 1、2：一次追趕同時跨過決戰的時間與季末，決戰從沒開成也不能沒有結果：收季之前照前線算出的起點判
-    （長社：潁川 40 → 55 → 官軍險勝；宛城：南陽 35 − 秦頡 3 → 59 → 甲版官軍險勝），交給時刻表結算，再算結局。"""
+    """Review Focus 1、2：一次追趕同時跨過決戰的時間與季末，決戰從沒開成也不能沒有結果：照前線算出的起點判，交給時刻表
+    結算，再算結局。宛城（南陽 35 − 秦頡 3 → 59 → 甲版官軍險勝）之後沒有別的大事，等到收季之前才結算（fix round 0）；
+    長社（潁川 40 → 55 → 官軍險勝）在第 7 週的大事之前就結算了（fix round 1）。"""
     w = _season_to_the_end(content)
     assert w.ended
     assert (w.timeline["changshe_fire"].key, w.timeline["wancheng"].key) == ("guan:險勝", "甲:guan:險勝")
-    assert w.timeline["changshe_fire"].time == w.time and w.trends["yingru"] == 40 - 8
+    assert w.timeline["wancheng"].time == w.time and w.trends["yingru"] == 40 - 8
+    assert w.timeline["changshe_fire"].time <= w.timeline["luzhi_siege"].time
     assert w.showdowns_waiting == [] and w.showdowns_opened == {}
     lines = [r.text for r in w.chronicle]
     assert lines.index("波才敗走陽翟。") < lines.index(next(t for t in lines if t.startswith("賽季落幕")))  # 結局看得到結果
@@ -555,3 +559,36 @@ def test_a_locked_waiting_showdown_goes_to_the_locker_at_the_season_end(content)
     })
     assert (w.timeline["changshe_fire"].key, w.timeline["wancheng"].key) == ("huang:險勝", "甲:guan:大勝")
     assert w.ended and w.showdowns_waiting == []
+
+
+def test_a_skipped_showdown_is_settled_before_later_events(content, monkeypatch):
+    """T8 fix round 1（審查 I-1，控制者裁定）：一次追趕跨過長社與第 7 週：長社從沒開成（這裡沒有 store，開不了集結），
+    第 7 週的大事結算之前先照起點把長社結算掉（潁川 80 → 起點 35 → 黃巾大勝）——時間軸照週次（長社在盧植圍廣宗之前），
+    長社黃巾大勝帶來的 −0.1 在盧植圍廣宗擲骰時已經算進去。"""
+    from conftest import install_season_one, install_showdowns
+    from tianxia import calendar, timetable
+    from tianxia.state import GameState
+    from tianxia.world import advance_world_state
+    from tianxia.world_state import fresh_season
+
+    install_season_one(content)
+    install_showdowns(content)
+    state = GameState(player=_player(content), world=fresh_season(content))
+    w = state.world
+    w.timeline.update({e: TimelineResult(key="skip", time=0.0) for e in ("zhangmancheng", "bocai")})
+    w.trends["yingru"] = 80
+    bonus_at_roll: dict[str, float] = {}
+    roll_chance = timetable.roll_chance
+
+    def spy(st, c, event):
+        bonus_at_roll[event.id] = st.world.event_bonus.get(event.id, 0.0)
+        return roll_chance(st, c, event)
+
+    monkeypatch.setattr(timetable, "roll_chance", spy)
+    advance_world_state(w, content, calendar.week_start(8, content) - w.time, random.Random(0))
+    order = list(w.timeline)
+    assert w.timeline["changshe_fire"].key == "huang:大勝"
+    assert order.index("changshe_fire") < order.index("luzhi_siege") < order.index("qinjie")
+    assert bonus_at_roll["luzhi_siege"] == -0.1
+    assert w.timeline["changshe_fire"].time <= w.timeline["luzhi_siege"].time
+    assert w.showdowns_waiting == [] and w.showdowns_opened == {}

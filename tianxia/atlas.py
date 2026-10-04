@@ -542,8 +542,10 @@ def detail_text(state: GameState, content: Content, loc_id: str, odds: Odds) -> 
     listed = foes(content, loc, odds, state.player.faction)
     parts.append("**敵情**　" + ("、".join(f"{name} {word}" for name, word in listed) if listed else "沒有人在這裡滋事"))
 
-    act = current_act(state, content)
-    story = [f"★ 這一幕主線的目標：{act.goal}" if loc_id in goal_places(state, content) else "不是這一幕主線的目標"]
+    story: list[str] = []
+    if not storyline_off(state, content):  # 第一季不觸發的 beta 主線：玩家看不到它，這一行也不寫（審查 M-3）
+        act = current_act(state, content)
+        story.append(f"★ 這一幕主線的目標：{act.goal}" if loc_id in act.places else "不是這一幕主線的目標")
     news = recent_news(state, loc_id)
     if news:
         story.append(f"✦ 最近 {NEWS_DAYS} 天的大事與傳聞：\n" + "\n".join(f"- {stamp_text(r.time, content, state.world)}　{r.text}" for r in news))

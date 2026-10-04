@@ -429,7 +429,9 @@ def test_the_showdown_is_three_acts_of_three_rounds_and_ends_early_at_90_or_10(c
     戰局到 90 以上或 10 以下就提前收場。"""
     showdown = content.battles["huangjin_showdown"]
     assert (len(showdown.acts), showdown.rounds_per_act) == (3, 3)
-    assert (showdown.trend_start + showdown.decisive_margin, showdown.trend_start - showdown.decisive_margin) == (90, 10)
+    from tianxia.battle_instance import CENTER
+
+    assert (CENTER + showdown.decisive_margin, CENTER - showdown.decisive_margin) == (90, 10)  # 提前收場看中線 50（戰鬥系統 5.3）
 
 
 def test_nobody_can_join_a_faction_at_the_start_location(content):
@@ -549,8 +551,8 @@ def test_real_timetable_matches_settlement_doc():
 
 
 def test_real_timetable_runs_a_whole_condensed_season():
-    """週末設定下把真實內容的一季從頭推到尾：除了決戰與季末（T8、T9），每件大事都結算一次、照週次。這裡沒有 store，
-    三場決戰開不了集結，記號一路等到季末：收季前照起點結算（T8 fix round 0），所以排在時間軸最後、照時間先後。"""
+    """週末設定下把真實內容的一季從頭推到尾：除了季末（T9），每件大事都結算一次、照週次。這裡沒有 store，三場決戰開不了
+    集結：長社、宛城在之後那件大事結算之前照起點結算（T8 fix round 1），廣宗之後沒有大事、等到收季前才結算（fix round 0）。"""
     import random as _random
 
     from tianxia.state import GameState, PlayerState
@@ -562,11 +564,10 @@ def test_real_timetable_runs_a_whole_condensed_season():
     state = GameState(player=PlayerState(name="", location=c.scenario.start_location, stats={}, stamina=0),
                       world=fresh_season(c))
     msgs = advance_world_state(state.world, c, 2.5 * 86400, _random.Random(0))
-    expected = [e.id for e in c.timetable if e.kind not in ("showdown", "finale")]
-    showdowns = ["changshe_fire", "wancheng", "guangzong"]
-    assert list(state.world.timeline) == expected + showdowns
-    assert all(state.world.timeline[e].time == state.world.time for e in showdowns) and state.world.showdowns_waiting == []
-    announced = len(expected) + len(showdowns) - (state.world.timeline["qinjie_slays_zhangmancheng"].key == "skip")
+    expected = [e.id for e in c.timetable if e.kind != "finale"]  # timetable.json 照週次排
+    assert list(state.world.timeline) == expected and state.world.showdowns_waiting == []
+    assert state.world.timeline["guangzong"].time == state.world.time  # 廣宗之後沒有大事：收季前才結算
+    announced = len(expected) - (state.world.timeline["qinjie_slays_zhangmancheng"].key == "skip")
     assert sum(m.startswith("【江湖大事】") for m in msgs) == announced
     assert state.world.ended  # 季末照舊收季（T9 換成下曲陽）
 
@@ -909,3 +910,17 @@ def test_a_real_weekend_season_opens_and_settles_the_three_showdowns(tmp_path):
     assert [b.battle_id for _, b in world.ended_battles()] == [
         "changshe_fire", world.get_season().showdowns_opened["wancheng"], "guangzong",
     ]
+
+
+def test_real_showdowns_start_from_the_opening_fronts():
+    """計畫 T8：開季那一刻照前線算的起點是長社 55（潁川 40）、宛城 58（南陽 35）、廣宗 48（冀州 55）。"""
+    from tianxia.state import GameState, PlayerState
+    from tianxia.world import showdown_battle, showdown_start
+    from tianxia.world_state import fresh_season
+
+    c = load_content(CONTENT_DIR, profile="weekend")
+    state = GameState(player=PlayerState(name="", location=c.scenario.start_location, stats={}, stamina=0), world=fresh_season(c))
+    starts = {
+        e.id: showdown_start(state, c, showdown_battle(state, c, e)) for e in c.timetable if e.kind == "showdown"
+    }
+    assert starts == {"changshe_fire": 55, "wancheng": 58, "guangzong": 48}
