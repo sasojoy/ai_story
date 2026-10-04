@@ -613,6 +613,44 @@ def test_each_resolved_round_is_one_row(store):
     assert [r.trend_after for r in store.battle_rounds(battle.record_id)] == [51, 52]
 
 
+def test_ended_battles_lists_every_finished_battle_with_its_season(store, content):
+    """FB-027：收場的決戰不分季別讀得回來（決戰常常把季收掉，下一季才回來的參戰者也要補送），
+    每一場帶著第幾季與流水號；沒打完就被換季清掉的不算；after 只讀流水號比它大的。"""
+    content.config.auto_open_first_season = True
+    store.seed_first_season(content)
+    first = store.start_battle(_battle_definition(), now=0.0)
+    store.mutate_battle(lambda b: (setattr(b, "phase", "ended"), setattr(b, "outcome_title", "甲方勝")))
+    unfinished = store.start_battle(_battle_definition(), now=1.0)  # 打到一半就換季
+    store.mutate_season(lambda season: setattr(season, "ended", True))
+    store.next_season(content, now=2.0)
+    second = store.start_battle(_battle_definition(), now=3.0)
+    store.mutate_battle(lambda b: setattr(b, "phase", "ended"))
+    found = store.ended_battles()
+    assert [(season, battle.record_id) for season, battle in found] == [(1, first.record_id), (2, second.record_id)]
+    assert found[0][1].outcome_title == "甲方勝"
+    assert unfinished.record_id not in {battle.record_id for _, battle in found}
+    assert first.record_id < unfinished.record_id < second.record_id  # 流水號照開戰的先後
+    assert [battle.record_id for _, battle in store.ended_battles(after=first.record_id)] == [second.record_id]
+    assert store.ended_battles(after=second.record_id) == []
+
+
+def test_battles_end_in_the_order_they_were_started(store, content):
+    """ended_battles(after=…) 的前提（FB-027）：同一時間只有一場決戰還沒收場，被清掉（換季、季終）的那一場永遠不會
+    再收場，流水號也不會倒退——所以一場決戰收場時，它的流水號比之前收場的每一場都大。"""
+    content.config.auto_open_first_season = True
+    store.seed_first_season(content)
+    first = store.start_battle(_battle_definition(), now=0.0)
+    assert store.start_battle(_battle_definition(), now=1.0).record_id == first.record_id  # 還在打：不另開
+    store.clear_battle()  # 沒打完就被清掉（季終）
+    second = store.start_battle(_battle_definition(), now=2.0)
+    assert second.record_id > first.record_id
+    store.mutate_battle(lambda b: setattr(b, "phase", "ended"))
+    assert store.mutate_battle(lambda b: None).record_id == second.record_id  # 之後動到的永遠是現在這一場
+    assert [battle.record_id for _, battle in store.ended_battles()] == [second.record_id]
+    with store.db.snapshot() as conn:  # 清掉的那一場還在表裡，但沒有收場
+        assert conn.execute("SELECT phase FROM battles WHERE id = ?", (first.record_id,)).fetchone()["phase"] == "muster"
+
+
 def test_a_battle_stays_on_record_after_the_next_season(store, content):
     content.config.auto_open_first_season = True
     store.seed_first_season(content)

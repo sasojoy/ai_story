@@ -2,11 +2,11 @@ import pytest
 
 from tianxia.atlas import (
     Route, TravelOption, detail_text, direction, foes, goal_places, haunters, is_known, known_locations, leg_minutes,
-    place_choices, recent_news, region_of, region_trends, road_hops, routes, travel_options, travel_refusal,
-    travel_seconds, travel_stamina, whole_minutes, worst_foe,
+    place_choices, recent_news, region_of, region_trends, road_hops, road_spot, routes, travel_block, travel_options,
+    travel_refusal, travel_seconds, travel_stamina, views, way_to, whole_minutes, worst_foe,
 )
 from tianxia.models import Condition, Connection, Location, SimPlayer
-from tianxia.state import Rumor
+from tianxia.state import Journey, Rumor
 
 DAY = 86400
 
@@ -426,3 +426,44 @@ def test_picking_whom_to_call_on_blocks_travel(state, content):
     state.player.picking_audience = True
     assert travel_options(state, content, "lake") == [TravelOption("walk", "求見中，先返回才能安排前往", False)]
     assert travel_refusal(state, content, "lake", "walk") == "求見中，先返回才能安排前往"
+
+
+# ── 路上（路上設計第二、三節）──────────────────────────────
+
+
+def _on_the_road(state, at=60.0):
+    """從小鎮步行往湖邊（夾具 3 分鐘＝180 秒），現在是第 at 秒。"""
+    state.player.journey = Journey(mode="walk", path=["lake"], arrive_at=[180.0])
+    state.world.time = at
+
+
+def test_the_road_spot_is_two_stops_and_how_far_along(state, content):
+    assert road_spot(state, content) is None  # 人在某一站
+    _on_the_road(state)
+    spot = road_spot(state, content)
+    assert (spot.behind, spot.ahead, spot.minutes) == ("town", "lake", pytest.approx(3.0))
+    assert spot.done == pytest.approx(1 / 3)
+    state.player.journey = Journey(mode="walk", path=["town"], arrive_at=[120.0], origin="lake", share=2 / 3)
+    spot = road_spot(state, content)  # 掉頭回小鎮：身後是湖邊，在湖邊往小鎮的三分之二處
+    assert (spot.behind, spot.ahead, spot.done) == ("lake", "town", pytest.approx(2 / 3))
+
+
+def test_on_the_road_no_place_is_where_you_are(state, content):
+    _on_the_road(state)
+    assert views(state, content)["town"] == "visible"
+    assert place_choices(state, content) == [("小鎮", "town"), ("湖邊", "lake")]
+
+
+def test_on_the_road_you_can_arrange_travel_from_where_you_are(state, content):
+    _on_the_road(state)
+    assert travel_block(state) is None
+    assert way_to(state, content, "town") == Route(("town",), (pytest.approx(1.0),), origin="lake", share=pytest.approx(2 / 3))
+    assert travel_options(state, content, "town") == [  # 剛離開的那一站：就是折返
+        TravelOption("walk", "步行（約 1 分鐘）", True),
+        TravelOption("hurry", "趕路（約 1 分鐘・體力 1）", True),
+        TravelOption("dash", "疾行（立刻到・體力 2）", True),
+    ]
+    assert travel_options(state, content, "lake")[0] == TravelOption("walk", "步行（約 2 分鐘）", True)
+    assert travel_refusal(state, content, "town", "walk") is None
+    detail = detail_text(state, content, "town", no_odds)
+    assert detail.startswith("### 小鎮　") and "**路線**　步行約 1 分鐘" in detail  # 在路上沒有所在地

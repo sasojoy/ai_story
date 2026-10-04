@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, GetCoreSchemaHandler
+from pydantic import BaseModel, ConfigDict, Field, GetCoreSchemaHandler, field_validator
 from pydantic_core import core_schema
 
 STATS = ("str", "agi", "con", "wis", "silver", "good", "evil", "fame", "xinde")
@@ -235,6 +235,19 @@ class Location(_Strict):
         return "路"
 
 
+class RoadSight(_Strict):
+    """路上見聞的一則（路上設計第五節）：每抵達一站有機會寫進自己的江湖紀錄的一兩句話。純敘事，沒有選項。
+    內容在 content/road_sights.json，載入時 content.validate 檢查組合夠不夠、收穫有沒有超標、是不是繁體。"""
+
+    id: str
+    text: str  # 一兩句；「聽說……」直接寫在這裡。收穫照慣例自動接在後面（「銀兩 +5」），文字裡不用寫
+    roads: list[RoadKind] = Field(default_factory=list)  # 適用的路的種類；空的＝哪種路都可以
+    regions: list[str] = Field(default_factory=list)  # 適用的大區（照剛抵達的那一站算）；空的＝哪個大區都可以
+    # 小收穫，最多一種，也可以沒有：stats 只能是 silver（≤10）或 xinde（≤5），materials 只能是一階 1 個。
+    # 不發全服傳聞（每人每站都可能觸發，發到傳聞板會洗版），Effect.text 也留空。
+    effect: Effect = Field(default_factory=Effect)
+
+
 class SkillDef(_Strict):
     """武學/內功的內容定義（sanguo-companions 合併重寫，取代 battle.py 時代的 Skill/SkillEffect）。
 
@@ -460,6 +473,41 @@ class Scenario(_Strict):
     jade_seal_flag: str | None = None  # 這個世界旗標代表玩家親手取得了這一季的玉璽碎片（設計文件九），記進跨季持久紀錄
 
 
+ExploreBranch = Literal["material", "wild", "event"]
+EXPLORE_BRANCHES: tuple[ExploreBranch, ...] = ("material", "wild", "event")  # 探索三選一的三支：素材、野怪、事件
+
+
+class ExploreMix(_Strict):
+    """一種地點類型探索時三支的比例（探索三選一設計第三節）。
+
+    地點有 tags 裡任何一個標籤就算這一類；Config.explore_mix 照順序比對、第一個符合的就是。
+    tags 空的那一筆是「其餘」，必須放最後。weights 沒寫的那一支當 0。"""
+
+    kind: str
+    tags: list[str] = Field(default_factory=list)
+    weights: dict[ExploreBranch, float]
+
+    @field_validator("weights")
+    @classmethod
+    def _weights_add_up(cls, weights: dict[str, float]) -> dict[str, float]:
+        if any(w < 0 for w in weights.values()):
+            raise ValueError("探索比例不能是負的")
+        if sum(weights.values()) <= 0:
+            raise ValueError("探索比例三支加起來要大於 0")
+        return weights
+
+
+def _default_explore_mix() -> list[ExploreMix]:
+    return [
+        ExploreMix(kind="camp", tags=["營寨", "祭壇", "塢堡"], weights={"material": 15, "wild": 35, "event": 50}),
+        ExploreMix(
+            kind="town", tags=["城鎮", "官署", "城池", "寺院", "書院", "莊院", "里巷", "結社"],
+            weights={"material": 15, "wild": 0, "event": 85},
+        ),
+        ExploreMix(kind="wild", tags=[], weights={"material": 40, "wild": 35, "event": 25}),
+    ]
+
+
 class Config(_Strict):
     stamina_max: int = 150
     stamina_regen_seconds: float = 180  # 自然回復：每幾秒（遊戲時間）回 1 點體力（地圖擴充設計第二節：每 3 分鐘 1 點）
@@ -473,6 +521,13 @@ class Config(_Strict):
     )  # 路程＝距離 × 路的種類係數 × travel_minutes_per_unit（地圖擴充設計 3.1）
     hurry_stamina_per_minute: float = Field(default=1, ge=0)  # 趕路：每分鐘路程扣幾點體力（時間減半）
     dash_stamina_per_minute: float = Field(default=2, ge=0)  # 疾行：每分鐘路程扣幾點體力（立刻到）
+    # 路上小事（路上設計第四節）：收入要明顯低於在站上做事，不然一直趕路會變成最賺的玩法
+    road_think_xinde: int = Field(default=3, ge=0)  # 邊走邊想：心得（一次歷練大約 12～20）
+    road_rumor_pool: int = Field(default=5, ge=1)  # 沿途打聽：從這一帶最近幾則傳聞裡挑一則
+    road_gather_chance: float = Field(default=0.4, ge=0, le=1)  # 路邊採集：撿到一樣一階素材的機率
+    road_sight_chance: float = Field(default=0.3, ge=0, le=1)  # 路上見聞：每抵達一站有幾成機會看見一則（路上設計第五節）
+    road_sight_recent: int = Field(default=5, ge=0)  # 路上見聞：最近看過的幾則先排除，池子不夠才重複
+    road_reward_daily_cap: int = Field(default=6, ge=0)  # 路上小事、見聞的收穫每個遊戲日各前幾次才有
     ollama_url: str = "http://localhost:11434"  # companion_agent.py 深度對話用；連不上時那輪對話取消
     ollama_model: str = "qwen2.5:14b"
     ollama_timeout: int = 120
@@ -518,7 +573,14 @@ class Config(_Strict):
     seclusion_xinde_per_hour: int = 15
     xinde_cost_factor: int = 20  # 第 n 成升到 n+1 成需要 factor × n（構想欄位，目前練功免費、沒有任何地方讀它）
     xinde_hint_threshold: int = 50  # 心得擱到這個量、而且還有功夫沒練滿時，主畫面提示玩家去門下練功
-    explore_material_chance: float = 0.3  # 探索時撿到一個素材的機率（見無限煉製設計 §4.2）
+    # ── 探索三選一（探索三選一設計）──
+    # 這裡有還能遇上的奇遇（一次性或奇遇事件）時，探索先滾這個機率，中了就是奇遇、不走三選一。
+    # 照整季模擬換算（設計第二節，企劃者 2026-10-03 改）：一個玩家一季在奇遇池非空的地點探索 E 次，
+    # 隨機機器人 120 季（p＝0.025 時）的中位數 E＝26.5，p ≤ 1 − 0.5^(1/26.5) ≈ 0.0258，取 0.025。
+    # 設好之後量到：每人每季碰到奇遇那一步 0.58 次，至少一次的約四成六。正式內容的值寫在 content/config.json。
+    rare_explore_chance: float = Field(default=0.025, ge=0, le=1)
+    explore_mix: list[ExploreMix] = Field(default_factory=_default_explore_mix)  # 地點類型 -> 素材／野怪／事件的比例
+    wild_neili_loss_factor: float = Field(default=0.5, ge=0, le=1)  # 探索撞上的野怪扣氣血是歷練的幾倍（內傷照同一個比例）
     craft_xinde_base: int = 5  # 煉製成本 = base × 素材數 + per_tier × 階總和（見無限煉製設計 §5.5）
     craft_xinde_per_tier: int = 3
     level_exp: int = 10  # 第 n 級升 n+1 級需要 level_exp × n
@@ -557,6 +619,24 @@ class Config(_Strict):
     bot_strength: float = 0.6  # 假人挑最高分選項的機率（0＝全隨機，1＝永遠挑最高分）；積極 +0.2、懶散 -0.2
     bot_tick_seconds: float = 20  # 假人程式多久巡一輪（現實秒數）
     bot_fill_seconds: float = 3600  # 同一個陣營兩次補人至少隔幾秒（現實時間），看起來像玩家陸續湧入
+
+    @field_validator("explore_mix")
+    @classmethod
+    def _rest_comes_last(cls, mixes: list[ExploreMix]) -> list[ExploreMix]:
+        """照順序比對、tags 空的是「其餘」：它必須是最後一筆，而且只能有一筆（放前面會蓋掉後面的類型）。"""
+        if not mixes or mixes[-1].tags:
+            raise ValueError("explore_mix 最後一筆必須是 tags 空的「其餘」")
+        if any(not mix.tags for mix in mixes[:-1]):
+            raise ValueError("explore_mix 裡 tags 空的「其餘」只能放最後")
+        return mixes
+
+    def explore_mix_of(self, tags: list[str]) -> ExploreMix:
+        """這組地點標籤算哪一類：照 explore_mix 的順序，第一個有共同標籤的；都沒有就是最後那筆「其餘」。"""
+        have = set(tags)
+        for mix in self.explore_mix:
+            if have & set(mix.tags):
+                return mix
+        return self.explore_mix[-1]
 
 
 class BattleFaction(_Strict):
@@ -666,5 +746,6 @@ class Content(_Strict):
     characters: dict[str, CharacterDef]
     squads: dict[str, Squad]
     battles: dict[str, BattleDef] = Field(default_factory=dict)  # 內容尚未撰寫，先留介面（見設計討論，骨架做完再回頭寫黃巾決戰）
+    road_sights: dict[str, RoadSight] = Field(default_factory=dict)  # 路上見聞（content/road_sights.json，路上設計第五節）
     map: MapLayout
     tutorial: Tutorial

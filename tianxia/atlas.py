@@ -1,7 +1,7 @@
 """江湖輿圖的資料（純資料與文字，不依賴介面框架）：視野、大區歸屬、路程最短的路線與三種走法的時間、體力、
 大地圖四個圖層要標的東西、地點詳情與「安排前往」的條件。畫圖在 mapview.py。
 
-沒摸清（看不見也沒去過）的地點在每個圖層都只畫輪廓與「？」，詳情只寫「尚未摸清」；未開放的地點照舊完全不畫。
+沒摸清（看不見、沒去過、也沒在路上留意地形摸清）的地點在每個圖層都只畫輪廓與「？」，詳情只寫「尚未摸清」；未開放的地點照舊完全不畫。
 勝算只在呼叫端傳入 odds 函式時才算（敵情層與詳情欄），平常重畫不模擬。
 """
 from __future__ import annotations
@@ -66,12 +66,12 @@ def location_view(loc_id: str, state: GameState, content: Content, visible: set[
     loc = content.locations[loc_id]
     if not is_unlocked(loc, state):
         return "hidden"
-    if loc_id == state.player.location:
-        return "current"
+    if loc_id == state.player.location and state.player.journey is None:
+        return "current"  # 在路上時沒有哪一站是所在地：人在兩站之間（路上設計 3.4，地圖另外畫「你」）
     if loc_id in visible:
         return "visible"
-    if loc_id in state.player.visited:
-        return "remembered"
+    if loc_id in state.player.visited or loc_id in state.player.surveyed:
+        return "remembered"  # 去過，或在路上留意地形摸清了（路上設計第四節）
     return "outline" if loc.important else "dot"
 
 
@@ -82,12 +82,12 @@ def views(state: GameState, content: Content) -> dict[str, str]:
 
 
 def known_locations(state: GameState, content: Content) -> set[str]:
-    """摸清的地點：看得見或去過，而且已開放。"""
+    """摸清的地點：看得見、去過或在路上留意地形摸清（PlayerState.surveyed），而且已開放。"""
     return {loc_id for loc_id, view in views(state, content).items() if view in KNOWN}
 
 
 def is_known(state: GameState, content: Content, loc_id: str) -> bool:
-    """這個地點摸清了嗎（看得見或去過，而且已開放）。沒摸清的地點不能洩漏敵人、勝算、路線或名字：
+    """這個地點摸清了嗎（看得見、去過或留意地形摸清，而且已開放）。沒摸清的地點不能洩漏敵人、勝算、路線或名字：
     下面局勢、劇情、敵情的資料函式本身不檢查，呼叫端（圖層、詳情欄）要先用這個把關。"""
     return location_view(loc_id, state, content, visible_locations(state, content)) in KNOWN
 
@@ -292,6 +292,8 @@ def mode_text(content: Content, minutes: float, mode: TravelMode) -> str:
 class Route:
     path: tuple[str, ...]  # 依序要走的地點，最後一個是目的地（不含所在地）；所在地本身是空的
     legs: tuple[float, ...] = ()  # 每一段的路程（步行分鐘），跟 path 一一對應
+    origin: str | None = None  # 從路中間出發（路上設計 3.1）時，第一段那條路的另一頭；None＝從所在地出發
+    share: float = 0.0  # 從路中間出發時，origin—path[0] 那條路已經走掉的幾成（legs[0] 只算剩下的）
 
     @property
     def minutes(self) -> float:
@@ -304,13 +306,16 @@ class Route:
         return self.path[:-1]
 
 
-def shortest_routes(state: GameState, content: Content, allowed: set[str] | None = None) -> dict[str, Route]:
-    """從所在地出發、只走 allowed 裡的地點（None＝所有已開放的地點），到每個地點路程最短（步行分鐘最少）
+def shortest_routes(
+    state: GameState, content: Content, allowed: set[str] | None = None, start: str | None = None,
+) -> dict[str, Route]:
+    """從 start（None＝所在地）出發、只走 allowed 裡的地點（None＝所有已開放的地點），到每個地點路程最短（步行分鐘最少）
     的走法（地圖擴充設計 3.2）。一樣近取站數少的，再一樣時比地點 id 的順序，結果固定。"""
     if allowed is None:
         allowed = {loc_id for loc_id, loc in content.locations.items() if is_unlocked(loc, state)}
+    begin = state.player.location if start is None else start
     best: dict[str, Route] = {}
-    heap: list[tuple[float, int, tuple[str, ...], tuple[float, ...], str]] = [(0.0, 0, (), (), state.player.location)]
+    heap: list[tuple[float, int, tuple[str, ...], tuple[float, ...], str]] = [(0.0, 0, (), (), begin)]
     while heap:
         minutes, hops, path, legs, here = heapq.heappop(heap)
         if here in best:
@@ -331,6 +336,79 @@ def routes(state: GameState, content: Content) -> dict[str, Route]:
 
 
 @dataclass(frozen=True)
+class RoadSpot:
+    """路上的位置（路上設計第二節）：在 behind 與 ahead 這兩站之間的那條路上，正往 ahead 走。只用這三樣表示，
+    不另外存座標。平常 behind 就是 player.location（最後抵達的那一站，設計裡的 P）、ahead 是下一站（N）；
+    掉頭之後 behind 是剛才要去的那一站（人正在離開它）。"""
+
+    behind: str  # 身後那一站：正在離開的那一頭
+    ahead: str  # 前面那一站：正要走到的那一頭
+    done: float  # 從 behind 往 ahead 走了幾成，0～1
+    minutes: float  # behind—ahead 這條路整條的路程（步行分鐘）
+
+
+def road_spot(state: GameState, content: Content) -> RoadSpot | None:
+    """在路上的位置；人在某一站（沒在路上）時是 None。走了幾成＝這一段已經走掉的時間 ÷ 這一段的時間；
+    改道出發的第一段只走那條路剩下的部分（Journey.origin、share）。"""
+    j = state.player.journey
+    if j is None or j.reached >= len(j.path):
+        return None
+    ahead = j.path[j.reached]
+    first = j.reached == 0 and j.origin is not None
+    behind = j.origin if first else state.player.location
+    share = j.share if first else 0.0
+    minutes = leg_minutes(content, behind, ahead)
+    span = travel_seconds(minutes * (1 - share), j.mode)  # 這一段這一趟要走幾秒
+    left = j.arrive_at[j.reached] - state.world.time
+    walked = 1.0 if span <= 0 else min(1.0, max(0.0, 1 - left / span))
+    return RoadSpot(behind, ahead, share + (1 - share) * walked, minutes)
+
+
+def way_to(state: GameState, content: Content, loc_id: str) -> Route | None:
+    """從現在的位置到 loc_id 路程最短的走法；走不到時是 None。人在某一站時就是 routes 的那一條（所在地本身是 None）。
+    在路上時（路上設計 3.1）比兩種走法、取路程短的（一樣近時繼續往前）：繼續走完這一段到前面那一站再接著走，
+    或掉頭先回身後那一站再接著走。第一段是半段路、路的種類照原本那一條；身後那一站本身也到得了（就是折返）。"""
+    spot = road_spot(state, content)
+    if spot is None:
+        route = routes(state, content).get(loc_id)
+        return route if route is not None and route.path else None
+    known = known_locations(state, content)
+    best: Route | None = None
+    for end, other, part in ((spot.ahead, spot.behind, 1 - spot.done), (spot.behind, spot.ahead, spot.done)):
+        onward = shortest_routes(state, content, known, start=end).get(loc_id)
+        if onward is None:
+            continue
+        way = Route((end, *onward.path), (spot.minutes * part, *onward.legs), origin=other, share=1 - part)
+        if best is None or round(way.minutes, 6) < round(best.minutes, 6):
+            best = way
+    return best
+
+
+RETURN_AT_ONCE_MINUTES = 0.5  # 剛出發就折返：回程不到這麼多分鐘路程（趕路的體力四捨五入正好是 0）
+
+
+def returns_at_once(state: GameState, content: Content, route: Route) -> bool:
+    """這條路是不是「剛出發就折返」（FB-025）：在路上、只回到自己最後待過的那一站、回程不到 RETURN_AT_ONCE_MINUTES
+    分鐘路程。是的話哪種走法都不扣體力、當下就回到原地（路上裁決：剛出發就折返，立刻回原地、不花體力）。
+    掉頭後馬上又掉頭時，身後那一站是剛才要去的那一站、不是自己待過的，不算——不然走到快到時連掉兩次頭就能白白抵達。"""
+    spot = road_spot(state, content)
+    return (
+        spot is not None and spot.behind == state.player.location and tuple(route.path) == (spot.behind,)
+        and route.minutes < RETURN_AT_ONCE_MINUTES
+    )
+
+
+def route_stamina(state: GameState, content: Content, route: Route, mode: TravelMode) -> int:
+    """照這條路、這種走法出發要扣的體力；剛出發就折返不扣（見 returns_at_once）。"""
+    return 0 if returns_at_once(state, content, route) else travel_stamina(content, route.minutes, mode)
+
+
+def route_text(state: GameState, content: Content, route: Route, mode: TravelMode) -> str:
+    """選單「前往／折返」括號裡的字（見 mode_text）；剛出發就折返是「立刻到」。"""
+    return "立刻到" if returns_at_once(state, content, route) else mode_text(content, route.minutes, mode)
+
+
+@dataclass(frozen=True)
 class TravelOption:
     """詳情欄底下的一個「安排前往」按鈕。"""
 
@@ -340,7 +418,8 @@ class TravelOption:
 
 
 def travel_block(state: GameState) -> str | None:
-    """現在不能安排前往的原因（賽季已結束、有事件待處理、交談中、求見中、投靠待確認、閉關中、在路上、打坐中）；可以時為 None。"""
+    """現在不能安排前往的原因（賽季已結束、有事件待處理、交談中、求見中、投靠待確認、閉關中、打坐中）；可以時為 None。
+    在路上不擋：從路上改去別處（路上設計 3.1，見 way_to）。"""
     if state.world.ended:
         return "賽季已結束，不能安排前往"
     if state.pending_event:
@@ -353,22 +432,20 @@ def travel_block(state: GameState) -> str | None:
         return "投靠還沒決定，先決定再安排前往"
     if state.player.busy_until is not None:
         return "閉關中，不能安排前往"
-    if state.player.journey is not None:
-        return "在路上，不能另外安排前往"
     if state.player.resting_since is not None:
         return "打坐中，先起身才能安排前往"
     return None
 
 
 def travel_refusal(state: GameState, content: Content, loc_id: str, mode: TravelMode) -> str | None:
-    """用這種走法安排前往這裡，不行的原因；可以時為 None。"""
-    route = routes(state, content).get(loc_id)
-    if route is None or not route.path:
+    """用這種走法安排前往這裡，不行的原因；可以時為 None。在路上時照改道的走法算（見 way_to）。"""
+    route = way_to(state, content, loc_id)
+    if route is None:
         return "無法安排前往這裡"
     reason = travel_block(state)
     if reason:
         return reason
-    cost = travel_stamina(content, route.minutes, mode)
+    cost = route_stamina(state, content, route, mode)
     if state.player.stamina < cost:
         return f"體力不足，{MODES[mode]}要 {cost} 體力"
     return None
@@ -376,21 +453,24 @@ def travel_refusal(state: GameState, content: Content, loc_id: str, mode: Travel
 
 def travel_options(state: GameState, content: Content, loc_id: str) -> list[TravelOption] | None:
     """詳情欄底下的按鈕：步行、趕路、疾行各一個，寫時間與體力，體力不夠的按不下去（地圖擴充設計 3.2）。
-    所在地、沒摸清或未開放的地點不顯示按鈕（None）；現在不能安排前往時只有一個按不下去的按鈕，寫原因。"""
-    route = routes(state, content).get(loc_id)
-    if route is None or not route.path:
+    所在地、沒摸清或未開放的地點不顯示按鈕（None）；現在不能安排前往時只有一個按不下去的按鈕，寫原因。
+    在路上時照改道的走法算時間與體力（見 way_to），剛離開的那一站也有按鈕（就是折返）。"""
+    route = way_to(state, content, loc_id)
+    if route is None:
         return None
     reason = travel_block(state)
     if reason:
         return [TravelOption("walk", reason, False)]
     out: list[TravelOption] = []
+    at_once = returns_at_once(state, content, route)
     for mode in MODES:
-        cost = travel_stamina(content, route.minutes, mode)
+        cost = route_stamina(state, content, route, mode)
         if state.player.stamina < cost:
             out.append(TravelOption(mode, f"{MODES[mode]}（體力不足，要 {cost}）", False))
         else:
             price = f"・體力 {cost}" if cost else ""
-            out.append(TravelOption(mode, f"{MODES[mode]}（{mode_when(route.minutes, mode)}{price}）", True))
+            when = "立刻到" if at_once else mode_when(route.minutes, mode)
+            out.append(TravelOption(mode, f"{MODES[mode]}（{when}{price}）", True))
     return out
 
 
@@ -436,7 +516,7 @@ def detail_text(state: GameState, content: Content, loc_id: str, odds: Odds) -> 
         # 只有畫出輪廓的未知重要地點才有名字；淡點與未開放的地點連名字都不能露
         outlined = views(state, content)[loc_id] == "outline"
         return f"### {loc.name if outlined else ''}？\n\n{UNKNOWN}"
-    here = loc_id == state.player.location
+    here = loc_id == state.player.location and state.player.journey is None  # 在路上時沒有所在地
     parts = [f"### {loc.name}" + ("（所在地）" if here else "") + f"　危險 {'★' * loc.danger}"]
 
     region = region_of(content, loc_id)
@@ -463,11 +543,13 @@ def detail_text(state: GameState, content: Content, loc_id: str, odds: Odds) -> 
         story.append(f"最近 {NEWS_DAYS} 天沒有大事或傳聞")
     parts.append("**劇情**　" + "\n\n".join(story))
 
-    route = routes(state, content).get(loc_id)
+    route = way_to(state, content, loc_id)  # 在路上時是改道的走法
     if here:
         way = "你就在這裡"
     elif route is None:
         way = "沒有摸清的路可以過去"
+    elif returns_at_once(state, content, route):
+        way = "剛出發，折返立刻到"
     else:
         way = "、".join(mode_text(content, route.minutes, mode) for mode in MODES)
         way += f"，途經 {_names(content, route.via)}" if route.via else ""

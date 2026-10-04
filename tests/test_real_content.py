@@ -85,10 +85,22 @@ def test_travel_settings_follow_the_map_design(content):
     assert cfg.travel_minutes_per_unit > 0  # 跟著地圖座標走（第二步重畫地圖時 PM 會改），這裡不寫死
 
 
+def test_the_road_sights_are_the_thirty_written_for_season_one(content):
+    """路上見聞的內容稿（2026-10-03-第一季陣營內容-路上見聞.md 第二節）：30 則，心得 23、銀兩 4、素材 3。"""
+    sights = content.road_sights
+    assert len(sights) == 30 and all(sight_id.startswith("sight_") for sight_id in sights)
+    effects = [sight.effect for sight in sights.values()]
+    assert sum("xinde" in e.stats for e in effects) == 23
+    assert sum("silver" in e.stats for e in effects) == 4
+    assert sum(bool(e.materials) for e in effects) == 3
+    assert content.config.road_sight_chance == 0.3  # 三成：正式內容用預設值
+
+
 def test_the_tutorial_explains_travel_and_sitting_down(content):
     texts = {step.id: step.text for step in content.tutorial.steps}
     assert all(word in texts["t2_map"] for word in ("步行", "趕路", "疾行", "體力"))
     assert "打坐" in texts["t3_outskirts"]
+    assert all(word in texts["t3_outskirts"] for word in ("邊走邊想", "沿途打聽", "折返"))  # 路上不是乾等（路上設計）
 
 
 def test_every_battle_is_fought_in_the_region_where_it_starts(content):

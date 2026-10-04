@@ -53,6 +53,10 @@ class Journey(BaseModel):
     arrive_at: list[float]  # 每一站的抵達時間，跟 path 一一對應
     reached: int = 0  # 已經抵達幾站
     stop_at: int | None = None  # 喊停：走到 path 的第幾站（索引）就停；None＝走到終點
+    # 在路上改道、折返（路上設計 3.1）：新路程從路中間出發，第一段走的是 origin—path[0] 那條路剩下的部分。
+    # 舊存檔沒有這兩欄＝從 location 出發的一般路程。
+    origin: str | None = None  # 第一段那條路的另一頭；None＝從 location 出發
+    share: float = 0.0  # 出發時 origin—path[0] 那條路已經走掉的幾成（第一段只走剩下的）
 
     @property
     def last(self) -> int:
@@ -98,6 +102,14 @@ class PlayerState(BaseModel):
     seclusion_start: float = 0.0
     resting_since: float | None = None  # 打坐坐下時的賽季時間（遊戲秒）；None＝沒在打坐（地圖擴充設計第二節，跟閉關同一種做法）
     journey: Journey | None = None  # 在路上；None＝人在某個地點（location）
+    # 路上小事（路上設計第四節）：這一段路上已經做過的（road: 選項的 id 後半，例如 think）。到了另一站就清空；
+    # 掉頭回到剛離開的那一站不算換段，所以不跟著那一趟 Journey 走，記在玩家身上（不然折返一下就能重做）。
+    leg_actions: set[str] = Field(default_factory=set)
+    surveyed: set[str] = Field(default_factory=set)  # 留意地形摸清的地點：大地圖上跟去過一樣算記得（atlas.location_view）
+    recent_sights: list[str] = Field(default_factory=list)  # 最近看過的路上見聞 id（舊的在前）；挑的時候先排除（路上設計第五節）
+    # 路上收穫的每天上限（企劃者 2026-10-03 決定）："task"（邊走邊想、路邊採集）／"sight"（路上見聞）->
+    # [第幾個遊戲日, 當天已拿幾次]，跟 talks_today 同一種寫法；記的是前幾天就當沒拿過
+    road_rewards_today: dict[str, list[int]] = Field(default_factory=dict)
     tutorial_step: int = 0  # 等於引導步數時代表引導結束
     visited: set[str] = Field(default_factory=set)  # 去過的地點
     fortune: bool = False  # 本季的新立門戶福緣已經發生（或已經改送賀禮）
@@ -107,6 +119,9 @@ class PlayerState(BaseModel):
     # Game._drop_stale_references() 會知道共用的賽季已經換過一輪，幫這個玩家的角色重開
     # 新的一季（好感度/關係現況保留，角色本身的等級/位置/隊伍重新開始，見設計討論）。
     bot: BotProfile | None = None  # 伺服器假人才有（伺服器假人設計第五節）；任何畫面都不能顯示或透露
+    # 處理過的收場決戰（BattleInstance.record_id）：自己參戰、已經補進江湖紀錄與戰報的，以及看過不是自己參戰的
+    # （FB-027，見 Game._deliver_battle_results）。跨季保留：決戰常常把季收掉，下一季才回來的人也要補、而且只補一次
+    battle_results_seen: list[int] = Field(default_factory=list)
 
 
 RumorLayer = Literal["world", "faction", "local", "personal"]  # 天下大事／陣營軍情／地方傳聞／個人線索（傳聞分層設計第二節）
@@ -155,18 +170,20 @@ class Fighter(BaseModel):
 
 class BattleRecord(BaseModel):
     """一場遭遇/劇情戰的紀錄（sanguo-companions 合併重寫：單次判定，取代舊的逐回合戰報，
-    見 tianxia/encounter.py）。"""
+    見 tianxia/encounter.py）。kind 是 showdown 的是全服決戰補送給參戰者的那一筆（FB-027）：沒有我方威力與
+    對手難度（記 0），tier 是決戰的結果（例如「官軍大勝」），side 是自己站的那一邊，見 battlelog 的畫法。"""
 
     id: int  # 流水號，本季從 1 起算
-    time: float  # 開打時的遊戲時間
-    location: str  # 地點名稱
-    kind: Literal["train", "event"]  # 歷練／劇情
-    event: str = ""  # 劇情戰的事件標題
-    opponent: str  # 敵方隊伍名稱
-    ours: list[Fighter]  # 我方陣容，第一位是隊長；等級是開打時的等級
-    tier: str  # 大勝/險勝/僵持/落敗（encounter.EncounterResult.tier）
+    time: float  # 開打時的遊戲時間（決戰是收場時的）
+    location: str  # 地點名稱（決戰是大區名；上一季打的前面加「第 N 季・」）
+    kind: Literal["train", "event", "wild", "showdown"]  # 歷練／劇情／探索撞上的野怪／全服決戰（舊戰報的 train 不遷移，照舊顯示「歷練」）
+    event: str = ""  # 劇情戰的事件標題；決戰是決戰的名稱
+    opponent: str  # 敵方隊伍名稱；決戰是敵方陣營名
+    ours: list[Fighter]  # 我方陣容，第一位是隊長；等級是開打時的等級（決戰不記，是空的）
+    tier: str  # 大勝/險勝/僵持/落敗（encounter.EncounterResult.tier）；決戰是結果的標題
     our_power: float
     difficulty: float
+    side: str = ""  # 決戰時自己站的陣營名；其他 kind 是空字串
     exp: int = 0  # 每人獲得的經驗
     xinde: int = 0
     silver: int = 0  # 正數為獲得、負數為失落

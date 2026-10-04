@@ -90,18 +90,19 @@ def roll_squad_drops(squad: Squad, content: Content, rng: random.Random) -> list
     return out
 
 
-def roll_explore_drop(loc: Location, content: Content, rng: random.Random) -> str | None:
-    """探索撿到的素材 id（沒撿到回傳 None）。
-
-    機率是 `Config.explore_material_chance`。地點寫了 `materials` 就從那幾樣裡挑，沒寫的
-    地點給隨機的一階素材——這樣內容不必每個地點都填，而探索也不會再常常完全空手
-    （實機試玩的體感問題，見設計 §4.2）。
-    """
-    if rng.random() >= content.config.explore_material_chance:
-        return None
+def explore_pool(loc: Location, content: Content) -> list[Material]:
+    """在這裡探索撿得到的素材：地點寫了 `materials` 就是那幾樣，沒寫的給一階素材——內容不必每個地點都填。"""
     pool = [content.materials[mid] for mid in loc.materials if mid in content.materials]
-    if not pool:
-        pool = by_tier(content, 1)
+    return pool or by_tier(content, 1)
+
+
+def roll_explore_drop(loc: Location, content: Content, rng: random.Random) -> str | None:
+    """探索抽到「素材」那一支時撿到的素材 id：必定撿到一樣（探索三選一設計 4.1）；
+    只有內容裡完全沒有可挑的素材時才是 None。
+
+    以前探索前固定滾一次三成（`explore_material_chance`），探索三選一把那一次拿掉了，
+    素材改由三支裡的「素材」那一支給，比例照地點類型（荒野多、城裡少）。"""
+    pool = explore_pool(loc, content)
     return rng.choice(pool).id if pool else None
 
 

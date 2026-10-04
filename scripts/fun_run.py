@@ -26,7 +26,7 @@
 | 旗標 | 重現哪個歷史狀態 |
 |---|---|
 | `--no-craft --no-train` | 0716d8b 之前：沒有煉製、也沒有歷練 |
-| `--no-train` | 239bdf8 之前：有煉製，但遭遇戰一季只有 3 場 |
+| `--no-train` | 239bdf8 之前：有煉製，但遭遇戰一季只有 3 場（歷練與探索三選一的野怪都關掉） |
 | `--allow-recraft` | 2b05b47 之前：47% 的爐在重煉已知配方 |
 | （無旗標） | 現在 |
 
@@ -37,6 +37,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import io
 import os
 import random
@@ -214,13 +215,22 @@ def observe_step(game: Game, log: FunLog, before: tuple, option_id: str, before_
     for art_id in [s.player.member.neigong_id, s.player.member.wugong_id, *s.player.arts]:
         if art_id:
             log.add_novelty("配方查表", art_id, day, True)
-    if s.battles:
-        log.add_novelty("對手", s.battles[0].opponent, day, True)
+    # 全服決戰補送的戰報（kind="showdown"，FB-027）不算對手：那是敵方陣營名，不是四處闖蕩撞上的人
+    encounters = [r for r in s.battles if r.kind != "showdown"]
+    if encounters:
+        log.add_novelty("對手", encounters[0].opponent, day, True)
     log.add_novelty("地點", s.player.location, day, True)
     if option_id.startswith("move:"):
         log.chance("地點")
-    if option_id == "act:train":
-        log.chance("對手")
+    # 對手的機會＝遭遇行動真的打了一場（戰報多了幾筆就是幾次）：歷練，以及探索三選一撞上的野怪。
+    # 以前只在按「歷練」時算，探索打到的新對手只加分子不加分母，分數會灌水；在自己人地盤的操練不打架，也不算。
+    # 劇情事件的「應戰」不算：那是事件管道的一部分（事件那邊已經記了一次機會），而且算進來的話，校準狀態 ②
+    # （一季只有幾場劇情戰）的對手管道會從「整季沒出現」變成一季十來場、幾乎場場新面孔，反而拿高分——
+    # 這條管道要量的是「四處闖蕩撞上的對手」新不新鮮，不是劇情安排的那幾場。
+    # 快照第 9 項是 battle_seq：這一步新增的戰報。同一步剛好補送到的決戰戰報不算打了一場（見上面「對手」）
+    fights = sum(1 for r in encounters if r.id > before[9])
+    if fights > 0 and option_id in ("act:train", "act:explore"):
+        log.chance("對手", fights)
 
     if option_id.startswith(("move:", "act:train", "act:rest")) or option_id in ("act:explore", "act:socialize"):
         if not fired:
@@ -244,8 +254,19 @@ def play(content, seed: int, world_dir: Path, **flags) -> FunLog:
     資料庫開在 world_dir 底下的暫存檔；季末結算榜單時沒指定資料庫就開預設的那個（saves/tianxia.db），
     所以跑的這段把預設資料庫也用環境變數指到同一個暫存檔，不碰真資料（照 sim_server_bots.py 的做法）。"""
     db_path = world_dir / "tianxia.db"
-    with mock.patch.dict(os.environ, {database.ENV_VAR: str(db_path)}):
+    with mock.patch.dict(os.environ, {database.ENV_VAR: str(db_path)}), \
+         (_without_wild(content) if flags.get("no_train") else contextlib.nullcontext()):
         return _play(content, seed, db_path, **flags)
+
+
+def _without_wild(content):
+    """`--no-train` 要重現「遭遇戰一季只有 3 場」：探索三選一之後探索也會撞上野怪，所以那一支的比例也得設成 0
+    （只在這一季的期間換掉，calibrate 的其他狀態共用同一份 content，不能留下來）。"""
+    mixes = getattr(content.config, "explore_mix", None)
+    if not mixes:
+        return contextlib.nullcontext()  # 還沒有探索三選一的版本：探索本來就不會打
+    no_wild = [mix.model_copy(update={"weights": {**mix.weights, "wild": 0}}) for mix in mixes]
+    return mock.patch.object(content.config, "explore_mix", no_wild)
 
 
 def _play(content, seed: int, db_path: Path, *, no_craft=False, no_train=False, allow_recraft=False) -> FunLog:
@@ -380,7 +401,8 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--seeds", type=int, nargs="+", default=[1, 2, 3])
     ap.add_argument("--no-craft", action="store_true")
-    ap.add_argument("--no-train", action="store_true")
+    ap.add_argument("--no-train", action="store_true",
+                    help="不打遭遇戰：不選歷練，探索三選一的野怪那一支也關掉（重現一季只有 3 場戰鬥的狀態）")
     ap.add_argument("--allow-recraft", action="store_true")
     ap.add_argument("--calibrate", action="store_true", help="跑四個已知狀態，驗指標排序對不對")
     args = ap.parse_args()

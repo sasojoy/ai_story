@@ -252,6 +252,17 @@ class WorldStateStore(Protocol):
         之後才結算、還沒寫進資料庫的回合，存檔後讀出來是空的；要看以前的回合查這裡。"""
         ...
 
+    def ended_battles(self, after: int = 0) -> list[tuple[int, BattleInstance]]:
+        """收場的決戰（phase 是 ended）裡流水號（record_id）比 after 大的，不分季別、照先後，每一場連同它是第幾季
+        打的：（季別, 戰鬥），戰鬥帶著 record_id。決戰的結果常常就把季收掉，所以參戰者休季、下一季才回來也要補得到
+        （FB-027，見 Game._deliver_battle_results）。只讀。
+
+        after 是呼叫端已經處理過的最大流水號：決戰照開戰的先後收場，所以比它小的不會再有新收場的。理由——
+        同一時間只有一場還沒收場（start_battle 在它收場或被清掉之前不另開），被清掉的（換季 next_season、季終
+        clear_battle）不再指到、永遠不會收場，而新開的一場流水號一定比之前的都大（實作要保證這一點，SQLite 版是
+        從不刪列的 INTEGER PRIMARY KEY）。所以一場收場時，它比之前收場的每一場都大。"""
+        ...
+
     # ── 同伴進度與招募 ──
     def get_companion(self, companion_id: str) -> CompanionProgress:
         """讀目前進度；還沒有人動過這位人物時回傳一份預設值（不寫回）。"""

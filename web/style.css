@@ -224,6 +224,9 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .options > .move-mode { margin: 4px 0 0; }
 .move-mode > span { flex: none; align-self: center; padding: 0 4px 0 9px; font-size: 13px; color: var(--ink-2); }
 .move-mode button { min-height: 48px; } /* 觸控目標跟 .btn 一樣大 */
+/* 路上的三個捷徑（路上設計 3.3）：一列，手機上擠不下就換行；觸控目標同 .btn */
+.road-links { display: flex; flex-wrap: wrap; gap: 8px; margin: -4px 0 12px; }
+.road-links .btn { flex: 1 1 auto; min-height: 48px; }
 .free { display: flex; gap: 8px; margin-bottom: 12px; }
 .free .input { flex: 1; }
 .mini { border-radius: var(--radius); overflow: hidden; border: 1px solid var(--line); margin-bottom: 12px; cursor: pointer; position: relative; }

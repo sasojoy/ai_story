@@ -1,0 +1,7 @@
+[
+  {"id": "sight_crow", "text": "一隻烏鴉停在路邊的枯樹上，盯著你看了好一會兒。", "roads": [], "regions": [], "effect": {"stats": {"xinde": 1}}},
+  {"id": "sight_wind", "text": "起風了，路上的塵土打著旋兒。", "roads": [], "regions": []},
+  {"id": "sight_cliff", "text": "山路一邊是峭壁，你貼著石壁慢慢走過。", "roads": ["山路"], "regions": [], "effect": {"stats": {"silver": 5}}},
+  {"id": "sight_south_feather", "text": "南邊的田埂上落著一根雀羽。", "roads": [], "regions": ["south"], "effect": {"materials": {"kuai_1": 1}}},
+  {"id": "sight_north_peddler", "text": "北地的路上，挑擔的貨郎跟你點了點頭。", "roads": ["路"], "regions": ["north"], "effect": {"stats": {"xinde": 2}}}
+]
