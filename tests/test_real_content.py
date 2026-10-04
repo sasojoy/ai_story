@@ -472,3 +472,61 @@ def test_figure_dialogue_runs_on_gemma4_without_thinking_or_repetition_penalties
     assert cfg.ollama_model == "gemma4:26b"
     assert cfg.ollama_think is False
     assert cfg.ollama_repeat_penalty == 1.0 and cfg.ollama_presence_penalty == 0.0 and cfg.ollama_frequency_penalty == 0.0
+
+
+# ── 時刻表（計畫 T2；時刻表結算文件第五節）────────────────────────────
+
+
+def test_real_timetable_matches_settlement_doc():
+    """12 件大事照結算文件第五節的週次；固定 3 件、決戰 3 件、最後是季末。用週末設定載入（開關與季長都開著）。"""
+    c = load_content(CONTENT_DIR, profile="weekend")
+    events = {e.id: e for e in c.timetable}
+    assert len(c.timetable) == 12
+    assert [(e.week, e.kind) for e in c.timetable] == [
+        (1, "fixed"), (2, "fixed"), (3, "roll"), (4, "roll"), (6, "showdown"), (7, "roll"), (7, "fixed"),
+        (8, "roll"), (9, "showdown"), (10, "roll"), (11, "showdown"), (12, "finale"),
+    ]
+    assert [e.id for e in c.timetable if e.kind == "fixed"] == ["uprising", "court_mobilizes", "qinjie_slays_zhangmancheng"]
+    assert [e.id for e in c.timetable if e.kind == "showdown"] == ["changshe_fire", "wancheng", "guangzong"]
+    assert c.timetable[-1].id == "xiaquyang"
+
+    zhang = events["zhangmancheng_wan"].outcomes  # 張曼成「成」南陽 +8，「不成」−5 且張曼成受挫
+    assert zhang["成"].trends == {"nanyang": 8} and not zhang["成"].figures
+    assert zhang["不成"].trends == {"nanyang": -5} and zhang["不成"].figures["zhangmancheng"].fate == "受挫"
+    guangzong = events["guangzong"].outcomes["guan:大勝"]  # 廣宗官軍大勝：冀州 −20、張梁退場
+    assert guangzong.trends == {"jizhou": -20} and guangzong.figures["zhangliang"].fate == "退場"
+    changshe = events["changshe_fire"].outcomes  # 長社四格：15／8
+    assert {k: o.trends["yingru"] for k, o in changshe.items()} == {
+        "guan:大勝": -15, "guan:險勝": -8, "huang:大勝": 15, "huang:險勝": 8,
+    }
+    assert changshe["huang:大勝"].chance_mods == {"luzhi_siege": -0.10} and changshe["huang:大勝"].trends["jizhou"] == 5
+    assert set(events["wancheng"].outcomes) == {  # 宛城甲、乙兩版共 8 格
+        f"{v}:{side}:{tier}" for v in ("甲", "乙") for side in ("guan", "huang") for tier in ("大勝", "險勝")
+    }
+    qinjie = events["qinjie_slays_zhangmancheng"]  # 朱儁到任南陽，條件是皇甫嵩還在潁川（濃縮版內容表 1.3）
+    assert qinjie.skip_if_out == "zhangmancheng" and set(qinjie.outcomes) == {"甲:fixed", "乙:fixed"}
+    zhujun = qinjie.outcomes["甲:fixed"].figures["zhujun"]
+    assert (zhujun.fate, zhujun.front, zhujun.location, zhujun.only_if) == ("到任", "nanyang", "wan_city", {"huangfusong": "yingru"})
+    assert zhujun.note == "右中郎將朱儁也領兵南下，往宛城去了。"
+    assert events["luzhi_jailed"].base_chance == 0.5 and events["luzhi_jailed"].front is None
+    assert events["luzhi_jailed"].lock_result == {"huang": "成", "guan": "不成"}
+    assert events["zhangjiao_dies"].lock_result == {"guan": "成", "huang": "不成"}
+
+
+def test_real_timetable_runs_a_whole_condensed_season():
+    """週末設定下把真實內容的一季從頭推到尾：除了決戰與季末（T8、T9），每件大事都結算一次、照週次。"""
+    import random as _random
+
+    from tianxia.state import GameState, PlayerState
+    from tianxia.world import advance_world_state
+    from tianxia.world_state import fresh_season
+
+    c = load_content(CONTENT_DIR, profile="weekend")
+    c.scenario.sim_players, c.scenario.thresholds, c.scenario.world_events = [], [], []  # 只看時刻表：舊聲勢門檻收季另外測
+    state = GameState(player=PlayerState(name="", location=c.scenario.start_location, stats={}, stamina=0),
+                      world=fresh_season(c))
+    msgs = advance_world_state(state.world, c, 2.5 * 86400, _random.Random(0))
+    expected = [e.id for e in c.timetable if e.kind not in ("showdown", "finale")]
+    assert list(state.world.timeline) == expected
+    assert sum(m.startswith("【江湖大事】") for m in msgs) == len(expected) - (state.world.timeline["qinjie_slays_zhangmancheng"].key == "skip")
+    assert state.world.ended  # 季末照舊收季（T9 換成下曲陽）

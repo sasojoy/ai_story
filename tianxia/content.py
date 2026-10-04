@@ -19,13 +19,22 @@ from .companion_agent import DIALOGUE_TAGS
 from .materials import TIER_NAMES
 from .models import (
     ROADS, STATS, BattleDef, CharacterDef, Condition, Config, Content, CraftNames, Effect, Event, Location,
-    MapLayout, Material, RoadSight, Scenario, Sect, SimRumor, SkillDef, Squad, Tutorial,
+    MapLayout, Material, RoadSight, Scenario, Sect, SimRumor, SkillDef, Squad, TimetableEvent, Tutorial,
 )
 from .zh import to_traditional
 
 ROAD_SIGHTS_PER_SPOT = 2  # 路上見聞：每一種路、每一個大區的組合至少要有幾則可挑（路上設計第五節）
 ROAD_SIGHT_CAPS = {"silver": 10, "xinde": 5}  # 路上見聞的小收穫上限
 TERRAIN_SIZE = (8, 40)  # 山脈、丘陵的山頭高度範圍（輿圖美術設計第四節）
+# 時刻表的戰況鍵先也認這幾條：三條戰線與豪強割據由 T1（地圖擴充開發）加進 scenario 的 trends，T2 跟它平行開發。
+# T1 併進來之後拿掉，只認劇本裡的大勢線（時刻表推一條劇本沒有的線時 timetable 直接略過）。
+SEASON_ONE_TRENDS = {"yingru", "nanyang", "jizhou", "geju"}
+TIMETABLE_SIDES = ("guan", "huang")  # 時刻表的鎖定、決戰、@commander 只有官軍與黃巾兩方（豪強是第三方）
+TIMETABLE_KEYS = {  # 每種大事該有的結果鍵（不含版本；有版本時每個版本各一套）
+    "fixed": ["fixed"],
+    "roll": ["成", "不成"],
+    "showdown": [f"{side}:{tier}" for side in TIMETABLE_SIDES for tier in ("大勝", "險勝")],
+}
 
 
 class ContentError(Exception):
@@ -61,6 +70,8 @@ def load_content(root: Path, profile: str | None = None) -> Content:
         squads=_index(Squad, _read(root / "squads.json")),
         battles=_index(BattleDef, _read(root / "battles.json")) if (root / "battles.json").exists() else {},
         road_sights=_index(RoadSight, _read(root / "road_sights.json")),
+        timetable=[_build(TimetableEvent, raw) for raw in _read(root / "timetable.json")]
+        if (root / "timetable.json").exists() else [],
         events=events,
         map=MapLayout(**_read(root / "map.json")),
         tutorial=Tutorial(**_read(root / "tutorial.json")),
@@ -160,6 +171,87 @@ def _material_sources(c: Content) -> set[str]:
     for sight in c.road_sights.values():
         reachable |= set(sight.effect.materials)
     return reachable
+
+
+def check_timetable(c: Content, need, known, region_ids: list[str], trend_ids: set[str]) -> None:
+    """時刻表（content/timetable.json，計畫 T2）：戰線是大區 id（不檢查是不是大勢線，三條戰線是 T1 加的）、
+    結果鍵照種類齊全、鎖定對得到結果、人物與修正的對象存在、文字只用繁體中文。人物先認 characters.json 的 id，
+    T4 的人物表進來後改認它。"""
+    ids = [e.id for e in c.timetable]
+    duplicated = sorted({eid for eid in ids if ids.count(eid) > 1})
+    need(not duplicated, f"時刻表 id 重複：{'、'.join(duplicated)}")
+    trends = trend_ids | SEASON_ONE_TRENDS
+    earlier: dict[str, TimetableEvent] = {}
+
+    def check_text(where: str, text: str | None) -> None:
+        if text:
+            need(to_traditional(text) == text, f"{where}：文字只能用繁體中文（「{text[:12]}…」）")
+
+    def check_figure(where: str, key: str, change) -> None:
+        if key.startswith("@commander:"):
+            front, _, side = key.removeprefix("@commander:").partition(":")
+            known(where, [front], region_ids, "大區")
+            need(side in TIMETABLE_SIDES, f"{where}：{key} 的那一方只能是 guan 或 huang")
+        else:
+            known(where, [key], c.characters, "人物")
+        if change.front is not None:
+            known(where, [change.front], region_ids, "大區")
+        if change.location is not None:
+            known(where, [change.location], c.locations, "地點")
+        if change.fate == "到任":
+            need(change.front is not None and change.location is not None, f"{where}：{key} 到任要寫 front 與 location")
+        known(where, change.only_if, c.characters, "人物")
+        known(where, change.only_if.values(), region_ids, "大區")
+        check_text(where, change.note)
+
+    for ev in c.timetable:
+        where = f"時刻表 {ev.id}"
+        need(ev.week <= c.config.season_weeks, f"{where}：第 {ev.week} 週超出季曆的 {c.config.season_weeks} 週")
+        if ev.front is not None:
+            known(where, [ev.front], region_ids, "大區")
+        if ev.kind == "roll":
+            need(ev.roll_side is not None, f"{where}：擲骰的大事要寫 roll_side（成對哪一方有利）")
+            need(ev.front is not None or ev.base_chance is not None, f"{where}：沒有戰線時要寫 base_chance")
+        else:
+            need(ev.roll_side is None and ev.base_chance is None, f"{where}：只有擲骰的大事寫 roll_side、base_chance")
+        if ev.version_from is not None:
+            known(where, [ev.version_from], earlier, "（更早的）時刻表大事")
+            source = earlier.get(ev.version_from)
+            if source is not None:
+                known(where, ev.versions, source.outcomes, f"{ev.version_from} 的結果")
+            need(bool(ev.versions), f"{where}：有 version_from 就要寫 versions")
+        else:
+            need(not ev.versions, f"{where}：有 versions 就要寫 version_from")
+        if ev.skip_if_out is not None:
+            known(where, [ev.skip_if_out], c.characters, "人物")
+        versions = list(dict.fromkeys(ev.versions.values()))
+        base = TIMETABLE_KEYS.get(ev.kind)
+        if base is not None:  # 季末的結局句由 T9 寫在劇本的結局裡
+            expected = [f"{v}:{k}" for v in versions for k in base] if versions else base
+            missing = [k for k in expected if k not in ev.outcomes]
+            extra = [k for k in ev.outcomes if k not in expected]
+            need(not missing, f"{where}：缺少結果 {'、'.join(missing)}")
+            need(not extra, f"{where}：多了不認得的結果 {'、'.join(extra)}")
+        for side, key in ev.lock_result.items():
+            need(side in TIMETABLE_SIDES, f"{where}：lock_result 的鎖定方只能是 guan 或 huang（寫的是 {side}）")
+            need(all(f"{v}:{key}" in ev.outcomes for v in versions) if versions else key in ev.outcomes,
+                 f"{where}：lock_result 指到不存在的結果 {key}")
+        known(where, ev.third_party_trends, trends, "大勢線")
+        check_text(where, ev.preface)
+        check_text(where, ev.third_party_text)
+        for key, outcome in ev.outcomes.items():
+            ow = f"{where} 結果 {key}"
+            known(ow, outcome.trends, trends, "大勢線")
+            known(ow, outcome.chance_mods, ids, "時刻表大事")
+            for label, texts in (("locked_text", outcome.locked_text), ("loser_text", outcome.loser_text)):
+                need(all(side in TIMETABLE_SIDES for side in texts), f"{ow}：{label} 的鍵只能是 guan 或 huang")
+            need(set(outcome.loser_text) <= set(outcome.locked_text), f"{ow}：有搶輸的一句就要有那一方的具名公告")
+            for fid, change in outcome.figures.items():
+                check_figure(ow, fid, change)
+            for text in (outcome.text, outcome.note, outcome.chronicle, outcome.third_party_text,
+                         *outcome.locked_text.values(), *outcome.loser_text.values()):
+                check_text(ow, text)
+        earlier[ev.id] = ev
 
 
 def validate(c: Content) -> None:
@@ -556,6 +648,8 @@ def validate(c: Content) -> None:
     for squad in c.squads.values():
         where = f"敵方隊伍 {squad.id}"
         need(squad.difficulty >= 0, f"{where}：difficulty 不能是負的")
+
+    check_timetable(c, need, known, region_ids, trend_ids)
 
     for key, where in sorted(marks_written.items()):
         need(key in marks_read, f"{where}：痕跡 {key} 寫了卻沒有任何條件或文字讀它")

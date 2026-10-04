@@ -797,3 +797,62 @@ def test_the_profile_line_says_what_the_profile_turns_on():
     assert profile_line(load_content(CONTENT_DIR, profile="weekend"), "weekend") == (
         "設定：weekend（第一季濃縮版規則開啟、季長 2.5 天、人數上限 2）"
     )
+
+
+# ── 時刻表（content/timetable.json，計畫 T2）──────────────────────────
+
+
+def _timetable() -> list[dict]:
+    """測試夾具用的小時刻表：一件固定、一件擲骰（有鎖定與豪強）、一件看版本的決戰。"""
+    return [
+        {"id": "start", "week": 1, "title": "開場", "kind": "fixed", "outcomes": {"fixed": {"text": "開場了。"}}},
+        {"id": "raid", "week": 2, "front": "north", "title": "劫江", "kind": "roll", "roll_side": "huang",
+         "lock_result": {"huang": "成", "guan": "不成"}, "third_party_trends": {"kou": 3},
+         "outcomes": {
+             "成": {"text": "劫成了。", "chronicle": "水寇劫江。", "trends": {"kou": 8},
+                   "locked_text": {"huang": "{name} 劫成了。"}, "loser_text": {"huang": "{loser} 沒擋住。"},
+                   "figures": {"mate": {"fate": "受挫"}}, "chance_mods": {"siege": -0.1}},
+             "不成": {"text": "沒劫成。", "trends": {"kou": -5}},
+         }},
+        {"id": "siege", "week": 3, "front": "south", "title": "圍城", "kind": "showdown", "version_from": "raid",
+         "versions": {"成": "甲", "不成": "乙"},
+         "outcomes": {f"{v}:{side}:{tier}": {"text": "打完了。", "figures": {"@commander:south:guan": {"fate": "受挫"}}}
+                      for v in ("甲", "乙") for side in ("guan", "huang") for tier in ("大勝", "險勝")}},
+    ]
+
+
+def _with_timetable(tmp_path, edit=None):
+    root = copy_fixture(tmp_path)
+    events = _timetable()
+    if edit is not None:
+        edit(events)
+    (root / "timetable.json").write_text(json.dumps(events, ensure_ascii=False), encoding="utf-8")
+    return root
+
+
+def test_the_timetable_loads_and_is_optional(tmp_path):
+    assert load_content(copy_fixture(tmp_path / "a")).timetable == []  # 沒有 timetable.json 的內容照舊載得進來
+    loaded = load_content(_with_timetable(tmp_path / "b"))
+    assert [e.id for e in loaded.timetable] == ["start", "raid", "siege"]
+
+
+@pytest.mark.parametrize(("edit", "message"), [
+    (lambda ev: ev[1].update(front="nowhere"), "nowhere"),  # 戰線要是大區 id
+    (lambda ev: ev[1]["outcomes"].pop("不成"), "不成"),  # 擲骰要有成與不成
+    (lambda ev: ev[2]["outcomes"].pop("乙:huang:險勝"), "乙:huang:險勝"),  # 決戰每個版本四格
+    (lambda ev: ev.append(dict(ev[0])), "start"),  # id 重複
+    (lambda ev: ev[1].update(roll_side=None), "roll_side"),
+    (lambda ev: ev[0].update(roll_side="guan"), "roll_side"),  # 不擲骰的不寫 roll_side（軍令的修正靠它判斷）
+    (lambda ev: ev[1]["outcomes"]["成"]["trends"].update(nowhere=3), "nowhere"),  # 未知的大勢線
+    (lambda ev: ev[1]["outcomes"]["成"]["figures"].update(ghost={"fate": "受挫"}), "ghost"),  # 未知的人物
+    (lambda ev: ev[2]["outcomes"]["甲:guan:大勝"]["figures"].update({"@commander:nowhere:guan": {"fate": "受挫"}}), "nowhere"),
+    (lambda ev: ev[1]["outcomes"]["成"]["chance_mods"].update(ghost=0.1), "ghost"),  # 修正要加在時刻表上的大事
+    (lambda ev: ev[1]["lock_result"].update(guan="大勝"), "大勝"),  # 鎖定要對到一個結果
+    (lambda ev: ev[2].update(version_from="ghost"), "ghost"),
+    (lambda ev: ev[1]["outcomes"]["成"]["figures"].update(mate={"fate": "到任"}), "到任"),  # 到任要寫戰線與地點
+    (lambda ev: ev[1].update(week=13), "13"),  # 季曆只有 12 週
+    (lambda ev: ev[0]["outcomes"]["fixed"].update(text="开场了。"), "繁體"),  # 公告只能用繁體中文
+])
+def test_timetable_cross_references_are_checked(tmp_path, edit, message):
+    with pytest.raises(ContentError, match=message):
+        load_content(_with_timetable(tmp_path, edit))
