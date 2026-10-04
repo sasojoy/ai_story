@@ -448,7 +448,7 @@
             "rou_1": 1
           },
           "trend": {
-            "huangjin": -1
+            "front": -1
           }
         },
         "fail_effect": {
@@ -514,7 +514,7 @@
             "fame": 2
           },
           "trend": {
-            "huangjin": -2
+            "front": -2
           }
         },
         "fail_effect": {
@@ -538,7 +538,7 @@
             "fame": 1
           },
           "trend": {
-            "huangjin": -1
+            "front": -1
           }
         },
         "fail_effect": {
@@ -576,7 +576,7 @@
             "silver": -10
           },
           "trend": {
-            "huangjin": 1
+            "front": 1
           },
           "marks": {
             "yu_river:交米": 1
@@ -687,7 +687,7 @@
             "good": 1
           },
           "trend": {
-            "huangjin": -1
+            "front": -1
           }
         },
         "fail_effect": {
@@ -727,7 +727,7 @@
             "xinde": 6
           },
           "trend": {
-            "huangjin": -1
+            "front": -1
           }
         },
         "fail_effect": {
@@ -1069,7 +1069,7 @@
             "evil": 1
           },
           "trend": {
-            "huangjin": -1
+            "front": -1
           },
           "marks": {
             "baima_ford:盤查": 1
@@ -1138,7 +1138,7 @@
             "xinde": 5
           },
           "trend": {
-            "huangjin": -2
+            "front": -2
           }
         },
         "fail_effect": {

@@ -645,7 +645,7 @@
             "silver": 10
           },
           "trend": {
-            "huangjin": -1
+            "front": -1
           },
           "rumor": "譙縣縣門募勇那天，有個叫{name}的外鄉人連舉三回大石，曹家門客都看直了眼。"
         },
@@ -670,7 +670,7 @@
             "xinde": 6
           },
           "trend": {
-            "huangjin": -1
+            "front": -1
           }
         },
         "fail_effect": {

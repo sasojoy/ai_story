@@ -21,7 +21,7 @@
             "fame": 1
           },
           "trend": {
-            "huangjin": -2
+            "front": -2
           }
         },
         "fail_effect": {
@@ -89,7 +89,7 @@
             "silver": 20
           },
           "trend": {
-            "huangjin": -3
+            "front": -3
           }
         }
       },
@@ -113,7 +113,7 @@
             "good": 2
           },
           "trend": {
-            "huangjin": -5
+            "front": -5
           },
           "rumor": "{name}率眾挑了黃巾軍在城裡的私鹽倉。"
         },

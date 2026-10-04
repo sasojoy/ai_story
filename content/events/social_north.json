@@ -486,7 +486,7 @@
             "fame": 1
           },
           "trend": {
-            "huangjin": -1
+            "front": -1
           }
         },
         "fail_effect": {
@@ -511,7 +511,7 @@
             "evil": 1
           },
           "trend": {
-            "huangjin": 1
+            "front": 1
           }
         },
         "fail_effect": {
@@ -567,7 +567,7 @@
             "silver": 35
           },
           "trend": {
-            "huangjin": 1
+            "front": 1
           }
         },
         "fail_effect": {
@@ -590,7 +590,7 @@
             "good": 3
           },
           "trend": {
-            "huangjin": -1
+            "front": -1
           }
         },
         "fail_effect": {

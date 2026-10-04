@@ -66,7 +66,7 @@ def test_events_stay_within_the_reward_limits(content, region):
                 assert -40 <= stats.get("silver", 0) <= 40 and -3 <= stats.get("fame", 0) <= 3, e["id"]
                 assert -3 <= stats.get("good", 0) <= 3 and -3 <= stats.get("evil", 0) <= 3, e["id"]
                 assert all(stats.get(k, 0) <= 1 for k in ("str", "agi", "con", "wis")), e["id"]
-                assert set(eff.get("trend", {})) <= {"huangjin"} and all(1 <= abs(v) <= 3 for v in eff.get("trend", {}).values()), e["id"]
+                assert set(eff.get("trend", {})) <= {"front"} and all(1 <= abs(v) <= 3 for v in eff.get("trend", {}).values()), e["id"]
                 assert sum(eff.get("materials", {}).values()) <= 1, e["id"]
                 assert all(content.materials[m].tier <= 2 for m in eff.get("materials", {})), e["id"]
                 assert not eff.get("flags_add") and not eff.get("world_flags_add"), e["id"]

@@ -521,6 +521,7 @@ def validate(c: Content) -> None:
         known(where, eff.materials, c.materials, "素材")
         known(where, eff.trend, trend_ids | {FRONT_KEY}, "大勢線")
         front_needs_total(where, eff.trend)
+        not_derived(where, eff.trend)
         known(where, eff.clue_items, item_ids, "伏筆物品")
         for key in eff.fs_counters:
             counters_written.setdefault(key, where)

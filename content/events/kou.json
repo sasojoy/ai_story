@@ -18,13 +18,13 @@
             "good": 1
           },
           "trend": {
-            "huangjin": -3
+            "front": -3
           }
         },
         "fail_effect": {
           "text": "你寡不敵眾，貨被劫走一半，布商哭天搶地。",
           "trend": {
-            "huangjin": 1
+            "front": 1
           }
         }
       },
@@ -72,7 +72,7 @@
             "evil": 3
           },
           "trend": {
-            "huangjin": 3
+            "front": 3
           },
           "flags_add": [
             "huangjin_member"
@@ -109,7 +109,7 @@
             "fame": 1
           },
           "trend": {
-            "huangjin": -2
+            "front": -2
           }
         },
         "fail_effect": {
@@ -150,7 +150,7 @@
             "silver": 50
           },
           "trend": {
-            "huangjin": -10
+            "front": -10
           },
           "flags_remove": [
             "huangjin_spy"
@@ -189,7 +189,7 @@
             "evil": 3
           },
           "trend": {
-            "huangjin": 3
+            "front": 3
           }
         }
       },
@@ -201,7 +201,7 @@
             "good": 2
           },
           "trend": {
-            "huangjin": -2
+            "front": -2
           },
           "flags_remove": [
             "huangjin_member"
@@ -241,7 +241,7 @@
             "good": 1
           },
           "trend": {
-            "huangjin": -4
+            "front": -4
           }
         },
         "fail_effect": {
@@ -292,7 +292,7 @@
             "good": 3
           },
           "trend": {
-            "huangjin": -2
+            "front": -2
           }
         },
         "fail_effect": {
@@ -336,7 +336,7 @@
             "good": 3
           },
           "trend": {
-            "huangjin": -25
+            "front": -25
           },
           "world_flags_add": [
             "bocai_defeated"

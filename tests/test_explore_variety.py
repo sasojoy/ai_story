@@ -75,7 +75,7 @@ def test_added_events_vary_their_checks_and_stay_within_limits(content, path):
                 assert -40 <= stats.get("silver", 0) <= 40 and stats.get("xinde", 0) <= 15, e["id"]
                 assert all(-3 <= stats.get(k, 0) <= 3 for k in ("fame", "good", "evil")), e["id"]
                 assert all(stats.get(k, 0) <= 1 for k in ("str", "agi", "con", "wis")), e["id"]
-                assert set(eff.get("trend", {})) <= {"huangjin"}, e["id"]
+                assert set(eff.get("trend", {})) <= {"front"}, e["id"]
                 assert all(1 <= abs(v) <= 3 for v in eff.get("trend", {}).values()), e["id"]
                 assert sum(eff.get("materials", {}).values()) <= 1, e["id"]
                 assert all(content.materials[m].tier <= 2 for m in eff.get("materials", {})), e["id"]

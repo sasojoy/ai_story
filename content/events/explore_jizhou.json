@@ -20,7 +20,7 @@
             "xinde": 8
           },
           "trend": {
-            "huangjin": 1
+            "front": 1
           }
         },
         "fail_effect": {
@@ -92,7 +92,7 @@
             "silver": 30
           },
           "trend": {
-            "huangjin": -2
+            "front": -2
           }
         },
         "fail_effect": {
@@ -116,7 +116,7 @@
             "xinde": 6
           },
           "trend": {
-            "huangjin": 1
+            "front": 1
           }
         },
         "fail_effect": {
@@ -134,7 +134,7 @@
             "evil": 1
           },
           "trend": {
-            "huangjin": -3
+            "front": -3
           }
         },
         "fail_effect": {
@@ -169,7 +169,7 @@
             "con": 1
           },
           "trend": {
-            "huangjin": -1
+            "front": -1
           }
         },
         "fail_effect": {
@@ -216,7 +216,7 @@
           "fame": 1
         },
         "trend": {
-          "huangjin": -1
+          "front": -1
         }
       },
       "fail_effect": {
@@ -283,7 +283,7 @@
             "fame": 3
           },
           "trend": {
-            "huangjin": -3
+            "front": -3
           },
           "rumor": "廣宗城外有一段黃巾營壘的令旗被人奪了，聽說動手的是{name}。"
         },
@@ -320,7 +320,7 @@
             "gang_1": 1
           },
           "trend": {
-            "huangjin": 1
+            "front": 1
           }
         },
         "fail_effect": {
@@ -436,7 +436,7 @@
             "xinde": 6
           },
           "trend": {
-            "huangjin": -1
+            "front": -1
           }
         },
         "fail_effect": {
@@ -457,7 +457,7 @@
             "fame": 1
           },
           "trend": {
-            "huangjin": -1
+            "front": -1
           }
         },
         "fail_effect": {
@@ -498,7 +498,7 @@
           "xinde": 4
         },
         "trend": {
-          "huangjin": -1
+          "front": -1
         }
       },
       "fail_effect": {
@@ -600,7 +600,7 @@
             "xinde": 6
           },
           "trend": {
-            "huangjin": 1
+            "front": 1
           }
         },
         "fail_effect": {
@@ -621,7 +621,7 @@
             "fame": 1
           },
           "trend": {
-            "huangjin": -1
+            "front": -1
           }
         },
         "fail_effect": {
@@ -642,7 +642,7 @@
             "good": 1
           },
           "trend": {
-            "huangjin": -1
+            "front": -1
           }
         },
         "fail_effect": {
@@ -1014,7 +1014,7 @@
             "fame": 1
           },
           "trend": {
-            "huangjin": -1
+            "front": -1
           },
           "marks": {
             "baima_ford:盤查": 1
@@ -1039,7 +1039,7 @@
             "good": 1
           },
           "trend": {
-            "huangjin": 1
+            "front": 1
           },
           "marks": {
             "baima_ford:放行": 1

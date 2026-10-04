@@ -514,3 +514,13 @@ def test_bot_far_from_the_losing_front_takes_the_step_toward_it(real):
     old_home = _join_home(real, "guan")
     for n in neighbours:
         assert tier(n) == (bot_policy.HOME_MOVE_SCORE if n in old_home else bot_policy.AWAY_MOVE_SCORE)
+
+
+# ── Task 7：事件只推所在戰線 ─────────────────────────────
+
+
+def test_validate_rejects_effects_on_derived_trend(real):
+    """事件效果寫 {"trend": {"huangjin": 3}} 時 validate 報錯：黃巾聲勢由三條戰線合成，要推就寫 front。"""
+    real.events["trend_yingchuan_refugees"].choices[0].effect.trend = {"huangjin": 3}
+    with pytest.raises(ContentError, match="不能推衍生線 huangjin"):
+        validate(real)

@@ -407,7 +407,7 @@
             "xinde": 5
           },
           "trend": {
-            "huangjin": -1
+            "front": -1
           }
         },
         "fail_effect": {
@@ -949,7 +949,7 @@
             "fame": 1
           },
           "trend": {
-            "huangjin": -1
+            "front": -1
           }
         },
         "fail_effect": {
@@ -1097,7 +1097,7 @@
             "evil": 2
           },
           "trend": {
-            "huangjin": 1
+            "front": 1
           }
         }
       }
@@ -1160,7 +1160,7 @@
             "good": 1
           },
           "trend": {
-            "huangjin": -1
+            "front": -1
           }
         },
         "fail_effect": {
@@ -1180,7 +1180,7 @@
             "fame": 1
           },
           "trend": {
-            "huangjin": -1
+            "front": -1
           }
         },
         "fail_effect": {
@@ -1202,7 +1202,7 @@
           "good": 2
         },
         "trend": {
-          "huangjin": -1
+          "front": -1
         }
       },
       "fail_effect": {
@@ -1235,7 +1235,7 @@
             "xinde": 6
           },
           "trend": {
-            "huangjin": -2
+            "front": -2
           }
         },
         "fail_effect": {
@@ -1257,7 +1257,7 @@
             "fame": 1
           },
           "trend": {
-            "huangjin": -1
+            "front": -1
           }
         },
         "fail_effect": {
@@ -1274,7 +1274,7 @@
             "fame": 2
           },
           "trend": {
-            "huangjin": -2
+            "front": -2
           }
         },
         "fail_effect": {
@@ -1309,7 +1309,7 @@
           },
           "stamina": -15,
           "trend": {
-            "huangjin": 1
+            "front": 1
           }
         },
         "fail_effect": {
@@ -1369,7 +1369,7 @@
             "fame": 1
           },
           "trend": {
-            "huangjin": -2
+            "front": -2
           },
           "rumor": "黃巾別部營寨的布置被人畫了出去，聽說是{name}摸進營裡看的。"
         },
@@ -1392,7 +1392,7 @@
           },
           "stamina": -10,
           "trend": {
-            "huangjin": -1
+            "front": -1
           }
         },
         "fail_effect": {
@@ -1409,7 +1409,7 @@
             "fame": 2
           },
           "trend": {
-            "huangjin": -2
+            "front": -2
           }
         },
         "fail_effect": {
@@ -1432,7 +1432,7 @@
           "xinde": 3
         },
         "trend": {
-          "huangjin": -1
+          "front": -1
         }
       },
       "fail_effect": {
@@ -1461,7 +1461,7 @@
             "silver": 20
           },
           "trend": {
-            "huangjin": 1
+            "front": 1
           }
         },
         "fail_effect": {
@@ -1499,7 +1499,7 @@
             "fame": 2
           },
           "trend": {
-            "huangjin": -2
+            "front": -2
           },
           "materials": {
             "gang_2": 1
