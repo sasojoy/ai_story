@@ -308,7 +308,7 @@ def _front_ok(state: GameState, content: Content, c: FsChain) -> bool:
     if front is None:
         return True
     low, high = FRONT_RULES.get(c.side, THIRD_PARTY_FRONT)
-    return low <= timetable._front_value(state, content, front) <= high  # noqa: SLF001  T1 換成 rules.trend_value
+    return low <= timetable._front_value(state, content, front) <= high  # noqa: SLF001  跟時刻表同一個讀法（T1：rules.trend_value）
 
 
 Plan = tuple[dict[str, int], int]  # 這一趟要交出去的（物品 id → 數量, 糧草份量），換算後的量

@@ -181,9 +181,10 @@ def _material_sources(c: Content) -> set[str]:
     return reachable
 
 
-def check_timetable(c: Content, need, known, region_ids: list[str], trend_ids: set[str]) -> None:
-    """時刻表（content/timetable.json，計畫 T2）：戰線寫的是大區 id（只檢查它是存在的大區，不檢查它是不是同名的
-    大勢線——三條戰線的大勢線與大區同名是約定，不是這裡驗的）、結果鍵照種類齊全、鎖定對得到結果、人物與修正的
+def check_timetable(c: Content, need, known, front_ids: list[str], trend_ids: set[str]) -> None:
+    """時刻表（content/timetable.json，計畫 T2）：戰線（大事的 front、人物效果的 front 與 only_if、@commander 的戰線）
+    寫的是戰線 id（大區的 front，T1：yingru／nanyang／jizhou），不是大區 id——幽州是大區、它的戰線是冀州，寫 youzhou
+    讀戰況時會讀到固定的 50；結果鍵照種類齊全、鎖定對得到結果、人物與修正的
     對象存在、文字只用繁體中文。大勢線的推動（第三方、結果）要是存在的線、而且不能是衍生線（黃巾聲勢由三條戰線合成）。
     人物先認 characters.json 的 id，T4 的人物表進來後改認它。"""
     ids = [e.id for e in c.timetable]
@@ -201,25 +202,25 @@ def check_timetable(c: Content, need, known, region_ids: list[str], trend_ids: s
     def check_figure(where: str, key: str, change) -> None:
         if key.startswith("@commander:"):
             front, _, side = key.removeprefix("@commander:").partition(":")
-            known(where, [front], region_ids, "大區")
+            known(where, [front], front_ids, "戰線")
             need(side in TIMETABLE_SIDES, f"{where}：{key} 的那一方只能是 guan 或 huang")
         else:
             known(where, [key], c.characters, "人物")
         if change.front is not None:
-            known(where, [change.front], region_ids, "大區")
+            known(where, [change.front], front_ids, "戰線")
         if change.location is not None:
             known(where, [change.location], c.locations, "地點")
         if change.fate == "到任":
             need(change.front is not None and change.location is not None, f"{where}：{key} 到任要寫 front 與 location")
         known(where, change.only_if, c.characters, "人物")
-        known(where, change.only_if.values(), region_ids, "大區")
+        known(where, change.only_if.values(), front_ids, "戰線")
         check_text(where, change.note)
 
     for ev in c.timetable:
         where = f"時刻表 {ev.id}"
         need(ev.week <= c.config.season_weeks, f"{where}：第 {ev.week} 週超出季曆的 {c.config.season_weeks} 週")
         if ev.front is not None:
-            known(where, [ev.front], region_ids, "大區")
+            known(where, [ev.front], front_ids, "戰線")
         if ev.kind == "roll":
             need(ev.roll_side is not None, f"{where}：擲骰的大事要寫 roll_side（成對哪一方有利）")
             need(ev.front is not None or ev.base_chance is not None, f"{where}：沒有戰線時要寫 base_chance")
@@ -273,7 +274,9 @@ def check_timetable(c: Content, need, known, region_ids: list[str], trend_ids: s
         earlier[ev.id] = ev
 
 
-def check_foreshadows(c: Content, need, known, region_ids: list[str], counters_written: dict[str, str]) -> None:
+def check_foreshadows(
+    c: Content, need, known, region_ids: list[str], front_ids: list[str], counters_written: dict[str, str],
+) -> None:
     """伏筆（content/foreshadows.json，計畫 T7）：鏈的大事在時刻表上、陣營在劇本裡；片段的大區是大區、事件與人物存在；
     最後一步的地點、物品、人物存在，答案是選項之一或 tianji:<天機>（天機的選項要剛好是候選）；文字只用繁體中文。
     伏筆計數：效果寫的要有鏈讀，鏈讀的要有效果寫（官銀由 guanyin 的規則寫）。"""
@@ -345,7 +348,7 @@ def check_foreshadows(c: Content, need, known, region_ids: list[str], counters_w
         event = events.get(ch.event)
         versions = set(event.versions.values()) if event is not None else set()
         if ch.front is not None:
-            known(where, [ch.front], region_ids, "大區")
+            known(where, [ch.front], front_ids, "戰線")  # 戰線 id，不是大區（同時刻表）
         need(
             ch.front is not None or event is None or event.front is not None,
             f"{where}：要寫 front（{ch.event} 沒有戰線，最後一步的戰況看不到任何一條線）",
@@ -918,8 +921,9 @@ def validate(c: Content) -> None:
         where = f"敵方隊伍 {squad.id}"
         need(squad.difficulty >= 0, f"{where}：difficulty 不能是負的")
 
-    check_timetable(c, need, known, region_ids, trend_ids)
-    check_foreshadows(c, need, known, region_ids, counters_written)
+    front_ids = sorted(region_fronts)  # 戰線 id 照 T1 的大區 front，不另寫一份清單
+    check_timetable(c, need, known, front_ids, trend_ids)
+    check_foreshadows(c, need, known, region_ids, front_ids, counters_written)
 
     for key, where in sorted(marks_written.items()):
         need(key in marks_read, f"{where}：痕跡 {key} 寫了卻沒有任何條件或文字讀它")

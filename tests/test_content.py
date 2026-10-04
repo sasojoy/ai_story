@@ -1015,7 +1015,16 @@ def _timetable() -> list[dict]:
 
 
 def _with_timetable(tmp_path, edit=None):
+    """fixture 加上時刻表。時刻表的 front 是戰線（大區的 front 指到的大勢線），所以 north、south 兩個大區各有一條
+    同名的戰線。"""
     root = copy_fixture(tmp_path)
+    scenario = json.loads((root / "scenario.json").read_text(encoding="utf-8"))
+    scenario["trends"] += [{"id": rid, "name": name, "start": 50} for rid, name in (("north", "北線"), ("south", "南線"))]
+    (root / "scenario.json").write_text(json.dumps(scenario, ensure_ascii=False), encoding="utf-8")
+    world_map = json.loads((root / "map.json").read_text(encoding="utf-8"))
+    for region in world_map["regions"]:
+        region["front"] = region["id"]
+    (root / "map.json").write_text(json.dumps(world_map, ensure_ascii=False), encoding="utf-8")
     events = _timetable()
     if edit is not None:
         edit(events)
@@ -1030,7 +1039,7 @@ def test_the_timetable_loads_and_is_optional(tmp_path):
 
 
 @pytest.mark.parametrize(("edit", "message"), [
-    (lambda ev: ev[1].update(front="nowhere"), "nowhere"),  # 戰線要是大區 id
+    (lambda ev: ev[1].update(front="nowhere"), "nowhere"),  # 戰線要是戰線 id（大區的 front）
     (lambda ev: ev[1]["outcomes"].pop("不成"), "不成"),  # 擲骰要有成與不成
     (lambda ev: ev[3]["outcomes"].pop("乙:huang:險勝"), "乙:huang:險勝"),  # 決戰每個版本四格
     (lambda ev: ev.append(dict(ev[0])), "start"),  # id 重複

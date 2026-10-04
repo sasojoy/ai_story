@@ -222,7 +222,8 @@ FORESHADOW_FIXTURE = Path(__file__).parent / "fixtures" / "foreshadow"
 def install_foreshadows(content):
     """第一季內容（install_season_one）加上伏筆要的東西，最後整份跑一次 content.validate：
     - 三個陣營 guan（小鎮投靠）、huang（湖邊投靠）、haoqiang；遊歷不接戰後事件、不加屬性；
-    - 戰線 yingru、nanyang、jizhou 也當大區（地圖右上角的小三角，不蓋到任何地點），時刻表的檢查才認得；
+    - 戰線 yingru、nanyang、jizhou 也當大區（地圖右上角的小三角，不蓋到任何地點），各自的 front 就是自己，時刻表與伏筆的
+      戰線檢查才認得；
     - 南區的「渡口」（port，連小鎮），加上時刻表會用到的盧植營、宛城；
     - 大勢人物：皇甫嵩在湖邊、朱儁在渡口、波才在小鎮可以對話，盧植、董卓、張曼成只是時刻表的人物；
     - 慢屬性三階（凡 1、靈 3、天 9 份糧草）與一支官軍的巡邏隊；
@@ -245,7 +246,7 @@ def install_foreshadows(content):
     for i, (rid, name) in enumerate((("yingru", "潁川汝南"), ("nanyang", "南陽"), ("jizhou", "冀州"))):
         x = 360 + i * 12
         content.map.regions.append(MapRegion(
-            id=rid, name=name, points=[[x, 0], [x + 10, 0], [x + 10, 8]], fill="#EEEEEE", text_fill="#999999",
+            id=rid, name=name, front=rid, points=[[x, 0], [x + 10, 0], [x + 10, 8]], fill="#EEEEEE", text_fill="#999999",
             label_x=x, label_y=4,
         ))
     content.locations["port"] = Location(

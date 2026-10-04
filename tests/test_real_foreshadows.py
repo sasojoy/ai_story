@@ -235,6 +235,26 @@ def test_real_foreshadows_valid(fs_content):
     assert fs.guanyin.regions == ["jizhou", "yingru"] and fs.guanyin.text
 
 
+@pytest.mark.parametrize("where", ["chain", "event", "figure"])
+def test_front_must_be_a_front_not_just_a_region(where):
+    """front 寫的是戰線（大勢線 yingru／nanyang／jizhou），不是大區：幽州是一個大區、它的戰線是冀州，寫 youzhou
+    讀戰況時會讀到固定的 50。載入時就擋下（地圖擴充 T1 總審查提的漏洞）。"""
+    from tianxia.content import ContentError, validate
+    from tianxia.models import FigureChange
+
+    c = load_content(CONTENT_DIR, profile="weekend")
+    validate(c)  # 原樣是對的
+    if where == "chain":
+        c.foreshadows.chains[0].front = "youzhou"
+    elif where == "event":
+        next(e for e in c.timetable if e.front is not None).front = "luoyang"
+    else:
+        outcome = next(o for e in c.timetable for o in e.outcomes.values() if o.figures)
+        outcome.figures["huangfusong"] = FigureChange(fate="重挫", front="youzhou", location="luzhi_camp")
+    with pytest.raises(ContentError, match="戰線"):
+        validate(c)
+
+
 def test_real_talk_and_event_fragments_follow_table_4_2(fs_content):
     """11 則對話片段：誰說、誰接手、話題標籤、情誼門檻（基準量）；4 則事件片段：來自哪一則事件。"""
     chains = fs_content.foreshadows.chains
