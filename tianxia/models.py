@@ -225,10 +225,18 @@ class Connection(str):
         )
 
 
+class LocationText(_Strict):
+    """地點描寫的一個版本：這個世界旗標成立時改用 text（例：宛城第 3 週起依版本換，計畫 T8）。"""
+
+    world_flag: str
+    text: str
+
+
 class Location(_Strict):
     id: str
     name: str
     description: str
+    desc_when: list[LocationText] = Field(default_factory=list)  # 照順序第一個成立的世界旗標勝出；都不成立時用 description
     connections: list[Connection]  # 相鄰的地點，每一筆是一條路（見 Connection）
     x: int
     y: int
@@ -239,6 +247,10 @@ class Location(_Strict):
     train_trend: dict[str, int] = Field(default_factory=dict)  # 遊歷打贏／操練推大勢的量；正負是散人的方向，有陣營目標的人照自己的目標推（Game._train_push）
     materials: list[str] = Field(default_factory=list)  # 在這裡探索可能撿到的素材；留空則給隨機的一階素材
     unlock_flag: str | None = None  # 設定後，需該世界旗標成立才能前往
+
+    def describe(self, world_flags: set[str]) -> str:
+        """此刻的描寫：desc_when 裡第一個旗標成立的那一版，都不成立時是 description。"""
+        return next((d.text for d in self.desc_when if d.world_flag in world_flags), self.description)
 
     def road_to(self, dest: str) -> RoadKind:
         """到相鄰地點 dest 的路的種類；清單裡是一般字串（測試直接塞的）或沒連到 dest 時當一般路。"""
@@ -828,9 +840,15 @@ class BattleDef(_Strict):
     # 就當回合收場、不再換幕（壓倒性提前收場；起點 50 時是 90／10）
     action_tags: dict[str, BattleActionEffect]
     free_text_gamble: FreeTextGamble | None = None  # 有 free_text 選項時必填
-    outcomes: list[BattleOutcome] = Field(min_length=1)
+    outcomes: list[BattleOutcome] = Field(min_length=1)  # 時刻表決戰只留一筆保底：實際的結果與效果走時刻表
     muster_seconds: float = 600  # 集結期：開放選陣營的時間，逾時系統自動分配
     round_seconds: float = 120  # 每回合等待所有參戰者選擇的時間，逾時系統代選保守行動
+    # ── 時刻表決戰（第一季三場大戲，計畫 T8）：時間到了照 WorldState.schedule 開集結，收場用 battle_instance.decide_result
+    # 判誰贏、大勝或險勝，交給 timetable.resolve 結算；beta 那場（黃巾決戰）這四欄都是 None ──
+    timetable_event: str | None = None  # 時刻表上的哪一件決戰（TimetableEvent.id）
+    version: str | None = None  # 那件大事分版本時（宛城甲、乙）這一筆是哪一版；到時間照 version_from 的結果開對的那一筆
+    defender: Literal["guan", "huang"] | None = None  # 守方：戰局剛好停在 50 算守方守住（戰鬥系統 4.2）
+    front: str | None = None  # 起點讀哪條戰線（戰線 id）：集結開始時讀一次戰況 v，起點＝50 ＋（50 − v）÷ 2（戰鬥系統 5.3）
 
 
 FigureFate = Literal["退場", "重創", "重挫", "聲威大減", "受挫", "下獄", "到任"]  # 用詞照時刻表結算文件第一節

@@ -787,3 +787,91 @@ def test_season_one_off_blocks_thresholds_storyline_and_beta_battle(tmp_path):
     _push_huangjin_to(game, 80)
     check_thresholds(game.state, beta, game.world, now=0.0)
     assert w.ended and "huangjin_win" in w.flags
+
+
+# ── 三場大戲（計畫 T8；戰鬥系統附錄 A）──────────────────────────────────
+
+SHOWDOWN_TABLE = {  # 計畫 T8 的表：大區、守方、時刻表大事、版本、戰線
+    "changshe_fire": ("yingru", "guan", "changshe_fire", None, "yingru"),
+    "wancheng_jia": ("nanyang", "huang", "wancheng", "甲", "nanyang"),
+    "wancheng_yi": ("nanyang", "guan", "wancheng", "乙", "nanyang"),
+    "guangzong": ("jizhou", "huang", "guangzong", None, "jizhou"),
+}
+SHOWDOWN_ACTS = {  # 附錄 A 的三幕標題與每幕官軍、黃巾的穩守／猛攻
+    "changshe_fire": [
+        ("長社被圍", "固守城頭", "開門突擊黃巾前營", "圍住四門，斷絕城中糧道", "架起雲梯，強攻城牆"),
+        ("夜風將起", "按兵不動，靜待時機", "縋城而下，襲擾敵營", "收攏營寨，嚴加戒備", "趁夜摸上城頭"),
+        ("決勝長社", "守住城門，穩住陣腳", "全軍出城，衝擊敵陣", "穩住營盤，步步進逼", "全軍壓上，奪下城門"),
+    ],
+    "wancheng_jia": [
+        ("兵臨宛城", "深溝高壘，困住宛城", "推上雲梯，強攻城牆", "閉門死守，輪番上城", "開門出擊，燒毀土山"),
+        ("四面攻城", "輪番佯攻，耗盡守軍", "集中一面，蟻附登城", "添兵守垛，滾木擂石", "夜縋出城，焚燒雲梯"),
+        ("城破與否", "圍死四門，不放一人", "全軍登城，畢其功於一役", "死守最後一道城門", "傾城而出，殺散圍軍"),
+    ],
+    "wancheng_yi": [
+        ("連營圍城", "閉城固守，清點糧草", "開門突擊，衝亂連營", "圍住四門，斷絕糧道", "趁城中未穩，架梯強攻"),
+        ("圍城日久", "節省糧草，輪番守城", "派死士夜出，燒敵糧車", "加固連營，圍而不攻", "四面同時攻城"),
+        ("城門開不開", "死守城門，寸步不讓", "傾城出戰，解圍在此一舉", "穩住連營，步步進逼", "全軍蟻附，奪下城頭"),
+    ],
+    "guangzong": [
+        ("廣宗城下", "築圍挖塹，步步緊逼", "架起雲梯，強攻城牆", "閉門堅守，以逸待勞", "開門出擊，衝散圍塹"),
+        ("堅城難下", "閉營休兵，佯示退意", "晝夜不停，輪番攻城", "輪班上城，保存氣力", "趁官軍疲憊，夜襲大營"),
+        ("雞鳴", "穩住陣線，堵死各門", "雞鳴而發，全軍撲城", "死守內城，寸土不讓", "死士出城，直撲中軍"),
+    ],
+}
+
+
+def test_real_battles_three_showdowns(content):
+    """真實內容有四筆時刻表決戰（宛城分甲乙兩筆）：大區、守方、時刻表大事、版本、戰線照計畫 T8 的表；三幕照戰鬥系統附錄 A；
+    推力、放手一搏、時間、提前收場跟 beta 那場一模一樣；結果只留一筆保底（實際效果走時刻表）。"""
+    beta = content.battles["huangjin_showdown"]
+    showdowns = {bid: b for bid, b in content.battles.items() if b.timetable_event is not None}
+    assert set(showdowns) == set(SHOWDOWN_TABLE)
+    for bid, (region, defender, event_id, version, front) in SHOWDOWN_TABLE.items():
+        b = showdowns[bid]
+        assert (b.region, b.defender, b.timetable_event, b.version, b.front) == (region, defender, event_id, version, front), bid
+        assert [(f.id, f.name) for f in b.factions] == [("guan", "官軍"), ("huang", "黃巾軍")]
+        assert (b.trend_start, b.rounds_per_act, b.decisive_margin) == (50, 3, 40)
+        assert (b.muster_seconds, b.round_seconds) == (beta.muster_seconds, beta.round_seconds)
+        assert b.action_tags == beta.action_tags and b.free_text_gamble == beta.free_text_gamble
+        assert len(b.outcomes) == 1 and b.outcomes[0].trend_min is None and b.outcomes[0].trend_max is None
+        assert not b.outcomes[0].trend_delta and not b.outcomes[0].world_flags_add  # 效果走時刻表，不重複套
+        acts = []
+        for act in b.acts:
+            fixed = {(o.faction, o.tag): o.text for o in act.options if not o.free_text}
+            acts.append((act.title, fixed["guan", "guan_safe"], fixed["guan", "guan_aggressive"],
+                         fixed["huang", "huang_safe"], fixed["huang", "huang_aggressive"]))
+            assert sorted(o.tag for o in act.options if o.free_text) == ["guan_reckless", "huang_reckless"]
+        assert acts == SHOWDOWN_ACTS[bid]
+    events = {e.id: e for e in content.timetable}
+    for bid, b in showdowns.items():  # 每一件時刻表決戰、每一個版本都正好有一筆
+        event = events[b.timetable_event]
+        assert event.kind == "showdown" and (b.version in event.versions.values() if event.versions else b.version is None)
+    assert sorted((b.timetable_event, b.version or "") for b in showdowns.values()) == sorted([
+        ("changshe_fire", ""), ("guangzong", ""), ("wancheng", "甲"), ("wancheng", "乙"),
+    ])
+
+
+@pytest.mark.parametrize(("battle_id", "winner"), [
+    ("changshe_fire", "guan"), ("guangzong", "huang"), ("wancheng_jia", "huang"), ("wancheng_yi", "guan"),
+])
+def test_real_showdowns_tie_goes_to_defender(content, battle_id, winner):
+    """計畫 T8：長社 50→官軍險勝；廣宗 50→黃巾險勝；宛城甲 50→黃巾、乙 50→官軍（戰鬥系統 4.2、附錄 A.5）。"""
+    from tianxia import battle_instance as bi
+
+    definition = content.battles[battle_id]
+    instance = bi.start_muster(definition, now=0.0)
+    assert bi.decide_result(instance, definition, None, definition.defender) == (winner, "險勝")
+
+
+def test_wan_city_reads_like_its_version_from_week_three(content):
+    """宛城的描寫第 3 週起依版本換（伏筆文件 5.0）：甲版黃巾據城、官軍大營在城外；乙版太守守住、黃巾在城外連營；
+    乙版宛城陷落之後換成甲版的描寫（結算文件 5.2）。版本的旗標由第 3 週「張曼成攻殺南陽太守」的結果寫入。"""
+    wan = content.locations["wan_city"]
+    zhang = next(e for e in content.timetable if e.id == "zhangmancheng_wan").outcomes
+    jia_flag, = zhang["成"].world_flags_add
+    yi_flag, = zhang["不成"].world_flags_add
+    assert wan.describe(set()) == wan.description
+    jia, yi = wan.describe({jia_flag}), wan.describe({yi_flag})
+    assert "黃" in jia and "城外" in jia and "連營" in yi and len({jia, yi, wan.description}) == 3
+    assert wan.describe({yi_flag, "wancheng_fallen"}) == jia

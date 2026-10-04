@@ -4426,3 +4426,20 @@ def test_timestamps_are_unchanged_with_the_switch_off(game):
     assert "剛剛　第1天 01:05" in game.latest_entry_html()
     assert "第1天　測試大事。" in game.chronicle_text()
     assert "第1天 01:05" in atlas.header_text(game.state, game.content)
+
+
+# ── 地點描寫隨世界旗標換版（計畫 T8：宛城的 desc_when）──────────────────────
+
+
+def test_a_location_description_follows_the_first_matching_world_flag(content, game):
+    """Location.desc_when：照順序第一個成立的世界旗標勝出；都不成立時是原本的描寫。"""
+    from tianxia.models import LocationText
+
+    town = content.locations["town"]
+    base = town.description
+    town.desc_when = [LocationText(world_flag="fallen", text="城頭換了旗。"), LocationText(world_flag="held", text="城門緊閉。")]
+    assert base in game.location_text()
+    game.state.world.flags.add("held")
+    assert "城門緊閉。" in game.location_text() and base not in game.location_text()
+    game.state.world.flags.add("fallen")  # 排在前面的勝出
+    assert "城頭換了旗。" in game.location_text() and "城門緊閉。" not in game.location_text()

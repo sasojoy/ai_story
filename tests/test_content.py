@@ -1096,3 +1096,67 @@ def test_fate_prestige_only_knows_the_three_fate_words(tmp_path):
     edit_json(root / "config.json", lambda d: d.update(fate_prestige={"重挫": -30, "重創": -60}))
     with pytest.raises(ValidationError, match="fate_prestige"):
         load_content(root)
+
+
+# ── 三場大戲：時刻表決戰的 BattleDef（計畫 T8）──────────────────────────
+
+
+def _showdown_battle(**fields) -> dict:
+    """接在 _with_timetable 的「圍城」（siege，第 3 週、南線、看 raid 分甲乙兩版）上的甲版決戰。"""
+    battle = json.loads(json.dumps(MINIMAL_BATTLE))
+    battle.update(
+        id="siege_jia", region="south", factions=[{"id": "guan", "name": "官軍"}, {"id": "huang", "name": "黃巾"}],
+        defender="huang", timetable_event="siege", version="甲", front="south",
+    )
+    battle["outcomes"][0]["faction"] = "guan"
+    battle.update(fields)
+    return battle
+
+
+def test_a_timetable_showdown_loads(tmp_path):
+    root = _with_timetable(tmp_path)
+    write_battles_json(root, [_showdown_battle(), _showdown_battle(id="siege_yi", version="乙", defender="guan")])
+    loaded = load_content(root).battles
+    assert (loaded["siege_jia"].defender, loaded["siege_jia"].timetable_event, loaded["siege_jia"].version) == ("huang", "siege", "甲")
+    assert (loaded["siege_yi"].front, loaded["siege_yi"].version) == ("south", "乙")
+
+
+@pytest.mark.parametrize(("fields", "message"), [
+    ({"timetable_event": "ghost"}, "未知的時刻表決戰 ghost"),  # 時刻表上要有這件大事
+    ({"timetable_event": "raid", "version": None}, "未知的時刻表決戰 raid"),  # 而且是決戰
+    ({"version": "丙"}, "version 丙 不是 siege 的版本"),  # 版本要是那件大事的版本之一
+    ({"version": None}, "version None 不是 siege 的版本"),  # 有版本的大事每一筆都要寫版本
+    ({"front": "nowhere"}, "未知的戰線 nowhere"),  # 戰線要是戰線 id
+    ({"front": None}, "時刻表決戰要寫 front 與 defender"),  # 起點照戰線算、平手算守方贏
+    ({"defender": None}, "時刻表決戰要寫 front 與 defender"),
+    ({"factions": [{"id": "huang", "name": "黃巾"}, {"id": "guan", "name": "官軍"}]}, "陣營要依序是 guan、huang"),  # 官軍是正向
+])
+def test_timetable_showdown_fields_are_checked(tmp_path, fields, message):
+    root = _with_timetable(tmp_path)
+    write_battles_json(root, [_showdown_battle(**fields)])
+    with pytest.raises(ContentError, match=message):
+        load_content(root)
+
+
+def test_a_timetable_showdown_version_has_only_one_battle(tmp_path):
+    root = _with_timetable(tmp_path)
+    write_battles_json(root, [_showdown_battle(), _showdown_battle(id="siege_jia2")])
+    with pytest.raises(ContentError, match="時刻表決戰 siege 的 甲 版有兩筆戰鬥"):
+        load_content(root)
+
+
+def test_defender_is_guan_or_huang(tmp_path):
+    root = _with_timetable(tmp_path)
+    write_battles_json(root, [_showdown_battle(defender="haoqiang")])
+    with pytest.raises(ContentError, match="defender"):
+        load_content(root)
+
+
+def test_location_desc_when_is_checked(tmp_path):
+    root = copy_fixture(tmp_path)
+    edit_json(root / "locations.json", lambda d: d[0].update(desc_when=[{"world_flag": "", "text": "城頭換了旗。"}]))
+    with pytest.raises(ContentError, match="desc_when"):
+        load_content(root)
+    edit_json(root / "locations.json", lambda d: d[0].update(desc_when=[{"world_flag": "fallen", "text": "城头换了旗。"}]))
+    with pytest.raises(ContentError, match="繁體"):
+        load_content(root)

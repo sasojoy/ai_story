@@ -261,8 +261,9 @@ class WorldStateStore(Protocol):
         """讀取目前這場戰鬥→套用 fn(battle)→寫回；沒有戰鬥時 fn 不會被呼叫，直接回傳 None。"""
         ...
 
-    def start_battle(self, definition: BattleDef, now: float) -> BattleInstance:
-        """開一場新戰鬥；已經有一場還沒結束的戰鬥時，原封不動回傳那一場。"""
+    def start_battle(self, definition: BattleDef, now: float, trend_start: int | None = None) -> BattleInstance:
+        """開一場新戰鬥；已經有一場還沒結束的戰鬥時，原封不動回傳那一場。trend_start 是這一場的起點（時刻表決戰照
+        前線戰況算）；不給照 definition.trend_start（見 battle_instance.start_muster）。"""
         ...
 
     def clear_battle(self) -> None: ...

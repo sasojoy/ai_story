@@ -584,7 +584,7 @@ def test_outcome_copies_the_season_level_consequences_onto_the_instance(definiti
 
 
 def test_a_decisive_gauge_ends_the_battle_in_either_direction(definition):
-    """壓倒性是雙向的：不管戰局往哪一方傾斜，偏離起點 decisive_margin（預設 40）就當回合收場，
+    """壓倒性是雙向的：不管戰局往哪一方傾斜，偏離中線 50 達 decisive_margin（預設 40）就當回合收場，
     不是只有某一方拉開差距才算。"""
     low = _active_battle(definition)
     low.trend = 8  # 8 + 1 + 1 = 10：|10-50| = 40
@@ -881,3 +881,79 @@ def test_ending_without_fighters_counts_the_timed_out_round(definition):
     bi.end_without_fighters(instance, definition, now=100.0 + definition.round_seconds)
     assert instance.round_number == 2
     assert [r.round_number for r in instance.rounds] == [1, 2]
+
+
+# ── 三場大戲（計畫 T8；戰鬥系統 4.1、4.2、5.3）────────────────────────────
+
+
+@pytest.mark.parametrize(("lock", "trend", "expected"), [
+    # 沒人鎖定：戰局決定誰贏與輕重；偏離 50 達 15 是大勝
+    (None, 70, ("guan", "大勝")), (None, 55, ("guan", "險勝")), (None, 50, ("guan", "險勝")),
+    (None, 45, ("huang", "險勝")), (None, 30, ("huang", "大勝")),
+    # 官軍鎖定：官軍一定贏，戰場上也贏是大勝、打輸是險勝
+    ("guan", 70, ("guan", "大勝")), ("guan", 55, ("guan", "大勝")), ("guan", 50, ("guan", "大勝")),
+    ("guan", 45, ("guan", "險勝")), ("guan", 30, ("guan", "險勝")),
+    # 黃巾鎖定
+    ("huang", 70, ("huang", "險勝")), ("huang", 55, ("huang", "險勝")), ("huang", 50, ("huang", "險勝")),
+    ("huang", 45, ("huang", "大勝")), ("huang", 30, ("huang", "大勝")),
+    # 門檻剛好的格：65／35 是大勝，64／36 是險勝
+    (None, 65, ("guan", "大勝")), (None, 64, ("guan", "險勝")), (None, 36, ("huang", "險勝")), (None, 35, ("huang", "大勝")),
+])
+def test_decide_result_table(showdown, lock, trend, expected):
+    """戰鬥系統 4.1 的表（守方官軍：剛好 50 算官軍守住）；戰局以 factions[0]（官軍）為正向。"""
+    instance = _showdown_battle(showdown)
+    instance.trend = trend
+    assert bi.decide_result(instance, showdown, lock, "guan") == expected
+
+
+@pytest.mark.parametrize(("defender", "lock", "expected"), [
+    ("guan", None, ("guan", "險勝")), ("huang", None, ("huang", "險勝")),  # 剛好 50 算守方守住（4.2）
+    ("huang", "guan", ("guan", "險勝")), ("guan", "huang", ("huang", "險勝")),  # 戰場上是守方贏：鎖定方只能險勝
+    ("guan", "guan", ("guan", "大勝")), ("huang", "huang", ("huang", "大勝")),
+])
+def test_tie_goes_to_defender(showdown, defender, lock, expected):
+    instance = _showdown_battle(showdown)
+    instance.trend = 50
+    assert bi.decide_result(instance, showdown, lock, defender) == expected
+
+
+def test_a_lock_from_a_side_not_in_the_battle_counts_as_no_lock(showdown):
+    instance = _showdown_battle(showdown)
+    instance.trend = 30
+    assert bi.decide_result(instance, showdown, "haoqiang", "guan") == ("huang", "大勝")
+
+
+@pytest.mark.parametrize(("front", "start"), [(40, 55), (35, 58), (55, 48), (30, 60), (20, 65), (50, 50), (0, 75), (100, 25)])
+def test_start_follows_the_front_value(front, start):
+    """戰鬥系統 5.3：起點＝50 ＋（50 − 戰況）÷ 2，用 int(x + 0.5) 進位（57.5 → 58、47.5 → 48）。"""
+    assert bi.start_from_front(front) == start
+
+
+def test_start_muster_takes_a_trend_start(showdown):
+    """start_muster 多一個 trend_start：給了就用它當這一場的起點，不給照 definition.trend_start（beta 那場不變）。"""
+    assert bi.start_muster(showdown, now=0.0).trend == 50
+    instance = bi.start_muster(showdown, now=0.0, trend_start=58)
+    assert instance.trend == 58
+    bi.close_muster(instance, showdown, random.Random(0))
+    assert instance.trend == 58  # 集結結束也不重設
+
+
+def test_early_end_at_ninety_or_ten(showdown):
+    """提前收場看 50（戰鬥系統 5.3）：起點 58 的一場，到 90 就收（舊規則偏離起點 40 要到 98），到 18 不收（舊規則會收），
+    到 10 才收；起點 50 的 beta 那場收場時機跟以前一樣。"""
+    def played(start: int, trend: int, guan="guan_safe", huang="huang_safe") -> bi.BattleInstance:
+        instance = bi.start_muster(showdown, now=0.0, trend_start=start)
+        bi.join_faction(instance, "甲", "guan", neili_cap=10_000.0)
+        bi.join_faction(instance, "乙", "huang", neili_cap=10_000.0)
+        bi.close_muster(instance, showdown, random.Random(0))
+        instance.trend = trend
+        _play(instance, showdown, guan, huang)
+        return instance
+
+    assert played(58, 86, "guan_aggressive").phase == "ended"  # 86 + 6 − 2 = 90
+    assert played(58, 85, "guan_aggressive").phase == "active"  # 89
+    assert played(58, 22, "guan_safe", "huang_aggressive").phase == "active"  # 22 + 2 − 6 = 18：舊規則會收
+    assert played(58, 14, "guan_safe", "huang_aggressive").phase == "ended"  # 10
+    for trend, phase in ((86, "ended"), (85, "active"), (14, "ended"), (15, "active")):  # beta 那場：起點 50
+        guan, huang = ("guan_aggressive", "huang_safe") if trend > 50 else ("guan_safe", "huang_aggressive")
+        assert played(50, trend, guan, huang).phase == phase, trend

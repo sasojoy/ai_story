@@ -1978,7 +1978,7 @@ class Game:
         s.player.visited.add(loc_id)
         text = self.location_text()
         if final and is_revisit and not dest.important and client is not None:
-            flourish = flavor.polish_revisit(client, dest.name, dest.description)
+            flourish = flavor.polish_revisit(client, dest.name, dest.describe(s.world.flags))
             if flourish:
                 text = f"{text}\n\n{flourish}"
         self._hide(text)
@@ -2504,7 +2504,7 @@ class Game:
 
     def location_text(self) -> str:
         loc = self.content.locations[self.state.player.location]
-        return f"【{loc.name}】危險 {'★' * loc.danger}\n\n{loc.description}"
+        return f"【{loc.name}】危險 {'★' * loc.danger}\n\n{loc.describe(self.state.world.flags)}"  # 宛城的描寫隨版本換
 
     def scene_text(self) -> str:
         """有全服戰鬥時大家都看得到戰場；只能觀戰的人照常遊玩，自己眼前的事（事件、對話、

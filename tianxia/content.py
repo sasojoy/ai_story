@@ -598,6 +598,9 @@ def validate(c: Content) -> None:
                     f"地點 {loc.id} 到 {dest} 寫的是{loc.road_to(dest)}，{dest} 回來寫的是"
                     f"{c.locations[dest].road_to(loc.id)}（一條路兩頭要寫同一種）"
                 )
+        for version in loc.desc_when:  # 描寫隨世界旗標換版（計畫 T8 的宛城）
+            need(bool(version.world_flag.strip()), f"{where}：desc_when 要寫 world_flag")
+            need(to_traditional(version.text) == version.text, f"{where}：desc_when 的文字只能用繁體中文（「{version.text[:12]}…」）")
         known(where, loc.enemies, c.squads, "敵方隊伍")
         known(where, loc.train_trend, trend_ids | {FRONT_KEY}, "大勢線")
         not_derived(where, loc.train_trend, "train_trend ")
@@ -849,6 +852,33 @@ def validate(c: Content) -> None:
         not_derived(f"陣營 {faction.id}", faction.goals, "goals ")
         need(all(d in (-1, 1) for d in faction.goals.values()), f"陣營 {faction.id}：goals 的方向只能是 1 或 -1")
 
+    showdown_events = {e.id: e for e in c.timetable if e.kind == "showdown"}
+    showdown_battles: dict[tuple[str, str | None], str] = {}  # （時刻表決戰, 版本）→ 第一筆寫它的戰鬥
+
+    def check_showdown_battle(battle: BattleDef, where: str) -> None:
+        """時刻表決戰（計畫 T8）：指到時刻表上的一件決戰；分版本的每一筆寫一個那件大事的版本、不分的不寫；
+        要寫戰線（起點照它算）與守方（剛好 50 算誰贏）；陣營依序是官軍、黃巾（戰局以官軍為正向，時刻表的結果鍵也是）；
+        同一件決戰的同一版只能有一筆。"""
+        known(where, [battle.timetable_event], showdown_events, "時刻表決戰")
+        event = showdown_events.get(battle.timetable_event)
+        if event is not None:
+            versions = list(dict.fromkeys(event.versions.values()))
+            need(
+                battle.version in versions if versions else battle.version is None,
+                f"{where}：version {battle.version} 不是 {event.id} 的版本（{'、'.join(versions) or '不分版本'}）",
+            )
+        need(battle.front is not None and battle.defender is not None, f"{where}：時刻表決戰要寫 front 與 defender")
+        if battle.front is not None:
+            known(where, [battle.front], region_fronts, "戰線")
+        need(
+            [f.id for f in battle.factions] == list(TIMETABLE_SIDES),
+            f"{where}：時刻表決戰的陣營要依序是 {'、'.join(TIMETABLE_SIDES)}（戰局以官軍為正向）",
+        )
+        key = (battle.timetable_event, battle.version)
+        version = f" 的 {key[1]} 版" if key[1] else ""
+        need(key not in showdown_battles, f"時刻表決戰 {key[0]}{version}有兩筆戰鬥：{showdown_battles.get(key)}、{battle.id}")
+        showdown_battles.setdefault(key, battle.id)
+
     for battle in c.battles.values():
         where = f"戰鬥 {battle.id}"
         faction_ids = [f.id for f in battle.factions]
@@ -884,6 +914,8 @@ def validate(c: Content) -> None:
             battle.outcomes[-1].trend_min is None and battle.outcomes[-1].trend_max is None,
             f"{where}：最後一個結果必須沒有數值門檻（作為保底結果，一定要能命中）",
         )
+        if battle.timetable_event is not None:
+            check_showdown_battle(battle, where)
 
     last = c.scenario.endings[-1] if c.scenario.endings else None
     need(

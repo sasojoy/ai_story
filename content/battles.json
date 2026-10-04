@@ -95,5 +95,319 @@
         "trend_delta": {"yingru": -5}
       }
     ]
+  },
+  {
+    "id": "changshe_fire",
+    "name": "長社火攻",
+    "region": "yingru",
+    "timetable_event": "changshe_fire",
+    "defender": "guan",
+    "front": "yingru",
+    "factions": [
+      {"id": "guan", "name": "官軍"},
+      {"id": "huang", "name": "黃巾軍"}
+    ],
+    "trend_start": 50,
+    "muster_seconds": 1800,
+    "round_seconds": 300,
+    "rounds_per_act": 3,
+    "decisive_margin": 40,
+    "action_tags": {
+      "guan_safe": {"trend_delta": 2, "neili_damage": 15},
+      "guan_aggressive": {"trend_delta": 6, "neili_damage": 60, "mitigated_by_power": true},
+      "huang_safe": {"trend_delta": -2, "neili_damage": 15},
+      "huang_aggressive": {"trend_delta": -6, "neili_damage": 60, "mitigated_by_power": true}
+    },
+    "free_text_gamble": {
+      "success_trend_base": 5,
+      "success_trend_per_risk": 0.3,
+      "success_neili_damage": 10,
+      "failure_trend_per_risk": 0.1,
+      "failure_neili_base": 20,
+      "failure_neili_per_risk": 3.0
+    },
+    "acts": [
+      {
+        "id": "changshe_1",
+        "title": "長社被圍",
+        "text": "黃巾數萬人依著長社城外的草澤結營，把城圍得水洩不通。城裡的官軍兵少，守了多日，城頭的旗卻一面也沒倒。",
+        "goal": "撐過圍城的頭一陣，別讓對方先拉開差距",
+        "options": [
+          {"text": "固守城頭", "tag": "guan_safe", "faction": "guan"},
+          {"text": "開門突擊黃巾前營", "tag": "guan_aggressive", "faction": "guan"},
+          {"text": "放手一搏（20字內，寫下你想做的事）", "tag": "guan_reckless", "faction": "guan", "free_text": true},
+          {"text": "圍住四門，斷絕城中糧道", "tag": "huang_safe", "faction": "huang"},
+          {"text": "架起雲梯，強攻城牆", "tag": "huang_aggressive", "faction": "huang"},
+          {"text": "放手一搏（20字內，寫下你想做的事）", "tag": "huang_reckless", "faction": "huang", "free_text": true}
+        ]
+      },
+      {
+        "id": "changshe_2",
+        "title": "夜風將起",
+        "text": "入夜之後，風從草澤上吹過來，越吹越緊。城上忽然靜了下來；黃巾營裡有人抬頭看天，也有人照舊圍著火堆取暖。",
+        "goal": "搶在天亮之前佔到上風",
+        "options": [
+          {"text": "按兵不動，靜待時機", "tag": "guan_safe", "faction": "guan"},
+          {"text": "縋城而下，襲擾敵營", "tag": "guan_aggressive", "faction": "guan"},
+          {"text": "孤注一擲（20字內，寫下你想做的事）", "tag": "guan_reckless", "faction": "guan", "free_text": true},
+          {"text": "收攏營寨，嚴加戒備", "tag": "huang_safe", "faction": "huang"},
+          {"text": "趁夜摸上城頭", "tag": "huang_aggressive", "faction": "huang"},
+          {"text": "孤注一擲（20字內，寫下你想做的事）", "tag": "huang_reckless", "faction": "huang", "free_text": true}
+        ]
+      },
+      {
+        "id": "changshe_3",
+        "title": "決勝長社",
+        "text": "草澤裡、城頭上，到處是火把與喊殺聲。天一亮，長社城下還站著的那一方，就是潁川的主人。",
+        "goal": "分出最終勝負",
+        "options": [
+          {"text": "守住城門，穩住陣腳", "tag": "guan_safe", "faction": "guan"},
+          {"text": "全軍出城，衝擊敵陣", "tag": "guan_aggressive", "faction": "guan"},
+          {"text": "背水一戰（20字內，寫下你想做的事）", "tag": "guan_reckless", "faction": "guan", "free_text": true},
+          {"text": "穩住營盤，步步進逼", "tag": "huang_safe", "faction": "huang"},
+          {"text": "全軍壓上，奪下城門", "tag": "huang_aggressive", "faction": "huang"},
+          {"text": "背水一戰（20字內，寫下你想做的事）", "tag": "huang_reckless", "faction": "huang", "free_text": true}
+        ]
+      }
+    ],
+    "outcomes": [
+      {"faction": "guan", "title": "長社戰罷", "text": "長社城下的廝殺停了下來，勝負即將傳遍天下。"}
+    ]
+  },
+  {
+    "id": "wancheng_jia",
+    "name": "宛城之戰",
+    "region": "nanyang",
+    "timetable_event": "wancheng",
+    "version": "甲",
+    "defender": "huang",
+    "front": "nanyang",
+    "factions": [
+      {"id": "guan", "name": "官軍"},
+      {"id": "huang", "name": "黃巾軍"}
+    ],
+    "trend_start": 50,
+    "muster_seconds": 1800,
+    "round_seconds": 300,
+    "rounds_per_act": 3,
+    "decisive_margin": 40,
+    "action_tags": {
+      "guan_safe": {"trend_delta": 2, "neili_damage": 15},
+      "guan_aggressive": {"trend_delta": 6, "neili_damage": 60, "mitigated_by_power": true},
+      "huang_safe": {"trend_delta": -2, "neili_damage": 15},
+      "huang_aggressive": {"trend_delta": -6, "neili_damage": 60, "mitigated_by_power": true}
+    },
+    "free_text_gamble": {
+      "success_trend_base": 5,
+      "success_trend_per_risk": 0.3,
+      "success_neili_damage": 10,
+      "failure_trend_per_risk": 0.1,
+      "failure_neili_base": 20,
+      "failure_neili_per_risk": 3.0
+    },
+    "acts": [
+      {
+        "id": "wancheng_jia_1",
+        "title": "兵臨宛城",
+        "text": "官軍的營壘一路紮到宛城四門外，城外的土山一天比一天高。城頭插滿了黃旗，守城的黃巾從垛口往下看，官軍的雲梯還堆在後頭。",
+        "goal": "站穩腳跟，別讓對方先拉開差距",
+        "options": [
+          {"text": "深溝高壘，困住宛城", "tag": "guan_safe", "faction": "guan"},
+          {"text": "推上雲梯，強攻城牆", "tag": "guan_aggressive", "faction": "guan"},
+          {"text": "放手一搏（20字內，寫下你想做的事）", "tag": "guan_reckless", "faction": "guan", "free_text": true},
+          {"text": "閉門死守，輪番上城", "tag": "huang_safe", "faction": "huang"},
+          {"text": "開門出擊，燒毀土山", "tag": "huang_aggressive", "faction": "huang"},
+          {"text": "放手一搏（20字內，寫下你想做的事）", "tag": "huang_reckless", "faction": "huang", "free_text": true}
+        ]
+      },
+      {
+        "id": "wancheng_jia_2",
+        "title": "四面攻城",
+        "text": "攻城的鼓從早響到晚，城牆底下堆滿了斷梯。城上的滾木擂石一天比一天少，城外的官軍也一天比一天疲。",
+        "goal": "撐過這一輪消耗",
+        "options": [
+          {"text": "輪番佯攻，耗盡守軍", "tag": "guan_safe", "faction": "guan"},
+          {"text": "集中一面，蟻附登城", "tag": "guan_aggressive", "faction": "guan"},
+          {"text": "孤注一擲（20字內，寫下你想做的事）", "tag": "guan_reckless", "faction": "guan", "free_text": true},
+          {"text": "添兵守垛，滾木擂石", "tag": "huang_safe", "faction": "huang"},
+          {"text": "夜縋出城，焚燒雲梯", "tag": "huang_aggressive", "faction": "huang"},
+          {"text": "孤注一擲（20字內，寫下你想做的事）", "tag": "huang_reckless", "faction": "huang", "free_text": true}
+        ]
+      },
+      {
+        "id": "wancheng_jia_3",
+        "title": "城破與否",
+        "text": "城裡的糧還剩多少、城外的兵還能撐幾天，今天都要見真章。",
+        "goal": "分出最終勝負",
+        "options": [
+          {"text": "圍死四門，不放一人", "tag": "guan_safe", "faction": "guan"},
+          {"text": "全軍登城，畢其功於一役", "tag": "guan_aggressive", "faction": "guan"},
+          {"text": "背水一戰（20字內，寫下你想做的事）", "tag": "guan_reckless", "faction": "guan", "free_text": true},
+          {"text": "死守最後一道城門", "tag": "huang_safe", "faction": "huang"},
+          {"text": "傾城而出，殺散圍軍", "tag": "huang_aggressive", "faction": "huang"},
+          {"text": "背水一戰（20字內，寫下你想做的事）", "tag": "huang_reckless", "faction": "huang", "free_text": true}
+        ]
+      }
+    ],
+    "outcomes": [
+      {"faction": "huang", "title": "宛城戰罷", "text": "宛城內外的廝殺停了下來，勝負即將傳遍天下。"}
+    ]
+  },
+  {
+    "id": "wancheng_yi",
+    "name": "宛城之戰",
+    "region": "nanyang",
+    "timetable_event": "wancheng",
+    "version": "乙",
+    "defender": "guan",
+    "front": "nanyang",
+    "factions": [
+      {"id": "guan", "name": "官軍"},
+      {"id": "huang", "name": "黃巾軍"}
+    ],
+    "trend_start": 50,
+    "muster_seconds": 1800,
+    "round_seconds": 300,
+    "rounds_per_act": 3,
+    "decisive_margin": 40,
+    "action_tags": {
+      "guan_safe": {"trend_delta": 2, "neili_damage": 15},
+      "guan_aggressive": {"trend_delta": 6, "neili_damage": 60, "mitigated_by_power": true},
+      "huang_safe": {"trend_delta": -2, "neili_damage": 15},
+      "huang_aggressive": {"trend_delta": -6, "neili_damage": 60, "mitigated_by_power": true}
+    },
+    "free_text_gamble": {
+      "success_trend_base": 5,
+      "success_trend_per_risk": 0.3,
+      "success_neili_damage": 10,
+      "failure_trend_per_risk": 0.1,
+      "failure_neili_base": 20,
+      "failure_neili_per_risk": 3.0
+    },
+    "acts": [
+      {
+        "id": "wancheng_yi_1",
+        "title": "連營圍城",
+        "text": "黃巾在宛城外連營數十里，把四門都圍住了。城裡的官軍守著郡府的倉廩，每天站在城頭，數城外的營火。",
+        "goal": "站穩腳跟，別讓對方先拉開差距",
+        "options": [
+          {"text": "閉城固守，清點糧草", "tag": "guan_safe", "faction": "guan"},
+          {"text": "開門突擊，衝亂連營", "tag": "guan_aggressive", "faction": "guan"},
+          {"text": "放手一搏（20字內，寫下你想做的事）", "tag": "guan_reckless", "faction": "guan", "free_text": true},
+          {"text": "圍住四門，斷絕糧道", "tag": "huang_safe", "faction": "huang"},
+          {"text": "趁城中未穩，架梯強攻", "tag": "huang_aggressive", "faction": "huang"},
+          {"text": "放手一搏（20字內，寫下你想做的事）", "tag": "huang_reckless", "faction": "huang", "free_text": true}
+        ]
+      },
+      {
+        "id": "wancheng_yi_2",
+        "title": "圍城日久",
+        "text": "圍了這些日子，城裡開始殺馬充飢，城外的營裡也有人病倒。兩邊都在等，等對方先撐不住。",
+        "goal": "撐過這一輪消耗",
+        "options": [
+          {"text": "節省糧草，輪番守城", "tag": "guan_safe", "faction": "guan"},
+          {"text": "派死士夜出，燒敵糧車", "tag": "guan_aggressive", "faction": "guan"},
+          {"text": "孤注一擲（20字內，寫下你想做的事）", "tag": "guan_reckless", "faction": "guan", "free_text": true},
+          {"text": "加固連營，圍而不攻", "tag": "huang_safe", "faction": "huang"},
+          {"text": "四面同時攻城", "tag": "huang_aggressive", "faction": "huang"},
+          {"text": "孤注一擲（20字內，寫下你想做的事）", "tag": "huang_reckless", "faction": "huang", "free_text": true}
+        ]
+      },
+      {
+        "id": "wancheng_yi_3",
+        "title": "城門開不開",
+        "text": "城裡的糧、城外的兵，都撐到了盡頭。宛城的門今天開不開，就看這最後一陣。",
+        "goal": "分出最終勝負",
+        "options": [
+          {"text": "死守城門，寸步不讓", "tag": "guan_safe", "faction": "guan"},
+          {"text": "傾城出戰，解圍在此一舉", "tag": "guan_aggressive", "faction": "guan"},
+          {"text": "背水一戰（20字內，寫下你想做的事）", "tag": "guan_reckless", "faction": "guan", "free_text": true},
+          {"text": "穩住連營，步步進逼", "tag": "huang_safe", "faction": "huang"},
+          {"text": "全軍蟻附，奪下城頭", "tag": "huang_aggressive", "faction": "huang"},
+          {"text": "背水一戰（20字內，寫下你想做的事）", "tag": "huang_reckless", "faction": "huang", "free_text": true}
+        ]
+      }
+    ],
+    "outcomes": [
+      {"faction": "guan", "title": "宛城戰罷", "text": "宛城內外的廝殺停了下來，勝負即將傳遍天下。"}
+    ]
+  },
+  {
+    "id": "guangzong",
+    "name": "廣宗決戰",
+    "region": "jizhou",
+    "timetable_event": "guangzong",
+    "defender": "huang",
+    "front": "jizhou",
+    "factions": [
+      {"id": "guan", "name": "官軍"},
+      {"id": "huang", "name": "黃巾軍"}
+    ],
+    "trend_start": 50,
+    "muster_seconds": 1800,
+    "round_seconds": 300,
+    "rounds_per_act": 3,
+    "decisive_margin": 40,
+    "action_tags": {
+      "guan_safe": {"trend_delta": 2, "neili_damage": 15},
+      "guan_aggressive": {"trend_delta": 6, "neili_damage": 60, "mitigated_by_power": true},
+      "huang_safe": {"trend_delta": -2, "neili_damage": 15},
+      "huang_aggressive": {"trend_delta": -6, "neili_damage": 60, "mitigated_by_power": true}
+    },
+    "free_text_gamble": {
+      "success_trend_base": 5,
+      "success_trend_per_risk": 0.3,
+      "success_neili_damage": 10,
+      "failure_trend_per_risk": 0.1,
+      "failure_neili_base": 20,
+      "failure_neili_per_risk": 3.0
+    },
+    "acts": [
+      {
+        "id": "guangzong_1",
+        "title": "廣宗城下",
+        "text": "官軍的大營紮在廣宗城外，壕溝一路挖到城下。城裡是太平道的根本，壇前的香火從沒斷過；守城的人說，黃天就在這座城裡。",
+        "goal": "站穩腳跟，別讓對方先拉開差距",
+        "options": [
+          {"text": "築圍挖塹，步步緊逼", "tag": "guan_safe", "faction": "guan"},
+          {"text": "架起雲梯，強攻城牆", "tag": "guan_aggressive", "faction": "guan"},
+          {"text": "放手一搏（20字內，寫下你想做的事）", "tag": "guan_reckless", "faction": "guan", "free_text": true},
+          {"text": "閉門堅守，以逸待勞", "tag": "huang_safe", "faction": "huang"},
+          {"text": "開門出擊，衝散圍塹", "tag": "huang_aggressive", "faction": "huang"},
+          {"text": "放手一搏（20字內，寫下你想做的事）", "tag": "huang_reckless", "faction": "huang", "free_text": true}
+        ]
+      },
+      {
+        "id": "guangzong_2",
+        "title": "堅城難下",
+        "text": "城牆比想像中厚，攻城的兵一波波退下來。城裡的黃巾也看得出來，官軍沒有要走的意思。",
+        "goal": "撐過這一輪消耗",
+        "options": [
+          {"text": "閉營休兵，佯示退意", "tag": "guan_safe", "faction": "guan"},
+          {"text": "晝夜不停，輪番攻城", "tag": "guan_aggressive", "faction": "guan"},
+          {"text": "孤注一擲（20字內，寫下你想做的事）", "tag": "guan_reckless", "faction": "guan", "free_text": true},
+          {"text": "輪班上城，保存氣力", "tag": "huang_safe", "faction": "huang"},
+          {"text": "趁官軍疲憊，夜襲大營", "tag": "huang_aggressive", "faction": "huang"},
+          {"text": "孤注一擲（20字內，寫下你想做的事）", "tag": "huang_reckless", "faction": "huang", "free_text": true}
+        ]
+      },
+      {
+        "id": "guangzong_3",
+        "title": "雞鳴",
+        "text": "天還沒亮，廣宗城外忽然鼓聲大作。黃天落不落幕，就看這一個早上。",
+        "goal": "分出最終勝負",
+        "options": [
+          {"text": "穩住陣線，堵死各門", "tag": "guan_safe", "faction": "guan"},
+          {"text": "雞鳴而發，全軍撲城", "tag": "guan_aggressive", "faction": "guan"},
+          {"text": "背水一戰（20字內，寫下你想做的事）", "tag": "guan_reckless", "faction": "guan", "free_text": true},
+          {"text": "死守內城，寸土不讓", "tag": "huang_safe", "faction": "huang"},
+          {"text": "死士出城，直撲中軍", "tag": "huang_aggressive", "faction": "huang"},
+          {"text": "背水一戰（20字內，寫下你想做的事）", "tag": "huang_reckless", "faction": "huang", "free_text": true}
+        ]
+      }
+    ],
+    "outcomes": [
+      {"faction": "huang", "title": "廣宗戰罷", "text": "廣宗城下的廝殺停了下來，勝負即將傳遍天下。"}
+    ]
   }
 ]

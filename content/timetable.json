@@ -34,13 +34,15 @@
       "成": {
         "text": "史書上，張曼成攻殺南陽太守褚貢，屯據宛城。這一次也一樣：神上使的黃旗插上了宛城城頭，郡府的官吏逃散一空。",
         "chronicle": "張曼成攻殺南陽太守褚貢，據宛城。",
-        "trends": {"nanyang": 8}
+        "trends": {"nanyang": 8},
+        "world_flags_add": ["wan_version_jia"]
       },
       "不成": {
         "text": "史書上，張曼成攻殺南陽太守褚貢，屯據宛城。這一次，宛城的城門沒有開。褚貢領著郡兵死守，黃巾在城下折了數百人，退回營中。",
         "chronicle": "張曼成攻宛城不下。",
         "trends": {"nanyang": -5},
-        "figures": {"zhangmancheng": {"fate": "受挫"}}
+        "figures": {"zhangmancheng": {"fate": "受挫"}},
+        "world_flags_add": ["wan_version_yi"]
       }
     }
   },
