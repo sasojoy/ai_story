@@ -1963,9 +1963,9 @@ class Game:
                 msgs.append(f"{fig.name}情誼 {p.affinities[fig.character] - before:+d}")
         p.snubbed_until[fid] = self.now + cfg.snub_hours * HOUR
         push.add_contribution(p, calendar.point(w.time, c, w).week, cfg.figure_defeat_prestige * cfg.contrib_per_push)
-        # T6 的呼叫點：「打擊大勢人物」軍令在這裡記一次進度——
-        #   msgs += orders.credit(s, c, p.faction, p.name, kind="challenge", location=p.location,
-        #                         front=figures.state_of(s, c, fid).front, figure=fid)
+        msgs += self._order_credit(  # 「打擊大勢人物」軍令（計畫 T6）：只算目標本人
+            kind="challenge", location=p.location, front=figures.state_of(s, c, fid).front, figure=fid,
+        )
         return msgs
 
     def _train_push(self, trend_id: str, delta: int) -> int:

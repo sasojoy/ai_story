@@ -535,3 +535,16 @@ def test_switch_off_no_convoy_option(real):
     game = _game(real, faction="guan", at="xinye")
     _grain(game, man_1=9)
     assert "act:convoy" not in [o.id for o in game.options()]
+
+
+# ── Task 6：打擊大勢人物接上 T4 的挑戰 ──────────────────────────
+
+
+def test_challenge_win_counts_for_strike(on):
+    game = _game(on, faction="guan")
+    game.state.player.location = figures.state_of(game.state, on, "bocai").location
+    order = _order(game, "strike", "guan", front="yingru", figure="bocai")
+    with _win():
+        msgs = game.choose("act:challenge:bocai")
+    assert any("軍令「打擊・波才」：你 1 次" in m for m in msgs)
+    assert order.progress == {"甲": 1}
