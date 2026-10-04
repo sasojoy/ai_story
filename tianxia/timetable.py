@@ -70,6 +70,12 @@ def due(state: GameState, content: Content) -> list[TimetableEvent]:
     return [e for e in _pending(state, content) if e.kind not in NOT_BY_SEASON_HOUR and when(state, content, e) <= now]
 
 
+def due_showdowns(state: GameState, content: Content) -> list[TimetableEvent]:
+    """時間到了、還沒收場（時間軸上沒有）的決戰，照時間排序。決戰不在季的事裡結算，T8 照這個開集結（world.season_events）。"""
+    now = state.world.time + calendar.EPS_SECONDS
+    return [e for e in _pending(state, content) if e.kind == "showdown" and when(state, content, e) <= now]
+
+
 def next_event(state: GameState, content: Content) -> TimetableEvent | None:
     """狀態列倒數的那一件：還沒結算、時間還沒到的最早一件（決戰照排定的時間）。"""
     return next((e for e in _pending(state, content) if when(state, content, e) > state.world.time), None)

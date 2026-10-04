@@ -32,8 +32,8 @@ from .rules import (
 from .sqlite_world import open_world
 from .state import PLAYER, BattleRecord, GameState, JournalEntry, Journey, Rumor, WorldState, new_game_state
 from .world import (
-    _season_vehicle, advance_world_state, check_thresholds, end_season, fire_by_id, settle_season_start, sim_tick,
-    start_pending_battle,
+    _season_vehicle, advance_world_state, check_thresholds, end_season, fire_by_id, open_showdown, open_waiting_showdown,
+    settle_season_start, showdown_battle, sim_tick, start_pending_battle,
 )
 from .world_state import WorldStateStore, season_length_days
 
@@ -1190,19 +1190,79 @@ class Game:
 
         最後把結果補送給自己（收場那一下的那個人當場就看得到）；別的參戰者各自同步時補（FB-027）。
 
-        季終收兵的決戰（unfinished，見 _shelve_unfinished_battle）沒有結果可套，不會走到這裡；萬一走到，直接不動。"""
+        季終收兵的決戰（unfinished，見 _shelve_unfinished_battle）沒有結果可套，不會走到這裡；萬一走到，直接不動。
+
+        時刻表決戰（第一季的三場大戲，計畫 T8）不套保底的 BattleOutcome，改走 _settle_showdown。不論哪一種，收場之後
+        都看有沒有時間到了、在等這一場打完的決戰，有就立刻開（見 _open_waiting_showdown）。"""
         if battle.unfinished:
             return
-        if battle.outcome_world_flags or battle.outcome_trend_delta or battle.outcome_title:
+        definition = self.content.battles.get(battle.battle_id)
+        if definition is not None and definition.timetable_event is not None and season_one(self.content, self.state.world):
+            self._settle_showdown(battle, definition)
+        else:
+            if battle.outcome_world_flags or battle.outcome_trend_delta or battle.outcome_title:
 
-            def _apply(season: WorldState) -> None:
-                self._apply_outcome_trends_and_flags(season, battle)
-                if battle.outcome_title:
-                    season.chronicle.append(Rumor(time=season.time, text=f"【{battle.outcome_title}】{battle.outcome_text}"))
+                def _apply(season: WorldState) -> None:
+                    self._apply_outcome_trends_and_flags(season, battle)
+                    if battle.outcome_title:
+                        season.chronicle.append(Rumor(time=season.time, text=f"【{battle.outcome_title}】{battle.outcome_text}"))
 
-            self.world.mutate_season(_apply)
-            self._apply_outcome_trends_and_flags(self.state.world, battle)
+                self.world.mutate_season(_apply)
+                self._apply_outcome_trends_and_flags(self.state.world, battle)
+            self._deliver_battle_results()
+        self._open_waiting_showdown()
+
+    def _settle_showdown(self, battle: battle_instance.BattleInstance, definition: BattleDef) -> None:
+        """時刻表決戰收場（計畫 T8）：照 battle_instance.decide_result 判誰贏、大勝或險勝——這一刻才讀
+        WorldState.locks（鎖定只在這裡看，起點、推力、選項都不看，戰鬥系統 4.3）——再交給 timetable.resolve 結算那一格
+        （它自己加宛城的版本前綴，公告、江湖史、戰況、人物都照時刻表）。保底的 BattleOutcome 不套、不寫江湖史。
+
+        戰鬥那一列的結果改成時刻表那一格（標題「官軍大勝」、文字是公告、大勢變化是那一格的戰況），參戰者的戰報照
+        W13／FB-027 補送時就寫這個；公告進每個人的江湖紀錄走 _deliver_big_events（FB-038）。
+
+        resolve 改的是資料庫裡的那一份賽季（mutate_season），手上的 self.state.world 跟著讀回來：結算發生在 options() 的
+        推進裡，接下來 choose() 收尾的 _save_season 會把手上那一份整份寫回去，不讀回來就把結果蓋掉了。這一刻手上那一份
+        跟資料庫一致（每個動作開頭的 sync 剛讀過、推進戰鬥之前還沒改它），讀回來不會丟東西。"""
+        event = next((e for e in self.content.timetable if e.id == definition.timetable_event), None)
+        result: dict[str, object] = {}
+
+        def _resolve(season: WorldState) -> None:
+            lock = season.locks.get(definition.timetable_event)
+            winner, margin = battle_instance.decide_result(
+                battle, definition, lock.side if lock is not None else None, definition.defender or definition.factions[0].id,
+            )
+            result["title"] = f"{timetable.SIDE_NAMES.get(winner, winner)}{margin}"
+            if event is None:
+                return
+            timetable.resolve(_season_vehicle(self.content, season), self.content, event, self.rng, key=f"{winner}:{margin}")
+            done = season.timeline.get(event.id)
+            outcome = event.outcomes.get(done.key) if done is not None else None
+            result["text"] = done.text if done is not None else ""
+            result["trends"] = dict(outcome.trends) if outcome is not None else {}
+
+        self.world.mutate_season(_resolve)
+
+        def _relabel(b: battle_instance.BattleInstance) -> None:
+            if b.record_id != battle.record_id:
+                return
+            b.outcome_title = str(result["title"])
+            b.outcome_text = str(result.get("text") or b.outcome_text or "")
+            b.outcome_trend_delta = dict(result.get("trends") or {})  # 只給戰報顯示：已經由 resolve 套過了
+            b.outcome_world_flags = []
+
+        self.world.mutate_battle(_relabel)
+        self.state.world = self.world.get_season()
+        self._deliver_big_events()
         self._deliver_battle_results()
+
+    def _open_waiting_showdown(self) -> None:
+        """時間到了、在等前一場打完的時刻表決戰，前一場一收場就開（Review Focus 2：開不成時留著記號，等它收場立刻開）。
+        開了的話手上的那一份賽季跟著讀回來（季上記了「開過了」，之後存檔不能蓋掉它）。集結的消息不另外寫紀錄：
+        場景上每個人都看得到集結。"""
+        if not self.state.world.showdowns_waiting:
+            return
+        if open_waiting_showdown(self.world, self.content, self.now):
+            self.state.world = self.world.get_season()
 
     def _apply_outcome_trends_and_flags(self, season: WorldState, battle: battle_instance.BattleInstance) -> None:
         """決戰結果的大勢變化與世界旗標，套到 season 上（資料庫裡的那份與記憶體裡的那份共用這一段）。
@@ -2446,9 +2506,18 @@ class Game:
         return None
 
     def admin_battles(self) -> list[BattleDef]:
-        """管理者「立刻開戰」的選單：照內容的順序，第一季不觸發的 beta 決戰不列（計畫 T8）。"""
-        off = season_one_off(self.content, self.state.world, "battles")
-        return [b for b in self.content.battles.values() if b.id not in off]
+        """管理者「立刻開戰」的選單，照內容的順序（計畫 T8）：
+        - 第一季不觸發的 beta 決戰不列；
+        - 時刻表決戰只在第一季列（開關關著時 beta 那一季沒有時刻表），而且只列還沒開過、還沒收場的，分版本的只列這一季
+          該開的那一版（宛城照第 3 週的結果）——開出來跟時間到了自動開的一樣（見 admin_start_battle）。"""
+        w = self.state.world
+        off = season_one_off(self.content, w, "battles")
+        showdowns = [
+            showdown_battle(self.state, self.content, e) for e in self.content.timetable
+            if season_one(self.content, w) and e.kind == "showdown" and e.id not in w.timeline and e.id not in w.showdowns_opened
+        ]
+        openable = {b.id for b in showdowns if b is not None}
+        return [b for b in self.content.battles.values() if b.id not in off and (b.timetable_event is None or b.id in openable)]
 
     def admin_fires(self) -> list[Threshold | WorldEvent]:
         """管理者「觸發大事」的選單：大勢門檻與世界事件，第一季不觸發的 beta 門檻不列（計畫 T8）。"""
@@ -2466,8 +2535,12 @@ class Game:
         current = self.world.get_battle()
         if current is not None and current.phase != "ended":
             return self._log(["（已經有一場戰鬥在進行。）"])
-        self.world.start_battle(definition, now)
-        msgs = [f"🛡️ 【全服戰報】{definition.name}的集結號角已經吹響！"]
+        if definition.timetable_event is not None:  # 時刻表決戰：跟時間到了一樣開（起點照戰況、記下開過了，之後不再開）
+            msgs = open_showdown(self.world, self.content, definition.timetable_event, now)
+            self.state.world = self.world.get_season()
+        else:
+            self.world.start_battle(definition, now)
+            msgs = [f"🛡️ 【全服戰報】{definition.name}的集結號角已經吹響！"]
         self._write(f"開戰・{definition.name}", msgs, tag="管理者")
         return self._log(msgs)
 

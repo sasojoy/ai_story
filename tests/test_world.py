@@ -1,10 +1,15 @@
 import random
 from unittest import mock
 
+from tianxia.state import PlayerState, TimelineResult
 from tianxia.world import (
     check_thresholds, current_act, current_storyline, end_season, evaluate_ending, sim_active, sim_tick,
     start_pending_battle,
 )
+
+
+def _player(content) -> PlayerState:
+    return PlayerState(name="", location=content.scenario.start_location, stats={}, stamina=0)
 
 
 def test_threshold_fires_once_and_sets_flag(state, content):
@@ -394,3 +399,113 @@ def test_season_one_off_storyline_does_not_advance(state, content):
     state.world.revealed.add("bao")
     update_storyline(state, content)
     assert state.world.storyline == "treasure"
+
+
+# ── 三場大戲照時刻表開集結（計畫 T8）────────────────────────────────────
+
+
+def _showdown_world(content, world):
+    """第一季內容＋時刻表決戰的 BattleDef，共用賽季種好（蓋了「開」的章、排好決戰時間）。回傳 defs。"""
+    from conftest import install_season_one, install_showdowns
+
+    install_season_one(content)
+    defs = install_showdowns(content)
+    world.seed_first_season(content)
+    return defs
+
+
+def test_start_follows_the_front(content, world):
+    """集結開始時讀一次戰況：潁川 40→長社起點 55；南陽 35→宛城 58；冀州 55→廣宗 48；集結開始後戰線再動，起點不變。"""
+    from conftest import FixedRandom
+    from tianxia.engine import Game
+    from tianxia.models import TimetableEvent, TimetableOutcome
+    from tianxia.world import open_showdown
+
+    defs = _showdown_world(content, world)
+    content.timetable.insert(-1, TimetableEvent(
+        id="guangzong", week=11, front="jizhou", title="廣宗決戰", kind="showdown",
+        outcomes={f"{side}:{tier}": TimetableOutcome(text="廣宗打完了。") for side in ("guan", "huang") for tier in ("大勝", "險勝")},
+    ))
+    content.battles["guangzong"] = defs["changshe_fire"].model_copy(
+        update={"id": "guangzong", "name": "廣宗決戰", "timetable_event": "guangzong", "defender": "huang", "front": "jizhou"},
+    )
+    for event_id, battle_id, start in (("changshe_fire", "changshe_fire", 55), ("wancheng", "wancheng_jia", 58), ("guangzong", "guangzong", 48)):
+        assert open_showdown(world, content, event_id, now=0.0) == [f"🛡️ 【全服戰報】{content.battles[battle_id].name}的集結號角已經吹響！"]
+        assert (world.get_battle().battle_id, world.get_battle().trend) == (battle_id, start), event_id
+        world.clear_battle()
+
+    world.mutate_season(lambda s: (s.showdowns_opened.clear(), s.trends.update(yingru=40)))
+    open_showdown(world, content, "changshe_fire", now=0.0)
+    world.mutate_season(lambda s: s.trends.update(yingru=5))  # 開打前戰線又動了
+    game = Game.new(content, "沈浪", rng=FixedRandom(0.5), world=world)
+    game.now = defs["changshe_fire"].muster_seconds + 1
+    game.options()  # 集結截止、開打
+    assert (world.get_battle().phase, world.get_battle().trend) == ("active", 55)
+
+
+def test_showdown_is_marked_waiting_when_its_time_comes(content):
+    """季的事（season_events）看 WorldState.schedule：時間到了、還沒收場、還沒開過的決戰記進 showdowns_waiting（要開集結得
+    在 mutate 外面，見 start_pending_battle）；時刻表上沒有對應 BattleDef 的決戰不記。"""
+    from conftest import install_season_one, install_showdowns
+    from tianxia.state import GameState
+    from tianxia.world import season_events
+    from tianxia.world_state import fresh_season
+
+    install_season_one(content)
+    install_showdowns(content)
+    state = GameState(player=_player(content), world=fresh_season(content))
+    w = state.world
+    w.timeline.update({e: TimelineResult(key="skip", time=0.0) for e in ("uprising", "zhangmancheng", "bocai")})
+    w.time = w.schedule["changshe_fire"] - 1.0
+    season_events(state, content, random.Random(0))
+    assert w.showdowns_waiting == []
+    w.time = w.schedule["changshe_fire"]
+    season_events(state, content, random.Random(0))
+    season_events(state, content, random.Random(0))  # 重複呼叫不重複記
+    assert w.showdowns_waiting == ["changshe_fire"] and "changshe_fire" not in w.timeline
+    del content.battles["wancheng_jia"], content.battles["wancheng_yi"]
+    w.time = w.schedule["wancheng"]
+    season_events(state, content, random.Random(0))
+    assert w.showdowns_waiting == ["changshe_fire"]
+
+
+def test_wancheng_version_from_week_three(content, world):
+    """第 3 週「成」開 wancheng_jia（守方黃巾），「不成」開 wancheng_yi（守方官軍）。"""
+    from tianxia.world import open_showdown
+
+    _showdown_world(content, world)
+    for week3, battle_id, defender in (("成", "wancheng_jia", "huang"), ("不成", "wancheng_yi", "guan")):
+        world.mutate_season(lambda s: (s.timeline.update(zhangmancheng=TimelineResult(key=week3, time=0.0)), s.showdowns_opened.clear()))
+        open_showdown(world, content, "wancheng", now=0.0)
+        assert world.get_battle().battle_id == battle_id and content.battles[battle_id].defender == defender
+        assert world.get_season().showdowns_opened == {"wancheng": battle_id}
+        world.clear_battle()
+
+
+def test_a_showdown_does_not_open_twice_or_after_it_is_settled(content, world):
+    """一場決戰只開一次：開過的（不論打完沒）、已經收場（時間軸上有結果）的、季已經結束的，都不再開。"""
+    from tianxia.world import open_showdown
+
+    _showdown_world(content, world)
+    assert open_showdown(world, content, "changshe_fire", now=0.0)
+    world.clear_battle()
+    assert open_showdown(world, content, "changshe_fire", now=1.0) == [] and world.get_battle() is None
+    world.mutate_season(lambda s: s.timeline.update(wancheng=TimelineResult(key="甲:guan:大勝", time=0.0)))
+    assert open_showdown(world, content, "wancheng", now=2.0) == [] and world.get_battle() is None
+    world.mutate_season(lambda s: (s.timeline.pop("wancheng"), setattr(s, "ended", True)))
+    assert open_showdown(world, content, "wancheng", now=3.0) == [] and world.get_battle() is None
+
+
+def test_a_showdown_waits_while_another_battle_runs(content, world):
+    """Review Focus 2：時間到了卻開不成（另一場還在打）：記號留著，start_pending_battle 不開；那一場收場之後立刻開。"""
+    from tianxia.world import open_waiting_showdown
+
+    _showdown_world(content, world)
+    other = _install_battle_def(content)
+    world.start_battle(other, now=0.0)
+    world.mutate_season(lambda s: s.showdowns_waiting.append("changshe_fire"))
+    assert start_pending_battle(world, content, now=10.0) == []
+    assert world.get_battle().battle_id == "b1" and world.get_season().showdowns_waiting == ["changshe_fire"]
+    world.mutate_battle(lambda b: setattr(b, "phase", "ended"))
+    assert open_waiting_showdown(world, content, now=20.0) == ["🛡️ 【全服戰報】長社火攻的集結號角已經吹響！"]
+    assert world.get_battle().battle_id == "changshe_fire" and world.get_season().showdowns_waiting == []

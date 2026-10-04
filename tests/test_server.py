@@ -144,7 +144,7 @@ def test_admin_choices_leave_out_the_beta_battle_and_thresholds_in_season_one(ga
     assert "huangjin_showdown" in listed("battles") and "huangjin_60" in listed("events")
     monkeypatch.setattr(server.CONTENT.config, "season_one", True)
     game.world.mutate_season(lambda season: setattr(season, "season_one", True))
-    assert "huangjin_showdown" not in listed("battles")
+    assert listed("battles") == ["changshe_fire", "wancheng_jia", "guangzong"]  # 三場大戲，宛城只列這一季該開的那一版
     assert not {"huangjin_50", "huangjin_60", "huangjin_80", "huangjin_10"} & set(listed("events"))
     assert {"yuxi_50", "yuxi_100"} <= set(listed("events"))
 
@@ -918,7 +918,7 @@ def _admin(client, monkeypatch, name="掌門"):
 def test_an_admin_account_sees_the_admin_tools(client, monkeypatch):
     assert _admin(client, monkeypatch)["main"]["admin"] is True
     choices = client.get("/api/admin").json()
-    assert [b["id"] for b in choices["battles"]] == list(server.CONTENT.battles)
+    assert [b["id"] for b in choices["battles"]] == ["huangjin_showdown"]  # 開關關著：三場大戲是第一季的，不列
     assert len(choices["events"]) == len(server.CONTENT.scenario.thresholds) + len(server.CONTENT.scenario.world_events)
     assert [t["id"] for t in choices["trends"]] == ["huangjin", "yuxi"]  # 開關關著：第一季才有的線不列
 

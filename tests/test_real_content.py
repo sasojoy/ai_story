@@ -875,3 +875,33 @@ def test_wan_city_reads_like_its_version_from_week_three(content):
     jia, yi = wan.describe({jia_flag}), wan.describe({yi_flag})
     assert "黃" in jia and "城外" in jia and "連營" in yi and len({jia, yi, wan.description}) == 3
     assert wan.describe({yi_flag, "wancheng_fallen"}) == jia
+
+
+def test_a_real_weekend_season_opens_and_settles_the_three_showdowns(tmp_path):
+    """週末設定的真實內容：長社、宛城、廣宗照排定的時間在各自的大區開集結（起點照當時的戰況），沒人參戰也照起點判、
+    交給時刻表結算（宛城帶版本前綴）；beta 那場一次也沒開。"""
+    from tianxia import battle_instance as bi
+    from tianxia.rules import trend_value
+    from tianxia.sqlite_world import open_world
+
+    c = load_content(CONTENT_DIR, profile="weekend")
+    c.config.auto_open_first_season = True
+    world = open_world(tmp_path / "weekend.db")
+    game = Game.new(c, "Rayal", rng=random.Random(0), world=world)
+    game.now = 0.0
+    for event_id, region in (("changshe_fire", "yingru"), ("wancheng", "nanyang"), ("guangzong", "jizhou")):
+        game.advance(game.state.world.schedule[event_id] + 1.0 - game.state.world.time)
+        battle = world.get_battle()
+        definition = c.battles[battle.battle_id]
+        assert (definition.timetable_event, definition.region, battle.phase) == (event_id, region, "muster")
+        assert battle.trend == bi.start_from_front(trend_value(game.state, c, definition.front))
+        deadline = battle.muster_deadline_real
+        for now in (deadline, deadline + definition.round_seconds):
+            game.now = now
+            game.options()
+        key = world.get_season().timeline[event_id].key
+        version = f"{definition.version}:" if definition.version else ""
+        assert key == f"{version}{':'.join(bi.decide_result(battle, definition, None, definition.defender))}"
+    assert [b.battle_id for _, b in world.ended_battles()] == [
+        "changshe_fire", world.get_season().showdowns_opened["wancheng"], "guangzong",
+    ]

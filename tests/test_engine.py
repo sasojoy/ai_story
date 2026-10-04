@@ -13,6 +13,7 @@ from tianxia.models import Location
 from tianxia.models import ExploreMix
 from tianxia.state import BotProfile, FigureState, GameState, Journey, Rumor, new_game_state
 from tianxia.sqlite_world import open_world
+from tianxia.world_state import season_length_days
 
 HOUR = 3600
 DAY = 86400
@@ -4443,3 +4444,207 @@ def test_a_location_description_follows_the_first_matching_world_flag(content, g
     assert "城門緊閉。" in game.location_text() and base not in game.location_text()
     game.state.world.flags.add("fallen")  # 排在前面的勝出
     assert "城頭換了旗。" in game.location_text() and "城門緊閉。" not in game.location_text()
+
+
+# ── 三場大戲（計畫 T8）：照時刻表開集結、收場的結果餵給時刻表 ────────────────────
+
+
+def _showdown_game(content, world, name="沈浪", faction="guan"):
+    """第一季內容＋三筆時刻表決戰（北區打，小鎮就在北區）＋陣營；第 3、4 週的擲骰先記成跳過，戰線停在開季的數字
+    （潁川 40、南陽 35），起點才算得準。回傳站在 faction 的 Game（現實時間 0）。"""
+    from conftest import install_showdowns
+    from tianxia.state import TimelineResult
+
+    if not content.config.season_one:
+        install_season_one(content)
+        install_showdowns(content)
+        _install_factions(content)
+    game = Game.new(content, name, rng=random.Random(0), world=world)
+    game.state.player.faction = faction
+    game.now = 0.0
+    skipped = {e: TimelineResult(key="skip", time=0.0) for e in ("zhangmancheng", "bocai")}
+    game.world.mutate_season(lambda s: s.timeline.update({k: v for k, v in skipped.items() if k not in s.timeline}))
+    game.state.world = game.world.get_season()
+    return game
+
+
+def _to_showdown(game, event_id: str, after: float = 1.0) -> list[str]:
+    """把季推進到這件決戰排定的時間再過 after 世界秒（遊戲時間；現實時間 game.now 不動）。"""
+    return game.advance(game.state.world.schedule[event_id] + after - game.state.world.time)
+
+
+def _settle_without_fighters(game, definition) -> None:
+    """沒人參戰：集結截止那一刻開打，再過一回合逾時就照 end_without_fighters 收場（有人刷新畫面才推進）。"""
+    deadline = game.world.get_battle().muster_deadline_real
+    for now in (deadline, deadline + definition.round_seconds):
+        with at(game, now):
+            game.options()
+
+
+def test_showdown_starts_at_scheduled_time_in_region(content, world):
+    """排定的時間（第 6 週週四 20:00）一到就在那個大區開集結：起點照潁川的戰況（40 → 55），季上記下開過了；
+    人要在那個大區才能加入。"""
+    game = _showdown_game(content, world)
+    schedule = game.state.world.schedule["changshe_fire"]
+    game.advance(schedule - 1.0 - game.state.world.time)
+    assert world.get_battle() is None and "changshe_fire" not in world.get_season().showdowns_opened
+    msgs = game.advance(2.0)
+    battle = world.get_battle()
+    assert (battle.battle_id, battle.phase, battle.trend) == ("changshe_fire", "muster", 55)
+    assert battle.muster_deadline_real == game.now + content.battles["changshe_fire"].muster_seconds
+    assert "🛡️ 【全服戰報】長社火攻的集結號角已經吹響！" in msgs
+    assert world.get_season().showdowns_opened == {"changshe_fire": "changshe_fire"}
+    assert game.state.world.showdowns_opened == {"changshe_fire": "changshe_fire"}  # 手上的那一份也跟上了
+    assert "battle:join:guan" in ids(game) and "battle:join:huang" not in ids(game)
+    content.battles["changshe_fire"].region = "south"  # 人不在決戰的大區：加入不了
+    assert "battle:join:guan" not in ids(game)
+
+
+def _play_showdown(game, tag: str) -> None:
+    """自己一個人參戰（集結時加入），集結截止後每回合都出 tag，一路打到收場。"""
+    with at(game, game.now):
+        game.choose(f"battle:join:{game.state.player.faction}")
+    now = game.world.get_battle().muster_deadline_real
+    while game.world.get_battle().phase != "ended":
+        with at(game, now):
+            game.choose(f"battle:act:{tag}")
+        now += 1
+
+
+def test_showdown_result_feeds_timetable(content, world):
+    """收場後 timeline["changshe_fire"] 有結果（不再走保底的 BattleOutcome）：戰況照表跳，波才照表退場；公告進每個人的
+    江湖紀錄，參戰者的戰報與那一則紀錄寫的是時刻表那一格（官軍大勝）。"""
+    from tianxia.models import FigureChange
+
+    game = _showdown_game(content, world)
+    event = next(e for e in content.timetable if e.id == "changshe_fire")
+    event.outcomes["guan:大勝"].figures = {"bocai": FigureChange(fate="退場")}
+    event.outcomes["guan:險勝"].figures = {"bocai": FigureChange(fate="聲威大減")}
+    _to_showdown(game, "changshe_fire")
+    _play_showdown(game, "guan_aggressive")  # 55 → 61 → 67 → 73：打滿三回合，官軍大勝
+    season = world.get_season()
+    assert season.timeline["changshe_fire"].key == "guan:大勝"
+    assert season.trends["yingru"] == 40 - 15 and season.figures["bocai"].status == "retired"
+    assert "皇甫嵩火攻長社。" in [r.text for r in season.chronicle]
+    assert not any("長社火攻戰罷" in r.text for r in season.chronicle)  # 保底結果不寫江湖史
+    assert game.state.world.timeline["changshe_fire"].key == "guan:大勝"  # 手上的那一份也跟上了（之後存檔不會蓋掉）
+    report = next(e for e in game.state.journal if e.battle_id is not None)
+    assert (report.title, report.tag) == ("長社火攻・官軍大勝", "你站在官軍")
+    assert season.timeline["changshe_fire"].text in report.lines and "潁川汝南 -15" in report.changes
+    assert game.state.battles[0].tier == "官軍大勝"
+    assert any(e.title == "江湖大事" and "火光燭天" in e.tag for e in game.state.journal)
+    other = Game.new(content, "丙", rng=random.Random(5), world=world)  # 沒參戰的人也收到公告，但沒有戰報
+    other.sync(game.now + 10)
+    assert any(e.title == "江湖大事" and "火光燭天" in e.tag + "".join(e.lines) for e in other.state.journal)  # 幾件合成一則
+    assert not any(e.battle_id is not None for e in other.state.journal)
+
+
+def test_no_fighters_judged_from_front_start(content, world):
+    """沒人參戰：照 end_without_fighters 收場，用照戰況算出的起點判（潁川 30 → 起點 60 → 官軍險勝），不是保底的結果。"""
+    game = _showdown_game(content, world)
+    world.mutate_season(lambda s: s.trends.update(yingru=30))
+    game.state.world = world.get_season()
+    _to_showdown(game, "changshe_fire")
+    assert world.get_battle().trend == 60
+    _settle_without_fighters(game, content.battles["changshe_fire"])
+    season = world.get_season()
+    assert season.timeline["changshe_fire"].key == "guan:險勝" and season.trends["yingru"] == 30 - 8
+
+
+def test_no_fighters_still_resolves(content, world):
+    """Review Focus 2：那個大區沒人打，時刻表照樣拿到一個結果，季不會卡住：決戰收掉、下一件照常倒數、之後的大事照常結算。"""
+    game = _showdown_game(content, world)
+    _to_showdown(game, "changshe_fire")
+    _settle_without_fighters(game, content.battles["changshe_fire"])
+    season = world.get_season()
+    assert season.timeline["changshe_fire"].key == "guan:險勝"  # 起點 55，沒人推
+    assert game.options() and world.get_battle().phase == "ended"
+    assert season.showdowns_waiting == [] and game.status_data()["next_event"]["title"] != "長社火攻"
+    game.advance(calendar.week_start(8, content) - game.state.world.time)
+    assert {"luzhi_siege", "qinjie", "luzhi_jailed"} <= set(world.get_season().timeline)
+
+
+def test_scheduled_while_another_battle_runs_waits_then_starts(content, world):
+    """Review Focus 1、2：另一場還在打時一次跨過長社與宛城兩件決戰：都不開、也不跳過，記號照時間排著；前一場收場的那一下
+    立刻開下一件，每件只開一次、各自結算一次。"""
+    game = _showdown_game(content, world)
+    content.config.admins = ["沈浪"]
+    beta = _install_battle_def(content)
+    game.admin_start_battle(beta.id, now=0.0)
+    _to_showdown(game, "wancheng")
+    assert world.get_battle().battle_id == beta.id
+    assert world.get_season().showdowns_waiting == ["changshe_fire", "wancheng"]
+    _settle_without_fighters(game, beta)
+    assert world.get_battle().battle_id == "changshe_fire" and world.get_season().showdowns_waiting == ["wancheng"]
+    _settle_without_fighters(game, content.battles["changshe_fire"])
+    assert world.get_battle().battle_id == "wancheng_jia" and world.get_season().showdowns_waiting == []
+    _settle_without_fighters(game, content.battles["wancheng_jia"])
+    season = world.get_season()
+    assert season.showdowns_opened == {"changshe_fire": "changshe_fire", "wancheng": "wancheng_jia"}
+    assert season.timeline["changshe_fire"].key == "guan:險勝" and season.timeline["wancheng"].key == "甲:guan:險勝"
+    assert [b.battle_id for _, b in world.ended_battles()] == [beta.id, "changshe_fire", "wancheng_jia"]
+
+
+def test_showdown_never_opens_twice(content, world):
+    """開戰後推進跨過開戰時間好幾次、季終收兵（FB-035）後再推進，都不會再開同一場；收兵的那一場不算結果。"""
+    game = _showdown_game(content, world)
+    _to_showdown(game, "changshe_fire")
+    record = world.get_battle().record_id
+    for _ in range(3):
+        game.advance(calendar.cal_hour_seconds(content) * 7)
+        game.sync(game.now)
+        assert world.get_battle().record_id == record
+    game.advance(season_length_days(world.get_season(), content) * DAY)  # 季終
+    assert world.get_season().ended
+    game.options()  # 有人刷新畫面：沒打完的收兵
+    for _ in range(2):
+        game.advance(DAY)
+        game.sync(game.now + 1)
+    assert world.get_battle() is None
+    ended = world.ended_battles()
+    assert [(b.battle_id, b.unfinished) for _, b in ended] == [("changshe_fire", True)]
+    assert "changshe_fire" not in world.get_season().timeline  # 沒打完的不算結果（季末交給 T9）
+
+
+def test_lock_does_not_change_start_or_options(content, tmp_path):
+    """Review Focus 3：有人鎖定長社（黃巾）的那一服，跟沒人鎖定的那一服，決戰的起點、集結、選項、戰場文字都一模一樣；
+    只有收場判結果時才看鎖定（起點 55 沒人推：沒鎖定是官軍險勝，黃巾鎖定是黃巾險勝）。"""
+    from tianxia.state import Lock
+
+    views, games = [], []
+    for name in ("plain", "locked"):
+        world = open_world(tmp_path / f"{name}.db")
+        game = _showdown_game(content, world)
+        if name == "locked":
+            world.mutate_season(lambda s: s.locks.update(changshe_fire=Lock(side="huang", name="乙", time=0.0, shown="某位少俠")))
+            game.state.world = world.get_season()
+        _to_showdown(game, "changshe_fire")
+        battle = world.get_battle()
+        views.append((battle.trend, [o.model_dump() for o in game.options()], game.scene_text()))
+        with at(game, battle.muster_deadline_real):
+            views.append(([o.model_dump() for o in game.options()], game.scene_text()))
+        games.append(game)
+    assert views[0] == views[2] and views[1] == views[3]
+    for game in games:
+        battle = game.world.get_battle()
+        with at(game, battle.round.opened_real + content.battles["changshe_fire"].round_seconds):
+            game.options()
+    assert [g.world.get_season().timeline["changshe_fire"].key for g in games] == ["guan:險勝", "huang:險勝"]
+
+
+def test_admin_can_open_a_showdown_by_hand_once(content, world):
+    """管理者「立刻開戰」：第一季列出還沒開過的時刻表決戰（宛城只列這一季版本的那一筆），開出來的跟排定時間開的一樣
+    （起點照戰況、記下開過了）；開過就不再列、時間到了也不再開。開關關著不列時刻表決戰。"""
+    game = _showdown_game(content, world)
+    content.config.admins = ["沈浪"]
+    assert [b.id for b in game.admin_battles()] == ["changshe_fire", "wancheng_jia"]
+    assert any("長社火攻的集結號角" in m for m in game.admin_start_battle("changshe_fire", now=0.0))
+    assert (world.get_battle().battle_id, world.get_battle().trend) == ("changshe_fire", 55)
+    assert game.state.world.showdowns_opened == {"changshe_fire": "changshe_fire"}
+    assert [b.id for b in game.admin_battles()] == ["wancheng_jia"]
+    assert game.admin_start_battle("changshe_fire", now=1.0) == ["（沒有這場戰鬥。）"]
+    record = world.get_battle().record_id
+    _to_showdown(game, "changshe_fire")
+    assert world.get_battle().record_id == record and world.get_season().showdowns_waiting == []
+    content.config.season_one = False
+    assert game.admin_battles() == []
