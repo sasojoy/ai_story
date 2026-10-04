@@ -273,7 +273,8 @@ def defeat(state: GameState, content: Content, fid: str, amount: float) -> list[
     lines = [f"{name}聲威 -{before - figure.prestige}"] if figure.prestige < before else []
     if figure.prestige == 0:
         destiny = fid in content.figures and content.figures[fid].destiny
-        news = [f"{name}連吃敗仗，{'元氣大傷' if destiny else '聲威掃地'}，退出了這一季的戰事。"]
+        # 濃縮版內容表 1.5（S1 審過）：不說「這一季」；退場句後面緊接接手句，所以這裡不再寫「的戰事」
+        news = [f"{name}連吃敗仗，元氣大傷，今年是露不了面了。" if destiny else f"{name}連吃敗仗，聲威掃地，再也號令不動手下的兵。"]
         news += _change(state, content, fid, FigureChange(fate="重創" if destiny else "退場"))
         add_rumor(state, "".join(news), content=content, layer="world")
         lines += news

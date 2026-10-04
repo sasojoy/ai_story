@@ -412,12 +412,12 @@ def test_prestige_zero_retires_and_successor_takes_the_front(on):
     s = _season(on)
     s.world.figures["bocai"].prestige = 5
     lines = figures.defeat(s, on, "bocai", 5)
-    assert lines == ["波才聲威 -5", "波才連吃敗仗，聲威掃地，退出了這一季的戰事。", "彭脫接手潁川汝南的戰事。"]
+    assert lines == ["波才聲威 -5", "波才連吃敗仗，聲威掃地，再也號令不動手下的兵。", "彭脫接手潁川汝南的戰事。"]
     assert s.world.figures["bocai"].status == "retired" and figures.is_out(s, "bocai")
     assert s.world.figures["pengtuo"] == FigureState(prestige=40, status="active", front="yingru", location="huangjin_camp")
     assert figures.commander(s, on, "yingru", "huang") == "pengtuo" and figures.push_goal(s, on, "pengtuo") == 1
     assert [(r.layer, r.text) for r in s.world.rumors] == [
-        ("world", "波才連吃敗仗，聲威掃地，退出了這一季的戰事。彭脫接手潁川汝南的戰事。"),
+        ("world", "波才連吃敗仗，聲威掃地，再也號令不動手下的兵。彭脫接手潁川汝南的戰事。"),
     ]
     assert figures.defeat(s, on, "bocai", 5) == []  # 退場的人不再扣、不再發公告
 
@@ -440,7 +440,7 @@ def test_destiny_figure_is_crippled_not_retired(on):
     """孫堅是天命人物：歸零是重創，退出本季；他沒有接位的人，南陽官軍沒有人物了。"""
     s = _season(on)
     s.world.figures["sunjian"].prestige = 3
-    assert figures.defeat(s, on, "sunjian", 5) == ["孫堅聲威 -3", "孫堅連吃敗仗，元氣大傷，退出了這一季的戰事。"]
+    assert figures.defeat(s, on, "sunjian", 5) == ["孫堅聲威 -3", "孫堅連吃敗仗，元氣大傷，今年是露不了面了。"]
     assert s.world.figures["sunjian"].status == "crippled" and figures.is_out(s, "sunjian")
     assert figures.commander(s, on, "nanyang", "guan") is None
 
@@ -735,3 +735,15 @@ def test_kou_boss_does_not_fire_in_season_one(on, world):
     assert "kou_boss" not in [e.id for e in event_candidates(game.state, on, "explore")]
     on.config.season_one = False
     assert "kou_boss" in [e.id for e in event_candidates(game.state, on, "explore")]
+
+
+def test_guangzong_names_the_jizhou_commander(on):
+    """QA 驗 T4 時記的：廣宗公告的 {官軍主將} 以前退回「官軍」；有了人物表，寫得出當時冀州的官軍主將（PM 2026-10-05）。"""
+    import random as _random
+
+    from tianxia import timetable
+
+    game = Game.new(on, "甲", rng=_random.Random(0))
+    event = next(e for e in on.timetable if e.id == "guangzong")
+    text = timetable.resolve(game.state, on, event, _random.Random(0), key="guan:大勝")[0]
+    assert "盧植破了廣宗" in text and "官軍破了廣宗" not in text
