@@ -52,6 +52,15 @@ def test_pick_returns_none_with_nothing_to_choose(game):
     assert pick(game, [], random.Random(0)) is None
 
 
+def test_pick_never_takes_the_road_options_meant_for_humans(game):
+    """路上設計第六節：機器人不折返、不改道、不做路上小事。折返在路上永遠按得下去，不排除的話
+    play_season「沒有能選的就推進時間」這個訊號會失效。"""
+    game.choose("move:lake")
+    options = [o for o in game.options(odds=False) if o.enabled]
+    assert "road:back" in [o.id for o in options]
+    assert pick(game, options, random.Random(0)) is None
+
+
 def test_play_season_completes_a_full_season(content):
     game = play_season(content, 0, max_steps=500)
     assert game.state.world.ended

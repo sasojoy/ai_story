@@ -3,11 +3,11 @@ import re
 
 from tianxia.atlas import location_view, vision_range, visible_locations
 from tianxia.mapview import (
-    LEGEND_LAYERS, MINI_HEIGHT, NODE_FILL, ROUTE_STROKE, SELECT_STROKE, node_shape, render_map,
+    LEGEND_LAYERS, MINI_HEIGHT, NODE_FILL, ROUTE_STROKE, SELECT_STROKE, YOU_SIZE, node_shape, render_map,
     render_minimap, text_box, text_width,
 )
 from tianxia.models import Location
-from tianxia.state import Rumor
+from tianxia.state import Journey, Rumor
 
 
 def no_odds(squad_id: str) -> str:
@@ -347,3 +347,44 @@ def test_minimap_without_regions_still_shows_the_player(state, content):
     content.map.regions = []
     svg = render_minimap(state, content)
     assert "<polygon" not in svg and ">小鎮（你）<" in svg
+
+
+# ── 路上的「你」（路上設計 3.4）──────────────────────────────
+
+
+def _walking(state, at=90.0):
+    """從小鎮步行往湖邊（夾具 3 分鐘＝180 秒），現在是第 at 秒（預設走了一半）。"""
+    state.player.journey = Journey(mode="walk", path=["lake"], arrive_at=[180.0])
+    state.world.time = at
+
+
+def test_on_the_road_the_map_draws_you_between_the_two_stops(state, content):
+    _walking(state)
+    svg = render_map(state, content)
+    assert f'<circle class="tx-you" cx="150" cy="100" r="{YOU_SIZE}"' in svg  # 小鎮與湖邊的正中間
+    assert f'<line x1="150" y1="100" x2="200" y2="100" stroke="{ROUTE_STROKE}"' in svg  # 還沒走的那一截，看得出走向
+    assert ">你→<" in svg
+    # 圓點與虛線畫在地點上面，不能擋住點前後那兩站（網頁照 [data-loc] 認點擊）
+    circle = re.search(r'<circle class="tx-you"[^>]*>', svg).group(0)
+    line = re.search(r'<line x1="150" y1="100"[^>]*>', svg).group(0)
+    assert 'pointer-events="none"' in circle and 'pointer-events="none"' in line
+    assert "小鎮（你）" not in svg  # 在路上：小鎮只是身後那一站
+    state.player.journey = Journey(mode="walk", path=["town"], arrive_at=[180.0], origin="lake", share=0.5)
+    svg = render_map(state, content)  # 在正中間掉頭回小鎮：箭頭朝西
+    assert ">你←<" in svg and f'<line x1="150" y1="100" x2="100" y2="100" stroke="{ROUTE_STROKE}"' in svg
+
+
+def test_on_the_road_the_routes_layer_counts_from_where_you_are(state, content):
+    _walking(state, at=60.0)  # 走了一成三：回小鎮 1 分鐘、到湖邊 2 分鐘
+    svg = render_map(state, content, "routes", selected="lake")
+    assert ">1 分鐘<" in svg and ">2 分鐘<" in svg  # 小鎮、湖邊各自從路上算
+    assert f'<polyline points="133.333,100 200,100" fill="none" stroke="{ROUTE_STROKE}"' in svg
+
+
+def test_on_the_road_the_minimap_is_centred_on_you(state, content):
+    _walking(state)
+    svg = render_minimap(state, content)
+    left, top, right, bottom = window(svg)
+    assert ((left + right) / 2, (top + bottom) / 2) == (150, 100)
+    assert '<circle class="tx-you" cx="150" cy="100"' in svg
+    assert [text for text, _ in texts(svg)] == ["小鎮", "湖邊", "你→"]

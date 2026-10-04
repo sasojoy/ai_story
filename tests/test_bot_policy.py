@@ -334,7 +334,10 @@ def test_next_hop_takes_the_quickest_road(content, game):
 
 def test_bots_never_pick_the_halt_or_rest_options_meant_for_humans(content, game, monkeypatch):
     """喊停、打坐是修給真人的：假人只走單站、喊停不會出現，萬一出現了也不選，不然整季模擬「沒有能做的事就推進時間」的訊號會失效。"""
-    human_only = [Option(id="act:halt", label="喊停", enabled=True), Option(id="act:rest", label="打坐", enabled=True)]
+    human_only = [
+        Option(id="act:halt", label="喊停", enabled=True), Option(id="act:rest", label="打坐", enabled=True),
+        Option(id="road:back", label="折返", enabled=True),  # 路上設計 3.5：假人不折返、不改道
+    ]
     assert bot.pick(game, human_only, random.Random(0)) is None
     monkeypatch.setattr(game, "options", lambda **kwargs: human_only)
     assert bot_policy.take_turn(game, _profile("guan"), random.Random(0)) == []

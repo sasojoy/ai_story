@@ -36,6 +36,56 @@ def test_travel_config_defaults():
     assert cfg.travel_minutes_per_unit > 0
 
 
+# ── 探索三選一的設定（探索三選一設計第三節）──────────────────
+
+
+def test_explore_mix_defaults_follow_the_design_table():
+    cfg = Config()
+    table = [(m.kind, m.tags, m.weights) for m in cfg.explore_mix]
+    assert table == [
+        ("camp", ["營寨", "祭壇", "塢堡"], {"material": 15, "wild": 35, "event": 50}),
+        ("town", ["城鎮", "官署", "城池", "寺院", "書院", "莊院", "里巷", "結社"], {"material": 15, "wild": 0, "event": 85}),
+        ("wild", [], {"material": 40, "wild": 35, "event": 25}),
+    ]
+    assert cfg.wild_neili_loss_factor == 0.5
+    assert 0 < cfg.rare_explore_chance < 1
+    assert not hasattr(cfg, "explore_material_chance")  # 探索前固定滾三成素材已經拿掉，素材改由「素材」那一支給
+
+
+def test_a_place_takes_the_first_kind_whose_tags_it_has():
+    cfg = Config()
+    assert cfg.explore_mix_of(["城池", "營寨"]).kind == "camp"  # 廣宗：營寨優先於城鎮
+    assert cfg.explore_mix_of(["寺院"]).kind == "town"
+    assert cfg.explore_mix_of(["官道", "野外"]).kind == "wild"
+    assert cfg.explore_mix_of([]).kind == "wild"  # 沒有標籤也算「其餘」
+
+
+def _mix(kind, tags, **weights):
+    return {"kind": kind, "tags": tags, "weights": weights}
+
+
+@pytest.mark.parametrize("mix", [
+    [_mix("wild", [], material=-1, wild=35, event=25)],  # 權重不能是負的
+    [_mix("wild", [], material=0, wild=0, event=0)],  # 三支總和要大於 0
+    [_mix("town", ["城鎮"], material=15, event=85)],  # 最後一筆必須是 tags 空的「其餘」
+    [_mix("wild", [], material=40), _mix("town", ["城鎮"], event=85)],  # tags 空的只能放最後
+    [],  # 一筆都沒有
+    [_mix("wild", [], material=40, loot=10)],  # 只有素材、野怪、事件三支
+])
+def test_explore_mix_rejects_a_broken_table(mix):
+    with pytest.raises(ValidationError):
+        Config(explore_mix=mix)
+
+
+@pytest.mark.parametrize("field, value", [
+    ("rare_explore_chance", -0.1), ("rare_explore_chance", 1.5),
+    ("wild_neili_loss_factor", -0.5), ("wild_neili_loss_factor", 1.5),
+])
+def test_explore_chances_must_be_fractions(field, value):
+    with pytest.raises(ValidationError):
+        Config(**{field: value})
+
+
 def test_a_connection_is_its_destination_id_with_a_road_kind():
     loc = Location(id="a", name="A", description="d", connections=["b", {"to": "c", "road": "官道"}], x=0, y=0)
     assert loc.connections == ["b", "c"] and f"move:{loc.connections[1]}" == "move:c"

@@ -50,7 +50,7 @@ ROUTE_STROKE = "#D85A30"
 TREND_RED = "#C0392B"
 TREND_TINT = 0.6  # 大勢 100 時，大區顏色往紅色靠六成
 TREND_TEXT = "#A32D2D"
-LEGEND_STATES = [("current", "所在地"), ("visible", "看得見"), ("remembered", "去過"), ("outline", "未知")]
+LEGEND_STATES = [("current", "所在地"), ("visible", "看得見"), ("remembered", "去過／摸清"), ("outline", "未知")]
 LEGEND_SHAPES = "■ 城鎮　◆ 門派　● 野外"
 LEGEND_RING = "外圈：綠安全／橙危險／紅兇險　⚔ 可歷練"
 LEGEND_LAYERS = {
@@ -68,6 +68,8 @@ MINI_ARROWS = 4  # 視窗邊緣最多標幾個方向
 ARROW_SIZE = 13  # 視窗邊緣方向的字級
 ARROW_SLIDE = 6  # 方向擠不下時，沿著邊緣滑開一次滑多遠
 ARROW_SLIDES = 20  # 往每一邊最多滑幾次（40 個地點的地圖，兩站外同方向的地點常常擠在同一邊）
+YOU_SIZE = 7  # 路上的「你」：圓點的半徑（路上設計 3.4）
+Point = tuple[float, float]
 
 
 def node_shape(loc: Location) -> str:
@@ -276,18 +278,47 @@ def _layer_marks(
             if marks:
                 prefixes[loc_id] = f"{marks} "
     elif layer == "routes":
-        for loc_id, route in atlas.routes(state, content).items():
-            notes[loc_id] = f"{atlas.whole_minutes(route.minutes)} 分鐘" if route.path else "所在地"
+        if state.player.journey is None:
+            for loc_id, route in atlas.routes(state, content).items():
+                notes[loc_id] = f"{atlas.whole_minutes(route.minutes)} 分鐘" if route.path else "所在地"
+        else:  # 在路上：從路上算起，跟「安排前往」的改道同一套走法（見 atlas.way_to）
+            for loc_id in known:
+                way = atlas.way_to(state, content, loc_id)
+                if way is not None:
+                    notes[loc_id] = f"{atlas.whole_minutes(way.minutes)} 分鐘"
     return prefixes, notes, fills
 
 
-def _route_line(state: GameState, content: Content, selected: str | None) -> str:
-    """路線層：從所在地到選定地點的那條路（粗線）；選的是所在地或走不到時是空字串。"""
-    route = atlas.routes(state, content).get(selected) if selected else None
-    if route is None or not route.path:
+def _you(content: Content, spot: atlas.RoadSpot) -> tuple[float, float, str]:
+    """路上的「你」畫在哪裡（路上設計 3.4）：身後那一站往前面那一站走了 done 成的那一點，以及往前走的方向箭頭。"""
+    a, b = content.locations[spot.behind], content.locations[spot.ahead]
+    x = a.x + (b.x - a.x) * spot.done
+    y = a.y + (b.y - a.y) * spot.done
+    return x, y, atlas.direction((a.x, a.y), (b.x, b.y))
+
+
+def _you_mark(content: Content, spot: atlas.RoadSpot, you: tuple[float, float, str], taken: list[Taken]) -> str:
+    """路上的「你」：從你到前面那一站的虛線（還沒走的那一截，看得出走向）與一個圓點；把圓點佔的範圍加進 taken。
+    兩個都不接點擊（pointer-events="none"）：它們畫在地點上面，不然會擋住點前後那兩站。"""
+    x, y, _ = you
+    ahead = content.locations[spot.ahead]
+    taken.append(((x - YOU_SIZE, y - YOU_SIZE, x + YOU_SIZE, y + YOU_SIZE), 1))
+    return (
+        f'<line x1="{x:g}" y1="{y:g}" x2="{ahead.x}" y2="{ahead.y}" stroke="{ROUTE_STROKE}" stroke-width="4" '
+        'stroke-dasharray="6 4" stroke-linecap="round" pointer-events="none"/>'
+        f'<circle class="tx-you" cx="{x:g}" cy="{y:g}" r="{YOU_SIZE}" fill="{NODE_FILL["current"]}" '
+        'stroke="#FFFFFF" stroke-width="2" pointer-events="none"/>'
+    )
+
+
+def _route_line(state: GameState, content: Content, selected: str | None, start: Point) -> str:
+    """路線層：從 start（所在地，或路上的「你」）到選定地點的那條路（粗線）；選的是所在地或走不到時是空字串。
+    在路上時走改道的那一條（見 atlas.way_to）。"""
+    route = atlas.way_to(state, content, selected) if selected else None
+    if route is None:
         return ""
-    stops = [content.locations[loc_id] for loc_id in (state.player.location, *route.path)]
-    points = " ".join(f"{loc.x},{loc.y}" for loc in stops)
+    stops = [start] + [(content.locations[loc_id].x, content.locations[loc_id].y) for loc_id in route.path]
+    points = " ".join(f"{x:g},{y:g}" for x, y in stops)
     return (
         f'<polyline points="{points}" fill="none" stroke="{ROUTE_STROKE}" stroke-width="5" stroke-opacity="0.7" '
         'stroke-linecap="round" stroke-linejoin="round"/>'
@@ -421,6 +452,10 @@ def render_map(
     bg = m.background
     views = atlas.views(state, content)
     prefixes, notes, fills = _layer_marks(state, content, layer, views, odds)
+    spot = atlas.road_spot(state, content)
+    you = _you(content, spot) if spot is not None else None  # 在路上：「你」畫在兩站之間（路上設計 3.4）
+    here_loc = content.locations[state.player.location]
+    start = (you[0], you[1]) if you is not None else (here_loc.x, here_loc.y)
     legend_top = m.height - 50
     out = [
         # max-width:100% 是必要的：少了它，這個 div 會被裡面整張地圖寬的 SVG 撐開、整塊溢出版面，
@@ -447,7 +482,7 @@ def render_map(
         taken.append((box, TEXT_WEIGHT))
     out += _roads(content, views)
     if layer == "routes":
-        out.append(_route_line(state, content, selected))
+        out.append(_route_line(state, content, selected, start))
     reach: dict[str, float] = {}
     for loc in content.locations.values():
         view = views[loc.id]
@@ -459,6 +494,8 @@ def render_map(
             out.append(f'<g data-loc="{loc.id}" style="cursor:pointer">{hit}{"".join(parts)}</g>')
         else:
             out.extend(parts)
+    if you is not None:
+        out.append(_you_mark(content, spot, you, taken))
     taken.append(((8, legend_top, 8 + _legend_width(m.width, layer), legend_top + 46), TEXT_WEIGHT))
     here = state.player.location
     placed = []  # （地點, 狀態, 幾行字）：所在地排第一個
@@ -471,6 +508,9 @@ def render_map(
         lines = [(prefixes.get(loc.id, "") + text, LABEL_SIZE if view in KNOWN else LABEL_SIZE - 1)]
         placed.append((loc, view, lines + ([(note, NOTE_SIZE)] if note else [])))
     labels = [(lines, _label_spots(loc.x, loc.y, reach[loc.id], lines)) for loc, _, lines in placed]
+    if you is not None:
+        you_lines = [(f"你{you[2]}", LABEL_SIZE)]  # 「你→」：箭頭是走向
+        labels.append((you_lines, _label_spots(you[0], you[1], YOU_SIZE + 2, you_lines)))
     spots = _place_labels(labels, taken, (EDGE, EDGE, m.width - EDGE, m.height - EDGE))
     for (loc, view, lines), (x, y, anchor) in zip(placed, spots):
         attrs = f' data-loc="{loc.id}"' if view in SELECTABLE else ""
@@ -479,6 +519,9 @@ def render_map(
         out.append(_text(x, y, text, font, TEXT_DARK if view in KNOWN else TEXT_MUTED, bg, anchor, bold, attrs))
         for note_text, size in note:
             out.append(_text(x, y + LINE_GAP, note_text, size, NOTE_FILL, bg, anchor, attrs=attrs))
+    if you is not None:
+        x, y, anchor = spots[-1]
+        out.append(_text(x, y, f"你{you[2]}", LABEL_SIZE, TEXT_DARK, bg, anchor, bold=True))
     out.append(_legend(bg, legend_top, m.width, layer))
     out.append("</svg></div>")
     return "".join(out)
@@ -492,30 +535,31 @@ def _contains(box: Box, x: float, y: float) -> bool:
 
 
 def _edge_targets(
-    state: GameState, content: Content, views: dict[str, str], here: Location, window: Box
+    state: GameState, content: Content, views: dict[str, str], centre: Point, window: Box
 ) -> list[Location]:
-    """視窗外、MINI_HOPS 站以內（只走已開放的地點）的摸清地點：站數少的先，一樣時近的先，最多 MINI_ARROWS 個。"""
+    """視窗外、MINI_HOPS 站以內（只走已開放的地點）的摸清地點：站數少的先，一樣時離視窗中心近的先，最多 MINI_ARROWS 個。"""
     hops = atlas.road_hops(state, content, MINI_HOPS)
     far = [
         loc for loc in content.locations.values()
         if loc.id in hops and views[loc.id] in KNOWN and not _contains(window, loc.x, loc.y)
     ]
-    far.sort(key=lambda loc: (hops[loc.id], math.hypot(loc.x - here.x, loc.y - here.y)))
+    far.sort(key=lambda loc: (hops[loc.id], math.hypot(loc.x - centre[0], loc.y - centre[1])))
     return far[:MINI_ARROWS]
 
 
-def _edge_spots(start: Location, end: Location, text: str, size: int, bounds: Box) -> list[Spot]:
-    """視窗邊緣方向文字（置中對齊）可以擺的位置：從 start 往 end 的方向看過去、文字剛好貼著 bounds 邊緣的
+def _edge_spots(start: Point, end: Location, text: str, size: int, bounds: Box) -> list[Spot]:
+    """視窗邊緣方向文字（置中對齊）可以擺的位置：從 start（視窗中心）往 end 的方向看過去、文字剛好貼著 bounds 邊緣的
     位置最優先；擠不下時沿著那條邊往兩旁滑開，近的先試。"""
     half_w, half_h = text_width(text, size) / 2, size / 2
     lo_x, hi_x = bounds[0] + half_w, bounds[2] - half_w  # 文字中心能到的範圍
     lo_y, hi_y = bounds[1] + half_h, bounds[3] - half_h
-    dx, dy = end.x - start.x, end.y - start.y
-    to_x = ((hi_x if dx > 0 else lo_x) - start.x) / dx if dx else math.inf  # 走多遠碰到左右邊
-    to_y = ((hi_y if dy > 0 else lo_y) - start.y) / dy if dy else math.inf  # 走多遠碰到上下邊
+    sx, sy = start
+    dx, dy = end.x - sx, end.y - sy
+    to_x = ((hi_x if dx > 0 else lo_x) - sx) / dx if dx else math.inf  # 走多遠碰到左右邊
+    to_y = ((hi_y if dy > 0 else lo_y) - sy) / dy if dy else math.inf  # 走多遠碰到上下邊
     t = min(to_x, to_y)
-    cx = min(max(start.x + t * dx, lo_x), hi_x)
-    cy = min(max(start.y + t * dy, lo_y), hi_y)
+    cx = min(max(sx + t * dx, lo_x), hi_x)
+    cy = min(max(sy + t * dy, lo_y), hi_y)
     centres: list[tuple[float, float]] = []
     for shift in [0] + [sign * k * ARROW_SLIDE for k in range(1, ARROW_SLIDES + 1) for sign in (1, -1)]:
         if to_x <= to_y:  # 貼著左右邊：上下滑
@@ -535,17 +579,21 @@ def render_minimap(state: GameState, content: Content) -> str:
     其中 MINI_HOPS 站以內的摸清地點，在視窗邊緣朝它的方向寫「箭頭 名字」（見 _edge_targets）。
     不畫圖層的記號、勝算、體力、傳聞，也沒有圖例。
     名字與方向用大地圖同一套擺法（_label_spots、_place_labels），彼此不疊、也不出視窗。
+    在路上時（路上設計 3.4）視窗以路上的「你」為中心，「你」畫法同大地圖。
     畫面上固定 MINI_HEIGHT 高、置中；平常每次重畫都會呼叫，不算勝算。"""
     m = content.map
     bg = m.background
     views = atlas.views(state, content)
     here = content.locations[state.player.location]
+    spot = atlas.road_spot(state, content)
+    you = _you(content, spot) if spot is not None else None
+    centre = (you[0], you[1]) if you is not None else (here.x, here.y)
     width, height = m.mini_window
-    left, top = here.x - width / 2, here.y - height / 2
+    left, top = centre[0] - width / 2, centre[1] - height / 2
     window = (left, top, left + width, top + height)
     bounds = _grow(window, -EDGE)
     rect = f'x="{left:g}" y="{top:g}" width="{width}" height="{height}"'
-    clip = f"minimap-{here.x}-{here.y}"  # 裁切範圍的 id：同一頁有兩張同一處的小地圖時，範圍也一樣
+    clip = f"minimap-{centre[0]:g}-{centre[1]:g}"  # 裁切範圍的 id：同一頁有兩張同一處的小地圖時，範圍也一樣
     out = [
         f'<svg viewBox="{left:g} {top:g} {width} {height}" xmlns="http://www.w3.org/2000/svg" '
         f'style="display:block;width:100%;height:{MINI_HEIGHT}px;font-family:sans-serif;cursor:pointer">',
@@ -575,6 +623,8 @@ def render_minimap(state: GameState, content: Content) -> str:
         view = views[loc.id]
         parts, reach[loc.id] = _node(loc, view, NODE_FILL[view], False, taken)
         out += parts
+    if you is not None:
+        out.append(_you_mark(content, spot, you, taken))
     labels: list[Label] = []
     looks = []  # 每段字的（顏色, 加粗）
     for loc in sorted(shown, key=lambda loc: loc.id != here.id):  # 所在地排第一個
@@ -585,10 +635,14 @@ def render_minimap(state: GameState, content: Content) -> str:
         lines = [(text, LABEL_SIZE if view in KNOWN else LABEL_SIZE - 1)]
         labels.append((lines, _label_spots(loc.x, loc.y, reach[loc.id], lines, bounds[0])))
         looks.append((TEXT_DARK if view in KNOWN else TEXT_MUTED, view == "current"))
-    for loc in _edge_targets(state, content, views, here, window):
-        text = f"{atlas.direction((here.x, here.y), (loc.x, loc.y))} {loc.name}"
-        labels.append(([(text, ARROW_SIZE)], _edge_spots(here, loc, text, ARROW_SIZE, bounds)))
+    for loc in _edge_targets(state, content, views, centre, window):
+        text = f"{atlas.direction(centre, (loc.x, loc.y))} {loc.name}"
+        labels.append(([(text, ARROW_SIZE)], _edge_spots(centre, loc, text, ARROW_SIZE, bounds)))
         looks.append((TEXT_MUTED, False))
+    if you is not None:
+        you_lines = [(f"你{you[2]}", LABEL_SIZE)]
+        labels.append((you_lines, _label_spots(you[0], you[1], YOU_SIZE + 2, you_lines, bounds[0])))
+        looks.append((TEXT_DARK, True))
     spots = _place_labels(labels, taken, bounds)
     for ([(text, size)], _), (fill, bold), (x, y, anchor) in zip(labels, looks, spots):
         out.append(_text(x, y, text, size, fill, bg, anchor, bold))

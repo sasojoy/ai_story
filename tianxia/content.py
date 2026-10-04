@@ -19,8 +19,12 @@ from .companion_agent import DIALOGUE_TAGS
 from .materials import TIER_NAMES
 from .models import (
     ROADS, STATS, BattleDef, CharacterDef, Condition, Config, Content, CraftNames, Effect, Event, Location,
-    MapLayout, Material, Scenario, Sect, SimRumor, SkillDef, Squad, Tutorial,
+    MapLayout, Material, RoadSight, Scenario, Sect, SimRumor, SkillDef, Squad, Tutorial,
 )
+from .zh import to_traditional
+
+ROAD_SIGHTS_PER_SPOT = 2  # 路上見聞：每一種路、每一個大區的組合至少要有幾則可挑（路上設計第五節）
+ROAD_SIGHT_CAPS = {"silver": 10, "xinde": 5}  # 路上見聞的小收穫上限
 
 
 class ContentError(Exception):
@@ -48,6 +52,7 @@ def load_content(root: Path) -> Content:
         characters=_index(CharacterDef, _read(root / "characters.json")),
         squads=_index(Squad, _read(root / "squads.json")),
         battles=_index(BattleDef, _read(root / "battles.json")) if (root / "battles.json").exists() else {},
+        road_sights=_index(RoadSight, _read(root / "road_sights.json")),
         events=events,
         map=MapLayout(**_read(root / "map.json")),
         tutorial=Tutorial(**_read(root / "tutorial.json")),
@@ -121,6 +126,8 @@ def _material_sources(c: Content) -> set[str]:
     for ev in c.events.values():
         for ch in ev.choices:
             reachable |= set(ch.effect.materials) | set(ch.fail_effect.materials)
+    for sight in c.road_sights.values():
+        reachable |= set(sight.effect.materials)
     return reachable
 
 
@@ -324,6 +331,37 @@ def validate(c: Content) -> None:
             len(region.points) >= 3 and all(len(point) == 2 for point in region.points),
             f"{where}：多邊形至少要有 3 個 [x, y] 點",
         )
+
+    # 路上見聞（路上設計第五節）：每一種路、每一個大區的組合都要有幾則可挑；小收穫不超過上限、一則最多一種、
+    # 不能有別的效果（不發傳聞：每人每站都可能觸發，發到傳聞板會洗版）；文字只用繁體中文。
+    for road in ROADS:
+        for area in region_ids or [None]:
+            count = sum(
+                1 for sight in c.road_sights.values()
+                if (not sight.roads or road in sight.roads) and (not sight.regions or area in sight.regions)
+            )
+            need(
+                count >= ROAD_SIGHTS_PER_SPOT,
+                f"路上見聞：{road}・{area or '不分大區'} 只有 {count} 則可挑（至少要 {ROAD_SIGHTS_PER_SPOT} 則）",
+            )
+    for sight in c.road_sights.values():
+        where = f"路上見聞 {sight.id}"
+        known(where, sight.regions, region_ids, "大區")
+        need(bool(sight.text.strip()), f"{where}：text 不能是空的")
+        need(to_traditional(sight.text) == sight.text, f"{where}：text 只能用繁體中文")
+        eff = sight.effect
+        need(
+            eff.model_copy(update={"stats": {}, "materials": {}}) == Effect(),
+            f"{where}：小收穫只能用 stats 或 materials（不能寫 text、rumor 或其他效果）",
+        )
+        need(len(eff.stats) + len(eff.materials) <= 1, f"{where}：小收穫一則最多一種")
+        for stat, amount in eff.stats.items():
+            cap = ROAD_SIGHT_CAPS.get(stat)
+            need(cap is not None and 0 < amount <= cap, f"{where}：stats 只能是銀兩 1～10 或心得 1～5（寫的是 {stat} {amount}）")
+        known(where, eff.materials, c.materials, "素材")
+        for mid, count in eff.materials.items():
+            if mid in c.materials:
+                need(count == 1 and c.materials[mid].tier == 1, f"{where}：素材只能是一階 1 個（寫的是 {mid} ×{count}）")
 
     for th in c.scenario.thresholds:
         where = f"門檻 {th.id}"

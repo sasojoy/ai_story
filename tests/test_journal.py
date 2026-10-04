@@ -6,6 +6,7 @@ from conftest import FixedRandom, walk_to
 from tianxia import journal
 from tianxia.engine import LOG_BREAK, Game
 from tianxia.characters import name_key, open_characters
+from tianxia.models import ExploreMix
 from tianxia.state import JournalEntry
 
 HOUR = 3600
@@ -13,6 +14,12 @@ HOUR = 3600
 
 def latest(game):
     return game.state.journal[0]
+
+
+def _explore_only(game, branch):
+    """探索三選一：讓探索一定走某一支（"event"／"wild"／"material"）。這些測試看的是事件或戰鬥寫成的紀錄，
+    不是探索抽到哪一支；不指定的話就要靠亂數剛好落在那一支的比例裡。"""
+    game.content.config.explore_mix = [ExploreMix(kind="wild", tags=[], weights={branch: 1})]
 
 
 # ── 每種行動寫成的紀錄 ─────────────────────────────────
@@ -60,6 +67,7 @@ def test_a_trip_finished_after_a_station_entry_is_tagged_as_arrived(game):
 
 
 def test_move_entry_keeps_guide_messages(game):
+    _explore_only(game, "event")
     game.choose("act:explore")
     game.choose("choice:1")  # 把醉漢打發掉
     walk_to(game, "lake")
@@ -69,6 +77,7 @@ def test_move_entry_keeps_guide_messages(game):
 
 
 def test_explore_that_meets_an_event_tags_it_and_drops_the_intro(game):
+    _explore_only(game, "event")
     game.choose("act:explore")
     entry = latest(game)
     assert (entry.title, entry.tag) == ("探索小鎮", "遇上【醉漢】")
@@ -81,6 +90,8 @@ def test_explore_that_finds_nothing(game):
     game.state.player.tutorial_step = 3  # 引導已走完，不會多出引導的訊息
     walk_to(game, "lake")
     game.state.player.seen_events.add("scroll")  # 湖邊唯一的探索事件只出現一次
+    game.content.locations["lake"].enemies = []  # 探索三選一：三支都做不了才是一無所獲
+    game.content.config.explore_mix = [ExploreMix(kind="wild", tags=[], weights={"material": 0, "wild": 35, "event": 25})]
     game.choose("act:explore")
     entry = latest(game)
     assert (entry.title, entry.tag, entry.lines) == ("探索湖邊", "", ["你四處走走，一無所獲。"])
@@ -88,6 +99,7 @@ def test_explore_that_finds_nothing(game):
 
 def test_qiyu_is_tagged_as_such(game):
     walk_to(game, "lake")
+    game.content.config.rare_explore_chance = 1.0  # 探索三選一：奇遇判定最優先
     game.choose("act:explore")
     assert latest(game).tag == "遇上奇遇【殘卷】"
 
@@ -126,6 +138,7 @@ def test_train_entry_carries_the_battle_summary_and_gains(game):
 
 
 def test_choice_entry_names_the_event_and_the_check(game):
+    _explore_only(game, "event")
     game.rng = FixedRandom(0.0)  # 檢定必定成功
     game.choose("act:explore")
     game.choose("choice:0")
@@ -189,6 +202,7 @@ def test_breaking_seclusion_early(game):
 
 
 def test_seclusion_refused_is_still_written(game):
+    _explore_only(game, "event")
     game.choose("act:explore")  # 有事件待處理，不能閉關
     game.seclude(4)
     assert (latest(game).title, latest(game).lines) == ("閉關", ["你現在無法閉關。"])
@@ -222,6 +236,143 @@ def test_world_news_while_time_passes_is_written_and_merged(game):
 def test_invalid_option_writes_no_entry(game):
     game.choose("move:cave")
     assert len(game.state.journal) == 1
+
+
+# FB-024：在修練頁完成新手引導的那一步，「✔ 引導完成」、獎勵與說書人的下一步也要進江湖紀錄，
+# 跟在江湖頁（choose()）完成時一樣；沒完成引導的門下動作，紀錄跟以前一模一樣。
+
+GUIDE_REWARD = 7
+GUIDE_XINDE = 5  # 獎勵也給心得：紀錄裡的心得變化只能算一次（門下紀錄自己也會算心得的增減）
+
+
+def _guide_waits_for(game, goal):
+    """把引導換成「第一步＝goal（獎勵銀兩 7、心得 5）、第二步＝出城」，停在第一步。"""
+    from tianxia.models import Effect, TutorialGoal, TutorialStep
+
+    game.content.tutorial.steps = [
+        TutorialStep(
+            id="t4", text="先修練。", done_when=goal,
+            reward=Effect(stats={"silver": GUIDE_REWARD, "xinde": GUIDE_XINDE}),
+        ),
+        TutorialStep(id="t5", text="出城。", done_when=TutorialGoal(action="move")),
+    ]
+    game.state.player.tutorial_step = 0
+
+
+def _speaker(game):
+    return game.content.tutorial.speaker
+
+
+def test_creating_a_skill_that_finishes_a_guide_step_writes_it_into_the_journal(game):
+    from tianxia.models import TutorialGoal
+
+    _guide_waits_for(game, TutorialGoal(has_wugong=True))
+    msgs = game.create_skill("測試長拳", "武學")
+    assert "✔ 引導完成" in msgs  # 修練頁的訊息照舊
+    entry = latest(game)
+    assert entry.title == "門下" and "自創了一門武學" in entry.tag
+    assert entry.lines[-2:] == ["✔ 引導完成", f"【{_speaker(game)}】出城。"]  # 跟 choose() 那條路同一種寫法
+    assert sorted(entry.changes) == sorted([f"銀兩 +{GUIDE_REWARD}", f"心得 +{GUIDE_XINDE}"])  # 獎勵是數值變化，心得沒有算兩次
+    assert game.state.player.tutorial_step == 1
+
+
+def test_practicing_that_finishes_a_guide_step_writes_it_into_the_journal(game):
+    from tianxia.models import TutorialGoal
+
+    game.create_skill("測試長拳", "武學")
+    game.state.player.member.wugong_level = 3
+    _guide_waits_for(game, TutorialGoal(action="practice"))
+    game.practice("武學")
+    entry = latest(game)
+    assert entry.title == "門下"
+    assert entry.lines[-2:] == ["✔ 引導完成", f"【{_speaker(game)}】出城。"]
+    assert f"銀兩 +{GUIDE_REWARD}" in entry.changes and f"心得 +{GUIDE_XINDE}" in entry.changes
+
+
+def test_crafting_that_finishes_a_guide_step_writes_it_into_the_journal(game):
+    from unittest import mock
+
+    from tianxia import craft, materials
+    from tianxia.models import TutorialGoal
+    from tianxia.ollama_client import OllamaClient
+
+    materials.grant(game.state, game.content, "gang_1", 2)
+    _guide_waits_for(game, TutorialGoal(has_wugong=True))
+    naming = lambda self, messages, response_model, **kw: craft.CraftedName(name="鐵腕勁", description="一句話。")
+    with mock.patch.object(OllamaClient, "chat_structured", naming):
+        msgs = game.craft(["gang_1", "gang_1"], "武學")
+    assert "✔ 引導完成" in msgs
+    entry = latest(game)
+    assert entry.title == "門下" and "煉製" in entry.tag
+    assert entry.lines[-2:] == ["✔ 引導完成", f"【{_speaker(game)}】出城。"]
+    assert f"銀兩 +{GUIDE_REWARD}" in entry.changes and f"心得 +{GUIDE_XINDE}" in entry.changes
+
+
+def test_the_guide_lines_do_not_swallow_the_menxia_story_when_entries_merge(game):
+    """連續的門下動作併成一則：引導的那幾行接在對應那次動作後面，之前與之後的動作敘事都還在。"""
+    from tianxia.models import TutorialGoal
+
+    game.create_skill("測試內功", "內功")
+    first_tag = latest(game).tag
+    _guide_waits_for(game, TutorialGoal(has_wugong=True))
+    game.create_skill("測試長拳", "武學")
+    second_tag = latest(game).tag
+    game.practice("武學")
+    entries = [e for e in game.state.journal if e.title == "門下"]
+    assert len(entries) == 1  # 還是併成一則
+    lines = entries[0].lines
+    assert lines.index(first_tag) < lines.index(second_tag) < lines.index("✔ 引導完成") < lines.index(f"【{_speaker(game)}】出城。")
+    assert f"銀兩 +{GUIDE_REWARD}" in entries[0].changes and f"心得 +{GUIDE_XINDE}" in entries[0].changes
+
+
+def test_menxia_without_finishing_a_guide_step_writes_exactly_what_it_used_to(game):
+    from tianxia.models import TutorialGoal
+
+    _guide_waits_for(game, TutorialGoal(action="view_map"))  # 修練頁做的事不會完成這一步
+    game.create_skill("測試長拳", "武學")
+    entry = latest(game)
+    assert entry.title == "門下" and "自創了一門武學" in entry.tag
+    assert entry.lines == [] and entry.changes == []
+    assert game.state.player.tutorial_step == 0
+    game.state.player.tutorial_step = len(game.content.tutorial.steps)  # 引導已走完：同一回事
+    game.practice("武學")
+    assert latest(game).lines == [entry.tag, latest(game).tag]  # 兩次練功併成一則，敘事只有兩次動作自己
+
+
+# FB-029：完成引導的門下動作，那次動作自己的那句話也放在 lines 第一行（之後併進來的門下動作才擠不掉它），
+# 「剛剛」與紀錄列畫這一則時，那句話只出現一次。
+
+
+def test_a_menxia_action_that_finishes_a_guide_step_shows_its_sentence_once(game):
+    import html
+
+    from tianxia.models import TutorialGoal
+
+    _guide_waits_for(game, TutorialGoal(has_wugong=True))
+    game.create_skill("測試長拳", "武學")
+    said = latest(game).tag
+    assert latest(game).lines[0] == said  # 存的時候照舊放在第一行
+    assert game.latest_entry_html().count(html.escape(said)) == 1
+    assert "✔ 引導完成" in game.latest_entry_html()
+    assert journal.rows_html([latest(game)]).count(html.escape(said)) == 1
+
+    game.practice("武學")  # 接著再做一個門下動作：併進同一則，那句話還在、仍只一次
+    entries = [e for e in game.state.journal if e.title == "門下"]
+    assert len(entries) == 1 and said in entries[0].lines
+    assert game.latest_entry_html().count(html.escape(said)) == 1
+    assert journal.rows_html(entries).count(html.escape(said)) == 1
+
+
+def test_menxia_entries_that_finish_no_guide_step_render_as_before(game):
+    from tianxia.models import TutorialGoal
+
+    _guide_waits_for(game, TutorialGoal(action="view_map"))
+    game.create_skill("測試長拳", "武學")
+    assert 'class="tx-line' not in game.latest_entry_html()  # 只有結果標記，沒有敘事
+    game.practice("武學")
+    entry = latest(game)
+    assert entry.lines[0] != entry.tag
+    assert journal._lines(entry.lines) in game.latest_entry_html()  # 兩次動作的敘事照舊一行一行畫出來
 
 
 def test_menxia_changes_are_written_but_failures_are_not(game):
@@ -271,18 +422,15 @@ def test_notice_and_skip_tutorial(game):
 
 
 def guided_train(game):
-    """湖邊探索剛好遇上遭遇戰、順便完成一步新手引導（獎勵銀兩 5）：把唯一的湖邊探索事件
-    標成已經看過，逼 explore 落到隨機遭遇戰那條路（見 engine.py::_encounter），
-    train_event_chance=1.0 保證真的觸發。"""
-    game.content.tutorial.steps[0].done_when.action = "explore"
-    game.content.config.train_event_chance = 1.0
-    game.state.player.seen_events.add("scroll")
+    """湖邊歷練打一場、順便完成一步新手引導（獎勵銀兩 5）：把引導第一步改成「歷練」。
+    （以前是逼探索落到隨機遭遇戰那條路；探索三選一之後那條路沒了，打仗就是歷練。）"""
+    game.content.tutorial.steps[0].done_when.action = "train"
     _give_player_a_winning_wugong(game)
     from conftest import FixedRandom
 
     game.rng = FixedRandom(0.99)
     walk_to(game, "lake")
-    game.choose("act:explore")
+    game.choose("act:train")
 
 
 def test_changes_with_the_same_label_are_added_up(game):
@@ -305,15 +453,13 @@ def test_battle_card_extra_shows_what_the_card_does_not(game):
 
 def test_battle_card_extra_skips_card_notes_and_event_markers(game):
     game.state.player.tutorial_step = 1  # 跳過第一步，這次遭遇戰不該混進引導訊息
-    game.content.config.train_event_chance = 1.0
-    game.state.player.seen_events.add("scroll")
     _give_player_a_winning_wugong(game)
     from conftest import FixedRandom
 
     game.rng = FixedRandom(0.99)
     game.state.player.member.exp = 90
     walk_to(game, "lake")
-    game.choose("act:explore")
+    game.choose("act:train")
     assert "沈浪升到第 2 級！" in latest(game).lines and "沈浪升到第 2 級！" in game.state.battles[0].notes
     assert game.battle_extra_html() == ""  # 升級已經寫在卡片的「結果」裡
     walk_to(game, "town")
@@ -396,7 +542,7 @@ def test_old_save_file_without_a_journal_loads_and_converts(content, game):
 
 
 def test_journal_survives_a_save_round_trip(game):
-    game.content.config.train_event_chance = 1.0
+    _explore_only(game, "wild")  # 在湖邊探索撞上野怪，打一場
     game.state.player.seen_events.add("scroll")
     _give_player_a_winning_wugong(game)
     from conftest import FixedRandom
@@ -476,7 +622,7 @@ def test_rows_html_one_line_per_entry_with_the_story_folded_inside():
 
 
 def test_game_html_helpers(game):
-    game.content.config.train_event_chance = 1.0
+    _explore_only(game, "wild")  # 在湖邊探索撞上野怪，打一場
     game.state.player.seen_events.add("scroll")
     from conftest import FixedRandom
 

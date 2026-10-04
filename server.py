@@ -21,12 +21,15 @@ from __future__ import annotations
 import argparse
 import contextlib
 import contextvars
+import re
 import secrets
 import shutil
 import subprocess
 import threading
 import time
 import unicodedata
+from collections import deque
+from collections.abc import Callable, Iterable
 from pathlib import Path
 
 from fastapi import Body, FastAPI, HTTPException, Request, Response
@@ -233,11 +236,16 @@ def answer_event(game: Game, text: str) -> list[str] | None:
 def main_view(game: Game) -> dict:
     """江湖畫面與頂上的狀態列；每次動作、每次計時器都回這一份。呼叫端要拿著行動鎖。"""
     card = game.battle_card() if game.shows_battle_card() else None
+    status, quest, scene = game.status_data(), md(game.quest_text()), md(game.scene_text())
+    options = game.options()  # 照原本的順序：狀態、主線、場景先讀，選單（會推進全服戰鬥）最後
     return {
-        "status": game.status_data(),
-        "quest": md(game.quest_text()),
-        "scene": md(game.scene_text()),
-        "options": [o.model_dump() for o in game.options()],
+        "status": status,
+        "quest": quest,
+        "scene": scene,
+        "options": [o.model_dump() for o in options],
+        # 在路上（路上設計 3.3）：頁面在選項底下多放三個捷徑（輿圖、修練、煉製），那是頁面切換、不是引擎的行動。
+        # 看的是選單本身：參戰者在決戰大區裡走動時選單是戰鬥選項，那時不放捷徑
+        "on_road": any(o.id == "act:on_road" for o in options),
         "free_text": game.battle_free_text_prompt(),
         "event_free_text": game.event_free_text_prompt(),  # 眼前事件的隨口應對：選單上那一顆按下去叫出輸入框
         # 「剛剛」：這次行動打了仗就放戰鬥卡片，卡片沒寫到的補充放在 latest；沒打仗時 latest 是最新一則紀錄
@@ -534,8 +542,14 @@ ADMIN_ACTIONS = {
 @app.post("/api/choose")
 def api_choose(request: Request, body: dict = Body(...)):
     game = _game(request)
-    choose(game, str(body.get("id", "")))
-    return {"main": look(game, main_view)}
+    option_id = str(body.get("id", ""))
+    msgs = choose(game, option_id)
+    out = {"main": look(game, main_view)}
+    if option_id.startswith("battle:"):
+        # 決戰選項（加入、趕到、每回合的出招）：按下去發生了什麼只有這句回話（FB-030），前端拿它跳一句提示。
+        # 其他選項的話已經寫進江湖紀錄、「剛剛」看得到，再回一句會重複，所以不回。
+        out["message"] = joined(msgs)
+    return out
 
 
 @app.post("/api/answer")
@@ -665,24 +679,61 @@ app.mount("/static", StaticFiles(directory=WEB), name="static")
 # ── 啟動 ──────────────────────────────────────────
 
 
-def start_tunnel(port: int) -> None:
-    """用 cloudflared 開臨時公開網址（trycloudflare，免帳號）。網址出現在它的輸出裡，原樣轉印出來。"""
+TUNNEL_URL = re.compile(r"https://(?!api\.)[a-z0-9-]+\.trycloudflare\.com")
+# cloudflared 第一行「Requesting new quick Tunnel on trycloudflare.com...」有網域、沒有 https://，所以只認完整的網址；
+# 要不到隧道時它的錯誤訊息會帶 https://api.trycloudflare.com（它自己的服務），那個也不是給手機用的。
+
+
+TUNNEL_TAIL_LINES = 20  # 拿不到網址時，結束前印出 cloudflared 最後這幾行，讓主機端看得到原因
+
+
+def _say(text: str) -> None:
+    print(text, flush=True)
+
+
+def relay_tunnel_output(lines: Iterable[str], emit: Callable[[str], None] = _say) -> None:
+    """把 cloudflared 的輸出逐行讀到結束（EOF）：第一次看到公開網址就印一次，其他輸出照舊安靜。
+
+    一定要把管線讀乾淨：沒人讀的話緩衝寫滿時 cloudflared 會卡住，隧道跟著停。
+    所以不提早結束，也不因為任何一行格式怪就丟例外（不認得的行直接跳過）。
+    輸出平常是吞掉的，只記住最後 TUNNEL_TAIL_LINES 行（去掉行尾換行、空行不記），不轉印；
+    讀到結束還沒拿到網址，就先說一句、再把這幾行印出來（錯誤原因通常就在裡面）；
+    連一行輸出都沒有就改說「沒有任何輸出」。拿到網址的路徑完全不印這些。"""
+    announced = False
+    tail: deque[str] = deque(maxlen=TUNNEL_TAIL_LINES)
+    for line in lines:
+        found = TUNNEL_URL.search(line)
+        if found and not announced:
+            announced = True
+            emit(f"公開網址：{found.group()}（給手機用；有網址的人都進得來，不要外流）")
+        text = line.rstrip()
+        if text:
+            tail.append(text)
+    if announced:
+        return
+    if not tail:
+        emit("cloudflared 沒有任何輸出就結束了。")
+        return
+    emit("cloudflared 已結束，沒有拿到公開網址。它最後的輸出：")
+    for text in tail:
+        emit(text)
+
+
+def start_tunnel(port: int) -> threading.Thread | None:
+    """用 cloudflared 開臨時公開網址（trycloudflare，免帳號）。網址出現在它的輸出裡，原樣轉印出來。
+
+    回傳讀 cloudflared 輸出的執行緒（沒裝 cloudflared 時回傳 None）；main() 不必理會，測試用它 join。"""
     exe = shutil.which("cloudflared")
     if exe is None:
         print("找不到 cloudflared，沒有開公開網址。Windows 可以用 `winget install Cloudflare.cloudflared` 安裝。")
-        return
+        return None
     proc = subprocess.Popen(
         [exe, "tunnel", "--url", f"http://127.0.0.1:{port}"],
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace",
     )
-
-    def relay() -> None:
-        for line in proc.stdout:
-            if "trycloudflare.com" in line:
-                url = line[line.find("https://"):].split()[0]
-                print(f"公開網址：{url}（給手機用；有網址的人都進得來，不要外流）", flush=True)
-
-    threading.Thread(target=relay, daemon=True).start()
+    thread = threading.Thread(target=relay_tunnel_output, args=(proc.stdout,), daemon=True)
+    thread.start()
+    return thread
 
 
 def main(argv: list[str] | None = None) -> None:

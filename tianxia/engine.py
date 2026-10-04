@@ -14,21 +14,32 @@ from . import (
     atlas, battle_instance, battlelog, companion_agent, craft, encounter, event_llm, flavor, journal, materials, roster,
     skillview, team,
 )
-from .events import choice_label, has_events_here, pick_event, visible_choices
+from .events import choice_label, event_candidates, has_events_here, pick_event, visible_choices
 from .guide import note_action, quest_text, tutorial_intro
 from .journal import LOG_BREAK, Draft
 from .mapview import render_map, render_minimap
-from .models import FREE_TEXT_MAX, BattleDef, Choice, Content, Effect, Event, Location, Squad, TravelMode
+from .models import (
+    EXPLORE_BRANCHES, FREE_TEXT_MAX, BattleDef, Choice, Content, Effect, Event, ExploreBranch, Location, RoadKind, Squad,
+    TravelMode,
+)
 from .ollama_client import OllamaClient
 from .rules import apply_effect, change_trend, check_who, current_day, fill_marks, free_text_rate, rate_words, roll_check
 from .sqlite_world import open_world
-from .state import PLAYER, GameState, JournalEntry, Journey, Rumor, WorldState, new_game_state
+from .state import PLAYER, BattleRecord, GameState, JournalEntry, Journey, Rumor, WorldState, new_game_state
 from .world import advance_world_state, check_thresholds, end_season, fire_by_id, sim_tick, start_pending_battle
 from .world_state import WorldStateStore
 
 HOUR = 3600
 DAY = 86400
 AUDIENCE_HALL_FIGURES = 2  # 一個地點有幾位以上的大勢人物，交遊就不直接找人、改按「求見」指名（企劃者 2026-10-03 決定）
+# 路上小事（路上設計第四節）：road:<id> → (名稱, 這一段做過之後寫的「這段路已經……」)；按鈕上的補充見 _road_task_options
+ROAD_TASKS: dict[str, tuple[str, str]] = {
+    "think": ("邊走邊想", "想過了"),
+    "ask": ("沿途打聽", "打聽過了"),
+    "survey": ("留意地形", "留意過了"),
+    "gather": ("路邊採集", "找過了"),
+}
+ROAD_REWARD_TASKS = ("think", "gather")  # 有經濟收穫、受每天上限管的路上小事（Config.road_reward_daily_cap）
 
 
 class Option(BaseModel):
@@ -130,6 +141,7 @@ class Game:
         fresh.player.used_dialogue_options = old.player.used_dialogue_options
         fresh.player.turns_since_consolidation = old.player.turns_since_consolidation
         fresh.player.bot = old.player.bot  # 伺服器假人的身分與作息跨季保留
+        fresh.player.battle_results_seen = old.player.battle_results_seen  # 補送過的決戰不再補一次（FB-027）
         fresh.player.season_number = season_number
         self.state = fresh
         self.state.player.visited.add(self.state.player.location)
@@ -148,12 +160,22 @@ class Game:
             p.pending_companion = None
         if p.pending_faction and p.pending_faction not in {f.id for f in c.scenario.factions}:
             p.pending_faction = None
-        if p.location not in c.locations:
+        lost_place = p.location not in c.locations
+        if lost_place:
             p.location = c.scenario.start_location
         if p.picking_audience and not self._audience_hall():
             p.picking_audience = False  # 內容改版後這裡不再有兩位以上的人物：收起求見選單
-        if p.journey is not None and any(loc_id not in c.locations for loc_id in p.journey.path):
+        j = p.journey
+        if j is not None and (
+            lost_place  # 所在地被拿掉、改回起點：腳下這段路已經不存在
+            or any(loc_id not in c.locations for loc_id in j.path)
+            or (j.origin is not None and j.origin not in c.locations)  # 改道後半段路的起點（見 atlas.road_spot）
+        ):
             p.journey = None
+            p.leg_actions = set()  # 這段路不在了：下次出發是新的一段
+        p.surveyed = {loc_id for loc_id in p.surveyed if loc_id in c.locations}
+        p.leg_actions &= set(ROAD_TASKS)
+        p.recent_sights = [sight_id for sight_id in p.recent_sights if sight_id in c.road_sights]
         p.team = [k for k in p.team if k in c.characters][: team.MAX_TEAM_COMPANIONS]
         if p.member.neigong_id and p.member.neigong_id not in c.skills and not self.world.is_skill_name_taken(p.member.neigong_id):
             p.member.neigong_id = None
@@ -215,6 +237,7 @@ class Game:
         news = journal.news_entry(self.state.world.time, msgs)
         if news is not None:
             journal.add_entry(self.state, news, merge=True)
+        self._deliver_battle_results()  # 下線時收場的決戰，回來第一次同步就補上（休季、籌備中也一樣，FB-027）
         return self._log(msgs + arrived)
 
     def advance(self, seconds: float) -> list[str]:
@@ -314,9 +337,10 @@ class Game:
         if j is not None:
             end = c.locations[j.path[j.last]].name
             opts = [Option(id="act:on_road", label=f"（在路上，{battlelog.clock_text(j.arrive_at[j.last])} 抵達{end}）", enabled=False)]
+            opts.append(self._back_option())  # 折返（路上設計 3.2）；改去別處在大地圖上安排
             if j.stop_at is None and j.reached < j.last:
                 opts.append(Option(id="act:halt", label=f"喊停（到{c.locations[j.path[j.reached]].name}就停下）"))
-            return opts
+            return opts + self._road_task_options(j)
         if s.player.resting_since is not None:
             return [self._stand_option()]
         loc = c.locations[s.player.location]
@@ -374,6 +398,46 @@ class Game:
         if self.state.player.stamina < cost:
             return Option(id=option_id, label=f"前往 {dest.name}（{atlas.MODES[mode]}・體力不足，要 {cost}）", enabled=False)
         return Option(id=option_id, label=f"前往 {dest.name}（{atlas.mode_text(c, minutes, mode)}）")
+
+    def _back_way(self) -> atlas.Route:
+        """折返的路：從路上回到身後那一站（路上設計 3.2：折返就是「改去」那一站，見 atlas.way_to）。
+        掉頭那一種走法到身後那一站一定算得出來，所以在路上時不會是 None。"""
+        spot = atlas.road_spot(self.state, self.content)
+        return atlas.way_to(self.state, self.content, spot.behind)
+
+    def _back_option(self) -> Option:
+        """路上的「折返 某站」，照主畫面選的走法（move_mode）：標籤寫這種走法的時間與體力，體力不夠就按不下去、寫明原因
+        （跟「前往」同一個說法，見 _move_option）。id 也跟「前往」一樣：步行是 road:back，趕路、疾行是 road:back:<走法>，
+        所以 choose() 照樣只認選單上真的有的 id。"""
+        c, mode = self.content, self.move_mode
+        way = self._back_way()
+        name = c.locations[way.path[-1]].name
+        option_id = "road:back" if mode == "walk" else f"road:back:{mode}"
+        cost = atlas.route_stamina(self.state, c, way, mode)
+        if self.state.player.stamina < cost:
+            return Option(id=option_id, label=f"折返 {name}（{atlas.MODES[mode]}・體力不足，要 {cost}）", enabled=False)
+        return Option(id=option_id, label=f"折返 {name}（{atlas.route_text(self.state, c, way, mode)}）")
+
+    def _road_task_options(self, j: Journey) -> list[Option]:
+        """路上小事（路上設計第四節）：步行、趕路時四樣各一顆，不花體力；這一段路做過的灰掉、寫「這段路已經……」。
+        疾行一站一站立刻抵達，沒有。今天的收穫拿滿了（每天上限）的邊走邊想、路邊採集照樣按得下去，補充改寫「今天沒有收穫了」。"""
+        if j.mode == "dash":
+            return []
+        hints = {
+            "think": f"心得 +{self.content.config.road_think_xinde}",
+            "ask": "聽一則這一帶的傳聞",
+            "survey": "摸清附近的地點",
+            "gather": "有機會撿到素材",
+        }
+        if not self._road_reward_due("task"):
+            for what in ROAD_REWARD_TASKS:
+                hints[what] = "今天沒有收穫了"  # 不留「心得 +3」：拿滿了就沒有
+        done = self.state.player.leg_actions
+        return [
+            Option(id=f"road:{what}", label=f"{name}（{did}，到下一站再說）", enabled=False) if what in done
+            else Option(id=f"road:{what}", label=f"{name}（{hints[what]}）")
+            for what, (name, did) in ROAD_TASKS.items()
+        ]
 
     def set_move_mode(self, mode: str) -> None:
         """主畫面的「走法」切換：之後選單上的「前往」用這種走法；不認得的走法當成步行。不存檔（見 __init__ 的 move_mode）。"""
@@ -502,7 +566,7 @@ class Game:
             return self._log(["（此刻無法這麼做。）"])
         self.state.battle_card = None
         kind, _, arg = option_id.partition(":")
-        if kind == "battle":
+        if kind == "battle":  # 決戰選項不走 Draft：加入與趕到由 _battle_choose 自己寫一則紀錄，每回合的出招不寫（FB-030）
             return self._log(self._battle_choose(arg))
         if option_id == FREE_TEXT_OPTION:
             return self._log([f"（寫下你的做法，{FREE_TEXT_MAX} 字以內。）"])  # 選項本身只叫出輸入框，不消耗事件
@@ -519,6 +583,8 @@ class Game:
                 msgs = self._faction_step(arg)
             elif kind == "call":
                 msgs = self._call(arg, prepared)
+            elif kind == "road":
+                msgs = self._road(arg)
             else:
                 msgs = self._choose(int(arg))
             if kind == "act" and arg != "break":
@@ -613,6 +679,11 @@ class Game:
             return f"交談・{character.name}"
         if kind == "call":
             return "收回名帖" if arg == "back" else f"求見・{c.characters[arg].name}"
+        if kind == "road":
+            what = arg.partition(":")[0]
+            if what == "back":
+                return atlas.journey_title(c, self._back_way().path)  # 折返：跟「前往」同一個標題，抵達時才併得進同一則
+            return ROAD_TASKS[what][0]
         here = c.locations[s.player.location].name
         titles = {
             "explore": f"探索{here}", "socialize": f"交遊・{here}", "call": f"求見・{here}", "train": f"歷練・{here}",
@@ -691,19 +762,45 @@ class Game:
             return self._dialogue_unavailable(companion_id)
 
     def _explore(self) -> list[str]:
-        """探索：先滾一次煉製素材，再走一般的遭遇流程（事件／敵人／一無所獲）。
+        """探索三選一（FB-013，docs/superpowers/specs/2026-10-03-探索三選一-design.md）。
 
-        素材的判定**刻意放在事件之前、而且不管接下來發生什麼都會滾**：原本照設計文件
-        §4.2 掛在「一無所獲」那條分支上，但用真實內容跑完整季實測，100 次探索有 100 次
-        都撞到手寫事件或敵人，那條分支一次都沒執行到（整季只拿到打贏掉的 3 個素材）。
-        改成探索本身就有機會撿到東西，一季約 30 個，對得上設計文件 §4.4 的產出目標。
+        1. 奇遇判定最優先：這裡有還能遇上的一次性或奇遇事件時，先滾 `rare_explore_chance`，中了就是它。
+        2. 沒中就照地點類型（`Config.explore_mix`）的比例抽素材、野怪、事件三支之一；做不了的那一支
+           （沒有會打的對手、沒有可重複的事件）從候選裡拿掉，用剩下的比例重抽——等於把它的比例按比例分給另外兩支。
+        3. 三支都做不了才是一無所獲。
+
+        以前是「先滾三成素材，再一定撞到一個事件」：40 個地點有 38 個探索 100% 跳事件，荒郊野外跟
+        城裡的手感一樣（QA 量過）。奇遇事件只走第 1 步、不進事件那一支，所以一直是稀有的。
         """
-        loc = self.content.locations[self.state.player.location]
-        found = materials.roll_explore_drop(loc, self.content, self.rng)
-        line = materials.grant(self.state, self.content, found) if found is not None else None
-        nothing = "你四處走走，一無所獲。" if line is None else f"你在{loc.name}翻找了一陣。"
-        msgs = self._encounter("explore", nothing)
-        return msgs + [line] if line is not None else msgs
+        s, c = self.state, self.content
+        loc = c.locations[s.player.location]
+        if event_candidates(s, c, "explore", "rare") and self.rng.random() < c.config.rare_explore_chance:
+            return self._present(pick_event(s, c, "explore", self.rng, "rare"))
+        mix = c.config.explore_mix_of(loc.tags).weights
+        branches = [b for b in EXPLORE_BRANCHES if mix.get(b, 0) > 0 and self._explore_can(b, loc)]
+        if not branches:
+            return ["你四處走走，一無所獲。"]
+        branch = self.rng.choices(branches, weights=[mix[b] for b in branches])[0]
+        if branch == "material":
+            found = materials.roll_explore_drop(loc, c, self.rng)
+            return [f"你在{loc.name}翻找了一陣。", materials.grant(s, c, found)]
+        if branch == "wild":
+            squad = min(self._wild_foes(loc), key=lambda foe: foe.difficulty)  # 同分取這裡列的第一路
+            return [f"你在{loc.name}走著，{squad.name}突然殺出！"] + self._squad_encounter(squad.id, wild=True)
+        return self._present(pick_event(s, c, "explore", self.rng, "common"))
+
+    def _explore_can(self, branch: ExploreBranch, loc: Location) -> bool:
+        """探索三選一的這一支在這裡做不做得了。"""
+        if branch == "material":
+            return bool(materials.explore_pool(loc, self.content))
+        if branch == "wild":
+            return bool(self._wild_foes(loc))
+        return bool(event_candidates(self.state, self.content, "explore", "common"))
+
+    def _wild_foes(self, loc: Location) -> list[Squad]:
+        """探索時可能殺出來的野怪：這裡的敵人裡不是自己陣營的那幾路（自己人不會突然殺出來，也不在這裡操練）。"""
+        squads = [self.content.squads[sid] for sid in loc.enemies]
+        return [squad for squad in squads if not self._drills_with(squad)]
 
     def _train(self) -> list[str]:
         """歷練：找這個地點的敵人打一場，**必定開打**；打完有機率接一段戰後的餘韻事件。
@@ -974,12 +1071,15 @@ class Game:
                     battle_instance.submit_action(battle, p.name, tag)
         ended = battle_instance.end_without_fighters(battle, definition, now)  # 沒人能打、回合逾時：用保底結果收場
         if ended:
+            battle.end_time = self.state.world.time  # 收場時的賽季時間：參戰者的戰報用（FB-027）
             return ended
         if now - battle.round.opened_real >= definition.round_seconds and not battle_instance.round_is_complete(battle):
             battle_instance.fill_timed_out_actions(battle, definition)
         if not battle_instance.round_is_complete(battle):
             return []
         msgs = battle_instance.resolve_round(battle, definition, self.rng, now=now)
+        if battle.phase == "ended":
+            battle.end_time = self.state.world.time
         narration = battle_instance.narrate_round(self.client, definition, battle, msgs)
         if narration:
             battle.narrative_log.append(narration)
@@ -1006,17 +1106,19 @@ class Game:
         結果也要套到自己手上的 self.state.world：結算可能發生在 choose()／travel() 的 options() tick 裡，
         而它們收尾的 _save_season 會把這份記憶體裡的賽季整份寫回去——不跟著改，剛寫進資料庫的大勢與旗標
         就被比較舊的那份蓋掉了（江湖史是另一張表，不受影響，所以只有它倖存）。江湖史那一則只寫資料庫，
-        不寫記憶體，免得存兩次。"""
-        if not (battle.outcome_world_flags or battle.outcome_trend_delta or battle.outcome_title):
-            return
+        不寫記憶體，免得存兩次。
 
-        def _apply(season: WorldState) -> None:
-            self._apply_outcome_trends_and_flags(season, battle)
-            if battle.outcome_title:
-                season.chronicle.append(Rumor(time=season.time, text=f"【{battle.outcome_title}】{battle.outcome_text}"))
+        最後把結果補送給自己（收場那一下的那個人當場就看得到）；別的參戰者各自同步時補（FB-027）。"""
+        if battle.outcome_world_flags or battle.outcome_trend_delta or battle.outcome_title:
 
-        self.world.mutate_season(_apply)
-        self._apply_outcome_trends_and_flags(self.state.world, battle)
+            def _apply(season: WorldState) -> None:
+                self._apply_outcome_trends_and_flags(season, battle)
+                if battle.outcome_title:
+                    season.chronicle.append(Rumor(time=season.time, text=f"【{battle.outcome_title}】{battle.outcome_text}"))
+
+            self.world.mutate_season(_apply)
+            self._apply_outcome_trends_and_flags(self.state.world, battle)
+        self._deliver_battle_results()
 
     @staticmethod
     def _apply_outcome_trends_and_flags(season: WorldState, battle: battle_instance.BattleInstance) -> None:
@@ -1027,6 +1129,62 @@ class Game:
             if flag not in season.flags:
                 season.flags.add(flag)
                 season.flag_times[flag] = season.time
+
+    def _deliver_battle_results(self) -> None:
+        """收場的全服決戰補送到自己手上（FB-027）：自己的名號在參戰名單上（含下線的、中途倒下的；觀戰的不在名單上）、
+        還沒補過的，每一場寫一則江湖紀錄、加一筆戰報。
+
+        為什麼是「下次同步時補」、不是收場那一下去改每個參戰者的角色：那會在一筆交易裡改幾十列，而且跟伺服器、假人
+        程式記憶體裡各自的 Game 打架（它們之後存檔會把別人寫進去的蓋掉）。資料庫是唯一的真實來源，戰鬥也一直留在
+        battles 表裡，所以每個人自己的 Game 在 sync（伺服器每個請求、假人每一輪）與自己收場的那一下自己補。
+        不分季別：決戰的結果常常就把季收掉，休季、下一季才回來的人也要補到。不是自己參戰的那幾場也記成處理過，
+        之後不必再讀（收場的決戰名單不會再變）。只讀處理過的最大流水號之後收場的：決戰照開戰的先後收場，比它小的
+        不會再有新收場的（見 WorldStateStore.ended_battles）。"""
+        p = self.state.player
+        fresh = self.world.ended_battles(after=max(p.battle_results_seen, default=0))
+        if not fresh:
+            return
+        current = self.world.get_season_number()
+        for season, battle in fresh:
+            me = battle.participants.get(p.name)
+            if me is not None:
+                self._file_showdown(battle, me, None if season == current else season)
+            p.battle_results_seen.append(battle.record_id)
+
+    def _file_showdown(
+        self, battle: battle_instance.BattleInstance, me: battle_instance.BattleParticipant, earlier: int | None,
+    ) -> None:
+        """一場收場的決戰寫成自己的一則江湖紀錄與一筆戰報（kind 是 showdown），「剛剛」放這一場的卡片。
+        earlier 是上一季（或更早）打的那一季的編號，這一季打的是 None：上一季的標明季別，大勢的增減寫進敘事、
+        不放進數值變化——數值變化看起來像剛發生在你身上的。"""
+        c, s = self.content, self.state
+        definition = c.battles.get(battle.battle_id)
+        sides = {f.id: f.name for f in definition.factions} if definition is not None else {}
+        name = definition.name if definition is not None else battle.battle_id
+        side = sides.get(me.faction, me.faction)
+        foes = "、".join(n for fid, n in sides.items() if fid != me.faction) or "敵軍"
+        where = self._battle_region_name(definition) if definition is not None and definition.region else name
+        outcome = battle.outcome_title or "收場"
+        label = "" if earlier is None else f"第 {earlier} 季・"
+        lines = ([battle.outcome_text] if battle.outcome_text else []) + [f"你出手 {me.acted_rounds} 回合"]
+        if me.fell_round is not None:
+            lines.append(f"你在第 {me.fell_round} 回合倒下，轉為觀戰")
+        trends = {t.id: t.name for t in c.scenario.trends}
+        deltas = [f"{trends.get(tid, tid)} {delta:+d}" for tid, delta in battle.outcome_trend_delta.items() if delta]
+        changes = deltas if earlier is None else []
+        if earlier is not None:
+            lines += [f"（第 {earlier} 季）{d}" for d in deltas]
+        time = battle.end_time if battle.end_time is not None else s.world.time
+        record = BattleRecord(
+            id=s.battle_seq + 1, time=time, location=f"{label}{where}", kind="showdown", event=name, opponent=foes,
+            ours=[], tier=outcome, our_power=0.0, difficulty=0.0, side=side, notes=list(lines), changes=list(changes),
+        )
+        battlelog.add_record(s, record)
+        s.battle_card = record.id
+        journal.add_entry(s, JournalEntry(
+            time=time, title=f"{label}{name}・{outcome}", tag=f"你站在{side}", lines=lines, changes=changes,
+            battle_id=record.id,
+        ))
 
     def _watching_battle(self, battle: battle_instance.BattleInstance, definition: BattleDef) -> bool:
         """這個人此刻打不了這場仗、只能在一旁看（options() 照常給平常的選項，場景上仍看得到戰場）：
@@ -1239,7 +1397,10 @@ class Game:
             self.world.mutate_battle(
                 lambda b: battle_instance.join_faction(b, name, rest, self._battle_neili_cap(), self._battle_power())
             )
-            return stood + ["你加入了這場戰局。"]
+            msgs = stood + ["你加入了這場戰局。"]
+            side = next((f.name for f in definition.factions if f.id == rest), rest)
+            self._write(f"{definition.name}・{'改選' if changing_sides else '加入'}{side}", msgs)  # 加入與改選各留一則（FB-030）
+            return msgs
         if kind == "join_late":
             own = self.state.player.faction if self.content.scenario.factions else None
             stood = self._stand_up() if self.state.player.resting_since is not None else []  # 加入戰局就起身
@@ -1248,7 +1409,9 @@ class Game:
                     b, definition, name, self._battle_neili_cap(), self.rng, self._battle_power(), faction=own,
                 )
             )
-            return stood + ["你加入了戰局，這回合先觀戰，下回合開始可以行動。"]
+            msgs = stood + ["你趕到了戰場，這一回合就能出手。"]  # 晚到的人當回合就能出招（FB-028）
+            self._write(f"{definition.name}・趕到戰場", msgs)  # 趕到也留一則（FB-030）；每回合的出招不寫，太吵
+            return msgs
         if kind == "act":
             return self._submit_battle_action(name, definition, rest)
         return ["（此刻無法這麼做。）"]
@@ -1299,12 +1462,10 @@ class Game:
         return msgs
 
     def _encounter(self, action: str, nothing: str) -> list[str]:
+        """交遊沒碰上人物時：抽一則事件，沒有就是 nothing（探索另有三選一，見 _explore）。"""
         event = pick_event(self.state, self.content, action, self.rng)
         if event:
             return self._present(event)
-        loc = self.content.locations[self.state.player.location]
-        if action == "explore" and loc.enemies and self.rng.random() < self.content.config.train_event_chance:
-            return self._squad_encounter(self.rng.choice(loc.enemies))
         return [nothing]
 
     def _present(self, event: Event) -> list[str]:
@@ -1321,8 +1482,12 @@ class Game:
         self._hide(text)
         return [head, text]
 
-    def _squad_encounter(self, squad_id: str) -> list[str]:
-        """遭遇一支敵方隊伍：單次判定，勝得對手獎勵與屬性機會，落敗失落一成銀兩；自己陣營的隊伍改成操練（見 _drill）。"""
+    def _squad_encounter(self, squad_id: str, wild: bool = False) -> list[str]:
+        """遭遇一支敵方隊伍：單次判定，勝得對手獎勵與屬性機會，落敗失落一成銀兩；自己陣營的隊伍改成操練（見 _drill）。
+
+        wild：探索時撞上的野怪（探索三選一設計 4.2）——扣氣血打折（`wild_neili_loss_factor`，內傷照比例）、
+        打贏**不推大勢**（歷練推大勢的量已經讓黃巾早早稱霸，探索不能再加碼）；獎勵、掉落、屬性機會、落敗的
+        一成銀兩都照常。戰後事件本來就只在 _train 裡接，野怪不走那裡。歷練不帶這個旗標，一點都不變。"""
         s, c = self.state, self.content
         p = s.player
         loc = c.locations[p.location]
@@ -1330,7 +1495,7 @@ class Game:
         if self._drills_with(squad):
             return self._drill(squad)
         result = team.fight(s, c, self.world, squad.id, self.rng)
-        record = battlelog.new_record(s, c, self.world, squad, result, "train")
+        record = battlelog.new_record(s, c, self.world, squad, result, "wild" if wild else "train")
         msgs: list[str] = []
         if result.tier in team.WIN_TIERS:
             rewards = self._battle_rewards(squad, record)
@@ -1340,8 +1505,9 @@ class Game:
                 key = self.rng.choice(["str", "agi", "con"])
                 p.stats[key] += 1
                 extra.append(f"{c.config.stat_names[key]} +1")
-            for trend_id, delta in loc.train_trend.items():
-                extra += change_trend(s, c, trend_id, self._train_push(trend_id, delta))
+            if not wild:
+                for trend_id, delta in loc.train_trend.items():
+                    extra += change_trend(s, c, trend_id, self._train_push(trend_id, delta))
             changes, notes = battlelog.split_changes(extra)
             record.changes += changes
             record.notes += notes
@@ -1352,7 +1518,7 @@ class Game:
             record.silver = -loss
             if loss:
                 msgs.append(f"銀兩 -{loss}")
-        toll = team.take_encounter_toll(s, c, self.world, result.tier)
+        toll = team.take_encounter_toll(s, c, self.world, result.tier, wild=wild)
         record.changes += toll
         msgs += toll
         msgs.insert(0, self._file_battle(record))
@@ -1437,26 +1603,118 @@ class Game:
         """選單上的「前往 某地」：沿直接相連的那條路出發。arg 是 move: 後面那段——只有地點就是步行，
         「地點:走法」是主畫面「走法」切換選的趕路或疾行（見 _move_option）。"""
         dest_id, _, mode = arg.partition(":")
-        return self._depart([dest_id], mode or "walk")
+        legs = atlas.path_legs(self.content, self.state.player.location, [dest_id])
+        return self._depart(atlas.Route((dest_id,), tuple(legs)), mode or "walk")
 
-    def _depart(self, path: list[str], mode: TravelMode) -> list[str]:
-        """出發（地圖擴充設計 3.2、3.3）：趕路、疾行的體力出發時一次扣，照走法排好每一站的抵達時間。
-        疾行立刻一站一站抵達；步行、趕路就在路上，之後由 sync／advance 補算抵達（見 _arrivals）。"""
+    def _road(self, arg: str) -> list[str]:
+        """路上的選項（路上設計第三、四節）。road:back[:<走法>] 是折返：回身後那一站，跟大地圖改道走同一條路（見 _depart）。
+        其餘是路上小事（ROAD_TASKS）：記進這一段做過的，結果照既有慣例寫成「心得 +3」這種變化量。"""
+        what, _, mode = arg.partition(":")
+        if what == "back":
+            return self._depart(self._back_way(), mode or "walk")
+        self.state.player.leg_actions.add(what)
+        tasks = {"think": self._road_think, "ask": self._road_ask, "survey": self._road_survey, "gather": self._road_gather}
+        return tasks[what]()
+
+    def _road_ends(self) -> tuple[str, str]:
+        """這段路的兩頭：身後那一站、前面那一站。"""
+        spot = atlas.road_spot(self.state, self.content)
+        return spot.behind, spot.ahead
+
+    def _road_rewards_used(self, kind: str, day: int | None = None) -> int:
+        """這一天（遊戲日，跟每天對話輪數同一個算法；不給就是今天）路上已經拿過幾次收穫；kind 是 "task"（路上小事）或
+        "sight"（見聞）。紀錄是別天的就當沒拿過。"""
+        record = self.state.player.road_rewards_today.get(kind)
+        return record[1] if record and record[0] == (day or current_day(self.state)) else 0
+
+    def _road_reward_due(self, kind: str, day: int | None = None) -> bool:
+        """這一天路上這一種收穫還沒拿滿（企劃者 2026-10-03 決定的每天上限 road_reward_daily_cap）。"""
+        return self._road_rewards_used(kind, day) < self.content.config.road_reward_daily_cap
+
+    def _count_road_reward(self, kind: str, day: int | None = None) -> None:
+        """記一次真的給出去的收穫（沒撿到東西的採集不算）。"""
+        day = day or current_day(self.state)
+        self.state.player.road_rewards_today[kind] = [day, self._road_rewards_used(kind, day) + 1]
+
+    def _road_think(self) -> list[str]:
+        """邊走邊想：心得（一次歷練大約 12～20，這裡刻意少很多）。今天的收穫拿滿了就照樣想，只是沒有心得。"""
+        if not self._road_reward_due("task"):
+            return ["你邊走邊想，今天想得夠多了，沒有新的心得。"]
+        p, amount = self.state.player, self.content.config.road_think_xinde
+        p.stats["xinde"] = p.stats.get("xinde", 0) + amount
+        self._count_road_reward("task")
+        return ["你邊走邊想，把這幾天的見聞在心裡過了一遍。", f"心得 +{amount}"]
+
+    def _road_ask(self) -> list[str]:
+        """沿途打聽：這段路兩頭所在大區（Rumor.region；兩頭不同區時兩區都算）最近幾則傳聞裡隨機挑一則；沒有就寫一句，
+        仍算做過。別的陣營的軍情、寫給別人的個人線索聽不到。"""
         s, c = self.state, self.content
-        legs = atlas.path_legs(c, s.player.location, path)
-        minutes = sum(legs)
-        cost = atlas.travel_stamina(c, minutes, mode)
+        p = s.player
+        regions = {region.id for loc_id in self._road_ends() if (region := atlas.region_of(c, loc_id)) is not None}
+        heard = [
+            r for r in s.world.rumors
+            if r.region in regions and r.faction in (None, p.faction) and r.character in (None, p.name)
+        ][-c.config.road_rumor_pool:]
+        if not heard:
+            return ["你沿途問了幾個人，這一帶最近沒什麼新鮮事。"]
+        return [f"你沿途向人打聽，聽說：{self.rng.choice(heard).text}"]
+
+    def _road_survey(self) -> list[str]:
+        """留意地形：這段路兩頭一站以內、還沒摸清（也已開放）的地點，標成摸清（PlayerState.surveyed，大地圖上跟去過一樣
+        算記得）。沒有可標的就寫一句，仍算做過。"""
+        s, c = self.state, self.content
+        views = atlas.views(s, c)
+        found: list[str] = []
+        for end in self._road_ends():
+            for loc_id in (end, *(str(dest) for dest in c.locations[end].connections)):
+                if views[loc_id] in ("outline", "dot") and loc_id not in found:
+                    found.append(loc_id)
+        if not found:
+            return ["你留意了一路的地形，附近沒有什麼沒摸清的地方。"]
+        s.player.surveyed |= set(found)
+        return [f"你留意沿路的地形，摸清了{'、'.join(c.locations[loc_id].name for loc_id in found)}的位置。"]
+
+    def _road_gather(self) -> list[str]:
+        """路邊採集：一定機率撿到一樣一階素材；屬性照這段路兩頭的地點寫的素材（Location.materials），兩頭都沒寫就隨機。
+        今天的收穫拿滿了就不翻（也不擲骰）；撿到了才算一次收穫。"""
+        s, c = self.state, self.content
+        if not self._road_reward_due("task"):
+            return ["你留心路邊，今天已經撿夠了，沒再去翻。"]
+        if self.rng.random() >= c.config.road_gather_chance:
+            return ["你在路邊翻找了一陣，沒找到什麼能用的。"]
+        kinds = {c.materials[m].attribute for end in self._road_ends() for m in c.locations[end].materials if m in c.materials}
+        pool = [m for m in materials.by_tier(c, 1) if m.attribute in kinds] or materials.by_tier(c, 1)
+        if not pool:  # 內容裡沒有一階素材：當成沒找到
+            return ["你在路邊翻找了一陣，沒找到什麼能用的。"]
+        self._count_road_reward("task")
+        return ["你在路邊翻找了一陣。", materials.grant(s, c, self.rng.choice(pool).id)]
+
+    def _depart(self, route: atlas.Route, mode: TravelMode) -> list[str]:
+        """出發（地圖擴充設計 3.2、3.3）：趕路、疾行的體力出發時一次扣，照走法排好每一站的抵達時間。
+        疾行立刻一站一站抵達；步行、趕路就在路上，之後由 sync／advance 補算抵達（見 _arrivals）。
+        在路上改道、折返（路上設計 3.1）也從這裡出發：route 的第一段是半段路（origin、share 記著是哪條路、走掉幾成），
+        新路程整個取代原本那一趟；原本已經扣的趕路體力不退。剛出發就折返（見 atlas.returns_at_once）不扣體力、當下就回到原地。"""
+        s, c = self.state, self.content
+        rerouting = s.player.journey is not None
+        minutes = route.minutes
+        at_once = atlas.returns_at_once(s, c, route)  # 要在換掉原本那一趟之前看：它看的是現在在路上的位置
+        cost = atlas.route_stamina(s, c, route, mode)
         s.player.stamina -= cost
-        s.player.journey = Journey(mode=mode, path=path, arrive_at=atlas.arrival_times(s.world.time, legs, mode))
+        legs = [0.0] if at_once else list(route.legs)
+        s.player.journey = Journey(
+            mode=mode, path=list(route.path), arrive_at=atlas.arrival_times(s.world.time, legs, mode),
+            origin=route.origin, share=route.share,
+        )
         if self._draft is not None:
-            self._draft.tag = atlas.MODES[mode] + atlas.mode_when(minutes, mode)
+            self._draft.tag = "立刻折返" if at_once else atlas.MODES[mode] + atlas.mode_when(minutes, mode)
             if cost:
                 self._draft.changes.append(f"體力 -{cost}")
-        if mode == "dash":
+        if mode == "dash" or at_once:
             return self._arrivals()
         arrive = s.player.journey.arrive_at[-1]
         left = atlas.whole_minutes((arrive - s.world.time) / 60)
-        msg = f"你動身{atlas.MODES[mode]}前往{c.locations[path[-1]].name}，{battlelog.clock_text(arrive)} 抵達（約 {left} 分鐘後）。"
+        verb = "改道" if rerouting else "動身"
+        msg = f"你{verb}{atlas.MODES[mode]}前往{c.locations[route.path[-1]].name}，{battlelog.clock_text(arrive)} 抵達（約 {left} 分鐘後）。"
         self._hide(msg)  # 場景會顯示「在路上」，紀錄只留標題與走法
         self._sync_battle_presence()
         return [msg]
@@ -1483,8 +1741,17 @@ class Game:
                 if s.world.ended and not already_over:
                     break  # 剛抵達的那一站觸發了賽季落幕：停在那裡
                 when = j.arrive_at[j.reached]
+                stop = j.path[j.reached]
+                came_from = j.origin if j.reached == 0 and j.origin is not None else s.player.location
                 j.reached += 1
-                msgs += self._arrive(j.path[j.reached - 1], final=j.reached > j.last, client=client)
+                # 到了另一站：換段，路上小事重新可做，也可能看見路上見聞。掉頭回到剛離開的那一站不算換段、也不擲見聞
+                # （剛出發就折返不花時間也不花體力，不能拿來刷見聞）
+                new_leg = stop != s.player.location
+                if new_leg:
+                    s.player.leg_actions = set()
+                msgs += self._arrive(stop, final=j.reached > j.last, client=client)
+                if new_leg:
+                    msgs += self._road_sight(c.locations[came_from].road_to(stop), stop, when)
             done = j.reached > j.last or s.world.ended
             if done:
                 s.player.journey = None
@@ -1518,6 +1785,36 @@ class Game:
         self._hide(text)
         return [text] + note_action(s, c, self.world, "move") + check_thresholds(s, c, self.world, client, now=self.now)
 
+    def _road_sight(self, road: RoadKind, loc_id: str, when: float | None = None) -> list[str]:
+        """路上見聞（路上設計第五節）：抵達一站時有 road_sight_chance 的機會，從符合這段路的種類、剛抵達那一站所在大區的
+        見聞裡平均挑一則（最近看過的 road_sight_recent 則先排除，池子不夠才重複）。文字寫進這次抵達的紀錄，小收穫照慣例
+        接在後面。寫好的文字、不呼叫模型，下線補算時照樣發生。機率是 0 或池子是空的時候連骰子都不擲。
+        有收穫的見聞受每天上限管（企劃者 2026-10-03 決定，跟路上小事各算各的）：抵達那一天（when，下線補算時是當時的
+        抵達時間）的 "sight" 收穫拿滿了，給銀兩、素材的見聞就不挑（文字寫的就是拿到東西），給心得的照寫文字、不給心得；
+        真的給了才算一次。沒有收穫的見聞不算次數。"""
+        s, c = self.state, self.content
+        day = int(when // DAY) + 1 if when is not None else current_day(s)
+        capped = not self._road_reward_due("sight", day)
+        region = atlas.region_of(c, loc_id)
+        area = region.id if region is not None else None
+        pool = [
+            sight for sight in c.road_sights.values()
+            if (not sight.roads or road in sight.roads) and (not sight.regions or area in sight.regions)
+            and not (capped and (sight.effect.materials or sight.effect.stats.get("silver")))
+        ]
+        chance = c.config.road_sight_chance
+        if not pool or chance <= 0 or self.rng.random() >= chance:
+            return []
+        recent = s.player.recent_sights
+        sight = self.rng.choice([x for x in pool if x.id not in recent] or pool)
+        keep = c.config.road_sight_recent
+        s.player.recent_sights = (recent + [sight.id])[-keep:] if keep else []
+        rewarded = bool(sight.effect.stats or sight.effect.materials)  # 載入檢查保證見聞只會有這兩種效果
+        if not rewarded or capped:
+            return [sight.text]
+        self._count_road_reward("sight", day)
+        return [sight.text] + apply_effect(sight.effect, s, c, self.world)
+
     def _journey_line(self) -> str:
         """在路上的那一句（狀態列、場景共用）：「往寶洞（步行），第1天 00:08 抵達，還要約 8 分鐘；下一站湖邊」。"""
         s, c = self.state, self.content
@@ -1544,16 +1841,17 @@ class Game:
         return msgs
 
     def travel(self, dest_id: str, mode: TravelMode = "walk") -> list[str]:
-        """安排前往（大地圖詳情欄的按鈕）：照路程最短的路線出發，走法見 _depart。"""
+        """安排前往（大地圖詳情欄的按鈕）：照路程最短的路線出發，走法見 _depart。在路上也行（路上設計 3.1）：
+        取掉頭與繼續兩種走法裡路程短的（見 atlas.way_to），新路程從路中間出發。"""
         refusal = self.travel_refusal(dest_id, mode)
         if refusal is not None:
             return self._log([f"（{refusal}。）"])
         s, c = self.state, self.content
-        route = atlas.routes(s, c)[dest_id]
+        route = atlas.way_to(s, c, dest_id)
         s.battle_card = None
         self._draft = Draft(atlas.journey_title(c, route.path))
         try:
-            msgs = self._depart(list(route.path), mode)
+            msgs = self._depart(route, mode)
             journal.add_entry(s, self._draft.entry(s.world.time, msgs))
         finally:
             self._draft = None
@@ -1659,8 +1957,7 @@ class Game:
         art, msg = team.create_skill(self.state, self.content, self.world, name, kind)
         msgs = self._log([msg])
         if art is not None:
-            self._menxia_entry(msg, xinde)
-            msgs += note_action(self.state, self.content, self.world, "practice")
+            msgs += self._menxia_entry(msg, xinde, guide=True)
         return msgs
 
     def craft(self, material_ids: list[str], kind: str) -> list[str]:
@@ -1676,8 +1973,7 @@ class Game:
         art, msgs = craft.craft(self.state, self.content, self.world, self.client, material_ids, kind)
         out = self._log(msgs)
         if art is not None:
-            self._menxia_entry(f"煉製【{art.name}】", xinde)
-            out += note_action(self.state, self.content, self.world, "practice")
+            out += self._menxia_entry(f"煉製【{art.name}】", xinde, guide=True)
         return out
 
     def craft_cost(self, material_ids: list[str]) -> int:
@@ -1714,10 +2010,7 @@ class Game:
         # 已經第十成（練無可練）也算（可能在走到這一步前就自創、煉製到滿了，只認「真的加一成」會永遠卡住）。
         has_art = getattr(self.state.player.member, "neigong_id" if kind == "內功" else "wugong_id") is not None
         msgs = self._log(team.practice(self.state, self.content, self.world, kind, self.rng))
-        self._menxia_entry(msgs[0] if msgs else "練功", xinde)
-        if has_art:
-            msgs += note_action(self.state, self.content, self.world, "practice")
-        return msgs
+        return msgs + self._menxia_entry(msgs[0] if msgs else "練功", xinde, guide=has_art)
 
     def heal(self) -> list[str]:
         if self._preparing():
@@ -1730,11 +2023,26 @@ class Game:
     def _xinde(self) -> int:
         return self.state.player.stats.get("xinde", 0)
 
-    def _menxia_entry(self, tag: str, xinde_before: int) -> None:
+    def _menxia_entry(self, tag: str, xinde_before: int, guide: bool = False) -> list[str]:
+        """門下動作寫進江湖紀錄（連續的併成一則）。
+
+        guide=True：這個動作算一次「練功」（自創、煉製、鍛鍊），順便看新手引導有沒有完成（FB-024）。完成了，
+        note_action 回來的「✔ 引導完成」、獎勵與說書人的下一步，跟江湖頁 choose() 那條路一樣寫進這一則
+        （敘事進 lines、獎勵的數字進 changes），並回傳這幾行讓畫面也照舊顯示；沒完成就回傳 []，這一則跟以前一模一樣。
+        心得的增減先算好、才輪到引導獎勵：獎勵本身若給心得，變化只由獎勵那幾行帶進來，不會算兩次。"""
         delta = self._xinde() - xinde_before
         changes = [f"心得 {delta:+d}"] if delta else []
-        entry = JournalEntry(time=self.state.world.time, title=journal.MENXIA, tag=tag, changes=changes)
+        notes = note_action(self.state, self.content, self.world, "practice") if guide else []
+        lines: list[str] = []
+        if notes:
+            reward, story = battlelog.split_changes(notes)
+            changes = journal.combine_changes(changes + reward)
+            # 一則的敘事有 lines 就只認 lines、沒有才拿結果標記（journal._story）：這次動作自己的那句話要先放進 lines，
+            # 不然之後的門下動作併進來時，這句話會被引導那幾行擠掉。
+            lines = [tag, *story]
+        entry = JournalEntry(time=self.state.world.time, title=journal.MENXIA, tag=tag, lines=lines, changes=changes)
         journal.add_entry(self.state, entry, merge=True)
+        return self._log(notes)
 
     # ── 門下與隊伍 ────────────────────────────────────────
 
@@ -1976,7 +2284,11 @@ class Game:
             return f"**求見**\n\n{self._audience_intro()}"
         if s.player.journey is not None:
             halted = "（已經喊停）" if s.player.journey.stop_at is not None else ""
-            return f"**在路上**{halted}\n\n{self._journey_line()}。\n\n路上不能做事；可以先下線，到了會自己抵達。"
+            return (
+                f"**在路上**{halted}\n\n{self._journey_line()}。\n\n"
+                "路上可以折返，也可以打開輿圖改去別處，或去修練、煉製；邊走邊想、沿途打聽、留意地形、路邊採集，"
+                "到下一站之前各能做一次。可以先下線，到了會自己抵達。"
+            )
         return self.location_text()
 
     def status_data(self) -> dict:

@@ -123,17 +123,17 @@ def test_explore_falls_back_to_a_first_tier_material(content):
     assert picked is not None and content.materials[picked].tier == 1
 
 
-def test_explore_usually_finds_nothing(content):
-    loc = content.locations["lake"]
-    never = random.Random()
-    never.random = lambda: 0.99  # type: ignore[method-assign]
-    assert materials.roll_explore_drop(loc, content, never) is None
-
-
-def test_explore_respects_the_configured_chance(content):
-    content.config.explore_material_chance = 0.0
-    loc = content.locations["lake"].model_copy(update={"materials": ["gang_1"]})
-    assert materials.roll_explore_drop(loc, content, random.Random(0)) is None
+def test_the_material_branch_always_finds_something(content):
+    """探索三選一：抽到「素材」那一支就必定撿到一樣（機率當成 1，探索三選一設計 4.1）；
+    以前探索前那一次三成的判定已經拿掉。"""
+    unlucky = random.Random()
+    unlucky.random = lambda: 0.99  # type: ignore[method-assign]
+    own = content.locations["lake"].model_copy(update={"materials": ["gang_1"]})
+    assert materials.roll_explore_drop(own, content, unlucky) == "gang_1"
+    bare = content.locations["lake"].model_copy(update={"materials": []})
+    for seed in range(20):
+        picked = materials.roll_explore_drop(bare, content, random.Random(seed))
+        assert picked is not None and content.materials[picked].tier == 1
 
 
 def test_tier_label_reads_in_words(content):

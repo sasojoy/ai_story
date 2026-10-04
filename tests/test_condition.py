@@ -127,6 +127,20 @@ def test_winning_big_costs_much_less_than_losing(state, content, world):
     assert win_state.player.member.injury < lose_state.player.member.injury
 
 
+def test_a_wild_fight_costs_half_the_blood_and_half_the_injury(state, content, world):
+    """探索時撞上的野怪只扣歷練的一半（wild_neili_loss_factor），內傷照同一個比例（探索三選一設計 4.2）。"""
+    from copy import deepcopy
+
+    trained, ambushed = deepcopy(state), deepcopy(state)
+    team.take_encounter_toll(trained, content, world, "落敗")
+    msgs = team.take_encounter_toll(ambushed, content, world, "落敗", wild=True)
+    cap = team.neili_cap(content, state.player.member.level)
+    half = cap * content.config.encounter_neili_loss["落敗"] * content.config.wild_neili_loss_factor
+    assert msgs[0] == f"氣血 -{half:.0f}"
+    assert ambushed.player.member.injury == pytest.approx(trained.player.member.injury * 0.5)
+    assert ambushed.player.member.injury == pytest.approx(half * content.config.injury_share)
+
+
 def test_an_unknown_result_costs_nothing(state, content, world):
     assert team.take_encounter_toll(state, content, world, "莫名其妙") == []
     assert state.player.member.injury == 0.0

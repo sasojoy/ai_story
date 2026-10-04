@@ -1,6 +1,7 @@
 import contextlib
 import random
 import sqlite3
+import time
 from unittest import mock
 
 import pytest
@@ -686,6 +687,106 @@ def test_battle_free_text_shows_and_submits(game):
     assert any("直取波才首級" in line for line in game.world.get_battle().narrative_log)
 
 
+# ── 決戰選項的回話（FB-030）：網頁上要看得到按下去發生了什麼 ──────────────
+
+
+def _a_showdown_fighter(client, started=False):
+    """官軍的新角色，黃巾決戰剛開（started＝集結已經結束、正在打），另有一位黃巾的真人在場、所以回合會等人。"""
+    _player(client)
+    game = server.game_for("沈青衫")
+    game.state.player.faction = "guan"
+    open_characters().save(game.state)
+    definition = server.CONTENT.battles["huangjin_showdown"]
+    open_world().start_battle(definition, now=time.time() - (definition.muster_seconds + 1 if started else 0))
+    open_world().mutate_battle(lambda b: battle_instance.join_faction(b, "乙玩家", "huang", neili_cap=320.0))
+    return definition
+
+
+def _journal_titles(name="沈青衫"):
+    return [e.title for e in open_characters().load(name).journal]
+
+
+def test_joining_the_muster_tells_the_page_and_is_journaled(client):
+    _a_showdown_fighter(client)
+    before = _journal_titles()
+    out = client.post("/api/choose", json={"id": "battle:join:guan"}).json()
+    assert "你加入了這場戰局。" in out["message"]
+    assert "黃巾決戰・加入官軍" in out["main"]["latest"]
+    assert _journal_titles() == ["黃巾決戰・加入官軍"] + before
+
+
+def test_joining_late_shows_the_line_on_the_page_data_and_journals_it(client):
+    """FB-028 的驗收：「你趕到了戰場，這一回合就能出手。」要在畫面資料裡找得到（回話與江湖紀錄兩處）。"""
+    _a_showdown_fighter(client, started=True)
+    before = _journal_titles()
+    out = client.post("/api/choose", json={"id": "battle:join_late"}).json()
+    line = "你趕到了戰場，這一回合就能出手。"
+    assert line in out["message"]
+    main = client.get("/api/main").json()
+    assert line in main["latest"] and line in out["main"]["latest"]
+    assert _journal_titles() == ["黃巾決戰・趕到戰場"] + before
+
+
+def test_a_rounds_action_replies_but_is_not_journaled(client):
+    _a_showdown_fighter(client, started=True)
+    client.post("/api/choose", json={"id": "battle:join_late"})
+    before = _journal_titles()
+    options = client.get("/api/main").json()["options"]
+    act_id = next(o["id"] for o in options if o["id"].startswith("battle:act:"))
+    out = client.post("/api/choose", json={"id": act_id}).json()
+    assert "等待其他人" in out["message"]
+    assert _journal_titles() == before
+
+
+def test_the_free_text_action_already_replies_and_is_not_journaled(client):
+    """放手一搏走 /api/do/battle_text，回話本來就從 api_do 的 message 回來、前端的 doMain 也會跳出來；不寫江湖紀錄。"""
+    _a_showdown_fighter(client, started=True)
+    client.post("/api/choose", json={"id": "battle:join_late"})
+    before = _journal_titles()
+    assert client.get("/api/main").json()["free_text"]
+    out = client.post("/api/do/battle_text", json={"text": "直取波才首級"}).json()
+    assert "等待其他人" in out["message"]
+    assert _journal_titles() == before
+
+
+def test_an_ordinary_option_does_not_come_back_with_a_message(client):
+    """它的話已經在江湖紀錄與「剛剛」裡，再跳一句提示會重複。"""
+    _player(client)
+    out = client.post("/api/choose", json={"id": "act:explore"}).json()
+    assert "message" not in out
+
+
+def test_a_showdown_option_that_is_no_longer_there_still_says_so(client):
+    _a_showdown_fighter(client)
+    out = client.post("/api/choose", json={"id": "battle:act:safe"}).json()
+    assert "此刻無法" in out["message"]
+
+
+def test_a_fighter_sees_the_finished_showdown_on_the_main_page(client):
+    """FB-027：決戰在這個帳號沒連線時收場（只動了資料庫裡的戰鬥），下一次打 /api/main 就補進江湖紀錄與戰報、
+    「剛剛」放這一場的卡片，而且存進了角色。"""
+    _player(client)
+    definition = server.CONTENT.battles["huangjin_showdown"]
+    world = open_world()
+    world.start_battle(definition, now=0.0)
+
+    def fight(b):
+        battle_instance.join_faction(b, "沈青衫", "guan", neili_cap=320.0)
+        battle_instance.close_muster(b, definition, random.Random(0))
+        while b.phase == "active":
+            battle_instance.submit_action(b, "沈青衫", battle_instance.safest_option_tag(b, definition, "沈青衫"))
+            battle_instance.resolve_round(b, definition, random.Random(0))
+
+    world.mutate_battle(fight)
+    main = client.get("/api/main").json()
+    assert main["card"] is not None and "決戰：黃巾決戰" in main["card"] and "你站在官軍" in main["card"]
+    assert main["card_id"] is not None
+    saved = open_characters().load("沈青衫")
+    assert saved.journal[0].title.startswith("黃巾決戰・") and saved.journal[0].battle_id == main["card_id"]
+    report = client.get(f"/api/reports?id={main['card_id']}").json()
+    assert report["list"][0]["id"] == main["card_id"] and "你站在官軍" in report["detail"]
+
+
 # ── 管理者 ────────────────────────────────────────────
 
 
@@ -1010,6 +1111,166 @@ def test_the_lan_flag_opens_every_network_card_and_says_so(capsys, monkeypatch):
     assert str(database.default_path().resolve()) in out
 
 
+# ── --share：把 cloudflared 的輸出讀完、只從有網址的那一行取網址（FB-020）──────────
+# cloudflared 第一行是「Requesting new quick Tunnel on trycloudflare.com...」：有網域、沒有 https://。
+# 舊的 relay 在那一行 IndexError 就死了，三秒後真正的網址那行沒人讀。
+
+TUNNEL_URL = "https://abc-def-123.trycloudflare.com"
+URL_ANNOUNCEMENT = f"公開網址：{TUNNEL_URL}（給手機用；有網址的人都進得來，不要外流）"
+NO_URL_NOTICE = "cloudflared 已結束，沒有拿到公開網址。它最後的輸出："
+NO_OUTPUT_NOTICE = "cloudflared 沒有任何輸出就結束了。"
+
+CLOUDFLARED_OUTPUT = [
+    "2026-10-03T12:00:00Z INF Thank you for trying Cloudflare Tunnel. Doing so, without a Cloudflare account, is a quick way to experiment and try it out.\n",
+    "2026-10-03T12:00:00Z INF Requesting new quick Tunnel on trycloudflare.com...\n",
+    "2026-10-03T12:00:03Z INF +--------------------------------------------------------------------------------------------+\n",
+    "2026-10-03T12:00:03Z INF |  Your quick Tunnel has been created! Visit it at (it may take some time to be reachable):  |\n",
+    f"2026-10-03T12:00:03Z INF |  {TUNNEL_URL}                                                  |\n",
+    "2026-10-03T12:00:03Z INF +--------------------------------------------------------------------------------------------+\n",
+    "2026-10-03T12:00:03Z INF Version 2025.9.0\n",
+    "2026-10-03T12:00:04Z INF Registered tunnel connection connIndex=0 location=tpe01 protocol=quic\n",
+    "2026-10-03T12:00:05Z INF Registered tunnel connection connIndex=1 location=tpe02 protocol=quic\n",
+]
+
+
+class _CountingLines:
+    """像 proc.stdout 一樣一行一行吐；記下總共被讀了幾行（用來證明網址之後的行也被讀完）。"""
+
+    def __init__(self, lines):
+        self.lines = list(lines)
+        self.read = 0
+
+    def __iter__(self):
+        for line in self.lines:
+            self.read += 1
+            yield line
+
+
+def test_the_tunnel_url_is_printed_once_from_the_line_that_has_it():
+    printed = []
+    server.relay_tunnel_output(CLOUDFLARED_OUTPUT, emit=printed.append)
+    assert printed == [URL_ANNOUNCEMENT]  # 「Requesting …on trycloudflare.com」那行不是網址；cloudflared 其他輸出照舊安靜
+
+
+def test_the_relay_keeps_reading_after_the_url_until_the_pipe_ends():
+    """網址印出後還要把管線讀乾淨：沒人讀的話緩衝寫滿時 cloudflared 會卡住，隧道跟著停。"""
+    lines = _CountingLines(CLOUDFLARED_OUTPUT)
+    printed = []
+    server.relay_tunnel_output(lines, emit=printed.append)
+    assert lines.read == len(CLOUDFLARED_OUTPUT)
+    assert printed == [URL_ANNOUNCEMENT]  # 讀完了也沒有再多說一句「沒拿到網址」
+
+
+def test_a_url_that_cloudflared_prints_again_is_announced_only_once():
+    printed = []
+    server.relay_tunnel_output(CLOUDFLARED_OUTPUT + CLOUDFLARED_OUTPUT[4:5] * 2, emit=printed.append)
+    assert printed == [URL_ANNOUNCEMENT]
+
+
+def test_an_odd_line_is_skipped_instead_of_killing_the_relay():
+    printed = []
+    odd = [
+        "\n",
+        "INF see https:// trycloudflare.com for details\n",  # 有網域、有 https://，但不是一個網址
+        "INF https://.trycloudflare.com\n",
+        "\ufffd\ufffd INF �\n",
+        "INF trycloudflare.com\n",
+    ]
+    server.relay_tunnel_output(odd + CLOUDFLARED_OUTPUT, emit=printed.append)
+    assert printed == [URL_ANNOUNCEMENT]
+
+
+def test_cloudflared_failing_to_request_a_tunnel_is_not_mistaken_for_the_public_url():
+    """要不到隧道時 cloudflared 的錯誤訊息會帶 https://api.trycloudflare.com：那是它自己的服務、不是給手機用的網址。"""
+    printed = []
+    failed = [
+        "2026-10-03T12:00:00Z INF Requesting new quick Tunnel on trycloudflare.com...\n",
+        'failed to request quick Tunnel: Post "https://api.trycloudflare.com/tunnel": dial tcp: lookup api.trycloudflare.com: no such host\n',
+    ]
+    server.relay_tunnel_output(failed, emit=printed.append)
+    assert printed == [NO_URL_NOTICE] + [line.rstrip("\n") for line in failed]  # 錯誤訊息本身就是主機端要看的原因
+
+
+def test_output_that_ends_without_any_url_says_so_instead_of_staying_silent():
+    printed = []
+    no_url = CLOUDFLARED_OUTPUT[:2] + CLOUDFLARED_OUTPUT[6:7]  # 沒有網址那行
+    lines = _CountingLines(no_url)
+    server.relay_tunnel_output(lines, emit=printed.append)
+    assert lines.read == 3
+    assert printed == [NO_URL_NOTICE] + [line.rstrip("\n") for line in no_url]  # 不到 20 行就全印，去掉行尾換行
+
+
+# 拿不到網址時，「看上面 cloudflared 的輸出」上面其實什麼都沒有（輸出都被吞了）：
+# 所以改成記住最後 20 行，結束時還沒有網址就印出來，原因就在眼前；成功時照樣安靜。
+
+def _numbered_output(count):
+    return [f"2026-10-03T12:00:{n:02d}Z ERR line {n}\n" for n in range(1, count + 1)]
+
+
+def test_without_a_url_the_last_twenty_lines_are_printed_after_the_notice():
+    assert server.TUNNEL_TAIL_LINES == 20
+    output = _numbered_output(25)
+    output[-1] = "2026-10-03T12:00:25Z ERR Failed to dial a quic connection: timeout: no recent network activity\n"
+    printed = []
+    server.relay_tunnel_output(output, emit=printed.append)  # 不丟例外
+    assert printed == [NO_URL_NOTICE] + [line.rstrip("\n") for line in output[5:]]  # 第 6～25 行
+    assert not any(line.endswith(("ERR line 1", "ERR line 5")) for line in printed)  # 前 5 行不在內
+
+
+def test_without_a_url_the_tail_skips_blank_lines_and_trailing_newlines():
+    printed = []
+    server.relay_tunnel_output(["ERR first\r\n", "\n", "   \n", "ERR second\n", "ERR third"], emit=printed.append)
+    assert printed == [NO_URL_NOTICE, "ERR first", "ERR second", "ERR third"]
+
+
+def test_without_a_url_and_without_any_output_it_says_there_was_no_output():
+    printed = []
+    server.relay_tunnel_output([], emit=printed.append)
+    assert printed == [NO_OUTPUT_NOTICE]
+    printed.clear()
+    server.relay_tunnel_output(["\n", "  \n"], emit=printed.append)  # 只有空行也等於沒有輸出
+    assert printed == [NO_OUTPUT_NOTICE]
+
+
+def test_with_a_url_the_tail_is_not_printed_even_when_the_output_is_long():
+    printed = []
+    server.relay_tunnel_output(_numbered_output(25) + CLOUDFLARED_OUTPUT + _numbered_output(25), emit=printed.append)
+    assert printed == [URL_ANNOUNCEMENT]  # 成功路徑跟以前一樣：只印網址那一句
+
+
+class _FakeProcess:
+    def __init__(self, stdout):
+        self.stdout = stdout
+
+
+def test_start_tunnel_prints_the_url_and_hands_back_the_relay_thread(capsys, monkeypatch):
+    import io
+    import subprocess
+
+    launched = []
+
+    def fake_popen(command, **kwargs):
+        launched.append(command)
+        return _FakeProcess(io.StringIO("".join(CLOUDFLARED_OUTPUT)))
+
+    monkeypatch.setattr(server.shutil, "which", lambda name: "C:/fake/cloudflared.exe")
+    monkeypatch.setattr(subprocess, "Popen", fake_popen)
+    thread = server.start_tunnel(7890)
+    thread.join(timeout=5)
+    assert not thread.is_alive()  # 讀到 EOF 就正常結束，不是死在某一行上
+    assert launched == [["C:/fake/cloudflared.exe", "tunnel", "--url", "http://127.0.0.1:7890"]]
+    assert capsys.readouterr().out.splitlines() == [URL_ANNOUNCEMENT]
+
+
+def test_start_tunnel_without_cloudflared_says_so_and_starts_nothing(capsys, monkeypatch):
+    import subprocess
+
+    monkeypatch.setattr(server.shutil, "which", lambda name: None)
+    monkeypatch.setattr(subprocess, "Popen", lambda *args, **kwargs: pytest.fail("沒有 cloudflared 不該開子程序"))
+    assert server.start_tunnel(7890) is None
+    assert "找不到 cloudflared" in capsys.readouterr().out
+
+
 # ── 主畫面的走法切換（步行／趕路／疾行）──────────────────────
 # 頁面記著走法、每個請求都帶上 X-Move-Mode；伺服器在行動鎖裡照它排選單（server.MOVE_MODE），從不存檔。
 
@@ -1079,6 +1340,62 @@ def test_the_move_mode_is_never_saved(client):
     _player(client)
     client.get("/api/main", headers=HURRY)
     assert "move_mode" not in open_characters().load("沈青衫").model_dump_json()
+
+
+# ── 路上（路上設計第三節）──────────────────────────────
+
+
+def test_on_the_road_the_page_is_told_so_and_can_turn_back(client):
+    _player(client)
+    assert client.get("/api/main").json()["on_road"] is False
+    client.post("/api/choose", json={"id": "move:yingshui"})
+    main = client.get("/api/main").json()
+    assert main["on_road"] is True  # 頁面照它放輿圖、修練、煉製三個捷徑
+    assert "road:back" in [o["id"] for o in main["options"]]
+    assert "路上可以折返" in main["scene"]
+    with mock.patch("server.time.time", return_value=server.time.time() + 6 * 3600):  # 早就到了：捷徑收起來、回到平常的選單
+        main = client.get("/api/main").json()
+    assert main["on_road"] is False and "act:explore" in [o["id"] for o in main["options"]]
+
+
+def test_turning_back_follows_the_move_mode_header(client):
+    _player(client)
+    game = server.game_for("沈青衫")
+    start = game.state.player.location
+    t0 = server.time.time()
+    with mock.patch("server.time.time", return_value=t0):
+        client.post("/api/choose", json={"id": "move:yingshui"})
+    with mock.patch("server.time.time", return_value=t0 + 60):  # 走了一分鐘才掉頭：不是剛出發就折返（那種立刻回原地，FB-025）
+        back = [o for o in client.get("/api/main", headers=HURRY).json()["options"] if o["id"].startswith("road:back")]
+        assert [o["id"] for o in back] == ["road:back:hurry"] and "趕路" in back[0]["label"]
+        client.post("/api/choose", json={"id": "road:back:hurry"})  # 沒帶走法：步行的選單上沒有這個 id
+        assert game.state.player.journey.path == ["yingshui"]
+        client.post("/api/choose", json={"id": "road:back:hurry"}, headers=HURRY)
+    j = game.state.player.journey
+    assert (j.mode, j.path) == ("hurry", [start])
+
+
+def test_the_map_arranges_travel_while_on_the_road(client):
+    _player(client)
+    game = server.game_for("沈青衫")
+    start = game.state.player.location
+    client.post("/api/choose", json={"id": "move:yingshui"})
+    view = client.get(f"/api/map?place={start}").json()
+    assert view["selected"] == start and view["travel"][0]["enabled"] is True  # 剛離開的那一站：就是折返
+    assert view["travel"][0]["label"] == "步行（立刻到）"  # 剛出發：當下就回到原地（FB-025）
+    out = client.post("/api/travel", json={"place": start}).json()
+    assert out["arrived"] is True
+    assert game.state.player.journey is None and game.state.player.location == start
+
+
+def test_on_the_road_the_page_offers_the_road_tasks(client):
+    _player(client)
+    client.post("/api/choose", json={"id": "move:yingshui"})
+    client.post("/api/choose", json={"id": "road:think"})
+    main = client.get("/api/main").json()
+    think = next(o for o in main["options"] if o["id"] == "road:think")
+    assert think["enabled"] is False and think["label"] == "邊走邊想（想過了，到下一站再說）"
+    assert main["status"]["xinde"] == server.CONTENT.config.road_think_xinde
 
 
 # ── 隨口應對（探索的多人與 LLM 玩法 §8.1）────────────────────

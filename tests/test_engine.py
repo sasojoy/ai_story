@@ -5,9 +5,12 @@ from unittest import mock
 import pytest
 
 from conftest import FixedRandom, at, walk_to
-from tianxia import battle_instance, companion_agent, flavor, rules, skillview
+from tianxia import atlas, battle_instance, companion_agent, flavor, rules, skillview
+from tianxia.characters import open_characters
 from tianxia.engine import Game, Option
 from tianxia.martial_arts import MartialArt
+from tianxia.models import Location
+from tianxia.models import ExploreMix
 from tianxia.state import BotProfile, GameState, Journey, Rumor
 from tianxia.sqlite_world import open_world
 
@@ -151,7 +154,13 @@ def test_sitting_ends_by_itself_once_stamina_is_full(game):
 # ── 事件與檢定 ────────────────────────────────────────────
 
 
+def _explore_finds_events(game):
+    """探索三選一：讓探索一定走「事件」那一支（這些測試看的是事件本身，不是探索抽到哪一支）。"""
+    game.content.config.explore_mix = [ExploreMix(kind="wild", tags=[], weights={"event": 1})]
+
+
 def test_explore_presents_event_and_resolves_check(game):
+    _explore_finds_events(game)
     game.rng = FixedRandom(0.0)  # 檢定必定成功
     game.choose("act:explore")
     assert game.state.pending_event == "drunk"
@@ -239,9 +248,8 @@ def test_train_win_is_recorded_with_rewards(game):
     rules.learn_skill(game.state, game.content, "fist")  # 壓倒性的威力，穩贏
     game.content.config.train_event_chance = 1.0
     walk_to(game, "lake")
-    game.state.player.seen_events.add("scroll")  # 避開探索遇到殘卷奇遇
     game.rng = FixedRandom(0.3)
-    game.choose("act:explore")
+    game.choose("act:train")
     record = game.state.battles[0]
     assert (record.kind, record.location, record.opponent) == ("train", "湖邊", "水寇小隊")
     assert record.tier in ("大勝", "險勝")
@@ -255,12 +263,11 @@ def test_train_loss_costs_a_tenth_of_the_silver(game):
     game.content.locations["lake"].enemies = ["boss"]  # 換成打不贏的翻江龍
     game.content.config.train_event_chance = 1.0
     walk_to(game, "lake")
-    game.state.player.seen_events.add("scroll")
     game.rng = FixedRandom(0.0)
-    game.choose("act:explore")
+    game.choose("act:train")
     record = game.state.battles[0]
     assert record.tier == "落敗" and record.silver == -5
-    assert game.state.player.stats["silver"] == 50  # -5 落敗損失，+5 這一步剛好完成新手引導第一步的獎勵
+    assert game.state.player.stats["silver"] == 45
 
 
 def test_train_win_stat_bonus_is_recorded_as_a_change_not_a_note(game):
@@ -268,9 +275,8 @@ def test_train_win_stat_bonus_is_recorded_as_a_change_not_a_note(game):
     game.content.config.train_stat_chance = 1.0
     game.content.config.train_event_chance = 1.0
     walk_to(game, "lake")
-    game.state.player.seen_events.add("scroll")
     game.rng = FixedRandom(0.3)
-    game.choose("act:explore")
+    game.choose("act:train")
     record = game.state.battles[0]
     assert record.tier in ("大勝", "險勝")
     assert record.changes and record.changes[0].split(" ")[1] == "+1"
@@ -280,8 +286,10 @@ def test_train_win_stat_bonus_is_recorded_as_a_change_not_a_note(game):
 def test_train_event_chain(game):
     game.content.config.train_event_chance = 1.0
     walk_to(game, "lake")
-    game.choose("act:explore")
-    assert game.state.pending_event == "scroll"
+    game.choose("act:train")
+    assert game.state.pending_event == "chain_a"  # 打完接上戰後的事件
+    game.choose("choice:0")
+    assert game.state.pending_event == "chain_b"  # 再串到下一則
 
 
 # ── 招募與隊伍 ────────────────────────────────────────────
@@ -921,6 +929,7 @@ def test_texts_render(game):
     assert "小鎮" in game.scene_text()
     assert "寇亂" in game.trends_text() and "寶藏" not in game.trends_text()
     assert game.rumors_text() == "（尚無傳聞。）"
+    _explore_finds_events(game)
     game.choose("act:explore")
     assert "醉漢" in game.scene_text()
 
@@ -1012,14 +1021,17 @@ def test_hurrying_takes_half_the_time(game):
     assert game.state.player.journey.arrive_at == [pytest.approx(90.0), pytest.approx(225.0)]  # (3＋4.5 分鐘) × 30 秒
 
 
-def test_on_the_road_you_cannot_act(game):
+def test_on_the_road_you_can_turn_back_but_not_do_what_needs_a_place(game):
     game.choose("move:lake")
     opts = game.options()
-    assert [(o.id, o.enabled) for o in opts] == [("act:on_road", False)]
+    assert [(o.id, o.enabled) for o in opts] == [
+        ("act:on_road", False), ("road:back", True),
+        ("road:think", True), ("road:ask", True), ("road:survey", True), ("road:gather", True),
+    ]
     assert "抵達湖邊" in opts[0].label
     assert game.choose("act:explore") == ["（此刻無法這麼做。）"]
-    assert game.travel("lake") == ["（在路上，不能另外安排前往。）"]
     assert game.seclude(4) == ["你現在無法閉關。"]
+    assert game.travel_refusal("lake") is None  # 路上設計 3.1：在路上也能安排前往（改道）
 
 
 def test_status_and_scene_show_the_arrival_time(game):
@@ -1069,8 +1081,20 @@ def test_a_season_that_ends_on_the_road_leaves_you_where_you_got_to(game):
 
 def test_a_stale_journey_is_dropped_on_load(content, game):
     game.state.player.journey = Journey(mode="walk", path=["nowhere"], arrive_at=[60.0])
+    game.state.player.leg_actions = {"think"}
     reloaded = Game(content, game.state, world=game.world)
     assert reloaded.state.player.journey is None
+    assert reloaded.state.player.leg_actions == set()  # 那段路不在了：下次出發是新的一段，路上小事都還能做
+
+
+def test_a_rerouted_journey_whose_road_end_is_gone_is_dropped_on_load(content, game):
+    """改道後的半段路，另一頭（origin）在內容改版時被拿掉：路已經不存在，丟掉這趟路程，不然算位置會找不到地點。"""
+    game.state.player.journey = Journey(mode="walk", path=["town"], arrive_at=[60.0], origin="nowhere", share=0.5)
+    assert Game(content, game.state, world=game.world).state.player.journey is None
+    game.state.player.location = "nowhere"  # 所在地被拿掉、改回起點：腳下這段路也不存在了
+    game.state.player.journey = Journey(mode="walk", path=["lake"], arrive_at=[60.0])
+    reloaded = Game(content, game.state, world=game.world)
+    assert reloaded.state.player.journey is None and reloaded.state.player.location == content.scenario.start_location
 
 
 # ── 全服即時多人戰鬥（設計討論：集結選陣營→逐幕逐回合鎖步）──────────
@@ -1180,6 +1204,7 @@ def test_a_watcher_still_sees_their_own_event_below_the_battle(content, game):
     _install_factions(content)
     definition = _install_battle_def(content)
     game.world.start_battle(definition, now=1000.0)
+    _explore_finds_events(game)
     with at(game, 1000.0):
         game.choose("act:explore")
         event = content.events[game.state.pending_event]
@@ -1509,12 +1534,263 @@ def test_a_latecomer_can_join_an_already_active_battle(content, game):
     assert "沈浪" in game.world.get_battle().participants
 
 
+def test_a_latecomer_is_told_they_can_act_this_round_and_can(content, game):
+    """FB-028：晚到的人當回合就能出招（企劃者決定改說法、不改規則），提示要照實說。"""
+    definition = _install_battle_def(content)
+    definition.rounds_per_act = 3  # 這一回合不會一結算就收場
+    game.world.start_battle(definition, now=0.0)
+    game.world.mutate_battle(lambda b: battle_instance.join_faction(b, "乙玩家", "huang", neili_cap=100.0))
+    with at(game, definition.muster_seconds + 1):
+        game._battle_status()  # 集結關閉，已經開打
+        assert game.choose("battle:join_late") == ["你趕到了戰場，這一回合就能出手。"]
+        battle = game.world.get_battle()
+        assert battle_instance.options_for(battle, definition, "沈浪")
+        assert ids(game) == ["battle:act:safe", "battle:act:aggressive"]
+        game.choose("battle:act:safe")
+    battle = game.world.get_battle()
+    assert battle.round_number == 0 and battle.round.pending_actions == {"沈浪": "safe"}  # 送出了、等乙玩家
+
+
+# ── 決戰選項的江湖紀錄（FB-030：加入與趕到各寫一則，每回合出招不寫）──────────────
+
+
+def test_joining_a_side_in_the_muster_writes_one_journal_entry(content, game):
+    definition = _install_battle_def(content)
+    game.world.start_battle(definition, now=0.0)
+    before = len(game.state.journal)
+    with at(game, 0.0):
+        msgs = game.choose("battle:join:guan")
+    assert msgs == ["你加入了這場戰局。"]  # 回話照舊
+    assert len(game.state.journal) == before + 1
+    entry = game.state.journal[0]
+    assert entry.title == "測試決戰・加入官軍" and entry.lines == ["你加入了這場戰局。"]
+
+
+def test_changing_sides_in_the_muster_writes_its_own_entry(content, game):
+    definition = _install_battle_def(content)
+    game.world.start_battle(definition, now=0.0)
+    with at(game, 0.0):
+        game.choose("battle:join:guan")
+        before = len(game.state.journal)
+        game.choose("battle:join:huang")
+    assert len(game.state.journal) == before + 1
+    assert game.state.journal[0].title == "測試決戰・改選黃巾"
+
+
+def test_a_refused_join_writes_nothing(content, game):
+    _install_factions(content)
+    definition = _install_battle_def(content)
+    game.state.player.faction = "huang"
+    game.world.start_battle(definition, now=1000.0)
+    before = len(game.state.journal)
+    with at(game, 1000.0):
+        assert game.choose("battle:join:guan") == ["（此刻無法這麼做。）"]
+    assert len(game.state.journal) == before
+
+
+def test_joining_late_writes_one_journal_entry_with_the_line_it_returns(content, game):
+    definition = _install_battle_def(content)
+    definition.rounds_per_act = 3
+    game.world.start_battle(definition, now=0.0)
+    game.world.mutate_battle(lambda b: battle_instance.join_faction(b, "乙玩家", "huang", neili_cap=100.0))
+    before = len(game.state.journal)
+    with at(game, definition.muster_seconds + 1):
+        game._battle_status()
+        msgs = game.choose("battle:join_late")
+    assert msgs == ["你趕到了戰場，這一回合就能出手。"]
+    assert len(game.state.journal) == before + 1
+    entry = game.state.journal[0]
+    assert entry.title == "測試決戰・趕到戰場" and entry.lines == msgs
+
+
+def test_a_rounds_action_is_not_journaled(content, game):
+    """每回合一句太吵：戰局的敘事在場景裡，收場後補送的那一則才留下完整的結果。"""
+    definition = _install_battle_def(content)
+    definition.rounds_per_act = 3
+    game.world.start_battle(definition, now=0.0)
+    game.world.mutate_battle(lambda b: battle_instance.join_faction(b, "乙玩家", "huang", neili_cap=100.0))
+    with at(game, definition.muster_seconds + 1):
+        game._battle_status()
+        game.choose("battle:join_late")
+        before = len(game.state.journal)
+        assert game.choose("battle:act:safe") == ["你選擇了行動，等待其他人……"]
+    assert len(game.state.journal) == before
+
+
+def test_the_join_entry_is_what_the_just_now_card_shows(content, game):
+    """加入寫的那則不是戰鬥紀錄（沒有 battle_id）：「剛剛」放那一則本身，不放戰鬥卡片。"""
+    definition = _install_battle_def(content)
+    game.world.start_battle(definition, now=0.0)
+    with at(game, 0.0):
+        game.choose("battle:join:guan")
+        assert not game.shows_battle_card()
+        assert "加入官軍" in game.latest_entry_html()
+
+
 def test_battle_ending_falls_back_to_normal_gameplay_on_the_next_render(content, game):
     definition = _install_battle_def(content)
     game.world.start_battle(definition, now=0.0)
     game.world.mutate_battle(lambda b: setattr(b, "phase", "ended"))
     assert game._battle_status() is None
     assert ids(game)[0] == "act:explore"
+
+
+# ── 決戰的結果送到每個參戰者手上（FB-027：下次同步時補）──────────────
+
+
+def _three_round_showdown(content, trend_delta=None):
+    """劇本分陣營、一幕三回合（整場 3 回合；穩紮穩打只推 1，不會提前收場），保底結果官軍大勝。"""
+    _install_factions(content)
+    definition = _install_battle_def(content)
+    definition.rounds_per_act = 3
+    definition.outcomes[0] = definition.outcomes[0].model_copy(update={"trend_delta": trend_delta or {"kou": -20}})
+    return definition
+
+
+def _fighter(content, game, name, faction):
+    """跟沈浪同一個全服世界的另一位玩家（自己的一份 Game），已經投靠 faction。"""
+    other = Game.new(content, name, rng=random.Random(1), world=game.world)
+    other.state.player.faction = faction
+    return other
+
+
+def _fight_to_the_end(game, definition, now):
+    """沈浪每回合自己出手，其他還在場上的人逾時由系統代選，一路打到收場；回傳收場那一刻的時間。"""
+    while True:
+        with at(game, now):
+            game.options()  # 推進：集結關閉，或上一回合逾時、代選、結算
+            battle = game.world.get_battle()
+            if battle.phase == "ended":
+                return now
+            if game.state.player.name not in battle.round.pending_actions:
+                game.choose("battle:act:safe")
+        now = game.world.get_battle().round.opened_real + definition.round_seconds
+
+
+def _showdown_entries(game):
+    """收場補送的那一則（掛著戰報的 battle_id）；加入、趕到寫的紀錄（FB-030）標題也有決戰的名字，但不是戰報。"""
+    return [e for e in game.state.journal if "測試決戰" in e.title and e.battle_id is not None]
+
+
+def test_every_fighter_gets_the_showdown_in_their_journal_and_battle_reports(content, game):
+    definition = _three_round_showdown(content)
+    game.state.player.faction = "guan"
+    fallen = _fighter(content, game, "乙", "huang")
+    watcher = Game.new(content, "丙", rng=random.Random(2), world=game.world)  # 散人：打不了，只能觀戰
+    game.world.start_battle(definition, now=0.0)
+    with at(game, 0.0), at(fallen, 0.0):
+        game.choose("battle:join:guan")
+        fallen.choose("battle:join:huang")
+    game.world.mutate_battle(lambda b: setattr(b.participants["乙"], "neili", 8.0))  # 穩紮穩打扣 5：第 2 回合倒下
+    start = definition.muster_seconds + 1
+    for i in range(3):
+        with at(game, start + i), at(fallen, start + i):
+            game.choose("battle:act:safe")
+            if i < 2:
+                fallen.choose("battle:act:safe")  # 兩人都出手了：這一回合結算
+    assert game.world.get_battle().phase == "ended"
+
+    entry = game.state.journal[0]  # 收場那一下出手的人當場就有
+    assert (entry.title, entry.tag) == ("測試決戰・官軍大勝", "你站在官軍")
+    assert entry.lines == ["官軍獲勝。", "你出手 3 回合"]
+    assert entry.changes == ["寇亂 -20"]
+    report = game.state.battles[0]
+    assert report.kind == "showdown" and entry.battle_id == report.id
+    assert (report.opponent, report.side, report.tier) == ("黃巾", "官軍", "官軍大勝")
+    assert game.shows_battle_card()  # 「剛剛」放這一場的卡片，連得到完整戰報
+    assert "威力" not in game.battle_detail(report.id)
+
+    assert _showdown_entries(fallen) == []  # 倒下的那位：下次同步時才補
+    fallen.sync(start + 10)
+    mine = fallen.state.journal[0]
+    assert (mine.title, mine.tag) == ("測試決戰・官軍大勝", "你站在黃巾")
+    assert mine.lines == ["官軍獲勝。", "你出手 2 回合", "你在第 2 回合倒下，轉為觀戰"]
+    assert fallen.state.battles[0].kind == "showdown" and fallen.state.battles[0].opponent == "官軍"
+
+    watcher.sync(start + 10)
+    assert _showdown_entries(watcher) == [] and watcher.state.battles == []
+
+    for g in (game, fallen):  # 再同步一次不會多寫
+        g.sync(start + 20)
+        assert len(_showdown_entries(g)) == 1 and len(g.state.battles) == 1
+
+
+def test_an_offline_fighter_gets_the_showdown_on_the_next_sync_without_the_timed_out_rounds(content, game):
+    """乙出了第 1 回合就下線（角色只在資料庫裡）：後兩回合逾時由系統代選，不算他自己出手；回來第一次同步就補到。"""
+    definition = _three_round_showdown(content)
+    game.state.player.faction = "guan"
+    away = _fighter(content, game, "乙", "huang")
+    game.world.start_battle(definition, now=0.0)
+    with at(game, 0.0), at(away, 0.0):
+        game.choose("battle:join:guan")
+        away.choose("battle:join:huang")
+    start = definition.muster_seconds + 1
+    with at(game, start), at(away, start):
+        game.choose("battle:act:safe")
+        away.choose("battle:act:safe")
+    open_characters().save(away.state)
+    end = _fight_to_the_end(game, definition, start + 1)
+    assert "你出手 3 回合" in game.state.journal[0].lines
+
+    back = Game(content, open_characters().load("乙"), rng=random.Random(3), world=game.world)
+    assert _showdown_entries(back) == []  # 讀回來還沒同步：還沒補
+    back.sync(end + 10)
+    entry = back.state.journal[0]
+    assert entry.title == "測試決戰・官軍大勝" and entry.changes == ["寇亂 -20"]
+    assert "你出手 1 回合" in entry.lines and not any("倒下" in line for line in entry.lines)
+    assert back.state.battles[0].kind == "showdown"
+
+
+def _showdown_ends_the_season(content, game):
+    """寇亂 30 → 80 跨過收季的門檻：決戰收場、季的時鐘再走一個鐘頭，季就收了。乙加入之後就下線。回傳那時的時間。"""
+    definition = _three_round_showdown(content, trend_delta={"kou": 50})
+    game.state.player.faction = "guan"
+    away = _fighter(content, game, "乙", "huang")
+    game.world.start_battle(definition, now=0.0)
+    with at(game, 0.0), at(away, 0.0):
+        game.choose("battle:join:guan")
+        away.choose("battle:join:huang")
+    open_characters().save(away.state)
+    end = _fight_to_the_end(game, definition, definition.muster_seconds + 1)
+    with at(game, end):
+        game.advance(HOUR)
+    assert game.world.season_phase() == "resting"
+    return end
+
+
+def test_a_fighter_back_during_the_off_season_gets_the_showdown_that_ended_it(content, game):
+    end = _showdown_ends_the_season(content, game)
+    back = Game(content, open_characters().load("乙"), rng=random.Random(3), world=game.world)
+    back.sync(end + 10)
+    assert ids(back) == ["season:resting"]
+    entry = back.state.journal[0]
+    assert entry.title == "測試決戰・官軍大勝" and entry.changes == ["寇亂 +50"]  # 還是這一季打的：大勢照常是數值變化
+    assert "你出手 0 回合" in entry.lines
+    open_characters().save(back.state)
+
+    game.world.next_season(content, now=end + 20)  # 補過的那一場，到了下一季不會再補一次
+    again = Game(content, open_characters().load("乙"), rng=random.Random(4), world=game.world)
+    again.sync(end + 30)
+    assert _showdown_entries(again) == [] and again.state.battles == []
+
+
+def test_a_fighter_first_back_next_season_gets_last_seasons_showdown_marked_with_its_season(content, game):
+    end = _showdown_ends_the_season(content, game)
+    game.world.next_season(content, now=end + 20)
+    back = Game(content, open_characters().load("乙"), rng=random.Random(3), world=game.world)
+    back.sync(end + 30)
+    entry = back.state.journal[0]
+    assert (entry.title, entry.tag) == ("第 1 季・測試決戰・官軍大勝", "你站在黃巾")
+    assert entry.changes == []  # 上一季的大勢不放進數值變化：那看起來像剛發生在你身上
+    assert "（第 1 季）寇亂 +50" in entry.lines
+    report = back.state.battles[0]
+    assert report.kind == "showdown" and report.location.startswith("第 1 季・") and report.changes == []
+    (_, battle), = game.world.ended_battles()
+    assert battle.end_time is not None
+    assert entry.time == report.time == battle.end_time  # 收場時（第 1 季）的時間，不是補送這一刻
+    assert battle.end_time != back.state.world.time  # 這一季的時鐘
+    back.sync(end + 40)
+    assert len(_showdown_entries(back)) == 1 and len(back.state.battles) == 1
 
 
 # ── 決戰要人在那個大區才打得到（地圖擴充設計第六節）──────────────
@@ -2084,9 +2360,8 @@ def test_train_win_drops_a_material_into_the_bag_and_the_report(game):
     rules.learn_skill(game.state, game.content, "fist")  # 壓倒性的威力，穩贏
     game.content.config.train_event_chance = 1.0
     walk_to(game, "lake")
-    game.state.player.seen_events.add("scroll")  # 避開探索遇到殘卷奇遇
     game.rng = FixedRandom(0.3)  # 水寇小隊難度 5：預設掉落表 50% 掉一個一階素材
-    msgs = game.choose("act:explore")
+    msgs = game.choose("act:train")
     record = game.state.battles[0]
     assert record.materials == ["精鐵砂 ×1"]
     assert game.state.player.materials == {"gang_1": 1}
@@ -2096,11 +2371,9 @@ def test_train_win_drops_a_material_into_the_bag_and_the_report(game):
 def test_a_hard_fought_loss_drops_nothing(game):
     game.content.locations["lake"].enemies = ["boss"]  # 打不贏的翻江龍
     game.content.config.train_event_chance = 1.0
-    game.content.config.explore_material_chance = 0.0  # 只看戰鬥那條路，不要被探索自己撿到的混進來
     walk_to(game, "lake")
-    game.state.player.seen_events.add("scroll")
     game.rng = FixedRandom(0.0)
-    game.choose("act:explore")
+    game.choose("act:train")
     assert game.state.battles[0].tier == "落敗"
     assert game.state.player.materials == {}
 
@@ -2115,23 +2388,14 @@ def test_exploring_a_quiet_place_can_still_turn_up_a_material(game):
 
 
 def test_exploring_and_finding_nothing_still_says_so(game):
+    """探索三選一：三支都做不了才是一無所獲——山洞沒有敵人、沒有事件，再把素材那一支的比例設成 0。"""
     game.state.player.location = "cave"
-    game.content.config.explore_material_chance = 0.0
+    game.content.config.explore_mix = [ExploreMix(kind="wild", tags=[], weights={"material": 0, "wild": 35, "event": 25})]
     game.rng = FixedRandom(0.99)
     msgs = game.choose("act:explore")
     assert msgs[0] == "你四處走走，一無所獲。"
     assert not any("獲得" in m for m in msgs)
     assert game.state.player.materials == {}
-
-
-def test_exploring_picks_up_a_material_even_when_an_event_fires(game):
-    """素材的判定在事件之前：實測整季 100 次探索都撞到事件，掛在「一無所獲」上等於沒做。"""
-    game.content.locations["town"].materials = ["gang_3"]
-    game.rng = FixedRandom(0.0)  # 必中素材，也必定撞到鎮上的事件
-    msgs = game.choose("act:explore")  # 訊息串後面還會接新手引導的進度
-    assert any("【" in m for m in msgs)  # 真的有事件
-    assert "獲得 隕鐵膽 ×1" in msgs
-    assert game.state.player.materials == {"gang_3": 1}
 
 
 # ── 歷練（第二層：遭遇戰的唯一管道）──────────────────────────
@@ -2632,7 +2896,7 @@ def test_choosing_a_prepared_dialogue_option_ticks_the_battle_only_once(content,
 def test_you_can_stop_at_the_next_station(game):
     game.state.world.flags.add("cave_open")
     game.travel("cave", "walk")
-    assert [o.id for o in game.options() if o.enabled] == ["act:halt"]
+    assert "act:halt" in [o.id for o in game.options() if o.enabled]
     assert "喊停（到湖邊就停下）" in [o.label for o in game.options()]
     game.choose("act:halt")
     assert game.state.player.journey.stop_at == 0
@@ -2655,6 +2919,520 @@ def test_stopping_does_not_refund_the_stamina_paid_to_hurry(game):
 def test_there_is_nothing_to_stop_on_the_last_leg(game):
     game.choose("move:lake")
     assert not any(o.id == "act:halt" for o in game.options())
+
+
+# ── 路上：改道與折返（路上設計第三節）──────────────────────────
+
+
+def _add_field(content):
+    """夾具只有一條線（小鎮—湖邊—寶洞）；在小鎮西邊加一塊田（一般路，3 分鐘），讓掉頭之後有別處可去。"""
+    content.locations["field"] = Location(id="field", name="田野", description="一片田。", connections=["town"], x=0, y=100)
+    content.locations["town"].connections.append("field")
+
+
+def _partway(game, share=1 / 3):
+    """從小鎮步行往湖邊（夾具 3 分鐘），把時間推到走了 share 成的那一刻；回傳這一趟。"""
+    game.choose("move:lake")
+    game.advance(180 * share)
+    return game.state.player.journey
+
+
+def _back(game):
+    return next(o for o in game.options() if o.id.startswith("road:back"))
+
+
+def test_turning_back_walks_back_the_part_already_walked(game):
+    _partway(game)  # 走了一成三：回小鎮要 1 分鐘
+    back = _back(game)
+    assert (back.id, back.label, back.enabled) == ("road:back", "折返 小鎮（步行約 1 分鐘）", True)
+    game.choose("road:back")
+    j = game.state.player.journey
+    assert (j.path, j.origin, j.share) == (["town"], "lake", pytest.approx(2 / 3))
+    assert j.arrive_at == [pytest.approx(120.0)]  # 第 60 秒掉頭，再走 60 秒
+    assert (game.state.journal[0].title, game.state.journal[0].tag) == ("前往 小鎮", "步行約 1 分鐘")
+    game.advance(60)
+    assert game.state.player.location == "town" and game.state.player.journey is None
+
+
+def test_rerouting_takes_the_shorter_of_turning_back_and_going_on(content, game):
+    _add_field(content)
+    game.state.world.flags.add("cave_open")
+    _partway(game)  # 小鎮—湖邊走了一成三：回小鎮 1 分鐘、到湖邊 2 分鐘
+    on = atlas.way_to(game.state, content, "cave")  # 繼續：2 ＋ 湖邊—寶洞山路 4.5（掉頭要 1 ＋ 3 ＋ 4.5）
+    assert (on.path, on.origin, on.share) == (("lake", "cave"), "town", pytest.approx(1 / 3))
+    assert on.minutes == pytest.approx(6.5)
+    back = atlas.way_to(game.state, content, "field")  # 掉頭：1 ＋ 小鎮—田野 3（繼續要 2 ＋ 3 ＋ 3）
+    assert (back.path, back.origin, back.share) == (("town", "field"), "lake", pytest.approx(2 / 3))
+    assert back.legs == (pytest.approx(1.0), pytest.approx(3.0))
+
+
+def test_rerouting_to_either_end_of_the_road(game):
+    _partway(game)
+    game.travel("lake")  # 改去前面那一站：照原路走完這一段，抵達時間不變
+    j = game.state.player.journey
+    assert (j.path, j.arrive_at) == (["lake"], [pytest.approx(180.0)])
+    game.travel("town")  # 改去剛離開的那一站：就是折返
+    j = game.state.player.journey
+    assert (j.path, j.origin, j.arrive_at) == (["town"], "lake", [pytest.approx(120.0)])
+
+
+def test_a_reroute_charges_the_new_way_and_refunds_nothing(game):
+    game.state.world.flags.add("cave_open")
+    game.state.player.stamina = 100
+    game.set_move_mode("hurry")
+    game.choose("move:lake:hurry")  # 3 分鐘：3 點
+    game.choose("road:back:hurry")  # 剛出發就掉頭：不扣體力、當下回到小鎮（FB-025），原本的 3 點不退
+    assert game.state.player.stamina == 97 and game.state.player.journey is None
+    game.choose("move:lake:hurry")
+    game.advance(30)  # 趕路 90 秒的一成三
+    game.travel("cave", "hurry")  # 繼續：2 ＋ 4.5 ＝ 6.5 分鐘，7 點；第一段是半段路
+    assert game.state.player.stamina == pytest.approx(97 - 3 - 7 + 30 / 180)  # 走那 30 秒回了一點點
+    j = game.state.player.journey
+    assert j.arrive_at == [pytest.approx(game.state.world.time + 60), pytest.approx(game.state.world.time + 195)]
+
+
+def test_dashing_from_the_road_reaches_an_end_of_the_road_first(content, game):
+    _add_field(content)
+    _partway(game)
+    game.travel("field", "dash")  # 掉頭比較近：先到小鎮，再到田野
+    p = game.state.player
+    assert p.location == "field" and p.journey is None and "field" in p.visited
+    entry = game.state.journal[0]
+    assert (entry.title, entry.tag, entry.changes) == ("前往 田野（途經 小鎮）", "疾行立刻到", ["體力 -8"])
+
+
+def test_a_rerouted_trip_can_be_halted_like_any_other(content, game):
+    _add_field(content)
+    _partway(game)
+    game.travel("field")  # 小鎮、田野兩站
+    assert "喊停（到小鎮就停下）" in [o.label for o in game.options()]
+    game.choose("act:halt")
+    game.advance(game.state.player.journey.arrive_at[0] - game.state.world.time)
+    assert game.state.player.location == "town" and game.state.player.journey is None
+    assert game.state.journal[0].tag == "喊停，停在 小鎮"
+
+
+def test_rerouting_out_of_the_battle_region_leaves_it_and_turning_back_returns(content, game):
+    definition = _install_battle_def(content)
+    definition.region = "north"
+    _south_cave(content, game)
+    game.world.start_battle(definition, now=0.0)
+    with at(game, 0.0):
+        game.choose("battle:join:guan")
+        _partway(game)
+        game.travel("cave")  # 繼續走：湖邊之後是南區的寶洞
+        assert game.world.get_battle().participants["沈浪"].away
+        game.choose("road:back")  # 掉頭回小鎮：這一趟的站都在北區
+        assert not game.world.get_battle().participants["沈浪"].away
+
+
+def test_turning_back_follows_the_move_mode(game):
+    _partway(game)
+    game.set_move_mode("hurry")
+    assert (_back(game).id, _back(game).label) == ("road:back:hurry", "折返 小鎮（趕路約 1 分鐘・體力 1）")
+    game.set_move_mode("dash")
+    game.state.player.stamina = 1
+    back = _back(game)
+    assert (back.id, back.label, back.enabled) == ("road:back:dash", "折返 小鎮（疾行・體力不足，要 2）", False)
+    assert game.choose("road:back:dash") == ["（此刻無法這麼做。）"]
+    game.state.player.stamina = 10
+    game.choose("road:back:dash")
+    assert game.state.player.location == "town" and game.state.player.journey is None
+    assert game.state.player.stamina == 8
+
+
+def test_turning_back_right_after_setting_off_is_free_and_lands_at_once(game):
+    """剛出發就折返（FB-025）：回程不到半分鐘路程時，哪種走法都不扣體力、當下就回到原地（路上裁決「給 QA 的」）。"""
+    game.set_move_mode("hurry")
+    game.choose("move:lake:hurry")
+    game.advance(10)  # 趕路 10 秒＝走了 1/3 分鐘路程
+    stamina = game.state.player.stamina
+    assert [(o.label, o.enabled) for o in game.travel_options("town")] == [
+        ("步行（立刻到）", True), ("趕路（立刻到）", True), ("疾行（立刻到）", True),
+    ]
+    assert (_back(game).id, _back(game).label) == ("road:back:hurry", "折返 小鎮（立刻到）")
+    game.choose("road:back:hurry")
+    p = game.state.player
+    assert (p.location, p.journey, p.stamina) == ("town", None, stamina)
+    assert (game.state.journal[0].title, game.state.journal[0].tag, game.state.journal[0].changes) == (
+        "前往 小鎮", "立刻折返", [],
+    )
+
+
+def test_turning_back_after_a_real_stretch_still_costs_and_takes_time(game):
+    """走了一段才折返照舊算：回程 1.5 分鐘路程，趕路 2 點、約 1 分鐘。"""
+    game.set_move_mode("hurry")
+    game.choose("move:lake:hurry")
+    game.advance(45)  # 趕路 90 秒的一半
+    stamina = game.state.player.stamina
+    assert _back(game).label == "折返 小鎮（趕路約 1 分鐘・體力 2）"
+    game.choose("road:back:hurry")
+    p = game.state.player
+    assert p.journey is not None and p.journey.path == ["town"] and p.stamina == stamina - 2
+
+
+def test_turning_back_twice_quickly_is_not_a_free_arrival_at_the_far_end(game):
+    """掉頭之後馬上又掉頭：身後那一站是剛才要去的湖邊、不是自己最後待過的小鎮，不算剛出發，照舊要走（不能拿來白白抵達）。"""
+    game.choose("move:lake")
+    game.advance(160)  # 走了快九成
+    game.choose("road:back")
+    game.choose("road:back")  # 再掉頭：往湖邊，回程 20 秒路程
+    p = game.state.player
+    assert p.journey is not None and p.journey.path == ["lake"] and p.location == "town"
+
+
+def test_the_road_scene_says_what_you_can_do_on_the_road(game):
+    game.choose("move:lake")
+    scene = game.scene_text()
+    assert "路上可以折返" in scene and "修練、煉製" in scene and "到了會自己抵達" in scene
+    assert "路上不能做事" not in scene
+
+
+def test_an_old_journey_without_the_reroute_fields_still_loads():
+    j = Journey.model_validate({"mode": "walk", "path": ["lake"], "arrive_at": [180.0]})
+    assert (j.origin, j.share) == (None, 0.0)
+
+
+# ── 路上小事（路上設計第四節）──────────────────────────────
+
+
+def _task(game, what):
+    return next(o for o in game.options() if o.id == f"road:{what}")
+
+
+def test_road_tasks_are_once_per_leg_and_free(game):
+    game.state.world.flags.add("cave_open")
+    game.travel("cave")  # 小鎮—湖邊—寶洞兩段
+    assert (_task(game, "think").label, _task(game, "think").enabled) == ("邊走邊想（心得 +3）", True)
+    stamina = game.state.player.stamina
+    game.choose("road:think")
+    assert game.state.player.stats["xinde"] == 3 and game.state.player.stamina == stamina
+    assert (_task(game, "think").label, _task(game, "think").enabled) == ("邊走邊想（想過了，到下一站再說）", False)
+    entry = game.state.journal[0]
+    assert (entry.title, entry.changes) == ("邊走邊想", ["心得 +3"])
+    game.advance(game.state.player.journey.arrive_at[0] - game.state.world.time)  # 到湖邊：換段
+    assert game.state.player.journey is not None and _task(game, "think").enabled
+
+
+def test_turning_back_does_not_hand_out_the_road_tasks_again(game):
+    game.choose("move:lake")
+    game.choose("road:think")
+    game.choose("road:back")  # 剛出發就掉頭，馬上回到小鎮
+    game.advance(0)
+    assert game.state.player.location == "town" and game.state.player.journey is None
+    game.choose("move:lake")  # 再出發：還沒真的到下一站，做過的還是做過了（不然來回折返就能不走路刷完一天的收穫）
+    assert (_task(game, "think").label, _task(game, "think").enabled) == ("邊走邊想（想過了，到下一站再說）", False)
+    game.advance(game.state.player.journey.arrive_at[0] - game.state.world.time)  # 真的走到湖邊才換段
+    assert game.state.player.leg_actions == set()
+
+
+def test_dashing_has_no_road_tasks(game):
+    game.state.player.journey = Journey(mode="dash", path=["lake"], arrive_at=[1e9])
+    assert not any(o.id.startswith("road:") and o.id != "road:back" for o in game.options())
+    game.state.player.journey = Journey(mode="hurry", path=["lake"], arrive_at=[90.0])
+    assert "road:gather" in ids(game)
+
+
+def test_asking_along_the_road_hears_a_rumor_from_this_part_of_the_land(game):
+    game.choose("move:lake")
+    w = game.state.world
+    w.rumors += [
+        Rumor(time=0, text="南邊鬧水患。", location=None, region="south"),
+        Rumor(time=0, text="官軍在湖邊集結。", location="lake", region="north", faction="guan"),  # 別的陣營的軍情
+        Rumor(time=0, text="湖邊來了個怪客。", location="lake", region="north"),
+    ]
+    msgs = game.choose("road:ask")
+    assert msgs == ["你沿途向人打聽，聽說：湖邊來了個怪客。"]
+    assert (_task(game, "ask").label, _task(game, "ask").enabled) == ("沿途打聽（打聽過了，到下一站再說）", False)
+
+
+def test_asking_with_nothing_to_hear_still_counts(game):
+    game.choose("move:lake")
+    assert game.choose("road:ask") == ["你沿途問了幾個人，這一帶最近沒什麼新鮮事。"]
+    assert not _task(game, "ask").enabled
+
+
+def test_surveying_marks_the_unknown_places_near_both_ends(content, game):
+    content.config.vision_base = 0  # 只看得見自己那一站
+    game.state.world.flags.add("cave_open")
+    game.choose("move:lake")
+    assert atlas.views(game.state, content)["lake"] == "dot"
+    msgs = game.choose("road:survey")
+    assert msgs == ["你留意沿路的地形，摸清了湖邊、寶洞的位置。"]
+    assert game.state.player.surveyed == {"lake", "cave"}
+    assert atlas.views(game.state, content)["cave"] == "remembered"
+
+
+def test_surveying_with_nothing_left_to_find_still_counts(game):
+    game.choose("move:lake")
+    assert game.choose("road:survey") == ["你留意了一路的地形，附近沒有什麼沒摸清的地方。"]
+    assert not _task(game, "survey").enabled
+
+
+def test_gathering_by_the_road_follows_what_the_two_ends_offer(content, game):
+    content.locations["lake"].materials = ["gang_2"]  # 湖邊出剛的素材：路邊撿到的是剛的一階
+    game.choose("move:lake")
+    game.rng = FixedRandom(0.1)
+    assert game.choose("road:gather") == ["你在路邊翻找了一陣。", "獲得 精鐵砂 ×1"]
+    assert game.state.player.materials == {"gang_1": 1}
+
+
+def test_gathering_can_come_up_empty(game):
+    game.choose("move:lake")
+    game.rng = FixedRandom(0.9)  # 四成機會：沒撿到
+    assert game.choose("road:gather") == ["你在路邊翻找了一陣，沒找到什麼能用的。"]
+    assert game.state.player.materials == {} and not _task(game, "gather").enabled
+
+
+def test_gathering_without_any_tier_one_material_finds_nothing(content, game):
+    """內容裡沒有一階素材時，採集當成沒找到，不會出錯，也不算今天的收穫。"""
+    content.materials = {k: m for k, m in content.materials.items() if m.tier != 1}
+    game.choose("move:lake")
+    game.rng = FixedRandom(0.1)
+    assert game.choose("road:gather") == ["你在路邊翻找了一陣，沒找到什麼能用的。"]
+    assert game.state.player.road_rewards_today.get("task") is None
+
+
+def test_the_road_scene_lists_the_road_tasks(game):
+    game.choose("move:lake")
+    assert "邊走邊想、沿途打聽、留意地形、路邊採集" in game.scene_text()
+
+
+def test_old_saves_without_road_fields_load(content, game):
+    raw = game.state.model_dump(mode="json")
+    del raw["player"]["leg_actions"], raw["player"]["surveyed"], raw["player"]["road_rewards_today"]
+    loaded = GameState.model_validate(raw)
+    assert loaded.player.leg_actions == set() and loaded.player.surveyed == set()
+    assert loaded.player.road_rewards_today == {}
+
+
+# ── 路上收穫的每天上限（企劃者 2026-10-03 決定）──────────────────
+
+
+def _leg(game, dest, *tasks):
+    """從所在的站步行到相鄰的 dest，路上依序做 tasks，一路走到。"""
+    game.choose(f"move:{dest}")
+    for what in tasks:
+        game.choose(f"road:{what}")
+    game.advance(game.state.player.journey.arrive_at[-1] - game.state.world.time)
+
+
+def test_thinking_on_the_road_pays_only_the_first_few_times_a_game_day(content, game):
+    content.config.road_reward_daily_cap = 2
+    p = game.state.player
+    _leg(game, "lake", "think")
+    _leg(game, "town", "think")
+    assert p.road_rewards_today == {"task": [1, 2]}
+    game.choose("move:lake")  # 同一天的第三段路
+    think = _task(game, "think")
+    assert (think.label, think.enabled) == ("邊走邊想（今天沒有收穫了）", True)
+    xinde = p.stats["xinde"]
+    assert game.choose("road:think") == ["你邊走邊想，今天想得夠多了，沒有新的心得。"]
+    assert p.stats["xinde"] == xinde and p.road_rewards_today == {"task": [1, 2]}
+    assert game.state.journal[0].changes == []
+    assert (_task(game, "think").label, _task(game, "think").enabled) == ("邊走邊想（想過了，到下一站再說）", False)
+
+
+def test_the_road_reward_count_starts_over_the_next_game_day(content, game):
+    content.config.road_reward_daily_cap = 1
+    p = game.state.player
+    _leg(game, "lake", "think")
+    game.state.world.time += DAY  # 隔天：紀錄是前一天的就當沒拿過（跟每天對話輪數同一個算法）
+    game.choose("move:town")
+    assert _task(game, "think").label == "邊走邊想（心得 +3）"
+    xinde = p.stats["xinde"]
+    game.choose("road:think")
+    assert p.stats["xinde"] == xinde + 3 and p.road_rewards_today == {"task": [2, 1]}
+
+
+def test_only_a_material_actually_found_counts_toward_the_day(game):
+    p = game.state.player
+    game.choose("move:lake")
+    game.rng = FixedRandom(0.9)
+    game.choose("road:gather")  # 沒撿到：不算一次
+    assert p.road_rewards_today == {}
+    game.advance(p.journey.arrive_at[-1] - game.state.world.time)
+    game.choose("move:town")
+    game.rng = FixedRandom(0.1)
+    game.choose("road:gather")
+    assert sum(p.materials.values()) == 1 and p.road_rewards_today == {"task": [1, 1]}
+
+
+def test_thinking_and_gathering_share_the_days_road_rewards(content, game):
+    content.config.road_reward_daily_cap = 1
+    p = game.state.player
+    game.choose("move:lake")
+    game.choose("road:think")
+    gather = _task(game, "gather")
+    assert (gather.label, gather.enabled) == ("路邊採集（今天沒有收穫了）", True)
+    game.rng = FixedRandom(0.1)  # 沒到上限的話這一擲撿得到
+    assert game.choose("road:gather") == ["你留心路邊，今天已經撿夠了，沒再去翻。"]
+    assert p.materials == {} and p.road_rewards_today == {"task": [1, 1]}
+    assert not _task(game, "gather").enabled  # 照樣算這段路做過了
+    # 沿途打聽、留意地形沒有經濟上的收穫，不設上限
+    assert [_task(game, what).label for what in ("ask", "survey")] == ["沿途打聽（聽一則這一帶的傳聞）", "留意地形（摸清附近的地點）"]
+
+
+# ── 路上見聞（路上設計第五節）──────────────────────────────
+# 夾具的 road_sight_chance 是 0（其他測試的亂數序列才不會被打亂），這裡的測試自己設機率。
+
+
+def test_a_road_sight_comes_on_arrival_at_the_set_chance(content, game):
+    content.config.road_sight_chance = 0.3
+    game.rng = FixedRandom(0.31)  # 沒擲進三成
+    walk_to(game, "lake")
+    assert game.state.player.recent_sights == []
+    game.rng = FixedRandom(0.29)  # 擲進三成：看見一則
+    walk_to(game, "town")
+    (seen,) = game.state.player.recent_sights
+    assert seen in {"sight_crow", "sight_wind", "sight_north_peddler"}  # 一般路、北區能挑的三則
+    assert content.road_sights[seen].text in game.state.journal[0].lines
+
+
+def test_road_sights_follow_the_kind_of_road(content, game):
+    content.config.road_sight_chance = 1.0
+    game.state.world.flags.add("cave_open")
+    walk_to(game, "lake")
+    game.state.player.recent_sights = ["sight_crow", "sight_wind"]  # 通用的兩則剛看過
+    silver = game.state.player.stats["silver"]
+    walk_to(game, "cave")  # 湖邊—寶洞是山路：剩下山路那一則
+    assert game.state.player.recent_sights[-1] == "sight_cliff"
+    assert game.state.player.stats["silver"] == silver + 5
+    assert "銀兩 +5" in game.state.journal[0].changes
+
+
+def test_road_sights_follow_the_region_of_the_stop_just_reached(content, game):
+    content.config.road_sight_chance = 1.0
+    content.locations["cave"].y = 170  # 寶洞搬進南區
+    game.state.world.flags.add("cave_open")
+    walk_to(game, "lake")
+    game.state.player.recent_sights = ["sight_crow", "sight_wind", "sight_cliff"]
+    walk_to(game, "cave")
+    assert game.state.player.recent_sights[-1] == "sight_south_feather"
+    assert game.state.player.materials == {"kuai_1": 1}
+
+
+def test_recent_road_sights_wait_until_the_pool_runs_out(content, game):
+    content.config.road_sight_chance = 1.0
+    for dest in ("lake", "town", "lake"):
+        walk_to(game, dest)
+    assert set(game.state.player.recent_sights) == {"sight_crow", "sight_wind", "sight_north_peddler"}
+    for dest in ("town", "lake", "town"):
+        walk_to(game, dest)  # 池子用完了才重複
+    assert len(game.state.player.recent_sights) == 5
+
+
+def test_a_road_sight_seen_while_offline_is_dated_at_the_arrival(content, game):
+    content.config.road_sight_chance = 1.0
+    game.sync(1000.0)
+    game.choose("move:lake")  # 第 0 秒出發，第 180 秒抵達
+    game.sync(1000.0 + 3600)  # 下線一小時才回來
+    sight = content.road_sights[game.state.player.recent_sights[-1]]
+    entry = next(e for e in game.state.journal if sight.text in e.lines)
+    assert entry.time == pytest.approx(180.0)
+
+
+def test_dashing_still_rolls_a_road_sight_at_every_stop(content, game):
+    content.config.road_sight_chance = 1.0
+    game.state.world.flags.add("cave_open")
+    game.travel("cave", "dash")  # 湖邊、寶洞兩站立刻抵達
+    assert len(game.state.player.recent_sights) == 2
+
+
+def test_old_saves_without_recent_sights_load(game):
+    raw = game.state.model_dump(mode="json")
+    del raw["player"]["recent_sights"]
+    assert GameState.model_validate(raw).player.recent_sights == []
+
+
+# ── 路上見聞的每天上限與折返（企劃者 2026-10-03 決定）──────────────
+# 夾具在小鎮—湖邊（北區的一般路）能挑的是烏鴉（心得 +1）、起風（沒有收穫）、貨郎（心得 +2）三則；
+# 把其餘的標成剛看過，下一則就一定是想要的那一則。
+
+
+def _sight_rewards(entry):
+    """一則江湖紀錄裡，路上見聞會給的那幾種收穫行。"""
+    return [line for line in entry.lines + entry.changes if line.startswith(("心得 +", "銀兩 +", "獲得"))]
+
+
+def test_road_sight_rewards_stop_at_the_days_cap_but_the_text_stays(content, game):
+    content.config.road_sight_chance = 1.0
+    content.config.road_reward_daily_cap = 1
+    p = game.state.player
+    xinde = p.stats["xinde"]
+    p.recent_sights = ["sight_wind", "sight_north_peddler"]  # 只剩烏鴉
+    walk_to(game, "lake")
+    assert p.stats["xinde"] == xinde + 1 and p.road_rewards_today == {"sight": [1, 1]}
+    p.recent_sights = ["sight_crow", "sight_wind"]  # 同一天走回小鎮：只剩貨郎，但今天的收穫拿滿了
+    walk_to(game, "town")
+    entry = game.state.journal[0]
+    assert content.road_sights["sight_north_peddler"].text in entry.lines  # 文字照寫
+    assert _sight_rewards(entry) == []  # 沒有收穫、也沒有多一句
+    assert p.stats["xinde"] == xinde + 1 and p.road_rewards_today == {"sight": [1, 1]}
+    assert p.recent_sights[-1] == "sight_north_peddler"
+
+
+def test_at_the_days_cap_sights_that_hand_you_something_stay_away(content, game):
+    """拿滿了：給銀兩、素材的見聞，文字寫的就是拿到東西，那天不再出現；給心得的照寫文字、不給心得（見上一則）。"""
+    content.config.road_sight_chance = 0.0
+    game.state.world.flags.add("cave_open")
+    walk_to(game, "lake")
+    content.config.road_sight_chance = 1.0
+    content.config.road_reward_daily_cap = 1
+    p = game.state.player
+    p.road_rewards_today = {"sight": [1, 1]}  # 今天的見聞收穫已經拿滿
+    p.recent_sights = ["sight_crow", "sight_wind"]  # 湖邊—寶洞是山路：沒看過的只剩峭壁（給銀兩）
+    walk_to(game, "cave")
+    assert p.recent_sights[-1] != "sight_cliff"
+    assert content.road_sights["sight_cliff"].text not in game.state.journal[0].lines
+
+
+def test_the_road_sight_cap_counts_the_day_of_the_arrival(content, game):
+    """下線補算跨過午夜：第 1 天 23:58 抵達的那一站，收穫算第 1 天（紀錄上寫的也是那一刻）。"""
+    content.config.road_sight_chance = 1.0
+    p = game.state.player
+    p.recent_sights = ["sight_wind", "sight_north_peddler"]  # 只剩烏鴉（心得 +1）
+    game.advance(DAY - 300 - game.state.world.time)  # 第 1 天 23:55
+    game.choose("move:lake")  # 走三分鐘，23:58 抵達
+    game.advance(600)  # 第 2 天 00:05 才補算
+    assert p.road_rewards_today == {"sight": [1, 1]}
+
+
+def test_road_sight_rewards_start_over_the_next_game_day(content, game):
+    content.config.road_sight_chance = 1.0
+    content.config.road_reward_daily_cap = 1
+    p = game.state.player
+    p.recent_sights = ["sight_wind", "sight_north_peddler"]
+    walk_to(game, "lake")
+    game.state.world.time += DAY  # 隔天：紀錄是前一天的就當沒拿過
+    p.recent_sights = ["sight_wind", "sight_north_peddler"]
+    xinde = p.stats["xinde"]
+    walk_to(game, "town")
+    assert p.stats["xinde"] == xinde + 1 and p.road_rewards_today == {"sight": [2, 1]}
+    assert _sight_rewards(game.state.journal[0]) == ["心得 +1"]
+
+
+def test_a_road_sight_without_a_reward_never_counts_toward_the_day(content, game):
+    content.config.road_sight_chance = 1.0
+    p = game.state.player
+    p.recent_sights = ["sight_crow", "sight_north_peddler"]  # 只剩起風
+    walk_to(game, "lake")
+    assert p.recent_sights[-1] == "sight_wind" and p.road_rewards_today == {}
+
+
+def test_turning_back_at_once_brings_no_road_sight(content, game):
+    """剛出發就掉頭回到剛離開的那一站（不花時間也不花體力）不擲見聞：跟路上小事不換段是同一條規則。"""
+    content.config.road_sight_chance = 1.0
+    p = game.state.player
+    game.choose("move:lake")
+    game.choose("road:back")
+    game.advance(0)
+    assert p.location == "town" and p.journey is None
+    assert p.recent_sights == []
+    texts = {sight.text for sight in content.road_sights.values()}
+    assert not any(line in texts for entry in game.state.journal for line in entry.lines)
+    walk_to(game, "lake")  # 真的走到另一站才有
+    assert len(p.recent_sights) == 1
 
 
 # ── 時間由外面傳入（線上架構設計第四節）──────────────────────

@@ -47,6 +47,9 @@ class BattleParticipant(BaseModel):
     away: bool = False  # 離開了決戰的大區（人在區外，或這一趟路正要走出大區）：這回合不出手，回到大區才再出手（地圖擴充設計第六節）。
     # 由那個玩家自己的 Game 在出發、抵達時寫進來（見 Game._sync_battle_presence）；戰局結算不會、也不能去讀別人的存檔
     is_bot: bool = False
+    # 參戰者自己的戰報要寫的（FB-027，見 Game._deliver_battle_results）；舊資料沒有這兩欄就是預設值
+    acted_rounds: int = 0  # 自己送出行動、而且結算了的回合數：玩家按的、假人自己選的都算，逾時被系統代選的不算（見 resolve_round）
+    fell_round: int | None = None  # 在整場的第幾回合倒下；沒倒下是 None
 
 
 class BattleRound(BaseModel):
@@ -57,6 +60,8 @@ class BattleRound(BaseModel):
     # 呼叫 LLM，見模組說明。這個欄位有值就代表這個人這回合是賭局型行動，沒有值就是走
     # action_tags 查表的一般行動，resolve_round 靠這個區分兩條路徑）。
     opened_real: float = 0.0  # 這回合開放選擇的時間點，逾時代選判斷用
+    auto_picked: list[str] = Field(default_factory=list)  # 這回合逾時、由系統代選行動的人（fill_timed_out_actions
+    # 記下）：resolve_round 不把他們這回合算成自己出手（BattleParticipant.acted_rounds）
 
 
 class BattleRoundRecord(BaseModel):
@@ -92,6 +97,8 @@ class BattleInstance(BaseModel):
     # 呼叫端 engine.py 的事，見 Game._apply_battle_outcome；這裡存一份複本給它讀，不用
     # 重新比對一次是哪個 BattleOutcome）。
     outcome_trend_delta: dict[str, int] = Field(default_factory=dict)  # 同上，複製自 BattleOutcome.trend_delta
+    end_time: float | None = None  # 收場時的賽季時間（遊戲秒）：收場那一下由 engine 寫入，給參戰者的戰報用（FB-027）；
+    # 舊資料、或不是經過 engine 收場的是 None
     record_id: int | None = None  # 資料庫裡這一場的流水號；None＝還沒寫進資料庫（見 sqlite_world）
     rounds: list[BattleRoundRecord] = Field(default_factory=list)  # 這次讀出來之後才結算、還沒寫進資料庫的回合
 
@@ -191,6 +198,8 @@ def submit_action(
     if p is None or p.eliminated or p.away or instance.phase != "active":
         return
     instance.round.pending_actions[name] = tag
+    if name in instance.round.auto_picked:  # 系統代選過、結算前自己又選了：這回合算自己出手
+        instance.round.auto_picked.remove(name)
     if text:
         instance.round.custom_texts[name] = text
     if success_rate is not None:
@@ -214,11 +223,13 @@ def safest_option_tag(instance: BattleInstance, definition: BattleDef, name: str
 
 def fill_timed_out_actions(instance: BattleInstance, definition: BattleDef) -> None:
     """逾時：還沒送出行動的在場者（沒倒下、沒離開大區），系統代選他自己陣營最保守的固定選項；
-    這一幕沒有他能選的固定選項時，退回整張 action_tags 裡氣血損耗最低的那個——回合一定要湊得齊。"""
+    這一幕沒有他能選的固定選項時，退回整張 action_tags 裡氣血損耗最低的那個——回合一定要湊得齊。
+    代選的人記進 round.auto_picked：這一回合不算他自己出手（FB-027）。"""
     mildest = min(definition.action_tags, key=lambda t: definition.action_tags[t].neili_damage)
     for p in _active_participants(instance):
         if p.name not in instance.round.pending_actions:
             instance.round.pending_actions[p.name] = safest_option_tag(instance, definition, p.name) or mildest
+            instance.round.auto_picked.append(p.name)
 
 
 def _power_mitigation(power: float | None) -> float:
@@ -242,7 +253,9 @@ def resolve_round(instance: BattleInstance, definition: BattleDef, rng: random.R
     回傳這回合發生的事件訊息（系統判定的部分，不含 LLM 潤色、也不會自己寫進
     narrative_log——那兩件事都是呼叫端的事，見 narrate_round：呼叫端通常是先結算拿到
     msgs，請 LLM 潤色成一段敘事，再把潤色後的文字（或潤色失敗時的 msgs 本身）加進
-    narrative_log，這裡不越俎代庖）。"""
+    narrative_log，這裡不越俎代庖）。
+    參戰者自己的戰報（FB-027）也在這裡記：這回合的行動不是系統代選的（不在 round.auto_picked 裡），出手回合數
+    加一——在結算時數，一回合只會數一次，送出後又離開大區（行動作廢）的也不會被數到；倒下的人記下第幾回合。"""
     act_index = instance.act_index
     msgs: list[str] = []
     positive_faction = definition.factions[0].id
@@ -250,6 +263,8 @@ def resolve_round(instance: BattleInstance, definition: BattleDef, rng: random.R
         p = instance.participants.get(name)
         if p is None or p.eliminated:
             continue
+        if name not in instance.round.auto_picked:
+            p.acted_rounds += 1
         success_rate = instance.round.success_rates.get(name)
         custom_text = instance.round.custom_texts.get(name)
         if success_rate is not None and definition.free_text_gamble is not None:
@@ -281,6 +296,7 @@ def resolve_round(instance: BattleInstance, definition: BattleDef, rng: random.R
         p.neili = max(0.0, p.neili - damage)
         if p.neili <= 0 and not p.eliminated:
             p.eliminated = True
+            p.fell_round = instance.round_number + 1  # 這一回合（round_number 結算完才加一）
             msgs.append(f"{name}氣血耗盡，倒在戰場上，退出了這場戰鬥（轉為觀戰）。")
     instance.round_number += 1
     decisive = abs(instance.trend - definition.trend_start) >= definition.decisive_margin
