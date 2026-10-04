@@ -928,7 +928,7 @@ class FsFragment(_Strict):
     text 可以寫 {風向}、{偽裝}（天機，foreshadow.tianji_answer）；versions 是有版本的大事（宛城甲、乙）的分版文字，
     鍵是版本（timetable 的 versions 的值），那件大事還沒定版本時用史書那一版（第一個）。"""
 
-    region: str  # 大區 id（map.json 的 regions）；action 照它抽，event、talk 只是標記
+    region: str  # 大區 id（map.json 的 regions）；action 照它抽，talk 在這個大區的行動裡讓求見不到那位人物的人偷聽，event 只是標記
     source: FsSource
     text: str
     versions: dict[str, str] = Field(default_factory=dict)
@@ -1002,7 +1002,7 @@ class FsStep(_Strict):
     answer: str | None = None
     then: list[FsAsk] = Field(default_factory=list)
     wrong: FsWrong = Field(default_factory=FsWrong)  # 答錯（選項沒有自己的 wrong 時）與檢定失敗
-    success_text: str = ""  # 多趟時：這一趟做完、整條還沒完成時的那句（單趟的看 final.success_text）
+    success_text: str = ""  # 多趟時：這一趟做完的那句；整條還沒完成就只有這句，最後完成的這一趟則接在 final.success_text 前面（單趟的看 final.success_text）
 
 
 class FsFinal(FsStep):
