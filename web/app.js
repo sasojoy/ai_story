@@ -85,6 +85,15 @@
   const pct = (a, b) => (b > 0 ? Math.max(0, Math.min(100, (a / b) * 100)) : 0);
   // 本季天數：整數不帶小數點（14.0 → 14），不是整數照原樣（14.5）
   const dayCount = (n) => String(Number(n));
+  // 第一季的季曆（計畫 T2）：狀態列寫「第 3 週・週二 21:40」，旁邊是下一件大事的倒數（現實時間）
+  const WEEKDAYS = "一二三四五六日";
+  const countdown = (sec) => {
+    const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60);
+    if (sec < 60) return "就在眼前";
+    return h > 0 ? `約 ${h} 小時 ${m} 分後` : `約 ${m} 分後`;
+  };
+  // 江湖頁畫的東西有沒有變：狀態列（時鐘、季曆每次輪詢都在走）另外重畫，不讓「剛剛」一直重播浮現
+  const pageKey = (m) => JSON.stringify({ ...m, status: null });
   // 焦點在輸入框、下拉選單：玩家正在填東西，輪詢不動畫面
   const typing = () => !!document.activeElement && ["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement.tagName);
 
@@ -199,7 +208,10 @@
       <div class="top-row">
         <div class="who" data-act="toggle-more" role="button" tabindex="0" aria-expanded="${S.showMore}">
           <div class="who-name"><span>${esc(s.name)}<small>${esc(s.affiliation)}${s.anonymous ? "・匿名" : ""}・第${s.level}級</small></span><i class="more-ico" aria-hidden="true">${S.showMore ? "▴" : "▾"}</i></div>
-          <div class="where">📍 ${esc(s.location)}　第 ${s.day} 天 ${esc(s.clock)}<small>／共 ${dayCount(s.season_days)} 天</small>${s.resting != null ? "　🧘 打坐中" : ""}</div>
+          <div class="where">📍 ${esc(s.location)}　${s.calendar
+            ? `第 ${s.calendar.week} 週・週${WEEKDAYS[s.calendar.weekday]} ${esc(s.calendar.clock)}`
+            : `第 ${s.day} 天 ${esc(s.clock)}<small>／共 ${dayCount(s.season_days)} 天</small>`}${s.resting != null ? "　🧘 打坐中" : ""}</div>
+          ${s.calendar && s.next_event ? `<div class="where sub">下一件：${esc(s.next_event.title)}，${countdown(s.next_event.in_seconds)}</div>` : ""}
           ${s.busy_hours != null ? `<div class="where sub">🧘 閉關中，約 ${s.busy_hours} 小時後出關</div>` : ""}
           ${s.journey != null ? `<div class="where sub">🐎 ${esc(s.journey)}</div>` : ""}
         </div>
@@ -410,8 +422,12 @@
       <div class="mini" data-act="tab" data-tab="map" role="button" aria-label="展開輿圖">${m.minimap}</div>
       <button class="linkish" data-act="news" data-news="journal">看江湖紀錄 ›</button>`;
     const quest = `<details class="fold quest"><summary>📜 主線與目標</summary><div class="fold-body">${m.quest}</div></details>`;
+    // 公告卡（第一季）：這一週已經發生的大事，新的在前；排在最上面、「剛剛」之前。沒有就不畫
+    const board = m.bulletin && m.bulletin.length
+      ? `<section class="card bulletin" aria-label="本週江湖大事"><div class="bulletin-head">📣 本週江湖大事</div>${m.bulletin.map((b) => `<div class="bulletin-item">${b}</div>`).join("")}</section>`
+      : "";
     // 劇情文字在上、行動在下（企劃者 2026-10-04）。行動列只有一排，375×812 上「剛剛」、場景與整排行動都在第一屏
-    return `${quest}${now}${scene}${free}${menu}${tail}`;
+    return `${board}${quest}${now}${scene}${free}${menu}${tail}`;
   }
 
   // ── 修練 ──
@@ -1298,7 +1314,10 @@
   // 重抓回來時玩家若已經切了分頁、按了別的（那份資料已經換過）、正在忙或正在打字，就不動畫面，下一輪再說。
   async function refreshPage(old) {
     const tab = S.tab;
-    if (tab === "jianghu") return renderPage();
+    if (tab === "jianghu") {
+      if (pageKey(old) !== pageKey(S.main)) renderPage(); // 只有狀態列變了（時鐘在走）：上面 renderTop 已經畫過
+      return;
+    }
     if (tab === "news") {
       // 戰報子分頁畫的是 S.reports，不用重抓；其他子分頁只在它畫的那幾欄真的變了才重畫
       const fields = { trends: ["trends"], rumors: ["rumors"], chronicle: ["chronicle"], journal: ["latest", "journal", "older"] }[S.news] || [];

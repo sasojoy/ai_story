@@ -1,9 +1,11 @@
 """江湖大勢：大勢門檻、世界事件、分幕主線與主線改寫、虛擬玩家、賽季結局。"""
 from __future__ import annotations
 
+import math
 import random
+from collections.abc import Callable
 
-from . import flavor, leaderboard
+from . import calendar, flavor, leaderboard, timetable
 from .models import Act, BattleDef, Content, Ending, SimPlayer, SimRumor, Storyline
 from .ollama_client import OllamaClient
 from .rules import add_chronicle, add_rumor, add_world_flags, change_trend, check_condition
@@ -12,6 +14,11 @@ from .world_state import WorldStateStore, season_length_days
 
 HOUR = 3600
 DAY = 86400
+CAL_EPS = 1e-9  # 曆時交界的浮點誤差（以曆時為單位）：剛好停在交界上的時間不能被算成上一個曆時
+CAL_REACH = 1e-6  # 推進的秒數只差這麼一點就到交界（現實時間相減的浮點誤差）也算跨過
+
+# 週初的掛鉤：季曆每跨進新的一週（週一 00:00）各跑一次，照週次、在那一刻的大事之前。T6 的 orders.issue 掛這裡。
+WEEK_HOOKS: list[Callable[[GameState, Content, random.Random], list[str]]] = []
 
 
 def _now_for_battle(now: float | None) -> float:
@@ -213,6 +220,27 @@ def _season_vehicle(content: Content, season: WorldState) -> GameState:
     return GameState(player=player, world=season)
 
 
+def season_hour(state: GameState, content: Content, rng: random.Random) -> list[str]:
+    """第一季「季的事」，每跨過一個曆時跑一次（advance_world_state 照曆時切段呼叫；開關關著或舊季不跑）：
+    先補跑還沒跑過的週初掛鉤（每週一次），再照時間順序結算到了的大事（決戰與季末不在這裡，見 T8、T9）。
+    T1 的 geju_tick、T4 的 figures.tick 之後也掛在這裡（週初掛鉤之後、大事之前），每曆時一次。"""
+    w = state.world
+    msgs: list[str] = []
+    week = calendar.point(w.time, content).week
+    while w.hooked_week < week:
+        w.hooked_week += 1
+        for hook in WEEK_HOOKS:
+            msgs += hook(state, content, rng)
+    for event in timetable.due(state, content):
+        msgs += timetable.resolve(state, content, event, rng)
+    return msgs
+
+
+def _to_next_cal_hour(time: float, cal_hour: float) -> float:
+    """從 time 到下一個曆時交界還有幾個世界秒。"""
+    return (math.floor(time / cal_hour + CAL_EPS) + 1) * cal_hour - time
+
+
 def advance_world_state(
     season: WorldState, content: Content, seconds: float, rng: random.Random, world: WorldStateStore | None = None,
 ) -> list[str]:
@@ -226,8 +254,13 @@ def advance_world_state(
     vehicle = _season_vehicle(content, season)
     msgs: list[str] = []
     remaining = seconds
+    # 第一季（開關開著、這一季也蓋了章）：另外在每個曆時的交界停一下跑季的事；跨過好幾件大事也逐件照時間來
+    cal_hour = calendar.cal_hour_seconds(content) if calendar.season_one_on(season, content) else None
     while remaining > 0 and not season.ended:
         step = min(remaining, HOUR)
+        crossed = False
+        if cal_hour is not None and (to_mark := _to_next_cal_hour(season.time, cal_hour)) <= step + CAL_REACH:
+            step, crossed = to_mark, True
         remaining -= step
         season.time += step
         season.sim_accum += step
@@ -235,6 +268,8 @@ def advance_world_state(
         if hours:
             season.sim_accum -= hours * HOUR
             msgs += sim_tick(vehicle, content, hours, rng)
+        if crossed and not season.ended:
+            msgs += season_hour(vehicle, content, rng)
         if not season.ended and season.time >= season_length_days(season, content) * DAY:
             msgs += end_season(vehicle, content, world)
     return msgs

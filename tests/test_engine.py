@@ -4,8 +4,8 @@ from unittest import mock
 
 import pytest
 
-from conftest import FixedRandom, at, walk_to
-from tianxia import atlas, battle_instance, companion_agent, flavor, rules, skillview
+from conftest import FixedRandom, at, install_season_one, walk_to
+from tianxia import atlas, battle_instance, calendar, companion_agent, flavor, rules, skillview
 from tianxia.characters import open_characters
 from tianxia.engine import Game, Option
 from tianxia.martial_arts import MartialArt
@@ -3931,7 +3931,7 @@ def test_the_move_mode_is_screen_state_and_never_saved(content, game):
 def test_old_season_not_replayed_when_switch_turns_on(content, world):
     """QA 要的保險：開關關著、季長 14 天時開的季，換成週末設定之後照它自己的章走——不會因為季長變成 2.5 天
     就一口氣收掉；管理者收季、開下一季之後，新的一季才照週末設定。"""
-    content.scenario.sim_players = []  # 虛擬玩家推過門檻也會收季，這裡只看時間與開關
+    install_season_one(content)  # 有時刻表、沒有虛擬玩家（推過門檻也會收季，這裡只看時間與開關）
     content.config.admins = ["管理者"]
     content.config.season_one, content.config.season_days = False, 14
     admin = Game.new(content, "管理者", rng=random.Random(1), world=world)
@@ -3944,7 +3944,36 @@ def test_old_season_not_replayed_when_switch_turns_on(content, world):
     assert not season.ended and season.time >= 5 * DAY
     assert (season.season_one, season.length_days) == (False, 14)
 
+    assert season.timeline == {} and season.hooked_week == 0  # 舊季不跑時刻表，也不補算
+    assert "calendar" not in admin.status_data()
+
     admin.admin_end_season(now=120.0)
     admin.admin_next_season(now=180.0)
     season = world.get_season()
     assert (season.season_one, season.length_days) == (True, 2.5)
+    admin.sync(180.0 + calendar.cal_hour_seconds(content))
+    assert list(world.get_season().timeline) == ["uprising"]  # 新的一季才照季曆跑
+    assert admin.status_data()["calendar"]["week"] == 1
+
+
+def test_status_shows_calendar_and_next_event(content, world):
+    """狀態列的季曆與下一件大事的倒數（真實秒）；決戰照排定的時間算。舊的 day／clock／season_days 照舊在。"""
+    install_season_one(content)
+    game = Game.new(content, "沈浪", rng=random.Random(0), world=world)
+    d = game.status_data()
+    assert d["calendar"] == {"week": 1, "weekday": 0, "clock": "00:00", "weeks": 12}
+    assert d["next_event"] == {"title": "張曼成攻殺南陽太守", "in_seconds": 36000}  # 起義就在此刻；下一件在第 3 週
+    assert (d["day"], d["clock"], d["season_days"]) == (1, "00:00", 2.5)
+
+    tuesday = calendar.week_start(3, content) + (DAY + 21 * HOUR + 40 * 60) / 33.6
+    game.advance(tuesday)
+    d = game.status_data()
+    assert d["calendar"] == {"week": 3, "weekday": 1, "clock": "21:40", "weeks": 12}
+    assert d["next_event"] == {"title": "波才大敗朱儁", "in_seconds": round(calendar.week_start(4, content) - tuesday)}
+    assert "第 3 週・週二 21:40" in game.status_text()
+
+    game.advance(calendar.week_start(5, content) - tuesday)
+    showdown = game.state.world.schedule["changshe_fire"]
+    assert game.status_data()["next_event"] == {"title": "長社火攻", "in_seconds": round(showdown - game.state.world.time)}
+    content.config.time_scale = 2  # 1 時等於現實 2 秒：倒數是現實秒
+    assert game.status_data()["next_event"]["in_seconds"] == round((showdown - game.state.world.time) / 2)

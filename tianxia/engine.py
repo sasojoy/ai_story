@@ -11,8 +11,8 @@ import random
 from pydantic import BaseModel
 
 from . import (
-    atlas, battle_instance, battlelog, companion_agent, craft, encounter, event_llm, flavor, journal, materials, roster,
-    skillview, team,
+    atlas, battle_instance, battlelog, calendar, companion_agent, craft, encounter, event_llm, flavor, journal, materials,
+    roster, skillview, team, timetable,
 )
 from .events import choice_label, event_candidates, has_events_here, pick_event, visible_choices
 from .guide import note_action, quest_text, tutorial_intro
@@ -33,6 +33,7 @@ from .world_state import WorldStateStore, season_length_days
 
 HOUR = 3600
 DAY = 86400
+BULLETIN_MAX = 3  # 江湖頁最上面的公告卡最多放這一週的幾則大事（計畫 T2）
 AUDIENCE_HALL_FIGURES = 2  # 一個地點有幾位以上的大勢人物，交友就不直接找人、改按「求見」指名（企劃者 2026-10-03 決定）
 # 路上小事（路上設計第四節）：road:<id> → (名稱, 這一段做過之後寫的「這段路已經……」)；按鈕上的補充見 _road_task_options
 ROAD_TASKS: dict[str, tuple[str, str]] = {
@@ -2354,7 +2355,45 @@ class Game:
             "busy_hours": None if p.busy_until is None else round((p.busy_until - w.time) / HOUR, 1),
             "resting": None if p.resting_since is None else c.config.rest_regen_multiplier,  # 打坐時體力回復的倍數
             "journey": None if p.journey is None else self._journey_line(),
+            **self._calendar_status(),  # 第一季：季曆與下一件大事的倒數；開關關著時沒有這兩欄
         }
+
+    def _calendar_status(self) -> dict:
+        """狀態列的季曆（第 N 週、週幾、幾點）與下一件大事的倒數。倒數是現實秒：(大事時刻 − 世界秒) ÷ time_scale。"""
+        w, c = self.state.world, self.content
+        if not calendar.season_one_on(w, c):
+            return {}
+        at = calendar.point(w.time, c)
+        upcoming = timetable.next_event(self.state, c)
+        return {
+            "calendar": {
+                "week": at.week, "weekday": at.weekday, "clock": f"{at.hour:02d}:{at.minute:02d}",
+                "weeks": c.config.season_weeks,
+            },
+            "next_event": None if upcoming is None else {
+                "title": upcoming.title,
+                "in_seconds": round((timetable.when(self.state, c, upcoming) - w.time) / c.config.time_scale),
+            },
+        }
+
+    def bulletin(self) -> list[str]:
+        """江湖頁最上面的公告卡（Markdown）：這一週已經發生的大事，新的在前、最多 BULLETIN_MAX 則。
+        江湖紀錄裡的「江湖大事」只寫進剛好在場同步到的那個人，這張卡讓每個人都看得到。開關關著時是空的。"""
+        w, c = self.state.world, self.content
+        if not calendar.season_one_on(w, c):
+            return []
+        start = calendar.week_start(calendar.point(w.time, c).week, c) - calendar.EPS
+        titles = {e.id: e.title for e in c.timetable}
+        done = [(i, eid, r) for i, (eid, r) in enumerate(w.timeline.items()) if r.text and r.time >= start]
+        done.sort(key=lambda item: (item[2].time, item[0]), reverse=True)
+        return [f"**{titles.get(eid, eid)}**\n\n{r.text}" for _, eid, r in done[:BULLETIN_MAX]]
+
+    @staticmethod
+    def _when_text(d: dict) -> str:
+        cal = d.get("calendar")
+        if cal is None:
+            return f"第 {d['day']} 天 {d['clock']}（本季共 {d['season_days']:g} 天）"
+        return f"第 {cal['week']} 週・週{calendar.WEEKDAYS[cal['weekday']]} {cal['clock']}"
 
     def status_text(self) -> str:
         d = self.status_data()
@@ -2375,7 +2414,7 @@ class Game:
         lines = [
             f"### {d['name']}　·　{d['affiliation']}" + ("（匿名行走）" if d["anonymous"] else "")
             + f"　第{d['level']}級",
-            f"📍 {d['location']}　⏳ 第 {d['day']} 天 {d['clock']}（本季共 {d['season_days']:g} 天）",
+            f"📍 {d['location']}　⏳ {self._when_text(d)}",
             vitals,
             f"{minor}　｜　{attrs}",
         ]

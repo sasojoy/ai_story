@@ -258,6 +258,7 @@ def main_view(game: Game) -> dict:
         "journal": game.journal_html(1, RECENT_ROWS),
         "older": game.journal_html(1 + RECENT_ROWS, OLDER_ROWS),
         "minimap": game.minimap_svg(),
+        "bulletin": [md(text) for text in game.bulletin()],  # 江湖頁最上面的公告卡：這一週的大事；開關關著是空的
         "trends": md(game.trends_text()),
         "rumors": md(game.rumors_text()),
         "chronicle": md(game.chronicle_text()),

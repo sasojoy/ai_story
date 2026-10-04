@@ -87,6 +87,8 @@ class SharedWorldState(BaseModel):
 def fresh_season(content: Content) -> WorldState:
     """照劇本種出一季全新的共用賽季（大勢起始值、公開的大勢線、第一條主線），並把當下的開關與季長蓋章在
     這一季上（seed_first_season、next_season 都走這裡）：之後換了設定，這一季照它自己的章走。"""
+    from .timetable import default_schedule  # noqa: PLC0415  延後 import：timetable → rules → world_state
+
     trends = content.scenario.trends
     cfg = content.config
     return WorldState(
@@ -95,6 +97,7 @@ def fresh_season(content: Content) -> WorldState:
         storyline=content.scenario.storylines[0].id,
         season_one=cfg.season_one,
         length_days=cfg.season_days,
+        schedule=default_schedule(content) if cfg.season_one else {},  # 決戰與季末的預設時間，管理者開季後可以改（T10）
     )
 
 
