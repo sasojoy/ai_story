@@ -357,3 +357,122 @@ def test_the_map_keeps_the_sim_players_with_the_switch_off(real):
     assert atlas.haunters(s, real, "huangjin_camp") == ["波才"]
     assert atlas.haunters(s, real, "mengjin_ford") == []
     assert "聲威" not in atlas.leader_text(s, real, "波才")
+
+
+# ── Task 4：人物結局、接手、打贏扣聲威 ───────────────────
+
+
+def test_prestige_zero_retires_and_successor_takes_the_front(on):
+    """波才被打到聲威歸零：退場，彭脫上場、接下潁川（在黃巾別部營寨）、開始推；退場與接手合成一則天下大事。"""
+    s = _season(on)
+    s.world.figures["bocai"].prestige = 5
+    lines = figures.defeat(s, on, "bocai", 5)
+    assert lines == ["波才聲威 -5", "波才連吃敗仗，聲威掃地，退出了這一季的戰事。", "彭脫接手潁川汝南的戰事。"]
+    assert s.world.figures["bocai"].status == "retired" and figures.is_out(s, "bocai")
+    assert s.world.figures["pengtuo"] == FigureState(prestige=40, status="active", front="yingru", location="huangjin_camp")
+    assert figures.commander(s, on, "yingru", "huang") == "pengtuo" and figures.push_goal(s, on, "pengtuo") == 1
+    assert [(r.layer, r.text) for r in s.world.rumors] == [
+        ("world", "波才連吃敗仗，聲威掃地，退出了這一季的戰事。彭脫接手潁川汝南的戰事。"),
+    ]
+    assert figures.defeat(s, on, "bocai", 5) == []  # 退場的人不再扣、不再發公告
+
+
+def test_destiny_figure_is_crippled_not_retired(on):
+    """孫堅是天命人物：歸零是重創，退出本季；他沒有接位的人，南陽官軍沒有人物了。"""
+    s = _season(on)
+    s.world.figures["sunjian"].prestige = 3
+    assert figures.defeat(s, on, "sunjian", 5) == ["孫堅聲威 -3", "孫堅連吃敗仗，元氣大傷，退出了這一季的戰事。"]
+    assert s.world.figures["sunjian"].status == "crippled" and figures.is_out(s, "sunjian")
+    assert figures.commander(s, on, "nanyang", "guan") is None
+
+
+def test_successor_chain_ends_without_error(on):
+    """總計畫 Review Focus 4：波才退場、接手的彭脫也退場——潁川沒有黃巾的人物了：commander 回 None、{黃巾主將}
+    填「黃巾」、tick 照跑不丟例外，潁川只剩官軍在推。"""
+    s = _season(on)
+    figures.apply(s, on, "bocai", FigureChange(fate="退場"))
+    figures.apply(s, on, "pengtuo", FigureChange(fate="退場"))
+    assert s.world.figures["pengtuo"].status == "retired"
+    assert figures.commander(s, on, "yingru", "huang") is None
+    changshe = next(e for e in on.timetable if e.id == "changshe_fire")
+    assert timetable.fill_slots(s, on, changshe, "{黃巾主將}") == "黃巾"
+    s.world.time = calendar.week_start(2, on, s.world) + calendar.cal_hour_seconds(on, s.world)  # 第 2 週：官軍出兵了
+    s.world.trends["yingru"] = 50
+    _ticks(s, on, 24)
+    assert s.world.trends["yingru"] == 49  # 皇甫嵩 −1；朱儁的 0.5 還沒滿一次
+
+
+def test_defeat_keeps_the_fraction_of_a_point(on):
+    """兩個人都在推時人數緩衝打折：扣 2.5 先扣 2、留 0.5，再扣 2.5 湊滿 3。"""
+    s = _season(on)
+    assert figures.defeat(s, on, "bocai", 2.5) == ["波才聲威 -2"]
+    assert figures.defeat(s, on, "bocai", 2.5) == ["波才聲威 -3"]
+    assert s.world.figures["bocai"].prestige == 55 and "prestige:bocai" not in s.world.trend_accum
+
+
+def test_timetable_outcome_retires_bocai(on):
+    """長社「guan:大勝」：波才退場、彭脫接手潁川；公告照時刻表的原文（不多接接手那一句），接手另發一則天下大事。"""
+    s = _season(on)
+    changshe = next(e for e in on.timetable if e.id == "changshe_fire")
+    outcome = changshe.outcomes["guan:大勝"]
+    msgs = timetable.resolve(s, on, changshe, random.Random(0), key="guan:大勝")
+    assert msgs == [f"【江湖大事】{changshe.preface}{outcome.text}{outcome.note}"]
+    assert s.world.figures["bocai"].status == "retired"
+    assert (s.world.figures["pengtuo"].status, s.world.figures["pengtuo"].front) == ("active", "yingru")
+    assert [r.text for r in s.world.rumors] == ["彭脫接手潁川汝南的戰事。", msgs[0].removeprefix("【江湖大事】")]
+
+
+def test_displaced_figure_leaves_front_successor_takes_it(on):
+    """長社「huang:險勝」：皇甫嵩重挫——聲威 −30、離開潁川轉往冀州盧植營；朱儁本來就在潁川，接下潁川不必交接、
+    也不另發公告。冀州官軍的主將變成皇甫嵩（人物表上他排在盧植前面）。"""
+    s = _season(on)
+    changshe = next(e for e in on.timetable if e.id == "changshe_fire")
+    timetable.resolve(s, on, changshe, random.Random(0), key="huang:險勝")
+    assert s.world.figures["huangfusong"] == FigureState(prestige=40, front="jizhou", location="luzhi_camp")
+    assert figures.commander(s, on, "yingru", "guan") == "zhujun"
+    assert figures.commander(s, on, "jizhou", "guan") == "huangfusong"
+    assert figures.push_goal(s, on, "huangfusong") == -1  # 之後推冀州
+    assert not any("接手" in r.text for r in s.world.rumors)
+
+
+def test_displaced_with_nobody_left_on_the_front_hands_it_down_the_chain(on):
+    """皇甫嵩重挫時朱儁已經南下宛城（守著南陽）：他不回頭，接位鏈到底，潁川沒有官軍的人物了，也不發接手公告。"""
+    s = _season(on)
+    s.world.figures["zhujun"].front, s.world.figures["zhujun"].location = "nanyang", "wan_city"
+    figures.apply(s, on, "huangfusong", FigureChange(fate="重挫", front="jizhou", location="luzhi_camp"))
+    assert figures.commander(s, on, "yingru", "guan") is None
+    assert (s.world.figures["zhujun"].front, s.world.rumors) == ("nanyang", [])
+
+
+def test_jailed_figure_hidden_dongzhuo_arrives(on):
+    """盧植下獄「成」：盧植 jailed（不在地圖上、不推、不算退場、聲威不變）；董卓到任冀州、在盧植營，開始推冀州。
+    下獄不走接位鏈（董卓是「到任」），不發接手公告。求見、交友那一半見 Task 5。"""
+    s = _season(on)
+    jailed = next(e for e in on.timetable if e.id == "luzhi_jailed")
+    timetable.resolve(s, on, jailed, random.Random(0), key="成")
+    assert s.world.figures["luzhi"] == FigureState(prestige=70, status="jailed", front="jizhou", location="luzhi_camp")
+    assert not figures.is_out(s, "luzhi") and figures.present_at(s, on, "luzhi_camp") == ["dongzhuo"]
+    assert (s.world.figures["dongzhuo"].front, figures.push_goal(s, on, "dongzhuo")) == ("jizhou", -1)
+    assert figures.commander(s, on, "jizhou", "guan") == "dongzhuo"
+    assert not any("接手" in r.text for r in s.world.rumors)
+
+
+def test_a_figure_who_is_out_stays_out(on):
+    """已經退場或重創的人不再被時刻表改：張角病逝之後廣宗的「張角退場」什麼都不做；重創的董卓不會因為「到任」回來。"""
+    s = _season(on)
+    figures.apply(s, on, "zhangjiao", FigureChange(fate="退場"))
+    figures.apply(s, on, "zhangjiao", FigureChange(fate="退場"))
+    assert s.world.rumors == []  # 張角沒有接位的人，兩次都不發公告
+    figures.apply(s, on, "dongzhuo", FigureChange(fate="重創"))
+    figures.apply(s, on, "dongzhuo", FigureChange(fate="到任", front="jizhou", location="luzhi_camp"))
+    assert s.world.figures["dongzhuo"].status == "crippled"
+
+
+def test_fates_that_zero_the_prestige_retire_through_the_chain(on):
+    """受挫扣到 0 也照退場處理（結算文件第一節）：張曼成聲威 10 時「受挫」→ 退場，趙弘接下南陽、開始推。"""
+    s = _season(on)
+    s.world.figures["zhangmancheng"].prestige = 10
+    figures.apply(s, on, "zhangmancheng", FigureChange(fate="受挫"))
+    assert s.world.figures["zhangmancheng"].status == "retired"
+    assert (s.world.figures["zhaohong"].front, figures.push_goal(s, on, "zhaohong")) == ("nanyang", 1)
+    assert [r.text for r in s.world.rumors] == ["趙弘接手南陽的戰事。"]

@@ -4,7 +4,7 @@
 開關開著時，開季那一刻照人物表種好（world_state.stamp_season 呼叫 seed）。
 - 讀：state_of（沒種過的照人物表的起始值，不寫回存檔）、present_at／placed_characters（誰在哪裡）、commander
   （那條戰線那一方的主將）、difficulty／squad_of（挑戰本人的難度）。
-- 改：apply（時刻表的人物結局）。
+- 改：apply（時刻表的人物結局與接手）、defeat（挑戰本人打贏扣聲威）。
 
 state 是 GameState（季的事用的是 world._season_vehicle 那個空殼玩家），只讀寫 state.world；不碰儲存。
 人物表沒有的 id（測試夾具）照 T2 最小版的規則：FigureState 的預設值、只改欄位。"""
@@ -12,12 +12,13 @@ from __future__ import annotations
 
 from . import calendar
 from .models import Content, FigureChange, FigureDef, Squad
-from .rules import change_trend, season_one, trend_value
+from .rules import add_rumor, change_trend, season_one, trend_value
 from .state import FigureState, GameState, WorldState
 
 OUT = ("retired", "crippled")  # 退場（非天命）、重創（天命）：本季不再出現；下獄不算（時刻表結算 5.2）
 FATE_STATUS = {"退場": "retired", "重創": "crippled", "下獄": "jailed", "到任": "active"}
 ZEROED = ("退場", "重創")  # 時刻表結算文件第一節：這兩種是聲威歸零
+HANDOFF_FATES = ("退場", "重創", "重挫")  # 這三種會空出戰線，由接位的人接（下獄的戰線由同一件大事裡「到任」的人接）
 
 
 # ── 種與讀 ───────────────────────────────────────────────
@@ -166,23 +167,101 @@ def tick(state: GameState, content: Content, cal_hours: float) -> None:
 
 
 def apply(state: GameState, content: Content, fid: str, change: FigureChange) -> list[str]:
-    """照時刻表結算文件第一節改一位人物：重挫、聲威大減、受挫照 Config.fate_prestige 扣聲威；退場、重創歸零；
-    下獄只改狀態、聲威不變；重挫退出所在戰線（front 換成 change.front，可能是 None）、轉往 change.location；
-    到任回到在場、接下 change.front 與 change.location。聲威夾在 0～100。only_if 由呼叫端（timetable）判斷。
-    還沒種過的人物先照人物表建一筆。回傳要接在公告後面的話：沒有。"""
+    """照時刻表結算文件第一節改一位人物（T2 定的用詞，T4 補上接手）：
+    - 退場（非天命）、重創（天命）：聲威歸零、本季不再出現，由接位的人接下他的戰線；
+    - 重挫：聲威 −30，退出所在戰線（front 換成 change.front，沒給就是 None）、轉往 change.location，由接位的人接下原本的戰線；
+    - 聲威大減、受挫：聲威 −30、−15，留在原地；
+    - 下獄：本季不出現、不能對話、不算退場、聲威不變；戰線由同一件大事裡「到任」的人接（不走接位鏈）；
+    - 到任：回到在場，接下 change.front 與 change.location。
+    任何時候聲威扣到 0：天命人物重創、其他人退場（照上面處理）。已經退場或重創的人不再變（例：張角病逝之後廣宗的「張角退場」）。
+    聲威夾在 0～100；only_if 由呼叫端（timetable）判斷。還沒種過的人物先照人物表建一筆；人物表沒有的（測試夾具）只改欄位。
+    接手另發一則天下大事傳聞（見聞頁看得到），不接在公告後面——時刻表的公告已經寫了結果（例：「皇甫嵩重挫退走，潁川交給了
+    朱儁」），再接就重複了。所以回傳（要接在公告後面的話）一律是空的。"""
+    for line in _change(state, content, fid, change):
+        add_rumor(state, line, content=content, layer="world")
+    return []
+
+
+def _change(state: GameState, content: Content, fid: str, change: FigureChange) -> list[str]:
+    """apply 的本體：改這位人物、空出戰線時照接位鏈交接；回傳接手的那一句（apply 拿去發傳聞、defeat 接在退場那句後面）。"""
     figure = _ensure(state, content, fid)
-    if change.fate in ZEROED:
+    if figure.status in OUT:
+        return []
+    fig = content.figures.get(fid)
+    held = figure.front if figure.status == "active" else None  # 原本守的戰線與所在（交接時接位的人接下這兩樣）
+    post = figure.location
+    fate = change.fate
+    if fate in ZEROED:
         figure.prestige = 0
     else:
-        figure.prestige += content.config.fate_prestige.get(change.fate or "", 0)
+        figure.prestige += content.config.fate_prestige.get(fate or "", 0)
     figure.prestige = max(0, min(100, figure.prestige + change.prestige))
-    if change.fate in FATE_STATUS:
-        figure.status = FATE_STATUS[change.fate]
-    if change.fate in ("重挫", "到任"):  # 重挫：退出原戰線、轉往別處；到任：接下新戰線
+    if figure.prestige == 0 and fate not in ("下獄", "到任"):  # 扣到 0：照退場或重創處理
+        fate = "重創" if fig is not None and fig.destiny else "退場"
+    if fate in FATE_STATUS:
+        figure.status = FATE_STATUS[fate]
+    if fate in ("重挫", "到任"):  # 重挫：退出原戰線、轉往別處；到任：接下新戰線
         figure.front = change.front
         if change.location is not None:
             figure.location = change.location
+    if fig is None or fate not in HANDOFF_FATES or held is None or (figure.status == "active" and figure.front == held):
+        return []
+    return _hand_over(state, content, fid, held, post)
+
+
+def _hand_over(state: GameState, content: Content, fid: str, front: str, location: str) -> list[str]:
+    """fid 空出 front（人物誌第七節、第一季設計 8.1）：照接位鏈找第一個接得了的人——還沒出場的，或在場、手上沒有別條戰線的——
+    換成在場、接下這條戰線與 fid 原本的所在。鏈上已經有人在這條戰線上（朱儁本來就在潁川）就不必交接、也不發公告；退場、
+    重創、下獄或守著別條戰線的人跳過，往下一位找；鏈走到底沒人接，這條戰線就沒有這一方的人物了（commander 回 None，
+    呼叫端換成泛稱）。回傳接手的那一句，例如「彭脫接手潁川汝南的戰事。」。"""
+    seen = {fid}
+    nxt = content.figures[fid].successor
+    while nxt is not None and nxt not in seen and nxt in content.figures:
+        seen.add(nxt)
+        heir = state_of(state, content, nxt)
+        if heir.status == "active" and heir.front == front:
+            return []
+        if heir.status == "away" or (heir.status == "active" and heir.front is None):
+            heir = _ensure(state, content, nxt)
+            heir.status, heir.front, heir.location = "active", front, location
+            return [f"{name_of(content, nxt)}接手{_front_name(content, front)}的戰事。"]
+        nxt = content.figures[nxt].successor
     return []
+
+
+def _front_name(content: Content, front: str) -> str:
+    return next((t.name for t in content.scenario.trends if t.id == front), front)
+
+
+def defeat(state: GameState, content: Content, fid: str, amount: float) -> list[str]:
+    """挑戰本人打贏（計畫 T4、軍令文件 4.5）：他敗走，聲威扣 amount（人數緩衝之後的量，可能有小數；不足一點的記在
+    trend_accum["prestige:<id>"]，滿一點才扣）。扣到 0 時照退場（天命人物重創）處理、由接位的人接下戰線，退場與接手
+    合成一則天下大事。回傳給打贏的人看的句子：「波才聲威 -5」，歸零時再接退場與接手那幾句。已經退場的人不再扣。"""
+    figure = _ensure(state, content, fid)
+    if figure.status in OUT or amount <= 0:
+        return []
+    w = state.world
+    key = f"prestige:{fid}"
+    pending = w.trend_accum.get(key, 0.0) + amount
+    whole = int(pending + 1e-9)  # 容一點浮點誤差（同 tick）
+    rest = max(0.0, pending - whole)
+    if rest:
+        w.trend_accum[key] = rest
+    else:
+        w.trend_accum.pop(key, None)
+    if not whole:
+        return []
+    name = name_of(content, fid)
+    before = figure.prestige
+    figure.prestige = max(0, before - whole)
+    lines = [f"{name}聲威 -{before - figure.prestige}"] if figure.prestige < before else []
+    if figure.prestige == 0:
+        destiny = fid in content.figures and content.figures[fid].destiny
+        news = [f"{name}連吃敗仗，{'元氣大傷' if destiny else '聲威掃地'}，退出了這一季的戰事。"]
+        news += _change(state, content, fid, FigureChange(fate="重創" if destiny else "退場"))
+        add_rumor(state, "".join(news), content=content, layer="world")
+        lines += news
+    return lines
 
 
 def holds(state: GameState, content: Content, change: FigureChange) -> bool:
