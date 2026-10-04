@@ -9,9 +9,12 @@ from pathlib import Path
 import pytest
 
 import random
+from unittest import mock
 
 from conftest import FixedRandom
-from tianxia import atlas, calendar, figures, rules, timetable, world
+from tianxia import atlas, battle_instance, calendar, figures, rules, team, timetable, world
+from tianxia.encounter import EncounterResult
+from tianxia.engine import Game
 from tianxia.content import ContentError, load_content, validate
 from tianxia.models import Config, FigureChange
 from tianxia.server_bots import reserved_names
@@ -475,3 +478,155 @@ def test_fates_that_zero_the_prestige_retire_through_the_chain(on):
     assert s.world.figures["zhangmancheng"].status == "retired"
     assert (s.world.figures["zhaohong"].front, figures.push_goal(s, on, "zhaohong")) == ("nanyang", 1)
     assert [r.text for r in s.world.rumors] == ["趙弘接手南陽的戰事。"]
+
+
+# ── Task 5：挑戰本人、閉門不見 ───────────────────────────
+
+
+def _player(content, store, name: str, faction: str | None, at: str, *, now: float = 1000.0) -> Game:
+    """真實內容的一個角色：站在 at、投靠 faction（None＝散人），現實時間是 now。store 是測試的資料庫（conftest 的 world）。"""
+    game = Game.new(content, name, rng=random.Random(0), world=store)
+    p = game.state.player
+    p.faction, p.location = faction, at
+    p.visited.add(at)
+    game.now = now
+    return game
+
+
+def _option(game: Game, option_id: str):
+    return next((o for o in game.options() if o.id == option_id), None)
+
+
+def _fight(tier: str = "大勝"):
+    """挑戰的結果寫死（team.fight），只看打完之後的事。"""
+    return mock.patch.object(team, "fight", return_value=EncounterResult(tier=tier, margin=50, our_power=200, difficulty=120))
+
+
+def test_challenge_only_for_enemy_faction_at_location(on, world):
+    """挑戰本人只給敵方陣營、站在人物所在地點的人：官軍在黃巾別部營寨看得到「挑戰波才」（勝算照聲威算的難度）；
+    黃巾（同陣營）、散人看不到；官軍在長社（皇甫嵩、朱儁是自己人）看不到；豪強兩邊都打。還沒出場的彭脫不在。"""
+    ids = lambda game: [o.id for o in game.options()]  # noqa: E731
+    guan = _player(on, world, "官甲", "guan", "huangjin_camp")
+    challenge = _option(guan, "act:challenge:bocai")
+    assert challenge.enabled and challenge.label.startswith("挑戰波才（體力 10・")
+    assert "act:challenge:pengtuo" not in ids(guan)
+    for name, faction, at in (("黃乙", "huang", "huangjin_camp"), ("散丙", None, "huangjin_camp"), ("官丁", "guan", "changshe")):
+        assert not any(i.startswith("act:challenge:") for i in ids(_player(on, world, name, faction, at))), name
+    assert {"act:challenge:huangfusong", "act:challenge:zhujun"} <= set(ids(_player(on, world, "豪戊", "haoqiang", "changshe")))
+
+
+def test_win_routs_the_figure_and_snubs_the_winner(on, world):
+    """打贏波才：他敗走，聲威 −5（陣營只有一人在推）、跟他的情誼 −5、記 50 貢獻、戰報記一筆「挑戰波才」；兩個現實小時內
+    他的交友、挑戰對打贏的人都按不下去、寫「剛吃了敗仗，閉門不見」，別人照常；時間一過又見得到。"""
+    winner = _player(on, world, "官甲", "guan", "huangjin_camp")
+    winner.state.player.affinities["bocai"] = 20
+    winner.state.player.stats["fame"] = 50  # 名望夠，平常見得到波才
+    stamina = winner.state.player.stamina
+    with _fight():
+        msgs = winner.choose("act:challenge:bocai")
+    assert {"波才敗走。", "波才聲威 -5", "波才情誼 -5"} <= set(msgs)
+    assert world.get_season().figures["bocai"].prestige == 55
+    p = winner.state.player
+    assert (p.affinities["bocai"], p.contrib, p.snubbed_until["bocai"], p.stamina) == (15, 50, 1000.0 + 2 * 3600, stamina - 10)
+    assert winner.state.battles[0].event == "挑戰波才" and "波才聲威 -5" in winner.state.battles[0].changes
+    for option_id, label in (("act:challenge:bocai", "挑戰波才"), ("act:socialize", "交友")):
+        option = _option(winner, option_id)
+        assert (option.enabled, option.label) == (False, f"{label}（剛吃了敗仗，閉門不見）")
+    assert not winner.socialize_starts_dialogue()
+    other = _player(on, world, "官乙", "guan", "huangjin_camp")
+    other.state.player.stats["fame"] = 50
+    assert _option(other, "act:challenge:bocai").enabled and other.socialize_starts_dialogue()
+    winner.now += 2 * 3600
+    assert _option(winner, "act:challenge:bocai").enabled and winner.socialize_starts_dialogue()
+
+
+def test_snub_in_the_audience_list(on, world):
+    """兩位人物以上的地點（長社）：被你打敗的朱儁在求見名單上按不下去、寫原因；皇甫嵩照常。"""
+    game = _player(on, world, "黃甲", "huang", "changshe")
+    game.state.player.stats["fame"] = 50
+    with _fight():
+        game.choose("act:challenge:zhujun")
+    game.choose("act:call")
+    names = {o.id: (o.label, o.enabled) for o in game.options()}
+    assert names["call:zhujun"] == ("朱儁（剛吃了敗仗，閉門不見）", False)
+    assert names["call:huangfusong"][1]
+
+
+def test_snub_follows_the_real_clock_not_the_season_clock(on, world):
+    """Review Focus 3：不見你看的是現實時間（Game.now）。管理者快轉賽季三天他照樣不見；現實時間過兩小時才見。
+    內容改版拿掉的人物，紀錄跟著清掉。"""
+    winner = _player(on, world, "官甲", "guan", "huangjin_camp", now=5000.0)
+    with _fight():
+        winner.choose("act:challenge:bocai")
+    winner.advance(3 * 86400)  # 賽季時鐘、季曆往前三天，現實時間沒動
+    assert not _option(winner, "act:challenge:bocai").enabled
+    winner.sync(5000.0 + 2 * 3600 - 1)
+    assert not _option(winner, "act:challenge:bocai").enabled
+    winner.sync(5000.0 + 2 * 3600)
+    assert _option(winner, "act:challenge:bocai").enabled
+    winner.state.player.snubbed_until["ghost"] = 1e12
+    winner._drop_stale_references()
+    assert "ghost" not in winner.state.player.snubbed_until
+
+
+def test_losing_a_challenge_costs_silver_and_blood_but_no_prestige(on, world):
+    game = _player(on, world, "官甲", "guan", "huangjin_camp")
+    game.state.player.stats["silver"] = 50
+    with _fight("落敗"):
+        msgs = game.choose("act:challenge:bocai")
+    assert "銀兩 -5" in msgs and any(m.startswith("氣血 -") for m in msgs)
+    assert world.get_season().figures["bocai"].prestige == 60 and game.state.player.snubbed_until == {}
+    assert game.state.player.contrib == 0
+
+
+def test_the_rout_is_buffered_by_the_sides_active_members(on, world):
+    """陣營人數緩衝（T3）：官軍這一曆日裡連自己有 4 個人推過大勢，打贏一次只扣 5 ÷ √4 = 2.5 點——先扣 2、留 0.5；貢獻照記 50。"""
+    game = _player(on, world, "官甲", "guan", "huangjin_camp")
+    w = game.state.world
+    w.active_pushers["guan"] = {name: w.time for name in ("官乙", "官丙", "官丁")}
+    with _fight():
+        msgs = game.choose("act:challenge:bocai")
+    assert "波才聲威 -2" in msgs and game.state.player.contrib == 50
+    assert world.get_season().trend_accum["prestige:bocai"] == pytest.approx(0.5)
+
+
+def test_challenge_while_a_showdown_is_on(on, world):
+    """Review Focus 4：決戰打起來的時候——上場的人只看得到決戰的選單（不能分身去挑戰）；在一旁觀戰的豪強照常挑戰，
+    打贏扣的是人物的聲威，決戰的戰局一點都不動。"""
+    definition = on.battles["huangjin_showdown"]
+    fighter = _player(on, world, "官甲", "guan", "huangjin_camp", now=0.0)
+    world.start_battle(definition, now=0.0)
+    for name, side in (("官甲", "guan"), ("黃乙", "huang")):
+        world.mutate_battle(lambda b, n=name, f=side: battle_instance.join_faction(b, n, f, neili_cap=100.0))
+    fighter.now = definition.muster_seconds + 1
+    assert fighter._battle_status()[0].phase == "active"
+    assert not any(o.id.startswith("act:") for o in fighter.options())
+    watcher = _player(on, world, "豪丙", "haoqiang", "huangjin_camp", now=definition.muster_seconds + 2)
+    trend = world.get_battle().trend
+    with _fight():
+        watcher.choose("act:challenge:bocai")
+    assert world.get_battle().trend == trend and world.get_season().figures["bocai"].prestige == 55
+
+
+def test_jailed_figure_is_gone_from_audience_and_dongzhuo_receives_at_the_camp(on, world):
+    """盧植下獄、董卓到任之後：盧植營交友直接找董卓（盧植不在），孟津渡沒有董卓了；人物照他此刻的所在出現。"""
+    game = _player(on, world, "官甲", "guan", "luzhi_camp")
+    game.state.player.stats["fame"] = 50
+    assert game._figures_here() == ["luzhi"]
+    jailed = next(e for e in on.timetable if e.id == "luzhi_jailed")
+    timetable.resolve(game.state, on, jailed, random.Random(0), key="成")
+    assert game._figures_here() == ["dongzhuo"] and game.socialize_starts_dialogue()
+    game.state.player.location = "mengjin_ford"
+    assert game._figures_here() == []
+
+
+def test_nothing_changes_with_the_switch_off(real, world):
+    """Review Focus 5：開關關著（beta 那一季）：沒有挑戰的選項、人物照 characters.json 的 talk_at 站（下獄也看不到）、
+    存檔沒有人物，交友照舊找波才。"""
+    game = _player(real, world, "官甲", "guan", "huangjin_camp")
+    game.state.player.stats["fame"] = 50
+    assert not any(o.id.startswith("act:challenge:") for o in game.options())
+    assert game._figures_here() == ["bocai"] and game.socialize_starts_dialogue()
+    assert world.get_season().figures == {}
+    game.state.player.location = "mengjin_ford"
+    assert game._figures_here() == ["dongzhuo"]

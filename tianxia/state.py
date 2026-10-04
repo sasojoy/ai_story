@@ -134,6 +134,10 @@ class PlayerState(BaseModel):
     # ── 捐獻紀錄（計畫 T6，軍備文件 4.1）：「據點 id:糧草」→ 累積的份量。T7 的伏筆只讀它；寫入是 T6 護糧的事 ──
     donations: dict[str, int] = Field(default_factory=dict)
 
+    # ── 大勢人物（計畫 T4、軍令文件 4.5）：剛被你打敗的人物 id → 到哪個「現實」時間（秒，Game.now）之前不見你、也不跟你交手。
+    # 看現實時間、不看賽季時鐘（管理者快轉不會讓他提早見你）；角色每季重來，跟著清空 ──
+    snubbed_until: dict[str, float] = Field(default_factory=dict)
+
     # ── 伏筆（計畫 T7、伏筆文件）；角色每季重來，跟著新角色清空（不在跨季保留的清單上）──
     fragments: dict[str, list[int]] = Field(default_factory=dict)  # 鏈 id → 聽過的片段（fragments 的索引）
     clue_items: dict[str, int] = Field(default_factory=dict)  # 伏筆專用物品 id → 數量
