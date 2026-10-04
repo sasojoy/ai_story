@@ -272,11 +272,42 @@ def resolve_goals(content: Content, world: WorldState, goals: dict[str, int]) ->
 
 
 def world_trend_value(world: WorldState, content: Content, trend_id: str) -> int:
-    """一條線現在的值；存檔裡沒有這條線（內容改版前開的那一季）時用劇本的起始值。"""
+    """一條線現在的值：開關開著時衍生線（黃巾聲勢）照來源線現算；存檔裡沒有這條線（內容改版前開的那一季）時用劇本的起始值。"""
+    trend = _trend(content, trend_id)
+    if trend is not None and trend.derived and season_one(content, world):
+        return _weighted(world, content, trend)
     if trend_id in world.trends:
         return world.trends[trend_id]
-    trend = _trend(content, trend_id)
     return trend.start if trend is not None else 0
+
+
+def _weighted(world: WorldState, content: Content, trend: Trend) -> int:
+    """衍生線的值：來源線的加權和，四捨五入到整數（int(x + 0.5)；先 round 到小數六位，免得 44.4999… 這種浮點雜訊）。"""
+    total = sum(world_trend_value(world, content, source) * weight for source, weight in trend.derived.items())
+    return int(round(total, 6) + 0.5)
+
+
+def recompute_trends(world: WorldState, content: Content) -> None:
+    """開關開著時，把每條衍生線（黃巾聲勢）存成來源線的加權和——條件、門檻與直接讀 trends 的地方讀的是存下來的值。
+    開關關著時不動（beta 那一季的黃巾聲勢是一般的線）。"""
+    if not season_one(content, world):
+        return
+    for trend in content.scenario.trends:
+        if trend.derived:
+            world.trends[trend.id] = _weighted(world, content, trend)
+
+
+def recompute_derived(state: GameState, content: Content) -> None:
+    """同 recompute_trends，對這個角色看到的那一份賽季。"""
+    recompute_trends(state.world, content)
+
+
+def is_revealed(world: WorldState, content: Content, trend_id: str) -> bool:
+    """這條線浮現了沒：記在 revealed 裡，或者本來就是公開的線（內容改版前開的那一季沒記到新加的公開線，照樣算浮現）。"""
+    if trend_id in world.revealed:
+        return True
+    trend = _trend(content, trend_id)
+    return trend is not None and not trend.hidden
 
 
 def trend_value(state: GameState, content: Content, trend_id: str) -> int:
@@ -289,6 +320,37 @@ def seed_trends(world: WorldState, content: Content) -> None:
     trends = [t for t in content.scenario.trends if trend_shown(content, world, t.id)]
     world.trends = {t.id: t.start for t in trends}
     world.revealed = {t.id for t in trends if not t.hidden}
+    recompute_trends(world, content)  # 開關開著時黃巾聲勢從三條戰線的起始值算（40／35／55 → 45）
+
+
+def in_chaos(state: GameState, content: Content, front: str) -> bool:
+    """亂局：戰況在 chaos_low～chaos_high 之間（含兩端，第一季設計 4.2「戰況在 35～65 之間的戰線」）。"""
+    cfg = content.config
+    return cfg.chaos_low <= trend_value(state, content, front) <= cfg.chaos_high
+
+
+def stances(state: GameState, content: Content) -> dict[str, int]:
+    """三方態勢（第一季設計 4.4）：官軍＝100－黃巾聲勢，黃巾＝黃巾聲勢，豪強＝豪強割據。"""
+    huangjin = trend_value(state, content, HUANGJIN)
+    return {"guan": 100 - huangjin, "huang": huangjin, "haoqiang": trend_value(state, content, GEJU)}
+
+
+def geju_tick(state: GameState, content: Content, cal_hours: float) -> None:
+    """豪強割據的自然漲落（第一季設計 4.2）：每有一條戰線在亂局，每曆日漲 geju_chaos_per_day；三條都穩下來時每曆日
+    落 geju_calm_per_day。不足一點的累積在 trend_accum["geju"]。背景推動，不回傳訊息（同虛擬玩家）。
+    由 T2 的 world.season_hour 每曆時呼叫一次（cal_hours＝1）。開關關著、劇本沒有割據、或地圖沒有戰線時什麼都不做。"""
+    fronts = front_ids(content)
+    if not season_one(content, state.world) or _trend(content, GEJU) is None or not fronts:
+        return
+    cfg = content.config
+    chaos = sum(1 for front in fronts if in_chaos(state, content, front))
+    per_day = chaos * cfg.geju_chaos_per_day if chaos else -cfg.geju_calm_per_day
+    w = state.world
+    pending = w.trend_accum.get(GEJU, 0.0) + per_day * cal_hours / 24
+    whole = int(pending + (1e-9 if pending > 0 else -1e-9))  # 往零取整；容一點浮點誤差，24 個 1/24 才剛好湊成 1
+    w.trend_accum[GEJU] = pending - whole
+    if whole:
+        change_trend(state, content, GEJU, whole, reveal=False)
 
 
 def change_trend(
@@ -303,17 +365,21 @@ def change_trend(
     行動有沒有用。sim_tick()（背景虛擬玩家，每小時自動微幅推動）刻意不接住這個回傳值，
     所以背景推動依然維持安靜，不會洗版；只有玩家自己選擇/打贏的那一刻才會顯示。"""
     w = state.world
+    trend = _trend(content, trend_id)
+    if trend is not None and trend.derived and season_one(content, w):
+        raise ValueError(f"「{trend.name}」由別的線合成，不能直接推（推它的來源線）：{trend_id}")
     msgs: list[str] = []
-    if trend_id not in w.revealed:
+    if not is_revealed(w, content, trend_id):
         if not reveal or delta <= 0:
             return msgs
         w.revealed.add(trend_id)
         msgs.append(f"（江湖暗流湧動——「{trend_name(content, trend_id)}」浮上檯面。）")
-    before = w.trends.get(trend_id, 0)
+    before = world_trend_value(w, content, trend_id)
     after = min(100, max(0, before + delta))
     w.trends[trend_id] = after
     actual = after - before
     if actual:
+        recompute_trends(w, content)  # 開關開著時推了戰線，黃巾聲勢跟著重算
         msgs.append(f"（{trend_name(content, trend_id)} {'+' if actual >= 0 else ''}{actual}）")
     return msgs
 

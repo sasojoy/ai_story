@@ -181,3 +181,132 @@ def test_the_timetable_reads_fronts_through_trend_value_and_cannot_push_huangjin
     next(iter(event.outcomes.values())).trends = {"huangjin": 5}
     with pytest.raises(ContentError, match="huangjin"):
         validate(real)
+
+
+# ── Task 3：開關開著——加權、亂局、態勢、割據 ─────────────────────
+
+
+def _set_fronts(state, yingru, nanyang, jizhou):
+    state.world.trends.update(yingru=yingru, nanyang=nanyang, jizhou=jizhou)
+
+
+def test_huangjin_is_the_weighted_fronts(on):
+    game = _game(on)
+    s = game.state
+    assert rules.trend_value(s, on, "huangjin") == 45  # 40×0.35＋35×0.25＋55×0.40＝44.75→45
+    assert s.world.trends["huangjin"] == 45  # 新的一季照三條戰線的起始值算好存著
+    rules.change_trend(s, on, "yingru", 10)  # 潁川 50
+    assert rules.trend_value(s, on, "huangjin") == 48  # 48.25→48
+    assert s.world.trends["huangjin"] == 48
+    assert rules.stances(s, on) == {"guan": 52, "huang": 48, "haoqiang": 10}
+
+
+def test_derived_trend_cannot_be_pushed_directly(real):
+    game = _game(real)
+    rules.change_trend(game.state, real, "huangjin", 5)  # 開關關著：黃巾聲勢是一般的線，照推
+    assert game.state.world.trends["huangjin"] == 30
+    real.config.season_one = True
+    game.state.world.season_one = True  # 這一季也蓋了「開」的章
+    with pytest.raises(ValueError):
+        rules.change_trend(game.state, real, "huangjin", 5)
+
+
+def test_new_season_with_the_switch_on_has_every_line(on):
+    season = fresh_season(on)
+    assert season.trends == {"huangjin": 45, "yingru": 40, "nanyang": 35, "jizhou": 55, "geju": 10, "yuxi": 0}
+    assert season.revealed == {"huangjin", "yingru", "nanyang", "jizhou", "geju"}
+
+
+def test_old_world_without_fronts_reads_start_values_and_pushes(on):
+    """Review Focus 1：beta 那一季在內容改版前開的，存檔只有黃巾聲勢與玉璽線索、revealed 也沒有三條戰線。
+    開關打開後：戰線讀起始值、黃巾聲勢讀加權值；推戰線不會被當成還沒浮現的隱藏線吞掉，也不冒出「浮上檯面」；
+    背景推進一下，存下來的黃巾聲勢（條件讀的那一份）就對了。"""
+    game = _game(on)
+    s = game.state
+    s.world.trends = {"huangjin": 25, "yuxi": 0}
+    s.world.revealed = {"huangjin"}
+    assert [rules.trend_value(s, on, t) for t in (*FRONTS, "geju", "huangjin")] == [40, 35, 55, 10, 45]
+    assert rules.change_trend(s, on, "yingru", -2) == ["（潁川汝南 -2）"]
+    assert (s.world.trends["yingru"], s.world.trends["huangjin"]) == (38, 44)  # 13.3＋8.75＋22＝44.05→44
+    s.world.trends = {"huangjin": 25, "yuxi": 0}  # 回到沒推過的舊存檔
+    world.advance_world_state(s.world, on, 1, random.Random(0))
+    assert s.world.trends["huangjin"] == 45
+    assert rules.check_condition(Condition(trend_min={"huangjin": 45}), s)
+    assert game.push_trend("nanyang", -2, source="train") == ["（南陽 -2）"]  # T3 的推動也不把它當沒浮現的線
+
+
+def test_front_key_at_luoyang_pushes_nothing_when_on(on):
+    """Review Focus 2：洛陽沒有戰況，推「所在戰線」的效果什麼都不推、不丟例外；到了長社就推潁川。"""
+    game = _game(on)
+    s = game.state
+    s.player.location = "luoyang_palace"
+    before = dict(s.world.trends)
+    assert rules.apply_effect(Effect(trend={"front": 2}), s, on, game.world) == []
+    assert s.world.trends == before
+    s.player.location = "changshe"
+    assert rules.apply_effect(Effect(trend={"front": 2}), s, on, game.world) == ["（潁川汝南 +2）"]
+    assert (s.world.trends["yingru"], s.world.trends["huangjin"]) == (42, 45)  # 14.7＋8.75＋22＝45.45→45
+
+
+def test_geju_rises_with_chaos_and_falls_when_calm(on):
+    game = _game(on)
+    s = game.state
+    _set_fronts(s, 40, 35, 80)  # 潁川、南陽在亂局（35 也算，含兩端），冀州穩
+    for _ in range(24):  # 一曆日
+        rules.geju_tick(s, on, 1)
+    assert s.world.trends["geju"] == 12
+    _set_fronts(s, 20, 34, 66)  # 三條都穩
+    for _ in range(24):
+        rules.geju_tick(s, on, 1)
+    assert s.world.trends["geju"] == 11
+    for _ in range(12):  # 半曆日：不足一點，先累積
+        rules.geju_tick(s, on, 1)
+    assert s.world.trends["geju"] == 11
+    assert s.world.trend_accum["geju"] == pytest.approx(-0.5)
+
+
+def test_geju_does_not_move_while_the_switch_is_off(real):
+    real.scenario.sim_players = []
+    game = _game(real)
+    for _ in range(48):
+        rules.geju_tick(game.state, real, 1)
+    world.advance_world_state(game.state.world, real, 24 * 3600, random.Random(0))
+    assert game.state.world.trends == {"huangjin": 25, "yuxi": 0}
+    assert game.state.world.trend_accum == {}
+
+
+def test_the_season_clock_runs_the_geju_tick_once_per_calendar_hour(on):
+    """割據掛在 T2 的 season_hour：季長 14 天時一個真實小時是 6 個曆時，所以真實 24 小時＝6 曆日，三條都在亂局
+    就是 +18。每小時那一步若也掛了，會多出 +3，這裡看得出來。"""
+    on.scenario.sim_players, on.timetable = [], []  # 不讓虛擬玩家與時刻表動戰線，只看割據
+    game = _game(on)
+    s = game.state
+    _set_fronts(s, 50, 50, 50)
+    world.advance_world_state(s.world, on, 24 * 3600, random.Random(0))
+    assert s.world.trends["geju"] == 28
+
+
+def test_geju_waits_for_a_season_stamped_with_the_switch_on(real):
+    """開關關著時開的季（T2 的章是「關」），之後把開關打開：季的事不跑，割據也不動。"""
+    real.scenario.sim_players = []
+    game = _game(real)
+    real.config.season_one = True
+    world.advance_world_state(game.state.world, real, 24 * 3600, random.Random(0))
+    assert "geju" not in game.state.world.trends
+
+
+def test_map_tints_each_region_by_its_front(on):
+    """Review Focus 4：開關開著時每個大區照自己的戰線標值、上色；幽州跟著冀州，洛陽不上色。"""
+    game = _game(on)
+    s = game.state
+    _set_fronts(s, 30, 70, 90)
+    regions = {r.id: atlas.region_trends(s, on, r) for r in on.map.regions}
+    assert regions == {
+        "youzhou": [("冀州", 90)], "jizhou": [("冀州", 90)], "luoyang": [],
+        "yingru": [("潁川汝南", 30)], "nanyang": [("南陽", 70)],
+    }
+    svg = mapview.render_map(s, on, "situation")
+    fills = {r.id: r.fill for r in on.map.regions}
+    for region_id, value in (("yingru", 30), ("nanyang", 70), ("jizhou", 90), ("youzhou", 90)):
+        assert mapview._tint(fills[region_id], value) in svg, region_id
+    assert "黃巾聲勢" not in svg

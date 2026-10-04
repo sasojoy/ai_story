@@ -8,7 +8,10 @@ from collections.abc import Callable
 from . import calendar, flavor, leaderboard, timetable
 from .models import Act, BattleDef, Content, Ending, SimPlayer, SimRumor, Storyline
 from .ollama_client import OllamaClient
-from .rules import add_chronicle, add_rumor, add_world_flags, change_trend, check_condition, resolve_trends
+from .rules import (
+    add_chronicle, add_rumor, add_world_flags, change_trend, check_condition, geju_tick, recompute_trends,
+    resolve_trends, trend_value,
+)
 from .state import GameState, PlayerState, WorldState
 from .world_state import WorldStateStore, season_length_days
 
@@ -41,7 +44,7 @@ def check_thresholds(
     for th in content.scenario.thresholds:
         if th.id in w.fired_thresholds:
             continue
-        value = w.trends.get(th.trend, 0)
+        value = trend_value(state, content, th.trend)  # 開關開著時黃巾聲勢是三條戰線的加權
         if not (value >= th.value if th.op == ">=" else value <= th.value):
             continue
         msgs += _fire(
@@ -238,11 +241,10 @@ def season_events(state: GameState, content: Content, rng: random.Random) -> lis
 def season_hour(state: GameState, content: Content, rng: random.Random) -> list[str]:
     """第一季「季的事」，每跨過一個曆時跑一次（advance_world_state 照曆時切段呼叫；開關關著或舊季不跑）：
     先跑每曆時才有的事，再跑 season_events（週初掛鉤、到了的大事）。
-    每曆時的 tick 一律放在 season_events 之前：T1 的 geju_tick、T4 的 figures.tick 加在下面標出的位置——
-    開季那一刻只跑 season_events（settle_season_start），不跑這一段，才不會多算一次割據變動。
-    目前還沒有每曆時才有的事。"""
+    每曆時的 tick 一律放在 season_events 之前：T1 的 geju_tick 在這裡，T4 的 figures.tick 之後也加在它旁邊——
+    開季那一刻只跑 season_events（settle_season_start），不跑這一段，才不會多算一次割據變動。"""
     msgs: list[str] = []
-    # ← 每曆時的 tick 放這裡（在 season_events 之前）
+    geju_tick(state, content, 1)  # T1：豪強割據每曆時一次，在週初掛鉤與大事之前
     return msgs + season_events(state, content, rng)
 
 
@@ -272,6 +274,7 @@ def advance_world_state(
     被動的現實時間追趕（world_state.py::catch_up_season）則透過下面的 advance_season
     包在 mutate_season 裡再呼叫。"""
     vehicle = _season_vehicle(content, season)
+    recompute_trends(season, content)  # 開關開著時，內容改版前開的一季也照三條戰線重算存下來的黃巾聲勢（條件讀它）
     msgs: list[str] = []
     remaining = seconds
     # 第一季（開關開著、這一季也蓋了章）：另外在每個曆時的交界停一下跑季的事；跨過好幾件大事也逐件照時間來

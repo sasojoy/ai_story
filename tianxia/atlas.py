@@ -13,7 +13,7 @@ from dataclasses import dataclass
 
 from .calendar import stamp_text
 from .models import Content, Location, MapRegion, SimPlayer, TravelMode
-from .rules import resolve_trend, resolve_trends, trend_value
+from .rules import is_revealed, resolve_trend, resolve_trends, trend_value
 from .state import GameState, Rumor
 from .world import current_act, sim_active
 
@@ -167,7 +167,7 @@ def region_trends(state: GameState, content: Content, region: MapRegion) -> list
     shown: list[str] = []
     for key in region.trends:
         trend_id = resolve_trend(content, state.world, key)
-        if trend_id is not None and trend_id not in shown and trend_id in state.world.revealed:
+        if trend_id is not None and trend_id not in shown and is_revealed(state.world, content, trend_id):
             shown.append(trend_id)
     return [(names[trend_id], trend_value(state, content, trend_id)) for trend_id in shown]
 

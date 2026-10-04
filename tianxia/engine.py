@@ -25,8 +25,8 @@ from .models import (
 )
 from .ollama_client import OllamaClient
 from .rules import (
-    apply_effect, change_trend, check_who, current_day, fill_marks, free_text_rate, pushable, rate_words, resolve_goals,
-    resolve_trend, resolve_trends, roll_check, trend_name, trend_shown, trend_value, world_trend_value,
+    apply_effect, change_trend, check_who, current_day, fill_marks, free_text_rate, is_revealed, pushable, rate_words,
+    resolve_goals, resolve_trend, resolve_trends, roll_check, trend_name, trend_shown, trend_value, world_trend_value,
 )
 from .sqlite_world import open_world
 from .state import PLAYER, BattleRecord, GameState, JournalEntry, Journey, Rumor, WorldState, new_game_state
@@ -1713,7 +1713,7 @@ class Game:
         w, p = s.world, s.player
         if not calendar.season_one_on(w, c):
             return change_trend(s, c, trend_id, delta)
-        if delta == 0 or (delta < 0 and trend_id not in w.revealed):
+        if delta == 0 or (delta < 0 and not is_revealed(w, c, trend_id)):  # 開季時才補蓋章的季沒記到新加的公開線，照樣算浮現
             return []  # change_trend 也不會動的推動：不能拿來刷貢獻、也不算活躍
         cfg = c.config
         now = w.time
@@ -2638,7 +2638,7 @@ class Game:
         w = self.state.world
         parts = []
         for trend in self.content.scenario.trends:
-            if trend.id not in w.revealed or not trend_shown(self.content, w, trend.id):
+            if not trend_shown(self.content, w, trend.id) or not is_revealed(w, self.content, trend.id):
                 continue
             value = trend_value(self.state, self.content, trend.id)
             bar = "█" * (value // 5) + "░" * (20 - value // 5)
