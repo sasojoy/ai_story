@@ -43,6 +43,7 @@ HOUR = 3600
 DAY = 86400
 BULLETIN_MAX = 3  # 江湖頁最上面的公告卡最多放這一週的幾則大事（計畫 T2）
 AUDIENCE_HALL_FIGURES = 2  # 一個地點有幾位以上的大勢人物，交友就不直接找人、改按「求見」指名（企劃者 2026-10-03 決定）
+OFF_FRONT_NOTE = "沒在戰線上領兵，不受挑戰"  # 戰線空著的人物（董卓、趙弘、重挫退下的人）：挑戰按鈕寫這一句（PM 2026-10-05 定）
 SNUB_NOTE = "剛吃了敗仗，閉門不見"  # 挑戰本人打贏之後，他對打贏的人關上門（軍令文件 4.5）：求見、交友、挑戰的按鈕寫這一句
 # 路上小事（路上設計第四節）：road:<id> → (名稱, 這一段做過之後寫的「這段路已經……」)；按鈕上的補充見 _road_task_options
 ROAD_TASKS: dict[str, tuple[str, str]] = {
@@ -1903,7 +1904,8 @@ class Game:
 
     def _challenge_options(self, odds: bool) -> list[Option]:
         """挑戰本人：第一季的規則開著、自己有陣營時，這裡每一位在場的敵方大勢人物一個選項（體力照遊歷；odds 時寫勝算，
-        難度跟著聲威走）。剛被你打敗、閉門不見的那幾位按不下去、寫明原因。散人沒有；同陣營的人不打。"""
+        難度跟著聲威走）。剛被你打敗、閉門不見的那幾位，以及戰線空著的人物（人物表標了 challenge_off_front 的何進除外），
+        按不下去、寫明原因；求見、交友照常。散人沒有；同陣營的人不打。"""
         s, c = self.state, self.content
         p = s.player
         if p.faction is None or not season_one(c, s.world):
@@ -1915,7 +1917,9 @@ class Game:
             if fig.faction == p.faction:
                 continue
             option_id = f"act:challenge:{fid}"
-            if self._snubbed(fid):
+            if figures.state_of(s, c, fid).front is None and not fig.challenge_off_front:
+                opts.append(Option(id=option_id, label=f"挑戰{fig.name}（{OFF_FRONT_NOTE}）", enabled=False))
+            elif self._snubbed(fid):
                 opts.append(Option(id=option_id, label=f"挑戰{fig.name}（{SNUB_NOTE}）", enabled=False))
             else:
                 opts.append(self._cost_option(option_id, f"挑戰{fig.name}", cost, note=self.challenge_odds(fid) if odds else ""))
