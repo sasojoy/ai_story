@@ -59,7 +59,7 @@
     kind: "武學",
     artOpen: null, // 修練頁功法庫裡點開的那一門（id）；切分頁、改練成功之後收起
     craftSel: [],
-    wheelSel: null, // 江湖輪盤點開的那一格（explore／train／rest／social／move）
+    wheelSel: null, // 江湖頁行動列展開的那一格（目前只有 move）
     craftLine: "",
     map: null,
     layer: "situation",
@@ -282,49 +282,11 @@
     return [t.innerHTML, chips ? chips.outerHTML : ""];
   }
 
-  // ── 輪盤（江湖頁的行動、煉製頁的素材，企劃者 2026-10-04 定稿）──
-  // 四格固定不動，只有外圈的八卦線與中心的圖案在轉（玩家要按得到）。每次重畫都是新的 SVG，
-  // 所以轉動用負的 animation-delay 接上時鐘，重畫不會讓圖案跳回原位。
-  const W_R0 = 64, W_R1 = 150, W_GAP = 2.2;
-  const TRIGRAMS = [[1, 1, 1], [0, 1, 1], [1, 0, 1], [1, 1, 0], [0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]]; // 乾巽離兌坤震坎艮，由內往外
+  // ── 太極火爐（煉製頁）──
+  // 每次重畫都是新的 SVG，所以轉動用負的 animation-delay 接上時鐘，重畫不會讓圖案跳回原位
   const wpt = (r, deg) => { const a = (deg - 90) * Math.PI / 180; return [+(r * Math.cos(a)).toFixed(2), +(r * Math.sin(a)).toFixed(2)]; };
   const spinAt = (secs) => `animation-delay:-${((performance.now() / 1000) % secs).toFixed(2)}s`;
-  function wheelArc(a0, a1) {
-    const [x0, y0] = wpt(W_R1, a0), [x1, y1] = wpt(W_R1, a1), [x2, y2] = wpt(W_R0, a1), [x3, y3] = wpt(W_R0, a0);
-    return `M${x0},${y0} A${W_R1},${W_R1} 0 0 1 ${x1},${y1} L${x2},${y2} A${W_R0},${W_R0} 0 0 0 ${x3},${y3} Z`;
-  }
-  function wheelRing() {
-    const ticks = Array.from({ length: 72 }, (_, k) => {
-      const [x0, y0] = wpt(165, k * 5), [x1, y1] = wpt(k % 9 ? 163 : 161, k * 5);
-      return `<line x1="${x0}" y1="${y0}" x2="${x1}" y2="${y1}" class="w-tick"/>`;
-    }).join("");
-    const bars = TRIGRAMS.map((lines, i) => `<g transform="rotate(${i * 45 + 22.5})">${lines.map((yang, j) => {
-      const y = -154 - j * 3.2;
-      return yang ? `<line x1="-8" y1="${y}" x2="8" y2="${y}"/>` : `<line x1="-8" y1="${y}" x2="-1.8" y2="${y}"/><line x1="1.8" y1="${y}" x2="8" y2="${y}"/>`;
-    }).join("")}</g>`).join("");
-    return `<g class="w-ring" style="${spinAt(60)}">${ticks}<circle r="152" class="w-ring-line"/><g class="w-gua">${bars}</g></g>`;
-  }
-  // sectors：四格，由上順時針；每格 { label, sub, tone, attrs, on, off }。hub：中心那一塊的 SVG（含自己的 data-act）
-  function wheelSvg(name, sectors, hub) {
-    const faces = sectors.map((s, i) => {
-      const mid = i * 90;
-      const [lx, ly] = wpt((W_R0 + W_R1) / 2 + 6, mid);
-      const [dx, dy] = wpt(9, mid);
-      const big = s.label.length > 1 ? 24 : 34;
-      return `<g class="w-sector${s.on ? " on" : ""}${s.off ? " off" : ""}" style="--dx:${dx}px;--dy:${dy}px;--glow:var(--${s.tone})" ${s.attrs} role="button" aria-label="${esc(s.label)}${s.sub ? `，${esc(s.sub)}` : ""}">
-        <path d="${wheelArc(mid - 45 + W_GAP, mid + 45 - W_GAP)}" fill="url(#wg-${s.tone})" class="w-face"/>
-        <text x="${lx}" y="${ly - 4}" class="w-lab" font-size="${big}">${esc(s.label)}</text>
-        ${s.sub ? `<text x="${lx}" y="${ly + (big === 24 ? 20 : 26)}" class="w-sub">${esc(s.sub)}</text>` : ""}
-      </g>`;
-    }).join("");
-    const grads = ["gang", "kuai", "rou", "man"].map((t) => `<radialGradient id="wg-${t}" cx="0" cy="0" r="${W_R1}" gradientUnits="userSpaceOnUse">
-      <stop offset="${(W_R0 / W_R1).toFixed(2)}" style="stop-color:var(--${t});stop-opacity:.55"/><stop offset="1" style="stop-color:var(--${t})"/></radialGradient>`).join("");
-    return `<div class="wheel-wrap"><svg class="wheel" viewBox="-170 -170 340 340" role="group" aria-label="${esc(name)}">
-      <defs>${grads}<radialGradient id="wg-disk"><stop offset="0" style="stop-color:var(--disk-2)"/><stop offset="1" style="stop-color:var(--disk)"/></radialGradient></defs>
-      <circle r="166" fill="url(#wg-disk)"/><circle r="163" class="w-rim"/>
-      ${wheelRing()}${faces}${hub}</svg></div>`;
-  }
-  // 煉製頁的中心：太極火爐（企劃者 2026-10-04）。太極在爐裡慢慢轉，外圈是一圈火舌；左右兩個是放素材的位置，
+  // 煉製頁的太極火爐（企劃者 2026-10-04）。太極在爐裡慢慢轉，外圈是一圈火舌；左右兩個是放素材的位置，
   // 點有東西的那一格拿出來，點爐身開爐。開爐後等結果的這段時間整座爐子晃動（見 forge()）
   function furnaceHub(slots, ready) {
     const r = 54;
@@ -358,67 +320,49 @@
       <defs><radialGradient id="wg-disk"><stop offset="0" style="stop-color:var(--disk-2)"/><stop offset="1" style="stop-color:var(--disk)"/></radialGradient></defs>
       <circle r="72" fill="url(#wg-disk)"/><circle r="70" class="w-rim"/>${furnaceHub(slots, ready)}</svg></div>`;
   }
-  // 江湖頁的中心：羅盤就是「移動」。刻度盤慢慢轉、指針輕輕擺
-  function compassHub(on, off) {
-    const r = 44;
-    const ticks = Array.from({ length: 24 }, (_, k) => {
-      const [x0, y0] = wpt(r - 1, k * 15), [x1, y1] = wpt(r - (k % 6 ? 4 : 7), k * 15);
-      return `<line x1="${x0}" y1="${y0}" x2="${x1}" y2="${y1}" class="${k % 6 ? "w-tick-s" : "w-tick-b"}"/>`;
-    }).join("");
-    const dirs = ["北", "東", "南", "西"].map((c, k) => { const [x, y] = wpt(r - 15, k * 90); return `<text x="${x}" y="${y}" class="w-dir">${c}</text>`; }).join("");
-    return `<g class="w-hub${on ? " on" : ""}${off ? " off" : ""}" data-act="wheel" data-key="move" role="button" aria-label="移動">
-      <circle r="${r + 5}" class="w-hub-rim"/><circle r="${r}" class="w-yang"/><circle r="${r - 7}" class="w-dial-line"/>
-      <g class="w-spin" style="${spinAt(28)}">${ticks}</g>${dirs}
-      <g class="w-needle"><path d="M0,${-(r - 20)} L5,0 L-5,0 Z" class="w-needle-n"/><path d="M0,${r - 20} L5,0 L-5,0 Z" class="w-yin"/><circle r="3" class="w-pin"/></g>
-      <text y="${r + 12}" class="w-hub-lab">移動</text></g>`;
-  }
+
+  // ── 江湖頁的行動列（企劃者 2026-10-04：輪盤太大，改成一排五顆，樣式是她給的「水墨氣勁」）──
   // 選項標籤「探索（體力 5・…）」拆成名字與括號裡的說明
   const optParts = (o) => { const m = /^(.*?)（(.*)）$/.exec(o.label); return m ? [m[1], m[2]] : [o.label, ""]; };
-  // 江湖頁的四格（由上順時針）：探索、遊歷、打坐、交友；每格對到選單上哪一顆、沒有時寫為什麼
-  const ACT_SECTORS = [
-    { key: "explore", tone: "gang", ids: ["act:explore"], name: "探索", none: "現在不能探索" },
-    { key: "train", tone: "kuai", ids: ["act:train"], name: "遊歷", none: "這裡沒有對手" },
-    { key: "rest", tone: "man", ids: ["act:rest"], name: "打坐", none: "現在不能打坐" },
-    { key: "social", tone: "rou", ids: ["act:socialize", "act:call"], name: "交友", none: "這裡沒有人可以結交" },
+  // 前四顆對到選單上哪一顆、沒有時寫什麼；第五顆是移動（點了在下面展開走法與目的地）
+  const ACT_CELLS = [
+    { key: "explore", ids: ["act:explore"], name: "探索", none: "不能探索", icon: '<circle cx="12" cy="12" r="9"/><path d="M12 3v3m0 12v3M3 12h3m12 0h3M15 9l-4 2-2 4 4-2z"/>' },
+    { key: "train", ids: ["act:train"], name: "遊歷", none: "沒有對手", icon: '<path d="M14.5 4h-5L7 7h10zM12 7v13M8 12h8"/>' },
+    { key: "rest", ids: ["act:rest"], name: "打坐", none: "不能打坐", icon: '<circle cx="12" cy="7" r="2.5"/><path d="M8 20c0-3 3-4 4-4s4 1 4 4M5 15l3-2m11 2l-3-2"/>' },
+    { key: "social", ids: ["act:socialize", "act:call"], name: "交友", none: "沒有人", icon: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>' },
   ];
-  const SHORT_SUB = { "act:rest": "回體力", "act:call": "挑人求見" };
-  // 選單上有「打坐」就是平常閒著的時候：用輪盤。事件、對話、路上、決戰的選項每次都不一樣，照舊排成一列按鈕
+  const MOVE_ICON = '<path d="M13 3l-3 7h5l-4 11 8-10h-5z"/>';
+  const SHORT_SUB = { "act:rest": "回體力", "act:call": "求見" };
+  // 選單上有「打坐」就是平常閒著的時候：用行動列。事件、對話、路上、決戰的選項每次都不一樣，照舊排成一列按鈕
   const idleMenu = (m) => m.options.some((o) => o.id === "act:rest");
+  const inkCell = (key, name, sub, icon, attrs, cls) => `<button class="act-ink${cls}" data-key="${key}" ${attrs}>
+      <svg class="ink-icon" viewBox="0 0 24 24" aria-hidden="true">${icon}</svg><b>${esc(name)}</b><small>${esc(sub)}</small></button>`;
 
-  // now：手機上「剛剛」那一則排在輪盤正下方（見 pageJianghu）；寬螢幕傳空字串，照舊排在場景上面
-  function actionWheel(m, now = "") {
+  function actionBar(m) {
     const byId = Object.fromEntries(m.options.map((o) => [o.id, o]));
     const used = new Set();
-    const sectors = ACT_SECTORS.map((d) => {
+    const cells = ACT_CELLS.map((d) => {
       const o = d.ids.map((id) => byId[id]).find(Boolean);
-      if (o) used.add(o.id);
-      const [name, detail] = o ? optParts(o) : [d.name, ""];
-      const sub = o ? (SHORT_SUB[o.id] || detail.replace(/^體力 (\d+).*$/, "體力 $1")) : "";
-      return { ...d, opt: o, name, detail, label: name, sub, on: S.wheelSel === d.key, off: !o || !o.enabled, attrs: `data-act="wheel" data-key="${d.key}"` };
+      if (!o) return inkCell(d.key, d.name, d.none, d.icon, "disabled", " off");
+      used.add(o.id);
+      const [name, detail] = optParts(o);
+      const sub = o.enabled ? (SHORT_SUB[o.id] || detail.replace(/^體力 (\d+).*$/, "體力 $1")) : "體力不夠";
+      return inkCell(d.key, name, sub, d.icon, o.enabled ? `data-act="choose" data-id="${esc(o.id)}"` : "disabled", o.enabled ? "" : " off");
     });
     const moves = m.options.filter((o) => followsMode(o.id));
     moves.forEach((o) => used.add(o.id));
-    const extras = m.options.filter((o) => !used.has(o.id));
-    const pick = sectors.find((s) => s.key === S.wheelSel);
-    let card;
-    if (S.wheelSel === "move") {
-      card = moves.length ? `<div class="seg move-mode" role="group" aria-label="走法">${MOVE_MODES.map((x) => `
+    const open = S.wheelSel === "move";
+    cells.push(inkCell("move", "移動", moves.length ? `${moves.length} 條路` : "沒有路", MOVE_ICON,
+      moves.length ? `data-act="wheel" data-key="move" aria-expanded="${open}"` : "disabled", (open ? " on" : "") + (moves.length ? "" : " off")));
+    const moveCard = !open ? "" : `<div class="card act-move"><div class="seg move-mode" role="group" aria-label="走法">${MOVE_MODES.map((x) => `
           <button class="${S.moveMode === x.id ? "on" : ""}" data-act="move-mode" data-mode="${x.id}" aria-pressed="${S.moveMode === x.id}">${x.name}</button>`).join("")}</div>
         <div class="options">${moves.map((o) => `<button class="btn go" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}>
-          <span class="k">→</span><span>${esc(o.label)}</span></button>`).join("")}</div>`
-        : '<p class="muted">這裡沒有路可以走。</p>';
-      card = `<h3 class="w-title">移動 <small>選一個目的地</small></h3>${card}`;
-    } else if (pick) {
-      card = `<h3 class="w-title">${esc(pick.name)}${pick.detail ? ` <small>${esc(pick.detail)}</small>` : ""}</h3>
-        ${pick.opt ? `<div class="options"><button class="btn primary" data-act="choose" data-id="${esc(pick.opt.id)}" ${pick.opt.enabled ? "" : "disabled"}><span>${esc(pick.opt.enabled ? pick.name : "體力不夠")}</span></button></div>`
-          : `<p class="muted">${esc(pick.none)}。</p>`}`;
-    } else if (!now) {
-      card = '<p class="muted">點輪盤上的一格看要花多少體力，再按一次確定；中間的羅盤是移動。</p>';
-    }
-    return `${wheelSvg("行動", sectors, compassHub(S.wheelSel === "move", !moves.length))}
-      ${card ? `<div class="card w-card">${card}</div>` : ""}${now}
-      ${extras.length ? `<div class="label">此地</div><div class="options seals">${extras.map((o) => `
-        <button class="btn seal" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}><span>${esc(o.label)}</span></button>`).join("")}</div>` : ""}`;
+          <span class="k">→</span><span>${esc(o.label)}</span></button>`).join("")}</div></div>`;
+    // 其他只在此地才有的行動（招募、投靠、多出來的求見）收在摺疊裡，不佔行動列的高度
+    const extras = m.options.filter((o) => !used.has(o.id));
+    const here = extras.length ? `<details class="fold here"><summary>此地還能做 ${extras.length} 件事</summary><div class="fold-body options">${extras.map((o) => `
+        <button class="btn" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}><span>${esc(o.label)}</span></button>`).join("")}</div></details>` : "";
+    return `<div class="act-bar" role="group" aria-label="行動">${cells.join("")}</div>${moveCard}${here}`;
   }
 
   function pageJianghu() {
@@ -446,8 +390,7 @@
           <button class="${S.moveMode === x.id ? "on" : ""}" data-act="move-mode" data-mode="${x.id}" aria-pressed="${S.moveMode === x.id}">${x.name}</button>`).join("")}
         </div>`
       : "";
-    const wheel = idleMenu(m);
-    const menu = wheel ? actionWheel(m) : `<div class="options">${m.options.map((o, i) => o.id === FREE_TEXT_OPTION && S.answering && o.enabled ? `
+    const menu = idleMenu(m) ? actionBar(m) : `<div class="options">${m.options.map((o, i) => o.id === FREE_TEXT_OPTION && S.answering && o.enabled ? `
         <form class="free answer" id="answer-form"><input class="input" name="text" maxlength="20" placeholder="${esc(o.label)}（20字內）" aria-label="${esc(o.label)}"><button class="btn primary small" type="submit">說出口</button></form>` : `${i === firstMove ? modes : ""}
         <button class="btn ${followsMode(o.id) ? "go" : ""}" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}>
           <span class="k">${o.id.startsWith("move:") ? "→" : o.id.startsWith("road:back") ? "↩" : i + 1}</span><span>${esc(o.label)}</span>
@@ -458,11 +401,7 @@
       <div class="mini" data-act="tab" data-tab="map" role="button" aria-label="展開輿圖">${m.minimap}</div>
       <button class="linkish" data-act="news" data-news="journal">看江湖紀錄 ›</button>`;
     const quest = `<details class="fold quest"><summary>📜 主線與目標</summary><div class="fold-body">${m.quest}</div></details>`;
-    // 手機上平常有輪盤時，輪盤排在「剛剛」與場景之前（W17／QA）：375×812 的第一屏只有 668px，「剛剛」和場景加起來把輪盤擠到分頁列下面，
-    // 打坐（體力見底時唯一的出路）要往下捲才按得到，而且位置隨上一個結果的長短忽上忽下。排在主線正下方，位置固定、確認卡也在第一屏。
-    // 事件、對話等選項是在回答場景文字，一律照舊排在場景後面
-    // 按完一格之後（choose() 會收起點開的那一格），結果就排在輪盤正下方、確認卡原本的位置：不用往下捲就看得到做了什麼（企劃者 2026-10-04）
-    if (wheel && PHONE && PHONE.matches) return `${quest}${actionWheel(m, now)}${scene}${free}${tail}`;
+    // 劇情文字在上、行動在下（企劃者 2026-10-04）。行動列只有一排，375×812 上「剛剛」、場景與整排行動都在第一屏
     return `${quest}${now}${scene}${free}${menu}${tail}`;
   }
 
@@ -958,7 +897,7 @@
       if (talking) btn.lastElementChild.textContent = "對方沉吟中…";
       const r = await api("/api/choose", { id });
       S.answering = false;
-      S.wheelSel = null; // 輪盤上按的：收起確認卡，讓結果排到輪盤正下方
+      S.wheelSel = null; // 收起展開的移動
       applyMain(r.main);
       window.scrollTo({ top: 0, behavior: "smooth" });
       // 決戰選項（加入、趕到、出招）伺服器會回一句 message；一般選項的話在江湖紀錄裡，不回
@@ -1079,10 +1018,28 @@
 
   // ── 事件 ──
   // 輿圖上選地點不走 click：pointer capture 之後 click 的目標會變，選取只在 gripUp 判斷「點了一下」時做
+  // 行動列點下去的水墨漣漪：記下位置，重畫之後（例如展開移動）畫在新的那一顆上
+  function inkRipple(key, x, y) {
+    const cell = document.querySelector(`.act-ink[data-key="${key}"]`);
+    if (!cell) return;
+    const r = cell.getBoundingClientRect();
+    const drop = document.createElement("span");
+    drop.className = "ink-drop";
+    drop.style.left = `${x - r.left}px`;
+    drop.style.top = `${y - r.top}px`;
+    cell.appendChild(drop);
+    setTimeout(() => drop.remove(), 650);
+  }
+
   document.addEventListener("click", async (ev) => {
     const el = ev.target.closest("[data-act]");
     if (!el) return;
     const act = el.dataset.act;
+    if (el.classList.contains("act-ink")) {
+      const [key, x, y] = [el.dataset.key, ev.clientX, ev.clientY];
+      if (act === "wheel") requestAnimationFrame(() => inkRipple(key, x, y)); // 展開移動會重畫整頁
+      else inkRipple(key, x, y);
+    }
     try {
       switch (act) {
         case "gate": S.gateMode = el.dataset.mode; renderGate(); break;
