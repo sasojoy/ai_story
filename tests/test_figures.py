@@ -110,6 +110,7 @@ def test_figure_settings_defaults():
 @pytest.mark.parametrize(("edit", "message"), [
     (lambda c: setattr(c.figures["bocai"], "character", "ghost"), "ghost"),
     (lambda c: setattr(c.figures["zhujun"], "character", "huangfusong"), "huangfusong"),  # 一個對話人物只能是一位
+    (lambda c: setattr(c.figures["bocai"], "character", "caocao"), "bocai：對話人物要跟人物 id 一樣"),  # 伏筆用人物 id 找他的狀態
     (lambda c: setattr(c.figures["bocai"], "faction", "nobody"), "nobody"),
     (lambda c: setattr(c.figures["bocai"], "front", "youzhou"), "youzhou"),  # 戰線 id，不是大區
     (lambda c: setattr(c.figures["bocai"], "location", "nowhere"), "nowhere"),
@@ -185,6 +186,47 @@ def test_state_of_reads_the_table_for_a_figure_the_season_never_seeded(on):
     assert figures.difficulty(s, on, "huangfusong") == 128  # 150 × (0.5 + 0.5 × 0.70) = 127.5 → 128
     assert figures.present_at(s, on, "huangjin_camp") == ["bocai"]
     assert s.world.figures == {}
+
+
+def test_t2_minimal_entry_without_a_location_is_read_from_the_table(on):
+    """T4 之前蓋「開」的章的季，人物表上被時刻表碰過的人存的是 T2 最小版的預設值（沒有所在、戰線是空的）：
+    讀的時候用人物表補上所在與戰線（聲威、狀態照存檔），讀了不寫回存檔；要改的時候（_ensure）才把補好的寫進存檔。
+    不補的話張曼成不在任何地點、挑戰不了、不推南陽、退場也沒人接。"""
+    s = _season(on)
+    minimal = FigureState(prestige=45, status="active", front=None, location="")
+    s.world.figures["zhangmancheng"] = minimal.model_copy()
+    repaired = FigureState(prestige=45, status="active", front="nanyang", location="nanyang_huangjin_camp")
+    assert figures.state_of(s, on, "zhangmancheng") == repaired
+    assert s.world.figures["zhangmancheng"] == minimal  # 讀不改存檔
+    assert "zhangmancheng" in figures.present_at(s, on, "nanyang_huangjin_camp")
+    assert figures.commander(s, on, "nanyang", "huang") == "zhangmancheng"
+    assert figures.push_goal(s, on, "zhangmancheng") == 1
+    assert figures._ensure(s, on, "zhangmancheng") == repaired
+    assert s.world.figures["zhangmancheng"] == repaired  # 要改之前才寫回
+
+
+def test_t2_minimal_entry_that_is_not_active_only_gets_its_location(on):
+    """補戰線只補在場的人：T2 最小版裡下獄的人所在補上、戰線照存檔（沒有）；表上本來就沒有戰線的人（趙弘）補完還是沒有。"""
+    s = _season(on)
+    s.world.figures["luzhi"] = FigureState(prestige=70, status="jailed", front=None, location="")
+    s.world.figures["zhaohong"] = FigureState(prestige=50, status="active", front=None, location="")
+    assert figures.state_of(s, on, "luzhi") == FigureState(prestige=70, status="jailed", front=None, location="luzhi_camp")
+    assert figures.state_of(s, on, "zhaohong") == FigureState(
+        prestige=50, status="active", front=None, location="nanyang_huangjin_camp",
+    )
+
+
+def test_entry_with_a_location_is_read_as_stored(on):
+    """已經有所在的存檔照存檔：重挫退出戰線的皇甫嵩（所在盧植營、戰線是空的）不會被人物表拉回潁川；不在人物表的 id（夾具）
+    也照存檔，哪怕所在是空的。"""
+    s = _season(on)
+    left = FigureState(prestige=40, status="active", front=None, location="luzhi_camp")
+    s.world.figures["huangfusong"] = left.model_copy()
+    s.world.figures["fixture"] = FigureState(prestige=33, status="active", front=None, location="")
+    assert figures.state_of(s, on, "huangfusong") == left
+    assert figures._ensure(s, on, "huangfusong") == left and s.world.figures["huangfusong"] == left
+    assert figures.state_of(s, on, "fixture") == FigureState(prestige=33, status="active", front=None, location="")
+    assert figures.commander(s, on, "yingru", "guan") == "zhujun"  # 皇甫嵩已經不在潁川
 
 
 def test_only_if_reads_the_table_for_an_unseeded_figure(on):
@@ -380,6 +422,20 @@ def test_prestige_zero_retires_and_successor_takes_the_front(on):
     assert figures.defeat(s, on, "bocai", 5) == []  # 退場的人不再扣、不再發公告
 
 
+def test_successor_takes_over_the_post_of_the_one_he_replaces(on):
+    """盧植被打到聲威歸零：董卓接手冀州，而且站到盧植原本的所在（盧植營），不是他自己開季時的孟津渡；
+    天下大事傳聞寫「董卓接手冀州的戰事。」。盧植退場、聲威歸零。"""
+    s = _season(on)
+    assert s.world.figures["dongzhuo"] == FigureState(prestige=60, status="active", front=None, location="mengjin_ford")
+    s.world.figures["luzhi"].prestige = 3
+    lines = figures.defeat(s, on, "luzhi", 5)
+    assert lines[-1] == "董卓接手冀州的戰事。"
+    assert s.world.figures["luzhi"].status == "retired" and s.world.figures["luzhi"].prestige == 0
+    assert s.world.figures["dongzhuo"] == FigureState(prestige=60, status="active", front="jizhou", location="luzhi_camp")
+    assert "董卓接手冀州的戰事。" in [r.text for r in s.world.rumors][-1]
+    assert figures.present_at(s, on, "luzhi_camp") == ["dongzhuo"] and figures.present_at(s, on, "mengjin_ford") == []
+
+
 def test_destiny_figure_is_crippled_not_retired(on):
     """孫堅是天命人物：歸零是重創，退出本季；他沒有接位的人，南陽官軍沒有人物了。"""
     s = _season(on)
@@ -539,6 +595,20 @@ def test_win_routs_the_figure_and_snubs_the_winner(on, world):
     assert _option(other, "act:challenge:bocai").enabled and other.socialize_starts_dialogue()
     winner.now += 2 * 3600
     assert _option(winner, "act:challenge:bocai").enabled and winner.socialize_starts_dialogue()
+
+
+def test_the_fight_receives_the_difficulty_from_the_prestige(on, world):
+    """挑戰本人時交給 team.fight 的難度是照聲威算的（聲威 60：150 × (0.5 + 0.5 × 0.60) = 120），不是代表本人的隊伍
+    寫死的 150；不寫死結果，只看呼叫收到什麼（真的打一場）。"""
+    game = _player(on, world, "官甲", "guan", "huangjin_camp")
+    assert on.squads["figure_bocai"].difficulty == 150 and world.get_season().figures["bocai"].prestige == 60
+    expected = figures.difficulty(game.state, on, "bocai")  # 打之前算（打贏會扣聲威）
+    assert expected == 120
+    with mock.patch.object(team, "fight", wraps=team.fight) as fight:
+        game.choose("act:challenge:bocai")
+    assert fight.call_count == 1
+    assert fight.call_args.args[3] == "figure_bocai"
+    assert fight.call_args.kwargs["difficulty"] == expected
 
 
 def test_snub_in_the_audience_list(on, world):

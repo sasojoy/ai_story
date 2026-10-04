@@ -362,9 +362,10 @@
       if (!o) return inkCell(d.key, d.name, d.none, d.icon, "disabled", " off");
       used.add(o.id);
       const [name, detail] = optParts(o);
-      // 按不下去的原因：標籤括號裡寫的是體力就是「體力不夠」，寫別的就照寫（例：挑戰本人打贏之後「剛吃了敗仗，閉門不見」，T4）
+      // 按不下去的原因：標籤括號裡寫的是體力就是「體力不夠」，寫別的就照寫；整句太長、格子裝不下（約 60 px、不換行）時只留
+      // 最後一小句（例：挑戰本人打贏之後「剛吃了敗仗，閉門不見」只寫「閉門不見」，T4）
       const sub = o.enabled ? (SHORT_SUB[o.id] || detail.replace(/^體力 (\d+).*$/, "體力 $1"))
-        : (detail && !detail.startsWith("體力") ? detail : "體力不夠");
+        : (detail && !detail.startsWith("體力") ? detail.split("，").pop() : "體力不夠");
       return inkCell(d.key, name, sub, d.icon, o.enabled ? `data-act="choose" data-id="${esc(o.id)}"` : "disabled", o.enabled ? "" : " off");
     });
     const moves = m.options.filter((o) => followsMode(o.id));

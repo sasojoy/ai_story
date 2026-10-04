@@ -279,7 +279,8 @@ def check_timetable(c: Content, need, known, front_ids: list[str], trend_ids: se
 
 def check_figures(c: Content, need, known, front_ids: list[str]) -> None:
     """大勢人物（content/figures.json，計畫 T4）：對話人物、陣營、戰線（戰線 id，不是大區）、地點、代表本人的隊伍都存在，
-    隊伍跟人物同一個陣營；一個對話人物只能是一位大勢人物；接位的人存在、同一個陣營、接位鏈不繞回來；名字只用繁體中文。"""
+    隊伍跟人物同一個陣營；一個對話人物只能是一位大勢人物，而且人物的 id 就是對話人物的 id（伏筆用對話人物的 id 讀人物的
+    狀態）；接位的人存在、同一個陣營、接位鏈不繞回來；名字只用繁體中文。"""
     faction_ids = [f.id for f in c.scenario.factions]
     owner: dict[str, str] = {}  # 對話人物 → 第一個用它的大勢人物
     for fid, fig in c.figures.items():
@@ -287,6 +288,7 @@ def check_figures(c: Content, need, known, front_ids: list[str]) -> None:
         if fig.character is not None:
             known(where, [fig.character], c.characters, "人物")
             need(owner.setdefault(fig.character, fid) == fid, f"{where}：人物 {fig.character} 已經是 {owner[fig.character]} 了")
+            need(fig.character == fid, f"{where}：對話人物要跟人物 id 一樣（現在是 {fig.character}）——伏筆用人物 id 找他的狀態")
         known(where, [fig.faction], faction_ids, "陣營")
         if fig.front is not None:
             known(where, [fig.front], front_ids, "戰線")

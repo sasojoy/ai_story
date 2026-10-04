@@ -35,21 +35,36 @@ def seed(world: WorldState, content: Content) -> None:
     world.figures = {fid: initial(fig) for fid, fig in content.figures.items()}
 
 
+def _completed(stored: FigureState, fig: FigureDef | None) -> FigureState:
+    """T4 之前蓋「開」的章的季，被時刻表碰過的人存的是 T2 最小版的預設值：沒有所在（location 是空的）、戰線也沒填。
+    人物表上有這位、存檔的所在是空的，就當成這種最小版：所在照人物表補上；在場（active）又沒有戰線的，戰線也照人物表補上
+    （人物表上的戰線本身可以是空的，例如趙弘、董卓）。聲威、狀態照存檔。已經有所在的（連重挫退出戰線的）照存檔，
+    人物表沒有的（夾具）也照存檔。回傳補好的一份新物件；不用補就是存檔本身。"""
+    if fig is None or stored.location:
+        return stored
+    update: dict[str, object] = {"location": fig.location}
+    if stored.status == "active" and stored.front is None:
+        update["front"] = fig.front
+    return stored.model_copy(update=update)
+
+
 def state_of(state: GameState, content: Content, fid: str) -> FigureState:
-    """這位人物此刻的樣子：種過的照存檔；沒種過的（T4 之前開的季、季中才加進人物表的人）照人物表的起始值，
-    不寫回存檔（讀畫面不該改存檔）。人物表也沒有的（測試夾具）照 FigureState 的預設值。"""
+    """這位人物此刻的樣子：種過的照存檔（T2 最小版留下的空所在、空戰線照人物表補上，見 _completed）；沒種過的（T4 之前
+    開的季、季中才加進人物表的人）照人物表的起始值，都不寫回存檔（讀畫面不該改存檔）。人物表也沒有的（測試夾具）
+    照 FigureState 的預設值。"""
+    fig = content.figures.get(fid)
     stored = state.world.figures.get(fid)
     if stored is not None:
-        return stored
-    fig = content.figures.get(fid)
+        return _completed(stored, fig)
     return initial(fig) if fig is not None else FigureState()
 
 
 def _ensure(state: GameState, content: Content, fid: str) -> FigureState:
-    """要改之前先確定存檔裡有這一筆（沒種過的照 state_of 建一筆）。"""
-    if fid not in state.world.figures:
-        state.world.figures[fid] = state_of(state, content, fid)
-    return state.world.figures[fid]
+    """要改之前先確定存檔裡有這一筆，而且是補好的（沒種過的照 state_of 建一筆；T2 最小版的存檔補好再寫回去）。
+    存檔本來就好的，state_of 回傳的就是存檔本身，原地改得到。"""
+    now = state_of(state, content, fid)
+    state.world.figures[fid] = now
+    return now
 
 
 def name_of(content: Content, fid: str) -> str:
@@ -133,8 +148,9 @@ def push_goal(state: GameState, content: Content, fid: str) -> int:
 def tick(state: GameState, content: Content, cal_hours: float) -> None:
     """大勢人物的日常推動（第一季設計 8.2 第 1、2 條，總計畫 T4）：決定性的累積，不擲骰。每位推得動的人物把
     actions_per_day × cal_hours ÷ 24 累積進 trend_accum["fig:<id>"]，每滿 1 就往自己陣營的方向推所在戰線 push 點；
-    戰線偏向對方 figure_reaction_lean 以上時累積乘 figure_reaction_mult（反應規則：輸得多時推得勤，人都不在時戰線
-    慢慢回到中段）。active_from_week 之前不推（官軍三將與孫堅第 2 週才出兵）；週次看這一段時間的中點，所以週一
+    戰線偏向對方 figure_reaction_lean 以上時累積乘 figure_reaction_mult（反應規則：輸得多的一方推得勤，兩邊都有人物
+    在這條戰線上時，輸的那邊推得比對方勤兩倍（每天出手的次數一樣的話），戰線就不容易被推到底、停在中段一帶；某一方的
+    人物都退場了，戰線就往另一方漂，沒有任何東西把它拉回 50）。active_from_week 之前不推（官軍三將與孫堅第 2 週才出兵）；週次看這一段時間的中點，所以週一
     00:00 那一刻結束的那個曆時算上一週。
     直接走 change_trend、不經過 T3 的人數緩衝（大勢人物不受玩家人數影響，第一季設計第七節），也不回傳訊息——背景推動
     跟以前的虛擬玩家一樣安靜，不洗版。由 world.season_hour 每曆時呼叫一次（cal_hours＝1）；規則沒開時什麼都不做。"""
