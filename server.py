@@ -297,7 +297,7 @@ def menxia_view(game: Game, person: str | None = None) -> dict:
             for k in KINDS
         ],
         "arts": [{"label": label, "id": aid, "card": md(game.art_detail(aid))} for label, aid in game.art_library()],
-        "craft_line": md(game.craft_line([], KINDS[0])),
+        "craft_line": md(game.craft_line([])),
     }
 
 
@@ -614,7 +614,7 @@ MENXIA_ACTIONS = {
     "create": lambda g, b: g.create_skill(str(b.get("name") or ""), str(b.get("kind") or KINDS[0])),
     "practice": lambda g, b: g.practice(str(b.get("kind") or KINDS[0])),
     "heal": lambda g, b: g.heal(),
-    "craft": lambda g, b: g.craft([str(m) for m in b.get("materials") or []], str(b.get("kind") or KINDS[0])),
+    "craft": lambda g, b: g.craft([str(m) for m in b.get("materials") or []]),  # 內功／武學開爐才揭曉，body 的 kind 不看
     "switch": lambda g, b: g.switch_art(str(b.get("art") or "")),
     "join": lambda g, b: g.add_to_team(str(b.get("person") or "")),
     "leave": lambda g, b: g.remove_from_team(str(b.get("person") or "")),
@@ -654,7 +654,7 @@ def api_craft_line(request: Request, body: dict = Body(default={})):
     """選了素材、換了種類就更新成本說明（不算行動、不存檔）。"""
     game = _game(request)
     materials = [str(m) for m in body.get("materials") or []]
-    return {"line": look(game, lambda g: md(g.craft_line(materials, str(body.get("kind") or KINDS[0]))))}
+    return {"line": look(game, lambda g: md(g.craft_line(materials)))}
 
 
 @app.get("/api/reports")
