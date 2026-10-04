@@ -187,9 +187,11 @@ def terrain(content: Content) -> tuple[Piece, ...]:
 
 
 def terrain_name_spot(piece: Terrain) -> Point:
-    """地形的名字寫在哪（置中的 x、基線 y）：山腳線（林地是外框）的平均 x，最高那一點再往上一個山頭高。"""
+    """地形的名字寫在哪（置中的 x、基線 y）：山腳線（林地是外框）的平均 x，最高那一點再往上一個山頭高；
+    貼著地圖上緣的（燕山）往下挪到外框裡面，不壓到外框。"""
     points = piece.spine or piece.points
-    return sum(p[0] for p in points) / len(points), min(p[1] for p in points) - piece.size - 4
+    y = min(p[1] for p in points) - piece.size - 4
+    return sum(p[0] for p in points) / len(points), max(y, FRAME_INSIDE + TERRAIN_NAME_SIZE)
 
 
 def _terrain_key(content: Content) -> str:
@@ -362,6 +364,8 @@ def _hill(x: float, y: float, w: float, h: float) -> str:
 # ── 外框、指北針 ──────────────────────────────────────
 
 FRAME = "#A08A5E"  # 外框與指北針
+FRAME_OUTER, FRAME_INNER = 5, 10  # 雙線外框：外線、內線離紙邊多遠
+FRAME_INSIDE = 14  # 外框裡面：擺出來的字、圖例從這裡開始，不壓到內線
 BANNER = "#C0392B"  # 紅旗（所在地）與指北針的北端
 COMPASS_RADIUS = 22  # 指北針的圓
 COMPASS_NEEDLE = 30  # 指針從中心往上下各伸多長
@@ -371,10 +375,11 @@ NORTH_SIZE = 13
 
 def frame(width: int, height: int) -> str:
     """紙的雙線外框。"""
+    o, i = FRAME_OUTER, FRAME_INNER
     return (
-        f'<rect x="5" y="5" width="{width - 10}" height="{height - 10}" rx="8" fill="none" stroke="{FRAME}" '
+        f'<rect x="{o}" y="{o}" width="{width - 2 * o}" height="{height - 2 * o}" rx="8" fill="none" stroke="{FRAME}" '
         'stroke-width="2"/>'
-        f'<rect x="10" y="10" width="{width - 20}" height="{height - 20}" rx="6" fill="none" stroke="{FRAME}" '
+        f'<rect x="{i}" y="{i}" width="{width - 2 * i}" height="{height - 2 * i}" rx="6" fill="none" stroke="{FRAME}" '
         'stroke-width="0.8"/>'
     )
 

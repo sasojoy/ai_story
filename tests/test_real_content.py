@@ -21,7 +21,7 @@ from tianxia.atlas import region_of
 from tianxia.bot import play_season
 from tianxia.content import load_content
 from tianxia.engine import Game
-from tianxia.mapart import BANNER_BOX
+from tianxia.mapart import BANNER_BOX, FRAME_INSIDE
 from tianxia.mapview import CURRENT_RING, NODE_SIZE, render_map, render_minimap, text_width
 from tianxia.ollama_client import OllamaClient
 from tianxia.team import fight
@@ -313,10 +313,9 @@ def test_world_map_labels_never_collide_or_leave_the_canvas_at_the_start(content
 
 
 # 每個地點都當所在地、而且選定（玩家一打開地圖看到的就是這個）時，名字壓到「別的地點的圓盤」的次數上限。
-# 圓盤半徑 14（13 加外圈的一半），新野、南陽官道這幾處的地點離得近、名字又長，沒有空位，只好壓到邊緣：
-# 淯水河畔的名字壓到新野（四個圖層都有）、敵情層再多三處（潁川郊野的小字、南陽郊野、荒丘的小字）。
-# 調高記號在 taken 裡的權重沒有用：每個權重掃過，壓到圓盤變少的同時，名字壓到紅旗、出界或壓到別的名字就跟著出現。
-DISC_OVERLAPS = {"situation": 1, "enemies": 4, "story": 1, "routes": 1}
+# 圓盤半徑 14（13 加外圈的一半）。名字多了左右錯開、正上下、斜角幾種位置之後，只剩擠得沒有任何空位的地方
+# 只好壓到邊緣（例如淯水河畔：貼著地圖左緣、新野就在右下，名字又長）。這個數字只准變少。
+DISC_OVERLAPS = {"situation": 0, "enemies": 1, "story": 0, "routes": 1}
 
 
 @pytest.mark.parametrize("layer", list(DISC_OVERLAPS))
@@ -335,6 +334,8 @@ def test_current_place_marks_stay_clear_of_names_from_any_location(content, laye
             assert not _overlaps(box, (loc.x + left, loc.y + top, loc.x + right, loc.y + bottom)), (loc.id, text, "紅旗")
             assert not _touches_circle(box, loc.x, loc.y, red_ring), (loc.id, text, "紅圈")
             assert not _touches_circle(box, loc.x, loc.y, select_ring), (loc.id, text, "選定的圓圈")
+            if owner is None:  # 山名的位置是內容定的：要整個在外框裡面（燕山貼著上緣，往下挪）
+                assert _inside_frame(box, content), (loc.id, text, "壓到外框")
             if owner is not None:
                 disc_overlaps += sum(
                     _touches_circle(box, other.x, other.y, disc)
@@ -343,12 +344,51 @@ def test_current_place_marks_stay_clear_of_names_from_any_location(content, laye
     assert disc_overlaps <= DISC_OVERLAPS[layer]
 
 
+def _inside_frame(box: Box, content) -> bool:
+    """字整個在外框裡面那條線之內（左右上下各 FRAME_INSIDE），不壓到外框。地點名字不檢查這個：
+    貼著地圖邊的地點（大將軍府、淯水河畔）名字要是不准碰外框，就只能壓到隔壁的圓盤，那個比較糟。"""
+    inside = FRAME_INSIDE - 1
+    return box[0] >= inside and box[1] >= inside and box[2] <= content.map.width - inside and box[3] <= content.map.height - inside
+
+
+def _disc_overlaps(game, content, svg: str, texts: list[tuple[str, Box, str | None]]) -> list[tuple[str, str]]:
+    """字壓到「別的地點」的圓盤（摸清的地點才有圓盤）：回傳（字, 被壓到的地點）。"""
+    from tianxia.atlas import KNOWN, views
+
+    seen = views(game.state, content)
+    disc = NODE_SIZE["visible"] + 1
+    here = game.state.player.location
+    return [
+        (text, other.id) for text, box, owner in texts for other in content.locations.values()
+        if other.id not in (here, owner) and seen[other.id] in KNOWN and _touches_circle(box, other.x, other.y, disc)
+    ]
+
+
+def test_a_new_player_at_the_first_fight_sees_the_camp_next_door(content):
+    """新手引導叫玩家去潁川郊野歷練：打開敵情時「最險」那行不能蓋住隔壁黃巾別部營寨的圓盤（蓋住的那一半點下去會選錯地點）。"""
+    game = Game.new(content, "測試俠客", rng=random.Random(0))
+    game.state.player.visited.update(["yingchuan", "yingchuan_wilds", "yingshui", "changshe", "songshan_foot", "yingchuan_academy", "huangjin_camp"])
+    game.state.player.location = "yingchuan_wilds"
+    for selected in ("yingchuan_wilds", "huangjin_camp"):  # 打開地圖時選的是所在地；點了營寨之後選的是營寨
+        svg = render_map(game.state, content, "enemies", selected, game.odds)
+        assert "最險" in svg
+        assert _disc_overlaps(game, content, svg, _placed_texts(svg)) == [], selected
+
+
+def _owner_by_name(content, text: str) -> str | None:
+    """小地圖的字沒有 data-loc（點不到）：照字裡的地名認是哪個地點的（視窗邊緣的「↘ 荒丘」是指向荒丘的）。"""
+    names = [loc for loc in content.locations.values() if loc.name in text]
+    return max(names, key=lambda loc: len(loc.name)).id if names else None
+
+
 def test_minimap_never_collides_from_any_location(content):
     game = Game.new(content, "測試俠客", rng=random.Random(0))
     for loc_id in content.locations:
         game.state.player.location = loc_id
         svg = render_minimap(game.state, content)
         assert _collisions(svg, _minimap_window(svg)) == [], loc_id
+        texts = [(text, box, _owner_by_name(content, text)) for text, box in _text_boxes(svg)]
+        assert _disc_overlaps(game, content, svg, texts) == [], loc_id
 
 
 def test_regions_reference_real_trends(content):
