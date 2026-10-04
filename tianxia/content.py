@@ -453,6 +453,11 @@ def validate(c: Content) -> None:
     hidden = {t.id for t in c.scenario.trends if t.hidden}
     derived = {t.id for t in c.scenario.trends if t.derived}  # 衍生線（第一季濃縮版的黃巾聲勢）
     region_fronts = {region.front for region in c.map.regions if region.front}  # 戰線
+    # 大區多邊形都寫得對（至少 3 個 [x, y] 點）：查地點在哪個大區（atlas.region_of）要拆每個點，寫壞了會炸成 ValueError，
+    # 所以要先確定沒壞才查；壞的由後面的大區檢查照舊回報
+    polygons_ok = all(
+        len(region.points) >= 3 and all(len(point) == 2 for point in region.points) for region in c.map.regions
+    )
 
     def need(ok: bool, message: str) -> None:
         if not ok:
@@ -584,14 +589,15 @@ def validate(c: Content) -> None:
         known(where, loc.train_trend, trend_ids | {FRONT_KEY}, "大勢線")
         not_derived(where, loc.train_trend, "train_trend ")
         front_needs_total(where, loc.train_trend)
-        local = region_of(c, loc.id)
-        local_front = local.front if local is not None else None
-        for key in loc.train_trend:
-            if key in region_fronts:
-                need(
-                    key == local_front,
-                    f"{where}：train_trend 的 {key} 不是這個地點所在大區的戰線（{local_front or '這裡沒有戰況'}）",
-                )
+        if polygons_ok:
+            local = region_of(c, loc.id)
+            local_front = local.front if local is not None else None
+            for key in loc.train_trend:
+                if key in region_fronts:
+                    need(
+                        key == local_front,
+                        f"{where}：train_trend 的 {key} 不是這個地點所在大區的戰線（{local_front or '這裡沒有戰況'}）",
+                    )
         known(where, loc.materials, c.materials, "素材")
         need(
             0 <= loc.x <= c.map.width and 0 <= loc.y <= c.map.height,

@@ -868,6 +868,14 @@ def test_validate_rejects_the_front_key_when_no_trend_is_built_from_fronts(conte
         validate(content)
 
 
+def test_validate_reports_a_malformed_region_polygon_instead_of_crashing(tmp_path):
+    """train_trend 的戰線歸屬要先查地點在哪個大區，有個點只寫了一個數字時不能在那裡炸成 ValueError，要照舊回報多邊形的錯。"""
+    root = copy_fixture(tmp_path)
+    edit_json(root / "map.json", lambda d: d["regions"][0].update(points=[[0, 0], [5], [400, 150]]))
+    with pytest.raises(ContentError, match="多邊形至少"):
+        load_content(root)
+
+
 # ── 週末設定（計畫 T2「總開關與週末設定」）：一次切換，不手改 content/config.json ──
 CONTENT_DIR = FIXTURE.parent.parent.parent / "content"
 WEEKEND_KEYS = {"season_one", "season_days", "server_max_players"}
