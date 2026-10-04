@@ -445,3 +445,93 @@ def test_switch_off_no_duty_no_convoy_squad_same_draws(real):
     with _win():
         msgs = game.choose("act:train")
     assert not any("軍令" in m for m in msgs)
+
+
+# ── Task 5：護糧的糧車 ─────────────────────────────────────
+
+
+def _grain(game, **counts):
+    game.state.player.materials.update(counts)
+
+
+def test_convoy_needs_four_grain_and_says_why(on):
+    """RF5：凡品 3 個（3 份）不夠，按鈕停用並寫明；一個天品（9 份）就夠，多的不找。"""
+    game = _game(on, faction="guan", at="xinye")
+    _order(game, "escort", "guan", front="nanyang", start="xinye", end="wan_city")
+    _grain(game, man_1=3)
+    option = next(o for o in game.options() if o.id == "act:convoy")
+    assert not option.enabled
+    assert option.label == "接下糧車（送到宛城・糧草不夠：要 4 份，你有 3 份；糧草是慢屬性的素材）"
+    game.state.player.materials = {"man_3": 1}
+    option = next(o for o in game.options() if o.id == "act:convoy")
+    assert option.enabled and option.label == "接下糧車（送到宛城・交出糧草 4 份）"
+    game.choose("act:convoy")
+    assert game.state.player.materials.get("man_3", 0) == 0
+    assert game.state.player.convoy == Convoy(order=game.state.world.orders[-1].id, grain=4, from_loc="xinye", to_loc="wan_city")
+    assert "act:convoy" not in [o.id for o in game.options()]  # 一次押一車
+
+
+def test_escort_takes_grain_and_records_donation(on):
+    game = _game(on, "乙", faction="huang", at="nanyang_wilds")
+    on.config.convoy_ambush_chance = 0.0
+    escort = _order(game, "escort", "huang", front="nanyang", start="nanyang_wilds", end="nanyang_huangjin_camp")
+    _grain(game, man_1=4)
+    game.choose("act:convoy")
+    assert game.state.player.donations == {}  # 抵達才算
+    game.state.player.stamina = 150
+    msgs = game.travel("nanyang_huangjin_camp", "dash")
+    assert game.state.player.convoy is None
+    assert game.state.player.donations == {"nanyang_huangjin_camp:糧草": 4}
+    assert game.state.player.contrib == on.config.contrib_per_push
+    assert escort.progress == {"乙": 1}
+    assert any("軍令「護糧・南陽郊野→南陽黃巾營」：你 1 次" in m for m in msgs)
+
+
+def test_convoy_ambushed_lost_does_not_count(on):
+    game = _game(on, faction="guan", at="xinye")
+    on.config.convoy_ambush_chance = 1.0
+    escort = _order(game, "escort", "guan", front="nanyang", start="xinye", end="wan_city")
+    _grain(game, man_1=4)
+    game.choose("act:convoy")
+    lose = EncounterResult(tier="落敗", margin=-50, our_power=1, difficulty=30)
+    game.state.player.stamina = 150
+    with mock.patch.object(team, "fight", return_value=lose):
+        msgs = game.travel("wan_city", "dash")
+    assert any("黃巾糧隊" in m for m in msgs) and any("糧車被劫" in m for m in msgs)
+    assert game.state.player.convoy is None and game.state.player.donations == {} and escort.progress == {}
+
+
+def test_convoy_ambushed_won_counts(on):
+    game = _game(on, faction="guan", at="xinye")
+    on.config.convoy_ambush_chance = 1.0
+    escort = _order(game, "escort", "guan", front="nanyang", start="xinye", end="wan_city")
+    _grain(game, man_1=4)
+    game.choose("act:convoy")
+    game.state.player.stamina = 150
+    with _win():
+        game.travel("wan_city", "dash")
+    assert escort.progress == {"甲": 1} and game.state.player.donations == {"wan_city:糧草": 4}
+
+
+def test_convoy_delivered_after_the_week_turned(on):
+    """RF4：糧車還在路上就換週了：送到照記捐獻與貢獻，但只算它自己那一道（已經清掉就不算）。"""
+    game = _game(on, faction="guan", at="xinye")
+    on.config.convoy_ambush_chance = 0.0
+    _at_week(game, 1)
+    _order(game, "escort", "guan", front="nanyang", start="xinye", end="wan_city")
+    _grain(game, man_1=4)
+    game.choose("act:convoy")
+    _at_week(game, 2)
+    game.state.world.orders = []  # 週一清掉了沒達成的
+    fresh = _order(game, "escort", "guan", front="nanyang", start="xinye", end="wan_city")
+    game.state.player.stamina = 150
+    game.travel("wan_city", "dash")
+    assert game.state.player.donations == {"wan_city:糧草": 4}
+    assert game.state.player.contrib == on.config.contrib_per_push
+    assert fresh.progress == {}
+
+
+def test_switch_off_no_convoy_option(real):
+    game = _game(real, faction="guan", at="xinye")
+    _grain(game, man_1=9)
+    assert "act:convoy" not in [o.id for o in game.options()]

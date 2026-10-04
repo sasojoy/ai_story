@@ -31,7 +31,7 @@ from .rules import (
     season_one, season_one_off, stances, trend_name, trend_shown, trend_value, world_trend_value,
 )
 from .sqlite_world import open_world
-from .state import PLAYER, BattleRecord, GameState, JournalEntry, Journey, Rumor, WorldState, new_game_state
+from .state import PLAYER, BattleRecord, Convoy, GameState, JournalEntry, Journey, Rumor, WorldState, new_game_state
 from .world import (
     _season_vehicle, advance_world_state, check_thresholds, end_season, fire_by_id, open_showdown, open_waiting_showdown,
     settle_season_start, showdown_battle, showdown_key, sim_tick, start_pending_battle,
@@ -772,6 +772,8 @@ class Game:
             return self._rest()
         if what == "duty":
             return self._duty()
+        if what == "convoy":
+            return self._take_convoy()
         if what == "call":
             self.state.player.picking_audience = True  # 打開求見選單（見 _audience_options），不花體力
             return [f"你遞上名帖，準備求見{self.content.locations[self.state.player.location].name}的人物。"]
@@ -918,6 +920,17 @@ class Game:
         duty = c.orders.duties.get(p.faction)
         if duty is not None and front_of(c, loc.id) is not None:
             opts.append(self._cost_option("act:duty", duty.name, c.config.duty_stamina))
+        escort = orders.escort_at(s, c, p.faction, loc.id)
+        if escort is not None and p.convoy is None:  # 一次押一車
+            need, have = c.config.convoy_grain, materials.grain_of(s, c)
+            dest = c.locations[escort.end].name
+            if have < need:
+                opts.append(Option(
+                    id="act:convoy", enabled=False,
+                    label=f"接下糧車（送到{dest}・糧草不夠：要 {need} 份，你有 {have} 份；糧草是慢屬性的素材）",
+                ))
+            else:
+                opts.append(Option(id="act:convoy", label=f"接下糧車（送到{dest}・交出糧草 {need} 份）"))
         return opts
 
     def _order_credit(self, **kw) -> list[str]:
@@ -947,6 +960,44 @@ class Game:
         elif goals.get(GEJU) and in_chaos(s, c, front):
             msgs += self.push_trend(GEJU, 1, source="duty")
         return msgs + self._order_credit(kind="duty", front=front)
+
+    def _take_convoy(self) -> list[str]:
+        """接下糧車（護糧，軍令文件 3.4）：交出 convoy_grain 份糧草（從低階的慢屬性素材用起，多的不找），記下要送到哪裡。
+        不花體力；抵達終點才算數（見 _convoy_arrives）。"""
+        s, c = self.state, self.content
+        p = s.player
+        escort = orders.escort_at(s, c, p.faction, p.location)
+        need = c.config.convoy_grain
+        if escort is None or p.convoy is not None or not materials.take_grain(s, c, need):
+            return ["（這裡沒有糧車可接。）"]
+        p.convoy = Convoy(order=escort.id, grain=need, from_loc=p.location, to_loc=escort.end)
+        text = f"你把 {need} 份糧草裝上車，要送到{c.locations[escort.end].name}。路上當心截糧的。"
+        self._outcome("接下糧車", text)
+        return [text]
+
+    def _convoy_arrives(self, loc_id: str) -> list[str]:
+        """糧車到了終點（路過也算）：先有 convoy_ambush_chance 機率撞上敵方截糧隊（探索撞上野怪的打法：不推大勢、
+        扣氣血打折），打輸糧車被劫、不算數；打贏或沒遇上就交進營中——記捐獻（軍備文件 4.1）、記一次推動的貢獻、
+        替它自己那一道護糧記一次（RF4：已經換週清掉就不算）。"""
+        s, c = self.state, self.content
+        p = s.player
+        convoy = p.convoy
+        if convoy is None or convoy.to_loc != loc_id:
+            return []
+        p.convoy = None
+        msgs: list[str] = []
+        enemy = orders.ambusher(c, p.faction)
+        if enemy is not None and self.rng.random() < c.config.convoy_ambush_chance:
+            msgs.append("快到營門時，半路殺出一隊截糧的人馬！")
+            msgs += self._squad_encounter(enemy, wild=True)
+            if s.battles[0].tier not in team.WIN_TIERS:
+                return msgs + ["糧車被劫走了，這一趟不算數。"]
+        key = f"{loc_id}:糧草"
+        p.donations[key] = p.donations.get(key, 0) + convoy.grain
+        # 護糧沒有推動，另記一次第 1 階推動的貢獻（總計畫 T6）
+        push.add_contribution(p, orders.week_of(s, c), c.config.contrib_per_push)
+        msgs.append(f"糧車送進了{c.locations[loc_id].name}，一粒不少。")
+        return msgs + self._order_credit(kind="convoy", location=loc_id, front=front_of(c, loc_id), order=convoy.order)
 
     def _rest(self) -> list[str]:
         """坐下來打坐（地圖擴充設計第二節）：進入「打坐中」，之後時間過去時體力回復是平常的
@@ -2217,7 +2268,10 @@ class Game:
             if flourish:
                 text = f"{text}\n\n{flourish}"
         self._hide(text)
-        return [text] + note_action(s, c, self.world, "move") + check_thresholds(s, c, self.world, client, now=self.now)
+        return (  # 糧車到了終點（路過也算）先交糧，再照原本的新手引導與門檻（計畫 T6）
+            [text] + self._convoy_arrives(loc_id) + note_action(s, c, self.world, "move")
+            + check_thresholds(s, c, self.world, client, now=self.now)
+        )
 
     def _road_sight(self, road: RoadKind, loc_id: str, when: float | None = None) -> list[str]:
         """路上見聞（路上設計第五節）：抵達一站時有 road_sight_chance 的機會，從符合這段路的種類、剛抵達那一站所在大區的
