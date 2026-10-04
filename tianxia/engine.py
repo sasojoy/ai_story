@@ -2927,6 +2927,21 @@ class Game:
         done.sort(key=lambda item: (item[2].time, item[0]), reverse=True)
         return [f"**{titles.get(eid, eid)}**\n\n{r.text}" for _, eid, r in done[:BULLETIN_MAX]]
 
+    def orders_view(self) -> list[dict]:
+        """江湖頁的「本週軍令」卡（計畫 T6）：自己陣營這週的軍令，只給自己陣營看；散人、開關關著是空的。
+        截止是下週一 00:00（最後一週寫成季末那一刻，calendar.point 會夾住）。"""
+        s, c = self.state, self.content
+        name = s.player.name
+        views = []
+        for o in orders.current(s, c, s.player.faction):
+            total = sum(o.progress.values())
+            views.append({
+                "id": o.id, "title": orders.title(c, o), "text": o.text, "mine": o.progress.get(name, 0),
+                "progress": min(total, o.quota), "quota": o.quota, "done": o.done,
+                "deadline": self.stamp(calendar.week_start(o.week + 1, c, s.world)),
+            })
+        return views
+
     def season_result(self) -> dict | None:
         """休季時江湖頁最上面的結算卡（計畫 T9）：結局與季末公告、最終三方態勢與三條戰況、時刻表每一件的結果（誰改寫的）、
         各陣營出力前五。只有第一季（開關開著＋這一季的章）收季之後才有；資料在收季那一刻存好（world.end_season），這裡只讀。

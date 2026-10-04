@@ -55,6 +55,7 @@
     tab: "jianghu",
     nowOpen: null, // 江湖頁「剛剛」展開的那一則（記內容本身）；換成新的一則就收回（A4）
     boardOpen: null, // 江湖頁公告卡展開著的那一週（週次）；收起或換週就不再對得上（FB-039）
+    ordersShut: null, // 江湖頁「本週軍令」收起來的那一週；換週就重新展開（計畫 T6）
     busy: false,
     menxia: null,
     message: "",
@@ -401,6 +402,20 @@
     return (strong || box.content).textContent.trim();
   }
 
+  // 第一季濃縮版的「本週軍令」（計畫 T6；伺服器只送自己陣營的，散人沒有）：預設展開，收起來的狀態照週次記住（同公告卡）
+  function ordersHtml(list, week) {
+    const done = list.filter((o) => o.done).length;
+    const rows = list.map((o) => `
+      <div class="order${o.done ? " done" : ""}">
+        <div class="order-head"><b>${esc(o.title)}</b><span>${o.done ? "已達成" : `陣營 ${o.progress}／${o.quota}`}</span></div>
+        <div class="order-text">${esc(o.text)}</div>
+        <div class="order-bar" role="meter" aria-valuemin="0" aria-valuemax="${o.quota}" aria-valuenow="${o.progress}" aria-label="${esc(o.title)}"><i style="width:${pct(o.progress, o.quota)}%"></i></div>
+        <div class="order-meta">你做了 ${o.mine} 次・截止 ${esc(o.deadline)}</div>
+      </div>`).join("");
+    return `<details class="fold orders" data-week="${week}" ${S.ordersShut === week ? "" : "open"}>
+      <summary>📜 本週軍令（${list.length}${done ? `，已達成 ${done}` : ""}）</summary><div class="fold-body">${rows}</div></details>`;
+  }
+
   // 第一季的結算卡（休季才有，計畫 T9）：結局與季末公告、最終態勢與三條戰況；十二件大事與各陣營出力前五收在摺疊裡
   function resultHtml(r) {
     const bars = (rows, label) => `<div class="fronts" role="group" aria-label="${label}">${rows.map((x) => `
@@ -475,9 +490,11 @@
     // 三條戰況排在行動列下面、小地圖上面，不擠掉第一屏的公告卡、「剛剛」、場景與行動列
     const fronts = m.fronts ? frontsHtml(m.fronts) : "";
     const resultCard = m.season_result ? resultHtml(m.season_result) : "";  // 休季的結算卡排在最上面（計畫 T9）
+    // 本週軍令排在行動列（與路上捷徑）下面、三條戰況上面：不擠掉第一屏的公告、「剛剛」、場景與行動列（計畫 T6）
+    const orderCard = m.orders ? ordersHtml(m.orders, week) : "";
     // 劇情文字在上、行動在下（企劃者 2026-10-04）。行動列只有一排，375×812 上「剛剛」、場景與整排行動都在第一屏。
     // 路上的三個捷徑（links）緊貼在選項底下，戰況條排在捷徑之後，不要把它插到選項與捷徑中間
-    return `${resultCard}${board}${quest}${now}${scene}${free}${menu}${links}${fronts}${tail}`;
+    return `${resultCard}${board}${quest}${now}${scene}${free}${menu}${links}${orderCard}${fronts}${tail}`;
   }
 
   // ── 修練 ──
@@ -1458,6 +1475,7 @@
   document.addEventListener("toggle", (ev) => {
     const box = ev.target;
     if (box instanceof Element && box.matches("details.bulletin")) S.boardOpen = box.open ? Number(box.dataset.week) : null;
+    if (box instanceof Element && box.matches("details.orders")) S.ordersShut = box.open ? null : Number(box.dataset.week);
   }, true);
 
   // 視窗大小變了（轉向、拉視窗）：輿圖開著就重新夾住、套用；原本是整張就維持整張（applyMapView）

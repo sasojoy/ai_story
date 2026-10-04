@@ -1702,3 +1702,31 @@ def test_switch_off_season_end_sends_no_result_card(game, monkeypatch):
     monkeypatch.setattr(server.CONTENT.config, "admins", ["測試"])
     game.admin_end_season(now=game.now)
     assert game.state.world.ended and "season_result" not in server.look(game, server.main_view)
+
+
+def _season_one_now(game, monkeypatch):
+    monkeypatch.setattr(server.CONTENT.config, "season_one", True)
+    game.world.mutate_season(lambda season: setattr(season, "season_one", True))
+
+
+def test_orders_hidden_from_other_factions(game, monkeypatch):
+    """T6 RF2：/api/main 只給自己陣營的軍令；散人沒有 orders 鍵；別陣營的軍令文字不出現在整份資料裡。"""
+    import json as _json
+
+    _season_one_now(game, monkeypatch)
+    guan = Game.new(server.CONTENT, "官甲", world=game.world)
+    huang = Game.new(server.CONTENT, "黃乙", world=game.world)
+    guan.state.player.faction, huang.state.player.faction = "guan", "huang"
+    guan.advance(700)  # 跨過第一個曆時交界（這一季照 14 天的章，一個曆時 600 秒）：第 1 週發令
+    huang.sync(huang.now)  # 伺服器每個請求都會同步；黃乙手上那份季還是官甲推進之前的
+    g, h = server.main_view(guan), server.main_view(huang)  # 這兩個角色沒存進資料庫：直接組畫面，不經過重讀角色的 look
+    assert g["orders"] and h["orders"]
+    dumped = _json.dumps(h, ensure_ascii=False)
+    assert not any(o["text"] in dumped for o in g["orders"])
+    assert "orders" not in server.main_view(game)  # 散人
+
+
+def test_switch_off_main_view_has_no_orders(game):
+    game.state.player.faction = "guan"
+    game.advance(7 * 86400)
+    assert "orders" not in server.main_view(game)

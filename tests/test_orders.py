@@ -548,3 +548,21 @@ def test_challenge_win_counts_for_strike(on):
         msgs = game.choose("act:challenge:bocai")
     assert any("軍令「打擊・波才」：你 1 次" in m for m in msgs)
     assert order.progress == {"甲": 1}
+
+
+# ── Task 7：江湖頁的「本週軍令」卡 ───────────────────────────
+
+
+def _issue_now(game):
+    orders.issue(game.state, game.content, orders.week_of(game.state, game.content), random.Random(0))
+
+
+def test_orders_view_shows_own_side_with_deadline(on):
+    game = _game(on, faction="guan")
+    _issue_now(game)
+    view = game.orders_view()
+    assert [v["title"] for v in view] == [orders.title(on, o) for o in orders.current(game.state, on, "guan")]
+    first = view[0]
+    assert (first["mine"], first["progress"], first["quota"], first["done"]) == (0, 0, 4, False)
+    assert first["deadline"] == "第2週・週一 00:00"
+    assert _game(on, "丙").orders_view() == []  # 散人
