@@ -245,9 +245,10 @@ class Game:
         arrived = self._arrivals()  # 抵達的站自己寫一則江湖紀錄（途中觸發的大事也寫在那裡），不併進下面的「江湖大事」
         if arrived:
             self._save_season()  # 抵達時觸發的大勢門檻改了共用賽季
-        news = journal.news_entry(self.state.world.time, msgs)
+        news = journal.news_entry(self.state.world.time, self._without_timetable(msgs))
         if news is not None:
             journal.add_entry(self.state, news, merge=True)
+        self._deliver_big_events()  # 這一季的時刻表大事人人有份：沒看過的補上，推進的人也走這一條（FB-038）
         self._deliver_battle_results()  # 下線時收場的決戰，回來第一次同步就補上（休季、籌備中也一樣，FB-027）
         return self._log(msgs + arrived)
 
@@ -266,9 +267,10 @@ class Game:
         self._save_season()
         msgs += start_pending_battle(self.world, self.content, self.now)
         self.state.world = self.world.get_season()
-        news = journal.news_entry(self.state.world.time, msgs)
+        news = journal.news_entry(self.state.world.time, self._without_timetable(msgs))
         if news is not None:
             journal.add_entry(self.state, news, merge=True)
+        self._deliver_big_events()
         return self._log(msgs + arrived)
 
     def _advance_player_local(self, seconds: float) -> list[str]:
@@ -1167,6 +1169,36 @@ class Game:
             if flag not in season.flags:
                 season.flags.add(flag)
                 season.flag_times[flag] = season.time
+
+    def _without_timetable(self, msgs: list[str]) -> list[str]:
+        """推進的訊息拿掉時刻表大事的公告（world.timetable.resolve 回的「【江湖大事】＋公告全文」）：那些由
+        _deliver_big_events 補進每個人的江湖紀錄，不再只進剛好推進到那一刻的人的那一則。
+        大勢門檻與世界事件也是「【江湖大事】」開頭，但文字不在時間軸上，照舊留著。"""
+        announced = {f"【江湖大事】{r.text}" for r in self.state.world.timeline.values() if r.text}
+        return [m for m in msgs if m not in announced]
+
+    def _deliver_big_events(self) -> None:
+        """這一季時刻表上已經發生、自己還沒看過的大事補進江湖紀錄（FB-038）：每個人各一次，不管有沒有剛好在線、
+        是不是推進時間的那個人，離線的回來第一次同步補到，這一季中途才建立的角色也補到這一季已經發生的。
+        一次補到好幾件就合成一則「江湖大事」，每件一行、照時間先後、前面標季曆時間；只補到一件時標籤就是公告全文。
+        跳過的大事（沒有公告文字）不補。看過的記在 PlayerState.events_seen，換季時新角色自然是空的。
+        做法比照 _deliver_battle_results：資料庫（時間軸）才是真實來源，每個人自己的 Game 同步時在鎖裡自己補，
+        不去改別人的角色。開關關著（或這一季開季時沒開）時時間軸本來就是空的，什麼都不補。"""
+        w, c, p = self.state.world, self.content, self.state.player
+        if not calendar.season_one_on(w, c):
+            return
+        fresh = [(i, eid, r) for i, (eid, r) in enumerate(w.timeline.items()) if r.text and eid not in p.events_seen]
+        if not fresh:
+            return
+        fresh.sort(key=lambda item: (item[2].time, item[0]))  # 先看時間，同一刻照時間軸記下的順序
+        p.events_seen += [eid for _, eid, _ in fresh]
+        last = fresh[-1][2]
+        if len(fresh) == 1:
+            entry = JournalEntry(time=last.time, title=journal.WORLD_NEWS, tag=last.text)
+        else:
+            lines = [f"{self.stamp(r.time)}　{r.text}" for _, _, r in fresh]
+            entry = JournalEntry(time=last.time, title=journal.WORLD_NEWS, tag=f"共 {len(fresh)} 件", lines=lines)
+        journal.add_entry(self.state, entry)
 
     def _deliver_battle_results(self) -> None:
         """收場的全服決戰補送到自己手上（FB-027）：自己的名號在參戰名單上（含下線的、中途倒下的；觀戰的不在名單上）、
@@ -2284,13 +2316,11 @@ class Game:
     def _settle_season_start(self) -> list[str]:
         """開季那一刻（世界秒 0）結算第 1 週週一 00:00 的大事（FB-040，見 world.settle_season_start），開季的人那一次
         請求就跑；之後每曆時的交界才跑每曆時的事。放在 open_season／next_season 之後、不在任何 mutate 裡（mutate 不能巢狀）。
-        開關關著或舊季什麼都不會發生。公告照一般推進的樣子併進自己的江湖紀錄。"""
+        開關關著或舊季什麼都不會發生。公告進自己的江湖紀錄走 _deliver_big_events，跟別人一樣。"""
         msgs: list[str] = []
         self.world.mutate_season(lambda season: msgs.extend(settle_season_start(season, self.content, self.rng)))
         self.state.world = self.world.get_season()
-        news = journal.news_entry(self.state.world.time, msgs)
-        if news is not None:
-            journal.add_entry(self.state, news, merge=True)
+        self._deliver_big_events()
         return msgs
 
     def admin_end_season(self, now: float) -> list[str]:

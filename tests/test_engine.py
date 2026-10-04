@@ -4246,6 +4246,137 @@ def test_opening_a_season_with_the_switch_off_settles_nothing(content, world):
     assert season.timeline == {} and season.hooked_week == 0 and "calendar" not in admin.status_data()
 
 
+def _big_event_entries(game) -> list:
+    return [e for e in game.state.journal if e.title == "江湖大事"]
+
+
+def _announced(content, world, *ids) -> list[str]:
+    """這幾件大事照時間先後、每行前面標季曆時間的樣子（江湖紀錄裡一則「江湖大事」該有的三行）。"""
+    season = world.get_season()
+    return [f"{calendar.stamp_text(season.timeline[i].time, content, season)}　{season.timeline[i].text}" for i in ids]
+
+
+def test_everyone_gets_the_seasons_big_events_not_just_whoever_advanced_the_clock(content, world):
+    """FB-038：管理者快轉推過三件大事，另一個在線、這段時間沒有請求的人同步一次，江湖紀錄裡就有一則「江湖大事」，
+    三行、照時間排、每行前面標季曆時間；再同步不重複。推進的那個人自己也只有一則（不是兩則）。"""
+    install_season_one(content)
+    content.config.admins = ["管理者"]
+    admin = Game.new(content, "管理者", rng=random.Random(1), world=world)
+    zi = Game.new(content, "子", rng=random.Random(2), world=world)
+    admin.sync(0.0)
+    zi.sync(0.0)
+    assert _big_event_entries(zi) == []
+
+    admin.advance(calendar.week_start(4, content) + calendar.cal_hour_seconds(content))  # 起義、張曼成、波才
+    ids = ["uprising", "zhangmancheng", "bocai"]
+    assert list(world.get_season().timeline) == ids
+    expected = _announced(content, world, *ids)
+    assert len(_big_event_entries(admin)) == 1 and _big_event_entries(admin)[0].lines == expected
+
+    zi.sync(5.0)
+    assert len(_big_event_entries(zi)) == 1 and _big_event_entries(zi)[0].lines == expected
+    assert [line.split("　")[0] for line in expected] == ["第1週・週一 01:00", "第3週・週一 00:00", "第4週・週一 00:00"]
+    zi.sync(10.0)
+    admin.sync(10.0)
+    assert len(_big_event_entries(zi)) == 1 and len(_big_event_entries(admin)) == 1  # 再同步不重複
+
+
+def test_one_new_big_event_is_one_line_in_the_journal_and_never_twice(content, world):
+    """每次同步補到的只有還沒看過的：一件就是一則（標籤是公告全文）；推進的人與在線的人都只有一則。"""
+    install_season_one(content)
+    admin = Game.new(content, "管理者", rng=random.Random(1), world=world)
+    zi = Game.new(content, "子", rng=random.Random(2), world=world)
+    admin.sync(0.0)
+    zi.sync(0.0)
+    admin.advance(calendar.cal_hour_seconds(content))
+    for game in (admin, zi):
+        game.sync(5.0)
+        (entry,) = _big_event_entries(game)
+        assert entry.tag == "三十六方同日起事。" and entry.lines == []
+    assert admin.state.player.events_seen == ["uprising"] == zi.state.player.events_seen
+    admin.advance(calendar.week_start(3, content))  # 張曼成：只補新的一件
+    zi.sync(10.0)
+    assert [e.tag for e in _big_event_entries(zi)] == [world.get_season().timeline["zhangmancheng"].text, "三十六方同日起事。"]
+    assert len(_big_event_entries(admin)) == 2
+
+
+def test_a_character_who_was_away_or_made_mid_season_catches_up_on_this_seasons_events(content, world):
+    """離線（角色只在資料庫裡）的人回來第一次同步補到；這一季中途才建立的角色也補到這一季已經發生的。"""
+    install_season_one(content)
+    away = Game.new(content, "丙", rng=random.Random(3), world=world)
+    away.sync(0.0)
+    open_characters().save(away.state)
+    admin = Game.new(content, "管理者", rng=random.Random(1), world=world)
+    admin.sync(0.0)
+    admin.advance(calendar.week_start(3, content) + calendar.cal_hour_seconds(content))  # 起義、張曼成
+    expected = _announced(content, world, "uprising", "zhangmancheng")
+
+    back = Game(content, open_characters().load("丙"), rng=random.Random(3), world=world)
+    assert _big_event_entries(back) == []  # 讀回來還沒同步：還沒補
+    back.sync(5.0)
+    assert [e.lines for e in _big_event_entries(back)] == [expected]
+    late = Game.new(content, "丁", rng=random.Random(4), world=world)  # 這一季中途才建立
+    late.sync(6.0)
+    assert [e.lines for e in _big_event_entries(late)] == [expected]
+    back.sync(7.0)
+    assert len(_big_event_entries(back)) == 1
+
+
+def test_the_big_event_settled_at_the_opening_reaches_everyone_too(content, world):
+    """FB-040 與 FB-038 合起來：管理者開季那一下結算的第 1 週大事，開季的人與其他人同步時都補到，時間寫週一 00:00。"""
+    install_season_one(content)
+    content.config.admins = ["管理者"]
+    content.config.auto_open_first_season = False
+    admin = Game.new(content, "管理者", rng=random.Random(1), world=world)
+    zi = Game.new(content, "子", rng=random.Random(2), world=world)
+    admin.admin_open_season(now=100.0)
+    zi.sync(101.0)
+    for game in (admin, zi):
+        (entry,) = _big_event_entries(game)
+        assert (entry.tag, entry.time) == ("三十六方同日起事。", 0)
+    assert "剛剛　第1週・週一 00:00" in zi.latest_entry_html()
+
+
+def test_skipped_big_events_are_not_delivered(content, world):
+    install_season_one(content)
+    game = Game.new(content, "沈浪", rng=random.Random(0), world=world)
+    game.state.world.figures["zhangmancheng"] = FigureState(status="retired")
+    game.advance(calendar.week_start(7, content) + calendar.cal_hour_seconds(content))
+    assert game.state.world.timeline["qinjie"].key == "skip"
+    lines = [line for e in _big_event_entries(game) for line in e.lines]
+    assert not any("秦頡" in line for line in lines) and "qinjie" not in game.state.player.events_seen
+
+
+def test_no_big_events_are_delivered_with_the_switch_off(content, world):
+    install_season_one(content)
+    zi = Game.new(content, "子", rng=random.Random(2), world=world)
+    zi.sync(0.0)
+    zi.advance(calendar.week_start(3, content))
+    assert len(_big_event_entries(zi)) == 1
+    content.config.season_one = False  # 開關關著：就算這一季蓋過章，什麼也不補
+    other = Game.new(content, "乙", rng=random.Random(5), world=world)
+    other.sync(5.0)
+    assert _big_event_entries(other) == [] and other.state.player.events_seen == []
+
+
+def test_big_events_start_over_with_the_new_season(content, world):
+    """看過的大事 id 每季重來：新的一季開季那一下結算的第 1 週大事，上一季看過的人也照樣收得到。"""
+    install_season_one(content)
+    content.config.admins = ["管理者"]
+    admin = Game.new(content, "管理者", rng=random.Random(1), world=world)
+    zi = Game.new(content, "子", rng=random.Random(2), world=world)
+    admin.sync(0.0)
+    zi.sync(0.0)
+    admin.advance(calendar.cal_hour_seconds(content))
+    zi.sync(5.0)
+    assert zi.state.player.events_seen == ["uprising"]
+    admin.admin_end_season(now=10.0)
+    admin.admin_next_season(now=20.0)
+    zi.sync(30.0)
+    assert zi.state.player.events_seen == ["uprising"] and len(_big_event_entries(zi)) == 1  # 新角色的紀錄，新的一季
+    assert len(_big_event_entries(admin)) == 1 and admin.state.player.events_seen == ["uprising"]
+
+
 def test_skipped_events_stay_off_the_bulletin(content, world):
     """張曼成已經退場：第 7 週秦頡那件記成跳過，公告卡只有同一週的盧植圍廣宗。"""
     install_season_one(content)

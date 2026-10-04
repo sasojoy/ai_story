@@ -3,7 +3,8 @@
 - 什麼時候：一般大事看季曆（calendar.event_time）；決戰與季末看 WorldState.schedule（管理者可以改）。
 - 怎麼結算：給了結果鍵照它（決戰由 T8 給、管理者也用）→ 有人鎖定關鍵伏筆照 lock_result → 固定的照 "fixed"
   → 其餘照戰況擲骰（roll_chance）。
-- 公告：「【江湖大事】」開頭，跟著 sync／advance 的訊息進江湖紀錄；同時寫一則天下大事傳聞與一行江湖史。
+- 公告：「【江湖大事】」開頭，同時記在時間軸（TimelineResult.text）、寫一則天下大事傳聞與一行江湖史。進每個人的江湖紀錄是
+  Game._deliver_big_events 的事（每個角色同步時補自己還沒看過的），不是只進推進到那一刻的人（FB-038）。
 
 state 是 GameState（季的事用的是 world._season_vehicle 那個空殼玩家），只讀寫 state.world；不碰儲存。"""
 from __future__ import annotations
