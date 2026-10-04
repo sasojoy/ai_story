@@ -133,9 +133,10 @@ def test_label_flips_left_near_right_edge(state, content):
     assert 'text-anchor="end"' in render_map(state, content)
 
 
-def test_legend_sits_at_the_bottom(state, content):
+def test_legend_sits_at_the_bottom_inside_the_frame(state, content):
+    """圖例在左下角、外框裡面那條線之內，不蓋住外框（外框的內線在 10，圖例從 14 開始）。"""
     svg = render_map(state, content)
-    assert f'<rect x="8" y="{content.map.height - 50}"' in svg
+    assert f'<rect x="14" y="{content.map.height - 14 - 46}"' in svg
 
 
 def test_view_states_are_full_faded_ghost_and_dot(state, content):
@@ -169,8 +170,8 @@ def test_legend_shows_the_six_icons_and_how_views_are_drawn(state, content):
     assert svg.count("scale(0.7)") == 6
     assert all(f">{text}<" in svg for text in ("城鎮", "寺院書院", "營寨", "渡口", "山林", "野外"))
     states = re.search(rf'<text x="(\d+)" y="\d+" font-size="12" fill="#5F5E5A">{LEGEND_STATES}</text>', svg)
-    box = re.search(r'<rect x="8" y="\d+" width="([\d.]+)"', svg)
-    assert int(states[1]) + text_width(LEGEND_STATES, 12) <= 8 + float(box[1])  # 圖例框裝得下第一行
+    box = re.search(r'<rect x="14" y="\d+" width="([\d.]+)"', svg)
+    assert int(states[1]) + text_width(LEGEND_STATES, 12) <= 14 + float(box[1])  # 圖例框裝得下第一行
 
 
 def test_places_keep_their_tap_circle_first_for_phones(state, content):
