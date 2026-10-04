@@ -32,7 +32,8 @@ LABEL_GAP = 5  # 名字離地點記號（含外圈）多遠
 LABEL_PAD = 0.5  # 擺名字時，和別的文字、記號至少隔多遠
 EDGE = 4  # 文字離畫布邊緣至少多遠
 OUTSIDE_WEIGHT = 10  # 找不到空位時，出界比壓到別的東西更糟
-SLIDE_STEP = 10  # 名字擺在地點上方或下方時，往左滑開一次滑多遠
+SLIDE_STEP = 10  # 名字擺在地點上方或下方時，往左（或往右）滑開一次滑多遠
+SHIFTS = (1, -1, 2, -2, 3, -3)  # 名字擺在左右兩邊、原本的位置都擠不下時，上下錯開幾個半行（往下為正）
 SEARCH_LIMIT = 400  # 擺名字時最多試幾個位置，再多就改成一個一個擺
 Box = tuple[float, float, float, float]  # 左、上、右、下
 Spot = tuple[float, float, str]  # 文字的 x、第一行的基線 y、對齊（start／middle／end）
@@ -65,6 +66,8 @@ MINI_ARROWS = 4  # 視窗邊緣最多標幾個方向
 ARROW_SIZE = 13  # 視窗邊緣方向的字級
 ARROW_SLIDE = 6  # 方向擠不下時，沿著邊緣滑開一次滑多遠
 ARROW_SLIDES = 20  # 往每一邊最多滑幾次（40 個地點的地圖，兩站外同方向的地點常常擠在同一邊）
+LEGEND_X = mapart.FRAME_INSIDE  # 圖例框的左緣：在外框裡面
+LEGEND_HEIGHT = 46
 YOU_SIZE = 7  # 路上的「你」：圓點的半徑（路上設計 3.4）
 YOU_FILL = "#D85A30"
 Point = tuple[float, float]
@@ -212,7 +215,7 @@ def _legend_line(layer: str) -> str:
 
 def _legend_xs() -> list[int]:
     """圖例第一行：六個小圖示各自的中心 x，最後再多一個：視野狀態那段字從哪裡寫起。"""
-    xs = [22]
+    xs = [LEGEND_X + 14]
     for _, text in LEGEND_ICONS:
         xs.append(xs[-1] + 26 + round(text_width(text, 12)))
     xs[-1] += 6
@@ -221,15 +224,15 @@ def _legend_xs() -> list[int]:
 
 def _legend_width(width: int, layer: str) -> float:
     """圖例框的寬：裝得下兩行字（第一行的圖示與視野狀態、第二行的外圈與圖層說明），但不超出地圖。"""
-    first = _legend_xs()[-1] + text_width(LEGEND_STATES, 12) + 2
-    return min(width - 16, max(400, first, text_width(_legend_line(layer), 12) + 24))
+    first = _legend_xs()[-1] - LEGEND_X + text_width(LEGEND_STATES, 12) + 10
+    return min(width - 2 * LEGEND_X, max(400, first, text_width(_legend_line(layer), 12) + 24))
 
 
 def _legend(top: int, width: int, layer: str) -> str:
     """圖例：第一行是六種地點圖示（縮成七成）與視野狀態的畫法，第二行是外圈與這一層的說明。"""
     box = _legend_width(width, layer)
     parts = [
-        f'<rect x="8" y="{top}" width="{box:g}" height="46" rx="6" fill="{mapart.DISC}" fill-opacity="0.92" '
+        f'<rect x="{LEGEND_X}" y="{top}" width="{box:g}" height="{LEGEND_HEIGHT}" rx="6" fill="{mapart.DISC}" fill-opacity="0.92" '
         'stroke="#B9AD8E" stroke-width="1"/>'
     ]
     xs, cy = _legend_xs(), top + 13
@@ -238,7 +241,7 @@ def _legend(top: int, width: int, layer: str) -> str:
         parts.append(f'<g transform="translate({x},{cy}) scale(0.7) translate({-x},{-cy})">{icon}</g>')
         parts.append(f'<text x="{x + 10}" y="{top + 17}" font-size="12" fill="{LEGEND_TEXT}">{text}</text>')
     parts.append(f'<text x="{xs[-1]}" y="{top + 17}" font-size="12" fill="{LEGEND_TEXT}">{LEGEND_STATES}</text>')
-    parts.append(f'<text x="14" y="{top + 38}" font-size="12" fill="{LEGEND_TEXT}">{escape(_legend_line(layer))}</text>')
+    parts.append(f'<text x="{LEGEND_X + 6}" y="{top + 38}" font-size="12" fill="{LEGEND_TEXT}">{escape(_legend_line(layer))}</text>')
     return "".join(parts)
 
 
@@ -353,8 +356,11 @@ def _reach(view: str, selected: bool) -> tuple[float, float]:
 
 def _label_spots(x: int, y: int, reach: float, lines: list[tuple[str, int]], edge: float = EDGE) -> list[Spot]:
     """地點名字（連同底下的小字）可以擺的位置，依偏好排好：右、左、左下、右下；都擠不下時再試
-    右邊與左邊高一行（小字在記號旁、名字在它上面）、右上、左上，最後把下方與上方的字往左滑開，
-    最遠滑到 edge（文字能擺到的最左邊）。"""
+    右邊與左邊高一行（小字在記號旁、名字在它上面）、右上、左上，再把下方與上方的字往左滑開，
+    最遠滑到 edge（文字能擺到的最左邊）。還是擠不下時：左右兩邊上下錯開半行到一行半、正下方與正上方置中、
+    四個斜角，最後是下方與上方另一組滑開的位置（從右下、右上那頭算起，跟往左滑開的錯開，補上中間的空隙）。
+    地點擠在一起時，原本那幾個位置常常全都壓到隔壁的圓盤。新位置排在後面，但多了選擇會改變 _place_labels
+    先擺誰，所以擠的地方（例如潁川一帶）本來擺得下的名字也可能換到別的空位。"""
     gap = reach + LABEL_GAP
     clear = reach + LABEL_PAD + 1  # 上下擺時，文字離記號中心至少多遠
     below = y + clear + lines[0][1] * ASCENT
@@ -368,7 +374,15 @@ def _label_spots(x: int, y: int, reach: float, lines: list[tuple[str, int]], edg
     lefts = [left for left in lefts if left >= edge]
     if x + reach - width < edge < x - reach:
         lefts.append(edge)  # 貼著畫布左邊
-    return spots + [(left, base, "start") for base in (below, above) for left in lefts]
+    spots += [(left, base, "start") for base in (below, above) for left in lefts]
+    for half in SHIFTS:  # 左右兩邊上下錯開
+        dy = half * LINE_GAP / 2
+        spots += [(x + gap, y + 5 + dy, "start"), (x - gap, y + 5 + dy, "end")]
+    spots += [(x, below, "middle"), (x, above, "middle")]
+    spots += [(x + gap, below, "start"), (x - gap, below, "end"), (x + gap, above, "start"), (x - gap, above, "end")]
+    rights = [x + reach + d - width for d in range(SLIDE_STEP, math.ceil(width - 2 * reach), SLIDE_STEP)]
+    spots += [(right, base, "start") for base in (below, above) for right in rights]
+    return list(dict.fromkeys(spots))  # 去掉重複的位置（一行字時有幾個會重疊），順序照舊
 
 
 def _region_labels(
@@ -513,7 +527,7 @@ def render_map(
     prefixes, notes, discs = _layer_marks(state, content, layer, views, odds)
     spot = atlas.road_spot(state, content)
     you = _you(content, spot) if spot is not None else None  # 在路上：「你」畫在兩站之間（路上設計 3.4）
-    legend_top = m.height - 50
+    legend_top = m.height - mapart.FRAME_INSIDE - LEGEND_HEIGHT  # 圖例在外框裡面，不蓋住外框
     out = [
         # max-width:100% 是必要的：少了它，這個 div 會被裡面整張地圖寬的 SVG 撐開、整塊溢出版面，
         # 於是 overflow:auto 永遠不會啟動——畫面上就是「地圖超出邊界、卡住看不了」（手機實測）。
@@ -557,7 +571,7 @@ def render_map(
     if you is not None:
         out.append(_you_mark(content, spot, you, taken))
     out += _terrain_names(m, taken)
-    taken.append(((8, legend_top, 8 + _legend_width(m.width, layer), legend_top + 46), TEXT_WEIGHT))
+    taken.append(((LEGEND_X, legend_top, LEGEND_X + _legend_width(m.width, layer), legend_top + LEGEND_HEIGHT), TEXT_WEIGHT))
     here = state.player.location
     placed = []  # （地點, 狀態, 幾行字）：所在地排第一個
     for loc in sorted(content.locations.values(), key=lambda loc: loc.id != here):
