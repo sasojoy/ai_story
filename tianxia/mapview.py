@@ -400,21 +400,24 @@ def _rivers(m: MapLayout) -> list[str]:
     return [mapart.river_shape(river) for river in m.rivers]
 
 
-def _terrain_names(m: MapLayout, taken: list[Taken]) -> list[str]:
-    """有名字的地形寫成淡綠小字（位置見 mapart.terrain_name_spot），佔的範圍加進 taken，地點名字會讓開。
-    畫在地點記號上面，所以不接點擊（pointer-events="none"），免得擋住點地點。"""
+def _terrain_names(m: MapLayout, taken: list[Taken], bounds: Box | None = None) -> list[str]:
+    """有名字的地形寫成淡綠小字（位置見 mapart.terrain_name_spot），佔的範圍加進 taken，地點名字會讓開；
+    給了 bounds（小地圖）時只寫整個落在裡面的。畫在地點記號上面，所以不接點擊（pointer-events="none"）。"""
     out = []
     for piece in m.terrain:
         if not piece.name:
             continue
         x, y = mapart.terrain_name_spot(piece)
+        box = _terrain_name_box(piece.name, x, y)
+        if bounds is not None and _outside(box, bounds):
+            continue
         out.append(
             f'<text x="{fmt(x)}" y="{fmt(y)}" font-size="{mapart.TERRAIN_NAME_SIZE}" fill="{mapart.TERRAIN_TEXT}" '
             f'text-anchor="middle" letter-spacing="{mapart.TERRAIN_NAME_SPACING}" stroke="{m.background}" '
             f'stroke-width="3" stroke-linejoin="round" style="paint-order:stroke" pointer-events="none">'
             f"{escape(piece.name)}</text>"
         )
-        taken.append((_terrain_name_box(piece.name, x, y), TEXT_WEIGHT))
+        taken.append((box, TEXT_WEIGHT))
     return out
 
 
@@ -630,7 +633,8 @@ def _edge_spots(start: Point, end: Location, text: str, size: int, bounds: Box) 
 
 def render_minimap(state: GameState, content: Content) -> str:
     """場景旁的小地圖：以所在地為中心，從大地圖截一塊 content.map.mini_window 大的視窗（超出地圖的地方填底色），
-    畫法同大地圖：大區底色（照原色，不依大勢變紅）、河、路，以及整個落在視窗裡的大區名稱與河名。
+    畫法同大地圖：大區底色（照原色，不依大勢變紅）、河、碰到視窗的山頭與樹（地形算一次就快取，每次重畫只挑出來，
+    也不把整張地圖的山都塞進來）、路，以及整個落在視窗裡的大區名稱、河名與山名；沒有外框、指北針。
     中心落在視窗裡的地點依視野畫記號：摸清的寫名字（所在地寫「名字（你）」並加粗），畫出輪廓的未知地點寫
     「名字？」，淡點不寫名字；未開放的地點與通往它的路不畫。視窗外的地點不畫記號，只有路通出去；
     其中 MINI_HOPS 站以內的摸清地點，在視窗邊緣朝它的方向寫「箭頭 名字」（見 _edge_targets）。
@@ -666,6 +670,7 @@ def render_minimap(state: GameState, content: Content) -> str:
             out.append(_text(region.label_x, region.label_y, region.name, REGION_SIZE, region.text_fill, bg))
             taken.append((box, TEXT_WEIGHT))
     out += _rivers(m)
+    out += [piece.svg for piece in mapart.terrain(content) if _overlap(piece.extent, window)]
     for label in m.labels:
         text, box = _river_label(label)
         if not _outside(box, bounds):
@@ -682,6 +687,7 @@ def render_minimap(state: GameState, content: Content) -> str:
         out += parts
     if you is not None:
         out.append(_you_mark(content, spot, you, taken))
+    out += _terrain_names(m, taken, bounds)
     labels: list[Label] = []
     looks = []  # 每段字的（顏色, 加粗）
     for loc in sorted(shown, key=lambda loc: loc.id != here.id):  # 所在地排第一個

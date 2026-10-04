@@ -13,7 +13,7 @@ from tianxia.mapview import (
     text_box, text_width,
 )
 from tianxia.models import Connection, Location, MapRiver, Terrain
-from tianxia.state import Journey, Rumor
+from tianxia.state import Journey, Rumor, new_game_state
 
 
 def no_odds(squad_id: str) -> str:
@@ -607,3 +607,34 @@ def test_terrain_is_the_same_before_and_after_a_place_unlocks(state, content):
     after = render_map(state, content)
     assert "寶洞" not in before and "寶洞" in after
     assert tree.findall(before) and tree.findall(before) == tree.findall(after)  # 地形只跟內容有關，開放前後一樣
+
+
+# ── 小地圖的地形、手機上的大小（輿圖美術設計第三節）──────────────────
+
+
+def test_minimap_draws_only_the_terrain_touching_its_window(state, content):
+    content.map.terrain = [WOODS]
+    svg = render_minimap(state, content)
+    left, top, right, bottom = window(svg)
+    pieces = terrain(content)
+    inside = [p for p in pieces if p.extent[0] < right and left < p.extent[2] and p.extent[1] < bottom and top < p.extent[3]]
+    assert 0 < len(inside) < len(pieces)  # 林地蓋滿整張地圖，視窗只截到一部分
+    assert svg.count('fill="#7FA36A"') == len(inside)
+
+
+def test_minimap_names_terrain_only_when_it_fits(state, content):
+    content.map.terrain = [Terrain(kind="mountains", name="測試嶺", spine=[[20, 160], [60, 160]], size=20)]
+    assert ">測試嶺<" in render_minimap(state, content)  # 名字在 (40, 136)，整個落在視窗裡
+    content.map.terrain[0].spine = [[300, 160], [340, 160]]  # 名字在 (320, 136)，視窗外
+    assert ">測試嶺<" not in render_minimap(state, content)
+
+
+def test_real_maps_stay_small_enough_for_phones(real):
+    state = new_game_state(real, "測試")
+    state.player.visited |= set(real.locations)  # 全部摸清：圓盤、名字最多的時候
+    for layer in LEGEND_LAYERS:
+        svg = render_map(state, real, layer, "wan_city", (lambda squad_id: "穩勝") if layer == "enemies" else None)
+        assert len(svg.encode()) <= 200_000, layer  # 大地圖上限 200 KB
+    for loc_id in real.locations:  # 小地圖每 10 秒跟著畫面更新一次：只放視窗裡的山頭
+        state.player.location = loc_id
+        assert len(render_minimap(state, real).encode()) <= 50_000, loc_id
