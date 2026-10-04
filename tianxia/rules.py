@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import random
 import re
+from collections.abc import Callable
 
 from . import materials, roster, team  # 與 roster 互相 import：只能引入整個模組、呼叫時才取屬性，不能 from .roster import …
 from .models import Check, Condition, Content, Effect
@@ -215,7 +216,12 @@ def learn_skill(state: GameState, content: Content, skill_id: str) -> list[str]:
     return [f"你習得了【{skill.name}】！"]
 
 
-def apply_effect(effect: Effect, state: GameState, content: Content, world: WorldStateStore) -> list[str]:
+def apply_effect(
+    effect: Effect, state: GameState, content: Content, world: WorldStateStore,
+    push: Callable[..., list[str]] | None = None,
+) -> list[str]:
+    """套用一則效果。push 是玩家造成的大勢推動要交給誰處理（Game.push_trend：人數緩衝、每曆日上限、貢獻帳，
+    呼叫時帶 source="event"）；沒給就照舊直接 change_trend（管理者、引導獎勵等沒有「玩家個人推動」的呼叫端）。"""
     p = state.player
     names = content.config.stat_names
     msgs: list[str] = []
@@ -250,7 +256,7 @@ def apply_effect(effect: Effect, state: GameState, content: Content, world: Worl
     if effect.recruit:
         msgs += roster.recruit(state, content, world, effect.recruit)
     for trend_id, delta in effect.trend.items():
-        msgs += change_trend(state, content, trend_id, delta)
+        msgs += change_trend(state, content, trend_id, delta) if push is None else push(trend_id, delta, source="event")
     jade_seal_flag = content.scenario.jade_seal_flag
     newly_found_shard = (
         jade_seal_flag is not None and jade_seal_flag in effect.world_flags_add and jade_seal_flag not in state.world.flags

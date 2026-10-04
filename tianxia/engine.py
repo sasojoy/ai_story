@@ -13,7 +13,7 @@ from pydantic import BaseModel
 
 from . import (
     atlas, battle_instance, battlelog, calendar, companion_agent, craft, encounter, event_llm, flavor, journal, materials,
-    roster, skillview, team, timetable,
+    push, roster, skillview, team, timetable,
 )
 from .events import choice_label, event_candidates, has_events_here, pick_event, visible_choices
 from .guide import note_action, quest_text, tutorial_intro
@@ -1551,7 +1551,7 @@ class Game:
                 extra.append(f"{c.config.stat_names[key]} +1")
             if not wild:
                 for trend_id, delta in loc.train_trend.items():
-                    extra += change_trend(s, c, trend_id, self._train_push(trend_id, delta))
+                    extra += self.push_trend(trend_id, self._train_push(trend_id, delta), source="train")
             changes, notes = battlelog.split_changes(extra)
             record.changes += changes
             record.notes += notes
@@ -1596,7 +1596,7 @@ class Game:
             p.stats[key] += 1
             msgs.append(f"{c.config.stat_names[key]} +1")
         for trend_id, delta in loc.train_trend.items():
-            msgs += change_trend(s, c, trend_id, self._train_push(trend_id, delta))
+            msgs += self.push_trend(trend_id, self._train_push(trend_id, delta), source="drill")
         return msgs
 
     def _train_push(self, trend_id: str, delta: int) -> int:
@@ -1610,6 +1610,54 @@ class Game:
         """在這個地點（預設所在地）遊歷打贏或操練時，各條大勢線會被推多少（照自己的陣營，見 _train_push）。"""
         loc = self.content.locations[loc_id or self.state.player.location]
         return {trend_id: self._train_push(trend_id, delta) for trend_id, delta in loc.train_trend.items()}
+
+    def push_trend(self, trend_id: str, delta: int, *, source: str) -> list[str]:
+        """玩家自己造成的大勢推動一律走這裡（遊歷、操練、事件效果；sim_tick、時刻表、決戰、管理者不是個人推動，不走）。
+        第一季設計第七節的規則，掛在第一季開關後面——開關關著（或這一季開季時是關的）就是 change_trend，一個字都不變：
+        1. 陣營人數緩衝：推力 ÷ √n，n＝自己陣營 active_window_days 個曆日內推過大勢的成員（含自己這一次、含假人，最少 1）；
+        2. 每人每曆日對每條線的上限（緩衝後算）：超過的部分不推大勢；
+        3. 貢獻帳：替自己陣營的目標方向推才記，contrib_per_push × 推力（不打緩衝的折），超過上限的部分只記 over_cap_contrib_ratio；
+        4. 散人照推、照受上限，n 當 1，不記貢獻也不進活躍名單。
+        緩衝後常有小數：不足一點的記在全服的 trend_accum（每條線一個），滿一點才真的推；回傳既有格式的「（潁川汝南 +2）」，
+        只有整數真的動了才有。source 先只當註記（"train"、"drill"、"event"），不存檔。"""
+        s, c = self.state, self.content
+        w, p = s.world, s.player
+        if not calendar.season_one_on(w, c):
+            return change_trend(s, c, trend_id, delta)
+        if delta == 0 or (delta < 0 and trend_id not in w.revealed):
+            return []  # change_trend 也不會動的推動：不能拿來刷貢獻、也不算活躍
+        cfg = c.config
+        now = w.time
+        at = calendar.point(now, c, w)
+        window = cfg.active_window_days * DAY / calendar.cal_scale(c, w)
+        key = f"{at.cal_day}:{trend_id}"
+        pushed = push.buffered(abs(delta), push.active_count(s, p.faction, now, window))
+        used = p.pushed.get(key, 0.0)
+        moved, _ = push.split_by_cap(pushed, used, cfg.daily_push_cap)
+        p.pushed = push.recent_days(p.pushed, at.cal_day)
+        p.pushed[key] = used + moved
+
+        msgs: list[str] = []
+        if moved > 0:
+            whole, rest = push.take_whole(w.trend_accum.get(trend_id, 0.0), moved if delta > 0 else -moved)
+            if rest:
+                w.trend_accum[trend_id] = rest
+            else:
+                w.trend_accum.pop(trend_id, None)
+            if whole:
+                msgs = change_trend(s, c, trend_id, whole)
+
+        if p.faction is not None:  # 散人：照推，但不記貢獻、不進活躍名單
+            faction = next((f for f in c.scenario.factions if f.id == p.faction), None)
+            goal = faction.goals.get(trend_id, 0) if faction is not None else 0
+            if goal and (goal > 0) == (delta > 0):  # 替自己陣營的目標方向推；逆著推、這條線沒有目標都不記
+                gained = push.contribution(abs(delta), pushed, moved, cfg.contrib_per_push, cfg.over_cap_contrib_ratio)
+                if gained:
+                    p.contrib += gained
+                    p.contrib_weeks[at.week] = p.contrib_weeks.get(at.week, 0) + gained
+            w.active_pushers.setdefault(p.faction, {})[p.name] = now
+        w.active_pushers = push.drop_stale(w.active_pushers, now, window)  # 順手清掉超過時窗的人，名單不會一直長
+        return msgs
 
     def _battle_rewards(self, squad: Squad, record) -> list[str]:
         p = self.state.player
@@ -1857,7 +1905,7 @@ class Game:
         if not rewarded or capped:
             return [sight.text]
         self._count_road_reward("sight", day)
-        return [sight.text] + apply_effect(sight.effect, s, c, self.world)
+        return [sight.text] + apply_effect(sight.effect, s, c, self.world, push=self.push_trend)
 
     def _journey_line(self) -> str:
         """在路上的那一句（狀態列、場景共用）：「往寶洞（步行），第1天 00:08 抵達，還要約 8 分鐘；下一站湖邊」。"""
@@ -1936,7 +1984,7 @@ class Game:
         won = result.tier in team.WIN_TIERS
         rewards = self._battle_rewards(squad, record) if won else []
         effect = choice.effect if won else choice.fail_effect
-        story = apply_effect(effect, s, c, self.world)
+        story = apply_effect(effect, s, c, self.world, push=self.push_trend)
         changes, notes = battlelog.split_changes(story)
         record.changes += changes
         record.notes += notes
@@ -1946,7 +1994,7 @@ class Game:
         return msgs
 
     def _apply(self, effect: Effect) -> list[str]:
-        msgs = apply_effect(effect, self.state, self.content, self.world)
+        msgs = apply_effect(effect, self.state, self.content, self.world, push=self.push_trend)
         if effect.next_event:
             msgs += self._present(self.content.events[effect.next_event])
         return msgs
