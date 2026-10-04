@@ -911,7 +911,7 @@ def test_end_to_end_one_chain(world):
     公告寫出官軍的名字與黃巾搶輸的一筆，江湖史有一筆「（名號改寫）」，之後每個人同步都收到那則公告。"""
     c = load_content(CONTENT_DIR, profile="weekend")
     c.config.auto_open_first_season = True
-    c.config.geju_chaos_per_day = 0.0  # 割據不漲：沒人玩時三條戰線一直在亂局，割據到 85 會在第 5 週以「群雄並起」收季（T9，已回報 PM 待決）；這裡測的不是它
+    c.config.geju_chaos_per_day = 0.0  # 割據不漲：沒人玩時三條戰線一直在亂局，割據第 5 週就過 85，第 10 週（decisive_from_week）起會以「群雄並起」提前收季，廣宗與季末就輪不到；這裡測的不是它
     jia = Game.new(c, "趙甲", rng=random.Random(1), world=world)
     yi = Game.new(c, "錢乙", rng=random.Random(2), world=world)
     admin = Game.new(c, "Rayal", rng=random.Random(3), world=world)

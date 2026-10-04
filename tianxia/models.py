@@ -647,6 +647,8 @@ class Config(_Strict):
     chaos_low: int = 35  # 亂局：戰況在 chaos_low～chaos_high 之間（含兩端，第一季設計 4.2；low 不能大於 high，content.validate 檢查）
     chaos_high: int = 65
     season_weeks: int = Field(default=12, ge=1)  # 季曆：一季壓成幾週（計畫第六節：季曆秒＝世界秒 × 週數 × 7 ÷ season_days）
+    # 決定性勝利（黃巾聲勢 ≥85、≤15，割據 ≥85）季曆第幾週起才提前收季；之前到了門檻也不收，季末照常比（企劃者 2026-10-05，計畫 T9）
+    decisive_from_week: int = Field(default=10, ge=1)
     # 時刻表的人物結局扣多少聲威（時刻表結算文件第一節）：只有這三種用詞會扣；退場、重創是聲威歸零，下獄、到任不動聲威
     fate_prestige: dict[Literal["重挫", "聲威大減", "受挫"], int] = Field(
         default_factory=lambda: {"重挫": -30, "聲威大減": -30, "受挫": -15}

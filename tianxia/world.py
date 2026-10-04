@@ -226,8 +226,12 @@ def evaluate_ending(state: GameState, content: Content) -> Ending:
 
 
 def decisive_ending(state: GameState, content: Content) -> Ending | None:
-    """決定性勝利（有 stance_min／stance_max 的結局）此刻成立了沒（計畫 T9：季的事每曆時看一次）；第一季以外一律 None。"""
+    """決定性勝利（有 stance_min／stance_max 的結局）此刻成立了沒（計畫 T9：季的事每曆時看一次）；第一季以外一律 None。
+    季曆第 decisive_from_week 週（預設 10）以前一律 None：割據開季後幾週就會頂到門檻，太早收季三場大戲就打不完
+    （企劃者 2026-10-05）；到了那一週已經在門檻上的，照規則當下收。"""
     if not season_one(content, state.world):
+        return None
+    if calendar.point(state.world.time, content, state.world).week < content.config.decisive_from_week:
         return None
     standing = stances(state, content)
     return next(

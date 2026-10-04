@@ -64,7 +64,10 @@ def test_finale_compares_stances(on, fronts, geju, expected):
 
 
 def test_decisive_only_for_threshold_endings(on):
+    from tianxia import calendar
+
     game = _game(on)
+    game.state.world.time = calendar.week_start(10, on, game.state.world)  # 決定性勝利第 10 週起才算
     _stances(game, huangjin_fronts=60, geju=40)
     assert world_mod.decisive_ending(game.state, on) is None  # 比態勢的那三種不是決定性勝利
     _stances(game, huangjin_fronts=86, geju=40)
@@ -139,11 +142,30 @@ def test_finale_adds_dong_zhuo_when_crippled(on):
     assert game.state.world.timeline["xiaquyang"].text.endswith("下曲陽破了，可冀州的山裡仍有黃旗。董卓兵敗，涼州軍元氣大傷。")
 
 
+def test_decisive_victory_waits_for_week_ten(on):
+    """企劃者 2026-10-05：決定性勝利三方都一樣，第 decisive_from_week 週（預設 10）以後才提前收季；之前到了門檻也不收。"""
+    from tianxia import calendar
+
+    assert on.config.decisive_from_week == 10
+    game = _game(on)
+    game.advance(60)
+    _stances(game, huangjin_fronts=50, geju=95)  # 群雄並起的門檻早就過了
+    assert world_mod.decisive_ending(game.state, on) is None
+    _quiet_until_finale(game)
+    game.state.world.time = calendar.week_start(10, on, game.state.world) - 200
+    game.advance(150)  # 第 9 週的最後一刻：還不收
+    assert not game.state.world.ended
+    game.advance(120)  # 跨進第 10 週：已經在門檻上，照規則收
+    assert game.state.world.ended and game.state.world.ending_id == "s1_warlords"
+    assert game.state.world.timeline["xiaquyang"].text.startswith("戰事提前收束。")
+
+
 def test_decisive_victory_ends_immediately(on):
     from tianxia import calendar
 
     game = _game(on)
-    game.advance(60)  # 開季後的第一個曆時：第 1 週的事
+    _quiet_until_finale(game)
+    game.state.world.time = calendar.week_start(10, on, game.state.world) + 60  # 第 10 週起才算
     _stances(game, huangjin_fronts=86, geju=20)
     game.advance(calendar.cal_hour_seconds(on, game.state.world) + 1)  # 跨過下一個曆時交界
     w = game.state.world
@@ -202,3 +224,14 @@ def test_contribution_rankings_top_five_per_side_this_season(on, world):
     assert ranks["huang"] == [("人2", 30), ("某位少俠", 10)]
     assert ranks["haoqiang"] == []  # RF5：沒人出力也有那一格
     assert all(name != "人3" for rows in ranks.values() for name, _ in rows)  # 散人不列
+
+
+def test_an_idle_season_lasts_to_week_ten(on):
+    """沒人玩的一季（企劃者 2026-10-05 的裁定之後）：割據早早頂到門檻，但第 10 週以前不收季；T11「第 6 週以前沒有決定性勝利」。"""
+    from tianxia import calendar
+
+    game = _game(on)
+    while not game.state.world.ended:
+        game.advance(3600)
+    w = game.state.world
+    assert calendar.point(w.time, on, w).week >= on.config.decisive_from_week
