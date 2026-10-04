@@ -405,6 +405,42 @@ def _rivers(m: MapLayout) -> list[str]:
     return [mapart.river_shape(river) for river in m.rivers]
 
 
+def _terrain_names(m: MapLayout, taken: list[Taken]) -> list[str]:
+    """有名字的地形寫成淡綠小字（位置見 mapart.terrain_name_spot），佔的範圍加進 taken，地點名字會讓開。
+    畫在地點記號上面，所以不接點擊（pointer-events="none"），免得擋住點地點。"""
+    out = []
+    for piece in m.terrain:
+        if not piece.name:
+            continue
+        x, y = mapart.terrain_name_spot(piece)
+        out.append(
+            f'<text x="{fmt(x)}" y="{fmt(y)}" font-size="{mapart.TERRAIN_NAME_SIZE}" fill="{mapart.TERRAIN_TEXT}" '
+            f'text-anchor="middle" letter-spacing="{mapart.TERRAIN_NAME_SPACING}" stroke="{m.background}" '
+            f'stroke-width="3" stroke-linejoin="round" style="paint-order:stroke" pointer-events="none">'
+            f"{escape(piece.name)}</text>"
+        )
+        taken.append((_terrain_name_box(piece.name, x, y), TEXT_WEIGHT))
+    return out
+
+
+def _terrain_name_box(name: str, x: float, y: float) -> Box:
+    """山名佔的範圍：有字距，比 text_box 估的寬一點。"""
+    left, top, right, bottom = text_box(x, y, name, mapart.TERRAIN_NAME_SIZE, "middle")
+    pad = mapart.TERRAIN_NAME_SPACING * len(name) / 2
+    return left - pad, top, right + pad, bottom
+
+
+def _compass(m: MapLayout, taken: list[Taken]) -> str:
+    """指北針（map.json 寫了 compass 才畫），把它與「北」字佔的範圍加進 taken。"""
+    if m.compass is None:
+        return ""
+    x, y = m.compass
+    r, n = mapart.COMPASS_RADIUS, mapart.COMPASS_NEEDLE
+    taken.append(((x - r, y - n, x + r, y + n), 1))
+    taken.append((text_box(x, y - mapart.NORTH_RISE, "北", mapart.NORTH_SIZE, "middle"), TEXT_WEIGHT))
+    return mapart.compass(x, y)
+
+
 def _river_label(label: MapLabel) -> tuple[str, Box]:
     """河名的 SVG 與它佔的範圍。"""
     svg = f'<text x="{label.x}" y="{label.y}" font-size="{RIVER_SIZE}" fill="{RIVER_TEXT}">{escape(label.text)}</text>'
@@ -461,8 +497,9 @@ def render_map(
     大地圖照原尺寸畫在可捲動的框裡（地圖上的遠近就是真正的路程，縮到欄寬字會太小；見地圖擴充與移動設計）。
     敵情層要傳 odds（Game.odds）才會寫出「最險」；其餘圖層不用、也不會算勝算。
 
-    地點名字（連同底下的小字）擺在不壓到大區名稱、大勢、河名、地點記號（含所在地與選定的圓圈）、圖例與
-    其他名字，也不出界的地方：所在地先擺，每個名字依序試右、左、左下、右下，擠不下再試其他位置
+    底下是紙色、雙線外框，大區、河、山頭與樹、路依序畫上去（輿圖美術設計）；map.json 寫了 compass 才畫指北針。
+    地點名字（連同底下的小字）擺在不壓到大區名稱、大勢、河名、山名、指北針、地點記號（含所在地與選定的圓圈）、
+    圖例與其他名字，也不出界的地方：所在地先擺，每個名字依序試右、左、左下、右下，擠不下再試其他位置
     （見 _label_spots、_place_labels）。選定地點的名字擺在選定圓圈外面。"""
     m = content.map
     bg = m.background
@@ -490,11 +527,14 @@ def render_map(
     out += _polygons(m, tints)
     out += region_texts  # 大區名稱畫在所有大區上面，不會被相鄰的大區蓋住
     out += _rivers(m)
+    out += [piece.svg for piece in mapart.terrain(content)]
     for label in m.labels:
         text, box = _river_label(label)
         out.append(text)
         taken.append((box, TEXT_WEIGHT))
     out += _roads(content, views)
+    out.append(mapart.frame(m.width, m.height))
+    out.append(_compass(m, taken))
     if layer == "routes":
         out.append(_route_line(state, content, selected, spot))
     reach: dict[str, float] = {}
@@ -510,6 +550,7 @@ def render_map(
             out.extend(parts)
     if you is not None:
         out.append(_you_mark(content, spot, you, taken))
+    out += _terrain_names(m, taken)
     taken.append(((8, legend_top, 8 + _legend_width(m.width, layer), legend_top + 46), TEXT_WEIGHT))
     here = state.player.location
     placed = []  # （地點, 狀態, 幾行字）：所在地排第一個

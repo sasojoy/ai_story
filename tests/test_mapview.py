@@ -1,16 +1,18 @@
 import html
 import math
 import re
+from pathlib import Path
 
 import pytest
 
 from tianxia.atlas import location_view, vision_range, visible_locations
-from tianxia.mapart import bezier_point, bezier_tail, fmt, mix, road_control
+from tianxia.content import load_content
+from tianxia.mapart import bezier_point, bezier_tail, fmt, mix, road_control, terrain
 from tianxia.mapview import (
     LEGEND_LAYERS, MINI_HEIGHT, NODE_FILL, ROUTE_STROKE, SELECT_STROKE, YOU_SIZE, node_shape, render_map,
     render_minimap, text_box, text_width,
 )
-from tianxia.models import Connection, Location
+from tianxia.models import Connection, Location, Terrain
 from tianxia.state import Journey, Rumor
 
 
@@ -444,3 +446,90 @@ def test_roads_bend_and_are_drawn_by_their_kind(state, content):
     content.config.vision_base = 0  # 湖邊、寶洞都成了淡點：兩頭都沒摸清的路畫成淡色點線
     faint = f'<path d="M300,100 Q{fmt(bx)},{fmt(by)} 200,100" fill="none" stroke="#C2B394" stroke-width="1.4" stroke-dasharray="1.5 4"'
     assert faint in render_map(state, content)
+
+
+# ── 地形、外框、指北針（輿圖美術設計 2.1、2.5）──────────────────────
+
+RIDGE_ACROSS = Terrain(kind="mountains", name="測試嶺", spine=[[20, 100], [380, 100]], size=20)  # 正好壓過小鎮、湖邊與路
+WOODS = Terrain(kind="forest", points=[[10, 40], [390, 40], [390, 190], [10, 190]])  # 整張地圖都是林地
+
+
+@pytest.fixture(scope="module")
+def real():
+    return load_content(Path(__file__).parent.parent / "content")
+
+
+def trampled(pieces, content) -> list[str]:
+    """壓到地點記號或路的山頭與樹。地點記號是半徑 13 的圓盤加外圈（14）；路照畫出來的曲線細細取點。"""
+    discs = [(loc.id, (loc.x - 14, loc.y - 14, loc.x + 14, loc.y + 14)) for loc in content.locations.values()]
+    dots = []
+    for a in content.locations.values():
+        for b_id in a.connections:
+            b, c = content.locations[b_id], road_control(content, a.id, b_id)
+            dots += [(f"{a.id}—{b_id}", bezier_point((a.x, a.y), c, (b.x, b.y), i / 64)) for i in range(65)]
+    found = []
+    for piece in pieces:
+        left, top, right, bottom = piece.box
+        found += [f"{piece.box}×{name}" for name, d in discs if left < d[2] and d[0] < right and top < d[3] and d[1] < bottom]
+        found += [f"{piece.box}×{name}" for name, (x, y) in dots if left < x < right and top < y < bottom]
+    return found
+
+
+def test_terrain_steps_aside_for_places_and_roads(content):
+    content.map.terrain = [RIDGE_ACROSS, WOODS]
+    pieces = terrain(content)
+    assert any('fill="#7BA088"' in p.svg for p in pieces) and any('fill="#9CB9A1"' in p.svg for p in pieces)  # 前後兩排
+    assert any('fill="#7FA36A"' in p.svg for p in pieces)  # 樹
+    assert trampled(pieces, content) == []
+    assert [p.base_y for p in pieces] == sorted(p.base_y for p in pieces)  # 由遠到近：近的蓋住遠的
+
+
+def test_real_terrain_steps_aside_for_every_place_and_road(real):
+    pieces = terrain(real)
+    assert len(pieces) > 300 and trampled(pieces, real) == []
+
+
+def test_terrain_is_worked_out_once_per_content_but_never_stale(content):
+    content.map.terrain = [WOODS]
+    first = terrain(content)
+    assert terrain(content) is first  # 同一份內容只算一次
+    content.locations["lake"].x = 330  # 搬了地點：樹要讓開新的位置
+    moved = terrain(content)
+    assert moved is not first and trampled(moved, content) == []
+    assert trampled(first, content) != []  # 舊的那一份會壓到搬過去的湖邊
+
+
+def test_terrain_is_drawn_under_the_roads(state, content):
+    content.map.terrain = [WOODS]
+    svg = render_map(state, content)
+    assert svg.index('fill="#7FA36A"') < svg.index('<path d="M200,100 Q') < svg.index('data-loc="town"')
+
+
+def test_terrain_names_are_drawn_and_place_names_step_aside(state, content):
+    content.map.terrain = [Terrain(kind="mountains", name="測試嶺", spine=[[150, 130], [170, 130]], size=20)]
+    svg = render_map(state, content)
+    name = re.search(r'<text x="([-\d.]+)" y="([-\d.]+)" font-size="12" fill="#4F6E5C"[^>]*pointer-events="none">測試嶺</text>', svg)
+    assert name and (float(name[1]), float(name[2])) == (160, 106)  # 山腳線中間、往上一個山頭高
+    box = text_box(float(name[1]), float(name[2]), "測試嶺", 12, "middle")
+    assert not overlap(label_box(svg, "town"), box)  # 小鎮的名字本來擺右邊，正好壓到山名：讓開
+
+
+def test_the_map_has_a_double_frame_and_a_compass_where_the_map_says(state, content):
+    svg = render_map(state, content)
+    assert '<rect x="5" y="5" width="390" height="190" rx="8" fill="none" stroke="#A08A5E" stroke-width="2"/>' in svg
+    assert '<rect x="10" y="10" width="380" height="180" rx="6" fill="none" stroke="#A08A5E" stroke-width="0.8"/>' in svg
+    assert ">北<" not in svg  # 夾具沒寫 compass：不畫
+    content.map.compass = (250, 100)  # 正好在湖邊右邊，湖邊的名字本來擺這裡
+    svg = render_map(state, content)
+    assert '<circle cx="250" cy="100" r="22"' in svg and ">北<" in svg
+    assert not overlap(label_box(svg, "lake"), (228, 70, 272, 130))  # 湖邊的名字讓開指北針
+
+
+def test_terrain_is_the_same_before_and_after_a_place_unlocks(state, content):
+    content.map.terrain = [WOODS]
+    tree = re.compile(r'<circle [^>]*fill="#7FA36A"/>')
+    before = render_map(state, content)  # 寶洞還沒開放：記號、名字、路都不畫
+    state.world.flags.add("cave_open")
+    after = render_map(state, content)
+    assert "寶洞" not in before and "寶洞" in after
+    assert tree.findall(before) and tree.findall(before) == tree.findall(after)  # 地形只跟內容有關，開放前後一樣

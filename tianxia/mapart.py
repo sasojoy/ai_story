@@ -5,8 +5,9 @@ from __future__ import annotations
 
 import math
 import zlib
+from dataclasses import dataclass
 
-from .models import Content, MapRiver
+from .models import Content, MapRiver, Terrain
 
 Point = tuple[float, float]
 
@@ -139,3 +140,249 @@ ROAD_STYLE = {  # 路的種類：顏色、粗細、虛線
     "山路": ("#86704F", 1.9, "1.5 4"),
 }
 FAINT_ROAD = ("#C2B394", 1.4, "1.5 4")  # 兩頭都沒摸清的路
+
+
+# ── 地形（純裝飾：只跟內容有關，同一份內容只算一次）─────────────
+
+MOUNTAIN_ROWS = (("#9CB9A1", "#7FA08A"), ("#7BA088", "#557D69"))  # 後排、前排：（山頭, 陰面）
+RIDGE = "#F1EEE2"  # 山脊的亮線
+HILL = ("#A9BE8F", "#8FA877")  # 圓丘、陰面
+TREE = ("#7FA36A", "#5F8A50", "#6B5235")  # 樹冠、陰影、樹幹
+TERRAIN_TEXT = "#4F6E5C"  # 山名
+TERRAIN_NAME_SIZE = 12
+TERRAIN_NAME_SPACING = 2  # 山名的字距
+NODE_CLEAR = 14  # 山頭與樹讓開地點多遠：圓盤半徑 13，加上外圈
+ROAD_CLEAR = 3  # 讓開路多遠
+RIVER_CLEAR = 2  # 讓開河岸多遠（從河中線算要再加半個下游河寬）
+ROAD_PIECES = 8  # 算讓開時，一條路的曲線切成幾段直線
+TERRAIN_CACHE = 8  # 最多記住幾份內容的地形
+Box = tuple[float, float, float, float]  # 左、上、右、下
+Segment = tuple[Point, Point, float]  # 要讓開的一段直線，與要讓開多遠
+
+
+@dataclass(frozen=True)
+class Piece:
+    """一個山頭、一座丘或一棵樹。"""
+
+    base_y: float  # 山腳（樹根）的 y：照它由遠到近排，近的蓋住遠的
+    box: Box  # 山體佔的範圍（山頭取中間七成寬）：讓開地點、路與河時拿它比
+    extent: Box  # 整個畫出來的範圍：小地圖拿它挑視窗裡的
+    svg: str
+
+
+_terrain_cache: dict[str, tuple[Piece, ...]] = {}
+
+
+def terrain(content: Content) -> tuple[Piece, ...]:
+    """整張地圖的山頭、丘與樹，由遠到近排好。只跟內容（地形、地點、路、河）有關、跟誰在看無關，所以同一份內容
+    只算一次；內容換了或改了（搬了地點、加了路或地形）算出來的鍵就不同，會重算，不會拿到舊的。"""
+    key = _terrain_key(content)
+    if key not in _terrain_cache:
+        if len(_terrain_cache) >= TERRAIN_CACHE:
+            _terrain_cache.pop(next(iter(_terrain_cache)))  # 丟掉最早算的那一份
+        _terrain_cache[key] = _grow_terrain(content)
+    return _terrain_cache[key]
+
+
+def terrain_name_spot(piece: Terrain) -> Point:
+    """地形的名字寫在哪（置中的 x、基線 y）：山腳線（林地是外框）的平均 x，最高那一點再往上一個山頭高。"""
+    points = piece.spine or piece.points
+    return sum(p[0] for p in points) / len(points), min(p[1] for p in points) - piece.size - 4
+
+
+def _terrain_key(content: Content) -> str:
+    m = content.map
+    places = [(loc.id, loc.x, loc.y, sorted(map(str, loc.connections))) for loc in content.locations.values()]
+    return repr(([t.model_dump() for t in m.terrain], [r.model_dump() for r in m.rivers], places))
+
+
+def _grow_terrain(content: Content) -> tuple[Piece, ...]:
+    places = [(float(loc.x), float(loc.y)) for loc in content.locations.values()]
+    segments = _obstacles(content)
+    pieces: list[Piece] = []
+    for piece in content.map.terrain:
+        key = piece.name + piece.kind  # 只看名字與種類：加一片新地形不會讓其他地形換個樣子
+        if piece.kind == "forest":
+            pieces += _forest(piece, key, places, segments)
+        else:
+            pieces += _ridge(piece, key, places, segments)
+    return tuple(sorted(pieces, key=lambda p: p.base_y))
+
+
+def _obstacles(content: Content) -> list[Segment]:
+    """地形要讓開的線段：每條路（照畫出來的曲線切成 ROAD_PIECES 段）與每條河的中線（另加半個下游河寬）。"""
+    segments: list[Segment] = []
+    for a_id, a in content.locations.items():
+        for b_id in a.connections:
+            if a_id < b_id:
+                b = content.locations[b_id]
+                c = road_control(content, a_id, b_id)
+                line = [bezier_point((a.x, a.y), c, (b.x, b.y), i / ROAD_PIECES) for i in range(ROAD_PIECES + 1)]
+                segments += [(p, q, ROAD_CLEAR) for p, q in zip(line, line[1:])]
+    for river in content.map.rivers:
+        line = river_line(river)
+        segments += [(p, q, river.width[1] / 2 + RIVER_CLEAR) for p, q in zip(line, line[1:])]
+    return segments
+
+
+def _clear(box: Box, places: list[Point], segments: list[Segment]) -> bool:
+    """box 有沒有讓開每一個地點記號（圓盤）、每一條路與河。"""
+    for x, y in places:
+        if box[0] < x + NODE_CLEAR and x - NODE_CLEAR < box[2] and box[1] < y + NODE_CLEAR and y - NODE_CLEAR < box[3]:
+            return False
+    return not any(_crosses(a, b, (box[0] - pad, box[1] - pad, box[2] + pad, box[3] + pad)) for a, b, pad in segments)
+
+
+def _crosses(a: Point, b: Point, box: Box) -> bool:
+    """線段 a—b 有沒有碰到 box（Liang–Barsky 裁切：把線段裁到 box 裡，裁得出東西就是碰到）。"""
+    low, high = 0.0, 1.0
+    dx, dy = b[0] - a[0], b[1] - a[1]
+    for p, q in ((-dx, a[0] - box[0]), (dx, box[2] - a[0]), (-dy, a[1] - box[1]), (dy, box[3] - a[1])):
+        if p == 0:
+            if q < 0:
+                return False
+            continue
+        t = q / p
+        if p < 0:
+            low = max(low, t)
+        else:
+            high = min(high, t)
+        if low > high:
+            return False
+    return True
+
+
+def _inside(x: float, y: float, points: list[list[int]]) -> bool:
+    """射線法：點是否在多邊形內。"""
+    hit = False
+    for (x1, y1), (x2, y2) in zip(points, points[1:] + points[:1]):
+        if (y1 > y) != (y2 > y) and x < x1 + (y - y1) * (x2 - x1) / (y2 - y1):
+            hit = not hit
+    return hit
+
+
+def _jitter(key: str, low: float, high: float) -> float:
+    """看起來隨意、但同一份內容每次都一樣的數（不用亂數：地形只跟內容有關）。"""
+    return low + zlib.crc32(key.encode()) % 1000 / 999 * (high - low)
+
+
+def _forest(piece: Terrain, key: str, places: list[Point], segments: list[Segment]) -> list[Piece]:
+    """林地：在多邊形裡每隔 13×11 擺一棵樹（位置稍微錯開），讓不開地點、路與河的就不種。"""
+    xs, ys = [p[0] for p in piece.points], [p[1] for p in piece.points]
+    crown, shade, trunk = TREE
+    out: list[Piece] = []
+    for gx in range(min(xs), max(xs), 13):
+        for gy in range(min(ys), max(ys), 11):
+            spot = f"{key}{gx}{gy}"
+            x, y = gx + _jitter(spot + "x", -4, 4), gy + _jitter(spot + "y", -3, 3)
+            box = (x - 6, y - 10, x + 6, y + 4)
+            if not _inside(x, y, piece.points) or not _clear(box, places, segments):
+                continue
+            r = _jitter(spot + "r", 4, 5.6)
+            svg = (
+                f'<path d="M{fmt(x)},{fmt(y + 4)} v-4" stroke="{trunk}" stroke-width="1.4"/>'
+                f'<circle cx="{fmt(x)}" cy="{fmt(y - r * 0.6)}" r="{fmt(r)}" fill="{crown}"/>'
+                f'<circle cx="{fmt(x + r * 0.35)}" cy="{fmt(y - r * 0.4)}" r="{fmt(r * 0.55)}" fill="{shade}"/>'
+            )
+            out.append(Piece(y, box, (x - r, y - r * 1.6, x + r, y + 4), svg))
+    return out
+
+
+def _ridge(piece: Terrain, key: str, places: list[Point], segments: list[Segment]) -> list[Piece]:
+    """山脈、丘陵：沿山腳線每隔一段排一個山頭（大小、位置稍微錯開）。山脈另外往山腳線的一側錯開一排小一點、
+    淡一點的後排，看起來有前後兩排。讓不開地點、路與河的山頭就不畫，路穿過的地方自然留出山口。"""
+    size = piece.size
+    mountains = piece.kind == "mountains"
+    line = catmull_rom(piece.spine, 20)
+    step = size * (0.5 if mountains else 0.9)
+    out: list[Piece] = []
+    walked, count = 0.0, 0
+    for i, (px, py) in enumerate(line):
+        if i:
+            walked += math.dist(line[i - 1], line[i])
+        if count and walked < step:
+            continue
+        (ax, ay), (bx, by) = line[max(i - 1, 0)], line[min(i + 1, len(line) - 1)]
+        length = math.hypot(bx - ax, by - ay) or 1
+        nx, ny = -(by - ay) / length, (bx - ax) / length  # 山腳線的法線：後排往這邊錯開
+        if ny > 0 or (abs(ny) < 0.35 and count % 2):  # 往上（遠處）錯開；山脈近乎南北向時左右輪流
+            nx, ny = -nx, -ny
+        walked = 0.0
+        count += 1
+        x = px + _jitter(f"{key}{count}x", -size * 0.2, size * 0.2)
+        y = py + _jitter(f"{key}{count}y", -size * 0.25, size * 0.25)
+        h = size * _jitter(f"{key}{count}h", 0.75, 1.2)
+        w = h * (1.55 if mountains else 2.4)
+        if not mountains:
+            box = (x - w * 0.35, y - h * 0.8, x + w * 0.35, y)
+            if _clear(box, places, segments):
+                out.append(Piece(y, box, (x - w / 2, y - h * 0.8, x + w / 2, y), _hill(x, y, w, h)))
+            continue
+        if not _clear((x - w * 0.35, y - h, x + w * 0.35, y), places, segments):
+            continue
+        for row, (fill, dark) in enumerate(MOUNTAIN_ROWS):
+            back = row == 0
+            off = size * 0.5 if back else 0
+            hx = x + nx * off + (_jitter(f"{key}{count}bx", -size * 0.2, size * 0.2) if back else 0)
+            hy = y + ny * off - (size * 0.15 if back else 0)
+            hh, hw = h * (0.8 if back else 1), w * (0.8 if back else 1)
+            box = (hx - hw * 0.35, hy - hh, hx + hw * 0.35, hy)
+            if back and not _clear(box, places, segments):
+                continue
+            svg = _peak(hx, hy, hw, hh, _jitter(f"{key}{count}{row}s", 0.6, 0.85), fill, dark)
+            out.append(Piece(hy, box, (hx - hw / 2, hy - hh, hx + hw / 2, hy), svg))
+    return out
+
+
+def _peak(x: float, y: float, w: float, h: float, shoulder: float, fill: str, dark: str) -> str:
+    """一個不規則的山頭：左肩、山尖、右肩，右半邊是陰面，左肩到山尖有一道亮線。"""
+    left, top, right = (x - w * 0.22, y - h * shoulder), (x + w * 0.04, y - h), (x + w * 0.24, y - h * shoulder * 0.9)
+    near = (x - w * 0.08, y - h * 0.9)
+    outline = [(x - w / 2, y), left, near, top, right, (x + w / 2, y)]
+    shade = [top, right, (x + w / 2, y), (x + w * 0.1, y)]
+    return (
+        f'<path d="{path_d(outline, closed=True)}" fill="{fill}"/>'
+        f'<path d="{path_d(shade, closed=True)}" fill="{dark}"/>'
+        f'<path d="{path_d([left, near, top])}" fill="none" stroke="{RIDGE}" stroke-width="1.1" stroke-linejoin="round"/>'
+    )
+
+
+def _hill(x: float, y: float, w: float, h: float) -> str:
+    """一座圓丘，右邊有一塊陰面。"""
+    fill, dark = HILL
+    return (
+        f'<path d="M{fmt(x - w / 2)},{fmt(y)} Q{fmt(x)},{fmt(y - h * 1.6)} {fmt(x + w / 2)},{fmt(y)} Z" fill="{fill}"/>'
+        f'<path d="M{fmt(x)},{fmt(y - h * 0.8)} Q{fmt(x + w * 0.3)},{fmt(y - h * 0.6)} {fmt(x + w / 2)},{fmt(y)} '
+        f'L{fmt(x + w * 0.1)},{fmt(y)} Z" fill="{dark}"/>'
+    )
+
+
+# ── 外框、指北針 ──────────────────────────────────────
+
+FRAME = "#A08A5E"  # 外框與指北針
+BANNER = "#C0392B"  # 紅旗（所在地）與指北針的北端
+COMPASS_RADIUS = 22  # 指北針的圓
+COMPASS_NEEDLE = 30  # 指針從中心往上下各伸多長
+NORTH_RISE = 36  # 「北」字的基線在中心上方多遠
+NORTH_SIZE = 13
+
+
+def frame(width: int, height: int) -> str:
+    """紙的雙線外框。"""
+    return (
+        f'<rect x="5" y="5" width="{width - 10}" height="{height - 10}" rx="8" fill="none" stroke="{FRAME}" '
+        'stroke-width="2"/>'
+        f'<rect x="10" y="10" width="{width - 20}" height="{height - 20}" rx="6" fill="none" stroke="{FRAME}" '
+        'stroke-width="0.8"/>'
+    )
+
+
+def compass(x: int, y: int) -> str:
+    """指北針：一個圓、上下兩頭尖的指針（北端紅色），上面寫「北」。"""
+    n = COMPASS_NEEDLE
+    return (
+        f'<circle cx="{x}" cy="{y}" r="{COMPASS_RADIUS}" fill="none" stroke="{FRAME}" stroke-width="1"/>'
+        f'<path d="M{x},{y - n} L{x + 6},{y} L{x},{y + n} L{x - 6},{y} Z" fill="{FRAME}"/>'
+        f'<path d="M{x},{y - n} L{x + 6},{y} L{x - 6},{y} Z" fill="{BANNER}"/>'
+        f'<text x="{x}" y="{y - NORTH_RISE}" font-size="{NORTH_SIZE}" fill="#7A6640" text-anchor="middle">北</text>'
+    )
