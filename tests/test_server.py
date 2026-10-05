@@ -1121,7 +1121,7 @@ def test_the_folded_first_round_is_two_lines_or_a_numbers_only_line():
     js = (server.WEB / "app.js").read_text(encoding="utf-8")
     css = (server.WEB / "style.css").read_text(encoding="utf-8")
     fit = _js_function(js, "function fitFirstRound(")
-    assert 'querySelector(".battle-card ul.rounds")' in fit and "first.offsetHeight <= 2 * lineHeight + 1" in fit
+    assert 'querySelector(".battle-card ul.rounds")' in fit and "first.offsetHeight <= 2.5 * lineHeight" in fit  # 兩行加幾 px（拉丁數字混漢字量出來會高一兩 px）不算三行
     assert "compactRound(" in fit and "if (short == null) return;" in fit  # 拼不出數字行就整句照常顯示
     assert 'list.classList.remove("tight")' in fit and 'list.classList.add("tight")' in fit
     assert "fitFirstRound();" in _js_function(js, "function afterPage(")

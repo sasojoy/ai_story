@@ -405,8 +405,9 @@
     if (!bits || /\d/.test(rest.replace(ROUND_BITS, ""))) return null;
     return `${head[0]}　${bits.join("，")}……`;
   }
-  // 畫好之後量第一回合：比兩行高、又拼得出數字行，就把它換成數字行（.r-full 整句、.r-short 數字行，style.css 的 .tight 決定露哪個；
-  // 展開時一律露整句）。每次都先拿掉 .tight 再量，轉向、拉視窗之後重量也一樣
+  // 畫好之後量第一回合：高過兩行半（三行是三倍行高；兩行混著拉丁數字與漢字量出來會多一兩 px，不能算成三行）、又拼得出數字行，
+  // 就把它換成數字行（.r-full 整句、.r-short 數字行，style.css 的 .tight 決定露哪個；展開時一律露整句）。
+  // 每次都先拿掉 .tight 再量，轉向、拉視窗之後重量也一樣
   function fitFirstRound() {
     const list = document.querySelector(".battle-card ul.rounds");
     const first = list && list.firstElementChild;
@@ -414,7 +415,7 @@
     list.classList.remove("tight");
     let full = first.querySelector(":scope > .r-full");
     const lineHeight = parseFloat(getComputedStyle(first).lineHeight);
-    if (!first.offsetHeight || !(lineHeight > 0) || first.offsetHeight <= 2 * lineHeight + 1) return;
+    if (!first.offsetHeight || !(lineHeight > 0) || first.offsetHeight <= 2.5 * lineHeight) return;
     const short = compactRound(full ? full.textContent : first.textContent);
     if (short == null) return;
     if (!full) {
