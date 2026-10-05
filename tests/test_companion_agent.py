@@ -264,7 +264,7 @@ def test_the_prompt_carries_last_seasons_bond_separately(content, state, world):
     state.player.affinities = {"mate": 8}
     prompt = companion_agent.build_system_prompt(content.characters["mate"], state, content, world, "mate")
     assert "【上一季】你們以前的交情：曾在潁川並肩殺敵。" in prompt
-    assert "交情淡了" in prompt
+    assert "交情淡了" in prompt and "先前" in prompt and "上回" in prompt
     assert "目前好感度 8" in prompt and "這一季還沒交談過" in prompt
 
 
@@ -272,7 +272,18 @@ def test_the_past_line_does_not_double_the_full_stop(content, state, world):
     """關係筆記通常自己就以句號結尾（模型寫的、退路那句都是）：【上一季】那句不再補一個。"""
     state.player.past_notes = {"mate": "曾在潁川並肩殺敵。"}
     prompt = companion_agent.build_system_prompt(content.characters["mate"], state, content, world, "mate")
-    assert "你們以前的交情：曾在潁川並肩殺敵。這一季" in prompt
+    assert "你們以前的交情：曾在潁川並肩殺敵。你仍記得" in prompt
+
+
+def test_the_past_section_tells_the_model_not_to_say_season(content, state, world):
+    """「季」是遊戲的說法，不是漢末的人會講的話：【上一季】那一段叫模型提舊事時說先前、上回，別把這一季、上一季帶進對白。
+    那一段自己的敘述（給模型看的）也不再寫「這一季」。"""
+    state.player.past_notes = {"mate": "曾在潁川並肩殺敵"}
+    prompt = companion_agent.build_system_prompt(content.characters["mate"], state, content, world, "mate")
+    section = next(line for line in prompt.splitlines() if line.startswith("【上一季】"))
+    assert "「先前」" in section and "「上回」" in section
+    assert "不要說「這一季」「上一季」" in section
+    assert section.count("這一季") == 1 and section.count("上一季") == 2  # 只剩那句禁令裡的各一次（標題那個「上一季」另算）
 
 
 def test_no_past_section_without_past_notes(content, state, world):

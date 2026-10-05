@@ -128,8 +128,9 @@ def build_system_prompt(
     # 上一季的交情（正式版辛）：只給模型當背景；沒聊過的人物沒有這一段。筆記常自己就以句號結尾，不重複補
     past = p.past_notes.get(companion_id, "").strip().rstrip("。")
     past_str = (
-        f"【上一季】你們以前的交情：{past}。這一季你仍記得這個人，但久未往來，交情淡了；"
-        "可以提起舊事，別當成昨天才發生的。\n"
+        f"【上一季】你們以前的交情：{past}。你仍記得這個人，但久未往來，交情淡了；"
+        "可以提起舊事，別當成昨天才發生的。提到那段往事時請說「先前」或「上回」，"
+        "不要說「這一季」「上一季」，那是遊戲的說法。\n"
         if past else ""
     )
     drift = world.get_companion_drift_note(companion_id)
@@ -225,7 +226,7 @@ def _record_turn(state: GameState, companion_id: str, player_action: str, turn: 
         p.dialogue_history[companion_id] = history[-MAX_HISTORY_MESSAGES:]
         if companion_id in p.history_start:  # 前面丟掉幾則，這一季的起點也往前挪幾則（不然會指到這一季的對話之後）
             p.history_start[companion_id] = max(0, p.history_start[companion_id] - dropped)
-    used =p.used_dialogue_options.setdefault(companion_id, [])
+    used = p.used_dialogue_options.setdefault(companion_id, [])
     used.append(player_action.strip())
     p.turns_since_consolidation[companion_id] = p.turns_since_consolidation.get(companion_id, 0) + 1
 
