@@ -20,12 +20,15 @@ def display_name(state: GameState) -> str:
 
 def audience_bar(state: GameState, content: Content, companion_id: str) -> int:
     """這位人物此刻對你的求見門檻（武學與成長設計 9.1）：名望門檻（CharacterDef.audience_fame），投靠了他的陣營的人
-    每升一階抵 audience_rank_discount 點；散人、敵對陣營，以及不在大勢人物表上的人物只看名望。最低 0。"""
+    每**升一階**（晉升過幾次）抵 audience_rank_discount 點；投靠了但還沒晉升過的人一點都不抵。散人、敵對陣營，
+    以及不在大勢人物表上的人物只看名望。最低 0。
+    存檔裡的階：0＝投靠了還沒晉升過（ranks.rank_of 算第 1 階），第一次晉升後是 2，所以晉升過幾次＝max(階, 1) - 1。
+    這裡自己算、不呼叫 ranks.rank_of：ranks 會 import rules，反過來 import 就循環了。"""
     bar = content.characters[companion_id].audience_fame
     figure = next((f for f in content.figures.values() if f.character == companion_id), None)
     p = state.player
     if figure is not None and p.faction is not None and p.faction == figure.faction:
-        bar -= p.rank * content.config.audience_rank_discount
+        bar -= (max(p.rank, 1) - 1) * content.config.audience_rank_discount
     return max(0, bar)
 
 

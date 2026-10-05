@@ -307,14 +307,27 @@ def _figure_for(content, character_id, faction="guan"):
     )
 
 
-def test_rank_in_the_figures_own_faction_lowers_the_bar(state, content):
+def test_each_promotion_in_the_figures_own_faction_lowers_the_bar(state, content):
+    """每升一階抵 audience_rank_discount（設計 9.1）；存檔裡的階 0 是投靠了還沒晉升過、第一次晉升後是 2（PlayerState.rank）。"""
     cid = "mate"
     content.characters[cid].audience_fame = 20
     _figure_for(content, cid, "guan")
     state.player.stats["fame"] = 10
     assert audience_bar(state, content, cid) == 20 and not can_meet(state, content, cid)
-    state.player.faction, state.player.rank = "guan", 2
-    assert audience_bar(state, content, cid) == 10 and can_meet(state, content, cid)  # 剛好到也算
+    state.player.faction, state.player.rank = "guan", 2  # 晉升過一次：抵 5
+    assert audience_bar(state, content, cid) == 15 and not can_meet(state, content, cid)
+    state.player.rank = 3  # 兩次：抵 10，剛好到也算
+    assert audience_bar(state, content, cid) == 10 and can_meet(state, content, cid)
+
+
+def test_joining_the_figures_faction_without_a_promotion_takes_nothing_off(state, content):
+    cid = "mate"
+    content.characters[cid].audience_fame = 20
+    _figure_for(content, cid, "guan")
+    state.player.faction = "guan"
+    for stored in (0, 1):  # 存檔裡的 0 是投靠了還沒晉升過（rank_of 算第 1 階）；階 1 同樣是還沒升
+        state.player.rank = stored
+        assert audience_bar(state, content, cid) == 20
 
 
 def test_rank_in_another_faction_does_not_count(state, content):
@@ -338,10 +351,10 @@ def test_the_bar_never_drops_below_zero_and_the_discount_is_configurable(state, 
     cid = "mate"
     content.characters[cid].audience_fame = 8
     _figure_for(content, cid, "guan")
-    state.player.faction, state.player.rank = "guan", 3
-    assert audience_bar(state, content, cid) == 0  # 8 - 15 夾到 0
+    state.player.faction, state.player.rank = "guan", 4
+    assert audience_bar(state, content, cid) == 0  # 8 - 3×5 夾到 0
     content.config.audience_rank_discount = 1
-    assert audience_bar(state, content, cid) == 5
+    assert audience_bar(state, content, cid) == 5  # 8 - 3×1
 
 
 def test_a_prior_meeting_still_opens_the_door_whatever_the_bar(state, content):

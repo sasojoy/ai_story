@@ -409,7 +409,12 @@ class Game:
                 opts.append(Option(id=f"call:{cid}", label=f"求見{ch.name}（{SNUB_NOTE}）", enabled=False))
             elif not self._can_meet(cid):
                 opts.append(Option(id=f"call:{cid}", label=f"求見{ch.name}（名望不夠，多半會被打發）"))  # 按下去走打發，見 _brush_off
-            elif self._talks_left(cid) > 0:
+            elif self._talks_left(cid) == 0:  # 求見一直都在：談滿了也留著、灰掉，說法跟求見名單一樣
+                opts.append(Option(
+                    id=f"call:{cid}", enabled=False,
+                    label=f"求見{ch.name}（今天已經談滿 {c.config.talk_turns_per_day} 輪，明天再來）",
+                ))
+            else:
                 opts.append(self._cost_option(f"call:{cid}", f"求見{ch.name}", cost["socialize"]))
         if len(people) >= AUDIENCE_HALL_FIGURES:
             opts.append(Option(id="act:call", label="求見"))  # 只是打開第二層選單，不花體力（見 _audience_options）
@@ -1129,6 +1134,7 @@ class Game:
 
     def _brush_off(self, companion_id: str) -> list[str]:
         """門檻不夠時被打發（武學與成長設計 9.1）：他自己口吻的一句（內容沒寫就用通用的），附上還差多少。
+        後面只在「真的升得上去、而且升一階抵掉的點數補得上差距」時才提在他那個陣營再升一階。
         不叫模型、不花體力、不加情誼。"""
         s, c = self.state, self.content
         ch = c.characters[companion_id]
@@ -1136,7 +1142,12 @@ class Game:
         short = audience_bar(s, c, companion_id) - s.player.stats.get("fame", 0)
         figure = next((f for f in c.figures.values() if f.character == companion_id), None)
         hint = f"名望還差 {short}"
-        if figure is not None and s.player.faction == figure.faction:
+        p = s.player
+        if (
+            figure is not None and p.faction == figure.faction
+            and short <= c.config.audience_rank_discount  # 再升一階抵掉的點數補得上這個差距
+            and ranks.promotion_for(c, p.faction, ranks.rank_of(s) + 1) is not None  # 而且真的有下一階可升
+        ):
             faction = next((f.name for f in c.scenario.factions if f.id == figure.faction), figure.faction)
             hint += f"，或在{faction}再升一階"
         return [f"{line}（{hint}）"]

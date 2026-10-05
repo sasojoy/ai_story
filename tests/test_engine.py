@@ -9,7 +9,7 @@ from tianxia import atlas, battle_instance, calendar, companion_agent, flavor, g
 from tianxia.characters import open_characters
 from tianxia.engine import Game, Option
 from tianxia.martial_arts import MartialArt
-from tianxia.models import FigureDef, Location
+from tianxia.models import FigureDef, Location, PromotionDef
 from tianxia.models import ExploreMix
 from tianxia.state import BotProfile, FigureState, GameState, Journey, Rumor, new_game_state
 from tianxia.sqlite_world import open_world
@@ -4112,6 +4112,13 @@ def _guan_figure(content, character_id="mate"):
     )
 
 
+def _promotion(content, faction="guan", rank=2):
+    """這個陣營升到第 rank 階的晉升定義（hint 只在真的有下一階可升時才提「再升一階」）。"""
+    content.promotions.append(PromotionDef(
+        faction=faction, rank=rank, location="town", event_main="x", summons_text="x", closing="x",
+    ))
+
+
 def test_the_audience_button_is_always_there_and_brushes_off_for_free(content, game):
     cid = _stand_by_one_figure(content, game)
     option = next(o for o in game.options() if o.id == f"call:{cid}")
@@ -4146,15 +4153,52 @@ def test_a_brush_off_picks_one_of_the_written_lines(content, game):
     assert seen == {"一", "二", "三"}
 
 
-def test_the_brush_off_says_how_far_short_you_are_and_names_the_faction_way_up(content, game):
+def test_the_brush_off_says_how_far_short_you_are(content, game):
     cid = _stand_by_one_figure(content, game)
     _guan_figure(content, cid)
     game.state.player.stats["fame"] = 12
     assert game.choose(f"call:{cid}") == ["閒雜人等退下。（名望還差 18）"]  # 散人只看名望
-    game.state.player.faction, game.state.player.rank = "guan", 2  # 晉升過一次（存檔裡的階從 2 起算，見 PlayerState.rank）
-    assert game.choose(f"call:{cid}") == ["閒雜人等退下。（名望還差 8，或在官軍再升一階）"]  # 門檻 30 - 2×5
     game.state.player.faction = "huang"  # 敵對陣營：階級不抵，也不指望在他那邊升階
+    game.state.player.rank = 2
+    _promotion(content, "huang", 3)
     assert game.choose(f"call:{cid}") == ["閒雜人等退下。（名望還差 18）"]
+
+
+def test_the_hint_names_the_faction_way_up_when_one_more_step_would_close_the_gap(content, game):
+    cid = _stand_by_one_figure(content, game)
+    _guan_figure(content, cid)
+    _promotion(content, "guan", 2)  # 官軍有第 2 階可升
+    p = game.state.player
+    p.faction, p.rank = "guan", 0  # 投靠了、還沒晉升：門檻 30，升一階抵 5
+    p.stats["fame"] = 25  # 差 5：剛好一階補得上
+    assert game.choose(f"call:{cid}") == ["閒雜人等退下。（名望還差 5，或在官軍再升一階）"]
+    p.stats["fame"] = 26
+    assert game.choose(f"call:{cid}") == ["閒雜人等退下。（名望還差 4，或在官軍再升一階）"]
+
+
+def test_the_hint_is_left_out_when_no_next_promotion_is_written(content, game):
+    cid = _stand_by_one_figure(content, game)
+    _guan_figure(content, cid)
+    p = game.state.player
+    p.faction, p.rank = "guan", 0
+    p.stats["fame"] = 26
+    assert game.choose(f"call:{cid}") == ["閒雜人等退下。（名望還差 4）"]  # 官軍的晉升表上沒有第 2 階
+    _promotion(content, "guan", 2)
+    p.rank = 2  # 已經升過第 2 階，下一階（3）沒寫
+    p.stats["fame"] = 22  # 門檻 30 - 5 = 25，差 3
+    assert game.choose(f"call:{cid}") == ["閒雜人等退下。（名望還差 3）"]
+
+
+def test_the_hint_is_left_out_when_one_more_step_cannot_close_the_gap(content, game):
+    cid = _stand_by_one_figure(content, game)
+    _guan_figure(content, cid)
+    _promotion(content, "guan", 2)
+    p = game.state.player
+    p.faction, p.rank = "guan", 0
+    p.stats["fame"] = 12  # 差 18，一階只抵 5
+    assert game.choose(f"call:{cid}") == ["閒雜人等退下。（名望還差 18）"]
+    content.config.audience_rank_discount = 18  # 抵得夠大的話就補得上
+    assert game.choose(f"call:{cid}") == ["閒雜人等退下。（名望還差 18，或在官軍再升一階）"]
 
 
 def test_enough_fame_turns_the_audience_button_into_a_real_audience(content, game):
@@ -4172,12 +4216,19 @@ def test_enough_fame_turns_the_audience_button_into_a_real_audience(content, gam
 def test_rank_in_the_figures_faction_opens_the_door(content, game):
     cid = _stand_by_one_figure(content, game)
     _guan_figure(content, cid)
-    game.state.player.stats["fame"] = 20
-    game.state.player.faction, game.state.player.rank = "guan", 2  # 30 - 2×5 = 20：剛好到
+    game.state.player.stats["fame"] = 24
+    game.state.player.faction, game.state.player.rank = "guan", 2  # 晉升過一次：30 - 5 = 25
+    assert not game.can_meet_figure(cid)
+    game.state.player.stats["fame"] = 25  # 剛好到
     assert game.can_meet_figure(cid)
     with mock.patch.object(companion_agent, "_generate", return_value=FAKE_TURN):
         game.choose(f"call:{cid}")
     assert game.state.player.pending_companion == cid
+    game.choose("talk:leave")
+    game.state.player.stats["fame"], game.state.player.rank = 20, 3  # 兩次：30 - 10 = 20
+    assert game.can_meet_figure(cid)
+    game.state.player.rank = 0  # 投靠了還沒晉升：一點都不抵
+    assert not game.can_meet_figure(cid)
 
 
 def test_can_meet_figure_follows_fame_or_a_prior_meeting(content, game):
@@ -4198,11 +4249,16 @@ def test_a_figure_who_turned_you_away_after_a_defeat_stays_shut(content, game):
         assert option.label == "求見韓鐵（剛吃了敗仗，閉門不見）" and not option.enabled
 
 
-def test_no_audience_button_once_the_day_is_used_up_with_the_single_figure(content, game):
+def test_the_audience_button_stays_but_greys_out_once_the_day_is_used_up(content, game):
+    """每天 3 輪談滿後，單人地點的求見不消失：灰掉、寫跟求見名單同一句（設計 9.1：求見一直都在）。"""
     cid = _stand_by_one_figure(content, game)
     game.state.player.stats["fame"] = 30
     game.state.player.talks_today[cid] = [rules.current_day(game.state), content.config.talk_turns_per_day]
-    assert f"call:{cid}" not in ids(game)
+    option = next(o for o in game.options() if o.id == f"call:{cid}")
+    assert (option.label, option.enabled) == ("求見韓鐵（今天已經談滿 3 輪，明天再來）", False)
+    assert game.choose(f"call:{cid}") == ["（此刻無法這麼做。）"]
+    game.state.world.time += DAY  # 隔天重算
+    assert next(o for o in game.options() if o.id == f"call:{cid}").enabled
 
 
 def test_two_figures_still_share_one_audience_option_and_a_brush_off_closes_the_list(content, game):
