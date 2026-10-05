@@ -134,6 +134,19 @@ def game(content):
     return Game.new(content, "沈浪", rng=random.Random(0))
 
 
+def next_season(content, world, *players):
+    """管理者收季再開下一季，再讓每個玩家同步一次（換季重來發生在 sync 裡）；照 test_engine._roll_one_season 的做法。"""
+    from tianxia.engine import Game
+
+    content.config.admins = ["管理者"]
+    admin = Game.new(content, "管理者", rng=random.Random(1), world=world)
+    admin.admin_end_season(now=200.0)
+    admin.admin_next_season(now=300.0)
+    for player in players:
+        player.sync(400.0)
+        assert player.state.player.season_number == 2
+
+
 def walk_to(game, dest: str) -> list[str]:
     """步行到相鄰的 dest：從選單出發，再把時間推到抵達那一刻（地圖擴充：移動要花時間）。回傳抵達時的訊息。"""
     game.choose(f"move:{dest}")

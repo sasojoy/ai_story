@@ -19,6 +19,7 @@ from . import (
     rounds, skillview, team, timetable,
 )
 from . import events as event_rules  # note_round 走模組屬性（測試要能換掉它，確認只有 _present 會叫）
+from . import prologue as prologue_rules  # Game.new 有個參數也叫 prologue，所以模組在這裡一律叫 prologue_rules
 from .events import (
     choice_label, event_candidates, has_events_here, pick_event, visible_choices,
 )
@@ -40,7 +41,9 @@ from .rules import (
     season_one, season_one_off, stance_sum_note, stances, trend_name, trend_shown, trend_value, world_trend_value,
 )
 from .sqlite_world import open_world
-from .state import PLAYER, BattleRecord, Convoy, GameState, JournalEntry, Journey, Rumor, WorldState, new_game_state
+from .state import (
+    ONBOARDING_VERSION, PLAYER, BattleRecord, Convoy, GameState, JournalEntry, Journey, Rumor, WorldState, new_game_state,
+)
 from .world import (
     _season_vehicle, advance_world_state, check_thresholds, end_season, fire_by_id, open_showdown, open_waiting_showdown,
     settle_season_start, showdown_battle, showdown_key, sim_tick, start_pending_battle,
@@ -145,8 +148,18 @@ class Game:
     @classmethod
     def new(
         cls, content: Content, name: str, rng: random.Random | None = None, world: WorldStateStore | None = None,
+        prologue: bool = False,
     ) -> Game:
+        """prologue：走序章（新手引導計畫一）。只有網頁上建立角色（server.create_character）傳 True；假人、整季機器人、
+        腳本與測試不傳，直接站在起點、序章算走過（沒有序章的內容兩種都一樣）。"""
         game = cls(content, new_game_state(content, name), rng, world)
+        if prologue:
+            prologue_rules.begin(game.state, content)
+        else:
+            # 第二季起建的角色，__init__ 的換季重來已經把新角色放進序章（體力也換成序章的）：這裡拉回起點、滿體力
+            prologue_rules.finish(game.state, content, game.world, purse=False)
+            if prologue_rules.has(content):
+                game.state.player.stamina = float(content.config.stamina_max)
         p = game.state.player
         p.visited.add(p.location)
         game._log(
@@ -187,10 +200,14 @@ class Game:
         old = self.state
         fresh = new_game_state(self.content, old.player.name)
         fresh.last_real = old.last_real
-        # 做完或略過（skip_tutorial 也是設成步數）：看不分季的那幾步；第一季多的兩步排在後面，回鍋的人接著做（計畫 T6）
-        if old.player.tutorial_step >= base_step_count(self.content):
-            fresh.player.tutorial_step = old.player.tutorial_step
+        # 做完或略過（skip_tutorial 也是設成步數）：看不分季的那幾步；第一季多的兩步排在後面，回鍋的人接著做（計畫 T6）。
+        # 舊存檔先換算成新引導的步數（設計 7.2）
+        step = prologue_rules.migrated_step(old.player, self.content)
+        if step >= base_step_count(self.content):
+            fresh.player.tutorial_step = step
             fresh.player.guide_skipped = old.player.guide_skipped  # 略過的人換季也不畫對話框（畫面批次審查 I4）
+        elif prologue_rules.has(self.content) and not old.player.bot:
+            prologue_rules.begin(fresh, self.content)  # 序章沒走完就換季：回草廬從第一步重來（Review Focus 5）
         ratio = self.content.config.affinity_carry_ratio
         fresh.player.affinities = {key: int(value * ratio) for key, value in old.player.affinities.items()}
         fresh.player.relationship_notes = old.player.relationship_notes
@@ -280,8 +297,17 @@ class Game:
         s.world.act = min(s.world.act, len(acts) - 1)
         s.world.act_reached = max(s.world.act_reached, s.world.act)
         if "tutorial_step" not in p.model_fields_set:
-            p.tutorial_step = len(c.tutorial.steps)
+            p.tutorial_step = len(c.tutorial.steps)  # 最舊的存檔連這一欄都沒有：引導當作做完
+        elif prologue_rules.has(c) and p.onboarding < ONBOARDING_VERSION:
+            # 舊存檔：當作走過序章，舊的第一季兩步往後挪（新手引導設計 7.2）
+            p.tutorial_step = prologue_rules.migrated_step(p, c)
+        if prologue_rules.has(c):
+            p.onboarding = ONBOARDING_VERSION  # 內容沒有序章時步數還是舊編號，不蓋章（preflight F6）
         p.tutorial_step = min(p.tutorial_step, len(c.tutorial.steps))
+        t = c.tutorial
+        if (t.location is not None and p.tutorial_step < t.prologue_steps and p.location != t.location
+                and p.journey is None):
+            prologue_rules.finish(s, c, self.world, purse=False)  # 序章沒走完卻不在草廬（內容改版）：當作走過，不卡住
         p.visited = {loc_id for loc_id in p.visited if loc_id in c.locations}
         p.visited.add(p.location)
         for rumor in s.world.rumors:
@@ -489,8 +515,7 @@ class Game:
                 note=f"成功率約 {chance * 100:.0f}%",
             ))
         for dest_id in loc.connections:
-            dest = c.locations[dest_id]
-            if dest.unlock_flag and dest.unlock_flag not in s.world.flags:
+            if not atlas.is_unlocked(c.locations[dest_id], s):  # 世界旗標沒開、序章的草廬（只給站在那裡的人）
                 continue
             opts.append(self._move_option(loc.id, dest_id))
         for skill, problem in library.lessons_here(s, c):  # 拜師學藝（武學與成長設計附錄 B）：不花體力
@@ -503,7 +528,7 @@ class Game:
         opts += self._order_options(loc)  # 軍令（計畫 T6）：守勢行動、接糧車；開關關著、散人沒有
         opts += foreshadow.final_options(s, c, loc.id)  # 伏筆的最後一步（計畫 T7）：做得了的人在那個地點才有
         opts.append(Option(id="act:rest", label="打坐（坐下來回體力，隨時可以起身）"))
-        return opts
+        return prologue_rules.allowed(opts, s, c)  # 序章裡在草廬閒著時只留這一步要的（新手引導計畫一）
 
     @staticmethod
     def _stand_option() -> Option:
@@ -3157,11 +3182,15 @@ class Game:
         steps = len(tutorial_steps(self.state, self.content))
         if self.state.player.tutorial_step >= steps:
             return []
+        # 在序章裡略過：站到起點、拿出師的盤纏（設計 7.3）；序章外略過照舊
+        purse = prologue_rules.finish(
+            self.state, self.content, self.world, purse=prologue_rules.active(self.state, self.content),
+        )
         self.state.player.tutorial_step = steps
         self.state.player.guide_done, self.state.player.guide_outro = [], False  # 略過後對話框不再出現（8.1.4）
         self.state.player.guide_skipped = True
-        self._write("新手引導", [], tag="已略過")
-        return self._log(["（已略過新手引導。）"])
+        self._write("新手引導", purse, tag="已略過")
+        return self._log(["（已略過新手引導。）"] + purse)
 
     def view_map(self) -> list[str]:
         self.state.player.flags.add("看過地圖")

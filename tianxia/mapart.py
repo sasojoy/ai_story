@@ -194,14 +194,23 @@ def terrain_name_spot(piece: Terrain) -> Point:
     return sum(p[0] for p in points) / len(points), max(y, FRAME_INSIDE + TERRAIN_NAME_SIZE)
 
 
+def _places(content: Content) -> dict[str, Location]:
+    """畫地形看的地點：不含序章的草廬（新手引導計畫一）。草廬只有序章裡的一個人看得到，不能因為它把整張地圖的地形換掉。"""
+    return {key: loc for key, loc in content.locations.items() if not loc.prologue_only}
+
+
 def _terrain_key(content: Content) -> str:
     m = content.map
-    places = [(loc.id, loc.x, loc.y, sorted(map(str, loc.connections))) for loc in content.locations.values()]
-    return repr(([t.model_dump() for t in m.terrain], [r.model_dump() for r in m.rivers], places))
+    places = _places(content)
+    spots = [
+        (loc.id, loc.x, loc.y, sorted(str(dest) for dest in loc.connections if str(dest) in places))
+        for loc in places.values()
+    ]
+    return repr(([t.model_dump() for t in m.terrain], [r.model_dump() for r in m.rivers], spots))
 
 
 def _grow_terrain(content: Content) -> tuple[Piece, ...]:
-    places = [(float(loc.x), float(loc.y)) for loc in content.locations.values()]
+    places = [(float(loc.x), float(loc.y)) for loc in _places(content).values()]
     segments = _obstacles(content)
     pieces: list[Piece] = []
     for piece in content.map.terrain:
@@ -216,8 +225,11 @@ def _grow_terrain(content: Content) -> tuple[Piece, ...]:
 def _obstacles(content: Content) -> list[Segment]:
     """地形要讓開的線段：每條路（照畫出來的曲線切成 ROAD_PIECES 段）與每條河的中線（另加半個下游河寬）。"""
     segments: list[Segment] = []
-    for a_id, a in content.locations.items():
+    places = _places(content)
+    for a_id, a in places.items():
         for b_id in a.connections:
+            if b_id not in places:
+                continue  # 連到序章草廬的路不算
             if a_id < b_id:
                 b = content.locations[b_id]
                 c = road_control(content, a_id, b_id)

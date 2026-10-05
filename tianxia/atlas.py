@@ -11,7 +11,7 @@ import math
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from . import figures, orders
+from . import figures, orders, prologue
 from .calendar import point, stamp_text
 from .models import Content, Location, MapRegion, SimPlayer, TravelMode
 from .rules import can_hear, is_revealed, pending_event_title, resolve_trend, resolve_trends, season_one, trend_value
@@ -42,6 +42,9 @@ def vision_range(state: GameState, content: Content) -> int:
 
 
 def is_unlocked(loc: Location, state: GameState) -> bool:
+    """這個地點開放了沒：世界旗標（unlock_flag），加上序章的草廬只給站在那裡的人（新手引導計畫一）。"""
+    if loc.prologue_only and state.player.location != loc.id:
+        return False
     return not loc.unlock_flag or loc.unlock_flag in state.world.flags
 
 
@@ -530,6 +533,8 @@ def travel_block(state: GameState, content: Content) -> TravelBlock | None:
     在路上不擋：從路上改去別處（路上設計 3.1，見 way_to）。"""
     if state.world.ended:
         return TravelBlock("賽季已結束，不能安排前往")
+    if not prologue.can_travel(state, content):
+        return TravelBlock("師父的話還沒說完，先別急著走")
     if state.pending_event:
         title = pending_event_title(state, content)  # 找不到事件（存檔指著拿掉的事件）時退回「眼前的事」
         what = f"「{title}」" if title is not None else "眼前的事"

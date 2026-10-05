@@ -621,7 +621,7 @@ def create_character(account_key: str, name: str) -> Game:
         else:
             if name_taken(name):
                 raise GameError(NAME_TAKEN)
-            game = Game.new(CONTENT, name)
+            game = Game.new(CONTENT, name, prologue=True)  # 網頁上建的新角色走序章（新手引導計畫一）；假人與腳本不走
             open_characters().save(game.state)
             store.bind_character(account_key, name)
     return game_for(name)
