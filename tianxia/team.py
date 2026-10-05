@@ -481,7 +481,8 @@ def take_encounter_toll(
                 content, state.player.member, fraction,
                 agi=stats.get("agi", BASE_STAT), con=con_of(state, PLAYER),
             )
-            msgs.append(f"氣血 -{lost:.0f}")  # 照既有慣例寫變化量（跟「銀兩 -5」「心得 +12」同一串）
+            if round(lost) > 0:  # 本來就見底、一滴都沒得扣時不寫「氣血 -0」（零的變化是雜訊）；內傷照樣寫
+                msgs.append(f"氣血 -{lost:.0f}")  # 照既有慣例寫變化量（跟「銀兩 -5」「心得 +12」同一串）
             if hurt >= 1:
                 msgs.append(f"內傷 +{hurt:.0f}")
         else:
