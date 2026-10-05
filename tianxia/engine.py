@@ -959,7 +959,6 @@ class Game:
         front = front_of(c, loc.id)
         p.stamina -= c.config.duty_stamina
         text = duty.text.replace("{地點}", loc.name)
-        self._outcome(duty.name, text)
         msgs = [text]
         goals = self._goals()
         if goals.get(front):
@@ -979,7 +978,6 @@ class Game:
             return ["（這裡沒有糧車可接。）"]
         p.convoy = Convoy(order=escort.id, grain=need, from_loc=p.location, to_loc=escort.end)
         text = f"你把 {need} 份糧草裝上車，要送到{c.locations[escort.end].name}。路上當心截糧的。"
-        self._outcome("接下糧車", text)
         return [text]
 
     def _convoy_arrives(self, loc_id: str) -> list[str]:
