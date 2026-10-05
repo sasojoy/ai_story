@@ -1,4 +1,4 @@
-from tianxia import library
+from tianxia import fusion, insights, library
 from tianxia.martial_arts import generate_from_name
 
 LOW = {"下品": 100.0, "中品": 0.0, "上品": 0.0, "絕學": 0.0}
@@ -39,12 +39,22 @@ def test_putting_a_point_into_lore_frees_room_to_fuse(state, content):
     assert not library.full(state, content)
 
 
-def test_losing_lore_can_leave_you_over_the_cap(state, content):
-    """Review Focus 4：博聞掉下來、持有已經超過上限——照設計 4.5，熔回上限以內之前不能合成、合併。"""
-    state.player.stats["lore"] = 7
-    state.player.insights = [f"x{i}" for i in range(library.cap_of(state, content))]
-    state.player.stats["lore"] = 5
+def test_losing_lore_can_leave_you_over_the_cap(state, content, world):
+    """Review Focus 4：博聞掉下來、持有已經超過上限——照設計 4.5，熔回上限以內之前不能合成、合併，
+    但悟得的意境照收（不然奇遇給的稀有意境會直接消失）。"""
+    p = state.player
+    p.stats["lore"] = 7
+    p.member.wugong_id = "basic_fist"
+    p.insights = ["feng", "huo"]
+    p.insights += [f"x{i}" for i in range(library.cap_of(state, content) - library.held_count(state))]
+    assert library.held_count(state) == library.cap_of(state, content)  # 博聞 7 時正好滿
+    p.stats["lore"] = 5
     assert library.held_count(state) > library.cap_of(state, content) and library.full(state, content)
+    assert "滿了" in fusion.merge_problem(state, content, world, "feng", "huo")  # 合併被擋
+    assert "滿了" in fusion.fuse_problem(state, content, world, "basic_fist", "feng")  # 合成也被擋
+    before = library.held_count(state)
+    insights.learn(state, content, world, "shui")  # 悟意境不擋：新的意境照收
+    assert "shui" in p.insights and library.held_count(state) == before + 1
 
 
 def test_held_count_counts_what_is_worn_the_library_and_insights(state):

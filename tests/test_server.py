@@ -821,6 +821,68 @@ def test_the_points_hint_stays_out_of_the_ellipsized_name_span():
     assert rule is not None and "flex: none" in rule.group(1)
 
 
+def _who_name_helper(js: str) -> tuple[str, str]:
+    """狀態列名號那一塊的函式（FB-071）拆成（收起來的那一行, 展開的那一段）。"""
+    assert "function whoNameHtml" in js
+    body = js[js.index("function whoNameHtml"):]
+    body = body[:body.index("\n  }\n")]
+    first, _, rest = body.partition("\n    if (!S.showMore)")
+    assert rest, "whoNameHtml 要先處理收起來的那一行（if (!S.showMore) …）"
+    collapsed_line, _, expanded = rest.partition("\n")
+    return collapsed_line, expanded
+
+
+def test_the_expanded_title_is_one_nowrap_span_per_segment():
+    """FB-071：展開時頭銜（門派・陣營・頭銜、匿名、第 N 級）是第二行；每一段各自一個不折行的 <span>，「地方豪強」不會從中間折斷，
+    只在段與段之間換行。段以「・」切開、再用「・」接回去。"""
+    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    css = (server.WEB / "style.css").read_text(encoding="utf-8")
+    _, expanded = _who_name_helper(js)
+    assert 's.affiliation.split("・")' in expanded and '<span class="seg">' in expanded and '.join("・")' in expanded
+    assert "匿名" in expanded and "s.level" in expanded
+    assert 'class="who-title"' in expanded
+    seg = re.search(r"\.who-title \.seg \{([^}]*)\}", css)
+    assert seg is not None and "white-space: nowrap" in seg.group(1)
+
+
+def test_the_expanded_name_line_is_the_name_alone_and_the_points_label_sits_above_the_buttons():
+    """FB-071：展開時第一行只有名號與 ▴，「可配 N 點」不再擠在名號那一行，改放在＋鈕上面當那一排的標題（跟＋鈕同一個條件：
+    有點才出現）。收起來的那一行照舊帶著 class="pts"（計畫二 T5：放在會「…」的 <span> 外面，不會被擠掉）。"""
+    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    collapsed, expanded = _who_name_helper(js)
+    assert 'class="pts"' in collapsed and "可配" in collapsed and "▾" in collapsed
+    assert "▴" in expanded and "s.name" in expanded
+    assert "可配" not in expanded and 'class="pts"' not in expanded  # 展開的名號那一行與頭銜那一行都不帶它
+    start = js.index('S.showMore ? `<div class="more-stats">')
+    block = js[start:js.index("</div>` : \"\"}", start)]
+    allocate = next(line for line in block.splitlines() if 'data-act="allocate"' in line)
+    assert allocate.strip().startswith("${s.stat_points ?")  # 有點可配才有
+    assert allocate.index("可配") < allocate.index('class="row alloc"') < allocate.index('data-act="allocate"')
+    assert 'class="pts"' in allocate.split('class="row alloc"')[0]  # 標題在那排按鈕的前面
+
+
+def test_the_five_stat_buttons_share_one_row_and_keep_their_labels_on_one_line():
+    """FB-071：五顆＋鈕要在 375 與 360 寬的一排裡放得下（排寬 343／328，五顆加四個 4px 的縫，每顆約 65／62px，
+    標籤「＋博聞」是三個全形字 14px ≈ 42px）。只改這一排（.alloc），不動全站的 .btn。"""
+    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    css = (server.WEB / "style.css").read_text(encoding="utf-8")
+    assert 'class="row alloc"' in js
+    row = re.search(r"\.more-stats \.alloc \{([^}]*)\}", css)
+    assert row is not None and "gap: 4px" in row.group(1)
+    button = re.search(r"\.more-stats \.alloc \.btn \{([^}]*)\}", css)
+    assert button is not None and "white-space: nowrap" in button.group(1) and "padding: 6px 2px" in button.group(1)
+    site = re.search(r"\n\.btn\.small \{([^}]*)\}", css)
+    assert site is not None and "padding: 6px 12px" in site.group(1)  # 全站的小按鈕照舊
+    label = re.search(r"\.more-stats \.pts-label \.pts \{([^}]*)\}", css)  # 跟收起來時那一句同樣的金色粗體 12px
+    assert label is not None and "var(--gold)" in label.group(1) and "600 12px" in label.group(1)
+
+
+def test_no_stale_four_stat_wording_is_left_around_the_status_bar():
+    css = (server.WEB / "style.css").read_text(encoding="utf-8")
+    fun_run = (server.WEB.parent / "scripts" / "fun_run.py").read_text(encoding="utf-8")
+    assert "四項各管什麼" not in css and "整季四項都停在 5" not in fun_run
+
+
 def test_the_allocate_buttons_say_what_each_stat_does():
     """M2：＋鈕底下那一行（四項各管什麼）跟＋鈕畫在同一個條件裡——有點可配才出現；用的是伺服器送的 stat_uses 與
     stat_uses_note，網頁不寫死屬性的用途。"""
