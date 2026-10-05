@@ -4,33 +4,69 @@
 新、舊兩個陣營的軍情各一則（寫名字），當地一則地方傳聞（可以匿名）。只有第一季的規則開著才有。"""
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from . import ranks
-from .models import Content, FactionDef
+from .models import Content, FactionDef, Sect
 from .rules import add_rumor, display_name, season_one
 from .state import GameState, PlayerState
+
+if TYPE_CHECKING:
+    from .battle_instance import BattleInstance
 
 
 def _faction(content: Content, faction_id: str) -> FactionDef:
     return next(f for f in content.scenario.factions if f.id == faction_id)
 
 
-def can_defect(state: GameState, content: Content) -> bool:
-    """這一季還能叛投嗎：第一季的規則開著、已經投靠、這一季還沒叛投過。"""
+def enlisted(battle: BattleInstance | None, name: str) -> bool:
+    """名字還在一場沒打完的決戰的參戰名單上（集結中或開打中；出局的、離開大區的也算，名字還在陣上）。
+    參戰者的陣營是加入那一刻記下的，叛投不會跟著改：讓他叛投，就會留在舊陣營那一邊打到底，
+    叛去不在交戰雙方的陣營甚至會拿到舊陣營的戰鬥選單（最終審查 Important 1）。所以還在名單上就不能叛投。"""
+    return battle is not None and battle.phase != "ended" and name in battle.participants
+
+
+def can_defect(state: GameState, content: Content, battle: BattleInstance | None = None) -> bool:
+    """這一季還能叛投嗎：第一季的規則開著、已經投靠、這一季還沒叛投過、名字不在沒打完的決戰的參戰名單上。
+    battle 是目前全服的那一場決戰（Game 傳 world.get_battle()；這個模組不碰全服狀態），沒有決戰就不傳。"""
     p = state.player
-    return season_one(content, state.world) and p.faction is not None and not p.defected
+    return season_one(content, state.world) and p.faction is not None and not p.defected \
+        and not enlisted(battle, p.name)
 
 
-def targets_here(state: GameState, content: Content) -> list[FactionDef]:
+def targets_here(state: GameState, content: Content, battle: BattleInstance | None = None) -> list[FactionDef]:
     """所在地點是哪些別的陣營的投靠點（照劇本的陣營順序）；不能叛投時是空的。"""
-    if not can_defect(state, content):
+    if not can_defect(state, content, battle):
         return []
     p = state.player
     return [f for f in content.scenario.factions if f.id != p.faction and p.location in f.join_at]
 
 
+def refusal(state: GameState, content: Content, target: FactionDef, battle: BattleInstance | None = None) -> str | None:
+    """現在不能叛投去 target 的原因（一句話，不含括號）；可以就是 None。跟 targets_here 同一套規則（target 在
+    targets_here 裡 ⇔ 這裡是 None），確認畫面按「確定」時用它再驗一次，並把真正的原因說給玩家聽。"""
+    p = state.player
+    if not season_one(content, state.world) or p.faction is None:
+        return "現在不能叛投。"
+    if p.defected:
+        return "這一季你已經叛投過一次了。"
+    if enlisted(battle, p.name):
+        return f"決戰還沒打完，你名字還在{_faction(content, p.faction).name}的陣上，打完再說。"
+    if target.id == p.faction or p.location not in target.join_at:
+        return "你已經不在叛投的地方了。"
+    return None
+
+
+def _sect_left(p: PlayerState, old: FactionDef, content: Content) -> Sect | None:
+    """叛投時會一起離開的門派：玩家拜的是舊陣營的門派（拜入門派等於加入陣營，第一季設計 5.1）；不是就沒有。"""
+    sect = content.sects.get(p.sect) if p.sect else None
+    return sect if sect is not None and sect.id in old.sects else None
+
+
 def prompt(state: GameState, content: Content, target: FactionDef, counts_text: str) -> str:
-    """確認畫面的話：寫明真的會失去什麼（晉升過的頭銜、還沒去的召見、部下、押著的糧車、功勞）、一季一次，接上三方目前的人數。
-    只寫真的有的：第 1 階（鄉勇）叛投之後在新陣營一樣是第 1 階，不算損失；沒有召見、糧車、部下就不提。"""
+    """確認畫面的話：寫明真的會失去什麼（晉升過的頭銜、還沒去的召見、部下、押著的糧車、要離開的門派、功勞）、一季一次，
+    接上三方目前的人數。只寫真的有的：第 1 階（鄉勇）叛投之後在新陣營一樣是第 1 階，不算損失；沒有召見、糧車、部下、
+    門派、功勞就不提；什麼都沒有的人，話說「沒有什麼進度要作廢」。"""
     p = state.player
     old = _faction(content, p.faction)
     lost = []
@@ -43,8 +79,13 @@ def prompt(state: GameState, content: Content, target: FactionDef, counts_text: 
         lost.append(f"{len(p.followers)} 名部下全部離隊")
     if p.convoy is not None:
         lost.append("押著的糧車作廢、交出去的糧草不退")
-    lost.append(f"這一季替{old.name}記下的功勞全部作廢")
-    return f"叛投{target.name}之後，" + "，".join(lost) + f"；一季只能叛投一次。{counts_text}。確定叛投{target.name}？"
+    sect = _sect_left(p, old, content)
+    if sect is not None:  # 離開門派之後這一季拜不回去（叛出旗標，content/events/sects.json 的 flags_none）
+        lost.append(f"離開{sect.name}、這一季拜不回去")
+    if p.contrib > 0:
+        lost.append(f"這一季替{old.name}記下的功勞全部作廢")
+    head = f"叛投{target.name}之後，" + "，".join(lost) if lost else f"叛投{target.name}沒有什麼進度要作廢"
+    return f"{head}；一季只能叛投一次。{counts_text}。確定叛投{target.name}？"
 
 
 def clear_progress(p: PlayerState) -> None:
@@ -67,8 +108,8 @@ def defect(state: GameState, content: Content, target: FactionDef) -> list[str]:
     p, w = state.player, state.world
     old = _faction(content, p.faction)
     msgs = [target.defect_text] if target.defect_text else []
-    sect = content.sects.get(p.sect) if p.sect else None
-    if sect is not None and sect.id in old.sects:  # 拜入門派等於加入陣營（第一季設計 5.1）：叛投就一起離開
+    sect = _sect_left(p, old, content)
+    if sect is not None:  # 拜入門派等於加入陣營（第一季設計 5.1）：叛投就一起離開
         p.flags.add(f"叛出:{sect.id}")
         p.sect = None
         msgs.append(f"你也就此離開了{sect.name}。")

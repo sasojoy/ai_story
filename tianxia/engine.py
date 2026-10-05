@@ -28,8 +28,8 @@ from .journal import LOG_BREAK, Draft
 from .mapview import render_map, render_minimap
 from .martial_arts import QUALITIES
 from .models import (
-    EXPLORE_BRANCHES, FREE_TEXT_MAX, BattleDef, Choice, Content, Effect, Event, ExploreBranch, Location, RoadKind, Squad,
-    Threshold, TimetableEvent, TravelMode, WorldEvent,
+    EXPLORE_BRANCHES, FREE_TEXT_MAX, BattleDef, Choice, Content, Effect, Event, ExploreBranch, FactionDef, Location, RoadKind,
+    Squad, Threshold, TimetableEvent, TravelMode, WorldEvent,
 )
 from .ollama_client import ModelBudget, OllamaClient, quick_client
 from .rules import (
@@ -391,6 +391,8 @@ class Game:
             battle_menu = self._battle_options(battle, definition)
             if self.state.player.resting_since is not None:
                 battle_menu.append(self._stand_option())  # 戰鬥選單取代整份選單，隨時可以起身這條規則不能因此掉了
+            if self.state.player.pending_defect:  # 同理：開著的叛投確認畫面不能因為開打就卡到整場打完（最終審查 Minor 1）
+                battle_menu.append(Option(id="defect:cancel", label="再想想"))
             return battle_menu
         return self._everyday_options(odds)
 
@@ -508,7 +510,7 @@ class Game:
             for faction in c.scenario.factions:
                 if s.player.location in faction.join_at:
                     opts.append(Option(id=f"faction:{faction.id}", label=f"投靠{faction.name}"))
-        for target in defection.targets_here(s, c):  # 叛投（計畫甲）：別的陣營的投靠點、一季一次
+        for target in self._defect_targets():  # 叛投（計畫甲）：別的陣營的投靠點、一季一次、不在沒打完的決戰的參戰名單上
             opts.append(Option(id=f"defect:{target.id}", label=f"叛投{target.name}"))
         opts += self._order_options(loc)  # 軍令（計畫 T6）：守勢行動、接糧車；開關關著、散人沒有
         opts += foreshadow.final_options(s, c, loc.id)  # 伏筆的最後一步（計畫 T7）：做得了的人在那個地點才有
@@ -1537,8 +1539,10 @@ class Game:
 
     def _defect_step(self, arg: str) -> list[str]:
         """叛投分兩步（同投靠）：按「叛投某陣營」先出確認畫面（寫明代價、一季一次、三方人數），「確定」才真的叛投。
-        確定時再驗一次這個陣營還在「這裡的叛投對象」裡（defection.targets_here：還在那個投靠點、還能叛投、不是自己的陣營）：
-        中間走開了，或另一個分頁已經叛投過，都不叛投。投靠名冊由 choose() 結尾的 _record_faction 改記，這裡不碰。"""
+        確定時再驗一次（defection.refusal，跟選單挑對象的 targets_here 同一套規則：還在那個投靠點、還能叛投、不是自己的陣營、
+        名字不在沒打完的決戰的參戰名單上）：中間走開了、規則關了、另一個分頁已經叛投過、報了名參戰，都不叛投，
+        而且把真正的原因說給玩家聽；那一則江湖紀錄也不寫成「叛投某某」（沒叛成）。
+        投靠名冊由 choose() 結尾的 _record_faction 改記，這裡不碰。"""
         p = self.state.player
         if arg == "cancel":
             p.pending_defect = None
@@ -1546,14 +1550,24 @@ class Game:
         if arg == "confirm":
             target = self._faction(p.pending_defect)
             p.pending_defect = None
-            if target not in defection.targets_here(self.state, self.content):
-                return ["（你已經不在叛投的地方了。）"]
+            reason = defection.refusal(self.state, self.content, target, self.world.get_battle())
+            if reason is not None:
+                if self._draft is not None:
+                    self._draft.title = "叛投不成"
+                return [f"（{reason}）"]
             return defection.defect(self.state, self.content, target)
         target = self._faction(arg)
         p.pending_defect = target.id
         prompt = defection.prompt(self.state, self.content, target, self.faction_counts_text())
         self._hide(prompt)  # 場景已經寫著這一問（_own_scene_text），江湖紀錄那一則只留標題（同投靠，FB-046）
         return [prompt]
+
+    def _defect_targets(self) -> list[FactionDef]:
+        """這一刻選單上能叛投去的陣營。先用不碰資料庫的條件擋掉大多數人（散人、開關關著、叛投過），
+        剩下的才讀目前的決戰、看名字在不在參戰名單上（defection.enlisted）。"""
+        if not defection.can_defect(self.state, self.content):
+            return []
+        return defection.targets_here(self.state, self.content, self.world.get_battle())
 
     def _faction_prompt(self, faction) -> str:
         return f"投靠後這一季不能改投（叛投另論）。{self.faction_counts_text()}。確定投靠{faction.name}？"

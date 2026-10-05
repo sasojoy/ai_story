@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from tianxia import bot, bot_policy, defection
+from tianxia import battle_instance, bot, bot_policy, defection
 from tianxia.content import ContentError, load_content, validate
 from tianxia.engine import Game
 from tianxia.models import FactionDef
@@ -90,7 +90,7 @@ def test_no_targets_with_switch_off(real):
 def test_prompt_names_the_cost(on):
     game = _game(on, faction="guan", at="huangjin_camp")
     p = game.state.player
-    p.rank, p.followers = 2, ["follower_guan_spear", "follower_guan_crossbow"]
+    p.rank, p.followers, p.contrib = 2, ["follower_guan_spear", "follower_guan_crossbow"], 420
     text = defection.prompt(game.state, on, _faction(on, "huang"), "目前官軍 1 人、黃巾軍 0 人、地方豪強 0 人")
     assert "身份歸零（你現在是屯長）" in text and "2 名部下全部離隊" in text
     assert "這一季替官軍記下的功勞全部作廢" in text and "一季只能叛投一次" in text
@@ -98,20 +98,38 @@ def test_prompt_names_the_cost(on):
 
 
 def test_prompt_lists_only_what_is_really_lost(on):
-    """第 1 階（鄉勇）不算損失：叛投之後在新陣營一樣是第 1 階；糧車、召見只在真的有的時候才寫。"""
+    """第 1 階（鄉勇）不算損失：叛投之後在新陣營一樣是第 1 階；糧車、召見、功勞只在真的有的時候才寫。"""
     game = _game(on, faction="guan", at="huangjin_camp")
     p = game.state.player
     counts = "目前官軍 1 人、黃巾軍 0 人、地方豪強 0 人"
     for rank in (0, 1):  # 存檔的 0 是投靠了還沒晉升過，也算第 1 階
         p.rank = rank
         text = defection.prompt(game.state, on, _faction(on, "huang"), counts)
-        assert not any(word in text for word in ("身份歸零", "部下", "糧車", "召見"))
-        assert "這一季替官軍記下的功勞全部作廢" in text and text.endswith("確定叛投黃巾軍？")
+        assert not any(word in text for word in ("身份歸零", "部下", "糧車", "召見", "功勞", "門派", "書院"))
+        assert text.startswith("叛投黃巾軍沒有什麼進度要作廢；一季只能叛投一次。") and text.endswith("確定叛投黃巾軍？")
+    p.contrib = 1
+    assert "這一季替官軍記下的功勞全部作廢；一季只能叛投一次" in defection.prompt(game.state, on, _faction(on, "huang"), counts)
+    p.contrib = 0
     p.convoy = Convoy(order="o1", grain=4, from_loc="xinye", to_loc="wan_city")
     assert "押著的糧車作廢、交出去的糧草不退" in defection.prompt(game.state, on, _faction(on, "huang"), counts)
     p.convoy, p.summons = None, Summons(rank=3, figure="luzhi", location="luzhi_camp")
     text = defection.prompt(game.state, on, _faction(on, "huang"), counts)
     assert "還沒去的召見作廢" in text and "糧車" not in text
+
+
+def test_prompt_names_the_sect_it_takes_you_out_of(on):
+    """叛投會一起離開舊陣營的門派、而且這一季拜不回去（叛出旗標），確認畫面要先講：只在拜的是舊陣營的門派時才寫。"""
+    game = _game(on, faction="guan", at="huangjin_camp")
+    p = game.state.player
+    counts = "目前官軍 1 人、黃巾軍 0 人、地方豪強 0 人"
+    p.sect = "yingchuan_academy"  # 潁川書院歸官軍
+    text = defection.prompt(game.state, on, _faction(on, "huang"), counts)
+    assert "離開潁川書院、這一季拜不回去" in text and text.endswith("確定叛投黃巾軍？")
+    p.rank, p.followers, p.contrib = 2, ["follower_guan_spear"], 90  # 跟別的子句連在一起讀得通
+    assert "，離開潁川書院、這一季拜不回去，這一季替官軍記下的功勞全部作廢；一季只能叛投一次。" in defection.prompt(
+        game.state, on, _faction(on, "huang"), counts)
+    p.sect = "cao_manor"  # 曹氏莊院歸豪強，不是官軍的門派：叛投不動它，也就不寫
+    assert "離開" not in defection.prompt(game.state, on, _faction(on, "huang"), counts)
 
 
 def test_defect_resets_rank_and_old_progress(on):
@@ -245,13 +263,44 @@ def test_confirm_after_leaving_does_nothing(on):
     assert game.state.player.pending_defect is None
 
 
+def _titles(game):
+    """江湖紀錄的標題，最新的在最前面（journal.add_entry）。"""
+    return [entry.title for entry in game.state.journal]
+
+
+def test_failed_confirm_is_not_logged_as_a_defection(on):
+    """沒叛成的「確定」：江湖紀錄的標題不能寫「叛投黃巾軍」（那是真的叛投了才有的標題）；成功的照舊。"""
+    game = _game(on, faction="guan", at="huangjin_camp")
+    game.choose("defect:huang")
+    game.state.player.location = "yingchuan"
+    game.choose("defect:confirm")
+    assert _titles(game)[0] == "叛投不成" and "叛投黃巾軍" not in _titles(game)
+    ok = _game(on, "乙", faction="guan", at="huangjin_camp")
+    ok.choose("defect:huang")
+    ok.choose("defect:confirm")
+    assert _titles(ok)[0] == "叛投黃巾軍"
+
+
 def test_confirm_after_defecting_elsewhere_does_nothing(on):
-    """另一個分頁已經叛投過了（defected 是 True）：這一頁的「確定」不能再叛投第二次。"""
+    """另一個分頁已經叛投過了（defected 是 True）：這一頁的「確定」不能再叛投第二次，話也說的是這一點。"""
     game = _game(on, faction="guan", at="huangjin_camp")
     game.choose("defect:huang")
     game.state.player.defected = True
-    assert game.choose("defect:confirm")[-1] == "（你已經不在叛投的地方了。）"
+    assert game.choose("defect:confirm")[-1] == "（這一季你已經叛投過一次了。）"
     assert game.state.player.faction == "guan"
+
+
+def test_confirm_when_defecting_is_no_longer_allowed(on):
+    """確認畫面還開著、規則卻已經不讓叛投了（沒有陣營，或第一季的規則關了）：不叛投，話不說「不在叛投的地方」。"""
+    game = _game(on, at="huangjin_camp")  # 散人
+    game.state.player.pending_defect = "huang"
+    assert game.choose("defect:confirm")[-1] == "（現在不能叛投。）"
+    assert game.state.player.faction is None and game.state.player.pending_defect is None
+    other = _game(on, "乙", faction="guan", at="huangjin_camp")
+    other.choose("defect:huang")
+    on.config.season_one = False  # 開關在確認之前關掉
+    assert other.choose("defect:confirm")[-1] == "（現在不能叛投。）"
+    assert other.state.player.faction == "guan"
 
 
 def test_confirm_screen_blocks_map_travel(on):
@@ -290,6 +339,135 @@ def test_new_season_allows_defecting_again(on):
 def test_switch_off_no_defect_option(real):
     game = _game(real, faction="guan", at="huangjin_camp")
     assert not any(i.startswith("defect:") for i in _ids(game))
+
+
+# ── 決戰中不能叛投（最終審查 Important 1）──────────────────────────────
+# 名字還在一場沒打完的決戰的參戰名單上，就不能叛投：參戰者的陣營是加入那一刻記下的，叛投不會跟著改，
+# 讓他叛投就會留在舊陣營那一邊打到底（甚至叛去豪強還拿到官軍的戰鬥選單）。
+
+
+def _battle(game):
+    return game.world.get_battle()
+
+
+def _muster(on):
+    """管理者開了長社火攻的集結（潁川大區；官軍、黃巾各有一個投靠點在區內：長社、黃巾別部營寨）。"""
+    on.config.admins = ["管"]
+    admin = _game(on, "管")
+    admin.sync(1000.0)
+    admin.admin_start_battle("changshe_fire", 1000.0)
+    assert _battle(admin).phase == "muster"
+    return admin
+
+
+def _go_active(content, game):
+    definition = content.battles["changshe_fire"]
+    game.world.mutate_battle(lambda b: battle_instance.close_muster(b, definition, random.Random(0), 1000.0))
+    assert _battle(game).phase == "active"
+
+
+def _no_defect(game):
+    assert not any(i.startswith("defect:") for i in _ids(game))
+    assert game.choose("defect:huang")[-1] == "（此刻無法這麼做。）"
+    assert game.state.player.faction == "guan" and not game.state.player.defected
+
+
+def test_enlisted_cannot_defect_inside_the_region_during_the_muster(on):
+    """路徑 1：集結期、已經報名官軍，走到同一個大區裡黃巾的投靠點——選單照常有加入的按鈕，但不給叛投。"""
+    _muster(on)
+    game = _game(on, faction="guan", at="changshe")
+    game.choose("battle:join:guan")
+    game.state.player.location = "huangjin_camp"
+    assert _battle(game).participants["甲"].faction == "guan"
+    _no_defect(game)
+
+
+def test_enlisted_cannot_defect_to_haoqiang_during_the_muster(on):
+    """路徑 2：集結期叛去不在交戰雙方的豪強，會讓他在開打後拿到官軍的戰鬥選單（舊陣營的參戰紀錄還在）：不給叛投。"""
+    _muster(on)
+    game = _game(on, faction="guan", at="changshe")
+    game.choose("battle:join:guan")
+    game.state.player.location = "cao_manor"  # 豪強的投靠點，也在潁川
+    assert "defect:haoqiang" not in _ids(game)
+    _no_defect(game)
+    _go_active(on, game)
+    assert [i for i in _ids(game) if i.startswith("battle:act:")] == ["battle:act:guan_safe", "battle:act:guan_aggressive"]
+
+
+def test_enlisted_cannot_defect_after_leaving_the_region_in_the_active_phase(on):
+    """路徑 3：開打後離開大區（away 是設計好的狀態，這時給的是平常的選單），在別處的投靠點叛投、再走回來——不給叛投。"""
+    _muster(on)
+    game = _game(on, faction="guan", at="changshe")
+    game.choose("battle:join:guan")
+    _go_active(on, game)
+    game.world.mutate_battle(lambda b: battle_instance.set_away(b, "甲", True))
+    game.state.player.location = "nanyang_huangjin_camp"  # 南陽，不在潁川
+    assert any(i.startswith("move:") for i in _ids(game))  # 確實是平常的選單
+    _no_defect(game)
+
+
+def test_not_enlisted_can_still_defect_during_a_muster_and_join_the_new_side(on):
+    """沒報名的人照常能叛投（擋的只是參戰名單上的人）；叛投之後加入的是新陣營那一邊。"""
+    _muster(on)
+    game = _game(on, faction="guan", at="huangjin_camp")
+    assert "defect:huang" in _ids(game)
+    game.choose("defect:huang")
+    game.choose("defect:confirm")
+    assert game.state.player.faction == "huang"
+    game.choose("battle:join:huang")
+    assert _battle(game).participants["甲"].faction == "huang"
+
+
+def test_a_finished_showdown_does_not_hold_him(on):
+    _muster(on)
+    game = _game(on, faction="guan", at="changshe")
+    game.choose("battle:join:guan")
+    game.state.player.location = "huangjin_camp"
+    assert "defect:huang" not in _ids(game)
+    game.world.mutate_battle(lambda b: setattr(b, "phase", "ended"))
+    assert "defect:huang" in _ids(game)
+
+
+def test_an_open_confirm_refuses_once_he_is_on_the_list(on):
+    """確認畫面先開了、之後（例如另一個地方）報了名：「確定」不叛投，話寫明為什麼；再想想永遠按得下去。"""
+    _muster(on)
+    game = _game(on, faction="guan", at="huangjin_camp")
+    game.choose("defect:huang")
+    game.world.mutate_battle(lambda b: battle_instance.join_faction(b, "甲", "guan", 100.0))
+    msg = game.choose("defect:confirm")[-1]
+    assert msg == "（決戰還沒打完，你名字還在官軍的陣上，打完再說。）"
+    p = game.state.player
+    assert (p.faction, p.defected, p.pending_defect) == ("guan", False, None)
+    assert "叛投不成" in _titles(game)
+
+
+def test_cancel_stays_reachable_when_the_battle_goes_active_around_an_open_confirm(on):
+    """確認畫面開著的時候集結結束、開打：開打後的選單只剩戰鬥選項，「再想想」也要在，不然確認畫面卡到整場打完。"""
+    _muster(on)
+    game = _game(on, faction="guan", at="huangjin_camp")
+    game.choose("defect:huang")
+    _go_active(on, game)
+    assert _ids(game) == ["battle:join_late", "defect:cancel"]
+    assert game.choose("defect:cancel")[-1] == "你決定再想想。"
+    assert game.state.player.pending_defect is None
+    assert _ids(game) == ["battle:join_late"]  # 取消之後恢復成只有戰鬥選項
+
+
+# ── 能叛投的條件只有一個說法（refusal 與 targets_here 一致）──
+
+
+def test_refusal_and_targets_here_agree(on):
+    guan, huang = _faction(on, "guan"), _faction(on, "huang")
+    game = _game(on, faction="guan", at="huangjin_camp")
+    p = game.state.player
+    assert defection.refusal(game.state, on, huang) is None and defection.targets_here(game.state, on) == [huang]
+    assert defection.refusal(game.state, on, guan) == "你已經不在叛投的地方了。"  # 自己的陣營不是對象
+    p.location = "changshe"
+    assert defection.refusal(game.state, on, huang) == "你已經不在叛投的地方了。"
+    p.location, p.defected = "huangjin_camp", True
+    assert defection.refusal(game.state, on, huang) == "這一季你已經叛投過一次了。"
+    p.defected, p.faction = False, None
+    assert defection.refusal(game.state, on, huang) == "現在不能叛投。" and defection.targets_here(game.state, on) == []
 
 
 # ── Task 4：假人與整季機器人不叛投 ─────────────────────────────────
