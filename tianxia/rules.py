@@ -4,7 +4,7 @@ from __future__ import annotations
 import random
 import re
 from collections.abc import Callable
-from typing import Literal
+from typing import Literal, NamedTuple
 
 from . import calendar, materials, roster, team  # 與 roster 互相 import：只能引入整個模組、呼叫時才取屬性，不能 from .roster import …
 from .models import FRONT_KEY, Check, Condition, Content, Effect, Trend
@@ -112,11 +112,25 @@ def check_condition(cond: Condition, state: GameState, content: Content | None =
     return True
 
 
+class CheckOutlook(NamedTuple):
+    """一次檢定的勝算：誰出手（門下 key）、他這項屬性現在的數值、成功率（0～1）。"""
+
+    actor: str
+    value: float
+    chance: float
+
+
+def check_outlook(check: Check, state: GameState, content: Content, world: WorldStateStore) -> CheckOutlook:
+    """出手者的屬性每高於難度 1 點，成功率 +10%；範圍 5%～95%。
+    擲骰（roll_check）與選項標籤上的出手者、屬性數值、心裡話（events.choice_label）都出自這一個函式，
+    所以標籤講的和實際擲出來的不會對不起來。"""
+    actor = team.check_actor(state, content, world, check)
+    value = team.check_value(state, content, world, actor, check.stat)
+    return CheckOutlook(actor, value, min(0.95, max(0.05, 0.5 + (value - check.difficulty) * 0.1)))
+
+
 def check_chance(check: Check, state: GameState, content: Content, world: WorldStateStore) -> float:
-    """出手者的屬性每高於難度 1 點，成功率 +10%；範圍 5%～95%。"""
-    key = team.check_actor(state, content, world, check)
-    value = team.check_value(state, content, world, key, check.stat)
-    return min(0.95, max(0.05, 0.5 + (value - check.difficulty) * 0.1))
+    return check_outlook(check, state, content, world).chance
 
 
 def roll_check(check: Check, state: GameState, content: Content, world: WorldStateStore, rng: random.Random) -> bool:

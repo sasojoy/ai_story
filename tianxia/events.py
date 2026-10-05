@@ -4,10 +4,10 @@ from __future__ import annotations
 import random
 from typing import Literal
 
-from . import foreshadow
+from . import check_lines, foreshadow, team
 from .models import Choice, Content, Event, Location
-from .rules import check_condition, check_who, season_one_off
-from .state import GameState
+from .rules import check_condition, check_outlook, season_one_off
+from .state import PLAYER, GameState
 from .world_state import WorldStateStore
 
 
@@ -83,8 +83,17 @@ def visible_choices(event: Event, state: GameState, content: Content | None = No
     return [(i, c) for i, c in enumerate(event.choices) if check_condition(c.condition, state, content)]
 
 
-def choice_label(choice: Choice, state: GameState, content: Content, world: WorldStateStore) -> str:
-    """有檢定的選項寫出由誰出手（不寫成功率）；其餘照原文。"""
-    if choice.check:
-        return f"{choice.text}（{check_who(choice.check, state, content, world)}）"
-    return choice.text
+def choice_label(
+    choice: Choice, state: GameState, content: Content, world: WorldStateStore, key: str | None = None,
+) -> str:
+    """有檢定的選項寫「（出手者・屬性 數值：一句心裡話）」，不寫成功率與難度（週末試玩 A，推翻 9/29 的「不顯示成功率」）；
+    其餘照原文。出手者、數值與成功率都出自 rules.check_outlook（跟擲骰同一個函式）。
+    key 是挑心裡話用的種子（引擎傳「事件 id#選項序號」），沒給就用選項文字——同一個選項每次畫都是同一句。"""
+    check = choice.check
+    if not check:
+        return choice.text
+    outlook = check_outlook(check, state, content, world)
+    who = "本人" if outlook.actor == PLAYER else team.member_name(state, content, outlook.actor)
+    stat = content.config.stat_names.get(check.stat, check.stat)
+    line = check_lines.pick_line(content.check_lines, check.stat, outlook.chance, choice.text if key is None else key)
+    return f"{choice.text}（{who}・{stat} {round(outlook.value, 1):g}：{line}）"

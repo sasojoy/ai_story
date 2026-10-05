@@ -349,7 +349,10 @@ class Game:
             return [Option(id="season:resting", label="休季中，等待管理者開啟下一季", enabled=False)]
         if s.pending_event:
             event = c.events[s.pending_event]
-            opts = [Option(id=f"choice:{i}", label=self._choice_label(ch, odds)) for i, ch in visible_choices(event, s, c)]
+            opts = [
+                Option(id=f"choice:{i}", label=self._choice_label(ch, odds, f"{event.id}#{i}"))
+                for i, ch in visible_choices(event, s, c)
+            ]
             if event.free_text is not None:
                 opts.append(Option(id=FREE_TEXT_OPTION, label=event.free_text.prompt))
             return opts
@@ -551,11 +554,12 @@ class Game:
         hardest = max(squads, key=lambda s: s.difficulty)
         return f"{who}・{self.odds(hardest.id)}"
 
-    def _choice_label(self, choice: Choice, odds: bool) -> str:
+    def _choice_label(self, choice: Choice, odds: bool, key: str) -> str:
+        """key 是檢定心裡話的種子（事件 id＋選項序號，見 events.choice_label）。"""
         if choice.combat and odds:
             squad = self.content.squads[choice.combat]
             return f"{choice.text}（對手：{squad.name}・{self.odds(squad.id)}）"
-        return choice_label(choice, self.state, self.content, self.world)
+        return choice_label(choice, self.state, self.content, self.world, key)
 
     def odds(self, squad_id: str) -> str:
         return team.estimate(self.state, self.content, self.world, squad_id)

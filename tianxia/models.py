@@ -131,6 +131,15 @@ class Check(_Strict):
     by: Literal["team", "self"] = "team"  # team：隊伍派屬性最高的人出手；self：只看本人
 
 
+class CheckLines(_Strict):
+    """檢定選項上的「心裡話」（content/check_lines.json，週末試玩 A）。成功率分五段（見 tianxia/check_lines.py 的
+    BUCKETS：80+、60-79、40-59、20-39、0-19）；generic 每一段都要有，by_stat 是各屬性（str／agi／con／wis…）自己的
+    說法，可以只寫其中幾段，沒寫的那段退回 generic。一段可以寫好幾句，同一個選項永遠挑同一句。"""
+
+    generic: dict[str, list[str]]
+    by_stat: dict[str, dict[str, list[str]]] = Field(default_factory=dict)
+
+
 class Choice(_Strict):
     text: str
     condition: Condition = Field(default_factory=Condition)
@@ -1233,6 +1242,7 @@ class Content(_Strict):
     skills: dict[str, SkillDef]
     materials: dict[str, Material]
     craft_names: CraftNames
+    check_lines: CheckLines  # 檢定選項上的心裡話（content/check_lines.json）
     banned_names: list[str]  # 煉製命名的禁用詞（原創原則：不用金庸等作品的專有名詞）
     sects: dict[str, Sect]
     characters: dict[str, CharacterDef]
