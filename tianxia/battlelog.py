@@ -63,6 +63,7 @@ def new_record(
         our_power=result.our_power,
         difficulty=result.difficulty,
         notes=[DODGE_NOTE] if result.dodged else [],
+        guarded=result.guarded,  # 護命的那一句演出由 Game._play_rounds 補進 notes 最前面（跟閃避的那一句同一個位置）
     )
 
 
@@ -168,14 +169,25 @@ def round_lines(content: Content, played: list[rounds_mod.Round], rng: random.Ra
     return out
 
 
+def trait_line(content: Content, name: str, who: str, art: str, foe: str, rng: random.Random) -> str:
+    """一句功效的演出（S1 寫的，content/trait_lines.json）：前面標〔功效名〕，{who}{art}{foe} 換成本人、帶這個功效的那一門、對手。
+    句子由呼叫端給的 rng 挑（引擎用名號＋戰報流水號當種子，不碰 Game.rng）；內容沒有這個功效的句子（舊內容）就用一句通用的。
+    載入時 content.check_traits 已經確定每一句的佔位都是乾淨的 {who}、{art}、{foe}，所以這裡 format 不會丟例外。"""
+    text = rng.choice(content.trait_lines.get(name) or ["{who}的【{art}】起了作用。"])
+    return f"〔{name}〕" + text.format(who=who, art=art, foe=foe)
+
+
 def _rounds_block(record: BattleRecord) -> list[str]:
-    """戰報的「過程」：一回合一行（Markdown 清單）。大場面有模型寫的那一版（narration，武學與成長設計 8.3）就寫它、一段話，
-    取代範本句子的回合。決戰與舊戰報沒有。"""
-    if record.narration:
-        return [f"**過程**\n{record.narration}"]
-    if not record.rounds:
+    """戰報的「過程」：功效開打前的句子、一回合一行（Markdown 清單）、功效受傷與結果出來的句子（武學與成長設計 13.6）。
+    大場面有模型寫的那一版（narration，8.3）就寫它、一段話（功效的句子各佔一行、在那段話的前與後），取代範本句子的回合。
+    決戰與舊戰報沒有回合也沒有功效的句子。"""
+    body = [record.narration] if record.narration else list(record.rounds)
+    lines = [*record.trait_before, *body, *record.trait_after]
+    if not lines:
         return []
-    return ["**過程**\n" + "\n".join(f"- {line}" for line in record.rounds)]
+    if record.narration:
+        return ["**過程**\n" + "\n".join(lines)]
+    return ["**過程**\n" + "\n".join(f"- {line}" for line in lines)]
 
 
 def _story_part(record: BattleRecord) -> str:

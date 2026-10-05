@@ -1289,6 +1289,47 @@ def test_a_hostile_big_fight_account_renders_as_one_plain_paragraph_on_the_card(
         assert "<p><strong>結果</strong>　波才抱拳認輸。　<strong>得失</strong>　" in html, (text, html)
 
 
+def test_a_trait_line_can_lead_the_folded_process_and_the_page_still_recognizes_it():
+    """計畫六 Task 4（N1）：功效開打前的句子排在回合前面，收著的「過程」露出的第一行因此是〔先手〕之類的句子、不是「第1回合」。
+    網頁認的 ROUNDS_MARK／TALE_MARK 照舊對得上（過程那一段的開頭沒變），第一個 <li> 就是功效的句子；
+    大場面的一段話則是功效的句子與模型的話在同一個 <p> 裡、各佔一行（<br />）。"""
+    from tianxia import battlelog
+    from tianxia.state import BattleRecord, Fighter
+
+    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    rounds_mark = re.search(r'const ROUNDS_MARK = "([^"]*)";', js).group(1).replace("\\n", "\n")
+    tale_mark = re.search(r'const TALE_MARK = "([^"]*)";', js).group(1).replace("\\n", "\n")
+    base = dict(
+        id=1, time=0, location="湖邊", kind="train", opponent="水寇", ours=[Fighter(name="沈浪", level=1)], tier="大勝",
+        our_power=50, difficulty=10, rounds=["第1回合　甲，你氣血 -5；乙，對手氣勢 -34。", "第2回合　丙。"],
+        trait_before=["〔先手〕沈浪搶得先機，【穿林腿】出手在前。"], trait_after=["〔乘勝〕沈浪越打越順，這一仗收穫格外多。"],
+    )
+    html = server.md(battlelog.card_text(BattleRecord(**base)))
+    assert rounds_mark in html
+    after_mark = html[html.index(rounds_mark) + len(rounds_mark):]
+    assert after_mark.startswith("\n<li>〔先手〕沈浪搶得先機，【穿林腿】出手在前。</li>\n<li>第1回合") and "<li>〔乘勝〕" in after_mark
+    tale = server.md(battlelog.card_text(BattleRecord(**base, narration="波才刀勢沉猛，你左支右絀。")))
+    assert tale_mark in tale and "<ul" not in tale
+    assert tale[tale.index(tale_mark):].startswith(tale_mark + "〔先手〕沈浪搶得先機，【穿林腿】出手在前。<br />\n波才刀勢沉猛，你左支右絀。<br />\n〔乘勝〕")
+
+
+def test_a_trait_line_never_looks_like_a_round_to_the_numbers_only_fold():
+    """收著的第一行是功效的句子時，fitFirstRound 量到太高也不會把它縮成數字行：compactRound 只認「第N回合」開頭的句子，
+    〔功效名〕開頭的一律回 null、整句照常顯示（寧可多佔一行也不藏字）。S1 的 45 句，每一句配上一個人名與一群人都試過；
+    S1 的句子本來就不寫數字（content.check_traits 擋），所以也不會被當成「還剩數字」的回合。"""
+    import json
+
+    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    lines = []
+    for name, pool in server.CONTENT.trait_lines.items():  # 伺服器載的是正式內容
+        for text in pool:
+            for foe in ("波才", "黃巾散兵"):
+                lines.append(f"〔{name}〕" + text.format(who="沈浪", art="基礎拳腳", foe=foe))
+    assert len(lines) == 90
+    script = f"const lines = {json.dumps(lines, ensure_ascii=False)}; console.log(JSON.stringify(lines.map(compactRound)));"
+    assert json.loads(_app_functions_in_node(js, script)) == [None] * len(lines)
+
+
 def test_the_three_art_buttons_stay_on_one_line_at_phone_width():
     """修練／改練這一門／熔煉在 375px 手機寬度：頁邊 16、清單邊框 1、卡內邊 14（兩側）、三顆之間兩個 8px 的縫，一排可用 375-32-2-28-16=297px。
     原本三顆等寬各 99px，扣掉邊框 2 與內距 28，「改練這一門」（5 字 × 15px = 75px）只剩 69px 放不下而折行。
@@ -2089,7 +2130,8 @@ def test_a_library_art_without_a_note_leaves_no_blank_line(client):
     card = next(r for r in client.get("/api/menxia").json()["owned_arts"] if r["id"] == "鐵柳纏勁")["card"]
     assert "None" not in card
     assert "<br />\n<br />" not in card and "<br />\n</p>" not in card
-    assert card.rstrip().endswith("來源：自創（沈浪 所創）</p>")
+    # 計畫六 Task 4：來源之後多一行功效（鐵柳纏勁屬柔、上品：化勁 10%×2）；沒有說明句時它就是最後一行
+    assert card.rstrip().endswith("來源：自創（沈浪 所創）<br />\n功效：〔化勁〕一場少扣 20% 氣血</p>")
 
 
 def test_travel_sets_off_or_stays_on_the_map_and_says_why(client):
