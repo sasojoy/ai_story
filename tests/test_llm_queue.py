@@ -57,16 +57,22 @@ def test_humans_go_before_bots_that_queued_earlier():
     assert order == ["真人", "假人"]
 
 
-def test_one_job_per_person_the_second_gets_the_fallback():
-    """同一個人連按兩下、開兩個分頁：第二件直接拿退路，不叫模型（Review Focus 1）。"""
+def test_one_job_per_person_the_second_is_refused_as_busy():
+    """同一個人連按兩下、開兩個分頁：第二件不叫模型，也不拿退路，丟 Busy 讓呼叫端自己決定怎麼拒絕（審查 M2、控制者裁示：
+    退路會讓第二個分頁挑結果）。第一件不受影響、佇列裡也沒有第二張票。"""
     queue = llm_queue.LlmQueue(slots=2, bot_cap=1)
-    started, release, holder, _ = _hold(queue, "甲")
+    started, release, holder, result = _hold(queue, "甲")
     assert started.wait(2)
     called = []
-    assert queue.run("甲", lambda: called.append(1), fallback="退路") == "退路"
-    assert called == []
+    with pytest.raises(llm_queue.Busy):
+        queue.run("甲", lambda: called.append(1), fallback="退路")
+    with pytest.raises(llm_queue.Busy):  # 假人也一樣：重複就是重複，不看是不是假人
+        queue.run("甲", lambda: called.append(2), fallback="退路", bot=True)
+    assert called == [] and queue.snapshot() == {"running": 1, "waiting": 0}
     release.set()
     holder.join(2)
+    assert result["value"] == "甲 的結果" and queue.position("甲") is None
+    assert queue.run("甲", lambda: "再來一件", fallback="退路") == "再來一件"  # 做完之後同一個人當然可以再排
 
 
 def test_bot_cap_full_means_fallback():

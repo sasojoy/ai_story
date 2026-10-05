@@ -2,8 +2,9 @@
 
 顯卡同時只處理 slots 件。排隊的規則：
 - 真人先、假人後，同一種照先來後到；
-- 每個人（名號）同時最多一件在排或在跑，第二件直接拿退路的結果；
-- 假人在排加在跑最多 bot_cap 件，滿了也直接拿退路；
+- 每個人（名號）同時最多一件在排或在跑，第二件不排、不叫模型，丟 Busy 讓呼叫端自己決定怎麼拒絕——不給退路：
+  退路是一個結果，第二個分頁就能拿它挑結果（評分 40、首次取名用退路字表）；
+- 假人在排加在跑最多 bot_cap 件，滿了直接拿退路；
 - 排超過 wait 秒還沒輪到，就拿退路、不叫模型。
 輪到了才執行 job()，執行時不握任何鎖（呼叫端在行動鎖外叫這裡）。
 
@@ -21,6 +22,10 @@ from typing import TypeVar
 T = TypeVar("T")
 
 HUMAN, BOT = 0, 1  # 排序的第一個鍵：真人先
+
+
+class Busy(Exception):
+    """同一個人已經有一件在排或在跑：LlmQueue.run 不排這一件、不叫 job，丟這個。訊息不寫名號（會進紀錄）。"""
 
 
 @dataclass(order=True)
@@ -43,12 +48,13 @@ class LlmQueue:
         self._seq = itertools.count()
 
     def run(self, owner: str, job: Callable[[], T], *, fallback: T, bot: bool = False, wait: float = 30.0) -> T:
-        """排隊、輪到了執行 job() 並回傳它的結果。以下三種情況回傳 fallback、不執行 job：
-        同一個人已經有一件、假人滿了、排超過 wait 秒。job 丟出的例外照樣往外丟，位置一定會讓出來。"""
+        """排隊、輪到了執行 job() 並回傳它的結果。以下兩種情況回傳 fallback、不執行 job：假人滿了、排超過 wait 秒。
+        同一個人已經有一件在排或在跑：丟 Busy、不排、不執行 job（呼叫端要拒絕這一件，不能給結果）。
+        job 丟出的例外照樣往外丟，位置一定會讓出來。"""
         with self._cond:
             mine = self._waiting + self._active
             if any(t.owner == owner for t in mine):
-                return fallback
+                raise Busy("同一個人已經有一件在排或在跑")
             if bot and sum(t.bot for t in mine) >= self.bot_cap:
                 return fallback
             ticket = _Ticket((BOT if bot else HUMAN, next(self._seq)), owner, bot)

@@ -18,7 +18,8 @@
 - 對話生成與隨口應對的評分、潤色也有總預算（`Config.dialogue_budget_seconds`、`free_text_budget_seconds`；評分與潤色共用
   後面那一份），跟開爐、大場面一樣從備料那一段開始算、扣掉等鎖與排隊的時間。
 - 鎖外的五個模型呼叫（對話生成、大場面判讀、開爐取名、隨口應對的評分與潤色）一律走 `model_call`：開關
-  `Config.llm_queue_slots`（預設 0＝關）打開時先排隊（`llm_queue.py`：真人先、假人有上限、一人一件、排太久拿退路），
+  `Config.llm_queue_slots`（預設 0＝關）打開時先排隊（`llm_queue.py`：真人先、假人有上限、排太久拿退路；同一個人同時只有一件，
+  第二件被擋下來——評分、開爐、大場面回一句話、什麼都不套用，對話取消、潤色不插句子），
   關著就直接叫。鎖內的小呼叫（`Game._quick_client`）與排程不進佇列。
 
 執行：`.venv/Scripts/python.exe server.py`（http://127.0.0.1:7861，預設只聽這台電腦）。要讓外面的手機連進來，
@@ -51,7 +52,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from markdown_it import MarkdownIt
 
-from llm_queue import LlmQueue
+from llm_queue import Busy, LlmQueue
 from tianxia import companion_agent, event_llm, fight_llm, foreshadow, naming, rules, server_bots, team, timetable
 from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, AccountStore, normalize
 from tianxia.content import PROFILE_ENV, load_content, profile_line
@@ -380,14 +381,24 @@ def queue_line(config) -> str:
     )
 
 
-def model_call(game: Game, job, *, fallback, left: float | None = None):
+# 同一個玩家已經有一件在等模型（另一個分頁、另一台裝置），這一件被擋下來時回的話（佇列開著才會；審查 M2）。
+# 退路是一個結果：隨口應對的評分退路是 40（灌水的寫法本來該得 0）、首次開爐的退路是退路字表的名字（整季登記），
+# 第二個分頁不能拿來挑結果，所以評分、開爐、大場面一律擋下來、什麼都不套用。三句都是草稿，待 joy 潤。
+BUSY_FREE_TEXT = "上一句還在掂量，稍等。"  # 待 joy 潤
+BUSY_FORGE = "上一爐還沒出爐。"  # 待 joy 潤
+BUSY_FIGHT = "還在對峙，稍等。"  # 待 joy 潤
+
+
+def model_call(game: Game, job, *, fallback, left: float | None = None, busy: str | None = None):
     """行動鎖外叫模型一律走這裡：佇列開著就用這個角色的名號排隊（真人先、假人有上限、一人一件、排太久拿 fallback，
     見 llm_queue.LlmQueue），關著就直接叫。呼叫端不能握著行動鎖：排隊最久要等 llm_queue_wait_seconds 秒，握著鎖等就是全服一起等；
     在鎖裡被叫到直接丟 RuntimeError（跟 _model_guard 一樣，用 RuntimeError 不用 assert：python -O 也照樣擋），開關開著關著都一樣。
     鎖內的小呼叫走 Game._quick_client、不進佇列。佇列只認名號；是不是假人只決定排序與上限，不改任何玩家看得到的字。
     left 是呼叫端那一件的總預算還剩幾秒（有總預算的四種呼叫都給）：排隊最久只等 min(llm_queue_wait_seconds, left)，
     一個請求不會排過自己的總預算（審查 M1）；剩下 0 秒就是 0：位子正好空著照常進場（job 自己發現預算用完、不叫模型），
-    要排的話馬上拿退路。沒給（None）就只受 llm_queue_wait_seconds 管。"""
+    要排的話馬上拿退路。沒給（None）就只受 llm_queue_wait_seconds 管。
+    同一個人已經有一件在排或在跑（佇列對這一件丟 Busy，審查 M2）：給了 busy（一句話）就丟 GameError、不叫 job、不套用任何東西，
+    呼叫端不能繼續往下走；沒給就拿 fallback（對話：取消那一輪、潤色：不插句子，本來就無害）。佇列關著沒有這回事，照舊直接叫。"""
     if game.world.db.writing():
         raise RuntimeError("model_call 要在行動鎖外用：鎖內的小呼叫走 Game._quick_client，不排隊")
     queue = QUEUE
@@ -397,7 +408,12 @@ def model_call(game: Game, job, *, fallback, left: float | None = None):
     wait = game.content.config.llm_queue_wait_seconds
     if left is not None:
         wait = max(0.0, min(wait, left))
-    return queue.run(p.name.casefold(), job, fallback=fallback, bot=p.bot is not None, wait=wait)
+    try:
+        return queue.run(p.name.casefold(), job, fallback=fallback, bot=p.bot is not None, wait=wait)
+    except Busy:
+        if busy is None:
+            return fallback
+        raise GameError(busy) from None
 
 
 def within_budget(client, left: float):
@@ -485,7 +501,9 @@ def prepare_fight(game: Game, option_id: str) -> list[str] | fight_llm.PreparedF
         budget = max(0.0, config.big_fight_budget_seconds - (_monotonic() - started))
         return fight_llm.judge(game.client, request, config.big_fight_swing, budget)
 
-    judgment = model_call(game, ask, fallback=None, left=config.big_fight_budget_seconds - (_monotonic() - started))
+    judgment = model_call(
+        game, ask, fallback=None, left=config.big_fight_budget_seconds - (_monotonic() - started), busy=BUSY_FIGHT,
+    )
     return fight_llm.PreparedFight(request=request, judgment=judgment)
 
 
@@ -533,16 +551,16 @@ def prepare_forge(
         # 角色名號的查詢是唯讀的快照、不拿行動鎖（FB-069：模型取到角色的名號就再取一次；C 段進鎖還會再擋一次）
         return naming.generate(game.client, game.content, request, budget=budget, person=game.world.is_character_name)
 
-    return model_call(game, name_it, fallback=NO_NAME, left=total - (_monotonic() - started))
+    return model_call(game, name_it, fallback=NO_NAME, left=total - (_monotonic() - started), busy=BUSY_FORGE)
 
 
 def forge(game: Game, art_id: str | None, insight_ids: list[str], other_art: str | None = None) -> list[str] | None:
     """開爐：A、B 在 prepare_forge，C 進鎖交給 Game.forge。proposed 一定給（不必叫模型時是 NO_NAME），
     所以伺服器上的開爐永遠不會在鎖裡叫模型。同一爐連按兩下、重新整理再按、開兩個分頁：兩個請求可能都走完 A、B，
     C 段重驗時第二個會看見配方有了、東西已經在你身上，什麼都不收（企劃者 2026-10-05：不能重複扣）。
-    模型佇列開著時，同一個人的第二件在 B 段直接拿 NO_NAME、不叫第二次模型（Review Focus 1）；它的 C 段如果先進鎖，這個配方這一季
-    就用退路字表的名字登記，第一件模型取的名字被丟掉。這是已知的代價（控制者 2026-10-06：保持這個行為，PM 知道），
-    要避免得讓重複的那一件改回「忙碌中」、不走 C 段。同一個分頁連點兩下被頁面擋住（按鈕 disable），要兩個分頁或兩台裝置才會。"""
+    模型佇列開著時，同一個人已經有一件在等模型（另一個分頁、另一台裝置），第二件在 B 段被擋下來：丟 GameError「上一爐還沒出爐。」
+    （BUSY_FORGE），不走 C 段、什麼都不登記、什麼都不收（審查 M2、控制者裁示；以前它拿 NO_NAME 先進鎖，這個配方這一季就用退路
+    字表的名字登記，第一件模型取的名字被丟掉）。不必叫模型的爐（配方已經有人合過）不經過佇列，兩個分頁照常都走得完。"""
     proposed = prepare_forge(game, art_id, insight_ids, other_art)
     return act(game, lambda g: g.forge(art_id, insight_ids, proposed=proposed, other_art=other_art))
 
@@ -575,6 +593,7 @@ def answer_event(game: Game, text: str) -> list[str] | None:
 
     rate = model_call(
         game, score, fallback=event_llm.DEFAULT_FREE_TEXT_SUCCESS_RATE, left=total - (_monotonic() - started),
+        busy=BUSY_FREE_TEXT,
     )
     msgs = act(game, lambda g: g.answer_event(request, rate))
     outcome = game.last_gamble

@@ -3983,8 +3983,10 @@ def test_model_call_queues_under_the_character_and_flags_bots(game, monkeypatch)
     assert seen["bot"] is True
 
 
-def test_a_second_request_from_the_same_player_gets_the_fallback(game, monkeypatch):
-    """同一個角色兩個分頁同時送：第二件拿退路，不叫第二次模型（Review Focus 1）。"""
+def test_a_second_request_from_the_same_player_is_cancelled_or_refused_as_the_call_site_says(game, monkeypatch):
+    """同一個角色兩個分頁同時送：第二件不叫第二次模型（Review Focus 1）。佇列對它丟 Busy，model_call 照呼叫端的意思：
+    沒給 busy 訊息的（對話：取消那一輪、潤色：不插句子，本來就無害）拿 fallback；給了 busy 訊息的（評分、開爐、大場面：
+    退路是一個結果，第二個分頁就能拿它挑結果）丟 GameError、一個字都不套用（審查 M2、控制者裁示）。"""
     queue = llm_queue.LlmQueue(slots=2, bot_cap=1)
     monkeypatch.setattr(server, "QUEUE", queue)
     started, release = threading.Event(), threading.Event()
@@ -3998,8 +4000,11 @@ def test_a_second_request_from_the_same_player_gets_the_fallback(game, monkeypat
     first.start()
     assert started.wait(2)
     assert server.model_call(game, lambda: "第二件", fallback="退路") == "退路"
+    with pytest.raises(server.GameError, match="還在掂量"):
+        server.model_call(game, lambda: pytest.fail("不該叫"), fallback="退路", busy="上一件還在掂量。")
     release.set()
     first.join(2)
+    assert queue.snapshot() == {"running": 0, "waiting": 0}
 
 
 def test_the_queue_key_ignores_the_case_of_the_name(monkeypatch):
@@ -4017,7 +4022,7 @@ def test_the_queue_key_ignores_the_case_of_the_name(monkeypatch):
     first = threading.Thread(target=lambda: server.model_call(upper, slow, fallback="退路"))
     first.start()
     assert started.wait(2)
-    assert server.model_call(lower, lambda: "第二件", fallback="退路") == "退路"
+    assert server.model_call(lower, lambda: pytest.fail("不該叫"), fallback="退路") == "退路"  # 同一個人：沒給 busy 訊息就是 fallback
     release.set()
     first.join(2)
 
@@ -4250,6 +4255,76 @@ def test_a_queue_that_will_not_take_the_job_gives_each_site_its_old_fallback(sit
         assert GAMBLE_NARRATION not in game.state.journal[0].lines
 
 
+class _ScriptedQueue:
+    """照劇本回應每一件：「run」照常叫 job、「busy」丟 Busy（同一個人已經有一件在排或在跑）；劇本用完之後一律 run。"""
+
+    def __init__(self, *script):
+        self.script, self.calls = list(script), 0
+
+    def run(self, owner, job, *, fallback, bot=False, wait=30.0):
+        step = self.script[self.calls] if self.calls < len(self.script) else "run"
+        self.calls += 1
+        if step == "busy":
+            raise llm_queue.Busy("同一個人已經有一件在排或在跑")
+        return job()
+
+
+@pytest.mark.parametrize("site", SITES)
+def test_a_duplicate_request_is_refused_where_the_fallback_would_let_the_second_tab_pick_the_result(site, monkeypatch):
+    """審查 M2、控制者裁示：同一個玩家已經有一件在等模型，第二件（另一個分頁）不能拿退路——評分 40 是一個結果（灌水的寫法本來
+    該得 0 分）、首次取名用退路字表是一個結果（整季登記）。所以隨口應對的評分、開爐、大場面都擋下來：不擲骰、不登記、不打、
+    什麼都不收，回一句短話，眼前的事還在原地。對話照舊取消那一輪（不扣體力，本來就無害）；潤色照舊不插句子。"""
+    queue = _ScriptedQueue("run", "busy") if site == "narrate" else _ScriptedQueue("busy")
+    monkeypatch.setattr(server, "QUEUE", queue)
+    game, run, seen = _ready(site, monkeypatch)
+    stamina = game.state.player.stamina
+    if site == "dialogue":
+        run()
+        assert _asked(seen, "dialogue") == []
+        assert game.state.player.pending_companion is None and game.state.player.stamina == stamina
+        assert game.state.journal[0].lines == ["盧植似乎無心多談，你只好先行告辭。"]
+    elif site == "fight":
+        with pytest.raises(server.GameError, match="還在對峙，稍等。"):
+            run()
+        assert _asked(seen, "fight") == []
+        stored = open_characters().load("測試")
+        assert stored.battles == [] and stored.pending_event == "kou_boss" and stored.player.stamina == stamina
+    elif site == "forge":
+        with pytest.raises(server.GameError, match="上一爐還沒出爐。"):
+            run()
+        assert _asked(seen, "forge") == [] and open_world().lookup_recipe(FIST_FENG) is None
+        assert open_characters().load("沈青衫").player.stats["xinde"] == 100
+    elif site == "score":
+        with pytest.raises(server.GameError, match="上一句還在掂量，稍等。"):
+            run()
+        assert _asked(seen, "score") == [] and _asked(seen, "rate") == []  # 沒評分、也沒擲骰
+        stored = open_characters().load("測試")
+        assert stored.pending_event is not None and not any(e.title.endswith("隨口應對") for e in stored.journal)
+    else:
+        run()  # 評分照常、擲骰照常；潤色那一件被擋下來：不插句子
+        assert _asked(seen, "rate") == [{"kind": "rate", "rate": 85}] and _asked(seen, "narrate") == []
+        assert GAMBLE_NARRATION not in game.state.journal[0].lines
+    assert queue.calls == (2 if site == "narrate" else 1)
+
+
+def test_the_refusals_reach_the_page_as_a_short_message(client, monkeypatch):
+    """被擋下來的請求回 400 與那一句話（前端的 api() 會把 error 跳成提示），不是 500。"""
+    monkeypatch.setattr(server, "QUEUE", _ScriptedQueue("busy", "busy"))
+    _a_player_with_insights(client)
+    forged = client.post("/api/menxia/forge", json={"art": "jichu_quanjiao", "insights": ["feng"]})
+    assert forged.status_code == 400 and forged.json() == {"error": "上一爐還沒出爐。"}
+    assert open_world().lookup_recipe(FIST_FENG) is None
+    game = server.game_for("沈青衫")
+    from tianxia.models import Effect, FreeTextChoice
+
+    event = next(iter(server.CONTENT.events.values()))
+    monkeypatch.setattr(event, "free_text", FreeTextChoice(prompt="自己想辦法……", stat="str", effect=Effect(text="成了。")))
+    server.act(game, lambda g: setattr(g.state, "pending_event", event.id))
+    answered = client.post("/api/answer", json={"text": "大喊官兵來了"})
+    assert answered.status_code == 400 and answered.json() == {"error": "上一句還在掂量，稍等。"}
+    assert client.get("/api/main").json()["event_free_text"] == "自己想辦法……"  # 眼前的事還在原地
+
+
 class _PassQueue:
     """記下每一件要排多久（wait），然後照常叫 job。"""
 
@@ -4363,11 +4438,10 @@ def test_the_forge_endpoint_goes_through_a_real_queue(client, monkeypatch):
     assert queue.snapshot() == {"running": 0, "waiting": 0}
 
 
-def test_a_duplicate_forge_gets_the_fallback_name_and_is_charged_once(monkeypatch):
-    """同一個玩家兩個分頁同時開同一爐（Review Focus 1；控制者 2026-10-06：保持計畫的行為，重複的那一件拿退路）：第二件在佇列裡
-    直接拿 NO_NAME、不叫第二次模型；它的 C 段先進鎖，這個配方這一季就用退路字表的名字登記，第一件模型取的名字被丟掉
-    （它的 C 段看到配方已經有了、東西已經在身上，什麼都不收）：心得只扣一次。這是已知的代價、不是 bug，PM 知道；
-    要避免的話，重複的那一件得改成回「忙碌中」、不走 C 段（會改計畫的語意）。"""
+def test_a_duplicate_forge_is_refused_and_the_first_one_registers_the_models_name(monkeypatch):
+    """同一個玩家兩個分頁同時開同一爐（審查 M2、控制者裁示，取代原本「重複的那一件拿退路」）：第二件被擋下來，不走 C 段，
+    什麼都不登記、什麼都不收，回一句「上一爐還沒出爐。」；模型只叫一次，第一件登記的是模型取的名字、心得只扣一次。
+    以前第二件拿 NO_NAME 先進鎖，這個配方這一季就用退路字表的名字登記，第一件模型取的名字被丟掉。"""
     queue = llm_queue.LlmQueue(slots=2, bot_cap=1)
     monkeypatch.setattr(server, "QUEUE", queue)
     game = _forger()
@@ -4384,14 +4458,16 @@ def test_a_duplicate_forge_gets_the_fallback_name_and_is_charged_once(monkeypatc
         thread = threading.Thread(target=lambda: first.update(msgs=server.forge(game, "jichu_quanjiao", ["feng"])))
         thread.start()
         assert started.wait(2)
-        second = server.forge(game, "jichu_quanjiao", ["feng"])  # 第一件還在模型那邊的時候，第二件整個走完
+        with pytest.raises(server.GameError, match="上一爐還沒出爐"):
+            server.forge(game, "jichu_quanjiao", ["feng"])  # 第一件還在模型那邊的時候，第二件被擋下來
+        assert open_world().lookup_recipe(FIST_FENG) is None  # 第二件什麼都沒登記
+        assert open_characters().load("沈青衫").player.stats["xinde"] == 100  # 也什麼都沒收
         release.set()
         thread.join(5)
-    fallback = naming.fallback_name(server.CONTENT, FIST_FENG, "武學")
     assert asked == [1]  # 模型只被叫一次（第一件的）
-    assert open_world().lookup_recipe(FIST_FENG).name == fallback != "旋風腿"
-    assert any(f"【{fallback}】" in m for m in second) and first["msgs"] is not None
-    assert open_characters().load("沈青衫").player.stats["xinde"] == 95  # 兩件只收一次
+    assert open_world().lookup_recipe(FIST_FENG).name == "旋風腿"  # 登記的是模型取的名字，不是退路字表的
+    assert first["msgs"] is not None
+    assert open_characters().load("沈青衫").player.stats["xinde"] == 95  # 只收一次
     assert queue.snapshot() == {"running": 0, "waiting": 0}
 
 
