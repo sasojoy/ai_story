@@ -3,6 +3,7 @@ import hashlib
 import random
 import re
 import sqlite3
+import threading
 import time
 from unittest import mock
 
@@ -37,12 +38,15 @@ def season_already_open(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def fresh_server_memory():
-    """登入紀錄、登入狀態、角色快取都只放在伺服器記憶體裡：每個測試從空的開始。"""
+    """登入紀錄、登入狀態、角色快取（還有排程那一份沒有玩家的 Game）都只放在伺服器記憶體裡：每個測試從空的開始，
+    不然上一個測試的暫存資料庫會被沿用。"""
     for store in (server.LOGIN_FAILURES, server.SESSIONS, server.GAMES):
         store.clear()
+    server.WORLD_GAME = None
     yield
     for store in (server.LOGIN_FAILURES, server.SESSIONS, server.GAMES):
         store.clear()
+    server.WORLD_GAME = None
 
 
 @pytest.fixture(autouse=True)
@@ -1445,6 +1449,82 @@ def test_when_the_first_trip_saw_no_need_for_the_model_the_lock_never_asks_it(mo
         server.forge(game, "jichu_quanjiao", ["feng"])
     assert asked == []
     assert open_world().lookup_recipe(FIST_FENG).name == naming.fallback_name(server.CONTENT, FIST_FENG, "武學")
+
+
+# ── 伺服器自己的排程：排程的一下（world_step）跟玩家請求同一把鎖、同一套鎖內模型守衛 ──────────────
+
+
+def test_world_step_pushes_the_season_under_the_action_lock(monkeypatch):
+    """排程的一下：拿行動鎖、推全服的事；鎖內的模型額度照玩家請求那一套（斷路器開著時這一下也不叫模型）。"""
+    held = []
+    real_lock = SqliteWorldStore.action_lock
+
+    def spy_lock(self, timeout=None):
+        held.append(timeout)
+        return real_lock(self, timeout)
+
+    monkeypatch.setattr(SqliteWorldStore, "action_lock", spy_lock)
+    server.world_step(1000.0)
+    before = open_world().get_season().time
+    server.world_step(1300.0)
+    assert open_world().get_season().time == pytest.approx(before + 300 * server.CONTENT.config.time_scale)
+    assert held and all(t is None for t in held)  # 跟玩家請求一樣等到拿到為止
+
+
+def test_world_step_respects_the_model_breaker(monkeypatch, breaker_clock):
+    """斷路器開著時，排程那一下的鎖內模型額度一開始就用完（跟 _locked 同一套 _model_guard）。"""
+    seen = []
+    monkeypatch.setattr(Game, "world_tick", lambda self, now: seen.append(self._model_budget.gave_up) or [])
+    server._pause_model()
+    server.world_step(1000.0)
+    assert seen == [True]
+
+
+def test_a_failed_in_lock_call_in_a_world_step_trips_the_breaker_for_everyone(game, monkeypatch, breaker_clock, capsys):
+    """排程那一下鎖內的模型呼叫失敗：跟玩家請求一樣打開全服的斷路器、印同一行，下一個玩家的拿鎖一開始額度就用完。"""
+    sent = _model_down(monkeypatch)
+    monkeypatch.setattr(Game, "world_tick", lambda self, now: _ask_the_model_in_the_lock(self) or [])
+    server.world_step(1000.0)
+    assert len(sent) == 1
+    assert server.look(game, lambda g: (g._model_budget.gave_up, g._quick_client())) == (True, None)
+    assert len(sent) == 1
+    assert capsys.readouterr().out.splitlines() == [
+        f"鎖內的模型呼叫失敗或逾時：接下來 {server.MODEL_BREAKER_SECONDS} 秒全服鎖內不叫模型，改用固定文字。",
+    ]
+
+
+def _lock_is_free() -> bool:
+    """另一個執行緒拿得到行動鎖嗎（拿不到就是有人沒放）。"""
+    got = []
+
+    def grab():
+        with contextlib.suppress(TimeoutError), open_world().action_lock(timeout=2.0):
+            got.append(True)
+
+    thread = threading.Thread(target=grab)
+    thread.start()
+    thread.join(5.0)
+    return got == [True]
+
+
+def test_a_failed_world_step_rolls_back_and_releases_the_lock(monkeypatch):
+    """排程那一下出錯：這一下推的整筆撤回、鎖放掉、例外丟給呼叫端；下一下照常推（Review Focus 2 的伺服器這一半）。"""
+    server.world_step(1000.0)  # 第一下只記下時鐘
+    before = open_world().get_season().time
+    real_tick = Game.world_tick
+
+    def tick_then_fail(self, now):
+        real_tick(self, now)
+        raise RuntimeError("這一下壞了")
+
+    monkeypatch.setattr(Game, "world_tick", tick_then_fail)
+    with pytest.raises(RuntimeError, match="這一下壞了"):
+        server.world_step(1300.0)
+    assert open_world().get_season().time == pytest.approx(before)  # 推過的那一段撤回了
+    assert _lock_is_free()
+    monkeypatch.setattr(Game, "world_tick", real_tick)
+    server.world_step(1300.0)
+    assert open_world().get_season().time == pytest.approx(before + 300 * server.CONTENT.config.time_scale)
 
 
 def test_a_recipe_registered_between_the_two_trips_gives_the_registered_art():

@@ -51,6 +51,7 @@ from tianxia.database import default_path, open_database
 from tianxia.engine import FREE_TEXT_OPTION, Game
 from tianxia.models import FREE_TEXT_MAX
 from tianxia.journal import CSS as JOURNAL_CSS
+from tianxia.sqlite_world import open_world
 
 ROOT = Path(__file__).parent
 WEB = ROOT / "web"
@@ -190,25 +191,31 @@ def _pause_model() -> None:
 
 
 @contextlib.contextmanager
+def _model_guard(game: Game):
+    """已經拿到行動鎖之後：這一次拿鎖的鎖內模型額度重新開始；全服斷路器開著時一開始就用完；這一次拿鎖裡（動作出錯也算）
+    有鎖內的模型呼叫失敗，就打開斷路器（見 MODEL_BREAKER_SECONDS）。玩家請求（_locked）與排程（world_step）共用這一套。"""
+    game.reset_model_budget()  # 新的一次拿鎖：鎖內的模型呼叫重新有額度（一次拿鎖期間只容忍一次失敗，見 Game._quick_client）
+    paused = _model_paused()
+    if paused:
+        game._model_budget.gave_up = True  # 斷路器開著：額度一開始就用完（直接碰 Game 的私有欄位，PM 同意只在這裡這樣做）
+    try:
+        yield
+    finally:
+        if not paused and game._model_budget.gave_up:  # 這一次拿鎖裡鎖內的模型呼叫失敗了（私有欄位，同上）
+            _pause_model()
+
+
+@contextlib.contextmanager
 def _locked(game: Game):
     """拿行動鎖，並先重讀角色（見 _reload）。這支程式裡每一個要用 game.state 的地方都從這裡進鎖
     （act、look、prepare_dialogue），不另外呼叫 game.world.action_lock()：資料庫是唯一的真實來源，
     GAMES 裡的 Game 只是這一個動作的工作副本。FastAPI 的同步端點跑在執行緒池裡，同一個角色的兩個請求
     可能同時進來；行動鎖是 BEGIN IMMEDIATE，不同執行緒就一個一個來，重讀與動作不會交錯。
-    鎖內的模型呼叫歸全服的斷路器管（見 MODEL_BREAKER_SECONDS）：開著時這一次拿鎖一開始額度就用完；這一次拿鎖
-    （動作出錯也算）有鎖內的模型呼叫失敗，就打開它。"""
-    with game.world.action_lock():
-        game.reset_model_budget()  # 新的一次拿鎖：鎖內的模型呼叫重新有額度（一次拿鎖期間只容忍一次失敗，見 Game._quick_client）
-        paused = _model_paused()
-        if paused:
-            game._model_budget.gave_up = True  # 斷路器開著：額度一開始就用完（直接碰 Game 的私有欄位，PM 同意只在這裡這樣做）
+    鎖內的模型額度與斷路器見 _model_guard。"""
+    with game.world.action_lock(), _model_guard(game):
         _reload(game)
         game.set_move_mode(MOVE_MODE.get())  # 這次請求選的走法（見 MOVE_MODE）：之後的選單與 choose() 都照它
-        try:
-            yield
-        finally:
-            if not paused and game._model_budget.gave_up:  # 這一次拿鎖裡鎖內的模型呼叫失敗了（私有欄位，同上）
-                _pause_model()
+        yield
 
 
 def act(game: Game, action) -> list[str] | None:
@@ -226,6 +233,21 @@ def look(game: Game, view):
     """只讀的畫面（點名冊、切圖層、看戰報）：拿鎖、重讀角色，但不同步、不存檔。"""
     with _locked(game):
         return view(game)
+
+
+WORLD_GAME: Game | None = None  # 排程用的那一份沒有玩家的 Game（Game.for_world）；只有排程執行緒用，第一次用到時才建
+
+
+def world_step(now: float) -> list[str]:
+    """伺服器排程的一下（線上架構設計第四節）：拿行動鎖（跟玩家請求同一把、等到拿到為止），推全服的事到 now
+    （Game.world_tick）。鎖內的模型呼叫照玩家請求那一套額度與斷路器（_model_guard）。出錯時交易整筆撤回、鎖放掉，
+    例外丟給呼叫端（排程迴圈印出來、下一輪照跑）。"""
+    global WORLD_GAME
+    if WORLD_GAME is None:
+        WORLD_GAME = Game.for_world(CONTENT, open_world())
+    game = WORLD_GAME
+    with game.world.action_lock(), _model_guard(game):
+        return game.world_tick(now)
 
 
 def prepare_dialogue(game: Game, option_id: str) -> companion_agent.PreparedTurn | None:
