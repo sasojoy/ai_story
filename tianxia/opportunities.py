@@ -7,13 +7,15 @@ from __future__ import annotations
 
 import random
 
-from . import calendar, figures, foreshadow, ranks
+from . import calendar, figures, foreshadow, ranks, timetable
+from .journal import fragment_line
 from .models import Content, OppDef, Rank2Action
-from .rules import GEJU, change_trend, front_of, season_one
+from .rules import GEJU, change_trend, front_of, roll_check, season_one
 from .state import GameState, PlayerState
 
 DONE = "（機緣「{name}」完成。）"
 NOT_NOW = "（此刻無法這麼做。）"
+DAWN_HOURS = (5, 6)  # 卯時：季曆 05:00～06:59（機緣文件 3.1 B）
 
 
 def active(state: GameState, content: Content) -> bool:
@@ -163,6 +165,88 @@ def _deliver_here(state: GameState, content: Content, o: OppDef, loc_id: str) ->
     return f"{side.name}的主將" if loc_id in on_front else None
 
 
+# ── 天時地利型 ─────────────────────────────────
+
+
+def _window_key(state: GameState, content: Content, when: str) -> int | None:
+    """這一刻屬於哪一回（同一回失敗了不能再試）：夜裡是那一夜開始的曆日（00:00～04:59 算前一天的夜），
+    黎明是當天；不在時段裡回 None。決戰之後沒有回數（時限內可以一直試），回 0。"""
+    at = calendar.point(state.world.time, content, state.world)
+    if when == "night":
+        if not calendar.is_night(state.world.time, content, state.world):
+            return None
+        return at.cal_day if at.hour >= calendar.NIGHT_FROM else at.cal_day - 1
+    if when == "dawn":
+        return at.cal_day if at.hour in DAWN_HOURS else None
+    return 0
+
+
+def _host_here(state: GameState, content: Content, o: OppDef, loc_id: str) -> str | None:
+    """黎明的主持：照順序第一位在場（在他的地點）的人物；他的地點就是你此刻所在才算。回傳人物 id 或 None。"""
+    for h in o.timing.hosts:
+        if h.figure in figures.present_at(state, content, h.at):
+            return h.figure if h.at == loc_id else None
+    return None
+
+
+def _showdown_here(state: GameState, content: Content, loc_id: str) -> bool:
+    """戰後的地：有一場全服決戰在 opp_showdown_days 個曆日內結算，這裡在那件大事的戰線上、帶野外一類的標籤。
+    記成跳過（沒有打過）的、沒有戰線的決戰不算。"""
+    loc = content.locations[loc_id]
+    if not set(loc.tags) & set(content.config.opp_wild_tags):
+        return False
+    w = state.world
+    span = content.config.opp_showdown_days * calendar.DAY / calendar.cal_scale(content, w)
+    for e in content.timetable:
+        done = w.timeline.get(e.id)
+        if e.kind == "showdown" and e.front is not None and done is not None and done.key != timetable.SKIPPED \
+                and 0 <= w.time - done.time <= span and front_of(content, loc_id) == e.front:
+            return True
+    return False
+
+
+def _timing_here(state: GameState, content: Content, o: OppDef, loc_id: str) -> tuple[bool, str] | None:
+    """天時地利型此刻在這裡做得了嗎：回傳（這一回還能試、{人物} 要填的名字），不在時段或地點是 None。
+    拿著東西還沒送的（密信）不再出選項。"""
+    t = o.timing
+    if o.id in state.player.opp_items:
+        return None
+    if t.when == "night":
+        if loc_id not in t.at:
+            return None
+        who = ""
+    elif t.when == "dawn":
+        host = _host_here(state, content, o, loc_id)
+        if host is None:
+            return None
+        who = figures.name_of(content, host)
+    else:
+        if not _showdown_here(state, content, loc_id):
+            return None
+        who = ""
+    key = _window_key(state, content, t.when)
+    if key is None:
+        return None
+    return (t.when == "after_showdown" or state.player.opp_tried.get(o.id) != key), who
+
+
+def hear_clues(state: GameState, content: Content, region: str | None, rng: random.Random) -> list[str]:
+    """花體力的行動之後（Game._hear_after_stamina）：天時地利型的線索，在它的大區（沒寫就哪裡都行）以伏筆片段的機率
+    聽到一則（foreshadow.fragment_chance），每種只聽一次。寫進江湖紀錄（「你聽到一件事：…」），不發傳聞。"""
+    if region is None:
+        return []
+    pool = [
+        o for o in open_ones(state, content)
+        if o.kind == "timing" and o.id not in state.player.opp_clues
+        and (not o.timing.clue_regions or region in o.timing.clue_regions)
+    ]
+    if not pool or rng.random() >= foreshadow.fragment_chance(content):
+        return []
+    o = rng.choice(pool)
+    state.player.opp_clues.append(o.id)
+    return [fragment_line(o.timing.clue)]
+
+
 def _deliver_label(o: OppDef) -> str:
     return o.accumulate.label if o.kind == "accumulate" else o.timing.deliver_label
 
@@ -172,7 +256,7 @@ def _deliver_done(o: OppDef) -> str:
 
 
 def place_options(state: GameState, content: Content, loc_id: str) -> list:
-    """閒著的選單上，這個地點做得了的機緣：交東西（opp:deliver:<id>）。Task 4 再加天時地利型的 opp:try:<id>。"""
+    """閒著的選單上，這個地點做得了的機緣：交東西（opp:deliver:<id>）、天時地利型此刻能做的（opp:try:<id>）。"""
     from .engine import Option  # noqa: PLC0415
 
     opts = []
@@ -180,6 +264,17 @@ def place_options(state: GameState, content: Content, loc_id: str) -> list:
         who = _deliver_here(state, content, o, loc_id)
         if who is not None:
             opts.append(Option(id=f"opp:deliver:{o.id}", label=_deliver_label(o).replace("{主將}", who)))
+        if o.kind == "timing":
+            here = _timing_here(state, content, o, loc_id)
+            if here is not None:
+                fresh, who = here
+                label = o.timing.label.replace("{人物}", who)
+                cost = o.timing.stamina
+                if fresh:
+                    opts.append(Option(id=f"opp:try:{o.id}", label=f"{label}（體力 {cost}）",
+                                       enabled=state.player.stamina >= cost))
+                else:
+                    opts.append(Option(id=f"opp:try:{o.id}", enabled=False, label=f"{label}（這一回已經試過，下一回再來）"))
     return opts
 
 
@@ -199,7 +294,7 @@ def _trend_on_done(state: GameState, content: Content, o: OppDef, loc_id: str) -
 
 
 def act(state: GameState, content: Content, world, arg: str, rng: random.Random) -> list[str]:
-    """閒著的選單上按了機緣的選項（opp:<arg>）：deliver:<id> 交東西；Task 4 加 try:<id>。選項不在了回「此刻無法」。"""
+    """閒著的選單上按了機緣的選項（opp:<arg>）：deliver:<id> 交東西、try:<id> 試天時地利型。選項不在了回「此刻無法」。"""
     what, _, opp_id = arg.partition(":")
     o = next((x for x in open_ones(state, content) if x.id == opp_id), None)
     loc_id = state.player.location
@@ -211,6 +306,23 @@ def act(state: GameState, content: Content, world, arg: str, rng: random.Random)
             return [NOT_NOW]
         msgs = [_deliver_done(o).replace("{主將}", who)] + _trend_on_done(state, content, o, loc_id)
         return msgs + _complete(state, o)  # _trend_on_done 要在 _complete 之前：_complete 會把 opp_fronts 收掉
+    if what == "try" and o.kind == "timing":
+        here = _timing_here(state, content, o, loc_id)
+        t = o.timing
+        if here is None or not here[0] or state.player.stamina < t.stamina:
+            return [NOT_NOW]
+        who = here[1]
+        state.player.stamina -= t.stamina
+        if not roll_check(t.check, state, content, world, rng):
+            if t.when != "after_showdown":
+                state.player.opp_tried[o.id] = _window_key(state, content, t.when)
+            return [t.fail.replace("{人物}", who)]
+        msgs = [t.ok.replace("{人物}", who)]
+        if t.item is not None:  # 先拿到東西，還要送（荒丘的密信）
+            state.player.opp_items[o.id] = t.item
+            state.player.opp_fronts[o.id] = t.deliver_front
+            return msgs
+        return msgs + _complete(state, o)
     return [NOT_NOW]
 
 

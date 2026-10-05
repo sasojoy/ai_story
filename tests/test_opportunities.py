@@ -12,11 +12,11 @@ from unittest import mock
 
 import pytest
 
-from tianxia import calendar, figures, opportunities, rules
+from tianxia import calendar, figures, opportunities, rules, timetable
 from tianxia.content import ContentError, load_content, validate
 from tianxia.engine import Game
 from tianxia.models import OppDef
-from tianxia.state import PlayerState
+from tianxia.state import PlayerState, TimelineResult
 
 CONTENT_DIR = Path(__file__).parent.parent / "content"
 
@@ -420,3 +420,241 @@ def test_opportunity_entries_are_titled(on):
     game.state.player.opp_items, game.state.player.opp_fronts = {"guan_deserter": "降卒"}, {"guan_deserter": "yingru"}
     game.choose("opp:deliver:guan_deserter")
     assert game.state.journal[0].title == "機緣・降卒的消息"
+
+
+# ── Task 4：三種天時地利型與線索 ─────────────────────────────────
+
+
+def _at_hour(game, hour, day=0):
+    w = game.state.world
+    w.time = (day * 24 + hour) * calendar.HOUR / calendar.cal_scale(game.content, w)
+
+
+def _try(game, opp_id):
+    return next((o for o in game.options(odds=False) if o.id == f"opp:try:{opp_id}"), None)
+
+
+def test_courier_only_at_night_on_the_hilltop(on):
+    game = _game(on, faction="guan", at="hilltop_wilds")
+    _at_hour(game, 12)
+    assert "opp:try:guan_courier" not in _ids(game)
+    _at_hour(game, 23)
+    option = next(o for o in game.options(odds=False) if o.id == "opp:try:guan_courier")
+    assert option.label == "埋伏在荒丘攔信使（體力 10）"
+    with _always(True):
+        msgs = game.choose("opp:try:guan_courier")
+    assert msgs[0].startswith("三更時分") and game.state.player.opp_items == {"guan_courier": "南陽渠帥的密信"}
+    assert game.state.player.opp_fronts == {"guan_courier": "yingru"}
+
+
+def test_courier_hours_are_the_calendar_night(on):
+    game = _game(on, faction="guan", at="hilltop_wilds")
+    for hour, open_ in ((22, False), (23, True), (0, True), (4, True), (5, False)):  # 子時到寅時 23:00～04:59
+        _at_hour(game, hour)
+        assert (_try(game, "guan_courier") is not None) == open_, hour
+    _at_hour(game, 23)
+    game.state.player.location = "changshe"  # 不在荒丘
+    assert _try(game, "guan_courier") is None
+
+
+def test_night_retry_waits_for_the_next_night(on):
+    game = _game(on, faction="guan", at="hilltop_wilds")
+    _at_hour(game, 23)
+    with _always(False):
+        assert game.choose("opp:try:guan_courier")[0].startswith("黑影一閃")
+    _at_hour(game, 2, day=1)  # 同一夜的 02:00
+    option = next(o for o in game.options(odds=False) if o.id == "opp:try:guan_courier")
+    assert not option.enabled and "這一回已經試過" in option.label
+    _at_hour(game, 23, day=1)  # 下一夜
+    assert next(o for o in game.options(odds=False) if o.id == "opp:try:guan_courier").enabled
+
+
+def test_a_failed_night_costs_stamina_and_cannot_be_forced_again(on):
+    game = _game(on, faction="guan", at="hilltop_wilds")
+    p = game.state.player
+    p.stamina = 30
+    _at_hour(game, 23)
+    with _always(False):
+        game.choose("opp:try:guan_courier")
+        assert p.stamina == 20
+        assert game.choose("opp:try:guan_courier") == ["（此刻無法這麼做。）"]  # 灰的選項按不下去
+    assert p.stamina == 20
+
+
+def test_courier_without_stamina_is_greyed(on):
+    game = _game(on, faction="guan", at="hilltop_wilds")
+    game.state.player.stamina = 9
+    _at_hour(game, 23)
+    assert not _try(game, "guan_courier").enabled
+
+
+def test_courier_letter_goes_to_the_yingchuan_commander(on):
+    game = _game(on, faction="guan", at="hilltop_wilds")
+    _at_hour(game, 23)
+    with _always(True):
+        game.choose("opp:try:guan_courier")
+    assert _try(game, "guan_courier") is None  # 密信在手上，不再出攔截的選項
+    assert "opp:deliver:guan_courier" not in _ids(game)  # 荒丘不是主將所在
+    game.state.player.location = "changshe"
+    option = next(o for o in game.options(odds=False) if o.id == "opp:deliver:guan_courier")
+    assert option.label == "把密信交給皇甫嵩"
+    msgs = game.choose("opp:deliver:guan_courier")
+    assert msgs[0].startswith("皇甫嵩把信看了兩遍") and msgs[-1] == "（機緣「荒丘的信使」完成。）"
+    assert game.state.player.opp_items == {} and "guan_courier" in game.state.player.opp_done
+
+
+def test_dawn_rite_completes_on_a_pass(on):
+    game = _game(on, faction="huang", at="xiaquyang")
+    _at_hour(game, 5)
+    option = next(o for o in game.options(odds=False) if o.id == "opp:try:huang_dawn")
+    assert option.label == "替張寶捧旗祭天（體力 10）"
+    with _always(True):
+        msgs = game.choose("opp:try:huang_dawn")
+    assert "張寶在祭壇上看了你一眼" in msgs[0] and msgs[-1] == "（機緣「黎明祭天」完成。）"
+
+
+def test_dawn_rite_only_at_the_hour_of_mao(on):
+    game = _game(on, faction="huang", at="xiaquyang")
+    for hour, open_ in ((4, False), (5, True), (6, True), (7, False)):  # 卯時 05:00～06:59
+        _at_hour(game, hour)
+        assert (_try(game, "huang_dawn") is not None) == open_, hour
+
+
+def test_dawn_failure_waits_for_tomorrows_dawn(on):
+    game = _game(on, faction="huang", at="xiaquyang")
+    _at_hour(game, 5)
+    with _always(False):
+        assert game.choose("opp:try:huang_dawn")[0].startswith("一陣狂風，黃旗歪了一下。張寶沒說什麼")
+    _at_hour(game, 6)
+    assert not _try(game, "huang_dawn").enabled  # 同一個黎明不能再試
+    _at_hour(game, 5, day=1)
+    assert _try(game, "huang_dawn").enabled
+
+
+def test_dawn_host_falls_back_to_zhangliang(on):
+    game = _game(on, faction="huang", at="xiaquyang")
+    _at_hour(game, 5)
+    w = game.state.world
+    w.figures["zhangbao"] = figures.state_of(game.state, on, "zhangbao").model_copy(update={"status": "retired"})
+    assert "opp:try:huang_dawn" not in _ids(game)  # 下曲陽沒人主持
+    game.state.player.location = "guangzong"
+    assert next(o for o in game.options(odds=False) if o.id == "opp:try:huang_dawn").label.startswith("替張梁捧旗")
+    w.figures["zhangliang"] = figures.state_of(game.state, on, "zhangliang").model_copy(update={"status": "retired"})
+    assert "opp:try:huang_dawn" not in _ids(game)
+
+
+def test_dawn_at_guangzong_waits_while_zhangbao_presides(on):
+    game = _game(on, faction="huang", at="guangzong")
+    _at_hour(game, 5)
+    assert "opp:try:huang_dawn" not in _ids(game)  # 張寶還在下曲陽主持，廣宗不必
+
+
+def test_dawn_host_who_has_left_xiaquyang_hands_over(on):
+    game = _game(on, faction="huang", at="guangzong")
+    _at_hour(game, 5)
+    w = game.state.world
+    w.figures["zhangbao"] = figures.state_of(game.state, on, "zhangbao").model_copy(update={"location": "julu_altar"})
+    assert next(o for o in game.options(odds=False) if o.id == "opp:try:huang_dawn").label.startswith("替張梁捧旗")
+
+
+def test_aftermath_within_a_day_of_a_showdown_on_its_front(on):
+    game = _game(on, faction="haoqiang", at="yingchuan_wilds")
+    w = game.state.world
+    assert "opp:try:hao_aftermath" not in _ids(game)  # 還沒打過決戰
+    w.timeline["changshe_fire"] = TimelineResult(key="guan:大勝", time=w.time)
+    assert "opp:try:hao_aftermath" in _ids(game)  # 長社在潁川汝南，潁川郊野是野外
+    game.state.player.location = "yingchuan"  # 城鎮不算
+    assert "opp:try:hao_aftermath" not in _ids(game)
+    game.state.player.location = "yingchuan_wilds"
+    w.time += 2 * calendar.DAY / calendar.cal_scale(on, w)  # 過了一個曆日
+    assert "opp:try:hao_aftermath" not in _ids(game)
+
+
+def test_aftermath_only_on_the_front_of_that_showdown(on):
+    game = _game(on, faction="haoqiang", at="nanyang_wilds")
+    w = game.state.world
+    w.timeline["changshe_fire"] = TimelineResult(key="guan:大勝", time=w.time)  # 潁川汝南的決戰，南陽郊野不算
+    assert "opp:try:hao_aftermath" not in _ids(game)
+    w.timeline["wancheng"] = TimelineResult(key="甲:huang:大勝", time=w.time)
+    assert "opp:try:hao_aftermath" in _ids(game)
+
+
+def test_a_skipped_showdown_leaves_no_aftermath(on):
+    game = _game(on, faction="haoqiang", at="yingchuan_wilds")
+    w = game.state.world
+    w.timeline["changshe_fire"] = TimelineResult(key=timetable.SKIPPED, time=w.time)  # 沒有打過
+    assert "opp:try:hao_aftermath" not in _ids(game)
+
+
+def test_aftermath_completes_on_a_pass(on):
+    game = _game(on, faction="haoqiang", at="yingchuan_wilds")
+    w = game.state.world
+    w.timeline["changshe_fire"] = TimelineResult(key="guan:大勝", time=w.time)
+    with _always(True):
+        msgs = game.choose("opp:try:hao_aftermath")
+    assert msgs[0].startswith("你在戰場邊上收攏了一群逃散的佃農") and msgs[-1] == "（機緣「戰後的地」完成。）"
+
+
+def test_aftermath_failure_can_retry_in_the_window(on):
+    game = _game(on, faction="haoqiang", at="yingchuan_wilds")
+    w = game.state.world
+    w.timeline["changshe_fire"] = TimelineResult(key="guan:大勝", time=w.time)
+    with _always(False):
+        game.choose("opp:try:hao_aftermath")
+    assert next(o for o in game.options(odds=False) if o.id == "opp:try:hao_aftermath").enabled
+
+
+def test_timing_options_need_the_switch(real):
+    off = _game(real, faction="guan", at="hilltop_wilds")
+    _at_hour(off, 23)
+    assert not any(i.startswith("opp:") for i in _ids(off))  # 開關關著
+
+
+def test_timing_options_are_only_for_the_own_faction(on):
+    other = _game(on, faction="huang", at="hilltop_wilds")
+    _at_hour(other, 23)
+    assert "opp:try:guan_courier" not in _ids(other)  # 別的陣營的機緣
+
+
+def test_clue_heard_once_in_its_region(on):
+    game = _game(on, faction="guan")
+    rng = mock.Mock(random=mock.Mock(return_value=0.0), choice=lambda xs: xs[0])
+    assert opportunities.hear_clues(game.state, on, "jizhou", rng) == []  # 荒丘的線索只在潁川汝南
+    first = opportunities.hear_clues(game.state, on, "yingru", rng)
+    assert first and "荒丘那條官道" in first[0]
+    assert opportunities.hear_clues(game.state, on, "yingru", rng) == []  # 只聽一次
+
+
+def test_clue_without_a_region_restriction_is_heard_anywhere(on):
+    game = _game(on, faction="haoqiang")
+    rng = mock.Mock(random=mock.Mock(return_value=0.0), choice=lambda xs: xs[0])
+    heard = opportunities.hear_clues(game.state, on, "luoyang", rng)
+    assert heard and "地最便宜" in heard[0]
+    assert opportunities.hear_clues(game.state, on, None, rng) == []  # 沒有大區（路上）不抽
+
+
+def test_clue_only_at_the_fragment_chance(on):
+    game = _game(on, faction="guan")
+    rng = mock.Mock(random=mock.Mock(return_value=0.99), choice=lambda xs: xs[0])  # 骰不中
+    assert opportunities.hear_clues(game.state, on, "yingru", rng) == []
+    assert game.state.player.opp_clues == []
+
+
+def test_clue_goes_to_the_journal_line_and_no_rumour(on):
+    game = _game(on, faction="guan", at="changshe")
+    p = game.state.player
+    before_rumors, before = len(game.state.world.rumors), p.stamina
+    game.rng = _Roll(0.0)  # 一定聽到
+    p.stamina -= 5  # 剛花了體力的行動
+    heard = game._hear_after_stamina(before)
+    assert any(m.startswith("你聽到一件事：南陽和潁川的黃巾") for m in heard)
+    assert p.opp_clues == ["guan_courier"] and len(game.state.world.rumors) == before_rumors
+    assert game._hear_after_stamina(p.stamina) == []  # 沒花體力的行動不抽
+
+
+def test_clues_stay_quiet_when_the_switch_is_off(real):
+    game = _game(real, faction="guan", at="changshe")
+    game.rng = _Roll(0.0)
+    before = game.state.player.stamina
+    game.state.player.stamina -= 5
+    assert game._hear_after_stamina(before) == [] and game.state.player.opp_clues == []

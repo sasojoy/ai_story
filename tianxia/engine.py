@@ -1116,12 +1116,17 @@ class Game:
     def _hear_after_stamina(self, before: float) -> list[str]:
         """每次花體力的行動之後抽一次伏筆片段（計畫 T7）：選單的每一個行動（choose）與輿圖的安排前往（travel）都經過這裡，
         體力比行動前少了才抽（探索、遊歷、交友、求見、對話、招募、趕路、疾行；打坐、步行、生成不出對話退回體力的都不算）。
-        抽的是行動後所在地點的大區；沒有伏筆在跑（開關關著、沒有鏈）就什麼都不做。"""
+        抽的是行動後所在地點的大區；沒有伏筆在跑（開關關著、沒有鏈）就什麼都不做。
+        伏筆先抽、天時地利型機緣的線索（正式版乙一）後抽：伏筆的擲骰順序不變。"""
         s, c = self.state, self.content
-        if s.player.stamina >= before or not foreshadow.active(s, c):
+        if s.player.stamina >= before:
             return []
         region = atlas.region_of(c, s.player.location)
-        return foreshadow.hear_after_action(s, c, region.id if region is not None else None, self.rng, self.world)
+        region_id = region.id if region is not None else None
+        msgs = foreshadow.hear_after_action(s, c, region_id, self.rng, self.world) if foreshadow.active(s, c) else []
+        if opportunities.active(s, c):  # 天時地利型機緣的線索（正式版乙一）
+            msgs += opportunities.hear_clues(s, c, region_id, self.rng)
+        return msgs
 
     def _call(self, arg: str, prepared: companion_agent.PreparedTurn | None = None) -> list[str]:
         """求見選單上的選擇：「返回」收起選單；選了一位人物就跟他開口對話，跟交友碰上人物時一模一樣——
