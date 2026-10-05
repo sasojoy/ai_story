@@ -121,23 +121,28 @@ def forge_request(
 
 
 def _named(
-    client: OllamaClient | None, content: Content, messages: list[dict[str, str]], proposed: tuple[str | None, str] | None,
+    client: OllamaClient | None, content: Content, world: WorldStateStore, messages: list[dict[str, str]],
+    proposed: tuple[str | None, str] | None,
 ) -> tuple[str | None, str]:
     """首次合出來的配方要的名字與說明。proposed 是鎖外先取好的（server：A 鎖內備料、B 鎖外取名，這裡是 C）：
     再過一次完整的過濾（naming.recheck），鎖裡不叫模型——(None, "") 也一樣，直接走退路字表。
-    沒給 proposed（整季機器人、腳本、測試直接呼叫 Game.forge）才照舊在這裡叫模型。"""
+    沒給 proposed（整季機器人、腳本、測試直接呼叫 Game.forge）才照舊在這裡叫模型。
+    兩條路都擋角色的名號（FB-069，world.is_character_name）。"""
     if proposed is not None:
-        return naming.recheck(content, proposed)
-    return naming.propose(client, content, messages)
+        return naming.recheck(content, proposed, person=world.is_character_name)
+    return naming.propose(client, content, messages, person=world.is_character_name)
 
 
-def _candidates(content: Content, key: str, kind: str, tianji: int, name: str | None):
+def _candidates(content: Content, world: WorldStateStore, key: str, kind: str, tianji: int, name: str | None):
     """登記時依序試的名字：先試模型取的（有的話），再試退路字表——種子是配方鍵＋這一季的天機、鹽從 0 起，
-    所以一個配方換到的退路名字只看它自己，不看誰先到（兩個配方同時拿到同一個模型名字時，後到的那一個每次都換成同一個）。"""
+    所以一個配方換到的退路名字只看它自己，不看誰先到（兩個配方同時拿到同一個模型名字時，後到的那一個每次都換成同一個）。
+    退路字表組出來的名字剛好是某個角色的名號就跳過（FB-069）。"""
     if name is not None:
         yield name
     for salt in range(naming.CLAIM_ATTEMPTS):
-        yield naming.fallback_name(content, key, kind, salt=salt, tianji=tianji)
+        fallback = naming.fallback_name(content, key, kind, salt=salt, tianji=tianji)
+        if not world.is_character_name(fallback):
+            yield fallback
 
 
 def fuse(
@@ -156,9 +161,9 @@ def fuse(
     art = world.lookup_recipe(key)
     first = False
     if art is None:
-        name, note = _named(client, content, _fuse_messages(base, insight), proposed)
+        name, note = _named(client, content, world, _fuse_messages(base, insight), proposed)
         tianji = world.read().tianji
-        for candidate_name in _candidates(content, key, base.kind, tianji, name):
+        for candidate_name in _candidates(content, world, key, base.kind, tianji, name):
             candidate = generate_from_name(
                 candidate_name, base.kind, candidate_name, tianji, weights=LOW_ONLY, attribute=insight.attribute,
             )
@@ -240,9 +245,9 @@ def merge(
     result = world.lookup_insight_recipe(key)
     first = False
     if result is None:
-        name, note = _named(client, content, _merge_messages(ia, ib), proposed)
+        name, note = _named(client, content, world, _merge_messages(ia, ib), proposed)
         tianji = world.read().tianji
-        for candidate_name in _candidates(content, key, "意境", tianji, name):
+        for candidate_name in _candidates(content, world, key, "意境", tianji, name):
             candidate = Insight(
                 id=candidate_name, name=candidate_name, attribute=insights.merged_attribute(ia, ib, candidate_name),
                 lean=insights.merged_lean(ia, ib), creator=state.player.name, creator_shown=display_name(state),

@@ -514,7 +514,7 @@ def test_chinese_numerals_are_not_digits_to_the_number_check():
     """只攔阿拉伯數字（半形、全形）與百分號；一、十、半這類字在成語裡很自然（略勝一籌、十拿九穩），不攔。"""
     content = load_content(CONTENT_DIR)
     content.front_lines.generic["1"] = ["略勝一籌", "半步先機"]
-    content.check_lines.generic["80+"] = ["十拿九穩"]
+    content.check_voice.bands[0].lines["default"] = "十拿九穩，難不倒{who}。"  # 檢定選項的心裡話（check_voice）一樣
     validate(content)
 
 

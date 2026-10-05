@@ -17,7 +17,10 @@ from . import (
     foreshadow, front_lines, fusion, insights, journal, library, materials, naming, orders, push, ranks, roster, skillview,
     team, timetable,
 )
-from .events import choice_label, event_candidates, has_events_here, pick_event, visible_choices
+from . import events as event_rules  # note_round 走模組屬性（測試要能換掉它，確認只有 _present 會叫）
+from .events import (
+    choice_label, event_candidates, has_events_here, pick_event, visible_choices,
+)
 from .guide import base_step_count, note_action, quest_text, step_text, tutorial_active, tutorial_intro
 from .guide import steps as tutorial_steps
 from .journal import LOG_BREAK, Draft
@@ -27,9 +30,10 @@ from .models import (
     EXPLORE_BRANCHES, FREE_TEXT_MAX, BattleDef, Choice, Content, Effect, Event, ExploreBranch, Location, RoadKind, Squad,
     Threshold, TimetableEvent, TravelMode, WorldEvent,
 )
-from .ollama_client import OllamaClient
+from .ollama_client import ModelBudget, OllamaClient, quick_client
 from .rules import (
-    GEJU, HUANGJIN, add_rumor, apply_effect, audience_bar, can_hear, can_meet, change_trend, check_who, current_day, display_name, fill_marks, free_text_rate,
+    GEJU, HUANGJIN, add_rumor, apply_effect, audience_bar, can_hear, can_meet, change_trend, check_result_line, current_day,
+    display_name, fill_marks, free_text_rate,
     can_draw_side_change, chaos_fronts, chaos_note, front_chip, front_ids, front_of, front_text, humanize, in_chaos,
     is_revealed, pushable, rate_words, recompute_trends, resolve_goals, resolve_trend, resolve_trends, roll_check,
     season_one, season_one_off, stance_sum_note, stances, trend_name, trend_shown, trend_value, world_trend_value,
@@ -100,6 +104,7 @@ class Game:
             keep_alive=cfg.ollama_keep_alive, repeat_penalty=cfg.ollama_repeat_penalty,
             presence_penalty=cfg.ollama_presence_penalty, frequency_penalty=cfg.ollama_frequency_penalty,
         )  # companion_agent.py 用；連不上時那輪對話取消，這裡不用先健檢
+        self._model_budget = ModelBudget()  # 鎖內的模型呼叫這一次拿鎖期間還有沒有額度（見 _quick_client）
         self._draft: Draft | None = None  # choose() 進行中那次行動的江湖紀錄草稿
         self.last_gamble: FreeTextOutcome | None = None  # 上一次 answer_event 擲完骰的結果（server.py 拿去潤色）
         # 主畫面「走法」切換選的走法（步行／趕路／疾行），選單上的「前往」照它出發（見 _move_option）。只是畫面狀態：
@@ -110,6 +115,23 @@ class Game:
         # 讀進來的存檔先用上次同步的時間；開戰的集結截止、回合逾時都看它。
         self.now: float = state.last_real if state.last_real is not None else 0.0
         self._drop_stale_references()
+
+    def _quick_client(self) -> OllamaClient | None:
+        """行動鎖裡叫模型用的 client：self.client 的複本，HTTP 逾時最多 Config.in_lock_model_timeout 秒（預設 15）、不重問
+        （retry=False），所以鎖內任何一步模型呼叫最多佔住鎖那麼久。行動鎖拿著的時候全服玩家與假人都在等，模型慢或冷的時候
+        照 ollama_timeout（120 秒）會凍住整台伺服器。所有在鎖內叫模型的地方都用它（大事與決戰回合的潤色、重複事件與重遊的
+        點綴句、決戰自訂行動的評分、鎖內才備料的對話與記憶整理、鎖內才取名的開爐）；逾時或失敗各處本來就退回固定的文字。
+        引擎不讀時鐘，上限靠 HTTP 的逾時（見 ollama_client.quick_client）。
+        一次拿鎖期間只容忍一次失敗：有一次鎖內的模型呼叫逾時或失敗之後（_model_budget.gave_up），這裡回 None，同一次行動裡
+        後面的鎖內呼叫都不叫模型、直接用固定文字。旗子由 server._locked 每次拿到鎖先歸零（reset_model_budget）；直接用 Game 的
+        測試與腳本（沒有鎖）自己決定什麼時候歸零。self.client 本身不動，鎖外的路徑（server.py 的對話備料、開爐取名、隨口應對的
+        評分與潤色，都拿 game.client）照舊用它自己的逾時與重問。沒有 client（伺服器假人，bot_runner 把 game.client 設成
+        None）就回 None，這些地方一個模型都不會叫。"""
+        return quick_client(self.client, self.content.config.in_lock_model_timeout, self._model_budget)
+
+    def reset_model_budget(self) -> None:
+        """新的一次拿鎖：鎖內的模型呼叫重新有額度（見 _quick_client）。server._locked 每次拿到行動鎖先呼叫。"""
+        self._model_budget.gave_up = False
 
     @classmethod
     def new(
@@ -369,7 +391,7 @@ class Game:
         if s.pending_event:
             event = c.events[s.pending_event]
             opts = [
-                Option(id=f"choice:{i}", label=self._choice_label(ch, odds, f"{event.id}#{i}"))
+                Option(id=f"choice:{i}", label=self._choice_label(ch, odds))
                 for i, ch in visible_choices(event, s, c)
             ]
             if event.free_text is not None:
@@ -576,12 +598,12 @@ class Game:
         hardest = max(squads, key=lambda s: s.difficulty)
         return f"{who}・{self.odds(hardest.id)}"
 
-    def _choice_label(self, choice: Choice, odds: bool, key: str) -> str:
-        """key 是檢定心裡話的種子（事件 id＋選項序號，見 events.choice_label）。"""
+    def _choice_label(self, choice: Choice, odds: bool) -> str:
+        """動手的選項寫對手與勝算；有檢定的寫一行「（屬性 數值：心裡話）」（events.choice_label）。"""
         if choice.combat and odds:
             squad = self.content.squads[choice.combat]
             return f"{choice.text}（對手：{squad.name}・{self.odds(squad.id)}）"
-        return choice_label(choice, self.state, self.content, self.world, key)
+        return choice_label(choice, self.state, self.content, self.world)
 
     def odds(self, squad_id: str) -> str:
         return team.estimate(self.state, self.content, self.world, squad_id)
@@ -698,7 +720,7 @@ class Game:
                 msgs += self._guide(note_action(self.state, self.content, self.world, arg))
             if kind == "call" and arg != "back":
                 msgs += self._guide(note_action(self.state, self.content, self.world, "socialize"))  # 指名求見算一次交友
-            msgs += check_thresholds(self.state, self.content, self.world, self.client, now=self.now)
+            msgs += check_thresholds(self.state, self.content, self.world, self._quick_client(), now=self.now)
             msgs += ranks.check_summons(self.state, self.content)  # 貢獻跨過門檻就發召見（計畫 T5）
             journal.add_entry(self.state, self._draft.entry(self.state.world.time, msgs))
         finally:
@@ -720,7 +742,8 @@ class Game:
 
     def answer_event(self, request: FreeTextRequest, llm_rate: int | None = None) -> list[str]:
         """隨口應對的階段 C（鎖內）：重驗還停在同一則事件、寫的是同一句話，才算成功率、擲骰、套用效果。
-        llm_rate 是鎖外評好的 0～100；沒給（直接呼叫的測試、腳本）就在這裡評，評不到一樣退回 40。
+        llm_rate 是鎖外評好的 0～100；沒給（直接呼叫的測試、腳本）就在這裡評（行動鎖內，用 _quick_client 的短逾時複本），
+        評不到一樣退回 40。
         成功率＝LLM 評分加屬性修正、夾在 5～85（rules.free_text_rate）；擲骰用引擎自己的 rng。"""
         s, c = self.state, self.content
         self.last_gamble = None
@@ -730,20 +753,19 @@ class Game:
         event = c.events[request.event_id]
         choice = event.free_text
         if llm_rate is None:
-            llm_rate = event_llm.assess_event_success_rate(self.client, event, request.text)
+            llm_rate = event_llm.assess_event_success_rate(self._quick_client(), event, request.text)
         self.state.battle_card = None
         self._draft = Draft(f"{event.title}・隨口應對")
         try:
             s.pending_event = None
             rate = free_text_rate(llm_rate, choice, s, c, self.world)
             success = self.rng.random() * 100 < rate
-            who = check_who(choice, s, c, self.world)
-            word = "成功" if success else "失敗"
-            msgs = [f"你：「{request.text}」（{rate_words(rate)}）", f"（{who}——{word}）"]
-            self._outcome(f"{who}・{word}", msgs[-1])
+            tag, line = check_result_line(success)  # 一律是本人：不寫誰出手
+            msgs = [f"你：「{request.text}」（{rate_words(rate)}）", line]
+            self._outcome(tag, line)
             effect = choice.effect if success else choice.fail_effect
             msgs += self._apply(effect)
-            msgs += check_thresholds(s, c, self.world, self.client, now=self.now)
+            msgs += check_thresholds(s, c, self.world, self._quick_client(), now=self.now)
             journal.add_entry(s, self._draft.entry(s.world.time, msgs))
             self.last_gamble = FreeTextOutcome(
                 event_id=event.id, text=request.text, success=success, effect_text=fill_marks(effect.text, s),
@@ -952,7 +974,7 @@ class Game:
         """跟一位大勢人物開口對話（呼叫端已經扣了交友的體力）：生成不出對話時退回那份體力，對話不開始。"""
         try:
             return companion_agent.start_dialogue(
-                self.client, self.state, self.content, self.world, companion_id, self.rng,
+                self._quick_client(), self.state, self.content, self.world, companion_id, self.rng,
                 turn=self._prepared_turn(prepared),
             )
         except companion_agent.DialogueUnavailable:
@@ -987,7 +1009,7 @@ class Game:
         s, c = self.state, self.content
         loc = c.locations[s.player.location]
         if event_candidates(s, c, "explore", "rare") and self.rng.random() < c.config.rare_explore_chance:
-            return self._present(pick_event(s, c, "explore", self.rng, "rare"))
+            return self._present(pick_event(s, c, "explore", self.rng, "rare"), "explore")
         mix = c.config.explore_mix_of(loc.tags).weights
         branches = [b for b in EXPLORE_BRANCHES if mix.get(b, 0) > 0 and self._explore_can(b, loc)]
         if not branches:
@@ -999,7 +1021,7 @@ class Game:
         if branch == "wild":
             squad = min(self._wild_foes(loc), key=lambda foe: foe.difficulty)  # 同分取這裡列的第一路
             return [f"你在{loc.name}走著，{squad.name}突然殺出！"] + self._squad_encounter(squad.id, wild=True)
-        return self._present(pick_event(s, c, "explore", self.rng, "common"))
+        return self._present(pick_event(s, c, "explore", self.rng, "common"), "explore")
 
     def _explore_can(self, branch: ExploreBranch, loc: Location) -> bool:
         """探索三選一的這一支在這裡做不做得了。"""
@@ -1034,7 +1056,7 @@ class Game:
         if self.rng.random() < self.content.config.train_event_chance:
             event = pick_event(self.state, self.content, "train", self.rng)
             if event is not None:
-                msgs += self._present(event)
+                msgs += self._present(event, "train")
         return msgs
 
     def _train_squad_ids(self, loc: Location) -> list[str]:
@@ -1317,7 +1339,7 @@ class Game:
             return heard or ["（此刻無法這麼做。）"]
         try:
             msgs = companion_agent.continue_dialogue(
-                self.client, self.state, self.content, self.world, companion_id, int(arg), self.rng,
+                self._quick_client(), self.state, self.content, self.world, companion_id, int(arg), self.rng,
                 turn=self._prepared_turn(prepared),
             )
         except companion_agent.DialogueUnavailable:
@@ -1360,6 +1382,11 @@ class Game:
         """「目前官軍 N 人、黃巾軍 M 人、地方豪強 K 人」：照全服投靠名冊（真人與假人一起算）。"""
         counts = self.world.faction_counts()
         return "目前" + "、".join(f"{f.name} {counts.get(f.id, 0)} 人" for f in self.content.scenario.factions)
+
+    def _roster_players(self) -> int:
+        """這一季投靠了陣營的人數（全服投靠名冊，真人與假人一樣算）：跟 world.advance_world_state 查來縮放割據漲速的是
+        同一個算式，割據的說明（rules.chaos_note）才說得準現在是在漲還是不動（FB-065 M1）。每次畫面現查，只是讀。"""
+        return sum(self.world.faction_counts().values())
 
     def _record_faction(self) -> None:
         """把自己的陣營記進全服投靠名冊（陣營人數看這份）；已經記過就不再寫。choose() 結束時
@@ -1465,7 +1492,7 @@ class Game:
         msgs = battle_instance.resolve_round(battle, definition, self.rng, now=now)
         if battle.phase == "ended":
             battle.end_time = self.state.world.time
-        narration = battle_instance.narrate_round(self.client, definition, battle, msgs)
+        narration = battle_instance.narrate_round(self._quick_client(), definition, battle, msgs)
         if narration:
             battle.narrative_log.append(narration)
             battle.rounds[-1].narration = narration  # resolve_round 剛記下這一回合
@@ -1860,7 +1887,8 @@ class Game:
         透過 choose() 進來的，choose() 開頭那次 self.options(odds=False) 呼叫順便推進
         過一次集結逾時/回合逾時的保護在這裡沒有發生過，這個方法是自己的入口，必須自己
         負責先追趕一次，不然集結剛好逾時的那一刻送出的行動會在 submit_action() 裡被
-        「battle.phase 還是 muster」悄悄吃掉（見那次遇到的真實 bug）。"""
+        「battle.phase 還是 muster」悄悄吃掉（見那次遇到的真實 bug）。
+        成功率的評分在行動鎖內（server.py 的 battle_text 走 act），所以用 _quick_client 的短逾時複本；評不到就是保底值。"""
         status = self._battle_status()
         if status is None:
             return ["（此刻無法這麼做。）"]
@@ -1877,7 +1905,7 @@ class Game:
             return ["（請先輸入你想做的事。）"]
         act = battle_instance.current_act(battle, definition)
         faction_name = next((f.name for f in definition.factions if f.id == p.faction), p.faction)
-        success_rate = battle_instance.assess_action_success_rate(self.client, act, faction_name, text)
+        success_rate = battle_instance.assess_action_success_rate(self._quick_client(), act, faction_name, text)
         return self._submit_battle_action(name, definition, option.tag, text, success_rate)
 
     def _battle_choose(self, arg: str) -> list[str]:
@@ -1970,20 +1998,21 @@ class Game:
         nothing 可以是函式：真的用到才呼叫（打發話要挑一句，不該在抽到事件時白花一次亂數）。"""
         event = pick_event(self.state, self.content, action, self.rng)
         if event:
-            return self._present(event)
+            return self._present(event, action)
         return [nothing() if callable(nothing) else nothing]
 
-    def _present(self, event: Event) -> list[str]:
+    def _present(self, event: Event, action: str | None = None) -> list[str]:
+        """把事件端到玩家眼前。action 是抽中它的行動（探索、交友、遊歷）：這時才記進 joy 的防重複輪替
+        （events.note_round；pick_event 本身不改狀態，預覽怎麼抽都不算）。next_event 串接、晉升召見不是從池子抽的，不給 action。"""
+        if action is not None:
+            event_rules.note_round(self.state, self.content, event, action)
         is_repeat = event.id in self.state.player.seen_events
         self.state.pending_event = event.id
         self.state.player.seen_events.add(event.id)
-        # 每真的端出一次記一次（探索、交友、遊歷、召見、next_event 串接都走這裡）；抽事件時按次數壓低權重（events.event_weight）
-        seen = self.state.player.event_seen
-        seen[event.id] = seen.get(event.id, 0) + 1
         head = f"✦ 奇遇：{event.title}" if event.qiyu else f"【{event.title}】"
         text = fill_marks(event.text, self.state)
         if is_repeat:
-            flourish = flavor.polish_event_repeat(self.client, event.title, event.text)
+            flourish = flavor.polish_event_repeat(self._quick_client(), event.title, event.text)
             if flourish:
                 text = f"{text}\n\n{flourish}"
         self._outcome(journal.event_marker(event.title, event.qiyu), head)
@@ -2413,7 +2442,7 @@ class Game:
         if j is None or (j.arrive_at[j.reached] > s.world.time and not s.world.ended):
             return []
         own = self._draft is None
-        client = None if own else self.client  # sync／advance 的抵達（計時器、備料都拿著行動鎖）不叫模型；只有疾行在玩家自己這次行動裡
+        client = None if own else self._quick_client()  # sync／advance 的抵達（計時器、備料都拿著行動鎖）不叫模型；只有疾行在玩家自己這次行動裡
         if own:
             self._draft = Draft(atlas.journey_title(c, j.path))
         try:
@@ -2568,11 +2597,10 @@ class Game:
         if choice.combat:
             return msgs + self._event_battle(event, choice)
         if choice.check:
-            who = check_who(choice.check, s, c, self.world)
             success = roll_check(choice.check, s, c, self.world, self.rng)
-            word = "成功" if success else "失敗"
-            msgs.append(f"（{who}——{word}）")
-            self._outcome(f"{who}・{word}", msgs[-1])
+            tag, line = check_result_line(success)  # 一律是本人：不寫誰出手（企劃者 2026-10-05）
+            msgs.append(line)
+            self._outcome(tag, line)
             return msgs + self._apply(choice.effect if success else choice.fail_effect)
         return msgs + self._apply(choice.effect)
 
@@ -2659,7 +2687,7 @@ class Game:
         proposed 是鎖外先取好的（名字, 說明）（C 段，見 forge_request）：這裡整個重驗（A 段之後意境可能熔掉、心得或體力
         可能花掉、配方可能被別人或同一個人的另一個請求登記了），名字再過一次過濾、登記時原子判斷重名，過不了走退路字表；
         給了 proposed 就不會在這裡叫模型（伺服器一律給，不需要模型時是 (None, "")）。沒給（整季機器人、腳本、測試）
-        首次出現的配方照舊在這裡叫模型。
+        首次出現的配方照舊在這裡叫模型，那是在行動鎖內，所以用 _quick_client 的短逾時複本，取不到名字就走退路字表。
         江湖紀錄的標題照煉製頁寫「煉製」（FB-047），做成了才寫，被拒絕只回一句話、什麼都不收。合併要花體力（Config.merge_stamina）、
         合成不花：花了的體力跟心得一起寫在這一則的數值變化上（企劃者 2026-10-05）。"""
         if self._preparing():
@@ -2667,11 +2695,11 @@ class Game:
         xinde, stamina = self._xinde(), self.state.player.stamina
         if art_id and len(insight_ids) == 1:
             art, msgs = fusion.fuse(
-                self.state, self.content, self.world, self.client, art_id, insight_ids[0], proposed=proposed,
+                self.state, self.content, self.world, self._quick_client(), art_id, insight_ids[0], proposed=proposed,
             )
             tag = f"合成【{art.name}】" if art is not None else None
         elif not art_id and len(insight_ids) == 2:
-            insight, msgs = fusion.merge(self.state, self.content, self.world, self.client, *insight_ids, proposed=proposed)
+            insight, msgs = fusion.merge(self.state, self.content, self.world, self._quick_client(), *insight_ids, proposed=proposed)
             tag = f"合併「{insight.name}」" if insight is not None else None
         else:
             return self._log(["放一門武學和一個意境（合成），或兩個意境（合併）。"])
@@ -3061,7 +3089,7 @@ class Game:
             return self._log(refusal)
         if fire_id in self.state.world.fired_thresholds:
             return self._log(["（這件大事已經發生過了。）"])
-        msgs = fire_by_id(self.state, self.content, fire_id, self.world, self.client, now=self.now)
+        msgs = fire_by_id(self.state, self.content, fire_id, self.world, self._quick_client(), now=self.now)
         if msgs is None:
             return self._log(["（沒有這件大事。）"])
         self._write("觸發大事", msgs, tag="管理者")
@@ -3078,7 +3106,7 @@ class Game:
         if not pushable(self.content, self.state.world, trend_id):  # 開關開著時的黃巾聲勢由三條戰線合成，change_trend 推它會丟 ValueError
             return self._log([f"（{trend_name(self.content, trend_id)}由三條戰線合成，不能直接推；請推其中一條戰線。）"])
         msgs = change_trend(self.state, self.content, trend_id, delta)
-        msgs += check_thresholds(self.state, self.content, self.world, self.client, now=self.now)
+        msgs += check_thresholds(self.state, self.content, self.world, self._quick_client(), now=self.now)
         self._write("推動大勢", msgs or ["大勢紋絲不動。"], tag="管理者")
         self._save_season()
         return self._log(msgs)
@@ -3185,7 +3213,7 @@ class Game:
             return self._log([f"（{trend_name(self.content, trend_id)}由三條戰線合成，不能直接推；請推其中一條戰線。）"])
         delta = max(0, min(100, value)) - trend_value(self.state, self.content, trend_id)
         msgs = change_trend(self.state, self.content, trend_id, delta) if delta else []
-        msgs += check_thresholds(self.state, self.content, self.world, self.client, now=self.now)
+        msgs += check_thresholds(self.state, self.content, self.world, self._quick_client(), now=self.now)
         self._write("定戰況", msgs or ["大勢紋絲不動。"], tag="管理者")
         self._save_season()
         return self._log(msgs)
@@ -3353,7 +3381,7 @@ class Game:
             ]
             data["chaos_band"] = {"low": c.config.chaos_low, "high": c.config.chaos_high}
             data["stances"] = stances(s, c)
-            data["stance_notes"] = {"sum": stance_sum_note(c), "haoqiang": chaos_note(s, c)}
+            data["stance_notes"] = {"sum": stance_sum_note(c), "haoqiang": chaos_note(s, c, self._roster_players())}
         return data
 
     def _calendar_status(self) -> dict:
@@ -3521,7 +3549,10 @@ class Game:
                 continue
             value = trend_value(self.state, self.content, trend.id)
             bar = "█" * (value // 5) + "░" * (20 - value // 5)
-            note = f"\n\n現況：{chaos_note(self.state, self.content)}。" if trend.id == GEJU and season_one(self.content, w) else ""
+            note = (
+                f"\n\n現況：{chaos_note(self.state, self.content, self._roster_players())}。"
+                if trend.id == GEJU and season_one(self.content, w) else ""
+            )
             parts.append(f"**{trend.name}** {value}/100\n\n`{bar}`\n\n{trend.desc}{note}")  # 割據：說明後面接現在漲或落（FB-065，同江湖頁態勢那一行）
         if w.ended:
             parts.append(f"## 結局：{w.ending_title}\n\n{w.ending_text}")

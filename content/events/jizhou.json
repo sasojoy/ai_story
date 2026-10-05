@@ -178,7 +178,7 @@
         "text": "替他作保",
         "check": {
           "stat": "wis",
-          "difficulty": 6
+          "difficulty": 5
         },
         "effect": {
           "text": "你說他村子被燒，連戶籍都沒了，一路逃到這裡。書吏寫下了名字，漢子紅著眼向你作揖。",
@@ -226,7 +226,7 @@
         "text": "接弓試射",
         "check": {
           "stat": "agi",
-          "difficulty": 7
+          "difficulty": 6
         },
         "effect": {
           "text": "箭正中靶心，四周一陣喝采，屯長拍著你的肩膀把錢塞給你。",
@@ -296,7 +296,7 @@
         "text": "跟在車後，割斷一袋糧的繩子",
         "check": {
           "stat": "agi",
-          "difficulty": 6
+          "difficulty": 5
         },
         "effect": {
           "text": "一袋糧滾進了路邊的溝裡。等車隊走遠，你把糧扛去還給了農婦。",
@@ -336,7 +336,7 @@
         "text": "跟守門的頭目說情",
         "check": {
           "stat": "wis",
-          "difficulty": 7
+          "difficulty": 6
         },
         "effect": {
           "text": "你說堡裡也要有人紡線餵豬，頭目想了想，多放了十幾個老人孩子進門。",
@@ -416,7 +416,7 @@
         "text": "幫船夫撐篙，多渡幾趟",
         "check": {
           "stat": "con",
-          "difficulty": 6
+          "difficulty": 5
         },
         "effect": {
           "text": "你跟船夫輪流撐篙到天黑，多渡了三趟。船夫從河灘折了一把柳絲送你，說是編繩最韌的料。",

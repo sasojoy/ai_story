@@ -274,6 +274,13 @@ def continue_dialogue(
     return msgs
 
 
+def _attempts(client: OllamaClient | None) -> int:
+    """記憶整理與性情漂移最多試幾次：照舊 MAX_RETRIES；client 設了不重問（retry 是 False，行動鎖內的複本，見
+    ollama_client.quick_client）就只試一次——鎖內任何一步模型呼叫最多佔住鎖 Config.in_lock_model_timeout 秒，
+    三次嘗試會變成三倍。失敗的話計數沒歸零，下次互動再試。"""
+    return 1 if getattr(client, "retry", True) is False else MAX_RETRIES
+
+
 def _maybe_consolidate_memory(client: OllamaClient | None, state: GameState, character: CharacterDef, companion_id: str) -> list[str]:
     """每隔 MEMORY_CONSOLIDATION_INTERVAL 輪，獨立呼叫一次濃縮關係現況、補上漏記的細節——
     不是每輪順便問 LLM「這輪值不值得記住」（那個做法實測填寫率極低，見 CLAUDE.md
@@ -296,7 +303,7 @@ def _maybe_consolidate_memory(client: OllamaClient | None, state: GameState, cha
         {"role": "user", "content": f"近期對話紀錄：\n{history_text}"},
     ]
     result = None
-    for _ in range(MAX_RETRIES):
+    for _ in range(_attempts(client)):
         try:
             candidate = client.chat_structured(messages, MemoryConsolidation, temperature=0.6)
         except Exception:
@@ -338,7 +345,7 @@ def _maybe_synthesize_drift(client: OllamaClient | None, character: CharacterDef
         )},
         {"role": "user", "content": "請給出 drift_note。"},
     ]
-    for _ in range(MAX_RETRIES):
+    for _ in range(_attempts(client)):
         try:
             result = client.chat_structured(messages, DriftSynthesis, temperature=0.6, required_fields=["drift_note"])
         except Exception:

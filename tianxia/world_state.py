@@ -151,6 +151,11 @@ class WorldStateStore(Protocol):
 
     def is_skill_name_taken(self, name: str) -> bool: ...
 
+    def is_character_name(self, name: str) -> bool:
+        """name 是不是江湖上某個角色的名號（真人、假人一樣，不分大小寫、不管前後空白，同 characters.name_key）。
+        給命名過濾用（FB-069：武學、意境不能取成角色的名號）；只回是或不是，不透露那個角色是不是假人。"""
+        ...
+
     def claim_skill_name(self, art: MartialArt) -> bool:
         """把 art 登記成這一季的自創武學；名字已經有人用過就不登記。回傳有沒有登記成功（原子判斷，
         不會有兩個玩家同時取到同一個名字都成功）。"""

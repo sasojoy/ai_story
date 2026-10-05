@@ -587,7 +587,7 @@ def test_forge_line_tells_a_merge_costs_stamina_but_a_fuse_does_not(state, conte
     state.player.insights = ["feng", "huo"]
     state.player.stats["xinde"] = 100
     merge = skillview.forge_line(state, content, world, None, ["feng", "huo"])
-    assert "花 5 點心得、10 點體力" in merge and "⚠" not in merge
+    assert "花 5 點心得、5 點體力" in merge and "⚠" not in merge
     fuse = skillview.forge_line(state, content, world, "basic_fist", ["feng"])
     assert "體力" not in fuse
 
@@ -598,7 +598,7 @@ def test_forge_line_warns_when_the_stamina_is_short_for_a_merge(state, content, 
     state.player.stats["xinde"] = 100
     state.player.stamina = content.config.merge_stamina - 1
     merge = skillview.forge_line(state, content, world, None, ["feng", "huo"])
-    assert "花 5 點心得、10 點體力" in merge and "⚠ 體力不足：合併一次要 10。" in merge
+    assert "花 5 點心得、5 點體力" in merge and "⚠ 體力不足：合併一次要 5。" in merge
     assert "⚠" not in skillview.forge_line(state, content, world, "basic_fist", ["feng"])  # 合成不花體力：照樣開得了爐
 
 

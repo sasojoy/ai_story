@@ -360,6 +360,54 @@ def test_a_hero_with_a_signature_skill_still_cannot_beat_bocai(content):
     assert _win_rate(content, "fanjianglong", wugong_id) <= 0.05
 
 
+# ── 事件檢定的難度帶（企劃者 2026-10-05「成功率毫無道理可言」）────────
+# 開局四項屬性都是 5，`rules.check_chance` 是 50% ＋ 每點差 10%（不動，按鈕上顯示的成算就是它）。
+# 所以難度帶跟著地點的危險度走：危險度 1 的地方（城鎮、官道、河畔）新角色有五到七成，
+# 2 的地方要練過，3 的地方（營寨、祭壇、洞窟）明確是難的。事件出現在好幾個地方時取最危險的那個。
+DIFFICULTY_BANDS = {1: (3, 6), 2: (4, 7), 3: (6, 8)}
+
+
+def _event_danger(content, event):
+    locs = list(event.locations) or [
+        lid for lid, loc in content.locations.items() if set(event.tags) & set(loc.tags)
+    ]
+    return max((content.locations[lid].danger for lid in locs), default=1)
+
+
+def _checks(content):
+    for event in content.events.values():
+        for choice in event.choices:
+            if choice.check is not None:
+                yield event, choice.check
+
+
+def test_event_checks_stay_inside_the_band_for_their_danger(content):
+    for event, check in _checks(content):
+        low, high = DIFFICULTY_BANDS[_event_danger(content, event)]
+        assert low <= check.difficulty <= high, (event.id, check.difficulty)
+
+
+def test_a_new_character_has_even_odds_or_better_on_most_checks_in_safe_places(content):
+    """危險度 1 的地方，九成以上的檢定新角色（屬性 5）有五成以上；難度 6（四成）留給刻意難的那幾個。"""
+    safe = [check.difficulty for event, check in _checks(content) if _event_danger(content, event) <= 1]
+    assert sum(d <= 5 for d in safe) / len(safe) >= 0.9
+
+
+def test_most_checks_in_the_starting_region_give_a_new_character_five_to_seven_in_ten(content):
+    start = region_of(content, content.scenario.start_location).id
+    here = [
+        check.difficulty for event, check in _checks(content)
+        if any(
+            region_of(content, lid).id == start
+            for lid in (list(event.locations) or [
+                lid for lid, loc in content.locations.items() if set(event.tags) & set(loc.tags)
+            ])
+        )
+    ]
+    # 屬性 5 對難度 3～5 ＝ 七成～五成；其餘是長社、嵩山深處、南華觀這類危險度 2、3 的地方
+    assert sum(3 <= d <= 5 for d in here) / len(here) >= 0.75
+
+
 def test_bocai_is_the_hardest_squad_by_difficulty(content):
     """代表大勢人物本人的隊伍（figure_<id>，T4）不算：難度跟著聲威走，見 tests/test_figures.py。"""
     squads = [s for s in content.squads.values() if not s.id.startswith("figure_")]

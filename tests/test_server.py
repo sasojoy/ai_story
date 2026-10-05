@@ -21,6 +21,8 @@ from tianxia.ollama_client import OllamaClient
 from tianxia.sqlite_world import SqliteWorldStore, open_world
 from tianxia.state import BotProfile
 
+REAL_CHAT_STRUCTURED = OllamaClient.chat_structured  # 匯入時抓：conftest 的 autouse 之後會換成「連不上」，重問的測試要真的
+
 
 @pytest.fixture(autouse=True)
 def save_dir(tmp_path):
@@ -153,6 +155,12 @@ def test_main_view_carries_the_chaos_band_and_which_fronts_are_in_it(game, monke
     assert view["status"]["chaos_band"] == {"low": 35, "high": 65}
     assert [(f["name"], f["value"], f["chaos"]) for f in view["fronts"]] == [
         ("潁川汝南", 35, True), ("南陽", 65, True), ("冀州", 66, False)]  # 35 與 65 剛好在邊上：算在亂局裡
+    # 名冊空著：割據的漲速乘人數係數、一點不漲，說明不能說漸長（FB-065 M1）
+    empty = "2 條戰線在亂局，但還沒有人投靠，割據暫時不動"
+    assert view["status"]["stance_notes"] == {"sum": "三條戰線合計", "haoqiang": empty}
+    assert empty in view["trends"]
+    game.world.record_faction("投靠者", "guan")
+    view = server.look(game, server.main_view)
     assert view["status"]["stance_notes"] == {"sum": "三條戰線合計", "haoqiang": "2 條戰線在亂局，割據漸長"}
     game.world.mutate_season(lambda season: season.trends.update(yingru=34, nanyang=66, jizhou=66))
     view = server.look(game, server.main_view)
@@ -927,6 +935,60 @@ def test_the_forge_endpoint_never_asks_the_model_while_holding_the_lock(client):
     assert game.client.timeout == server.CONTENT.config.ollama_timeout
 
 
+def test_the_forge_naming_outside_the_lock_keeps_its_retry_and_budget(monkeypatch):
+    """鎖內的模型呼叫不重問、只試一次（Config.in_lock_model_timeout），鎖外的取名不受影響：真的 chat_structured 格式不對
+    照舊重問一趟，一趟最多是預算（60 秒）的一半，每一趟都用複本、原本那個 client 不動。"""
+    game = _forger()
+    sent = []
+
+    def post(url, json=None, timeout=None):
+        sent.append(timeout)
+
+        class Reply:
+            status_code = 200
+
+            def raise_for_status(self):
+                pass
+
+            def json(self):
+                return {"message": {"content": "這不是 JSON"}}
+
+        return Reply()
+
+    monkeypatch.setattr("requests.post", post)
+    monkeypatch.setattr(OllamaClient, "chat_structured", REAL_CHAT_STRUCTURED)
+    assert server.prepare_forge(game, "jichu_quanjiao", ["feng"]) == server.NO_NAME
+    assert len(sent) == 2 and all(25 < t <= server.CONTENT.config.naming_budget_seconds / 2 for t in sent)  # 第一趟＋重問
+    assert game.client.timeout == server.CONTENT.config.ollama_timeout and game.client.retry is True
+
+
+def test_each_lock_hold_gets_a_fresh_model_budget(game, monkeypatch):
+    """一次拿鎖期間鎖內的模型呼叫只容忍一次失敗（之後都不叫模型）；server._locked 每次拿到行動鎖先歸零，下一個請求重新有額度。"""
+    sent = []
+
+    def chat_text(self, messages, **kwargs):
+        sent.append(self.timeout)
+        raise ConnectionError("模型太慢")
+
+    monkeypatch.setattr(OllamaClient, "chat_text", chat_text)
+
+    def first(g):
+        quick = g._quick_client()
+        assert quick is not None and quick.timeout == server.CONTENT.config.in_lock_model_timeout
+        with pytest.raises(ConnectionError):
+            quick.chat_text([])
+        assert g._quick_client() is None  # 同一次拿鎖：後面的鎖內呼叫都不叫模型
+
+    def second(g):
+        assert g._quick_client() is not None  # 新的一次拿鎖：重新有額度
+
+    server.act(game, first)
+    server.act(game, second)
+    server.look(game, second)  # 只讀的畫面（look）也是一次拿鎖，一樣先歸零
+    server.act(game, first)
+    assert len(sent) == 2
+
+
 def test_when_the_first_trip_saw_no_need_for_the_model_the_lock_never_asks_it(monkeypatch):
     """A 段說不必叫模型（那一刻會被拒絕、配方有了、沒有 client），C 段進鎖時卻做得成（中間狀態變了）：
     鎖裡也不叫模型，直接用退路字表——伺服器永遠不走「鎖裡取名」那條路。"""
@@ -989,7 +1051,7 @@ def test_the_same_forge_sent_twice_while_naming_is_charged_once(art, picked, ref
     else:
         assert world.lookup_insight_recipe(fusion.merge_key("feng", "huo")).name == "旋風腿"
         assert after_two.insights == ["feng", "huo", "旋風腿"]
-        assert after_two.stamina == pytest.approx(before.stamina - 10, abs=0.01)  # 只扣一次合併的體力
+        assert after_two.stamina == pytest.approx(before.stamina - 5, abs=0.01)  # 只扣一次合併的體力（FB-067：5 點）
 
 
 def test_a_second_tab_that_spends_the_xinde_while_naming_leaves_the_first_forge_refused_and_free():
@@ -1648,6 +1710,23 @@ def test_a_dialogue_option_generates_outside_the_action_lock(game, lock_events):
     assert game.state.player.pending_companion == "luzhi"
 
 
+def test_the_dialogue_prepared_outside_the_lock_keeps_the_full_client(game):
+    """鎖內的模型呼叫有 15 秒的上限（Config.in_lock_model_timeout），鎖外的備料不受它管：拿的是 game.client 本身，
+    逾時照 Config.ollama_timeout——一輪對話本來就要九、十秒，不能被短複本的 15 秒誤傷。"""
+    _stand_by_a_figure(game)
+    seen = []
+
+    def generate(client, messages):
+        seen.append(client)
+        return DIALOGUE_TURN
+
+    with mock.patch.object(companion_agent, "generate_turn", side_effect=generate):
+        server.choose(game, "act:socialize")
+    config = server.CONTENT.config
+    assert len(seen) == 1 and seen[0] is game.client
+    assert seen[0].timeout == config.ollama_timeout > config.in_lock_model_timeout
+
+
 def test_the_generated_turn_is_applied_and_saved(game, save_dir):
     _stand_by_a_figure(game)
     with mock.patch.object(companion_agent, "generate_turn", return_value=DIALOGUE_TURN):
@@ -2259,6 +2338,27 @@ def test_answering_asks_the_model_outside_the_lock(game, at_a_gamble, lock_event
     assert view["event_free_text"] is None
 
 
+def test_the_free_text_assessment_and_narration_keep_the_full_client(game, at_a_gamble):
+    """隨口應對的評分與潤色都在鎖外：拿 game.client 本身（Config.ollama_timeout），不是鎖內那個 15 秒的短複本。"""
+    seen = []
+
+    def assess(client, event, text):
+        seen.append(("assess", client))
+        return 85
+
+    def narrate(client, event, text, success, effect_text):
+        seen.append(("narrate", client))
+        return ""
+
+    game.rng = random.Random(0)
+    with mock.patch.object(server.event_llm, "assess_event_success_rate", side_effect=assess), \
+            mock.patch.object(server.event_llm, "narrate_event_gamble", side_effect=narrate):
+        server.answer_event(game, "大喊官兵來了")
+    assert [kind for kind, _ in seen] == ["assess", "narrate"]
+    assert all(client is game.client for _, client in seen)
+    assert game.client.timeout == server.CONTENT.config.ollama_timeout > server.CONTENT.config.in_lock_model_timeout
+
+
 def test_answering_does_nothing_when_the_event_was_dealt_with_meanwhile(game, at_a_gamble):
     def assess(client, event, text):
         server.act(game, lambda g: setattr(g.state, "pending_event", None))  # 另一個分頁先選了別的
@@ -2280,7 +2380,7 @@ def test_the_page_offers_the_box_and_rejects_empty_words(client, monkeypatch):
     server.act(game, lambda g: setattr(g.state, "pending_event", event.id))
     main = client.get("/api/main").json()
     assert main["event_free_text"] == "自己想辦法……"
-    assert main["options"][-1] == {"id": "choice:free", "label": "自己想辦法……", "enabled": True}
+    assert main["options"][-1] == {"id": "choice:free", "label": "自己想辦法……", "enabled": True}  # 選項只有一行，底下不另起一行（企劃者 2026-10-05）
     assert client.post("/api/answer", json={"text": "  "}).status_code == 400
     with mock.patch.object(server.event_llm, "assess_event_success_rate", return_value=50):
         main = client.post("/api/answer", json={"text": "大喊官兵來了"}).json()["main"]
@@ -2475,3 +2575,18 @@ def test_admin_choices_say_whether_the_next_season_has_a_timetable(client, monke
     assert client.get("/api/admin").json()["next_has_timetable"] is False
     monkeypatch.setattr(server.CONTENT.config, "season_one", True)
     assert client.get("/api/admin").json()["next_has_timetable"] is True
+
+
+def test_fb069_the_forge_never_names_a_recipe_after_a_character(lock_events):
+    """FB-069：鎖外取名（B 段）拿到別的角色的名號不算取到名字（60 秒的預算只夠問一次，所以直接走退路字表）；
+    C 段進鎖再擋一次。不會登記成角色的名號。"""
+    _forger("驗收新武")
+    game = _forger()
+    asked = []
+    with _model(lambda client, messages: asked.append(1) or "驗收新武"):
+        assert server.prepare_forge(game, "jichu_quanjiao", ["feng"]) == server.NO_NAME
+        server.forge(game, "jichu_quanjiao", ["feng"])
+    assert asked == [1, 1]  # 兩次 prepare 各問一次，都被擋下來
+    name = open_world().lookup_recipe(FIST_FENG).name
+    assert name != "驗收新武" and naming.name_problem(name, server.CONTENT) is None
+    assert server.forge(game, "jichu_quanjiao", ["huo"]) is not None  # 一般的名字照常

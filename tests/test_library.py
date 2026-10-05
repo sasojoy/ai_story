@@ -188,15 +188,16 @@ def test_melting_refunds_eighty_percent_of_practice_plus_a_quality_bonus(state, 
 
 def test_melting_pays_the_bonus_of_the_grade_you_raised_the_art_to_and_nothing_for_the_rest(state, content, world):
     """企劃者 2026-10-05（改了設計 4.3）：品質加給只算你自己修練出來的那幾階——現在的品質減去登記的品質。
-    合成的武學登記在下品，所以修練到中品、第一成熟練度（沒花練成的心得）熔掉，剛好退中品那 5 點。"""
-    bonus = content.config.melt_quality_bonus
+    合成的武學登記在下品，所以修練到中品、第一成熟練度（沒花練成的心得）熔掉，退中品那 5 點，
+    加上 FB-068 墊在練成那一份底下的基本值 4。"""
+    bonus, floor = content.config.melt_quality_bonus, content.config.melt_min_refund
     _fused(world, "旋風腿")
     state.player.arts = ["旋風腿"]
     state.player.art_quality["旋風腿"] = "中品"
     state.player.stats["xinde"] = 0
     msgs = library.melt_art(state, content, world, "旋風腿")
-    assert state.player.stats["xinde"] == bonus["中品"] - bonus["下品"] == 5
-    assert f"心得 +{bonus['中品']}" in msgs
+    assert state.player.stats["xinde"] == floor + bonus["中品"] - bonus["下品"] == 9
+    assert f"心得 +{floor + bonus['中品']}" in msgs
 
 
 def test_a_content_art_handed_out_at_its_top_grade_pays_no_bonus_when_melted(state, content, world):
@@ -218,14 +219,6 @@ def test_melt_refund_counts_only_the_grades_above_the_registered_one(content):
     assert library.melt_refund(content, 1, "絕學", registered="絕學") == 0
     assert library.melt_refund(content, 1, "下品", registered="絕學") == 0  # 不會是負的
     assert library.melt_refund(content, 5, "中品", registered="中品") == 8  # 練成的八成照退
-
-
-def test_melting_an_art_that_was_never_practised_refunds_only_the_quality_bonus(state, content, world):
-    _fused(world, "旋風腿")
-    state.player.arts = ["旋風腿"]
-    state.player.stats["xinde"] = 0
-    library.melt_art(state, content, world, "旋風腿")
-    assert state.player.stats["xinde"] == 0  # 下品、第一成：什麼都沒花、沒加給
 
 
 def test_melting_an_insight_pays_and_warns_about_the_arts_that_need_it(state, content, world):
@@ -276,3 +269,37 @@ def test_melt_problem_names_the_art_when_it_is_given_one(state):
     state.player.arts = ["旋風腿"]
     state.player.naming = "旋風腿"
     assert "【旋風腿】" in library.melt_problem(state, "旋風腿", name="旋風腿")
+
+
+# ── FB-068：熔掉沒練成過的合成武學有基本值（企劃者 2026-10-05）──────────────────
+
+
+def test_the_melt_minimum_is_four_by_default(content):
+    assert content.config.melt_min_refund == 4 < content.config.fuse_xinde  # 合成花 5、熔回最多 4：一圈淨虧 1
+
+
+def test_melting_a_fused_art_that_was_never_practised_refunds_the_minimum(state, content, world):
+    _fused(world, "旋風腿")
+    state.player.arts, state.player.stats["xinde"] = ["旋風腿"], 0
+    assert library.melt_value(state, content, world, "旋風腿") == 4
+    msgs = library.melt_art(state, content, world, "旋風腿")
+    assert state.player.stats["xinde"] == 4 and msgs[-1] == "心得 +4"
+
+
+def test_the_minimum_is_a_floor_under_the_practice_part_and_the_own_grade_bonus_still_adds(state, content, world):
+    """max(4, 練成花的八成) ＋ 自己修上去的品質加給：第五成（練成花 10、八成是 8）照退 8，不是 12；
+    第二成（花 1、八成是 0）退 4；修到中品的第一成退 4 ＋ 5。"""
+    _fused(world, "旋風腿")
+    state.player.arts = ["旋風腿"]
+    for level, quality, refund in ((5, "下品", 8), (2, "下品", 4), (1, "中品", 4 + 5), (5, "上品", 8 + 15)):
+        state.player.art_levels["旋風腿"], state.player.art_quality["旋風腿"] = level, quality
+        assert library.melt_value(state, content, world, "旋風腿") == refund, (level, quality)
+
+
+def test_a_content_art_gets_no_minimum_so_learning_and_melting_is_no_loop(state, content, world):
+    """基礎武學有的免費教、拜師學藝也不花體力：要是它們也有基本值，「學、熔、再學」就是無本的心得迴圈。
+    基本值只給全服登記的武學（合成出來的、舊的自創與煉製），內容裡的武學照舊。"""
+    state.player.arts, state.player.stats["xinde"] = ["lake_kick"], 0
+    assert library.melt_value(state, content, world, "lake_kick") == 0
+    library.melt_art(state, content, world, "lake_kick")
+    assert state.player.stats["xinde"] == 0
