@@ -18,7 +18,9 @@ LOG_BREAK = "\x1e"  # GameState.log 中每次行動結束的分隔標記（不�
 MAX_ENTRIES = 30  # 存檔保留最近幾則
 LEGACY_TIME = -1.0  # 舊存檔的 log 轉來的紀錄不知道時間
 TITLE_MAX = 40  # 舊存檔轉來的標題最長幾個字，超過的截斷
-MENXIA = "門下"  # 門下操作那一則的標題；連續的會併成一則
+# 修練頁（自創、鍛鍊、療傷、改練）與煉製頁的動作那一則的標題，照底部分頁的名字（FB-047）；同一種連續的會併成一則
+PRACTICE = "修練"
+CRAFT = "煉製"
 WORLD_NEWS = "江湖大事"  # 時間流逝時發生的江湖大事那一則的標題；連續的會併成一則
 NEWS_PREFIXES = ("【江湖大事】", "【主線】", "【主線改寫】")  # world.py 寫出的大勢門檻、世界事件、主線變化
 
@@ -88,12 +90,17 @@ def subtract_changes(changes: list[str], shown: list[str]) -> list[str]:
     return out
 
 
+LOSS_WHEN_UP = frozenset({"內傷"})  # 多了是壞事的數值：增加上紅、減少上綠（FB-049：「內傷 +3」以前是收穫的綠）
+
+
 def change_class(change: str) -> str:
-    """數值變化的顏色：增加 tx-up（綠）、減少 tx-down（紅）；零或看不出正負時不上色。"""
+    """數值變化的顏色：增加 tx-up（綠）、減少 tx-down（紅）；零或看不出正負時不上色。
+    LOSS_WHEN_UP 裡的（內傷）反過來：多了是損失。"""
     parsed = _parse(change)
     if parsed is None or parsed[1] == 0:
         return ""
-    return "tx-up" if parsed[1] > 0 else "tx-down"
+    gain = (parsed[1] > 0) != (parsed[0][0] in LOSS_WHEN_UP)
+    return "tx-up" if gain else "tx-down"
 
 
 # ── 建立紀錄 ──────────────────────────────────────────
@@ -122,6 +129,7 @@ class Draft:
     battle_id: int | None = None
     rewrites: list[tuple[str, str | None]] = field(default_factory=list)  # (訊息, 紀錄裡改寫成的文字；None＝不寫)
     changes: list[str] = field(default_factory=list)  # 訊息裡沒有、另外補上的數值變化（例如經驗）
+    guide: list[str] = field(default_factory=list)  # 這次行動順便完成的新手引導（記進 JournalEntry.guide，不進敘事）
 
     def hide(self, msg: str) -> None:
         self.rewrites.append((msg, None))
@@ -149,7 +157,7 @@ class Draft:
         changes, lines = split_changes(kept)
         return JournalEntry(
             time=time, title=self.title, tag=self.tag, lines=lines, changes=combine_changes(self.changes + changes),
-            battle_id=self.battle_id,
+            battle_id=self.battle_id, guide=list(self.guide),
         )
 
 
@@ -176,7 +184,7 @@ def _merged(head: JournalEntry, entry: JournalEntry, lines: list[str], battle_id
     """head 與 entry 併成的一則：時間與結果標記用新的（entry 沒有標記就沿用 head 的）、數值變化加總。"""
     return JournalEntry(
         time=entry.time, title=entry.title, tag=entry.tag or head.tag, lines=lines,
-        changes=combine_changes(head.changes + entry.changes), battle_id=battle_id,
+        changes=combine_changes(head.changes + entry.changes), battle_id=battle_id, guide=head.guide + entry.guide,
     )
 
 
@@ -189,6 +197,15 @@ def add_entry(state: GameState, entry: JournalEntry, merge: bool = False) -> Non
         return
     state.journal.insert(0, entry)
     del state.journal[MAX_ENTRIES:]
+
+
+def add_guide(state: GameState, notes: list[str]) -> None:
+    """不在行動裡完成的新手引導（例：打開輿圖）：接在最新一則的 guide 後面，不另起一則（「剛剛」不換）；還沒有紀錄時另起一則。"""
+    if state.journal:
+        head = state.journal[0]
+        state.journal[0] = head.model_copy(update={"guide": head.guide + notes})
+    else:
+        add_entry(state, JournalEntry(time=state.world.time, title="新手引導", guide=list(notes)))
 
 
 def add_arrival(state: GameState, entry: JournalEntry, done: bool) -> None:
@@ -309,7 +326,7 @@ def _row(entry: JournalEntry, when: Callable[[float], str]) -> str:
         f'<span class="tx-time">{_when(entry.time, when)}</span>'
         f'<span class="tx-main">{_heading(entry)}{_chips(entry.changes, "span")}</span>'
     )
-    body = _body(entry)
+    body = _body(entry) + entry.guide  # 新手引導在江湖紀錄照舊看得到（「剛剛」卡片不畫，見 card_html）
     if not body:
         return f'<div class="tx-row"><div class="tx-sum">{head}</div></div>'
     return (

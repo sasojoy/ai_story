@@ -241,6 +241,7 @@ def main_view(game: Game) -> dict:
     card = game.battle_card() if game.shows_battle_card() else None
     status, quest, scene = game.status_data(), md(game.quest_text()), md(game.scene_text())
     options = game.options()  # 照原本的順序：狀態、主線、場景先讀，選單（會推進全服戰鬥）最後
+    latest = game.battle_extra_html() if card is not None else game.latest_entry_html()
     view = {
         "status": status,
         "quest": quest,
@@ -254,15 +255,20 @@ def main_view(game: Game) -> dict:
         # 「剛剛」：這次行動打了仗就放戰鬥卡片，卡片沒寫到的補充放在 latest；沒打仗時 latest 是最新一則紀錄
         "card": md(card) if card is not None else None,
         "card_id": game.battle_card_id() if card is not None else None,
-        "latest": game.battle_extra_html() if card is not None else game.latest_entry_html(),
+        # 江湖紀錄頁是 latest＋journal＋older 接起來的，從最新一則列起
+        "latest": latest,
         "journal": game.journal_html(1, RECENT_ROWS),
         "older": game.journal_html(1 + RECENT_ROWS, OLDER_ROWS),
+        # 江湖頁的「剛剛」：跟 latest 一樣，只是最新的幾則若只是公告卡（休季是結算卡）上已經有全文的大事，
+        # 改放再前面那一則，同一段公告不寫兩次（FB-046）
+        "now": latest if card is not None else game.now_entry_html(),
         "minimap": game.minimap_svg(),
         "bulletin": [md(text) for text in game.bulletin()],  # 江湖頁最上面的公告卡：這一週的大事；開關關著是空的
         "trends": md(game.trends_text()),
         "rumors": md(game.rumors_text()),
         "chronicle": md(game.chronicle_text()),
         "admin": game.is_admin(),
+        "guide": game.guide_box(),  # 行動列上方的說書人對話框（引導重做設計 8.1）；略過或早就做完是 None
     }
     if "fronts" in status:  # 第一季濃縮版才有：江湖頁的三條戰況（開關關著時不送，頁面照舊）
         view["fronts"] = status["fronts"]
@@ -365,6 +371,8 @@ def admin_choices(game: Game) -> dict:
         # 照開關：關著時不列第一季才有的線；開著時不列黃巾聲勢（由三條戰線合成，不能直接推）
         "trends": [{"label": t.name, "id": t.id} for t in CONTENT.scenario.trends if rules.pushable(CONTENT, world, t.id)],
         **timetable_choices(game),
+        # 下一季會照第一季的規則開（開關開著）：「開啟下一季」的問句也提醒排三場大戲與季末的時間（FB-050）
+        "next_has_timetable": bool(CONTENT.config.season_one),
     }
 
 
@@ -379,6 +387,11 @@ def _result_label(key: str) -> str:
         if key.startswith(prefix):
             return side + key[len(prefix):]
     return key
+
+
+def _ending_title(ending_id: str) -> str:
+    """季末那一列的結果：時間軸記的是結局 id（world._finale），寫結局的標題（FB-051）。"""
+    return next((e.title for e in CONTENT.scenario.endings if e.id == ending_id), ending_id)
 
 
 def _done_label(key: str) -> str:
@@ -403,7 +416,8 @@ def timetable_choices(game: Game) -> dict:
         rows.append({
             "id": row["id"], "label": f"第{row['week']}週　{row['title']}",
             "state": row["state"], "state_text": TIMETABLE_STATES[row["state"]],
-            "result": _done_label(row["result"]) if row["result"] else None,
+            "result": (_ending_title(row["result"]) if row["kind"] == "finale" else _done_label(row["result"]))
+            if row["result"] else None,
             "schedulable": row["schedulable"],
             "at_real": now + (row["when"] - world.time) / CONTENT.config.time_scale if row["schedulable"] else None,
         })
@@ -648,6 +662,7 @@ MAIN_ACTIONS = {
     "anonymous": lambda g, b: g.set_anonymous(bool(b.get("value"))),
     "skip_tutorial": lambda g, b: g.skip_tutorial(),
     "view_map": lambda g, b: g.view_map(),
+    "guide_ack": lambda g, b: g.guide_ack(),  # 對話框的結語按「知道了」
 }
 ADMIN_ACTIONS = {
     "open_season": lambda g, b: g.admin_open_season(time.time()),

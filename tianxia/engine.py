@@ -17,7 +17,7 @@ from . import (
     journal, materials, orders, push, ranks, roster, skillview, team, timetable,
 )
 from .events import choice_label, event_candidates, has_events_here, pick_event, visible_choices
-from .guide import base_step_count, note_action, quest_text, tutorial_intro
+from .guide import base_step_count, note_action, quest_text, tutorial_active, tutorial_intro
 from .guide import steps as tutorial_steps
 from .journal import LOG_BREAK, Draft
 from .mapview import render_map, render_minimap
@@ -120,7 +120,8 @@ class Game:
             [f"══ {content.scenario.name} ══", content.scenario.intro, game.location_text()]
             + tutorial_intro(content)
         )
-        game._write(content.scenario.name, [content.scenario.intro] + tutorial_intro(content), tag="賽季開始")
+        if not game.state.journal:  # 第二季起建的角色：__init__ 的換季重來已經寫了開場那一則，不再寫一次（FB-052）
+            game._write(content.scenario.name, [content.scenario.intro], tag="賽季開始", guide=tutorial_intro(content))
         return game
 
     def _reconcile_season(self) -> None:
@@ -155,6 +156,7 @@ class Game:
         # 做完或略過（skip_tutorial 也是設成步數）：看不分季的那幾步；第一季多的兩步排在後面，回鍋的人接著做（計畫 T6）
         if old.player.tutorial_step >= base_step_count(self.content):
             fresh.player.tutorial_step = old.player.tutorial_step
+            fresh.player.guide_skipped = old.player.guide_skipped  # 略過的人換季也不畫對話框（畫面批次審查 I4）
         ratio = self.content.config.affinity_carry_ratio
         fresh.player.affinities = {key: int(value * ratio) for key, value in old.player.affinities.items()}
         fresh.player.relationship_notes = old.player.relationship_notes
@@ -165,9 +167,10 @@ class Game:
         fresh.player.battle_results_seen = old.player.battle_results_seen  # 補送過的決戰不再補一次（FB-027）
         fresh.player.season_number = season_number
         self.state = fresh
+        self.state.world = self.world.get_season()  # 開場那一則記此刻的季時間（FB-052：以前記成新存檔的 0）
         self.state.player.visited.add(self.state.player.location)
         self._write(
-            self.content.scenario.name, [self.content.scenario.intro] + tutorial_intro(self.content), tag="賽季開始",
+            self.content.scenario.name, [self.content.scenario.intro], tag="賽季開始", guide=tutorial_intro(self.content),
         )
 
     def _drop_stale_references(self) -> None:
@@ -617,6 +620,7 @@ class Game:
         if option is None or not option.enabled:
             return self._log(["（此刻無法這麼做。）"])
         self.state.battle_card = None
+        self.state.player.guide_done = []  # 對話框上一次完成的那幾行，下一次行動就清掉
         kind, _, arg = option_id.partition(":")
         if kind == "battle":  # 決戰選項不走 Draft：加入與趕到由 _battle_choose 自己寫一則紀錄，每回合的出招不寫（FB-030）
             return self._log(self._battle_choose(arg))
@@ -644,9 +648,9 @@ class Game:
                 msgs = self._choose(int(arg))
             msgs += self._hear_after_stamina(stamina)
             if kind == "act" and arg != "break":
-                msgs += note_action(self.state, self.content, self.world, arg)
+                msgs += self._guide(note_action(self.state, self.content, self.world, arg))
             if kind == "call" and arg != "back":
-                msgs += note_action(self.state, self.content, self.world, "socialize")  # 指名求見算一次交友（新手引導、任務）
+                msgs += self._guide(note_action(self.state, self.content, self.world, "socialize"))  # 指名求見算一次交友
             msgs += check_thresholds(self.state, self.content, self.world, self.client, now=self.now)
             msgs += ranks.check_summons(self.state, self.content)  # 貢獻跨過門檻就發召見（計畫 T5）
             journal.add_entry(self.state, self._draft.entry(self.state.world.time, msgs))
@@ -763,8 +767,54 @@ class Game:
         if self._draft is not None:
             self._draft.outcome(text, msg)
 
-    def _write(self, title: str, msgs: list[str], tag: str = "") -> None:
-        journal.add_entry(self.state, Draft(title, tag).entry(self.state.world.time, msgs))
+    def _write(self, title: str, msgs: list[str], tag: str = "", guide: list[str] | None = None) -> None:
+        draft = Draft(title, tag)
+        draft.guide = list(guide or [])
+        journal.add_entry(self.state, draft.entry(self.state.world.time, msgs))
+
+    def _note_guide(self, notes: list[str]) -> None:
+        """新手引導這次完成了（note_action 回傳的那幾行）：「✔ 引導完成」與獎勵記在 guide_done 給對話框；走完最後一步、
+        有結語時對話框改顯示結語，等按「知道了」（引導重做設計 8.1）。"""
+        if not notes:
+            return
+        speaker = f"【{self.content.tutorial.speaker}】"
+        p = self.state.player
+        p.guide_done = [n for n in notes if not n.startswith(speaker)]
+        if not tutorial_active(self.state, self.content) and self.content.tutorial.outro:
+            p.guide_outro = True
+
+    def _guide(self, notes: list[str]) -> list[str]:
+        """新手引導的訊息不接進這次行動的訊息（「剛剛」只放行動的結果，引導重做設計 8.1.3）：記進這一則江湖紀錄的 guide、
+        給對話框；不在行動裡（例如打開輿圖）時接在最新一則的 guide。回傳空串列，呼叫端照舊 `msgs += …`。"""
+        if notes:
+            self._note_guide(notes)
+            if self._draft is not None:
+                self._draft.guide += notes
+            else:
+                journal.add_guide(self.state, notes)
+        return []
+
+    def guide_box(self) -> dict | None:
+        """行動列上方的對話框（引導重做設計 8.1、6.2）：引導還沒做完是目前這一步的話；剛走完、結語還沒按「知道了」是結語；
+        其他（略過、早就做完的舊角色）是 None。done 是上一次行動完成的那幾行（✔ 與獎勵）。框上寫的人是 Tutorial.speaker。"""
+        s, c, p = self.state, self.content, self.state.player
+        t = c.tutorial
+        todo = tutorial_steps(s, c)
+        if p.guide_skipped:  # 略過的人不再畫框，換季、第一季多出的步驟也一樣（8.1.4；畫面批次審查 I4）
+            return None
+        if self._preparing() or s.world.ended:  # 籌備中、休季什麼都不能做，不叫人去探索（FB-045～052 審查 I1）
+            return None
+        if p.tutorial_step < len(todo):
+            return {"speaker": t.speaker, "text": todo[p.tutorial_step].text, "done": list(p.guide_done), "end": False}
+        if p.guide_outro and t.outro:
+            return {"speaker": t.speaker, "text": t.outro, "done": list(p.guide_done), "end": True}
+        return None
+
+    def guide_ack(self) -> list[str]:
+        """結語按「知道了」：對話框不再出現。"""
+        self.state.player.guide_outro = False
+        self.state.player.guide_done = []
+        return []
 
     # ── 行動 ──────────────────────────────────────────────
 
@@ -957,7 +1007,7 @@ class Game:
         s, c = self.state, self.content
         msgs = orders.credit(s, c, s.player.faction, s.player.name, shown=display_name(s), **kw)
         if msgs:
-            msgs += note_action(s, c, self.world, "order")
+            msgs += self._guide(note_action(s, c, self.world, "order"))
         return msgs
 
     def _duty(self) -> list[str]:
@@ -1032,7 +1082,12 @@ class Game:
         p = self.state.player
         minutes = max(0, round((self.state.world.time - p.resting_since) / 60))
         p.resting_since = None
-        msg = "體力已經回滿，你收功起身。" if full else f"你收功起身（打坐了約 {minutes} 分鐘）。"
+        if full:
+            msg = "體力已經回滿，你收功起身。"
+        elif minutes < 1:  # 剛坐下就起身：不寫「打坐了約 0 分鐘」（FB-049）
+            msg = "你收功起身。"
+        else:
+            msg = f"你收功起身（打坐了約 {minutes} 分鐘）。"
         if self._draft is None:
             self._write("起身", [msg])
         return [msg]
@@ -1192,11 +1247,13 @@ class Game:
             # 投靠這一刻就推一次新手引導：第一季「投靠、看一眼本週軍令」那一步只看陣營（計畫 T6）；beta 照舊等下一個行動
             msgs = [f"你投靠了{faction.name}。"]
             if season_one(self.content, self.state.world):
-                msgs += note_action(self.state, self.content, self.world, "join")
+                msgs += self._guide(note_action(self.state, self.content, self.world, "join"))  # 走對話框（畫面批次審查 I2）
             return msgs
         faction = self._faction(arg)
         p.pending_faction = faction.id
-        return [self._faction_prompt(faction)]
+        prompt = self._faction_prompt(faction)
+        self._hide(prompt)  # 場景已經寫著這一問（_own_scene_text），江湖紀錄那一則只留標題（FB-046）
+        return [prompt]
 
     def _faction_prompt(self, faction) -> str:
         return f"投靠後這一季不能改投（叛投另論）。{self.faction_counts_text()}。確定投靠{faction.name}？"
@@ -2270,7 +2327,7 @@ class Game:
                     self._draft.tag = f"{reason}，停在 {c.locations[s.player.location].name}"
             if own:
                 entry = self._draft.entry(when, msgs)
-                if done or entry.lines or entry.changes:  # 只到了中途的站、又沒有別的事，不另寫一則
+                if done or entry.lines or entry.changes or entry.guide:  # 只到了中途的站、又沒有別的事（連引導也沒有），不另寫一則
                     journal.add_arrival(s, entry, done)
         finally:
             if own:
@@ -2294,7 +2351,7 @@ class Game:
                 text = f"{text}\n\n{flourish}"
         self._hide(text)
         return (  # 糧車到了終點（路過也算）先交糧，再照原本的新手引導與門檻（計畫 T6）
-            [text] + self._convoy_arrives(loc_id) + note_action(s, c, self.world, "move")
+            [text] + self._convoy_arrives(loc_id) + self._guide(note_action(s, c, self.world, "move"))
             + check_thresholds(s, c, self.world, client, now=self.now)
         )
 
@@ -2329,7 +2386,7 @@ class Game:
         return [sight.text] + apply_effect(sight.effect, s, c, self.world, push=self.push_trend)
 
     def _journey_line(self) -> str:
-        """在路上的那一句（狀態列、場景共用）：「往寶洞（步行），第1天 00:08 抵達，還要約 8 分鐘；下一站湖邊」。"""
+        """在路上的那一句（狀態列）：「往寶洞（步行），第1天 00:08 抵達，還要約 8 分鐘；下一站湖邊」。"""
         s, c = self.state, self.content
         j = s.player.journey
         end = j.arrive_at[j.last]
@@ -2362,6 +2419,7 @@ class Game:
         s, c = self.state, self.content
         route = atlas.way_to(s, c, dest_id)
         s.battle_card = None
+        s.player.guide_done = []
         self._draft = Draft(atlas.journey_title(c, route.path))
         stamina = s.player.stamina
         try:
@@ -2490,7 +2548,7 @@ class Game:
         art, msgs = craft.craft(self.state, self.content, self.world, self.client, material_ids)
         out = self._log(msgs)
         if art is not None:
-            out += self._menxia_entry(f"煉製【{art.name}】", xinde, guide=True)
+            out += self._menxia_entry(f"煉製【{art.name}】", xinde, guide=True, title=journal.CRAFT)
         return out
 
     def craft_cost(self, material_ids: list[str]) -> int:
@@ -2540,26 +2598,21 @@ class Game:
     def _xinde(self) -> int:
         return self.state.player.stats.get("xinde", 0)
 
-    def _menxia_entry(self, tag: str, xinde_before: int, guide: bool = False) -> list[str]:
-        """門下動作寫進江湖紀錄（連續的併成一則）。
+    def _menxia_entry(self, tag: str, xinde_before: int, guide: bool = False, title: str = journal.PRACTICE) -> list[str]:
+        """修練頁、煉製頁的動作寫進江湖紀錄（同一種連續的併成一則）。標題照底部分頁的名字：煉製寫「煉製」，
+        自創、鍛鍊、療傷、改練寫「修練」（FB-047；以前都寫「門下」，煉製會併進前面那則自創、鍛鍊）。
 
         guide=True：這個動作算一次「練功」（自創、煉製、鍛鍊），順便看新手引導有沒有完成（FB-024）。完成了，
-        note_action 回來的「✔ 引導完成」、獎勵與說書人的下一步，跟江湖頁 choose() 那條路一樣寫進這一則
-        （敘事進 lines、獎勵的數字進 changes），並回傳這幾行讓畫面也照舊顯示；沒完成就回傳 []，這一則跟以前一模一樣。
-        心得的增減先算好、才輪到引導獎勵：獎勵本身若給心得，變化只由獎勵那幾行帶進來，不會算兩次。"""
+        note_action 回來的「✔ 引導完成」、獎勵與說書人的下一步記在這一則的 guide（江湖紀錄看得到），給對話框
+        （guide_done），不進修練、煉製頁的訊息與「剛剛」（引導重做設計 8.1.3）。回傳一律是空串列。"""
         delta = self._xinde() - xinde_before
         changes = [f"心得 {delta:+d}"] if delta else []
+        self.state.player.guide_done = []
         notes = note_action(self.state, self.content, self.world, "practice") if guide else []
-        lines: list[str] = []
-        if notes:
-            reward, story = battlelog.split_changes(notes)
-            changes = journal.combine_changes(changes + reward)
-            # 一則的敘事有 lines 就只認 lines、沒有才拿結果標記（journal._story）：這次動作自己的那句話要先放進 lines，
-            # 不然之後的門下動作併進來時，這句話會被引導那幾行擠掉。
-            lines = [tag, *story]
-        entry = JournalEntry(time=self.state.world.time, title=journal.MENXIA, tag=tag, lines=lines, changes=changes)
+        self._note_guide(notes)  # 引導的訊息記在這一則的 guide、給對話框，不進修練頁的訊息（引導重做設計 8.1.3）
+        entry = JournalEntry(time=self.state.world.time, title=title, tag=tag, changes=changes, guide=notes)
         journal.add_entry(self.state, entry, merge=True)
-        return self._log(notes)
+        return []
 
     # ── 門下與隊伍 ────────────────────────────────────────
 
@@ -2660,15 +2713,15 @@ class Game:
         if self.state.player.tutorial_step >= steps:
             return []
         self.state.player.tutorial_step = steps
+        self.state.player.guide_done, self.state.player.guide_outro = [], False  # 略過後對話框不再出現（8.1.4）
+        self.state.player.guide_skipped = True
         self._write("新手引導", [], tag="已略過")
         return self._log(["（已略過新手引導。）"])
 
     def view_map(self) -> list[str]:
         self.state.player.flags.add("看過地圖")
-        msgs = note_action(self.state, self.content, self.world, "view_map")
-        if msgs:
-            self._write("翻看地圖", msgs)
-        return self._log(msgs)
+        self._guide(note_action(self.state, self.content, self.world, "view_map"))  # 接在最新一則，「剛剛」不換
+        return []
 
     def quest_text(self) -> str:
         return quest_text(self.state, self.content)
@@ -3029,6 +3082,8 @@ class Game:
     def _own_scene_text(self) -> str:
         s, c = self.state, self.content
         if s.world.ended:
+            if season_one(c, s.world):  # 第一季：結局寫在江湖頁最上面的結算卡（season_result），場景寫所在的地方（FB-046）
+                return self.location_text()
             return f"## {s.world.ending_title}\n\n{s.world.ending_text}"
         if s.pending_event:
             event = c.events[s.pending_event]
@@ -3047,9 +3102,10 @@ class Game:
         if asking is not None:
             return asking
         if s.player.journey is not None:
+            # 往哪、幾時抵達只寫在狀態列（status_data 的 journey，每一頁都看得到），場景不再寫一次（FB-046）
             halted = "（已經喊停）" if s.player.journey.stop_at is not None else ""
             return (
-                f"**在路上**{halted}\n\n{self._journey_line()}。\n\n"
+                f"**在路上**{halted}\n\n"
                 "路上可以折返，也可以打開輿圖改去別處，或去修練、煉製；邊走邊想、沿途打聽、留意地形、路邊採集，"
                 "到下一站之前各能做一次。可以先下線，到了會自己抵達。"
             )
@@ -3107,7 +3163,8 @@ class Game:
         if not calendar.season_one_on(w, c):
             return {}
         at = calendar.point(w.time, c, w)
-        upcoming = None if w.ended else timetable.next_event(self.state, c)  # 休季時沒有下一件（計畫 T9）
+        # 休季時沒有下一件（計畫 T9）；籌備中時鐘沒走，也不倒數（FB-049）
+        upcoming = None if w.ended or self._preparing() else timetable.next_event(self.state, c)
         return {
             "calendar": {
                 "week": at.week, "weekday": at.weekday, "clock": f"{at.hour:02d}:{at.minute:02d}",
@@ -3121,28 +3178,46 @@ class Game:
 
     def bulletin(self) -> list[str]:
         """江湖頁最上面的公告卡（Markdown）：這一週已經發生的大事，新的在前、最多 BULLETIN_MAX 則。
-        江湖紀錄裡的「江湖大事」只寫進剛好在場同步到的那個人，這張卡讓每個人都看得到。開關關著時是空的。"""
+        江湖紀錄裡的「江湖大事」只寫進剛好在場同步到的那個人，這張卡讓每個人都看得到。開關關著時是空的；
+        休季時也是空的：結算卡已經列著這一季的每一件大事與結局（FB-046）。"""
+        return [f"**{title}**\n\n{text}" for title, text in self._bulletin_events()]
+
+    def _bulletin_events(self) -> list[tuple[str, str]]:
+        """公告卡上的（標題, 公告全文），新的在前、最多 BULLETIN_MAX 則。"""
         w, c = self.state.world, self.content
-        if not calendar.season_one_on(w, c):
+        if not calendar.season_one_on(w, c) or w.ended:
             return []
         start = calendar.week_start(calendar.point(w.time, c, w).week, c, w) - calendar.EPS_SECONDS
         titles = {e.id: e.title for e in c.timetable}
         done = [(i, eid, r) for i, (eid, r) in enumerate(w.timeline.items()) if r.text and r.time >= start]
         done.sort(key=lambda item: (item[2].time, item[0]), reverse=True)
-        return [f"**{titles.get(eid, eid)}**\n\n{r.text}" for _, eid, r in done[:BULLETIN_MAX]]
+        return [(titles.get(eid, eid), r.text) for _, eid, r in done[:BULLETIN_MAX]]
+
+    def _news_on_cards(self) -> set[str]:
+        """江湖頁的卡片上已經寫著全文的時刻表公告：平常是本週大事的公告卡，休季時是結算卡（結局與這一季的每一件大事）。"""
+        w = self.state.world
+        if w.ended and season_one(self.content, w):
+            shown = {r.text for r in w.timeline.values()} | {w.ending_text}
+        else:
+            shown = {text for _, text in self._bulletin_events()}
+        shown.discard("")
+        return shown
 
     def convoy_line(self) -> str | None:
         """押著的糧車要送去哪（江湖頁軍令卡上的一行；T6 審查 I3）：那一道軍令已經達成或換週清掉了也照樣寫，
-        送到了照樣記捐獻與貢獻。沒有押車時是 None。"""
+        送到了照樣記捐獻與貢獻。沒有押車、或這一季已經收了（休季，FB-045）時是 None。"""
         convoy = self.state.player.convoy
-        if convoy is None:
+        if convoy is None or self.state.world.ended:
             return None
         return f"你押著一車糧（{convoy.grain} 份），要送到{self.content.locations[convoy.to_loc].name}。"
 
     def orders_view(self) -> list[dict]:
         """江湖頁的「本週軍令」卡（計畫 T6）：自己陣營這週的軍令，只給自己陣營看；散人、開關關著是空的。
-        截止是下週一 00:00（最後一週寫成季末那一刻，calendar.point 會夾住）。"""
+        截止是下週一 00:00（最後一週寫成季末那一刻，calendar.point 會夾住）。休季時也是空的（FB-045）：
+        收季那一週的軍令截止已經過了，休季什麼都不能做，結算畫面底下不該還有一張叫人去做事的卡。"""
         s, c = self.state, self.content
+        if s.world.ended:
+            return []
         name = s.player.name
         views = []
         for o in orders.current(s, c, s.player.faction):
@@ -3276,6 +3351,25 @@ class Game:
     def latest_entry_html(self) -> str:
         entries = self.state.journal
         return journal.card_html(entries[0], self.stamp) if entries else ""
+
+    def now_entry_html(self) -> str:
+        """江湖頁「剛剛」那一則（FB-046）：最新一則；最新的幾則若只是時刻表大事的公告（_deliver_big_events 補的），
+        而且每一件的全文江湖頁的卡片上已經有了（_news_on_cards），就往前找第一則不是的——同一段公告不在「剛剛」
+        再寫一次，剛做完的事也不會因為一件大事發生就被擠掉。江湖紀錄頁照舊從最新一則列起（latest_entry_html）。
+        一次補好幾件時每一行是「季曆時間　公告全文」。
+        籌備中不放（FB-049）：那時最新一則是開場那一則，寫著「賽季開始」、叫人先去探索，選單卻只有「等待管理者開季」。"""
+        if self._preparing():
+            return ""
+        shown = self._news_on_cards()
+
+        def repeated(entry: JournalEntry) -> bool:
+            story = entry.lines or [entry.tag]
+            return entry.title == journal.WORLD_NEWS and all(
+                line in shown or line.partition("　")[2] in shown for line in story
+            )
+
+        entry = next((e for e in self.state.journal if not repeated(e)), None)
+        return journal.card_html(entry, self.stamp) if entry is not None else ""
 
     def journal_html(self, start: int = 1, limit: int = 5, heading: str = "", empty: str = "") -> str:
         return journal.rows_html(self.state.journal[start:start + limit], heading, empty, self.stamp)

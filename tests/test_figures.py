@@ -475,7 +475,8 @@ def test_timetable_outcome_retires_bocai(on):
     changshe = next(e for e in on.timetable if e.id == "changshe_fire")
     outcome = changshe.outcomes["guan:大勝"]
     msgs = timetable.resolve(s, on, changshe, random.Random(0), key="guan:大勝")
-    assert msgs == [f"【江湖大事】{changshe.preface}{outcome.text}{outcome.note}"]
+    text = outcome.text.replace("{人物:bocai}", "波才")  # 8.11：「這一次」那半句寫出人名，結算前的波才
+    assert msgs == [f"【江湖大事】{changshe.preface}{text}{outcome.note}"]
     assert s.world.figures["bocai"].status == "retired"
     assert (s.world.figures["pengtuo"].status, s.world.figures["pengtuo"].front) == ("active", "yingru")
     assert [r.text for r in s.world.rumors] == ["彭脫接手潁川汝南的戰事。", msgs[0].removeprefix("【江湖大事】")]

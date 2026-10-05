@@ -121,6 +121,16 @@ def test_sitting_down_is_a_state_you_stand_up_from(game):
     assert game.state.journal[0].title == "起身"
 
 
+def test_standing_up_right_away_does_not_count_zero_minutes(game):
+    """FB-049：剛坐下就起身，不寫「打坐了約 0 分鐘」；坐滿一分鐘以上照舊寫幾分鐘。"""
+    game.choose("act:rest")
+    assert game.choose("act:stand") == ["你收功起身。"]
+    game.state.player.stamina = 0  # 不然體力早就滿了，一推進時間就自己起身
+    game.choose("act:rest")
+    game.advance(600)
+    assert game.choose("act:stand") == ["你收功起身（打坐了約 10 分鐘）。"]
+
+
 def test_sitting_doubles_the_natural_regen(game):
     cfg = game.content.config
     game.state.player.stamina = 0
@@ -475,10 +485,10 @@ def test_create_skill_and_practice(game):
     assert msgs == ["你自創了一門武學【龍吟九霄】（中品，屬陰）！"]
     assert game.state.player.member.wugong_id == "龍吟九霄"
     entry = game.state.journal[0]
-    assert entry.title == "門下" and entry.tag == msgs[0]
+    assert entry.title == "修練" and entry.tag == msgs[0]
     game.practice("武學")
     assert game.state.player.member.wugong_level == 2
-    assert game.state.journal[0].title == "門下"  # 併進同一則
+    assert game.state.journal[0].title == "修練"  # 併進同一則
 
 
 def _practice_step_game(game, worn: dict[str, int]):
@@ -521,14 +531,14 @@ def test_the_practice_tutorial_step_counts_only_when_that_slot_has_an_art(game, 
     reward = _practice_step_game(game, worn)
     silver = game.state.player.stats["silver"]
     msgs = game.practice(kind)
-    joined = "\n".join(msgs)
+    assert "✔ 引導完成" not in msgs  # 引導的訊息走對話框，不進修練頁的訊息（引導重做設計 8.1.3）
     if counts:
         assert game.state.player.tutorial_step == 1
-        assert "✔ 引導完成" in joined
+        assert "✔ 引導完成" in game.state.player.guide_done
         assert game.state.player.stats["silver"] == silver + reward
     else:
         assert game.state.player.tutorial_step == 0
-        assert "✔ 引導完成" not in joined
+        assert game.state.player.guide_done == []
         assert game.state.player.stats["silver"] == silver
 
 
@@ -536,7 +546,7 @@ def test_the_practice_tutorial_step_counts_a_maxed_art_and_says_so(game):
     _practice_step_game(game, {"武學": 10})
     msgs = game.practice("武學")
     assert "練無可練" in msgs[0]
-    assert "✔ 引導完成" in msgs
+    assert "✔ 引導完成" in game.state.player.guide_done
     assert game.state.player.tutorial_step == 1
 
 
@@ -572,11 +582,11 @@ def test_a_maxed_wugong_finishes_the_practice_step_as_soon_as_it_comes_up(game):
     這一步改成「身上有一門武學」：前一步一完成，同一次 note_action 就接著完成它。"""
     reward = _wugong_step_game(game, {"武學": 10})
     silver = game.state.player.stats["silver"]
-    msgs = game.view_map()
-    assert msgs.count("✔ 引導完成") == 2
+    game.view_map()
+    assert game.state.player.guide_done.count("✔ 引導完成") == 2  # 對話框列出兩步（RF2）
     assert game.state.player.tutorial_step == 2
     assert game.state.player.stats["silver"] == silver + reward
-    assert msgs[-1] == f"【{game.content.tutorial.speaker}】出城。"
+    assert game.guide_box()["text"] == "出城。"
 
 
 def test_only_a_neigong_never_finishes_the_wugong_step_until_a_wugong_is_created(game):
@@ -585,9 +595,10 @@ def test_only_a_neigong_never_finishes_the_wugong_step_until_a_wugong_is_created
     game.view_map()
     assert game.state.player.tutorial_step == 1
     for act in (lambda: game.practice("內功"), lambda: game.practice("武學"), game.view_map):
-        assert "✔ 引導完成" not in act()
-        assert game.state.player.tutorial_step == 1
-    assert "✔ 引導完成" in game.create_skill("回風掌", "武學")
+        act()
+        assert game.state.player.tutorial_step == 1 and game.state.player.guide_done == []
+    game.create_skill("回風掌", "武學")
+    assert "✔ 引導完成" in game.state.player.guide_done
     assert game.state.player.tutorial_step == 2
 
 
@@ -1176,11 +1187,14 @@ def test_on_the_road_you_can_turn_back_but_not_do_what_needs_a_place(game):
     assert game.travel_refusal("lake") is None  # 路上設計 3.1：在路上也能安排前往（改道）
 
 
-def test_status_and_scene_show_the_arrival_time(game):
+def test_the_status_bar_shows_the_arrival_time_and_the_scene_does_not_repeat_it(game):
+    """FB-046：抵達時間只寫在狀態列（每一頁都看得到）；場景只寫「在路上」與路上能做什麼，不再寫一次。"""
     game.choose("move:lake")
     assert "🧭 在路上：往湖邊（步行），第1天 00:03 抵達，還要約 3 分鐘" in game.status_text()
+    assert game.status_data()["journey"] == "往湖邊（步行），第1天 00:03 抵達，還要約 3 分鐘"
     scene = game.scene_text()
-    assert scene.startswith("**在路上**") and "第1天 00:03 抵達" in scene and "到了會自己抵達" in scene
+    assert scene.startswith("**在路上**") and "到了會自己抵達" in scene
+    assert "抵達，還要約" not in scene and "第1天 00:03" not in scene
 
 
 def test_every_station_on_the_way_fires_the_arrival_rules(game):
@@ -2539,6 +2553,17 @@ def test_joining_a_faction_asks_for_confirmation_and_shows_the_headcount(content
     game.choose("faction:confirm")
     assert game.state.player.faction == "guan"
     assert game.world.faction_counts() == {"guan": 1, "huang": 1}
+
+
+def test_the_join_question_is_on_the_scene_only(content, game):
+    """FB-046：「投靠後這一季不能改投……確定投靠官軍？」場景上寫著，江湖紀錄那一則（「剛剛」）不再寫一次。"""
+    _install_factions(content)
+    game.choose("faction:guan")
+    entry = game.state.journal[0]
+    assert entry.title == "考慮投靠官軍"
+    assert "這一季不能改投" in game.scene_text()
+    assert "這一季不能改投" not in game.latest_entry_html()
+    assert not any("不能改投" in line for line in [entry.tag, *entry.lines])
 
 
 def test_thinking_again_leaves_you_a_free_agent(content, game):
@@ -4775,3 +4800,27 @@ def test_ending_once_when_battle_running(content, world):
     assert game.state.battles == []
     game.advance(60)  # 收季之後再推也不會再收一次
     assert game.world.get_season().ending_id == season.ending_id
+
+
+def test_a_character_made_mid_season_gets_one_season_start_entry(content, world):
+    """FB-052：第二季開季之後才建立的角色，江湖紀錄只有一則「賽季開始」（以前換季的重來與建角色各寫一則）。"""
+    content.config.admins = ["管理者"]
+    admin = Game.new(content, "管理者", rng=random.Random(1), world=world)
+    admin.admin_end_season(now=100.0)
+    admin.admin_next_season(now=200.0)
+    newcomer = Game.new(content, "新來的", rng=random.Random(2), world=world)
+    assert [e.tag for e in newcomer.state.journal].count("賽季開始") == 1
+    assert newcomer.state.player.season_number == world.get_season_number() == 2
+
+
+def test_the_season_start_entry_of_a_mid_season_character_has_the_season_time(content, world):
+    """FB-052（FB-045～052 審查 m1）：第二季過了一陣子才建的角色，留下的那一則「賽季開始」記的是建角色那一刻的季時間，
+    不是 0（「剛剛」的時間才對）。"""
+    content.config.admins = ["管理者"]
+    admin = Game.new(content, "管理者", rng=random.Random(1), world=world)
+    admin.admin_end_season(now=100.0)
+    admin.admin_next_season(now=200.0)
+    admin.advance(3 * 86400)
+    newcomer = Game.new(content, "新來的", rng=random.Random(2), world=world)
+    [entry] = [e for e in newcomer.state.journal if e.tag == "賽季開始"]
+    assert entry.time == world.get_season().time > 0

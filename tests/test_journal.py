@@ -29,7 +29,8 @@ def test_new_game_opens_with_the_season_intro(game):
     assert len(game.state.journal) == 1
     entry = latest(game)
     assert (entry.title, entry.tag) == ("測試劇本", "賽季開始")
-    assert entry.lines == ["測試開始。", "【說書人】先探索一下。"]  # 地點描述留給場景，不寫進紀錄
+    assert entry.lines == ["測試開始。"]  # 地點描述留給場景，不寫進紀錄
+    assert entry.guide == ["【說書人】先探索一下。"]  # 說書人的第一句在對話框；江湖紀錄記在 guide（引導重做設計 8.1）
     assert (entry.changes, entry.battle_id, entry.time) == ([], None, 0.0)
 
 
@@ -47,7 +48,7 @@ def test_an_arrival_after_other_entries_gets_its_own_entry(game):
     game.create_skill("測試長拳", "武學")  # 路上在門下練功：紀錄多了一則
     game.advance(game.state.player.journey.arrive_at[-1] - game.state.world.time)
     assert [(e.title, e.tag) for e in game.state.journal[:3]] == [
-        ("前往 湖邊", "抵達"), ("門下", game.state.journal[1].tag), ("前往 湖邊", "步行約 3 分鐘"),
+        ("前往 湖邊", "抵達"), ("修練", game.state.journal[1].tag), ("前往 湖邊", "步行約 3 分鐘"),
     ]
 
 
@@ -63,7 +64,7 @@ def test_a_trip_finished_after_a_station_entry_is_tagged_as_arrived(game):
     entry = latest(game)
     assert game.state.player.journey is None
     assert (entry.title, entry.tag) == ("前往 寶洞（途經 湖邊）", "抵達")
-    assert entry.lines[0] == "✔ 引導完成"
+    assert entry.guide[0] == "✔ 引導完成"
 
 
 def test_move_entry_keeps_guide_messages(game):
@@ -73,7 +74,7 @@ def test_move_entry_keeps_guide_messages(game):
     walk_to(game, "lake")
     entry = latest(game)
     assert entry.title == "前往 湖邊"
-    assert entry.lines == ["✔ 引導完成", "【說書人】看看地圖。"]
+    assert (entry.lines, entry.guide) == ([], ["✔ 引導完成", "【說書人】看看地圖。"])
 
 
 def test_explore_that_meets_an_event_tags_it_and_drops_the_intro(game):
@@ -82,8 +83,8 @@ def test_explore_that_meets_an_event_tags_it_and_drops_the_intro(game):
     entry = latest(game)
     assert (entry.title, entry.tag) == ("探索小鎮", "遇上【醉漢】")
     assert "一名醉漢撞上了你。" not in entry.lines and "【醉漢】" not in entry.lines
-    assert entry.lines == ["✔ 引導完成", "【說書人】去湖邊。"]
-    assert entry.changes == ["銀兩 +5"]  # 引導獎勵是數值變化
+    assert (entry.lines, entry.changes) == ([], [])  # 「剛剛」只放這次行動的結果（引導重做設計 8.1.3）
+    assert entry.guide == ["✔ 引導完成", "銀兩 +5", "【說書人】去湖邊。"]  # 引導與獎勵記在 guide
 
 
 def test_explore_that_finds_nothing(game):
@@ -268,11 +269,12 @@ def test_creating_a_skill_that_finishes_a_guide_step_writes_it_into_the_journal(
 
     _guide_waits_for(game, TutorialGoal(has_wugong=True))
     msgs = game.create_skill("測試長拳", "武學")
-    assert "✔ 引導完成" in msgs  # 修練頁的訊息照舊
+    assert "✔ 引導完成" not in msgs and "✔ 引導完成" in game.state.player.guide_done  # 走對話框（引導重做設計 8.1.3）
     entry = latest(game)
-    assert entry.title == "門下" and "自創了一門武學" in entry.tag
-    assert entry.lines[-2:] == ["✔ 引導完成", f"【{_speaker(game)}】出城。"]  # 跟 choose() 那條路同一種寫法
-    assert sorted(entry.changes) == sorted([f"銀兩 +{GUIDE_REWARD}", f"心得 +{GUIDE_XINDE}"])  # 獎勵是數值變化，心得沒有算兩次
+    assert entry.title == "修練" and "自創了一門武學" in entry.tag
+    assert entry.guide == [  # 跟 choose() 那條路同一種寫法
+        "✔ 引導完成", f"銀兩 +{GUIDE_REWARD}", f"心得 +{GUIDE_XINDE}", f"【{_speaker(game)}】出城。"]
+    assert entry.changes == []  # 獎勵只在 guide，心得沒有算兩次
     assert game.state.player.tutorial_step == 1
 
 
@@ -284,9 +286,9 @@ def test_practicing_that_finishes_a_guide_step_writes_it_into_the_journal(game):
     _guide_waits_for(game, TutorialGoal(action="practice"))
     game.practice("武學")
     entry = latest(game)
-    assert entry.title == "門下"
-    assert entry.lines[-2:] == ["✔ 引導完成", f"【{_speaker(game)}】出城。"]
-    assert f"銀兩 +{GUIDE_REWARD}" in entry.changes and f"心得 +{GUIDE_XINDE}" in entry.changes
+    assert entry.title == "修練"
+    assert entry.guide[0] == "✔ 引導完成" and entry.guide[-1] == f"【{_speaker(game)}】出城。"
+    assert f"銀兩 +{GUIDE_REWARD}" in entry.guide and f"銀兩 +{GUIDE_REWARD}" not in entry.changes
 
 
 def test_crafting_that_finishes_a_guide_step_writes_it_into_the_journal(game):
@@ -302,15 +304,36 @@ def test_crafting_that_finishes_a_guide_step_writes_it_into_the_journal(game):
     with mock.patch.object(OllamaClient, "chat_structured", naming), \
          mock.patch.object(craft, "result_kind", lambda a, b, tianji: "武學"):  # 這一步等的是武學
         msgs = game.craft(["gang_1", "gang_1"])
-    assert "✔ 引導完成" in msgs
+    assert "✔ 引導完成" not in msgs and "✔ 引導完成" in game.state.player.guide_done  # 煉製結果也不夾引導（8.1.3）
     entry = latest(game)
-    assert entry.title == "門下" and "煉製" in entry.tag
-    assert entry.lines[-2:] == ["✔ 引導完成", f"【{_speaker(game)}】出城。"]
-    assert f"銀兩 +{GUIDE_REWARD}" in entry.changes and f"心得 +{GUIDE_XINDE}" in entry.changes
+    assert entry.title == "煉製" and "煉製" in entry.tag
+    assert entry.guide[0] == "✔ 引導完成" and entry.guide[-1] == f"【{_speaker(game)}】出城。"
+    assert f"銀兩 +{GUIDE_REWARD}" in entry.guide and f"銀兩 +{GUIDE_REWARD}" not in entry.changes
+
+
+def test_practice_and_crafting_are_titled_after_their_tabs(game):
+    """FB-047：江湖紀錄照動作寫「修練」（自創、鍛鍊、療傷、改練）與「煉製」，不再寫「門下」；
+    煉製不併進前面那則自創。"""
+    from unittest import mock
+
+    from tianxia import craft, materials
+    from tianxia.ollama_client import OllamaClient
+
+    game.create_skill("測試長拳", "武學")
+    game.practice("武學")
+    assert latest(game).title == "修練" and len([e for e in game.state.journal if e.title == "修練"]) == 1
+    materials.grant(game.state, game.content, "gang_1", 2)
+    naming = lambda self, messages, response_model, **kw: craft.CraftedName(name="鐵腕勁", description="一句話。")
+    with mock.patch.object(OllamaClient, "chat_structured", naming), \
+         mock.patch.object(craft, "result_kind", lambda a, b, tianji: "內功"):
+        game.craft(["gang_1", "gang_1"])
+    assert [e.title for e in game.state.journal[:2]] == ["煉製", "修練"]
+    assert "煉製【鐵腕勁】" == latest(game).tag
+    assert not any(e.title == "門下" for e in game.state.journal)
 
 
 def test_the_guide_lines_do_not_swallow_the_menxia_story_when_entries_merge(game):
-    """連續的門下動作併成一則：引導的那幾行接在對應那次動作後面，之前與之後的動作敘事都還在。"""
+    """連續的門下動作併成一則：每次動作的那句話都還在、照順序；引導的那幾行併在 guide。"""
     from tianxia.models import TutorialGoal
 
     game.create_skill("測試內功", "內功")
@@ -319,11 +342,11 @@ def test_the_guide_lines_do_not_swallow_the_menxia_story_when_entries_merge(game
     game.create_skill("測試長拳", "武學")
     second_tag = latest(game).tag
     game.practice("武學")
-    entries = [e for e in game.state.journal if e.title == "門下"]
+    entries = [e for e in game.state.journal if e.title == "修練"]
     assert len(entries) == 1  # 還是併成一則
     lines = entries[0].lines
-    assert lines.index(first_tag) < lines.index(second_tag) < lines.index("✔ 引導完成") < lines.index(f"【{_speaker(game)}】出城。")
-    assert f"銀兩 +{GUIDE_REWARD}" in entries[0].changes and f"心得 +{GUIDE_XINDE}" in entries[0].changes
+    assert lines.index(first_tag) < lines.index(second_tag) and "✔ 引導完成" not in lines
+    assert entries[0].guide[0] == "✔ 引導完成" and entries[0].guide[-1] == f"【{_speaker(game)}】出城。"
 
 
 def test_menxia_without_finishing_a_guide_step_writes_exactly_what_it_used_to(game):
@@ -332,7 +355,7 @@ def test_menxia_without_finishing_a_guide_step_writes_exactly_what_it_used_to(ga
     _guide_waits_for(game, TutorialGoal(action="view_map"))  # 修練頁做的事不會完成這一步
     game.create_skill("測試長拳", "武學")
     entry = latest(game)
-    assert entry.title == "門下" and "自創了一門武學" in entry.tag
+    assert entry.title == "修練" and "自創了一門武學" in entry.tag
     assert entry.lines == [] and entry.changes == []
     assert game.state.player.tutorial_step == 0
     game.state.player.tutorial_step = len(game.content.tutorial.steps)  # 引導已走完：同一回事
@@ -352,13 +375,13 @@ def test_a_menxia_action_that_finishes_a_guide_step_shows_its_sentence_once(game
     _guide_waits_for(game, TutorialGoal(has_wugong=True))
     game.create_skill("測試長拳", "武學")
     said = latest(game).tag
-    assert latest(game).lines[0] == said  # 存的時候照舊放在第一行
     assert game.latest_entry_html().count(html.escape(said)) == 1
-    assert "✔ 引導完成" in game.latest_entry_html()
+    assert "✔ 引導完成" not in game.latest_entry_html()  # 「剛剛」不夾引導（引導重做設計 8.1.3）
     assert journal.rows_html([latest(game)]).count(html.escape(said)) == 1
+    assert "✔ 引導完成" in journal.rows_html([latest(game)])  # 江湖紀錄照舊看得到
 
     game.practice("武學")  # 接著再做一個門下動作：併進同一則，那句話還在、仍只一次
-    entries = [e for e in game.state.journal if e.title == "門下"]
+    entries = [e for e in game.state.journal if e.title == "修練"]
     assert len(entries) == 1 and said in entries[0].lines
     assert game.latest_entry_html().count(html.escape(said)) == 1
     assert journal.rows_html(entries).count(html.escape(said)) == 1
@@ -381,7 +404,7 @@ def test_menxia_changes_are_written_but_failures_are_not(game):
     assert len(game.state.journal) == 1
     game.create_skill("測試長拳", "武學")
     entry = latest(game)
-    assert entry.title == "門下"
+    assert entry.title == "修練"
     assert "自創了一門武學" in entry.tag
     assert game.create_skill("另一門", "武學") == ["你已經有一門武學了，同時只能練一門。"]
     assert len(game.state.journal) == 2  # 失敗不會再寫一則新紀錄
@@ -395,18 +418,19 @@ def test_menxia_entries_merge_only_when_nothing_else_happened_in_between(game):
     game.practice("武學")
     game.state.world.time = 1200
     game.practice("武學")
-    assert [e.title for e in game.state.journal] == ["門下", "前往 湖邊", "門下", "測試劇本"]
+    assert [e.title for e in game.state.journal] == ["修練", "前往 湖邊", "修練", "測試劇本"]
     assert latest(game).time == 1200
 
 
-def test_view_map_writes_an_entry_only_when_it_finishes_a_guide_step(game):
+def test_view_map_adds_the_guide_to_the_latest_entry_without_a_new_one(game):
+    """打開輿圖不是一次行動：完成「看地圖」那一步時，引導接在最新一則的 guide，「剛剛」不換成一則空的「翻看地圖」。"""
     game.view_map()
     assert len(game.state.journal) == 1  # 引導還沒走到「看地圖」：只記下看過地圖
     game.state.player.flags.discard("看過地圖")
     game.state.player.tutorial_step = 2  # 下一步就是看地圖
     game.view_map()
-    entry = latest(game)
-    assert (entry.title, entry.lines) == ("翻看地圖", ["✔ 引導完成", "【說書人】去闖吧。"])
+    assert len(game.state.journal) == 1
+    assert latest(game).guide[-2:] == ["✔ 引導完成", "【說書人】去闖吧。"]
 
 
 def test_notice_and_skip_tutorial(game):
@@ -434,22 +458,21 @@ def guided_train(game):
     game.choose("act:train")
 
 
-def test_changes_with_the_same_label_are_added_up(game):
+def test_a_fight_that_finishes_a_guide_step_keeps_the_reward_out_of_its_changes(game):
+    """遊歷打一場、順便完成一步引導：這一則的數值變化只有這一場的（對手的 5 兩），引導的 5 兩記在 guide、走對話框。"""
     guided_train(game)
     entry = latest(game)
-    assert entry.changes == [
-        "經驗 +20（每人）", "銀兩 +10", "心得 +10", "氣血 -16", "內傷 +3",
-    ]  # 對手的 5 兩＋引導獎勵 5 兩（同標籤相加）
-    assert entry.lines == ["（寇亂 -1）", "✔ 引導完成", "【說書人】去湖邊。"]  # 湖邊 train_trend kou:-1
+    assert entry.changes == ["經驗 +20（每人）", "銀兩 +5", "心得 +10", "氣血 -16", "內傷 +3"]
+    assert entry.lines == ["（寇亂 -1）"]  # 湖邊 train_trend kou:-1
+    assert entry.guide == ["✔ 引導完成", "銀兩 +5", "【說書人】去湖邊。"]
 
 
 def test_battle_card_extra_shows_what_the_card_does_not(game):
     guided_train(game)
     assert game.shows_battle_card()
     extra = game.battle_extra_html()
-    assert "✔ 引導完成" in extra and "【說書人】去湖邊。" in extra
-    assert '<span class="tx-chg tx-up">銀兩 +5</span>' in extra  # 卡片上只有對手給的 5 兩
-    assert "經驗" not in extra and "心得" not in extra  # 卡片上已經有了
+    assert "✔ 引導完成" not in extra and "【說書人】" not in extra  # 引導走對話框，卡片底下不補（引導重做設計 8.1.3）
+    assert "經驗" not in extra and "心得" not in extra and "銀兩" not in extra  # 卡片上已經有了
 
 
 def test_battle_card_extra_skips_card_notes_and_event_markers(game):
@@ -569,6 +592,13 @@ def test_change_signs():
     assert [journal.change_class(c) for c in ("銀兩 +10", "心得 -20", "名望 +0", "奇怪的一行", "經驗 +15（每人）")] == [
         "tx-up", "tx-down", "", "", "tx-up"
     ]
+
+
+def test_more_internal_injury_is_coloured_as_a_loss():
+    """FB-049：內傷多了是損失（紅，跟「氣血 -17」一樣），療傷讓內傷少了是收穫（綠）；其他照正負。"""
+    assert journal.change_class("內傷 +3") == "tx-down"
+    assert journal.change_class("內傷 -10") == "tx-up"
+    assert journal.change_class("氣血 -17") == "tx-down" and journal.change_class("銀兩 +5") == "tx-up"
 
 
 def test_combine_and_subtract_changes():

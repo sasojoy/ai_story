@@ -84,6 +84,27 @@ def test_main_view_bulletin_this_week(monkeypatch):
     assert [re.search(r"<strong>(.)事</strong>", b).group(1) for b in bulletin] == ["戊", "丁", "丙"]  # 上一週的甲不在
 
 
+def test_now_card_does_not_repeat_the_big_event_on_the_bulletin(monkeypatch):
+    """FB-046：時刻表大事補進江湖紀錄那一則，全文公告卡上已經有了，江湖頁的「剛剛」（now）不再寫一次，
+    改放再前面那一則（這裡是開場那一則）；江湖紀錄頁（latest＋journal＋older）照舊從最新一則列起。"""
+    content = server.CONTENT
+    monkeypatch.setattr(content.config, "season_one", True)
+    monkeypatch.setattr(content.config, "season_days", 2.5)
+    monkeypatch.setattr(content, "timetable", [_fixed("甲", 1)])
+    game = Game.new(content, "測試")
+    view = server.main_view(game)
+    assert "賽季開始" in view["now"] and view["now"] == view["latest"]
+    game.advance(calendar.cal_hour_seconds(content))
+    assert game.state.journal[0].title == WORLD_NEWS
+    view = server.main_view(game)
+    assert "甲事的公告。" in view["bulletin"][0]
+    assert "甲事的公告。" not in view["now"] and "賽季開始" in view["now"]
+    assert "甲事的公告。" in view["latest"]  # 江湖紀錄頁照舊
+    game.choose("act:explore")
+    view = server.main_view(game)
+    assert "探索" in view["now"] and view["now"] == view["latest"]
+
+
 def test_season_one_off_changes_nothing(game, monkeypatch):
     """開關關著（現在的試玩伺服器）：推進一週，時刻表不跑、狀態列沒有季曆、公告卡是空的。"""
     monkeypatch.setattr(server.CONTENT, "timetable", season_one_events())
@@ -982,6 +1003,25 @@ def test_open_season_only_works_for_admins(tmp_path, monkeypatch):
     assert fresh.world.season_phase() == "running"
 
 
+def test_preparing_has_no_now_card_and_no_countdown(tmp_path, monkeypatch):
+    """FB-049：籌備中時鐘沒走、什麼都不能做：江湖頁不畫「剛剛」（開場那一則寫「賽季開始」、叫人先去探索），
+    狀態列不倒數下一件大事；江湖紀錄頁照樣列得到開場那一則。開季之後照常。"""
+    monkeypatch.setattr(server.CONTENT.config, "auto_open_first_season", False)
+    monkeypatch.setattr(server.CONTENT.config, "season_one", True)
+    monkeypatch.setattr(server.CONTENT.config, "admins", ["路人"])
+    fresh = Game.new(server.CONTENT, "路人", world=open_world(tmp_path / "world.db"))
+    assert fresh.world.season_phase() == "preparing"
+    view = server.main_view(fresh)
+    assert view["now"] == "" and "賽季開始" in view["latest"]
+    assert view["status"]["calendar"] and view["status"]["next_event"] is None
+    assert view["guide"] is None  # 說書人的對話框也不叫人去探索（FB-045～052 審查 I1）
+    server.act(fresh, lambda g: server.ADMIN_ACTIONS["open_season"](g, {}))
+    view = server.main_view(fresh)
+    assert view["now"] and view["status"]["next_event"] is not None and view["guide"] is not None
+    server.act(fresh, lambda g: server.ADMIN_ACTIONS["end_season"](g, {}))
+    assert server.main_view(fresh)["guide"] is None  # 休季也一樣
+
+
 def test_only_admins_can_reset_a_password(client, monkeypatch):
     _player(client)
     player = server.game_for("沈青衫")
@@ -1700,6 +1740,24 @@ def test_main_view_sends_the_season_result_only_when_season_one_rests(game, monk
     assert len(result["timeline"]) == 12 and all(row["text"].startswith("<p>") for row in result["timeline"])
 
 
+def test_resting_season_one_writes_the_ending_once(game, monkeypatch):
+    """FB-046：休季時結局那句只在結算卡上：「剛剛」不再是季末那則公告（放再前面那一則）、場景寫所在的地方、
+    公告卡不畫（這一季的大事結算卡上都有）。江湖紀錄頁照舊列得到季末那則。"""
+    monkeypatch.setattr(server.CONTENT.config, "admins", ["測試"])
+    _season_one_now(game, monkeypatch)
+    player = Game.new(server.CONTENT, "路人", world=game.world)
+    player.sync(game.now)
+    game.admin_end_season(now=game.now)
+    player.sync(game.now)
+    ending = game.state.world.ending_text
+    assert player.state.journal[0].title == WORLD_NEWS and player.state.journal[0].tag == ending
+    view = server.main_view(player)
+    assert view["season_result"]["text"] == server.md(ending)
+    assert ending not in view["now"] and "賽季開始" in view["now"] and ending in view["latest"]
+    assert ending not in view["scene"] and view["scene"] == server.md(player.location_text())
+    assert view["bulletin"] == []
+
+
 def test_switch_off_season_end_sends_no_result_card(game, monkeypatch):
     monkeypatch.setattr(server.CONTENT.config, "admins", ["測試"])
     game.admin_end_season(now=game.now)
@@ -1743,6 +1801,25 @@ def test_main_view_shows_the_cart_being_carried(game, monkeypatch):
     assert server.main_view(game)["convoy"] == "你押著一車糧（4 份），要送到宛城。"
     game.state.player.convoy = None
     assert "convoy" not in server.main_view(game)
+
+
+def test_resting_season_sends_no_orders_and_no_cart(game, monkeypatch):
+    """FB-045：收季之後（休季）江湖頁不再有本週軍令卡，也不再寫押糧那一行：收季那一週的軍令截止已經過了。"""
+    from tianxia.state import Convoy
+
+    _season_one_now(game, monkeypatch)
+    monkeypatch.setattr(server.CONTENT.config, "admins", ["測試"])
+    game.sync(game.now)  # 拉回蓋了第一季章的那一份季
+    game.state.player.faction = "guan"
+    game.advance(700)  # 跨過第一個曆時交界：第 1 週發令
+    game.state.player.convoy = Convoy(order="x", grain=4, from_loc="xinye", to_loc="wan_city")
+    view = server.main_view(game)
+    assert view["orders"] and view["convoy"]
+    game.admin_end_season(now=game.now)
+    assert game.state.world.ended
+    view = server.main_view(game)
+    assert "orders" not in view and "convoy" not in view
+    assert game.orders_view() == [] and game.convoy_line() is None
 
 
 # ── 管理者：時刻表與救場（計畫 T10）────────────────────────
@@ -1796,3 +1873,45 @@ def test_admin_schedule_jump_and_rescue_via_api(client, monkeypatch):
     assert game.world.get_season().trends["yingru"] == 70
     assert "沒有人鎖定" in client.post("/api/do/clear_lock", json={"id": "luzhi_siege"}).json()["message"]
     assert "沒有進行中的決戰" in client.post("/api/do/cancel_battle", json={}).json()["message"]
+
+
+# ── 引導小改版（新手引導重做設計第八節）─────────────────────────
+
+
+def test_main_view_sends_the_guide_box_and_skipping_hides_it(client):
+    """全新角色的 /api/main 帶著對話框：說書人與第一步的話（不用點開任何東西）；略過新手引導後就沒有了。"""
+    main = _player(client)["main"]
+    tutorial = server.CONTENT.tutorial
+    assert main["guide"] == {"speaker": tutorial.speaker, "text": tutorial.steps[0].text, "done": [], "end": False}
+    client.post("/api/do/skip_tutorial", json={})
+    assert client.get("/api/main").json()["guide"] is None
+
+
+def test_guide_ack_closes_the_outro(client):
+    _player(client)
+    game = server.game_for("沈青衫")
+    game.state.player.tutorial_step = len(server.CONTENT.tutorial.steps)
+    game.state.player.guide_outro = True
+    open_characters().save(game.state)
+    assert client.get("/api/main").json()["guide"]["end"] is True
+    client.post("/api/do/guide_ack", json={})
+    assert client.get("/api/main").json()["guide"] is None
+
+
+def test_timetable_finale_row_shows_the_ending_title(client, monkeypatch):
+    """FB-051：收季之後，時刻表季末那一列寫結局的標題（豪強坐大），不是結局 id。"""
+    game = _season_one_admin(client, monkeypatch)
+    client.post("/api/do/end_season", json={})
+    rows = client.get("/api/admin").json()["timetable"]
+    finale = next(r for r in rows if r["id"] == "xiaquyang")
+    ending = game.world.get_season().ending_id
+    title = next(e.title for e in server.CONTENT.scenario.endings if e.id == ending)
+    assert finale["result"] == title and ending not in finale["result"]
+
+
+def test_admin_choices_say_whether_the_next_season_has_a_timetable(client, monkeypatch):
+    """FB-050：「開啟下一季」的問句要提醒排時間——下一季會照第一季的規則開（開關開著）時，/api/admin 說一聲。"""
+    _admin(client, monkeypatch)
+    assert client.get("/api/admin").json()["next_has_timetable"] is False
+    monkeypatch.setattr(server.CONTENT.config, "season_one", True)
+    assert client.get("/api/admin").json()["next_has_timetable"] is True
