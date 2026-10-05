@@ -6,12 +6,13 @@
 from __future__ import annotations
 
 import random
+import re
 from pathlib import Path
 from unittest import mock
 
 import pytest
 
-from tianxia import calendar, figures, front_lines, orders, rules, team, timetable
+from tianxia import atlas, calendar, figures, front_lines, mapart, mapview, orders, rules, team, timetable
 from tianxia.content import load_content
 from tianxia.encounter import EncounterResult
 from tianxia.engine import Game
@@ -967,3 +968,214 @@ def test_switch_off_no_orders_in_any_week(real):
         _at_week(game, week)
         assert orders.issue(game.state, real, week, random.Random(0)) == []
         assert game.state.world.orders == []
+
+
+# ── FB-072：打擊軍令寫明怎麼打、在哪裡，輿圖標出目標 ─────────────────────────
+
+
+# （陣營, 目標人物, 他的所在, 大區 id, 大區名）：三邊的打擊模板各一道。這三位開季時，新角色都還沒摸清他們的所在
+# （新角色摸得清的只有開局那十個地點）；要「摸清」就把所在加進 visited。
+STRIKES = [
+    ("guan", "bocai", "huangjin_camp", "yingru", "潁川汝南"),
+    ("huang", "luzhi", "luzhi_camp", "jizhou", "冀州"),
+    ("haoqiang", "zhangmancheng", "nanyang_huangjin_camp", "nanyang", "南陽"),
+]
+
+
+def _strike_game(on, faction, fid):
+    game = _game(on, faction=faction)
+    order = _order(game, "strike", faction, front=figures.state_of(game.state, on, fid).front, figure=fid)
+    return game, order
+
+
+def _how(name, tail):
+    return f"到{name}所在的地方挑戰他本人，打贏記一次（{tail}）。"
+
+
+@pytest.mark.parametrize("faction,fid,loc,region_id,region", STRIKES)
+def test_strike_card_names_the_place_when_you_know_it(on, faction, fid, loc, region_id, region):
+    game, _ = _strike_game(on, faction, fid)
+    game.state.player.visited.add(loc)
+    assert atlas.is_known(game.state, on, loc)
+    [card] = game.orders_view()
+    assert card["how"] == _how(on.figures[fid].name, f"他現在在{on.locations[loc].name}")
+
+
+@pytest.mark.parametrize("faction,fid,loc,region_id,region", STRIKES)
+def test_strike_card_gives_only_the_region_for_a_place_you_have_not_found(on, faction, fid, loc, region_id, region):
+    game, _ = _strike_game(on, faction, fid)
+    assert not atlas.is_known(game.state, on, loc)
+    [card] = game.orders_view()
+    assert card["how"] == _how(on.figures[fid].name, f"他現在在{region}一帶，那裡你還沒摸清")
+    assert on.locations[loc].name not in card["how"]  # 沒摸清的地方不洩漏名字（atlas.is_known）
+
+
+def test_strike_card_without_map_regions_only_says_it_is_not_found(on):
+    on.map.regions = []  # 沒有大區的內容（部分夾具）：連一帶都沒得說
+    game, _ = _strike_game(on, "haoqiang", "zhangmancheng")
+    [card] = game.orders_view()
+    assert card["how"] == _how("張曼成", "他在哪裡你還沒摸清")
+    assert on.locations["nanyang_huangjin_camp"].name not in card["how"]
+
+
+@pytest.mark.parametrize("change", [{"front": None}, {"status": "retired"}, {"status": "jailed"}, {"status": "crippled"}])
+def test_strike_card_says_so_when_the_target_cannot_be_challenged(on, change):
+    game, _ = _strike_game(on, "haoqiang", "zhangmancheng")
+    game.state.player.visited.add("nanyang_huangjin_camp")  # 就算摸清了他的所在，也不指路
+    for key, value in change.items():
+        setattr(game.state.world.figures["zhangmancheng"], key, value)
+    [card] = game.orders_view()
+    assert card["how"] == _how("張曼成", "他眼下沒在戰線上領兵，挑戰不了")
+    assert on.locations["nanyang_huangjin_camp"].name not in card["how"]
+
+
+def test_strike_card_follows_the_figure_not_where_he_stood_when_the_order_went_out(on):
+    game, order = _strike_game(on, "guan", "bocai")
+    order.location = "huangjin_camp"  # 發令時他在這裡，之後挪了窩
+    game.state.world.figures["bocai"].location = "yingchuan_wilds"
+    [card] = game.orders_view()
+    assert card["how"] == _how("波才", f"他現在在{on.locations['yingchuan_wilds'].name}")
+
+
+def test_a_target_off_the_front_but_challengeable_still_gets_the_place(on):
+    """何進沒有戰線，人物表標了 challenge_off_front：挑戰按鈕照開，所以軍令卡也照指路。"""
+    assert on.figures["hejin"].challenge_off_front
+    game, _ = _strike_game(on, "haoqiang", "hejin")
+    [card] = game.orders_view()
+    assert card["how"] == _how("何進", "他現在在洛陽一帶，那裡你還沒摸清")
+
+
+def test_only_open_strike_cards_carry_how(on):
+    """沒達成的打擊才有「怎麼打」；達成了、別種軍令都沒有這個鍵。"""
+    game = _game(on, faction="guan")
+    strike = _order(game, "strike", "guan", front="yingru", figure="bocai")
+    _order(game, "siege", "guan", front="yingru")
+    _order(game, "defend", "guan", front="yingru")
+    cards = {card["id"]: card for card in game.orders_view()}
+    assert len(cards) == 3 and "how" in cards[strike.id]
+    assert [c["id"] for c in cards.values() if "how" in c] == [strike.id]
+    strike.done = True
+    assert all("how" not in card for card in game.orders_view())
+
+
+def test_how_never_shows_for_other_sides_or_a_settled_season(on):
+    game, _ = _strike_game(on, "guan", "bocai")
+    game.state.player.faction = "huang"
+    assert game.orders_view() == []  # 別陣營的軍令不給看，連同怎麼打
+    game.state.player.faction = "guan"
+    game.state.world.ended = True
+    assert game.orders_view() == []  # 休季
+
+
+def test_can_challenge_is_the_rule_behind_the_challenge_button(on):
+    """「現在挑戰得了他嗎」只有一份規則：挑戰按鈕按得下去，就是 figures.can_challenge；軍令卡也問它。"""
+    game = _game(on)
+    for fid, fig in on.figures.items():
+        game.state.player.faction = "huang" if fig.faction == "guan" else "guan"
+        game.state.player.location = figures.state_of(game.state, on, fid).location
+        option = next((o for o in game._challenge_options(odds=False) if o.id == f"act:challenge:{fid}"), None)
+        assert (option is not None and option.enabled) == figures.can_challenge(game.state, on, fid), fid
+    # 戰線空著的人（董卓）不受挑戰、何進（標了 challenge_off_front）照打
+    assert not figures.can_challenge(game.state, on, "dongzhuo") and figures.can_challenge(game.state, on, "hejin")
+    assert not figures.can_challenge(game.state, on, "pengtuo")  # 還沒出場
+
+
+def test_strikes_issued_for_real_each_week_all_carry_how(crowded):
+    """真的發出來的打擊：豪強每週都有，官軍、黃巾在偶數週；三邊的卡都寫「挑戰他本人」。"""
+    seen = set()
+    for week, factions in ((1, ("haoqiang",)), (2, ("guan", "huang"))):
+        for faction in factions:
+            got = [o for o in _week_orders(crowded, faction, week) if o.template == "strike"]
+            assert len(got) == 1, (week, faction)
+            crowded.state.player.faction = faction
+            card = next(c for c in crowded.orders_view() if c["id"] == got[0].id)
+            assert card["how"].startswith(f"到{orders.figure_name(crowded.content, got[0].figure)}所在的地方挑戰他本人，打贏記一次（")
+            seen.add(faction)
+    assert seen == {"guan", "huang", "haoqiang"}
+
+
+# 地圖：局勢層標出本週打擊軍令的目標
+
+
+def _all_layers(game, content):
+    return {layer: mapview.render_map(game.state, content, layer) for layer in atlas.LAYERS}
+
+
+@pytest.mark.parametrize("faction,fid,loc,region_id,region", STRIKES)
+def test_situation_layer_marks_a_known_strike_target_place(on, faction, fid, loc, region_id, region):
+    game, _ = _strike_game(on, faction, fid)
+    game.state.player.visited.add(loc)
+    assert atlas.strike_marks(game.state, on) == ({loc}, set())
+    layers = _all_layers(game, on)
+    assert f"◎ {on.locations[loc].name}" in layers["situation"]
+    assert f">◎ {region}</text>" not in layers["situation"]  # 地方摸清了，大區不必標
+    assert all("◎" not in svg for layer, svg in layers.items() if layer != "situation")
+    assert "◎" not in mapview.render_minimap(game.state, on)
+
+
+@pytest.mark.parametrize("faction,fid,loc,region_id,region", STRIKES)
+def test_unknown_strike_target_place_marks_its_region_label_never_the_place(on, faction, fid, loc, region_id, region):
+    game, _ = _strike_game(on, faction, fid)
+    assert atlas.strike_marks(game.state, on) == (set(), {region_id})
+    layers = _all_layers(game, on)
+    assert f">◎ {region}</text>" in layers["situation"]
+    assert f"◎ {on.locations[loc].name}" not in layers["situation"]
+    assert all("◎" not in svg for layer, svg in layers.items() if layer != "situation")
+    assert "◎" not in mapview.render_minimap(game.state, on)
+
+
+def test_no_strike_mark_for_other_sides_loners_finished_orders_or_a_target_you_cannot_challenge(on):
+    game, order = _strike_game(on, "guan", "bocai")
+    game.state.player.visited.add("huangjin_camp")
+    assert atlas.strike_marks(game.state, on) == ({"huangjin_camp"}, set())
+    nothing = (set(), set())
+    game.state.player.faction = "huang"  # 別陣營的打擊，黃巾的人看不到
+    assert atlas.strike_marks(game.state, on) == nothing and "◎" not in mapview.render_map(game.state, on, "situation")
+    game.state.player.faction = None  # 散人
+    assert atlas.strike_marks(game.state, on) == nothing and "◎" not in mapview.render_map(game.state, on, "situation")
+    game.state.player.faction = "guan"
+    order.done = True  # 已經達成
+    assert atlas.strike_marks(game.state, on) == nothing and "◎" not in mapview.render_map(game.state, on, "situation")
+    order.done = False
+    game.state.world.figures["bocai"].front = None  # 他眼下挑戰不了：不指一個打不了的地方
+    assert atlas.strike_marks(game.state, on) == nothing and "◎" not in mapview.render_map(game.state, on, "situation")
+    game.state.world.figures["bocai"].front = "yingru"
+    game.state.world.ended = True  # 休季
+    assert atlas.strike_marks(game.state, on) == nothing
+
+
+def test_only_strike_orders_mark_the_map(on):
+    game = _game(on, faction="guan")
+    _order(game, "siege", "guan", front="yingru")
+    _order(game, "intercept", "guan", front="nanyang", location="nanyang_wilds")
+    assert atlas.strike_marks(game.state, on) == (set(), set())
+    assert "◎" not in mapview.render_map(game.state, on, "situation")
+
+
+def test_situation_legend_explains_the_mark_only_when_it_is_drawn_and_it_fits(on):
+    game, _ = _strike_game(on, "haoqiang", "zhangmancheng")
+    marked = mapview.render_map(game.state, on, "situation")
+    assert mapview.LEGEND_STRIKE in marked
+    assert mapview.LEGEND_STRIKE not in mapview.render_map(game.state, on, "enemies")
+    assert mapview.LEGEND_STRIKE not in mapview.render_map(_game(on, faction="guan").state, on, "situation")
+    box = re.search(r'<rect x="14" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)" rx="6"', marked)
+    top, width, height = (float(g) for g in box.groups())
+    assert top + height <= on.map.height - mapart.FRAME_INSIDE  # 圖例框還在外框裡面
+    for line in (mapview.LEGEND_STRIKE, mapview._legend_line("situation")):  # 每一行都裝得進框裡
+        text = re.search(rf'<text x="([\d.]+)" y="([\d.]+)" font-size="12" fill="#5F5E5A">{re.escape(line)}</text>', marked)
+        assert float(text[1]) + mapview.text_width(line, 12) <= 14 + width
+        assert top < float(text[2]) <= top + height
+    assert width <= on.map.width - 2 * 14
+
+
+def test_marked_region_label_takes_the_box_of_the_text_actually_drawn(on):
+    game = _game(on)
+    for region in on.map.regions:
+        taken = []
+        svg, _ = mapview._region_labels(game.state, on, region, "situation", taken, marked=True)
+        assert f">◎ {region.name}</text>" in svg
+        box = mapview.text_box(region.label_x, region.label_y, f"◎ {region.name}", mapview.REGION_SIZE)
+        assert taken[0] == (box, mapview.TEXT_WEIGHT)
+        assert box[2] <= on.map.width - mapview.EDGE, region.id  # 加了記號也不出界
+        plain, _ = mapview._region_labels(game.state, on, region, "situation", [])
+        assert "◎" not in plain

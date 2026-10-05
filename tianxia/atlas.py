@@ -11,11 +11,11 @@ import math
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from . import figures
+from . import figures, orders
 from .calendar import point, stamp_text
 from .models import Content, Location, MapRegion, SimPlayer, TravelMode
 from .rules import can_hear, is_revealed, pending_event_title, resolve_trend, resolve_trends, season_one, trend_value
-from .state import GameState, Rumor
+from .state import GameState, Order, Rumor
 from .world import current_act, sim_active, storyline_off
 
 DAY = 86400
@@ -244,6 +244,63 @@ def leader_text(state: GameState, content: Content, name: str) -> str:
     if news:
         lines += ["- 最近：", *(f"  - {stamp_text(r.time, content, state.world)}　{r.text}" for r in news)]
     return "\n".join(lines)
+
+
+# ── 本週軍令的打擊（FB-072）────────────────────────────
+
+STRIKE_MARK = "◎"  # 輿圖局勢層：本週打擊軍令的目標人物所在的地點，名字前加這個記號（還沒摸清時加在大區名稱前）
+
+
+def _open_strikes(state: GameState, content: Content) -> list[Order]:
+    """這個玩家自己陣營這週還沒達成的打擊軍令（有目標人物的）；散人、別陣營、開關關著、休季都是空的（同 Game.orders_view）。"""
+    if state.world.ended:
+        return []
+    return [
+        o for o in orders.current(state, content, state.player.faction)
+        if o.template == "strike" and not o.done and o.figure is not None
+    ]
+
+
+def _strike_place(state: GameState, content: Content, order: Order) -> str | None:
+    """打擊目標此刻的所在（讀人物此刻的樣子，不是發令那一刻的 order.location，他會挪窩）；
+    他挑戰不了（figures.can_challenge：不在場、戰線空著……）或所在不在地圖上時是 None。"""
+    if not figures.can_challenge(state, content, order.figure):
+        return None
+    loc_id = figures.state_of(state, content, order.figure).location
+    return loc_id if loc_id in content.locations else None
+
+
+def strike_how(state: GameState, content: Content, order: Order) -> str:
+    """軍令卡上打擊那道多寫的一行：怎麼打（到他所在的地方挑戰他本人、打贏記一次），以及他在哪。
+    他的所在摸清了才寫地點名字；沒摸清只寫大區（沒有大區的內容就只說沒摸清），不洩漏沒摸清的地點（見 is_known）。
+    他眼下挑戰不了（跟挑戰按鈕同一份規則，figures.can_challenge）就直說，不指路。"""
+    name = orders.figure_name(content, order.figure)
+    loc_id = _strike_place(state, content, order)
+    if loc_id is None:
+        where = "他眼下沒在戰線上領兵，挑戰不了"
+    elif is_known(state, content, loc_id):
+        where = f"他現在在{content.locations[loc_id].name}"
+    elif (region := region_of(content, loc_id)) is not None:
+        where = f"他現在在{region.name}一帶，那裡你還沒摸清"
+    else:
+        where = "他在哪裡你還沒摸清"
+    return f"到{name}所在的地方挑戰他本人，打贏記一次（{where}）。"
+
+
+def strike_marks(state: GameState, content: Content) -> tuple[set[str], set[str]]:
+    """局勢層要標的本週打擊目標：（摸清的所在地點 id, 大區 id）。目標的所在摸清了就標地點；沒摸清就標它所屬的大區
+    （只標大區、不標地點，所在不洩漏）。只算自己陣營這週還沒達成、而且他眼下挑戰得了的打擊軍令。"""
+    places: set[str] = set()
+    regions: set[str] = set()
+    for order in _open_strikes(state, content):
+        loc_id = _strike_place(state, content, order)
+        if loc_id is None:
+            continue
+        if is_known(state, content, loc_id):
+            places.add(loc_id)
+        elif (region := region_of(content, loc_id)) is not None:
+            regions.add(region.id)
+    return places, regions
 
 
 # ── 劇情 ──────────────────────────────────────────────
