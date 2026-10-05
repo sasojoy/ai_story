@@ -108,7 +108,7 @@ def test_a_success_applies_the_effect_and_writes_the_line_with_the_odds(gamble_g
     assert g.state.pending_event is None
     assert g.state.player.stats["good"] == good + 1
     entry = g.state.journal[0]
-    assert entry.title == "醉漢・隨口應對" and entry.tag == "本人・成功"
+    assert entry.title == "醉漢・隨口應對" and entry.tag == "成功"
     assert f"你：「把酒罈砸在地上大喊官兵來了」（{rate_words(rate)}）" in entry.lines
     assert "醉漢被你唬住了。" in entry.lines
 
@@ -119,7 +119,7 @@ def test_a_failure_applies_the_fail_effect(gamble_game):
     good = g.state.player.stats.get("good", 0)
     g.answer_event(g.free_text_request("求他放過我"), 85)
     assert g.state.player.stats.get("good", 0) == good
-    assert g.state.journal[0].tag == "本人・失敗"
+    assert g.state.journal[0].tag == "失敗"
     assert "醉漢一拳揮來。" in g.state.journal[0].lines
 
 

@@ -4,11 +4,13 @@ from __future__ import annotations
 import random
 from typing import Literal
 
-from . import check_lines, foreshadow, team
+from . import foreshadow
 from .models import Choice, Content, Event, Location
-from .rules import check_condition, check_gap, check_outlook, practice_line, season_one_off
-from .state import PLAYER, GameState
+from .rules import check_condition, check_outlook, practice_line, season_one_off
+from .state import GameState
 from .world_state import WorldStateStore
+
+GAP_EPSILON = 1e-6  # 浮點數誤差：等級成長帶小數（5 + 0.3 × n），差值剛好落在檔位上時不要因為少一根頭髮掉到下一檔
 
 
 def event_matches_location(event: Event, location: Location) -> bool:
@@ -119,35 +121,28 @@ def visible_choices(event: Event, state: GameState, content: Content | None = No
     return [(i, c) for i, c in enumerate(event.choices) if check_condition(c.condition, state, content)]
 
 
-def choice_label(
-    choice: Choice, state: GameState, content: Content, world: WorldStateStore, key: str | None = None,
-) -> str:
-    """有檢定的選項寫「（出手者・屬性 數值：一句心裡話）」，不寫成功率與難度（週末試玩 A，推翻 9/29 的「不顯示成功率」）；
-    其餘照原文。出手者、數值與成功率都出自 rules.check_outlook（跟擲骰同一個函式）。
-    key 是挑心裡話用的種子（引擎傳「事件 id#選項序號」），沒給就用選項文字——同一個選項每次畫都是同一句。"""
+def choice_label(choice: Choice, state: GameState, content: Content, world: WorldStateStore) -> str:
+    """有檢定的選項寫成一行：「{選項}（{屬性名} {數值}：{心裡話}）」（企劃者 2026-10-05 定案），例
+    「去拉牆上那張沒人拉得開的老弓（臂力 5：以你現在的臂力，恐怕力有未逮。）」。不寫成算、百分比，也不寫誰出手——
+    每一個事件檢定都是本人。心裡話出自 content/check_voice.json（joy 寫的四檔，{who} 換成「你」），檔位照擲骰用的
+    同一個差值挑（rules.check_outlook）。吃到熟練加成時數值寫成「身法 5＋2」，熟練那一句（rules.practice_line）
+    去掉句號、用逗號接在心裡話前面，同一個括號：「（身法 5＋2：這種事你幹得多了，這點身手難不倒你。）」。
+    沒有檢定的選項照原文。"""
     check = choice.check
     if not check:
         return choice.text
     outlook = check_outlook(check, state, content, world)
-    who = "本人" if outlook.actor == PLAYER else team.member_name(state, content, outlook.actor)
     stat = content.config.stat_names.get(check.stat, check.stat)
-    line = check_lines.pick_line(content.check_lines, check.stat, outlook.chance, choice.text if key is None else key)
-    return f"{choice.text}（{who}・{stat} {round(outlook.value, 1):g}：{line}）"
-
-
-def choice_hint(choice: Choice, state: GameState, content: Content, world: WorldStateStore) -> str:
-    """有檢定的選項底下那一句人物心聲（content/check_voice.json，依屬性減難度分檔）；沒有檢定或沒寫心聲是空字串。
-    吃到熟練加成（Check.practice）時，前面先補一句「這種事你幹得多了。」（rules.practice_line）。"""
-    check = choice.check
-    bands = content.check_voice.bands
-    if check is None:
-        return ""
+    value = f"{round(outlook.stat_value, 1):g}" + (f"＋{outlook.bonus}" if outlook.bonus else "")
+    line = voice_line(check.stat, outlook.gap, content)
     practiced = practice_line(check, state, content, world)
-    if not bands:
-        return practiced
-    gap = check_gap(check, state, content, world)
-    band = next((b for b in bands if gap >= b.min_gap), bands[-1])
-    line = band.lines.get(check.stat) or band.lines.get("default", "")
-    key = team.check_actor(state, content, world, check)
-    who = "你" if key == PLAYER else team.member_name(state, content, key)
-    return practiced + line.replace("{who}", who)
+    if practiced:
+        line = f"{practiced.rstrip('。')}，{line}"
+    return f"{choice.text}（{stat} {value}：{line}）"
+
+
+def voice_line(stat: str, gap: float, content: Content) -> str:
+    """check_voice 裡這個差值、這個屬性的那一句（沒寫這個屬性就用 default；比最低一檔還低也用最低一檔）。"""
+    bands = content.check_voice.bands
+    band = next((b for b in bands if gap + GAP_EPSILON >= b.min_gap), bands[-1])
+    return (band.lines.get(stat) or band.lines.get("default", "")).replace("{who}", "你")

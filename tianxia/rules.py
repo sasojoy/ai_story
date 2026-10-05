@@ -116,27 +116,28 @@ def check_condition(cond: Condition, state: GameState, content: Content | None =
 
 
 class CheckOutlook(NamedTuple):
-    """一次檢定的勝算：誰出手（門下 key）、他這項屬性現在的數值、成功率（0～1）。"""
+    """一次檢定的勝算：本人這項屬性現在的數值（含等級成長）、熟練加成、兩者相加減難度的差值、成功率（0～1）。"""
 
-    actor: str
-    value: float
+    stat_value: float
+    bonus: int
+    gap: float
     chance: float
 
 
 def check_outlook(check: Check, state: GameState, content: Content, world: WorldStateStore) -> CheckOutlook:
-    """出手者的屬性每高於難度 1 點，成功率 +10%；範圍 5%～95%。
-    擲骰（roll_check）與選項標籤上的出手者、屬性數值、心裡話（events.choice_label）都出自這一個函式，
-    所以標籤講的和實際擲出來的不會對不起來。本人出手時數值含熟練加成（Check.practice，joy #15）。"""
-    actor = team.check_actor(state, content, world, check)
-    value = team.check_value(state, content, world, actor, check.stat)
-    if actor == PLAYER:
-        value += team.practice_bonus(state, content, check)
-    return CheckOutlook(actor, value, min(0.95, max(0.05, 0.5 + (value - check.difficulty) * 0.1)))
+    """每一個事件檢定都看本人的屬性（企劃者 2026-10-05「探索應該沒有本人跟夥伴之分了」：Check.by 讀得進來、不再有作用），
+    本人的熟練加成（Check.practice，joy #15）照舊加上。差值每 +1，成功率 +10%；範圍 5%～95%。
+    擲骰（roll_check）與選項括號裡的數值、心裡話那一檔（events.choice_label）都出自這一個函式的同一個差值，
+    所以標籤講的和實際擲出來的不會對不起來。"""
+    stat_value = team.check_value(state, content, world, PLAYER, check.stat)
+    bonus = team.practice_bonus(state, content, check)
+    gap = stat_value + bonus - check.difficulty
+    return CheckOutlook(stat_value, bonus, gap, min(0.95, max(0.05, 0.5 + gap * 0.1)))
 
 
 def check_gap(check: Check, state: GameState, content: Content, world: WorldStateStore) -> float:
-    """出手者的屬性減難度（選項底下的心聲看它）；跟擲骰同一份 check_outlook，兩邊不會對不起來。"""
-    return check_outlook(check, state, content, world).value - check.difficulty
+    """本人的屬性（含熟練加成）減難度：選項括號裡挑哪一檔心裡話看它，擲骰的成功率也是它換算的（check_outlook）。"""
+    return check_outlook(check, state, content, world).gap
 
 
 def check_chance(check: Check, state: GameState, content: Content, world: WorldStateStore) -> float:
@@ -144,8 +145,8 @@ def check_chance(check: Check, state: GameState, content: Content, world: WorldS
 
 
 def practice_line(check: Check, state: GameState, content: Content, world: WorldStateStore) -> str:
-    """吃到熟練加成時，選項底下可以補的一句心聲（例如「這種事你幹得多了。」）；沒吃到是空字串。"""
-    if team.check_actor(state, content, world, check) != PLAYER or team.practice_bonus(state, content, check) <= 0:
+    """吃到熟練加成時，併進選項括號裡的那一句（例如「這種事你幹得多了。」）；沒吃到是空字串。"""
+    if team.practice_bonus(state, content, check) <= 0:
         return ""
     rule = content.config.practice_bonus[check.practice]
     return rule.line.replace("{who}", "你")
@@ -160,10 +161,9 @@ FREE_TEXT_PER_POINT = 4  # 相關屬性每比 5 高（低）1 點，成功率 +4
 
 
 def free_text_rate(llm_rate: int, choice, state: GameState, content: Content, world: WorldStateStore) -> int:
-    """隨口應對的成功率（百分比）：LLM 評的 0～100，加上屬性修正（照 choice.by 取出手者，跟一般檢定同一個函式），
+    """隨口應對的成功率（百分比）：LLM 評的 0～100，加上本人這項屬性的修正（跟一般檢定一樣只看本人，choice.by 不再有作用），
     夾在 5～85。choice 是 models.FreeTextChoice。"""
-    key = team.check_actor(state, content, world, choice)
-    value = team.check_value(state, content, world, key, choice.stat)
+    value = team.check_value(state, content, world, PLAYER, choice.stat)
     rate = round(llm_rate + (value - 5) * FREE_TEXT_PER_POINT)
     return max(FREE_TEXT_MIN_RATE, min(FREE_TEXT_MAX_RATE, rate))
 
@@ -211,12 +211,11 @@ def add_marks(marks: dict[str, int], state: GameState) -> None:
         state.world.marks[key] = state.world.marks.get(key, 0) + n
 
 
-def check_who(check: Check, state: GameState, content: Content, world: WorldStateStore) -> str:
-    """選項與結果上寫的出手者：本人檢定寫「本人」；隊伍檢定寫「某某出手」，派出的是本人時寫「本人出手」。"""
-    if check.by == "self":
-        return "本人"
-    key = team.check_actor(state, content, world, check)
-    return "本人出手" if key == PLAYER else f"{team.member_name(state, content, key)}出手"
+def check_result_line(success: bool) -> tuple[str, str]:
+    """檢定的結果：（江湖紀錄的標記, 敘事裡的那一行）。一律是本人出手，所以不寫誰（企劃者 2026-10-05），
+    只寫「成功」「失敗」——事件選項、隨口應對、伏筆的最後一步都用這一個。"""
+    word = "成功" if success else "失敗"
+    return word, f"（{word}）"
 
 
 def add_rumor(

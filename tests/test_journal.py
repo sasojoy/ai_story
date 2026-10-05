@@ -177,10 +177,10 @@ def test_choice_entry_names_the_event_and_the_check(game):
     game.choose("act:explore")
     game.choose("choice:0")
     entry = latest(game)
-    assert (entry.title, entry.tag) == ("醉漢・逼問", "本人出手・成功")  # 空隊伍時只有本人
+    assert (entry.title, entry.tag) == ("醉漢・逼問", "成功")  # 結果不寫誰出手（企劃者 2026-10-05：一律是本人）
     assert entry.lines == ["他全招了。", "（寇亂 -5）"]
     assert entry.changes == ["善名 +2"]
-    assert "▸ 逼問" in game.state.log and "（本人出手——成功）" in game.state.log
+    assert "▸ 逼問" in game.state.log and "（成功）" in game.state.log
 
 
 def test_self_check_choice_entry(game):
@@ -188,7 +188,7 @@ def test_self_check_choice_entry(game):
     game.rng = FixedRandom(0.99)
     game.choose("choice:0")
     entry = latest(game)
-    assert (entry.title, entry.tag, entry.lines) == ("調息・運氣衝關", "本人・失敗", ["氣息一亂，只得作罷。"])
+    assert (entry.title, entry.tag, entry.lines) == ("調息・運氣衝關", "失敗", ["氣息一亂，只得作罷。"])
 
 
 def test_choice_entry_with_a_battle(game):

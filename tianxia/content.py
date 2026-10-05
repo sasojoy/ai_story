@@ -15,13 +15,12 @@ from pathlib import Path
 
 from pydantic import BaseModel, ValidationError
 
-from .check_lines import BUCKET_KEYS
 from .companion_agent import DIALOGUE_TAGS
 from .front_lines import BAND_KEYS, GEJU_KEYS
 from .materials import TIER_NAMES
 from .models import (
     FRONT_KEY, ROADS, STATS, BattleDef, CharacterDef, CheckVoice, Condition, Config, Content, CraftNames, Effect, Event,
-    FigureDef, CheckLines, FollowerDef, Foreshadows, FrontLines, InsightDef, Location, OrdersContent, PromotionDef,
+    FigureDef, FollowerDef, Foreshadows, FrontLines, InsightDef, Location, OrdersContent, PromotionDef,
     MapLayout, Material, RoadSight, Scenario, Sect, SimRumor, SkillDef, Squad, TimetableEvent, Tutorial,
 )
 from .naming import name_problem
@@ -66,7 +65,7 @@ def load_content(root: Path, profile: str | None = None) -> Content:
         insights=_index(InsightDef, _read(root / "insights.json")),
         materials=_index(Material, _read(root / "materials.json")),
         craft_names=CraftNames(**_read(root / "craft_names.json")),
-        check_lines=_check_lines(root / "check_lines.json"),
+        check_voice=_check_voice(root / "check_voice.json"),
         front_lines=_front_lines(root / "front_lines.json"),
         banned_names=_read(root / "banned_names.json"),
         sects=_index(Sect, _read(root / "sects.json")),
@@ -86,7 +85,6 @@ def load_content(root: Path, profile: str | None = None) -> Content:
         events=events,
         map=MapLayout(**_read(root / "map.json")),
         tutorial=Tutorial(**_read(root / "tutorial.json")),
-        check_voice=CheckVoice(**_read(root / "check_voice.json")) if (root / "check_voice.json").exists() else CheckVoice(),
     )
     validate(content)
     _scale_marks(content, content.config.mark_threshold_scale)
@@ -164,22 +162,22 @@ def _orders(path: Path) -> OrdersContent:
         raise ContentError(f"orders.json：{e}") from e
 
 
-def _check_lines(path: Path) -> CheckLines:
-    """content/check_lines.json（週末試玩 A，檢定選項的心裡話）：必備的檔；找不到、不是合法的 JSON、欄位寫錯都改報
-    ContentError 並指出是這個檔（S1 會手改 by_stat）。"""
+def _check_voice(path: Path) -> CheckVoice:
+    """content/check_voice.json（檢定選項括號裡的那一句，joy 寫的；企劃者 2026-10-05 定案取代 S1 的 check_lines.json）：
+    必備的檔——每個檢定選項都要有一句；找不到、不是合法的 JSON、欄位寫錯都改報 ContentError 並指出是這個檔（joy 會手改）。"""
     if not path.exists():
-        raise ContentError(f"check_lines.json：找不到檔案（應該在 {path}）")
+        raise ContentError(f"check_voice.json：找不到檔案（應該在 {path}）")
     try:
-        return CheckLines(**_read(path))
+        return CheckVoice(**_read(path))
     except json.JSONDecodeError as e:
-        raise ContentError(f"check_lines.json：不是合法的 JSON：{e}") from e
+        raise ContentError(f"check_voice.json：不是合法的 JSON：{e}") from e
     except (ValidationError, TypeError) as e:
-        raise ContentError(f"check_lines.json：{e}") from e
+        raise ContentError(f"check_voice.json：{e}") from e
 
 
 def _front_lines(path: Path) -> FrontLines:
     """content/front_lines.json（FB-064，戰況變化的說法）：必備的檔；找不到、不是合法的 JSON、欄位寫錯都改報
-    ContentError 並指出是這個檔（跟 check_lines.json 一樣）。"""
+    ContentError 並指出是這個檔（跟 check_voice.json 一樣）。"""
     if not path.exists():
         raise ContentError(f"front_lines.json：找不到檔案（應該在 {path}）")
     try:
@@ -244,33 +242,37 @@ def _material_sources(c: Content) -> set[str]:
 NUMBER_IN_TEXT = re.compile(r"[0-9０-９%％]")  # 心裡話不能攤出成功率（也不能寫難度）
 
 
-def check_check_lines(c: Content, need) -> None:
-    """檢定選項的心裡話（content/check_lines.json，週末試玩 A）：通用的五段（check_lines.BUCKETS）一段都不能少、
-    不能多出不認得的段位；各屬性自己的說法只能寫存在的屬性與段位，可以只寫其中幾段；每一句都不能是空的、
-    只用繁體中文、不能寫數字或百分比（選項上不攤出成功率）。"""
-    lines = c.check_lines
+def check_check_voice(c: Content, need) -> None:
+    """檢定選項括號裡的那一句（content/check_voice.json，joy 寫的；取代 S1 的 check_lines.json，驗證照它的標準）：
+    至少一檔、照 min_gap 由高到低排而且不重複；每一檔都要說得出每一種有人檢定的屬性（沒寫的屬性用 "default"）；
+    鍵只能是屬性或 default；每一句都不能是空的、只用繁體中文、不能寫阿拉伯數字（半形、全形）或百分號（選項上不攤出成功率）。
+    熟練加成併進括號的那一句（config.practice_bonus 的 line）照同樣的文字規矩。"""
+    bands = c.check_voice.bands
 
-    def check_pool(where: str, pool: list[str]) -> None:
-        need(bool(pool), f"{where}：不能是空的")
-        for text in pool:
-            need(bool(text.strip()), f"{where}：有空白的句子")
-            need(to_traditional(text) == text, f"{where}：文字只能用繁體中文（「{text[:12]}」）")
-            need(not NUMBER_IN_TEXT.search(text), f"{where}：不能寫數字或百分比，成功率不攤在選項上（「{text[:12]}」）")
+    def check_text(where: str, text: str) -> None:
+        need(bool(text.strip()), f"{where}：有空白的句子")
+        need(to_traditional(text) == text, f"{where}：文字只能用繁體中文（「{text[:12]}」）")
+        need(not NUMBER_IN_TEXT.search(text), f"{where}：不能寫數字或百分比，成功率不攤在選項上（「{text[:12]}」）")
 
-    for bucket in BUCKET_KEYS:
-        need(bucket in lines.generic, f"check_lines.generic 缺少 {bucket} 那一段")
-    for bucket, pool in lines.generic.items():
-        need(bucket in BUCKET_KEYS, f"check_lines.generic：不認得的段位 {bucket}（只有 {'、'.join(BUCKET_KEYS)}）")
-        check_pool(f"check_lines.generic.{bucket}", pool)
-    for stat, buckets in lines.by_stat.items():
-        need(stat in STATS, f"check_lines.by_stat：未知的屬性 {stat}")
-        for bucket, pool in buckets.items():
-            need(bucket in BUCKET_KEYS, f"check_lines.by_stat.{stat}：不認得的段位 {bucket}（只有 {'、'.join(BUCKET_KEYS)}）")
-            check_pool(f"check_lines.by_stat.{stat}.{bucket}", pool)
+    need(bool(bands), "check_voice.json：至少要有一檔（每個檢定選項的括號裡都要有一句）")
+    gaps = [band.min_gap for band in bands]
+    need(gaps == sorted(gaps, reverse=True) and len(set(gaps)) == len(gaps), "check_voice.bands 要照 min_gap 由高到低排、不能重複")
+    checked = {ch.check.stat for e in c.events.values() for ch in e.choices if ch.check is not None}
+    for band in bands:
+        where = f"check_voice 的 min_gap {band.min_gap:g} 那一檔"
+        for key, text in band.lines.items():
+            need(key in STATS or key == "default", f"{where}：不認得的鍵 {key}（只能是屬性或 default）")
+            check_text(f"{where}.{key}", text)
+        for stat in sorted(checked):
+            need(bool((band.lines.get(stat) or band.lines.get("default") or "").strip()),
+                 f"{where}說不出 {stat} 的心聲（補這個屬性或 default）")
+    for kind, rule in c.config.practice_bonus.items():
+        if rule.line:
+            check_text(f"config.practice_bonus.{kind}.line", rule.line)
 
 
 def check_front_lines(c: Content, need) -> None:
-    """戰況變化的說法（content/front_lines.json，FB-064），照 check_lines 的標準：generic 三段（front_lines.BANDS）一段都不能少、
+    """戰況變化的說法（content/front_lines.json，FB-064）：generic 三段（front_lines.BANDS）一段都不能少、
     不能多出不認得的段；各陣營自己的說法（by_side）只能寫存在的陣營與段、可以只寫其中幾段；割據要有漲與落兩組；
     sides 的陣營名也要是存在的陣營。每一句、每個陣營名都不能是空的、只用繁體中文、不能寫數字或百分比（畫面上只有一句話、不攤出數字）。"""
     lines = c.front_lines
@@ -922,18 +924,6 @@ def validate(c: Content) -> None:
         + "、".join(f"{c.materials[mid].name}（{mid}）" for mid in unreachable),
     )
 
-    # 選項底下的人物心聲：由高到低排，而且每一檔都要說得出每一種有人檢定的屬性（沒寫的屬性用 "default"）
-    bands = c.check_voice.bands
-    gaps = [band.min_gap for band in bands]
-    need(gaps == sorted(gaps, reverse=True) and len(set(gaps)) == len(gaps), "check_voice.bands 要照 min_gap 由高到低排、不能重複")
-    checked = {
-        ch.check.stat for e in c.events.values() for ch in e.choices if ch.check is not None
-    }
-    for band in bands:
-        for stat in sorted(checked):
-            need(bool((band.lines.get(stat) or band.lines.get("default") or "").strip()),
-                 f"check_voice 的 min_gap {band.min_gap:g} 那一檔說不出 {stat} 的心聲（補這個屬性或 default）")
-
     # 合成、合併的決定性組名字表（模型不可用時的退路）：不能是空的，而且組出來的每一個名字都得
     # 通過命名過濾——這條退路一定會被走到（整季模擬把模型 mock 掉），組出壞名字會永久登記。
     names = c.craft_names
@@ -947,7 +937,7 @@ def validate(c: Content) -> None:
             need(reason is None, f"craft_names 組出的名字「{prefix + suffix}」過不了命名過濾：{reason}")
     for word in c.banned_names:
         need(bool(word.strip()), "banned_names 裡有空字串")
-    check_check_lines(c, need)
+    check_check_voice(c, need)
     check_front_lines(c, need)
     # 沒寫 drops 的對手走 materials.py 依難度的預設掉落表，所以每一階都得有素材可挑。
     for tier in sorted(TIER_NAMES):

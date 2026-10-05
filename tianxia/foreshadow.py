@@ -22,7 +22,7 @@ from .journal import fragment_line
 from .models import (
     Check, Content, FsAsk, FsChain, FsFinal, FsFragment, FsItem, FsRequires, FsStep, FsWrong, Squad,
 )
-from .rules import can_meet, check_chance, check_who, display_name
+from .rules import can_meet, check_chance, check_result_line, display_name
 from .state import GameState, Lock
 from .world_state import WorldStateStore
 
@@ -507,9 +507,9 @@ def attempt(
             return msgs + [fill(state, content, c, asks[p.fs_asked].question, world)]
     p.fs_asking, p.fs_asked = None, 0
     for check in [r.check for r in _requires_of(c.final, trip) if r.check is not None]:  # 整條的先、這一趟的後，每個都擲
-        roll = Check(stat=check.stat, difficulty=check.dc, by="self")
+        roll = Check(stat=check.stat, difficulty=check.dc)  # 跟事件檢定一樣只看本人
         success = rng.random() < check_chance(roll, state, content, world)
-        msgs.append(f"（{check_who(roll, state, content, world)}——{'成功' if success else '失敗'}）")
+        msgs.append(check_result_line(success)[1])
         if not success:
             return msgs + _punish(state, content, c, trip, trip.wrong, now)
     return msgs + _succeed(state, content, c, index, trip, now, world)

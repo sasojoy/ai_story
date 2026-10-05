@@ -41,16 +41,6 @@ def member_stats(state: GameState, content: Content, world: WorldStateStore, key
     return {k: base[k] + growth.get(k, 0.0) * (level - 1) for k in COMBAT_STATS}
 
 
-def check_actor(state: GameState, content: Content, world: WorldStateStore, check) -> str:
-    """檢定由誰出手：本人檢定，或檢定的是銀兩、名望這類只有本人才有的屬性時，一律本人；
-    隊伍檢定取本隊中這項屬性目前數值最高的人，同分時本人優先、其餘依隊伍順序。"""
-    if check.by == "self" or check.stat not in COMBAT_STATS:
-        return PLAYER
-    keys = team_keys(state)
-    bonus = practice_bonus(state, content, check)  # 本人的熟練也算進去：本人加上熟練比同伴強，就該本人出手
-    return max(keys, key=lambda k: member_stats(state, content, world, k)[check.stat] + (bonus if k == PLAYER else 0))
-
-
 def practice_bonus(state: GameState, content: Content, check) -> int:
     """本人做這件事的熟練加成（Check.practice，例如惡名）：名聲每 per 點 +1，最多 +cap；沒寫 practice 是 0。
     check 也可能是隨口應對（FreeTextChoice），它沒有 practice。"""

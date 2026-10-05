@@ -592,18 +592,18 @@ def test_requirements_in_final_and_a_step_add_up(fs, world):
     p.fs_counters = {"two_buyers": 1}
     p.materials = {"man_1": 4}
     assert option(game, "fs:fs_fire_haoqiang").enabled  # 這一趟 2 ＋ 整條 2
-    assert game.choose("fs:fs_fire_haoqiang") == ["（本人——成功）", "長社的帳房在你的契上按了手印。", "粗糧 -2"]
+    assert game.choose("fs:fs_fire_haoqiang") == ["（成功）", "長社的帳房在你的契上按了手印。", "粗糧 -2"]
     p.location = "lake"
     assert option(game, "fs:fs_fire_haoqiang").label == "交糧（東西還沒備齊）"  # 只剩 2 份：不夠這一趟加整條
     assert game.choose("fs:fs_fire_haoqiang") == ["（此刻無法這麼做。）"]
     assert "fs_fire_haoqiang" not in p.fs_done and p.materials == {"man_1": 2}
     p.materials = {"man_1": 4}
     game.rng = FixedRandom(0.99)
-    assert game.choose("fs:fs_fire_haoqiang") == ["（本人——失敗）", "半路撞上官軍斥候，糧車被扣下。", "粗糧 -2"]
+    assert game.choose("fs:fs_fire_haoqiang") == ["（失敗）", "半路撞上官軍斥候，糧車被扣下。", "粗糧 -2"]
     p.materials = {"man_1": 4}
     game.rng = FixedRandom(0.0)
     assert game.choose("fs:fs_fire_haoqiang") == [
-        "（本人——成功）", "黃巾的帳房在你的契上按了手印。",
+        "（成功）", "黃巾的帳房在你的契上按了手印。",
         "兩邊的帳房都在你的契上按了手印。不論那一夜誰勝誰敗，他們都欠你一份人情。", "粗糧 -4",
     ]
     assert p.materials == {} and "fs_fire_haoqiang" in p.fs_done
@@ -648,14 +648,14 @@ def test_haoqiang_chain_is_third_party(fs, world):
     p.fs_counters = {"two_buyers": 1}
     w.locks["changshe_fire"] = Lock(side="guan", name="官軍某甲", time=0.0)
     assert option(game, "fs:fs_fire_haoqiang").enabled
-    assert game.choose("fs:fs_fire_haoqiang") == ["（本人——失敗）", "帳房翻了兩頁就看穿了假帳，糧車被扣下。", "粗糧 -2"]
+    assert game.choose("fs:fs_fire_haoqiang") == ["（失敗）", "帳房翻了兩頁就看穿了假帳，糧車被扣下。", "粗糧 -2"]
     assert p.materials == {"man_1": 4} and p.fs_done == []
     game.rng = FixedRandom(0.0)
-    assert game.choose("fs:fs_fire_haoqiang") == ["（本人——成功）", "長社的帳房在你的契上按了手印。", "粗糧 -2"]
+    assert game.choose("fs:fs_fire_haoqiang") == ["（成功）", "長社的帳房在你的契上按了手印。", "粗糧 -2"]
     assert p.fs_done == ["fs_fire_haoqiang:0"] and option(game, "fs:fs_fire_haoqiang") is None  # 長社這一趟做完了
     p.location = "lake"
     assert game.choose("fs:fs_fire_haoqiang") == [
-        "（本人——成功）", "黃巾的帳房在你的契上按了手印。",
+        "（成功）", "黃巾的帳房在你的契上按了手印。",
         "兩邊的帳房都在你的契上按了手印。不論那一夜誰勝誰敗，他們都欠你一份人情。", "粗糧 -2",
     ]
     assert p.fs_done == ["fs_fire_haoqiang:0", "fs_fire_haoqiang:1", "fs_fire_haoqiang"]

@@ -131,9 +131,11 @@ class Drop(_Strict):
 class Check(_Strict):
     stat: str
     difficulty: int
-    by: Literal["team", "self"] = "team"  # team：隊伍派屬性最高的人出手；self：只看本人
+    # 讀得進來、不再有作用（企劃者 2026-10-05「探索應該沒有本人跟夥伴之分了」）：以前 team 派隊伍中這項屬性最高的人、
+    # self 只看本人；現在每一個事件檢定都看本人的屬性（rules.check_outlook）。留著這個欄位，舊內容與 joy 寫好的事件照樣載入。
+    by: Literal["team", "self"] = "team"
     # 熟練（企劃者 2026-10-05「你常常做壞事，因為很熟練所以也增加成功率」）：寫了 "evil" 時，
-    # 本人出手的檢定值再加上由惡名換算的加成（Config.practice_bonus）。同伴沒有善惡名，不吃這份加成。
+    # 本人的檢定值再加上由惡名換算的加成（Config.practice_bonus）。
     practice: str | None = None
 
 
@@ -142,16 +144,7 @@ class PracticeBonus(_Strict):
 
     per: int = Field(gt=0)
     cap: int = Field(ge=0)
-    line: str = ""  # 吃到加成時選項底下補的一句心聲，{who} 換成「你」
-
-
-class CheckLines(_Strict):
-    """檢定選項上的「心裡話」（content/check_lines.json，週末試玩 A）。成功率分五段（見 tianxia/check_lines.py 的
-    BUCKETS：80+、60-79、40-59、20-39、0-19）；generic 每一段都要有，by_stat 是各屬性（str／agi／con／wis…）自己的
-    說法，可以只寫其中幾段，沒寫的那段退回 generic。一段可以寫好幾句，同一個選項永遠挑同一句。"""
-
-    generic: dict[str, list[str]]
-    by_stat: dict[str, dict[str, list[str]]] = Field(default_factory=dict)
+    line: str = ""  # 吃到加成時併進選項括號裡的那一句（events.choice_label），{who} 換成「你」
 
 
 class FrontLines(_Strict):
@@ -186,7 +179,7 @@ class FreeTextChoice(_Strict):
 
     prompt: str  # 選單上的標籤，例如「自己想辦法……」
     stat: Literal["str", "agi", "con", "wis"]
-    by: Literal["team", "self"] = "team"  # 跟 Check.by 一樣：team 派隊伍中這項屬性最高的人，self 只看本人
+    by: Literal["team", "self"] = "team"  # 跟 Check.by 一樣：讀得進來、不再有作用，隨口應對也只看本人的屬性
     effect: Effect = Field(default_factory=Effect)
     fail_effect: Effect = Field(default_factory=Effect)
 
@@ -1338,14 +1331,16 @@ class FollowerDef(_Strict):
 
 
 class CheckVoiceBand(_Strict):
-    """一檔心聲：出手者的屬性減難度 ≥ min_gap 就用這一檔（由高到低找第一個符合的）。"""
+    """一檔心聲：本人的屬性（含熟練加成）減難度 ≥ min_gap 就用這一檔（由高到低找第一個符合的；差值跟擲骰同一個，
+    rules.check_gap）。"""
 
     min_gap: float
-    lines: dict[str, str]  # 屬性（str/agi/con/wis）→ 句子，{who} 換成「你」或同伴的名字；"default" 是其他屬性的退路
+    lines: dict[str, str]  # 屬性（str/agi/con/wis）→ 句子，{who} 換成「你」；"default" 是其他屬性的退路
 
 
 class CheckVoice(_Strict):
-    """有檢定的事件選項底下那一句人物心聲（content/check_voice.json）：讓玩家選之前就知道這件事對自己難不難。
+    """有檢定的事件選項括號裡的那一句心裡話（content/check_voice.json，joy 寫的）：「去拉那張老弓（臂力 5：以你現在的
+    臂力，恐怕力有未逮。）」，讓玩家選之前就知道這件事對自己難不難（企劃者 2026-10-05 定案；取代 S1 的 check_lines.json）。
     檢定是屬性每高於難度 1 點成功率 +10%（rules.check_chance），所以差 +2 約七成、0 是五成、−2 約三成。"""
 
     bands: list[CheckVoiceBand] = Field(default_factory=list)
@@ -1360,7 +1355,6 @@ class Content(_Strict):
     insights: dict[str, InsightDef] = Field(default_factory=dict)  # 意境（content/insights.json，武學與成長設計附錄 A）
     materials: dict[str, Material]
     craft_names: CraftNames
-    check_lines: CheckLines  # 檢定選項上的心裡話（content/check_lines.json）
     front_lines: FrontLines  # 戰況變化的說法（content/front_lines.json，FB-064）
     banned_names: list[str]  # 合成、合併命名的禁用詞（原創原則：不用金庸等作品的專有名詞）
     sects: dict[str, Sect]
@@ -1376,4 +1370,4 @@ class Content(_Strict):
     followers: dict[str, FollowerDef] = Field(default_factory=dict)  # 部下模板（content/followers.json，計畫 T5）
     map: MapLayout
     tutorial: Tutorial
-    check_voice: CheckVoice = Field(default_factory=CheckVoice)  # 選項底下的人物心聲（content/check_voice.json）；沒有這個檔就不顯示
+    check_voice: CheckVoice = Field(default_factory=CheckVoice)  # 檢定選項括號裡的那一句（content/check_voice.json，載入時必備）

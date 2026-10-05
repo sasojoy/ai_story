@@ -19,7 +19,7 @@ from . import (
 )
 from . import events as event_rules  # note_round 走模組屬性（測試要能換掉它，確認只有 _present 會叫）
 from .events import (
-    choice_hint, choice_label, event_candidates, has_events_here, pick_event, visible_choices,
+    choice_label, event_candidates, has_events_here, pick_event, visible_choices,
 )
 from .guide import base_step_count, note_action, quest_text, step_text, tutorial_active, tutorial_intro
 from .guide import steps as tutorial_steps
@@ -32,7 +32,8 @@ from .models import (
 )
 from .ollama_client import ModelBudget, OllamaClient, quick_client
 from .rules import (
-    GEJU, HUANGJIN, add_rumor, apply_effect, audience_bar, can_hear, can_meet, change_trend, check_who, current_day, display_name, fill_marks, free_text_rate,
+    GEJU, HUANGJIN, add_rumor, apply_effect, audience_bar, can_hear, can_meet, change_trend, check_result_line, current_day,
+    display_name, fill_marks, free_text_rate,
     can_draw_side_change, chaos_fronts, chaos_note, front_chip, front_ids, front_of, front_text, humanize, in_chaos,
     is_revealed, pushable, rate_words, recompute_trends, resolve_goals, resolve_trend, resolve_trends, roll_check,
     season_one, season_one_off, stance_sum_note, stances, trend_name, trend_shown, trend_value, world_trend_value,
@@ -65,7 +66,6 @@ class Option(BaseModel):
     id: str
     label: str
     enabled: bool = True
-    hint: str = ""  # 事件選項底下那一句人物心聲（events.choice_hint）
 
 
 FREE_TEXT_OPTION = "choice:free"  # 事件的「隨口應對」：按下去只是叫出輸入框，真正送出走 free_text_request／answer_event
@@ -391,10 +391,7 @@ class Game:
         if s.pending_event:
             event = c.events[s.pending_event]
             opts = [
-                Option(
-                    id=f"choice:{i}", label=self._choice_label(ch, odds, f"{event.id}#{i}"),
-                    hint=choice_hint(ch, s, c, self.world),
-                )
+                Option(id=f"choice:{i}", label=self._choice_label(ch, odds))
                 for i, ch in visible_choices(event, s, c)
             ]
             if event.free_text is not None:
@@ -601,12 +598,12 @@ class Game:
         hardest = max(squads, key=lambda s: s.difficulty)
         return f"{who}・{self.odds(hardest.id)}"
 
-    def _choice_label(self, choice: Choice, odds: bool, key: str) -> str:
-        """key 是檢定心裡話的種子（事件 id＋選項序號，見 events.choice_label）。"""
+    def _choice_label(self, choice: Choice, odds: bool) -> str:
+        """動手的選項寫對手與勝算；有檢定的寫一行「（屬性 數值：心裡話）」（events.choice_label）。"""
         if choice.combat and odds:
             squad = self.content.squads[choice.combat]
             return f"{choice.text}（對手：{squad.name}・{self.odds(squad.id)}）"
-        return choice_label(choice, self.state, self.content, self.world, key)
+        return choice_label(choice, self.state, self.content, self.world)
 
     def odds(self, squad_id: str) -> str:
         return team.estimate(self.state, self.content, self.world, squad_id)
@@ -763,10 +760,9 @@ class Game:
             s.pending_event = None
             rate = free_text_rate(llm_rate, choice, s, c, self.world)
             success = self.rng.random() * 100 < rate
-            who = check_who(choice, s, c, self.world)
-            word = "成功" if success else "失敗"
-            msgs = [f"你：「{request.text}」（{rate_words(rate)}）", f"（{who}——{word}）"]
-            self._outcome(f"{who}・{word}", msgs[-1])
+            tag, line = check_result_line(success)  # 一律是本人：不寫誰出手
+            msgs = [f"你：「{request.text}」（{rate_words(rate)}）", line]
+            self._outcome(tag, line)
             effect = choice.effect if success else choice.fail_effect
             msgs += self._apply(effect)
             msgs += check_thresholds(s, c, self.world, self._quick_client(), now=self.now)
@@ -2601,11 +2597,10 @@ class Game:
         if choice.combat:
             return msgs + self._event_battle(event, choice)
         if choice.check:
-            who = check_who(choice.check, s, c, self.world)
             success = roll_check(choice.check, s, c, self.world, self.rng)
-            word = "成功" if success else "失敗"
-            msgs.append(f"（{who}——{word}）")
-            self._outcome(f"{who}・{word}", msgs[-1])
+            tag, line = check_result_line(success)  # 一律是本人：不寫誰出手（企劃者 2026-10-05）
+            msgs.append(line)
+            self._outcome(tag, line)
             return msgs + self._apply(choice.effect if success else choice.fail_effect)
         return msgs + self._apply(choice.effect)
 

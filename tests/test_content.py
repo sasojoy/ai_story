@@ -1439,3 +1439,77 @@ def test_check_voice_must_cover_every_checked_stat_and_run_high_to_low(tmp_path)
         load_content(root)
     assert "由高到低" in str(caught.value) and "con" in str(caught.value)  # 調息事件檢定根骨，第一檔沒寫
 
+
+
+# ── check_voice.json：檢定選項括號裡的那一句（企劃者 2026-10-05 定案；S1 的 check_lines.json 已退休）──
+
+
+def _voice_with(tmp_path, line: str, key: str = "default"):
+    root = copy_fixture(tmp_path)
+    voice = json.loads((root / "check_voice.json").read_text(encoding="utf-8"))
+    voice["bands"][0]["lines"][key] = line
+    (root / "check_voice.json").write_text(json.dumps(voice, ensure_ascii=False), encoding="utf-8")
+    return root
+
+
+@pytest.mark.parametrize("line", ["成功率 7 成。", "大概五成，七０％吧。", "七成%把握。", "有 ５ 分把握。"])
+def test_a_check_voice_line_cannot_give_a_number_away(tmp_path, line):
+    """只攔阿拉伯數字（半形、全形）與百分號：選項上不攤出成功率與難度。"""
+    with pytest.raises(ContentError, match="數字"):
+        load_content(_voice_with(tmp_path, line))
+
+
+def test_chinese_numerals_are_fine_in_a_check_voice_line(tmp_path):
+    load_content(_voice_with(tmp_path, "十拿九穩，難不倒{who}。"))
+
+
+def test_a_check_voice_line_must_be_traditional_chinese(tmp_path):
+    with pytest.raises(ContentError, match="繁體"):
+        load_content(_voice_with(tmp_path, "这点力气，{who}使得出来。"))
+
+
+def test_a_check_voice_line_cannot_be_blank(tmp_path):
+    with pytest.raises(ContentError, match="空白"):
+        load_content(_voice_with(tmp_path, "   "))
+
+
+def test_a_check_voice_line_key_must_be_a_stat_or_default(tmp_path):
+    with pytest.raises(ContentError, match="strength"):
+        load_content(_voice_with(tmp_path, "{who}有把握。", key="strength"))
+
+
+def test_check_voice_needs_at_least_one_band(tmp_path):
+    root = copy_fixture(tmp_path)
+    (root / "check_voice.json").write_text(json.dumps({"bands": []}), encoding="utf-8")
+    with pytest.raises(ContentError, match="check_voice"):
+        load_content(root)
+
+
+def test_a_missing_or_malformed_check_voice_is_a_content_error_that_names_the_file(tmp_path):
+    root = copy_fixture(tmp_path / "a")
+    (root / "check_voice.json").unlink()
+    with pytest.raises(ContentError, match="check_voice.json"):
+        load_content(root)
+    root = copy_fixture(tmp_path / "b")
+    (root / "check_voice.json").write_text('{"bands": [', encoding="utf-8")
+    with pytest.raises(ContentError, match="check_voice.json"):
+        load_content(root)
+    root = copy_fixture(tmp_path / "c")
+    (root / "check_voice.json").write_text('{"bands": [], "voices": []}', encoding="utf-8")  # 拼錯的欄位
+    with pytest.raises(ContentError, match="check_voice.json"):
+        load_content(root)
+
+
+def test_s1s_check_lines_file_is_retired():
+    """S1 的 check_lines.json（五段 45 句）由 joy 的 check_voice.json（四檔）取代：檔案、模型、載入、驗證都拿掉了。"""
+    from tianxia import models
+
+    assert not (ROOT / "content" / "check_lines.json").exists()
+    assert not hasattr(models, "CheckLines")
+    assert "check_lines" not in models.Content.model_fields
+
+
+def test_old_content_with_by_on_a_check_still_loads_and_both_values_parse(content):
+    """Check.by 讀得進來、不再有作用（每一個事件檢定都看本人的屬性）。"""
+    assert content.events["drunk"].choices[0].check.by == "team"
+    assert content.events["insight"].choices[0].check.by == "self"
