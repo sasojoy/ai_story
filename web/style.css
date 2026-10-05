@@ -90,8 +90,16 @@ ul { padding-left: 1.3em; margin: 0.4em 0; }
 .who-name { display: flex; align-items: baseline; gap: 4px; font: 600 17px var(--serif); }
 .who-name > span { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .who-name small { font: 500 12px var(--sans); color: var(--ink-2); margin-left: 6px; }
-/* 名號長、又有門派・陣營・頭銜時，收著會被省略號吃掉頭銜；點名號展開就整行折下來看得到（計畫 T5） */
-.who[aria-expanded="true"] .who-name > span { white-space: normal; }
+/* 名號長、又有門派・陣營・頭銜時，收著會被省略號吃掉頭銜；點名號展開就整行看得到（計畫 T5）。展開之後（FB-071）各有各的位置：
+   第一行只有名號與 ▴，頭銜在第二行（.who-title），「可配 N 點」在＋鈕上面（.pts-label）。名號欄寬 375 是 295、360 是 280
+   （視窗寬 − 左右各 16 − 設定鈕 40 − 縫 8）；16 字的名號 17px 時要 272＋縫 4＋▴ 11 ≈ 287，360 寬放不下，所以展開時縮到 16px
+   （256＋15 ≈ 271，兩種寬度都一行放得下）；再窄的螢幕才折行——折行也比用「…」藏掉名號的後半好 */
+.who[aria-expanded="true"] .who-name { font-size: 16px; }
+.who[aria-expanded="true"] .who-name > span { flex: 1; white-space: normal; overflow-wrap: anywhere; }
+/* 展開的頭銜：門派、陣營、頭銜、匿名、第 N 級各是一個 .who-seg，不折行；只在段與段之間換行，「地方豪強」不會被從中間折斷。
+   不能叫 .seg：那是全站的分段選單（display: flex、下方留白），套到頭銜上每一段都會變成整列 */
+.who-title { margin-top: 1px; font: 500 12px/1.5 var(--sans); color: var(--ink-2); }
+.who-title .who-seg { white-space: nowrap; }
 /* 點名號展開更多數值的提示（畫面流程 S1），名號再長也不會被省略號吃掉 */
 /* 升級的屬性點：自己一個不縮的元素（flex: none）、放在會「…」的名號 <span> 外面——長長的「門派・陣營」只擠名號，擠不掉這一句 */
 .who-name .pts { flex: none; font: 600 12px var(--sans); color: var(--gold); }
@@ -126,7 +134,15 @@ ul { padding-left: 1.3em; margin: 0.4em 0; }
 .more-stats { font-size: 12px; color: var(--ink-2); margin-top: 6px; line-height: 1.7; }
 .more-stats .hint { color: var(--gold); }
 .more-stats .row { margin-top: 6px; } /* 升級的屬性點：每項屬性一顆「＋臂力」（狀態列展開後才出現） */
-/* ＋鈕底下那一行（四項各管什麼）：比面板再小一號；一項一個 inline-block，整項一起換行，太長時在項裡面折，不撐寬 */
+/* 「可配 N 點」（FB-071）：展開後放在＋鈕上面當那一排的標題，樣子同收起來時名號那一行的那句（金色粗體 12px） */
+.more-stats .pts-label { margin-top: 6px; line-height: 1.4; }
+.more-stats .pts-label .pts { font: 600 12px var(--sans); color: var(--gold); }
+/* 五顆＋鈕一排放得下（FB-071）：排寬 375 是 343、360 是 328（視窗寬 − 左右各 16），五顆加四個 4px 的縫，每顆 65.4／62.4px；
+   扣掉 1px 邊框與 2px 左右內距，裡面各剩 59.4／56.4px，標籤「＋博聞」是三個全形字 14px ≈ 42px，放得下、不折行。
+   高度仍是 .btn.small 的 38px。只改這一排（.alloc），不動全站的 .btn */
+.more-stats .alloc { gap: 4px; margin-top: 4px; }
+.more-stats .alloc .btn { min-width: 0; padding: 6px 2px; white-space: nowrap; }
+/* ＋鈕底下那一行（五項各管什麼）：比面板再小一號；一項一個 inline-block，整項一起換行，太長時在項裡面折，不撐寬 */
 .more-stats .stat-uses { margin-top: 4px; font-size: 11px; line-height: 1.5; }
 .more-stats .stat-uses span { display: inline-block; max-width: 100%; margin-right: 0.8em; }
 /* 在路上的 💡 提示收成一行（FB-060）：是按鈕，點了展開全文；樣子跟平常的提示一樣 */

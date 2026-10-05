@@ -23,6 +23,13 @@ def _claim_whirlwind(world):
     return art
 
 
+def test_a_companion_without_lore_reads_as_the_base(state, content, world):
+    """同伴的內容（characters.json 的 stats）沒寫博聞：member_stats 照五項列出來，博聞當基準 5，不能 KeyError。"""
+    companion = next(iter(content.characters))
+    assert team.member_stats(state, content, world, companion)["lore"] == team.BASE_STAT
+    assert set(team.member_stats(state, content, world, PLAYER)) == set(team.COMBAT_STATS)  # PLAYER 已從 tianxia.state import
+
+
 def test_content_basic_art_resolves_as_low_grade(content, world):
     assert team.resolve_art("basic_fist", content, world).quality == "下品"
 

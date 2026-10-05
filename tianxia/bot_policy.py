@@ -14,7 +14,7 @@ from .engine import FREE_TEXT_OPTION, Game, Option
 from .models import Content, Effect, FactionDef
 from .state import BotProfile
 
-REWARD_STATS = ("str", "agi", "con", "wis", "silver", "fame", "xinde")
+REWARD_STATS = ("str", "agi", "con", "wis", "lore", "silver", "fame", "xinde")
 TREND_WEIGHT = 10.0  # 推大勢一點，抵得過十點獎勵
 JOIN_BATTLE_SCORE = 100.0
 ACT_SCORES = {"explore": 1.0, "socialize": 0.8}

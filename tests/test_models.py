@@ -114,7 +114,8 @@ def test_growth_config_defaults_follow_the_design():
     assert cfg.melt_refund_ratio == 0.8
     assert cfg.melt_quality_bonus == {"下品": 0, "中品": 5, "上品": 15, "絕學": 40}
     assert (cfg.melt_insight_xinde, cfg.duplicate_insight_xinde) == (10, 10)
-    assert (cfg.holding_cap_base, cfg.holding_cap_levels, cfg.holding_cap_step) == (50, 5, 5)
+    assert (cfg.holding_cap_base, cfg.holding_cap_levels, cfg.holding_cap_step) == (50, 5, 3)  # 企劃者 2026-10-05 從 5 改成 3
+    assert cfg.holding_per_lore_point == 2  # 博聞比基準每多一點多 2 格（設計 6.3）
 
 
 def test_a_peerless_art_has_no_sure_thing_and_the_legend_item_is_a_small_help():

@@ -291,7 +291,7 @@ def _play(content, seed: int, db_path: Path, *, no_craft=False, no_train=False) 
             log.actions += 1
             observe_step(game, log, before, choice, before_events)
             if step % SPEND_XINDE_EVERY == 0:
-                bot.allocate_points(game, rng)  # 升級的屬性點（武學與成長設計 6.2）：不配的話整季四項都停在 5
+                bot.allocate_points(game, rng)  # 升級的屬性點（武學與成長設計 6.2）：不配的話整季五項都停在 5
                 bot.spend_xinde(game, rng)
                 if not no_craft:
                     had = set(library.owned_arts(game.state)) | set(game.state.player.insights)

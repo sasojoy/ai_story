@@ -12,7 +12,7 @@ from tianxia.characters import open_characters
 from tianxia.content import load_content
 from tianxia.engine import Game, Option
 from tianxia.martial_arts import Insight, MartialArt, generate_from_name
-from tianxia.models import FigureDef, Location, PromotionDef
+from tianxia.models import Effect, FigureDef, Location, PromotionDef
 from tianxia.models import ExploreMix
 from tianxia.state import BotProfile, FigureState, GameState, Journey, Rumor, new_game_state
 from tianxia.sqlite_world import open_world
@@ -76,7 +76,7 @@ def test_the_menxia_pages_get_their_rows_from_the_game_facade(game):
     game.state.player.member.wugong_id = "basic_fist"
     game.state.player.arts = ["lake_kick"]
     game.state.player.insights = ["feng"]
-    assert game.holdings() == {"count": 3, "cap": library.holding_cap(game.content, 1)}
+    assert game.holdings() == {"count": 3, "cap": library.cap_of(game.state, game.content)}
     assert [r["id"] for r in game.art_rows()] == ["basic_fist", "lake_kick"]
     assert [r["id"] for r in game.insight_rows()] == ["feng"]
     assert game.naming_row() is None
@@ -5527,24 +5527,52 @@ def test_the_status_carries_the_points_to_allocate(game):
     data = game.status_data()
     assert data["stat_points"] == 3 and data["stat_cap"] == 15
     assert data["attrs"][0] == ("臂力", 5, "str")
-    assert [k for _, _, k in data["attrs"]] == ["str", "agi", "con", "wis"]
+    assert [k for _, _, k in data["attrs"]] == ["str", "agi", "con", "wis", "lore"]
 
 
 def test_the_status_says_what_each_stat_does(game):
-    """配點鈕底下那一行（計畫二最終審查 M2）：點數配了收不回來（設計 6.2），按之前要看得到四項各管什麼（照設計 6.1）。
-    名字照 Config.stat_names、順序跟 attrs 一樣，再加一句事件的檢定也看這四項；文字由引擎給，網頁不寫死。"""
+    """配點鈕底下那一行（計畫二最終審查 M2）：點數配了收不回來（設計 6.2），按之前要看得到五項各管什麼（照設計 6.1、6.3）。
+    名字照 Config.stat_names、順序跟 attrs 一樣，再加一句事件的檢定也看這五項；文字由引擎給，網頁不寫死。"""
     names = game.content.config.stat_names
     names["agi"] = "輕功"  # 改了名字，那一行跟著改
     data = game.status_data()
     assert [name for name, _ in data["stat_uses"]] == [name for name, _, _ in data["attrs"]] == [
-        names[k] for k in ("str", "agi", "con", "wis")
+        names[k] for k in ("str", "agi", "con", "wis", "lore")
     ]
     uses = dict(data["stat_uses"])
     assert "武學" in uses[names["str"]]  # 臂力：武學（外功）的威力
     assert "氣血" in uses["輕功"]  # 身法：打完一場少掉一點氣血
     assert all(word in uses[names["con"]] for word in ("內功", "氣血上限", "內傷"))  # 根骨：內功、氣血上限、少受內傷
     assert all(word in uses[names["wis"]] for word in ("修練", "意境", "閉關"))  # 悟性：修練升品、探索悟意境、閉關心得
-    assert "檢定" in data["stat_uses_note"]
+    assert "持有" in uses[names["lore"]]  # 博聞：武學與意境的持有上限（設計 6.3）
+    assert "檢定" in data["stat_uses_note"] and "五項" in data["stat_uses_note"]
+
+
+def test_lore_is_the_fifth_stat_and_is_named_in_one_place(game):
+    """設計 6.3：第五項屬性「博聞」。顯示名只在 Config.stat_names，改那裡狀態列就跟著改。"""
+    assert game.state.player.stats["lore"] == 5
+    game.content.config.stat_names["lore"] = "見識"
+    game.state.player.stat_points = 1
+    assert game.status_data()["attrs"][-1] == ("見識", 5, "lore")
+    assert game.allocate_stat("lore") == ["見識 +1"]
+    assert game.state.player.stats["lore"] == 6 and game.state.player.stat_points == 0
+
+
+def test_lore_is_capped_like_the_other_stats(game):
+    p = game.state.player
+    p.stats["lore"], p.stat_points = game.content.config.stat_cap, 1
+    assert "到頂" in game.allocate_stat("lore")[0] and p.stat_points == 1
+    msgs = rules.apply_effect(Effect(stats={"lore": 3}), game.state, game.content, game.world)
+    assert p.stats["lore"] == game.content.config.stat_cap and any("到頂" in m for m in msgs)
+
+
+def test_an_old_save_without_lore_gets_the_starting_value(game):
+    """舊存檔（博聞加進來之前存的）沒有這一項：讀進來時照開局的數字補上，狀態列、加點、檢定都照常。"""
+    state = game.state.model_copy(deep=True)
+    del state.player.stats["lore"]
+    loaded = Game(game.content, state, random.Random(0), game.world)
+    assert loaded.state.player.stats["lore"] == game.content.config.start_stats["lore"] == 5
+    assert loaded.status_data()["attrs"][-1][1:] == (5, "lore")
 
 
 def test_the_status_text_still_reads_the_attrs_with_their_keys(game):

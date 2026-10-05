@@ -86,6 +86,14 @@ def test_practice_must_be_a_reputation(tmp_path):
         load_content(root)
 
 
+def test_practice_cannot_be_lore(tmp_path):
+    """熟練加成吃的是名聲類的屬性；博聞跟另外四項一樣是能力值，不能拿來當熟練。"""
+    root = copy_fixture(tmp_path)
+    edit_json(root / "config.json", lambda d: d.update(practice_bonus={"lore": {"per": 10, "cap": 3}}))
+    with pytest.raises(ContentError, match="lore"):
+        load_content(root)
+
+
 def test_last_ending_must_be_unconditional(tmp_path):
     root = copy_fixture(tmp_path)
     edit_json(root / "scenario.json", lambda d: d["endings"].pop())

@@ -203,6 +203,8 @@ class Game:
         self._reconcile_season()
         s, c = self.state, self.content
         p = s.player
+        for key in team.COMBAT_STATS:  # 舊存檔沒有後來加的屬性（博聞，武學與成長設計 6.3）：照開局的數字補上
+            p.stats.setdefault(key, c.config.start_stats.get(key, team.BASE_STAT))
         if s.pending_event and s.pending_event not in c.events:
             s.pending_event = None
         if p.pending_companion and p.pending_companion not in c.characters:
@@ -2905,7 +2907,7 @@ class Game:
         """武學與意境的持有數與上限（武學與成長設計 4.5）。"""
         return {
             "count": library.held_count(self.state),
-            "cap": library.holding_cap(self.content, self.state.player.member.level),
+            "cap": library.cap_of(self.state, self.content),
         }
 
     def art_rows(self) -> list[dict]:
@@ -3385,7 +3387,7 @@ class Game:
             "attrs": [(names[k], p.stats[k], k) for k in team.COMBAT_STATS],  # 第三項是鍵：配點鈕送它（allocate_stat）
             "stat_points": p.stat_points,
             "stat_cap": c.config.stat_cap,
-            # ＋鈕底下那一行：四項各管什麼、事件檢定也看它們（計畫二最終審查 M2）；網頁只在有點可配時畫
+            # ＋鈕底下那一行：五項各管什麼、事件檢定也看它們（計畫二最終審查 M2）；網頁只在有點可配時畫
             "stat_uses": skillview.stat_uses(c),
             "stat_uses_note": skillview.STAT_CHECK_NOTE,
             "hint": skillview.practice_hint(s, c),  # 心得擱著沒用、又還有功夫沒練滿時才有

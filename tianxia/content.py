@@ -135,7 +135,7 @@ def _scale_marks(obj, scale: float) -> None:
 
 
 MARKS_TOKEN = re.compile(r"\{marks:([^{}]+)\}")  # 文字裡的模糊人數（rules.fill_marks）
-FREE_TEXT_REWARDS = ("silver", "fame", "good", "xinde", "str", "agi", "con", "wis")  # 隨口應對的獎勵不能超過檢定選項的這幾項
+FREE_TEXT_REWARDS = ("silver", "fame", "good", "xinde", "str", "agi", "con", "wis", "lore")  # 隨口應對的獎勵不能超過檢定選項的這幾項
 
 
 def _read(path: Path):
@@ -742,7 +742,7 @@ def validate(c: Content) -> None:
             need(key in valid, f"{where}：未知的{kind} {key}")
 
     for kind in c.config.practice_bonus:  # 熟練加成看的是本人的名聲（善名、惡名、名望……），不是戰鬥屬性
-        need(kind in STATS and kind not in ("str", "agi", "con", "wis"), f"config.practice_bonus 的 {kind} 不是名聲類的屬性")
+        need(kind in STATS and kind not in ("str", "agi", "con", "wis", "lore"), f"config.practice_bonus 的 {kind} 不是名聲類的屬性")
 
     faction_ids = [f.id for f in c.scenario.factions]
     item_ids = [item.id for item in c.foreshadows.items]
