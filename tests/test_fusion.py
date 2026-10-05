@@ -2,7 +2,7 @@ from unittest import mock
 
 import pytest
 
-from tianxia import fusion, library, naming, team
+from tianxia import fusion, insights, landing, library, naming, team
 from tianxia.martial_arts import generate_from_name, power_at
 from tianxia.state import new_game_state
 
@@ -579,11 +579,26 @@ def test_not_enough_xinde_is_still_reported_before_the_stamina(ready, content, w
     assert "心得不足" in fusion.merge_problem(ready, content, world, "feng", "huo")
 
 
-def test_a_fuse_costs_no_stamina(ready, content, world):
-    ready.player.stamina = 0
+# ── 三種合成同一套價錢（武學與成長設計 12.1）──────────────────
+
+def test_a_fuse_costs_stamina_as_well_as_xinde(ready, content, world):
+    before = ready.player.stamina
     art, msgs = fusion.fuse(ready, content, world, named("旋風腿"), "basic_fist", "feng")
-    assert art is not None and ready.player.stamina == 0
-    assert not any("體力" in m for m in msgs)
+    assert art is not None and ready.player.stamina == before - content.config.fuse_stamina
+    assert f"心得 -{content.config.fuse_xinde}" in msgs and f"體力 -{content.config.fuse_stamina}" in msgs
+
+
+def test_a_fuse_without_enough_stamina_is_refused_and_changes_nothing(ready, content, world):
+    ready.player.stamina = content.config.fuse_stamina - 1
+    art, msgs = fusion.fuse(ready, content, world, must_not_ask(), "basic_fist", "feng")
+    assert art is None and msgs == [f"體力不足：合成一次要 {content.config.fuse_stamina}。"]
+    assert ready.player.arts == [] and ready.player.stats["xinde"] == 100
+    assert world.lookup_recipe(fusion.fuse_key("basic_fist", "feng")) is None
+
+
+def test_not_enough_xinde_is_still_reported_before_the_stamina_for_a_fuse(ready, content, world):
+    ready.player.stamina, ready.player.stats["xinde"] = 0, 0
+    assert "心得不足" in fusion.fuse_problem(ready, content, world, "basic_fist", "feng")
 
 
 def test_the_engine_merge_journal_entry_shows_both_the_xinde_and_the_stamina(game):
@@ -598,13 +613,16 @@ def test_the_engine_merge_journal_entry_shows_both_the_xinde_and_the_stamina(gam
     assert p.stamina == before - 5 and "體力 -5" in msgs  # FB-067：合併 5 點體力
 
 
-def test_the_engine_fuse_journal_entry_has_no_stamina_line(game):
+def test_the_engine_fuse_journal_entry_shows_both_the_xinde_and_the_stamina(game):
     p = game.state.player
     p.member.wugong_id, p.insights, p.stats["xinde"] = "basic_fist", ["feng"], 100
+    before = p.stamina
     with mock.patch.object(game.client, "chat_structured", side_effect=RuntimeError):
         game.forge("basic_fist", ["feng"])
     entry = game.state.journal[0]
-    assert "心得 -5" in entry.changes and not any("體力" in c for c in entry.changes)
+    stamina = game.content.config.fuse_stamina
+    assert "心得 -5" in entry.changes and f"體力 -{stamina}" in entry.changes
+    assert p.stamina == before - stamina
 
 
 def test_the_engine_refused_merge_writes_no_journal_entry_and_spends_nothing(game):
@@ -631,3 +649,174 @@ def test_the_merge_melt_merge_loop_is_still_allowed_but_every_round_costs_stamin
             assert p.insights == ["feng", "huo"]
             assert p.stamina == stamina - cfg.merge_stamina * round_
             assert p.stats["xinde"] == xinde + (cfg.melt_insight_xinde - cfg.merge_xinde) * round_
+
+
+# ── 合到舊的（設計 12.2）────────────────────────────────────────
+
+def landing_on(content):
+    """這個測試裡，有候選就一定合到舊的。"""
+    content.config.land_chance_per_candidate, content.config.land_chance_cap = 1.0, 1.0
+
+
+def two_fast_arts(content, world):
+    """乙先合出兩門「武學・快・無」：旋風腿（基礎拳腳＋風）、疾風腿（旋風腿＋風）。這時合到舊的還關著，兩門都是新的。"""
+    other = other_player(content)
+    fusion.fuse(other, content, world, named("旋風腿"), "basic_fist", "feng")
+    fusion.fuse(other, content, world, named("疾風腿"), "旋風腿", "feng")
+    return other
+
+
+def test_a_first_fuse_can_land_on_an_art_someone_else_made(ready, content, world):
+    other = other_player(content)
+    made, _ = fusion.fuse(other, content, world, named("旋風腿"), "basic_fist", "feng")
+    landing_on(content)
+    ready.player.arts = ["lake_kick"]  # 湖邊腿法：武學・快，跟旋風腿同種類、同屬性、同正邪
+    xinde, stamina = ready.player.stats["xinde"], ready.player.stamina
+    art, msgs = fusion.fuse(ready, content, world, must_not_ask(), "lake_kick", "feng")  # 只有一個候選：不問模型
+    assert art.id == made.id and art.id in ready.player.arts
+    assert "合出來的竟是一門已有的武學【旋風腿】" in msgs[0] and "這一門由乙首創。" in msgs[0]
+    assert "第一次" not in msgs[0]
+    assert ready.player.stats["xinde"] == xinde - content.config.fuse_xinde
+    assert ready.player.stamina == stamina - content.config.fuse_stamina
+    assert world.lookup_recipe(fusion.fuse_key("lake_kick", "feng")).id == made.id
+    assert world.get_skill(made.id).creator == "乙"  # 首創者照舊
+    assert [a.id for a in world.fused_arts()] == [made.id]  # 沒有多登記一門
+
+
+def test_landing_on_an_art_you_already_have_is_free_and_remembered(ready, content, world):
+    made, _ = fusion.fuse(ready, content, world, named("旋風腿"), "basic_fist", "feng")
+    ready.player.arts.append("lake_kick")
+    landing_on(content)
+    xinde, stamina = ready.player.stats["xinde"], ready.player.stamina
+    art, msgs = fusion.fuse(ready, content, world, must_not_ask(), "lake_kick", "feng")
+    assert art is None and msgs == ["這一爐合出來還是【旋風腿】，你已經有了——換一個意境吧。"]
+    assert (ready.player.stats["xinde"], ready.player.stamina) == (xinde, stamina)
+    assert world.lookup_recipe(fusion.fuse_key("lake_kick", "feng")).id == made.id  # 配方照樣記下來
+    assert "你已經有了" in fusion.fuse_problem(ready, content, world, "lake_kick", "feng")  # 下一次按之前就知道
+
+
+def test_landing_twice_charges_once(ready, content, world):
+    """Review Focus 1：同一爐合到舊的、連按兩下——第二下看見配方指向你剛拿到的那一門，什麼都不收。"""
+    other = other_player(content)
+    fusion.fuse(other, content, world, named("旋風腿"), "basic_fist", "feng")
+    landing_on(content)
+    ready.player.arts = ["lake_kick"]
+    proposed = (None, "")  # 伺服器一律給 proposed；這一爐只有一個候選，A 段不開單
+    first, _ = fusion.fuse(ready, content, world, must_not_ask(), "lake_kick", "feng", proposed=proposed)
+    xinde, stamina = ready.player.stats["xinde"], ready.player.stamina
+    second, msgs = fusion.fuse(ready, content, world, must_not_ask(), "lake_kick", "feng", proposed=proposed)
+    assert first is not None and second is None and "你已經有了" in msgs[0]
+    assert (ready.player.stats["xinde"], ready.player.stamina) == (xinde, stamina)
+
+
+def test_landing_on_the_base_itself_is_free_and_stays_that_way(ready, content, world):
+    """Review Focus 4（企劃者 2026-10-05：「旋風腿＋風」合出旋風腿可以接受；「一旦公式訂了就不能再變」）：
+    旋風腿（快）＋風（快）本來會得到「武學・快・無」，唯一的候選是底自己——合到它：你本來就有，什麼都不收，
+    配方照樣記下來；之後機會怎麼變都不重判。"""
+    made, _ = fusion.fuse(ready, content, world, named("旋風腿"), "basic_fist", "feng")
+    landing_on(content)
+    xinde, stamina = ready.player.stats["xinde"], ready.player.stamina
+    art, msgs = fusion.fuse(ready, content, world, must_not_ask(), "旋風腿", "feng")
+    assert art is None and msgs == ["這一爐合出來還是【旋風腿】，你已經有了——換一個意境吧。"]
+    assert (ready.player.stats["xinde"], ready.player.stamina) == (xinde, stamina)
+    key = fusion.fuse_key("旋風腿", "feng")
+    assert world.lookup_recipe(key).id == made.id
+    content.config.land_chance_per_candidate = 0.0  # 機會改了也不重判：配方已經定了
+    assert world.lookup_recipe(key).id == made.id
+    assert "你已經有了" in fusion.fuse_problem(ready, content, world, "旋風腿", "feng")
+
+
+def test_with_two_or_more_candidates_the_model_picks_one(ready, content, world):
+    two_fast_arts(content, world)
+    landing_on(content)
+    ready.player.arts = ["lake_kick"]
+    client = named("疾風腿")
+    art, msgs = fusion.fuse(ready, content, world, client, "lake_kick", "feng")
+    assert art.id == "疾風腿" and "竟是" in msgs[0]
+    listing = client.chat_structured.call_args.args[0][-1]["content"].split("清單：")[1]
+    assert "旋風腿" in listing and "疾風腿" in listing and "湖邊" not in listing  # 基礎武學不是合成物，不在清單上
+
+
+@pytest.mark.parametrize("client", [named("不在清單上"), model_down()])
+def test_when_the_model_picks_nothing_on_the_list_the_rules_pick(ready, content, world, client):
+    two_fast_arts(content, world)
+    landing_on(content)
+    ready.player.arts = ["lake_kick"]
+    key = fusion.fuse_key("lake_kick", "feng")
+    expected = landing.rule_pick(
+        landing.art_candidates(world, "武學", "快", "無"), key, world.read().tianji,
+    )
+    art, _ = fusion.fuse(ready, content, world, client, "lake_kick", "feng")
+    assert art.id == expected.id
+
+
+def test_a_proposed_pick_that_is_no_candidate_falls_back_to_the_rules(ready, content, world):
+    """Review Focus 2：C 段拿到的名字不在這時的候選裡（A 段之後情況變了）——改由規則挑，不叫模型。"""
+    two_fast_arts(content, world)
+    landing_on(content)
+    ready.player.arts = ["lake_kick"]
+    key = fusion.fuse_key("lake_kick", "feng")
+    expected = landing.rule_pick(
+        landing.art_candidates(world, "武學", "快", "無"), key, world.read().tianji,
+    )
+    art, _ = fusion.fuse(ready, content, world, must_not_ask(), "lake_kick", "feng", proposed=("亂取的名字", ""))
+    assert art.id == expected.id
+
+
+def test_a_pick_that_turns_into_a_new_art_gets_a_fallback_name(ready, content, world):
+    """Review Focus 2：A 段開的是「挑」的單（模型挑了疾風腿），C 段時這一爐翻成長新的——
+    挑的名字已經被用掉，登記撞名就走退路字表，照常收一次錢。"""
+    two_fast_arts(content, world)
+    landing_on(content)
+    ready.player.arts = ["lake_kick"]
+    request = fusion.forge_request(ready, content, world, "lake_kick", ["feng"])
+    assert request.choices == ("旋風腿", "疾風腿")
+    content.config.land_chance_per_candidate = 0.0  # A 段之後情況變了
+    art, msgs = fusion.fuse(ready, content, world, must_not_ask(), "lake_kick", "feng", proposed=("疾風腿", ""))
+    key = fusion.fuse_key("lake_kick", "feng")
+    assert art.name not in ("旋風腿", "疾風腿") and art.name == naming.fallback_name(content, key, "武學", tianji=world.read().tianji)
+    assert ready.player.stats["xinde"] == 100 - content.config.fuse_xinde
+
+
+def test_forge_request_opens_a_pick_only_with_two_or_more_candidates(ready, content, world):
+    two_fast_arts(content, world)
+    ready.player.arts = ["lake_kick"]
+    plain = fusion.forge_request(ready, content, world, "lake_kick", ["feng"])  # 合到舊的還關著：取新名字
+    assert plain.kind == "fuse" and plain.choices == ()
+    landing_on(content)
+    request = fusion.forge_request(ready, content, world, "lake_kick", ["feng"])
+    assert request.kind == "fuse" and request.choices == ("旋風腿", "疾風腿")
+    assert request.messages[0]["content"] == fusion.PICK_SYSTEM
+
+
+def test_forge_request_needs_no_model_when_it_lands_on_the_only_candidate(ready, content, world):
+    other = other_player(content)
+    fusion.fuse(other, content, world, named("旋風腿"), "basic_fist", "feng")
+    landing_on(content)
+    ready.player.arts = ["lake_kick"]
+    assert fusion.forge_request(ready, content, world, "lake_kick", ["feng"]) is None
+
+
+def test_a_first_merge_can_land_on_a_known_insight(ready, content, world):
+    """乙先合出燎原（火＋風＝陽）與狂風（風＋風＝快）；甲第一次合狂風＋火（快＋剛＝陽），合到燎原。"""
+    other = other_player(content, insights=("feng", "huo"))
+    fusion.merge(other, content, world, named("燎原"), "feng", "huo")
+    fusion.merge(other, content, world, named("狂風"), "feng", "feng")
+    landing_on(content)
+    ready.player.insights = ["狂風", "huo"]
+    stamina = ready.player.stamina
+    insight, msgs = fusion.merge(ready, content, world, must_not_ask(), "狂風", "huo")
+    assert insight.id == "燎原" and "燎原" in ready.player.insights
+    assert "化成的竟是已有的「燎原」" in msgs[0] and "這個意境由乙首悟。" in msgs[0]
+    assert ready.player.stamina == stamina - content.config.merge_stamina
+    assert world.lookup_insight_recipe(fusion.merge_key("狂風", "huo")).id == "燎原"
+
+
+def test_a_merged_insights_attribute_follows_the_recipe_not_the_name(ready, content, world):
+    """設計 12.6：火＋水是相剋的一對，屬性由配方加天機決定；模型取什麼名字都一樣。"""
+    ready.player.insights = ["huo", "shui"]
+    key = fusion.merge_key("huo", "shui")
+    fire, water = (insights.resolve(i, content, world) for i in ("huo", "shui"))
+    expected = insights.merged_attribute(fire, water, fusion.recipe_seed(world, key)[1])
+    insight, _ = fusion.merge(ready, content, world, named("水火"), "huo", "shui")
+    assert insight.attribute == expected

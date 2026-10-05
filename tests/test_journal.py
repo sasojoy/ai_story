@@ -472,7 +472,8 @@ def test_twice_forging_reads_as_two_lines_on_the_just_now_card(game):
     merged = latest(game).tag
     assert (fused, latest(game).title) == ("合成【鐵腕勁】", "煉製") and merged.startswith("合併「")
     assert shown(game.now_entry_html()) == [escape(fused), escape(merged)]
-    assert f"體力 -{game.content.config.merge_stamina}" in game.now_entry_html()
+    cfg = game.content.config
+    assert f"體力 -{cfg.fuse_stamina + cfg.merge_stamina}" in game.now_entry_html()  # 設計 12.1：合成與合併各收一次，加總
 
 
 def test_twice_melting_reads_as_two_lines_on_the_just_now_card(game):

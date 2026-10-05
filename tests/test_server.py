@@ -36,6 +36,12 @@ def season_already_open(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _no_landing(monkeypatch):
+    """合到舊的（設計 12.2）在 test_fusion.py 測；這裡的測試照舊每一爐都長新的，結果才固定。"""
+    monkeypatch.setattr(server.CONTENT.config, "land_chance_per_candidate", 0.0)
+
+
+@pytest.fixture(autouse=True)
 def fresh_server_memory():
     """登入紀錄、登入狀態、角色快取都只放在伺服器記憶體裡：每個測試從空的開始。"""
     for store in (server.LOGIN_FAILURES, server.SESSIONS, server.GAMES):

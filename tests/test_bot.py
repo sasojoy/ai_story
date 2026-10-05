@@ -146,7 +146,8 @@ def test_the_bot_keeps_its_stamina_for_the_road_below_the_reserve(content, world
     game = armed(content, world)
     game.state.player.stamina = bot.CULTIVATE_RESERVE - 1
     bot.forge_and_cultivate(game, random.Random(0))
-    assert game.state.player.stamina == bot.CULTIVATE_RESERVE - 1  # 沒有修練（合成不花體力）
+    # 合成也花體力了（設計 12.1）：這一輪合了一爐，但體力沒到修練的保留量，沒有修練
+    assert game.state.player.stamina == bot.CULTIVATE_RESERVE - 1 - content.config.fuse_stamina
     assert not game.state.player.art_mastery and not game.state.player.art_quality
 
 

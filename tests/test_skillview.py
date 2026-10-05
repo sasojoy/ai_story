@@ -323,7 +323,7 @@ def test_forge_line_shows_a_fuse(state, content, world):
     state.player.stats["xinde"] = 100
     line = skillview.forge_line(state, content, world, "basic_fist", ["feng"])
     assert "**合成**" in line and "【粗淺拳腳】＋「風」→ 一門新武學" in line and "屬快" in line
-    assert "從下品起修" in line and "花 5 點心得（你有 100 點）" in line and "⚠" not in line
+    assert "從下品起修" in line and "花 5 點心得、5 點體力（你有 100 點心得）" in line and "⚠" not in line
 
 
 @pytest.mark.parametrize("quality", ["下品", "中品", "上品", "絕學"])
@@ -335,7 +335,7 @@ def test_forge_line_says_the_new_art_starts_at_the_lowest_quality_whatever_the_b
     state.player.stats["xinde"] = 100
     line = skillview.forge_line(state, content, world, "basic_fist", ["feng"])
     assert "從下品起修" in line and "屬快" in line and "一樣是" not in line
-    assert "花 5 點心得（你有 100 點）" in line and "⚠" not in line
+    assert "花 5 點心得、5 點體力（你有 100 點心得）" in line and "⚠" not in line
 
 
 def test_forge_line_shows_a_merge(state, content, world):
@@ -604,15 +604,15 @@ def test_an_art_card_shows_an_anonymous_first_fuser_as_a_nameless_hero():
     assert card.split("\n")[3] == "來源：合成（某位少俠 首創）　意境：「風」" and "沈浪" not in card
 
 
-def test_forge_line_tells_a_merge_costs_stamina_but_a_fuse_does_not(state, content, world):
-    """企劃者 2026-10-05：合併要花體力；合成不花，說明裡就不提體力。"""
+def test_forge_line_tells_both_a_merge_and_a_fuse_cost_stamina(state, content, world):
+    """設計 12.1：三種合成都花體力。"""
     state.player.member.wugong_id = "basic_fist"
     state.player.insights = ["feng", "huo"]
     state.player.stats["xinde"] = 100
     merge = skillview.forge_line(state, content, world, None, ["feng", "huo"])
     assert "花 5 點心得、5 點體力" in merge and "⚠" not in merge
     fuse = skillview.forge_line(state, content, world, "basic_fist", ["feng"])
-    assert "體力" not in fuse
+    assert f"{content.config.fuse_stamina} 點體力" in fuse
 
 
 def test_forge_line_warns_when_the_stamina_is_short_for_a_merge(state, content, world):
@@ -622,7 +622,8 @@ def test_forge_line_warns_when_the_stamina_is_short_for_a_merge(state, content, 
     state.player.stamina = content.config.merge_stamina - 1
     merge = skillview.forge_line(state, content, world, None, ["feng", "huo"])
     assert "花 5 點心得、5 點體力" in merge and "⚠ 體力不足：合併一次要 5。" in merge
-    assert "⚠" not in skillview.forge_line(state, content, world, "basic_fist", ["feng"])  # 合成不花體力：照樣開得了爐
+    fuse = skillview.forge_line(state, content, world, "basic_fist", ["feng"])
+    assert "⚠ 體力不足：合成一次要" in fuse  # 合成也花體力了（設計 12.1）
 
 
 def test_practice_hint_does_not_send_you_to_merge_when_the_stamina_is_short(state, content):
@@ -633,9 +634,11 @@ def test_practice_hint_does_not_send_you_to_merge_when_the_stamina_is_short(stat
     assert skillview.practice_hint(state, content) is None
     state.player.stamina = content.config.merge_stamina
     assert "煉製" in skillview.practice_hint(state, content)
-    state.player.stamina = 0
     state.player.member.wugong_id, state.player.member.wugong_level = "basic_fist", 10
-    assert "煉製" in skillview.practice_hint(state, content)  # 有武學：合成不花體力
+    state.player.stamina = content.config.fuse_stamina - 1
+    assert skillview.practice_hint(state, content) is None  # 合成也要體力（設計 12.1）
+    state.player.stamina = content.config.fuse_stamina
+    assert "煉製" in skillview.practice_hint(state, content)
 
 
 # ── 計畫二 Task 3：本人卡寫出威力加成 ──────────────────────────────────────────────

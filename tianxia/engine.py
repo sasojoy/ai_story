@@ -2686,8 +2686,8 @@ class Game:
         可能花掉、配方可能被別人或同一個人的另一個請求登記了），名字再過一次過濾、登記時原子判斷重名，過不了走退路字表；
         給了 proposed 就不會在這裡叫模型（伺服器一律給，不需要模型時是 (None, "")）。沒給（整季機器人、腳本、測試）
         首次出現的配方照舊在這裡叫模型，那是在行動鎖內，所以用 _quick_client 的短逾時複本，取不到名字就走退路字表。
-        江湖紀錄的標題照煉製頁寫「煉製」（FB-047），做成了才寫，被拒絕只回一句話、什麼都不收。合併要花體力（Config.merge_stamina）、
-        合成不花：花了的體力跟心得一起寫在這一則的數值變化上（企劃者 2026-10-05）。"""
+        江湖紀錄的標題照煉製頁寫「煉製」（FB-047），做成了才寫，被拒絕只回一句話、什麼都不收。
+        三種合成都花心得與體力（設計 12.1）：花了的體力跟心得一起寫在這一則的數值變化上。"""
         if self._preparing():
             return self._log(["（賽季籌備中，等待管理者開季。）"])
         xinde, stamina = self._xinde(), self.state.player.stamina
@@ -2703,7 +2703,7 @@ class Game:
             return self._log(["放一門武學和一個意境（合成），或兩個意境（合併）。"])
         out = self._log(msgs)
         if tag is not None:
-            spent = round(stamina - self.state.player.stamina)  # 合併花體力、合成不花：數值變化寫在紀錄上，跟修練一樣
+            spent = round(stamina - self.state.player.stamina)  # 三種合成都花體力：數值變化寫在紀錄上，跟修練一樣
             out += self._menxia_entry(
                 tag, xinde, guide=True, title=journal.CRAFT, extra=[f"體力 -{spent}"] if spent > 0 else None,
             )

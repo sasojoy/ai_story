@@ -70,14 +70,14 @@ def forge_line(
         head = (
             f"**合成**　【{base.name}】＋「{insight.name}」→ 一門新{base.kind}"
             f"（屬{insight.attribute}，從下品起修），"
-            f"花 {cfg.fuse_xinde} 點心得（你有 {xinde} 點）。"
+            f"花 {cfg.fuse_xinde} 點心得、{cfg.fuse_stamina} 點體力（你有 {xinde} 點心得）。"
         )
         problem = fusion.fuse_problem(state, content, world, art_id, insight_ids[0])
     elif not art_id and len(insight_ids) == 2:
         a, b = (insights.resolve(i, content, world) for i in insight_ids)
         if a is None or b is None:
             return "（選了不存在的東西。）"
-        head = (  # 合併花體力、合成不花（企劃者 2026-10-05）：不夠的話下面的 ⚠ 會說
+        head = (  # 三種合成都花體力（設計 12.1）：不夠的話下面的 ⚠ 會說
             f"**合併**　「{a.name}」＋「{b.name}」→ 一個新的意境，"
             f"花 {cfg.merge_xinde} 點心得、{cfg.merge_stamina} 點體力（你有 {xinde} 點心得）。"
         )

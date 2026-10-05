@@ -50,17 +50,13 @@ def test_rolling_picks_from_the_pool(content):
 def test_merged_attributes_follow_the_pair_table():
     fire, wind = Insight(id="huo", name="火", attribute="剛"), Insight(id="feng", name="風", attribute="快")
     water, hill = Insight(id="shui", name="水", attribute="柔"), Insight(id="shan", name="山", attribute="慢")
-    assert insights.merged_attribute(fire, wind, "燎原") == "陽"
-    assert insights.merged_attribute(water, hill, "幽谷") == "陰"
-    assert insights.merged_attribute(wind, water, "雲霧") == "虛"
-    assert insights.merged_attribute(fire, hill, "熔岩") == "實"
-    assert insights.merged_attribute(wind, wind, "狂風") == "快"
-
-
-def test_other_pairs_pick_one_parent_by_the_name():
-    fire, water = Insight(id="huo", name="火", attribute="剛"), Insight(id="shui", name="水", attribute="柔")
-    got = insights.merged_attribute(fire, water, "水火")
-    assert got in ("剛", "柔") and got == insights.merged_attribute(water, fire, "水火")
+    seed = "1|合|recipe"  # 配方種子（天機|配方鍵）；表裡有的組合不看它
+    assert insights.merged_attribute(fire, wind, seed) == "陽"
+    assert insights.merged_attribute(water, hill, seed) == "陰"
+    assert insights.merged_attribute(wind, water, seed) == "虛"
+    assert insights.merged_attribute(fire, hill, seed) == "實"
+    assert insights.merged_attribute(wind, wind, seed) == "快"
+    assert {insights.merged_attribute(fire, wind, f"{t}|合|recipe") for t in range(20)} == {"陽"}
 
 
 def test_other_pairs_pick_one_parent_by_the_recipe_seed_whatever_the_order():
