@@ -3429,7 +3429,9 @@ def test_main_view_sends_the_guide_box_and_skipping_hides_it(client):
     """全新角色的 /api/main 帶著對話框：說書人與第一步的話（不用點開任何東西）；略過新手引導後就沒有了。"""
     main = _player(client)["main"]
     tutorial = server.CONTENT.tutorial
-    assert main["guide"] == {"speaker": tutorial.speaker, "text": tutorial.steps[0].text, "done": [], "end": False}
+    assert main["guide"] == {
+        "speaker": tutorial.speaker, "scene": "", "text": tutorial.steps[0].text, "line": "", "done": [], "end": False,
+    }
     client.post("/api/do/skip_tutorial", json={})
     assert client.get("/api/main").json()["guide"] is None
 

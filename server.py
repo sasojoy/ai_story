@@ -394,6 +394,8 @@ def main_view(game: Game) -> dict:
         "chronicle": md(game.chronicle_text()),
         "admin": game.is_admin(),
         "guide": game.guide_box(),  # 行動列上方的說書人對話框（引導重做設計 8.1）；略過或早就做完是 None
+        # 序章（新手引導計畫一）：要亮的畫面元件、要發光的鈕、略過連結；不在序章是 None，網頁照平常畫
+        "prologue": game.prologue_view(),
     }
     if "fronts" in status:  # 第一季濃縮版才有：江湖頁的三條戰況（開關關著時不送，頁面照舊）
         view["fronts"] = status["fronts"]
@@ -792,6 +794,7 @@ MAIN_ACTIONS = {
     "anonymous": lambda g, b: g.set_anonymous(bool(b.get("value"))),
     "skip_tutorial": lambda g, b: g.skip_tutorial(),
     "view_map": lambda g, b: g.view_map(),
+    "view_tab": lambda g, b: g.view_tab(str(b.get("tab", ""))),  # 序章裡打開修練、煉製頁（新手引導計畫一）
     "guide_ack": lambda g, b: g.guide_ack(),  # 對話框的結語按「知道了」
     "allocate": lambda g, b: g.allocate_stat(str(b.get("stat", ""))),  # 狀態列的配點鈕：升級得到的屬性點加到一項
 }

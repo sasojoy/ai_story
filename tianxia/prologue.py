@@ -7,7 +7,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from .models import Content, TutorialStep
+from .martial_arts import MartialArt
+from .models import Content, GiveArt, TutorialStep
 from .rules import apply_effect
 from .state import ONBOARDING_VERSION, GameState, PlayerState
 from .world_state import WorldStateStore
@@ -110,3 +111,48 @@ def can_travel(state: GameState, content: Content) -> bool:
     """輿圖的安排前往：序章裡只有出師那一步（allow 有 move:）走得了。"""
     current = step(state, content)
     return current is None or any(prefix.startswith("move:") for prefix in current.allow)
+
+
+def fused_arts(state: GameState, content: Content, world: WorldStateStore) -> list[MartialArt]:
+    """身上與功法庫裡合成出來的武學（自己那一份，品質照自己修到的），照擁有的順序。"""
+    from . import library, team  # team、library 都 import 很多東西，放在函式裡避免循環
+
+    arts = (team.player_art(state, content, world, art_id) for art_id in library.owned_arts(state))
+    return [art for art in arts if art is not None and art.origin == "fused"]
+
+
+def fill(text: str, state: GameState, content: Content, world: WorldStateStore) -> str:
+    """序章的話裡的 {武學}：換成合成出來的那一門（序章只合一門）；還沒有就寫「新武學」。"""
+    if "{武學}" not in text:
+        return text
+    arts = fused_arts(state, content, world)
+    return text.replace("{武學}", arts[0].name if arts else "新武學")
+
+
+def give_art(state: GameState, content: Content, world: WorldStateStore, give: GiveArt) -> list[str]:
+    """完成某一步時給一門內容武學（雪恥之後掉出來的雜學），照寫的成數；已經有了就不給。"""
+    from . import library, team
+
+    if give.id in library.owned_arts(state):
+        return []
+    art = team.resolve_art(give.id, content, world)
+    msgs = library.store_art(state, art)
+    member = state.player.member
+    if member.wugong_id == give.id:
+        member.wugong_level = give.level
+    elif member.neigong_id == give.id:
+        member.neigong_level = give.level
+    else:
+        state.player.art_levels[give.id] = give.level
+    return msgs
+
+
+def view(state: GameState, content: Content) -> dict | None:
+    """網頁的序章畫面（設計 6.1）：reveal 是到這一步為止亮起來的元件（排序過），glow 是這一步要發光的鈕，
+    skip 是第一步才有的「略過序章」。不在序章是 None（網頁照平常畫）。"""
+    current = step(state, content)
+    if current is None:
+        return None
+    t = content.tutorial
+    shown = {key for s in t.steps[: state.player.tutorial_step + 1] for key in s.reveal}
+    return {"reveal": sorted(shown), "glow": list(current.glow), "skip": state.player.tutorial_step == 0}

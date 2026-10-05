@@ -24,6 +24,8 @@ from .events import (
     choice_label, event_candidates, has_events_here, pick_event, visible_choices,
 )
 from .guide import base_step_count, note_action, quest_text, step_text, tutorial_active, tutorial_intro
+from .guide import speaker_of as guide_speaker_of
+from .guide import speakers as guide_speakers
 from .guide import steps as tutorial_steps
 from .journal import LOG_BREAK, Draft
 from .mapview import render_map, render_minimap
@@ -875,6 +877,8 @@ class Game:
             else:
                 msgs = self._choose(int(arg))
             msgs += self._hear_after_stamina(stamina)
+            if kind == "choice":  # 選了事件的選項：序章的遇險、拜師、四景（新手引導計畫一）
+                msgs += self._guide(note_action(self.state, self.content, self.world, "choice"))
             if kind == "act" and arg != "break":
                 msgs += self._guide(note_action(self.state, self.content, self.world, arg))
             if kind == "call" and arg != "back":
@@ -1008,9 +1012,9 @@ class Game:
         有結語時對話框改顯示結語，等按「知道了」（引導重做設計 8.1）。"""
         if not notes:
             return
-        speaker = f"【{self.content.tutorial.speaker}】"
+        heads = tuple(f"【{name}】" for name in guide_speakers(self.content))  # 每一步可以是不同的人說（新手引導計畫一）
         p = self.state.player
-        p.guide_done = [n for n in notes if not n.startswith(speaker)]
+        p.guide_done = [n for n in notes if not n.startswith(heads)]
         if not tutorial_active(self.state, self.content) and self.content.tutorial.outro:
             p.guide_outro = True
 
@@ -1037,10 +1041,17 @@ class Game:
         if self._preparing() or s.world.ended:  # 籌備中、休季什麼都不能做，不叫人去探索（FB-045～052 審查 I1）
             return None
         if p.tutorial_step < len(todo):
+            step = todo[p.tutorial_step]
+            if not step.text or (prologue_rules.active(s, c) and s.pending_event):
+                return None  # 序章第一步（還沒遇到師父）、序章的事件端出來的時候：畫面就是那則事件（新手引導計畫一）
+            fill = lambda text: prologue_rules.fill(text, s, c, self.world)  # noqa: E731
             # 眼前有事件還沒了結時是 guide.pending_line，不推這一步；了結後原樣回來（FB-063；「下一步」也用同一句）
-            return {"speaker": t.speaker, "text": step_text(s, c), "done": list(p.guide_done), "end": False}
+            return {
+                "speaker": guide_speaker_of(c, step), "scene": fill(step.scene), "text": fill(step_text(s, c)),
+                "line": fill(step.line), "done": list(p.guide_done), "end": False,
+            }
         if p.guide_outro and t.outro:
-            return {"speaker": t.speaker, "text": t.outro, "done": list(p.guide_done), "end": True}
+            return {"speaker": t.speaker, "scene": "", "text": t.outro, "line": "", "done": list(p.guide_done), "end": True}
         return None
 
     def guide_ack(self) -> list[str]:
@@ -2953,7 +2964,7 @@ class Game:
         )
         # 結果標記是擲骰的結果（「【X】修練…」，一定以【開頭）；前面服丹、沒服的提示與後面定名的話都不是
         tag = next((m for m in msgs if m.startswith("【")), msgs[0])
-        self._menxia_entry(tag, xinde, extra=extra or None)
+        self._menxia_entry(tag, xinde, guide=True, action="cultivate", extra=extra or None)
         return msgs
 
     def name_mastered(self, name: str) -> list[str]:
@@ -2985,7 +2996,7 @@ class Game:
         xinde, held = self._xinde(), library.held_count(self.state)
         msgs = self._log(library.melt_art(self.state, self.content, self.world, art_id))
         if library.held_count(self.state) < held:  # 看有沒有真的少一門，不看心得：下品第一成的武學熔了只退 0 點
-            self._menxia_entry(msgs[0], xinde)
+            self._menxia_entry(msgs[0], xinde, guide=True, action="melt")  # 序章第 10 步（新手引導計畫一）
         return msgs
 
     def melt_insight(self, insight_id: str) -> list[str]:
@@ -3044,6 +3055,7 @@ class Game:
             merge=True,
         )
         left = f"（還有 {p.stat_points} 點可以分配）" if p.stat_points else ""  # 最後一點不寫「還有 0 點」
+        self._guide(note_action(self.state, self.content, self.world, "allocate"))  # 序章第 9 步（新手引導計畫一）
         return self._log([f"{name} +1{left}"])
 
     def _xinde(self) -> int:
@@ -3051,19 +3063,19 @@ class Game:
 
     def _menxia_entry(
         self, tag: str, xinde_before: int, guide: bool = False, title: str = journal.PRACTICE,
-        extra: list[str] | None = None, lines: list[str] | None = None,
+        extra: list[str] | None = None, lines: list[str] | None = None, action: str = "practice",
     ) -> list[str]:
         """修練頁、煉製頁的動作寫進江湖紀錄（同一種連續的併成一則）。標題照底部分頁的名字：煉製寫「煉製」，
         鍛鍊、療傷、改練寫「修練」（FB-047；以前都寫「門下」，煉製會併進前面那則鍛鍊）。
         lines：這個動作要留在敘事裡的話（煉製的結果那一句，FB-073）；不給就只有結果標記，結果標記本身就是那句話（修練、療傷……）。
 
-        guide=True：這個動作算一次「練功」（煉製、鍛鍊），順便看新手引導有沒有完成（FB-024）。完成了，
+        guide=True：這個動作算一次「練功」（煉製、鍛鍊；序章裡還有修練、熔煉，action 是 cultivate、melt），順便看新手引導有沒有完成（FB-024）。完成了，
         note_action 回來的「✔ 引導完成」、獎勵與說書人的下一步記在這一則的 guide（江湖紀錄看得到），給對話框
         （guide_done），不進修練、煉製頁的訊息與「剛剛」（引導重做設計 8.1.3）。回傳一律是空串列。"""
         delta = self._xinde() - xinde_before
         changes = ([f"心得 {delta:+d}"] if delta else []) + (extra or [])  # extra：心得以外的數值變化（修練花的體力）
         self.state.player.guide_done = []
-        notes = note_action(self.state, self.content, self.world, "practice") if guide else []
+        notes = note_action(self.state, self.content, self.world, action) if guide else []
         self._note_guide(notes)  # 引導的訊息記在這一則的 guide、給對話框，不進修練頁的訊息（引導重做設計 8.1.3）
         entry = JournalEntry(
             time=self.state.world.time, title=title, tag=tag, lines=list(lines or []), changes=changes, guide=notes,
@@ -3196,6 +3208,20 @@ class Game:
         self.state.player.flags.add("看過地圖")
         self._guide(note_action(self.state, self.content, self.world, "view_map"))  # 接在最新一則，「剛剛」不換
         return []
+
+    PROLOGUE_TABS = ("practice", "craft")
+
+    def view_tab(self, tab: str) -> list[str]:
+        """打開修練或煉製頁（網頁在序章裡才送）：記一個旗標（看過:practice），看引導這一步有沒有完成；不寫紀錄、不換「剛剛」。"""
+        if tab not in self.PROLOGUE_TABS:
+            return []
+        self.state.player.flags.add(f"看過:{tab}")
+        self._guide(note_action(self.state, self.content, self.world, "view_tab"))
+        return []
+
+    def prologue_view(self) -> dict | None:
+        """序章的畫面要亮什麼、發光什麼（prologue.view）；不在序章是 None。"""
+        return prologue_rules.view(self.state, self.content)
 
     def quest_text(self) -> str:
         return quest_text(self.state, self.content)

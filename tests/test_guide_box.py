@@ -12,7 +12,7 @@ STEP_ONE, STEP_TWO, STEP_THREE, OUTRO = "先探索一下。", "去湖邊。", "�
 
 
 def _box(text, done=(), end=False):
-    return {"speaker": "說書人", "text": text, "done": list(done), "end": end}
+    return {"speaker": "說書人", "scene": "", "text": text, "line": "", "done": list(done), "end": end}
 
 
 def pending_line(title):
@@ -137,3 +137,15 @@ def test_skipping_stays_skipped_into_the_next_season():
         assert game.state.player.tutorial_step == 6
     assert games["略過的"].guide_box() is None
     assert games["做完的"].guide_box()["text"] == on.tutorial.steps[6].text
+
+
+def test_box_hidden_while_preparing(prologue_content, world, monkeypatch):
+    """籌備中選單照舊只有「賽季籌備中」，序章也不例外：對話框不出現（新手引導計畫一 Review Focus 5）。"""
+    from tianxia.engine import Game
+
+    game = Game.new(prologue_content, "沈浪", world=world, prologue=True)
+    game.choose("choice:0")
+    game.choose("choice:0")
+    assert game.guide_box() is not None
+    monkeypatch.setattr(game, "_preparing", lambda: True)
+    assert game.guide_box() is None
