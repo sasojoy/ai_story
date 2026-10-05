@@ -10,9 +10,11 @@
 """
 from __future__ import annotations
 
+import atexit
 import io
 import os
 import random
+import shutil
 import statistics
 import sys
 import tempfile
@@ -24,12 +26,22 @@ sys.path.insert(0, str(ROOT))
 TMP = Path(tempfile.mkdtemp(prefix="measure_companions_"))
 os.environ["TIANXIA_DB"] = str(TMP / "unused.db")  # 別開到 worktree 的 saves/tianxia.db
 
-from tianxia import encounter, team  # noqa: E402
+from tianxia import database, encounter, team  # noqa: E402
 from tianxia.content import load_content  # noqa: E402
 from tianxia.engine import Game  # noqa: E402
 from tianxia.martial_arts import QUALITIES, content_art, with_quality  # noqa: E402
 from tianxia.sqlite_world import open_world  # noqa: E402
 from tianxia.state import Member  # noqa: E402
+
+
+
+def _cleanup() -> None:
+    """結束時清掉暫存的資料庫檔：先關掉所有連線（Windows 上開著的檔刪不掉），免得每跑一次留一個 measure_companions_* 資料夾。"""
+    database.close_all()
+    shutil.rmtree(TMP, ignore_errors=True)
+
+
+atexit.register(_cleanup)
 
 PAIRS = {"強": ("guanyu", "zhangfei"), "弱": ("taoqian", "yuanshao")}
 LEVELS = (1, 10, 20, 30)

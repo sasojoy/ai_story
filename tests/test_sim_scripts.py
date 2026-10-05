@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import importlib.util
 import io
+import os
+import subprocess
 import sys
 from pathlib import Path
 from unittest import mock
@@ -54,3 +56,15 @@ def test_the_server_bot_simulation_humans_spend_their_stat_points(game):
     game.state.player.stat_points = 3
     sim.human_turn(game, FixedRandom(0.1))  # random() < 0.2：這一輪輪到花用（練成、配點）
     assert _spent(game)
+
+
+def test_the_companion_measure_script_removes_its_temp_folder(tmp_path):
+    """最終審查 M4：量測腳本在暫存目錄開一堆資料庫檔，結束時要清掉，不能每跑一次留一個 measure_companions_* 資料夾。
+    只匯入、開一個資料庫就結束（不跑整個量測，太慢），然後看暫存目錄還在不在。"""
+    code = (
+        f"import sys; sys.path.insert(0, {str(ROOT / 'scripts')!r}); import measure_companions as m; "
+        "m.open_world(m.TMP / 'x.db')"
+    )
+    env = {**os.environ, "TEMP": str(tmp_path), "TMP": str(tmp_path), "TMPDIR": str(tmp_path)}
+    subprocess.run([sys.executable, "-c", code], check=True, env=env, cwd=ROOT)
+    assert list(tmp_path.glob("measure_companions_*")) == []
