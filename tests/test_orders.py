@@ -159,9 +159,11 @@ def test_issue_fills_slots(on):
     by_id = {(o.faction, o.template): o for o in game.state.world.orders}
     assert by_id[("guan", "intercept")].location == "nanyang_wilds"
     assert by_id[("guan", "intercept")].text == "探得黃巾的糧道經過南陽郊野，本週截斷它。"
-    # 官軍第 1 週留了一格給攻城、護糧排不進去（FB-061）：照模板直接造一道，只驗插槽怎麼填
-    template = next(t for t in on.orders.templates if t.kind == "escort" and t.side == "guan")
-    escort = orders._build(game.state, on, template, 1, "nanyang", None)
+    # 官軍第 1 週（奇數週）輪到截糧、護糧排不進去（FB-061）：護糧看偶數週，南陽最吃緊的那一週（每條戰線兩週內都有大事）
+    with mock.patch.object(orders, "_event_within", return_value=object()):
+        _fronts(game, 40, 55, 50)
+        escort = next(o for o in _week_orders(game, "guan", 2) if o.template == "escort")
+    assert escort.front == "nanyang"
     assert (escort.start, escort.end, escort.location) == ("xinye", "wan_city", "xinye")
     assert escort.text == "一批軍糧要從新野送到宛城，各營派人沿途護送。"
     assert by_id[("haoqiang", "strike")].text == "家主吩咐：張曼成擋了咱們的路。"
@@ -899,6 +901,34 @@ def test_with_no_offense_at_all_the_slot_goes_back_to_priority(crowded, faction,
         got = _week_orders(crowded, faction, week)
     assert len(got) == 3 and not any(o.template in OFFENSE for o in got)
     assert {o.template for o in got} <= {"defend", "intercept", "escort"}
+
+
+@pytest.fixture
+def pressed(on):
+    """兩邊都有一道守城（官軍冀州 60、黃巾南陽 40 吃緊），而且每條戰線兩週內都有大事：守城之外只剩一格優先序 2，
+    截糧、護糧都發得出來（留一格給進攻之後，這就是 FB-061 審查找到的情形）。"""
+    with mock.patch.object(orders, "_event_within", return_value=object()):
+        game = _game(on)
+        _fronts(game, 45, 40, 60)
+        yield game
+
+
+@pytest.mark.parametrize("faction", ["guan", "huang"])
+@pytest.mark.parametrize("week, supply", [(3, "intercept"), (5, "intercept"), (4, "escort"), (6, "escort")])
+def test_the_supply_slot_alternates_between_intercept_and_escort(pressed, faction, week, supply):
+    """守城、進攻之外只剩一格優先序 2 時，截糧與護糧輪流：奇數週截糧、偶數週護糧（不然同優先序的平手永遠是截糧贏，護糧一道都發不出）。"""
+    got = _week_orders(pressed, faction, week)
+    kinds = [o.template for o in got]
+    assert kinds.count("defend") >= 1 and sum(k in OFFENSE for k in kinds) == 1
+    supplies = [k for k in kinds if k in ("intercept", "escort")]
+    assert supplies == [supply]
+
+
+def test_the_supply_alternation_only_breaks_ties_within_one_priority(pressed):
+    """輪流只動優先序 2 裡面的次序：守城（優先序 1）照舊排在前面，進攻那一道照舊排在後面。"""
+    for week in (3, 4):
+        kinds = [o.template for o in _week_orders(pressed, "guan", week)]
+        assert kinds[0] == "defend" and kinds[-1] in OFFENSE
 
 
 def test_week_one_composition_with_the_offense(on):
