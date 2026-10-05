@@ -409,6 +409,7 @@ class Squad(_Strict):
     drops: list[Drop] = Field(default_factory=list)  # 留空則走 materials.py 依難度的預設掉落表
     faction: str | None = None  # 這支隊伍屬於哪個陣營（Scenario.factions 的 id）；自己陣營的人遇到時改成操練、不開打
     desc: str = ""  # 一句描述（運糧隊這類有特別來歷的對手才寫；遇上時接在戰鬥那一行後面，濃縮版內容表 3.3）
+    boss: bool = False  # 頭目：遊歷、劇情戰遇上它算大場面，先請模型判讀（武學與成長設計 8.3）
 
 
 class Trend(_Strict):
@@ -720,6 +721,12 @@ class Config(_Strict):
     # naming.generate 的 budget；用完就走退路字表。試玩走 trycloudflare，一個請求約 100 秒就被切斷，60 秒留下 A、C 兩段
     # 等行動鎖的餘裕（控制者 2026-10-05 從 75 改成 60）
     naming_budget_seconds: int = Field(default=60, ge=0)
+    # 大場面（武學與成長設計 8.3、計畫三 Task 2）：挑戰大勢人物本人、打頭目（Squad.boss）或難度到這裡的對手，先在行動鎖外
+    # 請模型判讀，優勢最多把勝算推這麼多個百分點；鎖外那一段（含 A 段等鎖）最多花 big_fight_budget_seconds 秒
+    # （server.prepare_fight 扣掉等鎖的時間傳給 fight_llm.judge，跟開爐取名同一個理由：trycloudflare 約 100 秒切斷請求）
+    big_fight_difficulty: float = 100  # 難度到這裡就算大場面【預設】
+    big_fight_swing: int = Field(default=15, ge=0)  # 模型判讀最多把勝算推多少個百分點【預設】
+    big_fight_budget_seconds: int = Field(default=60, ge=0)
     # 2026-10-03 實測（gemma4:26b）：有思考模式的模型要關掉思考，不然每輪多等好幾秒；None 表示不送這個欄位
     ollama_think: bool | None = None
     ollama_keep_alive: str = "30m"  # 模型閒置多久後卸載；大模型重新載入要十幾秒

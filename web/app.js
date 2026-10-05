@@ -1260,6 +1260,9 @@
       // 跟 server.py 的 may_generate_dialogue 同一個判斷：這些選項要等模型回話
       const talking = id === "act:socialize" || ((id.startsWith("talk:") || id.startsWith("call:")) && id !== "talk:leave" && id !== "call:back");
       if (talking) btn.lastElementChild.textContent = "對方沉吟中…";
+      // 大場面（挑戰大勢人物本人、打頭目）：伺服器先在鎖外請模型判讀戰局，選項帶著要換上的字（「兩人對峙……」，server.prepare_fight）
+      const opt = ((S.main && S.main.options) || []).find((o) => o.id === id);
+      if (opt && opt.wait) (btn.lastElementChild || btn).textContent = opt.wait;
       const r = await api("/api/choose", { id });
       S.answering = false;
       S.wheelSel = null; // 收起展開的移動

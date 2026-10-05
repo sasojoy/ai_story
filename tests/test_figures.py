@@ -656,6 +656,27 @@ def test_a_challenge_plays_out_rounds_that_add_up_to_the_toll(on, world):
     assert told > 0 and sum(int(n) for line in record.rounds for n in re.findall(r"你氣血 -(\d+)", line)) == told
 
 
+def test_a_challenge_is_judged_with_the_whole_lineup_against_the_prestige_difficulty(on, world):
+    """挑戰本人一律是大場面（武學與成長設計 8.3）：按鈕寫「兩人對峙……」；送模型的單子列出整個陣容（本人兩門功夫、部下也上陣，
+    計畫三 G7）與照聲威算的難度；判讀的優勢換成判定差距的平移交給 team.fight，難度照舊。"""
+    from tianxia import encounter, fight_llm
+
+    game = _player(on, world, "官甲", "guan", "huangjin_camp")
+    game.state.player.followers = ["follower_guan_spear"]
+    assert _option(game, "act:challenge:bocai").wait == "兩人對峙……"
+    request = game.fight_request("act:challenge:bocai")
+    assert request.squad_id == "figure_bocai" and request.theirs.startswith("波才（屬剛，難度 120）")
+    assert len(request.ours) == 2 and request.ours[1].startswith("持矛鄉勇：武學【")
+    assert request.ours[0].startswith("官甲：武學【") and "內功【" in request.ours[0]
+    judgment = fight_llm.Judgment(advantage=-15, winning="佔上風。", losing="落下風。")
+    with mock.patch.object(team, "fight", wraps=team.fight) as fight:
+        game.choose("act:challenge:bocai", fight=fight_llm.PreparedFight(request=request, judgment=judgment))
+    assert fight.call_args.kwargs["difficulty"] == 120
+    assert fight.call_args.kwargs["shift"] == pytest.approx(encounter.advantage_shift(120, -15))
+    record = game.state.battles[0]
+    assert record.narration == ("佔上風。" if record.tier in team.WIN_TIERS else "落下風。")
+
+
 def test_the_fight_receives_the_difficulty_from_the_prestige(on, world):
     """挑戰本人時交給 team.fight 的難度是照聲威算的（聲威 60：150 × (0.5 + 0.5 × 0.60) = 120），不是代表本人的隊伍
     寫死的 150；不寫死結果，只看呼叫收到什麼（真的打一場）。"""

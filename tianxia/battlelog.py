@@ -161,7 +161,10 @@ def round_lines(content: Content, played: list[rounds_mod.Round], rng: random.Ra
 
 
 def _rounds_block(record: BattleRecord) -> list[str]:
-    """戰報的「過程」：一回合一行（Markdown 清單）。決戰與舊戰報沒有。"""
+    """戰報的「過程」：一回合一行（Markdown 清單）。大場面有模型寫的那一版（narration，武學與成長設計 8.3）就寫它、一段話，
+    取代範本句子的回合。決戰與舊戰報沒有。"""
+    if record.narration:
+        return [f"**過程**\n{record.narration}"]
     if not record.rounds:
         return []
     return ["**過程**\n" + "\n".join(f"- {line}" for line in record.rounds)]

@@ -335,6 +335,9 @@ class BattleRecord(BaseModel):
     notes: list[str] = Field(default_factory=list)  # 敘事文字：選項效果、升級、拜師、傳聞等（不是數字，見 changes）
     changes: list[str] = Field(default_factory=list)  # 其他數值變化，如屬性、名望、善惡名（經驗／心得／銀兩已有專屬欄位）
     rounds: list[str] = Field(default_factory=list)  # 回合演出，一回合一行（武學與成長設計 8.2）；決戰與舊戰報是空的
+    # 大場面模型寫的過程（武學與成長設計 8.3）：照結果挑佔上風或落下風那一版；有就取代範本句子的回合（rounds 照樣算好）。
+    # 叫 narration 不叫 story：battlelog 的 story_text／_story_block 已經是「結果」那一段（計畫三 G11）
+    narration: str = ""
 
 
 class JournalEntry(BaseModel):

@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 
 import server
 from conftest import at, season_one_events
-from tianxia import atlas, battle_instance, calendar, companion_agent, database, fusion, naming
+from tianxia import atlas, battle_instance, calendar, companion_agent, database, fight_llm, fusion, naming, team
 from tianxia.accounts import NAME_TAKEN
 from tianxia.characters import open_characters
 from tianxia.engine import Game
@@ -2206,6 +2206,77 @@ def test_leaving_a_dialogue_does_not_ask_the_model_or_take_an_extra_lock_round_t
     assert game.state.player.pending_companion is None
 
 
+# ── 大場面在行動鎖外請模型判讀（武學與成長設計 8.3、計畫三 Task 2）────────────
+
+
+def test_only_fights_and_event_choices_may_be_judged():
+    assert server.may_judge_fight("act:train") and server.may_judge_fight("choice:0")
+    assert server.may_judge_fight("act:challenge:bocai")
+    assert not server.may_judge_fight("act:explore") and not server.may_judge_fight("move:lake")
+    assert not server.may_judge_fight("choice:free")  # 隨口應對只是叫出輸入框（真正送出走 /api/answer）
+
+
+FIGHT_JUDGMENT = fight_llm.Judgment(advantage=15, winning="佔上風。", losing="落下風。")
+
+
+def test_a_big_fight_is_judged_outside_the_action_lock(game, lock_events):
+    """打頭目（翻江龍，難度 150）：鎖內備料 → 鎖外問模型 → 鎖內重驗套用（Review Focus 3 的前提：模型不在鎖裡跑）。
+    模型拿的是 game.client 本身（鎖外不受鎖內 15 秒的上限管），預算是 big_fight_budget_seconds 扣掉 A 段等鎖的時間。
+    按鈕上寫「兩人對峙……」：頁面按下去就換上這幾個字（app.js 的 choose）。"""
+    game.state.pending_event = "kou_boss"
+    options = server.look(game, server.main_view)["options"]
+    assert [(o["id"], o["wait"]) for o in options] == [("choice:0", "兩人對峙……"), ("choice:1", "")]
+    lock_events.clear()
+    seen = []
+
+    def judge(client, request, swing, budget=None):
+        lock_events.append("judge")
+        _nobody_holds_the_lock(game)
+        seen.append((client, request.squad_id, swing, budget))
+        return FIGHT_JUDGMENT
+
+    with mock.patch.object(server.fight_llm, "judge", side_effect=judge):
+        server.choose(game, "choice:0")
+    assert lock_events == ["enter", "exit", "judge", "enter", "exit"]  # 鎖內備料 → 鎖外判讀 → 鎖內重驗套用
+    client, squad_id, swing, budget = seen[0]
+    config = server.CONTENT.config
+    assert client is game.client and squad_id == "fanjianglong" and swing == config.big_fight_swing
+    assert 0 < budget <= config.big_fight_budget_seconds
+    record = game.state.battles[0]
+    assert record.opponent == "波才" and record.narration == ("佔上風。" if record.tier in team.WIN_TIERS else "落下風。")
+    assert open_characters().load("測試").battles[0].narration == record.narration
+
+
+def test_a_big_fight_the_model_cannot_judge_is_fought_as_usual(game, lock_events):
+    """模型叫不動（conftest 把它假成連不上）：優勢當 0、照平常的回合演出，這一仗照樣打。"""
+    game.state.pending_event = "kou_boss"
+    server.choose(game, "choice:0")
+    assert lock_events == ["enter", "exit", "enter", "exit"]
+    record = game.state.battles[0]
+    assert record.opponent == "波才" and record.narration == "" and record.rounds
+
+
+@pytest.mark.parametrize(("event", "option"), [(None, "act:train"), ("wolves", "choice:0")])
+def test_an_ordinary_fight_takes_the_lock_once_and_never_asks_the_model(game, lock_events, event, option):
+    """Review Focus 5：一般的仗（潁川郊野的地痞、山賊；狼群）不問模型、按鈕不寫「兩人對峙」，而且只拿一次行動鎖——
+    備料與動作在同一次拿鎖裡做完（計畫三 G14：遊歷與事件選項天天在按，不能每一下都多搶一次鎖）。"""
+    game.state.player.location = "yingchuan_wilds"
+    game.state.pending_event = event
+    assert next(o for o in game.options() if o.id == option).wait == ""
+    lock_events.clear()
+    with mock.patch.object(server.fight_llm, "judge", side_effect=AssertionError("一般的仗不該問模型")):
+        msgs = server.choose(game, option)
+    assert lock_events == ["enter", "exit"]
+    assert msgs and game.state.battles and game.state.battles[0].narration == ""
+    assert open_characters().load("測試").battles[0].id == game.state.battles[0].id  # 同一次拿鎖裡存好了
+
+
+def test_the_page_shows_the_wait_words_while_a_big_fight_is_judged():
+    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    body = _js_function(js, "async function choose(")
+    assert "opt.wait" in body and body.index("opt.wait") < body.index('api("/api/choose"')
+
+
 # ── 網頁本身 ────────────────────────────────────────────
 
 
@@ -2711,7 +2782,8 @@ def test_the_page_offers_the_box_and_rejects_empty_words(client, monkeypatch):
     server.act(game, lambda g: setattr(g.state, "pending_event", event.id))
     main = client.get("/api/main").json()
     assert main["event_free_text"] == "自己想辦法……"
-    assert main["options"][-1] == {"id": "choice:free", "label": "自己想辦法……", "enabled": True}  # 選項只有一行，底下不另起一行（企劃者 2026-10-05）
+    # 選項只有一行，底下不另起一行（企劃者 2026-10-05）；wait 是大場面按下去等模型時換上的字，這裡不是仗、是空的
+    assert main["options"][-1] == {"id": "choice:free", "label": "自己想辦法……", "enabled": True, "wait": ""}
     assert client.post("/api/answer", json={"text": "  "}).status_code == 400
     with mock.patch.object(server.event_llm, "assess_event_success_rate", return_value=50):
         main = client.post("/api/answer", json={"text": "大喊官兵來了"}).json()["main"]

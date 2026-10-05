@@ -7,7 +7,9 @@ from unittest import mock
 import pytest
 
 from conftest import FixedRandom, at, install_season_one, walk_to
-from tianxia import atlas, battle_instance, calendar, companion_agent, flavor, front_lines, guide, library, rules, skillview
+from tianxia import (
+    atlas, battle_instance, calendar, companion_agent, fight_llm, flavor, front_lines, guide, library, rules, skillview,
+)
 from tianxia.characters import open_characters
 from tianxia.content import load_content
 from tianxia.engine import Game, Option
@@ -376,7 +378,8 @@ def test_an_event_choice_that_lifts_the_name_to_the_threshold_grants_the_insight
 def test_self_check_shows_one_bracketed_line_and_takes_the_fail_branch(game):
     game.state.pending_event = "insight"
     assert [o.label for o in game.options()] == ["運氣衝關（根骨 5：咬咬牙，你應該撐得住。）"]
-    assert all(o.model_dump().keys() == {"id", "label", "enabled"} for o in game.options())  # 選項底下沒有另一行
+    # 選項底下沒有另一行（wait 是按下去等模型時換上的字，不是另一行；不是大場面就是空的）
+    assert all(o.model_dump().keys() == {"id", "label", "enabled", "wait"} and o.wait == "" for o in game.options())
     game.rng = FixedRandom(0.99)  # 成功率 50%：必定失敗
     game.choose("choice:0")
     log = game.state.log
@@ -3264,6 +3267,169 @@ def test_the_rounds_do_not_touch_the_rules_rng_and_read_the_same_every_time(game
     shown = list(record.rounds)
     game._play_rounds(record, game.content.squads["thug"], "落敗", told)
     assert shown and record.rounds == shown
+
+
+# ── 大場面請模型判讀（武學與成長設計 8.3、計畫三 Task 2）──────────────────────
+
+JUDGMENT = fight_llm.Judgment(advantage=15, winning="佔上風的過程。", losing="落下風的過程。")
+ACCOUNTS = (JUDGMENT.winning, JUDGMENT.losing)
+
+
+def _boss_at_the_lake(game):
+    game.content.locations["lake"].enemies = ["boss"]
+    walk_to(game, "lake")
+    game.state.player.member.wugong_id = "basic_fist"
+
+
+def _judged(request, judgment=JUDGMENT):
+    return fight_llm.PreparedFight(request=request, judgment=judgment)
+
+
+def test_an_ordinary_fight_needs_no_judgment(game):
+    walk_to(game, "lake")
+    assert game.fight_request("act:train") is None
+    assert next(o for o in game.options() if o.id == "act:train").wait == ""
+
+
+def test_a_big_fight_is_judged_and_tells_the_page_to_wait(game):
+    _boss_at_the_lake(game)
+    request = game.fight_request("act:train")
+    assert request.squad_id == "boss" and request.ours and "翻江龍" in request.theirs
+    assert request.ours[0].startswith("沈浪：武學【") and request.battle_seq == game.state.battle_seq
+    assert next(o for o in game.options() if o.id == "act:train").wait == "兩人對峙……"
+
+
+def test_the_judgment_writes_the_matching_account(game):
+    """僵持也算落下風（計畫三 G15）：只有大勝、險勝播佔上風那一版。"""
+    _boss_at_the_lake(game)
+    request = game.fight_request("act:train")
+    game.choose("act:train", fight=_judged(request))
+    record = game.state.battles[0]
+    expected = "佔上風的過程。" if record.tier in ("大勝", "險勝") else "落下風的過程。"
+    assert record.narration == expected and expected in game.battle_card()
+    assert record.rounds  # 回合照樣算好：過程換成模型寫的那一版，數字照樣在得失裡
+
+
+def test_a_stale_judgment_is_dropped(game):
+    _boss_at_the_lake(game)
+    request = game.fight_request("act:train")
+    stale = _judged(request.model_copy(update={"location": "town"}))
+    game.choose("act:train", fight=stale)
+    assert game.state.battles[0].narration == ""
+
+
+def test_a_judgment_survives_the_season_clock_moving_while_the_model_thinks(game):
+    """模型要想一分鐘，這段時間誰同步一次，賽季時鐘就往前走（計畫三 G1）：單子不記時間，判讀照樣套得上。"""
+    _boss_at_the_lake(game)
+    game.sync(1000.0)
+    request = game.fight_request("act:train")
+    before = game.state.world.time
+    game.sync(1060.0)
+    assert game.state.world.time > before
+    game.choose("act:train", fight=_judged(request))
+    assert game.state.battles[0].narration in ACCOUNTS
+
+
+def test_a_judgment_is_dropped_after_another_fight(game):
+    """Review Focus 3：等模型的時候（另一個分頁）又打了一場，戰報流水號變了：回來的判讀作廢、照平常打。"""
+    _boss_at_the_lake(game)
+    request = game.fight_request("act:train")
+    game.choose("act:train")
+    game.choose("act:train", fight=_judged(request))
+    newest = game.state.battles[0]
+    assert newest.id == request.battle_seq + 2 and newest.narration == ""
+    assert game.state.battles[1].narration == ""
+
+
+def test_a_judgment_is_dropped_after_switching_arts(game):
+    """Review Focus 3：等模型的時候換了武學，陣容跟判讀的那一張對不上：作廢、照平常打。"""
+    _boss_at_the_lake(game)
+    request = game.fight_request("act:train")
+    game.state.player.member.wugong_id = "fist"
+    game.choose("act:train", fight=_judged(request))
+    assert game.state.battles[0].narration == ""
+
+
+class _FirstChoice(random.Random):
+    """rng.choice 一律挑第一個：看得出遊歷的對手是不是照 Game.rng 挑的。"""
+
+    def choice(self, seq):
+        return seq[0]
+
+
+def test_a_judged_trip_fights_the_judged_foe_and_an_unjudged_one_still_draws_from_the_rng(game):
+    """判讀過的遊歷打單子上那一路（照名號、地點、戰報流水號雜湊挑的），判定差距平移優勢換算的量；沒有判讀的照舊用
+    Game.rng 隨機挑（計畫三 G1：亂數序列、整季模擬都不變）。"""
+    from tianxia import encounter, team
+
+    game.content.locations["lake"].enemies = ["thug", "boss"]
+    walk_to(game, "lake")
+    game.state.player.member.wugong_id = "basic_fist"
+    game.state.battle_seq = next(n for n in range(100) if _pick(game, n) == "boss")
+    request = game.fight_request("act:train")
+    assert request.squad_id == "boss"
+    game.rng = _FirstChoice(0)
+    with mock.patch.object(team, "fight", wraps=team.fight) as fight:
+        game.choose("act:train", fight=_judged(request))
+    assert game.state.battles[0].opponent == "翻江龍" and game.state.battles[0].narration in ACCOUNTS
+    assert fight.call_args.kwargs["shift"] == pytest.approx(encounter.advantage_shift(200, 15))
+    game.choose("act:train")
+    assert game.state.battles[0].opponent == "水寇小隊" and game.state.battles[0].narration == ""
+
+
+def _pick(game, battle_seq: int) -> str:
+    game.state.battle_seq = battle_seq
+    return game._train_pick(game.content.locations[game.state.player.location]).id
+
+
+def test_a_judgment_is_used_once_and_never_by_a_foe_met_while_exploring(game):
+    """判讀只用在它那一場（計畫三 G8）：同一次行動再打一場同一路不會再吃一次；探索撞上的野外對手是當下擲出來的，不問模型、
+    也不吃判讀（設計 8.3 只算遊歷、劇情戰與挑戰本人）。"""
+    _boss_at_the_lake(game)
+    game._fight = _judged(game.fight_request("act:train"))
+    game._squad_encounter("boss", wild=True)
+    assert game.state.battles[0].narration == "" and game._fight is not None
+    game._squad_encounter("boss")
+    game._squad_encounter("boss")
+    assert game.state.battles[1].narration in ACCOUNTS and game.state.battles[0].narration == ""
+    assert game._fight is None
+
+
+def test_the_fight_request_and_its_recheck_never_tick_the_battle(game):
+    """備料（A 段）與進鎖重驗都只讀：推進全服戰鬥留給 choose() 開頭那一次（理由同 dialogue_request）。"""
+    _boss_at_the_lake(game)
+    calls, patched = _spy_battle_status(game)
+    with patched:
+        request = game.fight_request("act:train")
+        game._checked_fight("act:train", _judged(request))
+    assert calls and True not in calls
+    calls, patched = _spy_battle_status(game)
+    with patched:
+        game.choose("act:train", fight=_judged(request))
+    assert calls.count(True) == 1 and game.state.battles[0].narration in ACCOUNTS
+
+
+def test_no_model_and_drills_are_never_judged(game):
+    """沒有模型（伺服器假人的 client 是 None）不問；自己陣營的隊伍是操練、不是大場面，按鈕也不寫「兩人對峙」。"""
+    _boss_at_the_lake(game)
+    client, game.client = game.client, None
+    assert game.fight_request("act:train") is None
+    game.client = client
+    game.content.squads["boss"].faction = game.state.player.faction = "kou"
+    assert game.fight_request("act:train") is None
+    assert next(o for o in game.options() if o.id == "act:train").wait == ""
+
+
+def test_only_the_big_event_fight_tells_the_page_to_wait_and_free_words_are_no_fight(game):
+    """事件的戰鬥選項：打頭目（翻江龍）那一顆寫「兩人對峙」，其他不寫；隨口應對（choice:free）不是仗，也不會在鎖裡出錯。"""
+    from tianxia.models import FreeTextChoice
+
+    walk_to(game, "lake")
+    game.content.events["duel"].free_text = FreeTextChoice(prompt="自己想辦法……", stat="str")
+    game.state.pending_event = "duel"
+    assert {o.id: o.wait for o in game.options()} == {"choice:0": "兩人對峙……", "choice:1": "", "choice:free": ""}
+    assert game.fight_request("choice:0").squad_id == "boss" and game.fight_request("choice:0").event == "duel"
+    assert game.fight_request("choice:1") is None and game.fight_request("choice:free") is None
 
 
 def test_the_journal_calls_it_a_training_trip(game):

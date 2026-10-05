@@ -334,9 +334,9 @@ def _spied_power(call):
     seen: list[float] = []
     resolve = encounter.resolve_encounter
 
-    def spy(power, difficulty, rng):
+    def spy(power, difficulty, rng, shift=0.0):
         seen.append(power)
-        return resolve(power, difficulty, rng)
+        return resolve(power, difficulty, rng, shift=shift)
 
     with mock.patch.object(encounter, "resolve_encounter", side_effect=spy):
         result = call()
