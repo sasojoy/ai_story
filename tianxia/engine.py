@@ -2129,7 +2129,7 @@ class Game:
             if fig.faction == p.faction:
                 continue
             option_id = f"act:challenge:{fid}"
-            if figures.state_of(s, c, fid).front is None and not fig.challenge_off_front:
+            if not figures.can_challenge(s, c, fid):
                 opts.append(Option(id=option_id, label=f"挑戰{fig.name}（{OFF_FRONT_NOTE}）", enabled=False))
             elif self._snubbed(fid):
                 opts.append(Option(id=option_id, label=f"挑戰{fig.name}（{SNUB_NOTE}）", enabled=False))
@@ -3468,7 +3468,8 @@ class Game:
     def orders_view(self) -> list[dict]:
         """江湖頁的「本週軍令」卡（計畫 T6）：自己陣營這週的軍令，只給自己陣營看；散人、開關關著是空的。
         截止是下週一 00:00（最後一週寫成季末那一刻，calendar.point 會夾住）。休季時也是空的（FB-045）：
-        收季那一週的軍令截止已經過了，休季什麼都不能做，結算畫面底下不該還有一張叫人去做事的卡。"""
+        收季那一週的軍令截止已經過了，休季什麼都不能做，結算畫面底下不該還有一張叫人去做事的卡。
+        沒達成的打擊軍令多一個 how：怎麼打、他在哪（atlas.strike_how，FB-072）；其他軍令與打完的打擊沒有這個鍵。"""
         s, c = self.state, self.content
         if s.world.ended:
             return []
@@ -3476,11 +3477,14 @@ class Game:
         views = []
         for o in orders.current(s, c, s.player.faction):
             total = sum(o.progress.values())
-            views.append({
+            view = {
                 "id": o.id, "title": orders.title(c, o), "text": o.text, "mine": o.progress.get(name, 0),
                 "progress": min(total, o.quota), "quota": o.quota, "done": o.done,
                 "deadline": self.stamp(calendar.week_start(o.week + 1, c, s.world)),
-            })
+            }
+            if o.template == "strike" and not o.done and o.figure is not None:
+                view["how"] = atlas.strike_how(s, c, o)  # 怎麼打、他在哪（FB-072）；其他軍令與打完的打擊沒有這個鍵
+            views.append(view)
         return views
 
     def season_result(self) -> dict | None:

@@ -489,6 +489,7 @@
       <div class="order${o.done ? " done" : ""}">
         <div class="order-head"><b>${esc(o.title)}</b><span>${o.done ? "已達成" : `陣營 ${o.progress}／${o.quota}`}</span></div>
         <div class="order-text">${esc(o.text)}</div>
+        ${o.how ? `<div class="order-how">${esc(o.how)}</div>` : ""}
         <div class="order-bar" role="meter" aria-valuemin="0" aria-valuemax="${o.quota}" aria-valuenow="${o.progress}" aria-label="${esc(o.title)}"><i style="width:${pct(o.progress, o.quota)}%"></i></div>
         <div class="order-meta">你做了 ${o.mine} 次・截止 ${esc(o.deadline)}</div>
       </div>`).join("");
