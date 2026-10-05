@@ -48,22 +48,18 @@
         "text": "扶他起身，順手摸走鐵牌",
         "check": {
           "stat": "agi",
-          "difficulty": 3
+          "difficulty": 3,
+          "practice": "evil"
         },
         "effect": {
-          "text": "你扶起醉漢，鐵牌已悄悄落入你袖中。",
-          "stats": {
-            "evil": 1
-          },
+          "text": "你扶起醉漢，鐵牌已悄悄落入你袖中，他醉眼惺忪，什麼也沒察覺。",
           "flags_add": [
             "wolf_token"
           ]
         },
         "fail_effect": {
-          "text": "醉漢猛然抓住你的手：「小賊！」四周的人都朝你看過來。",
-          "stats": {
-            "fame": -1
-          }
+          "text": "醉漢猛然抓住了你的手。",
+          "next_event": "caught_token"
         }
       },
       {
@@ -284,12 +280,20 @@
       },
       {
         "text": "趁亂撿走地上的錢袋",
+        "check": {
+          "stat": "agi",
+          "difficulty": 5,
+          "practice": "evil"
+        },
         "effect": {
-          "text": "錢袋沉甸甸的，沒人注意到你。",
+          "text": "你彎腰一勾，錢袋已進了袖子。錢袋沉甸甸的，滿堂的人只顧著打架，沒人注意到你。",
           "stats": {
-            "silver": 12,
-            "evil": 1
+            "silver": 12
           }
+        },
+        "fail_effect": {
+          "text": "你的手才碰到錢袋，失主就一腳踩了上來。",
+          "next_event": "caught_purse"
         }
       },
       {

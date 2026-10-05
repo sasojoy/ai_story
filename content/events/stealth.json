@@ -1,0 +1,303 @@
+[
+  {
+    "id": "yz_market_salt",
+    "title": "私鹽擔子",
+    "locations": [
+      "market_town"
+    ],
+    "text": "集市角落，一個漢子挑著擔子低價賣鹽，轉眼圍滿了人。遠處市吏帶著兩個差役擠過來，漢子慌了，低聲求你幫他把擔子弄出鎮去。",
+    "choices": [
+      {
+        "text": "扛起鹽擔，從泥巷繞出鎮外",
+        "check": {
+          "stat": "con",
+          "difficulty": 5,
+          "practice": "evil"
+        },
+        "effect": {
+          "text": "一擔鹽死沉，你咬牙走了半里泥路，總算避開差役，一路上沒人認出你。漢子把一半的鹽錢塞給你。",
+          "stats": {
+            "silver": 20
+          }
+        },
+        "fail_effect": {
+          "text": "走到半路肩頭吃不住，鹽袋掉進泥裡，差役順著腳印追了上來，看清了你的臉。",
+          "stamina": -12,
+          "next_event": "caught_salt"
+        }
+      },
+      {
+        "text": "上前攔住市吏，替漢子說情",
+        "check": {
+          "stat": "wis",
+          "difficulty": 3
+        },
+        "effect": {
+          "text": "你說今年鹽貴，鄉民吃不起鹽。市吏想了想，只沒收了一半，放漢子走了。",
+          "stats": {
+            "good": 1
+          }
+        },
+        "fail_effect": {
+          "text": "市吏不吃這套，連你也被記了名字，罰了錢才脫身。",
+          "stats": {
+            "silver": -15
+          }
+        }
+      },
+      {
+        "text": "指給差役看漢子往哪跑",
+        "effect": {
+          "text": "市吏賞了你幾個錢。漢子被扭住時回頭看了你一眼。",
+          "stats": {
+            "silver": 10,
+            "evil": 1,
+            "good": -1
+          }
+        }
+      }
+    ],
+    "free_text": {
+      "prompt": "另想法子替鹽販脫身",
+      "stat": "wis",
+      "by": "team",
+      "effect": {
+        "text": "市吏撲了個空，鹽販帶著擔子出了鎮，遠遠朝你拱了拱手。",
+        "stats": {
+          "good": 1
+        }
+      },
+      "fail_effect": {
+        "text": "市吏識破了你的把戲，罰了你一筆錢，鹽販也被押走了。",
+        "stats": {
+          "silver": -10
+        }
+      }
+    }
+  },
+  {
+    "id": "yc_cs_deserter",
+    "title": "桑林逃卒",
+    "locations": [
+      "changshe"
+    ],
+    "text": "營後那片燒得焦黑的桑林裡，躲著一個剛徵來的新卒。他說隊率剋扣口糧，自己三天沒吃飽了，想逃回家種地。可抓到逃兵，按軍法是要斬的。",
+    "choices": [
+      {
+        "text": "去找隊率，當面說清口糧的帳",
+        "check": {
+          "stat": "wis",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "你把每人每日該領的糧算給隊率聽，旁邊的兵都聽見了。隊率只好補發口糧，新卒也回了營。",
+          "stats": {
+            "good": 2,
+            "fame": 1
+          }
+        },
+        "fail_effect": {
+          "text": "隊率說你煽動軍心，叫人把你轟出營門，還放話要你好看。",
+          "stamina": -10,
+          "stats": {
+            "fame": -2
+          }
+        }
+      },
+      {
+        "text": "趁夜帶他穿過兩軍之間的空地",
+        "check": {
+          "stat": "agi",
+          "difficulty": 7,
+          "practice": "evil"
+        },
+        "effect": {
+          "text": "你們貼著焦土一路摸過去，沒驚動一個巡哨，天亮前到了潁水邊。新卒跪下磕了三個頭，往北走了。",
+          "stats": {
+            "good": 2
+          }
+        },
+        "fail_effect": {
+          "text": "巡哨的火把照過來，照見了你們的臉。",
+          "stamina": -10,
+          "next_event": "caught_deserter"
+        }
+      },
+      {
+        "text": "分他一塊乾糧，勸他回營",
+        "effect": {
+          "text": "新卒狼吞虎嚥地吃完，猶豫了很久，還是低著頭回了營。",
+          "stats": {
+            "good": 1
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "caught_purse",
+    "title": "被撞見了",
+    "actions": [],
+    "text": "失主一腳踩住錢袋，揪住你的衣襟大喊：「好啊，趁火打劫！」打架的人都停了手，滿堂的眼睛全轉過來看你。",
+    "choices": [
+      {
+        "text": "搶了錢袋就跑",
+        "check": {
+          "stat": "agi",
+          "difficulty": 4,
+          "practice": "evil"
+        },
+        "effect": {
+          "text": "你一扭身掙脫，抓起錢袋鑽出人群。身後有人喊抓賊，滿堂的人都看清了你的臉。",
+          "stats": {
+            "silver": 12,
+            "evil": 2
+          }
+        },
+        "fail_effect": {
+          "text": "你才跑出兩步就被人絆倒，錢袋被奪了回去，還挨了好幾腳。",
+          "stamina": -10,
+          "stats": {
+            "evil": 2
+          }
+        }
+      },
+      {
+        "text": "丟下錢袋，賠著笑說是撿到要還的",
+        "effect": {
+          "text": "你把錢袋往失主手裡一塞，連聲說是替他撿的。失主啐了一口，沒再追究，旁人看你的眼神卻變了。",
+          "stats": {
+            "evil": 1
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "caught_token",
+    "title": "被撞見了",
+    "actions": [],
+    "text": "醉漢死死扣住你的手腕：「小賊！」四周的人都朝你看過來，有人已經挽起了袖子。",
+    "choices": [
+      {
+        "text": "搶了鐵牌就跑",
+        "check": {
+          "stat": "agi",
+          "difficulty": 4,
+          "practice": "evil"
+        },
+        "effect": {
+          "text": "你手腕一翻掙開，攥著鐵牌鑽進人群，身後的叫罵聲追了兩條街。",
+          "stats": {
+            "evil": 2
+          },
+          "flags_add": [
+            "wolf_token"
+          ]
+        },
+        "fail_effect": {
+          "text": "醉漢拚命不放，鐵牌被他搶了回去，你被幾個路人推搡著趕走。",
+          "stamina": -10,
+          "stats": {
+            "evil": 2
+          }
+        }
+      },
+      {
+        "text": "鬆手賠笑，說是替他撿的",
+        "effect": {
+          "text": "你把鐵牌塞回他懷裡，說是見他掉了想替他收好。醉漢罵罵咧咧走了，旁人卻都記住了你。",
+          "stats": {
+            "evil": 1
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "caught_salt",
+    "title": "被撞見了",
+    "locations": [
+      "market_town"
+    ],
+    "actions": [],
+    "text": "兩個差役堵在泥巷口，喝令你放下擔子。巷子另一頭是一片菜畦，地上全是爛泥。",
+    "choices": [
+      {
+        "text": "挑著擔子從菜畦衝出去",
+        "check": {
+          "stat": "agi",
+          "difficulty": 5,
+          "practice": "evil"
+        },
+        "effect": {
+          "text": "你踩著畦埂一路狂奔，差役在爛泥裡摔了個跟頭。出了鎮，漢子把一半的鹽錢塞給你，可差役已經認得你了。",
+          "stats": {
+            "silver": 20,
+            "evil": 2
+          }
+        },
+        "fail_effect": {
+          "text": "你一腳陷進爛泥，擔子被差役扣下，漢子事先塞給你的錢也被搜走了。",
+          "stamina": -10,
+          "stats": {
+            "silver": -5,
+            "evil": 2
+          }
+        }
+      },
+      {
+        "text": "放下擔子，賠笑說只是替人挑的",
+        "effect": {
+          "text": "差役扣下鹽擔，記了你的長相才放你走。漢子遠遠看著，沒敢過來。",
+          "stats": {
+            "evil": 1
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "caught_deserter",
+    "title": "被撞見了",
+    "locations": [
+      "changshe"
+    ],
+    "actions": [],
+    "text": "巡哨舉著火把圍過來，喝問你們是哪一營的。新卒嚇得腿軟，死死抓著你的袖子。",
+    "choices": [
+      {
+        "text": "拉著新卒拔腿就跑",
+        "check": {
+          "stat": "agi",
+          "difficulty": 6,
+          "practice": "evil"
+        },
+        "effect": {
+          "text": "你拽著新卒鑽進焦黑的桑林，火把在身後亂晃。天亮前你們到了潁水邊，新卒磕了三個頭往北走了。營裡從此記下了你這個帶逃兵的人。",
+          "stats": {
+            "good": 2,
+            "evil": 2
+          }
+        },
+        "fail_effect": {
+          "text": "新卒跑不動，被巡哨按倒拖了回去。你被追了大半夜才脫身，營裡從此記下了你這個帶逃兵的人。",
+          "stamina": -10,
+          "stats": {
+            "fame": -1,
+            "evil": 2
+          }
+        }
+      },
+      {
+        "text": "丟下新卒，賠笑說只是路過",
+        "effect": {
+          "text": "你說自己是迷了路的過客。巡哨押走新卒，他回頭看了你一眼。",
+          "stats": {
+            "evil": 1
+          }
+        }
+      }
+    ]
+  }
+]

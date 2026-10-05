@@ -743,67 +743,6 @@
     ]
   },
   {
-    "id": "yc_cs_deserter",
-    "title": "桑林逃卒",
-    "locations": [
-      "changshe"
-    ],
-    "text": "營後那片燒得焦黑的桑林裡，躲著一個剛徵來的新卒。他說隊率剋扣口糧，自己三天沒吃飽了，想逃回家種地。可抓到逃兵，按軍法是要斬的。",
-    "choices": [
-      {
-        "text": "去找隊率，當面說清口糧的帳",
-        "check": {
-          "stat": "wis",
-          "difficulty": 6
-        },
-        "effect": {
-          "text": "你把每人每日該領的糧算給隊率聽，旁邊的兵都聽見了。隊率只好補發口糧，新卒也回了營。",
-          "stats": {
-            "good": 2,
-            "fame": 1
-          }
-        },
-        "fail_effect": {
-          "text": "隊率說你煽動軍心，叫人把你轟出營門，還放話要你好看。",
-          "stamina": -10,
-          "stats": {
-            "fame": -2
-          }
-        }
-      },
-      {
-        "text": "趁夜帶他穿過兩軍之間的空地",
-        "check": {
-          "stat": "agi",
-          "difficulty": 7
-        },
-        "effect": {
-          "text": "你們貼著焦土一路摸過去，天亮前到了潁水邊。新卒跪下磕了三個頭，往北走了。",
-          "stats": {
-            "good": 2,
-            "evil": 1
-          }
-        },
-        "fail_effect": {
-          "text": "巡哨的火把照過來，你們被追了大半夜，新卒最後還是被抓了回去。",
-          "stamina": -20,
-          "stats": {
-            "fame": -1
-          }
-        }
-      },
-      {
-        "text": "分他一塊乾糧，勸他回營",
-        "effect": {
-          "text": "新卒狼吞虎嚥地吃完，猶豫了很久，還是低著頭回了營。",
-          "stats": {
-            "good": 1
-          }
-        }
-      }
-    ]
-  },
-  {
     "id": "yc_cs_grain_cart",
     "title": "截糧牛車",
     "locations": [
