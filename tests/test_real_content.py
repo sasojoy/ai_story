@@ -532,11 +532,11 @@ def test_real_timetable_matches_settlement_doc():
     assert [e.id for e in c.timetable if e.kind == "showdown"] == ["changshe_fire", "wancheng", "guangzong"]
     assert c.timetable[-1].id == "xiaquyang"
 
-    zhang = events["zhangmancheng_wan"].outcomes  # 張曼成「成」南陽 +8，「不成」−5 且張曼成受挫
+    zhang = events["zhangmancheng_wan"].outcomes  # 張曼成「成」南陽 +8，「不成」−5 且張曼成（不在時是接手的人）受挫
     assert zhang["成"].trends == {"nanyang": 8} and not zhang["成"].figures
-    assert zhang["不成"].trends == {"nanyang": -5} and zhang["不成"].figures["zhangmancheng"].fate == "受挫"
-    guangzong = events["guangzong"].outcomes["guan:大勝"]  # 廣宗官軍大勝：冀州 −20、張梁退場
-    assert guangzong.trends == {"jizhou": -20} and guangzong.figures["zhangliang"].fate == "退場"
+    assert zhang["不成"].trends == {"nanyang": -5} and zhang["不成"].figures["@人物:zhangmancheng"].fate == "受挫"
+    guangzong = events["guangzong"].outcomes["guan:大勝"]  # 廣宗官軍大勝：冀州 −20、張梁（不在時是接手的人）退場
+    assert guangzong.trends == {"jizhou": -20} and guangzong.figures["@人物:zhangliang"].fate == "退場"
     changshe = events["changshe_fire"].outcomes  # 長社四格：15／8
     assert {k: o.trends["yingru"] for k, o in changshe.items()} == {
         "guan:大勝": -15, "guan:險勝": -8, "huang:大勝": 15, "huang:險勝": 8,
@@ -564,6 +564,14 @@ def test_real_endings_valid(content):
     assert s1[4].text == "下曲陽破了，可冀州的山裡仍有黃旗。"
     for ending in s1[:3]:  # 決定性勝利第 10 週起才收（企劃者 2026-10-05）：提示不能說「當場收場」卻讓人空等五週（T9 審查 I1）
         assert f"第 {content.config.decisive_from_week} 週起" in ending.hint, ending.hint
+    assert [e.hint for e in s1] == [  # 濃縮版內容表第七節（2026-10-05 審過）：一律照狀態列的「態勢」講、三方對稱
+        "第 10 週起，黃巾的態勢一到 85，這一季當場收場。",
+        "第 10 週起，官軍的態勢一到 85，這一季當場收場。",
+        "第 10 週起，豪強的態勢一到 85，這一季當場收場。",
+        "到了季末，黃巾的態勢最高。",
+        "到了季末，官軍的態勢最高。",
+        "到了季末，豪強的態勢最高。",
+    ]
     beta = [e for e in content.scenario.endings if not e.season_one]
     assert beta[-1].id == "default"
     finale = next(e for e in content.timetable if e.kind == "finale")
@@ -615,29 +623,30 @@ def test_real_timetable_runs_a_whole_condensed_season():
 # ── 時刻表：有人鎖定時的公告（伏筆文件 3.4、5.4；2026-10-04 S1 的四欄表）──────────────────
 #
 # 組法：具名的一段＋這一檔（大勝或險勝）的結果句＋搶輸的一筆＋豪強的一筆；「波才北上」由 note 接、只出現一次。
-# 下面三張表是照伏筆文件逐字抄的（具名的一段、大勝接、險勝接、搶輸的一筆），不是從 content 反推。
+# 下面三張表是照伏筆文件逐字抄的（具名的一段、大勝接、險勝接、搶輸的一筆），不是從 content 反推；「這一次」那半句
+# 寫到的人照濃縮版內容表第八節（FB-042）改成人物欄位，長社黃巾勝的「潁川交給了朱儁」移到朱儁那筆人物效果的 note。
 
 SHOWDOWN_NAMED = {
     ("changshe_fire", "", "guan"): "史書上，皇甫嵩趁夜縱火，大破波才於長社。這一次，{name} 讓史書沒有落空：葦束膏油早已備下，風起之時火光燭天。",
-    ("changshe_fire", "", "huang"): "史書上，皇甫嵩趁夜縱火，大破波才於長社。這一次，{name} 看破了火攻，先一步勸波才移營，那一夜燒的是一座空營。",
-    ("wancheng", "甲", "guan"): "史書上，孫堅身當一面，登城先入，大破宛城。這一次，{name} 帶著一隊人跟在孫文臺身後，從東北角新補的城牆攀了上去。",
+    ("changshe_fire", "", "huang"): "史書上，皇甫嵩趁夜縱火，大破波才於長社。這一次，{name} 看破了火攻，先一步勸{人物:bocai}移營，那一夜燒的是一座空營。",
+    ("wancheng", "甲", "guan"): "史書上，孫堅身當一面，登城先入，大破宛城。這一次，{name} 帶著一隊人跟在{人物:sunjian}身後，從東北角新補的城牆攀了上去。",
     ("wancheng", "甲", "huang"): "史書上，孫堅先登，宛城被破。這一次，城裡的糧倉是滿的，{name} 一袋一袋囤下的糧讓宛城撐過了最難的一個月。",
-    ("wancheng", "乙", "guan"): "這一次，宛城在官軍手裡。黃巾圍城數十日，{name} 跟著孫堅在一個雨夜縋城而出，直撲黃巾連營。",
-    ("wancheng", "乙", "huang"): "圍城的黃巾糧足，城裡的官軍先斷了糧。{name} 替趙弘囤下的糧，比攻城梯還管用，宛城開了門。",
+    ("wancheng", "乙", "guan"): "這一次，宛城在官軍手裡。黃巾圍城數十日，{name} 跟著{人物:sunjian}在一個雨夜縋城而出，直撲黃巾連營。",
+    ("wancheng", "乙", "huang"): "圍城的黃巾糧足，城裡的官軍先斷了糧。{name} 替{人物:zhaohong}囤下的糧，比攻城梯還管用，宛城開了門。",
 }
 SHOWDOWN_TIER = {  # 大勝接、險勝接。長社黃巾大勝的「波才分兵北上」不在這裡：那一句在 note 上，不論有沒有鎖定都接
-    ("changshe_fire", "", "guan"): ("騎都尉曹操的援兵恰好趕到，黃巾的草營燒成一片火海。", "只是風向不定，火只燒了半座營，波才敗走陽翟。"),
-    ("changshe_fire", "", "huang"): ("黃巾反從上風殺出，皇甫嵩重挫退走，潁川交給了朱儁。", "黃巾趁亂反撲，官軍折損甚重，皇甫嵩重挫退走。"),
-    ("wancheng", "甲", "guan"): ("城門從裡面打開，趙弘死在亂軍之中。", "宛城是破了，可趙弘帶著殘部從南門突圍。"),
+    ("changshe_fire", "", "guan"): ("騎都尉曹操的援兵恰好趕到，黃巾的草營燒成一片火海。", "只是風向不定，火只燒了半座營，{人物:bocai}敗走陽翟。"),
+    ("changshe_fire", "", "huang"): ("黃巾反從上風殺出，{人物:huangfusong}重挫退走。", "黃巾趁亂反撲，官軍折損甚重，{人物:huangfusong}重挫退走。"),
+    ("wancheng", "甲", "guan"): ("城門從裡面打開，{人物:zhaohong}死在亂軍之中。", "宛城是破了，可{人物:zhaohong}帶著殘部從南門突圍。"),
     ("wancheng", "甲", "huang"): ("官軍的雲梯一架架被推倒，{官軍主將}的兵先散了。", "宛城守住了，只是城裡的糧也快見底了。"),
-    ("wancheng", "乙", "guan"): ("趙弘死在亂軍之中，圍城不攻自解。", "黃巾的連營被衝亂，趙弘退兵三十里。"),
+    ("wancheng", "乙", "guan"): ("{人物:zhaohong}死在亂軍之中，圍城不攻自解。", "黃巾的連營被衝亂，{人物:zhaohong}退兵三十里。"),
     ("wancheng", "乙", "huang"): ("{官軍主將}的援軍晚到了一步。", "但黃巾也死傷慘重。"),
 }
 SHOWDOWN_LOSER = {  # 搶輸的一筆；乙版沒有
-    ("changshe_fire", "", "guan"): "黃巾的 {loser} 曾看破火攻、勸波才移營，可惜晚了一步。",
+    ("changshe_fire", "", "guan"): "黃巾的 {loser} 曾看破火攻、勸{人物:bocai}移營，可惜晚了一步。",
     ("changshe_fire", "", "huang"): "官軍的 {loser} 費盡心思備下的火具，燒掉的只是幾頂空帳。",
     ("wancheng", "甲", "guan"): "黃巾的 {loser} 送進城的糧，最後沒能派上用場。",
-    ("wancheng", "甲", "huang"): "孫堅帶著 {loser} 攀上東北角，城頭的守兵卻吃得飽、站得穩。",
+    ("wancheng", "甲", "huang"): "{人物:sunjian}帶著 {loser} 攀上東北角，城頭的守兵卻吃得飽、站得穩。",
 }
 SHOWDOWN_CELLS = [(eid, ver, side, tier) for (eid, ver, side) in SHOWDOWN_NAMED for tier in ("大勝", "險勝")]
 
@@ -647,8 +656,10 @@ def _cell_key(ver: str, side: str, tier: str) -> str:
 
 
 def _announce(event_id, key, *, version="", lock=None, losers=(), third=(), commander=None):
-    """用真實內容（週末設定）結算一件決戰，回傳公告那一段。lock 是 (陣營, 名號)；losers 是 [(陣營, 名號)]。"""
+    """用真實內容（週末設定）結算一件決戰，回傳公告那一段。lock 是 (陣營, 名號)；losers 是 [(陣營, 名號)]。
+    commander 換掉的是 figures.commander（{官軍主將}，以及人物欄位寫到的人不在時找的接手者）。"""
     from tianxia import figures, timetable
+    from tianxia.models import FigureChange
     from tianxia.state import GameState, Lock, PlayerState
     from tianxia.world_state import fresh_season
 
@@ -657,6 +668,7 @@ def _announce(event_id, key, *, version="", lock=None, losers=(), third=(), comm
                       world=fresh_season(c))
     if version:  # 宛城的版本看「張曼成攻殺南陽太守」那件的結果
         state.world.timeline["zhangmancheng_wan"] = timetable.TimelineResult(key={"甲": "成", "乙": "不成"}[version], time=0.0)
+        figures.apply(state, c, "zhangmancheng", FigureChange(fate="退場"))  # 第 7 週秦頡斬張曼成，趙弘接下南陽
     if lock is not None:
         state.world.locks[event_id] = Lock(side=lock[0], name=lock[1], time=0.0)
         state.world.lock_losers[event_id] = [Lock(side=s, name=n, time=1.0) for s, n in losers]
@@ -714,13 +726,14 @@ def test_changshe_huang_lock_big_win_says_the_northward_march_exactly_once():
     assert text.count("波才分兵北上") == 1
     assert text == (
         "史書上，皇甫嵩趁夜縱火，大破波才於長社。這一次，甲 看破了火攻，先一步勸波才移營，那一夜燒的是一座空營。"
-        "黃巾反從上風殺出，皇甫嵩重挫退走，潁川交給了朱儁。"
+        "黃巾反從上風殺出，皇甫嵩重挫退走。"
         "潁川得手之後，波才分兵北上，往廣宗去了。"  # 北上是這一檔結果句的一部分（S1 表），排在搶輸的一筆前面
+        "潁川交給了朱儁。"  # 朱儁那筆人物效果的 note（FB-042），接在這一格的 note 之後
         "官軍的 乙 費盡心思備下的火具，燒掉的只是幾頂空帳。"
         "事後才有人發現，兩軍那幾天吃的糧竟出自同一家：豪甲 的糧車。"
     )
     unlocked, _ = _announce("changshe_fire", "huang:大勝")  # 沒人鎖定的黃巾大勝：note 照樣接、也只有一次
-    assert unlocked.count("波才分兵北上") == 1 and unlocked.endswith("潁川得手之後，波才分兵北上，往廣宗去了。")
+    assert unlocked.count("波才分兵北上") == 1 and unlocked.endswith("潁川得手之後，波才分兵北上，往廣宗去了。潁川交給了朱儁。")
 
 
 def test_changshe_huang_lock_narrow_win_has_no_northward_march():
@@ -728,6 +741,7 @@ def test_changshe_huang_lock_narrow_win_has_no_northward_march():
     assert text == (
         "史書上，皇甫嵩趁夜縱火，大破波才於長社。這一次，甲 看破了火攻，先一步勸波才移營，那一夜燒的是一座空營。"
         "黃巾趁亂反撲，官軍折損甚重，皇甫嵩重挫退走。"
+        "潁川交給了朱儁。"  # 黃巾險勝原本沒有這一句，FB-042 一起補上
     )
 
 
@@ -760,10 +774,269 @@ def test_wancheng_guan_lock_cells_read_named_part_then_tier_sentence():
     )
     text, _ = _announce("wancheng", "guan:大勝", version="甲", lock=("guan", "甲"), losers=[("huang", "乙")])
     assert text == (
-        "史書上，孫堅身當一面，登城先入，大破宛城。這一次，甲 帶著一隊人跟在孫文臺身後，從東北角新補的城牆攀了上去。"
+        "史書上，孫堅身當一面，登城先入，大破宛城。這一次，甲 帶著一隊人跟在孫堅身後，從東北角新補的城牆攀了上去。"
         "城門從裡面打開，趙弘死在亂軍之中。"
         "黃巾的 乙 送進城的糧，最後沒能派上用場。"
     )
+
+
+# ── 時刻表的人物欄位（FB-042，濃縮版內容表第八節，2026-10-05 企劃者定）──────────────────────────────
+#
+# 「史書上」那半句照寫真名；「這一次」那半句與江湖史寫到的人改成 {人物:<id>}，人物效果的鍵跟著改成 @人物:<id>。
+# 下面這張表是照第八節逐格抄的（沒列的欄位照舊），不是從 content 反推。鍵是 (大事, 結果鍵, 欄位)；
+# 欄位 "locked_text.guan" 是那一方的具名公告，"figures" 是人物效果的鍵（照順序）。
+
+SECTION_EIGHT = {
+    # 8.2 第 3 週・張曼成攻宛城
+    ("zhangmancheng_wan", "成", "text"):
+        "史書上，張曼成攻殺南陽太守褚貢，屯據宛城。這一次也一樣：{人物:zhangmancheng}的黃旗插上了宛城城頭，郡府的官吏逃散一空。",
+    ("zhangmancheng_wan", "成", "chronicle"): "{人物:zhangmancheng}攻殺南陽太守褚貢，據宛城。",
+    ("zhangmancheng_wan", "不成", "chronicle"): "{人物:zhangmancheng}攻宛城不下。",
+    ("zhangmancheng_wan", "不成", "figures"): ["@人物:zhangmancheng"],
+    # 8.3 第 4 週・波才敗朱儁
+    ("bocai_routs_zhujun", "成", "text"): "史書上，波才大敗右中郎將朱儁。這一次也一樣：{人物:zhujun}的前軍在潁川郊外被黃巾衝散，退保長社。",
+    ("bocai_routs_zhujun", "成", "chronicle"): "{人物:bocai}大敗{人物:zhujun}於潁川。",
+    ("bocai_routs_zhujun", "成", "figures"): ["@人物:zhujun"],
+    ("bocai_routs_zhujun", "不成", "text"):
+        "史書上，波才大敗右中郎將朱儁。這一次，{人物:zhujun}穩住了陣腳，黃巾幾次衝陣都沒衝動，{人物:bocai}只得收兵。",
+    ("bocai_routs_zhujun", "不成", "chronicle"): "{人物:zhujun}擋住了{人物:bocai}的攻勢。",
+    ("bocai_routs_zhujun", "不成", "figures"): ["@人物:bocai"],
+    # 8.4 第 6 週・長社火攻（preface 照舊）
+    ("changshe_fire", "guan:大勝", "loser_text.guan"): "黃巾的 {loser} 曾看破火攻、勸{人物:bocai}移營，可惜晚了一步。",
+    ("changshe_fire", "guan:險勝", "loser_text.guan"): "黃巾的 {loser} 曾看破火攻、勸{人物:bocai}移營，可惜晚了一步。",
+    ("changshe_fire", "guan:大勝", "chronicle"): "{人物:huangfusong}火攻長社，大破{人物:bocai}。",
+    ("changshe_fire", "guan:大勝", "figures"): ["@人物:bocai"],
+    ("changshe_fire", "guan:險勝", "text"): "這一次，火是放起來了，可風向不定，只燒了半座營。黃巾且戰且退，{人物:bocai}敗走陽翟。",
+    ("changshe_fire", "guan:險勝", "locked_text.guan"):
+        "史書上，皇甫嵩趁夜縱火，大破波才於長社。這一次，{name} 讓史書沒有落空：葦束膏油早已備下，風起之時火光燭天。"
+        "只是風向不定，火只燒了半座營，{人物:bocai}敗走陽翟。",
+    ("changshe_fire", "guan:險勝", "chronicle"): "長社一戰，{人物:bocai}敗走陽翟。",
+    ("changshe_fire", "guan:險勝", "figures"): ["@人物:bocai"],
+    ("changshe_fire", "huang:大勝", "text"): "這一次，火攻沒有成。黃巾趁官軍出城時反撲，{人物:huangfusong}重挫退走。",
+    ("changshe_fire", "huang:大勝", "locked_text.huang"):
+        "史書上，皇甫嵩趁夜縱火，大破波才於長社。這一次，{name} 看破了火攻，先一步勸{人物:bocai}移營，那一夜燒的是一座空營。"
+        "黃巾反從上風殺出，{人物:huangfusong}重挫退走。",
+    ("changshe_fire", "huang:大勝", "note"): "潁川得手之後，{人物:bocai}分兵北上，往廣宗去了。",
+    ("changshe_fire", "huang:險勝", "text"): "這一次，火攻沒有成。黃巾死戰不退，官軍折損甚重，{人物:huangfusong}重挫退走。",
+    ("changshe_fire", "huang:險勝", "locked_text.huang"):
+        "史書上，皇甫嵩趁夜縱火，大破波才於長社。這一次，{name} 看破了火攻，先一步勸{人物:bocai}移營，那一夜燒的是一座空營。"
+        "黃巾趁亂反撲，官軍折損甚重，{人物:huangfusong}重挫退走。",
+    ("changshe_fire", "huang:大勝", "chronicle"): "長社火攻失利，{人物:huangfusong}重挫。",
+    ("changshe_fire", "huang:險勝", "chronicle"): "長社火攻失利，{人物:huangfusong}重挫。",
+    ("changshe_fire", "huang:大勝", "figures"): ["zhujun", "@人物:huangfusong"],  # 朱儁那筆排在前面（見下面的測試）
+    ("changshe_fire", "huang:險勝", "figures"): ["zhujun", "@人物:huangfusong"],
+    # 8.5 第 7 週・盧植圍廣宗
+    ("luzhi_siege", "成", "text"):
+        "史書上，盧植連戰破賊，把張角圍在廣宗，築圍鑿塹、造雲梯，眼看就要破城。這一次也一樣：{人物:luzhi}把{人物:zhangjiao}圍在了廣宗。",
+    ("luzhi_siege", "成", "chronicle"): "{人物:luzhi}圍{人物:zhangjiao}於廣宗。",
+    ("luzhi_siege", "成", "figures"): ["@人物:zhangjiao"],
+    ("luzhi_siege", "不成", "text"):
+        "史書上，盧植把張角圍在廣宗。這一次，黃巾在廣宗城外連營數十里，{人物:luzhi}的圍塹還沒挖成就被衝開，只能退守大營。",
+    ("luzhi_siege", "不成", "chronicle"): "{人物:luzhi}圍廣宗不成，退守大營。",
+    ("luzhi_siege", "不成", "figures"): ["@人物:luzhi"],
+    # 8.6 第 7 週・秦頡（只拿掉寫死的接手者）
+    ("qinjie_slays_zhangmancheng", "甲:fixed", "text"):
+        "新任南陽太守秦頡引兵來攻，張曼成在宛城下被斬。神上使一死，黃巾收攏餘眾，又把宛城守了起來。",
+    ("qinjie_slays_zhangmancheng", "乙:fixed", "text"): "援兵統帥秦頡趕到南陽，張曼成在宛城外被斬。黃巾在城外重整連營，圍城不退。",
+    ("qinjie_slays_zhangmancheng", "甲:fixed", "chronicle"): "秦頡斬張曼成。",
+    ("qinjie_slays_zhangmancheng", "乙:fixed", "chronicle"): "秦頡斬張曼成。",
+    # 8.7 第 8 週・盧植下獄（skip_if_out 見下面的測試）
+    ("luzhi_jailed", "成", "loser_text.huang"): "官軍的 {loser} 蒐齊的證據送進了大將軍府，卻遲遲沒有下文。",
+    # 8.8 第 9 週・宛城之戰
+    ("wancheng", "甲:guan:大勝", "text"):
+        "史書上，孫堅身當一面，登城先入，大破宛城。這一次也一樣：{人物:sunjian}的兵攀上東北角的城牆，城門從裡面打開了。",
+    ("wancheng", "甲:guan:大勝", "locked_text.guan"):
+        "史書上，孫堅身當一面，登城先入，大破宛城。這一次，{name} 帶著一隊人跟在{人物:sunjian}身後，從東北角新補的城牆攀了上去。"
+        "城門從裡面打開，{人物:zhaohong}死在亂軍之中。",
+    ("wancheng", "甲:guan:大勝", "figures"): ["@人物:zhaohong"],
+    ("wancheng", "甲:guan:險勝", "text"): "史書上，孫堅先登，大破宛城。這一次，宛城是破了，可{人物:zhaohong}帶著殘部從南門突圍。",
+    ("wancheng", "甲:guan:險勝", "locked_text.guan"):
+        "史書上，孫堅身當一面，登城先入，大破宛城。這一次，{name} 帶著一隊人跟在{人物:sunjian}身後，從東北角新補的城牆攀了上去。"
+        "宛城是破了，可{人物:zhaohong}帶著殘部從南門突圍。",
+    ("wancheng", "甲:guan:險勝", "figures"): ["@人物:zhaohong"],
+    ("wancheng", "甲:guan:大勝", "chronicle"): "{人物:sunjian}先登，宛城破。",
+    ("wancheng", "甲:guan:險勝", "chronicle"): "{人物:sunjian}先登，宛城破。",
+    ("wancheng", "甲:huang:大勝", "loser_text.huang"): "{人物:sunjian}帶著 {loser} 攀上東北角，城頭的守兵卻吃得飽、站得穩。",
+    ("wancheng", "甲:huang:險勝", "loser_text.huang"): "{人物:sunjian}帶著 {loser} 攀上東北角，城頭的守兵卻吃得飽、站得穩。",
+    ("wancheng", "乙:guan:大勝", "text"): "這一次，宛城在官軍手裡。{人物:sunjian}在雨夜縋城而出，直撲黃巾連營，{人物:zhaohong}死在亂軍之中。",
+    ("wancheng", "乙:guan:大勝", "locked_text.guan"):
+        "這一次，宛城在官軍手裡。黃巾圍城數十日，{name} 跟著{人物:sunjian}在一個雨夜縋城而出，直撲黃巾連營。"
+        "{人物:zhaohong}死在亂軍之中，圍城不攻自解。",
+    ("wancheng", "乙:guan:大勝", "figures"): ["@人物:zhaohong"],
+    ("wancheng", "乙:guan:險勝", "text"): "這一次，宛城在官軍手裡。黃巾的連營被{人物:sunjian}衝亂，{人物:zhaohong}退兵三十里。",
+    ("wancheng", "乙:guan:險勝", "locked_text.guan"):
+        "這一次，宛城在官軍手裡。黃巾圍城數十日，{name} 跟著{人物:sunjian}在一個雨夜縋城而出，直撲黃巾連營。"
+        "黃巾的連營被衝亂，{人物:zhaohong}退兵三十里。",
+    ("wancheng", "乙:guan:險勝", "figures"): ["@人物:zhaohong"],
+    ("wancheng", "乙:guan:大勝", "chronicle"): "{人物:sunjian}夜襲，解宛城之圍。",
+    ("wancheng", "乙:guan:險勝", "chronicle"): "{人物:sunjian}夜襲，解宛城之圍。",
+    ("wancheng", "乙:huang:大勝", "locked_text.huang"):
+        "圍城的黃巾糧足，城裡的官軍先斷了糧。{name} 替{人物:zhaohong}囤下的糧，比攻城梯還管用，宛城開了門。{官軍主將}的援軍晚到了一步。",
+    ("wancheng", "乙:huang:險勝", "locked_text.huang"):
+        "圍城的黃巾糧足，城裡的官軍先斷了糧。{name} 替{人物:zhaohong}囤下的糧，比攻城梯還管用，宛城開了門。但黃巾也死傷慘重。",
+    # 8.9 第 11 週・廣宗
+    ("guangzong", "guan:大勝", "chronicle"): "{官軍主將}破廣宗，斬{人物:zhangliang}。",
+    ("guangzong", "guan:大勝", "figures"): ["@人物:zhangliang", "zhangjiao"],
+    ("guangzong", "guan:險勝", "text"): "史書上，皇甫嵩破廣宗，斬張梁。這一次，廣宗的外城破了，{人物:zhangliang}退守內城。",
+    ("guangzong", "guan:險勝", "figures"): ["@人物:zhangliang"],
+    ("guangzong", "huang:大勝", "text"):
+        "史書上，皇甫嵩破廣宗，斬張梁。這一次，{人物:zhangliang}領著死士夜出，官軍大營起火，{官軍主將}退走。",
+}
+
+
+def _real_s1():
+    """真實內容（週末設定，第一季開關打開）的一季＋季的事用的那種空殼玩家（人物照人物表種好）。"""
+    from tianxia.state import GameState, PlayerState
+    from tianxia.world_state import fresh_season
+
+    c = load_content(CONTENT_DIR, profile="weekend")
+    state = GameState(player=PlayerState(name="", location=c.scenario.start_location, stats={}, stamina=0),
+                      world=fresh_season(c))
+    return c, state
+
+
+def test_section_eight_cells_are_in_the_timetable_word_for_word():
+    c = load_content(CONTENT_DIR)
+    events = {e.id: e for e in c.timetable}
+    for (event_id, key, field), expected in SECTION_EIGHT.items():
+        outcome = events[event_id].outcomes[key]
+        if field == "figures":
+            actual = list(outcome.figures)
+        elif "." in field:
+            name, side = field.split(".")
+            actual = getattr(outcome, name).get(side)
+        else:
+            actual = getattr(outcome, field)
+        assert actual == expected, (event_id, key, field)
+
+
+# 8.10 不改的大事，與第八節刻意照寫真名的幾件（秦頡要張曼成還在才發生、盧植下獄寫的是朝廷的任命）
+NAMES_KEPT = {"uprising", "court_mobilizes", "qinjie_slays_zhangmancheng", "luzhi_jailed", "zhangjiao_dies", "xiaquyang"}
+# 「這一次」那半句不能寫死的稱呼：人物表上的名字，加上只對那一位成立的稱號與官銜（第八節逐條拿掉的）
+FIGURE_TITLES = ("神上使", "江東子弟", "孫文臺", "人公將軍", "右中郎將")
+PLAIN_KEYS_KEPT = {("changshe_fire", "huang:大勝", "zhujun"), ("changshe_fire", "huang:險勝", "zhujun"),
+                   ("guangzong", "guan:大勝", "zhangjiao")}
+
+
+def test_the_this_time_half_names_nobody_directly():
+    """FB-042：「這一次」那半句、江湖史、note、搶輸的一句都不寫死人名（人物被挑戰打到退場之後就會寫錯人）——一律是
+    {人物:<id>} 或 {官軍主將}。人物效果的鍵也一樣是 @人物 或 @commander；照寫人物 id 的只剩第八節列明的三筆。"""
+    c = load_content(CONTENT_DIR)
+    banned = [fig.name for fig in c.figures.values()] + list(FIGURE_TITLES)
+    for e in c.timetable:
+        if e.id in NAMES_KEPT:
+            continue
+        for key, o in e.outcomes.items():
+            halves = [t.split("這一次", 1)[-1] for t in (o.text, *o.locked_text.values())]
+            notes = [ch.note for k, ch in o.figures.items() if (e.id, key, k) not in PLAIN_KEYS_KEPT]  # 「潁川交給了朱儁」只在朱儁在時才接
+            for line in [*halves, o.note, o.chronicle, *o.loser_text.values(), *notes]:
+                assert not [w for w in banned if w in line], (e.id, key, line)
+            plain = [k for k in o.figures if not k.startswith("@") and (e.id, key, k) not in PLAIN_KEYS_KEPT]
+            assert plain == [], (e.id, key)
+
+
+def test_changshe_huang_win_hands_yingru_to_zhujun_only_when_huangfusong_held_it():
+    """S1 第 1 項：長社黃巾勝，「潁川交給了朱儁」移到朱儁那筆人物效果的 note（不改數字、皇甫嵩與朱儁都在潁川才套），
+    排在皇甫嵩那筆前面（檢查條件時皇甫嵩還沒轉走）。皇甫嵩先被打到退場、潁川由朱儁接手時，重挫的就是朱儁本人，
+    不再寫「交給了朱儁」。"""
+    from tianxia import figures, timetable
+    from tianxia.models import FigureChange
+
+    c, here = _real_s1()
+    changshe = next(e for e in c.timetable if e.id == "changshe_fire")
+    for key in ("huang:大勝", "huang:險勝"):
+        assert changshe.outcomes[key].figures["zhujun"] == FigureChange(
+            only_if={"huangfusong": "yingru", "zhujun": "yingru"}, note="潁川交給了朱儁。",
+        )
+    msgs = timetable.resolve(here, c, changshe, random.Random(0), key="huang:險勝")
+    assert msgs == [f"【江湖大事】{changshe.preface}這一次，火攻沒有成。黃巾死戰不退，官軍折損甚重，皇甫嵩重挫退走。潁川交給了朱儁。"]
+    assert (here.world.figures["huangfusong"].front, here.world.figures["zhujun"].front) == ("jizhou", "yingru")
+    assert here.world.figures["zhujun"].prestige == 60  # 朱儁那筆不動數字
+    assert here.world.chronicle[-1].text == "長社火攻失利，皇甫嵩重挫。"
+
+    _, gone = _real_s1()
+    figures.apply(gone, c, "huangfusong", FigureChange(fate="退場"))  # 朱儁本來就在潁川：接下潁川
+    msgs = timetable.resolve(gone, c, changshe, random.Random(0), key="huang:險勝")
+    assert msgs == [f"【江湖大事】{changshe.preface}這一次，火攻沒有成。黃巾死戰不退，官軍折損甚重，朱儁重挫退走。"]
+    zhujun = gone.world.figures["zhujun"]
+    assert (zhujun.front, zhujun.location, zhujun.prestige) == ("jizhou", "luzhi_camp", 30)  # 重挫照舊轉往冀州盧植營
+    assert gone.world.chronicle[-1].text == "長社火攻失利，朱儁重挫。"
+
+
+def test_luzhi_jailed_is_skipped_once_luzhi_is_out():
+    """S1 第 2 項：盧植已經退場（冀州照接位鏈交給了董卓）就整件跳過，同張角病逝——不公告、不套效果、鎖定也不算；
+    搶輸的一句不寫何進（天命人物，可能先被打到重創）。"""
+    from tianxia import figures, timetable
+    from tianxia.models import FigureChange
+    from tianxia.state import Lock
+
+    c, s = _real_s1()
+    jailed = next(e for e in c.timetable if e.id == "luzhi_jailed")
+    assert jailed.skip_if_out == "luzhi" and "何進" not in jailed.outcomes["成"].loser_text["huang"]
+    figures.apply(s, c, "luzhi", FigureChange(fate="退場"))
+    assert (s.world.figures["dongzhuo"].status, s.world.figures["dongzhuo"].front) == ("active", "jizhou")
+    s.world.locks["luzhi_jailed"] = Lock(side="huang", name="甲", time=0.0)
+    trends, chronicle = dict(s.world.trends), list(s.world.chronicle)
+    assert timetable.resolve(s, c, jailed, random.Random(0)) == []
+    assert s.world.timeline["luzhi_jailed"].key == timetable.SKIPPED
+    assert (s.world.trends, s.world.chronicle) == (trends, chronicle)
+
+    _, there = _real_s1()  # 盧植還在：照舊結算（鎖定的黃巾定成「成」，董卓到任）
+    there.world.locks["luzhi_jailed"] = Lock(side="huang", name="甲", time=0.0)
+    assert timetable.resolve(there, c, jailed, random.Random(0))
+    assert (there.world.figures["luzhi"].status, there.world.timeline["luzhi_jailed"].key) == ("jailed", "成")
+
+
+def test_qinjie_no_longer_names_the_heir():
+    """S1 第 3 項：秦頡斬張曼成不寫「推趙弘為帥」——趙弘可能早就被挑戰打到退場，接手的是韓忠；誰接手由接手那則
+    天下大事講。"""
+    c = load_content(CONTENT_DIR)
+    qinjie = next(e for e in c.timetable if e.id == "qinjie_slays_zhangmancheng")
+    for o in qinjie.outcomes.values():
+        assert "趙弘" not in o.text + o.chronicle and "推趙弘為帥" not in o.text
+
+
+def test_every_person_slot_resolves_whoever_is_left():
+    """真實時刻表每一格（季末除外）都結算得了：人物都在時寫名字；人物全都不在時寫泛稱、@人物 的效果略過、不丟例外。
+    兩種情形都沒有沒填的欄位留在公告、傳聞與江湖史裡。"""
+    from tianxia import timetable
+
+    c, _ = _real_s1()
+    for e in c.timetable:
+        for key in e.outcomes:
+            for everyone_out in (False, True):
+                _, s = _real_s1()
+                if everyone_out:
+                    for figure in s.world.figures.values():
+                        figure.status = "retired"
+                msgs = timetable.resolve(s, c, e, random.Random(0), key=key)
+                written = msgs + [r.text for r in s.world.rumors] + [r.text for r in s.world.chronicle]
+                assert not [t for t in written if "{" in t], (e.id, key, everyone_out, written)
+    _, s = _real_s1()
+    for figure in s.world.figures.values():
+        figure.status = "retired"
+    wancheng = next(e for e in c.timetable if e.id == "wancheng")
+    msgs = timetable.resolve(s, c, wancheng, random.Random(0), key="乙:guan:險勝")
+    assert msgs == ["【江湖大事】這一次，宛城在官軍手裡。黃巾的連營被官軍主將衝亂，黃巾渠帥退兵三十里。"]
+
+
+def test_the_timetable_never_runs_with_the_switch_off():
+    """開關關著（beta 那一季）時時刻表整個不跑：一整季推到收季，時刻表一件也不結算、句子一句也不填，沒有人物欄位寫進
+    傳聞或江湖史。FB-042 改的是時刻表的句子與結算，所以 beta 的行為一個字都不變。"""
+    from tianxia import timetable
+    from tianxia.world import advance_world_state
+    from tianxia.world_state import fresh_season, season_length_days
+
+    c = load_content(CONTENT_DIR)
+    assert not c.config.season_one
+    w = fresh_season(c)
+    untouched = AssertionError("開關關著時不該碰時刻表")
+    with mock.patch.object(timetable, "resolve", side_effect=untouched), \
+            mock.patch.object(timetable, "fill_slots", side_effect=untouched):
+        msgs = advance_world_state(w, c, season_length_days(w, c) * 86400 + 3600, random.Random(0))
+    assert w.ended and w.timeline == {} and w.figures == {}
+    written = msgs + [r.text for r in w.rumors] + [r.text for r in w.chronicle]
+    assert written and not [t for t in written if "{人物" in t]
 
 
 # ── 第一季不觸發的 beta 內容（計畫 T8；控制者 2026-10-04）──────────────────────────────

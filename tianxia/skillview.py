@@ -131,7 +131,16 @@ def _art_label(content: Content, world: WorldStateStore, skill_id: str | None, l
 
 
 def member_card(state: GameState, content: Content, world: WorldStateStore, key: str) -> str:
-    """一個人的角色卡：等級、氣血、內功、武學。"""
+    """一個人的角色卡：等級、氣血、內功、武學。部下（計畫 T5）只有武學：沒有等級、不扣氣血。"""
+    if key.startswith(team.FOLLOWER_KEY):
+        follower = dict(team.follower_rows(state, content)).get(key)
+        if follower is None:
+            return ""
+        return "\n".join([
+            f"### {follower.name}",
+            "部下：一直跟著你出戰，只算威力、不扣氣血；不能對話，也不能散功。",
+            f"武學　{_art_label(content, world, follower.wugong, follower.wugong_level)}",
+        ])
     if key == PLAYER:
         member = state.player.member
         name = state.player.name

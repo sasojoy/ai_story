@@ -547,6 +547,7 @@
       ${mates ? `<div class="list">${x.roster.map((r) => `<button class="${x.person === r.key ? "on" : ""}" data-act="person" data-key="${esc(r.key)}">${esc(r.label)}</button>`).join("")}</div>` : ""}
       ${mates && x.person ? `<div class="card">${x.person_card}
         ${x.person === "player" ? '<p class="muted">本人一直都在隊伍裡。</p>' // 本人不能加入、移出（引擎也會擋）
+          : x.person.startsWith("follower:") ? "" // 部下（計畫 T5）也不能加入、移出；角色卡已經寫了
           : `<button class="btn ${x.on_team ? "" : "primary"}" data-act="mx" data-op="${x.on_team ? "leave" : "join"}">${x.on_team ? "移出隊伍" : "加入隊伍"}</button>`}</div>` : ""}`;
   }
 
@@ -862,10 +863,34 @@
               <div class="row ad-row"><span class="ad-tag">決戰</span><select class="input" id="ad-battle" aria-label="決戰">${opts(a.battles)}</select><button class="btn small" data-act="admin" data-op="start_battle">立刻開戰</button></div>
               <div class="row ad-row"><span class="ad-tag">事件</span><select class="input" id="ad-fire" aria-label="事件">${opts(a.events)}</select><button class="btn small" data-act="admin" data-op="fire">觸發</button></div>
               <div class="row ad-row"><span class="ad-tag">大勢</span><select class="input" id="ad-trend" aria-label="大勢">${opts(a.trends)}</select><input class="input" id="ad-amount" type="number" value="10" aria-label="推動量" style="max-width:76px"><button class="btn small" data-act="admin" data-op="push_trend">推動</button></div>
+              ${a.timetable.length ? timetableHtml(a) : ""}
+              <p class="muted">救場</p>
+              <div class="row ad-row"><span class="ad-tag">戰況</span><select class="input" id="ad-front" aria-label="定戰況的線">${opts(a.trends)}</select><input class="input" id="ad-value" type="number" value="50" min="0" max="100" aria-label="戰況" style="max-width:76px"><button class="btn small" data-act="admin" data-op="set_trend">定戰況</button></div>
+              ${a.results.length ? `<div class="row ad-row"><span class="ad-tag">結果</span><select class="input" id="ad-result" aria-label="定結果">${a.results.map((x) => `<option value="${esc(x.value)}">${esc(x.label)}</option>`).join("")}</select><button class="btn small" data-act="admin" data-op="resolve_event">定結果</button></div>` : ""}
+              ${a.locks.length ? `<div class="row ad-row"><span class="ad-tag">鎖定</span><select class="input" id="ad-lock" aria-label="清鎖定">${opts(a.locks)}</select><button class="btn small" data-act="admin" data-op="clear_lock">清鎖定</button></div>` : ""}
+              <div class="row"><button class="btn warn" data-act="admin" data-op="cancel_battle">⚠ 取消決戰</button></div>
               <p class="muted">重設密碼（朋友忘記密碼時用；臨時密碼私下告訴他）</p>
               <form id="reset-form"><div class="row"><input class="input" name="target" placeholder="帳號或名號"><input class="input" name="temp" placeholder="臨時密碼"><button class="btn small" type="submit">重設</button></div><p class="form-msg" role="alert"></p></form>` : ""}
           </section>` : ""}
       </div>`;
+  }
+
+  // 設定頁的「時刻表」（計畫 T10）：十二件照順序、標狀態；三場決戰與季末還沒結算的有日期時間欄位與「排定」
+  // （欄位是這台裝置的當地時間，送出時換成秒數）；最後是「跳到下一件大事」
+  function localInput(sec) {
+    const d = new Date(sec * 1000);
+    const p = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+  }
+  function timetableHtml(a) {
+    return `
+      <p class="muted">時刻表（三場大戲與季末可以排時間；時間到了自動開集結，季末就是收季）</p>
+      <div class="tt-list">${a.timetable.map((r) => `
+        <div class="tt-row">
+          <div class="tt-head"><span class="tt-name">${esc(r.label)}</span><span class="tt-state">${esc(r.result ? `${r.state_text}・${r.result}` : r.state_text)}</span></div>
+          ${r.schedulable ? `<div class="row"><input class="input" type="datetime-local" id="tt-at-${esc(r.id)}" value="${localInput(r.at_real)}" aria-label="${esc(r.label)}的時間"><button class="btn small" data-act="admin" data-op="schedule" data-id="${esc(r.id)}">排定</button></div>` : ""}
+        </div>`).join("")}</div>
+      <div class="row"><button class="btn" data-act="admin" data-op="jump_next">跳到下一件大事</button></div>`;
   }
 
   // 管理者動作的確認框（G3）：每一項按了都先問一次、問句說出後果。疊在設定抽屜上面、不重畫抽屜，
@@ -894,7 +919,7 @@
     const picked = (id) => { const el = document.getElementById(id); return el && el.selectedIndex >= 0 ? el.options[el.selectedIndex].text : ""; };
     const amount = `${body.amount >= 0 ? "+" : ""}${body.amount}`;
     return {
-      open_season: ["開季：賽季從籌備中正式開始，全服玩家都能行動了，確定？", "確定開季"],
+      open_season: ["開季：賽季從籌備中正式開始，全服玩家都能行動了。記得排三場大戲與季末的時間（預設在第 6、9、11 週中、第 12 週末），確定？", "確定開季"],
       // 照 Game.admin_end_season 實際做的事寫（只在進行中有效）
       end_season: ["立刻收季：這一季馬上結束、算出結局與武學榜，全服進入休季（之後再按「開啟下一季」）；沒打完的決戰直接收掉、不算結果，確定？", "確定收季"],
       // 照 SqliteWorldStore.next_season 實際做的事寫（只在休季有效）
@@ -903,6 +928,13 @@
       start_battle: [`立刻開戰「${picked("ad-battle")}」：全服一起進入集結，確定？`, "確定開戰"],
       fire: [`觸發「${picked("ad-fire")}」：效果跟自然發生一樣，全服都受影響，確定？`, "確定觸發"],
       push_trend: [`推動大勢「${picked("ad-trend")}」${amount}：全服一起，確定？`, "確定推動"],
+      // 時刻表與救場（計畫 T10）
+      schedule: [`把「${body.title}」排在 ${body.when}：時間到了自動開集結（季末就是收季），確定？`, "確定排定"],
+      jump_next: ["跳到下一件大事：全服的季時間一起往前推，到了的大事立刻結算（決戰直接開集結），確定？", "確定跳過去"],
+      set_trend: [`把「${picked("ad-front")}」定成 ${body.value}：全服一起，推過門檻照常觸發，確定？`, "確定定戰況"],
+      resolve_event: [`定下「${picked("ad-result")}」：照時刻表結算、全服公告，之後不再擲骰，確定？`, "確定定結果"],
+      clear_lock: [`清掉「${picked("ad-lock")}」的鎖定：結算時照沒人鎖定擲骰，確定？`, "確定清掉"],
+      cancel_battle: ["取消正在集結或開打的決戰：不算勝負，參戰者都會收到通知；時刻表的決戰不會自己再開，要用「定結果」收尾，確定？", "確定取消"],
     }[op] || ["確定要這麼做？", "確定"];
   }
 
@@ -1158,7 +1190,7 @@
         case "sheet":
           S.sheet = true;
           render();
-          if (S.main.admin && !S.admin) { S.admin = await api("/api/admin"); render(); }
+          if (S.main.admin) { S.admin = await api("/api/admin"); render(); } // 每次打開都重抓：時刻表與可以定的結果會變
           break;
         case "sheet-close": S.sheet = false; render(); break;
         case "do": S.sheet = false; await doMain(el.dataset.op); break;
@@ -1168,6 +1200,17 @@
           if (op === "start_battle") body.id = document.getElementById("ad-battle").value;
           if (op === "fire") body.id = document.getElementById("ad-fire").value;
           if (op === "push_trend") { body.id = document.getElementById("ad-trend").value; body.amount = Number(document.getElementById("ad-amount").value || 0); }
+          if (op === "schedule") {
+            const input = document.getElementById(`tt-at-${el.dataset.id}`);
+            if (!input || !input.value) { toast("先選一個時間。"); break; }
+            body.id = el.dataset.id;
+            body.at = new Date(input.value).getTime() / 1000;
+            body.title = (S.admin.timetable.find((r) => r.id === body.id) || {}).label || body.id;
+            body.when = input.value.replace("T", " ");
+          }
+          if (op === "set_trend") { body.id = document.getElementById("ad-front").value; body.value = Number(document.getElementById("ad-value").value || 0); }
+          if (op === "resolve_event") { const [id, key] = document.getElementById("ad-result").value.split("|"); body.id = id; body.key = key; }
+          if (op === "clear_lock") body.id = document.getElementById("ad-lock").value;
           const [text, yes] = adminAsk(op, body);
           ask(text, yes, () => adminDo(op, body)); // 先問一次（G3），按了確定才送
           break;

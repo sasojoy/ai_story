@@ -32,16 +32,16 @@
     "roll_side": "huang",
     "outcomes": {
       "成": {
-        "text": "史書上，張曼成攻殺南陽太守褚貢，屯據宛城。這一次也一樣：神上使的黃旗插上了宛城城頭，郡府的官吏逃散一空。",
-        "chronicle": "張曼成攻殺南陽太守褚貢，據宛城。",
+        "text": "史書上，張曼成攻殺南陽太守褚貢，屯據宛城。這一次也一樣：{人物:zhangmancheng}的黃旗插上了宛城城頭，郡府的官吏逃散一空。",
+        "chronicle": "{人物:zhangmancheng}攻殺南陽太守褚貢，據宛城。",
         "trends": {"nanyang": 8},
         "world_flags_add": ["wan_version_jia"]
       },
       "不成": {
         "text": "史書上，張曼成攻殺南陽太守褚貢，屯據宛城。這一次，宛城的城門沒有開。褚貢領著郡兵死守，黃巾在城下折了數百人，退回營中。",
-        "chronicle": "張曼成攻宛城不下。",
+        "chronicle": "{人物:zhangmancheng}攻宛城不下。",
         "trends": {"nanyang": -5},
-        "figures": {"zhangmancheng": {"fate": "受挫"}},
+        "figures": {"@人物:zhangmancheng": {"fate": "受挫"}},
         "world_flags_add": ["wan_version_yi"]
       }
     }
@@ -55,16 +55,16 @@
     "roll_side": "huang",
     "outcomes": {
       "成": {
-        "text": "史書上，波才大敗右中郎將朱儁。這一次也一樣：朱儁的前軍在潁川郊外被黃巾衝散，退保長社。",
-        "chronicle": "波才大敗朱儁於潁川。",
+        "text": "史書上，波才大敗右中郎將朱儁。這一次也一樣：{人物:zhujun}的前軍在潁川郊外被黃巾衝散，退保長社。",
+        "chronicle": "{人物:bocai}大敗{人物:zhujun}於潁川。",
         "trends": {"yingru": 8},
-        "figures": {"zhujun": {"fate": "受挫"}}
+        "figures": {"@人物:zhujun": {"fate": "受挫"}}
       },
       "不成": {
-        "text": "史書上，波才大敗右中郎將朱儁。這一次，朱儁穩住了陣腳，黃巾幾次衝陣都沒衝動，波才只得收兵。",
-        "chronicle": "朱儁擋住了波才的攻勢。",
+        "text": "史書上，波才大敗右中郎將朱儁。這一次，{人物:zhujun}穩住了陣腳，黃巾幾次衝陣都沒衝動，{人物:bocai}只得收兵。",
+        "chronicle": "{人物:zhujun}擋住了{人物:bocai}的攻勢。",
         "trends": {"yingru": -5},
-        "figures": {"bocai": {"fate": "受挫"}}
+        "figures": {"@人物:bocai": {"fate": "受挫"}}
       }
     }
   },
@@ -81,36 +81,42 @@
       "guan:大勝": {
         "text": "這一次也一樣：大風夜起，城上舉火，黃巾的草營燒成一片火海，騎都尉曹操的援兵恰好趕到。",
         "locked_text": {"guan": "史書上，皇甫嵩趁夜縱火，大破波才於長社。這一次，{name} 讓史書沒有落空：葦束膏油早已備下，風起之時火光燭天。騎都尉曹操的援兵恰好趕到，黃巾的草營燒成一片火海。"},
-        "loser_text": {"guan": "黃巾的 {loser} 曾看破火攻、勸波才移營，可惜晚了一步。"},
-        "chronicle": "皇甫嵩火攻長社，大破波才。",
+        "loser_text": {"guan": "黃巾的 {loser} 曾看破火攻、勸{人物:bocai}移營，可惜晚了一步。"},
+        "chronicle": "{人物:huangfusong}火攻長社，大破{人物:bocai}。",
         "trends": {"yingru": -15},
-        "figures": {"bocai": {"fate": "退場"}}
+        "figures": {"@人物:bocai": {"fate": "退場"}}
       },
       "guan:險勝": {
-        "text": "這一次，火是放起來了，可風向不定，只燒了半座營。黃巾且戰且退，波才敗走陽翟。",
-        "locked_text": {"guan": "史書上，皇甫嵩趁夜縱火，大破波才於長社。這一次，{name} 讓史書沒有落空：葦束膏油早已備下，風起之時火光燭天。只是風向不定，火只燒了半座營，波才敗走陽翟。"},
-        "loser_text": {"guan": "黃巾的 {loser} 曾看破火攻、勸波才移營，可惜晚了一步。"},
-        "chronicle": "長社一戰，波才敗走陽翟。",
+        "text": "這一次，火是放起來了，可風向不定，只燒了半座營。黃巾且戰且退，{人物:bocai}敗走陽翟。",
+        "locked_text": {"guan": "史書上，皇甫嵩趁夜縱火，大破波才於長社。這一次，{name} 讓史書沒有落空：葦束膏油早已備下，風起之時火光燭天。只是風向不定，火只燒了半座營，{人物:bocai}敗走陽翟。"},
+        "loser_text": {"guan": "黃巾的 {loser} 曾看破火攻、勸{人物:bocai}移營，可惜晚了一步。"},
+        "chronicle": "長社一戰，{人物:bocai}敗走陽翟。",
         "trends": {"yingru": -8},
-        "figures": {"bocai": {"fate": "聲威大減"}}
+        "figures": {"@人物:bocai": {"fate": "聲威大減"}}
       },
       "huang:大勝": {
-        "text": "這一次，火攻沒有成。黃巾趁官軍出城時反撲，皇甫嵩重挫退走，潁川交給了朱儁。",
-        "locked_text": {"huang": "史書上，皇甫嵩趁夜縱火，大破波才於長社。這一次，{name} 看破了火攻，先一步勸波才移營，那一夜燒的是一座空營。黃巾反從上風殺出，皇甫嵩重挫退走，潁川交給了朱儁。"},
+        "text": "這一次，火攻沒有成。黃巾趁官軍出城時反撲，{人物:huangfusong}重挫退走。",
+        "locked_text": {"huang": "史書上，皇甫嵩趁夜縱火，大破波才於長社。這一次，{name} 看破了火攻，先一步勸{人物:bocai}移營，那一夜燒的是一座空營。黃巾反從上風殺出，{人物:huangfusong}重挫退走。"},
         "loser_text": {"huang": "官軍的 {loser} 費盡心思備下的火具，燒掉的只是幾頂空帳。"},
-        "note": "潁川得手之後，波才分兵北上，往廣宗去了。",
-        "chronicle": "長社火攻失利，皇甫嵩重挫。",
+        "note": "潁川得手之後，{人物:bocai}分兵北上，往廣宗去了。",
+        "chronicle": "長社火攻失利，{人物:huangfusong}重挫。",
         "trends": {"yingru": 15, "jizhou": 5},
-        "figures": {"huangfusong": {"fate": "重挫", "front": "jizhou", "location": "luzhi_camp"}},
+        "figures": {
+          "zhujun": {"only_if": {"huangfusong": "yingru", "zhujun": "yingru"}, "note": "潁川交給了朱儁。"},
+          "@人物:huangfusong": {"fate": "重挫", "front": "jizhou", "location": "luzhi_camp"}
+        },
         "chance_mods": {"luzhi_siege": -0.10}
       },
       "huang:險勝": {
-        "text": "這一次，火攻沒有成。黃巾死戰不退，官軍折損甚重，皇甫嵩重挫退走。",
-        "locked_text": {"huang": "史書上，皇甫嵩趁夜縱火，大破波才於長社。這一次，{name} 看破了火攻，先一步勸波才移營，那一夜燒的是一座空營。黃巾趁亂反撲，官軍折損甚重，皇甫嵩重挫退走。"},
+        "text": "這一次，火攻沒有成。黃巾死戰不退，官軍折損甚重，{人物:huangfusong}重挫退走。",
+        "locked_text": {"huang": "史書上，皇甫嵩趁夜縱火，大破波才於長社。這一次，{name} 看破了火攻，先一步勸{人物:bocai}移營，那一夜燒的是一座空營。黃巾趁亂反撲，官軍折損甚重，{人物:huangfusong}重挫退走。"},
         "loser_text": {"huang": "官軍的 {loser} 費盡心思備下的火具，燒掉的只是幾頂空帳。"},
-        "chronicle": "長社火攻失利，皇甫嵩重挫。",
+        "chronicle": "長社火攻失利，{人物:huangfusong}重挫。",
         "trends": {"yingru": 8},
-        "figures": {"huangfusong": {"fate": "重挫", "front": "jizhou", "location": "luzhi_camp"}}
+        "figures": {
+          "zhujun": {"only_if": {"huangfusong": "yingru", "zhujun": "yingru"}, "note": "潁川交給了朱儁。"},
+          "@人物:huangfusong": {"fate": "重挫", "front": "jizhou", "location": "luzhi_camp"}
+        }
       }
     }
   },
@@ -123,16 +129,16 @@
     "roll_side": "guan",
     "outcomes": {
       "成": {
-        "text": "史書上，盧植連戰破賊，把張角圍在廣宗，築圍鑿塹、造雲梯，眼看就要破城。這一次也一樣。",
-        "chronicle": "盧植圍張角於廣宗。",
+        "text": "史書上，盧植連戰破賊，把張角圍在廣宗，築圍鑿塹、造雲梯，眼看就要破城。這一次也一樣：{人物:luzhi}把{人物:zhangjiao}圍在了廣宗。",
+        "chronicle": "{人物:luzhi}圍{人物:zhangjiao}於廣宗。",
         "trends": {"jizhou": -8},
-        "figures": {"zhangjiao": {"fate": "受挫"}}
+        "figures": {"@人物:zhangjiao": {"fate": "受挫"}}
       },
       "不成": {
-        "text": "史書上，盧植把張角圍在廣宗。這一次，黃巾在廣宗城外連營數十里，盧植的圍塹還沒挖成就被衝開，只能退守大營。",
-        "chronicle": "盧植圍廣宗不成，退守大營。",
+        "text": "史書上，盧植把張角圍在廣宗。這一次，黃巾在廣宗城外連營數十里，{人物:luzhi}的圍塹還沒挖成就被衝開，只能退守大營。",
+        "chronicle": "{人物:luzhi}圍廣宗不成，退守大營。",
         "trends": {"jizhou": 5},
-        "figures": {"luzhi": {"fate": "受挫"}}
+        "figures": {"@人物:luzhi": {"fate": "受挫"}}
       }
     }
   },
@@ -147,8 +153,8 @@
     "skip_if_out": "zhangmancheng",
     "outcomes": {
       "甲:fixed": {
-        "text": "新任南陽太守秦頡引兵來攻，張曼成在宛城下被斬。神上使一死，黃巾推趙弘為帥，收攏餘眾，又把宛城守了起來。",
-        "chronicle": "秦頡斬張曼成，趙弘代領南陽黃巾。",
+        "text": "新任南陽太守秦頡引兵來攻，張曼成在宛城下被斬。神上使一死，黃巾收攏餘眾，又把宛城守了起來。",
+        "chronicle": "秦頡斬張曼成。",
         "trends": {"nanyang": -3},
         "figures": {
           "zhangmancheng": {"fate": "退場"},
@@ -156,8 +162,8 @@
         }
       },
       "乙:fixed": {
-        "text": "援兵統帥秦頡趕到南陽，張曼成在宛城外被斬。黃巾推趙弘為帥，在城外重整連營，圍城不退。",
-        "chronicle": "秦頡斬張曼成，趙弘代領南陽黃巾。",
+        "text": "援兵統帥秦頡趕到南陽，張曼成在宛城外被斬。黃巾在城外重整連營，圍城不退。",
+        "chronicle": "秦頡斬張曼成。",
         "trends": {"nanyang": -3},
         "figures": {
           "zhangmancheng": {"fate": "退場"},
@@ -173,13 +179,14 @@
     "kind": "roll",
     "roll_side": "huang",
     "base_chance": 0.5,
+    "skip_if_out": "luzhi",
     "lock_result": {"huang": "成", "guan": "不成"},
     "third_party_trends": {"geju": 8},
     "outcomes": {
       "成": {
         "text": "史書上，盧植不肯賄賂監軍的宦官左豐，被誣以『固壘息軍，以待天誅』，檻車徵還洛陽。這一次也一樣。接替他的是東中郎將董卓。",
         "locked_text": {"huang": "史書上，盧植因不肯行賄而下獄。這一次也一樣，只是讓左豐開口的那份金帛，是黃巾的 {name} 託宮中舊人送去的。盧植檻車還京，接替他的是東中郎將董卓。"},
-        "loser_text": {"huang": "官軍的 {loser} 蒐齊的證據送進了大將軍府，何進卻遲遲沒有動作。"},
+        "loser_text": {"huang": "官軍的 {loser} 蒐齊的證據送進了大將軍府，卻遲遲沒有下文。"},
         "third_party_text": "是袁本初在朝中替他說話，才減了死罪。",
         "chronicle": "盧植被誣下獄，董卓接手冀州。",
         "trends": {"jizhou": 8},
@@ -211,27 +218,27 @@
     "third_party_chronicle": "{name} 取得新野",
     "outcomes": {
       "甲:guan:大勝": {
-        "text": "史書上，孫堅身當一面，登城先入，大破宛城。這一次也一樣：江東子弟攀上東北角的城牆，城門從裡面打開了。",
-        "locked_text": {"guan": "史書上，孫堅身當一面，登城先入，大破宛城。這一次，{name} 帶著一隊人跟在孫文臺身後，從東北角新補的城牆攀了上去。城門從裡面打開，趙弘死在亂軍之中。"},
+        "text": "史書上，孫堅身當一面，登城先入，大破宛城。這一次也一樣：{人物:sunjian}的兵攀上東北角的城牆，城門從裡面打開了。",
+        "locked_text": {"guan": "史書上，孫堅身當一面，登城先入，大破宛城。這一次，{name} 帶著一隊人跟在{人物:sunjian}身後，從東北角新補的城牆攀了上去。城門從裡面打開，{人物:zhaohong}死在亂軍之中。"},
         "loser_text": {"guan": "黃巾的 {loser} 送進城的糧，最後沒能派上用場。"},
-        "chronicle": "孫堅先登，宛城破。",
+        "chronicle": "{人物:sunjian}先登，宛城破。",
         "trends": {"nanyang": -15},
-        "figures": {"zhaohong": {"fate": "退場"}},
+        "figures": {"@人物:zhaohong": {"fate": "退場"}},
         "world_flags_add": ["wancheng_guan_holds"]
       },
       "甲:guan:險勝": {
-        "text": "史書上，孫堅先登，大破宛城。這一次，宛城是破了，可趙弘帶著殘部從南門突圍。",
-        "locked_text": {"guan": "史書上，孫堅身當一面，登城先入，大破宛城。這一次，{name} 帶著一隊人跟在孫文臺身後，從東北角新補的城牆攀了上去。宛城是破了，可趙弘帶著殘部從南門突圍。"},
+        "text": "史書上，孫堅先登，大破宛城。這一次，宛城是破了，可{人物:zhaohong}帶著殘部從南門突圍。",
+        "locked_text": {"guan": "史書上，孫堅身當一面，登城先入，大破宛城。這一次，{name} 帶著一隊人跟在{人物:sunjian}身後，從東北角新補的城牆攀了上去。宛城是破了，可{人物:zhaohong}帶著殘部從南門突圍。"},
         "loser_text": {"guan": "黃巾的 {loser} 送進城的糧，最後沒能派上用場。"},
-        "chronicle": "孫堅先登，宛城破。",
+        "chronicle": "{人物:sunjian}先登，宛城破。",
         "trends": {"nanyang": -8},
-        "figures": {"zhaohong": {"fate": "聲威大減"}},
+        "figures": {"@人物:zhaohong": {"fate": "聲威大減"}},
         "world_flags_add": ["wancheng_guan_holds"]
       },
       "甲:huang:大勝": {
         "text": "史書上，孫堅先登，宛城被破。這一次，官軍的雲梯一架架被推倒，圍城的兵先散了。",
         "locked_text": {"huang": "史書上，孫堅先登，宛城被破。這一次，城裡的糧倉是滿的，{name} 一袋一袋囤下的糧讓宛城撐過了最難的一個月。官軍的雲梯一架架被推倒，{官軍主將}的兵先散了。"},
-        "loser_text": {"huang": "孫堅帶著 {loser} 攀上東北角，城頭的守兵卻吃得飽、站得穩。"},
+        "loser_text": {"huang": "{人物:sunjian}帶著 {loser} 攀上東北角，城頭的守兵卻吃得飽、站得穩。"},
         "chronicle": "宛城守住了。",
         "trends": {"nanyang": 15},
         "figures": {"@commander:nanyang:guan": {"fate": "受挫"}}
@@ -239,29 +246,29 @@
       "甲:huang:險勝": {
         "text": "史書上，孫堅先登，宛城被破。這一次，宛城守住了，只是城裡的糧也快見底了。",
         "locked_text": {"huang": "史書上，孫堅先登，宛城被破。這一次，城裡的糧倉是滿的，{name} 一袋一袋囤下的糧讓宛城撐過了最難的一個月。宛城守住了，只是城裡的糧也快見底了。"},
-        "loser_text": {"huang": "孫堅帶著 {loser} 攀上東北角，城頭的守兵卻吃得飽、站得穩。"},
+        "loser_text": {"huang": "{人物:sunjian}帶著 {loser} 攀上東北角，城頭的守兵卻吃得飽、站得穩。"},
         "chronicle": "宛城守住了。",
         "trends": {"nanyang": 8}
       },
       "乙:guan:大勝": {
-        "text": "這一次，宛城在官軍手裡。孫堅在雨夜縋城而出，直撲黃巾連營，趙弘死在亂軍之中。",
-        "locked_text": {"guan": "這一次，宛城在官軍手裡。黃巾圍城數十日，{name} 跟著孫堅在一個雨夜縋城而出，直撲黃巾連營。趙弘死在亂軍之中，圍城不攻自解。"},
-        "chronicle": "孫堅夜襲，解宛城之圍。",
+        "text": "這一次，宛城在官軍手裡。{人物:sunjian}在雨夜縋城而出，直撲黃巾連營，{人物:zhaohong}死在亂軍之中。",
+        "locked_text": {"guan": "這一次，宛城在官軍手裡。黃巾圍城數十日，{name} 跟著{人物:sunjian}在一個雨夜縋城而出，直撲黃巾連營。{人物:zhaohong}死在亂軍之中，圍城不攻自解。"},
+        "chronicle": "{人物:sunjian}夜襲，解宛城之圍。",
         "trends": {"nanyang": -15},
-        "figures": {"zhaohong": {"fate": "退場"}},
+        "figures": {"@人物:zhaohong": {"fate": "退場"}},
         "world_flags_add": ["wancheng_guan_holds"]
       },
       "乙:guan:險勝": {
-        "text": "這一次，宛城在官軍手裡。黃巾的連營被孫堅衝亂，趙弘退兵三十里。",
-        "locked_text": {"guan": "這一次，宛城在官軍手裡。黃巾圍城數十日，{name} 跟著孫堅在一個雨夜縋城而出，直撲黃巾連營。黃巾的連營被衝亂，趙弘退兵三十里。"},
-        "chronicle": "孫堅夜襲，解宛城之圍。",
+        "text": "這一次，宛城在官軍手裡。黃巾的連營被{人物:sunjian}衝亂，{人物:zhaohong}退兵三十里。",
+        "locked_text": {"guan": "這一次，宛城在官軍手裡。黃巾圍城數十日，{name} 跟著{人物:sunjian}在一個雨夜縋城而出，直撲黃巾連營。黃巾的連營被衝亂，{人物:zhaohong}退兵三十里。"},
+        "chronicle": "{人物:sunjian}夜襲，解宛城之圍。",
         "trends": {"nanyang": -8},
-        "figures": {"zhaohong": {"fate": "受挫"}},
+        "figures": {"@人物:zhaohong": {"fate": "受挫"}},
         "world_flags_add": ["wancheng_guan_holds"]
       },
       "乙:huang:大勝": {
         "text": "宛城被圍數十日，城中糧盡，終於開了門。{官軍主將}的援軍晚到了一步。",
-        "locked_text": {"huang": "圍城的黃巾糧足，城裡的官軍先斷了糧。{name} 替趙弘囤下的糧，比攻城梯還管用，宛城開了門。{官軍主將}的援軍晚到了一步。"},
+        "locked_text": {"huang": "圍城的黃巾糧足，城裡的官軍先斷了糧。{name} 替{人物:zhaohong}囤下的糧，比攻城梯還管用，宛城開了門。{官軍主將}的援軍晚到了一步。"},
         "chronicle": "黃巾攻陷宛城。",
         "trends": {"nanyang": 15},
         "figures": {"@commander:nanyang:guan": {"fate": "聲威大減"}},
@@ -269,7 +276,7 @@
       },
       "乙:huang:險勝": {
         "text": "宛城被圍數十日，終於開了門，但黃巾也死傷慘重。",
-        "locked_text": {"huang": "圍城的黃巾糧足，城裡的官軍先斷了糧。{name} 替趙弘囤下的糧，比攻城梯還管用，宛城開了門。但黃巾也死傷慘重。"},
+        "locked_text": {"huang": "圍城的黃巾糧足，城裡的官軍先斷了糧。{name} 替{人物:zhaohong}囤下的糧，比攻城梯還管用，宛城開了門。但黃巾也死傷慘重。"},
         "chronicle": "黃巾攻陷宛城。",
         "trends": {"nanyang": 8},
         "world_flags_add": ["wancheng_fallen"]
@@ -312,18 +319,18 @@
     "outcomes": {
       "guan:大勝": {
         "text": "史書上，皇甫嵩夜勒兵，雞鳴馳赴廣宗，斬張梁，黃巾赴河死者五萬。這一次也一樣：{官軍主將}破了廣宗。",
-        "chronicle": "{官軍主將}破廣宗，斬張梁。",
+        "chronicle": "{官軍主將}破廣宗，斬{人物:zhangliang}。",
         "trends": {"jizhou": -20},
-        "figures": {"zhangliang": {"fate": "退場"}, "zhangjiao": {"fate": "退場"}}
+        "figures": {"@人物:zhangliang": {"fate": "退場"}, "zhangjiao": {"fate": "退場"}}
       },
       "guan:險勝": {
-        "text": "史書上，皇甫嵩破廣宗，斬張梁。這一次，廣宗的外城破了，張梁退守內城。",
+        "text": "史書上，皇甫嵩破廣宗，斬張梁。這一次，廣宗的外城破了，{人物:zhangliang}退守內城。",
         "chronicle": "官軍破廣宗外城。",
         "trends": {"jizhou": -10},
-        "figures": {"zhangliang": {"fate": "聲威大減"}}
+        "figures": {"@人物:zhangliang": {"fate": "聲威大減"}}
       },
       "huang:大勝": {
-        "text": "史書上，皇甫嵩破廣宗，斬張梁。這一次，人公將軍領著死士夜出，官軍大營起火，{官軍主將}退走。",
+        "text": "史書上，皇甫嵩破廣宗，斬張梁。這一次，{人物:zhangliang}領著死士夜出，官軍大營起火，{官軍主將}退走。",
         "chronicle": "廣宗城下，{官軍主將}大敗。",
         "trends": {"jizhou": 20},
         "figures": {"@commander:jizhou:guan": {"fate": "重挫"}}

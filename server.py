@@ -39,7 +39,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from markdown_it import MarkdownIt
 
-from tianxia import companion_agent, event_llm, foreshadow, materials, rules, server_bots, team
+from tianxia import companion_agent, event_llm, foreshadow, materials, rules, server_bots, team, timetable
 from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, AccountStore, normalize
 from tianxia.content import PROFILE_ENV, load_content, profile_line
 from tianxia.characters import open_characters
@@ -364,7 +364,66 @@ def admin_choices(game: Game) -> dict:
         "events": [{"label": f"{x.text[:30]}（{x.id}）", "id": x.id} for x in game.admin_fires()],
         # 照開關：關著時不列第一季才有的線；開著時不列黃巾聲勢（由三條戰線合成，不能直接推）
         "trends": [{"label": t.name, "id": t.id} for t in CONTENT.scenario.trends if rules.pushable(CONTENT, world, t.id)],
+        **timetable_choices(game),
     }
+
+
+RESULT_WORDS = (("guan:", "官軍"), ("huang:", "黃巾"))  # 結果鍵的白話（定結果的下拉選單）
+TIMETABLE_STATES = {"done": "已結算", "running": "開打了", "due": "時間到了", "later": "還沒到"}
+
+
+def _result_label(key: str) -> str:
+    if key == "fixed":
+        return "照史書"
+    for prefix, side in RESULT_WORDS:
+        if key.startswith(prefix):
+            return side + key[len(prefix):]
+    return key
+
+
+def _done_label(key: str) -> str:
+    """時刻表上已結算那一件的結果：拿掉版本（宛城、秦頡的「甲:」「乙:」），跳過的寫「跳過」。"""
+    if key == timetable.SKIPPED:
+        return "跳過"
+    head, _, rest = key.partition(":")
+    return _result_label(rest if rest and head not in ("guan", "huang") else key)
+
+
+def timetable_choices(game: Game) -> dict:
+    """設定頁的「時刻表」與「救場」（計畫 T10）：這一季有時刻表（第一季）才有東西，beta 那一季全是空的。
+    時刻表每件一列，可排的（三場決戰與季末）附現實時間 at_real（照此刻的季時間換算，time_scale 照設定）；
+    定結果的下拉選單列還沒結算、此刻知道是哪一版的大事的每一個結果；鎖定列有人鎖定的大事。"""
+    state = game.state
+    world = state.world
+    if not rules.season_one(CONTENT, world):
+        return {"timetable": [], "results": [], "locks": []}
+    now = time.time()
+    rows = []
+    for row in timetable.status_rows(state, CONTENT):
+        rows.append({
+            "id": row["id"], "label": f"第{row['week']}週　{row['title']}",
+            "state": row["state"], "state_text": TIMETABLE_STATES[row["state"]],
+            "result": _done_label(row["result"]) if row["result"] else None,
+            "schedulable": row["schedulable"],
+            "at_real": now + (row["when"] - world.time) / CONTENT.config.time_scale if row["schedulable"] else None,
+        })
+    results = [
+        {"value": f"{e.id}|{key}", "label": f"{e.title}：{_result_label(key)}"}
+        for e in CONTENT.timetable if e.id not in world.timeline
+        for key in timetable.result_keys(state, CONTENT, e)
+    ]
+    locks = [
+        {"id": event_id, "label": f"{e.title}（{lock.name}）"}
+        for event_id, lock in world.locks.items() if (e := next((x for x in CONTENT.timetable if x.id == event_id), None))
+    ]
+    return {"timetable": rows, "results": results, "locks": locks}
+
+
+def _float(value, default: float) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
 
 
 def _int(value, default: int) -> int:
@@ -598,6 +657,13 @@ ADMIN_ACTIONS = {
     "start_battle": lambda g, b: g.admin_start_battle(str(b.get("id", "")), time.time()),
     "fire": lambda g, b: g.admin_fire(str(b.get("id", ""))),
     "push_trend": lambda g, b: g.admin_push_trend(str(b.get("id", "")), _int(b.get("amount"), 0)),
+    # 時刻表與救場（計畫 T10）：現實時間由伺服器給，引擎不讀時鐘
+    "schedule": lambda g, b: g.admin_schedule(str(b.get("id", "")), _float(b.get("at"), 0.0), time.time()),
+    "jump_next": lambda g, b: g.admin_jump_next(time.time()),
+    "set_trend": lambda g, b: g.admin_set_trend(str(b.get("id", "")), _int(b.get("value"), 0)),
+    "resolve_event": lambda g, b: g.admin_resolve_event(str(b.get("id", "")), str(b.get("key", ""))),
+    "clear_lock": lambda g, b: g.admin_clear_lock(str(b.get("id", ""))),
+    "cancel_battle": lambda g, b: g.admin_cancel_battle(),
 }
 
 

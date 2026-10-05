@@ -5,7 +5,7 @@ import math
 import random
 from collections.abc import Callable
 
-from . import battle_instance, calendar, figures, flavor, leaderboard, orders, timetable
+from . import battle_instance, calendar, figures, flavor, leaderboard, orders, ranks, timetable
 from .models import Act, BattleDef, Content, Ending, SimPlayer, SimRumor, Storyline, TimetableEvent
 from .ollama_client import OllamaClient
 from .rules import (
@@ -269,6 +269,7 @@ def end_season(
         # 第一季（計畫 T9）：季末公告寫進時間軸（_finale；季中收季的開頭是「戰事提前收束。」），江湖史是季末大事的那一行，
         # 記下最終戰況與各陣營出力前五，給休季的結算畫面讀
         early = w.time < season_end_time(w, content) - calendar.EPS_SECONDS
+        ranks.flush_news(state, content, None)  # T5：還沒發的晉升彙整一起發掉
         text = _finale(state, content, ending, early)
         w.ending_text = text or ending.text
         if not any(e.kind == "finale" and e.ending_chronicle for e in content.timetable):
@@ -491,6 +492,7 @@ def season_hour(state: GameState, content: Content, rng: random.Random) -> list[
     每曆時的 tick 一律放在 season_events 之前：T1 的 geju_tick、T4 的 figures.tick——開季那一刻只跑
     season_events（settle_season_start），不跑這一段，才不會多算一次割據變動與人物推動。"""
     msgs: list[str] = []
+    ranks.flush_news(state, content, calendar.point(state.world.time, content, state.world).cal_day)  # T5：前一天的晉升彙整
     geju_tick(state, content, 1)  # T1：豪強割據每曆時一次，在週初掛鉤與大事之前
     figures.tick(state, content, 1)  # T4：大勢人物每曆時累積一次推動（取代每小時的虛擬玩家）
     return msgs + season_events(state, content, rng)
