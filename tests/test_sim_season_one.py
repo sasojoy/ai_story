@@ -15,7 +15,7 @@ _spec.loader.exec_module(sim)
 
 ONE_EACH = {"guan": 1, "huang": 1, "haoqiang": 1}
 FIELDS = {"weekly", "events", "missing", "showdowns", "orders", "promoted", "ending", "ending_id", "end_week", "ended",
-          "stuck", "checks"}
+          "stuck", "checks", "geju_first", "roster"}
 
 
 def _content(days: float = 0.25):
@@ -33,6 +33,10 @@ def test_a_short_season_runs_to_the_end_with_every_field(tmp_path):
     assert set(result["orders"]) == set(ONE_EACH) and set(result["promoted"]) == set(ONE_EACH)
     assert set(result["showdowns"]) == {"changshe_fire", "wancheng", "guangzong"}
     assert result["events"].keys().isdisjoint(result["missing"])
+    assert set(result["geju_first"]) == {85, 100} and isinstance(result["roster"], int)  # 割據首次到 85／100：(週, 時間章) 或 None
+    for hit in result["geju_first"].values():
+        assert hit is None or (isinstance(hit[0], int) and isinstance(hit[1], str))
+    assert "割據首次到" in sim.summary(1, result)
     assert "第" in sim.summary(1, result)  # 印得出來
 
 
@@ -40,6 +44,13 @@ def test_reports_stuck_when_out_of_time(tmp_path):
     """RF1：給的時間不夠一季：停在上限、標成卡住，不無限跑。"""
     result = sim.run_season(_content(), tmp_path / "sim.db", seed=1, targets=ONE_EACH, hours=0.5, tick=120)
     assert (result["ended"], result["stuck"]) == (False, True)
+
+
+def test_a_season_exactly_as_long_as_hours_still_ends(tmp_path):
+    """季長剛好等於 hours：最後一輪要落在 hours 那一刻（上限含頭含尾），不然停在差一輪就收季的地方、被誤標成卡住。
+    0.25 天＝6 現實小時。"""
+    result = sim.run_season(_content(), tmp_path / "sim.db", seed=1, targets=ONE_EACH, hours=6, tick=120)
+    assert (result["ended"], result["stuck"]) == (True, False)
 
 
 def test_acceptance_flags():
