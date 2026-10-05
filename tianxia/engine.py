@@ -208,8 +208,12 @@ class Game:
         if step >= base_step_count(self.content):
             fresh.player.tutorial_step = step
             fresh.player.guide_skipped = old.player.guide_skipped  # 略過的人換季也不畫對話框（畫面批次審查 I4）
-        elif prologue_rules.has(self.content) and not old.player.bot:
-            prologue_rules.begin(fresh, self.content)  # 序章沒走完就換季：回草廬從第一步重來（Review Focus 5）
+        elif prologue_rules.has(self.content):
+            if step < self.content.tutorial.prologue_steps and not old.player.bot:
+                prologue_rules.begin(fresh, self.content)  # 序章沒走完就換季：回草廬從第一步重來（Review Focus 5）
+            else:
+                # 序章走完了、後面的步驟還沒做完（或是假人、腳本）：從序章之後的起始步重來，不再回草廬
+                fresh.player.tutorial_step = self.content.tutorial.prologue_steps
         ratio = self.content.config.affinity_carry_ratio
         fresh.player.affinities = {key: int(value * ratio) for key, value in old.player.affinities.items()}
         fresh.player.relationship_notes = old.player.relationship_notes
@@ -1031,7 +1035,8 @@ class Game:
 
     def guide_box(self) -> dict | None:
         """行動列上方的對話框（引導重做設計 8.1、6.2）：引導還沒做完是目前這一步的話；剛走完、結語還沒按「知道了」是結語；
-        其他（略過、早就做完的舊角色）是 None。done 是上一次行動完成的那幾行（✔ 與獎勵）。框上寫的人是 Tutorial.speaker。
+        其他（略過、早就做完的舊角色）是 None。done 是上一次行動完成的那幾行（✔ 與獎勵）。框上寫的人照這一步
+        （TutorialStep.speaker），沒寫就是 Tutorial.speaker；這一步沒有話（序章第一步）時不畫框。
         還有事件待處理時，這一步的話換成「先把眼前的「事件名」了結」（每一步都一樣，步驟本身不動；結語照舊）。"""
         s, c, p = self.state, self.content, self.state.player
         t = c.tutorial
@@ -1044,7 +1049,9 @@ class Game:
             step = todo[p.tutorial_step]
             if not step.text or (prologue_rules.active(s, c) and s.pending_event):
                 return None  # 序章第一步（還沒遇到師父）、序章的事件端出來的時候：畫面就是那則事件（新手引導計畫一）
-            fill = lambda text: prologue_rules.fill(text, s, c, self.world)  # noqa: E731
+            def fill(text: str) -> str:  # 序章的話裡的 {武學}：換成合成出來的那一門
+                return prologue_rules.fill(text, s, c, self.world)
+
             # 眼前有事件還沒了結時是 guide.pending_line，不推這一步；了結後原樣回來（FB-063；「下一步」也用同一句）
             return {
                 "speaker": guide_speaker_of(c, step), "scene": fill(step.scene), "text": fill(step_text(s, c)),

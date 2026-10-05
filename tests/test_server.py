@@ -3436,6 +3436,17 @@ def test_main_view_sends_the_guide_box_and_skipping_hides_it(client):
     assert client.get("/api/main").json()["guide"] is None
 
 
+def test_a_character_created_on_the_web_starts_in_the_hut(client, monkeypatch, prologue_content):
+    """網頁上建的角色走序章（create_character 傳 prologue=True）；假人與腳本用的 Game.new 不傳，站在起點。"""
+    monkeypatch.setattr(server, "CONTENT", prologue_content)
+    main = _player(client)["main"]
+    player = server.game_for("沈青衫").state.player
+    assert player.location == "hut" and player.tutorial_step == 0
+    assert main["prologue"] == {"reveal": [], "glow": [], "skip": True}
+    assert main["guide"] is None  # 遇險的事件還在眼前，還沒遇到師父
+    assert Game.new(prologue_content, "假人").state.player.location == "town"
+
+
 def test_guide_ack_closes_the_outro(client):
     _player(client)
     game = server.game_for("沈青衫")

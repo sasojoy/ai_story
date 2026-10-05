@@ -1706,6 +1706,37 @@ def test_preset_recipe_names_are_checked(prologue_root):
         load_content(prologue_root)
 
 
+def test_the_hut_connects_only_to_the_start(prologue_root):
+    """草廬只能連到起點：連到別處，出師走出去就不是潁川了（validate 的 hut.connections 檢查）。"""
+    def reach_the_lake(locs):
+        next(loc for loc in locs if loc["id"] == "hut")["connections"] = ["town", "lake"]
+
+    edit_json(prologue_root / "locations.json", reach_the_lake)
+    with pytest.raises(ContentError, match="只能連到起點"):
+        load_content(prologue_root)
+
+
+@pytest.mark.parametrize("entry", ["act:explor", "act:", "explore", "talk:leave"])
+def test_prologue_allow_entries_must_be_menu_ids(prologue_root, entry):
+    """allow 是前綴比對：拼錯的前綴會把那一步的選單清空，卡死新人。talk:leave 是對話選單的，閒著的選單沒有。"""
+    edit_json(prologue_root / "tutorial.json", lambda t: t["steps"][2]["allow"].append(entry))
+    with pytest.raises(ContentError, match="allow 不是選單上的行動"):
+        load_content(prologue_root)
+
+
+def test_prologue_allow_takes_every_kind_of_menu_id(prologue_root):
+    more = ["act:challenge:x", "call:x", "move:town:hurry", "learn:x", "faction:x", "fs:x", "act:duty", "act:socialize"]
+    edit_json(prologue_root / "tutorial.json", lambda t: t["steps"][2]["allow"].extend(more))
+    assert load_content(prologue_root).tutorial.steps[2].allow[-1] == "act:socialize"
+
+
+def test_the_last_prologue_step_must_let_the_player_walk_out(prologue_root):
+    """出師那一步的 allow 沒有 move:，選單與輿圖都不給走，新人永遠出不了草廬。"""
+    edit_json(prologue_root / "tutorial.json", lambda t: t["steps"][10].update(allow=["act:rest"]))
+    with pytest.raises(ContentError, match="走不出草廬"):
+        load_content(prologue_root)
+
+
 def test_new_characters_get_the_current_onboarding_version(content, prologue_content):
     from tianxia.state import ONBOARDING_VERSION, PlayerState, new_game_state
 

@@ -21,7 +21,7 @@ from .companion_agent import DIALOGUE_TAGS
 from .front_lines import BAND_KEYS, GEJU_KEYS
 from .materials import TIER_NAMES
 from .models import (
-    FRONT_KEY, REVEAL_KEYS, ROADS, STATS, Attribute, BattleDef, CharacterDef, CheckVoice, CombatLines, Condition, Config,
+    FRONT_KEY, REVEAL_KEYS, ROADS, STATS, Attribute, allow_known, BattleDef, CharacterDef, CheckVoice, CombatLines, Condition, Config,
     Content, CraftNames, Effect, Event, FigureDef, FollowerDef, Foreshadows, FrontLines, InsightDef, Location,
     OrdersContent, PresetRecipe, PromotionDef, MapLayout, Material, RoadSight, Scenario, Sect, SimRumor, SkillDef, Squad,
     TimetableEvent, Tutorial,
@@ -1330,6 +1330,12 @@ def validate(c: Content) -> None:
         base = sum(1 for step in t.steps if not step.season_one)
         need(1 <= t.prologue_steps <= base, f"tutorial.json：prologue_steps 要在 1～{base}（不分季的步數）之間")
         need(t.start_event in c.events, f"tutorial.json：start_event {t.start_event} 不存在")
+        if 1 <= t.prologue_steps <= len(t.steps):  # 序章最後一步（出師）要放得出草廬：allow 有 move:（prologue.can_travel 看的就是它）
+            last = t.steps[t.prologue_steps - 1]
+            need(
+                any(entry.startswith("move:") for entry in last.allow),
+                f"新手引導 {last.id}：序章最後一步的 allow 要有 move:（不然走不出草廬）",
+            )
     for i, step in enumerate(t.steps):
         where = f"新手引導 {step.id}"
         special = (step.scene or step.line or step.reveal or step.glow or step.allow or step.explore_event or step.enemies
@@ -1338,6 +1344,8 @@ def validate(c: Content) -> None:
         need(not special or i < t.prologue_steps, f"{where}：序章才有的欄位只能寫在前 {t.prologue_steps} 步")
         bad = [k for k in step.reveal if k not in REVEAL_KEYS]
         need(not bad, f"{where}：reveal 不認得 {bad}")
+        unknown = [entry for entry in step.allow if not allow_known(entry)]
+        need(not unknown, f"{where}：allow 不是選單上的行動 {unknown}")
         need(step.explore_event is None or step.explore_event in c.events, f"{where}：explore_event {step.explore_event} 不存在")
         known(where, step.enemies, c.squads, "對手")
         need(step.force_tier is None or step.force_tier in encounter.TIERS, f"{where}：force_tier {step.force_tier} 不是判定結果")

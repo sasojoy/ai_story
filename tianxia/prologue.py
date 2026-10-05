@@ -86,7 +86,8 @@ def finish(state: GameState, content: Content, world: WorldStateStore, *, purse:
         p.tutorial_step = t.prologue_steps
         if purse:
             msgs = apply_effect(t.steps[t.prologue_steps - 1].reward, state, content, world)
-    p.stamina = max(p.stamina, float(content.config.stamina_max)) if purse else p.stamina
+    if purse:
+        p.stamina = max(p.stamina, float(content.config.stamina_max))
     return msgs
 
 

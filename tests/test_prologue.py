@@ -1,10 +1,12 @@
 """序章（新手引導計畫一）：進出序章、草廬只給序章裡的人、舊存檔與換季。"""
+import json
 import random
 
 import pytest
 from conftest import next_season
 
 from tianxia import atlas, prologue
+from tianxia.content import load_content
 from tianxia.engine import Game
 from tianxia.state import ONBOARDING_VERSION
 
@@ -43,12 +45,43 @@ def test_hut_is_invisible_to_everyone_outside(fresh, prologue_content):
     assert "hut" not in atlas.shortest_routes(other.state, prologue_content)
 
 
+def test_the_allow_lists_only_name_ids_the_code_really_makes():
+    """models.ALLOW_FIXED／ALLOW_FAMILIES 是照 engine.py、foreshadow.py 做得出來的閒著選單 id 列的：每一筆都要真的出現在原始碼的
+    字串裡（不憑空多寫）。反過來有沒有漏列，由 test_real_content 整季隨機玩、對照每一個閒著的選單。"""
+    import ast
+    from pathlib import Path
+
+    from tianxia import models
+
+    package, found = Path(models.__file__).parent, set()
+    for name in ("engine.py", "foreshadow.py"):
+        for node in ast.walk(ast.parse((package / name).read_text(encoding="utf-8"))):
+            if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                found.add(node.value)  # f"call:{id}" 的 "call:" 也是一個字串常數
+    assert models.ALLOW_FIXED <= found
+    assert set(models.ALLOW_FAMILIES) <= found
+
+
 def test_the_hut_does_not_change_the_terrain(prologue_content, content):
     """草廬只有序章裡的一個人看得到：它不能把整張地圖的山與樹換掉（mapart 的地形鍵不算它）。"""
     from tianxia import mapart
 
     assert mapart._terrain_key(prologue_content) == mapart._terrain_key(content)
     assert [p.svg for p in mapart.terrain(prologue_content)] == [p.svg for p in mapart.terrain(content)]
+
+
+def test_a_hut_that_sorts_after_the_start_adds_no_road_to_the_terrain(prologue_root, content):
+    """mapart._obstacles 只收 a_id < b_id 的路：草廬叫 hut 時排在 town 前面，那一條路本來就被略過，擋不擋它都看不出來。
+    換成排在 town 後面的 zhulu，草廬的路只靠「連到草廬的路不算」那一行擋住。"""
+    from tianxia import mapart
+
+    for name in ("locations.json", "tutorial.json"):
+        path = prologue_root / name
+        path.write_text(path.read_text(encoding="utf-8").replace('"hut"', '"zhulu"'), encoding="utf-8")
+    renamed = load_content(prologue_root)
+    assert renamed.tutorial.location == "zhulu" and "town" < "zhulu"
+    assert mapart._obstacles(renamed) == mapart._obstacles(content)
+    assert mapart._terrain_key(renamed) == mapart._terrain_key(content)
 
 
 def test_only_the_farewell_step_lets_the_menu_and_the_map_leave(fresh, prologue_content):
@@ -127,6 +160,25 @@ def test_old_save_reset_keeps_its_season_one_step(prologue_content, world):
     game.state.player.onboarding, game.state.player.tutorial_step = 0, 7
     next_season(prologue_content, world, game)
     assert game.state.player.location == "town" and game.state.player.tutorial_step == 12
+
+
+def test_a_human_past_the_prologue_is_never_sent_back_to_the_hut(prologue_root, world):
+    """序章走完、後面還有一步沒做完（內容改版多出來的）：換季回到起點，從序章之後的起始步重來，不回草廬；
+    序章走到一半的人照舊回草廬第一步。"""
+    path = prologue_root / "tutorial.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["steps"].append({"id": "p12", "text": "再逛逛。", "done_when": {"action": "explore"}})
+    path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    content = load_content(prologue_root)
+    past = Game.new(content, "走完的", rng=random.Random(0), world=world)  # 站在起點、步數 11（序章算走過）
+    half = Game.new(content, "半途的", rng=random.Random(0), world=world, prologue=True)
+    half.state.player.tutorial_step = 4
+    assert past.state.player.tutorial_step == 11 < len(content.tutorial.steps)
+    next_season(content, world, past, half)
+    p = past.state.player
+    assert p.location == "town" and past.state.pending_event is None
+    assert p.tutorial_step == 11 and p.stamina == content.config.stamina_max
+    assert half.state.player.location == "hut" and half.state.player.tutorial_step == 0
 
 
 def test_finished_prologue_survives_a_season(prologue_content, world):
@@ -223,6 +275,19 @@ def test_view_tab_does_not_change_the_latest_card(fresh):
     assert latest.guide[-2:] == ["✔ 引導完成", "【師父】去探索。"]  # 引導的那幾行接在最新一則的 guide
 
 
+def test_the_reveal_accumulates_over_the_steps(fresh):
+    """畫面上亮起來的東西一路累積：前面幾步亮的照舊亮著，只有「發光」是這一步的。"""
+    fresh.state.pending_event = None
+    fresh.state.player.tutorial_step = 3  # 第 4 步：去合成（reveal 只寫了 tab:craft）
+    view = fresh.prologue_view()
+    assert view["reveal"] == ["act:explore", "stamina", "tab:craft", "tab:jianghu", "tab:practice", "xinde"]
+    assert view["glow"] == ["tab:craft", "forge"]
+    fresh.state.player.tutorial_step = 6  # 第 7 步：打坐（reveal 只寫了 act:rest）
+    assert prologue.view(fresh.state, fresh.content)["reveal"] == [
+        "act:explore", "act:rest", "stamina", "tab:craft", "tab:jianghu", "tab:practice", "xinde",
+    ]
+
+
 def test_skip_link_only_on_the_first_step(fresh):
     assert fresh.prologue_view()["skip"] is True
     _walk(fresh, "choice:0", "choice:0")
@@ -235,12 +300,17 @@ def test_outside_the_prologue_there_is_nothing_to_reveal(prologue_content):
 
 
 def test_each_step_can_have_its_own_speaker(fresh, prologue_content):
-    """框上寫的人照這一步（TutorialStep.speaker）；完成後記給對話框的 ✔ 與獎勵不帶說話的人那一行。"""
+    """框上寫的人照這一步（TutorialStep.speaker）；完成上一步後記給對話框的 ✔ 與獎勵，不帶「下一步誰說的話」那一行——
+    那一行的人是這一步的旁人，不是預設的師父（_note_guide 要把每一個說話的人都認出來）。"""
     prologue_content.tutorial.steps[1].speaker = "旁人"
-    _walk(fresh, "choice:0", "choice:0")
-    assert fresh.guide_box()["speaker"] == "旁人"
-    fresh.view_tab("practice")
-    assert fresh.guide_box()["speaker"] == "師父" and fresh.guide_box()["done"] == ["✔ 引導完成"]
+    _walk(fresh, "choice:0", "choice:0")  # 完成第 1 步，輪到旁人說第 2 步
+    box = fresh.guide_box()
+    assert box["speaker"] == "旁人" and box["text"] == "去看修練頁。"
+    assert box["done"] == ["✔ 引導完成"]  # 「【旁人】去看修練頁。」不在裡面
+    assert fresh.state.journal[0].guide[-1] == "【旁人】去看修練頁。"  # 江湖紀錄照舊寫那一行
+    fresh.view_tab("practice")  # 完成第 2 步，輪到預設的師父
+    box = fresh.guide_box()
+    assert box["speaker"] == "師父" and box["done"] == ["✔ 引導完成"]
 
 
 def test_the_fused_goals_need_a_fused_art(fresh):
@@ -257,6 +327,81 @@ def test_the_fused_goals_need_a_fused_art(fresh):
     fresh.switch_art(_fused(fresh))
     s.player.member.wugong_level = 3
     assert guide._step_done(s, c, fresh.world, steps[4], "x")
+
+
+def _wear_a_fused_art(game) -> str:
+    """合成一門、換上身（第一成、下品）：序章第 5、6 步的起點。回傳那一門的 id。"""
+    game.state.player.insights = ["feng"]
+    game.state.pending_event = None  # 開場的遇險不用演
+    game.forge("basic_fist", ["feng"])
+    game.switch_art(_fused(game))
+    return _fused(game)
+
+
+def test_the_level_goal_needs_the_level(fresh):
+    from tianxia import guide
+
+    s, c = fresh.state, fresh.content
+    _wear_a_fused_art(fresh)
+    s.player.tutorial_step = 4  # 第 5 步：換上、練到第三成
+    s.player.member.wugong_level = 2
+    assert guide.note_action(s, c, fresh.world, "practice") == [] and s.player.tutorial_step == 4
+    s.player.member.wugong_level = 3
+    assert "✔ 引導完成" in guide.note_action(s, c, fresh.world, "practice") and s.player.tutorial_step == 5
+
+
+def test_the_quality_goal_needs_a_promotion_not_just_the_level(fresh):
+    """第 6 步：成數夠了、身上也是合成的那一門，但還是下品、沒升品，不算完成；升了中品才算。"""
+    from tianxia import guide
+
+    s, c = fresh.state, fresh.content
+    art_id = _wear_a_fused_art(fresh)
+    s.player.member.wugong_level = 3
+    s.player.tutorial_step = 5
+    assert guide.note_action(s, c, fresh.world, "cultivate") == [] and s.player.tutorial_step == 5
+    s.player.art_quality[art_id] = "中品"  # 升了品
+    assert "✔ 引導完成" in guide.note_action(s, c, fresh.world, "cultivate") and s.player.tutorial_step == 6
+
+
+def test_finishing_a_step_gives_its_art(fresh):
+    """序章第 8 步（雪恥一戰）做完就掉出那門雜學：第五成、收進功法庫（身上的武學欄已經有合成的那一門）。"""
+    from tianxia import guide, library
+
+    s, c = fresh.state, fresh.content
+    s.pending_event, s.player.tutorial_step = None, 7
+    msgs = guide.note_action(s, c, fresh.world, "train")
+    assert s.player.tutorial_step == 8
+    assert library.level_of(s, "junk") == 5
+    assert "✔ 引導完成" in msgs and any("蠻牛拳" in m for m in msgs)
+
+
+def test_the_box_and_the_next_step_line_name_the_fused_art(fresh):
+    """{武學} 換成合成出來的那一門：對話框的話與完成上一步時記在江湖紀錄裡的那一行都一樣。"""
+    s = fresh.state
+    s.pending_event, s.player.tutorial_step, s.player.insights = None, 3, ["feng"]
+    fresh.forge("basic_fist", ["feng"])
+    assert s.player.tutorial_step == 4
+    name = prologue.fused_arts(s, fresh.content, fresh.world)[0].name
+    line = f"把【{name}】換上，練到第三成。"
+    assert fresh.guide_box()["text"] == line
+    assert s.journal[0].guide[-1] == f"【師父】{line}"
+
+
+def test_a_step_without_words_writes_no_blank_speaker_line(fresh, prologue_content):
+    """序章第一步沒有話（還沒遇到師父）：開場那一則的 guide、對話框、完成上一步時接下去的那一行，都不會有空空的「【師父】」。"""
+    from tianxia import guide
+
+    assert guide.tutorial_intro(prologue_content) == []
+    assert fresh.state.journal[-1].guide == []  # 開場那一則
+    assert "【師父】" not in fresh.state.log
+    fresh.state.pending_event = None  # 沒有事件擋著：話是空的就不畫框
+    assert fresh.guide_box() is None
+    prologue_content.tutorial.steps[1].text = ""  # 第 2 步也沒有話：完成第 1 步時不接那一行
+    fresh.state.pending_event = "p_ambush"
+    _walk(fresh, "choice:0", "choice:0")
+    assert fresh.state.player.tutorial_step == 1
+    assert fresh.state.journal[0].guide == ["✔ 引導完成"]
+    assert fresh.guide_box() is None
 
 
 def test_give_art_gives_it_once_at_the_written_level(fresh, prologue_content):

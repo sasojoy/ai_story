@@ -605,6 +605,20 @@ REVEAL_KEYS = frozenset({
 })
 
 
+# 序章每一步 allow 可以寫的選單 id（TutorialStep.allow 是前綴比對，見 prologue.allowed）：照 Game._everyday_options 與它叫的
+# 幾個函式真的做得出來的 id 列。固定的整串寫在 ALLOW_FIXED；帶參數的（尾巴是地點、人物、武學的 id）只列到冒號，在 ALLOW_FAMILIES，
+# allow 可以寫到整個家族（"move:"）或家族加上 id（"move:town"）。引擎多了行動沒列在這裡，tests/test_prologue.py 會對著原始碼叫
+ALLOW_FIXED = frozenset({
+    "act:explore", "act:train", "act:socialize", "act:rest", "act:summons", "act:call", "act:recruit", "act:duty", "act:convoy",
+})
+ALLOW_FAMILIES = ("act:challenge:", "call:", "move:", "learn:", "faction:", "fs:")
+
+
+def allow_known(entry: str) -> bool:
+    """TutorialStep.allow 的一筆是不是選單上真的有的行動（content.validate 擋拼錯的：拼錯的前綴整步會把選單清空）。"""
+    return entry in ALLOW_FIXED or any(entry.startswith(family) for family in ALLOW_FAMILIES)
+
+
 class GiveArt(_Strict):
     """序章完成某一步時給的一門內容武學與成數（雪恥之後掉出來的雜學：第五成，熔了才退得回心得）。"""
 
