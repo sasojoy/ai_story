@@ -195,3 +195,98 @@ def test_clear_progress_is_the_one_place_to_reset():
     p = PlayerState(name="甲", location="x", stats={}, stamina=0, rank=3, contrib=5, followers=["a"])
     defection.clear_progress(p)
     assert (p.rank, p.contrib, p.followers) == (0, 0, [])
+
+
+# ── Task 3：引擎接上（選項、確認畫面、場景、紀錄）─────────────────────────────────
+
+
+def _ids(game):
+    return [o.id for o in game.options(odds=False)]
+
+
+def test_defect_option_and_confirm_screen(on):
+    game = _game(on, faction="guan", at="huangjin_camp")
+    assert "defect:huang" in _ids(game) and "faction:huang" not in _ids(game)
+    msgs = game.choose("defect:huang")
+    assert game.state.player.pending_defect == "huang"
+    assert _ids(game) == ["defect:confirm", "defect:cancel"]
+    assert "確定叛投黃巾軍？" in msgs[-1] and "叛投黃巾軍" in game.scene_text()
+
+
+def test_cancel_keeps_everything(on):
+    game = _game(on, faction="guan", at="huangjin_camp")
+    game.state.player.rank = 2
+    game.choose("defect:huang")
+    assert game.choose("defect:cancel")[-1] == "你決定再想想。"
+    p = game.state.player
+    assert (p.faction, p.rank, p.defected, p.pending_defect) == ("guan", 2, False, None)
+
+
+def test_confirm_defects_and_updates_the_roll(on):
+    game = _game(on, faction="guan", at="huangjin_camp")
+    other = _game(on, "乙", faction="guan")  # 再有一個官軍的人，名冊的人數才看得出從官軍搬到黃巾
+    game.choose("defect:huang")  # choose 結束時把目前的陣營記進名冊（還是官軍）
+    other.sync(50.0)
+    assert game.world.faction_counts() == {"guan": 2}
+    msgs = game.choose("defect:confirm")
+    assert game.state.player.faction == "huang" and game.state.player.defected
+    assert "你叛出官軍，投了黃巾軍。" in msgs
+    assert game.world.faction_of("甲") == "huang"  # 名冊是 choose() 結尾的 _record_faction 更新的，_defect_step 不碰
+    assert game.world.faction_counts() == {"guan": 1, "huang": 1}
+    assert not any(i.startswith("defect:") for i in _ids(game))  # 一季一次
+
+
+def test_confirm_after_leaving_does_nothing(on):
+    game = _game(on, faction="guan", at="huangjin_camp")
+    game.choose("defect:huang")
+    game.state.player.location = "yingchuan"  # 確認之前走開了（或在另一個分頁移動）
+    assert game.choose("defect:confirm")[-1] == "（你已經不在叛投的地方了。）"
+    assert game.state.player.faction == "guan" and not game.state.player.defected
+    assert game.state.player.pending_defect is None
+
+
+def test_confirm_after_defecting_elsewhere_does_nothing(on):
+    """另一個分頁已經叛投過了（defected 是 True）：這一頁的「確定」不能再叛投第二次。"""
+    game = _game(on, faction="guan", at="huangjin_camp")
+    game.choose("defect:huang")
+    game.state.player.defected = True
+    assert game.choose("defect:confirm")[-1] == "（你已經不在叛投的地方了。）"
+    assert game.state.player.faction == "guan"
+
+
+def test_confirm_screen_blocks_map_travel(on):
+    """輿圖的「安排前往」在叛投確認畫面上跟投靠的確認一樣按不下去（寫原因、要回江湖頁了結），不然走開之後「確定」就過期了。"""
+    game = _game(on, faction="guan", at="huangjin_camp")
+    reason = "叛投還沒決定，先決定再安排前往"
+    assert game.travel_refusal("changshe") is None  # 還沒按叛投：走得了
+    game.choose("defect:huang")
+    assert game.travel_refusal("changshe") == reason
+    assert [(o.enabled, o.label, o.to_jianghu) for o in game.travel_options("changshe")] == [(False, reason, True)]
+    assert game.travel("changshe") == [f"（{reason}。）"] and game.state.player.location == "huangjin_camp"
+    game.choose("defect:cancel")
+    assert game.travel_refusal("changshe") is None
+
+
+def test_stale_pending_defect_is_dropped(on):
+    game = _game(on, faction="guan", at="huangjin_camp")
+    game.state.player.pending_defect = "no_such_faction"
+    game._drop_stale_references()  # noqa: SLF001
+    assert game.state.player.pending_defect is None
+
+
+def test_new_season_allows_defecting_again(on):
+    """角色每季重來：叛投過的人，新的一季是散人、defected 回到 False（同 test_ranks 的換季寫法）。"""
+    on.config.admins = ["管"]
+    admin = _game(on, "管")
+    player = _game(on, "甲", faction="huang")
+    player.state.player.defected = True
+    player.sync(100.0)
+    admin.admin_end_season(now=200.0)
+    admin.admin_next_season(now=300.0)
+    player.sync(400.0)
+    assert (player.state.player.faction, player.state.player.defected) == (None, False)
+
+
+def test_switch_off_no_defect_option(real):
+    game = _game(real, faction="guan", at="huangjin_camp")
+    assert not any(i.startswith("defect:") for i in _ids(game))

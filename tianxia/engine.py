@@ -14,9 +14,9 @@ from collections.abc import Callable
 from pydantic import BaseModel
 
 from . import (
-    atlas, battle_instance, battlelog, calendar, companion_agent, cultivation, encounter, event_llm, fight_llm, figures,
-    flavor, foreshadow, front_lines, fusion, insights, journal, library, materials, naming, orders, push, ranks, roster,
-    rounds, skillview, team, timetable,
+    atlas, battle_instance, battlelog, calendar, companion_agent, cultivation, defection, encounter, event_llm, fight_llm,
+    figures, flavor, foreshadow, front_lines, fusion, insights, journal, library, materials, naming, orders, push, ranks,
+    roster, rounds, skillview, team, timetable,
 )
 from . import events as event_rules  # note_round 走模組屬性（測試要能換掉它，確認只有 _present 會叫）
 from .events import (
@@ -216,6 +216,8 @@ class Game:
             p.pending_companion = None
         if p.pending_faction and p.pending_faction not in {f.id for f in c.scenario.factions}:
             p.pending_faction = None
+        if p.pending_defect and p.pending_defect not in {f.id for f in c.scenario.factions}:
+            p.pending_defect = None
         lost_place = p.location not in c.locations
         if lost_place:
             p.location = c.scenario.start_location
@@ -421,6 +423,12 @@ class Game:
                 Option(id="faction:confirm", label=f"確定投靠{faction.name}"),
                 Option(id="faction:cancel", label="再想想"),
             ]
+        if s.player.pending_defect:
+            target = self._faction(s.player.pending_defect)
+            return [
+                Option(id="defect:confirm", label=f"確定叛投{target.name}"),
+                Option(id="defect:cancel", label="再想想"),
+            ]
         if s.player.picking_audience:
             return self._audience_options()
         if s.player.fs_asking is not None:
@@ -496,6 +504,8 @@ class Game:
             for faction in c.scenario.factions:
                 if s.player.location in faction.join_at:
                     opts.append(Option(id=f"faction:{faction.id}", label=f"投靠{faction.name}"))
+        for target in defection.targets_here(s, c):  # 叛投（計畫甲）：別的陣營的投靠點、一季一次
+            opts.append(Option(id=f"defect:{target.id}", label=f"叛投{target.name}"))
         opts += self._order_options(loc)  # 軍令（計畫 T6）：守勢行動、接糧車；開關關著、散人沒有
         opts += foreshadow.final_options(s, c, loc.id)  # 伏筆的最後一步（計畫 T7）：做得了的人在那個地點才有
         opts.append(Option(id="act:rest", label="打坐（坐下來回體力，隨時可以起身）"))
@@ -826,6 +836,8 @@ class Game:
                 msgs = self._talk(arg, prepared)
             elif kind == "faction":
                 msgs = self._faction_step(arg)
+            elif kind == "defect":
+                msgs = self._defect_step(arg)
             elif kind == "call":
                 msgs = self._call(arg, prepared)
             elif kind == "road":
@@ -921,6 +933,12 @@ class Game:
             if arg == "cancel":
                 return "再想想"
             return f"考慮投靠{self._faction(arg).name}"
+        if kind == "defect":
+            if arg == "confirm":
+                return f"叛投{self._faction(s.player.pending_defect).name}"
+            if arg == "cancel":
+                return "再想想"
+            return f"考慮叛投{self._faction(arg).name}"
         if kind == "move":
             return f"前往 {c.locations[arg.partition(':')[0]].name}"
         if kind == "choice":
@@ -1502,6 +1520,26 @@ class Game:
         p.pending_faction = faction.id
         prompt = self._faction_prompt(faction)
         self._hide(prompt)  # 場景已經寫著這一問（_own_scene_text），江湖紀錄那一則只留標題（FB-046）
+        return [prompt]
+
+    def _defect_step(self, arg: str) -> list[str]:
+        """叛投分兩步（同投靠）：按「叛投某陣營」先出確認畫面（寫明代價、一季一次、三方人數），「確定」才真的叛投。
+        確定時再驗一次這個陣營還在「這裡的叛投對象」裡（defection.targets_here：還在那個投靠點、還能叛投、不是自己的陣營）：
+        中間走開了，或另一個分頁已經叛投過，都不叛投。投靠名冊由 choose() 結尾的 _record_faction 改記，這裡不碰。"""
+        p = self.state.player
+        if arg == "cancel":
+            p.pending_defect = None
+            return ["你決定再想想。"]
+        if arg == "confirm":
+            target = self._faction(p.pending_defect)
+            p.pending_defect = None
+            if target not in defection.targets_here(self.state, self.content):
+                return ["（你已經不在叛投的地方了。）"]
+            return defection.defect(self.state, self.content, target)
+        target = self._faction(arg)
+        p.pending_defect = target.id
+        prompt = defection.prompt(self.state, self.content, target, self.faction_counts_text())
+        self._hide(prompt)  # 場景已經寫著這一問（_own_scene_text），江湖紀錄那一則只留標題（同投靠，FB-046）
         return [prompt]
 
     def _faction_prompt(self, faction) -> str:
@@ -3524,6 +3562,9 @@ class Game:
         if s.player.pending_faction:
             faction = self._faction(s.player.pending_faction)
             return f"**投靠{faction.name}**\n\n{self._faction_prompt(faction)}"
+        if s.player.pending_defect:
+            target = self._faction(s.player.pending_defect)
+            return f"**叛投{target.name}**\n\n{defection.prompt(s, c, target, self.faction_counts_text())}"
         if s.player.picking_audience:
             return f"**求見**\n\n{self._audience_intro()}"
         asking = foreshadow.asking_text(s, c, self.world) if s.player.fs_asking is not None else None
