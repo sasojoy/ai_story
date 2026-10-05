@@ -927,7 +927,7 @@ class TimetableOutcome(_Strict):
     note: str = ""  # 不論有沒有人鎖定都接在公告後面的一句（例：長社黃巾大勝的「波才北上」）
     chronicle: str = ""  # 江湖史一行
     trends: dict[str, int] = Field(default_factory=dict)  # 戰況移動，往黃巾為正
-    figures: dict[str, FigureChange] = Field(default_factory=dict)  # 人物 id 或「@commander:<戰線>:<guan|huang>」
+    figures: dict[str, FigureChange] = Field(default_factory=dict)  # 人物 id、「@commander:<戰線>:<guan|huang>」或「@人物:<人物 id>」
     chance_mods: dict[str, float] = Field(default_factory=dict)  # 之後那件大事的成功率修正（寫進 event_bonus，不佔 ±0.20 上限）
     world_flags_add: list[str] = Field(default_factory=list)
     third_party_text: str | None = None  # 這個結果專用的豪強那一句，蓋過 TimetableEvent.third_party_text（盧植下獄分兩版）

@@ -203,7 +203,10 @@ def check_timetable(c: Content, need, known, front_ids: list[str], trend_ids: se
     寫的是戰線 id（大區的 front，T1：yingru／nanyang／jizhou），不是大區 id——幽州是大區、它的戰線是冀州，寫 youzhou
     讀戰況時會讀到固定的 50；結果鍵照種類齊全、鎖定對得到結果、人物與修正的
     對象存在、文字只用繁體中文。大勢線的推動（第三方、結果）要是存在的線、而且不能是衍生線（黃巾聲勢由三條戰線合成）。
-    人物認人物表（figures.json，T4）的 id；沒有人物表的內容（測試夾具）照舊認 characters.json。"""
+    人物認人物表（figures.json，T4）的 id；沒有人物表的內容（測試夾具）照舊認 characters.json。
+    人物欄位（{人物:<id>}、@人物:<id>，FB-042）只認人物表：找人要看他的陣營與戰線。"""
+    from .timetable import PERSON_KEY, PERSON_SLOT  # noqa: PLC0415  延後 import（同 validate 的 atlas）
+
     figure_ids = c.figures or c.characters
     ids = [e.id for e in c.timetable]
     duplicated = sorted({eid for eid in ids if ids.count(eid) > 1})
@@ -217,12 +220,27 @@ def check_timetable(c: Content, need, known, front_ids: list[str], trend_ids: se
         if text:
             need(to_traditional(text) == text, f"{where}：文字只能用繁體中文（「{text[:12]}…」）")
 
+    def check_people(where: str, ev: TimetableEvent, texts, keys) -> None:
+        """人物欄位（濃縮版內容表 8.1）：texts 裡的 {人物:<id>} 與人物效果的鍵 keys 裡的 @人物:<id>。id 要在人物表上，
+        而且是官軍或黃巾的人物（沒有人時寫的泛稱只有這兩方）；用到的大事要有 front（照這件大事的戰線找人）。"""
+        ids = [fid for text in texts if text for fid in PERSON_SLOT.findall(text)]
+        ids += [key.removeprefix(PERSON_KEY) for key in keys if key.startswith(PERSON_KEY)]
+        if not ids:
+            return
+        ids = list(dict.fromkeys(ids))
+        known(where, ids, c.figures, "人物")
+        need(ev.front is not None, f"{where}：用到人物欄位（{{人物:…}}、@人物:…）的大事要寫 front")
+        for fid in ids:
+            fig = c.figures.get(fid)
+            need(fig is None or fig.faction in TIMETABLE_SIDES,
+                 f"{where}：人物欄位的 {fid} 要是官軍或黃巾的人物（沒有人時寫的泛稱只有這兩方）")
+
     def check_figure(where: str, key: str, change) -> None:
         if key.startswith("@commander:"):
             front, _, side = key.removeprefix("@commander:").partition(":")
             known(where, [front], front_ids, "戰線")
             need(side in TIMETABLE_SIDES, f"{where}：{key} 的那一方只能是 guan 或 huang")
-        else:
+        elif not key.startswith(PERSON_KEY):  # @人物:<id> 由 check_people 查
             known(where, [key], figure_ids, "人物")
         if change.front is not None:
             known(where, [change.front], front_ids, "戰線")
@@ -279,6 +297,8 @@ def check_timetable(c: Content, need, known, front_ids: list[str], trend_ids: se
         need(all(side in TIMETABLE_SIDES for side in ev.locked_chronicle), f"{where}：locked_chronicle 的鍵只能是 guan 或 huang")
         for text in ev.locked_chronicle.values():
             check_text(where, text)
+        # 結算時經過 fill_slots 的句子才填人物欄位（preface 與季末大事的句子不填）
+        check_people(where, ev, [ev.third_party_text, ev.third_party_chronicle, *ev.locked_chronicle.values()], [])
         for key, outcome in ev.outcomes.items():
             ow = f"{where} 結果 {key}"
             known(ow, outcome.trends, trends, "大勢線")
@@ -292,9 +312,11 @@ def check_timetable(c: Content, need, known, front_ids: list[str], trend_ids: se
             need(set(outcome.loser_text) <= set(outcome.locked_text), f"{ow}：有搶輸的一句就要有那一方的具名公告")
             for fid, change in outcome.figures.items():
                 check_figure(ow, fid, change)
-            for text in (outcome.text, outcome.note, outcome.chronicle, outcome.third_party_text,
-                         *outcome.locked_text.values(), *outcome.loser_text.values()):
+            texts = [outcome.text, outcome.note, outcome.chronicle, outcome.third_party_text,
+                     *outcome.locked_text.values(), *outcome.loser_text.values()]
+            for text in texts:
                 check_text(ow, text)
+            check_people(ow, ev, [*texts, *(change.note for change in outcome.figures.values())], outcome.figures)
         earlier[ev.id] = ev
 
 

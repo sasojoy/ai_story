@@ -10,6 +10,7 @@ state 是 GameState（季的事用的是 world._season_vehicle 那個空殼玩�
 from __future__ import annotations
 
 import random
+import re
 from typing import Literal
 
 from . import calendar, figures
@@ -27,6 +28,10 @@ EVENT_MODS_CAP = 0.20  # 一般伏筆、軍令的修正合計上限（event_bonu
 SIDE_NAMES = {"guan": "官軍", "huang": "黃巾"}
 COMMANDER_SLOTS = {"{官軍主將}": "guan", "{黃巾主將}": "huang"}
 COMMANDER_KEY = "@commander:"  # 人物效果的鍵「@commander:<戰線>:<guan|huang>」＝當時那條戰線那一方的主將
+# 人物欄位（FB-042，濃縮版內容表 8.1）：文字裡的 {人物:<人物 id>} 與人物效果的鍵 @人物:<人物 id>，照 person 找人
+PERSON_SLOT = re.compile(r"\{人物:([^{}]+)\}")
+PERSON_KEY = "@人物:"
+PERSON_FALLBACK = {"guan": "官軍主將", "huang": "黃巾渠帥"}  # 這條戰線那一方沒有人時寫的泛稱
 SHOWDOWN_HOUR = 20  # 決戰預設在那一週週四 20:00（季曆，計畫第六節）
 SHOWDOWN_WEEKDAY = 3
 
@@ -143,18 +148,40 @@ def _figure_name(content: Content, fid: str) -> str:
     return figures.name_of(content, fid)  # 人物表的名字（彭脫、韓忠沒有對話人物）
 
 
-def fill_slots(state: GameState, content: Content, event: TimetableEvent, text: str) -> str:
+def person(state: GameState, content: Content, event: TimetableEvent, fid: str) -> str | None:
+    """{人物:<fid>}／@人物:<fid> 指的是誰（FB-042，濃縮版內容表 8.1）：fid 此刻在場、而且在這件大事的戰線上，就是他；
+    否則是這條戰線、他那一方當時的主將（figures.commander，就是接手的人）；也沒有就是 None（文字寫泛稱、效果略過）。
+    fid 要在人物表上、大事要有戰線（載入時檢查過）。"""
+    now = figures.state_of(state, content, fid)
+    if event.front is not None and now.status == "active" and now.front == event.front:
+        return fid
+    return figures.commander(state, content, event.front, content.figures[fid].faction)
+
+
+def _person_name(state: GameState, content: Content, event: TimetableEvent, fid: str) -> str:
+    who = person(state, content, event, fid)
+    return PERSON_FALLBACK[content.figures[fid].faction] if who is None else _figure_name(content, who)
+
+
+def fill_slots(state: GameState, content: Content, event: TimetableEvent, text: str, *, people: bool = True) -> str:
     """{官軍主將}／{黃巾主將}：這件大事所在戰線當時那一方的主將（宛城是南陽的、廣宗是冀州的）；
-    沒有主將時填「官軍」「黃巾」。公告、鎖定公告、搶輸的一句、江湖史都經過這裡（T7、T8 也用）。"""
+    沒有主將時填「官軍」「黃巾」。{人物:<id>}（people 為真時）：照 person 找到的人，沒有人寫泛稱（PERSON_FALLBACK）。
+    公告、鎖定公告、搶輸的一句、note、人物效果的 note、江湖史都經過這裡（T7、T8 也用）；preface 只填主將、不填人物欄位
+    （「史書上」那半句照寫真名，濃縮版內容表 8.1）。"""
     for slot, side in COMMANDER_SLOTS.items():
         if slot in text:
             fid = figures.commander(state, content, event.front, side)
             text = text.replace(slot, SIDE_NAMES[side] if fid is None else _figure_name(content, fid))
+    if people:
+        text = PERSON_SLOT.sub(lambda m: _person_name(state, content, event, m.group(1)), text)
     return text
 
 
-def _commander_target(state: GameState, content: Content, key: str) -> str | None:
-    """人物效果的鍵換成人物 id：「@commander:<戰線>:<方>」是那時的主將（沒有就 None，效果略過）。"""
+def _target(state: GameState, content: Content, event: TimetableEvent, key: str) -> str | None:
+    """人物效果的鍵換成人物 id：「@commander:<戰線>:<方>」是那時的主將、「@人物:<id>」照 person 找人（沒有就 None，
+    效果略過）；其他的鍵就是人物 id。"""
+    if key.startswith(PERSON_KEY):
+        return person(state, content, event, key.removeprefix(PERSON_KEY))
     if not key.startswith(COMMANDER_KEY):
         return key
     front, _, side = key.removeprefix(COMMANDER_KEY).partition(":")
@@ -206,7 +233,8 @@ def _headline(
 ) -> str:
     """公告的主體：有人鎖定、這個結果也有他那一方的具名版本時用具名版本，否則用開頭＋公告。"""
     if lock is None or lock.side not in outcome.locked_text:
-        return fill_slots(state, content, event, event.preface + outcome.text)
+        preface = fill_slots(state, content, event, event.preface, people=False)  # 「史書上」那半句照寫真名
+        return preface + fill_slots(state, content, event, outcome.text)
     return fill_slots(state, content, event, outcome.locked_text[lock.side]).replace("{name}", shown(lock))
 
 
@@ -239,18 +267,22 @@ def resolve(
     named = lock is not None and lock.side in outcome.locked_text
     losing = [x for x in w.lock_losers.get(event.id, []) if lock is not None and x.side != lock.side]
     losers = [x.name for x in losing]  # 時間軸留真名（T9 的稱號）；公告寫顯示名（匿名的是「某位少俠」）
-    # 文字先填好再套效果：{官軍主將} 指的是這件事發生「之前」的主將（例：廣宗黃巾大勝，重挫的就是他）
+    # 文字先填好再套效果：{官軍主將}、{人物:…} 指的是這件事發生「之前」的人（例：廣宗黃巾大勝，重挫的就是他）；
+    # 人物效果落在誰身上也在這時定好——文字寫誰，效果就落在誰身上（FB-042），不因前一筆效果換了主將而改落到別人身上
     # 公告的組法（伏筆文件 3.4、5.4）：具名的一段＋這一檔的結果（含 note 與人物的後話）＋搶輸的一筆＋豪強的一筆
     text = _headline(state, content, event, outcome, lock) + fill_slots(state, content, event, outcome.note)
     loser_line = _loser_line(state, content, event, outcome, lock, [shown(x) for x in losing])
     chronicle = _chronicle(state, content, event, outcome, lock if named else None)
+    effects = [
+        (_target(state, content, event, key), change, fill_slots(state, content, event, change.note))
+        for key, change in outcome.figures.items()
+    ]
     for trend_id, delta in outcome.trends.items():
         _push(state, content, trend_id, delta)
-    for target_key, change in outcome.figures.items():
-        fid = _commander_target(state, content, target_key)
+    for fid, change, note in effects:
         if fid is None or not figures.holds(state, content, change):
             continue
-        text += "".join(figures.apply(state, content, fid, change)) + fill_slots(state, content, event, change.note)
+        text += "".join(figures.apply(state, content, fid, change)) + note
     for target, mod in outcome.chance_mods.items():
         w.event_bonus[target] = w.event_bonus.get(target, 0.0) + mod
     add_world_flags(state, outcome.world_flags_add)
