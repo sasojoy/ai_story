@@ -45,6 +45,7 @@
 from __future__ import annotations
 
 import os
+import re
 from typing import NamedTuple
 
 # OpenCC 不在時的退路：只蓋武俠文字裡最常見的簡體字。刻意不追求完整（完整的事交給 OpenCC），
@@ -93,6 +94,18 @@ VARIANTS = {
 #   蜡蝎虫苹柜帘腊荐：蠟、蠍、蟲、蘋、櫃、簾、臘、薦的簡體（蝎子、虫子、苹果、柜子、窗帘、腊月、推荐）；
 #     台灣正字不用這些寫法
 SIMPLIFIED_FIRST = frozenset("后几极愿适价党胜确种" "厂广据挂夸叶万丰" "蜡蝎虫苹柜帘腊荐")
+
+# 模型偶爾把一個字吐成位元組碼（FB-075：長社火攻的回合敘事寫「旌旗仍<0xE5><0xB7><0x93>然屹立」）。
+# 連續的一段當成一串 UTF-8 一起解；解不回字的位元組（缺了後半、或根本不是 UTF-8）直接拿掉。
+BYTE_TOKENS = re.compile(r"(?:<0x[0-9A-Fa-f]{2}>)+")
+
+
+def _decode_byte_tokens(text: str) -> str:
+    def decode(match: re.Match[str]) -> str:
+        hex_digits = match.group(0).replace("<0x", "").replace(">", "")
+        return bytes.fromhex(hex_digits).decode("utf-8", errors="ignore")
+
+    return BYTE_TOKENS.sub(decode, text)
 
 _CONVERTER: object | None = None
 _TRIED = False
@@ -182,7 +195,11 @@ def _merge(text: str, converted: str, table: _CharTable) -> str:
 
 def to_traditional(text: str) -> str:
     """轉成繁體（台灣正字，不換詞），並把日式異體字一併正規化。
-    已經是繁體的字原樣保留，只有簡體字才轉（FB-018，規則見模組 docstring）。"""
+    已經是繁體的字原樣保留，只有簡體字才轉（FB-018，規則見模組 docstring）。
+    模型吐出的位元組碼（「<0xE5><0xB7><0x8D>」）先解回字、解不回就拿掉（FB-075）：所有模型文字都經過這裡。"""
+    if not text:
+        return text
+    text = _decode_byte_tokens(text)
     if not text:
         return text
     converter = _converter()

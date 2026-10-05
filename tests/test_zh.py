@@ -213,3 +213,29 @@ def test_a_length_changing_conversion_falls_back_to_per_character():
 
     with mock.patch.object(zh, "_CONVERTER", Stretching()), mock.patch.object(zh, "_TRIED", True):
         assert zh.to_traditional("米斗这军") == "米斗這軍"
+
+
+def test_byte_tokens_from_the_model_are_decoded_back_to_characters():
+    """FB-075：模型偶爾把一個字吐成位元組碼（「旌旗仍<0xE5><0xB7><0x93>然屹立」），照 UTF-8 解回字。
+    所有模型文字都經過 to_traditional，所以對話、潤色、過程、取名說明一起修好。"""
+    assert zh.to_traditional("旌旗仍<0xE5><0xB7><0x8D>然屹立") == "旌旗仍巍然屹立"
+    assert zh.to_traditional("旌旗仍<0xE5><0xB7><0x93>然屹立") == "旌旗仍巓然屹立"
+    assert zh.to_traditional("<0xe5><0xb7><0x8d>然") == "巍然"  # 小寫也認
+    assert zh.to_traditional("一<0xE5><0xB7><0x8D>二<0xE5><0xB7><0x8D>三") == "一巍二巍三"  # 好幾段各自解
+
+
+def test_byte_tokens_that_do_not_decode_are_dropped():
+    """解不回字的（缺了後面的位元組、或根本不是 UTF-8）整段拿掉，不留「<0x..>」給玩家看。"""
+    assert zh.to_traditional("旌旗<0xE5><0xB7>仍在") == "旌旗仍在"
+    assert zh.to_traditional("旌旗<0xFF>仍在") == "旌旗仍在"
+    assert zh.to_traditional("<0xE5><0xB7>") == ""
+
+
+def test_byte_tokens_are_decoded_before_the_simplified_check():
+    """解回來的字是簡體時照樣轉成繁體：这＝E8 BF 99。"""
+    assert zh.to_traditional("<0xE8><0xBF><0x99>話") == "這話"
+
+
+def test_text_that_only_looks_like_a_byte_token_is_left_alone():
+    """不是「<0x兩位十六進位>」的寫法不動。"""
+    assert zh.to_traditional("<0x1>與<0xZZ>") == "<0x1>與<0xZZ>"
