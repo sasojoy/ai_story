@@ -257,6 +257,9 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .now.clamp .now-more { position: absolute; right: 0; bottom: -6px; padding-left: 1.6em; background: linear-gradient(90deg, transparent, var(--card) 1.4em); }
 .now.fits .now-more { display: none; }
 .battle-card { border-color: var(--accent); }
+/* 「看完整戰報 ›」接在卡片最後一段的句尾（app.js 的 withReportLink）：行內、不撐高那一行，點擊範圍上下各多 8px；
+   放不下時整顆換到下一行（inline-block） */
+.battle-card .report-link { display: inline-block; margin: -8px 0 -8px 6px; padding: 8px 4px; vertical-align: baseline; }
 /* 戰鬥卡片的「過程」（計畫三 Task 1、G6 暫定）：「剛剛」那張只露第一回合，第一屏留給剛剛、場景與整排行動（企劃者 2026-10-04）；
    「展開過程」攤開其餘回合，一回合晚一點浮現，代替「當場一回合一回合播」（減少動態時全站的動畫都關掉，見 prefers-reduced-motion）。
    「展開過程」放在「過程」那一行的右邊，不多佔一行。戰報頁（.report-detail）不收，整段列出（app.js 的 roundsFold） */

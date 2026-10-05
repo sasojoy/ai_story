@@ -1014,6 +1014,29 @@ def test_the_fight_card_head_is_one_heading_and_one_paragraph():
     )
 
 
+def test_the_report_link_ends_the_last_paragraph_of_the_fight_card():
+    """「看完整戰報 ›」接在卡片最後一段（「結果　…　得失　…」）的句尾，不另佔一行（戰鬥卡片壓縮）。網頁認的是伺服器的 HTML 一律以
+    </p> 收尾（卡片最後一塊永遠是「結果／得失」那一段）；認不出來時照舊放在卡片最後。這條擋住兩邊對不上。"""
+    from tianxia import battlelog
+    from tianxia.state import BattleRecord, Fighter
+
+    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    css = (server.WEB / "style.css").read_text(encoding="utf-8")
+    for narration in ("", "波才刀勢沉猛，你左支右絀。"):
+        record = BattleRecord(
+            id=1, time=0, location="湖邊", kind="event", opponent="水寇", ours=[Fighter(name="沈浪", level=1)], tier="大勝",
+            our_power=50, difficulty=10, rounds=["第1回合　甲。"], narration=narration, notes=["你贏了。"],
+        )
+        html = server.md(battlelog.card_text(record))
+        assert html.endswith("</p>\n") and "<strong>得失</strong>" in html.rsplit("<p>", 1)[1]
+    link = _js_function(js, "function withReportLink(")
+    assert 'card.lastIndexOf("</p>")' in link and "reportLink(id)" in link
+    jianghu = _js_function(js, "function pageJianghu(")
+    assert "withReportLink(roundsFold(m.card, m.card_id), m.card_id)" in jianghu
+    assert 'data-act="report"' not in jianghu  # 不再另放一顆
+    assert re.search(r"\.battle-card \.report-link \{[^}]*display: inline-block", css)
+
+
 def test_the_big_fight_account_is_folded_behind_the_same_button():
     """大場面模型寫的過程是一段話（不是回合清單，最多 200 字、手機上約十行）：「剛剛」那張也收起來，只露前兩行，
     按同一顆「展開過程」攤開、展開記在同一個 S.roundsOpen（PM 2026-10-05，Task 2 審查修正 2）；戰報頁照樣整段。

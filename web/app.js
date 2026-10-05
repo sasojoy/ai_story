@@ -373,6 +373,15 @@
     return card;
   }
 
+  // 「看完整戰報 ›」接在卡片最後一段（「結果　…　得失　…」那一句）的句尾，不另佔一行（PM 2026-10-05，戰鬥卡片壓縮）；
+  // 卡片最後不是 <p>（認不出來）時照舊放在卡片最後。伺服器的 Markdown 一律以 "</p>\n" 收尾，所以認最後一個 </p>
+  const reportLink = (id) => `<button class="linkish report-link" data-act="report" data-id="${id}">看完整戰報 ›</button>`;
+  function withReportLink(card, id) {
+    if (id == null) return card;
+    const end = card.lastIndexOf("</p>");
+    return end >= 0 && !card.slice(end + 4).trim() ? `${card.slice(0, end)}${reportLink(id)}${card.slice(end)}` : card + reportLink(id);
+  }
+
   // 「剛剛」那一則拆成敘事與數值變化（氣血 -96、黃巾聲勢 -2…，journal.card_html 放在 .tx-now 最後）：
   // 收合只收敘事，數值變化排在收合範圍外面，收著也看得到（W6 review Minor 2）
   function splitChips(html) {
@@ -591,8 +600,7 @@
     const expanded = S.nowOpen === m.now;
     const [text, chips] = !m.card && m.now ? splitChips(m.now) : ["", ""];
     const now = m.card
-      ? `<div class="card battle-card">${roundsFold(m.card, m.card_id)}${m.now || ""}
-           ${m.card_id != null ? `<button class="linkish" data-act="report" data-id="${m.card_id}">看完整戰報 ›</button>` : ""}</div>`
+      ? `<div class="card battle-card">${withReportLink(roundsFold(m.card, m.card_id), m.card_id)}${m.now || ""}</div>`
       : m.now ? `<div class="now ${expanded ? "open" : "clamp"}${m.on_road ? " road" : ""}"><div class="now-text">${text}<button class="linkish now-more" data-act="now-more" aria-expanded="${expanded}">${nowMore(expanded)}</button></div>${chips}</div>` : "";
     const free = m.free_text != null
       ? `<form class="free" id="free-form"><input class="input" name="text" maxlength="20" placeholder="${esc(m.free_text || "輸入你想做的事（20字內）")}"><button class="btn primary small" type="submit">送出</button></form>`
