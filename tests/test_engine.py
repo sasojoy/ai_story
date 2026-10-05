@@ -363,6 +363,16 @@ def test_explore_presents_event_and_resolves_check(game):
     assert "（成功）" in game.state.log
 
 
+def test_an_event_choice_that_lifts_the_name_to_the_threshold_grants_the_insight(game):
+    """走真的事件選項（Game.choose → apply_effect）：善名 14 +2 到門檻，悟得浩然，寫進江湖紀錄。"""
+    game.state.pending_event = "drunk"
+    game.state.player.stats["good"] = 14
+    game.rng = FixedRandom(0.0)  # 檢定必定成功：逼問，善名 +2
+    game.choose("choice:0")
+    assert game.state.player.insights == ["haoran"]
+    assert any("浩然" in m for m in game.state.log)
+
+
 def test_self_check_shows_one_bracketed_line_and_takes_the_fail_branch(game):
     game.state.pending_event = "insight"
     assert [o.label for o in game.options()] == ["運氣衝關（根骨 5：咬咬牙，你應該撐得住。）"]

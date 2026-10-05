@@ -638,6 +638,8 @@ def apply_effect(
             msgs.append(f"{names.get(key, key)} {after - before:+d}")
         if capped:  # 被上限夾掉了，玩家要知道是到頂、不是事件沒效果
             msgs.append(f"（{names.get(key, key)}已到頂 {content.config.stat_cap}）")
+    if any(key in ("good", "evil") for key in effect.stats):
+        msgs += insights.grant_by_name(state, content, world)  # 善名、惡名到門檻悟得浩然、血煞（只悟一次）
     for material_id, count in effect.materials.items():
         line = materials.grant(state, content, material_id, count)
         if line:

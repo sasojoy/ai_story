@@ -488,3 +488,26 @@ def test_a_floor_clamp_writes_what_really_moved_and_nothing_when_nothing_did(sta
     assert apply_effect(Effect(stats={"evil": -3}), state, content, world) == ["惡名 -1"]
     assert state.player.stats["evil"] == 0
     assert apply_effect(Effect(stats={"evil": -3}), state, content, world) == []
+
+
+# ── 名聲到門檻悟得浩然、血煞（武學與成長設計 7.2）──────────────────────────────
+
+
+def test_an_event_that_crosses_the_threshold_grants_the_insight(state, content, world):
+    state.player.stats["evil"] = 13
+    msgs = apply_effect(Effect(stats={"evil": 2}), state, content, world)
+    assert "xuesha" in state.player.insights and any("血煞" in m for m in msgs)
+    assert msgs.index("惡名 +2") < next(i for i, m in enumerate(msgs) if "血煞" in m)  # 先寫名聲，再寫悟得
+
+
+def test_an_event_that_stays_under_the_threshold_grants_nothing(state, content, world):
+    state.player.stats["good"] = 12
+    msgs = apply_effect(Effect(stats={"good": 2}), state, content, world)
+    assert state.player.insights == [] and msgs == ["善名 +2"]
+
+
+def test_an_effect_with_no_name_in_it_does_not_look_at_the_names(state, content, world):
+    state.player.stats["good"] = 40  # 例如舊存檔：名聲早就過了門檻、但這則效果跟名聲無關
+    assert apply_effect(Effect(stats={"silver": 5}), state, content, world) == ["銀兩 +5"]
+    assert state.player.insights == []
+
