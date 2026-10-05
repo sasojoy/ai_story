@@ -2669,19 +2669,23 @@ class Game:
             journal.add_entry(self.state, JournalEntry(time=end_time, title="出關", tag=tag, changes=[change]))
         return [msg]
 
-    def forge_request(self, art_id: str | None, insight_ids: list[str]) -> naming.NamingRequest | None:
+    def forge_request(
+        self, art_id: str | None, insight_ids: list[str], other_art: str | None = None,
+    ) -> naming.NamingRequest | None:
         """開爐首次取名的 A 段（呼叫端在行動鎖內、很快地呼叫；server.prepare_forge）：這一爐要不要模型取名？
         要就回送模型的單子（naming.NamingRequest），由呼叫端在鎖外交給 naming.generate（B 段），再進鎖把結果交給
         forge(..., proposed=...)（C 段）。不要的時候是 None：這個角色不叫模型（client 是 None，伺服器假人）、
-        賽季籌備中、這一爐會被拒絕、配方已經有人登記。只讀、不改狀態——跟 dialogue_request 同一個做法。"""
+        賽季籌備中、這一爐會被拒絕、配方已經有人登記。只讀、不改狀態——跟 dialogue_request 同一個做法。
+        other_art 有、insight_ids 空的是武學＋武學。"""
         if self.client is None or self._preparing():
             return None
-        return fusion.forge_request(self.state, self.content, self.world, art_id, insight_ids)
+        return fusion.forge_request(self.state, self.content, self.world, art_id, insight_ids, other_art=other_art)
 
     def forge(
         self, art_id: str | None, insight_ids: list[str], proposed: tuple[str | None, str] | None = None,
+        other_art: str | None = None,
     ) -> list[str]:
-        """煉製頁的開爐：一門武學＋一個意境＝合成，兩個意境（可以是同一個）＝合併（見 fusion.py）。
+        """煉製頁的開爐：一門武學＋一個意境、兩門武學＝合成，兩個意境（可以是同一個）＝合併（見 fusion.py）。
         proposed 是鎖外先取好的（名字, 說明）（C 段，見 forge_request）：這裡整個重驗（A 段之後意境可能熔掉、心得或體力
         可能花掉、配方可能被別人或同一個人的另一個請求登記了），名字再過一次過濾、登記時原子判斷重名，過不了走退路字表；
         給了 proposed 就不會在這裡叫模型（伺服器一律給，不需要模型時是 (None, "")）。沒給（整季機器人、腳本、測試）
@@ -2691,16 +2695,21 @@ class Game:
         if self._preparing():
             return self._log(["（賽季籌備中，等待管理者開季。）"])
         xinde, stamina = self._xinde(), self.state.player.stamina
-        if art_id and len(insight_ids) == 1:
+        if art_id and other_art and not insight_ids:
+            art, msgs = fusion.blend(
+                self.state, self.content, self.world, self._quick_client(), art_id, other_art, proposed=proposed,
+            )
+            tag = f"合成【{art.name}】" if art is not None else None
+        elif art_id and not other_art and len(insight_ids) == 1:
             art, msgs = fusion.fuse(
                 self.state, self.content, self.world, self._quick_client(), art_id, insight_ids[0], proposed=proposed,
             )
             tag = f"合成【{art.name}】" if art is not None else None
-        elif not art_id and len(insight_ids) == 2:
+        elif not art_id and not other_art and len(insight_ids) == 2:
             insight, msgs = fusion.merge(self.state, self.content, self.world, self._quick_client(), *insight_ids, proposed=proposed)
             tag = f"合併「{insight.name}」" if insight is not None else None
         else:
-            return self._log(["放一門武學和一個意境（合成），或兩個意境（合併）。"])
+            return self._log(["放一門武學和一個意境、或放兩門武學（合成），或放兩個意境（合併）。"])
         out = self._log(msgs)
         if tag is not None:
             spent = round(stamina - self.state.player.stamina)  # 三種合成都花體力：數值變化寫在紀錄上，跟修練一樣
@@ -2709,8 +2718,8 @@ class Game:
             )
         return out
 
-    def forge_line(self, art_id: str | None, insight_ids: list[str]) -> str:
-        return skillview.forge_line(self.state, self.content, self.world, art_id, insight_ids)
+    def forge_line(self, art_id: str | None, insight_ids: list[str], other_art: str | None = None) -> str:
+        return skillview.forge_line(self.state, self.content, self.world, art_id, insight_ids, other_art=other_art)
 
     def cultivate(self, art_id: str, use_legend: bool = False) -> list[str]:
         """修練：武學＋它融的意境，衝下一品（見 cultivation.py）。花體力。真的擲了骰（成功或失敗）才寫江湖紀錄；

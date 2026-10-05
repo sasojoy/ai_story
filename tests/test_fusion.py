@@ -829,3 +829,237 @@ def test_a_merged_insights_attribute_follows_the_recipe_not_the_name(ready, cont
     expected = insights.merged_attribute(fire, water, fusion.recipe_seed(world, key)[1])
     insight, _ = fusion.merge(ready, content, world, named("水火"), "huo", "shui")
     assert insight.attribute == expected
+
+
+# ── 武學＋武學（設計 12.3）────────────────────────────────────
+
+def base_art(art_id, content, world):
+    return team.resolve_art(art_id, content, world)
+
+
+def test_blending_two_arts_keeps_both_and_adds_a_new_one(ready, content, world):
+    ready.player.arts = ["lake_kick"]  # 粗淺拳腳（武學・實，身上）＋湖邊腿法（武學・快，功法庫）
+    before = ready.player.stamina
+    art, msgs = fusion.blend(ready, content, world, named("踏浪拳"), "basic_fist", "lake_kick")
+    assert (art.name, art.kind, art.origin, art.quality) == ("踏浪拳", "武學", "fused", "下品")
+    assert art.parents == ["basic_fist", "lake_kick"] and art.base is None
+    assert art.attribute in ("實", "快") and art.insight is None  # 實＋快不在第一層的表裡；兩門都沒記意境
+    assert {"basic_fist", "lake_kick", art.id} <= set(library.owned_arts(ready))  # 兩門都留著
+    assert ready.player.stats["xinde"] == 100 - content.config.fuse_xinde
+    assert ready.player.stamina == before - content.config.fuse_stamina
+    assert world.lookup_recipe(fusion.blend_key("lake_kick", "basic_fist")).id == art.id  # 不分先後
+    assert "你把【粗淺拳腳】與【湖邊腿法】合而為一" in msgs[0] and "第一次" in msgs[0]
+
+
+def test_two_fused_arts_blend_by_the_pair_table_and_remember_one_parents_insight(ready, content, world):
+    fast, _ = fusion.fuse(ready, content, world, named("旋風腿"), "basic_fist", "feng")
+    hard, _ = fusion.fuse(ready, content, world, named("烈火拳"), "basic_fist", "huo")
+    art, _ = fusion.blend(ready, content, world, named("烈風腿"), fast.id, hard.id)
+    assert art.attribute == "陽" and art.kind == "武學" and art.lean == "無"  # 快＋剛＝陽
+    shape = fusion.blend_shape(fast, hard, fusion.recipe_seed(world, fusion.blend_key(fast.id, hard.id))[1])
+    assert art.insight == shape.insight and art.insight in ("feng", "huo")  # 兩門都不是陽：配方挑一門
+
+
+def test_a_blended_art_inherits_the_insight_even_when_one_parent_is_basic(ready, content, world):
+    """旋風腿（快、記風）＋湖邊腿法（快、沒記意境）：不管配方挑到哪一門，沒有意境的那門就改用另一門的。"""
+    fast, _ = fusion.fuse(ready, content, world, named("旋風腿"), "basic_fist", "feng")
+    ready.player.arts.append("lake_kick")
+    art, _ = fusion.blend(ready, content, world, named("踏浪腿"), fast.id, "lake_kick")
+    assert art.attribute == "快" and art.insight == "feng"
+
+
+def test_blend_shape_keeps_an_insight_whichever_way_the_recipe_leans(content, world):
+    """兩門屬性一樣、只有一門記了意境：不管配方挑到哪一門，都用記了的那一個；兩門都記了才各有一半機會。"""
+    kick = base_art("lake_kick", content, world)
+    windy = kick.model_copy(update={"id": "windy", "insight": "feng"})
+    fiery = kick.model_copy(update={"id": "fiery", "insight": "huo"})
+    for i in range(40):
+        assert fusion.blend_shape(windy, kick, f"0|兼|{i}").insight == "feng"
+        assert fusion.blend_shape(kick, windy, f"0|兼|{i}").insight == "feng"
+    assert {fusion.blend_shape(windy, fiery, f"0|兼|{i}").insight for i in range(40)} == {"feng", "huo"}
+
+
+def test_blend_shape_gives_either_kind_for_an_inner_and_an_outer_art(content, world):
+    breath, fist = base_art("basic_breath", content, world), base_art("basic_fist", content, world)
+    assert {fusion.blend_shape(breath, fist, f"0|兼|{i}").kind for i in range(40)} == {"內功", "武學"}
+    assert fusion.blend_shape(breath, fist, "0|兼|x") == fusion.blend_shape(fist, breath, "0|兼|x")  # 不分先後
+
+
+def test_blend_shape_passes_the_lean_through_and_cancels_it(content, world):
+    fist = base_art("basic_fist", content, world)
+    good, evil = fist.model_copy(update={"id": "a", "lean": "正"}), fist.model_copy(update={"id": "b", "lean": "邪"})
+    kick = base_art("lake_kick", content, world)
+    assert fusion.blend_shape(good, kick, "0|兼|x").lean == "正"
+    assert fusion.blend_shape(good, evil, "0|兼|x").lean == "無"
+
+
+def test_an_inner_and_an_outer_art_blend_into_the_kind_the_recipe_fixes(ready, content, world):
+    ready.player.member.neigong_id = "basic_breath"
+    art, _ = fusion.blend(ready, content, world, named("吐納拳"), "basic_breath", "basic_fist")
+    seed = fusion.recipe_seed(world, fusion.blend_key("basic_breath", "basic_fist"))[1]
+    expected = fusion.blend_shape(base_art("basic_breath", content, world), base_art("basic_fist", content, world), seed)
+    assert (art.kind, art.attribute) == (expected.kind, expected.attribute)
+
+
+def test_blend_needs_two_different_arts_you_know(ready, content, world):
+    assert fusion.blend_problem(ready, content, world, "basic_fist", "basic_fist") == "要放兩門不同的武學。"
+    assert fusion.blend_problem(ready, content, world, "basic_fist", "lake_kick") == "兩門都要是你會的武學。"
+    ready.player.arts = ["lake_kick"]
+    assert fusion.blend_problem(ready, content, world, "basic_fist", "lake_kick") is None
+
+
+def test_a_blend_costs_like_a_fuse_and_is_refused_without_stamina(ready, content, world):
+    ready.player.arts = ["lake_kick"]
+    ready.player.stamina = content.config.fuse_stamina - 1
+    art, msgs = fusion.blend(ready, content, world, must_not_ask(), "basic_fist", "lake_kick")
+    assert art is None and msgs == [f"體力不足：合成一次要 {content.config.fuse_stamina}。"]
+    assert world.lookup_recipe(fusion.blend_key("basic_fist", "lake_kick")) is None
+
+
+def test_a_known_blend_you_already_have_is_refused_before_paying(ready, content, world):
+    ready.player.arts = ["lake_kick"]
+    art, _ = fusion.blend(ready, content, world, named("踏浪拳"), "basic_fist", "lake_kick")
+    xinde = ready.player.stats["xinde"]
+    assert fusion.blend_problem(ready, content, world, "lake_kick", "basic_fist") == (
+        f"這兩門合出來還是【{art.name}】，你已經有了——換一門吧。"
+    )
+    again, _ = fusion.blend(ready, content, world, must_not_ask(), "lake_kick", "basic_fist")
+    assert again is None and ready.player.stats["xinde"] == xinde
+
+
+def test_blending_and_melting_the_result_never_makes_xinde(ready, content, world):
+    """設計 12.4：合出來的下品、沒練過，熔掉退的比合成花的少，一圈只虧不賺。"""
+    ready.player.arts = ["lake_kick"]
+    xinde = ready.player.stats["xinde"]
+    art, _ = fusion.blend(ready, content, world, named("踏浪拳"), "basic_fist", "lake_kick")
+    library.melt_art(ready, content, world, art.id)
+    assert ready.player.stats["xinde"] < xinde
+
+
+def test_a_blend_can_land_on_a_known_art(ready, content, world):
+    ready.player.arts = ["lake_kick"]
+    key = fusion.blend_key("basic_fist", "lake_kick")
+    shape = fusion.blend_shape(
+        base_art("basic_fist", content, world), base_art("lake_kick", content, world), fusion.recipe_seed(world, key)[1],
+    )
+    known = generate_from_name("候選拳", shape.kind, "候選拳").model_copy(update={
+        "origin": "fused", "attribute": shape.attribute, "lean": shape.lean, "creator": "乙",
+    })
+    world.claim_recipe("融|測試", known)
+    landing_on(content)
+    art, msgs = fusion.blend(ready, content, world, must_not_ask(), "basic_fist", "lake_kick")
+    assert art.id == "候選拳" and "合出來的竟是一門已有的" in msgs[0] and "由乙首創" in msgs[0]
+    assert world.lookup_recipe(key).id == "候選拳"
+
+
+def test_a_blend_can_land_on_one_of_its_own_arts(ready, content, world):
+    """Review Focus 4：旋風腿（快）＋湖邊腿法（快）→ 快；唯一的候選是放進去的旋風腿自己——合到它（企劃者接受）：
+    你本來就有，什麼都不收，配方照樣記下來。"""
+    fast, _ = fusion.fuse(ready, content, world, named("旋風腿"), "basic_fist", "feng")
+    ready.player.arts.append("lake_kick")
+    landing_on(content)
+    xinde, stamina = ready.player.stats["xinde"], ready.player.stamina
+    art, msgs = fusion.blend(ready, content, world, must_not_ask(), fast.id, "lake_kick")
+    assert art is None and msgs == ["這兩門合出來還是【旋風腿】，你已經有了——換一門吧。"]
+    assert (ready.player.stats["xinde"], ready.player.stamina) == (xinde, stamina)
+    assert world.lookup_recipe(fusion.blend_key(fast.id, "lake_kick")).id == fast.id
+
+
+def test_forge_request_for_a_blend(ready, content, world):
+    ready.player.arts = ["lake_kick"]
+    request = fusion.forge_request(ready, content, world, "basic_fist", [], other_art="lake_kick")
+    assert request.kind == "blend" and request.key == fusion.blend_key("basic_fist", "lake_kick")
+    assert "兩門合而為一" in request.messages[-1]["content"]
+    assert fusion.forge_request(ready, content, world, "basic_fist", ["feng"], other_art="lake_kick") is None
+
+
+def test_the_engine_blends_two_arts_and_logs_it_under_the_furnace(game):
+    p = game.state.player
+    p.member.wugong_id, p.member.neigong_id, p.stats["xinde"] = "basic_fist", "basic_breath", 100
+    before = p.stamina
+    with mock.patch.object(game.client, "chat_structured", side_effect=RuntimeError):
+        game.forge("basic_fist", [], other_art="basic_breath")
+    entry = game.state.journal[0]
+    assert entry.title == "煉製" and entry.tag.startswith("合成【")
+    assert p.stamina == before - game.content.config.fuse_stamina
+    assert len(library.owned_arts(game.state)) == 3
+
+
+def test_the_engine_refuses_a_furnace_that_is_none_of_the_three(game):
+    msgs = game.forge("basic_fist", ["feng"], other_art="basic_breath")
+    assert "放一門武學和一個意境" in msgs[0] and "兩門武學" in msgs[0]
+
+
+def test_with_two_candidates_the_model_picks_one_for_a_blend_and_it_need_not_be_a_parent(ready, content, world):
+    """旋風腿（快）＋湖邊腿法（快）→ 武學・快・無：候選是旋風腿（放進爐裡的）與乙合出的疾風腿；模型挑疾風腿——
+    你還沒有它，照常收一次錢；同一爐反過來再按一次，看見配方指向你剛拿到的那一門，什麼都不收。"""
+    two_fast_arts(content, world)
+    fusion.fuse(ready, content, world, must_not_ask(), "basic_fist", "feng")  # 乙已經登記過：照表拿到旋風腿
+    ready.player.arts.append("lake_kick")
+    landing_on(content)
+    request = fusion.forge_request(ready, content, world, "旋風腿", [], other_art="lake_kick")
+    assert request.kind == "blend" and request.choices == ("旋風腿", "疾風腿")
+    assert request.messages[0]["content"] == fusion.PICK_SYSTEM
+    xinde, stamina = ready.player.stats["xinde"], ready.player.stamina
+    art, msgs = fusion.blend(ready, content, world, must_not_ask(), "旋風腿", "lake_kick", proposed=("疾風腿", ""))
+    assert art.id == "疾風腿" and art.id in library.owned_arts(ready)
+    assert "合出來的竟是一門已有的武學【疾風腿】" in msgs[0] and "這一門由乙首創。" in msgs[0]
+    assert ready.player.stats["xinde"] == xinde - content.config.fuse_xinde
+    assert ready.player.stamina == stamina - content.config.fuse_stamina
+    key = fusion.blend_key("旋風腿", "lake_kick")
+    assert world.lookup_recipe(key).id == "疾風腿" and art.parents == []  # 它本來的來源不改
+    again, msgs = fusion.blend(ready, content, world, must_not_ask(), "lake_kick", "旋風腿", proposed=("疾風腿", ""))
+    assert again is None and "你已經有了" in msgs[0]
+    assert ready.player.stats["xinde"] == xinde - content.config.fuse_xinde  # 沒有再收
+
+
+def test_a_blend_takes_the_proposed_name_and_note_without_asking_the_model(ready, content, world):
+    ready.player.arts = ["lake_kick"]
+    art, _ = fusion.blend(ready, content, world, must_not_ask(), "basic_fist", "lake_kick", proposed=("踏浪拳", "拳腳並用。"))
+    assert art.name == "踏浪拳" and art.note == "拳腳並用。"
+    assert world.lookup_recipe(fusion.blend_key("basic_fist", "lake_kick")).note == "拳腳並用。"
+
+
+def test_a_blend_without_a_model_falls_back_to_the_word_table(ready, content, world):
+    ready.player.arts = ["lake_kick"]
+    key = fusion.blend_key("basic_fist", "lake_kick")
+    art, _ = fusion.blend(ready, content, world, model_down(), "basic_fist", "lake_kick")
+    shape = fusion.blend_shape(
+        base_art("basic_fist", content, world), base_art("lake_kick", content, world), fusion.recipe_seed(world, key)[1],
+    )
+    assert art.name == naming.fallback_name(content, key, shape.kind, tianji=world.read().tianji)
+    assert art.kind == shape.kind and art.attribute == shape.attribute and art.note == ""
+
+
+def test_a_second_player_blends_into_the_same_art_without_the_model(ready, content, world):
+    """配方全服共享（設計 12.3）：乙先合出來，甲照同樣兩門合（不管順序）拿到同一門，不問模型、不再登記。"""
+    other = other_player(content)
+    other.player.arts = ["lake_kick"]
+    made, _ = fusion.blend(other, content, world, named("踏浪拳"), "lake_kick", "basic_fist")
+    ready.player.arts = ["lake_kick"]
+    art, msgs = fusion.blend(ready, content, world, must_not_ask(), "basic_fist", "lake_kick")
+    assert art.id == made.id and "你照著合出了同一門" in msgs[0]
+    assert [a.id for a in world.fused_arts()] == [made.id]
+
+
+def test_the_three_steps_run_for_a_blend_too(game):
+    """A（鎖內 Game.forge_request）→ B（鎖外 naming.generate）→ C（鎖內 Game.forge(..., proposed=, other_art=)）。"""
+    p = game.state.player
+    p.member.wugong_id, p.member.neigong_id, p.stats["xinde"] = "basic_fist", "basic_breath", 100
+    world = game.world
+    with world.action_lock():
+        request = game.forge_request("basic_fist", [], other_art="basic_breath")
+    assert request is not None and request.kind == "blend"
+    model = mock.Mock(timeout=120)
+    model.chat_structured.return_value = naming.NameReply(name="吐納拳", description="一吐一納，拳隨氣走。")
+    proposed = naming.generate(model, game.content, request, budget=game.content.config.naming_budget_seconds)
+    assert proposed == ("吐納拳", "一吐一納，拳隨氣走。")
+    with world.action_lock():
+        msgs = game.forge("basic_fist", [], proposed=proposed, other_art="basic_breath")
+    (made,) = p.arts
+    assert world.get_skill(made).name == "吐納拳" and p.stats["xinde"] == 95 and "第一次" in msgs[0]
+    assert world.lookup_recipe(fusion.blend_key("basic_fist", "basic_breath")).note == "一吐一納，拳隨氣走。"
+    assert game.forge_request("basic_fist", [], other_art="basic_breath") is None  # 配方登記了：不必再問
+    assert game.forge_request("basic_fist", [], other_art=made) is not None  # 另一組還沒人合過
+    game.client = None  # 伺服器假人（bot_runner 把 client 設成 None）：不叫模型，C 段走退路字表
+    assert game.forge_request("basic_fist", [], other_art=made) is None

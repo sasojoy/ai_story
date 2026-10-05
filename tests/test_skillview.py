@@ -1,6 +1,6 @@
 import pytest
 
-from tianxia import library, rules, skillview
+from tianxia import fusion, library, rules, skillview, team
 from tianxia.martial_arts import MartialArt, generate_from_name, historical_art, power_at
 
 
@@ -710,3 +710,43 @@ def test_a_small_name_shows_its_half_points_instead_of_rounding_to_nothing(state
     assert skillview.boost_line(state, content, world) == "威力加成：【清風拳】共鳴 +0.5%"
     state.player.stats["good"] = 15
     assert skillview.boost_line(state, content, world) == "威力加成：【清風拳】共鳴 +7.5%"
+
+
+# ── 武學＋武學（武學與成長設計 12.3）────────────────────────────────
+
+
+def test_forge_line_shows_a_blend(state, content, world):
+    state.player.member.wugong_id = "basic_fist"
+    state.player.arts = ["lake_kick"]
+    state.player.stats["xinde"] = 100
+    line = skillview.forge_line(state, content, world, "basic_fist", [], other_art="lake_kick")
+    seed = fusion.recipe_seed(world, fusion.blend_key("basic_fist", "lake_kick"))[1]
+    shape = fusion.blend_shape(
+        team.resolve_art("basic_fist", content, world), team.resolve_art("lake_kick", content, world), seed,
+    )
+    assert "**合成**" in line and f"→ 一門新{shape.kind}（屬{shape.attribute}，從下品起修）" in line
+    assert "花 5 點心得、5 點體力（你有 100 點心得）" in line and "⚠" not in line
+    assert "⚠ 要放兩門不同的武學。" in skillview.forge_line(state, content, world, "basic_fist", [], other_art="basic_fist")
+
+
+def test_forge_line_when_idle_mentions_two_arts(state, content, world):
+    line = skillview.forge_line(state, content, world, None, [])
+    assert "放兩門武學" in line and "放一門武學和一個意境" in line and "放兩個意境" in line
+
+
+def test_art_rows_name_the_parents_of_a_blended_art(state, content, world):
+    state.player.member.wugong_id = "basic_fist"
+    state.player.arts = ["lake_kick"]
+    state.player.stats["xinde"] = 100
+    art, _ = fusion.blend(state, content, world, None, "basic_fist", "lake_kick")  # 沒有模型：退路字表取名
+    rows = {row["id"]: row for row in skillview.art_rows(state, content, world)}
+    assert "由【粗淺拳腳】與【湖邊腿法】衍生" in rows[art.id]["card"]
+    assert "衍生" not in rows["basic_fist"]["card"] and "衍生" not in rows["lake_kick"]["card"]
+
+
+def test_the_card_of_a_blended_art_names_both_parents():
+    art = generate_from_name("烈風腿", "武學", "烈風腿").model_copy(
+        update={"origin": "fused", "creator": "甲", "parents": ["a", "b"]},
+    )
+    card = skillview.art_card(art, 1, None, ["旋風腿", "烈火拳"])
+    assert card.split("\n")[3] == "來源：合成（甲 首創）　由【旋風腿】與【烈火拳】衍生"
