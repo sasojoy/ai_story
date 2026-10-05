@@ -1,3 +1,4 @@
+import ast
 import contextlib
 import hashlib
 import random
@@ -36,14 +37,28 @@ def season_already_open(monkeypatch):
     monkeypatch.setattr(server.CONTENT.config, "auto_open_first_season", True)
 
 
+def _stop_scheduler() -> None:
+    """排程執行緒也是 server 的模組狀態：測試留下來的那一條先停掉、等它真的結束，再把停止的旗子放下，
+    免得它在後面測試的暫存資料庫上推世界。"""
+    thread = server.SCHEDULER_THREAD
+    if thread is not None:
+        server.SCHEDULER_STOP.set()
+        thread.join(5.0)
+        assert not thread.is_alive()
+    server.SCHEDULER_THREAD = None
+    server.SCHEDULER_STOP.clear()
+
+
 @pytest.fixture(autouse=True)
 def fresh_server_memory():
-    """登入紀錄、登入狀態、角色快取（還有排程那一份沒有玩家的 Game）都只放在伺服器記憶體裡：每個測試從空的開始，
+    """登入紀錄、登入狀態、角色快取（還有排程那一份沒有玩家的 Game、排程執行緒）都只放在伺服器記憶體裡：每個測試從空的開始，
     不然上一個測試的暫存資料庫會被沿用。"""
+    _stop_scheduler()
     for store in (server.LOGIN_FAILURES, server.SESSIONS, server.GAMES):
         store.clear()
     server.WORLD_GAME = None
     yield
+    _stop_scheduler()
     for store in (server.LOGIN_FAILURES, server.SESSIONS, server.GAMES):
         store.clear()
     server.WORLD_GAME = None
@@ -1578,6 +1593,102 @@ def test_a_world_step_that_cannot_build_its_game_raises_and_tries_again_next_tim
     assert server.WORLD_GAME is None
     server.world_step(lambda: 1000.0)
     assert server.WORLD_GAME is not None and len(calls) == 2
+
+
+# ── 排程執行緒與開關（Config.world_tick_seconds，預設 0＝關）──────────────
+
+
+def test_scheduler_keeps_running_after_a_failed_step(capsys):
+    """排程那一下出錯：印一行（stdout）加 traceback（stderr），下一輪照跑；執行緒不會死（Review Focus 2）。
+    每一下回傳的訊息不印：裡面可能有參戰者的名號。"""
+    stop = threading.Event()
+    calls = []
+
+    def step(clock):
+        calls.append(clock())
+        if len(calls) == 1:
+            raise RuntimeError("第一下壞了")
+        if len(calls) == 3:
+            stop.set()
+        return ["沈浪加入了官軍。"]
+
+    server.run_scheduler(0.001, stop, step=step, clock=lambda: 42.0)
+    assert calls == [42.0, 42.0, 42.0]
+    captured = capsys.readouterr()
+    assert captured.out.splitlines() == ["排程這一下出錯：RuntimeError('第一下壞了')"]
+    assert "Traceback" in captured.err
+    assert "沈浪" not in captured.out + captured.err
+
+
+def test_scheduler_off_starts_nothing():
+    """開關關著（0）：不開執行緒，啟動時印一行說排程關著（Review Focus 5）。"""
+    assert server.start_scheduler(0) is None
+    assert server.SCHEDULER_THREAD is None
+    assert "排程：關" in server.scheduler_line(0)
+    assert "每 10 秒" in server.scheduler_line(10)
+
+
+def test_scheduler_on_runs_steps_in_the_background(monkeypatch):
+    done = threading.Event()
+    monkeypatch.setattr(server, "world_step", lambda clock: done.set() or [])
+    thread = server.start_scheduler(0.01)
+    try:
+        assert thread is not None and thread.daemon
+        assert done.wait(2.0)
+    finally:
+        server.SCHEDULER_STOP.set()
+        if thread is not None:
+            thread.join(2.0)
+            assert not thread.is_alive()
+        server.SCHEDULER_STOP.clear()
+
+
+def test_a_second_scheduler_is_refused(monkeypatch):
+    """一個伺服器只開一條排程執行緒（WORLD_GAME 只給一條執行緒用）：已經有一條在跑，再開就拒絕。"""
+    monkeypatch.setattr(server, "world_step", lambda clock: [])
+    first = server.start_scheduler(0.01)
+    with pytest.raises(RuntimeError, match="排程"):
+        server.start_scheduler(0.01)
+    assert server.SCHEDULER_THREAD is first and first.is_alive()
+
+
+def _users_in_server(name: str) -> set[str | None]:
+    """server.py 裡用到 name 這個名字的地方各在哪個函式裡（模組層級是 None）。"""
+    found: set[str | None] = set()
+
+    def visit(node: ast.AST, owner: str | None) -> None:
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                visit(child, child.name)
+                continue
+            if isinstance(child, ast.Name) and child.id == name:
+                found.add(owner)
+            visit(child, owner)
+
+    visit(ast.parse((server.ROOT / "server.py").read_text(encoding="utf-8")), None)
+    return found
+
+
+def test_only_main_starts_the_scheduler_and_only_the_scheduler_runs_world_steps():
+    """排程只有一條：只從 main() 開（import 時不開）；請求的處理從不呼叫 world_step，只有排程迴圈用它。"""
+    assert _users_in_server("start_scheduler") == {"main"}
+    assert _users_in_server("world_step") == {"run_scheduler"}
+
+
+def test_main_starts_the_scheduler_only_when_switched_on(capsys, monkeypatch):
+    """啟動時在設定那一行後面印排程開了沒有；關著（預設）不開執行緒，開著就開一條、每隔幾秒推一下。"""
+    import uvicorn
+
+    monkeypatch.setattr(uvicorn, "run", lambda *args, **kwargs: None)
+    server.main([])
+    assert "排程：關（世界時間等有人連線才推）" in capsys.readouterr().out
+    assert server.SCHEDULER_THREAD is None
+    done = threading.Event()
+    monkeypatch.setattr(server.CONTENT.config, "world_tick_seconds", 0.01)
+    monkeypatch.setattr(server, "world_step", lambda clock: done.set() or [])
+    server.main([])
+    assert "排程：每 0.01 秒推一次全服的事" in capsys.readouterr().out
+    assert server.SCHEDULER_THREAD is not None and done.wait(2.0)
 
 
 def test_a_recipe_registered_between_the_two_trips_gives_the_registered_art():

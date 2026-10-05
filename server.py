@@ -33,6 +33,7 @@ import shutil
 import subprocess
 import threading
 import time
+import traceback
 import unicodedata
 from collections import deque
 from collections.abc import Callable, Iterable
@@ -261,6 +262,49 @@ def world_step(clock: Callable[[], float] = time.time) -> list[str]:
     except BaseException:
         WORLD_GAME = None
         raise
+
+
+SCHEDULER_STOP = threading.Event()  # 讓排程執行緒停下來（測試用；伺服器關掉時執行緒是 daemon，跟著結束）
+SCHEDULER_THREAD: threading.Thread | None = None  # 正在跑的那一條排程執行緒（一個伺服器只開一條，見 start_scheduler）
+_SCHEDULER_LOCK = threading.Lock()
+
+
+def run_scheduler(
+    interval: float, stop: threading.Event, step=None, clock: Callable[[], float] = time.time,
+) -> None:
+    """排程迴圈：每 interval 秒叫一次 step(clock)（預設是 world_step，它拿到行動鎖之後才讀 clock），直到 stop 被設起來。
+    一下出錯就印一行（stdout）加 traceback（stderr），下一輪照跑：排程不能因為一次例外就停掉，不然世界又變成等人點擊才動。
+    每一下回傳的訊息不印：裡面可能有參戰者的名號，伺服器視窗不該看得出誰在打、誰是假人。
+    step 預設寫成 None 再取 world_step：測試用 monkeypatch 換掉 server.world_step 時，執行緒拿到的是換過的那一個。"""
+    step = step or world_step
+    while not stop.wait(interval):
+        try:
+            step(clock)
+        except Exception as e:  # noqa: BLE001  任何錯都不能讓排程死掉
+            print(f"排程這一下出錯：{e!r}", flush=True)
+            traceback.print_exc()
+
+
+def scheduler_line(interval: float) -> str:
+    if interval <= 0:
+        return "排程：關（世界時間等有人連線才推）"
+    return f"排程：每 {interval:g} 秒推一次全服的事（世界時間、時刻表、決戰逾時、季末）"
+
+
+def start_scheduler(interval: float) -> threading.Thread | None:
+    """開關打開（interval > 0）時開排程執行緒（daemon：伺服器關掉時跟著結束）；關著回 None。
+    只有 main() 呼叫它（import 時不開），一個伺服器只開一條：已經有一條在跑就丟 RuntimeError（WORLD_GAME 只給一條執行緒用）。"""
+    global SCHEDULER_THREAD
+    if interval <= 0:
+        return None
+    with _SCHEDULER_LOCK:
+        if SCHEDULER_THREAD is not None and SCHEDULER_THREAD.is_alive():
+            raise RuntimeError("排程執行緒已經在跑了：一個伺服器只開一條")
+        SCHEDULER_THREAD = threading.Thread(
+            target=run_scheduler, args=(interval, SCHEDULER_STOP), daemon=True, name="world-scheduler",
+        )
+        SCHEDULER_THREAD.start()
+        return SCHEDULER_THREAD
 
 
 def prepare_dialogue(game: Game, option_id: str) -> companion_agent.PreparedTurn | None:
@@ -1071,6 +1115,9 @@ def main(argv: list[str] | None = None) -> None:
     print(f"天下大勢：http://127.0.0.1:{args.port}", flush=True)
     print(f"資料庫：{default_path().resolve()}", flush=True)  # 跟 run_bots.py 要是同一個檔；TIANXIA_DB 設錯時一眼看得出來
     print(profile_line(CONTENT, PROFILE), flush=True)  # TIANXIA_PROFILE 也是：兩個程式要用同一份設定
+    interval = CONTENT.config.world_tick_seconds
+    print(scheduler_line(interval), flush=True)
+    start_scheduler(interval)
     if args.lan:
         print("已開放區網連線：同一個網路裡的裝置都連得到。", flush=True)
     uvicorn.run(app, host="0.0.0.0" if args.lan else "127.0.0.1", port=args.port, log_level="warning")

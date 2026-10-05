@@ -1110,6 +1110,19 @@ def test_the_profile_line_says_what_the_profile_turns_on():
     )
 
 
+def test_world_tick_is_off_by_default():
+    """伺服器排程預設關（線上架構排程計畫）：0＝不開執行緒，世界時間照舊等有人連線才推。
+    content/config.json 與每一份 profiles 都還沒打開：要在哪一份打開由 PM 驗收之後決定。"""
+    assert load_content(CONTENT_DIR).config.world_tick_seconds == 0
+    for profile in sorted((CONTENT_DIR / "profiles").glob("*.json")):
+        assert load_content(CONTENT_DIR, profile=profile.stem).config.world_tick_seconds == 0, profile.name
+
+
+def test_world_tick_seconds_cannot_be_negative():
+    with pytest.raises(ValidationError, match="greater than or equal to 0"):
+        Config(world_tick_seconds=-1)
+
+
 # ── 時刻表（content/timetable.json，計畫 T2）──────────────────────────
 
 
