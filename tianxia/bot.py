@@ -171,7 +171,8 @@ def pick(game: Game, options: list[Option], rng: random.Random) -> str | None:
         for option in options:
             if option.id.startswith("choice:") and choices[int(option.id.partition(":")[2])].effect.recruit:
                 return option.id
-    options = [o for o in options if o.id not in ("act:rest", "act:halt") and not o.id.startswith("road:")]
+    # 叛投（defect:）：機器人不換陣營；選單上一直有，不排除的話「沒事可做就推進時間」的訊號會失效（同 act:rest）
+    options = [o for o in options if o.id not in ("act:rest", "act:halt") and not o.id.startswith(("road:", "defect:"))]
     # 會被打發的求見（名望不夠）永遠按得下去，不排除的話「沒事可做就推進時間」的訊號會失效（同 act:rest）
     options = [
         o for o in options
