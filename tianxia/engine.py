@@ -775,9 +775,11 @@ class Game:
         return fight if self.fight_request(option_id) == fight.request else None
 
     def _fight_gone(self, fight: fight_llm.PreparedFight) -> str:
-        """大場面 C 段：選項已經不在了。人不在備料時的地點了就說「你離開了」；其他（事件被了結、體力花光……）認不出是哪一種變動，
-        說得中性一點。備料（fight_request）一定是選項還按得下去才開單，所以這裡只可能是等判讀的時候變的。"""
-        return FIGHT_LEFT if self.state.player.location != fight.request.location else FIGHT_CHANGED
+        """大場面 C 段：選項已經不在了。人不在備料時的地點了、或已經在路上就說「你離開了」；其他（事件被了結、體力花光……）
+        認不出是哪一種變動，說得中性一點。備料（fight_request）一定是選項還按得下去才開單、而路上不開單，所以這裡只可能是等判讀的
+        時候變的；步行、趕路出發之後 location 要到抵達才換（Journey 在路上時還是出發地），所以也要看 journey。"""
+        player = self.state.player
+        return FIGHT_LEFT if player.journey is not None or player.location != fight.request.location else FIGHT_CHANGED
 
     def _judged(self, squad: Squad) -> fight_llm.Judgment | None:
         """這一場有沒有鎖外判讀好的優勢：有、而且是同一路對手，就拿出來用掉——一次行動只用一次，同一次行動再打一場

@@ -3437,6 +3437,18 @@ def test_a_big_fight_the_player_left_while_it_was_judged_says_so_and_fights_noth
     assert game.choose("act:train") == ["（此刻無法這麼做。）"]  # 沒有判讀過的過期按鈕：照舊是那一句
 
 
+def test_a_big_fight_the_player_set_out_from_on_foot_while_it_was_judged_says_they_left(game):
+    """步行、趕路出發之後地點要到抵達才換（Journey 在路上時 location 還是出發地），所以光看地點會誤說「情勢變了」。
+    大場面的單子只在不在路上時才開，套用時人在路上就是離開了。"""
+    _boss_at_the_lake(game)
+    request = game.fight_request("act:train")
+    game.choose("move:town")  # 另一個分頁：步行出發
+    player = game.state.player
+    assert player.journey is not None and player.location == request.location  # 地點還沒變
+    assert game.choose("act:train", fight=_judged(request)) == ["你離開了，這一仗沒打成。"]
+    assert game.state.battles == []
+
+
 def test_a_big_fight_that_can_no_longer_start_for_another_reason_says_the_situation_changed(game):
     """人沒走、選項卻按不下去了（例如別的分頁把體力花光）：認不出是哪一種變動，就說得中性一點。"""
     _boss_at_the_lake(game)
