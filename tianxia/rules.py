@@ -6,7 +6,7 @@ import re
 from collections.abc import Callable
 from typing import Literal
 
-from . import calendar, library, materials, roster, team  # 與 roster 互相 import：只能引入整個模組、呼叫時才取屬性，不能 from .roster import …
+from . import calendar, insights, library, materials, roster, team  # 與 roster 互相 import：只能引入整個模組、呼叫時才取屬性，不能 from .roster import …
 from .martial_arts import content_art
 from .models import FRONT_KEY, Check, Condition, Content, Effect, Trend
 from .state import PLAYER, GameState, Rumor, RumorLayer, WorldState
@@ -453,6 +453,8 @@ def apply_effect(
         line = materials.grant(state, content, material_id, count)
         if line:
             msgs.append(line)
+    for insight_id in effect.insights:
+        msgs += insights.learn(state, content, world, insight_id)
     if effect.stamina:
         p.stamina = min(content.config.stamina_max, max(0.0, p.stamina + effect.stamina))
         msgs.append(f"體力 {'+' if effect.stamina > 0 else ''}{effect.stamina}")

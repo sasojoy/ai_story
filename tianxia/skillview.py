@@ -85,7 +85,7 @@ def bag_text(state: GameState, content: Content) -> str:
     """門下頁的「煉製素材」那一塊：背包內容，階高的排前面（素材是煉製的材料，見 craft.py）。"""
     items = materials.bag_contents(state, content)
     if not items:
-        return "**煉製素材**　還沒撿到任何素材——打贏對手、四處探索，或在奇遇裡拿到。"
+        return "**煉製素材**　還沒撿到任何素材——打贏對手、沿路採集，或在奇遇裡拿到。"
     lines = ["**煉製素材**　煉製功法的材料，分凡品、靈品、天品三階。"]
     lines += [
         f"- {m.name} ×{n}　{materials.tier_label(m)}・屬{m.attribute}　{m.description}"

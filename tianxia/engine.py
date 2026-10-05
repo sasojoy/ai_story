@@ -14,7 +14,7 @@ from pydantic import BaseModel
 
 from . import (
     atlas, battle_instance, battlelog, calendar, companion_agent, craft, encounter, event_llm, figures, flavor, foreshadow,
-    journal, library, materials, orders, push, ranks, roster, skillview, team, timetable,
+    insights, journal, library, materials, orders, push, ranks, roster, skillview, team, timetable,
 )
 from .events import choice_label, event_candidates, has_events_here, pick_event, visible_choices
 from .guide import base_step_count, note_action, quest_text, tutorial_active, tutorial_intro
@@ -917,7 +917,7 @@ class Game:
         """探索三選一（FB-013，docs/superpowers/specs/2026-10-03-探索三選一-design.md）。
 
         1. 奇遇判定最優先：這裡有還能遇上的一次性或奇遇事件時，先滾 `rare_explore_chance`，中了就是它。
-        2. 沒中就照地點類型（`Config.explore_mix`）的比例抽悟意境（現在還是撿素材）、野怪、事件三支之一；做不了的那一支
+        2. 沒中就照地點類型（`Config.explore_mix`）的比例抽悟意境、野怪、事件三支之一；做不了的那一支
            （沒有會打的對手、沒有可重複的事件）從候選裡拿掉，用剩下的比例重抽——等於把它的比例按比例分給另外兩支。
         3. 三支都做不了才是一無所獲。
 
@@ -933,9 +933,9 @@ class Game:
         if not branches:
             return ["你四處走走，一無所獲。"]
         branch = self.rng.choices(branches, weights=[mix[b] for b in branches])[0]
-        if branch == "insight":  # 這一步先照舊撿素材，Task 7 才換成悟意境（武學與成長計畫一）
-            found = materials.roll_explore_drop(loc, c, self.rng)
-            return [f"你在{loc.name}翻找了一陣。", materials.grant(s, c, found)]
+        if branch == "insight":
+            found = insights.roll_explore(loc, c, self.rng)
+            return [f"你在{loc.name}靜下心來，看了好一陣。"] + insights.learn(s, c, self.world, found)
         if branch == "wild":
             squad = min(self._wild_foes(loc), key=lambda foe: foe.difficulty)  # 同分取這裡列的第一路
             return [f"你在{loc.name}走著，{squad.name}突然殺出！"] + self._squad_encounter(squad.id, wild=True)
@@ -944,7 +944,7 @@ class Game:
     def _explore_can(self, branch: ExploreBranch, loc: Location) -> bool:
         """探索三選一的這一支在這裡做不做得了。"""
         if branch == "insight":
-            return bool(materials.explore_pool(loc, self.content))
+            return bool(insights.explore_pool(loc, self.content))
         if branch == "wild":
             return bool(self._wild_foes(loc))
         return bool(event_candidates(self.state, self.content, "explore", "common"))

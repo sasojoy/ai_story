@@ -90,6 +90,19 @@ def test_move_entry_keeps_guide_messages(game):
     assert (entry.lines, entry.guide) == ([], ["✔ 引導完成", "【說書人】看看地圖。"])
 
 
+def test_a_new_insight_or_art_line_gets_the_shine():
+    """「拿到新東西」那一行掃過一道光：悟得意境、學會基礎武學、合成出新武學、修練晉品都算；重複悟到只是化成心得，不算。"""
+    for line in (
+        "你悟得了「風」的意境（屬快）！",
+        "你學會了【長拳】（武學・下品・屬剛）。",
+        "你以【長拳】融入「風」，衍生出一門武學【追風拳】",
+        "【長拳】修練有成，從下品晉為中品！",
+    ):
+        assert journal._line_class(line) == "tx-line tx-new", line
+    assert journal._line_class("你又悟到一次「風」，這份體會化成了心得。") == "tx-line"
+    assert journal._line_class("你在湖邊靜下心來，看了好一陣。") == "tx-line"
+
+
 def test_explore_that_meets_an_event_tags_it_and_drops_the_intro(game):
     _explore_only(game, "event")
     game.choose("act:explore")

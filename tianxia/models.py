@@ -80,6 +80,7 @@ class Effect(_Strict):
     next_event: str | None = None
     recruit: str | None = None  # 結識某人（同伴 id）：入門；已入門時改給心得（見 roster.recruit）
     materials: dict[str, int] = Field(default_factory=dict)  # 給煉製素材（素材 id -> 數量）；手寫劇情是天品素材的主要來源
+    insights: list[str] = Field(default_factory=list)  # 悟得的意境 id（奇遇給的，武學與成長設計 3.2.2）；只能是靠探索悟的基本意境
     # 在地方上留下痕跡（「地點 id:痕跡名」→ 1～3，只能加）：全服共用、每季清空；同一個人對同一個痕跡一天只算一次
     marks: dict[str, int] = Field(default_factory=dict)
     # 伏筆（計畫 T7）的準備事件用；第一季開關關著時兩個都不發生（不給也不寫任何字）
@@ -251,7 +252,7 @@ class Location(_Strict):
     important: bool = False
     enemies: list[str] = Field(default_factory=list)
     train_trend: dict[str, int] = Field(default_factory=dict)  # 遊歷打贏／操練推大勢的量；正負是散人的方向，有陣營目標的人照自己的目標推（Game._train_push）
-    materials: list[str] = Field(default_factory=list)  # 在這裡探索可能撿到的素材；留空則給隨機的一階素材
+    materials: list[str] = Field(default_factory=list)  # 路邊採集（兩頭的地點）出什麼屬性的素材：採到的是那些屬性的一階；探索不再撿素材（探索改悟意境，見 insights）
     insights: list[str] = Field(default_factory=list)  # 探索「悟意境」那一支悟得到的意境 id（武學與成長設計附錄 C）
     unlock_flag: str | None = None  # 設定後，需該世界旗標成立才能前往
 

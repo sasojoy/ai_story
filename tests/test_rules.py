@@ -178,6 +178,18 @@ def test_learn_skill_ignores_the_holding_cap(state, content):
     assert state.player.arts == ["sword"]
 
 
+def test_an_effect_can_grant_an_insight(state, content, world):
+    msgs = apply_effect(Effect(insights=["feng"]), state, content, world)
+    assert state.player.insights == ["feng"] and any("悟得" in m for m in msgs)
+
+
+def test_an_effect_that_grants_a_known_insight_again_gives_xinde(state, content, world):
+    state.player.insights = ["feng"]
+    state.player.stats["xinde"] = 0
+    msgs = apply_effect(Effect(insights=["feng"]), state, content, world)
+    assert state.player.insights == ["feng"] and state.player.stats["xinde"] == 10 and "心得 +10" in msgs
+
+
 def test_current_day(state):
     assert current_day(state) == 1
     state.world.time = 86400 * 2 + 5

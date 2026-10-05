@@ -51,7 +51,7 @@ def test_explore_mix_defaults_follow_the_design_table():
     ]
     assert cfg.wild_neili_loss_factor == 0.5
     assert 0 < cfg.rare_explore_chance < 1
-    assert not hasattr(cfg, "explore_material_chance")  # 探索前固定滾三成素材已經拿掉，素材改由探索三選一的那一支給
+    assert not hasattr(cfg, "explore_material_chance")  # 探索前固定滾三成素材已經拿掉，探索三選一的第一支改成悟意境（探索不再撿素材）
     assert EXPLORE_BRANCHES == ("insight", "wild", "event")  # 悟意境、野怪、事件
 
 

@@ -608,7 +608,7 @@
           <span class="n">×${m.count - used(m.id)}</span><b>${esc(m.name)}</b><small>${esc(m.tier)}・屬${esc(m.attribute)}</small>
         </button>`).join("")}</div>`
         : x.materials.length ? '<p class="muted">素材都放進爐裡了。</p>'
-        : '<p class="muted">背包裡還沒有素材。去探索、遊歷打贏，或是碰上奇遇都拿得到。</p>'}
+        : '<p class="muted">背包裡還沒有素材。遊歷打贏、沿路採集，或是碰上奇遇都拿得到。</p>'}
       ${x.clue_items?.length ? `<div class="label">伏筆物品</div>
       <div class="chips clues">${x.clue_items.map((i) => `<div class="clue"><b>${esc(i.name)}</b><span>×${i.count}</span></div>`).join("")}</div>` : ""}
       <details class="fold"><summary>素材說明</summary><div class="fold-body">${x.bag}</div></details>`;

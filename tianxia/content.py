@@ -177,14 +177,24 @@ def _index(model, items: list[dict]) -> dict:
 
 
 def _material_sources(c: Content) -> set[str]:
-    """所有拿得到的素材 id：地點撿、對手掉（含依難度的預設表）、事件給。"""
+    """所有拿得到的素材 id：路邊採集、對手掉（含依難度的預設表）、事件與路上見聞給。
+
+    探索不再撿素材（武學與成長計畫一：探索改悟意境），地點能給素材的只剩路邊採集（Game._road_gather）：
+    採到的永遠是一階，屬性看這段路兩頭的地點寫了哪些素材（只看屬性，不看寫的是幾階），兩頭都沒寫就隨機一階。
+    所以地點寫了二、三階素材，那一階並不會因此拿得到。"""
     from .materials import _default_rolls, by_tier  # noqa: PLC0415  延後 import，避免循環依賴
 
     reachable: set[str] = set()
+    first_tier = by_tier(c, 1)
     for loc in c.locations.values():
-        reachable |= set(loc.materials)
-        if not loc.materials and loc.tags:
-            reachable |= {m.id for m in by_tier(c, 1)}  # 沒填 materials 的地點給隨機一階素材
+        for conn in loc.connections:  # 路都是雙向的（載入時檢查過）：每一條路從兩頭各看一次，結果一樣
+            kinds = {
+                c.materials[mid].attribute
+                for end in (loc, c.locations.get(str(conn)))
+                if end is not None for mid in end.materials if mid in c.materials
+            }
+            picked = [m.id for m in first_tier if m.attribute in kinds]  # 跟 Game._road_gather 一樣：挑不到就退回全部一階
+            reachable |= set(picked or [m.id for m in first_tier])
     for squad in c.squads.values():
         if squad.drops:
             reachable |= {d.material for d in squad.drops}
@@ -691,6 +701,10 @@ def validate(c: Content) -> None:
         known(where, eff.stats, STATS, "屬性")
         known(where, eff.learn_skills, c.skills, "武學")
         known(where, eff.materials, c.materials, "素材")
+        known(where, eff.insights, c.insights, "意境")
+        for insight_id in eff.insights:
+            if insight_id in c.insights and c.insights[insight_id].grant is not None:
+                need(False, f"{where}：{c.insights[insight_id].name}只能靠名聲悟得，事件不能給")
         known(where, eff.affinity, c.characters, "人物")
         known(where, eff.trend, trend_ids | {FRONT_KEY}, "大勢線")
         front_needs_total(where, eff.trend)
@@ -724,6 +738,11 @@ def validate(c: Content) -> None:
         need(
             sum(ft.effect.materials.values()) <= best_materials,
             f"{fw}：素材 {sum(ft.effect.materials.values())} 個比檢定選項最多的 {best_materials} 個還多",
+        )
+        best_insights = max(len(eff.insights) for eff in rivals)
+        need(
+            len(ft.effect.insights) <= best_insights,
+            f"{fw}：意境 {len(ft.effect.insights)} 個比檢定選項最多的 {best_insights} 個還多",
         )
         for label, eff in (("effect", ft.effect), ("fail_effect", ft.fail_effect)):
             banned = [

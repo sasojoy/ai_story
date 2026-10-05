@@ -216,9 +216,10 @@ def test_practice_hint_goes_away_once_everything_is_at_the_tenth_level(state, co
 
 
 def test_bag_text_when_empty_says_where_materials_come_from(state, content):
+    """探索改悟意境之後不再撿素材（武學與成長計畫一 Task 7）：提示不能再叫玩家去探索找素材。"""
     text = skillview.bag_text(state, content)
     assert text.startswith("**煉製素材**")
-    assert "打贏對手" in text and "探索" in text
+    assert "打贏對手" in text and "探索" not in text
 
 
 def test_bag_text_lists_what_you_hold_high_tier_first(state, content):

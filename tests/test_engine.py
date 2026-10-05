@@ -2882,13 +2882,13 @@ def test_a_hard_fought_loss_drops_nothing(game):
     assert game.state.player.materials == {}
 
 
-def test_exploring_a_quiet_place_can_still_turn_up_a_material(game):
+def test_exploring_a_quiet_place_can_still_turn_up_an_insight(game):
     game.state.player.location = "cave"  # fixture 的山洞沒有任何事件也沒有敵人
     game.content.locations["cave"].materials = ["gang_3"]
     game.rng = FixedRandom(0.0)
     msgs = game.choose("act:explore")  # 訊息串後面還會接新手引導的進度
-    assert "你在寶洞翻找了一陣。" in msgs and "獲得 隕鐵膽 ×1" in msgs
-    assert game.state.player.materials == {"gang_3": 1}
+    assert "你在寶洞靜下心來，看了好一陣。" in msgs and "你悟得了「山」的意境（屬慢）！" in msgs
+    assert game.state.player.insights == ["shan"] and game.state.player.materials == {}  # 探索不再撿素材
 
 
 def test_exploring_and_finding_nothing_still_says_so(game):

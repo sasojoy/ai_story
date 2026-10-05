@@ -298,6 +298,13 @@ def test_free_text_cannot_pay_more_than_the_best_check(tmp_path):
         load_content(root)
 
 
+def test_free_text_cannot_give_more_insights_than_the_best_check(tmp_path):
+    root = copy_fixture(tmp_path)
+    _with_free_text(root, effect={"insights": ["feng"]})  # 醉漢事件的檢定選項沒有給意境
+    with pytest.raises(ContentError, match="意境 1 個比檢定選項最多的 0 個還多"):
+        load_content(root)
+
+
 @pytest.mark.parametrize("field, value", [
     ("next_event", "chain_b"), ("recruit", "liu"), ("join_sect", "cloud"), ("flags_add", ["x"]), ("world_flags_add", ["x"]),
 ])

@@ -655,10 +655,40 @@ def test_a_material_only_an_event_gives_is_still_reachable(tmp_path):
     load_content(root)  # 不該再報錯
 
 
-def test_a_material_only_a_location_offers_is_still_reachable(tmp_path):
+def test_a_higher_tier_material_a_location_lists_is_not_reachable_from_it(tmp_path):
+    """探索不再撿素材（武學與成長計畫一）：地點寫的素材只決定路邊採集出什麼屬性，採到的永遠是那個屬性的一階。
+    所以地點寫了天品，天品也不會因此拿得到。"""
     root = copy_fixture(tmp_path)
     _strand_the_top_tier(root)
     edit_json(root / "locations.json", lambda d: d[0].update(materials=["gang_3"]))
+    with pytest.raises(ContentError, match="隕鐵膽"):
+        load_content(root)
+
+
+def _every_place_lists_only_gang(root):
+    """每個地點都只寫剛；快屬性的一階素材原本還有一則路上見聞給，這裡拿掉，路邊採集就成了唯一的可能。"""
+    edit_json(root / "locations.json", lambda d: [loc.update(materials=["gang_1"]) for loc in d])
+    edit_json(root / "road_sights.json", lambda d: [s.get("effect", {}).pop("materials", None) for s in d])
+
+
+def test_a_first_tier_material_no_road_can_give_is_rejected(tmp_path):
+    """路邊採集只出兩頭地點寫的屬性：每個地點都只寫剛，快屬性的一階素材就沒有任何管道。"""
+    root = copy_fixture(tmp_path)
+    _every_place_lists_only_gang(root)
+    with pytest.raises(ContentError, match="驚羽"):
+        load_content(root)
+
+
+def test_a_first_tier_material_a_road_between_listed_places_can_give_is_reachable(tmp_path):
+    root = copy_fixture(tmp_path)
+    _every_place_lists_only_gang(root)
+    edit_json(root / "locations.json", lambda d: d[0].update(materials=["kuai_1"]))  # 小鎮出快：小鎮到湖邊的路採得到
+    load_content(root)
+
+
+def test_a_road_between_two_unlisted_places_can_give_any_first_tier_material(tmp_path):
+    root = copy_fixture(tmp_path)
+    edit_json(root / "locations.json", lambda d: [loc.pop("materials", None) for loc in d])
     load_content(root)
 
 
@@ -1302,6 +1332,23 @@ def test_a_location_cannot_hand_out_a_name_earned_insight(content):
     content.locations["lake"].insights.append("haoran")
     with pytest.raises(ContentError, match="浩然.*只能靠名聲"):
         validate(content)
+
+
+def test_an_effect_cannot_give_a_name_earned_insight(content):
+    content.events["drunk"].choices[0].effect.insights = ["haoran"]
+    with pytest.raises(ContentError, match="浩然.*只能靠名聲"):
+        validate(content)
+
+
+def test_an_effect_cannot_give_an_unknown_insight(content):
+    content.events["drunk"].choices[0].effect.insights = ["nope"]
+    with pytest.raises(ContentError, match="未知的意境 nope"):
+        validate(content)
+
+
+def test_an_effect_can_give_a_basic_insight(content):
+    content.events["drunk"].choices[0].effect.insights = ["feng"]
+    validate(content)
 
 
 def test_a_basic_art_must_be_taught_somewhere_that_exists(content):

@@ -44,7 +44,7 @@ def _explore_many(game, n=N):
     counts = Counter()
     s = game.state
     for _ in range(n):
-        battles, bag, xinde = s.battle_seq, sum(s.player.materials.values()), s.player.stats.get("xinde", 0)
+        battles, known, xinde = s.battle_seq, len(s.player.insights), s.player.stats.get("xinde", 0)
         msgs = game._explore()
         if s.pending_event:
             counts["event"] += 1
@@ -52,10 +52,8 @@ def _explore_many(game, n=N):
             s.pending_event = None
         elif s.battle_seq != battles:
             counts["wild"] += 1
-        elif sum(s.player.materials.values()) > bag:
-            counts["insight"] += 1
-        elif s.player.stats.get("xinde", 0) != xinde:
-            counts["drill"] += 1
+        elif len(s.player.insights) > known or s.player.stats.get("xinde", 0) > xinde:
+            counts["insight"] += 1  # 悟得新的意境，或是悟到已經會的、化成心得（沒有戰鬥就只有這一支會給心得）
         else:
             counts["nothing"] += 1
             assert msgs == ["你四處走走，一無所獲。"]
@@ -83,7 +81,7 @@ def test_each_kind_of_place_splits_exploring_by_its_own_ratio(game, tags, expect
     game.rng = random.Random(11)
     _lake(game, tags)
     counts = _explore_many(game)
-    assert counts["nothing"] == 0 and counts["drill"] == 0
+    assert counts["nothing"] == 0
     for branch, weight in expected.items():
         assert counts[branch] / N == pytest.approx(weight / 100, abs=0.035), (branch, counts)
 
@@ -105,7 +103,7 @@ def test_only_your_own_side_here_counts_as_no_foes(content, game):
     game.rng = random.Random(13)
     _lake(game)
     counts = _explore_many(game)
-    assert counts["wild"] == 0 and counts["drill"] == 0 and counts["nothing"] == 0
+    assert counts["wild"] == 0 and counts["nothing"] == 0
     assert counts["insight"] / N == pytest.approx(40 / 65, abs=0.035)
     assert game.state.world.trends["kou"] == 30  # 沒有操練，大勢也沒動
 
@@ -307,17 +305,49 @@ def test_the_journal_files_it_under_exploring(content, game):
     assert "你在湖邊走著，水寇小隊突然殺出！" in entry.lines
 
 
-# ── 素材 ──────────────────────────────────────────────
+# ── 悟意境 ────────────────────────────────────────────
 
 
-def test_the_material_branch_always_gives_a_material(content, game):
-    content.locations["town"].materials = ["gang_3"]
+def test_the_insight_branch_teaches_an_insight_from_the_location(game):
+    _lake(game)  # 湖邊的殘卷（一次性奇遇）標成看過，奇遇那一步不會插進來
+    _only(game, insight=1)
+    msgs = game._explore()
+    assert game.state.player.insights[0] in ("feng", "shui")
+    assert any("悟得" in m for m in msgs)
+    assert game.state.player.materials == {}  # 探索不再撿素材
+
+
+def test_the_insight_branch_always_gives_something_and_a_repeat_turns_into_xinde(game):
+    """抽到「悟意境」那一支必定有收穫：第一次是新意境，悟到已經會的就化成心得。"""
+    game.content.locations["town"].insights = ["huo"]
+    game.content.config.rare_explore_chance = 0.0
     _only(game, insight=1, wild=0, event=0)
-    game.rng = FixedRandom(0.99)
-    for n in range(1, 6):
+    game.state.player.stats["xinde"] = 0
+    first = game._explore()
+    assert first == ["你在小鎮靜下心來，看了好一陣。", "你悟得了「火」的意境（屬剛）！"]
+    assert game.state.player.insights == ["huo"] and game.state.player.stats["xinde"] == 0
+    for n in range(1, 4):
         msgs = game._explore()
-        assert msgs == ["你在小鎮翻找了一陣。", "獲得 隕鐵膽 ×1"]
-        assert game.state.player.materials == {"gang_3": n}
+        assert msgs[0] == "你在小鎮靜下心來，看了好一陣。" and msgs[-1] == "心得 +10"
+        assert not any("悟得" in m for m in msgs)
+        assert game.state.player.insights == ["huo"] and game.state.player.stats["xinde"] == 10 * n
+
+
+def test_a_place_with_no_insights_listed_still_teaches_a_basic_one(game):
+    _lake(game)
+    game.content.locations["lake"].insights = []
+    _only(game, insight=1)
+    game._explore()
+    assert game.state.player.insights[0] in ("feng", "huo", "shui", "shan")
+
+
+def test_without_any_insight_in_the_content_the_insight_share_goes_to_the_other_two(game):
+    game.content.insights = {}
+    game.rng = random.Random(18)
+    _lake(game)
+    counts = _explore_many(game)
+    assert counts["insight"] == 0 and counts["nothing"] == 0
+    assert counts["wild"] / N == pytest.approx(35 / 60, abs=0.035)
 
 
 # ── 真實內容 ──────────────────────────────────────────
