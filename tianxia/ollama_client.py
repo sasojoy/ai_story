@@ -7,6 +7,7 @@ options 類欄位缺席時視為失敗觸發 re-prompt 重試。
 """
 from __future__ import annotations
 
+import copy
 import json
 import logging
 import re
@@ -106,6 +107,21 @@ def _ensure_required_present(data: dict, response_model: type, required: list[st
     for name in required:
         if name in fields and not data.get(name):
             raise ValueError(f"LLM 回應缺少必要欄位 {name!r}，疑似被截斷")
+
+
+def with_timeout_cap(client: Any, seconds: int | float) -> Any:
+    """client 的複本，HTTP 逾時最多 seconds 秒；沒有 client（None）就是 None，原本的 client 不動（同一個角色的別的請求
+    可能正在用它）。已經比 seconds 快的 client 原樣回傳。引擎不讀時鐘（CLAUDE.md），上限靠 HTTP 的逾時來管，跟
+    naming.propose 同一個做法。拿簡單的假物件（沒有 timeout 欄位）當 client 的測試與腳本也一樣給複本、設上上限。
+    注意 chat_structured 一次呼叫最多送兩趟（第一次＋格式不對、逾時時的重問），兩趟都用這個逾時；chat_text 只送一趟。"""
+    if client is None:
+        return None
+    own = getattr(client, "timeout", None)
+    if isinstance(own, (int, float)) and own <= seconds:
+        return client
+    capped = copy.copy(client)
+    capped.timeout = seconds
+    return capped
 
 
 class OllamaClient:

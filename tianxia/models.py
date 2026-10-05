@@ -689,6 +689,12 @@ class Config(_Strict):
     ollama_url: str = "http://localhost:11434"  # companion_agent.py 深度對話用；連不上時那輪對話取消
     ollama_model: str = "qwen2.5:14b"
     ollama_timeout: int = 120
+    # 行動鎖內的模型呼叫（大事與決戰回合的潤色、重複事件與重遊的點綴句、決戰自訂行動的評分、鎖內才備料的對話與記憶整理、
+    # 鎖內才取名的開爐）最多等幾秒：鎖拿著的時候全服玩家與假人都在等，模型慢或冷的時候照 ollama_timeout 的 120 秒會讓整台
+    # 伺服器凍結好幾分鐘，試玩走的 trycloudflare 也會在約 100 秒切斷請求。Game._quick_client 給鎖內呼叫端這個逾時的複本
+    # （引擎不讀時鐘，靠 HTTP 的逾時，跟 naming.propose 同一個做法）；逾時或失敗都退回固定的文字。鎖外的路徑（對話備料、
+    # 開爐取名、隨口應對的評分與潤色）有自己的逾時，不受這個管。第二階段的模型佇列上線後，鎖內就不該再有模型呼叫了
+    in_lock_model_timeout: int = Field(default=15, ge=1)
     # 開爐首次取名（鎖外的 B 段）整段最多花幾秒（最終審查 Critical 1）：server.py 讀它、扣掉 A 段等鎖的時間，傳給
     # naming.generate 的 budget；用完就走退路字表。試玩走 trycloudflare，一個請求約 100 秒就被切斷，60 秒留下 A、C 兩段
     # 等行動鎖的餘裕（控制者 2026-10-05 從 75 改成 60）

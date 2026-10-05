@@ -1654,6 +1654,23 @@ def test_a_dialogue_option_generates_outside_the_action_lock(game, lock_events):
     assert game.state.player.pending_companion == "luzhi"
 
 
+def test_the_dialogue_prepared_outside_the_lock_keeps_the_full_client(game):
+    """鎖內的模型呼叫有 15 秒的上限（Config.in_lock_model_timeout），鎖外的備料不受它管：拿的是 game.client 本身，
+    逾時照 Config.ollama_timeout——一輪對話本來就要九、十秒，不能被短複本的 15 秒誤傷。"""
+    _stand_by_a_figure(game)
+    seen = []
+
+    def generate(client, messages):
+        seen.append(client)
+        return DIALOGUE_TURN
+
+    with mock.patch.object(companion_agent, "generate_turn", side_effect=generate):
+        server.choose(game, "act:socialize")
+    config = server.CONTENT.config
+    assert len(seen) == 1 and seen[0] is game.client
+    assert seen[0].timeout == config.ollama_timeout > config.in_lock_model_timeout
+
+
 def test_the_generated_turn_is_applied_and_saved(game, save_dir):
     _stand_by_a_figure(game)
     with mock.patch.object(companion_agent, "generate_turn", return_value=DIALOGUE_TURN):
@@ -2263,6 +2280,27 @@ def test_answering_asks_the_model_outside_the_lock(game, at_a_gamble, lock_event
     assert game.state.journal[0].lines[0].startswith("你：「大喊官兵來了」（成算")
     view = server.look(game, server.main_view)
     assert view["event_free_text"] is None
+
+
+def test_the_free_text_assessment_and_narration_keep_the_full_client(game, at_a_gamble):
+    """隨口應對的評分與潤色都在鎖外：拿 game.client 本身（Config.ollama_timeout），不是鎖內那個 15 秒的短複本。"""
+    seen = []
+
+    def assess(client, event, text):
+        seen.append(("assess", client))
+        return 85
+
+    def narrate(client, event, text, success, effect_text):
+        seen.append(("narrate", client))
+        return ""
+
+    game.rng = random.Random(0)
+    with mock.patch.object(server.event_llm, "assess_event_success_rate", side_effect=assess), \
+            mock.patch.object(server.event_llm, "narrate_event_gamble", side_effect=narrate):
+        server.answer_event(game, "大喊官兵來了")
+    assert [kind for kind, _ in seen] == ["assess", "narrate"]
+    assert all(client is game.client for _, client in seen)
+    assert game.client.timeout == server.CONTENT.config.ollama_timeout > server.CONTENT.config.in_lock_model_timeout
 
 
 def test_answering_does_nothing_when_the_event_was_dealt_with_meanwhile(game, at_a_gamble):
