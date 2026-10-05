@@ -1093,6 +1093,52 @@ def test_the_map_offers_walking_hurrying_and_dashing(game):
     assert here["travel"] is None
 
 
+def test_a_pending_event_blocks_the_map_travel_button_and_flags_the_way_back(game):
+    """FB-063：事件沒選完，輿圖那顆灰的按鈕寫出是哪一則（「先回江湖頁處理「…」」），並帶 to_jianghu：頁面照它多給一顆「回江湖」，
+    不去解析中文；沒被事件擋的按鈕沒有這個旗標。"""
+    pending = server.CONTENT.events[next(iter(server.CONTENT.events))]
+    game.state.pending_event = pending.id
+    view = server.look(game, lambda g: server.map_view(g, "situation", "yingshui"))
+    (blocked,) = view["travel"]
+    assert blocked["enabled"] is False and blocked["label"] == f"先回江湖頁處理「{pending.title}」"
+    assert blocked["to_jianghu"] is True
+    game.state.pending_event = None
+    walk, hurry, dash = server.look(game, lambda g: server.map_view(g, "situation", "yingshui"))["travel"]
+    assert [o["to_jianghu"] for o in (walk, hurry, dash)] == [False, False, False]
+    game.state.player.busy_until = game.state.world.time + 3600  # 閉關中：也不能出發，但那不是回江湖頁的事
+    (resting,) = server.look(game, lambda g: server.map_view(g, "situation", "yingshui"))["travel"]
+    assert resting["enabled"] is False and resting["to_jianghu"] is False
+
+
+def test_the_other_blocks_settled_on_the_jianghu_page_flag_the_way_back_too(game):
+    """FB-063 的餘項：交談中、（求見中）、投靠待確認、答話中也是要回江湖頁了結才解得開，輿圖的灰按鈕同樣帶 to_jianghu；
+    原因的話不變，閉關、打坐、賽季結束照舊沒有這個旗標。"""
+    p = game.state.player
+    content = server.CONTENT  # 進鎖時會清掉指向不存在東西的欄位，所以用真的人物、陣營與伏筆鏈（求見中要在有兩位人物的地方，atlas 的測試涵蓋）
+    for setup, reason, to_jianghu in (
+        (lambda: setattr(p, "pending_companion", next(iter(content.characters))), "交談中，先告辭才能安排前往", True),
+        (lambda: setattr(p, "pending_faction", content.scenario.factions[0].id), "投靠還沒決定，先決定再安排前往", True),
+        (lambda: setattr(p, "fs_asking", content.foreshadows.chains[0].id), "正在答話，先作罷才能安排前往", True),
+        (lambda: setattr(p, "resting_since", 0.0), "打坐中，先起身才能安排前往", False),
+    ):
+        p.pending_companion, p.picking_audience, p.pending_faction, p.fs_asking, p.resting_since = None, False, None, None, None
+        setup()
+        (blocked,) = server.look(game, lambda g: server.map_view(g, "situation", "yingshui"))["travel"]
+        assert (blocked["enabled"], blocked["label"], blocked["to_jianghu"]) == (False, reason, to_jianghu)
+
+
+def test_a_stale_travel_button_says_which_event_is_pending(client):
+    """打開輿圖之後才冒出事件、按了舊的按鈕：留在輿圖，寫出原因，回傳的輿圖也帶 to_jianghu（FB-063）。"""
+    _player(client)
+    game = server.game_for("沈青衫")
+    pending = server.CONTENT.events[next(iter(server.CONTENT.events))]
+    game.state.pending_event = pending.id
+    open_characters().save(game.state)  # 每次進鎖都從資料庫重讀角色，只改記憶體的話請求看不到
+    out = client.post("/api/travel", json={"place": "yingshui"}).json()
+    assert out["arrived"] is False and out["reason"] == f"先回江湖頁處理「{pending.title}」"
+    assert out["map"]["travel"][0]["to_jianghu"] is True
+
+
 def test_travel_dashes_when_asked(client):
     _player(client)
     game = server.game_for("沈青衫")

@@ -17,10 +17,11 @@ from pydantic import BaseModel, ValidationError
 
 from .check_lines import BUCKET_KEYS
 from .companion_agent import DIALOGUE_TAGS
+from .front_lines import BAND_KEYS, GEJU_KEYS
 from .materials import TIER_NAMES
 from .models import (
     FRONT_KEY, ROADS, STATS, BattleDef, CharacterDef, Condition, Config, Content, CraftNames, Effect, Event, FigureDef,
-    CheckLines, FollowerDef, Foreshadows, InsightDef, Location, OrdersContent, PromotionDef,
+    CheckLines, FollowerDef, Foreshadows, FrontLines, InsightDef, Location, OrdersContent, PromotionDef,
     MapLayout, Material, RoadSight, Scenario, Sect, SimRumor, SkillDef, Squad, TimetableEvent, Tutorial,
 )
 from .naming import name_problem
@@ -66,6 +67,7 @@ def load_content(root: Path, profile: str | None = None) -> Content:
         materials=_index(Material, _read(root / "materials.json")),
         craft_names=CraftNames(**_read(root / "craft_names.json")),
         check_lines=_check_lines(root / "check_lines.json"),
+        front_lines=_front_lines(root / "front_lines.json"),
         banned_names=_read(root / "banned_names.json"),
         sects=_index(Sect, _read(root / "sects.json")),
         characters=_index(CharacterDef, _read(root / "characters.json")),
@@ -174,6 +176,19 @@ def _check_lines(path: Path) -> CheckLines:
         raise ContentError(f"check_lines.json：{e}") from e
 
 
+def _front_lines(path: Path) -> FrontLines:
+    """content/front_lines.json（FB-064，戰況變化的說法）：必備的檔；找不到、不是合法的 JSON、欄位寫錯都改報
+    ContentError 並指出是這個檔（跟 check_lines.json 一樣）。"""
+    if not path.exists():
+        raise ContentError(f"front_lines.json：找不到檔案（應該在 {path}）")
+    try:
+        return FrontLines(**_read(path))
+    except json.JSONDecodeError as e:
+        raise ContentError(f"front_lines.json：不是合法的 JSON：{e}") from e
+    except (ValidationError, TypeError) as e:
+        raise ContentError(f"front_lines.json：{e}") from e
+
+
 def _build(model, raw: dict):
     """建立一筆有 id 的內容；欄位錯誤時改報 ContentError，並指出是哪一筆。"""
     try:
@@ -251,6 +266,43 @@ def check_check_lines(c: Content, need) -> None:
         for bucket, pool in buckets.items():
             need(bucket in BUCKET_KEYS, f"check_lines.by_stat.{stat}：不認得的段位 {bucket}（只有 {'、'.join(BUCKET_KEYS)}）")
             check_pool(f"check_lines.by_stat.{stat}.{bucket}", pool)
+
+
+def check_front_lines(c: Content, need) -> None:
+    """戰況變化的說法（content/front_lines.json，FB-064），照 check_lines 的標準：generic 三段（front_lines.BANDS）一段都不能少、
+    不能多出不認得的段；各陣營自己的說法（by_side）只能寫存在的陣營與段、可以只寫其中幾段；割據要有漲與落兩組；
+    sides 的陣營名也要是存在的陣營。每一句、每個陣營名都不能是空的、只用繁體中文、不能寫數字或百分比（畫面上只有一句話、不攤出數字）。"""
+    lines = c.front_lines
+    factions = {f.id for f in c.scenario.factions}
+
+    def check_text(where: str, text: str) -> None:
+        need(bool(text.strip()), f"{where}：有空白的句子")
+        need(to_traditional(text) == text, f"{where}：文字只能用繁體中文（「{text[:12]}」）")
+        need(not NUMBER_IN_TEXT.search(text), f"{where}：不能寫數字或百分比，戰況變化只用一句話說（「{text[:12]}」）")
+
+    def check_pool(where: str, pool: list[str]) -> None:
+        need(bool(pool), f"{where}：不能是空的")
+        for text in pool:
+            check_text(where, text)
+
+    for band in BAND_KEYS:
+        need(band in lines.generic, f"front_lines.generic 缺少 {band} 那一段")
+    for band, pool in lines.generic.items():
+        need(band in BAND_KEYS, f"front_lines.generic：不認得的段 {band}（只有 {'、'.join(BAND_KEYS)}）")
+        check_pool(f"front_lines.generic.{band}", pool)
+    for side, name in lines.sides.items():
+        need(side in factions, f"front_lines.sides：不存在的陣營 {side}")
+        check_text(f"front_lines.sides.{side}", name)
+    for side, bands in lines.by_side.items():
+        need(side in factions, f"front_lines.by_side：不存在的陣營 {side}")
+        for band, pool in bands.items():
+            need(band in BAND_KEYS, f"front_lines.by_side.{side}：不認得的段 {band}（只有 {'、'.join(BAND_KEYS)}）")
+            check_pool(f"front_lines.by_side.{side}.{band}", pool)
+    for key in GEJU_KEYS:
+        need(key in lines.geju, f"front_lines.geju 缺少 {key}（漲 up、落 down 各一組）")
+    for key, pool in lines.geju.items():
+        need(key in GEJU_KEYS, f"front_lines.geju：不認得的鍵 {key}（只有 {'、'.join(GEJU_KEYS)}）")
+        check_pool(f"front_lines.geju.{key}", pool)
 
 
 def check_timetable(c: Content, need, known, front_ids: list[str], trend_ids: set[str]) -> None:
@@ -880,6 +932,7 @@ def validate(c: Content) -> None:
     for word in c.banned_names:
         need(bool(word.strip()), "banned_names 裡有空字串")
     check_check_lines(c, need)
+    check_front_lines(c, need)
     # 沒寫 drops 的對手走 materials.py 依難度的預設掉落表，所以每一階都得有素材可挑。
     for tier in sorted(TIER_NAMES):
         need(

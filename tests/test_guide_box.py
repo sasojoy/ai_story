@@ -15,6 +15,10 @@ def _box(text, done=(), end=False):
     return {"speaker": "說書人", "text": text, "done": list(done), "end": end}
 
 
+def pending_line(title):
+    return f"先把眼前的「{title}」了結"
+
+
 def _explore_event(game):
     game.content.config.explore_mix = [ExploreMix(kind="wild", tags=[], weights={"event": 1})]
 
@@ -40,9 +44,42 @@ def test_finishing_a_step_goes_to_the_box_not_the_latest_card(game):
     assert (entry.lines, entry.changes) == ([], [])
     assert entry.guide == ["✔ 引導完成", "銀兩 +5", f"【說書人】{STEP_TWO}"]
     assert "引導完成" not in journal.card_html(entry) and "銀兩 +5" not in journal.card_html(entry)
-    assert game.guide_box() == _box(STEP_TWO, ["✔ 引導完成", "銀兩 +5"])
+    title = game.content.events[game.state.pending_event].title
+    assert game.guide_box() == _box(pending_line(title), ["✔ 引導完成", "銀兩 +5"])  # 眼前還有事件：先了結它（FB-063）
     game.choose("choice:1")
     assert game.guide_box() == _box(STEP_TWO)
+
+
+def test_a_pending_event_replaces_the_step_text_until_it_is_settled(game):
+    """FB-063：事件還沒了結時不推教學那一步（叫人往郊野走、事件卻擋著路），框上寫「先把眼前的「…」了結」；
+    事件了結後是原來那一步，步驟本身沒有動。每一步都一樣，不只是叫人出發的那幾步。"""
+    p = game.state.player
+    for step, text in enumerate((STEP_ONE, STEP_TWO, STEP_THREE)):
+        p.tutorial_step = step
+        game.state.pending_event = "drunk"
+        assert game.guide_box() == _box(pending_line("醉漢"))  # 說書人還是說書人
+        assert p.tutorial_step == step
+        game.state.pending_event = None
+        assert game.guide_box() == _box(text)
+
+
+def test_a_chained_event_names_the_step_that_is_pending_now_in_the_box(game):
+    """next_event 接下去的下一段：框上寫現在待處理的那一則。"""
+    game._present(game.content.events["chain_a"])
+    assert game.guide_box()["text"] == pending_line("跟蹤")
+    game.choose("choice:0")
+    assert game.state.pending_event == "chain_b"
+    assert game.guide_box()["text"] == pending_line("倉庫")
+    game.choose("choice:0")
+    assert game.guide_box()["text"] == STEP_ONE
+
+
+def test_the_outro_is_shown_even_while_an_event_is_pending(game):
+    """結語（end）照舊：全部做完了，沒有「下一步」可以擋。"""
+    game.state.player.tutorial_step = 3
+    game.state.player.guide_outro = True
+    game.state.pending_event = "drunk"
+    assert game.guide_box() == _box(OUTRO, end=True)
 
 
 def test_finishing_the_last_step_shows_the_outro_until_acknowledged(game):

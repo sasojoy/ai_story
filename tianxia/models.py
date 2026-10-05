@@ -143,6 +143,20 @@ class CheckLines(_Strict):
     by_stat: dict[str, dict[str, list[str]]] = Field(default_factory=dict)
 
 
+class FrontLines(_Strict):
+    """戰況變化的說法（content/front_lines.json，FB-064）。第一季規則開著時，推動戰線的那一行寫成一句話：
+    「{戰線}：{陣營}{句子}」，例「潁川汝南：官軍步步進逼」，不寫數字。句子分三段（tianxia/front_lines.py 的 BANDS：
+    1、2-3、4+，變動的大小），一段可以寫好幾句，同一則紀錄永遠挑同一句。
+    sides：陣營 id → 寫在句子前面的名字（黃巾軍簡稱「黃巾」）；沒寫的陣營用劇本裡的陣營名。
+    generic：每一段都要有，兩個陣營共用；by_side：某一方自己的說法（陣營 id → 段 → 句子），可以只寫其中幾段，沒寫的退回 generic。
+    geju：豪強割據漲（up）、落（down）的整句話，已經有「豪強」兩字，不再接陣營名、也不冠戰線名。"""
+
+    sides: dict[str, str] = Field(default_factory=dict)
+    generic: dict[str, list[str]]
+    by_side: dict[str, dict[str, list[str]]] = Field(default_factory=dict)
+    geju: dict[str, list[str]]
+
+
 class Choice(_Strict):
     text: str
     condition: Condition = Field(default_factory=Condition)
@@ -1307,6 +1321,7 @@ class Content(_Strict):
     materials: dict[str, Material]
     craft_names: CraftNames
     check_lines: CheckLines  # 檢定選項上的心裡話（content/check_lines.json）
+    front_lines: FrontLines  # 戰況變化的說法（content/front_lines.json，FB-064）
     banned_names: list[str]  # 合成、合併命名的禁用詞（原創原則：不用金庸等作品的專有名詞）
     sects: dict[str, Sect]
     characters: dict[str, CharacterDef]

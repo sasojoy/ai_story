@@ -345,9 +345,12 @@ def map_view(game: Game, layer: str, selected: str | None) -> dict:
         "selected": selected,
         "here": game.state.player.location,
         "detail": md(game.place_detail(selected)),
-        # 步行、趕路、疾行三個按鈕（照 atlas.MODES 的順序）；就在這裡時是 None
-        "travel": [{"mode": o.mode, "label": o.label, "enabled": o.enabled} for o in game.travel_options(selected) or []]
-        or None,
+        # 步行、趕路、疾行三個按鈕（照 atlas.MODES 的順序）；就在這裡時是 None。被待處理的事件擋著時只有一顆灰的、
+        # label 寫是哪一則，to_jianghu 為真：頁面在旁邊多給一顆「回江湖」（FB-063）
+        "travel": [
+            {"mode": o.mode, "label": o.label, "enabled": o.enabled, "to_jianghu": o.to_jianghu}
+            for o in game.travel_options(selected) or []
+        ] or None,
     }
 
 
