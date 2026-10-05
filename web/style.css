@@ -261,6 +261,10 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .battle-card h3 { margin: 0 0 1px; font-size: 16px; line-height: 1.3; }
 .battle-card p { margin: 3px 0; }
 .battle-card .tx-extra { margin: 3px 0 0; padding: 0 10px; line-height: 1.45; }
+/* 戰鬥卡片底下聽來的那一句「你聽到一件事：…」（FB-074；伺服器標 tx-hearsay，app.js 的 decorateHearsay 讓它能點）：
+   常有兩三行高、多撐 46～66px，收成一行、放不下加「…」，點了看全文。點擊範圍上下各多 7px、用負的 margin 吃回去，不多撐那一行 */
+.battle-card .tx-extra .tx-hearsay { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; padding: 7px 0; margin: -5px 0; }
+.battle-card .tx-extra .tx-hearsay.open { white-space: normal; overflow: visible; text-overflow: clip; }
 /* 「看完整戰報 ›」在「過程」那一行的中間（app.js 的 roundsFold）：不撐高那一行，點擊範圍上下各多 8px（約 38px 高）。
    沒有「過程」那一行的卡片（全服決戰、舊戰報）才接在卡片最後一段的句尾（withReportLink）：行內、不撐高那一行；
    放不下時整顆換到下一行（inline-block） */

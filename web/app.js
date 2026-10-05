@@ -58,6 +58,7 @@
     nowOpen: null, // 江湖頁「剛剛」展開的那一則（記內容本身）；換成新的一則就收回（A4）
     roundsOpen: null, // 江湖頁戰鬥卡片「過程」展開的那一場（戰報流水號）；換成新的一場就收回（計畫三 G6）
     peekOpen: null, // 江湖頁那一排小標（態勢｜大事｜主線）展開著的那一塊：{ id, week }；點同一個收起，換週就不再對得上（FB-039、正式版辛）
+    hearOpen: null, // 戰鬥卡片底下聽來的那一句展開著的那一場（卡片的戰報流水號）；換成下一場就收回（FB-074）
     boardSeen: null, // 這個名號看過的本週大事：{ owner, week, count }；記憶體裡一份，localStorage 另存一份（見 boardSeen）
     ordersShut: null, // 江湖頁「本週軍令」收起來的那一週；換週就重新展開（計畫 T6）
     sceneOpen: false, // 在路上時場景那段說明展開著嗎（預設只露兩行，FB-055）；下了路就清掉
@@ -310,6 +311,27 @@
     afterPage();
   }
 
+  // 戰鬥卡片底下伏筆聽來的那一句（FB-074）：常有兩三行高、多撐 46～66px，新角色前七場遊歷有三場看到。
+  // 伺服器在那一行標了 tx-hearsay（journal._line_class），這裡讓它變成一顆按鈕：收著是一行、放不下加「…」（style.css），
+  // 點了看全文。展開記在 S.hearOpen（記的是哪一場的卡片），輪詢重畫不會把它收回去，換了下一場就收著
+  function decorateHearsay() {
+    document.querySelectorAll(".battle-card .tx-hearsay").forEach((el) => {
+      const open = S.hearOpen != null && S.hearOpen === S.main.card_id;
+      el.classList.toggle("open", open);
+      el.setAttribute("data-act", "hear-more");
+      el.setAttribute("role", "button");
+      el.setAttribute("tabindex", "0");
+      el.setAttribute("aria-expanded", String(open));
+    });
+  }
+
+  function hearToggle(el) {
+    const open = !el.classList.contains("open");
+    S.hearOpen = open ? S.main.card_id : null;
+    el.classList.toggle("open", open);
+    el.setAttribute("aria-expanded", String(open));
+  }
+
   function afterPage() {
     if (S.tab === "jianghu") {
       // 「剛剛」收著卻其實放得下：拿掉底下的淡出與「展開全文」（A4）
@@ -317,6 +339,7 @@
       const body = now && now.querySelector(".tx-now");
       if (body && body.scrollHeight <= body.clientHeight + 1) now.classList.replace("clamp", "fits");
       fitFirstRound(); // 戰鬥卡片收著的第一回合最多兩行，放不下就只留數字（PM 2026-10-05）
+      decorateHearsay(); // 戰鬥卡片底下聽來的那一句收成一行（FB-074）
     }
     if (S.tab === "map") mapReady();
   }
@@ -1657,6 +1680,7 @@
         case "guide-more": S.guideFull = S.guideFull === (S.main.guide && S.main.guide.text) ? null : S.main.guide && S.main.guide.text; renderPage(); break;
         case "scene-more": S.sceneOpen = !S.sceneOpen; renderPage(); break;
         case "peek": peekTap(el.dataset.id); break; // 江湖頁最上面那一排小標：只換那一塊，「剛剛」不會重播
+        case "hear-more": hearToggle(el); break; // 戰鬥卡片底下聽來的那一句：原地展開／收起，不重畫
         case "hint-more": S.hintOpen = !S.hintOpen; renderTop(); break; // 狀態列只重畫它自己（江湖頁不動，「剛剛」不會重播）
         case "guide-ack": await doMain("guide_ack"); break;
         case "allocate": await doMain("allocate", { stat: el.dataset.stat }); break; // 升級的屬性點加到一項（狀態列展開後的「＋臂力」）
@@ -1807,6 +1831,10 @@
     if ((ev.key === "Enter" || ev.key === " ") && ev.target instanceof Element && ev.target.matches('.who[data-act="toggle-more"]')) {
       ev.preventDefault();
       toggleMore(true);
+    }
+    if ((ev.key === "Enter" || ev.key === " ") && ev.target instanceof Element && ev.target.matches('.tx-hearsay[data-act="hear-more"]')) {
+      ev.preventDefault();
+      hearToggle(ev.target);
     }
   });
 
