@@ -1,7 +1,7 @@
 """拍《天下大勢》網頁介面（server.py + web/）的手機截圖：照真實操作一步一步拍，輸出 <ID>.jpg 與 manifest.json。
 
 每一張都是「下一步要按的東西已經框起來」的畫面（朱紅外框＋步驟編號），每段流程最後再拍一張結果。
-用途是跟企劃者一頁一頁討論介面，不是測試：遊戲有亂數，每次重拍的事件、戰果、素材都可能不同。
+用途是跟企劃者一頁一頁討論介面，不是測試：遊戲有亂數，每次重拍的事件、戰果、悟到的意境都可能不同。
 
 準備（只要做一次）：
   1. 另開一個虛擬環境裝 playwright（不要裝進專案的 .venv）：
@@ -20,7 +20,7 @@
   - --port：沒設 TIANXIA_PROFILE（預設設定、beta 規則），拍 G A B J C E D F S 這幾段；
   - --port + 1：TIANXIA_PROFILE=weekend（第一季濃縮版），拍 W 那一段（週曆、本週大事、戰況、投靠、軍令、伏筆物品、收季結算）。
 自己啟動、拍完就關掉（連同子行程）。管理者與玩家的密碼只寫在 --work 裡，不印在畫面上、不進輸出資料夾。
-不要用 7860～7871（開發與試玩伺服器在用）。首次煉成的配方要等本機模型取名，最多等 --llm-wait 秒；
+不要用 7860～7871（開發與試玩伺服器在用）。首次合成的配方要等本機模型取名，最多等 --llm-wait 秒；
 本機模型連不上時很快就用退路的名字出爐，所以「爐火正旺」那一張是把煉製的回應攔住幾秒拍的（畫面就是等待中的樣子）。
 輸出資料夾裡舊的截圖會先刪掉；manifest.json 裡標了 "external": true 的流程（不是這支腳本拍的）保留不動。
 """
@@ -50,7 +50,6 @@ RESERVED_PORTS = range(7860, 7872)
 ADMIN_ACCOUNT = "webcap_admin"
 ADMIN_NAME = "Rayal"
 PLAYER_NAME = "試劍客"
-SKILL_NAME = "回風掌"
 WILDS = "yingchuan_wilds"  # 潁川郊野：離起點最近、有敵人的地點
 JOIN_AT = "changshe"  # 第一季：官軍的投靠地點之一（離起點最近）
 JOIN_FACTION = "guan"
@@ -254,7 +253,7 @@ def scroll_to(page, loc, top: int = 150) -> None:
 
 
 def api(page, path: str, body: dict | None = None) -> dict:
-    """用這一頁的登入狀態直接打 API（不拍、不畫：湊素材、跑伏筆、快轉用）。之後要 reload 畫面才會跟上。"""
+    """用這一頁的登入狀態直接打 API（不拍、不畫：湊意境、跑伏筆、快轉用）。之後要 reload 畫面才會跟上。"""
     return page.evaluate(
         """([p, b]) => fetch(p, b === null ? {credentials: 'same-origin'} : {method: 'POST', credentials: 'same-origin',
              headers: {'Content-Type': 'application/json'}, body: JSON.stringify(b)}).then(r => r.json())""",
@@ -495,26 +494,32 @@ def flow_practice(sh: Shooter, page) -> None:
     sh.shot("江湖頁", "按底下的「修練」分頁", tab)
     tap(page, tab, "/api/menxia")
     to_top(page)
-    sh.shot("修練頁剛打開（武學／內功切換、鍛鍊、療傷、身上的功法）", "往下捲到「自創功法」")
-    box = page.locator('#create-skill input[name="name"]')
-    box.fill(SKILL_NAME)
-    box.blur()
-    sh.shot(f"自創功法：已輸入「{SKILL_NAME}」", "按「自創」", page.locator('#create-skill button[type="submit"]'))
-    tap(page, page.locator('#create-skill button[type="submit"]'), "/api/menxia/create")
-    to_top(page)
     practice = page.locator('button[data-op="practice"]:not([disabled])')
-    sh.shot("自創的結果寫在最上面；鍛鍊按鈕亮起來", "按「鍛鍊武學」", practice)
+    sh.shot("修練頁剛打開（武學／內功切換、「練成」鈕上寫著下一成要的心得、療傷、身上的功法）",
+            "按「練成武學」", practice if has(practice) else None)
     tap(page, practice, "/api/menxia/practice")
-    for _ in range(14):  # 連按到第十成，中間不拍
+    for _ in range(14):  # 心得付得起就連按下去，中間不拍（開局只有一點心得，練不到第十成）
+        view = api(page, "/api/menxia")
+        card = next((c for c in view["slot_cards"] if c["kind"] == "武學"), None)
+        if card is None or card["price"] is None or card["price"] > view["xinde"]:
+            break
         btn = page.locator('button[data-op="practice"]:not([disabled])')
         if not has(btn):
             break
         tap(page, btn, "/api/menxia/practice", settle=400)
     to_top(page)
-    sh.shot("連按「鍛鍊武學」練到第十成之後的修練頁（鍛鍊鈕變灰、改寫「已練到第十成」；功法卡上十顆圓點全滿）", "往下捲到底")
+    sh.shot("連按「練成武學」到心得花完之後的修練頁（心得少了，功法卡上的圓點多亮幾顆）", "往下捲到「武學」清單")
+    arts = page.locator('#page button.art')
+    if has(arts):
+        scroll_to(page, arts, 150)
+        sh.shot("武學清單：每門一列（身上的前面標◆），寫著品質、屬性、第幾成", "點開第一門", arts)
+        tap(page, arts, settle=500)
+        sh.shot("點開一門武學：功法卡、「修練」「改練這一門」「熔煉」三個按鈕與各自的說明（要勾「服下破境丹」得先撿到丹、而且下一步是衝絕學）")
+    else:
+        sh.miss("武學清單（身上沒有武學）")
     page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
     page.wait_for_timeout(400)
-    sh.shot("修練頁下半：自創欄改口（已經有武學，想換去煉製或改練）、閉關、功法庫、門下的「本人」角色卡")
+    sh.shot("修練頁下半：閉關、悟得的意境（可以化成心得）、門下的「本人」角色卡")
 
 
 def flow_map(sh: Shooter, page) -> bool:
@@ -576,75 +581,72 @@ def flow_fight(sh: Shooter, page) -> None:
         sh.shot("遊歷的結果")
 
 
-def gather_materials(page, want: int = 2, budget: int = 10) -> int:
-    """湊到 want 個素材（不拍）：先遊歷，沒得遊歷就探索。回傳手上素材總數。"""
+def gather_insights(page, want: int = 1, budget: int = 12) -> int:
+    """悟到 want 個意境（不拍）：探索最容易有所領悟，探索不了就遊歷。回傳手上意境數。"""
     for _ in range(budget):
-        bag = api(page, "/api/menxia")
-        total = sum(m["count"] for m in bag["materials"])
-        if total >= want:
-            return total
+        held = len(api(page, "/api/menxia")["insights"])
+        if held >= want:
+            return held
         clear_events(page)
-        act = option(page, "act:train")
+        act = option(page, "act:explore")
         if not has(act):
-            act = option(page, "act:explore")
+            act = option(page, "act:train")
         if not has(act):
-            return total
+            return held
         tap(page, act, "/api/choose", settle=400)
         clear_events(page)
-    bag = api(page, "/api/menxia")
-    return sum(m["count"] for m in bag["materials"])
+    return len(api(page, "/api/menxia")["insights"])
 
 
 def flow_craft(sh: Shooter, page, llm_wait: int) -> None:
     sh.flow("D", "煉製")
-    total = gather_materials(page)
+    held = gather_insights(page)
     clear_events(page)
     to_top(page)
     tab = page.locator('.tabs button[data-tab="craft"]')
-    sh.shot("江湖頁（先遊歷、探索湊了幾樣素材）", "按底下的「煉製」分頁", tab)
+    sh.shot("江湖頁（先探索、遊歷悟到一個意境）", "按底下的「煉製」分頁", tab)
     tap(page, tab, "/api/menxia", settle=1200)
     to_top(page)
-    if total < 2:
-        sh.shot("煉製頁（素材不夠，開爐是灰的）")
-        sh.miss(f"開爐（素材只有 {total} 個）")
+    arts = page.locator('.chips button.chip[data-type="art"]:not([disabled])')
+    if held < 1 or not has(arts):
+        sh.shot("煉製頁（還沒悟到意境，開爐是灰的）")
+        sh.miss(f"開爐（意境只有 {held} 個）")
         return
-    chips = page.locator(".chips button.chip:not([disabled])")
-    sh.shot("煉製頁：上面是太極火爐（左右兩格放素材），底下是成本說明與背包裡的素材", "點一樣素材放進爐裡", chips)
-    first_id = chips.first.get_attribute("data-id")
-    tap(page, chips, "/api/craft_line", settle=600)
-    other = page.locator(f'.chips button.chip:not([disabled]):not([data-id="{first_id}"])')
-    pick = other if has(other) else page.locator(".chips button.chip:not([disabled])")
+    sh.shot("煉製頁：上面是太極火爐（左右兩格放一門武學與一個意境），底下是成本說明、武學與意境的清單、背包",
+            "點一門武學放進爐裡", arts)
+    tap(page, arts, "/api/forge_line", settle=600)
     to_top(page)
-    sh.shot("放進一樣之後：爐子左邊那一格填上了，底下那樣素材少一個",
-            "再點另一樣素材" if has(other) else "背包裡只有這一種，同一樣再點一次", pick)
-    tap(page, pick, "/api/craft_line", settle=600)
+    ins = page.locator('.chips button.chip[data-type="ins"]:not([disabled])')
+    sh.shot("放進武學之後：爐子左邊那一格填上了，那門武學在清單上變灰", "再點一個意境", ins)
+    tap(page, ins, "/api/forge_line", settle=600)
     to_top(page)
     forge = page.locator("#forge")
-    sh.shot("兩格都放好了：火舌竄高、太極轉快，「開爐煉製」亮起來（點爐身也能開爐）", "按「開爐煉製」", forge)
+    sh.shot("兩格都放好了：火舌竄高、太極轉快，「開爐」亮起來（成本說明寫著合成要的心得；點爐身也能開爐）", "按「開爐」", forge)
     # 本機模型連不上時退路的名字一下就出爐：把回應攔住幾秒，拍等待中的畫面（首次發現的配方實際要等模型取名）
     def hold(route):
         time.sleep(4)
         route.continue_()
 
-    page.route("**/api/menxia/craft", hold)
+    page.route("**/api/menxia/forge", hold)
     started = time.time()
     try:
-        with page.expect_response(api_path("/api/menxia/craft"), timeout=llm_wait * 1000 + 10_000):
+        with page.expect_response(api_path("/api/menxia/forge"), timeout=llm_wait * 1000 + 10_000):
             forge.click()
             page.wait_for_timeout(1500)
             if page.locator("#forge.forging").count():
                 to_top(page)
-                sh.shot("爐火正旺：等結果的時候整座爐子晃動，按鈕寫「爐火正旺…」，最上面說首次煉成要等取名",
-                        note="這一張是把煉製的回應攔住幾秒拍的：本機模型沒開時，退路的名字一下就出爐，平常看不到這個畫面這麼久")
+                sh.shot("爐火正旺：等結果的時候整座爐子晃動，按鈕寫「爐火正旺…」，最上面說首次合成要等取名",
+                        note="這一張是把合成的回應攔住幾秒拍的：本機模型沒開時，退路的名字一下就出爐，平常看不到這個畫面這麼久")
     except PWTimeout:
-        sh.miss(f"煉製結果（等了 {llm_wait} 秒，本機模型還沒取好名字）")
-        page.unroute("**/api/menxia/craft")
+        sh.miss(f"合成結果（等了 {llm_wait} 秒，本機模型還沒取好名字）")
+        page.unroute("**/api/menxia/forge")
         return
-    page.unroute("**/api/menxia/craft")
+    page.unroute("**/api/menxia/forge")
     waited = round(time.time() - started)
     page.wait_for_timeout(1000)
     to_top(page)
-    sh.shot("煉製的結果寫在最上面，爐子空了", note=f"本機模型沒開，用的是退路的名字；連同攔住的 4 秒，從按下到出爐約 {waited} 秒")
+    sh.shot("合成的結果寫在最上面（新武學從下品練起），爐子空了",
+            note=f"本機模型沒開，用的是退路的名字；連同攔住的 4 秒，從按下到出爐約 {waited} 秒")
 
 
 def flow_news(sh: Shooter, page) -> None:
@@ -837,7 +839,7 @@ def flow_season_one(sh: Shooter, browser, srv: Server, ctx_opts: dict) -> None:
     clues = page.locator("#page .clues")
     if held and has(clues):
         to_top(page)
-        sh.shot("（中間到潁川郊野探索，碰上「河灘蘆葦」割了一捆）煉製頁：素材下面多一塊「伏筆物品」，只有名字與數量",
+        sh.shot("（中間到潁川郊野探索，碰上「河灘蘆葦」割了一捆）煉製頁：意境清單下面多一塊「伏筆物品」，只有名字與數量",
                 note="伏筆物品是官軍才碰得到的事件給的；這一張是探索到拿到為止才拍")
     else:
         sh.miss("伏筆物品（探索了好幾回都沒碰上「河灘蘆葦」）")
