@@ -1,0 +1,259 @@
+[
+  {
+    "id": "promo_guan_2",
+    "title": "晉升・長社營中",
+    "actions": [],
+    "text": "長社營中。皇甫嵩不問你殺過幾個賊，只指著轅門外跪著的一個鄉勇：「他偷了百姓一隻雞。往後你就是屯長了，你怎麼處置？」",
+    "choices": [
+      {
+        "text": "「按軍法，斬。」",
+        "effect": {
+          "text": "「軍法是要守的，但為一隻雞斬一個兵，下一仗誰替你衝？」",
+          "promote": 2,
+          "followers": [
+            "follower_guan_spear",
+            "follower_guan_crossbow"
+          ],
+          "affinity": {
+            "huangfusong": 3
+          }
+        }
+      },
+      {
+        "text": "「杖二十，賠雞，再罰他替那戶人家挑一個月的水。」",
+        "effect": {
+          "text": "皇甫嵩微微一笑。",
+          "promote": 2,
+          "followers": [
+            "follower_guan_spear",
+            "follower_guan_crossbow"
+          ],
+          "affinity": {
+            "huangfusong": 10
+          }
+        }
+      },
+      {
+        "text": "「一隻雞而已，放了吧。」",
+        "effect": {
+          "text": "「營規鬆一寸，賊就近一丈。」",
+          "promote": 2,
+          "followers": [
+            "follower_guan_spear",
+            "follower_guan_crossbow"
+          ],
+          "affinity": {
+            "huangfusong": -3
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "promo_guan_2_handoff",
+    "title": "晉升・長社營中",
+    "actions": [],
+    "text": "長社營中。朱儁不問你殺過幾個賊，只指著轅門外跪著的一個鄉勇：「他偷了百姓一隻雞。往後你就是屯長了，你怎麼處置？」",
+    "choices": [
+      {
+        "text": "「按軍法，斬。」",
+        "effect": {
+          "text": "「軍法如此。不過我們寒門出身的都知道，一隻雞對那戶人家是什麼。」",
+          "promote": 2,
+          "followers": [
+            "follower_guan_spear",
+            "follower_guan_crossbow"
+          ],
+          "affinity": {
+            "zhujun": 3
+          }
+        }
+      },
+      {
+        "text": "「杖二十，賠雞，再罰他替那戶人家挑一個月的水。」",
+        "effect": {
+          "text": "朱儁點頭：「罰得實在。」",
+          "promote": 2,
+          "followers": [
+            "follower_guan_spear",
+            "follower_guan_crossbow"
+          ],
+          "affinity": {
+            "zhujun": 10
+          }
+        }
+      },
+      {
+        "text": "「一隻雞而已，放了吧。」",
+        "effect": {
+          "text": "「今天放一隻雞，明天就是一頭牛。」",
+          "promote": 2,
+          "followers": [
+            "follower_guan_spear",
+            "follower_guan_crossbow"
+          ],
+          "affinity": {
+            "zhujun": -3
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "promo_huang_2",
+    "title": "晉升・夜劫官糧",
+    "actions": [],
+    "text": "波才把你叫到帳前：「聽說你辦事牢靠。今夜有一支官糧從洛陽來，跟我走一趟。」夜裡，糧車陷在泥裡，押糧的郡兵縮成一團，車上還有幾個搭便車逃難的婦孺。",
+    "choices": [
+      {
+        "text": "「糧全搶，人一個不留。」",
+        "effect": {
+          "text": "「狠。不過殺光了，下次誰還敢走這條路讓我們搶？」",
+          "promote": 2,
+          "followers": [
+            "follower_huang_believer",
+            "follower_huang_strongman"
+          ],
+          "affinity": {
+            "bocai": 3
+          },
+          "stats": {
+            "evil": 2
+          }
+        }
+      },
+      {
+        "text": "「搶糧，放人走，把郡兵的刀收了。」",
+        "effect": {
+          "text": "波才咧嘴一笑：「會算。」",
+          "promote": 2,
+          "followers": [
+            "follower_huang_believer",
+            "follower_huang_strongman"
+          ],
+          "affinity": {
+            "bocai": 10
+          }
+        }
+      },
+      {
+        "text": "「把婦孺帶回營裡，給口飯吃。」",
+        "effect": {
+          "text": "「你當這裡是善堂？」嘴上罵，還是讓人收了。",
+          "promote": 2,
+          "followers": [
+            "follower_huang_believer",
+            "follower_huang_strongman"
+          ],
+          "affinity": {
+            "bocai": 3
+          },
+          "stats": {
+            "good": 2
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "promo_huang_2_handoff",
+    "title": "晉升・夜劫官糧",
+    "actions": [],
+    "text": "彭脫把你叫到帳前：「波才大當家不在了，營裡的事我來管。聽說你辦事牢靠，今夜有一支官糧從洛陽來，跟我走一趟。」夜裡，糧車陷在泥裡，押糧的郡兵縮成一團，車上還有幾個搭便車逃難的婦孺。",
+    "choices": [
+      {
+        "text": "「糧全搶，人一個不留。」",
+        "effect": {
+          "text": "彭脫：「乾淨。」",
+          "promote": 2,
+          "followers": [
+            "follower_huang_believer",
+            "follower_huang_strongman"
+          ],
+          "stats": {
+            "evil": 2
+          }
+        }
+      },
+      {
+        "text": "「搶糧，放人走，把郡兵的刀收了。」",
+        "effect": {
+          "text": "「也好，留著他們傳話，說黃巾還在。」",
+          "promote": 2,
+          "followers": [
+            "follower_huang_believer",
+            "follower_huang_strongman"
+          ],
+          "stats": {
+            "fame": 1
+          }
+        }
+      },
+      {
+        "text": "「把婦孺帶回營裡，給口飯吃。」",
+        "effect": {
+          "text": "「多幾張嘴吃飯……罷了。」",
+          "promote": 2,
+          "followers": [
+            "follower_huang_believer",
+            "follower_huang_strongman"
+          ],
+          "stats": {
+            "good": 2
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "promo_haoqiang_2",
+    "title": "晉升・中山馬商",
+    "actions": [],
+    "text": "兩個風塵僕僕的中山商人攔住你。張世平打量你帶的人，蘇雙在一旁算盤打得劈啪響：「亂世裡，馬是賣不出去的，除非賣給要打仗的人。我們出錢，你招兵；將來你出息了，記得是誰先押在你身上。」",
+    "choices": [
+      {
+        "text": "「我收下，連本帶利會還。」",
+        "effect": {
+          "text": "張世平拱手：「爽快。」",
+          "promote": 2,
+          "followers": [
+            "follower_haoqiang_retainer",
+            "follower_haoqiang_buqu"
+          ],
+          "stats": {
+            "silver": 40
+          }
+        }
+      },
+      {
+        "text": "「錢不必，給我馬。」",
+        "effect": {
+          "text": "蘇雙牽來一匹中山馬：「腳力好，就是吃得多。」",
+          "promote": 2,
+          "followers": [
+            "follower_haoqiang_retainer",
+            "follower_haoqiang_buqu"
+          ],
+          "materials": {
+            "kuai_1": 2
+          }
+        }
+      },
+      {
+        "text": "「你們押錯人了，我只是替鄉里辦事。」",
+        "effect": {
+          "text": "蘇雙笑道：「押的就是你這句話。」",
+          "promote": 2,
+          "followers": [
+            "follower_haoqiang_retainer",
+            "follower_haoqiang_buqu"
+          ],
+          "stats": {
+            "silver": 20,
+            "fame": 1
+          }
+        }
+      }
+    ]
+  }
+]

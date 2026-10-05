@@ -1,0 +1,129 @@
+{
+  "templates": [
+    {
+      "kind": "defend", "side": "guan", "priority": 1,
+      "when": {"losing_by": 10, "or_enemy_siege": true},
+      "text": "{主將}傳令：{戰線}吃緊，各營嚴守，不得輕出。",
+      "personal": "duty", "quota_base": 900,
+      "effect": {"trend": 3, "halve_enemy_siege": true},
+      "faction_rumor": "{戰線}守住了，營寨一座也沒丟。",
+      "leak_rumor": "{戰線}守得很緊，對面幾次衝營都退了回去。"
+    },
+    {
+      "kind": "defend", "side": "huang", "priority": 1,
+      "when": {"losing_by": 10, "or_enemy_siege": true},
+      "text": "{戰線}的弟兄頂住！官軍來一個，咱們擋一個。",
+      "personal": "duty", "quota_base": 900,
+      "effect": {"trend": 3, "halve_enemy_siege": true},
+      "faction_rumor": "{戰線}守住了，營寨一座也沒丟。",
+      "leak_rumor": "{戰線}守得很緊，對面幾次衝營都退了回去。"
+    },
+    {
+      "kind": "intercept", "side": "guan", "priority": 2,
+      "when": {"event_within_weeks": 2},
+      "text": "探得黃巾的糧道經過{地點}，本週截斷它。",
+      "personal": "win", "quota_base": 600,
+      "effect": {"trend": 4, "event_mod": 0.05},
+      "faction_rumor": "{地點}的糧道斷了。",
+      "leak_rumor": "{地點}一帶的糧車這幾天一輛也沒過去。"
+    },
+    {
+      "kind": "intercept", "side": "huang", "priority": 2,
+      "when": {"event_within_weeks": 2},
+      "text": "官軍的糧車要從{地點}過。弟兄們，劫了它！",
+      "personal": "win", "quota_base": 600,
+      "effect": {"trend": 4, "event_mod": 0.05},
+      "faction_rumor": "{地點}的糧道斷了。",
+      "leak_rumor": "{地點}一帶的糧車這幾天一輛也沒過去。"
+    },
+    {
+      "kind": "escort", "side": "guan", "priority": 2,
+      "when": {"event_within_weeks": 2},
+      "text": "一批軍糧要從{起點}送到{終點}，各營派人沿途護送。",
+      "personal": "convoy", "quota_base": 600,
+      "effect": {"trend": 4, "event_mod": 0.05},
+      "faction_rumor": "這一批糧，一粒不少地送到了{終點}。",
+      "leak_rumor": "{起點}到{終點}的路上，這幾天全是押糧的人。"
+    },
+    {
+      "kind": "escort", "side": "huang", "priority": 2,
+      "when": {"event_within_weeks": 2},
+      "text": "南邊來的糧要從{起點}運到{終點}，路上別讓官軍劫了。",
+      "personal": "convoy", "quota_base": 600,
+      "effect": {"trend": 4, "event_mod": 0.05},
+      "faction_rumor": "這一批糧，一粒不少地送到了{終點}。",
+      "leak_rumor": "{起點}到{終點}的路上，這幾天全是押糧的人。"
+    },
+    {
+      "kind": "siege", "side": "guan", "priority": 3,
+      "when": {"front_min": 30, "front_max": 70},
+      "text": "{主將}傳令：本週全力攻打{戰線}的黃巾，各營凡有斬獲者記功。",
+      "personal": "win", "quota_base": 1200,
+      "effect": {"trend": 8},
+      "faction_rumor": "{戰線}的黃巾營壘被我軍連拔數處。",
+      "leak_rumor": "官軍這幾天在{戰線}連破黃巾幾座營寨。"
+    },
+    {
+      "kind": "siege", "side": "huang", "priority": 3,
+      "when": {"front_min": 30, "front_max": 70},
+      "text": "{號令}：{戰線}的官軍欺我太甚，本週各方齊出，把他們打回去！",
+      "personal": "win", "quota_base": 1200,
+      "effect": {"trend": 8},
+      "faction_rumor": "{戰線}的官軍被打退了！",
+      "leak_rumor": "黃巾在{戰線}把官軍逼退了好幾十里。"
+    },
+    {
+      "kind": "strike", "side": "guan", "priority": 4,
+      "when": {"front_min": 30, "front_max": 70},
+      "text": "{主將}傳令：{人物}是賊中的頭目，本週誰遇上他就打，打到他不敢露面。",
+      "personal": "challenge", "quota_base": 600,
+      "effect": {"figure_prestige": -15},
+      "faction_rumor": "{人物}這週連敗幾陣，躲在營裡不敢出來。",
+      "leak_rumor": "{人物}這陣子天天被人挑，敗走了好幾回。"
+    },
+    {
+      "kind": "strike", "side": "huang", "priority": 4,
+      "when": {"front_min": 30, "front_max": 70},
+      "text": "{人物}殺了咱們多少弟兄？這週讓他嚐嚐厲害。",
+      "personal": "challenge", "quota_base": 600,
+      "effect": {"figure_prestige": -15},
+      "faction_rumor": "{人物}這週連敗幾陣，躲在營裡不敢出來。",
+      "leak_rumor": "{人物}這陣子天天被人挑，敗走了好幾回。"
+    },
+    {
+      "kind": "strike", "side": "haoqiang", "priority": 1,
+      "when": {"always": true},
+      "text": "家主吩咐：{人物}擋了咱們的路。",
+      "personal": "challenge", "quota_base": 600,
+      "effect": {"figure_prestige": -15},
+      "faction_rumor": "{人物}這週連敗幾陣，躲在營裡不敢出來。",
+      "leak_rumor": "{人物}這陣子天天被人挑，敗走了好幾回。"
+    }
+  ],
+  "slots": {
+    "yingru": {
+      "guan": {"intercept": "hilltop_wilds", "escort": ["luoyang_road", "changshe"]},
+      "huang": {"intercept": "yingchuan_wilds", "escort": ["runan_wilds", "huangjin_camp"]}
+    },
+    "nanyang": {
+      "guan": {"intercept": "nanyang_wilds", "escort": ["xinye", "wan_city"]},
+      "huang": {"intercept": "nanyang_road", "escort": ["nanyang_wilds", "nanyang_huangjin_camp"]}
+    },
+    "jizhou": {
+      "guan": {"intercept": "xiaquyang", "escort": ["baima_ford", "luzhi_camp"]},
+      "huang": {"intercept": "baima_ford", "escort": ["xiaquyang", "julu_altar"]}
+    }
+  },
+  "duties": {
+    "guan": {"name": "巡哨", "text": "你帶人沿{地點}的道路巡了一圈，盤查了幾個形跡可疑的人，沒出什麼事。"},
+    "huang": {"name": "傳道", "text": "你在{地點}的村口講了一段黃天的道理，幾個面黃肌瘦的鄉民聽完，向你討了一碗符水。"},
+    "haoqiang": {"name": "保境安民", "text": "你帶人在{地點}修補了幾段籬牆，替鄉里趕走了一夥遊蕩的散兵。"}
+  },
+  "commander_fallback": {"guan": "營中", "huang": "渠帥", "haoqiang": "家主"},
+  "callers": [
+    {"figure": "zhangjiao", "text": "大賢良師有令"},
+    {"figure": "zhangbao", "text": "地公將軍有令"},
+    {"figure": null, "text": "人公將軍有令"}
+  ],
+  "convoy_squads": {"guan": "guan_grain_convoy", "huang": "huang_grain_convoy"}
+}

@@ -218,9 +218,14 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .now.clamp .now-more { position: absolute; right: 0; bottom: -6px; padding-left: 1.6em; background: linear-gradient(90deg, transparent, var(--card) 1.4em); }
 .now.fits .now-more { display: none; }
 .battle-card { border-color: var(--accent); }
-/* 公告卡（第一季，計畫 T2）：這一週已經發生的江湖大事，排在江湖頁最上面；一則一段，新的在前 */
-.bulletin { border-color: var(--gold); padding: 10px 14px; }
-.bulletin-head { font: 600 13px var(--sans); color: var(--gold); margin-bottom: 4px; }
+/* 公告卡（第一季，計畫 T2）：這一週已經發生的江湖大事，排在江湖頁最上面。
+   預設縮成一行（FB-039）：「📣 本週江湖大事（2）：標題、標題」，放不下的標題截斷加「…」；兩件大事的全文加上戰鬥卡片，
+   會把整排行動擠到分頁列底下。點了才展開全文，一則一段、新的在前；用 details.fold 的外觀。
+   選擇器要寫成 details.fold.bulletin：details.fold > summary 的權重比 .bulletin > summary 高，只寫後者會被蓋掉 */
+details.fold.bulletin > summary { border-color: var(--gold); font-size: 14px; padding: 8px 14px; min-height: 44px; box-sizing: border-box; }
+details.fold.bulletin > .fold-body { border-color: var(--gold); max-height: 50vh; overflow: auto; }
+.bulletin-head { flex: none; color: var(--gold); white-space: nowrap; }
+.bulletin-titles { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 400; color: var(--ink-2); }
 .bulletin-item { font-size: 14px; line-height: 1.65; }
 .bulletin-item + .bulletin-item { border-top: 1px dashed var(--line); margin-top: 8px; padding-top: 8px; }
 .bulletin-item p { margin: 0 0 4px; }
@@ -244,6 +249,43 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .mini { border-radius: var(--radius); overflow: hidden; border: 1px solid var(--line); margin-bottom: 12px; cursor: pointer; position: relative; background: #e9e2cc; }
 .mini svg { height: 150px !important; }
 .mini::after { content: "展開輿圖 ›"; position: absolute; right: 8px; bottom: 8px; font-size: 12px; background: var(--card); border: 1px solid var(--line); padding: 2px 8px; border-radius: 8px; }
+/* 江湖頁的三條戰況（第一季濃縮版，伺服器有送才畫）：三格並排一行；條的底色是官軍（石青），黃的那一截是黃巾 */
+.fronts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px; }
+.front { min-width: 0; padding: 6px 8px 7px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
+.front-head { display: flex; justify-content: space-between; gap: 4px; font-size: 12px; line-height: 1.4; }
+.front-head span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-2); }
+.front-head b { font-variant-numeric: tabular-nums; }
+.front-bar { height: 6px; margin-top: 4px; border-radius: 3px; background: var(--kuai); overflow: hidden; }
+.front-bar > i { display: block; height: 100%; background: var(--gold); transition: width 0.4s ease; }
+/* 第一季的本週軍令（計畫 T6） */
+.orders .order { padding: 8px 0; border-top: 1px solid var(--line); }
+.orders .order:first-child { border-top: 0; padding-top: 0; }
+.order-head { display: flex; justify-content: space-between; gap: 8px; font-size: 14px; }
+.order-head span { color: var(--ink-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.order-text { margin-top: 2px; font-size: 13px; line-height: 1.5; color: var(--ink-2); }
+.order-bar { height: 5px; margin-top: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.order-bar > i { display: block; height: 100%; background: var(--gold); transition: width 0.4s ease; }
+.order-meta { margin-top: 4px; font-size: 12px; color: var(--ink-2); }
+.order-cart { padding-bottom: 8px; font-size: 13px; color: var(--ink); }
+.order.done .order-head b::after { content: " ✔"; color: var(--gold); }
+/* 第一季的結算卡（休季，計畫 T9） */
+.result h2 { margin: 0 0 6px; font-size: 18px; }
+.result h3 { margin: 10px 0 4px; font-size: 13px; color: var(--ink-2); font-weight: 600; }
+.result-text { line-height: 1.6; }
+.result-text p { margin: 0; }
+.result .fronts { margin-bottom: 4px; }
+.result .fold { margin-top: 8px; }
+.result-event { padding: 6px 0; border-top: 1px solid var(--line); font-size: 13px; line-height: 1.5; }
+.result-event:first-child { border-top: 0; padding-top: 0; }
+.result-event b { display: block; }
+.result-event small { display: block; color: var(--ink-2); }
+.result-event p { margin: 2px 0 0; }
+.result-ranks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; font-size: 13px; }
+.result-rank ol { margin: 4px 0 0; padding-left: 18px; }
+.result-rank li { display: flex; justify-content: space-between; gap: 4px; }
+.result-rank li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.result-rank li i { font-style: normal; font-variant-numeric: tabular-nums; color: var(--ink-2); }
+.result-rank p { margin: 4px 0 0; color: var(--ink-2); }
 .linkish { border: 0; background: none; color: var(--accent); cursor: pointer; padding: 6px 2px; font-size: 14px; }
 
 /* ── 修練 ── */
@@ -264,6 +306,11 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .chip.r3 { border-color: var(--gold); background: color-mix(in srgb, var(--gold) 10%, var(--card)); }
 .chip.used { opacity: 0.4; }
 .chip .n { float: right; font-size: 12px; color: var(--ink-2); }
+/* 煉製頁素材旁的「伏筆物品」：只列名字與數量，不能點，比素材的格子矮、排得密，手機上不把開爐擠出第一屏 */
+.chips.clues { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 6px; }
+.clue { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; border: 1px dashed var(--line); background: var(--card); border-radius: 10px; padding: 5px 10px; font-size: 13px; }
+.clue b { font-weight: 600; }
+.clue span { color: var(--ink-2); font-size: 12px; }
 .sticky-act { position: sticky; bottom: calc(68px + var(--bottom)); z-index: 5; padding-top: 6px; background: linear-gradient(transparent, var(--paper) 30%); }
 .travel-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .travel-row .btn:first-child { grid-column: 1 / -1; }

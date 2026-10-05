@@ -31,6 +31,9 @@ Phase = Literal["muster", "active", "ended"]
 UNFINISHED_TITLE = "未分勝負"  # 季終收兵的決戰：結果標題與江湖紀錄標題的尾巴（FB-035）
 UNFINISHED_TEXT = "季終了，這場決戰沒打完就各自收兵，不算勝負。"
 
+CENTER = 50  # 戰局的中線：提前收場看偏離它多少（戰鬥系統 5.3），時刻表決戰的勝負也以它為界（4.1、4.2）
+BIG_WIN_MARGIN = 15  # 時刻表決戰：戰局偏離中線達到這麼多是大勝，否則險勝（戰鬥系統 4.1【預設】）
+
 DEFAULT_FREE_TEXT_SUCCESS_RATE = 40  # LLM 評估失敗/無 client 時的保底值——明顯偏低（放手一搏預設不利），
 # 不是 50/50，呼應「不會全程 LLM 自由發展」的框架精神：評不出來就當作風險自負，不讓機制因為評估失敗而意外變得穩賺不賠。
 
@@ -109,10 +112,18 @@ class BattleInstance(BaseModel):
     rounds: list[BattleRoundRecord] = Field(default_factory=list)  # 這次讀出來之後才結算、還沒寫進資料庫的回合
 
 
-def start_muster(definition: BattleDef, now: float) -> BattleInstance:
-    return BattleInstance(
-        battle_id=definition.id, trend=definition.trend_start, muster_deadline_real=now + definition.muster_seconds,
-    )
+def start_muster(definition: BattleDef, now: float, trend_start: int | None = None) -> BattleInstance:
+    """開一場集結。trend_start 是這一場的起點（時刻表決戰照前線戰況算，見 start_from_front）；不給時照
+    definition.trend_start（beta 那場不變）。起點寫進 trend 之後就不再跟著戰線變。"""
+    start = definition.trend_start if trend_start is None else trend_start
+    return BattleInstance(battle_id=definition.id, trend=start, muster_deadline_real=now + definition.muster_seconds)
+
+
+def start_from_front(front_value: int) -> int:
+    """時刻表決戰的起點（戰鬥系統 5.3）：50 ＋（50 − 戰況）÷ 2，用 int(x + 0.5) 進位。戰況是 0 官軍穩控、100 黃巾控制，
+    戰局以官軍為正向，所以翻過來再折一半：潁川 40 → 長社 55、南陽 35 → 宛城 58、冀州 55 → 廣宗 48。
+    只看公開的戰況，不會洩漏伏筆鎖定（戰鬥系統 4.3）。"""
+    return int(CENTER + (CENTER - front_value) / 2 + 0.5)
 
 
 def join_faction(
@@ -249,7 +260,8 @@ def _power_mitigation(power: float | None) -> float:
 def resolve_round(instance: BattleInstance, definition: BattleDef, rng: random.Random, now: float = 0.0) -> list[str]:
     """結算一回合：依每個人選的 tag 查表推動戰局 trend、扣氣血，氣血歸零的人出局；
     回合數加一之後照戰鬥系統設計 3.2 決定接下來怎麼走（只有兩個時機判結果）：
-    - 戰局偏離起點到 decisive_margin（壓倒性）：當回合收場，不再換幕——剛好是該換幕的那一回合也一樣；
+    - 戰局偏離中線 50 到 decisive_margin（壓倒性，戰局到 90 或 10）：當回合收場，不再換幕——剛好是該換幕的那一回合
+      也一樣。看的是 50、不是這一場的起點（戰鬥系統 5.3：時刻表決戰的起點照戰況走，看起點會不對稱）；
     - 打完最後一回合（total_rounds）：看戰局收場；
     - 都不是、而且這一幕的回合打滿了：換下一幕。換幕只看回合數，不看戰局。
     最後把回合狀態重置給下一回合用（opened_real
@@ -305,7 +317,7 @@ def resolve_round(instance: BattleInstance, definition: BattleDef, rng: random.R
             p.fell_round = instance.round_number + 1  # 這一回合（round_number 結算完才加一）
             msgs.append(f"{name}氣血耗盡，倒在戰場上，退出了這場戰鬥（轉為觀戰）。")
     instance.round_number += 1
-    decisive = abs(instance.trend - definition.trend_start) >= definition.decisive_margin
+    decisive = abs(instance.trend - CENTER) >= definition.decisive_margin
     if decisive or instance.round_number >= total_rounds(definition):
         msgs += _record_outcome(instance, decide_outcome(instance, definition))
     else:
@@ -358,13 +370,37 @@ def end_without_fighters(instance: BattleInstance, definition: BattleDef, now: f
 def decide_outcome(instance: BattleInstance, definition: BattleDef) -> BattleOutcome:
     """從戰局決定結果：照 definition.outcomes 的順序，取第一個戰局落在門檻內的。最後那個沒有門檻的保底
     （content.py::validate 保證有）一定接得住，所以一定有結果。打完最後一回合與壓倒性提前收場都走這裡
-    （戰鬥系統設計 3.2）；之後「伏筆鎖定誰贏」（第四節）也在這裡攔。沒人能打的收場不走這裡，見
-    end_without_fighters。"""
+    （戰鬥系統設計 3.2）。沒人能打的收場不走這裡，見 end_without_fighters。時刻表決戰的 outcomes 只有一筆保底，
+    真正的結果（含伏筆鎖定誰贏，第四節）由 engine 在收場後照 decide_result 判、交給時刻表。"""
     for outcome in definition.outcomes:
         lo, hi = outcome.trend_min, outcome.trend_max
         if (lo is None or instance.trend >= lo) and (hi is None or instance.trend <= hi):
             return outcome
     return definition.outcomes[-1]
+
+
+def decide_result(
+    instance: BattleInstance, definition: BattleDef, lock_side: str | None, defender: str,
+) -> tuple[str, str]:
+    """時刻表決戰的結果（戰鬥系統 4.1、4.2）：回傳（贏家, "大勝" | "險勝"），贏家是 factions 的 id（guan／huang）。
+    - 戰場上的贏家：戰局以 factions[0]（官軍）為正向，高於 50 是它、低於 50 是另一方，剛好 50 算守方守住（沒有膠著）；
+      偏離 50 達 BIG_WIN_MARGIN（65 以上、35 以下）是大勝，否則險勝。
+    - 有人鎖定（lock_side 是交戰的一方）：鎖定方一定贏，戰場上也贏是大勝、打輸是險勝。
+    只有收場這一刻看鎖定（呼叫端讀 WorldState.locks 傳進來）；起點、推力、選項都不看，鎖定才不會在戰場上露出來（4.3）。"""
+    return result_at(instance.trend, definition, lock_side, defender)
+
+
+def result_at(trend: int, definition: BattleDef, lock_side: str | None, defender: str) -> tuple[str, str]:
+    """decide_result 的本體，戰局直接給數字：從沒開成的決戰在季末收季前照起點判（world.settle_waiting_showdowns）也用它。"""
+    first, second = definition.factions[0].id, definition.factions[1].id
+    if trend == CENTER:
+        field = defender
+    else:
+        field = first if trend > CENTER else second
+    big = abs(trend - CENTER) >= BIG_WIN_MARGIN
+    if lock_side not in (first, second):
+        return field, "大勝" if big else "險勝"
+    return lock_side, "大勝" if field == lock_side else "險勝"
 
 
 def bot_choose_action(instance: BattleInstance, definition: BattleDef, name: str, rng: random.Random) -> str | None:

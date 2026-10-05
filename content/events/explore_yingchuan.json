@@ -38,7 +38,7 @@
             "fame": 2
           },
           "trend": {
-            "huangjin": -1
+            "front": -1
           }
         },
         "fail_effect": {
@@ -94,7 +94,7 @@
             "fame": 1
           },
           "trend": {
-            "huangjin": -1
+            "front": -1
           }
         },
         "fail_effect": {
@@ -281,7 +281,7 @@
             "silver": 15
           },
           "trend": {
-            "huangjin": -1
+            "front": -1
           }
         },
         "fail_effect": {
@@ -302,7 +302,7 @@
             "silver": 10
           },
           "trend": {
-            "huangjin": 1
+            "front": 1
           }
         },
         "fail_effect": {
@@ -512,7 +512,7 @@
             "fame": 1
           },
           "trend": {
-            "huangjin": -1
+            "front": -1
           }
         },
         "fail_effect": {
@@ -590,7 +590,7 @@
             "fame": 1
           },
           "trend": {
-            "huangjin": -1
+            "front": -1
           }
         },
         "fail_effect": {
@@ -649,7 +649,7 @@
             "fame": 2
           },
           "trend": {
-            "huangjin": -1
+            "front": -1
           }
         },
         "fail_effect": {
@@ -723,7 +723,7 @@
             "silver": 15
           },
           "trend": {
-            "huangjin": -1
+            "front": -1
           }
         },
         "fail_effect": {
@@ -821,7 +821,7 @@
             "silver": 15
           },
           "trend": {
-            "huangjin": -2
+            "front": -2
           },
           "rumor": "長社營外有人單槍匹馬搶回了一車軍糧，說是{name}。"
         },
@@ -846,7 +846,7 @@
             "silver": 10
           },
           "trend": {
-            "huangjin": -1
+            "front": -1
           }
         },
         "fail_effect": {
@@ -892,7 +892,7 @@
           "silver": 10
         },
         "trend": {
-          "huangjin": -1
+          "front": -1
         }
       },
       "fail_effect": {
@@ -1587,7 +1587,7 @@
             "xinde": 5
           },
           "trend": {
-            "huangjin": -1
+            "front": -1
           }
         },
         "fail_effect": {

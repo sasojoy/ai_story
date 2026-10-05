@@ -104,6 +104,14 @@ def event_marker(title: str, qiyu: bool) -> str:
     return f"遇上奇遇【{title}】" if qiyu else f"遇上【{title}】"
 
 
+FRAGMENT_PREFIX = "你聽到一件事："
+
+
+def fragment_line(text: str) -> str:
+    """伏筆的線索片段寫進江湖紀錄的那一行（計畫 T7）：「你聽到一件事：……」。只進自己的紀錄，不發任何傳聞。"""
+    return f"{FRAGMENT_PREFIX}{text}"
+
+
 @dataclass
 class Draft:
     """一次行動的紀錄草稿。engine 在行動開始時給標題，行動過程中補上結果標記、打的那一場、
@@ -246,9 +254,9 @@ def _heading(entry: JournalEntry) -> str:
     return f'<span class="tx-title">{_esc(entry.title)}</span>{tag}'
 
 
-_NEW_THING = re.compile(r"^獲得 |煉成|自創了|習得了|第一次煉成|改練【")
+_NEW_THING = re.compile(r"^獲得 |煉成|自創了|習得了|第一次煉成|改練【|^你聽到一件事：")
 # 「拿到新東西」的那一行：掃過一道光。玩家一次行動常常吐出五六行訊息，而其中真正值得注意的
-# 就是這一行（新素材、新功法、第一次煉成某個配方）——好玩度量表量的也正是這件事。
+# 就是這一行（新素材、新功法、第一次煉成某個配方、伏筆的線索片段）——好玩度量表量的也正是這件事。
 
 
 def _line_class(line: str) -> str:

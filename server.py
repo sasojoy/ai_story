@@ -39,7 +39,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from markdown_it import MarkdownIt
 
-from tianxia import companion_agent, event_llm, materials, server_bots, team
+from tianxia import companion_agent, event_llm, foreshadow, materials, rules, server_bots, team
 from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, AccountStore, normalize
 from tianxia.content import PROFILE_ENV, load_content, profile_line
 from tianxia.characters import open_characters
@@ -241,7 +241,7 @@ def main_view(game: Game) -> dict:
     card = game.battle_card() if game.shows_battle_card() else None
     status, quest, scene = game.status_data(), md(game.quest_text()), md(game.scene_text())
     options = game.options()  # 照原本的順序：狀態、主線、場景先讀，選單（會推進全服戰鬥）最後
-    return {
+    view = {
         "status": status,
         "quest": quest,
         "scene": scene,
@@ -264,6 +264,21 @@ def main_view(game: Game) -> dict:
         "chronicle": md(game.chronicle_text()),
         "admin": game.is_admin(),
     }
+    if "fronts" in status:  # 第一季濃縮版才有：江湖頁的三條戰況（開關關著時不送，頁面照舊）
+        view["fronts"] = status["fronts"]
+    orders = game.orders_view()  # 第一季：自己陣營的本週軍令（計畫 T6；散人、別陣營、開關關著時都沒有這個鍵）
+    if orders:
+        view["orders"] = orders
+    convoy = game.convoy_line()  # 押著的糧車（T6 審查 I3）：軍令卡上寫一行
+    if convoy is not None:
+        view["convoy"] = convoy
+    result = game.season_result()  # 第一季休季：江湖頁最上面的結算卡（計畫 T9；開關關著、進行中都不送）
+    if result is not None:
+        view["season_result"] = {
+            **result, "text": md(result["text"]),
+            "timeline": [{**row, "text": md(row["text"])} for row in result["timeline"]],
+        }
+    return view
 
 
 def menxia_view(game: Game, person: str | None = None) -> dict:
@@ -290,6 +305,10 @@ def menxia_view(game: Game, person: str | None = None) -> dict:
         "materials": [
             {"id": m.id, "name": m.name, "tier": materials.tier_label(m), "rank": m.tier, "attribute": m.attribute, "count": n}
             for m, n in materials.bag_contents(game.state, game.content)
+        ],
+        # 素材旁的「伏筆物品」：開關開著、這一季蓋了章、手上有才有東西，沒有就是空的（畫面整塊不出現）。只有名字與數量
+        "clue_items": [
+            {"id": item.id, "name": item.name, "count": n} for item, n in foreshadow.held_items(game.state, game.content)
         ],
         "per_craft": MATERIALS_PER_CRAFT,
         # 功法卡（FB-006）：身上兩門各一張，還沒學的那一門是一句「你還沒有內功。」；
@@ -335,14 +354,16 @@ def reports_view(game: Game, record_id: int | None) -> dict:
     }
 
 
-def admin_choices() -> dict:
-    """管理者觸發區的三個下拉選單（戰鬥、大事、大勢線）。照內容固定；已經發生過的大事按下去會被引擎拒絕。"""
-    scenario = CONTENT.scenario
+def admin_choices(game: Game) -> dict:
+    """管理者觸發區的三個下拉選單（戰鬥、大事、大勢線）。戰鬥與大事照引擎給的（Game.admin_battles／admin_fires：
+    內容的順序，第一季不觸發的 beta 決戰與門檻不列；已經發生過的大事按下去會被引擎拒絕）；
+    大勢線照這一季的規則（第一季濃縮版要開關開著、而且這一季蓋了「開」的章）。呼叫端要拿著行動鎖（look）。"""
+    world = game.state.world
     return {
-        "battles": [{"label": b.name, "id": b.id} for b in CONTENT.battles.values()],
-        "events": [{"label": f"{x.text[:30]}（{x.id}）", "id": x.id}
-                   for x in [*scenario.thresholds, *scenario.world_events]],
-        "trends": [{"label": t.name, "id": t.id} for t in scenario.trends],
+        "battles": [{"label": b.name, "id": b.id} for b in game.admin_battles()],
+        "events": [{"label": f"{x.text[:30]}（{x.id}）", "id": x.id} for x in game.admin_fires()],
+        # 照開關：關著時不列第一季才有的線；開著時不列黃巾聲勢（由三條戰線合成，不能直接推）
+        "trends": [{"label": t.name, "id": t.id} for t in CONTENT.scenario.trends if rules.pushable(CONTENT, world, t.id)],
     }
 
 
@@ -704,9 +725,10 @@ def api_password(request: Request, body: dict = Body(...)):
 
 @app.get("/api/admin")
 def api_admin(request: Request):
-    if not _game(request).is_admin():
+    game = _game(request)
+    if not game.is_admin():
         raise HTTPException(403)
-    return admin_choices()
+    return look(game, admin_choices)
 
 
 @app.post("/api/admin/reset_password")

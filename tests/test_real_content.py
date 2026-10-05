@@ -72,7 +72,7 @@ def content():
 def test_real_content_loads():
     c = load_content(CONTENT_DIR)
     assert 30 <= len(c.locations) <= 40
-    assert {t.id for t in c.scenario.trends} == {"huangjin", "yuxi"}
+    assert {t.id for t in c.scenario.trends} == {"huangjin", "yuxi", "yingru", "nanyang", "jizhou", "geju"}
 
 
 def test_the_season_one_switch_stays_off_until_the_condensed_build_ships():
@@ -255,7 +255,9 @@ def test_a_hero_with_a_signature_skill_still_cannot_beat_bocai(content):
 
 
 def test_bocai_is_the_hardest_squad_by_difficulty(content):
-    assert max(content.squads.values(), key=lambda s: s.difficulty).id == "fanjianglong"
+    """代表大勢人物本人的隊伍（figure_<id>，T4）不算：難度跟著聲威走，見 tests/test_figures.py。"""
+    squads = [s for s in content.squads.values() if not s.id.startswith("figure_")]
+    assert max(squads, key=lambda s: s.difficulty).id == "fanjianglong"
 
 
 # ── 大地圖 ────────────────────────────────────────────────
@@ -429,7 +431,9 @@ def test_the_showdown_is_three_acts_of_three_rounds_and_ends_early_at_90_or_10(c
     戰局到 90 以上或 10 以下就提前收場。"""
     showdown = content.battles["huangjin_showdown"]
     assert (len(showdown.acts), showdown.rounds_per_act) == (3, 3)
-    assert (showdown.trend_start + showdown.decisive_margin, showdown.trend_start - showdown.decisive_margin) == (90, 10)
+    from tianxia.battle_instance import CENTER
+
+    assert (CENTER + showdown.decisive_margin, CENTER - showdown.decisive_margin) == (90, 10)  # 提前收場看中線 50（戰鬥系統 5.3）
 
 
 def test_nobody_can_join_a_faction_at_the_start_location(content):
@@ -439,8 +443,43 @@ def test_nobody_can_join_a_faction_at_the_start_location(content):
 
 
 def test_each_side_of_the_war_wants_the_yellow_turbans_to_go_its_way(content):
+    """官軍把三條戰線往 0 壓、黃巾往 100 推，豪強只推割據（第一季設計 4.4、總計畫 T1）。"""
     goals = {f.id: f.goals for f in content.scenario.factions}
-    assert goals == {"guan": {"huangjin": -1}, "huang": {"huangjin": 1}, "haoqiang": {}}
+    fronts = ("yingru", "nanyang", "jizhou")
+    assert goals == {"guan": dict.fromkeys(fronts, -1), "huang": dict.fromkeys(fronts, 1), "haoqiang": {"geju": 1}}
+
+
+# 遊歷推大勢：數字跟遷移前一模一樣，鍵換成所在大區的戰線；洛陽沒有戰況，寫 front
+EXPECTED_TRAINING = {
+    "changshe": {"yingru": -1}, "luoyang_road": {"front": -1}, "mengjin_ford": {"front": 1},
+    "nanyang_huangjin_camp": {"nanyang": -2}, "yu_river": {"nanyang": -1}, "nanyang_wilds": {"nanyang": -1},
+    "runan_wilds": {"yingru": -1}, "huangjin_camp": {"yingru": -2}, "juma_river": {"jizhou": -1},
+    "yanshan_foot": {"jizhou": -1}, "julu_altar": {"jizhou": -2}, "guangzong": {"jizhou": -2},
+    "luzhi_camp": {"jizhou": 1}, "xiaquyang": {"jizhou": -1}, "baima_ford": {"jizhou": 1},
+}
+
+
+def test_real_content_fronts(content):
+    """三條戰線的起始值與權重照第一季設計 4.1，割據從 10 起；大區對戰線；遊歷指向所在戰線；
+    虛擬玩家與決戰結果改推潁川汝南（數字不變）。"""
+    trends = {t.id: t for t in content.scenario.trends}
+    starts = {key: trends[key].start for key in ("yingru", "nanyang", "jizhou", "geju")}
+    assert starts == {"yingru": 40, "nanyang": 35, "jizhou": 55, "geju": 10}
+    assert trends["huangjin"].derived == {"yingru": 0.35, "nanyang": 0.25, "jizhou": 0.40}
+    assert trends["huangjin"].start == 25 and not trends["huangjin"].season_one
+    assert all(trends[key].season_one for key in ("yingru", "nanyang", "jizhou", "geju"))
+    assert {r.id: r.front for r in content.map.regions} == {
+        "youzhou": "jizhou", "jizhou": "jizhou", "luoyang": None, "yingru": "yingru", "nanyang": "nanyang",
+    }
+    assert {r.id: r.trends for r in content.map.regions} == {
+        "youzhou": ["jizhou"], "jizhou": ["jizhou"], "luoyang": [], "yingru": ["yingru", "yuxi"], "nanyang": ["nanyang"],
+    }
+    assert {lid: loc.train_trend for lid, loc in content.locations.items() if loc.train_trend} == EXPECTED_TRAINING
+    for lid, pushes in EXPECTED_TRAINING.items():
+        assert set(pushes) == {region_of(content, lid).front or "front"}, lid
+    assert [s.trend for s in content.scenario.sim_players] == [{"yingru": 1}, {"yingru": -1}, {"yuxi": 2}]
+    outcomes = [o.trend_delta for o in content.battles["huangjin_showdown"].outcomes]
+    assert outcomes == [{"yingru": -35}, {"yingru": 25}, {"yingru": -5}]
 
 
 def test_the_playtest_admin_is_rayal(tmp_path, monkeypatch):
@@ -453,7 +492,10 @@ def test_the_playtest_admin_is_rayal(tmp_path, monkeypatch):
     assert load_content(CONTENT_DIR).config.admins == ["Rayal"]
 
 def test_enemy_squads_are_marked_with_the_designers_factions(content):
-    factions = {sid: s.faction for sid, s in content.squads.items()}
+    factions = {  # 本人的隊伍見 test_figures；運糧隊（截糧、護糧，T6）見 test_orders
+        sid: s.faction for sid, s in content.squads.items()
+        if not sid.startswith("figure_") and not sid.endswith("_grain_convoy")
+    }
     assert {sid for sid, f in factions.items() if f == "huang"} == {
         "louluo", "shuikou", "toumu", "shanzei", "fanjianglong", "taiping_lishi", "huangjin_sishi",
     }
@@ -519,8 +561,42 @@ def test_real_timetable_matches_settlement_doc():
     assert events["zhangjiao_dies"].lock_result == {"guan": "成", "huang": "不成"}
 
 
+def test_real_endings_valid(content):
+    """第一季的六種結局（第一季設計 13.1，不含玉璽）照順序；beta 的保底照舊；季末大事的三種句子（時刻表結算第 12 週）。"""
+    s1 = [e for e in content.scenario.endings if e.season_one]
+    assert [e.title for e in s1] == ["黃天當立（無璽）", "黃巾平定", "群雄並起", "黃巾坐地", "黃巾敗退", "豪強坐大"]
+    assert [e.stance_min or e.stance_max for e in s1[:3]] == [{"huang": 85}, {"huang": 15}, {"haoqiang": 85}]
+    assert [e.stance_top for e in s1[3:]] == ["huang", "guan", "haoqiang"]
+    assert s1[4].text == "下曲陽破了，可冀州的山裡仍有黃旗。"
+    for ending in s1[:3]:  # 決定性勝利第 10 週起才收（企劃者 2026-10-05）：提示不能說「當場收場」卻讓人空等五週（T9 審查 I1）
+        assert f"第 {content.config.decisive_from_week} 週起" in ending.hint, ending.hint
+    beta = [e for e in content.scenario.endings if not e.season_one]
+    assert beta[-1].id == "default"
+    finale = next(e for e in content.timetable if e.kind == "finale")
+    assert finale.preface == "史書上，皇甫嵩攻下曲陽，斬張寶，黃巾之亂至此平定。這一次……"
+    assert finale.early_preface == "戰事提前收束。"
+    assert finale.out_lines == {"dongzhuo": "董卓兵敗，涼州軍元氣大傷。"}
+    assert finale.ending_chronicle == "甲子年冬，第一季黃巾之亂落幕：{結局}。"
+
+
+def test_wancheng_after_a_government_win_reads_that_the_turbans_withdrew(content):
+    """濃縮版內容表 4.7：宛城之戰官軍打贏（甲版破城、乙版解圍，大勝險勝都算）寫 wancheng_guan_holds，
+    宛城的描寫換成「黃巾退了」那一段，排在第 3 週的版本描寫前面；黃巾打贏的四格不寫。"""
+    outcomes = next(e for e in content.timetable if e.id == "wancheng").outcomes
+    for key, outcome in outcomes.items():
+        holds = "wancheng_guan_holds" in outcome.world_flags_add
+        assert holds == (":guan:" in key), key
+    wan = content.locations["wan_city"]
+    text = "南陽郡治，黃巾退了。城牆上到處是刀砍火燒的痕跡，郡兵正忙著修補；城中人人都在說，那位江東來的將領是怎麼帶頭打贏這一仗的。"
+    assert wan.desc_when[0].world_flag == "wancheng_guan_holds" and wan.desc_when[0].text == text
+    for version in ("wan_version_jia", "wan_version_yi"):
+        assert wan.describe({version, "wancheng_guan_holds"}) == text
+        assert wan.describe({version}) != text
+
+
 def test_real_timetable_runs_a_whole_condensed_season():
-    """週末設定下把真實內容的一季從頭推到尾：除了決戰與季末（T8、T9），每件大事都結算一次、照週次。"""
+    """週末設定下把真實內容的一季從頭推到尾：除了季末（T9），每件大事都結算一次、照週次。這裡沒有 store，三場決戰開不了
+    集結：長社、宛城在之後那件大事結算之前照起點結算（T8 fix round 1），廣宗之後沒有大事、等到收季前才結算（fix round 0）。"""
     import random as _random
 
     from tianxia.state import GameState, PlayerState
@@ -529,12 +605,16 @@ def test_real_timetable_runs_a_whole_condensed_season():
 
     c = load_content(CONTENT_DIR, profile="weekend")
     c.scenario.sim_players, c.scenario.thresholds, c.scenario.world_events = [], [], []  # 只看時刻表：舊聲勢門檻收季另外測
+    c.config.geju_chaos_per_day = 0.0  # 割據不漲：沒人玩時三條戰線一直在亂局，割據第 5 週就過 85，第 10 週（decisive_from_week）起會以「群雄並起」提前收季，廣宗與季末就輪不到；這裡測的不是它
     state = GameState(player=PlayerState(name="", location=c.scenario.start_location, stats={}, stamina=0),
                       world=fresh_season(c))
     msgs = advance_world_state(state.world, c, 2.5 * 86400, _random.Random(0))
-    expected = [e.id for e in c.timetable if e.kind not in ("showdown", "finale")]
-    assert list(state.world.timeline) == expected
-    assert sum(m.startswith("【江湖大事】") for m in msgs) == len(expected) - (state.world.timeline["qinjie_slays_zhangmancheng"].key == "skip")
+    expected = [e.id for e in c.timetable]  # timetable.json 照週次排；季末那件（下曲陽）收季時由 T9 寫在最後
+    assert list(state.world.timeline) == expected and state.world.showdowns_waiting == []
+    assert state.world.timeline["xiaquyang"].key == state.world.ending_id
+    assert state.world.timeline["guangzong"].time == state.world.time  # 廣宗之後沒有大事：收季前才結算
+    announced = len(expected) - (state.world.timeline["qinjie_slays_zhangmancheng"].key == "skip")
+    assert sum(m.startswith("【江湖大事】") for m in msgs) == announced
     assert state.world.ended  # 季末照舊收季（T9 換成下曲陽）
 
 
@@ -690,3 +770,210 @@ def test_wancheng_guan_lock_cells_read_named_part_then_tier_sentence():
         "城門從裡面打開，趙弘死在亂軍之中。"
         "黃巾的 乙 送進城的糧，最後沒能派上用場。"
     )
+
+
+# ── 第一季不觸發的 beta 內容（計畫 T8；控制者 2026-10-04）──────────────────────────────
+
+
+def _beta_season(c, tmp_path, name: str):
+    """一季剛開（照 c 的開關蓋章）、一位管理者 Rayal 的 Game 與它的資料庫；季的事與虛擬玩家先拿掉，只看門檻。"""
+    from tianxia.sqlite_world import open_world
+
+    c.scenario.sim_players = []
+    c.config.auto_open_first_season = True
+    game = Game.new(c, "Rayal", rng=random.Random(0), world=open_world(tmp_path / f"{name}.db"))
+    game.now = 0.0
+    return game
+
+
+def _push_huangjin_to(game, value: int) -> None:
+    """黃巾聲勢推到 value：開關開著時它由三條戰線合成，三條都設成 value；關著時直接設。"""
+    from tianxia.rules import recompute_trends
+
+    w = game.state.world
+    for key in ("yingru", "nanyang", "jizhou") if w.season_one else ("huangjin",):
+        w.trends[key] = value
+    recompute_trends(w, game.content)
+
+
+def test_season_one_off_blocks_thresholds_storyline_and_beta_battle(tmp_path):
+    """開關打開、季蓋了章：黃巾聲勢推到 50／60／80／10 都不觸發（沒有 road_blocked、不開戰、不收季、沒有
+    huangjin_crushed）；「主線與目標」沒有黃巾之亂；管理者的開戰選單沒有 beta 那場、也開不了。開關關著時四個門檻與主線照舊。"""
+    from tianxia.guide import quest_text
+    from tianxia.world import check_thresholds
+
+    c = load_content(CONTENT_DIR, profile="weekend")
+    off = c.scenario.season_one_off
+    assert (off.thresholds, off.storylines, off.battles) == (
+        ["huangjin_50", "huangjin_60", "huangjin_80", "huangjin_10"], ["huangjin_line"], ["huangjin_showdown"],
+    )
+    # 個人目標裡那四個也做不到了（波才的舊事件、平定門檻、beta 那場決戰都關了）：不列（PM：主線與目標不顯示做不到的目標）
+    assert off.milestones == ["beat_bocai", "crush_huangjin", "showdown_win", "showdown_loss"]
+    game = _beta_season(c, tmp_path, "on")
+    w = game.state.world
+    assert w.season_one
+    for value in (50, 60, 80, 10):
+        _push_huangjin_to(game, value)
+        check_thresholds(game.state, c, game.world, now=0.0)
+    assert not ({"huangjin_50", "huangjin_60", "huangjin_80", "huangjin_10"} & w.fired_thresholds)
+    assert not ({"road_blocked", "huangjin_win", "huangjin_crushed"} & w.flags) and not w.ended
+    assert game.world.get_battle() is None
+    assert (w.storyline, w.act) == ("huangjin_line", 0)
+    assert "黃巾之亂" not in quest_text(game.state, c) and "黃巾橫行" not in quest_text(game.state, c)
+    goals = quest_text(game.state, c)
+    assert "投身潁川書院或曹氏莊院" in goals and "名望達到 10" in goals  # 做得到的照列
+    assert not any(t in goals for t in ("擊敗波才", "平定黃巾", "打贏黃巾決戰", "黃巾決戰落敗"))
+    assert "huangjin_showdown" not in [b.id for b in game.admin_battles()]
+    assert "huangjin_60" not in [x.id for x in game.admin_fires()]
+    assert game.admin_start_battle("huangjin_showdown", now=0.0) == ["（沒有這場戰鬥。）"]
+    assert game.world.get_battle() is None
+
+    beta = load_content(CONTENT_DIR)  # 開關關著：beta 那一季照舊
+    game = _beta_season(beta, tmp_path, "off")
+    w = game.state.world
+    assert not w.season_one and "黃巾之亂" in quest_text(game.state, beta)
+    assert all(t in quest_text(game.state, beta) for t in ("擊敗波才", "平定黃巾", "打贏黃巾決戰", "黃巾決戰落敗"))
+    _push_huangjin_to(game, 60)
+    check_thresholds(game.state, beta, game.world, now=0.0)
+    assert {"huangjin_50", "huangjin_60"} <= w.fired_thresholds and "road_blocked" in w.flags
+    assert game.world.get_battle().battle_id == "huangjin_showdown"
+    assert "huangjin_showdown" in [b.id for b in game.admin_battles()]
+    _push_huangjin_to(game, 10)
+    check_thresholds(game.state, beta, game.world, now=0.0)
+    assert "huangjin_crushed" in w.flags
+    _push_huangjin_to(game, 80)
+    check_thresholds(game.state, beta, game.world, now=0.0)
+    assert w.ended and "huangjin_win" in w.flags
+
+
+# ── 三場大戲（計畫 T8；戰鬥系統附錄 A）──────────────────────────────────
+
+SHOWDOWN_TABLE = {  # 計畫 T8 的表：大區、守方、時刻表大事、版本、戰線
+    "changshe_fire": ("yingru", "guan", "changshe_fire", None, "yingru"),
+    "wancheng_jia": ("nanyang", "huang", "wancheng", "甲", "nanyang"),
+    "wancheng_yi": ("nanyang", "guan", "wancheng", "乙", "nanyang"),
+    "guangzong": ("jizhou", "huang", "guangzong", None, "jizhou"),
+}
+SHOWDOWN_ACTS = {  # 附錄 A 的三幕標題與每幕官軍、黃巾的穩守／猛攻
+    "changshe_fire": [
+        ("長社被圍", "固守城頭", "開門突擊黃巾前營", "圍住四門，斷絕城中糧道", "架起雲梯，強攻城牆"),
+        ("夜風將起", "按兵不動，靜待時機", "縋城而下，襲擾敵營", "收攏營寨，嚴加戒備", "趁夜摸上城頭"),
+        ("決勝長社", "守住城門，穩住陣腳", "全軍出城，衝擊敵陣", "穩住營盤，步步進逼", "全軍壓上，奪下城門"),
+    ],
+    "wancheng_jia": [
+        ("兵臨宛城", "深溝高壘，困住宛城", "推上雲梯，強攻城牆", "閉門死守，輪番上城", "開門出擊，燒毀土山"),
+        ("四面攻城", "輪番佯攻，耗盡守軍", "集中一面，蟻附登城", "添兵守垛，滾木擂石", "夜縋出城，焚燒雲梯"),
+        ("城破與否", "圍死四門，不放一人", "全軍登城，畢其功於一役", "死守最後一道城門", "傾城而出，殺散圍軍"),
+    ],
+    "wancheng_yi": [
+        ("連營圍城", "閉城固守，清點糧草", "開門突擊，衝亂連營", "圍住四門，斷絕糧道", "趁城中未穩，架梯強攻"),
+        ("圍城日久", "節省糧草，輪番守城", "派死士夜出，燒敵糧車", "加固連營，圍而不攻", "四面同時攻城"),
+        ("城門開不開", "死守城門，寸步不讓", "傾城出戰，解圍在此一舉", "穩住連營，步步進逼", "全軍蟻附，奪下城頭"),
+    ],
+    "guangzong": [
+        ("廣宗城下", "築圍挖塹，步步緊逼", "架起雲梯，強攻城牆", "閉門堅守，以逸待勞", "開門出擊，衝散圍塹"),
+        ("堅城難下", "閉營休兵，佯示退意", "晝夜不停，輪番攻城", "輪班上城，保存氣力", "趁官軍疲憊，夜襲大營"),
+        ("雞鳴", "穩住陣線，堵死各門", "雞鳴而發，全軍撲城", "死守內城，寸土不讓", "死士出城，直撲中軍"),
+    ],
+}
+
+
+def test_real_battles_three_showdowns(content):
+    """真實內容有四筆時刻表決戰（宛城分甲乙兩筆）：大區、守方、時刻表大事、版本、戰線照計畫 T8 的表；三幕照戰鬥系統附錄 A；
+    推力、放手一搏、時間、提前收場跟 beta 那場一模一樣；結果只留一筆保底（實際效果走時刻表）。"""
+    beta = content.battles["huangjin_showdown"]
+    showdowns = {bid: b for bid, b in content.battles.items() if b.timetable_event is not None}
+    assert set(showdowns) == set(SHOWDOWN_TABLE)
+    for bid, (region, defender, event_id, version, front) in SHOWDOWN_TABLE.items():
+        b = showdowns[bid]
+        assert (b.region, b.defender, b.timetable_event, b.version, b.front) == (region, defender, event_id, version, front), bid
+        assert [(f.id, f.name) for f in b.factions] == [("guan", "官軍"), ("huang", "黃巾軍")]
+        assert (b.trend_start, b.rounds_per_act, b.decisive_margin) == (50, 3, 40)
+        assert (b.muster_seconds, b.round_seconds) == (beta.muster_seconds, beta.round_seconds)
+        assert b.action_tags == beta.action_tags and b.free_text_gamble == beta.free_text_gamble
+        assert len(b.outcomes) == 1 and b.outcomes[0].trend_min is None and b.outcomes[0].trend_max is None
+        assert not b.outcomes[0].trend_delta and not b.outcomes[0].world_flags_add  # 效果走時刻表，不重複套
+        acts = []
+        for act in b.acts:
+            fixed = {(o.faction, o.tag): o.text for o in act.options if not o.free_text}
+            acts.append((act.title, fixed["guan", "guan_safe"], fixed["guan", "guan_aggressive"],
+                         fixed["huang", "huang_safe"], fixed["huang", "huang_aggressive"]))
+            assert sorted(o.tag for o in act.options if o.free_text) == ["guan_reckless", "huang_reckless"]
+        assert acts == SHOWDOWN_ACTS[bid]
+    events = {e.id: e for e in content.timetable}
+    for bid, b in showdowns.items():  # 每一件時刻表決戰、每一個版本都正好有一筆
+        event = events[b.timetable_event]
+        assert event.kind == "showdown" and (b.version in event.versions.values() if event.versions else b.version is None)
+    assert sorted((b.timetable_event, b.version or "") for b in showdowns.values()) == sorted([
+        ("changshe_fire", ""), ("guangzong", ""), ("wancheng", "甲"), ("wancheng", "乙"),
+    ])
+
+
+@pytest.mark.parametrize(("battle_id", "winner"), [
+    ("changshe_fire", "guan"), ("guangzong", "huang"), ("wancheng_jia", "huang"), ("wancheng_yi", "guan"),
+])
+def test_real_showdowns_tie_goes_to_defender(content, battle_id, winner):
+    """計畫 T8：長社 50→官軍險勝；廣宗 50→黃巾險勝；宛城甲 50→黃巾、乙 50→官軍（戰鬥系統 4.2、附錄 A.5）。"""
+    from tianxia import battle_instance as bi
+
+    definition = content.battles[battle_id]
+    instance = bi.start_muster(definition, now=0.0)
+    assert bi.decide_result(instance, definition, None, definition.defender) == (winner, "險勝")
+
+
+def test_wan_city_reads_like_its_version_from_week_three(content):
+    """宛城的描寫第 3 週起依版本換（伏筆文件 5.0）：甲版黃巾據城、官軍大營在城外；乙版太守守住、黃巾在城外連營；
+    乙版宛城陷落之後換成甲版的描寫（結算文件 5.2）。版本的旗標由第 3 週「張曼成攻殺南陽太守」的結果寫入。"""
+    wan = content.locations["wan_city"]
+    zhang = next(e for e in content.timetable if e.id == "zhangmancheng_wan").outcomes
+    jia_flag, = zhang["成"].world_flags_add
+    yi_flag, = zhang["不成"].world_flags_add
+    assert wan.describe(set()) == wan.description
+    jia, yi = wan.describe({jia_flag}), wan.describe({yi_flag})
+    assert "黃" in jia and "城外" in jia and "連營" in yi and len({jia, yi, wan.description}) == 3
+    assert wan.describe({yi_flag, "wancheng_fallen"}) == jia
+
+
+def test_a_real_weekend_season_opens_and_settles_the_three_showdowns(tmp_path):
+    """週末設定的真實內容：長社、宛城、廣宗照排定的時間在各自的大區開集結（起點照當時的戰況），沒人參戰也照起點判、
+    交給時刻表結算（宛城帶版本前綴）；beta 那場一次也沒開。"""
+    from tianxia import battle_instance as bi
+    from tianxia.rules import trend_value
+    from tianxia.sqlite_world import open_world
+
+    c = load_content(CONTENT_DIR, profile="weekend")
+    c.config.auto_open_first_season = True
+    c.config.geju_chaos_per_day = 0.0  # 割據不漲：沒人玩時三條戰線一直在亂局，割據第 5 週就過 85，第 10 週（decisive_from_week）起會以「群雄並起」提前收季，廣宗與季末就輪不到；這裡測的不是它
+    world = open_world(tmp_path / "weekend.db")
+    game = Game.new(c, "Rayal", rng=random.Random(0), world=world)
+    game.now = 0.0
+    for event_id, region in (("changshe_fire", "yingru"), ("wancheng", "nanyang"), ("guangzong", "jizhou")):
+        game.advance(game.state.world.schedule[event_id] + 1.0 - game.state.world.time)
+        battle = world.get_battle()
+        definition = c.battles[battle.battle_id]
+        assert (definition.timetable_event, definition.region, battle.phase) == (event_id, region, "muster")
+        assert battle.trend == bi.start_from_front(trend_value(game.state, c, definition.front))
+        deadline = battle.muster_deadline_real
+        for now in (deadline, deadline + definition.round_seconds):
+            game.now = now
+            game.options()
+        key = world.get_season().timeline[event_id].key
+        version = f"{definition.version}:" if definition.version else ""
+        assert key == f"{version}{':'.join(bi.decide_result(battle, definition, None, definition.defender))}"
+    assert [b.battle_id for _, b in world.ended_battles()] == [
+        "changshe_fire", world.get_season().showdowns_opened["wancheng"], "guangzong",
+    ]
+
+
+def test_real_showdowns_start_from_the_opening_fronts():
+    """計畫 T8：開季那一刻照前線算的起點是長社 55（潁川 40）、宛城 58（南陽 35）、廣宗 48（冀州 55）。"""
+    from tianxia.state import GameState, PlayerState
+    from tianxia.world import showdown_battle, showdown_start
+    from tianxia.world_state import fresh_season
+
+    c = load_content(CONTENT_DIR, profile="weekend")
+    state = GameState(player=PlayerState(name="", location=c.scenario.start_location, stats={}, stamina=0), world=fresh_season(c))
+    starts = {
+        e.id: showdown_start(state, c, showdown_battle(state, c, e)) for e in c.timetable if e.kind == "showdown"
+    }
+    assert starts == {"changshe_fire": 55, "wancheng": 58, "guangzong": 48}

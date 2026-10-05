@@ -112,11 +112,85 @@ def test_markdown_from_the_engine_cannot_inject_html():
     assert server.md("**名號** <script>x</script>") == "<p><strong>名號</strong> &lt;script&gt;x&lt;/script&gt;</p>\n"
 
 
+def test_main_view_sends_the_fronts_only_with_the_switch_on(game, monkeypatch):
+    assert "fronts" not in server.look(game, server.main_view)  # 開關關著：江湖頁照舊
+    monkeypatch.setattr(server.CONTENT.config, "season_one", True)
+    assert "fronts" not in server.look(game, server.main_view)  # 這一季沒蓋「開」的章：照舊
+    game.world.mutate_season(lambda season: setattr(season, "season_one", True))
+    view = server.look(game, server.main_view)
+    assert [(f["name"], f["value"]) for f in view["fronts"]] == [("潁川汝南", 40), ("南陽", 35), ("冀州", 55)]
+    assert view["status"]["stances"] == {"guan": 55, "huang": 45, "haoqiang": 10}
+
+
+def test_admin_choices_follow_the_switch(game, monkeypatch):
+    """管理者推大勢的下拉選單：開關關著跟 beta 一樣；開關打開但這一季沒蓋章也一樣；這一季蓋了「開」的章時
+    列三條戰線與割據，不列黃巾聲勢（由戰線合成）。"""
+    def listed():
+        return [t["id"] for t in server.look(game, server.admin_choices)["trends"]]
+
+    assert listed() == ["huangjin", "yuxi"]
+    monkeypatch.setattr(server.CONTENT.config, "season_one", True)
+    assert listed() == ["huangjin", "yuxi"]
+    game.world.mutate_season(lambda season: setattr(season, "season_one", True))
+    assert listed() == ["yingru", "nanyang", "jizhou", "geju", "yuxi"]
+
+
+def test_admin_choices_leave_out_the_beta_battle_and_thresholds_in_season_one(game, monkeypatch):
+    """計畫 T8：開戰與觸發大事的下拉選單照 Game.admin_battles／admin_fires——這一季蓋了「開」的章時，
+    beta 那場決戰與四個黃巾聲勢門檻不列；開關關著照舊。"""
+    def listed(kind):
+        return [x["id"] for x in server.look(game, server.admin_choices)[kind]]
+
+    assert "huangjin_showdown" in listed("battles") and "huangjin_60" in listed("events")
+    monkeypatch.setattr(server.CONTENT.config, "season_one", True)
+    game.world.mutate_season(lambda season: setattr(season, "season_one", True))
+    assert listed("battles") == ["changshe_fire", "wancheng_jia", "guangzong"]  # 三場大戲，宛城只列這一季該開的那一版
+    assert not {"huangjin_50", "huangjin_60", "huangjin_80", "huangjin_10"} & set(listed("events"))
+    assert {"yuxi_50", "yuxi_100"} <= set(listed("events"))
+
+
 def test_menxia_view_falls_back_to_no_person_for_an_unknown_one(game):
     view = server.look(game, lambda g: server.menxia_view(g, "沒這個人"))
     assert view["person"] is None and view["person_card"] is None
     assert view["roster"][0]["key"] == "player"
     assert view["per_craft"] == 2
+
+
+def _clue_items(game):
+    return server.look(game, server.menxia_view)["clue_items"]
+
+
+def test_menxia_view_lists_the_foreshadow_items_in_the_content_order(monkeypatch):
+    """煉製頁素材旁的「伏筆物品」（T7b）：開關開著、這一季蓋了章、手上有的才列；每樣名字加數量，照 foreshadows.json 的順序，
+    不列數量 0 的。沒有說明句：兩份文件都沒寫，不自己編。"""
+    monkeypatch.setattr(server.CONTENT.config, "season_one", True)
+    game = Game.new(server.CONTENT, "測試")  # 開關開著時開的季：蓋了章
+    assert _clue_items(game) == []  # 手上什麼都沒有：整塊不出現
+    game.state.player.clue_items = {"fs_oil": 1, "fs_reeds": 3, "fs_ash": 0}
+    assert _clue_items(game) == [
+        {"id": "fs_reeds", "name": "葦束", "count": 3},
+        {"id": "fs_oil", "name": "膏油", "count": 1},
+    ]
+
+
+def test_menxia_view_hides_the_foreshadow_items_when_the_switch_is_off(game, monkeypatch):
+    """開關關著（現在的試玩伺服器）：就算手上有東西也是空的。開關是後來才開的：這一季沒蓋章，一樣是空的。"""
+    game.state.player.clue_items = {"fs_oil": 1}
+    assert not server.CONTENT.config.season_one and _clue_items(game) == []
+    monkeypatch.setattr(server.CONTENT.config, "season_one", True)  # 這一季開季時開關是關的：不會跑
+    assert _clue_items(game) == []
+
+
+def test_menxia_endpoint_carries_the_foreshadow_items(client, monkeypatch):
+    monkeypatch.setattr(server.CONTENT.config, "season_one", True)
+    _player(client)
+    game = server.game_for("沈青衫")
+    assert client.get("/api/menxia").json()["clue_items"] == []
+    game.state.player.clue_items = {"fs_witness": 1}
+    open_characters().save(game.state)  # 資料庫是唯一的真實來源：進鎖先重讀
+    assert client.get("/api/menxia").json()["clue_items"] == [{"id": "fs_witness", "name": "宮中的證人", "count": 1}]
+    monkeypatch.setattr(server.CONTENT.config, "season_one", False)
+    assert client.get("/api/menxia").json()["clue_items"] == []
 
 
 def test_map_view_selects_your_location_by_default(game):
@@ -844,9 +918,9 @@ def _admin(client, monkeypatch, name="掌門"):
 def test_an_admin_account_sees_the_admin_tools(client, monkeypatch):
     assert _admin(client, monkeypatch)["main"]["admin"] is True
     choices = client.get("/api/admin").json()
-    assert [b["id"] for b in choices["battles"]] == list(server.CONTENT.battles)
+    assert [b["id"] for b in choices["battles"]] == ["huangjin_showdown"]  # 開關關著：三場大戲是第一季的，不列
     assert len(choices["events"]) == len(server.CONTENT.scenario.thresholds) + len(server.CONTENT.scenario.world_events)
-    assert [t["id"] for t in choices["trends"]] == [t.id for t in server.CONTENT.scenario.trends]
+    assert [t["id"] for t in choices["trends"]] == ["huangjin", "yuxi"]  # 開關關著：第一季才有的線不列
 
 
 def test_admin_triggers_work_for_admins(client, monkeypatch):
@@ -1609,3 +1683,61 @@ def test_the_page_offers_the_box_and_rejects_empty_words(client, monkeypatch):
     with mock.patch.object(server.event_llm, "assess_event_success_rate", return_value=50):
         main = client.post("/api/answer", json={"text": "大喊官兵來了"}).json()["main"]
     assert main["event_free_text"] is None
+
+
+def test_main_view_sends_the_season_result_only_when_season_one_rests(game, monkeypatch):
+    """第一季（開關開著、這一季蓋了章）收季之後才有結算卡；進行中、開關關著收季都沒有（計畫 T9）。"""
+    monkeypatch.setattr(server.CONTENT.config, "admins", ["測試"])
+    assert "season_result" not in server.look(game, server.main_view)
+    monkeypatch.setattr(server.CONTENT.config, "season_one", True)
+    game.world.mutate_season(lambda season: setattr(season, "season_one", True))
+    assert "season_result" not in server.look(game, server.main_view)  # 還在進行
+    game.admin_end_season(now=game.now)
+    result = server.look(game, server.main_view)["season_result"]
+    assert result["title"] and result["text"].startswith("<p>戰事提前收束。")
+    assert len(result["timeline"]) == 12 and all(row["text"].startswith("<p>") for row in result["timeline"])
+
+
+def test_switch_off_season_end_sends_no_result_card(game, monkeypatch):
+    monkeypatch.setattr(server.CONTENT.config, "admins", ["測試"])
+    game.admin_end_season(now=game.now)
+    assert game.state.world.ended and "season_result" not in server.look(game, server.main_view)
+
+
+def _season_one_now(game, monkeypatch):
+    monkeypatch.setattr(server.CONTENT.config, "season_one", True)
+    game.world.mutate_season(lambda season: setattr(season, "season_one", True))
+
+
+def test_orders_hidden_from_other_factions(game, monkeypatch):
+    """T6 RF2：/api/main 只給自己陣營的軍令；散人沒有 orders 鍵；別陣營的軍令文字不出現在整份資料裡。"""
+    import json as _json
+
+    _season_one_now(game, monkeypatch)
+    guan = Game.new(server.CONTENT, "官甲", world=game.world)
+    huang = Game.new(server.CONTENT, "黃乙", world=game.world)
+    guan.state.player.faction, huang.state.player.faction = "guan", "huang"
+    guan.advance(700)  # 跨過第一個曆時交界（這一季照 14 天的章，一個曆時 600 秒）：第 1 週發令
+    huang.sync(huang.now)  # 伺服器每個請求都會同步；黃乙手上那份季還是官甲推進之前的
+    g, h = server.main_view(guan), server.main_view(huang)  # 這兩個角色沒存進資料庫：直接組畫面，不經過重讀角色的 look
+    assert g["orders"] and h["orders"]
+    dumped = _json.dumps(h, ensure_ascii=False)
+    assert not any(o["text"] in dumped for o in g["orders"])
+    assert "orders" not in server.main_view(game)  # 散人
+
+
+def test_switch_off_main_view_has_no_orders(game):
+    game.state.player.faction = "guan"
+    game.advance(7 * 86400)
+    assert "orders" not in server.main_view(game)
+
+
+def test_main_view_shows_the_cart_being_carried(game, monkeypatch):
+    from tianxia.state import Convoy
+
+    _season_one_now(game, monkeypatch)
+    game.state.player.faction = "guan"
+    game.state.player.convoy = Convoy(order="x", grain=4, from_loc="xinye", to_loc="wan_city")
+    assert server.main_view(game)["convoy"] == "你押著一車糧（4 份），要送到宛城。"
+    game.state.player.convoy = None
+    assert "convoy" not in server.main_view(game)

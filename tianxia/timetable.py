@@ -3,7 +3,8 @@
 - 什麼時候：一般大事看季曆（calendar.event_time）；決戰與季末看 WorldState.schedule（管理者可以改）。
 - 怎麼結算：給了結果鍵照它（決戰由 T8 給、管理者也用）→ 有人鎖定關鍵伏筆照 lock_result → 固定的照 "fixed"
   → 其餘照戰況擲骰（roll_chance）。
-- 公告：「【江湖大事】」開頭，跟著 sync／advance 的訊息進江湖紀錄；同時寫一則天下大事傳聞與一行江湖史。
+- 公告：「【江湖大事】」開頭，同時記在時間軸（TimelineResult.text）、寫一則天下大事傳聞與一行江湖史。進每個人的江湖紀錄是
+  Game._deliver_big_events 的事（每個角色同步時補自己還沒看過的），不是只進推進到那一刻的人（FB-038）。
 
 state 是 GameState（季的事用的是 world._season_vehicle 那個空殼玩家），只讀寫 state.world；不碰儲存。"""
 from __future__ import annotations
@@ -13,7 +14,7 @@ from typing import Literal
 
 from . import calendar, figures
 from .models import Content, TimetableEvent, TimetableOutcome
-from .rules import add_chronicle, add_rumor, add_world_flags, change_trend
+from .rules import add_chronicle, add_rumor, add_world_flags, change_trend, trend_value
 from .state import GameState, Lock, TimelineResult, WorldState
 from .world_state import season_length_days
 
@@ -69,6 +70,12 @@ def due(state: GameState, content: Content) -> list[TimetableEvent]:
     return [e for e in _pending(state, content) if e.kind not in NOT_BY_SEASON_HOUR and when(state, content, e) <= now]
 
 
+def due_showdowns(state: GameState, content: Content) -> list[TimetableEvent]:
+    """時間到了、還沒收場（時間軸上沒有）的決戰，照時間排序。決戰不在季的事裡結算，T8 照這個開集結（world.season_events）。"""
+    now = state.world.time + calendar.EPS_SECONDS
+    return [e for e in _pending(state, content) if e.kind == "showdown" and when(state, content, e) <= now]
+
+
 def next_event(state: GameState, content: Content) -> TimetableEvent | None:
     """狀態列倒數的那一件：還沒結算、時間還沒到的最早一件（決戰照排定的時間）。"""
     return next((e for e in _pending(state, content) if when(state, content, e) > state.world.time), None)
@@ -84,12 +91,10 @@ def next_event_on(state: GameState, content: Content, front: str) -> TimetableEv
 
 
 def _front_value(state: GameState, content: Content, front: str) -> int:
-    """戰線的戰況。T1 的 rules.trend_value 進來後換掉（規則相同：有存值回存值，沒有回劇本的起始值）；
-    劇本也沒有這條線（T1 之前的真實內容）才當 50。"""
-    if front in state.world.trends:
-        return state.world.trends[front]
-    trend = next((t for t in content.scenario.trends if t.id == front), None)
-    return trend.start if trend is not None else 50
+    """戰線的戰況：rules.trend_value（有存值回存值，沒有回劇本的起始值）。劇本也沒有這條線（測試夾具）才當 50。"""
+    if not any(t.id == front for t in content.scenario.trends):
+        return 50
+    return trend_value(state, content, front)
 
 
 def apply_mods(p: float, m: float) -> float:
@@ -135,8 +140,7 @@ def _event(content: Content, event_id: str) -> TimetableEvent:
 
 
 def _figure_name(content: Content, fid: str) -> str:
-    character = content.characters.get(fid)
-    return character.name if character is not None else fid
+    return figures.name_of(content, fid)  # 人物表的名字（彭脫、韓忠沒有對話人物）
 
 
 def fill_slots(state: GameState, content: Content, event: TimetableEvent, text: str) -> str:
@@ -186,9 +190,15 @@ def _pick_key(state: GameState, content: Content, event: TimetableEvent, lock: L
 
 
 def _push(state: GameState, content: Content, trend_id: str, delta: int) -> None:
-    """戰況移動。劇本還沒有這條線（T1 之前的真實內容）就略過；推動的文字不另外顯示，公告已經寫了。"""
+    """戰況移動。劇本沒有這條線（沒寫三條戰線的內容，例如測試夾具）就略過；真實內容的三條戰線與豪強割據都在，
+    照 change_trend 推（時刻表只在第一季開關開著時結算，那時這些線才有值）；推動的文字不另外顯示，公告已經寫了。"""
     if any(t.id == trend_id for t in content.scenario.trends):
         change_trend(state, content, trend_id, delta)
+
+
+def shown(lock: Lock) -> str:
+    """公告與江湖史上寫的名字：鎖定時匿名的人是「某位少俠」（Lock.shown）；舊資料沒有 shown 就寫名號。"""
+    return lock.shown or lock.name
 
 
 def _headline(
@@ -197,7 +207,7 @@ def _headline(
     """公告的主體：有人鎖定、這個結果也有他那一方的具名版本時用具名版本，否則用開頭＋公告。"""
     if lock is None or lock.side not in outcome.locked_text:
         return fill_slots(state, content, event, event.preface + outcome.text)
-    return fill_slots(state, content, event, outcome.locked_text[lock.side]).replace("{name}", lock.name)
+    return fill_slots(state, content, event, outcome.locked_text[lock.side]).replace("{name}", shown(lock))
 
 
 def _loser_line(
@@ -227,17 +237,18 @@ def resolve(
     if outcome is None:
         raise ValueError(f"大事 {event.id} 沒有結果 {full_key}")
     named = lock is not None and lock.side in outcome.locked_text
-    losers = [x.name for x in w.lock_losers.get(event.id, []) if lock is not None and x.side != lock.side]
+    losing = [x for x in w.lock_losers.get(event.id, []) if lock is not None and x.side != lock.side]
+    losers = [x.name for x in losing]  # 時間軸留真名（T9 的稱號）；公告寫顯示名（匿名的是「某位少俠」）
     # 文字先填好再套效果：{官軍主將} 指的是這件事發生「之前」的主將（例：廣宗黃巾大勝，重挫的就是他）
     # 公告的組法（伏筆文件 3.4、5.4）：具名的一段＋這一檔的結果（含 note 與人物的後話）＋搶輸的一筆＋豪強的一筆
     text = _headline(state, content, event, outcome, lock) + fill_slots(state, content, event, outcome.note)
-    loser_line = _loser_line(state, content, event, outcome, lock, losers)
-    chronicle = fill_slots(state, content, event, outcome.chronicle)
+    loser_line = _loser_line(state, content, event, outcome, lock, [shown(x) for x in losing])
+    chronicle = _chronicle(state, content, event, outcome, lock if named else None)
     for trend_id, delta in outcome.trends.items():
         _push(state, content, trend_id, delta)
     for target_key, change in outcome.figures.items():
         fid = _commander_target(state, content, target_key)
-        if fid is None or not figures.holds(state, change):
+        if fid is None or not figures.holds(state, content, change):
             continue
         text += "".join(figures.apply(state, content, fid, change)) + fill_slots(state, content, event, change.note)
     for target, mod in outcome.chance_mods.items():
@@ -245,17 +256,34 @@ def resolve(
     add_world_flags(state, outcome.world_flags_add)
     text += loser_line
     third = w.third_party.get(event.id, [])
+    third_names = "、".join(w.third_party_shown.get(event.id, {}).get(name, name) for name in third)
     if third:  # 豪強是第三方：不論誰贏，每個做完的名字各套一次自己的效果（伏筆文件 2.6）
         for _ in third:
             for trend_id, delta in event.third_party_trends.items():
                 _push(state, content, trend_id, delta)
         line = outcome.third_party_text or event.third_party_text
         if line:
-            text += fill_slots(state, content, event, line).replace("{name}", "、".join(third))
+            text += fill_slots(state, content, event, line).replace("{name}", third_names)
     w.timeline[event.id] = TimelineResult(
         key=full_key, time=w.time, locked_by=lock.name if named else None, losers=losers if named else [], text=text,
     )
     add_rumor(state, text, content=content, layer="world")
     if chronicle:
         add_chronicle(state, chronicle)
+    if third and event.third_party_chronicle:  # 豪強另記一行（例：「{name} 取得新野」），不論誰贏
+        line = fill_slots(state, content, event, event.third_party_chronicle)
+        add_chronicle(state, line.replace("{name}", third_names))
     return [f"【江湖大事】{text}"]
+
+
+def _chronicle(
+    state: GameState, content: Content, event: TimetableEvent, outcome: TimetableOutcome, named: Lock | None,
+) -> str:
+    """江湖史那一行（計畫 T7、伏筆文件 2.4）：公告具名（named 是鎖定者）時，用這件大事寫給鎖定方的那一行；
+    那一方沒寫就在原本那一行後面接「（名號改寫）」。沒人鎖定、或結果不是鎖定方的（公告沒有具名）照原本那一行。"""
+    plain = fill_slots(state, content, event, outcome.chronicle)
+    if named is None:
+        return plain
+    if named.side in event.locked_chronicle:
+        return fill_slots(state, content, event, event.locked_chronicle[named.side]).replace("{name}", shown(named))
+    return f"{plain}（{shown(named)}改寫）" if plain else plain

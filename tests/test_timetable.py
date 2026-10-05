@@ -151,6 +151,49 @@ def test_same_side_late_finishers_are_not_named_as_losers(s1, season):
     assert w.timeline["luzhi_jailed"].losers == ["乙"] and "丁" not in msgs[0]
 
 
+def test_locked_chronicle_names_the_locker_and_falls_back(s1, season):
+    """江湖史具名（計畫 T7、伏筆文件 2.4）：有人鎖定、而且是他那一方的具名公告時，江湖史用這件大事寫給那一方的那一行；
+    那一方沒寫就在原本那一行後面接「（名號改寫）」。沒人鎖定、或管理者給了另一方的結果（公告沒有具名），照原本那一行。
+    豪強做完的人另外記一行（多人用「、」接），不論誰贏。"""
+    changshe, luzhi = event(s1, "changshe_fire"), event(s1, "luzhi_jailed")
+    changshe.locked_chronicle = {"guan": "皇甫嵩火攻長社；火具是{name}備下的。"}
+    changshe.third_party_chronicle = "{name} 趁亂收了兩邊的糧錢。"
+    w = season.world
+    w.locks["changshe_fire"] = Lock(side="guan", name="甲", time=0.0)
+    w.third_party["changshe_fire"] = ["豪甲", "豪乙"]
+    timetable.resolve(season, s1, changshe, random.Random(0), key="guan:大勝")
+    w.locks["luzhi_jailed"] = Lock(side="huang", name="乙", time=0.0)
+    timetable.resolve(season, s1, luzhi, FixedRandom(0.99))  # 擲骰本來會「不成」，鎖定定成「成」
+    assert [r.text for r in w.chronicle] == [
+        "皇甫嵩火攻長社；火具是甲備下的。", "豪甲、豪乙 趁亂收了兩邊的糧錢。", "盧植被誣下獄。（乙改寫）",
+    ]
+
+    plain = GameState(player=_player(), world=fresh_season(s1))
+    timetable.resolve(plain, s1, luzhi, FixedRandom(0.0))  # 沒人鎖定
+    forced = GameState(player=_player(), world=fresh_season(s1))
+    forced.world.locks["changshe_fire"] = Lock(side="guan", name="甲", time=0.0)
+    timetable.resolve(forced, s1, changshe, random.Random(0), key="huang:險勝")  # 管理者給了另一方的結果
+    assert [r.text for r in plain.world.chronicle] == ["盧植被誣下獄。"]
+    assert [r.text for r in forced.world.chronicle] == ["長社火攻失利。"] and forced.world.timeline["changshe_fire"].locked_by is None
+
+
+def test_shown_names_go_into_the_text_and_real_names_into_the_timeline(s1, season):
+    """匿名的鎖定者（Lock.shown 是「某位少俠」）：公告、搶輸的一句、改寫的江湖史、豪強的一句都寫 shown；
+    時間軸的 locked_by、losers 留真名。舊資料沒有 shown（None）照舊寫名號；豪強的顯示名記在 third_party_shown。"""
+    w = season.world
+    w.locks["luzhi_jailed"] = Lock(side="guan", name="甲", time=0.0, shown="某位少俠")
+    w.lock_losers["luzhi_jailed"] = [Lock(side="huang", name="乙", time=1.0, shown="某位少俠"), Lock(side="huang", name="丙", time=2.0)]
+    w.third_party["luzhi_jailed"] = ["豪甲", "豪乙"]
+    w.third_party_shown["luzhi_jailed"] = {"豪甲": "某位少俠"}
+    msgs = timetable.resolve(season, s1, event(s1, "luzhi_jailed"), FixedRandom(0.0))
+    third = "朝中替盧中郎說話最力的是袁本初。{name} 在他府上坐了三個晚上。".replace("{name}", "某位少俠、豪乙")
+    assert msgs == ["【江湖大事】" + LUZHI_LOCKED["guan"].replace("{name}", "某位少俠")
+                    + LUZHI_LOSER["guan"].replace("{loser}", "某位少俠、丙") + third]
+    result = w.timeline["luzhi_jailed"]
+    assert (result.locked_by, result.losers) == ("甲", ["乙", "丙"])
+    assert [r.text for r in w.chronicle] == ["盧植續圍廣宗。（某位少俠改寫）"]
+
+
 def test_a_showdown_resolved_with_a_key_uses_the_named_version_when_locked(s1, season):
     """決戰由 T8 給結果鍵（鎖定方一定贏，戰場上定大勝或險勝）：有人鎖定時照樣用具名公告，開頭不再接 preface。"""
     w = season.world
@@ -190,7 +233,7 @@ def test_skip_if_figure_out(s1, season):
 
 
 def test_figure_fates_minimal(s1, season):
-    """T2 的最小版：只改 WorldState.figures 的聲威與狀態；接手留給 T4。"""
+    """測試夾具沒有人物表（content.figures 是空的）：時刻表的人物結局只改 WorldState.figures 的聲威與狀態，沒有接位鏈、也就沒有接手。"""
     w = season.world
     w.figures["zhujun"] = FigureState(prestige=60)
     figures.apply(season, s1, "zhujun", FigureChange(fate="受挫"))
@@ -209,7 +252,20 @@ def test_figure_fates_minimal(s1, season):
     assert w.figures["bocai"].status == "retired" and w.figures["bocai"].prestige == 0 and figures.is_out(season, "bocai")
     figures.apply(season, s1, "dongzhuo", FigureChange(fate="到任", front="jizhou", location="luzhi_camp"))
     assert w.figures["dongzhuo"].front == "jizhou" and w.figures["dongzhuo"].location == "luzhi_camp"
-    assert figures.commander(season, s1, "jizhou", "guan") is None  # 最小版一律沒有主將
+    assert figures.commander(season, s1, "jizhou", "guan") is None  # 沒有人物表就沒有主將，也沒有人接手
+
+
+def test_unseeded_figures_count_as_present_on_their_front(s1, season):
+    """伏筆讀的 is_out／on_front（夾具沒有人物表）：還沒種的人物不算退場、當成在場；種過的看狀態與所在戰線，戰線看不出來也當在場。"""
+    w = season.world
+    assert not figures.is_out(season, "huangfusong") and figures.on_front(season, "huangfusong", "yingru")
+    w.figures["huangfusong"] = FigureState(front="yingru")
+    assert figures.on_front(season, "huangfusong", "yingru") and not figures.on_front(season, "huangfusong", "jizhou")
+    w.figures["zhujun"] = FigureState()  # 時刻表套效果時才建的一筆：戰線是空的，看不出來就當在場
+    assert figures.on_front(season, "zhujun", "yingru")
+    for status in ("retired", "crippled", "jailed", "away"):
+        w.figures["luzhi"] = FigureState(front="jizhou", status=status)
+        assert not figures.on_front(season, "luzhi", "jizhou")
 
 
 def test_bonus_from_outcome(s1, season):
@@ -322,6 +378,41 @@ def test_week_hooks_run_once_per_week_in_order(s1, season, monkeypatch):
     assert msgs[:2] == ["第1週", "【江湖大事】三十六方同日起事。"]
     advance_world_state(season.world, s1, calendar.cal_hour_seconds(s1) * 5, random.Random(0))
     assert len(seen) == 3  # 同一週不再跑
+
+
+def test_the_opening_settles_week_one_but_not_the_per_hour_part(s1, season, monkeypatch):
+    """FB-040：開季那一刻只跑「週初掛鉤＋到了的大事」（season_events），不跑每曆時的事——T1 的割據變動掛在
+    每曆時那一段，開季多跑一次就會多一次。第一次之後 hooked_week 不是 0，再呼叫什麼都不做。"""
+    from tianxia import world
+
+    hours: list[int] = []
+    monkeypatch.setattr(world, "season_hour", lambda *a, **k: hours.append(1) or [])  # 每曆時的那一段（含 season_events）
+    msgs = world.settle_season_start(season.world, s1, random.Random(0))
+    assert msgs == ["【江湖大事】三十六方同日起事。"] and hours == []
+    w = season.world
+    assert w.hooked_week == 1 and list(w.timeline) == ["uprising"] and w.timeline["uprising"].time == 0
+    assert world.settle_season_start(w, s1, random.Random(0)) == [] and list(w.timeline) == ["uprising"]
+
+
+def test_the_opening_settles_nothing_with_the_switch_off_or_on_an_unstamped_season(s1):
+    from tianxia import world
+
+    stamped = fresh_season(s1)
+    s1.config.season_one = False
+    assert world.settle_season_start(stamped, s1, random.Random(0)) == []  # 開關關著
+    s1.config.season_one = True
+    old = fresh_season(s1).model_copy(update={"season_one": False})  # 開季時開關是關的
+    assert world.settle_season_start(old, s1, random.Random(0)) == []
+    assert (stamped.timeline, stamped.hooked_week, old.timeline, old.hooked_week) == ({}, 0, {}, 0)
+
+
+def test_season_hour_runs_the_per_hour_part_first_and_then_the_season_events(s1, season, monkeypatch):
+    """每曆時的 tick 放在 season_events 之前（T1 的 geju_tick 掛在前面）；season_events 本身是週初掛鉤＋到了的大事。"""
+    from tianxia import world
+
+    order: list[str] = []
+    monkeypatch.setattr(world, "season_events", lambda state, content, rng: order.append("events") or ["大事"])
+    assert world.season_hour(season, s1, random.Random(0)) == ["大事"] and order == ["events"]
 
 
 def test_season_one_off_runs_no_calendar(s1):

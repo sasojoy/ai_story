@@ -378,14 +378,14 @@ class SqliteWorldStore:
         self.mutate(_apply)
         return result["battle"]
 
-    def start_battle(self, definition: BattleDef, now: float) -> BattleInstance:
+    def start_battle(self, definition: BattleDef, now: float, trend_start: int | None = None) -> BattleInstance:
         result: dict[str, BattleInstance] = {}
 
         def _apply(state: SharedWorldState) -> None:
             if state.active_battle is not None and state.active_battle.phase != "ended":
                 result["battle"] = state.active_battle
                 return
-            state.active_battle = start_muster(definition, now)
+            state.active_battle = start_muster(definition, now, trend_start)
             result["battle"] = state.active_battle
 
         self.mutate(_apply)

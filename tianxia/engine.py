@@ -12,23 +12,30 @@ from collections.abc import Callable
 from pydantic import BaseModel
 
 from . import (
-    atlas, battle_instance, battlelog, calendar, companion_agent, craft, encounter, event_llm, flavor, journal, materials,
-    roster, skillview, team, timetable,
+    atlas, battle_instance, battlelog, calendar, companion_agent, craft, encounter, event_llm, figures, flavor, foreshadow,
+    journal, materials, orders, push, roster, skillview, team, timetable,
 )
 from .events import choice_label, event_candidates, has_events_here, pick_event, visible_choices
-from .guide import note_action, quest_text, tutorial_intro
+from .guide import base_step_count, note_action, quest_text, tutorial_intro
+from .guide import steps as tutorial_steps
 from .journal import LOG_BREAK, Draft
 from .mapview import render_map, render_minimap
 from .models import (
     EXPLORE_BRANCHES, FREE_TEXT_MAX, BattleDef, Choice, Content, Effect, Event, ExploreBranch, Location, RoadKind, Squad,
-    TravelMode,
+    Threshold, TravelMode, WorldEvent,
 )
 from .ollama_client import OllamaClient
-from .rules import apply_effect, change_trend, check_who, current_day, fill_marks, free_text_rate, rate_words, roll_check
+from .rules import (
+    GEJU, HUANGJIN, apply_effect, can_hear, can_meet, change_trend, check_who, current_day, display_name, fill_marks, free_text_rate,
+    front_ids, front_of, in_chaos,
+    is_revealed, pushable, rate_words, recompute_trends, resolve_goals, resolve_trend, resolve_trends, roll_check,
+    season_one, season_one_off, stances, trend_name, trend_shown, trend_value, world_trend_value,
+)
 from .sqlite_world import open_world
-from .state import PLAYER, BattleRecord, GameState, JournalEntry, Journey, Rumor, WorldState, new_game_state
+from .state import PLAYER, BattleRecord, Convoy, GameState, JournalEntry, Journey, Rumor, WorldState, new_game_state
 from .world import (
-    _season_vehicle, advance_world_state, check_thresholds, end_season, fire_by_id, sim_tick, start_pending_battle,
+    _season_vehicle, advance_world_state, check_thresholds, end_season, fire_by_id, open_showdown, open_waiting_showdown,
+    settle_season_start, showdown_battle, showdown_key, sim_tick, start_pending_battle,
 )
 from .world_state import WorldStateStore, season_length_days
 
@@ -36,6 +43,7 @@ HOUR = 3600
 DAY = 86400
 BULLETIN_MAX = 3  # 江湖頁最上面的公告卡最多放這一週的幾則大事（計畫 T2）
 AUDIENCE_HALL_FIGURES = 2  # 一個地點有幾位以上的大勢人物，交友就不直接找人、改按「求見」指名（企劃者 2026-10-03 決定）
+SNUB_NOTE = "剛吃了敗仗，閉門不見"  # 挑戰本人打贏之後，他對打贏的人關上門（軍令文件 4.5）：求見、交友、挑戰的按鈕寫這一句
 # 路上小事（路上設計第四節）：road:<id> → (名稱, 這一段做過之後寫的「這段路已經……」)；按鈕上的補充見 _road_task_options
 ROAD_TASKS: dict[str, tuple[str, str]] = {
     "think": ("邊走邊想", "想過了"),
@@ -142,7 +150,8 @@ class Game:
         old = self.state
         fresh = new_game_state(self.content, old.player.name)
         fresh.last_real = old.last_real
-        if old.player.tutorial_step >= len(self.content.tutorial.steps):  # 做完或略過（skip_tutorial 也是設成步數）
+        # 做完或略過（skip_tutorial 也是設成步數）：看不分季的那幾步；第一季多的兩步排在後面，回鍋的人接著做（計畫 T6）
+        if old.player.tutorial_step >= base_step_count(self.content):
             fresh.player.tutorial_step = old.player.tutorial_step
         ratio = self.content.config.affinity_carry_ratio
         fresh.player.affinities = {key: int(value * ratio) for key, value in old.player.affinities.items()}
@@ -200,6 +209,13 @@ class Game:
         ]
         p.art_levels = {k: v for k, v in p.art_levels.items() if team.resolve_art(k, c, self.world) is not None}
         p.materials = {k: v for k, v in p.materials.items() if k in c.materials and v > 0}
+        chains = {ch.id for ch in c.foreshadows.chains}  # 伏筆：內容改版後拿掉的鏈與物品
+        items = {item.id for item in c.foreshadows.items}
+        p.clue_items = {k: v for k, v in p.clue_items.items() if k in items and v > 0}
+        p.fragments = {k: v for k, v in p.fragments.items() if k in chains}
+        p.snubbed_until = {k: v for k, v in p.snubbed_until.items() if k in c.figures}  # 內容改版拿掉的大勢人物（T4）
+        if p.fs_asking is not None and p.fs_asking not in chains:
+            p.fs_asking, p.fs_asked = None, 0
         line_ids = [line.id for line in c.scenario.storylines]
         if s.world.storyline not in line_ids:
             s.world.storyline, s.world.act = line_ids[0], 0
@@ -244,9 +260,10 @@ class Game:
         arrived = self._arrivals()  # 抵達的站自己寫一則江湖紀錄（途中觸發的大事也寫在那裡），不併進下面的「江湖大事」
         if arrived:
             self._save_season()  # 抵達時觸發的大勢門檻改了共用賽季
-        news = journal.news_entry(self.state.world.time, msgs)
+        news = journal.news_entry(self.state.world.time, self._without_timetable(msgs))
         if news is not None:
             journal.add_entry(self.state, news, merge=True)
+        self._deliver_big_events()  # 這一季的時刻表大事人人有份：沒看過的補上，推進的人也走這一條（FB-038）
         self._deliver_battle_results()  # 下線時收場的決戰，回來第一次同步就補上（休季、籌備中也一樣，FB-027）
         return self._log(msgs + arrived)
 
@@ -265,9 +282,10 @@ class Game:
         self._save_season()
         msgs += start_pending_battle(self.world, self.content, self.now)
         self.state.world = self.world.get_season()
-        news = journal.news_entry(self.state.world.time, msgs)
+        news = journal.news_entry(self.state.world.time, self._without_timetable(msgs))
         if news is not None:
             journal.add_entry(self.state, news, merge=True)
+        self._deliver_big_events()
         return self._log(msgs + arrived)
 
     def _advance_player_local(self, seconds: float) -> list[str]:
@@ -323,7 +341,7 @@ class Game:
             return [Option(id="season:resting", label="休季中，等待管理者開啟下一季", enabled=False)]
         if s.pending_event:
             event = c.events[s.pending_event]
-            opts = [Option(id=f"choice:{i}", label=self._choice_label(ch, odds)) for i, ch in visible_choices(event, s)]
+            opts = [Option(id=f"choice:{i}", label=self._choice_label(ch, odds)) for i, ch in visible_choices(event, s, c)]
             if event.free_text is not None:
                 opts.append(Option(id=FREE_TEXT_OPTION, label=event.free_text.prompt))
             return opts
@@ -331,6 +349,7 @@ class Game:
             dialogue_options, _ = s.player.last_offered_dialogue.get(s.player.pending_companion, [[], []])
             talk_cost = c.config.talk_stamina
             opts = [self._cost_option(f"talk:{i}", text, talk_cost) for i, text in enumerate(dialogue_options)]
+            opts += foreshadow.talk_options(s, c, s.player.pending_companion)  # 伏筆的片段：固定文字、不花體力（計畫 T7）
             opts.append(Option(id="talk:leave", label="告辭"))
             return opts
         if s.player.pending_faction:
@@ -341,6 +360,8 @@ class Game:
             ]
         if s.player.picking_audience:
             return self._audience_options()
+        if s.player.fs_asking is not None:
+            return foreshadow.asking_options(s, c)  # 伏筆的最後一步正在答題：只有答案與「作罷」
         if s.player.busy_until is not None:
             return [Option(id="act:break", label="提前出關")]
         j = s.player.journey
@@ -356,7 +377,7 @@ class Game:
         loc = c.locations[s.player.location]
         cost = c.config.action_cost
         opts = [self._cost_option("act:explore", "探索", cost["explore"])]
-        if loc.enemies:
+        if self._train_squad_ids(loc):
             # 遊歷：這個地點的敵人，必定開打（見 _train）。sanguo-companions 合併時這個行動被
             # 整個拿掉，於是 Location.enemies／action_cost["train"]／train_event_chance 三個設定
             # 一起變成死的，而遭遇戰只剩劇情事件的 combat 選項——實測整季只打 3 場。
@@ -365,12 +386,13 @@ class Game:
             # 新角色沒有武學時威力是 0，在任何地點遊歷都**必敗**，而落敗現在真的要付氣血與
             # 內傷的代價——不顯示勝算的話，玩家會在開局連輸三場、氣血見底才知道自己不該打。
             opts.append(self._train_option(loc, cost["train"], odds))
-        figures = self._figures_here()
-        if has_events_here(c, loc, "socialize") or 0 < len(figures) < AUDIENCE_HALL_FIGURES:
+        opts += self._challenge_options(odds)  # 挑戰本人（T4）：第一季、有陣營、這裡站著敵方的大勢人物時才有
+        people = self._figures_here()
+        if has_events_here(c, loc, "socialize") or 0 < len(people) < AUDIENCE_HALL_FIGURES:
             # 兩位以上大勢人物的地點，交友只走福緣與地點事件、從不開口對話（見 _socialize_figure），
             # 所以只在有交友事件時才給；人物改由下面的「求見」指名
-            opts.append(self._cost_option("act:socialize", "交友", cost["socialize"]))
-        if len(figures) >= AUDIENCE_HALL_FIGURES:
+            opts.append(self._socialize_option(people, cost["socialize"]))
+        if len(people) >= AUDIENCE_HALL_FIGURES:
             opts.append(Option(id="act:call", label="求見"))  # 只是打開第二層選單，不花體力（見 _audience_options）
         target = self._recruit_target()
         if target is not None:
@@ -389,6 +411,8 @@ class Game:
             for faction in c.scenario.factions:
                 if s.player.location in faction.join_at:
                     opts.append(Option(id=f"faction:{faction.id}", label=f"投靠{faction.name}"))
+        opts += self._order_options(loc)  # 軍令（計畫 T6）：守勢行動、接糧車；開關關著、散人沒有
+        opts += foreshadow.final_options(s, c, loc.id)  # 伏筆的最後一步（計畫 T7）：做得了的人在那個地點才有
         opts.append(Option(id="act:rest", label="打坐（坐下來回體力，隨時可以起身）"))
         return opts
 
@@ -467,10 +491,21 @@ class Game:
             id=option_id, label=f"{label}（體力 {cost}{extra}）", enabled=self.state.player.stamina >= cost
         )
 
+    def _socialize_option(self, people: list[str], cost: int) -> Option:
+        """交友的按鈕。這裡只有一位大勢人物、沒有交友事件、福緣也還沒到，而他剛被你打敗、閉門不見（T4）時，交友只會
+        撲空——按不下去、寫明原因。其他時候照舊。"""
+        s, c = self.state, self.content
+        if (
+            len(people) == 1 and self._snubbed_character(people[0])
+            and not has_events_here(c, c.locations[s.player.location], "socialize") and not roster.fortune_due(s, c)
+        ):
+            return Option(id="act:socialize", label=f"交友（{SNUB_NOTE}）", enabled=False)
+        return self._cost_option("act:socialize", "交友", cost)
+
     def _train_option(self, loc: Location, cost: int, odds: bool) -> Option:
         """遊歷的按鈕。遇上自己陣營的隊伍是操練、不會輸（見 _drill），所以只有自己人的地盤寫成「操練・零風險」，
         不拿自己人去算勝算「必敗」（試玩回饋 FB-008）；自己人與外人都有的地方，勝算只看真的會打的那幾路。"""
-        squads = [self.content.squads[sid] for sid in loc.enemies]
+        squads = [self.content.squads[sid] for sid in self._train_squad_ids(loc)]
         foes = [squad for squad in squads if not self._drills_with(squad)]
         if not foes:
             return self._cost_option("act:train", "操練", cost, note="零風險")
@@ -582,6 +617,7 @@ class Game:
             return self._log([f"（寫下你的做法，{FREE_TEXT_MAX} 字以內。）"])  # 選項本身只叫出輸入框，不消耗事件
         prepared = self._checked_prepared(option_id, prepared) if kind in ("act", "talk", "call") else None
         self._draft = Draft(self._action_title(kind, arg))
+        stamina = self.state.player.stamina
         try:
             if kind == "act":
                 msgs = self._act(arg, prepared)
@@ -595,8 +631,11 @@ class Game:
                 msgs = self._call(arg, prepared)
             elif kind == "road":
                 msgs = self._road(arg)
+            elif kind == "fs":
+                msgs = self._foreshadow(arg)
             else:
                 msgs = self._choose(int(arg))
+            msgs += self._hear_after_stamina(stamina)
             if kind == "act" and arg != "break":
                 msgs += note_action(self.state, self.content, self.world, arg)
             if kind == "call" and arg != "back":
@@ -689,15 +728,22 @@ class Game:
             return f"交談・{character.name}"
         if kind == "call":
             return "收回名帖" if arg == "back" else f"求見・{c.characters[arg].name}"
+        if kind == "fs":
+            here = c.locations[s.player.location].name
+            return "作罷" if arg == "leave" else f"{foreshadow.trip_label(s, c, arg.partition(':')[0])}・{here}"
         if kind == "road":
             what = arg.partition(":")[0]
             if what == "back":
                 return atlas.journey_title(c, self._back_way().path)  # 折返：跟「前往」同一個標題，抵達時才併得進同一則
             return ROAD_TASKS[what][0]
+        if kind == "act" and arg.startswith("challenge:"):
+            return f"挑戰・{figures.name_of(c, arg.partition(':')[2])}"
         here = c.locations[s.player.location].name
+        duty = c.orders.duties.get(s.player.faction or "")  # 守勢行動的標題寫陣營自己的名字（巡哨、傳道、保境安民）
         titles = {
             "explore": f"探索{here}", "socialize": f"交友・{here}", "call": f"求見・{here}", "train": f"遊歷・{here}",
             "recruit": f"招募・{here}", "rest": f"打坐・{here}", "stand": "起身", "halt": "喊停",
+            "duty": f"{duty.name if duty else '守勢'}・{here}", "convoy": f"接下糧車・{here}",
         }
         return titles.get(arg, "提前出關")
 
@@ -726,9 +772,15 @@ class Game:
             return self._recruit()
         if what == "rest":
             return self._rest()
+        if what == "duty":
+            return self._duty()
+        if what == "convoy":
+            return self._take_convoy()
         if what == "call":
             self.state.player.picking_audience = True  # 打開求見選單（見 _audience_options），不花體力
             return [f"你遞上名帖，準備求見{self.content.locations[self.state.player.location].name}的人物。"]
+        if what.startswith("challenge:"):
+            return self._challenge(what.partition(":")[2])
         self.state.player.stamina -= cost[what]
         if what == "explore":
             return self._explore()
@@ -749,6 +801,25 @@ class Game:
         if companion_id is not None:
             return self._open_dialogue(companion_id, prepared)
         return self._encounter("socialize", self._no_audience_line())
+
+    def _foreshadow(self, arg: str) -> list[str]:
+        """伏筆的最後一步（計畫 T7）：fs:<鏈> 看題（沒有題的直接做）、fs:<鏈>:<選項> 答題、fs:leave 作罷。"""
+        if arg == "leave":
+            return foreshadow.leave(self.state)
+        chain_id, _, option_id = arg.partition(":")
+        return foreshadow.attempt(
+            self.state, self.content, chain_id, option_id or None, self.state.world.time, self.rng, self.world,
+        )
+
+    def _hear_after_stamina(self, before: float) -> list[str]:
+        """每次花體力的行動之後抽一次伏筆片段（計畫 T7）：選單的每一個行動（choose）與輿圖的安排前往（travel）都經過這裡，
+        體力比行動前少了才抽（探索、遊歷、交友、求見、對話、招募、趕路、疾行；打坐、步行、生成不出對話退回體力的都不算）。
+        抽的是行動後所在地點的大區；沒有伏筆在跑（開關關著、沒有鏈）就什麼都不做。"""
+        s, c = self.state, self.content
+        if s.player.stamina >= before or not foreshadow.active(s, c):
+            return []
+        region = atlas.region_of(c, s.player.location)
+        return foreshadow.hear_after_action(s, c, region.id if region is not None else None, self.rng, self.world)
 
     def _call(self, arg: str, prepared: companion_agent.PreparedTurn | None = None) -> list[str]:
         """求見選單上的選擇：「返回」收起選單；選了一位人物就跟他開口對話，跟交友碰上人物時一模一樣——
@@ -825,7 +896,7 @@ class Game:
         到 explore，於是在集市散步也會冒出來。現在它們回到正確的位置。
         """
         loc = self.content.locations[self.state.player.location]
-        squad = self.content.squads[self.rng.choice(loc.enemies)]
+        squad = self.content.squads[self.rng.choice(self._train_squad_ids(loc))]
         msgs = self._squad_encounter(squad.id)
         if self._drills_with(squad):
             return msgs  # 操練沒有打架，不接「一番苦戰之後」這類戰後事件（試玩回饋 FB-001）
@@ -834,6 +905,105 @@ class Game:
             if event is not None:
                 msgs += self._present(event)
         return msgs
+
+    def _train_squad_ids(self, loc: Location) -> list[str]:
+        """遊歷可能遇上的對手：地點的敵人，加上軍令帶來的（截糧時那一帶的敵方運糧隊，計畫 T6）。
+        開關關著、沒有截糧軍令時就是 loc.enemies 本身，亂數的抽法跟以前一樣。"""
+        extra = orders.extra_enemies(self.state, self.content, loc.id, self.state.player.faction)
+        return loc.enemies + [sid for sid in extra if sid not in loc.enemies] if extra else loc.enemies
+
+    def _order_options(self, loc: Location) -> list[Option]:
+        """軍令的兩個行動（計畫 T6）：在有戰線的地方做第 1 階守勢行動；在護糧的起點接糧車。開關關著、散人沒有。"""
+        s, c = self.state, self.content
+        p = s.player
+        if not orders.active(s, c) or p.faction is None:
+            return []
+        opts: list[Option] = []
+        duty = c.orders.duties.get(p.faction)
+        if duty is not None and front_of(c, loc.id) is not None:
+            opts.append(self._cost_option("act:duty", duty.name, c.config.duty_stamina))
+        escort = orders.escort_at(s, c, p.faction, loc.id)
+        if escort is not None and p.convoy is not None:  # 一次押一車：寫明手上那一車要送去哪（T6 審查 I3）
+            dest = c.locations[p.convoy.to_loc].name
+            opts.append(Option(id="act:convoy", enabled=False, label=f"接下糧車（你還押著一車糧，要送到{dest}）"))
+        elif escort is not None:
+            need, have = c.config.convoy_grain, materials.grain_of(s, c)
+            dest = c.locations[escort.end].name
+            if have < need:
+                opts.append(Option(
+                    id="act:convoy", enabled=False,
+                    label=f"接下糧車（送到{dest}・糧草不夠：要 {need} 份，你有 {have} 份；糧草是慢屬性的素材）",
+                ))
+            else:
+                used = "、".join(f"{c.materials[mid].name} ×{n}" for mid, n in materials.grain_plan(s, c, need))
+                opts.append(Option(id="act:convoy", label=f"接下糧車（送到{dest}・交出糧草 {need} 份：{used}）"))
+        return opts
+
+    def _order_credit(self, **kw) -> list[str]:
+        """替自己記一次軍令（orders.credit）；真的記到了就推新手引導的「完成一次軍令的個人部分」（計畫 T6 Task 8）。"""
+        s, c = self.state, self.content
+        msgs = orders.credit(s, c, s.player.faction, s.player.name, shown=display_name(s), **kw)
+        if msgs:
+            msgs += note_action(s, c, self.world, "order")
+        return msgs
+
+    def _duty(self) -> list[str]:
+        """第 1 階守勢行動（官軍巡哨、黃巾傳道、豪強保境安民；軍令文件 3.2、濃縮版內容表 2.6）：體力 duty_stamina，
+        往己方推所在戰線 1 點（豪強在亂局時推割據，不在亂局什麼都不推），算守城的個人部分。推力走 push_trend
+        （緩衝、上限、貢獻）。"""
+        s, c = self.state, self.content
+        p = s.player
+        loc = c.locations[p.location]
+        duty = c.orders.duties[p.faction]
+        front = front_of(c, loc.id)
+        p.stamina -= c.config.duty_stamina
+        text = duty.text.replace("{地點}", loc.name)
+        self._outcome(duty.name, text)
+        msgs = [text]
+        goals = self._goals()
+        if goals.get(front):
+            msgs += self.push_trend(front, goals[front], source="duty")
+        elif goals.get(GEJU) and in_chaos(s, c, front):
+            msgs += self.push_trend(GEJU, 1, source="duty")
+        return msgs + self._order_credit(kind="duty", front=front)
+
+    def _take_convoy(self) -> list[str]:
+        """接下糧車（護糧，軍令文件 3.4）：交出 convoy_grain 份糧草（從低階的慢屬性素材用起，多的不找），記下要送到哪裡。
+        不花體力；抵達終點才算數（見 _convoy_arrives）。"""
+        s, c = self.state, self.content
+        p = s.player
+        escort = orders.escort_at(s, c, p.faction, p.location)
+        need = c.config.convoy_grain
+        if escort is None or p.convoy is not None or not materials.take_grain(s, c, need):
+            return ["（這裡沒有糧車可接。）"]
+        p.convoy = Convoy(order=escort.id, grain=need, from_loc=p.location, to_loc=escort.end)
+        text = f"你把 {need} 份糧草裝上車，要送到{c.locations[escort.end].name}。路上當心截糧的。"
+        self._outcome("接下糧車", text)
+        return [text]
+
+    def _convoy_arrives(self, loc_id: str) -> list[str]:
+        """糧車到了終點（路過也算）：先有 convoy_ambush_chance 機率撞上敵方截糧隊（探索撞上野怪的打法：不推大勢、
+        扣氣血打折），打輸糧車被劫、不算數；打贏或沒遇上就交進營中——記捐獻（軍備文件 4.1）、記一次推動的貢獻、
+        替它自己那一道護糧記一次（RF4：已經換週清掉就不算）。"""
+        s, c = self.state, self.content
+        p = s.player
+        convoy = p.convoy
+        if convoy is None or convoy.to_loc != loc_id:
+            return []
+        p.convoy = None
+        msgs: list[str] = []
+        enemy = orders.ambusher(c, p.faction)
+        if enemy is not None and self.rng.random() < c.config.convoy_ambush_chance:
+            msgs.append("快到營門時，半路殺出一隊截糧的人馬！")
+            msgs += self._squad_encounter(enemy, wild=True)
+            if s.battles[0].tier not in team.WIN_TIERS:
+                return msgs + ["糧車被劫走了，這一趟不算數。"]
+        key = f"{loc_id}:糧草"
+        p.donations[key] = p.donations.get(key, 0) + convoy.grain
+        # 護糧沒有推動，另記一次第 1 階推動的貢獻（總計畫 T6）
+        push.add_contribution(p, orders.week_of(s, c), c.config.contrib_per_push)
+        msgs.append(f"糧車送進了{c.locations[loc_id].name}，一粒不少。")
+        return msgs + self._order_credit(kind="convoy", location=loc_id, front=front_of(c, loc_id), order=convoy.order)
 
     def _rest(self) -> list[str]:
         """坐下來打坐（地圖擴充設計第二節）：進入「打坐中」，之後時間過去時體力回復是平常的
@@ -857,18 +1027,21 @@ class Game:
         return [msg]
 
     def _figures_here(self) -> list[str]:
-        """這個地點的大勢人物（不管見不見得到）：可招募的 7 位在 recruit_at，鎖定的 8 位龍頭
-        人物在 talk_at（不可招募，見「還要改進」第 5 點）。"""
+        """這個地點的大勢人物（不管見不見得到）：可招募的 7 位在 recruit_at，鎖定的龍頭人物在 talk_at（不可招募，見
+        「還要改進」第 5 點）。第一季的規則開著時，人物表上的人照他此刻的所在與狀態（figures.placed_characters，T4）：
+        轉往冀州的皇甫嵩、到任的董卓在盧植營；下獄、退場、重創的不在任何地方。規則沒開時一個字都不變。"""
         s, c = self.state, self.content
+        here = s.player.location
+        placed = figures.placed_characters(s, c)
         return [
             cid for cid, ch in c.characters.items()
-            if ch.deep_interaction and s.player.location in (ch.recruit_at, ch.talk_at)
+            if ch.deep_interaction and (placed[cid] == here if cid in placed else here in (ch.recruit_at, ch.talk_at))
         ]
 
     def _can_meet(self, companion_id: str) -> bool:
-        """見得到這位人物：名望到了他的求見門檻，或是透過他的「結識」事件認識過（企劃者 2026-10-02 決定）。"""
-        p = self.state.player
-        return f"結識:{companion_id}" in p.flags or p.stats.get("fame", 0) >= self.content.characters[companion_id].audience_fame
+        """見得到這位人物：名望到了他的求見門檻，或是透過他的「結識」事件認識過（企劃者 2026-10-02 決定）。
+        判斷在 rules.can_meet，伏筆的偷聽也用它。"""
+        return can_meet(self.state, self.content, companion_id)
 
     def _talks_used(self, companion_id: str) -> int:
         """今天（遊戲日，跟福緣用同一個算法）已經跟這位人物聊了幾輪；紀錄是前幾天的就當沒聊過。"""
@@ -888,9 +1061,9 @@ class Game:
         return [f"天色已晚，{self.content.characters[companion_id].name}起身送客，改日再敘。"]
 
     def _deep_interaction_target(self) -> str | None:
-        """這個地點此刻能深度對話的人物 id：見得到（名望或結識），而且今天還沒聊滿；沒有就是 None。"""
+        """這個地點此刻能深度對話的人物 id：見得到（名望或結識）、今天還沒聊滿，也沒在對你閉門不見（T4）；沒有就是 None。"""
         for companion_id in self._figures_here():
-            if self._can_meet(companion_id) and self._talks_left(companion_id) > 0:
+            if self._can_meet(companion_id) and self._talks_left(companion_id) > 0 and not self._snubbed_character(companion_id):
                 return companion_id
         return None
 
@@ -916,7 +1089,9 @@ class Game:
             ch = c.characters[companion_id]
             option_id = f"call:{companion_id}"
             left = self._talks_left(companion_id)
-            if not self._can_meet(companion_id):
+            if self._snubbed_character(companion_id):
+                opts.append(Option(id=option_id, label=f"{ch.name}（{SNUB_NOTE}）", enabled=False))
+            elif not self._can_meet(companion_id):
                 opts.append(Option(id=option_id, label=f"{ch.name}（名望 {ch.audience_fame} 以上才見得到）", enabled=False))
             elif left == 0:
                 opts.append(Option(id=option_id, label=f"{ch.name}（今天已經談滿 {per_day} 輪，明天再來）", enabled=False))
@@ -938,6 +1113,8 @@ class Game:
             return "你四處結交了一番，沒遇上什麼事；想拜會此地的人物，請按「求見」指名。"
         for companion_id in self._figures_here():
             ch = self.content.characters[companion_id]
+            if self._snubbed_character(companion_id):
+                return f"{ch.name}{SNUB_NOTE}。"
             if not self._can_meet(companion_id):
                 return f"你想求見{ch.name}，但人微言輕，被擋在門外（名望 {ch.audience_fame} 以上才見得到）。"
             if self._talks_left(companion_id) == 0:
@@ -970,6 +1147,10 @@ class Game:
             return ["（此刻無法這麼做。）"]
         if arg == "leave":
             return companion_agent.leave_dialogue(self.state)
+        if arg.startswith("clue:"):  # 伏筆的片段：固定文字，不經模型、不扣體力、不算對話輪數（計畫 T7）
+            chain_id, _, index = arg.removeprefix("clue:").rpartition(":")
+            heard = foreshadow.hear_talk(self.state, self.content, companion_id, chain_id, int(index), self.world)
+            return heard or ["（此刻無法這麼做。）"]
         try:
             msgs = companion_agent.continue_dialogue(
                 self.client, self.state, self.content, self.world, companion_id, int(arg), self.rng,
@@ -997,7 +1178,11 @@ class Game:
             if p.location not in faction.join_at:
                 return ["（你已經不在投靠的地方了。）"]
             p.faction = faction.id
-            return [f"你投靠了{faction.name}。"]
+            # 投靠這一刻就推一次新手引導：第一季「投靠、看一眼本週軍令」那一步只看陣營（計畫 T6）；beta 照舊等下一個行動
+            msgs = [f"你投靠了{faction.name}。"]
+            if season_one(self.content, self.state.world):
+                msgs += note_action(self.state, self.content, self.world, "join")
+            return msgs
         faction = self._faction(arg)
         p.pending_faction = faction.id
         return [self._faction_prompt(faction)]
@@ -1143,29 +1328,121 @@ class Game:
 
         最後把結果補送給自己（收場那一下的那個人當場就看得到）；別的參戰者各自同步時補（FB-027）。
 
-        季終收兵的決戰（unfinished，見 _shelve_unfinished_battle）沒有結果可套，不會走到這裡；萬一走到，直接不動。"""
+        季終收兵的決戰（unfinished，見 _shelve_unfinished_battle）沒有結果可套，不會走到這裡；萬一走到，直接不動。
+
+        時刻表決戰（第一季的三場大戲，計畫 T8）不套保底的 BattleOutcome，改走 _settle_showdown。不論哪一種，收場之後
+        都看有沒有時間到了、在等這一場打完的決戰，有就立刻開（見 _open_waiting_showdown）。"""
         if battle.unfinished:
             return
-        if battle.outcome_world_flags or battle.outcome_trend_delta or battle.outcome_title:
+        definition = self.content.battles.get(battle.battle_id)
+        if definition is not None and definition.timetable_event is not None and season_one(self.content, self.state.world):
+            self._settle_showdown(battle, definition)
+        else:
+            if battle.outcome_world_flags or battle.outcome_trend_delta or battle.outcome_title:
 
-            def _apply(season: WorldState) -> None:
-                self._apply_outcome_trends_and_flags(season, battle)
-                if battle.outcome_title:
-                    season.chronicle.append(Rumor(time=season.time, text=f"【{battle.outcome_title}】{battle.outcome_text}"))
+                def _apply(season: WorldState) -> None:
+                    self._apply_outcome_trends_and_flags(season, battle)
+                    if battle.outcome_title:
+                        season.chronicle.append(Rumor(time=season.time, text=f"【{battle.outcome_title}】{battle.outcome_text}"))
 
-            self.world.mutate_season(_apply)
-            self._apply_outcome_trends_and_flags(self.state.world, battle)
+                self.world.mutate_season(_apply)
+                self._apply_outcome_trends_and_flags(self.state.world, battle)
+            self._deliver_battle_results()
+        self._open_waiting_showdown()
+
+    def _settle_showdown(self, battle: battle_instance.BattleInstance, definition: BattleDef) -> None:
+        """時刻表決戰收場（計畫 T8）：照 battle_instance.decide_result 判誰贏、大勝或險勝——這一刻才讀
+        WorldState.locks（鎖定只在這裡看，起點、推力、選項都不看，戰鬥系統 4.3）——再交給 timetable.resolve 結算那一格
+        （它自己加宛城的版本前綴，公告、江湖史、戰況、人物都照時刻表）。保底的 BattleOutcome 不套、不寫江湖史。
+
+        戰鬥那一列的結果改成時刻表那一格（標題「官軍大勝」、文字是公告、大勢變化是那一格的戰況），參戰者的戰報照
+        W13／FB-027 補送時就寫這個；公告進每個人的江湖紀錄走 _deliver_big_events（FB-038）。
+
+        resolve 改的是資料庫裡的那一份賽季（mutate_season），手上的 self.state.world 跟著讀回來：結算發生在 options() 的
+        推進裡，接下來 choose() 收尾的 _save_season 會把手上那一份整份寫回去，不讀回來就把結果蓋掉了。這一刻手上那一份
+        跟資料庫一致（每個動作開頭的 sync 剛讀過、推進戰鬥之前還沒改它），讀回來不會丟東西。"""
+        event = next((e for e in self.content.timetable if e.id == definition.timetable_event), None)
+        result: dict[str, object] = {}
+
+        def _resolve(season: WorldState) -> None:
+            lock = season.locks.get(definition.timetable_event)
+            winner, margin = battle_instance.decide_result(
+                battle, definition, lock.side if lock is not None else None, definition.defender or definition.factions[0].id,
+            )
+            result["title"] = f"{timetable.SIDE_NAMES.get(winner, winner)}{margin}"
+            if event is None:
+                return
+            key = showdown_key(definition, winner, margin)  # 帶上實際打的那一版（審查 M-1）
+            timetable.resolve(_season_vehicle(self.content, season), self.content, event, self.rng, key=key)
+            done = season.timeline.get(event.id)
+            outcome = event.outcomes.get(done.key) if done is not None else None
+            result["text"] = done.text if done is not None else ""
+            result["trends"] = dict(outcome.trends) if outcome is not None else {}
+
+        self.world.mutate_season(_resolve)
+
+        def _relabel(b: battle_instance.BattleInstance) -> None:
+            if b.record_id != battle.record_id:
+                return
+            b.outcome_title = str(result["title"])
+            b.outcome_text = str(result.get("text") or b.outcome_text or "")
+            b.outcome_trend_delta = dict(result.get("trends") or {})  # 只給戰報顯示：已經由 resolve 套過了
+            b.outcome_world_flags = []
+
+        self.world.mutate_battle(_relabel)
+        self.state.world = self.world.get_season()
+        self._deliver_big_events()
         self._deliver_battle_results()
 
-    @staticmethod
-    def _apply_outcome_trends_and_flags(season: WorldState, battle: battle_instance.BattleInstance) -> None:
-        """決戰結果的大勢變化與世界旗標，套到 season 上（資料庫裡的那份與記憶體裡的那份共用這一段）。"""
-        for trend_id, delta in battle.outcome_trend_delta.items():
-            season.trends[trend_id] = max(0, min(100, season.trends.get(trend_id, 0) + delta))
+    def _open_waiting_showdown(self) -> None:
+        """時間到了、在等前一場打完的時刻表決戰，前一場一收場就開（Review Focus 2：開不成時留著記號，等它收場立刻開）。
+        開了的話手上的那一份賽季跟著讀回來（季上記了「開過了」，之後存檔不能蓋掉它）。集結的消息不另外寫紀錄：
+        場景上每個人都看得到集結。"""
+        if not self.state.world.showdowns_waiting:
+            return
+        if open_waiting_showdown(self.world, self.content, self.now):
+            self.state.world = self.world.get_season()
+
+    def _apply_outcome_trends_and_flags(self, season: WorldState, battle: battle_instance.BattleInstance) -> None:
+        """決戰結果的大勢變化與世界旗標，套到 season 上（資料庫裡的那份與記憶體裡的那份共用這一段）。
+        內容寫的是戰線：照 rules.resolve_trends 換鍵（開關關著時是黃巾聲勢）；存檔沒有那條線時從起始值算起。"""
+        for trend_id, delta in resolve_trends(self.content, season, battle.outcome_trend_delta).items():
+            season.trends[trend_id] = max(0, min(100, world_trend_value(season, self.content, trend_id) + delta))
+        recompute_trends(season, self.content)  # 開關開著時推了戰線，黃巾聲勢跟著重算（這裡不經 change_trend）
         for flag in battle.outcome_world_flags:
             if flag not in season.flags:
                 season.flags.add(flag)
                 season.flag_times[flag] = season.time
+
+    def _without_timetable(self, msgs: list[str]) -> list[str]:
+        """推進的訊息拿掉時刻表大事的公告（world.timetable.resolve 回的「【江湖大事】＋公告全文」）：那些由
+        _deliver_big_events 補進每個人的江湖紀錄，不再只進剛好推進到那一刻的人的那一則。
+        大勢門檻與世界事件也是「【江湖大事】」開頭，但文字不在時間軸上，照舊留著。"""
+        announced = {f"【江湖大事】{r.text}" for r in self.state.world.timeline.values() if r.text}
+        return [m for m in msgs if m not in announced]
+
+    def _deliver_big_events(self) -> None:
+        """這一季時刻表上已經發生、自己還沒看過的大事補進江湖紀錄（FB-038）：每個人各一次，不管有沒有剛好在線、
+        是不是推進時間的那個人，離線的回來第一次同步補到，這一季中途才建立的角色也補到這一季已經發生的。
+        一次補到好幾件就合成一則「江湖大事」，每件一行、照時間先後、前面標季曆時間；只補到一件時標籤就是公告全文。
+        跳過的大事（沒有公告文字）不補。看過的記在 PlayerState.events_seen，換季時新角色自然是空的。
+        做法比照 _deliver_battle_results：資料庫（時間軸）才是真實來源，每個人自己的 Game 同步時在鎖裡自己補，
+        不去改別人的角色。開關關著（或這一季開季時沒開）時時間軸本來就是空的，什麼都不補。"""
+        w, c, p = self.state.world, self.content, self.state.player
+        if not calendar.season_one_on(w, c):
+            return
+        fresh = [(i, eid, r) for i, (eid, r) in enumerate(w.timeline.items()) if r.text and eid not in p.events_seen]
+        if not fresh:
+            return
+        fresh.sort(key=lambda item: (item[2].time, item[0]))  # 先看時間，同一刻照時間軸記下的順序
+        p.events_seen += [eid for _, eid, _ in fresh]
+        last = fresh[-1][2]
+        if len(fresh) == 1:
+            entry = JournalEntry(time=last.time, title=journal.WORLD_NEWS, tag=last.text)
+        else:
+            lines = [f"{self.stamp(r.time)}　{r.text}" for _, _, r in fresh]
+            entry = JournalEntry(time=last.time, title=journal.WORLD_NEWS, tag=f"共 {len(fresh)} 件", lines=lines)
+        journal.add_entry(self.state, entry)
 
     def _deliver_battle_results(self) -> None:
         """收場的全服決戰補送到自己手上（FB-027）：自己的名號在參戰名單上（含下線的、中途倒下的；觀戰的不在名單上）、
@@ -1215,7 +1492,8 @@ class Game:
         if me.fell_round is not None:
             lines.append(f"你在第 {me.fell_round} 回合倒下，轉為觀戰")
         trends = {t.id: t.name for t in c.scenario.trends}
-        deltas = [f"{trends.get(tid, tid)} {delta:+d}" for tid, delta in battle.outcome_trend_delta.items() if delta]
+        moved = resolve_trends(c, s.world, battle.outcome_trend_delta)  # 開關關著時戰線都寫成黃巾聲勢
+        deltas = [f"{trends.get(tid, tid)} {delta:+d}" for tid, delta in moved.items() if delta]
         changes = deltas if earlier is None else []
         if earlier is not None:
             lines += [f"（第 {earlier} 季）{d}" for d in deltas]
@@ -1524,7 +1802,7 @@ class Game:
                 text = f"{text}\n\n{flourish}"
         self._outcome(journal.event_marker(event.title, event.qiyu), head)
         self._hide(text)
-        return [head, text]
+        return [head, text] + foreshadow.hear_from_event(self.state, self.content, event.id, self.world)  # 片段事件（計畫 T7）
 
     def _squad_encounter(self, squad_id: str, wild: bool = False) -> list[str]:
         """遭遇一支敵方隊伍：單次判定，勝得對手獎勵與屬性機會，落敗失落一成銀兩；自己陣營的隊伍改成操練（見 _drill）。
@@ -1550,22 +1828,25 @@ class Game:
                 p.stats[key] += 1
                 extra.append(f"{c.config.stat_names[key]} +1")
             if not wild:
-                for trend_id, delta in loc.train_trend.items():
-                    extra += change_trend(s, c, trend_id, self._train_push(trend_id, delta))
+                for trend_id, delta in self.train_trend_push(loc.id).items():  # 換算過的線，照舊交給 T3 的 push_trend
+                    extra += self.push_trend(trend_id, delta, source="train")
+                region = atlas.region_of(c, p.location)  # 官銀（伏筆，濃縮版內容表 4.0）：只有遊歷打贏才擲
+                extra += foreshadow.after_win(s, c, squad, self.rng, region.id if region is not None else None)
+                extra += self._order_credit(  # 軍令（計畫 T6）：攻城看戰線與敵方陣營，截糧看地點與運糧隊
+                    kind="win", location=loc.id, front=front_of(c, loc.id), squad=squad.id, squad_faction=squad.faction,
+                )
             changes, notes = battlelog.split_changes(extra)
             record.changes += changes
             record.notes += notes
             msgs += extra
         elif result.tier == "落敗":
-            loss = p.stats["silver"] // 10
-            p.stats["silver"] -= loss
-            record.silver = -loss
-            if loss:
-                msgs.append(f"銀兩 -{loss}")
+            msgs += self._lose_silver(record)
         toll = team.take_encounter_toll(s, c, self.world, result.tier, wild=wild)
         record.changes += toll
         msgs += toll
         msgs.insert(0, self._file_battle(record))
+        if squad.desc:  # 有來歷的對手（運糧隊）多一句描述，接在戰鬥那一行後面
+            msgs.insert(1, f"（{squad.name}：{squad.desc}）")
         return msgs
 
     def _drills_with(self, squad: Squad) -> bool:
@@ -1595,21 +1876,191 @@ class Game:
             key = self.rng.choice(["str", "agi", "con"])
             p.stats[key] += 1
             msgs.append(f"{c.config.stat_names[key]} +1")
-        for trend_id, delta in loc.train_trend.items():
-            msgs += change_trend(s, c, trend_id, self._train_push(trend_id, delta))
+        for trend_id, delta in self.train_trend_push(loc.id).items():
+            msgs += self.push_trend(trend_id, delta, source="drill")
+        return msgs
+
+    def _lose_silver(self, record) -> list[str]:
+        """落敗失落一成銀兩（遊歷與挑戰本人共用），記在戰報上。"""
+        p = self.state.player
+        loss = p.stats["silver"] // 10
+        p.stats["silver"] -= loss
+        record.silver = -loss
+        return [f"銀兩 -{loss}"] if loss else []
+
+    # ── 挑戰大勢人物本人（計畫 T4、軍令文件 4.5）─────────────
+
+    def _snubbed(self, fid: str) -> bool:
+        """這位人物剛被你打敗、還在閉門不見（snub_hours 個現實小時內）。看的是現實時間（self.now，sync 傳進來的），
+        不是賽季時鐘：管理者快轉、補算時間都不會讓他提早見你；紀錄存在角色存檔，伺服器重開也照樣記得。
+        第一季的規則沒開（beta 那一季）就沒有閉門不見這回事。"""
+        return season_one(self.content, self.state.world) and self.now < self.state.player.snubbed_until.get(fid, 0.0)
+
+    def _snubbed_character(self, character_id: str) -> bool:
+        """這個對話人物（求見、交友用的 id）是不是剛被你打敗、還在閉門不見的大勢人物。"""
+        fid = figures.of_character(self.content, character_id)
+        return fid is not None and self._snubbed(fid)
+
+    def _challenge_options(self, odds: bool) -> list[Option]:
+        """挑戰本人：第一季的規則開著、自己有陣營時，這裡每一位在場的敵方大勢人物一個選項（體力照遊歷；odds 時寫勝算，
+        難度跟著聲威走）。剛被你打敗、閉門不見的那幾位按不下去、寫明原因。散人沒有；同陣營的人不打。"""
+        s, c = self.state, self.content
+        p = s.player
+        if p.faction is None or not season_one(c, s.world):
+            return []
+        cost = c.config.action_cost["train"]
+        opts = []
+        for fid in figures.present_at(s, c, p.location):
+            fig = c.figures[fid]
+            if fig.faction == p.faction:
+                continue
+            option_id = f"act:challenge:{fid}"
+            if self._snubbed(fid):
+                opts.append(Option(id=option_id, label=f"挑戰{fig.name}（{SNUB_NOTE}）", enabled=False))
+            else:
+                opts.append(self._cost_option(option_id, f"挑戰{fig.name}", cost, note=self.challenge_odds(fid) if odds else ""))
+        return opts
+
+    def challenge_odds(self, fid: str) -> str:
+        """挑戰這位人物的勝算（跟遊歷同一套說法）：對手是代表本人的隊伍，難度照他此刻的聲威（figures.difficulty）。"""
+        squad = self.content.figures[fid].squad
+        return team.estimate(self.state, self.content, self.world, squad, difficulty=figures.difficulty(self.state, self.content, fid))
+
+    def _challenge(self, fid: str) -> list[str]:
+        """挑戰本人（軍令文件 4.5，企劃者 2026-10-04 改定）：跟他本人打一場單次判定，花遊歷的體力。打贏他敗走（_rout），
+        拿那支隊伍的獎勵；落敗失落一成銀兩；不論勝負都照結果扣氣血（同遊歷）。可以重複打，只是打贏的人要等他消氣。
+        不推戰線（推戰線的是遊歷；打擊人物削的是聲威），也不擲官銀（那是遊歷打贏官軍隊伍才有）。"""
+        s, c = self.state, self.content
+        fig = c.figures[fid]
+        squad = figures.squad_of(s, c, fid)
+        s.player.stamina -= c.config.action_cost["train"]
+        result = team.fight(s, c, self.world, fig.squad, self.rng, difficulty=squad.difficulty)
+        record = battlelog.new_record(s, c, self.world, squad, result, "event", event=f"挑戰{fig.name}")
+        msgs: list[str] = []
+        if result.tier in team.WIN_TIERS:
+            msgs += self._battle_rewards(squad, record)
+            extra = self._rout(fid)
+            changes, notes = battlelog.split_changes(extra)
+            record.changes += changes
+            record.notes += notes
+            msgs += extra
+        elif result.tier == "落敗":
+            msgs += self._lose_silver(record)
+        toll = team.take_encounter_toll(s, c, self.world, result.tier)
+        record.changes += toll
+        msgs += toll
+        msgs.insert(0, self._file_battle(record))
+        return msgs
+
+    def _rout(self, fid: str) -> list[str]:
+        """打贏了，他敗走：
+        1. 聲威扣 figure_defeat_prestige，照陣營人數緩衝（push.buffered，n＝自己陣營活躍時窗內推過大勢的人，含自己）；
+           扣到 0 退場或重創、由接位的人接手（figures.defeat）；
+        2. 打贏的人跟他的情誼扣 figure_defeat_affinity（沒有對話人物的彭脫、韓忠沒有情誼）；
+        3. snub_hours 個現實小時內他不見你、也不跟你交手（其他人照常）；
+        4. 記貢獻：照推 figure_defeat_prestige 點大勢算（contrib_per_push，不打人數緩衝的折），記在這一週。"""
+        s, c = self.state, self.content
+        p, w, cfg = s.player, s.world, c.config
+        fig = c.figures[fid]
+        window = cfg.active_window_days * DAY / calendar.cal_scale(c, w)
+        n = push.active_count(s, p.faction, w.time, window)
+        msgs = [f"{fig.name}敗走。"]
+        msgs += figures.defeat(s, c, fid, push.buffered(cfg.figure_defeat_prestige, n))
+        if fig.character is not None:
+            before = p.affinities.get(fig.character, 0)
+            p.affinities[fig.character] = max(0, before - cfg.figure_defeat_affinity)
+            if p.affinities[fig.character] != before:
+                msgs.append(f"{fig.name}情誼 {p.affinities[fig.character] - before:+d}")
+        p.snubbed_until[fid] = self.now + cfg.snub_hours * HOUR
+        push.add_contribution(p, calendar.point(w.time, c, w).week, cfg.figure_defeat_prestige * cfg.contrib_per_push)
+        msgs += self._order_credit(  # 「打擊大勢人物」軍令（計畫 T6）：只算目標本人
+            kind="challenge", location=p.location, front=figures.state_of(s, c, fid).front, figure=fid,
+        )
         return msgs
 
     def _train_push(self, trend_id: str, delta: int) -> int:
         """遊歷（打贏或操練）推大勢：量照地點設定；自己陣營對這條線有目標就往目標方向推，散人和
-        沒有這條線目標的陣營照地點原本的方向（企劃者 2026-10-02 決定）。"""
-        faction = next((f for f in self.content.scenario.factions if f.id == self.state.player.faction), None)
-        goal = faction.goals.get(trend_id, 0) if faction is not None else 0
+        沒有這條線目標的陣營照地點原本的方向（企劃者 2026-10-02 決定）。trend_id 是換算過、真的會動的那條線：
+        豪強（目標只有割據）在亂局的戰線上遊歷時換成豪強割據（delta 已取絕對值、往漲的方向，見 train_trend_push），
+        所以這裡乘上的是割據的目標；不在亂局的戰線上，豪強根本不會走到這裡（什麼都不推）。"""
+        goal = self._goals().get(trend_id, 0)
         return abs(delta) * goal if goal else delta
 
+    def _goals(self) -> dict[str, int]:
+        """自己陣營的目標，照 rules.resolve_goals 換過鍵（開關關著時三條戰線都算黃巾聲勢）；散人是空的。"""
+        faction = next((f for f in self.content.scenario.factions if f.id == self.state.player.faction), None)
+        return resolve_goals(self.content, self.state.world, faction.goals) if faction is not None else {}
+
     def train_trend_push(self, loc_id: str | None = None) -> dict[str, int]:
-        """在這個地點（預設所在地）遊歷打贏或操練時，各條大勢線會被推多少（照自己的陣營，見 _train_push）。"""
+        """在這個地點（預設所在地）遊歷打贏或操練時，各條大勢線會被推多少（照自己的陣營，見 _train_push）。
+        鍵是真的會動的那條線：內容寫的戰線或 front 先照 rules.resolve_trend 換過（開關關著時一律是黃巾聲勢）。
+        第一季濃縮版的豪強（目標只有割據、對這條戰線沒有目標，見 _backs_the_chaos）不推戰線本身：這個地點的戰線
+        在亂局（戰況 chaos_low～chaos_high）時改推豪強割據（往漲的方向、量取絕對值），戰線已經穩下來（不在亂局）
+        時什麼都不推，所以那一趟遊歷或操練不會出現在回傳裡。散人與官軍、黃巾照舊推戰線。"""
         loc = self.content.locations[loc_id or self.state.player.location]
-        return {trend_id: self._train_push(trend_id, delta) for trend_id, delta in loc.train_trend.items()}
+        pushes: dict[str, int] = {}
+        for key, delta in loc.train_trend.items():
+            target = resolve_trend(self.content, self.state.world, key, loc.id)
+            if target is not None and self._backs_the_chaos(target):
+                # 第一季濃縮版的豪強：那條戰線在亂局才推割據，不在亂局什麼都不推（第一季設計第七節）
+                target, delta = (GEJU, abs(delta)) if in_chaos(self.state, self.content, target) else (None, 0)
+            if target is not None:
+                pushes[target] = pushes.get(target, 0) + self._train_push(target, delta)
+        return pushes
+
+    def _backs_the_chaos(self, trend_id: str) -> bool:
+        """開關開著、這是一條戰線，而自己的陣營對它沒有目標、只想推割據（第一季濃縮版的豪強）。"""
+        goals = self._goals()
+        return (
+            season_one(self.content, self.state.world) and trend_id in front_ids(self.content)
+            and trend_id not in goals and GEJU in goals
+        )
+
+    def push_trend(self, trend_id: str, delta: int, *, source: str) -> list[str]:
+        """玩家自己造成的大勢推動一律走這裡（遊歷、操練、事件效果；sim_tick、時刻表、決戰、管理者不是個人推動，不走）。
+        第一季設計第七節的規則，掛在第一季開關後面——開關關著（或這一季開季時是關的）就是 change_trend，一個字都不變：
+        1. 陣營人數緩衝：推力 ÷ √n，n＝自己陣營 active_window_days 個曆日內推過大勢的成員（含自己這一次、含假人，最少 1）；
+        2. 每人每曆日對每條線的上限（緩衝後算）：超過的部分不推大勢；
+        3. 貢獻帳：替自己陣營的目標方向推才記，contrib_per_push × 推力（不打緩衝的折），超過上限的部分只記 over_cap_contrib_ratio；
+        4. 散人照推、照受上限，n 當 1，不記貢獻也不進活躍名單。
+        緩衝後常有小數：不足一點的記在全服的 trend_accum（每條線一個），滿一點才真的推；回傳既有格式的「（潁川汝南 +2）」，
+        只有整數真的動了才有。source 先只當註記（"train"、"drill"、"event"），不存檔。"""
+        s, c = self.state, self.content
+        w, p = s.world, s.player
+        if not calendar.season_one_on(w, c):
+            return change_trend(s, c, trend_id, delta)
+        if delta == 0 or (delta < 0 and not is_revealed(w, c, trend_id)):  # 開季時才補蓋章的季沒記到新加的公開線，照樣算浮現
+            return []  # change_trend 也不會動的推動：不能拿來刷貢獻、也不算活躍
+        cfg = c.config
+        now = w.time
+        at = calendar.point(now, c, w)
+        window = cfg.active_window_days * DAY / calendar.cal_scale(c, w)
+        key = f"{at.cal_day}:{trend_id}"
+        pushed = push.buffered(abs(delta), push.active_count(s, p.faction, now, window))
+        used = p.pushed.get(key, 0.0)
+        moved, _ = push.split_by_cap(pushed, used, cfg.daily_push_cap)
+        p.pushed = push.recent_days(p.pushed, at.cal_day)
+        p.pushed[key] = used + moved
+
+        msgs: list[str] = []
+        if moved > 0:
+            whole, rest = push.take_whole(w.trend_accum.get(trend_id, 0.0), moved if delta > 0 else -moved)
+            if rest:
+                w.trend_accum[trend_id] = rest
+            else:
+                w.trend_accum.pop(trend_id, None)
+            if whole:
+                msgs = change_trend(s, c, trend_id, whole)
+
+        if p.faction is not None:  # 散人：照推，但不記貢獻、不進活躍名單
+            faction = next((f for f in c.scenario.factions if f.id == p.faction), None)
+            goal = faction.goals.get(trend_id, 0) if faction is not None else 0
+            if goal and (goal > 0) == (delta > 0):  # 替自己陣營的目標方向推；逆著推、這條線沒有目標都不記
+                gained = push.contribution(abs(delta), pushed, moved, cfg.contrib_per_push, cfg.over_cap_contrib_ratio)
+                push.add_contribution(p, at.week, gained)
+            w.active_pushers.setdefault(p.faction, {})[p.name] = now
+        w.active_pushers = push.drop_stale(w.active_pushers, now, window)  # 順手清掉超過時窗的人，名單不會一直長
+        return msgs
 
     def _battle_rewards(self, squad: Squad, record) -> list[str]:
         p = self.state.player
@@ -1696,8 +2147,7 @@ class Game:
         p = s.player
         regions = {region.id for loc_id in self._road_ends() if (region := atlas.region_of(c, loc_id)) is not None}
         heard = [
-            r for r in s.world.rumors
-            if r.region in regions and r.faction in (None, p.faction) and r.character in (None, p.name)
+            r for r in s.world.rumors if r.region in regions and can_hear(r, s)
         ][-c.config.road_rumor_pool:]
         if not heard:
             return ["你沿途問了幾個人，這一帶最近沒什麼新鮮事。"]
@@ -1823,11 +2273,14 @@ class Game:
         s.player.visited.add(loc_id)
         text = self.location_text()
         if final and is_revisit and not dest.important and client is not None:
-            flourish = flavor.polish_revisit(client, dest.name, dest.description)
+            flourish = flavor.polish_revisit(client, dest.name, dest.describe(s.world.flags))
             if flourish:
                 text = f"{text}\n\n{flourish}"
         self._hide(text)
-        return [text] + note_action(s, c, self.world, "move") + check_thresholds(s, c, self.world, client, now=self.now)
+        return (  # 糧車到了終點（路過也算）先交糧，再照原本的新手引導與門檻（計畫 T6）
+            [text] + self._convoy_arrives(loc_id) + note_action(s, c, self.world, "move")
+            + check_thresholds(s, c, self.world, client, now=self.now)
+        )
 
     def _road_sight(self, road: RoadKind, loc_id: str, when: float | None = None) -> list[str]:
         """路上見聞（路上設計第五節）：抵達一站時有 road_sight_chance 的機會，從符合這段路的種類、剛抵達那一站所在大區的
@@ -1857,7 +2310,7 @@ class Game:
         if not rewarded or capped:
             return [sight.text]
         self._count_road_reward("sight", day)
-        return [sight.text] + apply_effect(sight.effect, s, c, self.world)
+        return [sight.text] + apply_effect(sight.effect, s, c, self.world, push=self.push_trend)
 
     def _journey_line(self) -> str:
         """在路上的那一句（狀態列、場景共用）：「往寶洞（步行），第1天 00:08 抵達，還要約 8 分鐘；下一站湖邊」。"""
@@ -1894,8 +2347,10 @@ class Game:
         route = atlas.way_to(s, c, dest_id)
         s.battle_card = None
         self._draft = Draft(atlas.journey_title(c, route.path))
+        stamina = s.player.stamina
         try:
             msgs = self._depart(route, mode)
+            msgs += self._hear_after_stamina(stamina)
             journal.add_entry(s, self._draft.entry(s.world.time, msgs))
         finally:
             self._draft = None
@@ -1936,7 +2391,7 @@ class Game:
         won = result.tier in team.WIN_TIERS
         rewards = self._battle_rewards(squad, record) if won else []
         effect = choice.effect if won else choice.fail_effect
-        story = apply_effect(effect, s, c, self.world)
+        story = apply_effect(effect, s, c, self.world, push=self.push_trend)
         changes, notes = battlelog.split_changes(story)
         record.changes += changes
         record.notes += notes
@@ -1946,7 +2401,7 @@ class Game:
         return msgs
 
     def _apply(self, effect: Effect) -> list[str]:
-        msgs = apply_effect(effect, self.state, self.content, self.world)
+        msgs = apply_effect(effect, self.state, self.content, self.world, push=self.push_trend)
         if effect.next_event:
             msgs += self._present(self.content.events[effect.next_event])
         return msgs
@@ -1962,6 +2417,7 @@ class Game:
         return (
             not self._preparing() and not s.world.ended and s.pending_event is None and s.player.busy_until is None
             and s.player.resting_since is None and s.player.journey is None and not s.player.picking_audience
+            and s.player.fs_asking is None  # 伏筆的最後一步正在答題：跟事件待處理一樣，先答完或作罷
         )
 
     def seclude(self, hours: int) -> list[str]:
@@ -2178,7 +2634,7 @@ class Game:
         self.state.player.anonymous = bool(value)
 
     def skip_tutorial(self) -> list[str]:
-        steps = len(self.content.tutorial.steps)
+        steps = len(tutorial_steps(self.state, self.content))
         if self.state.player.tutorial_step >= steps:
             return []
         self.state.player.tutorial_step = steps
@@ -2230,7 +2686,17 @@ class Game:
             return self._log(["（現在不是籌備期，無法開季。）"])
         msgs = [f"══ {self.content.scenario.name}・開季 ══"]
         self._write("開季", msgs, tag="管理者")
-        return self._log(msgs)
+        return self._log(msgs + self._settle_season_start())
+
+    def _settle_season_start(self) -> list[str]:
+        """開季那一刻（世界秒 0）結算第 1 週週一 00:00 的大事（FB-040，見 world.settle_season_start），開季的人那一次
+        請求就跑；之後每曆時的交界才跑每曆時的事。放在 open_season／next_season 之後、不在任何 mutate 裡（mutate 不能巢狀）。
+        開關關著或舊季什麼都不會發生。公告進自己的江湖紀錄走 _deliver_big_events，跟別人一樣。"""
+        msgs: list[str] = []
+        self.world.mutate_season(lambda season: msgs.extend(settle_season_start(season, self.content, self.rng)))
+        self.state.world = self.world.get_season()
+        self._deliver_big_events()
+        return msgs
 
     def admin_end_season(self, now: float) -> list[str]:
         """管理者立刻收季：進行中 → 休季（之後再由 admin_next_season 開下一季）。照自然收季的做法算結局、
@@ -2251,7 +2717,10 @@ class Game:
         battle = self.world.get_battle()
         if battle is not None and battle.phase != "ended":
             self._shelve_unfinished_battle()
-        self._write("收季", msgs, tag="管理者")  # 跟開季一樣，管理者自己的江湖紀錄留一則
+        # 收季前結算的、從沒開成的決戰（world.settle_waiting_showdowns）：公告跟別的大事一樣走 _deliver_big_events，
+        # 收季那一則不再重複一次
+        self._deliver_big_events()
+        self._write("收季", self._without_timetable(msgs), tag="管理者")  # 跟開季一樣，管理者自己的江湖紀錄留一則
         return self._log(msgs)
 
     def admin_next_season(self, now: float) -> list[str]:
@@ -2267,7 +2736,7 @@ class Game:
         if not self.world.next_season(self.content, now):
             return self._log(["（這一季還沒結束，無法開啟下一季。）"])
         self._reconcile_season()
-        return self._log([f"══ 第 {self.world.get_season_number()} 季開始 ══"])
+        return self._log([f"══ 第 {self.world.get_season_number()} 季開始 ══"] + self._settle_season_start())
 
     def _admin_refusal(self, action: str) -> list[str] | None:
         """管理者觸發的共同檢查：不是管理者、或賽季沒有在進行，回傳要顯示的拒絕訊息；可以做就回傳 None。"""
@@ -2277,19 +2746,42 @@ class Game:
             return ["（賽季沒有在進行，無法觸發。）"]
         return None
 
+    def admin_battles(self) -> list[BattleDef]:
+        """管理者「立刻開戰」的選單，照內容的順序（計畫 T8）：
+        - 第一季不觸發的 beta 決戰不列；
+        - 時刻表決戰只在第一季列（開關關著時 beta 那一季沒有時刻表），而且只列還沒開過、還沒收場的，分版本的只列這一季
+          該開的那一版（宛城照第 3 週的結果）——開出來跟時間到了自動開的一樣（見 admin_start_battle）。"""
+        w = self.state.world
+        off = season_one_off(self.content, w, "battles")
+        showdowns = [
+            showdown_battle(self.state, self.content, e) for e in self.content.timetable
+            if season_one(self.content, w) and e.kind == "showdown" and e.id not in w.timeline and e.id not in w.showdowns_opened
+        ]
+        openable = {b.id for b in showdowns if b is not None}
+        return [b for b in self.content.battles.values() if b.id not in off and (b.timetable_event is None or b.id in openable)]
+
+    def admin_fires(self) -> list[Threshold | WorldEvent]:
+        """管理者「觸發大事」的選單：大勢門檻與世界事件，第一季不觸發的 beta 門檻不列（計畫 T8）。"""
+        off = season_one_off(self.content, self.state.world, "thresholds")
+        return [x for x in [*self.content.scenario.thresholds, *self.content.scenario.world_events] if x.id not in off]
+
     def admin_start_battle(self, battle_id: str, now: float) -> list[str]:
-        """管理者直接開一場全服戰鬥（試玩時人少、大勢推不到門檻也能開戰）。"""
+        """管理者直接開一場全服戰鬥（試玩時人少、大勢推不到門檻也能開戰）。選單上沒有的（第一季不觸發的 beta 決戰）開不了。"""
         refusal = self._admin_refusal("開戰")
         if refusal:
             return self._log(refusal)
-        definition = self.content.battles.get(battle_id)
+        definition = next((b for b in self.admin_battles() if b.id == battle_id), None)
         if definition is None:
             return self._log(["（沒有這場戰鬥。）"])
         current = self.world.get_battle()
         if current is not None and current.phase != "ended":
             return self._log(["（已經有一場戰鬥在進行。）"])
-        self.world.start_battle(definition, now)
-        msgs = [f"🛡️ 【全服戰報】{definition.name}的集結號角已經吹響！"]
+        if definition.timetable_event is not None:  # 時刻表決戰：跟時間到了一樣開（起點照戰況、記下開過了，之後不再開）
+            msgs = open_showdown(self.world, self.content, definition.timetable_event, now)
+            self.state.world = self.world.get_season()
+        else:
+            self.world.start_battle(definition, now)
+            msgs = [f"🛡️ 【全服戰報】{definition.name}的集結號角已經吹響！"]
         self._write(f"開戰・{definition.name}", msgs, tag="管理者")
         return self._log(msgs)
 
@@ -2312,8 +2804,10 @@ class Game:
         refusal = self._admin_refusal("推動大勢")
         if refusal:
             return self._log(refusal)
-        if trend_id not in {t.id for t in self.content.scenario.trends}:
+        if not trend_shown(self.content, self.state.world, trend_id):
             return self._log(["（沒有這條大勢線。）"])
+        if not pushable(self.content, self.state.world, trend_id):  # 開關開著時的黃巾聲勢由三條戰線合成，change_trend 推它會丟 ValueError
+            return self._log([f"（{trend_name(self.content, trend_id)}由三條戰線合成，不能直接推；請推其中一條戰線。）"])
         msgs = change_trend(self.state, self.content, trend_id, delta)
         msgs += check_thresholds(self.state, self.content, self.world, self.client, now=self.now)
         self._write("推動大勢", msgs or ["大勢紋絲不動。"], tag="管理者")
@@ -2324,7 +2818,7 @@ class Game:
 
     def location_text(self) -> str:
         loc = self.content.locations[self.state.player.location]
-        return f"【{loc.name}】危險 {'★' * loc.danger}\n\n{loc.description}"
+        return f"【{loc.name}】危險 {'★' * loc.danger}\n\n{loc.describe(self.state.world.flags)}"  # 宛城的描寫隨版本換
 
     def scene_text(self) -> str:
         """有全服戰鬥時大家都看得到戰場；只能觀戰的人照常遊玩，自己眼前的事（事件、對話、
@@ -2354,6 +2848,9 @@ class Game:
             return f"**投靠{faction.name}**\n\n{self._faction_prompt(faction)}"
         if s.player.picking_audience:
             return f"**求見**\n\n{self._audience_intro()}"
+        asking = foreshadow.asking_text(s, c, self.world) if s.player.fs_asking is not None else None
+        if asking is not None:
+            return asking
         if s.player.journey is not None:
             halted = "（已經喊停）" if s.player.journey.stop_at is not None else ""
             return (
@@ -2377,7 +2874,7 @@ class Game:
             mate_now, mate_cap = team.member_neili(c, progress)
             mates.append({"name": c.characters[cid].name, "level": progress.level,
                           "hp": int(mate_now), "hp_max": int(mate_cap)})
-        return {
+        data = {
             "name": p.name,
             "affiliation": "・".join(name for name in (sect, faction) if name) or "散人",
             "anonymous": p.anonymous,
@@ -2402,6 +2899,12 @@ class Game:
             "journey": None if p.journey is None else self._journey_line(),
             **self._calendar_status(),  # 第一季：季曆與下一件大事的倒數；開關關著時沒有這兩欄
         }
+        if season_one(c, w):  # 第一季濃縮版：江湖頁的三條戰況與三方態勢；開關關著時沒有這兩個鍵，畫面照舊
+            data["fronts"] = [
+                {"id": tid, "name": trend_name(c, tid), "value": trend_value(s, c, tid)} for tid in front_ids(c)
+            ]
+            data["stances"] = stances(s, c)
+        return data
 
     def _calendar_status(self) -> dict:
         """狀態列的季曆（第 N 週、週幾、幾點）與下一件大事的倒數。倒數是現實秒：(大事時刻 − 世界秒) ÷ time_scale。"""
@@ -2409,7 +2912,7 @@ class Game:
         if not calendar.season_one_on(w, c):
             return {}
         at = calendar.point(w.time, c, w)
-        upcoming = timetable.next_event(self.state, c)
+        upcoming = None if w.ended else timetable.next_event(self.state, c)  # 休季時沒有下一件（計畫 T9）
         return {
             "calendar": {
                 "week": at.week, "weekday": at.weekday, "clock": f"{at.hour:02d}:{at.minute:02d}",
@@ -2432,6 +2935,67 @@ class Game:
         done = [(i, eid, r) for i, (eid, r) in enumerate(w.timeline.items()) if r.text and r.time >= start]
         done.sort(key=lambda item: (item[2].time, item[0]), reverse=True)
         return [f"**{titles.get(eid, eid)}**\n\n{r.text}" for _, eid, r in done[:BULLETIN_MAX]]
+
+    def convoy_line(self) -> str | None:
+        """押著的糧車要送去哪（江湖頁軍令卡上的一行；T6 審查 I3）：那一道軍令已經達成或換週清掉了也照樣寫，
+        送到了照樣記捐獻與貢獻。沒有押車時是 None。"""
+        convoy = self.state.player.convoy
+        if convoy is None:
+            return None
+        return f"你押著一車糧（{convoy.grain} 份），要送到{self.content.locations[convoy.to_loc].name}。"
+
+    def orders_view(self) -> list[dict]:
+        """江湖頁的「本週軍令」卡（計畫 T6）：自己陣營這週的軍令，只給自己陣營看；散人、開關關著是空的。
+        截止是下週一 00:00（最後一週寫成季末那一刻，calendar.point 會夾住）。"""
+        s, c = self.state, self.content
+        name = s.player.name
+        views = []
+        for o in orders.current(s, c, s.player.faction):
+            total = sum(o.progress.values())
+            views.append({
+                "id": o.id, "title": orders.title(c, o), "text": o.text, "mine": o.progress.get(name, 0),
+                "progress": min(total, o.quota), "quota": o.quota, "done": o.done,
+                "deadline": self.stamp(calendar.week_start(o.week + 1, c, s.world)),
+            })
+        return views
+
+    def season_result(self) -> dict | None:
+        """休季時江湖頁最上面的結算卡（計畫 T9）：結局與季末公告、最終三方態勢與三條戰況、時刻表每一件的結果（誰改寫的）、
+        各陣營出力前五。只有第一季（開關開著＋這一季的章）收季之後才有；資料在收季那一刻存好（world.end_season），這裡只讀。
+        時刻表那一列：結算過的是公告全文；跳過的寫「這一季沒有發生」；季提前收束、還沒輪到的寫「季已落幕，沒有發生」。
+        改寫的人寫公告上的名字（匿名的是「某位少俠」，timetable.shown），不寫真名。"""
+        s, c = self.state, self.content
+        w = s.world
+        if not w.ended or not season_one(c, w):
+            return None
+        values = dict(w.final_trends)
+        huangjin, geju = values.get(HUANGJIN, 0), values.get(GEJU, 0)
+        standing = {"guan": 100 - huangjin, "huang": huangjin, "haoqiang": geju}
+        names = {f.id: f.name for f in c.scenario.factions}
+        timeline = []
+        for event in c.timetable:
+            result = w.timeline.get(event.id)
+            if result is None:
+                text = "（季已落幕，沒有發生。）"
+            elif not result.text:
+                text = "（這一季沒有發生。）"
+            else:
+                text = result.text
+            lock = w.locks.get(event.id) if result is not None and result.locked_by else None
+            timeline.append({
+                "week": event.week, "title": event.title, "text": text,
+                "locked_by": timetable.shown(lock) if lock is not None else None,
+            })
+        return {
+            "title": w.ending_title, "text": w.ending_text,
+            "stances": [{"side": side, "name": names.get(side, side), "value": value} for side, value in standing.items()],
+            "fronts": [{"id": f, "name": trend_name(c, f), "value": values.get(f, 0)} for f in front_ids(c)],
+            "timeline": timeline,
+            "rankings": [
+                {"faction": f.id, "name": f.name, "rows": [list(row) for row in w.final_rankings.get(f.id, [])]}
+                for f in c.scenario.factions
+            ],
+        }
 
     def stamp(self, time: float, clock: bool = True) -> str:
         """玩家看得到的遊戲時間（江湖紀錄、江湖史、傳聞、戰報、路上）：第一季寫成季曆，其他時候照舊（calendar.stamp_text）。"""
@@ -2483,9 +3047,9 @@ class Game:
         w = self.state.world
         parts = []
         for trend in self.content.scenario.trends:
-            if trend.id not in w.revealed:
+            if not trend_shown(self.content, w, trend.id) or not is_revealed(w, self.content, trend.id):
                 continue
-            value = w.trends[trend.id]
+            value = trend_value(self.state, self.content, trend.id)
             bar = "█" * (value // 5) + "░" * (20 - value // 5)
             parts.append(f"**{trend.name}** {value}/100\n\n`{bar}`\n\n{trend.desc}")
         if w.ended:
@@ -2493,7 +3057,10 @@ class Game:
         return "\n\n".join(parts) or "（江湖暫時風平浪靜。）"
 
     def rumors_text(self, limit: int = 30) -> str:
-        return _timeline(self.state.world.rumors[-limit:][::-1], self._day_stamp) or "（尚無傳聞。）"
+        """見聞頁的傳聞：陣營軍情只給那個陣營、個人線索只給那個人（跟沿途打聽同一個規則，見 _road_ask；計畫 T6）。
+        開關關著時沒有這兩種傳聞，畫面一樣。"""
+        heard = [r for r in self.state.world.rumors if can_hear(r, self.state)]
+        return _timeline(heard[-limit:][::-1], self._day_stamp) or "（尚無傳聞。）"
 
     def chronicle_text(self) -> str:
         """江湖史：這一季在最前面，往前每一季各一段（線上架構設計 3.2：江湖史跨季保留），最後是玉璽碎片。"""

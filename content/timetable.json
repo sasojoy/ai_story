@@ -34,13 +34,15 @@
       "成": {
         "text": "史書上，張曼成攻殺南陽太守褚貢，屯據宛城。這一次也一樣：神上使的黃旗插上了宛城城頭，郡府的官吏逃散一空。",
         "chronicle": "張曼成攻殺南陽太守褚貢，據宛城。",
-        "trends": {"nanyang": 8}
+        "trends": {"nanyang": 8},
+        "world_flags_add": ["wan_version_jia"]
       },
       "不成": {
         "text": "史書上，張曼成攻殺南陽太守褚貢，屯據宛城。這一次，宛城的城門沒有開。褚貢領著郡兵死守，黃巾在城下折了數百人，退回營中。",
         "chronicle": "張曼成攻宛城不下。",
         "trends": {"nanyang": -5},
-        "figures": {"zhangmancheng": {"fate": "受挫"}}
+        "figures": {"zhangmancheng": {"fate": "受挫"}},
+        "world_flags_add": ["wan_version_yi"]
       }
     }
   },
@@ -206,6 +208,7 @@
     "versions": {"成": "甲", "不成": "乙"},
     "third_party_text": "宛城殺聲震天的時候，新野縣衙的冊子換了主人：{name} 開倉放糧，縣裡的人自己把冊子捧了出來。",
     "third_party_trends": {"geju": 10},
+    "third_party_chronicle": "{name} 取得新野",
     "outcomes": {
       "甲:guan:大勝": {
         "text": "史書上，孫堅身當一面，登城先入，大破宛城。這一次也一樣：江東子弟攀上東北角的城牆，城門從裡面打開了。",
@@ -213,7 +216,8 @@
         "loser_text": {"guan": "黃巾的 {loser} 送進城的糧，最後沒能派上用場。"},
         "chronicle": "孫堅先登，宛城破。",
         "trends": {"nanyang": -15},
-        "figures": {"zhaohong": {"fate": "退場"}}
+        "figures": {"zhaohong": {"fate": "退場"}},
+        "world_flags_add": ["wancheng_guan_holds"]
       },
       "甲:guan:險勝": {
         "text": "史書上，孫堅先登，大破宛城。這一次，宛城是破了，可趙弘帶著殘部從南門突圍。",
@@ -221,7 +225,8 @@
         "loser_text": {"guan": "黃巾的 {loser} 送進城的糧，最後沒能派上用場。"},
         "chronicle": "孫堅先登，宛城破。",
         "trends": {"nanyang": -8},
-        "figures": {"zhaohong": {"fate": "聲威大減"}}
+        "figures": {"zhaohong": {"fate": "聲威大減"}},
+        "world_flags_add": ["wancheng_guan_holds"]
       },
       "甲:huang:大勝": {
         "text": "史書上，孫堅先登，宛城被破。這一次，官軍的雲梯一架架被推倒，圍城的兵先散了。",
@@ -243,14 +248,16 @@
         "locked_text": {"guan": "這一次，宛城在官軍手裡。黃巾圍城數十日，{name} 跟著孫堅在一個雨夜縋城而出，直撲黃巾連營。趙弘死在亂軍之中，圍城不攻自解。"},
         "chronicle": "孫堅夜襲，解宛城之圍。",
         "trends": {"nanyang": -15},
-        "figures": {"zhaohong": {"fate": "退場"}}
+        "figures": {"zhaohong": {"fate": "退場"}},
+        "world_flags_add": ["wancheng_guan_holds"]
       },
       "乙:guan:險勝": {
         "text": "這一次，宛城在官軍手裡。黃巾的連營被孫堅衝亂，趙弘退兵三十里。",
         "locked_text": {"guan": "這一次，宛城在官軍手裡。黃巾圍城數十日，{name} 跟著孫堅在一個雨夜縋城而出，直撲黃巾連營。黃巾的連營被衝亂，趙弘退兵三十里。"},
         "chronicle": "孫堅夜襲，解宛城之圍。",
         "trends": {"nanyang": -8},
-        "figures": {"zhaohong": {"fate": "受挫"}}
+        "figures": {"zhaohong": {"fate": "受挫"}},
+        "world_flags_add": ["wancheng_guan_holds"]
       },
       "乙:huang:大勝": {
         "text": "宛城被圍數十日，城中糧盡，終於開了門。{官軍主將}的援軍晚到了一步。",
@@ -335,6 +342,9 @@
     "front": "jizhou",
     "title": "下曲陽・季末",
     "kind": "finale",
-    "preface": "史書上，皇甫嵩攻下曲陽，斬張寶，黃巾之亂至此平定。這一次……"
+    "preface": "史書上，皇甫嵩攻下曲陽，斬張寶，黃巾之亂至此平定。這一次……",
+    "early_preface": "戰事提前收束。",
+    "out_lines": {"dongzhuo": "董卓兵敗，涼州軍元氣大傷。"},
+    "ending_chronicle": "甲子年冬，第一季黃巾之亂落幕：{結局}。"
   }
 ]

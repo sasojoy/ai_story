@@ -94,7 +94,7 @@
             "good": 1
           },
           "trend": {
-            "huangjin": -1
+            "front": -1
           }
         },
         "fail_effect": {
@@ -103,7 +103,7 @@
             "fame": -1
           },
           "trend": {
-            "huangjin": 1
+            "front": 1
           },
           "stamina": -8
         }
@@ -136,7 +136,7 @@
             "fame": 2
           },
           "trend": {
-            "huangjin": -2
+            "front": -2
           }
         },
         "fail_effect": {

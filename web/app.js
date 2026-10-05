@@ -42,6 +42,8 @@
     { tab: "practice", name: "去修練" },
     { tab: "craft", name: "去煉製" },
   ];
+  // 三方態勢（第一季設計 4.4，status.stances 的鍵）：狀態列展開時那一行；第一季濃縮版才有
+  const STANCE_NAMES = [["guan", "官軍"], ["huang", "黃巾"], ["haoqiang", "豪強"]];
   // 手機寬度：第一次打開輿圖時，手機照原尺寸，寬螢幕照框寬（最多原尺寸），都對準所在地（見 mapReady）
   const PHONE = window.matchMedia ? window.matchMedia("(max-width: 767px)") : null;
 
@@ -52,6 +54,8 @@
     mainKey: "",
     tab: "jianghu",
     nowOpen: null, // 江湖頁「剛剛」展開的那一則（記內容本身）；換成新的一則就收回（A4）
+    boardOpen: null, // 江湖頁公告卡展開著的那一週（週次）；收起或換週就不再對得上（FB-039）
+    ordersShut: null, // 江湖頁「本週軍令」收起來的那一週；換週就重新展開（計畫 T6）
     busy: false,
     menxia: null,
     message: "",
@@ -226,6 +230,7 @@
       ${S.showMore ? `<div class="more-stats">
         ${s.minor.map(([k, v]) => `${esc(k)} ${v}`).join("　")}　｜　${s.attrs.map(([k, v]) => `${esc(k)} ${v}`).join("　")}
         ${team ? `<br>${team}` : ""}
+        ${s.stances ? `<br>態勢　${STANCE_NAMES.map(([id, name]) => `${name} ${s.stances[id]}`).join("・")}` : ""}
       </div>` : ""}
       ${s.hint ? `<div class="more-stats"><span class="hint">${esc(s.hint)}</span></div>` : ""}`;
   }
@@ -358,7 +363,10 @@
       if (!o) return inkCell(d.key, d.name, d.none, d.icon, "disabled", " off");
       used.add(o.id);
       const [name, detail] = optParts(o);
-      const sub = o.enabled ? (SHORT_SUB[o.id] || detail.replace(/^體力 (\d+).*$/, "體力 $1")) : "體力不夠";
+      // 按不下去的原因：標籤括號裡寫的是體力就是「體力不夠」，寫別的就照寫；整句太長、格子裝不下（約 60 px、不換行）時只留
+      // 最後一小句（例：挑戰本人打贏之後「剛吃了敗仗，閉門不見」只寫「閉門不見」，T4）
+      const sub = o.enabled ? (SHORT_SUB[o.id] || detail.replace(/^體力 (\d+).*$/, "體力 $1"))
+        : (detail && !detail.startsWith("體力") ? detail.split("，").pop() : "體力不夠");
       return inkCell(d.key, name, sub, d.icon, o.enabled ? `data-act="choose" data-id="${esc(o.id)}"` : "disabled", o.enabled ? "" : " off");
     });
     const moves = m.options.filter((o) => followsMode(o.id));
@@ -384,6 +392,52 @@
     if (!card) return;
     const calm = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     card.scrollIntoView({ block: "nearest", behavior: calm ? "auto" : "smooth" });
+  }
+
+  // 公告的標題：伺服器給的每則是「**標題**＋空行＋全文」轉成的 HTML，標題在第一個 <strong> 裡（Game.bulletin）
+  function bulletinTitle(html) {
+    const box = document.createElement("template");
+    box.innerHTML = html;
+    const strong = box.content.querySelector("strong");
+    return (strong || box.content).textContent.trim();
+  }
+
+  // 第一季濃縮版的「本週軍令」（計畫 T6；伺服器只送自己陣營的，散人沒有）：預設展開，收起來的狀態照週次記住（同公告卡）
+  function ordersHtml(list, week, convoy) {
+    const done = list.filter((o) => o.done).length;
+    const cart = convoy ? `<div class="order-cart">🛒 ${esc(convoy)}</div>` : "";  // 押著的糧車（那一道沒了也照樣寫）
+    const rows = list.map((o) => `
+      <div class="order${o.done ? " done" : ""}">
+        <div class="order-head"><b>${esc(o.title)}</b><span>${o.done ? "已達成" : `陣營 ${o.progress}／${o.quota}`}</span></div>
+        <div class="order-text">${esc(o.text)}</div>
+        <div class="order-bar" role="meter" aria-valuemin="0" aria-valuemax="${o.quota}" aria-valuenow="${o.progress}" aria-label="${esc(o.title)}"><i style="width:${pct(o.progress, o.quota)}%"></i></div>
+        <div class="order-meta">你做了 ${o.mine} 次・截止 ${esc(o.deadline)}</div>
+      </div>`).join("");
+    return `<details class="fold orders" data-week="${week}" ${S.ordersShut === week ? "" : "open"}>
+      <summary>📜 本週軍令（${list.length}${done ? `，已達成 ${done}` : ""}）</summary><div class="fold-body">${cart}${rows}</div></details>`;
+  }
+
+  // 第一季的結算卡（休季才有，計畫 T9）：結局與季末公告、最終態勢與三條戰況；十二件大事與各陣營出力前五收在摺疊裡
+  function resultHtml(r) {
+    const bars = (rows, label) => `<div class="fronts" role="group" aria-label="${label}">${rows.map((x) => `
+      <div class="front"><div class="front-head"><span>${esc(x.name)}</span><b>${x.value}</b></div>
+        <div class="front-bar" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${x.value}" aria-label="${esc(x.name)}"><i style="width:${pct(x.value, 100)}%"></i></div></div>`).join("")}</div>`;
+    const events = r.timeline.map((e) => `<div class="result-event"><b>第 ${e.week} 週・${esc(e.title)}</b>${
+      e.locked_by ? `<small>${esc(e.locked_by)} 改寫</small>` : ""}${e.text}</div>`).join("");
+    const ranks = r.rankings.map((f) => `<div class="result-rank"><b>${esc(f.name)}</b>${f.rows.length
+      ? `<ol>${f.rows.map(([n, v]) => `<li><span>${esc(n)}</span><i>${v}</i></li>`).join("")}</ol>`
+      : "<p>（沒有人出力）</p>"}</div>`).join("");
+    return `<section class="card result"><h2>賽季落幕：${esc(r.title)}</h2><div class="result-text">${r.text}</div>
+      <h3>最終態勢</h3>${bars(r.stances, "最終態勢")}<h3>最終戰況</h3>${bars(r.fronts, "最終戰況")}
+      <details class="fold"><summary>這一季的十二件大事</summary><div class="fold-body">${events}</div></details>
+      <details class="fold"><summary>各陣營出力前五</summary><div class="fold-body result-ranks">${ranks}</div></details></section>`;
+  }
+
+  // 第一季濃縮版的三條戰況（伺服器有送 fronts 才畫）：0 是官軍穩控、100 是黃巾控制，條上黃的那一截是黃巾佔的
+  function frontsHtml(fronts) {
+    return `<div class="fronts" role="group" aria-label="戰況：0 官軍穩控，100 黃巾控制">${fronts.map((f) => `
+      <div class="front"><div class="front-head"><span>${esc(f.name)}</span><b>${f.value}</b></div>
+        <div class="front-bar" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${f.value}" aria-label="${esc(f.name)}"><i style="width:${pct(f.value, 100)}%"></i></div></div>`).join("")}</div>`;
   }
 
   function pageJianghu() {
@@ -418,16 +472,30 @@
         </button>`).join("")}
       </div>`;
     const scene = `<section class="card scene">${m.scene}</section>`;
-    const tail = `${links}
-      <div class="mini" data-act="tab" data-tab="map" role="button" aria-label="展開輿圖">${m.minimap}</div>
+    const tail = `<div class="mini" data-act="tab" data-tab="map" role="button" aria-label="展開輿圖">${m.minimap}</div>
       <button class="linkish" data-act="news" data-news="journal">看江湖紀錄 ›</button>`;
-    const quest = `<details class="fold quest"><summary>📜 主線與目標</summary><div class="fold-body">${m.quest}</div></details>`;
-    // 公告卡（第一季）：這一週已經發生的大事，新的在前；排在最上面、「剛剛」之前。沒有就不畫
-    const board = m.bulletin && m.bulletin.length
-      ? `<section class="card bulletin" aria-label="本週江湖大事"><div class="bulletin-head">📣 本週江湖大事</div>${m.bulletin.map((b) => `<div class="bulletin-item">${b}</div>`).join("")}</section>`
+    // 第一季把 beta 的主線關掉、其他也都沒有東西時，quest 是空的：這一塊不畫，由本週大事卡與倒數撐著（計畫 T8）
+    const quest = m.quest && m.quest.trim()
+      ? `<details class="fold quest"><summary>📜 主線與目標</summary><div class="fold-body">${m.quest}</div></details>`
       : "";
-    // 劇情文字在上、行動在下（企劃者 2026-10-04）。行動列只有一排，375×812 上「剛剛」、場景與整排行動都在第一屏
-    return `${board}${quest}${now}${scene}${free}${menu}${tail}`;
+    // 公告卡（第一季）：這一週已經發生的大事，新的在前；排在最上面、「剛剛」之前。沒有就不畫。
+    // 預設縮成一行「📣 本週江湖大事（2）：標題、標題」（放不下截斷加「…」），點了才展開全文（FB-039）：兩件大事的全文
+    // 加上戰鬥卡片，會把整排行動擠到分頁列底下。展開與否記在 S.boardOpen（鍵是週次，toggle 監聽見下面），
+    // 輪詢重畫不會把它關掉，換週就回到收起
+    const week = m.status && m.status.calendar ? m.status.calendar.week : 0;
+    const board = m.bulletin && m.bulletin.length
+      ? `<details class="fold bulletin" data-week="${week}" ${S.boardOpen === week ? "open" : ""}>
+          <summary><span class="bulletin-head">📣 本週江湖大事（${m.bulletin.length}）</span><span class="bulletin-titles">${esc(m.bulletin.map(bulletinTitle).join("、"))}</span></summary>
+          <div class="fold-body">${m.bulletin.map((b) => `<div class="bulletin-item">${b}</div>`).join("")}</div></details>`
+      : "";
+    // 三條戰況排在行動列下面、小地圖上面，不擠掉第一屏的公告卡、「剛剛」、場景與行動列
+    const fronts = m.fronts ? frontsHtml(m.fronts) : "";
+    const resultCard = m.season_result ? resultHtml(m.season_result) : "";  // 休季的結算卡排在最上面（計畫 T9）
+    // 本週軍令排在行動列（與路上捷徑）下面、三條戰況上面：不擠掉第一屏的公告、「剛剛」、場景與行動列（計畫 T6）
+    const orderCard = m.orders || m.convoy ? ordersHtml(m.orders || [], week, m.convoy) : "";
+    // 劇情文字在上、行動在下（企劃者 2026-10-04）。行動列只有一排，375×812 上「剛剛」、場景與整排行動都在第一屏。
+    // 路上的三個捷徑（links）緊貼在選項底下，戰況條排在捷徑之後，不要把它插到選項與捷徑中間
+    return `${resultCard}${board}${quest}${now}${scene}${free}${menu}${links}${orderCard}${fronts}${tail}`;
   }
 
   // ── 修練 ──
@@ -500,6 +568,8 @@
           <span class="n">×${m.count - used(m.id)}</span><b>${esc(m.name)}</b><small>${esc(m.tier)}・屬${esc(m.attribute)}</small>
         </button>`).join("")}</div>`
         : '<p class="muted">背包裡還沒有素材。去探索、遊歷打贏，或是碰上奇遇都拿得到。</p>'}
+      ${x.clue_items?.length ? `<div class="label">伏筆物品</div>
+      <div class="chips clues">${x.clue_items.map((i) => `<div class="clue"><b>${esc(i.name)}</b><span>×${i.count}</span></div>`).join("")}</div>` : ""}
       <details class="fold"><summary>素材說明</summary><div class="fold-body">${x.bag}</div></details>
       <div class="sticky-act"><button class="btn primary" id="forge" data-act="forge" ${ready ? "" : "disabled"}>開爐煉製</button></div>`;
   }
@@ -1363,7 +1433,7 @@
   // 不比整份，是因為本人卡上的氣血一直在回，整份 menxia 幾乎每分鐘都不一樣，煉製頁根本沒畫那張卡
   const MENXIA_SHOWN = {
     practice: ["rules", "slot_cards", "arts", "player_card", "roster", "person", "person_card", "on_team"],
-    craft: ["materials", "per_craft", "bag", "craft_line", "xinde"],
+    craft: ["materials", "clue_items", "per_craft", "bag", "craft_line", "xinde"],
   };
 
   // 重畫這一頁但保留玩家正在做的事（輪詢、閉關被拒時用）：填到一半的欄位（自創功法的名字、閉關時數）、
@@ -1400,6 +1470,14 @@
   }
   setInterval(poll, POLL_MS);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) poll(); });
+
+  // 公告卡的展開與否（FB-039）：toggle 不冒泡，用捕獲階段接。記的是週次：換週之後新畫的卡週次對不上，自然收起；
+  // 重畫（輪詢、換分頁回來）時照 S.boardOpen 補回 open，那一下補出來的 toggle 記下的還是同一週，不會繞圈
+  document.addEventListener("toggle", (ev) => {
+    const box = ev.target;
+    if (box instanceof Element && box.matches("details.bulletin")) S.boardOpen = box.open ? Number(box.dataset.week) : null;
+    if (box instanceof Element && box.matches("details.orders")) S.ordersShut = box.open ? null : Number(box.dataset.week);
+  }, true);
 
   // 視窗大小變了（轉向、拉視窗）：輿圖開著就重新夾住、套用；原本是整張就維持整張（applyMapView）
   window.addEventListener("resize", () => { if (S.stage === "game" && S.tab === "map") applyMapView(); });

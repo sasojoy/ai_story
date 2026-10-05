@@ -19,6 +19,7 @@ from .world_state import WorldStateStore
 HALF_HOUR = 1800
 SPEND_XINDE_EVERY = 5  # 每幾步檢查一次要不要拿心得去練功/療傷/煉製
 CRAFT_TRIES = 4  # 煉製時最多試幾組素材組合（第一組是階最高的，其餘隨機）
+FORESHADOW_OPTIONS = ("fs:", "talk:clue:")  # 伏筆的最後一步、對話的片段選項：機器人不做伏筆
 
 
 def wants_heal(game: Game) -> bool:
@@ -96,6 +97,8 @@ def pick(game: Game, options: list[Option], rng: random.Random) -> str | None:
             if option.id.startswith("battle:join"):
                 return option.id
     options = [o for o in options if o.id != FREE_TEXT_OPTION]  # 隨口應對要寫一句話，機器人寫不出有意義的做法（同決戰的 free_text）
+    # 伏筆的最後一步與對話的片段選項：這一版假人不做伏筆（計畫 T7），同隨口應對一樣排除
+    options = [o for o in options if not o.id.startswith(FORESHADOW_OPTIONS)]
     if s.pending_event:
         choices = game.content.events[s.pending_event].choices
         for option in options:

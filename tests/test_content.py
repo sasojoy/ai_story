@@ -6,7 +6,10 @@ from pydantic import ValidationError
 
 from conftest import FIXTURE
 from tianxia.content import ContentError, load_content, profile_line, validate
-from tianxia.models import FactionDef
+from tianxia.models import (
+    BattleAct, BattleActionEffect, BattleDef, BattleFaction, BattleOption, BattleOutcome, Condition, Config, FactionDef,
+    Threshold, Trend,
+)
 
 
 def copy_fixture(tmp_path):
@@ -423,6 +426,39 @@ def test_threshold_starts_battle_with_known_id_loads(tmp_path):
     assert content.scenario.thresholds[0].starts_battle == "b1"
 
 
+def test_season_one_off_loads_and_defaults_to_nothing(tmp_path, content):
+    """第一季不觸發的清單（控制者 2026-10-04，與 T4 說好的格式，後來多了個人目標）：五種各自寫那一種內容的 id；沒寫就是空的。"""
+    assert content.scenario.season_one_off.model_dump() == {
+        "thresholds": [], "storylines": [], "battles": [], "events": [], "milestones": [],
+    }
+    root = copy_fixture(tmp_path)
+    write_battles_json(root)
+    edit_json(root / "scenario.json", lambda d: d.update(season_one_off={
+        "thresholds": ["kou50"], "storylines": ["main"], "battles": ["b1"], "events": ["drunk"], "milestones": ["m1"],
+    }))
+    off = load_content(root).scenario.season_one_off
+    assert (off.thresholds, off.storylines, off.battles, off.events, off.milestones) == (
+        ["kou50"], ["main"], ["b1"], ["drunk"], ["m1"],
+    )
+
+
+@pytest.mark.parametrize(("kind", "ghost", "message"), [
+    ("thresholds", "kou99", "門檻 kou99"),
+    ("storylines", "side", "主線 side"),
+    ("battles", "b9", "戰鬥 b9"),
+    ("events", "ghost_event", "事件 ghost_event"),
+    ("milestones", "ghost_goal", "個人目標 ghost_goal"),
+    ("thresholds", "main", "門檻 main"),  # 照種類各自檢查：主線的 id 不能寫在門檻那一欄
+    ("battles", "kou50", "戰鬥 kou50"),
+])
+def test_season_one_off_ids_are_checked(tmp_path, kind, ghost, message):
+    root = copy_fixture(tmp_path)
+    write_battles_json(root)
+    edit_json(root / "scenario.json", lambda d: d.update(season_one_off={kind: [ghost]}))
+    with pytest.raises(ContentError, match=f"第一季不觸發.*未知的{message}"):
+        load_content(root)
+
+
 def test_battle_option_with_unknown_tag_rejected(tmp_path):
     root = copy_fixture(tmp_path)
     battle = json.loads(json.dumps(MINIMAL_BATTLE))
@@ -766,6 +802,194 @@ def test_compass_must_be_on_the_map(tmp_path):
         load_content(root)
 
 
+# ── 第一季濃縮版：戰線與衍生線（T1）──────────────────────────
+
+
+def _with_fronts(content):
+    """夾具改成第一季濃縮版的樣子：北邊大區的戰線 east、南邊的 west，兩條合成 total（各半）。三個地點都在北邊。"""
+    content.scenario.trends += [
+        Trend(id="east", name="東線", start=40, season_one=True),
+        Trend(id="west", name="西線", start=60, season_one=True),
+        Trend(id="total", name="總勢", start=25, derived={"east": 0.5, "west": 0.5}),
+    ]
+    content.map.regions[0].front = "east"
+    content.map.regions[1].front = "west"
+    return content
+
+
+def _battle(trend_delta):
+    return BattleDef(
+        id="t1", name="測試決戰", region="north",
+        factions=[BattleFaction(id="guan", name="官軍"), BattleFaction(id="huang", name="黃巾")],
+        acts=[BattleAct(id="a1", title="初探", text="雙方試探。", goal="推動戰局",
+                        options=[BattleOption(text="穩紮穩打", tag="safe")])],
+        action_tags={"safe": BattleActionEffect(trend_delta=1, neili_damage=5)},
+        outcomes=[BattleOutcome(faction="guan", title="官軍大勝", text="官軍獲勝。", trend_delta=trend_delta)],
+        muster_seconds=600, round_seconds=120,
+    )
+
+
+def test_validate_accepts_fronts_and_a_derived_trend(content):
+    validate(_with_fronts(content))
+
+
+def test_validate_rejects_derived_weights_that_do_not_add_up_to_one(content):
+    _with_fronts(content).scenario.trends[-1].derived = {"east": 0.5, "west": 0.4}
+    with pytest.raises(ContentError, match="權重加起來要是 1"):
+        validate(content)
+
+
+def test_validate_rejects_a_derived_trend_built_from_another_derived_trend(content):
+    _with_fronts(content).scenario.trends.append(Trend(id="meta", name="套娃", derived={"total": 1.0}))
+    with pytest.raises(ContentError, match="大勢線 meta：來源不能是另一條衍生線"):
+        validate(content)
+
+
+@pytest.mark.parametrize("front", ["total", "ghost"])
+def test_validate_rejects_a_region_front_that_is_derived_or_unknown(content, front):
+    _with_fronts(content).map.regions[0].front = front
+    with pytest.raises(ContentError, match="大區 north"):
+        validate(content)
+
+
+def test_validate_rejects_training_that_pushes_another_regions_front(content):
+    _with_fronts(content).locations["lake"].train_trend = {"west": -1}  # 湖邊在北邊，戰線是 east
+    with pytest.raises(ContentError, match="地點 lake：train_trend 的 west 不是這個地點所在大區的戰線"):
+        validate(content)
+
+
+@pytest.mark.parametrize("where", ["train_trend", "sim", "goals", "outcome"])
+def test_validate_rejects_pushes_on_a_derived_trend(content, where):
+    content = _with_fronts(content)
+    if where == "train_trend":
+        content.locations["lake"].train_trend = {"total": -1}
+    elif where == "sim":
+        content.scenario.sim_players[0].trend = {"total": 1}
+    elif where == "goals":
+        content.scenario.factions = [FactionDef(id="guan", name="官軍", goals={"total": -1})]
+    else:
+        content.battles["t1"] = _battle({"total": -5})
+    with pytest.raises(ContentError, match="不能推衍生線 total"):
+        validate(content)
+
+
+def test_validate_lets_effects_and_training_push_the_local_front(content):
+    content = _with_fronts(content)
+    content.locations["lake"].train_trend = {"front": -1}
+    content.events["drunk"].choices[0].effect.trend = {"front": 1}
+    content.battles["t1"] = _battle({"east": -5})
+    validate(content)
+
+
+@pytest.mark.parametrize("where", ["sim", "goals", "outcome", "region"])
+def test_validate_rejects_the_front_key_outside_effects_and_training(content, where):
+    content = _with_fronts(content)
+    if where == "sim":
+        content.scenario.sim_players[0].trend = {"front": 1}
+    elif where == "goals":
+        content.scenario.factions = [FactionDef(id="guan", name="官軍", goals={"front": -1})]
+    elif where == "outcome":
+        content.battles["t1"] = _battle({"front": -5})
+    else:
+        content.map.regions[0].trends = ["front"]
+    with pytest.raises(ContentError, match="未知的大勢線 front"):
+        validate(content)
+
+
+def test_validate_rejects_the_front_key_when_no_trend_is_built_from_fronts(content):
+    content.events["drunk"].choices[0].effect.trend = {"front": 1}  # 夾具原樣：沒有衍生線
+    with pytest.raises(ContentError, match="用了 front"):
+        validate(content)
+
+
+@pytest.mark.parametrize("bound", ["trend_min", "trend_max"])
+@pytest.mark.parametrize("where", ["event", "any_of", "choice", "ending", "storyline", "milestone"])
+def test_validate_rejects_a_condition_on_a_season_one_trend(content, where, bound):
+    """條件讀的是 world.trends 的原數字：開關關著時戰線沒有值（讀成 0）、季中才開季的那一季讀不到起始值，
+    所以條件不能掛在第一季的線上（戰線、割據）；要讀就讀衍生線（黃巾聲勢）或一般的線。"""
+    content = _with_fronts(content)
+    cond = Condition(**{bound: {"east": 50}})
+    if where == "event":
+        content.events["drunk"].condition = cond
+    elif where == "any_of":
+        content.events["drunk"].condition = Condition(any_of=[cond])
+    elif where == "choice":
+        content.events["drunk"].choices[0].condition = cond
+    elif where == "ending":
+        content.scenario.endings[0].condition = cond
+    elif where == "storyline":
+        content.scenario.storylines[0].acts[0].advance_when = cond
+    else:
+        content.scenario.milestones[0].condition = cond
+    with pytest.raises(ContentError, match="條件不能讀第一季的線 east"):
+        validate(content)
+
+
+def test_validate_names_the_place_of_a_condition_on_a_season_one_trend(content):
+    content = _with_fronts(content)
+    content.events["drunk"].condition = Condition(trend_min={"west": 50})
+    with pytest.raises(ContentError, match="事件 drunk：條件不能讀第一季的線 west"):
+        validate(content)
+
+
+def test_validate_still_lets_conditions_read_derived_and_ordinary_trends(content):
+    content = _with_fronts(content)
+    content.events["drunk"].condition = Condition(trend_min={"total": 40, "kou": 10}, trend_max={"total": 90})
+    validate(content)
+
+
+def test_validate_rejects_a_threshold_on_a_season_one_trend(content):
+    content = _with_fronts(content)
+    content.scenario.trends.append(Trend(id="geju", name="豪強割據", season_one=True))
+    content.scenario.thresholds.append(
+        Threshold(id="geju60", trend="geju", op=">=", value=60, text="豪強割據一方！")
+    )
+    with pytest.raises(ContentError, match="門檻 geju60：不能掛在第一季的線 geju"):
+        validate(content)
+
+
+def test_validate_lets_a_threshold_sit_on_a_derived_trend(content):
+    content = _with_fronts(content)
+    content.scenario.thresholds.append(
+        Threshold(id="total60", trend="total", op=">=", value=60, text="總勢過六成。")
+    )
+    validate(content)
+
+
+def test_validate_rejects_a_trend_named_front(content):
+    """front 是效果與歷練裡「所在大區的戰線」的特殊鍵：真有一條大勢線叫 front，推它與推本地戰線就分不出來。"""
+    content.scenario.trends.append(Trend(id="front", name="撞名"))
+    with pytest.raises(ContentError, match="大勢線 front：id 不能叫 front"):
+        validate(content)
+
+
+def test_validate_rejects_chaos_bounds_that_cross(content):
+    """亂局是 chaos_low～chaos_high 之間：下界比上界高就永遠沒有戰線在亂局，割據只會一路回落。"""
+    content.config.chaos_low, content.config.chaos_high = 70, 30
+    with pytest.raises(ContentError, match="chaos_low 不能大於 chaos_high"):
+        validate(content)
+
+
+def test_validate_lets_chaos_bounds_meet(content):
+    content.config.chaos_low = content.config.chaos_high = 50
+    validate(content)
+
+
+@pytest.mark.parametrize("field", ["geju_chaos_per_day", "geju_calm_per_day"])
+def test_config_rejects_negative_geju_rates(field):
+    with pytest.raises(ValidationError):
+        Config(**{field: -0.5})
+    assert getattr(Config(**{field: 0}), field) == 0
+
+
+def test_validate_reports_a_malformed_region_polygon_instead_of_crashing(tmp_path):
+    """train_trend 的戰線歸屬要先查地點在哪個大區，有個點只寫了一個數字時不能在那裡炸成 ValueError，要照舊回報多邊形的錯。"""
+    root = copy_fixture(tmp_path)
+    edit_json(root / "map.json", lambda d: d["regions"][0].update(points=[[0, 0], [5], [400, 150]]))
+    with pytest.raises(ContentError, match="多邊形至少"):
+        load_content(root)
+
+
 # ── 週末設定（計畫 T2「總開關與週末設定」）：一次切換，不手改 content/config.json ──
 CONTENT_DIR = FIXTURE.parent.parent.parent / "content"
 WEEKEND_KEYS = {"season_one", "season_days", "server_max_players"}
@@ -824,7 +1048,16 @@ def _timetable() -> list[dict]:
 
 
 def _with_timetable(tmp_path, edit=None):
+    """fixture 加上時刻表。時刻表的 front 是戰線（大區的 front 指到的大勢線），所以 north、south 兩個大區各有一條
+    同名的戰線。"""
     root = copy_fixture(tmp_path)
+    scenario = json.loads((root / "scenario.json").read_text(encoding="utf-8"))
+    scenario["trends"] += [{"id": rid, "name": name, "start": 50} for rid, name in (("north", "北線"), ("south", "南線"))]
+    (root / "scenario.json").write_text(json.dumps(scenario, ensure_ascii=False), encoding="utf-8")
+    world_map = json.loads((root / "map.json").read_text(encoding="utf-8"))
+    for region in world_map["regions"]:
+        region["front"] = region["id"]
+    (root / "map.json").write_text(json.dumps(world_map, ensure_ascii=False), encoding="utf-8")
     events = _timetable()
     if edit is not None:
         edit(events)
@@ -839,7 +1072,7 @@ def test_the_timetable_loads_and_is_optional(tmp_path):
 
 
 @pytest.mark.parametrize(("edit", "message"), [
-    (lambda ev: ev[1].update(front="nowhere"), "nowhere"),  # 戰線要是大區 id
+    (lambda ev: ev[1].update(front="nowhere"), "nowhere"),  # 戰線要是戰線 id（大區的 front）
     (lambda ev: ev[1]["outcomes"].pop("不成"), "不成"),  # 擲骰要有成與不成
     (lambda ev: ev[3]["outcomes"].pop("乙:huang:險勝"), "乙:huang:險勝"),  # 決戰每個版本四格
     (lambda ev: ev.append(dict(ev[0])), "start"),  # id 重複
@@ -870,41 +1103,171 @@ def test_fate_prestige_only_knows_the_three_fate_words(tmp_path):
         load_content(root)
 
 
-# ── 這台機器自己的管理者名單（.local/admins.txt）────────────
+# ── 三場大戲：時刻表決戰的 BattleDef（計畫 T8）──────────────────────────
 
 
-def test_local_admins_file_adds_to_the_tracked_list(tmp_path, monkeypatch):
-    """直接改 content/config.json 的話，每次 pull 都會被蓋回去——所以本機設定放在 .local。"""
-    from tianxia import content as content_mod
-
-    local = tmp_path / "admins.txt"
-    local.write_text("# 註解不算\n司馬\n\n  阿財  \n", encoding="utf-8")
-    monkeypatch.setattr(content_mod, "ADMINS_FILE", local)
-    monkeypatch.delenv("TIANXIA_ADMINS", raising=False)
-    assert content_mod._with_local_admins(["Rayal"]) == ["Rayal", "司馬", "阿財"]
-
-
-def test_the_env_var_also_adds_admins(tmp_path, monkeypatch):
-    from tianxia import content as content_mod
-
-    monkeypatch.setattr(content_mod, "ADMINS_FILE", tmp_path / "nope.txt")
-    monkeypatch.setenv("TIANXIA_ADMINS", "阿財, 髒腳 ,")
-    assert content_mod._with_local_admins(["Rayal"]) == ["Rayal", "阿財", "髒腳"]
+def _showdown_battle(**fields) -> dict:
+    """接在 _with_timetable 的「圍城」（siege，第 3 週、南線、看 raid 分甲乙兩版）上的甲版決戰。"""
+    battle = json.loads(json.dumps(MINIMAL_BATTLE))
+    battle.update(
+        id="siege_jia", region="south", factions=[{"id": "guan", "name": "官軍"}, {"id": "huang", "name": "黃巾"}],
+        defender="huang", timetable_event="siege", version="甲", front="south",
+    )
+    battle["outcomes"][0]["faction"] = "guan"
+    battle.update(fields)
+    return battle
 
 
-def test_local_admins_never_drop_the_tracked_ones(tmp_path, monkeypatch):
-    from tianxia import content as content_mod
-
-    local = tmp_path / "admins.txt"
-    local.write_text("Rayal\n", encoding="utf-8")  # 重複的不會列兩次
-    monkeypatch.setattr(content_mod, "ADMINS_FILE", local)
-    monkeypatch.delenv("TIANXIA_ADMINS", raising=False)
-    assert content_mod._with_local_admins(["Rayal"]) == ["Rayal"]
+def test_a_timetable_showdown_loads(tmp_path):
+    root = _with_timetable(tmp_path)
+    write_battles_json(root, [_showdown_battle(), _showdown_battle(id="siege_yi", version="乙", defender="guan")])
+    loaded = load_content(root).battles
+    assert (loaded["siege_jia"].defender, loaded["siege_jia"].timetable_event, loaded["siege_jia"].version) == ("huang", "siege", "甲")
+    assert (loaded["siege_yi"].front, loaded["siege_yi"].version) == ("south", "乙")
 
 
-def test_no_local_file_and_no_env_changes_nothing(tmp_path, monkeypatch):
-    from tianxia import content as content_mod
+@pytest.mark.parametrize(("fields", "message"), [
+    ({"timetable_event": "ghost"}, "未知的時刻表決戰 ghost"),  # 時刻表上要有這件大事
+    ({"timetable_event": "raid", "version": None}, "未知的時刻表決戰 raid"),  # 而且是決戰
+    ({"version": "丙"}, "version 丙 不是 siege 的版本"),  # 版本要是那件大事的版本之一
+    ({"version": None}, "version None 不是 siege 的版本"),  # 有版本的大事每一筆都要寫版本
+    ({"front": "nowhere"}, "未知的戰線 nowhere"),  # 戰線要是戰線 id
+    ({"front": None}, "時刻表決戰要寫 front 與 defender"),  # 起點照戰線算、平手算守方贏
+    ({"defender": None}, "時刻表決戰要寫 front 與 defender"),
+    ({"factions": [{"id": "huang", "name": "黃巾"}, {"id": "guan", "name": "官軍"}]}, "陣營要依序是 guan、huang"),  # 官軍是正向
+])
+def test_timetable_showdown_fields_are_checked(tmp_path, fields, message):
+    root = _with_timetable(tmp_path)
+    write_battles_json(root, [_showdown_battle(**fields)])
+    with pytest.raises(ContentError, match=message):
+        load_content(root)
 
-    monkeypatch.setattr(content_mod, "ADMINS_FILE", tmp_path / "nope.txt")
-    monkeypatch.delenv("TIANXIA_ADMINS", raising=False)
-    assert content_mod._with_local_admins(["Rayal"]) == ["Rayal"]
+
+def test_a_timetable_showdown_version_has_only_one_battle(tmp_path):
+    root = _with_timetable(tmp_path)
+    write_battles_json(root, [_showdown_battle(), _showdown_battle(id="siege_jia2")])
+    with pytest.raises(ContentError, match="時刻表決戰 siege 的 甲 版有兩筆戰鬥"):
+        load_content(root)
+
+
+def test_defender_is_guan_or_huang(tmp_path):
+    root = _with_timetable(tmp_path)
+    write_battles_json(root, [_showdown_battle(defender="haoqiang")])
+    with pytest.raises(ContentError, match="defender"):
+        load_content(root)
+
+
+def test_location_desc_when_is_checked(tmp_path):
+    root = copy_fixture(tmp_path)
+    edit_json(root / "locations.json", lambda d: d[0].update(desc_when=[{"world_flag": "", "text": "城頭換了旗。"}]))
+    with pytest.raises(ContentError, match="desc_when"):
+        load_content(root)
+    edit_json(root / "locations.json", lambda d: d[0].update(desc_when=[{"world_flag": "fallen", "text": "城头换了旗。"}]))
+    with pytest.raises(ContentError, match="繁體"):
+        load_content(root)
+
+
+# ── 第一季的結局與季末大事（計畫 T9）──────────────────────────
+
+
+def _real_copy(tmp_path):
+    """真實內容的一份副本（fixture 內容沒有第一季的結局與季末大事）。"""
+    from pathlib import Path
+
+    root = tmp_path / "content"
+    shutil.copytree(Path(__file__).parent.parent / "content", root)
+    return root
+
+
+def test_stance_fields_only_on_season_one_endings(tmp_path):
+    root = _real_copy(tmp_path)
+    edit_json(root / "scenario.json", lambda d: d["endings"][0].update(stance_top="guan"))
+    with pytest.raises(ContentError, match="第一季"):
+        load_content(root)
+
+
+def test_finale_fields_only_on_the_finale(tmp_path):
+    root = _real_copy(tmp_path)
+    edit_json(root / "timetable.json", lambda d: d[0].update(early_preface="提早了。"))
+    with pytest.raises(ContentError, match="季末"):
+        load_content(root)
+
+
+def test_each_season_keeps_its_own_fallback_ending(tmp_path):
+    """beta 季與第一季各自清單的最後一筆是保底：第一季多一筆有門檻的結局排在最後，就沒有保底。"""
+    root = _real_copy(tmp_path)
+    edit_json(root / "scenario.json", lambda d: d["endings"].append(
+        {"id": "x", "season_one": True, "title": "多的", "text": "多的。", "stance_min": {"huang": 99}}))
+    with pytest.raises(ContentError, match="保底"):
+        load_content(root)
+
+
+# ── 軍令（計畫 T6）──────────────────────────────────────────
+
+
+def test_orders_slot_must_be_on_its_front(tmp_path):
+    root = _real_copy(tmp_path)
+    edit_json(root / "orders.json", lambda d: d["slots"]["yingru"]["guan"].update(intercept="nanyang_wilds"))
+    with pytest.raises(ContentError, match="截糧"):
+        load_content(root)
+
+
+def test_orders_escort_must_end_at_a_base_of_its_side(tmp_path):
+    root = _real_copy(tmp_path)
+    edit_json(root / "orders.json", lambda d: d["slots"]["yingru"]["guan"].update(escort=["luoyang_road", "huangjin_camp"]))
+    with pytest.raises(ContentError, match="護糧"):
+        load_content(root)
+
+
+def test_orders_personal_kind_must_match(tmp_path):
+    root = _real_copy(tmp_path)
+    edit_json(root / "orders.json", lambda d: d["templates"][0].update(personal="convoy"))
+    with pytest.raises(ContentError, match="個人部分"):
+        load_content(root)
+
+
+def test_orders_text_slots_must_be_known(tmp_path):
+    root = _real_copy(tmp_path)
+    edit_json(root / "orders.json", lambda d: d["templates"][0].update(text="{將軍}傳令"))
+    with pytest.raises(ContentError, match="插槽"):
+        load_content(root)
+
+
+def test_orders_convoy_squad_must_belong_to_its_side(tmp_path):
+    root = _real_copy(tmp_path)
+    edit_json(root / "orders.json", lambda d: d["convoy_squads"].update(guan="huang_grain_convoy"))
+    with pytest.raises(ContentError, match="糧隊"):
+        load_content(root)
+
+
+def test_season_one_tutorial_steps_must_come_last(tmp_path):
+    """存檔記的是第幾步：第一季才有的步驟插在中間，開關一開一關，同一個數字就指到不同的步驟（計畫 T6 Task 8）。"""
+    root = copy_fixture(tmp_path)
+    edit_json(root / "tutorial.json", lambda d: d["steps"][0].update(season_one=True))
+    with pytest.raises(ContentError, match="排在最後"):
+        load_content(root)
+
+
+# ── 晉升（計畫 T5）──────────────────────────────────────────
+
+
+def test_promote_only_on_promotion_scenes(tmp_path):
+    root = _real_copy(tmp_path)
+    edit_json(root / "events" / "general.json", lambda d: d[0]["choices"][0].setdefault("effect", {}).update(promote=2))
+    with pytest.raises(ContentError, match="晉升奇遇"):
+        load_content(root)
+
+
+def test_promotion_followers_must_be_that_sides(tmp_path):
+    root = _real_copy(tmp_path)
+    edit_json(root / "events" / "promotion.json",
+              lambda d: d[0]["choices"][0]["effect"].update(followers=["follower_huang_believer", "follower_guan_spear"]))
+    with pytest.raises(ContentError, match="給的部下要是 guan 的"):
+        load_content(root)
+
+
+def test_promotion_handoff_needs_its_scene_and_summons(tmp_path):
+    root = _real_copy(tmp_path)
+    edit_json(root / "promotions.json", lambda d: d[0].update(summons_handoff=None))
+    with pytest.raises(ContentError, match="接手"):
+        load_content(root)

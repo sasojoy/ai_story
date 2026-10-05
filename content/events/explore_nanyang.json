@@ -20,7 +20,7 @@
             "fame": 2
           },
           "trend": {
-            "huangjin": -1
+            "front": -1
           }
         },
         "fail_effect": {
@@ -239,7 +239,7 @@
             "fame": 1
           },
           "trend": {
-            "huangjin": -1
+            "front": -1
           },
           "marks": {
             "nanyang_road:護車": 1
@@ -340,7 +340,7 @@
             "fame": 1
           },
           "trend": {
-            "huangjin": -1
+            "front": -1
           },
           "rumor": "有人說{name}在南陽官道上拾到一捆燒焦的軍報，親手送進了宛城郡府。"
         },
@@ -402,7 +402,7 @@
             "str": 1
           },
           "trend": {
-            "huangjin": 1
+            "front": 1
           }
         },
         "fail_effect": {
@@ -458,7 +458,7 @@
             "fame": 1
           },
           "trend": {
-            "huangjin": 1
+            "front": 1
           }
         },
         "fail_effect": {
@@ -614,7 +614,7 @@
             "silver": 10
           },
           "trend": {
-            "huangjin": -2
+            "front": -2
           }
         },
         "fail_effect": {
@@ -671,7 +671,7 @@
             "fame": 1
           },
           "trend": {
-            "huangjin": -1
+            "front": -1
           },
           "marks": {
             "yu_river:斷繩": 1
@@ -692,7 +692,7 @@
             "fame": 1
           },
           "trend": {
-            "huangjin": -1
+            "front": -1
           },
           "marks": {
             "yu_river:斷繩": 1
@@ -749,7 +749,7 @@
           "fame": 1
         },
         "trend": {
-          "huangjin": -1
+          "front": -1
         }
       },
       "fail_effect": {

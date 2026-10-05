@@ -2,7 +2,7 @@
 season_weeks 週的「季曆」——季曆秒＝世界秒 × cal_scale。第一季的規則（時刻表的週次、週初發軍令、伏筆的夜裡）
 一律看季曆。濃縮版 2.5 天、12 週時 cal_scale 是 33.6：一週是真實 5 小時，夜裡每 43 分鐘有 11 分鐘。
 
-季長照這一季開季時蓋的章（WorldState.length_days）：設定中途換了，正在跑的這一季週次不會移動。
+季長照這一季開季時蓋的章（WorldState.length_days）：設定中途換了，正在跑的這一季週次不會移動；沒有章的舊季照預設的 14 天。
 每個函式都收一個 season；只有沒有季可看的呼叫端（例如蓋章本身之前）才不給，那時照現在的設定。
 
 只是換算，不改任何狀態；引擎不讀電腦時鐘，時間一律是傳進來的世界秒。"""
@@ -40,7 +40,7 @@ def season_one_on(season: WorldState, content: Content) -> bool:
 
 
 def cal_scale(content: Content, season: WorldState | None = None) -> float:
-    """季曆秒 ÷ 世界秒。季長照 season 蓋的章（沒有章的舊季照設定）；不給 season 時照現在的設定。"""
+    """季曆秒 ÷ 世界秒。季長照 season 蓋的章（沒有章的舊季照 DEFAULT_SEASON_DAYS）；不給 season 時照現在的設定。"""
     days = season_length_days(season, content) if season is not None else content.config.season_days
     return content.config.season_weeks * 7 / days
 

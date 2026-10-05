@@ -57,3 +57,26 @@ def format_lines(board: dict[str, list[LeaderboardRow]]) -> list[str]:
         for i, (owner, name, quality, power) in enumerate(rows, 1):
             lines.append(f"　{i}. {owner}・【{name}】（{quality}，威力 {power:.1f}）")
     return lines
+
+
+TOP_CONTRIB = 5  # 結算畫面每個陣營列幾名（第一季設計 13.3：各陣營貢獻最高的前幾名）
+
+
+def contribution_rankings(
+    content: Content, world: WorldStateStore, characters: CharacterStore | None = None,
+) -> dict[str, list[tuple[str, int]]]:
+    """第一季結算畫面的各陣營出力前五（計畫 T9）：這一季的角色、有陣營、貢獻大於 0，照貢獻排（同分照存檔順序）。
+    名字照畫面上的寫法（匿名的是「某位少俠」）；真人與假人一樣列、看不出來。劇本的每個陣營都有一格，沒人出力是空的。"""
+    from .rules import display_name  # noqa: PLC0415  rules → world → leaderboard：在函式裡 import，避免循環
+
+    season_number = world.get_season_number()
+    ranks: dict[str, list[tuple[str, int]]] = {f.id: [] for f in content.scenario.factions}
+    for state in (characters or open_characters()).all():
+        p = state.player
+        if p.season_number != season_number or p.faction not in ranks or p.contrib <= 0:
+            continue
+        ranks[p.faction].append((display_name(state), p.contrib))
+    for faction, rows in ranks.items():
+        rows.sort(key=lambda row: row[1], reverse=True)
+        ranks[faction] = rows[:TOP_CONTRIB]
+    return ranks

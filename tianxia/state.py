@@ -64,6 +64,25 @@ class Journey(BaseModel):
         return len(self.path) - 1 if self.stop_at is None else self.stop_at
 
 
+class Convoy(BaseModel):
+    """身上押著的糧車（護糧，計畫 T6）：送到 to_loc 才算數。"""
+
+    order: str  # 哪一道護糧軍令（Order.id）
+    grain: int  # 交出去的糧草份量
+    from_loc: str
+    to_loc: str
+
+
+class Summons(BaseModel):
+    """收到的召見（計畫 T5、晉升文件第一節）：沒有期限；到了 location、演完那一階的奇遇才晉升。
+    figure 是發召見那一刻出面的人（江湖紀錄寫他）；到了現場照當下再挑一次（ranks.presenter）。"""
+
+    rank: int
+    figure: str | None = None
+    location: str
+    since: float = 0.0
+
+
 class PlayerState(BaseModel):
     name: str
     location: str
@@ -122,6 +141,35 @@ class PlayerState(BaseModel):
     # 處理過的收場決戰（BattleInstance.record_id）：自己參戰、已經補進江湖紀錄與戰報的，以及看過不是自己參戰的
     # （FB-027，見 Game._deliver_battle_results）。跨季保留：決戰常常把季收掉，下一季才回來的人也要補、而且只補一次
     battle_results_seen: list[int] = Field(default_factory=list)
+    # 這一季已經補進江湖紀錄的時刻表大事 id（FB-038，見 Game._deliver_big_events）。大事 id 每季都一樣，
+    # 所以這份每季重來：換季時新角色自然是空的（跟 battle_results_seen 不同，不跨季保留）
+    events_seen: list[str] = Field(default_factory=list)
+
+    # ── 推力與貢獻帳（計畫 T3、第一季設計第七節）；角色每季重來，跟著新角色清空 ──
+    contrib: int = 0  # 本季替目前陣營推大勢記下的貢獻（散人不記）
+    contrib_weeks: dict[int, int] = Field(default_factory=dict)  # 季曆第幾週 → 那一週記的貢獻
+    pushed: dict[str, float] = Field(default_factory=dict)  # 「曆日:大勢線 id」→ 當天這條線推得動多少（人數緩衝之後）；只留今天與昨天
+
+    # ── 捐獻紀錄（計畫 T6，軍備文件 4.1）：「據點 id:糧草」→ 累積的份量。T7 的伏筆只讀它；寫入是 T6 護糧的事 ──
+    donations: dict[str, int] = Field(default_factory=dict)
+    convoy: Convoy | None = None  # 押著的糧車（計畫 T6 護糧）；None＝沒有。角色每季重來，跟著清空
+    # ── 晉升（計畫 T5）；角色每季重來 ──
+    rank: int = 0  # 晉升過的階；0 是還沒晉升過（有陣營時算第 1 階，見 ranks.rank_of）
+    summons: Summons | None = None  # 還沒去的召見
+    followers: list[str] = Field(default_factory=list)  # 部下（followers.json 的模板 id）
+
+    # ── 大勢人物（計畫 T4、軍令文件 4.5）：剛被你打敗的人物 id → 到哪個「現實」時間（秒，Game.now）之前不見你、也不跟你交手。
+    # 看現實時間、不看賽季時鐘（管理者快轉不會讓他提早見你）；角色每季重來，跟著清空 ──
+    snubbed_until: dict[str, float] = Field(default_factory=dict)
+
+    # ── 伏筆（計畫 T7、伏筆文件）；角色每季重來，跟著新角色清空（不在跨季保留的清單上）──
+    fragments: dict[str, list[int]] = Field(default_factory=dict)  # 鏈 id → 聽過的片段（fragments 的索引）
+    clue_items: dict[str, int] = Field(default_factory=dict)  # 伏筆專用物品 id → 數量
+    fs_counters: dict[str, int] = Field(default_factory=dict)  # 隱藏計數：guanyin（官銀）、two_buyers（豪強兩頭賣糧的起點）
+    fs_done: list[str] = Field(default_factory=list)  # 做完的鏈 id；多趟的鏈每做完一趟另記「鏈 id:第幾趟」（從 0 起）
+    fs_cooldown_until: dict[str, float] = Field(default_factory=dict)  # 鏈 id → 答錯之後要等到哪個世界秒才能再做
+    fs_asking: str | None = None  # 正在答最後一步的題的那條鏈；None＝沒在答（選單照常）
+    fs_asked: int = 0  # 答到第幾題（0＝question，1 起是 then 的追問）
 
 
 RumorLayer = Literal["world", "faction", "local", "personal"]  # 天下大事／陣營軍情／地方傳聞／個人線索（傳聞分層設計第二節）
@@ -155,8 +203,9 @@ class Lock(BaseModel):
     """關鍵伏筆的鎖定（伏筆文件 2.4；T7 寫入，T2 結算時讀）。"""
 
     side: str  # 陣營 id
-    name: str  # 名號
+    name: str  # 名號（真名：時間軸的 locked_by、losers 與 T9 的稱號用它）
     time: float
+    shown: str | None = None  # 公告與江湖史寫的名字：鎖定時匿名就是「某位少俠」；None＝寫名號（舊資料也是 None）
 
 
 class FigureState(BaseModel):
@@ -166,6 +215,29 @@ class FigureState(BaseModel):
     status: Literal["active", "away", "retired", "crippled", "jailed"] = "active"  # 在場／未出場／退場／重創／下獄
     front: str | None = None  # 在推哪條戰線
     location: str = ""
+
+
+class Order(BaseModel):
+    """一道軍令（計畫 T6）：每週一發、期限到下週一。陣營的進度＝progress 加總；湊滿 quota 那一刻達成、套一次效果。
+    text 是發的那一刻填好插槽的發布文字（主將之後換人也不改）。applied 是達成時實際推了戰況幾點（守城收回對方攻城的
+    一半時讀它）。上週沒達成的在下週一清掉；達成的留到季末（守城看「敵方上週達成攻城」、整季模擬數軍令都讀它）。"""
+
+    id: str
+    template: str  # 種類（OrderTemplate.kind）；同一個陣營每種只有一筆模板
+    faction: str
+    week: int
+    front: str | None = None  # 戰線（打擊是目標人物發令時所在的戰線）
+    location: str | None = None  # 截糧的 {地點}、護糧的 {起點}、打擊時人物的所在
+    start: str | None = None  # 護糧的 {起點}
+    end: str | None = None  # 護糧的 {終點}
+    figure: str | None = None  # 打擊的 {人物}
+    quota: int
+    text: str
+    progress: dict[str, int] = Field(default_factory=dict)  # 名號 → 做了幾次
+    shown: dict[str, str] = Field(default_factory=dict)  # 名號 → 軍情寫的名字（匿名時是「某位少俠」）
+    done: bool = False
+    done_time: float | None = None
+    applied: int = 0
 
 
 class WorldState(BaseModel):
@@ -181,6 +253,10 @@ class WorldState(BaseModel):
     ended: bool = False
     ending_title: str = ""
     ending_text: str = ""
+    ending_id: str = ""  # 收季時的結局 id（Ending.id）；舊存檔是空的
+    # 第一季的結算畫面（計畫 T9）：收季那一刻的戰況（顯示中的每條線）與各陣營出力前五（名號或「某位少俠」, 貢獻）
+    final_trends: dict[str, int] = Field(default_factory=dict)
+    final_rankings: dict[str, list[tuple[str, int]]] = Field(default_factory=dict)
     storyline: str = ""  # 目前主線 id
     act: int = 0  # 目前第幾幕（從 0 起算）
     act_reached: int = 0  # 本季到過的最遠一幕；主線改寫會把 act 歸零，隊伍數與統御上限看這個（見 roster.stage）
@@ -192,17 +268,28 @@ class WorldState(BaseModel):
     # 籌備中的季在管理者開季時再蓋一次（第一次啟動忘了設 TIANXIA_PROFILE 也救得回來）──
     # 開關打開時還在跑的舊季照它自己的章走：不跑季曆與時刻表，也不會因為設定的季長變短就一口氣收掉。
     season_one: bool = False  # 這一季開季時第一季濃縮版的規則是不是開著
-    length_days: float | None = None  # 這一季的長度（遊戲日）；None＝T2 之前開的季，照 Config.season_days
+    length_days: float | None = None  # 這一季的長度（遊戲日）；None＝T2 之前開的季，一律照 models.DEFAULT_SEASON_DAYS（FB-037）
     # ── 時刻表（計畫 T2；鎖定、搶輸、豪強、一般伏筆修正由 T7 寫入）──
     timeline: dict[str, TimelineResult] = Field(default_factory=dict)  # 大事 id → 結算結果（有就不再結算）
     locks: dict[str, Lock] = Field(default_factory=dict)  # 大事 id → 第一個做完關鍵伏筆的人
     lock_losers: dict[str, list[Lock]] = Field(default_factory=dict)  # 大事 id → 之後才做完的人
-    third_party: dict[str, list[str]] = Field(default_factory=dict)  # 大事 id → 做完豪強伏筆的名號
+    third_party: dict[str, list[str]] = Field(default_factory=dict)  # 大事 id → 做完豪強伏筆的名號（真名）
+    # 大事 id → {名號: 公告寫的名字}：做完時匿名的豪強（「某位少俠」）；沒記的照名號寫（舊資料是空的）
+    third_party_shown: dict[str, dict[str, str]] = Field(default_factory=dict)
     event_mods: dict[str, float] = Field(default_factory=dict)  # 大事 id → 一般伏筆、軍令的成功率修正（合計夾在 ±0.20）
     event_bonus: dict[str, float] = Field(default_factory=dict)  # 大事 id → 時刻表結果帶來的修正（例：波才北上，不夾）
     schedule: dict[str, float] = Field(default_factory=dict)  # 決戰 id 與 "finale" → 世界秒；開季時填預設、管理者可改
     hooked_week: int = 0  # 週初的掛鉤（world.WEEK_HOOKS）已經跑到第幾週；0＝還沒跑過
+    # ── 時刻表決戰開集結（計畫 T8）：季的事在 mutate 裡只記號，mutate 外面才開（world.open_waiting_showdown）──
+    showdowns_waiting: list[str] = Field(default_factory=list)  # 時間到了、還沒開成的決戰 id，照時間先後（另一場還在打就等）
+    showdowns_opened: dict[str, str] = Field(default_factory=dict)  # 開過集結的決戰 id → 開的那一筆 BattleDef；開過就不再開
     figures: dict[str, FigureState] = Field(default_factory=dict)  # 大勢人物 id → 聲威、狀態、所在（T4 開季時種）
+    orders: list[Order] = Field(default_factory=list)  # 陣營軍令（計畫 T6）：這一週的，加上之前達成的
+    # 升第 2 階的每日彙整（計畫 T5）：「陣營:曆日」→ 顯示名；過了那個曆日由季的事發成一則陣營軍情（傳聞只能新增，不能改）
+    promoted_today: dict[str, list[str]] = Field(default_factory=dict)
+    # ── 推力規則（計畫 T3）──
+    trend_accum: dict[str, float] = Field(default_factory=dict)  # 不足一點的推力（全服共用，滿一點才真的推；正負會抵銷）：大勢線 id、"geju"、"fig:<人物 id>"（大勢人物每天的推動）、"prestige:<人物 id>"（挑戰打贏扣聲威不足一點的部分）
+    active_pushers: dict[str, dict[str, float]] = Field(default_factory=dict)  # 陣營 id → 名號 → 最後一次推大勢的世界秒（人數緩衝用，過期的順手清掉）
 
 
 class Fighter(BaseModel):
@@ -263,8 +350,9 @@ def new_game_state(content: Content, name: str) -> GameState:
     """同伴全服唯一（設計文件四.4），開局不再自動塞給玩家任何一位——每個新玩家都是孤身
     一人起步，招募是要在遊戲裡真的去搶的行動，不是開局贈品（不然「唯一」第一時間就矛盾：
     每個新玩家都自動擁有同一位歷史人物是不可能的）。"""
+    from .rules import seed_trends  # rules → state：在函式裡 import，避免循環
+
     cfg = content.config
-    trends = content.scenario.trends
     player = PlayerState(
         name=name,
         location=content.scenario.start_location,
@@ -273,9 +361,6 @@ def new_game_state(content: Content, name: str) -> GameState:
         tutorial_step=0,
         member=Member(),
     )
-    world = WorldState(
-        trends={t.id: t.start for t in trends},
-        revealed={t.id for t in trends if not t.hidden},
-        storyline=content.scenario.storylines[0].id,
-    )
+    world = WorldState(storyline=content.scenario.storylines[0].id)
+    seed_trends(world, content)
     return GameState(player=player, world=world)

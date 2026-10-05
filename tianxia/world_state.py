@@ -23,7 +23,7 @@ from pydantic import BaseModel, Field
 
 from .battle_instance import BattleInstance, BattleRoundRecord
 from .martial_arts import MartialArt
-from .models import BattleDef, Content
+from .models import DEFAULT_SEASON_DAYS, BattleDef, Content
 from .state import Rumor, WorldState
 
 SeasonPhase = Literal["preparing", "running", "resting"]  # 籌備（管理者還沒開季）／進行中／休季（這一季已結束）
@@ -87,30 +87,33 @@ class SharedWorldState(BaseModel):
 def fresh_season(content: Content) -> WorldState:
     """照劇本種出一季全新的共用賽季（大勢起始值、公開的大勢線、第一條主線），並蓋上當下的章（stamp_season）。
     seed_first_season、next_season 都走這裡；籌備中的季在管理者開季時再蓋一次（open_season）。"""
-    trends = content.scenario.trends
-    season = WorldState(
-        trends={t.id: t.start for t in trends},
-        revealed={t.id for t in trends if not t.hidden},
-        storyline=content.scenario.storylines[0].id,
-    )
-    stamp_season(season, content)
+    from .rules import seed_trends  # rules → world_state：在函式裡 import，避免循環
+
+    season = WorldState(storyline=content.scenario.storylines[0].id)
+    stamp_season(season, content)  # 先蓋章：種哪些大勢線看這一季的章（rules.seed_trends）
+    seed_trends(season, content)
     return season
 
 
 def stamp_season(season: WorldState, content: Content) -> None:
     """把當下的開關與季長蓋章在這一季上（計畫 T2「舊季不會被補算」）：之後換了設定，這一季照它自己的章走。
     開關開著時順便填決戰與季末的預設時間（管理者開季後可以改，T10）。只在季還沒開始時呼叫：種季、換季、開季。"""
+    from .figures import seed  # noqa: PLC0415  延後 import：figures → rules → world_state
     from .timetable import default_schedule  # noqa: PLC0415  延後 import：timetable → rules → world_state
 
     cfg = content.config
     season.season_one = cfg.season_one
     season.length_days = cfg.season_days
     season.schedule = default_schedule(content, season) if cfg.season_one else {}  # 照剛蓋好的季長排
+    season.figures = {}
+    if cfg.season_one:  # 大勢人物照人物表種好（T4）：時刻表的 only_if、伏筆的出面人物從第一刻起就看得到每一位
+        seed(season, content)
 
 
 def season_length_days(season: WorldState, content: Content) -> float:
-    """這一季有幾個遊戲日：照開季時蓋的章；T2 之前開的季沒有章，照現在的設定。"""
-    return season.length_days if season.length_days is not None else content.config.season_days
+    """這一季有幾個遊戲日：照開季時蓋的章；T2 之前開的季沒有章，一律照它開季時的長度（DEFAULT_SEASON_DAYS，
+    那些季都是用預設設定開的），不跟著現在載入的設定走——換成週末設定的 2.5 天也不會把它收掉（FB-037）。"""
+    return season.length_days if season.length_days is not None else DEFAULT_SEASON_DAYS
 
 
 def jade_seal_summary(fragments: list[JadeSealFragment]) -> str:
@@ -262,8 +265,9 @@ class WorldStateStore(Protocol):
         """讀取目前這場戰鬥→套用 fn(battle)→寫回；沒有戰鬥時 fn 不會被呼叫，直接回傳 None。"""
         ...
 
-    def start_battle(self, definition: BattleDef, now: float) -> BattleInstance:
-        """開一場新戰鬥；已經有一場還沒結束的戰鬥時，原封不動回傳那一場。"""
+    def start_battle(self, definition: BattleDef, now: float, trend_start: int | None = None) -> BattleInstance:
+        """開一場新戰鬥；已經有一場還沒結束的戰鬥時，原封不動回傳那一場。trend_start 是這一場的起點（時刻表決戰照
+        前線戰況算）；不給照 definition.trend_start（見 battle_instance.start_muster）。"""
         ...
 
     def clear_battle(self) -> None: ...

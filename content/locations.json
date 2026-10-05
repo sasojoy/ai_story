@@ -89,7 +89,7 @@
       "shuikou"
     ],
     "train_trend": {
-      "huangjin": -1
+      "yingru": -1
     },
     "materials": [
       "gang_2",
@@ -120,7 +120,7 @@
       "louluo"
     ],
     "train_trend": {
-      "huangjin": -1
+      "front": -1
     },
     "materials": [
       "kuai_1",
@@ -131,6 +131,12 @@
     "id": "wan_city",
     "name": "宛城",
     "description": "南陽郡治，城池雄厚，是漢軍南線的重鎮。近來城中盛傳，有一位江東來的少年將領在此立下戰功。",
+    "desc_when": [
+      {"world_flag": "wancheng_guan_holds", "text": "南陽郡治，黃巾退了。城牆上到處是刀砍火燒的痕跡，郡兵正忙著修補；城中人人都在說，那位江東來的將領是怎麼帶頭打贏這一仗的。"},
+      {"world_flag": "wancheng_fallen", "text": "南陽郡治，如今城頭插滿了黃旗——黃巾據了宛城，郡府的官吏逃散一空。官軍的大營紮在城外，營中一位江東來的將領天天望著城牆。"},
+      {"world_flag": "wan_version_jia", "text": "南陽郡治，如今城頭插滿了黃旗——黃巾據了宛城，郡府的官吏逃散一空。官軍的大營紮在城外，營中一位江東來的將領天天望著城牆。"},
+      {"world_flag": "wan_version_yi", "text": "南陽郡治，城門緊閉，郡兵日夜守在城頭。城外黃巾連營數十里，夜裡營火望不到盡頭；城中盛傳，有一位江東來的將領領兵入城助守。"}
+    ],
     "connections": [
       {
         "to": "nanyang_road",
@@ -246,7 +252,7 @@
       "he_shuikou"
     ],
     "train_trend": {
-      "huangjin": 1
+      "front": 1
     },
     "materials": [
       "kuai_1",
@@ -302,7 +308,7 @@
       "huangjin_sishi"
     ],
     "train_trend": {
-      "huangjin": -2
+      "nanyang": -2
     },
     "materials": [
       "gang_2",
@@ -327,7 +333,7 @@
       "louluo"
     ],
     "train_trend": {
-      "huangjin": -1
+      "nanyang": -1
     },
     "materials": [
       "rou_1",
@@ -371,7 +377,7 @@
       "jun_bing"
     ],
     "train_trend": {
-      "huangjin": -1
+      "nanyang": -1
     },
     "materials": [
       "kuai_1",
@@ -602,7 +608,7 @@
       "shuikou"
     ],
     "train_trend": {
-      "huangjin": -1
+      "yingru": -1
     },
     "materials": [
       "man_1",
@@ -627,7 +633,7 @@
       "toumu"
     ],
     "train_trend": {
-      "huangjin": -2
+      "yingru": -2
     },
     "materials": [
       "gang_2",
@@ -665,7 +671,7 @@
   {
     "id": "market_town",
     "name": "集市小鎮",
-    "description": "涿郡城外的小鎮，鎮上的酒肆里，常有意氣風發的年輕人高談討賊立功之志。",
+    "description": "涿郡城外的小鎮，鎮上的酒肆裡，常有意氣風發的年輕人高談討賊立功之志。",
     "connections": [
       "yanshan_foot",
       {
@@ -742,7 +748,7 @@
       "shanzei"
     ],
     "train_trend": {
-      "huangjin": -1
+      "jizhou": -1
     },
     "materials": [
       "rou_1",
@@ -771,7 +777,7 @@
       "louluo"
     ],
     "train_trend": {
-      "huangjin": -1
+      "jizhou": -1
     },
     "materials": [
       "kuai_1",
@@ -807,7 +813,7 @@
       "huangjin_sishi"
     ],
     "train_trend": {
-      "huangjin": -2
+      "jizhou": -2
     },
     "materials": [
       "rou_2"
@@ -838,7 +844,7 @@
       "toumu"
     ],
     "train_trend": {
-      "huangjin": -2
+      "jizhou": -2
     },
     "materials": [
       "gang_2",
@@ -868,7 +874,7 @@
       "guan_patrol"
     ],
     "train_trend": {
-      "huangjin": 1
+      "jizhou": 1
     },
     "materials": [
       "gang_1"
@@ -897,7 +903,7 @@
       "shanzei"
     ],
     "train_trend": {
-      "huangjin": -1
+      "jizhou": -1
     },
     "materials": [
       "man_1",
@@ -959,7 +965,7 @@
       "jun_bing"
     ],
     "train_trend": {
-      "huangjin": 1
+      "jizhou": 1
     },
     "materials": [
       "rou_1",

@@ -8,10 +8,10 @@ from __future__ import annotations
 
 import random
 
-from . import atlas, server_bots
+from . import atlas, orders, rules, server_bots
 from .bot import wants_heal
 from .engine import FREE_TEXT_OPTION, Game, Option
-from .models import Effect, FactionDef
+from .models import Content, Effect, FactionDef
 from .state import BotProfile
 
 REWARD_STATS = ("str", "agi", "con", "wis", "silver", "fame", "xinde")
@@ -19,9 +19,19 @@ TREND_WEIGHT = 10.0  # 推大勢一點，抵得過十點獎勵
 JOIN_BATTLE_SCORE = 100.0
 ACT_SCORES = {"explore": 1.0, "socialize": 0.8}
 TRAIN_SCORE = 0.6  # 遊歷本身的分數（低於探索）；對自己陣營有利的地點再加上大勢分
-HOME_MOVE_SCORE = 0.3  # 往自己陣營投靠點一帶走
+HOME_MOVE_SCORE = 0.3  # 往自己陣營的地盤走（投靠點一帶；第一季濃縮版是輸得最多的那條戰線，離得還遠時是往那邊的下一站）
 AWAY_MOVE_SCORE = 0.1
 TRAIN_MOVE_SCORE = 0.5  # 往「遊歷對自己陣營有利」的地點走，額外加分
+# 挑戰打得贏的大勢人物本人（T4）：比探索、交友高，比推大勢的遊歷低（一點大勢抵十分）——前線上照舊遊歷，
+# 前線以外遇上了才打；「打擊大勢人物」軍令讓假人專程去找人是 T6 的事
+CHALLENGE_SCORE = 1.5
+CHALLENGE_ODDS = ("穩勝", "有把握")  # 假人只挑這兩種勝算的人物（輸了要賠銀兩、扣氣血）
+# 軍令（計畫 T6）：替這週的軍令記一次，比推三點大勢還值得；往軍令要去的地方走，比就地推一點大勢值得——
+# 不然假人永遠就地遊歷推大勢，軍令湊不滿（整季模擬 T11 照實回報）
+ORDER_SCORE = 30.0
+ORDER_MOVE_SCORE = 12.0
+DUTY_SCORE = 0.5  # 守勢行動本身（不替軍令記功時）：低於探索，不然假人整天巡哨
+STRIKE_ODDS = CHALLENGE_ODDS + ("五五波",)  # 有打擊軍令點名這位人物時，五五波也去打
 PRACTICE_CHANCE = 0.2  # 每次行動順便鍛鍊一門的機率（練功不花心得，不能每次都練）
 SKILL_NAME_TRIES = 5
 
@@ -100,28 +110,46 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
         return _battle_score(game, arg)
     if kind == "choice":
         event = game.content.events[game.state.pending_event]
-        return effect_score(event.choices[int(arg)].effect, _goals(game, profile))
+        effect = event.choices[int(arg)].effect
+        moved = rules.resolve_trends(game.content, game.state.world, effect.trend, game.state.player.location)
+        return effect_score(effect, _goals(game, profile), moved)
     if kind == "talk":
         return 0.0 if arg == "leave" else None
     if kind == "call":
         return 0.0 if arg == "back" else None  # 假人不求見大勢人物（不呼叫模型）；萬一停在求見選單上，只會按返回
     if kind == "move":
-        base = HOME_MOVE_SCORE if arg in _home(game, profile) else AWAY_MOVE_SCORE
-        return base + (TRAIN_MOVE_SCORE if _train_value(game, profile, arg) > 0 else 0.0)
+        base = HOME_MOVE_SCORE if arg == _front_hop(game, profile) or arg in _home(game, profile) else AWAY_MOVE_SCORE
+        order_hop = ORDER_MOVE_SCORE if arg.partition(":")[0] == _order_hop(game) else 0.0  # 往軍令要去的地方（計畫 T6）
+        return base + order_hop + (TRAIN_MOVE_SCORE if _train_value(game, profile, arg) > 0 else 0.0)
     if kind == "act":
+        if arg.startswith("challenge:"):  # 挑戰本人：打得贏才去（打不贏的、閉門不見的按不下去，本來就不在候選裡）
+            fid = arg.partition(":")[2]
+            odds = game.challenge_odds(fid)
+            if orders.strike_on(game.state, game.content, game.state.player.faction, fid):  # 打擊軍令點名他（計畫 T6）
+                return ORDER_SCORE + CHALLENGE_SCORE if odds in STRIKE_ODDS else None
+            return CHALLENGE_SCORE if odds in CHALLENGE_ODDS else None
         if arg == "call":
             return None
         if arg == "socialize" and (game.socialize_starts_dialogue() or game.socialize_is_futile()):
             return None
         if arg == "train":
-            return TRAIN_SCORE + _train_value(game, profile)
+            s = game.state
+            bonus = ORDER_SCORE if orders.win_counts(s, game.content, s.player.faction, s.player.location) else 0.0
+            return TRAIN_SCORE + _train_value(game, profile) + bonus
+        if arg == "duty":  # 守勢行動（計畫 T6）：替守城記功才值得做
+            s = game.state
+            return DUTY_SCORE + (ORDER_SCORE if orders.duty_counts(s, game.content, s.player.faction, s.player.location) else 0.0)
+        if arg == "convoy":  # 接下糧車：只在有護糧軍令的起點出現
+            return ORDER_SCORE
         return ACT_SCORES.get(arg, 0.0)
     return None
 
 
-def effect_score(effect: Effect, goals: dict[str, int]) -> float:
-    """選項效果的分數：把大勢往陣營想要的方向推，一點抵十分；能力、心得、銀兩、名望等獎勵每點 0.1 分。"""
-    push = sum(goals.get(trend_id, 0) * delta for trend_id, delta in effect.trend.items())
+def effect_score(effect: Effect, goals: dict[str, int], trend: dict[str, int] | None = None) -> float:
+    """選項效果的分數：把大勢往陣營想要的方向推，一點抵十分；能力、心得、銀兩、名望等獎勵每點 0.1 分。
+    trend 是照 rules.resolve_trends 換過鍵的推動（front 換成所在戰線）；不給就照效果原本寫的。"""
+    pushes = effect.trend if trend is None else trend
+    push = sum(goals.get(trend_id, 0) * delta for trend_id, delta in pushes.items())
     reward = sum(max(0, effect.stats.get(key, 0)) for key in REWARD_STATS)
     return TREND_WEIGHT * push + reward / 10
 
@@ -217,13 +245,49 @@ def _goals(game: Game, profile: BotProfile) -> dict[str, int]:
     faction_id = game.state.player.faction or profile.faction
     if faction_id is None:
         return {}
-    return _faction(game, faction_id).goals
+    return rules.resolve_goals(game.content, game.state.world, _faction(game, faction_id).goals)  # 開關關著時三條戰線都算黃巾聲勢
 
 
 def _home(game: Game, profile: BotProfile) -> set[str]:
-    """陣營的地盤：投靠點與相鄰的地點（第一季階段二有了戰線後改成往前線去）。"""
+    """陣營的地盤（假人往這一帶走）。第一季濃縮版（開關開著）：己方輸得最多的那條戰線上的所有地點（第一季設計
+    第七節：假人照陣營目標往前線去）；陣營對戰線沒有目標（豪強）或開關關著時：投靠點與相鄰的地點。"""
     faction_id = game.state.player.faction or profile.faction
     if faction_id is None:
         return set()
+    front = _losing_front(game, faction_id)
+    if front is not None:
+        return set(_front_locations(game.content, front))
     join_at = _faction(game, faction_id).join_at
     return set(join_at) | {n for loc_id in join_at for n in game.content.locations[loc_id].connections}
+
+
+def _front_locations(content: Content, front: str) -> list[str]:
+    """這條戰線上的所有地點（照內容檔的順序）。"""
+    return [loc_id for loc_id in content.locations if rules.front_of(content, loc_id) == front]
+
+
+def _front_hop(game: Game, profile: BotProfile) -> str | None:
+    """第一季濃縮版：假人還沒到己方輸得最多的那條戰線上，往那條戰線路程最近的地點走的下一站（鄰居裡沒有戰線上的地點時，
+    光看「目的地在不在地盤」沒有方向，會亂走）；已經在戰線上、走不到、沒有這種戰線（開關關著、豪強、散人）時是 None。"""
+    faction_id = game.state.player.faction or profile.faction
+    front = _losing_front(game, faction_id) if faction_id is not None else None
+    return None if front is None else next_hop(game, _front_locations(game.content, front))
+
+
+def _losing_front(game: Game, faction_id: str) -> str | None:
+    """己方輸得最多的戰線：目標是壓低（官軍）就挑戰況最高的、推高（黃巾）就挑最低的，同分取劇本排前面的。
+    開關關著、或這個陣營對戰線沒有目標時是 None。"""
+    content = game.content
+    if not rules.season_one(content, game.state.world):
+        return None
+    goals = _faction(game, faction_id).goals
+    fronts = [front for front in rules.front_ids(content) if goals.get(front)]
+    if not fronts:
+        return None
+    return max(fronts, key=lambda front: -goals[front] * rules.trend_value(game.state, content, front))
+
+
+def _order_hop(game: Game) -> str | None:
+    """往這週軍令要去的地方，路程最近的那一站；已經在、沒有軍令、走不到時是 None（計畫 T6）。"""
+    places = orders.targets(game.state, game.content, game.state.player.faction)
+    return next_hop(game, places) if places else None

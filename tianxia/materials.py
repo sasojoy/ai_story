@@ -8,6 +8,8 @@
 """
 from __future__ import annotations
 
+import math
+
 import random
 
 from .models import Content, Location, Material, Squad
@@ -59,6 +61,61 @@ def take(state: GameState, material_id: str, count: int = 1) -> bool:
 
 def held(state: GameState, material_id: str) -> int:
     return state.player.materials.get(material_id, 0)
+
+
+# ── 糧草（計畫 T6 的最小版）：這一版沒有軍備物資，糧草＝背包裡的慢屬性素材（濃縮版內容表 4.0、計畫待決 6）──
+
+GRAIN_ATTRIBUTE = "慢"
+
+
+def _grain_value(content: Content, material: Material) -> int:
+    """一個素材算幾份糧草（Config.grain_values，凡、靈、天）；階超出表的照最後一格。"""
+    values = content.config.grain_values
+    return values[min(material.tier, len(values)) - 1] if values else 0
+
+
+def _grain_in_bag(state: GameState, content: Content) -> list[tuple[Material, int]]:
+    """背包裡的慢屬性素材，低階在前（同階照內容順序）。"""
+    order = {mid: i for i, mid in enumerate(content.materials)}
+    items = [
+        (content.materials[mid], n) for mid, n in state.player.materials.items()
+        if mid in content.materials and n > 0 and content.materials[mid].attribute == GRAIN_ATTRIBUTE
+    ]
+    return sorted(items, key=lambda pair: (pair[0].tier, order.get(pair[0].id, 0)))
+
+
+def grain_of(state: GameState, content: Content) -> int:
+    """背包裡的糧草一共幾份。"""
+    return sum(_grain_value(content, m) * n for m, n in _grain_in_bag(state, content))
+
+
+def grain_plan(state: GameState, content: Content, amount: int) -> list[tuple[str, int]]:
+    """交 amount 份糧草會用掉哪些素材（素材 id, 個數）：從低階的慢屬性素材開始，一個一個拿到夠為止（最後一個的份量可能
+    超過，多的不找）。不動背包；不夠時回空串列。按鈕先寫給玩家看（T6 審查 M6），take_grain 照同一份拿。"""
+    if amount <= 0 or grain_of(state, content) < amount:
+        return []
+    plan: list[tuple[str, int]] = []
+    left = amount
+    for material, n in _grain_in_bag(state, content):
+        used = min(n, math.ceil(left / _grain_value(content, material)))
+        if used:
+            plan.append((material.id, used))
+            left -= used * _grain_value(content, material)
+        if left <= 0:
+            break
+    return plan
+
+
+def take_grain(state: GameState, content: Content, amount: int) -> bool:
+    """交出 amount 份糧草（照 grain_plan）。不夠就什麼都不動、回 False；amount <= 0 什麼都不拿、回 True。"""
+    if amount <= 0:
+        return True
+    plan = grain_plan(state, content, amount)
+    if not plan:
+        return False
+    for material_id, count in plan:
+        take(state, material_id, count)
+    return True
 
 
 def _default_rolls(squad: Squad) -> tuple[tuple[int, float], ...]:

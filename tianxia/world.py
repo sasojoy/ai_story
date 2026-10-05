@@ -5,19 +5,25 @@ import math
 import random
 from collections.abc import Callable
 
-from . import calendar, flavor, leaderboard, timetable
-from .models import Act, BattleDef, Content, Ending, SimPlayer, SimRumor, Storyline
+from . import battle_instance, calendar, figures, flavor, leaderboard, orders, timetable
+from .models import Act, BattleDef, Content, Ending, SimPlayer, SimRumor, Storyline, TimetableEvent
 from .ollama_client import OllamaClient
-from .rules import add_chronicle, add_rumor, add_world_flags, change_trend, check_condition
-from .state import GameState, PlayerState, WorldState
+from .rules import (
+    add_chronicle, add_rumor, add_world_flags, change_trend, check_condition, geju_tick, recompute_trends,
+    resolve_trends, season_one, season_one_off, stances, trend_shown, trend_value,
+)
+from .state import GameState, PlayerState, TimelineResult, WorldState
 from .world_state import WorldStateStore, season_length_days
 
 HOUR = 3600
 DAY = 86400
 EPS_CAL_HOURS = 1e-9  # 找下一個曆時交界時的浮點誤差（以曆時為單位）：剛好停在交界上的時間不能被算成上一個曆時
 
-# 週初的掛鉤：季曆每跨進新的一週（週一 00:00）各跑一次，照週次、在那一刻的大事之前。T6 的 orders.issue 掛這裡。
-WEEK_HOOKS: list[Callable[[GameState, Content, random.Random], list[str]]] = []
+# 週初的掛鉤：季曆每跨進新的一週（週一 00:00）各跑一次，照週次、在那一刻的大事之前。T6 的軍令掛這裡
+# （跑的時候 hooked_week 已經是剛跨進的那一週）。
+WEEK_HOOKS: list[Callable[[GameState, Content, random.Random], list[str]]] = [
+    lambda state, content, rng: orders.issue(state, content, state.world.hooked_week, rng),
+]
 
 
 def _now_for_battle(now: float | None) -> float:
@@ -38,10 +44,11 @@ def check_thresholds(
     msgs: list[str] = []
     if w.ended:
         return msgs
+    off = season_one_off(content, w, "thresholds")  # 第一季不觸發的 beta 門檻（計畫 T8）
     for th in content.scenario.thresholds:
-        if th.id in w.fired_thresholds:
+        if th.id in w.fired_thresholds or th.id in off:
             continue
-        value = w.trends.get(th.trend, 0)
+        value = trend_value(state, content, th.trend)  # 開關開著時黃巾聲勢是三條戰線的加權
         if not (value >= th.value if th.op == ">=" else value <= th.value):
             continue
         msgs += _fire(
@@ -82,6 +89,8 @@ def _fire(
         if flourish:
             shown_text = f"{text}\n\n{flourish}"
     msgs = [f"【江湖大事】{shown_text}"]
+    if starts_battle in season_one_off(content, state.world, "battles"):  # 第一季不開 beta 那場決戰（計畫 T8）
+        starts_battle = None
     if starts_battle and starts_battle in content.battles:
         if world is not None:
             msgs += _open_battle(world, content.battles[starts_battle], _now_for_battle(now))
@@ -97,8 +106,8 @@ def fire_by_id(
     client: OllamaClient | None = None, now: float | None = None,
 ) -> list[str] | None:
     """管理者手動觸發：照 id 找大勢門檻或世界事件，照自然觸發的方式觸發一次（旗標、傳聞、江湖史、
-    開戰、結束賽季都一樣），再更新主線。已經發生過、或找不到這個 id，回傳 None。"""
-    if fire_id in state.world.fired_thresholds:
+    開戰、結束賽季都一樣），再更新主線。已經發生過、找不到這個 id、或是第一季不觸發的 beta 門檻，回傳 None。"""
+    if fire_id in state.world.fired_thresholds or fire_id in season_one_off(content, state.world, "thresholds"):
         return None
     source = next((th for th in content.scenario.thresholds if th.id == fire_id), None)
     if source is None:
@@ -120,8 +129,14 @@ def current_act(state: GameState, content: Content) -> Act:
     return current_storyline(state, content).acts[state.world.act]
 
 
+def storyline_off(state: GameState, content: Content) -> bool:
+    """目前這條主線是第一季不觸發的 beta 主線（計畫 T8）：幕不推進，「主線與目標」與大地圖都不顯示它。"""
+    return state.world.storyline in season_one_off(content, state.world, "storylines")
+
+
 def update_storyline(state: GameState, content: Content) -> list[str]:
-    """還在主線時，檢查是否被支線主線取代；接著一路推進已滿足條件的幕。"""
+    """還在主線時，檢查是否被支線主線取代；接著一路推進已滿足條件的幕。第一季不觸發的主線（計畫 T8）不推進幕，
+    支線照舊可以取代它。"""
     w = state.world
     msgs: list[str] = []
     main = content.scenario.storylines[0]
@@ -135,6 +150,8 @@ def update_storyline(state: GameState, content: Content) -> list[str]:
                 msgs.append(f"【主線改寫】{branch.name}：{branch.intro}")
                 break
     line = current_storyline(state, content)
+    if storyline_off(state, content):
+        return msgs
     while w.act < len(line.acts) - 1:
         act = line.acts[w.act]
         if act.advance_when is None or not check_condition(act.advance_when, state):
@@ -155,14 +172,17 @@ def sim_active(sim: SimPlayer, state: GameState) -> bool:
 
 
 def sim_tick(state: GameState, content: Content, hours: int, rng: random.Random) -> list[str]:
+    """虛擬玩家每小時出手、發傳聞，再檢查一次門檻。第一季的規則開著時虛擬玩家不出手——大勢人物每曆時的推動
+    （figures.tick，T4）取代它們；門檻照舊每小時檢查。開關關著時一個字都不變（beta 的 scenario.json 照留）。"""
     msgs: list[str] = []
+    sims = [] if season_one(content, state.world) else content.scenario.sim_players
     for _ in range(hours):
-        for sim in content.scenario.sim_players:
+        for sim in sims:
             if not sim_active(sim, state):
                 continue
             if rng.random() >= sim.actions_per_day / 24:
                 continue
-            for trend_id, delta in sim.trend.items():
+            for trend_id, delta in resolve_trends(content, state.world, sim.trend).items():  # 規則沒開時戰線都算黃巾聲勢
                 change_trend(state, content, trend_id, delta, reveal=False)
             if sim.rumors and rng.random() < sim.rumor_chance:
                 text, where = _rumor_place(sim, rng.choice(sim.rumors))  # 和以前一樣只抽一次亂數
@@ -182,31 +202,117 @@ def _rumor_place(sim: SimPlayer, rumor: str | SimRumor) -> tuple[str, str | None
     return rumor, sim.haunts[0] if sim.haunts else None
 
 
+def season_endings(state: GameState, content: Content) -> list[Ending]:
+    """這一季算的結局：第一季（開關開著＋這一季的章）只看標了 season_one 的，beta 季只看沒標的。清單照劇本的順序，
+    最後一筆是那一季的保底（content.validate 檢查）。內容沒寫第一季的結局（測試夾具）時，第一季照 beta 那一份。"""
+    on = season_one(content, state.world)
+    chosen = [e for e in content.scenario.endings if e.season_one == on]
+    return chosen or [e for e in content.scenario.endings if not e.season_one]
+
+
+def stance_holds(ending: Ending, standing: dict[str, int]) -> bool:
+    """結局的態勢條件（第一季設計 4.4、13.1）：至少、至多，以及「這一方最高」——平手也算最高，誰先成立交給清單順序。"""
+    if any(standing[side] < value for side, value in ending.stance_min.items()):
+        return False
+    if any(standing[side] > value for side, value in ending.stance_max.items()):
+        return False
+    return ending.stance_top is None or standing[ending.stance_top] >= max(standing.values())
+
+
 def evaluate_ending(state: GameState, content: Content) -> Ending:
-    for ending in content.scenario.endings:
+    """照清單順序第一個成立的結局；都不成立就是這一季清單的最後一筆（保底）。第一季另外看三方態勢（rules.stances）。"""
+    endings = season_endings(state, content)
+    standing = stances(state, content) if season_one(content, state.world) else {}
+    for ending in endings:
         if ending.storyline not in (None, state.world.storyline):
             continue
-        if check_condition(ending.condition, state):
+        if check_condition(ending.condition, state) and (not ending.season_one or stance_holds(ending, standing)):
             return ending
-    return content.scenario.endings[-1]
+    return endings[-1]
 
 
-def end_season(state: GameState, content: Content, world: WorldStateStore | None = None) -> list[str]:
+def decisive_ending(state: GameState, content: Content) -> Ending | None:
+    """決定性勝利（有 stance_min／stance_max 的結局）此刻成立了沒（計畫 T9：季的事每曆時看一次）；第一季以外一律 None。
+    季曆第 decisive_from_week 週（預設 10）以前一律 None：割據開季後幾週就會頂到門檻，太早收季三場大戲就打不完
+    （企劃者 2026-10-05）；到了那一週已經在門檻上的，照規則當下收。"""
+    if not season_one(content, state.world):
+        return None
+    if calendar.point(state.world.time, content, state.world).week < content.config.decisive_from_week:
+        return None
+    standing = stances(state, content)
+    return next(
+        (e for e in season_endings(state, content) if (e.stance_min or e.stance_max) and stance_holds(e, standing)),
+        None,
+    )
+
+
+def end_season(
+    state: GameState, content: Content, world: WorldStateStore | None = None, rng: random.Random | None = None,
+    ending: Ending | None = None,
+) -> list[str]:
     """world 給的話，順便算一次天下武學榜／內功榜附在結局後面（設計文件 6.5）；不傳就是
-    原本的純結局文字，選填不影響既有呼叫端或測試。"""
+    原本的純結局文字，選填不影響既有呼叫端或測試。
+
+    第一季：收季之前先把時間到了卻從沒開成的決戰照起點結算（settle_waiting_showdowns，T8 fix round 0），結局看得到
+    它們的結果；正在打的那一場不在這裡，照 FB-035 收兵、不算結果。只動 state.world，不碰 store（常在 mutate 裡）。"""
     w = state.world
     if w.ended:
         return []
-    ending = evaluate_ending(state, content)
+    msgs = settle_waiting_showdowns(state, content, rng or random.Random(0))
+    # 決定性勝利收季時，結局就是觸發收季的那一種：上面照起點判掉的決戰可能把戰況拉回門檻下（T9 審查 M1），
+    # 那時再算一次會得到「戰事提前收束。……黃巾坐地」這種自相矛盾的公告
+    ending = ending or evaluate_ending(state, content)
     w.ended = True
+    w.ending_id = ending.id
     w.ending_title = ending.title
-    w.ending_text = ending.text
-    add_chronicle(state, f"賽季落幕：{ending.title}")
-    msgs = [f"══ 賽季落幕：{ending.title} ══", ending.text]
+    if season_one(content, w):
+        # 第一季（計畫 T9）：季末公告寫進時間軸（_finale；季中收季的開頭是「戰事提前收束。」），江湖史是季末大事的那一行，
+        # 記下最終戰況與各陣營出力前五，給休季的結算畫面讀
+        early = w.time < season_end_time(w, content) - calendar.EPS_SECONDS
+        text = _finale(state, content, ending, early)
+        w.ending_text = text or ending.text
+        if not any(e.kind == "finale" and e.ending_chronicle for e in content.timetable):
+            add_chronicle(state, f"賽季落幕：{ending.title}")  # 內容沒寫季末的江湖史句型（測試夾具）：照舊記一行，江湖史不會沒有結局
+        w.final_trends = {
+            t.id: trend_value(state, content, t.id) for t in content.scenario.trends if trend_shown(content, w, t.id)
+        }
+        if world is not None:
+            w.final_rankings = leaderboard.contribution_rankings(content, world)
+        msgs += ([f"【江湖大事】{text}"] if text else []) + [f"══ 賽季落幕：{ending.title} ══"]
+    else:
+        w.ending_text = ending.text
+        add_chronicle(state, f"賽季落幕：{ending.title}")
+        msgs += [f"══ 賽季落幕：{ending.title} ══", ending.text]
     if world is not None:
         board = leaderboard.compute_leaderboard(content, world)
         msgs += leaderboard.format_lines(board)
     return msgs
+
+
+def season_end_time(season: WorldState, content: Content) -> float:
+    """這一季在世界時鐘上何時收：第一季照排定的季末（schedule["finale"]，管理者可改，計畫 T10；舊季沒排就是季長），
+    其他照季長（沒蓋章的舊季 14 天）。"""
+    if calendar.season_one_on(season, content) and any(e.kind == "finale" for e in content.timetable):
+        return season.schedule.get("finale", season_length_days(season, content) * DAY)
+    return season_length_days(season, content) * DAY
+
+
+def _finale(state: GameState, content: Content, ending: Ending, early: bool) -> str:
+    """季末公告（時刻表結算第 12 週）：開頭（季中就收季時是 early_preface）＋結局句＋退場人物的後話（董卓兵敗）。
+    寫進時間軸（key 是結局 id；公告卡與 _deliver_big_events 照舊補給每個人）、天下大事傳聞與江湖史一行。
+    沒有季末大事、或已經寫過時回空字串。"""
+    w = state.world
+    event = next((e for e in content.timetable if e.kind == "finale"), None)
+    if event is None or event.id in w.timeline:
+        return ""
+    head = event.early_preface if early and event.early_preface else event.preface
+    after = "".join(line for fid, line in event.out_lines.items() if figures.is_out(state, fid))
+    text = head + ending.text + after
+    w.timeline[event.id] = TimelineResult(key=ending.id, time=w.time, text=text)
+    add_rumor(state, text, content=content, layer="world")
+    if event.ending_chronicle:
+        add_chronicle(state, event.ending_chronicle.replace("{結局}", ending.title))
+    return text
 
 
 def _season_vehicle(content: Content, season: WorldState) -> GameState:
@@ -219,10 +325,15 @@ def _season_vehicle(content: Content, season: WorldState) -> GameState:
     return GameState(player=player, world=season)
 
 
-def season_hour(state: GameState, content: Content, rng: random.Random) -> list[str]:
-    """第一季「季的事」，每跨過一個曆時跑一次（advance_world_state 照曆時切段呼叫；開關關著或舊季不跑）：
-    先補跑還沒跑過的週初掛鉤（每週一次），再照時間順序結算到了的大事（決戰與季末不在這裡，見 T8、T9）。
-    T1 的 geju_tick、T4 的 figures.tick 之後也掛在這裡（週初掛鉤之後、大事之前），每曆時一次。"""
+def season_events(state: GameState, content: Content, rng: random.Random) -> list[str]:
+    """第一季「季的事」裡跟時間點有關的那一半：先補跑還沒跑過的週初掛鉤（每週一次），再照時間順序結算到了的
+    大事（季末不在這裡，見 T9），最後把時間到了的決戰記進 showdowns_waiting（T8）——決戰平常不在這裡結算，也不在這裡開：
+    這裡常在 mutate_season 裡，開集結是 store 的另一次寫入，要等 mutate 結束（start_pending_battle 開，見
+    open_waiting_showdown）。例外（T8 fix round 1，控制者裁定）：這一趟要結算的大事排在一件從沒開成的決戰之後時，
+    先照起點把那件決戰結算掉再結算它（settle_waiting_showdowns 的 before）——追趕得到後面那件大事，表示這一整段沒有人在
+    （連假人都沒推過時間），真有人在也是沒人參戰、照起點收場；這樣才照週次、決戰帶給之後大事的修正也不會丟掉。
+    每曆時的交界（season_hour）與開季那一刻（settle_season_start）都跑它；
+    重複呼叫是安全的——掛鉤看 hooked_week、大事看 timeline、決戰看 timeline 與 showdowns_opened，跑過的不再跑。"""
     w = state.world
     msgs: list[str] = []
     week = calendar.point(w.time, content, w).week
@@ -231,8 +342,175 @@ def season_hour(state: GameState, content: Content, rng: random.Random) -> list[
         for hook in WEEK_HOOKS:
             msgs += hook(state, content, rng)
     for event in timetable.due(state, content):
+        msgs += settle_waiting_showdowns(state, content, rng, before=event)
         msgs += timetable.resolve(state, content, event, rng)
+    _note_due_showdowns(state, content)
     return msgs
+
+
+def _note_due_showdowns(state: GameState, content: Content) -> None:
+    """時間到了、還沒收場、還沒開過、內容有那一筆 BattleDef 的決戰，照時間記進 showdowns_waiting（已經記過的不重複）。
+    時刻表上有、內容沒寫那一場的不記（測試夾具）。"""
+    w = state.world
+    for event in timetable.due_showdowns(state, content):
+        if event.id in w.showdowns_waiting or event.id in w.showdowns_opened:
+            continue
+        if showdown_battle(state, content, event) is not None:
+            w.showdowns_waiting.append(event.id)
+
+
+def settle_waiting_showdowns(
+    state: GameState, content: Content, rng: random.Random, before: TimetableEvent | None = None,
+) -> list[str]:
+    """時間到了卻從沒開成的決戰（還在 showdowns_waiting，時間軸上沒有結果）照沒人參戰的那條路結算——起點照此刻前線的
+    戰況算（showdown_start），有人鎖定照鎖定（battle_instance.result_at），再交給 timetable.resolve，照時間先後一件一件來，
+    記號清掉、不會再開（Review Focus 1「決戰不能被跳過」、2「開不成或沒人打照鎖定或照起點收場」，控制者 2026-10-04 的裁定）。
+    兩個地方用它，同一條路：
+    - 收季之前（end_season，before 是 None）：還在等的全部結算（fix round 0）；
+    - 季的事要結算 before 這件大事之前（season_events）：只結算排在 before 前面的（照時刻、同一刻照時刻表的順序，fix round 1）。
+    正在打（已經開過）的不在這裡：季終照 FB-035 收兵、不算結果。開關關著、或這一季開季時沒開，什麼都不做。
+    回傳公告。只動 state.world，不碰 store。"""
+    w = state.world
+    if not calendar.season_one_on(w, content):
+        return []
+    _note_due_showdowns(state, content)  # 剛好停在決戰時刻、還沒跑到季的事的那一件也算
+    order = {e.id: i for i, e in enumerate(content.timetable)}
+
+    def place(event: TimetableEvent) -> tuple[float, int]:
+        return timetable.when(state, content, event), order[event.id]
+
+    msgs: list[str] = []
+    for event_id in list(w.showdowns_waiting):
+        event = next((e for e in content.timetable if e.id == event_id and e.kind == "showdown"), None)
+        if event is not None and before is not None and place(event) >= place(before):
+            continue  # 排在 before 之後的照舊等著開
+        w.showdowns_waiting.remove(event_id)
+        if event is None or event_id in w.timeline or event_id in w.showdowns_opened:
+            continue
+        definition = showdown_battle(state, content, event)
+        if definition is None:
+            continue
+        lock = w.locks.get(event_id)
+        winner, margin = battle_instance.result_at(
+            showdown_start(state, content, definition), definition, lock.side if lock is not None else None,
+            definition.defender or definition.factions[0].id,
+        )
+        msgs += timetable.resolve(state, content, event, rng, key=showdown_key(definition, winner, margin))
+    return msgs
+
+
+def showdown_key(definition: BattleDef, winner: str, margin: str) -> str:
+    """時刻表決戰交給 timetable.resolve 的結果鍵。分版本的帶上這一筆的版本（實際打的、或照起點判的那一版）：
+    不讓 resolve 照收場當下的版本重算——管理者在第 3 週之前開的宛城，收場時第 3 週可能已經換了版本（審查 M-1）。"""
+    return f"{definition.version}:{winner}:{margin}" if definition.version else f"{winner}:{margin}"
+
+
+def showdown_battle(state: GameState, content: Content, event: TimetableEvent) -> BattleDef | None:
+    """時刻表上這件決戰此刻要開的那一筆 BattleDef：分版本的照 version_from 那件的結果挑（宛城：第 3 週「成」是甲、
+    「不成」是乙；那件還沒結果時當史書那一版）。內容沒有那一筆就是 None。"""
+    version = timetable._version(state, event)  # noqa: SLF001  同一個套件
+    return next(
+        (b for b in content.battles.values() if b.timetable_event == event.id and b.version == version), None,
+    )
+
+
+def showdown_start(state: GameState, content: Content, definition: BattleDef) -> int:
+    """時刻表決戰的起點：集結開始這一刻讀 definition.front 的戰況，照 battle_instance.start_from_front 換算（戰鬥系統 5.3）；
+    沒寫戰線的照 definition.trend_start。只看公開的戰況，不看伏筆鎖定。"""
+    if definition.front is None:
+        return definition.trend_start
+    return battle_instance.start_from_front(timetable._front_value(state, content, definition.front))  # noqa: SLF001
+
+
+def _claim_showdown(state: GameState, content: Content, event_id: str) -> tuple[BattleDef, int] | None:
+    """（在 mutate_season 裡）把這件決戰記成開過了，回傳要開的那一筆與起點；不該開（季已經結束、已經收場、已經開過、
+    內容沒有那一筆）就是 None。不論開不開，都從 showdowns_waiting 拿掉。"""
+    w = state.world
+    if event_id in w.showdowns_waiting:
+        w.showdowns_waiting.remove(event_id)
+    if w.ended or event_id in w.timeline or event_id in w.showdowns_opened:
+        return None
+    event = next((e for e in content.timetable if e.id == event_id and e.kind == "showdown"), None)
+    definition = showdown_battle(state, content, event) if event is not None else None
+    if definition is None:
+        return None
+    w.showdowns_opened[event_id] = definition.id
+    return definition, showdown_start(state, content, definition)
+
+
+def open_showdown(world: WorldStateStore, content: Content, event_id: str, now: float) -> list[str]:
+    """開時刻表上這件決戰的集結（管理者手動開也走這裡）：照版本挑那一筆、照前線戰況定起點，季上記下開過了
+    （一場決戰只開一次：中途換季、季終收兵、跨過好幾週都不重開）。另一場還在打、季已經結束、已經收場或開過，
+    什麼都不做、回傳空串列。呼叫端不在任何 mutate 裡（開戰是 store 的寫入）。"""
+    return _open_claimed(world, content, now, lambda state: _claim_showdown(state, content, event_id))
+
+
+def open_waiting_showdown(world: WorldStateStore, content: Content, now: float) -> list[str]:
+    """時間到了、還在等的決戰（showdowns_waiting，照時間先後）開最早的那一件。另一場還在打就留著記號等它收場
+    （Game 收場那一下會再呼叫這裡，所以是「收場立刻開」）；一次只開一件，其餘照順序等下一次。
+    已經收場、已經開過、或內容沒有那一筆的記號順手清掉。呼叫端不在任何 mutate 裡。"""
+    season = world.get_season()
+    if season.ended or not season.showdowns_waiting:
+        return []
+
+    def _first_waiting(state: GameState) -> tuple[BattleDef, int] | None:
+        while state.world.showdowns_waiting:
+            picked = _claim_showdown(state, content, state.world.showdowns_waiting[0])  # 不論開不開都會拿掉這一筆
+            if picked is not None:
+                return picked
+        return None
+
+    return _open_claimed(world, content, now, _first_waiting)
+
+
+def _open_claimed(
+    world: WorldStateStore, content: Content, now: float, claim: Callable[[GameState], tuple[BattleDef, int] | None],
+) -> list[str]:
+    """另一場還在打就什麼都不做（記號留著）；否則在一次 mutate_season 裡用 claim 記下要開哪一場，mutate 結束後才開戰
+    （開戰是 store 的另一次寫入，mutate 不能巢狀）。"""
+    current = world.get_battle()
+    if current is not None and current.phase != "ended":
+        return []
+    claimed: list[tuple[BattleDef, int]] = []
+
+    def _apply(season: WorldState) -> None:
+        picked = claim(_season_vehicle(content, season))
+        if picked is not None:
+            claimed.append(picked)
+
+    world.mutate_season(_apply)
+    if not claimed:
+        return []
+    definition, start = claimed[0]
+    return _open_battle(world, definition, now, trend_start=start)
+
+
+def season_hour(state: GameState, content: Content, rng: random.Random) -> list[str]:
+    """第一季「季的事」，每跨過一個曆時跑一次（advance_world_state 照曆時切段呼叫；開關關著或舊季不跑）：
+    先跑每曆時才有的事，再跑 season_events（週初掛鉤、到了的大事）。
+    每曆時的 tick 一律放在 season_events 之前：T1 的 geju_tick、T4 的 figures.tick——開季那一刻只跑
+    season_events（settle_season_start），不跑這一段，才不會多算一次割據變動與人物推動。"""
+    msgs: list[str] = []
+    geju_tick(state, content, 1)  # T1：豪強割據每曆時一次，在週初掛鉤與大事之前
+    figures.tick(state, content, 1)  # T4：大勢人物每曆時累積一次推動（取代每小時的虛擬玩家）
+    return msgs + season_events(state, content, rng)
+
+
+def settle_season_start(season: WorldState, content: Content, rng: random.Random) -> list[str]:
+    """開季那一刻（世界秒 0）結算第 1 週週一 00:00 的事（FB-040）：只跑 season_events（週初掛鉤＋到了的大事），
+    不跑每曆時的事。不補這一下，要等到第一個曆時交界（約 1 分 47 秒）第一件大事才出現，公告卡那時還是空的。
+    開關關著、這一季開季時沒開（舊季）、或已經跑過（hooked_week 不是 0：週初掛鉤從沒跑過才是還沒開季結算）時什麼都不做，
+    所以重複呼叫也安全。呼叫端在開季之後、不在任何 mutate 裡（見 Game._settle_season_start）。"""
+    if not calendar.season_one_on(season, content) or season.hooked_week != 0 or season.ended:
+        return []
+    return season_events(_season_vehicle(content, season), content, rng)
+
+
+def _season_due(season: WorldState, content: Content) -> bool:
+    """收季的時間到了：第一季照排定的季末（容一點浮點誤差：排定的時刻不一定落在曆時交界上），其他照季長（跟以前一字不差）。"""
+    if calendar.season_one_on(season, content):
+        return season.time >= season_end_time(season, content) - calendar.EPS_SECONDS
+    return season.time >= season_length_days(season, content) * DAY
 
 
 def _to_next_cal_hour(time: float, cal_hour: float) -> float:
@@ -251,6 +529,7 @@ def advance_world_state(
     被動的現實時間追趕（world_state.py::catch_up_season）則透過下面的 advance_season
     包在 mutate_season 裡再呼叫。"""
     vehicle = _season_vehicle(content, season)
+    recompute_trends(season, content)  # 開關開著時，內容改版前開的一季也照三條戰線重算存下來的黃巾聲勢（條件讀它）
     msgs: list[str] = []
     remaining = seconds
     # 第一季（開關開著、這一季也蓋了章）：另外在每個曆時的交界停一下跑季的事；跨過好幾件大事也逐件照時間來
@@ -269,16 +548,26 @@ def advance_world_state(
             msgs += sim_tick(vehicle, content, hours, rng)
         if crossed and not season.ended:
             msgs += season_hour(vehicle, content, rng)
-        if not season.ended and season.time >= season_length_days(season, content) * DAY:
-            msgs += end_season(vehicle, content, world)
+            decisive = None if season.ended else decisive_ending(vehicle, content)
+            if decisive is not None:  # 決定性勝利：當曆時收季，結局就是它（計畫 T9）
+                msgs += end_season(vehicle, content, world, rng, ending=decisive)
+        if not season.ended and _season_due(season, content):
+            msgs += end_season(vehicle, content, world, rng)
     return msgs
 
 
 def start_pending_battle(world: WorldStateStore, content: Content, now: float) -> list[str]:
-    """背景推進跨過開戰門檻時只在賽季上記下要開哪一場（見 _fire）；呼叫端的 mutate_season
-    結束之後呼叫這裡（mutate 不能巢狀），真的開戰並清掉記號。沒有待開的戰鬥就什麼都不寫。"""
-    if world.get_season().pending_battle is None:
-        return []
+    """背景推進跨過開戰門檻時只在賽季上記下要開哪一場（見 _fire），時間到了的時刻表決戰也只記號（見 season_events）；
+    呼叫端的 mutate_season 結束之後呼叫這裡（mutate 不能巢狀），真的開戰並清掉記號。沒有待開的戰鬥就什麼都不寫。"""
+    season = world.get_season()
+    msgs = _start_threshold_battle(world, content, now) if season.pending_battle is not None else []
+    if season.showdowns_waiting:
+        msgs += open_waiting_showdown(world, content, now)
+    return msgs
+
+
+def _start_threshold_battle(world: WorldStateStore, content: Content, now: float) -> list[str]:
+    """開門檻記下的那一場（WorldState.pending_battle），並清掉記號。"""
     taken: dict[str, str | None] = {"id": None}
     ended = {"value": False}
 
@@ -290,16 +579,18 @@ def start_pending_battle(world: WorldStateStore, content: Content, now: float) -
     battle_id = taken["id"]
     if battle_id is None or battle_id not in content.battles or ended["value"]:  # 季已經結束：不開戰
         return []
+    if battle_id in season_one_off(content, world.get_season(), "battles"):  # 開關打開前記下的 beta 那場：第一季不開
+        return []
     return _open_battle(world, content.battles[battle_id], now)
 
 
-def _open_battle(world: WorldStateStore, definition: BattleDef, now: float) -> list[str]:
+def _open_battle(world: WorldStateStore, definition: BattleDef, now: float, trend_start: int | None = None) -> list[str]:
     """開一場全服決戰並廣播集結。已經有一場在集結或開打（例如管理者先開了戰，聲勢之後才跨過開戰門檻），
-    就不另開、也不再廣播（試玩回饋 FB-015）。"""
+    就不另開、也不再廣播（試玩回饋 FB-015）。trend_start 是時刻表決戰照戰況算的起點（見 showdown_start）。"""
     current = world.get_battle()
     if current is not None and current.phase != "ended":
         return []
-    world.start_battle(definition, now=now)
+    world.start_battle(definition, now=now, trend_start=trend_start)
     return [f"🛡️ 【全服戰報】{definition.name}的集結號角已經吹響！"]
 
 
