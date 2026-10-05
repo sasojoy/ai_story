@@ -92,7 +92,7 @@ def resolve_art(skill_id: str | None, content: Content, world: WorldStateStore) 
         return None
     if skill_id in content.skills:
         s = content.skills[skill_id]
-        return content_art(skill_id, s.name, s.kind, s.attribute, s.quality)
+        return content_art(skill_id, s.name, s.kind, s.attribute, s.quality, special=s.special)
     return world.get_skill(skill_id)
 
 

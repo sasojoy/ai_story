@@ -10,7 +10,7 @@ from tianxia import naming
 from tianxia.content import ContentError, load_content, profile_line, validate
 from tianxia.models import (
     BattleAct, BattleActionEffect, BattleDef, BattleFaction, BattleOption, BattleOutcome, Condition, Config, FactionDef,
-    Threshold, Trend,
+    SpecialTrait, Threshold, Trend,
 )
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -1654,3 +1654,137 @@ def test_the_free_text_and_bot_reward_lists_leave_lore_out():
 
     assert "lore" not in content.FREE_TEXT_REWARDS and "lore" not in bot_policy.REWARD_STATS
     assert {"str", "agi", "con", "wis"} <= set(content.FREE_TEXT_REWARDS)  # 另外四項不動
+
+
+# ── traits.json、trait_lines.json：武學的功效（武學與成長設計 13.2、13.4；計畫六 Task 1）──
+
+
+def _with_a_unique_special(content, skill_id):
+    """名將本命絕學的獨特特別功效（13.5）：pool 是 false，只給一門。它佔用「回春」的掛點（兩個特別功效不能共用掛點），
+    所以先把共用的回春換掉，剩下的清單與演出句才一致。"""
+    content.traits.special = [s for s in content.traits.special if s.id != "huichun"]
+    del content.trait_lines["回春"]
+    content.traits.special.append(SpecialTrait(
+        id="only", name="獨門", hook="heal_after", amount=0.03, pool=False, desc="打完回氣血上限的 {value}",
+    ))
+    content.trait_lines["獨門"] = ["{who}使出獨門絕技。"]
+    content.skills[skill_id].special = "only"
+
+
+def test_traits_must_cover_each_attribute_once(content):
+    content.traits.general.pop()
+    with pytest.raises(ContentError, match="功效"):
+        validate(content)
+
+
+def test_a_trait_name_cannot_repeat(content):
+    content.traits.special[1].name = content.traits.special[0].name
+    with pytest.raises(ContentError, match="名字不能重複"):
+        validate(content)
+
+
+def test_a_special_id_cannot_repeat(content):
+    content.traits.special[1].id = content.traits.special[0].id
+    with pytest.raises(ContentError, match="id 不能重複"):
+        validate(content)
+
+
+def test_two_specials_cannot_share_a_hook(content):
+    """Loadout.specials 照掛點記：兩個特別功效掛同一個點，身上只會留第一個、另一個悄悄失效（含 pool: false 的獨特功效）。"""
+    content.traits.special[1].hook = content.traits.special[0].hook
+    with pytest.raises(ContentError, match="掛點"):
+        validate(content)
+
+
+def test_a_skill_special_must_exist_and_a_unique_one_belongs_to_one_skill(content):
+    first, second = list(content.skills)[:2]
+    content.skills[first].special = "沒有這個"
+    with pytest.raises(ContentError, match="特別功效"):
+        validate(content)
+    _with_a_unique_special(content, first)
+    validate(content)  # 一門武學帶獨特功效：沒問題
+    content.skills[second].special = "only"
+    with pytest.raises(ContentError, match="只能給一門"):
+        validate(content)
+
+
+def test_every_trait_needs_lines(content):
+    del content.trait_lines["穩"]
+    with pytest.raises(ContentError, match="穩 沒有演出句"):
+        validate(content)
+
+
+def test_every_trait_has_lines_with_known_placeholders_only(content):
+    content.trait_lines["先手"] = ["{who}在{place}搶先出手。"]
+    with pytest.raises(ContentError, match="佔位"):
+        validate(content)
+
+
+@pytest.mark.parametrize(("line", "complaint"), [
+    ("连出数招", "繁體"),
+    ("{who}連出 3 招", "數字"),
+    ("{who}連出３招", "數字"),
+    ("{who}勝率過半%", "數字"),
+    ("   ", "空白"),
+])
+def test_a_trait_line_must_be_traditional_digit_free_and_not_blank(content, line, complaint):
+    content.trait_lines["先手"].append(line)
+    with pytest.raises(ContentError, match=complaint):
+        validate(content)
+
+
+def test_a_trait_line_may_use_brackets_and_chinese_numerals(content):
+    content.trait_lines["先手"].append("【{art}】一步一步逼上前去，{foe}連退。")
+    validate(content)
+
+
+def test_a_trait_lines_key_must_be_a_trait_name(content):
+    """鍵拼錯（例：先首）的句子永遠不會被挑到，載入時就擋下。"""
+    content.trait_lines["先首"] = ["{who}搶先出手。"]
+    with pytest.raises(ContentError, match="先首"):
+        validate(content)
+
+
+def test_a_malformed_traits_file_is_a_content_error_that_names_the_file(tmp_path):
+    root = copy_fixture(tmp_path / "a")
+    (root / "traits.json").write_text('{"general": [', encoding="utf-8")
+    with pytest.raises(ContentError, match="traits.json"):
+        load_content(root)
+    root = copy_fixture(tmp_path / "b")
+    edit_json(root / "traits.json", lambda d: d["general"][0].update(hook="沒有這個掛點"))
+    with pytest.raises(ContentError, match="traits.json"):
+        load_content(root)
+    root = copy_fixture(tmp_path / "c")
+    (root / "trait_lines.json").write_text('["不是物件"]', encoding="utf-8")
+    with pytest.raises(ContentError, match="trait_lines.json"):
+        load_content(root)
+
+
+def test_content_without_traits_still_loads(tmp_path):
+    """功效是選填的內容：沒有這兩個檔（舊的內容、別的測試夾具）就是沒有功效，載入照常。"""
+    root = copy_fixture(tmp_path)
+    (root / "traits.json").unlink()
+    (root / "trait_lines.json").unlink()
+    content = load_content(root)
+    assert content.traits.general == [] and content.trait_lines == {}
+
+
+def test_the_real_traits_are_the_designed_table():
+    """正式的功效照設計 13.2、13.4（八個一般、七個特別，數字都是預設）；演出句是 S1 的 45 句（每個功效三句）。"""
+    content = load_content(ROOT / "content")
+    book = content.traits
+    assert [t.name for t in book.general] == ["先手", "穩", "破甲", "化勁", "乘勝", "吸取", "險", "厚"]
+    assert [t.name for t in book.special] == ["連環", "不動", "護命", "悟招", "借力", "回春", "輕身"]
+    assert all(t.pool for t in book.special)
+    assert sorted(content.trait_lines) == sorted(t.name for t in [*book.general, *book.special])
+    assert all(len(lines) == 3 for lines in content.trait_lines.values())
+    assert content.config.special_trait_chance == 0.05
+    assert content.config.trait_quality_multiplier == {"下品": 1.0, "中品": 1.5, "上品": 2.0, "絕學": 3.0}
+
+
+def test_the_fixture_traits_are_the_real_ones():
+    """測試夾具的功效與演出句跟正式內容一樣（直接複製），數字跟著正式內容走。"""
+    for name in ("traits.json", "trait_lines.json"):
+        assert json.loads((FIXTURE / name).read_text(encoding="utf-8")) == json.loads(
+            (ROOT / "content" / name).read_text(encoding="utf-8")
+        )
