@@ -1725,7 +1725,10 @@ def test_prologue_allow_entries_must_be_menu_ids(prologue_root, entry):
 
 
 def test_prologue_allow_takes_every_kind_of_menu_id(prologue_root):
-    more = ["act:challenge:x", "call:x", "move:town:hurry", "learn:x", "faction:x", "fs:x", "act:duty", "act:socialize"]
+    more = [
+        "act:challenge:x", "call:x", "move:town:hurry", "learn:x", "faction:x", "defect:x", "fs:x", "act:duty",
+        "act:socialize",
+    ]
     edit_json(prologue_root / "tutorial.json", lambda t: t["steps"][2]["allow"].extend(more))
     assert load_content(prologue_root).tutorial.steps[2].allow[-1] == "act:socialize"
 

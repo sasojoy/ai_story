@@ -611,7 +611,7 @@ REVEAL_KEYS = frozenset({
 ALLOW_FIXED = frozenset({
     "act:explore", "act:train", "act:socialize", "act:rest", "act:summons", "act:call", "act:recruit", "act:duty", "act:convoy",
 })
-ALLOW_FAMILIES = ("act:challenge:", "call:", "move:", "learn:", "faction:", "fs:")
+ALLOW_FAMILIES = ("act:challenge:", "call:", "move:", "learn:", "faction:", "defect:", "fs:")
 
 
 def allow_known(entry: str) -> bool:
