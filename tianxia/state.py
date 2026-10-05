@@ -130,6 +130,8 @@ class PlayerState(BaseModel):
     # [第幾個遊戲日, 當天已拿幾次]，跟 talks_today 同一種寫法；記的是前幾天就當沒拿過
     road_rewards_today: dict[str, list[int]] = Field(default_factory=dict)
     tutorial_step: int = 0  # 等於引導步數時代表引導結束
+    guide_done: list[str] = Field(default_factory=list)  # 最近一次行動完成引導的那幾行（✔ 與獎勵），對話框顯示；下一次行動清掉
+    guide_outro: bool = False  # 引導剛走完、結語還沒按「知道了」（對話框顯示結語）；略過的、早就做完的是 False
     visited: set[str] = Field(default_factory=set)  # 去過的地點
     fortune: bool = False  # 本季的新立門戶福緣已經發生（或已經改送賀禮）
 
@@ -330,6 +332,9 @@ class JournalEntry(BaseModel):
     lines: list[str] = Field(default_factory=list)  # 敘事文字
     changes: list[str] = Field(default_factory=list)  # 數值變化，例如「銀兩 -5」「心得 +12」
     battle_id: int | None = None  # 這次行動打的那一場（BattleRecord.id）
+    # 這次行動順便完成的新手引導（「✔ 引導完成」、獎勵、說書人的下一步）：江湖紀錄的列表照舊畫，「剛剛」卡片不畫——
+    # 說書人的話改在行動列上方的對話框（引導重做設計 8.1）
+    guide: list[str] = Field(default_factory=list)
 
 
 class GameState(BaseModel):

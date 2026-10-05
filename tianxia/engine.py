@@ -17,7 +17,7 @@ from . import (
     journal, materials, orders, push, ranks, roster, skillview, team, timetable,
 )
 from .events import choice_label, event_candidates, has_events_here, pick_event, visible_choices
-from .guide import base_step_count, note_action, quest_text, tutorial_intro
+from .guide import base_step_count, note_action, quest_text, tutorial_active, tutorial_intro
 from .guide import steps as tutorial_steps
 from .journal import LOG_BREAK, Draft
 from .mapview import render_map, render_minimap
@@ -120,7 +120,7 @@ class Game:
             [f"══ {content.scenario.name} ══", content.scenario.intro, game.location_text()]
             + tutorial_intro(content)
         )
-        game._write(content.scenario.name, [content.scenario.intro] + tutorial_intro(content), tag="賽季開始")
+        game._write(content.scenario.name, [content.scenario.intro], tag="賽季開始", guide=tutorial_intro(content))
         return game
 
     def _reconcile_season(self) -> None:
@@ -167,7 +167,7 @@ class Game:
         self.state = fresh
         self.state.player.visited.add(self.state.player.location)
         self._write(
-            self.content.scenario.name, [self.content.scenario.intro] + tutorial_intro(self.content), tag="賽季開始",
+            self.content.scenario.name, [self.content.scenario.intro], tag="賽季開始", guide=tutorial_intro(self.content),
         )
 
     def _drop_stale_references(self) -> None:
@@ -617,6 +617,7 @@ class Game:
         if option is None or not option.enabled:
             return self._log(["（此刻無法這麼做。）"])
         self.state.battle_card = None
+        self.state.player.guide_done = []  # 對話框上一次完成的那幾行，下一次行動就清掉
         kind, _, arg = option_id.partition(":")
         if kind == "battle":  # 決戰選項不走 Draft：加入與趕到由 _battle_choose 自己寫一則紀錄，每回合的出招不寫（FB-030）
             return self._log(self._battle_choose(arg))
@@ -644,9 +645,9 @@ class Game:
                 msgs = self._choose(int(arg))
             msgs += self._hear_after_stamina(stamina)
             if kind == "act" and arg != "break":
-                msgs += note_action(self.state, self.content, self.world, arg)
+                msgs += self._guide(note_action(self.state, self.content, self.world, arg))
             if kind == "call" and arg != "back":
-                msgs += note_action(self.state, self.content, self.world, "socialize")  # 指名求見算一次交友（新手引導、任務）
+                msgs += self._guide(note_action(self.state, self.content, self.world, "socialize"))  # 指名求見算一次交友
             msgs += check_thresholds(self.state, self.content, self.world, self.client, now=self.now)
             msgs += ranks.check_summons(self.state, self.content)  # 貢獻跨過門檻就發召見（計畫 T5）
             journal.add_entry(self.state, self._draft.entry(self.state.world.time, msgs))
@@ -763,8 +764,50 @@ class Game:
         if self._draft is not None:
             self._draft.outcome(text, msg)
 
-    def _write(self, title: str, msgs: list[str], tag: str = "") -> None:
-        journal.add_entry(self.state, Draft(title, tag).entry(self.state.world.time, msgs))
+    def _write(self, title: str, msgs: list[str], tag: str = "", guide: list[str] | None = None) -> None:
+        draft = Draft(title, tag)
+        draft.guide = list(guide or [])
+        journal.add_entry(self.state, draft.entry(self.state.world.time, msgs))
+
+    def _note_guide(self, notes: list[str]) -> None:
+        """新手引導這次完成了（note_action 回傳的那幾行）：「✔ 引導完成」與獎勵記在 guide_done 給對話框；走完最後一步、
+        有結語時對話框改顯示結語，等按「知道了」（引導重做設計 8.1）。"""
+        if not notes:
+            return
+        speaker = f"【{self.content.tutorial.speaker}】"
+        p = self.state.player
+        p.guide_done = [n for n in notes if not n.startswith(speaker)]
+        if not tutorial_active(self.state, self.content) and self.content.tutorial.outro:
+            p.guide_outro = True
+
+    def _guide(self, notes: list[str]) -> list[str]:
+        """新手引導的訊息不接進這次行動的訊息（「剛剛」只放行動的結果，引導重做設計 8.1.3）：記進這一則江湖紀錄的 guide、
+        給對話框；不在行動裡（例如打開輿圖）時接在最新一則的 guide。回傳空串列，呼叫端照舊 `msgs += …`。"""
+        if notes:
+            self._note_guide(notes)
+            if self._draft is not None:
+                self._draft.guide += notes
+            else:
+                journal.add_guide(self.state, notes)
+        return []
+
+    def guide_box(self) -> dict | None:
+        """行動列上方的對話框（引導重做設計 8.1、6.2）：引導還沒做完是目前這一步的話；剛走完、結語還沒按「知道了」是結語；
+        其他（略過、早就做完的舊角色）是 None。done 是上一次行動完成的那幾行（✔ 與獎勵）。框上寫的人是 Tutorial.speaker。"""
+        s, c, p = self.state, self.content, self.state.player
+        t = c.tutorial
+        todo = tutorial_steps(s, c)
+        if p.tutorial_step < len(todo):
+            return {"speaker": t.speaker, "text": todo[p.tutorial_step].text, "done": list(p.guide_done), "end": False}
+        if p.guide_outro and t.outro:
+            return {"speaker": t.speaker, "text": t.outro, "done": list(p.guide_done), "end": True}
+        return None
+
+    def guide_ack(self) -> list[str]:
+        """結語按「知道了」：對話框不再出現。"""
+        self.state.player.guide_outro = False
+        self.state.player.guide_done = []
+        return []
 
     # ── 行動 ──────────────────────────────────────────────
 
@@ -957,7 +1000,7 @@ class Game:
         s, c = self.state, self.content
         msgs = orders.credit(s, c, s.player.faction, s.player.name, shown=display_name(s), **kw)
         if msgs:
-            msgs += note_action(s, c, self.world, "order")
+            msgs += self._guide(note_action(s, c, self.world, "order"))
         return msgs
 
     def _duty(self) -> list[str]:
@@ -2270,7 +2313,7 @@ class Game:
                     self._draft.tag = f"{reason}，停在 {c.locations[s.player.location].name}"
             if own:
                 entry = self._draft.entry(when, msgs)
-                if done or entry.lines or entry.changes:  # 只到了中途的站、又沒有別的事，不另寫一則
+                if done or entry.lines or entry.changes or entry.guide:  # 只到了中途的站、又沒有別的事（連引導也沒有），不另寫一則
                     journal.add_arrival(s, entry, done)
         finally:
             if own:
@@ -2294,7 +2337,7 @@ class Game:
                 text = f"{text}\n\n{flourish}"
         self._hide(text)
         return (  # 糧車到了終點（路過也算）先交糧，再照原本的新手引導與門檻（計畫 T6）
-            [text] + self._convoy_arrives(loc_id) + note_action(s, c, self.world, "move")
+            [text] + self._convoy_arrives(loc_id) + self._guide(note_action(s, c, self.world, "move"))
             + check_thresholds(s, c, self.world, client, now=self.now)
         )
 
@@ -2362,6 +2405,7 @@ class Game:
         s, c = self.state, self.content
         route = atlas.way_to(s, c, dest_id)
         s.battle_card = None
+        s.player.guide_done = []
         self._draft = Draft(atlas.journey_title(c, route.path))
         stamina = s.player.stamina
         try:
@@ -2544,22 +2588,18 @@ class Game:
         """門下動作寫進江湖紀錄（連續的併成一則）。
 
         guide=True：這個動作算一次「練功」（自創、煉製、鍛鍊），順便看新手引導有沒有完成（FB-024）。完成了，
-        note_action 回來的「✔ 引導完成」、獎勵與說書人的下一步，跟江湖頁 choose() 那條路一樣寫進這一則
-        （敘事進 lines、獎勵的數字進 changes），並回傳這幾行讓畫面也照舊顯示；沒完成就回傳 []，這一則跟以前一模一樣。
-        心得的增減先算好、才輪到引導獎勵：獎勵本身若給心得，變化只由獎勵那幾行帶進來，不會算兩次。"""
+        note_action 回來的「✔ 引導完成」、獎勵與說書人的下一步記在這一則的 guide（江湖紀錄看得到），給對話框
+        （guide_done），不進修練、煉製頁的訊息與「剛剛」（引導重做設計 8.1.3）。回傳一律是空串列。"""
         delta = self._xinde() - xinde_before
         changes = [f"心得 {delta:+d}"] if delta else []
+        self.state.player.guide_done = []
         notes = note_action(self.state, self.content, self.world, "practice") if guide else []
-        lines: list[str] = []
-        if notes:
-            reward, story = battlelog.split_changes(notes)
-            changes = journal.combine_changes(changes + reward)
-            # 一則的敘事有 lines 就只認 lines、沒有才拿結果標記（journal._story）：這次動作自己的那句話要先放進 lines，
-            # 不然之後的門下動作併進來時，這句話會被引導那幾行擠掉。
-            lines = [tag, *story]
-        entry = JournalEntry(time=self.state.world.time, title=journal.MENXIA, tag=tag, lines=lines, changes=changes)
+        self._note_guide(notes)  # 引導的訊息記在這一則的 guide、給對話框，不進修練頁的訊息（引導重做設計 8.1.3）
+        entry = JournalEntry(
+            time=self.state.world.time, title=journal.MENXIA, tag=tag, changes=changes, guide=notes,
+        )
         journal.add_entry(self.state, entry, merge=True)
-        return self._log(notes)
+        return []
 
     # ── 門下與隊伍 ────────────────────────────────────────
 
@@ -2660,15 +2700,14 @@ class Game:
         if self.state.player.tutorial_step >= steps:
             return []
         self.state.player.tutorial_step = steps
+        self.state.player.guide_done, self.state.player.guide_outro = [], False  # 略過後對話框不再出現（8.1.4）
         self._write("新手引導", [], tag="已略過")
         return self._log(["（已略過新手引導。）"])
 
     def view_map(self) -> list[str]:
         self.state.player.flags.add("看過地圖")
-        msgs = note_action(self.state, self.content, self.world, "view_map")
-        if msgs:
-            self._write("翻看地圖", msgs)
-        return self._log(msgs)
+        self._guide(note_action(self.state, self.content, self.world, "view_map"))  # 接在最新一則，「剛剛」不換
+        return []
 
     def quest_text(self) -> str:
         return quest_text(self.state, self.content)

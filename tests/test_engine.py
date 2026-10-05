@@ -521,14 +521,14 @@ def test_the_practice_tutorial_step_counts_only_when_that_slot_has_an_art(game, 
     reward = _practice_step_game(game, worn)
     silver = game.state.player.stats["silver"]
     msgs = game.practice(kind)
-    joined = "\n".join(msgs)
+    assert "✔ 引導完成" not in msgs  # 引導的訊息走對話框，不進修練頁的訊息（引導重做設計 8.1.3）
     if counts:
         assert game.state.player.tutorial_step == 1
-        assert "✔ 引導完成" in joined
+        assert "✔ 引導完成" in game.state.player.guide_done
         assert game.state.player.stats["silver"] == silver + reward
     else:
         assert game.state.player.tutorial_step == 0
-        assert "✔ 引導完成" not in joined
+        assert game.state.player.guide_done == []
         assert game.state.player.stats["silver"] == silver
 
 
@@ -536,7 +536,7 @@ def test_the_practice_tutorial_step_counts_a_maxed_art_and_says_so(game):
     _practice_step_game(game, {"武學": 10})
     msgs = game.practice("武學")
     assert "練無可練" in msgs[0]
-    assert "✔ 引導完成" in msgs
+    assert "✔ 引導完成" in game.state.player.guide_done
     assert game.state.player.tutorial_step == 1
 
 
@@ -572,11 +572,11 @@ def test_a_maxed_wugong_finishes_the_practice_step_as_soon_as_it_comes_up(game):
     這一步改成「身上有一門武學」：前一步一完成，同一次 note_action 就接著完成它。"""
     reward = _wugong_step_game(game, {"武學": 10})
     silver = game.state.player.stats["silver"]
-    msgs = game.view_map()
-    assert msgs.count("✔ 引導完成") == 2
+    game.view_map()
+    assert game.state.player.guide_done.count("✔ 引導完成") == 2  # 對話框列出兩步（RF2）
     assert game.state.player.tutorial_step == 2
     assert game.state.player.stats["silver"] == silver + reward
-    assert msgs[-1] == f"【{game.content.tutorial.speaker}】出城。"
+    assert game.guide_box()["text"] == "出城。"
 
 
 def test_only_a_neigong_never_finishes_the_wugong_step_until_a_wugong_is_created(game):
@@ -585,9 +585,10 @@ def test_only_a_neigong_never_finishes_the_wugong_step_until_a_wugong_is_created
     game.view_map()
     assert game.state.player.tutorial_step == 1
     for act in (lambda: game.practice("內功"), lambda: game.practice("武學"), game.view_map):
-        assert "✔ 引導完成" not in act()
-        assert game.state.player.tutorial_step == 1
-    assert "✔ 引導完成" in game.create_skill("回風掌", "武學")
+        act()
+        assert game.state.player.tutorial_step == 1 and game.state.player.guide_done == []
+    game.create_skill("回風掌", "武學")
+    assert "✔ 引導完成" in game.state.player.guide_done
     assert game.state.player.tutorial_step == 2
 
 

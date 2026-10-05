@@ -1796,3 +1796,26 @@ def test_admin_schedule_jump_and_rescue_via_api(client, monkeypatch):
     assert game.world.get_season().trends["yingru"] == 70
     assert "沒有人鎖定" in client.post("/api/do/clear_lock", json={"id": "luzhi_siege"}).json()["message"]
     assert "沒有進行中的決戰" in client.post("/api/do/cancel_battle", json={}).json()["message"]
+
+
+# ── 引導小改版（新手引導重做設計第八節）─────────────────────────
+
+
+def test_main_view_sends_the_guide_box_and_skipping_hides_it(client):
+    """全新角色的 /api/main 帶著對話框：說書人與第一步的話（不用點開任何東西）；略過新手引導後就沒有了。"""
+    main = _player(client)["main"]
+    tutorial = server.CONTENT.tutorial
+    assert main["guide"] == {"speaker": tutorial.speaker, "text": tutorial.steps[0].text, "done": [], "end": False}
+    client.post("/api/do/skip_tutorial", json={})
+    assert client.get("/api/main").json()["guide"] is None
+
+
+def test_guide_ack_closes_the_outro(client):
+    _player(client)
+    game = server.game_for("沈青衫")
+    game.state.player.tutorial_step = len(server.CONTENT.tutorial.steps)
+    game.state.player.guide_outro = True
+    open_characters().save(game.state)
+    assert client.get("/api/main").json()["guide"]["end"] is True
+    client.post("/api/do/guide_ack", json={})
+    assert client.get("/api/main").json()["guide"] is None

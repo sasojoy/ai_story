@@ -452,6 +452,24 @@
       stances ? `<p class="stances-line">態勢　${STANCE_NAMES.map(([id, name]) => `${name} ${stances[id]}`).join("・")}</p>` : ""}`;
   }
 
+  // 說書人的對話框（引導重做設計 8.1、6.2）：行動列（或事件的選項）上方，框上寫說話的人（之後換成師父、引薦人）。
+  // 做完一步先列「✔ 完成」與獎勵，再接下一步的話。可以收起成一行；記的是收起的那一句，換了下一句就自己展開。
+  // 結語有「知道了」，按了就不再出現
+  const GUIDE_KEY = "tx-guide-shut";
+  function guideShut() { try { return localStorage.getItem(GUIDE_KEY); } catch (e) { return null; } }
+  function setGuideShut(text) { try { if (text) localStorage.setItem(GUIDE_KEY, text); else localStorage.removeItem(GUIDE_KEY); } catch (e) { /* 存不了就只在這一頁有效 */ } }
+  function guideHtml(g) {
+    if (!g) return "";
+    if (!g.end && guideShut() === g.text) {
+      return `<button class="guide-line" data-act="guide-open" aria-label="展開${esc(g.speaker)}的話"><b>${esc(g.speaker)}</b>：${esc(g.text)}</button>`;
+    }
+    const done = g.done.length ? `<div class="guide-done">${g.done.map((d) => d.startsWith("✔")
+      ? '<span class="ok">✔ 完成</span>' : `<span class="reward">${esc(d)}</span>`).join("")}</div>` : "";
+    const btn = g.end ? '<button class="btn small" data-act="guide-ack">知道了</button>'
+      : '<button class="linkish" data-act="guide-shut">收起</button>';
+    return `<section class="card guide" aria-label="${esc(g.speaker)}的話"><div class="guide-head"><b>${esc(g.speaker)}</b>${btn}</div>${done}<p class="guide-text">${esc(g.text)}</p></section>`;
+  }
+
   function pageJianghu() {
     const m = S.main;
     // 「剛剛」（A4）：預設只露出開頭幾行，太長的（例如新角色的開場故事）收著、點「展開全文」看完，不在卡片裡捲。
@@ -507,7 +525,8 @@
     const orderCard = m.orders || m.convoy ? ordersHtml(m.orders || [], week, m.convoy) : "";
     // 劇情文字在上、行動在下（企劃者 2026-10-04）。行動列只有一排，375×812 上「剛剛」、場景與整排行動都在第一屏。
     // 路上的三個捷徑（links）緊貼在選項底下，戰況條排在捷徑之後，不要把它插到選項與捷徑中間
-    return `${resultCard}${board}${quest}${now}${scene}${free}${menu}${links}${orderCard}${fronts}${tail}`;
+    const guide = guideHtml(m.guide);  // 說書人的話緊貼在行動上方（引導重做設計 8.1）
+    return `${resultCard}${board}${quest}${now}${scene}${guide}${free}${menu}${links}${orderCard}${fronts}${tail}`;
   }
 
   // ── 修練 ──
@@ -1205,6 +1224,9 @@
           if (S.main.admin) { S.admin = await api("/api/admin"); render(); } // 每次打開都重抓：時刻表與可以定的結果會變
           break;
         case "sheet-close": S.sheet = false; render(); break;
+        case "guide-shut": setGuideShut(S.main.guide && S.main.guide.text); renderPage(); break;
+        case "guide-open": setGuideShut(null); renderPage(); break;
+        case "guide-ack": await doMain("guide_ack"); break;
         case "do": S.sheet = false; await doMain(el.dataset.op); break;
         case "admin": {
           const op = el.dataset.op;

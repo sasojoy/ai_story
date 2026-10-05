@@ -263,6 +263,7 @@ def main_view(game: Game) -> dict:
         "rumors": md(game.rumors_text()),
         "chronicle": md(game.chronicle_text()),
         "admin": game.is_admin(),
+        "guide": game.guide_box(),  # 行動列上方的說書人對話框（引導重做設計 8.1）；略過或早就做完是 None
     }
     if "fronts" in status:  # 第一季濃縮版才有：江湖頁的三條戰況（開關關著時不送，頁面照舊）
         view["fronts"] = status["fronts"]
@@ -648,6 +649,7 @@ MAIN_ACTIONS = {
     "anonymous": lambda g, b: g.set_anonymous(bool(b.get("value"))),
     "skip_tutorial": lambda g, b: g.skip_tutorial(),
     "view_map": lambda g, b: g.view_map(),
+    "guide_ack": lambda g, b: g.guide_ack(),  # 對話框的結語按「知道了」
 }
 ADMIN_ACTIONS = {
     "open_season": lambda g, b: g.admin_open_season(time.time()),

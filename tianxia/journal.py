@@ -122,6 +122,7 @@ class Draft:
     battle_id: int | None = None
     rewrites: list[tuple[str, str | None]] = field(default_factory=list)  # (訊息, 紀錄裡改寫成的文字；None＝不寫)
     changes: list[str] = field(default_factory=list)  # 訊息裡沒有、另外補上的數值變化（例如經驗）
+    guide: list[str] = field(default_factory=list)  # 這次行動順便完成的新手引導（記進 JournalEntry.guide，不進敘事）
 
     def hide(self, msg: str) -> None:
         self.rewrites.append((msg, None))
@@ -149,7 +150,7 @@ class Draft:
         changes, lines = split_changes(kept)
         return JournalEntry(
             time=time, title=self.title, tag=self.tag, lines=lines, changes=combine_changes(self.changes + changes),
-            battle_id=self.battle_id,
+            battle_id=self.battle_id, guide=list(self.guide),
         )
 
 
@@ -176,7 +177,7 @@ def _merged(head: JournalEntry, entry: JournalEntry, lines: list[str], battle_id
     """head 與 entry 併成的一則：時間與結果標記用新的（entry 沒有標記就沿用 head 的）、數值變化加總。"""
     return JournalEntry(
         time=entry.time, title=entry.title, tag=entry.tag or head.tag, lines=lines,
-        changes=combine_changes(head.changes + entry.changes), battle_id=battle_id,
+        changes=combine_changes(head.changes + entry.changes), battle_id=battle_id, guide=head.guide + entry.guide,
     )
 
 
@@ -189,6 +190,15 @@ def add_entry(state: GameState, entry: JournalEntry, merge: bool = False) -> Non
         return
     state.journal.insert(0, entry)
     del state.journal[MAX_ENTRIES:]
+
+
+def add_guide(state: GameState, notes: list[str]) -> None:
+    """不在行動裡完成的新手引導（例：打開輿圖）：接在最新一則的 guide 後面，不另起一則（「剛剛」不換）；還沒有紀錄時另起一則。"""
+    if state.journal:
+        head = state.journal[0]
+        state.journal[0] = head.model_copy(update={"guide": head.guide + notes})
+    else:
+        add_entry(state, JournalEntry(time=state.world.time, title="新手引導", guide=list(notes)))
 
 
 def add_arrival(state: GameState, entry: JournalEntry, done: bool) -> None:
@@ -309,7 +319,7 @@ def _row(entry: JournalEntry, when: Callable[[float], str]) -> str:
         f'<span class="tx-time">{_when(entry.time, when)}</span>'
         f'<span class="tx-main">{_heading(entry)}{_chips(entry.changes, "span")}</span>'
     )
-    body = _body(entry)
+    body = _body(entry) + entry.guide  # 新手引導在江湖紀錄照舊看得到（「剛剛」卡片不畫，見 card_html）
     if not body:
         return f'<div class="tx-row"><div class="tx-sum">{head}</div></div>'
     return (
