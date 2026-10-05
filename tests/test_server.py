@@ -720,6 +720,46 @@ def test_the_practice_and_furnace_pages_only_read_and_call_what_the_server_has(g
         assert gone not in js, gone
 
 
+def _js_function(js: str, header: str) -> str:
+    """app.js 裡 IIFE 內的一個函式本體：從標頭（例如 "async function mx("）到下一個縮兩格的收尾 "\\n  }\\n"。"""
+    start = js.index(header)
+    return js[start:js.index("\n  }\n", start)]
+
+
+def test_the_pages_trim_the_furnace_whenever_the_menxia_data_is_replaced():
+    """修練頁熔掉爐裡放著的東西、再回煉製頁：S.forgeSel 還留著那個 id，爐子看起來是空的、開爐卻亮著（forgeReady 照 id 數）。
+    只有輪詢的 refreshPage 會補，所以每個換掉 S.menxia 的地方都要自己修剪（mx、loadMenxia）。網頁沒有測試框架，這裡擋住漏改。"""
+    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    for header in ("async function mx(", "async function loadMenxia("):
+        body = _js_function(js, header)
+        assert "S.menxia = " in body and "trimPot()" in body, header
+        assert body.index("trimPot()") > body.index("S.menxia = "), header  # 換上新資料之後才修剪
+    trim = _js_function(js, "function trimPot(")
+    assert "trimForgeSel()" in trim and 'S.forgeLine = ""' in trim and "updateForgeLine()" in trim
+
+
+def test_a_refused_name_keeps_what_the_player_typed_and_the_pill_tick_does_not_outlive_the_tab():
+    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    submit = js[js.index('form.id === "name-art"'):]
+    submit = submit[:submit.index('form.id === "seclude"')]
+    assert 'await mx("name"' in submit and "again.value = data.name" in submit  # 被拒（表單還在）把字放回去
+    assert "S.legendTick = {}" in _js_function(js, "async function goTab(")  # 回到修練頁時，破境丹的勾是真的沒勾
+
+
+def test_the_three_art_buttons_stay_on_one_line_at_phone_width():
+    """修練／改練這一門／熔煉在 375px 手機寬度：頁邊 16、清單邊框 1、卡內邊 14（兩側）、三顆之間兩個 8px 的縫，一排可用 375-32-2-28-16=297px。
+    原本三顆等寬各 99px，扣掉邊框 2 與內距 28，「改練這一門」（5 字 × 15px = 75px）只剩 69px 放不下而折行。
+    改成照字寬分配（flex: 1 1 auto、width: auto）、不折行、橫向內距縮到 8px：三顆自然寬 48＋93＋48 = 189px，一排有 108px 的餘裕。"""
+    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    css = (server.WEB / "style.css").read_text(encoding="utf-8")
+    assert 'class="row art-actions"' in js[js.index("const artRow"):js.index("const insightRow")]
+    rule = re.search(r"\.art-body \.art-actions > \.btn \{([^}]*)\}", css)
+    assert rule is not None, "要有只管開啟的武學那一排按鈕的 class，不動全站的 .btn"
+    body = rule.group(1)
+    assert "white-space: nowrap" in body and "width: auto" in body and "flex: 1 1 auto" in body
+    assert re.search(r"padding:\s*10px 8px", body)
+
+
 def _a_player_with_insights(client, insights=("feng", "huo"), xinde=100):
     """新角色（開局送的兩門基礎武學在身上），悟得 insights、心得 xinde；存進資料庫（進鎖會重讀）。"""
     _player(client)

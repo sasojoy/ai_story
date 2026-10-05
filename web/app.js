@@ -637,7 +637,7 @@
         <button class="art ${S.artOpen === a.id ? "on" : ""}" data-act="art" data-id="${esc(a.id)}">${a.worn ? "◆ " : ""}${esc(a.kind)}　${esc(a.name)}（${esc(a.quality)}・屬${esc(a.attribute)}）第${a.level}成${a.insight ? `・意境「${esc(a.insight)}」` : ""}</button>
         ${S.artOpen === a.id ? `<div class="art-body">${a.card}
           ${lg ? `<label class="legend"><input type="checkbox" data-legend="${esc(a.id)}" ${ticked ? "checked" : ""}><span>${esc(lg.label)}</span></label>` : ""}
-          <div class="row">
+          <div class="row art-actions">
             <button class="btn ${a.cultivate.ok ? "primary" : ""}" data-act="cultivate" data-id="${esc(a.id)}" ${a.cultivate.ok ? "" : "disabled"}>修練</button>
             ${a.worn ? "" : `<button class="btn" data-act="switch" data-id="${esc(a.id)}">改練這一門</button>`}
             <button class="btn" data-act="melt" data-id="${esc(a.id)}" data-name="${esc(a.name)}" ${a.melt.ok ? "" : "disabled"}>熔煉</button>
@@ -1121,6 +1121,7 @@
   // ── 載入各頁 ──
   async function loadMenxia() {
     S.menxia = await api(`/api/menxia${S.person ? `?person=${encodeURIComponent(S.person)}` : ""}`);
+    trimPot();
     if (S.tab === "practice" || S.tab === "craft") renderPage();
   }
 
@@ -1141,6 +1142,7 @@
     S.tab = tab;
     S.message = "";
     S.artOpen = null;
+    S.legendTick = {}; // 破境丹的勾也一起收：回到修練頁時它是真的沒勾（預設不勾）
     S.mapNotice = "";
     if (tab === "news") S.unseen = false;
     render();
@@ -1242,6 +1244,7 @@
     await busy(async () => {
       const r = await api(`/api/menxia/${op}`, { person: S.person, kind: S.kind, ...extra });
       S.menxia = r.menxia;
+      trimPot(); // 熔掉的若正放在爐裡，回煉製頁時不能還留著
       S.message = r.message;
       setMain(r.main);
       renderTop();
@@ -1538,6 +1541,9 @@
         // 絕學定名：名字合不合格、有沒有人用過都由伺服器驗，結果寫在頁面上方那一行；定成了表單就不再畫
         if (!data.name.trim()) { toast("先取個名字。"); return; }
         await mx("name", { name: data.name });
+        // 被拒了（表單還在，原因寫在頁面上方那一行）：mx 重畫的表單是空的，把剛打的字放回去，不用重打；定成了表單就不在
+        const again = document.querySelector('#name-art input[name="name"]');
+        if (again && S.menxia && S.menxia.naming) again.value = data.name;
       } else if (form.id === "seclude") {
         // 閉關（QA L9）：真的進了閉關（busy_hours 有值）才回江湖頁。引擎不讓閉關（在路上、打坐、事件進行中）
         // 也是 200 加一句原因，請求本身失敗也一樣：留在修練頁、原因寫在頁面上方。
@@ -1703,6 +1709,14 @@
       const s = [...page.querySelectorAll("details > summary")].find((x) => x.textContent === text);
       if (s) s.parentElement.open = open;
     }
+  }
+
+  // S.menxia 換成新的一份之後：爐裡放的若已經不在了（例如在修練頁熔掉），拿掉、說明那一行作廢；爐裡還有東西就重問一次說明。
+  // 不修剪的話，爐子看起來是空的（畫的時候找不到它），forgeReady() 卻照 id 數、開爐亮著，說明也是舊的
+  function trimPot() {
+    if (!trimForgeSel()) return;
+    S.forgeLine = "";
+    if (S.forgeSel.length) updateForgeLine();
   }
 
   // 重抓之後，爐裡放的若已經不在了（熔掉、別處用掉）就拿掉；有拿掉回 true
