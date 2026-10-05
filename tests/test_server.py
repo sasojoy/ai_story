@@ -1037,6 +1037,28 @@ def test_the_report_link_ends_the_last_paragraph_of_the_fight_card():
     assert re.search(r"\.battle-card \.report-link \{[^}]*display: inline-block", css)
 
 
+def test_the_fight_card_spacing_is_tight_and_only_for_the_fight_card():
+    """戰鬥卡片壓縮：打完一場要在第一屏直接按下一顆行動。段距、標題與行高收緊，但只動「剛剛」那張戰鬥卡片
+    （.battle-card 只用在它身上，別張卡片與狀態列、行動列一個字不動），字級不縮到比 .order-text 的 13px 還小。"""
+    css = (server.WEB / "style.css").read_text(encoding="utf-8")
+    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    assert re.findall(r'class="[^"]*battle-card[^"]*"', js) == ['class="card battle-card"']  # 只有「剛剛」那張戰鬥卡片用這個 class
+
+    def rule(selector: str) -> str:
+        found = re.search(r"(?m)^" + re.escape(selector) + r" \{([^}]*)\}", css)
+        assert found is not None, selector
+        return found.group(1)
+
+    assert re.search(r"padding: [0-9]px [0-9]+px", rule(".battle-card")) and "line-height: 1.55" in rule(".battle-card")
+    assert "margin: 3px 0" in rule(".battle-card p")
+    assert "font-size: 16px" in rule(".battle-card h3") and "margin: 0 0 1px" in rule(".battle-card h3")
+    assert "margin: 1px 0 5px" in rule(".battle-card ul.rounds") and "margin: 1px 0 5px" in rule(".battle-card p.rounds-tale")
+    # 這張卡片的規則一律寫在 .battle-card 底下，字級沒有比 13px 小的
+    for selectors, body in re.findall(r"(?m)^([^{}\n@/]*\.battle-card[^{}\n]*) \{([^}]*)\}", css):
+        assert all(s.strip().startswith(".battle-card") for s in selectors.split(",")), selectors
+        assert all(float(px) >= 13 for px in re.findall(r"font-size: ([\d.]+)px", body)), selectors
+
+
 def test_the_big_fight_account_is_folded_behind_the_same_button():
     """大場面模型寫的過程是一段話（不是回合清單，最多 200 字、手機上約十行）：「剛剛」那張也收起來，只露前兩行，
     按同一顆「展開過程」攤開、展開記在同一個 S.roundsOpen（PM 2026-10-05，Task 2 審查修正 2）；戰報頁照樣整段。
