@@ -35,7 +35,7 @@ def stat_uses(content: Content) -> list[tuple[str, str]]:
 
 
 def rules_line(content: Content) -> str:
-    return "身上一門內功、一門武學：花心得練成，用意境修練衝品質；武學也能在「煉製」融意境衍生新武學。"
+    return "身上一門內功、一門武學：花心得練成，用意境修練衝品質；武學也能在「煉製」融意境衍生新武學，或兩門武學合成一門新的。"
 
 
 def practice_hint(state: GameState, content: Content) -> str | None:

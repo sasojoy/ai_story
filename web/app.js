@@ -388,7 +388,7 @@
   const wpt = (r, deg) => { const a = (deg - 90) * Math.PI / 180; return [+(r * Math.cos(a)).toFixed(2), +(r * Math.sin(a)).toFixed(2)]; };
   const spinAt = (secs) => `animation-delay:-${((performance.now() / 1000) % secs).toFixed(2)}s`;
   // 煉製頁的太極火爐（企劃者 2026-10-04）。太極在爐裡慢慢轉，外圈是一圈火舌；左右兩格放進去的是一門武學與一個意境
-  // （或兩個意境），點有東西的那一格拿出來，點爐身開爐。開爐後等結果的這段時間整座爐子晃動（見 forge()）。
+  // （或兩門武學，或兩個意境），點有東西的那一格拿出來，點爐身開爐。開爐後等結果的這段時間整座爐子晃動（見 forge()）。
   // slots 兩格各是 {name, sub, rank}（名字、第二行小字、品階 1~3）或沒放（null）
   function furnaceHub(slots, ready) {
     const r = 54;
@@ -1530,7 +1530,7 @@
         case "forge": await forge(); break;
         case "forge-hub":
           if (forgeReady()) await forge();
-          else toast("放一門武學和一個意境，或兩個意境。");
+          else toast("放一門武學和一個意境，或兩門武學，或兩個意境。");
           break;
         case "wheel":
           S.wheelSel = S.wheelSel === el.dataset.key ? null : el.dataset.key;

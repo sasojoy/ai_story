@@ -6,7 +6,7 @@ from tianxia.martial_arts import MartialArt, generate_from_name, historical_art,
 
 def test_rules_line():
     assert skillview.rules_line(None) == (
-        "身上一門內功、一門武學：花心得練成，用意境修練衝品質；武學也能在「煉製」融意境衍生新武學。"
+        "身上一門內功、一門武學：花心得練成，用意境修練衝品質；武學也能在「煉製」融意境衍生新武學，或兩門武學合成一門新的。"
     )
 
 

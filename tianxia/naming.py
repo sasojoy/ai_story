@@ -102,13 +102,16 @@ def _ask(
     accept: Callable[[NameReply], tuple[str, str] | None], budget: float | None,
 ) -> tuple[str | None, str]:
     """叫模型、照預算扣時間，最多 NAME_ATTEMPTS 次（行動鎖內的複本只一次，見下）；accept 收下這一次的回覆就回它的結果，
-    不收就再問一次。client 是 None、連不上、回 None、預算用完都回 (None, "")。預算的扣法見 propose。"""
+    不收就在還有預算時再問一次。client 是 None、連不上、回 None、預算用完都回 (None, "")。預算的扣法見 propose。"""
     if client is None:
         return None, ""
     left = budget
     own = getattr(client, "timeout", None)
     # 行動鎖內的複本（retry 是 False，Game._quick_client）只試一次：鎖內任何一步模型呼叫最多佔住鎖 in_lock_model_timeout 秒，
-    # 取壞了就直接走退路；鎖外（有預算）照舊最多 NAME_ATTEMPTS 次、每次最多兩趟
+    # 取壞了就直接走退路。鎖外最多 NAME_ATTEMPTS 次、每次最多兩趟，但要看預算分得完分不完：每一次先扣掉
+    # min(timeout, 剩下的 ÷ 2) 的兩趟——伺服器現在的數字（naming_budget_seconds 60、ollama_timeout 120）第一次就分到
+    # 30 秒兩趟、把 60 秒用光，所以實際上只問一次，取壞或挑到清單外的名字就直接走退路、不重問；
+    # 只有預算比 timeout 的兩倍多（或 client 的 timeout 很短）、或沒給預算（整季機器人、腳本、測試）時才會真的重問
     attempts = 1 if getattr(client, "retry", True) is False else NAME_ATTEMPTS
     for _ in range(attempts):
         caller = client
