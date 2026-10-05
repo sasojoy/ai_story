@@ -106,6 +106,67 @@ def test_switch_art_message_shows_the_players_own_quality(state, content, world)
     assert not any("下品" in m for m in msgs)
 
 
+# ── 改練（功法庫 → 身上）：合成出來的武學只能靠它上身（開局送的兩門把兩個欄位都占了）──────────────
+
+
+def _claim(world, name, kind="武學"):
+    art = generate_from_name(name, kind, name, weights=LOW_ONLY)
+    assert world.claim_skill_name(art)
+    return art
+
+
+def _wearing_one_and_holding_another(state, world):
+    """身上穿著第一門武學（第一成），第二門在功法庫裡。"""
+    worn, held = _claim(world, "旋風腿"), _claim(world, "沉山勢")
+    state.player.member.wugong_id, state.player.member.wugong_level = worn.id, 1
+    state.player.arts = [held.id]
+    return worn, held
+
+
+def test_switching_swaps_the_equipped_art_with_the_library_one(state, content, world):
+    worn, held = _wearing_one_and_holding_another(state, world)
+    msgs = team.switch_art(state, content, world, held.id)
+    assert state.player.member.wugong_id == held.id
+    assert state.player.arts == [worn.id]
+    assert f"改練【{held.name}】" in "\n".join(msgs)
+
+
+def test_switching_keeps_each_arts_level(state, content, world):
+    """熟練度各自保留：換回來不用重練（設計文件六.4）。"""
+    worn, held = _wearing_one_and_holding_another(state, world)
+    state.player.member.wugong_level = 7  # 把身上這門練到第七成
+    team.switch_art(state, content, world, held.id)
+    assert state.player.member.wugong_level == 1  # 庫裡的那門沒練過，從第一成開始
+    team.switch_art(state, content, world, worn.id)
+    assert state.player.member.wugong_level == 7  # 換回來還是第七成
+    assert state.player.art_levels[held.id] == 1
+
+
+def test_switching_into_an_empty_slot_needs_no_swap(state, content, world):
+    art = _claim(world, "玄淵經", "內功")
+    assert state.player.member.neigong_id is None
+    state.player.arts.append(art.id)  # 內功欄是空的，這門內功只在庫裡
+    msgs = team.switch_art(state, content, world, art.id)
+    assert state.player.member.neigong_id == art.id and state.player.arts == []
+    assert len(msgs) == 1  # 沒有「你收起了…」那一句
+
+
+def test_switching_something_not_in_the_library_is_refused(state, content, world):
+    assert team.switch_art(state, content, world, "ghost") == ["你的功法庫裡沒有這一門。"]
+    worn, _held = _wearing_one_and_holding_another(state, world)
+    assert team.switch_art(state, content, world, worn.id) == ["你的功法庫裡沒有這一門。"]  # 身上正練的也不在庫裡
+    assert state.player.member.wugong_id == worn.id and len(state.player.arts) == 1
+
+
+def test_a_neigong_in_the_library_does_not_displace_a_wugong(state, content, world):
+    worn, _held = _wearing_one_and_holding_another(state, world)
+    neigong = _claim(world, "玄淵經", "內功")
+    state.player.arts.append(neigong.id)
+    team.switch_art(state, content, world, neigong.id)
+    assert state.player.member.wugong_id == worn.id  # 武學沒被動到
+    assert state.player.member.neigong_id == neigong.id
+
+
 def test_old_saves_without_the_new_player_fields_still_load(state):
     from tianxia.state import PlayerState
 

@@ -714,10 +714,17 @@ def api_do(op: str, request: Request, body: dict = Body(default={})):
     return {"main": look(game, main_view), "message": joined(msgs)}
 
 
+def forge_args(body: dict) -> tuple[str | None, list[str]]:
+    """煉製頁送來的東西：放進爐裡的武學 id（可以沒有）與意境 id 們。body 是客戶端寫的：武學一律轉成字串、
+    意境不是清單就當作沒放，形狀不對只會得到「不存在／放一門武學和一個意境…」那一句話，不會打出 500。"""
+    art, picked = body.get("art"), body.get("insights")
+    return (str(art) if art else None), ([str(i) for i in picked] if isinstance(picked, list) else [])
+
+
 MENXIA_ACTIONS = {
     "practice": lambda g, b: g.practice(str(b.get("kind") or KINDS[0])),
     "heal": lambda g, b: g.heal(),
-    "forge": lambda g, b: g.forge(b.get("art") or None, [str(i) for i in b.get("insights") or []]),  # 一武學＋一意境＝合成，兩意境＝合併
+    "forge": lambda g, b: g.forge(*forge_args(b)),  # 一武學＋一意境＝合成，兩意境＝合併
     "switch": lambda g, b: g.switch_art(str(b.get("art") or "")),
     "join": lambda g, b: g.add_to_team(str(b.get("person") or "")),
     "leave": lambda g, b: g.remove_from_team(str(b.get("person") or "")),
@@ -756,8 +763,7 @@ def api_menxia_do(op: str, request: Request, body: dict = Body(default={})):
 def api_forge_line(request: Request, body: dict = Body(default={})):
     """煉製頁選了東西就更新說明（不算行動、不存檔）。"""
     game = _game(request)
-    art = body.get("art") or None
-    picked = [str(i) for i in body.get("insights") or []]
+    art, picked = forge_args(body)
     return {"line": look(game, lambda g: md(g.forge_line(art, picked)))}
 
 

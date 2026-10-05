@@ -2,7 +2,7 @@ from unittest import mock
 
 import pytest
 
-from tianxia import fusion, naming
+from tianxia import fusion, naming, team
 from tianxia.martial_arts import generate_from_name
 from tianxia.state import new_game_state
 
@@ -228,3 +228,94 @@ def test_the_engine_forge_is_titled_after_the_craft_tab_and_only_written_when_so
     length = len(game.state.journal)
     game.forge(None, ["feng", "huo"])  # 已經悟得了：被拒絕
     assert len(game.state.journal) == length
+
+
+# ── 設計 3.4、4.2 的規定，一條一條釘住 ───────────────────────────────
+
+
+def test_a_neigong_base_stays_a_neigong(ready, content, world):
+    """3.4：種類跟著底走，內功融意境還是內功；武學欄不受影響，新內功進功法庫。"""
+    ready.player.member.neigong_id = "basic_breath"  # 柔
+    art, _ = fusion.fuse(ready, content, world, named("雲水訣"), "basic_breath", "huo")
+    assert (art.kind, art.attribute, art.base) == ("內功", "剛", "basic_breath")  # 屬性跟意境（火＝剛），不跟底（柔）
+    assert ready.player.member.neigong_id == "basic_breath" and ready.player.member.wugong_id == "basic_fist"
+    assert ready.player.arts == [art.id] and world.get_skill(art.id).kind == "內功"
+
+
+def test_a_wugong_base_stays_a_wugong_even_when_the_neigong_slot_is_empty(ready, content, world):
+    assert ready.player.member.neigong_id is None
+    art, _ = fusion.fuse(ready, content, world, named("旋風腿"), "basic_fist", "feng")
+    assert art.kind == "武學"
+    assert ready.player.member.neigong_id is None  # 新武學沒有誤上內功欄
+    assert ready.player.arts == [art.id]
+
+
+@pytest.mark.parametrize(("insight_id", "lean"), [("haoran", "正"), ("xuesha", "邪"), ("feng", "無")])
+def test_the_fused_arts_lean_follows_the_insight(ready, content, world, insight_id, lean):
+    """7.3：武學的正邪跟著它最後融的那個意境走；全服登記的那一筆與玩家拿到的是同一個。"""
+    ready.player.insights += ["haoran", "xuesha"]
+    art, _ = fusion.fuse(ready, content, world, named("某某勁"), "basic_fist", insight_id)
+    assert art.lean == lean and art.insight == insight_id
+    assert world.get_skill(art.id).lean == lean
+
+
+def test_the_lean_is_the_last_insight_not_the_bases(ready, content, world):
+    """融過好幾次就記最後那一個：正派的底再融一個沒有正邪的意境，新武學的正邪是「無」。"""
+    ready.player.insights += ["haoran"]
+    good, _ = fusion.fuse(ready, content, world, named("正氣腿"), "basic_fist", "haoran")
+    plain, _ = fusion.fuse(ready, content, world, named("輕風腿"), good.id, "feng")
+    assert (good.lean, plain.lean, plain.insight, plain.base) == ("正", "無", "feng", good.id)
+
+
+def test_a_recipe_book_hit_still_costs_the_same_xinde(ready, content, world):
+    """4.2：查表的老配方也照收（你是在「學」）；不看有沒有人首創、也不看要不要叫模型。"""
+    fusion.fuse(ready, content, world, named("旋風腿"), "basic_fist", "feng")
+    other = other_player(content)
+    other_xinde = other.player.stats["xinde"]
+    second, msgs = fusion.fuse(other, content, world, must_not_ask(), "basic_fist", "feng")
+    assert second is not None and "首創" in msgs[0]
+    assert other.player.stats["xinde"] == other_xinde - content.config.fuse_xinde == 95
+    assert f"心得 -{content.config.fuse_xinde}" in msgs
+
+
+def test_a_merge_recipe_book_hit_still_costs_the_same_xinde(ready, content, world):
+    fusion.merge(ready, content, world, named("燎原"), "huo", "feng")
+    other = other_player(content, ("feng", "huo"))
+    second, msgs = fusion.merge(other, content, world, must_not_ask(), "feng", "huo")
+    assert second is not None and "首悟" in msgs[0]
+    assert other.player.stats["xinde"] == 100 - content.config.merge_xinde == 95
+    assert f"心得 -{content.config.merge_xinde}" in msgs
+
+
+def test_the_new_art_starts_at_the_first_level_even_when_the_base_is_far_along(ready, content, world):
+    """3.4：品質跟底一樣，但從第一成開始。底練到第七成，新武學不繼承；改練上身時也是第一成，底換回庫裡仍是第七成。"""
+    ready.player.member.wugong_level = 7
+    art, _ = fusion.fuse(ready, content, world, named("旋風腿"), "basic_fist", "feng")
+    assert ready.player.member.wugong_level == 7  # 底沒被動到
+    assert ready.player.art_levels.get(art.id, 1) == 1
+    team.switch_art(ready, content, world, art.id)
+    assert (ready.player.member.wugong_id, ready.player.member.wugong_level) == (art.id, 1)
+    assert ready.player.art_levels["basic_fist"] == 7
+
+
+def test_the_new_art_starts_at_the_first_level_when_it_goes_straight_onto_an_empty_slot(ready, content, world):
+    """底在功法庫裡、武學欄是空的：新武學直接上身，第一成。"""
+    ready.player.member.wugong_id, ready.player.member.wugong_level = None, 0
+    ready.player.arts = ["basic_fist"]
+    art, msgs = fusion.fuse(ready, content, world, named("旋風腿"), "basic_fist", "feng")
+    assert (ready.player.member.wugong_id, ready.player.member.wugong_level) == (art.id, 1)
+    assert ready.player.arts == ["basic_fist"] and any("第一成" in m for m in msgs)
+
+
+def test_two_players_racing_for_a_new_merge_end_up_with_one_registered_insight(ready, content, world):
+    """合併版的審查重點 3：兩個人都看見「這個配方還沒人合過」、各自請模型取了名字，登記只有第一個算數；
+    第二個拿到第一個登記的那一個意境（同名、同屬性），全服只有一筆。"""
+    first, _ = fusion.merge(ready, content, world, named("燎原"), "huo", "feng")
+    other = other_player(content, ("feng", "huo"))
+    with mock.patch.object(world, "lookup_insight_recipe", return_value=None):  # 乙看這一眼時，甲還沒登記
+        second, msgs = fusion.merge(other, content, world, named("野火"), "feng", "huo")
+    assert (second.id, second.name, second.attribute, second.creator) == (first.id, "燎原", first.attribute, "沈浪")
+    assert world.get_insight("野火") is None  # 乙取的名字沒有登記
+    assert other.player.insights == ["feng", "huo", "燎原"]
+    assert "首悟" in msgs[0] and "第一次" not in msgs[0]
+    assert other.player.stats["xinde"] == 95

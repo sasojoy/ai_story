@@ -734,6 +734,28 @@ def test_the_forge_refuses_what_it_cannot_do_and_charges_nothing(client):
     assert saved.arts == [] and saved.insights == ["feng"] and saved.stats["xinde"] == 2
 
 
+def test_the_forge_endpoints_survive_oddly_shaped_bodies(client):
+    """body 是玩家（或亂送的客戶端）寫的：art 不是字串、insights 不是清單都不能打出 500，也不能動到任何東西。"""
+    _a_player_with_insights(client)
+    bodies = (
+        {"art": ["jichu_quanjiao"], "insights": ["feng"]},
+        {"art": {"id": "jichu_quanjiao"}, "insights": ["feng"]},
+        {"art": 5, "insights": ["feng"]},
+        {"art": "jichu_quanjiao", "insights": "feng"},
+        {"art": "jichu_quanjiao", "insights": {"feng": 1}},
+        {"art": None, "insights": 7},
+        {"insights": [["feng"], {"x": 1}]},
+        {},
+    )
+    for body in bodies:
+        line = client.post("/api/forge_line", json=body)
+        assert line.status_code == 200 and isinstance(line.json()["line"], str), body
+        out = client.post("/api/menxia/forge", json=body)
+        assert out.status_code == 200 and out.json()["message"], body
+    saved = open_characters().load("沈青衫").player
+    assert saved.arts == [] and saved.insights == ["feng", "huo"] and saved.stats["xinde"] == 100
+
+
 # ── 功法卡（FB-006）與功法庫先看卡再改練（QA L4）────────────────
 
 
