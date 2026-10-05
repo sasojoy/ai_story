@@ -467,6 +467,8 @@ def map_view(game: Game, layer: str, selected: str | None) -> dict:
         "layers": [{"id": key, "name": name} for key, name in Game.MAP_LAYERS.items()],
         "layer": layer,
         "svg": game.world_map_svg(layer, selected),
+        # 圖例不畫進 svg（圖裡的會跟著平移、縮放，放大時就看不見）：跟 svg 並排給網頁，疊在地圖框角落（web/app.js 的 legendHtml）
+        "legend": game.map_legend(layer),
         "places": [{"label": label, "id": loc_id} for label, loc_id in places],
         "selected": selected,
         "here": game.state.player.location,

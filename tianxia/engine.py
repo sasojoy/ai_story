@@ -25,7 +25,7 @@ from .events import (
 from .guide import base_step_count, note_action, quest_text, step_text, tutorial_active, tutorial_intro
 from .guide import steps as tutorial_steps
 from .journal import LOG_BREAK, Draft
-from .mapview import render_map, render_minimap
+from .mapview import legend_data, render_map, render_minimap
 from .martial_arts import QUALITIES
 from .models import (
     EXPLORE_BRANCHES, FREE_TEXT_MAX, BattleDef, Choice, Content, Effect, Event, ExploreBranch, FactionDef, Location, RoadKind,
@@ -3274,6 +3274,10 @@ class Game:
 
     def minimap_svg(self) -> str:
         return render_minimap(self.state, self.content)
+
+    def map_legend(self, layer: str = "situation") -> dict:
+        """大地圖的圖例（資料，見 mapview.legend_data）：不畫進 SVG，網頁自己疊在地圖框角落。"""
+        return legend_data(self.state, self.content, layer)
 
     def map_header(self) -> str:
         return atlas.header_text(self.state, self.content)
