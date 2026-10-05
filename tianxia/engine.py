@@ -2490,7 +2490,7 @@ class Game:
         art, msgs = craft.craft(self.state, self.content, self.world, self.client, material_ids)
         out = self._log(msgs)
         if art is not None:
-            out += self._menxia_entry(f"煉製【{art.name}】", xinde, guide=True)
+            out += self._menxia_entry(f"煉製【{art.name}】", xinde, guide=True, title=journal.CRAFT)
         return out
 
     def craft_cost(self, material_ids: list[str]) -> int:
@@ -2540,8 +2540,9 @@ class Game:
     def _xinde(self) -> int:
         return self.state.player.stats.get("xinde", 0)
 
-    def _menxia_entry(self, tag: str, xinde_before: int, guide: bool = False) -> list[str]:
-        """門下動作寫進江湖紀錄（連續的併成一則）。
+    def _menxia_entry(self, tag: str, xinde_before: int, guide: bool = False, title: str = journal.PRACTICE) -> list[str]:
+        """修練頁、煉製頁的動作寫進江湖紀錄（同一種連續的併成一則）。標題照底部分頁的名字：煉製寫「煉製」，
+        自創、鍛鍊、療傷、改練寫「修練」（FB-047；以前都寫「門下」，煉製會併進前面那則自創、鍛鍊）。
 
         guide=True：這個動作算一次「練功」（自創、煉製、鍛鍊），順便看新手引導有沒有完成（FB-024）。完成了，
         note_action 回來的「✔ 引導完成」、獎勵與說書人的下一步，跟江湖頁 choose() 那條路一樣寫進這一則
@@ -2557,7 +2558,7 @@ class Game:
             # 一則的敘事有 lines 就只認 lines、沒有才拿結果標記（journal._story）：這次動作自己的那句話要先放進 lines，
             # 不然之後的門下動作併進來時，這句話會被引導那幾行擠掉。
             lines = [tag, *story]
-        entry = JournalEntry(time=self.state.world.time, title=journal.MENXIA, tag=tag, lines=lines, changes=changes)
+        entry = JournalEntry(time=self.state.world.time, title=title, tag=tag, lines=lines, changes=changes)
         journal.add_entry(self.state, entry, merge=True)
         return self._log(notes)
 

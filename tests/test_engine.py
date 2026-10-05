@@ -475,10 +475,10 @@ def test_create_skill_and_practice(game):
     assert msgs == ["你自創了一門武學【龍吟九霄】（中品，屬陰）！"]
     assert game.state.player.member.wugong_id == "龍吟九霄"
     entry = game.state.journal[0]
-    assert entry.title == "門下" and entry.tag == msgs[0]
+    assert entry.title == "修練" and entry.tag == msgs[0]
     game.practice("武學")
     assert game.state.player.member.wugong_level == 2
-    assert game.state.journal[0].title == "門下"  # 併進同一則
+    assert game.state.journal[0].title == "修練"  # 併進同一則
 
 
 def _practice_step_game(game, worn: dict[str, int]):

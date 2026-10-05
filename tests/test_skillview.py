@@ -147,6 +147,25 @@ def test_practice_hint_names_only_what_is_left_to_train(state, content, world):
     assert hint is not None and "內功" in hint and "武學" not in hint
 
 
+def test_practice_hint_calls_the_pages_by_their_tab_names(state, content):
+    """FB-047：門下頁拆成「修練」「煉製」兩個分頁之後，提示照分頁的名字寫，不再寫「門下」。"""
+    from tianxia import materials
+
+    state.player.stats["xinde"] = 500
+    hint = skillview.practice_hint(state, content)
+    assert hint == "💡 你已攢下 500 點心得。去「修練」鍛鍊內功、武學（不花一分一毫）。"
+    materials.grant(state, content, "gang_1", 2)
+    hint = skillview.practice_hint(state, content)
+    assert hint == "💡 你已攢下 500 點心得。去「修練」鍛鍊內功、武學（不花一分一毫），或到「煉製」拿素材煉製新功法。"
+
+
+def test_practice_hint_stays_quiet_while_the_season_rests(state, content):
+    """FB-047：休季時什麼都不能做，提示不出現。"""
+    state.player.stats["xinde"] = 500
+    state.world.ended = True
+    assert skillview.practice_hint(state, content) is None
+
+
 def test_practice_hint_goes_away_once_everything_is_at_the_tenth_level(state, content, world):
     state.player.stats["xinde"] = 9999
     team.create_skill(state, content, world, "龍吟九霄", "武學")
