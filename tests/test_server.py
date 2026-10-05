@@ -45,6 +45,21 @@ def fresh_server_memory():
         store.clear()
 
 
+@pytest.fixture(autouse=True)
+def model_breaker_closed(monkeypatch):
+    """鎖內模型呼叫的全服斷路器是 server 的模組狀態：每個測試從關著開始，前一個測試的模型失敗（conftest 把 chat_structured
+    假成連不上）不會讓這一個的鎖內呼叫全部跳過。"""
+    monkeypatch.setattr(server, "_breaker_until", None, raising=False)
+
+
+@pytest.fixture
+def breaker_clock(monkeypatch):
+    """斷路器的時鐘（server._monotonic）換成撥得動的：clock[0] 是現在的秒數，測試不必真的等 180 秒。"""
+    clock = [1000.0]
+    monkeypatch.setattr(server, "_monotonic", lambda: clock[0], raising=False)
+    return clock
+
+
 @pytest.fixture
 def game():
     return Game.new(server.CONTENT, "測試")
@@ -962,8 +977,9 @@ def test_the_forge_naming_outside_the_lock_keeps_its_retry_and_budget(monkeypatc
     assert game.client.timeout == server.CONTENT.config.ollama_timeout and game.client.retry is True
 
 
-def test_each_lock_hold_gets_a_fresh_model_budget(game, monkeypatch):
-    """一次拿鎖期間鎖內的模型呼叫只容忍一次失敗（之後都不叫模型）；server._locked 每次拿到行動鎖先歸零，下一個請求重新有額度。"""
+def test_each_lock_hold_gets_a_fresh_model_budget(game, monkeypatch, breaker_clock):
+    """一次拿鎖期間鎖內的模型呼叫只容忍一次失敗（之後都不叫模型）；server._locked 每次拿到行動鎖先歸零，下一個請求重新有額度。
+    失敗之後全服會暫停一陣子（斷路器，見下面那幾個測試），所以第一次失敗之後先把斷路器的時鐘撥過那段時間。"""
     sent = []
 
     def chat_text(self, messages, **kwargs):
@@ -983,10 +999,117 @@ def test_each_lock_hold_gets_a_fresh_model_budget(game, monkeypatch):
         assert g._quick_client() is not None  # 新的一次拿鎖：重新有額度
 
     server.act(game, first)
+    breaker_clock[0] += server.MODEL_BREAKER_SECONDS
     server.act(game, second)
     server.look(game, second)  # 只讀的畫面（look）也是一次拿鎖，一樣先歸零
     server.act(game, first)
     assert len(sent) == 2
+
+
+# ── 鎖內模型呼叫的全服斷路器（PM 2026-10-05）──────────────────
+# 模型掛了的時候，每個玩家的下一個動作都還要在行動鎖裡等一次 15 秒逾時，全服跟著等。一次鎖內呼叫失敗之後，
+# 全服 MODEL_BREAKER_SECONDS（180 秒）內每一次拿鎖一開始額度就用完，鎖內直接用固定文字；時間到之後的第一次拿鎖照常叫。
+
+
+def _model_down(monkeypatch):
+    """模型掛了：鎖內的 chat_text 一叫就失敗。回傳送出去的紀錄（每送一次一筆）。"""
+    sent = []
+
+    def chat_text(self, messages, **kwargs):
+        sent.append(self.timeout)
+        raise ConnectionError("模型連不上")
+
+    monkeypatch.setattr(OllamaClient, "chat_text", chat_text)
+    return sent
+
+
+def _ask_the_model_in_the_lock(g):
+    """鎖內叫一次模型，跟引擎各處一樣：拿 _quick_client，拿不到（None）就直接用固定文字；失敗照例吞掉、走固定文字。"""
+    quick = g._quick_client()
+    if quick is not None:
+        with contextlib.suppress(Exception):
+            quick.chat_text([])
+
+
+def test_a_failed_in_lock_model_call_trips_the_breaker(game, monkeypatch, breaker_clock, capsys):
+    sent = _model_down(monkeypatch)
+    server.act(game, _ask_the_model_in_the_lock)
+    assert len(sent) == 1
+    seen = []
+    server.act(game, lambda g: seen.append((g._model_budget.gave_up, g._quick_client())))
+    server.look(game, lambda g: seen.append((g._model_budget.gave_up, g._quick_client())))  # 只讀的畫面也是一次拿鎖
+    assert seen == [(True, None), (True, None)] and len(sent) == 1
+    lines = capsys.readouterr().out.splitlines()
+    assert len(lines) == 1 and f"{server.MODEL_BREAKER_SECONDS} 秒" in lines[0]
+    assert "測試" not in lines[0]  # 不寫是誰（也就看不出是不是假人）
+
+
+def test_while_it_is_open_another_players_hold_starts_spent_and_asks_nothing(monkeypatch, breaker_clock):
+    """甲在鎖內替首次出現的配方取名（沒給 proposed），模型連不上（conftest）：斷路器打開。乙接著也在鎖內開一爐新配方：
+    這次拿鎖一開始額度就用完，不叫模型（假的模型一次都沒被叫到），照樣合成、名字走退路字表。"""
+    jia, yi = _forger("甲"), _forger("乙")
+    server.act(jia, lambda g: g.forge("jichu_quanjiao", ["feng"]))
+    asked, spent = [], []
+    with _model(lambda model, messages: asked.append(1) or "旋風腿"):
+        msgs = server.act(yi, lambda g: spent.append(g._model_budget.gave_up) or g.forge("jichu_quanjiao", ["huo"]))
+    assert spent == [True] and asked == []
+    assert any("衍生出" in m for m in msgs)
+    assert open_world().lookup_recipe(fusion.fuse_key("jichu_quanjiao", "huo")).name != "旋風腿"
+
+
+def test_after_the_pause_the_next_hold_asks_again_and_a_new_failure_trips_it_again(
+    game, monkeypatch, breaker_clock, capsys,
+):
+    sent = _model_down(monkeypatch)
+    server.act(game, _ask_the_model_in_the_lock)  # 第 1000 秒打開
+    breaker_clock[0] += server.MODEL_BREAKER_SECONDS - 0.5
+    server.act(game, _ask_the_model_in_the_lock)
+    assert len(sent) == 1  # 還差半秒：不叫
+    breaker_clock[0] += 0.5
+    server.act(game, _ask_the_model_in_the_lock)  # 滿 180 秒：這一次照常叫，又失敗 → 再打開
+    assert len(sent) == 2
+    server.act(game, _ask_the_model_in_the_lock)
+    assert len(sent) == 2  # 又開著了（暫停中的拿鎖不會把時間往後延）
+    breaker_clock[0] += server.MODEL_BREAKER_SECONDS
+    monkeypatch.setattr(OllamaClient, "chat_text", lambda self, messages, **kwargs: sent.append("ok") or "一句話")
+    server.act(game, _ask_the_model_in_the_lock)
+    server.act(game, _ask_the_model_in_the_lock)
+    assert sent[2:] == ["ok", "ok"]  # 模型回來了：關上之後每一次都照常叫
+    trip, close, trip_again, close_again = capsys.readouterr().out.splitlines()  # 打開、關上各印一行
+    assert trip == trip_again and close == close_again and trip != close
+    assert all(f"{server.MODEL_BREAKER_SECONDS} 秒" in line for line in (trip, close))
+
+
+def test_a_successful_in_lock_call_does_not_trip_it(game, monkeypatch, breaker_clock, capsys):
+    calls = []
+    monkeypatch.setattr(OllamaClient, "chat_text", lambda self, messages, **kwargs: calls.append(1) or "一句話")
+    server.act(game, _ask_the_model_in_the_lock)
+    server.act(game, _ask_the_model_in_the_lock)
+    assert len(calls) == 2 and capsys.readouterr().out == ""
+
+
+def test_a_failed_call_trips_it_even_when_the_action_then_errors(game, monkeypatch, breaker_clock):
+    """動作出錯整筆撤回，可是模型確實掛了：照樣打開。"""
+    _model_down(monkeypatch)
+
+    def fail_then_error(g):
+        _ask_the_model_in_the_lock(g)
+        raise server.GameError("名冊裡沒有這個人。")
+
+    with pytest.raises(server.GameError):
+        server.act(game, fail_then_error)
+    assert server.look(game, lambda g: g._quick_client()) is None
+
+
+def test_the_breaker_does_not_gate_model_use_outside_the_lock(monkeypatch, breaker_clock):
+    """鎖外的模型呼叫（開爐取名的 B 段；對話、隨口應對的評分也一樣）不歸斷路器管：打開了照樣叫。"""
+    jia, yi = _forger("甲"), _forger("乙")
+    server.act(jia, lambda g: g.forge("jichu_quanjiao", ["feng"]))  # 鎖內取名失敗：打開
+    assert server.look(yi, lambda g: g._quick_client()) is None
+    asked = []
+    with _model(lambda model, messages: asked.append(1) or "旋風腿"):
+        assert server.prepare_forge(yi, "jichu_quanjiao", ["huo"])[0] == "旋風腿"
+    assert asked == [1]
 
 
 def test_when_the_first_trip_saw_no_need_for_the_model_the_lock_never_asks_it(monkeypatch):
@@ -1144,6 +1267,7 @@ def test_forge_cultivate_and_melt_through_the_endpoints(client):
     assert new["insight"] == "風" and new["cultivate"]["ok"] and new["worn"] is False
     r = client.post("/api/menxia/cultivate", json={"art": new["id"]}).json()
     assert "修練" in r["message"]
+    assert f"體力 -{server.CONTENT.config.cultivate_stamina}" in r["message"]  # FB-070 (b)：頁頂的回話寫出花的體力，跟合併一樣
     assert open_characters().load("沈青衫").player.stamina < server.CONTENT.config.stamina_max  # 花了體力
     r = client.post("/api/menxia/melt", json={"art": new["id"]}).json()
     assert "熔成了心得" in r["message"]

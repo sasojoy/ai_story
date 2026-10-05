@@ -75,7 +75,10 @@ def cultivate(
     quality = team.art_quality(state, art)
     target = next_quality(quality)
     failures = p.art_mastery.get(art_id, 0)
-    p.stamina -= content.config.cultivate_stamina
+    cost = content.config.cultivate_stamina
+    p.stamina -= cost
+    # 花的體力寫在擲骰那一句後面，跟合併的回話（fusion.merge）同一種寫法（FB-070）；江湖紀錄的數值變化另由 engine 照實際扣的算
+    tired = f"體力 -{cost}"
     pill = content.config.legend_item_name
     boost = boost_for(state, content, target, use_legend)
     msgs: list[str] = []
@@ -90,7 +93,7 @@ def cultivate(
     if rng.random() * 100 < chance(content, target, failures, boost):
         p.art_quality[art_id] = target
         p.art_mastery.pop(art_id, None)
-        msgs.append(f"【{art.name}】修練有成，從{quality}晉為{target}！")
+        msgs += [f"【{art.name}】修練有成，從{quality}晉為{target}！", tired]
         if target == "絕學":
             msgs += _mastered(state, world, art_id)
         return msgs
@@ -98,10 +101,11 @@ def cultivate(
     hint = ""
     if target == "絕學" and p.legend_items > 0:  # 下一次要不要服由玩家決定；這裡只提醒還握著一枚
         hint = f"，服下{pill}可再 +{content.config.legend_item_bonus}%"
-    msgs.append(
+    msgs += [
         f"【{art.name}】修練了一回，還差一點火候（熟練度 {failures + 1}，"
-        f"下一次約 {chance(content, target, failures + 1)}% 的機會晉為{target}{hint}）。"
-    )
+        f"下一次約 {chance(content, target, failures + 1)}% 的機會晉為{target}{hint}）。",
+        tired,
+    ]
     return msgs
 
 
