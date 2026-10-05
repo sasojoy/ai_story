@@ -7,7 +7,7 @@ from unittest import mock
 import pytest
 
 from conftest import FixedRandom, at, install_season_one, walk_to
-from tianxia import atlas, battle_instance, battlelog, calendar, companion_agent, flavor, front_lines, guide, library, rules, skillview, team
+from tianxia import atlas, battle_instance, battlelog, calendar, companion_agent, encounter, flavor, front_lines, guide, library, rules, skillview, team
 from tianxia.characters import open_characters
 from tianxia.content import load_content
 from tianxia.engine import Game, Option
@@ -414,6 +414,22 @@ def test_event_battle_is_fully_automatic_and_a_loss_applies_the_fail_effect(game
     assert record.notes == ["你敗了。"]
     assert record.changes == ["銀兩 -10"]
     assert "⚔ 湖邊：落敗翻江龍" in game.state.log
+
+
+def test_a_story_battle_is_not_dodged_and_a_loss_still_applies_the_fail_effect(game):
+    """最終審查 I1：劇情戰的結果是人寫好的勝或敗（僵持也算敗），身法閃避不擲——不然卡片寫「躲過了這一敗」、
+    下面卻照樣「你敗了。」「銀兩 -10」。身法 55＝閃避機會 100%。"""
+    game.state.player.stats["agi"] = 55
+    walk_to(game, "lake")
+    game.choose("act:socialize")
+    assert game.state.pending_event == "duel"
+    with mock.patch.object(encounter, "dodge", wraps=encounter.dodge) as spy:
+        game.choose("choice:0")  # 應戰翻江龍：必敗
+    spy.assert_not_called()  # 劇情戰一點亂數也不給閃避
+    record = game.state.battles[0]
+    assert (record.tier, record.event) == ("落敗", "挑戰")
+    assert record.notes == ["你敗了。"] and battlelog.DODGE_NOTE not in record.notes
+    assert record.changes == ["銀兩 -10"] and game.state.player.stats["silver"] == 40
 
 
 def test_event_battle_win_pays_squad_rewards_once_and_applies_choice_effect(game):

@@ -475,6 +475,17 @@ def test_a_fight_without_a_dodge_chance_draws_the_same_randomness(state, content
     assert ours.getstate() == theirs.getstate()
 
 
+def test_a_fight_with_the_dodge_turned_off_never_rolls_it(state, content, world):
+    """最終審查 I1：dodge=False（劇情戰）就是閃避必中的人也不閃、也不多擲那一次亂數。"""
+    content.config.dodge_per_point = 0.1
+    state.player.stats["agi"] = 15  # 閃避機會 100%
+    ours, theirs = random.Random(7), random.Random(7)
+    result = team.fight(state, content, world, "boss", ours, dodge=False)  # 難度 200，必敗
+    assert result.tier == "落敗" and not result.dodged
+    assert result == encounter.resolve_encounter(result.our_power, result.difficulty, theirs)
+    assert ours.getstate() == theirs.getstate()
+
+
 def test_the_odds_label_ignores_the_dodge(state, content, world):
     """勝算是贏的機會；閃避只把落敗變僵持、不增加贏，所以按鈕上的勝算不含閃避（14.4）。"""
     before = team.estimate(state, content, world, "boss")

@@ -2609,7 +2609,7 @@ class Game:
     def _event_battle(self, event: Event, choice: Choice) -> list[str]:
         s, c = self.state, self.content
         squad = c.squads[choice.combat]
-        result = team.fight(s, c, self.world, squad.id, self.rng)
+        result = team.fight(s, c, self.world, squad.id, self.rng, dodge=False)  # 劇情戰的勝敗是人寫好的：不閃（最終審查 I1）
         record = battlelog.new_record(s, c, self.world, squad, result, "event", event.title)
         won = result.tier in team.WIN_TIERS
         rewards = self._battle_rewards(squad, record) if won else []

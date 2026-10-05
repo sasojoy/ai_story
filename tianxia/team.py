@@ -509,14 +509,17 @@ def _apply_toll(
 
 def fight(
     state: GameState, content: Content, world: WorldStateStore, squad_id: str, rng: random.Random,
-    *, difficulty: float | None = None,
+    *, difficulty: float | None = None, dodge: bool = True,
 ) -> encounter.EncounterResult:
     """difficulty 給了就取代隊伍的難度（挑戰大勢人物本人：難度跟著聲威走，見 figures.difficulty）。
-    結果定了之後，本人的身法才有機會把落敗閃成僵持（dodge_chance，人物資質設計 14.4）。"""
+    結果定了之後，本人的身法才有機會把落敗閃成僵持（dodge_chance，人物資質設計 14.4）；
+    dodge=False 不擲閃避、也不動那一次亂數——劇情戰的勝敗是人寫好的（僵持也算敗），閃了只會自相矛盾（最終審查 I1）。"""
     squad = content.squads[squad_id]
     arts = team_arts(state, content, world)
     power = encounter.team_power(*_with_attribute(_fighters(state, content, world), arts, squad.attribute))
     result = encounter.resolve_encounter(power, squad.difficulty if difficulty is None else difficulty, rng)
+    if not dodge:
+        return result
     return encounter.dodge(result, dodge_chance(state, content), rng)  # 結果定了才閃（14.4）；勝算（estimate）不含
 
 
