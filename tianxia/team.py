@@ -9,7 +9,7 @@ from __future__ import annotations
 import math
 import random
 
-from . import calendar, encounter
+from . import calendar, encounter, rounds
 from .martial_arts import MAX_LEVEL, MartialArt, content_art, counters, with_quality
 from .models import Content, FollowerDef, Squad
 from .state import PLAYER, MAX_TEAM_COMPANIONS, GameState, Member
@@ -161,6 +161,35 @@ def _fighters(
         team_conditions(state, content, world) + [1.0] * len(followers),
         team_boosts(state, content, world),
     )
+
+
+def lineup(
+    state: GameState, content: Content, world: WorldStateStore,
+) -> list[tuple[str, MartialArt | None, MartialArt | None]]:
+    """上陣的每一個人：（名字, 武學, 內功）。本人在前（照自己那一份，player_art），再來是帶著的同伴、部下（部下沒有內功）——
+    跟 _fighters 算威力的是同一份名冊，部下也上陣（F17）。回合演出（fighters）與大場面判讀的陣容（Game.fight_request，
+    武學與成長設計 8.3）都從這裡走，兩邊不會一邊有部下、一邊沒有（計畫三 G7）。只給畫面與模型看，不算威力。"""
+    p = state.player
+    mine = [player_art(state, content, world, skill_id) for skill_id in (p.member.wugong_id, p.member.neigong_id)]
+    out = [(p.name, *mine)]
+    shared = world.read()
+    for key in p.team:
+        progress = shared.companions.get(key, CompanionProgress())
+        out.append((
+            content.characters[key].name,
+            resolve_art(progress.wugong_id, content, world), resolve_art(progress.neigong_id, content, world),
+        ))
+    for _, follower in follower_rows(state, content):
+        out.append((follower.name, resolve_art(follower.wugong, content, world), None))
+    return out
+
+
+def fighters(state: GameState, content: Content, world: WorldStateStore) -> list[rounds.Fighter]:
+    """回合演出的我方陣容（武學與成長設計 8.2）：lineup 的每一個人報身上那門武學的名字與屬性；沒學武學的是 None。"""
+    return [
+        rounds.Fighter(name=name, art=art.name if art else None, attribute=art.attribute if art else None)
+        for name, art, _ in lineup(state, content, world)
+    ]
 
 
 # ── 隊伍組成 ─────────────────────────────────────────────
@@ -476,13 +505,14 @@ def _apply_toll(
 
 def fight(
     state: GameState, content: Content, world: WorldStateStore, squad_id: str, rng: random.Random,
-    *, difficulty: float | None = None,
+    *, difficulty: float | None = None, shift: float = 0.0,
 ) -> encounter.EncounterResult:
-    """difficulty 給了就取代隊伍的難度（挑戰大勢人物本人：難度跟著聲威走，見 figures.difficulty）。"""
+    """difficulty 給了就取代隊伍的難度（挑戰大勢人物本人：難度跟著聲威走，見 figures.difficulty）。
+    shift 是大場面判讀的優勢換算成的判定差距平移（encounter.advantage_shift，武學與成長設計 8.3）；平常是 0。"""
     squad = content.squads[squad_id]
     arts = team_arts(state, content, world)
     power = encounter.team_power(*_with_attribute(_fighters(state, content, world), arts, squad.attribute))
-    return encounter.resolve_encounter(power, squad.difficulty if difficulty is None else difficulty, rng)
+    return encounter.resolve_encounter(power, squad.difficulty if difficulty is None else difficulty, rng, shift=shift)
 
 
 def odds_word(power: float, squad: Squad, rng_seed: int = ESTIMATE_SEED) -> str:

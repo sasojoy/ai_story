@@ -257,6 +257,22 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .now.clamp .now-more { position: absolute; right: 0; bottom: -6px; padding-left: 1.6em; background: linear-gradient(90deg, transparent, var(--card) 1.4em); }
 .now.fits .now-more { display: none; }
 .battle-card { border-color: var(--accent); }
+/* 戰鬥卡片的「過程」（計畫三 Task 1、G6 暫定）：「剛剛」那張只露第一回合，第一屏留給剛剛、場景與整排行動（企劃者 2026-10-04）；
+   「展開過程」攤開其餘回合，一回合晚一點浮現，代替「當場一回合一回合播」（減少動態時全站的動畫都關掉，見 prefers-reduced-motion）。
+   「展開過程」放在「過程」那一行的右邊，不多佔一行。戰報頁（.report-detail）不收，整段列出（app.js 的 roundsFold） */
+.battle-card .rounds-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 0; }
+.battle-card .rounds-more { flex: none; padding-top: 0; padding-bottom: 0; }
+.battle-card ul.rounds { margin: 2px 0 12px; padding-left: 1.2em; font-size: 14px; line-height: 1.6; }
+.battle-card ul.rounds:not(.open) > li:not(:first-child) { display: none; }
+.battle-card ul.rounds > li { animation: tx-round-in 0.3s ease-out both; }
+.battle-card ul.rounds > li:nth-child(2) { animation-delay: 0.25s; }
+.battle-card ul.rounds > li:nth-child(3) { animation-delay: 0.5s; }
+.battle-card ul.rounds > li:nth-child(4) { animation-delay: 0.75s; }
+.battle-card ul.rounds > li:nth-child(5) { animation-delay: 1s; }
+/* 大場面模型寫的過程是一段話（最多 200 字、手機上約十行）：收著只露前兩行，「展開過程」攤開（PM 2026-10-05，計畫三 Task 2 審查修正 2） */
+.battle-card p.rounds-tale { margin: 2px 0 12px; font-size: 14px; line-height: 1.6; }
+.battle-card p.rounds-tale:not(.open) { display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+@keyframes tx-round-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 /* 公告卡（第一季，計畫 T2）：這一週已經發生的江湖大事，排在江湖頁最上面。
    預設縮成一行（FB-039）：「📣 本週江湖大事（2）：標題、標題」，放不下的標題截斷加「…」；兩件大事的全文加上戰鬥卡片，
    會把整排行動擠到分頁列底下。點了才展開全文，一則一段、新的在前；用 details.fold 的外觀。

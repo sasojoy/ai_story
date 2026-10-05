@@ -13,6 +13,8 @@
 - 人物對話照舊在行動鎖外生成（`prepare_dialogue`），模型的 9~10 秒不會卡住全服。
 - 開爐的首次取名也在行動鎖外（`prepare_forge`／`forge`），整段有時間預算（`Config.naming_budget_seconds`），
   用完走退路字表，請求在 trycloudflare 切斷之前結束。
+- 大場面（挑戰大勢人物本人、打頭目）的判讀也在行動鎖外（`prepare_fight`），預算是 `Config.big_fight_budget_seconds`；
+  一般的仗不問模型，備料與動作在同一次拿鎖裡做完。
 
 執行：`.venv/Scripts/python.exe server.py`（http://127.0.0.1:7861，預設只聽這台電腦）。要讓外面的手機連進來，
 加 `--share`：會用 cloudflared 開一個臨時的公開網址（要先裝 cloudflared，見 CLAUDE.md）；
@@ -41,12 +43,12 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from markdown_it import MarkdownIt
 
-from tianxia import companion_agent, event_llm, foreshadow, naming, rules, server_bots, team, timetable
+from tianxia import companion_agent, event_llm, fight_llm, foreshadow, naming, rules, server_bots, team, timetable
 from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, AccountStore, normalize
 from tianxia.content import PROFILE_ENV, load_content, profile_line
 from tianxia.characters import open_characters
 from tianxia.database import default_path, open_database
-from tianxia.engine import Game
+from tianxia.engine import FREE_TEXT_OPTION, Game
 from tianxia.models import FREE_TEXT_MAX
 from tianxia.journal import CSS as JOURNAL_CSS
 
@@ -251,11 +253,46 @@ def may_generate_dialogue(option_id: str) -> bool:
     return option_id.startswith(("talk:", "call:")) and option_id not in ("talk:leave", "call:back")
 
 
+def may_judge_fight(option_id: str) -> bool:
+    """這個選項可能是大場面、要先在鎖外問模型（見 prepare_fight）：遊歷、挑戰大勢人物本人、事件選項。
+    隨口應對（choice:free）只是叫出輸入框（真正送出走 /api/answer），不是仗。"""
+    if option_id == FREE_TEXT_OPTION:
+        return False
+    return option_id == "act:train" or option_id.startswith(("act:challenge:", "choice:"))
+
+
+def prepare_fight(game: Game, option_id: str) -> list[str] | fight_llm.PreparedFight | None:
+    """大場面在行動鎖外問模型（武學與成長設計 8.3，跟 prepare_dialogue 同一套三段）：
+      A（鎖內、很快）同步時間，問引擎這個選項是不是大場面（Game.fight_request）。**不是**（一般的仗、自己陣營的操練、
+        按不下去、這個角色不叫模型）就在同一次拿鎖裡直接做完、存檔，回傳那個動作的訊息（list）——遊歷與事件選項天天在按，
+        一般的仗不能每一下都多搶一次行動鎖（計畫三 G14）。是大場面就拿到單子、存檔（不然 C 段進鎖重讀就把同步的結果丟了）；
+      B（鎖外、很慢）fight_llm.judge：預算是 Config.big_fight_budget_seconds 扣掉 A 段（含等鎖）花掉的時間，引擎不讀時鐘，
+        所以時間在這裡量；回傳判讀（PreparedFight），叫不動、太慢是 None；
+      C 由呼叫端交給 Game.choose(fight=...)，引擎進鎖後重驗再套用（None 也照樣打，優勢 0）。
+    鎖內任何一步都不叫模型；鎖外這一段不歸鎖內的模型上限與斷路器管（跟對話、開爐取名一樣）。"""
+    started = time.monotonic()
+    with _locked(game):
+        game.sync(time.time())
+        request = game.fight_request(option_id)
+        done = game.choose(option_id) if request is None else None
+        open_characters().save(game.state)
+    if request is None:
+        return done
+    budget = max(0.0, game.content.config.big_fight_budget_seconds - (time.monotonic() - started))
+    judgment = fight_llm.judge(game.client, request, game.content.config.big_fight_swing, budget)
+    return None if judgment is None else fight_llm.PreparedFight(request=request, judgment=judgment)
+
+
 def choose(game: Game, option_id: str) -> list[str] | None:
-    prepared = None
     if may_generate_dialogue(option_id):
         prepared = prepare_dialogue(game, option_id)
-    return act(game, lambda g: g.choose(option_id, prepared=prepared))
+        return act(game, lambda g: g.choose(option_id, prepared=prepared))
+    if may_judge_fight(option_id):
+        fight = prepare_fight(game, option_id)
+        if isinstance(fight, list):
+            return fight  # 不是大場面：A 段那一次拿鎖已經做完了
+        return act(game, lambda g: g.choose(option_id, fight=fight))
+    return act(game, lambda g: g.choose(option_id))
 
 
 NO_NAME: tuple[str | None, str] = (None, "")  # 開爐的 B 段沒取到名字（或不必取）：C 段直接走退路字表、不在鎖裡叫模型
