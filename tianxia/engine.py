@@ -398,7 +398,10 @@ class Game:
         if ranks.summons_event(s, c) is not None:
             opts.append(Option(id="act:summons", label="應召"))  # 晉升奇遇（計畫 T5）：人在召見的地點才有，不花體力
         people = self._figures_here()
-        if has_events_here(c, loc, "socialize") or 0 < len(people) < AUDIENCE_HALL_FIGURES:
+        # 只有一位大勢人物、沒有交友事件、他又見不到（名望不夠、閉門不見、今天談滿）、福緣也沒到、也不在召見的地點：
+        # 交友只會花 5 點體力換同一句打發，所以不給，這條路只剩不花體力的求見（下面）
+        only_the_door = len(people) == 1 and ranks.summons_event(s, c) is None and self.socialize_is_futile()
+        if (has_events_here(c, loc, "socialize") or 0 < len(people) < AUDIENCE_HALL_FIGURES) and not only_the_door:
             # 兩位以上大勢人物的地點，交友只走福緣與地點事件、從不開口對話（見 _socialize_figure），
             # 所以只在有交友事件時才給；人物改由下面的「求見」指名
             opts.append(self._socialize_option(people, cost["socialize"]))
@@ -408,7 +411,7 @@ class Game:
             if self._snubbed_character(cid):
                 opts.append(Option(id=f"call:{cid}", label=f"求見{ch.name}（{SNUB_NOTE}）", enabled=False))
             elif not self._can_meet(cid):
-                opts.append(Option(id=f"call:{cid}", label=f"求見{ch.name}（名望不夠，多半會被打發）"))  # 按下去走打發，見 _brush_off
+                opts.append(Option(id=f"call:{cid}", label=f"求見{ch.name}（名望還差 {self._fame_gap(cid)}）"))  # 按下去走打發，見 _brush_off
             elif self._talks_left(cid) == 0:  # 求見一直都在：談滿了也留著、灰掉，說法跟求見名單一樣
                 opts.append(Option(
                     id=f"call:{cid}", enabled=False,
@@ -879,7 +882,7 @@ class Game:
         companion_id = self._socialize_figure()
         if companion_id is not None:
             return self._open_dialogue(companion_id, prepared)
-        return self._encounter("socialize", self._no_audience_line())
+        return self._encounter("socialize", self._no_audience_line)  # 惰性：抽到事件就不挑打發話、不白花亂數
 
     def _foreshadow(self, arg: str) -> list[str]:
         """伏筆的最後一步（計畫 T7）：fs:<鏈> 看題（沒有題的直接做）、fs:<鏈>:<選項> 答題、fs:leave 作罷。"""
@@ -1132,19 +1135,24 @@ class Game:
         """見得到這位人物嗎（名望與陣營階級、或結識過）；機器人用來避開會被打發的求見。"""
         return self._can_meet(companion_id)
 
+    def _fame_gap(self, companion_id: str) -> int:
+        """離這位人物的求見門檻還差多少名望（門檻已含同陣營的階級折抵，見 rules.audience_bar）；見得到時不會拿來用。"""
+        return audience_bar(self.state, self.content, companion_id) - self.state.player.stats.get("fame", 0)
+
     def _brush_off(self, companion_id: str) -> list[str]:
         """門檻不夠時被打發（武學與成長設計 9.1）：他自己口吻的一句（內容沒寫就用通用的），附上還差多少。
-        後面只在「真的升得上去、而且升一階抵掉的點數補得上差距」時才提在他那個陣營再升一階。
+        後面只在「第一季的規則開著（才有晉升）、真的有下一階可升、而且升一階抵掉的點數補得上差距」時才提在他那個陣營再升一階。
         不叫模型、不花體力、不加情誼。"""
         s, c = self.state, self.content
         ch = c.characters[companion_id]
         line = self.rng.choice(ch.brush_off) if ch.brush_off else f"{ch.name}連見都不見你，門口的人把你請了出去。"
-        short = audience_bar(s, c, companion_id) - s.player.stats.get("fame", 0)
+        short = self._fame_gap(companion_id)
         figure = next((f for f in c.figures.values() if f.character == companion_id), None)
         hint = f"名望還差 {short}"
         p = s.player
         if (
-            figure is not None and p.faction == figure.faction
+            season_one(c, s.world)  # 規則沒開（beta 那一季）沒有人晉升
+            and figure is not None and p.faction == figure.faction
             and short <= c.config.audience_rank_discount  # 再升一階抵掉的點數補得上這個差距
             and ranks.promotion_for(c, p.faction, ranks.rank_of(s) + 1) is not None  # 而且真的有下一階可升
         ):
@@ -1202,7 +1210,7 @@ class Game:
             if self._snubbed_character(companion_id):
                 opts.append(Option(id=option_id, label=f"{ch.name}（{SNUB_NOTE}）", enabled=False))
             elif not self._can_meet(companion_id):
-                opts.append(Option(id=option_id, label=f"{ch.name}（名望不夠，多半會被打發）"))  # 按下去走打發，見 _brush_off
+                opts.append(Option(id=option_id, label=f"{ch.name}（名望還差 {self._fame_gap(companion_id)}）"))  # 按下去走打發，見 _brush_off
             elif left == 0:
                 opts.append(Option(id=option_id, label=f"{ch.name}（今天已經談滿 {per_day} 輪，明天再來）", enabled=False))
             else:
@@ -1214,7 +1222,7 @@ class Game:
         """求見畫面的說明（場景上的那一段）：挑一位拜會；每位人物每天最多談幾輪，各算各的。"""
         here = self.content.locations[self.state.player.location].name
         per_day = self.content.config.talk_turns_per_day
-        return f"{here}有好幾位人物，挑一位求見。每位人物每天最多談 {per_day} 輪，各算各的；名望不夠的多半會被打發，談滿的明天再來。"
+        return f"{here}有好幾位人物，挑一位求見。每位人物每天最多談 {per_day} 輪，各算各的；名望不夠的會被打發，談滿的明天再來。"
 
     def _no_audience_line(self) -> str:
         """交友時見不到這裡的大勢人物時的說明；這裡沒有大勢人物就是原本的「此地無人可訪」；
@@ -1897,12 +1905,13 @@ class Game:
         journal.add_entry(s, Draft(f"結識【{c.characters[cid].name}】", "福緣").entry(s.world.time, msgs))
         return msgs
 
-    def _encounter(self, action: str, nothing: str) -> list[str]:
-        """交友沒碰上人物時：抽一則事件，沒有就是 nothing（探索另有三選一，見 _explore）。"""
+    def _encounter(self, action: str, nothing: str | Callable[[], str]) -> list[str]:
+        """交友沒碰上人物時：抽一則事件，沒有就是 nothing（探索另有三選一，見 _explore）。
+        nothing 可以是函式：真的用到才呼叫（打發話要挑一句，不該在抽到事件時白花一次亂數）。"""
         event = pick_event(self.state, self.content, action, self.rng)
         if event:
             return self._present(event)
-        return [nothing]
+        return [nothing() if callable(nothing) else nothing]
 
     def _present(self, event: Event) -> list[str]:
         is_repeat = event.id in self.state.player.seen_events

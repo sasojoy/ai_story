@@ -365,8 +365,9 @@
   function actionBar(m) {
     const byId = Object.fromEntries(m.options.map((o) => [o.id, o]));
     const used = new Set();
-    // 只有一位大勢人物、交友又不在選單上（沒有交友事件、福緣也沒到）時，選單上直接列「求見某某」（設計 9.1）：
-    // 交友與求見名單都不在時才頂上社交那一格；兩者有一個在，這顆照舊收在摺疊裡
+    // 這裡只有一位大勢人物、沒有交友事件、他又見不到（名望不夠、閉門不見、今天談滿）、福緣也沒到時，引擎不給交友
+    // （只會花體力換同一句打發，Game._brush_off），選單上只剩直接列的「求見某某」（設計 9.1）：社交那一格改放它。
+    // 交友或求見名單（兩位以上）在選單上時照舊，這顆收在摺疊裡
     const loneCall = m.options.find((o) => o.id.startsWith("call:") && o.id !== "call:back");
     const cells = ACT_CELLS.map((d) => {
       const o = d.ids.map((id) => byId[id]).find(Boolean) || (d.key === "social" ? loneCall : undefined);
