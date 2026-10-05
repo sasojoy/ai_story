@@ -1409,3 +1409,14 @@ def test_validate_checks_the_insight_fallback_names_too(content):
     content.craft_names.insight = []
     with pytest.raises(ContentError, match="craft_names.insight 不能是空的"):
         validate(content)
+
+
+def test_check_voice_must_cover_every_checked_stat_and_run_high_to_low(tmp_path):
+    """選項底下的人物心聲（content/check_voice.json）：每一檔都要說得出有人檢定的屬性，而且由高到低排。"""
+    root = copy_fixture(tmp_path)
+    voice = {"bands": [{"min_gap": 0, "lines": {"str": "{who}有把握。"}}, {"min_gap": 2, "lines": {"default": "穩。"}}]}
+    (root / "check_voice.json").write_text(json.dumps(voice, ensure_ascii=False), encoding="utf-8")
+    with pytest.raises(ContentError) as caught:
+        load_content(root)
+    assert "由高到低" in str(caught.value) and "con" in str(caught.value)  # 調息事件檢定根骨，第一檔沒寫
+

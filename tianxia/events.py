@@ -6,7 +6,7 @@ from typing import Literal
 
 from . import check_lines, foreshadow, team
 from .models import Choice, Content, Event, Location
-from .rules import check_condition, check_outlook, season_one_off
+from .rules import check_condition, check_gap, check_outlook, season_one_off
 from .state import PLAYER, GameState
 from .world_state import WorldStateStore
 
@@ -108,3 +108,17 @@ def choice_label(
     stat = content.config.stat_names.get(check.stat, check.stat)
     line = check_lines.pick_line(content.check_lines, check.stat, outlook.chance, choice.text if key is None else key)
     return f"{choice.text}（{who}・{stat} {round(outlook.value, 1):g}：{line}）"
+
+
+def choice_hint(choice: Choice, state: GameState, content: Content, world: WorldStateStore) -> str:
+    """有檢定的選項底下那一句人物心聲（content/check_voice.json，依屬性減難度分檔）；沒有檢定或沒寫心聲是空字串。"""
+    check = choice.check
+    bands = content.check_voice.bands
+    if check is None or not bands:
+        return ""
+    gap = check_gap(check, state, content, world)
+    band = next((b for b in bands if gap >= b.min_gap), bands[-1])
+    line = band.lines.get(check.stat) or band.lines.get("default", "")
+    key = team.check_actor(state, content, world, check)
+    who = "你" if key == PLAYER else team.member_name(state, content, key)
+    return line.replace("{who}", who)

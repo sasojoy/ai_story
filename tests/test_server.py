@@ -2380,7 +2380,7 @@ def test_the_page_offers_the_box_and_rejects_empty_words(client, monkeypatch):
     server.act(game, lambda g: setattr(g.state, "pending_event", event.id))
     main = client.get("/api/main").json()
     assert main["event_free_text"] == "自己想辦法……"
-    assert main["options"][-1] == {"id": "choice:free", "label": "自己想辦法……", "enabled": True}
+    assert main["options"][-1] == {"id": "choice:free", "label": "自己想辦法……", "enabled": True, "hint": ""}
     assert client.post("/api/answer", json={"text": "  "}).status_code == 400
     with mock.patch.object(server.event_llm, "assess_event_success_rate", return_value=50):
         main = client.post("/api/answer", json={"text": "大喊官兵來了"}).json()["main"]

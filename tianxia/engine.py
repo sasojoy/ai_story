@@ -17,7 +17,9 @@ from . import (
     foreshadow, front_lines, fusion, insights, journal, library, materials, naming, orders, push, ranks, roster, skillview,
     team, timetable,
 )
-from .events import choice_label, event_candidates, has_events_here, pick_event, visible_choices
+from .events import (
+    choice_hint, choice_label, event_candidates, has_events_here, pick_event, visible_choices,
+)
 from .guide import base_step_count, note_action, quest_text, step_text, tutorial_active, tutorial_intro
 from .guide import steps as tutorial_steps
 from .journal import LOG_BREAK, Draft
@@ -62,6 +64,7 @@ class Option(BaseModel):
     id: str
     label: str
     enabled: bool = True
+    hint: str = ""  # 事件選項底下那一句人物心聲（events.choice_hint）
 
 
 FREE_TEXT_OPTION = "choice:free"  # 事件的「隨口應對」：按下去只是叫出輸入框，真正送出走 free_text_request／answer_event
@@ -387,7 +390,10 @@ class Game:
         if s.pending_event:
             event = c.events[s.pending_event]
             opts = [
-                Option(id=f"choice:{i}", label=self._choice_label(ch, odds, f"{event.id}#{i}"))
+                Option(
+                    id=f"choice:{i}", label=self._choice_label(ch, odds, f"{event.id}#{i}"),
+                    hint=choice_hint(ch, s, c, self.world),
+                )
                 for i, ch in visible_choices(event, s, c)
             ]
             if event.free_text is not None:

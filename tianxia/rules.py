@@ -132,6 +132,11 @@ def check_outlook(check: Check, state: GameState, content: Content, world: World
     return CheckOutlook(actor, value, min(0.95, max(0.05, 0.5 + (value - check.difficulty) * 0.1)))
 
 
+def check_gap(check: Check, state: GameState, content: Content, world: WorldStateStore) -> float:
+    """出手者的屬性減難度（選項底下的心聲看它）；跟擲骰同一份 check_outlook，兩邊不會對不起來。"""
+    return check_outlook(check, state, content, world).value - check.difficulty
+
+
 def check_chance(check: Check, state: GameState, content: Content, world: WorldStateStore) -> float:
     return check_outlook(check, state, content, world).chance
 
