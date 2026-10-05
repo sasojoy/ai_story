@@ -22,7 +22,10 @@ STAT_USES = {
     "wis": "修練機率・探索悟得意境・閉關心得",
     "lore": "武學與意境的持有上限",
 }
-STAT_CHECK_NOTE = "事件的檢定也看這五項。"  # 事件檢定、隨口應對讀這五項（設計 6.1、6.3）
+# 事件檢定、隨口應對讀得到五項（設計 6.1、6.3），但正式內容還沒有任何事件檢定博聞，所以先寫「前四項」（PM 2026-10-05）。
+# joy 加了第一個檢定（或隨口應對看）博聞的事件之後，改回「事件的檢定也看這五項。」——
+# tests/test_engine.py 的 test_the_stat_note_says_four_until_an_event_checks_lore 到時候會失敗提醒
+STAT_CHECK_NOTE = "事件的檢定看前四項。"
 
 
 def stat_uses(content: Content) -> list[tuple[str, str]]:

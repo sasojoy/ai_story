@@ -1508,6 +1508,74 @@ def test_a_missing_or_malformed_check_voice_is_a_content_error_that_names_the_fi
         load_content(root)
 
 
+# ── combat_lines.json：回合演出的句型（武學與成長設計 8.2、計畫三 Task 1；S1／Joy 照表手改）──
+
+
+def test_combat_lines_cover_every_attribute(content):
+    content.combat_lines.ours.pop("陰")
+    with pytest.raises(ContentError, match="combat_lines.ours 缺少屬性 陰"):
+        validate(content)
+
+
+def _lines_with(tmp_path, fn):
+    root = copy_fixture(tmp_path)
+    edit_json(root / "combat_lines.json", fn)
+    return root
+
+
+@pytest.mark.parametrize(("where", "line", "complaint"), [
+    ("ours", "连出数招", "繁體"),
+    ("theirs", "掄起兵刃猛砸 3 下", "數字"),
+    ("bare", "揮出１拳", "數字"),
+    ("theirs_any", "   ", "空白"),
+    ("ours", "以【旋風腿】搶攻", "【】"),
+])
+def test_a_combat_line_must_be_traditional_digit_free_and_not_blank(tmp_path, where, line, complaint):
+    """句型接在人名（或「以【武學】」）後面、再接「，對手氣勢 -N」：寫數字會跟回合的數字攪在一起，寫【】會跟武學名撞在一起。"""
+    def edit(data):
+        if where in ("ours", "theirs"):
+            data[where]["剛"].append(line)
+        else:
+            data[where].append(line)
+
+    with pytest.raises(ContentError, match=complaint):
+        load_content(_lines_with(tmp_path, edit))
+
+
+def test_chinese_numerals_are_fine_in_a_combat_line(tmp_path):
+    load_content(_lines_with(tmp_path, lambda d: d["ours"]["剛"].append("一步一步逼上前去")))
+
+
+def test_a_missing_or_malformed_combat_lines_is_a_content_error_that_names_the_file(tmp_path):
+    root = copy_fixture(tmp_path / "a")
+    (root / "combat_lines.json").unlink()
+    with pytest.raises(ContentError, match="combat_lines.json"):
+        load_content(root)
+    root = copy_fixture(tmp_path / "b")
+    (root / "combat_lines.json").write_text('{"ours": {', encoding="utf-8")
+    with pytest.raises(ContentError, match="combat_lines.json"):
+        load_content(root)
+    root = copy_fixture(tmp_path / "c")
+    edit_json(root / "combat_lines.json", lambda d: d.update(their=[]))  # 拼錯的欄位
+    with pytest.raises(ContentError, match="combat_lines.json"):
+        load_content(root)
+    root = copy_fixture(tmp_path / "d")
+    edit_json(root / "combat_lines.json", lambda d: d["ours"].update(雷=["轟然一響"]))  # 不認得的屬性
+    with pytest.raises(ContentError, match="combat_lines.json"):
+        load_content(root)
+
+
+def test_the_real_combat_lines_are_the_designers_table():
+    """正式的句型照設計 session 的內容表（打發話與回合句型 §二，PM 2026-10-05 定）：我方每種屬性五句、對手每種屬性三句、
+    沒學武學與沒有屬性的對手各三句；測試夾具留著計畫起手那一組。"""
+    lines = load_content(ROOT / "content").combat_lines
+    attributes = {"陰", "陽", "剛", "柔", "快", "慢", "虛", "實"}
+    assert set(lines.ours) == attributes and all(len(v) == 5 for v in lines.ours.values())
+    assert set(lines.theirs) == attributes and all(len(v) == 3 for v in lines.theirs.values())
+    assert len(lines.bare) == 3 and len(lines.theirs_any) == 3
+    assert "穩穩踏前一步，招式沉而不亂" in lines.ours["慢"] and "一個箭步衝到你面前" in lines.theirs["快"]
+
+
 def test_s1s_check_lines_file_is_retired():
     """S1 的 check_lines.json（五段 45 句）由 joy 的 check_voice.json（四檔）取代：檔案、模型、載入、驗證都拿掉了。"""
     from tianxia import models

@@ -345,9 +345,9 @@ def _power_seen(call) -> float:
     seen: list[float] = []
     resolve = encounter.resolve_encounter
 
-    def spy(power, difficulty, rng):
+    def spy(power, difficulty, rng, shift=0.0):
         seen.append(power)
-        return resolve(power, difficulty, rng)
+        return resolve(power, difficulty, rng, shift=shift)
 
     with mock.patch.object(encounter, "resolve_encounter", side_effect=spy):
         call()
@@ -555,3 +555,35 @@ def test_followers_fight_beside_a_resonating_player_without_the_factor():
     assert [b.factor for b in boosts] == [pytest.approx(1.2 * 1.2), 1.0, 1.0]
     seen = _power_seen(lambda: team.estimate(s, real, game.world, squad_id))
     assert seen == pytest.approx(plain * 1.2 * 1.2 + sum(followers))
+
+
+# ── 回合演出的我方陣容（計畫三 Task 1、G7）──────────────────────
+
+
+def test_the_narrated_lineup_is_the_player_then_the_companions_with_their_arts(state, content, world):
+    """回合演出的陣容：本人在前、再來是帶著出戰的同伴，各報身上那門武學（名字與屬性）；沒學武學的是 None。"""
+    state.player.member.wugong_id = "basic_fist"
+    state.player.team = ["mate", "pupil"]
+    world.update_companion("mate", lambda p: setattr(p, "wugong_id", "fist"))
+    lineup = team.fighters(state, content, world)
+    assert [(f.name, f.art, f.attribute) for f in lineup] == [
+        ("沈浪", "粗淺拳腳", "實"), ("韓鐵", "長拳", "剛"), ("小六", None, None),
+    ]
+
+
+def test_the_narrated_lineup_includes_the_followers():
+    """部下也上陣（F17）：照模板的稱呼與武學排在同伴後面，跟算威力的 _fighters 是同一份名冊。真實內容、兩個部下。"""
+    real = load_content(CONTENT_DIR)
+    real.config.auto_open_first_season = True
+    real.config.season_one, real.config.season_days, real.config.server_max_players = True, 2.5, 2
+    game = Game.new(real, "甲", rng=random.Random(0))
+    s = game.state
+    s.player.followers = ["follower_guan_spear", "follower_guan_crossbow"]
+    lineup = team.fighters(s, real, game.world)
+    members, _, _ = team._fighters(s, real, game.world)
+    assert len(lineup) == len(members) == 3
+    assert lineup[0].name == "甲"
+    for fighter, fid in zip(lineup[1:], s.player.followers, strict=True):
+        follower = real.followers[fid]
+        art = real.skills[follower.wugong]
+        assert (fighter.name, fighter.art, fighter.attribute) == (follower.name, art.name, art.attribute)
