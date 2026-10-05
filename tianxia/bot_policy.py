@@ -53,7 +53,8 @@ def take_turn(game: Game, profile: BotProfile, rng: random.Random) -> list[str]:
         return rally
     options = [  # road: 開頭的是路上的選項：假人不改道、不做路上小事（路上設計 3.5）
         o for o in game.options(odds=False, tick=False)
-        if o.enabled and o.id not in ("act:rest", "act:halt", FREE_TEXT_OPTION) and not o.id.startswith("road:")
+        if o.enabled and o.id not in ("act:rest", "act:halt", FREE_TEXT_OPTION)
+        and not o.id.startswith(("road:", "defect:"))  # 叛投：假人不換陣營（計畫甲）
     ]
     if not options:
         return []
@@ -103,8 +104,10 @@ def pick(game: Game, options: list[Option], profile: BotProfile, rng: random.Ran
 
 
 def score(game: Game, option: Option, profile: BotProfile) -> float | None:
-    """選項的分數；None＝假人不會選（別的陣營的投靠、閒聊或求見大勢人物、只會被擋在門外的交友、投靠的確認畫面另外處理）。"""
+    """選項的分數；None＝假人不會選（別的陣營的投靠、叛投、閒聊或求見大勢人物、只會被擋在門外的交友、投靠的確認畫面另外處理）。"""
     kind, _, arg = option.id.partition(":")
+    if kind == "defect":
+        return None  # 假人不叛投（計畫甲）
     if kind == "battle":
         return _battle_score(game, arg)
     if kind == "choice":

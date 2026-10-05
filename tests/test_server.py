@@ -307,6 +307,19 @@ def test_map_view_selects_your_location_by_default(game):
     assert 'data-loc="' in view["svg"]
 
 
+def test_map_view_gives_the_legend_as_data_for_the_layer_shown(game):
+    """圖例不畫進 SVG（企劃者 10/4：放大時也要看得到）：跟 svg 並排給網頁，由網頁疊在地圖框角落。
+    送的是正在看的那一層的說明（認不得的圖層退回預設那一層），不是四層全給。"""
+    from tianxia import mapview
+
+    legend = server.look(game, lambda g: server.map_view(g, "enemies", None))["legend"]
+    assert legend["layer"] == mapview.LEGEND_LAYERS["enemies"] and len(legend["icons"]) == 6
+    assert all(item["svg"].startswith("<svg") and item["label"] for item in legend["icons"])
+    assert legend["states"] == mapview.LEGEND_STATES and legend["ring"] == mapview.LEGEND_RING and legend["strike"] == ""
+    fallback = server.look(game, lambda g: server.map_view(g, "沒這層", None))["legend"]
+    assert fallback["layer"] == mapview.LEGEND_LAYERS[server.DEFAULT_LAYER]
+
+
 def test_reports_view_is_empty_with_no_battles(game):
     view = server.look(game, lambda g: server.reports_view(g, None))
     assert view["list"] == [] and view["selected"] is None
@@ -994,6 +1007,41 @@ def test_the_furnace_page_takes_two_arts_and_sends_the_second_one_as_other_art()
     assert "/api/forge_line" in js and "/api/menxia/forge" in js and js.count("forgeBody()") >= 2  # 預覽與開爐送同一份 body
     assert "合併要花體力、體力隨時間回" not in js and "合成與合併都要花體力" in js  # 三種合成都花體力（設計 12.1）
     assert "放一門武學和一個意境，或兩門武學，或兩個意境。" in js  # 點爐身放不滿時的提示也說兩門武學
+
+
+def test_the_map_legend_is_an_html_layer_over_the_map_frame(game):
+    """輿圖的圖例（企劃者 10/4：放大時也要看得到）不畫進 SVG（會跟著平移、縮放），是 web/app.js 疊在地圖框左下角的一層 HTML：
+    不被地圖的 transform 帶走、可以收合（記在這個瀏覽器的 localStorage，存不了照樣能用）、沒選過時手機收合寬螢幕展開、
+    不蓋到右上角那三顆按鈕、矮的框裡自己可捲。網頁沒有測試框架：伺服器的 legend 欄位、網頁讀的欄位、樣式三方對得上，就靠這一條。"""
+    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    css = re.sub(r"/\*.*?\*/", "", (server.WEB / "style.css").read_text(encoding="utf-8"), flags=re.S)
+    legend = server.look(game, lambda g: server.map_view(g, "situation", None))["legend"]
+    page = _js_function(js, "function legendHtml(")
+    assert set(re.findall(r"\blg\.(\w+)", page)) == {"icons", "states", "ring", "layer", "strike"} <= set(legend)  # 網頁讀的欄位，伺服器都送
+    assert set(re.findall(r"\bi\.(\w+)", page)) == {"svg", "label"} <= set(legend["icons"][0])
+    assert 'if (!lg) return ""' in page  # 伺服器沒給（或舊的回應）就不畫，不丟例外
+    assert "${m.svg}${MAP_CTL}${legendHtml(m.legend)}" in js  # 跟 SVG 同在地圖框裡，卻不在被平移縮放的那張 SVG 裡
+    assert 'aria-expanded="${open}"' in page and 'aria-controls="map-legend-body"' in page and 'id="map-legend-body"' in page
+    assert '" hidden"' in page  # 收合時說明用 hidden 藏起來（讀屏與 Tab 都到不了）
+    assert "lg.strike ?" in page  # 局勢層有打擊記號時多一行（FB-072）；沒有就是空字串、不畫
+    for header in ("function legendChoice(", "function legendToggle("):  # localStorage 讀寫都包 try／catch：存不了就只在這一頁有效
+        body = _js_function(js, header)
+        assert "try {" in body and "catch (e)" in body, header
+    assert "PHONE" in _js_function(js, "function legendOpen(") and "S.mapLegend" in _js_function(js, "function legendOpen(")
+    # 預設的展開與否各放在一個具名常數（企劃者之後可能改答案）：寬螢幕展開、手機收合
+    assert "const LEGEND_OPEN_WIDE = true;" in js and "const LEGEND_OPEN_PHONE = false;" in js
+    assert "LEGEND_OPEN_PHONE" in _js_function(js, "function legendOpen(") and "LEGEND_OPEN_WIDE" in _js_function(js, "function legendOpen(")
+    assert 'closest(".map-ctl, .map-legend")' in _js_function(js, "function gripDown(")  # 在圖例上按下去不是拖地圖
+    assert 'closest(".legend-body")' in _js_function(js, "function mapWheel(")  # 在圖例上滾輪不縮放地圖
+    assert 'case "legend-toggle": legendToggle(el); break;' in js
+    box = re.search(r"\n\.map-legend \{([^}]*)\}", css)
+    assert box and all(want in box[1] for want in ("position: absolute", "left: 8px", "bottom: 8px", "pointer-events: none"))
+    assert "--lg-alpha: 0.88" in box[1]  # 紙色 88% 不透明：改一個數字就調
+    assert "calc(100% - 68px)" in box[1]  # 右上角按鈕 44px ＋ 右邊 8px ＋ 8px 空隙：寬度到不了那一排
+    assert "max-height: calc(100% - 16px)" in box[1]  # 矮的框裡不超出框
+    assert re.search(r"\n\.map-ctl \{[^}]*top: 8px; right: 8px;", css) and re.search(r"\n\.map-ctl button \{[^}]*width: 44px;", css)  # 上面的算式照這一排算的
+    assert re.search(r"\n\.legend-body \{[^}]*overflow-y: auto;", css) and ".legend-body[hidden] { display: none; }" in css
+    assert re.search(r"\n\.map-wrap \{ overflow: clip; \}", css)  # 地圖框不能被 scrollIntoView 捲走（overflow: hidden 的框可以）
 
 
 def test_the_pages_trim_the_furnace_whenever_the_menxia_data_is_replaced():

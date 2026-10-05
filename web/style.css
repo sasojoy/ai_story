@@ -480,6 +480,29 @@ details.fold.bulletin > .fold-body { border-color: var(--gold); max-height: 50vh
 }
 .map-ctl button:disabled { opacity: 0.45; cursor: default; }
 .map-ctl svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; }
+/* 圖例（企劃者 10/4）：浮在地圖框左下角的一層 HTML，不畫進 SVG、不跟著地圖平移縮放。紙色半透明（--lg-alpha 是不透明度，
+   改一個數字就調），顏色用地圖的固定紙色、不跟深色主題走（地圖本身也不跟）。收合鈕在最下面、說明疊在它上面（column-reverse），
+   展開收合時鈕不跳位置。寬度上限留出右上角那一排按鈕（44px＋右邊 8px＋8px 空隙＝68px），所以橫向永遠碰不到它們；
+   高度上限是框高減 16px，說明那一塊矮的時候自己捲（touch-action: pan-y，蓋掉地圖框的 none：手指在說明上直著滑，滑的是
+   說明或頁面，不是地圖）。外層不收滑鼠與觸控（pointer-events: none）：只有鈕與說明收，框裡沒字的地方照常拖地圖、點地點 */
+.map-legend {
+  --lg-alpha: 0.88; --lg-paper: 244 239 223; --lg-line: #b9ad8e; --lg-ink: #5f5e5a;
+  position: absolute; left: 8px; bottom: 8px; z-index: 1; display: flex; flex-direction: column-reverse; align-items: flex-start; gap: 6px;
+  max-width: min(380px, calc(100% - 68px)); max-height: calc(100% - 16px); pointer-events: none;
+}
+.legend-toggle, .legend-body { pointer-events: auto; background: rgb(var(--lg-paper) / var(--lg-alpha)); border: 1px solid var(--lg-line); color: var(--lg-ink); box-shadow: var(--shadow); }
+.legend-toggle { flex: none; min-height: 44px; padding: 0 14px 0 10px; display: inline-flex; align-items: center; gap: 4px; border-radius: 12px; font-size: 14px; cursor: pointer; }
+.legend-toggle svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; transition: transform 0.15s; }
+.map-legend.open .legend-toggle svg { transform: rotate(180deg); }
+.legend-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; border-radius: 10px; padding: 8px 10px; font-size: 12px; line-height: 1.55; cursor: default; }
+.legend-body[hidden] { display: none; }
+.legend-body p { margin: 4px 0 0; }
+.legend-icons { display: flex; flex-wrap: wrap; gap: 2px 12px; margin: 0; padding: 0; list-style: none; }
+.legend-icons li { display: inline-flex; align-items: center; gap: 2px; white-space: nowrap; }
+.legend-icons svg { flex: none; width: 24px; height: 20px; }
+/* 地圖框用 overflow: hidden 裁切，但 hidden 的框仍然是捲動容器：程式叫 scrollIntoView（讀屏軟體、自動化測試常這樣做）時，
+   框自己會被捲走一截，裡面的地圖、圖例、按鈕一起上移。clip 一樣裁切、而且不能被捲；不認得 clip 的舊瀏覽器照舊用上面的 hidden */
+.map-wrap { overflow: clip; }
 .map-tools { display: flex; margin-bottom: 8px; }
 .map-tools select { flex: 1; }
 

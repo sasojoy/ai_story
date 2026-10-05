@@ -5,9 +5,9 @@
   "era_note": "東漢靈帝光和七年（公元184年，年底改元中平）春，張角的太平道在八州同時起事，史稱黃巾之亂。朝廷派皇甫嵩、朱儁、盧植領兵討伐。此時曹操是騎都尉，劉備、關羽、張飛還是涿郡鄉間的豪俠，孫堅在朱儁麾下任佐軍司馬，袁紹在洛陽與士人往來、尚未統兵，董卓是朝廷派在邊地的將領。諸葛亮、周瑜、陸遜都還是孩童；董卓入京、群雄討董、官渡、赤壁、三顧茅廬、三分天下，都是很多年以後的事。",
   "start_location": "yingchuan",
   "factions": [
-    {"id": "guan", "name": "官軍", "join_at": ["changshe", "wan_city", "luzhi_camp"], "sects": ["yingchuan_academy"], "goals": {"yingru": -1, "nanyang": -1, "jizhou": -1}},
-    {"id": "huang", "name": "黃巾軍", "join_at": ["huangjin_camp", "julu_altar", "nanyang_huangjin_camp"], "goals": {"yingru": 1, "nanyang": 1, "jizhou": 1}},
-    {"id": "haoqiang", "name": "地方豪強", "join_at": ["zhuo_militia_hall", "cao_manor", "haozu_fort"], "sects": ["cao_manor"], "goals": {"geju": 1}}
+    {"id": "guan", "name": "官軍", "join_at": ["changshe", "wan_city", "luzhi_camp"], "sects": ["yingchuan_academy"], "goals": {"yingru": -1, "nanyang": -1, "jizhou": -1}, "defect_text": "營門的軍吏把你的名字從另一本冊子上劃掉，寫進了官軍的名冊：「過去的事不問，往後聽號令。」"},
+    {"id": "huang", "name": "黃巾軍", "join_at": ["huangjin_camp", "julu_altar", "nanyang_huangjin_camp"], "goals": {"yingru": 1, "nanyang": 1, "jizhou": 1}, "defect_text": "一個頭目往你額上綁了一條黃巾：「從今往後，你就是黃天的人了。」"},
+    {"id": "haoqiang", "name": "地方豪強", "join_at": ["zhuo_militia_hall", "cao_manor", "haozu_fort"], "sects": ["cao_manor"], "goals": {"geju": 1}, "defect_text": "管事在帳本上記了一筆：「哪裡來的不要緊，往後跟著咱們做。」"}
   ],
   "trends": [
     {"id": "huangjin", "name": "黃巾聲勢", "desc": "黃巾軍在潁川一帶的聲勢。到 50 官道將被切斷，到 80 潁川恐將淪陷。剿討能讓它下降。", "start": 25, "derived": {"yingru": 0.35, "nanyang": 0.25, "jizhou": 0.40}},
