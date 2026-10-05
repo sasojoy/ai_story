@@ -354,6 +354,10 @@ details.fold.bulletin > .fold-body { border-color: var(--gold); max-height: 50vh
 .travel-row .btn:first-child { grid-column: 1 / -1; }
 .travel-row .btn:not(:first-child) { min-height: 44px; padding: 8px 6px; font-size: 14px; }
 .travel-row .btn { margin: 0; }
+/* 事件還沒了結擋著路（FB-063）：灰的那顆寫是哪一則，旁邊一顆「回江湖」，同一排、不多佔一行 */
+.travel-row.blocked { grid-template-columns: 1fr auto; align-items: stretch; }
+.travel-row.blocked .btn:first-child { grid-column: auto; }
+.travel-row.blocked .btn:not(:first-child) { min-height: 48px; padding: 8px 16px; font-size: 15px; white-space: nowrap; }
 .forging { animation: ember 1.6s ease-in-out infinite; }
 @keyframes ember { 0%, 100% { box-shadow: 0 0 0 rgba(214, 120, 40, 0); } 50% { box-shadow: 0 0 18px rgba(214, 120, 40, 0.75); } }
 

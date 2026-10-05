@@ -455,27 +455,41 @@ class TravelOption:
     mode: TravelMode
     label: str
     enabled: bool
+    to_jianghu: bool = False  # 按不下去是因為江湖頁上有事件還沒了結：頁面多給一顆「回江湖」（FB-063）
 
 
-def travel_block(state: GameState) -> str | None:
+@dataclass(frozen=True)
+class TravelBlock:
+    """現在不能安排前往的原因（話只在 travel_block 寫一次）。to_jianghu：要回江湖頁了結待處理的事件才解得開，
+    頁面照這個旗標多給「回江湖」，不去解析中文。"""
+
+    reason: str
+    to_jianghu: bool = False
+
+
+def travel_block(state: GameState, content: Content) -> TravelBlock | None:
     """現在不能安排前往的原因（賽季已結束、有事件待處理、交談中、求見中、投靠待確認、閉關中、打坐中）；可以時為 None。
+    有事件待處理時寫出是哪一則、去哪裡了結（FB-063）：多段的事件（next_event）是現在待處理的那一段。
     在路上不擋：從路上改去別處（路上設計 3.1，見 way_to）。"""
     if state.world.ended:
-        return "賽季已結束，不能安排前往"
+        return TravelBlock("賽季已結束，不能安排前往")
     if state.pending_event:
-        return "有事件待處理，不能安排前往"
-    if state.player.pending_companion:
-        return "交談中，先告辭才能安排前往"
-    if state.player.picking_audience:
-        return "求見中，先返回才能安排前往"
-    if state.player.pending_faction:
-        return "投靠還沒決定，先決定再安排前往"
-    if state.player.fs_asking is not None:
-        return "正在答話，先作罷才能安排前往"
-    if state.player.busy_until is not None:
-        return "閉關中，不能安排前往"
-    if state.player.resting_since is not None:
-        return "打坐中，先起身才能安排前往"
+        event = content.events.get(state.pending_event)
+        title = f"「{event.title}」" if event is not None else "眼前的事"
+        return TravelBlock(f"先回江湖頁處理{title}", to_jianghu=True)
+    p = state.player
+    if p.pending_companion:
+        return TravelBlock("交談中，先告辭才能安排前往")
+    if p.picking_audience:
+        return TravelBlock("求見中，先返回才能安排前往")
+    if p.pending_faction:
+        return TravelBlock("投靠還沒決定，先決定再安排前往")
+    if p.fs_asking is not None:
+        return TravelBlock("正在答話，先作罷才能安排前往")
+    if p.busy_until is not None:
+        return TravelBlock("閉關中，不能安排前往")
+    if p.resting_since is not None:
+        return TravelBlock("打坐中，先起身才能安排前往")
     return None
 
 
@@ -484,9 +498,9 @@ def travel_refusal(state: GameState, content: Content, loc_id: str, mode: Travel
     route = way_to(state, content, loc_id)
     if route is None:
         return "無法安排前往這裡"
-    reason = travel_block(state)
-    if reason:
-        return reason
+    block = travel_block(state, content)
+    if block:
+        return block.reason
     cost = route_stamina(state, content, route, mode)
     if state.player.stamina < cost:
         return f"體力不足，{MODES[mode]}要 {cost} 體力"
@@ -500,9 +514,9 @@ def travel_options(state: GameState, content: Content, loc_id: str) -> list[Trav
     route = way_to(state, content, loc_id)
     if route is None:
         return None
-    reason = travel_block(state)
-    if reason:
-        return [TravelOption("walk", reason, False)]
+    block = travel_block(state, content)
+    if block:
+        return [TravelOption("walk", block.reason, False, to_jianghu=block.to_jianghu)]
     out: list[TravelOption] = []
     at_once = returns_at_once(state, content, route)
     for mode in MODES:
