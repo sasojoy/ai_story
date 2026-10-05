@@ -77,6 +77,8 @@
     // 輿圖的視圖（W16）：{ s 倍率, cx, cy 視窗中心對著的地圖座標 }。這次載入網頁後第一次打開輿圖才決定（mapReady：
     // 對準所在地，手機原尺寸、寬螢幕照框寬，都不給整張），之後切分頁、輪詢重畫、換圖層、點地點都留著
     mapView: null,
+    // 輿圖圖例展開與否：undefined＝這次載入網頁還沒讀 localStorage，null＝這位玩家沒選過（照寬度）；true／false＝選過（見 legendOpen）
+    mapLegend: undefined,
     news: "reports",
     reports: null,
     reportOpen: false,
@@ -840,7 +842,7 @@
         `<button class="btn ${t.mode === "walk" && !t.to_jianghu ? "primary" : ""}" data-act="travel" data-mode="${esc(t.mode)}" ${t.enabled ? "" : "disabled"}>${esc(t.label)}</button>`).join("")}${
         // 事件還沒了結擋著路（灰的那顆寫了是哪一則）：旁邊給一顆回江湖頁的按鈕，伺服器的 to_jianghu 說了算（FB-063）
         toJianghu ? '<button class="btn primary" data-act="tab" data-tab="jianghu">回江湖</button>' : ""}</div>` : ""}
-      <div class="map-wrap" id="map">${m.svg}${MAP_CTL}</div>
+      <div class="map-wrap" id="map">${m.svg}${MAP_CTL}${legendHtml(m.legend)}</div>
       <div class="msg">${S.mapNotice || ""}</div>
       <div class="card">${m.detail}</div>`;
   }
@@ -851,6 +853,51 @@
     <button type="button" data-act="map-zoom" data-step="in" aria-label="放大" title="放大"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg></button>
     <button type="button" data-act="map-zoom" data-step="out" aria-label="縮小" title="縮小"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg></button>
   </div>`;
+
+  // ── 輿圖的圖例（企劃者 10/4：放大時也要看得到）──
+  // 浮在地圖框左下角的一層 HTML：不畫進 SVG（畫進去會跟著地圖平移、縮放），也不被 applyMapView 的 transform 動到。
+  // 內容是伺服器的 m.legend（mapview.legend_data），文字一律 esc；只有 icons[].svg 原樣放進來（引擎用常數畫的圖示，沒有玩家輸入）。
+  // 展開或收合是這個瀏覽器自己的選擇，記在 localStorage（存不了就只在這一頁有效）；沒選過時寬螢幕展開、手機寬度收合——
+  // 手機的地圖框矮，展開的圖例會蓋掉大半張圖。重畫（輪詢、換圖層、點地點）都從 S.mapLegend 讀，不會把玩家收合的又展開
+  const LEGEND_KEY = "tx-map-legend"; // 值是 "open" 或 "shut"
+  const LEGEND_OPEN_WIDE = true; // 沒選過時：寬螢幕（PHONE 之外）展開（企劃者確認前的預設；位置與透明度在 style.css 的 .map-legend）
+  const LEGEND_OPEN_PHONE = false; // 沒選過時：手機寬度收合
+  function legendChoice() {
+    try {
+      const v = localStorage.getItem(LEGEND_KEY);
+      return v === "open" ? true : v === "shut" ? false : null;
+    } catch (e) { return null; /* 讀不到就當沒選過 */ }
+  }
+  function legendOpen() {
+    if (S.mapLegend === undefined) S.mapLegend = legendChoice();
+    if (S.mapLegend !== null) return S.mapLegend;
+    return PHONE && PHONE.matches ? LEGEND_OPEN_PHONE : LEGEND_OPEN_WIDE;
+  }
+  // 收合鈕在最下面、說明疊在它上面（style.css 的 column-reverse）：展開收合時鈕不跳位置
+  function legendHtml(lg) {
+    if (!lg) return "";
+    const open = legendOpen();
+    return `<div class="map-legend${open ? " open" : ""}">
+      <button type="button" class="legend-toggle" data-act="legend-toggle" aria-expanded="${open}" aria-controls="map-legend-body"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 15l6-6 6 6"/></svg>圖例</button>
+      <div class="legend-body" id="map-legend-body"${open ? "" : " hidden"}>
+        <ul class="legend-icons">${lg.icons.map((i) => `<li>${i.svg}<span>${esc(i.label)}</span></li>`).join("")}</ul>
+        <p>${esc(lg.states)}</p>
+        <p>${esc(lg.ring)}</p>
+        ${lg.layer ? `<p>${esc(lg.layer)}</p>` : ""}
+        ${lg.strike ? `<p>${esc(lg.strike)}</p>` : ""}
+      </div>
+    </div>`;
+  }
+  // 按圖例的鈕：原地展開／收合，不重畫整頁（重畫會把地圖框整個換掉）
+  function legendToggle(btn) {
+    const open = btn.getAttribute("aria-expanded") !== "true";
+    S.mapLegend = open;
+    try { localStorage.setItem(LEGEND_KEY, open ? "open" : "shut"); } catch (e) { /* 存不了就只在這一頁有效 */ }
+    btn.setAttribute("aria-expanded", String(open));
+    const box = btn.closest(".map-legend");
+    box.classList.toggle("open", open);
+    box.querySelector(".legend-body").hidden = !open;
+  }
 
   // ── 輿圖的視圖（W16）：純數學，不碰 DOM ──
   // 視圖 v = { s 倍率, cx, cy 視窗中心對著的地圖座標 }，地圖座標＝原尺寸的 px。存中心不存位移：視窗寬高變了（轉向、拉視窗）還對得上。
@@ -951,7 +998,7 @@
   }
 
   function gripDown(ev) {
-    if (ev.button !== 0 || ev.target.closest(".map-ctl")) return; // 只收滑鼠左鍵、觸控、筆；角落的按鈕照常按
+    if (ev.button !== 0 || ev.target.closest(".map-ctl, .map-legend")) return; // 只收滑鼠左鍵、觸控、筆；角落的按鈕與圖例照常按
     if (grip.pts.has(ev.pointerId)) gripEnd(); // 同一個指標又按下：上一次沒收到放開（例如在視窗外放開），重新來過
     if (grip.pts.size >= 2) return; // 第三指不管
     gripFlush();
@@ -1031,6 +1078,7 @@
 
   // 滾輪以游標為準縮放；觸控板雙指捏合在 Chrome／Edge 是帶 ctrlKey 的 wheel，一樣處理（也因此擋掉瀏覽器自己的整頁放大）
   function mapWheel(ev) {
+    if (ev.target.closest(".legend-body")) return; // 在圖例上滾：是捲圖例（太矮時它自己會捲）或捲頁面，不縮放地圖
     ev.preventDefault();
     const g = mapGeom(ev.currentTarget);
     if (!g || !S.mapView) return;
@@ -1548,6 +1596,7 @@
         case "layer": S.layer = el.dataset.layer; await loadMap(S.map?.selected); break;
         case "map-zoom": mapZoom(el.dataset.step); break;
         case "map-home": mapHome(); break;
+        case "legend-toggle": legendToggle(el); break;
         case "travel": await travel(el.dataset.mode); break;
         case "news":
           S.news = el.dataset.news;
