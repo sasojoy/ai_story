@@ -99,7 +99,7 @@ def run_season(
         runner = SimRunner(
             content, world, characters, random.Random(seed + 1000), clock=lambda: now[0], targets=targets,
         )
-        while now[0] - START < hours * 3600:
+        while now[0] - START <= hours * 3600:  # 含 hours 那一刻：季長剛好等於 hours 時，最後一輪才輪得到收季
             runner.tick()
             with world.action_lock():
                 watcher.sync(now[0])

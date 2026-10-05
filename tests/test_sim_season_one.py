@@ -46,6 +46,13 @@ def test_reports_stuck_when_out_of_time(tmp_path):
     assert (result["ended"], result["stuck"]) == (False, True)
 
 
+def test_a_season_exactly_as_long_as_hours_still_ends(tmp_path):
+    """季長剛好等於 hours：最後一輪要落在 hours 那一刻（上限含頭含尾），不然停在差一輪就收季的地方、被誤標成卡住。
+    0.25 天＝6 現實小時。"""
+    result = sim.run_season(_content(), tmp_path / "sim.db", seed=1, targets=ONE_EACH, hours=6, tick=120)
+    assert (result["ended"], result["stuck"]) == (True, False)
+
+
 def test_acceptance_flags():
     """RF2：只判兩條——第 6 週以前沒有決定性勝利、三條戰線的週末中位數在 20～80。"""
     weekly = {w: {"yingru": 50, "nanyang": 40, "jizhou": 60, "geju": 20} for w in range(1, 11)}
