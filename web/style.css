@@ -258,7 +258,7 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .now.fits .now-more { display: none; }
 /* 戰鬥卡片壓縮（PM 2026-10-05）：打完一場要在第一屏直接按下一顆行動，不必捲動。只動「剛剛」那張戰鬥卡片
    （.battle-card 只用在它身上，別張卡片、狀態列與行動列不動）：內距、段距、標題與行高收緊，字級不縮
-   （內文 15px、過程與補充 14px，都不小於 .order-text 的 13px；標題 16px，跟場景標題一樣大） */
+   （內文 15px、過程與補充 14px，都不小於 .order-text 的 13px；標題 16px，比場景標題的 18px 小一號） */
 .battle-card { border-color: var(--accent); padding: 9px 12px; line-height: 1.55; }
 .battle-card h3 { margin: 0 0 1px; font-size: 16px; line-height: 1.3; }
 .battle-card p { margin: 3px 0; }
