@@ -728,9 +728,10 @@ class Config(_Strict):
     big_fight_difficulty: float = 100  # 難度到這裡就算大場面【預設】
     big_fight_swing: int = Field(default=15, ge=0)  # 模型判讀最多把勝算推多少個百分點【預設】
     big_fight_budget_seconds: int = Field(default=60, ge=0)
-    # 人物對話的生成（鎖外的 B 段）與隨口應對的評分也各有一份總預算（PM 2026-10-06，跟開爐取名、大場面同一套）：server.py 從 A 段
-    # 開始量、扣掉等行動鎖與排模型佇列的時間，剩下的一半當那一趟模型呼叫的逾時（chat_structured 一次最多送兩趟）；用完就走
-    # 原本的退路（對話取消、評分 40）。以前這兩件只有 ollama_timeout（120 秒），重問一次最壞要 240 秒
+    # 人物對話的生成（鎖外的 B 段）與隨口應對的評分、潤色也各有一份總預算（PM 2026-10-06，跟開爐取名、大場面同一套；評分與潤色
+    # 共用 free_text_budget_seconds，潤色用評分剩下的，控制者 2026-10-06）：server.py 從 A 段開始量、扣掉等行動鎖與排模型佇列的
+    # 時間，剩下的一半當那一趟模型呼叫的逾時（chat_structured 一次最多送兩趟）；用完就走原本的退路（對話取消、評分 40、潤色不插句子）。
+    # 以前這幾件只有 ollama_timeout（120 秒），重問一次最壞要 240 秒
     dialogue_budget_seconds: int = Field(default=60, ge=0)
     free_text_budget_seconds: int = Field(default=60, ge=0)
     # LLM 佇列（線上架構設計 5.2，第 2 期）：行動鎖外的模型呼叫先排隊（server.model_call）。llm_queue_slots＝顯卡同時處理幾件，

@@ -15,8 +15,8 @@
   用完走退路字表，請求在 trycloudflare 切斷之前結束。
 - 大場面（挑戰大勢人物本人、打頭目）的判讀也在行動鎖外（`prepare_fight`），預算是 `Config.big_fight_budget_seconds`；
   一般的仗不問模型，備料與動作在同一次拿鎖裡做完。
-- 對話生成與隨口應對的評分也有總預算（`Config.dialogue_budget_seconds`、`free_text_budget_seconds`），跟開爐、大場面一樣
-  從備料那一段開始算、扣掉等鎖與排隊的時間。
+- 對話生成與隨口應對的評分、潤色也有總預算（`Config.dialogue_budget_seconds`、`free_text_budget_seconds`；評分與潤色共用
+  後面那一份），跟開爐、大場面一樣從備料那一段開始算、扣掉等鎖與排隊的時間。
 - 鎖外的五個模型呼叫（對話生成、大場面判讀、開爐取名、隨口應對的評分與潤色）一律走 `model_call`：開關
   `Config.llm_queue_slots`（預設 0＝關）打開時先排隊（`llm_queue.py`：真人先、假人有上限、一人一件、排太久拿退路），
   關著就直接叫。鎖內的小呼叫（`Game._quick_client`）與排程不進佇列。
@@ -398,7 +398,8 @@ def model_call(game: Game, job, *, fallback):
 
 def within_budget(client, left: float):
     """鎖外一趟模型呼叫要用的 client：原本那個的複本，逾時設成 min(原本的逾時, 剩下的秒數 ÷ 2)。chat_structured 一次最多送兩趟
-    （第一趟加重問），所以整段不會超過剩下的秒數；跟 naming.propose、fight_llm.judge 同一套分法。剩下的不夠一趟
+    （第一趟加重問），所以整段不會超過剩下的秒數（chat_text 只送一趟，對它這是寬鬆的一半）；跟 naming.propose、
+    fight_llm.judge 同一套分法。對話、隨口應對的評分與潤色都用它。剩下的不夠一趟
     （naming.MIN_POST_SECONDS）回 None＝不叫了；沒有 client（None）還是 None。原本那個 client 不動（同一個角色別的請求可能正在用它）。"""
     if client is None:
         return None
@@ -533,7 +534,10 @@ def prepare_forge(
 def forge(game: Game, art_id: str | None, insight_ids: list[str], other_art: str | None = None) -> list[str] | None:
     """開爐：A、B 在 prepare_forge，C 進鎖交給 Game.forge。proposed 一定給（不必叫模型時是 NO_NAME），
     所以伺服器上的開爐永遠不會在鎖裡叫模型。同一爐連按兩下、重新整理再按、開兩個分頁：兩個請求可能都走完 A、B，
-    C 段重驗時第二個會看見配方有了、東西已經在你身上，什麼都不收（企劃者 2026-10-05：不能重複扣）。"""
+    C 段重驗時第二個會看見配方有了、東西已經在你身上，什麼都不收（企劃者 2026-10-05：不能重複扣）。
+    模型佇列開著時，同一個人的第二件在 B 段直接拿 NO_NAME、不叫第二次模型（Review Focus 1）；它的 C 段如果先進鎖，這個配方這一季
+    就用退路字表的名字登記，第一件模型取的名字被丟掉。這是已知的代價（控制者 2026-10-06：保持這個行為，PM 知道），
+    要避免得讓重複的那一件改回「忙碌中」、不走 C 段。同一個分頁連點兩下被頁面擋住（按鈕 disable），要兩個分頁或兩台裝置才會。"""
     proposed = prepare_forge(game, art_id, insight_ids, other_art)
     return act(game, lambda g: g.forge(art_id, insight_ids, proposed=proposed, other_art=other_art))
 
@@ -545,7 +549,9 @@ def answer_event(game: Game, text: str) -> list[str] | None:
         Config.free_text_budget_seconds 扣掉 A 段（含等鎖）與排隊花掉的時間（見 within_budget）；
       C（鎖內、很快）Game.answer_event 重驗還停在同一則事件、同一句話，才擲骰套用（對不上就不套用）；
       D、E 擲骰之後在鎖外請模型潤色一兩句（model_call：同一個人這時沒有別件在排，照常再排一次），再進鎖插回那一則江湖紀錄
-        （Game.add_gamble_narration）。潤色是一趟、不重問，逾時是 client 自己的 ollama_timeout，不另外給總預算；排太久就不潤色。"""
+        （Game.add_gamble_narration）。潤色跟評分共用同一份 free_text_budget_seconds（控制者 2026-10-06）：從 A 段算起，
+        扣掉評分、等鎖與排隊花掉的，剩下的給潤色（同一個 within_budget）；不夠一趟就不叫、不插句子，跟模型叫不動時一樣。
+        整個請求因此在 free_text_budget_seconds 加兩次進鎖之內結束，不會超過 trycloudflare 約 100 秒的切斷。"""
     started = _monotonic()
     with _locked(game):
         game.sync(time.time())
@@ -565,12 +571,14 @@ def answer_event(game: Game, text: str) -> list[str] | None:
     rate = model_call(game, score, fallback=event_llm.DEFAULT_FREE_TEXT_SUCCESS_RATE)
     msgs = act(game, lambda g: g.answer_event(request, rate))
     outcome = game.last_gamble
-    if outcome is not None:  # D（鎖外）擲骰之後請模型潤色一兩句，E（鎖內）插回那一則紀錄；失敗就只留結果文字
-        narration = model_call(
-            game,
-            lambda: event_llm.narrate_event_gamble(game.client, event, outcome.text, outcome.success, outcome.effect_text),
-            fallback=None,
-        )
+    if outcome is not None:  # D（鎖外）擲骰之後請模型潤色一兩句，E（鎖內）插回那一則紀錄；失敗、預算用完就只留結果文字
+        def narrate():
+            client = within_budget(game.client, total - (_monotonic() - started))  # 評分剩下來的預算，不是重新算一份
+            if client is None and game.client is not None:
+                return None  # 評分、等鎖、排隊把整份預算用完了：不叫模型，不插句子
+            return event_llm.narrate_event_gamble(client, event, outcome.text, outcome.success, outcome.effect_text)
+
+        narration = model_call(game, narrate, fallback=None)
         if narration:
             act(game, lambda g: g.add_gamble_narration(outcome, narration))
     return msgs

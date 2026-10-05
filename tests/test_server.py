@@ -3634,9 +3634,9 @@ def test_answering_asks_the_model_outside_the_lock(game, at_a_gamble, lock_event
     assert view["event_free_text"] is None
 
 
-def test_the_free_text_assessment_gets_its_budget_and_the_narration_keeps_the_full_client(game, at_a_gamble, breaker_clock):
-    """隨口應對的評分與潤色都在鎖外，不是鎖內那個 15 秒的短複本：評分有自己的總預算（Config.free_text_budget_seconds，PM 2026-10-06），
-    拿 game.client 的複本、一趟的逾時是預算的一半；潤色是一趟、不重問，照舊拿 game.client 本身（Config.ollama_timeout）。"""
+def test_the_free_text_assessment_and_the_narration_share_one_budget(game, at_a_gamble, breaker_clock):
+    """隨口應對的評分與潤色都在鎖外，不是鎖內那個 15 秒的短複本：兩件共用同一份總預算（Config.free_text_budget_seconds，PM 2026-10-06
+    ＋控制者 2026-10-06 把潤色也算進來），都拿 game.client 的複本、一趟的逾時是「剩下的」一半；原本那個 client 不動。"""
     seen = []
 
     def assess(client, event, text):
@@ -3655,8 +3655,44 @@ def test_the_free_text_assessment_gets_its_budget_and_the_narration_keeps_the_fu
     assert [kind for kind, _ in seen] == ["assess", "narrate"]
     (_, scored), (_, narrated) = seen
     assert scored is not game.client and scored.timeout == config.free_text_budget_seconds / 2 > config.in_lock_model_timeout
-    assert narrated is game.client
+    assert narrated is not game.client and narrated.timeout == config.free_text_budget_seconds / 2
     assert game.client.timeout == config.ollama_timeout > config.in_lock_model_timeout
+
+
+def test_the_narration_gets_what_the_scoring_left_of_the_free_text_budget(game, at_a_gamble, breaker_clock):
+    """評分花掉 50 秒：潤色只剩 60 − 50 = 10 秒，一趟的逾時是 5 秒（複本；原本那個 client 不動）。"""
+    seen = []
+
+    def assess(client, event, text):
+        breaker_clock[0] += 50
+        return 85
+
+    def narrate(client, event, text, success, effect_text):
+        seen.append(client)
+        return GAMBLE_NARRATION
+
+    game.rng = random.Random(0)
+    with mock.patch.object(server.event_llm, "assess_event_success_rate", side_effect=assess), \
+            mock.patch.object(server.event_llm, "narrate_event_gamble", side_effect=narrate):
+        server.answer_event(game, "大喊官兵來了")
+    assert len(seen) == 1 and seen[0] is not game.client
+    assert seen[0].timeout == pytest.approx((server.CONTENT.config.free_text_budget_seconds - 50) / 2)
+    assert game.state.journal[0].lines[1] == GAMBLE_NARRATION
+    assert game.client.timeout == server.CONTENT.config.ollama_timeout
+
+
+def test_a_narration_with_no_budget_left_is_skipped(game, at_a_gamble, breaker_clock):
+    """評分把預算用得只剩半秒（不夠一趟）：不叫潤色，一句都不插，跟模型叫不動時一樣（結果與擲骰照常套用，請求不再等）。"""
+    def assess(client, event, text):
+        breaker_clock[0] += server.CONTENT.config.free_text_budget_seconds - 0.5
+        return 85
+
+    game.rng = random.Random(0)
+    with mock.patch.object(server.event_llm, "assess_event_success_rate", side_effect=assess), \
+            mock.patch.object(server.event_llm, "narrate_event_gamble", side_effect=AssertionError("預算用完了，不該叫潤色")):
+        msgs = server.answer_event(game, "大喊官兵來了")
+    assert game.state.pending_event is None and game.state.journal[0].title == f"{at_a_gamble.title}・隨口應對"
+    assert GAMBLE_NARRATION not in game.state.journal[0].lines and msgs
 
 
 def test_answering_does_nothing_when_the_event_was_dealt_with_meanwhile(game, at_a_gamble):
@@ -4052,8 +4088,9 @@ def test_a_dialogue_that_waited_out_its_budget_is_cancelled_without_asking_the_m
 
 
 def test_the_free_text_budget_counts_the_time_spent_in_the_queue(game, at_a_gamble, monkeypatch, breaker_clock):
-    """隨口應對的評分也有總預算（Config.free_text_budget_seconds）：扣掉排隊的時間；排太久就不叫、直接是保底的 40。"""
-    rates, timeouts = [], []
+    """隨口應對的評分也有總預算（Config.free_text_budget_seconds）：扣掉排隊的時間；排太久就不叫、直接是保底的 40。
+    潤色跟評分共用這一份預算，它自己再排隊的時間也扣：這裡每一件都排 45 秒以上，評分之後預算剩不到一趟，潤色一律不叫。"""
+    rates, timeouts, narrated = [], [], []
     real = Game.answer_event
     monkeypatch.setattr(
         Game, "answer_event", lambda self, request, llm_rate=None: rates.append(llm_rate) or real(self, request, llm_rate),
@@ -4063,14 +4100,20 @@ def test_the_free_text_budget_counts_the_time_spent_in_the_queue(game, at_a_gamb
         timeouts.append(client.timeout)
         return 85
 
+    def narrate(client, event, text, success, effect_text):
+        narrated.append(client)
+        return GAMBLE_NARRATION
+
     for waited in (45, 61):
         _slow_queue(monkeypatch, breaker_clock, waited)
         game.state.pending_event = at_a_gamble.id
         open_characters().save(game.state)
-        with mock.patch.object(server.event_llm, "assess_event_success_rate", side_effect=assess):
+        with mock.patch.object(server.event_llm, "assess_event_success_rate", side_effect=assess), \
+                mock.patch.object(server.event_llm, "narrate_event_gamble", side_effect=narrate):
             server.answer_event(game, "大喊官兵來了")
     assert timeouts == [pytest.approx((server.CONTENT.config.free_text_budget_seconds - 45) / 2)]  # 第二次排太久，沒叫
     assert rates == [85, server.event_llm.DEFAULT_FREE_TEXT_SUCCESS_RATE]
+    assert narrated == []  # 評分排掉 45 秒、潤色再排 45 秒：預算早就沒了
     assert game.client.timeout == server.CONTENT.config.ollama_timeout
 
 
@@ -4149,9 +4192,9 @@ def _asked(seen, kind):
 
 @pytest.mark.parametrize("site", SITES)
 def test_with_the_queue_off_each_site_asks_the_model_directly(site, monkeypatch, breaker_clock):
-    """開關關著（llm_queue_slots = 0）：沒有佇列，五個呼叫點直接叫模型。拿到的 client 與預算照現在的樣子：開爐、大場面、潤色拿
-    game.client 本身（預算在 naming／fight_llm 裡再分）；對話與隨口應對的評分是 PM 2026-10-06 加的總預算，拿預算複本（逾時是
-    預算的一半、原本那個 client 不動）。"""
+    """開關關著（llm_queue_slots = 0）：沒有佇列，五個呼叫點直接叫模型。拿到的 client 與預算照現在的樣子：開爐、大場面拿
+    game.client 本身（預算在 naming／fight_llm 裡再分）；對話、隨口應對的評分與潤色是 PM 2026-10-06 加的總預算，拿預算複本
+    （逾時是剩下的一半、原本那個 client 不動）。"""
     assert server.QUEUE is None
     monkeypatch.setattr(llm_queue.LlmQueue, "run", lambda *args, **kwargs: pytest.fail("開關關著，不該碰佇列"))
     game, run, seen = _ready(site, monkeypatch)
@@ -4175,7 +4218,7 @@ def test_with_the_queue_off_each_site_asks_the_model_directly(site, monkeypatch,
         assert _asked(seen, "rate") == [{"kind": "rate", "rate": 85}]
     else:
         [asked] = _asked(seen, "narrate")
-        assert asked["client"] is game.client
+        assert asked["client"] is not game.client and asked["client"].timeout == config.free_text_budget_seconds / 2
         assert game.state.journal[0].lines[1] == GAMBLE_NARRATION
     assert game.client.timeout == config.ollama_timeout and game.client.retry is True
 
@@ -4255,6 +4298,38 @@ def test_the_forge_endpoint_goes_through_a_real_queue(client, monkeypatch):
         out = client.post("/api/menxia/forge", json={"art": "jichu_quanjiao", "insights": ["feng"]})
     assert out.status_code == 200 and "旋風腿" in out.json()["message"]
     assert asked == [{"running": 1, "waiting": 0, "bots_waiting": 0}]  # 模型叫的時候，這一件正在佇列裡跑
+    assert queue.snapshot() == {"running": 0, "waiting": 0, "bots_waiting": 0}
+
+
+def test_a_duplicate_forge_gets_the_fallback_name_and_is_charged_once(monkeypatch):
+    """同一個玩家兩個分頁同時開同一爐（Review Focus 1；控制者 2026-10-06：保持計畫的行為，重複的那一件拿退路）：第二件在佇列裡
+    直接拿 NO_NAME、不叫第二次模型；它的 C 段先進鎖，這個配方這一季就用退路字表的名字登記，第一件模型取的名字被丟掉
+    （它的 C 段看到配方已經有了、東西已經在身上，什麼都不收）：心得只扣一次。這是已知的代價、不是 bug，PM 知道；
+    要避免的話，重複的那一件得改成回「忙碌中」、不走 C 段（會改計畫的語意）。"""
+    queue = llm_queue.LlmQueue(slots=2, bot_cap=1)
+    monkeypatch.setattr(server, "QUEUE", queue)
+    game = _forger()
+    started, release = threading.Event(), threading.Event()
+    asked, first = [], {}
+
+    def reply(model, messages):
+        asked.append(1)
+        started.set()
+        release.wait(5)
+        return "旋風腿"
+
+    with _model(reply):
+        thread = threading.Thread(target=lambda: first.update(msgs=server.forge(game, "jichu_quanjiao", ["feng"])))
+        thread.start()
+        assert started.wait(2)
+        second = server.forge(game, "jichu_quanjiao", ["feng"])  # 第一件還在模型那邊的時候，第二件整個走完
+        release.set()
+        thread.join(5)
+    fallback = naming.fallback_name(server.CONTENT, FIST_FENG, "武學")
+    assert asked == [1]  # 模型只被叫一次（第一件的）
+    assert open_world().lookup_recipe(FIST_FENG).name == fallback != "旋風腿"
+    assert any(f"【{fallback}】" in m for m in second) and first["msgs"] is not None
+    assert open_characters().load("沈青衫").player.stats["xinde"] == 95  # 兩件只收一次
     assert queue.snapshot() == {"running": 0, "waiting": 0, "bots_waiting": 0}
 
 
