@@ -641,7 +641,7 @@ def test_the_players_card_spells_out_the_boosts(state, content, world):
     state.player.member.neigong_id = "basic_breath"  # 實配柔：不相剋也不同屬性
     state.player.stats["str"] = 9
     card = skillview.member_card(state, content, world, "player")
-    assert "臂力 +12%" in card and "內外搭配" not in card
+    assert "武學 +12%（臂力）" in card and "內外搭配" not in card
 
 
 def test_the_boost_line_reads_stats_pairing_and_resonance(state, content, world):
@@ -650,7 +650,7 @@ def test_the_boost_line_reads_stats_pairing_and_resonance(state, content, world)
     state.player.member.wugong_id, state.player.member.neigong_id = wugong.id, "basic_breath"  # 柔配柔
     state.player.stats.update({"str": 9, "con": 7, "good": 40})
     assert skillview.boost_line(state, content, world) == (
-        "威力加成：臂力 +12%・根骨 +6%・內外搭配 +20%・【清風拳】共鳴 +20%"
+        "威力加成：武學 +12%（臂力）・內功 +6%（根骨）・內外搭配 +20%・【清風拳】共鳴 +20%"
     )
     assert skillview.boost_line(state, content, world) in skillview.member_card(state, content, world, "player")
 
@@ -667,8 +667,27 @@ def test_the_boost_line_is_absent_when_nothing_boosts(state, content, world):
     assert "威力加成" not in skillview.member_card(state, content, world, "player")
 
 
+def test_a_stat_is_named_by_the_art_it_boosts_and_an_empty_slot_leaves_it_out(state, content, world):
+    """臂力乘的是武學那一項、根骨乘的是內功那一項（設計 6.1）：卡上寫它加成的那一門，那一欄沒有功法就不寫。"""
+    state.player.stats.update({"str": 9, "con": 9})
+    assert skillview.boost_line(state, content, world) == ""  # 兩欄都空：什麼都沒得加成
+    state.player.member.wugong_id = "basic_fist"
+    assert skillview.boost_line(state, content, world) == "威力加成：武學 +12%（臂力）"  # 沒有內功：不寫根骨
+    state.player.member.wugong_id, state.player.member.neigong_id = None, "basic_breath"
+    assert skillview.boost_line(state, content, world) == "威力加成：內功 +12%（根骨）"  # 沒有武學：不寫臂力
+    state.player.member.wugong_id = "basic_fist"
+    assert skillview.boost_line(state, content, world) == "威力加成：武學 +12%（臂力）・內功 +12%（根骨）"
+
+
+def test_a_stat_below_the_base_shows_a_negative_percentage(state, content, world):
+    state.player.member.wugong_id, state.player.member.neigong_id = "basic_fist", "basic_breath"
+    state.player.stats.update({"str": 3, "con": 4})
+    assert skillview.boost_line(state, content, world) == "威力加成：武學 -6%（臂力）・內功 -3%（根骨）"
+
+
 def test_only_the_players_card_carries_the_boost_line(state, content, world):
     """加成只算本人（計畫二）：同伴的卡不寫、也不會吃到本人的臂力與共鳴。"""
+    state.player.member.wugong_id = "basic_fist"
     state.player.stats.update({"str": 15, "con": 15, "good": 40})
     assert "威力加成" in skillview.member_card(state, content, world, "player")
     assert "威力加成" not in skillview.member_card(state, content, world, "mate")

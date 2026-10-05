@@ -382,12 +382,12 @@ def team_conditions(state: GameState, content: Content, world: WorldStateStore) 
 
 def pairing(content: Content, wugong: MartialArt | None, neigong: MartialArt | None) -> float:
     """內功與武學的搭配（武學與成長設計 5.1）：同屬性加成、相剋的一對打折、其他不變；少一門就不算。
-    打折再大也只到 encounter.BOOST_FLOOR，不會讓整個人的威力變成負的。"""
+    加成與打折兩支都夾在 encounter.BOOST_FLOOR 以上（設定寫錯也一樣），不會讓整個人的威力變成負的。"""
     if wugong is None or neigong is None:
         return 1.0
     cfg = content.config
     if wugong.attribute == neigong.attribute:
-        return 1 + cfg.pairing_bonus
+        return max(encounter.BOOST_FLOOR, 1 + cfg.pairing_bonus)
     if counters(wugong.attribute, neigong.attribute):
         return max(encounter.BOOST_FLOOR, 1 - cfg.pairing_penalty)
     return 1.0

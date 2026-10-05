@@ -444,6 +444,13 @@ def test_pairing_rewards_the_same_attribute_and_punishes_a_countering_pair(conte
     assert team.pairing(content, None, _art("戊功", "內功", "剛")) == 1.0
 
 
+def test_a_negative_pairing_bonus_is_held_at_the_floor_like_the_penalty(content):
+    """相同屬性那一支也夾在下限：設定寫錯（加成是負的）也不會讓整個人的乘數變成負的。"""
+    content.config.pairing_bonus = -5.0
+    same = team.pairing(content, _art("甲拳", "武學", "剛"), _art("甲功", "內功", "剛"))
+    assert same == encounter.BOOST_FLOOR
+
+
 def test_resonance_follows_the_matching_name_and_caps(state, content):
     good = _art("正拳", "武學", "陽", "正")
     state.player.stats["good"], state.player.stats["evil"] = 30, 100

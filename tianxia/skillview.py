@@ -209,15 +209,19 @@ def _pct(ratio: float) -> str:
 
 
 def boost_line(state: GameState, content: Content, world: WorldStateStore) -> str:
-    """本人卡上的一行：這時候威力吃到哪些加成（臂力、根骨、內外搭配、各門功法的正邪共鳴），有才寫、都沒有就是空字串。"""
+    """本人卡上的一行：這時候威力吃到哪些加成，有才寫、都沒有就是空字串。
+
+    臂力乘的是武學（外功）那一項、根骨乘的是內功那一項（設計 6.1），內功那一項還要再被縮小才進總威力，
+    所以寫成「武學 +12%（臂力）」「內功 +6%（根骨）」，說清楚加成的是哪一門；那一欄沒有功法就不寫。
+    其後是內外搭配與各門功法的正邪共鳴。"""
     member, stats = state.player.member, state.player.stats
-    parts = []
-    for key, name in (("str", "臂力"), ("con", "根骨")):
-        bonus = team.stat_bonus(content, stats.get(key, team.BASE_STAT))
-        if bonus:
-            parts.append(f"{name} {_pct(bonus)}")
     wugong = team.player_art(state, content, world, member.wugong_id)
     neigong = team.player_art(state, content, world, member.neigong_id)
+    parts = []
+    for art, word, key, stat_name in ((wugong, "武學", "str", "臂力"), (neigong, "內功", "con", "根骨")):
+        bonus = team.stat_bonus(content, stats.get(key, team.BASE_STAT))
+        if art is not None and bonus:
+            parts.append(f"{word} {_pct(bonus)}（{stat_name}）")
     pair = team.pairing(content, wugong, neigong)
     if pair != 1:
         parts.append(f"內外搭配 {_pct(pair - 1)}")
