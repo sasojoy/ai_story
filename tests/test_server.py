@@ -84,6 +84,27 @@ def test_main_view_bulletin_this_week(monkeypatch):
     assert [re.search(r"<strong>(.)事</strong>", b).group(1) for b in bulletin] == ["戊", "丁", "丙"]  # 上一週的甲不在
 
 
+def test_now_card_does_not_repeat_the_big_event_on_the_bulletin(monkeypatch):
+    """FB-046：時刻表大事補進江湖紀錄那一則，全文公告卡上已經有了，江湖頁的「剛剛」（now）不再寫一次，
+    改放再前面那一則（這裡是開場那一則）；江湖紀錄頁（latest＋journal＋older）照舊從最新一則列起。"""
+    content = server.CONTENT
+    monkeypatch.setattr(content.config, "season_one", True)
+    monkeypatch.setattr(content.config, "season_days", 2.5)
+    monkeypatch.setattr(content, "timetable", [_fixed("甲", 1)])
+    game = Game.new(content, "測試")
+    view = server.main_view(game)
+    assert "賽季開始" in view["now"] and view["now"] == view["latest"]
+    game.advance(calendar.cal_hour_seconds(content))
+    assert game.state.journal[0].title == WORLD_NEWS
+    view = server.main_view(game)
+    assert "甲事的公告。" in view["bulletin"][0]
+    assert "甲事的公告。" not in view["now"] and "賽季開始" in view["now"]
+    assert "甲事的公告。" in view["latest"]  # 江湖紀錄頁照舊
+    game.choose("act:explore")
+    view = server.main_view(game)
+    assert "探索" in view["now"] and view["now"] == view["latest"]
+
+
 def test_season_one_off_changes_nothing(game, monkeypatch):
     """開關關著（現在的試玩伺服器）：推進一週，時刻表不跑、狀態列沒有季曆、公告卡是空的。"""
     monkeypatch.setattr(server.CONTENT, "timetable", season_one_events())
@@ -1698,6 +1719,24 @@ def test_main_view_sends_the_season_result_only_when_season_one_rests(game, monk
     result = server.look(game, server.main_view)["season_result"]
     assert result["title"] and result["text"].startswith("<p>戰事提前收束。")
     assert len(result["timeline"]) == 12 and all(row["text"].startswith("<p>") for row in result["timeline"])
+
+
+def test_resting_season_one_writes_the_ending_once(game, monkeypatch):
+    """FB-046：休季時結局那句只在結算卡上：「剛剛」不再是季末那則公告（放再前面那一則）、場景寫所在的地方、
+    公告卡不畫（這一季的大事結算卡上都有）。江湖紀錄頁照舊列得到季末那則。"""
+    monkeypatch.setattr(server.CONTENT.config, "admins", ["測試"])
+    _season_one_now(game, monkeypatch)
+    player = Game.new(server.CONTENT, "路人", world=game.world)
+    player.sync(game.now)
+    game.admin_end_season(now=game.now)
+    player.sync(game.now)
+    ending = game.state.world.ending_text
+    assert player.state.journal[0].title == WORLD_NEWS and player.state.journal[0].tag == ending
+    view = server.main_view(player)
+    assert view["season_result"]["text"] == server.md(ending)
+    assert ending not in view["now"] and "賽季開始" in view["now"] and ending in view["latest"]
+    assert ending not in view["scene"] and view["scene"] == server.md(player.location_text())
+    assert view["bulletin"] == []
 
 
 def test_switch_off_season_end_sends_no_result_card(game, monkeypatch):

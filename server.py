@@ -241,6 +241,7 @@ def main_view(game: Game) -> dict:
     card = game.battle_card() if game.shows_battle_card() else None
     status, quest, scene = game.status_data(), md(game.quest_text()), md(game.scene_text())
     options = game.options()  # 照原本的順序：狀態、主線、場景先讀，選單（會推進全服戰鬥）最後
+    latest = game.battle_extra_html() if card is not None else game.latest_entry_html()
     view = {
         "status": status,
         "quest": quest,
@@ -254,9 +255,13 @@ def main_view(game: Game) -> dict:
         # 「剛剛」：這次行動打了仗就放戰鬥卡片，卡片沒寫到的補充放在 latest；沒打仗時 latest 是最新一則紀錄
         "card": md(card) if card is not None else None,
         "card_id": game.battle_card_id() if card is not None else None,
-        "latest": game.battle_extra_html() if card is not None else game.latest_entry_html(),
+        # 江湖紀錄頁是 latest＋journal＋older 接起來的，從最新一則列起
+        "latest": latest,
         "journal": game.journal_html(1, RECENT_ROWS),
         "older": game.journal_html(1 + RECENT_ROWS, OLDER_ROWS),
+        # 江湖頁的「剛剛」：跟 latest 一樣，只是最新的幾則若只是公告卡（休季是結算卡）上已經有全文的大事，
+        # 改放再前面那一則，同一段公告不寫兩次（FB-046）
+        "now": latest if card is not None else game.now_entry_html(),
         "minimap": game.minimap_svg(),
         "bulletin": [md(text) for text in game.bulletin()],  # 江湖頁最上面的公告卡：這一週的大事；開關關著是空的
         "trends": md(game.trends_text()),

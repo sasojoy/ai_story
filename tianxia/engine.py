@@ -1196,7 +1196,9 @@ class Game:
             return msgs
         faction = self._faction(arg)
         p.pending_faction = faction.id
-        return [self._faction_prompt(faction)]
+        prompt = self._faction_prompt(faction)
+        self._hide(prompt)  # 場景已經寫著這一問（_own_scene_text），江湖紀錄那一則只留標題（FB-046）
+        return [prompt]
 
     def _faction_prompt(self, faction) -> str:
         return f"投靠後這一季不能改投（叛投另論）。{self.faction_counts_text()}。確定投靠{faction.name}？"
@@ -2327,7 +2329,7 @@ class Game:
         return [sight.text] + apply_effect(sight.effect, s, c, self.world, push=self.push_trend)
 
     def _journey_line(self) -> str:
-        """在路上的那一句（狀態列、場景共用）：「往寶洞（步行），第1天 00:08 抵達，還要約 8 分鐘；下一站湖邊」。"""
+        """在路上的那一句（狀態列）：「往寶洞（步行），第1天 00:08 抵達，還要約 8 分鐘；下一站湖邊」。"""
         s, c = self.state, self.content
         j = s.player.journey
         end = j.arrive_at[j.last]
@@ -3007,6 +3009,8 @@ class Game:
     def _own_scene_text(self) -> str:
         s, c = self.state, self.content
         if s.world.ended:
+            if season_one(c, s.world):  # 第一季：結局寫在江湖頁最上面的結算卡（season_result），場景寫所在的地方（FB-046）
+                return self.location_text()
             return f"## {s.world.ending_title}\n\n{s.world.ending_text}"
         if s.pending_event:
             event = c.events[s.pending_event]
@@ -3025,9 +3029,10 @@ class Game:
         if asking is not None:
             return asking
         if s.player.journey is not None:
+            # 往哪、幾時抵達只寫在狀態列（status_data 的 journey，每一頁都看得到），場景不再寫一次（FB-046）
             halted = "（已經喊停）" if s.player.journey.stop_at is not None else ""
             return (
-                f"**在路上**{halted}\n\n{self._journey_line()}。\n\n"
+                f"**在路上**{halted}\n\n"
                 "路上可以折返，也可以打開輿圖改去別處，或去修練、煉製；邊走邊想、沿途打聽、留意地形、路邊採集，"
                 "到下一站之前各能做一次。可以先下線，到了會自己抵達。"
             )
@@ -3099,15 +3104,30 @@ class Game:
 
     def bulletin(self) -> list[str]:
         """江湖頁最上面的公告卡（Markdown）：這一週已經發生的大事，新的在前、最多 BULLETIN_MAX 則。
-        江湖紀錄裡的「江湖大事」只寫進剛好在場同步到的那個人，這張卡讓每個人都看得到。開關關著時是空的。"""
+        江湖紀錄裡的「江湖大事」只寫進剛好在場同步到的那個人，這張卡讓每個人都看得到。開關關著時是空的；
+        休季時也是空的：結算卡已經列著這一季的每一件大事與結局（FB-046）。"""
+        return [f"**{title}**\n\n{text}" for title, text in self._bulletin_events()]
+
+    def _bulletin_events(self) -> list[tuple[str, str]]:
+        """公告卡上的（標題, 公告全文），新的在前、最多 BULLETIN_MAX 則。"""
         w, c = self.state.world, self.content
-        if not calendar.season_one_on(w, c):
+        if not calendar.season_one_on(w, c) or w.ended:
             return []
         start = calendar.week_start(calendar.point(w.time, c, w).week, c, w) - calendar.EPS_SECONDS
         titles = {e.id: e.title for e in c.timetable}
         done = [(i, eid, r) for i, (eid, r) in enumerate(w.timeline.items()) if r.text and r.time >= start]
         done.sort(key=lambda item: (item[2].time, item[0]), reverse=True)
-        return [f"**{titles.get(eid, eid)}**\n\n{r.text}" for _, eid, r in done[:BULLETIN_MAX]]
+        return [(titles.get(eid, eid), r.text) for _, eid, r in done[:BULLETIN_MAX]]
+
+    def _news_on_cards(self) -> set[str]:
+        """江湖頁的卡片上已經寫著全文的時刻表公告：平常是本週大事的公告卡，休季時是結算卡（結局與這一季的每一件大事）。"""
+        w = self.state.world
+        if w.ended and season_one(self.content, w):
+            shown = {r.text for r in w.timeline.values()} | {w.ending_text}
+        else:
+            shown = {text for _, text in self._bulletin_events()}
+        shown.discard("")
+        return shown
 
     def convoy_line(self) -> str | None:
         """押著的糧車要送去哪（江湖頁軍令卡上的一行；T6 審查 I3）：那一道軍令已經達成或換週清掉了也照樣寫，
@@ -3257,6 +3277,22 @@ class Game:
     def latest_entry_html(self) -> str:
         entries = self.state.journal
         return journal.card_html(entries[0], self.stamp) if entries else ""
+
+    def now_entry_html(self) -> str:
+        """江湖頁「剛剛」那一則（FB-046）：最新一則；最新的幾則若只是時刻表大事的公告（_deliver_big_events 補的），
+        而且每一件的全文江湖頁的卡片上已經有了（_news_on_cards），就往前找第一則不是的——同一段公告不在「剛剛」
+        再寫一次，剛做完的事也不會因為一件大事發生就被擠掉。江湖紀錄頁照舊從最新一則列起（latest_entry_html）。
+        一次補好幾件時每一行是「季曆時間　公告全文」。"""
+        shown = self._news_on_cards()
+
+        def repeated(entry: JournalEntry) -> bool:
+            story = entry.lines or [entry.tag]
+            return entry.title == journal.WORLD_NEWS and all(
+                line in shown or line.partition("　")[2] in shown for line in story
+            )
+
+        entry = next((e for e in self.state.journal if not repeated(e)), None)
+        return journal.card_html(entry, self.stamp) if entry is not None else ""
 
     def journal_html(self, start: int = 1, limit: int = 5, heading: str = "", empty: str = "") -> str:
         return journal.rows_html(self.state.journal[start:start + limit], heading, empty, self.stamp)
