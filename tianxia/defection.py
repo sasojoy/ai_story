@@ -29,20 +29,29 @@ def targets_here(state: GameState, content: Content) -> list[FactionDef]:
 
 
 def prompt(state: GameState, content: Content, target: FactionDef, counts_text: str) -> str:
-    """確認畫面的話：寫明代價（頭銜、部下、功勞）、一季一次，接上三方目前的人數。"""
+    """確認畫面的話：寫明真的會失去什麼（晉升過的頭銜、還沒去的召見、部下、押著的糧車、功勞）、一季一次，接上三方目前的人數。
+    只寫真的有的：第 1 階（鄉勇）叛投之後在新陣營一樣是第 1 階，不算損失；沒有召見、糧車、部下就不提。"""
     p = state.player
     old = _faction(content, p.faction)
-    title = ranks.title(content, state)
-    lost = [f"身份歸零（你現在是{title}）" if title else "身份歸零"]
+    lost = []
+    if ranks.rank_of(state) > 1:
+        title = ranks.title(content, state)
+        lost.append(f"身份歸零（你現在是{title}）" if title else "身份歸零")
+    if p.summons is not None:
+        lost.append("還沒去的召見作廢")
     if p.followers:
         lost.append(f"{len(p.followers)} 名部下全部離隊")
+    if p.convoy is not None:
+        lost.append("押著的糧車作廢、交出去的糧草不退")
     lost.append(f"這一季替{old.name}記下的功勞全部作廢")
     return f"叛投{target.name}之後，" + "，".join(lost) + f"；一季只能叛投一次。{counts_text}。確定叛投{target.name}？"
 
 
 def clear_progress(p: PlayerState) -> None:
     """叛投時清掉舊陣營的個人進度（第一季設計 5.1；晉升奇遇文件第一節：取消還沒去的召見；軍備物資 4.5：donations 歸零）。
-    之後的計畫把自己的陣營進度加在這裡（乙：機緣；丙：靠山；丁：第四階資格），叛投就不會漏清。"""
+    之後的計畫把自己的陣營進度加在這裡（乙：機緣；丙：靠山；丁：第四階資格），叛投就不會漏清。
+    這裡只放玩家**個人**的進度（PlayerState 上的欄位）；全服狀態那一側的清理（例如活躍名單）寫在 defect() 裡，
+    跟 active_pushers 的清理放在一起。"""
     p.rank = 0
     p.summons = None
     p.followers = []
@@ -70,12 +79,11 @@ def defect(state: GameState, content: Content, target: FactionDef) -> list[str]:
         names.pop(p.name, None)
         if not names:
             del w.active_pushers[old.id]
-    name = display_name(state)
+    # 企劃者定：只有地方傳聞匿名；陣營軍情（只給那個陣營自己人看）一律寫真名，也不帶地點（同 orders、ranks 的陣營軍情）
+    add_rumor(state, f"{p.name}叛離了{old.name}，投奔{target.name}。", layer="faction", faction=old.id)
+    add_rumor(state, f"{p.name}從{old.name}投奔過來了。", layer="faction", faction=target.id)
     here = content.locations[p.location].name
-    add_rumor(state, f"{name}叛離了{old.name}，投奔{target.name}。", p.location, content=content,
-              layer="faction", faction=old.id)
-    add_rumor(state, f"{name}從{old.name}投奔過來了。", p.location, content=content, layer="faction", faction=target.id)
-    add_rumor(state, f"{name}在{here}改投了{target.name}。", p.location, content=content, layer="local",
+    add_rumor(state, f"{display_name(state)}在{here}改投了{target.name}。", p.location, content=content, layer="local",
               named=not p.anonymous)
     msgs.append(f"你叛出{old.name}，投了{target.name}。")
     return msgs

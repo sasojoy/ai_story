@@ -97,6 +97,23 @@ def test_prompt_names_the_cost(on):
     assert text.endswith("確定叛投黃巾軍？")
 
 
+def test_prompt_lists_only_what_is_really_lost(on):
+    """第 1 階（鄉勇）不算損失：叛投之後在新陣營一樣是第 1 階；糧車、召見只在真的有的時候才寫。"""
+    game = _game(on, faction="guan", at="huangjin_camp")
+    p = game.state.player
+    counts = "目前官軍 1 人、黃巾軍 0 人、地方豪強 0 人"
+    for rank in (0, 1):  # 存檔的 0 是投靠了還沒晉升過，也算第 1 階
+        p.rank = rank
+        text = defection.prompt(game.state, on, _faction(on, "huang"), counts)
+        assert not any(word in text for word in ("身份歸零", "部下", "糧車", "召見"))
+        assert "這一季替官軍記下的功勞全部作廢" in text and text.endswith("確定叛投黃巾軍？")
+    p.convoy = Convoy(order="o1", grain=4, from_loc="xinye", to_loc="wan_city")
+    assert "押著的糧車作廢、交出去的糧草不退" in defection.prompt(game.state, on, _faction(on, "huang"), counts)
+    p.convoy, p.summons = None, Summons(rank=3, figure="luzhi", location="luzhi_camp")
+    text = defection.prompt(game.state, on, _faction(on, "huang"), counts)
+    assert "還沒去的召見作廢" in text and "糧車" not in text
+
+
 def test_defect_resets_rank_and_old_progress(on):
     game = _game(on, faction="guan", at="huangjin_camp")
     p = game.state.player
@@ -121,16 +138,33 @@ def test_defect_publishes_two_faction_notes_and_a_local_rumor(on):
     assert new[1].text == "甲從官軍投奔過來了。"
     assert new[2].text == "甲在黃巾別部營寨改投了黃巾軍。" and new[2].location == "huangjin_camp" and new[2].named
     assert all(r.layer != "world" for r in new)  # 不上天下大事（傳聞分層第五節）
+    assert new[0].location is None and new[1].location is None  # 陣營軍情不帶地點（同 orders._faction_news、ranks.flush_news）
+
+
+def test_defect_clears_nothing_else(on):
+    """帶得走的照舊：每人每天的推動上限、背包、隊伍、屬性、功法庫、做完的伏筆鏈（第一季設計 5.1、計畫甲 Global Constraints）。"""
+    game = _game(on, faction="guan", at="huangjin_camp")
+    p = game.state.player
+    p.pushed = {"1:yingru": 3.0}
+    p.materials, p.arts, p.team, p.fs_done = {"gang_1": 2}, ["some_art"], ["luzhi"], ["fs_changshe_guan"]
+    p.stats["str"] = 9
+    kept = {key: getattr(p, key) for key in ("pushed", "materials", "arts", "team", "fs_done", "stats")}
+    kept = {key: value.copy() for key, value in kept.items()}  # 不能留著同一份：defect 若原地改動，比較會假裝沒事
+    defection.defect(game.state, on, _faction(on, "huang"))
+    assert {key: getattr(p, key) for key in kept} == kept
 
 
 def test_anonymous_defector_is_not_named(on):
+    """企劃者定：只有地方傳聞匿名；公告、陣營軍情、晉升、江湖史一律寫真名。選了匿名的人叛投，
+    兩則陣營軍情仍寫真名（只給那個陣營自己人看），當地那一則寫「某位少俠」、標成不具名。"""
     game = _game(on, faction="guan", at="huangjin_camp")
     game.state.player.anonymous = True
     before = len(game.state.world.rumors)
     defection.defect(game.state, on, _faction(on, "huang"))
     new = game.state.world.rumors[before:]
-    assert all("某位少俠" in r.text and "甲" not in r.text for r in new)
-    assert new[2].named is False
+    assert new[0].text == "甲叛離了官軍，投奔黃巾軍。" and new[1].text == "甲從官軍投奔過來了。"
+    assert new[2].text == "某位少俠在黃巾別部營寨改投了黃巾軍。" and new[2].named is False
+    assert new[0].named and new[1].named
 
 
 def test_defect_leaves_old_active_list(on):
