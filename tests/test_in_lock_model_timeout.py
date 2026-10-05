@@ -17,11 +17,12 @@ import requests
 
 from conftest import at, walk_to
 from test_engine import _install_battle_def, _install_battle_def_with_free_text, _join_and_open
-from tianxia import battle_instance, companion_agent, fusion
+from tianxia import battle_instance, companion_agent, fusion, naming
 from tianxia.engine import FreeTextRequest, Game
 from tianxia.models import Config, Effect, FreeTextChoice
 from tianxia.ollama_client import OllamaClient
 
+REAL_CHAT_STRUCTURED = OllamaClient.chat_structured  # 匯入時抓：conftest 的 autouse 之後會換成「連不上」，重問的測試要真的
 PRODUCTION_TIMEOUT = 120  # Config.ollama_timeout 的預設：鎖外路徑照舊用這個
 FAKE_TURN = companion_agent.CompanionTurn(
     narrative="他點了點頭。", options=["閒聊幾句", "就此告辭"], option_tags=["尋常寒暄", "尋常寒暄"],
@@ -33,17 +34,23 @@ GAMBLE = FreeTextChoice(
 
 
 class ModelSpy:
-    """替換 OllamaClient 的 chat_text／chat_structured：記下每一次呼叫當下 client.timeout，再丟 requests 的逾時（模型太慢）。"""
+    """替換 OllamaClient 的 chat_text／chat_structured：記下每一次呼叫當下 client.timeout 與 client.retry，再丟 requests 的逾時
+    （模型太慢）。ok=True 時改成回一句話（成功），拿來對照「失敗才讓後面的呼叫不送」。"""
 
-    def __init__(self, monkeypatch):
+    def __init__(self, monkeypatch, ok: bool = False):
         self.calls: list[tuple[str, float]] = []
+        self.retries: list[bool] = []
 
         def chat_text(client, messages, **kwargs):
             self.calls.append(("chat_text", client.timeout))
+            self.retries.append(client.retry)
+            if ok:
+                return "山風捲過旌旗。"
             raise requests.exceptions.ReadTimeout("模型太慢，逾時了")
 
         def chat_structured(client, messages, response_model, **kwargs):
             self.calls.append(("chat_structured", client.timeout))
+            self.retries.append(client.retry)
             raise requests.exceptions.ReadTimeout("模型太慢，逾時了")
 
         monkeypatch.setattr(OllamaClient, "chat_text", chat_text)
@@ -203,10 +210,12 @@ SCENARIOS = {
 @pytest.mark.parametrize("name", SCENARIOS)
 def test_every_model_call_made_in_the_lock_has_a_short_timeout_and_falls_back(slow, spy, name):
     SCENARIOS[name](slow)
-    assert spy.calls, f"{name}：這條路徑沒有叫模型，測的不是鎖內的模型呼叫"
     cap = slow.content.config.in_lock_model_timeout
     assert all(timeout <= cap for timeout in spy.timeouts), spy.calls
-    assert slow.client.timeout == PRODUCTION_TIMEOUT  # 原本那個 client 不動：鎖外的路徑（同一個 Game）照舊用它
+    assert not any(spy.retries), spy.retries  # 鎖內的呼叫都不重問
+    assert slow.client.timeout == PRODUCTION_TIMEOUT and slow.client.retry  # 原本那個 client 不動：鎖外的路徑照舊用它
+    # 第一次逾時之後，同一次行動裡後面的鎖內呼叫都不送（兩個動作的情境，旗子要到下一次拿鎖才歸零）：整條路徑只送一趟
+    assert len(spy.calls) == 1, f"{name}：{spy.calls}"
 
 
 @pytest.mark.parametrize("name", SCENARIOS)
@@ -227,6 +236,7 @@ def test_the_default_cap_is_fifteen_seconds():
 def test_the_quick_client_is_a_short_copy_and_leaves_the_original_alone(slow):
     quick = slow._quick_client()
     assert quick is not slow.client and quick.timeout == slow.content.config.in_lock_model_timeout == 15
+    assert quick.retry is False and slow.client.retry is True  # 鎖內不重問，鎖外照舊
     assert slow.client.timeout == PRODUCTION_TIMEOUT
     assert (quick.base_url, quick.model) == (slow.client.base_url, slow.client.model)  # 其他設定照舊
 
@@ -236,9 +246,12 @@ def test_the_quick_client_is_none_without_a_client(game):
     assert game._quick_client() is None
 
 
-def test_a_client_that_is_already_faster_than_the_cap_is_used_as_it_is(game):
+def test_a_client_that_is_already_faster_than_the_cap_keeps_its_own_timeout(game):
+    """比上限還快的 client（測試內容的 3 秒）：逾時照它自己的，不被拉長到 15 秒；一樣是不重問的複本。"""
     game.client.timeout = 5
-    assert game._quick_client() is game.client
+    quick = game._quick_client()
+    assert quick.timeout == 5 and quick.retry is False and quick is not game.client
+    assert game.client.retry is True
 
 
 def test_the_cap_comes_from_the_config(slow, spy):
@@ -257,3 +270,170 @@ def test_a_fake_client_without_a_timeout_attribute_still_gets_the_cap(game):
     game.client = Fake()
     quick = game._quick_client()
     assert quick is not game.client and quick.timeout == 15 and not hasattr(game.client, "timeout")
+
+
+# ── 硬上限（fix round 1）：不重問、記憶整理／漂移／取名只試一次、一次拿鎖只容忍一次失敗 ──────────────────
+
+
+class FakeResponse:
+    status_code = 200
+
+    def __init__(self, content):
+        self._content = content
+
+    def raise_for_status(self):
+        pass
+
+    def json(self):
+        return {"message": {"content": self._content}}
+
+
+@pytest.fixture
+def posts(monkeypatch):
+    """真的 chat_structured（含重問），HTTP 層換成假的：每送一趟記下它的 timeout，回一段不是 JSON 的字。"""
+    sent: list[float] = []
+
+    def post(url, json=None, timeout=None):
+        sent.append(timeout)
+        return FakeResponse("這不是 JSON")
+
+    monkeypatch.setattr(requests, "post", post)
+    monkeypatch.setattr(OllamaClient, "chat_structured", REAL_CHAT_STRUCTURED)
+    return sent
+
+
+ASK = [{"role": "user", "content": "取個名字"}]
+
+
+def test_an_in_lock_structured_call_with_an_unparsable_reply_makes_exactly_one_post(slow, posts):
+    quick = slow._quick_client()
+    with pytest.raises(ValueError):  # 解析失敗的例外照原樣丟給呼叫端，呼叫端各自走退路
+        quick.chat_structured(ASK, naming.NameReply, required_fields=["name"])
+    assert posts == [slow.content.config.in_lock_model_timeout]
+
+
+def test_an_in_lock_structured_call_that_times_out_makes_exactly_one_post(slow, monkeypatch):
+    sent = []
+
+    def post(url, json=None, timeout=None):
+        sent.append(timeout)
+        raise requests.exceptions.ReadTimeout("模型太慢，逾時了")
+
+    monkeypatch.setattr(requests, "post", post)
+    monkeypatch.setattr(OllamaClient, "chat_structured", REAL_CHAT_STRUCTURED)
+    with pytest.raises(requests.exceptions.ReadTimeout):
+        slow._quick_client().chat_structured(ASK, naming.NameReply, required_fields=["name"])
+    assert sent == [15]
+
+
+def test_the_out_of_lock_client_keeps_its_retry(slow, posts):
+    """鎖外的路徑（對話備料、開爐取名、隨口應對）拿的是 game.client：格式不對照舊重問一趟、用自己的逾時。"""
+    with pytest.raises(ValueError):
+        slow.client.chat_structured(ASK, naming.NameReply, required_fields=["name"])
+    assert posts == [PRODUCTION_TIMEOUT, PRODUCTION_TIMEOUT]
+
+
+class CountingClient:
+    """每次 chat_structured 數一次、丟例外（或回一個不合格的名字）；retry 沒給就是沒有這個欄位（簡單的假物件）。"""
+
+    def __init__(self, retry=None, reply=None):
+        self.calls = 0
+        self.reply = reply
+        if retry is not None:
+            self.retry = retry
+
+    def chat_structured(self, messages, response_model, **kwargs):
+        self.calls += 1
+        if self.reply is not None:
+            return self.reply
+        raise RuntimeError("連不上")
+
+
+@pytest.mark.parametrize(("retry", "attempts"), [(False, 1), (True, companion_agent.MAX_RETRIES), (None, companion_agent.MAX_RETRIES)])
+def test_memory_consolidation_makes_one_attempt_with_the_quick_client(game, retry, attempts):
+    state = game.state
+    state.player.turns_since_consolidation["mate"] = companion_agent.MEMORY_CONSOLIDATION_INTERVAL
+    state.player.dialogue_history["mate"] = [
+        {"role": "user", "content": "你好"}, {"role": "assistant", "content": "他點了點頭。"},
+    ]
+    client = CountingClient(retry)
+    assert companion_agent._maybe_consolidate_memory(client, state, game.content.characters["mate"], "mate") == []
+    assert client.calls == attempts
+    # 失敗的話計數沒歸零，下一次對話再試
+    assert state.player.turns_since_consolidation["mate"] == companion_agent.MEMORY_CONSOLIDATION_INTERVAL
+
+
+@pytest.mark.parametrize(("retry", "attempts"), [(False, 1), (True, companion_agent.MAX_RETRIES), (None, companion_agent.MAX_RETRIES)])
+def test_drift_synthesis_makes_one_attempt_with_the_quick_client(game, retry, attempts):
+    for _ in range(companion_agent.DRIFT_SYNTHESIS_INTERVAL):
+        game.world.record_companion_tag("mate", "尋常寒暄")
+    client = CountingClient(retry)
+    companion_agent._maybe_synthesize_drift(client, game.content.characters["mate"], "mate", game.world)
+    assert client.calls == attempts
+    assert game.world.get_companion_drift_note("mate") == ""  # 沒做成，下次互動再試
+
+
+def test_the_quick_client_gets_one_attempt_through_the_whole_dialogue_path(slow, spy):
+    """跟上面兩個函式層級的測試對照：整條對話路徑（記憶整理、性情漂移各有三次重試的迴圈）用 Game 的短複本只送一趟。"""
+    _a_dialogue_turn_that_consolidates_memory_and_drift(slow)
+    assert spy.calls == [("chat_structured", 15)]
+
+
+@pytest.mark.parametrize(("retry", "attempts"), [(False, 1), (True, naming.NAME_ATTEMPTS), (None, naming.NAME_ATTEMPTS)])
+def test_naming_makes_one_attempt_with_the_quick_client(content, retry, attempts):
+    """模型一直回不合格的名字（只有一個字）：鎖內的複本只問一次就走退路字表，鎖外照舊最多 NAME_ATTEMPTS 次。"""
+    client = CountingClient(retry, reply=naming.NameReply(name="一"))
+    assert naming.propose(client, content, ASK) == (None, "")
+    assert client.calls == attempts
+
+
+def test_the_out_of_lock_naming_budget_keeps_its_attempts(content):
+    """鎖外取名（server.prepare_forge）：複本帶預算，retry 欄位照舊是 True，所以預算夠的話照舊多試幾次。"""
+    inner = OllamaClient(timeout=PRODUCTION_TIMEOUT)
+    calls = []
+
+    def chat_structured(messages, response_model, **kwargs):
+        calls.append(inner.timeout)
+        return naming.NameReply(name="一")
+
+    inner.chat_structured = chat_structured  # copy.copy 會帶著這個實例欄位走
+    assert naming.propose(inner, content, ASK, budget=600) == (None, "")
+    assert len(calls) == naming.NAME_ATTEMPTS
+
+
+def test_a_failed_first_call_makes_later_calls_in_the_same_action_skip_the_model(slow, spy):
+    """疾行重遊：先叫模型補一句點綴，逾時了；同一次行動接著跨過的大事門檻，潤色就不再叫模型（直接用原文），門檻照樣觸發。"""
+    walk_to(slow, "lake")
+    slow.state.world.trends["kou"] = 50
+    msgs = slow.travel("town", "dash")
+    assert spy.calls == [("chat_text", 15)]
+    assert "blocked" in slow.state.world.flags and "【江湖大事】水寇封江！" in msgs
+
+
+def test_without_a_failure_every_in_lock_call_goes_out(game, monkeypatch):
+    """對照：模型回得出來，同一次行動裡兩處都叫（逾時的旗子才是後面不叫的原因，不是「一次行動只准一次」）。"""
+    spy = ModelSpy(monkeypatch, ok=True)
+    game.client.timeout = PRODUCTION_TIMEOUT
+    walk_to(game, "lake")
+    game.state.world.trends["kou"] = 50
+    msgs = game.travel("town", "dash")
+    assert [kind for kind, _ in spy.calls] == ["chat_text", "chat_text"]  # 重遊的點綴句＋大事潤色
+    assert any("山風捲過旌旗。" in m for m in msgs)
+
+
+def test_a_new_lock_hold_gets_a_fresh_budget(slow, spy):
+    quick = slow._quick_client()
+    with pytest.raises(requests.exceptions.ReadTimeout):
+        quick.chat_text([])
+    assert slow._quick_client() is None  # 這次拿鎖：後面都不叫
+    with pytest.raises(RuntimeError):  # 手上已經拿著的複本也一樣不送（_arrive 與 continue_dialogue 一路拿著同一個）
+        quick.chat_text([])
+    assert len(spy.calls) == 1
+    slow.reset_model_budget()  # server._locked 每次拿到鎖先做這件事
+    assert slow._quick_client() is not None
+
+
+def test_a_missing_client_stays_missing_after_a_reset(game):
+    game.client = None
+    game.reset_model_budget()
+    assert game._quick_client() is None

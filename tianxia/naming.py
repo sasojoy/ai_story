@@ -97,7 +97,10 @@ def propose(
         return None, ""
     left = budget
     own = getattr(client, "timeout", None)
-    for _ in range(NAME_ATTEMPTS):
+    # 行動鎖內的複本（retry 是 False，Game._quick_client）只試一次：鎖內任何一步模型呼叫最多佔住鎖 in_lock_model_timeout 秒，
+    # 取壞了就直接走退路字表；鎖外的取名（有預算）照舊最多 NAME_ATTEMPTS 次、每次最多兩趟
+    attempts = 1 if getattr(client, "retry", True) is False else NAME_ATTEMPTS
+    for _ in range(attempts):
         caller = client
         if left is not None:
             per_post = min(float(own) if isinstance(own, (int, float)) else left, left / POSTS_PER_CALL)

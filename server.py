@@ -157,6 +157,7 @@ def _locked(game: Game):
     GAMES 裡的 Game 只是這一個動作的工作副本。FastAPI 的同步端點跑在執行緒池裡，同一個角色的兩個請求
     可能同時進來；行動鎖是 BEGIN IMMEDIATE，不同執行緒就一個一個來，重讀與動作不會交錯。"""
     with game.world.action_lock():
+        game.reset_model_budget()  # 新的一次拿鎖：鎖內的模型呼叫重新有額度（一次拿鎖期間只容忍一次失敗，見 Game._quick_client）
         _reload(game)
         game.set_move_mode(MOVE_MODE.get())  # 這次請求選的走法（見 MOVE_MODE）：之後的選單與 choose() 都照它
         yield

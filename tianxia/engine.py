@@ -27,7 +27,7 @@ from .models import (
     EXPLORE_BRANCHES, FREE_TEXT_MAX, BattleDef, Choice, Content, Effect, Event, ExploreBranch, Location, RoadKind, Squad,
     Threshold, TimetableEvent, TravelMode, WorldEvent,
 )
-from .ollama_client import OllamaClient, with_timeout_cap
+from .ollama_client import ModelBudget, OllamaClient, quick_client
 from .rules import (
     GEJU, HUANGJIN, add_rumor, apply_effect, audience_bar, can_hear, can_meet, change_trend, check_who, current_day, display_name, fill_marks, free_text_rate,
     can_draw_side_change, chaos_fronts, chaos_note, front_chip, front_ids, front_of, front_text, humanize, in_chaos,
@@ -100,6 +100,7 @@ class Game:
             keep_alive=cfg.ollama_keep_alive, repeat_penalty=cfg.ollama_repeat_penalty,
             presence_penalty=cfg.ollama_presence_penalty, frequency_penalty=cfg.ollama_frequency_penalty,
         )  # companion_agent.py 用；連不上時那輪對話取消，這裡不用先健檢
+        self._model_budget = ModelBudget()  # 鎖內的模型呼叫這一次拿鎖期間還有沒有額度（見 _quick_client）
         self._draft: Draft | None = None  # choose() 進行中那次行動的江湖紀錄草稿
         self.last_gamble: FreeTextOutcome | None = None  # 上一次 answer_event 擲完骰的結果（server.py 拿去潤色）
         # 主畫面「走法」切換選的走法（步行／趕路／疾行），選單上的「前往」照它出發（見 _move_option）。只是畫面狀態：
@@ -112,14 +113,21 @@ class Game:
         self._drop_stale_references()
 
     def _quick_client(self) -> OllamaClient | None:
-        """行動鎖裡叫模型用的 client：self.client 的複本，HTTP 逾時最多 Config.in_lock_model_timeout 秒（預設 15）。
-        行動鎖拿著的時候全服玩家與假人都在等，模型慢或冷的時候照 ollama_timeout（120 秒）會凍住整台伺服器。
-        所有在鎖內叫模型的地方都用它（大事與決戰回合的潤色、重複事件與重遊的點綴句、決戰自訂行動的評分、鎖內才備料的對話
-        與記憶整理、鎖內才取名的開爐）；逾時或失敗各處本來就退回固定的文字。引擎不讀時鐘，上限靠 HTTP 的逾時（見
-        ollama_client.with_timeout_cap）。self.client 本身不動，鎖外的路徑（server.py 的對話備料、開爐取名、隨口應對的評分
-        與潤色，都拿 game.client）照舊用它自己的逾時。沒有 client（伺服器假人，bot_runner 把 game.client 設成 None）
-        就回 None，這些地方一個模型都不會叫。"""
-        return with_timeout_cap(self.client, self.content.config.in_lock_model_timeout)
+        """行動鎖裡叫模型用的 client：self.client 的複本，HTTP 逾時最多 Config.in_lock_model_timeout 秒（預設 15）、不重問
+        （retry=False），所以鎖內任何一步模型呼叫最多佔住鎖那麼久。行動鎖拿著的時候全服玩家與假人都在等，模型慢或冷的時候
+        照 ollama_timeout（120 秒）會凍住整台伺服器。所有在鎖內叫模型的地方都用它（大事與決戰回合的潤色、重複事件與重遊的
+        點綴句、決戰自訂行動的評分、鎖內才備料的對話與記憶整理、鎖內才取名的開爐）；逾時或失敗各處本來就退回固定的文字。
+        引擎不讀時鐘，上限靠 HTTP 的逾時（見 ollama_client.quick_client）。
+        一次拿鎖期間只容忍一次失敗：有一次鎖內的模型呼叫逾時或失敗之後（_model_budget.gave_up），這裡回 None，同一次行動裡
+        後面的鎖內呼叫都不叫模型、直接用固定文字。旗子由 server._locked 每次拿到鎖先歸零（reset_model_budget）；直接用 Game 的
+        測試與腳本（沒有鎖）自己決定什麼時候歸零。self.client 本身不動，鎖外的路徑（server.py 的對話備料、開爐取名、隨口應對的
+        評分與潤色，都拿 game.client）照舊用它自己的逾時與重問。沒有 client（伺服器假人，bot_runner 把 game.client 設成
+        None）就回 None，這些地方一個模型都不會叫。"""
+        return quick_client(self.client, self.content.config.in_lock_model_timeout, self._model_budget)
+
+    def reset_model_budget(self) -> None:
+        """新的一次拿鎖：鎖內的模型呼叫重新有額度（見 _quick_client）。server._locked 每次拿到行動鎖先呼叫。"""
+        self._model_budget.gave_up = False
 
     @classmethod
     def new(

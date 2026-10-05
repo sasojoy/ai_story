@@ -21,6 +21,8 @@ from tianxia.ollama_client import OllamaClient
 from tianxia.sqlite_world import SqliteWorldStore, open_world
 from tianxia.state import BotProfile
 
+REAL_CHAT_STRUCTURED = OllamaClient.chat_structured  # 匯入時抓：conftest 的 autouse 之後會換成「連不上」，重問的測試要真的
+
 
 @pytest.fixture(autouse=True)
 def save_dir(tmp_path):
@@ -931,6 +933,60 @@ def test_the_forge_endpoint_never_asks_the_model_while_holding_the_lock(client):
     # 預算 60 秒（扣掉 A 段等鎖的時間）；chat_structured 一次最多送兩趟，所以一趟最多一半。原本那個 client 不動
     assert len(asked) == 1 and 25 < asked[0] <= server.CONTENT.config.naming_budget_seconds / 2
     assert game.client.timeout == server.CONTENT.config.ollama_timeout
+
+
+def test_the_forge_naming_outside_the_lock_keeps_its_retry_and_budget(monkeypatch):
+    """鎖內的模型呼叫不重問、只試一次（Config.in_lock_model_timeout），鎖外的取名不受影響：真的 chat_structured 格式不對
+    照舊重問一趟，一趟最多是預算（60 秒）的一半，每一趟都用複本、原本那個 client 不動。"""
+    game = _forger()
+    sent = []
+
+    def post(url, json=None, timeout=None):
+        sent.append(timeout)
+
+        class Reply:
+            status_code = 200
+
+            def raise_for_status(self):
+                pass
+
+            def json(self):
+                return {"message": {"content": "這不是 JSON"}}
+
+        return Reply()
+
+    monkeypatch.setattr("requests.post", post)
+    monkeypatch.setattr(OllamaClient, "chat_structured", REAL_CHAT_STRUCTURED)
+    assert server.prepare_forge(game, "jichu_quanjiao", ["feng"]) == server.NO_NAME
+    assert len(sent) == 2 and all(25 < t <= server.CONTENT.config.naming_budget_seconds / 2 for t in sent)  # 第一趟＋重問
+    assert game.client.timeout == server.CONTENT.config.ollama_timeout and game.client.retry is True
+
+
+def test_each_lock_hold_gets_a_fresh_model_budget(game, monkeypatch):
+    """一次拿鎖期間鎖內的模型呼叫只容忍一次失敗（之後都不叫模型）；server._locked 每次拿到行動鎖先歸零，下一個請求重新有額度。"""
+    sent = []
+
+    def chat_text(self, messages, **kwargs):
+        sent.append(self.timeout)
+        raise ConnectionError("模型太慢")
+
+    monkeypatch.setattr(OllamaClient, "chat_text", chat_text)
+
+    def first(g):
+        quick = g._quick_client()
+        assert quick is not None and quick.timeout == server.CONTENT.config.in_lock_model_timeout
+        with pytest.raises(ConnectionError):
+            quick.chat_text([])
+        assert g._quick_client() is None  # 同一次拿鎖：後面的鎖內呼叫都不叫模型
+
+    def second(g):
+        assert g._quick_client() is not None  # 新的一次拿鎖：重新有額度
+
+    server.act(game, first)
+    server.act(game, second)
+    server.look(game, second)  # 只讀的畫面（look）也是一次拿鎖，一樣先歸零
+    server.act(game, first)
+    assert len(sent) == 2
 
 
 def test_when_the_first_trip_saw_no_need_for_the_model_the_lock_never_asks_it(monkeypatch):
