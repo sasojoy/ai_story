@@ -242,7 +242,8 @@ details.fold.bulletin > .fold-body { border-color: var(--gold); max-height: 50vh
 .bulletin-item p:last-child { margin-bottom: 0; }
 .scene { font-size: 15.5px; line-height: 1.75; }
 .scene > p:first-child { font: 600 16px var(--serif); margin-bottom: 2px; }
-.card.scene.road { padding: 8px 12px; font-size: 14px; line-height: 1.55; } /* 在路上：整段話小一號，路上的五個選項才全在第一屏（FB-055） */
+.card.scene.road { padding: 8px 12px; font-size: 14px; line-height: 1.55; cursor: pointer; }
+.card.scene.road.clamp > p:not(:first-child) { display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; } /* 在路上：整段話小一號，路上的五個選項才全在第一屏（FB-055） */
 .scene h2, .scene h3 { font-size: 18px; }
 .options { display: grid; gap: 8px; margin-bottom: 12px; }
 .options .btn { justify-content: flex-start; text-align: left; }

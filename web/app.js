@@ -57,6 +57,7 @@
     nowOpen: null, // 江湖頁「剛剛」展開的那一則（記內容本身）；換成新的一則就收回（A4）
     boardOpen: null, // 江湖頁公告卡展開著的那一週（週次）；收起或換週就不再對得上（FB-039）
     ordersShut: null, // 江湖頁「本週軍令」收起來的那一週；換週就重新展開（計畫 T6）
+    sceneOpen: false, // 在路上時場景那段說明展開著嗎（預設只露兩行，FB-055）；下了路就清掉
     guideRoad: null, // 在路上時說書人的框展開著的那一句（內容本身）；路上預設收成一行，下了路就清掉（FB-055）
     busy: false,
     menxia: null,
@@ -532,7 +533,12 @@
           <span class="k">${o.id.startsWith("move:") ? "→" : o.id.startsWith("road:back") ? "↩" : i + 1}</span><span>${esc(o.label)}</span>
         </button>`).join("")}${modesLast ? modes : ""}
       </div>`;
-    const scene = `<section class="card scene${m.on_road ? " road" : ""}">${m.scene}</section>`;
+    // 在路上，那段固定的說明只露兩行、點了看全文（FB-055）：剛按完路上小事時「剛剛」的結果卡會長高，狀態列又有提示的話，
+    // 最後一排小事會掉到分頁列底下；說明的內容路上的選項與捷徑本來就寫著。展開記在 S.sceneOpen，下了路就清掉
+    if (!m.on_road) S.sceneOpen = false;
+    const scene = m.on_road
+      ? `<section class="card scene road${S.sceneOpen ? "" : " clamp"}" data-act="scene-more" role="button" tabindex="0" aria-expanded="${!!S.sceneOpen}">${m.scene}</section>`
+      : `<section class="card scene">${m.scene}</section>`;
     const tail = `<div class="mini" data-act="tab" data-tab="map" role="button" aria-label="展開輿圖">${m.minimap}</div>
       <button class="linkish" data-act="news" data-news="journal">看江湖紀錄 ›</button>`;
     // 第一季把 beta 的主線關掉、其他也都沒有東西時，quest 是空的：這一塊不畫，由本週大事卡與倒數撐著（計畫 T8）
@@ -1269,6 +1275,7 @@
         case "guide-shut": setGuideShut(S.main.guide && S.main.guide.text); S.guideRoad = null; renderPage(); break;
         case "guide-open": setGuideShut(null); S.guideRoad = S.main.guide && S.main.guide.text; renderPage(); break;
         case "guide-more": S.guideFull = S.guideFull === (S.main.guide && S.main.guide.text) ? null : S.main.guide && S.main.guide.text; renderPage(); break;
+        case "scene-more": S.sceneOpen = !S.sceneOpen; renderPage(); break;
         case "guide-ack": await doMain("guide_ack"); break;
         case "do": S.sheet = false; await doMain(el.dataset.op); break;
         case "admin": {
