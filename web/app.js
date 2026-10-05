@@ -626,15 +626,16 @@
     const m = S.map;
     if (!m) return '<p class="muted">展開輿圖…</p>';
     // 步行／趕路／疾行緊接在地圖下面、不黏在底部（FB-048）：黏著時會蓋住地點詳情「局勢」那一行以下。按了的結果寫在它下面那一行
+    // 步行／趕路／疾行緊接在選地點底下、地圖上面：排在地圖下面時落在底部分頁列底下，要捲才按得到（FB-045～052 審查 I2）
     return `
       <div class="card">${m.header}</div>
       <div class="seg">${m.layers.map((l) => `<button class="${m.layer === l.id ? "on" : ""}" data-act="layer" data-layer="${esc(l.id)}">${esc(l.name)}</button>`).join("")}</div>
       <div class="map-tools">
         <select class="input" id="place">${m.places.map((p) => `<option value="${esc(p.id)}" ${p.id === m.selected ? "selected" : ""}>${esc(p.label)}</option>`).join("")}</select>
       </div>
-      <div class="map-wrap" id="map">${m.svg}${MAP_CTL}</div>
       ${m.travel ? `<div class="travel-row">${m.travel.map((t) =>
         `<button class="btn ${t.mode === "walk" ? "primary" : ""}" data-act="travel" data-mode="${esc(t.mode)}" ${t.enabled ? "" : "disabled"}>${esc(t.label)}</button>`).join("")}</div>` : ""}
+      <div class="map-wrap" id="map">${m.svg}${MAP_CTL}</div>
       <div class="msg">${S.mapNotice || ""}</div>
       <div class="card">${m.detail}</div>`;
   }

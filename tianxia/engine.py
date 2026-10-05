@@ -167,6 +167,7 @@ class Game:
         fresh.player.battle_results_seen = old.player.battle_results_seen  # 補送過的決戰不再補一次（FB-027）
         fresh.player.season_number = season_number
         self.state = fresh
+        self.state.world = self.world.get_season()  # 開場那一則記此刻的季時間（FB-052：以前記成新存檔的 0）
         self.state.player.visited.add(self.state.player.location)
         self._write(
             self.content.scenario.name, [self.content.scenario.intro], tag="賽季開始", guide=tutorial_intro(self.content),
@@ -800,6 +801,8 @@ class Game:
         t = c.tutorial
         todo = tutorial_steps(s, c)
         if p.guide_skipped:  # 略過的人不再畫框，換季、第一季多出的步驟也一樣（8.1.4；畫面批次審查 I4）
+            return None
+        if self._preparing() or s.world.ended:  # 籌備中、休季什麼都不能做，不叫人去探索（FB-045～052 審查 I1）
             return None
         if p.tutorial_step < len(todo):
             return {"speaker": t.speaker, "text": todo[p.tutorial_step].text, "done": list(p.guide_done), "end": False}

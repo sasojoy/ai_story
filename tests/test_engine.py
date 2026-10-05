@@ -4811,3 +4811,16 @@ def test_a_character_made_mid_season_gets_one_season_start_entry(content, world)
     newcomer = Game.new(content, "新來的", rng=random.Random(2), world=world)
     assert [e.tag for e in newcomer.state.journal].count("賽季開始") == 1
     assert newcomer.state.player.season_number == world.get_season_number() == 2
+
+
+def test_the_season_start_entry_of_a_mid_season_character_has_the_season_time(content, world):
+    """FB-052（FB-045～052 審查 m1）：第二季過了一陣子才建的角色，留下的那一則「賽季開始」記的是建角色那一刻的季時間，
+    不是 0（「剛剛」的時間才對）。"""
+    content.config.admins = ["管理者"]
+    admin = Game.new(content, "管理者", rng=random.Random(1), world=world)
+    admin.admin_end_season(now=100.0)
+    admin.admin_next_season(now=200.0)
+    admin.advance(3 * 86400)
+    newcomer = Game.new(content, "新來的", rng=random.Random(2), world=world)
+    [entry] = [e for e in newcomer.state.journal if e.tag == "賽季開始"]
+    assert entry.time == world.get_season().time > 0

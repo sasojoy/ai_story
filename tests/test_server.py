@@ -1014,9 +1014,12 @@ def test_preparing_has_no_now_card_and_no_countdown(tmp_path, monkeypatch):
     view = server.main_view(fresh)
     assert view["now"] == "" and "賽季開始" in view["latest"]
     assert view["status"]["calendar"] and view["status"]["next_event"] is None
+    assert view["guide"] is None  # 說書人的對話框也不叫人去探索（FB-045～052 審查 I1）
     server.act(fresh, lambda g: server.ADMIN_ACTIONS["open_season"](g, {}))
     view = server.main_view(fresh)
-    assert view["now"] and view["status"]["next_event"] is not None
+    assert view["now"] and view["status"]["next_event"] is not None and view["guide"] is not None
+    server.act(fresh, lambda g: server.ADMIN_ACTIONS["end_season"](g, {}))
+    assert server.main_view(fresh)["guide"] is None  # 休季也一樣
 
 
 def test_only_admins_can_reset_a_password(client, monkeypatch):
