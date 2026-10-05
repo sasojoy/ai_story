@@ -6156,3 +6156,196 @@ def test_the_status_bar_and_the_card_show_the_same_hp_at_root_6(game):
     data = game.status_data()
     assert (data["hp"], data["hp_max"]) == (101, 330)
     assert f"氣血 {data['hp']}/{data['hp_max']}" in game.member_card("player")
+
+
+# ── 武學的功效（武學與成長設計 13.2、13.4；計畫六 Task 3）：獎勵、打完回氣血、遊歷的體力 ──────────────
+
+
+def _wear_trait_art(game, name, attribute, trait_list, special=None, kind="武學", quality="下品"):
+    """合成武學直接登記到全服、穿到本人身上（品質照 quality）。"""
+    art = generate_from_name(name, kind, name, attribute=attribute).model_copy(
+        update={"origin": "fused", "traits": trait_list, "special": special},
+    )
+    game.world.claim_skill_name(art)
+    slot = "neigong_id" if art.kind == "內功" else "wugong_id"
+    setattr(game.state.player.member, slot, art.id)
+    game.state.player.art_quality[art.id] = quality
+    return art
+
+
+def _record_of(game, tier):
+    squad = game.content.squads["thug"].model_copy(update={"reward_xinde": 10, "exp": 20})
+    result = encounter.EncounterResult(tier=tier, margin=10, our_power=50, difficulty=5)
+    return squad, battlelog.new_record(game.state, game.content, game.world, squad, result, "train")
+
+
+def test_rewards_grow_with_momentum_and_insight(game):
+    """乘勝（陽）：打贏多拿心得與經驗；悟招：再多 5 心得（13.2、13.4）。"""
+    art = generate_from_name("乘風拳", "武學", "乘風拳", attribute="陽").model_copy(
+        update={"origin": "fused", "traits": ["陽", "陽", "陽"], "special": "wuzhao"},
+    )
+    game.world.claim_skill_name(art)
+    game.state.player.member.wugong_id = art.id
+    game.state.player.art_quality[art.id] = "下品"
+    squad = game.content.squads["thug"].model_copy(update={"reward_xinde": 10, "exp": 20})
+    record = battlelog.new_record(game.state, game.content, game.world, squad,
+                                  encounter.EncounterResult(tier="大勝", margin=10, our_power=50, difficulty=5), "train")
+    before = game.state.player.stats.get("xinde", 0)
+    game._battle_rewards(squad, record)
+    assert game.state.player.stats["xinde"] - before == 13 + 5  # 10 × 1.3 ＋ 悟招 5
+    assert record.exp == 26
+
+
+def test_rewards_are_untouched_without_momentum_or_insight(game):
+    """沒有乘勝、悟招的人（這裡什麼武學都沒有）：心得、經驗、戰報跟以前一模一樣。"""
+    game.state.player.member.wugong_id = game.state.player.member.neigong_id = None
+    squad, record = _record_of(game, "大勝")
+    before = game.state.player.stats.get("xinde", 0)
+    msgs = game._battle_rewards(squad, record)
+    assert game.state.player.stats["xinde"] - before == 10 and record.xinde == 10 and record.exp == 20
+    assert "心得 +10" in msgs
+
+
+def test_the_insight_special_pays_even_when_the_squad_gives_no_xinde(game):
+    """悟招是「打贏多拿 5 心得」，不看對手原本給不給：沒有心得獎勵的隊伍也拿得到這 5 點。"""
+    _wear_trait_art(game, "悟道拳", "剛", ["剛"], special="wuzhao")
+    squad = game.content.squads["thug"].model_copy(update={"reward_xinde": 0, "exp": 0})
+    record = battlelog.new_record(
+        game.state, game.content, game.world, squad,
+        encounter.EncounterResult(tier="險勝", margin=10, our_power=50, difficulty=5), "train",
+    )
+    before = game.state.player.stats.get("xinde", 0)
+    msgs = game._battle_rewards(squad, record)
+    assert game.state.player.stats["xinde"] - before == 5 and record.xinde == 5 and "心得 +5" in msgs
+
+
+def test_momentum_stops_at_its_cap(game):
+    """乘勝疊到上限（50%）：兩門絕學、六格都是陽也只多五成。"""
+    _wear_trait_art(game, "全陽拳", "陽", ["陽", "陽", "陽"], quality="絕學")
+    _wear_trait_art(game, "全陽功", "陽", ["陽", "陽", "陽"], kind="內功", quality="絕學")
+    squad, record = _record_of(game, "大勝")
+    game._battle_rewards(squad, record)
+    assert record.xinde == 15 and record.exp == 30
+
+
+def test_light_body_saves_stamina_on_a_journey(game):
+    art = generate_from_name("輕身腿", "武學", "輕身腿", attribute="快").model_copy(
+        update={"origin": "fused", "special": "qingshen"},
+    )
+    game.world.claim_skill_name(art)
+    base = game.content.config.action_cost["train"]
+    assert game._action_costs()["train"] == base
+    game.state.player.member.wugong_id = art.id
+    assert game._action_costs()["train"] == base - 2
+
+
+def test_light_body_only_touches_the_journey_cost(game):
+    base = dict(game.content.config.action_cost)
+    _wear_trait_art(game, "輕身腿", "快", ["快"], special="qingshen")
+    costs = game._action_costs()
+    assert costs["explore"] == base["explore"] and costs["socialize"] == base["socialize"]
+    assert game.content.config.action_cost == base  # 設定本身沒被改
+
+
+def test_light_body_never_makes_a_journey_free_below_zero(game):
+    game.content.config.action_cost["train"] = 1
+    _wear_trait_art(game, "輕身腿", "快", ["快"], special="qingshen")
+    assert game._action_costs()["train"] == 0
+
+
+def test_a_journey_costs_less_stamina_with_light_body_and_the_button_says_so(game):
+    """按鈕的體力、真的扣的體力都是少花後的數字（options 與 _act 讀同一個 _action_costs）。"""
+    walk_to(game, "lake")
+    base = game.content.config.action_cost["train"]
+    _wear_trait_art(game, "輕身腿", "快", ["快"], special="qingshen")
+    option = next(o for o in game.options() if o.id == "act:train")
+    assert f"（體力 {base - 2}" in option.label
+    before = game.state.player.stamina
+    game.rng = FixedRandom(0.99)
+    game.choose("act:train")
+    assert before - game.state.player.stamina == base - 2
+
+
+def test_a_tired_player_can_afford_a_journey_only_because_of_light_body(game):
+    walk_to(game, "lake")
+    base = game.content.config.action_cost["train"]
+    game.state.player.stamina = base - 1
+    assert not next(o for o in game.options() if o.id == "act:train").enabled
+    _wear_trait_art(game, "輕身腿", "快", ["快"], special="qingshen")
+    assert next(o for o in game.options() if o.id == "act:train").enabled
+
+
+def test_absorb_heals_after_a_win_but_not_after_a_loss(game):
+    """吸取（陰）：打贏回氣血上限的一點（下品三層 6%）；落敗、僵持不回。回的量接在扣氣血後面，一場寫兩行。"""
+    _wear_trait_art(game, "吸取掌", "陰", ["陰", "陰", "陰"])
+    plain = game.state.model_copy(deep=True)
+    team_toll = team.take_encounter_toll(plain, game.content, game.world, "大勝")
+    toll, hp_lost = game._take_toll("大勝")
+    assert toll[0] == team_toll[0] and toll[-1].startswith("氣血 +") and hp_lost == int(team_toll[0].removeprefix("氣血 -"))
+    for tier in ("僵持", "落敗"):
+        game.state.player.member.neili = None
+        toll, _ = game._take_toll(tier)
+        assert not any(line.startswith("氣血 +") for line in toll), tier
+
+
+def test_spring_heals_after_any_result(game):
+    """回春（特別）：不論勝負，打完回氣血上限的 3%。"""
+    _wear_trait_art(game, "回春拳", "剛", ["剛"], special="huichun")
+    for tier in ("大勝", "險勝", "僵持", "落敗"):
+        game.state.player.member.neili = None
+        toll, _ = game._take_toll(tier)
+        assert any(line.startswith("氣血 +") for line in toll), tier
+
+
+def test_the_heal_is_not_part_of_the_hp_the_rounds_show(game):
+    """回合裡寫的「你氣血 -N」加起來等於這一場扣掉的（回血是之後的事）：戰報的「氣血 -N」、回合、真的扣的三個數一樣，
+    另外戰報上有一行「氣血 +M」。"""
+    walk_to(game, "lake")
+    _wear_trait_art(game, "回春拳", "剛", ["剛"], special="huichun")
+    before = _player_hp(game)
+    with _forced("落敗"):
+        game.choose("act:train")
+    record = game.state.battles[0]
+    told, shown = _told_and_shown(record)
+    assert told > 0 and shown == told
+    assert any(c.startswith("氣血 +") for c in record.changes)
+    assert round(before - _player_hp(game)) < told  # 淨損失比扣的少：回了血
+
+
+@pytest.mark.parametrize("tier", ["大勝", "僵持", "落敗"])
+@pytest.mark.parametrize("trait_list, special", [
+    (["柔", "柔", "柔"], None),  # 化勁：少扣
+    (["剛"], "budong"),  # 不動：不受內傷
+    (["陰", "陰", "陰"], None),  # 吸取：打贏回血
+    (["剛"], "huichun"),  # 回春：不論勝負回血
+])
+def test_the_rounds_still_add_up_to_the_toll_with_hp_traits(game, trait_list, special, tier):
+    """計畫六對氣血的四個功效（化勁、不動、吸取、回春）都不動回合：回合裡每一句「你氣血 -N」加起來，等於戰報上扣氣血那一筆
+    （回血是回合之後的事，另外一行「氣血 +N」）。"""
+    walk_to(game, "lake")
+    _wear_trait_art(game, "護體拳", trait_list[0], trait_list, special=special)
+    with _forced(tier):
+        game.choose("act:train")
+    record = game.state.battles[0]
+    told, shown = _told_and_shown(record)
+    assert told > 0 and shown == told, (told, shown, record.changes, record.rounds)
+
+
+def test_a_heal_that_reaches_the_ceiling_leaves_the_player_full(game):
+    """吸取回到天花板（上限 − 內傷）就是滿血：之後升級、根骨變高，滿的人照舊是滿的（member_neili 的約定，N10）。"""
+    _wear_trait_art(game, "吸取掌", "陰", ["陰", "陰", "陰"], quality="絕學")
+    game.state.player.member.neili = None
+    game._take_toll("大勝")  # 大勝只扣 5%，絕學三層吸取 10% 回得滿
+    assert game.state.player.member.neili is None
+
+
+def test_a_story_battle_takes_no_blood_so_nothing_is_healed(game):
+    """劇情戰不扣氣血（計畫三 G5）：吸取與回春也不動，戰報上沒有「氣血 +N」。"""
+    _wear_trait_art(game, "回春拳", "剛", ["剛"], special="huichun")
+    walk_to(game, "lake")
+    game.choose("act:socialize")
+    assert game.state.pending_event == "duel"
+    game.state.player.member.neili = 100.0  # 走路會自然回氣血，所以走完才設
+    game.choose("choice:0")
+    assert game.state.player.member.neili == 100.0
+    assert not any(c.startswith("氣血") for c in game.state.battles[0].changes)

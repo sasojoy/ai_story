@@ -16,7 +16,7 @@ from pydantic import BaseModel
 from . import (
     atlas, battle_instance, battlelog, calendar, companion_agent, cultivation, encounter, event_llm, fight_llm, figures,
     flavor, foreshadow, front_lines, fusion, insights, journal, library, materials, naming, orders, push, ranks, roster,
-    rounds, skillview, team, timetable,
+    rounds, skillview, team, timetable, traits,
 )
 from . import events as event_rules  # note_round 走模組屬性（測試要能換掉它，確認只有 _present 會叫）
 from .events import (
@@ -438,7 +438,7 @@ class Game:
         if s.player.resting_since is not None:
             return [self._stand_option()]
         loc = c.locations[s.player.location]
-        cost = c.config.action_cost
+        cost = self._action_costs()
         opts = [self._cost_option("act:explore", "探索", cost["explore"])]
         if self._train_squad_ids(loc):
             # 遊歷：這個地點的敵人，必定開打（見 _train）。sanguo-companions 合併時這個行動被
@@ -1013,8 +1013,17 @@ class Game:
 
     # ── 行動 ──────────────────────────────────────────────
 
+    def _action_costs(self) -> dict[str, int]:
+        """各行動花的體力：照 Config.action_cost，身上帶【輕身】時遊歷（含挑戰本人）少花一點（武學與成長設計 13.4）。
+        按鈕上寫的與真的扣的都讀這一個。"""
+        costs = dict(self.content.config.action_cost)
+        light = traits.loadout(self.state, self.content, self.world).specials.get("train_stamina")
+        if light is not None:
+            costs["train"] = max(0, costs["train"] - int(light.amount))
+        return costs
+
     def _act(self, what: str, prepared: companion_agent.PreparedTurn | None = None) -> list[str]:
-        cost = self.content.config.action_cost
+        cost = self._action_costs()
         if what == "break":
             return self._finish_seclusion(self.state.world.time)
         if what == "stand":
@@ -2242,10 +2251,19 @@ class Game:
     def _take_toll(self, tier: str, *, wild: bool = False) -> tuple[list[str], int]:
         """照結果扣這一場的氣血（team.take_encounter_toll），回傳（訊息, 本人真的掉了多少氣血）。掉的量緊貼著扣氣血的
         前後量（計畫三 G4）：打贏升級會讓上限變高，開打前量的話回合裡寫的跟戰報「氣血 -N」對不上。四捨五入跟訊息的
-        「:.0f」是同一個數（兩者都對同一個浮點數做銀行家捨入）。"""
+        「:.0f」是同一個數（兩者都對同一個浮點數做銀行家捨入）。
+        扣完之後本人身上的吸取（打贏）與回春（不論勝負）才回氣血（武學與成長設計 13.2、13.4）：回的那一行「氣血 +N」接在
+        訊息後面、一起寫進戰報；掉的量在回血之前量，回合裡寫的「你氣血 -N」照舊加得起來。劇情戰不走這裡（不扣氣血，也就不回）。"""
         before = self._player_hp()
         toll = team.take_encounter_toll(self.state, self.content, self.world, tier, wild=wild)
-        return toll, round(before - self._player_hp())
+        hp_lost = round(before - self._player_hp())  # 回血之前量：回合裡寫的扣血不受吸取與回春影響
+        lo = traits.loadout(self.state, self.content, self.world)
+        if tier in team.WIN_TIERS and traits.has(lo, "win_heal"):  # 吸取（13.2）
+            toll += team.heal_fraction(self.state, self.content, self.world, traits.amount(self.content, lo, "win_heal"))
+        heal_after = lo.specials.get("heal_after")  # 回春（13.4）：不論勝負
+        if heal_after is not None:
+            toll += team.heal_fraction(self.state, self.content, self.world, heal_after.amount)
+        return toll, hp_lost
 
     def _play_rounds(self, record, squad: Squad, tier: str, hp_lost: int | None) -> None:
         """照結果演出回合寫進戰報（武學與成長設計 8.2）。hp_lost 是這一場本人真的扣掉的氣血（_take_toll），回合裡寫的
@@ -2284,7 +2302,7 @@ class Game:
         p = s.player
         if p.faction is None or not season_one(c, s.world):
             return []
-        cost = c.config.action_cost["train"]
+        cost = self._action_costs()["train"]
         opts = []
         for fid in figures.present_at(s, c, p.location):
             fig = c.figures[fid]
@@ -2314,7 +2332,7 @@ class Game:
         s, c = self.state, self.content
         fig = c.figures[fid]
         squad = figures.squad_of(s, c, fid)
-        s.player.stamina -= c.config.action_cost["train"]
+        s.player.stamina -= self._action_costs()["train"]
         judged = self._judged(squad)  # 挑戰本人一律是大場面：有鎖外的判讀就用（武學與成長設計 8.3）
         result = self._fight_with(squad, judged, difficulty=squad.difficulty)
         record = battlelog.new_record(s, c, self.world, squad, result, "event", event=f"挑戰{fig.name}")
@@ -2454,17 +2472,22 @@ class Game:
             p.stats["silver"] += squad.reward_silver
             record.silver = squad.reward_silver
             msgs.append(f"銀兩 +{squad.reward_silver}")
-        if squad.reward_xinde:
-            p.stats["xinde"] = p.stats.get("xinde", 0) + squad.reward_xinde
-            record.xinde = squad.reward_xinde
-            msgs.append(f"心得 +{squad.reward_xinde}")
+        lo = traits.loadout(self.state, self.content, self.world)
+        more = 1 + traits.amount(self.content, lo, "win_reward")  # 乘勝（13.2）：心得與經驗一起多拿
+        insight = lo.specials.get("win_xinde")  # 悟招（13.4）：再多固定的心得
+        xinde = round(squad.reward_xinde * more) + (int(insight.amount) if insight is not None else 0)
+        if xinde:
+            p.stats["xinde"] = p.stats.get("xinde", 0) + xinde
+            record.xinde = xinde
+            msgs.append(f"心得 +{xinde}")
         for material_id, count in materials.roll_squad_drops(squad, self.content, self.rng):
             line = materials.grant(self.state, self.content, material_id, count)
             if line:
                 record.materials.append(line.removeprefix(materials.GRANT_PREFIX))
                 msgs.append(line)
-        record.exp = squad.exp
-        levels = team.add_team_exp(self.state, self.content, self.world, squad.exp)  # 每人都拿（FB-002）
+        exp = round(squad.exp * more)  # 經驗本來就是每人拿一樣多（FB-002），乘勝整隊一起乘
+        record.exp = exp
+        levels = team.add_team_exp(self.state, self.content, self.world, exp)  # 每人都拿（FB-002）
         record.notes += levels
         return msgs + levels
 

@@ -6,6 +6,7 @@ from tianxia import encounter
 from tianxia.encounter import (
     Boost,
     EncounterResult,
+    Mods,
     describe_result,
     member_power,
     resolve_encounter,
@@ -187,3 +188,128 @@ def test_a_missed_dodge_roll_leaves_the_loss_alone():
         assert missed == _result("落敗") and not missed.dodged
     hit = encounter.dodge(_result("落敗"), 0.5, FixedRandom(0.49))
     assert (hit.tier, hit.dodged) == ("僵持", True)
+
+
+# ── 武學的功效（武學與成長設計 13.2、13.4；計畫六 Task 3）：Mods 進單次判定 ──────────────
+
+
+class _Luck:
+    """固定的運氣：uniform 依序吐 values（吐完重複最後一個）；記下被叫了幾次。"""
+
+    def __init__(self, *values):
+        self.values, self.calls = list(values), 0
+
+    def uniform(self, low, high):
+        self.calls += 1
+        return self.values[min(self.calls, len(self.values)) - 1]
+
+
+def test_no_mods_rolls_exactly_as_before():
+    """Review Focus 1：沒有功效（mods 是空的）時，結果與亂數用法跟以前一模一樣。"""
+    for seed in range(20):
+        a, b = random.Random(seed), random.Random(seed)
+        assert resolve_encounter(80, 100, a) == resolve_encounter(80, 100, b, mods=Mods())
+        assert a.getstate() == b.getstate()
+
+
+def _resolve_before_traits(our_power, difficulty, rng, shift=0.0):
+    """計畫六之前的單次判定（逐字照抄當時的算法）：拿來證明預設的 Mods 一個浮點數都沒改。"""
+    half = encounter.luck_half(difficulty)
+    luck = rng.uniform(-half, half)
+    margin = our_power - difficulty + luck + shift
+    for tier, threshold in encounter.tier_thresholds(difficulty):
+        if margin >= threshold:
+            return EncounterResult(tier=tier, margin=margin, our_power=our_power, difficulty=difficulty)
+    return EncounterResult(tier=encounter.FALLBACK_TIER, margin=margin, our_power=our_power, difficulty=difficulty)
+
+
+def test_default_mods_are_the_identity_against_the_pre_traits_formula():
+    """預設的 Mods 是恆等：換算過程（難度 × (1 − 0)、運氣 × 1、威力 + 0、門檻 − 0）一個浮點數都不改，
+    跟計畫六之前的算法逐位相同（不只是兩邊都走新程式的自己跟自己比）。"""
+    for difficulty in (0, 5, 37.5, 100, 150, 220):
+        for power in (0, 12.3, 80, 160):
+            for shift in (0.0, 7.5, -12.0):
+                for seed in range(5):
+                    old = _resolve_before_traits(power, difficulty, random.Random(seed), shift=shift)
+                    assert resolve_encounter(power, difficulty, random.Random(seed), shift=shift) == old
+                    assert resolve_encounter(power, difficulty, random.Random(seed), shift=shift, mods=Mods()) == old
+
+
+def test_each_mod_moves_the_result_the_way_the_design_says():
+    """運氣固定為 0：威力 − 難度就是差距。門檻是難度的 50%／15%／−50%。"""
+    assert resolve_encounter(95, 100, _Luck(0)).tier == "僵持"
+    assert resolve_encounter(95, 100, _Luck(0), mods=Mods(difficulty_cut=0.2)).tier == "險勝"  # 破甲：當作 80
+    assert resolve_encounter(140, 100, _Luck(0)).tier == "險勝"
+    assert resolve_encounter(140, 100, _Luck(0), mods=Mods(big_win_cut=0.2)).tier == "大勝"  # 先手：大勝門檻 30
+    assert resolve_encounter(112, 100, _Luck(0)).tier == "僵持"
+    assert resolve_encounter(112, 100, _Luck(0), mods=Mods(power_add=0.05)).tier == "險勝"  # 借力：+5
+
+
+def test_the_first_hand_lowers_only_the_big_win_line():
+    """先手只動大勝的門檻：險勝與僵持的線不變。"""
+    assert resolve_encounter(115, 100, _Luck(0), mods=Mods(big_win_cut=0.2)).tier == "險勝"
+    assert resolve_encounter(90, 100, _Luck(0), mods=Mods(big_win_cut=0.2)).tier == "僵持"
+
+
+def test_double_luck_takes_the_better_roll_and_rolls_twice():
+    rng = _Luck(-20, 20)
+    assert resolve_encounter(100, 100, rng, mods=Mods(double_luck=True)).margin == pytest.approx(20)
+    assert rng.calls == 2
+    rng = _Luck(20, -20)  # 第二次比較差：還是取好的那一次
+    assert resolve_encounter(100, 100, rng, mods=Mods(double_luck=True)).margin == pytest.approx(20)
+
+
+def test_without_double_luck_the_luck_is_rolled_once():
+    rng = _Luck(5)
+    resolve_encounter(100, 100, rng, mods=Mods())
+    assert rng.calls == 1
+
+
+def test_luck_scale_narrows_or_widens_the_swing():
+    seen = []
+
+    class Spy:
+        def uniform(self, low, high):
+            seen.append(high)
+            return 0.0
+
+    resolve_encounter(80, 100, Spy(), mods=Mods(luck_scale=0.4))
+    resolve_encounter(80, 100, Spy(), mods=Mods(luck_scale=1.6))
+    assert seen == [pytest.approx(12.0), pytest.approx(48.0)]  # 難度 100 的運氣半幅 30，×0.4、×1.6
+
+
+def test_a_negative_luck_scale_never_flips_the_swing():
+    """運氣的起伏再怎麼縮也不會變成負的（uniform(-h, h) 的 h 不能是負）。"""
+    seen = []
+
+    class Spy:
+        def uniform(self, low, high):
+            seen.append((low, high))
+            return 0.0
+
+    resolve_encounter(80, 100, Spy(), mods=Mods(luck_scale=-0.5))
+    assert seen == [(0.0, 0.0)]  # -0.0 == 0.0
+
+
+def test_the_cut_difficulty_also_sets_the_luck_and_the_thresholds():
+    """破甲讓對手「當作」弱一點：運氣半幅與門檻都照當作的強度算（難度 100 破甲 20% → 當作 80，運氣半幅 24）。"""
+    seen = []
+
+    class Spy:
+        def uniform(self, low, high):
+            seen.append(high)
+            return 0.0
+
+    result = resolve_encounter(100, 100, Spy(), mods=Mods(difficulty_cut=0.2))
+    assert seen == [pytest.approx(24.0)]
+    assert result.margin == pytest.approx(20.0) and result.difficulty == 100  # 戰報寫的難度還是原來的
+
+
+def test_the_condition_floor_can_be_raised():
+    assert encounter.condition_of(0, 300) == encounter.CONDITION_FLOOR
+    assert encounter.condition_of(0, 300, floor=0.75) == pytest.approx(0.75)
+    assert encounter.condition_of(300, 300, floor=0.75) == 1.0
+
+
+def test_a_result_is_not_guarded_unless_someone_says_so():
+    assert resolve_encounter(40, 100, _Luck(0)).guarded is False
