@@ -16,7 +16,7 @@ from unittest import mock
 
 import pytest
 
-from tianxia import companion_agent, roster
+from tianxia import companion_agent, roster, team
 from tianxia.atlas import region_of
 from tianxia.bot import play_season
 from tianxia.content import load_content
@@ -247,6 +247,22 @@ def test_the_practice_step_waits_for_a_real_practice_not_for_having_an_art(conte
     game.practice("武學")
     assert game.state.player.tutorial_step == index + 1
     assert "✔ 引導完成" in game.state.player.guide_done
+
+
+def test_a_new_character_can_afford_the_first_practices_the_tutorial_asks_for(content):
+    """練成花心得（武學與成長 4.2）：開局 20 點心得，第 1 成升第 2 成只花 1 點，照引導去練一次練得起；
+    心得見底時，訊息直接說差多少，新手才知道要去賺。"""
+    game = Game.new(content, "測試俠客", rng=random.Random(0))
+    member = game.state.player.member
+    start = game.state.player.stats["xinde"]
+    assert start >= team.practice_price(content, 1)
+    msgs = game.practice("武學")
+    assert member.wugong_level == 2 and "心得 -1" in msgs
+    assert game.state.player.stats["xinde"] == start - 1
+    game.state.player.stats["xinde"] = 0
+    msgs = game.practice("武學")
+    assert member.wugong_level == 2
+    assert "要 2 點心得，你只有 0 點" in msgs[0] and "還差 2 點" in msgs[0]
 
 
 # ── 戰鬥難度曲線 ──────────────────────────────────────────

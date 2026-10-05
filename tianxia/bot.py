@@ -4,7 +4,7 @@ sanguo-companions 合併大幅重寫：拿掉抽卡、收徒、多隊派遣—�
 額外處理，roster.attempt_recruit/recruit 已經自動把人加進隊伍（見 roster.py）。大多數
 時候隨機選一個可用的選項（含深度對話的 talk:N，模型叫不動時那輪對話會直接結束，不需要真的連
 Ollama）；只有「結識」一定接受；心得攢夠一定步數就拿去練功（開局就有兩門基礎武學，
-每門各鍛鍊一成，見 spend_xinde）。
+付得起心得才各練一成，見 spend_xinde）。
 """
 from __future__ import annotations
 
@@ -29,14 +29,24 @@ def wants_heal(game: Game) -> bool:
     return 0 < cost <= game.state.player.stats.get("silver", 0)
 
 
+def can_practise(game: Game, kind: str) -> bool:
+    """身上這一門還沒第十成、而且付得起下一成的心得（練成花心得，武學與成長設計 4.2）。"""
+    member = game.state.player.member
+    slot, level_slot = ("neigong_id", "neigong_level") if kind == "內功" else ("wugong_id", "wugong_level")
+    level = getattr(member, level_slot)
+    return (
+        getattr(member, slot) is not None and level < team.MAX_LEVEL
+        and game.state.player.stats.get("xinde", 0) >= team.practice_price(game.content, level)
+    )
+
+
 def spend_xinde(game: Game, rng: random.Random) -> None:
-    """有內傷先療傷；接著身上兩門各練一成（開局就有基礎武學，沒有空欄位要自創了）——
-    不追求最優策略，只求機器人不會把心得放著不用。"""
+    """有內傷先療傷；接著身上兩門各練一成——付得起才練（練成花心得，開局就有基礎武學，沒有空欄位要自創了）。
+    不追求最優策略，只求機器人不會把心得放著不用，也不會一直去撞「心得不足」。"""
     if wants_heal(game):
         game.heal()
-    member = game.state.player.member
-    for kind, slot in (("內功", "neigong_id"), ("武學", "wugong_id")):
-        if getattr(member, slot) is not None:
+    for kind in ("內功", "武學"):
+        if can_practise(game, kind):
             game.practice(kind)
 
 

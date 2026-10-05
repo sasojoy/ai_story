@@ -750,7 +750,7 @@ class Config(_Strict):
     neili_regen_hours: float = 2  # 氣血從零回滿所需時間
     newbie_days: float = 3  # 每季前幾天氣血回復加倍
     seclusion_xinde_per_hour: int = 15
-    xinde_cost_factor: int = 20  # 第 n 成升到 n+1 成需要 factor × n（構想欄位，目前練功免費、沒有任何地方讀它）
+    xinde_cost_factor: int = 20  # 舊構想欄位，沒有任何地方讀它；練成的價錢看 practice_xinde_per_level（武學與成長設計 4.2）
     xinde_hint_threshold: int = 50  # 心得擱到這個量、而且還有功夫沒練滿時，主畫面提示玩家去門下練功
     # ── 探索三選一（探索三選一設計）──
     # 這裡有還能遇上的奇遇（一次性或奇遇事件）時，探索先滾這個機率，中了就是奇遇、不走三選一。

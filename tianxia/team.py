@@ -187,10 +187,16 @@ def switch_art(state: GameState, content: Content, world: WorldStateStore, art_i
     return msgs
 
 
+def practice_price(content: Content, level: int) -> int:
+    """練成的價錢：第 level 成升 level+1 成要幾點心得（武學與成長設計 4.2）。只看第幾成、不看品質：
+    升品時成不變，品質越高越貴的話，玩家會先趁下品把成練滿再修練，價錢就被繞過去。"""
+    return content.config.practice_xinde_per_level * level
+
+
 def practice(
     state: GameState, content: Content, world: WorldStateStore, kind: str, rng: random.Random,
 ) -> list[str]:
-    """鍛鍊：目前已學會的內功或武學加深一成，累積受傷風險（設計文件六.2）。"""
+    """練成：身上這一門加深一成，花心得（設計 4.2），累積受傷風險（設計文件六.2）。"""
     cfg, member = content.config, state.player.member
     slot = "neigong_id" if kind == "內功" else "wugong_id"
     level_slot = slot.replace("_id", "_level")
@@ -198,12 +204,20 @@ def practice(
     if skill_id is None:
         return [f"你還沒學{kind}，沒東西可以練。"]
     level = getattr(member, level_slot)
-    art = resolve_art(skill_id, content, world)
+    art = player_art(state, content, world, skill_id)
     name = art.name if art else skill_id
     if level >= MAX_LEVEL:
         return [f"【{name}】已經練到第十成，練無可練。"]
+    price = practice_price(content, level)
+    xinde = state.player.stats.get("xinde", 0)
+    if xinde < price:
+        return [
+            f"心得不足：【{name}】從第{level}成練到第{level + 1}成要 {price} 點心得，"
+            f"你只有 {xinde} 點，還差 {price - xinde} 點。"
+        ]
+    state.player.stats["xinde"] = xinde - price
     setattr(member, level_slot, level + 1)
-    msgs = [f"【{name}】精進至第{level + 1}成。"]
+    msgs = [f"【{name}】精進至第{level + 1}成。", f"心得 -{price}"]
     if rng.random() < cfg.practice_injury_chance:
         now, _cap = member_neili(content, member)
         member.injury += cfg.practice_injury_amount

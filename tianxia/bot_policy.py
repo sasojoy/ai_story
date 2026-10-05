@@ -9,7 +9,7 @@ from __future__ import annotations
 import random
 
 from . import atlas, orders, rules, server_bots
-from .bot import wants_heal
+from .bot import can_practise, wants_heal
 from .engine import FREE_TEXT_OPTION, Game, Option
 from .models import Content, Effect, FactionDef
 from .state import BotProfile
@@ -35,7 +35,7 @@ DUTY_SCORE = 0.5  # 守勢行動本身（不替軍令記功時）：低於探索
 SUMMONS_SCORE = 50.0
 SUMMONS_MOVE_SCORE = 15.0
 STRIKE_ODDS = CHALLENGE_ODDS + ("五五波",)  # 有打擊軍令點名這位人物時，五五波也去打
-PRACTICE_CHANCE = 0.2  # 每次行動順便鍛鍊一門的機率（練功不花心得，不能每次都練）
+PRACTICE_CHANCE = 0.2  # 每次行動順便練成一門的機率（付得起心得才練，見 look_after；不是每次行動都練）
 
 
 def take_turn(game: Game, profile: BotProfile, rng: random.Random) -> list[str]:
@@ -79,11 +79,11 @@ def take_turn(game: Game, profile: BotProfile, rng: random.Random) -> list[str]:
 
 
 def look_after(game: Game, rng: random.Random) -> None:
-    """照顧動作（不受強度旋鈕影響）：有內傷先療傷；身上的兩門（開局送的基礎武學）偶爾鍛鍊一成。"""
+    """照顧動作（不受強度旋鈕影響）：有內傷先療傷；身上的兩門（開局送的基礎武學）偶爾練成一成，付得起心得才練。"""
     if wants_heal(game):
         game.heal()
-    for kind, slot in (("內功", "neigong_id"), ("武學", "wugong_id")):
-        if getattr(game.state.player.member, slot) is not None and rng.random() < PRACTICE_CHANCE:
+    for kind in ("內功", "武學"):
+        if can_practise(game, kind) and rng.random() < PRACTICE_CHANCE:
             game.practice(kind)
 
 

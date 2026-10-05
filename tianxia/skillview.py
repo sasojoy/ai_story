@@ -12,16 +12,14 @@ from .world_state import WorldStateStore
 
 
 def rules_line(content: Content) -> str:
-    return "每人最多學一門內功、一門武學：開局就送你兩門基礎功夫，鍛鍊它們，或在功法庫改練別的。"
+    return "身上一門內功、一門武學：花心得練成，用意境修練衝品質；武學也能在「煉製」融意境衍生新武學。"
 
 
 def practice_hint(state: GameState, content: Content) -> str | None:
-    """主畫面的練功提示：心得擱到 `xinde_hint_threshold` 以上、而且確實有事可做時才回傳一句話。
+    """主畫面的提示：心得擱到 `xinde_hint_threshold` 以上、而且確實有事可做時才回傳一句話。
 
-    心得的去處有兩個：鍛鍊（免費，已決定維持免費）與**煉製**（真的要花心得，見 craft.py）。
-    實測隨機玩完一整季的心得收入只有 20~96，所以門檻故意訂得低；真正需要這句話的是從來沒
-    進過門下、心得一路擱著而武學還停在第一成的玩家。兩門都練滿、又煉不動時就不再提示，
-    免得變成嘮叨；文字也只列出真正做得到的那幾件事。休季時什麼都不能做，也不提示（FB-047）。
+    心得的去處（武學與成長設計第四節）：練成（身上這一門還沒第十成、付得起下一成）與合成（手上有意境）。
+    兩樣都做不了就閉嘴，免得變成嘮叨。休季時什麼都不能做，也不提示（FB-047）。
     去處照底部分頁的名字寫「修練」「煉製」（舊的門下頁已經拆成這兩頁，FB-047）。
     """
     xinde = state.player.stats.get("xinde", 0)
@@ -33,33 +31,17 @@ def practice_hint(state: GameState, content: Content) -> str | None:
         for kind, slot, level_slot in (
             ("內功", "neigong_id", "neigong_level"), ("武學", "wugong_id", "wugong_level"),
         )
-        if getattr(member, slot) is None or getattr(member, level_slot) < MAX_LEVEL
+        if getattr(member, slot) is not None and getattr(member, level_slot) < MAX_LEVEL
+        and xinde >= team.practice_price(content, getattr(member, level_slot))
     ]
     parts = []
     if todo:
-        parts.append(f"去「修練」鍛鍊{'、'.join(todo)}（不花一分一毫）")
-    if _can_afford_a_craft(state, content, xinde):
-        parts.append("到「煉製」拿素材煉製新功法")
+        parts.append(f"去「修練」練成{'、'.join(todo)}")
+    if state.player.insights:
+        parts.append("去「煉製」拿意境合成新武學")
     if not parts:
         return None
     return f"💡 你已攢下 {xinde} 點心得。{'，或'.join(parts)}。"
-
-
-def _can_afford_a_craft(state: GameState, content: Content, xinde: int) -> bool:
-    """手上的素材湊得出一爐、而且心得付得起最便宜的那一爐嗎？"""
-    cheapest = _cheapest_pair(state, content)
-    return cheapest is not None and xinde >= craft.cost(content, cheapest)
-
-
-def _cheapest_pair(state: GameState, content: Content) -> list[str] | None:
-    """背包裡最便宜的兩樣素材（階最低的兩個，可以是同一種的兩個）；湊不出兩個就 None。"""
-    held: list[str] = []
-    for material, count in materials.bag_contents(state, content):
-        held += [material.id] * count
-    if len(held) < craft.MATERIALS_PER_CRAFT:
-        return None
-    held.sort(key=lambda mid: content.materials[mid].tier)
-    return held[: craft.MATERIALS_PER_CRAFT]
 
 
 def craft_line(

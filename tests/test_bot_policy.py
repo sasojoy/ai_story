@@ -147,11 +147,26 @@ def test_look_after_practices_the_worn_arts_and_never_creates_one(content, game)
     assert member.neigong_id is None and member.wugong_id is None
     member.neigong_id, member.wugong_id = "breath", "fist"
     member.neigong_level = member.wugong_level = 1
+    game.state.player.stats["xinde"] = 1000  # 練成要花心得，這裡驗的是「練不練」不是價錢
     content.config.practice_injury_chance = 0.0
     for seed in range(40):  # 每次有 PRACTICE_CHANCE 的機率練一成：幾輪下來身上的兩門都練到過
         bot_policy.look_after(game, random.Random(seed))
     assert member.neigong_level > 1 and member.wugong_level > 1
     assert (member.neigong_id, member.wugong_id) == ("breath", "fist")
+
+
+def test_look_after_does_not_practise_what_it_cannot_afford(content, game):
+    """練成花心得：付不起下一成就不練，也不會留下一堆「心得不足」的紀錄。"""
+    member = game.state.player.member
+    member.neigong_id, member.wugong_id = "breath", "fist"
+    member.neigong_level = member.wugong_level = 6  # 下一成要 6 點
+    game.state.player.stats["xinde"] = 5
+    entries = len(game.state.journal)
+    for seed in range(40):
+        bot_policy.look_after(game, random.Random(seed))
+    assert (member.neigong_level, member.wugong_level) == (6, 6)
+    assert game.state.player.stats["xinde"] == 5 and len(game.state.journal) == entries
+
 
 def test_a_bot_trains_where_training_helps_its_faction(content, game):
     _install_factions(content)  # 官軍 goals kou -1、黃巾 goals kou +1

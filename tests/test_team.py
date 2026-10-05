@@ -114,3 +114,53 @@ def test_old_saves_without_the_new_player_fields_still_load(state):
         old.pop(key)
     loaded = PlayerState.model_validate(old)
     assert (loaded.insights, loaded.art_quality, loaded.art_mastery, loaded.naming) == ([], {}, {}, None)
+
+
+# ── 練成花心得（武學與成長 Task 5）────────────────────────────
+
+
+def test_practice_costs_xinde_by_the_level_reached(state, content, world):
+    state.player.member.wugong_id = "basic_fist"
+    state.player.member.wugong_level = 3
+    state.player.stats["xinde"] = 10
+    content.config.practice_injury_chance = 0.0
+    msgs = team.practice(state, content, world, "武學", random.Random(0))
+    assert state.player.member.wugong_level == 4
+    assert state.player.stats["xinde"] == 7  # 第 3 成升第 4 成花 3
+    assert "心得 -3" in msgs
+
+
+def test_practice_without_enough_xinde_says_how_much_is_needed(state, content, world):
+    state.player.member.wugong_id = "basic_fist"
+    state.player.member.wugong_level = 5
+    state.player.stats["xinde"] = 2
+    msgs = team.practice(state, content, world, "武學", random.Random(0))
+    assert state.player.member.wugong_level == 5 and state.player.stats["xinde"] == 2
+    assert "要 5 點心得，你只有 2 點" in msgs[0]
+    assert "還差 3 點" in msgs[0]  # 不夠時直接說缺多少，新手才知道要去賺多少
+
+
+def test_practice_price_is_the_level_reached_times_the_configured_rate(content):
+    assert team.practice_price(content, 1) == 1
+    assert team.practice_price(content, 9) == 9
+    content.config.practice_xinde_per_level = 3
+    assert team.practice_price(content, 4) == 12
+
+
+def test_a_maxed_art_costs_nothing_and_says_so(state, content, world):
+    state.player.member.neigong_id = "basic_breath"
+    state.player.member.neigong_level = team.MAX_LEVEL
+    state.player.stats["xinde"] = 0
+    msgs = team.practice(state, content, world, "內功", random.Random(0))
+    assert "練無可練" in msgs[0] and state.player.stats["xinde"] == 0
+
+
+def test_practice_price_ignores_the_players_own_quality(state, content, world):
+    """價錢只看第幾成：升品時成不變，品質越高越貴的話，玩家會先趁下品把成練滿再修練。"""
+    state.player.member.wugong_id = "basic_fist"
+    state.player.member.wugong_level = 2
+    state.player.art_quality["basic_fist"] = "上品"
+    state.player.stats["xinde"] = 2
+    content.config.practice_injury_chance = 0.0
+    team.practice(state, content, world, "武學", random.Random(0))
+    assert state.player.stats["xinde"] == 0 and state.player.member.wugong_level == 3

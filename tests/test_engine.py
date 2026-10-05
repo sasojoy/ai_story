@@ -527,25 +527,54 @@ def _wear(game, wugong: str | None = None, neigong: str | None = None):
 
 def test_practice_writes_one_merged_journal_entry(game):
     _wear(game, wugong="fist")
+    game.state.player.stats["xinde"] = 10
     msgs = game.practice("武學")
-    assert msgs == ["【長拳】精進至第2成。"]
+    assert msgs == ["【長拳】精進至第2成。", "心得 -1"]  # 第 1 成升第 2 成花 1 點心得
     assert game.state.player.member.wugong_level == 2
     entry = game.state.journal[0]
     assert entry.title == "修練" and entry.tag == msgs[0]
     game.practice("武學")
     assert game.state.player.member.wugong_level == 3
+    assert game.state.player.stats["xinde"] == 7  # 再花 2 點
     assert game.state.journal[0].title == "修練"  # 併進同一則
+
+
+def test_a_failed_practice_does_not_finish_the_tutorial_step(game):
+    game.state.player.member.wugong_id = "basic_fist"
+    game.state.player.stats["xinde"] = 0
+    with mock.patch("tianxia.engine.note_action", return_value=[]) as noted:
+        game.practice("武學")
+    noted.assert_not_called()
+
+
+def test_a_real_practice_still_reaches_the_tutorial_hook(game):
+    game.state.player.member.wugong_id = "basic_fist"
+    game.state.player.stats["xinde"] = 5
+    with mock.patch("tianxia.engine.note_action", return_value=[]) as noted:
+        game.practice("武學")
+    noted.assert_called_once()
+    assert noted.call_args.args[-1] == "practice"
+
+
+def test_practicing_without_enough_xinde_says_how_much_is_missing(game):
+    _wear(game, wugong="fist")
+    game.state.player.member.wugong_level = 4
+    game.state.player.stats["xinde"] = 1
+    msgs = game.practice("武學")
+    assert game.state.player.member.wugong_level == 4 and game.state.player.stats["xinde"] == 1
+    assert "要 4 點心得，你只有 1 點" in msgs[0] and "還差 3 點" in msgs[0]
 
 
 def _practice_step_game(game, worn: dict[str, int]):
     """把引導換成「第 1 步＝鍛鍊」（fixture 的引導沒有這一步，照 _install_* 的慣例直接裝進內容），
-    身上先配好 worn（種類 → 熟練度）。回傳（引導步驟的獎勵銀兩）。"""
+    身上先配好 worn（種類 → 熟練度），並給足心得（練成要花心得，這裡驗的是引導不是價錢）。回傳（引導步驟的獎勵銀兩）。"""
     from tianxia.models import Effect, TutorialGoal, TutorialStep
 
     for kind, level in worn.items():
         _wear(game, **{"neigong" if kind == "內功" else "wugong": "breath" if kind == "內功" else "fist"})
         slot = "neigong" if kind == "內功" else "wugong"
         setattr(game.state.player.member, f"{slot}_level", level)
+    game.state.player.stats["xinde"] = 100
     reward = 10
     game.content.tutorial.steps = [
         TutorialStep(
@@ -591,6 +620,21 @@ def test_the_practice_tutorial_step_counts_a_maxed_art_and_says_so(game):
     assert "練無可練" in msgs[0]
     assert "✔ 引導完成" in game.state.player.guide_done
     assert game.state.player.tutorial_step == 1
+
+
+def test_a_practice_that_cannot_be_afforded_does_not_finish_the_step(game):
+    """練成花心得：心得不夠就沒練成，引導那一步不能算完成（也不發獎勵）。"""
+    reward = _practice_step_game(game, {"武學": 1})
+    game.state.player.stats["xinde"] = 0
+    silver = game.state.player.stats["silver"]
+    msgs = game.practice("武學")
+    assert "心得不足" in msgs[0] and game.state.player.member.wugong_level == 1
+    assert game.state.player.tutorial_step == 0 and game.state.player.guide_done == []
+    assert game.state.player.stats["silver"] == silver
+    game.state.player.stats["xinde"] = 1  # 湊到第 1 成升第 2 成的價錢，再練就算了
+    game.practice("武學")
+    assert game.state.player.tutorial_step == 1
+    assert game.state.player.stats["silver"] == silver + reward
 
 
 def test_practicing_with_nothing_learned_says_so_without_finishing_the_step(game):
@@ -642,6 +686,7 @@ def test_only_a_neigong_never_finishes_the_wugong_step_until_a_wugong_is_worn(ga
         act()
         assert game.state.player.tutorial_step == 1 and game.state.player.guide_done == []
     _wear(game, wugong="fist")
+    game.state.player.stats["xinde"] = 5  # 練成要花心得
     game.practice("武學")
     assert "✔ 引導完成" in game.state.player.guide_done
     assert game.state.player.tutorial_step == 2
@@ -1147,10 +1192,11 @@ def test_texts_render(game):
 def test_status_text_shows_the_practice_hint_only_when_xinde_is_idle(game):
     assert "心得" in game.status_text() and "💡" not in game.status_text()
     game.state.player.stats["xinde"] = game.content.config.xinde_hint_threshold
-    assert "💡" in game.status_text() and "鍛鍊內功、武學" in game.status_text()
+    assert "💡" not in game.status_text()  # 兩欄都空著：沒有哪一門可以練
+    _wear(game, wugong="fist", neigong="breath")
+    assert "💡" in game.status_text() and "練成內功、武學" in game.status_text()
     game.state.player.member.wugong_level = game.state.player.member.neigong_level = 10
-    game.state.player.member.wugong_id = game.state.player.member.neigong_id = "fist"
-    assert "💡" not in game.status_text()  # 沒東西可練、也湊不出一爐素材
+    assert "💡" not in game.status_text()  # 沒東西可練、手上也沒有意境可合成
 
 
 def test_visited_and_map(game):

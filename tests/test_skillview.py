@@ -1,10 +1,10 @@
-from tianxia import rules, skillview, team
+from tianxia import rules, skillview
 from tianxia.martial_arts import MartialArt, generate_from_name, historical_art, power_at
 
 
 def test_rules_line():
     assert skillview.rules_line(None) == (
-        "每人最多學一門內功、一門武學：開局就送你兩門基礎功夫，鍛鍊它們，或在功法庫改練別的。"
+        "身上一門內功、一門武學：花心得練成，用意境修練衝品質；武學也能在「煉製」融意境衍生新武學。"
     )
 
 
@@ -126,42 +126,80 @@ def test_an_art_card_shows_the_first_and_tenth_level_power():
     assert "（下一成：已達第十成）" in skillview.art_card(art, 10)
 
 
-# ── 練功提示（心得目前沒有用途，提示把它接回門下）──────────────
+# ── 練功提示（練成花心得：心得的去處是練成與合成）──────────────
 
 
-def test_practice_hint_stays_quiet_below_the_threshold(state, content):
+def test_practice_hint_is_quiet_below_the_threshold(state, content):
+    state.player.member.wugong_id = "basic_fist"
     state.player.stats["xinde"] = content.config.xinde_hint_threshold - 1
     assert skillview.practice_hint(state, content) is None
 
 
-def test_practice_hint_names_both_kinds_when_nothing_is_learned(state, content):
+def test_practice_hint_lists_the_slots_it_can_afford(state, content):
+    state.player.member.wugong_id = "basic_fist"
+    state.player.member.neigong_id = "basic_breath"
+    state.player.member.neigong_level = 10
+    state.player.stats["xinde"] = 60
+    hint = skillview.practice_hint(state, content)
+    assert "練成武學" in hint and "內功" not in hint
+
+
+def test_practice_hint_names_both_slots_when_both_can_be_practised(state, content):
+    state.player.member.wugong_id = "basic_fist"
+    state.player.member.neigong_id = "basic_breath"
     state.player.stats["xinde"] = content.config.xinde_hint_threshold
     hint = skillview.practice_hint(state, content)
-    assert hint is not None
-    assert "內功、武學" in hint and str(content.config.xinde_hint_threshold) in hint
+    assert "練成內功、武學" in hint and str(content.config.xinde_hint_threshold) in hint
 
 
-def test_practice_hint_names_only_what_is_left_to_train(state, content, world):
-    state.player.stats["xinde"] = 500
-    state.player.member.wugong_id, state.player.member.wugong_level = "fist", 10
+def test_practice_hint_skips_a_slot_whose_next_level_it_cannot_pay(state, content):
+    """價錢是下一成的價錢：付不起的那一門不列，不然玩家照著提示去按只會挨一句「心得不足」。"""
+    content.config.practice_xinde_per_level = 10
+    state.player.member.wugong_id, state.player.member.wugong_level = "basic_fist", 2  # 要 20 點
+    state.player.member.neigong_id, state.player.member.neigong_level = "basic_breath", 9  # 要 90 點
+    state.player.stats["xinde"] = 60
     hint = skillview.practice_hint(state, content)
-    assert hint is not None and "內功" in hint and "武學" not in hint
+    assert "練成武學" in hint and "內功" not in hint
+
+
+def test_practice_hint_points_at_the_furnace_when_holding_an_insight(state, content):
+    state.player.insights = ["feng"]
+    state.player.stats["xinde"] = 60
+    assert "煉製" in skillview.practice_hint(state, content)
 
 
 def test_practice_hint_calls_the_pages_by_their_tab_names(state, content):
     """FB-047：門下頁拆成「修練」「煉製」兩個分頁之後，提示照分頁的名字寫，不再寫「門下」。"""
+    state.player.member.wugong_id = "basic_fist"
+    state.player.stats["xinde"] = 60
+    assert skillview.practice_hint(state, content) == "💡 你已攢下 60 點心得。去「修練」練成武學。"
+    state.player.insights = ["feng"]
+    assert skillview.practice_hint(state, content) == (
+        "💡 你已攢下 60 點心得。去「修練」練成武學，或去「煉製」拿意境合成新武學。"
+    )
+
+
+def test_practice_hint_never_sends_you_to_the_furnace_with_materials(state, content):
+    """審查裁示（企劃者的用語）：任何提示都不能叫玩家拿素材去煉製。"""
     from tianxia import materials
 
+    state.player.member.wugong_id = "basic_fist"
+    state.player.insights = ["feng"]
+    materials.grant(state, content, "gang_1", 2)
     state.player.stats["xinde"] = 500
     hint = skillview.practice_hint(state, content)
-    assert hint == "💡 你已攢下 500 點心得。去「修練」鍛鍊內功、武學（不花一分一毫）。"
-    materials.grant(state, content, "gang_1", 2)
-    hint = skillview.practice_hint(state, content)
-    assert hint == "💡 你已攢下 500 點心得。去「修練」鍛鍊內功、武學（不花一分一毫），或到「煉製」拿素材煉製新功法。"
+    assert "煉製" in hint and "素材" not in hint
+
+
+def test_practice_hint_is_quiet_when_there_is_nothing_to_do(state, content):
+    state.player.stats["xinde"] = 60
+    assert skillview.practice_hint(state, content) is None
 
 
 def test_practice_hint_stays_quiet_while_the_season_rests(state, content):
     """FB-047：休季時什麼都不能做，提示不出現。"""
+    state.player.member.wugong_id = "basic_fist"
+    state.player.insights = ["feng"]
     state.player.stats["xinde"] = 500
     state.world.ended = True
     assert skillview.practice_hint(state, content) is None
@@ -237,31 +275,6 @@ def test_the_art_library_lists_each_art_with_its_own_level(state, content, world
     state.player.art_levels[art.id] = 4
     label, art_id = skillview.art_library(state, content, world)[0]
     assert art_id == art.id and "第4成" in label and "武學" in label
-
-
-# ── 練功提示（煉製之後文案改寫）──────────────────────────────
-
-
-def test_the_hint_mentions_crafting_once_you_can_afford_a_furnace(state, content):
-    from tianxia import materials
-
-    state.player.stats["xinde"] = 500
-    materials.grant(state, content, "gang_1", 2)
-    hint = skillview.practice_hint(state, content)
-    assert hint is not None and "煉製" in hint
-
-
-def test_the_hint_says_nothing_about_crafting_without_materials(state, content):
-    state.player.stats["xinde"] = 500
-    hint = skillview.practice_hint(state, content)
-    assert hint is not None and "煉製" not in hint
-
-
-def test_the_hint_goes_quiet_when_everything_is_maxed_and_nothing_can_be_crafted(state, content, world):
-    state.player.stats["xinde"] = 500
-    state.player.member.wugong_id, state.player.member.neigong_id = "fist", "breath"
-    state.player.member.wugong_level = state.player.member.neigong_level = 10
-    assert skillview.practice_hint(state, content) is None
 
 
 def test_the_level_bar_reads_at_a_glance():

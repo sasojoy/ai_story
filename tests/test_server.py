@@ -630,6 +630,22 @@ def test_menxia_practice_and_heal(client, monkeypatch):
     assert out["main"]["status"]["name"] == "沈青衫"
 
 
+def test_menxia_practice_costs_xinde_and_says_how_much_is_missing(client, monkeypatch):
+    """練成花心得：第 1 成升第 2 成 1 點、第 2 成升第 3 成 2 點；不夠時直接說還差多少，等級與心得都不動。"""
+    monkeypatch.setattr(server.CONTENT.config, "practice_injury_chance", 0.0)
+    _player(client)
+    game = server.game_for("沈青衫")
+    game.state.player.stats["xinde"] = 1
+    open_characters().save(game.state)
+    out = client.post("/api/menxia/practice", json={"kind": "武學"}).json()
+    assert "第2成" in out["message"]
+    assert open_characters().load("沈青衫").player.stats["xinde"] == 0
+    out = client.post("/api/menxia/practice", json={"kind": "武學"}).json()  # 第 2 成升第 3 成要 2 點，只剩 0 點
+    assert "要 2 點心得，你只有 0 點" in out["message"] and "還差 2 點" in out["message"]
+    saved = open_characters().load("沈青衫").player
+    assert saved.member.wugong_level == 2 and saved.stats["xinde"] == 0
+
+
 def test_self_creating_an_art_is_gone_for_good(client):
     """自創已經作廢（武學與成長設計 3.8）：伺服器不收這個動作，選單與修練頁也不提供，身上的功夫不變。"""
     _player(client)
@@ -736,6 +752,7 @@ def test_the_slot_cards_say_whether_each_slot_holds_an_art_and_its_level(client,
     assert slots(client.get("/api/menxia").json()["slot_cards"]) == [("武學", True, 1, False), ("內功", True, 1, False)]
     game = server.game_for("沈青衫")
     game.state.player.member.neigong_id = None  # 欄位空著（內容改版之後的舊角色）：沒學過、第 0 成
+    game.state.player.stats["xinde"] = 100  # 練成花心得：第 1 成升到第十成共 45 點，開局的 20 點不夠
     open_characters().save(game.state)
     out = client.post("/api/menxia/practice", json={"kind": "武學"}).json()
     assert slots(out["menxia"]["slot_cards"]) == [("武學", True, 2, False), ("內功", False, 0, False)]

@@ -25,6 +25,7 @@ def _train(game, kind="武學"):
             member.neigong_id, member.neigong_level = "breath", 1
     elif member.wugong_id is None:
         member.wugong_id, member.wugong_level = "fist", 1
+    game.state.player.stats["xinde"] = max(game.state.player.stats.get("xinde", 0), 100)  # 練成要花心得
     return game.practice(kind)
 
 
@@ -286,7 +287,7 @@ def test_a_first_practice_that_finishes_a_has_wugong_step_writes_it_into_the_jou
     assert entry.title == "修練" and "精進至第2成" in entry.tag
     assert entry.guide == [  # 跟 choose() 那條路同一種寫法
         "✔ 引導完成", f"銀兩 +{GUIDE_REWARD}", f"心得 +{GUIDE_XINDE}", f"【{_speaker(game)}】出城。"]
-    assert entry.changes == []  # 獎勵只在 guide，心得沒有算兩次
+    assert entry.changes == ["心得 -1"]  # 練成花的 1 點心得記在 changes；引導的獎勵只在 guide，沒有算兩次
     assert game.state.player.tutorial_step == 1
 
 
@@ -294,6 +295,7 @@ def test_practicing_that_finishes_a_guide_step_writes_it_into_the_journal(game):
     from tianxia.models import TutorialGoal
 
     game.state.player.member.wugong_id, game.state.player.member.wugong_level = "fist", 3
+    game.state.player.stats["xinde"] = 10  # 第 3 成升第 4 成花 3 點
     _guide_waits_for(game, TutorialGoal(action="practice"))
     game.practice("武學")
     entry = latest(game)
@@ -367,7 +369,7 @@ def test_menxia_without_finishing_a_guide_step_writes_exactly_what_it_used_to(ga
     _train(game)
     entry = latest(game)
     assert entry.title == "修練" and "精進至第2成" in entry.tag
-    assert entry.lines == [] and entry.changes == []
+    assert entry.lines == [] and entry.changes == ["心得 -1"]  # 沒有引導、也沒有別的敘事，只有練成花掉的心得
     assert game.state.player.tutorial_step == 0
     game.state.player.tutorial_step = len(game.content.tutorial.steps)  # 引導已走完：同一回事
     game.practice("武學")

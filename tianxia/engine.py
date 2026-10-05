@@ -2567,15 +2567,19 @@ class Game:
         return msgs
 
     def practice(self, kind: str) -> list[str]:
-        """鍛鍊：目前已學會的內功或武學加深一成，累積受傷風險。"""
+        """練成：身上這一門加深一成，花心得、累積受傷風險（見 team.practice）。"""
         if self._preparing():
             return self._log(["（賽季籌備中，等待管理者開季。）"])
         xinde = self._xinde()
-        # FB-007：引導那一步要的是「你有一門功夫了」，所以看練之前那一欄有沒有功法——沒學過就練不到、不算；
-        # 已經第十成（練無可練）也算（可能在走到這一步前就煉製、練到滿了，只認「真的加一成」會永遠卡住）。
-        has_art = getattr(self.state.player.member, "neigong_id" if kind == "內功" else "wugong_id") is not None
+        member = self.state.player.member
+        level_slot = "neigong_level" if kind == "內功" else "wugong_level"
+        has_art = getattr(member, "neigong_id" if kind == "內功" else "wugong_id") is not None
+        before = getattr(member, level_slot)
         msgs = self._log(team.practice(self.state, self.content, self.world, kind, self.rng))
-        return msgs + self._menxia_entry(msgs[0] if msgs else "練功", xinde, guide=has_art)
+        # FB-007：引導那一步要的是「真的練了一成」：沒學過就練不到、心得不夠沒練成，都不算；
+        # 已經第十成（練無可練）也算（可能在走到這一步前就練滿了，只認「真的加一成」會永遠卡住）。
+        counted = has_art and (getattr(member, level_slot) > before or before >= team.MAX_LEVEL)
+        return msgs + self._menxia_entry(msgs[0] if msgs else "練功", xinde, guide=counted)
 
     def heal(self) -> list[str]:
         if self._preparing():

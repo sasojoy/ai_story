@@ -24,10 +24,35 @@ def test_spend_xinde_practices_each_worn_art_one_level(content):
     rng = random.Random(0)
     member = game.state.player.member
     assert (member.neigong_level, member.wugong_level) == (1, 1)
+    game.state.player.stats["xinde"] = 100  # 練成要花心得
     spend_xinde(game, rng)
     assert (member.neigong_level, member.wugong_level) == (2, 2)
     spend_xinde(game, rng)
     assert (member.neigong_level, member.wugong_level) == (3, 3)
+    assert game.state.player.stats["xinde"] == 100 - 2 * (1 + 2)  # 兩門各花 1、再各花 2
+
+
+def test_spend_xinde_only_practises_what_it_can_afford(content):
+    content.config.starter_skills = ["basic_breath", "basic_fist"]
+    game = Game.new(content, "新人", rng=random.Random(0))
+    member = game.state.player.member
+    member.neigong_level, member.wugong_level = 3, 5  # 下一成要 3、5 點
+    game.state.player.stats["xinde"] = 4
+    spend_xinde(game, random.Random(0))
+    assert (member.neigong_level, member.wugong_level) == (4, 5)  # 武學付不起：留著，不去撞「心得不足」
+    assert game.state.player.stats["xinde"] == 1
+    spend_xinde(game, random.Random(0))
+    assert (member.neigong_level, member.wugong_level) == (4, 5)  # 剩 1 點，兩門都付不起
+
+
+def test_spend_xinde_leaves_a_maxed_art_alone(content):
+    content.config.starter_skills = ["basic_breath", "basic_fist"]
+    game = Game.new(content, "新人", rng=random.Random(0))
+    game.state.player.member.wugong_level = 10
+    game.state.player.stats["xinde"] = 100
+    spend_xinde(game, random.Random(0))
+    assert game.state.player.member.wugong_level == 10
+    assert game.state.player.stats["xinde"] == 99  # 只有內功練了一成（第 1 成升第 2 成花 1 點）
 
 
 def test_spend_xinde_leaves_an_empty_slot_empty(game):
