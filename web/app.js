@@ -351,13 +351,8 @@
   const MOVE_ICON = '<path d="M13 3l-3 7h5l-4 11 8-10h-5z"/>';
   const SHORT_SUB = { "act:rest": "回體力", "act:call": "求見" };
   // 選單上有「打坐」就是平常閒著的時候：用行動列。事件、對話、路上、決戰的選項每次都不一樣，照舊排成一列按鈕
-  // 事件選項底下的小字：人物心聲（這件事對你難不難）與會給的東西的種類（企劃者 2026-10-05）
-  const optSub = (o) => {
-    const os = o.hint ? `<span class="o-os">${esc(o.hint)}</span>` : "";
-    const gain = o.rewards && o.rewards.length
-      ? `<span class="o-gain" aria-label="可得">${o.rewards.map((r) => `<b>${esc(r)}</b>`).join("")}</span>` : "";
-    return os || gain ? `<span class="o-sub">${os}${gain}</span>` : "";
-  };
+  // 事件選項底下的小字：人物心聲，這件事對你難不難（企劃者 2026-10-05）
+  const optSub = (o) => (o.hint ? `<span class="o-sub"><span class="o-os">${esc(o.hint)}</span></span>` : "");
   const idleMenu = (m) => m.options.some((o) => o.id === "act:rest");
   const inkCell = (key, name, sub, icon, attrs, cls) => `<button class="act-ink${cls}" data-key="${key}" ${attrs}>
       <svg class="ink-icon" viewBox="0 0 24 24" aria-hidden="true">${icon}</svg><b>${esc(name)}</b><small>${esc(sub)}</small></button>`;

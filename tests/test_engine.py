@@ -176,7 +176,6 @@ def test_explore_presents_event_and_resolves_check(game):
 def test_self_check_names_the_player_and_takes_the_fail_branch(game):
     game.state.pending_event = "insight"
     assert [o.label for o in game.options()] == ["運氣衝關（本人・根骨・成算五成）"]
-    assert game.options()[0].rewards == ["心得"]
     game.rng = FixedRandom(0.99)  # 成功率 50%：必定失敗
     game.choose("choice:0")
     log = game.state.log

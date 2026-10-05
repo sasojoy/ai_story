@@ -236,12 +236,10 @@ details.fold.bulletin > .fold-body { border-color: var(--gold); max-height: 50vh
 .options { display: grid; gap: 8px; margin-bottom: 12px; }
 .options .btn { justify-content: flex-start; text-align: left; }
 .options .o-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-.o-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: 12.5px; color: var(--ink-2); }
+.o-sub { font-size: 12.5px; color: var(--ink-2); }
 .o-os { font-style: italic; }
 .o-os::before { content: "「"; }
 .o-os::after { content: "」"; }
-.o-gain { display: inline-flex; flex-wrap: wrap; gap: 4px; }
-.o-gain b { font-weight: 500; font-size: 11.5px; padding: 1px 6px; border-radius: 999px; border: 1px solid var(--line); color: var(--accent); }
 .options .btn .k { flex: none; width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center; background: var(--card-2); font-size: 12px; color: var(--ink-2); }
 .options .btn.go .k { background: var(--accent); color: #fff; }
 .move-mode { margin-bottom: 8px; } /* 走法切換：一列、緊貼在第一個「前往」上面（排在選項之間，A4） */

@@ -1,9 +1,9 @@
 import random
 
 from tianxia.events import (
-    choice_hint, choice_label, choice_rewards, event_matches_location, has_events_here, pick_event, visible_choices,
+    choice_hint, choice_label, event_matches_location, has_events_here, pick_event, visible_choices,
 )
-from tianxia.models import CheckVoice, CheckVoiceBand, Choice, Effect
+from tianxia.models import CheckVoice, CheckVoiceBand
 
 
 def test_location_matching(content):
@@ -110,14 +110,3 @@ def test_choice_hint_picks_the_band_by_stat_minus_difficulty(state, content, wor
     state.player.team.append("mate")  # 韓鐵出手：心聲講的是他
     assert choice_hint(drunk.choices[0], state, content, world) == "韓鐵有幾分把握。"
 
-
-def test_choice_rewards_name_the_kinds_not_the_numbers(content):
-    drunk = content.events["drunk"]
-    assert choice_rewards(drunk.choices[0], content) == ["善名"]
-    assert choice_rewards(drunk.choices[1], content) == ["惡名"]  # 惡名也標：那是選了的後果
-    rich = Choice(text="x", effect=Effect(
-        stats={"silver": 5, "fame": 2, "xinde": 3, "str": -1}, materials={"gang_1": 1}, affinity={"luzhi": 5},
-        learn_skills=["a"], recruit="mate",
-    ))
-    assert choice_rewards(rich, content) == ["名望", "銀兩", "心得", "素材", "情誼", "武學", "同伴"]
-    assert choice_rewards(Choice(text="x", effect=Effect(stats={"silver": -5})), content) == []  # 只算給、不算扣

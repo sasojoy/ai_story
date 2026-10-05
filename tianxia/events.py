@@ -5,7 +5,7 @@ import random
 from typing import Literal
 
 from . import foreshadow, team
-from .models import Choice, Content, Effect, Event, Location
+from .models import Choice, Content, Event, Location
 from .rules import check_chance, check_condition, check_gap, check_who, rate_words, season_one_off
 from .state import PLAYER, GameState
 from .world_state import WorldStateStore
@@ -108,31 +108,3 @@ def choice_hint(choice: Choice, state: GameState, content: Content, world: World
     key = team.check_actor(state, content, world, check)
     who = "你" if key == PLAYER else team.member_name(state, content, key)
     return line.replace("{who}", who)
-
-
-# 選項標的報酬種類（企劃者 2026-10-05：選之前就知道這一步圖的是什麼）：只標種類、不寫數字，照這個順序
-_STAT_REWARDS = ("fame", "silver", "xinde", "good", "str", "agi", "con", "wis")
-
-
-def effect_rewards(effect: Effect, content: Content) -> list[str]:
-    """這個效果會給的東西（只算給、不算扣）：名望、銀兩、心得、素材、情誼、武學、同伴……；惡名也標，那是選了的後果。"""
-    names = content.config.stat_names
-    kinds = [names.get(k, k) for k in _STAT_REWARDS if effect.stats.get(k, 0) > 0]
-    if effect.stats.get("evil", 0) > 0:
-        kinds.append(names.get("evil", "惡名"))
-    if any(n > 0 for n in effect.materials.values()):
-        kinds.append("素材")
-    if any(n > 0 for n in effect.affinity.values()):
-        kinds.append("情誼")
-    if effect.learn_skills:
-        kinds.append("武學")
-    if effect.recruit:
-        kinds.append("同伴")
-    if effect.followers:
-        kinds.append("部下")
-    return kinds
-
-
-def choice_rewards(choice: Choice, content: Content) -> list[str]:
-    """選項成功（或沒有檢定時）會給的東西的種類。"""
-    return effect_rewards(choice.effect, content)

@@ -16,7 +16,7 @@ from . import (
     journal, materials, orders, push, roster, skillview, team, timetable,
 )
 from .events import (
-    choice_hint, choice_label, choice_rewards, effect_rewards, event_candidates, has_events_here, pick_event, visible_choices,
+    choice_hint, choice_label, event_candidates, has_events_here, pick_event, visible_choices,
 )
 from .guide import base_step_count, note_action, quest_text, tutorial_intro
 from .guide import steps as tutorial_steps
@@ -61,7 +61,6 @@ class Option(BaseModel):
     label: str
     enabled: bool = True
     hint: str = ""  # 事件選項底下那一句人物心聲（events.choice_hint）
-    rewards: list[str] = []  # 事件選項會給的東西的種類（events.choice_rewards），只標種類、不寫數字
 
 
 FREE_TEXT_OPTION = "choice:free"  # 事件的「隨口應對」：按下去只是叫出輸入框，真正送出走 free_text_request／answer_event
@@ -348,12 +347,12 @@ class Game:
             opts = [
                 Option(
                     id=f"choice:{i}", label=self._choice_label(ch, odds),
-                    hint=choice_hint(ch, s, c, self.world), rewards=choice_rewards(ch, c),
+                    hint=choice_hint(ch, s, c, self.world),
                 )
                 for i, ch in visible_choices(event, s, c)
             ]
             if event.free_text is not None:
-                opts.append(Option(id=FREE_TEXT_OPTION, label=event.free_text.prompt, rewards=effect_rewards(event.free_text.effect, c)))
+                opts.append(Option(id=FREE_TEXT_OPTION, label=event.free_text.prompt))
             return opts
         if s.player.pending_companion:
             dialogue_options, _ = s.player.last_offered_dialogue.get(s.player.pending_companion, [[], []])
