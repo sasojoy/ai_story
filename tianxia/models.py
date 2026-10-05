@@ -117,6 +117,17 @@ class CraftNames(_Strict):
     insight: list[str] = Field(default_factory=lambda: ["意", "勢", "韻", "境"])  # 意境的退路字尾（武學與成長設計 3.2）
 
 
+class CombatLines(_Strict):
+    """回合演出的句型（武學與成長設計 8.2，content/combat_lines.json）：照出手那門武學的屬性挑一句。
+    ours 是我方出手、theirs 是對手出手；bare 給沒學武學的人，theirs_any 給沒有屬性（或那個屬性沒寫句子）的對手。
+    句子是接在人名（或「以【武學】」）後面、沒有主詞的動詞片語，只寫怎麼出手（內容表：打發話與回合句型 §二）。"""
+
+    ours: dict[Attribute, list[str]]
+    theirs: dict[Attribute, list[str]] = Field(default_factory=dict)
+    bare: list[str] = Field(min_length=1)
+    theirs_any: list[str] = Field(min_length=1)
+
+
 class Drop(_Strict):
     """一筆掉落：打贏這支隊伍時有 chance 的機率掉 count 個這種素材。
 
@@ -1364,6 +1375,7 @@ class Content(_Strict):
     insights: dict[str, InsightDef] = Field(default_factory=dict)  # 意境（content/insights.json，武學與成長設計附錄 A）
     materials: dict[str, Material]
     craft_names: CraftNames
+    combat_lines: CombatLines  # 回合演出的句型（content/combat_lines.json，武學與成長設計 8.2）
     front_lines: FrontLines  # 戰況變化的說法（content/front_lines.json，FB-064）
     banned_names: list[str]  # 合成、合併命名的禁用詞（原創原則：不用金庸等作品的專有名詞）
     sects: dict[str, Sect]

@@ -14,8 +14,8 @@ from pydantic import BaseModel
 
 from . import (
     atlas, battle_instance, battlelog, calendar, companion_agent, cultivation, encounter, event_llm, figures, flavor,
-    foreshadow, front_lines, fusion, insights, journal, library, materials, naming, orders, push, ranks, roster, skillview,
-    team, timetable,
+    foreshadow, front_lines, fusion, insights, journal, library, materials, naming, orders, push, ranks, roster, rounds,
+    skillview, team, timetable,
 )
 from . import events as event_rules  # note_round 走模組屬性（測試要能換掉它，確認只有 _present 會叫）
 from .events import (
@@ -2056,9 +2056,10 @@ class Game:
             msgs += extra
         elif result.tier == "落敗":
             msgs += self._lose_silver(record)
-        toll = team.take_encounter_toll(s, c, self.world, result.tier, wild=wild)
+        toll, hp_lost = self._take_toll(result.tier, wild=wild)
         record.changes += toll
         msgs += toll
+        self._play_rounds(record, squad, result.tier, hp_lost)
         msgs.insert(0, self._file_battle(record))
         if squad.desc:  # 有來歷的對手（運糧隊）多一句描述，接在戰鬥那一行後面
             msgs.insert(1, f"（{squad.name}：{squad.desc}）")
@@ -2098,6 +2099,30 @@ class Game:
         p.stats["silver"] -= loss
         record.silver = -loss
         return [f"銀兩 -{loss}"] if loss else []
+
+    def _player_hp(self) -> float:
+        """本人此刻的氣血（上限吃根骨：con_of 認 key，所以傳 PLAYER，不傳 Member）。"""
+        return team.member_neili(self.content, self.state.player.member, team.con_of(self.state, PLAYER))[0]
+
+    def _take_toll(self, tier: str, *, wild: bool = False) -> tuple[list[str], int]:
+        """照結果扣這一場的氣血（team.take_encounter_toll），回傳（訊息, 本人真的掉了多少氣血）。掉的量緊貼著扣氣血的
+        前後量（計畫三 G4）：打贏升級會讓上限變高，開打前量的話回合裡寫的跟戰報「氣血 -N」對不上。四捨五入跟訊息的
+        「:.0f」是同一個數（兩者都對同一個浮點數做銀行家捨入）。"""
+        before = self._player_hp()
+        toll = team.take_encounter_toll(self.state, self.content, self.world, tier, wild=wild)
+        return toll, round(before - self._player_hp())
+
+    def _play_rounds(self, record, squad: Squad, tier: str, hp_lost: int | None) -> None:
+        """照結果演出回合寫進戰報（武學與成長設計 8.2）。hp_lost 是這一場本人真的扣掉的氣血（_take_toll），回合裡寫的
+        「你氣血 -N」加起來剛好等於它；None 是這一場本來就不扣氣血（劇情戰），對手的出手不寫數字（計畫三 G5）。
+        亂數是自己一份、用「名號｜戰報流水號」當種子（計畫三 G3）：不碰 Game.rng，接下來的擲骰不會位移，
+        同一筆戰報每次演出來都一樣。"""
+        s, c, p = self.state, self.content, self.state.player
+        rng = random.Random(f"{p.name}|{record.id}")
+        foe = rounds.Foe(name=squad.name, attribute=squad.attribute, agility=rounds.foe_agility(squad.difficulty))
+        our_agility = float(p.stats.get("agi", team.BASE_STAT))
+        played = rounds.play(tier, team.fighters(s, c, self.world), foe, our_agility, hp_lost, rng)
+        record.rounds = battlelog.round_lines(c, played, rng)
 
     # ── 挑戰大勢人物本人（計畫 T4、軍令文件 4.5）─────────────
 
@@ -2160,9 +2185,10 @@ class Game:
             msgs += extra
         elif result.tier == "落敗":
             msgs += self._lose_silver(record)
-        toll = team.take_encounter_toll(s, c, self.world, result.tier)
+        toll, hp_lost = self._take_toll(result.tier)
         record.changes += toll
         msgs += toll
+        self._play_rounds(record, squad, result.tier, hp_lost)  # squad 是照聲威的那一份：對手的身法跟著難度走
         msgs.insert(0, self._file_battle(record))
         return msgs
 
@@ -2612,6 +2638,7 @@ class Game:
         changes, notes = battlelog.split_changes(story, for_record=True)
         record.changes += changes
         record.notes += notes
+        self._play_rounds(record, squad, result.tier, None)  # 劇情戰不扣氣血：對手的出手不寫數字（計畫三 G5）
         msgs = [self._file_battle(record)] + rewards + story
         if effect.next_event:
             msgs += self._present(c.events[effect.next_event])

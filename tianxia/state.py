@@ -334,6 +334,7 @@ class BattleRecord(BaseModel):
     materials: list[str] = Field(default_factory=list)  # 這一戰掉落的素材，已經是「精鐵砂 ×1」這樣的句子
     notes: list[str] = Field(default_factory=list)  # 敘事文字：選項效果、升級、拜師、傳聞等（不是數字，見 changes）
     changes: list[str] = Field(default_factory=list)  # 其他數值變化，如屬性、名望、善惡名（經驗／心得／銀兩已有專屬欄位）
+    rounds: list[str] = Field(default_factory=list)  # 回合演出，一回合一行（武學與成長設計 8.2）；決戰與舊戰報是空的
 
 
 class JournalEntry(BaseModel):

@@ -9,7 +9,7 @@ from __future__ import annotations
 import math
 import random
 
-from . import calendar, encounter
+from . import calendar, encounter, rounds
 from .martial_arts import MAX_LEVEL, MartialArt, content_art, counters, with_quality
 from .models import Content, FollowerDef, Squad
 from .state import PLAYER, MAX_TEAM_COMPANIONS, GameState, Member
@@ -159,6 +159,22 @@ def _fighters(
         team_conditions(state, content, world) + [1.0] * len(followers),
         team_boosts(state, content, world),
     )
+
+
+def fighters(state: GameState, content: Content, world: WorldStateStore) -> list[rounds.Fighter]:
+    """回合演出的我方陣容（武學與成長設計 8.2）：本人在前，再來是帶著的同伴、部下——跟 _fighters 算威力的是同一份名冊，
+    部下也上陣（F17）。每人報身上那門武學的名字與屬性（本人照自己那一份，player_art）；沒學武學的是 None。
+    只給畫面用，不算威力。"""
+    art = player_art(state, content, world, state.player.member.wugong_id)
+    out = [rounds.Fighter(name=state.player.name, art=art.name if art else None, attribute=art.attribute if art else None)]
+    shared = world.read()
+    others = [(content.characters[key].name, shared.companions.get(key, CompanionProgress()).wugong_id)
+              for key in state.player.team]
+    others += [(follower.name, follower.wugong) for _, follower in follower_rows(state, content)]
+    for name, skill_id in others:
+        mate = resolve_art(skill_id, content, world)
+        out.append(rounds.Fighter(name=name, art=mate.name if mate else None, attribute=mate.attribute if mate else None))
+    return out
 
 
 # ── 隊伍組成 ─────────────────────────────────────────────

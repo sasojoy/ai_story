@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 import random
+import re
 from unittest import mock
 
 from conftest import FixedRandom
@@ -639,6 +640,20 @@ def test_win_routs_the_figure_and_snubs_the_winner(on, world):
     assert _option(other, "act:challenge:bocai").enabled and other.socialize_starts_dialogue()
     winner.now += 2 * 3600
     assert _option(winner, "act:challenge:bocai").enabled and winner.socialize_starts_dialogue()
+
+
+def test_a_challenge_plays_out_rounds_that_add_up_to_the_toll(on, world):
+    """挑戰本人也演回合（計畫三 Task 1）：對手是照聲威的那一份（難度 120，身法 5＋120÷20＝11，比你快、先出手），
+    回合裡的「你氣血 -N」加起來等於戰報那一筆（根骨 10，上限吃根骨）。"""
+    game = _player(on, world, "官甲", "guan", "huangjin_camp")
+    game.state.player.stats["con"] = 10
+    with _fight("落敗"):
+        game.choose("act:challenge:bocai")
+    record = game.state.battles[0]
+    assert record.event == "挑戰波才" and len(record.rounds) in (3, 4)
+    assert all(line.startswith(f"第{i}回合　波才") for i, line in enumerate(record.rounds, 1))
+    told = int(re.search(r"氣血 -(\d+)", " ".join(record.changes)).group(1))
+    assert told > 0 and sum(int(n) for line in record.rounds for n in re.findall(r"你氣血 -(\d+)", line)) == told
 
 
 def test_the_fight_receives_the_difficulty_from_the_prestige(on, world):

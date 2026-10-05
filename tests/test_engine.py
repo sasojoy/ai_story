@@ -3138,6 +3138,112 @@ def test_a_post_battle_event_can_follow_the_fight(game):
     assert game.state.pending_event == "chain_a"  # 再接上戰後的事件
 
 
+# ── 回合演出（武學與成長設計 8.2、計畫三 Task 1）──────────────────────
+
+
+def _told_and_shown(record) -> tuple[int, int]:
+    """戰報「獲得與損失」寫的那一筆「氣血 -N」（沒有就是 0），以及回合裡每一句「你氣血 -N」加起來的數。"""
+    told = re.search(r"氣血 -(\d+)", " ".join(record.changes))
+    shown = sum(int(n) for line in record.rounds for n in re.findall(r"你氣血 -(\d+)", line))
+    return (int(told.group(1)) if told else 0), shown
+
+
+def _forced(tier: str):
+    """這一場的勝負寫死（team.fight 不擲骰）；回合怎麼演只看結果。"""
+    from tianxia import team
+    from tianxia.encounter import EncounterResult
+
+    return mock.patch.object(team, "fight", return_value=EncounterResult(tier=tier, margin=0, our_power=10, difficulty=5))
+
+
+def _player_hp(game) -> float:
+    from tianxia import team
+    from tianxia.state import PLAYER
+
+    return team.member_neili(game.content, game.state.player.member, team.con_of(game.state, PLAYER))[0]
+
+
+def test_a_training_fight_shows_rounds_that_match_the_hp_lost(game):
+    walk_to(game, "lake")
+    game.state.player.member.wugong_id = "basic_fist"
+    game.choose("act:train")
+    record = game.state.battles[0]
+    assert record.rounds and record.rounds[0].startswith("第1回合")
+    told = re.search(r"氣血 -(\d+)", " ".join(record.changes))  # 戰報「獲得與損失」寫的那一筆
+    shown = sum(int(n) for line in record.rounds for n in re.findall(r"你氣血 -(\d+)", line))
+    assert shown == (int(told.group(1)) if told else 0)
+    assert "**過程**" in game.battle_card()
+
+
+@pytest.mark.parametrize("neili", [None, 360.0])
+def test_the_rounds_add_up_to_what_a_sturdy_player_really_lost(game, neili):
+    """根骨 10 的人氣血上限是 368（吃根骨），比基準的 320 高：回合裡的「你氣血 -N」加起來要等於戰報那一筆、也等於真的
+    扣掉的（G4：con_of 認 key 不認物件，拿 Member 去問會當成基準 5，滿血落敗時只寫出 62、戰報卻是 110）。"""
+    walk_to(game, "lake")
+    p = game.state.player
+    p.stats["con"], p.member.neili = 10, neili
+    before = _player_hp(game)
+    with _forced("落敗"):
+        game.choose("act:train")
+    record = game.state.battles[0]
+    told, shown = _told_and_shown(record)
+    assert record.tier == "落敗" and told == round(before - _player_hp(game)) == 110
+    assert shown == told and len(record.rounds) in (3, 4)
+
+
+def test_the_rounds_add_up_to_the_halved_toll_of_a_wild_fight(game):
+    """探索撞上的野怪只扣一半的氣血（wild）：回合照樣加得起來。"""
+    game.state.player.stats["con"] = 10
+    before = _player_hp(game)
+    with _forced("落敗"):
+        game._squad_encounter("thug", wild=True)
+    record = game.state.battles[0]
+    told, shown = _told_and_shown(record)
+    assert record.kind == "wild" and told == round(before - _player_hp(game)) == 55 and shown == told
+
+
+def test_the_rounds_add_up_to_the_toll_after_a_level_up(game):
+    """打贏升級、氣血上限跟著變高（滿血的人「滿」也跟著變高）：回合的氣血要緊貼著扣氣血的前後量，
+    不是開打前——開打前量的話，升級多出來的上限會把這一場扣的蓋掉，回合裡一滴血都沒掉。"""
+    walk_to(game, "lake")
+    p = game.state.player
+    p.stats["con"], p.member.exp = 10, 90  # 夾具的 level_exp 是 100：水寇小隊給 20 經驗，打贏升到第 2 級
+    with _forced("大勝"):
+        game.choose("act:train")
+    record = game.state.battles[0]
+    told, shown = _told_and_shown(record)
+    assert p.member.level == 2 and told > 0 and shown == told
+
+
+def test_an_event_battle_takes_no_blood_so_their_blows_carry_no_numbers(game):
+    """劇情戰不扣氣血（G5）：對手的出手不寫「你氣血 -N」，也不寫「被你閃開了」——落敗的仗寫「被你閃開了」，
+    讀起來是對方從頭到尾沒碰到你、你卻輸了。沒學武學的人上場，也不會寫出「以【None】」。"""
+    walk_to(game, "lake")
+    game.choose("act:socialize")
+    assert game.state.pending_event == "duel"
+    game.choose("choice:0")  # 應戰翻江龍：必敗
+    record = game.state.battles[0]
+    assert record.tier == "落敗" and len(record.rounds) in (3, 4)
+    for line in record.rounds:
+        assert "你氣血" not in line and "被你閃開了" not in line
+        assert "None" not in line and "【" not in line and "翻江龍" in line and "沈浪" in line
+
+
+def test_the_rounds_do_not_touch_the_rules_rng_and_read_the_same_every_time(game):
+    """回合與句子用自己的亂數（名號＋戰報流水號當種子，G3），不動 Game.rng：演出是畫面上的事，不能讓同一個行動裡
+    接下來的擲骰（戰後事件、掉落、假人）跟著位移；同一筆戰報演幾次都一樣。"""
+    walk_to(game, "lake")
+    state = game.rng.getstate()
+    with _forced("落敗"):
+        game._squad_encounter("thug")
+    assert game.rng.getstate() == state
+    record = game.state.battles[0]
+    told, _ = _told_and_shown(record)
+    shown = list(record.rounds)
+    game._play_rounds(record, game.content.squads["thug"], "落敗", told)
+    assert shown and record.rounds == shown
+
+
 def test_the_journal_calls_it_a_training_trip(game):
     rules.learn_skill(game.state, game.content, "fist")
     walk_to(game, "lake")
