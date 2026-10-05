@@ -2633,6 +2633,10 @@ class Game:
         squad = c.squads[choice.combat]
         result = team.fight(s, c, self.world, squad.id, self.rng)
         record = battlelog.new_record(s, c, self.world, squad, result, "event", event.title)
+        # 回合照開打時的陣容與身法演，所以要在發獎勵、套效果之前：效果可能加身法、教武學、給同伴或部下，
+        # 不能回頭改寫這一場（例如 wolves 打贏身法 +1，不能變成「因為獎勵才先出手」）。
+        # 劇情戰不扣氣血：對手的出手不寫數字（計畫三 G5）
+        self._play_rounds(record, squad, result.tier, None)
         won = result.tier in team.WIN_TIERS
         rewards = self._battle_rewards(squad, record) if won else []
         effect = choice.effect if won else choice.fail_effect
@@ -2640,7 +2644,6 @@ class Game:
         changes, notes = battlelog.split_changes(story, for_record=True)
         record.changes += changes
         record.notes += notes
-        self._play_rounds(record, squad, result.tier, None)  # 劇情戰不扣氣血：對手的出手不寫數字（計畫三 G5）
         msgs = [self._file_battle(record)] + rewards + story
         if effect.next_event:
             msgs += self._present(c.events[effect.next_event])

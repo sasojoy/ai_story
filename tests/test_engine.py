@@ -3229,6 +3229,28 @@ def test_an_event_battle_takes_no_blood_so_their_blows_carry_no_numbers(game):
         assert "None" not in line and "【" not in line and "翻江龍" in line and "沈浪" in line
 
 
+def test_an_event_battle_is_played_with_the_fighters_from_before_its_rewards(game):
+    """劇情戰的回合照開打時的陣容與身法演（計畫三 Task 1 審查修正）：打贏的效果（真實內容的 wolves 打贏身法 +1）
+    不能回頭改寫這一場——身法 5 比水寇小隊的 5.25 慢，是對手先出手；效果加了身法也一樣。學到的武學同理：
+    本人空著手上陣、打贏才學會（配上身）的追風步，不會出現在這一場的回合裡，出手的只有帶著長拳的韓鐵。"""
+    duel = game.content.events["duel"].choices[0]
+    duel.combat = "thug"  # 換成打得贏的水寇小隊（難度 5：身法 5＋5÷20＝5.25）
+    duel.effect.stats = {"agi": 3}
+    duel.effect.learn_skills = ["step"]
+    game.state.player.team = ["mate"]
+    game.world.update_companion("mate", lambda p: setattr(p, "wugong_id", "fist"))
+    walk_to(game, "lake")
+    game.choose("act:socialize")
+    assert game.state.pending_event == "duel"
+    game.rng = FixedRandom(1.0)  # 最佳運氣：穩穩打贏
+    game.choose("choice:0")
+    record = game.state.battles[0]
+    p = game.state.player
+    assert record.tier in ("大勝", "險勝") and (p.stats["agi"], p.member.wugong_id) == (8, "step")  # 效果真的生效了
+    assert record.rounds and all(line.startswith(f"第{i}回合　水寇小隊") for i, line in enumerate(record.rounds, 1))
+    assert all("韓鐵以【長拳】" in line and "追風步" not in line and "沈浪" not in line for line in record.rounds)
+
+
 def test_the_rounds_do_not_touch_the_rules_rng_and_read_the_same_every_time(game):
     """回合與句子用自己的亂數（名號＋戰報流水號當種子，G3），不動 Game.rng：演出是畫面上的事，不能讓同一個行動裡
     接下來的擲骰（戰後事件、掉落、假人）跟著位移；同一筆戰報演幾次都一樣。"""
