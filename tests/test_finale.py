@@ -356,5 +356,51 @@ def test_stance_rule_reads_the_endings_not_a_fixed_number(on):
     assert game.status_data()["stance_rule"] == rules.stance_rule_note(game.state, on)  # 態勢卡那一句跟著內容走
 
 
+def _decisive(content):
+    """第一季的決定性結局（有 stance_min／stance_max 的），照 id 取出來，方便在記憶體裡改。"""
+    return {e.id: e for e in content.scenario.endings if e.season_one and (e.stance_min or e.stance_max)}
+
+
+def test_stance_rule_names_each_side_when_the_bars_differ(on):
+    """三方的門檻不一樣時，不能說「哪一方一到 85」：照每一方寫自己的數字（豪強改 90，其他兩方 85）。"""
+    game = _game(on)
+    _decisive(on)["s1_warlords"].stance_min = {"haoqiang": 90}
+    on.config.decisive_from_week = 1  # 第 1 週起就算：不帶「第 N 週起」，只剩規則那一句
+    note = rules.stance_rule_note(game.state, on)
+    assert note == "官軍一到 85、黃巾一到 85、豪強一到 90，這一季當場收場；否則到季末比高低。"
+
+
+def test_stance_rule_lists_only_the_sides_that_can_end_the_season(on):
+    """只有黃巾與豪強有決定性的結局（官軍那一種被拿掉）：不能說「哪一方」，官軍沒有門檻就不列。"""
+    game = _game(on)
+    _decisive(on)["s1_pacified"].stance_max = {}
+    on.config.decisive_from_week = 1
+    assert rules.stance_rule_note(game.state, on) == "黃巾一到 85、豪強一到 85，這一季當場收場；否則到季末比高低。"
+
+
+def test_stance_rule_states_no_number_it_cannot_back(on):
+    """豪強的 stance_max 沒有「另一方到幾分」可換（豪強 ≤ 10 不等於誰到了幾分），兩個條件合成一種的結局也不是「哪一方到幾分」：
+    這兩種都不報數字，寫一句中性的話。"""
+    game = _game(on)
+    on.config.decisive_from_week = 1
+    endings = _decisive(on)
+    endings["s1_warlords"].stance_min, endings["s1_warlords"].stance_max = {}, {"haoqiang": 10}
+    note = rules.stance_rule_note(game.state, on)
+    assert note == "哪一方的態勢到了決勝的門檻，這一季當場收場；否則到季末比高低。"
+    endings["s1_warlords"].stance_max = {}
+    endings["s1_warlords"].stance_min = {"haoqiang": 85}
+    endings["s1_huangtian"].stance_min = {"huang": 60}
+    endings["s1_huangtian"].stance_max = {"haoqiang": 30}  # 兩個條件合在一起
+    assert rules.stance_rule_note(game.state, on) == note
+    assert not any(ch.isdigit() for ch in note)
+
+
+def test_stance_rule_is_empty_without_a_decisive_ending(on):
+    game = _game(on)
+    for ending in _decisive(on).values():
+        ending.stance_min, ending.stance_max = {}, {}
+    assert rules.stance_rule_note(game.state, on) == ""
+
+
 def test_no_stance_rule_with_switch_off(real):
     assert "stance_rule" not in _game(real).status_data()
