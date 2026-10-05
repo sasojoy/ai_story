@@ -672,3 +672,14 @@ def test_only_the_players_card_carries_the_boost_line(state, content, world):
     state.player.stats.update({"str": 15, "con": 15, "good": 40})
     assert "威力加成" in skillview.member_card(state, content, world, "player")
     assert "威力加成" not in skillview.member_card(state, content, world, "mate")
+
+
+def test_a_small_name_shows_its_half_points_instead_of_rounding_to_nothing(state, content, world):
+    """共鳴是名聲 ÷ 2 %：善名 1 是 +0.5%、善名 15 是 +7.5%，不寫成「+0%」或湊整成 +8%。"""
+    wugong = generate_from_name("清風拳", "武學", "清風拳", attribute="剛").model_copy(update={"lean": "正"})
+    assert world.claim_skill_name(wugong)
+    state.player.member.wugong_id = wugong.id
+    state.player.stats["good"] = 1
+    assert skillview.boost_line(state, content, world) == "威力加成：【清風拳】共鳴 +0.5%"
+    state.player.stats["good"] = 15
+    assert skillview.boost_line(state, content, world) == "威力加成：【清風拳】共鳴 +7.5%"
