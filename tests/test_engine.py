@@ -9,7 +9,7 @@ from tianxia import atlas, battle_instance, calendar, companion_agent, flavor, g
 from tianxia.characters import open_characters
 from tianxia.engine import Game, Option
 from tianxia.martial_arts import MartialArt
-from tianxia.models import Location
+from tianxia.models import FigureDef, Location
 from tianxia.models import ExploreMix
 from tianxia.state import BotProfile, FigureState, GameState, Journey, Rumor, new_game_state
 from tianxia.sqlite_world import open_world
@@ -388,7 +388,8 @@ def test_continuing_and_leaving_a_dialogue(content, game):
         msgs = game.choose("talk:leave")
     assert msgs == ["你結束了這段交談，先行告辭。"]
     assert game.state.player.pending_companion is None
-    assert ids(game) == ["act:explore", "act:socialize", "act:recruit", "move:lake", "act:rest"]
+    # 小鎮只有他一位大勢人物：交友之外，直接多一顆求見他（名望門檻 0，見得到）
+    assert ids(game) == ["act:explore", "act:socialize", "call:mate", "act:recruit", "move:lake", "act:rest"]
 
 
 def test_socializing_without_a_deep_interaction_companion_falls_through_to_events(game):
@@ -2910,7 +2911,7 @@ def test_a_newcomer_without_fame_is_turned_away_from_a_figure(content, game):
             mock.patch.object(companion_agent, "_generate", return_value=FAKE_TURN):
         msgs = game.choose("act:socialize")
     assert game.state.player.pending_companion is None
-    assert msgs == ["你想求見韓鐵，但人微言輕，被擋在門外（名望 10 以上才見得到）。"]
+    assert msgs == ["韓鐵連見都不見你，門口的人把你請了出去。（名望還差 10）"]  # 內容沒寫打發話，用通用的那一句
 
 
 def test_enough_fame_or_a_prior_meeting_opens_the_door(content, game):
@@ -2961,7 +2962,7 @@ def test_a_newcomer_below_the_threshold_gets_the_locations_event_instead_of_a_di
     msgs = game.choose("act:socialize")
     assert game.state.player.pending_companion is None
     assert game.state.pending_event is not None
-    assert "你想求見韓鐵，但人微言輕，被擋在門外（名望 10 以上才見得到）。" not in msgs
+    assert not any("連見都不見你" in m for m in msgs)
 
 
 # ── 鎖外生成：dialogue_request 與 choose(prepared=...) ────────────────
@@ -3943,7 +3944,7 @@ def test_the_audience_list_names_each_figure_and_why_some_cannot_be_seen(content
     game.choose("act:call")
     assert game.state.player.picking_audience
     assert [(o.id, o.label, o.enabled) for o in game.options()] == [
-        ("call:mate", "韓鐵（名望 10 以上才見得到）", False),
+        ("call:mate", "韓鐵（名望不夠，多半會被打發）", True),  # 求見一直都在（武學與成長設計 9.1）
         ("call:scholar", "書生（體力 5・今天還能談 3/3 輪）", True),
         ("call:back", "返回", True),
     ]
@@ -4034,7 +4035,7 @@ def test_dialogue_request_for_a_call_is_the_generic_opening(content, game):
     assert (req.option_id, req.companion_id, req.player_action) == (
         "call:scholar", "scholar", companion_agent.GENERIC_OPENING,
     )
-    assert game.dialogue_request("call:mate") is None  # 見不到：選項停用
+    assert game.dialogue_request("call:mate") is None  # 見不到：被打發，不叫模型
     assert game.dialogue_request("call:back") is None
 
 
@@ -4089,6 +4090,138 @@ def test_a_stale_audience_list_is_closed_where_two_figures_no_longer_stand(conte
     game.state.player.picking_audience = True  # 夾具的小鎮沒有大勢人物：例如內容改版後讀進來的舊存檔
     reloaded = Game(content, game.state, world=game.world)
     assert not reloaded.state.player.picking_audience
+
+
+# ── 求見一直都在，門檻不夠就打發（武學與成長設計 9.1）──────────
+
+
+def _stand_by_one_figure(content, game, fame=30):
+    """小鎮只剩韓鐵一位大勢人物（夾具裡其他人都沒開深度對話），名望門檻 fame；他有一句打發話。福緣設成已領。"""
+    ch = _figure(content, fame=fame)
+    ch.brush_off = ["閒雜人等退下。"]
+    game.state.player.fortune = True
+    return "mate"
+
+
+def _guan_figure(content, character_id="mate"):
+    """把這位人物掛成官軍的大勢人物（階級抵門檻只認人物表上的陣營）。"""
+    _training_factions(content)
+    content.figures["f_test"] = FigureDef(
+        id="f_test", character=character_id, name=content.characters[character_id].name, faction="guan",
+        location="town", squad=next(iter(content.squads)),
+    )
+
+
+def test_the_audience_button_is_always_there_and_brushes_off_for_free(content, game):
+    cid = _stand_by_one_figure(content, game)
+    option = next(o for o in game.options() if o.id == f"call:{cid}")
+    assert option.enabled and option.label == "求見韓鐵（名望不夠，多半會被打發）"
+    stamina, affinity = game.state.player.stamina, game.state.player.affinities.get(cid, 0)
+    msgs = game.choose(f"call:{cid}")
+    assert any("閒雜人等退下。" in m and "名望還差 30" in m for m in msgs)
+    assert game.state.player.stamina == stamina and game.state.player.affinities.get(cid, 0) == affinity
+    assert game.state.player.pending_companion is None
+    assert game.state.journal[0].title == "求見・韓鐵"  # 吃閉門羹也寫進江湖紀錄
+
+
+def test_a_brush_off_does_not_ask_the_model(content, game):
+    cid = _stand_by_one_figure(content, game)
+    assert game.dialogue_request(f"call:{cid}") is None
+    with mock.patch.object(companion_agent, "_generate", side_effect=AssertionError("被打發的不該叫模型")):
+        game.choose(f"call:{cid}")
+
+
+def test_a_brush_off_without_written_lines_uses_the_general_one(content, game):
+    cid = _stand_by_one_figure(content, game)
+    content.characters[cid].brush_off = []
+    assert game.choose(f"call:{cid}") == ["韓鐵連見都不見你，門口的人把你請了出去。（名望還差 30）"]
+
+
+def test_a_brush_off_picks_one_of_the_written_lines(content, game):
+    cid = _stand_by_one_figure(content, game)
+    content.characters[cid].brush_off = ["一", "二", "三"]
+    seen = set()
+    for _ in range(40):
+        seen.add(game.choose(f"call:{cid}")[0].partition("（")[0])
+    assert seen == {"一", "二", "三"}
+
+
+def test_the_brush_off_says_how_far_short_you_are_and_names_the_faction_way_up(content, game):
+    cid = _stand_by_one_figure(content, game)
+    _guan_figure(content, cid)
+    game.state.player.stats["fame"] = 12
+    assert game.choose(f"call:{cid}") == ["閒雜人等退下。（名望還差 18）"]  # 散人只看名望
+    game.state.player.faction, game.state.player.rank = "guan", 2  # 晉升過一次（存檔裡的階從 2 起算，見 PlayerState.rank）
+    assert game.choose(f"call:{cid}") == ["閒雜人等退下。（名望還差 8，或在官軍再升一階）"]  # 門檻 30 - 2×5
+    game.state.player.faction = "huang"  # 敵對陣營：階級不抵，也不指望在他那邊升階
+    assert game.choose(f"call:{cid}") == ["閒雜人等退下。（名望還差 18）"]
+
+
+def test_enough_fame_turns_the_audience_button_into_a_real_audience(content, game):
+    cid = _stand_by_one_figure(content, game)
+    game.state.player.stats["fame"] = 30
+    option = next(o for o in game.options() if o.id == f"call:{cid}")
+    assert (option.label, option.enabled) == ("求見韓鐵（體力 5）", True)
+    with mock.patch.object(companion_agent, "_generate", return_value=FAKE_TURN):
+        game.choose(f"call:{cid}")
+    p = game.state.player
+    assert p.pending_companion == cid
+    assert p.stamina == content.config.stamina_max - content.config.action_cost["socialize"]
+
+
+def test_rank_in_the_figures_faction_opens_the_door(content, game):
+    cid = _stand_by_one_figure(content, game)
+    _guan_figure(content, cid)
+    game.state.player.stats["fame"] = 20
+    game.state.player.faction, game.state.player.rank = "guan", 2  # 30 - 2×5 = 20：剛好到
+    assert game.can_meet_figure(cid)
+    with mock.patch.object(companion_agent, "_generate", return_value=FAKE_TURN):
+        game.choose(f"call:{cid}")
+    assert game.state.player.pending_companion == cid
+
+
+def test_can_meet_figure_follows_fame_or_a_prior_meeting(content, game):
+    cid = _stand_by_one_figure(content, game)
+    assert not game.can_meet_figure(cid)
+    game.state.player.flags.add(f"結識:{cid}")
+    assert game.can_meet_figure(cid)
+    game.state.player.flags.discard(f"結識:{cid}")
+    game.state.player.stats["fame"] = 30
+    assert game.can_meet_figure(cid)
+
+
+def test_a_figure_who_turned_you_away_after_a_defeat_stays_shut(content, game):
+    cid = _stand_by_one_figure(content, game)
+    game.state.player.stats["fame"] = 30
+    with mock.patch.object(Game, "_snubbed_character", return_value=True):
+        option = next(o for o in game.options() if o.id == f"call:{cid}")
+        assert option.label == "求見韓鐵（剛吃了敗仗，閉門不見）" and not option.enabled
+
+
+def test_no_audience_button_once_the_day_is_used_up_with_the_single_figure(content, game):
+    cid = _stand_by_one_figure(content, game)
+    game.state.player.stats["fame"] = 30
+    game.state.player.talks_today[cid] = [rules.current_day(game.state), content.config.talk_turns_per_day]
+    assert f"call:{cid}" not in ids(game)
+
+
+def test_two_figures_still_share_one_audience_option_and_a_brush_off_closes_the_list(content, game):
+    _hall(content, game, mate_fame=10)
+    assert "call:mate" not in ids(game) and "act:call" in ids(game)  # 兩位以上：求見先打開名單，不直接列人
+    game.choose("act:call")
+    stamina = game.state.player.stamina
+    msgs = game.choose("call:mate")
+    assert msgs == ["韓鐵連見都不見你，門口的人把你請了出去。（名望還差 10）"]
+    assert game.state.player.stamina == stamina and not game.state.player.picking_audience
+    assert game.state.player.pending_companion is None
+
+
+def test_socializing_with_a_figure_you_cannot_meet_uses_the_same_brush_off(content, game):
+    cid = _stand_by_one_figure(content, game)
+    with mock.patch("tianxia.engine.pick_event", return_value=None),             mock.patch.object(companion_agent, "_generate", side_effect=AssertionError("被打發的不該叫模型")):
+        msgs = game.choose("act:socialize")
+    assert msgs == ["閒雜人等退下。（名望還差 30）"]
+    assert game.state.player.pending_companion is None
 
 
 # ── 主畫面的走法切換（步行／趕路／疾行）──────────────────────

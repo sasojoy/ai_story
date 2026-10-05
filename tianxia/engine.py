@@ -27,7 +27,7 @@ from .models import (
 )
 from .ollama_client import OllamaClient
 from .rules import (
-    GEJU, HUANGJIN, add_rumor, apply_effect, can_hear, can_meet, change_trend, check_who, current_day, display_name, fill_marks, free_text_rate,
+    GEJU, HUANGJIN, add_rumor, apply_effect, audience_bar, can_hear, can_meet, change_trend, check_who, current_day, display_name, fill_marks, free_text_rate,
     front_ids, front_of, in_chaos,
     is_revealed, pushable, rate_words, recompute_trends, resolve_goals, resolve_trend, resolve_trends, roll_check,
     season_one, season_one_off, stances, trend_name, trend_shown, trend_value, world_trend_value,
@@ -402,6 +402,15 @@ class Game:
             # 兩位以上大勢人物的地點，交友只走福緣與地點事件、從不開口對話（見 _socialize_figure），
             # 所以只在有交友事件時才給；人物改由下面的「求見」指名
             opts.append(self._socialize_option(people, cost["socialize"]))
+        if len(people) == 1:  # 只有一位：直接求見他，一直按得下去（武學與成長設計 9.1）
+            cid = people[0]
+            ch = c.characters[cid]
+            if self._snubbed_character(cid):
+                opts.append(Option(id=f"call:{cid}", label=f"求見{ch.name}（{SNUB_NOTE}）", enabled=False))
+            elif not self._can_meet(cid):
+                opts.append(Option(id=f"call:{cid}", label=f"求見{ch.name}（名望不夠，多半會被打發）"))  # 按下去走打發，見 _brush_off
+            elif self._talks_left(cid) > 0:
+                opts.append(self._cost_option(f"call:{cid}", f"求見{ch.name}", cost["socialize"]))
         if len(people) >= AUDIENCE_HALL_FIGURES:
             opts.append(Option(id="act:call", label="求見"))  # 只是打開第二層選單，不花體力（見 _audience_options）
         target = self._recruit_target()
@@ -555,8 +564,8 @@ class Game:
         - `talk:N`：N 是上一輪提供的選項、手上有對話、選項沒停用；`talk:leave` 不生成。
         - `act:socialize`：選項沒停用、福緣還沒到（福緣先發，見 _act）、這裡只有一位大勢人物而且見得到
           （兩位以上的地點交友不開口，見 _socialize_figure）；玩家這一步固定是 GENERIC_OPENING。
-        - `call:<人物>`：求見選單上按得下去的那位人物（選項沒停用＝見得到、今天還沒談滿、體力夠）；
-          玩家這一步固定是 GENERIC_OPENING。`call:back` 不生成。
+        - `call:<人物>`：求見選單上按得下去、而且見得到（名望或階級夠、或結識過）的那位人物（今天還沒談滿、體力夠）；
+          名望不夠的求見也按得下去，但那是被打發、不生成。玩家這一步固定是 GENERIC_OPENING。`call:back` 不生成。
         其他選項都不呼叫對話模型。
         只讀：選單用 tick=False 取，不推進戰鬥（推進可能結算一回合並呼叫 LLM 潤色，而且備料與
         進鎖重驗各會呼叫這個方法一次；一次請求的那一次推進留給 choose() 開頭）。"""
@@ -580,6 +589,8 @@ class Game:
                 return None
             player_action = companion_agent.GENERIC_OPENING
         elif kind == "call" and arg != "back":
+            if not self._can_meet(arg):
+                return None  # 門檻不夠：被打發，不叫模型（見 _call、_brush_off）
             companion_id, player_action = arg, companion_agent.GENERIC_OPENING
         else:
             return None
@@ -887,10 +898,13 @@ class Game:
     def _call(self, arg: str, prepared: companion_agent.PreparedTurn | None = None) -> list[str]:
         """求見選單上的選擇：「返回」收起選單；選了一位人物就跟他開口對話，跟交友碰上人物時一模一樣——
         花交友的體力、生成不出對話就退回（見 _open_dialogue）。福緣不在這裡發：指名求見就是要見這個人
-        （福緣照舊由交友先發，或到期自己送上門，見 _advance_player_local）。"""
+        （福緣照舊由交友先發，或到期自己送上門，見 _advance_player_local）。
+        門檻不夠（名望與階級都不到、也沒結識過）就被打發：不花體力、不叫模型，見 _brush_off。"""
         self.state.player.picking_audience = False
         if arg == "back":
             return ["你收回名帖，暫且不求見了。"]
+        if not self._can_meet(arg):
+            return self._brush_off(arg)
         self.state.player.stamina -= self.content.config.action_cost["socialize"]
         return self._open_dialogue(arg, prepared)
 
@@ -1109,6 +1123,24 @@ class Game:
         判斷在 rules.can_meet，伏筆的偷聽也用它。"""
         return can_meet(self.state, self.content, companion_id)
 
+    def can_meet_figure(self, companion_id: str) -> bool:
+        """見得到這位人物嗎（名望與陣營階級、或結識過）；機器人用來避開會被打發的求見。"""
+        return self._can_meet(companion_id)
+
+    def _brush_off(self, companion_id: str) -> list[str]:
+        """門檻不夠時被打發（武學與成長設計 9.1）：他自己口吻的一句（內容沒寫就用通用的），附上還差多少。
+        不叫模型、不花體力、不加情誼。"""
+        s, c = self.state, self.content
+        ch = c.characters[companion_id]
+        line = self.rng.choice(ch.brush_off) if ch.brush_off else f"{ch.name}連見都不見你，門口的人把你請了出去。"
+        short = audience_bar(s, c, companion_id) - s.player.stats.get("fame", 0)
+        figure = next((f for f in c.figures.values() if f.character == companion_id), None)
+        hint = f"名望還差 {short}"
+        if figure is not None and s.player.faction == figure.faction:
+            faction = next((f.name for f in c.scenario.factions if f.id == figure.faction), figure.faction)
+            hint += f"，或在{faction}再升一階"
+        return [f"{line}（{hint}）"]
+
     def _talks_used(self, companion_id: str) -> int:
         """今天（遊戲日，跟福緣用同一個算法）已經跟這位人物聊了幾輪；紀錄是前幾天的就當沒聊過。"""
         record = self.state.player.talks_today.get(companion_id)
@@ -1145,8 +1177,9 @@ class Game:
         return self._deep_interaction_target()
 
     def _audience_options(self) -> list[Option]:
-        """求見的第二層選單：這裡每一位大勢人物一個選項，最後是永遠按得下去的「返回」。名望不夠（也沒結識過）、
-        或今天已經跟他談滿的人按不下去並寫明原因；每天的輪數上限是每位人物各算各的（talk_turns_per_day）。"""
+        """求見的第二層選單：這裡每一位大勢人物一個選項，最後是永遠按得下去的「返回」。名望不夠（也沒結識過）的人
+        也按得下去，只是會被打發（見 _brush_off）；今天已經跟他談滿、或剛吃了敗仗閉門不見的人按不下去並寫明原因；
+        每天的輪數上限是每位人物各算各的（talk_turns_per_day）。"""
         c = self.content
         cost = c.config.action_cost["socialize"]
         per_day = c.config.talk_turns_per_day
@@ -1158,7 +1191,7 @@ class Game:
             if self._snubbed_character(companion_id):
                 opts.append(Option(id=option_id, label=f"{ch.name}（{SNUB_NOTE}）", enabled=False))
             elif not self._can_meet(companion_id):
-                opts.append(Option(id=option_id, label=f"{ch.name}（名望 {ch.audience_fame} 以上才見得到）", enabled=False))
+                opts.append(Option(id=option_id, label=f"{ch.name}（名望不夠，多半會被打發）"))  # 按下去走打發，見 _brush_off
             elif left == 0:
                 opts.append(Option(id=option_id, label=f"{ch.name}（今天已經談滿 {per_day} 輪，明天再來）", enabled=False))
             else:
@@ -1170,7 +1203,7 @@ class Game:
         """求見畫面的說明（場景上的那一段）：挑一位拜會；每位人物每天最多談幾輪，各算各的。"""
         here = self.content.locations[self.state.player.location].name
         per_day = self.content.config.talk_turns_per_day
-        return f"{here}有好幾位人物，挑一位求見。每位人物每天最多談 {per_day} 輪，各算各的；名望不夠的見不到，談滿的明天再來。"
+        return f"{here}有好幾位人物，挑一位求見。每位人物每天最多談 {per_day} 輪，各算各的；名望不夠的多半會被打發，談滿的明天再來。"
 
     def _no_audience_line(self) -> str:
         """交友時見不到這裡的大勢人物時的說明；這裡沒有大勢人物就是原本的「此地無人可訪」；
@@ -1182,7 +1215,7 @@ class Game:
             if self._snubbed_character(companion_id):
                 return f"{ch.name}{SNUB_NOTE}。"
             if not self._can_meet(companion_id):
-                return f"你想求見{ch.name}，但人微言輕，被擋在門外（名望 {ch.audience_fame} 以上才見得到）。"
+                return self._brush_off(companion_id)[0]  # 交友時遇上見不到的人物，用求見同一套打發的話
             if self._talks_left(companion_id) == 0:
                 return f"{ch.name}今日事忙，改日再來拜會吧。"
         return "此地無人可訪，你只好悻悻離去。"

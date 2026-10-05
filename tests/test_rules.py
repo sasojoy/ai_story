@@ -1,8 +1,9 @@
 import pytest
 
-from tianxia.models import Check, Condition, Effect
+from tianxia.models import Check, Condition, Effect, FigureDef
 from tianxia.rules import (
-    add_world_flags, apply_effect, check_chance, check_condition, check_who, current_day, learn_skill,
+    add_world_flags, apply_effect, audience_bar, can_meet, check_chance, check_condition, check_who, current_day,
+    learn_skill,
 )
 from tianxia.team import check_actor
 
@@ -294,3 +295,58 @@ def test_an_event_rumor_is_local_news_of_its_region(state, content, world):
     assert rumor.layer == "local" and rumor.location == state.player.location
     assert rumor.region == (region.id if region else None)
     assert rumor.named is False and "某位少俠" in rumor.text
+
+
+# ── 求見的門檻（武學與成長設計 9.1）：名望為主，同陣營的階級每階抵 audience_rank_discount ──
+
+
+def _figure_for(content, character_id, faction="guan"):
+    content.figures["f_test"] = FigureDef(
+        id="f_test", character=character_id, name=content.characters[character_id].name,
+        faction=faction, location=content.scenario.start_location, squad=next(iter(content.squads)),
+    )
+
+
+def test_rank_in_the_figures_own_faction_lowers_the_bar(state, content):
+    cid = "mate"
+    content.characters[cid].audience_fame = 20
+    _figure_for(content, cid, "guan")
+    state.player.stats["fame"] = 10
+    assert audience_bar(state, content, cid) == 20 and not can_meet(state, content, cid)
+    state.player.faction, state.player.rank = "guan", 2
+    assert audience_bar(state, content, cid) == 10 and can_meet(state, content, cid)  # 剛好到也算
+
+
+def test_rank_in_another_faction_does_not_count(state, content):
+    cid = "mate"
+    content.characters[cid].audience_fame = 20
+    _figure_for(content, cid, "guan")
+    state.player.faction, state.player.rank = "huang", 3
+    assert audience_bar(state, content, cid) == 20
+
+
+def test_a_loner_and_a_figure_without_a_faction_entry_only_count_fame(state, content):
+    cid = "mate"
+    content.characters[cid].audience_fame = 20
+    state.player.rank = 3  # 散人的階級不抵（沒有陣營）
+    assert audience_bar(state, content, cid) == 20  # 這個人物也不在大勢人物表上
+    _figure_for(content, cid, "guan")
+    assert audience_bar(state, content, cid) == 20
+
+
+def test_the_bar_never_drops_below_zero_and_the_discount_is_configurable(state, content):
+    cid = "mate"
+    content.characters[cid].audience_fame = 8
+    _figure_for(content, cid, "guan")
+    state.player.faction, state.player.rank = "guan", 3
+    assert audience_bar(state, content, cid) == 0  # 8 - 15 夾到 0
+    content.config.audience_rank_discount = 1
+    assert audience_bar(state, content, cid) == 5
+
+
+def test_a_prior_meeting_still_opens_the_door_whatever_the_bar(state, content):
+    cid = "mate"
+    content.characters[cid].audience_fame = 99
+    assert not can_meet(state, content, cid)
+    state.player.flags.add(f"結識:{cid}")
+    assert can_meet(state, content, cid)

@@ -1135,6 +1135,7 @@ def validate(c: Content) -> None:
         if ch.affinity_tag_deltas:
             for tag in ch.affinity_tag_deltas:
                 need(tag in DIALOGUE_TAGS, f"{where}：affinity_tag_deltas 的 {tag!r} 不是合法的交友 tag")
+        need(len(ch.brush_off) <= 3, f"{where}：brush_off 最多三句")
     for squad in c.squads.values():
         where = f"敵方隊伍 {squad.id}"
         need(squad.difficulty >= 0, f"{where}：difficulty 不能是負的")
