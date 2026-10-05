@@ -202,7 +202,7 @@ def add_to_team(state: GameState, companion_id: str) -> list[str]:
     if companion_id in state.player.team:
         return []
     if len(state.player.team) >= MAX_TEAM_COMPANIONS:
-        return [f"隊伍已經滿了（最多帶 {MAX_TEAM_COMPANIONS} 個夥伴），先讓someone離隊才能換人。"]
+        return [f"隊伍已經滿了（最多帶 {MAX_TEAM_COMPANIONS} 個夥伴），先讓一位夥伴離隊才能換人。"]
     state.player.team.append(companion_id)
     return []
 
