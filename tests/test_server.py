@@ -1051,7 +1051,7 @@ def test_the_same_forge_sent_twice_while_naming_is_charged_once(art, picked, ref
     else:
         assert world.lookup_insight_recipe(fusion.merge_key("feng", "huo")).name == "旋風腿"
         assert after_two.insights == ["feng", "huo", "旋風腿"]
-        assert after_two.stamina == pytest.approx(before.stamina - 10, abs=0.01)  # 只扣一次合併的體力
+        assert after_two.stamina == pytest.approx(before.stamina - 5, abs=0.01)  # 只扣一次合併的體力（FB-067：5 點）
 
 
 def test_a_second_tab_that_spends_the_xinde_while_naming_leaves_the_first_forge_refused_and_free():

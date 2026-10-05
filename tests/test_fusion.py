@@ -504,11 +504,12 @@ def test_the_naming_budget_fits_under_the_tunnels_cut(content):
 
 # ── 合併要花體力（企劃者 2026-10-05：「意境合併要花體力，這樣的話她要拿心得就給他拿」）──────────
 # 合併→熔掉→再合併，每一圈淨賺 5 點心得（merge_xinde 5、melt_insight_xinde 10）；企劃者的裁示不是擋重合、也不是
-# 動熔的價，而是讓合併花體力：要賺就照著賺，只是每一圈都要花一次修練那麼多的體力。合成（武學＋意境）維持不花體力。
+# 動熔的價，而是讓合併花體力：要賺就照著賺，只是每一圈都要付體力（FB-067 起 5 點，修練一次是 10）。合成（武學＋意境）維持不花體力。
 
 
-def test_merge_stamina_is_one_cultivation_by_default(content):
-    assert content.config.merge_stamina == content.config.cultivate_stamina == 10
+def test_merge_stamina_is_half_a_cultivation_by_default(content):
+    """FB-067（企劃者 2026-10-05）：合併的體力降到 5（原本 10，跟修練一次一樣）；修練（含衝絕學）維持 10。"""
+    assert (content.config.merge_stamina, content.config.cultivate_stamina) == (5, 10)
 
 
 def test_a_merge_costs_stamina_as_well_as_xinde(ready, content, world):
@@ -566,8 +567,8 @@ def test_the_engine_merge_journal_entry_shows_both_the_xinde_and_the_stamina(gam
         msgs = game.forge(None, ["feng", "huo"])
     entry = game.state.journal[0]
     assert entry.title == "煉製" and entry.tag.startswith("合併「")
-    assert "心得 -5" in entry.changes and "體力 -10" in entry.changes
-    assert p.stamina == before - 10 and "體力 -10" in msgs
+    assert "心得 -5" in entry.changes and "體力 -5" in entry.changes  # FB-067：合併 5 點體力
+    assert p.stamina == before - 5 and "體力 -5" in msgs  # FB-067：合併 5 點體力
 
 
 def test_the_engine_fuse_journal_entry_has_no_stamina_line(game):
