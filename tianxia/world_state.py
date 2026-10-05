@@ -193,6 +193,24 @@ class WorldStateStore(Protocol):
         """跟 claim_recipe 同一套：配方有了回 (登記在案的, False)；名字被占用回 (None, False)；否則登記、回 (insight, True)。"""
         ...
 
+    # ── 合到舊的（武學與成長設計 12.2；這一季）──
+    def fused_arts(self) -> list[MartialArt]:
+        """這一季靠合成登記的功法（origin 是 fused），照登記的先後；「合到舊的」從這裡找候選。"""
+        ...
+
+    def merged_insights(self) -> list[Insight]:
+        """這一季合併出來的意境，照登記的先後；基本意境不在這裡。"""
+        ...
+
+    def link_recipe(self, key: str, skill_name: str, creator: str | None) -> tuple[MartialArt | None, bool]:
+        """把配方指到這一季已經登記的一門功法（合到舊的），原子判斷：配方已經有人登記 → (登記在案的, False)；
+        那門功法不存在 → (None, False)；否則記下這個配方 → (那一門, True)。功法本身不動，首創者照舊。"""
+        ...
+
+    def link_insight_recipe(self, key: str, insight_name: str, creator: str | None) -> tuple[Insight | None, bool]:
+        """跟 link_recipe 同一套，指到這一季合併出來的一個意境。"""
+        ...
+
     def claim_master(self, skill_name: str, player: str, shown: str | None = None) -> bool:
         """這門武學這一季第一個修到絕學的人：還沒有人就記成 player、回 True；已經有人回 False（原子判斷）。
         player 是名號（身分：取名權照它認）；shown 是寫給別人看的名號（匿名行走的人是「某位少俠」），

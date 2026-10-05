@@ -799,3 +799,66 @@ def test_a_season_is_stamped_with_the_settings_it_opened_under(store, content):
     store.mutate_season(lambda season: setattr(season, "ended", True))
     assert store.next_season(content, now=1.0)
     assert (store.get_season().season_one, store.get_season().length_days) == (True, 2.5)
+
+
+# ── 合到舊的（武學與成長設計 12.2）──────────────────────────────
+
+def _fused(name, **update):
+    return generate_from_name(name, "武學", name).model_copy(update={"origin": "fused", **update})
+
+
+def test_fused_arts_lists_only_this_seasons_fused_arts_in_order(store, content):
+    content.config.auto_open_first_season = True
+    store.seed_first_season(content)
+    store.claim_recipe("融|a", _fused("旋風腿"))
+    store.claim_recipe("融|b", _fused("烈火拳"))
+    store.claim_skill_name(generate_from_name("舊自創", "武學", "舊自創"))  # origin 是 created：不算合成物
+    assert [art.id for art in store.fused_arts()] == ["旋風腿", "烈火拳"]
+
+
+def test_merged_insights_lists_this_seasons_merges_in_order(store, content):
+    content.config.auto_open_first_season = True
+    store.seed_first_season(content)
+    assert store.merged_insights() == []
+    store.claim_insight_recipe("合|feng+huo", Insight(id="燎原", name="燎原", attribute="陽"))
+    store.claim_insight_recipe("合|feng+feng", Insight(id="狂風", name="狂風", attribute="快"))
+    assert [i.id for i in store.merged_insights()] == ["燎原", "狂風"]
+
+
+def test_link_recipe_points_a_new_key_at_an_art_that_is_already_registered(store, content):
+    content.config.auto_open_first_season = True
+    store.seed_first_season(content)
+    store.claim_recipe("融|a", _fused("旋風腿", creator="甲"))
+    linked, first = store.link_recipe("兼|b", "旋風腿", "乙")
+    assert first and linked.id == "旋風腿" and linked.creator == "甲"  # 首創者照舊是甲
+    assert store.lookup_recipe("兼|b").id == "旋風腿"
+    again, first = store.link_recipe("兼|b", "旋風腿", "丙")  # 已經有人登記：回登記在案的
+    assert not first and again.id == "旋風腿"
+    assert store.link_recipe("兼|c", "沒有這門", "乙") == (None, False)
+    assert store.lookup_recipe("兼|c") is None
+    assert [art.id for art in store.fused_arts()] == ["旋風腿"]  # 沒有多出一門
+
+
+def test_link_insight_recipe_points_a_new_key_at_a_merged_insight(store, content):
+    content.config.auto_open_first_season = True
+    store.seed_first_season(content)
+    store.claim_insight_recipe("合|feng+huo", Insight(id="燎原", name="燎原", attribute="陽", creator="甲"))
+    linked, first = store.link_insight_recipe("合|huo+狂風", "燎原", "乙")
+    assert first and linked.id == "燎原" and linked.creator == "甲"
+    assert store.lookup_insight_recipe("合|huo+狂風").id == "燎原"
+    assert store.link_insight_recipe("合|huo+狂風", "燎原", "丙") == (linked, False)
+    assert store.link_insight_recipe("合|x+y", "沒有這個", "乙") == (None, False)
+
+
+def test_the_seasons_firsts_list_an_art_reached_by_two_recipes_once(store, content):
+    """合到舊的讓好幾個配方指向同一門：江湖史的「合成首創」「首悟意境」一門一個、寫首創的人。"""
+    content.config.auto_open_first_season = True
+    store.seed_first_season(content)
+    store.claim_recipe("融|a", _fused("旋風腿", creator="甲"))
+    store.link_recipe("兼|b", "旋風腿", "乙")
+    store.claim_insight_recipe("合|feng+huo", Insight(id="燎原", name="燎原", attribute="陽", creator="丙"))
+    store.link_insight_recipe("合|huo+狂風", "燎原", "丁")
+    store.mutate_season(lambda season: setattr(season, "ended", True))
+    assert store.next_season(content, now=1.0)
+    [(_, entries)] = store.chronicle_before(2)
+    assert [e.text for e in entries] == ["第 1 季合成首創 1 門：【旋風腿】甲", "第 1 季首悟意境 1 個：「燎原」丙"]
