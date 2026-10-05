@@ -751,7 +751,6 @@ class Config(_Strict):
     foreshadow_tiers: list[tuple[int, float]] = Field(default_factory=lambda: [(10, 0.2), (100, 0.3), (1000, 0.6)])
     foreshadow_contrib: int = Field(default=50, ge=0)  # 最後一步答對記多少貢獻（五點推力的量；先完成、搶輸、同陣營後到都照記）
     guanyin_chance: float = Field(default=0.3, ge=0, le=1)  # 黃巾遊歷打贏官軍的隊伍時拿到一錠官銀的機率（濃縮版內容表 4.0）
-    train_stat_chance: float = 0.3
     train_event_chance: float = 0.3
     qiyu_weight_multiplier: float = 1.5
     event_repeat_decay: float = Field(default=0.5, gt=0, le=1)  # 看過的事件下次更少出現：抽選權重 × 這個數 ^ 這個玩家這一季看過幾次（1.0＝不遞減）
@@ -771,9 +770,6 @@ class Config(_Strict):
     vision_base: int = 2  # 從所在地沿道路看得見幾步
     vision_fame: int = 10  # 名望達到這個值，視野 +1
     max_log: int = 200
-    player_growth: dict[str, float] = Field(
-        default_factory=lambda: {"str": 0.3, "agi": 0.3, "con": 0.3, "wis": 0.3}
-    )
     neili_base: float = 300
     neili_per_con: float = 40
     neili_per_level: float = 20
@@ -792,7 +788,7 @@ class Config(_Strict):
     level_exp: int = 10  # 第 n 級升 n+1 級需要 level_exp × n
     # 原本是 100，但實測一季打 19~26 場只升到第 2~3 級（升到第 10 級要 4500 經驗），
     # 而氣血設計 §1.4 的平衡量測點在第 5／10／15 級——連第 5 級都到不了。降到 10 之後
-    # 一季大約升到第 10 級，等級的兩條線（氣血上限、檢定屬性）才有量級可談。
+    # 一季大約升到第 10 級，等級的兩條線（氣血上限、屬性點）才有量級可談。
     max_level: int = 30
     # ── 練功（sanguo-companions 合併重寫，見設計文件六.2）──
     practice_injury_chance: float = 0.15  # 每次練功累積受傷（內傷）的機率
@@ -835,6 +831,10 @@ class Config(_Strict):
     holding_cap_base: int = 50  # 武學與意境合計最多幾個
     holding_cap_levels: int = 5  # 每升幾級……
     holding_cap_step: int = 5  # ……多幾格
+    # ── 四屬性（武學與成長設計第六節；【預設】）──
+    stat_points_per_level: int = 1  # 每升一級給幾點屬性，自己分配（取代每級自動 +0.3 與打贏隨機 +1）
+    stat_cap: int = 15  # 臂力、身法、根骨、悟性每項最高
+    stat_bonus_per_point: float = 0.03  # 比基準 5 每多一點的加成（計畫二 Task 2 起用）
     # ── 同伴招募（sanguo-companions 合併重寫，取代舊的收徒/招賢，見設計文件四.4）──
     recruit_stamina: int = 15  # 嘗試招募一次的體力
     recruit_base_chance: float = 0.35  # 基礎成功率，情誼會再往上加（見 roster.py）

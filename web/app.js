@@ -228,7 +228,7 @@
     return `
       <div class="top-row">
         <div class="who" data-act="toggle-more" role="button" tabindex="0" aria-expanded="${S.showMore}">
-          <div class="who-name"><span>${esc(s.name)}<small>${esc(s.affiliation)}${s.anonymous ? "・匿名" : ""}・第${s.level}級</small></span><i class="more-ico" aria-hidden="true">${S.showMore ? "▴" : "▾"}</i></div>
+          <div class="who-name"><span>${esc(s.name)}<small>${esc(s.affiliation)}${s.anonymous ? "・匿名" : ""}・第${s.level}級${s.stat_points ? `・<b>可配 ${s.stat_points} 點</b>` : ""}</small></span><i class="more-ico" aria-hidden="true">${S.showMore ? "▴" : "▾"}</i></div>
           <div class="where">📍 ${esc(s.location)}　${s.calendar
             ? esc(s.calendar.text)
             : `第 ${s.day} 天 ${esc(s.clock)}<small>／共 ${dayCount(s.season_days)} 天</small>`}${s.resting != null ? "　🧘 打坐中" : ""}</div>
@@ -248,6 +248,7 @@
       </div>
       ${S.showMore ? `<div class="more-stats">
         ${s.minor.map(([k, v]) => `${esc(k)} ${v}`).join("　")}　｜　${s.attrs.map(([k, v]) => `${esc(k)} ${v}`).join("　")}
+        ${s.stat_points ? `<div class="row">${s.attrs.map(([k, v, key]) => `<button class="btn small" data-act="allocate" data-stat="${esc(key)}" ${v >= s.stat_cap ? "disabled" : ""}>＋${esc(k)}</button>`).join("")}</div>` : ""}
         ${team ? `<br>${team}` : ""}
         ${s.stances ? stancesHtml(s.stances, s.stance_notes) : ""}
       </div>` : ""}
@@ -1386,6 +1387,7 @@
         case "scene-more": S.sceneOpen = !S.sceneOpen; renderPage(); break;
         case "hint-more": S.hintOpen = !S.hintOpen; renderTop(); break; // 狀態列只重畫它自己（江湖頁不動，「剛剛」不會重播）
         case "guide-ack": await doMain("guide_ack"); break;
+        case "allocate": await doMain("allocate", { stat: el.dataset.stat }); break; // 升級的屬性點加到一項（狀態列展開後的「＋臂力」）
         case "do": S.sheet = false; await doMain(el.dataset.op); break;
         case "admin": {
           const op = el.dataset.op;

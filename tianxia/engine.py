@@ -1991,10 +1991,10 @@ class Game:
         return [head, text] + foreshadow.hear_from_event(self.state, self.content, event.id, self.world)  # 片段事件（計畫 T7）
 
     def _squad_encounter(self, squad_id: str, wild: bool = False) -> list[str]:
-        """遭遇一支敵方隊伍：單次判定，勝得對手獎勵與屬性機會，落敗失落一成銀兩；自己陣營的隊伍改成操練（見 _drill）。
+        """遭遇一支敵方隊伍：單次判定，勝得對手獎勵，落敗失落一成銀兩；自己陣營的隊伍改成操練（見 _drill）。
 
         wild：探索時撞上的野怪（探索三選一設計 4.2）——扣氣血打折（`wild_neili_loss_factor`，內傷照比例）、
-        打贏**不推大勢**（遊歷推大勢的量已經讓黃巾早早稱霸，探索不能再加碼）；獎勵、掉落、屬性機會、落敗的
+        打贏**不推大勢**（遊歷推大勢的量已經讓黃巾早早稱霸，探索不能再加碼）；獎勵、掉落、落敗的
         一成銀兩都照常。戰後事件本來就只在 _train 裡接，野怪不走那裡。遊歷不帶這個旗標，一點都不變。"""
         s, c = self.state, self.content
         p = s.player
@@ -2009,10 +2009,6 @@ class Game:
             rewards = self._battle_rewards(squad, record)
             msgs += rewards
             extra: list[str] = []
-            if self.rng.random() < c.config.train_stat_chance:
-                key = self.rng.choice(["str", "agi", "con"])
-                p.stats[key] += 1
-                extra.append(f"{c.config.stat_names[key]} +1")
             if not wild:
                 for trend_id, delta in self.train_trend_push(loc.id).items():  # 換算過的線，照舊交給 T3 的 push_trend
                     extra += self.push_trend(trend_id, delta, source="train")
@@ -2041,7 +2037,7 @@ class Game:
 
     def _drill(self, squad: Squad) -> list[str]:
         """在自己陣營的地方遊歷：不打自己人，一起操軍擺陣（企劃者 2026-10-02 決定）。不會輸、不扣氣血；
-        給經驗與心得、有機會加屬性；不給銀兩、不掉素材（不搶自己人）；地點的大勢推動往自己陣營有利的方向推。"""
+        給經驗與心得；不給銀兩、不掉素材（不搶自己人）；地點的大勢推動往自己陣營有利的方向推。"""
         s, c = self.state, self.content
         p = s.player
         loc = c.locations[p.location]
@@ -2058,10 +2054,6 @@ class Game:
         msgs += team.add_team_exp(s, c, self.world, squad.exp)  # 本人與帶著的同伴都拿（FB-002）
         if self._draft is not None and squad.exp > 0:
             self._draft.changes.append(f"經驗 +{squad.exp}（每人）")
-        if self.rng.random() < c.config.train_stat_chance:
-            key = self.rng.choice(["str", "agi", "con"])
-            p.stats[key] += 1
-            msgs.append(f"{c.config.stat_names[key]} +1")
         for trend_id, delta in self.train_trend_push(loc.id).items():
             msgs += self.push_trend(trend_id, delta, source="drill")
         return msgs
@@ -2774,6 +2766,28 @@ class Game:
         self._menxia_entry(msgs[0] if msgs else "療傷", xinde)
         return msgs
 
+    def allocate_stat(self, stat: str) -> list[str]:
+        """把升級得到的屬性點分配到一項（武學與成長設計 6.2）：每項最高 stat_cap，這個版本不能洗點。
+        配成了才寫江湖紀錄，連按幾次（玩家、假人都一樣）併成一則「配點」；被拒絕（沒有點、到頂、沒這項屬性）
+        只回一句話，不留紀錄（武學與成長計畫 F12）。"""
+        if self._preparing():
+            return self._log(["（賽季籌備中，等待管理者開季。）"])
+        p, cfg = self.state.player, self.content.config
+        name = cfg.stat_names.get(stat, stat)
+        if stat not in team.COMBAT_STATS:
+            return self._log(["（沒有這項屬性。）"])
+        if p.stat_points <= 0:
+            return self._log(["沒有可以分配的屬性點，升級才會有。"])
+        if p.stats.get(stat, 0) >= cfg.stat_cap:
+            return self._log([f"{name}已經到頂（{cfg.stat_cap}）。"])
+        p.stat_points -= 1
+        p.stats[stat] = p.stats.get(stat, 0) + 1
+        journal.add_entry(
+            self.state, JournalEntry(time=self.state.world.time, title=journal.ALLOCATE, changes=[f"{name} +1"]),
+            merge=True,
+        )
+        return self._log([f"{name} +1（還有 {p.stat_points} 點可以分配）"])
+
     def _xinde(self) -> int:
         return self.state.player.stats.get("xinde", 0)
 
@@ -3335,7 +3349,9 @@ class Game:
             "silver": p.stats.get("silver", 0),
             "xinde": p.stats.get("xinde", 0),
             "minor": [(names[k], p.stats.get(k, 0)) for k in ("fame", "good", "evil")],
-            "attrs": [(names[k], p.stats[k]) for k in ("str", "agi", "con", "wis")],
+            "attrs": [(names[k], p.stats[k], k) for k in team.COMBAT_STATS],  # 第三項是鍵：配點鈕送它（allocate_stat）
+            "stat_points": p.stat_points,
+            "stat_cap": c.config.stat_cap,
             "hint": skillview.practice_hint(s, c),  # 心得擱著沒用、又還有功夫沒練滿時才有
             "team": mates,
             "busy_hours": None if p.busy_until is None else round((p.busy_until - w.time) / HOUR / c.config.time_scale, 1),  # 現實小時
@@ -3493,7 +3509,7 @@ class Game:
         if d["injury"] >= 1:
             vitals += f"　🩹 內傷 {d['injury']}"
         minor = "　".join(f"{k} {v}" for k, v in d["minor"])
-        attrs = "　".join(f"{k} {v}" for k, v in d["attrs"])
+        attrs = "　".join(f"{k} {v}" for k, v, _ in d["attrs"])
         lines = [
             f"### {d['name']}　·　{d['affiliation']}" + ("（匿名行走）" if d["anonymous"] else "")
             + f"　第{d['level']}級",

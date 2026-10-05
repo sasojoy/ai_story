@@ -31,14 +31,13 @@ def member_name(state: GameState, content: Content, key: str) -> str:
 
 
 def member_stats(state: GameState, content: Content, world: WorldStateStore, key: str) -> dict[str, float]:
+    """這個人的四屬性。玩家本人就是存檔裡的數字（升級給點、自己分配，武學與成長設計 6.2，不再每級自動長）；
+    同伴照舊是第 1 級的屬性加上每級成長。"""
     if key == PLAYER:
-        base = {k: float(state.player.stats.get(k, 0)) for k in COMBAT_STATS}
-        growth, level = content.config.player_growth, state.player.member.level
-    else:
-        character = content.characters[key]
-        base, growth = dict(character.stats), character.growth
-        level = world.get_companion(key).level
-    return {k: base[k] + growth.get(k, 0.0) * (level - 1) for k in COMBAT_STATS}
+        return {k: float(state.player.stats.get(k, 0)) for k in COMBAT_STATS}
+    character = content.characters[key]
+    level = world.get_companion(key).level
+    return {k: character.stats[k] + character.growth.get(k, 0.0) * (level - 1) for k in COMBAT_STATS}
 
 
 def check_actor(state: GameState, content: Content, world: WorldStateStore, check) -> str:
@@ -311,7 +310,13 @@ def add_team_exp(state: GameState, content: Content, world: WorldStateStore, amo
     跟著那一筆交易存檔），所以換頁、重新登入都還在；換季時跟其他同伴進度一起清空。氣血上限
     （neili_cap：基礎＋每級加成）由等級算出來，升級就跟著變高（氣血設計 A1：等級只買氣血上限）；
     目前氣血不變，不順便回血。"""
-    msgs = add_exp(content, state.player.member, amount, state.player.name)
+    p = state.player
+    before = p.member.level
+    msgs = add_exp(content, p.member, amount, p.name)
+    gained = p.member.level - before
+    if gained > 0:  # 升級給屬性點（武學與成長設計 6.2）：一次升好幾級就給好幾點，只給本人
+        p.stat_points += gained * content.config.stat_points_per_level
+        msgs.append(f"你有 {p.stat_points} 點屬性可以分配（點名號展開）。")
     for companion_id in state.player.team:
         name = content.characters[companion_id].name
         levels: list[str] = []

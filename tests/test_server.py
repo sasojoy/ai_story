@@ -725,6 +725,38 @@ def test_the_old_craft_endpoints_are_gone(client):
     assert client.post("/api/craft_line", json={"materials": []}).status_code == 404
 
 
+def test_allocate_through_the_main_actions(client):
+    _player(client)
+    game = server.game_for("沈青衫")
+    game.state.player.stat_points = 1
+    open_characters().save(game.state)
+    r = client.post("/api/do/allocate", json={"stat": "con"}).json()
+    assert r["main"]["status"]["stat_points"] == 0
+    assert open_characters().load("沈青衫").player.stats["con"] == 6
+    stat_names = server.CONTENT.config.stat_names
+    assert [(name, key) for name, _, key in r["main"]["status"]["attrs"]] == [
+        (stat_names[key], key) for key in ("str", "agi", "con", "wis")
+    ]  # 網頁的配點鈕送的鍵就是這個鍵，要跟 Config.stat_names 對得上
+
+
+def test_a_refused_allocation_through_the_server_only_says_why(client):
+    _player(client)
+    r = client.post("/api/do/allocate", json={"stat": "con"}).json()
+    assert "沒有可以分配" in r["message"]
+    r = client.post("/api/do/allocate", json={}).json()  # 客戶端沒帶 stat：也只是一句話，不是 500
+    assert "沒有這項" in r["message"]
+
+
+def test_the_allocate_buttons_call_what_the_server_has():
+    """網頁沒有測試框架：配點鈕（web/app.js）叫的動作與送的欄位要在伺服器的 MAIN_ACTIONS 與狀態資料裡。"""
+    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    assert 'doMain("allocate", { stat:' in js
+    assert "allocate" in server.MAIN_ACTIONS
+    data = Game.new(server.CONTENT, "測試").status_data()
+    for field in re.findall(r"\bs\.(stat_points|stat_cap)\b", js):
+        assert field in data
+
+
 def test_the_practice_and_furnace_pages_only_read_and_call_what_the_server_has(game):
     """Task 12：修練頁、煉製頁（web/app.js）讀的欄位都要在 menxia_view 裡、叫的動作都要在 MENXIA_ACTIONS 裡；
     舊煉製的端點、欄位、說法不再出現。網頁沒有測試框架，這條擋住「改了伺服器忘了改網頁」。"""

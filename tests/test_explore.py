@@ -259,16 +259,14 @@ def test_a_wild_win_pays_like_training_but_leaves_the_trend_and_no_post_fight_ev
     rules.learn_skill(game.state, content, "fist")
     content.events["chain_a"].actions = ["train"]  # 遊歷打完會接的戰後事件
     content.config.train_event_chance = 1.0
-    content.config.train_stat_chance = 1.0
     _lake(game, with_event=False)
     _only(game, insight=0, wild=1, event=0)
     game.rng = FixedRandom(0.99)
-    msgs = game.choose("act:explore")
+    game.choose("act:explore")
     assert len(game.state.battles) == 1  # 戰報照常有一筆
     record = game.state.battles[0]
     assert record.tier in team.WIN_TIERS and record.opponent == "水寇小隊"
     assert (record.exp, record.xinde, record.silver) == (20, 10, 5)  # 獎勵照常
-    assert any(line.endswith("+1") and line[:2] in ("臂力", "身法", "根骨") for line in msgs)  # 屬性機會照常
     assert game.state.world.trends["kou"] == 30  # 不推大勢（湖邊 train_trend kou:-1）
     assert game.state.pending_event is None  # 不接戰後事件
     game.choose("act:train")  # 對照：遊歷會推大勢、會接戰後事件

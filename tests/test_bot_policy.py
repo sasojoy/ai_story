@@ -168,6 +168,15 @@ def test_look_after_does_not_practise_what_it_cannot_afford(content, game):
     assert game.state.player.stats["xinde"] == 5 and len(game.state.journal) == entries
 
 
+def test_look_after_spends_the_stat_points_through_the_public_action(content, game):
+    """假人升級得到的屬性點，每一輪照顧動作先配掉（跟真人一樣只走 Game.allocate_stat，不叫模型）。"""
+    p = game.state.player
+    p.stat_points = 3
+    bot_policy.look_after(game, random.Random(0))
+    assert p.stat_points == 0 and sum(p.stats[k] for k in ("str", "agi", "con", "wis")) == 23
+    assert [e.title for e in game.state.journal if e.title == "配點"] == ["配點"]  # 連配三點只留一則
+
+
 def test_a_bot_trains_where_training_helps_its_faction(content, game):
     _install_factions(content)  # 官軍 goals kou -1、黃巾 goals kou +1
     game.state.player.faction = "huang"

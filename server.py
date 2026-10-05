@@ -702,6 +702,7 @@ MAIN_ACTIONS = {
     "skip_tutorial": lambda g, b: g.skip_tutorial(),
     "view_map": lambda g, b: g.view_map(),
     "guide_ack": lambda g, b: g.guide_ack(),  # 對話框的結語按「知道了」
+    "allocate": lambda g, b: g.allocate_stat(str(b.get("stat", ""))),  # 狀態列的配點鈕：升級得到的屬性點加到一項
 }
 ADMIN_ACTIONS = {
     "open_season": lambda g, b: g.admin_open_season(time.time()),

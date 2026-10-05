@@ -244,3 +244,45 @@ def test_can_practise_needs_a_worn_art_below_level_ten_and_enough_xinde(state, c
     assert not team.can_practise(state, content, "武學")
     state.player.stats["xinde"] = team.practice_price(content, 3)
     assert team.can_practise(state, content, "武學")
+
+
+# ── 屬性點（武學與成長設計 6.2）：升級給點、自己分配，不再每級自動長 ───────────────
+
+
+def test_the_players_stats_no_longer_grow_by_themselves(state, content, world):
+    state.player.member.level = 10
+    assert team.member_stats(state, content, world, "player")["str"] == state.player.stats["str"]
+
+
+def test_each_level_gained_gives_a_stat_point(state, content, world):
+    content.config.level_exp = 10  # 第 1 級升第 2 級要 10，第 2 級升第 3 級要 20
+    msgs = team.add_team_exp(state, content, world, 30)
+    assert state.player.member.level == 3 and state.player.stat_points == 2
+    assert any("2 點屬性可以分配" in m for m in msgs)
+
+
+def test_no_level_gained_gives_no_point_and_no_hint(state, content, world):
+    content.config.level_exp = 100
+    msgs = team.add_team_exp(state, content, world, 30)
+    assert state.player.member.level == 1 and state.player.stat_points == 0
+    assert not any("屬性" in m for m in msgs)
+
+
+def test_points_per_level_come_from_the_config(state, content, world):
+    content.config.level_exp = 10
+    content.config.stat_points_per_level = 2
+    team.add_team_exp(state, content, world, 10)
+    assert state.player.member.level == 2 and state.player.stat_points == 2
+
+
+def test_a_companions_level_ups_give_the_player_no_points(state, content, world):
+    """屬性點只給玩家本人；同伴照舊是第 1 級的屬性加上每級成長。"""
+    content.config.level_exp = 10
+    state.player.member.level = content.config.max_level  # 本人滿級：只有同伴會升
+    state.player.team = ["mate"]
+    team.add_team_exp(state, content, world, 10)
+    assert world.get_companion("mate").level == 2 and state.player.stat_points == 0
+    mate = content.characters["mate"]
+    assert team.member_stats(state, content, world, "mate")["str"] == pytest.approx(
+        mate.stats["str"] + mate.growth["str"]
+    )

@@ -461,16 +461,14 @@ def test_train_loss_costs_a_tenth_of_the_silver(game):
     assert game.state.player.stats["silver"] == 45
 
 
-def test_train_win_stat_bonus_is_recorded_as_a_change_not_a_note(game):
+def test_train_win_records_the_trend_as_a_note(game):
     rules.learn_skill(game.state, game.content, "fist")
-    game.content.config.train_stat_chance = 1.0
     game.content.config.train_event_chance = 1.0
     walk_to(game, "lake")
     game.rng = FixedRandom(0.3)
     game.choose("act:train")
     record = game.state.battles[0]
     assert record.tier in ("大勝", "險勝")
-    assert record.changes and record.changes[0].split(" ")[1] == "+1"
     assert record.notes == ["（寇亂 -1）"]  # 湖邊 train_trend kou:-1
 
 
@@ -5460,3 +5458,79 @@ def test_the_season_start_entry_of_a_mid_season_character_has_the_season_time(co
     newcomer = Game.new(content, "新來的", rng=random.Random(2), world=world)
     [entry] = [e for e in newcomer.state.journal if e.tag == "賽季開始"]
     assert entry.time == world.get_season().time > 0
+
+
+# ── 配點（武學與成長設計 6.2）──────────────────────────────────────────────
+
+
+def test_allocating_a_point_raises_the_stat(game):
+    game.state.player.stat_points = 2
+    game.allocate_stat("agi")
+    assert game.state.player.stats["agi"] == 6 and game.state.player.stat_points == 1
+
+
+def test_allocation_stops_at_the_cap_and_without_points(game):
+    p = game.state.player
+    p.stat_points = 1
+    p.stats["wis"] = 15
+    assert "到頂" in game.allocate_stat("wis")[0]
+    assert p.stat_points == 1  # 到頂的那一點沒扣
+    p.stat_points = 0
+    assert "沒有可以分配" in game.allocate_stat("str")[0]
+    assert "沒有這項" in game.allocate_stat("silver")[0]
+    assert p.stats["str"] == 5 and p.stats["silver"] == 50
+
+
+def test_a_refused_allocation_writes_no_journal_entry(game):
+    """被拒絕（沒有點、到頂、沒這項）只回一句話，不留紀錄（武學與成長計畫 F12）。"""
+    p = game.state.player
+    before = list(game.state.journal)
+    game.allocate_stat("str")  # 沒有點
+    p.stat_points, p.stats["wis"] = 1, 15
+    game.allocate_stat("wis")  # 到頂
+    game.allocate_stat("silver")  # 沒這項
+    assert game.state.journal == before
+
+
+def test_allocating_writes_one_merged_journal_entry(game):
+    """連按幾次（玩家、假人都一樣）併成一則「配點」，數值變化加總。"""
+    game.state.player.stat_points = 3
+    game.allocate_stat("str")
+    game.allocate_stat("str")
+    game.allocate_stat("agi")
+    heads = [e for e in game.state.journal if e.title == "配點"]
+    assert len(heads) == 1 and game.state.journal[0] is heads[0]
+    assert heads[0].changes == ["臂力 +2", "身法 +1"]
+
+
+def test_allocation_waits_for_the_season_to_open(content, world):
+    content.config.auto_open_first_season = False
+    game = Game.new(content, "甲", rng=random.Random(1), world=world)
+    game.state.player.stat_points = 1
+    assert game.allocate_stat("str") == ["（賽季籌備中，等待管理者開季。）"]
+    assert game.state.player.stat_points == 1 and game.state.player.stats["str"] == 5
+
+
+def test_the_status_carries_the_points_to_allocate(game):
+    game.state.player.stat_points = 3
+    data = game.status_data()
+    assert data["stat_points"] == 3 and data["stat_cap"] == 15
+    assert data["attrs"][0] == ("臂力", 5, "str")
+    assert [k for _, _, k in data["attrs"]] == ["str", "agi", "con", "wis"]
+
+
+def test_the_status_text_still_reads_the_attrs_with_their_keys(game):
+    assert "臂力 5　身法 5　根骨 5　悟性 5" in game.status_text()
+
+
+def test_a_win_no_longer_gives_a_random_stat_point(game):
+    """打贏不再有「隨機 +1 屬性」的機會（武學與成長設計 6.2：屬性只靠升級給的點）。"""
+    rules.learn_skill(game.state, game.content, "fist")
+    game.content.config.train_event_chance = 0.0
+    walk_to(game, "lake")
+    game.rng = FixedRandom(0.0)  # 以前這個值一定中那一個 +1
+    before = {k: game.state.player.stats[k] for k in ("str", "agi", "con", "wis")}
+    game.choose("act:train")
+    assert game.state.battles[0].tier in ("大勝", "險勝")
+    assert {k: game.state.player.stats[k] for k in before} == before
+    assert not any(c.split(" ")[0] in ("臂力", "身法", "根骨", "悟性") for c in game.state.battles[0].changes)

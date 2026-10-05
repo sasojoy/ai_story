@@ -24,7 +24,6 @@ def real():
     c = load_content(CONTENT_DIR)
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0
-    c.config.train_stat_chance = 0.0
     return c
 
 

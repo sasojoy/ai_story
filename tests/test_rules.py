@@ -396,3 +396,49 @@ def test_a_prior_meeting_still_opens_the_door_whatever_the_bar(state, content):
     assert not can_meet(state, content, cid)
     state.player.flags.add(f"結識:{cid}")
     assert can_meet(state, content, cid)
+
+
+# ── 四屬性每項最高 stat_cap（武學與成長設計 6.2）──────────────────────────────
+
+
+def test_an_event_cannot_push_a_stat_past_the_cap(state, content, world):
+    state.player.stats["str"] = 14
+    msgs = apply_effect(Effect(stats={"str": 3}), state, content, world)
+    assert state.player.stats["str"] == 15
+    assert "臂力 +1" in msgs  # 照實際加了多少寫
+    assert "（臂力已到頂 15）" in msgs  # 被上限夾掉了，玩家要知道是到頂
+
+
+def test_an_event_at_the_cap_writes_no_plus_line_and_one_cap_line(state, content, world):
+    state.player.stats["str"] = 15
+    msgs = apply_effect(Effect(stats={"str": 1}), state, content, world)
+    assert state.player.stats["str"] == 15
+    assert not any(m.startswith("臂力 ") for m in msgs)  # 沒動就不寫「臂力 +0」（江湖紀錄也會丟掉零）
+    assert msgs.count("（臂力已到頂 15）") == 1
+
+
+def test_a_stat_that_reaches_the_cap_exactly_says_nothing_about_it(state, content, world):
+    state.player.stats["wis"] = 14
+    msgs = apply_effect(Effect(stats={"wis": 1}), state, content, world)
+    assert state.player.stats["wis"] == 15 and "悟性 +1" in msgs
+    assert not any("到頂" in m for m in msgs)  # 沒有被夾掉，不提
+
+
+def test_a_stat_below_the_cap_is_written_in_full(state, content, world):
+    msgs = apply_effect(Effect(stats={"con": 2}), state, content, world)
+    assert state.player.stats["con"] == 7 and msgs == ["根骨 +2"]
+
+
+def test_only_the_four_combat_stats_have_a_cap(state, content, world):
+    """銀兩、善名這些沒有上限（stat_cap 只管臂力、身法、根骨、悟性）。"""
+    state.player.stats["silver"] = 500
+    msgs = apply_effect(Effect(stats={"silver": 40}), state, content, world)
+    assert state.player.stats["silver"] == 540 and msgs == ["銀兩 +40"]
+
+
+def test_a_floor_clamp_writes_what_really_moved_and_nothing_when_nothing_did(state, content, world):
+    """下限（不低於 0）夾住時也照實際動了多少寫，一點都沒動就不寫（不會冒出「惡名 +0」）。"""
+    state.player.stats["evil"] = 1
+    assert apply_effect(Effect(stats={"evil": -3}), state, content, world) == ["惡名 -1"]
+    assert state.player.stats["evil"] == 0
+    assert apply_effect(Effect(stats={"evil": -3}), state, content, world) == []

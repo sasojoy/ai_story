@@ -16,7 +16,6 @@
   "time_scale": 1.0,
   "season_days": 14,
   "season_one": false,
-  "train_stat_chance": 0.3,
   "train_event_chance": 0.3,
   "qiyu_weight_multiplier": 1.5,
   "rare_explore_chance": 0.025,
