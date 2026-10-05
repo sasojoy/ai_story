@@ -169,11 +169,11 @@ def test_prune_keeps_fourteen_days_and_eight_weeks(tmp_path):
     """設計 8.5：最近 14 個日曆日每天留最新的一份，加上最近 8 個 ISO 週每週留最新的一份；其他每日備份刪掉。"""
     folder = tmp_path / "backups"
     folder.mkdir()
-    stamps = [NOW.replace(minute=m) - dt.timedelta(days=d) for d in range(80) for m in (0, 30)]  # 80 天、每天兩份
+    stamps = [NOW - dt.timedelta(days=d, minutes=m) for d in range(80) for m in (0, 30)]  # 80 天、每天兩份，都不晚於 NOW
     paths = {when: _touch_daily(folder, when) for when in stamps}
     removed = backup_db.prune(folder, NOW)
     kept = {when for when, path in paths.items() if path.exists()}
-    recent_days = {NOW.replace(minute=30) - dt.timedelta(days=d) for d in range(14)}  # 每天只留 5:30 那份
+    recent_days = {NOW - dt.timedelta(days=d) for d in range(14)}  # 每天只留較晚的那份（5:00，不是早 30 分鐘的）
     monday = NOW.date() - dt.timedelta(days=NOW.weekday())
     week_keys = {(monday - dt.timedelta(weeks=i)).isocalendar()[:2] for i in range(8)}  # （年, 週）：跨年週數會重複
     newest_of_week = {}
@@ -183,6 +183,48 @@ def test_prune_keeps_fourteen_days_and_eight_weeks(tmp_path):
             newest_of_week[key] = when
     assert kept == recent_days | set(newest_of_week.values())
     assert sorted(removed) == sorted(paths[when] for when in stamps if when not in kept)
+
+
+def test_prune_keeps_files_dated_in_the_future(tmp_path):
+    """時鐘被調過、檔名的時間比現在還晚：不當成舊的刪掉。單獨一條，不跟 14 天規則混在一起。"""
+    folder = tmp_path / "backups"
+    folder.mkdir()
+    ahead = [_touch_daily(folder, NOW + dt.timedelta(days=d)) for d in (3, 5)]  # 兩份都在未來：較早那份不是最新、不在 14 天裡
+    stale = _touch_daily(folder, NOW - dt.timedelta(days=400))
+    assert backup_db.prune(folder, NOW) == [stale]
+    assert all(path.exists() for path in ahead)
+
+
+def test_prune_always_keeps_the_newest_daily_even_when_it_is_old(tmp_path):
+    """備份停了好幾個月才又跑 prune：全部都超過 8 週，也要留下最新的一份，不能把每日備份刪光（審查次要 5）。"""
+    folder = tmp_path / "backups"
+    folder.mkdir()
+    newest = _touch_daily(folder, NOW - dt.timedelta(days=100))
+    older = [_touch_daily(folder, NOW - dt.timedelta(days=d)) for d in (120, 200, 300)]
+    assert sorted(backup_db.prune(folder, NOW)) == sorted(older)
+    assert newest.exists()
+
+
+def test_prune_keeps_going_when_one_file_cannot_be_deleted(tmp_path, monkeypatch):
+    """其中一份刪不掉：其他能刪的照刪，最後一次講完哪幾份沒刪掉（審查次要 5）。"""
+    folder = tmp_path / "backups"
+    folder.mkdir()
+    stale = [_touch_daily(folder, NOW - dt.timedelta(days=d)) for d in (400, 401, 402)]
+    _touch_daily(folder, NOW)
+    real_unlink = Path.unlink
+
+    def locked_middle(self, *args, **kwargs):
+        if self == stale[1]:
+            raise PermissionError("檔案正在使用中")
+        return real_unlink(self, *args, **kwargs)
+
+    with monkeypatch.context() as patched:
+        patched.setattr(Path, "unlink", locked_middle)
+        with pytest.raises(backup_db.PruneError) as failure:
+            backup_db.prune(folder, NOW)
+    assert sorted(failure.value.removed) == sorted([stale[0], stale[2]])
+    assert [path for path, _ in failure.value.failed] == [stale[1]]
+    assert [p.exists() for p in stale] == [False, True, False]
 
 
 def test_prune_never_touches_manual_or_foreign_files(tmp_path):
@@ -200,8 +242,9 @@ def test_prune_never_touches_manual_or_foreign_files(tmp_path):
     for p in keep:
         p.write_bytes(b"")
     gone = _touch_daily(folder, old)
+    today = _touch_daily(folder, NOW)  # 最新的一份永遠留著，所以要有一份比 gone 新的，gone 才是該刪的
     assert backup_db.prune(folder, NOW) == [gone]
-    assert all(p.exists() for p in keep)
+    assert all(p.exists() for p in keep) and today.exists()
 
 
 def test_main_daily_prunes_only_with_the_flag(tmp_path, capsys):
@@ -237,6 +280,7 @@ def test_main_prune_that_cannot_delete_says_so_and_fails(tmp_path, capsys, monke
     captured = capsys.readouterr()
     assert "tianxia-daily-" in captured.out  # 備份本身是做好了的
     assert "刪舊備份失敗" in captured.err
+    assert str(stale) in captured.err  # 哪一份沒刪掉，講出來
     assert stale.exists()
 
 

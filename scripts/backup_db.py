@@ -118,9 +118,20 @@ def _daily_backups(dest_dir: Path) -> list[tuple[dt.datetime, Path]]:
     return sorted(found)
 
 
+class PruneError(Exception):
+    """刪舊的每日備份時有幾份刪不掉（被別的程式開著、雲端硬碟正在同步）：其他能刪的都已經刪了。"""
+
+    def __init__(self, removed: list[Path], failed: list[tuple[Path, OSError]]):
+        self.removed = removed
+        self.failed = failed  # （刪不掉的檔, 原因）
+        super().__init__(f"{len(failed)} 份刪不掉：{'、'.join(str(path) for path, _ in failed)}")
+
+
 def prune(dest_dir: Path, now: dt.datetime, *, keep_daily: int = KEEP_DAILY, keep_weekly: int = KEEP_WEEKLY) -> list[Path]:
     """照保留規則刪掉舊的每日備份，回傳刪掉的檔。留下：最近 keep_daily 個日曆日每天最新的一份，
-    加上最近 keep_weekly 個 ISO 週每週最新的一份；時間在 now 之後的（時鐘被調過）一律留著。"""
+    加上最近 keep_weekly 個 ISO 週每週最新的一份；時間在 now 之後的（時鐘被調過）一律留著；
+    再加最新的一份每日備份，就算它已經超過 8 週（備份停了很久又跑，不能把每日備份刪光）。
+    有檔刪不掉時其他的照刪，最後丟 PruneError 一次講完。"""
     backups = _daily_backups(dest_dir)
     days = {(now - dt.timedelta(days=i)).date() for i in range(keep_daily)}
     monday = now.date() - dt.timedelta(days=now.weekday())
@@ -132,11 +143,20 @@ def prune(dest_dir: Path, now: dt.datetime, *, keep_daily: int = KEEP_DAILY, kee
         newest_of_week[when.isocalendar()[:2]] = path
     keep = {p for d, p in newest_of_day.items() if d in days} | {p for w, p in newest_of_week.items() if w in weeks}
     keep |= {p for when, p in backups if when > now}
-    removed = []
+    keep |= {p for _, p in backups[-1:]}  # 最新的一份永遠留著
+    removed: list[Path] = []
+    failed: list[tuple[Path, OSError]] = []
     for _, path in backups:
-        if path not in keep:
+        if path in keep:
+            continue
+        try:
             path.unlink()
+        except OSError as e:
+            failed.append((path, e))
+        else:
             removed.append(path)
+    if failed:
+        raise PruneError(removed, failed)
     return removed
 
 
@@ -165,7 +185,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.prune:
         try:
             removed = prune(Path(args.dest), dt.datetime.now())
-        except OSError as e:  # 舊檔被別的程式開著（以後放雲端同步資料夾時，正在同步也一樣）刪不掉：新的備份已經做好，明天再刪，但要讓排程看得出這次不完全成功
+        except PruneError as e:  # 舊檔被別的程式開著（以後放雲端同步資料夾時，正在同步也一樣）刪不掉：新的備份已經做好，明天再刪，但要讓排程看得出這次不完全成功
+            print(f"刪舊備份失敗（今天這份備份已經做好，另外刪掉了 {len(e.removed)} 份；下面幾份刪不掉，明天會再試）：", file=sys.stderr)
+            for path, reason in e.failed:
+                print(f"  {path}（{reason}）", file=sys.stderr)
+            return 1
+        except OSError as e:  # 連資料夾都列不出來之類
             print(f"刪舊備份失敗（今天這份備份已經做好）：{e}", file=sys.stderr)
             return 1
         print(f"刪掉 {len(removed)} 份舊的每日備份")
