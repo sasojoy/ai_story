@@ -366,14 +366,37 @@
   // 「看完整戰報 ›」放在「過程」那一行的中間（PM 2026-10-05，戰鬥卡片壓縮第二輪）：那一行中間本來就是空的，不再接在「結果／得失」
   // 句尾多撐一行。點擊範圍上下各多 8px、不撐高那一行（style.css 的 .rounds-head .report-link）
   const reportLink = (id) => `<button class="linkish report-link" data-act="report" data-id="${id}">看完整戰報 ›</button>`;
+  // 功效的演出句（計畫六 Task 4，引擎的 battlelog.trait_line）一律以「〔功效名〕」開頭：收著的卡片先把它們藏起來，第一回合照舊帶頭
+  // （Task 4 審查 I-1：不然功效句頂掉第一回合的數字行，多佔一行、也藏了第一回合的數字）；展開之後照引擎寫的順序全部列出，戰報頁不經過這裡。
+  // 認的是行首的〔（引擎擁有這段文字，tests/test_server.py 擋住兩邊對不上）；整段都是功效句（沒有回合）時不藏，免得收著的過程是空的
+  const TRAIT_LEAD = "〔";
+  function foldTraitItems(rest) {
+    const end = rest.indexOf("</ul>");
+    const list = end < 0 ? rest : rest.slice(0, end);
+    const items = list.match(/<li>[\s\S]*?<\/li>/g) || [];
+    if (!items.some((li) => !li.startsWith(`<li>${TRAIT_LEAD}`))) return rest;
+    return list.split(`<li>${TRAIT_LEAD}`).join(`<li class="trait">${TRAIT_LEAD}`) + (end < 0 ? "" : rest.slice(end));
+  }
+  // 大場面的一段話：每一行以 <br /> 分開，功效句連同它後面的換行包進 <span class="trait">（收著時整個藏起來，兩行的截斷就看到模型的話）
+  function foldTraitText(rest) {
+    const end = rest.indexOf("</p>");
+    const lines = (end < 0 ? rest : rest.slice(0, end)).split("<br />\n");
+    if (lines.every((line) => line.startsWith(TRAIT_LEAD))) return rest;
+    const last = lines.length - 1;
+    const marked = lines.map((line, i) => {
+      const text = i < last ? `${line}<br />\n` : line;
+      return line.startsWith(TRAIT_LEAD) ? `<span class="trait">${text}</span>` : text;
+    });
+    return marked.join("") + (end < 0 ? "" : rest.slice(end));
+  }
   function roundsFold(card, id) {
     const open = S.roundsOpen === id;
     const more = `<button class="linkish rounds-more" data-act="rounds-more" aria-expanded="${open}">${roundsMore(open)}</button>`;
     const head = `<p class="rounds-head"><strong>過程</strong>${id == null ? "" : reportLink(id)}${more}</p>\n`;
     let at = card.indexOf(ROUNDS_MARK);
-    if (at >= 0) return card.slice(0, at) + head + `<ul class="rounds${open ? " open" : ""}">` + card.slice(at + ROUNDS_MARK.length);
+    if (at >= 0) return card.slice(0, at) + head + `<ul class="rounds${open ? " open" : ""}">` + foldTraitItems(card.slice(at + ROUNDS_MARK.length));
     at = card.indexOf(TALE_MARK);
-    if (at >= 0) return card.slice(0, at) + head + `<p class="rounds-tale${open ? " open" : ""}">` + card.slice(at + TALE_MARK.length);
+    if (at >= 0) return card.slice(0, at) + head + `<p class="rounds-tale${open ? " open" : ""}">` + foldTraitText(card.slice(at + TALE_MARK.length));
     return card;
   }
 
@@ -410,7 +433,7 @@
   // 每次都先拿掉 .tight 再量，轉向、拉視窗之後重量也一樣
   function fitFirstRound() {
     const list = document.querySelector(".battle-card ul.rounds");
-    const first = list && list.firstElementChild;
+    const first = list && list.querySelector(":scope > li:not(.trait)"); // 收著時露出的那一個：功效句藏起來，第一回合帶頭（foldTraitItems）
     if (!first) return;
     list.classList.remove("tight");
     let full = first.querySelector(":scope > .r-full");

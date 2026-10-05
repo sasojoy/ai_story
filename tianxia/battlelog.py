@@ -169,12 +169,25 @@ def round_lines(content: Content, played: list[rounds_mod.Round], rng: random.Ra
     return out
 
 
-def trait_line(content: Content, name: str, who: str, art: str, foe: str, rng: random.Random) -> str:
+TRAIT_LEAD = "〔"  # 功效的演出句一律以它開頭（〔功效名〕）：網頁認功效句靠它（app.js 的 TRAIT_LEAD，收著的卡片先藏起來）；回合句型不會以它開頭
+# 只在氣血真的低時才挑的句子（Task 4 審查 M3）：功效名 → 句子裡的暗號。S1 的三句厚裡有一句寫「氣血見底」，氣血不低的人不能被寫成見底
+LOW_HP_MARKS = {"厚": "氣血見底"}
+
+
+def trait_line(
+    content: Content, name: str, who: str, art: str, foe: str, rng: random.Random, low_hp: bool = True,
+) -> str:
     """一句功效的演出（S1 寫的，content/trait_lines.json）：前面標〔功效名〕，{who}{art}{foe} 換成本人、帶這個功效的那一門、對手。
     句子由呼叫端給的 rng 挑（引擎用名號＋戰報流水號當種子，不碰 Game.rng）；內容沒有這個功效的句子（舊內容）就用一句通用的。
+    low_hp 是這一場開打前氣血是不是真的低：不低時，帶 LOW_HP_MARKS 暗號的句子（厚的「氣血見底」）不挑；挑完沒句子了
+    （內容只寫了那一句）就用通用的。預設 True＝每一句都能挑。
     載入時 content.check_traits 已經確定每一句的佔位都是乾淨的 {who}、{art}、{foe}，所以這裡 format 不會丟例外。"""
-    text = rng.choice(content.trait_lines.get(name) or ["{who}的【{art}】起了作用。"])
-    return f"〔{name}〕" + text.format(who=who, art=art, foe=foe)
+    pool = content.trait_lines.get(name) or []
+    mark = LOW_HP_MARKS.get(name)
+    if mark and not low_hp:
+        pool = [text for text in pool if mark not in text]
+    text = rng.choice(pool or ["{who}的【{art}】起了作用。"])
+    return f"{TRAIT_LEAD}{name}〕" + text.format(who=who, art=art, foe=foe)
 
 
 def _rounds_block(record: BattleRecord) -> list[str]:

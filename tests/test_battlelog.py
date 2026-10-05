@@ -328,6 +328,24 @@ def test_a_trait_line_picks_by_the_given_rng_and_falls_back_when_the_content_has
     assert battlelog.trait_line(content, "先手", "沈浪", "穿林腿", "山賊", random.Random(0)) == "〔先手〕沈浪的【穿林腿】起了作用。"
 
 
+def test_the_bottom_line_of_thick_is_only_for_a_player_at_the_bottom(content):
+    """Task 4 審查 M3：厚有一句「氣血見底」（暗號在 LOW_HP_MARKS）：氣血不低（low_hp=False）時挑不到它，低時三句都挑得到。"""
+    content.trait_lines["厚"] = ["帶傷，{who}撐著。", "氣血見底，{who}硬撐。"]
+    pick = lambda low, seed: battlelog.trait_line(content, "厚", "沈浪", "拳", "山賊", random.Random(seed), low_hp=low)  # noqa: E731
+    assert {pick(False, seed) for seed in range(40)} == {"〔厚〕帶傷，沈浪撐著。"}
+    assert {pick(True, seed) for seed in range(40)} == {"〔厚〕帶傷，沈浪撐著。", "〔厚〕氣血見底，沈浪硬撐。"}
+    assert battlelog.trait_line(content, "厚", "沈浪", "拳", "山賊", random.Random(1)) in {pick(True, seed) for seed in range(40)}  # 預設是低
+
+
+def test_a_trait_without_a_bottom_line_ignores_the_flag_and_a_lone_bottom_line_falls_back(content):
+    rng = lambda seed: random.Random(seed)  # noqa: E731
+    assert {battlelog.trait_line(content, "先手", "沈浪", "拳", "山賊", rng(s), low_hp=False) for s in range(40)} == {
+        battlelog.trait_line(content, "先手", "沈浪", "拳", "山賊", rng(s)) for s in range(40)
+    }  # 先手沒有見底那一句：旗標不影響
+    content.trait_lines["厚"] = ["氣血見底，{who}硬撐。"]
+    assert battlelog.trait_line(content, "厚", "沈浪", "拳", "山賊", rng(0), low_hp=False) == "〔厚〕沈浪的【拳】起了作用。"
+
+
 def test_trait_lines_wrap_the_rounds_in_the_report():
     record = BattleRecord(id=1, time=0, location="郊野", kind="train", opponent="山賊", tier="險勝",
                           our_power=50, difficulty=40, ours=[], rounds=["第1回合　……"],

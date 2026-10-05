@@ -1015,7 +1015,8 @@ def test_the_fight_card_shows_the_first_round_until_the_player_opens_the_rest():
     assert "roundsFold(card, id)" in _js_function(js, "function fightCard(")
     assert "roundsFold" not in _js_function(js, "function pageNews(")  # 戰報頁整段列出
     assert 'case "rounds-more"' in js and "S.roundsOpen = open ? S.main.card_id : null" in js
-    hidden = re.search(r"\.battle-card ul\.rounds:not\(\.open\) > li:not\(:first-child\) \{([^}]*)\}", css)
+    # 收著時只露第一個「不是功效句」的 li（功效句藏起來，Task 4 審查 I-1）：沒有功效句的卡片就是第一個 li，跟以前一樣
+    hidden = re.search(r"\.battle-card ul\.rounds:not\(\.open\) > li:not\(\.trait\) ~ li:not\(\.trait\) \{([^}]*)\}", css)
     assert hidden is not None and "display: none" in hidden.group(1)
     assert re.search(r"\.battle-card ul\.rounds > li:nth-child\(2\) \{ animation-delay: [\d.]+s; \}", css)
 
@@ -1046,8 +1047,13 @@ def _app_functions_in_node(js: str, script: str) -> str:
     node = shutil.which("node")
     if node is None:
         pytest.skip("沒有裝 node")
-    consts = [re.search(rf"(?m)^  const {name} = .*;$", js).group(0) for name in ("ROUNDS_MARK", "TALE_MARK", "ROUND_BITS", "reportLink")]
-    funcs = [_js_function(js, f"function {name}(") + "\n  }" for name in ("roundsFold", "withReportLink", "fightCard", "compactRound")]
+    names = ("ROUNDS_MARK", "TALE_MARK", "ROUND_BITS", "reportLink", "TRAIT_LEAD")
+    consts = [m.group(0) for name in names if (m := re.search(rf"(?m)^  const {name} = .*;$", js))]
+    funcs = [
+        _js_function(js, f"function {name}(") + "\n  }"
+        for name in ("roundsFold", "withReportLink", "fightCard", "compactRound", "foldTraitItems", "foldTraitText")
+        if f"function {name}(" in js
+    ]
     prelude = 'const S = { roundsOpen: null };\nconst roundsMore = (open) => (open ? "收起過程 ▴" : "展開過程 ▾");\n'
     done = subprocess.run([node, "-"], input=(prelude + "\n".join(consts + funcs) + "\n" + script).encode("utf-8"),
                           capture_output=True, timeout=60)
@@ -1328,6 +1334,147 @@ def test_a_trait_line_never_looks_like_a_round_to_the_numbers_only_fold():
     assert len(lines) == 90
     script = f"const lines = {json.dumps(lines, ensure_ascii=False)}; console.log(JSON.stringify(lines.map(compactRound)));"
     assert json.loads(_app_functions_in_node(js, script)) == [None] * len(lines)
+
+
+# 收著的「剛剛」卡片（Task 4 審查 I-1）：功效的演出句只在展開與戰報頁才看得到，收著時照舊由第一回合帶頭。
+# 網頁沒有 DOM 測試框架：app.js 的標記在 node 裡真的跑（roundsFold／fightCard 認得〔開頭的句子、標成 trait），
+# 「收著時看得到什麼」由下面這段小程式照 style.css 的兩條規則算（規則本身由靜態測試釘死，兩邊對得上才算數）。
+FOLD_VIEW_SCRIPT = r"""
+const cards = __CARDS__;
+const strip = (s) => s.replace(/<[^>]+>/g, "").trim();
+// 鏡像 style.css：.rounds:not(.open) > li.trait 藏起來、其他的 li 只露第一個；.rounds-tale:not(.open) .trait 藏起來
+function view(html, open) {
+  const list = /<ul class="rounds( open)?">([\s\S]*?)<\/ul>/.exec(html);
+  if (list) {
+    const items = list[2].match(/<li[^>]*>[\s\S]*?<\/li>/g) || [];
+    const shown = [];
+    for (const li of items) {
+      const isTrait = /^<li class="trait">/.test(li);
+      if (list[1] || open) { shown.push(strip(li)); continue; }
+      if (isTrait || shown.length) continue;
+      shown.push(strip(li));
+    }
+    return shown;
+  }
+  const tale = /<p class="rounds-tale( open)?">([\s\S]*?)<\/p>/.exec(html);
+  if (tale) {
+    const text = (tale[1] || open) ? tale[2] : tale[2].replace(/<span class="trait">[\s\S]*?<\/span>/g, "");
+    return text.split("<br />").map(strip).filter(Boolean);
+  }
+  return null;
+}
+const out = {};
+for (const [name, card] of Object.entries(cards)) {
+  S.roundsOpen = null; const shut = fightCard(card, 7);
+  S.roundsOpen = 7; const open = fightCard(card, 7);
+  out[name] = { shut: view(shut, false), open: view(open, true), shutHtml: shut, first: null };
+  const lead = out[name].shut && out[name].shut[0];
+  out[name].compact = lead ? compactRound(lead) : null;
+}
+console.log(JSON.stringify(out));
+"""
+
+
+def _fold_view(cards: dict[str, str]) -> dict:
+    import json
+
+    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    return json.loads(_app_functions_in_node(js, FOLD_VIEW_SCRIPT.replace("__CARDS__", json.dumps(cards, ensure_ascii=False))))
+
+
+def _trait_card_record(**extra):
+    from tianxia.state import BattleRecord, Fighter
+
+    base = dict(
+        id=1, time=0, location="湖邊", kind="train", opponent="水寇", ours=[Fighter(name="沈浪", level=1)], tier="大勝",
+        our_power=50, difficulty=10,
+        rounds=["第1回合　甲以【穿林腿】身形一晃，搶到側面出手，對手氣勢 -34；水寇掄起兵刃猛砸過來，你氣血 -12。", "第2回合　乙。", "第3回合　丙。"],
+        trait_before=["〔先手〕沈浪搶得先機，【穿林腿】出手在前。", "〔險〕沈浪兵行險著，【穿林腿】專走險路。"],
+        trait_after=["〔化勁〕沈浪以【基礎吐納】卸去來勢，傷得輕了。"],
+    )
+    return BattleRecord(**(base | extra))
+
+
+def test_the_folded_fight_card_leads_with_round_one_and_hides_the_trait_lines():
+    """兩句開打前的功效、三個回合、一句之後的功效：收著時看得到的只有第一回合（太長時就是 fitFirstRound 縮成的數字行），
+    沒有任何〔開頭的句子；展開之後全部照今天的順序列出（前面的功效句、回合、後面的功效句）。大場面的一段話也一樣：
+    收著只剩模型的話（兩行的截斷看到的是它），展開才有功效的句子在前與後。"""
+    from tianxia import battlelog
+
+    cards = {
+        "list": server.md(battlelog.card_text(_trait_card_record())),
+        "tale": server.md(battlelog.card_text(_trait_card_record(narration="波才刀勢沉猛，你左支右絀，硬是撐過了這一輪。"))),
+    }
+    seen = _fold_view(cards)
+    folded, opened = seen["list"]["shut"], seen["list"]["open"]
+    assert len(folded) == 1 and folded[0].startswith("第1回合") and not any("〔" in line for line in folded)
+    assert [line[:4] for line in opened] == ["〔先手〕", "〔險〕沈", "第1回合", "第2回合", "第3回合", "〔化勁〕"]
+    assert seen["list"]["compact"] == "第1回合　對手氣勢 -34，你氣血 -12……"  # 太高時 fitFirstRound 換成的數字行：第一回合的數字一個沒少
+    assert 'ul class="rounds"' in seen["list"]["shutHtml"] and seen["list"]["shutHtml"].count('<li class="trait">') == 3
+    tale_shut, tale_open = seen["tale"]["shut"], seen["tale"]["open"]
+    assert tale_shut == ["波才刀勢沉猛，你左支右絀，硬是撐過了這一輪。"]
+    assert len(tale_open) == 4 and tale_open[0].startswith("〔先手〕") and tale_open[-1].startswith("〔化勁〕")
+    assert tale_open[2] == tale_shut[0]  # 展開時模型的話夾在兩句之間，順序跟引擎寫的一樣
+
+
+def test_the_fold_marks_nothing_when_a_card_has_no_trait_lines_or_only_trait_lines():
+    """沒有功效句的卡片（舊戰報、沒有武學的人）一個字都沒變：沒有 trait 標記；全部都是功效句（沒有回合）的卡片不藏，
+    免得收著的「過程」是空的；大場面模型的話剛好以〔開頭、又沒有別的行時也一樣不藏。"""
+    from tianxia import battlelog
+
+    plain = _trait_card_record(trait_before=[], trait_after=[])
+    only = _trait_card_record(rounds=[], trait_before=["〔先手〕甲"], trait_after=["〔乘勝〕乙"])
+    odd = _trait_card_record(narration="〔這是模型寫的話〕你左支右絀。", trait_before=[], trait_after=[])
+    seen = _fold_view({name: server.md(battlelog.card_text(rec)) for name, rec in (("plain", plain), ("only", only), ("odd", odd))})
+    assert 'class="trait"' not in seen["plain"]["shutHtml"] and len(seen["plain"]["shut"]) == 1
+    assert 'class="trait"' not in seen["only"]["shutHtml"] and len(seen["only"]["shut"]) == 1  # 沒有回合：第一句功效句照舊領頭
+    assert 'class="trait"' not in seen["odd"]["shutHtml"] and seen["odd"]["shut"] == ["〔這是模型寫的話〕你左支右絀。"]
+
+
+def test_the_trait_lead_mark_is_the_one_the_engine_writes():
+    """網頁認功效句靠〔這個開頭（TRAIT_LEAD）：引擎的 battlelog.trait_line 一律以它開頭、回合句型一律不是。"""
+    from tianxia import battlelog
+
+    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    lead = re.search(r'const TRAIT_LEAD = "([^"]*)";', js).group(1)
+    assert lead == battlelog.TRAIT_LEAD == "〔"
+    for name, pool in server.CONTENT.trait_lines.items():
+        for index in range(len(pool)):
+            rng = random.Random(0)
+            rng.choice = lambda items, index=index: items[index]  # noqa: B023  逐句挑
+            assert battlelog.trait_line(server.CONTENT, name, "沈浪", "穿林腿", "山賊", rng).startswith(lead)
+    assert not any(line.startswith(lead) for line in _trait_card_record().rounds)
+
+
+def test_the_folded_fight_card_css_hides_the_trait_lines_and_keeps_one_round():
+    """靜態釘住上面那段小程式鏡像的規則：收著時 li.trait 藏起來、其他的 li 只留第一個（前面已有非功效的 li 就藏）；
+    大場面那一段話收著時藏 .trait 的 span；fitFirstRound 量的是第一個非功效的 li（不是 firstElementChild）；
+    展開、戰報頁不受影響（規則都掛在 :not(.open) 與 .battle-card 底下，戰報頁沒有這張卡片）。"""
+    css = (server.WEB / "style.css").read_text(encoding="utf-8")
+    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    hide_trait = re.search(r"(?m)^\.battle-card ul\.rounds:not\(\.open\) > li\.trait \{([^}]*)\}", css)
+    one_round = re.search(r"(?m)^\.battle-card ul\.rounds:not\(\.open\) > li:not\(\.trait\) ~ li:not\(\.trait\) \{([^}]*)\}", css)
+    tale = re.search(r"(?m)^\.battle-card p\.rounds-tale:not\(\.open\) \.trait \{([^}]*)\}", css)
+    assert all(rule is not None and "display: none" in rule.group(1) for rule in (hide_trait, one_round, tale))
+    assert ":not(:first-child)" not in css[css.index("ul.rounds:not(.open)"):css.index("/* 收著的第一回合最多兩行")]
+    fit = _js_function(js, "function fitFirstRound(")
+    assert 'querySelector(":scope > li:not(.trait)")' in fit and "firstElementChild" not in fit
+
+
+def test_the_expanded_rounds_fade_in_in_order_however_many_lines_there_are():
+    """Task 4 審查 M4：功效的句子加進去之後過程可以有十幾行（3＋5＋8），延遲只寫到第 5 個的話，第 6 個以後會比第 2～5 個先浮現。
+    現在每一個位置都有延遲，而且一路不減；減少動態（prefers-reduced-motion）整站關動畫的規則照舊。"""
+    css = (server.WEB / "style.css").read_text(encoding="utf-8")
+    delays = {1: 0.0}
+    for number, seconds in re.findall(r"\.battle-card ul\.rounds > li:nth-child\((\d+)\) \{ animation-delay: ([\d.]+)s; \}", css):
+        delays[int(number)] = float(seconds)
+    catch_all = re.search(r"\.battle-card ul\.rounds > li:nth-child\(n\+(\d+)\) \{ animation-delay: ([\d.]+)s; \}", css)
+    assert catch_all is not None and max(delays) == int(catch_all.group(1)) - 1  # 最後一個明寫的位置接著 n+K 的收尾規則
+    assert sorted(delays) == list(range(1, max(delays) + 1)) and max(delays) >= 12  # 沒有跳號、至少涵蓋常見的十二行
+    ordered = [delays[number] for number in sorted(delays)]
+    assert ordered == sorted(ordered) and len(set(ordered)) == len(ordered)  # 嚴格遞增：後面的一定晚浮現
+    assert float(catch_all.group(2)) >= ordered[-1]
+    assert "animation: none !important" in css[css.index("@media (prefers-reduced-motion: reduce)"):]
 
 
 def test_the_three_art_buttons_stay_on_one_line_at_phone_width():

@@ -269,6 +269,15 @@ def test_the_cut_difficulty_decides_the_thresholds_not_the_original():
     assert resolve_encounter(39, 100, _Luck(0), mods=cut).tier == "落敗"  # 差距 -41：沒到當作的 -40；照原本的 -50 會是僵持
 
 
+def test_the_first_hands_big_win_cut_is_a_share_of_the_cut_difficulty():
+    """Task 4 審查 M5：先手降的是「當作的強度」的比例（跟門檻本身同一個基準）。難度 100、破甲 20%（當作 80）、先手 20%：
+    大勝線是 0.5×80 − 0.2×80 ＝ 24（不是照原本的難度 0.5×80 − 0.2×100 ＝ 20）。差距 23 還是險勝、24 才是大勝。"""
+    both = Mods(difficulty_cut=0.2, big_win_cut=0.2)
+    assert resolve_encounter(80 + 23, 100, _Luck(0), mods=both).tier == "險勝"
+    assert resolve_encounter(80 + 24, 100, _Luck(0), mods=both).tier == "大勝"
+    assert resolve_encounter(80 + 20, 100, _Luck(0), mods=both).tier == "險勝"  # 照原本的難度算的 20 不是線
+
+
 def test_borrowed_force_is_a_share_of_the_real_strength_even_when_it_is_cut():
     """借力（威力加上對手強度的 5%）看對手真正的強度：破甲只是讓判定「當作」弱一點，兇猛的對手借得到的力沒有變少
     （S1 的句子：對手越兇猛，越借得上力）。難度 100、破甲 20%：借力 +5（不是照當作的 80 算的 +4）。險勝線在當作的 12：
@@ -373,21 +382,57 @@ def test_a_push_of_zero_changes_nothing_under_any_mods():
         )
 
 
-def test_double_luck_keeps_the_push_close_but_only_approximately():
-    """連環取兩次運氣的好的，贏的機會不再是均勻分佈（優勢推的百分點是近似）：同樣的 ±15 推出來的差距在同一個量級、
-    不會變成穩或險那種好幾倍（見 resolve_encounter 的說明）。"""
+def _double_win_rate(power, difficulty, shift, mods, steps=2000):
+    """連環（兩次運氣取好的）贏的機會：贏只看兩次裡較大的那個，所以把第一次的格子編號 i、第二次 j，較大的是 max(i, j)；
+    max 剛好是 m 的 (i, j) 有 2m+1 組。逐格丟進 resolve_encounter（兩次都給同一個值），再照組數加權——精確的格子算法，沒有抽樣誤差。"""
+    half = encounter.luck_half(difficulty * (1 - mods.difficulty_cut)) * mods.luck_scale
+    wins = 0
+    for m in range(steps):
+        luck = -half + 2 * half * (m + 0.5) / steps
+        tier = resolve_encounter(power, difficulty, _Luck(luck, luck), shift=shift, mods=mods).tier
+        wins += (2 * m + 1) * (tier in ("大勝", "險勝"))
+    return wins / steps**2
+
+
+def _double_power_for(target, mods):
+    """讓連環加其他功效「沒有優勢時贏的機會」剛好是 target 的威力（二分法；贏面隨威力單調上升）。"""
+    low, high = 0.0, 300.0
+    for _ in range(40):
+        mid = (low + high) / 2
+        if _double_win_rate(mid, 100, 0.0, mods, steps=400) < target:
+            low = mid
+        else:
+            high = mid
+    return (low + high) / 2
+
+
+# 沒有優勢時贏的機會：0%（尾巴，威力低到連兩次最好的運氣都贏不了）、約 28%、75%
+DOUBLE_LUCK_BASES = {"贏面 0%": 0.0, "贏面約 28%": 0.28, "贏面 75%": 0.75}
+
+
+@pytest.mark.parametrize("label", list(DOUBLE_LUCK_BASES))
+@pytest.mark.parametrize(
+    "extra", [{}, {"luck_scale": 0.4}, {"luck_scale": 1.6}, {"difficulty_cut": 0.2}], ids=["連環", "連環加穩", "連環加險", "連環加破甲"],
+)
+def test_the_models_push_is_exact_under_double_luck_too_including_the_tails(label, extra):
+    """Task 4 審查 M1：兩次運氣取好的，贏的機會是 1 − u²（u 是需要的運氣佔全幅的比例），平移 15% 的全幅在尾巴只推 2、在中間推 28
+    個百分點。現在 resolve_encounter 在機率空間裡反解平移，每一組都剛好 ±15 個百分點，到 0%、100% 為止（夾住，不會推到負的）。"""
+    mods = Mods(double_luck=True, **extra)
+    target = DOUBLE_LUCK_BASES[label]
+    power = 0.0 if target == 0 else _double_power_for(target, mods)
+    base = _double_win_rate(power, 100, 0.0, mods)
+    assert base == pytest.approx(target, abs=0.01), label  # 起點真的是想測的那個贏面
+    for advantage in (15, -15, 7, -7):
+        pushed = _double_win_rate(power, 100, encounter.advantage_shift(100, advantage), mods)
+        assert pushed == pytest.approx(min(1.0, max(0.0, base + advantage / 100)), abs=0.003), (label, advantage, base, pushed)
+
+
+def test_the_double_luck_push_without_a_push_changes_nothing():
     mods = Mods(double_luck=True)
-
-    def rate(shift):
-        wins = 0
-        for i in range(60):
-            for j in range(60):
-                rng = _Luck(-30 + 60 * (i + 0.5) / 60, -30 + 60 * (j + 0.5) / 60)
-                wins += resolve_encounter(115, 100, rng, shift=shift, mods=mods).tier in ("大勝", "險勝")
-        return wins / 3600
-
-    gain = rate(encounter.advantage_shift(100, 15)) - rate(0.0)
-    assert 0.05 < gain < 0.2  # 不是 0.15 整，但離它不遠
+    for power in (70, 94.1, 115):
+        assert resolve_encounter(power, 100, _Luck(3, -7), shift=0.0, mods=mods) == resolve_encounter(
+            power, 100, _Luck(3, -7), mods=mods,
+        )
 
 
 def test_the_condition_floor_can_be_raised():

@@ -73,13 +73,14 @@ class Option(BaseModel):
 
 @dataclass(frozen=True)
 class TollFacts:
-    """扣完一場的氣血之後，寫功效演出句要知道的兩件事（_take_toll 量好、_play_rounds 讀；武學與成長設計 13.6：
-    只在功效真的改到結果時才演）。"""
+    """寫功效演出句要知道的氣血的事（_take_toll 與劇情戰量好、_play_rounds 讀；武學與成長設計 13.6：只在功效真的改到結果時才演）。"""
 
-    wounded: bool = False  # 開打前氣血就低於上限（厚才有用；內傷讓「滿血」的上蓋低於上限，也算）
-    healed: tuple[str, ...] = ()  # 真的回了血（有一行「氣血 +N」）的功效掛點：win_heal（吸取）、heal_after（回春）
+    wounded: bool = False  # 開打前氣血就低於上限（厚才有用：它把氣血係數的下限拉高，滿血時沒有東西可拉；內傷讓「滿血」的上蓋低於上限，也算）
+    low_hp: bool = False  # 開打前氣血低到「見底」（剩 LOW_HP_RATIO 以下，含）：厚那句「氣血見底」才挑得到
+    healed: tuple[str, ...] = ()  # 真的回了血（有一行「氣血 +N」）的功效掛點：win_heal（吸取）、heal_after（回春）；劇情戰不回血
 
 
+LOW_HP_RATIO = 0.3  # 開打前氣血剩上限的三成以下（含）算「氣血見底」：厚的那一句「氣血見底，……硬撐」（battlelog.LOW_HP_MARKS）才挑得到
 FREE_TEXT_OPTION = "choice:free"  # 事件的「隨口應對」：按下去只是叫出輸入框，真正送出走 free_text_request／answer_event
 BIG_FIGHT_WAIT = "兩人對峙……"  # 大場面按下去、等模型判讀時按鈕上的字（武學與成長設計 8.3）
 # 等模型判讀的時候選項沒了（另一個分頁把人帶走、事件被了結、體力花光）：這一仗不打，回這一句話代替一句看不出所以然的「無法這麼做」
@@ -2274,6 +2275,11 @@ class Game:
     def _player_hp(self) -> float:
         return self._player_hp_and_cap()[0]
 
+    def _hp_facts(self, healed: tuple[str, ...] = ()) -> TollFacts:
+        """此刻的氣血在寫功效演出句看來是什麼樣子（開打前量；劇情戰不扣氣血，開打前就是整場的樣子）。"""
+        now, cap = self._player_hp_and_cap()
+        return TollFacts(wounded=now < cap, low_hp=now <= LOW_HP_RATIO * cap, healed=healed)
+
     def _take_toll(self, tier: str, *, wild: bool = False) -> tuple[list[str], int, TollFacts]:
         """照結果扣這一場的氣血（team.take_encounter_toll），回傳（訊息, 本人真的掉了多少氣血, 寫演出句要的事實）。掉的量緊貼著
         扣氣血的前後量（計畫三 G4）：打贏升級會讓上限變高，開打前量的話回合裡寫的跟戰報「氣血 -N」對不上。四捨五入跟訊息的
@@ -2298,7 +2304,9 @@ class Game:
             toll += heal
             if heal:
                 healed.append("heal_after")
-        return toll, hp_lost, TollFacts(wounded=before < cap, healed=tuple(healed))
+        return toll, hp_lost, TollFacts(
+            wounded=before < cap, low_hp=before <= LOW_HP_RATIO * cap, healed=tuple(healed),
+        )
 
     def _play_rounds(
         self, record, squad: Squad, tier: str, hp_lost: int | None, facts: TollFacts | None = None,
@@ -2324,31 +2332,37 @@ class Game:
         if record.guarded and (guard := lo.specials.get("no_loss")) is not None:  # 護命（13.4）：結果那一段，不在過程裡
             record.notes.insert(0, self._trait_say(lo, guard.name, squad, rng))
 
-    def _trait_say(self, lo: traits.Loadout, name: str, squad: Squad, rng: random.Random) -> str:
+    def _trait_say(self, lo: traits.Loadout, name: str, squad: Squad, rng: random.Random, low_hp: bool = True) -> str:
         """一句功效的演出：本人、帶這個功效的那一門（lo.source，層數最多的）、對手的名字填進 S1 的句子。"""
-        return battlelog.trait_line(self.content, name, self.state.player.name, lo.source.get(name, ""), squad.name, rng)
+        return battlelog.trait_line(
+            self.content, name, self.state.player.name, lo.source.get(name, ""), squad.name, rng, low_hp=low_hp,
+        )
 
     def _trait_lines(
         self, lo: traits.Loadout, record, squad: Squad, hp_lost: int | None, facts: TollFacts, rng: random.Random,
     ) -> tuple[list[str], list[str]]:
         """（開打前, 之後）的功效演出句。只在功效真的改到結果時才演（13.6）：開打前的四個一般功效與連環、借力一帶就算
-        （它們改的是判定本身）；化勁、不動要這一場真的掉了氣血，厚還要開打前氣血低於上限（F11）；乘勝要打贏、而且對手有
-        東西可以多給，悟招要打贏；吸取、回春要真的回了血（有「氣血 +N」，F10）；輕身只在遊歷。護命的那一句在 _play_rounds
+        （它們改的是判定本身）；化勁、不動要這一場真的掉了氣血；厚要開打前氣血低於上限（它拉高的氣血係數下限這一場真的起了作用，
+        見底、一滴氣血都沒得扣、或是不扣氣血的劇情戰也算；「氣血見底」那一句只在氣血剩三成以下才挑，Task 4 審查 M3）；
+        乘勝要打贏、而且對手隊伍有東西可以多給（看 squad.exp、squad.reward_xinde：劇情戰先演回合、後發獎勵，戰報上的欄位這時還是 0，
+        Task 4 審查 M2），悟招要打贏；吸取、回春要真的回了血（有「氣血 +N」，F10）；輕身只在遊歷。護命的那一句在 _play_rounds
         另外寫進 notes。"""
         names = {t.hook: t.name for t in self.content.traits.general}
 
-        def say(name: str) -> str:
-            return self._trait_say(lo, name, squad, rng)
+        def say(name: str, low_hp: bool = True) -> str:
+            return self._trait_say(lo, name, squad, rng, low_hp=low_hp)
 
         won = record.tier in team.WIN_TIERS
         before = [say(names[h]) for h in ("big_win", "luck_narrow", "difficulty_cut", "luck_widen") if lo.layers.get(h)]
         before += [say(lo.specials[h].name) for h in ("double_luck", "power_from_difficulty") if h in lo.specials]
         after: list[str] = []
-        if hp_lost:
-            after += [say(names["toll_cut"])] if lo.layers.get("toll_cut") else []
-            after += [say(names["condition_floor"])] if lo.layers.get("condition_floor") and facts.wounded else []
-            after += [say(lo.specials["no_injury"].name)] if "no_injury" in lo.specials else []
-        if won and lo.layers.get("win_reward") and (record.exp or record.xinde):  # 乘勝：對手有東西可以多給
+        if hp_lost and lo.layers.get("toll_cut"):
+            after.append(say(names["toll_cut"]))
+        if lo.layers.get("condition_floor") and facts.wounded:
+            after.append(say(names["condition_floor"], low_hp=facts.low_hp))
+        if hp_lost and "no_injury" in lo.specials:
+            after.append(say(lo.specials["no_injury"].name))
+        if won and lo.layers.get("win_reward") and (squad.exp or squad.reward_xinde):  # 乘勝：對手有東西可以多給
             after.append(say(names["win_reward"]))
         if "win_heal" in facts.healed:  # 吸取：真的回了血
             after.append(say(names["win_heal"]))
@@ -2882,7 +2896,7 @@ class Game:
         # 回合照開打時的陣容與身法演，所以要在發獎勵、套效果之前：效果可能加身法、教武學、給同伴或部下，
         # 不能回頭改寫這一場（例如 wolves 打贏身法 +1，不能變成「因為獎勵才先出手」）。
         # 劇情戰不扣氣血：對手的出手不寫數字（計畫三 G5）
-        self._play_rounds(record, squad, result.tier, None)
+        self._play_rounds(record, squad, result.tier, None, self._hp_facts())  # 氣血照開打時的樣子：厚拉高的下限這一場也起了作用
         won = result.tier in team.WIN_TIERS
         rewards = self._battle_rewards(squad, record) if won else []
         effect = choice.effect if won else choice.fail_effect
