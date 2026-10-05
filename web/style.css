@@ -482,3 +482,12 @@ details.fold.bulletin > .fold-body { border-color: var(--gold); max-height: 50vh
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* 設定頁的時刻表（計畫 T10）：一件一列，標題與狀態一行，可排的下面一行是時間欄位與「排定」 */
+.tt-list { display: flex; flex-direction: column; gap: 6px; }
+.tt-row { border: 1px solid var(--line); border-radius: 10px; padding: 6px 8px; }
+.tt-head { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; }
+.tt-state { color: var(--ink-2); white-space: nowrap; }
+.tt-row .row { margin-top: 4px; }
+.tt-row input[type="datetime-local"] { flex: 1; min-width: 0; }
+.tt-row .row > .btn { flex: none; }  /* 「排定」照字寬，日期與時刻才放得下 */

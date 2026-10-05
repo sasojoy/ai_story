@@ -938,7 +938,9 @@ def test_admin_triggers_are_refused_for_players(client):
     _player(client)
     game = server.game_for("沈青衫")
     for op, body in (("start_battle", {"id": "huangjin_showdown"}), ("push_trend", {"id": "huangjin", "amount": 50}),
-                     ("fast_forward", {"hours": 24}), ("open_season", {})):
+                     ("fast_forward", {"hours": 24}), ("open_season", {}), ("jump_next", {}),
+                     ("schedule", {"id": "changshe_fire", "at": 0}), ("resolve_event", {"id": "uprising", "key": "fixed"}),
+                     ("set_trend", {"id": "huangjin", "value": 90}), ("clear_lock", {"id": "uprising"}), ("cancel_battle", {})):
         out = client.post(f"/api/do/{op}", json=body)
         assert out.status_code == 400 and out.json() == {"error": "只有管理者能這麼做。"}
     assert game.world.get_battle() is None
@@ -1741,3 +1743,56 @@ def test_main_view_shows_the_cart_being_carried(game, monkeypatch):
     assert server.main_view(game)["convoy"] == "你押著一車糧（4 份），要送到宛城。"
     game.state.player.convoy = None
     assert "convoy" not in server.main_view(game)
+
+
+# ── 管理者：時刻表與救場（計畫 T10）────────────────────────
+
+
+def _season_one_admin(client, monkeypatch):
+    """開關打開（週末設定）之後才開季：這一季蓋了「開」的章，有時刻表。回傳管理者的 Game。"""
+    monkeypatch.setattr(server.CONTENT.config, "season_one", True)
+    monkeypatch.setattr(server.CONTENT.config, "season_days", 2.5)
+    _admin(client, monkeypatch)
+    return server.game_for("掌門")
+
+
+def test_admin_timetable_choices(client, monkeypatch):
+    """/api/admin 多回時刻表（十二件，照內容順序；可排的三場決戰與季末附現實時間）、可以定的結果（宛城要等第 3 週、
+    季末不列）、有人鎖定的大事。開關關著是空的。"""
+    game = _season_one_admin(client, monkeypatch)
+    assert game.world.get_season().season_one
+    choices = client.get("/api/admin").json()
+    rows = choices["timetable"]
+    assert [r["id"] for r in rows] == [e.id for e in server.CONTENT.timetable]
+    changshe = next(r for r in rows if r["id"] == "changshe_fire")
+    season = game.world.get_season()
+    assert changshe["label"] == "第6週　長社火攻" and changshe["schedulable"] and changshe["state"] == "later"
+    assert abs(changshe["at_real"] - (time.time() + season.schedule["changshe_fire"] - season.time)) < 5
+    assert next(r for r in rows if r["id"] == "luzhi_siege")["schedulable"] is False
+    results = {r["value"]: r["label"] for r in choices["results"]}
+    assert results["bocai_routs_zhujun|成"] == "波才大敗朱儁：成"
+    assert results["changshe_fire|guan:大勝"] == "長社火攻：官軍大勝"
+    assert not any(v.startswith(("wancheng|", "xiaquyang|")) for v in results)
+    assert choices["locks"] == []
+
+
+def test_admin_timetable_choices_empty_with_the_switch_off(client, monkeypatch):
+    _admin(client, monkeypatch)
+    choices = client.get("/api/admin").json()
+    assert (choices["timetable"], choices["results"], choices["locks"]) == ([], [], [])
+
+
+def test_admin_schedule_jump_and_rescue_via_api(client, monkeypatch):
+    """每個新動作都走 /api/do/<op>，回應的 message 是引擎那一句。"""
+    game = _season_one_admin(client, monkeypatch)
+    out = client.post("/api/do/schedule", json={"id": "changshe_fire", "at": time.time() + 3600}).json()
+    assert "已把長社火攻排在" in out["message"]
+    season = game.world.get_season()
+    assert abs(season.schedule["changshe_fire"] - (season.time + 3600)) < 5
+    assert "跳到" in client.post("/api/do/jump_next", json={}).json()["message"]
+    client.post("/api/do/resolve_event", json={"id": "bocai_routs_zhujun", "key": "成"})
+    assert game.world.get_season().timeline["bocai_routs_zhujun"].key == "成"
+    client.post("/api/do/set_trend", json={"id": "yingru", "value": 70})
+    assert game.world.get_season().trends["yingru"] == 70
+    assert "沒有人鎖定" in client.post("/api/do/clear_lock", json={"id": "luzhi_siege"}).json()["message"]
+    assert "沒有進行中的決戰" in client.post("/api/do/cancel_battle", json={}).json()["message"]
