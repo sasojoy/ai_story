@@ -22,7 +22,7 @@ from typing import Literal, Protocol
 from pydantic import BaseModel, Field
 
 from .battle_instance import BattleInstance, BattleRoundRecord
-from .martial_arts import MartialArt
+from .martial_arts import Insight, MartialArt
 from .models import DEFAULT_SEASON_DAYS, BattleDef, Content
 from .state import Rumor, WorldState
 
@@ -151,6 +151,11 @@ class WorldStateStore(Protocol):
 
     def is_skill_name_taken(self, name: str) -> bool: ...
 
+    def is_character_name(self, name: str) -> bool:
+        """name 是不是江湖上某個角色的名號（真人、假人一樣，不分大小寫、不管前後空白，同 characters.name_key）。
+        給命名過濾用（FB-069：武學、意境不能取成角色的名號）；只回是或不是，不透露那個角色是不是假人。"""
+        ...
+
     def claim_skill_name(self, art: MartialArt) -> bool:
         """把 art 登記成這一季的自創武學；名字已經有人用過就不登記。回傳有沒有登記成功（原子判斷，
         不會有兩個玩家同時取到同一個名字都成功）。"""
@@ -171,6 +176,30 @@ class WorldStateStore(Protocol):
         - 配方還沒人登記、但 art.name 已經被別人的自創功法或別的配方占用 → 回傳 (None, False)，
           呼叫端換一個名字再試（取名自創仍然是獨佔的）。"""
         ...
+
+    # ── 改名、合併出來的意境、第一個練成絕學的人（武學與成長設計 3.2、3.6；這一季）──
+    def rename_skill(self, skill_name: str, new_name: str) -> bool:
+        """把這一季登記過的功法（skill_name 是它的 id）改叫 new_name：id 不變（身上、功法庫照舊指得到），
+        只換顯示的名字；new_name 已經被任何功法、改過的名字或意境用掉時不改、回 False（原子判斷）。"""
+        ...
+
+    def get_insight(self, name: str) -> Insight | None:
+        """這一季合併出來的意境；基本意境不在這裡（在 content.insights）。"""
+        ...
+
+    def lookup_insight_recipe(self, key: str) -> Insight | None: ...
+
+    def claim_insight_recipe(self, key: str, insight: Insight) -> tuple[Insight | None, bool]:
+        """跟 claim_recipe 同一套：配方有了回 (登記在案的, False)；名字被占用回 (None, False)；否則登記、回 (insight, True)。"""
+        ...
+
+    def claim_master(self, skill_name: str, player: str, shown: str | None = None) -> bool:
+        """這門武學這一季第一個修到絕學的人：還沒有人就記成 player、回 True；已經有人回 False（原子判斷）。
+        player 是名號（身分：取名權照它認）；shown 是寫給別人看的名號（匿名行走的人是「某位少俠」），
+        同一筆交易寫進那門武學的 master_shown（後到的人那一句、換季的江湖史照它寫）。"""
+        ...
+
+    def master_of(self, skill_name: str) -> str | None: ...
 
     # ── 同伴性情漂移 ──
     def record_companion_tag(self, companion_id: str, tag: str) -> None: ...
@@ -239,7 +268,7 @@ class WorldStateStore(Protocol):
     def next_season(self, content: Content, now: float) -> bool:
         """管理者開下一季：只在休季時有效。換上全新的一季、賽季編號 +1、直接開季，賽季時鐘從 now 起算；
         同伴全部重獲自由、沒打完的決戰清掉，天機 +1；玉璽碎片不動。武學命名、煉製配方、投靠名冊每季各一份，
-        新的一季自然是空的。舊的一季整份留著（線上架構設計 3.2），上一季的煉製首創寫進那一季的江湖史。"""
+        新的一季自然是空的。舊的一季整份留著（線上架構設計 3.2），上一季的首創（合成首創、首悟意境、練成絕學）寫進那一季的江湖史。"""
         ...
 
     def catch_up_season(self, content: Content, now: float, rng: random.Random) -> list[str]:

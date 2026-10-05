@@ -1,0 +1,8 @@
+[
+  {"id": "feng", "name": "風", "attribute": "快", "desc": "來去無蹤。"},
+  {"id": "huo", "name": "火", "attribute": "剛", "desc": "熾烈逼人。"},
+  {"id": "shui", "name": "水", "attribute": "柔", "desc": "隨形就勢。"},
+  {"id": "shan", "name": "山", "attribute": "慢", "desc": "不動如山。"},
+  {"id": "haoran", "name": "浩然", "attribute": "陽", "lean": "正", "grant": {"stat": "good", "at": 15}, "desc": "胸中正氣。"},
+  {"id": "xuesha", "name": "血煞", "attribute": "陰", "lean": "邪", "grant": {"stat": "evil", "at": 15}, "desc": "殺氣纏身。"}
+]

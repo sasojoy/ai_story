@@ -11,11 +11,11 @@ import math
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from . import figures
+from . import figures, orders
 from .calendar import point, stamp_text
 from .models import Content, Location, MapRegion, SimPlayer, TravelMode
-from .rules import can_hear, is_revealed, resolve_trend, resolve_trends, season_one, trend_value
-from .state import GameState, Rumor
+from .rules import can_hear, is_revealed, pending_event_title, resolve_trend, resolve_trends, season_one, trend_value
+from .state import GameState, Order, Rumor
 from .world import current_act, sim_active, storyline_off
 
 DAY = 86400
@@ -246,6 +246,63 @@ def leader_text(state: GameState, content: Content, name: str) -> str:
     return "\n".join(lines)
 
 
+# ── 本週軍令的打擊（FB-072）────────────────────────────
+
+STRIKE_MARK = "◎"  # 輿圖局勢層：本週打擊軍令的目標人物所在的地點，名字前加這個記號（還沒摸清時加在大區名稱前）
+
+
+def _open_strikes(state: GameState, content: Content) -> list[Order]:
+    """這個玩家自己陣營這週還沒達成的打擊軍令（有目標人物的）；散人、別陣營、開關關著、休季都是空的（同 Game.orders_view）。"""
+    if state.world.ended:
+        return []
+    return [
+        o for o in orders.current(state, content, state.player.faction)
+        if o.template == "strike" and not o.done and o.figure is not None
+    ]
+
+
+def _strike_place(state: GameState, content: Content, order: Order) -> str | None:
+    """打擊目標此刻的所在（讀人物此刻的樣子，不是發令那一刻的 order.location，他會挪窩）；
+    他挑戰不了（figures.can_challenge：不在場、戰線空著……）或所在不在地圖上時是 None。"""
+    if not figures.can_challenge(state, content, order.figure):
+        return None
+    loc_id = figures.state_of(state, content, order.figure).location
+    return loc_id if loc_id in content.locations else None
+
+
+def strike_how(state: GameState, content: Content, order: Order) -> str:
+    """軍令卡上打擊那道多寫的一行：怎麼打（到他所在的地方挑戰他本人、打贏記一次），以及他在哪。
+    他的所在摸清了才寫地點名字；沒摸清只寫大區（沒有大區的內容就只說沒摸清），不洩漏沒摸清的地點（見 is_known）。
+    他眼下挑戰不了（跟挑戰按鈕同一份規則，figures.can_challenge）就直說，不指路。"""
+    name = orders.figure_name(content, order.figure)
+    loc_id = _strike_place(state, content, order)
+    if loc_id is None:
+        where = "他眼下沒在戰線上領兵，挑戰不了"
+    elif is_known(state, content, loc_id):
+        where = f"他現在在{content.locations[loc_id].name}"
+    elif (region := region_of(content, loc_id)) is not None:
+        where = f"他現在在{region.name}一帶，那裡你還沒摸清"
+    else:
+        where = "他在哪裡你還沒摸清"
+    return f"到{name}所在的地方挑戰他本人，打贏記一次（{where}）。"
+
+
+def strike_marks(state: GameState, content: Content) -> tuple[set[str], set[str]]:
+    """局勢層要標的本週打擊目標：（摸清的所在地點 id, 大區 id）。目標的所在摸清了就標地點；沒摸清就標它所屬的大區
+    （只標大區、不標地點，所在不洩漏）。只算自己陣營這週還沒達成、而且他眼下挑戰得了的打擊軍令。"""
+    places: set[str] = set()
+    regions: set[str] = set()
+    for order in _open_strikes(state, content):
+        loc_id = _strike_place(state, content, order)
+        if loc_id is None:
+            continue
+        if is_known(state, content, loc_id):
+            places.add(loc_id)
+        elif (region := region_of(content, loc_id)) is not None:
+            regions.add(region.id)
+    return places, regions
+
+
 # ── 劇情 ──────────────────────────────────────────────
 
 
@@ -455,27 +512,41 @@ class TravelOption:
     mode: TravelMode
     label: str
     enabled: bool
+    to_jianghu: bool = False  # 按不下去是因為江湖頁上有事沒了結（事件、交談、求見、投靠、答話）：頁面多給一顆「回江湖」（FB-063）
 
 
-def travel_block(state: GameState) -> str | None:
+@dataclass(frozen=True)
+class TravelBlock:
+    """現在不能安排前往的原因（話只在 travel_block 寫一次）。to_jianghu：要回江湖頁了結才解得開（待處理的事件、交談中、
+    求見中、投靠待確認、答話中；FB-063），頁面照這個旗標多給「回江湖」，不去解析中文。閉關、打坐、賽季結束不是。"""
+
+    reason: str
+    to_jianghu: bool = False
+
+
+def travel_block(state: GameState, content: Content) -> TravelBlock | None:
     """現在不能安排前往的原因（賽季已結束、有事件待處理、交談中、求見中、投靠待確認、閉關中、打坐中）；可以時為 None。
+    有事件待處理時寫出是哪一則、去哪裡了結（FB-063）：多段的事件（next_event）是現在待處理的那一段。
     在路上不擋：從路上改去別處（路上設計 3.1，見 way_to）。"""
     if state.world.ended:
-        return "賽季已結束，不能安排前往"
+        return TravelBlock("賽季已結束，不能安排前往")
     if state.pending_event:
-        return "有事件待處理，不能安排前往"
-    if state.player.pending_companion:
-        return "交談中，先告辭才能安排前往"
-    if state.player.picking_audience:
-        return "求見中，先返回才能安排前往"
-    if state.player.pending_faction:
-        return "投靠還沒決定，先決定再安排前往"
-    if state.player.fs_asking is not None:
-        return "正在答話，先作罷才能安排前往"
-    if state.player.busy_until is not None:
-        return "閉關中，不能安排前往"
-    if state.player.resting_since is not None:
-        return "打坐中，先起身才能安排前往"
+        title = pending_event_title(state, content)  # 找不到事件（存檔指著拿掉的事件）時退回「眼前的事」
+        what = f"「{title}」" if title is not None else "眼前的事"
+        return TravelBlock(f"先回江湖頁處理{what}", to_jianghu=True)
+    p = state.player
+    if p.pending_companion:
+        return TravelBlock("交談中，先告辭才能安排前往", to_jianghu=True)
+    if p.picking_audience:
+        return TravelBlock("求見中，先返回才能安排前往", to_jianghu=True)
+    if p.pending_faction:
+        return TravelBlock("投靠還沒決定，先決定再安排前往", to_jianghu=True)
+    if p.fs_asking is not None:
+        return TravelBlock("正在答話，先作罷才能安排前往", to_jianghu=True)
+    if p.busy_until is not None:
+        return TravelBlock("閉關中，不能安排前往")
+    if p.resting_since is not None:
+        return TravelBlock("打坐中，先起身才能安排前往")
     return None
 
 
@@ -484,9 +555,9 @@ def travel_refusal(state: GameState, content: Content, loc_id: str, mode: Travel
     route = way_to(state, content, loc_id)
     if route is None:
         return "無法安排前往這裡"
-    reason = travel_block(state)
-    if reason:
-        return reason
+    block = travel_block(state, content)
+    if block:
+        return block.reason
     cost = route_stamina(state, content, route, mode)
     if state.player.stamina < cost:
         return f"體力不足，{MODES[mode]}要 {cost} 體力"
@@ -500,9 +571,9 @@ def travel_options(state: GameState, content: Content, loc_id: str) -> list[Trav
     route = way_to(state, content, loc_id)
     if route is None:
         return None
-    reason = travel_block(state)
-    if reason:
-        return [TravelOption("walk", reason, False)]
+    block = travel_block(state, content)
+    if block:
+        return [TravelOption("walk", block.reason, False, to_jianghu=block.to_jianghu)]
     out: list[TravelOption] = []
     at_once = returns_at_once(state, content, route)
     for mode in MODES:

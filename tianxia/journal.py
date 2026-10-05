@@ -11,6 +11,7 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
+from . import front_lines
 from .battlelog import clock_text, split_changes
 from .state import GameState, JournalEntry
 
@@ -18,7 +19,10 @@ LOG_BREAK = "\x1e"  # GameState.log 中每次行動結束的分隔標記（不�
 MAX_ENTRIES = 30  # 存檔保留最近幾則
 LEGACY_TIME = -1.0  # 舊存檔的 log 轉來的紀錄不知道時間
 TITLE_MAX = 40  # 舊存檔轉來的標題最長幾個字，超過的截斷
-MENXIA = "門下"  # 門下操作那一則的標題；連續的會併成一則
+# 修練頁（自創、鍛鍊、療傷、改練）與煉製頁的動作那一則的標題，照底部分頁的名字（FB-047）；同一種連續的會併成一則
+PRACTICE = "修練"
+CRAFT = "煉製"
+ALLOCATE = "配點"  # 升級的屬性點分配到屬性上（武學與成長設計 6.2）；連按幾次併成一則
 WORLD_NEWS = "江湖大事"  # 時間流逝時發生的江湖大事那一則的標題；連續的會併成一則
 NEWS_PREFIXES = ("【江湖大事】", "【主線】", "【主線改寫】")  # world.py 寫出的大勢門檻、世界事件、主線變化
 
@@ -88,12 +92,17 @@ def subtract_changes(changes: list[str], shown: list[str]) -> list[str]:
     return out
 
 
+LOSS_WHEN_UP = frozenset({"內傷"})  # 多了是壞事的數值：增加上紅、減少上綠（FB-049：「內傷 +3」以前是收穫的綠）
+
+
 def change_class(change: str) -> str:
-    """數值變化的顏色：增加 tx-up（綠）、減少 tx-down（紅）；零或看不出正負時不上色。"""
+    """數值變化的顏色：增加 tx-up（綠）、減少 tx-down（紅）；零或看不出正負時不上色。
+    LOSS_WHEN_UP 裡的（內傷）反過來：多了是損失。"""
     parsed = _parse(change)
     if parsed is None or parsed[1] == 0:
         return ""
-    return "tx-up" if parsed[1] > 0 else "tx-down"
+    gain = (parsed[1] > 0) != (parsed[0][0] in LOSS_WHEN_UP)
+    return "tx-up" if gain else "tx-down"
 
 
 # ── 建立紀錄 ──────────────────────────────────────────
@@ -122,6 +131,7 @@ class Draft:
     battle_id: int | None = None
     rewrites: list[tuple[str, str | None]] = field(default_factory=list)  # (訊息, 紀錄裡改寫成的文字；None＝不寫)
     changes: list[str] = field(default_factory=list)  # 訊息裡沒有、另外補上的數值變化（例如經驗）
+    guide: list[str] = field(default_factory=list)  # 這次行動順便完成的新手引導（記進 JournalEntry.guide，不進敘事）
 
     def hide(self, msg: str) -> None:
         self.rewrites.append((msg, None))
@@ -149,7 +159,7 @@ class Draft:
         changes, lines = split_changes(kept)
         return JournalEntry(
             time=time, title=self.title, tag=self.tag, lines=lines, changes=combine_changes(self.changes + changes),
-            battle_id=self.battle_id,
+            battle_id=self.battle_id, guide=list(self.guide),
         )
 
 
@@ -176,7 +186,7 @@ def _merged(head: JournalEntry, entry: JournalEntry, lines: list[str], battle_id
     """head 與 entry 併成的一則：時間與結果標記用新的（entry 沒有標記就沿用 head 的）、數值變化加總。"""
     return JournalEntry(
         time=entry.time, title=entry.title, tag=entry.tag or head.tag, lines=lines,
-        changes=combine_changes(head.changes + entry.changes), battle_id=battle_id,
+        changes=combine_changes(head.changes + entry.changes), battle_id=battle_id, guide=head.guide + entry.guide,
     )
 
 
@@ -189,6 +199,15 @@ def add_entry(state: GameState, entry: JournalEntry, merge: bool = False) -> Non
         return
     state.journal.insert(0, entry)
     del state.journal[MAX_ENTRIES:]
+
+
+def add_guide(state: GameState, notes: list[str]) -> None:
+    """不在行動裡完成的新手引導（例：打開輿圖）：接在最新一則的 guide 後面，不另起一則（「剛剛」不換）；還沒有紀錄時另起一則。"""
+    if state.journal:
+        head = state.journal[0]
+        state.journal[0] = head.model_copy(update={"guide": head.guide + notes})
+    else:
+        add_entry(state, JournalEntry(time=state.world.time, title="新手引導", guide=list(notes)))
 
 
 def add_arrival(state: GameState, entry: JournalEntry, done: bool) -> None:
@@ -249,14 +268,24 @@ def _when(time: float, when: Callable[[float], str]) -> str:
     return "舊紀錄" if time < 0 else when(time)
 
 
-def _heading(entry: JournalEntry) -> str:
-    tag = f'<span class="tx-tag">{_esc(entry.tag)}</span>' if entry.tag else ""
-    return f'<span class="tx-title">{_esc(entry.title)}</span>{tag}'
+def _heading(entry: JournalEntry, tag: str | None = None) -> str:
+    """標題與旁邊的結果標記；tag 沒給就用這一則的標記（給空字串＝不寫標記）。"""
+    tag = entry.tag if tag is None else tag
+    shown = f'<span class="tx-tag">{_esc(tag)}</span>' if tag else ""
+    return f'<span class="tx-title">{_esc(entry.title)}</span>{shown}'
 
 
-_NEW_THING = re.compile(r"^獲得 |煉成|自創了|習得了|第一次煉成|改練【|^你聽到一件事：")
+_NEW_THING = re.compile(
+    r"^獲得 |煉成|自創了|習得了|第一次煉成|改練【|^你聽到一件事："
+    r"|^你悟得了「|^你學會了【|^你以【[^】]+】融入「[^」]+」，衍生出一門|^「[^」]+」與「[^」]+」在你心中交融，化成「"
+    r"|^【[^】]+】修練有成，從"
+)
 # 「拿到新東西」的那一行：掃過一道光。玩家一次行動常常吐出五六行訊息，而其中真正值得注意的
-# 就是這一行（新素材、新功法、第一次煉成某個配方、伏筆的線索片段）——好玩度量表量的也正是這件事。
+# 就是這一行（新素材、新功法、新意境、伏筆的線索片段）——好玩度量表量的也正是這件事。
+# 後面那五條照訊息的原文錨在開頭，不能只認幾個字（路上見聞「你學會了那個結的打法」不是新功法）：
+# 悟得了＝意境（insights.learn）、學會了＝在各地學基礎武學（library.learn）、衍生出＝合成出新武學、
+# 交融化成＝合併出新意境（fusion.fuse／merge）、修練有成＝修練晉品（Task 9 的字眼）；
+# 重複悟到只是化成心得（「又悟到一次」），不算新東西。
 
 
 def _line_class(line: str) -> str:
@@ -277,39 +306,72 @@ def _body(entry: JournalEntry) -> list[str]:
     return lines[1:] if lines and entry.tag and lines[0] == entry.tag else lines
 
 
-def _chips(changes: list[str], tag: str) -> str:
-    if not changes:
+def _card_story(entry: JournalEntry) -> tuple[str, list[str]]:
+    """「剛剛」卡片標題旁的結果標記與底下的敘事，每一句只畫一次（FB-070）。
+    同一種連續的門下動作併成一則時（add_entry 的 merge），標記是最新那次的那句話、敘事是每一次照順序（_story），
+    所以標記又是敘事的最後一行：以前標記寫一次、敘事再列一遍，修練兩次看起來像三次。這時標記不另寫，敘事照順序畫，
+    N 次就是 N 行（數值變化本來就加總好了）。其他照 _body（FB-029：只有一行、跟標記一字不差的不再畫）。
+    只管卡片：江湖紀錄的一列摘要要靠標記看出最近一次的結果，點開才看全部（_row 照舊）。"""
+    lines = entry.lines
+    if len(lines) > 1 and entry.tag and lines[-1] == entry.tag:
+        return "", lines
+    return entry.tag, _body(entry)
+
+
+ChipFn = Callable[[str, str], tuple[str, int] | None]
+"""數值標籤的換法（FB-064）：(紀錄裡存的一項變化, seed) → (畫面上的字, 對看的人是好事 1／壞事 −1／無關 0)，不是它管的變化回 None。
+戰況變化（front_lines.mark）紀錄裡存的是機器可讀的寫法，要由 engine 照內容與看的人的陣營換成一句話；顏色因此在畫的那一刻才定。"""
+
+
+def _chips(changes: list[str], tag: str, chip: ChipFn | None = None, seed: str = "") -> str:
+    """數值標籤。chip 認得的變化（戰況）用它給的字與好壞上色；機器可讀的戰況變化沒人認得（沒交 chip）時不畫，不讓它原樣露給玩家。"""
+    shown: list[tuple[str, str]] = []
+    for change in changes:
+        drawn = chip(change, seed) if chip is not None else None
+        if drawn is not None:
+            text, favour = drawn
+            shown.append((text, "tx-up" if favour > 0 else "tx-down" if favour < 0 else ""))
+        elif not front_lines.is_mark(change):
+            shown.append((change, change_class(change)))
+    if not shown:
         return ""
-    chips = "".join(
-        f'<span class="{" ".join(filter(None, ("tx-chg", change_class(c))))}">{_esc(c)}</span>' for c in changes
-    )
+    chips = "".join(f'<span class="{" ".join(filter(None, ("tx-chg", cls)))}">{_esc(text)}</span>' for text, cls in shown)
     return f'<{tag} class="tx-chgs">{chips}</{tag}>'
 
 
-def card_html(entry: JournalEntry, when_text: Callable[[float], str] = clock_text) -> str:
+def _seed(entry: JournalEntry) -> str:
+    """一則紀錄換句子用的 seed：它的時間（同一則永遠同一句；Game._log 回給呼叫端的那句用同一個 seed，兩邊是同一句）。"""
+    return str(entry.time)
+
+
+def card_html(entry: JournalEntry, when_text: Callable[[float], str] = clock_text, chip: ChipFn | None = None) -> str:
     """「剛剛」卡片：時間、標題與結果標記、敘事、數值變化（綠增紅減）。舊存檔轉來的紀錄寫「舊紀錄」。
-    when_text 是時間的寫法：第一季由 engine 給季曆（calendar.stamp_text），不給時照舊「第N天 HH:MM」。"""
+    when_text 是時間的寫法：第一季由 engine 給季曆（calendar.stamp_text），不給時照舊「第N天 HH:MM」。
+    chip：戰況變化的換法（見 ChipFn）。"""
     when = "舊紀錄" if entry.time < 0 else f"剛剛　{when_text(entry.time)}"
+    tag, story = _card_story(entry)
     return (
-        f'<div class="tx-now"><div class="tx-when">{when}</div><div class="tx-head">{_heading(entry)}</div>'
-        f'{_lines(_body(entry))}{_chips(entry.changes, "div")}</div>'
+        f'<div class="tx-now"><div class="tx-when">{when}</div><div class="tx-head">{_heading(entry, tag)}</div>'
+        f'{_lines(story)}{_chips(entry.changes, "div", chip, _seed(entry))}</div>'
     )
 
 
-def extra_html(lines: list[str], changes: list[str]) -> str:
-    """戰鬥卡片底下的補充：卡片沒寫到的敘事與數值變化（見 card_leftovers）；都沒有時是空字串。"""
-    if not lines and not changes:
+def extra_html(lines: list[str], changes: list[str], chip: ChipFn | None = None, seed: str = "") -> str:
+    """戰鬥卡片底下的補充：卡片沒寫到的敘事與數值變化（見 card_leftovers）；都沒有時是空字串。
+    changes 全是畫不出來的（例如沒交 chip 的戰況變化）又沒有敘事時，也是空字串。"""
+    chips = _chips(changes, "div", chip, seed)
+    if not lines and not chips:
         return ""
-    return f'<div class="tx-extra">{_lines(lines)}{_chips(changes, "div")}</div>'
+    return f'<div class="tx-extra">{_lines(lines)}{chips}</div>'
 
 
-def _row(entry: JournalEntry, when: Callable[[float], str]) -> str:
+def _row(entry: JournalEntry, when: Callable[[float], str], chip: ChipFn | None = None) -> str:
     """紀錄的一列：時間一欄、標題與結果標記、數值變化。有敘事的一列可以點開，敘事收在裡面。"""
     head = (
         f'<span class="tx-time">{_when(entry.time, when)}</span>'
-        f'<span class="tx-main">{_heading(entry)}{_chips(entry.changes, "span")}</span>'
+        f'<span class="tx-main">{_heading(entry)}{_chips(entry.changes, "span", chip, _seed(entry))}</span>'
     )
-    body = _body(entry)
+    body = _body(entry) + entry.guide  # 新手引導在江湖紀錄照舊看得到（「剛剛」卡片不畫，見 card_html）
     if not body:
         return f'<div class="tx-row"><div class="tx-sum">{head}</div></div>'
     return (
@@ -320,12 +382,13 @@ def _row(entry: JournalEntry, when: Callable[[float], str]) -> str:
 
 def rows_html(
     entries: list[JournalEntry], heading: str = "", empty: str = "", when: Callable[[float], str] = clock_text,
+    chip: ChipFn | None = None,
 ) -> str:
-    """一則一列（最新的在前）；沒有紀錄時顯示 empty。什麼都沒有時回傳空字串。when 是時間的寫法（見 card_html）。"""
+    """一則一列（最新的在前）；沒有紀錄時顯示 empty。什麼都沒有時回傳空字串。when 是時間的寫法、chip 是戰況變化的換法（見 card_html）。"""
     if not entries and not heading and not empty:
         return ""
     parts = [f'<div class="tx-heading">{_esc(heading)}</div>'] if heading else []
-    parts += [_row(e, when) for e in entries] or ([f'<div class="tx-empty">{_esc(empty)}</div>'] if empty else [])
+    parts += [_row(e, when, chip) for e in entries] or ([f'<div class="tx-empty">{_esc(empty)}</div>'] if empty else [])
     return f'<div class="tx-journal">{"".join(parts)}</div>'
 
 

@@ -116,6 +116,7 @@
     "name": "行伍槍法",
     "kind": "武學",
     "attribute": "剛",
+    "quality": "上品",
     "desc": "軍中操練的長矛刺法，十個人站成一排，一起往前捅。"
   },
   {
@@ -123,6 +124,7 @@
     "name": "強弩射法",
     "kind": "武學",
     "attribute": "快",
+    "quality": "上品",
     "desc": "漢軍的看家本事，上弦慢，射得遠。"
   },
   {
@@ -130,6 +132,7 @@
     "name": "太平棍法",
     "kind": "武學",
     "attribute": "柔",
+    "quality": "上品",
     "desc": "信眾拿扁擔、竹竿練出來的棍法，不講招式，講人多。"
   },
   {
@@ -137,6 +140,7 @@
     "name": "力士錘法",
     "kind": "武學",
     "attribute": "剛",
+    "quality": "上品",
     "desc": "力士掄大錘的路數，一錘下去，盾牌連人一起倒。"
   },
   {
@@ -144,6 +148,7 @@
     "name": "門客劍法",
     "kind": "武學",
     "attribute": "虛",
+    "quality": "上品",
     "desc": "豪族養的門客防身用的劍法，虛晃的多，真刺的少。"
   },
   {
@@ -151,6 +156,210 @@
     "name": "部曲刀法",
     "kind": "武學",
     "attribute": "實",
+    "quality": "上品",
     "desc": "塢堡私兵練的刀法，守門守牆，一步不退。"
+  },
+  {
+    "id": "jichu_tuna",
+    "name": "基礎吐納",
+    "kind": "內功",
+    "attribute": "柔",
+    "quality": "下品",
+    "desc": "人人入門先學的呼吸法，氣沉丹田，慢吸慢吐。"
+  },
+  {
+    "id": "jichu_quanjiao",
+    "name": "基礎拳腳",
+    "kind": "武學",
+    "attribute": "實",
+    "quality": "下品",
+    "desc": "街頭巷尾都學得到的粗淺拳腳，紮實，但沒什麼變化。"
+  },
+  {
+    "id": "xiangyong_gun",
+    "name": "鄉勇棍法",
+    "kind": "武學",
+    "attribute": "慢",
+    "quality": "下品",
+    "learn": {
+      "at": "loushang_village",
+      "fame": 0,
+      "silver": 10
+    },
+    "desc": "鄉勇在大桑樹下操練的棍法，一招一式穩紮穩打。"
+  },
+  {
+    "id": "ganshan_tui",
+    "name": "趕山腿",
+    "kind": "武學",
+    "attribute": "快",
+    "quality": "下品",
+    "learn": {
+      "at": "yanshan_foot",
+      "fame": 0,
+      "silver": 10
+    },
+    "desc": "獵戶翻山追獸練出來的腿腳，又快又遠。"
+  },
+  {
+    "id": "yujia_quan",
+    "name": "漁家拳",
+    "kind": "武學",
+    "attribute": "柔",
+    "quality": "下品",
+    "learn": {
+      "at": "yingshui",
+      "fame": 0,
+      "silver": 10
+    },
+    "desc": "潁水漁家在船頭隨浪起伏練出的拳路，順勢卸力。"
+  },
+  {
+    "id": "dukou_duanda",
+    "name": "渡口短打",
+    "kind": "武學",
+    "attribute": "虛",
+    "quality": "下品",
+    "learn": {
+      "at": "yu_river",
+      "fame": 5,
+      "silver": 20
+    },
+    "desc": "運糧船上的船伕腳夫在擠滿人的船上纏鬥的貼身功夫，虛實難測。"
+  },
+  {
+    "id": "youxia_jian",
+    "name": "遊俠劍",
+    "kind": "武學",
+    "attribute": "陽",
+    "quality": "下品",
+    "learn": {
+      "at": "zhuo_militia_hall",
+      "fame": 5,
+      "silver": 20
+    },
+    "desc": "涿郡遊俠兒的劍法，大開大合，意氣風發。"
+  },
+  {
+    "id": "shouling_jinggong",
+    "name": "守陵靜功",
+    "kind": "內功",
+    "attribute": "陰",
+    "quality": "下品",
+    "learn": {
+      "at": "beimang_hill",
+      "fame": 5,
+      "silver": 20
+    },
+    "desc": "守陵人在王侯陵墓間獨坐練成的靜功，氣息幽冷。"
+  },
+  {
+    "id": "chanzuo_tiaoxi",
+    "name": "禪坐調息",
+    "kind": "內功",
+    "attribute": "慢",
+    "quality": "下品",
+    "learn": {
+      "at": "baima_temple",
+      "fame": 10,
+      "silver": 30
+    },
+    "desc": "寺中僧人靜坐調息的法門，氣息悠長。"
+  },
+  {
+    "id": "xingwu_dao",
+    "name": "行伍刀法",
+    "kind": "武學",
+    "attribute": "剛",
+    "quality": "下品",
+    "learn": {
+      "at": "luzhi_camp",
+      "faction": "guan"
+    },
+    "desc": "官軍營中操練的制式刀法，劈砍直截了當。"
+  },
+  {
+    "id": "xingwu_lianqi",
+    "name": "行伍練氣",
+    "kind": "內功",
+    "attribute": "陽",
+    "quality": "下品",
+    "learn": {
+      "at": "wan_city",
+      "faction": "guan"
+    },
+    "desc": "軍中壯氣的法子，呼喝之間氣血翻湧。"
+  },
+  {
+    "id": "huangtian_dao",
+    "name": "黃天刀法",
+    "kind": "武學",
+    "attribute": "剛",
+    "quality": "下品",
+    "learn": {
+      "at": "nanyang_huangjin_camp",
+      "faction": "huang"
+    },
+    "desc": "黃巾力士的刀法，刀刀搶攻，不留後路。"
+  },
+  {
+    "id": "fushui_zhang",
+    "name": "符水掌",
+    "kind": "武學",
+    "attribute": "陰",
+    "quality": "下品",
+    "learn": {
+      "at": "huangjin_camp",
+      "faction": "huang"
+    },
+    "desc": "太平道傳下的掌法，掌力陰寒，中者如飲冷水。"
+  },
+  {
+    "id": "taiping_daoyin",
+    "name": "太平導引",
+    "kind": "內功",
+    "attribute": "虛",
+    "quality": "下品",
+    "learn": {
+      "at": "julu_altar",
+      "faction": "huang"
+    },
+    "desc": "太平道的導引術，氣走經絡，飄忽難捉摸。"
+  },
+  {
+    "id": "wubao_zhuanggong",
+    "name": "塢堡樁功",
+    "kind": "內功",
+    "attribute": "實",
+    "quality": "下品",
+    "learn": {
+      "at": "haozu_fort",
+      "faction": "haoqiang"
+    },
+    "desc": "部曲站樁練出的根基，雙腳如生了根。"
+  },
+  {
+    "id": "huyuan_quan",
+    "name": "護院拳",
+    "kind": "武學",
+    "attribute": "實",
+    "quality": "下品",
+    "learn": {
+      "at": "cao_manor",
+      "sect": "cao_manor"
+    },
+    "desc": "曹家護院的拳法，守得住門，也打得退賊。"
+  },
+  {
+    "id": "shusheng_jian",
+    "name": "書生劍",
+    "kind": "武學",
+    "attribute": "柔",
+    "quality": "下品",
+    "learn": {
+      "at": "yingchuan_academy",
+      "sect": "yingchuan_academy"
+    },
+    "desc": "書院士子佩劍防身的劍法，綿長而有禮。"
   }
 ]

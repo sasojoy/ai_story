@@ -7,7 +7,7 @@ from __future__ import annotations
 import re
 from collections.abc import Callable
 
-from . import calendar, team
+from . import calendar, front_lines, team
 from .encounter import EncounterResult, describe_result
 from .models import Content, Squad
 from .state import BattleRecord, Fighter, GameState
@@ -22,9 +22,13 @@ HOUR = 3600
 _NUMERIC_CHANGE = re.compile(r"^\S+ [+-]\d+(\.\d+)?$")  # 例如「名望 +3」「銀兩 -10」
 
 
-def split_changes(msgs: list[str]) -> tuple[list[str], list[str]]:
+def split_changes(msgs: list[str], *, for_record: bool = False) -> tuple[list[str], list[str]]:
     """把一串訊息（apply_effect、遊歷加成……的回傳）分成（數值變化, 敘事文字）兩份，各自保留原順序。
-    數值變化是「標籤 + 正負號 + 數字」這種格式，例如「名望 +3」；其餘一律算敘事文字。"""
+    數值變化是「標籤 + 正負號 + 數字」這種格式，例如「名望 +3」；其餘一律算敘事文字。
+    for_record：這兩份是要記進戰報（BattleRecord）的——戰況變化（front_lines.mark）不收：戰鬥卡片的「獲得與損失」
+    是不上色的字、而戰況變化的顏色要看畫面的人站哪一邊，所以它留在江湖紀錄裡、由卡片底下的補充用標籤畫（FB-064）。"""
+    if for_record:
+        msgs = [m for m in msgs if not front_lines.is_mark(m)]
     changes = [m for m in msgs if _NUMERIC_CHANGE.match(m)]
     notes = [m for m in msgs if not _NUMERIC_CHANGE.match(m)]
     return changes, notes
@@ -109,7 +113,7 @@ def _result_line(record: BattleRecord) -> str:
 
 
 def gains_list(record: BattleRecord) -> list[str]:
-    """獲得與損失的每一項，例如 ["經驗 +15（每人）", "心得 +12", "銀兩 +10", "精鐵砂 ×1", "臂力 +1"]。"""
+    """獲得與損失的每一項，例如 ["經驗 +15（每人）", "心得 +12", "銀兩 +10", "精鐵砂 ×1", "氣血 -48"]。"""
     parts = []
     if record.exp:
         parts.append(f"經驗 +{record.exp}（每人）")

@@ -7,6 +7,7 @@ options 類欄位缺席時視為失敗觸發 re-prompt 重試。
 """
 from __future__ import annotations
 
+import copy
 import json
 import logging
 import re
@@ -117,6 +118,64 @@ def _ensure_required_present(data: dict, response_model: type, required: list[st
             raise ValueError(f"LLM 回應缺少必要欄位 {name!r}，疑似被截斷")
 
 
+class ModelGaveUp(RuntimeError):
+    """這一次拿鎖期間已經有一次模型呼叫逾時或失敗了：之後的呼叫不送出去，各處照例走退路的固定文字。"""
+
+
+class ModelBudget:
+    """行動鎖內的模型「額度」：一次拿鎖的期間，只要有一次模型呼叫逾時或失敗，gave_up 就設起來，之後鎖內的模型呼叫一律不送
+    （引擎不讀時鐘，靠這面旗子就夠）。由 Game 持有，server._locked 每次拿到鎖先歸零（Game.reset_model_budget）。"""
+
+    def __init__(self) -> None:
+        self.gave_up = False
+
+
+class InLockClient:
+    """鎖內呼叫端拿到的 client：包著一個短逾時、不重問的複本，並看著 ModelBudget——額度用完（這次拿鎖期間已經有一次失敗）
+    就不送、直接丟 ModelGaveUp；這一次呼叫失敗就把額度設成用完。其他欄位（timeout、retry、base_url、model……）讀的是裡面那個複本。
+    呼叫端（flavor、battle_instance、event_llm、companion_agent、naming）本來就把任何例外當作「沒取到」走退路，不必改。"""
+
+    def __init__(self, client: Any, budget: ModelBudget) -> None:
+        self._client = client
+        self._budget = budget
+
+    def __getattr__(self, name: str) -> Any:
+        if name in ("_client", "_budget"):  # 還沒 __init__ 完（copy、pickle）時別遞迴
+            raise AttributeError(name)
+        return getattr(self._client, name)
+
+    def chat_text(self, *args: Any, **kwargs: Any) -> Any:
+        return self._call("chat_text", args, kwargs)
+
+    def chat_structured(self, *args: Any, **kwargs: Any) -> Any:
+        return self._call("chat_structured", args, kwargs)
+
+    def _call(self, method: str, args: tuple, kwargs: dict) -> Any:
+        if self._budget.gave_up:
+            raise ModelGaveUp("這一次拿鎖期間已經有一次模型呼叫失敗，這一次不再叫模型")
+        try:
+            return getattr(self._client, method)(*args, **kwargs)
+        except Exception:
+            self._budget.gave_up = True
+            raise
+
+
+def quick_client(client: Any, seconds: int | float, budget: ModelBudget) -> Any:
+    """行動鎖內叫模型用的 client（Game._quick_client）：client 的複本，HTTP 逾時最多 seconds 秒、不重問（retry=False：
+    chat_structured 失敗直接丟出第一次的例外，不再多送一趟），外面包一層 InLockClient 看 budget。這樣鎖內任何一步模型呼叫
+    最多等 seconds 秒，這次拿鎖期間第一次失敗之後的呼叫都不送。沒有 client（None，伺服器假人）、或這次拿鎖期間額度已經用完
+    就是 None，呼叫端本來就把 None 當成不叫模型。原本的 client 不動（同一個角色鎖外的請求在用它，照舊有自己的逾時與重問）。
+    引擎不讀時鐘（CLAUDE.md），上限靠 HTTP 的逾時，跟 naming.propose 同一個做法。拿簡單的假物件（沒有 timeout 欄位）當 client
+    的測試與腳本也一樣給複本、設上上限。"""
+    if client is None or budget.gave_up:
+        return None
+    quick = copy.copy(client)
+    own = getattr(client, "timeout", None)
+    quick.timeout = min(own, seconds) if isinstance(own, (int, float)) else seconds
+    quick.retry = False
+    return InLockClient(quick, budget)
+
+
 class OllamaClient:
     def __init__(
         self, base_url: str = "http://localhost:11434", model: str = "qwen2.5:14b",
@@ -132,6 +191,9 @@ class OllamaClient:
         self.repeat_penalty = repeat_penalty
         self.presence_penalty = presence_penalty
         self.frequency_penalty = frequency_penalty
+        # chat_structured 失敗（逾時、格式不對）時要不要再問一趟：預設要；行動鎖內用的複本設成 False（見 quick_client），
+        # 一次呼叫最多只送一趟，失敗就丟出那一次的例外讓呼叫端走退路
+        self.retry = True
 
     def check_health(self) -> bool:
         try:
@@ -199,6 +261,8 @@ class OllamaClient:
         except (json.JSONDecodeError, ValidationError, requests.RequestException, ValueError) as e:
             if isinstance(e, requests.HTTPError) and e.response is not None and e.response.status_code == 404:
                 raise RuntimeError(f"Ollama 回傳 404：模型 '{self.model}' 未找到，請先 `ollama pull {self.model}`。")
+            if not self.retry:  # 行動鎖內的複本：不重問，鎖最多被這一趟佔住 timeout 秒；例外照原樣丟給呼叫端走退路
+                raise
             logger.warning(f"首次 LLM JSON 解析/請求失敗 ({e})，觸發 re-prompt 重試...")
             retry_messages = list(messages) + [{
                 "role": "user",

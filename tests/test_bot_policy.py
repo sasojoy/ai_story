@@ -141,11 +141,41 @@ def test_at_full_strength_the_other_side_holds_the_line(content, game):
     assert game.world.get_battle().round.pending_actions[game.state.player.name] == "safe"
 
 
-def test_look_after_creates_arts_with_ordinary_looking_names(content, game):
-    bot_policy.look_after(game, random.Random(0))
+def test_look_after_practices_the_worn_arts_and_never_creates_one(content, game):
     member = game.state.player.member
-    assert member.neigong_id and member.wugong_id
-    assert not any(ch.isdigit() for ch in member.neigong_id + member.wugong_id)
+    bot_policy.look_after(game, random.Random(0))  # 空著的欄位不會被補上（自創已經作廢）
+    assert member.neigong_id is None and member.wugong_id is None
+    member.neigong_id, member.wugong_id = "breath", "fist"
+    member.neigong_level = member.wugong_level = 1
+    game.state.player.stats["xinde"] = 1000  # 練成要花心得，這裡驗的是「練不練」不是價錢
+    content.config.practice_injury_chance = 0.0
+    for seed in range(40):  # 每次有 PRACTICE_CHANCE 的機率練一成：幾輪下來身上的兩門都練到過
+        bot_policy.look_after(game, random.Random(seed))
+    assert member.neigong_level > 1 and member.wugong_level > 1
+    assert (member.neigong_id, member.wugong_id) == ("breath", "fist")
+
+
+def test_look_after_does_not_practise_what_it_cannot_afford(content, game):
+    """練成花心得：付不起下一成就不練，也不會留下一堆「心得不足」的紀錄。"""
+    member = game.state.player.member
+    member.neigong_id, member.wugong_id = "breath", "fist"
+    member.neigong_level = member.wugong_level = 6  # 下一成要 6 點
+    game.state.player.stats["xinde"] = 5
+    entries = len(game.state.journal)
+    for seed in range(40):
+        bot_policy.look_after(game, random.Random(seed))
+    assert (member.neigong_level, member.wugong_level) == (6, 6)
+    assert game.state.player.stats["xinde"] == 5 and len(game.state.journal) == entries
+
+
+def test_look_after_spends_the_stat_points_through_the_public_action(content, game):
+    """假人升級得到的屬性點，每一輪照顧動作先配掉（跟真人一樣只走 Game.allocate_stat，不叫模型）。"""
+    p = game.state.player
+    p.stat_points = 3
+    bot_policy.look_after(game, random.Random(0))
+    assert p.stat_points == 0 and sum(p.stats[k] for k in ("str", "agi", "con", "wis")) == 23
+    assert [e.title for e in game.state.journal if e.title == "配點"] == ["配點"]  # 連配三點只留一則
+
 
 def test_a_bot_trains_where_training_helps_its_faction(content, game):
     _install_factions(content)  # 官軍 goals kou -1、黃巾 goals kou +1
@@ -210,11 +240,13 @@ def _battle_in_the_south(content, game):
     return definition
 
 
-def test_a_bot_on_the_road_skips_its_turn(content, game):
+def test_a_bot_on_the_road_skips_its_turn(content, game, monkeypatch):
+    monkeypatch.setattr(bot_policy, "PRACTICE_CHANCE", 1.0)  # 要是照顧動作沒被跳過，這一輪一定會鍛鍊一成
+    game.state.player.member.wugong_id, game.state.player.member.wugong_level = "fist", 1
     game.choose("move:lake")
-    before = (len(game.state.journal), game.state.player.member.wugong_id)
+    before = (len(game.state.journal), game.state.player.member.wugong_level)
     assert bot_policy.take_turn(game, _profile("guan"), random.Random(0)) == []
-    assert (len(game.state.journal), game.state.player.member.wugong_id) == before  # 連自創功法這種照顧動作都不做
+    assert (len(game.state.journal), game.state.player.member.wugong_level) == before  # 連鍛鍊這種照顧動作都不做
 
 
 def test_a_bot_on_the_road_still_ticks_the_shared_battle(content, game):
@@ -355,3 +387,16 @@ def test_a_bot_never_calls_on_a_figure_but_can_always_back_out(content, game):
     assert [o.id for o in options] == ["call:mate", "call:scholar", "call:back"]
     assert [bot_policy.score(game, o, profile) for o in options] == [None, None, 0.0]
     assert bot_policy.pick(game, options, profile, random.Random(0)) == "call:back"
+
+
+def test_a_bot_never_knocks_on_the_single_audience_button_even_though_it_always_works(content, game):
+    """名望不夠的求見按得下去（會被打發，武學與成長設計 9.1）：假人不求見任何人物，單人地點直接列的那顆也不給分。"""
+    _install_factions(content)
+    ch = content.characters["mate"]
+    ch.deep_interaction, ch.audience_fame = True, 99
+    profile = _profile("guan")
+    options = [o for o in game.options(odds=False) if o.enabled]
+    assert "call:mate" in [o.id for o in options]
+    assert bot_policy.score(game, next(o for o in options if o.id == "call:mate"), profile) is None
+    for seed in range(30):
+        assert bot_policy.pick(game, options, profile, random.Random(seed)) != "call:mate"

@@ -60,7 +60,6 @@ def real():
     c = load_content(CONTENT_DIR)
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0  # 遊歷打完不接戰後事件，結果才寫得死
-    c.config.train_stat_chance = 0.0
     return c
 
 
@@ -475,7 +474,8 @@ def test_timetable_outcome_retires_bocai(on):
     changshe = next(e for e in on.timetable if e.id == "changshe_fire")
     outcome = changshe.outcomes["guan:大勝"]
     msgs = timetable.resolve(s, on, changshe, random.Random(0), key="guan:大勝")
-    assert msgs == [f"【江湖大事】{changshe.preface}{outcome.text}{outcome.note}"]
+    text = outcome.text.replace("{人物:bocai}", "波才")  # 8.11：「這一次」那半句寫出人名，結算前的波才
+    assert msgs == [f"【江湖大事】{changshe.preface}{text}{outcome.note}"]
     assert s.world.figures["bocai"].status == "retired"
     assert (s.world.figures["pengtuo"].status, s.world.figures["pengtuo"].front) == ("active", "yingru")
     assert [r.text for r in s.world.rumors] == ["彭脫接手潁川汝南的戰事。", msgs[0].removeprefix("【江湖大事】")]
@@ -572,6 +572,47 @@ def test_challenge_only_for_enemy_faction_at_location(on, world):
     assert {"act:challenge:huangfusong", "act:challenge:zhujun"} <= set(ids(_player(on, world, "豪戊", "haoqiang", "changshe")))
 
 
+def test_figures_off_the_front_refuse_challenges_but_still_meet(on, world, real):
+    """戰線空著的人物不接受挑戰（PM 2026-10-05 定 (A)）：黃巾在孟津渡看得到「挑戰董卓」但按不下去、寫明原因，求見照常；
+    官軍在南陽黃巾營，趙弘（沒戰線）同樣按不下去，張曼成照打；何進（人物表標了 challenge_off_front）沒有戰線也照打；
+    重挫退出戰線的波才也不受挑戰。開關關著照舊沒有挑戰。"""
+    off_front = "沒在戰線上領兵，不受挑戰"
+    huang = _player(on, world, "黃甲", "huang", "mengjin_ford")
+    assert (_option(huang, "act:challenge:dongzhuo").enabled, _option(huang, "act:challenge:dongzhuo").label) == (
+        False, f"挑戰董卓（{off_front}）")
+    # 求見照常（孟津渡沒有交友事件、董卓又見不到：交友只會撲空所以不給，求見不花體力、按得下去）
+    assert _option(huang, "act:socialize") is None and _option(huang, "call:dongzhuo").enabled
+    guan = _player(on, world, "官乙", "guan", "nanyang_huangjin_camp")
+    assert (_option(guan, "act:challenge:zhaohong").enabled, _option(guan, "act:challenge:zhaohong").label) == (
+        False, f"挑戰趙弘（{off_front}）")
+    assert _option(guan, "act:challenge:zhangmancheng").enabled
+    assert real.figures["hejin"].challenge_off_front and not real.figures["dongzhuo"].challenge_off_front
+    assert _option(_player(on, world, "黃丙", "huang", "dajiangjun_fu"), "act:challenge:hejin").enabled
+    guan.state.player.location = "huangjin_camp"
+    assert _option(guan, "act:challenge:bocai").enabled
+    figures.apply(guan.state, on, "bocai", FigureChange(fate="重挫", location="huangjin_camp"))
+    assert not _option(guan, "act:challenge:bocai").enabled
+    on.config.season_one = False
+    assert _option(_player(on, world, "黃戊", "huang", "mengjin_ford"), "act:challenge:dongzhuo") is None
+
+
+@pytest.mark.parametrize("faction, spot, figure", [
+    ("guan", "luzhi_camp", "luzhi"), ("huang", "huangjin_camp", "bocai"), ("huang", "mengjin_ford", "dongzhuo"),
+])
+def test_a_lone_general_behind_a_closed_door_leaves_only_the_free_audience_button(on, world, faction, spot, figure):
+    """陣營投靠點的營寨、孟津渡都只站著一位將領、沒有交友事件：名望不夠時交友只會花 5 點體力換同一句打發，
+    所以不給交友，只留不花體力的求見（審查：盧植營交友 150→145 還吃了閉門羹）。"""
+    game = _player(on, world, "新人", faction, spot)
+    assert [o.id for o in game.options() if o.id in ("act:socialize", f"call:{figure}")] == [f"call:{figure}"]
+    option = _option(game, f"call:{figure}")
+    assert option.enabled and option.label.startswith("求見") and "名望還差" in option.label
+    stamina = game.state.player.stamina
+    msgs = game.choose(f"call:{figure}")
+    assert game.state.player.stamina == stamina and len(msgs) == 1 and "（名望還差 " in msgs[0]
+    game.state.player.stats["fame"] = 100  # 見得到了：交友照給
+    assert _option(game, "act:socialize") is not None
+
+
 def test_win_routs_the_figure_and_snubs_the_winner(on, world):
     """打贏波才：他敗走，聲威 −5（陣營只有一人在推）、跟他的情誼 −5、記 50 貢獻、戰報記一筆「挑戰波才」；兩個現實小時內
     他的交友、挑戰對打贏的人都按不下去、寫「剛吃了敗仗，閉門不見」，別人照常；時間一過又見得到。"""
@@ -586,9 +627,12 @@ def test_win_routs_the_figure_and_snubs_the_winner(on, world):
     p = winner.state.player
     assert (p.affinities["bocai"], p.contrib, p.snubbed_until["bocai"], p.stamina) == (15, 50, 1000.0 + 2 * 3600, stamina - 10)
     assert winner.state.battles[0].event == "挑戰波才" and "波才聲威 -5" in winner.state.battles[0].changes
-    for option_id, label in (("act:challenge:bocai", "挑戰波才"), ("act:socialize", "交友")):
-        option = _option(winner, option_id)
-        assert (option.enabled, option.label) == (False, f"{label}（剛吃了敗仗，閉門不見）")
+    option = _option(winner, "act:challenge:bocai")
+    assert (option.enabled, option.label) == (False, "挑戰波才（剛吃了敗仗，閉門不見）")
+    # 營寨沒有交友事件、他又閉門不見：交友只會撲空，所以不給交友，求見那顆灰掉、寫同一個原因
+    assert _option(winner, "act:socialize") is None
+    option = _option(winner, "call:bocai")
+    assert (option.enabled, option.label) == (False, "求見波才（剛吃了敗仗，閉門不見）")
     assert not winner.socialize_starts_dialogue()
     other = _player(on, world, "官乙", "guan", "huangjin_camp")
     other.state.player.stats["fame"] = 50

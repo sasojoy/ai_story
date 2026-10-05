@@ -1,7 +1,7 @@
 import pytest
 
 from tianxia.atlas import (
-    Route, TravelOption, detail_text, direction, foes, goal_places, haunters, is_known, known_locations, leg_minutes,
+    Route, TravelBlock, TravelOption, detail_text, direction, foes, goal_places, haunters, is_known, known_locations, leg_minutes,
     place_choices, recent_news, region_of, region_trends, road_hops, road_spot, routes, travel_block, travel_options,
     travel_refusal, travel_seconds, travel_stamina, views, way_to, whole_minutes, worst_foe,
 )
@@ -276,25 +276,62 @@ def test_travel_options_offer_walking_hurrying_and_dashing(state, content):
 
 
 def test_travel_options_and_refusal_explain_why_you_cannot_go(state, content):
-    for setup, reason in (
-        (lambda: setattr(state, "pending_event", "drunk"), "有事件待處理，不能安排前往"),
-        (lambda: setattr(state.player, "busy_until", 3600.0), "閉關中，不能安排前往"),
-        (lambda: setattr(state.player, "resting_since", 0.0), "打坐中，先起身才能安排前往"),
-        (lambda: setattr(state.player, "pending_companion", "someone"), "交談中，先告辭才能安排前往"),
-        (lambda: setattr(state.player, "pending_faction", "guan"), "投靠還沒決定，先決定再安排前往"),
-        (lambda: setattr(state.world, "ended", True), "賽季已結束，不能安排前往"),
+    for setup, reason, to_jianghu in (
+        (lambda: setattr(state, "pending_event", "drunk"), "先回江湖頁處理「醉漢」", True),
+        (lambda: setattr(state.player, "busy_until", 3600.0), "閉關中，不能安排前往", False),
+        (lambda: setattr(state.player, "resting_since", 0.0), "打坐中，先起身才能安排前往", False),
+        (lambda: setattr(state.player, "pending_companion", "someone"), "交談中，先告辭才能安排前往", True),
+        (lambda: setattr(state.player, "picking_audience", True), "求見中，先返回才能安排前往", True),
+        (lambda: setattr(state.player, "pending_faction", "guan"), "投靠還沒決定，先決定再安排前往", True),
+        (lambda: setattr(state.player, "fs_asking", "chain"), "正在答話，先作罷才能安排前往", True),
+        (lambda: setattr(state.world, "ended", True), "賽季已結束，不能安排前往", False),
     ):
         state.pending_event, state.player.busy_until, state.player.resting_since = None, None, None
         state.player.pending_companion, state.player.pending_faction = None, None
+        state.player.picking_audience, state.player.fs_asking = False, None
         state.world.ended = False
         setup()
-        assert travel_options(state, content, "lake") == [TravelOption("walk", reason, False)]
+        # 要回江湖頁了結才解得開的（事件、交談、求見、投靠待確認、答話）：頁面照 to_jianghu 多給一顆「回江湖」；
+        # 閉關、打坐、賽季結束不是回江湖頁就解得開的事（FB-063）
+        expected = [TravelOption("walk", reason, False, to_jianghu=to_jianghu)]
+        assert travel_options(state, content, "lake") == expected
+        assert travel_block(state, content) == TravelBlock(reason, to_jianghu=to_jianghu)
         assert travel_refusal(state, content, "lake", "walk") == reason
     state.world.ended = False
     assert travel_refusal(state, content, "town", "walk") == "無法安排前往這裡"
     state.player.stamina = 5
     assert travel_refusal(state, content, "lake", "dash") == "體力不足，疾行要 6 體力"
     assert travel_refusal(state, content, "lake", "hurry") is None
+
+
+def test_a_pending_event_blocks_travel_by_name_and_says_where_to_settle_it(state, content):
+    """FB-063：事件還沒選完不能出發。原因寫出是哪一則、要回江湖頁處理；多段事件寫「現在」待處理的那一則。"""
+    state.pending_event = "chain_a"
+    assert travel_block(state, content) == TravelBlock("先回江湖頁處理「跟蹤」", to_jianghu=True)
+    state.pending_event = "chain_b"  # next_event 接下去的下一段
+    assert travel_block(state, content) == TravelBlock("先回江湖頁處理「倉庫」", to_jianghu=True)
+    assert travel_refusal(state, content, "lake", "dash") == "先回江湖頁處理「倉庫」"
+    (option,) = travel_options(state, content, "lake")
+    assert (option.label, option.enabled, option.to_jianghu) == ("先回江湖頁處理「倉庫」", False, True)
+    state.pending_event = None
+    state.player.busy_until = 3600.0  # 閉關中也不能出發，但那不是回江湖頁就解得開的事
+    assert travel_block(state, content) == TravelBlock("閉關中，不能安排前往")
+    assert travel_block(state, content).to_jianghu is False
+
+
+def test_a_pending_event_missing_from_content_still_blocks_travel_toward_the_jianghu_page(state, content):
+    """防守用的退路（讀檔時會清掉指向不存在事件的 pending_event，平常走不到）：事件名找不到也不能崩，照樣擋、照樣叫人回江湖頁。"""
+    state.pending_event = "no_such_event"
+    assert travel_block(state, content) == TravelBlock("先回江湖頁處理眼前的事", to_jianghu=True)
+    assert travel_refusal(state, content, "lake", "walk") == "先回江湖頁處理眼前的事"
+    (option,) = travel_options(state, content, "lake")
+    assert (option.label, option.enabled, option.to_jianghu) == ("先回江湖頁處理眼前的事", False, True)
+
+
+def test_the_season_ending_outranks_a_pending_event_in_the_travel_block(state, content):
+    """賽季已結束時事件也動不了：原因寫賽季結束，不叫人回江湖頁。"""
+    state.pending_event, state.world.ended = "drunk", True
+    assert travel_block(state, content) == TravelBlock("賽季已結束，不能安排前往")
 
 
 # ── 詳情欄 ────────────────────────────────────────────
@@ -450,7 +487,7 @@ def test_game_map_helpers(game):
 
 def test_picking_whom_to_call_on_blocks_travel(state, content):
     state.player.picking_audience = True
-    assert travel_options(state, content, "lake") == [TravelOption("walk", "求見中，先返回才能安排前往", False)]
+    assert travel_options(state, content, "lake") == [TravelOption("walk", "求見中，先返回才能安排前往", False, to_jianghu=True)]
     assert travel_refusal(state, content, "lake", "walk") == "求見中，先返回才能安排前往"
 
 
@@ -482,7 +519,7 @@ def test_on_the_road_no_place_is_where_you_are(state, content):
 
 def test_on_the_road_you_can_arrange_travel_from_where_you_are(state, content):
     _on_the_road(state)
-    assert travel_block(state) is None
+    assert travel_block(state, content) is None
     assert way_to(state, content, "town") == Route(("town",), (pytest.approx(1.0),), origin="lake", share=pytest.approx(2 / 3))
     assert travel_options(state, content, "town") == [  # 剛離開的那一站：就是折返
         TravelOption("walk", "步行（約 1 分鐘）", True),

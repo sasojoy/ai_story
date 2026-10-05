@@ -29,7 +29,9 @@ def test_level_messages_come_in_team_order(state, content, world):
     state.player.team += ["mate", "scholar"]
     state.player.member.exp = 90
     world.update_companion("scholar", lambda progress: setattr(progress, "exp", 95))
-    assert team.add_team_exp(state, content, world, 10) == ["沈浪升到第 2 級！", "書生升到第 2 級！"]
+    assert team.add_team_exp(state, content, world, 10) == [
+        "沈浪升到第 2 級！", "你有 1 點屬性可以分配（點名號展開）。", "書生升到第 2 級！",  # 本人的升級與配點提示在前，同伴在後
+    ]
 
 
 def test_a_companions_blood_cap_grows_with_the_level(state, content, world):

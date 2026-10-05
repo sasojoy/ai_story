@@ -4,10 +4,11 @@ from __future__ import annotations
 import random
 import re
 from collections.abc import Callable
-from typing import Literal
+from typing import Literal, NamedTuple
 
-from . import calendar, materials, roster, team  # 與 roster 互相 import：只能引入整個模組、呼叫時才取屬性，不能 from .roster import …
-from .models import FRONT_KEY, Check, Condition, Content, Effect, Trend
+from . import calendar, front_lines, insights, library, materials, roster, team  # 與 roster 互相 import：只能引入整個模組、呼叫時才取屬性，不能 from .roster import …
+from .martial_arts import content_art
+from .models import FRONT_KEY, Check, Condition, Content, Effect, FactionDef, Trend
 from .state import PLAYER, GameState, Rumor, RumorLayer, WorldState
 from .world_state import JADE_SEAL_FRAGMENT_COUNT, WorldStateStore
 
@@ -18,12 +19,26 @@ def display_name(state: GameState) -> str:
     return "某位少俠" if state.player.anonymous else state.player.name
 
 
-def can_meet(state: GameState, content: Content, companion_id: str) -> bool:
-    """見得到這位大勢人物：名望到了他的求見門檻（CharacterDef.audience_fame），或是透過他的「結識」事件認識過
-    （企劃者 2026-10-02 決定）。引擎的求見與交友對話、伏筆的對話片段（名望不夠的人改從行動偷聽，foreshadow.hear_after_action）
-    都用這一個判斷，不要在別處再寫一份。"""
+def audience_bar(state: GameState, content: Content, companion_id: str) -> int:
+    """這位人物此刻對你的求見門檻（武學與成長設計 9.1）：名望門檻（CharacterDef.audience_fame），投靠了他的陣營的人
+    每**升一階**（晉升過幾次）抵 audience_rank_discount 點；投靠了但還沒晉升過的人一點都不抵。散人、敵對陣營，
+    以及不在大勢人物表上的人物只看名望。最低 0。
+    存檔裡的階：0＝投靠了還沒晉升過（ranks.rank_of 算第 1 階），第一次晉升後是 2，所以晉升過幾次＝max(階, 1) - 1。
+    這裡自己算、不呼叫 ranks.rank_of：ranks 會 import rules，反過來 import 就循環了。"""
+    bar = content.characters[companion_id].audience_fame
+    figure = next((f for f in content.figures.values() if f.character == companion_id), None)
     p = state.player
-    return f"結識:{companion_id}" in p.flags or p.stats.get("fame", 0) >= content.characters[companion_id].audience_fame
+    if figure is not None and p.faction is not None and p.faction == figure.faction:
+        bar -= (max(p.rank, 1) - 1) * content.config.audience_rank_discount
+    return max(0, bar)
+
+
+def can_meet(state: GameState, content: Content, companion_id: str) -> bool:
+    """見得到這位大勢人物：名望到了他的求見門檻（audience_bar：名望，同陣營的階級可以抵一段），或是透過他的「結識」
+    事件認識過（企劃者 2026-10-02 決定）。引擎的求見與交友對話、伏筆的對話片段（名望不夠的人改從行動偷聽，
+    foreshadow.hear_after_action）都用這一個判斷，不要在別處再寫一份。"""
+    p = state.player
+    return f"結識:{companion_id}" in p.flags or p.stats.get("fame", 0) >= audience_bar(state, content, companion_id)
 
 
 def current_day(state: GameState) -> int:
@@ -54,7 +69,9 @@ def check_condition(cond: Condition, state: GameState, content: Content | None =
         return False
     if cond.no_sect and p.sect is not None:
         return False
-    known_skills = {p.member.neigong_id, p.member.wugong_id} - {None}
+    # 擁有的武學都算（身上兩欄＋功法庫）：事件教的武學在欄位滿了時收進功法庫（F2），只看身上的話「還沒學過才出現」的
+    # 付費課程（潁川汝南鏢局的追風步）學完還會一直回來、再收一次錢
+    known_skills = set(library.owned_arts(state))
     if any(s not in known_skills for s in cond.skills_all):
         return False
     if any(s in known_skills for s in cond.skills_none):
@@ -98,11 +115,41 @@ def check_condition(cond: Condition, state: GameState, content: Content | None =
     return True
 
 
+class CheckOutlook(NamedTuple):
+    """一次檢定的勝算：本人這項屬性現在的數值（含等級成長）、熟練加成、兩者相加減難度的差值、成功率（0～1）。"""
+
+    stat_value: float
+    bonus: int
+    gap: float
+    chance: float
+
+
+def check_outlook(check: Check, state: GameState, content: Content, world: WorldStateStore) -> CheckOutlook:
+    """每一個事件檢定都看本人的屬性（企劃者 2026-10-05「探索應該沒有本人跟夥伴之分了」：Check.by 讀得進來、不再有作用），
+    本人的熟練加成（Check.practice，joy #15）照舊加上。差值每 +1，成功率 +10%；範圍 5%～95%。
+    擲骰（roll_check）與選項括號裡的數值、心裡話那一檔（events.choice_label）都出自這一個函式的同一個差值，
+    所以標籤講的和實際擲出來的不會對不起來。"""
+    stat_value = team.check_value(state, content, world, PLAYER, check.stat)
+    bonus = team.practice_bonus(state, content, check)
+    gap = stat_value + bonus - check.difficulty
+    return CheckOutlook(stat_value, bonus, gap, min(0.95, max(0.05, 0.5 + gap * 0.1)))
+
+
+def check_gap(check: Check, state: GameState, content: Content, world: WorldStateStore) -> float:
+    """本人的屬性（含熟練加成）減難度：選項括號裡挑哪一檔心裡話看它，擲骰的成功率也是它換算的（check_outlook）。"""
+    return check_outlook(check, state, content, world).gap
+
+
 def check_chance(check: Check, state: GameState, content: Content, world: WorldStateStore) -> float:
-    """出手者的屬性每高於難度 1 點，成功率 +10%；範圍 5%～95%。"""
-    key = team.check_actor(state, content, world, check)
-    value = team.check_value(state, content, world, key, check.stat)
-    return min(0.95, max(0.05, 0.5 + (value - check.difficulty) * 0.1))
+    return check_outlook(check, state, content, world).chance
+
+
+def practice_line(check: Check, state: GameState, content: Content, world: WorldStateStore) -> str:
+    """吃到熟練加成時，併進選項括號裡的那一句（例如「這種事你幹得多了。」）；沒吃到是空字串。"""
+    if team.practice_bonus(state, content, check) <= 0:
+        return ""
+    rule = content.config.practice_bonus[check.practice]
+    return rule.line.replace("{who}", "你")
 
 
 def roll_check(check: Check, state: GameState, content: Content, world: WorldStateStore, rng: random.Random) -> bool:
@@ -114,10 +161,9 @@ FREE_TEXT_PER_POINT = 4  # 相關屬性每比 5 高（低）1 點，成功率 +4
 
 
 def free_text_rate(llm_rate: int, choice, state: GameState, content: Content, world: WorldStateStore) -> int:
-    """隨口應對的成功率（百分比）：LLM 評的 0～100，加上屬性修正（照 choice.by 取出手者，跟一般檢定同一個函式），
+    """隨口應對的成功率（百分比）：LLM 評的 0～100，加上本人這項屬性的修正（跟一般檢定一樣只看本人，choice.by 不再有作用），
     夾在 5～85。choice 是 models.FreeTextChoice。"""
-    key = team.check_actor(state, content, world, choice)
-    value = team.check_value(state, content, world, key, choice.stat)
+    value = team.check_value(state, content, world, PLAYER, choice.stat)
     rate = round(llm_rate + (value - 5) * FREE_TEXT_PER_POINT)
     return max(FREE_TEXT_MIN_RATE, min(FREE_TEXT_MAX_RATE, rate))
 
@@ -165,12 +211,11 @@ def add_marks(marks: dict[str, int], state: GameState) -> None:
         state.world.marks[key] = state.world.marks.get(key, 0) + n
 
 
-def check_who(check: Check, state: GameState, content: Content, world: WorldStateStore) -> str:
-    """選項與結果上寫的出手者：本人檢定寫「本人」；隊伍檢定寫「某某出手」，派出的是本人時寫「本人出手」。"""
-    if check.by == "self":
-        return "本人"
-    key = team.check_actor(state, content, world, check)
-    return "本人出手" if key == PLAYER else f"{team.member_name(state, content, key)}出手"
+def check_result_line(success: bool) -> tuple[str, str]:
+    """檢定的結果：（江湖紀錄的標記, 敘事裡的那一行）。一律是本人出手，所以不寫誰（企劃者 2026-10-05），
+    只寫「成功」「失敗」——事件選項、隨口應對、伏筆的最後一步都用這一個。"""
+    word = "成功" if success else "失敗"
+    return word, f"（{word}）"
 
 
 def add_rumor(
@@ -204,6 +249,13 @@ def add_chronicle(state: GameState, text: str) -> None:
 
 def trend_name(content: Content, trend_id: str) -> str:
     return next(t.name for t in content.scenario.trends if t.id == trend_id)
+
+
+def pending_event_title(state: GameState, content: Content) -> str | None:
+    """現在待處理的那則事件，玩家看得到的名字（多段事件 next_event 是現在的這一段）；沒有待處理的事件、
+    或內容裡找不到那則事件（存檔指著已經拿掉的事件）時是 None。說書人的框、「下一步」與輿圖的前往都從這裡拿名字（FB-063）。"""
+    event = content.events.get(state.pending_event) if state.pending_event else None
+    return event.title if event is not None else None
 
 
 # ── 第一季濃縮版：戰線與開關（2026-10-04 計畫 T1）─────────────────
@@ -357,22 +409,72 @@ def in_chaos(state: GameState, content: Content, front: str) -> bool:
     return cfg.chaos_low <= trend_value(state, content, front) <= cfg.chaos_high
 
 
+def chaos_fronts(state: GameState, content: Content) -> list[str]:
+    """在亂局裡的戰線 id（照 front_ids 的順序）。geju_tick 的漲落、江湖頁圖卡的「亂局」標與亂局帶、態勢那一行、
+    見聞→大勢的割據說明，讀的都是這一份（FB-065），所以畫面上寫的條數與漲落的方向跟實際漲落永遠一致。"""
+    return [front for front in front_ids(content) if in_chaos(state, content, front)]
+
+
+def chaos_note(state: GameState, content: Content, players: int | None = None) -> str:
+    """豪強割據現在為什麼漲或落（FB-065），江湖頁態勢那一行（「豪強 32（…）」）與見聞→大勢的割據說明共用這一句：
+    有戰線在亂局就漲（geju_tick：每條每曆日漲 geju_chaos_per_day × 人數係數），一條都沒有就落（每曆日落 geju_calm_per_day）。
+    條數寫阿拉伯數字；只寫方向與條數，不寫速度，也不寫是哪幾條（圖卡自己標）。
+    漲速乘人數係數（geju_rise_factor）：名冊空著（players 是 0）時有戰線在亂局也一點不漲，這句不能說漸長，改說還沒有人
+    投靠、暫時不動（FB-065 M1）。每曆日的變動讀 geju_per_day，跟 geju_tick 同一個算式；players 是 None＝不知道名冊，
+    不縮放，照舊說漸長。回落不乘係數，所以名冊空著、沒有戰線在亂局時還是漸消。"""
+    count = len(chaos_fronts(state, content))
+    if not count:
+        return "沒有戰線在亂局，割據漸消"
+    if geju_per_day(state, content, players) > 0:
+        return f"{count} 條戰線在亂局，割據漸長"
+    if geju_rise_factor(content, players) == 0:
+        return f"{count} 條戰線在亂局，但還沒有人投靠，割據暫時不動"
+    return f"{count} 條戰線在亂局，割據不動"  # 名冊有人，是設定把漲速調成 0：不能怪名冊
+
+
+_COUNT_WORDS = "零一二三四五六七八九十"
+
+
+def stance_sum_note(content: Content) -> str:
+    """官軍、黃巾的態勢是幾條戰況合起來的（FB-065；權重不印）：「三條戰線合計」。"""
+    count = len(front_ids(content))
+    return f"{_COUNT_WORDS[count] if count < len(_COUNT_WORDS) else count}條戰線合計"
+
+
 def stances(state: GameState, content: Content) -> dict[str, int]:
     """三方態勢（第一季設計 4.4）：官軍＝100－黃巾聲勢，黃巾＝黃巾聲勢，豪強＝豪強割據。"""
     huangjin = trend_value(state, content, HUANGJIN)
     return {"guan": 100 - huangjin, "huang": huangjin, "haoqiang": trend_value(state, content, GEJU)}
 
 
-def geju_tick(state: GameState, content: Content, cal_hours: float) -> None:
-    """豪強割據的自然漲落（第一季設計 4.2）：每有一條戰線在亂局，每曆日漲 geju_chaos_per_day；三條都穩下來時每曆日
-    落 geju_calm_per_day。不足一點的累積在 trend_accum["geju"]。背景推動，不回傳訊息（同虛擬玩家）。
-    由 T2 的 world.season_hour 每曆時呼叫一次（cal_hours＝1）。開關關著、劇本沒有割據、或地圖沒有戰線時什麼都不做。"""
+def geju_rise_factor(content: Content, players: int | None) -> float:
+    """割據漲速的人數係數（企劃者 2026-10-05，測試階段「依據人數等比例調整」）：min(1, players ÷ geju_full_players)。
+    players 是這一季投靠了陣營的人數（投靠名冊，真人與假人一樣算）；沒人投靠就是 0（割據不漲），湊滿 geju_full_players 人
+    以上是 1（設計的速度）。players 是 None＝不知道名冊（沒有資料庫可查的純函式呼叫）：不縮放，照設計的速度。"""
+    if players is None:
+        return 1.0
+    return min(1.0, max(0, players) / content.config.geju_full_players)
+
+
+def geju_per_day(state: GameState, content: Content, players: int | None = None) -> float:
+    """割據每曆日的自然變動（漲為正、落為負）：每有一條戰線在亂局漲 geju_chaos_per_day × 人數係數（geju_rise_factor），
+    一條都沒有就落 geju_calm_per_day（回落不乘係數）。geju_tick 實際漲落與畫面上的說明（chaos_note）讀的是這同一個算式，
+    所以畫面說漲就是在漲、說不動就是不動（FB-065 M1）。players 的意思同 geju_rise_factor（None＝不縮放）。"""
+    cfg = content.config
+    chaos = len(chaos_fronts(state, content))
+    return chaos * cfg.geju_chaos_per_day * geju_rise_factor(content, players) if chaos else -cfg.geju_calm_per_day
+
+
+def geju_tick(state: GameState, content: Content, cal_hours: float, players: int | None = None) -> None:
+    """豪強割據的自然漲落（第一季設計 4.2）：每有一條戰線在亂局，每曆日漲 geju_chaos_per_day × 人數係數
+    （geju_rise_factor：這一季投靠名冊 players 人，占 geju_full_players 的比例，至多 1）；三條都穩下來時每曆日
+    落 geju_calm_per_day（回落不乘係數）。不足一點的累積在 trend_accum["geju"]。背景推動，不回傳訊息（同虛擬玩家）。
+    由 T2 的 world.season_hour 每曆時呼叫一次（cal_hours＝1），players 由 advance_world_state 每次推進查一次名冊帶進來。
+    開關關著、劇本沒有割據、或地圖沒有戰線時什麼都不做。"""
     fronts = front_ids(content)
     if not season_one(content, state.world) or _trend(content, GEJU) is None or not fronts:
         return
-    cfg = content.config
-    chaos = sum(1 for front in fronts if in_chaos(state, content, front))
-    per_day = chaos * cfg.geju_chaos_per_day if chaos else -cfg.geju_calm_per_day
+    per_day = geju_per_day(state, content, players)  # 畫面上寫的條數與漸長／不動／漸消（chaos_note）讀同一個算式
     w = state.world
     pending = w.trend_accum.get(GEJU, 0.0) + per_day * cal_hours / 24
     whole = int(pending + (1e-9 if pending > 0 else -1e-9))  # 往零取整；容一點浮點誤差，24 個 1/24 才剛好湊成 1
@@ -391,7 +493,11 @@ def change_trend(
     那一刻才有任何文字反饋，之後不管是打贏遭遇戰、選了某個事件分支推動了多少，玩家在
     劇情文字裡完全看不到，必須自己點開「江湖大勢」分頁才看得到數字，等於看不出自己的
     行動有沒有用。sim_tick()（背景虛擬玩家，每小時自動微幅推動）刻意不接住這個回傳值，
-    所以背景推動依然維持安靜，不會洗版；只有玩家自己選擇/打贏的那一刻才會顯示。"""
+    所以背景推動依然維持安靜，不會洗版；只有玩家自己選擇/打贏的那一刻才會顯示。
+
+    第一季的規則開著時（season_one），三條戰線與豪強割據的變動不寫數字（FB-064）：回機器可讀的「大勢@<線 id> ±N」
+    （front_lines.mark），畫面上由 front_chip／humanize 換成「潁川汝南：官軍步步進逼」這樣的一句話；其他的線與
+    開關關著時一個字都不變。"""
     w = state.world
     trend = _trend(content, trend_id)
     if trend is not None and trend.derived and season_one(content, w):
@@ -408,22 +514,106 @@ def change_trend(
     actual = after - before
     if actual:
         recompute_trends(w, content)  # 開關開著時推了戰線，黃巾聲勢跟著重算
-        msgs.append(f"（{trend_name(content, trend_id)} {'+' if actual >= 0 else ''}{actual}）")
+        if season_one(content, w) and is_side_trend(content, trend_id):
+            # FB-064：戰線與豪強割據不給玩家看數字（看不出是哪一邊、也看不出好壞）。這裡回機器可讀的寫法，
+            # 江湖紀錄照舊把同一條線的變動加總；畫出來的那一刻才換成一句話、照看的人的陣營上色（front_chip、humanize）
+            msgs.append(front_lines.mark(trend_id, actual))
+        else:
+            msgs.append(f"（{trend_name(content, trend_id)} {'+' if actual >= 0 else ''}{actual}）")
     return msgs
 
 
+# ── 戰況變化的說法（FB-064）──────────────────────────────────
+
+
+def is_side_trend(content: Content, trend_id: str) -> bool:
+    """變動要寫成「哪一方佔了便宜」的線：三條戰線與豪強割據。其他的線（玉璽線索、開關關著時的黃巾聲勢）照舊寫數字。"""
+    return trend_id == GEJU or trend_id in front_ids(content)
+
+
+def can_draw_side_change(content: Content, trend_id: str) -> bool:
+    """這條線的戰況變化畫得出來嗎：內容裡有這條線，而且它還是戰線或豪強割據。紀錄裡存的是機器可讀的寫法，存檔可能比內容舊
+    （內容改版拿掉了那條線）：畫不出來的一律丟掉，不當機、也不把原文露給玩家（front_chip、humanize 都先問這一關）。"""
+    return _trend(content, trend_id) is not None and is_side_trend(content, trend_id)
+
+
+def _beneficiary(content: Content, trend_id: str, delta: int) -> FactionDef | None:
+    """這一次往這個方向動，是哪一個陣營佔了便宜：陣營目標（goals）的方向跟變動同號的那一個。
+    戰況 0 是官軍穩控、100 是黃巾控制，這件事寫在內容裡（官軍 goals −1、黃巾 +1），不在程式裡。"""
+    return next(
+        (f for f in content.scenario.factions if (goal := f.goals.get(trend_id, 0)) and (goal > 0) == (delta > 0)), None,
+    )
+
+
+def front_text(content: Content, trend_id: str, delta: int, seed: str) -> str:
+    """戰況變化的一句話（不寫數字）。戰線：「{戰線}：{陣營}{句子}」，陣營是往那個方向動時佔便宜的一方，
+    句子照變動的大小（front_lines.band_of）在 content/front_lines.json 挑；割據：整句話（已經有「豪強」，不再接陣營名）。
+    一段有好幾句時照 seed 與線、段雜湊挑一句，不動引擎的亂數；seed 通常是那則紀錄的時間，同一則永遠同一句。"""
+    lines = content.front_lines
+    if trend_id == GEJU:
+        key = "up" if delta > 0 else "down"
+        return front_lines.pick(lines.geju[key], f"{seed}|{trend_id}|{key}")
+    side = _beneficiary(content, trend_id, delta)
+    band = front_lines.band_of(delta)
+    pool = (lines.by_side.get(side.id, {}).get(band) if side is not None else None) or lines.generic[band]
+    name = lines.sides.get(side.id, side.name) if side is not None else ""
+    phrase = front_lines.pick(pool, f"{seed}|{trend_id}|{band}")
+    return f"{trend_name(content, trend_id)}：{name}{phrase}"
+
+
+def front_favour(content: Content, viewer: str | None, trend_id: str, delta: int) -> int:
+    """這一次變動對看畫面的人（viewer＝他的陣營 id，散人是 None）是好事（1）、壞事（−1）還是無關（0）：
+    他的陣營對這條線有目標（goals）時，方向一致是好事、相反是壞事；沒有目標的（散人、戰線上的豪強、割據上的官軍與黃巾）一律 0。"""
+    faction = next((f for f in content.scenario.factions if f.id == viewer), None)
+    goal = faction.goals.get(trend_id, 0) if faction is not None else 0
+    if not goal:
+        return 0
+    return 1 if (goal > 0) == (delta > 0) else -1
+
+
+def front_chip(content: Content, viewer: str | None, change: str, seed: str) -> tuple[str, int] | None:
+    """一項機器可讀的戰況變化（front_lines.mark，江湖紀錄加總過的）→ (畫面上的一句話, 對 viewer 的好壞 1／0／−1)；
+    不是這種變化、或那條線內容裡已經沒有（can_draw_side_change）回 None，journal 就丟掉這枚標籤。
+    journal 畫數值標籤時用；顏色在畫的那一刻才決定，紀錄裡存的東西不帶任何一方的立場。"""
+    parsed = front_lines.unmark(change)
+    if parsed is None or not can_draw_side_change(content, parsed[0]):
+        return None
+    trend_id, delta = parsed
+    return front_text(content, trend_id, delta, seed), front_favour(content, viewer, trend_id, delta)
+
+
+def humanize(content: Content, msgs: list[str], seed: str) -> list[str]:
+    """一串訊息裡機器可讀的戰況變化換成一句話：同一條線的變動先加總（−1 與 −2 是 −3 一句話），放在那條線第一次出現的位置，
+    加總為零的拿掉；那條線內容裡已經沒有的（can_draw_side_change）也拿掉，原文不外露。
+    給 Game._log（回給呼叫端與存進 log 的話；管理者工具列的提示也是），沒有這種變化時原樣回傳。"""
+    totals: dict[str, int] = {}
+    for msg in msgs:
+        parsed = front_lines.unmark(msg)
+        if parsed is not None:
+            totals[parsed[0]] = totals.get(parsed[0], 0) + parsed[1]
+    if not totals:
+        return msgs
+    out: list[str] = []
+    said: set[str] = set()
+    for msg in msgs:
+        parsed = front_lines.unmark(msg)
+        if parsed is None:
+            out.append(msg)
+        elif can_draw_side_change(content, parsed[0]) and totals[parsed[0]] and parsed[0] not in said:
+            said.add(parsed[0])
+            out.append(front_text(content, parsed[0], totals[parsed[0]], seed))
+    return out
+
+
 def learn_skill(state: GameState, content: Content, skill_id: str) -> list[str]:
-    """每人最多學一門內功、一門武學（設計文件六.4）：對應的欄位已經有人時直接跳過，不覆蓋。"""
-    member = state.player.member
+    """事件教的武學（追風步、混元一氣）：欄位空著就配上身，否則收進功法庫（library.store_art）。
+    這裡不看持有上限，跟悟意境一樣——付了錢、奇遇給的東西不能因為滿了就憑空消失（武學與成長設計附錄 B.1）。
+    已經會的（身上或功法庫）不重複收。"""
     skill = content.skills[skill_id]
-    slot = "neigong_id" if skill.kind == "內功" else "wugong_id"
-    if getattr(member, slot) == skill_id:
+    if skill_id in library.owned_arts(state):
         return []
-    if getattr(member, slot) is not None:
-        return [f"你已經學了一門{skill.kind}，【{skill.name}】這次先無緣習得。"]
-    setattr(member, slot, skill_id)
-    setattr(member, slot.replace("_id", "_level"), 1)
-    return [f"你習得了【{skill.name}】！"]
+    stored = library.store_art(state, content_art(skill.id, skill.name, skill.kind, skill.attribute, skill.quality))
+    return [f"你習得了【{skill.name}】！"] + (stored if skill_id in state.player.arts else [])
 
 
 def apply_effect(
@@ -437,16 +627,39 @@ def apply_effect(
     msgs: list[str] = []
     if effect.text:
         msgs.append(fill_marks(effect.text, state))
-    for key, delta in effect.stats.items():
-        p.stats[key] = max(0, p.stats.get(key, 0) + delta)
-        msgs.append(f"{names.get(key, key)} {'+' if delta >= 0 else ''}{delta}")
+    for key, delta in effect.stats.items():  # 照實際動了多少寫、沒動就不寫（跟下面的情誼一樣）
+        before = p.stats.get(key, 0)
+        after = max(0, before + delta)
+        capped = key in team.COMBAT_STATS and delta > 0 and after > content.config.stat_cap
+        if capped:  # 五屬性每項最高 stat_cap（武學與成長設計 6.2）；已經超過的舊存檔不往下拉，只是不再加
+            after = max(before, content.config.stat_cap)
+        p.stats[key] = after
+        if after != before:
+            msgs.append(f"{names.get(key, key)} {after - before:+d}")
+        if capped:  # 被上限夾掉了，玩家要知道是到頂、不是事件沒效果
+            msgs.append(f"（{names.get(key, key)}已到頂 {content.config.stat_cap}）")
+    if any(key in ("good", "evil") for key in effect.stats):
+        msgs += insights.grant_by_name(state, content, world)  # 善名、惡名到門檻悟得浩然、血煞（只悟一次）
     for material_id, count in effect.materials.items():
         line = materials.grant(state, content, material_id, count)
         if line:
             msgs.append(line)
+    for insight_id in effect.insights:
+        msgs += insights.learn(state, content, world, insight_id)
     if effect.stamina:
         p.stamina = min(content.config.stamina_max, max(0.0, p.stamina + effect.stamina))
         msgs.append(f"體力 {'+' if effect.stamina > 0 else ''}{effect.stamina}")
+    for character_id, delta in effect.affinity.items():  # 情誼（計畫 T5）：夾在 0～100，訊息寫實際動了多少，沒動就不寫
+        before = p.affinities.get(character_id, 0)
+        p.affinities[character_id] = max(0, min(100, before + delta))
+        if p.affinities[character_id] != before:
+            msgs.append(f"{content.characters[character_id].name}情誼 {p.affinities[character_id] - before:+d}")
+    if effect.promote is not None or effect.followers:  # 晉升奇遇（計畫 T5）：開關關著時 ranks 什麼都不做
+        from . import ranks  # noqa: PLC0415  ranks → rules：在函式裡 import，避免循環
+
+        if effect.promote is not None:
+            msgs += ranks.promote(state, content, effect.promote)
+        msgs += ranks.add_followers(state, content, effect.followers)
     p.flags |= set(effect.flags_add)
     p.flags -= set(effect.flags_remove)
     for skill_id in effect.learn_skills:

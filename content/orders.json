@@ -2,7 +2,7 @@
   "templates": [
     {
       "kind": "defend", "side": "guan", "priority": 1,
-      "when": {"losing_by": 10, "or_enemy_siege": true},
+      "when": {"losing_by": 10, "or_enemy_siege": true, "opening_fronts": ["yingru"]},
       "text": "{主將}傳令：{戰線}吃緊，各營嚴守，不得輕出。",
       "personal": "duty", "quota_base": 900,
       "effect": {"trend": 3, "halve_enemy_siege": true},
@@ -11,7 +11,7 @@
     },
     {
       "kind": "defend", "side": "huang", "priority": 1,
-      "when": {"losing_by": 10, "or_enemy_siege": true},
+      "when": {"losing_by": 10, "or_enemy_siege": true, "opening_fronts": ["yingru"]},
       "text": "{戰線}的弟兄頂住！官軍來一個，咱們擋一個。",
       "personal": "duty", "quota_base": 900,
       "effect": {"trend": 3, "halve_enemy_siege": true},

@@ -90,27 +90,64 @@ ul { padding-left: 1.3em; margin: 0.4em 0; }
 .who-name { display: flex; align-items: baseline; gap: 4px; font: 600 17px var(--serif); }
 .who-name > span { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .who-name small { font: 500 12px var(--sans); color: var(--ink-2); margin-left: 6px; }
+/* 名號長、又有門派・陣營・頭銜時，收著會被省略號吃掉頭銜；點名號展開就整行看得到（計畫 T5）。展開之後（FB-071）各有各的位置：
+   第一行只有名號與 ▴，頭銜在第二行（.who-title），「可配 N 點」在＋鈕上面（.pts-label）。名號欄寬 375 是 295、360 是 280
+   （視窗寬 − 左右各 16 − 設定鈕 40 − 縫 8）；16 字的名號 17px 時要 272＋縫 4＋▴ 11 ≈ 287，360 寬放不下，所以展開時縮到 16px
+   （256＋15 ≈ 271，兩種寬度都一行放得下）；再窄的螢幕才折行——折行也比用「…」藏掉名號的後半好 */
+.who[aria-expanded="true"] .who-name { font-size: 16px; }
+.who[aria-expanded="true"] .who-name > span { flex: 1; white-space: normal; overflow-wrap: anywhere; }
+/* 展開的頭銜：門派、陣營、頭銜、匿名、第 N 級各是一個 .who-seg，不折行；只在段與段之間換行，「地方豪強」不會被從中間折斷。
+   不能叫 .seg：那是全站的分段選單（display: flex、下方留白），套到頭銜上每一段都會變成整列 */
+.who-title { margin-top: 1px; font: 500 12px/1.5 var(--sans); color: var(--ink-2); }
+.who-title .who-seg { white-space: nowrap; }
 /* 點名號展開更多數值的提示（畫面流程 S1），名號再長也不會被省略號吃掉 */
+/* 升級的屬性點：自己一個不縮的元素（flex: none）、放在會「…」的名號 <span> 外面——長長的「門派・陣營」只擠名號，擠不掉這一句 */
+.who-name .pts { flex: none; font: 600 12px var(--sans); color: var(--gold); }
 .who-name .more-ico { flex: none; font: 400 11px var(--sans); color: var(--ink-2); }
 .where { font-size: 12px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .where small { font-size: 10.5px; }
-/* 狀態列底下的小字行：閉關剩幾小時、在路上那一句（比較長，手機上可以折成兩行，不要把抵達時間省略掉） */
-.where.sub { white-space: normal; font-size: 11px; line-height: 1.45; }
+/* 狀態列底下的小字行：下一件、閉關剩幾小時、在路上那一句（比較長，手機上可以折成兩行，不要把倒數省略掉）。
+   會折行的行不能留著 .where 的 overflow／省略號：行尾的全形括號尾端會被瀏覽器收掉半格，剛好塞滿一行時
+   scrollWidth 仍比寬度多幾 px，省略號就把最後一個字蓋掉（FB-062） */
+.where.sub { white-space: normal; font-size: 11px; line-height: 1.45; overflow: visible; text-overflow: clip; }
 .icon-btn {
   flex: none; width: 40px; height: 40px; border-radius: 12px; border: 1px solid var(--line);
   background: var(--card); display: grid; place-items: center; cursor: pointer; font-size: 18px;
 }
-.vitals { display: grid; grid-template-columns: 1fr 1fr auto auto; gap: 6px 10px; align-items: center; margin-top: 6px; }
+/* 氣血條寬一點：有內傷時左邊寫「氣血 N/M」、右邊寫「傷 N」，兩段之間要留得出空 */
+.vitals { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) auto auto; gap: 6px 10px; align-items: center; margin-top: 6px; }
 .bar { position: relative; height: 20px; border-radius: 10px; background: var(--card-2); overflow: hidden; }
 .bar > i { position: absolute; inset: 0 auto 0 0; border-radius: 10px; transition: width 0.4s ease; }
 .bar.stam > i { background: var(--stam); }
 .bar.hp > i { background: var(--hp); }
-.bar.hp > b { position: absolute; inset: 0 0 0 auto; background: repeating-linear-gradient(45deg, transparent 0 3px, rgba(0,0,0,0.18) 3px 6px); }
+/* 內傷那一截（FB-049）：用氣血的紅畫淡斜紋、左邊一道細線，看得出是氣血條上被佔掉的一段，不像一個小破圖 */
+.bar.hp > b {
+  position: absolute; inset: 0 0 0 auto; border-left: 1.5px solid var(--hp);
+  background: repeating-linear-gradient(45deg, color-mix(in srgb, var(--hp) 40%, transparent) 0 2px, transparent 2px 5px);
+}
 .bar > span { position: relative; display: block; font-size: 11px; line-height: 20px; padding: 0 8px; font-weight: 600; color: var(--ink); white-space: nowrap; }
+/* 氣血條上的字壓在紅條、底色與斜紋上都要讀得清楚：描一圈底色。「傷 N」靠右，落在斜紋那一頭 */
+.bar.hp > span { text-shadow: 0 0 2px var(--card), 0 0 2px var(--card); }
+.bar.hp > span.inj { position: absolute; top: 0; right: 0; padding: 0 7px; }
 .num { font-size: 13px; font-weight: 600; white-space: nowrap; }
 .num em { font-style: normal; font-weight: 400; color: var(--ink-2); font-size: 11px; margin-right: 2px; }
 .more-stats { font-size: 12px; color: var(--ink-2); margin-top: 6px; line-height: 1.7; }
 .more-stats .hint { color: var(--gold); }
+.more-stats .row { margin-top: 6px; } /* 升級的屬性點：每項屬性一顆「＋臂力」（狀態列展開後才出現） */
+/* 「可配 N 點」（FB-071）：展開後放在＋鈕上面當那一排的標題，樣子同收起來時名號那一行的那句（金色粗體 12px） */
+.more-stats .pts-label { margin-top: 6px; line-height: 1.4; }
+.more-stats .pts-label .pts { font: 600 12px var(--sans); color: var(--gold); }
+/* 五顆＋鈕一排放得下（FB-071）：排寬 375 是 343、360 是 328（視窗寬 − 左右各 16），五顆加四個 4px 的縫，每顆 65.4／62.4px；
+   扣掉 1px 邊框與 2px 左右內距，裡面各剩 59.4／56.4px，標籤「＋博聞」是三個全形字 14px ≈ 42px，放得下、不折行。
+   高度仍是 .btn.small 的 38px。只改這一排（.alloc），不動全站的 .btn */
+.more-stats .alloc { gap: 4px; margin-top: 4px; }
+.more-stats .alloc .btn { min-width: 0; padding: 6px 2px; white-space: nowrap; }
+/* ＋鈕底下那一行（五項各管什麼）：比面板再小一號；一項一個 inline-block，整項一起換行，太長時在項裡面折，不撐寬 */
+.more-stats .stat-uses { margin-top: 4px; font-size: 11px; line-height: 1.5; }
+.more-stats .stat-uses span { display: inline-block; max-width: 100%; margin-right: 0.8em; }
+/* 在路上的 💡 提示收成一行（FB-060）：是按鈕，點了展開全文；樣子跟平常的提示一樣 */
+.more-stats .road-hint { display: block; width: 100%; margin: 0; padding: 0; border: 0; background: none; font: inherit; line-height: inherit; text-align: left; cursor: pointer; }
+.more-stats .road-hint.clamp { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .flash { animation: flash 0.9s ease-out; }
 @keyframes flash { from { background: var(--accent-soft); } to { background: transparent; } }
 
@@ -210,6 +247,8 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 }
 .now .tx-now { border: 0; border-radius: 0; background: none; padding: 0; animation: none; }
 .now-text { position: relative; }
+/* 在路上：剛按完沿途打聽之類，「剛剛」的字比平常多，只露三行（其餘點「展開全文」），最底下的「走法」才不會被擠到分頁列底下（FB-060） */
+.now.clamp.road .tx-now { max-height: 4.8em; }
 .now.clamp .tx-now {
   max-height: 8em; overflow: hidden;
   -webkit-mask-image: linear-gradient(#000 calc(100% - 1.6em), transparent); mask-image: linear-gradient(#000 calc(100% - 1.6em), transparent);
@@ -232,6 +271,8 @@ details.fold.bulletin > .fold-body { border-color: var(--gold); max-height: 50vh
 .bulletin-item p:last-child { margin-bottom: 0; }
 .scene { font-size: 15.5px; line-height: 1.75; }
 .scene > p:first-child { font: 600 16px var(--serif); margin-bottom: 2px; }
+.card.scene.road { padding: 8px 12px; font-size: 14px; line-height: 1.55; cursor: pointer; }
+.card.scene.road.clamp > p:not(:first-child) { display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; } /* 在路上：整段話小一號，路上的五個選項才全在第一屏（FB-055） */
 .scene h2, .scene h3 { font-size: 18px; }
 .options { display: grid; gap: 8px; margin-bottom: 12px; }
 .options .btn { justify-content: flex-start; text-align: left; }
@@ -239,10 +280,18 @@ details.fold.bulletin > .fold-body { border-color: var(--gold); max-height: 50vh
 .options .btn.go .k { background: var(--accent); color: #fff; }
 .move-mode { margin-bottom: 8px; } /* 走法切換：一列、緊貼在第一個「前往」上面（排在選項之間，A4） */
 .options > .move-mode { margin: 4px 0 0; }
+/* 在路上：四樣小事排成 2×2，名字一行、補充小字一行（FB-055）；折返與喊停照舊一整列 */
+.road-tasks { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+/* 折返與喊停併成一列（FB-060）：折返那格的字比較多（「↩ 折返 潁川郡（陽翟）」），多給一點寬、名字小一號，才不會折成兩行 */
+.road-ways { grid-template-columns: 1.45fr 1fr; }
+.road-ways .t-name { font-size: 15px; }
+.options .btn.task { flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px; padding: 8px 12px; min-height: 56px; }
+.btn.task .t-name { font-weight: 600; }
+.btn.task .t-note { font-size: 12px; line-height: 1.3; color: var(--ink-2); }
 .move-mode > span { flex: none; align-self: center; padding: 0 4px 0 9px; font-size: 13px; color: var(--ink-2); }
 .move-mode button { min-height: 48px; } /* 觸控目標跟 .btn 一樣大 */
 /* 路上的三個捷徑（路上設計 3.3）：一列，手機上擠不下就換行；觸控目標同 .btn */
-.road-links { display: flex; flex-wrap: wrap; gap: 8px; margin: -4px 0 12px; }
+.road-links { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; }
 .road-links .btn { flex: 1 1 auto; min-height: 48px; }
 .free { display: flex; gap: 8px; margin-bottom: 12px; }
 .free .input { flex: 1; }
@@ -255,14 +304,35 @@ details.fold.bulletin > .fold-body { border-color: var(--gold); max-height: 50vh
 .front-head { display: flex; justify-content: space-between; gap: 4px; font-size: 12px; line-height: 1.4; }
 .front-head span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-2); }
 .front-head b { font-variant-numeric: tabular-nums; }
-.front-bar { height: 6px; margin-top: 4px; border-radius: 3px; background: var(--kuai); overflow: hidden; }
+.front-bar { position: relative; height: 6px; margin-top: 4px; border-radius: 3px; background: var(--kuai); overflow: hidden; }
 .front-bar > i { display: block; height: 100%; background: var(--gold); transition: width 0.4s ease; }
+/* 亂局帶（FB-065）：條上淺色的一段（兩端含在內，位置與寬度由伺服器給的 chaos_band 算，不寫死 35／65），豪強的地盤；
+   淺色蓋在金與藍上都看得出來，兩側各一道細線，戰況剛好落在邊上的就貼著那條線 */
+.front-bar > .chaos-band { position: absolute; top: 0; bottom: 0; background: rgba(255, 255, 255, 0.42); box-shadow: inset 1px 0 rgba(255, 255, 255, 0.9), inset -1px 0 rgba(255, 255, 255, 0.9); pointer-events: none; }
+.front.chaos { border-color: var(--ink-2); }
+/* 戰況條兩端的陣營（FB-041）與下面那一行態勢（S1） */
+.front-ends { display: flex; justify-content: space-between; margin-top: 2px; font-size: 10px; line-height: 1.2; font-weight: 700; }
+.front-ends .huang { color: var(--gold); }
+.front-ends .guan { color: var(--kuai); }
+.front-ends span { white-space: nowrap; } /* 兩個字的標不在字中間換行：大字體或很窄的螢幕時圖卡才不會變高 */
+/* 「亂局」標（FB-065）：在兩端字的正中間、亂局帶的正下面，中性的顏色；用內陰影畫框、不加上下留白，圖卡不會因此變高 */
+.front-ends .chaos-tag { padding: 0 4px; border-radius: 4px; color: var(--ink-2); background: var(--card-2); box-shadow: inset 0 0 0 1px var(--ink-2); font-weight: 600; }
+/* 態勢兩行（FB-065）：「態勢」靠左，官軍、黃巾（三條戰線合計）與豪強（亂局條數與漸長／漸消）各一行 */
+.stances-line { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 0.7em; margin: -6px 0 12px; font-size: 12px; line-height: 1.5; color: var(--ink-2); }
+.more-stats .stances-line { margin: 0; font-size: inherit; line-height: inherit; }
+/* 結算卡的最終態勢：三條各用自己陣營的顏色（T9 審查 M3） */
+.front-bar.stance { background: var(--card-2); }
+.front-bar.side-guan > i { background: var(--kuai); }
+.front-bar.side-huang > i { background: var(--gold); }
+.front-bar.side-haoqiang > i { background: var(--rou); }
 /* 第一季的本週軍令（計畫 T6） */
 .orders .order { padding: 8px 0; border-top: 1px solid var(--line); }
 .orders .order:first-child { border-top: 0; padding-top: 0; }
 .order-head { display: flex; justify-content: space-between; gap: 8px; font-size: 14px; }
 .order-head span { color: var(--ink-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .order-text { margin-top: 2px; font-size: 13px; line-height: 1.5; color: var(--ink-2); }
+/* 打擊那道軍令多一行「怎麼打、他在哪」（FB-072）：字色比上面的軍令文字深一點、前面一條金線，看得出是補充說明；窄螢幕自然換行 */
+.order-how { margin-top: 4px; padding-left: 8px; border-left: 2px solid var(--gold); font-size: 12.5px; line-height: 1.5; color: var(--ink); overflow-wrap: anywhere; }
 .order-bar { height: 5px; margin-top: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
 .order-bar > i { display: block; height: 100%; background: var(--gold); transition: width 0.4s ease; }
 .order-meta { margin-top: 4px; font-size: 12px; color: var(--ink-2); }
@@ -296,6 +366,27 @@ details.fold.bulletin > .fold-body { border-color: var(--gold); max-height: 50vh
 .list .art-body > :first-child { margin-top: 0; }
 .list .art-body .btn { border: 1px solid var(--accent); margin-top: 10px; }
 .list .art-body .btn::after { content: none; }
+/* 開啟的武學那一排按鈕（修練／改練這一門／熔煉）：不折行。375px 手機一排可用 375-32-2-28-16 = 297px，
+   原本三顆等寬各 99px、扣掉邊框 2 與內距 28 只剩 69px，「改練這一門」（5 字 × 15px = 75px）放不下而折成兩行。
+   改成照字寬分配（width: auto、flex: 1 1 auto）、橫向內距縮到 8px：三顆自然寬 48＋93＋48 = 189px，一排還有 108px 餘裕。
+   只管這一排（.art-actions），不動全站的 .btn */
+.art-body .art-actions > .btn { width: auto; flex: 1 1 auto; white-space: nowrap; padding: 10px 8px; }
+/* 「練成武學（心得 1）」與「療傷」那一排（FB-070）：不折行。375px 手機卡片裡一排可用 375-32-2-28 = 313px，原本兩顆等寬各 152px、
+   扣掉邊框 2 與內距 28 只剩 122px，「練成武學（心得 1）」（約 132px，粗體再寬一點）放不下而折成「練成武學（心得」／「1）」。
+   跟上面那一排同一個做法：照字寬分配、橫向內距縮到 8px，兩顆自然寬約 151＋48 = 199px，一排還有一百多 px 餘裕。
+   只管這一排（.practice-actions），不動全站的 .btn */
+.practice-actions > .btn { width: auto; flex: 1 1 auto; white-space: nowrap; padding: 10px 8px; }
+/* 「服下破境丹」勾選框：預設不勾，整列都是觸控目標（至少 44px 高）；放在修練鈕那一排上面，不擠進按鈕列 */
+.art-body .legend { display: flex; align-items: center; gap: 10px; min-height: 44px; margin-top: 8px; font-size: 14px; cursor: pointer; }
+.art-body .legend input { width: 20px; height: 20px; flex: none; margin: 0; accent-color: var(--accent); }
+/* 修練頁的意境：一列一個，左邊名字、屬性與模型寫的一句話，右邊「化成心得」 */
+.insights { display: grid; gap: 8px; margin-bottom: 12px; }
+.insight { display: flex; align-items: center; justify-content: space-between; gap: 10px; border: 1px solid var(--line); background: var(--card); border-radius: 12px; padding: 8px 10px; }
+.insight > div { min-width: 0; overflow-wrap: anywhere; }
+.insight b { font-weight: 600; font-size: 14px; }
+.insight small { margin-left: 6px; color: var(--ink-2); font-size: 12px; }
+.insight p { margin: 2px 0 0; color: var(--ink-2); font-size: 12px; }
+.insight .btn { flex: none; }
 
 /* ── 煉製 ── */
 .chips { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; margin-bottom: 12px; }
@@ -306,16 +397,21 @@ details.fold.bulletin > .fold-body { border-color: var(--gold); max-height: 50vh
 .chip.r3 { border-color: var(--gold); background: color-mix(in srgb, var(--gold) 10%, var(--card)); }
 .chip.used { opacity: 0.4; }
 .chip .n { float: right; font-size: 12px; color: var(--ink-2); }
-/* 煉製頁素材旁的「伏筆物品」：只列名字與數量，不能點，比素材的格子矮、排得密，手機上不把開爐擠出第一屏 */
+/* 煉製頁武學與意境旁的「伏筆物品」：只列名字與數量，不能點，比武學的格子矮、排得密，手機上不把開爐擠出第一屏 */
 .chips.clues { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 6px; }
 .clue { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; border: 1px dashed var(--line); background: var(--card); border-radius: 10px; padding: 5px 10px; font-size: 13px; }
 .clue b { font-weight: 600; }
 .clue span { color: var(--ink-2); font-size: 12px; }
-.sticky-act { position: sticky; bottom: calc(68px + var(--bottom)); z-index: 5; padding-top: 6px; background: linear-gradient(transparent, var(--paper) 30%); }
-.travel-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+/* 煉製頁的「開爐」與輿圖的步行／趕路／疾行排在內容裡、不黏在底部（FB-048）：黏著時會蓋住底下的字 */
+.act-row { margin-bottom: 12px; }
+.travel-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 10px 0 12px; }
 .travel-row .btn:first-child { grid-column: 1 / -1; }
 .travel-row .btn:not(:first-child) { min-height: 44px; padding: 8px 6px; font-size: 14px; }
 .travel-row .btn { margin: 0; }
+/* 事件還沒了結擋著路（FB-063）：灰的那顆寫是哪一則，旁邊一顆「回江湖」，同一排、不多佔一行 */
+.travel-row.blocked { grid-template-columns: 1fr auto; align-items: stretch; }
+.travel-row.blocked .btn:first-child { grid-column: auto; }
+.travel-row.blocked .btn:not(:first-child) { min-height: 48px; padding: 8px 16px; font-size: 15px; white-space: nowrap; }
 .forging { animation: ember 1.6s ease-in-out infinite; }
 @keyframes ember { 0%, 100% { box-shadow: 0 0 0 rgba(214, 120, 40, 0); } 50% { box-shadow: 0 0 18px rgba(214, 120, 40, 0.75); } }
 
@@ -415,7 +511,7 @@ details.fold.bulletin > .fold-body { border-color: var(--gold); max-height: 50vh
   .page { padding-top: 16px; }
 }
 
-/* ── 太極火爐（煉製頁）：外圈火舌明滅，太極在爐裡慢慢轉，左右兩格放素材；開爐等結果時整座爐子晃動 ── */
+/* ── 太極火爐（煉製頁）：外圈火舌明滅，太極在爐裡慢慢轉，左右兩格放武學與意境；開爐等結果時整座爐子晃動 ── */
 .furnace-wrap { width: 100%; max-width: 250px; margin: 4px auto 10px; aspect-ratio: 1; }
 .wheel { width: 100%; height: 100%; display: block; overflow: visible; touch-action: manipulation; -webkit-user-select: none; user-select: none; }
 .wheel text { text-anchor: middle; dominant-baseline: central; pointer-events: none; }
@@ -457,6 +553,11 @@ details.fold.bulletin > .fold-body { border-color: var(--gold); max-height: 50vh
   transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), stroke 0.2s ease; }
 .act-ink b { font-size: 13px; font-weight: 800; letter-spacing: 0.5px; }
 .act-ink small { font-size: 10px; color: #9e8e7c; margin-top: 2px; white-space: nowrap; }
+/* 遊歷的勝算（FB-044）：體力底下一行，照風險上色（黑底上的淺色） */
+.act-ink small.ink-note { margin-top: 0; font-weight: 700; }
+.act-ink small.ink-note.good { color: #8fc79f; }
+.act-ink small.ink-note.even { color: #e3c77d; }
+.act-ink small.ink-note.bad { color: #ec8a78; }
 /* 選到的（展開的移動、按下去等結果的那一顆）往上浮 4px、金邊 */
 .act-ink.on, .act-ink.busy { background: #171310; border-color: var(--gold); transform: translateY(-4px);
   box-shadow: 0 4px 12px color-mix(in srgb, var(--gold) 22%, transparent), inset 0 0 12px color-mix(in srgb, var(--gold) 15%, transparent); }
@@ -480,3 +581,28 @@ details.fold.bulletin > .fold-body { border-color: var(--gold); max-height: 50vh
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* 設定頁的時刻表（計畫 T10）：一件一列，標題與狀態一行，可排的下面一行是時間欄位與「排定」 */
+.tt-list { display: flex; flex-direction: column; gap: 6px; }
+.tt-row { border: 1px solid var(--line); border-radius: 10px; padding: 6px 8px; }
+.tt-head { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; }
+.tt-state { color: var(--ink-2); white-space: nowrap; }
+.tt-real { margin-top: 4px; font-size: 11px; color: var(--ink-2); } /* 時間欄是現實時間，不是季曆（FB-062）；寫在欄位上面，不佔欄位的寬 */
+.tt-row .row { margin-top: 2px; }
+.tt-row input[type="datetime-local"] { flex: 1; min-width: 0; }
+.tt-row .row > .btn { flex: none; }  /* 「排定」照字寬，日期與時刻才放得下 */
+
+/* 說書人的對話框（引導重做設計 8.1、6.2）：行動上方，金框淡底；收起時縮成一行虛線框 */
+.card.guide { padding: 8px 12px; border-color: color-mix(in srgb, var(--gold) 60%, var(--line));
+  background: color-mix(in srgb, var(--gold) 7%, var(--card)); }
+.guide-head { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--gold); }
+.guide-head .linkish { font-size: 12px; }
+.guide-text { margin: 2px 0 0; font-size: 14px; line-height: 1.6; cursor: pointer; }
+.guide-text.clamp { display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.guide-done { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; font-size: 12px; }
+.guide-done .ok { color: var(--ok); font-weight: 700; }
+.guide-done .reward { padding: 0 6px; border: 1px solid var(--line); border-radius: 6px; }
+.guide-line { display: block; width: 100%; margin: 0 0 12px; padding: 6px 10px; text-align: left; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; border: 1px dashed color-mix(in srgb, var(--gold) 60%, var(--line)); border-radius: 10px;
+  background: var(--card); color: var(--ink); font: inherit; font-size: 13px; cursor: pointer; }
+.guide-line b { color: var(--gold); }

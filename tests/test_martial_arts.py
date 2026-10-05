@@ -1,12 +1,14 @@
 from tianxia.martial_arts import (
     ATTRIBUTES,
     QUALITIES,
+    content_art,
     counters,
     generate_from_name,
     historical_art,
+    next_quality,
     power_at,
+    with_quality,
 )
-from tianxia.sqlite_world import open_world
 
 
 def test_generate_from_name_is_deterministic():
@@ -92,12 +94,39 @@ def test_the_same_names_reshuffle_when_the_tianji_changes():
     ]
 
 
-def test_create_skill_uses_the_current_tianji(content, tmp_path):
-    from tianxia import team
-    from tianxia.state import new_game_state
+# ── 武學與成長 Task 3：基礎武學照品質、每個人自己的品質 ─────────────────
 
-    store = open_world(tmp_path / "world.db")
-    store.mutate(lambda state: setattr(state, "tianji", 3))
-    state = new_game_state(content, "甲")
-    art, _ = team.create_skill(state, content, store, "驚雷掌", "武學")
-    assert art == generate_from_name("驚雷掌", "武學", "驚雷掌", tianji=3)
+
+def test_a_basic_content_art_is_low_grade_without_jitter():
+    art = content_art("basic_fist", "粗淺拳腳", "武學", "實", "下品")
+    assert (art.quality, art.base_power, art.top_power, art.origin) == ("下品", 8, 24, "basic")
+
+
+def test_a_historical_content_art_is_still_peerless():
+    art = content_art("fist", "長拳", "武學", "剛", "絕學")
+    assert art.quality == "絕學" and art.origin == "historical"
+
+
+def test_an_upper_grade_content_art_keeps_its_follower_origin():
+    """審查裁示 F5：部下用的上品武學不是「基礎武學」，來源照舊標本命（historical），威力照上品。"""
+    art = content_art("xingwu_qiang", "星蕪槍", "武學", "剛", "上品")
+    assert (art.quality, art.base_power, art.top_power, art.origin) == ("上品", 28, 72, "historical")
+
+
+def test_a_new_art_carries_no_insight_base_or_lean_by_default():
+    art = content_art("basic_fist", "粗淺拳腳", "武學", "實", "下品")
+    assert (art.insight, art.base, art.lean) == (None, None, "無")
+
+
+def test_with_quality_keeps_the_arts_own_jitter():
+    art = generate_from_name("旋風腿", "武學", "旋風腿", weights={"下品": 100, "中品": 0, "上品": 0, "絕學": 0})
+    scale = art.base_power / 8
+    up = with_quality(art, "上品")
+    assert up.quality == "上品"
+    assert up.base_power == round(28 * scale, 1) and up.top_power == round(72 * scale, 1)
+    assert up.id == art.id and up.name == art.name
+    assert with_quality(art, "下品") is art
+
+
+def test_next_quality_climbs_to_peerless_and_stops():
+    assert [next_quality(q) for q in ("下品", "中品", "上品", "絕學")] == ["中品", "上品", "絕學", None]

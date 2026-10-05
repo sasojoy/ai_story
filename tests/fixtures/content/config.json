@@ -5,5 +5,6 @@
   "auto_open_first_season": true,
   "level_exp": 100,
   "travel_minutes_per_unit": 0.03,
-  "road_sight_chance": 0
+  "road_sight_chance": 0,
+  "explore_legend_chance": 0
 }

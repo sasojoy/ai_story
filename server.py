@@ -11,6 +11,8 @@
   重讀角色（`_locked`）：同一個帳號開兩個分頁、換手機再登入，看到的都是最新存好的那一份，
   動作中途出錯撤回時，做到一半的改動也不會被下一個請求存回去（線上架構設計 5.1）。
 - 人物對話照舊在行動鎖外生成（`prepare_dialogue`），模型的 9~10 秒不會卡住全服。
+- 開爐的首次取名也在行動鎖外（`prepare_forge`／`forge`），整段有時間預算（`Config.naming_budget_seconds`），
+  用完走退路字表，請求在 trycloudflare 切斷之前結束。
 
 執行：`.venv/Scripts/python.exe server.py`（http://127.0.0.1:7861，預設只聽這台電腦）。要讓外面的手機連進來，
 加 `--share`：會用 cloudflared 開一個臨時的公開網址（要先裝 cloudflared，見 CLAUDE.md）；
@@ -39,11 +41,10 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from markdown_it import MarkdownIt
 
-from tianxia import companion_agent, event_llm, foreshadow, materials, rules, server_bots, team
+from tianxia import companion_agent, event_llm, foreshadow, naming, rules, server_bots, team, timetable
 from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, AccountStore, normalize
 from tianxia.content import PROFILE_ENV, load_content, profile_line
 from tianxia.characters import open_characters
-from tianxia.craft import MATERIALS_PER_CRAFT
 from tianxia.database import default_path, open_database
 from tianxia.engine import Game
 from tianxia.models import FREE_TEXT_MAX
@@ -149,16 +150,63 @@ def _reload(game: Game) -> None:
 MOVE_MODE: contextvars.ContextVar[str] = contextvars.ContextVar("move_mode", default="walk")
 
 
+# ── 鎖內模型呼叫的全服斷路器（PM 2026-10-05）──
+# 鎖內每一步模型呼叫最多等 Config.in_lock_model_timeout（15 秒），一次拿鎖期間只容忍一次失敗（Game._quick_client）。可是模型
+# 掛了的時候，每個玩家的下一個動作都還是要在行動鎖裡等一次逾時，全服跟著等。所以任何一次拿鎖裡有鎖內的模型呼叫失敗或逾時，
+# 就把全服的斷路器打開 MODEL_BREAKER_SECONDS 秒：這段時間每一次拿鎖（不分玩家）一開始額度就用完，鎖內直接用固定文字、
+# 不碰網路；時間到之後的第一次拿鎖照常叫模型，又失敗就再打開。只管鎖內：鎖外的取名、對話、隨口應對的評分照舊叫模型。
+# 只在 server.py（PM：不進 Config）；假人程式（run_bots.py）的 client 是 None，本來就不叫模型。
+MODEL_BREAKER_SECONDS = 180
+_monotonic = time.monotonic  # 斷路器的時鐘（引擎不讀時鐘，伺服器可以）；測試換掉它，不必真的等
+_BREAKER_LOCK = threading.Lock()  # 「到期了就關上、印一行」是先讀再寫：兩個請求同時進來也只關一次、只印一行
+_breaker_until: float | None = None  # 斷路器開到什麼時候（_monotonic 的秒數）；None＝關著
+
+
+def _model_paused() -> bool:
+    """這一次拿鎖時斷路器還開著嗎？已經到期的話先關上（印一行），這一次照常叫模型。"""
+    global _breaker_until
+    with _BREAKER_LOCK:
+        if _breaker_until is None:
+            return False
+        if _monotonic() < _breaker_until:
+            return True
+        _breaker_until = None
+    print(f"鎖內的模型呼叫暫停滿 {MODEL_BREAKER_SECONDS} 秒，下一次再試模型。", flush=True)
+    return False
+
+
+def _pause_model() -> None:
+    """有一次鎖內的模型呼叫失敗或逾時：打開斷路器 MODEL_BREAKER_SECONDS 秒（已經開著的不延長、不再印）。
+    印的那一行不寫是誰的動作（也就看不出是不是假人）。"""
+    global _breaker_until
+    with _BREAKER_LOCK:
+        now = _monotonic()
+        if _breaker_until is not None and now < _breaker_until:
+            return
+        _breaker_until = now + MODEL_BREAKER_SECONDS
+    print(f"鎖內的模型呼叫失敗或逾時：接下來 {MODEL_BREAKER_SECONDS} 秒全服鎖內不叫模型，改用固定文字。", flush=True)
+
+
 @contextlib.contextmanager
 def _locked(game: Game):
     """拿行動鎖，並先重讀角色（見 _reload）。這支程式裡每一個要用 game.state 的地方都從這裡進鎖
     （act、look、prepare_dialogue），不另外呼叫 game.world.action_lock()：資料庫是唯一的真實來源，
     GAMES 裡的 Game 只是這一個動作的工作副本。FastAPI 的同步端點跑在執行緒池裡，同一個角色的兩個請求
-    可能同時進來；行動鎖是 BEGIN IMMEDIATE，不同執行緒就一個一個來，重讀與動作不會交錯。"""
+    可能同時進來；行動鎖是 BEGIN IMMEDIATE，不同執行緒就一個一個來，重讀與動作不會交錯。
+    鎖內的模型呼叫歸全服的斷路器管（見 MODEL_BREAKER_SECONDS）：開著時這一次拿鎖一開始額度就用完；這一次拿鎖
+    （動作出錯也算）有鎖內的模型呼叫失敗，就打開它。"""
     with game.world.action_lock():
+        game.reset_model_budget()  # 新的一次拿鎖：鎖內的模型呼叫重新有額度（一次拿鎖期間只容忍一次失敗，見 Game._quick_client）
+        paused = _model_paused()
+        if paused:
+            game._model_budget.gave_up = True  # 斷路器開著：額度一開始就用完（直接碰 Game 的私有欄位，PM 同意只在這裡這樣做）
         _reload(game)
         game.set_move_mode(MOVE_MODE.get())  # 這次請求選的走法（見 MOVE_MODE）：之後的選單與 choose() 都照它
-        yield
+        try:
+            yield
+        finally:
+            if not paused and game._model_budget.gave_up:  # 這一次拿鎖裡鎖內的模型呼叫失敗了（私有欄位，同上）
+                _pause_model()
 
 
 def act(game: Game, action) -> list[str] | None:
@@ -210,6 +258,40 @@ def choose(game: Game, option_id: str) -> list[str] | None:
     return act(game, lambda g: g.choose(option_id, prepared=prepared))
 
 
+NO_NAME: tuple[str | None, str] = (None, "")  # 開爐的 B 段沒取到名字（或不必取）：C 段直接走退路字表、不在鎖裡叫模型
+
+
+def prepare_forge(game: Game, art_id: str | None, insight_ids: list[str]) -> tuple[str | None, str]:
+    """開爐的首次取名在行動鎖外（最終審查 Critical 1）。首次合出來的配方要等模型取名，以前整段包在行動鎖裡：
+    一次最多叫三次、每次最多等 OllamaClient.timeout（120 秒），全服玩家與假人程式都得跟著等，試玩走的 trycloudflare
+    也會在約 100 秒切斷請求。跟 prepare_dialogue 一樣分三段：
+      A（鎖內、很快）同步時間，問引擎這一爐要不要模型取名（Game.forge_request），要就拿到單子；同步的結果要存起來，
+        不然 C 段進鎖重讀就把它丟了；
+      B（鎖外、很慢）naming.generate：預算是 Config.naming_budget_seconds 扣掉 A 段（含等鎖）花掉的時間，
+        引擎不讀時鐘，所以時間在這裡量；用完就回 (None, "")，C 段走退路字表；
+      C（鎖內、很快）由呼叫端把結果交給 Game.forge(..., proposed=...)，引擎整個重驗再登記、收費。
+    這裡做 A 與 B，回傳 B 的結果（名字, 說明）；不必叫模型時是 NO_NAME。假人程式之後要合成，照樣能不經過 HTTP
+    走這三段（Game.forge_request 在 action_lock 裡、naming.generate 在鎖外、Game.forge(proposed=...) 再進鎖）。"""
+    started = time.monotonic()
+    with _locked(game):
+        game.sync(time.time())
+        request = game.forge_request(art_id, insight_ids)
+        open_characters().save(game.state)
+    if request is None:
+        return NO_NAME
+    budget = max(0.0, game.content.config.naming_budget_seconds - (time.monotonic() - started))
+    # 角色名號的查詢是唯讀的快照、不拿行動鎖（FB-069：模型取到角色的名號就再取一次；C 段進鎖還會再擋一次）
+    return naming.generate(game.client, game.content, request, budget=budget, person=game.world.is_character_name)
+
+
+def forge(game: Game, art_id: str | None, insight_ids: list[str]) -> list[str] | None:
+    """開爐：A、B 在 prepare_forge，C 進鎖交給 Game.forge。proposed 一定給（不必叫模型時是 NO_NAME），
+    所以伺服器上的開爐永遠不會在鎖裡叫模型。同一爐連按兩下、重新整理再按、開兩個分頁：兩個請求可能都走完 A、B，
+    C 段重驗時第二個會看見配方有了、東西已經在你身上，什麼都不收（企劃者 2026-10-05：不能重複扣）。"""
+    proposed = prepare_forge(game, art_id, insight_ids)
+    return act(game, lambda g: g.forge(art_id, insight_ids, proposed=proposed))
+
+
 def answer_event(game: Game, text: str) -> list[str] | None:
     """事件的隨口應對（探索的多人與 LLM 玩法 §8.1），跟 prepare_dialogue 一樣分三段：
       A（鎖內、很快）同步時間，問引擎這句話現在能不能送；能就拿到單子（事件 id＋這句話），同步的結果照樣存起來；
@@ -241,6 +323,7 @@ def main_view(game: Game) -> dict:
     card = game.battle_card() if game.shows_battle_card() else None
     status, quest, scene = game.status_data(), md(game.quest_text()), md(game.scene_text())
     options = game.options()  # 照原本的順序：狀態、主線、場景先讀，選單（會推進全服戰鬥）最後
+    latest = game.journal_top_html()
     view = {
         "status": status,
         "quest": quest,
@@ -251,18 +334,23 @@ def main_view(game: Game) -> dict:
         "on_road": any(o.id == "act:on_road" for o in options),
         "free_text": game.battle_free_text_prompt(),
         "event_free_text": game.event_free_text_prompt(),  # 眼前事件的隨口應對：選單上那一顆按下去叫出輸入框
-        # 「剛剛」：這次行動打了仗就放戰鬥卡片，卡片沒寫到的補充放在 latest；沒打仗時 latest 是最新一則紀錄
+        # 「剛剛」：這次行動打了仗就放戰鬥卡片，卡片沒寫到的補充放在 now；之後配了點也一樣（配點不換「剛剛」，計畫二最終審查 M1）
         "card": md(card) if card is not None else None,
         "card_id": game.battle_card_id() if card is not None else None,
-        "latest": game.battle_extra_html() if card is not None else game.latest_entry_html(),
+        # 江湖紀錄頁是 latest＋journal＋older 接起來的，從最新一則列起（最新一則就是卡片那一場時，latest 是卡片的補充）
+        "latest": latest,
         "journal": game.journal_html(1, RECENT_ROWS),
         "older": game.journal_html(1 + RECENT_ROWS, OLDER_ROWS),
+        # 江湖頁的「剛剛」：跟 latest 一樣，只是最新的幾則若只是公告卡（休季是結算卡）上已經有全文的大事，
+        # 改放再前面那一則，同一段公告不寫兩次（FB-046）；最新的配點也越過，卡片與補充看的都是那一場那一則
+        "now": game.battle_extra_html() if card is not None else game.now_entry_html(),
         "minimap": game.minimap_svg(),
         "bulletin": [md(text) for text in game.bulletin()],  # 江湖頁最上面的公告卡：這一週的大事；開關關著是空的
         "trends": md(game.trends_text()),
         "rumors": md(game.rumors_text()),
         "chronicle": md(game.chronicle_text()),
         "admin": game.is_admin(),
+        "guide": game.guide_box(),  # 行動列上方的說書人對話框（引導重做設計 8.1）；略過或早就做完是 None
     }
     if "fronts" in status:  # 第一季濃縮版才有：江湖頁的三條戰況（開關關著時不送，頁面照舊）
         view["fronts"] = status["fronts"]
@@ -282,12 +370,13 @@ def main_view(game: Game) -> dict:
 
 
 def menxia_view(game: Game, person: str | None = None) -> dict:
-    """修練與煉製兩頁的資料（同一份：心得、名冊、素材、功法庫都兩邊用得到）。person 是名冊裡點的人。"""
+    """修練與煉製兩頁的資料（同一份：心得、名冊、背包、功法庫都兩邊用得到）。person 是名冊裡點的人。"""
     lines = game.roster_lines()
+    person = None if person is None else str(person)  # 客戶端寫的：JSON 清單之類不能拿去查集合（unhashable → 500）
     if person not in {key for _, key in lines}:
         person = None
     member = game.state.player.member
-    # 身上兩門各自有沒有功法、練到第幾成、練滿了沒（C4 自創欄收不收、C5 鍛鍊鈕亮不亮）；還沒學是 False、0、False
+    # 身上兩門各自有沒有功法、練到第幾成、練滿了沒（C5 鍛鍊鈕亮不亮）；還沒學是 False、0、False
     learned = {"武學": member.wugong_id is not None, "內功": member.neigong_id is not None}
     level = {
         "武學": member.wugong_level if learned["武學"] else 0,
@@ -302,24 +391,25 @@ def menxia_view(game: Game, person: str | None = None) -> dict:
         "person_card": md(game.member_card(person)) if person else None,
         "on_team": person is not None and person in game.state.player.team,
         "bag": md(game.bag_text()),
-        "materials": [
-            {"id": m.id, "name": m.name, "tier": materials.tier_label(m), "rank": m.tier, "attribute": m.attribute, "count": n}
-            for m, n in materials.bag_contents(game.state, game.content)
-        ],
-        # 素材旁的「伏筆物品」：開關開著、這一季蓋了章、手上有才有東西，沒有就是空的（畫面整塊不出現）。只有名字與數量
+        # 背包旁的「伏筆物品」：開關開著、這一季蓋了章、手上有才有東西，沒有就是空的（畫面整塊不出現）。只有名字與數量
         "clue_items": [
             {"id": item.id, "name": item.name, "count": n} for item, n in foreshadow.held_items(game.state, game.content)
         ],
-        "per_craft": MATERIALS_PER_CRAFT,
         # 功法卡（FB-006）：身上兩門各一張，還沒學的那一門是一句「你還沒有內功。」；
         # 功法庫通常只有幾門，卡一起送，點開不必再打一次 API（QA L4：先看卡再改練）
         "slot_cards": [
             {"kind": k, "card": md(game.skill_detail(k)), "learned": learned[k], "level": level[k],
-             "maxed": level[k] >= team.MAX_LEVEL}
+             "maxed": level[k] >= team.MAX_LEVEL,
+             # 練下一成要的心得（修練頁的鈕上寫給玩家看）；還沒學或已經第十成就沒有價錢
+             "price": team.practice_price(game.content, level[k]) if learned[k] and level[k] < team.MAX_LEVEL else None}
             for k in KINDS
         ],
-        "arts": [{"label": label, "id": aid, "card": md(game.art_detail(aid))} for label, aid in game.art_library()],
-        "craft_line": md(game.craft_line([])),
+        "forge_line": md(game.forge_line(None, [])),
+        # 武學與成長（修練頁、煉製頁）：持有數與上限、每門武學一列（身上的在前）、悟得的意境、等著取名的那一門
+        "holdings": game.holdings(),
+        "owned_arts": [{**row, "card": md(row["card"])} for row in game.art_rows()],
+        "insights": game.insight_rows(),
+        "naming": game.naming_row(),
     }
 
 
@@ -338,9 +428,12 @@ def map_view(game: Game, layer: str, selected: str | None) -> dict:
         "selected": selected,
         "here": game.state.player.location,
         "detail": md(game.place_detail(selected)),
-        # 步行、趕路、疾行三個按鈕（照 atlas.MODES 的順序）；就在這裡時是 None
-        "travel": [{"mode": o.mode, "label": o.label, "enabled": o.enabled} for o in game.travel_options(selected) or []]
-        or None,
+        # 步行、趕路、疾行三個按鈕（照 atlas.MODES 的順序）；就在這裡時是 None。被待處理的事件擋著時只有一顆灰的、
+        # label 寫是哪一則，to_jianghu 為真：頁面在旁邊多給一顆「回江湖」（FB-063）
+        "travel": [
+            {"mode": o.mode, "label": o.label, "enabled": o.enabled, "to_jianghu": o.to_jianghu}
+            for o in game.travel_options(selected) or []
+        ] or None,
     }
 
 
@@ -364,7 +457,74 @@ def admin_choices(game: Game) -> dict:
         "events": [{"label": f"{x.text[:30]}（{x.id}）", "id": x.id} for x in game.admin_fires()],
         # 照開關：關著時不列第一季才有的線；開著時不列黃巾聲勢（由三條戰線合成，不能直接推）
         "trends": [{"label": t.name, "id": t.id} for t in CONTENT.scenario.trends if rules.pushable(CONTENT, world, t.id)],
+        **timetable_choices(game),
+        # 下一季會照第一季的規則開（開關開著）：「開啟下一季」的問句也提醒排三場大戲與季末的時間（FB-050）
+        "next_has_timetable": bool(CONTENT.config.season_one),
     }
+
+
+RESULT_WORDS = (("guan:", "官軍"), ("huang:", "黃巾"))  # 結果鍵的白話（定結果的下拉選單）
+TIMETABLE_STATES = {"done": "已結算", "running": "開打了", "due": "時間到了", "later": "還沒到"}
+
+
+def _result_label(key: str) -> str:
+    if key == "fixed":
+        return "照史書"
+    for prefix, side in RESULT_WORDS:
+        if key.startswith(prefix):
+            return side + key[len(prefix):]
+    return key
+
+
+def _ending_title(ending_id: str) -> str:
+    """季末那一列的結果：時間軸記的是結局 id（world._finale），寫結局的標題（FB-051）。"""
+    return next((e.title for e in CONTENT.scenario.endings if e.id == ending_id), ending_id)
+
+
+def _done_label(key: str) -> str:
+    """時刻表上已結算那一件的結果：拿掉版本（宛城、秦頡的「甲:」「乙:」），跳過的寫「跳過」。"""
+    if key == timetable.SKIPPED:
+        return "跳過"
+    head, _, rest = key.partition(":")
+    return _result_label(rest if rest and head not in ("guan", "huang") else key)
+
+
+def timetable_choices(game: Game) -> dict:
+    """設定頁的「時刻表」與「救場」（計畫 T10）：這一季有時刻表（第一季）才有東西，beta 那一季全是空的。
+    時刻表每件一列，可排的（三場決戰與季末）附現實時間 at_real（照此刻的季時間換算，time_scale 照設定）；
+    定結果的下拉選單列還沒結算、此刻知道是哪一版的大事的每一個結果；鎖定列有人鎖定的大事。"""
+    state = game.state
+    world = state.world
+    if not rules.season_one(CONTENT, world):
+        return {"timetable": [], "results": [], "locks": []}
+    now = time.time()
+    rows = []
+    for row in timetable.status_rows(state, CONTENT):
+        rows.append({
+            "id": row["id"], "label": f"第{row['week']}週　{row['title']}",
+            "state": row["state"], "state_text": TIMETABLE_STATES[row["state"]],
+            "result": (_ending_title(row["result"]) if row["kind"] == "finale" else _done_label(row["result"]))
+            if row["result"] else None,
+            "schedulable": row["schedulable"],
+            "at_real": now + (row["when"] - world.time) / CONTENT.config.time_scale if row["schedulable"] else None,
+        })
+    results = [
+        {"value": f"{e.id}|{key}", "label": f"{e.title}：{_result_label(key)}"}
+        for e in CONTENT.timetable if e.id not in world.timeline
+        for key in timetable.result_keys(state, CONTENT, e)
+    ]
+    locks = [
+        {"id": event_id, "label": f"{e.title}（{lock.name}）"}
+        for event_id, lock in world.locks.items() if (e := next((x for x in CONTENT.timetable if x.id == event_id), None))
+    ]
+    return {"timetable": rows, "results": results, "locks": locks}
+
+
+def _float(value, default: float) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
 
 
 def _int(value, default: int) -> int:
@@ -589,6 +749,8 @@ MAIN_ACTIONS = {
     "anonymous": lambda g, b: g.set_anonymous(bool(b.get("value"))),
     "skip_tutorial": lambda g, b: g.skip_tutorial(),
     "view_map": lambda g, b: g.view_map(),
+    "guide_ack": lambda g, b: g.guide_ack(),  # 對話框的結語按「知道了」
+    "allocate": lambda g, b: g.allocate_stat(str(b.get("stat", ""))),  # 狀態列的配點鈕：升級得到的屬性點加到一項
 }
 ADMIN_ACTIONS = {
     "open_season": lambda g, b: g.admin_open_season(time.time()),
@@ -598,6 +760,13 @@ ADMIN_ACTIONS = {
     "start_battle": lambda g, b: g.admin_start_battle(str(b.get("id", "")), time.time()),
     "fire": lambda g, b: g.admin_fire(str(b.get("id", ""))),
     "push_trend": lambda g, b: g.admin_push_trend(str(b.get("id", "")), _int(b.get("amount"), 0)),
+    # 時刻表與救場（計畫 T10）：現實時間由伺服器給，引擎不讀時鐘
+    "schedule": lambda g, b: g.admin_schedule(str(b.get("id", "")), _float(b.get("at"), 0.0), time.time()),
+    "jump_next": lambda g, b: g.admin_jump_next(time.time()),
+    "set_trend": lambda g, b: g.admin_set_trend(str(b.get("id", "")), _int(b.get("value"), 0)),
+    "resolve_event": lambda g, b: g.admin_resolve_event(str(b.get("id", "")), str(b.get("key", ""))),
+    "clear_lock": lambda g, b: g.admin_clear_lock(str(b.get("id", ""))),
+    "cancel_battle": lambda g, b: g.admin_cancel_battle(),
 }
 
 
@@ -635,12 +804,25 @@ def api_do(op: str, request: Request, body: dict = Body(default={})):
     return {"main": look(game, main_view), "message": joined(msgs)}
 
 
+def forge_args(body: dict) -> tuple[str | None, list[str]]:
+    """煉製頁送來的東西：放進爐裡的武學 id（可以沒有）與意境 id 們。body 是客戶端寫的：武學一律轉成字串、
+    意境不是清單就當作沒放，形狀不對只會得到「不存在／放一門武學和一個意境…」那一句話，不會打出 500。"""
+    art, picked = body.get("art"), body.get("insights")
+    return (str(art) if art else None), ([str(i) for i in picked] if isinstance(picked, list) else [])
+
+
 MENXIA_ACTIONS = {
-    "create": lambda g, b: g.create_skill(str(b.get("name") or ""), str(b.get("kind") or KINDS[0])),
     "practice": lambda g, b: g.practice(str(b.get("kind") or KINDS[0])),
     "heal": lambda g, b: g.heal(),
-    "craft": lambda g, b: g.craft([str(m) for m in b.get("materials") or []]),  # 內功／武學開爐才揭曉，body 的 kind 不看
+    # 一武學＋一意境＝合成，兩意境＝合併。端點走 forge()（A 鎖內備料 → B 鎖外取名 → C 鎖內登記），不走這一條；
+    # 這裡也帶 NO_NAME，就算有人直接拿它在鎖裡呼叫，也不會叫模型
+    "forge": lambda g, b: g.forge(*forge_args(b), proposed=NO_NAME),
     "switch": lambda g, b: g.switch_art(str(b.get("art") or "")),
+    # 用融的意境修練一次，衝下一品；use_legend 是勾了「服下破境丹」。只認真正的布林 true：字串、數字都不算勾
+    "cultivate": lambda g, b: g.cultivate(str(b.get("art") or ""), use_legend=b.get("use_legend") is True),
+    "melt": lambda g, b: g.melt_art(str(b.get("art") or "")),  # 功法庫裡的一門熔成心得
+    "melt_insight": lambda g, b: g.melt_insight(str(b.get("insight") or "")),
+    "name": lambda g, b: g.name_mastered(str(b.get("name") or "")),  # 第一個練成絕學的人替它取正式名字
     "join": lambda g, b: g.add_to_team(str(b.get("person") or "")),
     "leave": lambda g, b: g.remove_from_team(str(b.get("person") or "")),
 }
@@ -659,6 +841,7 @@ def api_menxia_do(op: str, request: Request, body: dict = Body(default={})):
         raise HTTPException(404)
     game = _game(request)
     person = body.get("person")
+    person = None if person is None else str(person)  # 客戶端寫的：清單之類不是字串的，下面查名冊會丟 TypeError
 
     def run(g: Game):
         # 名冊（誰是你的人）是全服狀態，換季、假人程式都會改：跟動作在同一把鎖裡核對，引擎才能假設那個人在名冊上
@@ -666,7 +849,8 @@ def api_menxia_do(op: str, request: Request, body: dict = Body(default={})):
             raise GameError("名冊裡沒有這個人。")  # 交易整筆撤回（連同進鎖時的同步）；下一個請求重讀再算一次
         return MENXIA_ACTIONS[op](g, body)
 
-    msgs = act(game, run)
+    # 開爐：首次合出來的配方要模型取名，在行動鎖外取（見 prepare_forge）；其他動作照舊一把鎖做完
+    msgs = forge(game, *forge_args(body)) if op == "forge" else act(game, run)
     return {
         "menxia": look(game, lambda g: menxia_view(g, person)),
         "main": look(game, main_view),
@@ -674,12 +858,12 @@ def api_menxia_do(op: str, request: Request, body: dict = Body(default={})):
     }
 
 
-@app.post("/api/craft_line")
-def api_craft_line(request: Request, body: dict = Body(default={})):
-    """選了素材、換了種類就更新成本說明（不算行動、不存檔）。"""
+@app.post("/api/forge_line")
+def api_forge_line(request: Request, body: dict = Body(default={})):
+    """煉製頁選了東西就更新說明（不算行動、不存檔）。"""
     game = _game(request)
-    materials = [str(m) for m in body.get("materials") or []]
-    return {"line": look(game, lambda g: md(g.craft_line(materials)))}
+    art, picked = forge_args(body)
+    return {"line": look(game, lambda g: md(g.forge_line(art, picked)))}
 
 
 @app.get("/api/reports")

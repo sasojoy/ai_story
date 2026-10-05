@@ -88,11 +88,16 @@ def day_text(time: float) -> str:
     return f"第{int(time // DAY) + 1}天"
 
 
+def point_text(at: CalPoint) -> str:
+    """季曆時刻唯一的寫法「第 3 週・週二 21:40」（N 前後有空格）：狀態列第二行、下一件、江湖史、傳聞、軍令截止都走這裡，
+    不要在別處自己拼（FB-062 之後 PM 定：全部跟狀態列第二行一樣）。"""
+    return f"第 {at.week} 週・週{WEEKDAYS[at.weekday]} {at.hour:02d}:{at.minute:02d}"
+
+
 def stamp_text(time: float, content: Content, season: WorldState | None, *, clock: bool = True) -> str:
-    """玩家看得到的遊戲時間，全部走這裡：第一季（開關開著、這一季也蓋了章）寫成狀態列那樣的「第3週・週二 21:40」；
+    """玩家看得到的遊戲時間，全部走這裡：第一季（開關開著、這一季也蓋了章）寫成狀態列那樣的「第 3 週・週二 21:40」（point_text）；
     其他時候照舊——clock 時「第2天 14:05」，不要時刻（江湖史、傳聞）時「第2天」，一個字都不變。
     season 是 None（例如上一季的江湖史）一律照舊。"""
     if season is not None and season_one_on(season, content):
-        at = point(time, content, season)
-        return f"第{at.week}週・週{WEEKDAYS[at.weekday]} {at.hour:02d}:{at.minute:02d}"
+        return point_text(point(time, content, season))
     return day_clock_text(time) if clock else day_text(time)

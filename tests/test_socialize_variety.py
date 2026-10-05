@@ -77,7 +77,7 @@ def test_added_socialize_events_vary_their_checks_and_stay_within_limits(content
         for c in [*e["choices"], *([e["free_text"]] if "free_text" in e else [])]:
             assert "combat" not in c, e["id"]
             if "check" in c:
-                assert c["check"]["stat"] in {"str", "agi", "con", "wis"} and 4 <= c["check"]["difficulty"] <= 7, e["id"]
+                assert c["check"]["stat"] in {"str", "agi", "con", "wis"} and 3 <= c["check"]["difficulty"] <= 7, e["id"]  # 難度帶另見 test_real_content.py::DIFFICULTY_BANDS
                 assert "fail_effect" in c, e["id"]
             for key in ("effect", "fail_effect"):
                 eff = c.get(key, {})

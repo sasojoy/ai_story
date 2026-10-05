@@ -1,4 +1,5 @@
-"""煉製素材的掉落與背包（無限煉製第一刀，見 docs/superpowers/specs/2026-10-01-無限煉製-design.md §三、§四）。
+"""素材的掉落與背包（無限煉製第一刀，見 docs/superpowers/specs/2026-10-01-無限煉製-design.md §三、§四）。
+素材不再拿去煉製（武學與成長計畫一 Task 8：煉製改成武學＋意境的合成，見 fusion.py）；現在的用途是糧草（押糧車）與伏筆。
 
 純規則：只處理素材 id 與數量，不產生畫面文字（文字歸 `skillview.py`／呼叫端的訊息串）。
 素材本身是 `content/materials.json` 的內容（`models.Material`：一個屬性 × 一個階）。
@@ -12,7 +13,7 @@ import math
 
 import random
 
-from .models import Content, Location, Material, Squad
+from .models import Content, Material, Squad
 from .state import GameState
 
 TIER_NAMES = {1: "凡品", 2: "靈品", 3: "天品"}
@@ -49,7 +50,7 @@ def grant(state: GameState, content: Content, material_id: str, count: int = 1) 
 
 
 def take(state: GameState, material_id: str, count: int = 1) -> bool:
-    """從背包扣掉；不夠就什麼都不動、回傳 False（煉製要用，先放在這裡一起管）。"""
+    """從背包扣掉；不夠就什麼都不動、回傳 False。"""
     bag = state.player.materials
     if count <= 0 or bag.get(material_id, 0) < count:
         return False
@@ -145,22 +146,6 @@ def roll_squad_drops(squad: Squad, content: Content, rng: random.Random) -> list
         if pool:
             out.append((rng.choice(pool).id, 1))
     return out
-
-
-def explore_pool(loc: Location, content: Content) -> list[Material]:
-    """在這裡探索撿得到的素材：地點寫了 `materials` 就是那幾樣，沒寫的給一階素材——內容不必每個地點都填。"""
-    pool = [content.materials[mid] for mid in loc.materials if mid in content.materials]
-    return pool or by_tier(content, 1)
-
-
-def roll_explore_drop(loc: Location, content: Content, rng: random.Random) -> str | None:
-    """探索抽到「素材」那一支時撿到的素材 id：必定撿到一樣（探索三選一設計 4.1）；
-    只有內容裡完全沒有可挑的素材時才是 None。
-
-    以前探索前固定滾一次三成（`explore_material_chance`），探索三選一把那一次拿掉了，
-    素材改由三支裡的「素材」那一支給，比例照地點類型（荒野多、城裡少）。"""
-    pool = explore_pool(loc, content)
-    return rng.choice(pool).id if pool else None
 
 
 def bag_contents(state: GameState, content: Content) -> list[tuple[Material, int]]:

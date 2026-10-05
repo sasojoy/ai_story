@@ -1,6 +1,6 @@
 """伺服器假人的行為（伺服器假人設計第七節）：照陣營目標替選項打分數，強度旋鈕決定多常挑最高分。
 
-只透過 engine.Game 的公開行動（choose／create_skill／practice／heal）做事，跟真人按按鈕走同一條
+只透過 engine.Game 的公開行動（choose／practice／heal）做事，跟真人按按鈕走同一條
 路；不接 LLM（呼叫端把 game.client 設成 None）。全服戰鬥裡假人是一般參戰者，每回合從固定戰法裡挑，
 不寫自由文字。
 """
@@ -9,12 +9,12 @@ from __future__ import annotations
 import random
 
 from . import atlas, orders, rules, server_bots
-from .bot import wants_heal
+from .bot import allocate_points, can_practise, wants_heal
 from .engine import FREE_TEXT_OPTION, Game, Option
 from .models import Content, Effect, FactionDef
 from .state import BotProfile
 
-REWARD_STATS = ("str", "agi", "con", "wis", "silver", "fame", "xinde")
+REWARD_STATS = ("str", "agi", "con", "wis", "silver", "fame", "xinde")  # 博聞不在內：它只靠升級的點數增加，事件不給
 TREND_WEIGHT = 10.0  # 推大勢一點，抵得過十點獎勵
 JOIN_BATTLE_SCORE = 100.0
 ACT_SCORES = {"explore": 1.0, "socialize": 0.8}
@@ -31,9 +31,11 @@ CHALLENGE_ODDS = ("穩勝", "有把握")  # 假人只挑這兩種勝算的人物
 ORDER_SCORE = 30.0
 ORDER_MOVE_SCORE = 12.0
 DUTY_SCORE = 0.5  # 守勢行動本身（不替軍令記功時）：低於探索，不然假人整天巡哨
+# 召見（計畫 T5）：一季一次、演完才晉升帶部下，到了就應召、沒到就往那裡走，都比軍令優先
+SUMMONS_SCORE = 50.0
+SUMMONS_MOVE_SCORE = 15.0
 STRIKE_ODDS = CHALLENGE_ODDS + ("五五波",)  # 有打擊軍令點名這位人物時，五五波也去打
-PRACTICE_CHANCE = 0.2  # 每次行動順便鍛鍊一門的機率（練功不花心得，不能每次都練）
-SKILL_NAME_TRIES = 5
+PRACTICE_CHANCE = 0.2  # 每次行動順便練成一門的機率（付得起心得才練，見 look_after；不是每次行動都練）
 
 
 def take_turn(game: Game, profile: BotProfile, rng: random.Random) -> list[str]:
@@ -77,17 +79,14 @@ def take_turn(game: Game, profile: BotProfile, rng: random.Random) -> list[str]:
 
 
 def look_after(game: Game, rng: random.Random) -> None:
-    """照顧動作（不受強度旋鈕影響）：有內傷先療傷；沒學過的功法先自創（取一個像樣的名字），
-    學過的偶爾鍛鍊一成。"""
+    """照顧動作（不受強度旋鈕影響）：升級的屬性點先配掉（只走 Game.allocate_stat，跟真人一樣）；有內傷先療傷；身上的兩門（開局送的基礎武學）偶爾練成一成，付得起心得才練。
+    伺服器假人這一版不合成、不合併：首次合成會用退路字表的名字搶下首創（假人不叫模型），等觀察過真人再說
+    （武學與成長計畫一 Task 13）。整季模擬的機器人（bot.py）才合成，它只在測試與量平衡時跑、用自己的資料庫。"""
+    allocate_points(game, rng)
     if wants_heal(game):
         game.heal()
-    for kind, slot in (("內功", "neigong_id"), ("武學", "wugong_id")):
-        if getattr(game.state.player.member, slot) is None:
-            for _ in range(SKILL_NAME_TRIES):
-                game.create_skill(server_bots.make_skill_name(rng, kind), kind)
-                if getattr(game.state.player.member, slot) is not None:
-                    break
-        elif rng.random() < PRACTICE_CHANCE:
+    for kind in ("內功", "武學"):
+        if can_practise(game, kind) and rng.random() < PRACTICE_CHANCE:
             game.practice(kind)
 
 
@@ -116,11 +115,14 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
     if kind == "talk":
         return 0.0 if arg == "leave" else None
     if kind == "call":
-        return 0.0 if arg == "back" else None  # 假人不求見大勢人物（不呼叫模型）；萬一停在求見選單上，只會按返回
+        # 假人不求見大勢人物（不呼叫模型）；名望不夠的求見永遠按得下去（只是被打發，武學與成長設計 9.1），更不能給分；
+        # 萬一停在求見選單上，只會按返回
+        return 0.0 if arg == "back" else None
     if kind == "move":
         base = HOME_MOVE_SCORE if arg == _front_hop(game, profile) or arg in _home(game, profile) else AWAY_MOVE_SCORE
         order_hop = ORDER_MOVE_SCORE if arg.partition(":")[0] == _order_hop(game) else 0.0  # 往軍令要去的地方（計畫 T6）
-        return base + order_hop + (TRAIN_MOVE_SCORE if _train_value(game, profile, arg) > 0 else 0.0)
+        summons_hop = SUMMONS_MOVE_SCORE if arg.partition(":")[0] == _summons_hop(game) else 0.0  # 往召見的地點（計畫 T5）
+        return base + order_hop + summons_hop + (TRAIN_MOVE_SCORE if _train_value(game, profile, arg) > 0 else 0.0)
     if kind == "act":
         if arg.startswith("challenge:"):  # 挑戰本人：打得贏才去（打不贏的、閉門不見的按不下去，本來就不在候選裡）
             fid = arg.partition(":")[2]
@@ -141,6 +143,8 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
             return DUTY_SCORE + (ORDER_SCORE if orders.duty_counts(s, game.content, s.player.faction, s.player.location) else 0.0)
         if arg == "convoy":  # 接下糧車：只在有護糧軍令的起點出現
             return ORDER_SCORE
+        if arg == "summons":  # 應召（計畫 T5）：只在召見的地點出現
+            return SUMMONS_SCORE
         return ACT_SCORES.get(arg, 0.0)
     return None
 
@@ -285,6 +289,12 @@ def _losing_front(game: Game, faction_id: str) -> str | None:
     if not fronts:
         return None
     return max(fronts, key=lambda front: -goals[front] * rules.trend_value(game.state, content, front))
+
+
+def _summons_hop(game: Game) -> str | None:
+    """往召見的地點，路程最近的那一站；沒有召見、已經在、走不到時是 None（計畫 T5）。"""
+    summons = game.state.player.summons
+    return next_hop(game, [summons.location]) if summons is not None else None
 
 
 def _order_hop(game: Game) -> str | None:

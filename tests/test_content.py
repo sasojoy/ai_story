@@ -1,15 +1,19 @@
 import json
 import shutil
+from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
 
 from conftest import FIXTURE
+from tianxia import naming
 from tianxia.content import ContentError, load_content, profile_line, validate
 from tianxia.models import (
     BattleAct, BattleActionEffect, BattleDef, BattleFaction, BattleOption, BattleOutcome, Condition, Config, FactionDef,
     Threshold, Trend,
 )
+
+ROOT = Path(__file__).resolve().parent.parent
 
 
 def copy_fixture(tmp_path):
@@ -60,6 +64,33 @@ def test_unknown_stat_rejected(tmp_path):
     root = copy_fixture(tmp_path)
     edit_json(root / "events" / "test.json", lambda d: d[0]["choices"][1]["effect"]["stats"].update(luck=1))
     with pytest.raises(ContentError, match="luck"):
+        load_content(root)
+
+
+def test_unknown_practice_rejected(tmp_path):
+    root = copy_fixture(tmp_path)
+
+    def add_practice(d):
+        choice = next(ch for ch in d[0]["choices"] if "check" in ch)
+        choice["check"]["practice"] = "luck"
+
+    edit_json(root / "events" / "test.json", add_practice)
+    with pytest.raises(ContentError, match="luck"):
+        load_content(root)
+
+
+def test_practice_must_be_a_reputation(tmp_path):
+    root = copy_fixture(tmp_path)
+    edit_json(root / "config.json", lambda d: d.update(practice_bonus={"agi": {"per": 10, "cap": 3}}))
+    with pytest.raises(ContentError, match="agi"):
+        load_content(root)
+
+
+def test_practice_cannot_be_lore(tmp_path):
+    """熟練加成吃的是名聲類的屬性；博聞跟另外四項一樣是能力值，不能拿來當熟練。"""
+    root = copy_fixture(tmp_path)
+    edit_json(root / "config.json", lambda d: d.update(practice_bonus={"lore": {"per": 10, "cap": 3}}))
+    with pytest.raises(ContentError, match="lore"):
         load_content(root)
 
 
@@ -170,6 +201,24 @@ def test_character_missing_combat_stat_rejected(tmp_path):
     edit_json(root / "characters.json", lambda d: d[0]["stats"].pop("wis"))
     with pytest.raises(ContentError, match="mate"):
         load_content(root)
+
+
+def test_a_character_may_have_up_to_three_brush_off_lines(tmp_path):
+    root = copy_fixture(tmp_path)
+    edit_json(root / "characters.json", lambda d: d[0].update(brush_off=["一。", "二。", "三。"]))
+    assert load_content(root).characters["mate"].brush_off == ["一。", "二。", "三。"]
+
+
+def test_more_than_three_brush_off_lines_rejected(tmp_path):
+    root = copy_fixture(tmp_path)
+    edit_json(root / "characters.json", lambda d: d[0].update(brush_off=["一。", "二。", "三。", "四。"]))
+    with pytest.raises(ContentError, match="mate.*brush_off 最多三句"):
+        load_content(root)
+
+
+def test_brush_off_defaults_to_nothing_and_the_rank_discount_to_five(content):
+    assert content.characters["mate"].brush_off == []
+    assert content.config.audience_rank_discount == 5
 
 
 def test_map_and_scenario_places_loaded(content):
@@ -652,10 +701,40 @@ def test_a_material_only_an_event_gives_is_still_reachable(tmp_path):
     load_content(root)  # 不該再報錯
 
 
-def test_a_material_only_a_location_offers_is_still_reachable(tmp_path):
+def test_a_higher_tier_material_a_location_lists_is_not_reachable_from_it(tmp_path):
+    """探索不再撿素材（武學與成長計畫一）：地點寫的素材只決定路邊採集出什麼屬性，採到的永遠是那個屬性的一階。
+    所以地點寫了天品，天品也不會因此拿得到。"""
     root = copy_fixture(tmp_path)
     _strand_the_top_tier(root)
     edit_json(root / "locations.json", lambda d: d[0].update(materials=["gang_3"]))
+    with pytest.raises(ContentError, match="隕鐵膽"):
+        load_content(root)
+
+
+def _every_place_lists_only_gang(root):
+    """每個地點都只寫剛；快屬性的一階素材原本還有一則路上見聞給，這裡拿掉，路邊採集就成了唯一的可能。"""
+    edit_json(root / "locations.json", lambda d: [loc.update(materials=["gang_1"]) for loc in d])
+    edit_json(root / "road_sights.json", lambda d: [s.get("effect", {}).pop("materials", None) for s in d])
+
+
+def test_a_first_tier_material_no_road_can_give_is_rejected(tmp_path):
+    """路邊採集只出兩頭地點寫的屬性：每個地點都只寫剛，快屬性的一階素材就沒有任何管道。"""
+    root = copy_fixture(tmp_path)
+    _every_place_lists_only_gang(root)
+    with pytest.raises(ContentError, match="驚羽"):
+        load_content(root)
+
+
+def test_a_first_tier_material_a_road_between_listed_places_can_give_is_reachable(tmp_path):
+    root = copy_fixture(tmp_path)
+    _every_place_lists_only_gang(root)
+    edit_json(root / "locations.json", lambda d: d[0].update(materials=["kuai_1"]))  # 小鎮出快：小鎮到湖邊的路採得到
+    load_content(root)
+
+
+def test_a_road_between_two_unlisted_places_can_give_any_first_tier_material(tmp_path):
+    root = copy_fixture(tmp_path)
+    edit_json(root / "locations.json", lambda d: [loc.pop("materials", None) for loc in d])
     load_content(root)
 
 
@@ -982,6 +1061,14 @@ def test_config_rejects_negative_geju_rates(field):
     assert getattr(Config(**{field: 0}), field) == 0
 
 
+def test_geju_full_players_must_be_positive():
+    """滿額人數是除數：0 或負的都不行。"""
+    for bad in (0, -3):
+        with pytest.raises(ValidationError):
+            Config(geju_full_players=bad)
+    assert Config(geju_full_players=1).geju_full_players == 1
+
+
 def test_validate_reports_a_malformed_region_polygon_instead_of_crashing(tmp_path):
     """train_trend 的戰線歸屬要先查地點在哪個大區，有個點只寫了一個數字時不能在那裡炸成 ValueError，要照舊回報多邊形的錯。"""
     root = copy_fixture(tmp_path)
@@ -1271,3 +1358,231 @@ def test_promotion_handoff_needs_its_scene_and_summons(tmp_path):
     edit_json(root / "promotions.json", lambda d: d[0].update(summons_handoff=None))
     with pytest.raises(ContentError, match="接手"):
         load_content(root)
+
+
+# ── 意境與基礎武學（武學與成長設計附錄 A～C）─────────────────
+
+
+def test_insights_are_loaded(content):
+    assert content.insights["feng"].attribute == "快"
+    assert content.insights["haoran"].grant.stat == "good"
+
+
+def test_a_location_insight_must_exist(content):
+    content.locations["lake"].insights.append("nope")
+    with pytest.raises(ContentError, match="未知的意境 nope"):
+        validate(content)
+
+
+def test_a_location_cannot_hand_out_a_name_earned_insight(content):
+    content.locations["lake"].insights.append("haoran")
+    with pytest.raises(ContentError, match="浩然.*只能靠名聲"):
+        validate(content)
+
+
+def test_an_effect_cannot_give_a_name_earned_insight(content):
+    content.events["drunk"].choices[0].effect.insights = ["haoran"]
+    with pytest.raises(ContentError, match="浩然.*只能靠名聲"):
+        validate(content)
+
+
+def test_an_effect_cannot_give_an_unknown_insight(content):
+    content.events["drunk"].choices[0].effect.insights = ["nope"]
+    with pytest.raises(ContentError, match="未知的意境 nope"):
+        validate(content)
+
+
+def test_an_effect_can_give_a_basic_insight(content):
+    content.events["drunk"].choices[0].effect.insights = ["feng"]
+    validate(content)
+
+
+def test_a_basic_art_must_be_taught_somewhere_that_exists(content):
+    content.skills["lake_kick"].learn.at = "nowhere"
+    with pytest.raises(ContentError, match="未知的地點 nowhere"):
+        validate(content)
+
+
+def test_a_historical_art_is_not_taught(content):
+    content.skills["fist"].learn = content.skills["lake_kick"].learn
+    with pytest.raises(ContentError, match="絕學.*不能在各地學"):
+        validate(content)
+
+
+def test_starter_skills_are_one_inner_and_one_outer_art(content):
+    content.config.starter_skills = ["basic_fist", "lake_kick"]
+    with pytest.raises(ContentError, match="starter_skills"):
+        validate(content)
+
+
+def test_real_content_has_seventeen_basic_arts_and_every_location_an_insight():
+    real = load_content(ROOT / "content")
+    basics = [s for s in real.skills.values() if s.quality == "下品"]
+    assert len(basics) == 17
+    assert all(loc.insights for loc in real.locations.values())
+
+
+def test_every_insight_fallback_name_passes_the_filter(content):
+    for prefix in content.craft_names.prefixes:
+        for suffix in content.craft_names.insight:
+            assert naming.name_problem(prefix + suffix, content) is None
+
+
+def test_validate_checks_the_insight_fallback_names_too(content):
+    content.craft_names.insight = ["龍"]  # 「某某龍」之中有一個會撞上禁用詞時要在載入當下報錯
+    content.banned_names = [content.craft_names.prefixes[0] + "龍"]
+    with pytest.raises(ContentError, match="craft_names 組出的名字"):
+        validate(content)
+    content.craft_names.insight = []
+    with pytest.raises(ContentError, match="craft_names.insight 不能是空的"):
+        validate(content)
+
+
+def test_check_voice_must_cover_every_checked_stat_and_run_high_to_low(tmp_path):
+    """選項底下的人物心聲（content/check_voice.json）：每一檔都要說得出有人檢定的屬性，而且由高到低排。"""
+    root = copy_fixture(tmp_path)
+    voice = {"bands": [{"min_gap": 0, "lines": {"str": "{who}有把握。"}}, {"min_gap": 2, "lines": {"default": "穩。"}}]}
+    (root / "check_voice.json").write_text(json.dumps(voice, ensure_ascii=False), encoding="utf-8")
+    with pytest.raises(ContentError) as caught:
+        load_content(root)
+    assert "由高到低" in str(caught.value) and "con" in str(caught.value)  # 調息事件檢定根骨，第一檔沒寫
+
+
+
+# ── check_voice.json：檢定選項括號裡的那一句（企劃者 2026-10-05 定案；S1 的 check_lines.json 已退休）──
+
+
+def _voice_with(tmp_path, line: str, key: str = "default"):
+    root = copy_fixture(tmp_path)
+    voice = json.loads((root / "check_voice.json").read_text(encoding="utf-8"))
+    voice["bands"][0]["lines"][key] = line
+    (root / "check_voice.json").write_text(json.dumps(voice, ensure_ascii=False), encoding="utf-8")
+    return root
+
+
+@pytest.mark.parametrize("line", ["成功率 7 成。", "大概五成，七０％吧。", "七成%把握。", "有 ５ 分把握。"])
+def test_a_check_voice_line_cannot_give_a_number_away(tmp_path, line):
+    """只攔阿拉伯數字（半形、全形）與百分號：選項上不攤出成功率與難度。"""
+    with pytest.raises(ContentError, match="數字"):
+        load_content(_voice_with(tmp_path, line))
+
+
+def test_chinese_numerals_are_fine_in_a_check_voice_line(tmp_path):
+    load_content(_voice_with(tmp_path, "十拿九穩，難不倒{who}。"))
+
+
+def test_a_check_voice_line_must_be_traditional_chinese(tmp_path):
+    with pytest.raises(ContentError, match="繁體"):
+        load_content(_voice_with(tmp_path, "这点力气，{who}使得出来。"))
+
+
+def test_a_check_voice_line_cannot_be_blank(tmp_path):
+    with pytest.raises(ContentError, match="空白"):
+        load_content(_voice_with(tmp_path, "   "))
+
+
+def test_a_check_voice_line_key_must_be_a_stat_or_default(tmp_path):
+    with pytest.raises(ContentError, match="strength"):
+        load_content(_voice_with(tmp_path, "{who}有把握。", key="strength"))
+
+
+def test_check_voice_needs_at_least_one_band(tmp_path):
+    root = copy_fixture(tmp_path)
+    (root / "check_voice.json").write_text(json.dumps({"bands": []}), encoding="utf-8")
+    with pytest.raises(ContentError, match="check_voice"):
+        load_content(root)
+
+
+def test_a_missing_or_malformed_check_voice_is_a_content_error_that_names_the_file(tmp_path):
+    root = copy_fixture(tmp_path / "a")
+    (root / "check_voice.json").unlink()
+    with pytest.raises(ContentError, match="check_voice.json"):
+        load_content(root)
+    root = copy_fixture(tmp_path / "b")
+    (root / "check_voice.json").write_text('{"bands": [', encoding="utf-8")
+    with pytest.raises(ContentError, match="check_voice.json"):
+        load_content(root)
+    root = copy_fixture(tmp_path / "c")
+    (root / "check_voice.json").write_text('{"bands": [], "voices": []}', encoding="utf-8")  # 拼錯的欄位
+    with pytest.raises(ContentError, match="check_voice.json"):
+        load_content(root)
+
+
+def test_s1s_check_lines_file_is_retired():
+    """S1 的 check_lines.json（五段 45 句）由 joy 的 check_voice.json（四檔）取代：檔案、模型、載入、驗證都拿掉了。"""
+    from tianxia import models
+
+    assert not (ROOT / "content" / "check_lines.json").exists()
+    assert not hasattr(models, "CheckLines")
+    assert "check_lines" not in models.Content.model_fields
+
+
+def test_old_content_with_by_on_a_check_still_loads_and_both_values_parse(content):
+    """Check.by 讀得進來、不再有作用（每一個事件檢定都看本人的屬性）。"""
+    assert content.events["drunk"].choices[0].check.by == "team"
+    assert content.events["insight"].choices[0].check.by == "self"
+
+
+# ── 博聞只靠升級的點數增加（設計 6.3；PM 2026-10-05）─────────────────────────
+#
+# 事件、奇遇、隨口應對、新手引導、路上見聞的獎勵都不能給博聞，也不能扣（連寫 0 都不行）；檢定可以照樣考博聞。
+
+
+def _lore_in_choice(event, choice, field, amount):
+    def put(root):
+        edit_json(root / "events" / "test.json", lambda d: d[event]["choices"][choice].setdefault(field, {}).update(
+            stats={"lore": amount}))
+    return put
+
+
+def _lore_in_free_text(field, amount):
+    def put(root):
+        free = {"prompt": "自己想辦法……", "stat": "str", "effect": {"text": "成了。"}, "fail_effect": {}}
+        free[field] = {"stats": {"lore": amount}}
+        edit_json(root / "events" / "test.json", lambda d: d[0].update(free_text=free))
+    return put
+
+
+def _lore_in_tutorial(root):
+    edit_json(root / "tutorial.json", lambda d: d["steps"][1].update(reward={"stats": {"lore": 1}}))
+
+
+def _lore_in_road_sight(root):
+    edit_json(root / "road_sights.json", lambda d: d[1].update(effect={"stats": {"lore": 1}}))
+
+
+LORE_PLACES = [
+    pytest.param(_lore_in_choice(0, 0, "effect", 1), "事件 drunk 選項0", id="event-choice-effect"),
+    pytest.param(_lore_in_choice(0, 0, "fail_effect", -1), "事件 drunk 選項0", id="event-choice-fail-effect-negative"),
+    pytest.param(_lore_in_choice(0, 1, "effect", 0), "事件 drunk 選項1", id="event-choice-zero"),
+    pytest.param(_lore_in_choice(1, 0, "effect", 2), "事件 scroll 選項0", id="qiyu"),
+    pytest.param(_lore_in_free_text("effect", 1), "事件 drunk 隨口應對", id="free-text-effect"),
+    pytest.param(_lore_in_free_text("fail_effect", -1), "事件 drunk 隨口應對", id="free-text-fail-effect"),
+    pytest.param(_lore_in_tutorial, "新手引導 s2", id="tutorial-reward"),
+    pytest.param(_lore_in_road_sight, "路上見聞 sight_wind", id="road-sight"),
+]
+
+
+@pytest.mark.parametrize("put_lore, where", LORE_PLACES)
+def test_no_reward_anywhere_may_add_or_take_lore(tmp_path, put_lore, where):
+    root = copy_fixture(tmp_path)
+    put_lore(root)
+    with pytest.raises(ContentError) as caught:
+        load_content(root)
+    lines = [line for line in str(caught.value).splitlines() if line.startswith(where) and "lore" in line]
+    assert lines and all("博聞只能靠升級的點數增加" in line for line in lines), str(caught.value)
+    assert len(lines) == 1, str(caught.value)  # 同一處只報一次，不連同別的規則一起吵
+
+
+def test_a_check_may_still_test_lore(tmp_path):
+    """事件檢定與隨口應對可以考博聞（看的是本人的點數），只是獎勵不能給。"""
+    root = copy_fixture(tmp_path)
+    edit_json(root / "events" / "test.json", lambda d: d[0]["choices"][0]["check"].update(stat="lore"))
+    assert load_content(root).events["drunk"].choices[0].check.stat == "lore"
+
+
+def test_the_free_text_and_bot_reward_lists_leave_lore_out():
+    from tianxia import bot_policy, content
+
+    assert "lore" not in content.FREE_TEXT_REWARDS and "lore" not in bot_policy.REWARD_STATS
+    assert {"str", "agi", "con", "wis"} <= set(content.FREE_TEXT_REWARDS)  # 另外四項不動

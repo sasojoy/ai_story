@@ -108,7 +108,7 @@ def test_a_success_applies_the_effect_and_writes_the_line_with_the_odds(gamble_g
     assert g.state.pending_event is None
     assert g.state.player.stats["good"] == good + 1
     entry = g.state.journal[0]
-    assert entry.title == "醉漢・隨口應對" and entry.tag == "本人・成功"
+    assert entry.title == "醉漢・隨口應對" and entry.tag == "成功"
     assert f"你：「把酒罈砸在地上大喊官兵來了」（{rate_words(rate)}）" in entry.lines
     assert "醉漢被你唬住了。" in entry.lines
 
@@ -119,7 +119,7 @@ def test_a_failure_applies_the_fail_effect(gamble_game):
     good = g.state.player.stats.get("good", 0)
     g.answer_event(g.free_text_request("求他放過我"), 85)
     assert g.state.player.stats.get("good", 0) == good
-    assert g.state.journal[0].tag == "本人・失敗"
+    assert g.state.journal[0].tag == "失敗"
     assert "醉漢一拳揮來。" in g.state.journal[0].lines
 
 
@@ -295,6 +295,27 @@ def test_free_text_cannot_pay_more_than_the_best_check(tmp_path):
     root = copy_fixture(tmp_path)
     _with_free_text(root, effect={"stats": {"good": 3}})  # 逼問成功給善名 +2
     with pytest.raises(ContentError, match="good \\+3"):
+        load_content(root)
+
+
+def test_a_free_text_can_ask_for_lore_but_can_never_pay_it_out(tmp_path):
+    """博聞（設計 6.3）：隨口應對能指定它來考，但博聞只靠升級的點數增加——獎勵不能給（連檢定選項也不給的情況下
+    更不行）、失敗也不能扣。"""
+    root = copy_fixture(tmp_path)
+    _with_free_text(root, stat="lore")
+    assert load_content(root).events["drunk"].free_text.stat == "lore"
+    _with_free_text(root, stat="lore", effect={"stats": {"lore": 1}})
+    with pytest.raises(ContentError, match="博聞只能靠升級的點數增加"):
+        load_content(root)
+    _with_free_text(root, stat="lore", fail_effect={"stats": {"lore": -1}})
+    with pytest.raises(ContentError, match="博聞只能靠升級的點數增加"):
+        load_content(root)
+
+
+def test_free_text_cannot_give_more_insights_than_the_best_check(tmp_path):
+    root = copy_fixture(tmp_path)
+    _with_free_text(root, effect={"insights": ["feng"]})  # 醉漢事件的檢定選項沒有給意境
+    with pytest.raises(ContentError, match="意境 1 個比檢定選項最多的 0 個還多"):
         load_content(root)
 
 

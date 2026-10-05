@@ -590,15 +590,15 @@ def test_changshe_haoqiang_two_trips_and_two_checks(fs_content, world):
     p.materials = {"man_1": 2}
     assert fs_option(game, "fs:fs_changshe_haoqiang").label == "交糧（東西還沒備齊）"  # 沒有「兩邊都賣」的起點
     p.fs_counters = {"two_buyers": 1}
-    assert game.choose("fs:fs_changshe_haoqiang") == ["（本人——失敗）", chain.final.steps[0].wrong.text, "沉淵石 -1"]
+    assert game.choose("fs:fs_changshe_haoqiang") == ["（失敗）", chain.final.steps[0].wrong.text, "沉淵石 -1"]
     assert p.materials == {"man_1": 1} and p.fs_done == []
     p.materials = {"man_1": 2}
     game.rng = FixedRandom(0.0)
-    assert game.choose("fs:fs_changshe_haoqiang") == ["（本人——成功）", chain.final.steps[0].success_text, "沉淵石 -1"]
+    assert game.choose("fs:fs_changshe_haoqiang") == ["（成功）", chain.final.steps[0].success_text, "沉淵石 -1"]
     assert p.fs_done == ["fs_changshe_haoqiang:0"] and fs_option(game, "fs:fs_changshe_haoqiang") is None
     p.location = "huangjin_camp"
     assert game.choose("fs:fs_changshe_haoqiang") == [
-        "（本人——成功）", chain.final.steps[1].success_text, chain.final.success_text, "沉淵石 -1",
+        "（成功）", chain.final.steps[1].success_text, chain.final.success_text, "沉淵石 -1",
     ]  # 後完成的那一趟：自己的句子，再接整條完成的那一句（內容表 4.6）
     assert "fs_changshe_haoqiang" in p.fs_done and world.get_season().third_party["changshe_fire"] == ["甲"]
 
@@ -619,11 +619,11 @@ def test_two_buyers_second_trip_adds_the_joint_line(fs_content, world, first, se
     p = game.state.player
     p.location = first
     p.visited.add(first)
-    assert game.choose("fs:fs_changshe_haoqiang") == ["（本人——成功）", own[first], "沉淵石 -1"]  # 先完成的：沒有完成句
+    assert game.choose("fs:fs_changshe_haoqiang") == ["（成功）", own[first], "沉淵石 -1"]  # 先完成的：沒有完成句
     assert "fs_changshe_haoqiang" not in p.fs_done and not game.state.world.third_party
     p.location = second
     p.visited.add(second)
-    assert game.choose("fs:fs_changshe_haoqiang") == ["（本人——成功）", own[second], JOINT_LINE, "沉淵石 -1"]
+    assert game.choose("fs:fs_changshe_haoqiang") == ["（成功）", own[second], JOINT_LINE, "沉淵石 -1"]
     assert "fs_changshe_haoqiang" in p.fs_done
     assert game.choose("fs:fs_changshe_haoqiang") == ["（此刻無法這麼做。）"]  # 做完就沒有了
 
@@ -775,7 +775,6 @@ def test_guanyin_on_a_real_win_against_the_guan_squad(fs_content, world, monkeyp
     """黃巾在冀州（盧植營，那裡的對手是官軍）遊歷打贏，30% 得 1 官銀；落敗不算。"""
     c = fs_content
     monkeypatch.setattr(c.config, "train_event_chance", 0.0)
-    monkeypatch.setattr(c.config, "train_stat_chance", 0.0)
     monkeypatch.setattr(team, "fight", lambda *a, **k: EncounterResult(tier="大勝", margin=50, our_power=60, difficulty=1))
     huang = fs_game(c, world, "乙", "huang", "luzhi_camp", rng=FixedRandom(0.0), time=cal(c, 7))  # 盧植那件大事還沒到
     huang.choose("act:train")
@@ -955,7 +954,7 @@ def test_end_to_end_one_chain(world):
     world.save_season(season)
     named = "史書上，皇甫嵩趁夜縱火，大破波才於長社。這一次，趙甲 讓史書沒有落空：葦束膏油早已備下，風起之時火光燭天。"
     assert msgs[0].startswith("【江湖大事】" + named)
-    assert "騎都尉曹操的援兵恰好趕到，黃巾的草營燒成一片火海。" in msgs[0]
+    assert "騎都尉曹操的援兵恰好趕到，波才的草營燒成一片火海。" in msgs[0]  # 8.11
     assert "黃巾的 錢乙 曾看破火攻、勸波才移營，可惜晚了一步。" in msgs[0]
     result = season.timeline["changshe_fire"]
     assert (result.key, result.locked_by, result.losers) == ("guan:大勝", "趙甲", ["錢乙"])

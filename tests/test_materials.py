@@ -105,37 +105,6 @@ def test_the_default_table_matches_the_opponents_attribute(content):
     assert [content.materials[mid].id for mid, _ in rolled] == ["gang_2"]
 
 
-# ── 探索撿到的 ────────────────────────────────────────────
-
-
-def test_explore_picks_from_the_locations_own_list(content):
-    loc = content.locations["lake"].model_copy(update={"materials": ["gang_3"]})
-    always = random.Random()
-    always.random = lambda: 0.0  # type: ignore[method-assign]
-    assert materials.roll_explore_drop(loc, content, always) == "gang_3"
-
-
-def test_explore_falls_back_to_a_first_tier_material(content):
-    loc = content.locations["lake"].model_copy(update={"materials": []})
-    always = random.Random(3)
-    always.random = lambda: 0.0  # type: ignore[method-assign]
-    picked = materials.roll_explore_drop(loc, content, always)
-    assert picked is not None and content.materials[picked].tier == 1
-
-
-def test_the_material_branch_always_finds_something(content):
-    """探索三選一：抽到「素材」那一支就必定撿到一樣（機率當成 1，探索三選一設計 4.1）；
-    以前探索前那一次三成的判定已經拿掉。"""
-    unlucky = random.Random()
-    unlucky.random = lambda: 0.99  # type: ignore[method-assign]
-    own = content.locations["lake"].model_copy(update={"materials": ["gang_1"]})
-    assert materials.roll_explore_drop(own, content, unlucky) == "gang_1"
-    bare = content.locations["lake"].model_copy(update={"materials": []})
-    for seed in range(20):
-        picked = materials.roll_explore_drop(bare, content, random.Random(seed))
-        assert picked is not None and content.materials[picked].tier == 1
-
-
 def test_tier_label_reads_in_words(content):
     assert materials.tier_label(content.materials["gang_1"]) == "凡品"
     assert materials.tier_label(content.materials["gang_2"]) == "靈品"

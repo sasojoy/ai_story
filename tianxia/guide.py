@@ -1,8 +1,9 @@
 """新手引導、個人目標與任務區塊：讓玩家知道這一季在發生什麼、下一步該做什麼。"""
 from __future__ import annotations
 
+from . import ranks
 from .models import Content, TutorialStep
-from .rules import apply_effect, check_condition, season_one, season_one_off
+from .rules import apply_effect, check_condition, pending_event_title, season_one, season_one_off
 from .state import GameState
 from .world import current_act, current_storyline, season_endings, storyline_off
 from .world_state import WorldStateStore
@@ -69,12 +70,23 @@ def _idle(state: GameState) -> bool:
     )
 
 
+def pending_line(state: GameState, content: Content) -> str | None:
+    """眼前有事件還沒了結時，引導不推這一步（常常是叫人出發，事件卻擋著路），改說這一句（FB-063）；沒有待處理的事件時是 None。
+    說書人的框（Game.guide_box）與「下一步」（next_hint）都用它，句子只寫在這裡。"""
+    title = pending_event_title(state, content)
+    return f"先把眼前的「{title}」了結" if title is not None else None
+
+
+def step_text(state: GameState, content: Content) -> str:
+    """引導目前這一步要說的話：眼前有事件待處理時是 pending_line，不然是這一步本身的話。呼叫端先確認引導還沒做完。"""
+    return pending_line(state, content) or steps(state, content)[state.player.tutorial_step].text
+
+
 def next_hint(state: GameState, content: Content) -> str:
-    """引導還沒做完就是引導的下一步；否則是這一幕主線的目標（第一季不觸發的主線沒有，計畫 T8），體力將滿時加一句提醒。
-    兩者都沒有時是空字串。"""
+    """引導還沒做完就是引導的下一步（有事件待處理時見 pending_line）；否則是這一幕主線的目標（第一季不觸發的主線沒有，計畫 T8），
+    體力將滿時加一句提醒。兩者都沒有時是空字串。"""
     if tutorial_active(state, content):
-        t = content.tutorial
-        return f"（{t.speaker}）{steps(state, content)[state.player.tutorial_step].text}"
+        return f"（{content.tutorial.speaker}）{step_text(state, content)}"
     hints = [] if storyline_off(state, content) else [current_act(state, content).goal]
     if state.player.stamina >= content.config.stamina_max * 0.9 and _idle(state):
         hints.append("體力將滿，別讓它浪費。")
@@ -101,6 +113,9 @@ def quest_text(state: GameState, content: Content) -> str:
         parts.append("**個人目標**\n\n" + "\n".join(
             f"- {'☑' if check_condition(m.condition, state) else '☐'} {m.text}" for m in milestones
         ))
+    summons = ranks.summons_line(state, content)  # 還沒去的召見（計畫 T5）：照此刻出面的人寫
+    if summons:
+        parts.append(f"**召見**：{summons}")
     hint = next_hint(state, content)
     if hint:
         parts.append(f"**下一步**：{hint}")

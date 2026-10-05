@@ -1,5 +1,5 @@
 """門下與隊伍（sanguo-companions 合併大幅重寫）：玩家與最多 4 個已招募同伴的單一隊伍，
-每人最多一門內功、一門武學，練功（自創／鍛鍊）與心得升級，串接 encounter.py 的單次判定。
+每人最多一門內功、一門武學，練功（鍛鍊）與心得升級，串接 encounter.py 的單次判定。
 
 同伴不再是玩家存檔裡的副本——他們全服唯一，等級/武學是共用資料（world_state.py 的
 CompanionProgress），這裡的函式凡是要讀寫同伴進度都要帶一個 WorldStateStore 參數。
@@ -9,10 +9,10 @@ from __future__ import annotations
 import math
 import random
 
-from . import encounter
-from .martial_arts import MAX_LEVEL, MartialArt, generate_from_name, historical_art
-from .models import Content, Squad
-from .state import PLAYER, MAX_TEAM_COMPANIONS, GameState
+from . import calendar, encounter
+from .martial_arts import MAX_LEVEL, MartialArt, content_art, counters, with_quality
+from .models import Content, FollowerDef, Squad
+from .state import PLAYER, MAX_TEAM_COMPANIONS, GameState, Member
 from .world_state import CompanionProgress, WorldStateStore
 
 ESTIMATE_RUNS = 40
@@ -22,8 +22,30 @@ DRAW_TIERS = {"僵持"}
 ODDS = ((90, "穩勝"), (65, "有把握"), (35, "五五波"), (10, "凶險"))  # 勝率（%）門檻；再低就是必敗
 
 
-COMBAT_STATS = ("str", "agi", "con", "wis")  # Check 系統（辦事/修行類事件選項）用的屬性；跟遭遇/劇情戰的
-# 判定（encounter.py，威力/屬性相剋）無關，見設計文件六.3
+COMBAT_STATS = ("str", "agi", "con", "wis", "lore")  # 五屬性：升級給點、狀態列、＋鈕、事件檢定都照這份與這個順序；
+# 玩家本人的前四項另外各管一件戰力（武學與成長設計 6.1）：臂力管外功、根骨管內功與氣血、身法管損耗、悟性管修練與悟意境；
+# 第五項博聞管武學與意境的持有上限（6.3），不進戰力
+LORE = "lore"
+BASE_STAT = 5  # 屬性的基準：開局都是 5，比它多才有加成（武學與成長設計 6.1、6.3）
+
+
+def stat_bonus(content: Content, value: float) -> float:
+    """屬性比基準每多一點加 stat_bonus_per_point（預設 3%）；比基準少是負的。要乘上去的倍數用 stat_factor；
+    要減掉的（身法減損耗、根骨減內傷）由呼叫端寫成 1 − 加成，夾在 0 以上。"""
+    return content.config.stat_bonus_per_point * (value - BASE_STAT)
+
+
+def stat_factor(content: Content, value: float) -> float:
+    """屬性乘上去的倍數：1＋加成，再低也夾在 encounter.BOOST_FLOOR（0.1），不會讓任何量變成負的或 0。
+    氣血上限（根骨）、修練機率（悟性）、探索悟意境的比重（悟性）都用這一個。"""
+    return max(encounter.BOOST_FLOOR, 1 + stat_bonus(content, value))
+
+
+def con_of(state: GameState, key: str) -> float:
+    """名冊上這個人（key：PLAYER 或同伴的 id）的根骨。本人的根骨只從這裡讀（氣血四個函式的 con、內功的加成、
+    一場的內傷）；同伴一律是基準，不吃屬性加成（計畫二「實作決定」：同伴的平衡在氣血設計 §1.4 調過，不連帶動）。
+    認 key 不認物件：拿到玩家 Member 的複本也照樣是本人。"""
+    return float(state.player.stats.get("con", BASE_STAT)) if key == PLAYER else BASE_STAT
 
 
 def member_name(state: GameState, content: Content, key: str) -> str:
@@ -31,23 +53,23 @@ def member_name(state: GameState, content: Content, key: str) -> str:
 
 
 def member_stats(state: GameState, content: Content, world: WorldStateStore, key: str) -> dict[str, float]:
+    """這個人的五屬性。玩家本人就是存檔裡的數字（升級給點、自己分配，武學與成長設計 6.2，不再每級自動長）；
+    同伴照舊是第 1 級的屬性加上每級成長，同伴的內容沒寫的屬性（博聞）當基準。"""
     if key == PLAYER:
-        base = {k: float(state.player.stats.get(k, 0)) for k in COMBAT_STATS}
-        growth, level = content.config.player_growth, state.player.member.level
-    else:
-        character = content.characters[key]
-        base, growth = dict(character.stats), character.growth
-        level = world.get_companion(key).level
-    return {k: base[k] + growth.get(k, 0.0) * (level - 1) for k in COMBAT_STATS}
+        return {k: float(state.player.stats.get(k, 0)) for k in COMBAT_STATS}
+    character = content.characters[key]
+    level = world.get_companion(key).level
+    return {k: character.stats.get(k, BASE_STAT) + character.growth.get(k, 0.0) * (level - 1) for k in COMBAT_STATS}
 
 
-def check_actor(state: GameState, content: Content, world: WorldStateStore, check) -> str:
-    """檢定由誰出手：本人檢定，或檢定的是銀兩、名望這類只有本人才有的屬性時，一律本人；
-    隊伍檢定取本隊中這項屬性目前數值最高的人，同分時本人優先、其餘依隊伍順序。"""
-    if check.by == "self" or check.stat not in COMBAT_STATS:
-        return PLAYER
-    keys = team_keys(state)
-    return max(keys, key=lambda k: member_stats(state, content, world, k)[check.stat])
+def practice_bonus(state: GameState, content: Content, check) -> int:
+    """本人做這件事的熟練加成（Check.practice，例如惡名）：名聲每 per 點 +1，最多 +cap；沒寫 practice 是 0。
+    check 也可能是隨口應對（FreeTextChoice），它沒有 practice。"""
+    kind = getattr(check, "practice", None)
+    rule = content.config.practice_bonus.get(kind) if kind else None
+    if rule is None:
+        return 0
+    return min(rule.cap, max(0, int(state.player.stats.get(kind, 0))) // rule.per)
 
 
 def check_value(state: GameState, content: Content, world: WorldStateStore, key: str, stat: str) -> float:
@@ -62,25 +84,41 @@ def team_keys(state: GameState) -> list[str]:
 
 
 def resolve_art(skill_id: str | None, content: Content, world: WorldStateStore) -> MartialArt | None:
-    """skill_id 可能指向內容裡的本命武學（歷史人物固定武學）或玩家自創、存在共用世界狀態
-    裡的武學（見設計文件六.2；自創功法的 id 就是它的名字，兩邊用同一個 dict 鍵）。"""
+    """skill_id 指向內容裡的武學（本命武學、基礎武學）或全服登記的武學（合成、舊的自創與煉製）。
+    回傳的是全服共享的那一份；玩家自己那一份的品質見 player_art。"""
     if skill_id is None:
         return None
     if skill_id in content.skills:
         s = content.skills[skill_id]
-        return historical_art(skill_id, s.name, s.kind, s.attribute)
+        return content_art(skill_id, s.name, s.kind, s.attribute, s.quality)
     return world.get_skill(skill_id)
 
 
+def art_quality(state: GameState, art: MartialArt) -> str:
+    """玩家手上這一份是什麼品質：修練過就照自己的，沒修練過照全服登記的。"""
+    return state.player.art_quality.get(art.id, art.quality)
+
+
+def player_art(state: GameState, content: Content, world: WorldStateStore, skill_id: str | None) -> MartialArt | None:
+    """玩家自己那一份：品質與威力照自己修練到的品質。"""
+    art = resolve_art(skill_id, content, world)
+    return None if art is None else with_quality(art, art_quality(state, art))
+
+
 def team_arts(state: GameState, content: Content, world: WorldStateStore) -> dict[str, MartialArt]:
-    """本隊每個人的內功/武學，蒐集成一份 id -> MartialArt 給 encounter.py 用。"""
+    """本隊每個人的內功/武學（含部下），蒐集成一份 id -> MartialArt 給 encounter.py 用。
+    玩家的兩門照自己修練到的品質（player_art）；同伴、部下只有內容武學，照內容的品質。"""
     arts: dict[str, MartialArt] = {}
-    ids = {state.player.member.neigong_id, state.player.member.wugong_id}
+    for skill_id in (state.player.member.neigong_id, state.player.member.wugong_id):
+        art = player_art(state, content, world, skill_id)
+        if art:
+            arts[skill_id] = art
+    others = {unit.wugong_id for unit in follower_units(state, content)}
     shared = world.read()
     for key in state.player.team:
         progress = shared.companions.get(key, CompanionProgress())
-        ids |= {progress.neigong_id, progress.wugong_id}
-    for skill_id in ids:
+        others |= {progress.neigong_id, progress.wugong_id}
+    for skill_id in others:
         if skill_id and skill_id not in arts:
             art = resolve_art(skill_id, content, world)
             if art:
@@ -90,9 +128,39 @@ def team_arts(state: GameState, content: Content, world: WorldStateStore) -> dic
 
 def team_participants(state: GameState, world: WorldStateStore) -> list:
     """本隊每個人的「威力貢獻者」物件（玩家的 Member、同伴的 CompanionProgress），
-    直接餵給 encounter.team_power——兩者欄位形狀相同（見 encounter.HasMartialArts）。"""
+    直接餵給 encounter.team_power——兩者欄位形狀相同（見 encounter.HasMartialArts）。部下另外接在後面（follower_units）。"""
     shared = world.read()
     return [state.player.member] + [shared.companions.get(k, CompanionProgress()) for k in state.player.team]
+
+
+FOLLOWER_KEY = "follower:"  # 名冊裡部下的 key：follower:<在 PlayerState.followers 裡的位置>（同一種部下可以有兩個）
+
+
+def follower_rows(state: GameState, content: Content) -> list[tuple[str, FollowerDef]]:
+    """部下（計畫 T5）：(名冊的 key, 模板)。第一季才有，開關關著時是空的。"""
+    if not state.player.followers or not calendar.season_one_on(state.world, content):  # 同 rules.season_one（rules 會 import team）
+        return []
+    return [(f"{FOLLOWER_KEY}{i}", content.followers[fid]) for i, fid in enumerate(state.player.followers)
+            if fid in content.followers]
+
+
+def follower_units(state: GameState, content: Content) -> list[Member]:
+    """部下照模板建成跟 Member 同形狀的威力貢獻者（武學照模板、沒有內功）。只算威力：不在 team_keys 裡，
+    所以不擋檢定、不扣氣血（take_encounter_toll）、不吃經驗；氣血係數一律 1.0。"""
+    return [Member(wugong_id=f.wugong, wugong_level=f.wugong_level) for _, f in follower_rows(state, content)]
+
+
+def _fighters(
+    state: GameState, content: Content, world: WorldStateStore,
+) -> tuple[list, list[float], list[encounter.Boost]]:
+    """打一場的陣容、各自的氣血係數與加成：本人、出戰的同伴，再加上部下（滿血、不吃本人的加成）。
+    三份一樣長（encounter.team_power 會檢查），部下才不會被默默漏掉（F17）。"""
+    followers = follower_units(state, content)
+    return (
+        team_participants(state, world) + followers,
+        team_conditions(state, content, world) + [1.0] * len(followers),
+        team_boosts(state, content, world),
+    )
 
 
 # ── 隊伍組成 ─────────────────────────────────────────────
@@ -113,44 +181,21 @@ def remove_from_team(state: GameState, companion_id: str) -> list[str]:
     return []
 
 
-# ── 練功：自創功法／鍛鍊（設計文件六.2）──────────────────────
-
-
-def create_skill(
-    state: GameState, content: Content, world: WorldStateStore, name: str, kind: str,
-) -> tuple[MartialArt | None, str]:
-    """自創功法：名字即配方（martial_arts.generate_from_name），全服不能重名。成功時把
-    新武學配進玩家對應的欄位（如果那一欄還空著）並回傳 (art, 訊息)；名字被占用或欄位已經
-    有人時回傳 (None, 原因)。"""
-    name = name.strip()
-    if not name:
-        return None, "得先取個名字。"
-    member = state.player.member
-    slot = "neigong_id" if kind == "內功" else "wugong_id"
-    if getattr(member, slot) is not None:
-        return None, f"你已經有一門{kind}了，同時只能練一門。"
-    if world.is_skill_name_taken(name) or name in content.skills:
-        return None, f"【{name}】這個名字已經有人取走了，換一個吧。"
-    art = generate_from_name(name, kind, name, world.read().tianji)
-    if not world.claim_skill_name(art):
-        return None, f"【{name}】這個名字已經有人取走了，換一個吧。"
-    setattr(member, slot, art.id)
-    setattr(member, slot.replace("_id", "_level"), 1)
-    return art, f"你自創了一門{kind}【{name}】（{art.quality}，屬{art.attribute}）！"
+# ── 練功：改練／鍛鍊（設計文件六.2；自創武學已作廢，見武學與成長設計 3.8）──────────────────────
 
 
 def switch_art(state: GameState, content: Content, world: WorldStateStore, art_id: str) -> list[str]:
     """改練：把功法庫裡的一門換上身，被換下來的回庫，兩邊的熟練度**各自保留**。
 
-    煉製（craft.py）會讓同一個人擁有超過一門內功／武學，但每人同時只能練一門（設計文件
-    六.4），所以需要這個動作——在這之前整個 team.py 連散功都沒有，煉出絕學卻裝不上去。
+    合成（fusion.py）、學藝會讓同一個人擁有超過一門內功／武學，但每人同時只能練一門（設計文件
+    六.4），所以需要這個動作——在這之前整個 team.py 連散功都沒有，拿到好功法卻裝不上去。
     熟練度存在 `PlayerState.art_levels`（換下來時寫進去、換上去時取出來），所以換回來不用
     重練；舊存檔沒有這個欄位時，庫裡的功法一律從第一成算起。
     """
     p = state.player
     if art_id not in p.arts:
         return ["你的功法庫裡沒有這一門。"]
-    art = resolve_art(art_id, content, world)
+    art = player_art(state, content, world, art_id)
     if art is None:
         return ["（找不到這門功法的資料。）"]
     member = p.member
@@ -171,10 +216,28 @@ def switch_art(state: GameState, content: Content, world: WorldStateStore, art_i
     return msgs
 
 
+def practice_price(content: Content, level: int) -> int:
+    """練成的價錢：第 level 成升 level+1 成要幾點心得（武學與成長設計 4.2）。只看第幾成、不看品質：
+    升品時成不變，品質越高越貴的話，玩家會先趁下品把成練滿再修練，價錢就被繞過去。"""
+    return content.config.practice_xinde_per_level * level
+
+
+def can_practise(state: GameState, content: Content, kind: str) -> bool:
+    """身上這一欄有武學、還沒第十成、而且付得起下一成的心得（練成花心得，設計 4.2）。
+    機器人要不要練（bot.can_practise）與主畫面的提示（skillview.practice_hint）共用這一個條件。"""
+    member = state.player.member
+    slot, level_slot = ("neigong_id", "neigong_level") if kind == "內功" else ("wugong_id", "wugong_level")
+    level = getattr(member, level_slot)
+    return (
+        getattr(member, slot) is not None and level < MAX_LEVEL
+        and state.player.stats.get("xinde", 0) >= practice_price(content, level)
+    )
+
+
 def practice(
     state: GameState, content: Content, world: WorldStateStore, kind: str, rng: random.Random,
 ) -> list[str]:
-    """鍛鍊：目前已學會的內功或武學加深一成，累積受傷風險（設計文件六.2）。"""
+    """練成：身上這一門加深一成，花心得（設計 4.2），累積受傷風險（設計文件六.2）。"""
     cfg, member = content.config, state.player.member
     slot = "neigong_id" if kind == "內功" else "wugong_id"
     level_slot = slot.replace("_id", "_level")
@@ -182,41 +245,54 @@ def practice(
     if skill_id is None:
         return [f"你還沒學{kind}，沒東西可以練。"]
     level = getattr(member, level_slot)
-    art = resolve_art(skill_id, content, world)
+    art = player_art(state, content, world, skill_id)
     name = art.name if art else skill_id
     if level >= MAX_LEVEL:
         return [f"【{name}】已經練到第十成，練無可練。"]
+    price = practice_price(content, level)
+    xinde = state.player.stats.get("xinde", 0)
+    if xinde < price:
+        return [
+            f"心得不足：【{name}】從第{level}成練到第{level + 1}成要 {price} 點心得，"
+            f"你只有 {xinde} 點，還差 {price - xinde} 點。"
+        ]
+    state.player.stats["xinde"] = xinde - price
     setattr(member, level_slot, level + 1)
-    msgs = [f"【{name}】精進至第{level + 1}成。"]
+    msgs = [f"【{name}】精進至第{level + 1}成。", f"心得 -{price}"]
     if rng.random() < cfg.practice_injury_chance:
-        now, _cap = member_neili(content, member)
+        now, _cap = member_neili(content, member, con_of(state, PLAYER))
         member.injury += cfg.practice_injury_amount
         member.neili = max(0.0, now - cfg.practice_injury_amount)
         msgs.append(f"這一番苦練傷了氣血，氣血 -{cfg.practice_injury_amount:.0f}（累積內傷，需要療傷才能回到滿血）。")
     return msgs
 
 
-def neili_cap(content: Content, level: int) -> float:
+def neili_cap(content: Content, level: int, con: float = BASE_STAT) -> float:
+    """氣血上限：基礎＋每級加成，再乘上根骨的加成（武學與成長設計 6.1：上限 ×（1＋3%×（根骨−5））），
+    四捨五入成整數——每個呼叫端拿到的、狀態列與角色卡寫出來的都是同一個數（根骨 6：329.6 → 330）。
+    con 是根骨，只有玩家本人傳（con_of）；同伴照預設的基準，上限跟以前一樣。"""
     cfg = content.config
-    return cfg.neili_base + level * cfg.neili_per_level
+    return float(round((cfg.neili_base + level * cfg.neili_per_level) * stat_factor(content, con)))
 
 
 MIN_CEILING_RATIO = 0.1  # 內傷再重，能回到的氣血上蓋也不低於上限的一成（氣血設計 §1.3：再低也照樣能出戰）
 
 
-def neili_ceiling(content: Content, member) -> float:
-    """內傷之後氣血自己能回到哪裡（上限 − 內傷，但不低於上限的一成）。"""
-    cap = neili_cap(content, member.level)
+def neili_ceiling(content: Content, member, con: float = BASE_STAT) -> float:
+    """內傷之後氣血自己能回到哪裡（上限 − 內傷，但不低於上限的一成）。con 是根骨，只有玩家本人傳。"""
+    cap = neili_cap(content, member.level, con)
     return max(cap * MIN_CEILING_RATIO, cap - getattr(member, "injury", 0.0))
 
 
-def member_neili(content: Content, member) -> tuple[float, float]:
+def member_neili(content: Content, member, con: float = BASE_STAT) -> tuple[float, float]:
     """回傳（目前氣血, 上限）。member 可以是玩家的 Member 或同伴的 CompanionProgress。
+    con 是根骨，只有玩家本人傳（con_of）。
 
     `neili is None` 代表「回滿了」——有內傷時的「滿」是上蓋（上限 − 內傷），不是上限本身。
+    所以根骨變高時：沒滿血的人目前氣血不變、上限變大；本來就滿的人照舊是滿的（跟升級一樣）。
     """
-    cap = neili_cap(content, member.level)
-    ceiling = neili_ceiling(content, member)
+    cap = neili_cap(content, member.level, con)
+    ceiling = neili_ceiling(content, member, con)
     now = ceiling if member.neili is None else min(member.neili, ceiling)
     return now, cap
 
@@ -267,9 +343,15 @@ def add_team_exp(state: GameState, content: Content, world: WorldStateStore, amo
 
     同伴的等級與經驗存在全服共用的 CompanionProgress（world.update_companion 當場寫回共用世界，
     跟著那一筆交易存檔），所以換頁、重新登入都還在；換季時跟其他同伴進度一起清空。氣血上限
-    （neili_cap：基礎＋每級加成）由等級算出來，升級就跟著變高（氣血設計 A1：等級只買氣血上限）；
+    （neili_cap：基礎＋每級加成，本人再乘上根骨）由等級算出來，升級就跟著變高（氣血設計 A1：等級只買氣血上限）；
     目前氣血不變，不順便回血。"""
-    msgs = add_exp(content, state.player.member, amount, state.player.name)
+    p = state.player
+    before = p.member.level
+    msgs = add_exp(content, p.member, amount, p.name)
+    gained = p.member.level - before
+    if gained > 0:  # 升級給屬性點（武學與成長設計 6.2）：一次升好幾級就給好幾點，只給本人
+        p.stat_points += gained * content.config.stat_points_per_level
+        msgs.append(f"你有 {p.stat_points} 點屬性可以分配（點名號展開）。")
     for companion_id in state.player.team:
         name = content.characters[companion_id].name
         levels: list[str] = []
@@ -278,12 +360,12 @@ def add_team_exp(state: GameState, content: Content, world: WorldStateStore, amo
     return msgs
 
 
-def regen_neili(content: Content, member, fraction: float) -> None:
-    """氣血隨時間回復——只回到上蓋（上限 − 內傷），內傷那部分要療傷才清得掉。"""
+def regen_neili(content: Content, member, fraction: float, con: float = BASE_STAT) -> None:
+    """氣血隨時間回復——只回到上蓋（上限 − 內傷），內傷那部分要療傷才清得掉。con 是根骨，只有玩家本人傳。"""
     if member.neili is None:
         return
-    cap = neili_cap(content, member.level)
-    ceiling = neili_ceiling(content, member)
+    cap = neili_cap(content, member.level, con)
+    ceiling = neili_ceiling(content, member, con)
     member.neili += cap * fraction  # 回復速度照上限算，所以內傷不會讓回復變慢
     if member.neili >= ceiling:
         member.neili = None
@@ -295,9 +377,52 @@ def regen_neili(content: Content, member, fraction: float) -> None:
 def team_conditions(state: GameState, content: Content, world: WorldStateStore) -> list[float]:
     """本隊每個人的氣血狀態係數，順序跟 team_participants 一致（氣血設計 §1.1：帶傷出手較弱）。"""
     return [
-        encounter.condition_of(*member_neili(content, member))
-        for member in team_participants(state, world)
+        encounter.condition_of(*member_neili(content, member, con_of(state, key)))
+        for key, member in zip(team_keys(state), team_participants(state, world), strict=True)
     ]
+
+
+def pairing(content: Content, wugong: MartialArt | None, neigong: MartialArt | None) -> float:
+    """內功與武學的搭配（武學與成長設計 5.1）：同屬性加成、相剋的一對打折、其他不變；少一門就不算。
+    加成與打折兩支都夾在 encounter.BOOST_FLOOR 以上（設定寫錯也一樣），不會讓整個人的威力變成負的。"""
+    if wugong is None or neigong is None:
+        return 1.0
+    cfg = content.config
+    if wugong.attribute == neigong.attribute:
+        return max(encounter.BOOST_FLOOR, 1 + cfg.pairing_bonus)
+    if counters(wugong.attribute, neigong.attribute):
+        return max(encounter.BOOST_FLOOR, 1 - cfg.pairing_penalty)
+    return 1.0
+
+
+def resonance(state: GameState, content: Content, art: MartialArt | None) -> float:
+    """正邪共鳴（設計 7.4）：正派功法吃現在的善名、邪派吃惡名，名聲 ÷ 2 %、最多 resonance_cap；
+    沒有正邪、或用了反的那一派，就是 1（不反噬，名聲是負的也一樣）。"""
+    stat = {"正": "good", "邪": "evil"}.get(art.lean) if art is not None else None
+    if stat is None:
+        return 1.0
+    cfg = content.config
+    return 1 + min(cfg.resonance_cap, max(0.0, state.player.stats.get(stat, 0) * cfg.resonance_per_point))
+
+
+def player_boost(state: GameState, content: Content, world: WorldStateStore) -> encounter.Boost:
+    """玩家本人的加成：臂力管外功、根骨管內功（武學與成長設計 6.1）；整個人再乘上內外搭配與兩門各自的
+    正邪共鳴（5.1、7.4）。搭配至少是 BOOST_FLOOR、共鳴至少是 1，所以乘出來的 factor 不會低於下限。"""
+    stats, member = state.player.stats, state.player.member
+    wugong = player_art(state, content, world, member.wugong_id)
+    neigong = player_art(state, content, world, member.neigong_id)
+    return encounter.Boost(
+        outer=stat_bonus(content, stats.get("str", BASE_STAT)),
+        inner=stat_bonus(content, con_of(state, PLAYER)),
+        factor=pairing(content, wugong, neigong) * resonance(state, content, wugong) * resonance(state, content, neigong),
+    )
+
+
+def team_boosts(state: GameState, content: Content, world: WorldStateStore) -> list[encounter.Boost]:
+    """跟 _fighters 的陣容一一對應：本人有加成；出戰的同伴與部下沒有（計畫二「實作決定」），但一個都不能少——
+    少一個 encounter.team_power 就會報錯，而不是默默漏算部下（F17、計畫二 G1）。"""
+    others = len(state.player.team) + len(follower_units(state, content))
+    return [player_boost(state, content, world)] + [encounter.Boost() for _ in range(others)]
 
 
 def take_encounter_toll(
@@ -311,16 +436,22 @@ def take_encounter_toll(
 
     wild：探索時撞上的野怪（探索三選一設計 4.2），扣的量再乘上 `wild_neili_loss_factor`；
     內傷是扣掉的量的固定幾成，所以照同一個比例變少。遊歷與劇情戰不帶這個旗標，一點都不變。
+
+    玩家本人的身法讓一場少掉一點氣血（閃得開）、根骨讓其中變成內傷的少一點（武學與成長設計 6.1）；
+    同伴照舊，不吃本人的屬性。
     """
     cfg = content.config
     fraction = cfg.encounter_neili_loss.get(tier, 0.0) * (cfg.wild_neili_loss_factor if wild else 1.0)
     if fraction <= 0:
         return []
+    stats = state.player.stats
     msgs = []
     for key in team_keys(state):
         if key == PLAYER:
-            member = state.player.member
-            lost, hurt = _apply_toll(content, member, fraction)
+            lost, hurt = _apply_toll(
+                content, state.player.member, fraction,
+                agi=stats.get("agi", BASE_STAT), con=con_of(state, PLAYER),
+            )
             msgs.append(f"氣血 -{lost:.0f}")  # 照既有慣例寫變化量（跟「銀兩 -5」「心得 +12」同一串）
             if hurt >= 1:
                 msgs.append(f"內傷 +{hurt:.0f}")
@@ -329,14 +460,17 @@ def take_encounter_toll(
     return msgs
 
 
-def _apply_toll(content: Content, member, fraction: float) -> tuple[float, float]:
-    """扣一場的氣血，回傳（實際掉了多少氣血, 其中變成內傷的量）。"""
-    now, cap = member_neili(content, member)
-    loss = cap * fraction
-    hurt = loss * content.config.injury_share
+def _apply_toll(
+    content: Content, member, fraction: float, agi: float = BASE_STAT, con: float = BASE_STAT,
+) -> tuple[float, float]:
+    """扣一場的氣血，回傳（實際掉了多少氣血, 其中變成內傷的量）。身法減一場的損耗、根骨減其中變成內傷的
+    比例，各 ×（1−3%×（屬性−5）），夾在 0 以上；氣血上限也照根骨算。同伴不傳 agi、con，跟以前一樣。"""
+    now, cap = member_neili(content, member, con)
+    loss = cap * fraction * max(0.0, 1 - stat_bonus(content, agi))
+    hurt = loss * content.config.injury_share * max(0.0, 1 - stat_bonus(content, con))
     member.injury += hurt
     member.neili = max(0.0, now - loss)
-    after, _ = member_neili(content, member)
+    after, _ = member_neili(content, member, con)
     return now - after, hurt
 
 
@@ -347,9 +481,7 @@ def fight(
     """difficulty 給了就取代隊伍的難度（挑戰大勢人物本人：難度跟著聲威走，見 figures.difficulty）。"""
     squad = content.squads[squad_id]
     arts = team_arts(state, content, world)
-    power = encounter.team_power(
-        team_participants(state, world), arts, squad.attribute, team_conditions(state, content, world),
-    )
+    power = encounter.team_power(*_with_attribute(_fighters(state, content, world), arts, squad.attribute))
     return encounter.resolve_encounter(power, squad.difficulty if difficulty is None else difficulty, rng)
 
 
@@ -381,7 +513,13 @@ def estimate(
     if difficulty is not None:
         squad = squad.model_copy(update={"difficulty": difficulty})
     arts = team_arts(state, content, world)
-    power = encounter.team_power(
-        team_participants(state, world), arts, squad.attribute, team_conditions(state, content, world),
-    )
+    power = encounter.team_power(*_with_attribute(_fighters(state, content, world), arts, squad.attribute))
     return odds_word(power, squad)
+
+
+def _with_attribute(
+    fighters: tuple[list, list[float], list[encounter.Boost]], arts: dict[str, MartialArt], attribute: str | None,
+) -> tuple:
+    """encounter.team_power 的參數順序：陣容、武學、對手屬性、氣血係數、加成。"""
+    members, conditions, boosts = fighters
+    return members, arts, attribute, conditions, boosts

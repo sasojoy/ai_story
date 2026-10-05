@@ -112,9 +112,21 @@ class PlayerState(BaseModel):
     # ── 煉製素材（無限煉製第一刀，見 tianxia/materials.py）──
     materials: dict[str, int] = Field(default_factory=dict)  # 素材 id -> 數量；舊存檔沒這欄就是空背包
     arts: list[str] = Field(default_factory=list)  # 功法庫：煉出來但沒配上身的功法 id
-    art_levels: dict[str, int] = Field(default_factory=dict)  # 每門學過的功法各自的熟練度；改練時存進來／取出來
+    art_levels: dict[str, int] = Field(default_factory=dict)  # 每門學過的功法各自的「成」；改練時存進來／取出來
+    # ── 武學與成長（設計第三、四節）──
+    insights: list[str] = Field(default_factory=list)  # 悟得的意境 id，照悟得的先後
+    stat_points: int = 0  # 升級得到、還沒分配的屬性點（武學與成長設計 6.2）
+    art_quality: dict[str, str] = Field(default_factory=dict)  # 功法 id → 自己那一份的品質（沒記＝全服登記的品質）
+    art_mastery: dict[str, int] = Field(default_factory=dict)  # 功法 id → 修練往下一品失敗了幾次（熟練度）
+    naming: str | None = None  # 第一個修到絕學、等著取正式名字的功法 id
+    legend_items: int = 0  # 破境丹（Config.legend_item_name）的數量：探索撿到，玩家在修練頁勾了、衝絕學那一次才服一枚；角色每季重來
 
     seen_events: set[str] = Field(default_factory=set)
+    # （舊的 event_seen 看過次數已拿掉：joy #16 的輪替取代了 FB-058 的 0.5^次數 遞減。舊存檔裡還有這一欄也讀得進來——
+    # PlayerState 沒禁止多餘的欄位，讀的時候直接略過，下次存檔就不見了）
+    # 防重複（events.pick_event 照它抽、events.note_round 在 Game._present 真的端出事件時才記）：池子（「地點:行動」或「*:行動」）→ 這一輪看過的事件 id，照看到的先後；輪完清空。
+    # 舊存檔沒這欄就是每個池子都還沒看過；角色每季重來，所以每季自然清空
+    event_rounds: dict[str, list[str]] = Field(default_factory=dict)
     mark_days: dict[str, int] = Field(default_factory=dict)  # 地方痕跡：這個人上次替這個痕跡算進一次是第幾天（一天只算一次；角色每季重來，跟著清空）
     anonymous: bool = False
     busy_until: float | None = None  # 閉關結束的遊戲時間
@@ -130,6 +142,9 @@ class PlayerState(BaseModel):
     # [第幾個遊戲日, 當天已拿幾次]，跟 talks_today 同一種寫法；記的是前幾天就當沒拿過
     road_rewards_today: dict[str, list[int]] = Field(default_factory=dict)
     tutorial_step: int = 0  # 等於引導步數時代表引導結束
+    guide_done: list[str] = Field(default_factory=list)  # 最近一次行動完成引導的那幾行（✔ 與獎勵），對話框顯示；下一次行動清掉
+    guide_skipped: bool = False  # 按過「略過新手引導」：之後（含換季、第一季多出的步驟）都不畫對話框；步驟照樣記著
+    guide_outro: bool = False  # 引導剛走完、結語還沒按「知道了」（對話框顯示結語）；略過的、早就做完的是 False
     visited: set[str] = Field(default_factory=set)  # 去過的地點
     fortune: bool = False  # 本季的新立門戶福緣已經發生（或已經改送賀禮）
 
@@ -330,6 +345,9 @@ class JournalEntry(BaseModel):
     lines: list[str] = Field(default_factory=list)  # 敘事文字
     changes: list[str] = Field(default_factory=list)  # 數值變化，例如「銀兩 -5」「心得 +12」
     battle_id: int | None = None  # 這次行動打的那一場（BattleRecord.id）
+    # 這次行動順便完成的新手引導（「✔ 引導完成」、獎勵、說書人的下一步）：江湖紀錄的列表照舊畫，「剛剛」卡片不畫——
+    # 說書人的話改在行動列上方的對話框（引導重做設計 8.1）
+    guide: list[str] = Field(default_factory=list)
 
 
 class GameState(BaseModel):
@@ -349,7 +367,10 @@ class GameState(BaseModel):
 def new_game_state(content: Content, name: str) -> GameState:
     """同伴全服唯一（設計文件四.4），開局不再自動塞給玩家任何一位——每個新玩家都是孤身
     一人起步，招募是要在遊戲裡真的去搶的行動，不是開局贈品（不然「唯一」第一時間就矛盾：
-    每個新玩家都自動擁有同一位歷史人物是不可能的）。"""
+    每個新玩家都自動擁有同一位歷史人物是不可能的）。
+
+    開局送 `Config.starter_skills` 的兩門基礎武學（第一成），新角色與每季重來的角色都一樣
+    （武學與成長設計 3.3；自創武學已經作廢，沒有空欄位要自己取名）。"""
     from .rules import seed_trends  # rules → state：在函式裡 import，避免循環
 
     cfg = content.config
@@ -361,6 +382,9 @@ def new_game_state(content: Content, name: str) -> GameState:
         tutorial_step=0,
         member=Member(),
     )
+    for skill_id in cfg.starter_skills:  # 開局送的基礎內功、基礎武學（武學與成長設計 3.3）
+        slot = "neigong_id" if content.skills[skill_id].kind == "內功" else "wugong_id"
+        setattr(player.member, slot, skill_id)
     world = WorldState(storyline=content.scenario.storylines[0].id)
     seed_trends(world, content)
     return GameState(player=player, world=world)

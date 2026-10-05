@@ -1,5 +1,5 @@
 [
-  {"id": "town", "name": "小鎮", "description": "一個小鎮。", "connections": ["lake"], "tags": ["城鎮"], "x": 100, "y": 100},
-  {"id": "lake", "name": "湖邊", "description": "湖水茫茫。", "connections": ["town", {"to": "cave", "road": "山路"}], "tags": ["湖畔"], "danger": 2, "enemies": ["thug"], "train_trend": {"kou": -1}, "x": 200, "y": 100},
-  {"id": "cave", "name": "寶洞", "description": "幽深的山洞。", "connections": [{"to": "lake", "road": "山路"}], "unlock_flag": "cave_open", "danger": 3, "x": 300, "y": 100}
+  {"id": "town", "name": "小鎮", "description": "一個小鎮。", "connections": ["lake"], "tags": ["城鎮"], "insights": ["huo"], "x": 100, "y": 100},
+  {"id": "lake", "name": "湖邊", "description": "湖水茫茫。", "connections": ["town", {"to": "cave", "road": "山路"}], "tags": ["湖畔"], "insights": ["shui", "feng"], "danger": 2, "enemies": ["thug"], "train_trend": {"kou": -1}, "x": 200, "y": 100},
+  {"id": "cave", "name": "寶洞", "description": "幽深的山洞。", "connections": [{"to": "lake", "road": "山路"}], "unlock_flag": "cave_open", "insights": ["shan"], "danger": 3, "x": 300, "y": 100}
 ]
