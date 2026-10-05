@@ -19,7 +19,7 @@ from .companion_agent import DIALOGUE_TAGS
 from .materials import TIER_NAMES
 from .models import (
     FRONT_KEY, ROADS, STATS, BattleDef, CharacterDef, Condition, Config, Content, CraftNames, Effect, Event, FigureDef,
-    FollowerDef, Foreshadows, Location, OrdersContent, PromotionDef,
+    FollowerDef, Foreshadows, InsightDef, Location, OrdersContent, PromotionDef,
     MapLayout, Material, RoadSight, Scenario, Sect, SimRumor, SkillDef, Squad, TimetableEvent, Tutorial,
 )
 from .zh import to_traditional
@@ -60,6 +60,7 @@ def load_content(root: Path, profile: str | None = None) -> Content:
         scenario=Scenario(**_read(root / "scenario.json")),
         locations=_index(Location, _read(root / "locations.json")),
         skills=_index(SkillDef, _read(root / "skills.json")),
+        insights=_index(InsightDef, _read(root / "insights.json")),
         materials=_index(Material, _read(root / "materials.json")),
         craft_names=CraftNames(**_read(root / "craft_names.json")),
         banned_names=_read(root / "banned_names.json"),
@@ -1107,6 +1108,33 @@ def validate(c: Content) -> None:
         known(where, step.done_when.locations, c.locations, "地點")
         check_condition(where, step.done_when.condition)
         check_effect(where, step.reward)
+
+    # ── 意境與基礎武學（武學與成長設計附錄 A～C）──
+    for insight in c.insights.values():
+        need(insight.grant is None or insight.lean != "無", f"意境 {insight.id}：靠名聲悟得的意境要有正邪")
+    for loc in c.locations.values():
+        known(f"地點 {loc.id}", loc.insights, c.insights, "意境")
+        for insight_id in loc.insights:
+            if insight_id in c.insights and c.insights[insight_id].grant is not None:
+                need(False, f"地點 {loc.id}：{c.insights[insight_id].name}只能靠名聲悟得，不能放在地點上")
+    for skill in c.skills.values():
+        if skill.learn is None:
+            continue
+        where = f"武學 {skill.id}"
+        need(skill.quality != "絕學", f"{where}：絕學（本命武學）不能在各地學")
+        known(where, [skill.learn.at], c.locations, "地點")
+        if skill.learn.faction:
+            known(where, [skill.learn.faction], faction_ids, "陣營")
+        if skill.learn.sect:
+            known(where, [skill.learn.sect], c.sects, "門派")
+    starters = c.config.starter_skills
+    known("config.starter_skills", starters, c.skills, "武學")
+    if starters and all(s in c.skills for s in starters):
+        need(
+            sorted(c.skills[s].kind for s in starters) == ["內功", "武學"],
+            "config.starter_skills 要剛好一門內功、一門武學",
+        )
+        need(all(c.skills[s].quality == "下品" for s in starters), "config.starter_skills 要是下品的基礎武學")
 
     for ch in c.characters.values():
         where = f"人物 {ch.id}"

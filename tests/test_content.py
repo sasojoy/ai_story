@@ -1,5 +1,6 @@
 import json
 import shutil
+from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
@@ -10,6 +11,8 @@ from tianxia.models import (
     BattleAct, BattleActionEffect, BattleDef, BattleFaction, BattleOption, BattleOutcome, Condition, Config, FactionDef,
     Threshold, Trend,
 )
+
+ROOT = Path(__file__).resolve().parent.parent
 
 
 def copy_fixture(tmp_path):
@@ -1271,3 +1274,48 @@ def test_promotion_handoff_needs_its_scene_and_summons(tmp_path):
     edit_json(root / "promotions.json", lambda d: d[0].update(summons_handoff=None))
     with pytest.raises(ContentError, match="接手"):
         load_content(root)
+
+
+# ── 意境與基礎武學（武學與成長設計附錄 A～C）─────────────────
+
+
+def test_insights_are_loaded(content):
+    assert content.insights["feng"].attribute == "快"
+    assert content.insights["haoran"].grant.stat == "good"
+
+
+def test_a_location_insight_must_exist(content):
+    content.locations["lake"].insights.append("nope")
+    with pytest.raises(ContentError, match="未知的意境 nope"):
+        validate(content)
+
+
+def test_a_location_cannot_hand_out_a_name_earned_insight(content):
+    content.locations["lake"].insights.append("haoran")
+    with pytest.raises(ContentError, match="浩然.*只能靠名聲"):
+        validate(content)
+
+
+def test_a_basic_art_must_be_taught_somewhere_that_exists(content):
+    content.skills["lake_kick"].learn.at = "nowhere"
+    with pytest.raises(ContentError, match="未知的地點 nowhere"):
+        validate(content)
+
+
+def test_a_historical_art_is_not_taught(content):
+    content.skills["fist"].learn = content.skills["lake_kick"].learn
+    with pytest.raises(ContentError, match="絕學.*不能在各地學"):
+        validate(content)
+
+
+def test_starter_skills_are_one_inner_and_one_outer_art(content):
+    content.config.starter_skills = ["basic_fist", "lake_kick"]
+    with pytest.raises(ContentError, match="starter_skills"):
+        validate(content)
+
+
+def test_real_content_has_seventeen_basic_arts_and_every_location_an_insight():
+    real = load_content(ROOT / "content")
+    basics = [s for s in real.skills.values() if s.quality == "下品"]
+    assert len(basics) == 17
+    assert all(loc.insights for loc in real.locations.values())

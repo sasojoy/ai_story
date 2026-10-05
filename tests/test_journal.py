@@ -17,7 +17,7 @@ def latest(game):
 
 
 def _explore_only(game, branch):
-    """探索三選一：讓探索一定走某一支（"event"／"wild"／"material"）。這些測試看的是事件或戰鬥寫成的紀錄，
+    """探索三選一：讓探索一定走某一支（"event"／"wild"／"insight"）。這些測試看的是事件或戰鬥寫成的紀錄，
     不是探索抽到哪一支；不指定的話就要靠亂數剛好落在那一支的比例裡。"""
     game.content.config.explore_mix = [ExploreMix(kind="wild", tags=[], weights={branch: 1})]
 
@@ -92,7 +92,7 @@ def test_explore_that_finds_nothing(game):
     walk_to(game, "lake")
     game.state.player.seen_events.add("scroll")  # 湖邊唯一的探索事件只出現一次
     game.content.locations["lake"].enemies = []  # 探索三選一：三支都做不了才是一無所獲
-    game.content.config.explore_mix = [ExploreMix(kind="wild", tags=[], weights={"material": 0, "wild": 35, "event": 25})]
+    game.content.config.explore_mix = [ExploreMix(kind="wild", tags=[], weights={"insight": 0, "wild": 35, "event": 25})]
     game.choose("act:explore")
     entry = latest(game)
     assert (entry.title, entry.tag, entry.lines) == ("探索湖邊", "", ["你四處走走，一無所獲。"])

@@ -1,7 +1,7 @@
 """探索三選一（FB-013，docs/superpowers/specs/2026-10-03-探索三選一-design.md）。
 
 按「探索」：先看這裡有沒有還能遇上的奇遇（一次性或奇遇事件），有的話滾 rare_explore_chance，中了就是它；
-沒中就照地點類型的比例抽「素材／野怪／事件」三支之一，抽中的那支做不了就把它的比例分給另外兩支。
+沒中就照地點類型的比例抽「悟意境／野怪／事件」三支之一，抽中的那支做不了就把它的比例分給另外兩支。
 """
 from __future__ import annotations
 
@@ -53,7 +53,7 @@ def _explore_many(game, n=N):
         elif s.battle_seq != battles:
             counts["wild"] += 1
         elif sum(s.player.materials.values()) > bag:
-            counts["material"] += 1
+            counts["insight"] += 1
         elif s.player.stats.get("xinde", 0) != xinde:
             counts["drill"] += 1
         else:
@@ -73,11 +73,11 @@ def _factions(content):
 
 
 @pytest.mark.parametrize("tags, expected", [
-    (["營寨"], {"material": 15, "wild": 35, "event": 50}),
-    (["城池", "營寨"], {"material": 15, "wild": 35, "event": 50}),  # 廣宗：營寨優先
-    (["城鎮"], {"material": 15, "wild": 0, "event": 85}),  # 城裡探索不會被打，就算這裡有敵人
-    (["湖畔"], {"material": 40, "wild": 35, "event": 25}),
-    (["官道", "野外"], {"material": 40, "wild": 35, "event": 25}),
+    (["營寨"], {"insight": 15, "wild": 35, "event": 50}),
+    (["城池", "營寨"], {"insight": 15, "wild": 35, "event": 50}),  # 廣宗：營寨優先
+    (["城鎮"], {"insight": 15, "wild": 0, "event": 85}),  # 城裡探索不會被打，就算這裡有敵人
+    (["湖畔"], {"insight": 40, "wild": 35, "event": 25}),
+    (["官道", "野外"], {"insight": 40, "wild": 35, "event": 25}),
 ])
 def test_each_kind_of_place_splits_exploring_by_its_own_ratio(game, tags, expected):
     game.rng = random.Random(11)
@@ -93,7 +93,7 @@ def test_no_foes_here_gives_the_wild_share_to_the_other_two(game):
     _lake(game, enemies=())
     counts = _explore_many(game)
     assert counts["wild"] == 0 and counts["nothing"] == 0
-    assert counts["material"] / N == pytest.approx(40 / 65, abs=0.035)
+    assert counts["insight"] / N == pytest.approx(40 / 65, abs=0.035)
     assert counts["event"] / N == pytest.approx(25 / 65, abs=0.035)
 
 
@@ -106,7 +106,7 @@ def test_only_your_own_side_here_counts_as_no_foes(content, game):
     _lake(game)
     counts = _explore_many(game)
     assert counts["wild"] == 0 and counts["drill"] == 0 and counts["nothing"] == 0
-    assert counts["material"] / N == pytest.approx(40 / 65, abs=0.035)
+    assert counts["insight"] / N == pytest.approx(40 / 65, abs=0.035)
     assert game.state.world.trends["kou"] == 30  # 沒有操練，大勢也沒動
 
 
@@ -115,13 +115,13 @@ def test_no_repeatable_event_here_gives_the_event_share_to_the_other_two(game):
     _lake(game, with_event=False)  # 湖邊只剩看過的殘卷，可重複的池子是空的
     counts = _explore_many(game)
     assert counts["event"] == 0 and counts["nothing"] == 0
-    assert counts["material"] / N == pytest.approx(40 / 75, abs=0.035)
+    assert counts["insight"] / N == pytest.approx(40 / 75, abs=0.035)
     assert counts["wild"] / N == pytest.approx(35 / 75, abs=0.035)
 
 
 def test_nothing_happens_only_when_no_branch_can(game):
     _lake(game, enemies=(), with_event=False)
-    _only(game, material=0, wild=35, event=25)
+    _only(game, insight=0, wild=35, event=25)
     assert _explore_many(game, 20) == Counter(nothing=20)
 
 
@@ -143,7 +143,7 @@ def test_a_rare_event_never_comes_from_the_event_branch(game):
     game.state.player.seen_events.discard("scroll")
     game.content.events["scroll"].once = False  # 可以重複的奇遇也一樣
     game.content.config.rare_explore_chance = 0.0
-    _only(game, material=0, wild=0, event=1)
+    _only(game, insight=0, wild=0, event=1)
     counts = _explore_many(game, 200)
     assert counts["event:drunk"] == 200 and counts["event:scroll"] == 0
 
@@ -180,7 +180,7 @@ def test_a_seen_once_event_never_comes_back(game):
 def test_the_event_branch_still_reads_place_marks(game):
     """地方痕跡的後果事件是可重複事件、帶 marks_min：痕跡不夠時事件那一支抽不到它，夠了才抽得到。"""
     _lake(game)
-    _only(game, material=0, wild=0, event=1)
+    _only(game, insight=0, wild=0, event=1)
     game.content.events["drunk"].condition = Condition(marks_min={"lake:棚屋": 2})
     game.content.locations["lake"].enemies = []
     assert _explore_many(game, 20) == Counter(nothing=20)  # 唯一的可重複事件被痕跡擋住：事件那一支做不了
@@ -191,7 +191,7 @@ def test_the_event_branch_still_reads_place_marks(game):
 
 def test_a_free_text_event_from_the_event_branch_offers_its_free_answer(game):
     _lake(game)
-    _only(game, material=0, wild=0, event=1)
+    _only(game, insight=0, wild=0, event=1)
     game.content.events["drunk"].free_text = FreeTextChoice(prompt="自己想辦法……", stat="str")
     game.choose("act:explore")
     assert game.state.pending_event == "drunk"
@@ -204,7 +204,7 @@ def test_a_free_text_event_from_the_event_branch_offers_its_free_answer(game):
 def test_the_weakest_foe_jumps_out(content, game):
     rules.learn_skill(game.state, content, "fist")
     _lake(game, enemies=("boss", "thug"))
-    _only(game, material=0, wild=1, event=0)
+    _only(game, insight=0, wild=1, event=0)
     game.rng = random.Random(17)
     for _ in range(5):
         msgs = game._explore()
@@ -217,7 +217,7 @@ def test_your_own_side_never_counts_as_the_weakest(content, game):
     content.squads["thug"].faction = "huang"
     game.state.player.faction = "huang"
     _lake(game, enemies=("boss", "thug"))
-    _only(game, material=0, wild=1, event=0)
+    _only(game, insight=0, wild=1, event=0)
     game._explore()
     assert game.state.battles[0].opponent == "翻江龍"
 
@@ -225,7 +225,7 @@ def test_your_own_side_never_counts_as_the_weakest(content, game):
 def test_a_tie_goes_to_the_first_foe_listed_here(content, game):
     content.squads["boss"].difficulty = content.squads["thug"].difficulty
     _lake(game, enemies=("boss", "thug"))
-    _only(game, material=0, wild=1, event=0)
+    _only(game, insight=0, wild=1, event=0)
     game._explore()
     assert game.state.battles[0].opponent == "翻江龍"
 
@@ -233,7 +233,7 @@ def test_a_tie_goes_to_the_first_foe_listed_here(content, game):
 def test_a_wild_fight_costs_half_of_a_training_fight(content, game):
     """同樣落敗：遊歷扣上限的三成、兩成變內傷；探索撞上的野怪只扣一半。"""
     _lake(game, with_event=False)
-    _only(game, material=0, wild=1, event=0)
+    _only(game, insight=0, wild=1, event=0)
     game.rng = FixedRandom(0.0)  # 沒有武學、運氣最差：兩場都是落敗
     member = game.state.player.member
     now, cap = team.member_neili(content, member)
@@ -250,7 +250,7 @@ def test_a_wild_fight_costs_half_of_a_training_fight(content, game):
 
 def test_a_wild_loss_still_costs_a_tenth_of_the_silver(content, game):
     _lake(game, enemies=("boss",), with_event=False)
-    _only(game, material=0, wild=1, event=0)
+    _only(game, insight=0, wild=1, event=0)
     game._explore()
     record = game.state.battles[0]
     assert record.tier == "落敗" and record.silver == -5
@@ -263,7 +263,7 @@ def test_a_wild_win_pays_like_training_but_leaves_the_trend_and_no_post_fight_ev
     content.config.train_event_chance = 1.0
     content.config.train_stat_chance = 1.0
     _lake(game, with_event=False)
-    _only(game, material=0, wild=1, event=0)
+    _only(game, insight=0, wild=1, event=0)
     game.rng = FixedRandom(0.99)
     msgs = game.choose("act:explore")
     assert len(game.state.battles) == 1  # 戰報照常有一筆
@@ -283,7 +283,7 @@ def test_a_wild_fight_is_recorded_as_wild_and_shown_as_a_wild_encounter(content,
 
     rules.learn_skill(game.state, content, "fist")
     _lake(game, with_event=False)
-    _only(game, material=0, wild=1, event=0)
+    _only(game, insight=0, wild=1, event=0)
     game.rng = FixedRandom(0.99)
     game.choose("act:explore")
     record = game.state.battles[0]
@@ -299,7 +299,7 @@ def test_a_wild_fight_is_recorded_as_wild_and_shown_as_a_wild_encounter(content,
 def test_the_journal_files_it_under_exploring(content, game):
     rules.learn_skill(game.state, content, "fist")
     _lake(game, with_event=False)
-    _only(game, material=0, wild=1, event=0)
+    _only(game, insight=0, wild=1, event=0)
     game.rng = FixedRandom(0.99)
     game.choose("act:explore")
     entry = game.state.journal[0]
@@ -312,7 +312,7 @@ def test_the_journal_files_it_under_exploring(content, game):
 
 def test_the_material_branch_always_gives_a_material(content, game):
     content.locations["town"].materials = ["gang_3"]
-    _only(game, material=1, wild=0, event=0)
+    _only(game, insight=1, wild=0, event=0)
     game.rng = FixedRandom(0.99)
     for n in range(1, 6):
         msgs = game._explore()

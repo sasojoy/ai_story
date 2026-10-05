@@ -437,10 +437,13 @@ def test_socialize_at_the_summons_place_prepares_no_dialogue(on):
 
 def test_follower_arts_are_upper_grade(real):
     """企劃者 2026-10-05 選 (b)：六門部下武學是上品（skills.json 的 quality），每名第 3 成約 37、兩名約 75；
-    其他本命武學照舊是絕學。"""
+    其他本命武學照舊是絕學；基礎武學（武學與成長附錄 B）是下品。"""
     follower_arts = {f.wugong for f in real.followers.values()}
-    for skill_id, skill in real.skills.items():
-        assert team.resolve_art(skill_id, real, None).quality == ("上品" if skill_id in follower_arts else "絕學"), skill_id
+    basic_arts = {skill_id for skill_id, skill in real.skills.items() if skill.quality == "下品"}
+    assert not basic_arts & follower_arts
+    for skill_id in real.skills:
+        expected = "上品" if skill_id in follower_arts else "下品" if skill_id in basic_arts else "絕學"
+        assert team.resolve_art(skill_id, real, None).quality == expected, skill_id
     art = team.resolve_art("xingwu_qiang", real, None)
     power = encounter.member_power(Member(wugong_id="xingwu_qiang", wugong_level=3), {"xingwu_qiang": art})
     assert 35 <= power <= 40

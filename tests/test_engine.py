@@ -2717,9 +2717,9 @@ def test_exploring_a_quiet_place_can_still_turn_up_a_material(game):
 
 
 def test_exploring_and_finding_nothing_still_says_so(game):
-    """探索三選一：三支都做不了才是一無所獲——山洞沒有敵人、沒有事件，再把素材那一支的比例設成 0。"""
+    """探索三選一：三支都做不了才是一無所獲——山洞沒有敵人、沒有事件，再把悟意境那一支的比例設成 0。"""
     game.state.player.location = "cave"
-    game.content.config.explore_mix = [ExploreMix(kind="wild", tags=[], weights={"material": 0, "wild": 35, "event": 25})]
+    game.content.config.explore_mix = [ExploreMix(kind="wild", tags=[], weights={"insight": 0, "wild": 35, "event": 25})]
     game.rng = FixedRandom(0.99)
     msgs = game.choose("act:explore")
     assert msgs[0] == "你四處走走，一無所獲。"

@@ -1,0 +1,52 @@
+[
+  {
+    "id": "feng",
+    "name": "風",
+    "attribute": "快",
+    "lean": "無",
+    "desc": "來去無蹤，一觸即走。"
+  },
+  {
+    "id": "huo",
+    "name": "火",
+    "attribute": "剛",
+    "lean": "無",
+    "desc": "熾烈逼人，有進無退。"
+  },
+  {
+    "id": "shui",
+    "name": "水",
+    "attribute": "柔",
+    "lean": "無",
+    "desc": "隨形就勢，以柔化剛。"
+  },
+  {
+    "id": "shan",
+    "name": "山",
+    "attribute": "慢",
+    "lean": "無",
+    "desc": "沉穩厚重，不動如山。"
+  },
+  {
+    "id": "haoran",
+    "name": "浩然",
+    "attribute": "陽",
+    "lean": "正",
+    "grant": {
+      "stat": "good",
+      "at": 15
+    },
+    "desc": "胸中一股正氣，坦蕩無畏。"
+  },
+  {
+    "id": "xuesha",
+    "name": "血煞",
+    "attribute": "陰",
+    "lean": "邪",
+    "grant": {
+      "stat": "evil",
+      "at": 15
+    },
+    "desc": "殺氣纏身，出手不留餘地。"
+  }
+]
