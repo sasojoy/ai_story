@@ -77,12 +77,17 @@ def _messages(request: FightRequest, swing: int) -> list[dict[str, str]]:
 
 
 SENTENCE_END = re.compile(r"[。！？][」』”）]*")  # 一句話的結尾，連同緊跟著的收尾引號、括號
+# 這一段話會被伺服器的 Markdown 轉成 HTML（接在「**過程**」下一行）：這些 ASCII 字元會變成連結、圖片、程式碼區塊、引言、
+# 強調、表格，中文敘事一個都用不到（中文標點、全形括號與引號不在內）。模型的字是不可信的輸入（Final review Minor 1）
+MARKDOWN_SYNTAX = re.compile(r"[`*_#>\[\]|~<\\]")
+RULE_RUN = re.compile(r"^[-+=]+")  # 整段只有 --- 或 === 會變成上一行「**過程**」的標題底線；開頭的 -、+ 一併拿掉
 
 
 def _account(text) -> str:
-    """一版過程：轉成繁體（模型常夾簡體字）、拿掉換行與空白收成一段（卡片上「過程」底下就是一段話）、最多 TEXT_MAX 個字。
+    """一版過程：轉成繁體（模型常夾簡體字）、拿掉換行與空白收成一段（卡片上「過程」底下就是一段話）、拿掉 Markdown 語法字元
+    （一律是純文字一段，不會冒出連結、圖片、程式碼區塊）、最多 TEXT_MAX 個字。
     太長就退回 TEXT_MAX 以內最後一句話的結尾（「。！？」，後面緊跟的收尾引號一起留），不從句子中間斷；沒有句號才硬切。"""
-    text = zh.to_traditional("".join(str(text or "").split()))
+    text = RULE_RUN.sub("", MARKDOWN_SYNTAX.sub("", zh.to_traditional("".join(str(text or "").split()))))
     if len(text) <= TEXT_MAX:
         return text
     cut = text[:TEXT_MAX]

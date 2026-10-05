@@ -1025,6 +1025,32 @@ def test_the_big_fight_account_is_folded_behind_the_same_button():
     assert not re.search(r"\.tale\b", css + js)  # 沒有別的叫 tale 的 class
 
 
+def test_a_hostile_big_fight_account_renders_as_one_plain_paragraph_on_the_card():
+    """模型寫的過程走伺服器的 Markdown 轉換：連結、圖片、程式碼區塊、引言都不能出現，「結果」「獲得與損失」不能被吞進
+    程式碼區塊，網頁認的 TALE_MARK 要對得上（Final review Minor 1）。"""
+    from tianxia import battlelog, fight_llm
+    from tianxia.state import BattleRecord, Fighter
+
+    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    mark = re.search(r'const TALE_MARK = "([^"]*)";', js).group(1).replace("\\n", "\n")
+    hostile = [
+        "```\n你一拳打出，對方連退三步。", "![圖](http://example.com/a.png)你出手如電。", "> 你退了一步，咬牙再上。",
+        "[點我](http://example.com/x)你收劍而立。", "---", "你**橫掃**一腿。",
+    ]
+    for text in hostile:
+        record = BattleRecord(
+            id=1, time=0, location="黃巾別部營寨", kind="event", opponent="波才", ours=[Fighter(name="沈浪", level=1)],
+            tier="大勝", our_power=50, difficulty=150, notes=["波才抱拳認輸。"], changes=["銀兩 +5"],
+            narration=fight_llm._account(text),  # 整段只有 --- 的話整段拿光：那就沒有過程這一段（卡片不用回合清單頂替）
+        )
+        html = server.md(battlelog.card_text(record))
+        for tag in ("<img", "<a ", "<pre", "<code", "<blockquote", "<h1", "<h2", "<hr", "<ul", "<ol", "<em"):
+            assert tag not in html, (text, tag, html)
+        assert (mark in html) == bool(record.narration), (text, html)
+        for heading in ("結果", "獲得與損失"):
+            assert f"<p><strong>{heading}</strong>" in html, (text, html)  # 沒被吞進任何區塊
+
+
 def test_the_three_art_buttons_stay_on_one_line_at_phone_width():
     """修練／改練這一門／熔煉在 375px 手機寬度：頁邊 16、清單邊框 1、卡內邊 14（兩側）、三顆之間兩個 8px 的縫，一排可用 375-32-2-28-16=297px。
     原本三顆等寬各 99px，扣掉邊框 2 與內距 28，「改練這一門」（5 字 × 15px = 75px）只剩 69px 放不下而折行。

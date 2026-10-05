@@ -60,6 +60,35 @@ def test_a_long_account_is_cut_at_the_end_of_a_sentence():
     assert (short.winning, short.losing) == ("一刀劈下", "退")  # 不長就不動（沒有句號也照留）
 
 
+MARKDOWN_ACTIVE = "`*_#>[]|~<\\"  # 一段話裡會被 Markdown 當成語法的 ASCII 字元（中文敘事用不到）
+
+
+def test_markdown_syntax_in_an_account_is_stripped_so_it_stays_one_plain_paragraph():
+    """模型的字是不可信的輸入，卡片用 Markdown 轉成 HTML：連結、圖片會被畫出來（圖片是瀏覽器去抓外面的網址）、
+    開頭的 ``` 會把後面的「結果」「獲得與損失」吞進程式碼區塊、開頭的 > 變引言（Final review Minor 1）。
+    語法字元一律拿掉，只剩一段話；中文標點、全形括號與引號照留。"""
+    hostile = [
+        "```\n你一拳打出，對方連退三步。", "![圖](http://e.com/a.png)你出手如電。", "> 你退了一步，咬牙再上。",
+        "[點我](http://e.com)你收劍而立。", "# 標題\n你搶上一步。", "你**橫掃**一腿，__對方__悶哼。", "| a | b |\n|---|---|\n你攻出一掌。",
+        "~~~\n你翻身避開。", "<img src=x onerror=1>你側身一閃。", "\\[你\\]抱拳。",
+    ]
+    for text in hostile:
+        got = fight_llm.judge(_client(fight_llm.Judgment(winning=text, losing=text)), REQUEST, 15)
+        for account in (got.winning, got.losing):
+            assert not any(ch in account for ch in MARKDOWN_ACTIVE) and account, (text, account)
+    plain = "他喝道：「再來！」你冷笑一聲（不屑），拔劍相迎。"
+    got = fight_llm.judge(_client(fight_llm.Judgment(winning=plain, losing=plain)), REQUEST, 15)
+    assert got.winning == got.losing == plain  # 中文標點、全形括號與引號不動
+
+
+def test_an_account_that_is_only_a_rule_line_cannot_turn_the_heading_above_into_a_heading():
+    """整段只有 --- 或 === 的話，接在「**過程**」下一行會變成 Markdown 的標題底線；開頭的 -、+、= 也一併拿掉。"""
+    for text in ("---", "===", "- - -", "+++", "-你出手"):
+        got = fight_llm.judge(_client(fight_llm.Judgment(winning=text, losing=text)), REQUEST, 15)
+        assert not got.winning.startswith(("-", "+", "=")), text
+    assert fight_llm.judge(_client(fight_llm.Judgment(winning="---", losing="===")), REQUEST, 15).winning == ""
+
+
 def _post_replying(content: str, sent: list):
     def post(url, json=None, timeout=None):
         sent.append(timeout)
