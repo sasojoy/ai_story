@@ -73,9 +73,10 @@ def pick_event(
     state: GameState, content: Content, action: str, rng: random.Random, pool: EventPool | None = None,
 ) -> Event | None:
     """照權重抽一則（奇遇的權重乘上 qiyu_weight_multiplier）；沒有合格的就是 None。pool 見 event_candidates。
-    防重複（設計稿第八節）：同一個池子這一輪看過的先拿掉，在剩下的裡面抽；全都看過了，就把這些合格事件
-    所屬的池子清空、重開一輪（剛看過的那一則這次先不抽，免得換輪時連著兩次一樣）。抽中的記進
-    PlayerState.event_rounds，所以這個函式只在真的要把事件端給玩家時呼叫。"""
+    防重複（設計稿第八節）：同一個池子這一輪看過的先拿掉，在剩下的裡面抽；全都看過了，就是新的一輪
+    （剛看過的那一則這次先不抽，免得換輪時連著兩次一樣）。
+    這個函式**不改狀態**：抽中的那一則要等 Game._present 真的端給玩家時，才由 note_round 記進
+    PlayerState.event_rounds（全都看過時的清空也在那裡）。所以選單、勝算、機器人怎麼預覽都不會讓輪替往前走。"""
     candidates = event_candidates(state, content, action, pool)
     if not candidates:
         return None
@@ -85,16 +86,27 @@ def pick_event(
     fresh = [e for e in candidates if pools[e.id] is None or e.id not in rounds.get(pools[e.id], [])]
     if not fresh:
         last = {rounds[key][-1] for key in set(pools.values()) if key is not None and rounds.get(key)}
-        for key in set(pools.values()):
-            rounds.pop(key, None)
         fresh = [e for e in candidates if e.id not in last] or candidates
     multiplier = content.config.qiyu_weight_multiplier
     weights = [event.weight * (multiplier if event.qiyu else 1.0) for event in fresh]
-    chosen = rng.choices(fresh, weights=weights)[0]
-    key = pools[chosen.id]
-    if key is not None:
-        rounds.setdefault(key, []).append(chosen.id)
-    return chosen
+    return rng.choices(fresh, weights=weights)[0]
+
+
+def note_round(state: GameState, content: Content, event: Event, action: str) -> None:
+    """事件真的端到玩家眼前時（只有 Game._present 呼叫）記進這一輪。抽中的那一則已經在它那一池的這一輪裡，
+    表示 pick_event 是在「全都看過了」之後抽的：先把這裡、這個行動所有合格事件所屬的池子清空、重開一輪，再記
+    （跟 joy 原本在 pick_event 裡清空的是同一組池子；rare／common 的篩選不影響池子，一次性與奇遇不輪替）。"""
+    location = state.player.location
+    key = rotation_pool(event, location, action)
+    if key is None:
+        return
+    rounds = state.player.event_rounds
+    if event.id in rounds.get(key, []):
+        for candidate in event_candidates(state, content, action):
+            pool_key = rotation_pool(candidate, location, action)
+            if pool_key is not None:
+                rounds.pop(pool_key, None)
+    rounds.setdefault(key, []).append(event.id)
 
 
 def fortune_events(state: GameState, content: Content) -> list[Event]:

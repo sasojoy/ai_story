@@ -17,6 +17,7 @@ from . import (
     foreshadow, front_lines, fusion, insights, journal, library, materials, naming, orders, push, ranks, roster, skillview,
     team, timetable,
 )
+from . import events as event_rules  # note_round 走模組屬性（測試要能換掉它，確認只有 _present 會叫）
 from .events import (
     choice_hint, choice_label, event_candidates, has_events_here, pick_event, visible_choices,
 )
@@ -1012,7 +1013,7 @@ class Game:
         s, c = self.state, self.content
         loc = c.locations[s.player.location]
         if event_candidates(s, c, "explore", "rare") and self.rng.random() < c.config.rare_explore_chance:
-            return self._present(pick_event(s, c, "explore", self.rng, "rare"))
+            return self._present(pick_event(s, c, "explore", self.rng, "rare"), "explore")
         mix = c.config.explore_mix_of(loc.tags).weights
         branches = [b for b in EXPLORE_BRANCHES if mix.get(b, 0) > 0 and self._explore_can(b, loc)]
         if not branches:
@@ -1024,7 +1025,7 @@ class Game:
         if branch == "wild":
             squad = min(self._wild_foes(loc), key=lambda foe: foe.difficulty)  # 同分取這裡列的第一路
             return [f"你在{loc.name}走著，{squad.name}突然殺出！"] + self._squad_encounter(squad.id, wild=True)
-        return self._present(pick_event(s, c, "explore", self.rng, "common"))
+        return self._present(pick_event(s, c, "explore", self.rng, "common"), "explore")
 
     def _explore_can(self, branch: ExploreBranch, loc: Location) -> bool:
         """探索三選一的這一支在這裡做不做得了。"""
@@ -1059,7 +1060,7 @@ class Game:
         if self.rng.random() < self.content.config.train_event_chance:
             event = pick_event(self.state, self.content, "train", self.rng)
             if event is not None:
-                msgs += self._present(event)
+                msgs += self._present(event, "train")
         return msgs
 
     def _train_squad_ids(self, loc: Location) -> list[str]:
@@ -2001,10 +2002,14 @@ class Game:
         nothing 可以是函式：真的用到才呼叫（打發話要挑一句，不該在抽到事件時白花一次亂數）。"""
         event = pick_event(self.state, self.content, action, self.rng)
         if event:
-            return self._present(event)
+            return self._present(event, action)
         return [nothing() if callable(nothing) else nothing]
 
-    def _present(self, event: Event) -> list[str]:
+    def _present(self, event: Event, action: str | None = None) -> list[str]:
+        """把事件端到玩家眼前。action 是抽中它的行動（探索、交友、遊歷）：這時才記進 joy 的防重複輪替
+        （events.note_round；pick_event 本身不改狀態，預覽怎麼抽都不算）。next_event 串接、晉升召見不是從池子抽的，不給 action。"""
+        if action is not None:
+            event_rules.note_round(self.state, self.content, event, action)
         is_repeat = event.id in self.state.player.seen_events
         self.state.pending_event = event.id
         self.state.player.seen_events.add(event.id)
