@@ -997,6 +997,68 @@ def test_the_fight_card_shows_the_first_round_until_the_player_opens_the_rest():
     assert re.search(r"\.battle-card ul\.rounds > li:nth-child\(2\) \{ animation-delay: [\d.]+s; \}", css)
 
 
+def test_the_fight_card_head_is_one_heading_and_one_paragraph():
+    """標題、時間與類型、結果三行：標題是 h3，底下兩行是同一個 <p>（單換行變 <br />）——手機上只佔一塊的間距，不是三塊
+    （battlelog.card_text）。「過程」那一段緊接在後面，網頁認的 ROUNDS_MARK 照舊對得上。"""
+    from tianxia import battlelog
+    from tianxia.state import BattleRecord, Fighter
+
+    record = BattleRecord(
+        id=1, time=0, location="湖邊", kind="train", opponent="水寇", ours=[Fighter(name="沈浪", level=1)], tier="大勝",
+        our_power=50, difficulty=10, rounds=["第1回合　甲。"],
+    )
+    html = server.md(battlelog.card_text(record))
+    assert html.startswith(
+        "<h3>⚔ 湖邊・對陣 水寇</h3>\n<p>第1天 00:00　遊歷<br />\n<strong>大勝</strong>　我方威力 50　對手難度 10</p>\n"
+        "<p><strong>過程</strong></p>\n<ul>"
+    )
+
+
+def test_the_report_link_ends_the_last_paragraph_of_the_fight_card():
+    """「看完整戰報 ›」接在卡片最後一段（「結果　…　得失　…」）的句尾，不另佔一行（戰鬥卡片壓縮）。網頁認的是伺服器的 HTML 一律以
+    </p> 收尾（卡片最後一塊永遠是「結果／得失」那一段）；認不出來時照舊放在卡片最後。這條擋住兩邊對不上。"""
+    from tianxia import battlelog
+    from tianxia.state import BattleRecord, Fighter
+
+    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    css = (server.WEB / "style.css").read_text(encoding="utf-8")
+    for narration in ("", "波才刀勢沉猛，你左支右絀。"):
+        record = BattleRecord(
+            id=1, time=0, location="湖邊", kind="event", opponent="水寇", ours=[Fighter(name="沈浪", level=1)], tier="大勝",
+            our_power=50, difficulty=10, rounds=["第1回合　甲。"], narration=narration, notes=["你贏了。"],
+        )
+        html = server.md(battlelog.card_text(record))
+        assert html.endswith("</p>\n") and "<strong>得失</strong>" in html.rsplit("<p>", 1)[1]
+    link = _js_function(js, "function withReportLink(")
+    assert 'card.lastIndexOf("</p>")' in link and "reportLink(id)" in link
+    jianghu = _js_function(js, "function pageJianghu(")
+    assert "withReportLink(roundsFold(m.card, m.card_id), m.card_id)" in jianghu
+    assert 'data-act="report"' not in jianghu  # 不再另放一顆
+    assert re.search(r"\.battle-card \.report-link \{[^}]*display: inline-block", css)
+
+
+def test_the_fight_card_spacing_is_tight_and_only_for_the_fight_card():
+    """戰鬥卡片壓縮：打完一場要在第一屏直接按下一顆行動。段距、標題與行高收緊，但只動「剛剛」那張戰鬥卡片
+    （.battle-card 只用在它身上，別張卡片與狀態列、行動列一個字不動），字級不縮到比 .order-text 的 13px 還小。"""
+    css = (server.WEB / "style.css").read_text(encoding="utf-8")
+    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    assert re.findall(r'class="[^"]*battle-card[^"]*"', js) == ['class="card battle-card"']  # 只有「剛剛」那張戰鬥卡片用這個 class
+
+    def rule(selector: str) -> str:
+        found = re.search(r"(?m)^" + re.escape(selector) + r" \{([^}]*)\}", css)
+        assert found is not None, selector
+        return found.group(1)
+
+    assert re.search(r"padding: [0-9]px [0-9]+px", rule(".battle-card")) and "line-height: 1.55" in rule(".battle-card")
+    assert "margin: 3px 0" in rule(".battle-card p")
+    assert "font-size: 16px" in rule(".battle-card h3") and "margin: 0 0 1px" in rule(".battle-card h3")
+    assert "margin: 1px 0 5px" in rule(".battle-card ul.rounds") and "margin: 1px 0 5px" in rule(".battle-card p.rounds-tale")
+    # 這張卡片的規則一律寫在 .battle-card 底下，字級沒有比 13px 小的
+    for selectors, body in re.findall(r"(?m)^([^{}\n@/]*\.battle-card[^{}\n]*) \{([^}]*)\}", css):
+        assert all(s.strip().startswith(".battle-card") for s in selectors.split(",")), selectors
+        assert all(float(px) >= 13 for px in re.findall(r"font-size: ([\d.]+)px", body)), selectors
+
+
 def test_the_big_fight_account_is_folded_behind_the_same_button():
     """大場面模型寫的過程是一段話（不是回合清單，最多 200 字、手機上約十行）：「剛剛」那張也收起來，只露前兩行，
     按同一顆「展開過程」攤開、展開記在同一個 S.roundsOpen（PM 2026-10-05，Task 2 審查修正 2）；戰報頁照樣整段。
@@ -1026,8 +1088,8 @@ def test_the_big_fight_account_is_folded_behind_the_same_button():
 
 
 def test_a_hostile_big_fight_account_renders_as_one_plain_paragraph_on_the_card():
-    """模型寫的過程走伺服器的 Markdown 轉換：連結、圖片、程式碼區塊、引言都不能出現，「結果」「獲得與損失」不能被吞進
-    程式碼區塊，網頁認的 TALE_MARK 要對得上（Final review Minor 1）。"""
+    """模型寫的過程走伺服器的 Markdown 轉換：連結、圖片、程式碼區塊、引言都不能出現，「結果」「得失」不能被吞進
+    程式碼區塊（卡片上它們併成一段「結果／得失」），網頁認的 TALE_MARK 要對得上（Final review Minor 1）。"""
     from tianxia import battlelog, fight_llm
     from tianxia.state import BattleRecord, Fighter
 
@@ -1047,8 +1109,8 @@ def test_a_hostile_big_fight_account_renders_as_one_plain_paragraph_on_the_card(
         for tag in ("<img", "<a ", "<pre", "<code", "<blockquote", "<h1", "<h2", "<hr", "<ul", "<ol", "<em"):
             assert tag not in html, (text, tag, html)
         assert (mark in html) == bool(record.narration), (text, html)
-        for heading in ("結果", "獲得與損失"):
-            assert f"<p><strong>{heading}</strong>" in html, (text, html)  # 沒被吞進任何區塊
+        # 結果與得失併成同一段（卡片上少一段的間距），沒被吞進任何區塊
+        assert "<p><strong>結果</strong>　波才抱拳認輸。　<strong>得失</strong>　" in html, (text, html)
 
 
 def test_the_three_art_buttons_stay_on_one_line_at_phone_width():

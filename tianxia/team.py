@@ -202,7 +202,7 @@ def add_to_team(state: GameState, companion_id: str) -> list[str]:
     if companion_id in state.player.team:
         return []
     if len(state.player.team) >= MAX_TEAM_COMPANIONS:
-        return [f"隊伍已經滿了（最多帶 {MAX_TEAM_COMPANIONS} 個夥伴），先讓someone離隊才能換人。"]
+        return [f"隊伍已經滿了（最多帶 {MAX_TEAM_COMPANIONS} 個夥伴），先讓一位夥伴離隊才能換人。"]
     state.player.team.append(companion_id)
     return []
 
@@ -511,7 +511,8 @@ def take_encounter_toll(
                 content, state.player.member, fraction,
                 agi=stats.get("agi", BASE_STAT), con=con_of(state, content, world, PLAYER),
             )
-            msgs.append(f"氣血 -{lost:.0f}")  # 照既有慣例寫變化量（跟「銀兩 -5」「心得 +12」同一串）
+            if round(lost) > 0:  # 本來就見底、一滴都沒得扣時不寫「氣血 -0」（零的變化是雜訊）；內傷照樣寫
+                msgs.append(f"氣血 -{lost:.0f}")  # 照既有慣例寫變化量（跟「銀兩 -5」「心得 +12」同一串）
             if hurt >= 1:
                 msgs.append(f"內傷 +{hurt:.0f}")
         else:

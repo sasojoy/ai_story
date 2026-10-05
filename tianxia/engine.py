@@ -2461,7 +2461,7 @@ class Game:
         for material_id, count in materials.roll_squad_drops(squad, self.content, self.rng):
             line = materials.grant(self.state, self.content, material_id, count)
             if line:
-                record.materials.append(line.removeprefix("獲得 "))
+                record.materials.append(line.removeprefix(materials.GRANT_PREFIX))
                 msgs.append(line)
         record.exp = squad.exp
         levels = team.add_team_exp(self.state, self.content, self.world, squad.exp)  # 每人都拿（FB-002）
@@ -3840,7 +3840,7 @@ class Game:
             return ""
         record = battlelog.find(self.state, self.state.battle_card)
         entry = self.state.journal[self._now_start()]
-        lines, changes = journal.card_leftovers(entry, record.notes, battlelog.gains_list(record))
+        lines, changes = journal.card_leftovers(entry, battlelog.told_lines(record), battlelog.gains_list(record))
         return journal.extra_html(lines, changes, self._chip, str(entry.time))
 
     def _log(self, msgs: list[str]) -> list[str]:

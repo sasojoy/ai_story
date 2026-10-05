@@ -566,6 +566,38 @@ def test_battle_card_extra_shows_what_the_card_does_not(game):
     assert "經驗" not in extra and "心得" not in extra and "銀兩" not in extra  # 卡片上已經有了
 
 
+def test_battle_card_extra_does_not_repeat_a_material_the_card_already_lists(game):
+    """打贏掉了素材：卡片的獲得與損失寫「精鐵砂 ×1」，那一則裡的訊息寫「獲得 精鐵砂 ×1」，是同一件事，卡片底下不再補一次。
+    江湖紀錄那一則本身照舊留著那句話（紀錄頁看得到掉了什麼）。"""
+    game.state.player.tutorial_step = 1  # 跳過第一步，不混進引導
+    _give_player_a_winning_wugong(game)
+    game.rng = FixedRandom(0.3)  # 水寇小隊難度 5：預設掉落表 50% 掉一個一階素材
+    walk_to(game, "lake")
+    game.choose("act:train")
+    assert game.state.battles[0].materials == ["精鐵砂 ×1"] and "精鐵砂 ×1" in game.battle_card()
+    assert "獲得 精鐵砂 ×1" in latest(game).lines
+    assert "精鐵砂" not in game.battle_extra_html()
+
+
+def test_card_leftovers_drop_what_the_card_tells_but_keep_what_it_does_not():
+    """卡片講過的（結果裡的敘事、獲得與損失裡的素材與數值）不再補；卡片沒寫到的照舊補（例如別的獎勵、世界大事）。"""
+    from tianxia import battlelog
+    from tianxia.state import BattleRecord, Fighter
+
+    record = BattleRecord(
+        id=1, time=0, location="湖邊", kind="train", opponent="水寇", ours=[Fighter(name="沈浪", level=1)], tier="大勝",
+        our_power=50, difficulty=10, exp=10, materials=["精鐵砂 ×1"], notes=["沈浪升到第 2 級！"], changes=["氣血 -17"],
+    )
+    entry = JournalEntry(
+        time=0, title="遊歷・湖邊", tag="大勝水寇", battle_id=1,
+        lines=["獲得 精鐵砂 ×1", "沈浪升到第 2 級！", "遇上【水寇】", "獲得 【破境丹】一枚——衝擊絕學時可以服下。", "【江湖大事】潁川重歸平靜。"],
+        changes=["經驗 +10（每人）", "氣血 -17", "破境丹 +1"],
+    )
+    lines, changes = journal.card_leftovers(entry, battlelog.told_lines(record), battlelog.gains_list(record))
+    assert lines == ["獲得 【破境丹】一枚——衝擊絕學時可以服下。", "【江湖大事】潁川重歸平靜。"]
+    assert changes == ["破境丹 +1"]
+
+
 def test_battle_card_extra_skips_card_notes_and_event_markers(game):
     game.state.player.tutorial_step = 1  # 跳過第一步，這次遭遇戰不該混進引導訊息
     _give_player_a_winning_wugong(game)

@@ -3311,6 +3311,23 @@ def test_a_fight_not_won_at_zero_blood_does_not_say_the_blows_were_dodged(game, 
     assert "被你閃開了" not in game.battle_card()
 
 
+@pytest.mark.parametrize("tier", ["落敗", "僵持"])
+def test_a_fight_at_zero_blood_shows_no_zero_blood_change(game, tier):
+    """已經沒氣血的人打輸，這一場掉的氣血是 0：戰報的獲得與損失、江湖紀錄的數值變化都不寫「氣血 -0」（零的變化是雜訊，
+    手機上還多佔一格）；內傷照樣累積、照樣寫。"""
+    from tianxia import battlelog  # 區域 import：不動檔頭那一行（跟別的分支各自往同一行加東西會合併衝突）
+
+    walk_to(game, "lake")
+    game.state.player.member.neili = 0.0
+    with _forced(tier):
+        game.choose("act:train")
+    record = game.state.battles[0]
+    assert record.tier == tier and any(c.startswith("內傷 +") for c in record.changes)
+    assert not any(c.startswith("氣血") for c in record.changes)
+    assert "氣血" not in "　".join(battlelog.gains_list(record))
+    assert "氣血 -0" not in game.battle_card() and "氣血" not in " ".join(game.state.journal[0].changes)
+
+
 def test_a_won_fight_that_costs_no_blood_still_says_the_blows_were_dodged(game):
     """反過來：贏了而這一場沒掉氣血（打得漂亮），「被你閃開了」是通的，不動。"""
     walk_to(game, "lake")

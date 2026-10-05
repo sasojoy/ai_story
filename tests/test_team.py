@@ -708,3 +708,11 @@ def test_the_narrated_lineup_includes_the_followers():
         follower = real.followers[fid]
         art = real.skills[follower.wugong]
         assert (fighter.name, fighter.art, fighter.attribute) == (follower.name, art.name, art.attribute)
+
+
+def test_a_full_team_says_so_in_chinese_only(state):
+    """隊伍滿了的那句話是給玩家看的：不能夾英文字（原本寫成「先讓someone離隊」）。"""
+    state.player.team = [f"mate{i}" for i in range(team.MAX_TEAM_COMPANIONS)]
+    msgs = team.add_to_team(state, "one_more")
+    assert msgs and "一位夥伴" in msgs[0]
+    assert not any(ch.isascii() and ch.isalpha() for ch in msgs[0])
