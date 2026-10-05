@@ -1086,9 +1086,9 @@ def test_preparing_has_no_now_card_and_no_countdown(tmp_path, monkeypatch):
     server.act(fresh, lambda g: server.ADMIN_ACTIONS["open_season"](g, {}))
     view = server.main_view(fresh)
     assert view["now"] and view["status"]["next_event"] is not None and view["guide"] is not None
-    # FB-062：下一件寫季曆時刻加現實倒數，畫面（web/app.js）把兩個拼成「宛城之戰・第9週・週四 20:44（現實約 4 小時 32 分後）」
+    # FB-062：下一件寫季曆時刻加現實倒數，畫面（web/app.js）把兩個拼成「宛城之戰・第 9 週・週四 20:44（現實約 4 小時 32 分後）」
     next_event = view["status"]["next_event"]
-    assert re.fullmatch(r"第\d+週・週[一二三四五六日] \d\d:\d\d", next_event["at"]) and next_event["in_seconds"] >= 0
+    assert re.fullmatch(r"第 \d+ 週・週[一二三四五六日] \d\d:\d\d", next_event["at"]) and next_event["in_seconds"] >= 0
     server.act(fresh, lambda g: server.ADMIN_ACTIONS["end_season"](g, {}))
     assert server.main_view(fresh)["guide"] is None  # 休季也一樣
 

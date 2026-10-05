@@ -2458,7 +2458,7 @@ class Game:
 
     def _journey_line(self) -> str:
         """在路上的那一句（狀態列）：「往寶洞（步行），現實約 8 分鐘後抵達；下一站湖邊」。
-        只寫現實的倒數，不寫抵達的季曆時刻（FB-062）：季曆跑得比現實快，「第8週・週五 12:19 抵達」配上「還要約 1 分鐘」
+        只寫現實的倒數，不寫抵達的季曆時刻（FB-062）：季曆跑得比現實快，「第 8 週・週五 12:19 抵達」配上「還要約 1 分鐘」
         兩種時間混在一行，玩家算不出來；季曆時刻已經在狀態列上一行。"""
         s, c = self.state, self.content
         j = s.player.journey
@@ -3248,11 +3248,11 @@ class Game:
         return {
             "calendar": {
                 "week": at.week, "weekday": at.weekday, "clock": f"{at.hour:02d}:{at.minute:02d}",
-                "weeks": c.config.season_weeks,
+                "weeks": c.config.season_weeks, "text": calendar.point_text(at),  # 畫面第二行直接用這一句，不自己拼
             },
             "next_event": None if upcoming is None else {
                 "title": upcoming.title,
-                "at": self.stamp(timetable.when(self.state, c, upcoming)),  # 季曆時刻「第9週・週四 20:44」，畫面寫在倒數前面（FB-062）
+                "at": self.stamp(timetable.when(self.state, c, upcoming)),  # 季曆時刻「第 9 週・週四 20:44」，畫面寫在倒數前面（FB-062）
                 "in_seconds": round((timetable.when(self.state, c, upcoming) - w.time) / c.config.time_scale),
             },
         }
@@ -3357,7 +3357,7 @@ class Game:
         cal = d.get("calendar")
         if cal is None:
             return f"第 {d['day']} 天 {d['clock']}（本季共 {d['season_days']:g} 天）"
-        return f"第 {cal['week']} 週・週{calendar.WEEKDAYS[cal['weekday']]} {cal['clock']}"
+        return cal["text"]
 
     def status_text(self) -> str:
         d = self.status_data()

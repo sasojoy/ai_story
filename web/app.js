@@ -94,8 +94,8 @@
   // 本季天數：整數不帶小數點（14.0 → 14），不是整數照原樣（14.5）
   const dayCount = (n) => String(Number(n));
   // 第一季的季曆（計畫 T2）：狀態列寫「第 3 週・週二 21:40」，旁邊是下一件大事的倒數（現實時間）。
-  // 兩種時間的寫法固定（FB-062）：季曆時刻一律「第N週・週X HH:MM」，倒數一律標「現實」（季曆跑得比現實快，不標玩家會算不出來）
-  const WEEKDAYS = "一二三四五六日";
+  // 兩種時間的寫法固定（FB-062）：季曆時刻一律「第 N 週・週X HH:MM」（伺服器寫好的 calendar.text 與 next_event.at，同一個寫法，
+  // 畫面不自己拼），倒數一律標「現實」（季曆跑得比現實快，不標玩家會算不出來）
   const countdown = (sec) => {
     const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60);
     if (sec < 60) return "就在眼前";
@@ -226,7 +226,7 @@
         <div class="who" data-act="toggle-more" role="button" tabindex="0" aria-expanded="${S.showMore}">
           <div class="who-name"><span>${esc(s.name)}<small>${esc(s.affiliation)}${s.anonymous ? "・匿名" : ""}・第${s.level}級</small></span><i class="more-ico" aria-hidden="true">${S.showMore ? "▴" : "▾"}</i></div>
           <div class="where">📍 ${esc(s.location)}　${s.calendar
-            ? `第 ${s.calendar.week} 週・週${WEEKDAYS[s.calendar.weekday]} ${esc(s.calendar.clock)}`
+            ? esc(s.calendar.text)
             : `第 ${s.day} 天 ${esc(s.clock)}<small>／共 ${dayCount(s.season_days)} 天</small>`}${s.resting != null ? "　🧘 打坐中" : ""}</div>
         </div>
         <button class="icon-btn" data-act="sheet" aria-label="設定">⚙</button>

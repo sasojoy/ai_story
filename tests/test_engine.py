@@ -1,4 +1,5 @@
 import random
+import re
 import time
 from pathlib import Path
 from unittest import mock
@@ -4642,7 +4643,7 @@ def test_old_season_not_replayed_when_switch_turns_on(content, world):
     assert list(world.get_season().timeline) == ["uprising"]  # 新的一季才照季曆跑
     assert admin.status_data()["calendar"]["week"] == 1
     past, current = admin.chronicle_text().split("### 第 1 季")[::-1][:2]  # 本季的時間寫季曆，上一季照舊寫天數
-    assert "第1週・週一 00:00　張角率三十六方同時起義。" in current and "第6天　賽季落幕" in past
+    assert "第 1 週・週一 00:00　張角率三十六方同時起義。" in current and "第6天　賽季落幕" in past
 
 
 def test_an_unstamped_season_is_not_cut_short_by_the_weekend_profile(content, world):
@@ -4670,15 +4671,15 @@ def test_status_shows_calendar_and_next_event(content, world):
     install_season_one(content)
     game = Game.new(content, "沈浪", rng=random.Random(0), world=world)
     d = game.status_data()
-    assert d["calendar"] == {"week": 1, "weekday": 0, "clock": "00:00", "weeks": 12}
-    assert d["next_event"] == {"title": "張曼成攻殺南陽太守", "at": "第3週・週一 00:00", "in_seconds": 36000}  # 起義就在此刻；下一件在第 3 週
+    assert d["calendar"] == {"week": 1, "weekday": 0, "clock": "00:00", "weeks": 12, "text": "第 1 週・週一 00:00"}
+    assert d["next_event"] == {"title": "張曼成攻殺南陽太守", "at": "第 3 週・週一 00:00", "in_seconds": 36000}  # 起義就在此刻；下一件在第 3 週
     assert (d["day"], d["clock"], d["season_days"]) == (1, "00:00", 2.5)
 
     tuesday = calendar.week_start(3, content) + (DAY + 21 * HOUR + 40 * 60) / 33.6
     game.advance(tuesday)
     d = game.status_data()
-    assert d["calendar"] == {"week": 3, "weekday": 1, "clock": "21:40", "weeks": 12}
-    assert d["next_event"] == {"title": "波才大敗朱儁", "at": "第4週・週一 00:00", "in_seconds": round(calendar.week_start(4, content) - tuesday)}
+    assert d["calendar"] == {"week": 3, "weekday": 1, "clock": "21:40", "weeks": 12, "text": "第 3 週・週二 21:40"}
+    assert d["next_event"] == {"title": "波才大敗朱儁", "at": "第 4 週・週一 00:00", "in_seconds": round(calendar.week_start(4, content) - tuesday)}
     assert "第 3 週・週二 21:40" in game.status_text()
 
     game.advance(calendar.week_start(5, content) - tuesday)
@@ -4686,6 +4687,20 @@ def test_status_shows_calendar_and_next_event(content, world):
     assert game.status_data()["next_event"] == {"title": "長社火攻", "at": calendar.stamp_text(showdown, content, game.state.world), "in_seconds": round(showdown - game.state.world.time)}
     content.config.time_scale = 2  # 1 時等於現實 2 秒：倒數是現實秒
     assert game.status_data()["next_event"]["in_seconds"] == round((showdown - game.state.world.time) / 2)
+
+
+def test_next_event_time_is_written_like_the_status_bars_second_line(content, world):
+    """每一處季曆時刻都是同一種寫法「第 N 週・週X HH:MM」（N 前後有空格，PM 定）：下一件的 at 等到那一刻真的到了，
+    就跟狀態列第二行（日期那一行）寫的一字不差；江湖史、江湖紀錄、傳聞也一樣。"""
+    install_season_one(content)
+    game = Game.new(content, "沈浪", rng=random.Random(0), world=world)
+    d = game.status_data()
+    at = d["next_event"]["at"]
+    assert re.fullmatch(r"第 \d+ 週・週[一二三四五六日] \d\d:\d\d", at)
+    game.advance(d["next_event"]["in_seconds"] * content.config.time_scale)  # 等到下一件的那一刻
+    assert game.status_data()["calendar"]["text"] == at
+    assert at in game.status_text()
+    assert f"{at}　" in game.chronicle_text()  # 那一件大事寫進江湖史，時刻的寫法跟狀態列一樣
 
 
 def test_open_season_restamps_with_current_profile(content, world):
@@ -4723,8 +4738,8 @@ def test_week_one_is_settled_the_moment_a_stamped_season_opens(content, world):
     season = world.get_season()
     assert season.time == 0 and list(season.timeline) == ["uprising"] and season.timeline["uprising"].time == 0
     assert season.hooked_week == 1
-    assert "第1週・週一 00:00　三十六方同日起事。" in admin.rumors_text()
-    assert "第1週・週一 00:00　張角率三十六方同時起義。" in admin.chronicle_text()
+    assert "第 1 週・週一 00:00　三十六方同日起事。" in admin.rumors_text()
+    assert "第 1 週・週一 00:00　張角率三十六方同時起義。" in admin.chronicle_text()
     assert [b.split("**")[1] for b in admin.bulletin()] == ["三十六方起義"]
     assert admin.status_data()["next_event"]["title"] == "張曼成攻殺南陽太守"  # 第一件已經結算，倒數指向下一件
 
@@ -4737,7 +4752,7 @@ def test_week_one_is_settled_the_moment_a_stamped_season_opens(content, world):
     admin.admin_next_season(now=300.0)  # 新的一季：開季那一刻照樣結算
     season = world.get_season()
     assert season.time == 0 and list(season.timeline) == ["uprising"] and season.hooked_week == 1
-    assert "第1週・週一 00:00　張角率三十六方同時起義。" in admin.chronicle_text().split("### 第 1 季")[0]
+    assert "第 1 週・週一 00:00　張角率三十六方同時起義。" in admin.chronicle_text().split("### 第 1 季")[0]
 
 
 def test_opening_a_season_with_the_switch_off_settles_nothing(content, world):
@@ -4780,7 +4795,7 @@ def test_everyone_gets_the_seasons_big_events_not_just_whoever_advanced_the_cloc
 
     zi.sync(5.0)
     assert len(_big_event_entries(zi)) == 1 and _big_event_entries(zi)[0].lines == expected
-    assert [line.split("　")[0] for line in expected] == ["第1週・週一 01:00", "第3週・週一 00:00", "第4週・週一 00:00"]
+    assert [line.split("　")[0] for line in expected] == ["第 1 週・週一 01:00", "第 3 週・週一 00:00", "第 4 週・週一 00:00"]
     zi.sync(10.0)
     admin.sync(10.0)
     assert len(_big_event_entries(zi)) == 1 and len(_big_event_entries(admin)) == 1  # 再同步不重複
@@ -4839,7 +4854,7 @@ def test_the_big_event_settled_at_the_opening_reaches_everyone_too(content, worl
     for game in (admin, zi):
         (entry,) = _big_event_entries(game)
         assert (entry.tag, entry.time) == ("三十六方同日起事。", 0)
-    assert "剛剛　第1週・週一 00:00" in zi.latest_entry_html()
+    assert "剛剛　第 1 週・週一 00:00" in zi.latest_entry_html()
 
 
 def test_skipped_big_events_are_not_delivered(content, world):
@@ -4898,11 +4913,11 @@ def test_timestamps_read_like_the_calendar_when_the_season_is_season_one(content
     game = Game.new(content, "沈浪", rng=random.Random(0), world=world)
     game.sync(0.0)
     game.sync(calendar.cal_hour_seconds(content))  # 第 1 週週一 01:00：三十六方起義
-    assert "剛剛　第1週・週一 01:00" in game.latest_entry_html()
-    assert "第1週・週一 01:00　張角率三十六方同時起義。" in game.chronicle_text()
-    assert "第1週・週一 01:00　三十六方同日起事。" in game.rumors_text()
-    assert "第1週・週一 00:00" in game.journal_html(1, 5)  # 開季那一則
-    assert "第1週・週一 01:00" in atlas.header_text(game.state, content)
+    assert "剛剛　第 1 週・週一 01:00" in game.latest_entry_html()
+    assert "第 1 週・週一 01:00　張角率三十六方同時起義。" in game.chronicle_text()
+    assert "第 1 週・週一 01:00　三十六方同日起事。" in game.rumors_text()
+    assert "第 1 週・週一 00:00" in game.journal_html(1, 5)  # 開季那一則
+    assert "第 1 週・週一 01:00" in atlas.header_text(game.state, content)
 
 
 def test_timestamps_are_unchanged_with_the_switch_off(game):

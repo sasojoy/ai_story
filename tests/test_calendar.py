@@ -55,3 +55,10 @@ def test_is_night_by_calendar_hour(condensed):
     assert calendar.is_night(at(4, 59), condensed)
     assert not calendar.is_night(at(5), condensed)
     assert not calendar.is_night(at(22, 59), condensed)
+
+
+def test_a_calendar_time_is_written_one_way():
+    """季曆時刻只有一種寫法「第 N 週・週X HH:MM」（N 前後有空格）：狀態列第二行、下一件、江湖史、軍令截止都走這個。"""
+    at = CalPoint(week=3, weekday=1, hour=21, minute=40, cal_day=16)
+    assert calendar.point_text(at) == "第 3 週・週二 21:40"
+    assert calendar.point_text(CalPoint(week=12, weekday=6, hour=0, minute=5, cal_day=84)) == "第 12 週・週日 00:05"
