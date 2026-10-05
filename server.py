@@ -293,7 +293,7 @@ def menxia_view(game: Game, person: str | None = None) -> dict:
     if person not in {key for _, key in lines}:
         person = None
     member = game.state.player.member
-    # 身上兩門各自有沒有功法、練到第幾成、練滿了沒（C4 自創欄收不收、C5 鍛鍊鈕亮不亮）；還沒學是 False、0、False
+    # 身上兩門各自有沒有功法、練到第幾成、練滿了沒（C5 鍛鍊鈕亮不亮）；還沒學是 False、0、False
     learned = {"武學": member.wugong_id is not None, "內功": member.neigong_id is not None}
     level = {
         "武學": member.wugong_level if learned["武學"] else 0,
@@ -717,7 +717,6 @@ def api_do(op: str, request: Request, body: dict = Body(default={})):
 
 
 MENXIA_ACTIONS = {
-    "create": lambda g, b: g.create_skill(str(b.get("name") or ""), str(b.get("kind") or KINDS[0])),
     "practice": lambda g, b: g.practice(str(b.get("kind") or KINDS[0])),
     "heal": lambda g, b: g.heal(),
     "craft": lambda g, b: g.craft([str(m) for m in b.get("materials") or []]),  # 內功／武學開爐才揭曉，body 的 kind 不看

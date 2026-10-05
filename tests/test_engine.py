@@ -1,5 +1,6 @@
 import random
 import time
+from pathlib import Path
 from unittest import mock
 
 import pytest
@@ -7,6 +8,7 @@ import pytest
 from conftest import FixedRandom, at, install_season_one, walk_to
 from tianxia import atlas, battle_instance, calendar, companion_agent, flavor, guide, rules, skillview
 from tianxia.characters import open_characters
+from tianxia.content import load_content
 from tianxia.engine import Game, Option
 from tianxia.martial_arts import MartialArt
 from tianxia.models import Location
@@ -17,6 +19,7 @@ from tianxia.world_state import season_length_days
 
 HOUR = 3600
 DAY = 86400
+ROOT = Path(__file__).resolve().parent.parent
 
 
 def ids(game):
@@ -31,6 +34,39 @@ def test_new_game(game):
     assert p.location == "town" and p.stamina == 150
     assert p.team == [] and p.member.level == 1
     assert "測試開始。" in game.state.log
+
+
+def test_a_new_character_starts_with_the_starter_arts(content, world):
+    content.config.starter_skills = ["basic_breath", "basic_fist"]
+    game = Game.new(content, "新人", rng=random.Random(0), world=world)
+    member = game.state.player.member
+    assert (member.neigong_id, member.neigong_level) == ("basic_breath", 1)
+    assert (member.wugong_id, member.wugong_level) == ("basic_fist", 1)
+
+
+def test_a_new_season_character_starts_with_the_starter_arts_again(content, world):
+    """每季重來的角色也從那兩門第一成開始（_reset_player_for_new_season 走同一個 new_game_state）。"""
+    content.config.starter_skills = ["basic_breath", "basic_fist"]
+    game = Game.new(content, "新人", rng=random.Random(0), world=world)
+    game.state.player.member.wugong_id, game.state.player.member.wugong_level = "fist", 7
+    game._reset_player_for_new_season(game.state.player.season_number + 1)
+    member = game.state.player.member
+    assert (member.neigong_id, member.neigong_level) == ("basic_breath", 1)
+    assert (member.wugong_id, member.wugong_level) == ("basic_fist", 1)
+
+
+def test_there_is_no_self_created_art_any_more(game):
+    """行為上也沒有：選單沒有自創，伺服器那一側的拒絕在 tests/test_server.py。"""
+    assert not hasattr(game, "create_skill")
+    assert not any("create" in o.id for o in game.options())
+
+
+def test_real_content_starts_with_enough_xinde_for_the_first_level():
+    """Review Focus 第 5 條：新角色照新手引導按「練成」，第一成一定練得起。"""
+    real = load_content(ROOT / "content")
+    first = [real.skills[s] for s in real.config.starter_skills]
+    assert len(first) == 2
+    assert real.config.start_stats["xinde"] >= 2 * real.config.practice_xinde_per_level  # 兩門各練一成
 
 
 def test_town_options(game):
@@ -480,27 +516,34 @@ def test_presenting_a_repeated_event_appends_the_flavor_sentence(game):
 # ── 練功、療傷 ───────────────────────────────────────────
 
 
-def test_create_skill_and_practice(game):
-    msgs = game.create_skill("龍吟九霄", "武學")
-    assert msgs == ["你自創了一門武學【龍吟九霄】（中品，屬陰）！"]
-    assert game.state.player.member.wugong_id == "龍吟九霄"
+def _wear(game, wugong: str | None = None, neigong: str | None = None):
+    """直接把內容裡的武學配到身上（第一成）：自創已經作廢，測試要「先有一門功夫」就這樣借。"""
+    member = game.state.player.member
+    if wugong:
+        member.wugong_id, member.wugong_level = wugong, 1
+    if neigong:
+        member.neigong_id, member.neigong_level = neigong, 1
+
+
+def test_practice_writes_one_merged_journal_entry(game):
+    _wear(game, wugong="fist")
+    msgs = game.practice("武學")
+    assert msgs == ["【長拳】精進至第2成。"]
+    assert game.state.player.member.wugong_level == 2
     entry = game.state.journal[0]
     assert entry.title == "修練" and entry.tag == msgs[0]
     game.practice("武學")
-    assert game.state.player.member.wugong_level == 2
+    assert game.state.player.member.wugong_level == 3
     assert game.state.journal[0].title == "修練"  # 併進同一則
 
 
 def _practice_step_game(game, worn: dict[str, int]):
     """把引導換成「第 1 步＝鍛鍊」（fixture 的引導沒有這一步，照 _install_* 的慣例直接裝進內容），
-    身上先配好 worn（種類 → 熟練度）。回傳（引導步驟的獎勵銀兩）。
-
-    先自創再換引導：自創本身也會記一次 practice 動作，引導還在別的步驟時不會被它推進。
-    """
+    身上先配好 worn（種類 → 熟練度）。回傳（引導步驟的獎勵銀兩）。"""
     from tianxia.models import Effect, TutorialGoal, TutorialStep
 
-    for i, (kind, level) in enumerate(worn.items()):
-        game.create_skill(f"測試{kind}{i}", kind)
+    for kind, level in worn.items():
+        _wear(game, **{"neigong" if kind == "內功" else "wugong": "breath" if kind == "內功" else "fist"})
         slot = "neigong" if kind == "內功" else "wugong"
         setattr(game.state.player.member, f"{slot}_level", level)
     reward = 10
@@ -557,12 +600,13 @@ def test_practicing_with_nothing_learned_says_so_without_finishing_the_step(game
 
 
 def _wugong_step_game(game, worn: dict[str, int]):
-    """把引導換成「看地圖 → 身上要有一門武學（has_wugong）→ 出城」，跟正式內容的 t2_map → t4_practice 同一個
-    順序；身上先配好 worn（種類 → 熟練度），引導停在看地圖那一步。回傳 has_wugong 那一步的獎勵銀兩。"""
+    """把引導換成「看地圖 → 身上要有一門武學（has_wugong）→ 出城」；身上先配好 worn（種類 → 熟練度），引導停在
+    看地圖那一步。回傳 has_wugong 那一步的獎勵銀兩。正式內容的 t4_practice 已經改成看「練功」這個動作
+    （開局就送了武學，has_wugong 一開始就成立，教不到練成），這裡留著測 has_wugong 這種條件本身。"""
     from tianxia.models import Effect, TutorialGoal, TutorialStep
 
-    for i, (kind, level) in enumerate(worn.items()):
-        game.create_skill(f"測試{kind}{i}", kind)
+    for kind, level in worn.items():
+        _wear(game, **{"neigong" if kind == "內功" else "wugong": "breath" if kind == "內功" else "fist"})
         setattr(game.state.player.member, f"{'neigong' if kind == '內功' else 'wugong'}_level", level)
     reward = 10
     game.content.tutorial.steps = [
@@ -589,36 +633,28 @@ def test_a_maxed_wugong_finishes_the_practice_step_as_soon_as_it_comes_up(game):
     assert game.guide_box()["text"] == "出城。"
 
 
-def test_only_a_neigong_never_finishes_the_wugong_step_until_a_wugong_is_created(game):
-    """只有內功時：鍛鍊內功、看地圖、練空著的武學都不算；自創一門武學才算（W5 的規則在這裡有洞：練內功也算）。"""
+def test_only_a_neigong_never_finishes_the_wugong_step_until_a_wugong_is_worn(game):
+    """只有內功時：鍛鍊內功、看地圖、練空著的武學都不算；身上有了一門武學再練才算（W5 的規則在這裡有洞：練內功也算）。"""
     _wugong_step_game(game, {"內功": 10})
     game.view_map()
     assert game.state.player.tutorial_step == 1
     for act in (lambda: game.practice("內功"), lambda: game.practice("武學"), game.view_map):
         act()
         assert game.state.player.tutorial_step == 1 and game.state.player.guide_done == []
-    game.create_skill("回風掌", "武學")
+    _wear(game, wugong="fist")
+    game.practice("武學")
     assert "✔ 引導完成" in game.state.player.guide_done
     assert game.state.player.tutorial_step == 2
 
 
-def test_create_skill_rejects_a_taken_name(game):
-    game.create_skill("龍吟九霄", "武學")
-    other = Game(game.content, GameState(player=game.state.player.model_copy(), world=game.state.world), world=game.world)
-    other.state.player.member.wugong_id = None
-    msgs = other.create_skill("龍吟九霄", "內功")
-    assert "已經有人取走了" in msgs[0]
-
-
 def test_art_detail_of_a_worn_art_uses_the_slots_level(game):
     """FB-006：功法卡。配在身上的那一門，熟練度看身上那一欄（內功、武學各一欄）。"""
-    game.create_skill("龍吟九霄", "武學")
-    game.create_skill("太虛吐納", "內功")
+    _wear(game, wugong="fist", neigong="breath")
     game.state.player.member.wugong_level = 5
     game.state.player.member.neigong_level = 7
-    wugong = game.art_detail("龍吟九霄")
-    assert wugong.startswith("【龍吟九霄】") and "\n第5成 " in wugong
-    assert "\n第7成 " in game.art_detail("太虛吐納")
+    wugong = game.art_detail("fist")
+    assert wugong.startswith("【長拳】") and "\n第5成 " in wugong
+    assert "\n第7成 " in game.art_detail("breath")
 
 
 def test_art_detail_of_a_library_art_uses_its_own_kept_level(game):
@@ -638,13 +674,24 @@ def test_art_detail_of_a_library_art_uses_its_own_kept_level(game):
 
 def test_art_detail_shows_the_players_own_quality(game):
     """武學與成長 Task 3：功法卡寫玩家自己那一份的品質與威力，全服登記的那一筆不動。"""
-    game.create_skill("龍吟九霄", "武學")
-    registered = game.world.get_skill("龍吟九霄")
-    mine = "絕學" if registered.quality != "絕學" else "上品"
-    game.state.player.art_quality["龍吟九霄"] = mine
-    card = game.art_detail("龍吟九霄")
-    assert card.startswith(f"【龍吟九霄】{mine}・屬{registered.attribute}")
-    assert game.world.get_skill("龍吟九霄").quality == registered.quality
+    registered = MartialArt(
+        id="沉柳纏勁", name="沉柳纏勁", kind="武學", quality="中品", attribute="柔",
+        base_power=16.0, top_power=44.0, creator="沈浪",
+    )
+    assert game.world.claim_skill_name(registered)
+    game.state.player.member.wugong_id = registered.id
+    game.state.player.art_quality[registered.id] = "絕學"
+    card = game.art_detail(registered.id)
+    assert card.startswith("【沉柳纏勁】絕學・屬柔")
+    assert game.world.get_skill(registered.id).quality == "中品"
+
+
+def test_art_detail_shows_the_players_own_quality_of_a_basic_art(game):
+    """開局送的基礎武學也一樣：功法卡寫玩家自己那一份的品質，內容裡那一筆不動。"""
+    game.state.player.member.wugong_id = "basic_fist"
+    game.state.player.art_quality["basic_fist"] = "上品"
+    assert game.art_detail("basic_fist").startswith("【粗淺拳腳】上品・屬實")
+    assert game.content.skills["basic_fist"].quality == "下品"
 
 
 def test_art_detail_of_an_art_that_is_not_yours_is_not_found(game):
@@ -833,7 +880,6 @@ def test_nothing_personal_can_be_done_while_preparing(content, world):
     content.config.auto_open_first_season = False
     game = Game.new(content, "甲", rng=random.Random(1), world=world)
     waiting = ["（賽季籌備中，等待管理者開季。）"]
-    assert game.create_skill("驚雷掌", "武學") == waiting
     assert game.practice("武學") == waiting
     assert game.heal() == waiting
     assert game.add_to_team("mate") == waiting

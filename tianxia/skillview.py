@@ -12,7 +12,7 @@ from .world_state import WorldStateStore
 
 
 def rules_line(content: Content) -> str:
-    return "每人最多學一門內功、一門武學：自創功法（取名決定屬性/威力/成長性）或鍛鍊已知武學。"
+    return "每人最多學一門內功、一門武學：開局就送你兩門基礎功夫，鍛鍊它們，或在功法庫改練別的。"
 
 
 def practice_hint(state: GameState, content: Content) -> str | None:

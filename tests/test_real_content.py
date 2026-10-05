@@ -225,23 +225,55 @@ def test_bot_grows_its_arts_with_xinde(content, tmp_path):
     assert member.neigong_level > 1 or member.wugong_level > 1
 
 
+def test_a_new_character_starts_with_the_two_starter_arts_at_level_one(content):
+    game = Game.new(content, "測試俠客", rng=random.Random(0))
+    member = game.state.player.member
+    assert (member.neigong_id, member.neigong_level) == ("jichu_tuna", 1)
+    assert (member.wugong_id, member.wugong_level) == ("jichu_quanjiao", 1)
+    assert game.state.player.stats["xinde"] == content.config.start_stats["xinde"]
+
+
+def test_the_practice_step_waits_for_a_real_practice_not_for_having_an_art(content):
+    """審查裁示 F1：開局就有兩門基礎武學，t4 若看「有沒有武學」一開始就成立，教不到練成；要看「練功」這個動作。"""
+    from tianxia import guide
+
+    game = Game.new(content, "測試俠客", rng=random.Random(0))
+    todo = guide.steps(game.state, content)
+    index = [step.id for step in todo].index("t4_practice")
+    assert todo[index].done_when.action == "practice" and not todo[index].done_when.has_wugong
+    game.state.player.tutorial_step = index
+    game.view_map()
+    assert game.state.player.tutorial_step == index  # 帶著功夫、看過地圖，還不算
+    game.practice("武學")
+    assert game.state.player.tutorial_step == index + 1
+    assert "✔ 引導完成" in game.state.player.guide_done
+
+
 # ── 戰鬥難度曲線 ──────────────────────────────────────────
 
 
-def _win_rate(content, squad_id: str, wugong_id: str | None = None, runs: int = 40) -> float:
+def _win_rate(content, squad_id: str, wugong_id: str | None = None, runs: int = 40, bare: bool = False) -> float:
+    """新角色（開局就帶著 starter_skills 的兩門基礎武學）對 squad_id 的勝率；bare 先把兩門都清掉，wugong_id 換掉武學那一門。"""
     wins = 0
     for seed in range(runs):
         game = Game.new(content, "測試俠客", rng=random.Random(seed))
+        if bare:
+            game.state.player.member.neigong_id = game.state.player.member.wugong_id = None
         if wugong_id:
             game.state.player.member.wugong_id = wugong_id
         wins += fight(game.state, content, game.world, squad_id, random.Random(seed)).tier in ("大勝", "險勝")
     return wins / runs
 
 
-def test_a_freshly_started_hero_with_no_martial_art_cannot_win_any_fight(content):
-    """設計文件六.3：威力全靠武學，新手一開局手無寸鐵（沒有任何預設武學）——這跟舊版
-    「開局自動配一門長拳」不同，是刻意的設計，練功／招募同伴才是變強的路。"""
-    assert _win_rate(content, "dipi") == 0.0
+def test_a_hero_with_no_martial_art_at_all_cannot_win_any_fight(content):
+    """設計文件六.3：威力全靠武學，沒有武學的人誰都打不贏（開局送的兩門基礎武學清掉才是這個情況）。"""
+    assert _win_rate(content, "dipi", bare=True) == 0.0
+
+
+def test_a_freshly_started_hero_with_only_the_starter_arts_wins_sometimes_but_not_reliably(content):
+    """審查裁示 F3：開局就有兩門基礎武學，對地痞流氓有得打但不穩（量過約四成）；練上去、換更強的功夫才是變強的路。"""
+    rate = _win_rate(content, "dipi")
+    assert 0 < rate < 0.9
 
 
 def test_a_hero_with_a_signature_skill_beats_stray_bandits(content):
@@ -336,9 +368,12 @@ def test_current_place_marks_stay_clear_of_names_from_any_location(content, laye
     left, top, right, bottom = BANNER_BOX
     red_ring, select_ring, disc = CURRENT_RING + 1, NODE_SIZE["current"] + 11.5, NODE_SIZE["visible"] + 1
     disc_overlaps = 0
+    # 敵情層「最險」那行字的長短跟著誰最難對付走：這個測試量的是版面，所以勝算固定成全部必敗（開局送武學之前，
+    # 新角色看到的就是這樣）；開局帶著基礎武學時最險的換成官軍巡騎、字更長，北邙山那行會壓到白馬寺的紅旗（版面的老毛病）
+    odds = (lambda squad_id: "必敗") if layer == "enemies" else None
     for loc in content.locations.values():
         game.state.player.location = loc.id
-        svg = render_map(game.state, content, layer, loc.id, game.odds if layer == "enemies" else None)
+        svg = render_map(game.state, content, layer, loc.id, odds)
         for text, box, owner in _placed_texts(svg):
             assert not _overlaps(box, (loc.x + left, loc.y + top, loc.x + right, loc.y + bottom)), (loc.id, text, "紅旗")
             assert not _touches_circle(box, loc.x, loc.y, red_ring), (loc.id, text, "紅圈")

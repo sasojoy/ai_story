@@ -1,5 +1,5 @@
 """門下與隊伍（sanguo-companions 合併大幅重寫）：玩家與最多 4 個已招募同伴的單一隊伍，
-每人最多一門內功、一門武學，練功（自創／鍛鍊）與心得升級，串接 encounter.py 的單次判定。
+每人最多一門內功、一門武學，練功（鍛鍊）與心得升級，串接 encounter.py 的單次判定。
 
 同伴不再是玩家存檔裡的副本——他們全服唯一，等級/武學是共用資料（world_state.py 的
 CompanionProgress），這裡的函式凡是要讀寫同伴進度都要帶一個 WorldStateStore 參數。
@@ -10,7 +10,7 @@ import math
 import random
 
 from . import calendar, encounter
-from .martial_arts import MAX_LEVEL, MartialArt, content_art, generate_from_name, with_quality
+from .martial_arts import MAX_LEVEL, MartialArt, content_art, with_quality
 from .models import Content, FollowerDef, Squad
 from .state import PLAYER, MAX_TEAM_COMPANIONS, GameState, Member
 from .world_state import CompanionProgress, WorldStateStore
@@ -152,30 +152,7 @@ def remove_from_team(state: GameState, companion_id: str) -> list[str]:
     return []
 
 
-# ── 練功：自創功法／鍛鍊（設計文件六.2）──────────────────────
-
-
-def create_skill(
-    state: GameState, content: Content, world: WorldStateStore, name: str, kind: str,
-) -> tuple[MartialArt | None, str]:
-    """自創功法：名字即配方（martial_arts.generate_from_name），全服不能重名。成功時把
-    新武學配進玩家對應的欄位（如果那一欄還空著）並回傳 (art, 訊息)；名字被占用或欄位已經
-    有人時回傳 (None, 原因)。"""
-    name = name.strip()
-    if not name:
-        return None, "得先取個名字。"
-    member = state.player.member
-    slot = "neigong_id" if kind == "內功" else "wugong_id"
-    if getattr(member, slot) is not None:
-        return None, f"你已經有一門{kind}了，同時只能練一門。"
-    if world.is_skill_name_taken(name) or name in content.skills:
-        return None, f"【{name}】這個名字已經有人取走了，換一個吧。"
-    art = generate_from_name(name, kind, name, world.read().tianji)
-    if not world.claim_skill_name(art):
-        return None, f"【{name}】這個名字已經有人取走了，換一個吧。"
-    setattr(member, slot, art.id)
-    setattr(member, slot.replace("_id", "_level"), 1)
-    return art, f"你自創了一門{kind}【{name}】（{art.quality}，屬{art.attribute}）！"
+# ── 練功：改練／鍛鍊（設計文件六.2；自創武學已作廢，見武學與成長設計 3.8）──────────────────────
 
 
 def switch_art(state: GameState, content: Content, world: WorldStateStore, art_id: str) -> list[str]:

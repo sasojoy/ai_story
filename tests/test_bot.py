@@ -1,6 +1,7 @@
 import random
 
 from tianxia.bot import pick, play_season, spend_xinde, wants_heal
+from tianxia.engine import Game
 from tianxia.models import (
     BattleAct, BattleActionEffect, BattleDef, BattleFaction, BattleOption, BattleOutcome,
 )
@@ -17,14 +18,23 @@ def test_wants_heal_only_with_internal_injury(game):
     assert wants_heal(game)
 
 
-def test_spend_xinde_first_creates_then_practices_each_slot(game):
+def test_spend_xinde_practices_each_worn_art_one_level(content):
+    content.config.starter_skills = ["basic_breath", "basic_fist"]
+    game = Game.new(content, "新人", rng=random.Random(0))
     rng = random.Random(0)
     member = game.state.player.member
-    spend_xinde(game, rng)
-    assert member.neigong_id is not None and member.wugong_id is not None
     assert (member.neigong_level, member.wugong_level) == (1, 1)
     spend_xinde(game, rng)
     assert (member.neigong_level, member.wugong_level) == (2, 2)
+    spend_xinde(game, rng)
+    assert (member.neigong_level, member.wugong_level) == (3, 3)
+
+
+def test_spend_xinde_leaves_an_empty_slot_empty(game):
+    """沒有開局送的功夫時（fixture 的設定）也不會去自創：空著的欄位就是空著。"""
+    spend_xinde(game, random.Random(0))
+    member = game.state.player.member
+    assert member.neigong_id is None and member.wugong_id is None
 
 
 def test_spend_xinde_heals_first_when_neili_is_low(game):

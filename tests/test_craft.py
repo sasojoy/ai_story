@@ -438,11 +438,12 @@ def test_another_player_crafting_the_same_recipe_gets_the_same_art(stocked, cont
     assert "首創" in "\n".join(msgs)
 
 
-def test_a_name_already_taken_by_someone_elses_self_created_art_is_worked_around(stocked, content, world):
-    """取名自創仍然是獨佔的，所以煉製撞到那個名字時要自己換一個。"""
-    from tianxia import team
+def test_a_name_already_taken_by_an_older_registered_art_is_worked_around(stocked, content, world):
+    """世界裡登記過的名字（以前自創留下的）仍然是獨佔的，所以煉製撞到那個名字時要自己換一個。"""
+    from tianxia.martial_arts import generate_from_name
 
-    team.create_skill(stocked, content, world, "裂江訣", "內功")  # 別人（這裡是自己）先占走名字
+    taken = generate_from_name("裂江訣", "內功", "裂江訣", world.read().tianji)
+    assert world.claim_skill_name(taken)  # 別人先占走名字
     client = OllamaClient()
     with naming("裂江訣"):
         art, _ = brew(stocked, content, world, client, ["gang_1", "gang_1"], "武學")

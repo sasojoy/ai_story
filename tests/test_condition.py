@@ -98,7 +98,7 @@ def test_healing_clears_the_injury(state, content):
 
 def test_practising_now_accrues_real_injury(state, content, world):
     """練功受傷的訊息一直寫著「累積內傷，需要療傷」，但改之前它只是扣氣血、兩小時就自己回來了。"""
-    team.create_skill(state, content, world, "龍吟九霄", "武學")
+    state.player.member.wugong_id = "fist"
     always_hurt = random.Random()
     always_hurt.random = lambda: 0.0  # type: ignore[method-assign]
     team.practice(state, content, world, "武學", always_hurt)

@@ -1,10 +1,10 @@
 from tianxia import rules, skillview, team
-from tianxia.martial_arts import MartialArt, historical_art, power_at
+from tianxia.martial_arts import MartialArt, generate_from_name, historical_art, power_at
 
 
 def test_rules_line():
     assert skillview.rules_line(None) == (
-        "每人最多學一門內功、一門武學：自創功法（取名決定屬性/威力/成長性）或鍛鍊已知武學。"
+        "每人最多學一門內功、一門武學：開局就送你兩門基礎功夫，鍛鍊它們，或在功法庫改練別的。"
     )
 
 
@@ -61,9 +61,11 @@ def test_detail_at_the_tenth_level_has_no_next_tier(state, content, world):
     assert "已達第十成" in text and "威力 120.0" in text
 
 
-def test_detail_of_a_self_created_skill_says_so(state, content, world):
-    art, msg = team.create_skill(state, content, world, "龍吟九霄", "武學")
-    assert art is not None
+def test_detail_of_an_old_self_created_skill_says_so(state, content, world):
+    """自創已經作廢，但以前登記在世界裡的自創功法還在（資料庫沒清）：功法說明照舊寫「來源：自創」。"""
+    art = generate_from_name("龍吟九霄", "武學", "龍吟九霄", world.read().tianji)
+    assert world.claim_skill_name(art)
+    state.player.member.wugong_id = art.id
     text = skillview.detail(state, content, world, "武學")
     assert text.startswith("【龍吟九霄】") and "來源：自創" in text
 
@@ -141,8 +143,7 @@ def test_practice_hint_names_both_kinds_when_nothing_is_learned(state, content):
 
 def test_practice_hint_names_only_what_is_left_to_train(state, content, world):
     state.player.stats["xinde"] = 500
-    team.create_skill(state, content, world, "龍吟九霄", "武學")
-    state.player.member.wugong_level = 10
+    state.player.member.wugong_id, state.player.member.wugong_level = "fist", 10
     hint = skillview.practice_hint(state, content)
     assert hint is not None and "內功" in hint and "武學" not in hint
 
@@ -168,8 +169,7 @@ def test_practice_hint_stays_quiet_while_the_season_rests(state, content):
 
 def test_practice_hint_goes_away_once_everything_is_at_the_tenth_level(state, content, world):
     state.player.stats["xinde"] = 9999
-    team.create_skill(state, content, world, "龍吟九霄", "武學")
-    team.create_skill(state, content, world, "太虛吐納", "內功")
+    state.player.member.wugong_id, state.player.member.neigong_id = "fist", "breath"
     state.player.member.wugong_level = state.player.member.neigong_level = 10
     assert skillview.practice_hint(state, content) is None
 
@@ -232,11 +232,11 @@ def test_the_art_library_is_empty_at_first(state, content, world):
 
 
 def test_the_art_library_lists_each_art_with_its_own_level(state, content, world):
-    team.create_skill(state, content, world, "龍吟九霄", "武學")
-    state.player.arts.append("龍吟九霄")
-    state.player.art_levels["龍吟九霄"] = 4
+    art = _whirlwind(world)
+    state.player.arts.append(art.id)
+    state.player.art_levels[art.id] = 4
     label, art_id = skillview.art_library(state, content, world)[0]
-    assert art_id == "龍吟九霄" and "第4成" in label and "武學" in label
+    assert art_id == art.id and "第4成" in label and "武學" in label
 
 
 # ── 練功提示（煉製之後文案改寫）──────────────────────────────
@@ -259,8 +259,7 @@ def test_the_hint_says_nothing_about_crafting_without_materials(state, content):
 
 def test_the_hint_goes_quiet_when_everything_is_maxed_and_nothing_can_be_crafted(state, content, world):
     state.player.stats["xinde"] = 500
-    team.create_skill(state, content, world, "龍吟九霄", "武學")
-    team.create_skill(state, content, world, "太虛吐納", "內功")
+    state.player.member.wugong_id, state.player.member.neigong_id = "fist", "breath"
     state.player.member.wugong_level = state.player.member.neigong_level = 10
     assert skillview.practice_hint(state, content) is None
 

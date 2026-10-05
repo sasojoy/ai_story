@@ -4,7 +4,7 @@ from collections import Counter
 from tianxia.models import Config
 from tianxia import server_bots
 from tianxia.server_bots import (
-    DAY, GIVEN, SURNAMES, TZ_OFFSET, act_chance, active, attends_battle, is_online, make_name, make_skill_name,
+    DAY, GIVEN, SURNAMES, TZ_OFFSET, act_chance, active, attends_battle, is_online, make_name,
     pick_personality, reserved_names, schedule, strength,
 )
 from tianxia.state import BotProfile
@@ -54,12 +54,6 @@ def test_names_never_match_a_famous_three_kingdoms_figure():
     assert make_name(_Scripted(["雲", "趙", "雲", "陳"]), set()) == "陳雲"
     assert make_name(_Scripted(["瑜", "周", "超", "馬", "瑜", "林"]), set()) == "林瑜"
     assert {"趙雲", "周瑜", "馬超"} <= server_bots.FAMOUS_NAMES
-
-
-def test_skill_names_have_no_digits():
-    for kind in ("內功", "武學"):
-        name = make_skill_name(random.Random(2), kind)
-        assert name and not any(ch.isdigit() for ch in name)
 
 
 def test_personalities_follow_the_twenty_fifty_thirty_split():

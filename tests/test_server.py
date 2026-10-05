@@ -430,7 +430,7 @@ def test_the_sync_done_while_preparing_a_dialogue_is_saved(game):
 def test_a_game_that_was_never_saved_keeps_its_in_memory_character(game):
     """剛建好、還沒存過的角色資料庫裡沒有：重讀不能把它換成空的。"""
     assert not open_characters().exists("測試")
-    assert server.look(game, server.menxia_view)["xinde"] == 0
+    assert server.look(game, server.menxia_view)["xinde"] == server.CONTENT.config.start_stats["xinde"]
     assert game.state.player.name == "測試"
 
 
@@ -619,17 +619,28 @@ def test_an_unknown_action_is_not_found(client):
     assert client.post("/api/menxia/nonsense", json={}).status_code == 404
 
 
-def test_menxia_create_practice_and_heal(client, monkeypatch):
+def test_menxia_practice_and_heal(client, monkeypatch):
     monkeypatch.setattr(server.CONTENT.config, "practice_injury_chance", 0.0)
     _player(client)
-    out = client.post("/api/menxia/create", json={"kind": "武學", "name": "流雲手"}).json()
-    assert "流雲手" in out["message"]
-    assert "流雲手" in out["menxia"]["player_card"]
     out = client.post("/api/menxia/practice", json={"kind": "武學"}).json()
-    assert "第2成" in out["message"]
+    assert "基礎拳腳" in out["message"] and "第2成" in out["message"]  # 開局送的那一門
+    assert "基礎拳腳" in out["menxia"]["player_card"]
     out = client.post("/api/menxia/heal", json={}).json()
     assert out["message"]
     assert out["main"]["status"]["name"] == "沈青衫"
+
+
+def test_self_creating_an_art_is_gone_for_good(client):
+    """自創已經作廢（武學與成長設計 3.8）：伺服器不收這個動作，選單與修練頁也不提供，身上的功夫不變。"""
+    _player(client)
+    assert "create" not in server.MENXIA_ACTIONS
+    out = client.post("/api/menxia/create", json={"kind": "武學", "name": "流雲手"})
+    assert out.status_code == 404
+    member = open_characters().load("沈青衫").player.member
+    assert (member.neigong_id, member.wugong_id) == ("jichu_tuna", "jichu_quanjiao")
+    options = client.get("/api/main").json()["options"]
+    assert not any("create" in o["id"] for o in options)
+    assert "create-skill" not in (server.ROOT / "web" / "app.js").read_text(encoding="utf-8")
 
 
 def test_roster_pick_and_team_toggle_ignore_people_you_do_not_have(client):
@@ -659,7 +670,7 @@ def _a_player_with_a_material(client, count, xinde=100):
     game = server.game_for("沈青衫")
     mid = next(m.id for m in server.CONTENT.materials.values() if m.tier == 2)
     assert game.craft_cost([mid, mid]) > 0  # 要花心得，下面「心得有沒有被扣」才說明得了事情
-    assert game.state.player.member.wugong_id is None and game.state.player.arts == []
+    assert game.state.player.member.wugong_id == "jichu_quanjiao" and game.state.player.arts == []  # 開局送的那一門
     game.state.player.materials = {mid: count}
     game.state.player.stats["xinde"] = xinde
     open_characters().save(game.state)
@@ -681,7 +692,8 @@ def test_the_forge_takes_the_same_material_twice_when_there_are_two(client):
     key = craft.recipe_key([mid, mid], kind)
     art = open_world().lookup_recipe(key)
     slot = saved.member.wugong_id if kind == "武學" else saved.member.neigong_id
-    assert art is not None and art.kind == kind and slot == art.id  # 欄位本來是空的，煉出來的直接配上身
+    assert art is not None and art.kind == kind and art.id in saved.arts  # 欄位上已經有開局送的那一門：煉出來的進功法庫
+    assert slot in ("jichu_quanjiao", "jichu_tuna")
     assert art.name == craft.fallback_name(server.CONTENT, key, kind)  # 沒問模型
 
 
@@ -692,7 +704,7 @@ def test_the_forge_does_not_craft_the_same_material_twice_with_only_one(client):
     saved = open_characters().load("沈青衫").player
     assert saved.materials == {mid: 1}
     assert saved.stats["xinde"] == 100
-    assert saved.member.wugong_id is None and saved.arts == []
+    assert saved.member.wugong_id == "jichu_quanjiao" and saved.arts == []
 
 
 # ── 功法卡（FB-006）與功法庫先看卡再改練（QA L4）────────────────
@@ -700,16 +712,20 @@ def test_the_forge_does_not_craft_the_same_material_twice_with_only_one(client):
 
 def test_the_practice_page_gets_a_card_for_each_worn_art(client):
     _player(client)
-    client.post("/api/menxia/create", json={"kind": "武學", "name": "流雲手"})
     cards = client.get("/api/menxia").json()["slot_cards"]
     assert [c["kind"] for c in cards] == list(server.KINDS)
     wugong, neigong = cards
-    assert "流雲手" in wugong["card"] and "第一成" in wugong["card"]  # 第一成／第十成那一行是功法卡才有的
+    assert "基礎拳腳" in wugong["card"] and "第一成" in wugong["card"]  # 第一成／第十成那一行是功法卡才有的
+    assert "基礎吐納" in neigong["card"]
+    game = server.game_for("沈青衫")
+    game.state.player.member.neigong_id = None  # 內容改版之後欄位空著的舊角色：卡片照舊說沒有
+    open_characters().save(game.state)
+    neigong = client.get("/api/menxia").json()["slot_cards"][1]
     assert "你還沒有內功。" in neigong["card"]
 
 
 def test_the_slot_cards_say_whether_each_slot_holds_an_art_and_its_level(client, monkeypatch):
-    """C4／C5：修練頁照目前那一門有沒有功法、練到第幾成，決定自創欄收不收、鍛鍊鈕亮不亮。
+    """C5：修練頁照目前那一門有沒有功法、練到第幾成，決定鍛鍊鈕亮不亮。
     全程走 API：動作端點會存檔，每次進鎖都從資料庫重讀角色，所以讀到的是存好的那一份。"""
     monkeypatch.setattr(server.CONTENT.config, "practice_injury_chance", 0.0)
 
@@ -717,8 +733,10 @@ def test_the_slot_cards_say_whether_each_slot_holds_an_art_and_its_level(client,
         return [(c["kind"], c["learned"], c["level"], c["maxed"]) for c in cards]
 
     _player(client)
-    assert slots(client.get("/api/menxia").json()["slot_cards"]) == [("武學", False, 0, False), ("內功", False, 0, False)]
-    client.post("/api/menxia/create", json={"kind": "武學", "name": "流雲手"})
+    assert slots(client.get("/api/menxia").json()["slot_cards"]) == [("武學", True, 1, False), ("內功", True, 1, False)]
+    game = server.game_for("沈青衫")
+    game.state.player.member.neigong_id = None  # 欄位空著（內容改版之後的舊角色）：沒學過、第 0 成
+    open_characters().save(game.state)
     out = client.post("/api/menxia/practice", json={"kind": "武學"}).json()
     assert slots(out["menxia"]["slot_cards"]) == [("武學", True, 2, False), ("內功", False, 0, False)]
     assert slots(client.get("/api/menxia").json()["slot_cards"]) == [("武學", True, 2, False), ("內功", False, 0, False)]
@@ -1658,7 +1676,7 @@ def test_on_the_road_the_page_offers_the_road_tasks(client):
     main = client.get("/api/main").json()
     think = next(o for o in main["options"] if o["id"] == "road:think")
     assert think["enabled"] is False and think["label"] == "邊走邊想（想過了，到下一站再說）"
-    assert main["status"]["xinde"] == server.CONTENT.config.road_think_xinde
+    assert main["status"]["xinde"] == server.CONTENT.config.start_stats["xinde"] + server.CONTENT.config.road_think_xinde
 
 
 # ── 隨口應對（探索的多人與 LLM 玩法 §8.1）────────────────────

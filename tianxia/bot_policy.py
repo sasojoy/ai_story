@@ -1,6 +1,6 @@
 """伺服器假人的行為（伺服器假人設計第七節）：照陣營目標替選項打分數，強度旋鈕決定多常挑最高分。
 
-只透過 engine.Game 的公開行動（choose／create_skill／practice／heal）做事，跟真人按按鈕走同一條
+只透過 engine.Game 的公開行動（choose／practice／heal）做事，跟真人按按鈕走同一條
 路；不接 LLM（呼叫端把 game.client 設成 None）。全服戰鬥裡假人是一般參戰者，每回合從固定戰法裡挑，
 不寫自由文字。
 """
@@ -36,7 +36,6 @@ SUMMONS_SCORE = 50.0
 SUMMONS_MOVE_SCORE = 15.0
 STRIKE_ODDS = CHALLENGE_ODDS + ("五五波",)  # 有打擊軍令點名這位人物時，五五波也去打
 PRACTICE_CHANCE = 0.2  # 每次行動順便鍛鍊一門的機率（練功不花心得，不能每次都練）
-SKILL_NAME_TRIES = 5
 
 
 def take_turn(game: Game, profile: BotProfile, rng: random.Random) -> list[str]:
@@ -80,17 +79,11 @@ def take_turn(game: Game, profile: BotProfile, rng: random.Random) -> list[str]:
 
 
 def look_after(game: Game, rng: random.Random) -> None:
-    """照顧動作（不受強度旋鈕影響）：有內傷先療傷；沒學過的功法先自創（取一個像樣的名字），
-    學過的偶爾鍛鍊一成。"""
+    """照顧動作（不受強度旋鈕影響）：有內傷先療傷；身上的兩門（開局送的基礎武學）偶爾鍛鍊一成。"""
     if wants_heal(game):
         game.heal()
     for kind, slot in (("內功", "neigong_id"), ("武學", "wugong_id")):
-        if getattr(game.state.player.member, slot) is None:
-            for _ in range(SKILL_NAME_TRIES):
-                game.create_skill(server_bots.make_skill_name(rng, kind), kind)
-                if getattr(game.state.player.member, slot) is not None:
-                    break
-        elif rng.random() < PRACTICE_CHANCE:
+        if getattr(game.state.player.member, slot) is not None and rng.random() < PRACTICE_CHANCE:
             game.practice(kind)
 
 

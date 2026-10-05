@@ -547,7 +547,7 @@
     const s = S.main.status;
     // 身上的功法卡（FB-006）：目前切到的那一門放前面
     const slots = x.slot_cards.filter((c) => c.kind === S.kind).concat(x.slot_cards.filter((c) => c.kind !== S.kind));
-    // 目前這一門有沒有功法、練滿了沒（伺服器照 team.MAX_LEVEL 說）：沒有或練滿就不能鍛鍊（C5），有了就不能再自創（C4）
+    // 目前這一門有沒有功法、練滿了沒（伺服器照 team.MAX_LEVEL 說）：沒有或練滿就不能鍛鍊（C5）
     const cur = x.slot_cards.find((c) => c.kind === S.kind) || { learned: false, level: 0, maxed: false };
     const train = !cur.learned ? `還沒有${esc(S.kind)}` : cur.maxed ? "已練到第十成" : "";
     // 名冊只有本人一列（還沒有同伴）時跟上面的本人卡重複，不畫（C6）
@@ -564,13 +564,6 @@
       </div>
       <div class="label">身上的功法</div>
       ${slots.map((c) => `<div class="card">${c.card}</div>`).join("")}
-      <div class="label">自創功法</div>
-      ${cur.learned
-        ? `<div class="card"><p class="muted">你已經有一門${esc(S.kind)}了。想換別的，可以去煉製，或在功法庫改練。</p></div>`
-        : `<form class="card" id="create-skill">
-        <p class="muted">取名就決定了屬性、威力與成長，全服不能重名。你還沒有${esc(S.kind)}，這一欄空著，可以自創一門。</p>
-        <div class="row"><input class="input" name="name" maxlength="12" placeholder="幫你的${esc(S.kind)}取個名字" style="flex:2"><button class="btn" type="submit">自創</button></div>
-      </form>`}
       <div class="label">閉關</div>
       <form class="card" id="seclude">
         <p class="muted">閉關可以得到心得，期間氣血回復加倍；閉關中不能做別的事。</p>
@@ -1387,9 +1380,6 @@
       } else if (form.id === "free-form") {
         if (!data.text.trim()) return;
         await doMain("battle_text", { text: data.text });
-      } else if (form.id === "create-skill") {
-        if (!data.name.trim()) { toast("先幫你的功法取個名字。"); return; }
-        await mx("create", { name: data.name });
       } else if (form.id === "seclude") {
         // 閉關（QA L9）：真的進了閉關（busy_hours 有值）才回江湖頁。引擎不讓閉關（在路上、打坐、事件進行中）
         // 也是 200 加一句原因，請求本身失敗也一樣：留在修練頁、原因寫在頁面上方。
@@ -1456,7 +1446,7 @@
       }
     } catch (e) {
       if (submit) submit.disabled = false;
-      formMsg(form, failText(e)); // 沒有訊息行的表單（自創、閉關…）不受影響
+      formMsg(form, failText(e)); // 沒有訊息行的表單（閉關…）不受影響
     }
   });
 
@@ -1532,7 +1522,7 @@
     craft: ["materials", "clue_items", "per_craft", "bag", "craft_line", "xinde"],
   };
 
-  // 重畫這一頁但保留玩家正在做的事（輪詢、閉關被拒時用）：填到一半的欄位（自創功法的名字、閉關時數）、
+  // 重畫這一頁但保留玩家正在做的事（輪詢、閉關被拒時用）：填到一半的欄位（閉關時數）、
   // 摺疊區的開合（輿圖的視圖本來就存在 S.mapView，重畫照舊套用）。
   // quiet：輪詢的重畫，頁面上方那一行訊息沒有變，不要再播一次浮現動畫
   function redrawPage(quiet = false) {

@@ -2,7 +2,7 @@
 
 sanguo-companions 合併大幅重寫：拿掉 battle.py 的 3v3 全自動戰鬥、多隊派遣、招賢抽卡、
 收徒系統，改成單次判定遭遇（encounter.py）、單一隊伍（最多 4 位同伴）、唯一同伴的
-招募（roster.py）、練功兩種模式（team.py：自創功法／鍛鍊）。
+招募（roster.py）、練功（team.py：鍛鍊；開局送兩門基礎武學，自創武學已作廢）。
 """
 from __future__ import annotations
 
@@ -147,7 +147,8 @@ class Game:
         （整份保留）；好感度則只帶一成（Config.affinity_carry_ratio、無條件捨去，
         80→8、5→0：第一季設計第十四節，下一季最多從 10 起步，交情要重新經營）。
         新手引導：做完或略過的人照舊不再出現；還沒做完的人跟著新角色從起始步重來——
-        新角色沒有武學，接著上一季做到一半的下一步（例如出城遊歷）會把他推進必敗的路（FB-034）。
+        新角色只剩開局那兩門第一成的基礎武學，接著上一季做到一半的下一步（例如出城遊歷）會把他推進
+        打不過的路（FB-034）。
         world 欄位這裡不用管，呼叫端（_reconcile_season）緊接著就會把它指向共用賽季。
         之後新增的 PlayerState 欄位預設就跟著新角色重來；要跨季保留的才加進下面這份清單。"""
         old = self.state
@@ -2524,17 +2525,6 @@ class Game:
             journal.add_entry(self.state, JournalEntry(time=end_time, title="出關", tag=tag, changes=[change]))
         return [msg]
 
-    def create_skill(self, name: str, kind: str) -> list[str]:
-        """自創功法：取名決定屬性/威力/成長性，全服不能重名（設計文件六.2）。"""
-        if self._preparing():
-            return self._log(["（賽季籌備中，等待管理者開季。）"])
-        xinde = self._xinde()
-        art, msg = team.create_skill(self.state, self.content, self.world, name, kind)
-        msgs = self._log([msg])
-        if art is not None:
-            msgs += self._menxia_entry(msg, xinde, guide=True)
-        return msgs
-
     def craft(self, material_ids: list[str]) -> list[str]:
         """煉製：兩樣素材煉成一門功法，花心得（見 tianxia/craft.py）；內功還是武學開爐才揭曉。
 
@@ -2582,7 +2572,7 @@ class Game:
             return self._log(["（賽季籌備中，等待管理者開季。）"])
         xinde = self._xinde()
         # FB-007：引導那一步要的是「你有一門功夫了」，所以看練之前那一欄有沒有功法——沒學過就練不到、不算；
-        # 已經第十成（練無可練）也算（可能在走到這一步前就自創、煉製到滿了，只認「真的加一成」會永遠卡住）。
+        # 已經第十成（練無可練）也算（可能在走到這一步前就煉製、練到滿了，只認「真的加一成」會永遠卡住）。
         has_art = getattr(self.state.player.member, "neigong_id" if kind == "內功" else "wugong_id") is not None
         msgs = self._log(team.practice(self.state, self.content, self.world, kind, self.rng))
         return msgs + self._menxia_entry(msgs[0] if msgs else "練功", xinde, guide=has_art)
@@ -2600,9 +2590,9 @@ class Game:
 
     def _menxia_entry(self, tag: str, xinde_before: int, guide: bool = False, title: str = journal.PRACTICE) -> list[str]:
         """修練頁、煉製頁的動作寫進江湖紀錄（同一種連續的併成一則）。標題照底部分頁的名字：煉製寫「煉製」，
-        自創、鍛鍊、療傷、改練寫「修練」（FB-047；以前都寫「門下」，煉製會併進前面那則自創、鍛鍊）。
+        鍛鍊、療傷、改練寫「修練」（FB-047；以前都寫「門下」，煉製會併進前面那則鍛鍊）。
 
-        guide=True：這個動作算一次「練功」（自創、煉製、鍛鍊），順便看新手引導有沒有完成（FB-024）。完成了，
+        guide=True：這個動作算一次「練功」（煉製、鍛鍊），順便看新手引導有沒有完成（FB-024）。完成了，
         note_action 回來的「✔ 引導完成」、獎勵與說書人的下一步記在這一則的 guide（江湖紀錄看得到），給對話框
         （guide_done），不進修練、煉製頁的訊息與「剛剛」（引導重做設計 8.1.3）。回傳一律是空串列。"""
         delta = self._xinde() - xinde_before

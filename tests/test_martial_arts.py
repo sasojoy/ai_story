@@ -9,7 +9,6 @@ from tianxia.martial_arts import (
     power_at,
     with_quality,
 )
-from tianxia.sqlite_world import open_world
 
 
 def test_generate_from_name_is_deterministic():
@@ -93,17 +92,6 @@ def test_the_same_names_reshuffle_when_the_tianji_changes():
     assert [(a.attribute, a.quality, a.base_power) for a in before] != [
         (a.attribute, a.quality, a.base_power) for a in after
     ]
-
-
-def test_create_skill_uses_the_current_tianji(content, tmp_path):
-    from tianxia import team
-    from tianxia.state import new_game_state
-
-    store = open_world(tmp_path / "world.db")
-    store.mutate(lambda state: setattr(state, "tianji", 3))
-    state = new_game_state(content, "甲")
-    art, _ = team.create_skill(state, content, store, "驚雷掌", "武學")
-    assert art == generate_from_name("驚雷掌", "武學", "驚雷掌", tianji=3)
 
 
 # ── 武學與成長 Task 3：基礎武學照品質、每個人自己的品質 ─────────────────
