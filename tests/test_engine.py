@@ -6147,3 +6147,68 @@ def test_the_status_bar_and_the_card_show_the_same_hp_at_root_6(game):
     data = game.status_data()
     assert (data["hp"], data["hp_max"]) == (101, 330)
     assert f"氣血 {data['hp']}/{data['hp_max']}" in game.member_card("player")
+
+
+# ── 伺服器自己的排程（線上架構設計第四節）：沒有玩家的 Game 推全服的事 ──────────────
+
+
+def test_world_tick_advances_the_shared_season_once(content, game):
+    """排程推過之後玩家再同步，同一段現實時間不會推兩次（Review Focus 1）。"""
+    ticker = Game.for_world(content, game.world, rng=random.Random(0))
+    ticker.world_tick(5000.0)  # 第一下只記下時鐘
+    before = game.world.get_season().time
+    ticker.world_tick(5600.0)
+    after = game.world.get_season().time
+    assert after == pytest.approx(before + 600 * content.config.time_scale)
+    game.sync(5600.0)
+    assert game.world.get_season().time == pytest.approx(after)
+
+
+def test_world_tick_closes_muster_and_times_out_rounds_with_nobody_online(content, game):
+    """沒人在線：集結截止自動分配、回合逾時代選、全員到齊就結算、收場套結果（以前都要有人刷新畫面）。"""
+    definition = _install_battle_def(content)  # 集結 600 秒、回合 120 秒、一幕一回合
+    game.world.start_battle(definition, now=1000.0)
+    with at(game, 1000.0):
+        game.choose("battle:join:guan")
+    open_characters().save(game.state)  # 沈浪下線
+    ticker = Game.for_world(content, game.world, rng=random.Random(3))
+    ticker.world_tick(1000.0 + 601)
+    assert game.world.get_battle().phase == "active"
+    ticker.world_tick(1000.0 + 601 + 121)  # 回合逾時：系統代選、結算；一幕一回合就收場
+    (_, done), = game.world.ended_battles()
+    assert not done.unfinished and done.outcome_title == "官軍大勝"
+    back = Game(content, open_characters().load("沈浪"), rng=random.Random(4), world=game.world)
+    back.sync(1000.0 + 800)
+    assert any("測試決戰" in e.title for e in back.state.journal)  # 參戰者回來補到戰報（W13）
+
+
+def test_world_tick_shelves_a_battle_after_the_season_ended(content, game):
+    """季已經結束、決戰還在打、沒人在線：排程那一下照 FB-035 收兵（Review Focus 3）。"""
+    definition = _install_battle_def(content)
+    game.world.start_battle(definition, now=1000.0)
+    with at(game, 1000.0):
+        game.choose("battle:join:guan")
+    open_characters().save(game.state)
+    game.world.mutate_season(lambda s: (setattr(s, "ended", True), setattr(s, "ending_title", "天下太平")))
+    Game.for_world(content, game.world, rng=random.Random(3)).world_tick(1100.0)
+    assert game.world.get_battle() is None
+    (_, shelved), = game.world.ended_battles()
+    assert shelved.unfinished
+
+
+def test_world_tick_opens_and_settles_a_scheduled_showdown_with_nobody_online(content, world):
+    """第一季：排定的時間一到，排程那一下就開集結（不用等誰刷新）；沒人參戰，集結截止再一回合逾時，照前線起點判、
+    寫進時間軸（Review Focus 4 的排程版）。"""
+    _showdown_game(content, world)  # 裝好第一季內容、決戰與陣營，種好季；之後完全不用這個玩家
+    ticker = Game.for_world(content, world, rng=random.Random(5))
+    ticker.world_tick(0.0)  # 記下時鐘
+    season = world.get_season()
+    until_open = (season.schedule["changshe_fire"] - season.time) / content.config.time_scale
+    ticker.world_tick(until_open + 1.0)
+    battle = world.get_battle()
+    assert (battle.battle_id, battle.phase) == ("changshe_fire", "muster")
+    definition = content.battles["changshe_fire"]
+    t = battle.muster_deadline_real + 1.0
+    ticker.world_tick(t)
+    ticker.world_tick(t + definition.round_seconds + 1.0)
+    assert "changshe_fire" in world.get_season().timeline

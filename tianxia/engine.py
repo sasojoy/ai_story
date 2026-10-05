@@ -293,6 +293,27 @@ class Game:
 
     # ── 時間 ──────────────────────────────────────────────
 
+    @classmethod
+    def for_world(
+        cls, content: Content, world: WorldStateStore, rng: random.Random | None = None,
+    ) -> Game:
+        """沒有玩家的 Game：給伺服器的排程推全服的事用（線上架構設計第四節，見 world_tick）。state 是共用賽季的空殼
+        （world._season_vehicle：名號空白、不存檔），所以收場補送戰報、季終收兵那些「補給自己」的步驟對它都是空的。"""
+        return cls(content, _season_vehicle(content, world.get_season()), rng, world)
+
+    def world_tick(self, now: float) -> list[str]:
+        """伺服器排程的一下：全服的事推到 now。跟玩家 sync 加上 options() 裡全服的那一半一樣，所以有沒有人在線都一致：
+        1. 補算共用賽季（catch_up_season：大勢、季的事、時刻表、時間到了開決戰、季末收季）；
+        2. 推一次決戰（_battle_status：集結與回合逾時、機器人補位、結算、收場套結果、季終收兵、開等著的決戰）。
+        兩邊都是「追到 now 為止」，排程與玩家的請求誰先誰後都只推一次。不存角色、不寫任何人的江湖紀錄：
+        大事公告與決戰戰報照舊在每個人同步時補（FB-038、W13）。回傳的訊息只給排程印紀錄用。"""
+        self.now = now
+        self._reconcile_season()
+        msgs = list(self.world.catch_up_season(self.content, now, self.rng))
+        self.state.world = self.world.get_season()
+        self._battle_status(tick=True)
+        return msgs
+
     def sync(self, now: float) -> list[str]:
         """把現實經過的時間推進到遊戲裡。玩家自己的體力/氣血照自己上次連線以來的步調追趕；
         共用賽季的時間/大勢則照「距離上次有人追趕過了多久現實時間」追趕——不管是誰觸發、
