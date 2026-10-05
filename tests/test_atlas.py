@@ -276,21 +276,26 @@ def test_travel_options_offer_walking_hurrying_and_dashing(state, content):
 
 
 def test_travel_options_and_refusal_explain_why_you_cannot_go(state, content):
-    for setup, reason in (
-        (lambda: setattr(state, "pending_event", "drunk"), "先回江湖頁處理「醉漢」"),
-        (lambda: setattr(state.player, "busy_until", 3600.0), "閉關中，不能安排前往"),
-        (lambda: setattr(state.player, "resting_since", 0.0), "打坐中，先起身才能安排前往"),
-        (lambda: setattr(state.player, "pending_companion", "someone"), "交談中，先告辭才能安排前往"),
-        (lambda: setattr(state.player, "pending_faction", "guan"), "投靠還沒決定，先決定再安排前往"),
-        (lambda: setattr(state.world, "ended", True), "賽季已結束，不能安排前往"),
+    for setup, reason, to_jianghu in (
+        (lambda: setattr(state, "pending_event", "drunk"), "先回江湖頁處理「醉漢」", True),
+        (lambda: setattr(state.player, "busy_until", 3600.0), "閉關中，不能安排前往", False),
+        (lambda: setattr(state.player, "resting_since", 0.0), "打坐中，先起身才能安排前往", False),
+        (lambda: setattr(state.player, "pending_companion", "someone"), "交談中，先告辭才能安排前往", True),
+        (lambda: setattr(state.player, "picking_audience", True), "求見中，先返回才能安排前往", True),
+        (lambda: setattr(state.player, "pending_faction", "guan"), "投靠還沒決定，先決定再安排前往", True),
+        (lambda: setattr(state.player, "fs_asking", "chain"), "正在答話，先作罷才能安排前往", True),
+        (lambda: setattr(state.world, "ended", True), "賽季已結束，不能安排前往", False),
     ):
         state.pending_event, state.player.busy_until, state.player.resting_since = None, None, None
         state.player.pending_companion, state.player.pending_faction = None, None
+        state.player.picking_audience, state.player.fs_asking = False, None
         state.world.ended = False
         setup()
-        # 事件待處理：要回江湖頁才解得開，頁面照 to_jianghu 多給一顆「回江湖」；其他原因照舊（FB-063）
-        expected = [TravelOption("walk", reason, False, to_jianghu=state.pending_event is not None)]
+        # 要回江湖頁了結才解得開的（事件、交談、求見、投靠待確認、答話）：頁面照 to_jianghu 多給一顆「回江湖」；
+        # 閉關、打坐、賽季結束不是回江湖頁就解得開的事（FB-063）
+        expected = [TravelOption("walk", reason, False, to_jianghu=to_jianghu)]
         assert travel_options(state, content, "lake") == expected
+        assert travel_block(state, content) == TravelBlock(reason, to_jianghu=to_jianghu)
         assert travel_refusal(state, content, "lake", "walk") == reason
     state.world.ended = False
     assert travel_refusal(state, content, "town", "walk") == "無法安排前往這裡"
@@ -482,7 +487,7 @@ def test_game_map_helpers(game):
 
 def test_picking_whom_to_call_on_blocks_travel(state, content):
     state.player.picking_audience = True
-    assert travel_options(state, content, "lake") == [TravelOption("walk", "求見中，先返回才能安排前往", False)]
+    assert travel_options(state, content, "lake") == [TravelOption("walk", "求見中，先返回才能安排前往", False, to_jianghu=True)]
     assert travel_refusal(state, content, "lake", "walk") == "求見中，先返回才能安排前往"
 
 

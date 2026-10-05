@@ -6,8 +6,8 @@ import re
 from collections.abc import Callable
 from typing import Literal, NamedTuple
 
-from . import calendar, materials, roster, team  # 與 roster 互相 import：只能引入整個模組、呼叫時才取屬性，不能 from .roster import …
-from .models import FRONT_KEY, Check, Condition, Content, Effect, Trend
+from . import calendar, front_lines, materials, roster, team  # 與 roster 互相 import：只能引入整個模組、呼叫時才取屬性，不能 from .roster import …
+from .models import FRONT_KEY, Check, Condition, Content, Effect, FactionDef, Trend
 from .state import PLAYER, GameState, Rumor, RumorLayer, WorldState
 from .world_state import JADE_SEAL_FRAGMENT_COUNT, WorldStateStore
 
@@ -437,7 +437,11 @@ def change_trend(
     那一刻才有任何文字反饋，之後不管是打贏遭遇戰、選了某個事件分支推動了多少，玩家在
     劇情文字裡完全看不到，必須自己點開「江湖大勢」分頁才看得到數字，等於看不出自己的
     行動有沒有用。sim_tick()（背景虛擬玩家，每小時自動微幅推動）刻意不接住這個回傳值，
-    所以背景推動依然維持安靜，不會洗版；只有玩家自己選擇/打贏的那一刻才會顯示。"""
+    所以背景推動依然維持安靜，不會洗版；只有玩家自己選擇/打贏的那一刻才會顯示。
+
+    第一季的規則開著時（season_one），三條戰線與豪強割據的變動不寫數字（FB-064）：回機器可讀的「大勢@<線 id> ±N」
+    （front_lines.mark），畫面上由 front_chip／humanize 換成「潁川汝南：官軍步步進逼」這樣的一句話；其他的線與
+    開關關著時一個字都不變。"""
     w = state.world
     trend = _trend(content, trend_id)
     if trend is not None and trend.derived and season_one(content, w):
@@ -454,8 +458,95 @@ def change_trend(
     actual = after - before
     if actual:
         recompute_trends(w, content)  # 開關開著時推了戰線，黃巾聲勢跟著重算
-        msgs.append(f"（{trend_name(content, trend_id)} {'+' if actual >= 0 else ''}{actual}）")
+        if season_one(content, w) and is_side_trend(content, trend_id):
+            # FB-064：戰線與豪強割據不給玩家看數字（看不出是哪一邊、也看不出好壞）。這裡回機器可讀的寫法，
+            # 江湖紀錄照舊把同一條線的變動加總；畫出來的那一刻才換成一句話、照看的人的陣營上色（front_chip、humanize）
+            msgs.append(front_lines.mark(trend_id, actual))
+        else:
+            msgs.append(f"（{trend_name(content, trend_id)} {'+' if actual >= 0 else ''}{actual}）")
     return msgs
+
+
+# ── 戰況變化的說法（FB-064）──────────────────────────────────
+
+
+def is_side_trend(content: Content, trend_id: str) -> bool:
+    """變動要寫成「哪一方佔了便宜」的線：三條戰線與豪強割據。其他的線（玉璽線索、開關關著時的黃巾聲勢）照舊寫數字。"""
+    return trend_id == GEJU or trend_id in front_ids(content)
+
+
+def can_draw_side_change(content: Content, trend_id: str) -> bool:
+    """這條線的戰況變化畫得出來嗎：內容裡有這條線，而且它還是戰線或豪強割據。紀錄裡存的是機器可讀的寫法，存檔可能比內容舊
+    （內容改版拿掉了那條線）：畫不出來的一律丟掉，不當機、也不把原文露給玩家（front_chip、humanize 都先問這一關）。"""
+    return _trend(content, trend_id) is not None and is_side_trend(content, trend_id)
+
+
+def _beneficiary(content: Content, trend_id: str, delta: int) -> FactionDef | None:
+    """這一次往這個方向動，是哪一個陣營佔了便宜：陣營目標（goals）的方向跟變動同號的那一個。
+    戰況 0 是官軍穩控、100 是黃巾控制，這件事寫在內容裡（官軍 goals −1、黃巾 +1），不在程式裡。"""
+    return next(
+        (f for f in content.scenario.factions if (goal := f.goals.get(trend_id, 0)) and (goal > 0) == (delta > 0)), None,
+    )
+
+
+def front_text(content: Content, trend_id: str, delta: int, seed: str) -> str:
+    """戰況變化的一句話（不寫數字）。戰線：「{戰線}：{陣營}{句子}」，陣營是往那個方向動時佔便宜的一方，
+    句子照變動的大小（front_lines.band_of）在 content/front_lines.json 挑；割據：整句話（已經有「豪強」，不再接陣營名）。
+    一段有好幾句時照 seed 與線、段雜湊挑一句，不動引擎的亂數；seed 通常是那則紀錄的時間，同一則永遠同一句。"""
+    lines = content.front_lines
+    if trend_id == GEJU:
+        key = "up" if delta > 0 else "down"
+        return front_lines.pick(lines.geju[key], f"{seed}|{trend_id}|{key}")
+    side = _beneficiary(content, trend_id, delta)
+    band = front_lines.band_of(delta)
+    pool = (lines.by_side.get(side.id, {}).get(band) if side is not None else None) or lines.generic[band]
+    name = lines.sides.get(side.id, side.name) if side is not None else ""
+    phrase = front_lines.pick(pool, f"{seed}|{trend_id}|{band}")
+    return f"{trend_name(content, trend_id)}：{name}{phrase}"
+
+
+def front_favour(content: Content, viewer: str | None, trend_id: str, delta: int) -> int:
+    """這一次變動對看畫面的人（viewer＝他的陣營 id，散人是 None）是好事（1）、壞事（−1）還是無關（0）：
+    他的陣營對這條線有目標（goals）時，方向一致是好事、相反是壞事；沒有目標的（散人、戰線上的豪強、割據上的官軍與黃巾）一律 0。"""
+    faction = next((f for f in content.scenario.factions if f.id == viewer), None)
+    goal = faction.goals.get(trend_id, 0) if faction is not None else 0
+    if not goal:
+        return 0
+    return 1 if (goal > 0) == (delta > 0) else -1
+
+
+def front_chip(content: Content, viewer: str | None, change: str, seed: str) -> tuple[str, int] | None:
+    """一項機器可讀的戰況變化（front_lines.mark，江湖紀錄加總過的）→ (畫面上的一句話, 對 viewer 的好壞 1／0／−1)；
+    不是這種變化、或那條線內容裡已經沒有（can_draw_side_change）回 None，journal 就丟掉這枚標籤。
+    journal 畫數值標籤時用；顏色在畫的那一刻才決定，紀錄裡存的東西不帶任何一方的立場。"""
+    parsed = front_lines.unmark(change)
+    if parsed is None or not can_draw_side_change(content, parsed[0]):
+        return None
+    trend_id, delta = parsed
+    return front_text(content, trend_id, delta, seed), front_favour(content, viewer, trend_id, delta)
+
+
+def humanize(content: Content, msgs: list[str], seed: str) -> list[str]:
+    """一串訊息裡機器可讀的戰況變化換成一句話：同一條線的變動先加總（−1 與 −2 是 −3 一句話），放在那條線第一次出現的位置，
+    加總為零的拿掉；那條線內容裡已經沒有的（can_draw_side_change）也拿掉，原文不外露。
+    給 Game._log（回給呼叫端與存進 log 的話；管理者工具列的提示也是），沒有這種變化時原樣回傳。"""
+    totals: dict[str, int] = {}
+    for msg in msgs:
+        parsed = front_lines.unmark(msg)
+        if parsed is not None:
+            totals[parsed[0]] = totals.get(parsed[0], 0) + parsed[1]
+    if not totals:
+        return msgs
+    out: list[str] = []
+    said: set[str] = set()
+    for msg in msgs:
+        parsed = front_lines.unmark(msg)
+        if parsed is None:
+            out.append(msg)
+        elif can_draw_side_change(content, parsed[0]) and totals[parsed[0]] and parsed[0] not in said:
+            said.add(parsed[0])
+            out.append(front_text(content, parsed[0], totals[parsed[0]], seed))
+    return out
 
 
 def learn_skill(state: GameState, content: Content, skill_id: str) -> list[str]:

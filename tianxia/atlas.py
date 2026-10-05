@@ -455,13 +455,13 @@ class TravelOption:
     mode: TravelMode
     label: str
     enabled: bool
-    to_jianghu: bool = False  # 按不下去是因為江湖頁上有事件還沒了結：頁面多給一顆「回江湖」（FB-063）
+    to_jianghu: bool = False  # 按不下去是因為江湖頁上有事沒了結（事件、交談、求見、投靠、答話）：頁面多給一顆「回江湖」（FB-063）
 
 
 @dataclass(frozen=True)
 class TravelBlock:
-    """現在不能安排前往的原因（話只在 travel_block 寫一次）。to_jianghu：要回江湖頁了結待處理的事件才解得開，
-    頁面照這個旗標多給「回江湖」，不去解析中文。"""
+    """現在不能安排前往的原因（話只在 travel_block 寫一次）。to_jianghu：要回江湖頁了結才解得開（待處理的事件、交談中、
+    求見中、投靠待確認、答話中；FB-063），頁面照這個旗標多給「回江湖」，不去解析中文。閉關、打坐、賽季結束不是。"""
 
     reason: str
     to_jianghu: bool = False
@@ -479,13 +479,13 @@ def travel_block(state: GameState, content: Content) -> TravelBlock | None:
         return TravelBlock(f"先回江湖頁處理{what}", to_jianghu=True)
     p = state.player
     if p.pending_companion:
-        return TravelBlock("交談中，先告辭才能安排前往")
+        return TravelBlock("交談中，先告辭才能安排前往", to_jianghu=True)
     if p.picking_audience:
-        return TravelBlock("求見中，先返回才能安排前往")
+        return TravelBlock("求見中，先返回才能安排前往", to_jianghu=True)
     if p.pending_faction:
-        return TravelBlock("投靠還沒決定，先決定再安排前往")
+        return TravelBlock("投靠還沒決定，先決定再安排前往", to_jianghu=True)
     if p.fs_asking is not None:
-        return TravelBlock("正在答話，先作罷才能安排前往")
+        return TravelBlock("正在答話，先作罷才能安排前往", to_jianghu=True)
     if p.busy_until is not None:
         return TravelBlock("閉關中，不能安排前往")
     if p.resting_since is not None:

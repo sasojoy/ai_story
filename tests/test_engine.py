@@ -5,7 +5,7 @@ from unittest import mock
 import pytest
 
 from conftest import FixedRandom, at, install_season_one, walk_to
-from tianxia import atlas, battle_instance, calendar, companion_agent, flavor, guide, rules, skillview
+from tianxia import atlas, battle_instance, calendar, companion_agent, flavor, front_lines, guide, rules, skillview
 from tianxia.characters import open_characters
 from tianxia.engine import Game, Option
 from tianxia.martial_arts import MartialArt
@@ -4839,6 +4839,8 @@ def test_showdown_result_feeds_timetable(content, world):
     from tianxia.models import FigureChange
 
     game = _showdown_game(content, world)
+    content.map.regions[0].front = "yingru"  # 測試夾具的北區沒寫戰線：這裡宣告它算潁川汝南，官軍的目標是把它壓低
+    next(f for f in content.scenario.factions if f.id == "guan").goals = {"yingru": -1}
     event = next(e for e in content.timetable if e.id == "changshe_fire")
     event.outcomes["guan:大勝"].figures = {"bocai": FigureChange(fate="退場")}
     event.outcomes["guan:險勝"].figures = {"bocai": FigureChange(fate="聲威大減")}
@@ -4852,7 +4854,11 @@ def test_showdown_result_feeds_timetable(content, world):
     assert game.state.world.timeline["changshe_fire"].key == "guan:大勝"  # 手上的那一份也跟上了（之後存檔不會蓋掉）
     report = next(e for e in game.state.journal if e.battle_id is not None)
     assert (report.title, report.tag) == ("長社火攻・官軍大勝", "你站在官軍")
-    assert season.timeline["changshe_fire"].text in report.lines and "潁川汝南 -15" in report.changes
+    # 第一季規則開著、潁川汝南是一條戰線：大勢增減不再是帶正負號的數字（FB-064）——江湖紀錄存的是機器可讀的標籤（畫出來是
+    # 一句話，官軍看是綠的），戰報不收
+    assert season.timeline["changshe_fire"].text in report.lines and report.changes == [front_lines.mark("yingru", -15)]
+    assert game.state.battles[0].changes == [] and "潁川汝南 -15" not in game.state.battles[0].notes
+    assert any("潁川汝南：官軍" in html and "tx-up" in html for html in (game.battle_extra_html(),))
     assert game.state.battles[0].tier == "官軍大勝"
     assert any(e.title == "江湖大事" and "火光燭天" in e.tag for e in game.state.journal)
     other = Game.new(content, "丙", rng=random.Random(5), world=world)  # 沒參戰的人也收到公告，但沒有戰報
