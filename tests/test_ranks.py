@@ -14,7 +14,7 @@ from tianxia.content import ContentError, load_content, validate
 from tianxia.encounter import EncounterResult
 from tianxia.engine import Game
 from tianxia.models import Config, Effect, FigureChange
-from tianxia.state import BotProfile, PlayerState, Summons, WorldState
+from tianxia.state import BotProfile, Member, PlayerState, Summons, WorldState
 
 CONTENT_DIR = Path(__file__).parent.parent / "content"
 
@@ -433,3 +433,14 @@ def test_socialize_at_the_summons_place_prepares_no_dialogue(on):
     assert game.dialogue_request("act:socialize") is None and not game.socialize_starts_dialogue()
     game.state.player.summons = None
     assert game.dialogue_request("act:socialize") is not None and game.socialize_starts_dialogue()  # 沒有召見照舊對話
+
+
+def test_follower_arts_are_upper_grade(real):
+    """企劃者 2026-10-05 選 (b)：六門部下武學是上品（skills.json 的 quality），每名第 3 成約 37、兩名約 75；
+    其他本命武學照舊是絕學。"""
+    follower_arts = {f.wugong for f in real.followers.values()}
+    for skill_id, skill in real.skills.items():
+        assert team.resolve_art(skill_id, real, None).quality == ("上品" if skill_id in follower_arts else "絕學"), skill_id
+    art = team.resolve_art("xingwu_qiang", real, None)
+    power = encounter.member_power(Member(wugong_id="xingwu_qiang", wugong_level=3), {"xingwu_qiang": art})
+    assert 35 <= power <= 40

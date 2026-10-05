@@ -2,12 +2,14 @@
 
 用 tests/fixtures/content 加上幾條測試用的戰線與一份縮小的時刻表（照結算文件的寫法），不靠真實內容。"""
 import random
+from pathlib import Path
 
 import pytest
 
 from conftest import CHANGSHE_LOCKED, CHANGSHE_LOSER, LUZHI_LOCKED, LUZHI_LOSER, FixedRandom, install_season_one
 from tianxia import calendar, figures, timetable
-from tianxia.models import FigureChange, TimetableEvent
+from tianxia.content import ContentError, load_content, validate
+from tianxia.models import FigureChange, TimetableEvent, TimetableOutcome
 from tianxia.state import FigureState, GameState, Lock, PlayerState
 from tianxia.world import advance_world_state
 from tianxia.world_state import fresh_season
@@ -492,3 +494,178 @@ def test_calendar_follows_the_season_stamp_not_the_profile(s1):
     assert calendar.week_start(5, s1) == pytest.approx(2 * calendar.week_start(5, s1, season_world))  # 沒給季才照設定
     advance_to_week(state, s1, 4)  # 季的事也照蓋的章切曆時：第 4 週週一的大事準時結算
     assert state.world.timeline["bocai"].time == pytest.approx(calendar.week_start(4, s1, season_world))
+
+
+# ── 人物欄位（FB-042，濃縮版內容表第八節）：{人物:<id>} 與 @人物:<id> ─────────────────────
+#
+# 要人物表（戰線、陣營、接位鏈），所以用真實內容、開關打開；文字與效果在測試裡自己寫，不靠 timetable.json 的句子。
+
+CONTENT_DIR = Path(__file__).parent.parent / "content"
+
+
+@pytest.fixture
+def real_on():
+    """真實內容（人物表照濃縮版內容表 1.1），第一季開關打開。"""
+    c = load_content(CONTENT_DIR)
+    c.config.season_one = True
+    return c
+
+
+def _real_season(c) -> GameState:
+    """開季那一刻的一季（人物照人物表種好）＋季的事用的那種空殼玩家。"""
+    player = PlayerState(name="", location=c.scenario.start_location, stats={}, stamina=0)
+    return GameState(player=player, world=fresh_season(c))
+
+
+def test_person_slot_names_the_figure_who_is_on_the_events_front(real_on):
+    """規則第 1 條：在場、而且在這件大事的戰線上，就寫他自己——不必是主將（朱儁排在皇甫嵩後面，照樣寫朱儁）。"""
+    s = _real_season(real_on)
+    changshe = event(real_on, "changshe_fire")
+    assert timetable.fill_slots(s, real_on, changshe, "{人物:bocai}守營，{人物:zhujun}守城。") == "波才守營，朱儁守城。"
+
+
+def test_person_slot_names_whoever_took_over_when_he_is_gone(real_on):
+    """規則第 2 條：不在場、或不在這條戰線上，寫這條戰線他那一方當時的主將（接手的人）。"""
+    s = _real_season(real_on)
+    changshe, siege = event(real_on, "changshe_fire"), event(real_on, "luzhi_siege")
+    figures.apply(s, real_on, "bocai", FigureChange(fate="退場"))  # 彭脫接手潁川
+    figures.apply(s, real_on, "huangfusong", FigureChange(fate="重挫", front="jizhou", location="luzhi_camp"))  # 轉往冀州
+    assert timetable.fill_slots(s, real_on, changshe, "{人物:bocai}對{人物:huangfusong}。") == "彭脫對朱儁。"
+    figures.apply(s, real_on, "luzhi", FigureChange(fate="下獄"))
+    assert timetable.fill_slots(s, real_on, siege, "{人物:luzhi}圍廣宗。") == "皇甫嵩圍廣宗。"  # 長社後轉來的皇甫嵩
+    assert timetable.fill_slots(s, real_on, siege, "{人物:huangfusong}也在。") == "皇甫嵩也在。"  # 在冀州，寫他自己
+
+
+def test_person_slot_falls_back_to_the_generic_title(real_on):
+    """規則第 3 條：這條戰線他那一方也沒有人了，官軍寫「官軍主將」、黃巾寫「黃巾渠帥」。"""
+    s = _real_season(real_on)
+    for fid in ("bocai", "pengtuo", "huangfusong", "zhujun"):
+        s.world.figures[fid].status = "retired"
+    changshe = event(real_on, "changshe_fire")
+    assert timetable.fill_slots(s, real_on, changshe, "{人物:bocai}、{人物:huangfusong}") == "黃巾渠帥、官軍主將"
+
+
+def test_person_effect_lands_on_whoever_the_text_names(real_on):
+    """@人物:<id> 照同一個規則找人：他在就落在他身上，他不在就落在接手的人身上。"""
+    changshe = event(real_on, "changshe_fire")
+    changshe.outcomes["guan:險勝"] = TimetableOutcome(
+        text="這一次，{人物:bocai}敗走。", figures={"@人物:bocai": FigureChange(fate="受挫")},
+    )
+    here = _real_season(real_on)
+    msgs = timetable.resolve(here, real_on, changshe, random.Random(0), key="guan:險勝")
+    assert msgs == [f"【江湖大事】{changshe.preface}這一次，波才敗走。"]
+    assert here.world.figures["bocai"].prestige == 45  # 60 − 15
+
+    gone = _real_season(real_on)
+    figures.apply(gone, real_on, "bocai", FigureChange(fate="退場"))  # 彭脫接手潁川（聲威 40）
+    msgs = timetable.resolve(gone, real_on, changshe, random.Random(0), key="guan:險勝")
+    assert msgs == [f"【江湖大事】{changshe.preface}這一次，彭脫敗走。"]
+    assert gone.world.figures["pengtuo"].prestige == 25
+
+
+def test_person_effect_is_skipped_when_nobody_is_named(real_on):
+    """找到的是泛稱（這條戰線那一方沒有人）：效果略過、不丟例外。"""
+    changshe = event(real_on, "changshe_fire")
+    changshe.outcomes["guan:險勝"] = TimetableOutcome(
+        text="這一次，{人物:bocai}敗走。", figures={"@人物:bocai": FigureChange(fate="受挫")},
+    )
+    s = _real_season(real_on)
+    for fid in ("bocai", "pengtuo"):
+        s.world.figures[fid].status = "retired"
+    before = {fid: f.model_copy() for fid, f in s.world.figures.items()}
+    msgs = timetable.resolve(s, real_on, changshe, random.Random(0), key="guan:險勝")
+    assert msgs == [f"【江湖大事】{changshe.preface}這一次，黃巾渠帥敗走。"]
+    assert s.world.figures == before
+
+
+def test_person_targets_are_settled_before_any_effect(real_on):
+    """文字寫誰，效果就落在誰身上：前一筆效果讓那個人退場，後一筆 @人物 也不會因此換到下一位（張寶不受牽連）。"""
+    guangzong = event(real_on, "guangzong")
+    guangzong.outcomes["guan:險勝"] = TimetableOutcome(
+        text="這一次，斬{人物:zhangliang}。",
+        figures={"zhangjiao": FigureChange(fate="退場"), "@人物:zhangliang": FigureChange(fate="聲威大減")},
+    )
+    s = _real_season(real_on)
+    s.world.figures["zhangliang"].status = "retired"  # 張梁不在：欄位寫冀州黃巾的主將張角
+    msgs = timetable.resolve(s, real_on, guangzong, random.Random(0), key="guan:險勝")
+    assert msgs == ["【江湖大事】這一次，斬張角。"]
+    assert s.world.figures["zhangjiao"].status == "retired"
+    assert s.world.figures["zhangbao"].prestige == 60  # 不是「張角退場之後的主將」張寶
+
+
+def test_person_slots_fill_every_line_and_before_the_effects(real_on):
+    """具名公告、搶輸的一句、note、人物效果的 note、江湖史（含具名的那一行）都填；而且都在套效果之前填——
+    波才退場、彭脫接手之後，這些句子寫的仍是波才。"""
+    changshe = event(real_on, "changshe_fire")
+    changshe.outcomes["guan:大勝"] = TimetableOutcome(
+        text="這一次，{人物:huangfusong}大勝。",
+        locked_text={"guan": "{name} 助{人物:huangfusong}破營。"},
+        loser_text={"guan": "{loser} 勸{人物:bocai}移營。"},
+        note="{人物:bocai}北走。",
+        chronicle="{人物:huangfusong}破{人物:bocai}。",
+        figures={"@人物:bocai": FigureChange(fate="退場", note="{人物:bocai}退出戰事。")},
+    )
+    changshe.locked_chronicle = {"guan": "{人物:huangfusong}與{name}破{人物:bocai}。"}
+    s = _real_season(real_on)
+    s.world.locks["changshe_fire"] = Lock(side="guan", name="甲", time=0.0)
+    s.world.lock_losers["changshe_fire"] = [Lock(side="huang", name="乙", time=1.0)]
+    msgs = timetable.resolve(s, real_on, changshe, random.Random(0), key="guan:大勝")
+    assert msgs == ["【江湖大事】甲 助皇甫嵩破營。波才北走。波才退出戰事。乙 勸波才移營。"]
+    assert s.world.chronicle[-1].text == "皇甫嵩與甲破波才。"
+    assert (s.world.figures["bocai"].status, s.world.figures["pengtuo"].front) == ("retired", "yingru")
+
+    plain = _real_season(real_on)  # 沒人鎖定：公告是開頭＋這一格，江湖史是原本那一行
+    msgs = timetable.resolve(plain, real_on, changshe, random.Random(0), key="guan:大勝")
+    assert msgs == [f"【江湖大事】{changshe.preface}這一次，皇甫嵩大勝。波才北走。波才退出戰事。"]
+    assert plain.world.chronicle[-1].text == "皇甫嵩破波才。"
+
+
+def test_third_party_lines_are_filled_before_the_effects(real_on):
+    """FB-042 審查 I2：豪強那一句（公告）與另記的那一行江湖史也在套效果之前填：波才退場、彭脫接手之後仍寫波才。"""
+    changshe = event(real_on, "changshe_fire")
+    changshe.outcomes["guan:大勝"] = TimetableOutcome(
+        text="這一次，{人物:bocai}敗走。", figures={"@人物:bocai": FigureChange(fate="退場")},
+        third_party_text="{name} 的糧車餵飽了{人物:bocai}的兵。",
+    )
+    changshe.third_party_chronicle = "{name} 資助{人物:bocai}。"
+    s = _real_season(real_on)
+    s.world.third_party["changshe_fire"] = ["丙"]
+    msgs = timetable.resolve(s, real_on, changshe, random.Random(0), key="guan:大勝")
+    assert msgs[0].endswith("丙 的糧車餵飽了波才的兵。")
+    assert s.world.chronicle[-1].text == "丙 資助波才。"
+    assert s.world.figures["bocai"].status == "retired"
+
+
+def test_the_preface_is_not_filled(real_on):
+    """preface 只有「史書上」那半句，照寫真名，不經過人物欄位。"""
+    changshe = event(real_on, "changshe_fire")
+    changshe.preface = "史書上，{人物:bocai}……"
+    changshe.outcomes["guan:險勝"] = TimetableOutcome(text="這一次，{人物:bocai}敗走。")
+    s = _real_season(real_on)
+    msgs = timetable.resolve(s, real_on, changshe, random.Random(0), key="guan:險勝")
+    assert msgs == ["【江湖大事】史書上，{人物:bocai}……這一次，波才敗走。"]
+
+
+def _outcome(c, event_id: str, key: str) -> TimetableOutcome:
+    return event(c, event_id).outcomes[key]
+
+
+@pytest.mark.parametrize(("edit", "message"), [
+    (lambda c: setattr(_outcome(c, "bocai_routs_zhujun", "成"), "chronicle", "{人物:ghost}大敗。"), "未知的人物 ghost"),
+    (lambda c: setattr(_outcome(c, "bocai_routs_zhujun", "成"), "text", "{人物:caocao}來了。"), "未知的人物 caocao"),  # 對話人物不是大勢人物
+    (lambda c: _outcome(c, "changshe_fire", "guan:大勝").locked_text.update(guan="{name} 與{人物:ghost}。"), "未知的人物 ghost"),
+    (lambda c: _outcome(c, "changshe_fire", "guan:大勝").figures.update(
+        {"@人物:ghost": FigureChange(fate="受挫")}), "未知的人物 ghost"),
+    (lambda c: _outcome(c, "changshe_fire", "guan:大勝").figures.update(
+        {"zhujun": FigureChange(fate="受挫", note="{人物:ghost}也在。")}), "未知的人物 ghost"),
+    (lambda c: setattr(_outcome(c, "luzhi_jailed", "成"), "chronicle", "{人物:luzhi}下獄。"), "front"),  # 沒有戰線的大事不能用
+    (lambda c: _outcome(c, "luzhi_jailed", "不成").figures.update({"@人物:luzhi": FigureChange(fate="受挫")}), "front"),
+    (lambda c: setattr(c.figures["dongzhuo"], "faction", "haoqiang"), "官軍或黃巾"),  # 泛稱只有官軍、黃巾兩種
+])
+def test_person_slots_are_checked_at_load(real_on, edit, message):
+    """載入檢查：欄位與鍵裡的 id 要在人物表上；用到欄位的大事要有 front；欄位寫的人物要是官軍或黃巾的。"""
+    _outcome(real_on, "luzhi_siege", "成").chronicle = "{人物:luzhi}圍{人物:dongzhuo}。"  # 合格的寫法，edit 之前要過得了
+    validate(real_on)
+    edit(real_on)
+    with pytest.raises(ContentError, match=message):
+        validate(real_on)

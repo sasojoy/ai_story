@@ -99,16 +99,16 @@ def generate_from_name(
     )
 
 
-def historical_art(skill_id: str, name: str, kind: str, attribute: str) -> MartialArt:
-    """本命武學：內容手寫，穩定給絕學品質（設計文件七.1／六.2.1），不經過機率生成。"""
+def historical_art(skill_id: str, name: str, kind: str, attribute: str, quality: str = "絕學") -> MartialArt:
+    """內容手寫的武學，不經過機率生成：本命武學穩定給絕學品質（設計文件七.1／六.2.1）；部下用的通用武學照內容標的品質。"""
     return MartialArt(
         id=skill_id,
         name=name,
         kind=kind,
-        quality="絕學",
+        quality=quality,
         attribute=attribute,
-        base_power=QUALITY_BASE_POWER["絕學"],
-        top_power=QUALITY_TOP_POWER["絕學"],
+        base_power=QUALITY_BASE_POWER[quality],
+        top_power=QUALITY_TOP_POWER[quality],
         origin="historical",
     )
 
