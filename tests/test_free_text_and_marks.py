@@ -298,13 +298,17 @@ def test_free_text_cannot_pay_more_than_the_best_check(tmp_path):
         load_content(root)
 
 
-def test_a_free_text_can_ask_for_lore_but_cannot_pay_it_out_above_the_best_check(tmp_path):
-    """博聞（設計 6.3）跟另外四項一樣：隨口應對能指定它，但給的博聞不能比檢定選項最多的還高。"""
+def test_a_free_text_can_ask_for_lore_but_can_never_pay_it_out(tmp_path):
+    """博聞（設計 6.3）：隨口應對能指定它來考，但博聞只靠升級的點數增加——獎勵不能給（連檢定選項也不給的情況下
+    更不行）、失敗也不能扣。"""
     root = copy_fixture(tmp_path)
     _with_free_text(root, stat="lore")
     assert load_content(root).events["drunk"].free_text.stat == "lore"
-    _with_free_text(root, stat="lore", effect={"stats": {"lore": 1}})  # 醉漢事件的檢定選項沒有給博聞
-    with pytest.raises(ContentError, match="lore \\+1"):
+    _with_free_text(root, stat="lore", effect={"stats": {"lore": 1}})
+    with pytest.raises(ContentError, match="博聞只能靠升級的點數增加"):
+        load_content(root)
+    _with_free_text(root, stat="lore", fail_effect={"stats": {"lore": -1}})
+    with pytest.raises(ContentError, match="博聞只能靠升級的點數增加"):
         load_content(root)
 
 
