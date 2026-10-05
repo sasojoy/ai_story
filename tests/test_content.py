@@ -63,6 +63,25 @@ def test_unknown_stat_rejected(tmp_path):
         load_content(root)
 
 
+def test_unknown_practice_rejected(tmp_path):
+    root = copy_fixture(tmp_path)
+
+    def add_practice(d):
+        choice = next(ch for ch in d[0]["choices"] if "check" in ch)
+        choice["check"]["practice"] = "luck"
+
+    edit_json(root / "events" / "test.json", add_practice)
+    with pytest.raises(ContentError, match="luck"):
+        load_content(root)
+
+
+def test_practice_must_be_a_reputation(tmp_path):
+    root = copy_fixture(tmp_path)
+    edit_json(root / "config.json", lambda d: d.update(practice_bonus={"agi": {"per": 10, "cap": 3}}))
+    with pytest.raises(ContentError, match="agi"):
+        load_content(root)
+
+
 def test_last_ending_must_be_unconditional(tmp_path):
     root = copy_fixture(tmp_path)
     edit_json(root / "scenario.json", lambda d: d["endings"].pop())

@@ -60,6 +60,13 @@
 （明確是難的）。`tests/test_real_content.py::DIFFICULTY_BANDS` 鎖住這三個帶；**新寫事件照地點的危險度挑難度**。
 伏筆準備事件（`foreshadow_prep.json`）的難度是伏筆設計表裡寫定的，這次沒動。
 
+## 惡名的熟練加成（2026-10-05，企劃者「你常常做壞事（惡名高）因為很熟練所以也增加成功率」）
+檢定可以寫 `"practice": "evil"`：本人出手時，檢定值再加 `min(cap, 惡名 // per)`（`content/config.json` 的
+`practice_bonus`，現在是每 10 點 +1、最多 +3），所以 `rules.check_chance` 與按鈕上的成算都自動算進去；隊伍檢定挑出手者時
+本人的熟練也算（`team.check_actor`），同伴沒有善惡名、不吃這份加成。數字的依據：機器人整季隨機玩惡名 9～22（加成 +0～+2，
+多半 +1），每次都挑做壞事的選項 28～47（+2～+3，封頂）。`rules.practice_line` 是吃到加成時的心聲（「這種事你幹得多了。」）。
+**哪些事件帶 `practice` 由劇情填**，規則這邊只管換算。
+
 ## 全服即時多人戰鬥（黃巾決戰）
 
 好感度/聲勢推到門檻（`content/scenario.json` 的 `huangjin_60` 門檻，`starts_battle`）會開啟一場

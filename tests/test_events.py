@@ -113,6 +113,15 @@ def test_choice_hint_picks_the_band_by_stat_minus_difficulty(state, content, wor
     assert choice_hint(drunk.choices[0], state, content, world) == "韓鐵有幾分把握。"
 
 
+def test_choice_hint_mentions_practice_when_infamy_helps(state, content, world):
+    content.check_voice = VOICE
+    choice = content.events["drunk"].choices[0].model_copy(deep=True)  # 臂力檢定，難度 5
+    choice.check.practice = "evil"
+    assert choice_hint(choice, state, content, world) == "你有幾分把握。"  # 還沒有惡名：照舊
+    state.player.stats["evil"] = 20  # 熟練 +2：差 2，換成高一檔的心聲，前面補一句熟練
+    assert choice_hint(choice, state, content, world) == "這種事你幹得多了。這點力氣，你使得出來。"
+
+
 def _add(content, event_id, locations=(), **extra):
     content.events[event_id] = Event(
         id=event_id, title=event_id, text="……", locations=list(locations), choices=[Choice(text="走")], **extra,

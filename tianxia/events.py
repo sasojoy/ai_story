@@ -6,7 +6,7 @@ from typing import Literal
 
 from . import foreshadow, team
 from .models import Choice, Content, Event, Location
-from .rules import check_chance, check_condition, check_gap, check_who, rate_words, season_one_off
+from .rules import check_chance, check_condition, check_gap, check_who, practice_line, rate_words, season_one_off
 from .state import PLAYER, GameState
 from .world_state import WorldStateStore
 
@@ -121,14 +121,18 @@ def choice_label(choice: Choice, state: GameState, content: Content, world: Worl
 
 
 def choice_hint(choice: Choice, state: GameState, content: Content, world: WorldStateStore) -> str:
-    """有檢定的選項底下那一句人物心聲（content/check_voice.json，依屬性減難度分檔）；沒有檢定或沒寫心聲是空字串。"""
+    """有檢定的選項底下那一句人物心聲（content/check_voice.json，依屬性減難度分檔）；沒有檢定或沒寫心聲是空字串。
+    吃到熟練加成（Check.practice）時，前面先補一句「這種事你幹得多了。」（rules.practice_line）。"""
     check = choice.check
     bands = content.check_voice.bands
-    if check is None or not bands:
+    if check is None:
         return ""
+    practiced = practice_line(check, state, content, world)
+    if not bands:
+        return practiced
     gap = check_gap(check, state, content, world)
     band = next((b for b in bands if gap >= b.min_gap), bands[-1])
     line = band.lines.get(check.stat) or band.lines.get("default", "")
     key = team.check_actor(state, content, world, check)
     who = "你" if key == PLAYER else team.member_name(state, content, key)
-    return line.replace("{who}", who)
+    return practiced + line.replace("{who}", who)
