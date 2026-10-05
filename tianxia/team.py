@@ -155,7 +155,8 @@ def follower_units(state: GameState, content: Content) -> list[Member]:
 def _fighters(
     state: GameState, content: Content, world: WorldStateStore,
 ) -> tuple[list, list[float], list[encounter.Boost]]:
-    """打一場的陣容、各自的氣血係數與加成：本人、出戰的同伴，再加上部下（滿血、不吃本人的加成）。
+    """打一場的陣容、各自的氣血係數與加成：本人、出戰的同伴，再加上部下（滿血）。
+    每個人的加成吃他自己的屬性（本人、同伴、部下各一份，見 team_boosts），不吃別人的。
     三份一樣長（encounter.team_power 會檢查），部下才不會被默默漏掉（F17）。"""
     followers = follower_units(state, content)
     return (

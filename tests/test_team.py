@@ -412,7 +412,7 @@ def test_followers_fight_beside_the_player_with_their_own_strength():
     assert seen == pytest.approx(player + sum(followers))
 
 
-def test_a_weak_follower_hits_a_little_softer_but_never_below_the_floor(content):
+def test_a_weak_follower_hits_a_little_softer_but_never_below_the_floor():
     """Review Focus 1：屬性比 5 低是負加成（弩手鄉勇臂力 4：−3%），再低也不會讓威力變成負的或 0。"""
     real = load_content(CONTENT_DIR)
     assert team.follower_boost(real, real.followers["follower_guan_crossbow"]).outer == pytest.approx(-0.03)
