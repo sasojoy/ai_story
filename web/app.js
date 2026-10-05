@@ -359,13 +359,18 @@
   // 戰報頁照樣整段列出，不經過這裡。認的是伺服器把「**過程**」轉成的那段 HTML（server.md）；認不出來就整段照原樣
   // （tests/test_server.py 擋住兩邊對不上）。展開記在 S.roundsOpen（記的是那一場的流水號），換成新的一場就自動收回
   const ROUNDS_MARK = "<p><strong>過程</strong></p>\n<ul>";
+  // 大場面模型寫的過程是一段話（battlelog._rounds_block 的「**過程**＋換行＋一段話」，最多 200 字）：同一顆「展開過程」，
+  // 收著只露前兩行（style.css 的 .battle-card p.rounds-tale，PM 2026-10-05）
+  const TALE_MARK = "<p><strong>過程</strong><br />\n";
   function roundsFold(card, id) {
-    const at = card.indexOf(ROUNDS_MARK);
-    if (at < 0) return card;
     const open = S.roundsOpen === id;
     const more = `<button class="linkish rounds-more" data-act="rounds-more" aria-expanded="${open}">${roundsMore(open)}</button>`;
-    return card.slice(0, at) + `<p class="rounds-head"><strong>過程</strong>${more}</p>\n<ul class="rounds${open ? " open" : ""}">`
-      + card.slice(at + ROUNDS_MARK.length);
+    const head = `<p class="rounds-head"><strong>過程</strong>${more}</p>\n`;
+    let at = card.indexOf(ROUNDS_MARK);
+    if (at >= 0) return card.slice(0, at) + head + `<ul class="rounds${open ? " open" : ""}">` + card.slice(at + ROUNDS_MARK.length);
+    at = card.indexOf(TALE_MARK);
+    if (at >= 0) return card.slice(0, at) + head + `<p class="rounds-tale${open ? " open" : ""}">` + card.slice(at + TALE_MARK.length);
+    return card;
   }
 
   // 「剛剛」那一則拆成敘事與數值變化（氣血 -96、黃巾聲勢 -2…，journal.card_html 放在 .tx-now 最後）：
@@ -1429,7 +1434,7 @@
         }
         case "rounds-more": {
           // 同上，原地展開／收起；展開時其餘回合照 style.css 的延遲一回合一回合浮現
-          const list = el.closest(".battle-card").querySelector("ul.rounds");
+          const list = el.closest(".battle-card").querySelector("ul.rounds, p.rounds-tale"); // 回合清單，或大場面那一段話
           const open = !list.classList.contains("open");
           S.roundsOpen = open ? S.main.card_id : null;
           list.classList.toggle("open", open);

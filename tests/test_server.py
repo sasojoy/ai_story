@@ -997,6 +997,34 @@ def test_the_fight_card_shows_the_first_round_until_the_player_opens_the_rest():
     assert re.search(r"\.battle-card ul\.rounds > li:nth-child\(2\) \{ animation-delay: [\d.]+s; \}", css)
 
 
+def test_the_big_fight_account_is_folded_behind_the_same_button():
+    """大場面模型寫的過程是一段話（不是回合清單，最多 200 字、手機上約十行）：「剛剛」那張也收起來，只露前兩行，
+    按同一顆「展開過程」攤開、展開記在同一個 S.roundsOpen（PM 2026-10-05，Task 2 審查修正 2）；戰報頁照樣整段。
+    網頁認的是伺服器把「**過程**＋換行＋一段話」轉成的那段 HTML：兩邊對不上的話整段攤開、把行動擠出第一屏，這條擋住。
+    新的 class 只用在戰鬥卡片底下，不跟全站的撞名（.seg 那次的教訓）。"""
+    from tianxia import battlelog
+    from tianxia.state import BattleRecord, Fighter
+
+    record = BattleRecord(
+        id=1, time=0, location="黃巾別部營寨", kind="event", opponent="波才", ours=[Fighter(name="沈浪", level=1)],
+        tier="落敗", our_power=50, difficulty=150, rounds=["第1回合　甲。"], narration="波才刀勢沉猛，你左支右絀。" * 8,
+    )
+    html = server.md(battlelog.card_text(record))
+    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    css = (server.WEB / "style.css").read_text(encoding="utf-8")
+    mark = re.search(r'const TALE_MARK = "([^"]*)";', js)
+    assert mark is not None and mark.group(1).replace("\\n", "\n") in html and "<ul>" not in html
+    fold = _js_function(js, "function roundsFold(")
+    assert "TALE_MARK" in fold and 'class="rounds-tale' in fold and "S.roundsOpen === id" in fold
+    toggle = js[js.index('case "rounds-more"'):]
+    assert 'querySelector("ul.rounds, p.rounds-tale")' in toggle[:toggle.index("break;")]
+    clamp = re.search(r"\.battle-card p\.rounds-tale:not\(\.open\) \{([^}]*)\}", css)
+    assert clamp is not None and "-webkit-line-clamp: 2" in clamp.group(1) and "overflow: hidden" in clamp.group(1)
+    selectors = re.findall(r"([^{}\n]*rounds-tale[^{}]*)\{", css)
+    assert selectors and all(s.strip().startswith(".battle-card p.rounds-tale") for s in selectors)
+    assert not re.search(r"\.tale\b", css + js)  # 沒有別的叫 tale 的 class
+
+
 def test_the_three_art_buttons_stay_on_one_line_at_phone_width():
     """修練／改練這一門／熔煉在 375px 手機寬度：頁邊 16、清單邊框 1、卡內邊 14（兩側）、三顆之間兩個 8px 的縫，一排可用 375-32-2-28-16=297px。
     原本三顆等寬各 99px，扣掉邊框 2 與內距 28，「改練這一門」（5 字 × 15px = 75px）只剩 69px 放不下而折行。
