@@ -17,7 +17,7 @@ from . import (
     journal, materials, orders, push, ranks, roster, skillview, team, timetable,
 )
 from .events import choice_label, event_candidates, has_events_here, pick_event, visible_choices
-from .guide import base_step_count, note_action, quest_text, tutorial_active, tutorial_intro
+from .guide import base_step_count, note_action, quest_text, step_text, tutorial_active, tutorial_intro
 from .guide import steps as tutorial_steps
 from .journal import LOG_BREAK, Draft
 from .mapview import render_map, render_minimap
@@ -819,7 +819,8 @@ class Game:
 
     def guide_box(self) -> dict | None:
         """行動列上方的對話框（引導重做設計 8.1、6.2）：引導還沒做完是目前這一步的話；剛走完、結語還沒按「知道了」是結語；
-        其他（略過、早就做完的舊角色）是 None。done 是上一次行動完成的那幾行（✔ 與獎勵）。框上寫的人是 Tutorial.speaker。"""
+        其他（略過、早就做完的舊角色）是 None。done 是上一次行動完成的那幾行（✔ 與獎勵）。框上寫的人是 Tutorial.speaker。
+        還有事件待處理時，這一步的話換成「先把眼前的「事件名」了結」（每一步都一樣，步驟本身不動；結語照舊）。"""
         s, c, p = self.state, self.content, self.state.player
         t = c.tutorial
         todo = tutorial_steps(s, c)
@@ -828,7 +829,8 @@ class Game:
         if self._preparing() or s.world.ended:  # 籌備中、休季什麼都不能做，不叫人去探索（FB-045～052 審查 I1）
             return None
         if p.tutorial_step < len(todo):
-            return {"speaker": t.speaker, "text": todo[p.tutorial_step].text, "done": list(p.guide_done), "end": False}
+            # 眼前有事件還沒了結時是 guide.pending_line，不推這一步；了結後原樣回來（FB-063；「下一步」也用同一句）
+            return {"speaker": t.speaker, "text": step_text(s, c), "done": list(p.guide_done), "end": False}
         if p.guide_outro and t.outro:
             return {"speaker": t.speaker, "text": t.outro, "done": list(p.guide_done), "end": True}
         return None

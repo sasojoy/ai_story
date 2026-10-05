@@ -1147,7 +1147,7 @@ def test_dash_stops_when_the_season_ends_on_the_way(game):
 def test_travel_is_refused_with_a_reason(game):
     before = len(game.state.journal)
     game.state.pending_event = "drunk"
-    assert game.travel("lake") == ["（有事件待處理，不能安排前往。）"]
+    assert game.travel("lake") == ["（先回江湖頁處理「醉漢」。）"]
     game.state.pending_event = None
     game.state.player.busy_until = 3600.0
     assert game.travel("lake") == ["（閉關中，不能安排前往。）"]
@@ -1164,6 +1164,18 @@ def test_travel_is_refused_with_a_reason(game):
     assert game.travel_refusal("lake", "hurry") is None
     assert game.state.player.location == "town" and game.state.player.stamina == 5
     assert len(game.state.journal) == before
+
+
+def test_a_chained_event_names_the_step_that_is_pending_now_when_travel_is_refused(game):
+    """FB-063：多段事件走到下一段（next_event）之後，不能出發的原因寫的是「現在」待處理的那一段，不是第一段。"""
+    game._present(game.content.events["chain_a"])
+    assert game.travel_refusal("lake") == "先回江湖頁處理「跟蹤」"
+    game.choose("choice:0")  # 繼續：接到「倉庫」
+    assert game.state.pending_event == "chain_b"
+    assert game.travel_refusal("lake") == "先回江湖頁處理「倉庫」"
+    assert game.travel("lake") == ["（先回江湖頁處理「倉庫」。）"]
+    game.choose("choice:0")  # 離開：事件了結，路就通了
+    assert game.state.pending_event is None and game.travel_refusal("lake") is None
 
 
 def test_walking_takes_time_and_arrives_on_the_next_sync(game):
