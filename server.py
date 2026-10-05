@@ -49,7 +49,7 @@ from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, Account
 from tianxia.content import PROFILE_ENV, load_content, profile_line
 from tianxia.characters import open_characters
 from tianxia.database import default_path, open_database
-from tianxia.engine import FREE_TEXT_OPTION, Game
+from tianxia.engine import FIGHT_GONE_LINES, FREE_TEXT_OPTION, Game
 from tianxia.models import FREE_TEXT_MAX
 from tianxia.journal import CSS as JOURNAL_CSS
 from tianxia.sqlite_world import open_world
@@ -340,14 +340,16 @@ def may_judge_fight(option_id: str) -> bool:
     return option_id == "act:train" or option_id.startswith(("act:challenge:", "choice:"))
 
 
-def prepare_fight(game: Game, option_id: str) -> list[str] | fight_llm.PreparedFight | None:
+def prepare_fight(game: Game, option_id: str) -> list[str] | fight_llm.PreparedFight:
     """大場面在行動鎖外問模型（武學與成長設計 8.3，跟 prepare_dialogue 同一套三段）：
       A（鎖內、很快）同步時間，問引擎這個選項是不是大場面（Game.fight_request）。**不是**（一般的仗、自己陣營的操練、
         按不下去、這個角色不叫模型）就在同一次拿鎖裡直接做完、存檔，回傳那個動作的訊息（list）——遊歷與事件選項天天在按，
         一般的仗不能每一下都多搶一次行動鎖（計畫三 G14）。是大場面就拿到單子、存檔（不然 C 段進鎖重讀就把同步的結果丟了）；
       B（鎖外、很慢）fight_llm.judge：預算是 Config.big_fight_budget_seconds 扣掉 A 段（含等鎖）花掉的時間，引擎不讀時鐘，
-        所以時間在這裡量；回傳判讀（PreparedFight），叫不動、太慢是 None；
-      C 由呼叫端交給 Game.choose(fight=...)，引擎進鎖後重驗再套用（None 也照樣打，優勢 0）。
+        所以時間在這裡量；回傳 PreparedFight（備料的單子加判讀），叫不動、太慢時判讀是 None——單子照樣帶著，等判讀的時候
+        這個選項沒了（人被另一個分頁帶走），C 段才說得出是哪一仗沒打成；
+      C 由呼叫端交給 Game.choose(fight=...)，引擎進鎖後重驗再套用（判讀是 None 也照樣打，優勢 0；選項已經不在就不打，
+        回一句 FIGHT_LEFT／FIGHT_CHANGED，見 api_choose）。
     鎖內任何一步都不叫模型；鎖外這一段不歸鎖內的模型上限與斷路器管（跟對話、開爐取名一樣）。"""
     started = time.monotonic()
     with _locked(game):
@@ -359,7 +361,7 @@ def prepare_fight(game: Game, option_id: str) -> list[str] | fight_llm.PreparedF
         return done
     budget = max(0.0, game.content.config.big_fight_budget_seconds - (time.monotonic() - started))
     judgment = fight_llm.judge(game.client, request, game.content.config.big_fight_swing, budget)
-    return None if judgment is None else fight_llm.PreparedFight(request=request, judgment=judgment)
+    return fight_llm.PreparedFight(request=request, judgment=judgment)
 
 
 def choose(game: Game, option_id: str) -> list[str] | None:
@@ -377,21 +379,25 @@ def choose(game: Game, option_id: str) -> list[str] | None:
 NO_NAME: tuple[str | None, str] = (None, "")  # 開爐的 B 段沒取到名字（或不必取）：C 段直接走退路字表、不在鎖裡叫模型
 
 
-def prepare_forge(game: Game, art_id: str | None, insight_ids: list[str]) -> tuple[str | None, str]:
-    """開爐的首次取名在行動鎖外（最終審查 Critical 1）。首次合出來的配方要等模型取名，以前整段包在行動鎖裡：
+def prepare_forge(
+    game: Game, art_id: str | None, insight_ids: list[str], other_art: str | None = None,
+) -> tuple[str | None, str]:
+    """開爐的首次取名或挑選在行動鎖外（最終審查 Critical 1）。首次合出來的配方要等模型取名（合到舊的、候選兩個以上時是
+    請模型從候選挑一個名字），以前整段包在行動鎖裡：
     一次最多叫三次、每次最多等 OllamaClient.timeout（120 秒），全服玩家與假人程式都得跟著等，試玩走的 trycloudflare
     也會在約 100 秒切斷請求。跟 prepare_dialogue 一樣分三段：
-      A（鎖內、很快）同步時間，問引擎這一爐要不要模型取名（Game.forge_request），要就拿到單子；同步的結果要存起來，
+      A（鎖內、很快）同步時間，問引擎這一爐要不要模型取名或挑（Game.forge_request），要就拿到單子；同步的結果要存起來，
         不然 C 段進鎖重讀就把它丟了；
       B（鎖外、很慢）naming.generate：預算是 Config.naming_budget_seconds 扣掉 A 段（含等鎖）花掉的時間，
-        引擎不讀時鐘，所以時間在這裡量；用完就回 (None, "")，C 段走退路字表；
+        引擎不讀時鐘，所以時間在這裡量；用完就回 (None, "")，C 段走退路字表（挑的話改由規則挑）；
       C（鎖內、很快）由呼叫端把結果交給 Game.forge(..., proposed=...)，引擎整個重驗再登記、收費。
     這裡做 A 與 B，回傳 B 的結果（名字, 說明）；不必叫模型時是 NO_NAME。假人程式之後要合成，照樣能不經過 HTTP
-    走這三段（Game.forge_request 在 action_lock 裡、naming.generate 在鎖外、Game.forge(proposed=...) 再進鎖）。"""
+    走這三段（Game.forge_request 在 action_lock 裡、naming.generate 在鎖外、Game.forge(proposed=...) 再進鎖）。
+    other_art 有、insight_ids 空的是武學＋武學。"""
     started = time.monotonic()
     with _locked(game):
         game.sync(time.time())
-        request = game.forge_request(art_id, insight_ids)
+        request = game.forge_request(art_id, insight_ids, other_art=other_art)
         open_characters().save(game.state)
     if request is None:
         return NO_NAME
@@ -400,12 +406,12 @@ def prepare_forge(game: Game, art_id: str | None, insight_ids: list[str]) -> tup
     return naming.generate(game.client, game.content, request, budget=budget, person=game.world.is_character_name)
 
 
-def forge(game: Game, art_id: str | None, insight_ids: list[str]) -> list[str] | None:
+def forge(game: Game, art_id: str | None, insight_ids: list[str], other_art: str | None = None) -> list[str] | None:
     """開爐：A、B 在 prepare_forge，C 進鎖交給 Game.forge。proposed 一定給（不必叫模型時是 NO_NAME），
     所以伺服器上的開爐永遠不會在鎖裡叫模型。同一爐連按兩下、重新整理再按、開兩個分頁：兩個請求可能都走完 A、B，
     C 段重驗時第二個會看見配方有了、東西已經在你身上，什麼都不收（企劃者 2026-10-05：不能重複扣）。"""
-    proposed = prepare_forge(game, art_id, insight_ids)
-    return act(game, lambda g: g.forge(art_id, insight_ids, proposed=proposed))
+    proposed = prepare_forge(game, art_id, insight_ids, other_art)
+    return act(game, lambda g: g.forge(art_id, insight_ids, proposed=proposed, other_art=other_art))
 
 
 def answer_event(game: Game, text: str) -> list[str] | None:
@@ -892,8 +898,9 @@ def api_choose(request: Request, body: dict = Body(...)):
     option_id = str(body.get("id", ""))
     msgs = choose(game, option_id)
     out = {"main": look(game, main_view)}
-    if option_id.startswith("battle:"):
+    if option_id.startswith("battle:") or (msgs and msgs[0] in FIGHT_GONE_LINES):
         # 決戰選項（加入、趕到、每回合的出招）：按下去發生了什麼只有這句回話（FB-030），前端拿它跳一句提示。
+        # 大場面等判讀的時候選項沒了（「你離開了，這一仗沒打成。」）：這一仗沒打、不寫江湖紀錄，也只有這句回話。
         # 其他選項的話已經寫進江湖紀錄、「剛剛」看得到，再回一句會重複，所以不回。
         out["message"] = joined(msgs)
     return out
@@ -920,19 +927,27 @@ def api_do(op: str, request: Request, body: dict = Body(default={})):
     return {"main": look(game, main_view), "message": joined(msgs)}
 
 
-def forge_args(body: dict) -> tuple[str | None, list[str]]:
-    """煉製頁送來的東西：放進爐裡的武學 id（可以沒有）與意境 id 們。body 是客戶端寫的：武學一律轉成字串、
-    意境不是清單就當作沒放，形狀不對只會得到「不存在／放一門武學和一個意境…」那一句話，不會打出 500。"""
-    art, picked = body.get("art"), body.get("insights")
-    return (str(art) if art else None), ([str(i) for i in picked] if isinstance(picked, list) else [])
+def forge_args(body: dict) -> tuple[str | None, list[str], str | None]:
+    """煉製頁送來的東西：爐裡的武學 id（可以沒有）、意境 id 們、第二門武學 id（武學＋武學，可以沒有）。body 是客戶端寫的：
+    武學一律轉成字串、意境不是清單就當作沒放，形狀不對只會得到「不存在／放一門武學和一個意境…」那一句話，不會打出 500。"""
+    art, other, picked = body.get("art"), body.get("other_art"), body.get("insights")
+    return (
+        str(art) if art else None,
+        [str(i) for i in picked] if isinstance(picked, list) else [],
+        str(other) if other else None,
+    )
+
+
+def _forge_without_naming(game: Game, art_id: str | None, insight_ids: list[str], other_art: str | None) -> list[str]:
+    return game.forge(art_id, insight_ids, proposed=NO_NAME, other_art=other_art)
 
 
 MENXIA_ACTIONS = {
     "practice": lambda g, b: g.practice(str(b.get("kind") or KINDS[0])),
     "heal": lambda g, b: g.heal(),
-    # 一武學＋一意境＝合成，兩意境＝合併。端點走 forge()（A 鎖內備料 → B 鎖外取名 → C 鎖內登記），不走這一條；
+    # 一武學＋一意境、兩武學＝合成，兩意境＝合併。端點走 forge()（A 鎖內備料 → B 鎖外取名或挑 → C 鎖內登記），不走這一條；
     # 這裡也帶 NO_NAME，就算有人直接拿它在鎖裡呼叫，也不會叫模型
-    "forge": lambda g, b: g.forge(*forge_args(b), proposed=NO_NAME),
+    "forge": lambda g, b: _forge_without_naming(g, *forge_args(b)),
     "switch": lambda g, b: g.switch_art(str(b.get("art") or "")),
     # 用融的意境修練一次，衝下一品；use_legend 是勾了「服下破境丹」。只認真正的布林 true：字串、數字都不算勾
     "cultivate": lambda g, b: g.cultivate(str(b.get("art") or ""), use_legend=b.get("use_legend") is True),
@@ -978,8 +993,8 @@ def api_menxia_do(op: str, request: Request, body: dict = Body(default={})):
 def api_forge_line(request: Request, body: dict = Body(default={})):
     """煉製頁選了東西就更新說明（不算行動、不存檔）。"""
     game = _game(request)
-    art, picked = forge_args(body)
-    return {"line": look(game, lambda g: md(g.forge_line(art, picked)))}
+    art, picked, other = forge_args(body)
+    return {"line": look(game, lambda g: md(g.forge_line(art, picked, other_art=other)))}
 
 
 @app.get("/api/reports")

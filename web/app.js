@@ -1,7 +1,7 @@
 /* 天下大勢的網頁前端：沒有建置步驟、不靠外部函式庫。
  *
  * 畫面只有三種：登入、取名號、遊戲。遊戲畫面 = 頂上的狀態列 + 一頁內容 + 底部五個分頁：
- *   江湖（場景與選項）、修練（練成、閉關、武學與意境、修練與熔煉、名冊）、煉製（太極火爐：武學＋意境合成、意境＋意境合併）、
+ *   江湖（場景與選項）、修練（練成、閉關、武學與意境、修練與熔煉、名冊）、煉製（太極火爐：武學＋意境、武學＋武學合成，意境＋意境合併）、
  *   輿圖、見聞（戰報、大勢、傳聞、江湖史、紀錄）。
  * 設定與管理者工具收在右上角的抽屜裡。
  *
@@ -69,7 +69,7 @@
     kind: "武學",
     artOpen: null, // 修練頁武學清單裡點開的那一門（id）；切分頁、改練成功之後收起
     legendTick: {}, // 修練頁每一門武學「服下破境丹」勾了沒（id → true）；預設不勾，輪詢重畫不會悄悄取消，修練送出之後清掉
-    forgeSel: [], // 爐裡放的：{type: "art" | "ins", id}，最多兩樣、武學最多一門（武學＋意境＝合成，兩個意境＝合併）
+    forgeSel: [], // 爐裡放的：{type: "art" | "ins", id}，最多兩樣、武學最多兩門（武學＋意境、武學＋武學＝合成，兩個意境＝合併）
     wheelSel: null, // 江湖頁行動列展開的那一格（目前只有 move）
     forgeLine: "",
     map: null,
@@ -313,6 +313,7 @@
       const now = document.querySelector(".now.clamp");
       const body = now && now.querySelector(".tx-now");
       if (body && body.scrollHeight <= body.clientHeight + 1) now.classList.replace("clamp", "fits");
+      fitFirstRound(); // 戰鬥卡片收著的第一回合最多兩行，放不下就只留數字（PM 2026-10-05）
     }
     if (S.tab === "map") mapReady();
   }
@@ -362,10 +363,13 @@
   // 大場面模型寫的過程是一段話（battlelog._rounds_block 的「**過程**＋換行＋一段話」，最多 200 字）：同一顆「展開過程」，
   // 收著只露前兩行（style.css 的 .battle-card p.rounds-tale，PM 2026-10-05）
   const TALE_MARK = "<p><strong>過程</strong><br />\n";
+  // 「看完整戰報 ›」放在「過程」那一行的中間（PM 2026-10-05，戰鬥卡片壓縮第二輪）：那一行中間本來就是空的，不再接在「結果／得失」
+  // 句尾多撐一行。點擊範圍上下各多 8px、不撐高那一行（style.css 的 .rounds-head .report-link）
+  const reportLink = (id) => `<button class="linkish report-link" data-act="report" data-id="${id}">看完整戰報 ›</button>`;
   function roundsFold(card, id) {
     const open = S.roundsOpen === id;
     const more = `<button class="linkish rounds-more" data-act="rounds-more" aria-expanded="${open}">${roundsMore(open)}</button>`;
-    const head = `<p class="rounds-head"><strong>過程</strong>${more}</p>\n`;
+    const head = `<p class="rounds-head"><strong>過程</strong>${id == null ? "" : reportLink(id)}${more}</p>\n`;
     let at = card.indexOf(ROUNDS_MARK);
     if (at >= 0) return card.slice(0, at) + head + `<ul class="rounds${open ? " open" : ""}">` + card.slice(at + ROUNDS_MARK.length);
     at = card.indexOf(TALE_MARK);
@@ -373,13 +377,57 @@
     return card;
   }
 
-  // 「看完整戰報 ›」接在卡片最後一段（「結果　…　得失　…」那一句）的句尾，不另佔一行（PM 2026-10-05，戰鬥卡片壓縮）；
-  // 卡片最後不是 <p>（認不出來）時照舊放在卡片最後。伺服器的 Markdown 一律以 "</p>\n" 收尾，所以認最後一個 </p>
-  const reportLink = (id) => `<button class="linkish report-link" data-act="report" data-id="${id}">看完整戰報 ›</button>`;
+  // 沒有「過程」那一行的卡片（全服決戰、舊戰報）才把「看完整戰報 ›」接在卡片最後一段（「結果　…　得失　…」那一句）的句尾，
+  // 不另佔一行（PM 2026-10-05，戰鬥卡片壓縮）；卡片最後不是 <p>（認不出來）時照舊放在卡片最後。
+  // 伺服器的 Markdown 一律以 "</p>\n" 收尾，所以認最後一個 </p>
   function withReportLink(card, id) {
     if (id == null) return card;
     const end = card.lastIndexOf("</p>");
     return end >= 0 && !card.slice(end + 4).trim() ? `${card.slice(0, end)}${reportLink(id)}${card.slice(end)}` : card + reportLink(id);
+  }
+  // 「剛剛」的戰鬥卡片：有「過程」那一行（roundsFold 認得出來，卡片因此變了）連結就在那一行裡，沒有才接在最後一段的句尾
+  function fightCard(card, id) {
+    const folded = roundsFold(card, id);
+    return folded !== card ? folded : withReportLink(card, id);
+  }
+
+  // 收著的「過程」第一回合最多兩行、而且不藏任何數字（PM 2026-10-05）：句子放得進兩行就照原樣；放不進就整句省略，只留數字
+  // 「第1回合　你氣血 -13，對手氣勢 -10……」。數字就是 battlelog.round_lines 寫的那幾種結尾：「對手氣勢 -N」「你氣血 -N」，
+  // 沒打中的「被對方架開」「被你閃開了」（照句子裡出現的先後）。認不出來（沒有「第N回合」、一個結尾也沒找到、扣掉認得的之後
+  // 還剩任何數字）就回 null——呼叫端照原樣整句顯示，寧可多佔一行也不讓一個數字被藏起來。展開之後每一回合照舊整句列出
+  const ROUND_BITS = /對手氣勢 -\d+|你氣血 -\d+|被對方架開|被你閃開了/g;
+  function compactRound(text) {
+    const line = String(text).trim();
+    const head = /^第\d+回合/.exec(line);
+    if (!head) return null;
+    const rest = line.slice(head[0].length);
+    const bits = rest.match(ROUND_BITS);
+    if (!bits || /\d/.test(rest.replace(ROUND_BITS, ""))) return null;
+    return `${head[0]}　${bits.join("，")}……`;
+  }
+  // 畫好之後量第一回合：高過兩行半（三行是三倍行高；兩行混著拉丁數字與漢字量出來會多一兩 px，不能算成三行）、又拼得出數字行，
+  // 就把它換成數字行（.r-full 整句、.r-short 數字行，style.css 的 .tight 決定露哪個；展開時一律露整句）。
+  // 每次都先拿掉 .tight 再量，轉向、拉視窗之後重量也一樣
+  function fitFirstRound() {
+    const list = document.querySelector(".battle-card ul.rounds");
+    const first = list && list.firstElementChild;
+    if (!first) return;
+    list.classList.remove("tight");
+    let full = first.querySelector(":scope > .r-full");
+    const lineHeight = parseFloat(getComputedStyle(first).lineHeight);
+    if (!first.offsetHeight || !(lineHeight > 0) || first.offsetHeight <= 2.5 * lineHeight) return;
+    const short = compactRound(full ? full.textContent : first.textContent);
+    if (short == null) return;
+    if (!full) {
+      full = document.createElement("span");
+      full.className = "r-full";
+      full.append(...first.childNodes);
+      const tail = document.createElement("span");
+      tail.className = "r-short";
+      first.append(full, tail);
+    }
+    first.querySelector(":scope > .r-short").textContent = short;
+    list.classList.add("tight");
   }
 
   // 「剛剛」那一則拆成敘事與數值變化（氣血 -96、黃巾聲勢 -2…，journal.card_html 放在 .tx-now 最後）：
@@ -397,7 +445,7 @@
   const wpt = (r, deg) => { const a = (deg - 90) * Math.PI / 180; return [+(r * Math.cos(a)).toFixed(2), +(r * Math.sin(a)).toFixed(2)]; };
   const spinAt = (secs) => `animation-delay:-${((performance.now() / 1000) % secs).toFixed(2)}s`;
   // 煉製頁的太極火爐（企劃者 2026-10-04）。太極在爐裡慢慢轉，外圈是一圈火舌；左右兩格放進去的是一門武學與一個意境
-  // （或兩個意境），點有東西的那一格拿出來，點爐身開爐。開爐後等結果的這段時間整座爐子晃動（見 forge()）。
+  // （或兩門武學，或兩個意境），點有東西的那一格拿出來，點爐身開爐。開爐後等結果的這段時間整座爐子晃動（見 forge()）。
   // slots 兩格各是 {name, sub, rank}（名字、第二行小字、品階 1~3）或沒放（null）
   function furnaceHub(slots, ready) {
     const r = 54;
@@ -600,7 +648,7 @@
     const expanded = S.nowOpen === m.now;
     const [text, chips] = !m.card && m.now ? splitChips(m.now) : ["", ""];
     const now = m.card
-      ? `<div class="card battle-card">${withReportLink(roundsFold(m.card, m.card_id), m.card_id)}${m.now || ""}</div>`
+      ? `<div class="card battle-card">${fightCard(m.card, m.card_id)}${m.now || ""}</div>`
       : m.now ? `<div class="now ${expanded ? "open" : "clamp"}${m.on_road ? " road" : ""}"><div class="now-text">${text}<button class="linkish now-more" data-act="now-more" aria-expanded="${expanded}">${nowMore(expanded)}</button></div>${chips}</div>` : "";
     const free = m.free_text != null
       ? `<form class="free" id="free-form"><input class="input" name="text" maxlength="20" placeholder="${esc(m.free_text || "輸入你想做的事（20字內）")}"><button class="btn primary small" type="submit">送出</button></form>`
@@ -764,20 +812,25 @@
 
   // ── 煉製 ──
   const QUALITY_RANK = { 下品: 1, 中品: 2, 上品: 3, 絕學: 3 };
-  // 爐裡放的東西 → 送給伺服器的 body
+  // 爐裡放的東西 → 送給伺服器的 body（第二門武學放 other_art，設計 12.3）
   function forgeBody() {
-    const art = S.forgeSel.find((p) => p.type === "art");
-    return { art: art ? art.id : null, insights: S.forgeSel.filter((p) => p.type === "ins").map((p) => p.id) };
+    const arts = S.forgeSel.filter((p) => p.type === "art").map((p) => p.id);
+    return {
+      art: arts[0] ?? null,
+      other_art: arts[1] ?? null,
+      insights: S.forgeSel.filter((p) => p.type === "ins").map((p) => p.id),
+    };
   }
-  // 一門武學＋一個意境（合成）或兩個意境（合併）才放得滿
+  // 一門武學＋一個意境、兩門武學（合成），或兩個意境（合併）才放得滿
   function forgeReady() {
     const b = forgeBody();
+    if (b.other_art !== null) return b.insights.length === 0;
     return (b.art !== null && b.insights.length === 1) || (b.art === null && b.insights.length === 2);
   }
   function pick(type, id) {
     if (S.busy) return; // 開爐等結果的時候（首次取名要等模型）爐子不動
     if (S.forgeSel.length >= 2) { toast("爐裡已經放滿了，點上面的拿出來再換。"); return; }
-    if (type === "art" && S.forgeSel.some((p) => p.type === "art")) { toast("一爐只能放一門武學，另一樣放意境。"); return; }
+    if (type === "art" && S.forgeSel.some((p) => p.type === "art" && p.id === id)) return; // 同一門不放兩次（下面那顆 chip 也是灰的）
     if (type === "art") S.forgeSel.unshift({ type, id }); else S.forgeSel.push({ type, id }); // 武學放左邊
     renderPage();
     updateForgeLine();
@@ -804,7 +857,7 @@
       ${furnaceSvg([slotOf(S.forgeSel[0]), slotOf(S.forgeSel[1])], ready)}
       <div class="card" id="forge-line">${S.forgeLine || x.forge_line}</div>
       <div class="act-row"><button class="btn primary" id="forge" data-act="forge" ${ready ? "" : "disabled"}>開爐</button></div>
-      <div class="label">武學 <small class="muted">一爐放一門，另一樣放意境</small></div>
+      <div class="label">武學 <small class="muted">一門配一個意境，或兩門一起放</small></div>
       <div class="chips">${x.owned_arts.map((a) => `
         <button class="chip r${QUALITY_RANK[a.quality] || 1} ${inPot(a.id) ? "used" : ""}" data-act="pick" data-type="art" data-id="${esc(a.id)}" ${inPot(a.id) ? "disabled" : ""}>
           <b>${esc(a.name)}</b><small>${esc(a.quality)}・屬${esc(a.attribute)}</small></button>`).join("")}</div>
@@ -1282,7 +1335,8 @@
       S.wheelSel = null; // 收起展開的移動
       applyMain(r.main);
       window.scrollTo({ top: 0, behavior: "smooth" });
-      // 決戰選項（加入、趕到、出招）伺服器會回一句 message；一般選項的話在江湖紀錄裡，不回
+      // 決戰選項（加入、趕到、出招）伺服器會回一句 message；大場面等模型判讀的時候選項沒了（人被別的分頁帶走），
+      // 那一仗沒打成、不寫江湖紀錄，也只有這一句；一般選項的話在江湖紀錄裡，不回
       const text = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
       // 這一送剛好結算了回合時，回話是整段回合敘事（場景裡的戰況就是同一段）：提示只放得下幾秒，截短、指去場景
       if (text) toast(text.length > 40 ? `${text.slice(0, 40)}……（戰況見場景）` : text);
@@ -1533,7 +1587,7 @@
         case "forge": await forge(); break;
         case "forge-hub":
           if (forgeReady()) await forge();
-          else toast("放一門武學和一個意境，或兩個意境。");
+          else toast("放一門武學和一個意境，或兩門武學，或兩個意境。");
           break;
         case "wheel":
           S.wheelSel = S.wheelSel === el.dataset.key ? null : el.dataset.key;
@@ -1760,7 +1814,7 @@
       const changed = trimmed || shown(x) !== shown(was)
         || (tab === "practice" && old.status.injury !== S.main.status.injury); // 療傷鈕看的是內傷
       if (!changed) {
-        // 合併要花體力、體力隨時間回：爐裡放著東西時說明裡的「體力不足」要跟著更新（只換那一行，不整頁重畫）
+        // 合成與合併都要花體力、體力隨時間回：爐裡放著東西時說明裡的「體力不足」要跟著更新（只換那一行，不整頁重畫）
         if (tab === "craft" && S.forgeSel.length && old.status.stamina !== S.main.status.stamina) updateForgeLine();
         return;
       }
@@ -1843,7 +1897,10 @@
   }, true);
 
   // 視窗大小變了（轉向、拉視窗）：輿圖開著就重新夾住、套用；原本是整張就維持整張（applyMapView）
-  window.addEventListener("resize", () => { if (S.stage === "game" && S.tab === "map") applyMapView(); });
+  window.addEventListener("resize", () => {
+    if (S.stage === "game" && S.tab === "map") applyMapView();
+    if (S.stage === "game" && S.tab === "jianghu") fitFirstRound(); // 寬度變了，第一回合佔幾行也跟著變
+  });
   // 寬度跨過手機分界（轉向、拉視窗）：江湖頁的排列順序不同（pageJianghu 的輪盤），要重畫
   const onPhoneChange = () => { if (S.stage === "game" && S.tab === "jianghu") renderPage(); };
   if (PHONE) { if (PHONE.addEventListener) PHONE.addEventListener("change", onPhoneChange); else PHONE.addListener(onPhoneChange); }

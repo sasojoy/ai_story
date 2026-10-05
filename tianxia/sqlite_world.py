@@ -245,6 +245,57 @@ class SqliteWorldStore:
             )
             return insight, True
 
+    # ── 合到舊的（武學與成長設計 12.2）──────────────────────
+
+    def fused_arts(self) -> list[MartialArt]:
+        with self.db.snapshot() as conn:
+            rows = conn.execute(
+                "SELECT data FROM skills WHERE season = ? AND json_extract(data, '$.origin') = 'fused' ORDER BY rowid",
+                (self._season_number(conn),),
+            ).fetchall()
+        return [MartialArt.model_validate_json(row["data"]) for row in rows]
+
+    def merged_insights(self) -> list[Insight]:
+        with self.db.snapshot() as conn:
+            rows = conn.execute(
+                "SELECT data FROM insights WHERE season = ? ORDER BY rowid", (self._season_number(conn),),
+            ).fetchall()
+        return [Insight.model_validate_json(row["data"]) for row in rows]
+
+    def link_recipe(self, key: str, skill_name: str, creator: str | None) -> tuple[MartialArt | None, bool]:
+        with self.db.transaction() as conn:
+            season = self._season_number(conn)
+            existing = _recipe(conn, season, key)
+            if existing is not None:
+                return existing, False
+            row = conn.execute(
+                "SELECT data FROM skills WHERE season = ? AND name = ?", (season, skill_name),
+            ).fetchone()
+            if row is None:
+                return None, False
+            conn.execute(
+                "INSERT INTO recipes (season, key, skill_name, creator) VALUES (?, ?, ?, ?)",
+                (season, key, skill_name, creator),
+            )
+            return MartialArt.model_validate_json(row["data"]), True
+
+    def link_insight_recipe(self, key: str, insight_name: str, creator: str | None) -> tuple[Insight | None, bool]:
+        with self.db.transaction() as conn:
+            season = self._season_number(conn)
+            existing = _insight_recipe(conn, season, key)
+            if existing is not None:
+                return existing, False
+            row = conn.execute(
+                "SELECT data FROM insights WHERE season = ? AND name = ?", (season, insight_name),
+            ).fetchone()
+            if row is None:
+                return None, False
+            conn.execute(
+                "INSERT INTO insight_recipes (season, key, insight_name, creator) VALUES (?, ?, ?, ?)",
+                (season, key, insight_name, creator),
+            )
+            return Insight.model_validate_json(row["data"]), True
+
     def claim_master(self, skill_name: str, player: str, shown: str | None = None) -> bool:
         with self.db.transaction() as conn:
             season = self._season_number(conn)
@@ -571,21 +622,23 @@ def _season_firsts_lines(conn: Connection, season: int) -> list[str]:
     武學照現在顯示的名字（練成絕學改過名的寫新名）；沒有的那一類不寫。
     人名寫登記當下記下的「寫給別人看的名號」（匿名行走的人是「某位少俠」，最終審查 Important 2）：
     功法、意境的 creator_shown，武學的 master_shown；舊資料沒記的照資料表裡的名號。
-    （舊季的煉製配方也在 recipes 表裡，照樣列在「合成首創」，不用分。）"""
+    （舊季的煉製配方也在 recipes 表裡，照樣列在「合成首創」，不用分。）
+    合到舊的會讓好幾個配方指向同一門（設計 12.2）：一門只列一次，寫首創的那一列。"""
     lines = []
     arts = conn.execute(
         "SELECT json_extract(s.data, '$.name') AS name, "
-        "COALESCE(json_extract(s.data, '$.creator_shown'), r.creator) AS creator FROM recipes r "
-        "JOIN skills s ON s.season = r.season AND s.name = r.skill_name WHERE r.season = ? ORDER BY r.rowid",
+        "COALESCE(json_extract(s.data, '$.creator_shown'), r.creator) AS creator, MIN(r.rowid) AS first FROM recipes r "
+        "JOIN skills s ON s.season = r.season AND s.name = r.skill_name WHERE r.season = ? "
+        "GROUP BY r.skill_name ORDER BY first",
         (season,),
     ).fetchall()
     if arts:
         firsts = "、".join(f"【{row['name']}】{row['creator'] or '無名氏'}" for row in arts)
         lines.append(f"第 {season} 季合成首創 {len(arts)} 門：{firsts}")
     insights_rows = conn.execute(
-        "SELECT r.insight_name, COALESCE(json_extract(i.data, '$.creator_shown'), r.creator) AS creator "
-        "FROM insight_recipes r LEFT JOIN insights i ON i.season = r.season AND i.name = r.insight_name "
-        "WHERE r.season = ? ORDER BY r.rowid",
+        "SELECT r.insight_name, COALESCE(json_extract(i.data, '$.creator_shown'), r.creator) AS creator, "
+        "MIN(r.rowid) AS first FROM insight_recipes r LEFT JOIN insights i ON i.season = r.season AND i.name = r.insight_name "
+        "WHERE r.season = ? GROUP BY r.insight_name ORDER BY first",
         (season,),
     ).fetchall()
     if insights_rows:

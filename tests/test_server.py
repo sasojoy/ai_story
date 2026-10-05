@@ -18,7 +18,7 @@ from tianxia.accounts import NAME_TAKEN
 from tianxia.characters import open_characters
 from tianxia.engine import Game
 from tianxia.journal import WORLD_NEWS
-from tianxia.martial_arts import MartialArt
+from tianxia.martial_arts import MartialArt, generate_from_name
 from tianxia.ollama_client import OllamaClient
 from tianxia.sqlite_world import SqliteWorldStore, open_world
 from tianxia.state import BotProfile
@@ -47,6 +47,12 @@ def _stop_scheduler() -> None:
         assert not thread.is_alive()
     server.SCHEDULER_THREAD = None
     server.SCHEDULER_STOP.clear()
+
+
+@pytest.fixture(autouse=True)
+def _no_landing(monkeypatch):
+    """合到舊的（設計 12.2）在 test_fusion.py 測；這裡的測試照舊每一爐都長新的，結果才固定。"""
+    monkeypatch.setattr(server.CONTENT.config, "land_chance_per_candidate", 0.0)
 
 
 @pytest.fixture(autouse=True)
@@ -972,6 +978,22 @@ def _js_function(js: str, header: str) -> str:
     return js[start:js.index("\n  }\n", start)]
 
 
+def test_the_furnace_page_takes_two_arts_and_sends_the_second_one_as_other_art():
+    """武學＋武學（設計 12.3）：網頁沒有測試框架，這裡擋住「伺服器收了第二門武學、網頁卻還擋著或沒送」。"""
+    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    body = _js_function(js, "function forgeBody(")
+    assert 'type === "art"' in body and "other_art: arts[1]" in body and "art: arts[0]" in body
+    ready = _js_function(js, "function forgeReady(")
+    assert "other_art !== null" in ready and "insights.length === 0" in ready  # 兩門武學：不能再放意境
+    assert "insights.length === 1" in ready and "insights.length === 2" in ready  # 武學＋意境、意境＋意境照舊
+    pick = _js_function(js, "function pick(")
+    assert "已經放滿了" in pick and "p.id === id" in pick  # 放滿了不再收；同一門不放兩次
+    assert "一爐只能放一門武學" not in js and "一門配一個意境，或兩門一起放" in js
+    assert "/api/forge_line" in js and "/api/menxia/forge" in js and js.count("forgeBody()") >= 2  # 預覽與開爐送同一份 body
+    assert "合併要花體力、體力隨時間回" not in js and "合成與合併都要花體力" in js  # 三種合成都花體力（設計 12.1）
+    assert "放一門武學和一個意境，或兩門武學，或兩個意境。" in js  # 點爐身放不滿時的提示也說兩門武學
+
+
 def test_the_pages_trim_the_furnace_whenever_the_menxia_data_is_replaced():
     """修練頁熔掉爐裡放著的東西、再回煉製頁：S.forgeSel 還留著那個 id，爐子看起來是空的、開爐卻亮著（forgeReady 照 id 數）。
     只有輪詢的 refreshPage 會補，所以每個換掉 S.menxia 的地方都要自己修剪（mx、loadMenxia）。網頁沒有測試框架，這裡擋住漏改。"""
@@ -1008,7 +1030,8 @@ def test_the_fight_card_shows_the_first_round_until_the_player_opens_the_rest():
     css = (server.WEB / "style.css").read_text(encoding="utf-8")
     mark = re.search(r'const ROUNDS_MARK = "([^"]*)";', js)
     assert mark is not None and mark.group(1).replace("\\n", "\n") in html and html.count("<ul>") == 1
-    assert "roundsFold(m.card, m.card_id)" in _js_function(js, "function pageJianghu(")
+    assert "fightCard(m.card, m.card_id)" in _js_function(js, "function pageJianghu(")
+    assert "roundsFold(card, id)" in _js_function(js, "function fightCard(")
     assert "roundsFold" not in _js_function(js, "function pageNews(")  # 戰報頁整段列出
     assert 'case "rounds-more"' in js and "S.roundsOpen = open ? S.main.card_id : null" in js
     hidden = re.search(r"\.battle-card ul\.rounds:not\(\.open\) > li:not\(:first-child\) \{([^}]*)\}", css)
@@ -1033,9 +1056,28 @@ def test_the_fight_card_head_is_one_heading_and_one_paragraph():
     )
 
 
-def test_the_report_link_ends_the_last_paragraph_of_the_fight_card():
-    """「看完整戰報 ›」接在卡片最後一段（「結果　…　得失　…」）的句尾，不另佔一行（戰鬥卡片壓縮）。網頁認的是伺服器的 HTML 一律以
-    </p> 收尾（卡片最後一塊永遠是「結果／得失」那一段）；認不出來時照舊放在卡片最後。這條擋住兩邊對不上。"""
+def _app_functions_in_node(js: str, script: str) -> str:
+    """把 app.js 裡幾個不碰畫面的函式（戰鬥卡片的折疊、看完整戰報、數字行）拿出來在 node 裡跑，回傳 script 印出的東西；
+    網頁沒有測試框架，這是唯一真的執行過它們的地方。這台沒裝 node 就略過（行為由下面的標記測試擋住兩邊對不上）。"""
+    import shutil
+    import subprocess
+
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("沒有裝 node")
+    consts = [re.search(rf"(?m)^  const {name} = .*;$", js).group(0) for name in ("ROUNDS_MARK", "TALE_MARK", "ROUND_BITS", "reportLink")]
+    funcs = [_js_function(js, f"function {name}(") + "\n  }" for name in ("roundsFold", "withReportLink", "fightCard", "compactRound")]
+    prelude = 'const S = { roundsOpen: null };\nconst roundsMore = (open) => (open ? "收起過程 ▴" : "展開過程 ▾");\n'
+    done = subprocess.run([node, "-"], input=(prelude + "\n".join(consts + funcs) + "\n" + script).encode("utf-8"),
+                          capture_output=True, timeout=60)
+    assert done.returncode == 0, done.stderr.decode("utf-8", "replace")
+    return done.stdout.decode("utf-8")
+
+
+def test_the_report_link_sits_in_the_process_head_row_of_the_fight_card():
+    """「看完整戰報 ›」放在「過程 … 展開過程 ▾」那一行的中間（戰鬥卡片壓縮第二輪，PM 2026-10-05），不再接在「結果／得失」句尾
+    多撐一行；沒有「過程」那一行的卡片（全服決戰、舊戰報）照舊接在最後一段的句尾。網頁認的是伺服器的 HTML 一律以 </p> 收尾
+    （卡片最後一塊永遠是「結果／得失」那一段）與「過程」那一段的 ROUNDS_MARK／TALE_MARK；這條擋住兩邊對不上。"""
     from tianxia import battlelog
     from tianxia.state import BattleRecord, Fighter
 
@@ -1048,17 +1090,147 @@ def test_the_report_link_ends_the_last_paragraph_of_the_fight_card():
         )
         html = server.md(battlelog.card_text(record))
         assert html.endswith("</p>\n") and "<strong>得失</strong>" in html.rsplit("<p>", 1)[1]
+    fold = _js_function(js, "function roundsFold(")
+    assert '<p class="rounds-head"><strong>過程</strong>${id == null ? "" : reportLink(id)}${more}</p>' in fold  # 連結在過程與展開鈕之間
+    assert 'data-act="report"' in js[js.index("const reportLink"):js.index("function roundsFold(")]
     link = _js_function(js, "function withReportLink(")
-    assert 'card.lastIndexOf("</p>")' in link and "reportLink(id)" in link
+    assert 'card.lastIndexOf("</p>")' in link and "reportLink(id)" in link  # 沒有過程那一行時的退路
+    card = _js_function(js, "function fightCard(")
+    assert "roundsFold(card, id)" in card and "withReportLink(card, id)" in card and "folded !== card" in card
     jianghu = _js_function(js, "function pageJianghu(")
-    assert "withReportLink(roundsFold(m.card, m.card_id), m.card_id)" in jianghu
-    assert 'data-act="report"' not in jianghu  # 不再另放一顆
+    assert "fightCard(m.card, m.card_id)" in jianghu and 'data-act="report"' not in jianghu  # 不再另放一顆
     assert re.search(r"\.battle-card \.report-link \{[^}]*display: inline-block", css)
+    # 在「過程」那一行裡不撐高那一行：上下 padding 8px、上下 margin -8px（點擊範圍約 38px 高），展開鈕一樣
+    head_link = re.search(r"(?m)^\.battle-card \.rounds-head \.report-link \{([^}]*)\}", css)
+    assert head_link is not None and "margin: -8px 0" in head_link.group(1)
+    assert "padding: 8px 4px" in re.search(r"(?m)^\.battle-card \.report-link \{([^}]*)\}", css).group(1)
+    more = re.search(r"(?m)^\.battle-card \.rounds-more \{([^}]*)\}", css).group(1)
+    assert "padding: 8px 2px" in more and "margin: -8px 0" in more and "white-space: nowrap" in more
+
+
+def test_fight_card_puts_the_report_link_in_the_head_row_or_ends_the_last_paragraph():
+    """在 node 裡真的跑 fightCard：有「過程」的卡片（回合清單與大場面一段話兩種）連結只在 .rounds-head 裡、一顆，位置在「過程」
+    與展開鈕之間，展開與收著都一樣；沒有「過程」的卡片（全服決戰）接在最後一段的句尾、也是一顆。"""
+    import json
+
+    from tianxia import battlelog
+    from tianxia.state import BattleRecord, Fighter
+
+    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    base = dict(
+        id=7, time=0, location="湖邊", kind="event", opponent="水寇", ours=[Fighter(name="沈浪", level=1)], tier="大勝",
+        our_power=50, difficulty=10, notes=["你贏了。"], changes=["銀兩 +5"],
+    )
+    cards = {
+        "list": server.md(battlelog.card_text(BattleRecord(**base, rounds=["第1回合　甲。", "第2回合　乙。"]))),
+        "tale": server.md(battlelog.card_text(BattleRecord(**base, rounds=["第1回合　甲。"], narration="波才刀勢沉猛，你左支右絀。"))),
+        "showdown": server.md(battlelog.card_text(BattleRecord(**{**base, "kind": "showdown"}, side="官軍"))),
+    }
+    script = f"""
+    const cards = {json.dumps(cards, ensure_ascii=False)};
+    const out = {{}};
+    for (const [name, card] of Object.entries(cards)) {{
+      S.roundsOpen = null; const shut = fightCard(card, 7);
+      S.roundsOpen = 7; const open = fightCard(card, 7);
+      out[name] = {{ shut, open, none: fightCard(card, null) }};
+    }}
+    console.log(JSON.stringify(out));
+    """
+    out = json.loads(_app_functions_in_node(js, script))
+    link = '<button class="linkish report-link" data-act="report" data-id="7">看完整戰報 ›</button>'
+    for name in ("list", "tale"):
+        for state in ("shut", "open"):
+            html = out[name][state]
+            assert html.count("看完整戰報") == 1, (name, state)
+            head = re.search(r'<p class="rounds-head">(.*?)</p>', html).group(1)
+            assert head.startswith("<strong>過程</strong>" + link + '<button class="linkish rounds-more"'), (name, state, head)
+            assert "看完整戰報" not in html.rsplit("<p>", 1)[1]  # 結果／得失那一段不再多一個
+        assert ' open' in out[name]["open"] and ' open' not in out[name]["shut"]
+        assert "看完整戰報" not in out[name]["none"] and "rounds-head" in out[name]["none"]  # 沒有流水號就不放連結
+    assert "rounds-head" not in out["showdown"]["shut"]
+    last = out["showdown"]["shut"].rsplit("<p>", 1)[1]
+    assert out["showdown"]["shut"].count("看完整戰報") == 1 and link + "</p>" in last and "<strong>大勢</strong>" in last
+    assert out["showdown"]["none"] == cards["showdown"]  # 沒有流水號：連結也不放
+
+
+def test_the_folded_first_round_is_two_lines_or_a_numbers_only_line():
+    """收著的「過程」第一回合最多兩行、不藏任何數字（戰鬥卡片壓縮第二輪，PM 2026-10-05）：畫好之後量（fitFirstRound，不靠字數），
+    放不進兩行又拼得出數字行就整句省略、只留「第1回合　你氣血 -13，對手氣勢 -10……」；認不出來就回 null、整句照常顯示。
+    網頁沒有測試框架：樣式與量法用標記擋住，數字行怎麼拼在 node 裡真的跑（沒裝 node 就略過那一段）。"""
+    import json
+
+    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    css = (server.WEB / "style.css").read_text(encoding="utf-8")
+    fit = _js_function(js, "function fitFirstRound(")
+    assert 'querySelector(".battle-card ul.rounds")' in fit and "first.offsetHeight <= 2.5 * lineHeight" in fit  # 兩行加幾 px（拉丁數字混漢字量出來會高一兩 px）不算三行
+    assert "compactRound(" in fit and "if (short == null) return;" in fit  # 拼不出數字行就整句照常顯示
+    assert 'list.classList.remove("tight")' in fit and 'list.classList.add("tight")' in fit
+    assert "fitFirstRound();" in _js_function(js, "function afterPage(")
+    assert "fitFirstRound();" in js[js.index('window.addEventListener("resize"'):js.index("const onPhoneChange")]  # 轉向、拉視窗之後重量
+    for selector, shown in ((".battle-card ul.rounds .r-short", "none"), (".battle-card ul.rounds.tight:not(.open) .r-full", "none"),
+                            (".battle-card ul.rounds.tight:not(.open) .r-short", "inline")):
+        found = re.search(r"(?m)^" + re.escape(selector) + r" \{([^}]*)\}", css)
+        assert found is not None and f"display: {shown}" in found.group(1), selector  # 展開（.open）時一律露整句
+    cases = {
+        # 對手先出手：照句子裡出現的先後
+        "第1回合　黃巾散兵掄起兵刃猛砸過來，你氣血 -13；驗收卡片以【基礎拳腳】守中帶攻，步步紮實地逼過去，對手氣勢 -10。":
+            "第1回合　你氣血 -13，對手氣勢 -10……",
+        "第2回合　沈浪以【旋風腿】身形一晃，搶到側面出手，對手氣勢 -18；山賊掄起兵刃猛砸過來，你氣血 -102。":
+            "第2回合　對手氣勢 -18，你氣血 -102……",
+        # 沒打中的沒有數字，照寫「被對方架開」「被你閃開了」
+        "第3回合　山賊掄起兵刃，被你閃開了；沈浪出拳，被對方架開。": "第3回合　被你閃開了，被對方架開……",
+        # 劇情戰不扣氣血：對手出手沒有結尾
+        "第1回合　山賊掄起兵刃；沈浪出拳，對手氣勢 -12。": "第1回合　對手氣勢 -12……",
+        "  第4回合　甲，你氣血 -5；乙，對手氣勢 -34。\n": "第4回合　你氣血 -5，對手氣勢 -34……",
+        # 認不出來：整句照常顯示（null），寧可多一行也不藏數字
+        "第1回合　甲，你氣血 -13，連擊 ×2；乙，對手氣勢 -10。": None,  # 多了一個沒見過的數字
+        "第1回合　甲，你氣血 -13；乙，對手氣勢 -10，士氣 -5。": None,
+        "第1回合　劍客7掄起兵刃，你氣血 -4。": None,  # 名字裡的數字也分不出來，一律不縮
+        "甲，你氣血 -13；乙，對手氣勢 -10。": None,  # 沒有「第N回合」
+        "第1回合　甲乙丙，一路纏鬥。": None,  # 一個結尾也找不到
+        "": None,
+    }
+    script = f"const cases = {json.dumps(list(cases), ensure_ascii=False)}; console.log(JSON.stringify(cases.map(compactRound)));"
+    assert json.loads(_app_functions_in_node(js, script)) == list(cases.values())
+
+
+def test_the_numbers_only_line_keeps_every_number_the_round_wrote(content):
+    """真的由 battlelog.round_lines 寫出來的回合（每一種結果、先後手、有沒有扣氣血、有沒有武學），拿去跑 compactRound：
+    拼得出來的數字行裡 -N 的數字與順序都跟原句一模一樣，一個都不能少。"""
+    import json
+
+    from tianxia import battlelog, rounds
+
+    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    foe = rounds.Foe(name="山賊", attribute="剛", agility=9.0)
+    lines = []
+    for ours, theirs in ((0, 0), (0, 24), (18, 0), (7, None), (0, None)):  # 沒打中的兩種寫法，play 很少剛好擲出 0，手排幾回合
+        for first in ("ours", "theirs"):
+            beats = [rounds.Beat(side="ours", actor="沈浪", art="旋風腿", attribute="快", amount=ours),
+                     rounds.Beat(side="theirs", actor="山賊", art=None, attribute="剛", amount=theirs)]
+            lines += battlelog.round_lines(content, [rounds.Round(number=2, beats=beats if first == "ours" else beats[::-1])], random.Random(0))
+    for seed in range(15):
+        rng = random.Random(seed)
+        for tier in rounds.ROUNDS:
+            for fighters in ([rounds.Fighter(name="沈浪", art="旋風腿", attribute="快"), rounds.Fighter(name="蘇晴", art=None, attribute=None)],
+                             [rounds.Fighter(name="沈浪", art=None, attribute=None)]):
+                for hp_lost in (None, 0, 37, 480):
+                    for our_agility in (3.0, 30.0):
+                        played = rounds.play(tier, fighters, foe, our_agility, hp_lost, rng)
+                        lines += battlelog.round_lines(content, played, rng)
+    assert len(lines) > 1000 and any("，被你閃開了" in line for line in lines) and any("，被對方架開" in line for line in lines)
+    script = f"const lines = {json.dumps(lines, ensure_ascii=False)}; console.log(JSON.stringify(lines.map(compactRound)));"
+    shorts = json.loads(_app_functions_in_node(js, script))
+    for line, short in zip(lines, shorts, strict=True):
+        assert short is not None, line  # 名字裡沒有數字，句子的每一種寫法都拼得出來
+        assert re.findall(r"-\d+", short) == re.findall(r"-\d+", line), (line, short)
+        assert short.startswith(line[:line.index("回合") + 2]) and short.endswith("……") and len(short) < len(line)
 
 
 def test_the_fight_card_spacing_is_tight_and_only_for_the_fight_card():
     """戰鬥卡片壓縮：打完一場要在第一屏直接按下一顆行動。段距、標題與行高收緊，但只動「剛剛」那張戰鬥卡片
-    （.battle-card 只用在它身上，別張卡片與狀態列、行動列一個字不動），字級不縮到比 .order-text 的 13px 還小。"""
+    （.battle-card 只用在它身上，別張卡片與狀態列、行動列一個字不動），字級不縮到比 .order-text 的 13px 還小。
+    行高第二輪（PM 2026-10-05）：內文與過程、補充一律 1.45，標題以外沒有低於 1.4 的。"""
     css = (server.WEB / "style.css").read_text(encoding="utf-8")
     js = (server.WEB / "app.js").read_text(encoding="utf-8")
     assert re.findall(r'class="[^"]*battle-card[^"]*"', js) == ['class="card battle-card"']  # 只有「剛剛」那張戰鬥卡片用這個 class
@@ -1068,14 +1240,18 @@ def test_the_fight_card_spacing_is_tight_and_only_for_the_fight_card():
         assert found is not None, selector
         return found.group(1)
 
-    assert re.search(r"padding: [0-9]px [0-9]+px", rule(".battle-card")) and "line-height: 1.55" in rule(".battle-card")
+    assert re.search(r"padding: [0-9]px [0-9]+px", rule(".battle-card")) and "line-height: 1.45;" in rule(".battle-card")
     assert "margin: 3px 0" in rule(".battle-card p")
     assert "font-size: 16px" in rule(".battle-card h3") and "margin: 0 0 1px" in rule(".battle-card h3")
     assert "margin: 1px 0 5px" in rule(".battle-card ul.rounds") and "margin: 1px 0 5px" in rule(".battle-card p.rounds-tale")
-    # 這張卡片的規則一律寫在 .battle-card 底下，字級沒有比 13px 小的
+    for selector in (".battle-card ul.rounds", ".battle-card p.rounds-tale", ".battle-card .tx-extra"):
+        assert "line-height: 1.45;" in rule(selector), selector
+    # 這張卡片的規則一律寫在 .battle-card 底下，字級沒有比 13px 小的，行高除了單行的標題都不低於 1.4
     for selectors, body in re.findall(r"(?m)^([^{}\n@/]*\.battle-card[^{}\n]*) \{([^}]*)\}", css):
         assert all(s.strip().startswith(".battle-card") for s in selectors.split(",")), selectors
         assert all(float(px) >= 13 for px in re.findall(r"font-size: ([\d.]+)px", body)), selectors
+        if selectors.strip() != ".battle-card h3":
+            assert all(float(n) >= 1.4 for n in re.findall(r"line-height: ([\d.]+)", body)), selectors
 
 
 def test_the_big_fight_account_is_folded_behind_the_same_button():
@@ -1202,6 +1378,9 @@ def test_the_forge_endpoints_survive_oddly_shaped_bodies(client):
         {"art": "jichu_quanjiao", "insights": {"feng": 1}},
         {"art": None, "insights": 7},
         {"insights": [["feng"], {"x": 1}]},
+        {"art": "jichu_quanjiao", "other_art": ["jichu_tuna"], "insights": []},
+        {"art": "jichu_quanjiao", "other_art": {"id": 1}},
+        {"other_art": "jichu_tuna", "insights": ["feng"]},
         {},
     )
     for body in bodies:
@@ -1217,6 +1396,59 @@ def test_forge_line_warns_about_an_insight_you_have_not_learned(client):
     _player(client)
     line = client.post("/api/forge_line", json={"art": "jichu_quanjiao", "insights": ["feng"]}).json()["line"]
     assert "還沒悟到" in line
+
+
+def test_forge_line_does_not_leak_an_art_the_player_does_not_have(client):
+    """預覽不能拿來探：別人的本命武學（龍頭人物的）不在你身上，不管放在哪一格，都只回拒絕那一句，不寫名字與屬性。"""
+    _a_player_with_insights(client)
+    assert "caocao_wugong" in server.CONTENT.skills  # 真的有這一門（挾風槍法・屬快），探得到才算數
+    for body in (
+        {"art": "caocao_wugong", "insights": ["feng"]},
+        {"art": "jichu_quanjiao", "other_art": "caocao_wugong", "insights": []},
+        {"art": "caocao_wugong", "other_art": "jichu_quanjiao", "insights": []},
+    ):
+        line = client.post("/api/forge_line", json=body).json()["line"]
+        assert "⚠" in line and ("沒有這門武學" in line or "你會的武學" in line), (body, line)
+        assert "挾風槍法" not in line and "屬快" not in line and "→" not in line, (body, line)
+
+
+def test_the_forge_blends_two_arts(client):
+    """武學＋武學（設計 12.3）：開局送的兩門就能合，兩門都留著，花 5 心得＋5 體力。"""
+    _a_player_with_insights(client)
+    before = open_characters().load("沈青衫").player
+    out = client.post("/api/menxia/forge", json={"art": "jichu_quanjiao", "other_art": "jichu_tuna", "insights": []})
+    assert out.status_code == 200 and "合而為一" in out.json()["message"]
+    saved = open_characters().load("沈青衫").player
+    art = open_world().lookup_recipe(fusion.blend_key("jichu_quanjiao", "jichu_tuna"))
+    assert art is not None and art.id in saved.arts and art.parents == ["jichu_quanjiao", "jichu_tuna"]
+    assert (saved.member.wugong_id, saved.member.neigong_id) == ("jichu_quanjiao", "jichu_tuna")  # 兩門都留著
+    assert saved.stats["xinde"] == before.stats["xinde"] - 5
+    assert saved.stamina == pytest.approx(before.stamina - server.CONTENT.config.fuse_stamina, abs=0.1)
+
+
+def test_forge_line_previews_a_blend(client):
+    _a_player_with_insights(client)
+    before = open_characters().load("沈青衫").player
+    out = client.post("/api/forge_line", json={"art": "jichu_quanjiao", "other_art": "jichu_tuna"}).json()
+    assert "【基礎拳腳】＋【基礎吐納】" in out["line"] and "從下品起修" in out["line"]
+    saved = open_characters().load("沈青衫").player
+    assert saved.arts == []  # 只是預覽：什麼都沒收、沒登記
+    assert (saved.stats["xinde"], saved.stamina) == (before.stats["xinde"], before.stamina)
+    assert open_world().lookup_recipe(fusion.blend_key("jichu_quanjiao", "jichu_tuna")) is None
+
+
+def test_a_blended_art_that_is_worn_names_its_parents_on_the_slot_card(client):
+    """身上兩欄的功法卡也寫「由…衍生」（不只清單裡的卡）：合出來、改練上身，再看修練頁。"""
+    _a_player_with_insights(client)
+    client.post("/api/menxia/forge", json={"art": "jichu_quanjiao", "other_art": "jichu_tuna", "insights": []})
+    art = open_world().lookup_recipe(fusion.blend_key("jichu_quanjiao", "jichu_tuna"))
+    out = client.post("/api/menxia/switch", json={"art": art.id})
+    assert out.status_code == 200
+    view = client.get("/api/menxia").json()
+    worn = next(c for c in view["slot_cards"] if c["kind"] == art.kind)
+    assert "由【基礎拳腳】與【基礎吐納】衍生" in worn["card"]
+    plain = next(c for c in view["slot_cards"] if c["kind"] != art.kind)
+    assert "衍生" not in plain["card"]
 
 
 # ── 開爐的首次取名在行動鎖外（最終審查 Critical 1）：A 鎖內備料 → B 鎖外取名（有預算）→ C 鎖內重驗、登記、收費 ──
@@ -1315,6 +1547,84 @@ def test_the_forge_naming_outside_the_lock_keeps_its_retry_and_budget(monkeypatc
     assert server.prepare_forge(game, "jichu_quanjiao", ["feng"]) == server.NO_NAME
     assert len(sent) == 2 and all(25 < t <= server.CONTENT.config.naming_budget_seconds / 2 for t in sent)  # 第一趟＋重問
     assert game.client.timeout == server.CONTENT.config.ollama_timeout and game.client.retry is True
+
+
+def test_a_blend_goes_through_the_three_steps_outside_the_lock(lock_events):
+    """武學＋武學第一次合出來：A 段在鎖內開單、B 段在鎖外取名、C 段進鎖登記，跟武學＋意境同一套。"""
+    game = _forger()
+    lock_events.clear()
+
+    def reply(client, messages):
+        lock_events.append("generate")
+        _nobody_holds_the_lock(game)
+        return "拳息合一"
+
+    with _model(reply):
+        proposed = server.prepare_forge(game, "jichu_quanjiao", [], other_art="jichu_tuna")
+    assert proposed[0] == "拳息合一"
+    msgs = server.act(game, lambda g: g.forge("jichu_quanjiao", [], proposed=proposed, other_art="jichu_tuna"))
+    assert any("【拳息合一】" in m for m in msgs)
+    assert lock_events == ["enter", "exit", "generate", "enter", "exit"]
+    assert open_world().lookup_recipe(fusion.blend_key("jichu_quanjiao", "jichu_tuna")).name == "拳息合一"
+
+
+def test_the_blend_endpoint_asks_the_model_outside_the_lock_and_once(client):
+    _a_player_with_insights(client)
+    game = server.game_for("沈青衫")
+    asked = []
+
+    def reply(model, messages):
+        _nobody_holds_the_lock(game)
+        asked.append(messages[-1]["content"])
+        return "拳息合一"
+
+    with _model(reply):
+        out = client.post("/api/menxia/forge", json={"art": "jichu_quanjiao", "other_art": "jichu_tuna"})
+    assert out.status_code == 200 and "拳息合一" in out.json()["message"]
+    assert len(asked) == 1 and "【基礎拳腳】" in asked[0] and "【基礎吐納】" in asked[0] and "兩門合而為一" in asked[0]
+
+
+def test_a_blend_that_lands_on_a_known_art_asks_the_model_to_pick_outside_the_lock(monkeypatch):
+    """合到舊的、候選兩個以上：B 段在鎖外請模型從清單裡挑一個名字（只問一次），C 段進鎖登記那一門、收一次錢。"""
+    game = _forger()
+    world = open_world()
+    key = fusion.blend_key("jichu_quanjiao", "jichu_tuna")
+    quanjiao, tuna = (team.resolve_art(i, game.content, world) for i in ("jichu_quanjiao", "jichu_tuna"))
+    shape = fusion.blend_shape(quanjiao, tuna, fusion.recipe_seed(world, key)[1])
+    for i, name in enumerate(("甲拳", "乙拳")):
+        known = generate_from_name(name, shape.kind, name).model_copy(update={
+            "origin": "fused", "attribute": shape.attribute, "lean": shape.lean, "creator": "丙",
+        })
+        assert world.claim_recipe(f"融|測試{i}", known)[1]
+    monkeypatch.setattr(server.CONTENT.config, "land_chance_per_candidate", 1.0)
+    monkeypatch.setattr(server.CONTENT.config, "land_chance_cap", 1.0)
+    asked = []
+
+    def reply(model, messages):
+        _nobody_holds_the_lock(game)
+        asked.append(messages[-1]["content"])
+        return "乙拳"
+
+    xinde, stamina = game.state.player.stats["xinde"], game.state.player.stamina
+    with _model(reply):
+        msgs = server.forge(game, "jichu_quanjiao", [], other_art="jichu_tuna")
+    assert len(asked) == 1 and "清單：" in asked[0] and "- 甲拳" in asked[0] and "- 乙拳" in asked[0]
+    assert any("合出來的竟是一門已有的" in m and "【乙拳】" in m for m in msgs)
+    saved = open_characters().load("沈青衫").player
+    assert "乙拳" in saved.arts and world.lookup_recipe(key).id == "乙拳"
+    assert saved.stats["xinde"] == xinde - server.CONTENT.config.fuse_xinde
+    assert saved.stamina == pytest.approx(stamina - server.CONTENT.config.fuse_stamina, abs=0.1)
+
+
+def test_a_blend_respects_the_model_breaker_in_the_lock(monkeypatch, breaker_clock):
+    """沒給 proposed 直接在鎖內開爐（整季機器人那條路）：斷路器開著時鎖內不叫模型，名字走退路字表。"""
+    game = _forger()
+    server.act(game, lambda g: g.forge("jichu_quanjiao", ["feng"]))  # 鎖內取名失敗（conftest 假成連不上）→ 斷路器打開
+    asked = []
+    with _model(lambda model, messages: asked.append(1) or "拳息合一"):
+        msgs = server.act(game, lambda g: g.forge("jichu_quanjiao", [], other_art="jichu_tuna"))
+    assert asked == [] and any("合而為一" in m for m in msgs)
+    assert open_world().lookup_recipe(fusion.blend_key("jichu_quanjiao", "jichu_tuna")).name != "拳息合一"
 
 
 def test_each_lock_hold_gets_a_fresh_model_budget(game, monkeypatch, breaker_clock):
@@ -1458,7 +1768,7 @@ def test_when_the_first_trip_saw_no_need_for_the_model_the_lock_never_asks_it(mo
     """A 段說不必叫模型（那一刻會被拒絕、配方有了、沒有 client），C 段進鎖時卻做得成（中間狀態變了）：
     鎖裡也不叫模型，直接用退路字表——伺服器永遠不走「鎖裡取名」那條路。"""
     game = _forger()
-    monkeypatch.setattr(Game, "forge_request", lambda self, art_id, insight_ids: None)
+    monkeypatch.setattr(Game, "forge_request", lambda self, art_id, insight_ids, other_art=None: None)
     asked = []
     with _model(lambda model, messages: asked.append(1) or "旋風腿"):
         server.forge(game, "jichu_quanjiao", ["feng"])
@@ -2614,6 +2924,64 @@ def test_a_big_fight_the_model_cannot_judge_is_fought_as_usual(game, lock_events
     assert lock_events == ["enter", "exit", "enter", "exit"]
     record = game.state.battles[0]
     assert record.opponent == "波才" and record.narration == "" and record.rounds
+
+
+def _a_big_fight_at_the_wilds(game, monkeypatch):
+    """潁川郊野的對手難度都不到大場面的門檻（100）：把門檻壓到 1，這裡的遊歷就是大場面（鎖外判讀、按鈕寫「兩人對峙」）。
+    存一份到資料庫：鎖外判讀的時候，別的分頁看到、改的就是這一份。"""
+    monkeypatch.setattr(server.CONTENT.config, "big_fight_difficulty", 1)
+    server.act(game, lambda g: setattr(g.state.player, "location", "yingchuan_wilds"))  # 進鎖會先從資料庫重讀，改要在鎖裡改
+    assert next(o for o in server.look(game, lambda g: g.options()) if o.id == "act:train").wait == "兩人對峙……"
+
+
+@pytest.mark.parametrize("judgment", [FIGHT_JUDGMENT, None], ids=["judged", "model_too_slow"])
+def test_a_big_fight_the_player_left_while_it_was_judged_replies_with_one_line(game, monkeypatch, judgment):
+    """等模型判讀的時候（另一個分頁）把人帶走了：判讀回來作廢，這一仗不打、不寫戰報、不寫江湖紀錄，回一句話
+    （以前回給畫面的是空的，玩家什麼也沒看到）。模型太慢沒回來（判讀是 None）也一樣——等得久的正是這種時候。"""
+    _a_big_fight_at_the_wilds(game, monkeypatch)
+    journal = len(open_characters().load("測試").journal)
+
+    def judge(client, request, swing, budget=None):
+        server.act(game, lambda g: setattr(g.state.player, "location", "yingchuan"))  # 另一個分頁：走到別處去了
+        return judgment
+
+    with mock.patch.object(server.fight_llm, "judge", side_effect=judge):
+        reply = server.choose(game, "act:train")
+    assert reply == ["你離開了，這一仗沒打成。"]
+    stored = open_characters().load("測試")
+    assert stored.battles == [] and stored.player.location == "yingchuan" and len(stored.journal) == journal
+
+
+def test_the_page_gets_the_line_when_a_judged_big_fight_is_not_started(client, monkeypatch):
+    """/api/choose 一般選項不回話（話在江湖紀錄裡），這一句不寫紀錄，所以這裡回給前端跳提示；江湖畫面照樣回。"""
+    _player(client)
+    game = server.game_for("沈青衫")
+    _a_big_fight_at_the_wilds(game, monkeypatch)
+
+    def judge(client, request, swing, budget=None):
+        server.act(game, lambda g: setattr(g.state.player, "location", "yingchuan"))
+        return FIGHT_JUDGMENT
+
+    with mock.patch.object(server.fight_llm, "judge", side_effect=judge):
+        out = client.post("/api/choose", json={"id": "act:train"}).json()
+    assert "你離開了，這一仗沒打成。" in out["message"] and "main" in out
+    assert "act:train" not in [o["id"] for o in out["main"]["options"]]
+    # 平常打完一場仗的回話照舊不回（在「剛剛」卡片裡）
+    out = client.post("/api/choose", json={"id": "act:rest"}).json()
+    assert "message" not in out
+
+
+def test_a_big_fight_that_became_impossible_for_another_reason_says_the_situation_changed(game, monkeypatch):
+    """人還在、選項卻按不下去了（別的分頁把體力花光）：說得中性一點，一樣不打、不寫紀錄。"""
+    _a_big_fight_at_the_wilds(game, monkeypatch)
+
+    def judge(client, request, swing, budget=None):
+        server.act(game, lambda g: setattr(g.state.player, "stamina", 0))
+        return FIGHT_JUDGMENT
+
+    with mock.patch.object(server.fight_llm, "judge", side_effect=judge):
+        assert server.choose(game, "act:train") == ["情勢變了，這一仗沒打成。"]
+    assert open_characters().load("測試").battles == []
 
 
 @pytest.mark.parametrize(("event", "option"), [(None, "act:train"), ("wolves", "choice:0")])

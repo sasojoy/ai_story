@@ -42,8 +42,11 @@ class Judgment(BaseModel):
 
 
 class PreparedFight(BaseModel):
+    """鎖外走完的大場面：備料時的單子，加上模型的判讀。判讀是 None＝模型叫不動、太慢（照平常打，優勢 0）；單子照樣帶著，
+    套用時這個選項已經不在了（等判讀的時候別的分頁把人帶走），引擎才說得出是哪一仗沒打成（Game._fight_gone）。"""
+
     request: FightRequest
-    judgment: Judgment
+    judgment: Judgment | None = None
 
 
 def member_line(name: str, arts: list[MartialArt | None]) -> str:

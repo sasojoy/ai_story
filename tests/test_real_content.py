@@ -16,7 +16,7 @@ from unittest import mock
 
 import pytest
 
-from tianxia import companion_agent, roster, team
+from tianxia import companion_agent, fusion, roster, team
 from tianxia.atlas import region_of
 from tianxia.bot import play_season
 from tianxia.content import load_content
@@ -244,6 +244,7 @@ def test_the_bot_learns_insights_fuses_and_cultivates(content, tmp_path):
     p = game.state.player
     assert p.insights, "整季都沒悟到意境：探索的悟意境那一支沒接上"
     assert game.world.recipe_keys(), "整季都沒合成過"
+    assert any(key.startswith(fusion.BLEND_PREFIX) for key in game.world.recipe_keys()), "整季都沒把兩門武學合在一起過"
     assert p.art_quality or p.art_mastery, "整季都沒修練過"
     assert p.member.wugong_level > 1 or p.member.neigong_level > 1, "整季都沒練成過"
 

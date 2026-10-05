@@ -1015,6 +1015,15 @@ def test_art_detail_of_an_art_that_is_not_yours_is_not_found(game):
     assert game.art_detail("ghost") == "（找不到這門功法。）"
 
 
+def test_art_detail_of_a_blended_art_names_both_parents(game):
+    p = game.state.player
+    p.member.wugong_id, p.member.neigong_id, p.stats["xinde"] = "basic_fist", "basic_breath", 100
+    game.forge("basic_fist", [], proposed=(None, ""), other_art="basic_breath")  # 不叫模型：退路字表取名
+    (made,) = p.arts
+    assert "由【粗淺吐納】與【粗淺拳腳】衍生" in game.art_detail(made)  # 來源照 id 排序（basic_breath 在 basic_fist 前）
+    assert "衍生" not in game.art_detail("basic_fist")
+
+
 def test_heal(game):
     assert game.heal() == ["氣血無恙，不用療傷。"]
     member = game.state.player.member
@@ -3422,6 +3431,40 @@ def test_a_stale_judgment_is_dropped(game):
     stale = _judged(request.model_copy(update={"location": "town"}))
     game.choose("act:train", fight=stale)
     assert game.state.battles[0].narration == ""
+
+
+def test_a_big_fight_the_player_left_while_it_was_judged_says_so_and_fights_nothing(game):
+    """等模型判讀的時候（另一個分頁）把人帶走了，回來時這個選項已經不在選單上：不打、不寫戰報、不寫江湖紀錄，
+    回一句話告訴玩家這一仗沒打成（不是把空的回給畫面）。模型叫不動（判讀是 None）時一樣。"""
+    _boss_at_the_lake(game)
+    request = game.fight_request("act:train")
+    game.state.player.location = "town"
+    journal = len(game.state.journal)
+    for judgment in (JUDGMENT, None):
+        assert game.choose("act:train", fight=fight_llm.PreparedFight(request=request, judgment=judgment)) == ["你離開了，這一仗沒打成。"]
+    assert game.state.battles == [] and len(game.state.journal) == journal
+    assert game.choose("act:train") == ["（此刻無法這麼做。）"]  # 沒有判讀過的過期按鈕：照舊是那一句
+
+
+def test_a_big_fight_the_player_set_out_from_on_foot_while_it_was_judged_says_they_left(game):
+    """步行、趕路出發之後地點要到抵達才換（Journey 在路上時 location 還是出發地），所以光看地點會誤說「情勢變了」。
+    大場面的單子只在不在路上時才開，套用時人在路上就是離開了。"""
+    _boss_at_the_lake(game)
+    request = game.fight_request("act:train")
+    game.choose("move:town")  # 另一個分頁：步行出發
+    player = game.state.player
+    assert player.journey is not None and player.location == request.location  # 地點還沒變
+    assert game.choose("act:train", fight=_judged(request)) == ["你離開了，這一仗沒打成。"]
+    assert game.state.battles == []
+
+
+def test_a_big_fight_that_can_no_longer_start_for_another_reason_says_the_situation_changed(game):
+    """人沒走、選項卻按不下去了（例如別的分頁把體力花光）：認不出是哪一種變動，就說得中性一點。"""
+    _boss_at_the_lake(game)
+    request = game.fight_request("act:train")
+    game.state.player.stamina = 0
+    assert game.choose("act:train", fight=_judged(request)) == ["情勢變了，這一仗沒打成。"]
+    assert game.state.battles == []
 
 
 def test_a_judgment_survives_the_season_clock_moving_while_the_model_thinks(game):

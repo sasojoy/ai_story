@@ -1,6 +1,6 @@
 import random
 
-from tianxia import bot, library
+from tianxia import bot, fusion, library
 from tianxia.bot import pick, play_season, spend_xinde, wants_heal
 from tianxia.engine import Game
 from tianxia.models import (
@@ -76,6 +76,10 @@ class Fixed(random.Random):
 
     def __init__(self, value):
         super().__init__(0)
+        # random() 不會回 1.0 以上；rng.choice 又靠 random() < 1 才跳得出迴圈：Fixed(1.0) 以上會讓它永遠轉下去。
+        # 常數被改到逼近 1（例如 BLEND_SHARE + 0.01 越過 1.0）時要讓測試失敗，不是卡住整個測試套件
+        if not 0.0 <= value < 1.0:
+            raise ValueError(f"Fixed 的值要在 [0, 1) 裡：{value}")
         self.value = value
 
     def random(self):
@@ -129,6 +133,99 @@ def test_the_bot_fuses_when_the_merge_chance_does_not_come_up(content, world):
     assert len(game.state.player.insights) == 2 and len(library.owned_arts(game.state)) == 2
 
 
+def test_the_bot_blends_two_arts_when_it_has_no_insight_to_fuse(content, world):
+    """武學＋武學（設計 12.3）：沒有意境可合成、手上有兩門武學時，機器人把兩門合成第三門。"""
+    game = armed(content, world)
+    game.state.player.member.neigong_id = "basic_breath"
+    game.state.player.insights = []
+    bot.forge_and_cultivate(game, random.Random(0))
+    assert len(library.owned_arts(game.state)) == 3
+
+
+def test_the_bot_sometimes_blends_instead_of_fusing(content, world):
+    game = armed(content, world)
+    game.state.player.member.neigong_id = "basic_breath"
+    before = set(library.owned_arts(game.state))
+    bot.forge_and_cultivate(game, Fixed(bot.BLEND_SHARE - 0.01))  # 只有一個意境不會合併；這個數落在武學＋武學那一段
+    new = [a for a in library.owned_arts(game.state) if a not in before]
+    assert len(new) == 1 and game.world.get_skill(new[0]).parents == ["basic_breath", "basic_fist"]
+
+
+def test_the_bot_fuses_when_the_blend_chance_does_not_come_up(content, world):
+    """兩種都能做時，BLEND_SHARE 以上的數仍然是武學＋意境：新的那門有底（base）、沒有 parents。"""
+    game = armed(content, world)
+    game.state.player.member.neigong_id = "basic_breath"
+    before = set(library.owned_arts(game.state))
+    bot.forge_and_cultivate(game, Fixed(bot.BLEND_SHARE + 0.01))
+    new = [a for a in library.owned_arts(game.state) if a not in before]
+    assert len(new) == 1
+    art = game.world.get_skill(new[0])
+    assert art.parents == [] and art.base in ("basic_breath", "basic_fist") and art.insight == "feng"
+
+
+def test_the_forge_reserve_is_more_than_a_forge_costs(content):
+    """低於保留量的測試才有意義：少一點的體力要還付得起一爐，被擋下的才是保留量、不是體力不夠。"""
+    assert bot.FORGE_RESERVE - 1 >= content.config.fuse_stamina
+    assert bot.FORGE_RESERVE - 1 >= content.config.merge_stamina
+
+
+def test_the_bot_does_not_forge_below_the_forge_reserve(content, world):
+    game = armed(content, world)
+    game.state.player.stamina = bot.FORGE_RESERVE - 1
+    bot.forge_and_cultivate(game, random.Random(0))
+    assert library.owned_arts(game.state) == ["basic_fist"]
+    assert game.state.player.stamina == bot.FORGE_RESERVE - 1
+
+
+def test_the_bot_does_not_blend_below_the_forge_reserve(content, world):
+    """兩門武學、沒有意境：只剩武學＋武學這一條路，低於保留量也一樣不合（保留量擋的是三種合成，不只合成）。"""
+    game = armed(content, world)
+    game.state.player.member.neigong_id = "basic_breath"
+    game.state.player.insights = []
+    game.state.player.stamina = bot.FORGE_RESERVE - 1
+    bot.forge_and_cultivate(game, random.Random(0))
+    assert len(library.owned_arts(game.state)) == 2
+    assert not any(key.startswith(fusion.BLEND_PREFIX) for key in world.recipe_keys())
+    assert game.state.player.stamina == bot.FORGE_RESERVE - 1 and game.state.player.stats["xinde"] == 100
+
+
+def test_the_bot_forges_with_exactly_the_forge_reserve(content, world):
+    game = armed(content, world)
+    game.state.player.stamina = bot.FORGE_RESERVE
+    bot.forge_and_cultivate(game, random.Random(0))
+    assert len(library.owned_arts(game.state)) == 2
+    assert game.state.player.stamina == bot.FORGE_RESERVE - content.config.fuse_stamina
+
+
+def test_the_bot_with_one_art_and_no_insight_forges_nothing(content, world):
+    game = armed(content, world)
+    game.state.player.insights = []
+    bot.forge_and_cultivate(game, random.Random(0))
+    assert library.owned_arts(game.state) == ["basic_fist"]
+    assert game.state.player.stamina == 150  # 什麼都沒花（也沒修練：沒有意境就沒有修練的東西）
+
+
+def test_the_bot_pays_only_when_a_blend_really_makes_something(content, world):
+    """合出來的你已經有了就不再合（blend_problem 先擋，試 FORGE_TRIES 組都被擋就這一輪不合）：連跑幾輪，每一輪要嘛
+    多一門、花一次價錢，要嘛什麼都沒花；每一組只合過一次（配方鍵不重複）。"""
+    game = armed(content, world)
+    p = game.state.player
+    p.member.neigong_id, p.insights = "basic_breath", []
+    cfg = content.config
+    low = bot.FORGE_RESERVE + 5  # 合完還低於修練的保留量：每一輪只看合成
+    made_in_all = 0
+    for turn in range(10):
+        p.stamina, p.stats["xinde"] = low, 100
+        held = len(library.owned_arts(game.state))
+        bot.forge_and_cultivate(game, random.Random(turn))
+        made = len(library.owned_arts(game.state)) - held
+        assert made in (0, 1)
+        assert (p.stats["xinde"], p.stamina) == (100 - made * cfg.fuse_xinde, low - made * cfg.fuse_stamina)
+        made_in_all += made
+    blends = [key for key in world.recipe_keys() if key.startswith(fusion.BLEND_PREFIX)]
+    assert made_in_all >= 2 and len(blends) == made_in_all and len(set(blends)) == len(blends)
+
+
 def test_the_bot_names_the_art_it_mastered_with_a_fallback_name(content, world):
     """練成絕學的第一人要自己取名：機器人不叫模型，走退路字表（取出來的名字過得了命名過濾）。"""
     game = armed(content, world)
@@ -146,7 +243,8 @@ def test_the_bot_keeps_its_stamina_for_the_road_below_the_reserve(content, world
     game = armed(content, world)
     game.state.player.stamina = bot.CULTIVATE_RESERVE - 1
     bot.forge_and_cultivate(game, random.Random(0))
-    assert game.state.player.stamina == bot.CULTIVATE_RESERVE - 1  # 沒有修練（合成不花體力）
+    # 合成也花體力了（設計 12.1）：這一輪合了一爐，但體力沒到修練的保留量，沒有修練
+    assert game.state.player.stamina == bot.CULTIVATE_RESERVE - 1 - content.config.fuse_stamina
     assert not game.state.player.art_mastery and not game.state.player.art_quality
 
 
