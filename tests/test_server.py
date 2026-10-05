@@ -993,6 +993,16 @@ def test_a_second_tab_that_spends_the_xinde_while_naming_leaves_the_first_forge_
     assert len(_crafts("沈青衫")) == 1 and "烈火拳" in _crafts("沈青衫")[0]["tag"]
 
 
+def test_the_furnace_button_stays_disabled_with_the_wait_line_while_naming():
+    """企劃者 2026-10-05：等取名的時候「開爐」鈕關著、寫著爐火正旺，同一個分頁按不了第二下（busy）；
+    重新整理之後頁面重畫、按鈕照常能按——伺服器不留任何等待中的狀態，重複扣由 C 段的重驗擋（見上面幾條）。"""
+    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    body = _js_function(js, "async function forge(")
+    assert "await busy(" in body and "btn.disabled = true" in body and 'btn.textContent = "爐火正旺…"' in body
+    assert "取名要花上一分鐘，請稍候" in body
+    assert body.index("btn.disabled = true") < body.index('api("/api/menxia/forge"')
+
+
 def test_the_page_never_polls_twice_at_once():
     """最終審查 Critical 1：取名要等的時候伺服器的執行緒還在跑；輪詢若不等上一次回來就再打一次 /api/main，
     卡住的請求會越疊越多、把執行緒池用光。poll() 有一個「還在等」的旗子，上一次沒回來就不打。"""
