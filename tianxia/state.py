@@ -92,6 +92,8 @@ class PlayerState(BaseModel):
     sect: str | None = None
     faction: str | None = None  # 投靠的陣營 id（Scenario.factions）；None＝散人
     pending_faction: str | None = None  # 按了「投靠某陣營」、還在確認畫面上的陣營 id
+    pending_defect: str | None = None  # 按了「叛投某陣營」、還在確認畫面上的陣營 id（計畫甲）
+    defected: bool = False  # 這一季叛投過了（第一季設計 5.1：一季最多一次）；角色每季重來，新的一季自然是 False
     member: Member = Field(default_factory=Member)  # 玩家本人的角色表
 
     # ── 同伴（sanguo-companions 合併重寫：全服唯一，見 world_state.py）──
