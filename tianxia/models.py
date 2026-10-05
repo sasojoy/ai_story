@@ -6,7 +6,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, GetCoreSchemaHandler, field_validator
 from pydantic_core import core_schema
 
-STATS = ("str", "agi", "con", "wis", "silver", "good", "evil", "fame", "xinde")
+STATS = ("str", "agi", "con", "wis", "lore", "silver", "good", "evil", "fame", "xinde")
 ActionKind = Literal["explore", "train", "socialize"]
 TravelMode = Literal["walk", "hurry", "dash"]  # 步行／趕路／疾行（地圖擴充設計 3.2）
 # sanguo-companions 合併：同伴不再分天地玄黃品階，改成「龍頭人物」（劇情鎖定，不可招募，
@@ -189,7 +189,7 @@ class FreeTextChoice(_Strict):
     引擎再按 stat 修正、夾在 5%～85% 之後擲骰：成功套 effect，失敗套 fail_effect。"""
 
     prompt: str  # 選單上的標籤，例如「自己想辦法……」
-    stat: Literal["str", "agi", "con", "wis"]
+    stat: Literal["str", "agi", "con", "wis", "lore"]
     by: Literal["team", "self"] = "team"  # 跟 Check.by 一樣：讀得進來、不再有作用，隨口應對也只看本人的屬性
     effect: Effect = Field(default_factory=Effect)
     fail_effect: Effect = Field(default_factory=Effect)
@@ -783,13 +783,14 @@ class Config(_Strict):
     starter_skills: list[str] = Field(default_factory=list)
     start_stats: dict[str, int] = Field(
         default_factory=lambda: {
-            "str": 5, "agi": 5, "con": 5, "wis": 5,
+            "str": 5, "agi": 5, "con": 5, "wis": 5, "lore": 5,
             "silver": 50, "good": 0, "evil": 0, "fame": 0, "xinde": 0,
         }
     )
+    # 顯示名只寫在這裡（博聞是暫名，武學與成長設計 6.3；改名只動這一處）
     stat_names: dict[str, str] = Field(
         default_factory=lambda: {
-            "str": "臂力", "agi": "身法", "con": "根骨", "wis": "悟性",
+            "str": "臂力", "agi": "身法", "con": "根骨", "wis": "悟性", "lore": "博聞",
             "silver": "銀兩", "good": "善名", "evil": "惡名", "fame": "名望", "xinde": "心得",
         }
     )
@@ -861,10 +862,11 @@ class Config(_Strict):
     duplicate_insight_xinde: int = 10  # 已經會的意境又悟到一次換的心得
     holding_cap_base: int = 50  # 武學與意境合計最多幾個
     holding_cap_levels: int = 5  # 每升幾級……
-    holding_cap_step: int = 5  # ……多幾格
-    # ── 四屬性（武學與成長設計第六節；【預設】）──
+    holding_cap_step: int = 3  # ……多幾格（企劃者 2026-10-05 從 5 改成 3，另加博聞，設計 6.3）
+    holding_per_lore_point: int = 2  # 博聞比基準每多一點，多幾格（設計 6.3）
+    # ── 五屬性（武學與成長設計第六節；【預設】）──
     stat_points_per_level: int = 1  # 每升一級給幾點屬性，自己分配（取代每級自動 +0.3 與打贏隨機 +1）
-    stat_cap: int = 15  # 臂力、身法、根骨、悟性每項最高
+    stat_cap: int = 15  # 臂力、身法、根骨、悟性、博聞每項最高
     stat_bonus_per_point: float = 0.03  # 比基準 5 每多一點的加成（計畫二 Task 2 起用）
     pairing_bonus: float = 0.2  # 內功與武學同屬性，整個人威力 +幾成（武學與成長設計 5.1）
     pairing_penalty: float = 0.2  # 內功與武學是相剋的一對，整個人威力 −幾成（再大也只到 encounter.BOOST_FLOOR）
@@ -1127,7 +1129,7 @@ class FsFragment(_Strict):
 class FsCheck(_Strict):
     """最後一步的屬性檢定（只看本人，伏筆是個人做的）：答完題、要交出東西之前擲。"""
 
-    stat: Literal["str", "agi", "con", "wis"]
+    stat: Literal["str", "agi", "con", "wis", "lore"]
     dc: int
 
 

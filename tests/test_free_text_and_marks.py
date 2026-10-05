@@ -298,6 +298,16 @@ def test_free_text_cannot_pay_more_than_the_best_check(tmp_path):
         load_content(root)
 
 
+def test_a_free_text_can_ask_for_lore_but_cannot_pay_it_out_above_the_best_check(tmp_path):
+    """博聞（設計 6.3）跟另外四項一樣：隨口應對能指定它，但給的博聞不能比檢定選項最多的還高。"""
+    root = copy_fixture(tmp_path)
+    _with_free_text(root, stat="lore")
+    assert load_content(root).events["drunk"].free_text.stat == "lore"
+    _with_free_text(root, stat="lore", effect={"stats": {"lore": 1}})  # 醉漢事件的檢定選項沒有給博聞
+    with pytest.raises(ContentError, match="lore \\+1"):
+        load_content(root)
+
+
 def test_free_text_cannot_give_more_insights_than_the_best_check(tmp_path):
     root = copy_fixture(tmp_path)
     _with_free_text(root, effect={"insights": ["feng"]})  # 醉漢事件的檢定選項沒有給意境

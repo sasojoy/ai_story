@@ -631,7 +631,7 @@ def apply_effect(
         before = p.stats.get(key, 0)
         after = max(0, before + delta)
         capped = key in team.COMBAT_STATS and delta > 0 and after > content.config.stat_cap
-        if capped:  # 四屬性每項最高 stat_cap（武學與成長設計 6.2）；已經超過的舊存檔不往下拉，只是不再加
+        if capped:  # 五屬性每項最高 stat_cap（武學與成長設計 6.2）；已經超過的舊存檔不往下拉，只是不再加
             after = max(before, content.config.stat_cap)
         p.stats[key] = after
         if after != before:
