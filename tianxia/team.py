@@ -10,7 +10,7 @@ import math
 import random
 
 from . import calendar, encounter
-from .martial_arts import MAX_LEVEL, MartialArt, content_art, with_quality
+from .martial_arts import MAX_LEVEL, MartialArt, content_art, counters, with_quality
 from .models import Content, FollowerDef, Squad
 from .state import PLAYER, MAX_TEAM_COMPANIONS, GameState, Member
 from .world_state import CompanionProgress, WorldStateStore
@@ -380,12 +380,39 @@ def team_conditions(state: GameState, content: Content, world: WorldStateStore) 
     ]
 
 
+def pairing(content: Content, wugong: MartialArt | None, neigong: MartialArt | None) -> float:
+    """內功與武學的搭配（武學與成長設計 5.1）：同屬性加成、相剋的一對打折、其他不變；少一門就不算。
+    打折再大也只到 encounter.BOOST_FLOOR，不會讓整個人的威力變成負的。"""
+    if wugong is None or neigong is None:
+        return 1.0
+    cfg = content.config
+    if wugong.attribute == neigong.attribute:
+        return 1 + cfg.pairing_bonus
+    if counters(wugong.attribute, neigong.attribute):
+        return max(encounter.BOOST_FLOOR, 1 - cfg.pairing_penalty)
+    return 1.0
+
+
+def resonance(state: GameState, content: Content, art: MartialArt | None) -> float:
+    """正邪共鳴（設計 7.4）：正派功法吃現在的善名、邪派吃惡名，名聲 ÷ 2 %、最多 resonance_cap；
+    沒有正邪、或用了反的那一派，就是 1（不反噬，名聲是負的也一樣）。"""
+    stat = {"正": "good", "邪": "evil"}.get(art.lean) if art is not None else None
+    if stat is None:
+        return 1.0
+    cfg = content.config
+    return 1 + min(cfg.resonance_cap, max(0.0, state.player.stats.get(stat, 0) * cfg.resonance_per_point))
+
+
 def player_boost(state: GameState, content: Content, world: WorldStateStore) -> encounter.Boost:
-    """玩家本人的加成：臂力管外功、根骨管內功（武學與成長設計 6.1；計畫二 Task 3 再乘上內外搭配與正邪共鳴）。"""
-    stats = state.player.stats
+    """玩家本人的加成：臂力管外功、根骨管內功（武學與成長設計 6.1）；整個人再乘上內外搭配與兩門各自的
+    正邪共鳴（5.1、7.4）。搭配至少是 BOOST_FLOOR、共鳴至少是 1，所以乘出來的 factor 不會低於下限。"""
+    stats, member = state.player.stats, state.player.member
+    wugong = player_art(state, content, world, member.wugong_id)
+    neigong = player_art(state, content, world, member.neigong_id)
     return encounter.Boost(
         outer=stat_bonus(content, stats.get("str", BASE_STAT)),
         inner=stat_bonus(content, con_of(state, PLAYER)),
+        factor=pairing(content, wugong, neigong) * resonance(state, content, wugong) * resonance(state, content, neigong),
     )
 
 

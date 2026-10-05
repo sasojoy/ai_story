@@ -427,3 +427,117 @@ def test_the_hp_cap_is_a_whole_number_at_any_root(content):
     """根骨 6：320 × 1.03 ＝ 329.6，上限一律四捨五入成 330，每個呼叫端拿到、畫面寫出來的都是同一個數。"""
     assert team.neili_cap(content, 1, 6) == 330
     assert team.neili_cap(content, 1) == 320
+
+
+# ── 計畫二 Task 3：內外搭配與正邪共鳴 ──────────────────────────────────────────────
+
+
+def _art(name, kind, attribute, lean="無"):
+    return generate_from_name(name, kind, name, attribute=attribute).model_copy(update={"lean": lean})
+
+
+def test_pairing_rewards_the_same_attribute_and_punishes_a_countering_pair(content):
+    assert team.pairing(content, _art("甲拳", "武學", "剛"), _art("甲功", "內功", "剛")) == pytest.approx(1.2)
+    assert team.pairing(content, _art("乙拳", "武學", "剛"), _art("乙功", "內功", "柔")) == pytest.approx(0.8)
+    assert team.pairing(content, _art("丙拳", "武學", "剛"), _art("丙功", "內功", "快")) == 1.0
+    assert team.pairing(content, _art("丁拳", "武學", "剛"), None) == 1.0
+    assert team.pairing(content, None, _art("戊功", "內功", "剛")) == 1.0
+
+
+def test_resonance_follows_the_matching_name_and_caps(state, content):
+    good = _art("正拳", "武學", "陽", "正")
+    state.player.stats["good"], state.player.stats["evil"] = 30, 100
+    assert team.resonance(state, content, good) == pytest.approx(1.15)
+    state.player.stats["good"] = 100
+    assert team.resonance(state, content, good) == pytest.approx(1.2)
+    assert team.resonance(state, content, _art("平拳", "武學", "陽")) == 1.0
+    assert team.resonance(state, content, _art("邪拳", "武學", "陰", "邪")) == pytest.approx(1.2)
+    assert team.resonance(state, content, None) == 1.0
+
+
+def test_the_wrong_name_gives_no_resonance_and_never_a_penalty(state, content):
+    """用了反的不會反噬（設計 7.4）：滿身惡名的人使正派武學只是沒有共鳴；名聲是負的也不會變成打折。"""
+    state.player.stats["good"], state.player.stats["evil"] = 0, 100
+    assert team.resonance(state, content, _art("正拳", "武學", "陽", "正")) == 1.0
+    state.player.stats["good"] = -50
+    assert team.resonance(state, content, _art("正拳", "武學", "陽", "正")) == 1.0
+
+
+def _register(world, name, kind, attribute, lean="無"):
+    art = _art(name, kind, attribute, lean)
+    assert world.claim_skill_name(art)
+    return art
+
+
+def test_pairing_and_resonance_can_never_push_the_factor_under_the_floor(state, content, world):
+    """設定把相剋的打折調到比 100% 還大，搭配也只到下限（encounter.BOOST_FLOOR），整個人的乘數不會變成負的；
+    共鳴只往上加，名聲是負的也不會把乘數往下拉。"""
+    content.config.pairing_penalty = 5.0
+    wugong = _register(world, "鐵拳", "武學", "剛", "正")
+    state.player.member.wugong_id, state.player.member.neigong_id = wugong.id, "basic_breath"  # 剛克柔
+    state.player.stats["good"] = -500
+    assert team.pairing(content, wugong, team.resolve_art("basic_breath", content, world)) == encounter.BOOST_FLOOR
+    assert team.player_boost(state, content, world).factor == pytest.approx(encounter.BOOST_FLOOR)
+    state.player.stats["good"] = 100  # 共鳴封頂 1.2：搭配的下限 × 1.2，仍是正的
+    assert team.player_boost(state, content, world).factor == pytest.approx(encounter.BOOST_FLOOR * 1.2)
+
+
+def test_the_players_factor_is_pairing_times_both_resonances(state, content, world):
+    """計畫二 G12：正派的合成武學＋同屬性的內功＋善名 40 → 整個人乘 1.2（搭配）× 1.2（共鳴）。"""
+    wugong = _register(world, "清風拳", "武學", "柔", "正")
+    state.player.member.wugong_id, state.player.member.neigong_id = wugong.id, "basic_breath"  # 內功也是柔
+    state.player.stats["good"] = 40
+    boost = team.player_boost(state, content, world)
+    assert boost.factor == pytest.approx(1.2 * 1.2)
+    state.player.stats["good"] = 0  # 名聲掉了，共鳴跟著掉；搭配還在
+    assert team.player_boost(state, content, world).factor == pytest.approx(1.2)
+
+
+def test_both_arts_resonate_each_on_its_own_name(state, content, world):
+    """內功與武學都是正派：兩份共鳴各算各的；一正一邪各吃各的名聲。"""
+    wugong = _register(world, "清風拳", "武學", "剛", "正")
+    neigong = _register(world, "烈焰功", "內功", "快", "邪")  # 剛與快互不相剋、也不同屬性：搭配 1.0
+    state.player.member.wugong_id, state.player.member.neigong_id = wugong.id, neigong.id
+    state.player.stats["good"], state.player.stats["evil"] = 20, 40
+    assert team.player_boost(state, content, world).factor == pytest.approx(1.1 * 1.2)
+
+
+def test_a_fight_gives_the_pairing_and_resonance_to_the_player_only(state, content, world):
+    """計畫二 G12：帶著同伴打一場，總威力＝乘了 1.44 的本人＋沒乘的同伴（打一場與勝算估計一樣）。"""
+    wugong = _register(world, "清風拳", "武學", "柔", "正")
+    state.player.member.wugong_id, state.player.member.neigong_id = wugong.id, "basic_breath"
+    world.update_companion("mate", lambda p: setattr(p, "wugong_id", "palm"))
+    state.player.team = ["mate"]
+    state.player.stats["good"] = 40
+    squad = content.squads["thug"]
+    arts = team.team_arts(state, content, world)
+    plain = encounter.member_power(state.player.member, arts, squad.attribute, boost=encounter.Boost())
+    mate = encounter.member_power(world.get_companion("mate"), arts, squad.attribute)
+    expected = plain * 1.2 * 1.2 + mate
+    assert plain > 0 and mate > 0 and expected > plain + mate
+    assert _power_seen(lambda: team.fight(state, content, world, "thug", random.Random(0))) == pytest.approx(expected)
+    assert _power_seen(lambda: team.estimate(state, content, world, "thug")) == pytest.approx(expected)
+
+
+def test_followers_fight_beside_a_resonating_player_without_the_factor():
+    """計畫二 G12／F17：部下照樣上陣，只是不吃本人的搭配與共鳴。真實內容、兩個部下。"""
+    real = load_content(CONTENT_DIR)
+    real.config.auto_open_first_season = True
+    real.config.season_one, real.config.season_days, real.config.server_max_players = True, 2.5, 2
+    game = Game.new(real, "甲", rng=random.Random(0))
+    s = game.state
+    wugong, neigong = _art("清風拳", "武學", "柔", "正"), _art("清風功", "內功", "柔")
+    assert game.world.claim_skill_name(wugong) and game.world.claim_skill_name(neigong)
+    s.player.member.wugong_id, s.player.member.neigong_id = wugong.id, neigong.id
+    s.player.followers = ["follower_guan_spear", "follower_guan_crossbow"]
+    s.player.stats["good"] = 40
+    squad_id = next(iter(real.squads))
+    attribute = real.squads[squad_id].attribute
+    arts = team.team_arts(s, real, game.world)
+    plain = encounter.member_power(s.player.member, arts, attribute, boost=encounter.Boost())
+    followers = [encounter.member_power(f, arts, attribute) for f in team.follower_units(s, real)]
+    assert plain > 0 and len(followers) == 2 and all(power > 0 for power in followers)
+    boosts = team.team_boosts(s, real, game.world)
+    assert [b.factor for b in boosts] == [pytest.approx(1.2 * 1.2), 1.0, 1.0]
+    seen = _power_seen(lambda: team.estimate(s, real, game.world, squad_id))
+    assert seen == pytest.approx(plain * 1.2 * 1.2 + sum(followers))

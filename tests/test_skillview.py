@@ -631,3 +631,44 @@ def test_practice_hint_does_not_send_you_to_merge_when_the_stamina_is_short(stat
     state.player.stamina = 0
     state.player.member.wugong_id, state.player.member.wugong_level = "basic_fist", 10
     assert "煉製" in skillview.practice_hint(state, content)  # 有武學：合成不花體力
+
+
+# ── 計畫二 Task 3：本人卡寫出威力加成 ──────────────────────────────────────────────
+
+
+def test_the_players_card_spells_out_the_boosts(state, content, world):
+    state.player.member.wugong_id = "basic_fist"
+    state.player.member.neigong_id = "basic_breath"  # 實配柔：不相剋也不同屬性
+    state.player.stats["str"] = 9
+    card = skillview.member_card(state, content, world, "player")
+    assert "臂力 +12%" in card and "內外搭配" not in card
+
+
+def test_the_boost_line_reads_stats_pairing_and_resonance(state, content, world):
+    wugong = generate_from_name("清風拳", "武學", "清風拳", attribute="柔").model_copy(update={"lean": "正"})
+    assert world.claim_skill_name(wugong)
+    state.player.member.wugong_id, state.player.member.neigong_id = wugong.id, "basic_breath"  # 柔配柔
+    state.player.stats.update({"str": 9, "con": 7, "good": 40})
+    assert skillview.boost_line(state, content, world) == (
+        "威力加成：臂力 +12%・根骨 +6%・內外搭配 +20%・【清風拳】共鳴 +20%"
+    )
+    assert skillview.boost_line(state, content, world) in skillview.member_card(state, content, world, "player")
+
+
+def test_the_boost_line_shows_a_penalty_for_a_countering_pair(state, content, world):
+    wugong = generate_from_name("鐵拳", "武學", "鐵拳", attribute="剛")
+    assert world.claim_skill_name(wugong)
+    state.player.member.wugong_id, state.player.member.neigong_id = wugong.id, "basic_breath"  # 剛克柔
+    assert skillview.boost_line(state, content, world) == "威力加成：內外搭配 -20%"
+
+
+def test_the_boost_line_is_absent_when_nothing_boosts(state, content, world):
+    assert skillview.boost_line(state, content, world) == ""
+    assert "威力加成" not in skillview.member_card(state, content, world, "player")
+
+
+def test_only_the_players_card_carries_the_boost_line(state, content, world):
+    """加成只算本人（計畫二）：同伴的卡不寫、也不會吃到本人的臂力與共鳴。"""
+    state.player.stats.update({"str": 15, "con": 15, "good": 40})
+    assert "威力加成" in skillview.member_card(state, content, world, "player")
+    assert "威力加成" not in skillview.member_card(state, content, world, "mate")
