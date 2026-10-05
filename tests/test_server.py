@@ -1,9 +1,11 @@
 import ast
 import contextlib
 import hashlib
+import io
 import random
 import re
 import sqlite3
+import sys
 import threading
 import time
 from unittest import mock
@@ -1908,16 +1910,22 @@ def test_a_world_step_that_cannot_build_its_game_raises_and_tries_again_next_tim
 # ── 排程執行緒與開關（Config.world_tick_seconds，預設 0＝關）──────────────
 
 
+def _boom(exc: BaseException) -> None:
+    """在同一行丟出 exc：排程的出錯紀錄認「同一個錯」看的是類別與丟出來的那一行。"""
+    raise exc
+
+
 def test_scheduler_keeps_running_after_a_failed_step(capsys):
-    """排程那一下出錯：印一行（stdout）加 traceback（stderr），下一輪照跑；執行緒不會死（Review Focus 2）。
-    每一下回傳的訊息不印：裡面可能有參戰者的名號。"""
+    """排程那一下出錯：印一行（stdout，只寫例外的類別）加呼叫堆疊（stderr），下一輪照跑；執行緒不會死（Review Focus 2）。
+    例外訊息不寫（常夾著名號，跟 bot_runner.log_failure 一樣，最終審查 I1）；每一下回傳的訊息也不印。"""
     stop = threading.Event()
     calls = []
+    broken = RuntimeError("第一下壞了")  # 訊息不寫在丟出來那一行：呼叫堆疊會照實印出那一行原始碼
 
     def step(clock):
         calls.append(clock())
         if len(calls) == 1:
-            raise RuntimeError("第一下壞了")
+            _boom(broken)
         if len(calls) == 3:
             stop.set()
         return ["沈浪加入了官軍。"]
@@ -1925,9 +1933,114 @@ def test_scheduler_keeps_running_after_a_failed_step(capsys):
     server.run_scheduler(0.001, stop, step=step, clock=lambda: 42.0)
     assert calls == [42.0, 42.0, 42.0]
     captured = capsys.readouterr()
-    assert captured.out.splitlines() == ["排程這一下出錯：RuntimeError('第一下壞了')"]
-    assert "Traceback" in captured.err
+    assert captured.out.splitlines() == ["排程這一下出錯：RuntimeError"]
+    assert "in step" in captured.err and "in _boom" in captured.err  # 呼叫堆疊：程式碼的位置
+    assert "第一下壞了" not in captured.out + captured.err
     assert "沈浪" not in captured.out + captured.err
+
+
+def _strict_cp950_console(monkeypatch) -> tuple[io.BytesIO, io.BytesIO]:
+    """主控台是 cp950、寫不出的字直接丟例外（errors="strict"）：stdout 導到檔案、環境又不是 UTF-8 時就是這樣
+    （最終審查 I1 重現的情形）。回傳 stdout、stderr 底下的位元組。"""
+    out, err = io.BytesIO(), io.BytesIO()
+    for name, raw in (("stdout", out), ("stderr", err)):
+        monkeypatch.setattr(sys, name, io.TextIOWrapper(raw, encoding="cp950", errors="strict", write_through=True))
+    return out, err
+
+
+def test_a_failed_step_logs_no_names_and_survives_a_console_that_cannot_write_them(monkeypatch):
+    """I1：一下丟出夾著名號的例外（簡體字，cp950 寫不出來）、下一下又丟一個夾著名號的：排程執行緒照樣跑完每一下，
+    主控台只看到例外的類別與程式碼的位置，看不到名號也看不到訊息。以前 print 在 except 裡丟 UnicodeEncodeError，
+    執行緒就這樣死了，世界又變成等人點擊才動。"""
+    out, err = _strict_cp950_console(monkeypatch)
+    stop = threading.Event()
+    secrets_in_messages = [KeyError("孙坚"), RuntimeError("沈浪的存檔讀不進來")]  # 名號不能出現在丟出來那一行的原始碼上
+    calls = []
+
+    def step(clock):
+        calls.append(1)
+        if len(calls) <= len(secrets_in_messages):
+            _boom(secrets_in_messages[len(calls) - 1])
+        stop.set()
+        return []
+
+    thread = threading.Thread(target=server.run_scheduler, args=(0.001, stop), kwargs={"step": step})
+    thread.start()
+    thread.join(5.0)
+    assert not thread.is_alive() and len(calls) == 3  # 每一下都跑到了：排程沒有死在寫紀錄上
+    text = out.getvalue().decode("cp950") + err.getvalue().decode("cp950")
+    assert "排程這一下出錯：KeyError" in text and "排程這一下出錯：RuntimeError" in text
+    assert "in _boom" in text
+    assert "沈浪" not in text and "存檔讀不進來" not in text
+
+
+def test_a_console_that_breaks_never_stops_the_scheduler(monkeypatch):
+    """寫紀錄本身出錯（主控台不見了、寫不進去）一律吞掉：記錄不能讓排程停下來。"""
+
+    class Gone(io.StringIO):
+        def write(self, text):
+            raise OSError("主控台不見了")
+
+    monkeypatch.setattr(sys, "stdout", Gone())
+    monkeypatch.setattr(sys, "stderr", Gone())
+    stop = threading.Event()
+    calls = []
+
+    def step(clock):
+        calls.append(1)
+        if len(calls) <= 2:
+            _boom(RuntimeError("壞了"))
+        stop.set()
+        return []
+
+    server.run_scheduler(0.001, stop, step=step)
+    assert len(calls) == 3
+
+
+def test_a_failure_that_repeats_every_tick_is_counted_not_flooded(capsys):
+    """同一個錯（同一個類別、在同一行丟出來）一直重複：第一次整段印，之後只數次數，換了別的錯時先印一行「又出錯 N 次」
+    再整段印新的那個，不會每一下都印一整段（最終審查 M2：每 10 秒一下，一天八千多段）。"""
+    stop = threading.Event()
+    kinds = [KeyError] * 4 + [ValueError] * 2
+    calls = []
+
+    def step(clock):
+        calls.append(1)
+        if len(calls) <= len(kinds):
+            _boom(kinds[len(calls) - 1]("某某"))
+        stop.set()
+        return []
+
+    server.run_scheduler(0.001, stop, step=step, log_clock=lambda: 0.0)
+    captured = capsys.readouterr()
+    assert captured.out.splitlines() == [
+        "排程這一下出錯：KeyError",
+        "排程這一下又出錯 3 次：KeyError（同一個地方，細節同上）",
+        "排程這一下出錯：ValueError",
+    ]
+    assert captured.err.count("in _boom") == 2  # 整段的呼叫堆疊只印兩次：每個錯第一次
+
+
+def test_a_repeating_failure_still_reports_its_count_every_few_minutes(capsys):
+    """一直是同一個錯：滿 SCHEDULER_REPEAT_SUMMARY_SECONDS 秒印一行累計的次數（log 的節流時鐘跟世界時間無關）。"""
+    stop = threading.Event()
+    now = [0.0]
+    calls = []
+
+    def step(clock):
+        calls.append(1)
+        if len(calls) == 3:
+            now[0] = float(server.SCHEDULER_REPEAT_SUMMARY_SECONDS)
+        if len(calls) <= 4:
+            _boom(KeyError("某某"))
+        stop.set()
+        return []
+
+    server.run_scheduler(0.001, stop, step=step, log_clock=lambda: now[0])
+    assert capsys.readouterr().out.splitlines() == [
+        "排程這一下出錯：KeyError",
+        "排程這一下又出錯 2 次：KeyError（同一個地方，細節同上）",
+    ]
 
 
 def test_scheduler_off_starts_nothing():

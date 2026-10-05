@@ -31,6 +31,7 @@ import re
 import secrets
 import shutil
 import subprocess
+import sys
 import threading
 import time
 import traceback
@@ -267,22 +268,68 @@ def world_step(clock: Callable[[], float] = time.time) -> list[str]:
 SCHEDULER_STOP = threading.Event()  # 讓排程執行緒停下來（測試用；伺服器關掉時執行緒是 daemon，跟著結束）
 SCHEDULER_THREAD: threading.Thread | None = None  # 正在跑的那一條排程執行緒（一個伺服器只開一條，見 start_scheduler）
 _SCHEDULER_LOCK = threading.Lock()
+SCHEDULER_REPEAT_SUMMARY_SECONDS = 600  # 同一個錯一直重複時，每幾秒印一行累計的次數（第一次照樣整段印，見 _StepFailures）
+
+
+class _StepFailures:
+    """排程那一下出錯的紀錄。只寫例外的類別（stdout 一行）與呼叫堆疊（stderr，程式碼的位置與那幾行原始碼），
+    例外訊息一概不寫：常夾著名號（伺服器視窗不該看得出誰在打、誰是假人），跟 bot_runner.log_failure 同一個規矩（最終審查 I1）。
+    同一個錯（同一個類別、在同一行丟出來）一直重複時，第一次整段印，之後只數次數：換了別的錯、或距離上一次印滿
+    SCHEDULER_REPEAT_SUMMARY_SECONDS 秒，才印一行「又出錯 N 次」（最終審查 M2：每 10 秒一下，不收斂的話一天八千多段）。
+    寫紀錄本身出錯（主控台的編碼寫不出某個字、主控台不見了）一律吞掉：記錄不能讓排程停下來。
+    clock 只給節流用（預設 time.monotonic），跟世界時間無關。"""
+
+    def __init__(self, clock: Callable[[], float]):
+        self.clock = clock
+        self.key: tuple[str, str | None, int | None] | None = None  # 上一個整段印過的錯：（類別, 檔案, 行號）
+        self.repeats = 0  # 它之後又出了幾次、還沒交代
+        self.since = 0.0  # 上一次印（整段或摘要）的時刻
+
+    def failed(self, exc: BaseException) -> None:
+        with contextlib.suppress(Exception):
+            frames = traceback.extract_tb(exc.__traceback__)
+            top = frames[-1] if frames else None
+            key = (type(exc).__name__, top.filename if top else None, top.lineno if top else None)
+            if key == self.key:
+                self.repeats += 1
+                return
+            self._summary()  # 換了別的錯：上一個錯還沒交代的次數先交代
+            self.key, self.since = key, self.clock()
+            print(f"排程這一下出錯：{type(exc).__name__}", flush=True)
+            sys.stderr.write("".join(traceback.format_tb(exc.__traceback__)))
+            sys.stderr.flush()
+
+    def tick(self) -> None:
+        """每一下之後都叫（成功也叫）：同一個錯攢了次數、距離上一次印滿 SCHEDULER_REPEAT_SUMMARY_SECONDS 秒就印一行摘要。"""
+        with contextlib.suppress(Exception):
+            if self.repeats and self.clock() - self.since >= SCHEDULER_REPEAT_SUMMARY_SECONDS:
+                self._summary()
+
+    def _summary(self) -> None:
+        if self.key is None or not self.repeats:
+            return
+        count, self.repeats, self.since = self.repeats, 0, self.clock()
+        print(f"排程這一下又出錯 {count} 次：{self.key[0]}（同一個地方，細節同上）", flush=True)
 
 
 def run_scheduler(
     interval: float, stop: threading.Event, step=None, clock: Callable[[], float] = time.time,
+    log_clock: Callable[[], float] = time.monotonic,
 ) -> None:
     """排程迴圈：每 interval 秒叫一次 step(clock)（預設是 world_step，它拿到行動鎖之後才讀 clock），直到 stop 被設起來。
-    一下出錯就印一行（stdout）加 traceback（stderr），下一輪照跑：排程不能因為一次例外就停掉，不然世界又變成等人點擊才動。
+    一下出錯就記下來（_StepFailures：只寫例外的類別與呼叫堆疊，同一個錯重複時只數次數），下一輪照跑：排程不能因為一次
+    例外、也不能因為寫紀錄出錯就停掉，不然世界又變成等人點擊才動。
     每一下回傳的訊息不印：裡面可能有參戰者的名號，伺服器視窗不該看得出誰在打、誰是假人。
-    step 預設寫成 None 再取 world_step：測試用 monkeypatch 換掉 server.world_step 時，執行緒拿到的是換過的那一個。"""
+    step 預設寫成 None 再取 world_step：測試用 monkeypatch 換掉 server.world_step 時，執行緒拿到的是換過的那一個。
+    log_clock 只給出錯紀錄的節流用；世界的時間一律是 clock（牆上時鐘）。"""
     step = step or world_step
+    failures = _StepFailures(log_clock)
     while not stop.wait(interval):
         try:
             step(clock)
         except Exception as e:  # noqa: BLE001  任何錯都不能讓排程死掉
-            print(f"排程這一下出錯：{e!r}", flush=True)
-            traceback.print_exc()
+            failures.failed(e)
+        failures.tick()
 
 
 def scheduler_line(interval: float) -> str:
