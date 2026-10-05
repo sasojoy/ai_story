@@ -20,6 +20,7 @@ MAX_RECORDS = 20  # 存檔保留最近幾場
 TIER_WORDS = {"大勝": "大勝", "險勝": "險勝", "僵持": "平手", "落敗": "落敗"}
 KIND_WORDS = {"train": "遊歷", "event": "劇情", "wild": "探索遇敵", "showdown": "決戰"}
 NO_RECORD = "（還沒有戰報。）"
+DODGE_NOTE = "身法一閃，躲過了這一敗。"  # 落敗被閃成僵持時，戰報與場景的戰鬥卡片多這一句（人物資質設計 14.4）
 DAY = 86400
 HOUR = 3600
 _NUMERIC_CHANGE = re.compile(r"^\S+ [+-]\d+(\.\d+)?$")  # 例如「名望 +3」「銀兩 -10」
@@ -61,6 +62,7 @@ def new_record(
         tier=result.tier,
         our_power=result.our_power,
         difficulty=result.difficulty,
+        notes=[DODGE_NOTE] if result.dodged else [],
     )
 
 

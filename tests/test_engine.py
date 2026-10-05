@@ -8,7 +8,8 @@ import pytest
 
 from conftest import FixedRandom, at, install_season_one, walk_to
 from tianxia import (
-    atlas, battle_instance, calendar, companion_agent, fight_llm, flavor, front_lines, guide, library, rules, skillview,
+    atlas, battle_instance, battlelog, calendar, companion_agent, encounter, fight_llm, flavor, front_lines, guide,
+    library, rules, skillview, team,
 )
 from tianxia.characters import open_characters
 from tianxia.content import load_content
@@ -419,6 +420,22 @@ def test_event_battle_is_fully_automatic_and_a_loss_applies_the_fail_effect(game
     assert "⚔ 湖邊：落敗翻江龍" in game.state.log
 
 
+def test_a_story_battle_is_not_dodged_and_a_loss_still_applies_the_fail_effect(game):
+    """最終審查 I1：劇情戰的結果是人寫好的勝或敗（僵持也算敗），身法閃避不擲——不然卡片寫「躲過了這一敗」、
+    下面卻照樣「你敗了。」「銀兩 -10」。身法 55＝閃避機會 100%。"""
+    game.state.player.stats["agi"] = 55
+    walk_to(game, "lake")
+    game.choose("act:socialize")
+    assert game.state.pending_event == "duel"
+    with mock.patch.object(encounter, "dodge", wraps=encounter.dodge) as spy:
+        game.choose("choice:0")  # 應戰翻江龍：必敗
+    spy.assert_not_called()  # 劇情戰一點亂數也不給閃避
+    record = game.state.battles[0]
+    assert (record.tier, record.event) == ("落敗", "挑戰")
+    assert record.notes == ["你敗了。"] and battlelog.DODGE_NOTE not in record.notes
+    assert record.changes == ["銀兩 -10"] and game.state.player.stats["silver"] == 40
+
+
 def test_event_battle_win_pays_squad_rewards_once_and_applies_choice_effect(game):
     game.content.events["duel"].choices[0].combat = "thug"  # 換成打得贏的水寇小隊
     rules.learn_skill(game.state, game.content, "fist")  # 沒武學＝威力 0，門檻改成比例後真的打不贏
@@ -473,6 +490,24 @@ def test_train_loss_costs_a_tenth_of_the_silver(game):
     record = game.state.battles[0]
     assert record.tier == "落敗" and record.silver == -5
     assert game.state.player.stats["silver"] == 45
+
+
+def test_a_dodged_train_loss_is_a_draw_with_a_note_and_costs_no_silver(game):
+    """身法閃避（人物資質設計 14.4）：落敗被閃成僵持，戰報註明、不賠銀兩（賠銀兩只在落敗），氣血照僵持扣。"""
+    game.content.locations["lake"].enemies = ["boss"]  # 打不贏的翻江龍
+    game.content.config.dodge_per_point = 1.0
+    game.state.player.stats["agi"] = 6  # 閃避機會 1×1＝100%
+    walk_to(game, "lake")
+    before = game.state.model_copy(deep=True)
+    game.rng = FixedRandom(0.0)
+    game.choose("act:train")
+    record = game.state.battles[0]
+    assert (record.tier, record.silver) == ("僵持", 0)
+    assert record.notes == [battlelog.DODGE_NOTE]
+    assert game.state.player.stats["silver"] == 50
+    draw_toll = team.take_encounter_toll(before, game.content, game.world, "僵持")  # 同一個人、同一份氣血，結果是僵持
+    assert draw_toll and record.changes == draw_toll  # 戰報上的損耗就是僵持的那一份（不是落敗的）
+    assert game.state.player.member.neili == before.player.member.neili
 
 
 def test_train_win_records_the_trend_as_a_note(game):
@@ -1424,6 +1459,13 @@ def test_texts_render(game):
     _explore_finds_events(game)
     game.choose("act:explore")
     assert "醉漢" in game.scene_text()
+
+
+def test_the_status_shows_a_companions_rooted_hp_cap(game):
+    """狀態列的同伴氣血照他自己的根骨（人物資質設計 14.3）：韓鐵第 1 級根骨 6，上限 +3%。"""
+    game.state.player.team = ["mate"]
+    mate = game.status_data()["team"][0]
+    assert mate["hp_max"] == round(team.neili_cap(game.content, 1, 6))
 
 
 def test_status_text_shows_the_practice_hint_only_when_xinde_is_idle(game):
@@ -3163,7 +3205,9 @@ def _player_hp(game) -> float:
     from tianxia import team
     from tianxia.state import PLAYER
 
-    return team.member_neili(game.content, game.state.player.member, team.con_of(game.state, PLAYER))[0]
+    return team.member_neili(
+        game.content, game.state.player.member, team.con_of(game.state, game.content, game.world, PLAYER),
+    )[0]
 
 
 def test_a_training_fight_shows_rounds_that_match_the_hp_lost(game):
@@ -3176,6 +3220,23 @@ def test_a_training_fight_shows_rounds_that_match_the_hp_lost(game):
     shown = sum(int(n) for line in record.rounds for n in re.findall(r"你氣血 -(\d+)", line))
     assert shown == (int(told.group(1)) if told else 0)
     assert "**過程**" in game.battle_card()
+
+
+def test_a_dodged_fight_plays_the_draw_it_ended_as(game):
+    """身法閃避（人物資質設計 14.4）之後，回合照最後的結果演：落敗閃成僵持，就演五回合、對手氣勢共掉 50（落敗是 3～4 回合、
+    掉 20），回合裡的「你氣血 -N」加起來等於僵持那一份損耗（62），不是落敗的（93），也等於戰報與真的扣掉的。"""
+    game.content.config.dodge_per_point = 1.0
+    game.state.player.stats["agi"] = 6  # 閃避機會 100%
+    game.content.locations["lake"].enemies = ["boss"]  # 打不贏的翻江龍
+    walk_to(game, "lake")
+    before = _player_hp(game)
+    game.choose("act:train")
+    record = game.state.battles[0]
+    assert record.tier == "僵持" and battlelog.DODGE_NOTE in record.notes
+    told, shown = _told_and_shown(record)
+    assert told == shown == round(before - _player_hp(game)) == 62
+    assert len(record.rounds) == 5
+    assert sum(int(n) for line in record.rounds for n in re.findall(r"對手氣勢 -(\d+)", line)) == 50
 
 
 @pytest.mark.parametrize("neili", [None, 360.0])
@@ -5946,7 +6007,7 @@ def test_the_status_says_what_each_stat_does(game):
     ]
     uses = dict(data["stat_uses"])
     assert "武學" in uses[names["str"]]  # 臂力：武學（外功）的威力
-    assert "氣血" in uses["輕功"]  # 身法：打完一場少掉一點氣血
+    assert all(word in uses["輕功"] for word in ("氣血", "落敗", "平手"))  # 身法：打完一場少掉一點氣血，落敗有機會閃成平手（14.4；點數收不回來）
     assert all(word in uses[names["con"]] for word in ("內功", "氣血上限", "內傷"))  # 根骨：內功、氣血上限、少受內傷
     assert all(word in uses[names["wis"]] for word in ("修練", "意境", "閉關"))  # 悟性：修練升品、探索悟意境、閉關心得
     assert "持有" in uses[names["lore"]]  # 博聞：武學與意境的持有上限（設計 6.3）
@@ -6041,6 +6102,16 @@ def test_hp_comes_back_by_the_rooted_cap(content):
         game._advance_player_local(HOUR / 10)
     plain, rooted = (game.state.player.member.neili for game in games)
     assert plain > 0 and rooted == pytest.approx(plain * 1.3)
+
+
+def test_a_companions_hp_comes_back_by_his_own_cap(game):
+    """同伴的氣血也回到他自己（吃了根骨的）上限（人物資質設計 14.3）：韓鐵第 1 級根骨 6，上限 330，本人根骨 5 是 320。"""
+    game.state.player.team = ["mate"]
+    game.state.player.member.neili = 0.0
+    game.world.update_companion("mate", lambda p: setattr(p, "neili", 0.0))
+    game._advance_player_local(HOUR / 10)
+    player, mate = game.state.player.member.neili, game.world.get_companion("mate").neili
+    assert player > 0 and mate == pytest.approx(player * 330 / 320)
 
 
 def test_the_showdown_power_snapshot_carries_the_players_boost(game):
