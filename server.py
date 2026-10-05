@@ -719,7 +719,7 @@ def reports_view(game: Game, record_id: int | None) -> dict:
 
 
 def admin_choices(game: Game) -> dict:
-    """管理者觸發區的三個下拉選單（戰鬥、大事、大勢線）。戰鬥與大事照引擎給的（Game.admin_battles／admin_fires：
+    """管理者觸發區的三個下拉選單（戰鬥、大事、大勢線）與模型佇列的總數。戰鬥與大事照引擎給的（Game.admin_battles／admin_fires：
     內容的順序，第一季不觸發的 beta 決戰與門檻不列；已經發生過的大事按下去會被引擎拒絕）；
     大勢線照這一季的規則（第一季濃縮版要開關開著、而且這一季蓋了「開」的章）。呼叫端要拿著行動鎖（look）。"""
     world = game.state.world
@@ -731,6 +731,8 @@ def admin_choices(game: Game) -> dict:
         **timetable_choices(game),
         # 下一季會照第一季的規則開（開關開著）：「開啟下一季」的問句也提醒排三場大戲與季末的時間（FB-050）
         "next_has_timetable": bool(CONTENT.config.season_one),
+        # 模型佇列的總數（正在跑幾件、真人在排幾件、假人在排幾件）；不列名號，也看不出誰是假人。開關關著是 None
+        "llm_queue": None if QUEUE is None else QUEUE.snapshot(),
     }
 
 
@@ -1185,6 +1187,14 @@ def api_travel(request: Request, body: dict = Body(...)):
 def api_password(request: Request, body: dict = Body(...)):
     key = _account(request)
     return {"message": change_password(key, body.get("old", ""), body.get("new", ""), body.get("again", ""))}
+
+
+@app.get("/api/queue")
+def api_queue(request: Request):
+    """等模型的時候前端每 2 秒問一次：這個角色那一件前面還有幾件（正在跑的也算一件；佇列關著、或沒有在排：null）。
+    只給一個數字：真人排在假人前面，所以前面的只有正在跑的與先排的真人，看不出有沒有假人。不拿行動鎖。"""
+    game = _game(request)
+    return {"ahead": None if QUEUE is None else QUEUE.position(game.state.player.name.casefold())}
 
 
 @app.get("/api/admin")

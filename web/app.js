@@ -1203,6 +1203,7 @@
         ${S.main.admin ? `
           <section class="admin-zone stack" aria-label="管理者工具">
             <h4>管理者工具（只有你看得到）</h4>
+            ${a && a.llm_queue ? `<p class="muted">模型佇列：處理中 ${a.llm_queue.running}、真人在排 ${a.llm_queue.waiting}、假人在排 ${a.llm_queue.bots_waiting}</p>` : ""}
             <p class="muted">每一項按了都會先問一次才送出；做完會關掉設定、回到江湖頁。</p>
             <div class="row seasons"><button class="btn" data-act="admin" data-op="open_season">開季</button><button class="btn warn" data-act="admin" data-op="end_season">⚠ 立刻收季</button><button class="btn warn" data-act="admin" data-op="next_season">⚠ 開啟下一季</button></div>
             <p class="muted">時間快轉（全服一起快轉，只在測試時用；小時是現實小時，季曆會跳得更多）</p>
@@ -1350,6 +1351,22 @@
     try { await fn(); } catch (e) { /* api() 已經提示過 */ } finally { S.busy = false; }
   }
 
+  // 等模型的時候（對話、大場面、開爐、隨口應對）每 2 秒問一次佇列，按鈕上補「前面還有 N 件」。佇列關著時伺服器回 null，什麼都不多顯示
+  function watchQueue(el, base) {
+    let alive = true;
+    (async function loop() {
+      while (alive) {
+        await new Promise((r) => setTimeout(r, 2000));
+        if (!alive) break;
+        try {
+          const r = await fetch("/api/queue", { credentials: "same-origin" }).then((x) => x.json());
+          if (alive && el && typeof r.ahead === "number" && r.ahead > 0) el.textContent = `${base}（前面還有 ${r.ahead} 件）`;
+        } catch (e) { /* 問不到就算了，按鈕照原本的字 */ }
+      }
+    })();
+    return () => { alive = false; };
+  }
+
   function applyMain(main) {
     const before = S.main ? S.main.status : null;
     setMain(main); // 見聞的紅點在 setMain 裡判斷（新的一場才亮）
@@ -1378,16 +1395,21 @@
       // 大場面（挑戰大勢人物本人、打頭目）：伺服器先在鎖外請模型判讀戰局，選項帶著要換上的字（「兩人對峙……」，server.prepare_fight）
       const opt = ((S.main && S.main.options) || []).find((o) => o.id === id);
       if (opt && opt.wait) (btn.lastElementChild || btn).textContent = opt.wait;
-      const r = await api("/api/choose", { id });
-      S.answering = false;
-      S.wheelSel = null; // 收起展開的移動
-      applyMain(r.main);
-      window.scrollTo({ top: 0, behavior: "smooth" });
-      // 決戰選項（加入、趕到、出招）伺服器會回一句 message；大場面等模型判讀的時候選項沒了（人被別的分頁帶走），
-      // 那一仗沒打成、不寫江湖紀錄，也只有這一句；一般選項的話在江湖紀錄裡，不回
-      const text = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-      // 這一送剛好結算了回合時，回話是整段回合敘事（場景裡的戰況就是同一段）：提示只放得下幾秒，截短、指去場景
-      if (text) toast(text.length > 40 ? `${text.slice(0, 40)}……（戰況見場景）` : text);
+      // 等模型的這兩種（對話、大場面）每 2 秒問一次佇列，排在後面時按鈕上補「前面還有 N 件」
+      const label = btn.lastElementChild || btn;
+      const stop = (talking || (opt && opt.wait)) ? watchQueue(label, label.textContent) : () => {};
+      try {
+        const r = await api("/api/choose", { id });
+        S.answering = false;
+        S.wheelSel = null; // 收起展開的移動
+        applyMain(r.main);
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        // 決戰選項（加入、趕到、出招）伺服器會回一句 message；大場面等模型判讀的時候選項沒了（人被別的分頁帶走），
+        // 那一仗沒打成、不寫江湖紀錄，也只有這一句；一般選項的話在江湖紀錄裡，不回
+        const text = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+        // 這一送剛好結算了回合時，回話是整段回合敘事（場景裡的戰況就是同一段）：提示只放得下幾秒，截短、指去場景
+        if (text) toast(text.length > 40 ? `${text.slice(0, 40)}……（戰況見場景）` : text);
+      } finally { stop(); }
     });
     if (document.querySelector(".options .btn.busy")) renderPage(); // 失敗了：把按鈕還原
   }
@@ -1396,13 +1418,16 @@
   async function answer(form, text) {
     await busy(async () => {
       form.querySelectorAll("input, button").forEach((el) => { el.disabled = true; });
-      form.querySelector("[type=submit]").textContent = "思量中……";
+      const submitBtn = form.querySelector("[type=submit]");
+      submitBtn.textContent = "思量中……";
+      const stop = watchQueue(submitBtn, "思量中……");
       try {
         const r = await api("/api/answer", { text });
         S.answering = false;
         applyMain(r.main);
         window.scrollTo({ top: 0, behavior: "smooth" });
       } finally {
+        stop();
         form.querySelectorAll("input, button").forEach((el) => { el.disabled = false; });
         form.querySelector("[type=submit]").textContent = "說出口";
       }
@@ -1473,13 +1498,16 @@
       document.querySelector(".furnace .w-taichi")?.classList.add("hot");
       S.message = "爐火正旺。若這是江湖上第一次合出來，取名要花上一分鐘，請稍候。";
       document.getElementById("mx-msg").textContent = S.message;
-      const r = await api("/api/menxia/forge", forgeBody());
-      S.menxia = r.menxia;
-      S.message = r.message;
-      S.forgeSel = [];
-      S.forgeLine = "";
-      setMain(r.main);
-      renderTop();
+      const stop = watchQueue(btn, "爐火正旺…");
+      try {
+        const r = await api("/api/menxia/forge", forgeBody());
+        S.menxia = r.menxia;
+        S.message = r.message;
+        S.forgeSel = [];
+        S.forgeLine = "";
+        setMain(r.main);
+        renderTop();
+      } finally { stop(); }
     });
     renderPage();
     window.scrollTo({ top: 0, behavior: "smooth" });

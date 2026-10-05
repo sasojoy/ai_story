@@ -4268,7 +4268,9 @@ def test_only_the_out_of_lock_steps_enter_the_model_queue():
     _locked）與排程（world_step）都不碰它。tianxia/（引擎，鎖內的 _quick_client 在那裡）沒有人 import llm_queue
     （Config 的三個開關欄位 llm_queue_* 是設定，不算）。"""
     assert _users_in_server("model_call") == {"prepare_dialogue", "prepare_fight", "prepare_forge", "answer_event"}
-    assert _users_in_server("QUEUE") == {None, "model_call", "main"}  # 宣告、讀、main() 建佇列
+    # 宣告、model_call 讀、main() 建佇列；另外兩個只看不排：/api/queue 問位置、管理者那份資料抄總數（admin_choices 在 look 的鎖裡，
+    # 但 snapshot 只碰佇列自己的短鎖、不等任何一件，不算在行動鎖裡排隊）
+    assert _users_in_server("QUEUE") == {None, "model_call", "main", "api_queue", "admin_choices"}
     importers = [
         p.name for p in (server.ROOT / "tianxia").glob("*.py")
         if re.search(r"^\s*(import|from)\s+llm_queue\b", p.read_text(encoding="utf-8"), re.M)
@@ -4356,3 +4358,174 @@ def test_main_builds_the_queue_only_when_switched_on(capsys, monkeypatch):
     server.main([])
     assert "模型佇列：同時 2 件" in capsys.readouterr().out
     assert isinstance(server.QUEUE, llm_queue.LlmQueue) and server.QUEUE.slots == 2
+
+
+# ── 看得到前面還有幾件（/api/queue、管理者的總數、網頁的「前面還有 N 件」）──────────────────────
+
+
+def test_queue_endpoint_reports_how_many_are_ahead(client, monkeypatch):
+    _player(client)
+    assert client.get("/api/queue").json() == {"ahead": None}  # 開關關著（Review Focus 5）
+    queue = llm_queue.LlmQueue(slots=1, bot_cap=1)
+    monkeypatch.setattr(server, "QUEUE", queue)
+    monkeypatch.setattr(queue, "position", lambda owner: 2)
+    assert client.get("/api/queue").json() == {"ahead": 2}
+
+
+def test_queue_endpoint_needs_a_logged_in_character(client):
+    assert client.get("/api/queue").status_code == 401  # 沒登入
+    client.post("/api/register", json={"login": "shen_01", "password": "secret-pw", "again": "secret-pw"})
+    assert client.get("/api/queue").status_code == 409  # 登入了但還沒有角色
+
+
+def test_a_waiting_player_counts_the_runners_and_humans_ahead_but_not_the_bots_behind(client, monkeypatch):
+    """真人排在假人前面：先排進去的假人不算在「前面」，正在跑的算一件；輪到之前問是 1，做完就沒有在排（null）。
+    也看得出來假人只是排序：回傳的只有一個數字，沒有名號。"""
+    _player(client)
+    queue = llm_queue.LlmQueue(slots=1, bot_cap=2)
+    monkeypatch.setattr(server, "QUEUE", queue)
+    started, release = threading.Event(), threading.Event()
+
+    def hold():
+        started.set()
+        release.wait(5)
+
+    threads = [threading.Thread(target=lambda: queue.run("佔著的人", hold, fallback=None))]
+    threads[0].start()
+    assert started.wait(2)
+    threads.append(threading.Thread(target=lambda: queue.run("某假人", lambda: None, fallback=None, bot=True)))
+    threads[1].start()
+    assert _wait_for(lambda: queue.snapshot()["bots_waiting"] == 1)
+    me = server.game_for("沈青衫")
+    threads.append(threading.Thread(target=lambda: server.model_call(me, lambda: None, fallback=None)))
+    threads[2].start()
+    assert _wait_for(lambda: queue.snapshot()["waiting"] == 1)
+    assert client.get("/api/queue").json() == {"ahead": 1}  # 只有正在跑的那一件；先排的假人在後面
+    release.set()
+    for thread in threads:
+        thread.join(2)
+    assert client.get("/api/queue").json() == {"ahead": None}
+
+
+def _wait_for(predicate, seconds=2.0):
+    end = time.monotonic() + seconds
+    while time.monotonic() < end:
+        if predicate():
+            return True
+        time.sleep(0.005)
+    return False
+
+
+def test_admin_sees_queue_totals_only(client, monkeypatch):
+    """管理者看的是總數，不列名號（假人不能被看出來）。"""
+    queue = llm_queue.LlmQueue(slots=1, bot_cap=1)
+    monkeypatch.setattr(server, "QUEUE", queue)
+    _admin(client, monkeypatch)
+    data = client.get("/api/admin").json()
+    assert data["llm_queue"] == {"running": 0, "waiting": 0, "bots_waiting": 0}
+
+
+def test_admin_totals_count_humans_and_bots_apart_without_names(client, monkeypatch):
+    queue = llm_queue.LlmQueue(slots=1, bot_cap=2)
+    monkeypatch.setattr(server, "QUEUE", queue)
+    _admin(client, monkeypatch)
+    started, release = threading.Event(), threading.Event()
+
+    def hold():
+        started.set()
+        release.wait(5)
+
+    threads = [threading.Thread(target=lambda: queue.run("佔著的人", hold, fallback=None))]
+    threads[0].start()
+    assert started.wait(2)
+    threads.append(threading.Thread(target=lambda: queue.run("某假人", lambda: None, fallback=None, bot=True)))
+    threads.append(threading.Thread(target=lambda: queue.run("路過的真人", lambda: None, fallback=None)))
+    for thread in threads[1:]:
+        thread.start()
+    assert _wait_for(lambda: queue.snapshot()["waiting"] == 1 and queue.snapshot()["bots_waiting"] == 1)
+    text = client.get("/api/admin").text
+    assert client.get("/api/admin").json()["llm_queue"] == {"running": 1, "waiting": 1, "bots_waiting": 1}
+    assert not any(name in text for name in ("佔著的人", "某假人", "路過的真人"))
+    release.set()
+    for thread in threads:
+        thread.join(2)
+
+
+def test_admin_has_no_queue_numbers_while_the_switch_is_off(client, monkeypatch):
+    _admin(client, monkeypatch)
+    assert client.get("/api/admin").json()["llm_queue"] is None
+
+
+def test_the_page_polls_the_queue_only_while_waiting_on_the_model():
+    """網頁沒有測試框架：標記擋住「伺服器有 /api/queue、網頁卻沒人問」。等模型的四個地方（對話、大場面、隨口應對、開爐）各開一個
+    watchQueue、在 finally 裡收掉；管理者區只在伺服器給了數字時多一行。"""
+    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    assert js.count("function watchQueue(") == 1 and '"/api/queue"' in _js_function(js, "function watchQueue(")
+    choose = _js_function(js, "async function choose(")
+    assert "watchQueue(" in choose and "talking || (opt && opt.wait)" in choose and "finally { stop(); }" in choose
+    answer = _js_function(js, "async function answer(")
+    assert 'watchQueue(submitBtn, "思量中……")' in answer and "stop();" in answer.split("finally")[1]
+    forge = _js_function(js, "async function forge(")
+    assert 'watchQueue(btn, "爐火正旺…")' in forge and "finally { stop(); }" in forge
+    assert js.count("watchQueue(") == 4  # 定義一個、使用三個（對話與大場面是同一個選項流程）
+    sheet = _js_function(js, "function sheetHtml(")
+    assert "a && a.llm_queue" in sheet and "模型佇列：處理中" in sheet
+
+
+def test_watch_queue_shows_the_count_ahead_only_while_someone_is_ahead():
+    """在 node 裡真的跑 watchQueue（假的 fetch 與計時器）：問不到、佇列關著（null）、正在跑（0）都不改按鈕的字；前面有人才寫
+    「（前面還有 N 件）」，而且接在原本的字後面、不會一層一層疊上去；收掉之後不再問。"""
+    import json
+    import shutil
+    import subprocess
+
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("沒有裝 node")
+    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    watch = _js_function(js, "function watchQueue(") + "\n  }"
+    script = f"""
+    {watch}
+    const el = {{ textContent: "思量中……" }};
+    const answers = [{{ ahead: null }}, "boom", {{ ahead: 0 }}, {{ ahead: 3 }}, {{ ahead: 1 }}];
+    const seen = [];
+    const urls = [];
+    let stop = null;
+    globalThis.setTimeout = (f) => {{ queueMicrotask(f); }};
+    globalThis.fetch = async (url, opts) => {{
+      seen.push(el.textContent);
+      urls.push([url, opts && opts.credentials]);
+      const next = answers[seen.length - 1];
+      if (seen.length === answers.length + 1) stop();
+      if (next === "boom") throw new Error("斷線");
+      return {{ json: async () => next }};
+    }};
+    stop = watchQueue(el, "思量中……");
+    (async () => {{
+      for (let i = 0; i < 200; i++) await new Promise((r) => setImmediate(r));
+      const calls = seen.length;
+      for (let i = 0; i < 50; i++) await new Promise((r) => setImmediate(r));
+      console.log(JSON.stringify({{ seen, final: el.textContent, urls: urls[0], more: seen.length - calls }}));
+    }})();
+    """
+    done = subprocess.run([node, "-"], input=script.encode("utf-8"), capture_output=True, timeout=60)
+    assert done.returncode == 0, done.stderr.decode("utf-8", "replace")
+    out = json.loads(done.stdout.decode("utf-8"))
+    assert out["urls"] == ["/api/queue", "same-origin"]
+    assert out["seen"] == [
+        "思量中……", "思量中……", "思量中……", "思量中……",  # null、斷線、0 都不改字
+        "思量中……（前面還有 3 件）", "思量中……（前面還有 1 件）",  # 3、1：每次都從原本的字接，不疊
+    ]
+    assert out["more"] == 0  # 收掉之後沒有再問
+
+
+def test_app_js_parses():
+    """node --check web/app.js（沒裝 node 就略過）。"""
+    import shutil
+    import subprocess
+
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("沒有裝 node")
+    done = subprocess.run([node, "--check", str(server.WEB / "app.js")], capture_output=True, timeout=60)
+    assert done.returncode == 0, done.stderr.decode("utf-8", "replace")
