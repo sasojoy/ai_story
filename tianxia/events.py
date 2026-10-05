@@ -61,16 +61,40 @@ def event_candidates(
     return candidates
 
 
+def rotation_pool(event: Event, location_id: str, action: str) -> str | None:
+    """防重複的池子（交友與人物別傳設計稿第八節）：掛在特定地點的事件，每個地點、每種行動各一池
+    （「潁川郡:explore」）；不掛地點的通用事件每種行動共用一池（「*:explore」）。一次性與奇遇不輪替，回 None。"""
+    if is_rare(event):
+        return None
+    return f"{location_id}:{action}" if event.locations else f"*:{action}"
+
+
 def pick_event(
     state: GameState, content: Content, action: str, rng: random.Random, pool: EventPool | None = None,
 ) -> Event | None:
-    """照權重抽一則（奇遇的權重乘上 qiyu_weight_multiplier）；沒有合格的就是 None。pool 見 event_candidates。"""
+    """照權重抽一則（奇遇的權重乘上 qiyu_weight_multiplier）；沒有合格的就是 None。pool 見 event_candidates。
+    防重複（設計稿第八節）：同一個池子這一輪看過的先拿掉，在剩下的裡面抽；全都看過了，就把這些合格事件
+    所屬的池子清空、重開一輪（剛看過的那一則這次先不抽，免得換輪時連著兩次一樣）。抽中的記進
+    PlayerState.event_rounds，所以這個函式只在真的要把事件端給玩家時呼叫。"""
     candidates = event_candidates(state, content, action, pool)
     if not candidates:
         return None
+    location = state.player.location
+    rounds = state.player.event_rounds
+    pools = {e.id: rotation_pool(e, location, action) for e in candidates}
+    fresh = [e for e in candidates if pools[e.id] is None or e.id not in rounds.get(pools[e.id], [])]
+    if not fresh:
+        last = {rounds[key][-1] for key in set(pools.values()) if key is not None and rounds.get(key)}
+        for key in set(pools.values()):
+            rounds.pop(key, None)
+        fresh = [e for e in candidates if e.id not in last] or candidates
     multiplier = content.config.qiyu_weight_multiplier
-    weights = [event.weight * (multiplier if event.qiyu else 1.0) for event in candidates]
-    return rng.choices(candidates, weights=weights)[0]
+    weights = [event.weight * (multiplier if event.qiyu else 1.0) for event in fresh]
+    chosen = rng.choices(fresh, weights=weights)[0]
+    key = pools[chosen.id]
+    if key is not None:
+        rounds.setdefault(key, []).append(chosen.id)
+    return chosen
 
 
 def fortune_events(state: GameState, content: Content) -> list[Event]:
