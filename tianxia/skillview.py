@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from . import cultivation, fusion, insights, materials, team
 # 不 import 整個 library 模組：這個檔案自己有一個叫 library() 的函式
-from .library import held_count, holding_cap, level_of, melt_problem, melt_refund, owned_arts
+from .library import held_count, holding_cap, level_of, melt_problem, melt_value, owned_arts
 from .martial_arts import MAX_LEVEL, MartialArt, next_quality, power_at
 from .models import Content
 from .state import PLAYER, GameState
@@ -51,7 +51,7 @@ def forge_line(
             return "（選了不存在的東西。）"
         head = (
             f"**合成**　【{base.name}】＋「{insight.name}」→ 一門新{base.kind}"
-            f"（屬{insight.attribute}，品質跟【{base.name}】一樣是{base.quality}），"
+            f"（屬{insight.attribute}，從下品起修），"
             f"花 {cfg.fuse_xinde} 點心得（你有 {xinde} 點）。"
         )
         problem = fusion.fuse_problem(state, content, world, art_id, insight_ids[0])
@@ -95,7 +95,7 @@ def art_rows(state: GameState, content: Content, world: WorldStateStore) -> list
             "cultivate": {"ok": problem is None, "note": note, "legend": legend},
             "melt": {
                 "ok": stuck is None,
-                "note": stuck if stuck is not None else f"退回心得 {melt_refund(content, level, art.quality)}",
+                "note": stuck if stuck is not None else f"退回心得 {melt_value(state, content, world, art_id)}",
             },
         })
     return rows

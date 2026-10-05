@@ -804,6 +804,8 @@ class Config(_Strict):
     legend_item_bonus: int = 15
     explore_legend_chance: float = Field(default=0.02, ge=0, le=1)  # 每按一次探索（不論走哪一支）撿到一枚的機率
     melt_refund_ratio: float = Field(default=0.8, ge=0, le=1)  # 熔一門武學退回練成花的心得的幾成
+    # 熔煉的品質加給，只算玩家自己修練上去的那幾階（企劃者 2026-10-05）：領的是「現在的品質」減去「登記時的品質」的差
+    # （library.melt_refund）。合成的武學登記在下品，修練到上品領 15；內容直接給的絕學（本命武學）登記就是絕學，沒有加給
     melt_quality_bonus: dict[str, int] = Field(
         default_factory=lambda: {"下品": 0, "中品": 5, "上品": 15, "絕學": 40}
     )

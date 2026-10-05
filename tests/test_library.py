@@ -186,6 +186,40 @@ def test_melting_refunds_eighty_percent_of_practice_plus_a_quality_bonus(state, 
     assert {"旋風腿"} & (set(state.player.art_levels) | set(state.player.art_quality) | set(state.player.art_mastery)) == set()
 
 
+def test_melting_pays_the_bonus_of_the_grade_you_raised_the_art_to_and_nothing_for_the_rest(state, content, world):
+    """企劃者 2026-10-05（改了設計 4.3）：品質加給只算你自己修練出來的那幾階——現在的品質減去登記的品質。
+    合成的武學登記在下品，所以修練到中品、第一成熟練度（沒花練成的心得）熔掉，剛好退中品那 5 點。"""
+    bonus = content.config.melt_quality_bonus
+    _fused(world, "旋風腿")
+    state.player.arts = ["旋風腿"]
+    state.player.art_quality["旋風腿"] = "中品"
+    state.player.stats["xinde"] = 0
+    msgs = library.melt_art(state, content, world, "旋風腿")
+    assert state.player.stats["xinde"] == bonus["中品"] - bonus["下品"] == 5
+    assert f"心得 +{bonus['中品']}" in msgs
+
+
+def test_a_content_art_handed_out_at_its_top_grade_pays_no_bonus_when_melted(state, content, world):
+    """本命武學（情誼送的絕學）、劇情教的絕學：登記就是絕學，沒修練過，熔了只退練成花的八成，沒有品質加給。"""
+    state.player.arts = ["fist"]
+    state.player.stats["xinde"] = 0
+    library.melt_art(state, content, world, "fist")
+    assert state.player.stats["xinde"] == 0  # 第一成：什麼都沒花
+    state.player.arts, state.player.art_levels["fist"] = ["fist"], 5  # 練到第 5 成花了 10
+    library.melt_art(state, content, world, "fist")
+    assert state.player.stats["xinde"] == 8
+
+
+def test_melt_refund_counts_only_the_grades_above_the_registered_one(content):
+    bonus = content.config.melt_quality_bonus
+    assert library.melt_refund(content, 1, "下品") == 0
+    assert library.melt_refund(content, 1, "絕學") == bonus["絕學"]  # registered 預設是下品（合成的武學）
+    assert library.melt_refund(content, 1, "上品", registered="中品") == bonus["上品"] - bonus["中品"]
+    assert library.melt_refund(content, 1, "絕學", registered="絕學") == 0
+    assert library.melt_refund(content, 1, "下品", registered="絕學") == 0  # 不會是負的
+    assert library.melt_refund(content, 5, "中品", registered="中品") == 8  # 練成的八成照退
+
+
 def test_melting_an_art_that_was_never_practised_refunds_only_the_quality_bonus(state, content, world):
     _fused(world, "旋風腿")
     state.player.arts = ["旋風腿"]

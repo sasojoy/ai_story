@@ -50,7 +50,8 @@ def full(state: GameState, content: Content) -> bool:
 
 def store_art(state: GameState, art: MartialArt, quality: str | None = None) -> list[str]:
     """新拿到的武學放哪：對應的欄位空著就配上身（第一成），否則進功法庫。quality 是玩家這一份的品質
-    （跟全服登記的不一樣時才記）。這裡不看上限：該不該擋住由呼叫端決定（合成、學藝擋，奇遇給的、買來的不擋）。"""
+    （跟全服登記的不一樣時才記；現在沒有呼叫端給它——合成也從登記的下品起修）。
+    這裡不看上限：該不該擋住由呼叫端決定（合成、學藝擋，奇遇給的、買來的不擋）。"""
     p = state.player
     if art.id in owned_arts(state):  # 已經有了（配在身上或在庫裡）：不重複收，也不動它的品質與熟練度
         return []
@@ -125,11 +126,17 @@ def learn(state: GameState, content: Content, skill_id: str) -> list[str]:
 # ── 熔煉（設計 4.3）──────────────────────────────────────
 
 
-def melt_refund(content: Content, level: int, quality: str) -> int:
-    """熔一門練到第 level 成、品質 quality 的武學退多少心得：練成花的八成＋品質加給。"""
+def melt_refund(content: Content, level: int, quality: str, registered: str = "下品") -> int:
+    """熔一門練到第 level 成、玩家自己這一份品質是 quality 的武學退多少心得：練成花的八成＋品質加給。
+
+    品質加給只算玩家自己修練上去的那幾階（企劃者 2026-10-05，改了設計 4.3）：加給（quality）減去
+    登記時就有的那一階的加給（registered，全服共享、沒個人化的那一份的品質），不低於 0。
+    合成的武學登記在下品，所以修練到上品照領上品的加給；內容裡直接給的絕學（情誼送的本命武學、劇情教的）
+    登記就是絕學、沒修練過，熔了沒有加給——不然「合一門、熔一門」就是個無本的金錢迴圈。"""
     cfg = content.config
     spent = sum(team.practice_price(content, n) for n in range(1, level))
-    return int(spent * cfg.melt_refund_ratio) + cfg.melt_quality_bonus.get(quality, 0)
+    bonus = max(0, cfg.melt_quality_bonus.get(quality, 0) - cfg.melt_quality_bonus.get(registered, 0))
+    return int(spent * cfg.melt_refund_ratio) + bonus
 
 
 def melt_problem(state: GameState, art_id: str, name: str | None = None) -> str | None:
@@ -147,14 +154,24 @@ def melt_problem(state: GameState, art_id: str, name: str | None = None) -> str 
     return None
 
 
+def melt_value(state: GameState, content: Content, world: WorldStateStore, art_id: str) -> int:
+    """熔掉功法庫裡的 art_id 會退多少心得。熔煉頁寫的「退回心得 N」（skillview.art_rows）與 melt_art 真的退的
+    共用這一個數：玩家自己那一份的品質跟全服登記的那一份（沒個人化）比，只有修練上去的幾階有加給。"""
+    mine = team.player_art(state, content, world, art_id)
+    registered = team.resolve_art(art_id, content, world)
+    return melt_refund(
+        content, state.player.art_levels.get(art_id, 1),
+        mine.quality if mine else "下品", registered.quality if registered else "下品",
+    )
+
+
 def melt_art(state: GameState, content: Content, world: WorldStateStore, art_id: str) -> list[str]:
     p = state.player
     art = team.player_art(state, content, world, art_id)
     problem = melt_problem(state, art_id, art.name if art else art_id)
     if problem is not None:
         return [problem]
-    level = p.art_levels.get(art_id, 1)
-    refund = melt_refund(content, level, art.quality if art else "下品")
+    refund = melt_value(state, content, world, art_id)
     p.arts.remove(art_id)
     for record in (p.art_levels, p.art_quality, p.art_mastery):
         record.pop(art_id, None)

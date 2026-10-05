@@ -5,8 +5,10 @@
 | 模型 | 只取名字＋一句說明，一個數字都不碰 |
 | 引擎 | 配方、屬性、正邪、品質、成本、全服登記 |
 
-合成：武學＋意境 → 新武學，底留著；種類跟著底；屬性與正邪跟著意境；玩家拿到的那一份品質跟自己的底一樣、
-從第一成開始（全服登記的那一筆一律下品，見計畫「實作決定」）。
+合成：武學＋意境 → 新武學，底留著；種類跟著底；屬性與正邪跟著意境；品質一律從下品起修、從第一成開始
+（全服登記的那一筆是下品，玩家拿到的那一份也是，不繼承底的品質——企劃者 2026-10-05 改了設計 3.4：
+絕學的底合出絕學的複本、馬上熔掉就賺 40 心得，是個無本的金錢迴圈；底的好壞只留在底身上，
+新武學靠修練一階一階往上爬，熔的時候才領得到那幾階的加給，見 library.melt_refund）。
 合併：意境＋意境（可以是同一個）→ 新意境，兩個都留著；屬性與正邪照 insights 的規則。
 配方全服共享：第一個合出來的人等模型取名（叫不動就走退路字表），之後查表、不用等。
 「已經有了」一律照功法的 id 認（改名之後顯示的名字跟 id 不一樣）。
@@ -14,7 +16,7 @@
 from __future__ import annotations
 
 from . import insights, library, naming, team
-from .martial_arts import Insight, MartialArt, generate_from_name, with_quality
+from .martial_arts import Insight, MartialArt, generate_from_name
 from .models import Content
 from .ollama_client import OllamaClient
 from .state import GameState
@@ -120,9 +122,9 @@ def fuse(
         return None, [f"這一爐合出來還是【{art.name}】，你已經有了——換一個意境吧。"]
     price = content.config.fuse_xinde
     state.player.stats["xinde"] = state.player.stats.get("xinde", 0) - price
-    quality = team.art_quality(state, base)
-    msgs = [_fuse_line(base, insight, with_quality(art, quality), first), f"心得 -{price}"]
-    return art, msgs + library.store_art(state, art, quality)
+    # 新武學一律從登記的品質（下品）起修，不看底現在是什麼品質：store_art 不帶 quality，就不會記一筆個人品質
+    msgs = [_fuse_line(base, insight, art, first), f"心得 -{price}"]
+    return art, msgs + library.store_art(state, art)
 
 
 def _fuse_line(base: MartialArt, insight: Insight, art: MartialArt, first: bool) -> str:

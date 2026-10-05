@@ -2,8 +2,8 @@ from unittest import mock
 
 import pytest
 
-from tianxia import fusion, naming, team
-from tianxia.martial_arts import generate_from_name
+from tianxia import fusion, library, naming, team
+from tianxia.martial_arts import generate_from_name, power_at
 from tianxia.state import new_game_state
 
 
@@ -51,12 +51,42 @@ def test_fuse_keeps_the_base_and_adds_an_art_of_the_same_kind(ready, content, wo
     assert "第一次" in msgs[0]
 
 
-def test_the_new_art_takes_the_players_quality_of_the_base(ready, content, world):
+def test_a_fused_art_always_starts_at_the_lowest_quality_whatever_the_base_is(ready, content, world):
+    """企劃者 2026-10-05（改了設計 3.4）：合出來的武學一律從下品起修，不繼承底的品質——底是中品也一樣。
+    底的品質只留在底身上；新武學的底與威力曲線照配方登記的，從下品往上修練。"""
     fusion.fuse(ready, content, world, named("旋風腿"), "basic_fist", "feng")
     ready.player.art_quality["旋風腿"] = "中品"
-    art, _ = fusion.fuse(ready, content, world, named("烈風腿"), "旋風腿", "huo")
-    assert ready.player.art_quality[art.id] == "中品"
-    assert world.get_skill(art.id).quality == "下品"  # 全服那一筆是中性的
+    art, msgs = fusion.fuse(ready, content, world, named("烈風腿"), "旋風腿", "huo")
+    assert team.art_quality(ready, art) == "下品" and art.id not in ready.player.art_quality
+    assert world.get_skill(art.id).quality == "下品"
+    assert ready.player.art_quality["旋風腿"] == "中品"  # 底沒被動到
+    assert "（下品・屬" in msgs[0] and "中品" not in msgs[0]
+
+
+def test_fusing_on_a_peerless_base_gives_a_lowest_quality_copy_with_the_lowest_power(ready, content, world):
+    """設計 3.4 的舊寫法會讓絕學的底合出絕學的複本，馬上熔掉就賺 40 心得（金錢迴圈）。"""
+    ready.player.art_quality["basic_fist"] = "絕學"
+    art, msgs = fusion.fuse(ready, content, world, named("旋風腿"), "basic_fist", "feng")
+    mine = team.player_art(ready, content, world, art.id)
+    assert mine.quality == "下品" and art.id not in ready.player.art_quality
+    assert power_at(mine, 1) == power_at(world.get_skill(art.id), 1)  # 威力也是下品的那一檔
+    assert "（下品・屬" in msgs[0] and "絕學" not in msgs[0]
+    assert ready.player.art_quality["basic_fist"] == "絕學"  # 底保有自己的品質
+
+
+def test_fusing_over_and_over_and_melting_the_copy_never_makes_xinde(ready, content, world):
+    """金錢迴圈關上了：絕學的底，合一爐（花心得）、立刻熔掉剛合出來的複本，每一輪心得只減不增。"""
+    ready.player.art_quality["basic_fist"] = "絕學"
+    ready.player.insights = ["feng", "huo", "shui"]
+    price = content.config.fuse_xinde
+    xinde = ready.player.stats["xinde"]
+    for name, insight in [("旋風腿", "feng"), ("烈火拳", "huo"), ("驚濤掌", "shui")]:
+        art, _ = fusion.fuse(ready, content, world, named(name), "basic_fist", insight)
+        assert ready.player.stats["xinde"] == xinde - price
+        library.melt_art(ready, content, world, art.id)
+        assert ready.player.stats["xinde"] == xinde - price  # 熔掉一毛不退（下品、第一成）
+        xinde -= price
+    assert ready.player.stats["xinde"] == 100 - 3 * price
 
 
 def test_a_second_player_gets_the_same_art_without_the_model(ready, content, world):
@@ -230,6 +260,23 @@ def test_the_engine_forge_is_titled_after_the_craft_tab_and_only_written_when_so
     assert len(game.state.journal) == length
 
 
+def test_the_engine_fuse_then_melt_loop_on_a_peerless_base_only_ever_costs_xinde(game):
+    """Task 13 的整季機器人踩到的洞（企劃者 2026-10-05 關掉）：走真的 Game.forge／Game.melt_art，
+    絕學的底每一輪「合成、熔掉複本」心得 100 → 95 → 90 → 85，不再 100 → 135 → 170。"""
+    p = game.state.player
+    p.member.wugong_id, p.art_quality["basic_fist"] = "basic_fist", "絕學"
+    p.insights, p.stats["xinde"] = ["feng", "huo", "shui"], 100
+    price = game.content.config.fuse_xinde
+    seen = [p.stats["xinde"]]
+    with mock.patch.object(game.client, "chat_structured", side_effect=RuntimeError):
+        for insight in ("feng", "huo", "shui"):
+            game.forge("basic_fist", [insight])
+            (new,) = p.arts
+            game.melt_art(new)
+            seen.append(p.stats["xinde"])
+    assert p.arts == [] and seen == [100 - price * n for n in range(4)]
+
+
 # ── 設計 3.4、4.2 的規定，一條一條釘住 ───────────────────────────────
 
 
@@ -288,7 +335,7 @@ def test_a_merge_recipe_book_hit_still_costs_the_same_xinde(ready, content, worl
 
 
 def test_the_new_art_starts_at_the_first_level_even_when_the_base_is_far_along(ready, content, world):
-    """3.4：品質跟底一樣，但從第一成開始。底練到第七成，新武學不繼承；改練上身時也是第一成，底換回庫裡仍是第七成。"""
+    """3.4：新武學從第一成開始（品質也是下品起，見上面的測試）。底練到第七成，新武學不繼承；改練上身時也是第一成，底換回庫裡仍是第七成。"""
     ready.player.member.wugong_level = 7
     art, _ = fusion.fuse(ready, content, world, named("旋風腿"), "basic_fist", "feng")
     assert ready.player.member.wugong_level == 7  # 底沒被動到

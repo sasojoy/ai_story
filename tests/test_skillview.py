@@ -1,4 +1,6 @@
-from tianxia import rules, skillview
+import pytest
+
+from tianxia import library, rules, skillview
 from tianxia.martial_arts import MartialArt, generate_from_name, historical_art, power_at
 
 
@@ -309,7 +311,19 @@ def test_forge_line_shows_a_fuse(state, content, world):
     state.player.stats["xinde"] = 100
     line = skillview.forge_line(state, content, world, "basic_fist", ["feng"])
     assert "**合成**" in line and "【粗淺拳腳】＋「風」→ 一門新武學" in line and "屬快" in line
-    assert "品質跟【粗淺拳腳】一樣是下品" in line and "花 5 點心得（你有 100 點）" in line and "⚠" not in line
+    assert "從下品起修" in line and "花 5 點心得（你有 100 點）" in line and "⚠" not in line
+
+
+@pytest.mark.parametrize("quality", ["下品", "中品", "上品", "絕學"])
+def test_forge_line_says_the_new_art_starts_at_the_lowest_quality_whatever_the_base_is(state, content, world, quality):
+    """企劃者 2026-10-05：合出來的武學一律從下品起修，底是絕學也一樣；說明不能再寫「品質跟底一樣」。"""
+    state.player.member.wugong_id = "basic_fist"
+    state.player.art_quality["basic_fist"] = quality
+    state.player.insights = ["feng"]
+    state.player.stats["xinde"] = 100
+    line = skillview.forge_line(state, content, world, "basic_fist", ["feng"])
+    assert "從下品起修" in line and "屬快" in line and "一樣是" not in line
+    assert "花 5 點心得（你有 100 點）" in line and "⚠" not in line
 
 
 def test_forge_line_shows_a_merge(state, content, world):
@@ -400,6 +414,38 @@ def test_art_rows_list_worn_arts_first_with_what_can_be_done(state, content, wor
     assert rows[0]["worn"] and not rows[0]["melt"]["ok"]
     assert rows[1]["melt"]["ok"] and "退回心得" in rows[1]["melt"]["note"]
     assert not rows[0]["cultivate"]["ok"] and "沒有融過意境" in rows[0]["cultivate"]["note"]
+
+
+def _refund_the_row_promises(state, content, world, art_id):
+    (row,) = [r for r in skillview.art_rows(state, content, world) if r["id"] == art_id]
+    assert row["melt"]["ok"]
+    return int(row["melt"]["note"].removeprefix("退回心得 "))
+
+
+def test_the_melt_note_is_what_melting_really_pays_for_a_fused_art_you_cultivated(state, content, world):
+    """修練頁寫的「退回心得 N」跟 library.melt_art 真的退的是同一個數（共用 melt_refund 與登記的品質）。"""
+    _whirlwind(world)
+    state.player.arts = ["旋風腿"]
+    state.player.art_levels["旋風腿"] = 5
+    for quality in ("下品", "中品", "上品", "絕學"):
+        state.player.art_quality["旋風腿"] = quality
+        promised = _refund_the_row_promises(state, content, world, "旋風腿")
+        before = state.player.stats["xinde"]
+        arts, levels, qualities = list(state.player.arts), dict(state.player.art_levels), dict(state.player.art_quality)
+        library.melt_art(state, content, world, "旋風腿")
+        assert state.player.stats["xinde"] - before == promised
+        assert promised == 8 + content.config.melt_quality_bonus[quality]  # 登記是下品：每一階都算修練出來的
+        state.player.arts, state.player.art_levels, state.player.art_quality = arts, levels, qualities
+
+
+def test_the_melt_note_is_what_melting_really_pays_for_a_content_peerless_art(state, content, world):
+    """登記就是絕學的內容武學（沒修練過）：頁面寫的、真的退的都不含 +40。"""
+    state.player.arts = ["fist"]
+    state.player.art_levels["fist"] = 5
+    promised = _refund_the_row_promises(state, content, world, "fist")
+    before = state.player.stats["xinde"]
+    library.melt_art(state, content, world, "fist")
+    assert state.player.stats["xinde"] - before == promised == 8
 
 
 def test_art_rows_carry_what_the_pages_draw(state, content, world):
