@@ -103,8 +103,8 @@ def test_story_text_joins_notes_but_hides_rumor_lines():
 def test_card_text_omits_the_result_line_when_there_is_no_story():
     card = battlelog.card_text(record())
     assert "**結果**" not in card
-    assert card == (
-        "### ⚔ 湖邊・對陣 劫道山賊\n\n第2天 08:30　遊歷\n\n**大勝**　我方威力 40　對手難度 5\n\n**得失**　無"
+    assert card == (  # 標題、時間類型、結果三行同一塊（單換行）：手機上只佔一塊的間距
+        "### ⚔ 湖邊・對陣 劫道山賊\n第2天 08:30　遊歷\n**大勝**　我方威力 40　對手難度 5\n\n**得失**　無"
     )
     assert battlelog.detail_text(record()).endswith("\n\n**獲得與損失**　無")  # 戰報頁照舊兩個詞、各自一段
 
@@ -136,10 +136,10 @@ def test_a_wild_fight_is_worded_as_a_wild_encounter_not_as_training():
     """探索撞上的野怪（kind="wild"）在卡片與詳情寫「探索遇敵」，遊歷仍寫「遊歷」（FB-023）。"""
     assert battlelog.KIND_WORDS["wild"] == "探索遇敵"
     wild = record(kind="wild")
-    assert battlelog.card_text(wild).split("\n\n")[1] == "第2天 08:30　探索遇敵"
+    assert battlelog.card_text(wild).split("\n")[1] == "第2天 08:30　探索遇敵"  # 卡片：標題底下那一行
     assert "第2天 08:30　探索遇敵　第 3 場" in battlelog.detail_text(wild)
     assert "遊歷" not in battlelog.card_text(wild) and "遊歷" not in battlelog.detail_text(wild)
-    assert battlelog.card_text(record(kind="train")).split("\n\n")[1] == "第2天 08:30　遊歷"
+    assert battlelog.card_text(record(kind="train")).split("\n")[1] == "第2天 08:30　遊歷"
 
 
 def test_every_kind_a_record_can_have_has_a_word():
@@ -171,7 +171,7 @@ def test_a_showdown_report_shows_the_side_and_the_trends_instead_of_power_and_di
     rec = showdown()
     card = battlelog.card_text(rec)
     assert card == (
-        "### ⚔ 潁汝・對陣 黃巾軍\n\n第2天 08:30　決戰：黃巾決戰\n\n**官軍大勝**　你站在官軍\n\n"
+        "### ⚔ 潁汝・對陣 黃巾軍\n第2天 08:30　決戰：黃巾決戰\n**官軍大勝**　你站在官軍\n\n"
         "**結果**　官軍士氣如虹。　你出手 3 回合　**大勢**　黃巾聲勢 -35"
     )
     detail = battlelog.detail_text(rec)

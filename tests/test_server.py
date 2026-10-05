@@ -997,6 +997,23 @@ def test_the_fight_card_shows_the_first_round_until_the_player_opens_the_rest():
     assert re.search(r"\.battle-card ul\.rounds > li:nth-child\(2\) \{ animation-delay: [\d.]+s; \}", css)
 
 
+def test_the_fight_card_head_is_one_heading_and_one_paragraph():
+    """標題、時間與類型、結果三行：標題是 h3，底下兩行是同一個 <p>（單換行變 <br />）——手機上只佔一塊的間距，不是三塊
+    （battlelog.card_text）。「過程」那一段緊接在後面，網頁認的 ROUNDS_MARK 照舊對得上。"""
+    from tianxia import battlelog
+    from tianxia.state import BattleRecord, Fighter
+
+    record = BattleRecord(
+        id=1, time=0, location="湖邊", kind="train", opponent="水寇", ours=[Fighter(name="沈浪", level=1)], tier="大勝",
+        our_power=50, difficulty=10, rounds=["第1回合　甲。"],
+    )
+    html = server.md(battlelog.card_text(record))
+    assert html.startswith(
+        "<h3>⚔ 湖邊・對陣 水寇</h3>\n<p>第1天 00:00　遊歷<br />\n<strong>大勝</strong>　我方威力 50　對手難度 10</p>\n"
+        "<p><strong>過程</strong></p>\n<ul>"
+    )
+
+
 def test_the_big_fight_account_is_folded_behind_the_same_button():
     """大場面模型寫的過程是一段話（不是回合清單，最多 200 字、手機上約十行）：「剛剛」那張也收起來，只露前兩行，
     按同一顆「展開過程」攤開、展開記在同一個 S.roundsOpen（PM 2026-10-05，Task 2 審查修正 2）；戰報頁照樣整段。

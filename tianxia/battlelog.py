@@ -208,11 +208,10 @@ def _outcome_block(record: BattleRecord) -> list[str]:
 def card_text(record: BattleRecord, when: Callable[[float], str] = clock_text) -> str:
     """場景裡的戰鬥卡片（Markdown）：標題、時間與類型、結果、（過程）、（劇情結果）與得失併成一段。when 是時間的寫法（見 list_label）。
     過程整段都在；「剛剛」那張卡片只露第一回合、點了才攤開，是網頁的事（web/app.js 的 roundsFold）。
-    戰報頁（detail_text）的結果與獲得與損失照舊各一段，只有場景裡這張卡片併成一段。"""
+    戰報頁（detail_text）的結果與獲得與損失照舊各一段，只有場景裡這張卡片併成一段。
+    標題、時間與類型、結果三行同一塊（單換行：標題是 h3，底下兩行是同一個 <p>）——手機上只佔一塊的間距，不是三塊。"""
     return "\n\n".join([
-        _title(record),
-        _when(record, when),
-        _result_line(record),
+        "\n".join([_title(record), _when(record, when), _result_line(record)]),
         *_rounds_block(record),
         *_outcome_block(record),
     ])
