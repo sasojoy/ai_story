@@ -314,6 +314,15 @@ def test_a_pending_event_blocks_travel_by_name_and_says_where_to_settle_it(state
     assert travel_block(state, content).to_jianghu is False
 
 
+def test_a_pending_event_missing_from_content_still_blocks_travel_toward_the_jianghu_page(state, content):
+    """防守用的退路（讀檔時會清掉指向不存在事件的 pending_event，平常走不到）：事件名找不到也不能崩，照樣擋、照樣叫人回江湖頁。"""
+    state.pending_event = "no_such_event"
+    assert travel_block(state, content) == TravelBlock("先回江湖頁處理眼前的事", to_jianghu=True)
+    assert travel_refusal(state, content, "lake", "walk") == "先回江湖頁處理眼前的事"
+    (option,) = travel_options(state, content, "lake")
+    assert (option.label, option.enabled, option.to_jianghu) == ("先回江湖頁處理眼前的事", False, True)
+
+
 def test_the_season_ending_outranks_a_pending_event_in_the_travel_block(state, content):
     """賽季已結束時事件也動不了：原因寫賽季結束，不叫人回江湖頁。"""
     state.pending_event, state.world.ended = "drunk", True

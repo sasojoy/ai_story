@@ -17,7 +17,7 @@ from . import (
     journal, materials, orders, push, ranks, roster, skillview, team, timetable,
 )
 from .events import choice_label, event_candidates, has_events_here, pick_event, visible_choices
-from .guide import base_step_count, note_action, quest_text, tutorial_active, tutorial_intro
+from .guide import base_step_count, note_action, quest_text, step_text, tutorial_active, tutorial_intro
 from .guide import steps as tutorial_steps
 from .journal import LOG_BREAK, Draft
 from .mapview import render_map, render_minimap
@@ -829,11 +829,8 @@ class Game:
         if self._preparing() or s.world.ended:  # 籌備中、休季什麼都不能做，不叫人去探索（FB-045～052 審查 I1）
             return None
         if p.tutorial_step < len(todo):
-            text = todo[p.tutorial_step].text
-            event = c.events.get(s.pending_event) if s.pending_event else None
-            if event is not None:  # 眼前有事件還沒了結：先不推這一步（常常是叫人出發，事件卻擋著路）；了結後原樣回來（FB-063）
-                text = f"先把眼前的「{event.title}」了結"
-            return {"speaker": t.speaker, "text": text, "done": list(p.guide_done), "end": False}
+            # 眼前有事件還沒了結時是 guide.pending_line，不推這一步；了結後原樣回來（FB-063；「下一步」也用同一句）
+            return {"speaker": t.speaker, "text": step_text(s, c), "done": list(p.guide_done), "end": False}
         if p.guide_outro and t.outro:
             return {"speaker": t.speaker, "text": t.outro, "done": list(p.guide_done), "end": True}
         return None

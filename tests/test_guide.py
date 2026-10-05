@@ -1,3 +1,4 @@
+from tianxia import guide
 from tianxia.guide import next_hint, note_action, quest_text, tutorial_active, tutorial_intro
 from tianxia.state import Journey
 
@@ -49,6 +50,32 @@ def test_next_hint_follows_tutorial_then_act_goal(state, content):
     assert next_hint(state, content) == "壓制寇亂"
     state.player.stamina = 150
     assert "體力將滿" in next_hint(state, content)
+
+
+def test_next_hint_defers_to_a_pending_event_while_the_tutorial_is_active(state, content):
+    """FB-063：事件還沒了結時，「下一步」跟說書人的框一樣不推教學那一步，寫「先把眼前的「…」了結」（說話的人照舊括號寫在前面）；
+    了結後原來那一步照舊。教學做完了就沒有這回事，還是這一幕的目標。"""
+    state.pending_event = "drunk"
+    assert next_hint(state, content) == "（說書人）先把眼前的「醉漢」了結"
+    assert "**下一步**：（說書人）先把眼前的「醉漢」了結" in quest_text(state, content)
+    state.pending_event = "chain_b"  # 多段事件：現在待處理的那一則
+    assert next_hint(state, content) == "（說書人）先把眼前的「倉庫」了結"
+    state.pending_event = None
+    assert next_hint(state, content) == "（說書人）先探索一下。"
+    state.player.tutorial_step = 3  # 教學做完
+    state.pending_event = "drunk"
+    assert next_hint(state, content) == "壓制寇亂"
+
+
+def test_the_guide_line_for_a_pending_event_is_written_once(game):
+    """框與「下一步」用的是同一句（guide.pending_line），事件名單一來源；內容裡找不到那則事件時兩邊都退回這一步的話。"""
+    game.state.pending_event = "drunk"
+    box = game.guide_box()["text"]
+    assert box == guide.pending_line(game.state, game.content) == "先把眼前的「醉漢」了結"
+    assert f"（說書人）{box}" in game.quest_text()
+    game.state.pending_event = "no_such_event"
+    assert guide.pending_line(game.state, game.content) is None
+    assert game.guide_box()["text"] == "先探索一下。" and "（說書人）先探索一下。" in game.quest_text()
 
 
 def test_next_hint_hides_stamina_reminder_when_not_idle(state, content):

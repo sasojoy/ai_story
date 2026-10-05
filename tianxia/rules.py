@@ -234,6 +234,13 @@ def trend_name(content: Content, trend_id: str) -> str:
     return next(t.name for t in content.scenario.trends if t.id == trend_id)
 
 
+def pending_event_title(state: GameState, content: Content) -> str | None:
+    """現在待處理的那則事件，玩家看得到的名字（多段事件 next_event 是現在的這一段）；沒有待處理的事件、
+    或內容裡找不到那則事件（存檔指著已經拿掉的事件）時是 None。說書人的框、「下一步」與輿圖的前往都從這裡拿名字（FB-063）。"""
+    event = content.events.get(state.pending_event) if state.pending_event else None
+    return event.title if event is not None else None
+
+
 # ── 第一季濃縮版：戰線與開關（2026-10-04 計畫 T1）─────────────────
 # 內容只寫一份（三條戰線、豪強割據、front 鍵）。第一季的規則沒開時（開關關著，或這一季開季時沒蓋「開」的章），
 # 下面的換算讓規則與畫面跟 beta 那一季一模一樣：三條戰線與 front 都算黃巾聲勢，第一季才有的其他線（豪強割據）不存在。

@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from . import figures
 from .calendar import point, stamp_text
 from .models import Content, Location, MapRegion, SimPlayer, TravelMode
-from .rules import can_hear, is_revealed, resolve_trend, resolve_trends, season_one, trend_value
+from .rules import can_hear, is_revealed, pending_event_title, resolve_trend, resolve_trends, season_one, trend_value
 from .state import GameState, Rumor
 from .world import current_act, sim_active, storyline_off
 
@@ -474,9 +474,9 @@ def travel_block(state: GameState, content: Content) -> TravelBlock | None:
     if state.world.ended:
         return TravelBlock("賽季已結束，不能安排前往")
     if state.pending_event:
-        event = content.events.get(state.pending_event)
-        title = f"「{event.title}」" if event is not None else "眼前的事"
-        return TravelBlock(f"先回江湖頁處理{title}", to_jianghu=True)
+        title = pending_event_title(state, content)  # 找不到事件（存檔指著拿掉的事件）時退回「眼前的事」
+        what = f"「{title}」" if title is not None else "眼前的事"
+        return TravelBlock(f"先回江湖頁處理{what}", to_jianghu=True)
     p = state.player
     if p.pending_companion:
         return TravelBlock("交談中，先告辭才能安排前往")
