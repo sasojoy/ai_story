@@ -497,8 +497,9 @@
     // 本週軍令排在行動列（與路上捷徑）下面、三條戰況上面：不擠掉第一屏的公告、「剛剛」、場景與行動列（計畫 T6）
     const orderCard = m.orders || m.convoy ? ordersHtml(m.orders || [], week, m.convoy) : "";
     // 劇情文字在上、行動在下（企劃者 2026-10-04）。行動列只有一排，375×812 上「剛剛」、場景與整排行動都在第一屏。
-    // 路上的三個捷徑（links）緊貼在選項底下，戰況條排在捷徑之後，不要把它插到選項與捷徑中間
-    return `${resultCard}${board}${quest}${now}${scene}${free}${menu}${links}${orderCard}${fronts}${tail}`;
+    // 路上的三個捷徑（links）緊接在場景（「也可以打開輿圖改去別處，或去修練、煉製」那一段）底下、選項上面：
+    // 排在路上的五六顆選項底下時落在第一屏外，要捲才看得到（FB-048）
+    return `${resultCard}${board}${quest}${now}${scene}${links}${free}${menu}${orderCard}${fronts}${tail}`;
   }
 
   // ── 修練 ──
@@ -561,11 +562,13 @@
     const name = (id) => x.materials.find((m) => m.id === id);
     const used = (id) => S.craftSel.filter((s) => s === id).length;
     const ready = S.craftSel.length === x.per_craft;
-    // 太極火爐只管放素材與開爐；挑素材在下面的素材列表（企劃者 2026-10-04：「選素材不要也在那邊，用舊的模式來顯示素材」）
+    // 太極火爐只管放素材與開爐；挑素材在下面的素材列表（企劃者 2026-10-04：「選素材不要也在那邊，用舊的模式來顯示素材」）。
+    // 「開爐煉製」緊接在成本那一行下面、不黏在底部（FB-048）：黏著時會蓋住素材列表、開爐後那一行字與「素材說明」
     return `
       <div class="msg" id="mx-msg">${S.message}</div>
       ${furnaceSvg([name(S.craftSel[0]), name(S.craftSel[1])], ready)}
       <div class="card" id="craft-line">${S.craftLine || x.craft_line}</div>
+      <div class="act-row"><button class="btn primary" id="forge" data-act="forge" ${ready ? "" : "disabled"}>開爐煉製</button></div>
       <div class="label">素材 <small class="muted">點一樣放進爐裡</small></div>
       ${x.materials.length ? `<div class="chips">${x.materials.map((m) => `
         <button class="chip r${m.rank} ${used(m.id) >= m.count ? "used" : ""}" data-act="slot" data-id="${esc(m.id)}" ${used(m.id) >= m.count ? "disabled" : ""}>
@@ -574,14 +577,14 @@
         : '<p class="muted">背包裡還沒有素材。去探索、遊歷打贏，或是碰上奇遇都拿得到。</p>'}
       ${x.clue_items?.length ? `<div class="label">伏筆物品</div>
       <div class="chips clues">${x.clue_items.map((i) => `<div class="clue"><b>${esc(i.name)}</b><span>×${i.count}</span></div>`).join("")}</div>` : ""}
-      <details class="fold"><summary>素材說明</summary><div class="fold-body">${x.bag}</div></details>
-      <div class="sticky-act"><button class="btn primary" id="forge" data-act="forge" ${ready ? "" : "disabled"}>開爐煉製</button></div>`;
+      <details class="fold"><summary>素材說明</summary><div class="fold-body">${x.bag}</div></details>`;
   }
 
   // ── 輿圖 ──
   function pageMap() {
     const m = S.map;
     if (!m) return '<p class="muted">展開輿圖…</p>';
+    // 步行／趕路／疾行緊接在地圖下面、不黏在底部（FB-048）：黏著時會蓋住地點詳情「局勢」那一行以下。按了的結果寫在它下面那一行
     return `
       <div class="card">${m.header}</div>
       <div class="seg">${m.layers.map((l) => `<button class="${m.layer === l.id ? "on" : ""}" data-act="layer" data-layer="${esc(l.id)}">${esc(l.name)}</button>`).join("")}</div>
@@ -589,10 +592,10 @@
         <select class="input" id="place">${m.places.map((p) => `<option value="${esc(p.id)}" ${p.id === m.selected ? "selected" : ""}>${esc(p.label)}</option>`).join("")}</select>
       </div>
       <div class="map-wrap" id="map">${m.svg}${MAP_CTL}</div>
+      ${m.travel ? `<div class="travel-row">${m.travel.map((t) =>
+        `<button class="btn ${t.mode === "walk" ? "primary" : ""}" data-act="travel" data-mode="${esc(t.mode)}" ${t.enabled ? "" : "disabled"}>${esc(t.label)}</button>`).join("")}</div>` : ""}
       <div class="msg">${S.mapNotice || ""}</div>
-      <div class="card">${m.detail}</div>
-      ${m.travel ? `<div class="sticky-act travel-row">${m.travel.map((t) =>
-        `<button class="btn ${t.mode === "walk" ? "primary" : ""}" data-act="travel" data-mode="${esc(t.mode)}" ${t.enabled ? "" : "disabled"}>${esc(t.label)}</button>`).join("")}</div>` : ""}`;
+      <div class="card">${m.detail}</div>`;
   }
 
   // 地圖框右上角的按鈕（給不會手勢的人，像一般地圖 App）：回到所在地、放大、縮小

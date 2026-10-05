@@ -244,7 +244,7 @@ details.fold.bulletin > .fold-body { border-color: var(--gold); max-height: 50vh
 .move-mode > span { flex: none; align-self: center; padding: 0 4px 0 9px; font-size: 13px; color: var(--ink-2); }
 .move-mode button { min-height: 48px; } /* 觸控目標跟 .btn 一樣大 */
 /* 路上的三個捷徑（路上設計 3.3）：一列，手機上擠不下就換行；觸控目標同 .btn */
-.road-links { display: flex; flex-wrap: wrap; gap: 8px; margin: -4px 0 12px; }
+.road-links { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; }
 .road-links .btn { flex: 1 1 auto; min-height: 48px; }
 .free { display: flex; gap: 8px; margin-bottom: 12px; }
 .free .input { flex: 1; }
@@ -313,8 +313,9 @@ details.fold.bulletin > .fold-body { border-color: var(--gold); max-height: 50vh
 .clue { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; border: 1px dashed var(--line); background: var(--card); border-radius: 10px; padding: 5px 10px; font-size: 13px; }
 .clue b { font-weight: 600; }
 .clue span { color: var(--ink-2); font-size: 12px; }
-.sticky-act { position: sticky; bottom: calc(68px + var(--bottom)); z-index: 5; padding-top: 6px; background: linear-gradient(transparent, var(--paper) 30%); }
-.travel-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+/* 煉製頁的「開爐煉製」與輿圖的步行／趕路／疾行排在內容裡、不黏在底部（FB-048）：黏著時會蓋住底下的字 */
+.act-row { margin-bottom: 12px; }
+.travel-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 10px 0 12px; }
 .travel-row .btn:first-child { grid-column: 1 / -1; }
 .travel-row .btn:not(:first-child) { min-height: 44px; padding: 8px 6px; font-size: 14px; }
 .travel-row .btn { margin: 0; }
