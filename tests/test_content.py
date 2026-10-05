@@ -1171,6 +1171,16 @@ def test_llm_queue_settings_cannot_be_negative(field):
         Config(**{field: -1})
 
 
+def test_the_queue_wait_has_an_upper_bound():
+    """審查 M5：排隊最久等多久要有上限。請求在 trycloudflare 約 100 秒就被切斷，排 120 秒以上沒有意義；太大的數字（超過
+    threading.TIMEOUT_MAX，約 430 萬秒）還會讓每一次要排的呼叫在 Condition.wait 丟 OverflowError。"""
+    assert Config(llm_queue_wait_seconds=120).llm_queue_wait_seconds == 120
+    assert Config(llm_queue_wait_seconds=0).llm_queue_wait_seconds == 0
+    for too_long in (120.5, 5_000_000):
+        with pytest.raises(ValidationError, match="less than or equal to 120"):
+            Config(llm_queue_wait_seconds=too_long)
+
+
 def test_every_model_call_outside_the_lock_has_a_total_budget():
     """鎖外四種模型呼叫（開爐取名、大場面判讀、對話生成、隨口應對評分）各有一份總預算，預設都是 60 秒：試玩走 trycloudflare，
     一個請求約 100 秒就被切斷，60 秒留下 A、C 兩段等行動鎖與排模型佇列的餘裕。"""
