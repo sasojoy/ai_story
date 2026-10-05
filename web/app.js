@@ -575,19 +575,38 @@
       <summary>📜 本週軍令（${list.length}${done ? `，已達成 ${done}` : ""}）</summary><div class="fold-body">${cart}${rows}</div></details>`;
   }
 
+  // 三方態勢的三條（結算卡與江湖頁的態勢卡共用）：各用自己陣營的顏色、底色中性（T9 審查 M3）
+  function stanceBars(rows, label) {
+    return `<div class="fronts" role="group" aria-label="${label}">${rows.map((x) => `
+      <div class="front"><div class="front-head"><span>${esc(x.name)}</span><b>${x.value}</b></div>
+        <div class="front-bar stance side-${esc(x.side)}" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${x.value}" aria-label="${esc(x.name)}"><i style="width:${pct(x.value, 100)}%"></i></div></div>`).join("")}</div>`;
+  }
+
+  // 江湖頁最上面的態勢卡（正式版辛，企劃者 2026-10-06）：三條、收季規則一行、怎麼算的一行小字。
+  // 門檻與週次由伺服器寫在 stance_rule 裡（從結局與設定算，前端不寫死 85、10）。
+  // 休季不畫（結算卡已經有最終態勢）；開關關著時 status 沒有 stances，也不畫
+  function stanceCardHtml(s) {
+    if (!s || !s.stances) return "";
+    const rows = STANCE_NAMES.map(([side, name]) => ({ side, name, value: s.stances[side] }));
+    const n = s.stance_notes || {};
+    const how = [n.sum ? `官軍、黃巾：${esc(n.sum)}` : "", n.haoqiang ? `豪強：${esc(n.haoqiang)}` : ""].filter(Boolean).join("；");
+    return `<section class="card stances-card"><h3>三方態勢</h3>${stanceBars(rows, "三方態勢")}${
+      s.stance_rule ? `<p class="stance-rule">${esc(s.stance_rule)}</p>` : ""}${how ? `<p class="stance-how">${how}</p>` : ""}</section>`;
+  }
+
   // 第一季的結算卡（休季才有，計畫 T9）：結局與季末公告、最終態勢與三條戰況；十二件大事與各陣營出力前五收在摺疊裡
   function resultHtml(r) {
-    // 態勢三條各用自己陣營的顏色、底色中性（T9 審查 M3）；戰況照江湖頁標兩端（FB-041）
-    const bars = (rows, label, stance) => `<div class="fronts" role="group" aria-label="${label}">${rows.map((x) => `
+    // 戰況照江湖頁標兩端（FB-041）；態勢三條走 stanceBars
+    const bars = (rows, label) => `<div class="fronts" role="group" aria-label="${label}">${rows.map((x) => `
       <div class="front"><div class="front-head"><span>${esc(x.name)}</span><b>${x.value}</b></div>
-        <div class="front-bar${stance ? ` stance side-${esc(x.side)}` : ""}" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${x.value}" aria-label="${esc(x.name)}"><i style="width:${pct(x.value, 100)}%"></i></div>${stance ? "" : FRONT_ENDS}</div>`).join("")}</div>`;
+        <div class="front-bar" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${x.value}" aria-label="${esc(x.name)}"><i style="width:${pct(x.value, 100)}%"></i></div>${FRONT_ENDS}</div>`).join("")}</div>`;
     const events = r.timeline.map((e) => `<div class="result-event"><b>第 ${e.week} 週・${esc(e.title)}</b>${
       e.locked_by ? `<small>${esc(e.locked_by)} 改寫</small>` : ""}${e.text}</div>`).join("");
     const ranks = r.rankings.map((f) => `<div class="result-rank"><b>${esc(f.name)}</b>${f.rows.length
       ? `<ol>${f.rows.map(([n, v]) => `<li><span>${esc(n)}</span><i>${v}</i></li>`).join("")}</ol>`
       : "<p>（沒有人出力）</p>"}</div>`).join("");
     return `<section class="card result"><h2>賽季落幕：${esc(r.title)}</h2><div class="result-text">${r.text}</div>
-      <h3>最終態勢</h3>${bars(r.stances, "最終態勢", true)}<h3>最終戰況</h3>${bars(r.fronts, "最終戰況", false)}
+      <h3>最終態勢</h3>${stanceBars(r.stances, "最終態勢")}<h3>最終戰況</h3>${bars(r.fronts, "最終戰況")}
       <details class="fold"><summary>這一季的十二件大事</summary><div class="fold-body">${events}</div></details>
       <details class="fold"><summary>各陣營出力前五</summary><div class="fold-body result-ranks">${ranks}</div></details></section>`;
   }
@@ -599,7 +618,7 @@
   const FRONT_ENDS = frontEnds(false);
 
   // 態勢那一行（FB-065）：官軍、黃巾是幾條戰況合起來的，豪強是割據（有戰線在亂局就漸長）。說明由伺服器給（status.stance_notes），
-  // 跟見聞→大勢的割據說明同一句，前端不自己數條數。狀態列展開時與江湖頁圖卡底下都用它
+  // 跟見聞→大勢的割據說明同一句，前端不自己數條數。狀態列展開時用它（江湖頁的三條在最上面的態勢卡，正式版辛）
   function stancesHtml(stances, notes) {
     const n = notes || {};
     const side = (id) => `${STANCE_NAMES.find(([key]) => key === id)[1]} ${stances[id]}`;
@@ -609,13 +628,12 @@
 
   // 第一季濃縮版的三條戰況（伺服器有送 fronts 才畫）：0 是官軍穩控、100 是黃巾控制，條上黃的那一截是黃巾佔的。
   // 條上淺色的一段是亂局帶（band＝status.chaos_band，兩端含在內；豪強趁亂割據的戰況區間），戰況落在裡面的圖卡標「亂局」（f.chaos）。
-  // 下面是三方態勢（S1：以前只有點開狀態列才看得到，結局提示講的就是它）
-  function frontsHtml(fronts, stances, band, notes) {
+  // 三方態勢在江湖頁最上面的態勢卡（正式版辛），不在這一排底下重複
+  function frontsHtml(fronts, band) {
     const shade = band ? `<span class="chaos-band" aria-hidden="true" title="亂局帶" style="left:${pct(band.low, 100)}%;width:${pct(band.high - band.low, 100)}%"></span>` : "";
     return `<div class="fronts" role="group" aria-label="戰況：0 官軍穩控，100 黃巾控制">${fronts.map((f) => `
       <div class="front${f.chaos ? " chaos" : ""}"><div class="front-head"><span>${esc(f.name)}</span><b>${f.value}</b></div>
-        <div class="front-bar" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${f.value}" aria-label="${esc(f.name)}${f.chaos ? "，在亂局" : ""}"><i style="width:${pct(f.value, 100)}%"></i>${shade}</div>${frontEnds(f.chaos)}</div>`).join("")}</div>${
-      stances ? stancesHtml(stances, notes) : ""}`;
+        <div class="front-bar" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${f.value}" aria-label="${esc(f.name)}${f.chaos ? "，在亂局" : ""}"><i style="width:${pct(f.value, 100)}%"></i>${shade}</div>${frontEnds(f.chaos)}</div>`).join("")}</div>`;
   }
 
   // 說書人的對話框（引導重做設計 8.1、6.2）：行動列（或事件的選項）上方，框上寫說話的人（之後換成師父、引薦人）。
@@ -723,18 +741,20 @@
           <div class="fold-body">${m.bulletin.map((b) => `<div class="bulletin-item">${b}</div>`).join("")}</div></details>`
       : "";
     // 三條戰況排在行動列下面、小地圖上面，不擠掉第一屏的公告卡、「剛剛」、場景與行動列
-    const fronts = m.fronts ? frontsHtml(m.fronts, m.status && m.status.stances, m.status && m.status.chaos_band, m.status && m.status.stance_notes) : "";
+    const fronts = m.fronts ? frontsHtml(m.fronts, m.status && m.status.chaos_band) : "";
     const resultCard = m.season_result ? resultHtml(m.season_result) : "";  // 休季的結算卡排在最上面（計畫 T9）
+    // 態勢卡（正式版辛）：平常排在最上面、公告卡之前；休季由結算卡取代；在路上跟公告卡一樣排到選項底下（FB-055）
+    const stanceCard = m.season_result ? "" : stanceCardHtml(m.status);
     // 本週軍令排在行動列（與路上捷徑）下面、三條戰況上面：不擠掉第一屏的公告、「剛剛」、場景與行動列（計畫 T6）
     const orderCard = m.orders || m.convoy ? ordersHtml(m.orders || [], week, m.convoy) : "";
     // 劇情文字在上、行動在下（企劃者 2026-10-04）。行動列只有一排，375×812 上「剛剛」、場景與整排行動都在第一屏。
     // 路上的三個捷徑（links）緊接在場景（「也可以打開輿圖改去別處，或去修練、煉製」那一段）底下、選項上面：
     // 排在路上的五六顆選項底下時落在第一屏外，要捲才看得到（FB-048）。說書人的話緊貼在行動上方（引導重做設計 8.1）
     const guide = guideHtml(m.guide, m.on_road);
-    // 在路上（FB-055）：路上的五個選項要全在第一屏（375×812），所以公告、主線與說書人的框都排在選項底下——它們都是收著的一行，
+    // 在路上（FB-055）：路上的五個選項要全在第一屏（375×812），所以態勢卡、公告、主線與說書人的框都排在選項底下——
     // 不是這一刻要按的；捷徑還是緊接在場景底下（FB-048）
-    if (m.on_road) return `${resultCard}${now}${scene}${links}${free}${menu}${guide}${board}${quest}${orderCard}${fronts}${tail}`;
-    return `${resultCard}${board}${quest}${now}${scene}${links}${guide}${free}${menu}${orderCard}${fronts}${tail}`;
+    if (m.on_road) return `${resultCard}${now}${scene}${links}${free}${menu}${guide}${stanceCard}${board}${quest}${orderCard}${fronts}${tail}`;
+    return `${resultCard}${stanceCard}${board}${quest}${now}${scene}${links}${guide}${free}${menu}${orderCard}${fronts}${tail}`;
   }
 
   // ── 修練 ──

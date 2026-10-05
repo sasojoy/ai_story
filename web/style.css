@@ -359,6 +359,13 @@ details.fold.bulletin > .fold-body { border-color: var(--gold); max-height: 50vh
 .front-bar.side-guan > i { background: var(--kuai); }
 .front-bar.side-huang > i { background: var(--gold); }
 .front-bar.side-haoqiang > i { background: var(--rou); }
+/* 江湖頁最上面的態勢卡（正式版辛）：三欄一列，跟戰況條同一種排法，數字放大 */
+.stances-card { padding: 10px 12px; }
+.stances-card h3 { margin: 0 0 6px; font-size: 13px; color: var(--ink-2); }
+.stances-card .fronts { margin-bottom: 6px; }
+.stances-card .front-head b { font-size: 18px; }
+.stance-rule { margin: 0; font-size: 12px; line-height: 1.5; color: var(--ink); }
+.stance-how { margin: 2px 0 0; font-size: 11px; line-height: 1.5; color: var(--ink-2); }
 /* 第一季的本週軍令（計畫 T6） */
 .orders .order { padding: 8px 0; border-top: 1px solid var(--line); }
 .orders .order:first-child { border-top: 0; padding-top: 0; }

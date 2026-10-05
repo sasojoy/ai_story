@@ -447,6 +447,20 @@ def stances(state: GameState, content: Content) -> dict[str, int]:
     return {"guan": 100 - huangjin, "huang": huangjin, "haoqiang": trend_value(state, content, GEJU)}
 
 
+def stance_rule_note(state: GameState, content: Content) -> str:
+    """態勢卡底下那一句收季規則（第一季設計 4.4；正式版辛）：門檻從第一季結局算——stance_min 的值，或 stance_max 換成
+    另一方的「100 − 值」（黃巾 ≤ 15 就是官軍 ≥ 85）；取最小的那個（這一季三種都是 85）。第 decisive_from_week 週以前
+    寫「第 N 週起」，之後不寫。沒有決定性結局時是空字串。"""
+    bars = [v for e in content.scenario.endings if e.season_one for v in e.stance_min.values()]
+    bars += [100 - v for e in content.scenario.endings if e.season_one for v in e.stance_max.values()]
+    if not bars:
+        return ""
+    rule = f"哪一方的態勢一到 {min(bars)}，這一季當場收場；否則到季末比高低。"
+    week = calendar.point(state.world.time, content, state.world).week
+    start = content.config.decisive_from_week
+    return f"第 {start} 週起，{rule}" if week < start else rule
+
+
 def geju_rise_factor(content: Content, players: int | None) -> float:
     """割據漲速的人數係數（企劃者 2026-10-05，測試階段「依據人數等比例調整」）：min(1, players ÷ geju_full_players)。
     players 是這一季投靠了陣營的人數（投靠名冊，真人與假人一樣算）；沒人投靠就是 0（割據不漲），湊滿 geju_full_players 人

@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from tianxia import guide, rules
+from tianxia import calendar, guide, rules
 from tianxia import world as world_mod
 from tianxia.content import load_content
 from tianxia.engine import Game
@@ -326,3 +326,35 @@ def test_a_decisive_end_keeps_the_ending_that_triggered_it(on):
     assert w.ended and w.ending_id == "s1_huangtian"
     assert w.timeline["xiaquyang"].text == "戰事提前收束。下曲陽沒有破，黃巾的聲勢席捲了半個天下。"
     assert "guangzong" in w.timeline  # 廣宗照樣結算了（收季前把等著的決戰判掉）
+
+
+# ── 正式版辛：態勢卡的收季規則 ─────────────────────────────
+
+
+def test_stance_rule_before_the_decisive_week(on):
+    game = _game(on)
+    assert rules.stance_rule_note(game.state, on) == "第 10 週起，哪一方的態勢一到 85，這一季當場收場；否則到季末比高低。"
+    assert game.status_data()["stance_rule"] == rules.stance_rule_note(game.state, on)
+
+
+def test_stance_rule_after_the_decisive_week(on):
+    game = _game(on)
+    w = game.state.world
+    w.time = calendar.week_start(10, on, w)
+    assert rules.stance_rule_note(game.state, on) == "哪一方的態勢一到 85，這一季當場收場；否則到季末比高低。"
+
+
+def test_stance_rule_reads_the_endings_not_a_fixed_number(on):
+    game = _game(on)
+    for ending in on.scenario.endings:
+        if ending.stance_min:
+            ending.stance_min = {side: 80 for side in ending.stance_min}
+        if ending.stance_max:
+            ending.stance_max = {side: 20 for side in ending.stance_max}  # 黃巾 ≤ 20 ＝ 官軍 ≥ 80
+    on.config.decisive_from_week = 9
+    assert rules.stance_rule_note(game.state, on) == "第 9 週起，哪一方的態勢一到 80，這一季當場收場；否則到季末比高低。"
+    assert game.status_data()["stance_rule"] == rules.stance_rule_note(game.state, on)  # 態勢卡那一句跟著內容走
+
+
+def test_no_stance_rule_with_switch_off(real):
+    assert "stance_rule" not in _game(real).status_data()
