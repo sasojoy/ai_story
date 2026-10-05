@@ -463,6 +463,22 @@ def test_the_new_name_cannot_be_taken_by_anyone_else_afterwards(kicker, content,
     assert not world.claim_skill_name(generate_from_name("風神腿", "武學", "風神腿"))
 
 
+def test_a_roll_says_what_it_cost_in_stamina_right_after_the_result(kicker, content, world):
+    """FB-070 (b)：修練的回話寫出花了多少體力，跟合併的回話（「心得 -5」「體力 -5」）同一種寫法；數字照 Config.cultivate_stamina。
+    緊接在擲骰的那一句後面：服丹的話在前，第一個練成絕學的話在後。"""
+    content.config.cultivate_stamina = 7
+    won = cultivation.cultivate(kicker, content, world, "旋風腿", WIN)
+    assert len(won) == 2 and "從下品晉為中品" in won[0] and won[1] == "體力 -7"
+    lost = cultivation.cultivate(kicker, content, world, "旋風腿", LOSE)
+    assert len(lost) == 2 and "還差一點火候" in lost[0] and lost[1] == "體力 -7"
+    p = kicker.player
+    p.art_quality["旋風腿"], p.legend_items = "上品", 1
+    peerless = cultivation.cultivate(kicker, content, world, "旋風腿", WIN, use_legend=True)
+    assert peerless[0] == PILL and "晉為絕學" in peerless[1] and peerless[2] == "體力 -7"
+    assert "取一個正式的名字" in peerless[3]
+    assert p.stamina == 150 - 3 * 7
+
+
 def test_the_upgrade_line_gets_the_new_thing_shine_and_a_failed_try_does_not(kicker, content, world):
     won = cultivation.cultivate(kicker, content, world, "旋風腿", WIN)[0]
     assert won.startswith("【旋風腿】修練有成，從下品晉為中品") and journal._line_class(won) == "tx-line tx-new"
@@ -487,6 +503,18 @@ def test_cultivating_writes_one_journal_entry_with_the_xinde_untouched(adept):
     entry = adept.state.journal[0]
     assert "中品" in msgs[0] and entry.title == "修練" and entry.tag == msgs[0] and entry.changes == ["體力 -10"]
     assert adept.state.player.art_quality["旋風腿"] == "中品"
+
+
+def test_the_cultivate_reply_shows_the_stamina_but_the_journal_counts_it_once(adept):
+    """FB-070 (b)：修練頁頂的回話有「體力 -10」（狀態列與江湖紀錄本來就有）；紀錄的數值變化還是只算一次，
+    敘事也不多一行「體力 -10」。被拒絕的照舊只回那一句原因，沒有體力那一行。"""
+    msgs = adept.cultivate("旋風腿")
+    assert f"體力 -{adept.content.config.cultivate_stamina}" in msgs
+    entry = adept.state.journal[0]
+    assert entry.changes == ["體力 -10"] and entry.lines == [] and entry.tag == msgs[0]
+    adept.state.player.stamina = 5
+    refused = adept.cultivate("旋風腿")
+    assert len(refused) == 1 and "體力不足" in refused[0] and not any(m.startswith("體力 -") for m in refused)
 
 
 def test_a_failed_roll_is_something_that_happened_and_is_written(adept):
@@ -549,6 +577,21 @@ def test_the_stamina_of_consecutive_rolls_adds_up_in_one_merged_entry(adept):
     adept.cultivate("旋風腿")
     entries = [e for e in adept.state.journal if e.title == "修練"]
     assert len(entries) == 1 and entries[0].changes == ["體力 -20"] and adept.state.player.stamina == 130
+
+
+def test_two_rolls_in_a_row_read_as_two_on_the_just_now_card(adept):
+    """FB-070 (c)：連續修練兩次（晉中品、再失敗一次）：「剛剛」那一則照順序兩行、每一句只出現一次（以前最後一句
+    寫在標題旁又列在底下，看起來像修了三次），體力照舊加總成「體力 -20」。"""
+    from html import escape
+
+    won = adept.cultivate("旋風腿")[0]
+    adept.rng = LOSE
+    lost = adept.cultivate("旋風腿")[0]
+    card = adept.now_entry_html()
+    assert "修練有成" in won and "還差一點火候" in lost
+    assert re.findall(r'<span class="tx-tag">(.*?)</span>', card) + re.findall(
+        r'<div class="tx-line[^"]*">(.*?)</div>', card) == [escape(won), escape(lost)]
+    assert '<span class="tx-chg tx-down">體力 -20</span>' in card
 
 
 def test_the_stamina_change_is_not_written_for_a_naming(adept):

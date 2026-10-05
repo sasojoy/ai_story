@@ -1144,6 +1144,7 @@ def test_forge_cultivate_and_melt_through_the_endpoints(client):
     assert new["insight"] == "風" and new["cultivate"]["ok"] and new["worn"] is False
     r = client.post("/api/menxia/cultivate", json={"art": new["id"]}).json()
     assert "修練" in r["message"]
+    assert f"體力 -{server.CONTENT.config.cultivate_stamina}" in r["message"]  # FB-070 (b)：頁頂的回話寫出花的體力，跟合併一樣
     assert open_characters().load("沈青衫").player.stamina < server.CONTENT.config.stamina_max  # 花了體力
     r = client.post("/api/menxia/melt", json={"art": new["id"]}).json()
     assert "熔成了心得" in r["message"]
