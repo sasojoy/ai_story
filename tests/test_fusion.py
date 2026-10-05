@@ -1434,7 +1434,8 @@ def test_the_special_rumor_of_a_blend_and_of_an_anonymous_walker(ready, content,
     line = f"江湖上傳開了：某位少俠合出一門帶〔{special.name}〕的【踏浪拳】。"
     assert line in msgs and "沈浪" not in line
     (rumor,) = ready.world.rumors
-    assert rumor.text == line and rumor.named is False  # 匿名行走：傳聞標成不具名
+    # 世界層的傳聞一律具名（只有地方傳聞才有不具名）；匿名行走的人只是名字寫成「某位少俠」
+    assert rumor.text == line and rumor.named is True and rumor.layer == "world"
 
 
 def test_a_special_rumor_survives_the_engine_save(game):
