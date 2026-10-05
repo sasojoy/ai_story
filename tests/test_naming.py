@@ -198,3 +198,82 @@ def test_the_model_proposing_a_characters_name_is_asked_again(content):
 def test_the_lock_side_recheck_drops_a_characters_name(content):
     assert naming.recheck(content, ("驗收新武", "一句話。"), person=is_person) == (None, "")
     assert naming.recheck(content, ("裂江訣", "一句話。"), person=is_person) == ("裂江訣", "一句話。")
+
+
+# ── 從清單挑一個（合到舊的，武學與成長設計 12.2）──────────────
+
+PICK = [{"role": "user", "content": "清單：旋風腿、烈火拳"}]
+
+
+def _replying(*names):
+    client = mock.Mock()
+    client.chat_structured.side_effect = [naming.NameReply(name=n) for n in names]
+    return client
+
+
+def test_pick_returns_the_name_the_model_chose_from_the_list():
+    assert naming.pick(_replying("烈火拳"), PICK, ("旋風腿", "烈火拳")) == ("烈火拳", "")
+
+
+def test_pick_cleans_the_reply_before_matching():
+    """括號、空白、簡體照取名的整理方式先清掉，對得上清單就算。"""
+    assert naming.pick(_replying("【旋风腿】"), PICK, ("旋風腿", "烈火拳")) == ("旋風腿", "")
+
+
+def test_pick_retries_then_gives_up_on_names_off_the_list():
+    client = _replying(*["新名字"] * naming.NAME_ATTEMPTS)
+    assert naming.pick(client, PICK, ("旋風腿", "烈火拳")) == (None, "")
+    assert client.chat_structured.call_count == naming.NAME_ATTEMPTS
+
+
+def test_pick_tries_only_once_with_the_in_lock_client():
+    """行動鎖內的複本（Game._quick_client，retry 是 False）跟取名一樣只試一次，免得佔住鎖。"""
+    client = _replying(*["新名字"] * naming.NAME_ATTEMPTS)
+    client.retry = False
+    assert naming.pick(client, PICK, ("旋風腿", "烈火拳")) == (None, "")
+    assert client.chat_structured.call_count == 1
+
+
+def test_pick_without_a_model_or_when_it_is_down():
+    assert naming.pick(None, PICK, ("旋風腿",)) == (None, "")
+    down = mock.Mock()
+    down.chat_structured.side_effect = RuntimeError("連不上")
+    assert naming.pick(down, PICK, ("旋風腿", "烈火拳")) == (None, "")
+
+
+def test_pick_keeps_within_the_budget():
+    client = _replying("旋風腿")
+    client.timeout = 120
+    assert naming.pick(client, PICK, ("旋風腿", "烈火拳"), budget=0.5) == (None, "")  # 一趟分不到 1 秒：不叫
+    assert client.chat_structured.call_count == 0
+
+
+@pytest.mark.parametrize("reply", ["旋風腿法", "旋風", ""])
+def test_pick_wants_the_whole_name_on_the_list(reply):
+    """差一個字、少一個字、空白都不算挑中：一律 (None, "")，改由規則挑。"""
+    client = _replying(*[reply] * naming.NAME_ATTEMPTS)
+    assert naming.pick(client, PICK, ("旋風腿", "烈火拳")) == (None, "")
+    assert client.chat_structured.call_count == naming.NAME_ATTEMPTS
+
+
+def test_pick_drops_the_description_the_model_adds():
+    client = mock.Mock()
+    client.chat_structured.return_value = naming.NameReply(name="烈火拳", description="一句多餘的話。")
+    assert naming.pick(client, PICK, ("旋風腿", "烈火拳")) == ("烈火拳", "")
+
+
+def test_generate_sends_a_pick_request_to_pick(content):
+    request = naming.NamingRequest("fuse", "融|a", "武學", PICK, choices=("旋風腿", "烈火拳"))
+    assert naming.generate(_replying("旋風腿"), content, request) == ("旋風腿", "")
+    plain = naming.NamingRequest("fuse", "融|a", "武學", PICK)
+    assert plain.choices == ()
+
+
+def test_generate_keeps_a_pick_request_on_the_list_even_for_a_name_that_would_pass_the_filter(content):
+    """「新名字」過得了取名的過濾，但不在清單上：走的是 pick，所以三次都不收；若 generate 不看 choices、改走 propose，
+    第一次就會收下它。"""
+    request = naming.NamingRequest("fuse", "融|a", "武學", PICK, choices=("旋風腿", "烈火拳"))
+    client = _replying(*["新名字"] * naming.NAME_ATTEMPTS)
+    assert naming.generate(client, content, request) == (None, "")
+    assert client.chat_structured.call_count == naming.NAME_ATTEMPTS
+    assert naming.generate(_replying("新名字"), content, naming.NamingRequest("fuse", "融|a", "武學", PICK))[0] == "新名字"

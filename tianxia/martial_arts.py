@@ -47,6 +47,7 @@ class MartialArt(BaseModel):
     note: str = ""  # 模型寫的一句話描述（只有語意、沒有數字）；自創與本命武學是空的
     insight: str | None = None  # 最後融的意境 id（武學與成長設計 3.4）；修練要用它
     base: str | None = None  # 合成的底（功法 id）
+    parents: list[str] = Field(default_factory=list)  # 武學＋武學：兩門來源的 id（排序過，武學與成長設計 12.3）；其他是空的
     lean: str = "無"  # 正、邪、無：跟著最後融的意境（設計 7.3）
 
 

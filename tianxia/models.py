@@ -836,11 +836,16 @@ class Config(_Strict):
     practice_xinde_per_level: int = 1  # 練成：第 N 成升 N+1 成花 N × 這個數的心得
     fuse_xinde: int = 5  # 合成（武學＋意境）一次
     merge_xinde: int = 5  # 合併（意境＋意境）一次
-    # 企劃者 2026-10-05：合併要花體力（跟修練一次一樣），合成（武學＋意境）不花。合併→熔掉（melt_insight_xinde）→再合併
+    # 企劃者 2026-10-05：合併要花體力（跟修練一次一樣；那時合成不花，設計 12.1 起三種合成一樣花，見 fuse_stamina）。合併→熔掉（melt_insight_xinde）→再合併
     # 每一圈淨賺心得，決定不擋重合、也不動熔的價，而是讓每一圈都付一次體力：「意境合併要花體力，這樣的話她要拿心得就給他拿」。
     # FB-067（企劃者 2026-10-05）：從 10（跟修練一次一樣）降到 5；修練（含衝絕學）維持 10。一圈淨賺 5 心得＝每點體力 1 心得，
     # 跟「同一個地點探索又悟到同一個意境」（10 體力換 10 心得）一樣划算
     merge_stamina: int = 5
+    # 武學與成長設計 12.1：三種合成同一套價錢——武學＋意境、武學＋武學也收體力
+    fuse_stamina: int = Field(default=5, ge=0)
+    # 12.2 合到舊的：一個組合第一次被合時，候選每有一個，機會加這麼多，最多到 land_chance_cap（企劃者定九成）；0 就永遠長新的
+    land_chance_per_candidate: float = Field(default=0.05, ge=0, le=1)
+    land_chance_cap: float = Field(default=0.9, ge=0, le=1)
     cultivate_stamina: int = 10  # 修練一次的體力
     # 修練升到這一品：第一次的機率、每失敗一次加多少（%）（設計 3.5）。中品、上品加到 100 就必成；
     # 絕學沒有保底：累積的機率最多到 cultivate_cap（企劃者 2026-10-05），剩下靠破境丹

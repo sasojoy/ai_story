@@ -300,21 +300,25 @@ def choose(game: Game, option_id: str) -> list[str] | None:
 NO_NAME: tuple[str | None, str] = (None, "")  # 開爐的 B 段沒取到名字（或不必取）：C 段直接走退路字表、不在鎖裡叫模型
 
 
-def prepare_forge(game: Game, art_id: str | None, insight_ids: list[str]) -> tuple[str | None, str]:
-    """開爐的首次取名在行動鎖外（最終審查 Critical 1）。首次合出來的配方要等模型取名，以前整段包在行動鎖裡：
+def prepare_forge(
+    game: Game, art_id: str | None, insight_ids: list[str], other_art: str | None = None,
+) -> tuple[str | None, str]:
+    """開爐的首次取名或挑選在行動鎖外（最終審查 Critical 1）。首次合出來的配方要等模型取名（合到舊的、候選兩個以上時是
+    請模型從候選挑一個名字），以前整段包在行動鎖裡：
     一次最多叫三次、每次最多等 OllamaClient.timeout（120 秒），全服玩家與假人程式都得跟著等，試玩走的 trycloudflare
     也會在約 100 秒切斷請求。跟 prepare_dialogue 一樣分三段：
-      A（鎖內、很快）同步時間，問引擎這一爐要不要模型取名（Game.forge_request），要就拿到單子；同步的結果要存起來，
+      A（鎖內、很快）同步時間，問引擎這一爐要不要模型取名或挑（Game.forge_request），要就拿到單子；同步的結果要存起來，
         不然 C 段進鎖重讀就把它丟了；
       B（鎖外、很慢）naming.generate：預算是 Config.naming_budget_seconds 扣掉 A 段（含等鎖）花掉的時間，
-        引擎不讀時鐘，所以時間在這裡量；用完就回 (None, "")，C 段走退路字表；
+        引擎不讀時鐘，所以時間在這裡量；用完就回 (None, "")，C 段走退路字表（挑的話改由規則挑）；
       C（鎖內、很快）由呼叫端把結果交給 Game.forge(..., proposed=...)，引擎整個重驗再登記、收費。
     這裡做 A 與 B，回傳 B 的結果（名字, 說明）；不必叫模型時是 NO_NAME。假人程式之後要合成，照樣能不經過 HTTP
-    走這三段（Game.forge_request 在 action_lock 裡、naming.generate 在鎖外、Game.forge(proposed=...) 再進鎖）。"""
+    走這三段（Game.forge_request 在 action_lock 裡、naming.generate 在鎖外、Game.forge(proposed=...) 再進鎖）。
+    other_art 有、insight_ids 空的是武學＋武學。"""
     started = time.monotonic()
     with _locked(game):
         game.sync(time.time())
-        request = game.forge_request(art_id, insight_ids)
+        request = game.forge_request(art_id, insight_ids, other_art=other_art)
         open_characters().save(game.state)
     if request is None:
         return NO_NAME
@@ -323,12 +327,12 @@ def prepare_forge(game: Game, art_id: str | None, insight_ids: list[str]) -> tup
     return naming.generate(game.client, game.content, request, budget=budget, person=game.world.is_character_name)
 
 
-def forge(game: Game, art_id: str | None, insight_ids: list[str]) -> list[str] | None:
+def forge(game: Game, art_id: str | None, insight_ids: list[str], other_art: str | None = None) -> list[str] | None:
     """開爐：A、B 在 prepare_forge，C 進鎖交給 Game.forge。proposed 一定給（不必叫模型時是 NO_NAME），
     所以伺服器上的開爐永遠不會在鎖裡叫模型。同一爐連按兩下、重新整理再按、開兩個分頁：兩個請求可能都走完 A、B，
     C 段重驗時第二個會看見配方有了、東西已經在你身上，什麼都不收（企劃者 2026-10-05：不能重複扣）。"""
-    proposed = prepare_forge(game, art_id, insight_ids)
-    return act(game, lambda g: g.forge(art_id, insight_ids, proposed=proposed))
+    proposed = prepare_forge(game, art_id, insight_ids, other_art)
+    return act(game, lambda g: g.forge(art_id, insight_ids, proposed=proposed, other_art=other_art))
 
 
 def answer_event(game: Game, text: str) -> list[str] | None:
@@ -844,19 +848,27 @@ def api_do(op: str, request: Request, body: dict = Body(default={})):
     return {"main": look(game, main_view), "message": joined(msgs)}
 
 
-def forge_args(body: dict) -> tuple[str | None, list[str]]:
-    """煉製頁送來的東西：放進爐裡的武學 id（可以沒有）與意境 id 們。body 是客戶端寫的：武學一律轉成字串、
-    意境不是清單就當作沒放，形狀不對只會得到「不存在／放一門武學和一個意境…」那一句話，不會打出 500。"""
-    art, picked = body.get("art"), body.get("insights")
-    return (str(art) if art else None), ([str(i) for i in picked] if isinstance(picked, list) else [])
+def forge_args(body: dict) -> tuple[str | None, list[str], str | None]:
+    """煉製頁送來的東西：爐裡的武學 id（可以沒有）、意境 id 們、第二門武學 id（武學＋武學，可以沒有）。body 是客戶端寫的：
+    武學一律轉成字串、意境不是清單就當作沒放，形狀不對只會得到「不存在／放一門武學和一個意境…」那一句話，不會打出 500。"""
+    art, other, picked = body.get("art"), body.get("other_art"), body.get("insights")
+    return (
+        str(art) if art else None,
+        [str(i) for i in picked] if isinstance(picked, list) else [],
+        str(other) if other else None,
+    )
+
+
+def _forge_without_naming(game: Game, art_id: str | None, insight_ids: list[str], other_art: str | None) -> list[str]:
+    return game.forge(art_id, insight_ids, proposed=NO_NAME, other_art=other_art)
 
 
 MENXIA_ACTIONS = {
     "practice": lambda g, b: g.practice(str(b.get("kind") or KINDS[0])),
     "heal": lambda g, b: g.heal(),
-    # 一武學＋一意境＝合成，兩意境＝合併。端點走 forge()（A 鎖內備料 → B 鎖外取名 → C 鎖內登記），不走這一條；
+    # 一武學＋一意境、兩武學＝合成，兩意境＝合併。端點走 forge()（A 鎖內備料 → B 鎖外取名或挑 → C 鎖內登記），不走這一條；
     # 這裡也帶 NO_NAME，就算有人直接拿它在鎖裡呼叫，也不會叫模型
-    "forge": lambda g, b: g.forge(*forge_args(b), proposed=NO_NAME),
+    "forge": lambda g, b: _forge_without_naming(g, *forge_args(b)),
     "switch": lambda g, b: g.switch_art(str(b.get("art") or "")),
     # 用融的意境修練一次，衝下一品；use_legend 是勾了「服下破境丹」。只認真正的布林 true：字串、數字都不算勾
     "cultivate": lambda g, b: g.cultivate(str(b.get("art") or ""), use_legend=b.get("use_legend") is True),
@@ -902,8 +914,8 @@ def api_menxia_do(op: str, request: Request, body: dict = Body(default={})):
 def api_forge_line(request: Request, body: dict = Body(default={})):
     """煉製頁選了東西就更新說明（不算行動、不存檔）。"""
     game = _game(request)
-    art, picked = forge_args(body)
-    return {"line": look(game, lambda g: md(g.forge_line(art, picked)))}
+    art, picked, other = forge_args(body)
+    return {"line": look(game, lambda g: md(g.forge_line(art, picked, other_art=other)))}
 
 
 @app.get("/api/reports")
