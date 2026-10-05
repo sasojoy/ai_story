@@ -18,7 +18,7 @@ from .world_state import WorldStateStore
 
 HALF_HOUR = 1800
 SPEND_XINDE_EVERY = 5  # 每幾步檢查一次要不要拿心得去練功/療傷
-FORESHADOW_OPTIONS = ("fs:", "talk:clue:")  # 伏筆的最後一步、對話的片段選項：機器人不做伏筆
+FORESHADOW_OPTIONS = ("fs:", "talk:clue:", "opp:", "talk:opp:")  # 伏筆的最後一步、對話的片段與機緣（正式版乙一）：機器人不做
 
 FORGE_TRIES = 4  # 武學＋意境、武學＋武學、意境＋意境各試幾組（被擋下就換一組）
 MERGE_SHARE = 0.3  # 手上有兩個以上意境時，這麼多的機會改做合併
@@ -164,7 +164,7 @@ def pick(game: Game, options: list[Option], rng: random.Random) -> str | None:
             if option.id.startswith("battle:join"):
                 return option.id
     options = [o for o in options if o.id != FREE_TEXT_OPTION]  # 隨口應對要寫一句話，機器人寫不出有意義的做法（同決戰的 free_text）
-    # 伏筆的最後一步與對話的片段選項：這一版假人不做伏筆（計畫 T7），同隨口應對一樣排除
+    # 伏筆的最後一步與對話的片段選項、機緣的選項與話題：這一版假人不做伏筆（計畫 T7）也不做機緣，同隨口應對一樣排除
     options = [o for o in options if not o.id.startswith(FORESHADOW_OPTIONS)]
     if s.pending_event:
         choices = game.content.events[s.pending_event].choices

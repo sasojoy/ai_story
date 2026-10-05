@@ -108,6 +108,8 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
     kind, _, arg = option.id.partition(":")
     if kind == "defect":
         return None  # 假人不叛投（計畫甲）
+    if kind == "opp":
+        return None  # 機緣：假人不做（正式版乙一）；對話裡的 talk:opp: 落在下面 talk 的 None
     if kind == "battle":
         return _battle_score(game, arg)
     if kind == "choice":
@@ -144,6 +146,8 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
         if arg == "duty":  # 守勢行動（計畫 T6）：替守城記功才值得做
             s = game.state
             return DUTY_SCORE + (ORDER_SCORE if orders.duty_counts(s, game.content, s.player.faction, s.player.location) else 0.0)
+        if arg == "rank2":  # 第 2 階行動（正式版乙一）：跟守勢行動一樣的底分；替軍令記功的加分是計畫戊的事
+            return DUTY_SCORE
         if arg == "convoy":  # 接下糧車：只在有護糧軍令的起點出現
             return ORDER_SCORE
         if arg == "summons":  # 應召（計畫 T5）：只在召見的地點出現

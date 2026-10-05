@@ -12,11 +12,11 @@ from unittest import mock
 
 import pytest
 
-from tianxia import calendar, figures, opportunities, rules, timetable
+from tianxia import bot, bot_policy, calendar, figures, opportunities, rules, timetable
 from tianxia.content import ContentError, load_content, validate
 from tianxia.engine import Game
 from tianxia.models import OppDef
-from tianxia.state import PlayerState, TimelineResult
+from tianxia.state import BotProfile, PlayerState, TimelineResult
 
 CONTENT_DIR = Path(__file__).parent.parent / "content"
 
@@ -658,3 +658,62 @@ def test_clues_stay_quiet_when_the_switch_is_off(real):
     before = game.state.player.stamina
     game.state.player.stamina -= 5
     assert game._hear_after_stamina(before) == [] and game.state.player.opp_clues == []
+
+
+# ── Task 5：假人與整季機器人 ─────────────────────────────────
+
+
+def _profile(faction="guan"):
+    return BotProfile(personality="普通", seed=1, faction=faction, season_number=1)
+
+
+def test_bots_skip_opportunities_but_do_rank2(on):
+    game = _game(on, faction="guan", at="changshe", rank=2)
+    p = game.state.player
+    p.opp_items, p.opp_fronts = {"guan_deserter": "知道運糧小道的降卒"}, {"guan_deserter": "yingru"}
+    options = game.options(odds=False)
+    opp = [o for o in options if o.id.startswith("opp:")]
+    assert opp and bot.pick(game, opp, random.Random(0)) is None
+    profile = _profile()
+    assert all(bot_policy.score(game, o, profile) is None for o in opp)
+    rank2 = next(o for o in options if o.id == "act:rank2")
+    assert bot_policy.score(game, rank2, profile) is not None
+
+
+def test_bots_skip_the_bond_topics_too(on):
+    game = _game(on, faction="guan", at="changshe")
+    p = game.state.player
+    p.pending_companion, p.affinities = "zhujun", {"zhujun": 8}
+    topic = next(o for o in game.options(odds=False) if o.id == "talk:opp:guan_zhujun")
+    assert bot.pick(game, [topic], random.Random(0)) is None
+    assert bot_policy.score(game, topic, _profile()) is None
+
+
+def test_bots_skip_the_timing_attempts_too(on):
+    game = _game(on, faction="guan", at="hilltop_wilds")
+    _at_hour(game, 23)
+    attempt = _try(game, "guan_courier")
+    assert attempt is not None and attempt.enabled
+    assert bot.pick(game, [attempt], random.Random(0)) is None
+    assert bot_policy.score(game, attempt, _profile()) is None
+
+
+def test_rank2_scores_like_the_duty_action_for_bots(on):
+    game = _game(on, faction="guan", at="changshe", rank=2)
+    options = {o.id: o for o in game.options(odds=False)}
+    assert bot_policy.score(game, options["act:rank2"], _profile()) == bot_policy.DUTY_SCORE
+    assert bot_policy.score(game, options["act:rank2"], _profile()) == bot_policy.score(game, options["act:duty"], _profile())
+
+
+def test_server_bots_never_choose_an_opportunity(on):
+    game = _game(on, faction="guan", at="changshe", rank=2)
+    p = game.state.player
+    p.opp_items, p.opp_fronts = {"guan_deserter": "知道運糧小道的降卒"}, {"guan_deserter": "yingru"}
+    chosen = []
+    real_choose = game.choose
+    with mock.patch.object(game, "choose", side_effect=lambda option_id, *a, **k: chosen.append(option_id) or real_choose(option_id, *a, **k)):
+        for seed in range(40):
+            p.stamina = 100
+            p.location, p.pending_companion = "changshe", None
+            bot_policy.take_turn(game, _profile(), random.Random(seed))
+    assert chosen and not any(i.startswith(("opp:", "talk:opp:")) for i in chosen)
