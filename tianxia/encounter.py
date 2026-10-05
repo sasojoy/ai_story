@@ -130,10 +130,17 @@ def team_power(
     )
 
 
-def resolve_encounter(our_power: float, difficulty: float, rng: Random) -> EncounterResult:
+def advantage_shift(difficulty: float, advantage: int) -> float:
+    """大場面模型給的優勢（百分點，武學與成長設計 8.3）換成判定差距的平移：戰場運氣是均勻分佈、全幅 2 × luck_half，
+    差距平移 advantage/100 × 全幅，越過門檻的機會剛好差 advantage 個百分點（在運氣範圍內）。"""
+    return advantage / 100 * 2 * luck_half(difficulty)
+
+
+def resolve_encounter(our_power: float, difficulty: float, rng: Random, shift: float = 0.0) -> EncounterResult:
+    """shift 是判定差距的平移（大場面的優勢，見 advantage_shift）；平常是 0。擲骰照舊只擲一次運氣。"""
     half = luck_half(difficulty)
     luck = rng.uniform(-half, half)
-    margin = our_power - difficulty + luck
+    margin = our_power - difficulty + luck + shift
     for tier, threshold in tier_thresholds(difficulty):
         if margin >= threshold:
             return EncounterResult(tier=tier, margin=margin, our_power=our_power, difficulty=difficulty)

@@ -6,6 +6,7 @@ sanguo-companions 合併大幅重寫：拿掉 battle.py 的 3v3 全自動戰鬥�
 """
 from __future__ import annotations
 
+import hashlib
 import math
 import random
 from collections.abc import Callable
@@ -13,9 +14,9 @@ from collections.abc import Callable
 from pydantic import BaseModel
 
 from . import (
-    atlas, battle_instance, battlelog, calendar, companion_agent, cultivation, encounter, event_llm, figures, flavor,
-    foreshadow, front_lines, fusion, insights, journal, library, materials, naming, orders, push, ranks, roster, skillview,
-    team, timetable,
+    atlas, battle_instance, battlelog, calendar, companion_agent, cultivation, encounter, event_llm, fight_llm, figures,
+    flavor, foreshadow, front_lines, fusion, insights, journal, library, materials, naming, orders, push, ranks, roster,
+    rounds, skillview, team, timetable,
 )
 from . import events as event_rules  # note_round 走模組屬性（測試要能換掉它，確認只有 _present 會叫）
 from .events import (
@@ -66,9 +67,11 @@ class Option(BaseModel):
     id: str
     label: str
     enabled: bool = True
+    wait: str = ""  # 按下去要等模型時，按鈕上換上的字（大場面「兩人對峙……」，武學與成長設計 8.3）；不必等是空的
 
 
 FREE_TEXT_OPTION = "choice:free"  # 事件的「隨口應對」：按下去只是叫出輸入框，真正送出走 free_text_request／answer_event
+BIG_FIGHT_WAIT = "兩人對峙……"  # 大場面按下去、等模型判讀時按鈕上的字（武學與成長設計 8.3）
 
 
 class FreeTextRequest(BaseModel):
@@ -106,6 +109,8 @@ class Game:
         )  # companion_agent.py 用；連不上時那輪對話取消，這裡不用先健檢
         self._model_budget = ModelBudget()  # 鎖內的模型呼叫這一次拿鎖期間還有沒有額度（見 _quick_client）
         self._draft: Draft | None = None  # choose() 進行中那次行動的江湖紀錄草稿
+        # choose() 進行中那次行動、鎖外先判讀好的大場面（重驗過的，見 _checked_fight）；打那一場時用掉（_judged）
+        self._fight: fight_llm.PreparedFight | None = None
         self.last_gamble: FreeTextOutcome | None = None  # 上一次 answer_event 擲完骰的結果（server.py 拿去潤色）
         # 主畫面「走法」切換選的走法（步行／趕路／疾行），選單上的「前往」照它出發（見 _move_option）。只是畫面狀態：
         # 不在 GameState 裡、不進存檔。網頁伺服器的同一個角色只有一份 Game（各分頁共用、重新整理也還在），所以走法
@@ -394,7 +399,10 @@ class Game:
         if s.pending_event:
             event = c.events[s.pending_event]
             opts = [
-                Option(id=f"choice:{i}", label=self._choice_label(ch, odds))
+                Option(
+                    id=f"choice:{i}", label=self._choice_label(ch, odds),
+                    wait=BIG_FIGHT_WAIT if ch.combat and self.is_big(c.squads[ch.combat]) else "",
+                )
                 for i, ch in visible_choices(event, s, c)
             ]
             if event.free_text is not None:
@@ -581,7 +589,8 @@ class Game:
 
     def _train_option(self, loc: Location, cost: int, odds: bool) -> Option:
         """遊歷的按鈕。遇上自己陣營的隊伍是操練、不會輸（見 _drill），所以只有自己人的地盤寫成「操練・零風險」，
-        不拿自己人去算勝算「必敗」（試玩回饋 FB-008）；自己人與外人都有的地方，勝算只看真的會打的那幾路。"""
+        不拿自己人去算勝算「必敗」（試玩回饋 FB-008）；自己人與外人都有的地方，勝算只看真的會打的那幾路。
+        這一趟會是大場面（備料挑到的那一路，見 _train_pick）時，按下去要等模型判讀：wait 寫「兩人對峙……」。"""
         squads = [self.content.squads[sid] for sid in self._train_squad_ids(loc)]
         foes = [squad for squad in squads if not self._drills_with(squad)]
         if not foes:
@@ -589,15 +598,19 @@ class Game:
         note = self._train_note(foes, odds)
         if len(foes) < len(squads):
             note += "・或與自己人操練"
-        return self._cost_option("act:train", "遊歷", cost, note=note)
+        option = self._cost_option("act:train", "遊歷", cost, note=note)
+        pick = self._train_pick(loc)
+        if pick is not None and not self._drills_with(pick) and self.is_big(pick):
+            option.wait = BIG_FIGHT_WAIT
+        return option
 
     def _train_note(self, squads: list[Squad], odds: bool) -> str:
         """遊歷按鈕上的補充說明：對手是誰、勝算多少（勝算的計算比較貴，所以照既有慣例吃 odds 旗標）。"""
         who = squads[0].name if len(squads) == 1 else f"{len(squads)} 路對手"
         if not odds:
             return who
-        # 多路對手時以**最強的**那個當參考（真的開打是隨機挑）：這個標籤的用途是警告玩家，
-        # 寧可低估也不要給出過度樂觀的承諾。
+        # 多路對手時以**最強的**那個當參考（真的開打平常是用 Game.rng 隨機挑；池子裡有大場面對手的地方照 _train_pick 挑，
+        # 見 _train）：這個標籤的用途是警告玩家，寧可低估也不要給出過度樂觀的承諾。
         hardest = max(squads, key=lambda s: s.difficulty)
         return f"{who}・{self.odds(hardest.id)}"
 
@@ -683,9 +696,113 @@ class Game:
             raise companion_agent.DialogueUnavailable("鎖外生成失敗")
         return prepared.turn
 
-    def choose(self, option_id: str, prepared: companion_agent.PreparedTurn | None = None) -> list[str]:
+    # ── 大場面：鎖外請模型判讀（武學與成長設計 8.3、計畫三 Task 2）────────────
+
+    def is_big(self, squad: Squad) -> bool:
+        """大場面：對手標了頭目、是大勢人物本人（figures 的 squad），或難度到 big_fight_difficulty（武學與成長設計 8.3）。
+        只看對手本身：遊歷遇上自己陣營的隊伍是操練、不打架，那是遊歷那一條路自己擋（_fight_squad、_train_option）；
+        劇情戰從來不操練（_event_battle 不看陣營），黃巾的人打黃巾的頭目照樣是大場面（Task 2 審查修正 1）。"""
+        c = self.content
+        own = {fig.squad for fig in c.figures.values()}
+        return squad.boss or squad.id in own or squad.difficulty >= c.config.big_fight_difficulty
+
+    def _big_trip(self, loc: Location) -> bool:
+        """這裡遊歷可能撞上大場面：池子（_train_squad_ids）裡有不是自己人的大場面對手。這種地點的遊歷一律照 _train_pick 挑對手
+        （Task 2 審查修正 3）；正式內容目前沒有這種地點，所以每一處遊歷照舊用 Game.rng 挑。"""
+        squads = (self.content.squads[sid] for sid in self._train_squad_ids(loc))
+        return any(self.is_big(squad) and not self._drills_with(squad) for squad in squads)
+
+    def _train_pick(self, loc: Location) -> Squad | None:
+        """池子裡有大場面對手（_big_trip）的地點，這一趟遊歷遇上哪一路（計畫三 G1、Task 2 審查修正 3）：照（名號、地點、戰報流水號）
+        雜湊，從 _train_squad_ids 挑一路；沒有對手是 None。按鈕的「兩人對峙」、備料（A 段）、套用（C 段）、判讀失敗照平常打，
+        看的都是它：A、C 之間流水號不動（模型那一分鐘裡沒有打別的仗），兩邊挑到同一路；打過一場流水號就變，對手照樣輪替。
+        池子裡沒有大場面對手的地點不用它，照舊用 Game.rng 隨機挑（亂數序列、整季模擬與好玩度量表的對手組成都不變）。"""
+        ids = self._train_squad_ids(loc)
+        if not ids:
+            return None
+        key = f"{self.state.player.name}|{loc.id}|{self.state.battle_seq}".encode()
+        return self.content.squads[ids[int.from_bytes(hashlib.sha256(key).digest()[:4], "big") % len(ids)]]
+
+    def _fight_squad(self, option_id: str) -> Squad | None:
+        """這個選項按下去會打哪一路（遊歷、挑戰大勢人物本人、劇情戰的戰鬥選項）；不會打仗是 None。
+        隨口應對（choice:free）不是數字，不是仗。"""
+        s, c = self.state, self.content
+        kind, _, arg = option_id.partition(":")
+        if option_id == "act:train":
+            pick = self._train_pick(c.locations[s.player.location])
+            return None if pick is None or self._drills_with(pick) else pick  # 遇上自己人是操練，不打架
+        if option_id.startswith("act:challenge:"):
+            fid = option_id.removeprefix("act:challenge:")
+            return figures.squad_of(s, c, fid) if fid in c.figures else None  # 難度照他此刻的聲威（T4）
+        if kind == "choice" and arg.isdecimal() and s.pending_event:
+            choices = c.events[s.pending_event].choices
+            combat = choices[int(arg)].combat if int(arg) < len(choices) else None
+            return c.squads[combat] if combat else None
+        return None
+
+    def fight_request(self, option_id: str) -> fight_llm.FightRequest | None:
+        """大場面的 A 段（server.prepare_fight 在行動鎖內、很快地呼叫）：這個選項按下去會打一場大場面，就回傳送模型判讀的單子；
+        不會（不是大場面、按不下去、自己陣營的操練、這個角色不叫模型——伺服器假人的 client 是 None）就是 None，伺服器在
+        同一次拿鎖裡直接做完（計畫三 G14）。C 段進鎖重驗也呼叫它（_checked_fight），要一模一樣才採用。
+        只讀、不改狀態，也不推進戰鬥（理由同 dialogue_request）。先看是不是大場面、再排選單：一般的仗不多排一次選單。"""
+        if self.client is None:
+            return None
+        squad = self._fight_squad(option_id)
+        if squad is None or not self.is_big(squad):
+            return None
+        option = {o.id: o for o in self.options(odds=False, tick=False)}.get(option_id)
+        if option is None or not option.enabled:
+            return None
+        s = self.state
+        theirs = f"{squad.name}（屬{squad.attribute or '不明'}，難度 {squad.difficulty:.0f}）"
+        return fight_llm.FightRequest(
+            option_id=option_id, squad_id=squad.id, location=s.player.location, battle_seq=s.battle_seq,
+            event=s.pending_event,
+            ours=[fight_llm.member_line(name, arts) for name, *arts in team.lineup(s, self.content, self.world)],
+            theirs=theirs + (f"：{squad.desc}" if squad.desc else ""),  # 有來歷的對手多一句描述（設計 8.3「對手的描述」）
+        )
+
+    def _checked_fight(self, option_id: str, fight: fight_llm.PreparedFight | None) -> fight_llm.PreparedFight | None:
+        """大場面 C 段的重驗（鎖內）：現在重算一張單子（fight_request），要跟鎖外判讀的那一張一模一樣才採用——同一個選項、
+        同一路對手、同一個地點與事件、戰報流水號沒動（等模型的時候沒有打過別的仗）、雙方陣容一字不差（換了武學、帶的人，
+        或對手的聲威被別人推動了，都算變了；Review Focus 3）。對不上就丟掉、照平常打（優勢 0）。"""
+        if fight is None:
+            return None
+        return fight if self.fight_request(option_id) == fight.request else None
+
+    def _judged(self, squad: Squad) -> fight_llm.Judgment | None:
+        """這一場有沒有鎖外判讀好的優勢：有、而且是同一路對手，就拿出來用掉——一次行動只用一次，同一次行動再打一場
+        同一路也不會再吃一次（計畫三 G8）。"""
+        fight = self._fight
+        if fight is None or fight.request.squad_id != squad.id:
+            return None
+        self._fight = None
+        return fight.judgment
+
+    def _fight_with(self, squad: Squad, judged: fight_llm.Judgment | None, **kw) -> encounter.EncounterResult:
+        """打一場單次判定（kw 照傳給 team.fight，挑戰本人的 difficulty）：有判讀就把優勢換成判定差距的平移
+        （encounter.advantage_shift，照這一場真的用的難度算）；沒有是 0。優勢在這裡再夾一次 ±big_fight_swing 個百分點：
+        fight_llm.judge 夾過了，但判讀不一定都經過它（之後的模型佇列也會交判讀進來），模型不能直接決定勝負（Task 2 審查修正 4）。"""
+        shift = 0.0
+        if judged is not None:
+            swing = self.content.config.big_fight_swing
+            shift = encounter.advantage_shift(squad.difficulty, max(-swing, min(swing, judged.advantage)))
+        return team.fight(self.state, self.content, self.world, squad.id, self.rng, shift=shift, **kw)
+
+    @staticmethod
+    def _narrate(record, result: encounter.EncounterResult, judged: fight_llm.Judgment | None) -> None:
+        """大場面的過程照結果挑一版：大勝、險勝是佔上風那一版，僵持、落敗是落下風那一版（計畫三 G15）。"""
+        if judged is not None:
+            record.narration = judged.winning if result.tier in team.WIN_TIERS else judged.losing
+
+    def choose(
+        self, option_id: str, prepared: companion_agent.PreparedTurn | None = None,
+        fight: fight_llm.PreparedFight | None = None,
+    ) -> list[str]:
         """prepared 是 server.py 在鎖外先生成好的一輪對話（見 dialogue_request／companion_agent.prepare_turn）；
-        只有對話選項用得到，進來先重驗，驗不過就忽略。"""
+        只有對話選項用得到，進來先重驗，驗不過就忽略。
+        fight 是 server.py 在鎖外先判讀好的大場面（見 fight_request／fight_llm.judge）：一樣先重驗（_checked_fight），
+        驗不過就忽略、照平常打（優勢 0）。假人、整季機器人不帶，大場面也是優勢 0、照平常演出（武學與成長設計 8.3）。"""
         option = {o.id: o for o in self.options(odds=False)}.get(option_id)
         if option is None or not option.enabled:
             return self._log(["（此刻無法這麼做。）"])
@@ -697,6 +814,7 @@ class Game:
         if option_id == FREE_TEXT_OPTION:
             return self._log([f"（寫下你的做法，{FREE_TEXT_MAX} 字以內。）"])  # 選項本身只叫出輸入框，不消耗事件
         prepared = self._checked_prepared(option_id, prepared) if kind in ("act", "talk", "call") else None
+        self._fight = self._checked_fight(option_id, fight)
         self._draft = Draft(self._action_title(kind, arg))
         stamina = self.state.player.stamina
         try:
@@ -728,6 +846,7 @@ class Game:
             journal.add_entry(self.state, self._draft.entry(self.state.world.time, msgs))
         finally:
             self._draft = None
+            self._fight = None
         self._record_faction()
         self._save_season()
         return self._log(msgs)
@@ -1054,7 +1173,12 @@ class Game:
         到 explore，於是在集市散步也會冒出來。現在它們回到正確的位置。
         """
         loc = self.content.locations[self.state.player.location]
-        squad = self.content.squads[self.rng.choice(self._train_squad_ids(loc))]
+        # 池子裡有大場面的對手：照 _train_pick 挑，跟按鈕、備料、套用、判讀失敗的退路都是同一路（鎖外判讀過的單子就是它，
+        # _squad_encounter 照對手對上判讀）；沒有就照舊用 Game.rng 隨機挑——正式內容每一處都是這樣（Task 2 審查修正 3）
+        if self._big_trip(loc):
+            squad = self._train_pick(loc)
+        else:
+            squad = self.content.squads[self.rng.choice(self._train_squad_ids(loc))]
         msgs = self._squad_encounter(squad.id)
         if self._drills_with(squad):
             return msgs  # 操練沒有打架，不接「一番苦戰之後」這類戰後事件（試玩回饋 FB-001）
@@ -2034,15 +2158,18 @@ class Game:
 
         wild：探索時撞上的野怪（探索三選一設計 4.2）——扣氣血打折（`wild_neili_loss_factor`，內傷照比例）、
         打贏**不推大勢**（遊歷推大勢的量已經讓黃巾早早稱霸，探索不能再加碼）；獎勵、掉落、落敗的
-        一成銀兩都照常。戰後事件本來就只在 _train 裡接，野怪不走那裡。遊歷不帶這個旗標，一點都不變。"""
+        一成銀兩都照常。戰後事件本來就只在 _train 裡接，野怪不走那裡。遊歷不帶這個旗標，一點都不變。
+        野怪是當下擲出來的，不問模型、也不吃判讀（武學與成長設計 8.3）；遊歷的大場面吃鎖外的判讀（_judged）。"""
         s, c = self.state, self.content
         p = s.player
         loc = c.locations[p.location]
         squad = c.squads[squad_id]
         if self._drills_with(squad):
             return self._drill(squad)
-        result = team.fight(s, c, self.world, squad.id, self.rng)
+        judged = None if wild else self._judged(squad)
+        result = self._fight_with(squad, judged)
         record = battlelog.new_record(s, c, self.world, squad, result, "wild" if wild else "train")
+        self._narrate(record, result, judged)
         msgs: list[str] = []
         if result.tier in team.WIN_TIERS:
             rewards = self._battle_rewards(squad, record)
@@ -2062,9 +2189,10 @@ class Game:
             msgs += extra
         elif result.tier == "落敗":
             msgs += self._lose_silver(record)
-        toll = team.take_encounter_toll(s, c, self.world, result.tier, wild=wild)
+        toll, hp_lost = self._take_toll(result.tier, wild=wild)
         record.changes += toll
         msgs += toll
+        self._play_rounds(record, squad, result.tier, hp_lost)
         msgs.insert(0, self._file_battle(record))
         if squad.desc:  # 有來歷的對手（運糧隊）多一句描述，接在戰鬥那一行後面
             msgs.insert(1, f"（{squad.name}：{squad.desc}）")
@@ -2105,6 +2233,36 @@ class Game:
         record.silver = -loss
         return [f"銀兩 -{loss}"] if loss else []
 
+    def _player_hp(self) -> float:
+        """本人此刻的氣血（上限吃根骨：con_of 認 key，所以傳 PLAYER，不傳 Member）。"""
+        return team.member_neili(
+            self.content, self.state.player.member, team.con_of(self.state, self.content, self.world, PLAYER),
+        )[0]
+
+    def _take_toll(self, tier: str, *, wild: bool = False) -> tuple[list[str], int]:
+        """照結果扣這一場的氣血（team.take_encounter_toll），回傳（訊息, 本人真的掉了多少氣血）。掉的量緊貼著扣氣血的
+        前後量（計畫三 G4）：打贏升級會讓上限變高，開打前量的話回合裡寫的跟戰報「氣血 -N」對不上。四捨五入跟訊息的
+        「:.0f」是同一個數（兩者都對同一個浮點數做銀行家捨入）。"""
+        before = self._player_hp()
+        toll = team.take_encounter_toll(self.state, self.content, self.world, tier, wild=wild)
+        return toll, round(before - self._player_hp())
+
+    def _play_rounds(self, record, squad: Squad, tier: str, hp_lost: int | None) -> None:
+        """照結果演出回合寫進戰報（武學與成長設計 8.2）。hp_lost 是這一場本人真的扣掉的氣血（_take_toll），回合裡寫的
+        「你氣血 -N」加起來剛好等於它；None 是這一場本來就不扣氣血（劇情戰），對手的出手不寫數字（計畫三 G5）。
+        亂數是自己一份、用「名號｜戰報流水號」當種子（計畫三 G3）：不碰 Game.rng，接下來的擲骰不會位移，
+        同一筆戰報每次演出來都一樣。
+        輸了（含僵持）卻一滴氣血都沒掉（本來就見底，內傷照樣累積）時，跟劇情戰一樣不寫打中沒有：每一下都寫「被你閃開了」，
+        讀起來是對方沒碰到你、你卻輸了、損失裡還有內傷（最後審查 Minor 2）；贏了沒掉血（打得漂亮）寫閃開是通的，不動。"""
+        s, c, p = self.state, self.content, self.state.player
+        if hp_lost == 0 and tier not in team.WIN_TIERS:
+            hp_lost = None
+        rng = random.Random(f"{p.name}|{record.id}")
+        foe = rounds.Foe(name=squad.name, attribute=squad.attribute, agility=rounds.foe_agility(squad.difficulty))
+        our_agility = float(p.stats.get("agi", team.BASE_STAT))
+        played = rounds.play(tier, team.fighters(s, c, self.world), foe, our_agility, hp_lost, rng)
+        record.rounds = battlelog.round_lines(c, played, rng)
+
     # ── 挑戰大勢人物本人（計畫 T4、軍令文件 4.5）─────────────
 
     def _snubbed(self, fid: str) -> bool:
@@ -2133,12 +2291,15 @@ class Game:
             if fig.faction == p.faction:
                 continue
             option_id = f"act:challenge:{fid}"
-            if figures.state_of(s, c, fid).front is None and not fig.challenge_off_front:
+            if not figures.can_challenge(s, c, fid):
                 opts.append(Option(id=option_id, label=f"挑戰{fig.name}（{OFF_FRONT_NOTE}）", enabled=False))
             elif self._snubbed(fid):
                 opts.append(Option(id=option_id, label=f"挑戰{fig.name}（{SNUB_NOTE}）", enabled=False))
             else:
-                opts.append(self._cost_option(option_id, f"挑戰{fig.name}", cost, note=self.challenge_odds(fid) if odds else ""))
+                note = self.challenge_odds(fid) if odds else ""
+                option = self._cost_option(option_id, f"挑戰{fig.name}", cost, note=note)
+                option.wait = BIG_FIGHT_WAIT  # 挑戰本人一律是大場面：按下去先等模型判讀（武學與成長設計 8.3）
+                opts.append(option)
         return opts
 
     def challenge_odds(self, fid: str) -> str:
@@ -2154,8 +2315,10 @@ class Game:
         fig = c.figures[fid]
         squad = figures.squad_of(s, c, fid)
         s.player.stamina -= c.config.action_cost["train"]
-        result = team.fight(s, c, self.world, fig.squad, self.rng, difficulty=squad.difficulty)
+        judged = self._judged(squad)  # 挑戰本人一律是大場面：有鎖外的判讀就用（武學與成長設計 8.3）
+        result = self._fight_with(squad, judged, difficulty=squad.difficulty)
         record = battlelog.new_record(s, c, self.world, squad, result, "event", event=f"挑戰{fig.name}")
+        self._narrate(record, result, judged)
         msgs: list[str] = []
         if result.tier in team.WIN_TIERS:
             msgs += self._battle_rewards(squad, record)
@@ -2166,9 +2329,10 @@ class Game:
             msgs += extra
         elif result.tier == "落敗":
             msgs += self._lose_silver(record)
-        toll = team.take_encounter_toll(s, c, self.world, result.tier)
+        toll, hp_lost = self._take_toll(result.tier)
         record.changes += toll
         msgs += toll
+        self._play_rounds(record, squad, result.tier, hp_lost)  # squad 是照聲威的那一份：對手的身法跟著難度走
         msgs.insert(0, self._file_battle(record))
         return msgs
 
@@ -2609,8 +2773,14 @@ class Game:
     def _event_battle(self, event: Event, choice: Choice) -> list[str]:
         s, c = self.state, self.content
         squad = c.squads[choice.combat]
-        result = team.fight(s, c, self.world, squad.id, self.rng, dodge=False)  # 劇情戰的勝敗是人寫好的：不閃（最終審查 I1）
+        judged = self._judged(squad)  # 打頭目這種大場面：有鎖外的判讀就用（武學與成長設計 8.3）
+        result = self._fight_with(squad, judged, dodge=False)  # 劇情戰的勝敗是人寫好的：不閃（最終審查 I1）
         record = battlelog.new_record(s, c, self.world, squad, result, "event", event.title)
+        self._narrate(record, result, judged)
+        # 回合照開打時的陣容與身法演，所以要在發獎勵、套效果之前：效果可能加身法、教武學、給同伴或部下，
+        # 不能回頭改寫這一場（例如 wolves 打贏身法 +1，不能變成「因為獎勵才先出手」）。
+        # 劇情戰不扣氣血：對手的出手不寫數字（計畫三 G5）
+        self._play_rounds(record, squad, result.tier, None)
         won = result.tier in team.WIN_TIERS
         rewards = self._battle_rewards(squad, record) if won else []
         effect = choice.effect if won else choice.fail_effect
@@ -3472,7 +3642,8 @@ class Game:
     def orders_view(self) -> list[dict]:
         """江湖頁的「本週軍令」卡（計畫 T6）：自己陣營這週的軍令，只給自己陣營看；散人、開關關著是空的。
         截止是下週一 00:00（最後一週寫成季末那一刻，calendar.point 會夾住）。休季時也是空的（FB-045）：
-        收季那一週的軍令截止已經過了，休季什麼都不能做，結算畫面底下不該還有一張叫人去做事的卡。"""
+        收季那一週的軍令截止已經過了，休季什麼都不能做，結算畫面底下不該還有一張叫人去做事的卡。
+        沒達成的打擊軍令多一個 how：怎麼打、他在哪（atlas.strike_how，FB-072）；其他軍令與打完的打擊沒有這個鍵。"""
         s, c = self.state, self.content
         if s.world.ended:
             return []
@@ -3480,11 +3651,14 @@ class Game:
         views = []
         for o in orders.current(s, c, s.player.faction):
             total = sum(o.progress.values())
-            views.append({
+            view = {
                 "id": o.id, "title": orders.title(c, o), "text": o.text, "mine": o.progress.get(name, 0),
                 "progress": min(total, o.quota), "quota": o.quota, "done": o.done,
                 "deadline": self.stamp(calendar.week_start(o.week + 1, c, s.world)),
-            })
+            }
+            if o.template == "strike" and not o.done and o.figure is not None:
+                view["how"] = atlas.strike_how(s, c, o)  # 怎麼打、他在哪（FB-072）；其他軍令與打完的打擊沒有這個鍵
+            views.append(view)
         return views
 
     def season_result(self) -> dict | None:

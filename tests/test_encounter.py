@@ -136,6 +136,26 @@ def test_describe_result_fills_in_names_for_every_tier():
         assert "黑風寨賊人" in text
 
 
+def test_a_shift_moves_the_margin_by_the_advantage():
+    from tianxia.encounter import advantage_shift, luck_half, resolve_encounter
+    assert advantage_shift(100, 15) == pytest.approx(0.15 * 2 * luck_half(100))
+    plain = resolve_encounter(100, 100, random.Random(3))
+    shifted = resolve_encounter(100, 100, random.Random(3), shift=advantage_shift(100, 15))
+    assert shifted.margin == pytest.approx(plain.margin + advantage_shift(100, 15))
+
+
+def test_a_shift_of_p_points_moves_the_win_line_by_p_points_of_luck():
+    """優勢 p 個百分點＝運氣全幅的 p%：運氣是均勻分佈，所以越過門檻的那一段剛好多（少）p 個百分點。難度 100、威力 100：
+    運氣 ±30、險勝門檻 +15，運氣要 ≥ +15 才贏（25%）；優勢 +15 平移 9 點，運氣 ≥ +6 就贏（40%）——剛好多 15 個百分點。"""
+    from tianxia.encounter import advantage_shift, luck_half
+
+    half = luck_half(100)
+    for advantage in (15, -15, 0):
+        shift = advantage_shift(100, advantage)
+        need = 15 - shift  # 運氣至少要這麼多才是險勝以上
+        assert (half - need) / (2 * half) == pytest.approx(0.25 + advantage / 100)
+
+
 def _result(tier):
     return encounter.EncounterResult(tier=tier, margin=-50.0, our_power=10.0, difficulty=60.0)
 

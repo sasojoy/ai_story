@@ -1508,6 +1508,74 @@ def test_a_missing_or_malformed_check_voice_is_a_content_error_that_names_the_fi
         load_content(root)
 
 
+# ── combat_lines.json：回合演出的句型（武學與成長設計 8.2、計畫三 Task 1；S1／Joy 照表手改）──
+
+
+def test_combat_lines_cover_every_attribute(content):
+    content.combat_lines.ours.pop("陰")
+    with pytest.raises(ContentError, match="combat_lines.ours 缺少屬性 陰"):
+        validate(content)
+
+
+def _lines_with(tmp_path, fn):
+    root = copy_fixture(tmp_path)
+    edit_json(root / "combat_lines.json", fn)
+    return root
+
+
+@pytest.mark.parametrize(("where", "line", "complaint"), [
+    ("ours", "连出数招", "繁體"),
+    ("theirs", "掄起兵刃猛砸 3 下", "數字"),
+    ("bare", "揮出１拳", "數字"),
+    ("theirs_any", "   ", "空白"),
+    ("ours", "以【旋風腿】搶攻", "【】"),
+])
+def test_a_combat_line_must_be_traditional_digit_free_and_not_blank(tmp_path, where, line, complaint):
+    """句型接在人名（或「以【武學】」）後面、再接「，對手氣勢 -N」：寫數字會跟回合的數字攪在一起，寫【】會跟武學名撞在一起。"""
+    def edit(data):
+        if where in ("ours", "theirs"):
+            data[where]["剛"].append(line)
+        else:
+            data[where].append(line)
+
+    with pytest.raises(ContentError, match=complaint):
+        load_content(_lines_with(tmp_path, edit))
+
+
+def test_chinese_numerals_are_fine_in_a_combat_line(tmp_path):
+    load_content(_lines_with(tmp_path, lambda d: d["ours"]["剛"].append("一步一步逼上前去")))
+
+
+def test_a_missing_or_malformed_combat_lines_is_a_content_error_that_names_the_file(tmp_path):
+    root = copy_fixture(tmp_path / "a")
+    (root / "combat_lines.json").unlink()
+    with pytest.raises(ContentError, match="combat_lines.json"):
+        load_content(root)
+    root = copy_fixture(tmp_path / "b")
+    (root / "combat_lines.json").write_text('{"ours": {', encoding="utf-8")
+    with pytest.raises(ContentError, match="combat_lines.json"):
+        load_content(root)
+    root = copy_fixture(tmp_path / "c")
+    edit_json(root / "combat_lines.json", lambda d: d.update(their=[]))  # 拼錯的欄位
+    with pytest.raises(ContentError, match="combat_lines.json"):
+        load_content(root)
+    root = copy_fixture(tmp_path / "d")
+    edit_json(root / "combat_lines.json", lambda d: d["ours"].update(雷=["轟然一響"]))  # 不認得的屬性
+    with pytest.raises(ContentError, match="combat_lines.json"):
+        load_content(root)
+
+
+def test_the_real_combat_lines_are_the_designers_table():
+    """正式的句型照設計 session 的內容表（打發話與回合句型 §二，PM 2026-10-05 定）：我方每種屬性五句、對手每種屬性三句、
+    沒學武學與沒有屬性的對手各三句；測試夾具留著計畫起手那一組。"""
+    lines = load_content(ROOT / "content").combat_lines
+    attributes = {"陰", "陽", "剛", "柔", "快", "慢", "虛", "實"}
+    assert set(lines.ours) == attributes and all(len(v) == 5 for v in lines.ours.values())
+    assert set(lines.theirs) == attributes and all(len(v) == 3 for v in lines.theirs.values())
+    assert len(lines.bare) == 3 and len(lines.theirs_any) == 3
+    assert "穩穩踏前一步，招式沉而不亂" in lines.ours["慢"] and "一個箭步衝到你面前" in lines.theirs["快"]
+
+
 def test_s1s_check_lines_file_is_retired():
     """S1 的 check_lines.json（五段 45 句）由 joy 的 check_voice.json（四檔）取代：檔案、模型、載入、驗證都拿掉了。"""
     from tianxia import models
@@ -1521,3 +1589,68 @@ def test_old_content_with_by_on_a_check_still_loads_and_both_values_parse(conten
     """Check.by 讀得進來、不再有作用（每一個事件檢定都看本人的屬性）。"""
     assert content.events["drunk"].choices[0].check.by == "team"
     assert content.events["insight"].choices[0].check.by == "self"
+
+
+# ── 博聞只靠升級的點數增加（設計 6.3；PM 2026-10-05）─────────────────────────
+#
+# 事件、奇遇、隨口應對、新手引導、路上見聞的獎勵都不能給博聞，也不能扣（連寫 0 都不行）；檢定可以照樣考博聞。
+
+
+def _lore_in_choice(event, choice, field, amount):
+    def put(root):
+        edit_json(root / "events" / "test.json", lambda d: d[event]["choices"][choice].setdefault(field, {}).update(
+            stats={"lore": amount}))
+    return put
+
+
+def _lore_in_free_text(field, amount):
+    def put(root):
+        free = {"prompt": "自己想辦法……", "stat": "str", "effect": {"text": "成了。"}, "fail_effect": {}}
+        free[field] = {"stats": {"lore": amount}}
+        edit_json(root / "events" / "test.json", lambda d: d[0].update(free_text=free))
+    return put
+
+
+def _lore_in_tutorial(root):
+    edit_json(root / "tutorial.json", lambda d: d["steps"][1].update(reward={"stats": {"lore": 1}}))
+
+
+def _lore_in_road_sight(root):
+    edit_json(root / "road_sights.json", lambda d: d[1].update(effect={"stats": {"lore": 1}}))
+
+
+LORE_PLACES = [
+    pytest.param(_lore_in_choice(0, 0, "effect", 1), "事件 drunk 選項0", id="event-choice-effect"),
+    pytest.param(_lore_in_choice(0, 0, "fail_effect", -1), "事件 drunk 選項0", id="event-choice-fail-effect-negative"),
+    pytest.param(_lore_in_choice(0, 1, "effect", 0), "事件 drunk 選項1", id="event-choice-zero"),
+    pytest.param(_lore_in_choice(1, 0, "effect", 2), "事件 scroll 選項0", id="qiyu"),
+    pytest.param(_lore_in_free_text("effect", 1), "事件 drunk 隨口應對", id="free-text-effect"),
+    pytest.param(_lore_in_free_text("fail_effect", -1), "事件 drunk 隨口應對", id="free-text-fail-effect"),
+    pytest.param(_lore_in_tutorial, "新手引導 s2", id="tutorial-reward"),
+    pytest.param(_lore_in_road_sight, "路上見聞 sight_wind", id="road-sight"),
+]
+
+
+@pytest.mark.parametrize("put_lore, where", LORE_PLACES)
+def test_no_reward_anywhere_may_add_or_take_lore(tmp_path, put_lore, where):
+    root = copy_fixture(tmp_path)
+    put_lore(root)
+    with pytest.raises(ContentError) as caught:
+        load_content(root)
+    lines = [line for line in str(caught.value).splitlines() if line.startswith(where) and "lore" in line]
+    assert lines and all("博聞只能靠升級的點數增加" in line for line in lines), str(caught.value)
+    assert len(lines) == 1, str(caught.value)  # 同一處只報一次，不連同別的規則一起吵
+
+
+def test_a_check_may_still_test_lore(tmp_path):
+    """事件檢定與隨口應對可以考博聞（看的是本人的點數），只是獎勵不能給。"""
+    root = copy_fixture(tmp_path)
+    edit_json(root / "events" / "test.json", lambda d: d[0]["choices"][0]["check"].update(stat="lore"))
+    assert load_content(root).events["drunk"].choices[0].check.stat == "lore"
+
+
+def test_the_free_text_and_bot_reward_lists_leave_lore_out():
+    from tianxia import bot_policy, content
+
+    assert "lore" not in content.FREE_TEXT_REWARDS and "lore" not in bot_policy.REWARD_STATS
+    assert {"str", "agi", "con", "wis"} <= set(content.FREE_TEXT_REWARDS)  # 另外四項不動

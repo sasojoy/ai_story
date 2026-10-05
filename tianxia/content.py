@@ -12,6 +12,7 @@ import json
 import math
 import re
 from pathlib import Path
+from typing import get_args
 
 from pydantic import BaseModel, ValidationError
 
@@ -19,9 +20,9 @@ from .companion_agent import DIALOGUE_TAGS
 from .front_lines import BAND_KEYS, GEJU_KEYS
 from .materials import TIER_NAMES
 from .models import (
-    FRONT_KEY, ROADS, STATS, BattleDef, CharacterDef, CheckVoice, Condition, Config, Content, CraftNames, Effect, Event,
-    FigureDef, FollowerDef, Foreshadows, FrontLines, InsightDef, Location, OrdersContent, PromotionDef,
-    MapLayout, Material, RoadSight, Scenario, Sect, SimRumor, SkillDef, Squad, TimetableEvent, Tutorial,
+    FRONT_KEY, ROADS, STATS, Attribute, BattleDef, CharacterDef, CheckVoice, CombatLines, Condition, Config, Content,
+    CraftNames, Effect, Event, FigureDef, FollowerDef, Foreshadows, FrontLines, InsightDef, Location, OrdersContent,
+    PromotionDef, MapLayout, Material, RoadSight, Scenario, Sect, SimRumor, SkillDef, Squad, TimetableEvent, Tutorial,
 )
 from .naming import name_problem
 from .zh import to_traditional
@@ -65,6 +66,7 @@ def load_content(root: Path, profile: str | None = None) -> Content:
         insights=_index(InsightDef, _read(root / "insights.json")),
         materials=_index(Material, _read(root / "materials.json")),
         craft_names=CraftNames(**_read(root / "craft_names.json")),
+        combat_lines=_combat_lines(root / "combat_lines.json"),
         check_voice=_check_voice(root / "check_voice.json"),
         front_lines=_front_lines(root / "front_lines.json"),
         banned_names=_read(root / "banned_names.json"),
@@ -135,7 +137,8 @@ def _scale_marks(obj, scale: float) -> None:
 
 
 MARKS_TOKEN = re.compile(r"\{marks:([^{}]+)\}")  # 文字裡的模糊人數（rules.fill_marks）
-FREE_TEXT_REWARDS = ("silver", "fame", "good", "xinde", "str", "agi", "con", "wis", "lore")  # 隨口應對的獎勵不能超過檢定選項的這幾項
+LORE = "lore"  # 博聞（team.LORE）：只靠升級的點數增加，任何獎勵都不能給、不能扣（validate 的 no_lore）
+FREE_TEXT_REWARDS = ("silver", "fame", "good", "xinde", "str", "agi", "con", "wis")  # 隨口應對的獎勵不能超過檢定選項的這幾項（博聞不在內：一律不能給）
 
 
 def _read(path: Path):
@@ -173,6 +176,19 @@ def _check_voice(path: Path) -> CheckVoice:
         raise ContentError(f"check_voice.json：不是合法的 JSON：{e}") from e
     except (ValidationError, TypeError) as e:
         raise ContentError(f"check_voice.json：{e}") from e
+
+
+def _combat_lines(path: Path) -> CombatLines:
+    """content/combat_lines.json（回合演出的句型，武學與成長設計 8.2；S1／Joy 照內容表手改）：必備的檔；找不到、
+    不是合法的 JSON、欄位或屬性寫錯都改報 ContentError 並指出是這個檔（跟 check_voice.json 一樣）。"""
+    if not path.exists():
+        raise ContentError(f"combat_lines.json：找不到檔案（應該在 {path}）")
+    try:
+        return CombatLines(**_read(path))
+    except json.JSONDecodeError as e:
+        raise ContentError(f"combat_lines.json：不是合法的 JSON：{e}") from e
+    except (ValidationError, TypeError) as e:
+        raise ContentError(f"combat_lines.json：{e}") from e
 
 
 def _front_lines(path: Path) -> FrontLines:
@@ -306,6 +322,25 @@ def check_front_lines(c: Content, need) -> None:
     for key, pool in lines.geju.items():
         need(key in GEJU_KEYS, f"front_lines.geju：不認得的鍵 {key}（只有 {'、'.join(GEJU_KEYS)}）")
         check_pool(f"front_lines.geju.{key}", pool)
+
+
+def check_combat_lines(c: Content, need) -> None:
+    """回合演出的句型（content/combat_lines.json，武學與成長設計 8.2；S1／Joy 照內容表手改）：我方八種屬性都要有句子
+    （武學一定有屬性）；對手的每種屬性可以不寫（退回 theirs_any）。每一句都不能是空的、只用繁體中文、不能寫阿拉伯數字
+    或百分比（後面接的「對手氣勢 -N」「你氣血 -N」才是數字，句子裡再寫數字會攪在一起；國字的「一步一步」可以），也不能寫
+    【】（武學名的「以【某某】」由引擎加上）。"""
+    lines = c.combat_lines
+    for attribute in get_args(Attribute):
+        need(bool(lines.ours.get(attribute)), f"combat_lines.ours 缺少屬性 {attribute}")
+    pools = [(f"combat_lines.ours.{a}", pool) for a, pool in lines.ours.items()]
+    pools += [(f"combat_lines.theirs.{a}", pool) for a, pool in lines.theirs.items()]
+    pools += [("combat_lines.bare", lines.bare), ("combat_lines.theirs_any", lines.theirs_any)]
+    for where, pool in pools:
+        for text in pool:
+            need(bool(text.strip()), f"{where}：有空白的句子")
+            need(to_traditional(text) == text, f"{where}：文字只能用繁體中文（「{text[:12]}」）")
+            need(not NUMBER_IN_TEXT.search(text), f"{where}：不能寫數字或百分比，回合的數字由引擎接在後面（「{text[:12]}」）")
+            need("【" not in text and "】" not in text, f"{where}：不能寫【】，武學名由引擎加上（「{text[:12]}」）")
 
 
 def check_timetable(c: Content, need, known, front_ids: list[str], trend_ids: set[str]) -> None:
@@ -796,7 +831,13 @@ def validate(c: Content) -> None:
         for sub in cond.any_of:
             check_condition(where, sub)
 
+    def no_lore(where: str, eff: Effect) -> None:
+        """博聞只靠升級的點數增加（設計 6.3；PM 2026-10-05）：任何效果的 stats 都不能有 lore，給、扣、寫 0 都不行。
+        檢定（Check／隨口應對的 stat）可以照樣考博聞，那不是獎勵。"""
+        need(LORE not in eff.stats, f"{where}：stats 不能有 {LORE}（博聞只能靠升級的點數增加，事件、奇遇、隨口應對的獎勵都不能給、也不能扣）")
+
     def check_effect(where: str, eff: Effect) -> None:
+        no_lore(where, eff)
         for key, n in eff.marks.items():
             check_mark_key(where, key)
             need(1 <= n <= 3, f"{where}：痕跡 {key} 一次只能加 1～3（不能減）")
@@ -939,6 +980,7 @@ def validate(c: Content) -> None:
         need(bool(word.strip()), "banned_names 裡有空字串")
     check_check_voice(c, need)
     check_front_lines(c, need)
+    check_combat_lines(c, need)
     # 沒寫 drops 的對手走 materials.py 依難度的預設掉落表，所以每一階都得有素材可挑。
     for tier in sorted(TIER_NAMES):
         need(
@@ -1054,7 +1096,10 @@ def validate(c: Content) -> None:
             f"{where}：小收穫只能用 stats 或 materials（不能寫 text、rumor 或其他效果）",
         )
         need(len(eff.stats) + len(eff.materials) <= 1, f"{where}：小收穫一則最多一種")
+        no_lore(where, eff)
         for stat, amount in eff.stats.items():
+            if stat == LORE:  # no_lore 已經報過，不再用「只能是銀兩或心得」重複報一次
+                continue
             cap = ROAD_SIGHT_CAPS.get(stat)
             need(cap is not None and 0 < amount <= cap, f"{where}：stats 只能是銀兩 1～10 或心得 1～5（寫的是 {stat} {amount}）")
         known(where, eff.materials, c.materials, "素材")
