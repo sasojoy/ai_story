@@ -21,10 +21,11 @@ def practice_hint(state: GameState, content: Content) -> str | None:
     心得的去處有兩個：鍛鍊（免費，已決定維持免費）與**煉製**（真的要花心得，見 craft.py）。
     實測隨機玩完一整季的心得收入只有 20~96，所以門檻故意訂得低；真正需要這句話的是從來沒
     進過門下、心得一路擱著而武學還停在第一成的玩家。兩門都練滿、又煉不動時就不再提示，
-    免得變成嘮叨；文字也只列出真正做得到的那幾件事。
+    免得變成嘮叨；文字也只列出真正做得到的那幾件事。休季時什麼都不能做，也不提示（FB-047）。
+    去處照底部分頁的名字寫「修練」「煉製」（舊的門下頁已經拆成這兩頁，FB-047）。
     """
     xinde = state.player.stats.get("xinde", 0)
-    if xinde < content.config.xinde_hint_threshold:
+    if xinde < content.config.xinde_hint_threshold or state.world.ended:
         return None
     member = state.player.member
     todo = [
@@ -36,12 +37,12 @@ def practice_hint(state: GameState, content: Content) -> str | None:
     ]
     parts = []
     if todo:
-        parts.append(f"鍛鍊{'、'.join(todo)}（不花一分一毫）")
+        parts.append(f"去「修練」鍛鍊{'、'.join(todo)}（不花一分一毫）")
     if _can_afford_a_craft(state, content, xinde):
-        parts.append("拿素材煉製新功法")
+        parts.append("到「煉製」拿素材煉製新功法")
     if not parts:
         return None
-    return f"💡 你已攢下 {xinde} 點心得。去「門下」{'，或'.join(parts)}。"
+    return f"💡 你已攢下 {xinde} 點心得。{'，或'.join(parts)}。"
 
 
 def _can_afford_a_craft(state: GameState, content: Content, xinde: int) -> bool:

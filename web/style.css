@@ -102,13 +102,21 @@ ul { padding-left: 1.3em; margin: 0.4em 0; }
   flex: none; width: 40px; height: 40px; border-radius: 12px; border: 1px solid var(--line);
   background: var(--card); display: grid; place-items: center; cursor: pointer; font-size: 18px;
 }
-.vitals { display: grid; grid-template-columns: 1fr 1fr auto auto; gap: 6px 10px; align-items: center; margin-top: 6px; }
+/* 氣血條寬一點：有內傷時左邊寫「氣血 N/M」、右邊寫「傷 N」，兩段之間要留得出空 */
+.vitals { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) auto auto; gap: 6px 10px; align-items: center; margin-top: 6px; }
 .bar { position: relative; height: 20px; border-radius: 10px; background: var(--card-2); overflow: hidden; }
 .bar > i { position: absolute; inset: 0 auto 0 0; border-radius: 10px; transition: width 0.4s ease; }
 .bar.stam > i { background: var(--stam); }
 .bar.hp > i { background: var(--hp); }
-.bar.hp > b { position: absolute; inset: 0 0 0 auto; background: repeating-linear-gradient(45deg, transparent 0 3px, rgba(0,0,0,0.18) 3px 6px); }
+/* 內傷那一截（FB-049）：用氣血的紅畫淡斜紋、左邊一道細線，看得出是氣血條上被佔掉的一段，不像一個小破圖 */
+.bar.hp > b {
+  position: absolute; inset: 0 0 0 auto; border-left: 1.5px solid var(--hp);
+  background: repeating-linear-gradient(45deg, color-mix(in srgb, var(--hp) 40%, transparent) 0 2px, transparent 2px 5px);
+}
 .bar > span { position: relative; display: block; font-size: 11px; line-height: 20px; padding: 0 8px; font-weight: 600; color: var(--ink); white-space: nowrap; }
+/* 氣血條上的字壓在紅條、底色與斜紋上都要讀得清楚：描一圈底色。「傷 N」靠右，落在斜紋那一頭 */
+.bar.hp > span { text-shadow: 0 0 2px var(--card), 0 0 2px var(--card); }
+.bar.hp > span.inj { position: absolute; top: 0; right: 0; padding: 0 7px; }
 .num { font-size: 13px; font-weight: 600; white-space: nowrap; }
 .num em { font-style: normal; font-weight: 400; color: var(--ink-2); font-size: 11px; margin-right: 2px; }
 .more-stats { font-size: 12px; color: var(--ink-2); margin-top: 6px; line-height: 1.7; }
@@ -244,7 +252,7 @@ details.fold.bulletin > .fold-body { border-color: var(--gold); max-height: 50vh
 .move-mode > span { flex: none; align-self: center; padding: 0 4px 0 9px; font-size: 13px; color: var(--ink-2); }
 .move-mode button { min-height: 48px; } /* 觸控目標跟 .btn 一樣大 */
 /* 路上的三個捷徑（路上設計 3.3）：一列，手機上擠不下就換行；觸控目標同 .btn */
-.road-links { display: flex; flex-wrap: wrap; gap: 8px; margin: -4px 0 12px; }
+.road-links { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; }
 .road-links .btn { flex: 1 1 auto; min-height: 48px; }
 .free { display: flex; gap: 8px; margin-bottom: 12px; }
 .free .input { flex: 1; }
@@ -323,8 +331,9 @@ details.fold.bulletin > .fold-body { border-color: var(--gold); max-height: 50vh
 .clue { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; border: 1px dashed var(--line); background: var(--card); border-radius: 10px; padding: 5px 10px; font-size: 13px; }
 .clue b { font-weight: 600; }
 .clue span { color: var(--ink-2); font-size: 12px; }
-.sticky-act { position: sticky; bottom: calc(68px + var(--bottom)); z-index: 5; padding-top: 6px; background: linear-gradient(transparent, var(--paper) 30%); }
-.travel-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+/* 煉製頁的「開爐煉製」與輿圖的步行／趕路／疾行排在內容裡、不黏在底部（FB-048）：黏著時會蓋住底下的字 */
+.act-row { margin-bottom: 12px; }
+.travel-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 10px 0 12px; }
 .travel-row .btn:first-child { grid-column: 1 / -1; }
 .travel-row .btn:not(:first-child) { min-height: 44px; padding: 8px 6px; font-size: 14px; }
 .travel-row .btn { margin: 0; }

@@ -18,7 +18,9 @@ LOG_BREAK = "\x1e"  # GameState.log 中每次行動結束的分隔標記（不�
 MAX_ENTRIES = 30  # 存檔保留最近幾則
 LEGACY_TIME = -1.0  # 舊存檔的 log 轉來的紀錄不知道時間
 TITLE_MAX = 40  # 舊存檔轉來的標題最長幾個字，超過的截斷
-MENXIA = "門下"  # 門下操作那一則的標題；連續的會併成一則
+# 修練頁（自創、鍛鍊、療傷、改練）與煉製頁的動作那一則的標題，照底部分頁的名字（FB-047）；同一種連續的會併成一則
+PRACTICE = "修練"
+CRAFT = "煉製"
 WORLD_NEWS = "江湖大事"  # 時間流逝時發生的江湖大事那一則的標題；連續的會併成一則
 NEWS_PREFIXES = ("【江湖大事】", "【主線】", "【主線改寫】")  # world.py 寫出的大勢門檻、世界事件、主線變化
 
@@ -88,12 +90,17 @@ def subtract_changes(changes: list[str], shown: list[str]) -> list[str]:
     return out
 
 
+LOSS_WHEN_UP = frozenset({"內傷"})  # 多了是壞事的數值：增加上紅、減少上綠（FB-049：「內傷 +3」以前是收穫的綠）
+
+
 def change_class(change: str) -> str:
-    """數值變化的顏色：增加 tx-up（綠）、減少 tx-down（紅）；零或看不出正負時不上色。"""
+    """數值變化的顏色：增加 tx-up（綠）、減少 tx-down（紅）；零或看不出正負時不上色。
+    LOSS_WHEN_UP 裡的（內傷）反過來：多了是損失。"""
     parsed = _parse(change)
     if parsed is None or parsed[1] == 0:
         return ""
-    return "tx-up" if parsed[1] > 0 else "tx-down"
+    gain = (parsed[1] > 0) != (parsed[0][0] in LOSS_WHEN_UP)
+    return "tx-up" if gain else "tx-down"
 
 
 # ── 建立紀錄 ──────────────────────────────────────────
