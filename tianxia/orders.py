@@ -23,6 +23,7 @@ SIGN = {"guan": -1, "huang": 1}  # 往己方推：戰況 0 是官軍穩控、100
 ENEMY = {"guan": "huang", "huang": "guan"}
 TOP = 3  # 達成時陣營軍情列出前幾名（軍令文件第二節）
 ISSUED = "本週軍令："  # 發令那一則陣營軍情的開頭
+OPENING_WEEK = 1  # 開局週（OrderWhen.opening_fronts 只在這一週放寬）
 
 
 def active(state: GameState, content: Content) -> bool:
@@ -121,9 +122,13 @@ def siege_places(content: Content, faction: str, front: str) -> list[str]:
 
 
 def _issuable(state: GameState, content: Content, t: OrderTemplate, front: str, week: int) -> bool:
-    """這種軍令這週在這條戰線發不發得出來（濃縮版內容表 3.1「什麼時候發」）；攻城另外要那條戰線打得到敵方隊伍。"""
+    """這種軍令這週在這條戰線發不發得出來（濃縮版內容表 3.1「什麼時候發」）；攻城另外要那條戰線打得到敵方隊伍。
+    例外：第 1 週（OPENING_WEEK）、這條戰線在 when.opening_fronts 裡就直接發，front_min／front_max、event_within_weeks、
+    losing_by 都不看（FB-054，新手第一週要有一道走得到的軍令）；攻城的「打得到敵方隊伍」照舊先看。"""
     if t.kind == "siege" and not siege_places(content, t.side, front):
         return False
+    if week == OPENING_WEEK and front in t.when.opening_fronts:  # 開局週：這條戰線不看局勢（FB-054）
+        return True
     when, v = t.when, _value(state, content, front)
     if when.front_min is not None and v < when.front_min:
         return False

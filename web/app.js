@@ -36,6 +36,7 @@
   ];
   // 照「走法」切換的選項：「前往」與路上的「折返」（路上設計 3.2）。切換鈕緊貼在第一個這種選項上面（A4／W6）
   const followsMode = (id) => id.startsWith("move:") || id.startsWith("road:back");
+  const ROAD_TASKS = /^road:(think|ask|survey|gather)$/; // 路上的四樣小事（engine.ROAD_TASKS），排成 2×2（FB-055）
   // 路上的江湖頁多三個捷徑（路上設計 3.3）：是頁面切換，不是引擎的行動
   const ROAD_LINKS = [
     { tab: "map", name: "打開輿圖改去別處" },
@@ -56,6 +57,8 @@
     nowOpen: null, // 江湖頁「剛剛」展開的那一則（記內容本身）；換成新的一則就收回（A4）
     boardOpen: null, // 江湖頁公告卡展開著的那一週（週次）；收起或換週就不再對得上（FB-039）
     ordersShut: null, // 江湖頁「本週軍令」收起來的那一週；換週就重新展開（計畫 T6）
+    sceneOpen: false, // 在路上時場景那段說明展開著嗎（預設只露兩行，FB-055）；下了路就清掉
+    guideRoad: null, // 在路上時說書人的框展開著的那一句（內容本身）；路上預設收成一行，下了路就清掉（FB-055）
     busy: false,
     menxia: null,
     message: "",
@@ -465,13 +468,15 @@
 
   // 說書人的對話框（引導重做設計 8.1、6.2）：行動列（或事件的選項）上方，框上寫說話的人（之後換成師父、引薦人）。
   // 做完一步先列「✔ 完成」與獎勵，再接下一步的話。可以收起成一行；記的是收起的那一句，換了下一句就自己展開。
-  // 結語有「知道了」，按了就不再出現
+  // 結語有「知道了」，按了就不再出現。在路上預設收成一行（FB-055）：框、走法與路上的五個選項擠不進第一屏，折返被分頁列蓋住；
+  // 路上展開的記在 S.guideRoad（記的是那一句，下了路就清掉），輪詢重畫不會把它收回去
   const GUIDE_KEY = "tx-guide-shut";
   function guideShut() { try { return localStorage.getItem(GUIDE_KEY); } catch (e) { return null; } }
   function setGuideShut(text) { try { if (text) localStorage.setItem(GUIDE_KEY, text); else localStorage.removeItem(GUIDE_KEY); } catch (e) { /* 存不了就只在這一頁有效 */ } }
-  function guideHtml(g) {
+  function guideHtml(g, onRoad) {
+    if (!onRoad) S.guideRoad = null; // 沒有框的時候也要清（FB-055）
     if (!g) return "";
-    if (!g.end && guideShut() === g.text) {
+    if (!g.end && (guideShut() === g.text || (onRoad && S.guideRoad !== g.text))) {
       return `<button class="guide-line" data-act="guide-open" aria-label="展開${esc(g.speaker)}的話"><b>${esc(g.speaker)}</b>：${esc(g.text)}</button>`;
     }
     const done = g.done.length ? `<div class="guide-done">${g.done.map((d) => d.startsWith("✔")
@@ -511,13 +516,29 @@
           <button class="${S.moveMode === x.id ? "on" : ""}" data-act="move-mode" data-mode="${x.id}" aria-pressed="${S.moveMode === x.id}">${x.name}</button>`).join("")}
         </div>`
       : "";
+    // 在路上，走法排在整排選項底下（FB-055）：路上的五個選項要全在第一屏，走法那一列（54 px）排在前面會把最後一個擠到分頁列底下
+    const modesLast = m.on_road;
+    // 路上的四樣小事排成 2×2（FB-055）：折返、喊停（多站的路才有）各佔一整列，四樣小事共兩列，再多一顆喊停、狀態列多一行提示，
+    // 最後一顆也不會掉到分頁列底下。標籤「名（補充）」拆成兩行：名字一行、補充小字一行
+    const isTask = (o) => m.on_road && ROAD_TASKS.test(o.id);
+    const firstTask = opts.findIndex(isTask);
+    const lastTask = opts.length - 1 - [...opts].reverse().findIndex(isTask);
+    const taskButton = (o) => {
+      const [, name, note] = o.label.match(/^(.*?)（(.*)）$/) || [null, o.label, ""];
+      return `<button class="btn task" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}><span class="t-name">${esc(name)}</span>${note ? `<span class="t-note">${esc(note)}</span>` : ""}</button>`;
+    };
     const menu = idleMenu(m) ? actionBar(m) : `<div class="options">${opts.map((o, i) => o.id === FREE_TEXT_OPTION && S.answering && o.enabled ? `
-        <form class="free answer" id="answer-form"><input class="input" name="text" maxlength="20" placeholder="${esc(o.label)}（20字內）" aria-label="${esc(o.label)}"><button class="btn primary small" type="submit">說出口</button></form>` : `${i === firstMove ? modes : ""}
+        <form class="free answer" id="answer-form"><input class="input" name="text" maxlength="20" placeholder="${esc(o.label)}（20字內）" aria-label="${esc(o.label)}"><button class="btn primary small" type="submit">說出口</button></form>` : isTask(o) ? `${i === firstTask ? '<div class="road-tasks">' : ""}${taskButton(o)}${i === lastTask ? "</div>" : ""}` : `${i === firstMove && !modesLast ? modes : ""}
         <button class="btn ${followsMode(o.id) ? "go" : ""}" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}>
           <span class="k">${o.id.startsWith("move:") ? "→" : o.id.startsWith("road:back") ? "↩" : i + 1}</span><span>${esc(o.label)}</span>
-        </button>`).join("")}
+        </button>`).join("")}${modesLast ? modes : ""}
       </div>`;
-    const scene = `<section class="card scene">${m.scene}</section>`;
+    // 在路上，那段固定的說明只露兩行、點了看全文（FB-055）：剛按完路上小事時「剛剛」的結果卡會長高，狀態列又有提示的話，
+    // 最後一排小事會掉到分頁列底下；說明的內容路上的選項與捷徑本來就寫著。展開記在 S.sceneOpen，下了路就清掉
+    if (!m.on_road) S.sceneOpen = false;
+    const scene = m.on_road
+      ? `<section class="card scene road${S.sceneOpen ? "" : " clamp"}" data-act="scene-more" role="button" tabindex="0" aria-expanded="${!!S.sceneOpen}">${m.scene}</section>`
+      : `<section class="card scene">${m.scene}</section>`;
     const tail = `<div class="mini" data-act="tab" data-tab="map" role="button" aria-label="展開輿圖">${m.minimap}</div>
       <button class="linkish" data-act="news" data-news="journal">看江湖紀錄 ›</button>`;
     // 第一季把 beta 的主線關掉、其他也都沒有東西時，quest 是空的：這一塊不畫，由本週大事卡與倒數撐著（計畫 T8）
@@ -542,7 +563,10 @@
     // 劇情文字在上、行動在下（企劃者 2026-10-04）。行動列只有一排，375×812 上「剛剛」、場景與整排行動都在第一屏。
     // 路上的三個捷徑（links）緊接在場景（「也可以打開輿圖改去別處，或去修練、煉製」那一段）底下、選項上面：
     // 排在路上的五六顆選項底下時落在第一屏外，要捲才看得到（FB-048）。說書人的話緊貼在行動上方（引導重做設計 8.1）
-    const guide = guideHtml(m.guide);
+    const guide = guideHtml(m.guide, m.on_road);
+    // 在路上（FB-055）：路上的五個選項要全在第一屏（375×812），所以公告、主線與說書人的框都排在選項底下——它們都是收著的一行，
+    // 不是這一刻要按的；捷徑還是緊接在場景底下（FB-048）
+    if (m.on_road) return `${resultCard}${now}${scene}${links}${free}${menu}${guide}${board}${quest}${orderCard}${fronts}${tail}`;
     return `${resultCard}${board}${quest}${now}${scene}${links}${guide}${free}${menu}${orderCard}${fronts}${tail}`;
   }
 
@@ -1248,9 +1272,10 @@
           if (S.main.admin) { S.admin = await api("/api/admin"); render(); } // 每次打開都重抓：時刻表與可以定的結果會變
           break;
         case "sheet-close": S.sheet = false; render(); break;
-        case "guide-shut": setGuideShut(S.main.guide && S.main.guide.text); renderPage(); break;
-        case "guide-open": setGuideShut(null); renderPage(); break;
+        case "guide-shut": setGuideShut(S.main.guide && S.main.guide.text); S.guideRoad = null; renderPage(); break;
+        case "guide-open": setGuideShut(null); S.guideRoad = S.main.guide && S.main.guide.text; renderPage(); break;
         case "guide-more": S.guideFull = S.guideFull === (S.main.guide && S.main.guide.text) ? null : S.main.guide && S.main.guide.text; renderPage(); break;
+        case "scene-more": S.sceneOpen = !S.sceneOpen; renderPage(); break;
         case "guide-ack": await doMain("guide_ack"); break;
         case "do": S.sheet = false; await doMain(el.dataset.op); break;
         case "admin": {

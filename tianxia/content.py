@@ -378,6 +378,8 @@ def check_orders(c: Content, need, known, front_ids: list[str]) -> None:
         for text in (t.text, t.faction_rumor, t.leak_rumor):
             for slot in re.findall(r"\{[^{}]*\}", text):
                 need(slot in ORDER_SLOTS, f"{where}：不認得的插槽 {slot}")
+        for front in t.when.opening_fronts:
+            need(front in front_ids and front in o.slots, f"{where}：開局週的戰線 {front} 不是有插槽的戰線")
     for front, by_side in o.slots.items():
         need(front in front_ids, f"orders.json 的 slots：{front} 不是戰線")
         for side, slot in by_side.items():
