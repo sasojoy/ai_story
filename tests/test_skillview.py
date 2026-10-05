@@ -744,6 +744,26 @@ def test_art_rows_name_the_parents_of_a_blended_art(state, content, world):
     assert "衍生" not in rows["basic_fist"]["card"] and "衍生" not in rows["lake_kick"]["card"]
 
 
+def test_the_worn_slot_card_of_a_blended_art_names_both_parents(state, content, world):
+    """身上那一欄的功法卡（detail）也寫「由…衍生」，不只清單裡的（art_rows）；穿的不是合成的就不寫。"""
+    state.player.member.wugong_id = "basic_fist"
+    state.player.arts = ["lake_kick"]
+    state.player.stats["xinde"] = 100
+    art, _ = fusion.blend(state, content, world, None, "basic_fist", "lake_kick")
+    assert "衍生" not in skillview.detail(state, content, world, "武學")  # 還穿著粗淺拳腳
+    team.switch_art(state, content, world, art.id)
+    assert art.kind == "武學" and "由【粗淺拳腳】與【湖邊腿法】衍生" in skillview.detail(state, content, world, "武學")
+
+
+def test_parent_names_skip_a_source_that_is_gone_and_are_empty_for_other_arts(content, world):
+    fist = team.resolve_art("basic_fist", content, world)
+    assert skillview.parent_names(fist, content, world) == []
+    art = generate_from_name("踏浪拳", "武學", "踏浪拳").model_copy(
+        update={"origin": "fused", "parents": ["basic_fist", "ghost"]},
+    )
+    assert skillview.parent_names(art, content, world) == ["粗淺拳腳"]  # 找不到的那門不寫，card 只認剛好兩個
+
+
 def test_the_card_of_a_blended_art_names_both_parents():
     art = generate_from_name("烈風腿", "武學", "烈風腿").model_copy(
         update={"origin": "fused", "creator": "甲", "parents": ["a", "b"]},

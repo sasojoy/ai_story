@@ -2901,7 +2901,9 @@ class Game:
         不是自己的、或內容與共用世界裡都找不到時回一句話。"""
         level = library.level_of(self.state, art_id)
         art = None if level is None else team.player_art(self.state, self.content, self.world, art_id)
-        return "（找不到這門功法。）" if art is None else skillview.art_card(art, level)
+        if art is None:
+            return "（找不到這門功法。）"
+        return skillview.art_card(art, level, parent_names=skillview.parent_names(art, self.content, self.world))
 
     def member_card(self, key: str) -> str:
         return skillview.member_card(self.state, self.content, self.world, key)

@@ -1,7 +1,7 @@
 /* 天下大勢的網頁前端：沒有建置步驟、不靠外部函式庫。
  *
  * 畫面只有三種：登入、取名號、遊戲。遊戲畫面 = 頂上的狀態列 + 一頁內容 + 底部五個分頁：
- *   江湖（場景與選項）、修練（練成、閉關、武學與意境、修練與熔煉、名冊）、煉製（太極火爐：武學＋意境合成、意境＋意境合併）、
+ *   江湖（場景與選項）、修練（練成、閉關、武學與意境、修練與熔煉、名冊）、煉製（太極火爐：武學＋意境、武學＋武學合成，意境＋意境合併）、
  *   輿圖、見聞（戰報、大勢、傳聞、江湖史、紀錄）。
  * 設定與管理者工具收在右上角的抽屜裡。
  *
@@ -68,7 +68,7 @@
     kind: "武學",
     artOpen: null, // 修練頁武學清單裡點開的那一門（id）；切分頁、改練成功之後收起
     legendTick: {}, // 修練頁每一門武學「服下破境丹」勾了沒（id → true）；預設不勾，輪詢重畫不會悄悄取消，修練送出之後清掉
-    forgeSel: [], // 爐裡放的：{type: "art" | "ins", id}，最多兩樣、武學最多一門（武學＋意境＝合成，兩個意境＝合併）
+    forgeSel: [], // 爐裡放的：{type: "art" | "ins", id}，最多兩樣、武學最多兩門（武學＋意境、武學＋武學＝合成，兩個意境＝合併）
     wheelSel: null, // 江湖頁行動列展開的那一格（目前只有 move）
     forgeLine: "",
     map: null,
@@ -734,20 +734,25 @@
 
   // ── 煉製 ──
   const QUALITY_RANK = { 下品: 1, 中品: 2, 上品: 3, 絕學: 3 };
-  // 爐裡放的東西 → 送給伺服器的 body
+  // 爐裡放的東西 → 送給伺服器的 body（第二門武學放 other_art，設計 12.3）
   function forgeBody() {
-    const art = S.forgeSel.find((p) => p.type === "art");
-    return { art: art ? art.id : null, insights: S.forgeSel.filter((p) => p.type === "ins").map((p) => p.id) };
+    const arts = S.forgeSel.filter((p) => p.type === "art").map((p) => p.id);
+    return {
+      art: arts[0] ?? null,
+      other_art: arts[1] ?? null,
+      insights: S.forgeSel.filter((p) => p.type === "ins").map((p) => p.id),
+    };
   }
-  // 一門武學＋一個意境（合成）或兩個意境（合併）才放得滿
+  // 一門武學＋一個意境、兩門武學（合成），或兩個意境（合併）才放得滿
   function forgeReady() {
     const b = forgeBody();
+    if (b.other_art !== null) return b.insights.length === 0;
     return (b.art !== null && b.insights.length === 1) || (b.art === null && b.insights.length === 2);
   }
   function pick(type, id) {
     if (S.busy) return; // 開爐等結果的時候（首次取名要等模型）爐子不動
     if (S.forgeSel.length >= 2) { toast("爐裡已經放滿了，點上面的拿出來再換。"); return; }
-    if (type === "art" && S.forgeSel.some((p) => p.type === "art")) { toast("一爐只能放一門武學，另一樣放意境。"); return; }
+    if (type === "art" && S.forgeSel.some((p) => p.type === "art" && p.id === id)) return; // 同一門不放兩次（下面那顆 chip 也是灰的）
     if (type === "art") S.forgeSel.unshift({ type, id }); else S.forgeSel.push({ type, id }); // 武學放左邊
     renderPage();
     updateForgeLine();
@@ -774,7 +779,7 @@
       ${furnaceSvg([slotOf(S.forgeSel[0]), slotOf(S.forgeSel[1])], ready)}
       <div class="card" id="forge-line">${S.forgeLine || x.forge_line}</div>
       <div class="act-row"><button class="btn primary" id="forge" data-act="forge" ${ready ? "" : "disabled"}>開爐</button></div>
-      <div class="label">武學 <small class="muted">一爐放一門，另一樣放意境</small></div>
+      <div class="label">武學 <small class="muted">一門配一個意境，或兩門一起放</small></div>
       <div class="chips">${x.owned_arts.map((a) => `
         <button class="chip r${QUALITY_RANK[a.quality] || 1} ${inPot(a.id) ? "used" : ""}" data-act="pick" data-type="art" data-id="${esc(a.id)}" ${inPot(a.id) ? "disabled" : ""}>
           <b>${esc(a.name)}</b><small>${esc(a.quality)}・屬${esc(a.attribute)}</small></button>`).join("")}</div>
@@ -1717,7 +1722,7 @@
       const changed = trimmed || shown(x) !== shown(was)
         || (tab === "practice" && old.status.injury !== S.main.status.injury); // 療傷鈕看的是內傷
       if (!changed) {
-        // 合併要花體力、體力隨時間回：爐裡放著東西時說明裡的「體力不足」要跟著更新（只換那一行，不整頁重畫）
+        // 合成與合併都要花體力、體力隨時間回：爐裡放著東西時說明裡的「體力不足」要跟著更新（只換那一行，不整頁重畫）
         if (tab === "craft" && S.forgeSel.length && old.status.stamina !== S.main.status.stamina) updateForgeLine();
         return;
       }

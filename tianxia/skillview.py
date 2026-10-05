@@ -123,12 +123,10 @@ def art_rows(state: GameState, content: Content, world: WorldStateStore) -> list
         else:
             note = problem
         stuck = melt_problem(state, art_id, art.name)  # 跟 library.melt_art 同一個判斷
-        parents = (team.resolve_art(pid, content, world) for pid in art.parents)
-        parent_names = [parent.name for parent in parents if parent is not None]
         rows.append({
             "id": art_id, "name": art.name, "kind": art.kind, "quality": art.quality, "attribute": art.attribute,
             "level": level, "worn": art_id in (member.neigong_id, member.wugong_id), "insight": insight_name,
-            "card": art_card(art, level, insight_name, parent_names),
+            "card": art_card(art, level, insight_name, parent_names(art, content, world)),
             "cultivate": {"ok": problem is None, "note": note, "legend": legend},
             "melt": {
                 "ok": stuck is None,
@@ -289,7 +287,14 @@ def detail(state: GameState, content: Content, world: WorldStateStore, kind: str
     art = team.player_art(state, content, world, skill_id)
     if art is None:
         return f"（找不到武學資料：{skill_id}）"
-    return art_card(art, level)
+    return art_card(art, level, parent_names=parent_names(art, content, world))
+
+
+def parent_names(art: MartialArt, content: Content, world: WorldStateStore) -> list[str]:
+    """武學＋武學的兩門來源的名字（art.parents，設計 12.3）：功法卡寫「由【甲】與【乙】衍生」要的。其他功法是空的；
+    找不到資料的來源不寫（art_card 只認剛好兩個名字）。"""
+    parents = (team.resolve_art(parent_id, content, world) for parent_id in art.parents)
+    return [parent.name for parent in parents if parent is not None]
 
 
 def art_card(
