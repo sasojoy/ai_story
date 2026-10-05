@@ -2668,7 +2668,7 @@ class Game:
             level = self.state.player.art_levels.get(art_id, 1)
         else:
             return "（找不到這門功法。）"
-        art = team.resolve_art(art_id, self.content, self.world)
+        art = team.player_art(self.state, self.content, self.world, art_id)
         return "（找不到這門功法。）" if art is None else skillview.art_card(art, level)
 
     def member_card(self, key: str) -> str:

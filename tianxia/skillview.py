@@ -91,7 +91,7 @@ def art_library(state: GameState, content: Content, world: WorldStateStore) -> l
     """
     out = []
     for art_id in state.player.arts:
-        art = team.resolve_art(art_id, content, world)
+        art = team.player_art(state, content, world, art_id)
         if art is None:
             continue
         level = state.player.art_levels.get(art_id, 1)
@@ -122,10 +122,13 @@ def level_bar(level: int) -> str:
     return "●" * level + "○" * (MAX_LEVEL - level)
 
 
-def _art_label(content: Content, world: WorldStateStore, skill_id: str | None, level: int) -> str:
+def _art_label(
+    content: Content, world: WorldStateStore, skill_id: str | None, level: int, state: GameState | None = None,
+) -> str:
+    """一門功法的一行說明。給了 state 就是玩家自己那一份（品質照自己修練到的）；同伴、部下不給。"""
     if skill_id is None:
         return "（尚未習得）"
-    art = team.resolve_art(skill_id, content, world)
+    art = team.player_art(state, content, world, skill_id) if state is not None else team.resolve_art(skill_id, content, world)
     if art is None:
         return skill_id
     return f"{art.name}（{art.quality}・屬{art.attribute}）第{level}成 {level_bar(level)}"
@@ -148,12 +151,13 @@ def member_card(state: GameState, content: Content, world: WorldStateStore, key:
     else:
         member = world.get_companion(key)
         name = content.characters[key].name
+    own = state if key == PLAYER else None  # 玩家那一列顯示自己修練到的品質；同伴照全服登記的
     now, cap = team.member_neili(content, member)
     lines = [
         f"### {name}",
         f"第 {member.level} 級　氣血 {now:.0f}/{cap:.0f}",
-        f"內功　{_art_label(content, world, member.neigong_id, member.neigong_level)}",
-        f"武學　{_art_label(content, world, member.wugong_id, member.wugong_level)}",
+        f"內功　{_art_label(content, world, member.neigong_id, member.neigong_level, own)}",
+        f"武學　{_art_label(content, world, member.wugong_id, member.wugong_level, own)}",
     ]
     return "\n".join(lines)
 
@@ -167,7 +171,7 @@ def library(state: GameState, content: Content, world: WorldStateStore) -> list[
         ("武學", member.wugong_id, member.wugong_level),
     ):
         if slot_id:
-            items.append((f"{kind}　{_art_label(content, world, slot_id, level)}", kind))
+            items.append((f"{kind}　{_art_label(content, world, slot_id, level, state)}", kind))
     return items
 
 
@@ -178,7 +182,7 @@ def detail(state: GameState, content: Content, world: WorldStateStore, kind: str
     level = member.neigong_level if kind == "內功" else member.wugong_level
     if skill_id is None:
         return f"你還沒有{kind}。"
-    art = team.resolve_art(skill_id, content, world)
+    art = team.player_art(state, content, world, skill_id)
     if art is None:
         return f"（找不到武學資料：{skill_id}）"
     return art_card(art, level)

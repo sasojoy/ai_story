@@ -636,6 +636,17 @@ def test_art_detail_of_a_library_art_uses_its_own_kept_level(game):
     assert card.endswith("以柔勁纏住兵刃，借力卸力。")
 
 
+def test_art_detail_shows_the_players_own_quality(game):
+    """武學與成長 Task 3：功法卡寫玩家自己那一份的品質與威力，全服登記的那一筆不動。"""
+    game.create_skill("龍吟九霄", "武學")
+    registered = game.world.get_skill("龍吟九霄")
+    mine = "絕學" if registered.quality != "絕學" else "上品"
+    game.state.player.art_quality["龍吟九霄"] = mine
+    card = game.art_detail("龍吟九霄")
+    assert card.startswith(f"【龍吟九霄】{mine}・屬{registered.attribute}")
+    assert game.world.get_skill("龍吟九霄").quality == registered.quality
+
+
 def test_art_detail_of_an_art_that_is_not_yours_is_not_found(game):
     other = MartialArt(
         id="鐵柳纏勁", name="鐵柳纏勁", kind="武學", quality="中品", attribute="剛",

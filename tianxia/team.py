@@ -10,7 +10,7 @@ import math
 import random
 
 from . import calendar, encounter
-from .martial_arts import MAX_LEVEL, MartialArt, generate_from_name, historical_art
+from .martial_arts import MAX_LEVEL, MartialArt, content_art, generate_from_name, with_quality
 from .models import Content, FollowerDef, Squad
 from .state import PLAYER, MAX_TEAM_COMPANIONS, GameState, Member
 from .world_state import CompanionProgress, WorldStateStore
@@ -62,26 +62,41 @@ def team_keys(state: GameState) -> list[str]:
 
 
 def resolve_art(skill_id: str | None, content: Content, world: WorldStateStore) -> MartialArt | None:
-    """skill_id 可能指向內容裡的本命武學（歷史人物固定武學）或玩家自創、存在共用世界狀態
-    裡的武學（見設計文件六.2；自創功法的 id 就是它的名字，兩邊用同一個 dict 鍵）。"""
+    """skill_id 指向內容裡的武學（本命武學、基礎武學）或全服登記的武學（合成、舊的自創與煉製）。
+    回傳的是全服共享的那一份；玩家自己那一份的品質見 player_art。"""
     if skill_id is None:
         return None
     if skill_id in content.skills:
         s = content.skills[skill_id]
-        return historical_art(skill_id, s.name, s.kind, s.attribute, s.quality)
+        return content_art(skill_id, s.name, s.kind, s.attribute, s.quality)
     return world.get_skill(skill_id)
 
 
+def art_quality(state: GameState, art: MartialArt) -> str:
+    """玩家手上這一份是什麼品質：修練過就照自己的，沒修練過照全服登記的。"""
+    return state.player.art_quality.get(art.id, art.quality)
+
+
+def player_art(state: GameState, content: Content, world: WorldStateStore, skill_id: str | None) -> MartialArt | None:
+    """玩家自己那一份：品質與威力照自己修練到的品質。"""
+    art = resolve_art(skill_id, content, world)
+    return None if art is None else with_quality(art, art_quality(state, art))
+
+
 def team_arts(state: GameState, content: Content, world: WorldStateStore) -> dict[str, MartialArt]:
-    """本隊每個人的內功/武學（含部下），蒐集成一份 id -> MartialArt 給 encounter.py 用。"""
+    """本隊每個人的內功/武學（含部下），蒐集成一份 id -> MartialArt 給 encounter.py 用。
+    玩家的兩門照自己修練到的品質（player_art）；同伴、部下只有內容武學，照內容的品質。"""
     arts: dict[str, MartialArt] = {}
-    ids = {state.player.member.neigong_id, state.player.member.wugong_id}
-    ids |= {unit.wugong_id for unit in follower_units(state, content)}
+    for skill_id in (state.player.member.neigong_id, state.player.member.wugong_id):
+        art = player_art(state, content, world, skill_id)
+        if art:
+            arts[skill_id] = art
+    others = {unit.wugong_id for unit in follower_units(state, content)}
     shared = world.read()
     for key in state.player.team:
         progress = shared.companions.get(key, CompanionProgress())
-        ids |= {progress.neigong_id, progress.wugong_id}
-    for skill_id in ids:
+        others |= {progress.neigong_id, progress.wugong_id}
+    for skill_id in others:
         if skill_id and skill_id not in arts:
             art = resolve_art(skill_id, content, world)
             if art:
@@ -174,7 +189,7 @@ def switch_art(state: GameState, content: Content, world: WorldStateStore, art_i
     p = state.player
     if art_id not in p.arts:
         return ["你的功法庫裡沒有這一門。"]
-    art = resolve_art(art_id, content, world)
+    art = player_art(state, content, world, art_id)
     if art is None:
         return ["（找不到這門功法的資料。）"]
     member = p.member

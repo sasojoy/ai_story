@@ -35,10 +35,14 @@ class MartialArt(BaseModel):
     attribute: str  # ATTRIBUTES 其中之一
     base_power: float
     top_power: float
-    # "historical"（本命武學，內容手寫）、"created"（玩家取名自創）或 "crafted"（煉製，craft.py 設的）
+    # "historical"（本命武學，內容手寫）、"basic"（基礎武學，內容手寫）、"fused"（合成）；
+    # 舊資料還有 "created"（玩家取名自創）與 "crafted"（煉製，craft.py 設的）
     origin: str = "created"
-    creator: str | None = None  # 自創功法的取名者、煉製功法的首創者（玩家名號），本命武學為 None
-    note: str = ""  # 煉製時由 LLM 寫的一句話描述（只有語意、沒有數字）；自創與本命武學是空的
+    creator: str | None = None  # 合成首創者；舊的自創、煉製功法照舊；內容武學為 None
+    note: str = ""  # 模型寫的一句話描述（只有語意、沒有數字）；自創與本命武學是空的
+    insight: str | None = None  # 最後融的意境 id（武學與成長設計 3.4）；修練要用它
+    base: str | None = None  # 合成的底（功法 id）
+    lean: str = "無"  # 正、邪、無：跟著最後融的意境（設計 7.3）
 
 
 class Insight(BaseModel):
@@ -124,6 +128,37 @@ def historical_art(skill_id: str, name: str, kind: str, attribute: str, quality:
         top_power=QUALITY_TOP_POWER[quality],
         origin="historical",
     )
+
+
+def content_art(skill_id: str, name: str, kind: str, attribute: str, quality: str) -> MartialArt:
+    """內容手寫的武學：下品是基礎武學（武學與成長設計附錄 B，origin "basic"）；
+    其他品質照舊走 historical_art（本命武學的絕學、部下用的上品武學，來源標本命，不算基礎武學）。
+    威力照品質的區間、不加微調。"""
+    if quality != "下品":
+        return historical_art(skill_id, name, kind, attribute, quality)
+    return MartialArt(
+        id=skill_id, name=name, kind=kind, quality=quality, attribute=attribute,
+        base_power=QUALITY_BASE_POWER[quality], top_power=QUALITY_TOP_POWER[quality], origin="basic",
+    )
+
+
+def with_quality(art: MartialArt, quality: str) -> MartialArt:
+    """同一門武學換一個品質（修練是各練各的，設計 3.5）：威力照新品質的區間，保留這門武學原本那一點微調。
+    品質一樣就原封不動回傳。"""
+    if quality == art.quality:
+        return art
+    scale = art.base_power / QUALITY_BASE_POWER[art.quality]
+    return art.model_copy(update={
+        "quality": quality,
+        "base_power": round(QUALITY_BASE_POWER[quality] * scale, 1),
+        "top_power": round(QUALITY_TOP_POWER[quality] * scale, 1),
+    })
+
+
+def next_quality(quality: str) -> str | None:
+    """修練的下一品；絕學是頂，回 None。"""
+    i = QUALITIES.index(quality)
+    return QUALITIES[i + 1] if i + 1 < len(QUALITIES) else None
 
 
 # 屬性相剋：陰陽剛柔快慢虛實，比照 tianxia 設計文件（design.md §六）原本構想的「內功陰陽剛柔、

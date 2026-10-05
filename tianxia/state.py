@@ -112,7 +112,12 @@ class PlayerState(BaseModel):
     # ── 煉製素材（無限煉製第一刀，見 tianxia/materials.py）──
     materials: dict[str, int] = Field(default_factory=dict)  # 素材 id -> 數量；舊存檔沒這欄就是空背包
     arts: list[str] = Field(default_factory=list)  # 功法庫：煉出來但沒配上身的功法 id
-    art_levels: dict[str, int] = Field(default_factory=dict)  # 每門學過的功法各自的熟練度；改練時存進來／取出來
+    art_levels: dict[str, int] = Field(default_factory=dict)  # 每門學過的功法各自的「成」；改練時存進來／取出來
+    # ── 武學與成長（設計第三、四節）──
+    insights: list[str] = Field(default_factory=list)  # 悟得的意境 id，照悟得的先後
+    art_quality: dict[str, str] = Field(default_factory=dict)  # 功法 id → 自己那一份的品質（沒記＝全服登記的品質）
+    art_mastery: dict[str, int] = Field(default_factory=dict)  # 功法 id → 修練往下一品失敗了幾次（熟練度）
+    naming: str | None = None  # 第一個修到絕學、等著取正式名字的功法 id
 
     seen_events: set[str] = Field(default_factory=set)
     mark_days: dict[str, int] = Field(default_factory=dict)  # 地方痕跡：這個人上次替這個痕跡算進一次是第幾天（一天只算一次；角色每季重來，跟著清空）

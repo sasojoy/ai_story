@@ -34,7 +34,7 @@ def compute_leaderboard(
             skill_id = getattr(member, slot)
             if not skill_id:
                 continue
-            art = team.resolve_art(skill_id, content, world)
+            art = team.player_art(state, content, world, skill_id)
             if art is None:
                 continue
             level = getattr(member, slot.replace("_id", "_level"))

@@ -271,3 +271,41 @@ def test_the_level_bar_reads_at_a_glance():
     assert skillview.level_bar(4) == "●●●●○○○○○○"
     assert skillview.level_bar(10) == "●" * 10
     assert skillview.level_bar(99) == "●" * 10  # 夾住，不會長出第 11 格
+
+
+# ── 武學與成長 Task 3：顯示玩家自己那一份的品質 ─────────────────────────
+
+
+def _whirlwind(world) -> MartialArt:
+    from tianxia.martial_arts import generate_from_name
+
+    art = generate_from_name("旋風腿", "武學", "旋風腿", weights={"下品": 100, "中品": 0, "上品": 0, "絕學": 0})
+    assert world.claim_skill_name(art)
+    return art
+
+
+def test_the_players_card_library_and_detail_show_the_players_own_quality(state, content, world):
+    art = _whirlwind(world)
+    state.player.member.wugong_id = "旋風腿"
+    state.player.art_quality["旋風腿"] = "上品"
+    label = f"旋風腿（上品・屬{art.attribute}）第1成"
+    assert f"武學　{label}" in skillview.member_card(state, content, world, "player")
+    assert skillview.library(state, content, world)[0][0].startswith(f"武學　{label}")
+    text = skillview.detail(state, content, world, "武學")
+    assert text.startswith(f"【旋風腿】上品・屬{art.attribute}")
+    assert f"第一成 {28 * art.base_power / 8:.1f}" in text  # 威力也照自己的品質（上品區間，保留這門的微調）
+
+
+def test_the_art_library_shows_the_players_own_quality(state, content, world):
+    art = _whirlwind(world)
+    state.player.arts = ["旋風腿"]
+    assert skillview.art_library(state, content, world) == [(f"武學　旋風腿（下品・屬{art.attribute}）第1成", "旋風腿")]
+    state.player.art_quality["旋風腿"] = "中品"
+    assert skillview.art_library(state, content, world) == [(f"武學　旋風腿（中品・屬{art.attribute}）第1成", "旋風腿")]
+
+
+def test_a_companions_card_ignores_the_players_own_quality(state, content, world):
+    """玩家自己修練出來的品質只屬於玩家：同伴那門同 id 的武學照全服登記的（內容的）品質。"""
+    world.update_companion("mate", lambda p: setattr(p, "wugong_id", "fist"))
+    state.player.art_quality["fist"] = "下品"
+    assert "武學　長拳（絕學・屬剛）第1成" in skillview.member_card(state, content, world, "mate")
