@@ -276,6 +276,89 @@ def test_geju_rises_with_chaos_and_falls_when_calm(on):
     assert s.world.trend_accum["geju"] == pytest.approx(-0.5)
 
 
+def _geju_rise(content, players, hours, fronts=(40, 40, 40)):
+    """三條戰線固定在 fronts，跑 hours 個曆時（每曆時一次 geju_tick）後割據漲了幾點；players 是這一季投靠名冊的人數（None＝不知道）。"""
+    s = _game(content).state
+    _set_fronts(s, *fronts)
+    before = s.world.trends["geju"]
+    for _ in range(hours):
+        rules.geju_tick(s, content, 1, players=players)
+    return s.world.trends["geju"] - before
+
+
+def test_geju_does_not_rise_when_nobody_has_joined_a_faction(on):
+    """人數等比例調整（企劃者 2026-10-05）：一個人都沒投靠，三條戰線全在亂局，割據也一點不漲，累積也不攢。"""
+    on.config.geju_full_players = 10
+    s = _game(on).state
+    _set_fronts(s, 40, 40, 40)
+    for _ in range(48):
+        rules.geju_tick(s, on, 1, players=0)
+    assert s.world.trends["geju"] == 10 and s.world.trend_accum["geju"] == 0
+
+
+@pytest.mark.parametrize("players, rise", [(5, 3), (10, 6), (2, 1)])  # 三條在亂局、兩曆日：全速 3×2＝6 點，按名冊占滿額的比例
+def test_geju_rise_is_proportional_to_the_roster_below_the_full_size(on, players, rise):
+    on.config.geju_full_players = 10
+    assert _geju_rise(on, players, 48) == rise
+
+
+@pytest.mark.parametrize("players", [10, 11, 40])
+def test_geju_rise_is_capped_at_the_designed_speed(on, players):
+    """滿額以上不再加快：一季真的湊滿人，割據照設計的速度漲。"""
+    on.config.geju_full_players = 10
+    assert _geju_rise(on, players, 48) == 6
+
+
+def test_geju_rise_is_unscaled_when_the_roster_is_unknown(on):
+    """沒給名冊（純函式的呼叫，沒有資料庫可查）：照設計速度，不縮放。"""
+    on.config.geju_full_players = 10
+    assert _geju_rise(on, None, 48) == 6
+
+
+def test_the_roster_scales_only_the_rise_not_the_calm_down(on):
+    """三條都穩下來時回落照 geju_calm_per_day，跟名冊幾個人無關。"""
+    on.config.geju_full_players = 10
+    assert _geju_rise(on, 0, 24, fronts=(20, 80, 90)) == -1
+    assert _geju_rise(on, 2, 24, fronts=(20, 80, 90)) == -1
+
+
+def test_geju_roster_scaling_does_nothing_while_the_switch_is_off(real):
+    real.config.geju_full_players = 10
+    game = _game(real)
+    for _ in range(48):
+        rules.geju_tick(game.state, real, 1, players=0)
+        rules.geju_tick(game.state, real, 1, players=40)
+    assert game.state.world.trends == {"huangjin": 25, "yuxi": 0}
+    assert game.state.world.trend_accum == {}
+
+
+def test_the_season_clock_reads_the_roster_from_the_store(on):
+    """季的時鐘自己去查名冊：真實 24 小時＝6 曆日，三條在亂局全速是 +18；四人投靠、滿額 8 人＝一半＝+9。
+    推進包在 mutate_season 裡（背景追趕走這一條）也查得到——讀名冊不是 mutate，不會撞「mutate 不能巢狀」。"""
+    on.scenario.sim_players, on.timetable = [], []
+    on.config.geju_full_players = 8
+    game = _game(on)
+    for name in "甲乙丙丁":
+        game.world.record_faction(name, "guan")
+    game.world.mutate_season(lambda season: season.trends.update(yingru=50, nanyang=50, jizhou=50))
+    world.advance_season(game.world, on, 24 * 3600, random.Random(0), now=0.0)
+    assert game.world.get_season().trends["geju"] == 19  # 10 + 18 × 4/8
+
+
+def test_the_players_advance_reads_the_roster_too(on):
+    """玩家自己「等待」那一條（Game.advance）一樣按名冊縮放；一個人都沒投靠就一點不漲。"""
+    on.scenario.sim_players, on.timetable = [], []
+    on.config.geju_full_players = 8
+    game = _game(on)
+    _set_fronts(game.state, 50, 50, 50)
+    game.advance(24 * 3600)
+    assert game.world.get_season().trends["geju"] == 10
+    for name in "甲乙":
+        game.world.record_faction(name, "huang")
+    game.advance(24 * 3600)
+    assert game.world.get_season().trends["geju"] == 14  # 每曆日 3 點全速、六曆日 18 點，2/8 ＝ 4.5 → 4（餘 0.5 累積）
+
+
 def test_geju_does_not_move_while_the_switch_is_off(real):
     real.scenario.sim_players = []
     game = _game(real)
