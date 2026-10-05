@@ -237,12 +237,15 @@ def test_bot_plays_a_full_season(content, seed, tmp_path):
     assert len(game.state.player.seen_events) >= 3
 
 
-def test_bot_grows_its_arts_with_xinde(content, tmp_path):
+def test_the_bot_learns_insights_fuses_and_cultivates(content, tmp_path):
     from tianxia.sqlite_world import open_world
 
-    game = play_season(content, 1, world=open_world(tmp_path / "world.db"))
-    member = game.state.player.member
-    assert member.neigong_level > 1 or member.wugong_level > 1
+    game = play_season(content, 1, world=open_world(tmp_path / "arts.db"))
+    p = game.state.player
+    assert p.insights, "整季都沒悟到意境：探索的悟意境那一支沒接上"
+    assert game.world.recipe_keys(), "整季都沒合成過"
+    assert p.art_quality or p.art_mastery, "整季都沒修練過"
+    assert p.member.wugong_level > 1 or p.member.neigong_level > 1, "整季都沒練成過"
 
 
 def test_a_new_character_starts_with_the_two_starter_arts_at_level_one(content):

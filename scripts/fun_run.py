@@ -1,9 +1,12 @@
 """好玩度量表（企劃者 2026-10-03 提的方法）：假裝自己是什麼都不知道的新玩家跑完一整季，
 **看到新東西加分、看到重複過的東西扣分，重複越多次扣越多**，最後印出分數與分項。
 
-為什麼要這個：既有的量法全是資源計數（素材 21 個、心得 167 點），那些數字完全說不出「玩起來
-有沒有東西看」。而這個專案反覆踩到的坑本質上就是重複——探索 100 次撞到同幾個事件、17 爐裡
-8 爐在重煉已知配方、遊歷機制上不會發生所以戰鬥內容從沒出現過。單一個指標會一次抓到這三個。
+為什麼要這個：既有的量法全是資源計數（心得 167 點、悟到幾個意境），那些數字完全說不出「玩起來
+有沒有東西看」。而這個專案反覆踩到的坑本質上就是重複——探索 100 次撞到同幾個事件、（舊版煉製）
+17 爐裡 8 爐在重煉已知配方、遊歷機制上不會發生所以戰鬥內容從沒出現過。單一個指標會一次抓到這三個。
+
+新鮮感的管道：事件、意境（探索悟到的、合併出來的）、合成出來的功法（全服首創或查表拿到）、對手、地點。
+機器人會合成、合併、修練（`bot.forge_and_cultivate`），不然配方與意境這兩條管道整季是空的。
 
 實作時刻意處理了四件會讓指標量錯的事：
 
@@ -25,9 +28,11 @@
 
 | 旗標 | 重現哪個歷史狀態 |
 |---|---|
-| `--no-craft --no-train` | 0716d8b 之前：沒有煉製、也沒有遊歷 |
-| `--no-train` | 239bdf8 之前：有煉製，但遭遇戰一季只有 3 場（遊歷與探索三選一的野怪都關掉） |
+| `--no-craft --no-train` | 0716d8b 之前：還沒有（合成這類的）造功法玩法，也沒有遊歷 |
+| `--no-train` | 239bdf8 之前：有造功法的玩法，但遭遇戰一季只有 3 場（遊歷與探索三選一的野怪都關掉） |
 | （無旗標） | 現在 |
+
+`--no-craft` 關掉的是機器人的合成、合併與修練（`bot.forge_and_cultivate`）；練成（`bot.spend_xinde`）照舊。
 
 執行：
     .venv/Scripts/python.exe scripts/fun_run.py --seeds 1 2 3
@@ -52,7 +57,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")  # 不包的話印 ✔ 會噴 cp950
 
-from tianxia import bot, companion_agent, database, materials  # noqa: E402
+from tianxia import bot, companion_agent, database, insights, library  # noqa: E402
 from tianxia.content import load_content  # noqa: E402
 from tianxia.engine import Game  # noqa: E402
 from tianxia.ollama_client import OllamaClient  # noqa: E402
@@ -66,23 +71,18 @@ SPEND_XINDE_EVERY = 5
 # 首見的加分（有改變狀態才給全額，否則一半，見模組說明第 1 點）
 NOVELTY_POINTS = {
     "事件": 3.0,
-    "配方首創": 5.0,  # 全服第一個煉出這個配方：最珍貴的一種新鮮感
-    "配方查表": 3.0,  # 別人首創、自己第一次拿到：仍然是新功法
-    "素材": 2.0,
+    "配方首創": 5.0,  # 全服第一個合出這個配方（合成出的功法、合併出的意境）：最珍貴的一種新鮮感
+    "配方查表": 3.0,  # 別人首創、自己第一次拿到：仍然是新功法（開局送的兩門基礎武學不算，見 observe_step）
+    "意境": 2.0,  # 探索悟到的、合併出來的意境
     "對手": 2.0,
     "地點": 1.0,
 }
 REPEAT_STEP = 0.5  # 第 n 次看到同一個敘事內容，扣 (n-1) × STEP
 REPEAT_CAP = 3.0  # 單次扣分上限（見模組說明第 3 點）
-WASTE_PENALTY = 4.0  # 花了資源（素材＋心得）卻沒換到新功法，一次扣這麼多
 MISSING_CHANNEL = -100.0  # 一條管道整季沒出現過（例如完全沒有戰鬥）：那是最壞的情況，不是「沒資料」
 # 校準逼出來的第二件事：原本把 0 次機會的管道**排除在平均之外**，結果「整季沒有任何戰鬥」
-# 的狀態 ② 拿到 +36.9 分，跟修好的版本（+41.6）只差 5 分——因為它的煉製管道滿分，把平均
+# 的狀態 ② 拿到 +36.9 分，跟修好的版本（+41.6）只差 5 分——因為它的配方管道滿分，把平均
 # 拉了上去。內容整條不存在應該是重罰，不是中性。
-# 這一項是校準逼出來的：第一版只有「新鮮感」與「重複」兩項，結果「會重煉已知配方、47% 白燒」
-# 那個已知缺陷跟修好的版本**分數一模一樣**——因為重煉不會產生新內容，所以在只看新鮮感的
-# 指標下它是「什麼都沒發生」，而不是「虧了」。花掉的資源本來可以換到別的新東西，那個機會
-# 成本才是它真正的病。
 
 
 @dataclass
@@ -95,8 +95,7 @@ class FunLog:
     repeats: Counter = field(default_factory=Counter)  # 敘事內容 id -> 看過幾次
     repeat_penalty: float = 0.0
     mechanical: int = 0  # 機制動作的重複次數（不扣分，只記錄）
-    wasted: int = 0  # 花了資源卻沒換到新功法的次數
-    crafts: int = 0  # 總共開了幾爐
+    crafts: int = 0  # 總共合成或合併了幾次
     actions: int = 0  # 總共做了幾個行動（分數要除以它，見下面 score 的說明）
     by_day: dict[int, list[float]] = field(default_factory=dict)  # 遊戲日 -> [加分, 扣分]
     last_novel_day: float = 0.0
@@ -105,12 +104,12 @@ class FunLog:
     chances: Counter = field(default_factory=Counter)  # 管道 -> 這條管道被碰到幾次（分管道正規化的分母）
     channel_points: Counter = field(default_factory=Counter)  # 管道 -> 新鮮感加分（給 raw 用）
     channel_penalty: Counter = field(default_factory=Counter)  # 管道 -> 扣分（給 raw 用）
-    channel_bad: Counter = field(default_factory=Counter)  # 管道 -> 「這次機會壞掉」的次數（重複、白燒）
+    channel_bad: Counter = field(default_factory=Counter)  # 管道 -> 「這次機會壞掉」的次數（重複）
 
     @property
     def raw(self) -> float:
         """未正規化的總分；只用來看組成，不要拿來比較不同的跑次。"""
-        return self.novelty_points - self.repeat_penalty - self.wasted * WASTE_PENALTY
+        return self.novelty_points - self.repeat_penalty
 
     def channel_score(self, channel: str) -> float | None:
         """一條管道的「新鮮命中率」：每次碰到它，有幾成給了你新東西（−100 ~ +100）。
@@ -132,9 +131,9 @@ class FunLog:
 
         這是企劃者把決定權交回來之後選的版本。只看一個總分（`score`）的問題是：分母是「總行動
         數」，所以權重完全由「那條管道多常觸發」決定——一季約 1100 個行動，事件觸發好幾百次、
-        **開爐只有 5~8 次**，於是煉製的缺陷（白燒一爐扣 4 分，攤成 0.4 分／百行動）被埋在 20 分
-        的種子噪音裡，校準時完全看不見。分管道之後，白燒一爐是「8 次機會裡壞了 1 次」，在煉製
-        那條管道上就是很大的一筆。
+        **合成只有 5~8 次**，於是配方這一類的缺陷（舊版煉製的白燒一爐扣 4 分，攤成 0.4 分／百行動）
+        被埋在 20 分的種子噪音裡，校準時完全看不見。分管道之後，壞一爐是「8 次機會裡壞了 1 次」，
+        在配方那條管道上就是很大的一筆。
         """
         scores = [self.channel_score(c) for c in NOVELTY_POINTS]
         return sum(scores) / len(scores) if scores else 0.0
@@ -185,7 +184,7 @@ def snapshot(game: Game) -> tuple:
     return (
         tuple(sorted(p.stats.items())), tuple(sorted(game.state.world.trends.items())),
         m.neigong_id, m.neigong_level, m.wugong_id, m.wugong_level, m.level,
-        sum(p.materials.values()), len(p.arts), game.state.battle_seq, len(p.team),
+        len(p.insights), len(p.arts), game.state.battle_seq, len(p.team),
         round(p.stamina), round(m.neili or 0), round(m.injury),
     )
 
@@ -205,14 +204,14 @@ def observe_step(game: Game, log: FunLog, before: tuple, option_id: str, before_
         log.chance("事件")
         log.add_repeat(f"事件:{s.pending_event}", day)
 
-    gained = sum(s.player.materials.values()) - before[7]  # 快照第 7 項是素材總數
+    gained = len(s.player.insights) - before[7]  # 快照第 7 項是意境數
     if gained > 0:
-        log.chance("素材", gained)  # 掉到幾個素材就是幾次機會（撿到重複的種類不算新鮮感）
-    for material_id, count in s.player.materials.items():
-        if count > 0:
-            log.add_novelty("素材", material_id, day, True)  # 拿到素材本身就是改變
+        log.chance("意境", gained)
+    for insight_id in s.player.insights:
+        log.add_novelty("意境", insight_id, day, True)  # 悟到新意境本身就是改變
+    starters = set(c.config.starter_skills)  # 開局就送的兩門基礎武學不是「拿到的新功法」，不然第 0 天就先灌水
     for art_id in [s.player.member.neigong_id, s.player.member.wugong_id, *s.player.arts]:
-        if art_id:
+        if art_id and art_id not in starters:
             log.add_novelty("配方查表", art_id, day, True)
     # 全服決戰補送的戰報（kind="showdown"，FB-027）不算對手：那是敵方陣營名，不是四處闖蕩撞上的人
     encounters = [r for r in s.battles if r.kind != "showdown"]
@@ -237,7 +236,7 @@ def observe_step(game: Game, log: FunLog, before: tuple, option_id: str, before_
 
 
 def fake_structured(self, messages, response_model, **kwargs):
-    """LLM 一律假掉（照 tests/test_real_content.py 的作法），煉製因此走決定性組名那條退路。"""
+    """LLM 一律假掉（照 tests/test_real_content.py 的作法），合成與合併因此走決定性組名那條退路。"""
     if response_model is companion_agent.CompanionTurn:
         return companion_agent.CompanionTurn(
             narrative="他微微頷首。", options=["繼續交談", "就此告辭"], option_tags=["尋常寒暄", "尋常寒暄"],
@@ -293,10 +292,28 @@ def _play(content, seed: int, db_path: Path, *, no_craft=False, no_train=False) 
             observe_step(game, log, before, choice, before_events)
             if step % SPEND_XINDE_EVERY == 0:
                 bot.spend_xinde(game, rng)
+                if not no_craft:
+                    had = set(library.owned_arts(game.state)) | set(game.state.player.insights)
+                    known = game.world.recipe_keys()
+                    bot.forge_and_cultivate(game, rng)
+                    for key in game.world.recipe_keys() - known:
+                        first_crafts.add(key)
+                    now = set(library.owned_arts(game.state)) | set(game.state.player.insights)
+                    new_insights = [made for made in now - had if made in game.state.player.insights]
+                    for made in new_insights:  # 合併出來的意境不在 recipe_keys 裡（那是功法的配方表）：看首創者是不是自己
+                        merged = insights.resolve(made, content, game.world)
+                        if merged is not None and merged.creator == game.state.player.name:
+                            first_crafts.add(f"合|{made}")
+                    if new_insights:
+                        log.chance("意境", len(new_insights))  # 合併出來的意境也是意境這條管道的機會（observe_step 看不到它們）
+                    if now - had:
+                        log.crafts += 1
+                        log.chance("配方首創")  # 合成或合併＝配方這條管道的一次機會
+                        log.chance("配方查表")
         if choice is None or step % 4 == 0:
             game.advance(HALF_HOUR)
 
-    # 配方首創要事後補記（煉製是在 spend_xinde 那條路徑上，不經過 observe_step）
+    # 配方首創要事後補記（合成是在 spend_xinde 那條路徑上，不經過 observe_step）
     log.novelty["配方首創"] = len(first_crafts)
     log.novelty_points += len(first_crafts) * (NOVELTY_POINTS["配方首創"] - NOVELTY_POINTS["配方查表"])
     log.days = game.state.world.time / DAY  # type: ignore[attr-defined]
@@ -326,7 +343,7 @@ def report(label: str, logs: list[FunLog], content) -> float:
         totals.update(lg.novelty)
         hollow.update(lg.hollow)
     coverage = {
-        "事件": len(content.events), "素材": len(content.materials),
+        "事件": len(content.events), "意境": len(content.insights),
         "地點": len(content.locations), "對手": len(content.squads),
     }
     print("  首見（平均）：", end="")
@@ -344,11 +361,7 @@ def report(label: str, logs: list[FunLog], content) -> float:
     top = "、".join(f"{k.split(':')[-1]}×{v // len(logs)}" for k, v in worst.most_common(3))
     print(f"  敘事重複：{rep:.0f} 次（扣 {sum(lg.repeat_penalty for lg in logs) / len(logs):.0f} 分）"
           f"　機制重複：{sum(lg.mechanical for lg in logs) / len(logs):.0f} 次（不扣）")
-    crafts = sum(lg.crafts for lg in logs) / len(logs)
-    wasted = sum(lg.wasted for lg in logs) / len(logs)
-    share = f"（{wasted / crafts:.0%}）" if crafts else ""
-    print(f"  開爐 {crafts:.0f} 次，其中白燒 {wasted:.0f} 次{share}"
-          f"　扣 {wasted * WASTE_PENALTY:.0f} 分")
+    print(f"  合成／合併 {sum(lg.crafts for lg in logs) / len(logs):.0f} 次")
     print(f"  最常重複：{top}")
     for lg in logs[:1]:
         days = sorted(lg.by_day)
@@ -362,7 +375,7 @@ def report(label: str, logs: list[FunLog], content) -> float:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--seeds", type=int, nargs="+", default=[1, 2, 3])
-    ap.add_argument("--no-craft", action="store_true")
+    ap.add_argument("--no-craft", action="store_true", help="關掉合成與修練（機器人不合成、不合併、不修練）")
     ap.add_argument("--no-train", action="store_true",
                     help="不打遭遇戰：不選遊歷，探索三選一的野怪那一支也關掉（重現一季只有 3 場戰鬥的狀態）")
     ap.add_argument("--calibrate", action="store_true", help="跑三個已知狀態，驗指標排序對不對")
@@ -383,8 +396,8 @@ def main() -> None:
                 return
 
             cases = [
-                ("① 沒有煉製也沒有遊歷（0716d8b 之前）", {"no_craft": True, "no_train": True}),
-                ("② 有煉製但遭遇戰一季 3 場（239bdf8 之前）", {"no_train": True}),
+                ("① 沒有合成也沒有遊歷（仿 0716d8b 之前）", {"no_craft": True, "no_train": True}),
+                ("② 有合成但遭遇戰一季 3 場（仿 239bdf8 之前）", {"no_train": True}),
                 ("③ 現在", {}),
             ]
             results, all_logs = [], []
@@ -396,7 +409,7 @@ def main() -> None:
             for label, score in results:
                 print(f"  {score:+8.1f}　{label}")
             # 判準刻意只要求「現在要贏過每一個已知缺陷」，不要求三個缺陷狀態之間也排對：
-            # 「遭遇戰一季只有 3 場」跟「47% 的爐白燒」哪個比較無聊，我們從來沒有依據可以排，
+            # 「遭遇戰一季只有 3 場」跟「（舊版煉製）47% 的爐白燒」哪個比較無聊，我們從來沒有依據可以排，
             # 那是我一開始沒有根據就寫進期望裡的假設。實測 ③（-23.1）比 ②（-16.2）更低，
             # 與其硬調參數去迎合那個假設，不如承認判準該收窄到真正有依據的那一條。
             scores = [s for _, s in results]

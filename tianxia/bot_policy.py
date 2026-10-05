@@ -79,7 +79,9 @@ def take_turn(game: Game, profile: BotProfile, rng: random.Random) -> list[str]:
 
 
 def look_after(game: Game, rng: random.Random) -> None:
-    """照顧動作（不受強度旋鈕影響）：有內傷先療傷；身上的兩門（開局送的基礎武學）偶爾練成一成，付得起心得才練。"""
+    """照顧動作（不受強度旋鈕影響）：有內傷先療傷；身上的兩門（開局送的基礎武學）偶爾練成一成，付得起心得才練。
+    伺服器假人這一版不合成、不合併：首次合成會用退路字表的名字搶下首創（假人不叫模型），等觀察過真人再說
+    （武學與成長計畫一 Task 13）。整季模擬的機器人（bot.py）才合成，它只在測試與量平衡時跑、用自己的資料庫。"""
     if wants_heal(game):
         game.heal()
     for kind in ("內功", "武學"):
