@@ -3232,6 +3232,34 @@ def test_an_event_battle_takes_no_blood_so_their_blows_carry_no_numbers(game):
         assert "None" not in line and "【" not in line and "翻江龍" in line and "沈浪" in line
 
 
+@pytest.mark.parametrize("tier", ["落敗", "僵持"])
+def test_a_fight_not_won_at_zero_blood_does_not_say_the_blows_were_dodged(game, tier):
+    """已經沒氣血的人遊歷落敗，這一場掉的氣血是 0（內傷照樣累積）：對手的出手不能每一下都寫「被你閃開了」——
+    讀起來是對方從頭到尾沒碰到你、你卻輸了、損失裡還有內傷（G5 對劇情戰拿掉的同一個矛盾，Final review Minor 2）。
+    輸了就不寫打中沒有（跟劇情戰一樣只寫怎麼出手）；回合裡的氣血數字照樣加得起來（0）。"""
+    walk_to(game, "lake")
+    game.state.player.member.neili = 0.0
+    with _forced(tier):
+        game.choose("act:train")
+    record = game.state.battles[0]
+    told, shown = _told_and_shown(record)
+    assert record.tier == tier and told == shown == 0 and any(c.startswith("內傷") for c in record.changes)
+    assert len(record.rounds) in (3, 4, 5)
+    for line in record.rounds:
+        assert "被你閃開了" not in line and "你氣血" not in line and "水寇小隊" in line, line
+    assert "被你閃開了" not in game.battle_card()
+
+
+def test_a_won_fight_that_costs_no_blood_still_says_the_blows_were_dodged(game):
+    """反過來：贏了而這一場沒掉氣血（打得漂亮），「被你閃開了」是通的，不動。"""
+    walk_to(game, "lake")
+    game.state.player.member.neili = 0.0
+    with _forced("大勝"):
+        game.choose("act:train")
+    record = game.state.battles[0]
+    assert _told_and_shown(record) == (0, 0) and any("被你閃開了" in line for line in record.rounds)
+
+
 def test_an_event_battle_is_played_with_the_fighters_from_before_its_rewards(game):
     """劇情戰的回合照開打時的陣容與身法演（計畫三 Task 1 審查修正）：打贏的效果（真實內容的 wolves 打贏身法 +1）
     不能回頭改寫這一場——身法 5 比水寇小隊的 5.25 慢，是對手先出手；效果加了身法也一樣。學到的武學同理：

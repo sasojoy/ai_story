@@ -2245,8 +2245,12 @@ class Game:
         """照結果演出回合寫進戰報（武學與成長設計 8.2）。hp_lost 是這一場本人真的扣掉的氣血（_take_toll），回合裡寫的
         「你氣血 -N」加起來剛好等於它；None 是這一場本來就不扣氣血（劇情戰），對手的出手不寫數字（計畫三 G5）。
         亂數是自己一份、用「名號｜戰報流水號」當種子（計畫三 G3）：不碰 Game.rng，接下來的擲骰不會位移，
-        同一筆戰報每次演出來都一樣。"""
+        同一筆戰報每次演出來都一樣。
+        輸了（含僵持）卻一滴氣血都沒掉（本來就見底，內傷照樣累積）時，跟劇情戰一樣不寫打中沒有：每一下都寫「被你閃開了」，
+        讀起來是對方沒碰到你、你卻輸了、損失裡還有內傷（最後審查 Minor 2）；贏了沒掉血（打得漂亮）寫閃開是通的，不動。"""
         s, c, p = self.state, self.content, self.state.player
+        if hp_lost == 0 and tier not in team.WIN_TIERS:
+            hp_lost = None
         rng = random.Random(f"{p.name}|{record.id}")
         foe = rounds.Foe(name=squad.name, attribute=squad.attribute, agility=rounds.foe_agility(squad.difficulty))
         our_agility = float(p.stats.get("agi", team.BASE_STAT))
