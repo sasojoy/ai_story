@@ -2575,3 +2575,18 @@ def test_admin_choices_say_whether_the_next_season_has_a_timetable(client, monke
     assert client.get("/api/admin").json()["next_has_timetable"] is False
     monkeypatch.setattr(server.CONTENT.config, "season_one", True)
     assert client.get("/api/admin").json()["next_has_timetable"] is True
+
+
+def test_fb069_the_forge_never_names_a_recipe_after_a_character(lock_events):
+    """FB-069：鎖外取名（B 段）拿到別的角色的名號不算取到名字（60 秒的預算只夠問一次，所以直接走退路字表）；
+    C 段進鎖再擋一次。不會登記成角色的名號。"""
+    _forger("驗收新武")
+    game = _forger()
+    asked = []
+    with _model(lambda client, messages: asked.append(1) or "驗收新武"):
+        assert server.prepare_forge(game, "jichu_quanjiao", ["feng"]) == server.NO_NAME
+        server.forge(game, "jichu_quanjiao", ["feng"])
+    assert asked == [1, 1]  # 兩次 prepare 各問一次，都被擋下來
+    name = open_world().lookup_recipe(FIST_FENG).name
+    assert name != "驗收新武" and naming.name_problem(name, server.CONTENT) is None
+    assert server.forge(game, "jichu_quanjiao", ["huo"]) is not None  # 一般的名字照常

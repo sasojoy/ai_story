@@ -23,6 +23,7 @@ from pathlib import Path
 from sqlite3 import Connection, Row
 
 from .battle_instance import BattleInstance, BattleRoundRecord, start_muster
+from .characters import name_key
 from .database import Database, open_database
 from .martial_arts import Insight, MartialArt
 from .models import BattleDef, Content
@@ -161,6 +162,12 @@ class SqliteWorldStore:
     def is_skill_name_taken(self, name: str) -> bool:
         with self.db.snapshot() as conn:
             return _name_taken(conn, self._season_number(conn), name.strip())
+
+    def is_character_name(self, name: str) -> bool:
+        # 角色存檔（characters.CharacterStore）跟全服狀態在同一個資料庫檔；主鍵就是名號的 casefold（characters.name_key）。
+        # 只看有沒有這一列，不讀 is_bot：命名過濾回的話不能透露是不是假人
+        with self.db.snapshot() as conn:
+            return conn.execute("SELECT 1 FROM characters WHERE key = ?", (name_key(name),)).fetchone() is not None
 
     def claim_skill_name(self, art: MartialArt) -> bool:
         with self.db.transaction() as conn:

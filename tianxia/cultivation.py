@@ -127,7 +127,8 @@ def name_mastered(state: GameState, content: Content, world: WorldStateStore, na
     if old is None:
         return ["找不到這門武學的資料，沒辦法定名。"]
     name = naming.clean_name(name)
-    problem = naming.name_problem(name, content)
+    # FB-069：也不能取成江湖上任何角色的名號（真人、假人一樣、不分大小寫），回的話看不出是不是假人
+    problem = naming.name_problem(name, content, world.is_character_name)
     if problem is not None:
         return [f"這個名字不行：{problem}。"]
     # 沿用目前的名字（模型取的就很好）也算定名，只是名字不動；其他名字原子判斷：武學、改過的名字、意境都不能撞名

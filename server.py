@@ -234,7 +234,8 @@ def prepare_forge(game: Game, art_id: str | None, insight_ids: list[str]) -> tup
     if request is None:
         return NO_NAME
     budget = max(0.0, game.content.config.naming_budget_seconds - (time.monotonic() - started))
-    return naming.generate(game.client, game.content, request, budget=budget)
+    # 角色名號的查詢是唯讀的快照、不拿行動鎖（FB-069：模型取到角色的名號就再取一次；C 段進鎖還會再擋一次）
+    return naming.generate(game.client, game.content, request, budget=budget, person=game.world.is_character_name)
 
 
 def forge(game: Game, art_id: str | None, insight_ids: list[str]) -> list[str] | None:
