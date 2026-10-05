@@ -14,7 +14,7 @@
         "text": "挽起袖子去舉石臼",
         "check": {
           "stat": "str",
-          "difficulty": 6,
+          "difficulty": 4,
           "by": "self"
         },
         "effect": {
@@ -33,7 +33,7 @@
         "text": "替大夥念告示、講明條目",
         "check": {
           "stat": "wis",
-          "difficulty": 5
+          "difficulty": 3
         },
         "effect": {
           "text": "你一條條講清楚：自備兵器者每月多給糧多少，傷殘者如何撫恤。少年們聽得明白，好幾家父兄來向你道謝。",
@@ -72,7 +72,7 @@
         "text": "陪新郎挨案敬酒，替他擋酒",
         "check": {
           "stat": "con",
-          "difficulty": 6,
+          "difficulty": 4,
           "by": "self"
         },
         "effect": {
@@ -91,7 +91,7 @@
         "text": "去灶間寬慰新郎的母親",
         "check": {
           "stat": "wis",
-          "difficulty": 5
+          "difficulty": 3
         },
         "effect": {
           "text": "你跟她說鄉勇守的是本郡，不是遠戍邊塞，兒子有人照應。她擦乾眼淚，出來替你添了一碗肉羹。",
@@ -150,7 +150,7 @@
         "text": "翻身上馬試騎一圈",
         "check": {
           "stat": "agi",
-          "difficulty": 7,
+          "difficulty": 5,
           "by": "self"
         },
         "effect": {
@@ -172,7 +172,7 @@
         "text": "替豪家子弟看馬齒、驗馬蹄",
         "check": {
           "stat": "wis",
-          "difficulty": 5
+          "difficulty": 3
         },
         "effect": {
           "text": "你指出兩匹馬的蹄子剛削過、牙口是磨過的老馬，豪家子弟沒上當，事後塞給你一份謝禮。",
@@ -210,7 +210,7 @@
         "text": "站出來分說兵勢",
         "check": {
           "stat": "wis",
-          "difficulty": 6,
+          "difficulty": 4,
           "by": "self"
         },
         "effect": {
@@ -232,7 +232,7 @@
         "text": "跟他們拚酒，誰先倒誰閉嘴",
         "check": {
           "stat": "con",
-          "difficulty": 5,
+          "difficulty": 3,
           "by": "self"
         },
         "effect": {
@@ -273,7 +273,7 @@
         "text": "下場跟外鄉人比一輪",
         "check": {
           "stat": "agi",
-          "difficulty": 6,
+          "difficulty": 4,
           "by": "self"
         },
         "effect": {
@@ -294,7 +294,7 @@
         "text": "拿起箭桿掂一掂，看有沒有作假",
         "check": {
           "stat": "wis",
-          "difficulty": 5
+          "difficulty": 3
         },
         "effect": {
           "text": "你掂出箭桿輕重如常，是外鄉人手穩。輸家紅著臉道歉，外鄉人請你喝了一碗，說你眼明心公。",
@@ -349,7 +349,7 @@
         "text": "扛鹽包搬進倉房",
         "check": {
           "stat": "str",
-          "difficulty": 5,
+          "difficulty": 3,
           "by": "self"
         },
         "effect": {
@@ -370,7 +370,7 @@
         "text": "替他守倉房一夜",
         "check": {
           "stat": "con",
-          "difficulty": 6,
+          "difficulty": 4,
           "by": "self"
         },
         "effect": {
@@ -414,7 +414,7 @@
         "text": "擠進人群，替婦人討一碗粥",
         "check": {
           "stat": "agi",
-          "difficulty": 6
+          "difficulty": 5
         },
         "effect": {
           "text": "你左閃右鑽擠到鍋前，端著滿滿一碗粥擠回來，一滴沒灑。婦人捧著碗直磕頭，旁邊的人都看在眼裡。",
@@ -435,7 +435,7 @@
         "text": "跟舀粥的道徒攀談，求個通融",
         "check": {
           "stat": "wis",
-          "difficulty": 5
+          "difficulty": 4
         },
         "effect": {
           "text": "你說這婦人的丈夫在城頭守夜，道徒聽了點頭，讓她先舀，還多給了半勺。你也聽他說了些城裡的糧數。",
@@ -476,7 +476,7 @@
         "text": "引經據典，跟他辯一辯",
         "check": {
           "stat": "wis",
-          "difficulty": 7,
+          "difficulty": 6,
           "by": "self"
         },
         "effect": {
@@ -501,7 +501,7 @@
         "text": "跟著跪下聽完一整場講道",
         "check": {
           "stat": "con",
-          "difficulty": 5,
+          "difficulty": 4,
           "by": "self"
         },
         "effect": {
@@ -558,7 +558,7 @@
         "text": "應徵去搬糧",
         "check": {
           "stat": "str",
-          "difficulty": 5,
+          "difficulty": 4,
           "by": "self"
         },
         "effect": {
@@ -582,7 +582,7 @@
         "text": "趁亂把一袋糧推給牆邊的城民",
         "check": {
           "stat": "agi",
-          "difficulty": 7
+          "difficulty": 6
         },
         "effect": {
           "text": "你借搬糧轉身的工夫，把一袋粟推進牆角的人群，一眨眼就被分得乾乾淨淨。沒人看見是你。",

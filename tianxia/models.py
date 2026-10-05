@@ -1228,6 +1228,20 @@ class FollowerDef(_Strict):
     wugong_level: int = Field(ge=1, le=10)
 
 
+class CheckVoiceBand(_Strict):
+    """一檔心聲：出手者的屬性減難度 ≥ min_gap 就用這一檔（由高到低找第一個符合的）。"""
+
+    min_gap: float
+    lines: dict[str, str]  # 屬性（str/agi/con/wis）→ 句子，{who} 換成「你」或同伴的名字；"default" 是其他屬性的退路
+
+
+class CheckVoice(_Strict):
+    """有檢定的事件選項底下那一句人物心聲（content/check_voice.json）：讓玩家選之前就知道這件事對自己難不難。
+    檢定是屬性每高於難度 1 點成功率 +10%（rules.check_chance），所以差 +2 約七成、0 是五成、−2 約三成。"""
+
+    bands: list[CheckVoiceBand] = Field(default_factory=list)
+
+
 class Content(_Strict):
     config: Config
     scenario: Scenario
@@ -1250,3 +1264,4 @@ class Content(_Strict):
     followers: dict[str, FollowerDef] = Field(default_factory=dict)  # 部下模板（content/followers.json，計畫 T5）
     map: MapLayout
     tutorial: Tutorial
+    check_voice: CheckVoice = Field(default_factory=CheckVoice)  # 選項底下的人物心聲（content/check_voice.json）；沒有這個檔就不顯示

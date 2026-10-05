@@ -99,7 +99,7 @@ def check_condition(cond: Condition, state: GameState, content: Content | None =
 
 
 def check_gap(check: Check, state: GameState, content: Content, world: WorldStateStore) -> float:
-    """出手者的屬性減難度（成功率看它）；本人出手時加上熟練加成（Check.practice）。"""
+    """出手者的屬性減難度（成功率與選項底下的心聲都看它）；本人出手時加上熟練加成（Check.practice）。"""
     key = team.check_actor(state, content, world, check)
     value = team.check_value(state, content, world, key, check.stat)
     if key == PLAYER:

@@ -11,7 +11,7 @@
         "text": "湊過去細聽",
         "check": {
           "stat": "wis",
-          "difficulty": 6
+          "difficulty": 4
         },
         "effect": {
           "text": "你從他們的話裡理出了頭緒，轉頭說給城南的商隊聽，換了一頓飯錢。",
@@ -71,7 +71,7 @@
         "text": "當眾問他主人姓甚名誰",
         "check": {
           "stat": "wis",
-          "difficulty": 7
+          "difficulty": 5
         },
         "effect": {
           "text": "你一句句追問，他答得前言不搭後語。圍觀的人都笑了，門客灰溜溜地走了。",
@@ -107,7 +107,7 @@
         "text": "想辦法把血書遞進府裡",
         "check": {
           "stat": "wis",
-          "difficulty": 7
+          "difficulty": 5
         },
         "effect": {
           "text": "你找到一個肯收錢辦事的府吏，把血書夾進了今天的奏報裡。鄉紳們向你千恩萬謝。",
@@ -174,7 +174,7 @@
         "text": "悄悄下山，去叫巡山的兵卒",
         "check": {
           "stat": "agi",
-          "difficulty": 6
+          "difficulty": 5
         },
         "effect": {
           "text": "你摸黑下山找到巡山的兵卒，他們趕到時正好把人堵在坑裡。",
@@ -220,7 +220,7 @@
         "text": "說自己是大將軍府派來的",
         "check": {
           "stat": "wis",
-          "difficulty": 7
+          "difficulty": 6
         },
         "effect": {
           "text": "伍長半信半疑，不敢再攔，賠著笑讓開了路。"
@@ -264,7 +264,7 @@
         "text": "上前替船夫牽馬",
         "check": {
           "stat": "agi",
-          "difficulty": 7
+          "difficulty": 6
         },
         "effect": {
           "text": "烈馬在你手裡安靜下來。騎兵們吹了聲口哨，丟給你幾個錢，還有一包釘馬掌剩下的鐵砂。",
