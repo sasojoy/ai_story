@@ -548,7 +548,7 @@ def test_real_timetable_matches_settlement_doc():
     qinjie = events["qinjie_slays_zhangmancheng"]  # 朱儁到任南陽，條件是皇甫嵩還在潁川（濃縮版內容表 1.3）
     assert qinjie.skip_if_out == "zhangmancheng" and set(qinjie.outcomes) == {"甲:fixed", "乙:fixed"}
     zhujun = qinjie.outcomes["甲:fixed"].figures["zhujun"]
-    assert (zhujun.fate, zhujun.front, zhujun.location, zhujun.only_if) == ("到任", "nanyang", "wan_city", {"huangfusong": "yingru"})
+    assert (zhujun.fate, zhujun.front, zhujun.location, zhujun.only_if) == ("到任", "nanyang", "wan_city", {"huangfusong": "yingru", "zhujun": "yingru"})  # 8.11：朱儁也要在潁川
     assert zhujun.note == "右中郎將朱儁也領兵南下，往宛城去了。"
     assert events["luzhi_jailed"].base_chance == 0.5 and events["luzhi_jailed"].front is None
     assert events["luzhi_jailed"].lock_result == {"huang": "成", "guan": "不成"}
@@ -635,7 +635,7 @@ SHOWDOWN_NAMED = {
     ("wancheng", "乙", "huang"): "圍城的黃巾糧足，城裡的官軍先斷了糧。{name} 替{人物:zhaohong}囤下的糧，比攻城梯還管用，宛城開了門。",
 }
 SHOWDOWN_TIER = {  # 大勝接、險勝接。長社黃巾大勝的「波才分兵北上」不在這裡：那一句在 note 上，不論有沒有鎖定都接
-    ("changshe_fire", "", "guan"): ("騎都尉曹操的援兵恰好趕到，黃巾的草營燒成一片火海。", "只是風向不定，火只燒了半座營，{人物:bocai}敗走陽翟。"),
+    ("changshe_fire", "", "guan"): ("騎都尉曹操的援兵恰好趕到，{人物:bocai}的草營燒成一片火海。", "只是風向不定，火只燒了半座營，{人物:bocai}敗走陽翟。"),
     ("changshe_fire", "", "huang"): ("黃巾反從上風殺出，{人物:huangfusong}重挫退走。", "黃巾趁亂反撲，官軍折損甚重，{人物:huangfusong}重挫退走。"),
     ("wancheng", "甲", "guan"): ("城門從裡面打開，{人物:zhaohong}死在亂軍之中。", "宛城是破了，可{人物:zhaohong}帶著殘部從南門突圍。"),
     ("wancheng", "甲", "huang"): ("官軍的雲梯一架架被推倒，{官軍主將}的兵先散了。", "宛城守住了，只是城裡的糧也快見底了。"),
@@ -715,7 +715,7 @@ def test_changshe_guan_lock_big_win_with_the_baron_adds_his_line_last():
     text, _ = _announce("changshe_fire", "guan:大勝", lock=("guan", "甲"), losers=[("huang", "乙"), ("huang", "丙")], third=["豪甲"])
     assert text == (
         "史書上，皇甫嵩趁夜縱火，大破波才於長社。這一次，甲 讓史書沒有落空：葦束膏油早已備下，風起之時火光燭天。"
-        "騎都尉曹操的援兵恰好趕到，黃巾的草營燒成一片火海。"
+        "騎都尉曹操的援兵恰好趕到，波才的草營燒成一片火海。"  # 8.11：人名寫進「這一次」那半句
         "黃巾的 乙、丙 曾看破火攻、勸波才移營，可惜晚了一步。"
         "事後才有人發現，兩軍那幾天吃的糧竟出自同一家：豪甲 的糧車。"
     )
@@ -728,12 +728,12 @@ def test_changshe_huang_lock_big_win_says_the_northward_march_exactly_once():
         "史書上，皇甫嵩趁夜縱火，大破波才於長社。這一次，甲 看破了火攻，先一步勸波才移營，那一夜燒的是一座空營。"
         "黃巾反從上風殺出，皇甫嵩重挫退走。"
         "潁川得手之後，波才分兵北上，往廣宗去了。"  # 北上是這一檔結果句的一部分（S1 表），排在搶輸的一筆前面
-        "潁川交給了朱儁。"  # 朱儁那筆人物效果的 note（FB-042），接在這一格的 note 之後
+        "留在潁川的官軍，由朱儁收拾殘局。"  # 朱儁那筆人物效果的 note（FB-042；8.11 改字），接在這一格的 note 之後
         "官軍的 乙 費盡心思備下的火具，燒掉的只是幾頂空帳。"
         "事後才有人發現，兩軍那幾天吃的糧竟出自同一家：豪甲 的糧車。"
     )
     unlocked, _ = _announce("changshe_fire", "huang:大勝")  # 沒人鎖定的黃巾大勝：note 照樣接、也只有一次
-    assert unlocked.count("波才分兵北上") == 1 and unlocked.endswith("潁川得手之後，波才分兵北上，往廣宗去了。潁川交給了朱儁。")
+    assert unlocked.count("波才分兵北上") == 1 and unlocked.endswith("潁川得手之後，波才分兵北上，往廣宗去了。留在潁川的官軍，由朱儁收拾殘局。")
 
 
 def test_changshe_huang_lock_narrow_win_has_no_northward_march():
@@ -741,7 +741,7 @@ def test_changshe_huang_lock_narrow_win_has_no_northward_march():
     assert text == (
         "史書上，皇甫嵩趁夜縱火，大破波才於長社。這一次，甲 看破了火攻，先一步勸波才移營，那一夜燒的是一座空營。"
         "黃巾趁亂反撲，官軍折損甚重，皇甫嵩重挫退走。"
-        "潁川交給了朱儁。"  # 黃巾險勝原本沒有這一句，FB-042 一起補上
+        "留在潁川的官軍，由朱儁收拾殘局。"  # 黃巾險勝原本沒有這一句，FB-042 一起補上（8.11 改字）
     )
 
 
@@ -785,6 +785,59 @@ def test_wancheng_guan_lock_cells_read_named_part_then_tier_sentence():
 # 「史書上」那半句照寫真名；「這一次」那半句與江湖史寫到的人改成 {人物:<id>}，人物效果的鍵跟著改成 @人物:<id>。
 # 下面這張表是照第八節逐格抄的（沒列的欄位照舊），不是從 content 反推。鍵是 (大事, 結果鍵, 欄位)；
 # 欄位 "locked_text.guan" 是那一方的具名公告，"figures" 是人物效果的鍵（照順序）。
+
+SECTION_EIGHT_ELEVEN = {  # 8.11（2026-10-05 企劃者同意）：「這一次也一樣」那半句寫出人名
+    ("changshe_fire", "guan:大勝", "text"):
+        "這一次也一樣：大風夜起，城上舉火，{人物:bocai}的草營燒成一片火海，騎都尉曹操的援兵恰好趕到。",
+    ("changshe_fire", "guan:大勝", "locked_text.guan"):
+        "史書上，皇甫嵩趁夜縱火，大破波才於長社。這一次，{name} 讓史書沒有落空：葦束膏油早已備下，風起之時火光燭天。"
+        "騎都尉曹操的援兵恰好趕到，{人物:bocai}的草營燒成一片火海。",
+    ("guangzong", "guan:大勝", "text"):
+        "史書上，皇甫嵩夜勒兵，雞鳴馳赴廣宗，斬張梁，黃巾赴河死者五萬。這一次也一樣：{官軍主將}破了廣宗，斬了{人物:zhangliang}。",
+}
+
+
+def test_section_eight_eleven_cells():
+    """濃縮版內容表 8.11：三格「這一次」寫出人名；秦頡兩版的朱儁南下要朱儁也在潁川；長社黃巾勝朱儁那一句改字（順序不變）。"""
+    c, _ = _real_s1()
+    events = {e.id: e for e in c.timetable}
+    for (event_id, key, field), expected in SECTION_EIGHT_ELEVEN.items():
+        outcome = events[event_id].outcomes[key]
+        got = outcome.locked_text["guan"] if field == "locked_text.guan" else getattr(outcome, field)
+        assert got == expected, (event_id, key, field)
+    for key in ("甲:fixed", "乙:fixed"):
+        assert events["qinjie_slays_zhangmancheng"].outcomes[key].figures["zhujun"].only_if == {
+            "huangfusong": "yingru", "zhujun": "yingru"}
+    for key in ("huang:大勝", "huang:險勝"):
+        assert events["changshe_fire"].outcomes[key].figures["zhujun"].note == "留在潁川的官軍，由朱儁收拾殘局。"
+
+
+def test_bocai_gone_changshe_guan_win_names_his_successor():
+    """8.11 的例子：波才先退場、彭脫接手，長社官軍大勝讀到「……彭脫的草營燒成一片火海……」，江湖史也是彭脫。"""
+    from tianxia import figures, timetable
+    from tianxia.models import FigureChange
+
+    c, here = _real_s1()
+    figures.apply(here, c, "bocai", FigureChange(fate="退場"))
+    changshe = next(e for e in c.timetable if e.id == "changshe_fire")
+    [msg] = timetable.resolve(here, c, changshe, random.Random(0), key="guan:大勝")
+    assert "城上舉火，彭脫的草營燒成一片火海" in msg and "這一次也一樣" in msg
+    assert here.world.chronicle[-1].text == "皇甫嵩火攻長社，大破彭脫。"
+
+
+def test_qinjie_skips_zhujuns_march_when_he_is_gone():
+    """8.11 二：朱儁已經退場，秦頡那件不再接「右中郎將朱儁也領兵南下」。"""
+    from tianxia import figures, timetable
+    from tianxia.models import FigureChange
+    from tianxia.state import TimelineResult
+
+    c, here = _real_s1()
+    figures.apply(here, c, "zhujun", FigureChange(fate="退場"))
+    here.world.timeline["zhangmancheng_wan"] = TimelineResult(key="成", time=0.0)
+    qinjie = next(e for e in c.timetable if e.id == "qinjie_slays_zhangmancheng")
+    [msg] = timetable.resolve(here, c, qinjie, random.Random(0))
+    assert "朱儁也領兵南下" not in msg
+
 
 SECTION_EIGHT = {
     # 8.2 第 3 週・張曼成攻宛城
@@ -946,10 +999,10 @@ def test_changshe_huang_win_hands_yingru_to_zhujun_only_when_huangfusong_held_it
     changshe = next(e for e in c.timetable if e.id == "changshe_fire")
     for key in ("huang:大勝", "huang:險勝"):
         assert changshe.outcomes[key].figures["zhujun"] == FigureChange(
-            only_if={"huangfusong": "yingru", "zhujun": "yingru"}, note="潁川交給了朱儁。",
+            only_if={"huangfusong": "yingru", "zhujun": "yingru"}, note="留在潁川的官軍，由朱儁收拾殘局。",
         )
     msgs = timetable.resolve(here, c, changshe, random.Random(0), key="huang:險勝")
-    assert msgs == [f"【江湖大事】{changshe.preface}這一次，火攻沒有成。黃巾死戰不退，官軍折損甚重，皇甫嵩重挫退走。潁川交給了朱儁。"]
+    assert msgs == [f"【江湖大事】{changshe.preface}這一次，火攻沒有成。黃巾死戰不退，官軍折損甚重，皇甫嵩重挫退走。留在潁川的官軍，由朱儁收拾殘局。"]
     assert (here.world.figures["huangfusong"].front, here.world.figures["zhujun"].front) == ("jizhou", "yingru")
     assert here.world.figures["zhujun"].prestige == 60  # 朱儁那筆不動數字
     assert here.world.chronicle[-1].text == "長社火攻失利，皇甫嵩重挫。"

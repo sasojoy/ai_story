@@ -955,7 +955,7 @@ def test_end_to_end_one_chain(world):
     world.save_season(season)
     named = "史書上，皇甫嵩趁夜縱火，大破波才於長社。這一次，趙甲 讓史書沒有落空：葦束膏油早已備下，風起之時火光燭天。"
     assert msgs[0].startswith("【江湖大事】" + named)
-    assert "騎都尉曹操的援兵恰好趕到，黃巾的草營燒成一片火海。" in msgs[0]
+    assert "騎都尉曹操的援兵恰好趕到，波才的草營燒成一片火海。" in msgs[0]  # 8.11
     assert "黃巾的 錢乙 曾看破火攻、勸波才移營，可惜晚了一步。" in msgs[0]
     result = season.timeline["changshe_fire"]
     assert (result.key, result.locked_by, result.losers) == ("guan:大勝", "趙甲", ["錢乙"])

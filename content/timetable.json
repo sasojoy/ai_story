@@ -79,8 +79,8 @@
     "third_party_trends": {"geju": 10},
     "outcomes": {
       "guan:大勝": {
-        "text": "這一次也一樣：大風夜起，城上舉火，黃巾的草營燒成一片火海，騎都尉曹操的援兵恰好趕到。",
-        "locked_text": {"guan": "史書上，皇甫嵩趁夜縱火，大破波才於長社。這一次，{name} 讓史書沒有落空：葦束膏油早已備下，風起之時火光燭天。騎都尉曹操的援兵恰好趕到，黃巾的草營燒成一片火海。"},
+        "text": "這一次也一樣：大風夜起，城上舉火，{人物:bocai}的草營燒成一片火海，騎都尉曹操的援兵恰好趕到。",
+        "locked_text": {"guan": "史書上，皇甫嵩趁夜縱火，大破波才於長社。這一次，{name} 讓史書沒有落空：葦束膏油早已備下，風起之時火光燭天。騎都尉曹操的援兵恰好趕到，{人物:bocai}的草營燒成一片火海。"},
         "loser_text": {"guan": "黃巾的 {loser} 曾看破火攻、勸{人物:bocai}移營，可惜晚了一步。"},
         "chronicle": "{人物:huangfusong}火攻長社，大破{人物:bocai}。",
         "trends": {"yingru": -15},
@@ -102,7 +102,7 @@
         "chronicle": "長社火攻失利，{人物:huangfusong}重挫。",
         "trends": {"yingru": 15, "jizhou": 5},
         "figures": {
-          "zhujun": {"only_if": {"huangfusong": "yingru", "zhujun": "yingru"}, "note": "潁川交給了朱儁。"},
+          "zhujun": {"only_if": {"huangfusong": "yingru", "zhujun": "yingru"}, "note": "留在潁川的官軍，由朱儁收拾殘局。"},
           "@人物:huangfusong": {"fate": "重挫", "front": "jizhou", "location": "luzhi_camp"}
         },
         "chance_mods": {"luzhi_siege": -0.10}
@@ -114,7 +114,7 @@
         "chronicle": "長社火攻失利，{人物:huangfusong}重挫。",
         "trends": {"yingru": 8},
         "figures": {
-          "zhujun": {"only_if": {"huangfusong": "yingru", "zhujun": "yingru"}, "note": "潁川交給了朱儁。"},
+          "zhujun": {"only_if": {"huangfusong": "yingru", "zhujun": "yingru"}, "note": "留在潁川的官軍，由朱儁收拾殘局。"},
           "@人物:huangfusong": {"fate": "重挫", "front": "jizhou", "location": "luzhi_camp"}
         }
       }
@@ -158,7 +158,7 @@
         "trends": {"nanyang": -3},
         "figures": {
           "zhangmancheng": {"fate": "退場"},
-          "zhujun": {"fate": "到任", "front": "nanyang", "location": "wan_city", "only_if": {"huangfusong": "yingru"}, "note": "右中郎將朱儁也領兵南下，往宛城去了。"}
+          "zhujun": {"fate": "到任", "front": "nanyang", "location": "wan_city", "only_if": {"huangfusong": "yingru", "zhujun": "yingru"}, "note": "右中郎將朱儁也領兵南下，往宛城去了。"}
         }
       },
       "乙:fixed": {
@@ -167,7 +167,7 @@
         "trends": {"nanyang": -3},
         "figures": {
           "zhangmancheng": {"fate": "退場"},
-          "zhujun": {"fate": "到任", "front": "nanyang", "location": "wan_city", "only_if": {"huangfusong": "yingru"}, "note": "右中郎將朱儁也領兵南下，往宛城去了。"}
+          "zhujun": {"fate": "到任", "front": "nanyang", "location": "wan_city", "only_if": {"huangfusong": "yingru", "zhujun": "yingru"}, "note": "右中郎將朱儁也領兵南下，往宛城去了。"}
         }
       }
     }
@@ -318,7 +318,7 @@
     "kind": "showdown",
     "outcomes": {
       "guan:大勝": {
-        "text": "史書上，皇甫嵩夜勒兵，雞鳴馳赴廣宗，斬張梁，黃巾赴河死者五萬。這一次也一樣：{官軍主將}破了廣宗。",
+        "text": "史書上，皇甫嵩夜勒兵，雞鳴馳赴廣宗，斬張梁，黃巾赴河死者五萬。這一次也一樣：{官軍主將}破了廣宗，斬了{人物:zhangliang}。",
         "chronicle": "{官軍主將}破廣宗，斬{人物:zhangliang}。",
         "trends": {"jizhou": -20},
         "figures": {"@人物:zhangliang": {"fate": "退場"}, "zhangjiao": {"fate": "退場"}}
