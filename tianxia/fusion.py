@@ -186,7 +186,7 @@ def fuse_problem(state: GameState, content: Content, world: WorldStateStore, art
         return "找不到它的資料。"  # 存檔裡記著、內容與全服登記裡都沒有（失效的引用）
     known = world.lookup_recipe(fuse_key(art_id, insight_id))
     if known is not None and known.id in library.owned_arts(state):
-        return f"這一爐合出來還是【{known.name}】，你已經有了——換一個意境吧。"
+        return f"這一爐合出來還是【{known.name}】，你已經有了——換一組試試吧。"
     if library.full(state, content):
         return _full_line(state, content)
     problem = _xinde_line(state, content.config.fuse_xinde, "合成")
@@ -328,7 +328,7 @@ def fuse(
         if art is None:
             return None, ["爐火熄了，這一次什麼也沒合成（名字都被用掉了，再試一次）。"]
     if art.id in library.owned_arts(state):  # 合到的、先被別人登記的，剛好是你已經有的：不收錢、不重複收
-        return None, [f"這一爐合出來還是【{art.name}】，你已經有了——換一個意境吧。"]
+        return None, [f"這一爐合出來還是【{art.name}】，你已經有了——換一組試試吧。"]
     cfg = content.config
     # 新武學一律從登記的品質（下品）起修，不看底現在是什麼品質：store_art 不帶 quality，就不會記一筆個人品質
     msgs = [_fuse_line(base, insight, art, first, landed)] + _charge(state, cfg.fuse_xinde, cfg.fuse_stamina)
@@ -498,8 +498,9 @@ def blend(
         return None, [f"這兩門合出來還是【{art.name}】，你已經有了——換一門吧。"]
     cfg = content.config
     verb = "合出來的竟是一門已有的" if landed else "衍生出一門"
+    lead, follow = (art_a, art_b) if a <= b else (art_b, art_a)  # 照 id 排，跟 parents、功法卡的「由【甲】與【乙】衍生」同一個先後（FB-073）
     head = (
-        f"你把【{art_a.name}】與【{art_b.name}】合而為一，{verb}{art.kind}【{art.name}】"
+        f"你把【{lead.name}】與【{follow.name}】合而為一，{verb}{art.kind}【{art.name}】"
         f"（{art.quality}・屬{art.attribute}）！"
     )
     msgs = [head + _arrival(art, first, landed)] + _charge(state, cfg.fuse_xinde, cfg.fuse_stamina)

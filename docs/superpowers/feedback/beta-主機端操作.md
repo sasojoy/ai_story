@@ -50,22 +50,182 @@ $env:TIANXIA_DB = "C:\Ray\tianxia-play\tianxia.db"
 - 伺服器重開後**每個人都要重新登入一次**。帳號、角色、進度都還在。
 - 有網址的人都能進來註冊，所以網址只私下給，不要貼在公開的地方。
 
+## 換成自己的網域（Cloudflare 具名 Tunnel）
+
+封測要用固定的網址：LINE、Google 登入只認事先登記好的網址；trycloudflare 每次重開都換，不能用（線上架構帳號計畫開頭的清單第 1、2 項）。下面是企劃者自己做一次的步驟。指令裡的 `tianxia-game.com` 換成你買的網域，`tianxia` 是隧道的名字，照用就好。
+
+> 這台電腦已經裝好 cloudflared（2026.9.3），下面的指令都是它內建說明裡有的。哪一步出了沒寫到的訊息，截圖給 PM。
+
+**一、買網域，交給 Cloudflare 管**
+
+1. 登入 Cloudflare 的網站，左邊「網域註冊」→「註冊網域」，搜尋想要的名字，照畫面付款。在 Cloudflare 買的網域，DNS 自動就在 Cloudflare，不用另外設。
+2. 已經在別家買了網域：在 Cloudflare 按「新增網站」加進來，照畫面把那家的名稱伺服器（nameserver）改成 Cloudflare 給的兩個。改好之後可能要等幾小時才生效。
+
+**二、讓這台電腦登入 Cloudflare、建隧道**（一次就好）
+
+開一個 PowerShell 視窗：
+
+```powershell
+cloudflared tunnel login
+```
+
+- 瀏覽器會打開 Cloudflare 的授權頁，選你的網域、按「授權」。
+- 回到視窗，看到檔案寫進 `C:\Users\<你>\.cloudflared\cert.pem` 就好。這個檔是你的 Cloudflare 憑證，**不要給任何人、不要放進 git 或貼在對話裡**。
+
+```powershell
+cloudflared tunnel create tianxia
+```
+
+- 會印出一串隧道編號（UUID），並在同一個資料夾寫一個 `<UUID>.json`。這也是密鑰，同樣不外流。
+
+```powershell
+cloudflared tunnel route dns tianxia tianxia-game.com
+```
+
+- 在 Cloudflare 的 DNS 加一筆紀錄，讓 `tianxia-game.com` 指到這條隧道。
+- 想用子網域（例如 `play.tianxia-game.com`），就把最後那一段換成子網域。
+
+**三、平常怎麼開**
+
+伺服器照平常開，**不要加 `--share`**（`--share` 是開臨時網址的）：
+
+```powershell
+cd C:\Ray\專案\天下大勢
+$env:TIANXIA_DB = "C:\Ray\tianxia-play\tianxia.db"
+.venv\Scripts\python.exe -u server.py --port 7861
+```
+
+另開一個視窗開隧道：
+
+```powershell
+cloudflared tunnel run --url http://127.0.0.1:7861 tianxia
+```
+
+- 看到幾行「Registered tunnel connection」就通了，手機打開 `https://tianxia-game.com` 試試。
+- 這個網址重開也不會變，所以 LINE、Google 的回傳網址都填它：
+  - `https://tianxia-game.com/auth/line/callback`
+  - `https://tianxia-game.com/auth/google/callback`
+- 帳號計畫的 `.local/oauth.json` 裡，`base_url` 也寫 `https://tianxia-game.com`。
+- 要停：在隧道視窗按 Ctrl+C。伺服器那個視窗照舊。
+
+**四、（選擇性）讓隧道開機自己跑**
+
+先用第三步的視窗方式跑順，再考慮這一步。要用系統管理員身分開 PowerShell。
+
+1. 在 `C:\Users\<你>\.cloudflared\` 建一個 `config.yml`，內容如下：
+   - `<UUID>` 換成第二步印出來的那一串；
+   - 檔案路徑寫完整。
+
+   ```yaml
+   tunnel: <UUID>
+   credentials-file: C:\Windows\System32\config\systemprofile\.cloudflared\<UUID>.json
+   ingress:
+     - hostname: tianxia-game.com
+       service: http://127.0.0.1:7861
+     - service: http_status:404
+   ```
+
+2. 系統服務是用系統帳號跑的，讀不到你自己資料夾的檔。所以要把 `config.yml` 與 `<UUID>.json` 兩個檔，複製到 `C:\Windows\System32\config\systemprofile\.cloudflared\`；資料夾沒有就建一個。
+3. 在系統管理員的 PowerShell 打 `cloudflared service install`。
+4. 到「服務」程式找 Cloudflared，確認是「執行中」、啟動類型是「自動」。
+5. 服務起不來時：先 `cloudflared service uninstall`，回到第三步的視窗方式，截圖給 PM。
+
+伺服器本身要不要也開機自動跑，是部署那一期的事；在那之前，伺服器照舊用視窗開。
+
 ## 怎麼停
 
 在兩個視窗各按一次 **Ctrl+C**。伺服器和 cloudflared 會一起關掉，不會留下東西。直接關掉視窗也可以。
 
 ## 怎麼備份資料庫
 
-1. 先把伺服器和假人**兩個都停掉**。
-2. 把資料庫的三個檔一起複製到別的資料夾：`tianxia.db`、`tianxia.db-wal`、`tianxia.db-shm`。後兩個有時候不存在，有就一起帶。
+伺服器開著也可以備份。備份腳本用 SQLite 內建的線上備份，做出來的是一個獨立的 `.db` 檔，先驗過才放上去。備份先放在這台電腦的資料夾 `C:\Ray\tianxia-play\backup`，不上雲端（企劃者 2026-10-06 定）；之後要上雲，看下面「之後要上雲時怎麼改」。
+
+**手動備份**：換程式、收季、出事之前做。手動備份永遠留著，不會被刪。
 
 ```powershell
-$dst = "C:\Ray\tianxia-play\backup\$(Get-Date -Format yyyyMMdd-HHmm)"
-New-Item -ItemType Directory -Force $dst | Out-Null
-Copy-Item C:\Ray\tianxia-play\tianxia.db* $dst
+cd C:\Ray\專案\天下大勢
+$env:TIANXIA_DB = "C:\Ray\tianxia-play\tianxia.db"
+.venv\Scripts\python.exe scripts\backup_db.py --dest C:\Ray\tianxia-play\backup
 ```
 
-要還原時，一樣先停掉兩個程式，再把這三個檔複製回去。
+成功會印：`已備份：C:\Ray\tianxia-play\backup\tianxia-manual-20261006-050000.db（結構第 2 版、帳號 3、角色 5、季 2、江湖史 120）`。失敗會印「備份失敗：…」，原因寫在後面。備份先寫成 `.partial`，驗過才改成正式的檔名，所以資料夾裡看到 `tianxia-…db` 的，都是驗過的。
+
+**每天自動備份**：企劃者自己設一次就好。下面的 `schtasks` 是**給企劃者自己貼的**：它會改這台電腦的排程設定，PM 和其他 Claude session 不要代貼、不要代跑。
+
+1. 開一個 PowerShell 視窗，貼下面這一段。排程設在每天早上 5 點，備份放 `C:\Ray\tianxia-play\backup`：
+
+   ```powershell
+   $py = "C:\Ray\專案\天下大勢\.venv\Scripts\python.exe"
+   $script = "C:\Ray\專案\天下大勢\scripts\backup_db.py"
+   $taskArgs = "`"$script`" --db C:\Ray\tianxia-play\tianxia.db --dest C:\Ray\tianxia-play\backup --tag daily --prune"
+   schtasks /Create /TN "天下大勢每日備份" /SC DAILY /ST 05:00 /TR "`"$py`" $taskArgs" /F
+   ```
+2. 馬上試跑一次：`schtasks /Run /TN "天下大勢每日備份"`。然後到 `C:\Ray\tianxia-play\backup`，看有沒有一個 `tianxia-daily-…db`。
+3. 之後在「工作排程器」程式裡，可以看到這個工作的「上次執行結果」：`0x0` 是成功，`0x1` 是失敗。
+4. 在「工作排程器」找到這個工作，雙擊打開，**改兩個預設值**（`schtasks` 建出來的工作，預設在沒插電、或錯過時間的時候都不會跑）：
+   - 「條件」分頁 →「電源」：取消勾選「只有在電腦使用 AC 電源時，才啟動這個工作」（英文介面：Start the task only if the computer is on AC power），也取消「電腦改用電池電源時停止」（Stop if the computer switches to battery power）。新建的工作預設兩個都是勾著的，筆電沒插電那天就不備份；中文字樣可能和這裡寫的略有出入，認得出電源那兩條就是。
+   - 「設定」分頁：勾「若錯過排定的開始時間，儘快啟動工作」。電腦在 5 點關機或睡眠，那一天就不會備份，勾了之後開機會補跑。
+
+- **只在這個使用者登入時才會跑**：上面的指令沒有 `/RU`，工作是用目前這個使用者的身分建的，登出或鎖在登入畫面時不會執行。這台試玩主機要一直保持登入。要改成沒登入也跑，得在工作的「一般」分頁選「不論使用者登入與否，都要執行」，會要你輸入 Windows 密碼，自己決定要不要。
+- 每日備份只留最近 14 天每天一份，加最近 8 週每週一份，其餘自動刪掉；最新的一份不管多舊都會留著。手動備份和資料夾裡別的檔都不會被刪。
+- 某一份舊備份刪不掉（被別的程式開著）時，其他能刪的照刪，腳本最後把刪不掉的檔一份一份列出來、印「刪舊備份失敗」，「上次執行結果」會是 `0x1`；今天的備份已經做好，隔天會再試。
+- 資料夾裡有 `.bad` 結尾的檔，是驗證沒通過的備份，留著給人查原因（把檔案和那次印出的訊息給開發的人），不會被自動刪。資料庫自己壞掉時（腳本印「資料庫本身壞了」），複製到一半的檔也會留成 `.bad`，每天跑一次就多一份，壞掉修好之後記得自己清掉。
+- 遊戲的資料庫換了位置（例如換到線上版資料夾），第 1 步要重貼一次，`/F` 會蓋掉舊的。
+- 備份和遊戲資料在同一顆硬碟：硬碟壞掉時兩份一起沒。在還沒上雲之前，偶爾把 `C:\Ray\tianxia-play\backup` 整個資料夾複製到隨身碟或別台電腦。
+
+### 之後要上雲時怎麼改
+
+腳本不用動，只要把每天備份的目的地換成雲端硬碟的同步資料夾：
+
+1. 決定同步資料夾，例如 `C:\Users\<你>\OneDrive\tianxia-backup`，或 Google 雲端硬碟電腦版的資料夾。
+2. 自己貼下面這一段（一樣是企劃者自己貼）。雲端資料夾的路徑常常有空白（例如 `OneDrive - 公司`），**一定要照這個寫法**，把 `<你>` 換成你的使用者名稱：
+
+   ```powershell
+   $py = "C:\Ray\專案\天下大勢\.venv\Scripts\python.exe"
+   $script = "C:\Ray\專案\天下大勢\scripts\backup_db.py"
+   $taskArgs = "\`"$script\`" --db C:\Ray\tianxia-play\tianxia.db --dest \`"C:\Users\<你>\OneDrive - 公司\tianxia-backup\`" --tag daily --prune"
+   schtasks /Create /TN "天下大勢每日備份" /SC DAILY /ST 05:00 /TR "\`"$py\`" $taskArgs" /F
+   ```
+
+   - 字串裡的雙引號要寫成 ``\`"``（反斜線、反引號、雙引號，三個字元連在一起）。這台電腦的 Windows PowerShell 5.1 把字串交給 `schtasks` 之前，會吃掉只寫 `` `" ``（反引號加雙引號）的那種引號，路徑就在空白處被切成好幾段，工作建得起來、每天卻跑錯；寫成 ``\`"`` 才會原封不動送到（2026-10-06 在這台電腦上，用一支只把收到的引數印出來的小程式代替 `schtasks` 試過：三種寫法裡只有這一種收到的 `/TR` 是完整、引號都在的）。
+   - 上面「每天自動備份」那段本機指令的路徑沒有空白，引號被吃掉也不影響，所以不用改；只有目的地有空白才要用這個寫法。
+   - `/F` 會蓋掉舊的排程，不會多出第二個。重貼之後，「工作排程器」裡的「條件」「設定」兩個勾（第 4 步）要再確認一次。
+   - 貼完先看一眼：在「工作排程器」雙擊這個工作 →「動作」，「新增引數」裡 `--dest` 後面的路徑要有雙引號包著。
+3. 馬上試跑一次：`schtasks /Run /TN "天下大勢每日備份"`，到雲端資料夾看有沒有 `tianxia-daily-…db`，再等雲端程式顯示同步完成。
+4. 本機 `C:\Ray\tianxia-play\backup` 裡原本的備份留著，之後不會再被自動刪（保留規則只看目的地那個資料夾），要清就自己清。想兩邊都留，就另外建一個工作：`/TN` 換一個名字、`--dest` 各填各的。
+5. 備份檔是單一個 `.db`、先寫成 `.partial` 驗過才改名，所以雲端程式不會同步到寫到一半的檔。雲端程式正在同步舊檔時，刪舊備份可能失敗：今天的備份已經做好，腳本會印「刪舊備份失敗」、「上次執行結果」是 `0x1`，隔天會再刪一次。
+
+## 怎麼還原
+
+1. **先停掉伺服器和假人程式**，兩個視窗各按 Ctrl+C。沒停掉的話，還原腳本會拒絕，什麼都不動。
+   - 這個保護**只在 Windows 有用**：它靠的是 Windows 上還開著的檔案改不了名。在 Linux 或 macOS 上，改名不管檔案有沒有被打開都會成功，腳本攔不住，會把還開著的資料庫搬走。這台試玩主機是 Windows，沒問題；之後資料庫搬到別的系統上，要自己先確定兩個程式都停了。
+2. 找到要還原的備份檔，然後：
+
+   ```powershell
+   cd C:\Ray\專案\天下大勢
+   .venv\Scripts\python.exe scripts\restore_db.py <備份檔> --db C:\Ray\tianxia-play\tianxia.db
+   ```
+3. 成功會印「已還原：…」，以及「還原前的資料庫留在：…pre-restore-…」。原本的檔改了名留著。如果舊的資料庫旁邊還有 `-wal`、`-shm`、`-journal`（伺服器當機留下的），它們也一起改了名，腳本會把這些檔的路徑一個一個印出來。複製不過去（例如磁碟滿了）會印「還原失敗」，現在的資料庫一點都沒動。
+4. 照平常的方式開伺服器和假人。所有人都要重新登入一次。
+
+**還原錯了、要退回去**：先停掉伺服器和假人，再把還原出來的檔移開，把舊的改名回去，**舊的 `-wal`、`-shm`、`-journal` 有印出來的也要一起改回去**（不然舊的資料庫會少掉還沒寫進主檔的最後一段）。以腳本印出的檔名為準，下面是例子：
+
+```powershell
+cd C:\Ray\tianxia-play
+Rename-Item tianxia.db tianxia.db.restored
+Rename-Item tianxia.db.pre-restore-20261006-050000 tianxia.db
+Rename-Item tianxia.db.pre-restore-20261006-050000-wal tianxia.db-wal   # 腳本有印出 -wal 才做
+Rename-Item tianxia.db.pre-restore-20261006-050000-shm tianxia.db-shm   # 腳本有印出 -shm 才做
+```
+
+**每個月實際還原一次**，確認備份真的能用（線上架構設計 8.5）：
+
+1. 拿最新的一份每日備份，還原到一個**練習用的檔**，不要還原到正式的那一份：
+
+   ```powershell
+   .venv\Scripts\python.exe scripts\restore_db.py <最新的每日備份> --db C:\Ray\tianxia-play\restore-drill.db
+   ```
+2. 再用這個練習檔開一個伺服器，換一個 port，例如 7899，登入看角色在不在。看完關掉，把 `restore-drill.db` 刪掉。
 
 ## 換成第一季濃縮版的那一天
 

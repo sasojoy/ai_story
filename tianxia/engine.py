@@ -72,6 +72,10 @@ class Option(BaseModel):
 
 FREE_TEXT_OPTION = "choice:free"  # 事件的「隨口應對」：按下去只是叫出輸入框，真正送出走 free_text_request／answer_event
 BIG_FIGHT_WAIT = "兩人對峙……"  # 大場面按下去、等模型判讀時按鈕上的字（武學與成長設計 8.3）
+# 等模型判讀的時候選項沒了（另一個分頁把人帶走、事件被了結、體力花光）：這一仗不打，回這一句話代替一句看不出所以然的「無法這麼做」
+FIGHT_LEFT = "你離開了，這一仗沒打成。"
+FIGHT_CHANGED = "情勢變了，這一仗沒打成。"
+FIGHT_GONE_LINES = (FIGHT_LEFT, FIGHT_CHANGED)
 
 
 class FreeTextRequest(BaseModel):
@@ -780,6 +784,13 @@ class Game:
             return None
         return fight if self.fight_request(option_id) == fight.request else None
 
+    def _fight_gone(self, fight: fight_llm.PreparedFight) -> str:
+        """大場面 C 段：選項已經不在了。人不在備料時的地點了、或已經在路上就說「你離開了」；其他（事件被了結、體力花光……）
+        認不出是哪一種變動，說得中性一點。備料（fight_request）一定是選項還按得下去才開單、而路上不開單，所以這裡只可能是等判讀的
+        時候變的；步行、趕路出發之後 location 要到抵達才換（Journey 在路上時還是出發地），所以也要看 journey。"""
+        player = self.state.player
+        return FIGHT_LEFT if player.journey is not None or player.location != fight.request.location else FIGHT_CHANGED
+
     def _judged(self, squad: Squad) -> fight_llm.Judgment | None:
         """這一場有沒有鎖外判讀好的優勢：有、而且是同一路對手，就拿出來用掉——一次行動只用一次，同一次行動再打一場
         同一路也不會再吃一次（計畫三 G8）。"""
@@ -812,10 +823,12 @@ class Game:
         """prepared 是 server.py 在鎖外先生成好的一輪對話（見 dialogue_request／companion_agent.prepare_turn）；
         只有對話選項用得到，進來先重驗，驗不過就忽略。
         fight 是 server.py 在鎖外先判讀好的大場面（見 fight_request／fight_llm.judge）：一樣先重驗（_checked_fight），
-        驗不過就忽略、照平常打（優勢 0）。假人、整季機器人不帶，大場面也是優勢 0、照平常演出（武學與成長設計 8.3）。"""
+        驗不過就忽略、照平常打（優勢 0）。假人、整季機器人不帶，大場面也是優勢 0、照平常演出（武學與成長設計 8.3）。
+        不過等判讀的時候這個選項已經不在選單上了（人被帶走、事件被了結）就不打：回一句話說這一仗沒打成（_fight_gone），
+        不寫戰報也不寫江湖紀錄（跟其他的拒絕一樣）。"""
         option = {o.id: o for o in self.options(odds=False)}.get(option_id)
         if option is None or not option.enabled:
-            return self._log(["（此刻無法這麼做。）"])
+            return self._log([self._fight_gone(fight) if fight is not None else "（此刻無法這麼做。）"])
         self.state.battle_card = None
         self.state.player.guide_done = []  # 對話框上一次完成的那幾行，下一次行動就清掉
         kind, _, arg = option_id.partition(":")
@@ -2926,8 +2939,9 @@ class Game:
         out = self._log(msgs)
         if tag is not None:
             spent = round(stamina - self.state.player.stamina)  # 三種合成都花體力：數值變化寫在紀錄上，跟修練一樣
-            out += self._menxia_entry(
+            out += self._menxia_entry(  # 結果那一句（第一則訊息）也寫進這一則的敘事，拿到新東西的那一行才配得到 journal._NEW_THING（FB-073）
                 tag, xinde, guide=True, title=journal.CRAFT, extra=[f"體力 -{spent}"] if spent > 0 else None,
+                lines=out[:1],
             )
         return out
 
@@ -3050,10 +3064,11 @@ class Game:
 
     def _menxia_entry(
         self, tag: str, xinde_before: int, guide: bool = False, title: str = journal.PRACTICE,
-        extra: list[str] | None = None,
+        extra: list[str] | None = None, lines: list[str] | None = None,
     ) -> list[str]:
         """修練頁、煉製頁的動作寫進江湖紀錄（同一種連續的併成一則）。標題照底部分頁的名字：煉製寫「煉製」，
         鍛鍊、療傷、改練寫「修練」（FB-047；以前都寫「門下」，煉製會併進前面那則鍛鍊）。
+        lines：這個動作要留在敘事裡的話（煉製的結果那一句，FB-073）；不給就只有結果標記，結果標記本身就是那句話（修練、療傷……）。
 
         guide=True：這個動作算一次「練功」（煉製、鍛鍊），順便看新手引導有沒有完成（FB-024）。完成了，
         note_action 回來的「✔ 引導完成」、獎勵與說書人的下一步記在這一則的 guide（江湖紀錄看得到），給對話框
@@ -3063,7 +3078,9 @@ class Game:
         self.state.player.guide_done = []
         notes = note_action(self.state, self.content, self.world, "practice") if guide else []
         self._note_guide(notes)  # 引導的訊息記在這一則的 guide、給對話框，不進修練頁的訊息（引導重做設計 8.1.3）
-        entry = JournalEntry(time=self.state.world.time, title=title, tag=tag, changes=changes, guide=notes)
+        entry = JournalEntry(
+            time=self.state.world.time, title=title, tag=tag, lines=list(lines or []), changes=changes, guide=notes,
+        )
         journal.add_entry(self.state, entry, merge=True)
         return []
 
