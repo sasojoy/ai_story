@@ -303,6 +303,56 @@ def test_the_chronicle_line_names_the_old_name_and_the_new_one(kicker, content, 
     assert [r.text for r in kicker.world.chronicle] == ["沈浪把【旋風腿】練成絕學，為之定名【風神腿】。"]
 
 
+def test_an_anonymous_namer_goes_into_the_chronicle_as_a_nameless_hero(kicker, content, world):
+    """匿名行走（最終審查 Important 2）：江湖史是公開的，定名那一筆照 rules.display_name 寫。"""
+    kicker.player.anonymous = True
+    kicker.player.art_quality["旋風腿"] = "上品"
+    cultivation.cultivate(kicker, content, world, "旋風腿", WIN)
+    cultivation.name_mastered(kicker, content, world, "風神腿")
+    assert [r.text for r in kicker.world.chronicle] == ["某位少俠把【旋風腿】練成絕學，為之定名【風神腿】。"]
+
+
+def test_the_second_to_reach_peerless_sees_an_anonymous_first_as_a_nameless_hero(kicker, content, world):
+    """第一個練成的人匿名行走：取名權照名號認（身分），後到的人看到的是「某位少俠」。"""
+    kicker.player.anonymous = True
+    kicker.player.art_quality["旋風腿"] = "上品"
+    cultivation.cultivate(kicker, content, world, "旋風腿", WIN)
+    assert world.master_of("旋風腿") == "沈浪" and kicker.player.naming == "旋風腿"
+    other = equip(new_game_state(content, "乙"))
+    other.player.art_quality["旋風腿"] = "上品"
+    msgs = cultivation.cultivate(other, content, world, "旋風腿", WIN)
+    assert "這門武學已由某位少俠率先練成絕學。" in msgs and not any("沈浪" in m for m in msgs)
+
+
+def test_the_season_firsts_write_an_anonymous_player_as_a_nameless_hero(state, content, world):
+    """換季寫進江湖史的首創（合成、首悟、練成絕學）：匿名行走的人寫「某位少俠」，走真的合成、合併、修練、定名。"""
+    from unittest import mock
+
+    from tianxia import naming
+
+    content.config.auto_open_first_season = True
+    world.seed_first_season(content)
+    state.player.anonymous = True
+    state.player.member.wugong_id = "basic_fist"
+    state.player.insights = ["feng", "huo"]
+    state.player.stats["xinde"], state.player.stamina = 100, 150
+    model = mock.Mock()
+    model.chat_structured.side_effect = [naming.NameReply(name="旋風腿"), naming.NameReply(name="燎原")]
+    art, _ = fusion.fuse(state, content, world, model, "basic_fist", "feng")
+    fusion.merge(state, content, world, model, "feng", "huo")
+    state.player.art_quality[art.id] = "上品"
+    cultivation.cultivate(state, content, world, art.id, WIN)
+    cultivation.name_mastered(state, content, world, "風神腿")
+    world.mutate_season(lambda season: setattr(season, "ended", True))
+    assert world.next_season(content, now=1.0)
+    [(_, entries)] = world.chronicle_before(2)
+    assert [e.text for e in entries] == [
+        "第 1 季合成首創 1 門：【風神腿】某位少俠",
+        "第 1 季首悟意境 1 個：「燎原」某位少俠",
+        "第 1 季練成絕學 1 門：【風神腿】某位少俠",
+    ]
+
+
 def test_the_second_to_reach_peerless_does_not_name_it(kicker, content, world):
     world.claim_master("旋風腿", "甲")
     kicker.player.art_quality["旋風腿"] = "上品"

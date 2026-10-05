@@ -17,9 +17,10 @@
 from __future__ import annotations
 
 from . import insights, library, naming, team
-from .martial_arts import Insight, MartialArt, generate_from_name
+from .martial_arts import Insight, MartialArt, generate_from_name, shown_creator
 from .models import Content
 from .ollama_client import OllamaClient
+from .rules import display_name
 from .state import GameState
 from .world_state import WorldStateStore
 
@@ -111,7 +112,7 @@ def fuse(
                 name = naming.fallback_name(content, key, base.kind, salt=attempt)
             candidate = generate_from_name(name, base.kind, name, tianji, weights=LOW_ONLY, attribute=insight.attribute)
             candidate = candidate.model_copy(update={
-                "origin": "fused", "creator": state.player.name, "note": note,
+                "origin": "fused", "creator": state.player.name, "creator_shown": display_name(state), "note": note,
                 "insight": insight.id, "base": art_id, "lean": insight.lean,
             })
             art, first = world.claim_recipe(key, candidate)  # 同時有人先登記了：拿到的是人家登記的那一門
@@ -138,7 +139,7 @@ def _fuse_line(base: MartialArt, insight: Insight, art: MartialArt, first: bool)
         head += f"\n{art.note}"
     if first:
         return head + "\n這是江湖上第一次有人合出這一門——從此它就叫這個名字。"
-    return head + f"\n這一門由{art.creator or '不知名的前人'}首創，你照著合出了同一門。"
+    return head + f"\n這一門由{shown_creator(art) or '不知名的前人'}首創，你照著合出了同一門。"
 
 
 def merge_problem(state: GameState, content: Content, world: WorldStateStore, a: str, b: str) -> str | None:
@@ -192,7 +193,8 @@ def merge(
                 name = naming.fallback_name(content, key, "意境", salt=attempt)
             candidate = Insight(
                 id=name, name=name, attribute=insights.merged_attribute(ia, ib, name),
-                lean=insights.merged_lean(ia, ib), creator=state.player.name, note=note, parents=sorted([a, b]),
+                lean=insights.merged_lean(ia, ib), creator=state.player.name, creator_shown=display_name(state),
+                note=note, parents=sorted([a, b]),
             )
             result, first = world.claim_insight_recipe(key, candidate)
             if result is not None:
@@ -209,5 +211,5 @@ def merge(
     head = f"「{ia.name}」與「{ib.name}」在你心中交融，化成「{result.name}」（屬{result.attribute}）！"
     if result.note:
         head += f"\n{result.note}"
-    head += "\n這是江湖上第一次有人悟出這個意境。" if first else f"\n這個意境由{result.creator or '不知名的前人'}首悟。"
+    head += "\n這是江湖上第一次有人悟出這個意境。" if first else f"\n這個意境由{shown_creator(result) or '不知名的前人'}首悟。"
     return result, [head, f"心得 -{price}", f"體力 -{tired}"]

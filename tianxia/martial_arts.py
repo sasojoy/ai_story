@@ -38,7 +38,12 @@ class MartialArt(BaseModel):
     # "historical"（本命武學，內容手寫）、"basic"（基礎武學，內容手寫）、"fused"（合成）；
     # 舊資料還有 "created"（玩家取名自創）與 "crafted"（舊的素材煉製，已經沒有了）
     origin: str = "created"
-    creator: str | None = None  # 合成首創者；舊的自創、煉製功法照舊；內容武學為 None
+    creator: str | None = None  # 合成首創者的名號（身分，誰是首創者照它認）；舊的自創、煉製功法照舊；內容武學為 None
+    # 首創者寫給別人看的名號：登記當下照匿名行走的規矩定（rules.display_name，匿名是「某位少俠」）；
+    # 功法卡、後到的人那一句、換季的江湖史都寫這個（shown_creator）。舊資料沒有，照 creator
+    creator_shown: str | None = None
+    # 全服第一個把它練成絕學的人寫給別人看的名號（world.claim_master 登記時一起寫進來）；身分記在 masters 表
+    master_shown: str | None = None
     note: str = ""  # 模型寫的一句話描述（只有語意、沒有數字）；自創與本命武學是空的
     insight: str | None = None  # 最後融的意境 id（武學與成長設計 3.4）；修練要用它
     base: str | None = None  # 合成的底（功法 id）
@@ -53,9 +58,15 @@ class Insight(BaseModel):
     name: str
     attribute: str  # ATTRIBUTES 其中之一
     lean: str = "無"  # 正、邪、無（設計 7.3）
-    creator: str | None = None  # 合併出來的：第一個合出來的人；基本意境是 None
+    creator: str | None = None  # 合併出來的：第一個合出來的人的名號（身分）；基本意境是 None
+    creator_shown: str | None = None  # 首悟者寫給別人看的名號（登記當下照匿名的規矩定，見 MartialArt.creator_shown）
     note: str = ""  # 模型寫的一句說明；基本意境是內容的 desc
     parents: list[str] = Field(default_factory=list)  # 合併出來的：兩個來源的 id（排序過）
+
+
+def shown_creator(thing: MartialArt | Insight) -> str | None:
+    """首創者寫給別人看的名號：登記當下定的那一個（匿名行走的人是「某位少俠」）；舊資料沒記，照名號。"""
+    return thing.creator_shown or thing.creator
 
 
 def power_at(art: MartialArt, level: int) -> float:

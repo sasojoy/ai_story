@@ -223,6 +223,32 @@ def test_a_second_player_merges_into_the_same_insight_without_the_model(ready, c
     assert other.player.insights == ["feng", "huo", "燎原"] and "首悟" in msgs[0]
 
 
+def test_an_anonymous_first_fuser_is_stored_by_name_but_shown_as_a_nameless_hero(ready, content, world):
+    """匿名行走（最終審查 Important 2）：首創者的名號是身分（存著照舊），寫給別人看的地方——後到的人那一句、
+    功法卡（skillview）、換季的江湖史——用登記當下的匿名規矩寫「某位少俠」（rules.display_name）。"""
+    ready.player.anonymous = True
+    art, msgs = fusion.fuse(ready, content, world, named("旋風腿"), "basic_fist", "feng")
+    stored = world.get_skill(art.id)
+    assert (stored.creator, stored.creator_shown) == ("沈浪", "某位少俠")
+    _, msgs = fusion.fuse(other_player(content), content, world, must_not_ask(), "basic_fist", "feng")
+    assert "這一門由某位少俠首創" in msgs[0] and "沈浪" not in msgs[0]
+
+
+def test_a_named_first_fuser_is_shown_by_name(ready, content, world):
+    art, _ = fusion.fuse(ready, content, world, named("旋風腿"), "basic_fist", "feng")
+    assert world.get_skill(art.id).creator_shown == "沈浪"
+    _, msgs = fusion.fuse(other_player(content), content, world, must_not_ask(), "basic_fist", "feng")
+    assert "這一門由沈浪首創" in msgs[0]
+
+
+def test_an_anonymous_first_merger_is_shown_as_a_nameless_hero(ready, content, world):
+    ready.player.anonymous = True
+    first, _ = fusion.merge(ready, content, world, named("燎原"), "huo", "feng")
+    assert (first.creator, first.creator_shown) == ("沈浪", "某位少俠")
+    _, msgs = fusion.merge(other_player(content, ("feng", "huo")), content, world, must_not_ask(), "feng", "huo")
+    assert "這個意境由某位少俠首悟" in msgs[0] and "沈浪" not in msgs[0]
+
+
 def test_merge_falls_back_to_the_word_table_when_the_model_is_down(ready, content, world):
     insight, _ = fusion.merge(ready, content, world, model_down(), "huo", "feng")
     assert insight.name == naming.fallback_name(content, fusion.merge_key("huo", "feng"), "意境", salt=0)

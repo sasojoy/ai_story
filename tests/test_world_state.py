@@ -614,6 +614,30 @@ def test_the_seasons_firsts_are_one_line_each_in_a_fixed_order(store, content):
     ]
 
 
+def test_the_seasons_firsts_use_the_name_shown_when_it_was_claimed(store, content):
+    """匿名行走（最終審查 Important 2）：首創者、第一個練成絕學的人在資料表裡照舊記名號（身分：取名權、首創者都照它認），
+    寫給別人看的名號在登記當下一起記下（creator_shown、claim_master 的 shown），江湖史照它寫；改名之後也留著。"""
+    content.config.auto_open_first_season = True
+    store.seed_first_season(content)
+    art = generate_from_name("旋風腿", "武學", "旋風腿").model_copy(update={"creator": "甲", "creator_shown": "某位少俠"})
+    store.claim_recipe("融|a", art)
+    store.claim_insight_recipe(
+        "合|feng+huo", Insight(id="燎原", name="燎原", attribute="陽", creator="乙", creator_shown="某位少俠"),
+    )
+    assert store.claim_master("旋風腿", "甲", shown="某位少俠")
+    assert store.master_of("旋風腿") == "甲" and store.get_skill("旋風腿").master_shown == "某位少俠"
+    store.rename_skill("旋風腿", "風神腿")
+    assert store.get_skill("旋風腿").master_shown == "某位少俠"
+    store.mutate_season(lambda season: setattr(season, "ended", True))
+    assert store.next_season(content, now=1.0)
+    [(_, entries)] = store.chronicle_before(2)
+    assert [e.text for e in entries] == [
+        "第 1 季合成首創 1 門：【風神腿】某位少俠",
+        "第 1 季首悟意境 1 個：「燎原」某位少俠",
+        "第 1 季練成絕學 1 門：【風神腿】某位少俠",
+    ]
+
+
 def test_a_firsts_category_nobody_reached_writes_no_line(store, content):
     content.config.auto_open_first_season = True
     store.seed_first_season(content)

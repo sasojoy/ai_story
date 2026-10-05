@@ -571,6 +571,16 @@ def test_an_art_card_names_fused_and_basic_sources_and_the_insight():
     assert skillview.art_card(basic, 1).split("\n")[0] == "【旋風腿】下品・屬快"  # 沒有傾向就不寫「無派」
 
 
+def test_an_art_card_shows_an_anonymous_first_fuser_as_a_nameless_hero():
+    """匿名行走（最終審查 Important 2）：首創者登記時是匿名的，功法卡寫「某位少俠」——存著的 creator 照舊是名號（身分）。"""
+    fused = MartialArt(
+        id="旋風腿", name="旋風腿", kind="武學", quality="下品", attribute="快", base_power=10.0, top_power=30.0,
+        origin="fused", creator="沈浪", creator_shown="某位少俠", insight="feng",
+    )
+    card = skillview.art_card(fused, 2, "風")
+    assert card.split("\n")[3] == "來源：合成（某位少俠 首創）　意境：「風」" and "沈浪" not in card
+
+
 def test_forge_line_tells_a_merge_costs_stamina_but_a_fuse_does_not(state, content, world):
     """企劃者 2026-10-05：合併要花體力；合成不花，說明裡就不提體力。"""
     state.player.member.wugong_id = "basic_fist"

@@ -188,8 +188,10 @@ class WorldStateStore(Protocol):
         """跟 claim_recipe 同一套：配方有了回 (登記在案的, False)；名字被占用回 (None, False)；否則登記、回 (insight, True)。"""
         ...
 
-    def claim_master(self, skill_name: str, player: str) -> bool:
-        """這門武學這一季第一個修到絕學的人：還沒有人就記成 player、回 True；已經有人回 False（原子判斷）。"""
+    def claim_master(self, skill_name: str, player: str, shown: str | None = None) -> bool:
+        """這門武學這一季第一個修到絕學的人：還沒有人就記成 player、回 True；已經有人回 False（原子判斷）。
+        player 是名號（身分：取名權照它認）；shown 是寫給別人看的名號（匿名行走的人是「某位少俠」），
+        同一筆交易寫進那門武學的 master_shown（後到的人那一句、換季的江湖史照它寫）。"""
         ...
 
     def master_of(self, skill_name: str) -> str | None: ...

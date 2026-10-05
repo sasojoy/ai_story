@@ -7,7 +7,7 @@ from __future__ import annotations
 from . import cultivation, fusion, insights, materials, team
 # 不 import 整個 library 模組：這個檔案自己有一個叫 library() 的函式
 from .library import held_count, holding_cap, level_of, melt_problem, melt_value, owned_arts
-from .martial_arts import MAX_LEVEL, MartialArt, next_quality, power_at
+from .martial_arts import MAX_LEVEL, MartialArt, next_quality, power_at, shown_creator
 from .models import Content
 from .state import PLAYER, GameState
 from .world_state import WorldStateStore
@@ -231,21 +231,23 @@ def art_card(art: MartialArt, level: int, insight_name: str | None = None) -> st
     """一門功法的功法卡（無限煉製設計 §8；FB-006）：名字・品質・屬性（有傾向再加正邪）、目前熟練度與威力、
     第一成／第十成的威力、來源與融的意境，最後是模型寫的那句說明。
 
-    來源（FB-017、武學與成長設計 3.4）：合成（origin == "fused"）寫「合成（某某 首創）」，creator 是第一個合出這個配方的人；
+    來源（FB-017、武學與成長設計 3.4）：合成（origin == "fused"）寫「合成（某某 首創）」，某某是第一個合出這個配方的人
+    寫給別人看的名號（shown_creator：登記當下匿名行走的寫「某位少俠」）；
     基礎武學（"basic"）寫「基礎武學」；舊資料的煉製（"crafted"）寫「煉製（某某 首創）」、取名自創（"created"）寫
     「自創（某某 所創）」；其他是本命武學。insight_name 是這門武學融的意境的名字（沒融過就不給、不寫）。
     說明句只有真的有字時才有那一行：退路字表取名的功法、自創與本命武學都沒有說明，
     這時整行省略——不留空行、不出現 None（QA 寫進 FB-006 的驗收）。
     """
     nxt = "已達第十成" if level >= MAX_LEVEL else f"{power_at(art, level + 1):.1f}"
+    creator = shown_creator(art)  # 寫給別人看的名號：匿名行走的首創者是「某位少俠」（最終審查 Important 2）
     if art.origin == "fused":
-        source = "合成" + (f"（{art.creator} 首創）" if art.creator else "")
+        source = "合成" + (f"（{creator} 首創）" if creator else "")
     elif art.origin == "basic":
         source = "基礎武學"
     elif art.origin == "crafted":
-        source = "煉製" + (f"（{art.creator} 首創）" if art.creator else "")
+        source = "煉製" + (f"（{creator} 首創）" if creator else "")
     elif art.origin == "created":
-        source = "自創" + (f"（{art.creator} 所創）" if art.creator else "")
+        source = "自創" + (f"（{creator} 所創）" if creator else "")
     else:
         source = "本命武學"
     lines = [
