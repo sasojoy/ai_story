@@ -218,6 +218,11 @@ Rename-Item tianxia.db.pre-restore-20261006-050000-wal tianxia.db-wal   # 腳本
 Rename-Item tianxia.db.pre-restore-20261006-050000-shm tianxia.db-shm   # 腳本有印出 -shm 才做
 ```
 
+**還原前的舊檔（`tianxia.db.pre-restore-…`）什麼時候可以清**：
+- 確定還原回來的資料庫沒問題就可以清：大家照常玩過一天，而且還原之後的每日備份至少成功一次（備份資料夾裡有一份時間在還原之後的 `tianxia-daily-…db`）。
+- 清的時候連它旁邊同名的 `-wal`、`-shm`、`-journal` 一起刪，例如 `Remove-Item C:\Ray\tianxia-play\tianxia.db.pre-restore-20261006-050000*`。
+- 這些舊檔不在備份資料夾裡，保留規則不會自動刪它們，不清就會一直留著。
+
 **每個月實際還原一次**，確認備份真的能用（線上架構設計 8.5）：
 
 1. 拿最新的一份每日備份，還原到一個**練習用的檔**，不要還原到正式的那一份：
@@ -225,7 +230,28 @@ Rename-Item tianxia.db.pre-restore-20261006-050000-shm tianxia.db-shm   # 腳本
    ```powershell
    .venv\Scripts\python.exe scripts\restore_db.py <最新的每日備份> --db C:\Ray\tianxia-play\restore-drill.db
    ```
-2. 再用這個練習檔開一個伺服器，換一個 port，例如 7899，登入看角色在不在。看完關掉，把 `restore-drill.db` 刪掉。
+2. 再用這個練習檔開一個伺服器，看角色在不在。**另開一個新的 PowerShell 視窗**，三行都要打：
+
+   ```powershell
+   cd C:\Ray\專案\天下大勢
+   $env:TIANXIA_DB = "C:\Ray\tianxia-play\restore-drill.db"
+   .venv\Scripts\python.exe -u server.py --port 7899
+   ```
+
+   - 第二行一定要打。如果在剛做過手動備份的同一個視窗開，`$env:TIANXIA_DB` 還指著正式的 `tianxia.db`，開起來的就是正式資料庫。
+   - 啟動時印的「資料庫：…」要是 `restore-drill.db`，不是就馬上 Ctrl+C。
+   - 不加 `--share`：只在這台電腦上看，不開公開網址。
+   - 正式的伺服器（7861）可以照常開著，兩邊用的是不同的檔、不同的埠。
+   - 打開 http://127.0.0.1:7899，用平常的帳號登入（練習檔是正式資料的複本，帳號密碼都一樣），看角色、江湖史都在。
+3. 看完在這個視窗按 Ctrl+C 停掉伺服器，再把練習檔刪乾淨：
+
+   ```powershell
+   Remove-Item C:\Ray\tianxia-play\restore-drill.db*
+   ```
+
+   - 結尾的 `*` 會一起刪掉 `restore-drill.db-wal`、`restore-drill.db-shm`（直接關視窗時常常留著），以及之前演練留下的 `restore-drill.db.pre-restore-…`。
+   - 要先按 Ctrl+C 停掉，檔案還開著時刪不掉，會出現「正由另一個處理程序使用」。
+   - 這個指令只會刪檔名開頭是 `restore-drill.db` 的檔，正式的 `tianxia.db` 不受影響。
 
 ## 換成第一季濃縮版的那一天
 
