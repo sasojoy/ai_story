@@ -8,11 +8,11 @@ from pathlib import Path
 
 import pytest
 
-from tianxia import defection
+from tianxia import bot, bot_policy, defection
 from tianxia.content import ContentError, load_content, validate
 from tianxia.engine import Game
 from tianxia.models import FactionDef
-from tianxia.state import Convoy, PlayerState, Summons
+from tianxia.state import BotProfile, Convoy, PlayerState, Summons
 
 CONTENT_DIR = Path(__file__).parent.parent / "content"
 
@@ -290,3 +290,27 @@ def test_new_season_allows_defecting_again(on):
 def test_switch_off_no_defect_option(real):
     game = _game(real, faction="guan", at="huangjin_camp")
     assert not any(i.startswith("defect:") for i in _ids(game))
+
+
+# ── Task 4：假人與整季機器人不叛投 ─────────────────────────────────
+
+
+def test_bots_never_defect(on):
+    game = _game(on, faction="guan", at="huangjin_camp")
+    options = [o for o in game.options(odds=False) if o.id.startswith("defect:")]
+    assert options  # 選單上確實有
+    assert bot.pick(game, options, random.Random(0)) is None  # 整季機器人：只剩叛投就當作沒得挑
+    profile = BotProfile(personality="普通", seed=1, faction="guan", season_number=1)
+    assert all(bot_policy.score(game, o, profile) is None for o in options)
+
+
+def test_server_bot_turn_never_picks_a_defect_option(on):
+    """take_turn 的候選清單也排除 defect:（score 回 None 之外的第二道）：站在別的陣營的投靠點上，假人照常做別的事、不叛投。"""
+    profile = BotProfile(personality="普通", seed=1, faction="guan", season_number=1)
+    for seed in range(8):  # 每個種子一個新假人：走了一步就離開投靠點，同一個假人只能測一輪
+        game = _game(on, f"假{seed}", faction="guan", at="huangjin_camp")
+        game.state.player.bot = profile
+        assert any(o.id.startswith("defect:") for o in game.options(odds=False))
+        bot_policy.take_turn(game, profile, random.Random(seed))
+        p = game.state.player
+        assert (p.faction, p.defected, p.pending_defect) == ("guan", False, None)
