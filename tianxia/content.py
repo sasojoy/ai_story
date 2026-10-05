@@ -137,7 +137,8 @@ def _scale_marks(obj, scale: float) -> None:
 
 
 MARKS_TOKEN = re.compile(r"\{marks:([^{}]+)\}")  # 文字裡的模糊人數（rules.fill_marks）
-FREE_TEXT_REWARDS = ("silver", "fame", "good", "xinde", "str", "agi", "con", "wis", "lore")  # 隨口應對的獎勵不能超過檢定選項的這幾項
+LORE = "lore"  # 博聞（team.LORE）：只靠升級的點數增加，任何獎勵都不能給、不能扣（validate 的 no_lore）
+FREE_TEXT_REWARDS = ("silver", "fame", "good", "xinde", "str", "agi", "con", "wis")  # 隨口應對的獎勵不能超過檢定選項的這幾項（博聞不在內：一律不能給）
 
 
 def _read(path: Path):
@@ -830,7 +831,13 @@ def validate(c: Content) -> None:
         for sub in cond.any_of:
             check_condition(where, sub)
 
+    def no_lore(where: str, eff: Effect) -> None:
+        """博聞只靠升級的點數增加（設計 6.3；PM 2026-10-05）：任何效果的 stats 都不能有 lore，給、扣、寫 0 都不行。
+        檢定（Check／隨口應對的 stat）可以照樣考博聞，那不是獎勵。"""
+        need(LORE not in eff.stats, f"{where}：stats 不能有 {LORE}（博聞只能靠升級的點數增加，事件、奇遇、隨口應對的獎勵都不能給、也不能扣）")
+
     def check_effect(where: str, eff: Effect) -> None:
+        no_lore(where, eff)
         for key, n in eff.marks.items():
             check_mark_key(where, key)
             need(1 <= n <= 3, f"{where}：痕跡 {key} 一次只能加 1～3（不能減）")
@@ -1089,7 +1096,10 @@ def validate(c: Content) -> None:
             f"{where}：小收穫只能用 stats 或 materials（不能寫 text、rumor 或其他效果）",
         )
         need(len(eff.stats) + len(eff.materials) <= 1, f"{where}：小收穫一則最多一種")
+        no_lore(where, eff)
         for stat, amount in eff.stats.items():
+            if stat == LORE:  # no_lore 已經報過，不再用「只能是銀兩或心得」重複報一次
+                continue
             cap = ROAD_SIGHT_CAPS.get(stat)
             need(cap is not None and 0 < amount <= cap, f"{where}：stats 只能是銀兩 1～10 或心得 1～5（寫的是 {stat} {amount}）")
         known(where, eff.materials, c.materials, "素材")

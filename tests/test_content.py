@@ -1589,3 +1589,68 @@ def test_old_content_with_by_on_a_check_still_loads_and_both_values_parse(conten
     """Check.by 讀得進來、不再有作用（每一個事件檢定都看本人的屬性）。"""
     assert content.events["drunk"].choices[0].check.by == "team"
     assert content.events["insight"].choices[0].check.by == "self"
+
+
+# ── 博聞只靠升級的點數增加（設計 6.3；PM 2026-10-05）─────────────────────────
+#
+# 事件、奇遇、隨口應對、新手引導、路上見聞的獎勵都不能給博聞，也不能扣（連寫 0 都不行）；檢定可以照樣考博聞。
+
+
+def _lore_in_choice(event, choice, field, amount):
+    def put(root):
+        edit_json(root / "events" / "test.json", lambda d: d[event]["choices"][choice].setdefault(field, {}).update(
+            stats={"lore": amount}))
+    return put
+
+
+def _lore_in_free_text(field, amount):
+    def put(root):
+        free = {"prompt": "自己想辦法……", "stat": "str", "effect": {"text": "成了。"}, "fail_effect": {}}
+        free[field] = {"stats": {"lore": amount}}
+        edit_json(root / "events" / "test.json", lambda d: d[0].update(free_text=free))
+    return put
+
+
+def _lore_in_tutorial(root):
+    edit_json(root / "tutorial.json", lambda d: d["steps"][1].update(reward={"stats": {"lore": 1}}))
+
+
+def _lore_in_road_sight(root):
+    edit_json(root / "road_sights.json", lambda d: d[1].update(effect={"stats": {"lore": 1}}))
+
+
+LORE_PLACES = [
+    pytest.param(_lore_in_choice(0, 0, "effect", 1), "事件 drunk 選項0", id="event-choice-effect"),
+    pytest.param(_lore_in_choice(0, 0, "fail_effect", -1), "事件 drunk 選項0", id="event-choice-fail-effect-negative"),
+    pytest.param(_lore_in_choice(0, 1, "effect", 0), "事件 drunk 選項1", id="event-choice-zero"),
+    pytest.param(_lore_in_choice(1, 0, "effect", 2), "事件 scroll 選項0", id="qiyu"),
+    pytest.param(_lore_in_free_text("effect", 1), "事件 drunk 隨口應對", id="free-text-effect"),
+    pytest.param(_lore_in_free_text("fail_effect", -1), "事件 drunk 隨口應對", id="free-text-fail-effect"),
+    pytest.param(_lore_in_tutorial, "新手引導 s2", id="tutorial-reward"),
+    pytest.param(_lore_in_road_sight, "路上見聞 sight_wind", id="road-sight"),
+]
+
+
+@pytest.mark.parametrize("put_lore, where", LORE_PLACES)
+def test_no_reward_anywhere_may_add_or_take_lore(tmp_path, put_lore, where):
+    root = copy_fixture(tmp_path)
+    put_lore(root)
+    with pytest.raises(ContentError) as caught:
+        load_content(root)
+    lines = [line for line in str(caught.value).splitlines() if line.startswith(where) and "lore" in line]
+    assert lines and all("博聞只能靠升級的點數增加" in line for line in lines), str(caught.value)
+    assert len(lines) == 1, str(caught.value)  # 同一處只報一次，不連同別的規則一起吵
+
+
+def test_a_check_may_still_test_lore(tmp_path):
+    """事件檢定與隨口應對可以考博聞（看的是本人的點數），只是獎勵不能給。"""
+    root = copy_fixture(tmp_path)
+    edit_json(root / "events" / "test.json", lambda d: d[0]["choices"][0]["check"].update(stat="lore"))
+    assert load_content(root).events["drunk"].choices[0].check.stat == "lore"
+
+
+def test_the_free_text_and_bot_reward_lists_leave_lore_out():
+    from tianxia import bot_policy, content
+
+    assert "lore" not in content.FREE_TEXT_REWARDS and "lore" not in bot_policy.REWARD_STATS
+    assert {"str", "agi", "con", "wis"} <= set(content.FREE_TEXT_REWARDS)  # 另外四項不動
