@@ -4,6 +4,7 @@
 auto_open_first_season 開出來的季照當下的 Config 蓋章。現實時間由測試給（game.now），time_scale 是 1。"""
 from __future__ import annotations
 
+import math
 import random
 from pathlib import Path
 
@@ -108,9 +109,10 @@ def test_schedule_converts_real_time_and_validates_order(on):
     都拒絕；已經結算的、不是三場決戰與季末的都拒絕。"""
     game = _game(on)
     w = game.state.world
-    at = w.time + 3600 * on.config.time_scale
+    cal_hour = calendar.cal_hour_seconds(on, w)
+    at = math.ceil((w.time + 3600 * on.config.time_scale) / cal_hour) * cal_hour  # 決戰對齊到下一個曆時交界（T10 審查 I1）
     assert game.admin_schedule("changshe_fire", NOW + 3600, NOW) == [
-        f"已把長社火攻排在{calendar.stamp_text(at, on, w)}（季曆）。"]
+        f"已把長社火攻排在{calendar.stamp_text(at, on, w)}（季曆，對齊整點）。"]
     assert game.world.get_season().schedule["changshe_fire"] == pytest.approx(at)
     assert game.admin_schedule("changshe_fire", NOW - 10, NOW) == ["（不能排在已經過去的時間。）"]
     late = NOW + (w.schedule["wancheng"] - w.time) + 60
@@ -138,6 +140,38 @@ def test_schedule_off_the_hour_still_opens(on):
     game.admin_jump_next(NOW)
     assert _battle(game).battle_id == "changshe_fire"
     assert game.state.world.time == pytest.approx(6 * cal_hour)
+
+
+def test_schedule_snaps_to_the_hour_and_off_a_regular_event(on):
+    """T10 審查 I1：排在第 7 週週初（盧植圍廣宗）前 30 秒：先進到下一個曆時交界，那一刻又剛好是第 7 週的大事，
+    再往後挪一個曆時——集結照樣開，不會被第 7 週的大事先照起點判掉；跳一次只到長社。"""
+    game = _game(on)
+    _settle(game, *BEFORE_CHANGSHE)
+    w = game.state.world
+    cal_hour = calendar.cal_hour_seconds(on, w)
+    week7 = calendar.week_start(7, on, w)
+    msgs = game.admin_schedule("changshe_fire", NOW + (week7 - 30) - w.time, NOW)
+    assert game.world.get_season().schedule["changshe_fire"] == pytest.approx(week7 + cal_hour)
+    assert msgs == [f"已把長社火攻排在{calendar.stamp_text(week7 + cal_hour, on, w)}（季曆，對齊整點、避開同一刻的盧植圍廣宗）。"]
+    game.admin_jump_next(NOW)
+    assert "changshe_fire" not in game.world.get_season().timeline
+    game.admin_jump_next(NOW)
+    assert _battle(game).battle_id == "changshe_fire"
+    assert "changshe_fire" not in game.world.get_season().timeline
+
+
+def test_rescheduling_a_waiting_showdown_takes_it_off_the_queue(on):
+    """T10 審查 I2：宛城時間到了、在排隊等長社打完（showdowns_waiting）；改排到之後：拿出隊伍，到了新的時間才開。"""
+    game = _game(on)
+    game.admin_resolve_event("zhangmancheng_wan", "成")
+    game.world.mutate_season(lambda s: s.showdowns_waiting.append("wancheng"))
+    game.state.world = game.world.get_season()
+    w = game.state.world
+    later = w.schedule["guangzong"] - 600
+    game.admin_schedule("wancheng", NOW + later - w.time, NOW)
+    assert game.world.get_season().showdowns_waiting == []
+    game.advance(calendar.cal_hour_seconds(on, w) * 2)
+    assert _battle(game) is None
 
 
 # ── 跳到下一件 ─────────────────────────────────────────────
@@ -223,6 +257,8 @@ def test_cancel_then_resolve_showdown(on):
     game.advance(calendar.cal_hour_seconds(on, game.state.world) * 2)
     assert _battle(game) is None
     assert game.admin_cancel_battle() == ["（沒有進行中的決戰。）"]
+    [(_, shelved)] = game.world.ended_battles()  # T10 審查 I3：參戰者那一則寫「臨時取消」，不是「季終了」
+    assert shelved.unfinished and shelved.unfinished_text == "長社火攻臨時取消，這一仗沒有打成，不算勝負。"
     game.admin_resolve_event("changshe_fire", "guan:大勝")
     assert game.world.get_season().timeline["changshe_fire"].key == "guan:大勝"
 

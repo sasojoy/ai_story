@@ -1788,7 +1788,7 @@ def test_admin_schedule_jump_and_rescue_via_api(client, monkeypatch):
     out = client.post("/api/do/schedule", json={"id": "changshe_fire", "at": time.time() + 3600}).json()
     assert "已把長社火攻排在" in out["message"]
     season = game.world.get_season()
-    assert abs(season.schedule["changshe_fire"] - (season.time + 3600)) < 5
+    assert 0 <= season.schedule["changshe_fire"] - (season.time + 3600) < 115  # 對齊到下一個曆時交界（約 107 秒內）
     assert "跳到" in client.post("/api/do/jump_next", json={}).json()["message"]
     client.post("/api/do/resolve_event", json={"id": "bocai_routs_zhujun", "key": "成"})
     assert game.world.get_season().timeline["bocai_routs_zhujun"].key == "成"

@@ -1258,7 +1258,7 @@ class Game:
             return None
         return battle, definition
 
-    def _shelve_unfinished_battle(self) -> None:
+    def _shelve_unfinished_battle(self, text: str = "") -> None:
         """季終時還沒打完的決戰收起來（自然收季見 _battle_status、管理者收季見 admin_end_season；呼叫端先確認
         有一場還沒收場的）。不算結果：不動大勢、不寫旗標、不寫江湖史、不加戰報（FB-015）；但每個參戰者要有交代（FB-035）。
 
@@ -1273,6 +1273,7 @@ class Game:
         def _mark(b: battle_instance.BattleInstance) -> None:
             b.phase = "ended"
             b.unfinished = True
+            b.unfinished_text = text  # 空的照季終收兵那一句（管理者取消決戰另外寫，T10 審查 I3）
             b.outcome_title = battle_instance.UNFINISHED_TITLE
             b.end_time = end_time
 
@@ -1496,7 +1497,8 @@ class Game:
         label = "" if earlier is None else f"第 {earlier} 季・"
         time = battle.end_time if battle.end_time is not None else s.world.time
         if battle.unfinished:
-            lines = [battle_instance.UNFINISHED_TEXT] + ([f"你出手 {me.acted_rounds} 回合"] if me.acted_rounds else [])
+            lines = [battle.unfinished_text or battle_instance.UNFINISHED_TEXT]
+            lines += [f"你出手 {me.acted_rounds} 回合"] if me.acted_rounds else []
             journal.add_entry(s, JournalEntry(time=time, title=f"{label}{name}・{outcome}", tag=f"你站在{side}", lines=lines))
             return
         lines = ([battle.outcome_text] if battle.outcome_text else []) + [f"你出手 {me.acted_rounds} 回合"]
@@ -2866,6 +2868,9 @@ class Game:
         at = w.time + (at_real - now) * c.config.time_scale
         if at <= w.time + calendar.EPS_SECONDS:
             return self._log(["（不能排在已經過去的時間。）"])
+        wanted, avoided = at, None
+        if event.kind == "showdown":
+            at, avoided = self._showdown_mark(at)
         i = items.index(event)
         prev = items[i - 1] if i > 0 else None
         nxt = items[i + 1] if i + 1 < len(items) else None
@@ -2877,13 +2882,29 @@ class Game:
         if order:
             return self._log(["（三場決戰與季末要照順序：" + "、".join(order) + "。）"])
         source = self._timetable_event(event.version_from) if event.version_from else None
-        if source is not None and source.id not in w.timeline and at <= timetable.when(s, c, source):
+        if source is not None and source.id not in w.timeline and wanted <= timetable.when(s, c, source):  # 照管理者要的時間判
             return self._log([f"（{event.title}要看{source.title}的結果決定版本：要排在它之後。）"])  # 宛城（PM 2026-10-05）
         w.schedule[timetable.schedule_key(event)] = at
+        if event.id in w.showdowns_waiting:  # 時間到了在排隊（前一場還在打）：改到之後就拿出隊伍，到了新的時間才開（T10 審查 I2）
+            w.showdowns_waiting.remove(event.id)
         self._save_season()
-        msg = f"已把{event.title}排在{calendar.stamp_text(at, c, w)}（季曆）。"
+        moved = "，對齊整點" if abs(at - wanted) > calendar.EPS_SECONDS else ""
+        moved += f"、避開同一刻的{avoided}" if avoided else ""
+        msg = f"已把{event.title}排在{calendar.stamp_text(at, c, w)}（季曆{moved}）。"
         self._write("排時間", [msg], tag="管理者")
         return self._log([msg])
+
+    def _showdown_mark(self, at: float) -> tuple[float, str | None]:
+        """排定的決戰時間對齊到下一個曆時交界（季的事只在交界把時間到了的決戰記下來，T10 審查 I1）；那一刻剛好有還沒結算的
+        一般大事時再往後挪一個曆時——不然同一刻那件大事先結算，排在它前面、還沒開成的決戰會照起點判掉（settle_waiting_showdowns）。"""
+        s, c = self.state, self.content
+        cal_hour = calendar.cal_hour_seconds(c, s.world)
+        mark = math.ceil((at - calendar.EPS_SECONDS) / cal_hour) * cal_hour
+        regular = [e for e in timetable._pending(s, c) if e.kind not in timetable.NOT_BY_SEASON_HOUR]  # noqa: SLF001
+        avoided = None
+        while hit := next((e for e in regular if abs(mark - timetable.when(s, c, e)) < calendar.EPS_SECONDS), None):
+            avoided, mark = avoided or hit.title, mark + cal_hour
+        return mark, avoided
 
     def admin_jump_next(self, now: float) -> list[str]:
         """跳到下一件大事：推進到最早那一件還沒結算的大事的時間（決戰是排定的集結開始；開過集結的不算），取整到下一個
@@ -2979,9 +3000,10 @@ class Game:
         if battle is None or battle.phase == "ended":
             return self._log(["（沒有進行中的決戰。）"])
         definition = self.content.battles.get(battle.battle_id)
-        line = f"{definition.name if definition else battle.battle_id}臨時取消，這一仗沒有打成。"
+        name = definition.name if definition else battle.battle_id
+        line = f"{name}臨時取消，這一仗沒有打成。"
         self.state.world = self.world.get_season()  # 收場時間記此刻的季時間（同 admin_end_season）
-        self._shelve_unfinished_battle()
+        self._shelve_unfinished_battle(f"{name}臨時取消，這一仗沒有打成，不算勝負。")
         add_rumor(self.state, line, content=self.content, layer="world")
         self._save_season()
         self._write("取消決戰", [line], tag="管理者")
