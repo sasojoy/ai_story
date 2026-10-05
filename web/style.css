@@ -282,13 +282,22 @@ details.fold.bulletin > .fold-body { border-color: var(--gold); max-height: 50vh
 .front-head { display: flex; justify-content: space-between; gap: 4px; font-size: 12px; line-height: 1.4; }
 .front-head span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-2); }
 .front-head b { font-variant-numeric: tabular-nums; }
-.front-bar { height: 6px; margin-top: 4px; border-radius: 3px; background: var(--kuai); overflow: hidden; }
+.front-bar { position: relative; height: 6px; margin-top: 4px; border-radius: 3px; background: var(--kuai); overflow: hidden; }
 .front-bar > i { display: block; height: 100%; background: var(--gold); transition: width 0.4s ease; }
+/* 亂局帶（FB-065）：條上淺色的一段（兩端含在內，位置與寬度由伺服器給的 chaos_band 算，不寫死 35／65），豪強的地盤；
+   淺色蓋在金與藍上都看得出來，兩側各一道細線，戰況剛好落在邊上的就貼著那條線 */
+.front-bar > .chaos-band { position: absolute; top: 0; bottom: 0; background: rgba(255, 255, 255, 0.42); box-shadow: inset 1px 0 rgba(255, 255, 255, 0.9), inset -1px 0 rgba(255, 255, 255, 0.9); pointer-events: none; }
+.front.chaos { border-color: var(--ink-2); }
 /* 戰況條兩端的陣營（FB-041）與下面那一行態勢（S1） */
 .front-ends { display: flex; justify-content: space-between; margin-top: 2px; font-size: 10px; line-height: 1.2; font-weight: 700; }
 .front-ends .huang { color: var(--gold); }
 .front-ends .guan { color: var(--kuai); }
-.stances-line { margin: -6px 0 12px; font-size: 12px; color: var(--ink-2); }
+.front-ends span { white-space: nowrap; } /* 兩個字的標不在字中間換行：大字體或很窄的螢幕時圖卡才不會變高 */
+/* 「亂局」標（FB-065）：在兩端字的正中間、亂局帶的正下面，中性的顏色；用內陰影畫框、不加上下留白，圖卡不會因此變高 */
+.front-ends .chaos-tag { padding: 0 4px; border-radius: 4px; color: var(--ink-2); background: var(--card-2); box-shadow: inset 0 0 0 1px var(--ink-2); font-weight: 600; }
+/* 態勢兩行（FB-065）：「態勢」靠左，官軍、黃巾（三條戰線合計）與豪強（亂局條數與漸長／漸消）各一行 */
+.stances-line { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 0.7em; margin: -6px 0 12px; font-size: 12px; line-height: 1.5; color: var(--ink-2); }
+.more-stats .stances-line { margin: 0; font-size: inherit; line-height: inherit; }
 /* 結算卡的最終態勢：三條各用自己陣營的顏色（T9 審查 M3） */
 .front-bar.stance { background: var(--card-2); }
 .front-bar.side-guan > i { background: var(--kuai); }

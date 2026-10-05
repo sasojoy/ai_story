@@ -144,6 +144,28 @@ def test_main_view_sends_the_fronts_only_with_the_switch_on(game, monkeypatch):
     assert view["status"]["stances"] == {"guan": 55, "huang": 45, "haoqiang": 10}
 
 
+def test_main_view_carries_the_chaos_band_and_which_fronts_are_in_it(game, monkeypatch):
+    """FB-065：圖卡要畫亂局帶（兩端讀設定、不寫死在前端）、標出在亂局裡的戰線，態勢那一行的說法也由伺服器給。"""
+    monkeypatch.setattr(server.CONTENT.config, "season_one", True)
+    game.world.mutate_season(lambda season: (setattr(season, "season_one", True),
+                                             season.trends.update(yingru=35, nanyang=65, jizhou=66)))
+    view = server.look(game, server.main_view)
+    assert view["status"]["chaos_band"] == {"low": 35, "high": 65}
+    assert [(f["name"], f["value"], f["chaos"]) for f in view["fronts"]] == [
+        ("潁川汝南", 35, True), ("南陽", 65, True), ("冀州", 66, False)]  # 35 與 65 剛好在邊上：算在亂局裡
+    assert view["status"]["stance_notes"] == {"sum": "三條戰線合計", "haoqiang": "2 條戰線在亂局，割據漸長"}
+    game.world.mutate_season(lambda season: season.trends.update(yingru=34, nanyang=66, jizhou=66))
+    view = server.look(game, server.main_view)
+    assert [f["chaos"] for f in view["fronts"]] == [False, False, False]
+    assert view["status"]["stance_notes"]["haoqiang"] == "沒有戰線在亂局，割據漸消"
+    assert "在亂局" in view["trends"] and "割據漸消" in view["trends"]  # 見聞→大勢的割據那一段同一句話
+
+
+def test_main_view_has_no_chaos_data_with_the_switch_off(game):
+    status = server.look(game, server.main_view)["status"]
+    assert "chaos_band" not in status and "stance_notes" not in status
+
+
 def test_admin_choices_follow_the_switch(game, monkeypatch):
     """管理者推大勢的下拉選單：開關關著跟 beta 一樣；開關打開但這一季沒蓋章也一樣；這一季蓋了「開」的章時
     列三條戰線與割據，不列黃巾聲勢（由戰線合成）。"""

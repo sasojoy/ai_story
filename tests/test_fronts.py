@@ -493,17 +493,115 @@ def test_huangjin_stays_the_weighted_value_after_every_kind_of_push(on):
 def test_status_shows_three_fronts_and_stances(real):
     game = _game(real)
     data = game.status_data()
-    assert "fronts" not in data and "stances" not in data  # 開關關著：狀態列照舊
+    assert not {"fronts", "stances", "chaos_band", "stance_notes"} & set(data)  # 開關關著：狀態列照舊
     real.config.season_one = True
     game.state.world.season_one = True  # 開季時才補蓋「開」的章的季：割據沒存過，讀起始值 10
     _set_fronts(game.state, 30, 70, 90)
     data = game.status_data()
     assert data["fronts"] == [
-        {"id": "yingru", "name": "潁川汝南", "value": 30},
-        {"id": "nanyang", "name": "南陽", "value": 70},
-        {"id": "jizhou", "name": "冀州", "value": 90},
+        {"id": "yingru", "name": "潁川汝南", "value": 30, "chaos": False},
+        {"id": "nanyang", "name": "南陽", "value": 70, "chaos": False},
+        {"id": "jizhou", "name": "冀州", "value": 90, "chaos": False},
     ]
     assert data["stances"] == {"guan": 36, "huang": 64, "haoqiang": 10}  # 10.5＋17.5＋36＝64
+
+
+# ── FB-065：圖卡標亂局帶、態勢那一行寫出數字是怎麼來的 ──────────────
+
+# 三條戰線的值（潁川汝南、南陽、冀州）→ 在亂局（戰況 35～65）的有幾條
+CHAOS_CASES = [((20, 80, 10), 0), ((40, 80, 10), 1), ((40, 50, 10), 2), ((40, 50, 60), 3)]
+
+
+@pytest.mark.parametrize("fronts, count", CHAOS_CASES)
+def test_chaos_fronts_agree_with_what_geju_tick_does(on, fronts, count):
+    """畫面寫的「N 條戰線在亂局，割據漸長／漸消」與 geju_tick 讀的是同一份：N 條就是每曆日漲 N 點，N＝0 就是落 1 點。"""
+    s = _game(on).state
+    _set_fronts(s, *fronts)
+    assert [rules.in_chaos(s, on, f) for f in FRONTS] == [v in range(35, 66) for v in fronts]
+    chaos = rules.chaos_fronts(s, on)
+    assert len(chaos) == count and chaos == [f for f in FRONTS if rules.in_chaos(s, on, f)]
+    before = s.world.trends["geju"]
+    for _ in range(24):  # 一曆日（players 不傳＝不縮放）
+        rules.geju_tick(s, on, 1)
+    delta = s.world.trends["geju"] - before
+    assert delta == (count if count else -1)
+    note = rules.chaos_note(s, on)
+    assert note == (f"{count} 條戰線在亂局，割據漸長" if count else "沒有戰線在亂局，割據漸消")
+    assert ("漸長" in note) == (delta > 0) and ("漸消" in note) == (delta < 0)
+
+
+@pytest.mark.parametrize("value, inside", [(34, False), (35, True), (36, True), (64, True), (65, True), (66, False)])
+def test_chaos_band_edges_are_included_everywhere(on, value, inside):
+    """35 與 65 都算在亂局裡（含兩端）：in_chaos、chaos_fronts、狀態列的標記、割據的漲落、態勢那一行，一個說法。"""
+    game = _game(on)
+    s = game.state
+    _set_fronts(s, value, 0, 0)  # 南陽與冀州都在 0：穩
+    assert rules.in_chaos(s, on, "yingru") is inside
+    assert (rules.chaos_fronts(s, on) == ["yingru"]) is inside
+    flags = {f["id"]: f["chaos"] for f in game.status_data()["fronts"]}
+    assert flags == {"yingru": inside, "nanyang": False, "jizhou": False}
+    before = s.world.trends["geju"]
+    for _ in range(24):
+        rules.geju_tick(s, on, 1)
+    assert s.world.trends["geju"] - before == (1 if inside else -1)
+    assert game.status_data()["stance_notes"]["haoqiang"] == (
+        "1 條戰線在亂局，割據漸長" if inside else "沒有戰線在亂局，割據漸消")
+
+
+def test_chaos_band_edges_come_from_config(on):
+    """亂局帶的兩端讀設定（跟 in_chaos 同一份），狀態列把它送出去，前端不寫死 35／65。"""
+    on.config.chaos_low, on.config.chaos_high = 40, 60
+    game = _game(on)
+    _set_fronts(game.state, 39, 40, 61)
+    data = game.status_data()
+    assert data["chaos_band"] == {"low": 40, "high": 60}
+    assert [(f["id"], f["chaos"]) for f in data["fronts"]] == [("yingru", False), ("nanyang", True), ("jizhou", False)]
+    assert data["stance_notes"]["haoqiang"] == "1 條戰線在亂局，割據漸長"
+
+
+def test_status_says_what_the_stance_numbers_are_made_of(on):
+    game = _game(on)
+    _set_fronts(game.state, 20, 50, 80)  # 只有南陽在亂局
+    data = game.status_data()
+    assert data["chaos_band"] == {"low": 35, "high": 65}
+    assert data["stance_notes"] == {"sum": "三條戰線合計", "haoqiang": "1 條戰線在亂局，割據漸長"}
+    assert not any(ch.isdigit() for ch in data["stance_notes"]["sum"])  # 不印權重
+    _set_fronts(game.state, 20, 80, 90)
+    assert game.status_data()["stance_notes"]["haoqiang"] == "沒有戰線在亂局，割據漸消"
+    _set_fronts(game.state, 40, 50, 60)
+    assert game.status_data()["stance_notes"]["haoqiang"] == "3 條戰線在亂局，割據漸長"
+
+
+def test_the_trends_page_gives_the_geju_note_the_same_wording(on):
+    game = _game(on)
+    s = game.state
+    _set_fronts(s, 40, 50, 90)
+    text = game.trends_text()
+    assert "地方豪強割據的程度" in text  # 劇本寫的說明照舊
+    assert "2 條戰線在亂局，割據漸長" in text
+    assert game.status_data()["stance_notes"]["haoqiang"] in text  # 跟江湖頁同一句
+    _set_fronts(s, 10, 90, 90)
+    text = game.trends_text()
+    assert "沒有戰線在亂局，割據漸消" in text and "戰線在亂局，割據漸長" not in text
+    # 這句話跟在割據那一段裡，不跑到別的線底下
+    assert "在亂局" not in text[: text.index("豪強割據")]
+
+
+def test_the_trends_page_is_unchanged_with_the_switch_off(real):
+    game = _game(real)
+    assert "在亂局" not in game.trends_text()
+    assert "stance_notes" not in game.status_data() and "chaos_band" not in game.status_data()
+
+
+@pytest.mark.parametrize("faction", [None, "guan", "huang", "haoqiang"])
+def test_chaos_and_stance_notes_are_the_same_for_every_faction(on, faction):
+    """亂局與態勢是全服公開的戰況，不分陣營、散人也看得到：誰看都一樣（沒有別陣營的資訊混進來）。"""
+    game = _game(on)
+    game.state.player.faction = faction
+    _set_fronts(game.state, 40, 50, 90)
+    data = game.status_data()
+    assert [f["chaos"] for f in data["fronts"]] == [True, True, False]
+    assert data["stance_notes"]["haoqiang"] == "2 條戰線在亂局，割據漸長"
 
 
 def test_switch_on_but_season_unstamped_behaves_like_switch_off(real):
