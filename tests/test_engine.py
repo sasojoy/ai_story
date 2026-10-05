@@ -494,12 +494,16 @@ def test_a_dodged_train_loss_is_a_draw_with_a_note_and_costs_no_silver(game):
     game.content.config.dodge_per_point = 1.0
     game.state.player.stats["agi"] = 6  # 閃避機會 1×1＝100%
     walk_to(game, "lake")
+    before = game.state.model_copy(deep=True)
     game.rng = FixedRandom(0.0)
     game.choose("act:train")
     record = game.state.battles[0]
     assert (record.tier, record.silver) == ("僵持", 0)
     assert record.notes == [battlelog.DODGE_NOTE]
     assert game.state.player.stats["silver"] == 50
+    draw_toll = team.take_encounter_toll(before, game.content, game.world, "僵持")  # 同一個人、同一份氣血，結果是僵持
+    assert draw_toll and record.changes == draw_toll  # 戰報上的損耗就是僵持的那一份（不是落敗的）
+    assert game.state.player.member.neili == before.player.member.neili
 
 
 def test_train_win_records_the_trend_as_a_note(game):

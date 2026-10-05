@@ -158,3 +158,12 @@ def test_dodge_draws_from_the_rng_only_on_a_loss_with_a_chance():
     assert rng.getstate() == state
     encounter.dodge(_result("落敗"), 0.5, rng)
     assert rng.getstate() != state
+
+
+def test_a_missed_dodge_roll_leaves_the_loss_alone():
+    """最終審查 M2：擲到的數大於等於機會就沒閃中，還是落敗、dodged 是 False（剛好等於機會也算沒中，擲到比機會小才中）。"""
+    for roll in (0.9, 0.5):
+        missed = encounter.dodge(_result("落敗"), 0.5, FixedRandom(roll))
+        assert missed == _result("落敗") and not missed.dodged
+    hit = encounter.dodge(_result("落敗"), 0.5, FixedRandom(0.49))
+    assert (hit.tier, hit.dodged) == ("僵持", True)

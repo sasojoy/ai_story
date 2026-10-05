@@ -12,7 +12,7 @@ import random
 from unittest import mock
 
 from conftest import FixedRandom
-from tianxia import atlas, battle_instance, bot_policy, calendar, figures, rules, team, timetable, world
+from tianxia import atlas, battle_instance, battlelog, bot_policy, calendar, figures, rules, team, timetable, world
 from tianxia.encounter import EncounterResult
 from tianxia.engine import Game, Option
 from tianxia.events import event_candidates
@@ -692,6 +692,22 @@ def test_losing_a_challenge_costs_silver_and_blood_but_no_prestige(on, world):
     assert "銀兩 -5" in msgs and any(m.startswith("氣血 -") for m in msgs)
     assert world.get_season().figures["bocai"].prestige == 60 and game.state.player.snubbed_until == {}
     assert game.state.player.contrib == 0
+
+
+def test_a_challenge_can_be_dodged_into_a_draw(on, world):
+    """最終審查 M2：挑戰本人也吃身法閃避（劇情戰不吃，見 test_engine）：沒武學必敗，身法 6、每點閃避 100%＝閃避機會 100%，
+    結果是僵持——戰報有那一句、不賠銀兩、聲威不動、他不閉門，氣血照僵持扣（身法別拉太高：身法 38 以上損耗歸零，兩種結果分不出來）。"""
+    on.config.dodge_per_point = 1.0
+    game = _player(on, world, "官甲", "guan", "huangjin_camp")
+    p = game.state.player
+    p.stats["silver"], p.stats["agi"] = 50, 6
+    before = game.state.model_copy(deep=True)
+    msgs = game.choose("act:challenge:bocai")
+    record = game.state.battles[0]
+    assert (record.event, record.tier) == ("挑戰波才", "僵持") and record.notes == [battlelog.DODGE_NOTE]
+    assert p.stats["silver"] == 50 and "銀兩 -5" not in msgs
+    assert world.get_season().figures["bocai"].prestige == 60 and p.snubbed_until == {}
+    assert record.changes == team.take_encounter_toll(before, on, world, "僵持")
 
 
 def test_the_rout_is_buffered_by_the_sides_active_members(on, world):
