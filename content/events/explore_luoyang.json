@@ -11,7 +11,7 @@
         "text": "在草棚裡硬熬一夜，等亭長來",
         "check": {
           "stat": "con",
-          "difficulty": 6,
+          "difficulty": 4,
           "by": "self"
         },
         "effect": {
@@ -29,7 +29,7 @@
         "text": "跟戍卒講明來歷，請他通融",
         "check": {
           "stat": "wis",
-          "difficulty": 7
+          "difficulty": 5
         },
         "effect": {
           "text": "你把來處去處說得條理分明，又點出哨卡西邊那條小路沒人看守。什長記下了，放你先走。",
@@ -85,7 +85,7 @@
         "text": "搶先一步撲過去撿起漆筒",
         "check": {
           "stat": "agi",
-          "difficulty": 6
+          "difficulty": 4
         },
         "effect": {
           "text": "你搶在那幾人之前抄起漆筒，塞回驛卒懷裡。驛卒說這是潁川來的軍報，記下了你的樣貌。",
@@ -112,7 +112,7 @@
         "text": "把驛卒從溝裡扛出來，背到下一個驛亭",
         "check": {
           "stat": "str",
-          "difficulty": 7
+          "difficulty": 5
         },
         "effect": {
           "text": "你背著驛卒走了七八里，驛亭的亭長親自倒水給你，又賞了些錢。",
@@ -161,7 +161,7 @@
         "text": "坐下來幫著推敲譯語",
         "check": {
           "stat": "wis",
-          "difficulty": 7,
+          "difficulty": 5,
           "by": "self"
         },
         "effect": {
@@ -181,7 +181,7 @@
         "text": "替書生通宵抄寫經卷",
         "check": {
           "stat": "con",
-          "difficulty": 5,
+          "difficulty": 3,
           "by": "self"
         },
         "effect": {
@@ -219,7 +219,7 @@
         "text": "下場投壺",
         "check": {
           "stat": "agi",
-          "difficulty": 5
+          "difficulty": 3
         },
         "effect": {
           "text": "你連中三矢，一矢還插進壺耳。士人們拍手叫好，把彩頭推到你面前。",
@@ -239,7 +239,7 @@
         "text": "加入他們議論天下時局",
         "check": {
           "stat": "wis",
-          "difficulty": 7
+          "difficulty": 5
         },
         "effect": {
           "text": "你說黃巾之起在於民無所食，不在妖術。一位老士人沉吟良久，說要把你的話寫進信裡寄給洛陽的朋友。",
@@ -275,7 +275,7 @@
         "text": "衝上去用肩膀頂住梁木",
         "check": {
           "stat": "str",
-          "difficulty": 7
+          "difficulty": 5
         },
         "effect": {
           "text": "你咬牙扛住，等工匠把繩子繫牢。管工的僧人塞給你一袋錢，說是寺裡的一點心意。",
@@ -294,7 +294,7 @@
         "text": "爬上木架幫著繫繩",
         "check": {
           "stat": "agi",
-          "difficulty": 6
+          "difficulty": 4
         },
         "effect": {
           "text": "你攀上高架，三兩下把繩結打成死扣。工匠說你身子比猴還靈，把襯在繩結下的一團柳絲綿送給了你。",
@@ -355,7 +355,7 @@
         "text": "一把將老翁拖到路邊",
         "check": {
           "stat": "agi",
-          "difficulty": 7
+          "difficulty": 5
         },
         "effect": {
           "text": "車輪貼著你的衣角碾過去。老翁回過神來，硬是塞給你一罐漿。旁觀的人都說你手腳快。",
@@ -375,7 +375,7 @@
         "text": "擋在老翁身前，替他挨那一鞭",
         "check": {
           "stat": "con",
-          "difficulty": 6,
+          "difficulty": 4,
           "by": "self"
         },
         "effect": {
@@ -432,7 +432,7 @@
         "text": "替他站一整夜崗",
         "check": {
           "stat": "con",
-          "difficulty": 7,
+          "difficulty": 5,
           "by": "self"
         },
         "effect": {
@@ -456,7 +456,7 @@
         "text": "幫他把巡夜的竹簽和口令記熟再上崗",
         "check": {
           "stat": "wis",
-          "difficulty": 5
+          "difficulty": 3
         },
         "effect": {
           "text": "查夜的司馬問口令，你答得一字不差，順利熬過一夜，衛士分了你一半餉錢。",
@@ -491,7 +491,7 @@
         "text": "舉起最重的那副石鎖",
         "check": {
           "stat": "str",
-          "difficulty": 7
+          "difficulty": 5
         },
         "effect": {
           "text": "你把石鎖舉過頭頂，繞場走了一圈。掾屬在竹簡上記下你的名號，賞錢一串。",
@@ -512,7 +512,7 @@
         "text": "挽弓射靶",
         "check": {
           "stat": "agi",
-          "difficulty": 6
+          "difficulty": 4
         },
         "effect": {
           "text": "五箭中了三箭，掾屬點點頭，說府裡正缺能騎射的人，要你得空再來。",
@@ -548,7 +548,7 @@
         "text": "幫主簿把軍報理出頭緒",
         "check": {
           "stat": "wis",
-          "difficulty": 7
+          "difficulty": 5
         },
         "effect": {
           "text": "你把各處日期、兵數一一對照，挑出兩份顯然是誇大其詞的。主簿大喜，說明早要在大將軍面前提你一句。",
@@ -568,7 +568,7 @@
         "text": "陪著書佐們熬夜謄抄",
         "check": {
           "stat": "con",
-          "difficulty": 6,
+          "difficulty": 4,
           "by": "self"
         },
         "effect": {
@@ -607,7 +607,7 @@
         "text": "接過來一口喝乾",
         "check": {
           "stat": "con",
-          "difficulty": 7,
+          "difficulty": 5,
           "by": "self"
         },
         "effect": {
@@ -629,7 +629,7 @@
         "text": "以茶代酒，席間應對眾人",
         "check": {
           "stat": "wis",
-          "difficulty": 6
+          "difficulty": 4
         },
         "effect": {
           "text": "有人問你對宦官與黨人怎麼看，你答得滴水不漏，既不得罪人也不失分寸。席上幾位游士記住了你。",
@@ -686,7 +686,7 @@
         "text": "跳下去把壓在身上的石板掀開",
         "check": {
           "stat": "str",
-          "difficulty": 7
+          "difficulty": 6
         },
         "effect": {
           "text": "你雙臂一發力，石板翻到一邊，把孩子拖了出來。老卒跪在泥裡向你磕頭，又從屋裡翻出一塊壓陵角的沉石送你。",
@@ -707,7 +707,7 @@
         "text": "順著繩子溜下去，從縫裡把孩子拉出來",
         "check": {
           "stat": "agi",
-          "difficulty": 6
+          "difficulty": 5
         },
         "effect": {
           "text": "你貼著土壁鑽進縫裡，在第二波塌方前把孩子拉了上來。",
@@ -760,7 +760,7 @@
         "text": "脫了外衣跳進黃河救人",
         "check": {
           "stat": "con",
-          "difficulty": 7,
+          "difficulty": 6,
           "by": "self"
         },
         "effect": {
@@ -786,7 +786,7 @@
         "text": "在岸邊把纜繩甩給落水的人",
         "check": {
           "stat": "agi",
-          "difficulty": 5
+          "difficulty": 4
         },
         "effect": {
           "text": "你一甩就把繩頭送到一個商人手裡，船夫們合力把他拉了上來。",
@@ -822,7 +822,7 @@
         "text": "抄起長篙把小船頂開",
         "check": {
           "stat": "str",
-          "difficulty": 7
+          "difficulty": 6
         },
         "effect": {
           "text": "你一篙把領頭的小船撐翻，其餘幾條見勢不妙，掉頭鑽回了蘆葦。船老大說這一趟的船錢免了。",
@@ -843,7 +843,7 @@
         "text": "提醒船老大往西涼兵營那邊靠",
         "check": {
           "stat": "wis",
-          "difficulty": 6
+          "difficulty": 5
         },
         "effect": {
           "text": "你看出這夥人怕官兵，讓船老大升起燈籠往營帳那岸靠。小船在暗處盤了一陣就散了。",
@@ -891,7 +891,7 @@
         "text": "替船主跟軍侯講道理",
         "check": {
           "stat": "wis",
-          "difficulty": 8
+          "difficulty": 7
         },
         "effect": {
           "text": "你指出帳簿上蓋著河內郡的封泥，徵了這船糧，軍侯得自己去跟太守交代。軍侯罵了一聲，放船過了河。",
@@ -911,7 +911,7 @@
         "text": "趁騎兵不注意，幫船夫解纜開船",
         "check": {
           "stat": "agi",
-          "difficulty": 7
+          "difficulty": 6
         },
         "effect": {
           "text": "你悄悄割斷纜繩，船夫一篙撐出河心，騎兵在岸上罵了半天也追不上。船主託人捎來謝錢。",

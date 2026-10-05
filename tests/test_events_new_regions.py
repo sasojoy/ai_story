@@ -58,7 +58,7 @@ def test_events_stay_within_the_reward_limits(content, region):
             if "check" in c or "combat" in c:
                 assert "fail_effect" in c, e["id"]
             if "check" in c:
-                assert c["check"]["stat"] in {"str", "agi", "con", "wis"} and 5 <= c["check"]["difficulty"] <= 8, e["id"]
+                assert c["check"]["stat"] in {"str", "agi", "con", "wis"} and 3 <= c["check"]["difficulty"] <= 8, e["id"]  # 難度帶另見 test_real_content.py::DIFFICULTY_BANDS
             for key in ("effect", "fail_effect"):
                 eff = c.get(key, {})
                 stats = eff.get("stats", {})
