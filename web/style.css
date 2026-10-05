@@ -359,11 +359,18 @@ details.fold.bulletin > .fold-body { border-color: var(--gold); max-height: 50vh
 .front-bar.side-guan > i { background: var(--kuai); }
 .front-bar.side-huang > i { background: var(--gold); }
 .front-bar.side-haoqiang > i { background: var(--rou); }
-/* 江湖頁最上面的態勢卡（正式版辛）：三欄一列，跟戰況條同一種排法，數字放大 */
-.stances-card { padding: 10px 12px; }
-.stances-card h3 { margin: 0 0 6px; font-size: 13px; color: var(--ink-2); }
-.stances-card .fronts { margin-bottom: 6px; }
-.stances-card .front-head b { font-size: 18px; }
+/* 江湖頁最上面的態勢卡（正式版辛；PM 2026-10-06 改成一行的摺疊）：用 details.fold 的外觀、收起時跟公告卡一樣高（44px），
+   一行「三方態勢　官軍 55・黃巾 45・豪強 10」，三個數字各用陣營的顏色；點開才有三條（跟結算卡共用）、收季規則與怎麼算的。
+   選擇器寫成 details.fold.stances，理由同 details.fold.bulletin（權重要贏過 details.fold > summary） */
+details.fold.stances > summary { font-size: 14px; padding: 8px 14px; min-height: 44px; box-sizing: border-box; }
+.stances-head { flex: none; color: var(--ink-2); white-space: nowrap; }
+.stances-nums { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 400; }
+.stances-nums b { font-weight: 700; font-variant-numeric: tabular-nums; }
+.stances-nums .side-guan { color: var(--kuai); }
+.stances-nums .side-huang { color: var(--gold); }
+.stances-nums .side-haoqiang { color: var(--rou); }
+details.fold.stances > .fold-body > .fronts { margin-bottom: 8px; }
+details.fold.stances > .fold-body > :last-child { margin-bottom: 0; }
 .stance-rule { margin: 0; font-size: 12px; line-height: 1.5; color: var(--ink); }
 .stance-how { margin: 2px 0 0; font-size: 11px; line-height: 1.5; color: var(--ink-2); }
 /* 第一季的本週軍令（計畫 T6） */

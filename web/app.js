@@ -59,6 +59,7 @@
     roundsOpen: null, // 江湖頁戰鬥卡片「過程」展開的那一場（戰報流水號）；換成新的一場就收回（計畫三 G6）
     boardOpen: null, // 江湖頁公告卡展開著的那一週（週次）；收起或換週就不再對得上（FB-039）
     ordersShut: null, // 江湖頁「本週軍令」收起來的那一週；換週就重新展開（計畫 T6）
+    stanceOpen: null, // 江湖頁態勢卡展開著的那一週（週次）；收起或換週就不再對得上，同公告卡（正式版辛）
     sceneOpen: false, // 在路上時場景那段說明展開著嗎（預設只露兩行，FB-055）；下了路就清掉
     hintOpen: false, // 在路上時狀態列的 💡 提示展開著嗎（預設只露一行，FB-060）；下了路就清掉
     guideRoad: null, // 在路上時說書人的框展開著的那一句（內容本身）；路上預設收成一行，下了路就清掉（FB-055）
@@ -582,16 +583,22 @@
         <div class="front-bar stance side-${esc(x.side)}" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${x.value}" aria-label="${esc(x.name)}"><i style="width:${pct(x.value, 100)}%"></i></div></div>`).join("")}</div>`;
   }
 
-  // 江湖頁最上面的態勢卡（正式版辛，企劃者 2026-10-06）：三條、收季規則一行、怎麼算的一行小字。
-  // 門檻與週次由伺服器寫在 stance_rule 裡（從結局與設定算，前端不寫死 85、10）。
-  // 休季不畫（結算卡已經有最終態勢）；開關關著時 status 沒有 stances，也不畫
+  // 江湖頁最上面的態勢卡（正式版辛，企劃者 2026-10-06；PM 量過 375×812 展開的卡有 173px，改成一行的摺疊，同公告卡的樣子）：
+  // 收起時一行「三方態勢　官軍 55・黃巾 45・豪強 10」（三個數字各用陣營的顏色，名稱與數字都來自 status.stances）；
+  // 點開才有三條、收季規則一行、怎麼算的一行小字。門檻與週次由伺服器寫在 stance_rule 裡（從結局與設定算，前端不寫死 85、10）。
+  // 展開與否記在 S.stanceOpen（鍵是週次，toggle 監聽見下面，跟公告卡一樣只存在這一頁，不碰 localStorage）：
+  // 輪詢重畫不會把它關掉，換週就回到收起。休季不畫（結算卡已經有最終態勢）；開關關著時 status 沒有 stances，也不畫
   function stanceCardHtml(s) {
     if (!s || !s.stances) return "";
     const rows = STANCE_NAMES.map(([side, name]) => ({ side, name, value: s.stances[side] }));
+    const week = s.calendar ? s.calendar.week : 0;
+    const nums = rows.map((x) => `${esc(x.name)} <b class="side-${esc(x.side)}">${x.value}</b>`).join("・");
     const n = s.stance_notes || {};
     const how = [n.sum ? `官軍、黃巾：${esc(n.sum)}` : "", n.haoqiang ? `豪強：${esc(n.haoqiang)}` : ""].filter(Boolean).join("；");
-    return `<section class="card stances-card"><h3>三方態勢</h3>${stanceBars(rows, "三方態勢")}${
-      s.stance_rule ? `<p class="stance-rule">${esc(s.stance_rule)}</p>` : ""}${how ? `<p class="stance-how">${how}</p>` : ""}</section>`;
+    return `<details class="fold stances" data-week="${week}" ${S.stanceOpen === week ? "open" : ""}>
+      <summary><span class="stances-head">三方態勢</span><span class="stances-nums">${nums}</span></summary>
+      <div class="fold-body">${stanceBars(rows, "三方態勢")}${
+      s.stance_rule ? `<p class="stance-rule">${esc(s.stance_rule)}</p>` : ""}${how ? `<p class="stance-how">${how}</p>` : ""}</div></details>`;
   }
 
   // 第一季的結算卡（休季才有，計畫 T9）：結局與季末公告、最終態勢與三條戰況；十二件大事與各陣營出力前五收在摺疊裡
@@ -1914,6 +1921,7 @@
     const box = ev.target;
     if (box instanceof Element && box.matches("details.bulletin")) S.boardOpen = box.open ? Number(box.dataset.week) : null;
     if (box instanceof Element && box.matches("details.orders")) S.ordersShut = box.open ? null : Number(box.dataset.week);
+    if (box instanceof Element && box.matches("details.stances")) S.stanceOpen = box.open ? Number(box.dataset.week) : null;
   }, true);
 
   // 視窗大小變了（轉向、拉視窗）：輿圖開著就重新夾住、套用；原本是整張就維持整張（applyMapView）
