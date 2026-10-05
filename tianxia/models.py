@@ -131,16 +131,20 @@ class Drop(_Strict):
 class Check(_Strict):
     stat: str
     difficulty: int
-    by: Literal["team", "self"] = "team"  # team：隊伍派屬性最高的人出手；self：只看本人
+    # 讀得進來、不再有作用（企劃者 2026-10-05「探索應該沒有本人跟夥伴之分了」）：以前 team 派隊伍中這項屬性最高的人、
+    # self 只看本人；現在每一個事件檢定都看本人的屬性（rules.check_outlook）。留著這個欄位，舊內容與 joy 寫好的事件照樣載入。
+    by: Literal["team", "self"] = "team"
+    # 熟練（企劃者 2026-10-05「你常常做壞事，因為很熟練所以也增加成功率」）：寫了 "evil" 時，
+    # 本人的檢定值再加上由惡名換算的加成（Config.practice_bonus）。
+    practice: str | None = None
 
 
-class CheckLines(_Strict):
-    """檢定選項上的「心裡話」（content/check_lines.json，週末試玩 A）。成功率分五段（見 tianxia/check_lines.py 的
-    BUCKETS：80+、60-79、40-59、20-39、0-19）；generic 每一段都要有，by_stat 是各屬性（str／agi／con／wis…）自己的
-    說法，可以只寫其中幾段，沒寫的那段退回 generic。一段可以寫好幾句，同一個選項永遠挑同一句。"""
+class PracticeBonus(_Strict):
+    """熟練加成：這項名聲每 per 點，本人的檢定值 +1，最多 +cap（rules.practice_bonus）。"""
 
-    generic: dict[str, list[str]]
-    by_stat: dict[str, dict[str, list[str]]] = Field(default_factory=dict)
+    per: int = Field(gt=0)
+    cap: int = Field(ge=0)
+    line: str = ""  # 吃到加成時併進選項括號裡的那一句（events.choice_label），{who} 換成「你」
 
 
 class FrontLines(_Strict):
@@ -175,7 +179,7 @@ class FreeTextChoice(_Strict):
 
     prompt: str  # 選單上的標籤，例如「自己想辦法……」
     stat: Literal["str", "agi", "con", "wis"]
-    by: Literal["team", "self"] = "team"  # 跟 Check.by 一樣：team 派隊伍中這項屬性最高的人，self 只看本人
+    by: Literal["team", "self"] = "team"  # 跟 Check.by 一樣：讀得進來、不再有作用，隨口應對也只看本人的屬性
     effect: Effect = Field(default_factory=Effect)
     fail_effect: Effect = Field(default_factory=Effect)
 
@@ -672,6 +676,10 @@ class Config(_Strict):
     rest_regen_multiplier: float = Field(default=2, ge=1)  # 打坐中體力回復是平常的幾倍
     # 地方痕跡的門檻倍數（Condition.marks_min/max 的數字乘上它、無條件進位）：開發期 1，正式伺服器依人數調大
     mark_threshold_scale: float = Field(default=1.0, gt=0)
+    # 熟練加成（Check.practice）：名聲 → 每幾點加 1、最多加幾。惡名的估算見 CLAUDE.md「惡名的熟練加成」。
+    practice_bonus: dict[str, PracticeBonus] = Field(default_factory=lambda: {
+        "evil": PracticeBonus(per=10, cap=3, line="這種事{who}幹得多了。"),
+    })
     # 地圖座標 1 單位＝步行幾分鐘：現行內容（40 個地點的地圖）取 0.04，也就是 25 個單位約 1 分鐘；這裡的預設值只是沒寫時的退路
     travel_minutes_per_unit: float = Field(default=0.0375, gt=0)
     road_factor: dict[RoadKind, float] = Field(
@@ -689,6 +697,14 @@ class Config(_Strict):
     ollama_url: str = "http://localhost:11434"  # companion_agent.py 深度對話用；連不上時那輪對話取消
     ollama_model: str = "qwen2.5:14b"
     ollama_timeout: int = 120
+    # 行動鎖內的模型呼叫（大事與決戰回合的潤色、重複事件與重遊的點綴句、決戰自訂行動的評分、鎖內才備料的對話與記憶整理、
+    # 鎖內才取名的開爐）最多等幾秒：鎖拿著的時候全服玩家與假人都在等，模型慢或冷的時候照 ollama_timeout 的 120 秒會讓整台
+    # 伺服器凍結好幾分鐘，試玩走的 trycloudflare 也會在約 100 秒切斷請求。Game._quick_client 給鎖內呼叫端這個逾時的複本
+    # （引擎不讀時鐘，靠 HTTP 的逾時，跟 naming.propose 同一個做法）；逾時或失敗都退回固定的文字。這是硬上限：鎖內的呼叫
+    # 不重問（chat_structured 只送一趟）、記憶整理／性情漂移／取名只試一次，而且一次拿鎖期間有一次呼叫失敗之後，後面的鎖內
+    # 呼叫都不再叫模型。鎖外的路徑（對話備料、開爐取名、隨口應對的評分與潤色）有自己的逾時與重問，不受這個管。
+    # 第二階段的模型佇列上線後，鎖內就不該再有模型呼叫了
+    in_lock_model_timeout: int = Field(default=15, ge=1)
     # 開爐首次取名（鎖外的 B 段）整段最多花幾秒（最終審查 Critical 1）：server.py 讀它、扣掉 A 段等鎖的時間，傳給
     # naming.generate 的 budget；用完就走退路字表。試玩走 trycloudflare，一個請求約 100 秒就被切斷，60 秒留下 A、C 兩段
     # 等行動鎖的餘裕（控制者 2026-10-05 從 75 改成 60）
@@ -753,7 +769,6 @@ class Config(_Strict):
     guanyin_chance: float = Field(default=0.3, ge=0, le=1)  # 黃巾遊歷打贏官軍的隊伍時拿到一錠官銀的機率（濃縮版內容表 4.0）
     train_event_chance: float = 0.3
     qiyu_weight_multiplier: float = 1.5
-    event_repeat_decay: float = Field(default=0.5, gt=0, le=1)  # 看過的事件下次更少出現：抽選權重 × 這個數 ^ 這個玩家這一季看過幾次（1.0＝不遞減）
     starter_skills: list[str] = Field(default_factory=list)
     start_stats: dict[str, int] = Field(
         default_factory=lambda: {
@@ -804,8 +819,10 @@ class Config(_Strict):
     fuse_xinde: int = 5  # 合成（武學＋意境）一次
     merge_xinde: int = 5  # 合併（意境＋意境）一次
     # 企劃者 2026-10-05：合併要花體力（跟修練一次一樣），合成（武學＋意境）不花。合併→熔掉（melt_insight_xinde）→再合併
-    # 每一圈淨賺心得，決定不擋重合、也不動熔的價，而是讓每一圈都付一次體力：「意境合併要花體力，這樣的話她要拿心得就給他拿」
-    merge_stamina: int = 10
+    # 每一圈淨賺心得，決定不擋重合、也不動熔的價，而是讓每一圈都付一次體力：「意境合併要花體力，這樣的話她要拿心得就給他拿」。
+    # FB-067（企劃者 2026-10-05）：從 10（跟修練一次一樣）降到 5；修練（含衝絕學）維持 10。一圈淨賺 5 心得＝每點體力 1 心得，
+    # 跟「同一個地點探索又悟到同一個意境」（10 體力換 10 心得）一樣划算
+    merge_stamina: int = 5
     cultivate_stamina: int = 10  # 修練一次的體力
     # 修練升到這一品：第一次的機率、每失敗一次加多少（%）（設計 3.5）。中品、上品加到 100 就必成；
     # 絕學沒有保底：累積的機率最多到 cultivate_cap（企劃者 2026-10-05），剩下靠破境丹
@@ -821,6 +838,10 @@ class Config(_Strict):
     legend_item_bonus: int = 15
     explore_legend_chance: float = Field(default=0.02, ge=0, le=1)  # 每按一次探索（不論走哪一支）撿到一枚的機率
     melt_refund_ratio: float = Field(default=0.8, ge=0, le=1)  # 熔一門武學退回練成花的心得的幾成
+    # FB-068（企劃者 2026-10-05）：熔掉全服登記的武學（合成出來的）時，「練成花的八成」那一份至少退這麼多——合成也花了東西。
+    # 不超過合成的價（fuse_xinde 5）：合成→熔掉一圈淨虧 1，不成迴圈。內容裡的武學（基礎武學有的免費教、學藝不花體力）
+    # 不給基本值，否則「學、熔、再學」就是無本的心得迴圈（library.melt_value）
+    melt_min_refund: int = Field(default=4, ge=0)
     # 熔煉的品質加給，只算玩家自己修練上去的那幾階（企劃者 2026-10-05）：領的是「現在的品質」減去「登記時的品質」的差
     # （library.melt_refund）。合成的武學登記在下品，修練到上品領 15；內容直接給的絕學（本命武學）登記就是絕學，沒有加給
     melt_quality_bonus: dict[str, int] = Field(
@@ -1315,6 +1336,22 @@ class FollowerDef(_Strict):
     wugong_level: int = Field(ge=1, le=10)
 
 
+class CheckVoiceBand(_Strict):
+    """一檔心聲：本人的屬性（含熟練加成）減難度 ≥ min_gap 就用這一檔（由高到低找第一個符合的；差值跟擲骰同一個，
+    rules.check_gap）。"""
+
+    min_gap: float
+    lines: dict[str, str]  # 屬性（str/agi/con/wis）→ 句子，{who} 換成「你」；"default" 是其他屬性的退路
+
+
+class CheckVoice(_Strict):
+    """有檢定的事件選項括號裡的那一句心裡話（content/check_voice.json，joy 寫的）：「去拉那張老弓（臂力 5：以你現在的
+    臂力，恐怕力有未逮。）」，讓玩家選之前就知道這件事對自己難不難（企劃者 2026-10-05 定案；取代 S1 的 check_lines.json）。
+    檢定是屬性每高於難度 1 點成功率 +10%（rules.check_chance），所以差 +2 約七成、0 是五成、−2 約三成。"""
+
+    bands: list[CheckVoiceBand] = Field(default_factory=list)
+
+
 class Content(_Strict):
     config: Config
     scenario: Scenario
@@ -1324,7 +1361,6 @@ class Content(_Strict):
     insights: dict[str, InsightDef] = Field(default_factory=dict)  # 意境（content/insights.json，武學與成長設計附錄 A）
     materials: dict[str, Material]
     craft_names: CraftNames
-    check_lines: CheckLines  # 檢定選項上的心裡話（content/check_lines.json）
     front_lines: FrontLines  # 戰況變化的說法（content/front_lines.json，FB-064）
     banned_names: list[str]  # 合成、合併命名的禁用詞（原創原則：不用金庸等作品的專有名詞）
     sects: dict[str, Sect]
@@ -1340,3 +1376,4 @@ class Content(_Strict):
     followers: dict[str, FollowerDef] = Field(default_factory=dict)  # 部下模板（content/followers.json，計畫 T5）
     map: MapLayout
     tutorial: Tutorial
+    check_voice: CheckVoice = Field(default_factory=CheckVoice)  # 檢定選項括號裡的那一句（content/check_voice.json，載入時必備）

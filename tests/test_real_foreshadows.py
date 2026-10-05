@@ -590,15 +590,15 @@ def test_changshe_haoqiang_two_trips_and_two_checks(fs_content, world):
     p.materials = {"man_1": 2}
     assert fs_option(game, "fs:fs_changshe_haoqiang").label == "交糧（東西還沒備齊）"  # 沒有「兩邊都賣」的起點
     p.fs_counters = {"two_buyers": 1}
-    assert game.choose("fs:fs_changshe_haoqiang") == ["（本人——失敗）", chain.final.steps[0].wrong.text, "沉淵石 -1"]
+    assert game.choose("fs:fs_changshe_haoqiang") == ["（失敗）", chain.final.steps[0].wrong.text, "沉淵石 -1"]
     assert p.materials == {"man_1": 1} and p.fs_done == []
     p.materials = {"man_1": 2}
     game.rng = FixedRandom(0.0)
-    assert game.choose("fs:fs_changshe_haoqiang") == ["（本人——成功）", chain.final.steps[0].success_text, "沉淵石 -1"]
+    assert game.choose("fs:fs_changshe_haoqiang") == ["（成功）", chain.final.steps[0].success_text, "沉淵石 -1"]
     assert p.fs_done == ["fs_changshe_haoqiang:0"] and fs_option(game, "fs:fs_changshe_haoqiang") is None
     p.location = "huangjin_camp"
     assert game.choose("fs:fs_changshe_haoqiang") == [
-        "（本人——成功）", chain.final.steps[1].success_text, chain.final.success_text, "沉淵石 -1",
+        "（成功）", chain.final.steps[1].success_text, chain.final.success_text, "沉淵石 -1",
     ]  # 後完成的那一趟：自己的句子，再接整條完成的那一句（內容表 4.6）
     assert "fs_changshe_haoqiang" in p.fs_done and world.get_season().third_party["changshe_fire"] == ["甲"]
 
@@ -619,11 +619,11 @@ def test_two_buyers_second_trip_adds_the_joint_line(fs_content, world, first, se
     p = game.state.player
     p.location = first
     p.visited.add(first)
-    assert game.choose("fs:fs_changshe_haoqiang") == ["（本人——成功）", own[first], "沉淵石 -1"]  # 先完成的：沒有完成句
+    assert game.choose("fs:fs_changshe_haoqiang") == ["（成功）", own[first], "沉淵石 -1"]  # 先完成的：沒有完成句
     assert "fs_changshe_haoqiang" not in p.fs_done and not game.state.world.third_party
     p.location = second
     p.visited.add(second)
-    assert game.choose("fs:fs_changshe_haoqiang") == ["（本人——成功）", own[second], JOINT_LINE, "沉淵石 -1"]
+    assert game.choose("fs:fs_changshe_haoqiang") == ["（成功）", own[second], JOINT_LINE, "沉淵石 -1"]
     assert "fs_changshe_haoqiang" in p.fs_done
     assert game.choose("fs:fs_changshe_haoqiang") == ["（此刻無法這麼做。）"]  # 做完就沒有了
 

@@ -126,17 +126,19 @@ def learn(state: GameState, content: Content, skill_id: str) -> list[str]:
 # ── 熔煉（設計 4.3）──────────────────────────────────────
 
 
-def melt_refund(content: Content, level: int, quality: str, registered: str = "下品") -> int:
-    """熔一門練到第 level 成、玩家自己這一份品質是 quality 的武學退多少心得：練成花的八成＋品質加給。
+def melt_refund(content: Content, level: int, quality: str, registered: str = "下品", minimum: int = 0) -> int:
+    """熔一門練到第 level 成、玩家自己這一份品質是 quality 的武學退多少心得：
+    max(minimum, 練成花的八成) ＋ 品質加給。
 
     品質加給只算玩家自己修練上去的那幾階（企劃者 2026-10-05，改了設計 4.3）：加給（quality）減去
     登記時就有的那一階的加給（registered，全服共享、沒個人化的那一份的品質），不低於 0。
     合成的武學登記在下品，所以修練到上品照領上品的加給；內容裡直接給的絕學（情誼送的本命武學、劇情教的）
-    登記就是絕學、沒修練過，熔了沒有加給——不然「合一門、熔一門」就是個無本的金錢迴圈。"""
+    登記就是絕學、沒修練過，熔了沒有加給——不然「合一門、熔一門」就是個無本的金錢迴圈。
+    minimum 是 FB-068 的基本值（Config.melt_min_refund，只給合成出來的武學，見 melt_value），墊在練成那一份底下，不另外加。"""
     cfg = content.config
     spent = sum(team.practice_price(content, n) for n in range(1, level))
     bonus = max(0, cfg.melt_quality_bonus.get(quality, 0) - cfg.melt_quality_bonus.get(registered, 0))
-    return int(spent * cfg.melt_refund_ratio) + bonus
+    return max(minimum, int(spent * cfg.melt_refund_ratio)) + bonus
 
 
 def melt_problem(state: GameState, art_id: str, name: str | None = None) -> str | None:
@@ -156,12 +158,15 @@ def melt_problem(state: GameState, art_id: str, name: str | None = None) -> str 
 
 def melt_value(state: GameState, content: Content, world: WorldStateStore, art_id: str) -> int:
     """熔掉功法庫裡的 art_id 會退多少心得。熔煉頁寫的「退回心得 N」（skillview.art_rows）與 melt_art 真的退的
-    共用這一個數：玩家自己那一份的品質跟全服登記的那一份（沒個人化）比，只有修練上去的幾階有加給。"""
+    共用這一個數：玩家自己那一份的品質跟全服登記的那一份（沒個人化）比，只有修練上去的幾階有加給。
+    FB-068 的基本值（Config.melt_min_refund）只給全服登記的武學（合成出來的；art_id 不是內容裡的武學）：
+    內容裡的基礎武學有的免費教、學藝也不花體力，給了基本值就是「學、熔、再學」的無本迴圈。"""
     mine = team.player_art(state, content, world, art_id)
     registered = team.resolve_art(art_id, content, world)
+    minimum = 0 if art_id in content.skills else content.config.melt_min_refund
     return melt_refund(
         content, state.player.art_levels.get(art_id, 1),
-        mine.quality if mine else "下品", registered.quality if registered else "下品",
+        mine.quality if mine else "下品", registered.quality if registered else "下品", minimum,
     )
 
 

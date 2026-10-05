@@ -171,3 +171,30 @@ def test_a_name_from_outside_the_lock_is_filtered_again(content, proposed, expec
 def test_the_prompt_never_asks_for_numbers():
     assert "絕對不要提到任何數字" in naming.SYSTEM_PROMPT
     assert not hasattr(naming.NameReply(name="甲乙"), "base_power")
+
+
+# ── FB-069：名字不能是江湖上角色的名號（真人、假人一樣）──────────────────
+
+
+def is_person(name):
+    """假的角色名冊：比對不分大小寫，跟 WorldStateStore.is_character_name 一樣。"""
+    return name.strip().casefold() in {"驗收新武", "lan"}
+
+
+def test_a_characters_name_is_rejected_when_the_lookup_is_given(content):
+    assert naming.name_problem("驗收新武", content) is None  # 只看內容時擋不到（內容的驗證、退路字表都這樣叫）
+    assert naming.name_problem("驗收新武", content, is_person) == naming.PERSON_CLASH == "跟江湖上的人物同名"
+    assert naming.name_problem("LAN", content, is_person) == naming.PERSON_CLASH  # 大小寫不同也擋
+    assert naming.name_problem("裂江訣", content, is_person) is None
+
+
+def test_the_model_proposing_a_characters_name_is_asked_again(content):
+    client = named("驗收新武", "裂江訣")
+    assert naming.propose(client, content, MESSAGES, person=is_person) == ("裂江訣", "一句話。")
+    request = naming.NamingRequest(kind="fuse", key="融|basic_fist+feng", name_kind="武學", messages=MESSAGES)
+    assert naming.generate(named("驗收新武", "裂江訣"), content, request, person=is_person) == ("裂江訣", "一句話。")
+
+
+def test_the_lock_side_recheck_drops_a_characters_name(content):
+    assert naming.recheck(content, ("驗收新武", "一句話。"), person=is_person) == (None, "")
+    assert naming.recheck(content, ("裂江訣", "一句話。"), person=is_person) == ("裂江訣", "一句話。")

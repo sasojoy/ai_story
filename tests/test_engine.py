@@ -360,16 +360,17 @@ def test_explore_presents_event_and_resolves_check(game):
     assert game.state.pending_event is None
     assert game.state.player.stats["good"] == 2
     assert game.state.world.trends["kou"] == 25
-    assert "（本人出手——成功）" in game.state.log
+    assert "（成功）" in game.state.log
 
 
-def test_self_check_names_the_player_and_takes_the_fail_branch(game):
+def test_self_check_shows_one_bracketed_line_and_takes_the_fail_branch(game):
     game.state.pending_event = "insight"
-    assert [o.label for o in game.options()] == [f"運氣衝關（本人・根骨 5：{game.content.check_lines.generic['40-59'][0]}）"]
+    assert [o.label for o in game.options()] == ["運氣衝關（根骨 5：咬咬牙，你應該撐得住。）"]
+    assert all(o.model_dump().keys() == {"id", "label", "enabled"} for o in game.options())  # 選項底下沒有另一行
     game.rng = FixedRandom(0.99)  # 成功率 50%：必定失敗
     game.choose("choice:0")
     log = game.state.log
-    assert log.index("（本人——失敗）") < log.index("氣息一亂，只得作罷。")
+    assert log.index("（失敗）") < log.index("氣息一亂，只得作罷。")
     assert game.state.player.stats["xinde"] == 0
 
 

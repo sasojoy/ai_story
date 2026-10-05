@@ -116,24 +116,40 @@ def check_condition(cond: Condition, state: GameState, content: Content | None =
 
 
 class CheckOutlook(NamedTuple):
-    """一次檢定的勝算：誰出手（門下 key）、他這項屬性現在的數值、成功率（0～1）。"""
+    """一次檢定的勝算：本人這項屬性現在的數值（含等級成長）、熟練加成、兩者相加減難度的差值、成功率（0～1）。"""
 
-    actor: str
-    value: float
+    stat_value: float
+    bonus: int
+    gap: float
     chance: float
 
 
 def check_outlook(check: Check, state: GameState, content: Content, world: WorldStateStore) -> CheckOutlook:
-    """出手者的屬性每高於難度 1 點，成功率 +10%；範圍 5%～95%。
-    擲骰（roll_check）與選項標籤上的出手者、屬性數值、心裡話（events.choice_label）都出自這一個函式，
+    """每一個事件檢定都看本人的屬性（企劃者 2026-10-05「探索應該沒有本人跟夥伴之分了」：Check.by 讀得進來、不再有作用），
+    本人的熟練加成（Check.practice，joy #15）照舊加上。差值每 +1，成功率 +10%；範圍 5%～95%。
+    擲骰（roll_check）與選項括號裡的數值、心裡話那一檔（events.choice_label）都出自這一個函式的同一個差值，
     所以標籤講的和實際擲出來的不會對不起來。"""
-    actor = team.check_actor(state, content, world, check)
-    value = team.check_value(state, content, world, actor, check.stat)
-    return CheckOutlook(actor, value, min(0.95, max(0.05, 0.5 + (value - check.difficulty) * 0.1)))
+    stat_value = team.check_value(state, content, world, PLAYER, check.stat)
+    bonus = team.practice_bonus(state, content, check)
+    gap = stat_value + bonus - check.difficulty
+    return CheckOutlook(stat_value, bonus, gap, min(0.95, max(0.05, 0.5 + gap * 0.1)))
+
+
+def check_gap(check: Check, state: GameState, content: Content, world: WorldStateStore) -> float:
+    """本人的屬性（含熟練加成）減難度：選項括號裡挑哪一檔心裡話看它，擲骰的成功率也是它換算的（check_outlook）。"""
+    return check_outlook(check, state, content, world).gap
 
 
 def check_chance(check: Check, state: GameState, content: Content, world: WorldStateStore) -> float:
     return check_outlook(check, state, content, world).chance
+
+
+def practice_line(check: Check, state: GameState, content: Content, world: WorldStateStore) -> str:
+    """吃到熟練加成時，併進選項括號裡的那一句（例如「這種事你幹得多了。」）；沒吃到是空字串。"""
+    if team.practice_bonus(state, content, check) <= 0:
+        return ""
+    rule = content.config.practice_bonus[check.practice]
+    return rule.line.replace("{who}", "你")
 
 
 def roll_check(check: Check, state: GameState, content: Content, world: WorldStateStore, rng: random.Random) -> bool:
@@ -145,10 +161,9 @@ FREE_TEXT_PER_POINT = 4  # 相關屬性每比 5 高（低）1 點，成功率 +4
 
 
 def free_text_rate(llm_rate: int, choice, state: GameState, content: Content, world: WorldStateStore) -> int:
-    """隨口應對的成功率（百分比）：LLM 評的 0～100，加上屬性修正（照 choice.by 取出手者，跟一般檢定同一個函式），
+    """隨口應對的成功率（百分比）：LLM 評的 0～100，加上本人這項屬性的修正（跟一般檢定一樣只看本人，choice.by 不再有作用），
     夾在 5～85。choice 是 models.FreeTextChoice。"""
-    key = team.check_actor(state, content, world, choice)
-    value = team.check_value(state, content, world, key, choice.stat)
+    value = team.check_value(state, content, world, PLAYER, choice.stat)
     rate = round(llm_rate + (value - 5) * FREE_TEXT_PER_POINT)
     return max(FREE_TEXT_MIN_RATE, min(FREE_TEXT_MAX_RATE, rate))
 
@@ -196,12 +211,11 @@ def add_marks(marks: dict[str, int], state: GameState) -> None:
         state.world.marks[key] = state.world.marks.get(key, 0) + n
 
 
-def check_who(check: Check, state: GameState, content: Content, world: WorldStateStore) -> str:
-    """選項與結果上寫的出手者：本人檢定寫「本人」；隊伍檢定寫「某某出手」，派出的是本人時寫「本人出手」。"""
-    if check.by == "self":
-        return "本人"
-    key = team.check_actor(state, content, world, check)
-    return "本人出手" if key == PLAYER else f"{team.member_name(state, content, key)}出手"
+def check_result_line(success: bool) -> tuple[str, str]:
+    """檢定的結果：（江湖紀錄的標記, 敘事裡的那一行）。一律是本人出手，所以不寫誰（企劃者 2026-10-05），
+    只寫「成功」「失敗」——事件選項、隨口應對、伏筆的最後一步都用這一個。"""
+    word = "成功" if success else "失敗"
+    return word, f"（{word}）"
 
 
 def add_rumor(
@@ -401,12 +415,21 @@ def chaos_fronts(state: GameState, content: Content) -> list[str]:
     return [front for front in front_ids(content) if in_chaos(state, content, front)]
 
 
-def chaos_note(state: GameState, content: Content) -> str:
+def chaos_note(state: GameState, content: Content, players: int | None = None) -> str:
     """豪強割據現在為什麼漲或落（FB-065），江湖頁態勢那一行（「豪強 32（…）」）與見聞→大勢的割據說明共用這一句：
-    有戰線在亂局就漲（geju_tick：每條每曆日漲 geju_chaos_per_day），一條都沒有就落（每曆日落 geju_calm_per_day）。
-    條數寫阿拉伯數字；只寫方向與條數，不寫速度，也不寫是哪幾條（圖卡自己標）。"""
+    有戰線在亂局就漲（geju_tick：每條每曆日漲 geju_chaos_per_day × 人數係數），一條都沒有就落（每曆日落 geju_calm_per_day）。
+    條數寫阿拉伯數字；只寫方向與條數，不寫速度，也不寫是哪幾條（圖卡自己標）。
+    漲速乘人數係數（geju_rise_factor）：名冊空著（players 是 0）時有戰線在亂局也一點不漲，這句不能說漸長，改說還沒有人
+    投靠、暫時不動（FB-065 M1）。每曆日的變動讀 geju_per_day，跟 geju_tick 同一個算式；players 是 None＝不知道名冊，
+    不縮放，照舊說漸長。回落不乘係數，所以名冊空著、沒有戰線在亂局時還是漸消。"""
     count = len(chaos_fronts(state, content))
-    return f"{count} 條戰線在亂局，割據漸長" if count else "沒有戰線在亂局，割據漸消"
+    if not count:
+        return "沒有戰線在亂局，割據漸消"
+    if geju_per_day(state, content, players) > 0:
+        return f"{count} 條戰線在亂局，割據漸長"
+    if geju_rise_factor(content, players) == 0:
+        return f"{count} 條戰線在亂局，但還沒有人投靠，割據暫時不動"
+    return f"{count} 條戰線在亂局，割據不動"  # 名冊有人，是設定把漲速調成 0：不能怪名冊
 
 
 _COUNT_WORDS = "零一二三四五六七八九十"
@@ -433,6 +456,15 @@ def geju_rise_factor(content: Content, players: int | None) -> float:
     return min(1.0, max(0, players) / content.config.geju_full_players)
 
 
+def geju_per_day(state: GameState, content: Content, players: int | None = None) -> float:
+    """割據每曆日的自然變動（漲為正、落為負）：每有一條戰線在亂局漲 geju_chaos_per_day × 人數係數（geju_rise_factor），
+    一條都沒有就落 geju_calm_per_day（回落不乘係數）。geju_tick 實際漲落與畫面上的說明（chaos_note）讀的是這同一個算式，
+    所以畫面說漲就是在漲、說不動就是不動（FB-065 M1）。players 的意思同 geju_rise_factor（None＝不縮放）。"""
+    cfg = content.config
+    chaos = len(chaos_fronts(state, content))
+    return chaos * cfg.geju_chaos_per_day * geju_rise_factor(content, players) if chaos else -cfg.geju_calm_per_day
+
+
 def geju_tick(state: GameState, content: Content, cal_hours: float, players: int | None = None) -> None:
     """豪強割據的自然漲落（第一季設計 4.2）：每有一條戰線在亂局，每曆日漲 geju_chaos_per_day × 人數係數
     （geju_rise_factor：這一季投靠名冊 players 人，占 geju_full_players 的比例，至多 1）；三條都穩下來時每曆日
@@ -442,9 +474,7 @@ def geju_tick(state: GameState, content: Content, cal_hours: float, players: int
     fronts = front_ids(content)
     if not season_one(content, state.world) or _trend(content, GEJU) is None or not fronts:
         return
-    cfg = content.config
-    chaos = len(chaos_fronts(state, content))  # 畫面上寫的條數與漸長／漸消（chaos_note）讀同一份
-    per_day = chaos * cfg.geju_chaos_per_day * geju_rise_factor(content, players) if chaos else -cfg.geju_calm_per_day
+    per_day = geju_per_day(state, content, players)  # 畫面上寫的條數與漸長／不動／漸消（chaos_note）讀同一個算式
     w = state.world
     pending = w.trend_accum.get(GEJU, 0.0) + per_day * cal_hours / 24
     whole = int(pending + (1e-9 if pending > 0 else -1e-9))  # 往零取整；容一點浮點誤差，24 個 1/24 才剛好湊成 1

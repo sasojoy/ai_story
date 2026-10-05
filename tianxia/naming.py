@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import copy
 import hashlib
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from pydantic import BaseModel
@@ -63,10 +64,18 @@ def clean_name(raw: str) -> str:
     return zh.to_traditional(name)
 
 
-def name_problem(name: str, content: Content) -> str | None:
-    """名字過不了過濾的原因；None＝可以用。全服重名不在這裡查（那要看資料庫，見 world.is_skill_name_taken）。"""
+PersonCheck = Callable[[str], bool]  # 這個名字是不是江湖上某個角色的名號（WorldStateStore.is_character_name）
+PERSON_CLASH = "跟江湖上的人物同名"  # 真人、假人都回這一句：看不出那個名號是不是假人（FB-069）
+
+
+def name_problem(name: str, content: Content, person: PersonCheck | None = None) -> str | None:
+    """名字過不了過濾的原因；None＝可以用。全服重名不在這裡查（那要看資料庫，見 world.is_skill_name_taken）。
+    person 給了就也擋角色的名號（FB-069：玩家定名、模型取名、鎖內重驗都給 world.is_character_name；
+    內容的驗證與退路字表只看內容、不給）。排在字數之後、字元之前，所以換了大小寫的英文名號也回同一句話。"""
     if not (NAME_MIN_CHARS <= len(name) <= NAME_MAX_CHARS):
         return f"長度要 {NAME_MIN_CHARS}~{NAME_MAX_CHARS} 個字"
+    if person is not None and person(name):
+        return PERSON_CLASH
     if not all("一" <= ch <= "鿿" for ch in name):
         return "只能是中文字"
     for banned in content.banned_names:
@@ -85,6 +94,7 @@ def name_problem(name: str, content: Content) -> str | None:
 
 def propose(
     client: OllamaClient | None, content: Content, messages: list[dict[str, str]], budget: float | None = None,
+    person: PersonCheck | None = None,
 ) -> tuple[str | None, str]:
     """請模型命名，回傳（通過過濾的名字, 一句說明）；連不上、取壞了、預算用完都回 (None, "")，呼叫端走退路字表。
     client 是 None（伺服器假人，bot_runner 會把 game.client 設成 None）時不叫模型。
@@ -92,12 +102,16 @@ def propose(
     budget（秒）：整段取名最多花多久（server.py 從 Config.naming_budget_seconds 算好傳進來；沒給就照 client 自己的
     timeout，整季機器人、腳本、測試直接呼叫時是這樣）。不讀時鐘，照給出去的 timeout 扣：每一次呼叫拿 client 的複本、
     timeout 設成 min(client.timeout, 剩下的 ÷ POSTS_PER_CALL)，連重問那一趟都用完也不超過剩下的；
-    分不到 MIN_POST_SECONDS 就不叫了。原本那個 client 不動（同一個角色的別的請求可能正在用它）。"""
+    分不到 MIN_POST_SECONDS 就不叫了。原本那個 client 不動（同一個角色的別的請求可能正在用它）。
+    person：角色名號的查詢（見 name_problem）；模型取到角色的名號跟取壞了一樣，再請它取一次。"""
     if client is None:
         return None, ""
     left = budget
     own = getattr(client, "timeout", None)
-    for _ in range(NAME_ATTEMPTS):
+    # 行動鎖內的複本（retry 是 False，Game._quick_client）只試一次：鎖內任何一步模型呼叫最多佔住鎖 in_lock_model_timeout 秒，
+    # 取壞了就直接走退路字表；鎖外的取名（有預算）照舊最多 NAME_ATTEMPTS 次、每次最多兩趟
+    attempts = 1 if getattr(client, "retry", True) is False else NAME_ATTEMPTS
+    for _ in range(attempts):
         caller = client
         if left is not None:
             per_post = min(float(own) if isinstance(own, (int, float)) else left, left / POSTS_PER_CALL)
@@ -113,28 +127,33 @@ def propose(
         if reply is None:
             return None, ""
         name = clean_name(reply.name)
-        if name_problem(name, content) is None:
+        if name_problem(name, content, person) is None:
             return name, zh.to_traditional((reply.description or "").strip())
     return None, ""
 
 
 def generate(
     client: OllamaClient | None, content: Content, request: NamingRequest, budget: float | None = None,
+    person: PersonCheck | None = None,
 ) -> tuple[str | None, str]:
     """B 段（鎖外、很慢）：拿 A 段開的單子請模型取名，回傳（名字, 說明）；取不到是 (None, "")。
-    只拿單子、模型與內容（過濾要用），不碰任何遊戲狀態、不拿行動鎖——可以單獨呼叫，也可以整段換成模型佇列。"""
-    return propose(client, content, request.messages, budget=budget)
+    只拿單子、模型與內容（過濾要用），不碰任何遊戲狀態、不拿行動鎖——可以單獨呼叫，也可以整段換成模型佇列。
+    person 是角色名號的查詢（server 給 world.is_character_name：唯讀的快照，不拿行動鎖）。"""
+    return propose(client, content, request.messages, budget=budget, person=person)
 
 
-def recheck(content: Content, proposed: tuple[str | None, str]) -> tuple[str | None, str]:
+def recheck(
+    content: Content, proposed: tuple[str | None, str], person: PersonCheck | None = None,
+) -> tuple[str | None, str]:
     """C 段（鎖內）登記之前，把鎖外拿到的名字再過一次完整的過濾：整理包裝、轉繁體（含異體字表）、長度與字、禁用詞、
-    跟素材／人物／內容武學／意境同名。過不了就是 (None, "")，呼叫端走退路字表。全服重名不在這裡查：登記時
-    （world.claim_recipe／claim_insight_recipe 的 _name_taken）在同一筆交易裡原子判斷，同時有兩個配方拿到同一個名字也只有一個登記得上。"""
+    跟素材／人物／內容武學／意境同名，給了 person 也擋角色的名號（FB-069）。過不了就是 (None, "")，呼叫端走退路字表。
+    全服重名不在這裡查：登記時（world.claim_recipe／claim_insight_recipe 的 _name_taken）在同一筆交易裡原子判斷，
+    同時有兩個配方拿到同一個名字也只有一個登記得上。"""
     name, note = proposed
     if name is None:
         return None, ""
     name = clean_name(name)
-    if name_problem(name, content) is not None:
+    if name_problem(name, content, person) is not None:
         return None, ""
     return name, zh.to_traditional((note or "").strip())
 

@@ -122,7 +122,11 @@ class PlayerState(BaseModel):
     legend_items: int = 0  # 破境丹（Config.legend_item_name）的數量：探索撿到，玩家在修練頁勾了、衝絕學那一次才服一枚；角色每季重來
 
     seen_events: set[str] = Field(default_factory=set)
-    event_seen: dict[str, int] = Field(default_factory=dict)  # 事件 id -> 這一季看過幾次（Game._present 每端出一次記一次；抽事件時權重按次數遞減，見 events.event_weight）
+    # （舊的 event_seen 看過次數已拿掉：joy #16 的輪替取代了 FB-058 的 0.5^次數 遞減。舊存檔裡還有這一欄也讀得進來——
+    # PlayerState 沒禁止多餘的欄位，讀的時候直接略過，下次存檔就不見了）
+    # 防重複（events.pick_event 照它抽、events.note_round 在 Game._present 真的端出事件時才記）：池子（「地點:行動」或「*:行動」）→ 這一輪看過的事件 id，照看到的先後；輪完清空。
+    # 舊存檔沒這欄就是每個池子都還沒看過；角色每季重來，所以每季自然清空
+    event_rounds: dict[str, list[str]] = Field(default_factory=dict)
     mark_days: dict[str, int] = Field(default_factory=dict)  # 地方痕跡：這個人上次替這個痕跡算進一次是第幾天（一天只算一次；角色每季重來，跟著清空）
     anonymous: bool = False
     busy_until: float | None = None  # 閉關結束的遊戲時間

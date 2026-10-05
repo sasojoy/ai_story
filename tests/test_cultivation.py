@@ -614,3 +614,62 @@ def test_cultivating_and_naming_wait_while_the_season_is_preparing(adept):
     with mock.patch.object(adept.world, "season_phase", return_value="preparing"):
         assert "籌備中" in adept.cultivate("旋風腿")[0] and "籌備中" in adept.name_mastered("風神腿")[0]
     assert adept.state.player.stamina == 150 and adept.state.player.art_quality == {}
+
+
+# ── FB-069：絕學的正式名字不能取成江湖上任何一個角色的名號 ──────────────────
+
+
+def _save_character(content, name, bot=False):
+    from tianxia.characters import open_characters
+    from tianxia.state import BotProfile
+
+    state = new_game_state(content, name)
+    if bot:
+        state.player.bot = BotProfile(personality="普通", seed=1)
+    open_characters().save(state)
+
+
+def test_fb069_a_mastered_art_cannot_take_a_players_or_a_bots_name(kicker, content, world):
+    """QA 驗收時把絕學定名成另一個玩家的名號「驗收新武」也被接受了。現在真人、假人的名號都擋（不分大小寫），
+    回的是同一句話，看不出那是不是假人；普通的名字照常定名。"""
+    kicker.player.naming = "旋風腿"
+    world.claim_master("旋風腿", kicker.player.name)
+    _save_character(content, "驗收新武")
+    _save_character(content, "雲中客", bot=True)
+    _save_character(content, "Lan", bot=True)
+    refusal = ["這個名字不行：跟江湖上的人物同名。"]
+    assert cultivation.name_mastered(kicker, content, world, "驗收新武") == refusal  # 真人
+    assert cultivation.name_mastered(kicker, content, world, "雲中客") == refusal  # 假人：同一句話
+    assert cultivation.name_mastered(kicker, content, world, "lAN") == refusal  # 假人的名號換了大小寫
+    assert kicker.player.naming == "旋風腿" and world.get_skill("旋風腿").name == "旋風腿"  # 什麼都沒動
+    assert cultivation.name_mastered(kicker, content, world, "風神腿") == ["從今以後，江湖上這門武學就叫【風神腿】。"]
+    assert world.get_skill("旋風腿").name == "風神腿"
+
+
+def test_fb069_the_world_store_knows_every_characters_name_ignoring_case(content, world):
+    _save_character(content, "驗收新武")
+    _save_character(content, "Lan", bot=True)
+    assert world.is_character_name("驗收新武") and world.is_character_name(" LAN ") and world.is_character_name("lan")
+    assert not world.is_character_name("風神腿")
+
+
+def test_fb069_a_forge_never_registers_a_characters_name(ready_forge, content, world):
+    """開爐也一樣：鎖外取到的名字（C 段重驗）、鎖內叫模型取到的名字，撞上角色的名號都不用，改走退路字表。"""
+    from unittest import mock
+
+    from tianxia import naming
+
+    _save_character(content, "驗收新武")
+    art, _ = fusion.fuse(ready_forge, content, world, None, "basic_fist", "feng", proposed=("驗收新武", "一句話。"))
+    assert art is not None and art.name != "驗收新武"
+    client = mock.Mock()
+    client.chat_structured.side_effect = [naming.NameReply(name="驗收新武"), naming.NameReply(name="裂江訣")]
+    art, _ = fusion.fuse(ready_forge, content, world, client, "basic_fist", "huo")
+    assert art is not None and art.name == "裂江訣"  # 第一個名字是角色的名號：再請模型取一次
+
+
+@pytest.fixture
+def ready_forge(state):
+    state.player.member.wugong_id = "basic_fist"
+    state.player.insights, state.player.stats["xinde"] = ["feng", "huo"], 100
+    return state

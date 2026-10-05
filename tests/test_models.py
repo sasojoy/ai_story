@@ -109,7 +109,7 @@ def test_a_connection_is_its_destination_id_with_a_road_kind():
 def test_growth_config_defaults_follow_the_design():
     cfg = Config()
     assert (cfg.fuse_xinde, cfg.merge_xinde, cfg.cultivate_stamina, cfg.practice_xinde_per_level) == (5, 5, 10, 1)
-    assert cfg.merge_stamina == 10  # 企劃者 2026-10-05：合併要花體力（跟修練一次一樣），合成不花
+    assert cfg.merge_stamina == 5  # 企劃者 2026-10-05：合併要花體力，合成不花；FB-067 從 10（跟修練一次一樣）降到 5
     assert cfg.cultivate_odds == {"中品": (20, 10), "上品": (10, 6), "絕學": (4, 3)}
     assert cfg.melt_refund_ratio == 0.8
     assert cfg.melt_quality_bonus == {"下品": 0, "中品": 5, "上品": 15, "絕學": 40}
