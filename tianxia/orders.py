@@ -1,6 +1,6 @@
 """陣營軍令（計畫 T6；軍令文件第二節、3.1～3.4、4.5；濃縮版內容表第三節）。
 
-每週一 00:00（季曆）由季的事發令（world.WEEK_HOOKS → issue）：每個陣營照優先序挑 orders_per_week 道。個人照做一次記一次
+每週一 00:00（季曆）由季的事發令（world.WEEK_HOOKS → issue）：每個陣營照優先序挑 orders_per_week 道（留一格給進攻的軍令，見 _picks）。個人照做一次記一次
 （credit，由引擎在遊歷打贏、守勢行動、糧車送到、挑戰打贏時呼叫）；全陣營湊滿額度（quota）那一刻套一次效果，發陣營軍情
 （列前三名）與一則不具名的地方傳聞。
 
@@ -165,22 +165,50 @@ def strike_target(state: GameState, content: Content, template: OrderTemplate) -
     return min(picks, key=lambda p: p[0])[1] if picks else None
 
 
+def preferred_offense(week: int) -> str:
+    """每週留給進攻的那一格偏好哪一種：奇數週攻城、偶數週打擊（FB-061）。"""
+    return "siege" if week % 2 == 1 else "strike"
+
+
+SUPPLY = ("intercept", "escort")  # 優先序相同的兩種補給軍令（截糧、護糧）
+
+
+def preferred_supply(week: int) -> str:
+    """截糧與護糧同優先序，平手時輪流排前面：奇數週截糧、偶數週護糧（FB-061 審查：不輪流的話，留一格給進攻之後
+    守城之外只剩一格優先序 2，平手永遠是截糧贏，護糧一道都發不出）。"""
+    return "intercept" if week % 2 == 1 else "escort"
+
+
 def _picks(state: GameState, content: Content, faction: str, week: int) -> list[tuple[OrderTemplate, str | None, str | None]]:
-    """這個陣營這週發哪幾道：照優先序（數字小的先），同一優先序裡戰況越吃緊的戰線先，再照模板在內容檔的順序。"""
-    found: list[tuple[tuple[int, int, int], OrderTemplate, str | None, str | None]] = []
+    """這個陣營這週發哪幾道：照優先序（數字小的先），同一優先序裡先看輪到哪一種補給軍令（preferred_supply，只動截糧、護糧
+    兩種），再看戰況越吃緊的戰線先，最後照模板在內容檔的順序。
+    FB-061：優先序 1～2 的守城、截糧、護糧幾乎每週把三格佔滿，攻城、打擊輪不到，所以留一格給進攻的軍令（攻城、打擊）：
+    偏好的那一種（preferred_offense）有對象就發它，沒有就改發另一種，兩種都沒有就照優先序給下一道；其餘兩格照舊。
+    每週只有一格時沒有「其中一格」可留，照優先序。發出的次序仍照優先序（進攻的那一道排在它的優先序上）。"""
+    found: list[tuple[tuple[int, int, int, int], OrderTemplate, str | None, str | None]] = []
     for rank, t in enumerate(content.orders.templates):
         if t.side != faction:
             continue
         if t.kind == "strike":
             fid = strike_target(state, content, t)
             if fid is not None:
-                found.append(((t.priority, 0, rank), t, None, fid))
+                found.append(((t.priority, 0, 0, rank), t, None, fid))
             continue
+        turn = 1 if t.kind in SUPPLY and t.kind != preferred_supply(week) else 0  # 這週不輪到的那一種補給排後面
         for front in rules.front_ids(content):
             if front in content.orders.slots and _issuable(state, content, t, front, week):
-                found.append(((t.priority, -_pressure(faction, _value(state, content, front)), rank), t, front, None))
+                found.append(((t.priority, turn, -_pressure(faction, _value(state, content, front)), rank), t, front, None))
     found.sort(key=lambda item: item[0])
-    return [(t, front, fid) for _, t, front, fid in found[: content.config.orders_per_week]]
+    slots = content.config.orders_per_week
+    reserved = None  # 留給進攻的那一道；沒有留（只有一格、或兩種進攻都沒有對象）就是 None
+    if slots >= 2:
+        first = preferred_offense(week)
+        other = "strike" if first == "siege" else "siege"
+        reserved = next((item for kind in (first, other) for item in found if item[1].kind == kind), None)
+    rest = [item for item in found if item is not reserved]
+    chosen = rest[:slots] if reserved is None else rest[: slots - 1] + [reserved]
+    chosen.sort(key=lambda item: item[0])
+    return [(t, front, fid) for _, t, front, fid in chosen]
 
 
 def _caller(state: GameState, content: Content) -> str:
