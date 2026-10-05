@@ -608,7 +608,7 @@ class Game:
         who = squads[0].name if len(squads) == 1 else f"{len(squads)} 路對手"
         if not odds:
             return who
-        # 多路對手時以**最強的**那個當參考（真的開打平常是用 Game.rng 隨機挑；大場面判讀過的那一趟打單子上那一路，
+        # 多路對手時以**最強的**那個當參考（真的開打平常是用 Game.rng 隨機挑；池子裡有大場面對手的地方照 _train_pick 挑，
         # 見 _train）：這個標籤的用途是警告玩家，寧可低估也不要給出過度樂觀的承諾。
         hardest = max(squads, key=lambda s: s.difficulty)
         return f"{who}・{self.odds(hardest.id)}"
@@ -705,11 +705,17 @@ class Game:
         own = {fig.squad for fig in c.figures.values()}
         return squad.boss or squad.id in own or squad.difficulty >= c.config.big_fight_difficulty
 
+    def _big_trip(self, loc: Location) -> bool:
+        """這裡遊歷可能撞上大場面：池子（_train_squad_ids）裡有不是自己人的大場面對手。這種地點的遊歷一律照 _train_pick 挑對手
+        （Task 2 審查修正 3）；正式內容目前沒有這種地點，所以每一處遊歷照舊用 Game.rng 挑。"""
+        squads = (self.content.squads[sid] for sid in self._train_squad_ids(loc))
+        return any(self.is_big(squad) and not self._drills_with(squad) for squad in squads)
+
     def _train_pick(self, loc: Location) -> Squad | None:
-        """大場面判讀要用的遊歷對手（計畫三 G1）：照（名號、地點、戰報流水號）雜湊，從 _train_squad_ids 挑一路；沒有對手是 None。
-        備料（A 段）與套用（C 段）之間流水號不動（模型那一分鐘裡沒有打別的仗），兩邊挑到同一路；打過一場流水號就變，
-        對手照樣輪替。只有判讀過的那一趟照它打（_train 打單子上的 squad_id）；平常的遊歷照舊用 Game.rng 隨機挑，
-        亂數序列、整季模擬與好玩度量表的對手組成都不變。"""
+        """池子裡有大場面對手（_big_trip）的地點，這一趟遊歷遇上哪一路（計畫三 G1、Task 2 審查修正 3）：照（名號、地點、戰報流水號）
+        雜湊，從 _train_squad_ids 挑一路；沒有對手是 None。按鈕的「兩人對峙」、備料（A 段）、套用（C 段）、判讀失敗照平常打，
+        看的都是它：A、C 之間流水號不動（模型那一分鐘裡沒有打別的仗），兩邊挑到同一路；打過一場流水號就變，對手照樣輪替。
+        池子裡沒有大場面對手的地點不用它，照舊用 Game.rng 隨機挑（亂數序列、整季模擬與好玩度量表的對手組成都不變）。"""
         ids = self._train_squad_ids(loc)
         if not ids:
             return None
@@ -1162,10 +1168,12 @@ class Game:
         到 explore，於是在集市散步也會冒出來。現在它們回到正確的位置。
         """
         loc = self.content.locations[self.state.player.location]
-        # 鎖外判讀過的大場面打單子上那一路（備料時照雜湊挑的，見 _train_pick）；平常照舊用 Game.rng 隨機挑（計畫三 G1）
-        fight = self._fight
-        squad_id = fight.request.squad_id if fight is not None else self.rng.choice(self._train_squad_ids(loc))
-        squad = self.content.squads[squad_id]
+        # 池子裡有大場面的對手：照 _train_pick 挑，跟按鈕、備料、套用、判讀失敗的退路都是同一路（鎖外判讀過的單子就是它，
+        # _squad_encounter 照對手對上判讀）；沒有就照舊用 Game.rng 隨機挑——正式內容每一處都是這樣（Task 2 審查修正 3）
+        if self._big_trip(loc):
+            squad = self._train_pick(loc)
+        else:
+            squad = self.content.squads[self.rng.choice(self._train_squad_ids(loc))]
         msgs = self._squad_encounter(squad.id)
         if self._drills_with(squad):
             return msgs  # 操練沒有打架，不接「一番苦戰之後」這類戰後事件（試玩回饋 FB-001）

@@ -3357,24 +3357,86 @@ class _FirstChoice(random.Random):
         return seq[0]
 
 
-def test_a_judged_trip_fights_the_judged_foe_and_an_unjudged_one_still_draws_from_the_rng(game):
-    """判讀過的遊歷打單子上那一路（照名號、地點、戰報流水號雜湊挑的），判定差距平移優勢換算的量；沒有判讀的照舊用
-    Game.rng 隨機挑（計畫三 G1：亂數序列、整季模擬都不變）。"""
+class _LastChoice(random.Random):
+    """rng.choice 一律挑最後一個。"""
+
+    def choice(self, seq):
+        return seq[-1]
+
+
+def _train_wait(game) -> str:
+    return next(o for o in game.options() if o.id == "act:train").wait
+
+
+def _next_seq(game, squad_id: str) -> int:
+    """從現在的戰報流水號往後找，第一個讓 _train_pick 挑到 squad_id 的流水號，並把流水號設成它（只往後跳，戰報的編號不會重複）。"""
+    return next(n for n in range(game.state.battle_seq, game.state.battle_seq + 100) if _pick(game, n) == squad_id)
+
+
+def test_a_trip_where_a_big_foe_lurks_meets_the_foe_the_button_names(game):
+    """遊歷的池子裡有大場面的對手時，這一趟遇上哪一路一律照 _train_pick（名號｜地點｜戰報流水號的雜湊），不擲 Game.rng：
+    按鈕、備料、套用與判讀失敗的退路都是同一路（Task 2 審查修正 3）。判讀過的照優勢平移判定差距；判讀不到（模型叫不動）
+    照樣打按鈕寫的那一路，優勢 0、照範本回合演出。挑到一般的那一路就是一般的仗：不寫「兩人對峙」、不問模型。"""
     from tianxia import encounter, team
 
     game.content.locations["lake"].enemies = ["thug", "boss"]
     walk_to(game, "lake")
     game.state.player.member.wugong_id = "basic_fist"
-    game.state.battle_seq = next(n for n in range(100) if _pick(game, n) == "boss")
+
+    game.rng = _FirstChoice(0)  # Game.rng 要是被拿去挑對手，會挑到水寇小隊
+    _next_seq(game, "boss")
+    assert _train_wait(game) == "兩人對峙……"
     request = game.fight_request("act:train")
     assert request.squad_id == "boss"
-    game.rng = _FirstChoice(0)
     with mock.patch.object(team, "fight", wraps=team.fight) as fight:
         game.choose("act:train", fight=_judged(request))
     assert game.state.battles[0].opponent == "翻江龍" and game.state.battles[0].narration in ACCOUNTS
     assert fight.call_args.kwargs["shift"] == pytest.approx(encounter.advantage_shift(200, 15))
+
+    _next_seq(game, "boss")  # 判讀失敗（伺服器拿到 None）：照樣打按鈕寫的翻江龍，優勢 0
+    assert _train_wait(game) == "兩人對峙……"
+    with mock.patch.object(team, "fight", wraps=team.fight) as fight:
+        game.choose("act:train")
+    record = game.state.battles[0]
+    assert record.opponent == "翻江龍" and record.narration == "" and record.rounds
+    assert fight.call_args.kwargs["shift"] == 0.0
+
+    game.rng = _LastChoice(0)  # 這回 Game.rng 要是被拿去挑，會挑到翻江龍
+    _next_seq(game, "thug")
+    assert _train_wait(game) == "" and game.fight_request("act:train") is None
     game.choose("act:train")
     assert game.state.battles[0].opponent == "水寇小隊" and game.state.battles[0].narration == ""
+
+
+class _Recording(random.Random):
+    """照常擲骰，順便記下每一次 rng.choice 從哪一串挑、挑到什麼。"""
+
+    def __init__(self, seed):
+        super().__init__(seed)
+        self.picked: list[tuple[list, object]] = []
+
+    def choice(self, seq):
+        got = super().choice(seq)
+        self.picked.append((list(seq), got))
+        return got
+
+
+def test_a_real_trip_still_draws_its_foe_from_the_rng():
+    """正式內容沒有一個地點的遊歷池子裡有大場面的對手，所以每一處遊歷照舊用 Game.rng 從池子裡挑（亂數序列、整季模擬、
+    好玩度量表的對手組成都不變）：潁川郊野打的就是 rng.choice 挑到的那一路。"""
+    real = load_content(ROOT / "content")
+    real.config.auto_open_first_season = True
+    real.config.train_event_chance = 0.0
+    game = Game.new(real, "甲", rng=_Recording(0))
+    for loc in real.locations.values():
+        assert not any(game.is_big(real.squads[sid]) for sid in loc.enemies), loc.id
+    game.state.player.location = "yingchuan_wilds"
+    pool = real.locations["yingchuan_wilds"].enemies
+    game.rng.picked.clear()
+    game.choose("act:train")
+    got = next(got for seq, got in game.rng.picked if seq == pool)
+    assert game.state.battles[0].opponent == real.squads[got].name
+    assert game.rng.picked[0][0] == pool  # 遊歷這一下第一個擲的就是挑對手，跟以前一樣
 
 
 def _pick(game, battle_seq: int) -> str:
