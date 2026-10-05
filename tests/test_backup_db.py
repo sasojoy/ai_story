@@ -156,3 +156,82 @@ def test_main_manual_backup_prints_where_and_returns_zero(tmp_path, capsys):
     out = capsys.readouterr().out
     assert "tianxia-manual-" in out and "角色 2" in out
     assert backup_db.main(["--db", str(tmp_path / "nope.db"), "--dest", str(tmp_path / "cloud")]) == 1
+
+
+def _touch_daily(folder: Path, when: dt.datetime) -> Path:
+    path = folder / backup_db.backup_name("daily", when)
+    path.write_bytes(b"")
+    return path
+
+
+def test_prune_keeps_fourteen_days_and_eight_weeks(tmp_path):
+    """設計 8.5：最近 14 個日曆日每天留最新的一份，加上最近 8 個 ISO 週每週留最新的一份；其他每日備份刪掉。"""
+    folder = tmp_path / "cloud"
+    folder.mkdir()
+    stamps = [NOW.replace(minute=m) - dt.timedelta(days=d) for d in range(80) for m in (0, 30)]  # 80 天、每天兩份
+    paths = {when: _touch_daily(folder, when) for when in stamps}
+    removed = backup_db.prune(folder, NOW)
+    kept = {when for when, path in paths.items() if path.exists()}
+    recent_days = {NOW.replace(minute=30) - dt.timedelta(days=d) for d in range(14)}  # 每天只留 5:30 那份
+    monday = NOW.date() - dt.timedelta(days=NOW.weekday())
+    week_keys = {(monday - dt.timedelta(weeks=i)).isocalendar()[:2] for i in range(8)}  # （年, 週）：跨年週數會重複
+    newest_of_week = {}
+    for when in stamps:
+        key = when.isocalendar()[:2]
+        if key in week_keys and when > newest_of_week.get(key, dt.datetime.min):
+            newest_of_week[key] = when
+    assert kept == recent_days | set(newest_of_week.values())
+    assert sorted(removed) == sorted(paths[when] for when in stamps if when not in kept)
+
+
+def test_prune_never_touches_manual_or_foreign_files(tmp_path):
+    """手動備份、.partial、.bad、別人放的檔：一個都不碰（Review Focus 5）。"""
+    folder = tmp_path / "cloud"
+    folder.mkdir()
+    old = NOW - dt.timedelta(days=400)
+    keep = [
+        folder / backup_db.backup_name("manual", old),
+        folder / (backup_db.backup_name("daily", old) + ".partial"),
+        folder / (backup_db.backup_name("daily", old) + ".bad"),
+        folder / "企劃者的筆記.txt",
+        folder / "tianxia-daily-壞掉的名字.db",
+    ]
+    for p in keep:
+        p.write_bytes(b"")
+    gone = _touch_daily(folder, old)
+    assert backup_db.prune(folder, NOW) == [gone]
+    assert all(p.exists() for p in keep)
+
+
+def test_main_daily_prunes_only_with_the_flag(tmp_path, capsys):
+    src = _live_db(tmp_path)
+    folder = tmp_path / "cloud"
+    folder.mkdir()
+    stale = _touch_daily(folder, NOW - dt.timedelta(days=400))
+    assert backup_db.main(["--db", str(src), "--dest", str(folder), "--tag", "daily"]) == 0
+    assert stale.exists()  # 沒給 --prune 不刪
+    assert backup_db.main(["--db", str(src), "--dest", str(folder), "--tag", "daily", "--prune"]) == 0
+    assert not stale.exists()
+    assert "刪掉 1 份舊的每日備份" in capsys.readouterr().out
+    with pytest.raises(SystemExit) as stop:  # 手動備份不能帶 --prune：parser.error 結束碼 2
+        backup_db.main(["--db", str(src), "--dest", str(folder), "--prune"])
+    assert stop.value.code == 2
+
+
+def test_main_prune_that_cannot_delete_says_so_and_fails(tmp_path, capsys, monkeypatch):
+    """雲端硬碟正在同步、舊檔刪不掉：新的備份已經做好，但要用白話講出刪舊失敗、結束碼不是 0（工作排程器才看得出來）。"""
+    src = _live_db(tmp_path)
+    folder = tmp_path / "cloud"
+    folder.mkdir()
+    stale = _touch_daily(folder, NOW - dt.timedelta(days=400))
+
+    def locked(self, *args, **kwargs):
+        raise PermissionError("檔案正在使用中")
+
+    with monkeypatch.context() as patched:
+        patched.setattr(Path, "unlink", locked)
+        assert backup_db.main(["--db", str(src), "--dest", str(folder), "--tag", "daily", "--prune"]) == 1
+    captured = capsys.readouterr()
+    assert "tianxia-daily-" in captured.out  # 備份本身是做好了的
+    assert "刪舊備份失敗" in captured.err
+    assert stale.exists()

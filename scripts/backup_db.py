@@ -99,6 +99,44 @@ def verify(path: Path) -> dict[str, int]:
     return {"version": version, **counts}
 
 
+KEEP_DAILY = 14  # 最近幾個日曆日每天留最新的一份（設計 8.5【預設】）
+KEEP_WEEKLY = 8  # 再加最近幾個 ISO 週每週留最新的一份
+
+
+def _daily_backups(dest_dir: Path) -> list[tuple[dt.datetime, Path]]:
+    """資料夾裡認得出來的每日備份（照檔名的時間）；認不出時間的、.partial、.bad、手動的都不算。"""
+    found = []
+    for path in Path(dest_dir).glob(f"{PREFIX}-daily-*.db"):
+        stamp = path.name.removeprefix(f"{PREFIX}-daily-").removesuffix(".db")
+        try:
+            found.append((dt.datetime.strptime(stamp, STAMP), path))
+        except ValueError:
+            continue
+    return sorted(found)
+
+
+def prune(dest_dir: Path, now: dt.datetime, *, keep_daily: int = KEEP_DAILY, keep_weekly: int = KEEP_WEEKLY) -> list[Path]:
+    """照保留規則刪掉舊的每日備份，回傳刪掉的檔。留下：最近 keep_daily 個日曆日每天最新的一份，
+    加上最近 keep_weekly 個 ISO 週每週最新的一份；時間在 now 之後的（時鐘被調過）一律留著。"""
+    backups = _daily_backups(dest_dir)
+    days = {(now - dt.timedelta(days=i)).date() for i in range(keep_daily)}
+    monday = now.date() - dt.timedelta(days=now.weekday())
+    weeks = {(monday - dt.timedelta(weeks=i)).isocalendar()[:2] for i in range(keep_weekly)}  # （年, 週）：跨年週數會重複
+    newest_of_day: dict[dt.date, Path] = {}
+    newest_of_week: dict[tuple[int, int], Path] = {}
+    for when, path in backups:  # 已照時間排序：後面的蓋掉前面的，留下的就是最新的
+        newest_of_day[when.date()] = path
+        newest_of_week[when.isocalendar()[:2]] = path
+    keep = {p for d, p in newest_of_day.items() if d in days} | {p for w, p in newest_of_week.items() if w in weeks}
+    keep |= {p for when, p in backups if when > now}
+    removed = []
+    for _, path in backups:
+        if path not in keep:
+            path.unlink()
+            removed.append(path)
+    return removed
+
+
 def describe(report: dict[str, int]) -> str:
     names = {"accounts": "帳號", "characters": "角色", "seasons": "季", "chronicle": "江湖史"}
     parts = [f"結構第 {report['version']} 版"] + [f"{names[t]} {report[t]}" for t in COUNTED if t in report]
@@ -110,7 +148,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--db", default=None, help="要備份的資料庫（預設：環境變數 TIANXIA_DB，沒設是 saves/tianxia.db）")
     parser.add_argument("--dest", required=True, help="備份放哪個資料夾（每天的備份放雲端硬碟的同步資料夾）")
     parser.add_argument("--tag", choices=TAGS, default="manual", help="manual（預設，永遠留著）或 daily（照保留規則刪舊）")
+    parser.add_argument("--prune", action="store_true", help="做完之後照保留規則刪掉舊的每日備份（只能搭 --tag daily）")
     args = parser.parse_args(argv)
+    if args.prune and args.tag != "daily":
+        parser.error("--prune 只能搭 --tag daily：手動備份永遠留著")
     src = Path(args.db) if args.db else default_path()
     try:
         out = backup(src, Path(args.dest), tag=args.tag, now=dt.datetime.now())
@@ -118,6 +159,13 @@ def main(argv: list[str] | None = None) -> int:
         print(f"備份失敗：{e}", file=sys.stderr)
         return 1
     print(f"已備份：{out}（{describe(verify(out))}）")
+    if args.prune:
+        try:
+            removed = prune(Path(args.dest), dt.datetime.now())
+        except OSError as e:  # 雲端硬碟正在同步時舊檔可能刪不掉：新的備份已經做好，明天再刪，但要讓排程看得出這次不完全成功
+            print(f"刪舊備份失敗（今天這份備份已經做好）：{e}", file=sys.stderr)
+            return 1
+        print(f"刪掉 {len(removed)} 份舊的每日備份")
     return 0
 
 
