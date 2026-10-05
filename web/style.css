@@ -250,6 +250,11 @@ details.fold.bulletin > .fold-body { border-color: var(--gold); max-height: 50vh
 .options .btn.go .k { background: var(--accent); color: #fff; }
 .move-mode { margin-bottom: 8px; } /* 走法切換：一列、緊貼在第一個「前往」上面（排在選項之間，A4） */
 .options > .move-mode { margin: 4px 0 0; }
+/* 在路上：四樣小事排成 2×2，名字一行、補充小字一行（FB-055）；折返與喊停照舊一整列 */
+.road-tasks { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.options .btn.task { flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px; padding: 8px 12px; min-height: 56px; }
+.btn.task .t-name { font-weight: 600; }
+.btn.task .t-note { font-size: 12px; line-height: 1.3; color: var(--ink-2); }
 .move-mode > span { flex: none; align-self: center; padding: 0 4px 0 9px; font-size: 13px; color: var(--ink-2); }
 .move-mode button { min-height: 48px; } /* 觸控目標跟 .btn 一樣大 */
 /* 路上的三個捷徑（路上設計 3.3）：一列，手機上擠不下就換行；觸控目標同 .btn */
