@@ -124,7 +124,14 @@ def build_system_prompt(
 ) -> str:
     p = state.player
     affinity = p.affinities.get(companion_id, 0)
-    my_note = p.relationship_notes.get(companion_id, "尚無記錄")
+    my_note = p.relationship_notes.get(companion_id, "這一季還沒交談過")
+    # 上一季的交情（正式版辛）：只給模型當背景；沒聊過的人物沒有這一段。筆記常自己就以句號結尾，不重複補
+    past = p.past_notes.get(companion_id, "").strip().rstrip("。")
+    past_str = (
+        f"【上一季】你們以前的交情：{past}。這一季你仍記得這個人，但久未往來，交情淡了；"
+        "可以提起舊事，別當成昨天才發生的。\n"
+        if past else ""
+    )
     drift = world.get_companion_drift_note(companion_id)
     drift_str = f"\n【{character.name}近來因眾人互動而顯露的性情變化】: {drift}" if drift else ""
     used = p.used_dialogue_options.get(companion_id, [])
@@ -144,6 +151,7 @@ def build_system_prompt(
         f"【{character.name}的性格】{character.personality}{drift_str}\n"
         f"{era_str}"
         f"【此刻】{content.scenario.name}・{act_title}，第 {day} 天。\n"
+        f"{past_str}"
         f"【玩家】{p.name}，目前好感度 {affinity}（範圍 0~100，只會照玩家選的話變化，"
         f"不是你決定的）。你與玩家目前的關係現況：{my_note}\n"
         f"【已經說過的話（避免重複）】{used_str}\n\n"
@@ -167,12 +175,19 @@ def build_system_prompt(
     )
 
 
+def _this_season_history(state: GameState, companion_id: str) -> list[dict[str, str]]:
+    """跟這位人物這一季說過的話（換季時對話紀錄整份保留，history_start 記著這一季從第幾則開始；正式版辛）。
+    模型只看這一季的：上一季的最後幾句不能被當成剛剛說的。"""
+    p = state.player
+    return p.dialogue_history.get(companion_id, [])[p.history_start.get(companion_id, 0):]
+
+
 def _build_messages(
     character: CharacterDef, state: GameState, content: Content, world: WorldStateStore, companion_id: str,
     player_action: str,
 ) -> list[dict[str, str]]:
     system_prompt = build_system_prompt(character, state, content, world, companion_id)
-    history = state.player.dialogue_history.get(companion_id, [])[-4:]
+    history = _this_season_history(state, companion_id)[-4:]  # 只看這一季的（正式版辛）
     messages = [{"role": "system", "content": system_prompt}] + list(history)
     messages.append({"role": "user", "content": f"玩家的行動：「{player_action}」\n請描寫{character.name}的反應，並提供 3 個新選項。"})
     return messages
@@ -206,8 +221,11 @@ def _record_turn(state: GameState, companion_id: str, player_action: str, turn: 
     history.append({"role": "user", "content": player_action})
     history.append({"role": "assistant", "content": turn.narrative})
     if len(history) > MAX_HISTORY_MESSAGES:
+        dropped = len(history) - MAX_HISTORY_MESSAGES
         p.dialogue_history[companion_id] = history[-MAX_HISTORY_MESSAGES:]
-    used = p.used_dialogue_options.setdefault(companion_id, [])
+        if companion_id in p.history_start:  # 前面丟掉幾則，這一季的起點也往前挪幾則（不然會指到這一季的對話之後）
+            p.history_start[companion_id] = max(0, p.history_start[companion_id] - dropped)
+    used =p.used_dialogue_options.setdefault(companion_id, [])
     used.append(player_action.strip())
     p.turns_since_consolidation[companion_id] = p.turns_since_consolidation.get(companion_id, 0) + 1
 
@@ -288,7 +306,7 @@ def _maybe_consolidate_memory(client: OllamaClient | None, state: GameState, cha
     p = state.player
     if client is None or p.turns_since_consolidation.get(companion_id, 0) < MEMORY_CONSOLIDATION_INTERVAL:
         return []
-    history = p.dialogue_history.get(companion_id, [])
+    history = _this_season_history(state, companion_id)  # 這一季的關係從頭寫：不把上一季的事梳進去（正式版辛）
     if not history:
         return []
     history_text = "\n".join(f"{'玩家' if m.get('role') == 'user' else character.name}：{m.get('content', '')}" for m in history)

@@ -98,6 +98,11 @@ class PlayerState(BaseModel):
     team: list[str] = Field(default_factory=list)  # 目前帶在身邊出戰的同伴 id，最多 MAX_TEAM_COMPANIONS 人
     affinities: dict[str, int] = Field(default_factory=dict)  # 人物 id -> 0~100 好感度，跟有沒有招到他無關
     relationship_notes: dict[str, str] = Field(default_factory=dict)  # 人物 id -> 一句話關係現況
+    # 上一季的交情（第一季設計第十四節；正式版辛）：人物 id → 最近一次有聊過的那一季的關係筆記。換季時把
+    # relationship_notes 搬過來（這一季的從頭寫），沒聊過的人物保留更早的那一句。只給模型當背景，畫面不顯示
+    past_notes: dict[str, str] = Field(default_factory=dict)
+    # 人物 id → dialogue_history 裡這一季的對話從第幾則開始（換季時記下當時的長度）；模型只看這一季的對話
+    history_start: dict[str, int] = Field(default_factory=dict)
 
     # ── 深度對話（companion_agent.py，見設計文件四.3）── 這些是「這個玩家跟這位人物」的
     # 私有對話狀態，不是全服共用的（性情漂移才是全服共用，見 world_state.py）。
