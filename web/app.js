@@ -228,7 +228,7 @@
     return `
       <div class="top-row">
         <div class="who" data-act="toggle-more" role="button" tabindex="0" aria-expanded="${S.showMore}">
-          <div class="who-name"><span>${esc(s.name)}<small>${esc(s.affiliation)}${s.anonymous ? "・匿名" : ""}・第${s.level}級${s.stat_points ? `・<b>可配 ${s.stat_points} 點</b>` : ""}</small></span><i class="more-ico" aria-hidden="true">${S.showMore ? "▴" : "▾"}</i></div>
+          <div class="who-name"><span>${esc(s.name)}<small>${esc(s.affiliation)}${s.anonymous ? "・匿名" : ""}・第${s.level}級</small></span>${s.stat_points ? `<b class="pts">可配 ${s.stat_points} 點</b>` : ""}<i class="more-ico" aria-hidden="true">${S.showMore ? "▴" : "▾"}</i></div>
           <div class="where">📍 ${esc(s.location)}　${s.calendar
             ? esc(s.calendar.text)
             : `第 ${s.day} 天 ${esc(s.clock)}<small>／共 ${dayCount(s.season_days)} 天</small>`}${s.resting != null ? "　🧘 打坐中" : ""}</div>

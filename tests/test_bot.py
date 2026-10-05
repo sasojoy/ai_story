@@ -324,3 +324,20 @@ def test_the_bot_does_nothing_without_points(game):
     before = dict(game.state.player.stats)
     bot.allocate_points(game, random.Random(0))
     assert game.state.player.stats == before and game.state.player.stat_points == 0
+
+
+def test_the_bot_does_not_spin_when_the_game_refuses_every_allocation(content, world):
+    """賽季籌備中 Game.allocate_stat 一律拒絕、點數不會少：迴圈要有界、馬上回來（它在全服寫入鎖裡跑，空轉會凍住伺服器）。"""
+    content.config.auto_open_first_season = False
+    game = Game.new(content, "甲", rng=random.Random(1), world=world)
+    game.state.player.stat_points = 1
+    real, calls = game.allocate_stat, []
+
+    def counted(stat):
+        calls.append(stat)
+        assert len(calls) <= 3, "allocate_points keeps calling a refusing allocate_stat"
+        return real(stat)
+
+    game.allocate_stat = counted
+    bot.allocate_points(game, random.Random(0))
+    assert len(calls) == 1 and game.state.player.stat_points == 1  # 試了一次、被拒絕就停；那一點還在

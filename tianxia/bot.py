@@ -38,13 +38,18 @@ def can_practise(game: Game, kind: str) -> bool:
 
 
 def allocate_points(game: Game, rng: random.Random) -> None:
-    """升級得到的屬性點隨機分掉（還沒到頂的那幾項裡挑）。走 Game.allocate_stat——真人按按鈕的同一條路。"""
+    """升級得到的屬性點隨機分掉（還沒到頂的那幾項裡挑）。走 Game.allocate_stat——真人按按鈕的同一條路。
+    迴圈有界：它在全服寫入鎖裡跑，空轉會凍住伺服器。最多試「手上有幾點」次；全到頂、或 allocate_stat
+    拒絕了（賽季籌備中等，點數沒少）就停，剩下的點留著。"""
     p, cap = game.state.player, game.content.config.stat_cap
-    while p.stat_points > 0:
+    for _ in range(p.stat_points):
         open_stats = [k for k in team.COMBAT_STATS if p.stats.get(k, 0) < cap]
         if not open_stats:
             return
+        before = p.stat_points
         game.allocate_stat(rng.choice(open_stats))
+        if p.stat_points >= before:  # 被拒絕：再試也一樣
+            return
 
 
 def spend_xinde(game: Game, rng: random.Random) -> None:

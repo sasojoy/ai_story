@@ -757,6 +757,19 @@ def test_the_allocate_buttons_call_what_the_server_has():
         assert field in data
 
 
+def test_the_points_hint_stays_out_of_the_ellipsized_name_span():
+    """收起來的狀態列，名號那一行是單行、超出就「…」：「可配 N 點」寫在那個 <span> 裡（尤其是最後面）會先被長長的「門派・陣營」
+    擠掉，玩家看不到有點可配（＋鈕要展開才有）。所以它自己一個不縮的元素（flex: none），放在那個 <span> 外面。"""
+    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    css = (server.WEB / "style.css").read_text(encoding="utf-8")
+    start = js.index('<div class="who-name">')
+    line = js[start:js.index("\n", start)]
+    assert line.index("</span>") < line.index("可配") < line.index("more-ico")  # 在名號那個 <span> 後面、展開箭頭前面
+    assert 'class="pts"' in line
+    rule = re.search(r"\.who-name \.pts \{([^}]*)\}", css)
+    assert rule is not None and "flex: none" in rule.group(1)
+
+
 def test_the_practice_and_furnace_pages_only_read_and_call_what_the_server_has(game):
     """Task 12：修練頁、煉製頁（web/app.js）讀的欄位都要在 menxia_view 裡、叫的動作都要在 MENXIA_ACTIONS 裡；
     舊煉製的端點、欄位、說法不再出現。網頁沒有測試框架，這條擋住「改了伺服器忘了改網頁」。"""

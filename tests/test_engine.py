@@ -5534,3 +5534,9 @@ def test_a_win_no_longer_gives_a_random_stat_point(game):
     assert game.state.battles[0].tier in ("大勝", "險勝")
     assert {k: game.state.player.stats[k] for k in before} == before
     assert not any(c.split(" ")[0] in ("臂力", "身法", "根骨", "悟性") for c in game.state.battles[0].changes)
+
+
+def test_the_last_point_does_not_say_there_are_zero_left(game):
+    game.state.player.stat_points = 2
+    assert game.allocate_stat("str") == ["臂力 +1（還有 1 點可以分配）"]
+    assert game.allocate_stat("agi") == ["身法 +1"]  # 最後一點：不寫「還有 0 點」

@@ -2786,7 +2786,8 @@ class Game:
             self.state, JournalEntry(time=self.state.world.time, title=journal.ALLOCATE, changes=[f"{name} +1"]),
             merge=True,
         )
-        return self._log([f"{name} +1（還有 {p.stat_points} 點可以分配）"])
+        left = f"（還有 {p.stat_points} 點可以分配）" if p.stat_points else ""  # 最後一點不寫「還有 0 點」
+        return self._log([f"{name} +1{left}"])
 
     def _xinde(self) -> int:
         return self.state.player.stats.get("xinde", 0)
