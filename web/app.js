@@ -1660,7 +1660,11 @@
       const shown = (m) => JSON.stringify(MENXIA_SHOWN[tab].map((k) => m[k]));
       const changed = trimmed || shown(x) !== shown(was)
         || (tab === "practice" && old.status.injury !== S.main.status.injury); // 療傷鈕看的是內傷
-      if (!changed) return;
+      if (!changed) {
+        // 合併要花體力、體力隨時間回：爐裡放著東西時說明裡的「體力不足」要跟著更新（只換那一行，不整頁重畫）
+        if (tab === "craft" && S.forgeSel.length && old.status.stamina !== S.main.status.stamina) updateForgeLine();
+        return;
+      }
       redrawPage(true);
       // 爐裡有東西：說明裡的心得、能不能開爐也跟著更新
       if (S.forgeSel.length && (trimmed || tab === "craft")) updateForgeLine();

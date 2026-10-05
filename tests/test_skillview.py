@@ -569,3 +569,37 @@ def test_an_art_card_names_fused_and_basic_sources_and_the_insight():
     basic = fused.model_copy(update={"origin": "basic", "lean": "無"})
     assert skillview.art_card(basic, 1).split("\n")[3] == "來源：基礎武學"
     assert skillview.art_card(basic, 1).split("\n")[0] == "【旋風腿】下品・屬快"  # 沒有傾向就不寫「無派」
+
+
+def test_forge_line_tells_a_merge_costs_stamina_but_a_fuse_does_not(state, content, world):
+    """企劃者 2026-10-05：合併要花體力；合成不花，說明裡就不提體力。"""
+    state.player.member.wugong_id = "basic_fist"
+    state.player.insights = ["feng", "huo"]
+    state.player.stats["xinde"] = 100
+    merge = skillview.forge_line(state, content, world, None, ["feng", "huo"])
+    assert "花 5 點心得、10 點體力" in merge and "⚠" not in merge
+    fuse = skillview.forge_line(state, content, world, "basic_fist", ["feng"])
+    assert "體力" not in fuse
+
+
+def test_forge_line_warns_when_the_stamina_is_short_for_a_merge(state, content, world):
+    state.player.member.wugong_id = "basic_fist"
+    state.player.insights = ["feng", "huo"]
+    state.player.stats["xinde"] = 100
+    state.player.stamina = content.config.merge_stamina - 1
+    merge = skillview.forge_line(state, content, world, None, ["feng", "huo"])
+    assert "花 5 點心得、10 點體力" in merge and "⚠ 體力不足：合併一次要 10。" in merge
+    assert "⚠" not in skillview.forge_line(state, content, world, "basic_fist", ["feng"])  # 合成不花體力：照樣開得了爐
+
+
+def test_practice_hint_does_not_send_you_to_merge_when_the_stamina_is_short(state, content):
+    """沒有武學、只能合併的人：合併要體力，體力不夠就別叫他去煉製；合成不花體力，不受影響。"""
+    state.player.insights = ["feng"]
+    state.player.stats["xinde"] = 60
+    state.player.stamina = content.config.merge_stamina - 1
+    assert skillview.practice_hint(state, content) is None
+    state.player.stamina = content.config.merge_stamina
+    assert "煉製" in skillview.practice_hint(state, content)
+    state.player.stamina = 0
+    state.player.member.wugong_id, state.player.member.wugong_level = "basic_fist", 10
+    assert "煉製" in skillview.practice_hint(state, content)  # 有武學：合成不花體力

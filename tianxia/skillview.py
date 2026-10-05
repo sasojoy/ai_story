@@ -59,7 +59,10 @@ def forge_line(
         a, b = (insights.resolve(i, content, world) for i in insight_ids)
         if a is None or b is None:
             return "（選了不存在的東西。）"
-        head = f"**合併**　「{a.name}」＋「{b.name}」→ 一個新的意境，花 {cfg.merge_xinde} 點心得（你有 {xinde} 點）。"
+        head = (  # 合併花體力、合成不花（企劃者 2026-10-05）：不夠的話下面的 ⚠ 會說
+            f"**合併**　「{a.name}」＋「{b.name}」→ 一個新的意境，"
+            f"花 {cfg.merge_xinde} 點心得、{cfg.merge_stamina} 點體力（你有 {xinde} 點心得）。"
+        )
         problem = fusion.merge_problem(state, content, world, *insight_ids)
     else:
         return f"**煉製**　放一門武學和一個意境，衍生出一門新武學（底留著）；或放兩個意境，合出新的意境。{count}。"

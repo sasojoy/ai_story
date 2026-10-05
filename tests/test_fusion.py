@@ -366,3 +366,106 @@ def test_two_players_racing_for_a_new_merge_end_up_with_one_registered_insight(r
     assert other.player.insights == ["feng", "huo", "燎原"]
     assert "首悟" in msgs[0] and "第一次" not in msgs[0]
     assert other.player.stats["xinde"] == 95
+
+
+# ── 合併要花體力（企劃者 2026-10-05：「意境合併要花體力，這樣的話她要拿心得就給他拿」）──────────
+# 合併→熔掉→再合併，每一圈淨賺 5 點心得（merge_xinde 5、melt_insight_xinde 10）；企劃者的裁示不是擋重合、也不是
+# 動熔的價，而是讓合併花體力：要賺就照著賺，只是每一圈都要花一次修練那麼多的體力。合成（武學＋意境）維持不花體力。
+
+
+def test_merge_stamina_is_one_cultivation_by_default(content):
+    assert content.config.merge_stamina == content.config.cultivate_stamina == 10
+
+
+def test_a_merge_costs_stamina_as_well_as_xinde(ready, content, world):
+    before = ready.player.stamina
+    insight, msgs = fusion.merge(ready, content, world, named("燎原"), "huo", "feng")
+    assert insight is not None
+    assert ready.player.stamina == before - content.config.merge_stamina
+    assert ready.player.stats["xinde"] == 100 - content.config.merge_xinde
+    assert f"心得 -{content.config.merge_xinde}" in msgs and f"體力 -{content.config.merge_stamina}" in msgs
+
+
+def test_a_merge_recipe_book_hit_costs_the_stamina_too(ready, content, world):
+    fusion.merge(ready, content, world, named("燎原"), "huo", "feng")
+    other = other_player(content, ("feng", "huo"))
+    before = other.player.stamina
+    second, msgs = fusion.merge(other, content, world, must_not_ask(), "feng", "huo")
+    assert second is not None and other.player.stamina == before - content.config.merge_stamina
+    assert f"體力 -{content.config.merge_stamina}" in msgs
+
+
+def test_a_merge_without_enough_stamina_is_refused_and_changes_nothing(ready, content, world):
+    ready.player.stamina = content.config.merge_stamina - 1
+    assert fusion.merge_problem(ready, content, world, "feng", "huo") == f"體力不足：合併一次要 {content.config.merge_stamina}。"
+    insight, msgs = fusion.merge(ready, content, world, named("燎原"), "feng", "huo")
+    assert insight is None and msgs == [f"體力不足：合併一次要 {content.config.merge_stamina}。"]
+    assert (ready.player.stamina, ready.player.stats["xinde"], ready.player.insights) == (
+        content.config.merge_stamina - 1, 100, ["feng", "huo"],
+    )
+    assert world.lookup_insight_recipe(fusion.merge_key("feng", "huo")) is None  # 被拒絕的不登記配方
+
+
+def test_a_merge_with_exactly_enough_stamina_goes_through_and_leaves_none(ready, content, world):
+    ready.player.stamina = content.config.merge_stamina
+    insight, _ = fusion.merge(ready, content, world, named("燎原"), "huo", "feng")
+    assert insight is not None and ready.player.stamina == 0
+
+
+def test_not_enough_xinde_is_still_reported_before_the_stamina(ready, content, world):
+    ready.player.stamina, ready.player.stats["xinde"] = 0, 0
+    assert "心得不足" in fusion.merge_problem(ready, content, world, "feng", "huo")
+
+
+def test_a_fuse_costs_no_stamina(ready, content, world):
+    ready.player.stamina = 0
+    art, msgs = fusion.fuse(ready, content, world, named("旋風腿"), "basic_fist", "feng")
+    assert art is not None and ready.player.stamina == 0
+    assert not any("體力" in m for m in msgs)
+
+
+def test_the_engine_merge_journal_entry_shows_both_the_xinde_and_the_stamina(game):
+    p = game.state.player
+    p.insights, p.stats["xinde"] = ["feng", "huo"], 100
+    before = p.stamina
+    with mock.patch.object(game.client, "chat_structured", side_effect=RuntimeError):
+        msgs = game.forge(None, ["feng", "huo"])
+    entry = game.state.journal[0]
+    assert entry.title == "煉製" and entry.tag.startswith("合併「")
+    assert "心得 -5" in entry.changes and "體力 -10" in entry.changes
+    assert p.stamina == before - 10 and "體力 -10" in msgs
+
+
+def test_the_engine_fuse_journal_entry_has_no_stamina_line(game):
+    p = game.state.player
+    p.member.wugong_id, p.insights, p.stats["xinde"] = "basic_fist", ["feng"], 100
+    with mock.patch.object(game.client, "chat_structured", side_effect=RuntimeError):
+        game.forge("basic_fist", ["feng"])
+    entry = game.state.journal[0]
+    assert "心得 -5" in entry.changes and not any("體力" in c for c in entry.changes)
+
+
+def test_the_engine_refused_merge_writes_no_journal_entry_and_spends_nothing(game):
+    p = game.state.player
+    p.insights, p.stats["xinde"], p.stamina = ["feng", "huo"], 100, 3
+    length = len(game.state.journal)
+    msgs = game.forge(None, ["feng", "huo"])
+    assert any("體力不足" in m for m in msgs) and len(game.state.journal) == length
+    assert (p.stamina, p.stats["xinde"], p.insights) == (3, 100, ["feng", "huo"])
+
+
+def test_the_merge_melt_merge_loop_is_still_allowed_but_every_round_costs_stamina(game):
+    """要拿心得就給他拿：合併（-5 心得、-10 體力）→ 熔掉那個意境（+10 心得）→ 再合同一組，沒有被擋；
+    每一圈淨賺 5 點心得，也實實在在花掉 10 點體力。"""
+    p = game.state.player
+    p.insights, p.stats["xinde"] = ["feng", "huo"], 100
+    cfg = game.content.config
+    stamina, xinde = p.stamina, p.stats["xinde"]
+    with mock.patch.object(game.client, "chat_structured", side_effect=RuntimeError):
+        for round_ in range(1, 4):
+            game.forge(None, ["feng", "huo"])
+            (merged,) = [i for i in p.insights if i not in ("feng", "huo")]
+            game.melt_insight(merged)
+            assert p.insights == ["feng", "huo"]
+            assert p.stamina == stamina - cfg.merge_stamina * round_
+            assert p.stats["xinde"] == xinde + (cfg.melt_insight_xinde - cfg.merge_xinde) * round_

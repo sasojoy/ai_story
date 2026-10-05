@@ -2628,10 +2628,11 @@ class Game:
     def forge(self, art_id: str | None, insight_ids: list[str]) -> list[str]:
         """煉製頁的開爐：一門武學＋一個意境＝合成，兩個意境（可以是同一個）＝合併（見 fusion.py）。
         首次出現的配方要等模型取名（在行動裡叫，跟舊的煉製一樣；移出鎖外是線上架構第 2 期的事）；
-        江湖紀錄的標題照煉製頁寫「煉製」（FB-047），做成了才寫，被拒絕只回一句話。"""
+        江湖紀錄的標題照煉製頁寫「煉製」（FB-047），做成了才寫，被拒絕只回一句話。合併要花體力（Config.merge_stamina）、
+        合成不花：花了的體力跟心得一起寫在這一則的數值變化上（企劃者 2026-10-05）。"""
         if self._preparing():
             return self._log(["（賽季籌備中，等待管理者開季。）"])
-        xinde = self._xinde()
+        xinde, stamina =self._xinde(), self.state.player.stamina
         if art_id and len(insight_ids) == 1:
             art, msgs = fusion.fuse(self.state, self.content, self.world, self.client, art_id, insight_ids[0])
             tag = f"合成【{art.name}】" if art is not None else None
@@ -2642,7 +2643,10 @@ class Game:
             return self._log(["放一門武學和一個意境（合成），或兩個意境（合併）。"])
         out = self._log(msgs)
         if tag is not None:
-            out += self._menxia_entry(tag, xinde, guide=True, title=journal.CRAFT)
+            spent = round(stamina - self.state.player.stamina)  # 合併花體力、合成不花：數值變化寫在紀錄上，跟修練一樣
+            out += self._menxia_entry(
+                tag, xinde, guide=True, title=journal.CRAFT, extra=[f"體力 -{spent}"] if spent > 0 else None,
+            )
         return out
 
     def forge_line(self, art_id: str | None, insight_ids: list[str]) -> str:

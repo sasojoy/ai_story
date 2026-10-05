@@ -789,6 +789,9 @@ class Config(_Strict):
     practice_xinde_per_level: int = 1  # 練成：第 N 成升 N+1 成花 N × 這個數的心得
     fuse_xinde: int = 5  # 合成（武學＋意境）一次
     merge_xinde: int = 5  # 合併（意境＋意境）一次
+    # 企劃者 2026-10-05：合併要花體力（跟修練一次一樣），合成（武學＋意境）不花。合併→熔掉（melt_insight_xinde）→再合併
+    # 每一圈淨賺心得，決定不擋重合、也不動熔的價，而是讓每一圈都付一次體力：「意境合併要花體力，這樣的話她要拿心得就給他拿」
+    merge_stamina: int = 10
     cultivate_stamina: int = 10  # 修練一次的體力
     # 修練升到這一品：第一次的機率、每失敗一次加多少（%）（設計 3.5）。中品、上品加到 100 就必成；
     # 絕學沒有保底：累積的機率最多到 cultivate_cap（企劃者 2026-10-05），剩下靠破境丹

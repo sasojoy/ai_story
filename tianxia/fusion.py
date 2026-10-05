@@ -9,7 +9,8 @@
 （全服登記的那一筆是下品，玩家拿到的那一份也是，不繼承底的品質——企劃者 2026-10-05 改了設計 3.4：
 絕學的底合出絕學的複本、馬上熔掉就賺 40 心得，是個無本的金錢迴圈；底的好壞只留在底身上，
 新武學靠修練一階一階往上爬，熔的時候才領得到那幾階的加給，見 library.melt_refund）。
-合併：意境＋意境（可以是同一個）→ 新意境，兩個都留著；屬性與正邪照 insights 的規則。
+合併：意境＋意境（可以是同一個）→ 新意境，兩個都留著；屬性與正邪照 insights 的規則。合併要花體力（Config.merge_stamina）、
+合成不花——合併→熔掉→再合併每一圈淨賺心得，企劃者 2026-10-05 的裁示是不擋、讓每一圈都付一次體力。
 配方全服共享：第一個合出來的人等模型取名（叫不動就走退路字表），之後查表、不用等。
 「已經有了」一律照功法的 id 認（改名之後顯示的名字跟 id 不一樣）。
 """
@@ -46,14 +47,15 @@ def _xinde_line(state: GameState, price: int, what: str) -> str | None:
 
 
 def can_forge(state: GameState, content: Content) -> bool:
-    """現在有沒有可能開爐：持有沒滿、有意境，而且付得起一次合成（還要有武學）或一次合併。
+    """現在有沒有可能開爐：持有沒滿、有意境，而且付得起一次合成（還要有武學）或一次合併（還要有體力）。
     只看結構、不查全服配方表（那要打資料庫；狀態列每次輪詢都會算這個），所以「合出來的你已經有了」這種
     要真的按下去才知道的情形不在這裡擋。"""
     cfg, held = content.config, state.player.insights
     if not held or library.full(state, content):
         return False
     xinde = state.player.stats.get("xinde", 0)
-    return xinde >= cfg.merge_xinde or (bool(library.owned_arts(state)) and xinde >= cfg.fuse_xinde)
+    can_merge = xinde >= cfg.merge_xinde and state.player.stamina >= cfg.merge_stamina  # 合併花體力，合成不花
+    return can_merge or (bool(library.owned_arts(state)) and xinde >= cfg.fuse_xinde)
 
 
 def fuse_problem(state: GameState, content: Content, world: WorldStateStore, art_id: str, insight_id: str) -> str | None:
@@ -151,6 +153,8 @@ def merge_problem(state: GameState, content: Content, world: WorldStateStore, a:
     problem = _xinde_line(state, content.config.merge_xinde, "合併")
     if problem is not None:
         return problem
+    if state.player.stamina < content.config.merge_stamina:  # 合併要花體力，合成不用（企劃者 2026-10-05）
+        return f"體力不足：合併一次要 {content.config.merge_stamina}。"
     known = world.lookup_insight_recipe(merge_key(a, b))
     if known is not None and known.id in held:
         return f"這兩個合起來還是「{known.name}」，你已經悟得了。"
@@ -198,11 +202,12 @@ def merge(
             return None, ["兩股意念始終融不到一塊（名字都被用掉了，再試一次）。"]
     if result.id in state.player.insights:  # 先被別人登記的那一個，剛好是你已經悟得的：不收錢、不重複
         return None, [f"這兩個合起來還是「{result.name}」，你已經悟得了。"]
-    price = content.config.merge_xinde
+    price, tired = content.config.merge_xinde, content.config.merge_stamina
     state.player.stats["xinde"] = state.player.stats.get("xinde", 0) - price
+    state.player.stamina -= tired  # 真的合成了才扣：被拒絕、名字都被用掉的都不收體力，跟心得同一個點
     state.player.insights.append(result.id)
     head = f"「{ia.name}」與「{ib.name}」在你心中交融，化成「{result.name}」（屬{result.attribute}）！"
     if result.note:
         head += f"\n{result.note}"
     head += "\n這是江湖上第一次有人悟出這個意境。" if first else f"\n這個意境由{result.creator or '不知名的前人'}首悟。"
-    return result, [head, f"心得 -{price}"]
+    return result, [head, f"心得 -{price}", f"體力 -{tired}"]
