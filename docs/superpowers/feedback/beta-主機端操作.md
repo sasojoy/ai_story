@@ -56,16 +56,67 @@ $env:TIANXIA_DB = "C:\Ray\tianxia-play\tianxia.db"
 
 ## 怎麼備份資料庫
 
-1. 先把伺服器和假人**兩個都停掉**。
-2. 把資料庫的三個檔一起複製到別的資料夾：`tianxia.db`、`tianxia.db-wal`、`tianxia.db-shm`。後兩個有時候不存在，有就一起帶。
+伺服器開著也可以備份。備份腳本用 SQLite 內建的線上備份，做出來的是一個獨立的 `.db` 檔，先驗過才放上去。備份先放在這台電腦的資料夾 `C:\Ray\tianxia-play\backup`，不上雲端（企劃者 2026-10-06 定）；之後要上雲，看下面「之後要上雲時怎麼改」。
+
+**手動備份**：換程式、收季、出事之前做。手動備份永遠留著，不會被刪。
 
 ```powershell
-$dst = "C:\Ray\tianxia-play\backup\$(Get-Date -Format yyyyMMdd-HHmm)"
-New-Item -ItemType Directory -Force $dst | Out-Null
-Copy-Item C:\Ray\tianxia-play\tianxia.db* $dst
+cd C:\Ray\專案\天下大勢
+$env:TIANXIA_DB = "C:\Ray\tianxia-play\tianxia.db"
+.venv\Scripts\python.exe scripts\backup_db.py --dest C:\Ray\tianxia-play\backup
 ```
 
-要還原時，一樣先停掉兩個程式，再把這三個檔複製回去。
+成功會印：`已備份：C:\Ray\tianxia-play\backup\tianxia-manual-20261006-050000.db（結構第 2 版、帳號 3、角色 5、季 2、江湖史 120）`。失敗會印「備份失敗：…」，原因寫在後面。備份先寫成 `.partial`，驗過才改成正式的檔名，所以資料夾裡看到 `tianxia-…db` 的，都是驗過的。
+
+**每天自動備份**：企劃者自己設一次就好。
+
+1. 開一個 PowerShell 視窗，貼下面這一段。排程設在每天早上 5 點，備份放 `C:\Ray\tianxia-play\backup`：
+
+   ```powershell
+   $py = "C:\Ray\專案\天下大勢\.venv\Scripts\python.exe"
+   $script = "C:\Ray\專案\天下大勢\scripts\backup_db.py"
+   $taskArgs = "`"$script`" --db C:\Ray\tianxia-play\tianxia.db --dest C:\Ray\tianxia-play\backup --tag daily --prune"
+   schtasks /Create /TN "天下大勢每日備份" /SC DAILY /ST 05:00 /TR "`"$py`" $taskArgs" /F
+   ```
+2. 馬上試跑一次：`schtasks /Run /TN "天下大勢每日備份"`。然後到 `C:\Ray\tianxia-play\backup`，看有沒有一個 `tianxia-daily-…db`。
+3. 之後在「工作排程器」程式裡，可以看到這個工作的「上次執行結果」：`0x0` 是成功，`0x1` 是失敗。
+4. 電腦在 5 點關機或睡眠，那一天就不會備份。在「工作排程器」找到這個工作，雙擊 →「設定」→ 勾「若錯過排定的開始時間，儘快啟動工作」，開機後會補跑。
+
+- 每日備份只留最近 14 天每天一份，加最近 8 週每週一份，其餘自動刪掉。手動備份和資料夾裡別的檔都不會被刪。
+- 資料夾裡有 `.bad` 結尾的檔，是驗證沒通過的備份，留著給人查原因（把檔案和那次印出的訊息給開發的人），不會被自動刪。
+- 遊戲的資料庫換了位置（例如換到線上版資料夾），第 1 步要重貼一次，`/F` 會蓋掉舊的。
+- 備份和遊戲資料在同一顆硬碟：硬碟壞掉時兩份一起沒。在還沒上雲之前，偶爾把 `C:\Ray\tianxia-play\backup` 整個資料夾複製到隨身碟或別台電腦。
+
+### 之後要上雲時怎麼改
+
+腳本不用動，只要把每天備份的目的地換成雲端硬碟的同步資料夾：
+
+1. 決定同步資料夾，例如 `C:\Users\<你>\OneDrive\tianxia-backup`，或 Google 雲端硬碟電腦版的資料夾。
+2. 把上面「每天自動備份」第 1 步的 `--dest C:\Ray\tianxia-play\backup` 換成 `--dest "<雲端資料夾>"`（路徑要用雙引號包起來，有空白才不會被切開），整段重貼一次。`/F` 會蓋掉舊的排程，不會多出第二個。
+3. 馬上試跑一次：`schtasks /Run /TN "天下大勢每日備份"`，到雲端資料夾看有沒有 `tianxia-daily-…db`，再等雲端程式顯示同步完成。
+4. 本機 `C:\Ray\tianxia-play\backup` 裡原本的備份留著，之後不會再被自動刪（保留規則只看目的地那個資料夾），要清就自己清。想兩邊都留，就另外建一個工作：`/TN` 換一個名字、`--dest` 各填各的。
+5. 備份檔是單一個 `.db`、先寫成 `.partial` 驗過才改名，所以雲端程式不會同步到寫到一半的檔。雲端程式正在同步舊檔時，刪舊備份可能失敗：今天的備份已經做好，腳本會印「刪舊備份失敗」、「上次執行結果」是 `0x1`，隔天會再刪一次。
+
+## 怎麼還原
+
+1. **先停掉伺服器和假人程式**，兩個視窗各按 Ctrl+C。沒停掉的話，還原腳本會拒絕，什麼都不動。
+2. 找到要還原的備份檔，然後：
+
+   ```powershell
+   cd C:\Ray\專案\天下大勢
+   .venv\Scripts\python.exe scripts\restore_db.py <備份檔> --db C:\Ray\tianxia-play\tianxia.db
+   ```
+3. 成功會印「已還原：…」，以及「還原前的資料庫留在：…pre-restore-…」。原本的檔改了名留著，還原錯了就把它改回 `tianxia.db`。複製不過去（例如磁碟滿了）會印「還原失敗」，現在的資料庫一點都沒動。
+4. 照平常的方式開伺服器和假人。所有人都要重新登入一次。
+
+**每個月實際還原一次**，確認備份真的能用（線上架構設計 8.5）：
+
+1. 拿最新的一份每日備份，還原到一個**練習用的檔**，不要還原到正式的那一份：
+
+   ```powershell
+   .venv\Scripts\python.exe scripts\restore_db.py <最新的每日備份> --db C:\Ray\tianxia-play\restore-drill.db
+   ```
+2. 再用這個練習檔開一個伺服器，換一個 port，例如 7899，登入看角色在不在。看完關掉，把 `restore-drill.db` 刪掉。
 
 ## 換成第一季濃縮版的那一天
 
