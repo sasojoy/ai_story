@@ -2526,6 +2526,64 @@ def test_a_big_fight_the_model_cannot_judge_is_fought_as_usual(game, lock_events
     assert record.opponent == "波才" and record.narration == "" and record.rounds
 
 
+def _a_big_fight_at_the_wilds(game, monkeypatch):
+    """潁川郊野的對手難度都不到大場面的門檻（100）：把門檻壓到 1，這裡的遊歷就是大場面（鎖外判讀、按鈕寫「兩人對峙」）。
+    存一份到資料庫：鎖外判讀的時候，別的分頁看到、改的就是這一份。"""
+    monkeypatch.setattr(server.CONTENT.config, "big_fight_difficulty", 1)
+    server.act(game, lambda g: setattr(g.state.player, "location", "yingchuan_wilds"))  # 進鎖會先從資料庫重讀，改要在鎖裡改
+    assert next(o for o in server.look(game, lambda g: g.options()) if o.id == "act:train").wait == "兩人對峙……"
+
+
+@pytest.mark.parametrize("judgment", [FIGHT_JUDGMENT, None], ids=["judged", "model_too_slow"])
+def test_a_big_fight_the_player_left_while_it_was_judged_replies_with_one_line(game, monkeypatch, judgment):
+    """等模型判讀的時候（另一個分頁）把人帶走了：判讀回來作廢，這一仗不打、不寫戰報、不寫江湖紀錄，回一句話
+    （以前回給畫面的是空的，玩家什麼也沒看到）。模型太慢沒回來（判讀是 None）也一樣——等得久的正是這種時候。"""
+    _a_big_fight_at_the_wilds(game, monkeypatch)
+    journal = len(open_characters().load("測試").journal)
+
+    def judge(client, request, swing, budget=None):
+        server.act(game, lambda g: setattr(g.state.player, "location", "yingchuan"))  # 另一個分頁：走到別處去了
+        return judgment
+
+    with mock.patch.object(server.fight_llm, "judge", side_effect=judge):
+        reply = server.choose(game, "act:train")
+    assert reply == ["你離開了，這一仗沒打成。"]
+    stored = open_characters().load("測試")
+    assert stored.battles == [] and stored.player.location == "yingchuan" and len(stored.journal) == journal
+
+
+def test_the_page_gets_the_line_when_a_judged_big_fight_is_not_started(client, monkeypatch):
+    """/api/choose 一般選項不回話（話在江湖紀錄裡），這一句不寫紀錄，所以這裡回給前端跳提示；江湖畫面照樣回。"""
+    _player(client)
+    game = server.game_for("沈青衫")
+    _a_big_fight_at_the_wilds(game, monkeypatch)
+
+    def judge(client, request, swing, budget=None):
+        server.act(game, lambda g: setattr(g.state.player, "location", "yingchuan"))
+        return FIGHT_JUDGMENT
+
+    with mock.patch.object(server.fight_llm, "judge", side_effect=judge):
+        out = client.post("/api/choose", json={"id": "act:train"}).json()
+    assert "你離開了，這一仗沒打成。" in out["message"] and "main" in out
+    assert "act:train" not in [o["id"] for o in out["main"]["options"]]
+    # 平常打完一場仗的回話照舊不回（在「剛剛」卡片裡）
+    out = client.post("/api/choose", json={"id": "act:rest"}).json()
+    assert "message" not in out
+
+
+def test_a_big_fight_that_became_impossible_for_another_reason_says_the_situation_changed(game, monkeypatch):
+    """人還在、選項卻按不下去了（別的分頁把體力花光）：說得中性一點，一樣不打、不寫紀錄。"""
+    _a_big_fight_at_the_wilds(game, monkeypatch)
+
+    def judge(client, request, swing, budget=None):
+        server.act(game, lambda g: setattr(g.state.player, "stamina", 0))
+        return FIGHT_JUDGMENT
+
+    with mock.patch.object(server.fight_llm, "judge", side_effect=judge):
+        assert server.choose(game, "act:train") == ["情勢變了，這一仗沒打成。"]
+    assert open_characters().load("測試").battles == []
+
+
 @pytest.mark.parametrize(("event", "option"), [(None, "act:train"), ("wolves", "choice:0")])
 def test_an_ordinary_fight_takes_the_lock_once_and_never_asks_the_model(game, lock_events, event, option):
     """Review Focus 5：一般的仗（潁川郊野的地痞、山賊；狼群）不問模型、按鈕不寫「兩人對峙」，而且只拿一次行動鎖——

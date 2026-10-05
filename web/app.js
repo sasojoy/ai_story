@@ -1329,7 +1329,8 @@
       S.wheelSel = null; // 收起展開的移動
       applyMain(r.main);
       window.scrollTo({ top: 0, behavior: "smooth" });
-      // 決戰選項（加入、趕到、出招）伺服器會回一句 message；一般選項的話在江湖紀錄裡，不回
+      // 決戰選項（加入、趕到、出招）伺服器會回一句 message；大場面等模型判讀的時候選項沒了（人被別的分頁帶走），
+      // 那一仗沒打成、不寫江湖紀錄，也只有這一句；一般選項的話在江湖紀錄裡，不回
       const text = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
       // 這一送剛好結算了回合時，回話是整段回合敘事（場景裡的戰況就是同一段）：提示只放得下幾秒，截短、指去場景
       if (text) toast(text.length > 40 ? `${text.slice(0, 40)}……（戰況見場景）` : text);

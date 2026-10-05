@@ -3424,6 +3424,28 @@ def test_a_stale_judgment_is_dropped(game):
     assert game.state.battles[0].narration == ""
 
 
+def test_a_big_fight_the_player_left_while_it_was_judged_says_so_and_fights_nothing(game):
+    """等模型判讀的時候（另一個分頁）把人帶走了，回來時這個選項已經不在選單上：不打、不寫戰報、不寫江湖紀錄，
+    回一句話告訴玩家這一仗沒打成（不是把空的回給畫面）。模型叫不動（判讀是 None）時一樣。"""
+    _boss_at_the_lake(game)
+    request = game.fight_request("act:train")
+    game.state.player.location = "town"
+    journal = len(game.state.journal)
+    for judgment in (JUDGMENT, None):
+        assert game.choose("act:train", fight=fight_llm.PreparedFight(request=request, judgment=judgment)) == ["你離開了，這一仗沒打成。"]
+    assert game.state.battles == [] and len(game.state.journal) == journal
+    assert game.choose("act:train") == ["（此刻無法這麼做。）"]  # 沒有判讀過的過期按鈕：照舊是那一句
+
+
+def test_a_big_fight_that_can_no_longer_start_for_another_reason_says_the_situation_changed(game):
+    """人沒走、選項卻按不下去了（例如別的分頁把體力花光）：認不出是哪一種變動，就說得中性一點。"""
+    _boss_at_the_lake(game)
+    request = game.fight_request("act:train")
+    game.state.player.stamina = 0
+    assert game.choose("act:train", fight=_judged(request)) == ["情勢變了，這一仗沒打成。"]
+    assert game.state.battles == []
+
+
 def test_a_judgment_survives_the_season_clock_moving_while_the_model_thinks(game):
     """模型要想一分鐘，這段時間誰同步一次，賽季時鐘就往前走（計畫三 G1）：單子不記時間，判讀照樣套得上。"""
     _boss_at_the_lake(game)

@@ -48,7 +48,7 @@ from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, Account
 from tianxia.content import PROFILE_ENV, load_content, profile_line
 from tianxia.characters import open_characters
 from tianxia.database import default_path, open_database
-from tianxia.engine import FREE_TEXT_OPTION, Game
+from tianxia.engine import FIGHT_GONE_LINES, FREE_TEXT_OPTION, Game
 from tianxia.models import FREE_TEXT_MAX
 from tianxia.journal import CSS as JOURNAL_CSS
 
@@ -261,14 +261,16 @@ def may_judge_fight(option_id: str) -> bool:
     return option_id == "act:train" or option_id.startswith(("act:challenge:", "choice:"))
 
 
-def prepare_fight(game: Game, option_id: str) -> list[str] | fight_llm.PreparedFight | None:
+def prepare_fight(game: Game, option_id: str) -> list[str] | fight_llm.PreparedFight:
     """大場面在行動鎖外問模型（武學與成長設計 8.3，跟 prepare_dialogue 同一套三段）：
       A（鎖內、很快）同步時間，問引擎這個選項是不是大場面（Game.fight_request）。**不是**（一般的仗、自己陣營的操練、
         按不下去、這個角色不叫模型）就在同一次拿鎖裡直接做完、存檔，回傳那個動作的訊息（list）——遊歷與事件選項天天在按，
         一般的仗不能每一下都多搶一次行動鎖（計畫三 G14）。是大場面就拿到單子、存檔（不然 C 段進鎖重讀就把同步的結果丟了）；
       B（鎖外、很慢）fight_llm.judge：預算是 Config.big_fight_budget_seconds 扣掉 A 段（含等鎖）花掉的時間，引擎不讀時鐘，
-        所以時間在這裡量；回傳判讀（PreparedFight），叫不動、太慢是 None；
-      C 由呼叫端交給 Game.choose(fight=...)，引擎進鎖後重驗再套用（None 也照樣打，優勢 0）。
+        所以時間在這裡量；回傳 PreparedFight（備料的單子加判讀），叫不動、太慢時判讀是 None——單子照樣帶著，等判讀的時候
+        這個選項沒了（人被另一個分頁帶走），C 段才說得出是哪一仗沒打成；
+      C 由呼叫端交給 Game.choose(fight=...)，引擎進鎖後重驗再套用（判讀是 None 也照樣打，優勢 0；選項已經不在就不打，
+        回一句 FIGHT_LEFT／FIGHT_CHANGED，見 api_choose）。
     鎖內任何一步都不叫模型；鎖外這一段不歸鎖內的模型上限與斷路器管（跟對話、開爐取名一樣）。"""
     started = time.monotonic()
     with _locked(game):
@@ -280,7 +282,7 @@ def prepare_fight(game: Game, option_id: str) -> list[str] | fight_llm.PreparedF
         return done
     budget = max(0.0, game.content.config.big_fight_budget_seconds - (time.monotonic() - started))
     judgment = fight_llm.judge(game.client, request, game.content.config.big_fight_swing, budget)
-    return None if judgment is None else fight_llm.PreparedFight(request=request, judgment=judgment)
+    return fight_llm.PreparedFight(request=request, judgment=judgment)
 
 
 def choose(game: Game, option_id: str) -> list[str] | None:
@@ -813,8 +815,9 @@ def api_choose(request: Request, body: dict = Body(...)):
     option_id = str(body.get("id", ""))
     msgs = choose(game, option_id)
     out = {"main": look(game, main_view)}
-    if option_id.startswith("battle:"):
+    if option_id.startswith("battle:") or (msgs and msgs[0] in FIGHT_GONE_LINES):
         # 決戰選項（加入、趕到、每回合的出招）：按下去發生了什麼只有這句回話（FB-030），前端拿它跳一句提示。
+        # 大場面等判讀的時候選項沒了（「你離開了，這一仗沒打成。」）：這一仗沒打、不寫江湖紀錄，也只有這句回話。
         # 其他選項的話已經寫進江湖紀錄、「剛剛」看得到，再回一句會重複，所以不回。
         out["message"] = joined(msgs)
     return out
