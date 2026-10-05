@@ -268,7 +268,7 @@
       ${hintHtml(s)}`;
   }
 
-  // ＋鈕底下一行：四項各管什麼（計畫二最終審查 M2）。點數配了收不回來，按之前要讀得到；文字是引擎給的（status.stat_uses），
+  // ＋鈕底下一行：五項各管什麼（計畫二最終審查 M2）。點數配了收不回來，按之前要讀得到；文字是引擎給的（status.stat_uses），
   // 一項一個 inline-block：手機上整項一起換行，不會把「根骨：內功威力…」從中間折斷，也不會撐出橫向捲動
   function statUsesHtml(s) {
     if (!s.stat_uses) return "";

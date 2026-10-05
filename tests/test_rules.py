@@ -1,6 +1,6 @@
 import pytest
 
-from tianxia.models import Check, Condition, Effect, FigureDef, FreeTextChoice
+from tianxia.models import Check, Condition, Effect, FigureDef, FreeTextChoice, FsCheck
 from tianxia.rules import (
     add_world_flags, apply_effect, audience_bar, can_meet, check_chance, check_condition, check_gap, check_outlook,
     current_day, free_text_rate, learn_skill, practice_line,
@@ -118,6 +118,14 @@ def test_practice_line_only_when_the_bonus_applies(state, content, world):
 def test_check_on_a_player_only_stat_uses_that_stat(state, content, world):
     state.player.stats["fame"] = 3
     assert check_chance(Check(stat="fame", difficulty=2), state, content, world) == pytest.approx(0.6)
+
+
+def test_an_event_check_can_ask_for_lore(state, content, world):
+    """設計 6.3：劇情之後可以寫考博聞的檢定（認古籍、記陣圖）；程式要認得這個鍵。"""
+    state.player.stats["lore"] = 7
+    assert check_chance(Check(stat="lore", difficulty=5), state, content, world) == pytest.approx(0.7)
+    FreeTextChoice(prompt="翻翻舊書", stat="lore")  # 隨口應對也能指定
+    FsCheck(stat="lore", dc=6)  # 伏筆最後一步也能
 
 
 def test_the_roll_reads_the_same_gap_the_label_reads(state, content, world):

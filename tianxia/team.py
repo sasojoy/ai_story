@@ -22,9 +22,11 @@ DRAW_TIERS = {"僵持"}
 ODDS = ((90, "穩勝"), (65, "有把握"), (35, "五五波"), (10, "凶險"))  # 勝率（%）門檻；再低就是必敗
 
 
-COMBAT_STATS = ("str", "agi", "con", "wis")  # 四屬性：事件檢定用的就是它們（數字照舊，不吃下面的加成）；
-# 玩家本人的四項另外各管一件事（武學與成長設計 6.1）：臂力管外功、根骨管內功與氣血、身法管損耗、悟性管修練與悟意境
-BASE_STAT = 5  # 四屬性的基準：開局都是 5，比它多才有加成（武學與成長設計 6.1）
+COMBAT_STATS = ("str", "agi", "con", "wis", "lore")  # 五屬性：升級給點、狀態列、＋鈕、事件檢定都照這份與這個順序；
+# 玩家本人的前四項另外各管一件戰力（武學與成長設計 6.1）：臂力管外功、根骨管內功與氣血、身法管損耗、悟性管修練與悟意境；
+# 第五項博聞管武學與意境的持有上限（6.3），不進戰力
+LORE = "lore"
+BASE_STAT = 5  # 屬性的基準：開局都是 5，比它多才有加成（武學與成長設計 6.1、6.3）
 
 
 def stat_bonus(content: Content, value: float) -> float:
@@ -51,13 +53,13 @@ def member_name(state: GameState, content: Content, key: str) -> str:
 
 
 def member_stats(state: GameState, content: Content, world: WorldStateStore, key: str) -> dict[str, float]:
-    """這個人的四屬性。玩家本人就是存檔裡的數字（升級給點、自己分配，武學與成長設計 6.2，不再每級自動長）；
-    同伴照舊是第 1 級的屬性加上每級成長。"""
+    """這個人的五屬性。玩家本人就是存檔裡的數字（升級給點、自己分配，武學與成長設計 6.2，不再每級自動長）；
+    同伴照舊是第 1 級的屬性加上每級成長，同伴的內容沒寫的屬性（博聞）當基準。"""
     if key == PLAYER:
         return {k: float(state.player.stats.get(k, 0)) for k in COMBAT_STATS}
     character = content.characters[key]
     level = world.get_companion(key).level
-    return {k: character.stats[k] + character.growth.get(k, 0.0) * (level - 1) for k in COMBAT_STATS}
+    return {k: character.stats.get(k, BASE_STAT) + character.growth.get(k, 0.0) * (level - 1) for k in COMBAT_STATS}
 
 
 def practice_bonus(state: GameState, content: Content, check) -> int:

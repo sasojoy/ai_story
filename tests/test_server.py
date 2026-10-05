@@ -758,8 +758,18 @@ def test_allocate_through_the_main_actions(client):
     assert open_characters().load("沈青衫").player.stats["con"] == 6
     stat_names = server.CONTENT.config.stat_names
     assert [(name, key) for name, _, key in r["main"]["status"]["attrs"]] == [
-        (stat_names[key], key) for key in ("str", "agi", "con", "wis")
+        (stat_names[key], key) for key in ("str", "agi", "con", "wis", "lore")
     ]  # 網頁的配點鈕送的鍵就是這個鍵，要跟 Config.stat_names 對得上
+
+
+def test_a_point_goes_into_lore_through_the_server(client):
+    _player(client)
+    game = server.game_for("沈青衫")
+    game.state.player.stat_points = 1
+    open_characters().save(game.state)
+    r = client.post("/api/do/allocate", json={"stat": "lore"}).json()
+    assert r["main"]["status"]["stat_points"] == 0
+    assert open_characters().load("沈青衫").player.stats["lore"] == 6
 
 
 def test_a_refused_allocation_through_the_server_only_says_why(client):

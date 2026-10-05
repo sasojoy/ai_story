@@ -308,16 +308,26 @@ def test_the_bot_spends_its_stat_points(game):
     game.state.player.stat_points = 3
     bot.allocate_points(game, random.Random(0))
     p = game.state.player
-    assert p.stat_points == 0 and sum(p.stats[k] for k in ("str", "agi", "con", "wis")) == 23
+    assert p.stat_points == 0 and sum(p.stats[k] for k in ("str", "agi", "con", "wis", "lore")) == 28  # 五項各 5，加上 3 點
 
 
 def test_the_bot_leaves_capped_stats_alone_and_stops_when_all_are_capped(game):
     p = game.state.player
     p.stat_points = 4
-    p.stats.update({"str": 15, "agi": 15, "con": 15, "wis": 14})
+    p.stats.update({"str": 15, "agi": 15, "con": 15, "wis": 14, "lore": 15})
     bot.allocate_points(game, random.Random(0))
     assert p.stats["wis"] == 15 and p.stat_points == 3  # 只有悟性還能加；全到頂後剩下的點留著
-    assert (p.stats["str"], p.stats["agi"], p.stats["con"]) == (15, 15, 15)
+    assert (p.stats["str"], p.stats["agi"], p.stats["con"], p.stats["lore"]) == (15, 15, 15, 15)
+
+
+def test_the_bot_puts_points_into_lore_when_the_rest_are_full(content, world):
+    game = Game.new(content, "機器人", rng=random.Random(0), world=world)
+    p, cap = game.state.player, content.config.stat_cap
+    for key in ("str", "agi", "con", "wis"):
+        p.stats[key] = cap
+    p.stat_points = 2
+    bot.allocate_points(game, random.Random(0))
+    assert p.stats["lore"] == 7 and p.stat_points == 0
 
 
 def test_the_bot_does_nothing_without_points(game):
