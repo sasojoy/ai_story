@@ -28,7 +28,7 @@ from .models import (
 from .ollama_client import OllamaClient
 from .rules import (
     GEJU, HUANGJIN, add_rumor, apply_effect, audience_bar, can_hear, can_meet, change_trend, check_who, current_day, display_name, fill_marks, free_text_rate,
-    front_ids, front_of, in_chaos,
+    front_chip, front_ids, front_of, humanize, in_chaos,
     is_revealed, pushable, rate_words, recompute_trends, resolve_goals, resolve_trend, resolve_trends, roll_check,
     season_one, season_one_off, stances, trend_name, trend_shown, trend_value, world_trend_value,
 )
@@ -1967,7 +1967,7 @@ class Game:
                 extra += self._order_credit(  # 軍令（計畫 T6）：攻城看戰線與敵方陣營，截糧看地點與運糧隊
                     kind="win", location=loc.id, front=front_of(c, loc.id), squad=squad.id, squad_faction=squad.faction,
                 )
-            changes, notes = battlelog.split_changes(extra)
+            changes, notes = battlelog.split_changes(extra, for_record=True)
             record.changes += changes
             record.notes += notes
             msgs += extra
@@ -2075,7 +2075,7 @@ class Game:
         if result.tier in team.WIN_TIERS:
             msgs += self._battle_rewards(squad, record)
             extra = self._rout(fid)
-            changes, notes = battlelog.split_changes(extra)
+            changes, notes = battlelog.split_changes(extra, for_record=True)
             record.changes += changes
             record.notes += notes
             msgs += extra
@@ -2158,7 +2158,8 @@ class Game:
         2. 每人每曆日對每條線的上限（緩衝後算）：超過的部分不推大勢；
         3. 貢獻帳：替自己陣營的目標方向推才記，contrib_per_push × 推力（不打緩衝的折），超過上限的部分只記 over_cap_contrib_ratio；
         4. 散人照推、照受上限，n 當 1，不記貢獻也不進活躍名單。
-        緩衝後常有小數：不足一點的記在全服的 trend_accum（每條線一個），滿一點才真的推；回傳既有格式的「（潁川汝南 +2）」，
+        緩衝後常有小數：不足一點的記在全服的 trend_accum（每條線一個），滿一點才真的推；回傳 change_trend 的訊息
+        （第一季規則開著時戰線是機器可讀的戰況變化，畫面上換成一句話，見 front_lines；開關關著是既有的「（黃巾聲勢 +2）」），
         只有整數真的動了才有。source 先只當註記（"train"、"drill"、"event"），不存檔。"""
         s, c = self.state, self.content
         w, p = s.world, s.player
@@ -2530,7 +2531,7 @@ class Game:
         rewards = self._battle_rewards(squad, record) if won else []
         effect = choice.effect if won else choice.fail_effect
         story = apply_effect(effect, s, c, self.world, push=self.push_trend)
-        changes, notes = battlelog.split_changes(story)
+        changes, notes = battlelog.split_changes(story, for_record=True)
         record.changes += changes
         record.notes += notes
         msgs = [self._file_battle(record)] + rewards + story
@@ -3413,9 +3414,14 @@ class Game:
         """江湖史與傳聞的時間：沒有季曆時只寫天數（「第2天」），第一季寫季曆。"""
         return self.stamp(time, clock=False)
 
+    def _chip(self, change: str, seed: str) -> tuple[str, int] | None:
+        """江湖紀錄畫數值標籤時，戰況變化的換法（FB-064，journal.ChipFn）：紀錄裡存的是機器可讀的寫法，這裡照內容換成一句話、
+        照「現在看的人」的陣營算對他是好事還是壞事（顏色在畫的那一刻才定，換了陣營再畫就跟著變）。"""
+        return front_chip(self.content, self.state.player.faction, change, seed)
+
     def latest_entry_html(self) -> str:
         entries = self.state.journal
-        return journal.card_html(entries[0], self.stamp) if entries else ""
+        return journal.card_html(entries[0], self.stamp, self._chip) if entries else ""
 
     def now_entry_html(self) -> str:
         """江湖頁「剛剛」那一則（FB-046）：最新一則；最新的幾則若只是時刻表大事的公告（_deliver_big_events 補的），
@@ -3434,10 +3440,10 @@ class Game:
             )
 
         entry = next((e for e in self.state.journal if not repeated(e)), None)
-        return journal.card_html(entry, self.stamp) if entry is not None else ""
+        return journal.card_html(entry, self.stamp, self._chip) if entry is not None else ""
 
     def journal_html(self, start: int = 1, limit: int = 5, heading: str = "", empty: str = "") -> str:
-        return journal.rows_html(self.state.journal[start:start + limit], heading, empty, self.stamp)
+        return journal.rows_html(self.state.journal[start:start + limit], heading, empty, self.stamp, self._chip)
 
     def shows_battle_card(self) -> bool:
         s = self.state
@@ -3447,10 +3453,14 @@ class Game:
         if not self.shows_battle_card():
             return ""
         record = battlelog.find(self.state, self.state.battle_card)
-        lines, changes = journal.card_leftovers(self.state.journal[0], record.notes, battlelog.gains_list(record))
-        return journal.extra_html(lines, changes)
+        entry = self.state.journal[0]
+        lines, changes = journal.card_leftovers(entry, record.notes, battlelog.gains_list(record))
+        return journal.extra_html(lines, changes, self._chip, str(entry.time))
 
     def _log(self, msgs: list[str]) -> list[str]:
+        """回給呼叫端、也存進 GameState.log 的訊息。戰況變化（機器可讀的寫法）在這裡換成一句話——這些話玩家（管理者工具列的
+        提示）看得到，數字不外露（FB-064）；江湖紀錄那邊在畫的時候換（見 _chip），兩邊用同一個 seed（現在的時間），是同一句。"""
+        msgs = humanize(self.content, msgs, str(self.state.world.time))
         if not msgs:
             return msgs
         log = self.state.log

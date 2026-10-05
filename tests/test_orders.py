@@ -11,7 +11,7 @@ from unittest import mock
 
 import pytest
 
-from tianxia import calendar, figures, orders, rules, team, timetable
+from tianxia import calendar, figures, front_lines, orders, rules, team, timetable
 from tianxia.content import load_content
 from tianxia.encounter import EncounterResult
 from tianxia.engine import Game
@@ -283,7 +283,7 @@ def test_order_done_applies_effect_once_and_names_top_three(on):
     assert siege.done and siege.applied == 8
     assert rules.trend_value(s, c, "yingru") == 42
     assert any("【軍令達成】潁川汝南的黃巾營壘被我軍連拔數處。出力最多：乙、甲、某位少俠。" in m for m in msgs)
-    assert any("（潁川汝南 -8）" in m for m in msgs)
+    assert front_lines.mark("yingru", -8) in msgs  # 軍令達成推的戰況；畫面上由 front_lines 換成一句話（FB-064）
     news = [r for r in s.world.rumors if r.layer == "faction" and "軍令達成" in r.text]
     assert len(news) == 1 and news[0].faction == "guan"
     leak = [r for r in s.world.rumors if r.layer == "local" and "連破黃巾" in r.text]
@@ -419,7 +419,8 @@ def test_duty_pushes_the_front_and_counts_for_defend(on):
     assert option.label == "傳道（體力 10）"
     msgs = game.choose("act:duty")
     assert msgs[0].startswith("你在長社的村口講了一段黃天的道理")
-    assert any("（潁川汝南 +1）" in m for m in msgs)
+    # 守勢行動推的一點戰況：回給呼叫端的話是一句話（小的那一段三句裡的一句）、不是數字（FB-064）
+    assert sum(m in {f"潁川汝南：黃巾{p}" for p in ("稍佔上風", "略有斬獲", "小有進展")} for m in msgs) == 1
     assert any("軍令「守城・潁川汝南」：你 1 次" in m for m in msgs)
     assert game.state.player.stamina == 140
     assert game.state.player.contrib == 10  # 推 1 點記 10 貢獻（T3）

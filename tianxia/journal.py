@@ -11,6 +11,7 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
+from . import front_lines
 from .battlelog import clock_text, split_changes
 from .state import GameState, JournalEntry
 
@@ -294,37 +295,57 @@ def _body(entry: JournalEntry) -> list[str]:
     return lines[1:] if lines and entry.tag and lines[0] == entry.tag else lines
 
 
-def _chips(changes: list[str], tag: str) -> str:
-    if not changes:
+ChipFn = Callable[[str, str], tuple[str, int] | None]
+"""數值標籤的換法（FB-064）：(紀錄裡存的一項變化, seed) → (畫面上的字, 對看的人是好事 1／壞事 −1／無關 0)，不是它管的變化回 None。
+戰況變化（front_lines.mark）紀錄裡存的是機器可讀的寫法，要由 engine 照內容與看的人的陣營換成一句話；顏色因此在畫的那一刻才定。"""
+
+
+def _chips(changes: list[str], tag: str, chip: ChipFn | None = None, seed: str = "") -> str:
+    """數值標籤。chip 認得的變化（戰況）用它給的字與好壞上色；機器可讀的戰況變化沒人認得（沒交 chip）時不畫，不讓它原樣露給玩家。"""
+    shown: list[tuple[str, str]] = []
+    for change in changes:
+        drawn = chip(change, seed) if chip is not None else None
+        if drawn is not None:
+            text, favour = drawn
+            shown.append((text, "tx-up" if favour > 0 else "tx-down" if favour < 0 else ""))
+        elif not front_lines.is_mark(change):
+            shown.append((change, change_class(change)))
+    if not shown:
         return ""
-    chips = "".join(
-        f'<span class="{" ".join(filter(None, ("tx-chg", change_class(c))))}">{_esc(c)}</span>' for c in changes
-    )
+    chips = "".join(f'<span class="{" ".join(filter(None, ("tx-chg", cls)))}">{_esc(text)}</span>' for text, cls in shown)
     return f'<{tag} class="tx-chgs">{chips}</{tag}>'
 
 
-def card_html(entry: JournalEntry, when_text: Callable[[float], str] = clock_text) -> str:
+def _seed(entry: JournalEntry) -> str:
+    """一則紀錄換句子用的 seed：它的時間（同一則永遠同一句；Game._log 回給呼叫端的那句用同一個 seed，兩邊是同一句）。"""
+    return str(entry.time)
+
+
+def card_html(entry: JournalEntry, when_text: Callable[[float], str] = clock_text, chip: ChipFn | None = None) -> str:
     """「剛剛」卡片：時間、標題與結果標記、敘事、數值變化（綠增紅減）。舊存檔轉來的紀錄寫「舊紀錄」。
-    when_text 是時間的寫法：第一季由 engine 給季曆（calendar.stamp_text），不給時照舊「第N天 HH:MM」。"""
+    when_text 是時間的寫法：第一季由 engine 給季曆（calendar.stamp_text），不給時照舊「第N天 HH:MM」。
+    chip：戰況變化的換法（見 ChipFn）。"""
     when = "舊紀錄" if entry.time < 0 else f"剛剛　{when_text(entry.time)}"
     return (
         f'<div class="tx-now"><div class="tx-when">{when}</div><div class="tx-head">{_heading(entry)}</div>'
-        f'{_lines(_body(entry))}{_chips(entry.changes, "div")}</div>'
+        f'{_lines(_body(entry))}{_chips(entry.changes, "div", chip, _seed(entry))}</div>'
     )
 
 
-def extra_html(lines: list[str], changes: list[str]) -> str:
-    """戰鬥卡片底下的補充：卡片沒寫到的敘事與數值變化（見 card_leftovers）；都沒有時是空字串。"""
-    if not lines and not changes:
+def extra_html(lines: list[str], changes: list[str], chip: ChipFn | None = None, seed: str = "") -> str:
+    """戰鬥卡片底下的補充：卡片沒寫到的敘事與數值變化（見 card_leftovers）；都沒有時是空字串。
+    changes 全是畫不出來的（例如沒交 chip 的戰況變化）又沒有敘事時，也是空字串。"""
+    chips = _chips(changes, "div", chip, seed)
+    if not lines and not chips:
         return ""
-    return f'<div class="tx-extra">{_lines(lines)}{_chips(changes, "div")}</div>'
+    return f'<div class="tx-extra">{_lines(lines)}{chips}</div>'
 
 
-def _row(entry: JournalEntry, when: Callable[[float], str]) -> str:
+def _row(entry: JournalEntry, when: Callable[[float], str], chip: ChipFn | None = None) -> str:
     """紀錄的一列：時間一欄、標題與結果標記、數值變化。有敘事的一列可以點開，敘事收在裡面。"""
     head = (
         f'<span class="tx-time">{_when(entry.time, when)}</span>'
-        f'<span class="tx-main">{_heading(entry)}{_chips(entry.changes, "span")}</span>'
+        f'<span class="tx-main">{_heading(entry)}{_chips(entry.changes, "span", chip, _seed(entry))}</span>'
     )
     body = _body(entry) + entry.guide  # 新手引導在江湖紀錄照舊看得到（「剛剛」卡片不畫，見 card_html）
     if not body:
@@ -337,12 +358,13 @@ def _row(entry: JournalEntry, when: Callable[[float], str]) -> str:
 
 def rows_html(
     entries: list[JournalEntry], heading: str = "", empty: str = "", when: Callable[[float], str] = clock_text,
+    chip: ChipFn | None = None,
 ) -> str:
-    """一則一列（最新的在前）；沒有紀錄時顯示 empty。什麼都沒有時回傳空字串。when 是時間的寫法（見 card_html）。"""
+    """一則一列（最新的在前）；沒有紀錄時顯示 empty。什麼都沒有時回傳空字串。when 是時間的寫法、chip 是戰況變化的換法（見 card_html）。"""
     if not entries and not heading and not empty:
         return ""
     parts = [f'<div class="tx-heading">{_esc(heading)}</div>'] if heading else []
-    parts += [_row(e, when) for e in entries] or ([f'<div class="tx-empty">{_esc(empty)}</div>'] if empty else [])
+    parts += [_row(e, when, chip) for e in entries] or ([f'<div class="tx-empty">{_esc(empty)}</div>'] if empty else [])
     return f'<div class="tx-journal">{"".join(parts)}</div>'
 
 

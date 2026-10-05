@@ -231,6 +231,36 @@ def test_the_real_content_has_a_line_for_every_bucket():
     assert all(content.check_lines.generic[b] for b in BUCKETS)
 
 
+def test_the_real_content_has_s1s_forty_five_inner_voice_lines():
+    """S1 的內容表（docs/superpowers/specs/2026-10-05-檢定選項的心裡話.md 第一、二節）：四項屬性各五段、每段兩句（40 句），
+    加上不認得的屬性用的通用五句，共 45 句；通用的五句取代開發先放的（那幾句有「十」「九」「半」）。"""
+    lines = load_content(REAL_CONTENT).check_lines
+    assert lines.generic == {
+        "80+": ["易如反掌"], "60-79": ["應該辦得到"], "40-59": ["成不成難說"], "20-39": ["恐怕不太容易"], "0-19": ["幾乎沒有指望"],
+    }
+    assert set(lines.by_stat) == {"str", "agi", "con", "wis"}
+    for stat, buckets in lines.by_stat.items():
+        assert set(buckets) == set(BUCKETS), stat
+        assert all(len(pool) == 2 and len(set(pool)) == 2 for pool in buckets.values()), stat
+    assert sum(len(p) for b in lines.by_stat.values() for p in b.values()) + sum(len(p) for p in lines.generic.values()) == 45
+    assert lines.by_stat["str"]["20-39"] == ["這股力氣怕是不夠", "力有未逮，得碰運氣"]  # 老弓那一檔
+    assert lines.by_stat["wis"]["40-59"] == ["似懂非懂，說不準", "得靠靈光乍現"]
+
+
+def test_a_real_stat_line_shows_up_in_the_label_and_an_unknown_stat_falls_back_to_the_generic_one():
+    from tianxia.sqlite_world import open_world
+    from tianxia.state import new_game_state
+
+    content = load_content(REAL_CONTENT)
+    state, world = new_game_state(content, "沈浪"), open_world()
+    label = choice_label(self_choice("agi", 7), state, content, world, key="事件#0")
+    assert label.startswith("試試（本人・身法 5：") and label.removeprefix("試試（本人・身法 5：").removesuffix("）") in (
+        content.check_lines.by_stat["agi"]["20-39"]  # 身法 5 對難度 7，三成
+    )
+    content.check_lines.by_stat.pop("agi")
+    assert choice_label(self_choice("agi", 7), state, content, world) == "試試（本人・身法 5：恐怕不太容易）"
+
+
 def test_the_old_bow_shows_a_twenty_to_thirty_nine_line_to_a_fresh_character():
     """去拉牆上那張老弓：臂力 5 對難度 7，成功率三成，落在 20–39 那一段。"""
     from tianxia.sqlite_world import open_world

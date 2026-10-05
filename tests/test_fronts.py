@@ -11,7 +11,7 @@ from unittest import mock
 import pytest
 
 from conftest import FixedRandom
-from tianxia import atlas, battle_instance, bot_policy, mapview, rules, team, timetable, world
+from tianxia import atlas, battle_instance, bot_policy, front_lines, mapview, rules, team, timetable, world
 from tianxia.content import ContentError, load_content, validate
 from tianxia.encounter import EncounterResult
 from tianxia.engine import Game
@@ -226,13 +226,13 @@ def test_old_world_without_fronts_reads_start_values_and_pushes(on):
     s.world.trends = {"huangjin": 25, "yuxi": 0}
     s.world.revealed = {"huangjin"}
     assert [rules.trend_value(s, on, t) for t in (*FRONTS, "geju", "huangjin")] == [40, 35, 55, 10, 45]
-    assert rules.change_trend(s, on, "yingru", -2) == ["（潁川汝南 -2）"]
+    assert rules.change_trend(s, on, "yingru", -2) == [front_lines.mark("yingru", -2)]
     assert (s.world.trends["yingru"], s.world.trends["huangjin"]) == (38, 44)  # 13.3＋8.75＋22＝44.05→44
     s.world.trends = {"huangjin": 25, "yuxi": 0}  # 回到沒推過的舊存檔
     world.advance_world_state(s.world, on, 1, random.Random(0))
     assert s.world.trends["huangjin"] == 45
     assert rules.check_condition(Condition(trend_min={"huangjin": 45}), s)
-    assert game.push_trend("nanyang", -2, source="train") == ["（南陽 -2）"]  # T3 的推動也不把它當沒浮現的線
+    assert game.push_trend("nanyang", -2, source="train") == [front_lines.mark("nanyang", -2)]  # T3 的推動也不把它當沒浮現的線
 
 
 def test_old_world_leader_activity_still_names_the_front_pushes(on):
@@ -255,7 +255,7 @@ def test_front_key_at_luoyang_pushes_nothing_when_on(on):
     assert rules.apply_effect(Effect(trend={"front": 2}), s, on, game.world) == []
     assert s.world.trends == before
     s.player.location = "changshe"
-    assert rules.apply_effect(Effect(trend={"front": 2}), s, on, game.world) == ["（潁川汝南 +2）"]
+    assert rules.apply_effect(Effect(trend={"front": 2}), s, on, game.world) == [front_lines.mark("yingru", 2)]
     assert (s.world.trends["yingru"], s.world.trends["huangjin"]) == (42, 45)  # 14.7＋8.75＋22＝45.45→45
 
 
