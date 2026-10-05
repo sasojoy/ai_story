@@ -694,6 +694,7 @@ class Config(_Strict):
     train_stat_chance: float = 0.3
     train_event_chance: float = 0.3
     qiyu_weight_multiplier: float = 1.5
+    event_repeat_decay: float = Field(default=0.5, gt=0, le=1)  # 看過的事件下次更少出現：抽選權重 × 這個數 ^ 這個玩家這一季看過幾次（1.0＝不遞減）
     starter_skills: list[str] = Field(default_factory=list)
     start_stats: dict[str, int] = Field(
         default_factory=lambda: {
