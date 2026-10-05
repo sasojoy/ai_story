@@ -4,10 +4,10 @@ from __future__ import annotations
 import random
 from typing import Literal
 
-from . import foreshadow
+from . import foreshadow, team
 from .models import Choice, Content, Event, Location
-from .rules import check_condition, check_who, season_one_off
-from .state import GameState
+from .rules import check_chance, check_condition, check_gap, check_who, practice_line, rate_words, season_one_off
+from .state import PLAYER, GameState
 from .world_state import WorldStateStore
 
 
@@ -61,16 +61,40 @@ def event_candidates(
     return candidates
 
 
+def rotation_pool(event: Event, location_id: str, action: str) -> str | None:
+    """防重複的池子（交友與人物別傳設計稿第八節）：掛在特定地點的事件，每個地點、每種行動各一池
+    （「潁川郡:explore」）；不掛地點的通用事件每種行動共用一池（「*:explore」）。一次性與奇遇不輪替，回 None。"""
+    if is_rare(event):
+        return None
+    return f"{location_id}:{action}" if event.locations else f"*:{action}"
+
+
 def pick_event(
     state: GameState, content: Content, action: str, rng: random.Random, pool: EventPool | None = None,
 ) -> Event | None:
-    """照權重抽一則（奇遇的權重乘上 qiyu_weight_multiplier）；沒有合格的就是 None。pool 見 event_candidates。"""
+    """照權重抽一則（奇遇的權重乘上 qiyu_weight_multiplier）；沒有合格的就是 None。pool 見 event_candidates。
+    防重複（設計稿第八節）：同一個池子這一輪看過的先拿掉，在剩下的裡面抽；全都看過了，就把這些合格事件
+    所屬的池子清空、重開一輪（剛看過的那一則這次先不抽，免得換輪時連著兩次一樣）。抽中的記進
+    PlayerState.event_rounds，所以這個函式只在真的要把事件端給玩家時呼叫。"""
     candidates = event_candidates(state, content, action, pool)
     if not candidates:
         return None
+    location = state.player.location
+    rounds = state.player.event_rounds
+    pools = {e.id: rotation_pool(e, location, action) for e in candidates}
+    fresh = [e for e in candidates if pools[e.id] is None or e.id not in rounds.get(pools[e.id], [])]
+    if not fresh:
+        last = {rounds[key][-1] for key in set(pools.values()) if key is not None and rounds.get(key)}
+        for key in set(pools.values()):
+            rounds.pop(key, None)
+        fresh = [e for e in candidates if e.id not in last] or candidates
     multiplier = content.config.qiyu_weight_multiplier
-    weights = [event.weight * (multiplier if event.qiyu else 1.0) for event in candidates]
-    return rng.choices(candidates, weights=weights)[0]
+    weights = [event.weight * (multiplier if event.qiyu else 1.0) for event in fresh]
+    chosen = rng.choices(fresh, weights=weights)[0]
+    key = pools[chosen.id]
+    if key is not None:
+        rounds.setdefault(key, []).append(chosen.id)
+    return chosen
 
 
 def fortune_events(state: GameState, content: Content) -> list[Event]:
@@ -84,7 +108,31 @@ def visible_choices(event: Event, state: GameState, content: Content | None = No
 
 
 def choice_label(choice: Choice, state: GameState, content: Content, world: WorldStateStore) -> str:
-    """有檢定的選項寫出由誰出手（不寫成功率）；其餘照原文。"""
-    if choice.check:
-        return f"{choice.text}（{check_who(choice.check, state, content, world)}）"
-    return choice.text
+    """有檢定的選項寫出看哪一項屬性與成算（企劃者 2026-10-05：玩家要知道為什麼有時拉得開、有時拉不開），
+    同伴出手時前面寫是誰、本人檢定寫「本人」（同伴幫不上忙）；其餘照原文。"""
+    check = choice.check
+    if check is None:
+        return choice.text
+    stat = content.config.stat_names.get(check.stat, check.stat)
+    rate = rate_words(round(check_chance(check, state, content, world) * 100))
+    who = check_who(check, state, content, world)
+    parts = [stat, rate] if who == "本人出手" else [who, stat, rate]
+    return f"{choice.text}（{'・'.join(parts)}）"
+
+
+def choice_hint(choice: Choice, state: GameState, content: Content, world: WorldStateStore) -> str:
+    """有檢定的選項底下那一句人物心聲（content/check_voice.json，依屬性減難度分檔）；沒有檢定或沒寫心聲是空字串。
+    吃到熟練加成（Check.practice）時，前面先補一句「這種事你幹得多了。」（rules.practice_line）。"""
+    check = choice.check
+    bands = content.check_voice.bands
+    if check is None:
+        return ""
+    practiced = practice_line(check, state, content, world)
+    if not bands:
+        return practiced
+    gap = check_gap(check, state, content, world)
+    band = next((b for b in bands if gap >= b.min_gap), bands[-1])
+    line = band.lines.get(check.stat) or band.lines.get("default", "")
+    key = team.check_actor(state, content, world, check)
+    who = "你" if key == PLAYER else team.member_name(state, content, key)
+    return practiced + line.replace("{who}", who)

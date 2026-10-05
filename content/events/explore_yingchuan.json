@@ -11,7 +11,7 @@
         "text": "背起他穿過擁擠的街市，送到官署",
         "check": {
           "stat": "con",
-          "difficulty": 6
+          "difficulty": 4
         },
         "effect": {
           "text": "你背著他一路擠到官署階前，署吏接過竹筒，賞了你一串錢，還記下你的名號。",
@@ -30,7 +30,7 @@
         "text": "接過竹筒，騎他的馬先跑一趟",
         "check": {
           "stat": "agi",
-          "difficulty": 7
+          "difficulty": 5
         },
         "effect": {
           "text": "你伏在馬背上穿過三條街，竹筒準時遞進官署。據說那是潁川各縣黃巾聚眾的名冊。",
@@ -69,7 +69,7 @@
         "text": "鑽到車底，用肩膀頂起車身換軸",
         "check": {
           "stat": "str",
-          "difficulty": 6
+          "difficulty": 4
         },
         "effect": {
           "text": "你咬牙把車身頂起一尺，車夫趁機換上新軸。軍候拍拍你的肩膀，塞給你一把錢。",
@@ -86,7 +86,7 @@
         "text": "細看斷口，覺得斷得太整齊",
         "check": {
           "stat": "wis",
-          "difficulty": 7
+          "difficulty": 5
         },
         "effect": {
           "text": "你指給軍候看：斷口一半齊整，是被人先鋸過的。軍候臉色一變，當場把車隊裡一個新雇的車夫綁了。",
@@ -125,7 +125,7 @@
         "text": "替他重寫訴狀，句句扣住律條",
         "check": {
           "stat": "wis",
-          "difficulty": 6,
+          "difficulty": 4,
           "by": "self"
         },
         "effect": {
@@ -146,7 +146,7 @@
         "text": "趁門吏換班，帶他從側門溜進去",
         "check": {
           "stat": "agi",
-          "difficulty": 5
+          "difficulty": 3
         },
         "effect": {
           "text": "你們趁換班的空檔閃進側門，正好撞見郡丞，狀子當面遞了上去。",
@@ -205,7 +205,7 @@
         "text": "脫了外衣跳下水去",
         "check": {
           "stat": "con",
-          "difficulty": 7
+          "difficulty": 5
         },
         "effect": {
           "text": "你頂著刺骨的河水把母子拖上岸。婦人跪在泥裡磕頭，渡口茶棚的人都圍過來看。",
@@ -223,7 +223,7 @@
         "text": "抓起船上的纜繩甩過去",
         "check": {
           "stat": "agi",
-          "difficulty": 6
+          "difficulty": 4
         },
         "effect": {
           "text": "纜繩正落在婦人手邊，你和船家合力把她拉回船上。",
@@ -272,7 +272,7 @@
         "text": "伏在案上裝睡，聽他們說什麼",
         "check": {
           "stat": "wis",
-          "difficulty": 6,
+          "difficulty": 4,
           "by": "self"
         },
         "effect": {
@@ -293,7 +293,7 @@
         "text": "端著烈酒過去，陪他們喝個痛快",
         "check": {
           "stat": "con",
-          "difficulty": 6,
+          "difficulty": 4,
           "by": "self"
         },
         "effect": {
@@ -332,7 +332,7 @@
         "text": "用濕布蒙臉衝進去",
         "check": {
           "stat": "agi",
-          "difficulty": 7
+          "difficulty": 5
         },
         "effect": {
           "text": "你在濃煙裡摸到老人，背著他衝了出來，身後的草頂轟然塌下。",
@@ -351,7 +351,7 @@
         "text": "拆倒下風的幾間棚子，斷開火路",
         "check": {
           "stat": "str",
-          "difficulty": 6
+          "difficulty": 4
         },
         "effect": {
           "text": "你一連扯倒三間棚子，火燒到空地就熄了。流民們看著殘骸，卻也知道是你救了大半片棚屋。",
@@ -394,7 +394,7 @@
         "text": "接過犁繩，替他拉一段",
         "check": {
           "stat": "str",
-          "difficulty": 6
+          "difficulty": 4
         },
         "effect": {
           "text": "你拉著犁走完一整壟，泥土翻出新的顏色。老漢硬塞給你兩個麥餅。",
@@ -412,7 +412,7 @@
         "text": "教他打木樁、繞繩子，省一半力氣",
         "check": {
           "stat": "wis",
-          "difficulty": 6,
+          "difficulty": 4,
           "by": "self"
         },
         "effect": {
@@ -465,7 +465,7 @@
         "text": "跟他們說，鄉民跟他們一樣是窮人",
         "check": {
           "stat": "wis",
-          "difficulty": 7
+          "difficulty": 5
         },
         "effect": {
           "text": "為首的散兵搔搔頭，揮手讓鄉民過去，嘴裡嘟囔著「大賢良師也說過不欺貧苦」。",
@@ -485,7 +485,7 @@
         "text": "脫了鞋，涉過旁邊的爛泥溝繞過去",
         "check": {
           "stat": "con",
-          "difficulty": 6,
+          "difficulty": 4,
           "by": "self"
         },
         "effect": {
@@ -564,7 +564,7 @@
         "text": "壓低身子，慢慢靠過去套住牠",
         "check": {
           "stat": "agi",
-          "difficulty": 7
+          "difficulty": 5
         },
         "effect": {
           "text": "你一把抓住斷韁，戰馬甩了幾下頭就安靜了。你把牠牽回城裡，官署按例給了賞錢。",
@@ -581,7 +581,7 @@
         "text": "先翻看皮囊裡的東西",
         "check": {
           "stat": "wis",
-          "difficulty": 6,
+          "difficulty": 4,
           "by": "self"
         },
         "effect": {
@@ -618,7 +618,7 @@
         "text": "站到天亮，眼睛都不閉一下",
         "check": {
           "stat": "con",
-          "difficulty": 7,
+          "difficulty": 6,
           "by": "self"
         },
         "effect": {
@@ -640,7 +640,7 @@
         "text": "溜出營柵，摸近去數清對面的營火",
         "check": {
           "stat": "agi",
-          "difficulty": 8
+          "difficulty": 7
         },
         "effect": {
           "text": "你在焦黑的田壟間伏了半夜，數清了對面的營帳和馬匹。軍司馬聽完回報，賞了你錢。",
@@ -677,7 +677,7 @@
         "text": "掘開塌土，挖出整塊的鐵料",
         "check": {
           "stat": "str",
-          "difficulty": 7
+          "difficulty": 6
         },
         "effect": {
           "text": "你挖到一具半埋的鐵甲，敲下來的鐵片沉甸甸的，鐵匠挑出最好的一塊還給你，剩下的折成了錢。",
@@ -697,7 +697,7 @@
         "text": "蹲下細看，挑出還能回爐的好鐵",
         "check": {
           "stat": "wis",
-          "difficulty": 6,
+          "difficulty": 5,
           "by": "self"
         },
         "effect": {
@@ -743,67 +743,6 @@
     ]
   },
   {
-    "id": "yc_cs_deserter",
-    "title": "桑林逃卒",
-    "locations": [
-      "changshe"
-    ],
-    "text": "營後那片燒得焦黑的桑林裡，躲著一個剛徵來的新卒。他說隊率剋扣口糧，自己三天沒吃飽了，想逃回家種地。可抓到逃兵，按軍法是要斬的。",
-    "choices": [
-      {
-        "text": "去找隊率，當面說清口糧的帳",
-        "check": {
-          "stat": "wis",
-          "difficulty": 7
-        },
-        "effect": {
-          "text": "你把每人每日該領的糧算給隊率聽，旁邊的兵都聽見了。隊率只好補發口糧，新卒也回了營。",
-          "stats": {
-            "good": 2,
-            "fame": 1
-          }
-        },
-        "fail_effect": {
-          "text": "隊率說你煽動軍心，叫人把你轟出營門，還放話要你好看。",
-          "stamina": -10,
-          "stats": {
-            "fame": -2
-          }
-        }
-      },
-      {
-        "text": "趁夜帶他穿過兩軍之間的空地",
-        "check": {
-          "stat": "agi",
-          "difficulty": 8
-        },
-        "effect": {
-          "text": "你們貼著焦土一路摸過去，天亮前到了潁水邊。新卒跪下磕了三個頭，往北走了。",
-          "stats": {
-            "good": 2,
-            "evil": 1
-          }
-        },
-        "fail_effect": {
-          "text": "巡哨的火把照過來，你們被追了大半夜，新卒最後還是被抓了回去。",
-          "stamina": -20,
-          "stats": {
-            "fame": -1
-          }
-        }
-      },
-      {
-        "text": "分他一塊乾糧，勸他回營",
-        "effect": {
-          "text": "新卒狼吞虎嚥地吃完，猶豫了很久，還是低著頭回了營。",
-          "stats": {
-            "good": 1
-          }
-        }
-      }
-    ]
-  },
-  {
     "id": "yc_cs_grain_cart",
     "title": "截糧牛車",
     "locations": [
@@ -837,7 +776,7 @@
         "text": "繞到後頭割斷繩子，趕著牛車就跑",
         "check": {
           "stat": "agi",
-          "difficulty": 7
+          "difficulty": 6
         },
         "effect": {
           "text": "你跳上車轅一刀割斷繩子，牛車一路狂奔回營，留下一地麻袋。",
@@ -858,7 +797,7 @@
         "text": "扛起車夫就跑",
         "check": {
           "stat": "str",
-          "difficulty": 6
+          "difficulty": 5
         },
         "effect": {
           "text": "你扛著車夫跑回營柵，他說這輩子都記得你。糧雖然丟了，人保住了。",
@@ -913,7 +852,7 @@
         "text": "站起來，引經據典提一問",
         "check": {
           "stat": "wis",
-          "difficulty": 7,
+          "difficulty": 5,
           "by": "self"
         },
         "effect": {
@@ -937,7 +876,7 @@
         "text": "在後排跪坐整日，一字不漏地聽完",
         "check": {
           "stat": "con",
-          "difficulty": 5,
+          "difficulty": 3,
           "by": "self"
         },
         "effect": {
@@ -971,7 +910,7 @@
         "text": "點著油燈熬一整夜，一筆一畫抄完",
         "check": {
           "stat": "con",
-          "difficulty": 6,
+          "difficulty": 4,
           "by": "self"
         },
         "effect": {
@@ -992,7 +931,7 @@
         "text": "邊抄邊細讀卷中的兵法",
         "check": {
           "stat": "wis",
-          "difficulty": 7,
+          "difficulty": 5,
           "by": "self"
         },
         "effect": {
@@ -1029,7 +968,7 @@
         "text": "攀著井繩下到井底去撈",
         "check": {
           "stat": "str",
-          "difficulty": 6
+          "difficulty": 4
         },
         "effect": {
           "text": "你在井底的淤泥裡摸到了玉佩，上來時滿身是泥。真相大白，經師當眾免了那學生的罰。",
@@ -1047,7 +986,7 @@
         "text": "入夜後暗中跟著那位同窗",
         "check": {
           "stat": "agi",
-          "difficulty": 6
+          "difficulty": 4
         },
         "effect": {
           "text": "你看見他半夜溜到井邊，拿竹竿往井底亂攪，想把玉佩攪進淤泥裡。他明知玉佩在井中，卻一口咬定是人偷的。你把他扭到了經師面前。",
@@ -1104,7 +1043,7 @@
         "text": "依禮上場，四矢連射",
         "check": {
           "stat": "agi",
-          "difficulty": 6
+          "difficulty": 4
         },
         "effect": {
           "text": "四矢有三矢中鵠，學生們依禮向你作揖，司射把那束箭羽交到你手上。",
@@ -1126,7 +1065,7 @@
         "text": "去拉牆上那張沒人拉得開的老弓",
         "check": {
           "stat": "str",
-          "difficulty": 7
+          "difficulty": 5
         },
         "effect": {
           "text": "你把老弓拉成滿月，滿圃的學生都安靜了。司射說這張弓已經十年沒人拉開過。",
@@ -1162,7 +1101,7 @@
         "text": "扛起一擔麻布，跟著走一整天山路",
         "check": {
           "stat": "con",
-          "difficulty": 6
+          "difficulty": 4
         },
         "effect": {
           "text": "翻過山坳時你肩膀磨破了皮，但貨一件沒少，商人照數給了工錢。",
@@ -1182,7 +1121,7 @@
         "text": "走在隊伍最前頭探路",
         "check": {
           "stat": "agi",
-          "difficulty": 7
+          "difficulty": 5
         },
         "effect": {
           "text": "你提早發現了岔道上的絆索，帶著商隊繞了過去，商人多給了你一份錢。",
@@ -1237,7 +1176,7 @@
         "text": "在她的竹簍裡認出解毒的草，替她嚼碎敷上",
         "check": {
           "stat": "wis",
-          "difficulty": 6,
+          "difficulty": 4,
           "by": "self"
         },
         "effect": {
@@ -1256,7 +1195,7 @@
         "text": "背起她，一口氣跑下山找醫匠",
         "check": {
           "stat": "str",
-          "difficulty": 6
+          "difficulty": 4
         },
         "effect": {
           "text": "你背著她跑了三里山路，醫匠說再晚一刻就保不住那條腿了。",
@@ -1309,7 +1248,7 @@
         "text": "爬上小松，從上往下看清整塊碑",
         "check": {
           "stat": "agi",
-          "difficulty": 6
+          "difficulty": 4
         },
         "effect": {
           "text": "從高處看下去，青苔間露出的字連成了句子，你默記下一段祭文。",
@@ -1326,7 +1265,7 @@
         "text": "一點點刮去青苔，辨認碑文",
         "check": {
           "stat": "wis",
-          "difficulty": 7,
+          "difficulty": 5,
           "by": "self"
         },
         "effect": {
@@ -1360,7 +1299,7 @@
         "text": "找到寒潭，坐到天明",
         "check": {
           "stat": "con",
-          "difficulty": 8,
+          "difficulty": 7,
           "by": "self"
         },
         "effect": {
@@ -1378,7 +1317,7 @@
         "text": "琢磨老者話裡的意思",
         "check": {
           "stat": "wis",
-          "difficulty": 7,
+          "difficulty": 6,
           "by": "self"
         },
         "effect": {
@@ -1431,7 +1370,7 @@
         "text": "從寨後掀開一根朽木鑽進去",
         "check": {
           "stat": "str",
-          "difficulty": 8
+          "difficulty": 7
         },
         "effect": {
           "text": "你撼動了那根半朽的寨木，從縫隙鑽進去，悄悄解開繩索，帶著山民從原路溜走。",
@@ -1448,7 +1387,7 @@
         "text": "等守門的睡熟，摸過去割斷繩子",
         "check": {
           "stat": "agi",
-          "difficulty": 7
+          "difficulty": 6
         },
         "effect": {
           "text": "你貓著腰摸到寨門，三刀割斷繩子，三個山民跟著你鑽進了林子。他們事後湊了點錢謝你。",
@@ -1503,7 +1442,7 @@
         "text": "小心取出竹簡細讀",
         "check": {
           "stat": "wis",
-          "difficulty": 8,
+          "difficulty": 7,
           "by": "self"
         },
         "effect": {
@@ -1521,7 +1460,7 @@
         "text": "爬上古柏樹頂，辨認出山的方向",
         "check": {
           "stat": "agi",
-          "difficulty": 7
+          "difficulty": 6
         },
         "effect": {
           "text": "你在樹頂看清了群山的走勢，還在一個空鷹巢裡撿到幾根硬挺的翎羽。",

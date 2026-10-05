@@ -11,7 +11,7 @@
         "text": "挑最重的那對石鎖",
         "check": {
           "stat": "str",
-          "difficulty": 7
+          "difficulty": 5
         },
         "effect": {
           "text": "你把石鎖穩穩舉過頭頂，校場上一片喝彩。軍吏記下你的名號，多給了一串錢。",
@@ -35,7 +35,7 @@
         "text": "挑輕一號的舉",
         "check": {
           "stat": "str",
-          "difficulty": 5
+          "difficulty": 3
         },
         "effect": {
           "text": "輕的那對你舉得輕鬆，軍吏點點頭，丟給你幾枚錢。",
@@ -52,7 +52,7 @@
         "text": "跟老兵比扛沙囊繞校場",
         "check": {
           "stat": "con",
-          "difficulty": 7,
+          "difficulty": 5,
           "by": "self"
         },
         "effect": {
@@ -87,7 +87,7 @@
         "text": "細看那塊黃布",
         "check": {
           "stat": "wis",
-          "difficulty": 6
+          "difficulty": 4
         },
         "effect": {
           "text": "你指出布邊繡著小花，是女兒家的針線，不是黃巾的頭巾。守卒悻悻放人，老漢塞給你一把乾棗。",
@@ -108,7 +108,7 @@
         "text": "替老漢擔保，任守卒罰你",
         "check": {
           "stat": "con",
-          "difficulty": 6,
+          "difficulty": 4,
           "by": "self"
         },
         "effect": {
@@ -174,7 +174,7 @@
         "text": "綁上繩子親自下井",
         "check": {
           "stat": "con",
-          "difficulty": 7,
+          "difficulty": 5,
           "by": "self"
         },
         "effect": {
@@ -193,7 +193,7 @@
         "text": "在井口把人拉上來",
         "check": {
           "stat": "str",
-          "difficulty": 6
+          "difficulty": 4
         },
         "effect": {
           "text": "你一把一把收著繩子，把母子拉出井口。婦人癱在地上，半天才哭出聲來。",
@@ -257,7 +257,7 @@
         "text": "搶在前頭把散兵引開",
         "check": {
           "stat": "agi",
-          "difficulty": 7
+          "difficulty": 5
         },
         "effect": {
           "text": "你在坡下兜了一大圈，散兵追著你跑遠了。等你繞回來，車隊已經換好車軸上路。",
@@ -275,7 +275,7 @@
         "text": "扛起車身幫忙換軸",
         "check": {
           "stat": "str",
-          "difficulty": 8
+          "difficulty": 6
         },
         "effect": {
           "text": "你一肩扛起車身，車主飛快換上備用的車軸，車隊趕在散兵到前上了路，車主硬塞給你一些錢。",
@@ -330,7 +330,7 @@
         "text": "拼讀殘簡上的字",
         "check": {
           "stat": "wis",
-          "difficulty": 7,
+          "difficulty": 5,
           "by": "self"
         },
         "effect": {
@@ -353,7 +353,7 @@
         "text": "翻開還在悶燒的梁木找找",
         "check": {
           "stat": "con",
-          "difficulty": 6
+          "difficulty": 4
         },
         "effect": {
           "text": "你頂著熱氣搬開焦梁，底下壓著亭長來不及帶走的錢囊。",
@@ -530,7 +530,7 @@
         "text": "下水推筏",
         "check": {
           "stat": "con",
-          "difficulty": 7,
+          "difficulty": 5,
           "by": "self"
         },
         "effect": {
@@ -549,7 +549,7 @@
         "text": "撐篙避開火把",
         "check": {
           "stat": "agi",
-          "difficulty": 6
+          "difficulty": 4
         },
         "effect": {
           "text": "你看準火把移動的空檔，一篙一篙撐過河心，水寇半點沒察覺。老翁說他擺渡三十年，沒見過這麼穩的篙。",
@@ -605,7 +605,7 @@
         "text": "讀一讀木牘",
         "check": {
           "stat": "wis",
-          "difficulty": 6
+          "difficulty": 4
         },
         "effect": {
           "text": "木牘是黃巾各營約定在淯水會合運糧的暗號。你把它交給宛城郡府，郡吏記下了你的功勞。",
@@ -625,7 +625,7 @@
         "text": "潛到網沉之處，看下面還有什麼",
         "check": {
           "stat": "str",
-          "difficulty": 7
+          "difficulty": 5
         },
         "effect": {
           "text": "河底沉著一口木箱，你憋著氣把它拖上岸，裡頭是一塊壓艙的黑石，入手沉得出奇。",
@@ -662,7 +662,7 @@
         "text": "從繩下潛過去",
         "check": {
           "stat": "agi",
-          "difficulty": 7
+          "difficulty": 5
         },
         "effect": {
           "text": "你貼著水面從繩下滑過，鈴鐺一聲沒響，順手還割斷了繩子，後面的漁船一擁而過。",
@@ -710,7 +710,7 @@
         "text": "跟嘍囉頭目講價",
         "check": {
           "stat": "wis",
-          "difficulty": 5
+          "difficulty": 3
         },
         "effect": {
           "text": "你說船上只有幾條魚，頭目看你不像有錢人，收了幾個錢就放行了。",
@@ -773,7 +773,7 @@
         "text": "挑土挑到天亮",
         "check": {
           "stat": "con",
-          "difficulty": 7,
+          "difficulty": 5,
           "by": "self"
         },
         "effect": {
@@ -792,7 +792,7 @@
         "text": "掄起夯杵打夯",
         "check": {
           "stat": "str",
-          "difficulty": 5
+          "difficulty": 3
         },
         "effect": {
           "text": "夯杵在你手裡一下一下砸得結實，這段牆比別處夯得都硬。工頭賞了你幾個錢。",
@@ -810,7 +810,7 @@
         "text": "爬上牆頭替他們瞭望",
         "check": {
           "stat": "agi",
-          "difficulty": 6
+          "difficulty": 4
         },
         "effect": {
           "text": "你在牆頭盯了一夜，下半夜發現城外有火光移動，及早示警，民夫們趕緊點起火把。",
@@ -863,7 +863,7 @@
         "text": "出洞給郡兵指錯方向",
         "check": {
           "stat": "wis",
-          "difficulty": 7
+          "difficulty": 6
         },
         "effect": {
           "text": "你說看見幾個人往北邊山路跑了，郡兵信以為真，罵罵咧咧地往北追去。洞裡的人向你拱手，消失在雨夜裡。",
@@ -882,7 +882,7 @@
         "text": "跟他們一起躲著，熬過這一陣",
         "check": {
           "stat": "con",
-          "difficulty": 6,
+          "difficulty": 5,
           "by": "self"
         },
         "effect": {
@@ -961,7 +961,7 @@
         "text": "垂下藤索把老人拉上來",
         "check": {
           "stat": "str",
-          "difficulty": 6
+          "difficulty": 5
         },
         "effect": {
           "text": "你踩穩崖邊，一把一把把老人拉了上來。老人喘過氣，把背簍裡的紫葉草分了一半給你。",
@@ -979,7 +979,7 @@
         "text": "自己攀上崖頂採草",
         "check": {
           "stat": "agi",
-          "difficulty": 8
+          "difficulty": 7
         },
         "effect": {
           "text": "你攀上崖頂，採到那叢紫葉草，崖縫裡還勾著一團輕得出奇的白絮，順手一起收了起來。",

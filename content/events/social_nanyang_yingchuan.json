@@ -8,7 +8,7 @@
     "choices": [
       {
         "text": "舉爵奉陪，一巡不落",
-        "check": {"stat": "con", "difficulty": 6, "by": "self"},
+        "check": {"stat": "con", "difficulty": 4, "by": "self"},
         "effect": {
           "text": "你陪到雞鳴，屬吏們一個個伏案睡倒，只剩你還能替主人送客。功曹拍著你的肩說，往後郡府有差事，記得來找他。",
           "stats": {"fame": 2, "silver": 15}
@@ -21,7 +21,7 @@
       },
       {
         "text": "藉行酒令替席間解悶",
-        "check": {"stat": "wis", "difficulty": 5},
+        "check": {"stat": "wis", "difficulty": 3},
         "effect": {
           "text": "你出的令以各郡地名相聯，屬吏們接得哄堂大笑，有人順口說起汝南、南陽兩路的糧道虛實，你都默記在心。",
           "stats": {"xinde": 8, "fame": 1}
@@ -48,7 +48,7 @@
     "choices": [
       {
         "text": "引經據典，當眾答辯",
-        "check": {"stat": "wis", "difficulty": 7, "by": "self"},
+        "check": {"stat": "wis", "difficulty": 5, "by": "self"},
         "effect": {
           "text": "你從宦官弄權、州郡苛斂說到百姓流離，名士頷首，讓僕人把你的話記在簡上。廊下士人紛紛打聽你的名號。",
           "stats": {"fame": 3, "xinde": 10},
@@ -61,7 +61,7 @@
       },
       {
         "text": "在廊外候到散席，求見一面",
-        "check": {"stat": "con", "difficulty": 5, "by": "self"},
+        "check": {"stat": "con", "difficulty": 3, "by": "self"},
         "effect": {
           "text": "日落人散，你在寒風裡站到最後。名士聽說後請你進屋，就著燈火跟你談了半夜的天下郡國。",
           "stats": {"xinde": 8, "good": 1}
@@ -103,7 +103,7 @@
     "choices": [
       {
         "text": "捲起袖子，替他裝鞍上架",
-        "check": {"stat": "str", "difficulty": 6},
+        "check": {"stat": "str", "difficulty": 4},
         "effect": {
           "text": "你一口氣扛起二十副鞍架，連最倔的那頭灰騾都被你按住套上了籠頭。倉曹吏數錢給你，還說明日再來。",
           "stats": {"silver": 25}
@@ -116,7 +116,7 @@
       },
       {
         "text": "幫他挑出販子混進來的病騾",
-        "check": {"stat": "wis", "difficulty": 5},
+        "check": {"stat": "wis", "difficulty": 3},
         "effect": {
           "text": "你翻開幾頭騾子的眼瞼和牙口，指出三頭是灌了水充膘的病騾。倉曹吏省下一筆冤枉錢，多賞了你一些。",
           "stats": {"silver": 15, "good": 1}
@@ -143,7 +143,7 @@
     "choices": [
       {
         "text": "接過箭矢，連投貫耳",
-        "check": {"stat": "agi", "difficulty": 6},
+        "check": {"stat": "agi", "difficulty": 4},
         "effect": {
           "text": "你連中兩記貫耳，滿庭喝彩。家主大樂，賞你一匹細絹折錢，還留你吃了一碗湯餅。",
           "stats": {"silver": 30, "fame": 1}
@@ -156,7 +156,7 @@
       },
       {
         "text": "替家主作一段壽辭",
-        "check": {"stat": "wis", "difficulty": 7},
+        "check": {"stat": "wis", "difficulty": 5},
         "effect": {
           "text": "你把南陽的鐵、宛城的牆與家主的壽數聯成一氣，說得四座稱好，家主讓門客記下你的名號。",
           "stats": {"fame": 2, "xinde": 6}
@@ -183,7 +183,7 @@
     "choices": [
       {
         "text": "下場幫忙鼓風搬鐵",
-        "check": {"stat": "str", "difficulty": 6},
+        "check": {"stat": "str", "difficulty": 4},
         "effect": {
           "text": "你拉了半夜的風囊，又把幾塊熟鐵扛上鍛臺。老匠人收工時把一包篩剩的鐵砂塞給你，說這東西外頭不好找。",
           "stats": {"silver": 10},
@@ -197,7 +197,7 @@
       },
       {
         "text": "替役夫跟小吏算清欠款",
-        "check": {"stat": "wis", "difficulty": 5},
+        "check": {"stat": "wis", "difficulty": 3},
         "effect": {
           "text": "你翻看簿籍，指出錢糧是被上頭截在半路，不是小吏私吞。小吏鬆了口氣，役夫也願意再等幾日，兩邊都記著你的好。",
           "stats": {"good": 2, "fame": 1}
@@ -225,7 +225,7 @@
     "choices": [
       {
         "text": "擠進兩夥人中間，把人隔開",
-        "check": {"stat": "str", "difficulty": 6},
+        "check": {"stat": "str", "difficulty": 4},
         "effect": {
           "text": "你一手一個把最兇的兩人架開，硬是按回座上。眾人見你力大，不好再鬧，酒保連聲道謝，免了你的酒錢。",
           "stats": {"fame": 2, "silver": 10}
@@ -238,7 +238,7 @@
       },
       {
         "text": "替兩邊說和，提議當場算清",
-        "check": {"stat": "wis", "difficulty": 7},
+        "check": {"stat": "wis", "difficulty": 5},
         "effect": {
           "text": "你讓屠戶拿出賒欠木牘、讓兵卒報上營名，一筆筆對清，該還的還、該讓的讓。雙方各退一步，還互敬了一爵。",
           "stats": {"good": 2, "fame": 2}
@@ -279,7 +279,7 @@
     "choices": [
       {
         "text": "留下來幫忙張羅到天亮",
-        "check": {"stat": "con", "difficulty": 6, "by": "self"},
+        "check": {"stat": "con", "difficulty": 4, "by": "self"},
         "effect": {
           "text": "你劈柴燒水、搭棚掛布，又陪鄉親守到天明。新人拜堂時特地朝你行禮，棚裡的人從此見了你都喊一聲恩人。",
           "stats": {"good": 3, "fame": 1}
@@ -291,7 +291,7 @@
       },
       {
         "text": "替新人寫一紙婚書",
-        "check": {"stat": "wis", "difficulty": 5},
+        "check": {"stat": "wis", "difficulty": 3},
         "effect": {
           "text": "你借來一片木牘，寫明兩家姓氏、籍貫與媒證，字跡端正。老父說有了這個，日後回鄉也不怕官府不認。",
           "stats": {"good": 2, "xinde": 5}
@@ -319,7 +319,7 @@
     "choices": [
       {
         "text": "撥開人群追進巷子",
-        "check": {"stat": "agi", "difficulty": 6},
+        "check": {"stat": "agi", "difficulty": 4},
         "effect": {
           "text": "你在巷尾截住那人，竟是個十來歲的孩子，錢袋還攥在手裡。你把錢還給婦人，婦人硬塞給你一面舊銅鏡當謝禮，你轉手換了些錢。",
           "stats": {"good": 2, "silver": 10}
@@ -332,7 +332,7 @@
       },
       {
         "text": "留在攤前，盯著還有沒有同夥",
-        "check": {"stat": "wis", "difficulty": 7},
+        "check": {"stat": "wis", "difficulty": 5},
         "effect": {
           "text": "你看出一個裝作挑農具的漢子一直在給人打手勢，當場揪住他。市吏趕來，從他身上搜出好幾個錢袋，眾人齊聲叫好。",
           "stats": {"fame": 2, "good": 1}
@@ -360,7 +360,7 @@
     "choices": [
       {
         "text": "站到前頭擋住人潮",
-        "check": {"stat": "str", "difficulty": 5},
+        "check": {"stat": "str", "difficulty": 3},
         "effect": {
           "text": "你張開雙臂硬生生擋住往前湧的人群，讓老弱先排到前面。書佐看你鎮得住場面，總算肯坐下來慢慢點名。",
           "stats": {"good": 2, "fame": 1}
@@ -372,7 +372,7 @@
       },
       {
         "text": "勸書佐改由鄉人互保作證",
-        "check": {"stat": "wis", "difficulty": 6},
+        "check": {"stat": "wis", "difficulty": 4},
         "effect": {
           "text": "你提議同鄉五家互保、由年長者作證，記下名字再發糧。書佐想了想照辦，隊伍立時順了，流民們紛紛向你道謝。",
           "stats": {"good": 3, "fame": 1},

@@ -120,7 +120,7 @@
         "text": "動手拓印",
         "check": {
           "stat": "wis",
-          "difficulty": 6
+          "difficulty": 5
         },
         "effect": {
           "text": "石壁縫隙裡，又是一片符文殘卷！",
@@ -246,7 +246,7 @@
         "text": "自己拿著符卷琢磨",
         "check": {
           "stat": "wis",
-          "difficulty": 8,
+          "difficulty": 6,
           "by": "self"
         },
         "effect": {

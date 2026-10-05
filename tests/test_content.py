@@ -63,6 +63,25 @@ def test_unknown_stat_rejected(tmp_path):
         load_content(root)
 
 
+def test_unknown_practice_rejected(tmp_path):
+    root = copy_fixture(tmp_path)
+
+    def add_practice(d):
+        choice = next(ch for ch in d[0]["choices"] if "check" in ch)
+        choice["check"]["practice"] = "luck"
+
+    edit_json(root / "events" / "test.json", add_practice)
+    with pytest.raises(ContentError, match="luck"):
+        load_content(root)
+
+
+def test_practice_must_be_a_reputation(tmp_path):
+    root = copy_fixture(tmp_path)
+    edit_json(root / "config.json", lambda d: d.update(practice_bonus={"agi": {"per": 10, "cap": 3}}))
+    with pytest.raises(ContentError, match="agi"):
+        load_content(root)
+
+
 def test_last_ending_must_be_unconditional(tmp_path):
     root = copy_fixture(tmp_path)
     edit_json(root / "scenario.json", lambda d: d["endings"].pop())
@@ -1271,3 +1290,14 @@ def test_promotion_handoff_needs_its_scene_and_summons(tmp_path):
     edit_json(root / "promotions.json", lambda d: d[0].update(summons_handoff=None))
     with pytest.raises(ContentError, match="接手"):
         load_content(root)
+
+
+def test_check_voice_must_cover_every_checked_stat_and_run_high_to_low(tmp_path):
+    """選項底下的人物心聲（content/check_voice.json）：每一檔都要說得出有人檢定的屬性，而且由高到低排。"""
+    root = copy_fixture(tmp_path)
+    voice = {"bands": [{"min_gap": 0, "lines": {"str": "{who}有把握。"}}, {"min_gap": 2, "lines": {"default": "穩。"}}]}
+    (root / "check_voice.json").write_text(json.dumps(voice, ensure_ascii=False), encoding="utf-8")
+    with pytest.raises(ContentError) as caught:
+        load_content(root)
+    assert "由高到低" in str(caught.value) and "con" in str(caught.value)  # 調息事件檢定根骨，第一檔沒寫
+

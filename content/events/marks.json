@@ -16,7 +16,7 @@
         "text": "捲起袖子，跟村裡的青壯一起挑土築堤",
         "check": {
           "stat": "str",
-          "difficulty": 6
+          "difficulty": 4
         },
         "effect": {
           "text": "你挑了一整天土，堤頭高出水面兩尺。老者讓孫兒捧來一碗豆粥，說這堤往後就叫「客堤」。",
@@ -37,7 +37,7 @@
         "text": "看看水勢，替他們把堤線改一改",
         "check": {
           "stat": "wis",
-          "difficulty": 6,
+          "difficulty": 4,
           "by": "self"
         },
         "effect": {
@@ -82,7 +82,7 @@
         "text": "去找亭長，問問這塊地憑什麼算官地",
         "check": {
           "stat": "wis",
-          "difficulty": 7
+          "difficulty": 5
         },
         "effect": {
           "text": "你翻出亭裡的田籍，那片灘地從來不在冊上。亭長支吾半天，答應先讓那幾戶在灘尾搭棚過冬。",
@@ -102,7 +102,7 @@
         "text": "盯緊那個少年，等他伸手",
         "check": {
           "stat": "agi",
-          "difficulty": 6
+          "difficulty": 4
         },
         "effect": {
           "text": "少年的手剛摸上一個客商的錢袋，就被你扣住。你沒送官，只把他帶回渡口那幾戶人家面前，他娘哭著把錢還了，客商反倒分了你幾個錢。",
@@ -147,7 +147,7 @@
         "text": "提筆在壁上續一句",
         "check": {
           "stat": "wis",
-          "difficulty": 6,
+          "difficulty": 4,
           "by": "self"
         },
         "effect": {
@@ -171,7 +171,7 @@
         "text": "趁夜提桶灰漿，把整面壁抹乾淨",
         "check": {
           "stat": "con",
-          "difficulty": 6
+          "difficulty": 4
         },
         "effect": {
           "text": "你抹到天亮，粉壁白得像新的。經師清早經過，對你深深一揖，說書院保住了。學生們卻好幾日不肯跟你說話。",
@@ -218,7 +218,7 @@
         "text": "幫學生把竹簡從後牆遞出去",
         "check": {
           "stat": "agi",
-          "difficulty": 6
+          "difficulty": 4
         },
         "effect": {
           "text": "你蹲在牆頭接了一捆又一捆，郡吏衝進藏書樓時，架上只剩幾卷《孝經》。有個學生把一卷手抄的論集塞給你，說替他收著。",
@@ -238,7 +238,7 @@
         "text": "擋在講堂前，跟郡吏論律條",
         "check": {
           "stat": "wis",
-          "difficulty": 7
+          "difficulty": 5
         },
         "effect": {
           "text": "你一條條指出他們手上的文書沒有太守的印信。領頭的郡吏臉色青白，只封了講堂的門，沒敢抓人。",
@@ -287,7 +287,7 @@
         "text": "下到淺灘，跟船工一起把貨船推回深水",
         "check": {
           "stat": "str",
-          "difficulty": 7
+          "difficulty": 6
         },
         "effect": {
           "text": "你喊著號子跟船工們一推，貨船吱呀一聲滑回了河道。船主拿出一包錢，老船工又從船底刮下一塊黑沉沉的壓艙石塞給你。",
@@ -311,7 +311,7 @@
         "text": "替他們看看貨船漏在哪裡",
         "check": {
           "stat": "wis",
-          "difficulty": 6,
+          "difficulty": 5,
           "by": "self"
         },
         "effect": {
@@ -376,7 +376,7 @@
         "text": "幫船夫把火撲滅，搶出半條船",
         "check": {
           "stat": "con",
-          "difficulty": 7
+          "difficulty": 6
         },
         "effect": {
           "text": "你頂著濃煙一桶桶潑水，總算保住了船頭與龍骨。船夫說修一修還能用，非要請你喝酒。",
@@ -394,7 +394,7 @@
         "text": "混在船夫裡，趁夜把木樁底下的土刨鬆",
         "check": {
           "stat": "agi",
-          "difficulty": 7
+          "difficulty": 6
         },
         "effect": {
           "text": "天亮時一陣河風吹過，木樁自己歪進了泥裡。騎兵罵了半天也不知道是誰幹的，船夫們憋著笑把船撐離了岸。",
@@ -436,7 +436,7 @@
         "text": "幫漁戶在灣口打一排木樁，擋住賊船",
         "check": {
           "stat": "str",
-          "difficulty": 6
+          "difficulty": 4
         },
         "effect": {
           "text": "木樁一根根楔進河床，賊船再想橫進灣口就得先撞樁。漁戶們湊了一串錢給你，還有一束晾乾的韌絲。",
@@ -460,7 +460,7 @@
         "text": "替魚市定個規矩，誰家佔哪段河岸",
         "check": {
           "stat": "wis",
-          "difficulty": 6,
+          "difficulty": 4,
           "by": "self"
         },
         "effect": {
@@ -529,7 +529,7 @@
         "text": "湊過去看那本帳簿",
         "check": {
           "stat": "agi",
-          "difficulty": 6
+          "difficulty": 4
         },
         "effect": {
           "text": "你趁小頭目打盹，翻出帳簿上記著哪天有糧船要運往黃巾大營。你把這頁撕下，送到了宛城。",
@@ -552,7 +552,7 @@
         "text": "跟小頭目論一論，這例錢憑的是哪家的律",
         "check": {
           "stat": "wis",
-          "difficulty": 6
+          "difficulty": 4
         },
         "effect": {
           "text": "你說得小頭目答不上來，只好說漁船這一斗先免了。後面幾條漁船跟著你的話，也都沒交。",
@@ -623,7 +623,7 @@
         "text": "教他們夜裡把車圍成一圈紮營",
         "check": {
           "stat": "wis",
-          "difficulty": 6,
+          "difficulty": 4,
           "by": "self"
         },
         "effect": {
@@ -642,7 +642,7 @@
         "text": "替他們把斷了的車軸、破了的車輪都修好再上路",
         "check": {
           "stat": "str",
-          "difficulty": 6
+          "difficulty": 4
         },
         "effect": {
           "text": "你扛車換軸忙了一下午，十來輛車沒有一輛再出毛病。車主們湊了幾個錢給你。",
@@ -702,7 +702,7 @@
         "text": "從坡後的林子繞過去",
         "check": {
           "stat": "agi",
-          "difficulty": 6
+          "difficulty": 4
         },
         "effect": {
           "text": "你貼著林子邊走，散兵一點也沒發覺。繞回官道時，你還順手牽走了他們拴在樹後的一隻雞。",
@@ -719,7 +719,7 @@
         "text": "跟樹後的漢子攀談，打聽他們是哪一部的",
         "check": {
           "stat": "wis",
-          "difficulty": 6
+          "difficulty": 4
         },
         "effect": {
           "text": "幾句話你就聽出他們是散了營的逃兵，連頭目都沒有。你嚇他們說官軍明日要來清路，當夜樹就被他們自己拖走了。",
@@ -768,7 +768,7 @@
         "text": "替她念信",
         "check": {
           "stat": "wis",
-          "difficulty": 5,
+          "difficulty": 3,
           "by": "self"
         },
         "effect": {
@@ -792,7 +792,7 @@
         "text": "替排隊的人把回信送到驛站，趕上今天的郵車",
         "check": {
           "stat": "agi",
-          "difficulty": 6
+          "difficulty": 4
         },
         "effect": {
           "text": "你抱著一捆竹簡跑到驛站，郵車正要套馬。驛卒看了一眼板子上的字，一個錢都沒收你。",
@@ -831,7 +831,7 @@
         "text": "拿過信來看，當場揭穿那個攤主",
         "check": {
           "stat": "wis",
-          "difficulty": 6
+          "difficulty": 4
         },
         "effect": {
           "text": "你指出整封信是照著同一張底稿抄的，連名字都沒換。圍觀的少年們把錢要了回去，攤主捲了席子溜走。",
@@ -851,7 +851,7 @@
         "text": "就地擺張案几，一封不收錢，寫到天黑",
         "check": {
           "stat": "con",
-          "difficulty": 6,
+          "difficulty": 4,
           "by": "self"
         },
         "effect": {
@@ -899,7 +899,7 @@
         "text": "帶著新戶在荒地四周挖一道壕溝",
         "check": {
           "stat": "str",
-          "difficulty": 7
+          "difficulty": 6
         },
         "effect": {
           "text": "壕溝挖成那天，新戶們在溝邊燒了一堆火，請你坐在上首。塢主遠遠看了一眼，派人送來一壺酒。",
@@ -921,7 +921,7 @@
         "text": "替管事算一算口糧怎麼分",
         "check": {
           "stat": "wis",
-          "difficulty": 7,
+          "difficulty": 6,
           "by": "self"
         },
         "effect": {
@@ -964,7 +964,7 @@
         "text": "獨自去蘆葦蕩，跟他們的頭目談",
         "check": {
           "stat": "wis",
-          "difficulty": 7
+          "difficulty": 6
         },
         "effect": {
           "text": "頭目是個斷了手的老佃農。你答應替他們向塢主討一塊荒地，他們答應不再割麥。塢主雖不情願，也知道這比年年防賊省事。",
@@ -982,7 +982,7 @@
         "text": "在麥田邊守一整夜",
         "check": {
           "stat": "con",
-          "difficulty": 6,
+          "difficulty": 5,
           "by": "self"
         },
         "effect": {
@@ -1040,7 +1040,7 @@
         "text": "一個個看過去，替冤枉的人作保",
         "check": {
           "stat": "wis",
-          "difficulty": 7
+          "difficulty": 6
         },
         "effect": {
           "text": "你看出大半木傳都是真的，只是縣印模糊。伍長拗不過你，放了二十幾戶上船。草棚裡的人目送你走，沒人敢出聲道謝。",
@@ -1060,7 +1060,7 @@
         "text": "幫伍長查，查一個算一份錢",
         "check": {
           "stat": "agi",
-          "difficulty": 6
+          "difficulty": 5
         },
         "effect": {
           "text": "你眼明手快，從貨箱夾層裡搜出兩卷符書。伍長樂得合不攏嘴，分了你一份賞。",
@@ -1107,7 +1107,7 @@
         "text": "幫船戶撐篙，把逃戶一家一家送過河",
         "check": {
           "stat": "con",
-          "difficulty": 7,
+          "difficulty": 6,
           "by": "self"
         },
         "effect": {
@@ -1129,7 +1129,7 @@
         "text": "去掂一掂那幾個漢子的包袱",
         "check": {
           "stat": "agi",
-          "difficulty": 7
+          "difficulty": 6
         },
         "effect": {
           "text": "包袱裡是一捆捆鏽跡斑斑的槍頭。你趁他們上船前割斷包袱帶，鐵器全掉進了河裡，漢子們罵著在泥裡摸了半夜。",

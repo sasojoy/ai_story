@@ -370,7 +370,7 @@
         "text": "坐下來一字不差地謄抄",
         "check": {
           "stat": "wis",
-          "difficulty": 6
+          "difficulty": 5
         },
         "effect": {
           "text": "你抄得又快又工整，書佐鬆了口氣，分了你一份賞錢。抄的時候也看到不少圍城的兵法佈置。",
@@ -391,7 +391,7 @@
         "text": "陪書佐熬夜，把整批軍書趕完",
         "check": {
           "stat": "con",
-          "difficulty": 8,
+          "difficulty": 7,
           "by": "self"
         },
         "effect": {
@@ -426,7 +426,7 @@
         "text": "下壕去挖一整夜的土",
         "check": {
           "stat": "con",
-          "difficulty": 7,
+          "difficulty": 6,
           "by": "self"
         },
         "effect": {
@@ -448,7 +448,7 @@
         "text": "扛木樁去築柵",
         "check": {
           "stat": "str",
-          "difficulty": 6
+          "difficulty": 5
         },
         "effect": {
           "text": "你一肩扛兩根木樁，一個早上就把柵欄立起一大段，士卒們都叫好。",
@@ -522,7 +522,7 @@
         "text": "隔著灶台低聲說明來意",
         "check": {
           "stat": "wis",
-          "difficulty": 6
+          "difficulty": 5
         },
         "effect": {
           "text": "躲在地窖裡的是一家四口，怕被拉去城裡做苦役。你指給他們一條往南的小路，婦人把僅有的一塊碎銀硬塞給你。",
@@ -540,7 +540,7 @@
         "text": "搬開壓在灶上的斷梁",
         "check": {
           "stat": "str",
-          "difficulty": 8
+          "difficulty": 7
         },
         "effect": {
           "text": "你把斷梁一點點撬開，地窖口透進天光。老漢爬出來，從懷裡摸出一塊祖傳的壓甕石送你，說留著也沒用了。",
@@ -591,7 +591,7 @@
         "text": "老老實實背一天石頭",
         "check": {
           "stat": "str",
-          "difficulty": 7
+          "difficulty": 6
         },
         "effect": {
           "text": "你背石頭背得比誰都快，管工的頭目放你走時還給了兩升粟米錢，說黃天之下不虧待出力的人。",
@@ -612,7 +612,7 @@
         "text": "混在搬糧的人裡溜進城看看",
         "check": {
           "stat": "agi",
-          "difficulty": 8
+          "difficulty": 7
         },
         "effect": {
           "text": "你扛著糧袋混進城門，看清了糧倉在城東、守倉的不過數十人。出城時路過門邊的糧堆，順手扛走一袋，丟給城外的饑民。",
@@ -667,7 +667,7 @@
         "text": "裹緊衣裳，在樓上熬到天亮",
         "check": {
           "stat": "con",
-          "difficulty": 6,
+          "difficulty": 5,
           "by": "self"
         },
         "effect": {
@@ -688,7 +688,7 @@
         "text": "看見牆下有黑影，放一支火箭照明",
         "check": {
           "stat": "agi",
-          "difficulty": 7
+          "difficulty": 6
         },
         "effect": {
           "text": "火箭釘在牆外的枯草上燒起來，照出幾個想挖牆的流民，他們丟下鐵鍬就跑。塢主聽說後，特地召見了你。",
@@ -728,7 +728,7 @@
         "text": "翻看租簿，替佃戶算清舊帳",
         "check": {
           "stat": "wis",
-          "difficulty": 6
+          "difficulty": 5
         },
         "effect": {
           "text": "你一筆筆算下來，發現管事把去年遭兵災該免的兩成也算進去了。管事臉上掛不住，只好讓佃戶來年再補。",
@@ -748,7 +748,7 @@
         "text": "掏錢替佃戶墊上，不夠的扛租糧抵數",
         "check": {
           "stat": "con",
-          "difficulty": 7,
+          "difficulty": 6,
           "by": "self"
         },
         "effect": {
@@ -818,7 +818,7 @@
         "text": "去舉那個最大的石鎖",
         "check": {
           "stat": "str",
-          "difficulty": 8
+          "difficulty": 7
         },
         "effect": {
           "text": "你一聲低喝把石鎖舉過頭頂，校場上一片叫好。塢主親手賞你一份錢，說塢堡的門隨時為你開著。",
@@ -839,7 +839,7 @@
         "text": "說力氣不算本事，比繞箭樓跑圈",
         "check": {
           "stat": "agi",
-          "difficulty": 6
+          "difficulty": 5
         },
         "effect": {
           "text": "你沿著堡牆跑了三圈，把部曲裡腳程最快的甩下半圈。塢主大笑，賞了你一碗酒和幾個錢。",
@@ -873,7 +873,7 @@
         "text": "下水扶著筏子泅過河",
         "check": {
           "stat": "con",
-          "difficulty": 8,
+          "difficulty": 7,
           "by": "self"
         },
         "effect": {
@@ -892,7 +892,7 @@
         "text": "幫老船戶看水路，挑個回水處下筏",
         "check": {
           "stat": "wis",
-          "difficulty": 6
+          "difficulty": 5
         },
         "effect": {
           "text": "你看出上游沙洲後面水勢較緩，筏子從那裡下水，一路平平穩穩。過河的一家人謝了你一把乾棗和幾個錢。",
@@ -929,7 +929,7 @@
         "text": "踩著撓鉤一路跳上快船",
         "check": {
           "stat": "agi",
-          "difficulty": 7
+          "difficulty": 6
         },
         "effect": {
           "text": "你從貨船躍上快船，一腳把舵手踢下水，水寇們見勢不妙，割斷撓鉤溜了。商人捧出一包錢道謝。",
@@ -950,7 +950,7 @@
         "text": "跳上貨船，搶過船槳往岸邊划",
         "check": {
           "stat": "str",
-          "difficulty": 6
+          "difficulty": 5
         },
         "effect": {
           "text": "你一個人划得貨船直往岸邊衝，水寇的撓鉤被扯脫兩支，只好放棄。商人送你一捆貨裡的上好絲綿。",
@@ -1005,7 +1005,7 @@
         "text": "湊過去細看那片木傳",
         "check": {
           "stat": "wis",
-          "difficulty": 7
+          "difficulty": 6
         },
         "effect": {
           "text": "你看出木傳上的縣印是新刻的，邊角還沒磨圓。你把話說給伍長聽，布商懷裡果然搜出一卷太平道的經文。伍長賞了你一份錢。",
@@ -1031,7 +1031,7 @@
         "text": "趁亂引開伍長，讓布商上船",
         "check": {
           "stat": "agi",
-          "difficulty": 6
+          "difficulty": 5
         },
         "effect": {
           "text": "你故意撞翻郡兵的錢箱，銅錢滾了一地，布商趁機跳上渡船。船離岸時，他朝你深深一揖。",
