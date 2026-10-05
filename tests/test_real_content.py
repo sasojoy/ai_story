@@ -265,6 +265,24 @@ def test_a_new_character_can_afford_the_first_practices_the_tutorial_asks_for(co
     assert "要 2 點心得，你只有 0 點" in msgs[0] and "還差 2 點" in msgs[0]
 
 
+def test_event_taught_arts_still_reach_a_character_whose_slots_are_full(content):
+    """審查裁示 F2：開局兩個欄位都被基礎武學佔了，事件教的追風步、混元一氣不能因此學不到——進功法庫，附錄 B.1 說它們照舊拿得到。"""
+    from tianxia import library
+    from tianxia.models import Effect
+    from tianxia.rules import apply_effect
+
+    game = Game.new(content, "測試俠客", rng=random.Random(0))
+    worn = (game.state.player.member.neigong_id, game.state.player.member.wugong_id)
+    assert None not in worn
+    for skill_id in ("zhuifeng", "hunyuan"):
+        assert any(skill_id in (e.model_dump_json()) for e in content.events.values())  # 內容裡真的有事件教它
+        msgs = apply_effect(Effect(learn_skills=[skill_id]), game.state, content, game.world)
+        assert any("功法庫" in m for m in msgs), msgs
+    assert {"zhuifeng", "hunyuan"} <= set(game.state.player.arts)
+    assert (game.state.player.member.neigong_id, game.state.player.member.wugong_id) == worn
+    assert {"zhuifeng", "hunyuan"} <= set(library.owned_arts(game.state))
+
+
 # ── 戰鬥難度曲線 ──────────────────────────────────────────
 
 

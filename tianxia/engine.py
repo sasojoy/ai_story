@@ -14,7 +14,7 @@ from pydantic import BaseModel
 
 from . import (
     atlas, battle_instance, battlelog, calendar, companion_agent, craft, encounter, event_llm, figures, flavor, foreshadow,
-    journal, materials, orders, push, ranks, roster, skillview, team, timetable,
+    journal, library, materials, orders, push, ranks, roster, skillview, team, timetable,
 )
 from .events import choice_label, event_candidates, has_events_here, pick_event, visible_choices
 from .guide import base_step_count, note_action, quest_text, tutorial_active, tutorial_intro
@@ -418,6 +418,9 @@ class Game:
             if dest.unlock_flag and dest.unlock_flag not in s.world.flags:
                 continue
             opts.append(self._move_option(loc.id, dest_id))
+        for skill, problem in library.lessons_here(s, c):  # 拜師學藝（武學與成長設計附錄 B）：不花體力
+            note = library.lesson_note(skill) if problem is None else problem
+            opts.append(Option(id=f"learn:{skill.id}", label=f"學{skill.name}（{note}）", enabled=problem is None))
         if s.player.faction is None:
             for faction in c.scenario.factions:
                 if s.player.location in faction.join_at:
@@ -643,6 +646,8 @@ class Game:
                 msgs = self._call(arg, prepared)
             elif kind == "road":
                 msgs = self._road(arg)
+            elif kind == "learn":
+                msgs = library.learn(self.state, self.content, arg)
             elif kind == "fs":
                 msgs = self._foreshadow(arg)
             else:
@@ -741,6 +746,8 @@ class Game:
             return f"交談・{character.name}"
         if kind == "call":
             return "收回名帖" if arg == "back" else f"求見・{c.characters[arg].name}"
+        if kind == "learn":
+            return f"學藝・{c.skills[arg].name}"
         if kind == "fs":
             here = c.locations[s.player.location].name
             return "作罷" if arg == "leave" else f"{foreshadow.trip_label(s, c, arg.partition(':')[0])}・{here}"
@@ -2566,6 +2573,27 @@ class Game:
         self._menxia_entry(msgs[-1] if msgs else "改練", xinde)
         return msgs
 
+    def melt_art(self, art_id: str) -> list[str]:
+        """熔煉：功法庫裡的一門熔成心得（見 library.melt_art）；身上正在練的不能熔。熔成了才寫江湖紀錄，
+        被拒絕（身上正在練的、庫裡沒有）只回一句話（武學與成長計畫 F12）。"""
+        if self._preparing():
+            return self._log(["（賽季籌備中，等待管理者開季。）"])
+        xinde, held = self._xinde(), library.held_count(self.state)
+        msgs = self._log(library.melt_art(self.state, self.content, self.world, art_id))
+        if library.held_count(self.state) < held:  # 看有沒有真的少一門，不看心得：下品第一成的武學熔了只退 0 點
+            self._menxia_entry(msgs[0], xinde)
+        return msgs
+
+    def melt_insight(self, insight_id: str) -> list[str]:
+        """把一個意境化成心得（見 library.melt_insight）；同 melt_art，熔成了才寫江湖紀錄。"""
+        if self._preparing():
+            return self._log(["（賽季籌備中，等待管理者開季。）"])
+        xinde, held = self._xinde(), library.held_count(self.state)
+        msgs = self._log(library.melt_insight(self.state, self.content, self.world, insight_id))
+        if library.held_count(self.state) < held:
+            self._menxia_entry(msgs[0], xinde)
+        return msgs
+
     def practice(self, kind: str) -> list[str]:
         """練成：身上這一門加深一成，花心得、累積受傷風險（見 team.practice）。"""
         if self._preparing():
@@ -2579,7 +2607,9 @@ class Game:
         # FB-007：引導那一步要的是「真的練了一成」：沒學過就練不到、心得不夠沒練成，都不算；
         # 已經第十成（練無可練）也算（可能在走到這一步前就練滿了，只認「真的加一成」會永遠卡住）。
         counted = has_art and (getattr(member, level_slot) > before or before >= team.MAX_LEVEL)
-        return msgs + self._menxia_entry(msgs[0] if msgs else "練功", xinde, guide=counted)
+        if not counted:  # 練不成（還沒學、心得不足）：什麼都沒變，只回那一句話，不寫「修練」紀錄（武學與成長計畫 F12）
+            return msgs
+        return msgs + self._menxia_entry(msgs[0], xinde, guide=True)
 
     def heal(self) -> list[str]:
         if self._preparing():

@@ -160,11 +160,22 @@ def test_learn_skill_starts_at_first_level(state, content):
     assert learn_skill(state, content, "fist") == []
 
 
-def test_learn_skill_does_not_overwrite_an_existing_wugong(state, content):
+def test_learn_skill_puts_a_second_art_in_the_library(state, content):
+    """事件教的武學（追風步、混元一氣）：欄位已經有東西時不覆蓋、也不消失，進功法庫（武學與成長計畫 F2、設計附錄 B.1）。"""
     learn_skill(state, content, "fist")
     msgs = learn_skill(state, content, "sword")
-    assert state.player.member.wugong_id == "fist"  # 原本那門先到，後來的沒學成
-    assert "先無緣習得" in msgs[0]
+    assert state.player.member.wugong_id == "fist"  # 原本那門先到，不被蓋掉
+    assert state.player.arts == ["sword"]
+    assert "流雲劍" in msgs[0] and "功法庫" in msgs[-1]
+    assert learn_skill(state, content, "sword") == [] and state.player.arts == ["sword"]  # 已經有了就不再收一次
+
+
+def test_learn_skill_ignores_the_holding_cap(state, content):
+    """付了錢、或是奇遇給的，不能因為滿了就憑空消失（跟悟意境一樣不受上限擋）。"""
+    content.config.holding_cap_base = 1
+    learn_skill(state, content, "fist")
+    learn_skill(state, content, "sword")
+    assert state.player.arts == ["sword"]
 
 
 def test_current_day(state):

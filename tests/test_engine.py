@@ -6,7 +6,7 @@ from unittest import mock
 import pytest
 
 from conftest import FixedRandom, at, install_season_one, walk_to
-from tianxia import atlas, battle_instance, calendar, companion_agent, flavor, guide, rules, skillview
+from tianxia import atlas, battle_instance, calendar, companion_agent, flavor, guide, library, rules, skillview
 from tianxia.characters import open_characters
 from tianxia.content import load_content
 from tianxia.engine import Game, Option
@@ -563,6 +563,78 @@ def test_practicing_without_enough_xinde_says_how_much_is_missing(game):
     msgs = game.practice("武學")
     assert game.state.player.member.wugong_level == 4 and game.state.player.stats["xinde"] == 1
     assert "要 4 點心得，你只有 1 點" in msgs[0] and "還差 3 點" in msgs[0]
+
+
+def test_a_refused_practice_writes_no_journal_entry(game):
+    """練不成（還沒學、心得不足）只回一句話，不留一則「修練」紀錄（武學與成長計畫 F12）。"""
+    game.state.player.stats["xinde"] = 0
+    before = list(game.state.journal)
+    game.state.player.member.wugong_id = None
+    game.practice("武學")  # 還沒學
+    game.state.player.member.wugong_id, game.state.player.member.wugong_level = "fist", 4
+    msgs = game.practice("武學")  # 心得不足
+    assert "心得不足" in msgs[0]
+    assert game.state.journal == before
+
+
+def test_learning_shows_up_on_the_menu_and_costs_no_stamina(game):
+    walk_to(game, "lake")
+    game.state.player.stats["silver"] = 30
+    stamina = game.state.player.stamina
+    option = next(o for o in game.options() if o.id == "learn:lake_kick")
+    assert option.enabled and "銀兩 10" in option.label
+    game.choose("learn:lake_kick")
+    assert "lake_kick" in library.owned_arts(game.state)
+    assert game.state.player.stamina == stamina
+
+
+def test_a_lesson_you_cannot_afford_is_listed_but_greyed_out(game):
+    walk_to(game, "lake")
+    game.state.player.stats["silver"] = 3
+    option = next(o for o in game.options() if o.id == "learn:lake_kick")
+    assert not option.enabled and "學費 10 兩" in option.label
+    assert "（此刻無法這麼做。）" in game.choose("learn:lake_kick")
+
+
+def test_learning_is_written_to_the_journal_and_the_lesson_leaves_the_menu(game):
+    walk_to(game, "lake")
+    game.state.player.stats["silver"] = 30
+    game.choose("learn:lake_kick")
+    entry = game.state.journal[0]
+    assert entry.title == "學藝・湖邊腿法" and "銀兩 -10" in entry.changes
+    assert "learn:lake_kick" not in ids(game)
+
+
+def test_melting_a_library_art_writes_one_journal_entry(game):
+    player = game.state.player
+    player.arts, player.art_levels["lake_kick"], player.stats["xinde"] = ["lake_kick"], 5, 0
+    msgs = game.melt_art("lake_kick")
+    assert "熔成了心得" in msgs[0] and player.arts == [] and player.stats["xinde"] == 8
+    entry = game.state.journal[0]
+    assert entry.title == "修練" and entry.tag == msgs[0] and "心得 +8" in entry.changes
+
+
+def test_melting_an_art_worth_no_xinde_still_counts_as_something_that_happened(game):
+    game.state.player.arts = ["lake_kick"]  # 第一成、下品：退 0 心得，但這門武學確實沒了
+    game.melt_art("lake_kick")
+    assert game.state.player.arts == [] and game.state.journal[0].tag.startswith("你把【湖邊腿法】")
+
+
+def test_a_refused_melt_writes_no_journal_entry(game):
+    game.state.player.member.wugong_id = "basic_fist"
+    before = list(game.state.journal)
+    assert "先改練" in game.melt_art("basic_fist")[0]  # 身上正在練的
+    assert "沒有" in game.melt_art("lake_kick")[0]  # 功法庫裡沒有
+    assert "沒有" in game.melt_insight("feng")[0]  # 沒有這個意境
+    assert game.state.journal == before
+
+
+def test_melting_an_insight_writes_one_journal_entry(game):
+    game.state.player.insights, game.state.player.stats["xinde"] = ["feng"], 0
+    msgs = game.melt_insight("feng")
+    assert "化成了心得" in msgs[0] and game.state.player.insights == []
+    entry = game.state.journal[0]
+    assert entry.title == "修練" and "心得 +10" in entry.changes
 
 
 def _practice_step_game(game, worn: dict[str, int]):

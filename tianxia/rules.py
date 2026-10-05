@@ -6,7 +6,8 @@ import re
 from collections.abc import Callable
 from typing import Literal
 
-from . import calendar, materials, roster, team  # 與 roster 互相 import：只能引入整個模組、呼叫時才取屬性，不能 from .roster import …
+from . import calendar, library, materials, roster, team  # 與 roster 互相 import：只能引入整個模組、呼叫時才取屬性，不能 from .roster import …
+from .martial_arts import content_art
 from .models import FRONT_KEY, Check, Condition, Content, Effect, Trend
 from .state import PLAYER, GameState, Rumor, RumorLayer, WorldState
 from .world_state import JADE_SEAL_FRAGMENT_COUNT, WorldStateStore
@@ -424,17 +425,14 @@ def change_trend(
 
 
 def learn_skill(state: GameState, content: Content, skill_id: str) -> list[str]:
-    """每人最多學一門內功、一門武學（設計文件六.4）：對應的欄位已經有人時直接跳過，不覆蓋。"""
-    member = state.player.member
+    """事件教的武學（追風步、混元一氣）：欄位空著就配上身，否則收進功法庫（library.store_art）。
+    這裡不看持有上限，跟悟意境一樣——付了錢、奇遇給的東西不能因為滿了就憑空消失（武學與成長設計附錄 B.1）。
+    已經會的（身上或功法庫）不重複收。"""
     skill = content.skills[skill_id]
-    slot = "neigong_id" if skill.kind == "內功" else "wugong_id"
-    if getattr(member, slot) == skill_id:
+    if skill_id in library.owned_arts(state):
         return []
-    if getattr(member, slot) is not None:
-        return [f"你已經學了一門{skill.kind}，【{skill.name}】這次先無緣習得。"]
-    setattr(member, slot, skill_id)
-    setattr(member, slot.replace("_id", "_level"), 1)
-    return [f"你習得了【{skill.name}】！"]
+    stored = library.store_art(state, content_art(skill.id, skill.name, skill.kind, skill.attribute, skill.quality))
+    return [f"你習得了【{skill.name}】！"] + (stored if skill_id in state.player.arts else [])
 
 
 def apply_effect(

@@ -388,7 +388,7 @@ def _maybe_grant_signature_skill(state: GameState, content: Content, character: 
     """設計文件七.1：情誼滿門檻才能習得對方的本命武學。系統決定性判斷，不靠 LLM——
     跟里程碑/天機記事橫幅同一套「系統偵測狀態轉換」精神，只在真的跨過門檻那一刻觸發一次
     （用 flags 記錄過，之後即使好感度掉回門檻以下再升上來也不會重複觸發/重複學習）。
-    learn_skill() 本身已經有「欄位已經有人就跳過」的保護，這裡只需要負責「這是不是
+    learn_skill() 欄位已經有人時會把它收進功法庫（不蓋掉、也不消失），這裡只需要負責「這是不是
     第一次跨過門檻」。"""
     from .rules import learn_skill
 
