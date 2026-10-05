@@ -392,6 +392,29 @@ def in_chaos(state: GameState, content: Content, front: str) -> bool:
     return cfg.chaos_low <= trend_value(state, content, front) <= cfg.chaos_high
 
 
+def chaos_fronts(state: GameState, content: Content) -> list[str]:
+    """在亂局裡的戰線 id（照 front_ids 的順序）。geju_tick 的漲落、江湖頁圖卡的「亂局」標與亂局帶、態勢那一行、
+    見聞→大勢的割據說明，讀的都是這一份（FB-065），所以畫面上寫的條數與漲落的方向跟實際漲落永遠一致。"""
+    return [front for front in front_ids(content) if in_chaos(state, content, front)]
+
+
+def chaos_note(state: GameState, content: Content) -> str:
+    """豪強割據現在為什麼漲或落（FB-065），江湖頁態勢那一行（「豪強 32（…）」）與見聞→大勢的割據說明共用這一句：
+    有戰線在亂局就漲（geju_tick：每條每曆日漲 geju_chaos_per_day），一條都沒有就落（每曆日落 geju_calm_per_day）。
+    條數寫阿拉伯數字；只寫方向與條數，不寫速度，也不寫是哪幾條（圖卡自己標）。"""
+    count = len(chaos_fronts(state, content))
+    return f"{count} 條戰線在亂局，割據漸長" if count else "沒有戰線在亂局，割據漸消"
+
+
+_COUNT_WORDS = "零一二三四五六七八九十"
+
+
+def stance_sum_note(content: Content) -> str:
+    """官軍、黃巾的態勢是幾條戰況合起來的（FB-065；權重不印）：「三條戰線合計」。"""
+    count = len(front_ids(content))
+    return f"{_COUNT_WORDS[count] if count < len(_COUNT_WORDS) else count}條戰線合計"
+
+
 def stances(state: GameState, content: Content) -> dict[str, int]:
     """三方態勢（第一季設計 4.4）：官軍＝100－黃巾聲勢，黃巾＝黃巾聲勢，豪強＝豪強割據。"""
     huangjin = trend_value(state, content, HUANGJIN)
@@ -417,7 +440,7 @@ def geju_tick(state: GameState, content: Content, cal_hours: float, players: int
     if not season_one(content, state.world) or _trend(content, GEJU) is None or not fronts:
         return
     cfg = content.config
-    chaos = sum(1 for front in fronts if in_chaos(state, content, front))
+    chaos = len(chaos_fronts(state, content))  # 畫面上寫的條數與漸長／漸消（chaos_note）讀同一份
     per_day = chaos * cfg.geju_chaos_per_day * geju_rise_factor(content, players) if chaos else -cfg.geju_calm_per_day
     w = state.world
     pending = w.trend_accum.get(GEJU, 0.0) + per_day * cal_hours / 24

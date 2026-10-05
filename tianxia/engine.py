@@ -28,9 +28,9 @@ from .models import (
 from .ollama_client import OllamaClient
 from .rules import (
     GEJU, HUANGJIN, add_rumor, apply_effect, audience_bar, can_hear, can_meet, change_trend, check_who, current_day, display_name, fill_marks, free_text_rate,
-    can_draw_side_change, front_chip, front_ids, front_of, front_text, humanize, in_chaos,
+    can_draw_side_change, chaos_fronts, chaos_note, front_chip, front_ids, front_of, front_text, humanize, in_chaos,
     is_revealed, pushable, rate_words, recompute_trends, resolve_goals, resolve_trend, resolve_trends, roll_check,
-    season_one, season_one_off, stances, trend_name, trend_shown, trend_value, world_trend_value,
+    season_one, season_one_off, stance_sum_note, stances, trend_name, trend_shown, trend_value, world_trend_value,
 )
 from .sqlite_world import open_world
 from .state import PLAYER, BattleRecord, Convoy, GameState, JournalEntry, Journey, Rumor, WorldState, new_game_state
@@ -3230,10 +3230,16 @@ class Game:
             **self._calendar_status(),  # 第一季：季曆與下一件大事的倒數；開關關著時沒有這兩欄
         }
         if season_one(c, w):  # 第一季濃縮版：江湖頁的三條戰況與三方態勢；開關關著時沒有這兩個鍵，畫面照舊
+            # FB-065：圖卡畫亂局帶（兩端讀設定，跟 in_chaos 同一份、含兩端）、標出在亂局裡的戰線；態勢那一行的說明也由這裡給，
+            # 前端不寫死 35／65，也不自己數條數。全服公開的戰況，誰看都一樣
+            in_the_chaos = set(chaos_fronts(s, c))
             data["fronts"] = [
-                {"id": tid, "name": trend_name(c, tid), "value": trend_value(s, c, tid)} for tid in front_ids(c)
+                {"id": tid, "name": trend_name(c, tid), "value": trend_value(s, c, tid), "chaos": tid in in_the_chaos}
+                for tid in front_ids(c)
             ]
+            data["chaos_band"] = {"low": c.config.chaos_low, "high": c.config.chaos_high}
             data["stances"] = stances(s, c)
+            data["stance_notes"] = {"sum": stance_sum_note(c), "haoqiang": chaos_note(s, c)}
         return data
 
     def _calendar_status(self) -> dict:
@@ -3401,7 +3407,8 @@ class Game:
                 continue
             value = trend_value(self.state, self.content, trend.id)
             bar = "█" * (value // 5) + "░" * (20 - value // 5)
-            parts.append(f"**{trend.name}** {value}/100\n\n`{bar}`\n\n{trend.desc}")
+            note = f"\n\n現況：{chaos_note(self.state, self.content)}。" if trend.id == GEJU and season_one(self.content, w) else ""
+            parts.append(f"**{trend.name}** {value}/100\n\n`{bar}`\n\n{trend.desc}{note}")  # 割據：說明後面接現在漲或落（FB-065，同江湖頁態勢那一行）
         if w.ended:
             parts.append(f"## 結局：{w.ending_title}\n\n{w.ending_text}")
         return "\n\n".join(parts) or "（江湖暫時風平浪靜。）"

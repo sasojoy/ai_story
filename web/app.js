@@ -245,7 +245,7 @@
       ${S.showMore ? `<div class="more-stats">
         ${s.minor.map(([k, v]) => `${esc(k)} ${v}`).join("　")}　｜　${s.attrs.map(([k, v]) => `${esc(k)} ${v}`).join("　")}
         ${team ? `<br>${team}` : ""}
-        ${s.stances ? `<br>態勢　${STANCE_NAMES.map(([id, name]) => `${name} ${s.stances[id]}`).join("・")}` : ""}
+        ${s.stances ? stancesHtml(s.stances, s.stance_notes) : ""}
       </div>` : ""}
       ${hintHtml(s)}`;
   }
@@ -471,16 +471,30 @@
       <details class="fold"><summary>各陣營出力前五</summary><div class="fold-body result-ranks">${ranks}</div></details></section>`;
   }
 
-  // 戰況條兩端標陣營（FB-041）：條上左邊金色那一截是黃巾佔的、右邊藍色是官軍，字的顏色跟那一截一樣
-  const FRONT_ENDS = '<div class="front-ends" aria-hidden="true"><span class="huang">黃巾</span><span class="guan">官軍</span></div>';
+  // 戰況條兩端標陣營（FB-041）：條上左邊金色那一截是黃巾佔的、右邊藍色是官軍，字的顏色跟那一截一樣。
+  // 戰線在亂局裡時（FB-065）正中間多一個小小的「亂局」標，剛好在亂局帶下面：豪強的地盤，中性的顏色，不佔多一行
+  const frontEnds = (chaos) => `<div class="front-ends" aria-hidden="true"><span class="huang">黃巾</span>${
+    chaos ? '<span class="chaos-tag">亂局</span>' : ""}<span class="guan">官軍</span></div>`;
+  const FRONT_ENDS = frontEnds(false);
+
+  // 態勢那一行（FB-065）：官軍、黃巾是幾條戰況合起來的，豪強是割據（有戰線在亂局就漸長）。說明由伺服器給（status.stance_notes），
+  // 跟見聞→大勢的割據說明同一句，前端不自己數條數。狀態列展開時與江湖頁圖卡底下都用它
+  function stancesHtml(stances, notes) {
+    const n = notes || {};
+    const side = (id) => `${STANCE_NAMES.find(([key]) => key === id)[1]} ${stances[id]}`;
+    const note = (text) => (text ? `（${esc(text)}）` : "");
+    return `<div class="stances-line"><span>態勢</span><span>${side("guan")}・${side("huang")}${note(n.sum)}<br>${side("haoqiang")}${note(n.haoqiang)}</span></div>`;
+  }
 
   // 第一季濃縮版的三條戰況（伺服器有送 fronts 才畫）：0 是官軍穩控、100 是黃巾控制，條上黃的那一截是黃巾佔的。
-  // 下面一行是三方態勢（S1：以前只有點開狀態列才看得到，結局提示講的就是它）
-  function frontsHtml(fronts, stances) {
+  // 條上淺色的一段是亂局帶（band＝status.chaos_band，兩端含在內；豪強趁亂割據的戰況區間），戰況落在裡面的圖卡標「亂局」（f.chaos）。
+  // 下面是三方態勢（S1：以前只有點開狀態列才看得到，結局提示講的就是它）
+  function frontsHtml(fronts, stances, band, notes) {
+    const shade = band ? `<span class="chaos-band" aria-hidden="true" title="亂局帶" style="left:${pct(band.low, 100)}%;width:${pct(band.high - band.low, 100)}%"></span>` : "";
     return `<div class="fronts" role="group" aria-label="戰況：0 官軍穩控，100 黃巾控制">${fronts.map((f) => `
-      <div class="front"><div class="front-head"><span>${esc(f.name)}</span><b>${f.value}</b></div>
-        <div class="front-bar" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${f.value}" aria-label="${esc(f.name)}"><i style="width:${pct(f.value, 100)}%"></i></div>${FRONT_ENDS}</div>`).join("")}</div>${
-      stances ? `<p class="stances-line">態勢　${STANCE_NAMES.map(([id, name]) => `${name} ${stances[id]}`).join("・")}</p>` : ""}`;
+      <div class="front${f.chaos ? " chaos" : ""}"><div class="front-head"><span>${esc(f.name)}</span><b>${f.value}</b></div>
+        <div class="front-bar" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${f.value}" aria-label="${esc(f.name)}${f.chaos ? "，在亂局" : ""}"><i style="width:${pct(f.value, 100)}%"></i>${shade}</div>${frontEnds(f.chaos)}</div>`).join("")}</div>${
+      stances ? stancesHtml(stances, notes) : ""}`;
   }
 
   // 說書人的對話框（引導重做設計 8.1、6.2）：行動列（或事件的選項）上方，框上寫說話的人（之後換成師父、引薦人）。
@@ -589,7 +603,7 @@
           <div class="fold-body">${m.bulletin.map((b) => `<div class="bulletin-item">${b}</div>`).join("")}</div></details>`
       : "";
     // 三條戰況排在行動列下面、小地圖上面，不擠掉第一屏的公告卡、「剛剛」、場景與行動列
-    const fronts = m.fronts ? frontsHtml(m.fronts, m.status && m.status.stances) : "";
+    const fronts = m.fronts ? frontsHtml(m.fronts, m.status && m.status.stances, m.status && m.status.chaos_band, m.status && m.status.stance_notes) : "";
     const resultCard = m.season_result ? resultHtml(m.season_result) : "";  // 休季的結算卡排在最上面（計畫 T9）
     // 本週軍令排在行動列（與路上捷徑）下面、三條戰況上面：不擠掉第一屏的公告、「剛剛」、場景與行動列（計畫 T6）
     const orderCard = m.orders || m.convoy ? ordersHtml(m.orders || [], week, m.convoy) : "";
