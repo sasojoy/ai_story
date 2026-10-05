@@ -15,7 +15,7 @@ _spec.loader.exec_module(sim)
 
 ONE_EACH = {"guan": 1, "huang": 1, "haoqiang": 1}
 FIELDS = {"weekly", "events", "missing", "showdowns", "orders", "promoted", "ending", "ending_id", "end_week", "ended",
-          "stuck", "checks"}
+          "stuck", "checks", "geju_first", "roster"}
 
 
 def _content(days: float = 0.25):
@@ -33,6 +33,10 @@ def test_a_short_season_runs_to_the_end_with_every_field(tmp_path):
     assert set(result["orders"]) == set(ONE_EACH) and set(result["promoted"]) == set(ONE_EACH)
     assert set(result["showdowns"]) == {"changshe_fire", "wancheng", "guangzong"}
     assert result["events"].keys().isdisjoint(result["missing"])
+    assert set(result["geju_first"]) == {85, 100} and isinstance(result["roster"], int)  # 割據首次到 85／100：(週, 時間章) 或 None
+    for hit in result["geju_first"].values():
+        assert hit is None or (isinstance(hit[0], int) and isinstance(hit[1], str))
+    assert "割據首次到" in sim.summary(1, result)
     assert "第" in sim.summary(1, result)  # 印得出來
 
 

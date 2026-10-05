@@ -38,6 +38,7 @@ from tianxia.world import settle_season_start  # noqa: E402
 START = 1_791_198_000.0  # 2026-10-05 19:00 台灣時間（同 sim_server_bots）
 FRONTS = ("yingru", "nanyang", "jizhou")
 SIDES = ("guan", "huang", "haoqiang")
+GEJU_LINES = (85, 100)  # 割據的兩條線：85 是決定性勝利的門檻（第 10 週起收季），100 是頂
 WATCHER = "旁觀者"  # 不做事的真人角色：每一輪同步、刷新選單（跟開著網頁的人一樣推著共用時鐘與決戰回合）
 
 
@@ -87,6 +88,7 @@ def run_season(
     rng = random.Random(seed)
     weekly: dict[int, dict[str, int]] = {}
     orders_done: dict[str, tuple[str, int]] = {}
+    geju_first: dict[int, tuple[int, str]] = {}  # 割據第一次到 85、到 100 是第幾週、什麼時候（曆法的時間章）
     with mock.patch.dict(os.environ, {database.ENV_VAR: str(db_path)}):
         world, characters = open_world(db_path), open_characters(db_path)
         world.seed_first_season(content)
@@ -107,6 +109,9 @@ def run_season(
             if season.time > 0:
                 week = calendar.point(season.time, content, season).week
                 weekly[week] = {f: rules.trend_value(watcher.state, content, f) for f in (*FRONTS, "geju")}
+                for line in GEJU_LINES:
+                    if line not in geju_first and weekly[week]["geju"] >= line:
+                        geju_first[line] = (week, calendar.stamp_text(season.time, content, season))
             for order in season.orders:
                 if order.done:
                     orders_done[order.id] = (order.faction, order.week)
@@ -115,6 +120,7 @@ def run_season(
             now[0] += tick
         season = world.get_season()
         everyone = characters.all()
+        roster = sum(world.faction_counts().values())  # 這一季投靠名冊的人數（割據的漲速照它縮放）
     by_week: dict[str, Counter] = {side: Counter() for side in SIDES}
     for faction, week in orders_done.values():
         by_week.setdefault(faction, Counter())[week] += 1
@@ -122,6 +128,8 @@ def run_season(
     timeline = season.timeline
     result = {
         "weekly": weekly,
+        "geju_first": {line: geju_first.get(line) for line in GEJU_LINES},  # {85: (週, 時間章) 或 None, 100: …}
+        "roster": roster,
         "events": {eid: {"result": r.key, "locked": r.locked_by is not None} for eid, r in timeline.items()},
         "missing": [e.id for e in content.timetable if e.id not in timeline],
         "showdowns": {
@@ -153,6 +161,8 @@ def summary(seed: int, r: dict) -> str:
         f"{SIDE_NAMES[s]} {n}" for s, n in r["bots"].items())]
     lines.append("  每週末（潁川汝南/南陽/冀州/割據）：" + "　".join(
         f"{w}:{v['yingru']}/{v['nanyang']}/{v['jizhou']}/{v['geju']}" for w, v in sorted(r["weekly"].items())))
+    lines.append(f"  割據首次到（投靠名冊 {r['roster']} 人）：" + "　".join(
+        f"{line}＝" + (f"第 {hit[0]} 週（{hit[1]}）" if hit else "沒到") for line, hit in r["geju_first"].items()))
     lines.append("  大事：" + "　".join(
         f"{eid}={v['result']}{'（鎖定）' if v['locked'] else ''}" for eid, v in r["events"].items()))
     if r["missing"]:

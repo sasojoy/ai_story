@@ -486,14 +486,15 @@ def _open_claimed(
     return _open_battle(world, definition, now, trend_start=start)
 
 
-def season_hour(state: GameState, content: Content, rng: random.Random) -> list[str]:
+def season_hour(state: GameState, content: Content, rng: random.Random, players: int | None = None) -> list[str]:
     """第一季「季的事」，每跨過一個曆時跑一次（advance_world_state 照曆時切段呼叫；開關關著或舊季不跑）：
     先跑每曆時才有的事，再跑 season_events（週初掛鉤、到了的大事）。
     每曆時的 tick 一律放在 season_events 之前：T1 的 geju_tick、T4 的 figures.tick——開季那一刻只跑
-    season_events（settle_season_start），不跑這一段，才不會多算一次割據變動與人物推動。"""
+    season_events（settle_season_start），不跑這一段，才不會多算一次割據變動與人物推動。
+    players 是這一季投靠名冊的人數（advance_world_state 每次推進查一次帶進來），給割據按人數縮放漲速；None＝不知道，不縮放。"""
     msgs: list[str] = []
     ranks.flush_news(state, content, calendar.point(state.world.time, content, state.world).cal_day)  # T5：前一天的晉升彙整
-    geju_tick(state, content, 1)  # T1：豪強割據每曆時一次，在週初掛鉤與大事之前
+    geju_tick(state, content, 1, players=players)  # T1：豪強割據每曆時一次，在週初掛鉤與大事之前
     figures.tick(state, content, 1)  # T4：大勢人物每曆時累積一次推動（取代每小時的虛擬玩家）
     return msgs + season_events(state, content, rng)
 
@@ -526,7 +527,7 @@ def advance_world_state(
     """把一份 WorldState（不管是共用賽季的副本，還是——理論上——任何 WorldState）原地
     往前推進 seconds 秒：逐小時推進、累積滿一小時才跑一次虛擬玩家模擬（避免長時間快轉時
     事件/門檻判斷太粗），照搬原本 engine.py::_advance_step 的世界部分。純函式性質（除了
-    原地修改傳入的 season），不碰儲存——存不存、怎麼存是呼叫端的事：Game.advance() 直接對
+    原地修改傳入的 season），不寫儲存（world 給了只讀名冊與榜單）——存不存、怎麼存是呼叫端的事：Game.advance() 直接對
     self.state.world 呼叫這個函式再自己存回共用儲存（跟 choose()/travel() 同一套模式）；
     被動的現實時間追趕（world_state.py::catch_up_season）則透過下面的 advance_season
     包在 mutate_season 裡再呼叫。"""
@@ -536,6 +537,10 @@ def advance_world_state(
     remaining = seconds
     # 第一季（開關開著、這一季也蓋了章）：另外在每個曆時的交界停一下跑季的事；跨過好幾件大事也逐件照時間來
     cal_hour = calendar.cal_hour_seconds(content, season) if calendar.season_one_on(season, content) else None
+    # 割據漲速依人數縮放：這一季投靠名冊的人數，一次推進只查一次（推進握著寫入權，名冊中途不會變）。讀名冊只是讀，
+    # 在 advance_season 的 mutate_season 裡也查得到（交易裡的快照直接用同一條連線，不是 mutate，不撞「不能巢狀」）。
+    # 沒傳 store（純函式的呼叫，例如測試）就不知道人數：None＝割據照設計的速度漲，不縮放
+    players = sum(world.faction_counts().values()) if cal_hour is not None and world is not None else None
     while remaining > 0 and not season.ended:
         step = min(remaining, HOUR)
         crossed = False
@@ -549,7 +554,7 @@ def advance_world_state(
             season.sim_accum -= hours * HOUR
             msgs += sim_tick(vehicle, content, hours, rng)
         if crossed and not season.ended:
-            msgs += season_hour(vehicle, content, rng)
+            msgs += season_hour(vehicle, content, rng, players=players)
             decisive = None if season.ended else decisive_ending(vehicle, content)
             if decisive is not None:  # 決定性勝利：當曆時收季，結局就是它（計畫 T9）
                 msgs += end_season(vehicle, content, world, rng, ending=decisive)

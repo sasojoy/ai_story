@@ -982,6 +982,14 @@ def test_config_rejects_negative_geju_rates(field):
     assert getattr(Config(**{field: 0}), field) == 0
 
 
+def test_geju_full_players_must_be_positive():
+    """滿額人數是除數：0 或負的都不行。"""
+    for bad in (0, -3):
+        with pytest.raises(ValidationError):
+            Config(geju_full_players=bad)
+    assert Config(geju_full_players=1).geju_full_players == 1
+
+
 def test_validate_reports_a_malformed_region_polygon_instead_of_crashing(tmp_path):
     """train_trend 的戰線歸屬要先查地點在哪個大區，有個點只寫了一個數字時不能在那裡炸成 ValueError，要照舊回報多邊形的錯。"""
     root = copy_fixture(tmp_path)

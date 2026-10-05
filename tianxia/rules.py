@@ -363,16 +363,27 @@ def stances(state: GameState, content: Content) -> dict[str, int]:
     return {"guan": 100 - huangjin, "huang": huangjin, "haoqiang": trend_value(state, content, GEJU)}
 
 
-def geju_tick(state: GameState, content: Content, cal_hours: float) -> None:
-    """豪強割據的自然漲落（第一季設計 4.2）：每有一條戰線在亂局，每曆日漲 geju_chaos_per_day；三條都穩下來時每曆日
-    落 geju_calm_per_day。不足一點的累積在 trend_accum["geju"]。背景推動，不回傳訊息（同虛擬玩家）。
-    由 T2 的 world.season_hour 每曆時呼叫一次（cal_hours＝1）。開關關著、劇本沒有割據、或地圖沒有戰線時什麼都不做。"""
+def geju_rise_factor(content: Content, players: int | None) -> float:
+    """割據漲速的人數係數（企劃者 2026-10-05，測試階段「依據人數等比例調整」）：min(1, players ÷ geju_full_players)。
+    players 是這一季投靠了陣營的人數（投靠名冊，真人與假人一樣算）；沒人投靠就是 0（割據不漲），湊滿 geju_full_players 人
+    以上是 1（設計的速度）。players 是 None＝不知道名冊（沒有資料庫可查的純函式呼叫）：不縮放，照設計的速度。"""
+    if players is None:
+        return 1.0
+    return min(1.0, max(0, players) / content.config.geju_full_players)
+
+
+def geju_tick(state: GameState, content: Content, cal_hours: float, players: int | None = None) -> None:
+    """豪強割據的自然漲落（第一季設計 4.2）：每有一條戰線在亂局，每曆日漲 geju_chaos_per_day × 人數係數
+    （geju_rise_factor：這一季投靠名冊 players 人，占 geju_full_players 的比例，至多 1）；三條都穩下來時每曆日
+    落 geju_calm_per_day（回落不乘係數）。不足一點的累積在 trend_accum["geju"]。背景推動，不回傳訊息（同虛擬玩家）。
+    由 T2 的 world.season_hour 每曆時呼叫一次（cal_hours＝1），players 由 advance_world_state 每次推進查一次名冊帶進來。
+    開關關著、劇本沒有割據、或地圖沒有戰線時什麼都不做。"""
     fronts = front_ids(content)
     if not season_one(content, state.world) or _trend(content, GEJU) is None or not fronts:
         return
     cfg = content.config
     chaos = sum(1 for front in fronts if in_chaos(state, content, front))
-    per_day = chaos * cfg.geju_chaos_per_day if chaos else -cfg.geju_calm_per_day
+    per_day = chaos * cfg.geju_chaos_per_day * geju_rise_factor(content, players) if chaos else -cfg.geju_calm_per_day
     w = state.world
     pending = w.trend_accum.get(GEJU, 0.0) + per_day * cal_hours / 24
     whole = int(pending + (1e-9 if pending > 0 else -1e-9))  # 往零取整；容一點浮點誤差，24 個 1/24 才剛好湊成 1
