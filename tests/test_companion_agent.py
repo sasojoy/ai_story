@@ -265,7 +265,7 @@ def test_the_prompt_carries_last_seasons_bond_separately(content, state, world):
     prompt = companion_agent.build_system_prompt(content.characters["mate"], state, content, world, "mate")
     assert "【上一季】你們以前的交情：曾在潁川並肩殺敵。" in prompt
     assert "交情淡了" in prompt and "先前" in prompt and "上回" in prompt
-    assert "目前好感度 8" in prompt and "這一季還沒交談過" in prompt
+    assert "目前好感度 8" in prompt and "你與玩家目前的關係現況：還沒交談過" in prompt
 
 
 def test_the_past_line_does_not_double_the_full_stop(content, state, world):
@@ -284,6 +284,17 @@ def test_the_past_section_tells_the_model_not_to_say_season(content, state, worl
     assert "「先前」" in section and "「上回」" in section
     assert "不要說「這一季」「上一季」" in section
     assert section.count("這一季") == 1 and section.count("上一季") == 2  # 只剩那句禁令裡的各一次（標題那個「上一季」另算）
+
+
+def test_the_prompt_never_says_season_to_the_model(content, state, world):
+    """「季」是遊戲的說法：沒有【上一季】那一段的提示（第一季的玩家、沒聊過的人物）裡，連「這一季」「上一季」都不出現，
+    模型就沒有字可以學去講進對白；有那一段時，這兩個詞只出現在「不要說」的那一句裡。"""
+    prompt = companion_agent.build_system_prompt(content.characters["mate"], state, content, world, "mate")
+    assert "這一季" not in prompt and "上一季" not in prompt and "關係現況：還沒交談過" in prompt
+    state.player.past_notes = {"mate": "曾在潁川並肩殺敵"}
+    section = next(line for line in companion_agent.build_system_prompt(
+        content.characters["mate"], state, content, world, "mate").splitlines() if line.startswith("【上一季】"))
+    assert "不要說「這一季」「上一季」" in section
 
 
 def test_no_past_section_without_past_notes(content, state, world):

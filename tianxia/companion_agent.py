@@ -124,7 +124,7 @@ def build_system_prompt(
 ) -> str:
     p = state.player
     affinity = p.affinities.get(companion_id, 0)
-    my_note = p.relationship_notes.get(companion_id, "這一季還沒交談過")
+    my_note = p.relationship_notes.get(companion_id, "還沒交談過")  # 不寫「這一季」：「季」是遊戲的說法，模型會學去講進對白
     # 上一季的交情（正式版辛）：只給模型當背景；沒聊過的人物沒有這一段。筆記常自己就以句號結尾，不重複補
     past = p.past_notes.get(companion_id, "").strip().rstrip("。")
     past_str = (
