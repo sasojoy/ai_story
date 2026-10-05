@@ -14,7 +14,7 @@ from pydantic import BaseModel
 
 from . import (
     atlas, battle_instance, battlelog, calendar, companion_agent, craft, encounter, event_llm, figures, flavor, foreshadow,
-    journal, materials, orders, push, ranks, roster, skillview, team, timetable,
+    front_lines, journal, materials, orders, push, ranks, roster, skillview, team, timetable,
 )
 from .events import choice_label, event_candidates, has_events_here, pick_event, visible_choices
 from .guide import base_step_count, note_action, quest_text, step_text, tutorial_active, tutorial_intro
@@ -28,7 +28,7 @@ from .models import (
 from .ollama_client import OllamaClient
 from .rules import (
     GEJU, HUANGJIN, add_rumor, apply_effect, audience_bar, can_hear, can_meet, change_trend, check_who, current_day, display_name, fill_marks, free_text_rate,
-    front_chip, front_ids, front_of, humanize, in_chaos,
+    can_draw_side_change, front_chip, front_ids, front_of, front_text, humanize, in_chaos,
     is_revealed, pushable, rate_words, recompute_trends, resolve_goals, resolve_trend, resolve_trends, roll_check,
     season_one, season_one_off, stances, trend_name, trend_shown, trend_value, world_trend_value,
 )
@@ -1621,13 +1621,27 @@ class Game:
             lines.append(f"你在第 {me.fell_round} 回合倒下，轉為觀戰")
         trends = {t.id: t.name for t in c.scenario.trends}
         moved = resolve_trends(c, s.world, battle.outcome_trend_delta)  # 開關關著時戰線都寫成黃巾聲勢
-        deltas = [f"{trends.get(tid, tid)} {delta:+d}" for tid, delta in moved.items() if delta]
-        changes = deltas if earlier is None else []
-        if earlier is not None:
-            lines += [f"（第 {earlier} 季）{d}" for d in deltas]
+        # 第一季規則開著時，戰線與豪強割據的增減不寫數字（FB-064，同 change_trend）：這一季的是機器可讀的標籤，畫在戰鬥卡片
+        # 底下、照看的人的陣營上色，戰報不收（「大勢」那一行不寫，跟遊歷的戰鬥卡片一樣）；上一季的寫進敘事，就直接是那一句話
+        # （敘事沒有顏色）。其他的線、開關關著時照舊是帶正負號的數字。
+        moves = {tid: d for tid, d in moved.items() if d}
+        in_words = season_one(c, s.world)
+
+        def plain(tid: str) -> str:
+            return f"{trends.get(tid, tid)} {moves[tid]:+d}"
+
+        if earlier is None:
+            changes = [front_lines.mark(tid, d) if in_words and can_draw_side_change(c, tid) else plain(tid) for tid, d in moves.items()]
+            record_changes = [plain(tid) for tid in moves if not (in_words and can_draw_side_change(c, tid))]
+        else:
+            changes, record_changes = [], []
+            lines += [
+                f"（第 {earlier} 季）" + (front_text(c, tid, d, str(time)) if in_words and can_draw_side_change(c, tid) else plain(tid))
+                for tid, d in moves.items()
+            ]
         record = BattleRecord(
             id=s.battle_seq + 1, time=time, location=f"{label}{where}", kind="showdown", event=name, opponent=foes,
-            ours=[], tier=outcome, our_power=0.0, difficulty=0.0, side=side, notes=list(lines), changes=list(changes),
+            ours=[], tier=outcome, our_power=0.0, difficulty=0.0, side=side, notes=list(lines), changes=list(record_changes),
         )
         battlelog.add_record(s, record)
         s.battle_card = record.id

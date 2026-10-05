@@ -15,7 +15,7 @@ import pytest
 
 import server
 from conftest import FIXTURE, FixedRandom
-from tianxia import figures, front_lines, journal, rules, team, world
+from tianxia import battle_instance, battlelog, figures, front_lines, journal, rules, team, world
 from tianxia.content import ContentError, load_content, validate
 from tianxia.encounter import EncounterResult
 from tianxia.engine import Game
@@ -250,6 +250,115 @@ def test_the_home_page_payload_carries_the_chip_for_the_logged_in_viewer(on):
     ((classes, text),) = chips(view["now"])
     assert tone(classes) == "down" and text in {f"潁川汝南：官軍{phrase}" for phrase in SMALL}
     assert chips(view["latest"]) == chips(view["now"])
+
+
+# ── 全服決戰收場的大勢增減（Game._file_showdown）：同一套換法，數字不外露 ─────────────────
+
+
+def file_showdown(game, trend_delta, *, earlier=None, time=1234.0):
+    """一場收場的決戰（結果的大勢增減是 trend_delta）補送到這個角色手上；回傳那一筆戰報。"""
+    battle = battle_instance.BattleInstance(
+        battle_id="huangjin_showdown", phase="ended", outcome_title="官軍大勝", outcome_text="官軍火攻得手。",
+        outcome_trend_delta=trend_delta, end_time=time, record_id=1,
+    )
+    me = battle_instance.BattleParticipant(
+        name=game.state.player.name, faction=game.state.player.faction or "guan", neili=100, neili_cap=100, acted_rounds=2,
+    )
+    game._file_showdown(battle, me, earlier)
+    return game.state.battles[0]
+
+
+@pytest.mark.parametrize("faction, front_tone, geju_tone", [
+    (None, "flat", "flat"),
+    ("guan", "up", "flat"),
+    ("huang", "down", "flat"),
+    ("haoqiang", "flat", "up"),
+])
+def test_a_showdown_result_shows_the_front_move_as_a_phrase_chip_under_the_card(on, faction, front_tone, geju_tone):
+    """這一季打的決戰：潁川汝南 −15（官軍大舉推進）與割據 +3（豪強趁亂坐大）是江湖紀錄裡機器可讀的標籤，畫在戰鬥卡片底下、
+    照看的人的陣營上色；戰報不收（跟遊歷的戰鬥卡片一樣，「大勢」那一行不再寫數字），原本寫的「潁川汝南 -15」不見了。"""
+    game = make(on, faction)
+    record = file_showdown(game, {"yingru": -15, "geju": 3})
+    assert game.state.journal[0].changes == [front_lines.mark("yingru", -15), front_lines.mark("geju", 3)]
+    assert record.changes == [] and not any(front_lines.MARK in t for t in (*record.notes, *record.changes))
+    assert game.shows_battle_card()
+    (front, geju) = chips(game.battle_extra_html())
+    assert (tone(front[0]), tone(geju[0])) == (front_tone, geju_tone)
+    assert front[1] in {f"潁川汝南：官軍{phrase}" for phrase in LARGE} and geju[1] in GEJU_UP
+    for card in (battlelog.card_text(record), battlelog.detail_text(record)):
+        assert "**大勢**" not in card and "潁川汝南 -15" not in card and not re.search(r"[+-]\d", card), card
+
+
+def test_a_showdown_that_pulls_the_geju_down_is_red_for_haoqiang(on):
+    game = make(on, "haoqiang")
+    file_showdown(game, {"geju": -4})
+    ((classes, text),) = chips(game.battle_extra_html())
+    assert tone(classes) == "down" and text in GEJU_DOWN
+
+
+def test_last_seasons_showdown_says_the_front_move_in_words_without_a_number(on):
+    """上一季打的：數值變化放不進去（看起來像剛發生在你身上），大勢的增減寫進敘事，標明第幾季；有開關時是那一句話、不是數字。"""
+    game = make(on, "guan")
+    record = file_showdown(game, {"yingru": -15, "geju": 2}, earlier=1)
+    entry = game.state.journal[0]
+    assert entry.changes == [] and record.changes == []
+    said = [line for line in entry.lines if line.startswith("（第 1 季）")]
+    assert len(said) == 2
+    assert said[0].removeprefix("（第 1 季）") in {f"潁川汝南：官軍{phrase}" for phrase in LARGE}
+    assert said[1].removeprefix("（第 1 季）") in GEJU_UP
+    assert said == [line for line in record.notes if line.startswith("（第 1 季）")]
+    assert not any(re.search(r"[+-]\d", line) for line in (*entry.lines, *record.notes))
+
+
+def test_a_showdown_keeps_the_old_wording_with_the_switch_off(real):
+    """開關關著：戰線都寫成黃巾聲勢，增減照舊是帶正負號的數字（一個字都不變）：這一季的放進數值變化與戰報，上一季的寫進敘事。"""
+    game = make(real, "guan")
+    record = file_showdown(game, {"yingru": -35})
+    assert game.state.journal[0].changes == ["黃巾聲勢 -35"] and record.changes == ["黃巾聲勢 -35"]
+    assert "**大勢**　黃巾聲勢 -35" in battlelog.card_text(record)
+    other = make(real, "guan", "乙")
+    record = file_showdown(other, {"yingru": -35}, earlier=1)
+    assert "（第 1 季）黃巾聲勢 -35" in other.state.journal[0].lines and record.changes == []
+
+
+def test_a_showdown_move_on_a_line_that_is_not_a_front_keeps_the_old_wording_even_with_the_switch_on(on):
+    game = make(on)
+    record = file_showdown(game, {"yuxi": 5})
+    assert game.state.journal[0].changes == ["玉璽碎片線索 +5"] and record.changes == ["玉璽碎片線索 +5"]
+
+
+# ── 紀錄裡存著、內容已經沒有的線（內容改版）：畫不出來就丟掉，不當機、也不外露 ─────────────────
+
+
+@pytest.mark.parametrize("stale", ["ghost", "yuxi"])  # ghost＝內容裡沒有這條線；yuxi＝有，但不是戰線也不是割據（不歸這個換法管）
+def test_a_stored_mark_for_a_line_content_no_longer_has_is_dropped_when_the_journal_is_drawn(on, stale):
+    """內容改版後，舊存檔的江湖紀錄裡可能還存著指向已經不存在（或不再是戰線）的線的戰況變化：畫「剛剛」、紀錄列、首頁資料時
+    不能丟 StopIteration 把 /api/main 弄壞；這枚標籤畫不出來，丟掉（其他標籤照畫、原文不外露）。"""
+    game = make(on, "guan")
+    game.state.journal.insert(0, journal.JournalEntry(
+        time=game.state.world.time, title="舊紀錄", changes=["銀兩 +5", front_lines.mark(stale, -2)],
+    ))
+    assert rules.front_chip(on, "guan", front_lines.mark(stale, -2), "1") is None
+    for html in (game.latest_entry_html(), game.now_entry_html(), game.journal_html(0, 5)):
+        assert texts(chips(html)) == ["銀兩 +5"]
+        assert front_lines.MARK not in html and stale not in html
+    view = server.main_view(game)
+    assert all(front_lines.MARK not in view[key] and stale not in view[key] for key in ("now", "latest", "journal"))
+    game.state.journal[0] = game.state.journal[0].model_copy(update={"changes": [front_lines.mark(stale, -2)]})
+    assert chips(game.latest_entry_html()) == []  # 只剩這一枚時，連空的標籤列都不畫
+
+
+def test_a_stale_mark_in_an_action_reply_is_dropped_too(on):
+    """Game._log（回給呼叫端與存進 log 的話，管理者工具列的提示也走這裡）遇到畫不出來的戰況變化：丟掉，其他話照回。"""
+    game = make(on)
+    msgs = ["你喝了一口茶。", front_lines.mark("ghost", -2), front_lines.mark("yingru", -1)]
+    out = rules.humanize(on, msgs, "1")
+    assert out[0] == "你喝了一口茶。" and len(out) == 2 and out[1].startswith("潁川汝南：官軍")
+    before = list(game.state.log)  # 開場白已經在 log 裡
+    assert game._log([front_lines.mark("ghost", 3)]) == []  # 只有這一枚：什麼都不回、也不寫進 log
+    assert game.state.log == before
+    assert game._log(["（好）", front_lines.mark("ghost", 3)]) == ["（好）"]
+    assert not any(front_lines.MARK in m or "ghost" in m for m in game.state.log)
 
 
 # ── 開關關著與背景推動 ─────────────────────────────────────────

@@ -475,6 +475,12 @@ def is_side_trend(content: Content, trend_id: str) -> bool:
     return trend_id == GEJU or trend_id in front_ids(content)
 
 
+def can_draw_side_change(content: Content, trend_id: str) -> bool:
+    """這條線的戰況變化畫得出來嗎：內容裡有這條線，而且它還是戰線或豪強割據。紀錄裡存的是機器可讀的寫法，存檔可能比內容舊
+    （內容改版拿掉了那條線）：畫不出來的一律丟掉，不當機、也不把原文露給玩家（front_chip、humanize 都先問這一關）。"""
+    return _trend(content, trend_id) is not None and is_side_trend(content, trend_id)
+
+
 def _beneficiary(content: Content, trend_id: str, delta: int) -> FactionDef | None:
     """這一次往這個方向動，是哪一個陣營佔了便宜：陣營目標（goals）的方向跟變動同號的那一個。
     戰況 0 是官軍穩控、100 是黃巾控制，這件事寫在內容裡（官軍 goals −1、黃巾 +1），不在程式裡。"""
@@ -511,9 +517,10 @@ def front_favour(content: Content, viewer: str | None, trend_id: str, delta: int
 
 def front_chip(content: Content, viewer: str | None, change: str, seed: str) -> tuple[str, int] | None:
     """一項機器可讀的戰況變化（front_lines.mark，江湖紀錄加總過的）→ (畫面上的一句話, 對 viewer 的好壞 1／0／−1)；
-    不是這種變化回 None。journal 畫數值標籤時用；顏色在畫的那一刻才決定，紀錄裡存的東西不帶任何一方的立場。"""
+    不是這種變化、或那條線內容裡已經沒有（can_draw_side_change）回 None，journal 就丟掉這枚標籤。
+    journal 畫數值標籤時用；顏色在畫的那一刻才決定，紀錄裡存的東西不帶任何一方的立場。"""
     parsed = front_lines.unmark(change)
-    if parsed is None:
+    if parsed is None or not can_draw_side_change(content, parsed[0]):
         return None
     trend_id, delta = parsed
     return front_text(content, trend_id, delta, seed), front_favour(content, viewer, trend_id, delta)
@@ -521,7 +528,8 @@ def front_chip(content: Content, viewer: str | None, change: str, seed: str) -> 
 
 def humanize(content: Content, msgs: list[str], seed: str) -> list[str]:
     """一串訊息裡機器可讀的戰況變化換成一句話：同一條線的變動先加總（−1 與 −2 是 −3 一句話），放在那條線第一次出現的位置，
-    加總為零的拿掉。給 Game._log（回給呼叫端與存進 log 的話；管理者工具列的提示也是），沒有這種變化時原樣回傳。"""
+    加總為零的拿掉；那條線內容裡已經沒有的（can_draw_side_change）也拿掉，原文不外露。
+    給 Game._log（回給呼叫端與存進 log 的話；管理者工具列的提示也是），沒有這種變化時原樣回傳。"""
     totals: dict[str, int] = {}
     for msg in msgs:
         parsed = front_lines.unmark(msg)
@@ -535,7 +543,7 @@ def humanize(content: Content, msgs: list[str], seed: str) -> list[str]:
         parsed = front_lines.unmark(msg)
         if parsed is None:
             out.append(msg)
-        elif totals[parsed[0]] and parsed[0] not in said:
+        elif can_draw_side_change(content, parsed[0]) and totals[parsed[0]] and parsed[0] not in said:
             said.add(parsed[0])
             out.append(front_text(content, parsed[0], totals[parsed[0]], seed))
     return out
