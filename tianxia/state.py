@@ -319,6 +319,16 @@ class Fighter(BaseModel):
     level: int
 
 
+class LevelUps(BaseModel):
+    """一場打完升級的人（FB-074）：「剛剛」的戰鬥卡片拿它畫一行簡短的「升到第 N 級」（battlelog.levelup_line），
+    戰報頁與江湖紀錄照舊寫完整的句子。誰升到第幾級是結構化存下來的，不從句子的字裡讀回來。"""
+
+    you: int | None = None  # 本人最後升到第幾級；本人沒升級是 None
+    points: int = 0  # 本人升級之後還沒配的屬性點總數（那一刻的；畫卡片時改用現在的，見 levelup_line）
+    mates: list[tuple[str, int]] = Field(default_factory=list)  # 升級的同伴（名字，最後升到第幾級），照隊伍順序
+    lines: list[str] = Field(default_factory=list)  # 這一場寫進 notes 的升級句子原文（卡片不再重複，戰報頁照舊寫）
+
+
 class BattleRecord(BaseModel):
     """一場遭遇/劇情戰的紀錄（sanguo-companions 合併重寫：單次判定，取代舊的逐回合戰報，
     見 tianxia/encounter.py）。kind 是 showdown 的是全服決戰補送給參戰者的那一筆（FB-027）：沒有我方威力與
@@ -345,6 +355,7 @@ class BattleRecord(BaseModel):
     # 大場面模型寫的過程（武學與成長設計 8.3）：照結果挑佔上風或落下風那一版；有就取代範本句子的回合（rounds 照樣算好）。
     # 叫 narration 不叫 story：battlelog 的 story_text／_story_block 已經是「結果」那一段（計畫三 G11）
     narration: str = ""
+    levelups: LevelUps | None = None  # 這一場有人升級才有（FB-074）；舊戰報沒有，卡片照 notes 原文
 
 
 class JournalEntry(BaseModel):

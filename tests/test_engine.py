@@ -4848,6 +4848,29 @@ def test_a_won_training_fight_gives_every_fighter_the_exp(content, game):
     assert "🧍 韓鐵　第2級" in game.status_text()
 
 
+def test_the_fight_card_puts_every_level_up_on_one_line(content, game):
+    """FB-074：升級的句子（本人一句一級、配點提示、每位同伴各一句）在「剛剛」的戰鬥卡片上收成一行，戰報頁與江湖紀錄照舊；
+    點數跟狀態列同一個數（配了就少）。"""
+    rules.learn_skill(game.state, game.content, "fist")
+    _companion_on_the_team(game, exp=90)
+    game.state.player.member.exp = 90
+    walk_to(game, "lake")
+    game.rng = FixedRandom(0.99)
+    game.choose("act:train")
+    record = game.state.battles[0]
+    assert (record.levelups.you, record.levelups.points, record.levelups.mates) == (2, 1, [("韓鐵", 2)])
+    card = game.battle_card()
+    assert "升到第 2 級（可配 1 點）・韓鐵升到第 2 級　**得失**" in card  # 在結果的最後、得失的前面（前面可能有別的敘事，例如大勢的變動）
+    assert card.count("升到第") == 2 and "升到第 2 級！" not in card and "屬性可以分配" not in card
+    detail = game.battle_detail(record.id)  # 戰報頁：完整的句子
+    assert "沈浪升到第 2 級！" in detail and "你有 1 點屬性可以分配（點名號展開）。" in detail and "韓鐵升到第 2 級！" in detail
+    assert "沈浪升到第 2 級！" in game.state.journal[0].lines and "韓鐵升到第 2 級！" in game.state.journal[0].lines  # 江湖紀錄也是
+    assert game.battle_extra_html() == ""  # 卡片底下的補充不重複句子
+    game.allocate_stat("str")
+    card = game.battle_card()
+    assert "升到第 2 級・韓鐵升到第 2 級　**得失**" in card and "可配" not in card
+
+
 def test_a_drill_gives_every_fighter_the_exp_too(content, game):
     _training_factions(content)
     content.squads["thug"].faction = "huang"

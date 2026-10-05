@@ -2533,8 +2533,8 @@ class Game:
                 record.materials.append(line.removeprefix(materials.GRANT_PREFIX))
                 msgs.append(line)
         record.exp = squad.exp
-        levels = team.add_team_exp(self.state, self.content, self.world, squad.exp)  # 每人都拿（FB-002）
-        record.notes += levels
+        levels, record.levelups = team.grant_team_exp(self.state, self.content, self.world, squad.exp)  # 每人都拿（FB-002）
+        record.notes += levels  # 完整的句子留著（戰報頁、江湖紀錄）；戰鬥卡片畫 levelups 那一行簡短的（FB-074）
         return msgs + levels
 
     def _file_battle(self, record) -> str:
@@ -3185,7 +3185,8 @@ class Game:
 
     def battle_card(self) -> str | None:
         record = battlelog.find(self.state, self.state.battle_card)
-        return battlelog.card_text(record, self.stamp) if record else None
+        # 升級那一行的「可配 N 點」照現在的點數寫（配了就少），跟狀態列同一個數（FB-074）
+        return battlelog.card_text(record, self.stamp, points=self.state.player.stat_points) if record else None
 
     def battle_card_id(self) -> int | None:
         record = battlelog.find(self.state, self.state.battle_card)
