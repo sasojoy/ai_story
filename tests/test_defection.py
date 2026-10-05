@@ -8,10 +8,11 @@ from pathlib import Path
 
 import pytest
 
+from tianxia import defection
 from tianxia.content import ContentError, load_content, validate
 from tianxia.engine import Game
 from tianxia.models import FactionDef
-from tianxia.state import PlayerState
+from tianxia.state import Convoy, PlayerState, Summons
 
 CONTENT_DIR = Path(__file__).parent.parent / "content"
 
@@ -54,3 +55,109 @@ def test_defect_text_must_be_traditional(real):
     real.scenario.factions[0].defect_text = "过去的事不问"
     with pytest.raises(ContentError, match="defect_text"):
         validate(real)
+
+
+# ── Task 2：叛投的規則 ─────────────────────────────────
+
+
+def _faction(content, faction_id):
+    return next(f for f in content.scenario.factions if f.id == faction_id)
+
+
+def test_targets_only_at_another_factions_join_point(on):
+    game = _game(on, faction="guan", at="huangjin_camp")
+    assert [f.id for f in defection.targets_here(game.state, on)] == ["huang"]
+    game.state.player.location = "changshe"  # 自己陣營的投靠點：沒有
+    assert defection.targets_here(game.state, on) == []
+    game.state.player.location = "yingchuan"  # 不是任何人的投靠點
+    assert defection.targets_here(game.state, on) == []
+
+
+def test_no_targets_for_loners_or_after_a_defection(on):
+    loner = _game(on, at="huangjin_camp")
+    assert defection.targets_here(loner.state, on) == []
+    once = _game(on, faction="guan", at="huangjin_camp")
+    once.state.player.defected = True
+    assert defection.targets_here(once.state, on) == []
+
+
+def test_no_targets_with_switch_off(real):
+    # 分開測：on 與 real 是同一份內容（on 只是把開關打開），同一個測試裡再拿 real 就已經是開著的了
+    off = _game(real, faction="guan", at="huangjin_camp")  # 開關關著（config.json 預設）
+    assert defection.targets_here(off.state, real) == []
+
+
+def test_prompt_names_the_cost(on):
+    game = _game(on, faction="guan", at="huangjin_camp")
+    p = game.state.player
+    p.rank, p.followers = 2, ["follower_guan_spear", "follower_guan_crossbow"]
+    text = defection.prompt(game.state, on, _faction(on, "huang"), "目前官軍 1 人、黃巾軍 0 人、地方豪強 0 人")
+    assert "身份歸零（你現在是屯長）" in text and "2 名部下全部離隊" in text
+    assert "這一季替官軍記下的功勞全部作廢" in text and "一季只能叛投一次" in text
+    assert text.endswith("確定叛投黃巾軍？")
+
+
+def test_defect_resets_rank_and_old_progress(on):
+    game = _game(on, faction="guan", at="huangjin_camp")
+    p = game.state.player
+    p.rank, p.followers, p.contrib, p.contrib_weeks = 2, ["follower_guan_spear"], 420, {1: 420}
+    p.summons = Summons(rank=3, figure="luzhi", location="luzhi_camp")
+    p.donations, p.convoy = {"wan_city:grain": 8}, Convoy(order="o1", grain=4, from_loc="xinye", to_loc="wan_city")
+    p.affinities, p.fragments = {"huangfusong": 30}, {"fs_changshe_guan": [0, 2]}
+    msgs = defection.defect(game.state, on, _faction(on, "huang"))
+    assert (p.faction, p.defected, p.rank, p.summons, p.followers) == ("huang", True, 0, None, [])
+    assert (p.contrib, p.contrib_weeks, p.donations, p.convoy) == (0, {}, {}, None)
+    assert p.affinities == {"huangfusong": 30} and p.fragments == {"fs_changshe_guan": [0, 2]}  # 帶得走的照舊
+    assert msgs[0] == _faction(on, "huang").defect_text and msgs[-1] == "你叛出官軍，投了黃巾軍。"
+
+
+def test_defect_publishes_two_faction_notes_and_a_local_rumor(on):
+    game = _game(on, faction="guan", at="huangjin_camp")
+    before = len(game.state.world.rumors)
+    defection.defect(game.state, on, _faction(on, "huang"))
+    new = game.state.world.rumors[before:]
+    assert [(r.layer, r.faction) for r in new] == [("faction", "guan"), ("faction", "huang"), ("local", None)]
+    assert new[0].text == "甲叛離了官軍，投奔黃巾軍。"
+    assert new[1].text == "甲從官軍投奔過來了。"
+    assert new[2].text == "甲在黃巾別部營寨改投了黃巾軍。" and new[2].location == "huangjin_camp" and new[2].named
+    assert all(r.layer != "world" for r in new)  # 不上天下大事（傳聞分層第五節）
+
+
+def test_anonymous_defector_is_not_named(on):
+    game = _game(on, faction="guan", at="huangjin_camp")
+    game.state.player.anonymous = True
+    before = len(game.state.world.rumors)
+    defection.defect(game.state, on, _faction(on, "huang"))
+    new = game.state.world.rumors[before:]
+    assert all("某位少俠" in r.text and "甲" not in r.text for r in new)
+    assert new[2].named is False
+
+
+def test_defect_leaves_old_active_list(on):
+    game = _game(on, faction="guan", at="huangjin_camp")
+    w = game.state.world
+    w.active_pushers = {"guan": {"甲": w.time, "乙": w.time}, "huang": {"丙": w.time}}
+    defection.defect(game.state, on, _faction(on, "huang"))
+    assert w.active_pushers == {"guan": {"乙": w.time}, "huang": {"丙": w.time}}
+    solo = _game(on, name="丁", faction="guan", at="huangjin_camp")
+    solo.state.world.active_pushers = {"guan": {"丁": solo.state.world.time}}
+    defection.defect(solo.state, on, _faction(on, "huang"))
+    assert "guan" not in solo.state.world.active_pushers  # 清空的陣營整列拿掉（同 push.drop_stale）
+
+
+def test_defect_leaves_old_faction_sect_only(on):
+    game = _game(on, faction="guan", at="huangjin_camp")
+    game.state.player.sect = "yingchuan_academy"  # 潁川書院歸官軍
+    msgs = defection.defect(game.state, on, _faction(on, "huang"))
+    assert game.state.player.sect is None and "叛出:yingchuan_academy" in game.state.player.flags
+    assert "你也就此離開了潁川書院。" in msgs
+    other = _game(on, name="乙", faction="huang", at="changshe")
+    other.state.player.sect = "cao_manor"  # 曹氏莊院歸豪強，不是舊陣營（黃巾）的門派
+    defection.defect(other.state, on, _faction(on, "guan"))
+    assert other.state.player.sect == "cao_manor"
+
+
+def test_clear_progress_is_the_one_place_to_reset():
+    p = PlayerState(name="甲", location="x", stats={}, stamina=0, rank=3, contrib=5, followers=["a"])
+    defection.clear_progress(p)
+    assert (p.rank, p.contrib, p.followers) == (0, 0, [])
