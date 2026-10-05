@@ -4800,3 +4800,14 @@ def test_ending_once_when_battle_running(content, world):
     assert game.state.battles == []
     game.advance(60)  # 收季之後再推也不會再收一次
     assert game.world.get_season().ending_id == season.ending_id
+
+
+def test_a_character_made_mid_season_gets_one_season_start_entry(content, world):
+    """FB-052：第二季開季之後才建立的角色，江湖紀錄只有一則「賽季開始」（以前換季的重來與建角色各寫一則）。"""
+    content.config.admins = ["管理者"]
+    admin = Game.new(content, "管理者", rng=random.Random(1), world=world)
+    admin.admin_end_season(now=100.0)
+    admin.admin_next_season(now=200.0)
+    newcomer = Game.new(content, "新來的", rng=random.Random(2), world=world)
+    assert [e.tag for e in newcomer.state.journal].count("賽季開始") == 1
+    assert newcomer.state.player.season_number == world.get_season_number() == 2
