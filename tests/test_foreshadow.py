@@ -436,6 +436,7 @@ def test_lock_is_invisible(fs, world):
     jia.state.player.clue_items = {"fs_reeds": 1, "fs_oil": 1}
     jia._save_season()
     ding = player(fs, world, "丁", "guan", "lake", time=t)
+    world.record_faction("丁", "guan")  # 真人投靠就在名冊上（這裡直接設陣營沒走投靠）；名冊空著時畫面的割據說明會隨甲的第一次行動變（FB-065 M1）
     refresh(ding)
     before = server.main_view(ding)
     finish_fire_guan(jia, wind(world))

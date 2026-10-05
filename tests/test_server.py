@@ -153,6 +153,12 @@ def test_main_view_carries_the_chaos_band_and_which_fronts_are_in_it(game, monke
     assert view["status"]["chaos_band"] == {"low": 35, "high": 65}
     assert [(f["name"], f["value"], f["chaos"]) for f in view["fronts"]] == [
         ("潁川汝南", 35, True), ("南陽", 65, True), ("冀州", 66, False)]  # 35 與 65 剛好在邊上：算在亂局裡
+    # 名冊空著：割據的漲速乘人數係數、一點不漲，說明不能說漸長（FB-065 M1）
+    empty = "2 條戰線在亂局，但還沒有人投靠，割據暫時不動"
+    assert view["status"]["stance_notes"] == {"sum": "三條戰線合計", "haoqiang": empty}
+    assert empty in view["trends"]
+    game.world.record_faction("投靠者", "guan")
+    view = server.look(game, server.main_view)
     assert view["status"]["stance_notes"] == {"sum": "三條戰線合計", "haoqiang": "2 條戰線在亂局，割據漸長"}
     game.world.mutate_season(lambda season: season.trends.update(yingru=34, nanyang=66, jizhou=66))
     view = server.look(game, server.main_view)

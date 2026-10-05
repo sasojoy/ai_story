@@ -1361,6 +1361,11 @@ class Game:
         counts = self.world.faction_counts()
         return "目前" + "、".join(f"{f.name} {counts.get(f.id, 0)} 人" for f in self.content.scenario.factions)
 
+    def _roster_players(self) -> int:
+        """這一季投靠了陣營的人數（全服投靠名冊，真人與假人一樣算）：跟 world.advance_world_state 查來縮放割據漲速的是
+        同一個算式，割據的說明（rules.chaos_note）才說得準現在是在漲還是不動（FB-065 M1）。每次畫面現查，只是讀。"""
+        return sum(self.world.faction_counts().values())
+
     def _record_faction(self) -> None:
         """把自己的陣營記進全服投靠名冊（陣營人數看這份）；已經記過就不再寫。choose() 結束時
         與 sync() 都會呼叫，名冊出現之前就投靠了的人（或拜入門派而投靠的人）也會補記進去。"""
@@ -3353,7 +3358,7 @@ class Game:
             ]
             data["chaos_band"] = {"low": c.config.chaos_low, "high": c.config.chaos_high}
             data["stances"] = stances(s, c)
-            data["stance_notes"] = {"sum": stance_sum_note(c), "haoqiang": chaos_note(s, c)}
+            data["stance_notes"] = {"sum": stance_sum_note(c), "haoqiang": chaos_note(s, c, self._roster_players())}
         return data
 
     def _calendar_status(self) -> dict:
@@ -3521,7 +3526,10 @@ class Game:
                 continue
             value = trend_value(self.state, self.content, trend.id)
             bar = "█" * (value // 5) + "░" * (20 - value // 5)
-            note = f"\n\n現況：{chaos_note(self.state, self.content)}。" if trend.id == GEJU and season_one(self.content, w) else ""
+            note = (
+                f"\n\n現況：{chaos_note(self.state, self.content, self._roster_players())}。"
+                if trend.id == GEJU and season_one(self.content, w) else ""
+            )
             parts.append(f"**{trend.name}** {value}/100\n\n`{bar}`\n\n{trend.desc}{note}")  # 割據：說明後面接現在漲或落（FB-065，同江湖頁態勢那一行）
         if w.ended:
             parts.append(f"## 結局：{w.ending_title}\n\n{w.ending_text}")

@@ -190,6 +190,12 @@ def _set_fronts(state, yingru, nanyang, jizhou):
     state.world.trends.update(yingru=yingru, nanyang=nanyang, jizhou=jizhou)
 
 
+def _join(game, count=1):
+    """這一季的投靠名冊上有 count 個人（名冊空著，割據不漲，畫面上的說明也跟著變，見 FB-065 M1）。"""
+    for i in range(count):
+        game.world.record_faction(f"投靠者{i}", "guan")
+
+
 def test_huangjin_is_the_weighted_fronts(on):
     game = _game(on)
     s = game.state
@@ -535,6 +541,7 @@ def test_chaos_band_edges_are_included_everywhere(on, value, inside):
     """35 與 65 都算在亂局裡（含兩端）：in_chaos、chaos_fronts、狀態列的標記、割據的漲落、態勢那一行，一個說法。"""
     game = _game(on)
     s = game.state
+    _join(game)
     _set_fronts(s, value, 0, 0)  # 南陽與冀州都在 0：穩
     assert rules.in_chaos(s, on, "yingru") is inside
     assert (rules.chaos_fronts(s, on) == ["yingru"]) is inside
@@ -552,6 +559,7 @@ def test_chaos_band_edges_come_from_config(on):
     """亂局帶的兩端讀設定（跟 in_chaos 同一份），狀態列把它送出去，前端不寫死 35／65。"""
     on.config.chaos_low, on.config.chaos_high = 40, 60
     game = _game(on)
+    _join(game)
     _set_fronts(game.state, 39, 40, 61)
     data = game.status_data()
     assert data["chaos_band"] == {"low": 40, "high": 60}
@@ -561,6 +569,7 @@ def test_chaos_band_edges_come_from_config(on):
 
 def test_status_says_what_the_stance_numbers_are_made_of(on):
     game = _game(on)
+    _join(game)
     _set_fronts(game.state, 20, 50, 80)  # 只有南陽在亂局
     data = game.status_data()
     assert data["chaos_band"] == {"low": 35, "high": 65}
@@ -574,6 +583,7 @@ def test_status_says_what_the_stance_numbers_are_made_of(on):
 
 def test_the_trends_page_gives_the_geju_note_the_same_wording(on):
     game = _game(on)
+    _join(game)
     s = game.state
     _set_fronts(s, 40, 50, 90)
     text = game.trends_text()
@@ -597,11 +607,91 @@ def test_the_trends_page_is_unchanged_with_the_switch_off(real):
 def test_chaos_and_stance_notes_are_the_same_for_every_faction(on, faction):
     """亂局與態勢是全服公開的戰況，不分陣營、散人也看得到：誰看都一樣（沒有別陣營的資訊混進來）。"""
     game = _game(on)
+    _join(game)
     game.state.player.faction = faction
     _set_fronts(game.state, 40, 50, 90)
     data = game.status_data()
     assert [f["chaos"] for f in data["fronts"]] == [True, True, False]
     assert data["stance_notes"]["haoqiang"] == "2 條戰線在亂局，割據漸長"
+
+
+# ── FB-065 M1：名冊空著時，亂局那一句不能說割據在長 ──────────────
+
+EMPTY_ROSTER_NOTE = "2 條戰線在亂局，但還沒有人投靠，割據暫時不動"
+
+
+def test_an_empty_roster_says_the_geju_is_not_moving(on):
+    """geju_tick 的漲速乘人數係數，沒人投靠就是 0：態勢那一行與見聞→大勢的現況，都不能說「漸長」。"""
+    game = _game(on)
+    _set_fronts(game.state, 40, 50, 90)  # 南陽、潁川在亂局
+    assert game.status_data()["stance_notes"]["haoqiang"] == EMPTY_ROSTER_NOTE
+    text = game.trends_text()
+    assert f"現況：{EMPTY_ROSTER_NOTE}。" in text and "割據漸長" not in text
+
+
+def test_one_player_on_the_roster_makes_the_note_say_the_geju_grows_again(on):
+    game = _game(on)
+    _join(game)
+    _set_fronts(game.state, 40, 50, 90)
+    assert game.status_data()["stance_notes"]["haoqiang"] == "2 條戰線在亂局，割據漸長"
+    assert "現況：2 條戰線在亂局，割據漸長。" in game.trends_text()
+
+
+def test_no_chaos_still_says_the_geju_falls_with_an_empty_roster(on):
+    """回落不乘人數係數：名冊空著、沒有戰線在亂局，割據照樣一天落一點，說明寫漸消。"""
+    game = _game(on)
+    _set_fronts(game.state, 20, 80, 90)
+    assert game.status_data()["stance_notes"]["haoqiang"] == "沒有戰線在亂局，割據漸消"
+    assert "現況：沒有戰線在亂局，割據漸消。" in game.trends_text()
+
+
+def test_the_roster_follows_the_store_when_the_note_is_drawn(on):
+    """名冊人數是每次畫面現查的（跟 advance_world_state 同一個算式：全服各陣營人數加總），人一投靠說明就跟著變。"""
+    game = _game(on)
+    _set_fronts(game.state, 40, 50, 90)
+    assert game.status_data()["stance_notes"]["haoqiang"] == EMPTY_ROSTER_NOTE
+    _join(game)
+    assert game.status_data()["stance_notes"]["haoqiang"] == "2 條戰線在亂局，割據漸長"
+
+
+@pytest.mark.parametrize("players", [None, 0, 1, 15, 40])
+@pytest.mark.parametrize("fronts, count", CHAOS_CASES)
+def test_the_geju_note_follows_the_same_per_day_change_as_geju_tick(on, fronts, count, players):
+    """說明讀的是 geju_tick 用的那個每曆日變動（rules.geju_per_day）：說漸長就真的在漲，說暫時不動就真的一點不動，
+    說漸消就真的在落；players 不傳（None）＝不縮放，照舊。"""
+    s = _game(on).state
+    _set_fronts(s, *fronts)
+    per_day = rules.geju_per_day(s, on, players)
+    before = s.world.trends["geju"]
+    for _ in range(24):  # 一曆日
+        rules.geju_tick(s, on, 1, players=players)
+    delta = s.world.trends["geju"] - before
+    moved = delta + s.world.trend_accum.get("geju", 0.0)  # 不足一點的累積在 trend_accum：整點加零頭就是這一曆日實際的變動
+    note = rules.chaos_note(s, on, players)
+    assert moved == pytest.approx(per_day)
+    if not count:
+        assert per_day == -1 and note == "沒有戰線在亂局，割據漸消"
+    elif players == 0:
+        assert per_day == 0 and delta == 0
+        assert note == f"{count} 條戰線在亂局，但還沒有人投靠，割據暫時不動"
+    else:
+        assert per_day > 0 and note == f"{count} 條戰線在亂局，割據漸長"
+
+
+def test_a_pure_call_without_the_roster_keeps_the_unscaled_note(on):
+    """沒給名冊人數（純函式呼叫）＝不知道，照設計的速度：說漸長，跟以前一字不差。"""
+    s = _game(on).state
+    _set_fronts(s, 40, 50, 90)
+    assert rules.chaos_note(s, on) == "2 條戰線在亂局，割據漸長"
+
+
+def test_a_geju_that_cannot_rise_for_another_reason_does_not_blame_the_roster(on):
+    """設定把每條戰線的漲速調成 0（名冊有人）：割據一樣不動，但不能說「還沒有人投靠」。"""
+    on.config.geju_chaos_per_day = 0
+    s = _game(on).state
+    _set_fronts(s, 40, 50, 90)
+    note = rules.chaos_note(s, on, players=5)
+    assert "割據漸長" not in note and "還沒有人投靠" not in note and "割據不動" in note
 
 
 def test_switch_on_but_season_unstamped_behaves_like_switch_off(real):
