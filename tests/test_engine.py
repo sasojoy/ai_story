@@ -6301,6 +6301,46 @@ def test_a_journey_costs_less_stamina_with_light_body_and_the_button_says_so(gam
     assert before - game.state.player.stamina == base - 2
 
 
+@pytest.mark.parametrize("traits_worn", [(), ("慢", "慢", "慢"), ("虛", "虛", "虛"), ("剛", "剛", "剛")])
+def test_the_models_push_in_a_big_fight_is_the_same_points_with_or_without_roll_traits(game, traits_worn):
+    """Task 3 審查 I1：判讀的優勢（最多 ±15 個百分點，武學與成長設計 8.3）走完整條路（_fight_with → team.fight →
+    resolve_encounter）推的勝算，不因為本人帶了穩（慢）、險（虛）、破甲（剛）而變多變少：每一組都剛好 +15 個百分點。
+    運氣用均勻切成的格子當亂數，沒有抽樣誤差；難度挑成沒有優勢時剛好五成贏。"""
+    from tianxia import fight_llm
+
+    if traits_worn:
+        _wear_trait_art(game, "試招拳", traits_worn[0], list(traits_worn), quality="絕學")
+    base_power = game._fight_with(game.content.squads["thug"], None).our_power
+    cut = team.trait_mods(game.content, traits.loadout(game.state, game.content, game.world)).difficulty_cut
+    difficulty = base_power / (1.15 * (1 - cut))  # 險勝線在當作的難度的 15%：威力剛好到線，運氣要到 0 才過，五成
+    game.content.squads["thug"] = game.content.squads["thug"].model_copy(update={"difficulty": difficulty})
+    squad = game.content.squads["thug"]
+
+    def win_rate(judged):
+        wins = 0
+        for i in range(2000):
+            game.rng = FixedRandom((i + 0.5) / 2000)
+            wins += game._fight_with(squad, judged).tier in team.WIN_TIERS
+        return wins / 2000
+
+    base = win_rate(None)
+    assert base == pytest.approx(0.5, abs=0.01)
+    pushed = win_rate(fight_llm.Judgment(advantage=15))
+    assert pushed - base == pytest.approx(0.15, abs=0.01)
+    assert win_rate(fight_llm.Judgment(advantage=-15)) - base == pytest.approx(-0.15, abs=0.01)
+
+
+def test_actions_that_cost_nothing_do_not_build_the_cost_table(game):
+    """不花體力的行動（打坐、起身……）不必算各行動的體力（要翻武學的資料）；要花體力的才算、而且只算一次。"""
+    spy = mock.Mock(wraps=game._action_costs)
+    game._action_costs = spy
+    game._act("rest")
+    game._act("stand")
+    assert spy.call_count == 0
+    game._act("explore")
+    assert spy.call_count == 1
+
+
 def test_a_tired_player_can_afford_a_journey_only_because_of_light_body(game):
     walk_to(game, "lake")
     base = game.content.config.action_cost["train"]

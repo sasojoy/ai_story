@@ -246,9 +246,37 @@ def test_each_mod_moves_the_result_the_way_the_design_says():
 
 
 def test_the_first_hand_lowers_only_the_big_win_line():
-    """先手只動大勝的門檻：險勝與僵持的線不變。"""
-    assert resolve_encounter(115, 100, _Luck(0), mods=Mods(big_win_cut=0.2)).tier == "險勝"
-    assert resolve_encounter(90, 100, _Luck(0), mods=Mods(big_win_cut=0.2)).tier == "僵持"
+    """先手只動大勝的門檻：難度 100 時大勝線從 50 降到 30（先手 20%）；險勝線（15）與僵持線（-50）不動。
+    每一條線都用剛好在線上與差一點的兩個差距量，兩邊都量到才知道線真的在那裡。"""
+    cut = Mods(big_win_cut=0.2)
+
+    def tier(margin, mods=None):
+        return resolve_encounter(100 + margin, 100, _Luck(0), mods=mods).tier
+
+    assert (tier(29), tier(30), tier(49), tier(50)) == ("險勝", "險勝", "險勝", "大勝")  # 沒有先手：大勝線在 50
+    assert (tier(29, cut), tier(30, cut), tier(49, cut), tier(50, cut)) == ("險勝", "大勝", "大勝", "大勝")  # 先手：降到 30
+    for mods in (None, cut):  # 其他兩條線不受影響
+        assert (tier(14.9, mods), tier(15, mods)) == ("僵持", "險勝")
+        assert (tier(-50.1, mods), tier(-50, mods)) == ("落敗", "僵持")
+
+
+def test_the_cut_difficulty_decides_the_thresholds_not_the_original():
+    """破甲（難度 100 破甲 20% → 當作 80）：門檻照當作的強度算（大勝 40、險勝 12、僵持 -40）。同一個差距，
+    照原本的難度（50／15／-50）會判成差一級——這條擋住「只改了差距、門檻還是看原來的難度」。"""
+    cut = Mods(difficulty_cut=0.2)
+    assert resolve_encounter(94, 100, _Luck(0), mods=cut).tier == "險勝"  # 差距 14：過當作的 12，沒到原本的 15
+    assert resolve_encounter(125, 100, _Luck(0), mods=cut).tier == "大勝"  # 差距 45：過當作的 40，沒到原本的 50
+    assert resolve_encounter(39, 100, _Luck(0), mods=cut).tier == "落敗"  # 差距 -41：沒到當作的 -40；照原本的 -50 會是僵持
+
+
+def test_borrowed_force_is_a_share_of_the_real_strength_even_when_it_is_cut():
+    """借力（威力加上對手強度的 5%）看對手真正的強度：破甲只是讓判定「當作」弱一點，兇猛的對手借得到的力沒有變少
+    （S1 的句子：對手越兇猛，越借得上力）。難度 100、破甲 20%：借力 +5（不是照當作的 80 算的 +4）。險勝線在當作的 12：
+    威力 87 → 差距 87 + 5 − 80 = 12 剛好過線；照 +4 算是 11，會差一級。"""
+    both = Mods(difficulty_cut=0.2, power_add=0.05)
+    assert resolve_encounter(87, 100, _Luck(0), mods=both).tier == "險勝"
+    assert resolve_encounter(86.9, 100, _Luck(0), mods=both).tier == "僵持"
+    assert resolve_encounter(87, 100, _Luck(0), mods=Mods(difficulty_cut=0.2)).tier == "僵持"  # 沒有借力：差距 7
 
 
 def test_double_luck_takes_the_better_roll_and_rolls_twice():
@@ -303,6 +331,63 @@ def test_the_cut_difficulty_also_sets_the_luck_and_the_thresholds():
     result = resolve_encounter(100, 100, Spy(), mods=Mods(difficulty_cut=0.2))
     assert seen == [pytest.approx(24.0)]
     assert result.margin == pytest.approx(20.0) and result.difficulty == 100  # 戰報寫的難度還是原來的
+
+
+def _win_rate(power, difficulty, shift, mods, steps=4000):
+    """運氣是均勻分佈：把 0～1 切成 steps 等分、每一份的中點當那一次的亂數，算贏（大勝、險勝）的比例——沒有抽樣的誤差，只有 1/steps 的格子誤差。"""
+    wins = 0
+    for i in range(steps):
+        result = resolve_encounter(power, difficulty, FixedRandom((i + 0.5) / steps), shift=shift, mods=mods)
+        wins += result.tier in ("大勝", "險勝")
+    return wins / steps
+
+
+# 每一組都挑成「沒有優勢時剛好五成贏」：運氣要到 0 才過險勝線（難度 100 時線在 15、破甲 20% 後當作 80 線在 12）
+LUCK_MOD_CASES = {
+    "沒有功效": (115, Mods()),
+    "穩（疊到上限）": (115, Mods(luck_scale=0.4)),
+    "險（疊到上限）": (115, Mods(luck_scale=1.6)),
+    "破甲（疊到上限）": (92, Mods(difficulty_cut=0.2)),
+    "穩加破甲": (92, Mods(difficulty_cut=0.2, luck_scale=0.4)),
+    "險加破甲": (92, Mods(difficulty_cut=0.2, luck_scale=1.6)),
+}
+
+
+@pytest.mark.parametrize("label", list(LUCK_MOD_CASES))
+def test_the_models_push_moves_the_win_chance_by_the_same_points_whatever_traits_are_worn(label):
+    """計畫三 §8：模型的優勢最多把勝算推 big_fight_swing 個百分點，不能決定勝負。功效改了運氣的範圍（穩縮小、險放大、
+    破甲讓難度當作低），平移若還照沒有功效的範圍算，同一個 ±15 就變成穩 ±37、穩加破甲 ±47、險 ±9.5（Task 3 審查 I1）。
+    現在 shift 在 resolve_encounter 裡跟著運氣範圍等比例變，每一組都剛好是 ±15 個百分點。"""
+    power, mods = LUCK_MOD_CASES[label]
+    base = _win_rate(power, 100, 0.0, mods)
+    assert base == pytest.approx(0.5, abs=0.001), label
+    for advantage in (15, -15, 7):
+        shifted = _win_rate(power, 100, encounter.advantage_shift(100, advantage), mods)
+        assert shifted - base == pytest.approx(advantage / 100, abs=0.002), (label, advantage)
+
+
+def test_a_push_of_zero_changes_nothing_under_any_mods():
+    for power, mods in LUCK_MOD_CASES.values():
+        assert resolve_encounter(power, 100, FixedRandom(0.3), shift=0.0, mods=mods) == resolve_encounter(
+            power, 100, FixedRandom(0.3), mods=mods,
+        )
+
+
+def test_double_luck_keeps_the_push_close_but_only_approximately():
+    """連環取兩次運氣的好的，贏的機會不再是均勻分佈（優勢推的百分點是近似）：同樣的 ±15 推出來的差距在同一個量級、
+    不會變成穩或險那種好幾倍（見 resolve_encounter 的說明）。"""
+    mods = Mods(double_luck=True)
+
+    def rate(shift):
+        wins = 0
+        for i in range(60):
+            for j in range(60):
+                rng = _Luck(-30 + 60 * (i + 0.5) / 60, -30 + 60 * (j + 0.5) / 60)
+                wins += resolve_encounter(115, 100, rng, shift=shift, mods=mods).tier in ("大勝", "險勝")
+        return wins / 3600
+
+    gain = rate(encounter.advantage_shift(100, 15)) - rate(0.0)
+    assert 0.05 < gain < 0.2  # 不是 0.15 整，但離它不遠
 
 
 def test_the_condition_floor_can_be_raised():

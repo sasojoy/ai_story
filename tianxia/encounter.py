@@ -155,10 +155,16 @@ def resolve_encounter(
     """shift 是判定差距的平移（大場面的優勢，見 advantage_shift）；平常是 0。mods 是本人的功效（13.2）：破甲讓對手
     當作弱一點（門檻與運氣都照當作的強度算）、借力加威力、穩與險改運氣的起伏、先手降大勝門檻、連環多擲一次運氣取好的。
     沒有連環時照舊只擲一次運氣；mods 是空的（預設）時，每一步都乘 1、減 0，結果與亂數用法跟沒有這個參數時一模一樣。
-    結果記的 difficulty 還是原來的強度（戰報照實寫），破甲只改判定。"""
+    結果記的 difficulty 還是原來的強度（戰報照實寫），破甲只改判定。借力加的是對手真正強度的一成份（abs(difficulty) × power_add，
+    不照破甲當作的那個：對手兇猛是真的，破甲只是破開它的守勢，S1 的句子也是「對手越兇猛越借得上力」）。
+    shift 是呼叫端照「沒有功效的運氣範圍」算的（advantage_shift(difficulty, 優勢)：優勢百分點 × 運氣全幅）；功效改了運氣的範圍
+    （穩縮小、險放大、破甲讓難度當作低）之後，平移跟著等比例縮放，同一個優勢才推同樣的百分點——不然模型的 ±15 會在穩加破甲時
+    變成 ±47、險時剩 ±9.5，big_fight_swing 的夾子（模型不能決定勝負，武學與成長設計 8.3）就失效了。
+    連環取兩次運氣的好的，贏的機會不是均勻分佈，所以那一種只是近似（推的百分點大致不變、不精確）。"""
     mods = mods or Mods()
     effective = difficulty * (1 - mods.difficulty_cut)
     half = luck_half(effective) * max(0.0, mods.luck_scale)
+    shift *= half / luck_half(difficulty)  # 沒有功效時是 x / x ＝ 1.0，shift 一個位元都不變
     luck = rng.uniform(-half, half)
     if mods.double_luck:
         luck = max(luck, rng.uniform(-half, half))

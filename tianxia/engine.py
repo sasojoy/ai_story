@@ -802,7 +802,8 @@ class Game:
 
     def _fight_with(self, squad: Squad, judged: fight_llm.Judgment | None, **kw) -> encounter.EncounterResult:
         """打一場單次判定（kw 照傳給 team.fight，挑戰本人的 difficulty）：有判讀就把優勢換成判定差距的平移
-        （encounter.advantage_shift，照這一場真的用的難度算）；沒有是 0。優勢在這裡再夾一次 ±big_fight_swing 個百分點：
+        （encounter.advantage_shift，照這一場真的用的難度、沒有功效的運氣範圍算；本人的功效改了運氣範圍時，單次判定裡會把它
+        等比例縮放，推的百分點不變）；沒有是 0。優勢在這裡再夾一次 ±big_fight_swing 個百分點：
         fight_llm.judge 夾過了，但判讀不一定都經過它（之後的模型佇列也會交判讀進來），模型不能直接決定勝負（Task 2 審查修正 4）。"""
         shift = 0.0
         if judged is not None:
@@ -1046,7 +1047,6 @@ class Game:
         return costs
 
     def _act(self, what: str, prepared: companion_agent.PreparedTurn | None = None) -> list[str]:
-        cost = self._action_costs()
         if what == "break":
             return self._finish_seclusion(self.state.world.time)
         if what == "stand":
@@ -1069,7 +1069,7 @@ class Game:
         promotion = ranks.summons_event(self.state, self.content)
         if what == "summons":
             return self._present(self.content.events[promotion])
-        self.state.player.stamina -= cost[what]
+        self.state.player.stamina -= self._action_costs()[what]  # 不花體力的行動（上面那些）不必算（要翻武學的資料）
         if promotion is not None and what in ("explore", "socialize"):  # 在召見的地點探索、交友：端出晉升奇遇（計畫 T5）
             return self._present(self.content.events[promotion])
         if what == "explore":

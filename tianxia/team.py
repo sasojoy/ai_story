@@ -435,7 +435,16 @@ def team_conditions(state: GameState, content: Content, world: WorldStateStore) 
 
 def trait_mods(content: Content, lo: traits.Loadout) -> encounter.Mods:
     """本人身上的功效換成遭遇戰的數字（武學與成長設計 13.2、13.4）。沒有功效的人是空的 Mods（單次判定跟以前一模一樣）。
-    特別功效只在這一個函式與下面幾處用 lo.specials.get(掛點)，之後改成照 id 記時只動這幾處。"""
+
+    特別功效目前照「掛點」記在 Loadout.specials（一個掛點一個，content.check_traits 擋共用）。名將本命絕學（13.5）的獨特
+    特別功效進來時，若要改成照 id 記，下面每一處「按掛點讀」都要跟著改——全部的清單（讀的是 lo.specials 的鍵或值）：
+    - traits.py：loadout（寫入，同一個掛點只留第一個）、has（`hook in lo.specials`）。
+    - team.py：trait_mods（`.get("power_from_difficulty")`、`"double_luck" in`）、fight（`"no_loss" in`）、
+      take_encounter_toll（`"no_injury" in`）。
+    - engine.py：_battle_rewards（`.get("win_xinde")`）、_take_toll（`.get("heal_after")`）、_action_costs（`.get("train_stamina")`）、
+      _play_rounds（`.get("no_loss")`）、_trait_lines（`double_luck`、`power_from_difficulty`、`no_injury`、`win_xinde`、
+      `heal_after`、`train_stamina` 各一處 `in` 或 `[...]`）。
+    - 一般功效不在這裡：它們照屬性記層數、數字由 traits.amount 讀。"""
     borrow = lo.specials.get("power_from_difficulty")
     return encounter.Mods(
         luck_scale=1 - traits.amount(content, lo, "luck_narrow") + traits.amount(content, lo, "luck_widen"),
@@ -578,7 +587,8 @@ def fight(
     *, difficulty: float | None = None, shift: float = 0.0, dodge: bool = True,
 ) -> encounter.EncounterResult:
     """difficulty 給了就取代隊伍的難度（挑戰大勢人物本人：難度跟著聲威走，見 figures.difficulty）。
-    shift 是大場面判讀的優勢換算成的判定差距平移（encounter.advantage_shift，武學與成長設計 8.3）；平常是 0。
+    shift 是大場面判讀的優勢換算成的判定差距平移（encounter.advantage_shift，武學與成長設計 8.3，照沒有功效的運氣範圍算）；
+    平常是 0。本人的功效改了運氣範圍時，resolve_encounter 會把它等比例縮放，同一個優勢推的百分點不變（Task 3 審查 I1）。
     結果定了（優勢平移也算進去）之後，本人的身法才有機會把落敗閃成僵持（dodge_chance，人物資質設計 14.4）；
     dodge=False 不擲閃避、也不動那一次亂數——劇情戰的勝敗是人寫好的（僵持也算敗），閃了只會自相矛盾（最終審查 I1）。"""
     squad = content.squads[squad_id]
