@@ -277,6 +277,14 @@ def resolve(
         (_target(state, content, event, key), change, fill_slots(state, content, event, change.note))
         for key, change in outcome.figures.items()
     ]
+    third = w.third_party.get(event.id, [])
+    third_names = "、".join(w.third_party_shown.get(event.id, {}).get(name, name) for name in third)
+    third_line = outcome.third_party_text or event.third_party_text
+    third_text = fill_slots(state, content, event, third_line).replace("{name}", third_names) if third and third_line else ""
+    third_chronicle = (  # 豪強另記一行（例：「{name} 取得新野」），不論誰贏；同樣先填好（FB-042 審查 I2）
+        fill_slots(state, content, event, event.third_party_chronicle).replace("{name}", third_names)
+        if third and event.third_party_chronicle else ""
+    )
     for trend_id, delta in outcome.trends.items():
         _push(state, content, trend_id, delta)
     for fid, change, note in effects:
@@ -287,24 +295,18 @@ def resolve(
         w.event_bonus[target] = w.event_bonus.get(target, 0.0) + mod
     add_world_flags(state, outcome.world_flags_add)
     text += loser_line
-    third = w.third_party.get(event.id, [])
-    third_names = "、".join(w.third_party_shown.get(event.id, {}).get(name, name) for name in third)
-    if third:  # 豪強是第三方：不論誰贏，每個做完的名字各套一次自己的效果（伏筆文件 2.6）
-        for _ in third:
-            for trend_id, delta in event.third_party_trends.items():
-                _push(state, content, trend_id, delta)
-        line = outcome.third_party_text or event.third_party_text
-        if line:
-            text += fill_slots(state, content, event, line).replace("{name}", third_names)
+    for _ in third:  # 豪強是第三方：不論誰贏，每個做完的名字各套一次自己的效果（伏筆文件 2.6）
+        for trend_id, delta in event.third_party_trends.items():
+            _push(state, content, trend_id, delta)
+    text += third_text
     w.timeline[event.id] = TimelineResult(
         key=full_key, time=w.time, locked_by=lock.name if named else None, losers=losers if named else [], text=text,
     )
     add_rumor(state, text, content=content, layer="world")
     if chronicle:
         add_chronicle(state, chronicle)
-    if third and event.third_party_chronicle:  # 豪強另記一行（例：「{name} 取得新野」），不論誰贏
-        line = fill_slots(state, content, event, event.third_party_chronicle)
-        add_chronicle(state, line.replace("{name}", third_names))
+    if third_chronicle:
+        add_chronicle(state, third_chronicle)
     return [f"【江湖大事】{text}"]
 
 

@@ -620,6 +620,22 @@ def test_person_slots_fill_every_line_and_before_the_effects(real_on):
     assert plain.world.chronicle[-1].text == "皇甫嵩破波才。"
 
 
+def test_third_party_lines_are_filled_before_the_effects(real_on):
+    """FB-042 審查 I2：豪強那一句（公告）與另記的那一行江湖史也在套效果之前填：波才退場、彭脫接手之後仍寫波才。"""
+    changshe = event(real_on, "changshe_fire")
+    changshe.outcomes["guan:大勝"] = TimetableOutcome(
+        text="這一次，{人物:bocai}敗走。", figures={"@人物:bocai": FigureChange(fate="退場")},
+        third_party_text="{name} 的糧車餵飽了{人物:bocai}的兵。",
+    )
+    changshe.third_party_chronicle = "{name} 資助{人物:bocai}。"
+    s = _real_season(real_on)
+    s.world.third_party["changshe_fire"] = ["丙"]
+    msgs = timetable.resolve(s, real_on, changshe, random.Random(0), key="guan:大勝")
+    assert msgs[0].endswith("丙 的糧車餵飽了波才的兵。")
+    assert s.world.chronicle[-1].text == "丙 資助波才。"
+    assert s.world.figures["bocai"].status == "retired"
+
+
 def test_the_preface_is_not_filled(real_on):
     """preface 只有「史書上」那半句，照寫真名，不經過人物欄位。"""
     changshe = event(real_on, "changshe_fire")
