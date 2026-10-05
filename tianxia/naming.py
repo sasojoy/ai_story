@@ -5,6 +5,8 @@
   A（行動鎖內、很快）fusion.forge_request／Game.forge_request 開一張 NamingRequest；
   B（鎖外、很慢）generate：只拿單子與模型，不碰狀態、不拿鎖（之後線上架構第 2 期的模型佇列只換掉這一段）；
   C（鎖內、很快）Game.forge(..., proposed=...)：recheck 再過一次過濾，登記、收費。
+合到舊的（設計 12.2）時，B 段不取新名字而是 pick：請模型從清單裡挑一個已知的名字；挑不到（連不上、回了清單外的）就是
+(None, "")，C 段改由規則挑（landing.choose）。
 這個模組不讀時鐘（引擎不讀時鐘）：B 段的總時間用 budget（秒）管——每一次呼叫給模型的 timeout 照給出去的扣，
 給出去的加起來不超過 budget；預算由呼叫端（server.py）算好傳進來。"""
 from __future__ import annotations

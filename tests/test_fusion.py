@@ -789,6 +789,15 @@ def test_forge_request_opens_a_pick_only_with_two_or_more_candidates(ready, cont
     assert request.messages[0]["content"] == fusion.PICK_SYSTEM
 
 
+def test_the_pick_prompt_lists_the_candidates_and_asks_for_the_bare_name():
+    """清單每一行寫「名字（屬X）」，模型照抄會被 clean_name 變成「名字屬X」而對不上：提示要明講只回名字本身。"""
+    arts = [generate_from_name(name, "武學", name) for name in ("旋風腿", "疾風腿")]
+    messages = fusion._pick_messages("說明", arts)
+    assert messages[0]["content"] == fusion.PICK_SYSTEM
+    assert "- 旋風腿（屬" in messages[1]["content"] and "- 疾風腿（屬" in messages[1]["content"]
+    assert "不要帶括號、屬性或說明" in messages[1]["content"]
+
+
 def test_forge_request_needs_no_model_when_it_lands_on_the_only_candidate(ready, content, world):
     other = other_player(content)
     fusion.fuse(other, content, world, named("旋風腿"), "basic_fist", "feng")

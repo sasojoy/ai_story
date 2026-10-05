@@ -248,8 +248,32 @@ def test_pick_keeps_within_the_budget():
     assert client.chat_structured.call_count == 0
 
 
+@pytest.mark.parametrize("reply", ["旋風腿法", "旋風", ""])
+def test_pick_wants_the_whole_name_on_the_list(reply):
+    """差一個字、少一個字、空白都不算挑中：一律 (None, "")，改由規則挑。"""
+    client = _replying(*[reply] * naming.NAME_ATTEMPTS)
+    assert naming.pick(client, PICK, ("旋風腿", "烈火拳")) == (None, "")
+    assert client.chat_structured.call_count == naming.NAME_ATTEMPTS
+
+
+def test_pick_drops_the_description_the_model_adds():
+    client = mock.Mock()
+    client.chat_structured.return_value = naming.NameReply(name="烈火拳", description="一句多餘的話。")
+    assert naming.pick(client, PICK, ("旋風腿", "烈火拳")) == ("烈火拳", "")
+
+
 def test_generate_sends_a_pick_request_to_pick(content):
     request = naming.NamingRequest("fuse", "融|a", "武學", PICK, choices=("旋風腿", "烈火拳"))
     assert naming.generate(_replying("旋風腿"), content, request) == ("旋風腿", "")
     plain = naming.NamingRequest("fuse", "融|a", "武學", PICK)
     assert plain.choices == ()
+
+
+def test_generate_keeps_a_pick_request_on_the_list_even_for_a_name_that_would_pass_the_filter(content):
+    """「新名字」過得了取名的過濾，但不在清單上：走的是 pick，所以三次都不收；若 generate 不看 choices、改走 propose，
+    第一次就會收下它。"""
+    request = naming.NamingRequest("fuse", "融|a", "武學", PICK, choices=("旋風腿", "烈火拳"))
+    client = _replying(*["新名字"] * naming.NAME_ATTEMPTS)
+    assert naming.generate(client, content, request) == (None, "")
+    assert client.chat_structured.call_count == naming.NAME_ATTEMPTS
+    assert naming.generate(_replying("新名字"), content, naming.NamingRequest("fuse", "融|a", "武學", PICK))[0] == "新名字"

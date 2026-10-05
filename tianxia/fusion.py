@@ -75,7 +75,9 @@ PICK_SYSTEM = (
     "你是武俠小說裡的說書人。有人把兩樣東西合在一起，結果是下面清單裡的哪一個？"
     "你只負責挑，**不要提到任何數字、品質或威力**。全程使用繁體中文。"
 )
-PICK_RULES = "從清單裡挑一個意思最接近的。name 寫那個名字、一字不改；description 留空。"
+PICK_RULES = (
+    "從清單裡挑一個意思最接近的。name 只回清單上的名字本身、一字不改，不要帶括號、屬性或說明；description 留空。"
+)
 
 
 def _pick_messages(what: str, items: list[MartialArt] | list[Insight]) -> list[dict[str, str]]:
