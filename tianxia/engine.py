@@ -72,6 +72,10 @@ class Option(BaseModel):
 
 FREE_TEXT_OPTION = "choice:free"  # 事件的「隨口應對」：按下去只是叫出輸入框，真正送出走 free_text_request／answer_event
 BIG_FIGHT_WAIT = "兩人對峙……"  # 大場面按下去、等模型判讀時按鈕上的字（武學與成長設計 8.3）
+# 等模型判讀的時候選項沒了（另一個分頁把人帶走、事件被了結、體力花光）：這一仗不打，回這一句話代替一句看不出所以然的「無法這麼做」
+FIGHT_LEFT = "你離開了，這一仗沒打成。"
+FIGHT_CHANGED = "情勢變了，這一仗沒打成。"
+FIGHT_GONE_LINES = (FIGHT_LEFT, FIGHT_CHANGED)
 
 
 class FreeTextRequest(BaseModel):
@@ -770,6 +774,13 @@ class Game:
             return None
         return fight if self.fight_request(option_id) == fight.request else None
 
+    def _fight_gone(self, fight: fight_llm.PreparedFight) -> str:
+        """大場面 C 段：選項已經不在了。人不在備料時的地點了、或已經在路上就說「你離開了」；其他（事件被了結、體力花光……）
+        認不出是哪一種變動，說得中性一點。備料（fight_request）一定是選項還按得下去才開單、而路上不開單，所以這裡只可能是等判讀的
+        時候變的；步行、趕路出發之後 location 要到抵達才換（Journey 在路上時還是出發地），所以也要看 journey。"""
+        player = self.state.player
+        return FIGHT_LEFT if player.journey is not None or player.location != fight.request.location else FIGHT_CHANGED
+
     def _judged(self, squad: Squad) -> fight_llm.Judgment | None:
         """這一場有沒有鎖外判讀好的優勢：有、而且是同一路對手，就拿出來用掉——一次行動只用一次，同一次行動再打一場
         同一路也不會再吃一次（計畫三 G8）。"""
@@ -802,10 +813,12 @@ class Game:
         """prepared 是 server.py 在鎖外先生成好的一輪對話（見 dialogue_request／companion_agent.prepare_turn）；
         只有對話選項用得到，進來先重驗，驗不過就忽略。
         fight 是 server.py 在鎖外先判讀好的大場面（見 fight_request／fight_llm.judge）：一樣先重驗（_checked_fight），
-        驗不過就忽略、照平常打（優勢 0）。假人、整季機器人不帶，大場面也是優勢 0、照平常演出（武學與成長設計 8.3）。"""
+        驗不過就忽略、照平常打（優勢 0）。假人、整季機器人不帶，大場面也是優勢 0、照平常演出（武學與成長設計 8.3）。
+        不過等判讀的時候這個選項已經不在選單上了（人被帶走、事件被了結）就不打：回一句話說這一仗沒打成（_fight_gone），
+        不寫戰報也不寫江湖紀錄（跟其他的拒絕一樣）。"""
         option = {o.id: o for o in self.options(odds=False)}.get(option_id)
         if option is None or not option.enabled:
-            return self._log(["（此刻無法這麼做。）"])
+            return self._log([self._fight_gone(fight) if fight is not None else "（此刻無法這麼做。）"])
         self.state.battle_card = None
         self.state.player.guide_done = []  # 對話框上一次完成的那幾行，下一次行動就清掉
         kind, _, arg = option_id.partition(":")

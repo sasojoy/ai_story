@@ -258,28 +258,37 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .now.fits .now-more { display: none; }
 /* 戰鬥卡片壓縮（PM 2026-10-05）：打完一場要在第一屏直接按下一顆行動，不必捲動。只動「剛剛」那張戰鬥卡片
    （.battle-card 只用在它身上，別張卡片、狀態列與行動列不動）：內距、段距、標題與行高收緊，字級不縮
-   （內文 15px、過程與補充 14px，都不小於 .order-text 的 13px；標題 16px，比場景標題的 18px 小一號） */
-.battle-card { border-color: var(--accent); padding: 9px 12px; line-height: 1.55; }
+   （內文 15px、過程與補充 14px，都不小於 .order-text 的 13px；標題 16px，比場景標題的 18px 小一號）。
+   行高第二輪（PM 2026-10-05）：內文 1.55→1.45、過程／補充 1.5→1.45；標題 1.3 是單行，其餘都不低於 1.4，字不擠 */
+.battle-card { border-color: var(--accent); padding: 9px 12px; line-height: 1.45; }
 .battle-card h3 { margin: 0 0 1px; font-size: 16px; line-height: 1.3; }
 .battle-card p { margin: 3px 0; }
-.battle-card .tx-extra { margin: 3px 0 0; padding: 0 10px; line-height: 1.5; }
-/* 「看完整戰報 ›」接在卡片最後一段的句尾（app.js 的 withReportLink）：行內、不撐高那一行，點擊範圍上下各多 8px；
+.battle-card .tx-extra { margin: 3px 0 0; padding: 0 10px; line-height: 1.45; }
+/* 「看完整戰報 ›」在「過程」那一行的中間（app.js 的 roundsFold）：不撐高那一行，點擊範圍上下各多 8px（約 38px 高）。
+   沒有「過程」那一行的卡片（全服決戰、舊戰報）才接在卡片最後一段的句尾（withReportLink）：行內、不撐高那一行；
    放不下時整顆換到下一行（inline-block） */
-.battle-card .report-link { display: inline-block; margin: -8px 0 -8px 6px; padding: 8px 4px; vertical-align: baseline; }
+.battle-card .report-link { display: inline-block; margin: -8px 0 -8px 6px; padding: 8px 4px; vertical-align: baseline; white-space: nowrap; }
+.battle-card .rounds-head .report-link { margin: -8px 0; }
 /* 戰鬥卡片的「過程」（計畫三 Task 1、G6 暫定）：「剛剛」那張只露第一回合，第一屏留給剛剛、場景與整排行動（企劃者 2026-10-04）；
    「展開過程」攤開其餘回合，一回合晚一點浮現，代替「當場一回合一回合播」（減少動態時全站的動畫都關掉，見 prefers-reduced-motion）。
-   「展開過程」放在「過程」那一行的右邊，不多佔一行。戰報頁（.report-detail）不收，整段列出（app.js 的 roundsFold） */
+   「看完整戰報 ›」在這一行的中間、「展開過程」在右邊，不多佔一行（寬度夠：375px 下三樣加起來約 215px，這一行有約 315px）。
+   戰報頁（.report-detail）不收，整段列出（app.js 的 roundsFold） */
 .battle-card .rounds-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 0; }
-.battle-card .rounds-more { flex: none; padding-top: 0; padding-bottom: 0; }
-.battle-card ul.rounds { margin: 1px 0 5px; padding-left: 1.2em; font-size: 14px; line-height: 1.5; }
+.battle-card .rounds-more { flex: none; padding: 8px 2px; margin: -8px 0; white-space: nowrap; }
+.battle-card ul.rounds { margin: 1px 0 5px; padding-left: 1.2em; font-size: 14px; line-height: 1.45; }
 .battle-card ul.rounds:not(.open) > li:not(:first-child) { display: none; }
+/* 收著的第一回合最多兩行（PM 2026-10-05）：app.js 的 fitFirstRound 量過、放不進兩行又拼得出數字行時，整句（.r-full）省略、
+   換成只有數字的那一行（.r-short，「第1回合　你氣血 -13，對手氣勢 -10……」）；展開時一律是整句 */
+.battle-card ul.rounds .r-short { display: none; }
+.battle-card ul.rounds.tight:not(.open) .r-full { display: none; }
+.battle-card ul.rounds.tight:not(.open) .r-short { display: inline; }
 .battle-card ul.rounds > li { animation: tx-round-in 0.3s ease-out both; }
 .battle-card ul.rounds > li:nth-child(2) { animation-delay: 0.25s; }
 .battle-card ul.rounds > li:nth-child(3) { animation-delay: 0.5s; }
 .battle-card ul.rounds > li:nth-child(4) { animation-delay: 0.75s; }
 .battle-card ul.rounds > li:nth-child(5) { animation-delay: 1s; }
 /* 大場面模型寫的過程是一段話（最多 200 字、手機上約十行）：收著只露前兩行，「展開過程」攤開（PM 2026-10-05，計畫三 Task 2 審查修正 2） */
-.battle-card p.rounds-tale { margin: 1px 0 5px; font-size: 14px; line-height: 1.5; }
+.battle-card p.rounds-tale { margin: 1px 0 5px; font-size: 14px; line-height: 1.45; }
 .battle-card p.rounds-tale:not(.open) { display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 @keyframes tx-round-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 /* 公告卡（第一季，計畫 T2）：這一週已經發生的江湖大事，排在江湖頁最上面。
