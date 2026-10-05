@@ -1733,6 +1733,57 @@ def test_a_trait_line_must_be_traditional_digit_free_and_not_blank(content, line
         validate(content)
 
 
+@pytest.mark.parametrize("line", [
+    "{who搶先出手。",  # 大括號沒有成對
+    "{who}搶先出手}。",  # 多出來的右括號
+    "{}搶先出手。",  # 空的佔位
+    "{who!r}搶先出手。",  # 後面接轉換
+    "{who:>5}搶先出手。",  # 後面接格式
+    "{who.name}搶先出手。",  # 取屬性
+    "{who[0]}搶先出手。",  # 取索引
+])
+def test_a_malformed_placeholder_is_a_content_error_naming_the_file_and_the_trait(content, line):
+    """演出句之後會被 str.format(who=…, art=…, foe=…) 套上去（計畫六 Task 4）：載入時就要確定每個佔位都是乾淨的 who、art、foe，
+    不然戰鬥打到一半才丟 ValueError／KeyError／AttributeError。"""
+    content.trait_lines["先手"].append(line)
+    with pytest.raises(ContentError, match=r"trait_lines\.json：先手.*佔位"):
+        validate(content)
+
+
+def test_every_line_of_the_real_trait_lines_formats_with_the_three_placeholders():
+    """正式的 45 句真的能 format：載入時的檢查跟之後的用法對得上。"""
+    content = load_content(ROOT / "content")
+    for name, lines in content.trait_lines.items():
+        for line in lines:
+            line.format(who="沈浪", art="粗淺拳腳", foe="黃巾散兵")
+
+
+def test_general_trait_hooks_must_be_unique(content):
+    """traits.amount 與 Loadout.layers 都照掛點找：兩個一般功效掛同一個點，其中一個永遠算不到。"""
+    content.traits.general[1].hook = content.traits.general[0].hook
+    with pytest.raises(ContentError, match="一般功效的掛點不能重複"):
+        validate(content)
+
+
+def test_a_skill_special_must_exist_even_when_the_content_has_no_traits(content):
+    first = list(content.skills)[0]
+    content.traits.general.clear()
+    content.traits.special.clear()
+    content.trait_lines.clear()
+    validate(content)  # 沒有功效、也沒有武學指到特別功效：照常
+    content.skills[first].special = "lianhuan"
+    with pytest.raises(ContentError, match=f"武學 {first}：特別功效 lianhuan 不存在"):
+        validate(content)
+
+
+def test_the_quality_multiplier_needs_all_four_qualities(content):
+    """少寫一個品質，那一品的功效強度會悄悄變成 ×1：要在載入時擋下。"""
+    validate(content)
+    del content.config.trait_quality_multiplier["上品"]
+    with pytest.raises(ContentError, match="trait_quality_multiplier.*上品"):
+        validate(content)
+
+
 def test_a_trait_line_may_use_brackets_and_chinese_numerals(content):
     content.trait_lines["先手"].append("【{art}】一步一步逼上前去，{foe}連退。")
     validate(content)

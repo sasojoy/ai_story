@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import math
 import re
+import string
 from pathlib import Path
 from typing import get_args
 
@@ -25,7 +26,7 @@ from .models import (
     PromotionDef, MapLayout, Material, RoadSight, Scenario, Sect, SimRumor, SkillDef, Squad, TimetableEvent, TraitBook,
     Tutorial,
 )
-from .martial_arts import ATTRIBUTES
+from .martial_arts import ATTRIBUTES, QUALITIES
 from .naming import name_problem
 from .zh import to_traditional
 
@@ -407,8 +408,24 @@ def check_combat_lines(c: Content, need) -> None:
             need("【" not in text and "】" not in text, f"{where}：不能寫【】，武學名由引擎加上（「{text[:12]}」）")
 
 
-TRAIT_PLACEHOLDERS = re.compile(r"\{(\w+)\}")
 TRAIT_LINE_SLOTS = {"who", "art", "foe"}  # 演出句的三個佔位（S1：出手的人、帶功效的那一門、對手）
+
+
+def _placeholder_problem(line: str) -> str | None:
+    """演出句的佔位有沒有問題；沒問題是 None。之後 trait_line 用 str.format(who=…, art=…, foe=…) 把句子套上去，
+    所以每一個佔位都要是乾淨的 {who}、{art}、{foe}（不接格式、不接轉換、不取屬性或索引），大括號要成對、不能有空的 {}；
+    載入時沒擋下的話，會在戰鬥打到一半才丟 ValueError、KeyError、AttributeError。"""
+    try:
+        parsed = list(string.Formatter().parse(line))
+    except ValueError as e:  # 大括號沒有成對（{who搶先、多出來的 }）
+        return f"佔位的大括號沒有成對（{e}）"
+    for _, field, spec, conversion in parsed:
+        if field is None:  # 句子尾巴那一段純文字
+            continue
+        if field not in TRAIT_LINE_SLOTS or spec or conversion is not None:
+            written = "{" + field + (f"!{conversion}" if conversion else "") + (f":{spec}" if spec else "") + "}"
+            return f"用了不認得的佔位 {written}（只能是 {{who}}、{{art}}、{{foe}}，後面不能接格式或屬性）"
+    return None
 
 
 def check_traits(c: Content, need) -> None:
@@ -416,9 +433,16 @@ def check_traits(c: Content, need) -> None:
     名字不重複；特別功效的 id 不重複；掛點不重複（Loadout 與 traits.amount 都是照掛點找，兩個掛同一點會悄悄只剩一個，
     含 pool 是 false 的獨特功效）；武學（SkillDef.special）指的特別功效要存在，不在共用清單（pool 是 false）的只能給一門；
     每個功效都有演出句、演出句的鍵都是功效名（鍵拼錯的永遠挑不到）。每一句都不能是空的、只用繁體中文、不能寫數字或百分比
-    （功效幾層、多少由規則算，句子只寫打法），佔位只能是 {who}、{art}、{foe}。這份內容選填：兩個檔都沒有就是沒有功效。"""
+    （功效幾層、多少由規則算，句子只寫打法），佔位只能是乾淨的 {who}、{art}、{foe}（_placeholder_problem）。品質的強度倍數
+    （Config.trait_quality_multiplier）四個品質都要寫，少一個那一品的功效強度會悄悄變成 ×1。
+    這份內容選填：兩個檔都沒有就是沒有功效。"""
     book = c.traits
     specials = {t.id: t for t in book.special}
+    for quality in QUALITIES:
+        need(
+            quality in c.config.trait_quality_multiplier,
+            f"config.trait_quality_multiplier 缺少品質 {quality}（沒寫的那一品，功效強度會悄悄變成 ×1）",
+        )
     if book.general or book.special:
         need(sorted(t.attribute for t in book.general) == sorted(ATTRIBUTES), "content/traits.json：一般功效要一個屬性一個，八個都要有")
         names = [t.name for t in book.general] + [t.name for t in book.special]
@@ -445,8 +469,8 @@ def check_traits(c: Content, need) -> None:
         where = f"content/trait_lines.json：{name}"
         need(name in names, f"{where} 不是 content/traits.json 裡的功效（鍵拼錯的句子永遠不會被挑到）")
         for line in lines:
-            unknown = set(TRAIT_PLACEHOLDERS.findall(line)) - TRAIT_LINE_SLOTS
-            need(not unknown, f"{where} 的句子用了不認得的佔位 {'、'.join(sorted(unknown))}（只能是 {{who}}、{{art}}、{{foe}}）")
+            problem = _placeholder_problem(line)
+            need(problem is None, f"{where} 的句子「{line[:12]}」{problem}")
             need(bool(line.strip()), f"{where}：有空白的句子")
             need(to_traditional(line) == line, f"{where}：文字只能用繁體中文（「{line[:12]}」）")
             need(not NUMBER_IN_TEXT.search(line), f"{where}：不能寫數字或百分比，功效的數字由規則算、句子只寫打法（「{line[:12]}」）")
