@@ -11,7 +11,7 @@
         "text": "下場示範怎麼持竿列陣",
         "check": {
           "stat": "agi",
-          "difficulty": 6
+          "difficulty": 4
         },
         "effect": {
           "text": "你帶著他們練了一下午，總算站得像個隊伍。領頭的漢子塞給你一雙新編的草鞋。",
@@ -82,7 +82,7 @@
         },
         "check": {
           "stat": "wis",
-          "difficulty": 6
+          "difficulty": 4
         },
         "effect": {
           "text": "你把價錢殺得極低，轉手在集市賣了個好價。主人知道後，只是嘆了口氣。",
@@ -137,7 +137,7 @@
         "text": "去拉那張三石弓",
         "check": {
           "stat": "str",
-          "difficulty": 7
+          "difficulty": 5
         },
         "effect": {
           "text": "弓弦拉得如滿月一般，管事眼睛一亮，給了你一份賞錢。",
@@ -170,7 +170,7 @@
         "text": "涉水把他們一個個背過河",
         "check": {
           "stat": "con",
-          "difficulty": 6
+          "difficulty": 5
         },
         "effect": {
           "text": "河水冰冷刺骨，你來回七八趟，總算把一家人都送上了北岸。老漢拉著你的手，半天說不出話。",
@@ -229,7 +229,7 @@
         "text": "說自己也是來討口飯吃的",
         "check": {
           "stat": "wis",
-          "difficulty": 7
+          "difficulty": 6
         },
         "effect": {
           "text": "為首的打量你半天，信了，分給你一份搶來的錢。",
@@ -290,7 +290,7 @@
         "text": "跟他學怎麼看山裡的蹄印",
         "check": {
           "stat": "wis",
-          "difficulty": 6,
+          "difficulty": 5,
           "by": "self"
         },
         "effect": {

@@ -11,7 +11,8 @@
         "text": "扛起鹽擔，從泥巷繞出鎮外",
         "check": {
           "stat": "con",
-          "difficulty": 5
+          "difficulty": 5,
+          "practice": "evil"
         },
         "effect": {
           "text": "一擔鹽死沉，你咬牙走了半里泥路，總算避開差役，一路上沒人認出你。漢子把一半的鹽錢塞給你。",
@@ -107,7 +108,8 @@
         "text": "趁夜帶他穿過兩軍之間的空地",
         "check": {
           "stat": "agi",
-          "difficulty": 7
+          "difficulty": 7,
+          "practice": "evil"
         },
         "effect": {
           "text": "你們貼著焦土一路摸過去，沒驚動一個巡哨，天亮前到了潁水邊。新卒跪下磕了三個頭，往北走了。",
@@ -142,7 +144,8 @@
         "text": "搶了錢袋就跑",
         "check": {
           "stat": "agi",
-          "difficulty": 4
+          "difficulty": 4,
+          "practice": "evil"
         },
         "effect": {
           "text": "你一扭身掙脫，抓起錢袋鑽出人群。身後有人喊抓賊，滿堂的人都看清了你的臉。",
@@ -180,7 +183,8 @@
         "text": "搶了鐵牌就跑",
         "check": {
           "stat": "agi",
-          "difficulty": 4
+          "difficulty": 4,
+          "practice": "evil"
         },
         "effect": {
           "text": "你手腕一翻掙開，攥著鐵牌鑽進人群，身後的叫罵聲追了兩條街。",
@@ -223,7 +227,8 @@
         "text": "挑著擔子從菜畦衝出去",
         "check": {
           "stat": "agi",
-          "difficulty": 5
+          "difficulty": 5,
+          "practice": "evil"
         },
         "effect": {
           "text": "你踩著畦埂一路狂奔，差役在爛泥裡摔了個跟頭。出了鎮，漢子把一半的鹽錢塞給你，可差役已經認得你了。",
@@ -265,7 +270,8 @@
         "text": "拉著新卒拔腿就跑",
         "check": {
           "stat": "agi",
-          "difficulty": 6
+          "difficulty": 6,
+          "practice": "evil"
         },
         "effect": {
           "text": "你拽著新卒鑽進焦黑的桑林，火把在身後亂晃。天亮前你們到了潁水邊，新卒磕了三個頭往北走了。營裡從此記下了你這個帶逃兵的人。",

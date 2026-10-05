@@ -18,7 +18,7 @@ from pydantic import BaseModel, ValidationError
 from .companion_agent import DIALOGUE_TAGS
 from .materials import TIER_NAMES
 from .models import (
-    FRONT_KEY, ROADS, STATS, BattleDef, CharacterDef, Condition, Config, Content, CraftNames, Effect, Event, FigureDef,
+    FRONT_KEY, ROADS, STATS, BattleDef, CharacterDef, CheckVoice, Condition, Config, Content, CraftNames, Effect, Event, FigureDef,
     FollowerDef, Foreshadows, Location, OrdersContent, PromotionDef,
     MapLayout, Material, RoadSight, Scenario, Sect, SimRumor, SkillDef, Squad, TimetableEvent, Tutorial,
 )
@@ -80,6 +80,7 @@ def load_content(root: Path, profile: str | None = None) -> Content:
         events=events,
         map=MapLayout(**_read(root / "map.json")),
         tutorial=Tutorial(**_read(root / "tutorial.json")),
+        check_voice=CheckVoice(**_read(root / "check_voice.json")) if (root / "check_voice.json").exists() else CheckVoice(),
     )
     validate(content)
     _scale_marks(content, content.config.mark_threshold_scale)
@@ -607,6 +608,9 @@ def validate(c: Content) -> None:
         for key in keys:
             need(key in valid, f"{where}：未知的{kind} {key}")
 
+    for kind in c.config.practice_bonus:  # 熟練加成看的是本人的名聲（善名、惡名、名望……），不是戰鬥屬性
+        need(kind in STATS and kind not in ("str", "agi", "con", "wis"), f"config.practice_bonus 的 {kind} 不是名聲類的屬性")
+
     faction_ids = [f.id for f in c.scenario.factions]
     item_ids = [item.id for item in c.foreshadows.items]
     counters_written: dict[str, str] = {}  # 伏筆計數 → 第一個寫它的地方（效果的 fs_counters）
@@ -777,6 +781,18 @@ def validate(c: Content) -> None:
         + "、".join(f"{c.materials[mid].name}（{mid}）" for mid in unreachable),
     )
 
+    # 選項底下的人物心聲：由高到低排，而且每一檔都要說得出每一種有人檢定的屬性（沒寫的屬性用 "default"）
+    bands = c.check_voice.bands
+    gaps = [band.min_gap for band in bands]
+    need(gaps == sorted(gaps, reverse=True) and len(set(gaps)) == len(gaps), "check_voice.bands 要照 min_gap 由高到低排、不能重複")
+    checked = {
+        ch.check.stat for e in c.events.values() for ch in e.choices if ch.check is not None
+    }
+    for band in bands:
+        for stat in sorted(checked):
+            need(bool((band.lines.get(stat) or band.lines.get("default") or "").strip()),
+                 f"check_voice 的 min_gap {band.min_gap:g} 那一檔說不出 {stat} 的心聲（補這個屬性或 default）")
+
     # 煉製的決定性組名字表（LLM 不可用時的退路）：不能是空的，而且組出來的每一個名字都得
     # 通過命名過濾——這條退路一定會被走到（整季模擬把 LLM mock 掉），組出壞名字會永久登記。
     from .craft import name_problem  # noqa: PLC0415  延後 import，避免 content <-> craft 互相依賴
@@ -815,6 +831,8 @@ def validate(c: Content) -> None:
                 known(cw, [ch.combat], c.squads, "敵方隊伍")
             if ch.check:
                 known(cw, [ch.check.stat], STATS, "屬性")
+                if ch.check.practice:
+                    known(cw, [ch.check.practice], c.config.practice_bonus, "熟練（config.practice_bonus）")
         read_marks_in(where, ev.text)
         if ev.free_text is not None:
             check_free_text(where, ev)

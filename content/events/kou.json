@@ -84,7 +84,7 @@
         "text": "假意入夥，伺機探聽",
         "check": {
           "stat": "wis",
-          "difficulty": 7
+          "difficulty": 6
         },
         "effect": {
           "text": "你混進了黃巾軍的隊伍，對方還沒起疑。",

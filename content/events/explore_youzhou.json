@@ -11,7 +11,7 @@
         "text": "端起大碗，連飲三碗",
         "check": {
           "stat": "con",
-          "difficulty": 7,
+          "difficulty": 5,
           "by": "self"
         },
         "effect": {
@@ -33,7 +33,7 @@
         "text": "把那張硬弓拉滿",
         "check": {
           "stat": "str",
-          "difficulty": 5
+          "difficulty": 3
         },
         "effect": {
           "text": "弓弦勒得指節發白，你仍穩穩把弓拉成滿月。吏員點頭，賞了幾串錢。",
@@ -66,7 +66,7 @@
         "text": "坐下來替少年們一封封寫",
         "check": {
           "stat": "wis",
-          "difficulty": 5,
+          "difficulty": 3,
           "by": "self"
         },
         "effect": {
@@ -90,7 +90,7 @@
         "text": "背起老書生，趕在天黑前送去醫家",
         "check": {
           "stat": "agi",
-          "difficulty": 6
+          "difficulty": 4
         },
         "effect": {
           "text": "你一路小跑，醫家正要閉門時趕到。老書生喘著氣拉住你的手，說涿郡人會記得這份情。",
@@ -131,7 +131,7 @@
         "text": "翻身上馬，把牠馴服",
         "check": {
           "stat": "agi",
-          "difficulty": 7
+          "difficulty": 5
         },
         "effect": {
           "text": "烈馬顛跳了半條街，終於低頭喘氣。馬販服了你，把賣馬的錢分了你一份。",
@@ -152,7 +152,7 @@
         "text": "扳開馬嘴看牙口，替買主相馬",
         "check": {
           "stat": "wis",
-          "difficulty": 6,
+          "difficulty": 4,
           "by": "self"
         },
         "effect": {
@@ -209,7 +209,7 @@
         "text": "坐到屠戶對面，跟他扳腕子",
         "check": {
           "stat": "str",
-          "difficulty": 6
+          "difficulty": 4
         },
         "effect": {
           "text": "你把屠戶的手腕按在案上，滿堂喝彩。年輕人們爭著敬你酒，酒家也免了你的酒錢。",
@@ -230,7 +230,7 @@
         "text": "替年輕人們分析冀州的戰局",
         "check": {
           "stat": "wis",
-          "difficulty": 6,
+          "difficulty": 4,
           "by": "self"
         },
         "effect": {
@@ -270,7 +270,7 @@
         "text": "當眾點破符水的底細",
         "check": {
           "stat": "wis",
-          "difficulty": 6
+          "difficulty": 4
         },
         "effect": {
           "text": "你指出那符紙是鎮上雜貨攤就買得到的，道人收攤溜走。圍觀的人議論紛紛，對大賢良師的話也少信了幾分。",
@@ -295,7 +295,7 @@
         "text": "先喝一碗試試",
         "check": {
           "stat": "con",
-          "difficulty": 5,
+          "difficulty": 3,
           "by": "self"
         },
         "effect": {
@@ -335,7 +335,7 @@
         "text": "把壓在棚上的斷枝扛開",
         "check": {
           "stat": "str",
-          "difficulty": 6
+          "difficulty": 4
         },
         "effect": {
           "text": "你使勁把粗枝挪開，棚裡的新蓆沒壓壞幾張。主人家留你吃了頓飯。",
@@ -352,7 +352,7 @@
         "text": "爬上樹，把裂開的半截枝幹鋸下",
         "check": {
           "stat": "agi",
-          "difficulty": 7
+          "difficulty": 5
         },
         "effect": {
           "text": "你攀在樹杈間鋸下裂枝，免得它再砸人。下樹時順手揀了一把被風吹落的桑皮絲。",
@@ -403,7 +403,7 @@
         "text": "陪她們熬一整夜",
         "check": {
           "stat": "con",
-          "difficulty": 6,
+          "difficulty": 4,
           "by": "self"
         },
         "effect": {
@@ -422,7 +422,7 @@
         "text": "學她們的手法，幫著打鞋底",
         "check": {
           "stat": "agi",
-          "difficulty": 5
+          "difficulty": 3
         },
         "effect": {
           "text": "你手腳靈巧，打的鞋底又密又勻，婦人們誇你天生是幹這行的。",
@@ -460,7 +460,7 @@
         "text": "脫了外衣，扛到天亮",
         "check": {
           "stat": "con",
-          "difficulty": 6
+          "difficulty": 4
         },
         "effect": {
           "text": "你一袋袋扛到雞叫，肩上磨破了皮。家吏數了錢給你，還多看了你兩眼，說主人正缺這樣的人。",
@@ -480,7 +480,7 @@
         "text": "一邊卸，一邊默記袋數",
         "check": {
           "stat": "wis",
-          "difficulty": 7,
+          "difficulty": 5,
           "by": "self"
         },
         "effect": {
@@ -515,7 +515,7 @@
         "text": "起身論說討賊之策",
         "check": {
           "stat": "wis",
-          "difficulty": 7
+          "difficulty": 5
         },
         "effect": {
           "text": "你從黃巾的糧道講到鄉勇的編伍，滿座豪傑停杯靜聽。主人親自為你斟酒，記下了你的名號。",
@@ -534,7 +534,7 @@
         "text": "離席舞劍，為主人助興",
         "check": {
           "stat": "agi",
-          "difficulty": 6
+          "difficulty": 4
         },
         "effect": {
           "text": "劍光在燈下翻飛，席上叫好聲不絕。主人命人賞你一匹絹。",
@@ -575,7 +575,7 @@
         "text": "在箭靶前連射三箭",
         "check": {
           "stat": "agi",
-          "difficulty": 7
+          "difficulty": 5
         },
         "effect": {
           "text": "三箭都中了靶心附近，義勇們面面相覷，為首的漢子哈哈一笑，拍你的肩稱兄道弟。",
@@ -594,7 +594,7 @@
         "text": "站定不動，讓為首的打三拳",
         "check": {
           "stat": "con",
-          "difficulty": 7,
+          "difficulty": 5,
           "by": "self"
         },
         "effect": {
@@ -658,7 +658,7 @@
         "text": "趁夜撐一隻竹筏，從蘆葦裡偷渡",
         "check": {
           "stat": "agi",
-          "difficulty": 7
+          "difficulty": 6
         },
         "effect": {
           "text": "你撐著竹筏貼著蘆葦滑過去，水寇毫無察覺。幾個百姓跟在你後面，一起過了河。",
@@ -675,7 +675,7 @@
         "text": "跟水寇頭子討價還價",
         "check": {
           "stat": "wis",
-          "difficulty": 6
+          "difficulty": 5
         },
         "effect": {
           "text": "你說今年冀州亂，收得太狠過路的就沒了。頭子想了想，把錢減了一半，岸邊的百姓都鬆了口氣。",
@@ -751,7 +751,7 @@
         "text": "搬開河灘上的大石找砂窩",
         "check": {
           "stat": "str",
-          "difficulty": 6
+          "difficulty": 5
         },
         "effect": {
           "text": "你掀開一塊又一塊大石，終於找到一窩細密的黑砂，老鐵匠分了你一包。",
@@ -768,7 +768,7 @@
         "text": "泡在冰冷的河水裡跟著淘",
         "check": {
           "stat": "con",
-          "difficulty": 7,
+          "difficulty": 6,
           "by": "self"
         },
         "effect": {
@@ -811,7 +811,7 @@
         "text": "在雪地裡伏到天亮，等他們散了再走",
         "check": {
           "stat": "con",
-          "difficulty": 8,
+          "difficulty": 7,
           "by": "self"
         },
         "effect": {
@@ -829,7 +829,7 @@
         "text": "走過去分他們乾糧，勸他們回鄉",
         "check": {
           "stat": "wis",
-          "difficulty": 6
+          "difficulty": 5
         },
         "effect": {
           "text": "幾個人捧著乾糧哭了，說誰願意造反，是家裡沒了活路。天亮時他們扯下黃巾，往南去了。",
@@ -880,7 +880,7 @@
         "text": "追上去攏住馬群",
         "check": {
           "stat": "agi",
-          "difficulty": 7
+          "difficulty": 6
         },
         "effect": {
           "text": "你繞到山坡上方，把馬群趕進一條死谷。把馬送到山下的亭舍，亭長按規矩給了賞錢。",
@@ -897,7 +897,7 @@
         "text": "捧一把鹽，慢慢靠近頭馬",
         "check": {
           "stat": "wis",
-          "difficulty": 5
+          "difficulty": 4
         },
         "effect": {
           "text": "頭馬舔了你手裡的鹽，乖乖讓你牽著，其餘的馬也跟了過來。",
