@@ -7,7 +7,7 @@ from unittest import mock
 import pytest
 
 from conftest import FixedRandom, at, install_season_one, walk_to
-from tianxia import atlas, battle_instance, calendar, companion_agent, flavor, front_lines, guide, library, rules, skillview
+from tianxia import atlas, battle_instance, calendar, companion_agent, flavor, front_lines, guide, library, rules, skillview, team
 from tianxia.characters import open_characters
 from tianxia.content import load_content
 from tianxia.engine import Game, Option
@@ -1421,6 +1421,13 @@ def test_texts_render(game):
     _explore_finds_events(game)
     game.choose("act:explore")
     assert "醉漢" in game.scene_text()
+
+
+def test_the_status_shows_a_companions_rooted_hp_cap(game):
+    """狀態列的同伴氣血照他自己的根骨（人物資質設計 14.3）：韓鐵第 1 級根骨 6，上限 +3%。"""
+    game.state.player.team = ["mate"]
+    mate = game.status_data()["team"][0]
+    assert mate["hp_max"] == round(team.neili_cap(game.content, 1, 6))
 
 
 def test_status_text_shows_the_practice_hint_only_when_xinde_is_idle(game):
@@ -5624,6 +5631,16 @@ def test_hp_comes_back_by_the_rooted_cap(content):
         game._advance_player_local(HOUR / 10)
     plain, rooted = (game.state.player.member.neili for game in games)
     assert plain > 0 and rooted == pytest.approx(plain * 1.3)
+
+
+def test_a_companions_hp_comes_back_by_his_own_cap(game):
+    """同伴的氣血也回到他自己（吃了根骨的）上限（人物資質設計 14.3）：韓鐵第 1 級根骨 6，上限 330，本人根骨 5 是 320。"""
+    game.state.player.team = ["mate"]
+    game.state.player.member.neili = 0.0
+    game.world.update_companion("mate", lambda p: setattr(p, "neili", 0.0))
+    game._advance_player_local(HOUR / 10)
+    player, mate = game.state.player.member.neili, game.world.get_companion("mate").neili
+    assert player > 0 and mate == pytest.approx(player * 330 / 320)
 
 
 def test_the_showdown_power_snapshot_carries_the_players_boost(game):

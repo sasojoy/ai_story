@@ -209,7 +209,7 @@ def member_card(state: GameState, content: Content, world: WorldStateStore, key:
         member = world.get_companion(key)
         name = content.characters[key].name
     own = state if key == PLAYER else None  # 玩家那一列顯示自己修練到的品質；同伴照全服登記的
-    now, cap = team.member_neili(content, member, team.con_of(state, key))  # 本人的上限吃根骨，同伴照基準
+    now, cap = team.member_neili(content, member, team.con_of(state, content, world, key))  # 本人與同伴各照自己的根骨
     lines = [
         f"### {name}",
         f"第 {member.level} 級　氣血 {now:.0f}/{cap:.0f}",
