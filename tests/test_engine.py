@@ -4700,16 +4700,18 @@ def test_a_catch_up_that_crosses_only_the_showdown_time_still_opens_the_muster(c
 
 
 def test_a_showdown_records_the_version_it_actually_fought(content, world):
-    """審查 M-1：管理者在第 3 週結算之前就開了宛城（照史書那一版，甲：守方黃巾），開打期間第 3 週結算成「不成」；
-    收場時記的仍是實際打的甲版（南陽 35 → 起點 58 → 官軍險勝），不是照當下的版本改成乙版。"""
+    """審查 M-1：宛城在第 3 週結算之前就開了（照史書那一版，甲：守方黃巾），開打期間第 3 週結算成「不成」；
+    收場時記的仍是實際打的甲版（南陽 35 → 起點 58 → 官軍險勝），不是照當下的版本改成乙版。
+    T10 起管理者的開戰選單在第 3 週結算前不列宛城（PM 2026-10-05），所以這裡直接照時間到了的那條路開。"""
     from tianxia.state import TimelineResult
+    from tianxia.world import open_showdown
 
     game = _showdown_game(content, world)
     content.config.admins = ["沈浪"]
     world.mutate_season(lambda s: s.timeline.pop("zhangmancheng"))  # 第 3 週還沒結算
     game.state.world = world.get_season()
-    assert [b.id for b in game.admin_battles()] == ["changshe_fire", "wancheng_jia"]
-    game.admin_start_battle("wancheng_jia", now=0.0)
+    assert [b.id for b in game.admin_battles()] == ["changshe_fire"]
+    open_showdown(world, content, "wancheng", 0.0)
     world.mutate_season(lambda s: s.timeline.update(zhangmancheng=TimelineResult(key="不成", time=1.0)))
     game.state.world = world.get_season()
     _settle_without_fighters(game, content.battles["wancheng_jia"])

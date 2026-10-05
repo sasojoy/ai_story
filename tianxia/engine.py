@@ -6,6 +6,7 @@ sanguo-companions 合併大幅重寫：拿掉 battle.py 的 3v3 全自動戰鬥�
 """
 from __future__ import annotations
 
+import math
 import random
 from collections.abc import Callable
 
@@ -22,11 +23,11 @@ from .journal import LOG_BREAK, Draft
 from .mapview import render_map, render_minimap
 from .models import (
     EXPLORE_BRANCHES, FREE_TEXT_MAX, BattleDef, Choice, Content, Effect, Event, ExploreBranch, Location, RoadKind, Squad,
-    Threshold, TravelMode, WorldEvent,
+    Threshold, TimetableEvent, TravelMode, WorldEvent,
 )
 from .ollama_client import OllamaClient
 from .rules import (
-    GEJU, HUANGJIN, apply_effect, can_hear, can_meet, change_trend, check_who, current_day, display_name, fill_marks, free_text_rate,
+    GEJU, HUANGJIN, add_rumor, apply_effect, can_hear, can_meet, change_trend, check_who, current_day, display_name, fill_marks, free_text_rate,
     front_ids, front_of, in_chaos,
     is_revealed, pushable, rate_words, recompute_trends, resolve_goals, resolve_trend, resolve_trends, roll_check,
     season_one, season_one_off, stances, trend_name, trend_shown, trend_value, world_trend_value,
@@ -2775,6 +2776,7 @@ class Game:
         showdowns = [
             showdown_battle(self.state, self.content, e) for e in self.content.timetable
             if season_one(self.content, w) and e.kind == "showdown" and e.id not in w.timeline and e.id not in w.showdowns_opened
+            and (e.version_from is None or e.version_from in w.timeline)  # 宛城：第 3 週結算前不知道是哪一版，不列（PM 2026-10-05）
         ]
         openable = {b.id for b in showdowns if b is not None}
         return [b for b in self.content.battles.values() if b.id not in off and (b.timetable_event is None or b.id in openable)]
@@ -2832,6 +2834,158 @@ class Game:
         self._write("推動大勢", msgs or ["大勢紋絲不動。"], tag="管理者")
         self._save_season()
         return self._log(msgs)
+
+    # ── 管理者：時刻表與救場（計畫 T10）──────────────────────
+
+    def _timetable_refusal(self, action: str) -> list[str] | None:
+        """時刻表類的管理者動作：先照 _admin_refusal，再要這一季有時刻表（第一季；beta 那一季沒有）。"""
+        refusal = self._admin_refusal(action)
+        if refusal:
+            return refusal
+        if not season_one(self.content, self.state.world):
+            return ["（這一季沒有時刻表。）"]
+        return None
+
+    def _timetable_event(self, event_id: str) -> TimetableEvent | None:
+        return next((e for e in self.content.timetable if e.id == event_id), None)
+
+    def admin_schedule(self, item: str, at_real: float, now: float) -> list[str]:
+        """把三場決戰或季末排在現實時間 at_real：換成世界秒（world.time ＋ (at_real − now) × time_scale）寫進 schedule。
+        已經結算或開過集結的不能再排；不能排在過去；三場決戰與季末要照時刻表的順序（嚴格在前一項之後、後一項之前）。"""
+        refusal = self._timetable_refusal("排時間")
+        if refusal:
+            return self._log(refusal)
+        s, c = self.state, self.content
+        w = s.world
+        items = timetable.schedulable(c)
+        event = next((e for e in items if e.id == item), None)
+        if event is None:
+            return self._log(["（只有三場決戰與季末能排時間。）"])
+        if event.id in w.timeline or event.id in w.showdowns_opened:
+            return self._log([f"（{event.title}已經結算或開打了，不能再排。）"])
+        at = w.time + (at_real - now) * c.config.time_scale
+        if at <= w.time + calendar.EPS_SECONDS:
+            return self._log(["（不能排在已經過去的時間。）"])
+        i = items.index(event)
+        prev = items[i - 1] if i > 0 else None
+        nxt = items[i + 1] if i + 1 < len(items) else None
+        order = []
+        if prev is not None and at <= timetable.when(s, c, prev):
+            order.append(f"要排在{prev.title}之後")
+        if nxt is not None and at >= timetable.when(s, c, nxt):
+            order.append(f"要排在{nxt.title}之前")
+        if order:
+            return self._log(["（三場決戰與季末要照順序：" + "、".join(order) + "。）"])
+        source = self._timetable_event(event.version_from) if event.version_from else None
+        if source is not None and source.id not in w.timeline and at <= timetable.when(s, c, source):
+            return self._log([f"（{event.title}要看{source.title}的結果決定版本：要排在它之後。）"])  # 宛城（PM 2026-10-05）
+        w.schedule[timetable.schedule_key(event)] = at
+        self._save_season()
+        msg = f"已把{event.title}排在{calendar.stamp_text(at, c, w)}（季曆）。"
+        self._write("排時間", [msg], tag="管理者")
+        return self._log([msg])
+
+    def admin_jump_next(self, now: float) -> list[str]:
+        """跳到下一件大事：推進到最早那一件還沒結算的大事的時間（決戰是排定的集結開始；開過集結的不算），取整到下一個
+        曆時交界（季的事只在交界跑），照常結算、開集結（走 advance）。同一刻的幾件一起結算。決戰還在集結或開打時拒絕。"""
+        refusal = self._timetable_refusal("跳到下一件大事")
+        if refusal:
+            return self._log(refusal)
+        self.now = now
+        battle = self.world.get_battle()
+        if battle is not None and battle.phase != "ended":
+            return self._log(["（決戰還沒收場，先等它打完或取消。）"])
+        s, c = self.state, self.content
+        w = s.world
+        pending = [e for e in timetable._pending(s, c) if e.id not in w.showdowns_opened]  # noqa: SLF001  同一個套件的排序
+        if not pending:
+            return self._log(["（時刻表上沒有下一件大事了。）"])
+        cal_hour = calendar.cal_hour_seconds(c, w)
+        target = max(timetable.when(s, c, pending[0]), w.time)
+        mark = math.ceil((target - calendar.EPS_SECONDS) / cal_hour) * cal_hour
+        if mark <= w.time + calendar.EPS_SECONDS:
+            mark += cal_hour
+        return [f"跳到{pending[0].title}。"] + self.advance(mark - w.time)
+
+    def admin_set_trend(self, trend_id: str, value: int) -> list[str]:
+        """定戰況：把一條大勢線直接推到 value（夾在 0～100）；檢查同「推動大勢」（衍生線拒絕），推過門檻照常觸發。"""
+        refusal = self._admin_refusal("定戰況")
+        if refusal:
+            return self._log(refusal)
+        if not trend_shown(self.content, self.state.world, trend_id):
+            return self._log(["（沒有這條大勢線。）"])
+        if not pushable(self.content, self.state.world, trend_id):
+            return self._log([f"（{trend_name(self.content, trend_id)}由三條戰線合成，不能直接推；請推其中一條戰線。）"])
+        delta = max(0, min(100, value)) - trend_value(self.state, self.content, trend_id)
+        msgs = change_trend(self.state, self.content, trend_id, delta) if delta else []
+        msgs += check_thresholds(self.state, self.content, self.world, self.client, now=self.now)
+        self._write("定戰況", msgs or ["大勢紋絲不動。"], tag="管理者")
+        self._save_season()
+        return self._log(msgs)
+
+    def admin_resolve_event(self, event_id: str, key: str) -> list[str]:
+        """定結果：管理者直接定一件大事的結果（不含版本的鍵，例如「成」「guan:險勝」），照時刻表結算（公告、江湖史、
+        效果都照內容），人人的江湖紀錄照 FB-038 補上。季末用「立刻收季」；決戰正在打的先取消。"""
+        refusal = self._timetable_refusal("定結果")
+        if refusal:
+            return self._log(refusal)
+        s, c = self.state, self.content
+        event = self._timetable_event(event_id)
+        if event is None:
+            return self._log(["（沒有這件大事。）"])
+        if event.kind == "finale":
+            return self._log(["（季末請用「立刻收季」。）"])
+        if event.id in s.world.timeline:
+            return self._log([f"（{event.title}已經結算了。）"])
+        battle = self.world.get_battle()
+        running = battle is not None and battle.phase != "ended" and battle.battle_id in c.battles
+        if running and c.battles[battle.battle_id].timetable_event == event.id:
+            return self._log([f"（{event.title}正在打，先取消決戰。）"])
+        if event.version_from is not None and event.version_from not in s.world.timeline:
+            source = self._timetable_event(event.version_from)
+            return self._log([f"（{event.title}要等{source.title if source else event.version_from}結算了才知道是哪一版。）"])
+        if key not in timetable.result_keys(s, c, event):
+            return self._log([f"（{event.title}沒有「{key}」這個結果。）"])
+        msgs = timetable.resolve(s, c, event, self.rng, key=key)
+        self._save_season()
+        self._deliver_big_events()
+        return self._log(msgs)
+
+    def admin_clear_lock(self, event_id: str) -> list[str]:
+        """清鎖定：拿掉一件大事的伏筆鎖定（第一個做完的人）與之後才做完的名單，結算時照沒人鎖定擲骰。"""
+        refusal = self._timetable_refusal("清鎖定")
+        if refusal:
+            return self._log(refusal)
+        w = self.state.world
+        event = self._timetable_event(event_id)
+        if event is None:
+            return self._log(["（沒有這件大事。）"])
+        if event_id not in w.locks:
+            return self._log([f"（{event.title}沒有人鎖定。）"])
+        del w.locks[event_id]
+        w.lock_losers.pop(event_id, None)
+        self._save_season()
+        msg = f"已清掉{event.title}的鎖定。"
+        self._write("清鎖定", [msg], tag="管理者")
+        return self._log([msg])
+
+    def admin_cancel_battle(self) -> list[str]:
+        """取消決戰：正在集結或開打的那一場收起來、不算結果（參戰者各補一則「不算勝負」，同收季，FB-035），發一則天下大事。
+        時刻表決戰取消後不會自己再開（開過的記號留著）；要收尾用「定結果」。"""
+        refusal = self._admin_refusal("取消決戰")
+        if refusal:
+            return self._log(refusal)
+        battle = self.world.get_battle()
+        if battle is None or battle.phase == "ended":
+            return self._log(["（沒有進行中的決戰。）"])
+        definition = self.content.battles.get(battle.battle_id)
+        line = f"{definition.name if definition else battle.battle_id}臨時取消，這一仗沒有打成。"
+        self.state.world = self.world.get_season()  # 收場時間記此刻的季時間（同 admin_end_season）
+        self._shelve_unfinished_battle()
+        add_rumor(self.state, line, content=self.content, layer="world")
+        self._save_season()
+        self._write("取消決戰", [line], tag="管理者")
+        return self._log([line])
 
     # ── 畫面文字 ──────────────────────────────────────────
 
