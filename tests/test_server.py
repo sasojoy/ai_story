@@ -1162,6 +1162,20 @@ def test_forge_line_warns_about_an_insight_you_have_not_learned(client):
     assert "還沒悟到" in line
 
 
+def test_forge_line_does_not_leak_an_art_the_player_does_not_have(client):
+    """預覽不能拿來探：別人的本命武學（龍頭人物的）不在你身上，不管放在哪一格，都只回拒絕那一句，不寫名字與屬性。"""
+    _a_player_with_insights(client)
+    assert "caocao_wugong" in server.CONTENT.skills  # 真的有這一門（挾風槍法・屬快），探得到才算數
+    for body in (
+        {"art": "caocao_wugong", "insights": ["feng"]},
+        {"art": "jichu_quanjiao", "other_art": "caocao_wugong", "insights": []},
+        {"art": "caocao_wugong", "other_art": "jichu_quanjiao", "insights": []},
+    ):
+        line = client.post("/api/forge_line", json=body).json()["line"]
+        assert "⚠" in line and ("沒有這門武學" in line or "你會的武學" in line), (body, line)
+        assert "挾風槍法" not in line and "屬快" not in line and "→" not in line, (body, line)
+
+
 def test_the_forge_blends_two_arts(client):
     """武學＋武學（設計 12.3）：開局送的兩門就能合，兩門都留著，花 5 心得＋5 體力。"""
     _a_player_with_insights(client)

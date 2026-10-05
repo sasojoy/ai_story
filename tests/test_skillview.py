@@ -355,8 +355,30 @@ def test_forge_line_explains_why_it_cannot_be_done(state, content, world):
 
 
 def test_forge_line_survives_something_that_does_not_exist(state, content, world):
+    """存檔裡記著、內容與登記裡都沒有的（失效的引用）：說「不存在」；你根本沒有的，見下面那條。"""
+    state.player.arts = ["ghost", "ghost2"]
+    state.player.insights = ["feng", "ghost"]
     assert "不存在" in skillview.forge_line(state, content, world, "ghost", ["feng"])
     assert "不存在" in skillview.forge_line(state, content, world, None, ["feng", "ghost"])
+    assert "不存在" in skillview.forge_line(state, content, world, "ghost", [], other_art="ghost2")
+
+
+def test_forge_line_says_nothing_about_an_art_or_insight_you_do_not_have(state, content, world):
+    """沒有的東西（內容裡的龍頭本命武學、還沒悟到的意境）只回拒絕那一句：不寫名字、屬性，不能拿預覽來探。"""
+    state.player.member.wugong_id = "basic_fist"
+    state.player.arts = ["lake_kick"]
+    state.player.insights = ["feng", "huo"]
+    state.player.stats["xinde"] = 100
+    probes = (
+        (skillview.forge_line(state, content, world, "sky", ["feng"]), "你沒有這門武學"),  # 武學＋意境：武學不是你的
+        (skillview.forge_line(state, content, world, "basic_fist", ["shui"]), "你還沒悟到"),  # 意境不是你的
+        (skillview.forge_line(state, content, world, "basic_fist", [], other_art="sky"), "兩門都要是你會的武學"),
+        (skillview.forge_line(state, content, world, "sky", [], other_art="basic_fist"), "兩門都要是你會的武學"),
+        (skillview.forge_line(state, content, world, None, ["feng", "shui"]), "兩個意境都要是你悟得的"),
+    )
+    for line, reason in probes:
+        assert reason in line and line.startswith("⚠"), line
+        assert "天外劍" not in line and "水" not in line and "屬" not in line and "→" not in line, line
 
 
 def test_forge_line_never_sends_you_to_the_furnace_with_materials(state, content, world):

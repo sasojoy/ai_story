@@ -66,7 +66,12 @@ def forge_line(
     """煉製頁的說明：放了什麼、會做哪一種、花多少心得，或者為什麼還不能開爐。other_art 有、insight_ids 空的是武學＋武學。"""
     cfg, xinde = content.config, state.player.stats.get("xinde", 0)
     count = f"武學與意境 {held_count(state)}/{cap_of(state, content)}"
+    owned, held = owned_arts(state), state.player.insights
+    # 預覽不能拿來探：不是你的武學、還沒悟到的意境，先於一切（查名字、屬性、種類）就回開爐時會說的那句拒絕，
+    # 不然隨便塞一個 id（龍頭人物的本命武學、別人首創的）就看得到它叫什麼、屬什麼。
     if art_id and other_art and not insight_ids:
+        if art_id not in owned or other_art not in owned:
+            return f"⚠ {fusion.blend_problem(state, content, world, art_id, other_art)}"
         a, b = team.player_art(state, content, world, art_id), team.player_art(state, content, world, other_art)
         if a is None or b is None:
             return "（選了不存在的東西。）"
@@ -77,6 +82,8 @@ def forge_line(
         )
         problem = fusion.blend_problem(state, content, world, art_id, other_art)
     elif art_id and not other_art and len(insight_ids) == 1:
+        if art_id not in owned or insight_ids[0] not in held:
+            return f"⚠ {fusion.fuse_problem(state, content, world, art_id, insight_ids[0])}"
         base = team.player_art(state, content, world, art_id)
         insight = insights.resolve(insight_ids[0], content, world)
         if base is None or insight is None:
@@ -88,6 +95,8 @@ def forge_line(
         )
         problem = fusion.fuse_problem(state, content, world, art_id, insight_ids[0])
     elif not art_id and not other_art and len(insight_ids) == 2:
+        if any(i not in held for i in insight_ids):
+            return f"⚠ {fusion.merge_problem(state, content, world, *insight_ids)}"
         a, b = (insights.resolve(i, content, world) for i in insight_ids)
         if a is None or b is None:
             return "（選了不存在的東西。）"
