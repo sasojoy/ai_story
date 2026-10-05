@@ -10,9 +10,12 @@ from pathlib import Path
 import pytest
 
 from tianxia import calendar, rules, timetable
+from tianxia.characters import open_characters
 from tianxia.content import load_content
 from tianxia.engine import Game
 from tianxia.state import Lock, TimelineResult
+from tianxia.sqlite_world import open_world
+from tianxia.world_state import season_length_days
 
 CONTENT_DIR = Path(__file__).parent.parent / "content"
 NOW = 1000.0
@@ -246,3 +249,61 @@ def test_wancheng_not_in_battle_menu_before_week_three(on, real):
     assert [b.id for b in game.admin_battles() if b.timetable_event] == ["changshe_fire", "wancheng_yi", "guangzong"]
     real.config.season_one = False
     assert not any(b.timetable_event for b in _game(real, "乙").admin_battles())
+
+
+# ── 換版當天的順序（總計畫 T10 的表）──────────────────────────
+
+
+def _restart(content, *names):
+    """「重開伺服器」：角色照資料庫裡存的那一份、換上這一份內容（開關照它）重建 Game。"""
+    chars = open_characters()
+    return [Game(content, chars.load(name), rng=random.Random(0), world=open_world()) for name in names]
+
+
+def test_cutover_sequence(real):
+    """RF5：照總計畫 T10 的表 1～5 步走一次（假時鐘、兩個角色）：
+    1. 開關關著，beta 那一季照舊進行；2. 管理者立刻收季；3. 開關打開、重開：休季中的 beta 季什麼都不補算；
+    4. 開啟下一季：照週末設定蓋章，第 1 週的大事結算一次、公告一則；5. 排長社，時間到了開集結。
+    兩個角色同步後都是新角色、在第 1 週，江湖史留著上一季。"""
+    chars = open_characters()
+    admin, player = _game(real), _game(real, "乙")
+    player.state.player.faction = "guan"
+    for game in (admin, player):
+        game.sync(NOW)
+        chars.save(game.state)
+    assert not admin.world.get_season().season_one  # 1. beta：沒蓋章
+    admin.admin_end_season(NOW + 60)  # 2.
+    chars.save(admin.state)
+    assert admin.world.season_phase() == "resting"
+
+    on = load_content(CONTENT_DIR)  # 3. 設 TIANXIA_PROFILE=weekend、重開
+    on.config.auto_open_first_season, on.config.admins = True, ["管"]
+    on.config.season_one, on.config.season_days, on.config.server_max_players = True, 2.5, 2
+    admin, player = _restart(on, "管", "乙")
+    for game in (admin, player):
+        game.sync(NOW + 120)
+    old = admin.world.get_season()
+    assert old.ended and not old.season_one and old.timeline == {} and old.schedule == {}
+
+    admin.admin_next_season(NOW + 180)  # 4.
+    admin.sync(NOW + 181)
+    season = admin.world.get_season()
+    assert season.season_one and season_length_days(season, on) == 2.5 and list(season.timeline) == ["uprising"]
+    uprising = season.timeline["uprising"].text
+    assert sum(uprising in (e.tag + "".join(e.lines)) for e in admin.state.journal) == 1
+
+    t = NOW + 200  # 5. 排長社在現實 10 分鐘後；時間一到（下一個曆時交界）開集結
+    admin.admin_schedule("changshe_fire", t + 600, t)
+    assert admin.world.get_battle() is None
+    cal_hour = calendar.cal_hour_seconds(on, season)
+    admin.sync(t + 600 + cal_hour)
+    battle = admin.world.get_battle()
+    assert (battle.battle_id, battle.phase) == ("changshe_fire", "muster")
+
+    player.sync(t + 600 + cal_hour + 1)
+    for game in (admin, player):
+        p = game.state.player
+        assert (p.season_number, p.faction, p.rank) == (2, None, 0)
+        assert game.status_data()["calendar"]["week"] == 1
+    assert any(uprising in (e.tag + "".join(e.lines)) for e in player.state.journal)
+    assert "賽季落幕" in player.chronicle_text()  # 江湖史留著上一季
