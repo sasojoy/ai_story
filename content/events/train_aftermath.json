@@ -285,7 +285,8 @@
         "text": "趁夥計顧不上，撿一包貨揣走",
         "check": {
           "stat": "agi",
-          "difficulty": 5
+          "difficulty": 5,
+          "practice": "evil"
         },
         "effect": {
           "text": "你把一個小貨包塞進懷裡，夥計光顧著追騾子，誰也沒看見。打開一看，是幾匹好布。",
@@ -310,7 +311,8 @@
         "text": "揣著貨包就跑",
         "check": {
           "stat": "agi",
-          "difficulty": 4
+          "difficulty": 4,
+          "practice": "evil"
         },
         "effect": {
           "text": "你一頭鑽進路邊的樹林，夥計追不上，只能在後頭罵。幾個行人都看清了你的臉。",
