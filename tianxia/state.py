@@ -188,6 +188,15 @@ class PlayerState(BaseModel):
     fs_asking: str | None = None  # 正在答最後一步的題的那條鏈；None＝沒在答（選單照常）
     fs_asked: int = 0  # 答到第幾題（0＝question，1 起是 then 的追問）
 
+    # ── 機緣（正式版乙一、機緣文件）；角色每季重來，叛投時 opportunities.clear 清掉 ──
+    opp_done: list[str] = Field(default_factory=list)  # 完成的機緣 id
+    opp_counts: dict[str, int] = Field(default_factory=dict)  # 累積型：機緣 id → 記了幾次
+    opp_items: dict[str, str] = Field(default_factory=dict)  # 機緣 id → 拿到、還沒交的東西（名字）
+    opp_fronts: dict[str, str] = Field(default_factory=dict)  # 機緣 id → 那件東西要送去哪條戰線
+    opp_clues: list[str] = Field(default_factory=list)  # 聽過線索的機緣 id
+    opp_tried: dict[str, int] = Field(default_factory=dict)  # 天時地利型：失敗那一回的時段鍵；同一回不能再試
+    rank2_days: dict[int, int] = Field(default_factory=dict)  # 曆日 → 那天做了幾次第 2 階行動；只留今天
+
 
 RumorLayer = Literal["world", "faction", "local", "personal"]  # 天下大事／陣營軍情／地方傳聞／個人線索（傳聞分層設計第二節）
 
