@@ -286,6 +286,19 @@ def test_map_view_selects_your_location_by_default(game):
     assert 'data-loc="' in view["svg"]
 
 
+def test_map_view_gives_the_legend_as_data_for_the_layer_shown(game):
+    """圖例不畫進 SVG（企劃者 10/4：放大時也要看得到）：跟 svg 並排給網頁，由網頁疊在地圖框角落。
+    送的是正在看的那一層的說明（認不得的圖層退回預設那一層），不是四層全給。"""
+    from tianxia import mapview
+
+    legend = server.look(game, lambda g: server.map_view(g, "enemies", None))["legend"]
+    assert legend["layer"] == mapview.LEGEND_LAYERS["enemies"] and len(legend["icons"]) == 6
+    assert all(item["svg"].startswith("<svg") and item["label"] for item in legend["icons"])
+    assert legend["states"] == mapview.LEGEND_STATES and legend["ring"] == mapview.LEGEND_RING and legend["strike"] == ""
+    fallback = server.look(game, lambda g: server.map_view(g, "沒這層", None))["legend"]
+    assert fallback["layer"] == mapview.LEGEND_LAYERS[server.DEFAULT_LAYER]
+
+
 def test_reports_view_is_empty_with_no_battles(game):
     view = server.look(game, lambda g: server.reports_view(g, None))
     assert view["list"] == [] and view["selected"] is None

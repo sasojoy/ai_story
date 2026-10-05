@@ -455,6 +455,18 @@ def icon(kind: str, x: int, y: int, look: str) -> str:
     return pole + _fill(f"M{x - 4},{y - 9} L{x + 8},{y - 5} L{x - 4},{y - 1} Z", main)
 
 
+ICON_BOX = (-12, -11, 24, 20)  # 單獨畫一個圖示的畫布（左、上、寬、高）：圖示中心在 (0, 0)；最寬的渡口與屋簷左右各 11，最高的渡口帆在上方 10，最低的船底在下方 8
+
+
+def icon_svg(kind: str, look: str = "full") -> str:
+    """單獨一個地點圖示（輿圖圖例用）：自成一張很小的 SVG，畫法就是地圖上的 icon()，不加圓盤與外圈；旁邊的字由網頁寫。"""
+    left, top, width, height = ICON_BOX
+    return (
+        f'<svg class="tx-icon" viewBox="{left} {top} {width} {height}" width="{width}" height="{height}" '
+        f'xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">{icon(kind, 0, 0, look)}</svg>'
+    )
+
+
 def banner(x: int, y: int) -> str:
     """所在地插的紅旗，插在記號右上（佔的範圍是 BANNER_BOX）。"""
     return (

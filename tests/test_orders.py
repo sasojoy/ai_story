@@ -1152,6 +1152,34 @@ def test_only_strike_orders_mark_the_map(on):
     assert "◎" not in mapview.render_map(game.state, on, "situation")
 
 
+def test_situation_legend_data_has_the_strike_line_only_when_the_mark_is_drawn(on):
+    game, _ = _strike_game(on, "haoqiang", "zhangmancheng")
+    assert atlas.STRIKE_MARK in mapview.render_map(game.state, on, "situation")  # 圖上標了
+    assert mapview.legend_data(game.state, on, "situation")["strike"] == mapview.LEGEND_STRIKE  # 圖例才多那一行
+    assert mapview.legend_data(game.state, on, "enemies")["strike"] == ""  # 只有局勢層標它
+    guan = _game(on, faction="guan")  # 這個陣營沒有打擊軍令：沒標，也沒有那一行
+    assert atlas.strike_marks(guan.state, on) == (set(), set())
+    assert mapview.legend_data(guan.state, on, "situation")["strike"] == ""
+
+
+@pytest.mark.parametrize("faction,fid,loc,region_id,region", STRIKES)
+def test_strike_legend_line_follows_the_mark_whether_it_sits_on_the_place_or_only_the_region(on, faction, fid, loc, region_id, region):
+    """◎ 那一行跟地圖標 ◎ 是同一個條件（atlas.strike_marks）：標在摸清的地點、或沒摸清只標在大區，都有；那一行只講
+    「本週軍令要打擊的人物」，沒有地名，所以沒摸清的地點不會從圖例洩漏。"""
+    game, order = _strike_game(on, faction, fid)
+    assert atlas.strike_marks(game.state, on) == (set(), {region_id})  # 沒摸清：只標大區
+    legend = mapview.legend_data(game.state, on, "situation")
+    assert legend["strike"] == mapview.LEGEND_STRIKE and on.locations[loc].name not in legend["strike"]
+    game.state.player.visited.add(loc)
+    assert atlas.strike_marks(game.state, on) == ({loc}, set())  # 摸清了：標地點
+    assert mapview.legend_data(game.state, on, "situation")["strike"] == mapview.LEGEND_STRIKE
+    for layer in ("enemies", "story", "routes"):
+        assert mapview.legend_data(game.state, on, layer)["strike"] == ""
+    order.done = True  # 已經達成：圖上不標，圖例也不多那一行
+    assert atlas.strike_marks(game.state, on) == (set(), set())
+    assert mapview.legend_data(game.state, on, "situation")["strike"] == ""
+
+
 def test_situation_legend_explains_the_mark_only_when_it_is_drawn_and_it_fits(on):
     game, _ = _strike_game(on, "haoqiang", "zhangmancheng")
     marked = mapview.render_map(game.state, on, "situation")

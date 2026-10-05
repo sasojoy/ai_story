@@ -211,6 +211,21 @@ def _tint(color: str, value: int) -> str:
     return mapart.mix(color, TREND_RED, TREND_TINT * max(0, min(100, value)) / 100)
 
 
+def legend_data(state: GameState, content: Content, layer: str = "situation") -> dict:
+    """輿圖的圖例，照這一層給網頁疊在地圖框角落的一層（不畫進 SVG：畫在圖裡會跟著平移、縮放，放大時就看不見了）。
+    icons 是六種地點圖示（每個是一張自成一體的小 SVG，畫法同地圖上的圖示）；states 是視野狀態怎麼畫；ring 是外圈；
+    layer 是這一層的說明（認不得的圖層是空字串）；strike 是局勢層有本週打擊軍令的標記時多的那一句說明，沒有就是空字串
+    （跟 render_map 標 ◎ 同一個條件，見 atlas.strike_marks；小地圖沒有圖例）。全是字串，原樣就是 JSON。"""
+    strike_places, strike_regions = atlas.strike_marks(state, content) if layer == "situation" else (set(), set())
+    return {
+        "icons": [{"kind": kind, "label": text, "svg": mapart.icon_svg(kind)} for kind, text in LEGEND_ICONS],
+        "states": LEGEND_STATES,
+        "ring": LEGEND_RING,
+        "layer": LEGEND_LAYERS.get(layer, ""),
+        "strike": LEGEND_STRIKE if strike_places or strike_regions else "",
+    }
+
+
 def _legend_line(layer: str) -> str:
     return f"{LEGEND_RING}　{LEGEND_LAYERS[layer]}"
 

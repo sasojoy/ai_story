@@ -7,10 +7,10 @@ import pytest
 
 from tianxia.atlas import location_view, vision_range, visible_locations
 from tianxia.content import load_content
-from tianxia.mapart import bezier_point, bezier_tail, fmt, icon_kind, mix, road_control, terrain
+from tianxia.mapart import bezier_point, bezier_tail, fmt, icon_kind, icon_svg, mix, road_control, terrain
 from tianxia.mapview import (
-    LEGEND_LAYERS, LEGEND_STATES, MINI_HEIGHT, ROUTE_STROKE, SELECT_STROKE, YOU_SIZE, render_map, render_minimap,
-    text_box, text_width,
+    LEGEND_ICONS, LEGEND_LAYERS, LEGEND_RING, LEGEND_STATES, LEGEND_STRIKE, MINI_HEIGHT, ROUTE_STROKE, SELECT_STROKE, YOU_SIZE,
+    legend_data, render_map, render_minimap, text_box, text_width,
 )
 from tianxia.models import Connection, Location, MapRiver, Terrain
 from tianxia.state import Journey, Rumor, new_game_state
@@ -669,3 +669,21 @@ def test_real_maps_stay_small_enough_for_phones(real):
     for loc_id in real.locations:  # 小地圖每 10 秒跟著畫面更新一次：只放視窗裡的山頭
         state.player.location = loc_id
         assert len(render_minimap(state, real).encode()) <= 50_000, loc_id
+
+
+# ── 圖例的資料（給網頁疊在地圖框角落；不畫進 SVG）──────────────────
+
+
+def test_legend_data_has_six_icons_how_views_are_drawn_the_ring_and_this_layers_line(state, content):
+    legend = legend_data(state, content, "routes")
+    assert [(item["kind"], item["label"]) for item in legend["icons"]] == LEGEND_ICONS
+    assert all(item["svg"] == icon_svg(item["kind"]) for item in legend["icons"])  # 圖示就是地圖上畫的那六個
+    assert legend["states"] == LEGEND_STATES and legend["ring"] == LEGEND_RING
+    assert legend["layer"] == LEGEND_LAYERS["routes"] and legend["strike"] == ""
+    assert all(isinstance(value, str) for key, value in legend.items() if key != "icons")  # 全是字串：原樣就是 JSON
+
+
+def test_every_layer_has_its_own_legend_line(state, content):
+    for layer, line in LEGEND_LAYERS.items():
+        assert legend_data(state, content, layer)["layer"] == line
+    assert legend_data(state, content, "沒這層")["layer"] == ""  # 認不得的圖層不丟例外，網頁就不畫那一行
