@@ -2571,12 +2571,15 @@ class Game:
 
     # 名冊第一列是本人（PLAYER）：本人永遠出戰，加入、移出都只回一句話，隊伍裡不會多出一個 "player"
     SELF_IN_TEAM = "本人一直都在隊伍裡，不用加入，也不能移出。"
+    FOLLOWER_IN_TEAM = "部下一直跟著你出戰，不用加入，也不能移出。"  # 計畫 T5
 
     def add_to_team(self, companion_id: str) -> list[str]:
         if self._preparing():
             return self._log(["（賽季籌備中，等待管理者開季。）"])
         if companion_id == PLAYER:
             return self._log([self.SELF_IN_TEAM])
+        if companion_id.startswith(team.FOLLOWER_KEY):
+            return self._log([self.FOLLOWER_IN_TEAM])
         return self._log(team.add_to_team(self.state, companion_id))
 
     def remove_from_team(self, companion_id: str) -> list[str]:
@@ -2584,6 +2587,8 @@ class Game:
             return self._log(["（賽季籌備中，等待管理者開季。）"])
         if companion_id == PLAYER:
             return self._log([self.SELF_IN_TEAM])
+        if companion_id.startswith(team.FOLLOWER_KEY):
+            return self._log([self.FOLLOWER_IN_TEAM])
         return self._log(team.remove_from_team(self.state, companion_id))
 
     # ── 門下頁面：武學說明 ──────────────────────────────────

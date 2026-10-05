@@ -9,10 +9,10 @@ from __future__ import annotations
 import math
 import random
 
-from . import encounter
+from . import calendar, encounter
 from .martial_arts import MAX_LEVEL, MartialArt, generate_from_name, historical_art
-from .models import Content, Squad
-from .state import PLAYER, MAX_TEAM_COMPANIONS, GameState
+from .models import Content, FollowerDef, Squad
+from .state import PLAYER, MAX_TEAM_COMPANIONS, GameState, Member
 from .world_state import CompanionProgress, WorldStateStore
 
 ESTIMATE_RUNS = 40
@@ -73,9 +73,10 @@ def resolve_art(skill_id: str | None, content: Content, world: WorldStateStore) 
 
 
 def team_arts(state: GameState, content: Content, world: WorldStateStore) -> dict[str, MartialArt]:
-    """本隊每個人的內功/武學，蒐集成一份 id -> MartialArt 給 encounter.py 用。"""
+    """本隊每個人的內功/武學（含部下），蒐集成一份 id -> MartialArt 給 encounter.py 用。"""
     arts: dict[str, MartialArt] = {}
     ids = {state.player.member.neigong_id, state.player.member.wugong_id}
+    ids |= {unit.wugong_id for unit in follower_units(state, content)}
     shared = world.read()
     for key in state.player.team:
         progress = shared.companions.get(key, CompanionProgress())
@@ -90,9 +91,32 @@ def team_arts(state: GameState, content: Content, world: WorldStateStore) -> dic
 
 def team_participants(state: GameState, world: WorldStateStore) -> list:
     """本隊每個人的「威力貢獻者」物件（玩家的 Member、同伴的 CompanionProgress），
-    直接餵給 encounter.team_power——兩者欄位形狀相同（見 encounter.HasMartialArts）。"""
+    直接餵給 encounter.team_power——兩者欄位形狀相同（見 encounter.HasMartialArts）。部下另外接在後面（follower_units）。"""
     shared = world.read()
     return [state.player.member] + [shared.companions.get(k, CompanionProgress()) for k in state.player.team]
+
+
+FOLLOWER_KEY = "follower:"  # 名冊裡部下的 key：follower:<在 PlayerState.followers 裡的位置>（同一種部下可以有兩個）
+
+
+def follower_rows(state: GameState, content: Content) -> list[tuple[str, FollowerDef]]:
+    """部下（計畫 T5）：(名冊的 key, 模板)。第一季才有，開關關著時是空的。"""
+    if not state.player.followers or not calendar.season_one_on(state.world, content):  # 同 rules.season_one（rules 會 import team）
+        return []
+    return [(f"{FOLLOWER_KEY}{i}", content.followers[fid]) for i, fid in enumerate(state.player.followers)
+            if fid in content.followers]
+
+
+def follower_units(state: GameState, content: Content) -> list[Member]:
+    """部下照模板建成跟 Member 同形狀的威力貢獻者（武學照模板、沒有內功）。只算威力：不在 team_keys 裡，
+    所以不擋檢定、不扣氣血（take_encounter_toll）、不吃經驗；氣血係數一律 1.0。"""
+    return [Member(wugong_id=f.wugong, wugong_level=f.wugong_level) for _, f in follower_rows(state, content)]
+
+
+def _fighters(state: GameState, content: Content, world: WorldStateStore) -> tuple[list, list[float]]:
+    """打一場的陣容與各自的氣血係數：本人、出戰的同伴，再加上部下（滿血）。"""
+    followers = follower_units(state, content)
+    return team_participants(state, world) + followers, team_conditions(state, content, world) + [1.0] * len(followers)
 
 
 # ── 隊伍組成 ─────────────────────────────────────────────
@@ -347,9 +371,7 @@ def fight(
     """difficulty 給了就取代隊伍的難度（挑戰大勢人物本人：難度跟著聲威走，見 figures.difficulty）。"""
     squad = content.squads[squad_id]
     arts = team_arts(state, content, world)
-    power = encounter.team_power(
-        team_participants(state, world), arts, squad.attribute, team_conditions(state, content, world),
-    )
+    power = encounter.team_power(*_with_attribute(_fighters(state, content, world), arts, squad.attribute))
     return encounter.resolve_encounter(power, squad.difficulty if difficulty is None else difficulty, rng)
 
 
@@ -381,7 +403,11 @@ def estimate(
     if difficulty is not None:
         squad = squad.model_copy(update={"difficulty": difficulty})
     arts = team_arts(state, content, world)
-    power = encounter.team_power(
-        team_participants(state, world), arts, squad.attribute, team_conditions(state, content, world),
-    )
+    power = encounter.team_power(*_with_attribute(_fighters(state, content, world), arts, squad.attribute))
     return odds_word(power, squad)
+
+
+def _with_attribute(fighters: tuple[list, list[float]], arts: dict[str, MartialArt], attribute: str | None) -> tuple:
+    """encounter.team_power 的參數順序：陣容、武學、對手屬性、氣血係數。"""
+    members, conditions = fighters
+    return members, arts, attribute, conditions

@@ -9,7 +9,7 @@ from unittest import mock
 
 import pytest
 
-from tianxia import calendar, figures, ranks, team
+from tianxia import calendar, encounter, figures, ranks, team
 from tianxia.content import ContentError, load_content, validate
 from tianxia.encounter import EncounterResult
 from tianxia.engine import Game
@@ -323,3 +323,56 @@ def test_switch_off_no_summons(real):
     game.choose("act:stand")
     _summoned(game)
     assert "act:summons" not in _ids(game) and ranks.summons_event(game.state, real) is None
+
+
+# ── Task 4：部下 ─────────────────────────────────
+
+GUAN_FOLLOWERS = ["follower_guan_spear", "follower_guan_crossbow"]
+
+
+def _spied_power(call):
+    """call() 裡第一次單次判定收到的我方威力（遊歷、勝算估計都經過 encounter.resolve_encounter）。"""
+    seen: list[float] = []
+    resolve = encounter.resolve_encounter
+
+    def spy(power, difficulty, rng):
+        seen.append(power)
+        return resolve(power, difficulty, rng)
+
+    with mock.patch.object(encounter, "resolve_encounter", side_effect=spy):
+        result = call()
+    return seen[0], result
+
+
+def test_followers_add_power_and_take_no_toll(on):
+    """RF4：同一場遊歷，帶著兩名部下的威力比沒有高、勝算估計也算進去；打完只扣本人的氣血（部下沒有氣血、不吃傷）。"""
+    alone = _game(on, "甲", faction="guan", at="runan_wilds")
+    led = _game(on, "乙", faction="guan", at="runan_wilds")
+    led.state.player.followers = list(GUAN_FOLLOWERS)
+    squad = alone._train_squad_ids(on.locations["runan_wilds"])[0]
+    estimate = lambda g: team.estimate(g.state, on, g.world, squad)  # noqa: E731
+    assert _spied_power(lambda: estimate(led))[0] > _spied_power(lambda: estimate(alone))[0]
+    power_alone, _ = _spied_power(lambda: alone.choose("act:train"))
+    power_led, msgs = _spied_power(lambda: led.choose("act:train"))
+    assert power_led > power_alone
+    assert sum(m.startswith("氣血 -") for m in msgs) == 1
+
+
+def test_switch_off_followers_do_not_fight(real):
+    """開關關著：存檔裡就算有部下，也不算威力、不進名冊。"""
+    alone = _game(real, "甲", faction="guan", at="runan_wilds")
+    led = _game(real, "乙", faction="guan", at="runan_wilds")
+    led.state.player.followers = list(GUAN_FOLLOWERS)
+    assert _spied_power(lambda: led.choose("act:train"))[0] == _spied_power(lambda: alone.choose("act:train"))[0]
+    assert [key for _, key in led.roster_lines()] == ["player"]
+
+
+def test_followers_listed_in_roster_without_dialogue(on):
+    """名冊多兩列「部下・持矛鄉勇」；角色卡寫武學與成數；不能加入、移出隊伍（一直跟著出戰），也不進同伴的隊伍。"""
+    game = _game(on, faction="guan")
+    game.state.player.followers = list(GUAN_FOLLOWERS)
+    assert game.roster_lines()[1:] == [("部下・持矛鄉勇", "follower:0"), ("部下・弩手鄉勇", "follower:1")]
+    card = game.member_card("follower:0")
+    assert card.startswith("### 持矛鄉勇") and "行伍槍法" in card and "第3成" in card
+    assert game.add_to_team("follower:0") == [Game.FOLLOWER_IN_TEAM] == game.remove_from_team("follower:1")
+    assert game.state.player.team == []
