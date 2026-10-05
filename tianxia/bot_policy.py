@@ -31,6 +31,9 @@ CHALLENGE_ODDS = ("穩勝", "有把握")  # 假人只挑這兩種勝算的人物
 ORDER_SCORE = 30.0
 ORDER_MOVE_SCORE = 12.0
 DUTY_SCORE = 0.5  # 守勢行動本身（不替軍令記功時）：低於探索，不然假人整天巡哨
+# 召見（計畫 T5）：一季一次、演完才晉升帶部下，到了就應召、沒到就往那裡走，都比軍令優先
+SUMMONS_SCORE = 50.0
+SUMMONS_MOVE_SCORE = 15.0
 STRIKE_ODDS = CHALLENGE_ODDS + ("五五波",)  # 有打擊軍令點名這位人物時，五五波也去打
 PRACTICE_CHANCE = 0.2  # 每次行動順便鍛鍊一門的機率（練功不花心得，不能每次都練）
 SKILL_NAME_TRIES = 5
@@ -120,7 +123,8 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
     if kind == "move":
         base = HOME_MOVE_SCORE if arg == _front_hop(game, profile) or arg in _home(game, profile) else AWAY_MOVE_SCORE
         order_hop = ORDER_MOVE_SCORE if arg.partition(":")[0] == _order_hop(game) else 0.0  # 往軍令要去的地方（計畫 T6）
-        return base + order_hop + (TRAIN_MOVE_SCORE if _train_value(game, profile, arg) > 0 else 0.0)
+        summons_hop = SUMMONS_MOVE_SCORE if arg.partition(":")[0] == _summons_hop(game) else 0.0  # 往召見的地點（計畫 T5）
+        return base + order_hop + summons_hop + (TRAIN_MOVE_SCORE if _train_value(game, profile, arg) > 0 else 0.0)
     if kind == "act":
         if arg.startswith("challenge:"):  # 挑戰本人：打得贏才去（打不贏的、閉門不見的按不下去，本來就不在候選裡）
             fid = arg.partition(":")[2]
@@ -141,6 +145,8 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
             return DUTY_SCORE + (ORDER_SCORE if orders.duty_counts(s, game.content, s.player.faction, s.player.location) else 0.0)
         if arg == "convoy":  # 接下糧車：只在有護糧軍令的起點出現
             return ORDER_SCORE
+        if arg == "summons":  # 應召（計畫 T5）：只在召見的地點出現
+            return SUMMONS_SCORE
         return ACT_SCORES.get(arg, 0.0)
     return None
 
@@ -285,6 +291,12 @@ def _losing_front(game: Game, faction_id: str) -> str | None:
     if not fronts:
         return None
     return max(fronts, key=lambda front: -goals[front] * rules.trend_value(game.state, content, front))
+
+
+def _summons_hop(game: Game) -> str | None:
+    """往召見的地點，路程最近的那一站；沒有召見、已經在、走不到時是 None（計畫 T5）。"""
+    summons = game.state.player.summons
+    return next_hop(game, [summons.location]) if summons is not None else None
 
 
 def _order_hop(game: Game) -> str | None:

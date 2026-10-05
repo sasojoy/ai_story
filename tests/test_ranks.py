@@ -9,12 +9,12 @@ from unittest import mock
 
 import pytest
 
-from tianxia import calendar, encounter, figures, ranks, team
+from tianxia import bot_policy, calendar, encounter, figures, ranks, team
 from tianxia.content import ContentError, load_content, validate
 from tianxia.encounter import EncounterResult
 from tianxia.engine import Game
 from tianxia.models import Config, Effect, FigureChange
-from tianxia.state import PlayerState, Summons, WorldState
+from tianxia.state import BotProfile, PlayerState, Summons, WorldState
 
 CONTENT_DIR = Path(__file__).parent.parent / "content"
 
@@ -376,3 +376,48 @@ def test_followers_listed_in_roster_without_dialogue(on):
     assert card.startswith("### 持矛鄉勇") and "行伍槍法" in card and "第3成" in card
     assert game.add_to_team("follower:0") == [Game.FOLLOWER_IN_TEAM] == game.remove_from_team("follower:1")
     assert game.state.player.team == []
+
+
+# ── Task 5：假人應召、真實內容走一遍 ─────────────────────────────────
+
+
+def _bot(on, game, faction):
+    on.config.bot_strength = 1.0  # 永遠挑最高分
+    return BotProfile(personality="普通", seed=1, faction=faction, season_number=1)
+
+
+def test_bot_answers_summons(on):
+    """有召見的假人往召見的地點走（長社 → 黃巾別部營寨），到了選「應召」，演完晉升（選哪個選項都晉升）。"""
+    game = _summoned(_game(on, faction="huang", at="changshe"), figure="bocai", at="huangjin_camp")
+    profile = _bot(on, game, "huang")
+    options = [o for o in game.options(odds=False) if o.enabled and o.id != "act:rest"]
+    assert bot_policy.pick(game, options, profile, random.Random(0)).startswith("move:huangjin_camp")
+    game.state.player.location = "huangjin_camp"
+    options = [o for o in game.options(odds=False) if o.enabled and o.id != "act:rest"]
+    assert bot_policy.pick(game, options, profile, random.Random(0)) == "act:summons"
+    bot_policy.take_turn(game, profile, random.Random(0))
+    assert game.state.pending_event == "promo_huang_2"
+    bot_policy.take_turn(game, profile, random.Random(0))
+    p = game.state.player
+    assert (p.rank, p.summons, len(p.followers)) == (2, None, 2)
+
+
+def test_real_guan_reaches_rank_two(on):
+    """真實內容走一遍：新角色走到長社投靠官軍（官軍・鄉勇）、巡哨把貢獻推過 300、收到召見、應召、選第二個選項，
+    狀態列「官軍・屯長」、兩名部下，遊歷的威力變高。"""
+    game = _game(on, at="yingchuan")
+    game.state.player.stamina = 150
+    game.travel("changshe", "dash")
+    game.choose("faction:guan")
+    game.choose("faction:confirm")
+    assert game.status_data()["affiliation"] == "官軍・鄉勇"
+    game.state.player.contrib = 290
+    game.state.player.stamina = 150
+    assert "皇甫嵩召你到長社營中。" in game.choose("act:duty")
+    squad = game._train_squad_ids(on.locations["changshe"])[0]
+    before = _spied_power(lambda: team.estimate(game.state, on, game.world, squad))[0]
+    game.choose("act:summons")
+    assert "皇甫嵩微微一笑。" in game.choose("choice:1")
+    assert game.status_data()["affiliation"] == "官軍・屯長"
+    assert game.state.player.followers == GUAN_FOLLOWERS
+    assert _spied_power(lambda: team.estimate(game.state, on, game.world, squad))[0] > before
