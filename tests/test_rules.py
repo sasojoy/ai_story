@@ -452,7 +452,7 @@ def test_a_prior_meeting_still_opens_the_door_whatever_the_bar(state, content):
     assert can_meet(state, content, cid)
 
 
-# ── 四屬性每項最高 stat_cap（武學與成長設計 6.2）──────────────────────────────
+# ── 五屬性每項最高 stat_cap（武學與成長設計 6.2）──────────────────────────────
 
 
 def test_an_event_cannot_push_a_stat_past_the_cap(state, content, world):

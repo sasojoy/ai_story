@@ -899,7 +899,7 @@ def test_no_stale_four_stat_wording_is_left_around_the_status_bar():
 
 
 def test_the_allocate_buttons_say_what_each_stat_does():
-    """M2：＋鈕底下那一行（四項各管什麼）跟＋鈕畫在同一個條件裡——有點可配才出現；用的是伺服器送的 stat_uses 與
+    """M2：＋鈕底下那一行（五項各管什麼）跟＋鈕畫在同一個條件裡——有點可配才出現；用的是伺服器送的 stat_uses 與
     stat_uses_note，網頁不寫死屬性的用途。"""
     js = (server.WEB / "app.js").read_text(encoding="utf-8")
     start = js.index('data-act="allocate"')
