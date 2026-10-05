@@ -42,6 +42,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import load_common  # noqa: E402
 
 SKIP_PREFIXES = ("talk:", "call:", "act:socialize", "act:challenge:", "choice:free")  # 會叫模型的，引擎層不做
+ENV_KEYS = ("TIANXIA_DB", "TIANXIA_PROFILE")  # run() 會動的環境變數
 NO_MODEL_URL = "http://127.0.0.1:1"  # 沒人聽的埠：真的有地方漏叫了模型，也只會連線失敗，碰不到真的 Ollama（11434）
 AFTER_END_ACTIONS = 3  # 收季之後再讓幾個角色做動作，確認伺服器還能回應
 
@@ -56,10 +57,12 @@ def _import_server(db_path: Path):
 
 
 @contextlib.contextmanager
-def lock_timer(db) -> Iterator[list[float]]:
+def lock_timer(db, clock=time.perf_counter) -> Iterator[list[float]]:
     """在 db.transaction 上裝計時：每一筆「最外層」的寫入交易（也就是行動鎖）握了多久就往清單加一筆。
-    計時從拿到寫入權開始、到 COMMIT 完成為止；巢狀在裡面的交易（角色存檔、全服狀態的寫入）不另外算。
-    離開時拆掉。不改 server.py：伺服器的 _locked 一律走 game.world.action_lock() → db.transaction()。"""
+    計時從拿到寫入權（BEGIN IMMEDIATE 回來）開始、到 COMMIT 完成為止：等別人放掉寫入權的時間不算，COMMIT 寫進磁碟的
+    時間要算（兩頭各有一條測試釘住）；巢狀在裡面的交易（角色存檔、全服狀態的寫入）不另外算。
+    離開時拆掉。不改 server.py：伺服器的 _locked 一律走 game.world.action_lock() → db.transaction()。
+    clock 只給測試換成假時鐘用。"""
     held: list[float] = []
     real = db.transaction  # 綁好的原方法
 
@@ -68,12 +71,12 @@ def lock_timer(db) -> Iterator[list[float]]:
         outermost = not db.writing()
         start = None
         try:
-            with real(timeout) as conn:
-                start = time.perf_counter()
+            with real(timeout) as conn:  # 進來＝拿到寫入權；離開＝COMMIT 做完
+                start = clock()
                 yield conn
         finally:
             if outermost and start is not None:
-                held.append(time.perf_counter() - start)
+                held.append(clock() - start)
 
     db.transaction = timed
     try:
@@ -133,7 +136,7 @@ def run(
     polls_per_action: int = 0, trace_memory: bool = True,
 ) -> dict:
     db_path = Path(workdir) / "load.db"
-    db_env_before = os.environ.get("TIANXIA_DB")
+    env_before = {key: os.environ.get(key) for key in ENV_KEYS}  # _import_server 會動這兩個，跑完要原樣放回去
     server = _import_server(db_path)
     config = server.CONTENT.config
     config_before = (config.auto_open_first_season, list(config.admins), config.ollama_url)
@@ -226,12 +229,15 @@ def run(
     finally:
         if trace_memory:
             tracemalloc.stop()
-        config.auto_open_first_season, config.admins, config.ollama_url = config_before[0], config_before[1], config_before[2]
+        config.auto_open_first_season = config_before[0]
+        config.admins = config_before[1]
+        config.ollama_url = config_before[2]
         server.GAMES.clear()
-        if db_env_before is None:
-            os.environ.pop("TIANXIA_DB", None)
-        else:
-            os.environ["TIANXIA_DB"] = db_env_before
+        for key, value in env_before.items():  # 原本沒設的要刪掉，不能留著 setdefault 補上的值
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
     return report
 
 

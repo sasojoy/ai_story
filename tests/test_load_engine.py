@@ -1,7 +1,10 @@
 """引擎層壓測（線上架構設計 9.1 第 1 層）：小數字跑通流程，數字本身不驗。"""
+import contextlib
 import os
 import sys
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -37,6 +40,111 @@ def test_lock_timer_counts_only_outermost_transactions_and_cleans_up(tmp_path):
             pass
     assert len(held) == 3 and held[1] >= 0.05  # 出錯撤回的那一筆也算握過鎖
     assert "transaction" not in vars(db)
+
+
+class FakeClock:
+    def __init__(self):
+        self.now = 0.0
+
+    def __call__(self) -> float:
+        return self.now
+
+    def advance(self, seconds: float) -> None:
+        self.now += seconds
+
+
+class FakeDb:
+    """假的資料庫：最外層的交易進來要先等 begin_wait 秒（BEGIN IMMEDIATE 等別人放掉寫入權），離開時花 commit 秒
+    （COMMIT 寫進磁碟）；巢狀的交易不等也不 COMMIT。時間走假時鐘，所以測試不靠真的睡覺、也不會因為機器忙而抖動。"""
+
+    def __init__(self, clock, begin_wait: float, commit: float):
+        self.clock, self.begin_wait, self.commit, self.depth = clock, begin_wait, commit, 0
+
+    def writing(self) -> bool:
+        return self.depth > 0
+
+    @contextlib.contextmanager
+    def transaction(self, timeout=None):
+        if self.depth == 0:
+            self.clock.advance(self.begin_wait)
+        self.depth += 1
+        try:
+            yield "conn"
+        finally:
+            self.depth -= 1
+            if self.depth == 0:
+                self.clock.advance(self.commit)
+
+
+def test_lock_hold_runs_from_begin_returning_to_commit_done():
+    """握鎖時間的定義釘在兩頭：從 BEGIN IMMEDIATE 回來（拿到寫入權）算起、到 COMMIT 做完為止。
+    等寫入權的 0.7 秒不算（算進去＝把別人佔著鎖的時間記成自己的）；COMMIT 的 0.2 秒要算（寫進磁碟在鎖裡）。"""
+    clock = FakeClock()
+    db = FakeDb(clock, begin_wait=0.7, commit=0.2)
+    with load_engine.lock_timer(db, clock=clock) as held:
+        with db.transaction():
+            clock.advance(0.1)  # 動作本身
+            with db.transaction():  # 裡面巢狀的存檔：不另外算、也不多等
+                clock.advance(0.05)
+    assert held == [pytest.approx(0.35)]
+
+
+def test_lock_hold_does_not_count_time_spent_waiting_for_the_write_lock(tmp_path):
+    """同一件事用真的資料庫與真的競爭再驗一次：另一個執行緒佔著寫入權 0.4 秒，這邊的交易等到了才開始算，
+    所以記下來的握鎖時間只有交易本身那一點點。"""
+    import threading  # noqa: PLC0415
+    import time  # noqa: PLC0415
+
+    from tianxia.database import open_database  # noqa: PLC0415
+
+    db = open_database(tmp_path / "contend.db")
+    holding, release = threading.Event(), threading.Event()
+
+    def hold_the_lock():
+        with db.transaction():
+            holding.set()
+            release.wait(5)
+
+    thread = threading.Thread(target=hold_the_lock)
+    thread.start()
+    try:
+        assert holding.wait(5)
+        threading.Timer(0.4, release.set).start()
+        started = time.monotonic()
+        with load_engine.lock_timer(db) as held:
+            with db.transaction():
+                pass
+        waited = time.monotonic() - started
+    finally:
+        release.set()
+        thread.join(5)
+    assert waited >= 0.3  # 真的等了
+    assert len(held) == 1 and held[0] < 0.15
+
+
+def test_poll_takes_two_locks_and_reports_both(tmp_path):
+    """/api/main ＝ 一次無事的 act ＋ 一次 look，各拿一次行動鎖；回報的是兩次握鎖加起來的秒數。"""
+    import time  # noqa: PLC0415
+    from types import SimpleNamespace  # noqa: PLC0415
+
+    from tianxia.database import open_database  # noqa: PLC0415
+
+    db = open_database(tmp_path / "poll.db")
+    calls = []
+
+    def locked_for_a_while(name):
+        with db.transaction():
+            calls.append(name)
+            time.sleep(0.1)
+
+    server = SimpleNamespace(
+        act=lambda game, action: (locked_for_a_while("act"), action(game)),
+        look=lambda game, view: (locked_for_a_while("look"), view(game)),
+        main_view=lambda game: {},
+    )
+    held = load_engine.one_poll(server, SimpleNamespace(world=SimpleNamespace(db=db)))
+    assert calls == ["act", "look"]
+    assert held >= 0.19  # 兩次各 0.1 秒都算進去（只算一次的話是 0.1）
 
 
 def test_process_memory_peak_reads_a_sane_number():
@@ -97,27 +205,96 @@ def test_poll_requests_between_actions_are_measured_separately(tmp_path):
     assert plain["poll_locked"] == []  # 預設不穿插，跟只量動作時一樣
 
 
-def test_run_leaves_the_process_as_it_found_it(tmp_path):
-    """run 動了環境變數、內容設定與伺服器的角色表：跑完都要放回去，不然同一個 pytest 程序裡別的測試會被帶歪。"""
+@pytest.mark.parametrize("profile", [None, "weekend"])
+def test_run_puts_back_everything_it_touched(tmp_path, monkeypatch, profile):
+    """run 動了環境變數（TIANXIA_DB、TIANXIA_PROFILE）、內容設定的三個欄位與伺服器的角色表：跑完都要放回去，
+    不然同一個 pytest 程序裡別的測試會被帶歪。「放回去」的對象是這個測試自己先設好的哨兵值，不是從目前狀態抄來的
+    『之前』：前面的測試就算已經把狀態弄髒了，刪掉任何一行還原都一定會紅（跟測試的執行順序無關）。"""
     import server  # noqa: PLC0415
 
-    before = (os.environ.get("TIANXIA_DB"), server.CONTENT.config.auto_open_first_season,
-              list(server.CONTENT.config.admins), server.CONTENT.config.ollama_url)
+    config = server.CONTENT.config
+    sentinel_db = str(tmp_path / "sentinel.db")
+    monkeypatch.setattr(config, "auto_open_first_season", False)
+    monkeypatch.setattr(config, "admins", ["甲"])
+    monkeypatch.setattr(config, "ollama_url", "http://sentinel.invalid:9")
+    monkeypatch.setenv("TIANXIA_DB", sentinel_db)
+    if profile is None:
+        monkeypatch.delenv("TIANXIA_PROFILE", raising=False)
+    else:
+        monkeypatch.setenv("TIANXIA_PROFILE", profile)
+
     load_engine.run(characters=3, actions=5, seed=1, workdir=tmp_path, end_season=True)
-    after = (os.environ.get("TIANXIA_DB"), server.CONTENT.config.auto_open_first_season,
-             list(server.CONTENT.config.admins), server.CONTENT.config.ollama_url)
-    assert after == before
+
+    assert config.auto_open_first_season is False
+    assert config.admins == ["甲"]
+    assert config.ollama_url == "http://sentinel.invalid:9"
+    assert os.environ.get("TIANXIA_DB") == sentinel_db
+    assert os.environ.get("TIANXIA_PROFILE") == profile
     assert not any(key.startswith("壓測") for key in server.GAMES)
 
 
+def test_the_dead_model_address_is_nobodys_port():
+    """上一條拿 NO_MODEL_URL 當標準答案，所以常數本身另外釘：只能是這台電腦上的埠，而且不是真的 Ollama（11434）、
+    別人用的 11999、試玩伺服器（7861）與壓測假模型的 11990～11998。"""
+    from urllib.parse import urlparse  # noqa: PLC0415
+
+    url = urlparse(load_engine.NO_MODEL_URL)
+    assert url.hostname == "127.0.0.1"
+    assert url.port not in (11434, 11999, 7861) and not 11990 <= url.port <= 11998
+
+
 def test_the_engine_run_never_asks_a_model(tmp_path, monkeypatch):
-    """引擎層不叫任何模型：連線一碰就失敗的測試替身，跑完也不會被碰到。"""
+    """引擎層不叫任何模型，兩道防線各自釘住（拿掉任何一道都會紅）：每個角色的 Game 拿掉 client、內容設定的 ollama_url
+    指到沒人聽的埠。引擎自己會吞掉鎖內模型呼叫的失敗、退回固定文字，所以「叫了也不出錯」不能當證據；這裡改成：
+    1. 每個動作與畫面請求開始前，記下這個 Game 的 client 與目前的 ollama_url，要是 None 與 NO_MODEL_URL；
+    2. 每次再走一次引擎在鎖內叫模型的入口（Game._quick_client）：有 client 就硬叫一次，叫了會被記下來（模型的方法與
+       HTTP 都換成只記錄的替身，不會真的連線）。沒有 client 的 Game 這個入口回 None，什麼也不會發生。"""
+    import requests  # noqa: PLC0415
+    import server  # noqa: PLC0415
     from tianxia.ollama_client import OllamaClient  # noqa: PLC0415
 
-    def boom(self, *args, **kwargs):
-        raise AssertionError("引擎層壓測不該叫模型")
+    asked: list[tuple[str, str]] = []
 
-    monkeypatch.setattr(OllamaClient, "chat_text", boom)
-    monkeypatch.setattr(OllamaClient, "chat_structured", boom)
-    report = load_engine.run(characters=4, actions=60, seed=2, workdir=tmp_path, end_season=False)
+    def recorder(kind):
+        def record(self, *args, **kwargs):
+            asked.append((kind, self.base_url))
+            return "" if kind == "chat_text" else {}
+        return record
+
+    def no_network(url, *args, **kwargs):
+        asked.append(("http", url))
+        raise requests.ConnectionError("測試不連線")
+
+    monkeypatch.setattr(OllamaClient, "chat_text", recorder("chat_text"))
+    monkeypatch.setattr(OllamaClient, "chat_structured", recorder("chat_structured"))
+    monkeypatch.setattr(requests, "post", no_network)
+    monkeypatch.setattr(requests, "get", no_network)
+
+    seen: list[tuple[object, str]] = []
+
+    def look_for_a_model(game):
+        seen.append((game.client, server.CONTENT.config.ollama_url))
+        quick = game._quick_client()
+        if quick is not None:  # 有 client 才會到這裡：硬叫一次，讓「有 client」變成看得見的模型呼叫
+            quick.chat_text([{"role": "user", "content": "你好"}])
+
+    real_action, real_poll = load_engine.one_action, load_engine.one_poll
+
+    def watched_action(srv, game, rng):
+        look_for_a_model(game)
+        return real_action(srv, game, rng)
+
+    def watched_poll(srv, game):
+        look_for_a_model(game)
+        return real_poll(srv, game)
+
+    monkeypatch.setattr(load_engine, "one_action", watched_action)
+    monkeypatch.setattr(load_engine, "one_poll", watched_poll)
+    report = load_engine.run(
+        characters=4, actions=30, seed=2, workdir=tmp_path, end_season=True, polls_per_action=1)
+
+    assert len(seen) == 30 + 30 + load_engine.AFTER_END_ACTIONS  # 動作、畫面請求、收季之後的動作都看過了
+    assert all(client is None for client, _ in seen)  # Game.client 是 None
+    assert {url for _, url in seen} == {load_engine.NO_MODEL_URL}  # ollama_url 是沒人聽的埠
+    assert asked == []  # 從頭到尾沒有模型呼叫、沒有 HTTP
     assert report["errors"] == {}
