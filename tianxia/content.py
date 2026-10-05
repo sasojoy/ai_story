@@ -15,11 +15,12 @@ from pathlib import Path
 
 from pydantic import BaseModel, ValidationError
 
+from .check_lines import BUCKET_KEYS
 from .companion_agent import DIALOGUE_TAGS
 from .materials import TIER_NAMES
 from .models import (
     FRONT_KEY, ROADS, STATS, BattleDef, CharacterDef, Condition, Config, Content, CraftNames, Effect, Event, FigureDef,
-    FollowerDef, Foreshadows, Location, OrdersContent, PromotionDef,
+    CheckLines, FollowerDef, Foreshadows, Location, OrdersContent, PromotionDef,
     MapLayout, Material, RoadSight, Scenario, Sect, SimRumor, SkillDef, Squad, TimetableEvent, Tutorial,
 )
 from .zh import to_traditional
@@ -62,6 +63,7 @@ def load_content(root: Path, profile: str | None = None) -> Content:
         skills=_index(SkillDef, _read(root / "skills.json")),
         materials=_index(Material, _read(root / "materials.json")),
         craft_names=CraftNames(**_read(root / "craft_names.json")),
+        check_lines=_check_lines(root / "check_lines.json"),
         banned_names=_read(root / "banned_names.json"),
         sects=_index(Sect, _read(root / "sects.json")),
         characters=_index(CharacterDef, _read(root / "characters.json")),
@@ -157,6 +159,19 @@ def _orders(path: Path) -> OrdersContent:
         raise ContentError(f"orders.json：{e}") from e
 
 
+def _check_lines(path: Path) -> CheckLines:
+    """content/check_lines.json（週末試玩 A，檢定選項的心裡話）：必備的檔；找不到、不是合法的 JSON、欄位寫錯都改報
+    ContentError 並指出是這個檔（S1 會手改 by_stat）。"""
+    if not path.exists():
+        raise ContentError(f"check_lines.json：找不到檔案（應該在 {path}）")
+    try:
+        return CheckLines(**_read(path))
+    except json.JSONDecodeError as e:
+        raise ContentError(f"check_lines.json：不是合法的 JSON：{e}") from e
+    except (ValidationError, TypeError) as e:
+        raise ContentError(f"check_lines.json：{e}") from e
+
+
 def _build(model, raw: dict):
     """建立一筆有 id 的內容；欄位錯誤時改報 ContentError，並指出是哪一筆。"""
     try:
@@ -196,6 +211,34 @@ def _material_sources(c: Content) -> set[str]:
     for sight in c.road_sights.values():
         reachable |= set(sight.effect.materials)
     return reachable
+
+
+NUMBER_IN_TEXT = re.compile(r"[0-9０-９%％]")  # 心裡話不能攤出成功率（也不能寫難度）
+
+
+def check_check_lines(c: Content, need) -> None:
+    """檢定選項的心裡話（content/check_lines.json，週末試玩 A）：通用的五段（check_lines.BUCKETS）一段都不能少、
+    不能多出不認得的段位；各屬性自己的說法只能寫存在的屬性與段位，可以只寫其中幾段；每一句都不能是空的、
+    只用繁體中文、不能寫數字或百分比（選項上不攤出成功率）。"""
+    lines = c.check_lines
+
+    def check_pool(where: str, pool: list[str]) -> None:
+        need(bool(pool), f"{where}：不能是空的")
+        for text in pool:
+            need(bool(text.strip()), f"{where}：有空白的句子")
+            need(to_traditional(text) == text, f"{where}：文字只能用繁體中文（「{text[:12]}」）")
+            need(not NUMBER_IN_TEXT.search(text), f"{where}：不能寫數字或百分比，成功率不攤在選項上（「{text[:12]}」）")
+
+    for bucket in BUCKET_KEYS:
+        need(bucket in lines.generic, f"check_lines.generic 缺少 {bucket} 那一段")
+    for bucket, pool in lines.generic.items():
+        need(bucket in BUCKET_KEYS, f"check_lines.generic：不認得的段位 {bucket}（只有 {'、'.join(BUCKET_KEYS)}）")
+        check_pool(f"check_lines.generic.{bucket}", pool)
+    for stat, buckets in lines.by_stat.items():
+        need(stat in STATS, f"check_lines.by_stat：未知的屬性 {stat}")
+        for bucket, pool in buckets.items():
+            need(bucket in BUCKET_KEYS, f"check_lines.by_stat.{stat}：不認得的段位 {bucket}（只有 {'、'.join(BUCKET_KEYS)}）")
+            check_pool(f"check_lines.by_stat.{stat}.{bucket}", pool)
 
 
 def check_timetable(c: Content, need, known, front_ids: list[str], trend_ids: set[str]) -> None:
@@ -816,6 +859,7 @@ def validate(c: Content) -> None:
             need(reason is None, f"craft_names 組出的名字「{prefix + suffix}」過不了命名過濾：{reason}")
     for word in c.banned_names:
         need(bool(word.strip()), "banned_names 裡有空字串")
+    check_check_lines(c, need)
     # 沒寫 drops 的對手走 materials.py 依難度的預設掉落表，所以每一階都得有素材可挑。
     for tier in sorted(TIER_NAMES):
         need(

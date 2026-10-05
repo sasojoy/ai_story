@@ -4,10 +4,10 @@ from __future__ import annotations
 import random
 from typing import Literal
 
-from . import foreshadow
+from . import check_lines, foreshadow, team
 from .models import Choice, Content, Event, Location
-from .rules import check_condition, check_who, season_one_off
-from .state import GameState
+from .rules import check_condition, check_outlook, season_one_off
+from .state import PLAYER, GameState
 from .world_state import WorldStateStore
 
 
@@ -25,6 +25,7 @@ def has_events_here(content: Content, location: Location, action: str) -> bool:
 
 
 EventPool = Literal["rare", "common"]
+MIN_DECAY_FACTOR = 1e-9  # event_weight 的看過遞減乘數下限（約 decay 0.5 看過 30 次之後就不再往下）
 
 
 def is_rare(event: Event) -> bool:
@@ -61,15 +62,25 @@ def event_candidates(
     return candidates
 
 
+def event_weight(event: Event, state: GameState, content: Content) -> float:
+    """抽選權重：事件自己的權重 × 奇遇倍率（奇遇才乘）× event_repeat_decay ^ 這個玩家這一季看過幾次。
+    看過的事件下次更少出現（週末試玩項目 B）；decay 設 1.0 時乘的是 1.0，浮點數跟舊的純權重抽法逐位相同。
+    遞減有下限 MIN_DECAY_FACTOR：機器人整季亂逛可以把同一則事件看上千次，0.5 ^ 1100 在浮點數裡是 0.0，
+    只剩那一則候選時總權重為 0 會讓 random.choices 丟 ValueError。"""
+    config = content.config
+    weight = event.weight * (config.qiyu_weight_multiplier if event.qiyu else 1.0)
+    return weight * max(config.event_repeat_decay ** state.player.event_seen.get(event.id, 0), MIN_DECAY_FACTOR)
+
+
 def pick_event(
     state: GameState, content: Content, action: str, rng: random.Random, pool: EventPool | None = None,
 ) -> Event | None:
-    """照權重抽一則（奇遇的權重乘上 qiyu_weight_multiplier）；沒有合格的就是 None。pool 見 event_candidates。"""
+    """照權重抽一則（權重怎麼算見 event_weight：奇遇乘 qiyu_weight_multiplier、看過幾次就乘幾次 event_repeat_decay）；
+    沒有合格的就是 None。pool 見 event_candidates。"""
     candidates = event_candidates(state, content, action, pool)
     if not candidates:
         return None
-    multiplier = content.config.qiyu_weight_multiplier
-    weights = [event.weight * (multiplier if event.qiyu else 1.0) for event in candidates]
+    weights = [event_weight(event, state, content) for event in candidates]
     return rng.choices(candidates, weights=weights)[0]
 
 
@@ -83,8 +94,17 @@ def visible_choices(event: Event, state: GameState, content: Content | None = No
     return [(i, c) for i, c in enumerate(event.choices) if check_condition(c.condition, state, content)]
 
 
-def choice_label(choice: Choice, state: GameState, content: Content, world: WorldStateStore) -> str:
-    """有檢定的選項寫出由誰出手（不寫成功率）；其餘照原文。"""
-    if choice.check:
-        return f"{choice.text}（{check_who(choice.check, state, content, world)}）"
-    return choice.text
+def choice_label(
+    choice: Choice, state: GameState, content: Content, world: WorldStateStore, key: str | None = None,
+) -> str:
+    """有檢定的選項寫「（出手者・屬性 數值：一句心裡話）」，不寫成功率與難度（週末試玩 A，推翻 9/29 的「不顯示成功率」）；
+    其餘照原文。出手者、數值與成功率都出自 rules.check_outlook（跟擲骰同一個函式）。
+    key 是挑心裡話用的種子（引擎傳「事件 id#選項序號」），沒給就用選項文字——同一個選項每次畫都是同一句。"""
+    check = choice.check
+    if not check:
+        return choice.text
+    outlook = check_outlook(check, state, content, world)
+    who = "本人" if outlook.actor == PLAYER else team.member_name(state, content, outlook.actor)
+    stat = content.config.stat_names.get(check.stat, check.stat)
+    line = check_lines.pick_line(content.check_lines, check.stat, outlook.chance, choice.text if key is None else key)
+    return f"{choice.text}（{who}・{stat} {round(outlook.value, 1):g}：{line}）"
