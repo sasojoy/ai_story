@@ -21,6 +21,7 @@ from .guide import base_step_count, note_action, quest_text, tutorial_active, tu
 from .guide import steps as tutorial_steps
 from .journal import LOG_BREAK, Draft
 from .mapview import render_map, render_minimap
+from .martial_arts import QUALITIES
 from .models import (
     EXPLORE_BRANCHES, FREE_TEXT_MAX, BattleDef, Choice, Content, Effect, Event, ExploreBranch, Location, RoadKind, Squad,
     Threshold, TimetableEvent, TravelMode, WorldEvent,
@@ -202,10 +203,18 @@ class Game:
         p.leg_actions &= set(ROAD_TASKS)
         p.recent_sights = [sight_id for sight_id in p.recent_sights if sight_id in c.road_sights]
         p.team = [k for k in p.team if k in c.characters][: team.MAX_TEAM_COMPANIONS]
-        if p.member.neigong_id and p.member.neigong_id not in c.skills and not self.world.is_skill_name_taken(p.member.neigong_id):
+        # 身上的武學要真的有這一門：is_skill_name_taken 連改過的名字、意境名都算，不能拿來判斷「武學存在」，要用 get_skill
+        if p.member.neigong_id and p.member.neigong_id not in c.skills and self.world.get_skill(p.member.neigong_id) is None:
             p.member.neigong_id = None
-        if p.member.wugong_id and p.member.wugong_id not in c.skills and not self.world.is_skill_name_taken(p.member.wugong_id):
+        if p.member.wugong_id and p.member.wugong_id not in c.skills and self.world.get_skill(p.member.wugong_id) is None:
             p.member.wugong_id = None
+        # 武學欄不會空（開局送兩門、身上的熔不掉，也不能再自創）。改版前存的角色欄位空著，讀檔時補回開局那一門；
+        # 它已經在功法庫裡就拿出來配上，熟練度沿用庫裡記的，否則從第一成起（沒有 starter_skills 的內容什麼都不做）
+        for starter in c.config.starter_skills:
+            slot = "neigong" if c.skills[starter].kind == "內功" else "wugong"
+            if getattr(p.member, f"{slot}_id") is None:
+                setattr(p.member, f"{slot}_id", starter)
+                setattr(p.member, f"{slot}_level", p.art_levels.get(starter, 1) if starter in p.arts else 1)
         # 功法庫與素材：內容檔改版（或換季）後可能指到不存在的東西
         equipped = {p.member.neigong_id, p.member.wugong_id}
         seen: set[str] = set()
@@ -215,7 +224,15 @@ class Game:
         ]
         p.art_levels = {k: v for k, v in p.art_levels.items() if team.resolve_art(k, c, self.world) is not None}
         p.materials = {k: v for k, v in p.materials.items() if k in c.materials and v > 0}
-        chains = {ch.id for ch in c.foreshadows.chains}  # 伏筆：內容改版後拿掉的鏈與物品
+        # 武學與成長（設計第三、四節）：意境去重、去掉找不到的；品質、熟練度只留還擁有的武學；
+        # 等著取名的那一門要真的是自己第一個練成的（換季、熔掉、內容改版後都可能對不上）
+        p.insights = [i for i in dict.fromkeys(p.insights) if insights.resolve(i, c, self.world) is not None]
+        owned = set(library.owned_arts(s))
+        p.art_quality = {k: v for k, v in p.art_quality.items() if k in owned and v in QUALITIES}
+        p.art_mastery = {k: v for k, v in p.art_mastery.items() if k in owned and v > 0}
+        if p.naming is not None and (p.naming not in owned or self.world.master_of(p.naming) != p.name):
+            p.naming = None
+        chains ={ch.id for ch in c.foreshadows.chains}  # 伏筆：內容改版後拿掉的鏈與物品
         items = {item.id for item in c.foreshadows.items}
         p.clue_items = {k: v for k, v in p.clue_items.items() if k in items and v > 0}
         p.fragments = {k: v for k, v in p.fragments.items() if k in chains}

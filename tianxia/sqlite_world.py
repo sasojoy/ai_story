@@ -369,9 +369,10 @@ class SqliteWorldStore:
             state = self._load(conn)
             if state.season_phase() != "resting":
                 return False
-            line = _first_crafts_line(conn, state.season_number)
-            if line:  # 上一季的煉製首創寫進那一季的江湖史（第一季設計第十四節）
+            lines = _season_firsts_lines(conn, state.season_number)
+            for line in lines:  # 上一季的首創（合成、意境、絕學）寫進那一季的江湖史（第一季設計第十四節、武學與成長設計 3.10）
                 state.season.chronicle.append(Rumor(time=state.season.time, text=line))
+            if lines:
                 self._save_season(conn, state.season_number, state.season)
             state.season = fresh_season(content)  # 新的一季另起一列（_save 照新的編號寫），舊的那一列不動
             state.season_number += 1
@@ -548,15 +549,34 @@ def _insight_recipe(conn: Connection, season: int, key: str) -> Insight | None:
     return None if row is None else Insight.model_validate_json(row["data"])
 
 
-def _first_crafts_line(conn: Connection, season: int) -> str:
-    """這一季每個配方的首創者，寫成一則江湖史；這一季沒有人煉出新配方就是空字串。"""
-    rows = conn.execute(
-        "SELECT skill_name, creator FROM recipes WHERE season = ? ORDER BY rowid", (season,),
+def _season_firsts_lines(conn: Connection, season: int) -> list[str]:
+    """這一季的首創，寫成江湖史（跨季保留，武學與成長設計 3.10）：合成首創、首悟意境、練成絕學。
+    武學照現在顯示的名字（練成絕學改過名的寫新名）；沒有的那一類不寫。
+    （舊季的煉製配方也在 recipes 表裡，照樣列在「合成首創」，不用分。）"""
+    lines = []
+    arts = conn.execute(
+        "SELECT json_extract(s.data, '$.name') AS name, r.creator FROM recipes r "
+        "JOIN skills s ON s.season = r.season AND s.name = r.skill_name WHERE r.season = ? ORDER BY r.rowid",
+        (season,),
     ).fetchall()
-    if not rows:
-        return ""
-    firsts = "、".join(f"【{row['skill_name']}】{row['creator'] or '無名氏'}" for row in rows)
-    return f"第 {season} 季煉製首創 {len(rows)} 門：{firsts}"
+    if arts:
+        firsts = "、".join(f"【{row['name']}】{row['creator'] or '無名氏'}" for row in arts)
+        lines.append(f"第 {season} 季合成首創 {len(arts)} 門：{firsts}")
+    insights_rows = conn.execute(
+        "SELECT insight_name, creator FROM insight_recipes WHERE season = ? ORDER BY rowid", (season,),
+    ).fetchall()
+    if insights_rows:
+        firsts = "、".join(f"「{row['insight_name']}」{row['creator'] or '無名氏'}" for row in insights_rows)
+        lines.append(f"第 {season} 季首悟意境 {len(insights_rows)} 個：{firsts}")
+    masters = conn.execute(
+        "SELECT json_extract(s.data, '$.name') AS name, m.master FROM masters m "
+        "JOIN skills s ON s.season = m.season AND s.name = m.skill_name WHERE m.season = ? ORDER BY m.rowid",
+        (season,),
+    ).fetchall()
+    if masters:
+        firsts = "、".join(f"【{row['name']}】{row['master']}" for row in masters)
+        lines.append(f"第 {season} 季練成絕學 {len(masters)} 門：{firsts}")
+    return lines
 
 
 def _rumor(row: Row) -> Rumor:

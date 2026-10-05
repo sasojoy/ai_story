@@ -261,7 +261,7 @@ class WorldStateStore(Protocol):
     def next_season(self, content: Content, now: float) -> bool:
         """管理者開下一季：只在休季時有效。換上全新的一季、賽季編號 +1、直接開季，賽季時鐘從 now 起算；
         同伴全部重獲自由、沒打完的決戰清掉，天機 +1；玉璽碎片不動。武學命名、煉製配方、投靠名冊每季各一份，
-        新的一季自然是空的。舊的一季整份留著（線上架構設計 3.2），上一季的煉製首創寫進那一季的江湖史。"""
+        新的一季自然是空的。舊的一季整份留著（線上架構設計 3.2），上一季的首創（合成首創、首悟意境、練成絕學）寫進那一季的江湖史。"""
         ...
 
     def catch_up_season(self, content: Content, now: float, rng: random.Random) -> list[str]:

@@ -759,7 +759,7 @@ def test_the_forge_endpoints_survive_oddly_shaped_bodies(client):
 # ── 功法卡（FB-006）與功法庫先看卡再改練（QA L4）────────────────
 
 
-def test_the_practice_page_gets_a_card_for_each_worn_art(client):
+def test_the_practice_page_gets_a_card_for_each_worn_art(client, monkeypatch):
     _player(client)
     cards = client.get("/api/menxia").json()["slot_cards"]
     assert [c["kind"] for c in cards] == list(server.KINDS)
@@ -767,6 +767,7 @@ def test_the_practice_page_gets_a_card_for_each_worn_art(client):
     assert "基礎拳腳" in wugong["card"] and "第一成" in wugong["card"]  # 第一成／第十成那一行是功法卡才有的
     assert "基礎吐納" in neigong["card"]
     game = server.game_for("沈青衫")
+    monkeypatch.setattr(server.CONTENT.config, "starter_skills", [])  # 沒有開局送的武學：讀檔才不會把空著的欄位補回來
     game.state.player.member.neigong_id = None  # 內容改版之後欄位空著的舊角色：卡片照舊說沒有
     open_characters().save(game.state)
     neigong = client.get("/api/menxia").json()["slot_cards"][1]
@@ -784,6 +785,7 @@ def test_the_slot_cards_say_whether_each_slot_holds_an_art_and_its_level(client,
     _player(client)
     assert slots(client.get("/api/menxia").json()["slot_cards"]) == [("武學", True, 1, False), ("內功", True, 1, False)]
     game = server.game_for("沈青衫")
+    monkeypatch.setattr(server.CONTENT.config, "starter_skills", [])  # 沒有開局送的武學：讀檔才不會把空著的欄位補回來
     game.state.player.member.neigong_id = None  # 欄位空著（內容改版之後的舊角色）：沒學過、第 0 成
     game.state.player.stats["xinde"] = 100  # 練成花心得：第 1 成升到第十成共 45 點，開局的 20 點不夠
     open_characters().save(game.state)

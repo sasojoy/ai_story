@@ -576,7 +576,52 @@ def test_next_season_writes_last_seasons_first_crafts_into_its_chronicle(store, 
     store.mutate_season(lambda season: setattr(season, "ended", True))
     assert store.next_season(content, now=1.0)
     [(number, entries)] = store.chronicle_before(2)
-    assert number == 1 and entries[-1].text == "第 1 季煉製首創 1 門：【玄雷式】沈浪"
+    assert number == 1 and entries[-1].text == "第 1 季合成首創 1 門：【玄雷式】沈浪"
+
+
+def test_next_season_writes_the_seasons_firsts_into_its_chronicle(store, content):
+    content.config.auto_open_first_season = True
+    store.seed_first_season(content)
+    store.claim_recipe("融|basic_fist+feng", generate_from_name("旋風腿", "武學", "旋風腿").model_copy(update={"creator": "甲"}))
+    store.claim_insight_recipe("合|feng+huo", Insight(id="燎原", name="燎原", attribute="陽", creator="乙"))
+    store.claim_master("旋風腿", "甲")
+    store.rename_skill("旋風腿", "風神腿")
+    store.mutate_season(lambda season: setattr(season, "ended", True))
+    store.next_season(content, now=1.0)
+    texts = [r.text for _, rumors in store.chronicle_before(2) for r in rumors]
+    assert any("合成首創" in t and "【風神腿】甲" in t for t in texts)
+    assert any("首悟意境" in t and "「燎原」乙" in t for t in texts)
+    assert any("練成絕學" in t and "【風神腿】甲" in t for t in texts)
+
+
+def test_the_seasons_firsts_are_one_line_each_in_a_fixed_order(store, content):
+    """合成首創、首悟意境、練成絕學各一行，順序固定；每行寫件數與全部名字，用現在顯示的名字（改過名寫新名）。"""
+    content.config.auto_open_first_season = True
+    store.seed_first_season(content)
+    store.claim_recipe("融|a", generate_from_name("旋風腿", "武學", "旋風腿").model_copy(update={"creator": "甲"}))
+    store.claim_recipe("融|b", generate_from_name("回風掌", "武學", "回風掌").model_copy(update={"creator": None}))
+    store.claim_insight_recipe("合|feng+huo", Insight(id="燎原", name="燎原", attribute="陽", creator="乙"))
+    store.claim_insight_recipe("合|huo+shui", Insight(id="蒸騰", name="蒸騰", attribute="陰", creator="丙"))
+    store.claim_master("旋風腿", "甲")
+    store.rename_skill("旋風腿", "風神腿")
+    store.mutate_season(lambda season: setattr(season, "ended", True))
+    assert store.next_season(content, now=1.0)
+    [(number, entries)] = store.chronicle_before(2)
+    assert number == 1 and [e.text for e in entries] == [
+        "第 1 季合成首創 2 門：【風神腿】甲、【回風掌】無名氏",
+        "第 1 季首悟意境 2 個：「燎原」乙、「蒸騰」丙",
+        "第 1 季練成絕學 1 門：【風神腿】甲",
+    ]
+
+
+def test_a_firsts_category_nobody_reached_writes_no_line(store, content):
+    content.config.auto_open_first_season = True
+    store.seed_first_season(content)
+    store.claim_insight_recipe("合|feng+huo", Insight(id="燎原", name="燎原", attribute="陽", creator="乙"))
+    store.mutate_season(lambda season: setattr(season, "ended", True))
+    assert store.next_season(content, now=1.0)
+    [(_, entries)] = store.chronicle_before(2)
+    assert [e.text for e in entries] == ["第 1 季首悟意境 1 個：「燎原」乙"]
 
 
 def test_a_season_without_first_crafts_adds_no_chronicle_entry(store, content):

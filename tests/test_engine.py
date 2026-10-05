@@ -11,7 +11,7 @@ from tianxia import atlas, battle_instance, calendar, companion_agent, flavor, g
 from tianxia.characters import open_characters
 from tianxia.content import load_content
 from tianxia.engine import Game, Option
-from tianxia.martial_arts import MartialArt
+from tianxia.martial_arts import Insight, MartialArt, generate_from_name
 from tianxia.models import FigureDef, Location, PromotionDef
 from tianxia.models import ExploreMix
 from tianxia.state import BotProfile, FigureState, GameState, Journey, Rumor, new_game_state
@@ -68,6 +68,125 @@ def test_real_content_starts_with_enough_xinde_for_the_first_level():
     first = [real.skills[s] for s in real.config.starter_skills]
     assert len(first) == 2
     assert real.config.start_stats["xinde"] >= 2 * real.config.practice_xinde_per_level  # 兩門各練一成
+
+
+# ── 讀檔清理（武學與成長計畫 T10）──────────────────────────
+
+
+def _reload(game, content, world):
+    return Game(content, game.state, rng=random.Random(0), world=world).state.player
+
+
+def _a_fused_art(world, name="旋風腿"):
+    """全服登記一門合成的武學（修練、定名都要它存在於全服）。"""
+    art = generate_from_name(name, "武學", name).model_copy(update={"origin": "fused", "insight": "feng", "creator": "舊檔"})
+    assert world.claim_skill_name(art)
+    return art
+
+
+def test_loading_drops_insights_and_records_that_no_longer_point_anywhere(content, world):
+    game = Game.new(content, "舊檔", rng=random.Random(0), world=world)
+    p = game.state.player
+    p.member.neigong_id = "basic_breath"
+    p.member.wugong_id = "basic_fist"
+    p.insights = ["feng", "feng", "不存在的意境"]
+    p.art_quality = {"basic_fist": "中品", "早就熔掉的": "上品", "basic_breath": "怪品"}  # 怪品：不是四個品質之一
+    p.art_mastery = {"basic_fist": 2, "早就熔掉的": 3, "basic_breath": 0}
+    p.naming = "basic_fist"  # 不是全服第一個練成的人
+    q = _reload(game, content, world)
+    assert q.insights == ["feng"]
+    assert q.art_quality == {"basic_fist": "中品"}
+    assert q.art_mastery == {"basic_fist": 2}
+    assert q.naming is None
+
+
+def test_loading_keeps_world_made_insights_that_still_exist(content, world):
+    """全服合併出來的意境（world.get_insight）找得到就留著，換季或內容改版後找不到才丟。"""
+    game = Game.new(content, "舊檔", rng=random.Random(0), world=world)
+    assert world.claim_insight_recipe("合|feng+huo", Insight(id="燎原", name="燎原", attribute="陽", creator="乙"))[1]
+    game.state.player.insights = ["燎原", "huo", "已經散掉的意境"]
+    assert _reload(game, content, world).insights == ["燎原", "huo"]
+
+
+def test_loading_keeps_a_naming_right_the_player_really_holds(content, world):
+    """等著取名的那一門是自己第一個練成的、又還擁有它：讀檔後取名權還在（清理不能一律清掉）。"""
+    game = Game.new(content, "舊檔", rng=random.Random(0), world=world)
+    art = _a_fused_art(world)
+    assert world.claim_master(art.id, "舊檔")
+    p = game.state.player
+    p.arts, p.naming = [art.id], art.id
+    assert _reload(game, content, world).naming == art.id
+
+
+def test_loading_drops_a_naming_right_someone_else_holds_or_the_art_is_gone(content, world):
+    game = Game.new(content, "舊檔", rng=random.Random(0), world=world)
+    art = _a_fused_art(world)
+    p = game.state.player
+    assert world.claim_master(art.id, "別人")  # 第一個練成的是別人：換季、讀到舊檔都可能對不上
+    p.arts, p.naming = [art.id], art.id
+    assert _reload(game, content, world).naming is None
+    other = _a_fused_art(world, "回風掌")
+    assert world.claim_master(other.id, "舊檔")
+    p.arts, p.naming = [], other.id  # 取名權是自己的，可是那門武學已經不在手上
+    assert _reload(game, content, world).naming is None
+
+
+def test_a_worn_id_that_is_only_an_insight_name_or_an_alias_is_not_an_art(content, world):
+    """is_skill_name_taken 連改過的名字與意境名都算，不能拿來判斷「這門武學存在」：身上的 id 對不到真的武學就丟掉。"""
+    game = Game.new(content, "舊檔", rng=random.Random(0), world=world)
+    art = _a_fused_art(world)
+    assert world.rename_skill(art.id, "風神腿")
+    assert world.claim_insight_recipe("合|feng+huo", Insight(id="燎原", name="燎原", attribute="陽", creator="乙"))[1]
+    member = game.state.player.member
+    member.neigong_id, member.wugong_id = "燎原", "風神腿"  # 一個是意境名、一個是別名，都沒有這個 id 的武學
+    after = _reload(game, content, world).member
+    assert after.neigong_id is None and after.wugong_id is None
+    member.wugong_id = art.id  # 真的存在的合成武學：留著
+    assert _reload(game, content, world).member.wugong_id == art.id
+
+
+def test_loading_fills_an_empty_slot_with_the_matching_starter_art(content, world):
+    """新規則下欄位不會空（開局送兩門、身上的熔不掉）；改版前存的角色欄位空著、又不能再自創，讀檔時補回開局那門。"""
+    content.config.starter_skills = ["basic_breath", "basic_fist"]
+    game = Game.new(content, "舊檔", rng=random.Random(0), world=world)
+    member = game.state.player.member
+    member.neigong_id = member.wugong_id = None
+    member.neigong_level = member.wugong_level = 7  # 舊的熟練度不帶：新的一門從第一成起
+    after = _reload(game, content, world).member
+    assert (after.neigong_id, after.neigong_level) == ("basic_breath", 1)
+    assert (after.wugong_id, after.wugong_level) == ("basic_fist", 1)
+
+
+def test_loading_moves_a_starter_from_the_library_into_the_empty_slot_keeping_its_level(content, world):
+    content.config.starter_skills = ["basic_breath", "basic_fist"]
+    game = Game.new(content, "舊檔", rng=random.Random(0), world=world)
+    p = game.state.player
+    p.member.wugong_id = None
+    p.arts, p.art_levels = ["basic_fist"], {"basic_fist": 6}
+    after = _reload(game, content, world)
+    assert (after.member.wugong_id, after.member.wugong_level) == ("basic_fist", 6)
+    assert "basic_fist" not in after.arts
+    assert library.owned_arts(game.state).count("basic_fist") == 1
+
+
+def test_loading_leaves_a_filled_slot_alone(content, world):
+    content.config.starter_skills = ["basic_breath", "basic_fist"]
+    game = Game.new(content, "舊檔", rng=random.Random(0), world=world)
+    p = game.state.player
+    p.member.wugong_id, p.member.wugong_level = "fist", 4
+    p.arts, p.art_levels = ["basic_fist"], {"basic_fist": 6}  # 開局那門收在庫裡也不動它
+    after = _reload(game, content, world)
+    assert (after.member.wugong_id, after.member.wugong_level) == ("fist", 4)
+    assert after.arts == ["basic_fist"] and after.art_levels == {"basic_fist": 6}
+    assert (after.member.neigong_id, after.member.neigong_level) == ("basic_breath", 1)
+
+
+def test_loading_leaves_an_empty_slot_empty_when_the_content_has_no_starter_arts(content, world):
+    assert content.config.starter_skills == []
+    game = Game.new(content, "舊檔", rng=random.Random(0), world=world)
+    game.state.player.member.neigong_id = game.state.player.member.wugong_id = None
+    after = _reload(game, content, world).member
+    assert after.neigong_id is None and after.wugong_id is None
 
 
 def test_town_options(game):
