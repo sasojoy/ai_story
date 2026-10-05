@@ -671,7 +671,7 @@
   {
     "id": "market_town",
     "name": "集市小鎮",
-    "description": "涿郡城外的小鎮，鎮上的酒肆里，常有意氣風發的年輕人高談討賊立功之志。",
+    "description": "涿郡城外的小鎮，鎮上的酒肆裡，常有意氣風發的年輕人高談討賊立功之志。",
     "connections": [
       "yanshan_foot",
       {
