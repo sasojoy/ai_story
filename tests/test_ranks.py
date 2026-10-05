@@ -421,3 +421,15 @@ def test_real_guan_reaches_rank_two(on):
     assert game.status_data()["affiliation"] == "官軍・屯長"
     assert game.state.player.followers == GUAN_FOLLOWERS
     assert _spied_power(lambda: team.estimate(game.state, on, game.world, squad))[0] > before
+
+
+# ── 審查修正 ─────────────────────────────────────────────
+
+
+def test_socialize_at_the_summons_place_prepares_no_dialogue(on):
+    """T5 審查 I1：在召見的地點交友端出的是晉升奇遇，伺服器不該先在鎖外生成一輪對話（生成了也會被丟掉，白等十幾秒）。"""
+    game = _summoned(_game(on, faction="huang", at="huangjin_camp"), figure="bocai", at="huangjin_camp")
+    game.state.player.stats["fame"] = 50  # 名望夠，平常見得到波才
+    assert game.dialogue_request("act:socialize") is None and not game.socialize_starts_dialogue()
+    game.state.player.summons = None
+    assert game.dialogue_request("act:socialize") is not None and game.socialize_starts_dialogue()  # 沒有召見照舊對話

@@ -570,8 +570,8 @@ class Game:
                 return None
             player_action = offered[int(arg)]
         elif option_id == "act:socialize":
-            if roster.fortune_due(self.state, self.content):
-                return None
+            if roster.fortune_due(self.state, self.content) or ranks.summons_event(self.state, self.content) is not None:
+                return None  # 福緣先發；在召見的地點交友端出晉升奇遇（計畫 T5，審查 I1）——都不開口對話
             companion_id = self._socialize_figure()
             if companion_id is None:
                 return None
@@ -1133,8 +1133,8 @@ class Game:
         return "此地無人可訪，你只好悻悻離去。"
 
     def socialize_starts_dialogue(self) -> bool:
-        """在這裡交友會直接跟大勢人物對話（伺服器假人不閒聊大勢人物，見 bot_policy）。"""
-        return self._socialize_figure() is not None
+        """在這裡交友會直接跟大勢人物對話（伺服器假人不閒聊大勢人物，見 bot_policy）。在召見的地點不會：交友端出晉升奇遇。"""
+        return ranks.summons_event(self.state, self.content) is None and self._socialize_figure() is not None
 
     def socialize_is_futile(self) -> bool:
         """在這裡交友注定白跑一趟（伺服器假人不該去按）：這個地點沒有交友事件、沒有見得到的大勢人物，
