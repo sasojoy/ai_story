@@ -1,8 +1,9 @@
 import random
 
 from tianxia.events import (
-    choice_label, event_matches_location, has_events_here, pick_event, visible_choices,
+    choice_hint, choice_label, event_matches_location, has_events_here, pick_event, visible_choices,
 )
+from tianxia.models import CheckVoice, CheckVoiceBand
 
 
 def test_location_matching(content):
@@ -77,11 +78,35 @@ def test_has_events_here(content):
     assert not has_events_here(content, content.locations["cave"], "socialize")
 
 
-def test_choice_label_shows_who_acts_not_the_success_rate(state, content, world):
+def test_choice_label_shows_the_stat_and_the_odds(state, content, world):
+    """企劃者 2026-10-05：玩家要知道為什麼有時拉得開、有時拉不開，所以寫出看哪一項屬性與成算。"""
     drunk = content.events["drunk"]
-    assert choice_label(drunk.choices[0], state, content, world) == "逼問（本人出手）"  # 空隊伍時只有本人
-    state.player.team.append("mate")  # 韓鐵臂力比本人高
-    assert choice_label(drunk.choices[0], state, content, world) == "逼問（韓鐵出手）"
+    assert choice_label(drunk.choices[0], state, content, world) == "逼問（臂力・成算五成）"  # 空隊伍時是本人：不寫誰
+    state.player.team.append("mate")  # 韓鐵臂力 6，比本人高
+    assert choice_label(drunk.choices[0], state, content, world) == "逼問（韓鐵出手・臂力・成算六成）"
     assert choice_label(drunk.choices[1], state, content, world) == "摸走鐵牌"
     insight = content.events["insight"]
-    assert choice_label(insight.choices[0], state, content, world) == "運氣衝關（本人）"  # 本人檢定
+    assert choice_label(insight.choices[0], state, content, world) == "運氣衝關（本人・根骨・成算五成）"  # 本人檢定
+
+
+VOICE = CheckVoice(bands=[
+    CheckVoiceBand(min_gap=2, lines={"str": "這點力氣，{who}使得出來。", "default": "難不倒{who}。"}),
+    CheckVoiceBand(min_gap=0, lines={"default": "{who}有幾分把握。"}),
+    CheckVoiceBand(min_gap=-99, lines={"str": "以{who}現在的臂力，恐怕力有未逮。", "default": "恐怕不成。"}),
+])
+
+
+def test_choice_hint_picks_the_band_by_stat_minus_difficulty(state, content, world):
+    drunk = content.events["drunk"]  # 臂力檢定，難度 5
+    assert choice_hint(drunk.choices[0], state, content, world) == ""  # 沒寫心聲就不顯示
+    content.check_voice = VOICE
+    assert choice_hint(drunk.choices[0], state, content, world) == "你有幾分把握。"  # 臂力 5：差 0
+    assert choice_hint(drunk.choices[1], state, content, world) == ""  # 沒有檢定
+    state.player.stats["str"] = 2
+    assert choice_hint(drunk.choices[0], state, content, world) == "以你現在的臂力，恐怕力有未逮。"
+    state.player.stats["str"] = 9
+    assert choice_hint(drunk.choices[0], state, content, world) == "這點力氣，你使得出來。"
+    state.player.stats["str"] = 5
+    state.player.team.append("mate")  # 韓鐵出手：心聲講的是他
+    assert choice_hint(drunk.choices[0], state, content, world) == "韓鐵有幾分把握。"
+
