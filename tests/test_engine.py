@@ -7,7 +7,7 @@ from unittest import mock
 import pytest
 
 from conftest import FixedRandom, at, install_season_one, walk_to
-from tianxia import atlas, battle_instance, calendar, companion_agent, flavor, front_lines, guide, library, rules, skillview, team
+from tianxia import atlas, battle_instance, battlelog, calendar, companion_agent, flavor, front_lines, guide, library, rules, skillview, team
 from tianxia.characters import open_characters
 from tianxia.content import load_content
 from tianxia.engine import Game, Option
@@ -470,6 +470,20 @@ def test_train_loss_costs_a_tenth_of_the_silver(game):
     record = game.state.battles[0]
     assert record.tier == "落敗" and record.silver == -5
     assert game.state.player.stats["silver"] == 45
+
+
+def test_a_dodged_train_loss_is_a_draw_with_a_note_and_costs_no_silver(game):
+    """身法閃避（人物資質設計 14.4）：落敗被閃成僵持，戰報註明、不賠銀兩（賠銀兩只在落敗），氣血照僵持扣。"""
+    game.content.locations["lake"].enemies = ["boss"]  # 打不贏的翻江龍
+    game.content.config.dodge_per_point = 1.0
+    game.state.player.stats["agi"] = 6  # 閃避機會 1×1＝100%
+    walk_to(game, "lake")
+    game.rng = FixedRandom(0.0)
+    game.choose("act:train")
+    record = game.state.battles[0]
+    assert (record.tier, record.silver) == ("僵持", 0)
+    assert record.notes == [battlelog.DODGE_NOTE]
+    assert game.state.player.stats["silver"] == 50
 
 
 def test_train_win_records_the_trend_as_a_note(game):

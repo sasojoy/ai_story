@@ -857,6 +857,8 @@ class Config(_Strict):
     stat_points_per_level: int = 1  # 每升一級給幾點屬性，自己分配（取代每級自動 +0.3 與打贏隨機 +1）
     stat_cap: int = 15  # 臂力、身法、根骨、悟性、博聞每項最高
     stat_bonus_per_point: float = 0.03  # 比基準 5 每多一點的加成（計畫二 Task 2 起用）
+    # 人物資質設計 14.4：本人的身法比 5 每多一點，落敗時閃成僵持的機會加這麼多（身法 15 是 20%）
+    dodge_per_point: float = Field(default=0.02, ge=0, le=1)
     pairing_bonus: float = 0.2  # 內功與武學同屬性，整個人威力 +幾成（武學與成長設計 5.1）
     pairing_penalty: float = 0.2  # 內功與武學是相剋的一對，整個人威力 −幾成（再大也只到 encounter.BOOST_FLOOR）
     resonance_per_point: float = 0.005  # 正派武學每一點善名（邪派每一點惡名）+幾成（設計 7.4：名聲 ÷ 2 %）

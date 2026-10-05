@@ -134,3 +134,27 @@ def test_describe_result_fills_in_names_for_every_tier():
         text = describe_result(result, ours="我方", theirs="黑風寨賊人")
         assert "我方" in text
         assert "黑風寨賊人" in text
+
+
+def _result(tier):
+    return encounter.EncounterResult(tier=tier, margin=-50.0, our_power=10.0, difficulty=60.0)
+
+
+def test_a_dodge_turns_only_a_loss_into_a_draw():
+    """人物資質設計 14.4：只有落敗會被閃成僵持；別的結果原封不動。"""
+    dodged = encounter.dodge(_result("落敗"), 1.0, random.Random(0))
+    assert (dodged.tier, dodged.dodged) == ("僵持", True)
+    for tier in ("大勝", "險勝", "僵持"):
+        assert encounter.dodge(_result(tier), 1.0, random.Random(0)) == _result(tier)
+    assert encounter.dodge(_result("落敗"), 0.0, random.Random(0)) == _result("落敗")
+
+
+def test_dodge_draws_from_the_rng_only_on_a_loss_with_a_chance():
+    """Review Focus 3：沒落敗、或機會是 0，不碰亂數——同一個種子的整季模擬不會因為這一條整個變樣。"""
+    rng = random.Random(0)
+    state = rng.getstate()
+    encounter.dodge(_result("險勝"), 1.0, rng)
+    encounter.dodge(_result("落敗"), 0.0, rng)
+    assert rng.getstate() == state
+    encounter.dodge(_result("落敗"), 0.5, rng)
+    assert rng.getstate() != state

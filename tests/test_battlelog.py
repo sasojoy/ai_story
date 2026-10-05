@@ -210,3 +210,13 @@ def test_report_list_and_detail_take_the_calendar_stamp():
     stamp = lambda t: "第 1 週・週一 01:05"  # noqa: E731
     assert battlelog.list_label(record, stamp) == "大勝　第3場　第 1 週・週一 01:05　湖邊　vs 水寇"
     assert "第 1 週・週一 01:05　遊歷" in battlelog.detail_text(record, stamp)
+
+
+def test_a_dodged_loss_says_so_on_the_battle_card(state, content, world):
+    from tianxia.encounter import EncounterResult
+
+    result = EncounterResult(tier="僵持", margin=-50.0, our_power=1.0, difficulty=60.0, dodged=True)
+    record = battlelog.new_record(state, content, world, content.squads["thug"], result, "train")
+    assert record.tier == "僵持" and record.notes == [battlelog.DODGE_NOTE]
+    plain = result.model_copy(update={"dodged": False})
+    assert battlelog.new_record(state, content, world, content.squads["thug"], plain, "train").notes == []

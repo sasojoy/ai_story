@@ -423,13 +423,12 @@ def player_boost(state: GameState, content: Content, world: WorldStateStore) -> 
 def mate_boost(state: GameState, content: Content, world: WorldStateStore, key: str) -> encounter.Boost:
     """同伴的加成（人物資質設計 14.3）：吃跟本人同一套——他自己的臂力管他的武學、根骨管他的內功，再乘上他自己那兩門的
     內外搭配（同伴的天分就是他那一路武學）。正邪共鳴看的是你的善名惡名、功效只算本人，所以同伴不吃。"""
-    stats = member_stats(state, content, world, key)
     progress = world.get_companion(key)
     wugong = resolve_art(progress.wugong_id, content, world)
     neigong = resolve_art(progress.neigong_id, content, world)
     return encounter.Boost(
-        outer=stat_bonus(content, stats["str"]),
-        inner=stat_bonus(content, stats["con"]),
+        outer=stat_bonus(content, member_stats(state, content, world, key)["str"]),
+        inner=stat_bonus(content, con_of(state, content, world, key)),  # 根骨只從 con_of 讀
         factor=pairing(content, wugong, neigong),
     )
 
@@ -447,6 +446,12 @@ def team_boosts(state: GameState, content: Content, world: WorldStateStore) -> l
         + [mate_boost(state, content, world, key) for key in state.player.team]
         + [follower_boost(content, follower) for _, follower in follower_rows(state, content)]
     )
+
+
+def dodge_chance(state: GameState, content: Content) -> float:
+    """本人的身法讓落敗有機會閃成僵持（人物資質設計 14.4）：比 5 每多一點 dodge_per_point，夾在 0～1；同伴不另外算。"""
+    agi = float(state.player.stats.get("agi", BASE_STAT))
+    return min(1.0, max(0.0, (agi - BASE_STAT) * content.config.dodge_per_point))
 
 
 def take_encounter_toll(
@@ -480,9 +485,10 @@ def take_encounter_toll(
             if hurt >= 1:
                 msgs.append(f"內傷 +{hurt:.0f}")
         else:
-            mate = member_stats(state, content, world, key)
+            agi = member_stats(state, content, world, key)["agi"]
+            con = con_of(state, content, world, key)  # 根骨只從 con_of 讀
             world.update_companion(
-                key, lambda progress, s=mate: _apply_toll(content, progress, fraction, agi=s["agi"], con=s["con"]),
+                key, lambda progress, agi=agi, con=con: _apply_toll(content, progress, fraction, agi=agi, con=con),
             )
     return msgs
 
@@ -505,11 +511,13 @@ def fight(
     state: GameState, content: Content, world: WorldStateStore, squad_id: str, rng: random.Random,
     *, difficulty: float | None = None,
 ) -> encounter.EncounterResult:
-    """difficulty 給了就取代隊伍的難度（挑戰大勢人物本人：難度跟著聲威走，見 figures.difficulty）。"""
+    """difficulty 給了就取代隊伍的難度（挑戰大勢人物本人：難度跟著聲威走，見 figures.difficulty）。
+    結果定了之後，本人的身法才有機會把落敗閃成僵持（dodge_chance，人物資質設計 14.4）。"""
     squad = content.squads[squad_id]
     arts = team_arts(state, content, world)
     power = encounter.team_power(*_with_attribute(_fighters(state, content, world), arts, squad.attribute))
-    return encounter.resolve_encounter(power, squad.difficulty if difficulty is None else difficulty, rng)
+    result = encounter.resolve_encounter(power, squad.difficulty if difficulty is None else difficulty, rng)
+    return encounter.dodge(result, dodge_chance(state, content), rng)  # 結果定了才閃（14.4）；勝算（estimate）不含
 
 
 def odds_word(power: float, squad: Squad, rng_seed: int = ESTIMATE_SEED) -> str:
@@ -535,7 +543,7 @@ def _odds_text(wins: int, draws: int, runs: int) -> str:
 def estimate(
     state: GameState, content: Content, world: WorldStateStore, squad_id: str, *, difficulty: float | None = None,
 ) -> str:
-    """勝算的文字；difficulty 同 fight。"""
+    """勝算的文字；difficulty 同 fight。不含身法閃避：勝算是贏的機會（人物資質設計 14.4）。"""
     squad = content.squads[squad_id]
     if difficulty is not None:
         squad = squad.model_copy(update={"difficulty": difficulty})

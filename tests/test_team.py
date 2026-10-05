@@ -430,13 +430,57 @@ def test_boosts_line_up_with_companions_and_followers():
     real.config.season_one, real.config.season_days, real.config.server_max_players = True, 2.5, 2
     game = Game.new(real, "甲", rng=random.Random(0))
     s = game.state
-    mate = "guanyu"  # 真實內容的人物都是 locked；算加成只要他在隊伍名單上
-    s.player.team = [mate]
+    first, second = "guanyu", "zhangfei"  # 真實內容的人物都是 locked；算加成只要他們在隊伍名單上
+    s.player.team = [first, second]
     s.player.followers = ["follower_huang_strongman"]  # 太平力士：臂力 7（+6%）
     boosts = team.team_boosts(s, real, game.world)
-    assert len(boosts) == 3 == len(team.team_participants(s, game.world)) + len(team.follower_units(s, real))
-    assert boosts[1] == team.mate_boost(s, real, game.world, mate)
-    assert boosts[2].outer == pytest.approx(0.06) and boosts[2].inner == 0.0 and boosts[2].factor == 1.0
+    assert len(boosts) == 4 == len(team.team_participants(s, game.world)) + len(team.follower_units(s, real))
+    assert team.mate_boost(s, real, game.world, first) != team.mate_boost(s, real, game.world, second)  # 兩人不同，對調才看得出來
+    assert boosts[1] == team.mate_boost(s, real, game.world, first)
+    assert boosts[2] == team.mate_boost(s, real, game.world, second)
+    assert boosts[3].outer == pytest.approx(0.06) and boosts[3].inner == 0.0 and boosts[3].factor == 1.0
+
+
+def test_a_companions_root_is_read_through_con_of(state, content, world, monkeypatch):
+    """根骨只從 con_of 讀（Task 1 審查）：同伴的內功加成與一場的內傷、上限也跟著它走，不另外去翻 member_stats。"""
+    monkeypatch.setattr(team, "con_of", lambda *_: 15.0)
+    content.config.encounter_neili_loss = {"落敗": 0.3}
+    state.player.team = ["mate"]
+    assert team.mate_boost(state, content, world, "mate").inner == pytest.approx(0.3)
+    team.take_encounter_toll(state, content, world, "落敗")
+    loss = team.neili_cap(content, 1, 15) * 0.3  # 韓鐵第 1 級身法 5：不減；上限照根骨 15
+    assert world.get_companion("mate").injury == pytest.approx(loss * content.config.injury_share * (1 - 0.3))
+
+
+def test_dodge_chance_follows_the_players_body(state, content):
+    for agi, chance in ((15, 0.2), (8, 0.06), (5, 0.0), (2, 0.0)):
+        state.player.stats["agi"] = agi
+        assert team.dodge_chance(state, content) == pytest.approx(chance)
+
+
+def test_a_dodged_fight_is_settled_as_a_draw(state, content, world):
+    """Review Focus 4：打翻江龍（難度 200）必敗；身法讓閃避必中時，結果就是僵持，之後的扣氣血、獎懲、回合都照僵持。"""
+    content.config.dodge_per_point = 0.1
+    state.player.stats["agi"] = 15
+    result = team.fight(state, content, world, "boss", random.Random(0))
+    assert (result.tier, result.dodged) == ("僵持", True)
+
+
+def test_a_fight_without_a_dodge_chance_draws_the_same_randomness(state, content, world):
+    """Review Focus 3：身法 5（機會 0）的人打一場，用掉的亂數跟直接單次判定一樣，落敗也不多擲。"""
+    ours, theirs = random.Random(7), random.Random(7)
+    result = team.fight(state, content, world, "boss", ours)  # 難度 200，必敗
+    assert result.tier == "落敗" and not result.dodged
+    assert result == encounter.resolve_encounter(result.our_power, result.difficulty, theirs)
+    assert ours.getstate() == theirs.getstate()
+
+
+def test_the_odds_label_ignores_the_dodge(state, content, world):
+    """勝算是贏的機會；閃避只把落敗變僵持、不增加贏，所以按鈕上的勝算不含閃避（14.4）。"""
+    before = team.estimate(state, content, world, "boss")
+    content.config.dodge_per_point = 0.1
+    state.player.stats["agi"] = 15
+    assert team.estimate(state, content, world, "boss") == before
 
 
 def test_a_companions_toll_uses_his_own_body_and_root(state, content, world):
