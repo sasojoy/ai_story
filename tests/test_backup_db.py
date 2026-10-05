@@ -85,8 +85,7 @@ def test_backup_of_a_big_database_finishes_while_writes_never_stop(tmp_path):
     )
     conn.commit()
     conn.close()
-    started = time.monotonic()
-    deadline = started + 10  # 備份做不完時，寫入自己在十秒後停，測試才不會永遠掛著
+    deadline = time.monotonic() + 20  # 備份做不完時，寫入自己在二十秒後停，測試才不會永遠掛著
     stop = threading.Event()
 
     def writer():
@@ -104,11 +103,11 @@ def test_backup_of_a_big_database_finishes_while_writes_never_stop(tmp_path):
     try:
         time.sleep(0.2)  # 讓寫入先跑起來
         out = backup_db.backup(src, tmp_path / "backups", tag="manual", now=NOW)
-        took = time.monotonic() - started
+        writer_still_running = thread.is_alive()  # 不看備份花了幾秒（機器慢也不會誤報），只看備份做完時寫入還在不在跑
     finally:
         stop.set()
         thread.join()
-    assert took < 5, f"備份花了 {took:.1f} 秒：寫入一直打斷它"
+    assert writer_still_running, "備份是等寫入自己停了才做完的：寫入一直打斷它"
     assert backup_db.verify(out)["characters"] == 2
 
 
@@ -120,6 +119,53 @@ def test_backup_into_a_folder_that_cannot_be_written(tmp_path):
     with pytest.raises(backup_db.BackupError, match="備份資料夾"):
         backup_db.backup(src, blocked, tag="manual", now=NOW)
     assert list(tmp_path.glob("**/*.partial")) == []
+
+
+def _bad_source(tmp_path: Path, kind: str) -> Path:
+    """複製得動、但驗不過的來源資料庫：頁壞掉（完整性檢查不過）或結構版本比程式新。"""
+    if kind == "newer":
+        path = tmp_path / "live" / "tianxia.db"
+        path.parent.mkdir()
+        conn = sqlite3.connect(path)
+        conn.execute("CREATE TABLE accounts (x)")
+        conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION + 1}")
+        conn.close()
+        return path
+    path = _live_db(tmp_path)
+    close_all()  # 沒有 -wal 了，內容都在主檔裡
+    data = bytearray(path.read_bytes())
+    data[4096:] = b"\xff" * (len(data) - 4096)  # 第一頁（檔頭與資料表清單）留著，後面的頁全壞
+    path.write_bytes(bytes(data))
+    return path
+
+
+@pytest.mark.parametrize("kind", ["corrupt", "newer"])
+def test_backup_of_a_bad_source_leaves_only_a_bad_file_and_prunes_nothing(tmp_path, kind, capsys):
+    """來源壞掉、或版本比程式新：備份驗不過就改名成 .bad（錯誤訊息指的是 .bad，不是已經不存在的 .partial），
+    不會有正式檔名的備份，也不會接著刪舊備份（審查次要 7）。"""
+    src = _bad_source(tmp_path, kind)
+    folder = tmp_path / "backups"
+    with pytest.raises(backup_db.BackupError) as failure:
+        backup_db.backup(src, folder, tag="daily", now=NOW)
+    bad = folder / (backup_db.backup_name("daily", NOW) + ".bad")
+    assert [p.name for p in folder.iterdir()] == [bad.name]  # 沒有正式檔名的備份，也沒有 .partial
+    assert str(bad) in str(failure.value) and ".partial" not in str(failure.value)
+    # 走指令列：每日備份加 --prune，失敗了就不能刪任何舊備份
+    stale = _touch_daily(folder, NOW - dt.timedelta(days=400))
+    fresh = _touch_daily(folder, NOW - dt.timedelta(days=1))
+    assert backup_db.main(["--db", str(src), "--dest", str(folder), "--tag", "daily", "--prune"]) == 1
+    assert stale.exists()  # 要是 prune 跑了，400 天前這份就被刪了
+    assert sorted(p.name for p in folder.glob("tianxia-daily-*.db")) == sorted([stale.name, fresh.name])  # 沒有新的正式備份
+    assert "備份失敗" in capsys.readouterr().err
+
+
+def test_backup_of_a_file_that_is_not_a_database(tmp_path):
+    """來源根本不是資料庫：講是資料庫本身壞了（不是「資料夾寫不進去」），資料夾裡什麼都不留。"""
+    junk = tmp_path / "tianxia.db"
+    junk.write_bytes(b"this is not sqlite" * 1000)
+    with pytest.raises(backup_db.BackupError, match="資料庫本身壞了"):
+        backup_db.backup(junk, tmp_path / "backups", tag="daily", now=NOW)
+    assert list((tmp_path / "backups").iterdir()) == []
 
 
 def test_backup_of_a_missing_database(tmp_path):

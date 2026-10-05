@@ -54,6 +54,7 @@ def backup(src: Path, dest_dir: Path, *, tag: str, now: dt.datetime) -> Path:
         raise BackupError(f"備份資料夾建不起來：{dest_dir}（{e}）") from e
     final = dest_dir / backup_name(tag, now)
     partial = final.with_name(final.name + ".partial")
+    bad = final.with_name(final.name + ".bad")  # 驗不過的備份留成這個名字給人查，永遠不會被保留規則刪掉
     try:
         source = sqlite3.connect(src, timeout=30)
         try:
@@ -66,39 +67,52 @@ def backup(src: Path, dest_dir: Path, *, tag: str, now: dt.datetime) -> Path:
         finally:
             source.close()
     except (sqlite3.Error, OSError) as e:
+        if _is_corruption(e) and partial.is_file() and partial.stat().st_size:
+            os.replace(partial, bad)  # 資料庫本身壞了：複製到一半的檔也留著給人查，不是資料夾的問題
+            raise BackupError(f"資料庫本身壞了，這次備份沒有做成（複製到一半的檔留成 {bad}）：{src}（{e}）") from e
         partial.unlink(missing_ok=True)
+        if _is_corruption(e):
+            raise BackupError(f"資料庫本身壞了，這次備份沒有做成：{src}（{e}）") from e
         raise BackupError(f"備份資料夾寫不進去，或資料庫讀不到：{dest_dir}（{e}）") from e
     try:
-        verify(partial)
+        verify(partial, name=bad)  # 驗不過時下面就會改名成 bad，訊息直接講 bad 的路徑
     except BackupError:
-        os.replace(partial, final.with_name(final.name + ".bad"))
+        os.replace(partial, bad)
         raise
     os.replace(partial, final)
     return final
 
 
-def verify(path: Path) -> dict[str, int]:
-    """備份檔驗得過：integrity_check 是 ok、結構版本是這版程式認得的、數得出幾張表的列數。回傳版本與列數。"""
+def _is_corruption(error: Exception) -> bool:
+    """SQLite 說資料庫檔本身壞了（頁壞掉、根本不是資料庫），不是權限、磁碟滿、被鎖住這類環境的問題。"""
+    code = getattr(error, "sqlite_errorcode", None)
+    return isinstance(error, sqlite3.DatabaseError) and code is not None and code & 0xFF in (sqlite3.SQLITE_CORRUPT, sqlite3.SQLITE_NOTADB)
+
+
+def verify(path: Path, *, name: Path | None = None) -> dict[str, int]:
+    """備份檔驗得過：integrity_check 是 ok、結構版本是這版程式認得的、數得出幾張表的列數。回傳版本與列數。
+    name：錯誤訊息裡要寫的檔名（驗的是 .partial、但驗不過馬上會改名成 .bad 時，訊息要指 .bad）。"""
     path = Path(path)
+    shown = name if name is not None else path
     if not path.is_file():
-        raise BackupError(f"找不到備份檔：{path}")
+        raise BackupError(f"找不到備份檔：{shown}")
     try:
         conn = sqlite3.connect(path.absolute().as_uri() + "?mode=ro", uri=True)  # as_uri 會跳脫 # 與 %：資料夾名字帶這些字不會驗到別的檔
     except sqlite3.Error as e:
-        raise BackupError(f"打不開備份：{path}（{e}）") from e
+        raise BackupError(f"打不開備份：{shown}（{e}）") from e
     try:
         check = conn.execute("PRAGMA integrity_check").fetchone()[0]
         version = conn.execute("PRAGMA user_version").fetchone()[0]
         tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
         counts = {t: conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0] for t in COUNTED if t in tables}
     except sqlite3.Error as e:
-        raise BackupError(f"備份壞了，不是可用的資料庫：{path}（{e}）") from e
+        raise BackupError(f"備份壞了，不是可用的資料庫：{shown}（{e}）") from e
     finally:
         conn.close()
     if check != "ok":
-        raise BackupError(f"備份沒通過完整性檢查：{path}（{check}）")
+        raise BackupError(f"備份沒通過完整性檢查：{shown}（{check}）")
     if not 1 <= version <= SCHEMA_VERSION:
-        raise BackupError(f"備份的結構版本是 {version}，這版程式只認得 1～{SCHEMA_VERSION}：{path}")
+        raise BackupError(f"備份的結構版本是 {version}，這版程式只認得 1～{SCHEMA_VERSION}：{shown}")
     return {"version": version, **counts}
 
 
