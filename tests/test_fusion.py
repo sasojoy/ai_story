@@ -2,8 +2,9 @@ from unittest import mock
 
 import pytest
 
-from tianxia import fusion, insights, landing, library, naming, team
-from tianxia.martial_arts import generate_from_name, power_at
+from tianxia import database, fusion, insights, landing, library, naming, skillview, team
+from tianxia.martial_arts import Insight, generate_from_name, power_at
+from tianxia.sqlite_world import open_world
 from tianxia.state import new_game_state
 
 
@@ -19,9 +20,14 @@ def model_down():
     return client
 
 
+class AskedTheModel(BaseException):
+    """naming._ask 把模型呼叫丟出的所有 Exception 當成「這次沒拿到」吞掉（連 AssertionError 也是），所以「不該叫模型」的假 client
+    要丟 _ask 接不住的東西：BaseException 不是 Exception，會一路穿到測試、測試才會真的失敗。"""
+
+
 def must_not_ask():
     client = mock.Mock()
-    client.chat_structured.side_effect = AssertionError("配方已經有了，不該再叫模型")
+    client.chat_structured.side_effect = AskedTheModel("配方已經有了，不該再叫模型")
     return client
 
 
@@ -821,14 +827,112 @@ def test_a_first_merge_can_land_on_a_known_insight(ready, content, world):
     assert world.lookup_insight_recipe(fusion.merge_key("狂風", "huo")).id == "燎原"
 
 
-def test_a_merged_insights_attribute_follows_the_recipe_not_the_name(ready, content, world):
-    """設計 12.6：火＋水是相剋的一對，屬性由配方加天機決定；模型取什麼名字都一樣。"""
-    ready.player.insights = ["huo", "shui"]
-    key = fusion.merge_key("huo", "shui")
-    fire, water = (insights.resolve(i, content, world) for i in ("huo", "shui"))
-    expected = insights.merged_attribute(fire, water, fusion.recipe_seed(world, key)[1])
-    insight, _ = fusion.merge(ready, content, world, named("水火"), "huo", "shui")
-    assert insight.attribute == expected
+def test_a_merged_insights_attribute_follows_the_recipe_not_the_name(ready, content, tmp_path, monkeypatch):
+    """設計 12.6：火＋水是相剋的一對，屬性由配方加天機決定；模型取什麼名字都一樣。一個天機只翻一次硬幣、可能剛好兩邊一樣，
+    所以每個天機各開一個新世界合一次：結果都要跟配方種子算的一樣，而且兩種屬性都要出現過（種子真的有在用）。"""
+    seen = set()
+    for tianji in range(12):
+        monkeypatch.setattr(database, "DEFAULT_PATH", tmp_path / f"world{tianji}.db")
+        world = open_world()
+        world.mutate(lambda shared: setattr(shared, "tianji", tianji))
+        ready.player.insights, ready.player.stats["xinde"], ready.player.stamina = ["huo", "shui"], 100, 100
+        key = fusion.merge_key("huo", "shui")
+        fire, water = (insights.resolve(i, content, world) for i in ("huo", "shui"))
+        expected = insights.merged_attribute(fire, water, fusion.recipe_seed(world, key)[1])
+        insight, _ = fusion.merge(ready, content, world, named(f"水火{tianji}"), "huo", "shui")
+        assert insight.attribute == expected, tianji
+        seen.add(insight.attribute)
+    assert seen == {"剛", "柔"}
+
+
+def two_yang_insights(world):
+    """乙先合出兩個「陽・無」的意境（燎原、烈焰）：合到舊的還關著時直接登記，候選才有兩個。"""
+    for i, name in enumerate(("燎原", "烈焰")):
+        world.claim_insight_recipe(f"合|測試{i}", Insight(id=name, name=name, attribute="陽", creator="乙"))
+
+
+def test_a_proposed_pick_beats_the_rules_pick(ready, content, world):
+    """Task 4 審查：C 段拿到的「挑」要真的用上。挑規則不會挑的那一個——_picked 若不理 proposed，改由規則挑，這裡就會錯。"""
+    two_fast_arts(content, world)
+    landing_on(content)
+    ready.player.arts = ["lake_kick"]
+    key = fusion.fuse_key("lake_kick", "feng")
+    candidates = landing.art_candidates(world, "武學", "快", "無")
+    by_rule = landing.rule_pick(candidates, key, world.read().tianji)
+    other = next(c for c in candidates if c.id != by_rule.id)
+    art, _ = fusion.fuse(ready, content, world, must_not_ask(), "lake_kick", "feng", proposed=(other.name, ""))
+    assert art.id == other.id and art.id != by_rule.id
+    assert world.lookup_recipe(key).id == other.id
+
+
+def test_a_proposed_pick_beats_the_rules_pick_for_a_merge(ready, content, world):
+    two_yang_insights(world)
+    landing_on(content)
+    key = fusion.merge_key("feng", "huo")
+    candidates = landing.insight_candidates(world, "陽", "無")
+    by_rule = landing.rule_pick(candidates, key, world.read().tianji)
+    other = next(c for c in candidates if c.id != by_rule.id)
+    insight, _ = fusion.merge(ready, content, world, must_not_ask(), "feng", "huo", proposed=(other.name, ""))
+    assert insight.id == other.id and insight.id != by_rule.id
+    assert world.lookup_insight_recipe(key).id == other.id
+
+
+def test_the_model_picks_one_of_two_known_insights_too(ready, content, world):
+    """沒給 proposed 時在這裡問模型（整季機器人、腳本）：挑到規則不會挑的那一個。"""
+    two_yang_insights(world)
+    landing_on(content)
+    key = fusion.merge_key("feng", "huo")
+    candidates = landing.insight_candidates(world, "陽", "無")
+    by_rule = landing.rule_pick(candidates, key, world.read().tianji)
+    other = next(c for c in candidates if c.id != by_rule.id)
+    client = named(other.name)
+    insight, msgs = fusion.merge(ready, content, world, client, "feng", "huo")
+    assert insight.id == other.id and "化成的竟是已有的" in msgs[0]
+    listing = client.chat_structured.call_args.args[0][-1]["content"].split("清單：")[1]
+    assert "- 燎原（屬陽）" in listing and "- 烈焰（屬陽）" in listing
+    assert "- 風（" not in listing and "- 火（" not in listing  # 基本意境不是合併得來的，不在清單上
+
+
+def test_forge_request_opens_a_pick_for_a_merge_with_two_candidates(ready, content, world):
+    two_yang_insights(world)
+    plain = fusion.forge_request(ready, content, world, None, ["feng", "huo"])  # 合到舊的還關著：取新名字
+    assert plain.kind == "merge" and plain.choices == ()
+    landing_on(content)
+    request = fusion.forge_request(ready, content, world, None, ["feng", "huo"])
+    assert request.kind == "merge" and request.choices == ("燎原", "烈焰")
+    assert request.messages[0]["content"] == fusion.PICK_SYSTEM
+
+
+def test_forge_request_needs_no_model_when_a_merge_lands_on_the_only_candidate(ready, content, world):
+    world.claim_insight_recipe("合|測試", Insight(id="燎原", name="燎原", attribute="陽", creator="乙"))
+    landing_on(content)
+    assert fusion.forge_request(ready, content, world, None, ["feng", "huo"]) is None
+
+
+def test_landing_on_an_insight_you_already_hold_is_free(ready, content, world):
+    """合出來的意境你已經悟得了：什麼都不收、不重複，配方照樣記下來（下一次按之前就知道）。"""
+    fusion.merge(ready, content, world, named("燎原"), "feng", "huo")  # 陽
+    fusion.merge(ready, content, world, named("狂風"), "feng", "feng")  # 快
+    landing_on(content)
+    xinde, stamina, held = ready.player.stats["xinde"], ready.player.stamina, list(ready.player.insights)
+    result, msgs = fusion.merge(ready, content, world, must_not_ask(), "狂風", "huo")  # 快＋剛＝陽，唯一的候選是你的燎原
+    assert result is None and msgs == ["這兩個合起來還是「燎原」，你已經悟得了。"]
+    assert (ready.player.stats["xinde"], ready.player.stamina, ready.player.insights) == (xinde, stamina, held)
+    assert world.lookup_insight_recipe(fusion.merge_key("狂風", "huo")).id == "燎原"
+    assert "你已經悟得了" in fusion.merge_problem(ready, content, world, "狂風", "huo")
+
+
+def test_landing_follows_the_registered_id_after_the_art_was_renamed(ready, content, world):
+    """link_recipe 認登記的 id（skills 表的名字欄），不是現在顯示的名字：絕學的首位練成者替它改了名（world.rename_skill）
+    之後兩個不一樣，合到它還是要成；模型挑的是清單上寫的名字（顯示的），也要對得回那一門。"""
+    two_fast_arts(content, world)
+    assert world.rename_skill("旋風腿", "颶風腿")
+    landing_on(content)
+    ready.player.arts = ["lake_kick"]
+    art, msgs = fusion.fuse(ready, content, world, must_not_ask(), "lake_kick", "feng", proposed=("颶風腿", ""))
+    assert art.id == "旋風腿" and art.name == "颶風腿" and "【颶風腿】" in msgs[0]
+    assert world.lookup_recipe(fusion.fuse_key("lake_kick", "feng")).id == "旋風腿"
+    assert "旋風腿" in ready.player.arts
 
 
 # ── 武學＋武學（設計 12.3）────────────────────────────────────
@@ -1063,3 +1167,113 @@ def test_the_three_steps_run_for_a_blend_too(game):
     assert game.forge_request("basic_fist", [], other_art=made) is not None  # 另一組還沒人合過
     game.client = None  # 伺服器假人（bot_runner 把 client 設成 None）：不叫模型，C 段走退路字表
     assert game.forge_request("basic_fist", [], other_art=made) is None
+
+
+# ── 武學＋武學：Task 5 審查補的測試 ───────────────────────────────
+
+def test_blend_parents_are_sorted_whatever_the_order_you_put_them_in(ready, content, world):
+    ready.player.arts = ["lake_kick"]
+    art, _ = fusion.blend(ready, content, world, named("踏浪拳"), "lake_kick", "basic_fist")  # 反過來放
+    assert art.parents == ["basic_fist", "lake_kick"]
+    assert world.get_skill(art.id).parents == ["basic_fist", "lake_kick"]  # 登記的那一筆也是
+    assert skillview.parent_names(art, content, world) == ["粗淺拳腳", "湖邊腿法"]  # 功法卡的先後照 id 排，不看你怎麼放
+
+
+def test_a_blend_is_refused_when_the_holdings_are_full(ready, content, world):
+    """持有上限含放進爐裡的兩門：一門武學加一門功法庫的加兩個意境＝4，上限 4 就是滿的。拒絕時什麼都不收、不登記、A 段也不開單。"""
+    ready.player.arts = ["lake_kick"]
+    content.config.holding_cap_base = 4
+    xinde, stamina = ready.player.stats["xinde"], ready.player.stamina
+    assert fusion.forge_request(ready, content, world, "basic_fist", [], other_art="lake_kick") is None
+    art, msgs = fusion.blend(ready, content, world, must_not_ask(), "basic_fist", "lake_kick")
+    assert art is None and "滿了" in msgs[0] and "4/4" in msgs[0]
+    assert (ready.player.stats["xinde"], ready.player.stamina) == (xinde, stamina)
+    assert world.lookup_recipe(fusion.blend_key("basic_fist", "lake_kick")) is None
+    assert ready.player.arts == ["lake_kick"]
+
+
+def test_a_blend_still_goes_through_one_below_the_cap(ready, content, world):
+    ready.player.arts = ["lake_kick"]
+    content.config.holding_cap_base = 5  # 現在 4 個，差一個
+    assert fusion.blend_problem(ready, content, world, "basic_fist", "lake_kick") is None
+    art, _ = fusion.blend(ready, content, world, named("踏浪拳"), "basic_fist", "lake_kick")
+    assert art is not None and library.held_count(ready) == 5
+    assert "5/5" in fusion.blend_problem(ready, content, world, "basic_fist", art.id)  # 合出來的也占一格，現在滿了
+
+
+@pytest.mark.parametrize(("art", "other", "why"), [
+    ("basic_fist", "basic_fist", "同一門放兩次"),
+    ("basic_fist", "basic_breath", "另一門你不會"),
+    ("basic_fist", "ghost", "找不到資料的"),
+])
+def test_forge_request_for_a_blend_that_would_be_refused_is_none(ready, content, world, art, other, why):
+    ready.player.arts = ["lake_kick", "ghost"]
+    assert fusion.blend_problem(ready, content, world, art, other) is not None, why
+    assert fusion.forge_request(ready, content, world, art, [], other_art=other) is None, why
+
+
+def test_forge_request_for_a_blend_with_enough_xinde_and_stamina_only(ready, content, world):
+    ready.player.arts = ["lake_kick"]
+    assert fusion.forge_request(ready, content, world, "basic_fist", [], other_art="lake_kick") is not None
+    ready.player.stats["xinde"] = content.config.fuse_xinde - 1
+    assert fusion.forge_request(ready, content, world, "basic_fist", [], other_art="lake_kick") is None
+    ready.player.stats["xinde"] = 100
+    ready.player.stamina = content.config.fuse_stamina - 1
+    assert fusion.forge_request(ready, content, world, "basic_fist", [], other_art="lake_kick") is None
+
+
+def test_forge_request_for_a_blend_with_a_known_recipe_is_none_even_if_you_do_not_own_the_result(ready, content, world):
+    """配方這一季已經有人登記：查表就好，不問模型（照 A 段的規矩）；你還沒有它，所以 blend_problem 不攔。"""
+    other = other_player(content)
+    other.player.arts = ["lake_kick"]
+    fusion.blend(other, content, world, named("踏浪拳"), "basic_fist", "lake_kick")
+    ready.player.arts = ["lake_kick"]
+    assert fusion.blend_problem(ready, content, world, "basic_fist", "lake_kick") is None
+    assert fusion.forge_request(ready, content, world, "basic_fist", [], other_art="lake_kick") is None
+
+
+def test_a_blend_passes_a_good_parents_lean_to_the_new_art(ready, content, world):
+    """設計 7.3：正＋無＝正；登記的那一筆與玩家拿到的是同一個。"""
+    ready.player.insights += ["haoran"]
+    good, _ = fusion.fuse(ready, content, world, named("正氣拳"), "basic_fist", "haoran")  # 屬陽、正
+    assert good.lean == "正"
+    ready.player.arts.append("lake_kick")  # 屬快、無
+    art, _ = fusion.blend(ready, content, world, named("正氣腿"), good.id, "lake_kick")
+    assert art.lean == "正" and world.get_skill(art.id).lean == "正"
+    assert "正派" in skillview.art_card(art, 1)
+
+
+def test_a_mixed_kind_blend_lands_among_arts_of_the_kind_the_recipe_fixes(ready, content, world):
+    """一內一外的兩門合出哪一種由配方定：合到舊的時候選的是那一種的合成物（不是放進爐裡第一門的種類）。
+    先放的那一門刻意是種類跟結果不一樣的；同屬性、同正邪但另一種類的合成物是誘餌，不能算候選。"""
+    ready.player.member.neigong_id = "basic_breath"
+    key = fusion.blend_key("basic_breath", "basic_fist")
+    breath, fist = base_art("basic_breath", content, world), base_art("basic_fist", content, world)
+    shape = fusion.blend_shape(breath, fist, fusion.recipe_seed(world, key)[1])
+    first, second = ("basic_breath", "basic_fist") if breath.kind != shape.kind else ("basic_fist", "basic_breath")
+    decoy_kind = "武學" if shape.kind == "內功" else "內功"
+    for name, kind in (("甲功", shape.kind), ("乙功", shape.kind), ("誘餌功", decoy_kind)):
+        known = generate_from_name(name, kind, name).model_copy(update={
+            "origin": "fused", "attribute": shape.attribute, "lean": shape.lean, "creator": "丙",
+        })
+        assert world.claim_recipe(f"融|測試{name}", known)[1]
+    landing_on(content)
+    request = fusion.forge_request(ready, content, world, first, [], other_art=second)
+    assert request.kind == "blend" and request.choices == ("甲功", "乙功")
+    art, _ = fusion.blend(ready, content, world, must_not_ask(), first, second, proposed=("乙功", ""))
+    assert art.id == "乙功" and art.kind == shape.kind
+    assert world.lookup_recipe(key).id == "乙功"
+
+
+def test_blend_shape_keeps_the_insight_of_the_one_parent_that_matches_the_result(content, world):
+    """快與實不在對照表裡：結果的屬性由配方從兩門裡挑一個；只有一門的屬性跟結果一樣，就記那一門的意境（不看另一個擲骰）。"""
+    kick = base_art("lake_kick", content, world).model_copy(update={"id": "windy", "insight": "feng"})  # 屬快
+    fist = base_art("basic_fist", content, world).model_copy(update={"id": "hard", "insight": "huo"})  # 屬實
+    seen = set()
+    for i in range(40):
+        shape = fusion.blend_shape(kick, fist, f"0|兼|{i}")
+        assert shape.attribute in ("快", "實")
+        assert shape.insight == ("feng" if shape.attribute == "快" else "huo"), i
+        assert fusion.blend_shape(fist, kick, f"0|兼|{i}") == shape  # 不分先後
+        seen.add(shape.attribute)
+    assert seen == {"快", "實"}  # 兩邊都出現過，上面的判斷才不是巧合

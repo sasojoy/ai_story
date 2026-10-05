@@ -294,7 +294,8 @@ def fuse(
     state: GameState, content: Content, world: WorldStateStore, client: OllamaClient | None,
     art_id: str, insight_id: str, proposed: tuple[str | None, str] | None = None,
 ) -> tuple[MartialArt | None, list[str]]:
-    """武學＋意境 → 新武學（或合到一門已知的），回傳（那一門, 訊息）；不能合成時回 (None, [原因])，什麼都不收、不登記。
+    """武學＋意境 → 新武學（或合到一門已知的），回傳（那一門, 訊息）；不能合成時回 (None, [原因])，什麼都不收、不登記新的武學。
+    合到你已經有的那一門也是 (None, [原因])、也不收錢，但配方照樣記下來（link_recipe；下一次按之前 fuse_problem 就知道）。
     proposed：鎖外先取好的（名字, 說明）或先挑好的（名字, ""），見 _named、_picked。進來先整個重驗（A 段之後狀態可能變了：
     意境熔掉、心得或體力花掉、配方被別人或自己的另一個請求登記了、候選多了），再登記、收費。"""
     problem = fuse_problem(state, content, world, art_id, insight_id)
@@ -379,7 +380,8 @@ def merge(
     state: GameState, content: Content, world: WorldStateStore, client: OllamaClient | None, a: str, b: str,
     proposed: tuple[str | None, str] | None = None,
 ) -> tuple[Insight | None, list[str]]:
-    """意境＋意境 → 新意境（或合到一個已知的），回傳（那一個, 訊息）；不能合併時回 (None, [原因])，什麼都不收、不登記。
+    """意境＋意境 → 新意境（或合到一個已知的），回傳（那一個, 訊息）；不能合併時回 (None, [原因])，什麼都不收、不登記新的意境。
+    合到你已經悟得的那一個也是 (None, [原因])、也不收錢，但配方照樣記下來（link_insight_recipe；下一次按之前 merge_problem 就知道）。
     屬性與正邪在取名之前就照配方定好（設計 12.6），才找得到合到舊的候選。proposed 與重驗同 fuse。"""
     problem = merge_problem(state, content, world, a, b)
     if problem is not None:
@@ -460,7 +462,8 @@ def blend(
     state: GameState, content: Content, world: WorldStateStore, client: OllamaClient | None,
     a: str, b: str, proposed: tuple[str | None, str] | None = None,
 ) -> tuple[MartialArt | None, list[str]]:
-    """武學＋武學 → 新武學（或合到一門已知的），兩門都留著（設計 12.3）；不能合時回 (None, [原因])，什麼都不收、不登記。
+    """武學＋武學 → 新武學（或合到一門已知的），兩門都留著（設計 12.3）；不能合時回 (None, [原因])，什麼都不收、不登記新的武學。
+    合到你已經有的那一門（放進爐裡的那兩門也算）也是 (None, [原因])、也不收錢，但配方照樣記下來。
     跟 fuse 同一套：價錢、合到舊的、取名三段與重驗都一樣；底（base）是 None，兩門來源記在 parents。"""
     problem = blend_problem(state, content, world, a, b)
     if problem is not None:

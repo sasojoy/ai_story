@@ -2672,11 +2672,12 @@ class Game:
     def forge_request(
         self, art_id: str | None, insight_ids: list[str], other_art: str | None = None,
     ) -> naming.NamingRequest | None:
-        """開爐首次取名的 A 段（呼叫端在行動鎖內、很快地呼叫；server.prepare_forge）：這一爐要不要模型取名？
+        """開爐首次取名或挑選的 A 段（呼叫端在行動鎖內、很快地呼叫；server.prepare_forge）：這一爐要不要模型？
         要就回送模型的單子（naming.NamingRequest），由呼叫端在鎖外交給 naming.generate（B 段），再進鎖把結果交給
-        forge(..., proposed=...)（C 段）。不要的時候是 None：這個角色不叫模型（client 是 None，伺服器假人）、
-        賽季籌備中、這一爐會被拒絕、配方已經有人登記。只讀、不改狀態——跟 dialogue_request 同一個做法。
-        other_art 有、insight_ids 空的是武學＋武學。"""
+        forge(..., proposed=...)（C 段）。單子有兩種：沒人合過、長新的 → 取名（choices 是空的）；合到舊的、候選兩個以上
+        → 從候選挑一個（choices 是候選的名字，見 fusion.forge_request）。不要的時候是 None：這個角色不叫模型
+        （client 是 None，伺服器假人）、賽季籌備中、這一爐會被拒絕、配方已經有人登記、合到舊的而且只有一個候選。
+        只讀、不改狀態——跟 dialogue_request 同一個做法。other_art 有、insight_ids 空的是武學＋武學。"""
         if self.client is None or self._preparing():
             return None
         return fusion.forge_request(self.state, self.content, self.world, art_id, insight_ids, other_art=other_art)

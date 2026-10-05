@@ -264,17 +264,18 @@ NO_NAME: tuple[str | None, str] = (None, "")  # 開爐的 B 段沒取到名字�
 def prepare_forge(
     game: Game, art_id: str | None, insight_ids: list[str], other_art: str | None = None,
 ) -> tuple[str | None, str]:
-    """開爐的首次取名在行動鎖外（最終審查 Critical 1）。首次合出來的配方要等模型取名，以前整段包在行動鎖裡：
+    """開爐的首次取名或挑選在行動鎖外（最終審查 Critical 1）。首次合出來的配方要等模型取名（合到舊的、候選兩個以上時是
+    請模型從候選挑一個名字），以前整段包在行動鎖裡：
     一次最多叫三次、每次最多等 OllamaClient.timeout（120 秒），全服玩家與假人程式都得跟著等，試玩走的 trycloudflare
     也會在約 100 秒切斷請求。跟 prepare_dialogue 一樣分三段：
-      A（鎖內、很快）同步時間，問引擎這一爐要不要模型取名（Game.forge_request），要就拿到單子；同步的結果要存起來，
+      A（鎖內、很快）同步時間，問引擎這一爐要不要模型取名或挑（Game.forge_request），要就拿到單子；同步的結果要存起來，
         不然 C 段進鎖重讀就把它丟了；
       B（鎖外、很慢）naming.generate：預算是 Config.naming_budget_seconds 扣掉 A 段（含等鎖）花掉的時間，
-        引擎不讀時鐘，所以時間在這裡量；用完就回 (None, "")，C 段走退路字表；
+        引擎不讀時鐘，所以時間在這裡量；用完就回 (None, "")，C 段走退路字表（挑的話改由規則挑）；
       C（鎖內、很快）由呼叫端把結果交給 Game.forge(..., proposed=...)，引擎整個重驗再登記、收費。
     這裡做 A 與 B，回傳 B 的結果（名字, 說明）；不必叫模型時是 NO_NAME。假人程式之後要合成，照樣能不經過 HTTP
     走這三段（Game.forge_request 在 action_lock 裡、naming.generate 在鎖外、Game.forge(proposed=...) 再進鎖）。
-    other_art 有、insight_ids 空的是武學＋武學。合到舊的時，B 段是請模型從候選挑一個名字，一樣在鎖外、一樣有預算。"""
+    other_art 有、insight_ids 空的是武學＋武學。"""
     started = time.monotonic()
     with _locked(game):
         game.sync(time.time())
