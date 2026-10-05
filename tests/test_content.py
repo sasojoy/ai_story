@@ -1110,17 +1110,47 @@ def test_the_profile_line_says_what_the_profile_turns_on():
     )
 
 
+# 可以打開伺服器排程的設定：只有壓測用的（壓測計畫 Task 4 的 content/profiles/loadtest.json 寫 10）。其他設定（試玩的
+# weekend 等）一律關著，直到 PM 驗收之後決定在哪一份打開——到時改 test_world_tick_is_off_by_default，寫明是哪一份、為什麼
+LOAD_TEST_PROFILES = frozenset({"loadtest"})
+
+
+def _schedule_switched_on(root: Path) -> list[str]:
+    """root/profiles 裡打開了伺服器排程、又不在 LOAD_TEST_PROFILES 的設定名稱。"""
+    return [
+        path.stem for path in sorted((root / "profiles").glob("*.json"))
+        if path.stem not in LOAD_TEST_PROFILES and load_content(root, profile=path.stem).config.world_tick_seconds != 0
+    ]
+
+
 def test_world_tick_is_off_by_default():
     """伺服器排程預設關（線上架構排程計畫）：0＝不開執行緒，世界時間照舊等有人連線才推。
-    content/config.json 與每一份 profiles 都還沒打開：要在哪一份打開由 PM 驗收之後決定。"""
+    content/config.json 與玩家用的設定（weekend 等）都還沒打開；只有 LOAD_TEST_PROFILES 列的壓測設定（loadtest）可以打開
+    （最終審查 M1）。要在哪一份玩家用的設定打開，由 PM 驗收之後決定，到時改這個測試、寫明是哪一份。"""
     assert load_content(CONTENT_DIR).config.world_tick_seconds == 0
-    for profile in sorted((CONTENT_DIR / "profiles").glob("*.json")):
-        assert load_content(CONTENT_DIR, profile=profile.stem).config.world_tick_seconds == 0, profile.name
+    assert _schedule_switched_on(CONTENT_DIR) == []
+
+
+def test_only_the_load_test_profiles_may_switch_the_schedule_on(tmp_path):
+    root = copy_fixture(tmp_path)
+    (root / "profiles").mkdir()
+    for name in ("loadtest", "preview"):
+        (root / "profiles" / f"{name}.json").write_text('{"world_tick_seconds": 10}', encoding="utf-8")
+    (root / "profiles" / "weekend.json").write_text('{"season_days": 2.5}', encoding="utf-8")
+    assert _schedule_switched_on(root) == ["preview"]
 
 
 def test_world_tick_seconds_cannot_be_negative():
     with pytest.raises(ValidationError, match="greater than or equal to 0"):
         Config(world_tick_seconds=-1)
+
+
+def test_world_tick_seconds_is_off_or_at_least_a_second():
+    """0 是關；開著至少 1 秒（最終審查 M5：0.1 秒就是每秒十筆寫入交易）。"""
+    assert Config(world_tick_seconds=0).world_tick_seconds == 0
+    assert Config(world_tick_seconds=1).world_tick_seconds == 1
+    with pytest.raises(ValidationError, match="至少 1 秒"):
+        Config(world_tick_seconds=0.5)
 
 
 # ── 時刻表（content/timetable.json，計畫 T2）──────────────────────────
