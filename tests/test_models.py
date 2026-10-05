@@ -83,6 +83,7 @@ def test_explore_mix_rejects_a_broken_table(mix):
 @pytest.mark.parametrize("field, value", [
     ("rare_explore_chance", -0.1), ("rare_explore_chance", 1.5),
     ("wild_neili_loss_factor", -0.5), ("wild_neili_loss_factor", 1.5),
+    ("explore_legend_chance", -0.1), ("explore_legend_chance", 1.5),
 ])
 def test_explore_chances_must_be_fractions(field, value):
     with pytest.raises(ValidationError):
@@ -113,6 +114,14 @@ def test_growth_config_defaults_follow_the_design():
     assert cfg.melt_quality_bonus == {"下品": 0, "中品": 5, "上品": 15, "絕學": 40}
     assert (cfg.melt_insight_xinde, cfg.duplicate_insight_xinde) == (10, 10)
     assert (cfg.holding_cap_base, cfg.holding_cap_levels, cfg.holding_cap_step) == (50, 5, 5)
+
+
+def test_a_peerless_art_has_no_sure_thing_and_the_legend_item_is_a_small_help():
+    """企劃者 2026-10-05：絕學沒有保底（機會最多 50%），探索偶爾拿到的破境丹替那一次多加 15%。"""
+    cfg = Config()
+    assert cfg.cultivate_cap == {"絕學": 50}
+    assert (cfg.legend_item_name, cfg.legend_item_bonus, cfg.explore_legend_chance) == ("破境丹", 15, 0.02)
+    assert "絕學" in cfg.legend_item_note and "可以服下" in cfg.legend_item_note and "自動" not in cfg.legend_item_note
 
 
 @pytest.mark.parametrize("ratio", [-0.1, 1.1])

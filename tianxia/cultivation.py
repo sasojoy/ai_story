@@ -1,6 +1,9 @@
 """修練（武學與成長設計 3.5、3.6）：融過意境的武學，用它融的那個意境反覆修練衝品質。
 
-每修練一次擲一次能不能升一品；失敗了熟練度 +1、下一次機會更高，加到 100% 就必成（Config.cultivate_odds）。
+每修練一次擲一次能不能升一品；失敗了熟練度 +1、下一次機會更高（Config.cultivate_odds）：下品→中品、中品→上品加到 100% 就必成，
+上品→絕學沒有保底，累積的機會最多到 Config.cultivate_cap（預設 50%），剩下靠破境丹——探索偶爾撿到的傳奇道具，
+由玩家自己決定哪一次衝絕學要服（修練頁勾「服下破境丹」）：服的那一次多 Config.legend_item_bonus%，成不成都用掉一枚；
+被拒絕的修練（體力不足、沒有意境、還有絕學等著取名……）不擲骰，丹也不動（企劃者 2026-10-05）。
 品質是每個人各練各的（PlayerState.art_quality），熟練度記在 PlayerState.art_mastery；升品時「成」不變。
 第一個把某門武學修到絕學的人替全服取正式名字：功法 id 不變，只改顯示的名字（world.rename_skill）——
 所以這裡凡是「認東西」的都用 id（art_id），凡是寫給玩家看的都用 resolve_art 回來的 art.name（改名之後兩者不一樣）。
@@ -18,10 +21,20 @@ from .state import GameState
 from .world_state import WorldStateStore
 
 
-def chance(content: Content, target_quality: str, failures: int) -> int:
-    """升到 target_quality 的機率（%）：第一次的機率＋每失敗一次加的量，最多 100。"""
+def chance(content: Content, target_quality: str, failures: int, boost: int = 0) -> int:
+    """升到 target_quality 的機率（%）：第一次的機率＋每失敗一次加的量，最多到這一階的上限（Config.cultivate_cap，
+    沒寫的那一階是 100）；再加上 boost（破境丹，見 boost_for），總和最多 100。"""
     first, step = content.config.cultivate_odds[target_quality]
-    return min(100, first + step * failures)
+    cap = content.config.cultivate_cap.get(target_quality, 100)
+    return min(100, min(cap, first + step * failures) + boost)
+
+
+def boost_for(state: GameState, content: Content, target_quality: str, use_legend: bool = False) -> int:
+    """這一次衝 target_quality 的加成（%）：玩家勾了服破境丹、衝的是絕學、手上也還有丹才有。要不要算丹全由這裡決定：
+    擲骰與修練頁寫的加成機率都用它，頁面上寫的就是實際擲的。"""
+    if use_legend and target_quality == "絕學" and state.player.legend_items > 0:
+        return content.config.legend_item_bonus
+    return 0
 
 
 def cultivate_problem(state: GameState, content: Content, world: WorldStateStore, art_id: str) -> str | None:
@@ -49,8 +62,11 @@ def cultivate_problem(state: GameState, content: Content, world: WorldStateStore
 
 def cultivate(
     state: GameState, content: Content, world: WorldStateStore, art_id: str, rng: random.Random,
+    use_legend: bool = False,
 ) -> list[str]:
-    """修練一次：花體力，擲一次能不能升一品。被拒絕時只回原因（什麼都不扣、不動）。"""
+    """修練一次：花體力，擲一次能不能升一品。被拒絕時只回原因（什麼都不扣、不動，破境丹也留著）。
+    use_legend：玩家勾了「服下破境丹」。衝絕學、手上有丹才真的服（這一次的機率多一份加成，成不成都用掉一枚）；
+    頁面過期了（丹已經沒有、下一步不是絕學）不拒絕這次修練，照一般的機率擲，多回一句話說這一回沒服。"""
     problem = cultivate_problem(state, content, world, art_id)
     if problem is not None:
         return [problem]
@@ -60,18 +76,33 @@ def cultivate(
     target = next_quality(quality)
     failures = p.art_mastery.get(art_id, 0)
     p.stamina -= content.config.cultivate_stamina
-    if rng.random() * 100 < chance(content, target, failures):
+    pill = content.config.legend_item_name
+    boost = boost_for(state, content, target, use_legend)
+    msgs: list[str] = []
+    if boost:
+        p.legend_items -= 1
+        msgs.append(f"你服下一枚【{pill}】，心神一片澄明。")
+    elif use_legend:
+        if target != "絕學":
+            msgs.append(f"{pill}只在衝擊絕學時用得上，這一回沒服。")
+        else:
+            msgs.append(f"你身上已經沒有{pill}了，這一回沒服。")
+    if rng.random() * 100 < chance(content, target, failures, boost):
         p.art_quality[art_id] = target
         p.art_mastery.pop(art_id, None)
-        msgs = [f"【{art.name}】修練有成，從{quality}晉為{target}！"]
+        msgs.append(f"【{art.name}】修練有成，從{quality}晉為{target}！")
         if target == "絕學":
             msgs += _mastered(state, world, art_id)
         return msgs
     p.art_mastery[art_id] = failures + 1
-    return [
+    hint = ""
+    if target == "絕學" and p.legend_items > 0:  # 下一次要不要服由玩家決定；這裡只提醒還握著一枚
+        hint = f"，服下{pill}可再 +{content.config.legend_item_bonus}%"
+    msgs.append(
         f"【{art.name}】修練了一回，還差一點火候（熟練度 {failures + 1}，"
-        f"下一次約 {chance(content, target, failures + 1)}% 的機會晉為{target}）。"
-    ]
+        f"下一次約 {chance(content, target, failures + 1)}% 的機會晉為{target}{hint}）。"
+    )
+    return msgs
 
 
 def _mastered(state: GameState, world: WorldStateStore, art_id: str) -> list[str]:

@@ -26,6 +26,9 @@
     {"kind": "wild", "tags": [], "weights": {"insight": 40, "wild": 35, "event": 25}}
   ],
   "wild_neili_loss_factor": 0.5,
+  "cultivate_cap": {"絕學": 50},
+  "legend_item_bonus": 15,
+  "explore_legend_chance": 0.02,
   "start_stats": {"str": 5, "agi": 5, "con": 5, "wis": 5, "silver": 50, "good": 0, "evil": 0, "fame": 0, "xinde": 20},
   "starter_skills": ["jichu_tuna", "jichu_quanjiao"],
   "max_log": 200,

@@ -43,9 +43,23 @@ def kicker(state, world):
     return equip(state)
 
 
-def test_chance_climbs_with_each_failure_to_a_sure_thing(content):
+def test_chance_climbs_with_each_failure_to_a_sure_thing_for_the_lower_two_steps(content):
     assert [cultivation.chance(content, "中品", n) for n in (0, 1, 8)] == [20, 30, 100]
-    assert cultivation.chance(content, "絕學", 32) == 100
+    assert [cultivation.chance(content, "上品", n) for n in (0, 1, 15)] == [10, 16, 100]
+
+
+def test_the_climb_to_a_peerless_art_stops_at_half_and_a_pill_adds_on_top_of_the_cap(content):
+    """企劃者 2026-10-05：絕學沒有保底，累積機率最多 50%；破境丹的加成加在上限之上，總和不超過 100。"""
+    assert [cultivation.chance(content, "絕學", n) for n in (0, 1, 15, 16, 32, 100)] == [4, 7, 49, 50, 50, 50]
+    assert cultivation.chance(content, "絕學", 100, 15) == 65
+    assert cultivation.chance(content, "絕學", 0, 15) == 19
+    assert cultivation.chance(content, "中品", 8) == 100 and cultivation.chance(content, "中品", 8, 99) == 100
+    assert cultivation.chance(content, "中品", 100) == 100  # 沒寫上限的那一階（上限預設 100）照舊必成
+
+
+def test_a_target_with_no_cap_entry_climbs_to_a_hundred_as_before(content):
+    content.config.cultivate_cap = {}
+    assert cultivation.chance(content, "絕學", 32) == 100 and cultivation.chance(content, "絕學", 100) == 100
 
 
 def test_a_success_raises_only_this_players_quality(kicker, content, world):
@@ -69,12 +83,13 @@ def test_the_level_does_not_change_on_a_quality_rise(kicker, content, world):
 
 
 @pytest.mark.parametrize(("start", "target", "tries"), [
-    ("下品", "中品", 9), ("中品", "上品", 16), ("上品", "絕學", 33),
+    ("下品", "中品", 9), ("中品", "上品", 16),
 ])
 def test_losing_every_roll_still_ends_in_a_sure_success_after_the_stated_number_of_tries(
     kicker, content, world, start, target, tries,
 ):
-    """設計 3.5 的保底：骰子永遠擲輸（0.999），熟練度一次加一、顯示的下一次機率每次加一個級距，加到 100% 的那一次必成。
+    """設計 3.5 的保底（下品→中品、中品→上品；上品→絕學沒有保底，見下一個測試）：骰子永遠擲輸（0.999），
+    熟練度一次加一、顯示的下一次機率每次加一個級距，加到 100% 的那一次必成。
     釘在 cultivate() 上：熟練度要累加（不是每次都 1）、擲骰要用累積後的機率（不是永遠第一次的機率）。"""
     first, step = content.config.cultivate_odds[target]
     p = kicker.player
@@ -89,6 +104,129 @@ def test_losing_every_roll_still_ends_in_a_sure_success_after_the_stated_number_
     msgs = cultivation.cultivate(kicker, content, world, "旋風腿", LOSE)  # 同一個輸的骰子：這一次機率已經是 100%
     assert f"從{start}晉為{target}" in msgs[0]
     assert p.art_quality["旋風腿"] == target and "旋風腿" not in p.art_mastery and p.stamina == 0
+
+
+def test_losing_every_roll_never_promotes_a_peerless_art_and_the_shown_chance_stops_at_half(kicker, content, world):
+    """企劃者 2026-10-05：上品→絕學沒有保底。擲 60 次都輸：一次都不晉品、每次都花體力、熟練度照加，
+    顯示的下一次機率 7、10、13……爬到 50% 就停住（沒有第 33 次必成）。"""
+    p = kicker.player
+    p.art_quality["旋風腿"], p.stamina = "上品", 10 * 60
+    shown = []
+    for failure in range(1, 61):
+        msgs = cultivation.cultivate(kicker, content, world, "旋風腿", LOSE)
+        assert "還差一點火候" in msgs[0] and p.art_mastery["旋風腿"] == failure
+        shown.append(int(re.search(r"下一次約 (\d+)%", msgs[0]).group(1)))
+    assert shown == [min(50, 4 + 3 * n) for n in range(1, 61)] and shown[:3] == [7, 10, 13]
+    assert shown[-1] == 50 and max(shown) == 50
+    assert p.art_quality["旋風腿"] == "上品" and p.naming is None and p.stamina == 0
+
+
+def test_a_peerless_try_wins_only_under_the_capped_chance(kicker, content, world):
+    p = kicker.player
+    p.art_quality["旋風腿"], p.art_mastery["旋風腿"] = "上品", 100
+    assert "晉為絕學" in cultivation.cultivate(kicker, content, world, "旋風腿", Fixed(0.49))[0]  # 49 < 50
+    p.art_quality["旋風腿"], p.art_mastery["旋風腿"], p.naming = "上品", 100, None
+    assert "還差一點火候" in cultivation.cultivate(kicker, content, world, "旋風腿", Fixed(0.50))[0]  # 50 不小於 50
+
+
+# ── 破境丹（企劃者 2026-10-05）：玩家自己勾了才服；衝絕學那一次多 15%，成不成都用掉 ──────────────────
+
+PILL = "你服下一枚【破境丹】，心神一片澄明。"
+NOT_TAKEN_NO_PILL = "你身上已經沒有破境丹了，這一回沒服。"
+NOT_TAKEN_WRONG_STEP = "破境丹只在衝擊絕學時用得上，這一回沒服。"
+
+
+def test_the_boost_needs_the_box_ticked_the_peerless_step_and_a_pill_in_hand(kicker, content):
+    p = kicker.player
+    assert cultivation.boost_for(kicker, content, "絕學", True) == 0  # 手上沒有丹
+    p.legend_items = 1
+    assert cultivation.boost_for(kicker, content, "絕學") == 0  # 沒勾（預設不服）
+    assert cultivation.boost_for(kicker, content, "絕學", False) == 0
+    assert cultivation.boost_for(kicker, content, "絕學", True) == 15
+    assert cultivation.boost_for(kicker, content, "上品", True) == 0 and cultivation.boost_for(kicker, content, "中品", True) == 0
+    content.config.legend_item_bonus = 20  # 數字從設定來
+    assert cultivation.boost_for(kicker, content, "絕學", True) == 20
+
+
+def test_an_unticked_try_keeps_the_pill_and_rolls_the_plain_chance(kicker, content, world):
+    """擲 0.10：基本 4% 輸、加成後 19% 贏。沒勾：同一個骰子輸，丹原封不動，也不說服了什麼。"""
+    p = kicker.player
+    p.art_quality["旋風腿"], p.legend_items = "上品", 2
+    msgs = cultivation.cultivate(kicker, content, world, "旋風腿", Fixed(0.10))
+    assert PILL not in msgs and "還差一點火候" in msgs[0] and "沒服" not in msgs[0]
+    assert p.legend_items == 2 and p.art_quality["旋風腿"] == "上品" and p.stamina == 140
+    assert "下一次約 7% 的機會晉為絕學，服下破境丹可再 +15%" in msgs[0]  # 下一次的機率是不服丹的機率，另提醒還握著丹
+
+
+def test_a_ticked_try_uses_exactly_one_pill_and_adds_the_bonus_to_the_roll(kicker, content, world):
+    p = kicker.player
+    p.art_quality["旋風腿"], p.legend_items = "上品", 2
+    msgs = cultivation.cultivate(kicker, content, world, "旋風腿", Fixed(0.10), use_legend=True)  # 同一個骰子：這次贏
+    assert msgs[0] == PILL and "從上品晉為絕學" in msgs[1]
+    assert p.art_quality["旋風腿"] == "絕學" and p.legend_items == 1 and p.stamina == 140
+
+
+def test_a_ticked_try_that_loses_still_uses_the_pill_and_shows_the_plain_next_chance(kicker, content, world):
+    p = kicker.player
+    p.art_quality["旋風腿"], p.legend_items = "上品", 2
+    msgs = cultivation.cultivate(kicker, content, world, "旋風腿", LOSE, use_legend=True)
+    assert msgs[0] == PILL and p.legend_items == 1 and p.art_mastery["旋風腿"] == 1
+    assert "下一次約 7% 的機會晉為絕學，服下破境丹可再 +15%" in msgs[1]  # 不含丹的 7%，還握著一枚所以提醒
+    msgs = cultivation.cultivate(kicker, content, world, "旋風腿", LOSE, use_legend=True)
+    assert msgs[0] == PILL and p.legend_items == 0
+    assert "下一次約 10% 的機會晉為絕學）" in msgs[1] and "服下" not in msgs[1]  # 沒有丹了：不再提醒
+    msgs = cultivation.cultivate(kicker, content, world, "旋風腿", LOSE)
+    assert PILL not in msgs and "下一次約 13%" in msgs[0]
+
+
+def test_a_stale_page_ticking_a_pill_you_no_longer_hold_rolls_the_plain_chance_and_says_so(kicker, content, world):
+    p = kicker.player
+    p.art_quality["旋風腿"], p.legend_items = "上品", 0
+    msgs = cultivation.cultivate(kicker, content, world, "旋風腿", Fixed(0.10), use_legend=True)  # 沒有丹：19% 的加成不算
+    assert msgs[0] == NOT_TAKEN_NO_PILL and "還差一點火候" in msgs[1] and p.art_quality["旋風腿"] == "上品"
+    assert p.legend_items == 0 and p.stamina == 140 and p.art_mastery["旋風腿"] == 1  # 照常修練、照常花體力
+
+
+@pytest.mark.parametrize("start", ["下品", "中品"])
+@pytest.mark.parametrize("roll", [WIN, LOSE])
+def test_a_ticked_pill_is_kept_on_the_lower_two_steps(kicker, content, world, start, roll):
+    p = kicker.player
+    p.art_quality["旋風腿"], p.legend_items = start, 3
+    msgs = cultivation.cultivate(kicker, content, world, "旋風腿", roll, use_legend=True)
+    assert PILL not in msgs and msgs[0] == NOT_TAKEN_WRONG_STEP and p.legend_items == 3
+    assert p.stamina == 140  # 這一回照常修練
+
+
+def test_the_notes_use_the_configured_pill_name(kicker, content, world):
+    content.config.legend_item_name = "天機丹"
+    p = kicker.player
+    p.art_quality["旋風腿"], p.legend_items = "上品", 1
+    assert cultivation.cultivate(kicker, content, world, "旋風腿", LOSE, use_legend=True)[0] == "你服下一枚【天機丹】，心神一片澄明。"
+    assert cultivation.cultivate(kicker, content, world, "旋風腿", LOSE, use_legend=True)[0] == "你身上已經沒有天機丹了，這一回沒服。"
+
+
+@pytest.mark.parametrize("break_it", [
+    lambda p: p.insights.clear(),                         # 意境熔掉了
+    lambda p: setattr(p, "stamina", 5),                   # 體力不足
+    lambda p: setattr(p, "naming", "別的絕學"),             # 還有一門絕學等著取名
+    lambda p: setattr(p, "arts", []),                     # 沒有這門武學
+])
+def test_a_refused_try_with_the_box_ticked_keeps_the_pill(kicker, content, world, break_it):
+    p = kicker.player
+    p.art_quality["旋風腿"], p.legend_items = "上品", 1
+    break_it(p)
+    stamina = p.stamina
+    assert cultivation.cultivate_problem(kicker, content, world, "旋風腿") is not None
+    msgs = cultivation.cultivate(kicker, content, world, "旋風腿", WIN, use_legend=True)
+    assert len(msgs) == 1 and p.legend_items == 1 and p.stamina == stamina and p.art_quality["旋風腿"] == "上品"
+
+
+def test_a_save_from_before_the_pill_loads_with_none(state):
+    from tianxia.state import PlayerState
+
+    data = state.player.model_dump()
+    data.pop("legend_items")
+    assert PlayerState.model_validate(data).legend_items == 0 and state.player.legend_items == 0
 
 
 def test_the_stated_chances_for_the_first_step_climb_thirty_to_a_hundred(kicker, content, world):
@@ -305,6 +443,53 @@ def test_a_failed_roll_is_something_that_happened_and_is_written(adept):
     msgs = adept.cultivate("旋風腿")
     assert "還差一點火候" in msgs[0] and adept.state.journal[0].tag == msgs[0]
     assert adept.state.journal[0].changes == ["體力 -10"]  # 輸了也花了體力，跟別的行動一樣寫在紀錄上
+
+
+def test_a_ticked_pill_shows_in_the_journal_changes_next_to_the_stamina(adept):
+    p = adept.state.player
+    p.art_quality["旋風腿"], p.legend_items = "上品", 1
+    adept.rng = LOSE
+    msgs = adept.cultivate("旋風腿", use_legend=True)
+    entry = adept.state.journal[0]
+    assert msgs[0] == PILL and "還差一點火候" in msgs[1] and p.legend_items == 0
+    assert entry.title == "修練" and entry.changes == ["體力 -10", "破境丹 -1"]
+    assert entry.tag == msgs[1]  # 結果標記是擲骰的結果，不是服丹那一句
+
+
+def test_a_success_with_the_pill_is_written_with_the_pill_too(adept):
+    p = adept.state.player
+    p.art_quality["旋風腿"], p.legend_items = "上品", 1
+    msgs = adept.cultivate("旋風腿", use_legend=True)  # 擲骰預設全贏
+    entry = adept.state.journal[0]
+    assert "從上品晉為絕學" in msgs[1] and entry.tag == msgs[1] and entry.changes == ["體力 -10", "破境丹 -1"]
+
+
+def test_an_unticked_try_writes_no_pill_change_and_keeps_the_pill(adept):
+    p = adept.state.player
+    p.art_quality["旋風腿"], p.legend_items = "上品", 2
+    adept.rng = LOSE
+    adept.cultivate("旋風腿")
+    assert adept.state.journal[0].changes == ["體力 -10"] and p.legend_items == 2
+
+
+def test_no_pill_is_written_when_none_was_taken(adept):
+    adept.state.player.legend_items = 0
+    adept.state.player.art_quality["旋風腿"] = "上品"
+    msgs = adept.cultivate("旋風腿", use_legend=True)  # 頁面過期：丹已經沒有了
+    assert msgs[0] == NOT_TAKEN_NO_PILL and adept.state.journal[0].changes == ["體力 -10"]
+    assert adept.state.journal[0].tag == msgs[1] and "修練有成" in msgs[1]  # 標記仍是擲骰的結果，不是「沒服」那一句
+    adept.state.player.legend_items, adept.state.player.art_quality["旋風腿"] = 2, "下品"
+    adept.state.player.naming = None
+    adept.cultivate("旋風腿", use_legend=True)  # 下品→中品那一步：丹留著、紀錄也不寫丹
+    assert adept.state.player.legend_items == 2 and adept.state.journal[0].changes == ["體力 -20"]
+
+
+def test_a_refused_try_with_the_box_ticked_keeps_the_pill_and_writes_no_entry(adept):
+    p = adept.state.player
+    p.art_quality["旋風腿"], p.legend_items, p.stamina = "上品", 1, 5
+    before = list(adept.state.journal)
+    assert "體力不足" in adept.cultivate("旋風腿", use_legend=True)[0]
+    assert p.legend_items == 1 and adept.state.journal == before
 
 
 def test_the_stamina_of_consecutive_rolls_adds_up_in_one_merged_entry(adept):

@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from conftest import FixedRandom
-from tianxia import rules, team
+from tianxia import journal, rules, team
 from tianxia.content import load_content
 from tianxia.engine import FREE_TEXT_OPTION
 from tianxia.models import Condition, ExploreMix, FactionDef, FreeTextChoice
@@ -348,6 +348,79 @@ def test_without_any_insight_in_the_content_the_insight_share_goes_to_the_other_
     counts = _explore_many(game)
     assert counts["insight"] == 0 and counts["nothing"] == 0
     assert counts["wild"] / N == pytest.approx(35 / 60, abs=0.035)
+
+
+# ── 傳奇道具破境丹（企劃者 2026-10-05）：探索不論走哪一支，結束後都擲一次 ──────────────────
+
+
+def _legend_setup(game, branch):
+    """把探索逼到某一支，並讓破境丹一定掉。"""
+    nothing = branch == "nothing"
+    _lake(game, enemies=() if nothing else ("thug",), with_event=not nothing)
+    game.content.config.explore_legend_chance = 1.0
+    game.content.config.rare_explore_chance = 0.0
+    if branch == "insight":
+        _only(game, insight=1, wild=0, event=0)
+    elif branch == "wild":
+        _only(game, insight=0, wild=1, event=0)
+    elif branch == "event":
+        _only(game, insight=0, wild=0, event=1)
+    elif nothing:  # 野怪與事件兩支都做不了、悟意境的比例是 0：三支都做不了
+        _only(game, insight=0, wild=35, event=25)
+    else:  # "rare"：奇遇判定先於三選一
+        game.state.player.seen_events.discard("scroll")
+        game.content.config.rare_explore_chance = 1.0
+
+
+@pytest.mark.parametrize("branch", ["insight", "wild", "event", "nothing", "rare"])
+def test_every_explore_branch_can_turn_up_a_pill_and_the_entry_shows_it_with_the_shine(game, branch):
+    _legend_setup(game, branch)
+    game.state.player.tutorial_step = 3  # 引導已走完，免得引導的獎勵混進這則紀錄
+    msgs = game.choose("act:explore")
+    cfg = game.content.config
+    line = f"獲得 【{cfg.legend_item_name}】一枚——{cfg.legend_item_note}"
+    assert game.state.player.legend_items == 1
+    assert msgs[-2:] == [line, "破境丹 +1"]  # 兩行都接在這次探索本來的訊息後面
+    entry = game.state.journal[0]
+    assert entry.title.startswith("探索") and "破境丹 +1" in entry.changes and line in entry.lines
+    assert journal._line_class(line) == "tx-line tx-new"  # 「獲得 」開頭的新東西，掃一道光
+
+
+def test_an_explore_that_finds_nothing_still_says_so_before_the_pill(game):
+    _legend_setup(game, "nothing")
+    assert game._explore() == [
+        "你四處走走，一無所獲。",
+        f"獲得 【破境丹】一枚——{game.content.config.legend_item_note}",
+        "破境丹 +1",
+    ]
+
+
+def test_each_explore_rolls_for_the_pill_once_and_the_pills_pile_up(game):
+    _legend_setup(game, "nothing")
+    for _ in range(3):
+        game._explore()
+    assert game.state.player.legend_items == 3
+
+
+def test_the_pill_roll_uses_the_configured_chance(game):
+    _legend_setup(game, "nothing")
+    game.content.config.explore_legend_chance = 0.02
+    game.rng = FixedRandom(0.019)
+    assert "破境丹 +1" in game._explore()
+    game.rng = FixedRandom(0.02)  # 擲到的數字要小於機率才中
+    assert "破境丹 +1" not in game._explore() and game.state.player.legend_items == 1
+
+
+def test_a_zero_chance_draws_no_random_number_so_seeded_runs_do_not_shift(game):
+    """機率 0 的時候不擲這顆骰（要先判斷機率大於 0）：測試用內容把它設成 0，既有的固定種子序列才不會位移。"""
+    _legend_setup(game, "nothing")  # 一無所獲這一支本來就不用亂數
+    game.content.config.explore_legend_chance = 0.0
+    before = game.rng.getstate()
+    assert game._explore() == ["你四處走走，一無所獲。"]
+    assert game.rng.getstate() == before and game.state.player.legend_items == 0
+    game.content.config.explore_legend_chance = 0.02
+    game._explore()
+    assert game.rng.getstate() != before  # 對照：機率大於 0 才會多擲一顆
 
 
 # ── 真實內容 ──────────────────────────────────────────

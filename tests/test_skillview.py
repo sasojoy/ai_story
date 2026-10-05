@@ -254,6 +254,30 @@ def test_bag_text_never_mentions_the_furnace(state, content):
     assert text.startswith("**背包**") and "煉" not in text and "爐" not in text
 
 
+PILL_LINE = "- 破境丹 ×2　衝擊絕學時可以服下，那一次的機會多幾分。"
+
+
+def test_bag_text_lists_the_legend_item_and_is_not_empty_because_of_it(state, content):
+    state.player.legend_items = 2
+    text = skillview.bag_text(state, content)
+    assert text.startswith("**背包**") and PILL_LINE in text.splitlines() and "還沒有東西" not in text
+    assert "煉" not in text and "爐" not in text and "素材" not in text  # PM 用語：不叫人拿東西去爐裡
+
+
+def test_bag_text_lists_materials_and_the_legend_item_together(state, content):
+    state.player.materials = {"gang_1": 2}
+    state.player.legend_items = 2
+    lines = skillview.bag_text(state, content).splitlines()
+    assert lines[1].startswith("- 精鐵砂 ×2") and lines[2] == PILL_LINE
+
+
+def test_bag_text_says_it_is_empty_only_when_there_is_nothing_at_all(state, content):
+    assert "還沒有東西" in skillview.bag_text(state, content)
+    state.player.legend_items = 0
+    state.player.materials = {"gang_1": 1}
+    assert "還沒有東西" not in skillview.bag_text(state, content)
+
+
 def test_bag_text_lists_what_you_hold_high_tier_first(state, content):
     state.player.materials = {"gang_1": 2, "gang_3": 1}
     lines = skillview.bag_text(state, content).splitlines()
@@ -401,6 +425,60 @@ def test_art_rows_of_an_art_with_an_insight_say_the_odds_and_the_cost(state, con
     assert "意境：「風」" in row["card"] and "合成" in row["card"]
     state.player.insights = []  # 意境熔掉了：修練的按鈕講原因，不再說機率
     assert not skillview.art_rows(state, content, world)[0]["cultivate"]["ok"]
+
+
+def _wind_kick(world, state, quality="下品"):
+    art = generate_from_name("旋風腿", "武學", "旋風腿", weights={"下品": 100.0, "中品": 0.0, "上品": 0.0, "絕學": 0.0}).model_copy(
+        update={"origin": "fused", "insight": "feng", "lean": "無"},
+    )
+    assert world.claim_skill_name(art)
+    state.player.arts, state.player.insights = ["旋風腿"], ["feng"]
+    state.player.art_quality["旋風腿"] = quality
+
+
+def _cultivate_row(state, content, world):
+    return skillview.art_rows(state, content, world)[0]["cultivate"]
+
+
+def test_the_peerless_step_note_is_the_plain_capped_chance_whatever_is_held(state, content, world):
+    """企劃者 2026-10-05：絕學沒有保底（上限 50%）。note 一直是不服丹的機率，丹的那一格另放在 legend。"""
+    _wind_kick(world, state, "上品")
+    assert _cultivate_row(state, content, world)["note"] == "4% 晉為絕學・體力 10"
+    state.player.legend_items = 1
+    assert _cultivate_row(state, content, world)["note"] == "4% 晉為絕學・體力 10"
+    state.player.art_mastery["旋風腿"] = 100
+    assert _cultivate_row(state, content, world)["note"] == "50% 晉為絕學・體力 10"  # 沒有保底：爬到 50% 就停
+
+
+def test_the_row_offers_the_pill_only_on_the_peerless_step_and_only_when_one_is_held(state, content, world):
+    _wind_kick(world, state, "上品")
+    assert _cultivate_row(state, content, world)["legend"] is None  # 手上沒有丹
+    state.player.legend_items = 2
+    assert _cultivate_row(state, content, world)["legend"] == {
+        "count": 2, "bonus": 15, "label": "服下破境丹（+15%，剩 2 枚）", "note": "19% 晉為絕學（含破境丹 +15%）・體力 10",
+    }
+    state.player.art_mastery["旋風腿"] = 100
+    assert _cultivate_row(state, content, world)["legend"]["note"] == "65% 晉為絕學（含破境丹 +15%）・體力 10"
+    for step in ("中品", "下品"):  # 下一步不是絕學：不提
+        state.player.art_quality["旋風腿"] = step
+        assert _cultivate_row(state, content, world)["legend"] is None, step
+        assert "破境丹" not in _cultivate_row(state, content, world)["note"]
+
+
+def test_a_refused_row_has_no_pill_choice(state, content, world):
+    _wind_kick(world, state, "上品")
+    state.player.legend_items = 1
+    state.player.stamina = 5  # 體力不足：按鈕講原因，不再提丹
+    row = _cultivate_row(state, content, world)
+    assert row["ok"] is False and "體力不足" in row["note"] and row["legend"] is None
+
+
+def test_the_row_follows_the_pill_name_and_bonus_in_the_config(state, content, world):
+    content.config.legend_item_name, content.config.legend_item_bonus = "天機丹", 20
+    _wind_kick(world, state, "上品")
+    state.player.legend_items = 1
+    legend = _cultivate_row(state, content, world)["legend"]
+    assert legend["label"] == "服下天機丹（+20%，剩 1 枚）" and legend["note"] == "24% 晉為絕學（含天機丹 +20%）・體力 10"
 
 
 def test_the_art_awaiting_its_name_sits_in_the_library_but_cannot_be_melted(state, content, world):

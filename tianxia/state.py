@@ -118,6 +118,7 @@ class PlayerState(BaseModel):
     art_quality: dict[str, str] = Field(default_factory=dict)  # 功法 id → 自己那一份的品質（沒記＝全服登記的品質）
     art_mastery: dict[str, int] = Field(default_factory=dict)  # 功法 id → 修練往下一品失敗了幾次（熟練度）
     naming: str | None = None  # 第一個修到絕學、等著取正式名字的功法 id
+    legend_items: int = 0  # 破境丹（Config.legend_item_name）的數量：探索撿到，玩家在修練頁勾了、衝絕學那一次才服一枚；角色每季重來
 
     seen_events: set[str] = Field(default_factory=set)
     event_seen: dict[str, int] = Field(default_factory=dict)  # 事件 id -> 這一季看過幾次（Game._present 每端出一次記一次；抽事件時權重按次數遞減，見 events.event_weight）

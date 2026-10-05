@@ -79,10 +79,12 @@ def art_rows(state: GameState, content: Content, world: WorldStateStore) -> list
         insight = insights.resolve(art.insight, content, world) if art.insight else None
         insight_name = insight.name if insight else None
         problem = cultivation.cultivate_problem(state, content, world, art_id)
+        legend = None
         if problem is None:
             target = next_quality(art.quality)
-            chance = cultivation.chance(content, target, p.art_mastery.get(art_id, 0))
-            note = f"{chance}% 晉為{target}・體力 {content.config.cultivate_stamina}"
+            failures = p.art_mastery.get(art_id, 0)
+            note = f"{cultivation.chance(content, target, failures)}% 晉為{target}・體力 {content.config.cultivate_stamina}"
+            legend = _legend_choice(state, content, target, failures)
         else:
             note = problem
         stuck = melt_problem(state, art_id, art.name)  # 跟 library.melt_art 同一個判斷
@@ -90,13 +92,29 @@ def art_rows(state: GameState, content: Content, world: WorldStateStore) -> list
             "id": art_id, "name": art.name, "kind": art.kind, "quality": art.quality, "attribute": art.attribute,
             "level": level, "worn": art_id in (member.neigong_id, member.wugong_id), "insight": insight_name,
             "card": art_card(art, level, insight_name),
-            "cultivate": {"ok": problem is None, "note": note},
+            "cultivate": {"ok": problem is None, "note": note, "legend": legend},
             "melt": {
                 "ok": stuck is None,
                 "note": stuck if stuck is not None else f"退回心得 {melt_refund(content, level, art.quality)}",
             },
         })
     return rows
+
+
+def _legend_choice(state: GameState, content: Content, target: str, failures: int) -> dict | None:
+    """修練頁上「服下破境丹」那一格（預設不勾）要的資料：下一步是絕學、手上有丹才有，否則 None。
+    note 是勾了之後機率欄換成的那一句；加成機率照 cultivation.boost_for 算，跟實際擲的一致。"""
+    boost = cultivation.boost_for(state, content, target, use_legend=True)
+    if not boost:
+        return None
+    cfg, count = content.config, state.player.legend_items
+    return {
+        "count": count,
+        "bonus": boost,
+        "label": f"服下{cfg.legend_item_name}（+{boost}%，剩 {count} 枚）",
+        "note": f"{cultivation.chance(content, target, failures, boost)}% 晉為{target}"
+                f"（含{cfg.legend_item_name} +{boost}%）・體力 {cfg.cultivate_stamina}",
+    }
 
 
 def insight_rows(state: GameState, content: Content, world: WorldStateStore) -> list[dict]:
@@ -130,13 +148,16 @@ def art_library(state: GameState, content: Content, world: WorldStateStore) -> l
 def bag_text(state: GameState, content: Content) -> str:
     """背包：隨身帶著的材料（糧草、伏筆要用），階高的排前面。"""
     items = materials.bag_contents(state, content)
-    if not items:
+    pills = state.player.legend_items
+    if not items and pills <= 0:
         return "**背包**　還沒有東西——打贏對手、沿路採集，或在奇遇裡拿到。"
-    lines = ["**背包**　隨身帶著的材料，分凡品、靈品、天品三階。"]
+    lines = ["**背包**　隨身帶著的材料，分凡品、靈品、天品三階。"] if items else ["**背包**　隨身帶著的東西。"]
     lines += [
         f"- {m.name} ×{n}　{materials.tier_label(m)}・屬{m.attribute}　{m.description}"
         for m, n in items
     ]
+    if pills > 0:  # 傳奇道具破境丹（企劃者 2026-10-05）：不是材料，列在最後
+        lines.append(f"- {content.config.legend_item_name} ×{pills}　{content.config.legend_item_note}")
     return "\n".join(lines)
 
 

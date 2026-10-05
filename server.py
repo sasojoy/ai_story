@@ -733,7 +733,8 @@ MENXIA_ACTIONS = {
     "heal": lambda g, b: g.heal(),
     "forge": lambda g, b: g.forge(*forge_args(b)),  # 一武學＋一意境＝合成，兩意境＝合併
     "switch": lambda g, b: g.switch_art(str(b.get("art") or "")),
-    "cultivate": lambda g, b: g.cultivate(str(b.get("art") or "")),  # 用融的意境修練一次，衝下一品
+    # 用融的意境修練一次，衝下一品；use_legend 是勾了「服下破境丹」。只認真正的布林 true：字串、數字都不算勾
+    "cultivate": lambda g, b: g.cultivate(str(b.get("art") or ""), use_legend=b.get("use_legend") is True),
     "melt": lambda g, b: g.melt_art(str(b.get("art") or "")),  # 功法庫裡的一門熔成心得
     "melt_insight": lambda g, b: g.melt_insight(str(b.get("insight") or "")),
     "name": lambda g, b: g.name_mastered(str(b.get("name") or "")),  # 第一個練成絕學的人替它取正式名字

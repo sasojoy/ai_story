@@ -790,10 +790,19 @@ class Config(_Strict):
     fuse_xinde: int = 5  # 合成（武學＋意境）一次
     merge_xinde: int = 5  # 合併（意境＋意境）一次
     cultivate_stamina: int = 10  # 修練一次的體力
-    # 修練升到這一品：第一次的機率、每失敗一次加多少（%）；加到 100 就必成（設計 3.5）
+    # 修練升到這一品：第一次的機率、每失敗一次加多少（%）（設計 3.5）。中品、上品加到 100 就必成；
+    # 絕學沒有保底：累積的機率最多到 cultivate_cap（企劃者 2026-10-05），剩下靠破境丹
     cultivate_odds: dict[str, tuple[int, int]] = Field(
         default_factory=lambda: {"中品": (20, 10), "上品": (10, 6), "絕學": (4, 3)}
     )
+    # 企劃者 2026-10-05：絕學沒有保底，靠破境丹提升。累積機率的上限（%）：沒寫的那一階上限是 100（照舊必成）；
+    # 破境丹是探索偶爾撿到的傳奇道具，玩家在修練頁勾了、而且這一次衝的是絕學，才服下一枚：那一次多 legend_item_bonus%，
+    # 成不成都用掉（不勾就不服；被拒絕的修練不擲骰、丹也不動）
+    cultivate_cap: dict[str, int] = Field(default_factory=lambda: {"絕學": 50})
+    legend_item_name: str = "破境丹"
+    legend_item_note: str = "衝擊絕學時可以服下，那一次的機會多幾分。"
+    legend_item_bonus: int = 15
+    explore_legend_chance: float = Field(default=0.02, ge=0, le=1)  # 每按一次探索（不論走哪一支）撿到一枚的機率
     melt_refund_ratio: float = Field(default=0.8, ge=0, le=1)  # 熔一門武學退回練成花的心得的幾成
     melt_quality_bonus: dict[str, int] = Field(
         default_factory=lambda: {"下品": 0, "中品": 5, "上品": 15, "絕學": 40}

@@ -815,6 +815,61 @@ def test_forge_cultivate_and_melt_through_the_endpoints(client):
     assert all(row["id"] != new["id"] for row in r["menxia"]["owned_arts"])
 
 
+def _a_peerless_candidate(client, pills=2):
+    """一門融過意境、已經是上品的武學（下一步是絕學）、手上有 pills 枚破境丹、體力夠。回傳（功法 id，Game）。"""
+    _a_player_with_insights(client)
+    r = client.post("/api/menxia/forge", json={"art": "jichu_quanjiao", "insights": ["feng"]}).json()
+    art_id = r["menxia"]["owned_arts"][-1]["id"]
+    game = server.game_for("沈青衫")
+    game.state.player.art_quality[art_id] = "上品"
+    game.state.player.legend_items = pills
+    game.state.player.stamina = server.CONTENT.config.stamina_max
+    open_characters().save(game.state)
+    return art_id, game
+
+
+def test_the_pill_is_taken_only_when_the_request_ticks_it_with_a_real_true(client):
+    """勾了才服：use_legend 只認布林 true。累積了 8 次失敗之後，基本機率 28%、服丹 43%：擲 30%，不服輸、服了贏。"""
+    from conftest import FixedRandom
+
+    art_id, game = _a_peerless_candidate(client)
+    game.rng = FixedRandom(0.99)
+    for odd in (False, None, "true", 1, "yes", [True], {"a": 1}):  # 沒勾，或不是真正的 true：丹留著
+        body = {"art": art_id} if odd is None else {"art": art_id, "use_legend": odd}
+        out = client.post("/api/menxia/cultivate", json=body).json()
+        assert "還差一點火候" in out["message"] and "你服下" not in out["message"], odd
+    game.rng = FixedRandom(0.30)
+    out = client.post("/api/menxia/cultivate", json={"art": art_id}).json()  # 第 8 次失敗之後的基本機率 25%：輸
+    assert "還差一點火候" in out["message"]
+    saved = open_characters().load("沈青衫").player
+    assert saved.legend_items == 2 and saved.art_quality[art_id] == "上品" and saved.art_mastery[art_id] == 8
+    out = client.post("/api/menxia/cultivate", json={"art": art_id, "use_legend": True}).json()  # 同一個 30：28% + 15% 贏
+    assert "你服下一枚【破境丹】" in out["message"] and "晉為絕學" in out["message"]
+    saved = open_characters().load("沈青衫").player
+    assert saved.legend_items == 1 and saved.art_quality[art_id] == "絕學"
+
+
+def test_a_stale_page_ticking_a_pill_you_no_longer_hold_still_cultivates(client):
+    from conftest import FixedRandom
+
+    art_id, game = _a_peerless_candidate(client, pills=0)
+    game.rng = FixedRandom(0.10)
+    out = client.post("/api/menxia/cultivate", json={"art": art_id, "use_legend": True})
+    assert out.status_code == 200 and "你身上已經沒有破境丹了，這一回沒服。" in out.json()["message"]
+    saved = open_characters().load("沈青衫").player
+    assert saved.legend_items == 0 and saved.art_mastery[art_id] == 1 and saved.stamina < server.CONTENT.config.stamina_max
+
+
+def test_the_practice_page_offers_the_pill_for_the_peerless_step(client):
+    art_id, _ = _a_peerless_candidate(client)
+    row = next(r for r in client.get("/api/menxia").json()["owned_arts"] if r["id"] == art_id)
+    assert row["cultivate"]["note"] == "4% 晉為絕學・體力 10"
+    assert row["cultivate"]["legend"]["label"] == "服下破境丹（+15%，剩 2 枚）"
+    assert row["cultivate"]["legend"]["note"] == "19% 晉為絕學（含破境丹 +15%）・體力 10"
+    breath = client.get("/api/menxia").json()["owned_arts"][0]
+    assert breath["cultivate"]["ok"] is False and breath["cultivate"]["legend"] is None
+
+
 def test_melting_an_insight_through_the_endpoint(client):
     _a_player_with_insights(client, xinde=0)
     r = client.post("/api/menxia/melt_insight", json={"insight": "feng"}).json()

@@ -963,10 +963,24 @@ class Game:
         2. 沒中就照地點類型（`Config.explore_mix`）的比例抽悟意境、野怪、事件三支之一；做不了的那一支
            （沒有會打的對手、沒有可重複的事件）從候選裡拿掉，用剩下的比例重抽——等於把它的比例按比例分給另外兩支。
         3. 三支都做不了才是一無所獲。
+        4. 不論走哪一支，結束後再擲一次有沒有撿到破境丹（`_legend_find`）。
 
         以前是「先滾三成素材，再一定撞到一個事件」：40 個地點有 38 個探索 100% 跳事件，荒郊野外跟
         城裡的手感一樣（QA 量過）。奇遇事件只走第 1 步、不進事件那一支，所以一直是稀有的。
         """
+        return self._explore_outcome() + self._legend_find()
+
+    def _legend_find(self) -> list[str]:
+        """探索不論走哪一支，結束後擲一次有沒有撿到破境丹（企劃者 2026-10-05：到處探索都有約 2% 的機會）。
+        機率是 0 就不擲骰（先判斷機率，亂數序列一個都不動：測試內容把它設成 0，既有的固定種子序列才不會位移）。
+        兩行：「獲得」開頭的敘事（江湖紀錄給它掃光，journal._NEW_THING）與「破境丹 +1」（寫進紀錄的數值變化）。"""
+        cfg = self.content.config
+        if cfg.explore_legend_chance <= 0 or self.rng.random() >= cfg.explore_legend_chance:
+            return []
+        self.state.player.legend_items += 1
+        return [f"獲得 【{cfg.legend_item_name}】一枚——{cfg.legend_item_note}", f"{cfg.legend_item_name} +1"]
+
+    def _explore_outcome(self) -> list[str]:
         s, c = self.state, self.content
         loc = c.locations[s.player.location]
         if event_candidates(s, c, "explore", "rare") and self.rng.random() < c.config.rare_explore_chance:
@@ -2634,18 +2648,25 @@ class Game:
     def forge_line(self, art_id: str | None, insight_ids: list[str]) -> str:
         return skillview.forge_line(self.state, self.content, self.world, art_id, insight_ids)
 
-    def cultivate(self, art_id: str) -> list[str]:
+    def cultivate(self, art_id: str, use_legend: bool = False) -> list[str]:
         """修練：武學＋它融的意境，衝下一品（見 cultivation.py）。花體力。真的擲了骰（成功或失敗）才寫江湖紀錄；
-        被拒絕（意境熔掉了、沒融過意境、已經絕學、體力不足、沒有這門武學）只回一句話（武學與成長計畫 F12）。"""
+        被拒絕（意境熔掉了、沒融過意境、已經絕學、體力不足、沒有這門武學）只回一句話（武學與成長計畫 F12）。
+        use_legend：玩家勾了「服下破境丹」；真的服了才在紀錄裡寫「破境丹 -1」（丹沒了、下一步不是絕學都照一般的機率擲）。"""
         if self._preparing():
             return self._log(["（賽季籌備中，等待管理者開季。）"])
         problem = cultivation.cultivate_problem(self.state, self.content, self.world, art_id)
         if problem is not None:
             return self._log([problem])
-        xinde, stamina = self._xinde(), self.state.player.stamina
-        msgs = self._log(cultivation.cultivate(self.state, self.content, self.world, art_id, self.rng))
+        xinde, stamina, pills = self._xinde(), self.state.player.stamina, self.state.player.legend_items
+        msgs = self._log(cultivation.cultivate(self.state, self.content, self.world, art_id, self.rng, use_legend))
         spent = round(stamina - self.state.player.stamina)  # 輸了也花了體力：數值變化寫在紀錄上，跟別的行動一樣
-        self._menxia_entry(msgs[0], xinde, extra=[f"體力 -{spent}"] if spent > 0 else None)
+        taken = pills - self.state.player.legend_items
+        extra = ([f"體力 -{spent}"] if spent > 0 else []) + (
+            [f"{self.content.config.legend_item_name} -{taken}"] if taken > 0 else []
+        )
+        # 結果標記是擲骰的結果（「【X】修練…」，一定以【開頭）；前面服丹、沒服的提示與後面定名的話都不是
+        tag = next((m for m in msgs if m.startswith("【")), msgs[0])
+        self._menxia_entry(tag, xinde, extra=extra or None)
         return msgs
 
     def name_mastered(self, name: str) -> list[str]:
