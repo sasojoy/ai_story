@@ -36,7 +36,7 @@ def _wait_until(predicate, seconds=2.0):
 def test_runs_the_job_and_returns_its_result():
     queue = llm_queue.LlmQueue(slots=1, bot_cap=1)
     assert queue.run("甲", lambda: 7, fallback=0) == 7
-    assert queue.snapshot() == {"running": 0, "waiting": 0, "bots_waiting": 0}
+    assert queue.snapshot() == {"running": 0, "waiting": 0}
 
 
 def test_humans_go_before_bots_that_queued_earlier():
@@ -46,10 +46,10 @@ def test_humans_go_before_bots_that_queued_earlier():
     order = []
     bot = threading.Thread(target=lambda: queue.run("假人甲", lambda: order.append("假人"), fallback=None, bot=True))
     bot.start()
-    assert _wait_until(lambda: queue.snapshot()["bots_waiting"] == 1)
+    assert _wait_until(lambda: queue.snapshot()["waiting"] == 1)
     human = threading.Thread(target=lambda: queue.run("真人乙", lambda: order.append("真人"), fallback=None))
     human.start()
-    assert _wait_until(lambda: queue.snapshot()["waiting"] == 1)
+    assert _wait_until(lambda: queue.snapshot()["waiting"] == 2)
     assert queue.position("真人乙") == 1 and queue.position("假人甲") == 2
     release.set()
     for t in (holder, bot, human):
@@ -115,6 +115,25 @@ def test_position_while_running_and_after():
 # ── 計畫沒寫、實作時補的幾條 ───────────────────────────────────
 
 
+def test_the_snapshot_gives_totals_only_and_does_not_tell_bots_from_humans():
+    """審查 M4：假人不能被看出來，連管理者的畫面也不行。快照只有兩個總數（正在跑、在排），假人與真人算在一起；
+    假人的上限（bot_cap）是佇列內部的事，不出現在任何對外的資料裡。"""
+    queue = llm_queue.LlmQueue(slots=1, bot_cap=2)
+    started, release, holder, _ = _hold(queue, "佔著的人")
+    assert started.wait(2)
+    waiters = [
+        threading.Thread(target=lambda: queue.run("假人甲", lambda: None, fallback=None, bot=True)),
+        threading.Thread(target=lambda: queue.run("真人乙", lambda: None, fallback=None)),
+    ]
+    for waiter in waiters:
+        waiter.start()
+    assert _wait_until(lambda: queue.snapshot()["waiting"] == 2)
+    assert queue.snapshot() == {"running": 1, "waiting": 2}  # 一個假人、一個真人，只看得到「兩件在排」
+    release.set()
+    for thread in (holder, *waiters):
+        thread.join(2)
+
+
 def test_it_needs_at_least_one_slot():
     with pytest.raises(ValueError):
         llm_queue.LlmQueue(slots=0, bot_cap=1)
@@ -126,7 +145,7 @@ def test_two_slots_run_two_jobs_at_once_and_the_third_waits_for_one_to_finish():
     first, release_first, holder_a, _ = _hold(queue, "甲")
     second, release_second, holder_b, _ = _hold(queue, "乙")
     assert first.wait(2) and second.wait(2)
-    assert queue.snapshot() == {"running": 2, "waiting": 0, "bots_waiting": 0}
+    assert queue.snapshot() == {"running": 2, "waiting": 0}
     third, release_third, holder_c, result = _hold(queue, "丙")
     assert _wait_until(lambda: queue.snapshot()["waiting"] == 1)
     assert not third.is_set() and queue.position("丙") == 2
@@ -136,7 +155,7 @@ def test_two_slots_run_two_jobs_at_once_and_the_third_waits_for_one_to_finish():
         release.set()
     for t in (holder_a, holder_b, holder_c):
         t.join(2)
-    assert result["value"] == "丙 的結果" and queue.snapshot() == {"running": 0, "waiting": 0, "bots_waiting": 0}
+    assert result["value"] == "丙 的結果" and queue.snapshot() == {"running": 0, "waiting": 0}
 
 
 def test_a_waiter_that_dies_while_waiting_does_not_leave_its_ticket_behind():

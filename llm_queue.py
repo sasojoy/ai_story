@@ -96,10 +96,7 @@ class LlmQueue:
             return None
 
     def snapshot(self) -> dict[str, int]:
-        """管理者看的總數：正在跑幾件、真人在排幾件、假人在排幾件（不列名號）。"""
+        """管理者看的總數：正在跑幾件、在排幾件。只有兩個總數：不列名號，也不把假人與真人分開數（假人不能被看出來，
+        連管理者的畫面也不行，審查 M4）；假人的上限 bot_cap 是這裡面的事，不對外。"""
         with self._cond:
-            return {
-                "running": len(self._active),
-                "waiting": sum(not t.bot for t in self._waiting),
-                "bots_waiting": sum(t.bot for t in self._waiting),
-            }
+            return {"running": len(self._active), "waiting": len(self._waiting)}

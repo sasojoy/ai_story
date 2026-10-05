@@ -4260,7 +4260,7 @@ def test_model_call_never_runs_while_the_action_lock_is_held(game, monkeypatch):
             with pytest.raises(RuntimeError, match="行動鎖"):
                 server.model_call(game, lambda: pytest.fail("不該叫"), fallback="退路")
         assert server.model_call(game, lambda: "放掉鎖之後就行", fallback="退路") == "放掉鎖之後就行"
-    assert real.snapshot() == {"running": 0, "waiting": 0, "bots_waiting": 0}
+    assert real.snapshot() == {"running": 0, "waiting": 0}
 
 
 def test_only_the_out_of_lock_steps_enter_the_model_queue():
@@ -4299,8 +4299,8 @@ def test_the_forge_endpoint_goes_through_a_real_queue(client, monkeypatch):
     with _model(lambda model, messages: asked.append(queue.snapshot()) or "旋風腿"):
         out = client.post("/api/menxia/forge", json={"art": "jichu_quanjiao", "insights": ["feng"]})
     assert out.status_code == 200 and "旋風腿" in out.json()["message"]
-    assert asked == [{"running": 1, "waiting": 0, "bots_waiting": 0}]  # 模型叫的時候，這一件正在佇列裡跑
-    assert queue.snapshot() == {"running": 0, "waiting": 0, "bots_waiting": 0}
+    assert asked == [{"running": 1, "waiting": 0}]  # 模型叫的時候，這一件正在佇列裡跑
+    assert queue.snapshot() == {"running": 0, "waiting": 0}
 
 
 def test_a_duplicate_forge_gets_the_fallback_name_and_is_charged_once(monkeypatch):
@@ -4332,7 +4332,7 @@ def test_a_duplicate_forge_gets_the_fallback_name_and_is_charged_once(monkeypatc
     assert open_world().lookup_recipe(FIST_FENG).name == fallback != "旋風腿"
     assert any(f"【{fallback}】" in m for m in second) and first["msgs"] is not None
     assert open_characters().load("沈青衫").player.stats["xinde"] == 95  # 兩件只收一次
-    assert queue.snapshot() == {"running": 0, "waiting": 0, "bots_waiting": 0}
+    assert queue.snapshot() == {"running": 0, "waiting": 0}
 
 
 def test_make_queue_and_the_startup_line_follow_the_switch(monkeypatch):
@@ -4395,11 +4395,11 @@ def test_a_waiting_player_counts_the_runners_and_humans_ahead_but_not_the_bots_b
     assert started.wait(2)
     threads.append(threading.Thread(target=lambda: queue.run("某假人", lambda: None, fallback=None, bot=True)))
     threads[1].start()
-    assert _wait_for(lambda: queue.snapshot()["bots_waiting"] == 1)
+    assert _wait_for(lambda: queue.snapshot()["waiting"] == 1)
     me = server.game_for("沈青衫")
     threads.append(threading.Thread(target=lambda: server.model_call(me, lambda: None, fallback=None)))
     threads[2].start()
-    assert _wait_for(lambda: queue.snapshot()["waiting"] == 1)
+    assert _wait_for(lambda: queue.snapshot()["waiting"] == 2)  # 假人與我
     assert client.get("/api/queue").json() == {"ahead": 1}  # 只有正在跑的那一件；先排的假人在後面
     release.set()
     for thread in threads:
@@ -4422,10 +4422,25 @@ def test_admin_sees_queue_totals_only(client, monkeypatch):
     monkeypatch.setattr(server, "QUEUE", queue)
     _admin(client, monkeypatch)
     data = client.get("/api/admin").json()
-    assert data["llm_queue"] == {"running": 0, "waiting": 0, "bots_waiting": 0}
+    assert data["llm_queue"] == {"running": 0, "waiting": 0}
 
 
-def test_admin_totals_count_humans_and_bots_apart_without_names(client, monkeypatch):
+def _keys(value, found=None):
+    """一份 JSON 裡所有（任何一層的）鍵。"""
+    found = set() if found is None else found
+    if isinstance(value, dict):
+        for key, inner in value.items():
+            found.add(key)
+            _keys(inner, found)
+    elif isinstance(value, list):
+        for inner in value:
+            _keys(inner, found)
+    return found
+
+
+def test_admin_totals_mix_bots_and_humans_and_show_no_names_or_bot_keys(client, monkeypatch):
+    """審查 M4：管理者的畫面也不能透露假人。在排的有一個假人、一個真人：管理者只看到「兩件在排」，不分開數；
+    /api/admin 與 /api/queue 的 JSON 裡沒有任何帶 bot 的鍵，文字裡沒有名號。"""
     queue = llm_queue.LlmQueue(slots=1, bot_cap=2)
     monkeypatch.setattr(server, "QUEUE", queue)
     _admin(client, monkeypatch)
@@ -4442,10 +4457,11 @@ def test_admin_totals_count_humans_and_bots_apart_without_names(client, monkeypa
     threads.append(threading.Thread(target=lambda: queue.run("路過的真人", lambda: None, fallback=None)))
     for thread in threads[1:]:
         thread.start()
-    assert _wait_for(lambda: queue.snapshot()["waiting"] == 1 and queue.snapshot()["bots_waiting"] == 1)
-    text = client.get("/api/admin").text
-    assert client.get("/api/admin").json()["llm_queue"] == {"running": 1, "waiting": 1, "bots_waiting": 1}
-    assert not any(name in text for name in ("佔著的人", "某假人", "路過的真人"))
+    assert _wait_for(lambda: queue.snapshot()["waiting"] == 2)
+    admin, ahead = client.get("/api/admin"), client.get("/api/queue")
+    assert admin.json()["llm_queue"] == {"running": 1, "waiting": 2}
+    assert not any("bot" in str(key).lower() for key in _keys(admin.json()) | _keys(ahead.json()))
+    assert not any(name in admin.text + ahead.text for name in ("佔著的人", "某假人", "路過的真人"))
     release.set()
     for thread in threads:
         thread.join(2)
