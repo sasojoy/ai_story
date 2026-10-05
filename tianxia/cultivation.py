@@ -95,7 +95,8 @@ def name_mastered(state: GameState, content: Content, world: WorldStateStore, na
     problem = naming.name_problem(name, content)
     if problem is not None:
         return [f"這個名字不行：{problem}。"]
-    if not world.rename_skill(art_id, name):  # 原子判斷：武學、改過的名字、意境都不能撞名
+    # 沿用目前的名字（模型取的就很好）也算定名，只是名字不動；其他名字原子判斷：武學、改過的名字、意境都不能撞名
+    if name != old.name and not world.rename_skill(art_id, name):
         return [f"【{name}】已經有人用了，換一個吧。"]
     state.player.naming = None
     add_chronicle(state, f"{state.player.name}把【{old.name}】練成絕學，為之定名【{name}】。")

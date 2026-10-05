@@ -2625,9 +2625,10 @@ class Game:
         problem = cultivation.cultivate_problem(self.state, self.content, self.world, art_id)
         if problem is not None:
             return self._log([problem])
-        xinde = self._xinde()
+        xinde, stamina = self._xinde(), self.state.player.stamina
         msgs = self._log(cultivation.cultivate(self.state, self.content, self.world, art_id, self.rng))
-        self._menxia_entry(msgs[0], xinde)
+        spent = round(stamina - self.state.player.stamina)  # 輸了也花了體力：數值變化寫在紀錄上，跟別的行動一樣
+        self._menxia_entry(msgs[0], xinde, extra=[f"體力 -{spent}"] if spent > 0 else None)
         return msgs
 
     def name_mastered(self, name: str) -> list[str]:
@@ -2703,7 +2704,10 @@ class Game:
     def _xinde(self) -> int:
         return self.state.player.stats.get("xinde", 0)
 
-    def _menxia_entry(self, tag: str, xinde_before: int, guide: bool = False, title: str = journal.PRACTICE) -> list[str]:
+    def _menxia_entry(
+        self, tag: str, xinde_before: int, guide: bool = False, title: str = journal.PRACTICE,
+        extra: list[str] | None = None,
+    ) -> list[str]:
         """修練頁、煉製頁的動作寫進江湖紀錄（同一種連續的併成一則）。標題照底部分頁的名字：煉製寫「煉製」，
         鍛鍊、療傷、改練寫「修練」（FB-047；以前都寫「門下」，煉製會併進前面那則鍛鍊）。
 
@@ -2711,7 +2715,7 @@ class Game:
         note_action 回來的「✔ 引導完成」、獎勵與說書人的下一步記在這一則的 guide（江湖紀錄看得到），給對話框
         （guide_done），不進修練、煉製頁的訊息與「剛剛」（引導重做設計 8.1.3）。回傳一律是空串列。"""
         delta = self._xinde() - xinde_before
-        changes = [f"心得 {delta:+d}"] if delta else []
+        changes = ([f"心得 {delta:+d}"] if delta else []) + (extra or [])  # extra：心得以外的數值變化（修練花的體力）
         self.state.player.guide_done = []
         notes = note_action(self.state, self.content, self.world, "practice") if guide else []
         self._note_guide(notes)  # 引導的訊息記在這一則的 guide、給對話框，不進修練頁的訊息（引導重做設計 8.1.3）

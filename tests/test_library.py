@@ -151,6 +151,21 @@ def test_a_worn_art_cannot_be_melted(state, content, world):
     assert state.player.member.wugong_id == "basic_fist" and "先改練" in msgs[0]
 
 
+def test_an_art_waiting_to_be_named_cannot_be_melted(state, content, world):
+    """審查：練成絕學、等著取名的那門（PlayerState.naming）不能熔，要先定名。其他庫裡的照樣能熔。"""
+    _fused(world, "旋風腿")
+    _fused(world, "裂地腿")
+    state.player.arts = ["旋風腿", "裂地腿"]
+    state.player.naming = "旋風腿"
+    state.player.stats["xinde"] = 0
+    msgs = library.melt_art(state, content, world, "旋風腿")
+    assert len(msgs) == 1 and "先替它定名" in msgs[0] and "【旋風腿】" in msgs[0]
+    assert state.player.arts == ["旋風腿", "裂地腿"] and state.player.naming == "旋風腿" and state.player.stats["xinde"] == 0
+    assert "熔成了心得" in library.melt_art(state, content, world, "裂地腿")[0] and state.player.arts == ["旋風腿"]
+    state.player.naming = None
+    assert "熔成了心得" in library.melt_art(state, content, world, "旋風腿")[0]
+
+
 def test_melting_something_you_do_not_have_changes_nothing(state, content, world):
     state.player.stats["xinde"] = 0
     assert "沒有" in library.melt_art(state, content, world, "旋風腿")[0]

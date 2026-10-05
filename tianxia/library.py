@@ -126,6 +126,8 @@ def melt_art(state: GameState, content: Content, world: WorldStateStore, art_id:
     if art_id not in p.arts:
         return ["你的功法庫裡沒有這一門。"]
     art = team.player_art(state, content, world, art_id)
+    if art_id == p.naming:  # 練成絕學、等著定名的那門：熔了，讀檔清理會連取名權帶已登記的第一人一起丟掉
+        return [f"【{art.name if art else art_id}】是你練成絕學、還等著定名的武學——先替它定名，再談熔掉。"]
     level = p.art_levels.get(art_id, 1)
     refund = melt_refund(content, level, art.quality if art else "下品")
     p.arts.remove(art_id)

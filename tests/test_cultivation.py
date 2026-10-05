@@ -1,4 +1,5 @@
 import random
+import re
 
 import pytest
 
@@ -65,6 +66,37 @@ def test_the_level_does_not_change_on_a_quality_rise(kicker, content, world):
     kicker.player.art_levels["旋風腿"] = 7
     cultivation.cultivate(kicker, content, world, "旋風腿", WIN)
     assert kicker.player.art_levels["旋風腿"] == 7
+
+
+@pytest.mark.parametrize(("start", "target", "tries"), [
+    ("下品", "中品", 9), ("中品", "上品", 16), ("上品", "絕學", 33),
+])
+def test_losing_every_roll_still_ends_in_a_sure_success_after_the_stated_number_of_tries(
+    kicker, content, world, start, target, tries,
+):
+    """設計 3.5 的保底：骰子永遠擲輸（0.999），熟練度一次加一、顯示的下一次機率每次加一個級距，加到 100% 的那一次必成。
+    釘在 cultivate() 上：熟練度要累加（不是每次都 1）、擲骰要用累積後的機率（不是永遠第一次的機率）。"""
+    first, step = content.config.cultivate_odds[target]
+    p = kicker.player
+    p.art_quality["旋風腿"], p.stamina = start, 10 * tries
+    shown = []
+    for failure in range(1, tries):  # 前 tries - 1 次都輸
+        msgs = cultivation.cultivate(kicker, content, world, "旋風腿", LOSE)
+        assert "還差一點火候" in msgs[0] and p.art_mastery["旋風腿"] == failure
+        assert p.art_quality["旋風腿"] == start
+        shown.append(int(re.search(r"下一次約 (\d+)%", msgs[0]).group(1)))
+    assert shown == [min(100, first + step * n) for n in range(1, tries)] and shown[-1] == 100
+    msgs = cultivation.cultivate(kicker, content, world, "旋風腿", LOSE)  # 同一個輸的骰子：這一次機率已經是 100%
+    assert f"從{start}晉為{target}" in msgs[0]
+    assert p.art_quality["旋風腿"] == target and "旋風腿" not in p.art_mastery and p.stamina == 0
+
+
+def test_the_stated_chances_for_the_first_step_climb_thirty_to_a_hundred(kicker, content, world):
+    shown = [
+        int(re.search(r"下一次約 (\d+)%", cultivation.cultivate(kicker, content, world, "旋風腿", LOSE)[0]).group(1))
+        for _ in range(8)
+    ]
+    assert shown == [30, 40, 50, 60, 70, 80, 90, 100] and kicker.player.art_mastery["旋風腿"] == 8
 
 
 def test_a_worn_art_can_be_cultivated_too(state, content, world):
@@ -190,6 +222,18 @@ def test_a_name_used_by_an_alias_or_an_insight_is_refused(kicker, content, world
     assert kicker.player.naming == "旋風腿" and world.get_skill("旋風腿").name == "旋風腿"
 
 
+def test_naming_it_with_the_name_it_already_has_keeps_the_name(kicker, content, world):
+    """第一個練成的人覺得模型取的名字就很好：這算定名（取名權用掉、江湖史記一筆），名字不變——
+    不能說成「已經有人用了」，用的人就是這門武學自己。"""
+    kicker.player.naming = "旋風腿"
+    world.claim_master("旋風腿", kicker.player.name)
+    msgs = cultivation.name_mastered(kicker, content, world, "旋風腿")
+    assert msgs == ["從今以後，江湖上這門武學就叫【旋風腿】。"] and kicker.player.naming is None
+    assert world.get_skill("旋風腿").name == "旋風腿" and not world.is_skill_name_taken("風神腿")
+    assert [r.text for r in kicker.world.chronicle] == ["沈浪把【旋風腿】練成絕學，為之定名【旋風腿】。"]
+    assert cultivation.name_mastered(kicker, content, world, "風神腿") == ["（沒有等著你取名的武學。）"]  # 取名權用掉了
+
+
 def test_a_name_is_cleaned_before_it_is_checked(kicker, content, world):
     kicker.player.naming = "旋風腿"
     cultivation.name_mastered(kicker, content, world, "《風神腿》")
@@ -252,7 +296,7 @@ def adept(game):
 def test_cultivating_writes_one_journal_entry_with_the_xinde_untouched(adept):
     msgs = adept.cultivate("旋風腿")
     entry = adept.state.journal[0]
-    assert "中品" in msgs[0] and entry.title == "修練" and entry.tag == msgs[0] and entry.changes == []
+    assert "中品" in msgs[0] and entry.title == "修練" and entry.tag == msgs[0] and entry.changes == ["體力 -10"]
     assert adept.state.player.art_quality["旋風腿"] == "中品"
 
 
@@ -260,6 +304,21 @@ def test_a_failed_roll_is_something_that_happened_and_is_written(adept):
     adept.rng = LOSE
     msgs = adept.cultivate("旋風腿")
     assert "還差一點火候" in msgs[0] and adept.state.journal[0].tag == msgs[0]
+    assert adept.state.journal[0].changes == ["體力 -10"]  # 輸了也花了體力，跟別的行動一樣寫在紀錄上
+
+
+def test_the_stamina_of_consecutive_rolls_adds_up_in_one_merged_entry(adept):
+    adept.rng = LOSE
+    adept.cultivate("旋風腿")
+    adept.cultivate("旋風腿")
+    entries = [e for e in adept.state.journal if e.title == "修練"]
+    assert len(entries) == 1 and entries[0].changes == ["體力 -20"] and adept.state.player.stamina == 130
+
+
+def test_the_stamina_change_is_not_written_for_a_naming(adept):
+    adept.state.player.naming = "旋風腿"
+    adept.name_mastered("風神腿")
+    assert adept.state.journal[0].changes == [] and adept.state.player.stamina == 150
 
 
 @pytest.mark.parametrize("break_it", [
@@ -274,6 +333,18 @@ def test_a_refused_cultivation_writes_no_journal_entry(adept, break_it):
     msgs = adept.cultivate("旋風腿")
     assert len(msgs) == 1 and adept.state.journal == before
     assert any(msgs[0] in line for line in adept.state.log)  # 話還是照樣留在 log
+
+
+def test_melting_the_art_waiting_for_its_name_is_refused_without_an_entry(adept):
+    """練成絕學、還沒定名的那門不能熔：熔了，讀檔清理會把取名權連同已登記的第一人一起丟掉。"""
+    adept.state.player.art_quality["旋風腿"] = "上品"
+    adept.cultivate("旋風腿")
+    assert adept.state.player.naming == "旋風腿"
+    before = list(adept.state.journal)
+    msgs = adept.melt_art("旋風腿")
+    assert "先替它定名" in msgs[0] and "旋風腿" in adept.state.player.arts and adept.state.journal == before
+    adept.name_mastered("風神腿")
+    assert "熔成了心得" in adept.melt_art("旋風腿")[0] and adept.state.player.arts == []  # 定了名就能熔
 
 
 def test_a_basic_art_is_refused_without_a_journal_entry(adept):
