@@ -63,6 +63,14 @@ def test_other_pairs_pick_one_parent_by_the_name():
     assert got in ("剛", "柔") and got == insights.merged_attribute(water, fire, "水火")
 
 
+def test_other_pairs_pick_one_parent_by_the_recipe_seed_whatever_the_order():
+    """設計 12.6：「其他組合」的屬性由配方加天機決定（原本是新名字），要先知道屬性才找得到合到舊的候選。"""
+    fire, water = Insight(id="huo", name="火", attribute="剛"), Insight(id="shui", name="水", attribute="柔")
+    seed = "3|合|huo+shui"
+    assert insights.merged_attribute(fire, water, seed) == insights.merged_attribute(water, fire, seed)
+    assert {insights.merged_attribute(fire, water, f"{t}|合|huo+shui") for t in range(40)} == {"剛", "柔"}
+
+
 def test_a_merge_key_ignores_the_order():
     assert insights.merge_key("shui", "huo") == insights.merge_key("huo", "shui") == "huo+shui"
     assert insights.merge_key("feng", "feng") == "feng+feng"
