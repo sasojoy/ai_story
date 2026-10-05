@@ -129,6 +129,17 @@ class Check(_Strict):
     stat: str
     difficulty: int
     by: Literal["team", "self"] = "team"  # team：隊伍派屬性最高的人出手；self：只看本人
+    # 熟練（企劃者 2026-10-05「你常常做壞事，因為很熟練所以也增加成功率」）：寫了 "evil" 時，
+    # 本人出手的檢定值再加上由惡名換算的加成（Config.practice_bonus）。同伴沒有善惡名，不吃這份加成。
+    practice: str | None = None
+
+
+class PracticeBonus(_Strict):
+    """熟練加成：這項名聲每 per 點，本人的檢定值 +1，最多 +cap（rules.practice_bonus）。"""
+
+    per: int = Field(gt=0)
+    cap: int = Field(ge=0)
+    line: str = ""  # 吃到加成時選項底下補的一句心聲，{who} 換成「你」
 
 
 class Choice(_Strict):
@@ -614,6 +625,10 @@ class Config(_Strict):
     rest_regen_multiplier: float = Field(default=2, ge=1)  # 打坐中體力回復是平常的幾倍
     # 地方痕跡的門檻倍數（Condition.marks_min/max 的數字乘上它、無條件進位）：開發期 1，正式伺服器依人數調大
     mark_threshold_scale: float = Field(default=1.0, gt=0)
+    # 熟練加成（Check.practice）：名聲 → 每幾點加 1、最多加幾。惡名的估算見 CLAUDE.md「惡名的熟練加成」。
+    practice_bonus: dict[str, PracticeBonus] = Field(default_factory=lambda: {
+        "evil": PracticeBonus(per=10, cap=3, line="這種事{who}幹得多了。"),
+    })
     # 地圖座標 1 單位＝步行幾分鐘：現行內容（40 個地點的地圖）取 0.04，也就是 25 個單位約 1 分鐘；這裡的預設值只是沒寫時的退路
     travel_minutes_per_unit: float = Field(default=0.0375, gt=0)
     road_factor: dict[RoadKind, float] = Field(

@@ -98,11 +98,26 @@ def check_condition(cond: Condition, state: GameState, content: Content | None =
     return True
 
 
-def check_chance(check: Check, state: GameState, content: Content, world: WorldStateStore) -> float:
-    """出手者的屬性每高於難度 1 點，成功率 +10%；範圍 5%～95%。"""
+def check_gap(check: Check, state: GameState, content: Content, world: WorldStateStore) -> float:
+    """出手者的屬性減難度（成功率看它）；本人出手時加上熟練加成（Check.practice）。"""
     key = team.check_actor(state, content, world, check)
     value = team.check_value(state, content, world, key, check.stat)
-    return min(0.95, max(0.05, 0.5 + (value - check.difficulty) * 0.1))
+    if key == PLAYER:
+        value += team.practice_bonus(state, content, check)
+    return value - check.difficulty
+
+
+def check_chance(check: Check, state: GameState, content: Content, world: WorldStateStore) -> float:
+    """出手者的屬性每高於難度 1 點，成功率 +10%；範圍 5%～95%。"""
+    return min(0.95, max(0.05, 0.5 + check_gap(check, state, content, world) * 0.1))
+
+
+def practice_line(check: Check, state: GameState, content: Content, world: WorldStateStore) -> str:
+    """吃到熟練加成時，選項底下可以補的一句心聲（例如「這種事你幹得多了。」）；沒吃到是空字串。"""
+    if team.check_actor(state, content, world, check) != PLAYER or team.practice_bonus(state, content, check) <= 0:
+        return ""
+    rule = content.config.practice_bonus[check.practice]
+    return rule.line.replace("{who}", "你")
 
 
 def roll_check(check: Check, state: GameState, content: Content, world: WorldStateStore, rng: random.Random) -> bool:
