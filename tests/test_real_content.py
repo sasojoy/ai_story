@@ -639,7 +639,13 @@ def test_real_content_fronts(content):
     assert outcomes == [{"yingru": -35}, {"yingru": 25}, {"yingru": -5}]
 
 
-def test_the_playtest_admin_is_rayal():
+def test_the_playtest_admin_is_rayal(tmp_path, monkeypatch):
+    """驗的是版控內容只帶 Rayal，所以要先隔開這台機器自己的 `.local/admins.txt` 與 `TIANXIA_ADMINS`
+    （那兩個是附加在名單上的，不隔開的話凡是設過本機管理者的機器都會失敗）。"""
+    from tianxia import content as content_mod
+
+    monkeypatch.setattr(content_mod, "ADMINS_FILE", tmp_path / "nope.txt")
+    monkeypatch.delenv("TIANXIA_ADMINS", raising=False)
     assert load_content(CONTENT_DIR).config.admins == ["Rayal"]
 
 def test_enemy_squads_are_marked_with_the_designers_factions(content):
