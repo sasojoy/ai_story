@@ -312,6 +312,11 @@ def test_forge_line_asks_for_an_art_and_an_insight_first(state, content, world):
     assert "武學與意境 0/50" in line
 
 
+def test_forge_line_counts_against_the_cap_that_lore_widens(state, content, world):
+    state.player.stats["lore"] = 8  # 比基準多 3 點：多 6 格
+    assert "武學與意境 0/56" in skillview.forge_line(state, content, world, None, [])
+
+
 def test_forge_line_shows_a_fuse(state, content, world):
     state.player.member.wugong_id = "basic_fist"
     state.player.insights = ["feng"]

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from . import cultivation, fusion, insights, materials, team
 # 不 import 整個 library 模組：這個檔案自己有一個叫 library() 的函式
-from .library import held_count, holding_cap, level_of, melt_problem, melt_value, owned_arts
+from .library import cap_of, held_count, level_of, melt_problem, melt_value, owned_arts
 from .martial_arts import MAX_LEVEL, MartialArt, next_quality, power_at, shown_creator
 from .models import Content
 from .state import PLAYER, GameState
@@ -61,7 +61,7 @@ def forge_line(
 ) -> str:
     """煉製頁的說明：放了什麼、會做哪一種、花多少心得，或者為什麼還不能開爐。"""
     cfg, xinde = content.config, state.player.stats.get("xinde", 0)
-    count = f"武學與意境 {held_count(state)}/{holding_cap(content, state.player.member.level)}"
+    count = f"武學與意境 {held_count(state)}/{cap_of(state, content)}"
     if art_id and len(insight_ids) == 1:
         base = team.player_art(state, content, world, art_id)
         insight = insights.resolve(insight_ids[0], content, world)

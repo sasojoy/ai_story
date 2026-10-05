@@ -76,7 +76,7 @@ def test_the_menxia_pages_get_their_rows_from_the_game_facade(game):
     game.state.player.member.wugong_id = "basic_fist"
     game.state.player.arts = ["lake_kick"]
     game.state.player.insights = ["feng"]
-    assert game.holdings() == {"count": 3, "cap": library.holding_cap(game.content, 1)}
+    assert game.holdings() == {"count": 3, "cap": library.cap_of(game.state, game.content)}
     assert [r["id"] for r in game.art_rows()] == ["basic_fist", "lake_kick"]
     assert [r["id"] for r in game.insight_rows()] == ["feng"]
     assert game.naming_row() is None

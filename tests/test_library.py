@@ -12,8 +12,39 @@ def _fused(world, name):
     return art
 
 
-def test_holding_cap_grows_every_five_levels(content):
-    assert [library.holding_cap(content, lv) for lv in (1, 4, 5, 9, 10)] == [50, 50, 55, 55, 60]
+def test_holding_cap_grows_three_slots_every_five_levels(content):
+    """設計 4.5、6.3：基本 50，每升 5 級 +3 格（原本 +5）。"""
+    assert [library.holding_cap(content, lv, 5) for lv in (1, 4, 5, 9, 10, 30)] == [50, 50, 53, 53, 56, 68]
+
+
+def test_each_point_of_lore_above_the_base_adds_two_slots(content):
+    assert [library.holding_cap(content, 1, lore) for lore in (5, 6, 10, 15)] == [50, 52, 60, 70]
+    assert library.holding_cap(content, 30, content.config.stat_cap) == 88  # 一季最多
+
+
+def test_lore_below_the_base_takes_no_slots_away(content):
+    """Review Focus 2：博聞被事件扣到 5 以下，上限不比「50＋等級給的格子」少。"""
+    assert library.holding_cap(content, 10, 2) == library.holding_cap(content, 10, 5) == 56
+
+
+def test_cap_of_reads_the_players_level_and_lore(state, content):
+    state.player.member.level, state.player.stats["lore"] = 10, 8
+    assert library.cap_of(state, content) == 50 + 6 + 6
+
+
+def test_putting_a_point_into_lore_frees_room_to_fuse(state, content):
+    state.player.insights = [f"x{i}" for i in range(library.cap_of(state, content))]
+    assert library.full(state, content)
+    state.player.stats["lore"] += 1
+    assert not library.full(state, content)
+
+
+def test_losing_lore_can_leave_you_over_the_cap(state, content):
+    """Review Focus 4：博聞掉下來、持有已經超過上限——照設計 4.5，熔回上限以內之前不能合成、合併。"""
+    state.player.stats["lore"] = 7
+    state.player.insights = [f"x{i}" for i in range(library.cap_of(state, content))]
+    state.player.stats["lore"] = 5
+    assert library.held_count(state) > library.cap_of(state, content) and library.full(state, content)
 
 
 def test_held_count_counts_what_is_worn_the_library_and_insights(state):

@@ -133,6 +133,16 @@ def test_fuse_explains_why_it_is_refused(ready, content, world, change, reason):
     assert reason in fusion.fuse_problem(ready, content, world, "basic_fist", "feng")
 
 
+def test_the_full_check_for_a_fuse_follows_lore(ready, content, world):
+    """持有上限含博聞（設計 6.3）：正好滿的時候多放一點博聞就能合成；博聞回到 5，又滿了，訊息寫的是同一個上限。"""
+    content.config.holding_cap_base = 3  # 一門武學加兩個意境，正好滿
+    assert "滿了" in fusion.fuse_problem(ready, content, world, "basic_fist", "feng")
+    ready.player.stats["lore"] = 6  # 多 2 格
+    assert fusion.fuse_problem(ready, content, world, "basic_fist", "feng") is None
+    ready.player.stats["lore"] = 5
+    assert "3/3" in fusion.fuse_problem(ready, content, world, "basic_fist", "feng")
+
+
 def test_fuse_refuses_an_art_you_do_not_have(ready, content, world):
     assert "沒有這門武學" in fusion.fuse_problem(ready, content, world, "basic_breath", "feng")
     art, msgs = fusion.fuse(ready, content, world, must_not_ask(), "basic_breath", "feng")

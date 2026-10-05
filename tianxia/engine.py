@@ -2907,7 +2907,7 @@ class Game:
         """武學與意境的持有數與上限（武學與成長設計 4.5）。"""
         return {
             "count": library.held_count(self.state),
-            "cap": library.holding_cap(self.content, self.state.player.member.level),
+            "cap": library.cap_of(self.state, self.content),
         }
 
     def art_rows(self) -> list[dict]:

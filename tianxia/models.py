@@ -851,7 +851,8 @@ class Config(_Strict):
     duplicate_insight_xinde: int = 10  # 已經會的意境又悟到一次換的心得
     holding_cap_base: int = 50  # 武學與意境合計最多幾個
     holding_cap_levels: int = 5  # 每升幾級……
-    holding_cap_step: int = 5  # ……多幾格
+    holding_cap_step: int = 3  # ……多幾格（企劃者 2026-10-05 從 5 改成 3，另加博聞，設計 6.3）
+    holding_per_lore_point: int = 2  # 博聞比基準每多一點，多幾格（設計 6.3）
     # ── 五屬性（武學與成長設計第六節；【預設】）──
     stat_points_per_level: int = 1  # 每升一級給幾點屬性，自己分配（取代每級自動 +0.3 與打贏隨機 +1）
     stat_cap: int = 15  # 臂力、身法、根骨、悟性、博聞每項最高

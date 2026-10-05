@@ -40,7 +40,7 @@ def merge_key(a: str, b: str) -> str:
 
 
 def _full_line(state: GameState, content: Content) -> str:
-    cap = library.holding_cap(content, state.player.member.level)
+    cap = library.cap_of(state, content)
     return f"武學與意境已經滿了（{library.held_count(state)}/{cap}），先熔掉一些。"
 
 

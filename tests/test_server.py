@@ -772,6 +772,24 @@ def test_a_point_goes_into_lore_through_the_server(client):
     assert open_characters().load("沈青衫").player.stats["lore"] == 6
 
 
+def test_an_old_save_stored_without_lore_reads_as_five_through_the_server(client):
+    """舊存檔（博聞加進來之前存的）：_reload 讀回來的是資料庫裡原樣的那一列、沒經過 Game 的建構，所以進鎖重讀之後也要
+    照開局的 5 補上（計畫 2-2 Review Focus 1）：唯讀的 look、會存檔的 act（/api/main）、＋博聞都照常，不是 KeyError。"""
+    _player(client)
+    game = server.game_for("沈青衫")
+    del game.state.player.stats["lore"]
+    game.state.player.stat_points = 1
+    open_characters().save(game.state)
+    assert "lore" not in open_characters().load("沈青衫").player.stats  # 資料庫裡那一列確實沒有博聞
+    game.state.player.stats["lore"] = 9  # 記憶體裡那份是別的數字：重讀要換成資料庫裡的（補成 5），不能沿用它
+    assert server.look(game, lambda g: g.state.player.stats["lore"]) == server.CONTENT.config.start_stats["lore"] == 5
+    status = client.get("/api/main").json()["status"]
+    assert status["attrs"][-1][1:] == [5, "lore"]
+    r = client.post("/api/do/allocate", json={"stat": "lore"}).json()
+    assert r["main"]["status"]["attrs"][-1][1:] == [6, "lore"]
+    assert open_characters().load("沈青衫").player.stats["lore"] == 6
+
+
 def test_a_refused_allocation_through_the_server_only_says_why(client):
     _player(client)
     r = client.post("/api/do/allocate", json={"stat": "con"}).json()
