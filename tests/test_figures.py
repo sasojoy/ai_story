@@ -9,10 +9,11 @@ from pathlib import Path
 import pytest
 
 import random
+import re
 from unittest import mock
 
 from conftest import FixedRandom
-from tianxia import atlas, battle_instance, bot_policy, calendar, figures, rules, team, timetable, world
+from tianxia import atlas, battle_instance, battlelog, bot_policy, calendar, figures, rules, team, timetable, world
 from tianxia.encounter import EncounterResult
 from tianxia.engine import Game, Option
 from tianxia.events import event_candidates
@@ -641,6 +642,52 @@ def test_win_routs_the_figure_and_snubs_the_winner(on, world):
     assert _option(winner, "act:challenge:bocai").enabled and winner.socialize_starts_dialogue()
 
 
+def test_a_challenge_plays_out_rounds_that_add_up_to_the_toll(on, world):
+    """挑戰本人也演回合（計畫三 Task 1）：對手是照聲威的那一份（難度 120，身法 5＋120÷20＝11，比你快、先出手），
+    回合裡的「你氣血 -N」加起來等於戰報那一筆（根骨 10，上限吃根骨）。"""
+    game = _player(on, world, "官甲", "guan", "huangjin_camp")
+    game.state.player.stats["con"] = 10
+    with _fight("落敗"):
+        game.choose("act:challenge:bocai")
+    record = game.state.battles[0]
+    assert record.event == "挑戰波才" and len(record.rounds) in (3, 4)
+    assert all(line.startswith(f"第{i}回合　波才") for i, line in enumerate(record.rounds, 1))
+    told = int(re.search(r"氣血 -(\d+)", " ".join(record.changes)).group(1))
+    assert told > 0 and sum(int(n) for line in record.rounds for n in re.findall(r"你氣血 -(\d+)", line)) == told
+
+
+def test_a_boss_event_of_your_own_faction_is_still_a_big_fight(real, world):
+    """劇情戰從來不是操練（_event_battle 不看陣營）：黃巾的人在黃巾別部營寨碰上「波才」事件，拔劍打的翻江龍（難度 150）
+    雖然是黃巾的隊伍，照樣是大場面——按鈕寫「兩人對峙……」、有送模型的單子（Task 2 審查：以前被操練的例外擋掉，從不判讀）。"""
+    game = _player(real, world, "黃甲", "huang", "huangjin_camp")
+    assert real.squads["fanjianglong"].faction == "huang" and real.squads["fanjianglong"].difficulty == 150
+    game.state.pending_event = "kou_boss"
+    assert _option(game, "choice:0").wait == "兩人對峙……" and _option(game, "choice:1").wait == ""
+    request = game.fight_request("choice:0")
+    assert request is not None and request.squad_id == "fanjianglong" and request.event == "kou_boss"
+
+
+def test_a_challenge_is_judged_with_the_whole_lineup_against_the_prestige_difficulty(on, world):
+    """挑戰本人一律是大場面（武學與成長設計 8.3）：按鈕寫「兩人對峙……」；送模型的單子列出整個陣容（本人兩門功夫、部下也上陣，
+    計畫三 G7）與照聲威算的難度；判讀的優勢換成判定差距的平移交給 team.fight，難度照舊。"""
+    from tianxia import encounter, fight_llm
+
+    game = _player(on, world, "官甲", "guan", "huangjin_camp")
+    game.state.player.followers = ["follower_guan_spear"]
+    assert _option(game, "act:challenge:bocai").wait == "兩人對峙……"
+    request = game.fight_request("act:challenge:bocai")
+    assert request.squad_id == "figure_bocai" and request.theirs.startswith("波才（屬剛，難度 120）")
+    assert len(request.ours) == 2 and request.ours[1].startswith("持矛鄉勇：武學【")
+    assert request.ours[0].startswith("官甲：武學【") and "內功【" in request.ours[0]
+    judgment = fight_llm.Judgment(advantage=-15, winning="佔上風。", losing="落下風。")
+    with mock.patch.object(team, "fight", wraps=team.fight) as fight:
+        game.choose("act:challenge:bocai", fight=fight_llm.PreparedFight(request=request, judgment=judgment))
+    assert fight.call_args.kwargs["difficulty"] == 120
+    assert fight.call_args.kwargs["shift"] == pytest.approx(encounter.advantage_shift(120, -15))
+    record = game.state.battles[0]
+    assert record.narration == ("佔上風。" if record.tier in team.WIN_TIERS else "落下風。")
+
+
 def test_the_fight_receives_the_difficulty_from_the_prestige(on, world):
     """挑戰本人時交給 team.fight 的難度是照聲威算的（聲威 60：150 × (0.5 + 0.5 × 0.60) = 120），不是代表本人的隊伍
     寫死的 150；不寫死結果，只看呼叫收到什麼（真的打一場）。"""
@@ -692,6 +739,22 @@ def test_losing_a_challenge_costs_silver_and_blood_but_no_prestige(on, world):
     assert "銀兩 -5" in msgs and any(m.startswith("氣血 -") for m in msgs)
     assert world.get_season().figures["bocai"].prestige == 60 and game.state.player.snubbed_until == {}
     assert game.state.player.contrib == 0
+
+
+def test_a_challenge_can_be_dodged_into_a_draw(on, world):
+    """最終審查 M2：挑戰本人也吃身法閃避（劇情戰不吃，見 test_engine）：沒武學必敗，身法 6、每點閃避 100%＝閃避機會 100%，
+    結果是僵持——戰報有那一句、不賠銀兩、聲威不動、他不閉門，氣血照僵持扣（身法別拉太高：身法 38 以上損耗歸零，兩種結果分不出來）。"""
+    on.config.dodge_per_point = 1.0
+    game = _player(on, world, "官甲", "guan", "huangjin_camp")
+    p = game.state.player
+    p.stats["silver"], p.stats["agi"] = 50, 6
+    before = game.state.model_copy(deep=True)
+    msgs = game.choose("act:challenge:bocai")
+    record = game.state.battles[0]
+    assert (record.event, record.tier) == ("挑戰波才", "僵持") and record.notes == [battlelog.DODGE_NOTE]
+    assert p.stats["silver"] == 50 and "銀兩 -5" not in msgs
+    assert world.get_season().figures["bocai"].prestige == 60 and p.snubbed_until == {}
+    assert record.changes == team.take_encounter_toll(before, on, world, "僵持")
 
 
 def test_the_rout_is_buffered_by_the_sides_active_members(on, world):

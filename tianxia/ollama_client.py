@@ -102,10 +102,19 @@ def parse_json_robustly(text: str) -> dict:
 def _ensure_required_present(data: dict, response_model: type, required: list[str]) -> None:
     """呼叫端指定「這個 schema 缺這個欄位就視同截斷失敗」的欄位清單（見 ai_story 對
     options 欄位踩過的坑：GameStateDelta.options 有 default_factory，Pydantic 驗證
-    不會報錯，會靜默套用寫死的預設清單）。"""
+    不會報錯，會靜默套用寫死的預設清單）。
+
+    判斷的是「沒有這個鍵／是 None／是空的容器或字串」，**不是 falsy**：`success_rate: 0`
+    是完全合法的答案（防灌水的提示詞就是要模型對「我必定成功」這類寫法給 0~10），
+    以前用 `not data.get(name)` 會把它當成截斷丟掉、重試再拿到 0 再丟一次，最後退回
+    保底 40——比正常評出來的低分還高，等於把最該壓低的寫法往上抬。"""
     fields = getattr(response_model, "model_fields", {})
     for name in required:
-        if name in fields and not data.get(name):
+        if name not in fields:
+            continue
+        value = data.get(name)
+        empty = value is None or (isinstance(value, (str, bytes, list, tuple, set, dict)) and len(value) == 0)
+        if empty:
             raise ValueError(f"LLM 回應缺少必要欄位 {name!r}，疑似被截斷")
 
 

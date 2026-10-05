@@ -17,11 +17,11 @@ def test_member_card_before_learning_anything(state, content, world):
     )
 
 
-def test_the_players_card_reads_the_hp_cap_with_root_and_a_companions_does_not(state, content, world):
-    """根骨 15：本人的氣血上限 320 × 1.3 ＝ 416；同伴不吃本人的屬性。"""
+def test_the_players_card_reads_the_hp_cap_with_root_and_a_companions_reads_his_own(state, content, world):
+    """根骨 15：本人的氣血上限 320 × 1.3 ＝ 416；同伴照他自己的根骨（韓鐵 6：320 × 1.03）。"""
     state.player.stats["con"] = 15
     assert "第 1 級　氣血 416/416" in skillview.member_card(state, content, world, "player")
-    assert "氣血 320/320" in skillview.member_card(state, content, world, "mate")
+    assert "氣血 330/330" in skillview.member_card(state, content, world, "mate")
 
 
 def test_member_card_after_learning_a_historical_skill(state, content, world):
@@ -694,7 +694,7 @@ def test_a_stat_below_the_base_shows_a_negative_percentage(state, content, world
 
 
 def test_only_the_players_card_carries_the_boost_line(state, content, world):
-    """加成只算本人（計畫二）：同伴的卡不寫、也不會吃到本人的臂力與共鳴。"""
+    """同伴的卡這一版不寫加成那一行（同伴吃的是他自己的屬性，不是本人的臂力與共鳴）。"""
     state.player.member.wugong_id = "basic_fist"
     state.player.stats.update({"str": 15, "con": 15, "good": 40})
     assert "威力加成" in skillview.member_card(state, content, world, "player")

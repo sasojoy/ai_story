@@ -7,7 +7,10 @@ from unittest import mock
 import pytest
 
 from conftest import FixedRandom, at, install_season_one, walk_to
-from tianxia import atlas, battle_instance, calendar, companion_agent, flavor, front_lines, guide, library, rules, skillview
+from tianxia import (
+    atlas, battle_instance, battlelog, calendar, companion_agent, encounter, fight_llm, flavor, front_lines, guide,
+    library, rules, skillview, team,
+)
 from tianxia.characters import open_characters
 from tianxia.content import load_content
 from tianxia.engine import Game, Option
@@ -376,7 +379,8 @@ def test_an_event_choice_that_lifts_the_name_to_the_threshold_grants_the_insight
 def test_self_check_shows_one_bracketed_line_and_takes_the_fail_branch(game):
     game.state.pending_event = "insight"
     assert [o.label for o in game.options()] == ["運氣衝關（根骨 5：咬咬牙，你應該撐得住。）"]
-    assert all(o.model_dump().keys() == {"id", "label", "enabled"} for o in game.options())  # 選項底下沒有另一行
+    # 選項底下沒有另一行（wait 是按下去等模型時換上的字，不是另一行；不是大場面就是空的）
+    assert all(o.model_dump().keys() == {"id", "label", "enabled", "wait"} and o.wait == "" for o in game.options())
     game.rng = FixedRandom(0.99)  # 成功率 50%：必定失敗
     game.choose("choice:0")
     log = game.state.log
@@ -414,6 +418,22 @@ def test_event_battle_is_fully_automatic_and_a_loss_applies_the_fail_effect(game
     assert record.notes == ["你敗了。"]
     assert record.changes == ["銀兩 -10"]
     assert "⚔ 湖邊：落敗翻江龍" in game.state.log
+
+
+def test_a_story_battle_is_not_dodged_and_a_loss_still_applies_the_fail_effect(game):
+    """最終審查 I1：劇情戰的結果是人寫好的勝或敗（僵持也算敗），身法閃避不擲——不然卡片寫「躲過了這一敗」、
+    下面卻照樣「你敗了。」「銀兩 -10」。身法 55＝閃避機會 100%。"""
+    game.state.player.stats["agi"] = 55
+    walk_to(game, "lake")
+    game.choose("act:socialize")
+    assert game.state.pending_event == "duel"
+    with mock.patch.object(encounter, "dodge", wraps=encounter.dodge) as spy:
+        game.choose("choice:0")  # 應戰翻江龍：必敗
+    spy.assert_not_called()  # 劇情戰一點亂數也不給閃避
+    record = game.state.battles[0]
+    assert (record.tier, record.event) == ("落敗", "挑戰")
+    assert record.notes == ["你敗了。"] and battlelog.DODGE_NOTE not in record.notes
+    assert record.changes == ["銀兩 -10"] and game.state.player.stats["silver"] == 40
 
 
 def test_event_battle_win_pays_squad_rewards_once_and_applies_choice_effect(game):
@@ -470,6 +490,24 @@ def test_train_loss_costs_a_tenth_of_the_silver(game):
     record = game.state.battles[0]
     assert record.tier == "落敗" and record.silver == -5
     assert game.state.player.stats["silver"] == 45
+
+
+def test_a_dodged_train_loss_is_a_draw_with_a_note_and_costs_no_silver(game):
+    """身法閃避（人物資質設計 14.4）：落敗被閃成僵持，戰報註明、不賠銀兩（賠銀兩只在落敗），氣血照僵持扣。"""
+    game.content.locations["lake"].enemies = ["boss"]  # 打不贏的翻江龍
+    game.content.config.dodge_per_point = 1.0
+    game.state.player.stats["agi"] = 6  # 閃避機會 1×1＝100%
+    walk_to(game, "lake")
+    before = game.state.model_copy(deep=True)
+    game.rng = FixedRandom(0.0)
+    game.choose("act:train")
+    record = game.state.battles[0]
+    assert (record.tier, record.silver) == ("僵持", 0)
+    assert record.notes == [battlelog.DODGE_NOTE]
+    assert game.state.player.stats["silver"] == 50
+    draw_toll = team.take_encounter_toll(before, game.content, game.world, "僵持")  # 同一個人、同一份氣血，結果是僵持
+    assert draw_toll and record.changes == draw_toll  # 戰報上的損耗就是僵持的那一份（不是落敗的）
+    assert game.state.player.member.neili == before.player.member.neili
 
 
 def test_train_win_records_the_trend_as_a_note(game):
@@ -1430,6 +1468,13 @@ def test_texts_render(game):
     _explore_finds_events(game)
     game.choose("act:explore")
     assert "醉漢" in game.scene_text()
+
+
+def test_the_status_shows_a_companions_rooted_hp_cap(game):
+    """狀態列的同伴氣血照他自己的根骨（人物資質設計 14.3）：韓鐵第 1 級根骨 6，上限 +3%。"""
+    game.state.player.team = ["mate"]
+    mate = game.status_data()["team"][0]
+    assert mate["hp_max"] == round(team.neili_cap(game.content, 1, 6))
 
 
 def test_status_text_shows_the_practice_hint_only_when_xinde_is_idle(game):
@@ -3145,6 +3190,427 @@ def test_a_post_battle_event_can_follow_the_fight(game):
     game.choose("act:train")
     assert game.state.battles  # 先打了一場
     assert game.state.pending_event == "chain_a"  # 再接上戰後的事件
+
+
+# ── 回合演出（武學與成長設計 8.2、計畫三 Task 1）──────────────────────
+
+
+def _told_and_shown(record) -> tuple[int, int]:
+    """戰報「獲得與損失」寫的那一筆「氣血 -N」（沒有就是 0），以及回合裡每一句「你氣血 -N」加起來的數。"""
+    told = re.search(r"氣血 -(\d+)", " ".join(record.changes))
+    shown = sum(int(n) for line in record.rounds for n in re.findall(r"你氣血 -(\d+)", line))
+    return (int(told.group(1)) if told else 0), shown
+
+
+def _forced(tier: str):
+    """這一場的勝負寫死（team.fight 不擲骰）；回合怎麼演只看結果。"""
+    from tianxia import team
+    from tianxia.encounter import EncounterResult
+
+    return mock.patch.object(team, "fight", return_value=EncounterResult(tier=tier, margin=0, our_power=10, difficulty=5))
+
+
+def _player_hp(game) -> float:
+    from tianxia import team
+    from tianxia.state import PLAYER
+
+    return team.member_neili(
+        game.content, game.state.player.member, team.con_of(game.state, game.content, game.world, PLAYER),
+    )[0]
+
+
+def test_a_training_fight_shows_rounds_that_match_the_hp_lost(game):
+    walk_to(game, "lake")
+    game.state.player.member.wugong_id = "basic_fist"
+    game.choose("act:train")
+    record = game.state.battles[0]
+    assert record.rounds and record.rounds[0].startswith("第1回合")
+    told = re.search(r"氣血 -(\d+)", " ".join(record.changes))  # 戰報「獲得與損失」寫的那一筆
+    shown = sum(int(n) for line in record.rounds for n in re.findall(r"你氣血 -(\d+)", line))
+    assert shown == (int(told.group(1)) if told else 0)
+    assert "**過程**" in game.battle_card()
+
+
+def test_a_dodged_fight_plays_the_draw_it_ended_as(game):
+    """身法閃避（人物資質設計 14.4）之後，回合照最後的結果演：落敗閃成僵持，就演五回合、對手氣勢共掉 50（落敗是 3～4 回合、
+    掉 20），回合裡的「你氣血 -N」加起來等於僵持那一份損耗（62），不是落敗的（93），也等於戰報與真的扣掉的。"""
+    game.content.config.dodge_per_point = 1.0
+    game.state.player.stats["agi"] = 6  # 閃避機會 100%
+    game.content.locations["lake"].enemies = ["boss"]  # 打不贏的翻江龍
+    walk_to(game, "lake")
+    before = _player_hp(game)
+    game.choose("act:train")
+    record = game.state.battles[0]
+    assert record.tier == "僵持" and battlelog.DODGE_NOTE in record.notes
+    told, shown = _told_and_shown(record)
+    assert told == shown == round(before - _player_hp(game)) == 62
+    assert len(record.rounds) == 5
+    assert sum(int(n) for line in record.rounds for n in re.findall(r"對手氣勢 -(\d+)", line)) == 50
+
+
+@pytest.mark.parametrize("neili", [None, 360.0])
+def test_the_rounds_add_up_to_what_a_sturdy_player_really_lost(game, neili):
+    """根骨 10 的人氣血上限是 368（吃根骨），比基準的 320 高：回合裡的「你氣血 -N」加起來要等於戰報那一筆、也等於真的
+    扣掉的（G4：con_of 認 key 不認物件，拿 Member 去問會當成基準 5，滿血落敗時只寫出 62、戰報卻是 110）。"""
+    walk_to(game, "lake")
+    p = game.state.player
+    p.stats["con"], p.member.neili = 10, neili
+    before = _player_hp(game)
+    with _forced("落敗"):
+        game.choose("act:train")
+    record = game.state.battles[0]
+    told, shown = _told_and_shown(record)
+    assert record.tier == "落敗" and told == round(before - _player_hp(game)) == 110
+    assert shown == told and len(record.rounds) in (3, 4)
+
+
+def test_the_rounds_add_up_to_the_halved_toll_of_a_wild_fight(game):
+    """探索撞上的野怪只扣一半的氣血（wild）：回合照樣加得起來。"""
+    game.state.player.stats["con"] = 10
+    before = _player_hp(game)
+    with _forced("落敗"):
+        game._squad_encounter("thug", wild=True)
+    record = game.state.battles[0]
+    told, shown = _told_and_shown(record)
+    assert record.kind == "wild" and told == round(before - _player_hp(game)) == 55 and shown == told
+
+
+def test_the_rounds_add_up_to_the_toll_after_a_level_up(game):
+    """打贏升級、氣血上限跟著變高（滿血的人「滿」也跟著變高）：回合的氣血要緊貼著扣氣血的前後量，
+    不是開打前——開打前量的話，升級多出來的上限會把這一場扣的蓋掉，回合裡一滴血都沒掉。"""
+    walk_to(game, "lake")
+    p = game.state.player
+    p.stats["con"], p.member.exp = 10, 90  # 夾具的 level_exp 是 100：水寇小隊給 20 經驗，打贏升到第 2 級
+    with _forced("大勝"):
+        game.choose("act:train")
+    record = game.state.battles[0]
+    told, shown = _told_and_shown(record)
+    assert p.member.level == 2 and told > 0 and shown == told
+
+
+def test_an_event_battle_takes_no_blood_so_their_blows_carry_no_numbers(game):
+    """劇情戰不扣氣血（G5）：對手的出手不寫「你氣血 -N」，也不寫「被你閃開了」——落敗的仗寫「被你閃開了」，
+    讀起來是對方從頭到尾沒碰到你、你卻輸了。沒學武學的人上場，也不會寫出「以【None】」。"""
+    walk_to(game, "lake")
+    game.choose("act:socialize")
+    assert game.state.pending_event == "duel"
+    game.choose("choice:0")  # 應戰翻江龍：必敗
+    record = game.state.battles[0]
+    assert record.tier == "落敗" and len(record.rounds) in (3, 4)
+    for line in record.rounds:
+        assert "你氣血" not in line and "被你閃開了" not in line
+        assert "None" not in line and "【" not in line and "翻江龍" in line and "沈浪" in line
+
+
+@pytest.mark.parametrize("tier", ["落敗", "僵持"])
+def test_a_fight_not_won_at_zero_blood_does_not_say_the_blows_were_dodged(game, tier):
+    """已經沒氣血的人遊歷落敗，這一場掉的氣血是 0（內傷照樣累積）：對手的出手不能每一下都寫「被你閃開了」——
+    讀起來是對方從頭到尾沒碰到你、你卻輸了、損失裡還有內傷（G5 對劇情戰拿掉的同一個矛盾，Final review Minor 2）。
+    輸了就不寫打中沒有（跟劇情戰一樣只寫怎麼出手）；回合裡的氣血數字照樣加得起來（0）。"""
+    walk_to(game, "lake")
+    game.state.player.member.neili = 0.0
+    with _forced(tier):
+        game.choose("act:train")
+    record = game.state.battles[0]
+    told, shown = _told_and_shown(record)
+    assert record.tier == tier and told == shown == 0 and any(c.startswith("內傷") for c in record.changes)
+    assert len(record.rounds) in (3, 4, 5)
+    for line in record.rounds:
+        assert "被你閃開了" not in line and "你氣血" not in line and "水寇小隊" in line, line
+    assert "被你閃開了" not in game.battle_card()
+
+
+def test_a_won_fight_that_costs_no_blood_still_says_the_blows_were_dodged(game):
+    """反過來：贏了而這一場沒掉氣血（打得漂亮），「被你閃開了」是通的，不動。"""
+    walk_to(game, "lake")
+    game.state.player.member.neili = 0.0
+    with _forced("大勝"):
+        game.choose("act:train")
+    record = game.state.battles[0]
+    assert _told_and_shown(record) == (0, 0) and any("被你閃開了" in line for line in record.rounds)
+
+
+def test_an_event_battle_is_played_with_the_fighters_from_before_its_rewards(game):
+    """劇情戰的回合照開打時的陣容與身法演（計畫三 Task 1 審查修正）：打贏的效果（真實內容的 wolves 打贏身法 +1）
+    不能回頭改寫這一場——身法 5 比水寇小隊的 5.25 慢，是對手先出手；效果加了身法也一樣。學到的武學同理：
+    本人空著手上陣、打贏才學會（配上身）的追風步，不會出現在這一場的回合裡，出手的只有帶著長拳的韓鐵。"""
+    duel = game.content.events["duel"].choices[0]
+    duel.combat = "thug"  # 換成打得贏的水寇小隊（難度 5：身法 5＋5÷20＝5.25）
+    duel.effect.stats = {"agi": 3}
+    duel.effect.learn_skills = ["step"]
+    game.state.player.team = ["mate"]
+    game.world.update_companion("mate", lambda p: setattr(p, "wugong_id", "fist"))
+    walk_to(game, "lake")
+    game.choose("act:socialize")
+    assert game.state.pending_event == "duel"
+    game.rng = FixedRandom(1.0)  # 最佳運氣：穩穩打贏
+    game.choose("choice:0")
+    record = game.state.battles[0]
+    p = game.state.player
+    assert record.tier in ("大勝", "險勝") and (p.stats["agi"], p.member.wugong_id) == (8, "step")  # 效果真的生效了
+    assert record.rounds and all(line.startswith(f"第{i}回合　水寇小隊") for i, line in enumerate(record.rounds, 1))
+    assert all("韓鐵以【長拳】" in line and "追風步" not in line and "沈浪" not in line for line in record.rounds)
+
+
+def test_the_rounds_do_not_touch_the_rules_rng_and_read_the_same_every_time(game):
+    """回合與句子用自己的亂數（名號＋戰報流水號當種子，G3），不動 Game.rng：演出是畫面上的事，不能讓同一個行動裡
+    接下來的擲骰（戰後事件、掉落、假人）跟著位移；同一筆戰報演幾次都一樣。"""
+    walk_to(game, "lake")
+    state = game.rng.getstate()
+    with _forced("落敗"):
+        game._squad_encounter("thug")
+    assert game.rng.getstate() == state
+    record = game.state.battles[0]
+    told, _ = _told_and_shown(record)
+    shown = list(record.rounds)
+    game._play_rounds(record, game.content.squads["thug"], "落敗", told)
+    assert shown and record.rounds == shown
+
+
+# ── 大場面請模型判讀（武學與成長設計 8.3、計畫三 Task 2）──────────────────────
+
+JUDGMENT = fight_llm.Judgment(advantage=15, winning="佔上風的過程。", losing="落下風的過程。")
+ACCOUNTS = (JUDGMENT.winning, JUDGMENT.losing)
+
+
+def _boss_at_the_lake(game):
+    game.content.locations["lake"].enemies = ["boss"]
+    walk_to(game, "lake")
+    game.state.player.member.wugong_id = "basic_fist"
+
+
+def _judged(request, judgment=JUDGMENT):
+    return fight_llm.PreparedFight(request=request, judgment=judgment)
+
+
+def test_an_ordinary_fight_needs_no_judgment(game):
+    walk_to(game, "lake")
+    assert game.fight_request("act:train") is None
+    assert next(o for o in game.options() if o.id == "act:train").wait == ""
+
+
+def test_a_big_fight_is_judged_and_tells_the_page_to_wait(game):
+    _boss_at_the_lake(game)
+    request = game.fight_request("act:train")
+    assert request.squad_id == "boss" and request.ours and "翻江龍" in request.theirs
+    assert request.ours[0].startswith("沈浪：武學【") and request.battle_seq == game.state.battle_seq
+    assert next(o for o in game.options() if o.id == "act:train").wait == "兩人對峙……"
+
+
+def test_the_judgment_writes_the_matching_account(game):
+    """僵持也算落下風（計畫三 G15）：只有大勝、險勝播佔上風那一版。"""
+    _boss_at_the_lake(game)
+    request = game.fight_request("act:train")
+    game.choose("act:train", fight=_judged(request))
+    record = game.state.battles[0]
+    expected = "佔上風的過程。" if record.tier in ("大勝", "險勝") else "落下風的過程。"
+    assert record.narration == expected and expected in game.battle_card()
+    assert record.rounds  # 回合照樣算好：過程換成模型寫的那一版，數字照樣在得失裡
+
+
+def test_a_stale_judgment_is_dropped(game):
+    _boss_at_the_lake(game)
+    request = game.fight_request("act:train")
+    stale = _judged(request.model_copy(update={"location": "town"}))
+    game.choose("act:train", fight=stale)
+    assert game.state.battles[0].narration == ""
+
+
+def test_a_judgment_survives_the_season_clock_moving_while_the_model_thinks(game):
+    """模型要想一分鐘，這段時間誰同步一次，賽季時鐘就往前走（計畫三 G1）：單子不記時間，判讀照樣套得上。"""
+    _boss_at_the_lake(game)
+    game.sync(1000.0)
+    request = game.fight_request("act:train")
+    before = game.state.world.time
+    game.sync(1060.0)
+    assert game.state.world.time > before
+    game.choose("act:train", fight=_judged(request))
+    assert game.state.battles[0].narration in ACCOUNTS
+
+
+def test_a_judgment_is_dropped_after_another_fight(game):
+    """Review Focus 3：等模型的時候（另一個分頁）又打了一場，戰報流水號變了：回來的判讀作廢、照平常打。"""
+    _boss_at_the_lake(game)
+    request = game.fight_request("act:train")
+    game.choose("act:train")
+    game.choose("act:train", fight=_judged(request))
+    newest = game.state.battles[0]
+    assert newest.id == request.battle_seq + 2 and newest.narration == ""
+    assert game.state.battles[1].narration == ""
+
+
+def test_a_judgment_is_dropped_after_switching_arts(game):
+    """Review Focus 3：等模型的時候換了武學，陣容跟判讀的那一張對不上：作廢、照平常打。"""
+    _boss_at_the_lake(game)
+    request = game.fight_request("act:train")
+    game.state.player.member.wugong_id = "fist"
+    game.choose("act:train", fight=_judged(request))
+    assert game.state.battles[0].narration == ""
+
+
+class _FirstChoice(random.Random):
+    """rng.choice 一律挑第一個：看得出遊歷的對手是不是照 Game.rng 挑的。"""
+
+    def choice(self, seq):
+        return seq[0]
+
+
+class _LastChoice(random.Random):
+    """rng.choice 一律挑最後一個。"""
+
+    def choice(self, seq):
+        return seq[-1]
+
+
+def _train_wait(game) -> str:
+    return next(o for o in game.options() if o.id == "act:train").wait
+
+
+def _next_seq(game, squad_id: str) -> int:
+    """從現在的戰報流水號往後找，第一個讓 _train_pick 挑到 squad_id 的流水號，並把流水號設成它（只往後跳，戰報的編號不會重複）。"""
+    return next(n for n in range(game.state.battle_seq, game.state.battle_seq + 100) if _pick(game, n) == squad_id)
+
+
+def test_a_trip_where_a_big_foe_lurks_meets_the_foe_the_button_names(game):
+    """遊歷的池子裡有大場面的對手時，這一趟遇上哪一路一律照 _train_pick（名號｜地點｜戰報流水號的雜湊），不擲 Game.rng：
+    按鈕、備料、套用與判讀失敗的退路都是同一路（Task 2 審查修正 3）。判讀過的照優勢平移判定差距；判讀不到（模型叫不動）
+    照樣打按鈕寫的那一路，優勢 0、照範本回合演出。挑到一般的那一路就是一般的仗：不寫「兩人對峙」、不問模型。"""
+    from tianxia import encounter, team
+
+    game.content.locations["lake"].enemies = ["thug", "boss"]
+    walk_to(game, "lake")
+    game.state.player.member.wugong_id = "basic_fist"
+
+    game.rng = _FirstChoice(0)  # Game.rng 要是被拿去挑對手，會挑到水寇小隊
+    _next_seq(game, "boss")
+    assert _train_wait(game) == "兩人對峙……"
+    request = game.fight_request("act:train")
+    assert request.squad_id == "boss"
+    with mock.patch.object(team, "fight", wraps=team.fight) as fight:
+        game.choose("act:train", fight=_judged(request))
+    assert game.state.battles[0].opponent == "翻江龍" and game.state.battles[0].narration in ACCOUNTS
+    assert fight.call_args.kwargs["shift"] == pytest.approx(encounter.advantage_shift(200, 15))
+
+    _next_seq(game, "boss")  # 判讀失敗（伺服器拿到 None）：照樣打按鈕寫的翻江龍，優勢 0
+    assert _train_wait(game) == "兩人對峙……"
+    with mock.patch.object(team, "fight", wraps=team.fight) as fight:
+        game.choose("act:train")
+    record = game.state.battles[0]
+    assert record.opponent == "翻江龍" and record.narration == "" and record.rounds
+    assert fight.call_args.kwargs["shift"] == 0.0
+
+    game.rng = _LastChoice(0)  # 這回 Game.rng 要是被拿去挑，會挑到翻江龍
+    _next_seq(game, "thug")
+    assert _train_wait(game) == "" and game.fight_request("act:train") is None
+    game.choose("act:train")
+    assert game.state.battles[0].opponent == "水寇小隊" and game.state.battles[0].narration == ""
+
+
+class _Recording(random.Random):
+    """照常擲骰，順便記下每一次 rng.choice 從哪一串挑、挑到什麼。"""
+
+    def __init__(self, seed):
+        super().__init__(seed)
+        self.picked: list[tuple[list, object]] = []
+
+    def choice(self, seq):
+        got = super().choice(seq)
+        self.picked.append((list(seq), got))
+        return got
+
+
+def test_a_real_trip_still_draws_its_foe_from_the_rng():
+    """正式內容沒有一個地點的遊歷池子裡有大場面的對手，所以每一處遊歷照舊用 Game.rng 從池子裡挑（亂數序列、整季模擬、
+    好玩度量表的對手組成都不變）：潁川郊野打的就是 rng.choice 挑到的那一路。"""
+    real = load_content(ROOT / "content")
+    real.config.auto_open_first_season = True
+    real.config.train_event_chance = 0.0
+    game = Game.new(real, "甲", rng=_Recording(0))
+    for loc in real.locations.values():
+        assert not any(game.is_big(real.squads[sid]) for sid in loc.enemies), loc.id
+    game.state.player.location = "yingchuan_wilds"
+    pool = real.locations["yingchuan_wilds"].enemies
+    game.rng.picked.clear()
+    game.choose("act:train")
+    got = next(got for seq, got in game.rng.picked if seq == pool)
+    assert game.state.battles[0].opponent == real.squads[got].name
+    assert game.rng.picked[0][0] == pool  # 遊歷這一下第一個擲的就是挑對手，跟以前一樣
+
+
+def _pick(game, battle_seq: int) -> str:
+    game.state.battle_seq = battle_seq
+    return game._train_pick(game.content.locations[game.state.player.location]).id
+
+
+def test_the_engine_clamps_the_advantage_itself(game):
+    """引擎自己也把優勢夾在 ±big_fight_swing：判讀不一定都經過 fight_llm.judge（之後的模型佇列也會交判讀進來），
+    優勢 99 只當 15 用（Task 2 審查修正 4）。"""
+    from tianxia import encounter, team
+
+    _boss_at_the_lake(game)
+    request = game.fight_request("act:train")
+    wild = fight_llm.Judgment(advantage=99, winning="贏", losing="輸")
+    with mock.patch.object(team, "fight", wraps=team.fight) as fight:
+        game.choose("act:train", fight=_judged(request, wild))
+    assert fight.call_args.kwargs["shift"] == pytest.approx(encounter.advantage_shift(200, 15))
+    game._fight = _judged(game.fight_request("act:train"), wild.model_copy(update={"advantage": -99}))
+    with mock.patch.object(team, "fight", wraps=team.fight) as fight:
+        game._squad_encounter("boss")
+    assert fight.call_args.kwargs["shift"] == pytest.approx(encounter.advantage_shift(200, -15))
+
+
+def test_a_judgment_is_used_once_and_never_by_a_foe_met_while_exploring(game):
+    """判讀只用在它那一場（計畫三 G8）：同一次行動再打一場同一路不會再吃一次；探索撞上的野外對手是當下擲出來的，不問模型、
+    也不吃判讀（設計 8.3 只算遊歷、劇情戰與挑戰本人）。"""
+    _boss_at_the_lake(game)
+    game._fight = _judged(game.fight_request("act:train"))
+    game._squad_encounter("boss", wild=True)
+    assert game.state.battles[0].narration == "" and game._fight is not None
+    game._squad_encounter("boss")
+    game._squad_encounter("boss")
+    assert game.state.battles[1].narration in ACCOUNTS and game.state.battles[0].narration == ""
+    assert game._fight is None
+
+
+def test_the_fight_request_and_its_recheck_never_tick_the_battle(game):
+    """備料（A 段）與進鎖重驗都只讀：推進全服戰鬥留給 choose() 開頭那一次（理由同 dialogue_request）。"""
+    _boss_at_the_lake(game)
+    calls, patched = _spy_battle_status(game)
+    with patched:
+        request = game.fight_request("act:train")
+        game._checked_fight("act:train", _judged(request))
+    assert calls and True not in calls
+    calls, patched = _spy_battle_status(game)
+    with patched:
+        game.choose("act:train", fight=_judged(request))
+    assert calls.count(True) == 1 and game.state.battles[0].narration in ACCOUNTS
+
+
+def test_no_model_and_drills_are_never_judged(game):
+    """沒有模型（伺服器假人的 client 是 None）不問；遊歷遇上自己陣營的隊伍是操練、不打架，不判讀，按鈕也不寫「兩人對峙」。
+    操練只是遊歷的事：同一路人馬在劇情戰裡照樣開打，仍是大場面（Task 2 審查修正 1）。"""
+    _boss_at_the_lake(game)
+    client, game.client = game.client, None
+    assert game.fight_request("act:train") is None
+    game.client = client
+    game.content.squads["boss"].faction = game.state.player.faction = "kou"
+    assert game.fight_request("act:train") is None
+    assert next(o for o in game.options() if o.id == "act:train").wait == ""
+    game.state.pending_event = "duel"  # 應戰翻江龍：劇情戰不操練
+    assert next(o for o in game.options() if o.id == "choice:0").wait == "兩人對峙……"
+    assert game.fight_request("choice:0").squad_id == "boss"
+
+
+def test_only_the_big_event_fight_tells_the_page_to_wait_and_free_words_are_no_fight(game):
+    """事件的戰鬥選項：打頭目（翻江龍）那一顆寫「兩人對峙」，其他不寫；隨口應對（choice:free）不是仗，也不會在鎖裡出錯。"""
+    from tianxia.models import FreeTextChoice
+
+    walk_to(game, "lake")
+    game.content.events["duel"].free_text = FreeTextChoice(prompt="自己想辦法……", stat="str")
+    game.state.pending_event = "duel"
+    assert {o.id: o.wait for o in game.options()} == {"choice:0": "兩人對峙……", "choice:1": "", "choice:free": ""}
+    assert game.fight_request("choice:0").squad_id == "boss" and game.fight_request("choice:0").event == "duel"
+    assert game.fight_request("choice:1") is None and game.fight_request("choice:free") is None
 
 
 def test_the_journal_calls_it_a_training_trip(game):
@@ -5541,7 +6007,7 @@ def test_the_status_carries_the_points_to_allocate(game):
 
 def test_the_status_says_what_each_stat_does(game):
     """配點鈕底下那一行（計畫二最終審查 M2）：點數配了收不回來（設計 6.2），按之前要看得到五項各管什麼（照設計 6.1、6.3）。
-    名字照 Config.stat_names、順序跟 attrs 一樣，再加一句事件的檢定也看這五項；文字由引擎給，網頁不寫死。"""
+    名字照 Config.stat_names、順序跟 attrs 一樣，再加一句事件的檢定看哪幾項；文字由引擎給，網頁不寫死。"""
     names = game.content.config.stat_names
     names["agi"] = "輕功"  # 改了名字，那一行跟著改
     data = game.status_data()
@@ -5550,11 +6016,23 @@ def test_the_status_says_what_each_stat_does(game):
     ]
     uses = dict(data["stat_uses"])
     assert "武學" in uses[names["str"]]  # 臂力：武學（外功）的威力
-    assert "氣血" in uses["輕功"]  # 身法：打完一場少掉一點氣血
+    assert all(word in uses["輕功"] for word in ("氣血", "落敗", "平手"))  # 身法：打完一場少掉一點氣血，落敗有機會閃成平手（14.4；點數收不回來）
     assert all(word in uses[names["con"]] for word in ("內功", "氣血上限", "內傷"))  # 根骨：內功、氣血上限、少受內傷
     assert all(word in uses[names["wis"]] for word in ("修練", "意境", "閉關"))  # 悟性：修練升品、探索悟意境、閉關心得
     assert "持有" in uses[names["lore"]]  # 博聞：武學與意境的持有上限（設計 6.3）
-    assert "檢定" in data["stat_uses_note"] and "五項" in data["stat_uses_note"]
+    assert data["stat_uses_note"] == "事件的檢定看前四項。"  # 還沒有事件檢定博聞（PM 2026-10-05），見下一個測試
+
+
+def test_the_stat_note_says_four_until_an_event_checks_lore():
+    """「事件的檢定看前四項」是因為正式內容還沒有任何事件檢定（或隨口應對看）博聞。joy 加了第一個之後這條會失敗：
+    把 skillview.STAT_CHECK_NOTE 改回「事件的檢定也看這五項。」、這條跟著改（PM 2026-10-05）。"""
+    from tianxia import skillview
+
+    real = load_content(ROOT / "content")
+    stats = {ch.check.stat for e in real.events.values() for ch in e.choices if ch.check is not None}
+    stats |= {e.free_text.stat for e in real.events.values() if e.free_text is not None}
+    assert stats and "lore" not in stats
+    assert skillview.STAT_CHECK_NOTE == "事件的檢定看前四項。"
 
 
 def test_lore_is_the_fifth_stat_and_is_named_in_one_place(game):
@@ -5633,6 +6111,16 @@ def test_hp_comes_back_by_the_rooted_cap(content):
         game._advance_player_local(HOUR / 10)
     plain, rooted = (game.state.player.member.neili for game in games)
     assert plain > 0 and rooted == pytest.approx(plain * 1.3)
+
+
+def test_a_companions_hp_comes_back_by_his_own_cap(game):
+    """同伴的氣血也回到他自己（吃了根骨的）上限（人物資質設計 14.3）：韓鐵第 1 級根骨 6，上限 330，本人根骨 5 是 320。"""
+    game.state.player.team = ["mate"]
+    game.state.player.member.neili = 0.0
+    game.world.update_companion("mate", lambda p: setattr(p, "neili", 0.0))
+    game._advance_player_local(HOUR / 10)
+    player, mate = game.state.player.member.neili, game.world.get_companion("mate").neili
+    assert player > 0 and mate == pytest.approx(player * 330 / 320)
 
 
 def test_the_showdown_power_snapshot_carries_the_players_boost(game):

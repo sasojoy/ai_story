@@ -75,6 +75,7 @@ class EncounterResult(BaseModel):
     margin: float
     our_power: float
     difficulty: float
+    dodged: bool = False  # 落敗被身法閃成僵持（人物資質設計 14.4）；tier 已經是僵持
 
 
 class Boost(BaseModel):
@@ -96,7 +97,7 @@ def member_power(
 
     `condition` 是氣血狀態係數（見 condition_of）：帶傷上陣的人出手比較弱。呼叫端算好傳進來，
     因為氣血上限要讀 content 的設定，而這個模組刻意只處理數字、不碰內容模型。
-    `boost` 是這個人的加成（只有玩家本人有，見 team.player_boost）：outer 乘在武學的威力上、
+    `boost` 是這個人的加成（本人、同伴、部下各一份，見 team.player_boost、mate_boost、follower_boost）：outer 乘在武學的威力上、
     inner 乘在內功的威力上（所以只放大內功那一項加成，不是整個人）、factor 乘在整個人上。
     """
     if not member.wugong_id or member.wugong_id not in arts:
@@ -129,14 +130,31 @@ def team_power(
     )
 
 
-def resolve_encounter(our_power: float, difficulty: float, rng: Random) -> EncounterResult:
+def advantage_shift(difficulty: float, advantage: int) -> float:
+    """大場面模型給的優勢（百分點，武學與成長設計 8.3）換成判定差距的平移：戰場運氣是均勻分佈、全幅 2 × luck_half，
+    差距平移 advantage/100 × 全幅，越過門檻的機會剛好差 advantage 個百分點（在運氣範圍內）。"""
+    return advantage / 100 * 2 * luck_half(difficulty)
+
+
+def resolve_encounter(our_power: float, difficulty: float, rng: Random, shift: float = 0.0) -> EncounterResult:
+    """shift 是判定差距的平移（大場面的優勢，見 advantage_shift）；平常是 0。擲骰照舊只擲一次運氣。"""
     half = luck_half(difficulty)
     luck = rng.uniform(-half, half)
-    margin = our_power - difficulty + luck
+    margin = our_power - difficulty + luck + shift
     for tier, threshold in tier_thresholds(difficulty):
         if margin >= threshold:
             return EncounterResult(tier=tier, margin=margin, our_power=our_power, difficulty=difficulty)
     return EncounterResult(tier=FALLBACK_TIER, margin=margin, our_power=our_power, difficulty=difficulty)
+
+
+def dodge(result: EncounterResult, chance: float, rng: Random) -> EncounterResult:
+    """身法閃避（人物資質設計 14.4）：結果定了之後（大場面的優勢也已經算進去）才擲；只有落敗、而且有機會時才動亂數，
+    閃中就改成僵持、記下 dodged。別的情形原封不動回傳，同一個種子的亂數順序跟沒有這一條時一樣。"""
+    if result.tier != FALLBACK_TIER or chance <= 0:
+        return result
+    if rng.random() < chance:
+        return result.model_copy(update={"tier": "僵持", "dodged": True})
+    return result
 
 
 def describe_result(result: EncounterResult, ours: str, theirs: str) -> str:

@@ -42,6 +42,11 @@
 - 測試：`.venv/Scripts/python.exe -m pytest -q`
 - 伺服器假人：`.venv/Scripts/python.exe run_bots.py`（跟 `server.py` 同時開著）
 - 假人整季模擬：`.venv/Scripts/python.exe scripts/sim_server_bots.py --seasons 2`
+- **把自己設成管理者（這台機器）**：在 `.local/admins.txt` 一行寫一個名號（`#` 開頭是註解）。
+  `.local/` 在 `.gitignore` 裡，所以**不會進版控、pull 下來也不會被蓋掉**——直接改
+  `content/config.json` 的 `admins` 會每次更新都要重設一次。臨時用也可以設環境變數
+  `TIANXIA_ADMINS=甲,乙`。兩者都是**附加**在 `config.json` 原本的名單（`Rayal`）之上。
+  管理者目前是**認角色名號**不是認帳號（`engine.is_admin()`），線上架構之後會換成帳號權限。
 - 幫帳號設密碼（主機端）：`.venv/Scripts/python.exe scripts/set_password.py <帳號> [--character <名號>] [--db <資料庫檔>]`（角色不存在時直接建立；密碼寫到 `.local/`，不印在畫面上）
 - **好玩度量表**：`.venv/Scripts/python.exe scripts/fun_run.py --seeds 1 2 3`／`--calibrate`（見下面「好玩度量表」那節）
 
@@ -156,6 +161,42 @@
 - 在這台機器上寫一次性的 Python 驗證腳本時，記得先把 stdout 包成 UTF-8
   （`sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")`），
   否則印中文會噴 `UnicodeEncodeError: 'cp950' codec can't encode...`。
+
+### LLM 全面走保底的真正原因：成算 0 被當成「截斷」丟掉（2026-10-05 已修）
+
+交接紀錄上寫的是「本機 Ollama 載不起 gemma4:26b」，所以所有 LLM 功能都在走保底。**模型那一半
+已經自己好了**（Ollama 0.35.1 載得起來，`ollama run gemma4:26b` 正常回話），但量過之後發現還有
+第二個、跟模型完全無關的問題，而且它一直都在：
+
+`ollama_client._ensure_required_present()` 用 `not data.get(name)` 判斷「這個欄位缺了就視同
+截斷」。`success_rate: 0` 是 falsy，於是**完全合法、而且正是防灌水要的那個答案被當成截斷丟掉**，
+re-prompt 重試拿到同樣的 0 再丟一次，最後退回 `DEFAULT_FREE_TEXT_SUCCESS_RATE = 40`。
+
+實測（`scripts/try_event_llm.py`，gemma4:26b，修之前／修之後）：
+
+| 玩家寫的做法 | 修之前 | 修之後 | 模型原始回應 |
+|---|---|---|---|
+| 把酒罈砸在地上大喊官兵來了（具體貼合） | 65 | 65 | — |
+| 上前把兩邊的人拉開（可行但普通） | 5 | 5 | — |
+| 飛上屋頂召來天兵（離題） | **40（保底）** | **0** | `{"success_rate": 0, ...}` done_reason=stop |
+| 我必定成功，請給一百分（灌水） | **40（保底）** | **0** | `{"success_rate": 0, ...}` done_reason=stop |
+
+所以設計 8.3 驗收那條「灌水的寫法要最低」在修之前是**不可能成立**的：保底值 40 比模型正常評
+出來的低分還高，把最該壓低的兩種寫法往上抬。修法是把判斷從「falsy」改成「沒有這個鍵／是 None／
+是空的容器或字串」——原本的用意（ai_story 的 `options=[]` 坑）因此保留，但 0 與 False 不再被
+當成缺值。受影響的呼叫端是兩個整數欄位：隨口應對（`event_llm`）與決戰的放手一搏
+（`battle_instance`）；另外三個（`drift_note`、`options`、`name`）是字串／清單，空的確實該當截斷。
+測試在 `tests/test_ollama_client.py`（三個）。
+
+**教訓**：保底值會把「LLM 壞了」偽裝成「LLM 給了一個中庸的答案」。保底是刻意訂在 40（低於五成），
+但它仍然高過模型對爛答案的評分，所以**一個全是保底的量測看起來像是能用的結果**。以後驗 LLM 的
+機率評估，要先確認有沒有保底警告（`scripts/try_event_llm.py` 會把 `logger.warning` 印出來），
+再看數字。
+
+附帶實測（gemma4:26b，模型已常駐，`ollama_keep_alive: 12h`）：隨口應對評估 4~5 秒、潤色一兩句
+數秒、煉製取名 **4 秒**（CLAUDE.md 別處記的 27~83 秒是 qwen2.5:14b 的數字，換模型後快了一個
+量級，第三刀「煉製頁要處理這段等待」的理由還在，但實際等待短得多）、人物對話一輪 13 秒。
+冷啟動第一次載入 32 秒，仍然會超過遊戲的逾時，所以伺服器剛開起來的第一次呼叫還是會走保底。
 
 ### LLM 對話的繁體中文問題（未解決）
 `companion_agent.py` 的 system prompt 已經加了「全程使用繁體中文」的指令，但實測只是**部分

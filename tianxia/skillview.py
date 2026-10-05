@@ -17,12 +17,15 @@ from .world_state import WorldStateStore
 # 博聞又看不到立即的變化，所以按之前要讀得到。名字照 Config.stat_names（見 stat_uses），這裡只寫用途；只寫玩家本人身上的事
 STAT_USES = {
     "str": "武學威力",
-    "agi": "打完一場少損氣血",
+    "agi": "打完一場少損氣血・落敗有機會閃成平手",
     "con": "內功威力・氣血上限・少受內傷",
     "wis": "修練機率・探索悟得意境・閉關心得",
     "lore": "武學與意境的持有上限",
 }
-STAT_CHECK_NOTE = "事件的檢定也看這五項。"  # 事件檢定、隨口應對讀這五項（設計 6.1、6.3）
+# 事件檢定、隨口應對讀得到五項（設計 6.1、6.3），但正式內容還沒有任何事件檢定博聞，所以先寫「前四項」（PM 2026-10-05）。
+# joy 加了第一個檢定（或隨口應對看）博聞的事件之後，改回「事件的檢定也看這五項。」——
+# tests/test_engine.py 的 test_the_stat_note_says_four_until_an_event_checks_lore 到時候會失敗提醒
+STAT_CHECK_NOTE = "事件的檢定看前四項。"
 
 
 def stat_uses(content: Content) -> list[tuple[str, str]]:
@@ -223,14 +226,14 @@ def member_card(state: GameState, content: Content, world: WorldStateStore, key:
         member = world.get_companion(key)
         name = content.characters[key].name
     own = state if key == PLAYER else None  # 玩家那一列顯示自己修練到的品質；同伴照全服登記的
-    now, cap = team.member_neili(content, member, team.con_of(state, key))  # 本人的上限吃根骨，同伴照基準
+    now, cap = team.member_neili(content, member, team.con_of(state, content, world, key))  # 本人與同伴各照自己的根骨
     lines = [
         f"### {name}",
         f"第 {member.level} 級　氣血 {now:.0f}/{cap:.0f}",
         f"內功　{_art_label(content, world, member.neigong_id, member.neigong_level, own)}",
         f"武學　{_art_label(content, world, member.wugong_id, member.wugong_level, own)}",
     ]
-    if key == PLAYER and (boosts := boost_line(state, content, world)):  # 加成只算本人，同伴的卡不寫
+    if key == PLAYER and (boosts := boost_line(state, content, world)):  # 共鳴與功效只算本人，同伴的卡這一版不寫加成那一行
         lines.append(boosts)
     return "\n".join(lines)
 

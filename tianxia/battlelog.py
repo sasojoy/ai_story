@@ -1,13 +1,16 @@
 """遭遇/劇情戰紀錄（sanguo-companions 合併大幅簡化，取代舊的逐回合戰報）：把一次
 encounter.EncounterResult 存成 BattleRecord，並產生場景卡片與戰報列表的文字。全服決戰補送給參戰者的那一筆
 （kind 是 showdown，Game._deliver_battle_results 建的）也在這裡畫，沒有威力與難度、改寫站哪一邊與大勢。
+勝負一次算好之後照結果演出的 3～5 回合（武學與成長設計 8.2）：數字在 rounds.py，句子在這裡（round_lines）。
 """
 from __future__ import annotations
 
+import random
 import re
 from collections.abc import Callable
 
 from . import calendar, front_lines, team
+from . import rounds as rounds_mod  # state 也有一個 Fighter（戰報的陣容），這裡用別名免得混淆
 from .encounter import EncounterResult, describe_result
 from .models import Content, Squad
 from .state import BattleRecord, Fighter, GameState
@@ -17,6 +20,7 @@ MAX_RECORDS = 20  # 存檔保留最近幾場
 TIER_WORDS = {"大勝": "大勝", "險勝": "險勝", "僵持": "平手", "落敗": "落敗"}
 KIND_WORDS = {"train": "遊歷", "event": "劇情", "wild": "探索遇敵", "showdown": "決戰"}
 NO_RECORD = "（還沒有戰報。）"
+DODGE_NOTE = "身法一閃，躲過了這一敗。"  # 落敗被閃成僵持時，戰報與場景的戰鬥卡片多這一句（人物資質設計 14.4）
 DAY = 86400
 HOUR = 3600
 _NUMERIC_CHANGE = re.compile(r"^\S+ [+-]\d+(\.\d+)?$")  # 例如「名望 +3」「銀兩 -10」
@@ -58,6 +62,7 @@ def new_record(
         tier=result.tier,
         our_power=result.our_power,
         difficulty=result.difficulty,
+        notes=[DODGE_NOTE] if result.dodged else [],
     )
 
 
@@ -134,6 +139,39 @@ def story_text(record: BattleRecord) -> str:
     return "　".join(n for n in record.notes if not n.startswith("【江湖傳聞】"))
 
 
+def round_lines(content: Content, played: list[rounds_mod.Round], rng: random.Random) -> list[str]:
+    """把回合寫成一行一行的句子：照出手那門武學（對手照它自己）的屬性挑句型（content/combat_lines.json）。
+    我方：「沈浪以【旋風腿】身形一晃，搶到側面出手，對手氣勢 -18」，沒打中寫「，被對方架開」；沒學武學的沒有「以【】」、
+    句型從 bare 挑。對手：「山賊掄起兵刃猛砸過來，你氣血 -24」，沒打中寫「，被你閃開了」；這一場不扣氣血（amount 是
+    None，劇情戰）就只寫怎麼出手。rng 是呼叫端給的那一份（引擎用名號＋戰報流水號當種子，不碰 Game.rng）。"""
+    lines = content.combat_lines
+    out = []
+    for r in played:
+        parts = []
+        for beat in r.beats:
+            if beat.side == "ours":
+                how = rng.choice(lines.ours.get(beat.attribute, []) or lines.bare) if beat.art else rng.choice(lines.bare)
+                art = f"以【{beat.art}】" if beat.art else ""
+                tail = f"，對手氣勢 -{beat.amount}" if beat.amount else "，被對方架開"
+                parts.append(f"{beat.actor}{art}{how}{tail}")
+            else:
+                how = rng.choice(lines.theirs.get(beat.attribute, []) or lines.theirs_any)
+                tail = "" if beat.amount is None else f"，你氣血 -{beat.amount}" if beat.amount else "，被你閃開了"
+                parts.append(f"{beat.actor}{how}{tail}")
+        out.append(f"第{r.number}回合　" + "；".join(parts) + "。")
+    return out
+
+
+def _rounds_block(record: BattleRecord) -> list[str]:
+    """戰報的「過程」：一回合一行（Markdown 清單）。大場面有模型寫的那一版（narration，武學與成長設計 8.3）就寫它、一段話，
+    取代範本句子的回合。決戰與舊戰報沒有。"""
+    if record.narration:
+        return [f"**過程**\n{record.narration}"]
+    if not record.rounds:
+        return []
+    return ["**過程**\n" + "\n".join(f"- {line}" for line in record.rounds)]
+
+
 def _story_block(record: BattleRecord) -> list[str]:
     story = story_text(record)
     return [f"**結果**　{story}"] if story else []
@@ -148,11 +186,13 @@ def _gains_block(record: BattleRecord) -> list[str]:
 
 
 def card_text(record: BattleRecord, when: Callable[[float], str] = clock_text) -> str:
-    """場景裡的戰鬥卡片（Markdown）：標題、時間與類型、結果、（劇情結果）、獲得與損失。when 是時間的寫法（見 list_label）。"""
+    """場景裡的戰鬥卡片（Markdown）：標題、時間與類型、結果、（過程）、（劇情結果）、獲得與損失。when 是時間的寫法（見 list_label）。
+    過程整段都在；「剛剛」那張卡片只露第一回合、點了才攤開，是網頁的事（web/app.js 的 roundsFold）。"""
     return "\n\n".join([
         _title(record),
         _when(record, when),
         _result_line(record),
+        *_rounds_block(record),
         *_story_block(record),
         *_gains_block(record),
     ])
@@ -163,13 +203,14 @@ def _ours_line(record: BattleRecord) -> str:
 
 
 def detail_text(record: BattleRecord, when: Callable[[float], str] = clock_text) -> str:
-    """戰報分頁下方的完整內容（Markdown）：陣容、結果、（劇情結果）、得失。全服決戰不列陣容（站哪一邊寫在結果那一行）。
+    """戰報分頁下方的完整內容（Markdown）：陣容、結果、（過程）、（劇情結果）、得失。全服決戰不列陣容（站哪一邊寫在結果那一行）。
     when 是時間的寫法（第一季給季曆，見 list_label）。"""
     return "\n\n".join([
         _title(record),
         f"{_when(record, when)}　第 {record.id} 場",
         *([] if record.kind == "showdown" else [f"**我方**　{_ours_line(record)}"]),
         _result_line(record),
+        *_rounds_block(record),
         *_story_block(record),
         *_gains_block(record),
     ])

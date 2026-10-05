@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 
 import server
 from conftest import at, season_one_events
-from tianxia import atlas, battle_instance, calendar, companion_agent, database, fusion, naming, team
+from tianxia import atlas, battle_instance, calendar, companion_agent, database, fight_llm, fusion, naming, team
 from tianxia.accounts import NAME_TAKEN
 from tianxia.characters import open_characters
 from tianxia.engine import Game
@@ -992,6 +992,84 @@ def test_a_refused_name_keeps_what_the_player_typed_and_the_pill_tick_does_not_o
     submit = submit[:submit.index('form.id === "seclude"')]
     assert 'await mx("name"' in submit and "again.value = data.name" in submit  # 被拒（表單還在）把字放回去
     assert "S.legendTick = {}" in _js_function(js, "async function goTab(")  # 回到修練頁時，破境丹的勾是真的沒勾
+
+
+def test_the_fight_card_shows_the_first_round_until_the_player_opens_the_rest():
+    """計畫三 Task 1、G6（暫定，等 PM／企劃者拍板）：「剛剛」的戰鬥卡片上「過程」只露第一回合、按「展開過程」才攤開，
+    其餘回合一回合一回合浮現；第一屏要留給剛剛、場景與整排行動（企劃者 2026-10-04）。戰報頁照樣整段列出。
+    網頁認的是伺服器把「**過程**」轉成的那段 HTML：兩邊對不上的話卡片會整段攤開、把行動擠出第一屏，這條擋住。"""
+    from tianxia import battlelog
+    from tianxia.state import BattleRecord, Fighter
+
+    record = BattleRecord(
+        id=1, time=0, location="湖邊", kind="train", opponent="水寇", ours=[Fighter(name="沈浪", level=1)], tier="大勝",
+        our_power=50, difficulty=10, rounds=["第1回合　甲。", "第2回合　乙。", "第3回合　丙。"],
+    )
+    html = server.md(battlelog.card_text(record))
+    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    css = (server.WEB / "style.css").read_text(encoding="utf-8")
+    mark = re.search(r'const ROUNDS_MARK = "([^"]*)";', js)
+    assert mark is not None and mark.group(1).replace("\\n", "\n") in html and html.count("<ul>") == 1
+    assert "roundsFold(m.card, m.card_id)" in _js_function(js, "function pageJianghu(")
+    assert "roundsFold" not in _js_function(js, "function pageNews(")  # 戰報頁整段列出
+    assert 'case "rounds-more"' in js and "S.roundsOpen = open ? S.main.card_id : null" in js
+    hidden = re.search(r"\.battle-card ul\.rounds:not\(\.open\) > li:not\(:first-child\) \{([^}]*)\}", css)
+    assert hidden is not None and "display: none" in hidden.group(1)
+    assert re.search(r"\.battle-card ul\.rounds > li:nth-child\(2\) \{ animation-delay: [\d.]+s; \}", css)
+
+
+def test_the_big_fight_account_is_folded_behind_the_same_button():
+    """大場面模型寫的過程是一段話（不是回合清單，最多 200 字、手機上約十行）：「剛剛」那張也收起來，只露前兩行，
+    按同一顆「展開過程」攤開、展開記在同一個 S.roundsOpen（PM 2026-10-05，Task 2 審查修正 2）；戰報頁照樣整段。
+    網頁認的是伺服器把「**過程**＋換行＋一段話」轉成的那段 HTML：兩邊對不上的話整段攤開、把行動擠出第一屏，這條擋住。
+    新的 class 只用在戰鬥卡片底下，不跟全站的撞名（.seg 那次的教訓）。"""
+    from tianxia import battlelog
+    from tianxia.state import BattleRecord, Fighter
+
+    record = BattleRecord(
+        id=1, time=0, location="黃巾別部營寨", kind="event", opponent="波才", ours=[Fighter(name="沈浪", level=1)],
+        tier="落敗", our_power=50, difficulty=150, rounds=["第1回合　甲。"], narration="波才刀勢沉猛，你左支右絀。" * 8,
+    )
+    html = server.md(battlelog.card_text(record))
+    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    css = (server.WEB / "style.css").read_text(encoding="utf-8")
+    mark = re.search(r'const TALE_MARK = "([^"]*)";', js)
+    assert mark is not None and mark.group(1).replace("\\n", "\n") in html and "<ul>" not in html
+    fold = _js_function(js, "function roundsFold(")
+    assert "TALE_MARK" in fold and 'class="rounds-tale' in fold and "S.roundsOpen === id" in fold
+    toggle = js[js.index('case "rounds-more"'):]
+    assert 'querySelector("ul.rounds, p.rounds-tale")' in toggle[:toggle.index("break;")]
+    clamp = re.search(r"\.battle-card p\.rounds-tale:not\(\.open\) \{([^}]*)\}", css)
+    assert clamp is not None and "-webkit-line-clamp: 2" in clamp.group(1) and "overflow: hidden" in clamp.group(1)
+    selectors = re.findall(r"([^{}\n]*rounds-tale[^{}]*)\{", css)
+    assert selectors and all(s.strip().startswith(".battle-card p.rounds-tale") for s in selectors)
+    assert not re.search(r"\.tale\b", css + js)  # 沒有別的叫 tale 的 class
+
+
+def test_a_hostile_big_fight_account_renders_as_one_plain_paragraph_on_the_card():
+    """模型寫的過程走伺服器的 Markdown 轉換：連結、圖片、程式碼區塊、引言都不能出現，「結果」「獲得與損失」不能被吞進
+    程式碼區塊，網頁認的 TALE_MARK 要對得上（Final review Minor 1）。"""
+    from tianxia import battlelog, fight_llm
+    from tianxia.state import BattleRecord, Fighter
+
+    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    mark = re.search(r'const TALE_MARK = "([^"]*)";', js).group(1).replace("\\n", "\n")
+    hostile = [
+        "```\n你一拳打出，對方連退三步。", "![圖](http://example.com/a.png)你出手如電。", "> 你退了一步，咬牙再上。",
+        "[點我](http://example.com/x)你收劍而立。", "---", "你**橫掃**一腿。",
+    ]
+    for text in hostile:
+        record = BattleRecord(
+            id=1, time=0, location="黃巾別部營寨", kind="event", opponent="波才", ours=[Fighter(name="沈浪", level=1)],
+            tier="大勝", our_power=50, difficulty=150, notes=["波才抱拳認輸。"], changes=["銀兩 +5"],
+            narration=fight_llm._account(text),  # 整段只有 --- 的話整段拿光：那就沒有過程這一段（卡片不用回合清單頂替）
+        )
+        html = server.md(battlelog.card_text(record))
+        for tag in ("<img", "<a ", "<pre", "<code", "<blockquote", "<h1", "<h2", "<hr", "<ul", "<ol", "<em"):
+            assert tag not in html, (text, tag, html)
+        assert (mark in html) == bool(record.narration), (text, html)
+        for heading in ("結果", "獲得與損失"):
+            assert f"<p><strong>{heading}</strong>" in html, (text, html)  # 沒被吞進任何區塊
 
 
 def test_the_three_art_buttons_stay_on_one_line_at_phone_width():
@@ -2320,6 +2398,77 @@ def test_leaving_a_dialogue_does_not_ask_the_model_or_take_an_extra_lock_round_t
     assert game.state.player.pending_companion is None
 
 
+# ── 大場面在行動鎖外請模型判讀（武學與成長設計 8.3、計畫三 Task 2）────────────
+
+
+def test_only_fights_and_event_choices_may_be_judged():
+    assert server.may_judge_fight("act:train") and server.may_judge_fight("choice:0")
+    assert server.may_judge_fight("act:challenge:bocai")
+    assert not server.may_judge_fight("act:explore") and not server.may_judge_fight("move:lake")
+    assert not server.may_judge_fight("choice:free")  # 隨口應對只是叫出輸入框（真正送出走 /api/answer）
+
+
+FIGHT_JUDGMENT = fight_llm.Judgment(advantage=15, winning="佔上風。", losing="落下風。")
+
+
+def test_a_big_fight_is_judged_outside_the_action_lock(game, lock_events):
+    """打頭目（翻江龍，難度 150）：鎖內備料 → 鎖外問模型 → 鎖內重驗套用（Review Focus 3 的前提：模型不在鎖裡跑）。
+    模型拿的是 game.client 本身（鎖外不受鎖內 15 秒的上限管），預算是 big_fight_budget_seconds 扣掉 A 段等鎖的時間。
+    按鈕上寫「兩人對峙……」：頁面按下去就換上這幾個字（app.js 的 choose）。"""
+    game.state.pending_event = "kou_boss"
+    options = server.look(game, server.main_view)["options"]
+    assert [(o["id"], o["wait"]) for o in options] == [("choice:0", "兩人對峙……"), ("choice:1", "")]
+    lock_events.clear()
+    seen = []
+
+    def judge(client, request, swing, budget=None):
+        lock_events.append("judge")
+        _nobody_holds_the_lock(game)
+        seen.append((client, request.squad_id, swing, budget))
+        return FIGHT_JUDGMENT
+
+    with mock.patch.object(server.fight_llm, "judge", side_effect=judge):
+        server.choose(game, "choice:0")
+    assert lock_events == ["enter", "exit", "judge", "enter", "exit"]  # 鎖內備料 → 鎖外判讀 → 鎖內重驗套用
+    client, squad_id, swing, budget = seen[0]
+    config = server.CONTENT.config
+    assert client is game.client and squad_id == "fanjianglong" and swing == config.big_fight_swing
+    assert 0 < budget <= config.big_fight_budget_seconds
+    record = game.state.battles[0]
+    assert record.opponent == "波才" and record.narration == ("佔上風。" if record.tier in team.WIN_TIERS else "落下風。")
+    assert open_characters().load("測試").battles[0].narration == record.narration
+
+
+def test_a_big_fight_the_model_cannot_judge_is_fought_as_usual(game, lock_events):
+    """模型叫不動（conftest 把它假成連不上）：優勢當 0、照平常的回合演出，這一仗照樣打。"""
+    game.state.pending_event = "kou_boss"
+    server.choose(game, "choice:0")
+    assert lock_events == ["enter", "exit", "enter", "exit"]
+    record = game.state.battles[0]
+    assert record.opponent == "波才" and record.narration == "" and record.rounds
+
+
+@pytest.mark.parametrize(("event", "option"), [(None, "act:train"), ("wolves", "choice:0")])
+def test_an_ordinary_fight_takes_the_lock_once_and_never_asks_the_model(game, lock_events, event, option):
+    """Review Focus 5：一般的仗（潁川郊野的地痞、山賊；狼群）不問模型、按鈕不寫「兩人對峙」，而且只拿一次行動鎖——
+    備料與動作在同一次拿鎖裡做完（計畫三 G14：遊歷與事件選項天天在按，不能每一下都多搶一次鎖）。"""
+    game.state.player.location = "yingchuan_wilds"
+    game.state.pending_event = event
+    assert next(o for o in game.options() if o.id == option).wait == ""
+    lock_events.clear()
+    with mock.patch.object(server.fight_llm, "judge", side_effect=AssertionError("一般的仗不該問模型")):
+        msgs = server.choose(game, option)
+    assert lock_events == ["enter", "exit"]
+    assert msgs and game.state.battles and game.state.battles[0].narration == ""
+    assert open_characters().load("測試").battles[0].id == game.state.battles[0].id  # 同一次拿鎖裡存好了
+
+
+def test_the_page_shows_the_wait_words_while_a_big_fight_is_judged():
+    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    body = _js_function(js, "async function choose(")
+    assert "opt.wait" in body and body.index("opt.wait") < body.index('api("/api/choose"')
+
+
 # ── 網頁本身 ────────────────────────────────────────────
 
 
@@ -2825,7 +2974,8 @@ def test_the_page_offers_the_box_and_rejects_empty_words(client, monkeypatch):
     server.act(game, lambda g: setattr(g.state, "pending_event", event.id))
     main = client.get("/api/main").json()
     assert main["event_free_text"] == "自己想辦法……"
-    assert main["options"][-1] == {"id": "choice:free", "label": "自己想辦法……", "enabled": True}  # 選項只有一行，底下不另起一行（企劃者 2026-10-05）
+    # 選項只有一行，底下不另起一行（企劃者 2026-10-05）；wait 是大場面按下去等模型時換上的字，這裡不是仗、是空的
+    assert main["options"][-1] == {"id": "choice:free", "label": "自己想辦法……", "enabled": True, "wait": ""}
     assert client.post("/api/answer", json={"text": "  "}).status_code == 400
     with mock.patch.object(server.event_llm, "assess_event_success_rate", return_value=50):
         main = client.post("/api/answer", json={"text": "大喊官兵來了"}).json()["main"]

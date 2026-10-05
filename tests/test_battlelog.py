@@ -1,6 +1,6 @@
 import random
 
-from tianxia import battlelog
+from tianxia import battlelog, rounds
 from tianxia.encounter import resolve_encounter
 from tianxia.state import BattleRecord, Fighter
 
@@ -210,3 +210,85 @@ def test_report_list_and_detail_take_the_calendar_stamp():
     stamp = lambda t: "第 1 週・週一 01:05"  # noqa: E731
     assert battlelog.list_label(record, stamp) == "大勝　第3場　第 1 週・週一 01:05　湖邊　vs 水寇"
     assert "第 1 週・週一 01:05　遊歷" in battlelog.detail_text(record, stamp)
+
+
+# ── 回合演出（武學與成長設計 8.2、計畫三 Task 1）──────────────────────
+
+
+def test_round_lines_never_print_a_missing_art(content):
+    played = rounds.play(
+        "落敗", [rounds.Fighter(name="沈浪", art=None, attribute=None)],
+        rounds.Foe(name="山賊", attribute=None, agility=9.0), our_agility=5.0, hp_lost=30, rng=random.Random(0),
+    )
+    lines = battlelog.round_lines(content, played, random.Random(0))
+    assert lines[0].startswith("第1回合") and all("None" not in line and "【】" not in line for line in lines)
+
+
+def test_round_lines_name_the_art_and_write_the_numbers_that_were_played(content):
+    """我方：「沈浪以【旋風腿】……，對手氣勢 -N」；對手：「山賊……，你氣血 -N」；沒打中的寫「被對方架開」「被你閃開了」。
+    句型照出手那門武學（或對手）的屬性挑。"""
+    played = [
+        rounds.Round(number=1, beats=[
+            rounds.Beat(side="theirs", actor="山賊", art=None, attribute="剛", amount=24),
+            rounds.Beat(side="ours", actor="沈浪", art="旋風腿", attribute="快", amount=0),
+        ]),
+        rounds.Round(number=2, beats=[
+            rounds.Beat(side="theirs", actor="山賊", art=None, attribute="剛", amount=0),
+            rounds.Beat(side="ours", actor="沈浪", art="旋風腿", attribute="快", amount=18),
+        ]),
+    ]
+    first, second = battlelog.round_lines(content, played, random.Random(0))
+    theirs = content.combat_lines.theirs["剛"]
+    ours = content.combat_lines.ours["快"]
+    assert first.startswith("第1回合　山賊") and "，你氣血 -24；沈浪以【旋風腿】" in first and first.endswith("，被對方架開。")
+    assert any(f"山賊{how}，你氣血 -24" in first for how in theirs)
+    assert any(f"沈浪以【旋風腿】{how}，被對方架開" in first for how in ours)
+    assert second.startswith("第2回合　山賊") and "，被你閃開了；" in second and second.endswith("，對手氣勢 -18。")
+
+
+def test_round_lines_leave_a_blow_with_no_amount_without_a_tail(content):
+    """不扣氣血的仗（劇情戰，G5）：對手的出手只寫怎麼出手，不寫「你氣血 -N」也不寫「被你閃開了」——
+    落敗的劇情戰寫「被你閃開了」等於說對方從頭到尾沒碰到你、你卻輸了。"""
+    played = rounds.play(
+        "落敗", [rounds.Fighter(name="沈浪", art="旋風腿", attribute="快")],
+        rounds.Foe(name="翻江龍", attribute="剛", agility=15.0), our_agility=5.0, hp_lost=None, rng=random.Random(0),
+    )
+    lines = battlelog.round_lines(content, played, random.Random(0))
+    assert lines and all("你氣血" not in line and "被你閃開了" not in line for line in lines)
+    assert all(line.startswith(f"第{i}回合　翻江龍") for i, line in enumerate(lines, 1))  # 對手身法高，先出手
+    assert all(any(f"翻江龍{how}；" in line for how in content.combat_lines.theirs["剛"]) for line in lines)
+
+
+def test_a_foe_with_no_attribute_and_a_bare_fighter_use_the_fallback_lines(content):
+    played = rounds.play(
+        "大勝", [rounds.Fighter(name="沈浪", art=None, attribute=None)],
+        rounds.Foe(name="山賊", attribute=None, agility=1.0), our_agility=5.0, hp_lost=9, rng=random.Random(0),
+    )
+    for line in battlelog.round_lines(content, played, random.Random(0)):
+        assert any(f"沈浪{how}，" in line for how in content.combat_lines.bare)
+        assert any(f"山賊{how}，" in line for how in content.combat_lines.theirs_any)
+
+
+def test_the_card_and_the_report_show_the_rounds_after_the_result_line():
+    rec = record(rounds=["第1回合　甲。", "第2回合　乙。"], notes=["你贏了。"])
+    for text in (battlelog.card_text(rec), battlelog.detail_text(rec)):
+        assert "**過程**\n- 第1回合　甲。\n- 第2回合　乙。" in text
+        assert text.index("對手難度") < text.index("**過程**") < text.index("**結果**") < text.index("**獲得與損失**")
+
+
+def test_an_old_record_without_rounds_loads_and_shows_no_rounds():
+    old = record().model_dump()
+    old.pop("rounds")
+    loaded = BattleRecord.model_validate(old)
+    assert loaded.rounds == []
+    assert "**過程**" not in battlelog.card_text(loaded) and "**過程**" not in battlelog.detail_text(loaded)
+
+
+def test_a_dodged_loss_says_so_on_the_battle_card(state, content, world):
+    from tianxia.encounter import EncounterResult
+
+    result = EncounterResult(tier="僵持", margin=-50.0, our_power=1.0, difficulty=60.0, dodged=True)
+    record = battlelog.new_record(state, content, world, content.squads["thug"], result, "train")
+    assert record.tier == "僵持" and record.notes == [battlelog.DODGE_NOTE]
+    plain = result.model_copy(update={"dodged": False})
+    assert battlelog.new_record(state, content, world, content.squads["thug"], plain, "train").notes == []
