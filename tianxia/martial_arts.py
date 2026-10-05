@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import hashlib
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 QUALITIES = ("下品", "中品", "上品", "絕學")
 ATTRIBUTES = ("陰", "陽", "剛", "柔", "快", "慢", "虛", "實")
@@ -39,6 +39,19 @@ class MartialArt(BaseModel):
     origin: str = "created"
     creator: str | None = None  # 自創功法的取名者、煉製功法的首創者（玩家名號），本命武學為 None
     note: str = ""  # 煉製時由 LLM 寫的一句話描述（只有語意、沒有數字）；自創與本命武學是空的
+
+
+class Insight(BaseModel):
+    """一個意境（武學與成長設計 3.2）。基本意境（風火水山、浩然、血煞）寫在 content/insights.json；
+    合併出來的存在全服（world.get_insight），名字就是 id。只有語意，沒有數字。"""
+
+    id: str
+    name: str
+    attribute: str  # ATTRIBUTES 其中之一
+    lean: str = "無"  # 正、邪、無（設計 7.3）
+    creator: str | None = None  # 合併出來的：第一個合出來的人；基本意境是 None
+    note: str = ""  # 模型寫的一句說明；基本意境是內容的 desc
+    parents: list[str] = Field(default_factory=list)  # 合併出來的：兩個來源的 id（排序過）
 
 
 def power_at(art: MartialArt, level: int) -> float:

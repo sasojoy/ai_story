@@ -9,7 +9,9 @@
   `battle_rounds` 表一回合一列（只寫不讀回）。換季、開新的一場時舊的那一場留著；收場的那幾場給參戰者補送戰報
   （ended_battles）。
 - 自創武學（`skills`）、煉製配方（`recipes`）、投靠名冊（`faction_rolls`）一列一筆、記著第幾季：
-  換季不用清空，新的一季自然是空的，上一季的留著。
+  換季不用清空，新的一季自然是空的，上一季的留著。第 2 版再加改過的名字（`skill_aliases`）、合併出來的意境
+  （`insights`、`insight_recipes`）、第一個練成絕學的人（`masters`），同樣照季分；功法、改過的名字與意境
+  共用一個名字空間（`_name_taken`）。
 - 每個會寫的方法自己是一筆交易；呼叫端已經在 action_lock() 裡時，併進那一筆（見 database.Database）。
 """
 from __future__ import annotations
@@ -22,7 +24,7 @@ from sqlite3 import Connection, Row
 
 from .battle_instance import BattleInstance, BattleRoundRecord, start_muster
 from .database import Database, open_database
-from .martial_arts import MartialArt
+from .martial_arts import Insight, MartialArt
 from .models import BattleDef, Content
 from .state import Rumor, WorldState
 from .world_state import (
@@ -157,7 +159,8 @@ class SqliteWorldStore:
         return None if row is None else MartialArt.model_validate_json(row["data"])
 
     def is_skill_name_taken(self, name: str) -> bool:
-        return self.get_skill(name) is not None
+        with self.db.snapshot() as conn:
+            return _name_taken(conn, self._season_number(conn), name.strip())
 
     def claim_skill_name(self, art: MartialArt) -> bool:
         with self.db.transaction() as conn:
@@ -185,6 +188,71 @@ class SqliteWorldStore:
                 (season, key, art.name.strip(), art.creator),
             )
             return art, True
+
+    def rename_skill(self, skill_name: str, new_name: str) -> bool:
+        new_name = new_name.strip()
+        with self.db.transaction() as conn:
+            season = self._season_number(conn)
+            row = conn.execute(
+                "SELECT data FROM skills WHERE season = ? AND name = ?", (season, skill_name),
+            ).fetchone()
+            if row is None or _name_taken(conn, season, new_name):
+                return False
+            art = MartialArt.model_validate_json(row["data"])
+            art.name = new_name
+            conn.execute(
+                "UPDATE skills SET data = ? WHERE season = ? AND name = ?", (art.model_dump_json(), season, skill_name),
+            )
+            conn.execute(
+                "INSERT INTO skill_aliases (season, name, skill_name) VALUES (?, ?, ?)", (season, new_name, skill_name),
+            )
+            return True
+
+    def get_insight(self, name: str) -> Insight | None:
+        with self.db.snapshot() as conn:
+            row = conn.execute(
+                "SELECT data FROM insights WHERE season = ? AND name = ?", (self._season_number(conn), name.strip()),
+            ).fetchone()
+        return None if row is None else Insight.model_validate_json(row["data"])
+
+    def lookup_insight_recipe(self, key: str) -> Insight | None:
+        with self.db.snapshot() as conn:
+            return _insight_recipe(conn, self._season_number(conn), key)
+
+    def claim_insight_recipe(self, key: str, insight: Insight) -> tuple[Insight | None, bool]:
+        with self.db.transaction() as conn:
+            season = self._season_number(conn)
+            existing = _insight_recipe(conn, season, key)
+            if existing is not None:
+                return existing, False
+            name = insight.name.strip()
+            if _name_taken(conn, season, name):
+                return None, False
+            conn.execute(
+                "INSERT INTO insights (season, name, creator, data) VALUES (?, ?, ?, ?)",
+                (season, name, insight.creator, insight.model_dump_json()),
+            )
+            conn.execute(
+                "INSERT INTO insight_recipes (season, key, insight_name, creator) VALUES (?, ?, ?, ?)",
+                (season, key, name, insight.creator),
+            )
+            return insight, True
+
+    def claim_master(self, skill_name: str, player: str) -> bool:
+        with self.db.transaction() as conn:
+            cursor = conn.execute(
+                "INSERT INTO masters (season, skill_name, master) VALUES (?, ?, ?) ON CONFLICT DO NOTHING",
+                (self._season_number(conn), skill_name, player),
+            )
+            return cursor.rowcount == 1
+
+    def master_of(self, skill_name: str) -> str | None:
+        with self.db.snapshot() as conn:
+            row = conn.execute(
+                "SELECT master FROM masters WHERE season = ? AND skill_name = ?",
+                (self._season_number(conn), skill_name),
+            ).fetchone()
+        return None if row is None else row["master"]
 
     # ── 同伴性情漂移 ──────────────────────────────────────
 
@@ -442,11 +510,22 @@ class SqliteWorldStore:
         return self.mutate(_apply).companions[companion_id]
 
 
+def _name_taken(conn: Connection, season: int, name: str) -> bool:
+    """這一季這個名字被用掉了沒：功法（id）、改過的名字、合併出來的意境都算。"""
+    return any(
+        conn.execute(f"SELECT 1 FROM {table} WHERE season = ? AND name = ?", (season, name)).fetchone()
+        for table in ("skills", "skill_aliases", "insights")
+    )
+
+
 def _insert_skill(conn: Connection, season: int, art: MartialArt) -> bool:
-    """登記一門功法；這一季已經有同名的就不登記（主鍵擋住，不會有兩個人同時取到同一個名字）。"""
+    """登記一門功法；這一季名字已經被用掉（功法、改過的名字、意境）就不登記。"""
+    name = art.name.strip()
+    if _name_taken(conn, season, name):
+        return False
     cursor = conn.execute(
         "INSERT INTO skills (season, name, creator, data) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING",
-        (season, art.name.strip(), art.creator, art.model_dump_json()),
+        (season, name, art.creator, art.model_dump_json()),
     )
     return cursor.rowcount == 1
 
@@ -458,6 +537,15 @@ def _recipe(conn: Connection, season: int, key: str) -> MartialArt | None:
         (season, key),
     ).fetchone()
     return None if row is None else MartialArt.model_validate_json(row["data"])
+
+
+def _insight_recipe(conn: Connection, season: int, key: str) -> Insight | None:
+    row = conn.execute(
+        "SELECT i.data FROM insight_recipes r JOIN insights i ON i.season = r.season AND i.name = r.insight_name "
+        "WHERE r.season = ? AND r.key = ?",
+        (season, key),
+    ).fetchone()
+    return None if row is None else Insight.model_validate_json(row["data"])
 
 
 def _first_crafts_line(conn: Connection, season: int) -> str:

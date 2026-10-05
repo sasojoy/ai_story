@@ -22,7 +22,7 @@ from typing import Literal, Protocol
 from pydantic import BaseModel, Field
 
 from .battle_instance import BattleInstance, BattleRoundRecord
-from .martial_arts import MartialArt
+from .martial_arts import Insight, MartialArt
 from .models import DEFAULT_SEASON_DAYS, BattleDef, Content
 from .state import Rumor, WorldState
 
@@ -171,6 +171,28 @@ class WorldStateStore(Protocol):
         - 配方還沒人登記、但 art.name 已經被別人的自創功法或別的配方占用 → 回傳 (None, False)，
           呼叫端換一個名字再試（取名自創仍然是獨佔的）。"""
         ...
+
+    # ── 改名、合併出來的意境、第一個練成絕學的人（武學與成長設計 3.2、3.6；這一季）──
+    def rename_skill(self, skill_name: str, new_name: str) -> bool:
+        """把這一季登記過的功法（skill_name 是它的 id）改叫 new_name：id 不變（身上、功法庫照舊指得到），
+        只換顯示的名字；new_name 已經被任何功法、改過的名字或意境用掉時不改、回 False（原子判斷）。"""
+        ...
+
+    def get_insight(self, name: str) -> Insight | None:
+        """這一季合併出來的意境；基本意境不在這裡（在 content.insights）。"""
+        ...
+
+    def lookup_insight_recipe(self, key: str) -> Insight | None: ...
+
+    def claim_insight_recipe(self, key: str, insight: Insight) -> tuple[Insight | None, bool]:
+        """跟 claim_recipe 同一套：配方有了回 (登記在案的, False)；名字被占用回 (None, False)；否則登記、回 (insight, True)。"""
+        ...
+
+    def claim_master(self, skill_name: str, player: str) -> bool:
+        """這門武學這一季第一個修到絕學的人：還沒有人就記成 player、回 True；已經有人回 False（原子判斷）。"""
+        ...
+
+    def master_of(self, skill_name: str) -> str | None: ...
 
     # ── 同伴性情漂移 ──
     def record_companion_tag(self, companion_id: str, tag: str) -> None: ...

@@ -13,8 +13,9 @@ COMMIT 失敗（例如延後檢查的外鍵到這時才出錯）時交易還開�
 不會讓這條連線永遠握著寫入權；SQLite 已經自己撤掉交易（磁碟滿、I/O 錯誤）時就不再下 ROLLBACK，
 免得另一個錯把本來的錯蓋掉。
 
-資料庫結構的版本記在 PRAGMA user_version。第 1 期做完之前還沒有正式的資料庫，結構有改就直接改
-SCHEMA；之後每次改結構都要加版本號與搬資料的步驟（線上架構設計 8.2）。
+資料庫結構的版本記在 PRAGMA user_version。改結構時：新表或新欄加進新的一組句子、`SCHEMA` 接上它、
+`MIGRATIONS[舊版]` 指向它、`SCHEMA_VERSION` 加一；舊檔打開時照 `MIGRATIONS` 一版一版升上來
+（升級在同一筆交易裡，中途出錯整個撤回，檔還是舊版）。
 """
 from __future__ import annotations
 
@@ -30,10 +31,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_PATH = ROOT / "saves" / "tianxia.db"
 ENV_VAR = "TIANXIA_DB"  # 線上版與開發版用不同的資料（線上架構設計 8.1）：設了這個環境變數就開那個檔
-SCHEMA_VERSION = 1
 BUSY_SLICE = 5.0  # 不限時等寫入權時，每次最多等幾秒就重試一次
 
-SCHEMA: tuple[str, ...] = (
+# 第 1 版的結構。已經有檔案是這個樣子了（試玩伺服器），不要再改它；要改結構就加新的一組、升版本。
+SCHEMA_V1: tuple[str, ...] = (
     # 全服的小資料（SharedWorldState 除了賽季與目前的決戰），整份覆寫；只有 id = 1 一列
     """CREATE TABLE world (
         id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -143,6 +144,43 @@ SCHEMA: tuple[str, ...] = (
         PRIMARY KEY (provider, subject)
     )""",
 )
+
+# 第 2 版（武學與成長設計 3.2、3.6）：改過的名字、合併出來的意境、第一個練成絕學的人。都照季分，換季不刪。
+SCHEMA_V2_TABLES: tuple[str, ...] = (
+    # 修到絕學時第一人取的正式名字：功法 id（skills.name）不變，新名記在這裡，全服重名檢查一起看
+    """CREATE TABLE skill_aliases (
+        season INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        skill_name TEXT NOT NULL,
+        PRIMARY KEY (season, name)
+    )""",
+    # 合併出來的意境：名字就是 id；基本意境在 content/insights.json，不在這裡
+    """CREATE TABLE insights (
+        season INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        creator TEXT,
+        data TEXT NOT NULL,
+        PRIMARY KEY (season, name)
+    )""",
+    """CREATE TABLE insight_recipes (
+        season INTEGER NOT NULL,
+        key TEXT NOT NULL,
+        insight_name TEXT NOT NULL,
+        creator TEXT,
+        PRIMARY KEY (season, key)
+    )""",
+    # 每門武學這一季第一個修到絕學的人
+    """CREATE TABLE masters (
+        season INTEGER NOT NULL,
+        skill_name TEXT NOT NULL,
+        master TEXT NOT NULL,
+        PRIMARY KEY (season, skill_name)
+    )""",
+)
+
+SCHEMA: tuple[str, ...] = SCHEMA_V1 + SCHEMA_V2_TABLES  # 新檔一次建好
+MIGRATIONS: dict[int, tuple[str, ...]] = {1: SCHEMA_V2_TABLES}  # 第 n 版 → 第 n+1 版要跑的句子
+SCHEMA_VERSION = 2
 
 
 def default_path() -> Path:
@@ -291,11 +329,15 @@ class Database:
             version = conn.execute("PRAGMA user_version").fetchone()[0]
             if version == SCHEMA_VERSION:
                 return
-            if version != 0:
+            if version == 0:
+                statements = SCHEMA
+            elif version < SCHEMA_VERSION and all(v in MIGRATIONS for v in range(version, SCHEMA_VERSION)):
+                statements = tuple(s for v in range(version, SCHEMA_VERSION) for s in MIGRATIONS[v])
+            else:
                 raise RuntimeError(
                     f"資料庫結構是第 {version} 版，這版程式只認得第 {SCHEMA_VERSION} 版：{self.path}"
                 )
-            for statement in SCHEMA:
+            for statement in statements:
                 conn.execute(statement)
             conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
 
