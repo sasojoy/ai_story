@@ -459,6 +459,11 @@ details.fold.bulletin > .fold-body { border-color: var(--gold); max-height: 50vh
   transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), stroke 0.2s ease; }
 .act-ink b { font-size: 13px; font-weight: 800; letter-spacing: 0.5px; }
 .act-ink small { font-size: 10px; color: #9e8e7c; margin-top: 2px; white-space: nowrap; }
+/* 遊歷的勝算（FB-044）：體力底下一行，照風險上色（黑底上的淺色） */
+.act-ink small.ink-note { margin-top: 0; font-weight: 700; }
+.act-ink small.ink-note.good { color: #8fc79f; }
+.act-ink small.ink-note.even { color: #e3c77d; }
+.act-ink small.ink-note.bad { color: #ec8a78; }
 /* 選到的（展開的移動、按下去等結果的那一顆）往上浮 4px、金邊 */
 .act-ink.on, .act-ink.busy { background: #171310; border-color: var(--gold); transform: translateY(-4px);
   box-shadow: 0 4px 12px color-mix(in srgb, var(--gold) 22%, transparent), inset 0 0 12px color-mix(in srgb, var(--gold) 15%, transparent); }

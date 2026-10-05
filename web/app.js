@@ -349,11 +349,14 @@
     { key: "social", ids: ["act:socialize", "act:call"], name: "交友", none: "沒有人", icon: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>' },
   ];
   const MOVE_ICON = '<path d="M13 3l-3 7h5l-4 11 8-10h-5z"/>';
-  const SHORT_SUB = { "act:rest": "回體力", "act:call": "求見" };
+  const SHORT_SUB = { "act:rest": "回體力", "act:call": "不花體力" };  // 求見只是打開名單（FB-044：以前又寫一次「求見」）
+  // 勝算的顏色（FB-044）：遊歷的小字第二行照風險上色
+  const ODDS_TONE = { "穩勝": "good", "有把握": "good", "零風險": "good", "五五波": "even", "難分勝負": "even", "凶險": "bad", "必敗": "bad" };
   // 選單上有「打坐」就是平常閒著的時候：用行動列。事件、對話、路上、決戰的選項每次都不一樣，照舊排成一列按鈕
   const idleMenu = (m) => m.options.some((o) => o.id === "act:rest");
-  const inkCell = (key, name, sub, icon, attrs, cls) => `<button class="act-ink${cls}" data-key="${key}" ${attrs}>
-      <svg class="ink-icon" viewBox="0 0 24 24" aria-hidden="true">${icon}</svg><b>${esc(name)}</b><small>${esc(sub)}</small></button>`;
+  const inkCell = (key, name, sub, icon, attrs, cls, note = "") => `<button class="act-ink${cls}" data-key="${key}" ${attrs}>
+      <svg class="ink-icon" viewBox="0 0 24 24" aria-hidden="true">${icon}</svg><b>${esc(name)}</b><small>${esc(sub)}</small>${
+      note ? `<small class="ink-note ${ODDS_TONE[note] || ""}">${esc(note)}</small>` : ""}</button>`;
 
   function actionBar(m) {
     const byId = Object.fromEntries(m.options.map((o) => [o.id, o]));
@@ -367,7 +370,10 @@
       // 最後一小句（例：挑戰本人打贏之後「剛吃了敗仗，閉門不見」只寫「閉門不見」，T4）
       const sub = o.enabled ? (SHORT_SUB[o.id] || detail.replace(/^體力 (\d+).*$/, "體力 $1"))
         : (detail && !detail.startsWith("體力") ? detail.split("，").pop() : "體力不夠");
-      return inkCell(d.key, name, sub, d.icon, o.enabled ? `data-act="choose" data-id="${esc(o.id)}"` : "disabled", o.enabled ? "" : " off");
+      // 體力之後還有說明（遊歷的「體力 10・2 路對手・必敗」）：最後一段是勝算，另起一行寫出來（FB-044；對手數放不下就不寫）
+      const parts = detail.split("・");
+      const note = o.enabled && parts.length > 1 && /^體力 \d+/.test(parts[0]) ? parts[parts.length - 1] : "";
+      return inkCell(d.key, name, sub, d.icon, o.enabled ? `data-act="choose" data-id="${esc(o.id)}"` : "disabled", o.enabled ? "" : " off", note);
     });
     const moves = m.options.filter((o) => followsMode(o.id));
     moves.forEach((o) => used.add(o.id));
