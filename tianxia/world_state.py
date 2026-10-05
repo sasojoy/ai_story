@@ -204,11 +204,12 @@ class WorldStateStore(Protocol):
 
     def link_recipe(self, key: str, skill_name: str, creator: str | None) -> tuple[MartialArt | None, bool]:
         """把配方指到這一季已經登記的一門功法（合到舊的），原子判斷：配方已經有人登記 → (登記在案的, False)；
-        那門功法不存在 → (None, False)；否則記下這個配方 → (那一門, True)。功法本身不動，首創者照舊。"""
+        那門功法不存在 → (None, False)；否則記下這個配方 → (那一門, True)。功法本身不動，首創者照舊。
+        skill_name 是登記的 id（資料表裡 skills.name 那一欄）：練成絕學改名之後顯示的名字就對不上了，所以呼叫端傳 art.id、不是 art.name。"""
         ...
 
     def link_insight_recipe(self, key: str, insight_name: str, creator: str | None) -> tuple[Insight | None, bool]:
-        """跟 link_recipe 同一套，指到這一季合併出來的一個意境。"""
+        """跟 link_recipe 同一套，指到這一季合併出來的一個意境。insight_name 是登記的名字（insights.name 那一欄，跟 insight.id 一樣；意境不改名）。"""
         ...
 
     def claim_master(self, skill_name: str, player: str, shown: str | None = None) -> bool:
