@@ -306,6 +306,23 @@ def test_event_taught_arts_still_reach_a_character_whose_slots_are_full(content)
     assert {"zhuifeng", "hunyuan"} <= set(library.owned_arts(game.state))
 
 
+def test_the_escort_lesson_stops_coming_back_once_the_art_is_in_the_library(content):
+    """最終審查 Important 1：潁川「汝南鏢局」（交友、可重複）只在還不會追風步時出現，付 40 兩學。開局兩個欄位都是基礎武學，
+    學到的追風步進功法庫；條件只看身上兩欄的話，這則會一直回來、第二次付錢什麼都學不到（100 → 60 → 20 兩）。"""
+    from tianxia.rules import apply_effect, check_condition
+
+    game = Game.new(content, "測試俠客", rng=random.Random(0))
+    event = content.events["escort_teacher"]
+    assert not event.once and "yingchuan" in event.locations and "socialize" in event.actions
+    assert check_condition(event.condition, game.state, content)
+    lesson = next(c for c in event.choices if "zhuifeng" in c.effect.learn_skills)
+    apply_effect(lesson.effect, game.state, content, game.world)
+    assert "zhuifeng" in game.state.player.arts  # 欄位滿了，收進功法庫
+    assert not check_condition(event.condition, game.state, content)
+    waterfall = next(c for c in content.events["waterfall"].choices if c.condition.skills_none == ["zhuifeng"])
+    assert not check_condition(waterfall.condition, game.state, content)  # 瀑布怪客的偷學也不再出現
+
+
 # ── 戰鬥難度曲線 ──────────────────────────────────────────
 
 

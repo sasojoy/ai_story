@@ -69,7 +69,9 @@ def check_condition(cond: Condition, state: GameState, content: Content | None =
         return False
     if cond.no_sect and p.sect is not None:
         return False
-    known_skills = {p.member.neigong_id, p.member.wugong_id} - {None}
+    # 擁有的武學都算（身上兩欄＋功法庫）：事件教的武學在欄位滿了時收進功法庫（F2），只看身上的話「還沒學過才出現」的
+    # 付費課程（潁川汝南鏢局的追風步）學完還會一直回來、再收一次錢
+    known_skills = set(library.owned_arts(state))
     if any(s not in known_skills for s in cond.skills_all):
         return False
     if any(s in known_skills for s in cond.skills_none):

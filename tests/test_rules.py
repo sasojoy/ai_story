@@ -171,6 +171,16 @@ def test_learn_skill_puts_a_second_art_in_the_library(state, content):
     assert learn_skill(state, content, "sword") == [] and state.player.arts == ["sword"]  # 已經有了就不再收一次
 
 
+def test_skill_conditions_see_arts_in_the_library_too(state, content):
+    """事件教的武學在欄位滿了時進功法庫（F2）：skills_none／skills_all 要看所有擁有的武學（身上＋功法庫），
+    不然「還沒學過才出現」的付費課程，學完收進功法庫之後還會一直回來、再收一次錢（最終審查 Important 1）。"""
+    learn_skill(state, content, "fist")
+    learn_skill(state, content, "sword")
+    assert state.player.arts == ["sword"]  # 在功法庫，不在身上
+    assert not check_condition(Condition(skills_none=["sword"]), state)
+    assert check_condition(Condition(skills_all=["sword", "fist"]), state)
+
+
 def test_learn_skill_ignores_the_holding_cap(state, content):
     """付了錢、或是奇遇給的，不能因為滿了就憑空消失（跟悟意境一樣不受上限擋）。"""
     content.config.holding_cap_base = 1
