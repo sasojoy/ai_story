@@ -350,7 +350,7 @@ class Game:
             rate *= 2
         if w.time <= cfg.newbie_days * DAY:
             rate *= 2
-        team.regen_neili(self.content, p.member, rate, team.con_of(self.state, p.member))
+        team.regen_neili(self.content, p.member, rate, team.con_of(self.state, PLAYER))
         for cid in p.team:
             self.world.update_companion(cid, lambda progress: team.regen_neili(self.content, progress, rate))
         msgs: list[str] = []
@@ -1015,7 +1015,7 @@ class Game:
         if not branches:
             return ["你四處走走，一無所獲。"]
         # 悟性：落在「悟意境」那一支的比重 ×（1＋3%×（悟性−5））；另外兩支不動（武學與成長設計 6.1）
-        wis = max(0.1, 1 + team.stat_bonus(c, s.player.stats.get("wis", team.BASE_STAT)))
+        wis = team.stat_factor(c, s.player.stats.get("wis", team.BASE_STAT))
         branch = self.rng.choices(branches, weights=[mix[b] * (wis if b == "insight" else 1) for b in branches])[0]
         if branch == "insight":
             found = insights.roll_explore(loc, c, self.rng)
@@ -1409,8 +1409,7 @@ class Game:
         )
 
     def _battle_neili_cap(self) -> float:
-        member = self.state.player.member
-        _, cap = team.member_neili(self.content, member, team.con_of(self.state, member))
+        _, cap = team.member_neili(self.content, self.state.player.member, team.con_of(self.state, PLAYER))
         return cap
 
     def _battle_status(self, tick: bool = True) -> tuple[battle_instance.BattleInstance, BattleDef] | None:
@@ -3359,13 +3358,13 @@ class Game:
         names = c.config.stat_names
         sect = c.sects[p.sect].name if p.sect else None
         faction = next((f.name for f in c.scenario.factions if f.id == p.faction), None)
-        now, cap = team.member_neili(c, p.member, team.con_of(s, p.member))
+        now, cap = team.member_neili(c, p.member, team.con_of(s, PLAYER))
         mates = []
         for cid in p.team:
             progress = self.world.get_companion(cid)
             mate_now, mate_cap = team.member_neili(c, progress)
             mates.append({"name": c.characters[cid].name, "level": progress.level,
-                          "hp": int(mate_now), "hp_max": int(mate_cap)})
+                          "hp": round(mate_now), "hp_max": round(mate_cap)})
         data = {
             "name": p.name,
             "affiliation": "・".join(name for name in (sect, faction, ranks.title(c, s)) if name) or "散人",
@@ -3377,8 +3376,8 @@ class Game:
             "season_days": season_length_days(w, c),  # 這一季蓋章的季長（舊季照它自己的章，不跟著設定變）
             "stamina": int(p.stamina),
             "stamina_max": c.config.stamina_max,
-            "hp": int(now),
-            "hp_max": int(cap),
+            "hp": round(now),  # 跟角色卡（skillview.member_card 的 {:.0f}）同一種進位：兩邊寫出來的數字一樣
+            "hp_max": round(cap),
             "injury": int(p.member.injury),
             "silver": p.stats.get("silver", 0),
             "xinde": p.stats.get("xinde", 0),

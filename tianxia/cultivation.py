@@ -34,7 +34,7 @@ def chance(
     if raw >= 100 and cap >= 100:
         base = 100
     else:
-        base = min(cap, round(raw * max(0.1, 1 + team.stat_bonus(content, wis))))
+        base = min(cap, round(raw * team.stat_factor(content, wis)))
     return min(100, base + boost)
 
 

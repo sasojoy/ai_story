@@ -11,6 +11,7 @@ from tianxia import encounter, team
 from tianxia.content import load_content
 from tianxia.engine import Game
 from tianxia.martial_arts import generate_from_name
+from tianxia.state import PLAYER
 
 LOW_ONLY = {"下品": 100, "中品": 0, "上品": 0, "絕學": 0}
 CONTENT_DIR = Path(__file__).parent.parent / "content"
@@ -307,15 +308,15 @@ def test_root_raises_the_hp_cap_without_refilling(state, content, world):
     member.neili = 100.0
     base_cap = team.neili_cap(content, member.level)
     state.player.stats["con"] = 15
-    now, cap = team.member_neili(content, member, team.con_of(state, member))
+    now, cap = team.member_neili(content, member, team.con_of(state, PLAYER))
     assert cap == pytest.approx(base_cap * 1.3) and now == 100.0
 
 
 def test_a_companions_hp_ignores_the_players_root(state, content, world):
     state.player.stats["con"] = 15
     mate = world.get_companion("mate")
-    assert team.con_of(state, mate) == team.BASE_STAT
-    assert team.member_neili(content, mate, team.con_of(state, mate))[1] == team.neili_cap(content, mate.level)
+    assert team.con_of(state, "mate") == team.BASE_STAT
+    assert team.member_neili(content, mate, team.con_of(state, "mate"))[1] == team.neili_cap(content, mate.level)
 
 
 def test_body_lightness_and_root_soften_a_fights_toll(state, content, world):
@@ -390,3 +391,39 @@ def test_a_practice_injury_starts_from_the_rooted_hp(state, content, world):
     team.practice(state, content, world, "武學", random.Random(0))
     member, hurt = state.player.member, content.config.practice_injury_amount
     assert team.member_neili(content, member, 15) == pytest.approx((416 - hurt, 416))
+
+
+# ── 計畫二 Task 2 修正第一輪：根骨只從一處讀、加成的乘數只有一種寫法 ──────────────────────
+
+
+def test_the_players_root_follows_the_key_not_the_member_object(state, content, world):
+    """con_of 認的是名冊的 key，不是物件本身：拿玩家 Member 的複本照樣吃本人的根骨，同伴照基準。"""
+    state.player.stats["con"] = 15
+    copy = state.player.member.model_copy(deep=True)
+    assert team.con_of(state, PLAYER) == 15
+    assert team.member_neili(content, copy, team.con_of(state, PLAYER))[1] == 416
+    assert team.con_of(state, "mate") == team.BASE_STAT
+
+
+def test_the_players_root_is_read_in_one_place(state, content, world, monkeypatch):
+    """本人的根骨只從 con_of 讀：內功的加成、一場的內傷都跟著它走（不再各自翻 stats）。"""
+    content.config.encounter_neili_loss = {"落敗": 0.3}
+    plain = state.model_copy(deep=True)
+    team.take_encounter_toll(plain, content, world, "落敗")
+    monkeypatch.setattr(team, "con_of", lambda *_: 15.0)
+    assert team.player_boost(state, content, world).inner == pytest.approx(0.3)
+    team.take_encounter_toll(state, content, world, "落敗")
+    assert state.player.member.injury < plain.player.member.injury
+
+
+def test_the_stat_factor_is_one_plus_the_bonus_and_never_below_the_floor(content):
+    """「1＋加成、至少 0.1」只有一種寫法：氣血上限、修練機率、探索比重都用它。"""
+    assert team.stat_factor(content, 15) == pytest.approx(1.3)
+    assert team.stat_factor(content, team.BASE_STAT) == 1.0
+    assert team.stat_factor(content, -100) == encounter.BOOST_FLOOR
+
+
+def test_the_hp_cap_is_a_whole_number_at_any_root(content):
+    """根骨 6：320 × 1.03 ＝ 329.6，上限一律四捨五入成 330，每個呼叫端拿到、畫面寫出來的都是同一個數。"""
+    assert team.neili_cap(content, 1, 6) == 330
+    assert team.neili_cap(content, 1) == 320

@@ -28,15 +28,22 @@ BASE_STAT = 5  # 四屬性的基準：開局都是 5，比它多才有加成（�
 
 
 def stat_bonus(content: Content, value: float) -> float:
-    """屬性比基準每多一點加 stat_bonus_per_point（預設 3%）；比基準少是負的。呼叫端自己決定乘在哪、
-    怎麼夾（1 + 加成夾在 0.1 以上，1 − 減免夾在 0 以上）。"""
+    """屬性比基準每多一點加 stat_bonus_per_point（預設 3%）；比基準少是負的。要乘上去的倍數用 stat_factor；
+    要減掉的（身法減損耗、根骨減內傷）由呼叫端寫成 1 − 加成，夾在 0 以上。"""
     return content.config.stat_bonus_per_point * (value - BASE_STAT)
 
 
-def con_of(state: GameState, member) -> float:
-    """這個人的根骨：玩家本人照自己的屬性；同伴（CompanionProgress）一律是基準，不吃屬性加成
-    （計畫二「實作決定」：同伴的平衡在氣血設計 §1.4 調過，不連帶動）。氣血四個函式的 con 都從這裡來。"""
-    return float(state.player.stats.get("con", BASE_STAT)) if member is state.player.member else BASE_STAT
+def stat_factor(content: Content, value: float) -> float:
+    """屬性乘上去的倍數：1＋加成，再低也夾在 encounter.BOOST_FLOOR（0.1），不會讓任何量變成負的或 0。
+    氣血上限（根骨）、修練機率（悟性）、探索悟意境的比重（悟性）都用這一個。"""
+    return max(encounter.BOOST_FLOOR, 1 + stat_bonus(content, value))
+
+
+def con_of(state: GameState, key: str) -> float:
+    """名冊上這個人（key：PLAYER 或同伴的 id）的根骨。本人的根骨只從這裡讀（氣血四個函式的 con、內功的加成、
+    一場的內傷）；同伴一律是基準，不吃屬性加成（計畫二「實作決定」：同伴的平衡在氣血設計 §1.4 調過，不連帶動）。
+    認 key 不認物件：拿到玩家 Member 的複本也照樣是本人。"""
+    return float(state.player.stats.get("con", BASE_STAT)) if key == PLAYER else BASE_STAT
 
 
 def member_name(state: GameState, content: Content, key: str) -> str:
@@ -251,7 +258,7 @@ def practice(
     setattr(member, level_slot, level + 1)
     msgs = [f"【{name}】精進至第{level + 1}成。", f"心得 -{price}"]
     if rng.random() < cfg.practice_injury_chance:
-        now, _cap = member_neili(content, member, con_of(state, member))
+        now, _cap = member_neili(content, member, con_of(state, PLAYER))
         member.injury += cfg.practice_injury_amount
         member.neili = max(0.0, now - cfg.practice_injury_amount)
         msgs.append(f"這一番苦練傷了氣血，氣血 -{cfg.practice_injury_amount:.0f}（累積內傷，需要療傷才能回到滿血）。")
@@ -259,10 +266,11 @@ def practice(
 
 
 def neili_cap(content: Content, level: int, con: float = BASE_STAT) -> float:
-    """氣血上限：基礎＋每級加成，再乘上根骨的加成（武學與成長設計 6.1：上限 ×（1＋3%×（根骨−5））。
+    """氣血上限：基礎＋每級加成，再乘上根骨的加成（武學與成長設計 6.1：上限 ×（1＋3%×（根骨−5））），
+    四捨五入成整數——每個呼叫端拿到的、狀態列與角色卡寫出來的都是同一個數（根骨 6：329.6 → 330）。
     con 是根骨，只有玩家本人傳（con_of）；同伴照預設的基準，上限跟以前一樣。"""
     cfg = content.config
-    return (cfg.neili_base + level * cfg.neili_per_level) * max(0.1, 1 + stat_bonus(content, con))
+    return float(round((cfg.neili_base + level * cfg.neili_per_level) * stat_factor(content, con)))
 
 
 MIN_CEILING_RATIO = 0.1  # 內傷再重，能回到的氣血上蓋也不低於上限的一成（氣血設計 §1.3：再低也照樣能出戰）
@@ -367,8 +375,8 @@ def regen_neili(content: Content, member, fraction: float, con: float = BASE_STA
 def team_conditions(state: GameState, content: Content, world: WorldStateStore) -> list[float]:
     """本隊每個人的氣血狀態係數，順序跟 team_participants 一致（氣血設計 §1.1：帶傷出手較弱）。"""
     return [
-        encounter.condition_of(*member_neili(content, member, con_of(state, member)))
-        for member in team_participants(state, world)
+        encounter.condition_of(*member_neili(content, member, con_of(state, key)))
+        for key, member in zip(team_keys(state), team_participants(state, world), strict=True)
     ]
 
 
@@ -377,7 +385,7 @@ def player_boost(state: GameState, content: Content, world: WorldStateStore) -> 
     stats = state.player.stats
     return encounter.Boost(
         outer=stat_bonus(content, stats.get("str", BASE_STAT)),
-        inner=stat_bonus(content, stats.get("con", BASE_STAT)),
+        inner=stat_bonus(content, con_of(state, PLAYER)),
     )
 
 
@@ -413,7 +421,7 @@ def take_encounter_toll(
         if key == PLAYER:
             lost, hurt = _apply_toll(
                 content, state.player.member, fraction,
-                agi=stats.get("agi", BASE_STAT), con=stats.get("con", BASE_STAT),
+                agi=stats.get("agi", BASE_STAT), con=con_of(state, PLAYER),
             )
             msgs.append(f"氣血 -{lost:.0f}")  # 照既有慣例寫變化量（跟「銀兩 -5」「心得 +12」同一串）
             if hurt >= 1:

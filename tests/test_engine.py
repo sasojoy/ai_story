@@ -5556,8 +5556,8 @@ def test_a_point_of_root_raises_the_hp_cap_but_not_the_hp(game):
     game.allocate_stat("con")
     after = game.status_data()
     assert before["hp"] == after["hp"] == 100
-    assert (before["hp_max"], after["hp_max"]) == (int(base), int(base * 1.03))
-    assert game._battle_neili_cap() == pytest.approx(base * 1.03)  # 決戰帶進去的氣血上限也吃根骨
+    assert (before["hp_max"], after["hp_max"]) == (base, round(base * 1.03))  # 320 → 330（329.6 四捨五入）
+    assert game._battle_neili_cap() == round(base * 1.03)  # 決戰帶進去的氣血上限也吃根骨
 
 
 def test_hp_comes_back_by_the_rooted_cap(content):
@@ -5578,3 +5578,12 @@ def test_the_showdown_power_snapshot_carries_the_players_boost(game):
     plain = game._battle_power()
     p.stats["str"] = 15
     assert plain > 0 and game._battle_power() == pytest.approx(plain * 1.3)
+
+
+def test_the_status_bar_and_the_card_show_the_same_hp_at_root_6(game):
+    """計畫二 Task 2 修正第一輪：根骨 6 的上限 329.6、目前氣血 100.6，狀態列與名冊的角色卡寫出同一組數字。"""
+    p = game.state.player
+    p.stats["con"], p.member.neili = 6, 100.6
+    data = game.status_data()
+    assert (data["hp"], data["hp_max"]) == (101, 330)
+    assert f"氣血 {data['hp']}/{data['hp_max']}" in game.member_card("player")
