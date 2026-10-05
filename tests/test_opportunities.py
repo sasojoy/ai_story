@@ -12,7 +12,7 @@ from unittest import mock
 
 import pytest
 
-from tianxia import bot, bot_policy, calendar, figures, opportunities, rules, timetable
+from tianxia import bot, bot_policy, calendar, figures, opportunities, push, rules, timetable
 from tianxia.content import ContentError, load_content, validate
 from tianxia.engine import Game
 from tianxia.models import OppDef
@@ -92,6 +92,16 @@ def test_timing_must_name_its_place_and_front(real):
         validate(real)
     courier.deliver_front, courier.at = "yingru", []  # 夜裡沒寫地點
     with pytest.raises(ContentError, match="夜裡要寫地點"):
+        validate(real)
+
+
+def test_a_timing_item_needs_its_delivery_lines(real):
+    courier = _opp(real, "guan_courier").timing
+    courier.deliver_label = ""
+    with pytest.raises(ContentError, match="guan_courier：有 item 就要寫 deliver_label"):
+        validate(real)
+    courier.deliver_label, courier.done = "把密信交給{主將}", ""
+    with pytest.raises(ContentError, match="guan_courier：有 item 就要寫 done"):
         validate(real)
 
 
@@ -201,6 +211,24 @@ def test_defection_clears_opportunities(on):
     assert game.state.player.opp_done == []
 
 
+def test_new_season_clears_the_opportunity_fields(on):
+    """角色每季重來（同 test_defection 的換季寫法）：七個機緣欄位都回到空的。"""
+    on.config.admins = ["管"]
+    admin = _game(on, "管")
+    game = _game(on, "甲", faction="guan")
+    p = game.state.player
+    p.opp_done, p.opp_counts, p.opp_items = ["guan_zhujun"], {"guan_deserter": 1}, {"guan_courier": "南陽渠帥的密信"}
+    p.opp_fronts, p.opp_clues, p.opp_tried, p.rank2_days = {"guan_courier": "yingru"}, ["guan_courier"], {"guan_courier": 3}, {5: 2}
+    game.sync(100.0)
+    admin.admin_end_season(now=200.0)
+    admin.admin_next_season(now=300.0)
+    game.sync(400.0)
+    p = game.state.player
+    assert p.season_number == 2
+    assert (p.opp_done, p.opp_counts, p.opp_items, p.opp_fronts, p.opp_clues, p.opp_tried, p.rank2_days) == (
+        [], {}, {}, {}, [], {}, {})
+
+
 # ── Task 3：第 2 階行動與三種累積型 ─────────────────────────────────
 
 
@@ -266,11 +294,28 @@ def test_rank2_success_pushes_the_local_front_towards_its_own_side(on):
     with _always(True):
         guan.choose("act:rank2")
     assert rules.trend_value(guan.state, on, "yingru") == before - 3  # rank2_push 3，往官軍偏
+    # 走 Game.push_trend（不是直接 change_trend）：替自己陣營推，貢獻照 contrib_per_push 記
+    assert guan.state.player.contrib == on.config.contrib_per_push * on.config.rank2_push
     huang = _game(on, faction="huang", at="julu_altar", rank=2)
     before = rules.trend_value(huang.state, on, "jizhou")
     with _always(True):
         huang.choose("act:rank2")
     assert rules.trend_value(huang.state, on, "jizhou") == before + 3  # 往黃巾偏
+    assert huang.state.player.contrib == on.config.contrib_per_push * on.config.rank2_push
+
+
+def test_rank2_push_goes_through_the_daily_cap(on):
+    on.config.daily_push_cap = 4  # 每人每曆日每條線推得動 4 點
+    game = _game(on, faction="guan", at="changshe", rank=2)
+    p = game.state.player
+    p.stamina = 100
+    before = rules.trend_value(game.state, on, "yingru")
+    with _always(True):
+        game.choose("act:rank2")
+        game.choose("act:rank2")
+    assert rules.trend_value(game.state, on, "yingru") == before - 4  # 3 加 1，不是 6：超過上限的不推
+    cfg = on.config  # 超過上限的那一份貢獻只記 over_cap_contrib_ratio
+    assert p.contrib == cfg.contrib_per_push * 3 + push.contribution(3, 3, 1, cfg.contrib_per_push, cfg.over_cap_contrib_ratio)
 
 
 def test_rank2_failure_counts_a_try_but_not_a_deserter(on):
@@ -281,6 +326,7 @@ def test_rank2_failure_counts_a_try_but_not_a_deserter(on):
     assert msgs[0].startswith("你在長社喊了半天") and game.state.player.opp_counts == {}
     assert sum(game.state.player.rank2_days.values()) == 1
     assert rules.trend_value(game.state, on, "yingru") == before  # 失敗不推戰線
+    assert game.state.player.contrib == 0  # 也不記貢獻
 
 
 def test_rank2_daily_limit_resets_next_day(on):
@@ -293,6 +339,21 @@ def test_rank2_daily_limit_resets_next_day(on):
     assert not option.enabled and "今天已經做滿 3 次" in option.label
     w = game.state.world
     w.time += calendar.DAY / calendar.cal_scale(on, w)  # 隔一個曆日
+    assert next(o for o in game.options(odds=False) if o.id == "act:rank2").enabled
+
+
+def test_rank2_daily_limit_resets_at_calendar_midnight(on):
+    game = _game(on, faction="guan", at="changshe", rank=2)
+    game.state.player.stamina = 100
+    _at_hour(game, 23)  # 第 1 曆日 23:00
+    with _always(False):
+        for _ in range(3):
+            game.choose("act:rank2")
+    for hour in (23, 23.9):
+        _at_hour(game, hour)
+        option = next(o for o in game.options(odds=False) if o.id == "act:rank2")
+        assert not option.enabled and "今天已經做滿 3 次" in option.label
+    _at_hour(game, 0.5, day=1)  # 第 2 曆日 00:30：只隔 1.5 個曆時，但曆日換了；滾動 24 小時的算法在這裡還是灰的
     assert next(o for o in game.options(odds=False) if o.id == "act:rank2").enabled
 
 
@@ -389,6 +450,16 @@ def test_refugees_roll_after_duty(on):
     before = rules.trend_value(game.state, on, "geju")
     game.choose("opp:deliver:hao_refugees")
     assert rules.trend_value(game.state, on, "geju") == before + 1
+
+
+def test_geju_push_on_delivery_follows_the_goals_sign(on):
+    haoqiang = next(f for f in on.scenario.factions if f.id == "haoqiang")
+    haoqiang.goals[rules.GEJU] = -1  # 假設有個陣營要把割據往下壓：跟戰線那一支一樣是 目標 × 次數
+    game = _game(on, faction="haoqiang", at="cao_manor")
+    game.state.player.opp_items = {"hao_refugees": "佃戶名冊"}
+    before = rules.trend_value(game.state, on, rules.GEJU)
+    game.choose("opp:deliver:hao_refugees")
+    assert rules.trend_value(game.state, on, rules.GEJU) == before - 1
 
 
 def test_refugees_come_with_their_chance(on):

@@ -285,8 +285,9 @@ def _trend_on_done(state: GameState, content: Content, o: OppDef, loc_id: str) -
     if not amount:
         return []
     faction = _faction_def(content, o.faction)
-    if faction.goals.get(GEJU):
-        return change_trend(state, content, GEJU, amount)
+    geju_goal = faction.goals.get(GEJU, 0)  # 豪強：推割據；跟戰線那一支一樣是「目標 × 次數」，目標的正負照陣營
+    if geju_goal:
+        return change_trend(state, content, GEJU, geju_goal * amount)
     front = front_of(content, loc_id) if o.kind == "accumulate" and o.accumulate.deliver == "nearest_base" \
         else state.player.opp_fronts.get(o.id)
     goal = faction.goals.get(front or "", 0)
