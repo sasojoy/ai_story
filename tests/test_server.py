@@ -838,11 +838,26 @@ def test_the_expanded_title_is_one_nowrap_span_per_segment():
     js = (server.WEB / "app.js").read_text(encoding="utf-8")
     css = (server.WEB / "style.css").read_text(encoding="utf-8")
     _, expanded = _who_name_helper(js)
-    assert 's.affiliation.split("・")' in expanded and '<span class="seg">' in expanded and '.join("・")' in expanded
+    assert 's.affiliation.split("・")' in expanded and '<span class="who-seg">' in expanded and '.join("・")' in expanded
     assert "匿名" in expanded and "s.level" in expanded
     assert 'class="who-title"' in expanded
-    seg = re.search(r"\.who-title \.seg \{([^}]*)\}", css)
+    seg = re.search(r"\.who-title \.who-seg \{([^}]*)\}", css)
     assert seg is not None and "white-space: nowrap" in seg.group(1)
+
+
+def test_the_title_segment_class_is_not_shared_with_any_site_wide_style():
+    """FB-071 的瀏覽器驗收抓到：頭銜的每一段原本叫 seg，而 .seg 早就是全站的分段選單（display: flex、下方留 12px），
+    每一段都變成整列、一段一行。段落的 class 要獨一無二：style.css 裡凡是提到它的規則都掛在 .who-title 底下，
+    沒有任何一條規則是單獨選它的名字（之後加全站樣式也不會撞上）；而且別的地方不會用這個 class。"""
+    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    css = re.sub(r"/\*.*?\*/", "", (server.WEB / "style.css").read_text(encoding="utf-8"), flags=re.S)
+    _, expanded = _who_name_helper(js)
+    seg_class = re.search(r'<span class="([\w-]+)">\$\{esc\(t\)\}</span>', expanded).group(1)
+    assert seg_class != "seg"  # 全站的分段選單
+    mentions = [sel.strip() for group in re.findall(r"([^{}]+)\{", css) for sel in group.split(",")
+                if re.search(rf"\.{seg_class}\b", sel)]
+    assert mentions and all(sel.startswith(".who-title ") for sel in mentions), mentions
+    assert js.count(f'class="{seg_class}"') == 1  # 只有頭銜那一處用它
 
 
 def test_the_expanded_name_line_is_the_name_alone_and_the_points_label_sits_above_the_buttons():

@@ -96,9 +96,10 @@ ul { padding-left: 1.3em; margin: 0.4em 0; }
    （256＋15 ≈ 271，兩種寬度都一行放得下）；再窄的螢幕才折行——折行也比用「…」藏掉名號的後半好 */
 .who[aria-expanded="true"] .who-name { font-size: 16px; }
 .who[aria-expanded="true"] .who-name > span { flex: 1; white-space: normal; overflow-wrap: anywhere; }
-/* 展開的頭銜：門派、陣營、頭銜、匿名、第 N 級各是一個 .seg，不折行；只在段與段之間換行，「地方豪強」不會被從中間折斷 */
+/* 展開的頭銜：門派、陣營、頭銜、匿名、第 N 級各是一個 .who-seg，不折行；只在段與段之間換行，「地方豪強」不會被從中間折斷。
+   不能叫 .seg：那是全站的分段選單（display: flex、下方留白），套到頭銜上每一段都會變成整列 */
 .who-title { margin-top: 1px; font: 500 12px/1.5 var(--sans); color: var(--ink-2); }
-.who-title .seg { white-space: nowrap; }
+.who-title .who-seg { white-space: nowrap; }
 /* 點名號展開更多數值的提示（畫面流程 S1），名號再長也不會被省略號吃掉 */
 /* 升級的屬性點：自己一個不縮的元素（flex: none）、放在會「…」的名號 <span> 外面——長長的「門派・陣營」只擠名號，擠不掉這一句 */
 .who-name .pts { flex: none; font: 600 12px var(--sans); color: var(--gold); }
