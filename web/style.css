@@ -121,6 +121,9 @@ ul { padding-left: 1.3em; margin: 0.4em 0; }
 .num em { font-style: normal; font-weight: 400; color: var(--ink-2); font-size: 11px; margin-right: 2px; }
 .more-stats { font-size: 12px; color: var(--ink-2); margin-top: 6px; line-height: 1.7; }
 .more-stats .hint { color: var(--gold); }
+/* 在路上的 💡 提示收成一行（FB-060）：是按鈕，點了展開全文；樣子跟平常的提示一樣 */
+.more-stats .road-hint { display: block; width: 100%; margin: 0; padding: 0; border: 0; background: none; font: inherit; line-height: inherit; text-align: left; cursor: pointer; }
+.more-stats .road-hint.clamp { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .flash { animation: flash 0.9s ease-out; }
 @keyframes flash { from { background: var(--accent-soft); } to { background: transparent; } }
 
@@ -253,6 +256,9 @@ details.fold.bulletin > .fold-body { border-color: var(--gold); max-height: 50vh
 .options > .move-mode { margin: 4px 0 0; }
 /* 在路上：四樣小事排成 2×2，名字一行、補充小字一行（FB-055）；折返與喊停照舊一整列 */
 .road-tasks { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+/* 折返與喊停併成一列（FB-060）：折返那格的字比較多（「↩ 折返 潁川郡（陽翟）」），多給一點寬、名字小一號，才不會折成兩行 */
+.road-ways { grid-template-columns: 1.45fr 1fr; }
+.road-ways .t-name { font-size: 15px; }
 .options .btn.task { flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px; padding: 8px 12px; min-height: 56px; }
 .btn.task .t-name { font-weight: 600; }
 .btn.task .t-note { font-size: 12px; line-height: 1.3; color: var(--ink-2); }
