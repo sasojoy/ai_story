@@ -17,7 +17,7 @@ from .world_state import WorldStateStore
 # 博聞又看不到立即的變化，所以按之前要讀得到。名字照 Config.stat_names（見 stat_uses），這裡只寫用途；只寫玩家本人身上的事
 STAT_USES = {
     "str": "武學威力",
-    "agi": "打完一場少損氣血",
+    "agi": "打完一場少損氣血・落敗有機會閃成平手",
     "con": "內功威力・氣血上限・少受內傷",
     "wis": "修練機率・探索悟得意境・閉關心得",
     "lore": "武學與意境的持有上限",
