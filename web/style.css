@@ -292,6 +292,7 @@ details.fold.bulletin > .fold-body { border-color: var(--gold); max-height: 50vh
 .front-ends { display: flex; justify-content: space-between; margin-top: 2px; font-size: 10px; line-height: 1.2; font-weight: 700; }
 .front-ends .huang { color: var(--gold); }
 .front-ends .guan { color: var(--kuai); }
+.front-ends span { white-space: nowrap; } /* 兩個字的標不在字中間換行：大字體或很窄的螢幕時圖卡才不會變高 */
 /* 「亂局」標（FB-065）：在兩端字的正中間、亂局帶的正下面，中性的顏色；用內陰影畫框、不加上下留白，圖卡不會因此變高 */
 .front-ends .chaos-tag { padding: 0 4px; border-radius: 4px; color: var(--ink-2); background: var(--card-2); box-shadow: inset 0 0 0 1px var(--ink-2); font-weight: 600; }
 /* 態勢兩行（FB-065）：「態勢」靠左，官軍、黃巾（三條戰線合計）與豪強（亂局條數與漸長／漸消）各一行 */
