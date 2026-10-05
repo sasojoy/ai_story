@@ -6,3 +6,4 @@ CLAUDE.md 裡跟現況對不上的地方。PM 收集，**企劃者同意後**才
 
 | # | 在哪 | 現在寫的 | 實際情況 | 誰提的 |
 |---|---|---|---|---|
+| 1 | `CLAUDE.md`「第一季濃縮版」那一節的「叛投」一條；同一節也沒有「第 2 階行動」與「機緣」兩條；「架構」清單沒有 `tianxia/opportunities.py`（併入時可能要重編） | 叛投「身份歸零：晉升、召見、部下、本季貢獻、押著的糧車作廢……屬性、武學、同伴、銀兩、素材、紀錄都不動」，只列這幾樣 | 乙一做完後，叛投還會清掉機緣的完成、計數、拿著的東西與聽過的線索（`defection.clear_progress` 呼叫 `opportunities.clear`；每人每曆日第 2 階行動限次 `rank2_days` 不清）。另外多了：第 2 階行動 `act:rank2`（`Config.rank2_stamina`／`rank2_daily`／`rank2_push`）；機緣九種（`content/opportunities.json`，`tianxia/opportunities.py`，選項 `opp:deliver:`／`opp:try:`、對話話題 `talk:opp:`）；假人與整季機器人不做機緣（`bot.FORESHADOW_OPTIONS`、`bot_policy.score`），第 2 階行動假人照守勢行動的分數做 | 乙一 Task 2～5 |
