@@ -265,6 +265,49 @@ def test_restore_moves_a_leftover_wal_with_the_old_file(tmp_path):
     assert aside.with_name(aside.name + "-wal").read_bytes() == b"leftover"
 
 
+def test_restore_moves_orphan_sidecars_when_the_database_file_is_gone(tmp_path):
+    """資料庫檔不見了、-wal 等殘留檔還在：照樣搬走，舊的 -wal 不能被套進還原回來的檔（審查必修 1）。
+    實際做出一份有 500 筆江湖史的 -wal，備份卻是空的江湖史：套進去的話還原後會多出 500 筆。"""
+    src = _live_db(tmp_path)
+    out = backup_db.backup(src, tmp_path / "backups", tag="manual", now=NOW)
+    close_all()
+    writer = sqlite3.connect(src)
+    writer.execute("PRAGMA journal_mode = WAL")
+    writer.execute("PRAGMA wal_autocheckpoint = 0")
+    writer.executemany(
+        "INSERT INTO chronicle (season, time, location, text) VALUES (1, ?, NULL, ?)",
+        [(i, f"第{i}筆") for i in range(500)],
+    )
+    writer.commit()
+    wal = src.with_name(src.name + "-wal")
+    stale_wal = wal.read_bytes()  # 還沒做檢查點：這 500 筆只在 -wal 裡
+    writer.close()
+    src.unlink()  # 資料庫檔不見了，只剩殘留的 -wal（還有隨手留下的 -shm、-journal）
+    wal.write_bytes(stale_wal)
+    src.with_name(src.name + "-shm").write_bytes(b"leftover shm")
+    src.with_name(src.name + "-journal").write_bytes(b"leftover journal")
+    aside = restore_db.restore(out, src, now=NOW)
+    assert aside is not None and not aside.exists()  # 資料庫檔本來就不在，所以只有殘留檔搬走了
+    assert {p.name[len(aside.name):] for p in restore_db.aside_sidecars(aside)} == {"-wal", "-shm", "-journal"}
+    assert [s for s in ("-wal", "-shm", "-journal") if src.with_name(src.name + s).exists()] == []
+    assert backup_db.verify(src)["chronicle"] == 0  # 備份那一刻的樣子，沒有被舊的 -wal 改掉
+    assert aside.with_name(aside.name + "-wal").read_bytes() == stale_wal
+
+
+def test_restore_main_says_where_the_sidecars_went(tmp_path, capsys):
+    """搬走了 -wal／-shm 就把路徑印出來；還原錯了要退回時，它們要跟資料庫檔一起改名回去（審查次要 4）。"""
+    src = _live_db(tmp_path)
+    out = backup_db.backup(src, tmp_path / "backups", tag="manual", now=NOW)
+    close_all()
+    wal = src.with_name(src.name + "-wal")
+    wal.write_bytes(b"leftover")
+    assert restore_db.main([str(out), "--db", str(src)]) == 0
+    printed = capsys.readouterr().out
+    (moved_wal,) = src.parent.glob("tianxia.db.pre-restore-*-wal")
+    assert str(moved_wal) in printed  # 搬走的 -wal 的完整路徑
+    assert "一起改名回去" in printed
+
+
 @pytest.mark.skipif(sys.platform != "win32", reason="開著的檔改不了名是 Windows 的行為")
 def test_restore_refuses_while_the_database_is_open(tmp_path):
     """伺服器開著（檔案被打開）時不還原（Review Focus 3）。"""
