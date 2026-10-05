@@ -185,12 +185,22 @@
     if (main.event_free_text == null) S.answering = false; // 事件過去了，輸入框跟著收起
     // 見聞的紅點只為新的一場亮（比 card_id）：配點之後「剛剛」照舊是升級那一場的卡片，看過戰報再配點不再亮一次（計畫二最終審查 M1）；
     // 放在這裡是因為動作回來的與輪詢拿到的都走 setMain——決戰收場的卡片常常是輪詢（sync）補送的。登入那一份不亮（S.main 還沒有）
-    if (main.card && S.main && S.main.card_id !== main.card_id) S.unseen = true;
+    if (main.card && S.main && S.main.card_id !== main.card_id) {
+      S.unseen = true;
+      paintNewsDot();
+    }
     const key = JSON.stringify(main);
     const changed = key !== S.mainKey;
     S.main = main;
     S.mainKey = key;
     return changed;
+  }
+
+  // 分頁列上見聞那一顆補上紅點：分頁列只在整頁重畫（render）時畫，輪詢只重畫狀態列與頁面，
+  // 所以紅點亮起的當下就地補一顆（已經有、或正在看見聞時不補）
+  function paintNewsDot() {
+    const tab = document.querySelector('.tabs .tab[data-tab="news"]');
+    if (tab && S.unseen && S.tab !== "news" && !tab.querySelector(".dot")) tab.insertAdjacentHTML("beforeend", '<i class="dot"></i>');
   }
 
   // ── 整體 ──

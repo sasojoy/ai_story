@@ -817,6 +817,11 @@ def test_the_news_dot_lights_only_for_a_new_fight_card():
     assert "main.card_id" in set_main and "S.unseen = true" in set_main
     apply_main = js[js.index("function applyMain"):js.index("async function choose")]
     assert "S.unseen = true" not in apply_main
+    # 輪詢只重畫狀態列與頁面、不重畫分頁列：亮的當下要把紅點補進見聞那一顆（不然要等下一次整頁重畫才看得到）
+    assert "paintNewsDot()" in set_main
+    paint = js[js.index("function paintNewsDot"):]
+    paint = paint[:paint.index("\n  }\n")]
+    assert 'data-tab="news"' in paint and 'class="dot"' in paint
 
 
 def test_the_practice_and_furnace_pages_only_read_and_call_what_the_server_has(game):
