@@ -223,7 +223,11 @@
       </div>
       <div class="vitals">
         <div class="bar stam" title="體力"><i style="width:${pct(s.stamina, s.stamina_max)}%"></i><span>體力 ${s.stamina}/${s.stamina_max}</span></div>
-        <div class="bar hp" title="氣血"><i style="width:${pct(s.hp, s.hp_max)}%"></i>${s.injury >= 1 ? `<b style="width:${pct(s.injury, s.hp_max + s.injury)}%"></b>` : ""}<span>氣血 ${s.hp}/${s.hp_max}${s.injury >= 1 ? `・傷 ${s.injury}` : ""}</span></div>
+        <div class="bar hp" title="氣血"><i style="width:${pct(s.hp, s.hp_max)}%"></i>${s.injury >= 1
+          // 內傷（FB-049）：斜紋是上限裡被內傷佔掉、回不來的那一截（寬＝內傷÷上限，回滿時紅條剛好接到它）；
+          // 「傷 N」靠右另寫在斜紋那一頭，不再接在「氣血 N/M」後面跨過紅條的交界
+          ? `<b style="width:${pct(s.injury, s.hp_max)}%"></b>` : ""}<span>氣血 ${s.hp}/${s.hp_max}</span>${s.injury >= 1
+          ? `<span class="inj">傷 ${s.injury}</span>` : ""}</div>
         <div class="num"><em>銀</em>${s.silver}</div>
         <div class="num"><em>心得</em>${s.xinde}</div>
       </div>
@@ -562,6 +566,8 @@
     const name = (id) => x.materials.find((m) => m.id === id);
     const used = (id) => S.craftSel.filter((s) => s === id).length;
     const ready = S.craftSel.length === x.per_craft;
+    // 素材列表只列手上還剩的：全放進爐裡的那一樣不留一顆灰的「×0」（FB-049），點爐裡那一格拿出來就回到列表
+    const left = x.materials.filter((m) => m.count - used(m.id) > 0);
     // 太極火爐只管放素材與開爐；挑素材在下面的素材列表（企劃者 2026-10-04：「選素材不要也在那邊，用舊的模式來顯示素材」）。
     // 「開爐煉製」緊接在成本那一行下面、不黏在底部（FB-048）：黏著時會蓋住素材列表、開爐後那一行字與「素材說明」
     return `
@@ -570,10 +576,11 @@
       <div class="card" id="craft-line">${S.craftLine || x.craft_line}</div>
       <div class="act-row"><button class="btn primary" id="forge" data-act="forge" ${ready ? "" : "disabled"}>開爐煉製</button></div>
       <div class="label">素材 <small class="muted">點一樣放進爐裡</small></div>
-      ${x.materials.length ? `<div class="chips">${x.materials.map((m) => `
-        <button class="chip r${m.rank} ${used(m.id) >= m.count ? "used" : ""}" data-act="slot" data-id="${esc(m.id)}" ${used(m.id) >= m.count ? "disabled" : ""}>
+      ${left.length ? `<div class="chips">${left.map((m) => `
+        <button class="chip r${m.rank}" data-act="slot" data-id="${esc(m.id)}">
           <span class="n">×${m.count - used(m.id)}</span><b>${esc(m.name)}</b><small>${esc(m.tier)}・屬${esc(m.attribute)}</small>
         </button>`).join("")}</div>`
+        : x.materials.length ? '<p class="muted">素材都放進爐裡了。</p>'
         : '<p class="muted">背包裡還沒有素材。去探索、遊歷打贏，或是碰上奇遇都拿得到。</p>'}
       ${x.clue_items?.length ? `<div class="label">伏筆物品</div>
       <div class="chips clues">${x.clue_items.map((i) => `<div class="clue"><b>${esc(i.name)}</b><span>×${i.count}</span></div>`).join("")}</div>` : ""}

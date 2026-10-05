@@ -102,13 +102,21 @@ ul { padding-left: 1.3em; margin: 0.4em 0; }
   flex: none; width: 40px; height: 40px; border-radius: 12px; border: 1px solid var(--line);
   background: var(--card); display: grid; place-items: center; cursor: pointer; font-size: 18px;
 }
-.vitals { display: grid; grid-template-columns: 1fr 1fr auto auto; gap: 6px 10px; align-items: center; margin-top: 6px; }
+/* 氣血條寬一點：有內傷時左邊寫「氣血 N/M」、右邊寫「傷 N」，兩段之間要留得出空 */
+.vitals { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) auto auto; gap: 6px 10px; align-items: center; margin-top: 6px; }
 .bar { position: relative; height: 20px; border-radius: 10px; background: var(--card-2); overflow: hidden; }
 .bar > i { position: absolute; inset: 0 auto 0 0; border-radius: 10px; transition: width 0.4s ease; }
 .bar.stam > i { background: var(--stam); }
 .bar.hp > i { background: var(--hp); }
-.bar.hp > b { position: absolute; inset: 0 0 0 auto; background: repeating-linear-gradient(45deg, transparent 0 3px, rgba(0,0,0,0.18) 3px 6px); }
+/* 內傷那一截（FB-049）：用氣血的紅畫淡斜紋、左邊一道細線，看得出是氣血條上被佔掉的一段，不像一個小破圖 */
+.bar.hp > b {
+  position: absolute; inset: 0 0 0 auto; border-left: 1.5px solid var(--hp);
+  background: repeating-linear-gradient(45deg, color-mix(in srgb, var(--hp) 40%, transparent) 0 2px, transparent 2px 5px);
+}
 .bar > span { position: relative; display: block; font-size: 11px; line-height: 20px; padding: 0 8px; font-weight: 600; color: var(--ink); white-space: nowrap; }
+/* 氣血條上的字壓在紅條、底色與斜紋上都要讀得清楚：描一圈底色。「傷 N」靠右，落在斜紋那一頭 */
+.bar.hp > span { text-shadow: 0 0 2px var(--card), 0 0 2px var(--card); }
+.bar.hp > span.inj { position: absolute; top: 0; right: 0; padding: 0 7px; }
 .num { font-size: 13px; font-weight: 600; white-space: nowrap; }
 .num em { font-style: normal; font-weight: 400; color: var(--ink-2); font-size: 11px; margin-right: 2px; }
 .more-stats { font-size: 12px; color: var(--ink-2); margin-top: 6px; line-height: 1.7; }

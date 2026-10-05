@@ -592,6 +592,13 @@ def test_change_signs():
     ]
 
 
+def test_more_internal_injury_is_coloured_as_a_loss():
+    """FB-049：內傷多了是損失（紅，跟「氣血 -17」一樣），療傷讓內傷少了是收穫（綠）；其他照正負。"""
+    assert journal.change_class("內傷 +3") == "tx-down"
+    assert journal.change_class("內傷 -10") == "tx-up"
+    assert journal.change_class("氣血 -17") == "tx-down" and journal.change_class("銀兩 +5") == "tx-up"
+
+
 def test_combine_and_subtract_changes():
     assert journal.combine_changes(["銀兩 +10", "心得 +8", "銀兩 +10", "經驗 +5（每人）", "經驗 +5（每人）"]) == [
         "銀兩 +20", "心得 +8", "經驗 +10（每人）"

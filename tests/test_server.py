@@ -1003,6 +1003,22 @@ def test_open_season_only_works_for_admins(tmp_path, monkeypatch):
     assert fresh.world.season_phase() == "running"
 
 
+def test_preparing_has_no_now_card_and_no_countdown(tmp_path, monkeypatch):
+    """FB-049：籌備中時鐘沒走、什麼都不能做：江湖頁不畫「剛剛」（開場那一則寫「賽季開始」、叫人先去探索），
+    狀態列不倒數下一件大事；江湖紀錄頁照樣列得到開場那一則。開季之後照常。"""
+    monkeypatch.setattr(server.CONTENT.config, "auto_open_first_season", False)
+    monkeypatch.setattr(server.CONTENT.config, "season_one", True)
+    monkeypatch.setattr(server.CONTENT.config, "admins", ["路人"])
+    fresh = Game.new(server.CONTENT, "路人", world=open_world(tmp_path / "world.db"))
+    assert fresh.world.season_phase() == "preparing"
+    view = server.main_view(fresh)
+    assert view["now"] == "" and "賽季開始" in view["latest"]
+    assert view["status"]["calendar"] and view["status"]["next_event"] is None
+    server.act(fresh, lambda g: server.ADMIN_ACTIONS["open_season"](g, {}))
+    view = server.main_view(fresh)
+    assert view["now"] and view["status"]["next_event"] is not None
+
+
 def test_only_admins_can_reset_a_password(client, monkeypatch):
     _player(client)
     player = server.game_for("沈青衫")

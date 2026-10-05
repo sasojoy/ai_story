@@ -1032,7 +1032,12 @@ class Game:
         p = self.state.player
         minutes = max(0, round((self.state.world.time - p.resting_since) / 60))
         p.resting_since = None
-        msg = "體力已經回滿，你收功起身。" if full else f"你收功起身（打坐了約 {minutes} 分鐘）。"
+        if full:
+            msg = "體力已經回滿，你收功起身。"
+        elif minutes < 1:  # 剛坐下就起身：不寫「打坐了約 0 分鐘」（FB-049）
+            msg = "你收功起身。"
+        else:
+            msg = f"你收功起身（打坐了約 {minutes} 分鐘）。"
         if self._draft is None:
             self._write("起身", [msg])
         return [msg]
@@ -3091,7 +3096,8 @@ class Game:
         if not calendar.season_one_on(w, c):
             return {}
         at = calendar.point(w.time, c, w)
-        upcoming = None if w.ended else timetable.next_event(self.state, c)  # 休季時沒有下一件（計畫 T9）
+        # 休季時沒有下一件（計畫 T9）；籌備中時鐘沒走，也不倒數（FB-049）
+        upcoming = None if w.ended or self._preparing() else timetable.next_event(self.state, c)
         return {
             "calendar": {
                 "week": at.week, "weekday": at.weekday, "clock": f"{at.hour:02d}:{at.minute:02d}",
@@ -3283,7 +3289,10 @@ class Game:
         """江湖頁「剛剛」那一則（FB-046）：最新一則；最新的幾則若只是時刻表大事的公告（_deliver_big_events 補的），
         而且每一件的全文江湖頁的卡片上已經有了（_news_on_cards），就往前找第一則不是的——同一段公告不在「剛剛」
         再寫一次，剛做完的事也不會因為一件大事發生就被擠掉。江湖紀錄頁照舊從最新一則列起（latest_entry_html）。
-        一次補好幾件時每一行是「季曆時間　公告全文」。"""
+        一次補好幾件時每一行是「季曆時間　公告全文」。
+        籌備中不放（FB-049）：那時最新一則是開場那一則，寫著「賽季開始」、叫人先去探索，選單卻只有「等待管理者開季」。"""
+        if self._preparing():
+            return ""
         shown = self._news_on_cards()
 
         def repeated(entry: JournalEntry) -> bool:

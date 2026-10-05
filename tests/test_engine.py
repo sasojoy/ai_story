@@ -121,6 +121,16 @@ def test_sitting_down_is_a_state_you_stand_up_from(game):
     assert game.state.journal[0].title == "起身"
 
 
+def test_standing_up_right_away_does_not_count_zero_minutes(game):
+    """FB-049：剛坐下就起身，不寫「打坐了約 0 分鐘」；坐滿一分鐘以上照舊寫幾分鐘。"""
+    game.choose("act:rest")
+    assert game.choose("act:stand") == ["你收功起身。"]
+    game.state.player.stamina = 0  # 不然體力早就滿了，一推進時間就自己起身
+    game.choose("act:rest")
+    game.advance(600)
+    assert game.choose("act:stand") == ["你收功起身（打坐了約 10 分鐘）。"]
+
+
 def test_sitting_doubles_the_natural_regen(game):
     cfg = game.content.config
     game.state.player.stamina = 0
