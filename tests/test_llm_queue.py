@@ -159,3 +159,49 @@ def test_a_waiter_that_dies_while_waiting_does_not_leave_its_ticket_behind():
     release.set()
     holder.join(2)
     assert queue.run("乙", lambda: "好了", fallback=None) == "好了"  # 乙的下一件照常排得進去
+
+
+def test_a_free_slot_wakes_the_next_waiter_even_if_the_first_waiter_woke_late():
+    """審查 I1：兩個位子、兩件一起做完，甲乙在排。乙先搶到條件鎖、發現甲才是頭、回去睡；甲搶到之後進場，位子還空著一個——
+    甲進場時沒有再叫醒大家的話，乙要一路睡到自己的期限（或甲做完）才會輪到。把甲醒來重新拿鎖的時間拖 50 毫秒，這個交錯就每次都發生；
+    乙應該在甲進場之後馬上開始，不是等到期限。"""
+    queue = llm_queue.LlmQueue(slots=2, bot_cap=1)
+    restore = queue._cond._acquire_restore  # Condition 建構時把鎖的這個方法複製到實例上：包實例的，不包類別的
+
+    def late_for_a(state):
+        if threading.current_thread().name == "甲":
+            time.sleep(0.05)
+        return restore(state)
+
+    queue._cond._acquire_restore = late_for_a
+    go = threading.Event()
+    running = [threading.Event(), threading.Event()]
+
+    def hold(which):
+        def job():
+            running[which].set()
+            go.wait(5)
+        return job
+
+    holders = [threading.Thread(target=lambda i=i: queue.run(f"佔位{i}", hold(i), fallback=None)) for i in (0, 1)]
+    for thread in holders:
+        thread.start()
+    assert all(event.wait(2) for event in running)
+    a_release, b_started = threading.Event(), threading.Event()
+
+    def a_job():
+        a_release.wait(5)  # 甲進場之後一直佔著，乙只能靠「位子還空著」被叫醒
+
+    first = threading.Thread(target=lambda: queue.run("甲", a_job, fallback=None, wait=5), name="甲")
+    first.start()
+    assert _wait_until(lambda: queue.snapshot()["waiting"] == 1)
+    second = threading.Thread(target=lambda: queue.run("乙", b_started.set, fallback=None, wait=2), name="乙")
+    second.start()
+    assert _wait_until(lambda: queue.snapshot()["waiting"] == 2)
+    released_at = time.monotonic()
+    go.set()
+    assert b_started.wait(1.5), "乙一路睡到自己的期限才輪到：位子空著、甲進場之後沒有叫醒它"
+    assert time.monotonic() - released_at < 0.5
+    a_release.set()
+    for thread in (*holders, first, second):
+        thread.join(2)

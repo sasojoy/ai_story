@@ -71,6 +71,10 @@ class LlmQueue:
                 raise
             self._waiting.remove(ticket)
             self._active.append(ticket)
+            if self._waiting and len(self._active) < self.slots:
+                # 位子還空著、後面還有人：叫醒大家讓下一個進場。兩件一起做完時兩次 notify_all 可能都落在排隊的人搶到條件鎖
+                # 之前，後到的先搶到、發現自己不是頭又回去睡；頭進場之後如果不再叫，下一個就睡到自己的期限（審查 I1）
+                self._cond.notify_all()
         try:
             return job()
         finally:
