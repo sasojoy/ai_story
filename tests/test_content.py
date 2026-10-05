@@ -1741,6 +1741,9 @@ def test_a_trait_line_must_be_traditional_digit_free_and_not_blank(content, line
     "{who:>5}搶先出手。",  # 後面接格式
     "{who.name}搶先出手。",  # 取屬性
     "{who[0]}搶先出手。",  # 取索引
+    "{{who}}搶先出手。",  # 跳脫的大括號：format 之後會變成字面的 {who}，絕不是想要的
+    "{who}搶先出手{{。",
+    "{who}搶先出手}}。",
 ])
 def test_a_malformed_placeholder_is_a_content_error_naming_the_file_and_the_trait(content, line):
     """演出句之後會被 str.format(who=…, art=…, foe=…) 套上去（計畫六 Task 4）：載入時就要確定每個佔位都是乾淨的 who、art、foe，

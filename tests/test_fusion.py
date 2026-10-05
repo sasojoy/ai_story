@@ -1425,17 +1425,18 @@ def test_the_first_art_with_a_special_is_a_rumor_in_the_world(ready, content, wo
     assert again.id == art.id and not any("江湖上傳開了" in m for m in again_msgs)
 
 
-def test_the_special_rumor_of_a_blend_and_of_an_anonymous_walker(ready, content, world):
+def test_the_special_rumor_names_the_maker_even_when_walking_anonymously(ready, content, world):
     content.config.special_trait_chance = 1.0
     ready.player.anonymous = True
     ready.player.arts = ["lake_kick"]
     art, msgs = fusion.blend(ready, content, world, named("踏浪拳"), "basic_fist", "lake_kick")
     special = traits.special(content, art.special)
-    line = f"江湖上傳開了：某位少俠合出一門帶〔{special.name}〕的【踏浪拳】。"
-    assert line in msgs and "沈浪" not in line
+    line = f"江湖上傳開了：沈浪合出一門帶〔{special.name}〕的【踏浪拳】。"
+    assert line in msgs and "某位少俠" not in line
     (rumor,) = ready.world.rumors
-    # 世界層的傳聞一律具名（只有地方傳聞才有不具名）；匿名行走的人只是名字寫成「某位少俠」
+    # 世界層的傳聞一律具名、寫真正的名號（只有地方傳聞才有不具名）；匿名行走的人也一樣
     assert rumor.text == line and rumor.named is True and rumor.layer == "world"
+    assert art.creator_shown == "某位少俠"  # 首創者那一門自己寫的名號照匿名的規矩，這裡不動
 
 
 def test_a_special_rumor_survives_the_engine_save(game):

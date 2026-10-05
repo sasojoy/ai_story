@@ -171,12 +171,13 @@ def _special_and_note(content: Content, new_traits: list[str], key: str, tianji:
 
 def _special_rumor(state: GameState, content: Content, art: MartialArt, first: bool) -> list[str]:
     """第一次合出帶特別功效的武學：江湖上傳一句（13.4，不寫配方），也回給玩家看。後來照著合的人不再傳。
-    這是世界層的傳聞、標成具名（企劃者定：只有地方傳聞才有不具名這回事）；匿名行走的人，名字照規矩寫成「某位少俠」。"""
+    這是世界層的傳聞：具名（named=True），寫真正的名號、不照匿名行走改成「某位少俠」（企劃者定：只有地方傳聞才有不具名這回事）。
+    首創者那一門武學自己的 creator_shown 照舊（匿名的人合出來的，功法卡上還是「某位少俠」），這裡不動它。"""
     special = traits.special(content, art.special) if first else None
     if special is None:
         return []
-    line = f"江湖上傳開了：{display_name(state)}合出一門帶〔{special.name}〕的【{art.name}】。"
-    add_rumor(state, line, state.player.location, content=content)  # layer 預設 world、named 預設 True
+    line = f"江湖上傳開了：{state.player.name}合出一門帶〔{special.name}〕的【{art.name}】。"
+    add_rumor(state, line, state.player.location, content=content, named=True)
     return [line]
 
 

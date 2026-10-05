@@ -414,7 +414,10 @@ TRAIT_LINE_SLOTS = {"who", "art", "foe"}  # 演出句的三個佔位（S1：出�
 def _placeholder_problem(line: str) -> str | None:
     """演出句的佔位有沒有問題；沒問題是 None。之後 trait_line 用 str.format(who=…, art=…, foe=…) 把句子套上去，
     所以每一個佔位都要是乾淨的 {who}、{art}、{foe}（不接格式、不接轉換、不取屬性或索引），大括號要成對、不能有空的 {}；
-    載入時沒擋下的話，會在戰鬥打到一半才丟 ValueError、KeyError、AttributeError。"""
+    載入時沒擋下的話，會在戰鬥打到一半才丟 ValueError、KeyError、AttributeError。
+    連續的 {{ 與 }} 在 str.format 裡是寫出一個大括號的跳脫，但演出句裡不會有人真的要大括號，多半是寫壞了的佔位，一律擋下。"""
+    if "{{" in line or "}}" in line:
+        return "不能有連續的 {{ 或 }}（演出句裡用不到大括號本身，佔位只能是 {who}、{art}、{foe}）"
     try:
         parsed = list(string.Formatter().parse(line))
     except ValueError as e:  # 大括號沒有成對（{who搶先、多出來的 }）

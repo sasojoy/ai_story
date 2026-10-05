@@ -19,8 +19,8 @@ Lean = Literal["正", "邪", "無"]  # 武學與成長設計 7.3
 TRAIT_HOOKS = (  # 一般功效掛在遭遇戰的哪一步（武學與成長設計 13.2）；程式照這幾個實作
     "big_win", "luck_narrow", "difficulty_cut", "toll_cut", "win_reward", "win_heal", "luck_widen", "condition_floor",
 )
-SPECIAL_HOOKS = (  # 特別功效的掛點（13.4）：一個掛點只能有一個特別功效（身上的特別功效照掛點記，validate 擋共用），
-    # 所以新的特別功效要嘛換掉共用清單裡掛同一點的那一個、要嘛用新的掛點（要寫程式）；掛點只要在這幾個裡面就只要改內容
+SPECIAL_HOOKS = (  # 特別功效的掛點（13.4）：一個掛點只能有一個特別功效（身上的特別功效照掛點記，validate 擋共用）。
+    # 這 7 個掛點現在都被初版的 7 個特別功效佔了，所以新的特別功效要嘛換掉掛同一點的那一個、要嘛加新的掛點（要寫程式）
     "double_luck", "no_injury", "no_loss", "win_xinde", "power_from_difficulty", "heal_after", "train_stamina",
 )
 
