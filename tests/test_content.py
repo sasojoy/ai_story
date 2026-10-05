@@ -1654,3 +1654,62 @@ def test_the_free_text_and_bot_reward_lists_leave_lore_out():
 
     assert "lore" not in content.FREE_TEXT_REWARDS and "lore" not in bot_policy.REWARD_STATS
     assert {"str", "agi", "con", "wis"} <= set(content.FREE_TEXT_REWARDS)  # 另外四項不動
+
+
+# ── 序章（新手引導計畫一）────────────────────────────────
+
+def test_prologue_content_loads(prologue_content):
+    t = prologue_content.tutorial
+    assert t.location == "hut"
+    assert t.prologue_steps == 11
+    assert prologue_content.locations["hut"].prologue_only
+    assert [r.name for r in prologue_content.preset_recipes] == ["穿林腿", "坐山拳", "回瀾手", "烈爐拳"]
+    assert t.steps[7].force_tier == "險勝" and t.steps[7].give_art.level == 5
+
+
+def test_fixture_content_has_no_prologue(content):
+    assert content.tutorial.location is None and content.tutorial.prologue_steps == 0
+    assert content.preset_recipes == []
+
+
+@pytest.mark.parametrize("patch, message", [
+    (lambda t: t.update(location="lake"), "序章的地點"),  # lake 不是 prologue_only
+    (lambda t: t.update(prologue_steps=12), "prologue_steps"),
+    (lambda t: t["steps"][2].update(explore_event="nope"), "nope"),
+    (lambda t: t["steps"][7].update(force_tier="大敗"), "大敗"),
+    (lambda t: t["steps"][1].update(reveal=["tab:nowhere"]), "tab:nowhere"),
+    (lambda t: t["steps"][9].update(melt_only="nope"), "nope"),
+])
+def test_prologue_validation(prologue_root, patch, message):
+    edit_json(prologue_root / "tutorial.json", patch)
+    with pytest.raises(ContentError, match=message):
+        load_content(prologue_root)
+
+
+def test_prologue_only_location_needs_a_prologue(tmp_path):
+    root = copy_fixture(tmp_path)
+
+    def mark_cave(locs):
+        locs[2]["prologue_only"] = True  # cave
+
+    edit_json(root / "locations.json", mark_cave)
+    with pytest.raises(ContentError, match="prologue_only"):
+        load_content(root)
+
+
+def test_preset_recipe_names_are_checked(prologue_root):
+    def clash(data):
+        data[1]["name"] = data[0]["name"]
+
+    edit_json(prologue_root / "preset_recipes.json", clash)
+    with pytest.raises(ContentError, match="師門配方"):
+        load_content(prologue_root)
+
+
+def test_new_characters_get_the_current_onboarding_version(content, prologue_content):
+    from tianxia.state import ONBOARDING_VERSION, PlayerState, new_game_state
+
+    assert new_game_state(prologue_content, "甲").player.onboarding == ONBOARDING_VERSION
+    # 沒有序章的內容不蓋章：新引導的步數編號是序章之後才算數的（preflight F6），先蓋章會讓之後上線的舊存檔跳過換算
+    assert new_game_state(content, "甲").player.onboarding == 0
+    assert PlayerState(name="乙", location="town", stats={}, stamina=0).onboarding == 0  # 舊存檔讀進來沒有這個欄位
