@@ -63,7 +63,7 @@ def load_content(root: Path, profile: str | None = None) -> Content:
         skills=_index(SkillDef, _read(root / "skills.json")),
         materials=_index(Material, _read(root / "materials.json")),
         craft_names=CraftNames(**_read(root / "craft_names.json")),
-        check_lines=CheckLines(**_read(root / "check_lines.json")),
+        check_lines=_check_lines(root / "check_lines.json"),
         banned_names=_read(root / "banned_names.json"),
         sects=_index(Sect, _read(root / "sects.json")),
         characters=_index(CharacterDef, _read(root / "characters.json")),
@@ -157,6 +157,19 @@ def _orders(path: Path) -> OrdersContent:
         return OrdersContent(**_read(path))
     except ValidationError as e:
         raise ContentError(f"orders.json：{e}") from e
+
+
+def _check_lines(path: Path) -> CheckLines:
+    """content/check_lines.json（週末試玩 A，檢定選項的心裡話）：必備的檔；找不到、不是合法的 JSON、欄位寫錯都改報
+    ContentError 並指出是這個檔（S1 會手改 by_stat）。"""
+    if not path.exists():
+        raise ContentError(f"check_lines.json：找不到檔案（應該在 {path}）")
+    try:
+        return CheckLines(**_read(path))
+    except json.JSONDecodeError as e:
+        raise ContentError(f"check_lines.json：不是合法的 JSON：{e}") from e
+    except (ValidationError, TypeError) as e:
+        raise ContentError(f"check_lines.json：{e}") from e
 
 
 def _build(model, raw: dict):

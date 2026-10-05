@@ -245,3 +245,28 @@ def test_the_old_bow_shows_a_twenty_to_thirty_nine_line_to_a_fresh_character():
     label = choice_label(bow, state, content, world, key=f"{event.id}#{index}")
     pool = content.check_lines.by_stat.get("str", {}).get("20-39") or content.check_lines.generic["20-39"]
     assert any(label == f"{bow.text}（本人・臂力 5：{line}）" for line in pool), label
+
+
+# ── 檔案本身壞掉時，錯誤要指到這個檔 ───────────────────────
+
+
+def test_a_missing_file_is_a_content_error_that_names_the_file(tmp_path):
+    root = copy_fixture(tmp_path)
+    (root / "check_lines.json").unlink()
+    with pytest.raises(ContentError, match="check_lines.json"):
+        load_content(root)
+
+
+def test_a_malformed_hand_edit_is_a_content_error_that_names_the_file(tmp_path):
+    root = copy_fixture(tmp_path / "a")
+    edit_lines(root, lambda d: d.update(by_stat={"str": ["不是各段的對照"]}))  # 欄位型別不對：pydantic 會擋
+    with pytest.raises(ContentError, match="check_lines.json"):
+        load_content(root)
+    root = copy_fixture(tmp_path / "b")
+    edit_lines(root, lambda d: d.update(by_strength={}))  # 拼錯的欄位
+    with pytest.raises(ContentError, match="check_lines.json"):
+        load_content(root)
+    root = copy_fixture(tmp_path / "c")
+    (root / "check_lines.json").write_text('{"generic": {"80+": ["穩"],', encoding="utf-8")  # 漏了括號：不是合法的 JSON
+    with pytest.raises(ContentError, match="check_lines.json"):
+        load_content(root)
