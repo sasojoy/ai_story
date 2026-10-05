@@ -50,7 +50,7 @@ from .world_state import WorldStateStore, season_length_days
 
 HOUR = 3600
 DAY = 86400
-BULLETIN_MAX = 3  # 江湖頁最上面的公告卡最多放這一週的幾則大事（計畫 T2）
+BULLETIN_MAX = 3  # 江湖頁那排小標「大事」點開的面板最多放這一週的幾則大事（計畫 T2；以前是公告卡）
 AUDIENCE_HALL_FIGURES = 2  # 一個地點有幾位以上的大勢人物，交友就不直接找人、改按「求見」指名（企劃者 2026-10-03 決定）
 OFF_FRONT_NOTE = "沒在戰線上領兵，不受挑戰"  # 戰線空著的人物（董卓、趙弘、重挫退下的人）：挑戰按鈕寫這一句（PM 2026-10-05 定）
 SNUB_NOTE = "剛吃了敗仗，閉門不見"  # 挑戰本人打贏之後，他對打贏的人關上門（軍令文件 4.5）：求見、交友、挑戰的按鈕寫這一句
@@ -3640,6 +3640,7 @@ class Game:
             "anonymous": p.anonymous,
             "level": p.member.level,
             "location": c.locations[p.location].name,
+            "season": p.season_number,  # 第幾季；週次每一季都從 1 起，網頁記「看過哪一季哪一週的大事」要帶它
             "day": int(w.time // DAY) + 1,
             "clock": f"{int(w.time % DAY // HOUR):02d}:{int(w.time % HOUR // 60):02d}",
             "season_days": season_length_days(w, c),  # 這一季蓋章的季長（舊季照它自己的章，不跟著設定變）
@@ -3699,13 +3700,13 @@ class Game:
         }
 
     def bulletin(self) -> list[str]:
-        """江湖頁最上面的公告卡（Markdown）：這一週已經發生的大事，新的在前、最多 BULLETIN_MAX 則。
+        """江湖頁那排小標「大事」點開的本週大事（Markdown）：這一週已經發生的大事，新的在前、最多 BULLETIN_MAX 則。
         江湖紀錄裡的「江湖大事」只寫進剛好在場同步到的那個人，這張卡讓每個人都看得到。開關關著時是空的；
         休季時也是空的：結算卡已經列著這一季的每一件大事與結局（FB-046）。"""
         return [f"**{title}**\n\n{text}" for title, text in self._bulletin_events()]
 
     def _bulletin_events(self) -> list[tuple[str, str]]:
-        """公告卡上的（標題, 公告全文），新的在前、最多 BULLETIN_MAX 則。"""
+        """本週大事面板上的（標題, 公告全文），新的在前、最多 BULLETIN_MAX 則。"""
         w, c = self.state.world, self.content
         if not calendar.season_one_on(w, c) or w.ended:
             return []
@@ -3716,7 +3717,7 @@ class Game:
         return [(titles.get(eid, eid), r.text) for _, eid, r in done[:BULLETIN_MAX]]
 
     def _news_on_cards(self) -> set[str]:
-        """江湖頁的卡片上已經寫著全文的時刻表公告：平常是本週大事的公告卡，休季時是結算卡（結局與這一季的每一件大事）。"""
+        """江湖頁的卡片上已經寫著全文的時刻表公告：平常是本週大事（那排小標「大事」點開的面板），休季時是結算卡（結局與這一季的每一件大事）。"""
         w = self.state.world
         if w.ended and season_one(self.content, w):
             shown = {r.text for r in w.timeline.values()} | {w.ending_text}

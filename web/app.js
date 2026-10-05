@@ -577,14 +577,6 @@
     card.scrollIntoView({ block: "nearest", behavior: calm ? "auto" : "smooth" });
   }
 
-  // 公告的標題：伺服器給的每則是「**標題**＋空行＋全文」轉成的 HTML，標題在第一個 <strong> 裡（Game.bulletin）
-  function bulletinTitle(html) {
-    const box = document.createElement("template");
-    box.innerHTML = html;
-    const strong = box.content.querySelector("strong");
-    return (strong || box.content).textContent.trim();
-  }
-
   // 第一季濃縮版的「本週軍令」（計畫 T6；伺服器只送自己陣營的，散人沒有）：預設展開，收起來的狀態照週次記住
   function ordersHtml(list, week, convoy) {
     const done = list.filter((o) => o.done).length;
@@ -611,24 +603,28 @@
   // ── 江湖頁最上面的一排小標：態勢｜大事｜主線（正式版辛，PM 2026-10-06）──
   // 以前是三張各 44px 的摺疊卡疊在「剛剛」上面（連縫約 170px），打完一仗整排行動就被擠出第一屏。現在是一排 44px 的小標：
   // 點哪一個，它的內容就在這一排正下面攤開；同一時間只開一個，再點一次收起，點別的就換過去。內容跟以前摺疊卡裡的一樣
-  // （態勢：三條、收季規則、怎麼算的；大事：本週的公告；主線：主線與目標）。
+  // （態勢：三條、收季規則、怎麼算的；大事：本週的公告，標題與內文都在面板裡；主線：主線與目標）。
   // 每個小標都可以沒有：沒有態勢（開關關著，或休季由結算卡取代）、沒有大事、主線是空的就不畫那一個，三個都沒有整排不畫。
   // 計畫 guide-1（還沒併進來）之後會在序章把大事與主線一個一個藏起來（shown("board")／shown("quest")）：
   // peekParts 回傳的清單裡把那一塊換成 null 就行，peekHtml 會略過 null，其他不用動。
   // 展開哪一個記在 S.peekOpen（{ id, week }，帶著週次：換週就收回；輪詢重畫整頁也不會把開著的關掉）。
-  // 「大事」小標上有一個點：這一週有還沒打開看過的大事。看過的記在 S.boardSeen（名號、週次、則數），另存一份在 localStorage
-  // 當這個瀏覽器的方便（讀寫都包 try/catch，存不了就只記在這一頁）；換週沒有人看過，點又亮起來。
+  // 「大事」小標上有一個點：這一週有還沒打開看過的大事。看過的記在 S.boardSeen（名號、季、週次、則數），另存一份在 localStorage
+  // 當這個瀏覽器的方便（讀寫都包 try/catch，存不了就只記在這一頁）；換週沒有人看過，點又亮起來。週次每一季都從 1 起，
+  // 所以記的要帶季：上一季第 1 週看過的，下一季第 1 週的大事照樣亮點（status.season，見 Game.status_data）。
+  // 小標裡只有「大事 N」加這個點，不寫標題：428～440px 的手機一行放不下，整排會折成兩行（輪三審查）
   const PEEK_SEEN_KEY = "tx-board-seen";
   const peekWeek = (m) => (m.status && m.status.calendar ? m.status.calendar.week : 0);
+  const peekSeason = (m) => (m.status && m.status.season) || 0;
 
-  // 這個名號看過的大事：先看記憶體，沒有（或是別的名號留下的）再讀 localStorage；讀不到、格式不對都當沒看過
+  // 這個名號看過的大事：先看記憶體，沒有（或是別的名號留下的）再讀 localStorage（「季:週:則數」）；讀不到、格式不對（含舊的
+  // 沒有季的格式）都當沒看過
   function boardSeen(m) {
     const owner = m.status && m.status.name ? m.status.name : "";
     if (S.boardSeen && S.boardSeen.owner === owner) return S.boardSeen;
-    let seen = { owner, week: -1, count: 0 };
+    let seen = { owner, season: -1, week: -1, count: 0 };
     try {
-      const got = String(localStorage.getItem(`${PEEK_SEEN_KEY}:${owner}`) || "").match(/^(\d+):(\d+)$/);
-      if (got) seen = { owner, week: Number(got[1]), count: Number(got[2]) };
+      const got = String(localStorage.getItem(`${PEEK_SEEN_KEY}:${owner}`) || "").match(/^(\d+):(\d+):(\d+)$/);
+      if (got) seen = { owner, season: Number(got[1]), week: Number(got[2]), count: Number(got[3]) };
     } catch (e) { /* 讀不到就當沒看過 */ }
     S.boardSeen = seen;
     return seen;
@@ -636,14 +632,14 @@
 
   function markBoardSeen(m) {
     const owner = m.status && m.status.name ? m.status.name : "";
-    const seen = { owner, week: peekWeek(m), count: (m.bulletin || []).length };
+    const seen = { owner, season: peekSeason(m), week: peekWeek(m), count: (m.bulletin || []).length };
     S.boardSeen = seen;
-    try { localStorage.setItem(`${PEEK_SEEN_KEY}:${owner}`, `${seen.week}:${seen.count}`); } catch (e) { /* 存不了就只在這一頁有效 */ }
+    try { localStorage.setItem(`${PEEK_SEEN_KEY}:${owner}`, `${seen.season}:${seen.week}:${seen.count}`); } catch (e) { /* 存不了就只在這一頁有效 */ }
   }
 
   function boardUnseen(m, week) {
     const seen = boardSeen(m);
-    return seen.week !== week || seen.count < m.bulletin.length;
+    return seen.season !== peekSeason(m) || seen.week !== week || seen.count < m.bulletin.length;
   }
 
   // 三塊的小標與面板：{ id, label（給讀的人聽的整句）, chip（小標裡的字）, flag（要不要亮點）, panel（點開的內容） }；沒有就是 null
@@ -666,7 +662,7 @@
     return {
       id: "board",
       label: `本週江湖大事 ${m.bulletin.length} 則`,
-      chip: `<span class="peek-name">大事</span><b class="peek-count">${m.bulletin.length}</b><span class="peek-titles">${esc(m.bulletin.map(bulletinTitle).join("、"))}</span>`,
+      chip: `<span class="peek-name">大事</span><b class="peek-count">${m.bulletin.length}</b>`,
       flag: boardUnseen(m, week),
       panel: m.bulletin.map((b) => `<div class="bulletin-item">${b}</div>`).join(""),
     };

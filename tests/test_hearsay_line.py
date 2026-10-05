@@ -93,6 +93,24 @@ def test_the_folded_line_is_one_line_with_an_ellipsis_and_the_open_one_wraps():
     assert "white-space: normal" in opened and "overflow: visible" in opened
 
 
+def test_the_folded_line_leaves_the_left_padding_to_the_reduced_motion_bar():
+    """Reduce Motion 開著時，journal 的 .tx-new 改成左邊一條 3px 的金色條加 padding-left: 8px（讓字離條遠一點）。
+    折起來那一行的規則不能用 padding 簡寫（0,3,0 的權重會把左邊也歸零），條就蓋在「你」字上（輪三審查 Minor 2）：
+    只寫上下的 padding；不管有沒有開 Reduce Motion，條都不會壓到字。"""
+    from tianxia import journal
+
+    css = _css()
+    for selector in (r"\.battle-card \.tx-extra \.tx-hearsay", r"\.battle-card \.tx-extra \.tx-hearsay\.open"):
+        rule = re.search(rf"(?m)^{selector} \{{([^}}]*)\}}", css).group(1)
+        assert not re.search(r"(?<![-\w])padding\s*:", rule) and not re.search(r"padding-(left|right)", rule), selector
+    folded = re.search(r"(?m)^\.battle-card \.tx-extra \.tx-hearsay \{([^}]*)\}", css).group(1)
+    assert "padding-top: 7px" in folded and "padding-bottom: 7px" in folded and "margin: -5px 0" in folded
+    reduced = re.search(r"@media \(prefers-reduced-motion: reduce\) \{(.*?)\n\}", journal.CSS, re.S).group(1)
+    bar = re.search(r"\.tx-new \{[^}]*box-shadow: inset (\d+)px", reduced)
+    gap = re.search(r"\.tx-new \{[^}]*padding-left: (\d+)px", reduced)
+    assert bar and gap and int(gap.group(1)) > int(bar.group(1))  # 空出來的比條寬：條不壓字
+
+
 def test_the_page_wires_the_tap_and_the_keyboard():
     js = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
     assert 'case "hear-more": hearToggle(el); break;' in js

@@ -49,21 +49,13 @@ if (input.storage === "throw") { // 存不了瀏覽器的儲存空間（隱私�
   });
 }
 globalThis.document = {
-  createElement: () => ({ // bulletinTitle 用的 <template>：標題在第一個 <strong> 裡
-    set innerHTML(h) {
-      this.content = {
-        querySelector: () => { const t = h.match(/<strong>([\s\S]*?)<\/strong>/); return t ? { textContent: t[1] } : null; },
-        textContent: h.replace(/<[^>]+>/g, ""),
-      };
-    },
-  }),
   getElementById: (id) => (id === "peek" ? { set outerHTML(v) { dom.peek = v; } } : null),
   querySelector: () => ({ focus() {} }),
 };
 const S = { nowOpen: null, sceneOpen: false, moveMode: "walk", answering: false, peekOpen: null, boardSeen: null, main: input.m, ...input.S };
 const parts = [
-  ...["esc", "pct", "STANCE_NAMES", "idleMenu", "PEEK_SEEN_KEY", "peekWeek", "peekParts", "peekBlock"].map(konst),
-  ...["stanceBars", "bulletinTitle", "boardSeen", "markBoardSeen", "boardUnseen", "stancePeek", "boardPeek", "questPeek",
+  ...["esc", "pct", "STANCE_NAMES", "idleMenu", "PEEK_SEEN_KEY", "peekWeek", "peekSeason", "peekParts", "peekBlock"].map(konst),
+  ...["stanceBars", "boardSeen", "markBoardSeen", "boardUnseen", "stancePeek", "boardPeek", "questPeek",
     "peekHtml", "peekTap", "pageJianghu"].map(fn),
   // 不相干的畫法換成一行的假貨：要驗的是排在哪裡，不是它們自己長什麼樣
   `const splitChips = (html) => [html, ""], nowMore = () => "展開全文", followsMode = (id) => id.startsWith("move:");
@@ -156,8 +148,19 @@ def test_the_row_has_the_three_chips_in_order_with_the_stance_numbers(on):
     for side in ("guan", "huang", "haoqiang"):  # 三個數字各用自己陣營的顏色
         assert f'<b class="side-{side}">{status["stances"][side]}</b>' in stance["html"]
     assert "官軍 %d、黃巾 %d、豪強 %d" % tuple(nums) in stance["label"]  # 只靠顏色分不出誰是誰：讀的人聽得到名字
-    assert board["text"].startswith("大事2") and "2 則" in board["label"] and 'class="peek-titles"' in board["html"]
+    assert board["text"] == "大事2" and "2 則" in board["label"]  # 只有「大事 N」（有新的才多一個點），不寫標題
     assert quest["text"] == "主線"
+
+
+def test_the_board_chip_carries_no_title_text_but_the_panel_keeps_titles_and_bodies(on):
+    """大事的標題放在小標裡，428～440px 的手機上一行放不下、整排折成兩行，點掉亮點又跳回一行（輪三審查 Important 1）：
+    小標一律只有「大事 N」加一個點，不分螢幕寬窄；標題與內文都在點開的面板裡。"""
+    status = _status(on)
+    board = next(c for c in chips(run(view(status))) if c["id"] == "board")
+    assert "甲事" not in board["html"] and "乙事" not in board["html"] and "peek-titles" not in board["html"]
+    assert board["text"] == "大事2" and "甲事" not in board["label"]
+    _pid, body = panel(_open(view(status), "board"))
+    assert "<strong>甲事</strong>" in body and "<strong>乙事</strong>" in body and "甲事的公告。" in body and "乙事的公告。" in body
 
 
 def test_the_numbers_follow_the_status_not_a_fixed_text(on):
@@ -295,7 +298,7 @@ def test_the_board_chip_carries_a_dot_until_it_is_opened(on):
     assert 'class="peek-dot"' not in board(got["opened"])["html"]
     assert 'class="peek-dot"' not in board(got["closed"])["html"] and 'class="peek-dot"' not in board(got["redraw"])["html"]
     week = status["calendar"]["week"]
-    assert got["stored"] == [[f"tx-board-seen:{status['name']}", f"{week}:2"]]  # 這個瀏覽器的方便：週次與看過幾則
+    assert got["stored"] == [[f"tx-board-seen:{status['name']}", f"{status['season']}:{week}:2"]]  # 這個瀏覽器的方便：季、週次與看過幾則
 
 
 def test_a_new_week_or_a_new_event_lights_the_dot_again(on):
@@ -331,13 +334,39 @@ def test_events_that_arrive_while_the_board_is_open_count_as_seen_when_you_leave
 
 def test_a_remembered_seen_count_comes_back_from_storage(on):
     status = _status(on)
-    week = status["calendar"]["week"]
+    week, season = status["calendar"]["week"], status["season"]
     key = f"tx-board-seen:{status['name']}"
-    quiet = chips(run(view(status), stored={key: f"{week}:2"}))
+    quiet = chips(run(view(status), stored={key: f"{season}:{week}:2"}))
     assert 'class="peek-dot"' not in next(c for c in quiet if c["id"] == "board")["html"]
-    for stored in ({key: f"{week}:1"}, {key: f"{week - 1}:2"}, {f"tx-board-seen:別人": f"{week}:2"}, {key: "亂碼"}):
+    for stored in (
+        {key: f"{season}:{week}:1"}, {key: f"{season}:{week - 1}:2"}, {key: f"{season - 1}:{week}:2"}, {key: f"{week}:2"},  # 少看一則、別的週、別的季、舊格式
+        {f"tx-board-seen:別人": f"{season}:{week}:2"}, {key: "亂碼"},
+    ):
         lit = chips(run(view(status), stored=stored))
         assert 'class="peek-dot"' in next(c for c in lit if c["id"] == "board")["html"], stored
+
+
+def test_a_new_season_does_not_inherit_last_seasons_seen_count(on):
+    """週次每一季都從 1 起：上一季第 1 週看過的，下一季第 1 週的大事不能因此沒有點（輪三審查 Minor 1）。
+    記憶體裡的與 localStorage 裡的都一樣，記的是（季、週、則數）。"""
+    status = _status(on)
+    week, season = status["calendar"]["week"], status["season"]
+    key = f"tx-board-seen:{status['name']}"
+    script = """
+      H.peekTap("board"); H.peekTap("board");                        // 這一季看過了
+      const sameSeason = H.peekBlock(H.S.main);
+      H.S.main = { ...m, status: { ...m.status, season: m.status.season + 1 } };    // 下一季，週次一樣
+      const nextSeason = H.peekBlock(H.S.main);
+      H.peekTap("board");                                            // 下一季也打開看
+      return { sameSeason, nextSeason, opened: H.dom.peek, stored: [...H.store.entries()] };
+    """
+    got = run(view(status), script)
+    dot = lambda html: 'class="peek-dot"' in next(c for c in chips(html) if c["id"] == "board")["html"]  # noqa: E731
+    assert not dot(got["sameSeason"]) and dot(got["nextSeason"]) and not dot(got["opened"])
+    assert got["stored"] == [[key, f"{season + 1}:{week}:2"]]
+    # 重新載入頁面（記憶體沒了，只剩 localStorage）：上一季留下的值在下一季也不算看過
+    reloaded = run(view({**status, "season": season + 1}), stored={key: f"{season}:{week}:2"})
+    assert dot(reloaded)
 
 
 def test_everything_still_works_when_storage_throws(on):
@@ -414,18 +443,17 @@ def test_every_chip_is_at_least_44px_tall_and_the_row_never_cuts_a_number():
     assert "min-height: 44px" in chip and "white-space: nowrap" in chip
     row = re.search(r"(?m)^\.peek-row \{([^}]*)\}", css).group(1)
     assert "flex-wrap: wrap" in row  # 再窄的螢幕寧可折行，也不截斷態勢的數字
-    # 大事的標題文字先讓：預設不畫，夠寬（≥420px）才露；最窄（≤340px）連小箭頭也不畫
-    assert re.search(r"(?m)^\.peek-titles \{[^}]*display: none", css)
-    assert re.search(r"@media \(min-width: 420px\) \{\s*\.peek-titles \{[^}]*display: block", css)
+    # 最窄（≤340px）連小箭頭也不畫；大事的標題不在小標裡（428～440px 會折行），所以沒有依螢幕寬度顯示它的規則
     assert re.search(r"@media \(max-width: 340px\) \{[^}]*\.peek-chip::after \{[^}]*display: none", css, re.S)
     assert not re.search(r"\.peek-nums \{[^}]*overflow: hidden", css)  # 態勢的數字不能被截
+    assert "peek-titles" not in css and not re.search(r"@media \(min-width: 4\d\dpx\)", css)
 
 
 def test_the_old_folds_and_their_helpers_are_gone():
     js = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
     css = (ROOT / "web" / "style.css").read_text(encoding="utf-8")
     for dead in ("stanceBelowMenu", "stanceCardHtml", "S.boardOpen", "S.stanceOpen", "details.bulletin", "details.stances",
-                 'class="fold bulletin"', 'class="fold quest"', "lowCard", "topCard"):
+                 'class="fold bulletin"', 'class="fold quest"', "lowCard", "topCard", "peek-titles", "bulletinTitle"):
         assert dead not in js, dead
     for dead in ("details.fold.bulletin", "details.fold.stances", ".bulletin-head", ".bulletin-titles", ".stances-head", ".stances-nums"):
         assert dead not in css, dead

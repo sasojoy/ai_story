@@ -1288,6 +1288,19 @@ def test_past_notes_survive_a_quiet_season(content, world):
     assert player.state.player.past_notes == {"mate": "第一季的舊識"}
 
 
+def test_the_status_carries_the_season_number(content, world):
+    """網頁用它記「這個名號看過哪一季哪一週的大事」：週次每一季都從 1 起，不帶季就分不出上一季的第 1 週與這一季的第 1 週。"""
+    content.config.admins = ["管理者"]
+    admin = Game.new(content, "管理者", rng=random.Random(1), world=world)
+    player = Game.new(content, "玩家", rng=random.Random(2), world=world)
+    assert player.status_data()["season"] == 1
+    player.sync(100.0)
+    admin.admin_end_season(now=200.0)
+    admin.admin_next_season(now=300.0)
+    player.sync(400.0)
+    assert player.status_data()["season"] == 2
+
+
 def test_each_season_marks_where_its_own_dialogue_begins(content, world):
     """對話紀錄跨季保留：每次換季記下當時的長度，模型只看這之後的；第二次換季往後挪到第二季的尾巴。"""
     content.config.admins = ["管理者"]
@@ -5482,7 +5495,7 @@ def test_open_season_restamps_with_current_profile(content, world):
 
 def test_week_one_is_settled_the_moment_a_stamped_season_opens(content, world):
     """FB-040：開季那一刻（世界秒 0）就結算第 1 週週一 00:00 的大事，不必等到第一個曆時交界：時間軸、傳聞、江湖史、
-    公告卡都在，狀態列的下一件是第 2 週那件；再推進一個曆時不會重複結算。下一季開出來也一樣。"""
+    本週大事都在，狀態列的下一件是第 2 週那件；再推進一個曆時不會重複結算。下一季開出來也一樣。"""
     install_season_one(content)
     content.config.admins = ["管理者"]
     content.config.auto_open_first_season = False
@@ -5653,7 +5666,7 @@ def test_big_events_start_over_with_the_new_season(content, world):
 
 
 def test_skipped_events_stay_off_the_bulletin(content, world):
-    """張曼成已經退場：第 7 週秦頡那件記成跳過，公告卡只有同一週的盧植圍廣宗。"""
+    """張曼成已經退場：第 7 週秦頡那件記成跳過，本週大事只有同一週的盧植圍廣宗。"""
     install_season_one(content)
     game = Game.new(content, "沈浪", rng=random.Random(0), world=world)
     game.state.world.figures["zhangmancheng"] = FigureState(status="retired")

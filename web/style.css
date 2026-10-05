@@ -262,8 +262,10 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .battle-card p { margin: 3px 0; }
 .battle-card .tx-extra { margin: 3px 0 0; padding: 0 10px; line-height: 1.45; }
 /* 戰鬥卡片底下聽來的那一句「你聽到一件事：…」（FB-074；伺服器標 tx-hearsay，app.js 的 decorateHearsay 讓它能點）：
-   常有兩三行高、多撐 46～66px，收成一行、放不下加「…」，點了看全文。點擊範圍上下各多 7px、用負的 margin 吃回去，不多撐那一行 */
-.battle-card .tx-extra .tx-hearsay { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; padding: 7px 0; margin: -5px 0; }
+   常有兩三行高、多撐 46～66px，收成一行、放不下加「…」，點了看全文。點擊範圍上下各多 7px、用負的 margin 吃回去，不多撐那一行。
+   只寫上下的 padding，不用簡寫：Reduce Motion 時 journal 的 .tx-new 靠 padding-left 8px 讓字離左邊那條金條遠一點，
+   簡寫（權重比它高）會把左邊歸零、條就壓在第一個字上 */
+.battle-card .tx-extra .tx-hearsay { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; padding-top: 7px; padding-bottom: 7px; margin: -5px 0; }
 .battle-card .tx-extra .tx-hearsay.open { white-space: normal; overflow: visible; text-overflow: clip; }
 /* 「看完整戰報 ›」在「過程」那一行的中間（app.js 的 roundsFold）：不撐高那一行，點擊範圍上下各多 8px（約 38px 高）。
    沒有「過程」那一行的卡片（全服決戰、舊戰報）才接在卡片最後一段的句尾（withReportLink）：行內、不撐高那一行；
@@ -355,8 +357,9 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .front-bar.side-haoqiang > i { background: var(--rou); }
 /* 江湖頁最上面的一排小標「態勢｜大事｜主線」（正式版辛，PM 2026-10-06）：三張各 44px 的摺疊卡疊起來有 170px，打完一仗整排行動
    就被擠出第一屏；一排 44px。每顆至少 44px 高；點哪一顆，它的內容在這一排正下面攤開（.peek-panel），同一時間只開一個。
-   一行放得下三顆：375 寬約 330px 可用、320 寬約 270px。窄的時候先讓的是大事的標題文字（預設不畫，≥420px 才露），
-   再窄（≤340px）連小箭頭也不畫；態勢的數字永遠不縮、不截（nowrap），實在放不下整排折行，也不截字。
+   一行放得下三顆：375 寬約 330px 可用、320 寬約 270px。大事的小標一律只有「大事 N」加一個點、不寫標題（寫了，428～440px 的手機
+   一行放不下、整排折成兩行，點掉亮點又跳回一行）；最窄（≤340px）連小箭頭也不畫；態勢的數字永遠不縮、不截（nowrap），
+   實在放不下整排折行，也不截字。
    類別名稱獨一無二：.chip／.chips 是別處（人物、線索）在用的 */
 .peek { margin-bottom: 12px; }
 .peek-row { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -371,7 +374,6 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .peek-nums .side-huang { color: var(--gold); }
 .peek-nums .side-haoqiang { color: var(--rou); }
 .peek-count { color: var(--gold); font-variant-numeric: tabular-nums; }
-.peek-titles { display: none; }
 .peek-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--gang); }
 .peek-panel { margin-top: 6px; padding: 10px 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); max-height: 50vh; overflow: auto; }
 .peek-panel.board { border-color: var(--gold); }
@@ -381,9 +383,6 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .peek-panel > :last-child { margin-bottom: 0; }
 .stance-rule { margin: 0; font-size: 12px; line-height: 1.5; color: var(--ink); }
 .stance-how { margin: 2px 0 0; font-size: 11px; line-height: 1.5; color: var(--ink-2); }
-@media (min-width: 420px) {
-  .peek-titles { display: block; flex: 0 1 auto; min-width: 0; max-width: 9em; overflow: hidden; text-overflow: ellipsis; font-weight: 400; color: var(--ink-2); }
-}
 @media (max-width: 340px) {
   .peek-chip::after { display: none; }
 }

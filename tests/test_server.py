@@ -92,7 +92,7 @@ def _fixed(event_id: str, week: int, day: float = 0):
 
 
 def test_main_view_bulletin_this_week(monkeypatch):
-    """江湖頁最上面的公告卡：這一週已經發生的大事（Markdown 轉成 HTML），最多 3 則、新的在前。"""
+    """江湖頁那排小標「大事」點開的本週大事：這一週已經發生的大事（Markdown 轉成 HTML），最多 3 則、新的在前。"""
     content = server.CONTENT
     monkeypatch.setattr(content.config, "season_one", True)
     monkeypatch.setattr(content.config, "season_days", 2.5)
@@ -109,7 +109,7 @@ def test_main_view_bulletin_this_week(monkeypatch):
 
 
 def test_now_card_does_not_repeat_the_big_event_on_the_bulletin(monkeypatch):
-    """FB-046：時刻表大事補進江湖紀錄那一則，全文公告卡上已經有了，江湖頁的「剛剛」（now）不再寫一次，
+    """FB-046：時刻表大事補進江湖紀錄那一則，全文本週大事上已經有了，江湖頁的「剛剛」（now）不再寫一次，
     改放再前面那一則（這裡是開場那一則）；江湖紀錄頁（latest＋journal＋older）照舊從最新一則列起。"""
     content = server.CONTENT
     monkeypatch.setattr(content.config, "season_one", True)
@@ -130,7 +130,7 @@ def test_now_card_does_not_repeat_the_big_event_on_the_bulletin(monkeypatch):
 
 
 def test_season_one_off_changes_nothing(game, monkeypatch):
-    """開關關著（現在的試玩伺服器）：推進一週，時刻表不跑、狀態列沒有季曆、公告卡是空的。"""
+    """開關關著（現在的試玩伺服器）：推進一週，時刻表不跑、狀態列沒有季曆、本週大事是空的。"""
     monkeypatch.setattr(server.CONTENT, "timetable", season_one_events())
     assert server.CONTENT.config.season_one is False
     game.advance(7 * 86400)
@@ -3337,7 +3337,7 @@ def test_main_view_sends_the_season_result_only_when_season_one_rests(game, monk
 
 def test_resting_season_one_writes_the_ending_once(game, monkeypatch):
     """FB-046：休季時結局那句只在結算卡上：「剛剛」不再是季末那則公告（放再前面那一則）、場景寫所在的地方、
-    公告卡不畫（這一季的大事結算卡上都有）。江湖紀錄頁照舊列得到季末那則。"""
+    本週大事不畫（這一季的大事結算卡上都有）。江湖紀錄頁照舊列得到季末那則。"""
     monkeypatch.setattr(server.CONTENT.config, "admins", ["測試"])
     _season_one_now(game, monkeypatch)
     player = Game.new(server.CONTENT, "路人", world=game.world)
