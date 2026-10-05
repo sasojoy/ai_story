@@ -225,3 +225,22 @@ def test_practice_price_ignores_the_players_own_quality(state, content, world):
     content.config.practice_injury_chance = 0.0
     team.practice(state, content, world, "武學", random.Random(0))
     assert state.player.stats["xinde"] == 0 and state.player.member.wugong_level == 3
+
+
+# ── 練得動嗎（武學與成長計畫 T11：機器人與主畫面提示共用同一個條件）──────────────
+
+
+def test_can_practise_needs_a_worn_art_below_level_ten_and_enough_xinde(state, content):
+    member = state.player.member
+    state.player.stats["xinde"] = 100
+    assert not team.can_practise(state, content, "武學")  # 欄位空著
+    member.wugong_id, member.wugong_level = "basic_fist", 3
+    assert team.can_practise(state, content, "武學")
+    assert not team.can_practise(state, content, "內功")  # 另一欄還空著
+    member.wugong_level = team.MAX_LEVEL
+    assert not team.can_practise(state, content, "武學")  # 第十成練無可練
+    member.wugong_level = 3
+    state.player.stats["xinde"] = team.practice_price(content, 3) - 1
+    assert not team.can_practise(state, content, "武學")
+    state.player.stats["xinde"] = team.practice_price(content, 3)
+    assert team.can_practise(state, content, "武學")

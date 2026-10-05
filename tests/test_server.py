@@ -756,6 +756,120 @@ def test_the_forge_endpoints_survive_oddly_shaped_bodies(client):
     assert saved.arts == [] and saved.insights == ["feng", "huo"] and saved.stats["xinde"] == 100
 
 
+def test_forge_line_warns_about_an_insight_you_have_not_learned(client):
+    _player(client)
+    line = client.post("/api/forge_line", json={"art": "jichu_quanjiao", "insights": ["feng"]}).json()["line"]
+    assert "還沒悟到" in line
+
+
+def test_menxia_view_lists_owned_arts_insights_and_holdings(client):
+    _player(client)
+    game = server.game_for("沈青衫")
+    game.state.player.insights = ["feng"]
+    open_characters().save(game.state)
+    view = client.get("/api/menxia").json()
+    assert view["holdings"] == {"count": 3, "cap": 50}
+    assert [row["name"] for row in view["owned_arts"]] == ["基礎吐納", "基礎拳腳"]
+    assert view["insights"][0]["name"] == "風" and view["naming"] is None
+    assert view["slot_cards"][0]["price"] == 1
+
+
+def test_menxia_view_rows_carry_what_the_pages_need(client):
+    """每門武學一列：身上的在前、功法卡已轉成 HTML、修練與熔煉按不按得下去與為什麼；意境一列一個。"""
+    _a_player_with_insights(client)
+    view = client.get("/api/menxia").json()
+    breath, fist = view["owned_arts"]
+    assert (breath["worn"], fist["worn"], breath["kind"], fist["kind"]) == (True, True, "內功", "武學")
+    assert breath["level"] == 1 and breath["insight"] is None and breath["card"].startswith("<")
+    assert breath["cultivate"]["ok"] is False and "沒有融過意境" in breath["cultivate"]["note"]
+    assert breath["melt"]["ok"] is False
+    assert [(i["id"], i["name"], i["melt"]) for i in view["insights"]] == [("feng", "風", 10), ("huo", "火", 10)]
+
+
+def test_slot_prices_are_none_when_empty_or_at_the_tenth_level(client, monkeypatch):
+    monkeypatch.setattr(server.CONTENT.config, "starter_skills", [])  # 沒有開局送的武學：讀檔才不會把空著的欄位補回來
+    _player(client)
+    game = server.game_for("沈青衫")
+    game.state.player.member.wugong_id, game.state.player.member.wugong_level = "jichu_quanjiao", 10
+    game.state.player.member.neigong_id = None
+    open_characters().save(game.state)
+    cards = {c["kind"]: c for c in client.get("/api/menxia").json()["slot_cards"]}
+    assert cards["武學"]["price"] is None and cards["內功"]["price"] is None  # 第十成、還沒學
+    game.state.player.member.wugong_level = 9
+    open_characters().save(game.state)
+    cards = {c["kind"]: c for c in client.get("/api/menxia").json()["slot_cards"]}
+    assert cards["武學"]["price"] == 9
+
+
+def test_forge_cultivate_and_melt_through_the_endpoints(client):
+    _a_player_with_insights(client)
+    r = client.post("/api/menxia/forge", json={"art": "jichu_quanjiao", "insights": ["feng"]}).json()
+    assert "衍生出" in r["message"]
+    new = r["menxia"]["owned_arts"][-1]
+    assert new["insight"] == "風" and new["cultivate"]["ok"] and new["worn"] is False
+    r = client.post("/api/menxia/cultivate", json={"art": new["id"]}).json()
+    assert "修練" in r["message"]
+    assert open_characters().load("沈青衫").player.stamina < server.CONTENT.config.stamina_max  # 花了體力
+    r = client.post("/api/menxia/melt", json={"art": new["id"]}).json()
+    assert "熔成了心得" in r["message"]
+    assert all(row["id"] != new["id"] for row in r["menxia"]["owned_arts"])
+
+
+def test_melting_an_insight_through_the_endpoint(client):
+    _a_player_with_insights(client, xinde=0)
+    r = client.post("/api/menxia/melt_insight", json={"insight": "feng"}).json()
+    assert "化成了心得" in r["message"] and [i["id"] for i in r["menxia"]["insights"]] == ["huo"]
+    saved = open_characters().load("沈青衫").player
+    assert saved.insights == ["huo"] and saved.stats["xinde"] == 10
+    r = client.post("/api/menxia/melt_insight", json={"insight": "feng"}).json()  # 已經沒有了
+    assert "沒有這個意境" in r["message"]
+
+
+def test_the_naming_row_and_the_name_action(client):
+    """練成絕學的第一人：修練頁有等著取名的一列；定了名，那一列消失、武學的名字全服一起改。"""
+    _a_player_with_insights(client)
+    r = client.post("/api/menxia/forge", json={"art": "jichu_quanjiao", "insights": ["feng"]}).json()
+    art_id = r["menxia"]["owned_arts"][-1]["id"]
+    game = server.game_for("沈青衫")
+    game.state.player.naming = art_id
+    game.state.player.art_quality[art_id] = "絕學"
+    open_characters().save(game.state)
+    assert open_world().claim_master(art_id, "沈青衫")
+    view = client.get("/api/menxia").json()
+    assert view["naming"] == {"id": art_id, "name": view["owned_arts"][-1]["name"]}
+    assert view["owned_arts"][-1]["melt"]["ok"] is False and "先替它定名" in view["owned_arts"][-1]["melt"]["note"]
+    r = client.post("/api/menxia/name", json={"name": "旋風不歸腿"}).json()
+    assert "旋風不歸腿" in r["message"] and r["menxia"]["naming"] is None
+    assert r["menxia"]["owned_arts"][-1]["name"] == "旋風不歸腿"
+    assert open_characters().load("沈青衫").player.naming is None
+
+
+def test_a_bad_name_leaves_the_naming_right_in_place(client):
+    _a_player_with_insights(client)
+    r = client.post("/api/menxia/forge", json={"art": "jichu_quanjiao", "insights": ["feng"]}).json()
+    art_id = r["menxia"]["owned_arts"][-1]["id"]
+    game = server.game_for("沈青衫")
+    game.state.player.naming = art_id
+    open_characters().save(game.state)
+    assert open_world().claim_master(art_id, "沈青衫")
+    r = client.post("/api/menxia/name", json={"name": "a"}).json()
+    assert "不行" in r["message"] and r["menxia"]["naming"]["id"] == art_id
+
+
+def test_the_new_menxia_actions_survive_oddly_shaped_bodies(client):
+    """cultivate／melt／melt_insight／name 的 body 是客戶端寫的：什麼形狀都只會得到一句話，不會 500，也不會動到東西。"""
+    _a_player_with_insights(client)
+    bodies = ({}, {"art": 5}, {"art": ["jichu_quanjiao"]}, {"art": None}, {"insight": {"a": 1}}, {"insight": 7},
+              {"name": 5}, {"name": ["旋風腿"]}, {"name": None})
+    for op in ("cultivate", "melt", "melt_insight", "name"):
+        for body in bodies:
+            out = client.post(f"/api/menxia/{op}", json=body)
+            assert out.status_code == 200 and out.json()["message"], (op, body)
+    saved = open_characters().load("沈青衫").player
+    assert (saved.member.neigong_id, saved.member.wugong_id) == ("jichu_tuna", "jichu_quanjiao")
+    assert saved.insights == ["feng", "huo"] and saved.stats["xinde"] == 100 and saved.arts == []
+
+
 # ── 功法卡（FB-006）與功法庫先看卡再改練（QA L4）────────────────
 
 

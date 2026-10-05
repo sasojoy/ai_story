@@ -20,6 +20,19 @@ def owned_arts(state: GameState) -> list[str]:
     return [a for a in (member.neigong_id, member.wugong_id) if a] + list(state.player.arts)
 
 
+def level_of(state: GameState, art_id: str) -> int | None:
+    """擁有的一門武學練到第幾成：配在身上的看身上那一欄，功法庫裡的看換下來時存的（沒存過從第一成算，
+    跟 team.switch_art 一致）；不是自己的是 None。修練頁的資料列與功法卡共用這一份。"""
+    member = state.player.member
+    if art_id == member.neigong_id:
+        return member.neigong_level
+    if art_id == member.wugong_id:
+        return member.wugong_level
+    if art_id in state.player.arts:
+        return state.player.art_levels.get(art_id, 1)
+    return None
+
+
 def held_count(state: GameState) -> int:
     return len(owned_arts(state)) + len(state.player.insights)
 
@@ -119,15 +132,27 @@ def melt_refund(content: Content, level: int, quality: str) -> int:
     return int(spent * cfg.melt_refund_ratio) + cfg.melt_quality_bonus.get(quality, 0)
 
 
-def melt_art(state: GameState, content: Content, world: WorldStateStore, art_id: str) -> list[str]:
+def melt_problem(state: GameState, art_id: str, name: str | None = None) -> str | None:
+    """熔不掉的原因；None＝可以熔。熔煉鈕亮不亮（skillview.art_rows）與 melt_art 的拒絕走同一個判斷，
+    兩邊才不會各說各話。name 是這門武學現在的名字（寫進「先替它定名」那一句；不給就寫「這一門」）。"""
     p = state.player
     if art_id in (p.member.neigong_id, p.member.wugong_id):
-        return ["身上正在練的不能熔，先改練別的。"]
+        return "身上正在練的不能熔，先改練別的。"
     if art_id not in p.arts:
-        return ["你的功法庫裡沒有這一門。"]
+        return "你的功法庫裡沒有這一門。"
+    if art_id == p.naming:
+        # 練成絕學、等著定名的那門：熔了，讀檔清理會把取名權（p.naming）丟掉，而全服的第一人登記還在，
+        # 那門就永遠沒有人替它定名
+        return f"【{name or '這一門'}】是你練成絕學、還等著定名的武學——先替它定名，再談熔掉。"
+    return None
+
+
+def melt_art(state: GameState, content: Content, world: WorldStateStore, art_id: str) -> list[str]:
+    p = state.player
     art = team.player_art(state, content, world, art_id)
-    if art_id == p.naming:  # 練成絕學、等著定名的那門：熔了，讀檔清理會連取名權帶已登記的第一人一起丟掉
-        return [f"【{art.name if art else art_id}】是你練成絕學、還等著定名的武學——先替它定名，再談熔掉。"]
+    problem = melt_problem(state, art_id, art.name if art else art_id)
+    if problem is not None:
+        return [problem]
     level = p.art_levels.get(art_id, 1)
     refund = melt_refund(content, level, art.quality if art else "下品")
     p.arts.remove(art_id)

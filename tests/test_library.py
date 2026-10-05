@@ -208,3 +208,37 @@ def test_melting_an_insight_nobody_needs_has_no_warning(state, content, world):
     state.player.insights = ["huo"]
     msgs = library.melt_insight(state, content, world, "huo")
     assert not any("不能再修練" in m for m in msgs)
+
+
+# ── 熟練度與熔煉的共用判斷（武學與成長計畫 T11）──────────────────
+
+
+def test_level_of_reads_the_worn_slot_the_stored_level_or_nothing(state):
+    """一份查表給修練頁與功法卡共用：身上的看欄位、庫裡的看換下來時存的（沒存過從第一成算）、不是自己的是 None。"""
+    member = state.player.member
+    member.neigong_id, member.neigong_level = "basic_breath", 4
+    member.wugong_id, member.wugong_level = "basic_fist", 7
+    state.player.arts = ["lake_kick", "旋風腿"]
+    state.player.art_levels["旋風腿"] = 3
+    assert library.level_of(state, "basic_breath") == 4
+    assert library.level_of(state, "basic_fist") == 7
+    assert library.level_of(state, "lake_kick") == 1
+    assert library.level_of(state, "旋風腿") == 3
+    assert library.level_of(state, "ghost") is None
+
+
+def test_melt_problem_is_the_one_place_that_decides_what_cannot_be_melted(state):
+    """熔煉頁的按鈕與 melt_art 的拒絕共用同一個判斷：身上的、不是自己的、等著定名的都不行；其餘 None。"""
+    state.player.member.wugong_id = "basic_fist"
+    state.player.arts = ["旋風腿", "裂地腿"]
+    state.player.naming = "旋風腿"
+    assert "先改練" in library.melt_problem(state, "basic_fist")
+    assert "沒有這一門" in library.melt_problem(state, "ghost")
+    assert "先替它定名" in library.melt_problem(state, "旋風腿")
+    assert library.melt_problem(state, "裂地腿") is None
+
+
+def test_melt_problem_names_the_art_when_it_is_given_one(state):
+    state.player.arts = ["旋風腿"]
+    state.player.naming = "旋風腿"
+    assert "【旋風腿】" in library.melt_problem(state, "旋風腿", name="旋風腿")

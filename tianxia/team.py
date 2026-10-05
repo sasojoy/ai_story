@@ -193,6 +193,18 @@ def practice_price(content: Content, level: int) -> int:
     return content.config.practice_xinde_per_level * level
 
 
+def can_practise(state: GameState, content: Content, kind: str) -> bool:
+    """身上這一欄有武學、還沒第十成、而且付得起下一成的心得（練成花心得，設計 4.2）。
+    機器人要不要練（bot.can_practise）與主畫面的提示（skillview.practice_hint）共用這一個條件。"""
+    member = state.player.member
+    slot, level_slot = ("neigong_id", "neigong_level") if kind == "內功" else ("wugong_id", "wugong_level")
+    level = getattr(member, level_slot)
+    return (
+        getattr(member, slot) is not None and level < MAX_LEVEL
+        and state.player.stats.get("xinde", 0) >= practice_price(content, level)
+    )
+
+
 def practice(
     state: GameState, content: Content, world: WorldStateStore, kind: str, rng: random.Random,
 ) -> list[str]:

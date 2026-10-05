@@ -319,11 +319,18 @@ def menxia_view(game: Game, person: str | None = None) -> dict:
         # 功法庫通常只有幾門，卡一起送，點開不必再打一次 API（QA L4：先看卡再改練）
         "slot_cards": [
             {"kind": k, "card": md(game.skill_detail(k)), "learned": learned[k], "level": level[k],
-             "maxed": level[k] >= team.MAX_LEVEL}
+             "maxed": level[k] >= team.MAX_LEVEL,
+             # 練下一成要的心得（修練頁的鈕上寫給玩家看）；還沒學或已經第十成就沒有價錢
+             "price": team.practice_price(game.content, level[k]) if learned[k] and level[k] < team.MAX_LEVEL else None}
             for k in KINDS
         ],
         "arts": [{"label": label, "id": aid, "card": md(game.art_detail(aid))} for label, aid in game.art_library()],
         "forge_line": md(game.forge_line(None, [])),
+        # 武學與成長（修練頁、煉製頁）：持有數與上限、每門武學一列（身上的在前）、悟得的意境、等著取名的那一門
+        "holdings": game.holdings(),
+        "owned_arts": [{**row, "card": md(row["card"])} for row in game.art_rows()],
+        "insights": game.insight_rows(),
+        "naming": game.naming_row(),
     }
 
 
@@ -726,6 +733,10 @@ MENXIA_ACTIONS = {
     "heal": lambda g, b: g.heal(),
     "forge": lambda g, b: g.forge(*forge_args(b)),  # 一武學＋一意境＝合成，兩意境＝合併
     "switch": lambda g, b: g.switch_art(str(b.get("art") or "")),
+    "cultivate": lambda g, b: g.cultivate(str(b.get("art") or "")),  # 用融的意境修練一次，衝下一品
+    "melt": lambda g, b: g.melt_art(str(b.get("art") or "")),  # 功法庫裡的一門熔成心得
+    "melt_insight": lambda g, b: g.melt_insight(str(b.get("insight") or "")),
+    "name": lambda g, b: g.name_mastered(str(b.get("name") or "")),  # 第一個練成絕學的人替它取正式名字
     "join": lambda g, b: g.add_to_team(str(b.get("person") or "")),
     "leave": lambda g, b: g.remove_from_team(str(b.get("person") or "")),
 }

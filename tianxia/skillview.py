@@ -4,9 +4,10 @@
 """
 from __future__ import annotations
 
-from . import fusion, insights, materials, team
-from .library import held_count, holding_cap  # 不 import 整個 library 模組：這個檔案自己有一個叫 library() 的函式
-from .martial_arts import MAX_LEVEL, MartialArt, power_at
+from . import cultivation, fusion, insights, materials, team
+# 不 import 整個 library 模組：這個檔案自己有一個叫 library() 的函式
+from .library import held_count, holding_cap, level_of, melt_problem, melt_refund, owned_arts
+from .martial_arts import MAX_LEVEL, MartialArt, next_quality, power_at
 from .models import Content
 from .state import PLAYER, GameState
 from .world_state import WorldStateStore
@@ -26,15 +27,7 @@ def practice_hint(state: GameState, content: Content) -> str | None:
     xinde = state.player.stats.get("xinde", 0)
     if xinde < content.config.xinde_hint_threshold or state.world.ended:
         return None
-    member = state.player.member
-    todo = [
-        kind
-        for kind, slot, level_slot in (
-            ("內功", "neigong_id", "neigong_level"), ("武學", "wugong_id", "wugong_level"),
-        )
-        if getattr(member, slot) is not None and getattr(member, level_slot) < MAX_LEVEL
-        and xinde >= team.practice_price(content, getattr(member, level_slot))
-    ]
+    todo = [kind for kind in ("內功", "武學") if team.can_practise(state, content, kind)]
     parts = []
     if todo:
         parts.append(f"去「修練」練成{'、'.join(todo)}")
@@ -71,6 +64,52 @@ def forge_line(
     else:
         return f"**煉製**　放一門武學和一個意境，衍生出一門新武學（底留著）；或放兩個意境，合出新的意境。{count}。"
     return head if problem is None else f"{head}\n⚠ {problem}"
+
+
+def art_rows(state: GameState, content: Content, world: WorldStateStore) -> list[dict]:
+    """修練與煉製兩頁的武學清單：身上的在前，再來功法庫。每門一列：品質（自己那一份）、第幾成、融的意境、
+    修練與熔煉按不按得下去與為什麼。只讀狀態，不改東西。"""
+    p, member = state.player, state.player.member
+    rows = []
+    for art_id in owned_arts(state):
+        art = team.player_art(state, content, world, art_id)  # 自己那一份：品質照自己修練到的
+        if art is None:
+            continue
+        level = level_of(state, art_id)
+        insight = insights.resolve(art.insight, content, world) if art.insight else None
+        insight_name = insight.name if insight else None
+        problem = cultivation.cultivate_problem(state, content, world, art_id)
+        if problem is None:
+            target = next_quality(art.quality)
+            chance = cultivation.chance(content, target, p.art_mastery.get(art_id, 0))
+            note = f"{chance}% 晉為{target}・體力 {content.config.cultivate_stamina}"
+        else:
+            note = problem
+        stuck = melt_problem(state, art_id, art.name)  # 跟 library.melt_art 同一個判斷
+        rows.append({
+            "id": art_id, "name": art.name, "kind": art.kind, "quality": art.quality, "attribute": art.attribute,
+            "level": level, "worn": art_id in (member.neigong_id, member.wugong_id), "insight": insight_name,
+            "card": art_card(art, level, insight_name),
+            "cultivate": {"ok": problem is None, "note": note},
+            "melt": {
+                "ok": stuck is None,
+                "note": stuck if stuck is not None else f"退回心得 {melt_refund(content, level, art.quality)}",
+            },
+        })
+    return rows
+
+
+def insight_rows(state: GameState, content: Content, world: WorldStateStore) -> list[dict]:
+    """悟得的意境，照悟得的先後。"""
+    rows = []
+    for insight_id in state.player.insights:
+        insight = insights.resolve(insight_id, content, world)
+        if insight is not None:
+            rows.append({
+                "id": insight_id, "name": insight.name, "attribute": insight.attribute, "lean": insight.lean,
+                "note": insight.note, "melt": content.config.melt_insight_xinde,
+            })
+    return rows
 
 
 def art_library(state: GameState, content: Content, world: WorldStateStore) -> list[tuple[str, str]]:
@@ -177,27 +216,32 @@ def detail(state: GameState, content: Content, world: WorldStateStore, kind: str
     return art_card(art, level)
 
 
-def art_card(art: MartialArt, level: int) -> str:
-    """一門功法的功法卡（無限煉製設計 §8；FB-006）：名字・品質・屬性、目前熟練度與威力、
-    第一成／第十成的威力、來源，最後是煉製時模型寫的那句說明。
+def art_card(art: MartialArt, level: int, insight_name: str | None = None) -> str:
+    """一門功法的功法卡（無限煉製設計 §8；FB-006）：名字・品質・屬性（有傾向再加正邪）、目前熟練度與威力、
+    第一成／第十成的威力、來源與融的意境，最後是模型寫的那句說明。
 
-    來源分三種（FB-017）：煉製（origin == "crafted"）寫「煉製（某某 首創）」，creator 是第一個煉出這個配方的人；
-    取名自創（"created"）寫「自創（某某 所創）」；其他是本命武學。
+    來源（FB-017、武學與成長設計 3.4）：合成（origin == "fused"）寫「合成（某某 首創）」，creator 是第一個合出這個配方的人；
+    基礎武學（"basic"）寫「基礎武學」；舊資料的煉製（"crafted"）寫「煉製（某某 首創）」、取名自創（"created"）寫
+    「自創（某某 所創）」；其他是本命武學。insight_name 是這門武學融的意境的名字（沒融過就不給、不寫）。
     說明句只有真的有字時才有那一行：退路字表取名的功法、自創與本命武學都沒有說明，
     這時整行省略——不留空行、不出現 None（QA 寫進 FB-006 的驗收）。
     """
     nxt = "已達第十成" if level >= MAX_LEVEL else f"{power_at(art, level + 1):.1f}"
-    if art.origin == "crafted":
+    if art.origin == "fused":
+        source = "合成" + (f"（{art.creator} 首創）" if art.creator else "")
+    elif art.origin == "basic":
+        source = "基礎武學"
+    elif art.origin == "crafted":
         source = "煉製" + (f"（{art.creator} 首創）" if art.creator else "")
     elif art.origin == "created":
         source = "自創" + (f"（{art.creator} 所創）" if art.creator else "")
     else:
         source = "本命武學"
     lines = [
-        f"【{art.name}】{art.quality}・屬{art.attribute}",
+        f"【{art.name}】{art.quality}・屬{art.attribute}" + (f"・{art.lean}派" if art.lean != "無" else ""),
         f"第{level}成 {level_bar(level)}，威力 {power_at(art, level):.1f}（下一成：{nxt}）",
         f"第一成 {power_at(art, 1):.1f}　第十成 {power_at(art, MAX_LEVEL):.1f}",
-        f"來源：{source}",
+        f"來源：{source}" + (f"　意境：「{insight_name}」" if insight_name else ""),
     ]
     note = art.note.strip()
     if note:

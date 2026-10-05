@@ -57,9 +57,33 @@ def test_a_new_season_character_starts_with_the_starter_arts_again(content, worl
 
 
 def test_there_is_no_self_created_art_any_more(game):
-    """行為上也沒有：選單沒有自創，伺服器那一側的拒絕在 tests/test_server.py。"""
-    assert not hasattr(game, "create_skill")
-    assert not any("create" in o.id for o in game.options())
+    """行為上也沒有（審查 F18）：就算兩個欄位都空著、手上心得銀兩都有，選單也不給自創，硬送自創的選項 id 只會被擋回；
+    伺服器那一側的拒絕在 tests/test_server.py。"""
+    member = game.state.player.member
+    member.neigong_id = member.wugong_id = None
+    game.state.player.stats.update(xinde=500, silver=500)
+    listed = game.options()
+    assert not any("create" in o.id or "自創" in o.label for o in listed)
+    arts_before = library.owned_arts(game.state)
+    for option_id in ("act:create", "act:create_skill", "create", "act:craft"):
+        assert game.choose(option_id) == ["（此刻無法這麼做。）"]
+    assert library.owned_arts(game.state) == arts_before == []
+    assert (member.neigong_id, member.wugong_id) == (None, None)
+
+
+def test_the_menxia_pages_get_their_rows_from_the_game_facade(game):
+    """修練與煉製兩頁的資料都從 Game 這個門面拿（伺服器不直接碰 skillview）。"""
+    game.state.player.member.wugong_id = "basic_fist"
+    game.state.player.arts = ["lake_kick"]
+    game.state.player.insights = ["feng"]
+    assert game.holdings() == {"count": 3, "cap": library.holding_cap(game.content, 1)}
+    assert [r["id"] for r in game.art_rows()] == ["basic_fist", "lake_kick"]
+    assert [r["id"] for r in game.insight_rows()] == ["feng"]
+    assert game.naming_row() is None
+    game.state.player.naming = "lake_kick"
+    assert game.naming_row() == {"id": "lake_kick", "name": "湖邊腿法"}
+    game.state.player.naming = "ghost"
+    assert game.naming_row() is None  # 找不到那門武學：沒有東西可以取名
 
 
 def test_real_content_starts_with_enough_xinde_for_the_first_level():

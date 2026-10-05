@@ -361,3 +361,85 @@ def test_a_companions_card_ignores_the_players_own_quality(state, content, world
     world.update_companion("mate", lambda p: setattr(p, "wugong_id", "fist"))
     state.player.art_quality["fist"] = "下品"
     assert "武學　長拳（絕學・屬剛）第1成" in skillview.member_card(state, content, world, "mate")
+
+
+# ── 修練與煉製頁的資料列（武學與成長計畫 T11）──────────────────
+
+
+def test_art_rows_list_worn_arts_first_with_what_can_be_done(state, content, world):
+    state.player.member.wugong_id = "basic_fist"
+    state.player.arts = ["lake_kick"]
+    rows = skillview.art_rows(state, content, world)
+    assert [r["id"] for r in rows] == ["basic_fist", "lake_kick"]
+    assert rows[0]["worn"] and not rows[0]["melt"]["ok"]
+    assert rows[1]["melt"]["ok"] and "退回心得" in rows[1]["melt"]["note"]
+    assert not rows[0]["cultivate"]["ok"] and "沒有融過意境" in rows[0]["cultivate"]["note"]
+
+
+def test_art_rows_carry_what_the_pages_draw(state, content, world):
+    state.player.member.wugong_id, state.player.member.wugong_level = "basic_fist", 6
+    state.player.arts = ["lake_kick"]
+    state.player.art_levels["lake_kick"] = 3
+    worn, stored = skillview.art_rows(state, content, world)
+    assert (worn["name"], worn["kind"], worn["quality"], worn["attribute"], worn["level"]) == ("粗淺拳腳", "武學", "下品", "實", 6)
+    assert (stored["level"], stored["worn"], stored["insight"]) == (3, False, None)
+    assert "第6成" in worn["card"] and "基礎武學" in worn["card"]  # 功法卡跟著那一份的熟練度
+
+
+def test_art_rows_of_an_art_with_an_insight_say_the_odds_and_the_cost(state, content, world):
+    art = generate_from_name("旋風腿", "武學", "旋風腿", weights={"下品": 100.0, "中品": 0.0, "上品": 0.0, "絕學": 0.0}).model_copy(
+        update={"origin": "fused", "insight": "feng", "lean": "無"},
+    )
+    assert world.claim_skill_name(art)
+    state.player.arts = ["旋風腿"]
+    state.player.insights = ["feng"]
+    state.player.art_mastery["旋風腿"] = 2
+    (row,) = skillview.art_rows(state, content, world)
+    first, step = content.config.cultivate_odds["中品"]
+    assert row["insight"] == "風" and row["cultivate"]["ok"]
+    assert row["cultivate"]["note"] == f"{first + 2 * step}% 晉為中品・體力 {content.config.cultivate_stamina}"
+    assert "意境：「風」" in row["card"] and "合成" in row["card"]
+    state.player.insights = []  # 意境熔掉了：修練的按鈕講原因，不再說機率
+    assert not skillview.art_rows(state, content, world)[0]["cultivate"]["ok"]
+
+
+def test_the_art_awaiting_its_name_sits_in_the_library_but_cannot_be_melted(state, content, world):
+    """審查（Task 9）：練成絕學、等著定名的那門在功法庫裡，熔煉鈕要跟動作一樣擋住，並講原因。"""
+    state.player.member.wugong_id = "basic_fist"
+    state.player.arts = ["lake_kick", "basic_breath"]
+    state.player.naming = "lake_kick"
+    rows = {r["id"]: r for r in skillview.art_rows(state, content, world)}
+    assert rows["lake_kick"]["melt"]["ok"] is False and "先替它定名" in rows["lake_kick"]["melt"]["note"]
+    assert rows["basic_breath"]["melt"]["ok"] is True  # 其他庫裡的照樣能熔
+
+
+def test_art_rows_skip_an_art_nobody_can_find(state, content, world):
+    state.player.arts = ["ghost", "lake_kick"]
+    assert [r["id"] for r in skillview.art_rows(state, content, world)] == ["lake_kick"]
+
+
+def test_insight_rows_carry_name_attribute_and_melt_value(state, content, world):
+    state.player.insights = ["haoran"]
+    (row,) = skillview.insight_rows(state, content, world)
+    assert (row["name"], row["attribute"], row["lean"], row["melt"]) == ("浩然", "陽", "正", 10)
+    assert row["id"] == "haoran" and row["note"]
+
+
+def test_insight_rows_keep_the_order_they_were_learned_and_skip_unknown_ones(state, content, world):
+    state.player.insights = ["huo", "ghost", "feng"]
+    assert [r["id"] for r in skillview.insight_rows(state, content, world)] == ["huo", "feng"]
+
+
+def test_an_art_card_names_fused_and_basic_sources_and_the_insight():
+    fused = MartialArt(
+        id="旋風腿", name="旋風腿", kind="武學", quality="下品", attribute="快", base_power=10.0, top_power=30.0,
+        origin="fused", creator="沈浪", insight="feng", lean="正",
+    )
+    card = skillview.art_card(fused, 2, "風")
+    lines = card.split("\n")
+    assert lines[0] == "【旋風腿】下品・屬快・正派"
+    assert lines[3] == "來源：合成（沈浪 首創）　意境：「風」"
+    assert skillview.art_card(fused.model_copy(update={"creator": None}), 2).split("\n")[3] == "來源：合成"
+    basic = fused.model_copy(update={"origin": "basic", "lean": "無"})
+    assert skillview.art_card(basic, 1).split("\n")[3] == "來源：基礎武學"
+    assert skillview.art_card(basic, 1).split("\n")[0] == "【旋風腿】下品・屬快"  # 沒有傾向就不寫「無派」

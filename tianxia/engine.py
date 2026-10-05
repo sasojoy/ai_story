@@ -232,7 +232,7 @@ class Game:
         p.art_mastery = {k: v for k, v in p.art_mastery.items() if k in owned and v > 0}
         if p.naming is not None and (p.naming not in owned or self.world.master_of(p.naming) != p.name):
             p.naming = None
-        chains ={ch.id for ch in c.foreshadows.chains}  # 伏筆：內容改版後拿掉的鏈與物品
+        chains = {ch.id for ch in c.foreshadows.chains}  # 伏筆：內容改版後拿掉的鏈與物品
         items = {item.id for item in c.foreshadows.items}
         p.clue_items = {k: v for k, v in p.clue_items.items() if k in items and v > 0}
         p.fragments = {k: v for k, v in p.fragments.items() if k in chains}
@@ -2785,16 +2785,8 @@ class Game:
         """這個角色擁有的一門功法的功法卡（FB-006；功法庫先看卡再改練）。熟練度：配在身上的看身上
         那一欄，功法庫裡的看換下來時存的 art_levels（沒存過從第一成算，跟 team.switch_art 一致）。
         不是自己的、或內容與共用世界裡都找不到時回一句話。"""
-        member = self.state.player.member
-        if art_id == member.neigong_id:
-            level = member.neigong_level
-        elif art_id == member.wugong_id:
-            level = member.wugong_level
-        elif art_id in self.state.player.arts:
-            level = self.state.player.art_levels.get(art_id, 1)
-        else:
-            return "（找不到這門功法。）"
-        art = team.player_art(self.state, self.content, self.world, art_id)
+        level = library.level_of(self.state, art_id)
+        art = None if level is None else team.player_art(self.state, self.content, self.world, art_id)
         return "（找不到這門功法。）" if art is None else skillview.art_card(art, level)
 
     def member_card(self, key: str) -> str:
@@ -2805,6 +2797,25 @@ class Game:
 
     def bag_text(self) -> str:
         return skillview.bag_text(self.state, self.content)
+
+    def holdings(self) -> dict:
+        """武學與意境的持有數與上限（武學與成長設計 4.5）。"""
+        return {
+            "count": library.held_count(self.state),
+            "cap": library.holding_cap(self.content, self.state.player.member.level),
+        }
+
+    def art_rows(self) -> list[dict]:
+        return skillview.art_rows(self.state, self.content, self.world)
+
+    def insight_rows(self) -> list[dict]:
+        return skillview.insight_rows(self.state, self.content, self.world)
+
+    def naming_row(self) -> dict | None:
+        """等著自己取正式名字的那一門（第一個練成絕學）；沒有是 None。"""
+        art_id = self.state.player.naming
+        art = team.resolve_art(art_id, self.content, self.world) if art_id else None
+        return None if art is None else {"id": art_id, "name": art.name}
 
     # ── 戰鬥紀錄 ──────────────────────────────────────────
 

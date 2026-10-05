@@ -30,13 +30,7 @@ def wants_heal(game: Game) -> bool:
 
 def can_practise(game: Game, kind: str) -> bool:
     """身上這一門還沒第十成、而且付得起下一成的心得（練成花心得，武學與成長設計 4.2）。"""
-    member = game.state.player.member
-    slot, level_slot = ("neigong_id", "neigong_level") if kind == "內功" else ("wugong_id", "wugong_level")
-    level = getattr(member, level_slot)
-    return (
-        getattr(member, slot) is not None and level < team.MAX_LEVEL
-        and game.state.player.stats.get("xinde", 0) >= team.practice_price(game.content, level)
-    )
+    return team.can_practise(game.state, game.content, kind)
 
 
 def spend_xinde(game: Game, rng: random.Random) -> None:
