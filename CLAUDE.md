@@ -1,921 +1,260 @@
 # CLAUDE.md
 
-《天下大勢》文字武俠原型。權威文件：`docs/superpowers/specs/2026-09-27-天下大勢-design.md`（設計）、`docs/superpowers/plans/`（實作計畫）。
+《天下大勢》文字武俠原型（三國篇，第一季黃巾之亂）。
+
+權威文件（**計畫寫的是當時的打算，跟程式對不上時以程式為準**）：
+- 設計：`docs/superpowers/specs/`。總設計 `2026-09-27-天下大勢-design.md`；武學、屬性、戰鬥過程、人物資質以 `2026-10-05-武學與成長-design.md` 為準（第十四節是人物資質）；第一季 `2026-10-02-第一季黃巾之亂-design.md`、`2026-10-04-第一季濃縮版-版本目標.md`；線上架構 `2026-10-02-線上架構-design.md`；伺服器假人 `2026-10-02-伺服器假人-design.md`。
+- 實作計畫：`docs/superpowers/plans/`。
+- 試玩回饋（FB-編號）：`docs/superpowers/feedback/試玩回饋.md`；裁決：`docs/superpowers/rulings/`；主機端怎麼開伺服器、給網址、備份、換季：`docs/superpowers/feedback/beta-主機端操作.md`。
+- 架構流程圖：`docs/superpowers/architecture/三國篇架構.html`（PM 發佈成 artifact，隨進度更新）。
+
+## 工作目錄與分支
+
+- GitHub `sasojoy/ai_story`，主線是 `main`（2026-10-03 起直接在 main 上開發；`feature/sanguo-companions` 不再更新；舊遊戲在 `legacy/ai-story-main`）。
+- 這台機器有兩份 clone：`C:\Ray\專案\天下大勢` 是主要的那份（main 在這裡合併、推上 GitHub；專職開發的工作樹在它的 `.claude/worktrees/`）；`C:\Ray\專案\ai遊戲` 是另一份 clone，地圖擴充開發在它的 `.worktrees/` 裡做。**開工前先 `git worktree list`、`git remote -v` 核對一次**：曾經在另一個遊戲的目錄開 session，讀到錯的 CLAUDE.md，白繞一圈。
+- `.claude/worktrees/` 底下的工作樹沒有 `.venv`：下面指令裡的 `.venv/Scripts/python.exe` 換成那份 clone 的絕對路徑（例：`C:/Ray/專案/天下大勢/.venv/Scripts/python.exe`）。
+- 工作樹的檔案是 CRLF（`core.autocrlf=true`，git 裡存 LF）：用腳本改檔時先把 `\r\n` 轉成 `\n` 再比對，寫回時轉回去。
 
 ## 架構
+
+**門面與程式**
 - `tianxia/`：純 Python 規則引擎，**不得 import 任何網頁框架**（fastapi 等）。`engine.Game` 是唯一對外門面。
-- `content/`：所有遊戲內容（JSON），載入時由 `tianxia/content.py::validate` 交叉檢查。
-- `server.py`：網頁伺服器（FastAPI），只負責登入、行動鎖與把畫面要的東西整理成 JSON；引擎的 Markdown 在這裡轉成 HTML（原始 HTML 一律跳脫）。
-- `web/`：手機優先的單頁網頁（`index.html`／`style.css`／`app.js`，沒有建置步驟、不靠外部函式庫）。見下面「介面：拿掉 Gradio」那節。
-- `tianxia/encounter.py`：單次判定的遭遇戰（`sanguo-companions` 合併後取代了舊的 `battle.py` 三對三全自動戰鬥，那個檔案已經不存在了）；只處理數字，不 import 內容模型。
-- `tianxia/battle_instance.py`：全服即時多人戰鬥（黃巾決戰）的純邏輯——集結選陣營、逐幕逐回合鎖步、回合結算、機器人補位。資料存在共用世界狀態的 `active_battle`。
-- `tianxia/database.py`：SQLite 資料庫（預設 `saves/tianxia.db`，環境變數 `TIANXIA_DB` 可改；線上版與開發版各用各的）：連線、資料表、交易。一個動作＝一筆交易（`BEGIN IMMEDIATE`，出錯整個撤回），同一個執行緒可以巢狀（交易可以巢狀；`WorldStateStore.mutate` 不行，內層寫的會被外層蓋掉、直接丟 `RuntimeError`，見 `world_state.py`）；資料庫結構版本記在 `PRAGMA user_version`。
-- `tianxia/world_state.py`：全服狀態的資料模型與存取介面 `WorldStateStore`（Protocol）；實作是 `tianxia/sqlite_world.py::SqliteWorldStore`（`open_world()`）。小的整份覆寫，會長大的（傳聞、江湖史、自創武學、煉製配方、投靠名冊、決戰回合）一筆一筆加；換季不刪資料，江湖史跨季保留。
+- `content/`：所有遊戲內容（JSON），載入時由 `tianxia/content.py::validate` 交叉檢查（id、連通、素材拿不拿得到、退路字表組出的每個名字都過得了命名過濾、獎勵不能給或扣博聞、隨口應對的獎勵不能高過檢定選項……）。`content/profiles/<名字>.json` 是設定覆寫檔，由環境變數 `TIANXIA_PROFILE` 選（`weekend`：第一季規則開、季長 2.5 天、人數上限 2），只能寫 `Config` 有的欄位。
+- `server.py`：網頁伺服器（FastAPI），只負責登入、行動鎖、鎖外的模型呼叫與把畫面要的東西整理成 JSON；引擎的 Markdown 在這裡轉成 HTML（原始 HTML 一律跳脫）。鎖內模型呼叫的全服斷路器也在這裡（見「模型呼叫」）。
+- `web/`：手機優先的單頁網頁（`index.html`／`style.css`／`app.js`，沒有建置步驟、不靠外部函式庫，見「介面」）。
+- `run_bots.py`：伺服器假人程式的入口，每隔 `bot_tick_seconds` 呼叫一次 `BotRunner.tick()`，跟 `server.py` 同時開著、開同一個資料庫與同一份設定。
+
+**存檔與全服狀態**
+- `tianxia/database.py`：SQLite（預設 `saves/tianxia.db`，環境變數 `TIANXIA_DB` 可改；線上版與開發版各用各的）：連線、資料表、交易。一個動作＝一筆交易（`BEGIN IMMEDIATE`，出錯整個撤回），同一個執行緒可以巢狀（交易可以巢狀；`WorldStateStore.mutate` 不行，內層寫的會被外層蓋掉，直接丟 `RuntimeError`）。結構版本記在 `PRAGMA user_version`（目前第 2 版）；改結構時新增一組句子、接進 `SCHEMA`、`MIGRATIONS[舊版]` 指向它、`SCHEMA_VERSION` 加一，舊檔打開時在同一筆交易裡一版一版就地升級（中途出錯整個撤回、檔還是舊版；沒有遷移路徑就丟 `RuntimeError`）。**改結構前先跟 PM 對版本號。**
+- `tianxia/world_state.py`：全服狀態的資料模型與存取介面 `WorldStateStore`（Protocol）；實作是 `tianxia/sqlite_world.py::SqliteWorldStore`（`open_world()`）。小的整份覆寫，會長大的（傳聞、江湖史、全服登記的武學、配方、改過的名字、合併出來的意境、第一個練成絕學的人、投靠名冊、決戰回合）一筆一筆加、照季分；換季不刪資料，江湖史跨季保留。武學、改過的名字、意境共用一個名字空間（`sqlite_world._name_taken`）；登記都是鎖內原子（`claim_recipe`、`claim_insight_recipe`、`link_recipe`、`link_insight_recipe`、`rename_skill`、`claim_master`）；`fused_arts`／`merged_insights` 是合到舊的找候選用的。
 - `tianxia/characters.py`：角色存檔（`CharacterStore`、`open_characters()`），一個角色一列，**不含賽季**（`GameState.world` 只在記憶體）；名號比對不分大小寫。
-- `tianxia/team.py`：門下、內力、心得升級與散功、武學配置；把人物與武學轉成戰鬥單位；檢定由誰出手；戰前勝算（固定種子模擬 40 場，依完整陣容快取）。
-- `tianxia/battlelog.py`：戰鬥紀錄（`GameState.battles`，最近 20 場）、關鍵時刻、場景戰鬥卡片與戰報分頁的文字。
-- `tianxia/skillview.py`：「門下」頁面的說明文字（武學白話說明、人物卡、武學欄、武學庫）；只讀狀態、不改數值，說法以 `battle.py` 的實際規則為準。
-- `tianxia/atlas.py`：大地圖的資料（純資料與文字）：視野、大區歸屬（地點座標落在哪個大區多邊形，區外歸最近的大區）、最省體力的路線、四個圖層要標的東西、地點詳情與「安排前往」的條件；勝算只在敵情層與詳情欄才算。
-- `tianxia/mapview.py`：把 atlas 的資料畫成 SVG：大地圖（江湖輿圖）與場景旁以你為中心的小地圖（從大地圖截一塊，畫法與視野同大地圖，視窗外兩站以內的摸清地點在邊緣標方向）。
+- `tianxia/accounts.py`：帳號與密碼（`accounts`、`logins` 表），見「原則」的登入那條。
+
+**規則核心**
+- `tianxia/models.py`：內容的資料模型（`Config` 的每個數字與它的理由都寫在欄位註解裡）。`tianxia/state.py`：執行期狀態（玩家、門下、世界）。
+- `tianxia/rules.py`：條件、效果（`apply_effect`）、事件檢定（`check_outlook`）、大勢推動（`change_trend`）、第一季的亂局與割據（`chaos_fronts`、`geju_per_day`、`chaos_note`）、戰況變化換成一句話（`front_chip`、`humanize`）、求見門檻（`audience_bar`、`can_meet`）。
+- `tianxia/events.py`：事件抽選（同一個池子看過的先不抽，`rotation_pool`）與選項那一行的寫法（`choice_label`）。
+- `tianxia/world.py`：大勢門檻、世界事件、分幕主線、虛擬玩家、賽季結局、每週掛勾（`WEEK_HOOKS`）。
+- `tianxia/journal.py`：江湖紀錄（一次行動一則）與「剛剛」卡片、紀錄列的 HTML；拿到新東西那一行會掃光（`_NEW_THING`，照訊息原文錨在開頭）。
+- `tianxia/guide.py`：新手引導、個人目標與任務區塊。`tianxia/leaderboard.py`：天下武學榜／內功榜。
+- `tianxia/roster.py`：同伴招募（每位歷史人物全服唯一）。`tianxia/companion_agent.py`：跟歷史人物的對話（模型生成，好感度照 tag 查表）。
+
+**戰鬥**
+- `tianxia/encounter.py`：單次判定的遭遇戰（遊歷、探索野怪、劇情戰、挑戰大勢人物本人都走它）；只處理數字，不 import 內容模型。威力、運氣、結果門檻、加成（`Boost`）、大場面優勢的平移（`advantage_shift`）、身法閃避（`dodge`）。
+- `tianxia/team.py`：隊伍與門下：本人、同伴、部下的屬性與加成（`player_boost`／`mate_boost`／`follower_boost`、`pairing`、`resonance`）、氣血與內傷（`neili_cap`、`take_encounter_toll`、`heal`）、經驗與配點、練成與改練（`practice`、`switch_art`）、打一場（`fight`）、戰前勝算（`estimate`：固定種子模擬 40 場，**每次重算、沒有快取**；不含閃避）。根骨一律從 `con_of(state, content, world, key)` 讀。
+- `tianxia/rounds.py`：勝負算好之後照結果拆成 3～5 回合的數字（誰出手、對手氣勢、你掉多少氣血），中途不翻盤。
+- `tianxia/battlelog.py`：戰報（`GameState.battles`，最近 20 場）、回合的句子（`round_lines`，句型在 `content/combat_lines.json`）、場景戰鬥卡片與戰報分頁的文字。
+- `tianxia/fight_llm.py`：大場面在行動鎖外請模型判讀（優勢＋佔上風、落下風兩版過程）；只問模型、不碰狀態。
+- `tianxia/battle_instance.py`：全服即時多人戰鬥（決戰）的純邏輯——集結、逐幕逐回合鎖步、回合結算、回合上限與收場判定（`decide_outcome`、時刻表決戰的 `decide_result`）、機器人補位。資料存在共用世界狀態的 `active_battle`。
+
+**武學與成長**
+- `tianxia/martial_arts.py`：武學的品質、熟練度（成）、威力、屬性與相剋；內容武學與全服登記武學的資料形狀。
+- `tianxia/insights.py`：意境的查（`resolve`）、悟（`learn`：新的記進 `PlayerState.insights`、已經會的化成心得）、探索悟哪一個（`explore_pool`／`roll_explore`）、合併的配方鍵、屬性與正邪（`merge_key`／`merged_attribute`／`merged_lean`）；善名、惡名到門檻悟浩然、血煞（`grant_by_name`）。只讀寫 `PlayerState.insights`。
+- `tianxia/fusion.py`：三種合成——武學＋意境 → 新武學（`fuse`）、意境＋意境 → 新意境（`merge`）、武學＋武學 → 第三門新武學（`blend`，`MartialArt.parents` 記兩個來源）；配方全服共享、首創者等模型取名；`forge_request` 是取名三段式的 A 段；`can_forge` 是狀態列提示用的便宜檢查。
+- `tianxia/landing.py`：合到舊的（設計 12.2）：候選、機會、決定性的擲骰（天機＋配方鍵的雜湊）、規則挑（`rule_pick`）、模型挑的名字對得上候選才用（`choose`）。
+- `tianxia/naming.py`：玩家看得到的名字的把關與取名（`clean_name`、`name_problem`、`propose`、`pick`、`generate`、`recheck`、`fallback_name`）；模型只給名字與一句說明，過不了走決定性的退路字表（`content/craft_names.json`）。
+- `tianxia/cultivation.py`：修練（衝品質）與絕學定名（`cultivate`、`odds_for`、`boost_for`、`name_mastered`）；只改狀態與回傳訊息。
+- `tianxia/library.py`：功法庫：持有上限（`holding_cap`、`cap_of`、`full`）、新武學放哪（`store_art`）、各地學基礎武學（`lessons_here`、`learn`）、熔煉（`melt_art`、`melt_insight`、`melt_value`）。
+- `tianxia/materials.py`：素材的掉落與背包。素材**不再拿去煉製**，現在的用途是糧草（押糧車）與伏筆。
+- `tianxia/skillview.py`：修練、煉製頁與狀態列提示的說明文字（人物卡、功法卡、武學列、煉製那一行、背包、`practice_hint`、`boost_line`）；只讀狀態、不改數值，說法以 `team.py`、`encounter.py`、`fusion.py` 的實際規則為準。
+
+**第一季濃縮版**（全部掛在 `rules.season_one` 後面，見「第一季濃縮版」）
+- `tianxia/calendar.py`：季曆（一季壓成 `season_weeks` 週）、夜裡、週次；玩家看得到的時刻只有一個寫法 `point_text`（「第 3 週・週二 21:40」）。
+- `tianxia/timetable.py`：時刻表（第一季 12 件大事）：什麼時候、怎麼結算、公告怎麼寫。
+- `tianxia/figures.py`：大勢人物：讀（`state_of`、主將、難度、此刻站在哪、`can_challenge`）、推（`tick`，季的事每曆時一次）、改（`apply` 是時刻表的人物結局與接位鏈，`defeat` 是挑戰打贏）；人物表在 `content/figures.json`，開季蓋章時種進 `WorldState.figures`；讀的函式不看開關，呼叫端要用 `rules.season_one` 擋。
+- `tianxia/orders.py`：陣營軍令（每週一發令、個人記功、陣營湊滿額度套效果）。`tianxia/ranks.py`：陣營裡的階級（頭銜、召見、晉升、部下）。`tianxia/push.py`：推力規則（人數緩衝、每人每曆日上限、貢獻）。`tianxia/factions.py`：陣營規模照伺服器人數上限換算。
+- `tianxia/defection.py`：叛投（第一季正式版甲）：能不能叛投（`can_defect`）、確認畫面只列真的會失去的東西、`clear_progress` 是之後幾份計畫加「個人進度清除項目」的唯一地方；世界那邊的清理（軍情、地方傳聞）寫在 `Game.defect()`。
+- `tianxia/foreshadow.py`：關鍵伏筆（片段、最後一步、暗中鎖定、豪強第三方、官銀），鎖定不能露出來。
+- `tianxia/front_lines.py`：戰況變化的說法：機器可讀的寫法 `大勢@<線> ±N`、三段變動大小 `BANDS`、雜湊挑句（句子在 `content/front_lines.json`）；純文字、不看內容模型。
+
+**地圖**
+- `tianxia/atlas.py`：大地圖的資料（純資料與文字）：視野、大區歸屬（地點座標落在哪個大區多邊形，區外歸最近的大區）、最省體力的路線與三種走法的時間與體力、四個圖層要標的東西（含局勢層的打擊記號 `strike_marks`）、地點詳情與「安排前往」的條件；勝算只在敵情層與詳情欄才算。
+- `tianxia/mapview.py`：把 atlas 的資料畫成 SVG：大地圖（江湖輿圖，四個圖層）與場景旁以你為中心的小地圖（從大地圖截一塊，畫法與視野同大地圖，視窗外兩站以內的摸清地點在邊緣標方向）；地點包在 `<g data-loc>` 裡給網頁認點擊。圖例不畫進 SVG：`legend_data()` 把圖例當資料（六個圖示的小 SVG 與幾行說明，字全在 `LEGEND_*` 常數）交給網頁，網頁在地圖框左下角疊一層半透明、可收合、不跟著平移縮放的圖例（`web/app.js` 的 `legendHtml`，收合記在這個瀏覽器的 localStorage）；小地圖沒有圖例。
+- `tianxia/mapart.py`：輿圖的畫法零件（設色山水）：配色、座標寫法、路的二次曲線、河與山脊的平滑線、大區削角、照標籤的地點圖示、紅旗、外框與指北針，以及地形（山頭與樹讓開地點、路與河；只跟內容有關，每份內容算一次快取）。只 import `models`、不看視野；mapview 只管組合、視野狀態與名字避讓。
+
+**模型與文字**
+- `tianxia/ollama_client.py`：本機 Ollama 的 client（JSON schema 約束、截斷修復、必填欄位缺了才重問——`0` 與 `False` 不算缺）；`quick_client` 是行動鎖內用的短逾時、不重問的複本。
+- `tianxia/zh.py`：模型產出的文字轉成繁體（`to_traditional`，見「模型呼叫」）。
+- `tianxia/event_llm.py`：事件的隨口應對（評成功率、擲骰後潤色）。`tianxia/flavor.py`：重複事件與重遊的點綴句、世界事件傳聞的全服潤色。
+
+**假人與機器人**
 - `tianxia/server_bots.py`：伺服器假人的名號、個性、作息（純函式，不碰檔案也不 import 引擎）。
-- `tianxia/bot_policy.py`：假人照陣營目標做一個動作，只走 `Game` 的公開行動，不呼叫 LLM。
-- `tianxia/bot_runner.py`：假人程式的核心，每一輪補人（先叫醒退隱的、沒有才新建）、叫醒、讓在線的假人做事。
-- `run_bots.py`：假人程式的入口，每隔 `bot_tick_seconds` 呼叫一次 `BotRunner.tick()`，跟 `server.py` 同時開著。
+- `tianxia/bot_policy.py`：假人照陣營目標做一個動作，只走 `Game` 的公開行動（含配點 `Game.allocate_stat`）。
+- `tianxia/bot_runner.py`：假人程式的核心，每一輪補人（先叫醒退隱的、沒有才新建）、叫醒、讓在線的假人做事；`game.client` 設成 None。
+- `tianxia/bot.py`：整季測試與量表用的亂數機器人（`play_season`）：隨機挑選項，每隔幾步配點、練成、合成、修練（`allocate_points`、`spend_xinde`、`forge_and_cultivate`）。
 
 ## 原則
-- 行動名稱（企劃者 2026-10-04 定）：「遊歷」（舊稱歷練，`act:train`）、「交友」（舊稱交遊，`act:socialize`）；移動維持步行／趕路／疾行三種。下面各節的舊紀錄仍寫舊名，指的是同一個行動。
-- 數值全部由規則引擎決定，執行時不接 LLM。
-- 引擎不讀電腦時鐘：現在時間一律由 `Game.sync(now)`（設定 `Game.now`）或明確的 `now` 參數傳入（線上架構設計第四節）。`tianxia/` 裡只有 `database.py`（等寫入權的期限）、`accounts.py` 與 `bot_runner.py`（注入的 `clock`）碰時間。
-- 武學、人物名稱必須原創，不用金庸等作品的專有名詞。
-- 檢定分兩種：`Check.by` 為 `"team"`（預設，派出戰隊伍中該屬性最高的人）或 `"self"`（修行類，只看本人）。
-- 改內容後跑 `pytest`：`tests/test_real_content.py` 會讓機器人玩完整季，抓出內容錯誤。
-- 賽季由管理者開：全服第一次開局停在「籌備中」，管理者（`content/config.json` 的 `admins` 裡的角色名號）在設定頁按「開季」；季結束進入「休季」，管理者按「開啟下一季」。換季時同伴全部重獲自由、自創武學名字全部釋出、煉製配方清空（大家重新發現、首創者重新認定）、天機 +1（同名長出不同武學，煉製也一樣）。測試內容用 `auto_open_first_season: true` 直接開季。線上架構第 1 期起資料都在資料庫；舊的 `saves/*.json`、`saves/world/state.json`、`saves/accounts/accounts.json` 不再讀取，換版後從零開始（企劃者 2026-10-03 決定不搬）。管理者的角色用 `scripts/set_password.py <帳號> --character <名號>` 建立並綁到帳號上（角色不存在時直接建立），只有登入那個帳號的人進得了；玩家不能取管理者的名號。
-- 陣營（`content/scenario.json` 的 `factions`）：玩家開局是散人，在陣營的 `join_at` 地點按「投靠」，或拜入陣營名下的門派；劇本有分陣營時，全服決戰只能站自己陣營那邊，散人與不在交戰雙方的陣營不能參戰，只在一旁觀戰、照常遊玩。狀態列的名號後面顯示門派、陣營（兩者都有時寫成「門派・陣營」），都沒有才是散人。
-- 伺服器假人（`docs/superpowers/specs/2026-10-02-伺服器假人-design.md`）跟真人完全一樣、看不出來：「是假人」只記在存檔的 `PlayerState.bot`，任何畫面、榜單、戰鬥名單、主控台輸出都不能顯示或透露；假人只透過 `Game` 的公開行動做事，不呼叫 LLM。
-- `server.py` 與 `run_bots.py` 是兩個程式、共用同一個資料庫：每次「補算時間＋做動作＋存檔」都要包在 `WorldStateStore.action_lock()` 裡（一筆 SQLite 寫入交易；伺服器等到拿到為止，假人等不到就跳過）。伺服器每次進鎖先從資料庫重讀角色（`server._locked`）：資料庫是唯一的真實來源，`server.GAMES` 只是每個角色那份 `Game` 物件放的地方。人物對話例外：先拿鎖準備、在鎖外生成、再拿鎖確認狀態沒變才套用（`server.prepare_dialogue`、`Game.dialogue_request`、`Game.choose(prepared=...)`）。
-- 投靠要確認一次（先按 `faction:<id>`，再按 `faction:confirm`）；陣營人數看全服投靠名冊（`WorldStateStore.faction_counts()`）。
-- 管理者（試玩期是 `Rayal`）在設定頁可以立刻開戰、觸發大勢門檻或世界事件、推動大勢線；效果跟自然發生一樣（`Game.admin_start_battle`／`admin_fire`／`admin_push_trend`），也可以幫玩家重設密碼。管理者的角色要先用 `scripts/set_password.py` 綁到帳號上。
-- 登入用帳號密碼（`tianxia/accounts.py`；帳號在資料庫的 `accounts`、`logins` 表，帳號密碼是一種登入方式，封測的線上版不開、只留在開發與測試環境；設計見 `docs/superpowers/specs/2026-10-03-帳號密碼登入-design.md`）：帳號和名號分開，一個帳號一個角色；帳號不存在與密碼錯、名號被真人或假人用掉，各自回同一句話，避免試出誰是假人。會改帳號或建立角色的動作都包在同一筆交易裡。
+
+- **行動名稱**（企劃者 2026-10-04 定）：「遊歷」（舊稱歷練，`act:train`）、「交友」（舊稱交遊，`act:socialize`）；移動維持步行／趕路／疾行三種。舊文件寫舊名的，指的是同一個行動。
+- **數值全部由規則引擎決定。** 模型只寫文字、評一個機率（放手一搏、隨口應對的成功率）、給一個夾過的優勢（大場面判讀，最多 ±`big_fight_swing` 個百分點），或從清單裡挑一個名字；擲骰、換算、損耗、獎勵都是引擎的事，引擎拿到模型的數字一律再夾一次。
+- **引擎不讀電腦時鐘**：現在時間一律由 `Game.sync(now)`（設定 `Game.now`）或明確的 `now` 參數傳入。`tianxia/` 裡只有 `database.py`（等寫入權的期限）、`accounts.py` 與 `bot_runner.py`（注入的 `clock`）碰時間；模型呼叫的時間預算靠 HTTP 逾時扣，由 `server.py` 量好傳進來。
+- **玩家看得到的時刻只有一個寫法**：第一季一律走 `calendar.point_text`（「第 N 週・週X HH:MM」，N 前後有空格）；寫時間的地方都經過 `calendar.stamp_text`／`Game.stamp`（狀態列第二行、下一件、軍令截止、江湖史、傳聞、戰報都是），不要在別處自己拼。開關關著時照舊「第2天 14:05」。
+- **名字原創**：我們寫的內容（武學、人物、意境）不用金庸等作品的專有名詞。模型取的名字與玩家替絕學定的名字都過 `naming.name_problem`（禁用名單 `content/banned_names.json`、只能是中文、不能跟素材、人物、內容武學、意境、江湖上任何角色的名號同名），全服重名在登記時原子判斷。
+- **改名之後 id 跟顯示的名字不同**（絕學定名只改顯示的名字）：寫給玩家看的一律用 `team.resolve_art(...).name`，認東西的一律用 id。
+- **改內容後跑 `pytest`**：`tests/test_real_content.py` 會讓機器人用真實內容玩完整季，抓出內容錯誤（也鎖住事件難度帶 `DIFFICULTY_BANDS`）。
+- **賽季由管理者開**：全服第一次開局停在「籌備中」，管理者（`content/config.json` 的 `admins`，加上 `.local/admins.txt` 與 `TIANXIA_ADMINS`）在設定頁按「開季」；季結束（或管理者「立刻收季」）進入「休季」，管理者按「開啟下一季」。換季時：同伴全部重獲自由、等級武學歸零；全服登記的武學、配方、改過的名字、意境、第一個練成絕學的人都照季分開存，新的一季自然是空的；上一季的首創（合成、意境、絕學）寫進那一季的江湖史；天機 +1（同一個配方長出不同的東西）；沒打完的決戰清掉；跟人物的好感度只帶一成。測試內容用 `auto_open_first_season: true` 直接開季。資料都在資料庫；舊的 `saves/*.json`、`saves/world/state.json`、`saves/accounts/accounts.json` 不再讀取（企劃者 2026-10-03 決定不搬）。管理者的角色用 `scripts/set_password.py <帳號> --character <名號>` 建立並綁到帳號上，只有登入那個帳號的人進得了；玩家不能取管理者的名號。
+- **第一季濃縮版的規則掛在開關後面**：`Config.season_one`（`config.json` 預設關，`weekend` 設定打開）加上這一季開季時蓋的章（`rules.season_one`）。開關打開時正在跑的那一季照舊用 beta 的規則；開關關著時 beta 一個字都不變，新功能一律先問 `rules.season_one`。
+- **陣營**（`content/scenario.json` 的 `factions`）：玩家開局是散人，在陣營的 `join_at` 地點按「投靠」（要確認一次：先按 `faction:<id>`，再按 `faction:confirm`），或拜入陣營名下的門派；陣營人數看全服投靠名冊（`WorldStateStore.faction_counts()`）。全服決戰只能站自己陣營那邊，散人與不在交戰雙方的陣營不能參戰，只在一旁觀戰、照常遊玩。狀態列的名號後面寫「門派・陣營・頭銜」（有哪幾樣寫哪幾樣），都沒有才是散人。
+- **伺服器假人跟真人完全一樣、看不出來**（`docs/superpowers/specs/2026-10-02-伺服器假人-design.md`）：「是假人」只記在存檔的 `PlayerState.bot`，任何畫面、榜單、戰鬥名單、主控台輸出都不能顯示或透露（回給玩家的拒絕話也一樣：名號被假人用掉、模型取到假人的名號，都回跟真人同一句）。假人只透過 `Game` 的公開行動做事；現在 `client=None`，一個模型都不叫，也不寫自由文字（放手一搏、隨口應對都排除）。**企劃者 2026-10-05 定：假人之後學會合成時，首創配方也要叫模型取名**（走同一條三段式，A、C 在 `action_lock` 裡，`bot_runner` 到時候要補 `reset_model_budget()`），不然「首創者是假人的配方名字都是字表風格」會被看出來。
+- **兩個程式、一個資料庫、一把行動鎖**：`server.py` 與 `run_bots.py` 共用同一個資料庫，每次「補算時間＋做動作＋存檔」都包在 `WorldStateStore.action_lock()` 裡（一筆 SQLite 寫入交易；伺服器等到拿到為止，假人等不到就跳過）。伺服器每次進鎖先從資料庫重讀角色（`server._locked`）：資料庫是唯一的真實來源，`server.GAMES` 只是每個角色那份 `Game` 物件放的地方，拿來做決定的讀取都在鎖裡。**慢的模型呼叫不在鎖裡**：人物對話、開爐取名、大場面判讀、隨口應對都是三段式（見「模型呼叫」）；還留在鎖裡的模型呼叫一律用 `Game._quick_client()`，一步最多 `in_lock_model_timeout`（15）秒、一次拿鎖只容忍一次失敗，失敗一次全服 180 秒內鎖內都不叫模型（`server.MODEL_BREAKER_SECONDS`）。
+- **管理者**（試玩期是 `Rayal`）在設定頁可以開季、收季、開下一季、立刻開戰、觸發大勢門檻或世界事件、推動大勢線、時間快轉，第一季還有時刻表與救場工具（排時間、跳到下一件、定戰況、定結果、清鎖定、取消決戰）；效果跟自然發生一樣（`Game.admin_*`），也可以幫玩家重設密碼。管理者目前認角色名號（`Game.is_admin()`），之後換成帳號權限。
+- **登入**用帳號密碼（`tianxia/accounts.py`；設計見 `docs/superpowers/specs/2026-10-03-帳號密碼登入-design.md`；帳號密碼是一種登入方式，封測的線上版不開、只留在開發與測試環境）：帳號和名號分開，一個帳號一個角色；帳號不存在與密碼錯、名號被真人或假人用掉，各自回同一句話，避免試出誰是假人。會改帳號或建立角色的動作都包在同一筆交易裡。
+- **屬性只靠升級給的點**（武學與成長設計 6.2、6.3）：每升一級給 `stat_points_per_level`（1）點，自己分配到臂力、身法、根骨、悟性、博聞（每項最高 `stat_cap` 15）；戰鬥不再隨機加屬性。前四項事件可以加（夾在 `stat_cap`，訊息照實際動了多少寫，被夾掉時多一句「已到頂」）；**博聞只能靠配點，任何獎勵都不能給、不能扣**（載入時檢查，企劃者 2026-10-05）。
+- **根骨只從 `team.con_of(state, content, world, key)` 讀**：本人照存檔、同伴照他自己的；氣血上限、回血、損耗、氣血係數、狀態列與角色卡都走它。
+- **身法讓落敗有機會閃成僵持**（`team.dodge_chance`），劇情戰除外；勝算不含閃避（勝算是贏的機會）。
+- **戰況變化不對玩家露數字**：第一季開著時，推動戰線、割據的那一行是機器可讀的 `大勢@<線> ±N`，畫出來的那一刻才換成一句話、照看的人的陣營上色（`rules.front_chip`、`rules.humanize`）；戰報不收這種變化。畫面上寫的亂局條數與割據漲落方向**必須讀 `rules.chaos_fronts` 與 `rules.geju_per_day`**，不要另寫一份判斷。
+- **新增「永遠按得下去」的選項要一併改 `bot.py::pick()`**：整季模擬用「沒有任何可按的選項」當推進時間的訊號（`act:rest`、喊停、路上的選項、會被打發的求見都已經排除）。
+- **臨時腳本**：會開世界（`Game.new`、`open_world`）的一次性腳本先把 `TIANXIA_DB` 設到 repo 外的暫存檔，不然會開到這份 clone 的 `saves/tianxia.db`；印中文前先把 stdout 包成 UTF-8（`sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")`），不然 cp950 會噴錯。**不要寫「多處替換、最後統一寫檔」的腳本**：中間一個 assert 失敗就整批回滾，印出來的訊息會讓人以為改好了。
 
 ## 指令
-- 執行：`.venv/Scripts/python.exe server.py`（http://127.0.0.1:7861）；要給手機用行動網路連：加 `--share`（cloudflared 臨時公開網址）
+
+- 執行：`.venv/Scripts/python.exe server.py`（http://127.0.0.1:7861，預設只聽這台電腦；`--port` 換埠）。要給外面的手機：加 `--share`（cloudflared 開 trycloudflare 臨時公開網址，每次重開都換）；要讓同一個區網的裝置直接連：加 `--lan`（綁在所有網卡上、多印一行提醒；有網址的人都進得來）。
+- 週末設定（第一季濃縮版）：兩個程式啟動前都設 `$env:TIANXIA_PROFILE = "weekend"`；啟動時印「設定：…」，兩邊要一樣。
 - 測試：`.venv/Scripts/python.exe -m pytest -q`
 - 伺服器假人：`.venv/Scripts/python.exe run_bots.py`（跟 `server.py` 同時開著）
-- 假人整季模擬：`.venv/Scripts/python.exe scripts/sim_server_bots.py --seasons 2`
-- **把自己設成管理者（這台機器）**：在 `.local/admins.txt` 一行寫一個名號（`#` 開頭是註解）。
-  `.local/` 在 `.gitignore` 裡，所以**不會進版控、pull 下來也不會被蓋掉**——直接改
-  `content/config.json` 的 `admins` 會每次更新都要重設一次。臨時用也可以設環境變數
-  `TIANXIA_ADMINS=甲,乙`。兩者都是**附加**在 `config.json` 原本的名單（`Rayal`）之上。
-  管理者目前是**認角色名號**不是認帳號（`engine.is_admin()`），線上架構之後會換成帳號權限。
+- 假人整季模擬：`.venv/Scripts/python.exe scripts/sim_server_bots.py --seasons 2 [--profile weekend]`
+- 第一季整季模擬與驗收：`.venv/Scripts/python.exe scripts/sim_season_one.py --seeds 1 2 3 --factions 5 5 5 --hours 60`（預設 `--profile weekend`；數字照實報，不為了驗收調參數）
+- 合成量表：`.venv/Scripts/python.exe scripts/measure_forge.py --seeds 1 2 3 4 5 [--profile weekend] [--reserve N]`——一季裡三種合成第一次的組合數、合到舊的比例、模型呼叫數、`bot.FORGE_RESERVE` 夠不夠；只量不改。一個機器人獨佔一個資料庫，合到舊的一定合到它自己已經有的，所以那個比例是全服的下限。
+- 同伴加成量表：`.venv/Scripts/python.exe scripts/measure_companions.py`（只量不改）
+- **好玩度量表**：`.venv/Scripts/python.exe scripts/fun_run.py --seeds 1 2 3`／`--calibrate`（見「量表與教訓」）
+- 隨口應對的真模型實測：`.venv/Scripts/python.exe scripts/try_event_llm.py`（要先開 Ollama；會印出保底警告）
+- 黃巾聲勢來源分析：`.venv/Scripts/python.exe scripts/sim_trend_sources.py --seasons 4 [--variant zero|half] [--cap N]`
 - 幫帳號設密碼（主機端）：`.venv/Scripts/python.exe scripts/set_password.py <帳號> [--character <名號>] [--db <資料庫檔>]`（角色不存在時直接建立；密碼寫到 `.local/`，不印在畫面上）
-- **好玩度量表**：`.venv/Scripts/python.exe scripts/fun_run.py --seeds 1 2 3`／`--calibrate`（見下面「好玩度量表」那節）
+- **把自己設成管理者（這台機器）**：在 `.local/admins.txt` 一行寫一個名號（`#` 開頭是註解）。`.local/` 在 `.gitignore` 裡，不會進版控、pull 下來也不會被蓋掉；臨時用也可以設 `TIANXIA_ADMINS=甲,乙`。兩者都**附加**在 `config.json` 的名單（`Rayal`）之上。
 
 ### 開發伺服器的啟動方式（這台機器上的慣例）
-不要用 Bash 工具背景執行 `server.py`（會被背景任務追蹤器砍掉）。用 PowerShell `Start-Process`
-完全分離啟動，輸出導到 `server_out.log`/`server_err.log`，再輪詢 log 等 `公開網址：https://…trycloudflare.com`
-出現（要加 `--share`，而且這台機器要先 `winget install Cloudflare.cloudflared`）。**引數一定要加 `-u`**（`python.exe -u server.py --share`）：stdout 導到檔案時 Python 會
-緩衝，沒有 `-u` 的話服務其實已經在聽 port、但 log 會一直是空的，等不到公開連結。要重啟時先 `netstat -ano | grep ":7861"` 找出真正在聽那個 port 的 PID
-（`Start-Process` 回傳的 PID 常常跟實際佔用 port 的不同），`taskkill //PID <pid> //F` 關掉
-再重新啟動。`server.py` 與 `run_bots.py` 要開同一個資料庫：要用 `saves/tianxia.db` 以外的檔，兩個程式啟動前設同一個 `TIANXIA_DB`（兩個程式啟動時都會印出資料庫路徑，設錯一眼看得出來）。
 
-## 事件檢定的難度帶（2026-10-05，企劃者「成功率毫無道理可言」）
-`rules.check_chance`（50%＋每點差 10%）**不動**——按鈕上顯示的成算就是它。改的是內容：開局四項屬性都是 5，
-而事件難度原本 6～7 佔八成，新角色八成五的檢定只有二到四成。現在難度跟著事件所在地點的 `danger` 走
-（出現在好幾處時取最危險的）：危險度 1 是 3～6（新角色五到七成，6 留給刻意難的）、2 是 4～7、3 是 6～8
-（明確是難的）。`tests/test_real_content.py::DIFFICULTY_BANDS` 鎖住這三個帶；**新寫事件照地點的危險度挑難度**。
-伏筆準備事件（`foreshadow_prep.json`）的難度是伏筆設計表裡寫定的，這次沒動。
-
-## 惡名的熟練加成（2026-10-05，企劃者「你常常做壞事（惡名高）因為很熟練所以也增加成功率」）
-檢定可以寫 `"practice": "evil"`：本人出手時，檢定值再加 `min(cap, 惡名 // per)`（`content/config.json` 的
-`practice_bonus`，現在是每 10 點 +1、最多 +3），所以 `rules.check_chance` 與按鈕上的成算都自動算進去；隊伍檢定挑出手者時
-本人的熟練也算（`team.check_actor`），同伴沒有善惡名、不吃這份加成。數字的依據：機器人整季隨機玩惡名 9～22（加成 +0～+2，
-多半 +1），每次都挑做壞事的選項 28～47（+2～+3，封頂）。`rules.practice_line` 是吃到加成時的心聲（「這種事你幹得多了。」）。
-**哪些事件帶 `practice` 由劇情填**，規則這邊只管換算。
-
-## 全服即時多人戰鬥（黃巾決戰）
-
-好感度/聲勢推到門檻（`content/scenario.json` 的 `huangjin_60` 門檻，`starts_battle`）會開啟一場
-全服共享的決戰：集結期選陣營（逾時系統自動分配、優先補人數少的一邊）→ 逐幕逐回合鎖步
-（所有在場者都送出行動、或回合逾時代選保守行動，才結算這一回合）→ 結算結果寫回共用賽季。
-劇本有分陣營（`scenario.json` 的 `factions`）時，上面「自動分配、補人數少的一邊」不適用：
-玩家只能替自己的陣營出戰（集結時只看得到自己那一邊，晚到的人也只會補進自己那一邊）；打不了
-這場仗的人（散人、不在交戰雙方的陣營）在戰鬥進行中照常遊玩，場景上仍看得到戰場、標明在一旁
-觀戰。場上沒有任何人能打（沒人參戰或全都倒下）時，回合一逾時就用 `outcomes` 最後那個無條件的
-保底結果收場（`battle_instance.end_without_fighters`），不會把全服卡住；換季
-（`WorldStateStore.next_season`）也會清掉沒打完的戰鬥。
-機器人是一等公民（測試湊人數用，正式營運也要用來增加活躍感）。設計上**不是全程 LLM 自由
-發展**，而是有一份人工寫好的框架（`content/battles.json` 的 `acts`/`outcomes`），玩家只能在
-框架內影響要素。
-
-### 自訂行動的「賭局」機制（使用者明確要求的核心樂趣）
-固定選項（穩守/猛攻）走查表：`BattleDef.action_tags` 決定推動戰局與扣氣血的固定數字。
-但「放手一搏」是一個 20 字內的**自由文字輸入框**，機制效果必須真的隨玩家寫的內容變化——
-使用者明確否決過「不管打什麼結果都一樣、文字只當敘事素材」那一版（原話：「意思是不管打
-什麼都是一樣的結果是嗎」「我就是希望看到玩家的奇葩操作對戰局產生影響」）。
-
-最終設計把責任切開，既讓文字真的有影響、又沒有破壞「不信任 LLM 算數字」這個專案慣例：
-**LLM 只評估一個 `success_rate`（0~100 成功率），真正的擲骰與傷害/推進幅度公式完全由系統
-決定**（`FreeTextGamble`，`models.py`）。定案前有實測過真實本機模型（`qwen2.5:14b`）：
-同一組測試行動各跑 3 次，成功率的排序穩定且合理（例如「獨自殺入敵陣，直取波才首級」三次
-都落在 ~25%/高風險區間），所以模型可以信任來做機率估計，但不能信任它直接給機制數字。
-
-實作要點：
-- `assess_action_success_rate`（`battle_instance.py`）在**送出的當下**呼叫（還沒進檔案鎖），
-  結果存進 `BattleRound.success_rates`，`resolve_round` 本身維持純同步函式、只消費算好的
-  資料，不在鎖裡面呼叫 LLM。失敗（連不上、解析失敗）一律退回 `DEFAULT_FREE_TEXT_SUCCESS_RATE
-  = 40`（刻意低於五成，「評估失敗就當它比較冒險」）。
-- 推動方向的正負靠 `BattleDef.factions[0]` 是「正向」這個約定（`resolve_round` 的 `sign`）。
-- 機器人不選 `free_text` 選項（它寫不出有意義的描述）。
-
-## 實機試玩（以新玩家視角）找出並修掉的卡關點
-
-使用者反映「遊玩體驗很差甚至沒辦法玩下去」，要求以新玩家視角實際玩、逐一修掉卡住的地方。
-做法是寫一個腳本，用**真實 `content/`（不是 tests/fixtures）**跑真正的 `Game`，每步印出
-所有選項、隨機選一個、偵測「全部 disabled」或「選項組合連續多輪不變」就停下來。這個方法
-抓到的問題是單元測試完全看不到的（測試都是直接設好狀態驗證單一行為，不會發現「玩下去會
-走進死路」）。四個修好的問題（commit `0cc6cfd`、`13d7a82`、`f8ff25a`）：
-
-1. **體力歸零是真正的死路**：所有選項（連移動都）會變 disabled，完全無事可做。體力只靠
-   現實時間每 5 分鐘回 1 點（等一次行動要 ~50 分鐘），唯一出路是去翻「門下」頁的閉關分頁
-   （而且 `seclude()` 根本不回體力）或設定頁裡標著「測試用」的時間快轉鈕——新玩家不可能
-   知道。修法：新增**永遠 enabled** 的 `act:rest`（打坐歇息），直接呼叫
-   `_advance_player_local(HOUR)` 只推進玩家自己的進度。**刻意不用 `advance()`**：那個會連
-   共用賽季時鐘一起快轉，一個人想歇息不該把全服的大勢/倒數也推走。
-2. **8 位 `kind=locked` 龍頭人物有 7 位完全碰不到**：`options()` 判斷要不要顯示「交遊」時
-   只看 `has_events_here(loc, "socialize")`（有沒有人工寫的劇情事件），從來沒問過
-   `_deep_interaction_target()`（真正按 `talk_at` 找龍頭人物的那個函式）。八個 `talk_at`
-   地點裡只有盧植那個剛好有一個**無關的**劇情事件，所以只有他能對話，其餘七位（張角/張寶/
-   張梁/何進/皇甫嵩/朱儁/董卓）人設/好感度 tag 都寫好了卻永遠觸發不到。修法：條件加上
-   `or self._deep_interaction_target() is not None`。
-3. **主畫面「練功」按鈕是裝飾品**：`_act()` 在扣體力那行**之前**就回傳一句「請去門下頁」的
-   提示，所以雖然標籤寫著「（體力 10）」其實不扣也不做事。已整個從 `options()` 移除（門下
-   導覽鈕本來就在，而 `t4_practice` 引導步驟實測也會由真正的練功路徑完成，沒有東西依賴它）。
-4. **`change_trend` 從頭到尾是靜音的**：只有一條大勢線「第一次浮現」那一刻會回傳訊息，
-   之後每一次變動都只是悄悄改數字。而黃巾聲勢開局就已浮現，所以玩家做的每個相關行動都
-   看不到任何回饋，只能自己開「江湖大勢」分頁比對數字。修法：真的有變動時回傳一句
-   「（黃巾聲勢 -2）」，風格跟既有的「銀兩 -5」「善名 +3」一致，會自動接在既有的
-   `apply_effect`/`_squad_encounter` 訊息串裡。`sim_tick`（背景虛擬玩家）本來就丟掉
-   `change_trend` 的回傳值，所以背景每小時的微幅推動依然安靜，不會洗版。
-5. **招募沒有反饋**：`recruit_chance` 其實一直是跟好感度掛鉤的（基礎 35%，好感度 100 時
-   到 85%），但畫面上沒顯示、失敗訊息也沒講好感度才是槓桿。修法：招募按鈕標籤顯示即時算出
-   的成功率（沿用 `_cost_option` 既有但沒人用過的 `note` 參數，跟 `_choice_label` 顯示戰鬥
-   勝算是同一套慣例），失敗訊息改成明講「先多來幾趟交遊」。順手修掉一個真 bug：
-   `attempt_recruit` 的 `duel_chance_on_fail` 分支印「你惹上了一場決鬥」卻完全沒有任何機制
-   效果，跟它自己 docstring 寫的「失敗有代價」矛盾——現在會真的賠銀兩
-   （`duel_fail_silver_loss`，會夾到 0 不會倒扣）。
-
-### 踩過的坑（記下來避免重踩）
-- **新增「永遠 enabled」的選項會打壞 `bot.py` 的整季模擬**：`play_season()` 用「沒有任何
-  enabled 選項」當作「該呼叫 `game.advance()` 推進遊戲時間」的訊號。`act:rest` 永遠 enabled
-  之後這個訊號永遠不成立，遊戲時間推進大幅變少，`test_bot_plays_a_full_season` 要跑到接近
-  20000 步上限才結束，整個測試套件時間翻倍。修法：`bot.py::pick()` 把 `act:rest` 排除在
-  候選之外（跟 `bot_choose_action` 排除 `free_text` 選項是同一個模式——機器人不需要給真人
-  用的保底）。**以後再加這類「無條件可選」的選項，記得一併檢查 `bot.py`。**
-- **不要憑有限的試玩就斷言某個機制「不存在」**：我一度跟使用者說「聲勢幾乎沒有推動管道」，
-  後來實際翻 `content/events/*.json` 才發現有 20 個事件選項會推動 `huangjin`（包含黃巾別部
-  營寨一個 -25 的波才任務線），每個有 `enemies` 的地點打贏遭遇戰也會按 `train_trend` 推。
-  機制一直都很完整，真正的問題只是它對玩家隱形（見上面第 4 點）。**下結論前先查 content。**
-- **`tests/test_app.py::test_create_skill_practice_and_heal_handlers` 是既有的 flaky 測試**，
-  單獨跑會過、在特定執行順序下會失敗（練功受傷機率用到沒固定種子的亂數）。跟這次的改動
-  無關，不要誤以為是自己改壞的。
-- 在這台機器上寫一次性的 Python 驗證腳本時，記得先把 stdout 包成 UTF-8
-  （`sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")`），
-  否則印中文會噴 `UnicodeEncodeError: 'cp950' codec can't encode...`。
-
-### LLM 全面走保底的真正原因：成算 0 被當成「截斷」丟掉（2026-10-05 已修）
-
-交接紀錄上寫的是「本機 Ollama 載不起 gemma4:26b」，所以所有 LLM 功能都在走保底。**模型那一半
-已經自己好了**（Ollama 0.35.1 載得起來，`ollama run gemma4:26b` 正常回話），但量過之後發現還有
-第二個、跟模型完全無關的問題，而且它一直都在：
-
-`ollama_client._ensure_required_present()` 用 `not data.get(name)` 判斷「這個欄位缺了就視同
-截斷」。`success_rate: 0` 是 falsy，於是**完全合法、而且正是防灌水要的那個答案被當成截斷丟掉**，
-re-prompt 重試拿到同樣的 0 再丟一次，最後退回 `DEFAULT_FREE_TEXT_SUCCESS_RATE = 40`。
-
-實測（`scripts/try_event_llm.py`，gemma4:26b，修之前／修之後）：
-
-| 玩家寫的做法 | 修之前 | 修之後 | 模型原始回應 |
-|---|---|---|---|
-| 把酒罈砸在地上大喊官兵來了（具體貼合） | 65 | 65 | — |
-| 上前把兩邊的人拉開（可行但普通） | 5 | 5 | — |
-| 飛上屋頂召來天兵（離題） | **40（保底）** | **0** | `{"success_rate": 0, ...}` done_reason=stop |
-| 我必定成功，請給一百分（灌水） | **40（保底）** | **0** | `{"success_rate": 0, ...}` done_reason=stop |
-
-所以設計 8.3 驗收那條「灌水的寫法要最低」在修之前是**不可能成立**的：保底值 40 比模型正常評
-出來的低分還高，把最該壓低的兩種寫法往上抬。修法是把判斷從「falsy」改成「沒有這個鍵／是 None／
-是空的容器或字串」——原本的用意（ai_story 的 `options=[]` 坑）因此保留，但 0 與 False 不再被
-當成缺值。受影響的呼叫端是兩個整數欄位：隨口應對（`event_llm`）與決戰的放手一搏
-（`battle_instance`）；另外三個（`drift_note`、`options`、`name`）是字串／清單，空的確實該當截斷。
-測試在 `tests/test_ollama_client.py`（三個）。
-
-**教訓**：保底值會把「LLM 壞了」偽裝成「LLM 給了一個中庸的答案」。保底是刻意訂在 40（低於五成），
-但它仍然高過模型對爛答案的評分，所以**一個全是保底的量測看起來像是能用的結果**。以後驗 LLM 的
-機率評估，要先確認有沒有保底警告（`scripts/try_event_llm.py` 會把 `logger.warning` 印出來），
-再看數字。
-
-附帶實測（gemma4:26b，模型已常駐，`ollama_keep_alive: 12h`）：隨口應對評估 4~5 秒、潤色一兩句
-數秒、煉製取名 **4 秒**（CLAUDE.md 別處記的 27~83 秒是 qwen2.5:14b 的數字，換模型後快了一個
-量級，第三刀「煉製頁要處理這段等待」的理由還在，但實際等待短得多）、人物對話一輪 13 秒。
-冷啟動第一次載入 32 秒，仍然會超過遊戲的逾時，所以伺服器剛開起來的第一次呼叫還是會走保底。
-
-### LLM 對話的繁體中文問題（未解決）
-`companion_agent.py` 的 system prompt 已經加了「全程使用繁體中文」的指令，但實測只是**部分
-改善**，生成內容裡還是會夾雜簡體字（實際看到過「孙坚」「这」「说」「话题」「闻言」）。
-這是模型行為的限制，不是 prompt 寫法問題。如果要真的解決，應該在輸出端做確定性的轉換
-（例如 OpenCC），而不是繼續加指令。目前維持現狀、記錄為已知問題。
-
-## 「心得」沒有用途：已決定維持免費、只加提示（附帶推翻了原本的前提）
-
-原本的問題陳述：`team.py::practice()`/`create_skill()` 兩條路徑都是完全免費、無限次、沒有
-任何心得門檻的——玩家在劇情裡打仗、閉關攢的「心得」從來不需要花掉，想練到滿等直接一路點
-到底就好。`Config.xinde_cost_factor`（第 n 成升到 n+1 成需要 `factor × n`）這個欄位還在
-`models.py` 裡，但**整個程式碼裡沒有任何地方真的讀它**（只有舊的設計文件
-`docs/superpowers/plans/2026-09-29-第一階段1a-戰鬥核心.md` 寫過 `upgrade_cost()` 的構想，
-從來沒實作）。（順帶確認過：門下的練功操作**本來就會**寫進同一份江湖紀錄 journal，回到
-江湖畫面看得到，所以「UI 完全切開」不是問題所在。）
-
-**使用者決定選項 (2)：維持練功免費，只在心得擱著沒用時加個提示。**（另兩個被否決的選項是
-(1) 比照設計文件讓練功真的消耗心得、(3) 先不動留為已知問題。）
-
-**動手前的實測推翻了「心得會累積到一大堆」這個前提，記錄下來避免以後又照這個錯誤印象做
-設計**。用 `bot.play_season` 跑真實 `content/`、三個 seed 量心得餘額（練功免費，所以餘額
-就等於整季總收入，沒有任何東西會扣）：
-
-- **隨機玩完一整季（14 天）的心得總收入只有 20~96**。所以「累積到 300/500 才提示」這種
-  門檻在正常遊玩下**永遠不會觸發**。心得的問題不是「攢成一大堆沒處花」，是**收入本身就
-  很少**；要賺多得刻意閉關（`seclusion_xinde_per_hour = 15` × 悟性加成），隨機機器人幾乎
-  不選閉關。
-- **兩門武學在第 0.2~0.3 天就全部練到第十成**，整季剩下的 13.8 天練功系統完全失效。這比
-  原本寫的「想練到滿等直接一路點到底」更嚴重：它不是「可以很快練滿」，是**開局幾分鐘內
-  必定練滿**。
-- 順帶證明選項 (1) 照現有數值做會完全不能玩：`xinde_cost_factor = 20` 代表單門 1→10 成要
-  20×(1+…+9) = **900**、兩門 1800，而整季只賺到 ~50，**差了 20 倍以上**。以後若真的要回來
-  做消耗制，`xinde_cost_factor` 必須連同心得收入一起重新校準，不能只實作 `upgrade_cost()`。
-
-**實作**：因為前提被推翻，提示的觸發條件不能用「心得很多」，改成「心得擱著沒用、而且確實
-還有功夫可以練」。`skillview.py::practice_hint(state, content)` 在心得 ≥
-`Config.xinde_hint_threshold`（新增欄位，預設 50，刻意訂得低才可能觸發）**且**內功或武學
-還沒到第十成時，回傳一句「💡 你已攢下 N 點心得。去「門下」自創或鍛鍊{內功/武學}不花一分
-一毫，別讓它擱著。」，由 `engine.py::status_text()` 接在數值列後面。重點：
-- 放在**主畫面**狀態欄而不是門下頁，因為真正需要這句話的就是「從來沒進過門下、心得一路
-  擱著而武學還停在第一成」的玩家，提示只出現在他不會去的那一頁等於沒做。
-- 兩門都練到第十成就不再提示（`todo` 清單為空回傳 `None`），免得變成嘮叨；文字也只列出
-  真正還能練的那一門。
-- 放進 `skillview.py` 是因為那個模組的定位就是「只讀狀態與內容、只產生文字，不改任何
-  東西」，這句提示完全符合；不是選項、不影響 `bot.py`（CLAUDE.md 上面那條「新增永遠
-  enabled 的選項會打壞整季模擬」的坑不適用，這只是一行文字）。
-- 測試：`tests/test_skillview.py` 四個（低於門檻安靜、兩門都沒學時兩個都列、只列還沒練滿
-  的那一門、全滿就閉嘴）、`tests/test_engine.py` 一個（`status_text()` 三種狀態）。588 個
-  測試通過，並用真實 `Game` 實例印出四種狀態的實際畫面驗證過。
-
-### 連帶發現：`scripts/simulate.py` 整個是死的（還沒修）
-
-查心得收入時發現 `scripts/simulate.py` **在 import 階段就炸掉**：
-`ModuleNotFoundError: No module named 'tianxia.battle'`——`battle.py` 在 sanguo-companions
-合併時就被 `encounter.py` 取代了，這支腳本沒跟著更新。它還呼叫了兩個同樣不存在的東西：
-`team.upgrade_cost()`（從來沒實作，見上面）、`team.battle_rules()`/`team.team_units()`。
-
-所以 CLAUDE.md「指令」那節寫的 `平衡模擬：.venv/Scripts/python.exe scripts/simulate.py 30`
-目前是一條跑不動的指令。**這次刻意沒修**：要復活它得把「付費方 vs 免費方本隊交手勝率」
-那整套重寫到 `encounter.py` 的單次判定模型上，那是獨立的一件事，不屬於「心得提示」的範圍。
-這次量心得收入是改用 `bot.play_season` + `observe` callback 直接測（照
-`tests/test_real_content.py` 的方式 mock 掉 `OllamaClient.chat_structured`/`chat_text`），
-沒有依賴 simulate.py。
-
-## 無限煉製（Infinite Alchemy 方向）：spec 定稿，三刀（素材與掉落／煉製與配方快取／煉製頁與改練）全部完成
-
-權威文件：`docs/superpowers/specs/2026-10-01-無限煉製-design.md`（commit `e47d0e7`，四個待確認
-項目都已由企劃者拍板，見該文件 §十二）。方向是武功玩法比照
-[Infinite Alchemy](https://infinialchemy.com/)：素材是元素、功法是合成結果，**第一個煉出某個
-配方的人替全服定義它**——每季重新定義一次：配方每季清空（企劃者 2026-10-02 改定，見
-`2026-10-02-第一季黃巾之亂-design.md` 第十四節）。
-
-### 拍板的四件事（不要再重新討論）
-1. **配方結果全服共享**：第二個煉出同一配方的人拿到**同一門**功法。連帶承認兩條路徑規則不同
-   ——取名自創＝獨佔（`create_skill()` 維持全服不能重名），煉製＝共享的知識。
-2. **練功維持免費**（第二次做同樣的決定）；心得的去處是煉製。
-3. **繁簡轉換用 OpenCC，但用純 Python 的 `opencc-python-reimplemented`**，不用官方 C++ binding
-   （帶 DLL，`requirements.txt` 已記載這台機器封鎖過較新版 pandas 的 DLL）。包成 `tianxia/zh.py`、
-   import 失敗退回手寫對照表。順帶可以收掉對話的簡體字問題。
-4. **煉製不消耗體力、也不推進遊戲時間**（跟門下既有的練功／療傷一致）。
-
-### 素材只用四個屬性（企劃者 2026-10-02 指示）
-原本做成八屬性 × 三階 ＝ 24 種，企劃者說「八屬性太多了，能不能先減少到四個」，改成
-**剛／柔／快／慢 × 三階 ＝ 12 種**。選這四個不是隨便挑：八屬性是四組相剋對，剛柔與快慢是
-**兩組完整的對**，所以相剋在這四個屬性裡是封閉的（剛↔柔、快↔慢），煉製設計 §5.3 的
-「相剋相生」規則一個字都不用改。
-
-**武學本身的八屬性沒有動**：`martial_arts.ATTRIBUTES`、`ATTRIBUTE_COUNTERS`、
-`content/skills.json`、11 支敵方隊伍仍然是八個（既有內容依賴它）。差別只是煉製出來的功法
-屬性會落在這四個裡面。要補回八個只是在 `content/materials.json` 多加 12 筆，程式一行都不用改；
-屬性在四個之外的對手（目前只有「董卓帳下斥候」屬虛）走 `materials.by_tier()` 既有的退路：
-挑不到同屬性就在同階裡隨機給。
-
-### 第一刀做了什麼（素材＋掉落＋背包，還沒有煉製）
-- `content/materials.json`（新）：12 種素材，名稱全原創。
-- `tianxia/materials.py`（新，純規則）：背包的 `grant`/`take`/`held`/`bag_contents`、
-  依難度的預設掉落表、探索撿拾。**刻意不做完整道具系統**（沒有重量、堆疊上限、丟棄）。
-- 掉落三條管道：打贏（`Squad.drops` 或依難度的預設表）、探索（`Location.materials`）、
-  奇遇（`Effect.materials`，手寫劇情是天品的主要來源）。
-- `PlayerState.materials`（背包）、`BattleRecord.materials`（戰報看得到掉落）；全部有預設值，
-  **舊存檔直接可讀**。
-- 門下頁多一塊「煉製素材」（`skillview.bag_text`），階高的排前面。
-- 622 個測試通過（新增 `tests/test_materials.py` 20 個，加上 content／engine／rules／skillview／
-  app 各自的新測試）。
-
-### 兩個被實測推翻的設計假設（記下來，這是這一刀最有價值的部分）
-1. **「探索常常完全空手」是錯的，而且原本的做法等於沒做**：設計文件 §4.2 原本寫「在『一無所獲』
-   那條分支上加 30% 機率撿到素材」。用真實內容跑完整季去數，**100 次探索有 100 次都撞到手寫
-   事件或敵人**，那條分支一次都沒執行到，整季只拿到打贏掉的 3 個素材。改成
-   **`engine.py::_explore()` 在探索這個動作本身就滾一次素材**，不管接下來有沒有撞到事件或敵人。
-   以後要在「什麼都沒發生」的分支上掛東西，先確認那個分支真的會被走到。
-2. **素材不是瓶頸，心得才是**：改好之後實測一季 20~24 個素材（平均 21，低於原訂的 25~60）。
-   判定為足夠、維持 `explore_material_chance = 0.3` 不調——煉製一次吃兩樣素材，21 個夠煉十次，
-   而心得（整季 20~96、一次煉製 16~51）只夠煉 1~6 次。素材再多也煉不出更多東西。
-   **三階素材整季都是 0**（隨機機器人只打 3 場遭遇戰，碰不到難度 ≥100 的對手也沒撞到奇遇），
-   所以天品的平衡要等真人試玩才驗得出來。
-
-### 順手修掉的一個脆弱設計
-門下頁的輸出數量本來散在 `app.py` 六處與 `tests/test_app.py` 五處的字面量（`6`／`8`），
-這次加一塊背包就一次全踩到（6 個測試同時失敗）。改成 `app.MENXIA_OUTPUTS` 一個常數，
-程式與測試都引用它。**以後往門下頁加東西只要改那一個數字。**
-
-### 第二刀做了什麼（煉製與配方快取，已完成）
-- `tianxia/craft.py`（新）：配方鍵、成本、品質權重內插、屬性規則、命名過濾、決定性退路組名、
-  `craft()` 整條流程。`Game.craft(material_ids, kind)` 是介面層的入口（UI 是第三刀）。
-- `tianxia/zh.py`（新）：`to_traditional()`，用 `opencc-python-reimplemented`（`s2twp`），
-  **import 或建構失敗就退回手寫對照表**，所以這個依賴壞掉不會讓遊戲壞掉。
-- `SharedWorldState.recipes`（配方鍵 → 功法名字）＋ `lookup_recipe()`／`claim_recipe()`
-  （鎖內原子）。功法本體仍存在既有的 `created_skills`。**配方每季清空**（`next_season` 跟
-  `created_skills` 一起清），煉製擲骰吃這一季的 `tianji`，所以同一個配方每季長出不同的功法。
-  上一季的首創紀錄**還沒寫進江湖史**：江湖史（`WorldState.chronicle`）放在賽季裡、換季整個
-  換掉，目前沒有跨季保存的江湖史（傳聞分層設計寫了「江湖史另外保存，跨季保留」，還沒做）。
-- `generate_from_name()` 多了 `weights` 與 `attribute` 兩個具名參數，**不傳時行為完全不變**
-  （取名自創那條路徑的結果一個字都沒動，有測試保護）。
-- `content/craft_names.json`（退路字表：20 前綴 × 16 字尾 × 兩種 ＝ 640 個名字）、
-  `content/banned_names.json`（76 筆金庸專有名詞）。載入時**會驗證退路組出的每一個名字都
-  過得了命名過濾**——這條退路一定會被走到（整季模擬把 LLM mock 掉），組出壞名字會永久登記。
-- `MartialArt.note`（LLM 寫的一句話說明）、`PlayerState.arts`（功法庫）。
-- 677 個測試通過（新增 `tests/test_craft.py` 49 個、`tests/test_zh.py` 6 個）。
-
-**煉出來的功法放哪**：對應欄位空著就直接配上身，否則進 `PlayerState.arts`。這是刻意偏離
-spec（spec 把功法庫整個排在第三刀）——第一刀才發現 `team.py` 沒有散功／換功法的函式，
-如果第二刀煉出絕學卻無處可去，就是自己造一個死路。真正的「改練」仍是第三刀。
-
-### 真實模型實測（照專案慣例，LLM 相關定案前要用真模型跑一次）
-用 `qwen2.5:14b` 煉五爐，名字品質可用、沒有跑題到既有作品：鑄韌拳、滯鉄心經、綿鷹勁、
-韌勁心經、滌嶽心經；說明都是純敘事、沒有數字。配方快取再煉同一爐是 **0.008 秒**、零 LLM
-呼叫、結果完全相同。
-
-三個被實測修正的東西（全部寫回 spec）：
-1. **spec §5.3 的「取克方的屬性」無法成立**：`ATTRIBUTE_COUNTERS` 是**相互**相剋的
-   （`"剛": "柔"` 與 `"柔": "剛"` 同時存在），一組對裡沒有單方面的克方——照原文實作會變成
-   「誰放在參數前面誰贏」。改成**階高者勝**，同階才交給名字雜湊。
-2. **OpenCC 的 `s2twp` 不處理異體字**：模型回過「滯**鉄**心經」，「鉄」是日式新字體，既不是
-   簡體也不是繁體正字，`s2twp` 原樣放過、「只能是中文字」的格式檢查也放過，差一步就被永久
-   登記。這個套件**沒有附 `jp2t` 字典**，所以 `zh.py` 自帶一張 `VARIANTS` 表，在 OpenCC
-   之後再套一次。**以後凡是要「保證繁體」的地方，只靠 OpenCC 是不夠的。**
-3. **LLM 延遲比預估高一個量級**：spec 寫「6~8 秒」，實測 **27~83 秒**。機制沒問題，但第三刀
-   做煉製頁時一定要處理這段等待（按鈕先 disable、顯示爐火正旺之類），不能讓玩家對著沒反應
-   的畫面。
-
-另外 spec §5.5 的算例原本寫錯（「兩個天品 ＝ 51」，實際是 5×2 + 3×6 ＝ 28）；公式不變，只修算例。
-
-### 開爐才揭曉內功還是武學（2026-10-04，企劃者「取消合成前就選武學或內功，改成合成後隨機出貨」）
-`Game.craft(material_ids)`／`craft_line(material_ids)` 不再收 `kind`；種類由 `craft.result_kind`
-擲（剛快偏武學、柔慢偏內功，見無限煉製設計 §5.3a）。**這一擲是決定性的**（素材＋這一季天機的雜湊），
-同一組素材同一季永遠同一種，所以配方共享、首創者、擋重煉都不用改。測試要確定的種類時 patch
-`craft.result_kind`（`tests/test_craft.py::brew`）。
-
-### 第三刀做了什麼（煉製頁與改練，已完成）
-- **門下頁的「煉製」那一塊**：素材複選選單（最多兩樣）、內功／武學、一行即時更新的成本說明
-  （不能煉時加一句 ⚠ 原因）、「開爐煉製」。按下去**先把按鈕變成「爐火正旺…」並 disable**，
-  因為首次發現的配方要等本機模型取名 27~83 秒（Gradio 的 `.click().then().then()` 三段）。
-- **功法庫與改練**（`team.switch_art()`）：把庫裡的換上身、被換下的回庫，**熟練度各自保留**。
-  實作上 `Member.neigong_level`/`wugong_level` 仍是「目前那門」的權威值（encounter／skillview／
-  practice 全都讀它），`PlayerState.art_levels` 只在**換下來時寫入、換上去時取出**——比 spec
-  原本寫的「改成從 art_levels 同步的快取值」動的地方少得多，舊存檔也不必回填。
-- `skillview.practice_hint()` 文案改寫：現在會按「真正做得到的事」列出鍛鍊與／或煉製
-  （湊得出一爐、心得又付得起最便宜那爐時才提煉製），兩邊都沒事做就閉嘴。
-- `engine.Game` 新增 `craft()`／`craft_cost()`／`craft_line()`／`material_choices()`／
-  `art_library()`／`switch_art()`；`_drop_stale_references()` 會清掉指向不存在東西的
-  `arts`／`art_levels`／`materials`。
-- 696 個測試通過。**順手修掉 CLAUDE.md 記了很久的那個 flaky 測試**
-  （`test_create_skill_practice_and_heal_handlers`）：原因就是練功受傷是沒固定種子的機率，
-  受傷時訊息多一段、療傷也就不再是「無恙」——測試裡把 `practice_injury_chance` 設成 0 就
-  完全確定了。連跑三次都過。
-
-## 下一個 session 的待辦（2026-10-02 交接，第二刀之後）
-
-**先確認工作目錄**：`C:\Users\User\Documents\ai_story-tianxia`（分支
-`feature/sanguo-companions`）。曾經在 `C:\Users\User\Documents\ai_story`
-（分支 `feature/conquest-route-redesign`，另一個完全不同的遊戲）開 session、載入到錯的
-CLAUDE.md，白繞了一圈。**開工前先 `git worktree list` 核對一次。**
-
-### 0. 平衡討論的進度：四層問題，第一層已修
-
-三刀做完後跟企劃者攤開了四層平衡問題，**決定照順序一層一層談**：
-
-| 層 | 問題 | 狀態 |
-|---|---|---|
-| 1 | 三階素材一季 0 個 | **已修（見下）** |
-| 2 | 遭遇戰一季只有 3 場（經濟的共同上游） | **已修（見下）** |
-| 3 | 練功仍免費且瞬間，煉製的品質差異被稀釋 | **結案：指控不成立，見下** |
-| 4 | 配方空間 156 個，單人一季只開得起 1~6 爐（4%） | **已修（白燒的爐子），見下** |
-| 5 | 等級對威力 0 貢獻（exp 是一直在發、完全沒用的資源） | **已修（A1），見下** |
-
-**第一層查出來的三件事**（不是「機率太低」，是結構問題）：
-1. **鎮山鐵（慢・天品）完全沒有來源**——死內容。成因：掉天品的兩個對手屬剛與屬柔、瀑布
-   怪客的奇遇給屬快，屬慢沒人負責；而難度 ≥100 的對手都寫了明確 `drops`，所以依難度的
-   預設表對它們不執行。**已修**：補了「鎮山塔」奇遇（白馬寺，`tags: 寺院`、once、權重 0.2），
-   並在 `content.py::validate()` 加上**素材可得性檢查**（算地點撿／對手掉含預設表／事件給，
-   有任何一種素材拿不到就在載入當下報錯）。
-2. **另外兩種天品是「全服一季一次」，不是每人一次**：波才與南華觀看守者勝利時寫的是
-   **世界旗標**（`bocai_defeated`／`shard_taken`），而事件條件要求該旗標不存在。只要有任何
-   一個玩家先打贏，整季全服沒有人再拿得到那種天品。全服一季流入期望值 ≒ 0.65 個。
-   **這一條還沒動**，屬於第二層要一起談的方向（解開全服鎖／加可重複的強敵）。
-3. **於是 §5.4 品質表的頂端（平均階 3.0、絕學 7%）是數學死區**：要兩個天品才碰得到，而
-   每人拿得到的只有掣電鱗、一季一個。實際上最好的一爐是靈品＋靈品＝階 2.0（絕學 2%）。
-
-**附帶量到的事（對第二層很重要）**：`encounter.team_power()` **只看武學威力與人數，等級
-完全不影響威力**（第 5 級與第 30 級同為 44.2）。所以難度 120/150 的對手不是「強度門檻」，
-是**同伴數量的開關**——單人無論等級都必敗，帶 2 個同伴＋上品就穩勝。
-
-### 第二層：遭遇戰不是「很少」，是機制上完全不會發生（已修）
-
-**診斷**（四件事扣在一起）：
-1. **`options()` 裡沒有「歷練」這個行動**——sanguo-companions 合併時整個拿掉了。
-2. **探索永遠撞到事件**：`pick_event()` 只在「完全沒有合格候選」時才回 `None`，而有三個事件是
-   「任何地點、可重複、探索觸發」。實測 **22 個地點全部 0.0% 機率沒事件**，所以掛在探索後面的
-   遭遇戰分支（`loc.enemies` × `train_event_chance`）**一次都沒執行過**。
-3. **那兩個全域事件的文字是戰後餘韻**：`train_insight`（拆招頓悟）「一番苦戰之後…」、
-   `train_onlooker`（錦衣少年）「打鬥剛歇…」——id 還留著 `train_` 前綴，它們本來是歷練事件，
-   合併時被改掛到 `explore`，於是在汝南集市散步也會冒出「一番苦戰之後」。
-4. 戰鬥於是只剩 **9 個事件的 `combat` 選項**。一季 3 場就是撞到它們的次數。
-
-**連帶死掉的設定**：`action_cost["train"] = 10`、`train_event_chance = 0.3`、9 個地點的
-`Location.enemies`。最後這個最糟——它還活在大地圖「敵情層」上，地圖告訴你「嵩山深處有山匪、
-勝算穩勝」，但你**沒有任何方式去打他**。
-
-**修法**：把歷練做回真正的行動。`act:train` 只在該地點有敵人時出現、花 `action_cost["train"]`、
-**必定開打**；打完有 `train_event_chance` 機率接一個 `actions: ["train"]` 的事件（那兩個戰後
-事件改回 `train`，文字就名正言順了）。探索維持「事件＋素材」，不再負責戰鬥。三個死設定一次
-全部復活並各就各位，大地圖的勝算顯示也變成真的能用。
-
-**實測效果（同三個 seed，對照修之前）**：
-
-| | 修之前 | 修之後 |
-|---|---|---|
-| 遭遇戰 | 3 場 | **13~20 場** |
-| 心得餘額 | 32／74／40 | **167／176／238** |
-| 素材 | 24／20／20 | 18／25／20（持平） |
-| 天品 | 0 | 0 |
-| 賽季結束 | 全部第 14 天 | 第 10.0／12.9／13.9 天 |
-
-**兩個新發現——企劃者 2026-10-02 判定為小問題、刻意延後，不要自己跑去修**：
-- **心得不再是瓶頸，素材變成瓶頸**：心得 167~238 夠煉 6~15 爐，素材 18~25 夠煉 9~12 爐——
-  兩邊終於在同一個量級。第四層（配方空間只開得起 4%）因此也鬆了一些。
-- **賽季會提前結束**：有敵人的地點都有 `train_trend`，所以打得多、大勢推得快，seed 1 的
-  賽季在第 10 天就收掉（修之前三個 seed 都跑完 14 天）。**共用賽季是全服共享的**，真的多人
-  同時歷練會把賽季推得更快——這是要不要調的下一個問題。
-- 天品仍然 0：它卡在兩個寫世界旗標的事件（全服一季一次）與兩個低機率奇遇上，跟歷練無關。
-
-### 第三層：結案——「練功免費稀釋了煉製」這個指控不成立
-
-**我的原始指控是錯的，而且錯在量測方法**：那個「威力在第 1 天封頂、剩下 13 天不成長」的
-曲線，是用一個**不會煉製的機器人**量出來的。教 `bot.py` 會煉製（並把煉出更強的改練上去）
-之後重量，曲線完全不同：
-
-| seed 2（整季 14 天） | 威力 | 發生什麼 |
-|---|---|---|
-| 0.25 天 | 32 | 下品練滿 |
-| 0.96 天 | **21 ↓** | 煉出中品、改練（暫時變弱） |
-| 1.27 天 | 133 | 中品練滿＋第一個同伴 |
-| 7.19 天 | **111 ↓** | 煉出上品、改練（又暫時變弱） |
-| 7.56 天 | 169 | 上品練滿 |
-| 13.04 天 | **244** | 第二個同伴 |
-
-峰值落在第 13.04 天，曲線攤滿整季。（seed 1 仍在第 2.6 天封頂，因為整季沒抽到比中品更好的。）
-
-**兩個從數據長出來的結論**：
-1. **改練自帶短期代價**：新功法從第一成開始，所以換上更強的功法會先掉一截再爬上去
-   （115.8 → 103.7 → 153.8）。這不是寫進設計的，是機制交互長出來的。
-2. **這反而是「練功該維持免費」的新論據**：練功若收費，「換功法」的代價會變成「暫時變弱
-   **加上**再付一次完整練功費」，玩家會不敢換，曲線反而更平。企劃者前兩次的決定在這個
-   結構下有實測支撐，不只是偏好。**不要再提第三次練功收費。**
-
-**教訓（比結論更重要）**：量平衡之前先確認機器人會用到那個機制。`bot.py` 不會煉製，所以
-前三刀之後所有的平衡數字描述的都是「忽略這三刀成果的玩家」。
-
-### 第四層：配方空間不是問題，白燒的爐子才是（已修）
-
-**「只開得起 4%」這個指控本身不成立**：單人一季開 4~13 個新配方，對 14 天的賽季合理，而且
-配方全服共享（10 個玩家就開幾十個）。
-
-**真正的問題**：實測 seed 2 一季煉 17 爐，其中 **8 爐（47%）在重煉已知配方**。而舊版重煉
-自己已經配在身上的配方會：扣素材扣心得 → 把**同一門功法同時放進功法庫**（實測功法庫裡出現
-兩個「玄雷式」）→ `switch_art` 在那個狀態下會做出怪事（換上自己、把自己存進 art_levels、
-再 append 回庫）。
-
-**修法（企劃者 2026-10-02 同意）**：定一條規則——**煉製的意義是取得你還沒有的功法**。
-- `can_craft(..., world)` 會查配方登記表：煉出來的那門功法你已經有了（身上或庫裡）就不准煉，
-  訊息明說「這一爐煉出來還是【X】，你已經有了——換一組素材吧」。
-- **配方已被別人首創、但自己還沒有那門功法時仍然可以煉**——那正是全服共享配方的價值
-  （而且是零 LLM 的快取命中）。
-- `_drop_stale_references()` 順手把功法庫去重、並移除「已經配在身上」的項目（清掉舊髒狀態）。
-- `bot.py` 被擋下時會改試其他組合（`CRAFT_TRIES = 4`），不然一撞到已知配方就從此不再煉製。
-
-**修完的實測**：5／5／13 爐，**新發現 5／5／13、查表 0、零浪費**（修之前是 4新+1查、
-9新+8查、6新+1查）。
-
-**新的瓶頸是素材的「種類」，不是數量**：季末心得又剩 56~144，因為能煉的新組合用完了——
-機器人整季只持有 5~6 種素材（共 12 種），而掉落的屬性跟著對手走，玩家打的對手屬性集中在
-剛與快。要擴配方空間，得讓素材種類更分散，不是給更多素材。
-
-### 第五層：等級無用，是因為「氣血門戶名冊」spec 有一半沒實作（已修，方案 A1）
-
-**診斷**：等級餵兩條線，兩條都是乾的——
-- **氣血上限**（300 + 20×等級）：實測整季**滿血、療傷 0 次**，因為遭遇戰不扣氣血。
-- **檢定屬性**（每級 +0.3）：整季只升到第 2~3 級 → 臂力 5.0→5.3，而檢定難度是 5~8 的整數級距。
-
-而等級本身幾乎不動（19~26 場戰鬥只到第 2~3 級；升到第 10 級要 4500 經驗）。連帶**銀兩也沒
-去處**（季末剩 36~126 兩，而銀兩的主要出口就是療傷）。
-
-**根因**：`2026-09-30-氣血門戶名冊-design.md` 的 §1.1／§1.3 是**【定】**的——「上陣時的血量
-＝目前氣血……剩越少出手越弱（×(0.5＋0.5×剩餘／上限)）」、「一場打完，損失的氣血分成輕傷
-八成（自己回）與內傷兩成（只能療傷去除）」。但 sanguo-companions 合併把 3v3 血量池戰鬥換成
-`encounter.py` 的單次判定，而單次判定**完全沒有氣血**。於是：戰鬥不扣氣血 → 內傷不累積 →
-療傷不觸發 → 銀兩沒出口 → 等級的氣血上限無意義。**而且 `member_power()` 裡根本沒有等級這個
-變數，所以 §1.4 第 1 條（高 10 級勝率 60~70%）在現在的模型下是數學上不可能達成的。**
-
-**企劃者選了 A1（氣血比例，相對自己的上限）**，也就是把那半份 spec 補上，而不是把等級塞進
-威力公式當持續加成（那是 A2，會跟「武學是主軸」衝突）。四段：
-1. **內傷真的存在**：`Member.injury`／`CompanionProgress.injury`，氣血只回到「上限 − 內傷」
-   （不低於上限的一成，§1.3 的「再低也照樣能出戰」）。
-2. **威力 × 氣血比例**：`encounter.condition_of()` ＝ 0.5 + 0.5 × 剩餘／上限，滿血 1.0、見底 0.5。
-   係數由呼叫端算好傳進去——`encounter.py` 刻意只處理數字、不碰內容模型。
-3. **遭遇戰按結果扣氣血**：`Config.encounter_neili_loss`（大勝 5%／險勝 15%／僵持 20%／落敗 30%
-   的上限），其中 `injury_share = 0.2` 變成內傷。訊息照既有慣例寫成變化量（「氣血 -48」
-   「內傷 +10」），會自動併進江湖紀錄與戰報。
-4. **經驗校準**：`level_exp` 100 → 10。**fixture 的 config 刻意釘回 100**，因為好幾個測試驗的是
-   獎勵與江湖紀錄、不是升級節奏。
-
-**連帶修掉的兩件事**：練功受傷現在真的累積內傷（它的訊息一直這樣寫，但以前只是扣氣血、
-兩小時就自己回來了）；療傷改成**按內傷計價**（每 2 點 1 兩，§二），不再是「花錢跳過兩小時
-的等待」。
-
-**實測（三個 seed，對照修之前）**：
-
-| | 修之前 | 修之後 |
-|---|---|---|
-| 等級 | 2／2／3 | **9／6／9** |
-| 氣血 | 滿血 | 384/480、326/420、391/480 |
-| 內傷 | 不存在 | **89~96**（氣血上蓋因此降兩成，威力跟著降） |
-| 療傷 | 0 次 | 0~1 次 |
-| 銀兩 | 36~126 | 29~126 |
-
-**§1.4 的兩條平衡目標原本都沒達成**（不是 A1 造成的，是目標數字沒跟著模型換）：
-- 第 1 條「高 10 級勝率 60~70%」：滿血時 **16%**（等於雙方平手的基準勝率，因為滿血時等級
-  不影響威力），雙方各帶 100／200 點內傷時升到 **24%／29%**。A1 的結構本來就只讓等級在帶傷
-  時有差，所以這條要嘛放棄、要嘛改成 A2。
-- 第 2 條「同等級、武學成數高 3 成的一方勝率 ≥75%」：實測 **48%**。原因是 `encounter.py` 的
-  `LUCK_HALF = 15` 與「險勝」門檻 +10——武學高 3 成只差 9.7 點威力，完全被運氣項蓋過。
-  **這兩個數字是舊的 3v3 血量池戰鬥訂的。**
-
-#### 接著做的調整（2026-10-02，企劃者指示「來調整這兩個平衡」）
-
-把 `encounter.py` 的運氣與結果門檻從**絕對點數改成對手難度的比例**：
-
-| | 改之前 | 改之後 |
-|---|---|---|
-| 戰場運氣半幅 | 固定 ±15 | 難度的 **30%**（下限 5） |
-| 大勝／險勝／僵持門檻 | +40／+10／-20 | 難度的 **50%／15%／-50%** |
-
-**為什麼是比例**：絕對點數讓「這場仗多大」完全不影響變數——武學高 3 成在低等級只差 9.7 點
-威力，被 ±15 的運氣整個蓋過。改成比例之後，打難度 150 的強敵運氣擺幅 ±45（真的是一場賭），
-打難度 8 的散兵幾乎沒有變數。順帶修掉一個一直存在的怪現象：**威力 50 打難度 5 以前只判「險勝」**
-（因為大勝要 +40），現在正確地判成大勝。
-
-**參數是掃過 20 組挑的**（5 組同時滿足第 2、3 條），選的這組實測：
-
-| 目標 | 改之前 | 改之後 |
-|---|---|---|
-| §1.4 第 2 條 武學高 3 成勝率（要 ≥75%） | 48% ✗ | **79% ✔** |
-| §1.4 第 3 條 既有內容偏移（要 ≤10 個百分點） | — | **最大 7 個百分點 ✔** |
-| §1.4 第 1 條 高 10 級勝率（原訂 60~70%） | 16% | 25%（滿血）／33%（各帶 100 內傷）／43%（200） |
-| 雙方完全一樣時的勝率（參考） | 17% | 25% |
-
-**§1.4 第 1 條已經在 spec 裡改寫掉**（`2026-09-30-氣血門戶名冊-design.md` §1.4）：A1 的結構下
-滿血時等級本來就不影響威力——等級買的是氣血上限，也就是「撐得住幾場」。要達到原訂的 60~70%
-只能讓等級變成持續性的戰力加成（方案 A2），那會跟「武學是主軸」直接衝突，所以**放棄那個數字**，
-改成「雙方各帶相同內傷時，高 10 級的一方勝率明顯高於平手基準」。spec 也新增了第 4 條
-（損耗要真的咬得到人，觀察中）。
-
-**順帶量到的新動態**：一整季累積內傷 89~227 點，氣血上蓋掉到上限的五到八成、威力跟著降一到
-兩成；機器人一季出現一次「想療傷但銀兩不夠」——**銀兩終於成為真正的限制**。內傷累積得太快
-還是太慢要等真人試玩，spec 第 4 條還沒訂目標值。
-
-### 實機試玩（2026-10-02，五層平衡改完之後）抓到的坑：歷練對新角色是陷阱
-
-用真實內容跑一個全新角色，走到第一個有敵人的地點（潁川郊野）連按三次「歷練」：
-
-```
-第 1 場：落敗　銀兩 -5　氣血 -96　內傷 +19
-第 2 場：落敗　氣血 -96　內傷 +19　→ 128/320（內傷 38）
-第 3 場：落敗　氣血 -96　內傷 +19　→  32/320（內傷 58）
-```
-
-**成因**：新角色還沒有武學，而 `member_power()` 沒有武學就回 0——所以**任何歷練都必敗**。
-以前落敗只扣一成銀兩，幾乎免費；第五層讓落敗真的扣三成氣血上限＋兩成變內傷之後，同一個
-行為變成「開局就把自己打到剩一成氣血、還欠 29 兩療傷費」。而引導第 3 步正好叫玩家去郊野
-「練練身手」，第 4 步才提到門下練功——順序剛好相反。
-
-**修法**：歷練按鈕顯示勝算（`_train_note()`），跟劇情戰選項同一套慣例（`_choice_label` 本來
-就會顯示）。現在新角色看到的是「歷練（體力 10・2 路對手・**必敗**）」，自創並練滿一門武學後
-變成「穩勝」。多路對手時**取最強的那個**算勝算——這個標籤的用途是警告，寧可低估也不要給出
-過度樂觀的承諾。
-
-**還沒處理的**（記下來，等下次決定）：
-- 引導的順序：第 3 步（去郊野練身手）應該排在第 4 步（門下練功）之後，或者第 3 步就改成
-  「先去門下自創一門武學」。
-- 落敗扣三成氣血上限對「完全打不贏」的情境仍然偏重；但資訊透明之後玩家不會誤入，所以先不調。
-- **這類坑只有實機試玩抓得到**：單元測試都是先把狀態設好再驗單一行為，不會發現「新角色照著
-  引導走會把自己打死」。CLAUDE.md 上面那段「實機試玩找出並修掉的卡關點」是同一個教訓。
-
-## 介面：拿掉 Gradio，改成獨立網頁（2026-10-03，企劃者交辦「推翻現有 UI 架構，重構一個真正簡潔、適合手機遊玩、操作用戶友善的新版 UI」）
-
-前面三次在 Gradio 上的手機改版（排版、功能列、煉製／修練分頁）都卡在同一個地方：Gradio 的元件
-自己決定 DOM 與樣式，我們只能從外面用 CSS 硬拗，而且每次重畫都是整排元件一起換。所以這次直接照
-線上架構設計第七節的方向，**伺服器只給資料、畫面自己做**：
-
-- `app.py`（Gradio）與 `tests/test_app.py` 刪掉，換成 `server.py`（FastAPI）＋ `web/`（單頁網頁）＋
-  `tests/test_server.py`。`requirements.txt` 不再裝 gradio／pandas／numpy（之前 DLL 被封鎖的就是 Gradio 帶進來的 pandas）。
-- 第七節寫 Vue 3【預設】；**實際用的是沒有建置步驟的原生 JavaScript**（`web/app.js` 一個檔）：
-  這個專案沒有 node 工具鏈，畫面也只有五頁，多一套建置流程不划算。之後真的要拆元件再換 Vue。
-- 版面：頂上狀態列（體力、氣血兩條＋銀兩、心得；點名號展開屬性與隊伍）、底部五個分頁
-  **江湖／修練／煉製／輿圖／見聞**（見聞＝戰報、大勢、傳聞、江湖史、江湖紀錄），設定與管理者工具收在右上角齒輪。
-  修練與煉製維持企劃者 10/3 定的「兩個各自獨立的去處」，門下名冊與功法庫放在修練頁。
-- 同一個角色在伺服器上只有一份 `Game`（`server.GAMES`）：同帳號兩個分頁、換手機再登入，看到的都是同一份。`GAMES` 只是放 `Game` 物件的地方，資料庫才是真實來源：每次進鎖都把它的 `state` 換成資料庫裡存好的那一份（`server._locked`），拿來做決定的讀取（例如加入／移出隊伍前核對名冊）都在鎖裡。
-- 登入狀態是 cookie，伺服器記憶體裡對應帳號；**重開伺服器要重新登入**（跟 Gradio 時一樣）。
-- 計時器改成前端每 10 秒打 `/api/main`，內容沒變就不重畫（不會一直重播動畫）；分頁在背景時不打。
-- 引擎多了 `Game.status_data()`（狀態列的結構化資料），`status_text()` 改成由它組字串，輸出不變。
-- 公開網址：Gradio 的 `share=True` 沒了，改成 `server.py --share` 叫 cloudflared 開 trycloudflare 臨時網址（線上架構設計第六節本來就選 Cloudflare）。
-- 線上架構第 1 期（SQLite）在 `app.py` 上做的改動都已經搬到 `server.py`：角色用 `characters.open_characters()`、全服狀態用 `sqlite_world.open_world()`，壞檔搬進 `character_backups` 表；帳號用資料庫的 `accounts`／`logins` 表（`AccountStore(open_database())`，註冊與改密碼不包外層交易、建角與重設密碼包在 `open_database().transaction()` 裡）；啟動時印出資料庫路徑；每次進鎖先從資料庫重讀角色並清掉失效引用（`server._locked`／`_reload`），對話備料的第一段也存檔。第 1 期計畫與之後的計畫凡是寫 `app.py` 的地方，都要讀成 `server.py`。
-- 輿圖的「安排前往」是步行／趕路／疾行三個按鈕（`/api/travel` 帶 `mode`），跟 Gradio 版一樣照 `Game.travel_options()` 畫。
-- **行動列與太極火爐**（企劃者 2026-10-04；輪盤試過、嫌太大已拿掉）：江湖頁平常閒著時（選單上有「打坐」）的行動是一排五顆「水墨氣勁」按鈕（黑底金邊、圖示、底下一行消耗）：探索、遊歷、打坐、交友（沒有交友時是求見）、移動；按一下就做，移動點了在下面展開走法與「前往」。其他只在此地才有的行動（招募、投靠、多出來的求見）收在「此地還能做 N 件事」的摺疊裡。版面是劇情文字在上、行動在下，375×812 上「剛剛」、場景與整排行動都在第一屏（企劃者要的是按完不用捲就看得到結果）。事件、對話、路上、決戰的選單照舊是一排按鈕。煉製頁的「太極火爐」只放素材與開爐：左右兩格（點有東西的那格拿出來），放滿兩樣火舌竄高、太極轉快，點爐身開爐，等結果時整座爐子晃動；挑素材在爐子下面的素材列表（企劃者：「選素材不要也在那邊」）。合成前不選武學／內功，出哪一種由規則決定（`tianxia/craft.py`，養成經濟那邊負責）。程式在 `web/app.js` 的 `actionBar`／`furnaceSvg`／`pageCraft`。
-
-以下兩節是 Gradio 時期的紀錄，留著當歷史；裡面講的 class 名稱、`MENXIA_OUTPUTS`、`css=` 的坑都已經不存在了。
-
-## 事件的隨口應對與地方痕跡（2026-10-03，`docs/superpowers/specs/2026-10-03-探索的多人與LLM玩法-draft.md` §8）
-
-引擎與介面這一半（劇情寫內容、LLM 整合調提示詞）：
-- **隨口應對**：事件有 `free_text`（`FreeTextChoice`）時，選單最後多一顆 `choice:free`，網頁上按了才出現 20 字輸入框，
-  送出走 `/api/answer`，跟人物對話一樣三段：鎖內 `Game.free_text_request` → 鎖外 `event_llm.assess_event_success_rate`
-  （失敗一律 40）→ 鎖內 `Game.answer_event` 重驗同一則事件、同一句話才擲骰。成功率 `rules.free_text_rate`
-  ＝LLM 分數＋(屬性−5)×4，夾在 5～85；江湖紀錄寫「你：「…」（成算N成）」。`choose("choice:free")` 只回一句提示、不消耗事件。
-  兩種假人都排除這顆（`bot.pick`、`bot_policy.take_turn`）。擲骰後再鎖外請模型潤色一兩句（`event_llm.narrate_event_gamble`，LLM 整合寫的），
-  進鎖用 `Game.add_gamble_narration` 插回那一則紀錄；認不到那一則就不插。
-- **地方痕跡**：`Effect.marks`（1～3，只能加）、`Condition.marks_min/max`、`WorldState.marks`（跟賽季 JSON 一起存，
-  換季自然清空）。一人一天一次記在 `PlayerState.mark_days`（角色每季重來，跟著清）。門檻在載入時乘
-  `Config.mark_threshold_scale` 無條件進位；文字裡的 `{marks:地點:痕跡}` 換成模糊人數（`rules.fill_marks`），不列名字。
-- `content.py::validate`：痕跡鍵要是「存在的地點:名字」，而且寫了的要有人讀（條件或文字）、讀的要有人寫；
-  隨口應對的獎勵不能高過同一則事件最好的檢定選項，也不能有 next_event／recruit／join_sect／flags_add／world_flags_add。
-
-## 介面：手機排版與小動畫（2026-10-03，Gradio 時期，已被上一節取代）
-
-### 原本的問題：整個專案沒有自己的樣式表
-
-`app.py` 以前只有 `gr.Blocks(title=...)`，唯一的 CSS 是 `journal.py` 的卡片樣式。而
-**Gradio 的 Row 是 flex，在任何寬度都不換行**，所以手機上：
-
-- 「場景文字 × 小地圖」各佔一半——兩邊都讀不動
-- 「左欄（場景＋選項）× 右欄（狀態＋五個分頁）」也各佔一半
-- 戰報頁（清單 × 詳情）、大地圖頁（地圖 × 地點詳情）、門下頁（名冊 × 角色卡）同樣對半
-- 江湖紀錄沒有高度上限，會把「下一回的選項按鈕」一路推出螢幕
-
-### 做了什麼
-
-`app.py` 新增 `UI_CSS`，靠 `elem_classes` 掛 class 定位（Gradio 自己生的 class 名稱不穩定，
-不能拿來當選擇器）：
-
-| class | 掛在哪 | 手機上做什麼 |
-|---|---|---|
-| `tx-game` | 江湖頁外層 Row | 改直排 |
-| `tx-main-col`／`tx-side-col` | 左右兩欄 | **行動優先**：選項排在狀態與分頁之前（手機玩家最常做的是「看場景、按一個選項」，那兩件事要在第一屏） |
-| `tx-scene-row`／`tx-mini` | 場景列與小地圖 | 小地圖移到文字下方、放大到滿寬 |
-| `tx-nav` | 門下／戰報／大地圖 | **黏在上緣**，拇指永遠按得到 |
-| `tx-side-row` | 四個頁面的左右兩欄 | 一律改直排 |
-| `tx-act`／`tx-page` | 選項按鈕與整頁 | 觸控目標 48px、輸入欄 16px（手機瀏覽器才不會一聚焦就縮放） |
-| `tx-journal` | 江湖紀錄 | 限高 42vh、可捲 |
-
-**門下頁重新分組**成可收合區塊：練功與煉製預設展開（玩家真的來做的事）、煉製素材與功法庫、
-名冊與角色卡預設收起（會越玩越長的參考資料）。**動作結果移到最上面**——按完按鈕，訊息如果在
-整頁最底下，手機上根本看不到。
-
-### 動畫（都很小，而且只在「有事發生」的地方）
-
-| 動畫 | 在哪 | 為什麼 |
-|---|---|---|
-| 浮現（`tx-rise`／`tx-now-rise`） | 「剛剛」卡片、戰鬥卡片、切換整頁 | 內容每次行動都換掉，所以動畫每次都重播＝「這是剛發生的事」 |
-| **爐火明滅**（`tx-ember`） | 煉製的「開爐」按鈕 disabled 期間 | 首次發現配方要等本機模型取名，**實測 27~83 秒**，得讓玩家知道還活著 |
-| **掃光**（`tx-shine`） | 紀錄卡片上「拿到新東西」那一行 | 一次行動常吐五六行，真正值得注意的只有新素材／新功法／首次煉成那一行（好玩度量表量的正是這件事）。判斷在 `journal.py::_line_class`，只認「獲得／煉成／自創了／習得了／改練」 |
-| 按壓回饋 | 門下頁的按鈕 | 不然那一頁按下去完全沒有反應 |
-
-**全部包在 `prefers-reduced-motion` 裡**；掃光在減少動態模式下改成靜態的左側色條（不是直接
-消失——那一行仍然需要被看見）。
-
-### 踩到的坑：Gradio 6 把 `css` 從 `Blocks` 移到 `launch()`
-
-`gr.Blocks(css=...)` **只會發一個 UserWarning，然後把樣式表整個丟掉**——畫面完全不會變，很容易
-以為是 CSS 寫錯。正確寫法是 `build_demo().launch(..., css=UI_CSS)`。驗證方式是直接抓服務出來的
-HTML，確認 media query 與 keyframes 真的在裡面（`curl http://127.0.0.1:7861/`）。
-
-## 好玩度量表（企劃者 2026-10-03 提的方法，`scripts/fun_run.py`）
-
-**企劃者的話**：「你要假裝自己是一個新玩家，甚麼都不知道，然後有新東西例如新的事件或是新的
-素材或是合出新武學，你的好玩度會上升，反之如果你的行動看到重複出現過的，那你的好玩度會下降，
-重複越多次下降越多」。
-
-**為什麼值得做**：既有的量法全是資源計數（素材 21 個、心得 167 點），完全說不出「玩起來有沒有
-東西看」。而這個專案反覆踩到的坑本質上就是重複——探索 100 次撞到同幾個事件、17 爐裡 8 爐在
-重煉已知配方、歷練機制上不會發生所以戰鬥內容從沒出現過。**一個指標會一次抓到這三個，而當初是
-靠四支不同的臨時腳本才各自挖出來的。**
-
-### 實作時刻意處理的四件事（照原方法直接做會量錯）
-
-1. **「新」不等於「好玩」**：新事件如果所有選項都 disabled、新功法如果是下品還比身上那門弱，
-   是有新鮮感但沒有收穫（實測過改練更強的功法威力會**先掉**：115.8 → 103.7）。所以首見的加分
-   要乘上「這次行動有沒有真的改變什麼」——沒改變任何狀態的首見只拿一半分，並單獨列出來。
-2. **重複分兩種**：**敘事內容**的重複（同一段事件文字、同一門功法）真的該扣；**機制動作**的
-   重複（移動、歷練、練功、療傷）不扣——那是遊戲的骨幹，遭遇戰每次結果不同，玩家不會因為
-   「打第二場」就無聊。不分開的話，指標會把核心循環本身判成扣分來源，推著設計往純新鮮感的
-   跑步機走。
-3. **遞增懲罰要有上限**：一季數百個行動，懲罰若一路線性成長，分數會被尾段支配，等於變成
-   「賽季長度」的代理變數。所以第 n 次重複扣 (n−1) × 0.5，夾在 3.0。
-4. **分項輸出，不要只看總分**：總分很容易被調參調到好看。實際輸出的是每一類的首見數／內容
-   總數（事件 N/41、素材 N/12、地點 N/22、對手 N/11）、配方首創對查表、重複最多的三個內容、
-   **每日淨值的時間軸**（第幾天開始重複贏過新鮮感）、以及**最後一次看到新東西是第幾天**。
-   後面這兩個比總分有用得多。
-
-### 校準的實際經過（四次才真的測到，記下來避免重走）
-
-**這一段比指標本身重要**：校準跑了四輪，前三輪的結論都是錯的，而每一輪錯的原因不同。
-
-| 輪 | 結果 | 真正的原因 |
-|---|---|---|
-| 1 | ③④ 分數一模一樣 | 我以為是指標看不見白燒，於是加了「花資源沒換到新東西」扣分項 |
-| 2 | ③④ 還是一樣，**白燒 0 次** | 重現只做了一半：`--allow-recraft` 只關掉重煉檢查，但舊版的白燒還因為機器人**只試階最高的那一組**，而那個「被擋就換一組」的重試迴圈跟「擋重煉」是同一個 commit 加的 |
-| 3 | 同上 | **我的修改根本沒寫進檔案**：那支「多處替換、最後統一寫檔」的腳本在最後一個 assert 失敗就中止，整批回滾，而我拿另一支腳本印的成功訊息當成依據 |
-| 4 | 終於測到（白燒 16%），但 ③ 比 ② 更低 | **我的期望是錯的**：「遭遇戰一季 3 場」跟「47% 白燒」哪個比較無聊，從來沒有依據可以排，那是我照修復的時間順序順手寫的 |
-
-得到的三條規矩：
-1. **判準只寫有依據的那一條**：現在改成「『現在』要贏過每一個已知缺陷狀態」，不要求三個缺陷
-   之間也排對。判準不通過時**先確認是重現不夠真、還是指標看不見**，不要急著調參數迎合直覺。
-2. **重現歷史缺陷要連同期的程式行為一起退回**，不是只關掉那個檢查——缺陷常常是「檢查沒有」
-   加上「當時的策略比較笨」兩件事一起造成的。
-3. **不要再寫「多處替換、最後統一寫檔」的腳本**。中間任何一個 assert 失敗就等於全部回滾，
-   而印出來的訊息會讓人誤以為改好了。改用 Edit 逐處修改、或每處獨立寫檔並即時驗證。
-
-### 分數一定要正規化（8 個 seed 才看得出來）
-
-4 個 seed 時「現在」贏過三個缺陷狀態，看起來判準通過了；**換成 8 個 seed 就翻盤**：② 有一個
-seed 跑出 **-2616 分**，③（+2.1）反而比「現在」（-11.2）高，種子落差 2648 分、狀態差距只有
-358 分。
-
-根因：**總分會隨「玩了多久」無上限累積**。單一次重複的扣分有上限（`REPEAT_CAP`），但重複的
-次數沒有——那個 -2616 的 seed 推算有約 900 次重複事件，它只是跑了很長一季、在沒有新東西的
-狀態下一直探索。那正是我自己在設計時警告過的「分數變成賽季長度的代理變數」，而我**只防了
-幅度、沒防次數**。所以 `FunLog.score` 改成**每 100 個行動**的密度，`raw` 只留著看組成。
-
-### 最終版：分管道的「新鮮命中率」，而且校準終於過關（2026-10-03）
-
-**定案的算法**：每條管道各自算「每次碰到它，有幾成給了你新東西」（−100 ~ +100），再平均。
-一條整季沒出現過的管道算 **−100**（內容整條不存在是最壞的情況，不是「沒資料」）。
-`FunLog.balanced` 是這個，`FunLog.score`（單一總分）留著對照用、不要拿它下結論。
-
-| 狀態 | 分管道平均 | 8 個 seed |
-|---|---|---|
-| ① 沒煉製也沒歷練 | **−51.4** | −48 ~ −55 |
-| ② 戰鬥一季 3 場 | **+14.1** | +6 ~ +22 |
-| ③ 會重煉已知配方 | **+37.8** | +25 ~ +61 |
-| ④ 現在 | **+41.6** | +33 ~ +52 |
-
-**判準通過**，順序自然就是 ① < ② < ③ < ④（沒有為了湊它調任何參數）。最重要的一行是
-**種子落差 36 分 < 狀態差距 93 分**——六輪校準以來第一次量尺的解析度超過它要量的效果
-（之前一直相反：2648 對 358）。那才是它先前不能用的根本原因。
-
-**分管道的明細才是真正可以拿來做事的東西**（缺陷會出現在正確的管道上）：
-
-| 管道 | ① | ② | ③ | ④ 現在 |
-|---|---|---|---|---|
-| 事件 | −60（84 次） | −64（204 次） | −48（79 次） | **−56（88 次）** |
-| 配方首創 | 沒出現 | +100 | **+66** ← 白燒看得見了 | +100 |
-| 對手 | 沒出現 | **沒出現** ← 歷練沒做 | +69 | +58 |
-| 素材 | +46 | +42 | +39 | +41 |
-| 地點 | +6 | +6 | +7 | +6 |
-
-**現在最大的問題是「事件」管道：−56**（觸發 88 次，只有 20 次是沒看過的）。這不是機制問題，
-是內容量與分佈的問題——實測最常重複的是**茶館說書，一季出現 27~37 次**。
-
-### 先前幾版的校準結果（記錄用，說明為什麼要走到分管道）
-
-改成每百行動的密度之後，分數終於回到合理範圍（一季約 1100 個行動）：
-
-| 狀態 | 分／百行動 | 判準 |
-|---|---|---|
-| ① 沒煉製也沒歷練 | **−3.8** | ✔ 比「現在」差 |
-| ② 戰鬥一季 3 場 | **−27.0** | ✔ 比「現在」差（但有一個 seed 是 −191，見下） |
-| ③ 會重煉已知配方 | **−0.1** | ✘ **比「現在」還高** |
-| ④ 現在 | **−1.1** | — |
-
-**結論：這個指標量的其實是「敘事內容的重複密度」，對煉製這類經濟效率的缺陷完全盲。**
-原因是量級差太多：一季約 1100 個行動，其中**開爐只有 5~8 次**，而事件觸發幾百次。白燒一爐
-扣 4 分，攤到每百行動是 0.4 分，而種子噪音有 20 分——根本埋在雜訊裡。③ 跟 ④ 差 1.0 分，
-統計上無法分辨。
-
-所以目前可以信任的範圍是：**偵測「某條內容管道整條斷掉」**（① 沒有煉製內容、② 幾乎沒有戰鬥
-內容，兩個都抓到了）。**不要拿它調煉製的經濟**，那要用開爐數／白燒率／素材心得收支直接看。
-
-**還有一個真的要查的 seed**：② 的 seed 5 是 −191 分／百行動，推算那一季有七百多次重複事件
-（約六成的行動都在看看過的事件）。其他七個 seed 都在 −2~−8，所以那是一個病態跑次，值得單獨
-看它卡在哪裡——很可能是某個地點的事件池太小又走不出去。
-
-**下一步的選項（還沒做，等企劃者決定）**：要讓煉製那類缺陷也看得見，得**每條管道各自正規化
-再合併**（事件、素材、功法、對手、地點各算一個密度分數，再平均），而不是全部丟進同一個總分。
-那樣每條管道的權重才不會被「它多常觸發」決定。
-
-### 校準：先用已知答案驗指標，再用指標下結論
-
-**指標要先能把「我們已經知道哪個版本比較無聊」排對順序**，否則調出來的參數只是在迎合直覺。
-`--calibrate` 用**行為重現**造出三個已經修掉的缺陷（不是 checkout 舊 commit——那些版本連煉製
-模組都不存在，同一支腳本跑不起來）：
-
-| 旗標 | 重現的歷史狀態 |
-|---|---|
-| `--no-craft --no-train` | `0716d8b` 之前：沒有煉製、也沒有歷練 |
-| `--no-train` | `239bdf8` 之前：有煉製，但遭遇戰一季只有 3 場 |
-| `--allow-recraft` | `2b05b47` 之前：47% 的爐在重煉已知配方 |
-| （無旗標） | 現在 |
-
-期望排序是 ① < ② < ③ < ④。**排不對就是指標錯了，不是遊戲錯了**，要先改指標。
-
-### 這個方法量不到的事（別過度相信它）
-
-實機試玩抓到最嚴重的問題——新角色歷練必敗、三場把自己打到剩一成氣血——**在這個指標下完全
-看不出來**：第一場是新內容（加分），第二三場是重複（小扣分）。真正的問題是「玩家被重罰卻沒有
-資訊」。好玩度只量新鮮感，**挫折要另外量**（連續失敗、不可預期的損失），或者繼續靠實機試玩。
-
-### 踩到的坑：遠端新增了「管理者開季」，腳本第一次跑是全 0 分
-
-`WorldStateStore.season_phase()` 現在會回 `preparing`——新世界停在籌備中，選單只有一個
-disabled 的「賽季籌備中，等待管理者開季」。管理者看名號認（`content/config.json` 的
-`admins`，目前是 `Rayal`），介面上是設定區的「開季」按鈕；程式裡是 `store.open_season(now)`。
-**以後任何「用 Game 跑整季」的腳本都要記得先開季**，不然什麼都不會發生。
-
-## 引導順序已修（2026-10-02 記下的待辦）
-
-原本第 3 步叫玩家「出城往潁川郊野走走……正好練練身手」，第 4 步才提到去門下練功——而實機
-試玩證實沒有武學時威力是 0、歷練**必敗**，落敗又真的扣三成氣血上限＋兩成變內傷。順序剛好
-把新玩家推進那個陷阱。現在**練功排到出城之前**，而且兩步的文字都改了：練功那步寫「沒有武學
-的人，出城遇上誰都只有挨打的份」，郊野那步寫「括號裡寫著勝算，覺得划算再打」。
-
-### 新方向（2026-10-02 企劃者交辦）：自創武功要限次數，讓玩家的創意跟 LLM 煉製碰撞
-
-**企劃者的話**：「之後玩家要可以自創武功，這樣他們的創意才有機會跟我們的 LLM 武學合成碰撞，
-但是會限制次數，例如三天才能自創一次功法」。
-
-**先確認現狀，免得把「已經有的東西」當成新功能做**：
-- **自創武功早就存在**：`team.create_skill()`／門下頁的「自創功法」按鈕。玩家自己打一個名字，
-  `martial_arts.generate_from_name()` 用名字的雜湊決定屬性／品質／威力，全服不能重名
-  （`claim_skill_name()`）。
-- **而且目前完全沒有任何限制**：不花心得、不花體力、沒有冷卻、沒有次數上限。唯一的限制是
-  「同一種（內功／武學）的欄位已經有東西時不能再自創」——但那只要去功法庫改練就繞開了。
-- 所以要做的是**加上節流**，不是蓋新功能。
-
-**為什麼要節流（跟煉製的關係）**：兩條路現在的規則刻意不同——
-| | 自創（玩家取名） | 煉製（素材＋LLM 命名） |
-|---|---|---|
-| 誰出語意 | 玩家 | LLM |
-| 獨佔性 | **獨佔**（全服不能重名） | **共享**（同配方全服同一門） |
-| 成本 | 目前零 | 素材 ×2 ＋ 心得 16~28 |
-| 次數 | 目前無限 | 受素材與心得限制 |
-
-自創是零成本無限次，而煉製要湊素材與心得——**玩家理性選擇永遠是自創**，LLM 煉製那條路會被
-冷落。限次數（例如三天一次）正是為了讓兩條路互相補位：自創是「我的創意、獨佔、稀有」，
-煉製是「探索配方空間、可重複、共享」。
-
-**實作要想清楚的幾件事（還沒決定）**：
-1. **三天是遊戲時間還是現實時間？** 一季 14 天（遊戲時間），所以「三天一次」＝一季約 4 次。
-   但賽季會提前結束（見上面第二層的小問題），所以實際次數會更少。
-2. **冷卻存在哪？** `PlayerState` 加一個 `last_created_at: float`（遊戲時間）最單純；要跨季
-   保留還是每季重置要決定（我傾向每季重置——自創是賽季內的成長手段）。
-3. **冷卻中要怎麼顯示？** 門下頁的「自創功法」按鈕照既有慣例 disable 並在標籤寫剩餘時間
-   （比照 `_cost_option` 顯示體力不足的作法）；**不要只是按下去才報錯**。
-4. **要不要同時給自創一點成本？** 企劃者只說限次數。但如果自創仍然免費，它就是「每三天的
-   免費抽獎」；若要跟煉製對齊，可以收心得（煉製吃心得，自創吃心得會讓兩條路共用同一個瓶頸——
-   未必是好事，要想）。
-5. **`bot.py` 會踩到**：`spend_xinde()` 目前沒學過就直接自創（隨機取名）。加冷卻之後機器人
-   開局那一門還是拿得到，但要確認它不會卡在「永遠想自創卻被擋」的狀態。
-
-### 1. 平衡與瓶頸：煉製做完之後真正該談的事（已與企劃者開始討論）
-三刀都做完了，機制可用，但幾個量到的數字顯示**經濟仍然很緊**：一季只煉得起 1~6 爐
-（心得 20~96、一爐 16~28），素材卻有 21 個（夠煉十次）；三階素材整季是 0；隨機機器人整季
-只打 3 場遭遇戰。也就是**心得是唯一的瓶頸，而素材與戰鬥的曝光都過剩**。要調的話候選有：
-心得收入、一爐成本、三階素材的來源、或者讓戰鬥更常發生。**動數字前先決定要讓誰當瓶頸。**
-
-### 2. `scripts/simulate.py` 已刪除（2026-10-03）
-它從 sanguo-companions 合併起就在 import 階段炸掉（`tianxia.battle` 已不存在），還呼叫
-`team.upgrade_cost()`／`battle_rules()`／`team_units()` 與 `p.gacha_xinde` 四個不存在的東西，
-而 CLAUDE.md 的「指令」那節卻一直在推薦它——等於文件在騙人。「修還是刪」從 2026-10-01 問了
-兩次沒有結論，這次直接刪掉，因為它想做的事已經有三個還活著的替代品：
-`scripts/fun_run.py`（好玩度與內容覆蓋）、`scripts/sim_server_bots.py`（整季、多陣營、假人）、
-以及直接用 `bot.play_season` + observe callback 量單一指標（前面幾次實測都是這樣做的）。
-**要是你本來想保留它，`git revert` 就回來了**；真的要復活得把「付費方 vs 免費方本隊交手勝率」
-整套重寫到 `encounter.py` 的單次判定模型上。
-
-### 3. 架構圖（`mapping-architecture-flow` skill）
-`example.html` 已由使用者補齊、裝在 `C:\Users\User\.claude\skills\mapping-architecture-flow\`，
-skill 現在可以正常執行。2026-10-01 產出的那份架構圖在
-https://claude.ai/code/artifact/c63483c5-4b2f-42ff-bfe6-4c76d73e0e95
-（10 個系統、114 個細項：已完成 75／開發中 21／討論中 5／規劃中 13）。**第一刀做完之後那份
-已經過期**（素材與掉落從「開發中」變「已完成」），下次有里程碑時用同一個檔案路徑更新即可。
+完整步驟（含給網址、換季、備份、具名 Tunnel）見 `docs/superpowers/feedback/beta-主機端操作.md`。要點：
+- 不要用 Bash 工具背景執行 `server.py`（會被背景任務追蹤器砍掉）。用 PowerShell `Start-Process` 完全分離啟動，輸出導到 `server_out.log`／`server_err.log`，**記下回傳的 PID**，再輪詢 log 等 `公開網址：https://…trycloudflare.com`（約 7 秒；讀 log 要 `Get-Content server_out.log -Encoding UTF8`）。
+- **引數一定要加 `-u`**（`python.exe -u server.py --share`）：stdout 導到檔案時 Python 會緩衝，沒有 `-u` 的話服務其實已經在聽 port、log 卻一直是空的。
+- `--share` 要先 `winget install Cloudflare.cloudflared`（裝在 `C:\Program Files (x86)\cloudflared`）；裝之前就開著的終端機找不到它，啟動前補 `$env:Path += ";C:\Program Files (x86)\cloudflared"`。
+- **停的時候用 `/T` 關整棵**：`taskkill /PID <Start-Process 回傳的 PID> /T /F`（或在主控台 Ctrl+C）。只關「正在聽 7861 的那個 PID」會留下 cloudflared，重開後舊網址照樣進得到新伺服器（FB-021）。不確定有沒有殘留時，先停伺服器，再清掉連到 7861 的 cloudflared，最後才重開（指令在主機端操作文件）。
+- `server.py` 與 `run_bots.py` 要開同一個資料庫、同一份設定：要用 `saves/tianxia.db` 以外的檔，兩個程式啟動前設同一個 `TIANXIA_DB`（兩個程式啟動時都會印出資料庫路徑與設定，設錯一眼看得出來）。
+
+## 規則速查（現在怎麼玩）
+
+數字都在 `Config`（`tianxia/models.py`，正式值以 `content/config.json` 與設定覆寫檔為準）；這裡只寫結構與現在的值，改數字不必改這一節的結構。
+
+### 行動
+- **體力**：上限 150，每 3 分鐘回 1 點（`stamina_regen_seconds`）。探索、遊歷各 10，交友 5，招募 15。
+- **探索**（探索三選一設計）：這裡有還能遇上的一次性或奇遇事件時先滾 `rare_explore_chance`（2.5%）；沒中就照地點類型（`explore_mix`：營寨類、城鎮類、其餘）抽「悟意境／野怪／事件」三支之一（悟意境那一支的比重乘悟性的加成；做不了的那一支拿掉重抽）；不論走哪一支，最後再擲 `explore_legend_chance`（2%）撿一枚破境丹。**探索不撿素材。** 野怪扣的氣血打五折、打贏不推大勢。
+- **遊歷**（`act:train`）：只在這裡有敵人（或軍令帶來的運糧隊）時出現，**必定開打**；遇上自己陣營的隊伍是操練（零風險：給經驗與心得、推大勢，不給銀兩、不掉素材）。打完有 `train_event_chance`（30%）接一則 `actions: ["train"]` 的戰後事件。按鈕寫勝算，多路對手時取**最強的**那個算（標籤是警告，寧可低估）。
+- **交友與求見**：見不見得到看求見門檻（`rules.audience_bar`：人物的 `audience_fame`，投靠他那個陣營的人每晉升一次抵 `audience_rank_discount`），或結識過；門檻不夠的求見一直按得下去，但只會被打發（他自己口吻的一句、寫還差多少名望；不花體力、不叫模型）。只有一位人物的地點直接列「求見某某」，兩位以上打開求見名單（不花體力）。對話每輪 `talk_stamina`（2），同一位人物每個遊戲日最多 `talk_turns_per_day`（3）輪。
+- **招募**：成功率 35%＋50%×情誼／100，夾在 5%～95%（按鈕上寫）；失敗有 40% 被要求決鬥、賠 15 兩。
+- **打坐**（`act:rest`）：永遠按得下去；坐下之後體力回復是平常的 `rest_regen_multiplier`（2）倍，期間不能做別的，隨時「起身」，回滿自己起身。只推玩家自己的時間，不碰共用賽季時鐘。
+- **閉關**：1～12 小時，出關得心得 小時 × `seclusion_xinde_per_hour` ×（1＋悟性／20），期間氣血回復加倍。
+- **移動**：步行不花體力只花時間、趕路快一倍、疾行立刻到（後兩種花體力）。步行、趕路時路上有四樣小事，每一段路各做一次（疾行沒有）：邊走邊想（心得）、沿途打聽（傳聞）、留意地形（摸清地點）、路邊採集（一階素材，屬性看這段路兩頭的 `Location.materials`），收穫每個遊戲日有上限；每抵達一站有機會看見一則路上見聞。可以折返、喊停。
+- **拜師學藝**（`learn:<id>`）：各地教基礎武學（武學與成長設計附錄 B），開局送的兩門（基礎吐納、基礎拳腳）熔掉之後在任何城鎮免費重學；持有滿了不能學。
+
+### 事件檢定
+- **每一個事件檢定都只看本人的屬性**（企劃者 2026-10-05）：檢定值＝本人這項屬性（配的點與事件加成）＋熟練加成。`Check.by`、`FreeTextChoice.by` 照樣讀得進來、不再有作用。成功率 50%＋差值×10%，夾在 5%～95%（`rules.check_outlook`；擲骰與選項上寫的都出自它）。
+- **選項只寫一行**：「{選項}（{屬性名} {數值}：{心裡話}）」，不寫成算、百分比、誰出手。心裡話出自 joy 的 `content/check_voice.json`（照差值分檔）。結果只寫「（成功）」「（失敗）」（`rules.check_result_line`）。動手的選項寫對手與勝算。
+- **難度帶**（2026-10-05，企劃者「成功率毫無道理可言」）：難度跟著事件所在地點的 `danger` 走（出現在好幾處時取最危險的）：危險度 1 是 3～6、2 是 4～7、3 是 6～8。`tests/test_real_content.py::DIFFICULTY_BANDS` 鎖住；**新寫事件照地點的危險度挑難度**。伏筆準備事件（`foreshadow_prep.json`）的難度照伏筆設計表，不在帶裡。
+- **惡名的熟練加成**（2026-10-05，企劃者「你常常做壞事（惡名高）因為很熟練所以也增加成功率」）：檢定寫 `"practice": "evil"` 時，檢定值再加 `min(cap, 惡名 // per)`（`Config.practice_bonus`，現在每 10 點 +1、最多 +3）。選項上寫成「身法 5＋2」，熟練那一句（`rules.practice_line`，「這種事你幹得多了」）併進同一個括號。依據：機器人整季隨機玩惡名 9～22（多半 +1），每次挑做壞事的選項 28～47（+2～+3）。**哪些事件帶 `practice` 由劇情填**。
+- **隨口應對**：事件有 `free_text` 時選單最後多一顆 `choice:free`，按了才出現 20 字輸入框，送出走 `/api/answer`（三段式）。成功率＝模型分數＋（屬性−5）×4，夾在 5～85（`rules.free_text_rate`；模型失敗一律 40）；江湖紀錄寫「你：「…」（成算 N 成）」。獎勵不能高過同一則事件最好的檢定選項，也不能有 `next_event`／`recruit`／`join_sect`／`flags_add`／`world_flags_add`（載入時檢查）。
+- **地方痕跡**：`Effect.marks`（1～3，只能加）、`Condition.marks_min/max`、`WorldState.marks`（換季自然清空），一人一天一次；門檻在載入時乘 `mark_threshold_scale`；文字裡的 `{marks:地點:痕跡}` 換成模糊人數，不列名字。
+
+### 屬性、威力與氣血
+- **五屬性**（`team.COMBAT_STATS`，順序就是狀態列與＋鈕的順序）：臂力、身法、根骨、悟性、博聞（鍵 `lore`；「博聞」是暫名，顯示名只寫在 `Config.stat_names`），開局都是 5。比基準 5 每多一點 `stat_bonus_per_point`（3%），比 5 少是負的；乘上去的量最低夾在 `encounter.BOOST_FLOOR`（0.1）。
+  - 臂力：乘武學（外功）威力。根骨：乘內功威力、乘氣血上限、減一場損耗裡變成內傷的比例。身法：減一場的氣血損耗；落敗時有（身法−5）×`dodge_per_point`（2%）的機會閃成僵持（劇情戰不擲）；回合演出裡不低於對手就先出手（對手身法＝5＋難度÷20）。悟性：乘修練升品的機率（在 `cultivate_cap` 之內）與探索落在悟意境的比重、閉關心得。博聞：持有上限，**不進戰力**。
+  - 狀態列點名號展開，「可配 N 點」與五顆＋鈕（`Game.allocate_stat`）；底下一行寫五項各管什麼（`skillview.STAT_USES`）。
+- **整個人的乘數**（`Boost.factor`）：本人＝內外搭配（`team.pairing`：同屬性 +20%、相剋的一對 −20%、少一門或其他是 1）× 兩門各自的正邪共鳴（`team.resonance`：正派功法吃善名、邪派吃惡名，每點 0.5%、最多 +20%，反了不反噬）；同伴只乘他自己的內外搭配。本人的角色卡多一行「威力加成」（`skillview.boost_line`；同伴的卡這一版不寫）。
+- **同伴與部下吃自己的屬性**（人物資質設計 14.3）：同伴＝他自己的臂力乘他的武學、根骨乘他的內功與氣血、再乘他自己那兩門的內外搭配（屬性是內容的起始值＋每級成長，博聞沒寫當 5）；部下＝模板的臂力乘他那一門武學。**都不吃正邪共鳴**（看的是你的善名惡名）。部下上陣只算威力：不擋檢定、不扣氣血、不吃經驗。同伴不進全服決戰。
+- **威力**（`encounter.member_power`）：武學威力（品質與成）×（1＋臂力加成）×（1＋內功威力×（1＋根骨加成）／100）× 整個人的乘數 ×（屬性克對手時 1.3）× 氣血係數（0.5＋0.5×剩餘／上限）。沒有武學就是 0。**等級不進威力**：等級買的是氣血上限（撐得住幾場）與屬性點。
+- **單次判定**（`encounter.resolve_encounter`）：差距＝我方威力−難度＋運氣（±難度的 30%，至少 ±5）＋大場面優勢的平移；差距 ≥ 難度的 50% 大勝、≥15% 險勝、≥−50% 僵持，其餘落敗。比例而不是固定點數，所以打大對手是一場賭、打散兵幾乎沒有變數（2026-10-02 校準：武學高 3 成勝率 79%）。
+- **氣血與內傷**（氣血門戶名冊設計 §1、A1）：氣血上限＝（300＋20×等級）×根骨的倍數。一場打完按結果扣上限的 5%／15%／20%／30%（大勝／險勝／僵持／落敗；探索野怪再打五折），其中 `injury_share`（兩成）變成內傷；氣血只回到「上限−內傷」（不低於上限的一成），內傷要療傷（每 2 點 1 兩）。落敗另失一成銀兩。練成有 15% 機會受傷、累積內傷。**劇情戰不扣氣血**。
+- **等級**：第 n 級升 n+1 級要 `level_exp`×n（10×n）經驗，最高 30 級；同伴跟著拿經驗（存在全服共用的 `CompanionProgress`）。
+
+### 戰鬥的演出與大場面
+- **回合演出**（武學與成長設計 8.2）：遊歷、探索野怪、劇情戰、挑戰大勢人物本人打完都演出 3～5 回合（大勝 3、險勝 4、僵持 5、落敗 3～4）。勝負照單次判定一次算好，`rounds.py` 只照結果拆數字（中途不翻盤；回合裡「你氣血 -N」加起來等於戰報那一筆，劇情戰不帶數字），句子照出手那門武學的屬性從 `content/combat_lines.json` 挑（`battlelog.round_lines`；句子由內容方手改，載入時檢查）。**演出用自己的亂數**（`random.Random("名號｜戰報流水號")`），不碰 `Game.rng`：接下來的擲骰不會位移，同一筆戰報每次演出來都一樣。
+- **大場面**（設計 8.3）：挑戰大勢人物本人、標了 `Squad.boss` 的對手、難度 ≥ `big_fight_difficulty`（100）的對手（`Game.is_big`；自己陣營的操練、探索野怪不算）。伺服器在行動鎖外請模型判讀（`server.prepare_fight` → `fight_llm.judge`，預算 `big_fight_budget_seconds` 60 秒扣掉等鎖的時間）：模型回優勢（夾在 ±15 個百分點）與佔上風、落下風兩版過程；引擎換成判定差距的平移（`encounter.advantage_shift`），大勝、險勝播佔上風那一版，僵持、落敗播落下風那一版（取代範本回合，寫在 `BattleRecord.narration`）。C 段重驗**整張單子一模一樣**才採用（選項、對手、地點、事件、戰報流水號、雙方陣容），對不上照平常打；等判讀時人走了或事件被了結就不打，回一句「你離開了，這一仗沒打成。」或「情勢變了……」。**一般的仗不問模型，備料與動作在同一次拿鎖裡做完**。按下去要等模型的選項帶 `Option.wait`（「兩人對峙……」），網頁照它換字。池子裡有大場面對手的地點，遊歷挑對手照 `Game._train_pick`（雜湊），其餘照 `Game.rng`（正式內容目前每一處都是後者）。
+- **戰鬥卡片**（「剛剛」那張，`battlelog.card_text`）：標題、時間與類型、結果三行同一塊；「過程」（回合一行一行，或大場面模型的一段話）；結果敘事與得失併成一段（「**結果**　…　**得失**　…」）；不重複掉落物、不寫「氣血 -0」，身法閃過多一句「身法一閃，躲過了這一敗。」。網頁上只露第一回合（太高時換成只有數字的短句，`compactRound`），按「展開過程」才攤開，「看完整戰報 ›」放在「過程」那一行（沒有過程的卡片放在最後一段句尾）——目的是 375×812 上不用捲就看得到結果。戰報頁（`detail_text`）照舊整段列出、陣容與「獲得與損失」各一段。
+
+### 武學與成長（武學與成長設計；計畫一～三、二之二、二之三、四、五都已在 main）
+- **身上一門內功、一門武學**，開局送基礎吐納與基礎拳腳。**取消自創**（設計 3.8）：玩家不能自己取名造武學，新武學靠合成。
+- **心得管學、體力管練**（設計 4.7，推翻了「練功免費」的兩次舊決定）：
+  - 練成（成）：第 N 成升 N+1 成花 N×`practice_xinde_per_level`（1）點心得，只看第幾成、不看品質；有 15% 機會受傷。
+  - 修練（品）：融過意境的武學，用它融的那個意境反覆修練衝品質，一次花 `cultivate_stamina`（10）體力；機率照 `cultivate_odds`（中品 20%、每失敗一次 +10；上品 10%、+6；絕學 4%、+3），乘悟性加成。中品、上品加到 100% 必成；**絕學沒有保底**，累積最多到 `cultivate_cap`（50%）。品質每人各練各的（`PlayerState.art_quality`），熟練度記在 `art_mastery`，升品時成不變。
+  - 破境丹（`legend_items`）：探索偶爾撿到；修練頁每一門武學勾「服下破境丹」（預設不勾，伺服器只認布林 `true` 的 `use_legend`），服的那一次多 `legend_item_bonus`（15）%（加在上限之上），成不成都用掉一枚；被拒絕的修練不擲骰、丹也不動。
+  - 絕學定名：全服第一個練成的人拿到取名權（`world.claim_master`，一人一次只留一門；還有一門沒定名時不能衝第二門），名字過 `naming.name_problem`、`world.rename_skill`（原子），id 不變只改顯示的名字（沿用原名也算定名），江湖史記一行；等著定名的那門不能熔。
+- **意境**（設計 3.2、附錄 A）：基本意境 風（快）、火（剛）、水（柔）、山（慢）靠探索悟（照地點地形，附錄 C）；浩然（正）、血煞（邪）靠善名、惡名到門檻；奇遇可以直接給（`Effect.insights`，只能是靠探索悟的基本意境）。悟到已經會的化成 10 心得。意境永久學會，合成、修練、合併都不會用掉。
+- **三種合成**（煉製頁的太極火爐，`Game.forge(art_id, insight_ids, proposed=None, other_art=None)`）：
+  - 武學＋意境 → 新武學（`fuse`，配方鍵 `融|底+意境`）：底留著；種類跟底、屬性與正邪跟意境。
+  - 意境＋意境（可以是同一個）→ 新意境（`merge`，`合|甲+乙`）：兩個都留著；屬性的種子是「天機｜配方鍵」。
+  - 武學＋武學 → 第三門新武學（`blend`，`兼|甲+乙`，兩個 id 排序後接起來）：兩門都留著；種類、屬性、正邪由 `blend_shape` 照配方種子決定。
+  - **三種一樣價錢**：`fuse_xinde`／`merge_xinde`（5）心得＋`fuse_stamina`／`merge_stamina`（5）體力，真的合成了才收（被拒絕不扣）。合併收體力的起因：「合併 → 熔掉 → 再合併」每一圈淨賺心得，企劃者決定不擋、讓每一圈都付一次體力（2026-10-05；FB-067 從 10 降到 5）。
+  - 合成出來的武學**一律從下品、第一成起修**，不繼承底的品質（擋「絕學的底合出絕學的複本、熔掉就賺」的迴圈）。
+  - **配方全服共享**：第一個合出來的人等模型取名（叫不動走退路字表），之後查表、不用等；別人首創、你還沒有的照樣能合。
+  - **合到舊的**（設計 12.2）：一個組合這一季第一次被合時，規則先判會不會合到這一季已經合出來的同類（`landing`：每個候選 +`land_chance_per_candidate` 5%、最多 90%，擲骰是天機＋配方鍵的雜湊）；候選兩個以上由模型從清單挑一個（挑到清單外的當沒挑、改由規則挑）；合到的那一門登記成這個配方，合到你已經有的不收錢。基礎武學、名將武學、內容寫好的意境不在候選裡。
+  - **合成的意義是拿到你還沒有的**：配方已經登記、合出來的那一門你已經有了，就不准合（「…你已經有了——換一組試試吧」，排在花費與持有上限之前，同一爐連按兩下也只扣一次）。「已經有了」一律照功法的 id 認。合出來的對應欄位空著就直接配上身，否則進功法庫。
+- **持有上限**（武學與意境合計，`library.cap_of`）：50＋（等級 // 5）×3＋max(0, 博聞−5)×2（一季最多 88 格）。滿了不能合成、合併、學新的；悟意境照收（博聞被扣下來而超過上限時，熔回上限以內之前不能合成）。
+- **熔煉**：功法庫裡的武學熔成心得＝max(基本值, 練成花的八成)＋品質加給（只算自己修練上去的那幾階：中品 5、上品 15、絕學 40，減去登記時的那一階）；全服登記的武學基本值 `melt_min_refund`（4），內容裡的武學沒有基本值（不然「學、熔、再學」就是無本迴圈）。意境熔成 10 心得。身上正在練的不能熔（先改練）。
+- **改練**（`team.switch_art`）：把庫裡的換上身、換下來的回庫，熟練度各自保留（`PlayerState.art_levels` 只在換下來時寫、換上去時取）。
+- **素材**：只剩打贏掉（`Squad.drops` 或依難度的預設表）、路邊採集、事件與路上見聞給；用途是糧草與伏筆。`content.py` 載入時檢查每一種素材都拿得到。
+- **狀態列提示**（`skillview.practice_hint`）：心得 ≥ `xinde_hint_threshold`（50）而且真的有事可做（還能練成、或付得起一次合成）時，提示去「修練」或「煉製」；休季不提示。
+
+### 第一季濃縮版（`rules.season_one` 開著時才有）
+- **季曆**：一季壓成 `season_weeks`（12）週，季曆秒＝世界秒×`cal_scale`；週末設定 2.5 天時一週是現實 5 小時。季長照開季時蓋的章，設定中途換了也不影響正在跑的這一季。
+- **時刻表**（`content/timetable.json`，12 件大事）：一般大事看季曆；決戰與季末看 `WorldState.schedule`（管理者可排）。結算：給了結果鍵照它 → 有人鎖定關鍵伏筆照鎖定 → 寫死的照 fixed → 其餘照戰況擲骰。公告卡（江湖頁最上面）、天下大事傳聞、江湖史各一筆；每個人的江湖紀錄在他下次同步時補（`Game._deliver_big_events`）。
+- **三條戰線**：潁川汝南、南陽、冀州（0 官軍穩控、100 黃巾控制）；黃巾聲勢由三條加權而來；豪強割據：有戰線在亂局（35～65，`chaos_low`～`chaos_high`）時每條每曆日漲 `geju_chaos_per_day`×min(1, 投靠名冊人數÷`geju_full_players` 15)，三條都穩時每曆日落 `geju_calm_per_day`。決定性勝利（聲勢 ≥85 或 ≤15、割據 ≥85）第 `decisive_from_week`（10）週起才提前收季。江湖頁有戰況圖卡（亂局帶、亂局標）與三方態勢那一行（`status_data` 的 `fronts`、`chaos_band`、`stances`、`stance_notes`，開關關著時這幾個鍵都沒有）。
+- **推力**（`Game.push_trend`）：陣營人數緩衝、每人每曆日每條線上限 `daily_push_cap`、貢獻記帳（推 1 點記 `contrib_per_push`）。
+- **軍令**（`content/orders.json`）：每週一發令，五種：攻城、守城、截糧、護糧、打擊大勢人物；個人照做一次記一次，全陣營湊滿額度那一刻套一次效果。打擊軍令的卡寫怎麼打、在哪（所在沒摸清只寫大區），輿圖局勢層在目標標 ◎（沒摸清標大區）；「他現在挑戰得了嗎」只問 `figures.can_challenge`（挑戰鈕、軍令卡、輿圖共用）。
+- **晉升**：貢獻到 `rank2_contrib` 發召見 → 在召見的地點應召走晉升奇遇；頭銜寫在狀態列；部下見上面。
+- **大勢人物**：選單上「挑戰本人」（`act:challenge:<id>`，難度跟著聲威）；打贏扣他的聲威與情誼，`snub_hours` 現實小時內閉門不見。
+- **伏筆**：片段（行動後偷聽、對話裡的片段選項）、準備事件、最後一步；鎖定只在大事揭曉時露出來，先完成與搶輸的敘事一模一樣。
+- **叛投**：一季一次，在別陣營的投靠點（「此地還能做」裡的「叛投X」，要再按一次確認，可以「再想想」）。身份歸零：晉升、召見、部下、本季貢獻、押著的糧車作廢，舊陣營的門派一起離開、這一季拜不回去；屬性、武學、同伴、銀兩、素材、紀錄都不動。新舊陣營各一則軍情（寫本名），當地一則地方傳聞（照匿名規則）。名字還在沒打完的決戰陣上不能叛投；假人與整季機器人不叛投。
+- 結局與休季的結算卡（江湖頁最上面）。beta 的黃巾決戰門檻、主線、`kou_boss` 等由 `scenario.json` 的 `season_one_off` 關掉。
+
+### 全服決戰
+- **兩種開法**：beta 那一季是大勢推到門檻（`scenario.json` 的 `huangjin_60`，`starts_battle`）開「黃巾決戰」；第一季是時刻表上的三場（長社火攻、宛城之戰、廣宗決戰），起點照戰況。
+- **流程**：集結（人要在決戰所在的大區、不在路上；劇本有陣營時只能替自己的陣營出戰，晚到的人補進自己那一邊）→ 逐幕逐回合鎖步（所有在場者都送出行動、或回合逾時代選保守行動，才結算；誰送出最後一個就由誰的這次呼叫觸發結算，不需要背景程式）→ 收場。**每幕固定 `rounds_per_act`（3）回合**（黃巾決戰 3 幕 × 3 ＝ 9 回合），換幕只看回合數、不看戰局；打完最後一回合，或某回合戰局偏離中線 50 達 `decisive_margin`（40，即到 90／10）就收場，由 `battle_instance.decide_outcome` 照 `outcomes` 決定結果。時刻表決戰的結果由 `decide_result` 判：有人鎖定伏筆的一方一定贏，否則看戰局偏向哪邊，偏離 ≥15 大勝、否則險勝。場上沒有任何人能打時，回合一逾時就用 `outcomes` 最後那個無條件的保底收場（`end_without_fighters`）；換季也會清掉沒打完的戰鬥。「不會把全服卡住」主要靠回合上限。
+- 決戰的氣血池是加入時抓的快照，不回頭傷到角色；威力也是加入時快照。參戰者打完各自補一則紀錄與一場戰報（站哪邊、出手幾回合、第幾回合倒下、大勢），下線的人回來補。
+- 框架是人寫好的（`content/battles.json` 的 `acts`／`outcomes`／`rounds_per_act`／`decisive_margin`），玩家只能在框架內影響要素；機器人是一等公民（補位湊人數，`bot_choose_action` 照風險反向加權，不選自由文字）。
+- **放手一搏（使用者明確要求的核心樂趣）**：固定選項（穩守／猛攻）走查表（`BattleDef.action_tags`）。「放手一搏」是 20 字內的自由文字，機制效果必須真的隨玩家寫的內容變化——使用者明確否決過「不管打什麼結果都一樣」那一版（「我就是希望看到玩家的奇葩操作對戰局產生影響」）。做法：**模型只評一個成功率（0～100），擲骰與推進、損耗公式全由引擎**（`FreeTextGamble`：成功時推進＝基礎＋風險×係數、失敗時往對方倒退並重扣氣血，風險＝100−成功率）。評估在送出的當下、**行動鎖內**用 `_quick_client()` 做（`MAIN_ACTIONS["battle_text"]` → `Game.submit_battle_custom_action`），存進 `BattleRound.success_rates`；`resolve_round` 本身是純同步函式、不叫模型。評不到一律 `DEFAULT_FREE_TEXT_SUCCESS_RATE = 40`（刻意低於五成）。推動方向靠 `BattleDef.factions[0]` 是正向的約定。
+
+### 模型呼叫
+- 本機 Ollama，模型 `gemma4:26b`（`content/config.json` 的 `ollama_model`；`ollama_think: false`、`ollama_keep_alive: 12h`）。實測（模型已常駐）：隨口應對評分 4～5 秒、人物對話一輪約 9～13 秒、合成取名約 4 秒；冷啟動第一次載入約 32 秒。trycloudflare 約 100 秒就切斷一個請求。
+- **三段式**（照人物對話 `server.prepare_dialogue` 的做法）：A 鎖內很快地開單（`Game.dialogue_request`、`Game.forge_request`、`Game.fight_request`、`Game.free_text_request`，只讀）→ B 鎖外叫模型（`companion_agent.prepare_turn`、`naming.generate`、`fight_llm.judge`、`event_llm.assess_event_success_rate`；不碰狀態、不拿鎖）→ C 鎖內整個重驗再套用（`Game.choose(prepared=…)`、`Game.forge(…, proposed=…)`、`Game.choose(fight=…)`、`Game.answer_event`），對不上就丟掉、照沒有模型的路走。開爐取名的 B 段預算是 `naming_budget_seconds`（60）扣掉 A 段等鎖的時間，`naming.propose(…, budget=)` 照給出去的逾時扣、用 client 的複本；伺服器的開爐一律給 `proposed`（不必叫模型時是 `NO_NAME`），所以鎖裡從不取名。C 段的名字再過 `naming.recheck`，重名在登記時原子判斷，過不了走退路字表（種子是配方鍵＋這一季的天機，不看誰先到）。之後的模型佇列只會換掉 B 段。
+- **還留在鎖內的模型呼叫**：大事潤色（`world.check_thresholds`／`fire_by_id`）、決戰回合敘事（`battle_instance.narrate_round`）、重複事件與重遊的點綴句（`flavor`）、放手一搏的評分、鎖內才備料的對話與每隔一陣子的記憶整理／性情漂移、沒給 `proposed` 的開爐與沒給分數的隨口應對（整季機器人、腳本、測試）。**一律拿 `Game._quick_client()`，不要直接用 `self.client`**：逾時 `in_lock_model_timeout`（15 秒，這是每一步的上限）、不重問；一次拿鎖期間第一次失敗之後，後面的鎖內呼叫都不叫（`_model_budget`；`server._locked` 每次拿到鎖先 `reset_model_budget()`）。**全服斷路器**：任何一次拿鎖裡鎖內的模型呼叫失敗或逾時，`server.py` 打開 `MODEL_BREAKER_SECONDS`（180 秒），這段時間每一次拿鎖一開始額度就用完、直接用固定文字；時間到之後的第一次照常叫，又失敗再打開；開、關各印一行（不寫是誰）。鎖外的路徑不歸它管。
+- **繁體**：模型產出的文字（對話、敘事、選項、標籤、名字、點綴）一律過 `zh.to_traditional`：純 Python 的 `opencc-python-reimplemented`、`s2tw` 模式（只轉字、不換詞——`s2twp` 會把「的士卒」換成「計程車卒」，FB-014），繁體輸入原樣通過（FB-018，「里、斗、了」不會被改錯），之後再套一張異體字表 `VARIANTS`（OpenCC 放過日式新字體「鉄」）；import 失敗退回手寫對照表。**要「保證繁體」只靠 OpenCC 不夠。**
+- **保底值會把「模型壞了」偽裝成「模型給了中庸的答案」**：成功率評不到退回 40，可是模型對爛寫法正常會評 0～5；曾經因為 `ollama_client` 把 `0` 當成缺值，所有灌水的寫法都被抬到 40（2026-10-05 已修，`tests/test_ollama_client.py`）。驗模型的機率評估要先看有沒有保底警告（`scripts/try_event_llm.py` 會印）。LLM 相關的東西定案前要用真模型跑一次。
+- **匿名**：首創者、第一個練成絕學的人寫給別人看的名號在登記當下記下（`MartialArt.creator_shown`／`master_shown`、`Insight.creator_shown`；匿名是「某位少俠」），之後照它寫；名號本身照舊存著當身分。
+
+### 介面（`web/`）
+- 伺服器只給資料、畫面自己做：沒有建置步驟的原生 JavaScript（`web/app.js` 一個檔）。底部五個分頁 **江湖／修練／煉製／輿圖／見聞**（見聞＝戰報、大勢、傳聞、江湖史、紀錄），設定與管理者工具收在右上角齒輪。頂上狀態列（體力、氣血兩條＋銀兩、心得；點名號展開：名號獨佔一行、頭銜第二行〔一段一個 `.who-seg`，不能叫 `seg`〕、屬性、「可配 N 點」與五顆＋鈕、隊伍）。
+- 登入狀態是 cookie（`tx_session`），伺服器記憶體裡對應帳號；**重開伺服器要重新登入**。前端每 10 秒打 `/api/main`，分頁在背景時不打、上一次還沒回來不打、內容沒變不重畫。
+- **江湖頁**：劇情文字在上、行動在下；375×812 上「剛剛」、場景與整排行動都在第一屏（企劃者要的是按完不用捲就看得到結果）。平常閒著時（選單上有「打坐」）行動是一排五顆「水墨氣勁」按鈕：探索、遊歷、打坐、交友（沒有時是求見）、移動（點了在下面展開走法與「前往」）；其他只在此地才有的行動收在「此地還能做 N 件事」。事件、對話、路上、決戰的選單照舊是一排按鈕。第一季另有公告卡、本週軍令卡、戰況圖卡。
+- **修練頁**（`pagePractice`）：身上的功法卡、練成鈕（寫價錢）；每一門武學一列（`owned_arts`：品質、熟練度、融的意境）可修練（含「服下破境丹」）、改練、熔煉；意境可化成心得；等著取名的絕學多一張定名表單；名冊與人物卡。
+- **煉製頁**（`pageCraft`）：太極火爐左右兩格放「一門武學＋一個意境」、「兩門武學」（第二門當 `other_art` 送出）或「兩個意境」，點有東西的那一格拿出來；挑東西在爐子下面的武學與意境清單；說明那一行即時更新（`/api/forge_line`），「開爐」緊接在它下面；等結果時整座爐子晃動；第一季手上有伏筆物品時多一列「伏筆物品」；最底下摺疊「背包」（素材，有破境丹時另起「傳奇道具」小標題）。
+- **輿圖**：四個圖層，可拖、可縮放；點地點看詳情，「安排前往」是步行／趕路／疾行三顆（`/api/travel` 帶 `mode`，照 `Game.travel_options()` 畫）。
+
+## 量表與教訓
+
+### 好玩度量表（企劃者 2026-10-03 提的方法，`scripts/fun_run.py`）
+企劃者的話：「你要假裝自己是一個新玩家，甚麼都不知道，然後有新東西……你的好玩度會上升，反之如果你的行動看到重複出現過的，那你的好玩度會下降，重複越多次下降越多」。
+- **定案的算法**：每條管道（事件、意境、合成出來的功法〔配方首創／查表〕、對手、地點）各自算「每次碰到它，有幾成給了你新東西」（−100～+100）再平均（`FunLog.balanced`）；整季沒出現的管道算 −100。單一總分（`FunLog.score`，每百行動的密度）只留著對照，**不要拿它下結論**——總分會隨「玩了多久」無上限累積，被觸發頻率高的管道支配。
+- 實作上刻意處理：新而沒有收穫的首見只拿一半分；**機制動作的重複（移動、遊歷、練功、療傷）不扣**，只扣敘事內容的重複；遞增懲罰夾上限；輸出分項、每日淨值的時間軸、最後一次看到新東西是第幾天。
+- **校準先於結論**：`--calibrate` 用行為重現造出已知比較無聊的歷史狀態（`--no-craft --no-train`、`--no-train`、現在），指標排不對就是指標錯了。計畫一拿掉素材煉製之後校準剩這三個狀態；10/3 四個狀態時量到種子落差 36 分 < 狀態差距 93 分，現在的數字沒重量。當時最大的問題是事件管道（茶館說書一季 27～37 次），之後有了防重複輪替（`events.rotation_pool`）。
+- **量不到的事**：挫折（連續失敗、不可預期的損失）。新角色連輸三場、氣血見底這種坑，這個指標看不出來，要另外量或實機試玩。
+
+### 量平衡與試玩的教訓（還在用的）
+- **量平衡之前先確認機器人會用到那個機制**（舊稱「第三層」的教訓）：`bot.py` 不會煉製的那段時間，所有平衡數字描述的都是「忽略新玩法的玩家」。`bot.forge_and_cultivate`、`allocate_points` 就是為此存在。
+- **以後要在「什麼都沒發生」的分支上掛東西，先確認那個分支真的會被走到**：舊版探索 100 次有 100 次撞到事件，掛在「一無所獲」後面的素材與遭遇戰一次都沒執行過。
+- **不要憑有限的試玩就斷言某個機制「不存在」**，下結論前先查 content。
+- **實機試玩**（用真實 `content/` 跑真正的 `Game`，每步印出所有選項、偵測「全部 disabled」或「選項組合連續多輪不變」）抓得到單元測試看不到的死路：體力歸零全部 disabled、龍頭人物碰不到、裝飾用的按鈕、對玩家隱形的數值變化、新角色照著引導走把自己打死。資訊透明（勝算、成功率、還差多少）是這類坑最常見的解法。
+- **重現歷史缺陷要連同期的程式行為一起退回**：缺陷常常是「檢查沒有」加上「當時的策略比較笨」兩件事一起造成的。
+- 判準只寫有依據的那一條；判準不通過時先確認是重現不夠真、還是指標看不見，不要急著調參數迎合直覺。
+- **任何「用 Game 跑整季」的腳本都要先開季**（`store.open_season(now)`；`bot.play_season` 自己會開），不然停在籌備中、什麼都不會發生。
+
+## 歷史（已完成或已取代，細節看原文件）
+
+- **Gradio 介面**（`app.py`，至 2026-10-03）：已換成 `server.py`＋`web/`；`requirements.txt` 不再裝 gradio／pandas／numpy（這台機器封鎖過 pandas 帶進來的 DLL）。舊計畫寫 `app.py` 的地方讀成 `server.py`。
+- **三對三戰鬥** `battle.py`：sanguo-companions 合併時換成 `encounter.py` 的單次判定；`scripts/simulate.py` 因此死掉，2026-10-03 刪除（替代品：`fun_run.py`、`sim_server_bots.py`、`bot.play_season`＋observe）。
+- **無限煉製**（素材＋素材 → 功法，`craft.py`，2026-10-01～10-04，`specs/2026-10-01-無限煉製-design.md`）：由武學與成長取代（武學＋意境、取消素材合成）；`craft.py`、`tests/test_craft.py`、`Config.xinde_cost_factor`／`craft_xinde_*` 已刪。留下來的有：配方全服共享、首創者取名、每季清空、`zh.py`、退路字表、禁用名單、`MartialArt.note`、功法庫與改練。
+- **自創武功**（`team.create_skill`）與 10/2「限次數」、10/3「自創與融合」設計：企劃者 2026-10-05 在武學與成長設計取消自創，程式已拿掉；《自創與融合》整份作廢。
+- **「練功免費」**（10/1、10/2 兩次決定，與第三層「不要再提收費」）：2026-10-05 由武學與成長設計 4.7 推翻（心得管學、體力管練）。當時量到的事實（隨機一季心得收入很少、兩門開局幾分鐘就練滿）是推翻的依據之一。
+- **平衡五層**（2026-10-02）：三階素材沒有來源（補了鎮山塔奇遇與素材可得性檢查）、遭遇戰機制上不會發生（遊歷做回真正的行動）、白燒的爐子（擋重煉；現在是「結果你已經有了就不准合」與「合到你已經有的不收錢」）、等級無用（補上氣血門戶名冊設計 §1 的內傷與氣血係數，方案 A1；運氣與門檻改成難度的比例；§1.4 第 1 條的「高 10 級勝率 60～70%」已在設計裡改寫掉）。現在的規則見上面「屬性、威力與氣血」。
+- **引導順序**：練功排到出城之前（t4 在 t3 前面）；開局就送兩門基礎武學。
+- **flaky 測試** `test_create_skill_practice_and_heal_handlers`：原因是練功受傷的機率沒固定種子，已修（測試裡把 `practice_injury_chance` 設 0）；連同 `tests/test_app.py` 一起不在了。
+- **LLM 對話夾簡體字**：已由 `zh.py` 解決。
+- **舊模型** `qwen2.5:14b`：放手一搏的成功率排序是用它實測定案的；煉製取名 27～83 秒也是它的數字，換 `gemma4:26b` 後約 4 秒。
