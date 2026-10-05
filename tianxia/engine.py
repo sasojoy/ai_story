@@ -13,7 +13,7 @@ from pydantic import BaseModel
 
 from . import (
     atlas, battle_instance, battlelog, calendar, companion_agent, craft, encounter, event_llm, figures, flavor, foreshadow,
-    journal, materials, orders, push, roster, skillview, team, timetable,
+    journal, materials, orders, push, ranks, roster, skillview, team, timetable,
 )
 from .events import choice_label, event_candidates, has_events_here, pick_event, visible_choices
 from .guide import base_step_count, note_action, quest_text, tutorial_intro
@@ -43,6 +43,7 @@ HOUR = 3600
 DAY = 86400
 BULLETIN_MAX = 3  # 江湖頁最上面的公告卡最多放這一週的幾則大事（計畫 T2）
 AUDIENCE_HALL_FIGURES = 2  # 一個地點有幾位以上的大勢人物，交友就不直接找人、改按「求見」指名（企劃者 2026-10-03 決定）
+OFF_FRONT_NOTE = "沒在戰線上領兵，不受挑戰"  # 戰線空著的人物（董卓、趙弘、重挫退下的人）：挑戰按鈕寫這一句（PM 2026-10-05 定）
 SNUB_NOTE = "剛吃了敗仗，閉門不見"  # 挑戰本人打贏之後，他對打贏的人關上門（軍令文件 4.5）：求見、交友、挑戰的按鈕寫這一句
 # 路上小事（路上設計第四節）：road:<id> → (名稱, 這一段做過之後寫的「這段路已經……」)；按鈕上的補充見 _road_task_options
 ROAD_TASKS: dict[str, tuple[str, str]] = {
@@ -265,7 +266,10 @@ class Game:
             journal.add_entry(self.state, news, merge=True)
         self._deliver_big_events()  # 這一季的時刻表大事人人有份：沒看過的補上，推進的人也走這一條（FB-038）
         self._deliver_battle_results()  # 下線時收場的決戰，回來第一次同步就補上（休季、籌備中也一樣，FB-027）
-        return self._log(msgs + arrived)
+        summons = ranks.check_summons(self.state, self.content)  # 行動之外記到的貢獻（抵達、別人觸發的結算）：同步時補發召見（計畫 T5）
+        if summons:
+            self._write("召見", summons)
+        return self._log(msgs + arrived + summons)
 
     def advance(self, seconds: float) -> list[str]:
         """玩家主動「等待」固定一段遊戲時間（快轉按鈕）：進行中時，直接在 self.state.world
@@ -387,6 +391,8 @@ class Game:
             # 內傷的代價——不顯示勝算的話，玩家會在開局連輸三場、氣血見底才知道自己不該打。
             opts.append(self._train_option(loc, cost["train"], odds))
         opts += self._challenge_options(odds)  # 挑戰本人（T4）：第一季、有陣營、這裡站著敵方的大勢人物時才有
+        if ranks.summons_event(s, c) is not None:
+            opts.append(Option(id="act:summons", label="應召"))  # 晉升奇遇（計畫 T5）：人在召見的地點才有，不花體力
         people = self._figures_here()
         if has_events_here(c, loc, "socialize") or 0 < len(people) < AUDIENCE_HALL_FIGURES:
             # 兩位以上大勢人物的地點，交友只走福緣與地點事件、從不開口對話（見 _socialize_figure），
@@ -641,6 +647,7 @@ class Game:
             if kind == "call" and arg != "back":
                 msgs += note_action(self.state, self.content, self.world, "socialize")  # 指名求見算一次交友（新手引導、任務）
             msgs += check_thresholds(self.state, self.content, self.world, self.client, now=self.now)
+            msgs += ranks.check_summons(self.state, self.content)  # 貢獻跨過門檻就發召見（計畫 T5）
             journal.add_entry(self.state, self._draft.entry(self.state.world.time, msgs))
         finally:
             self._draft = None
@@ -742,7 +749,7 @@ class Game:
         duty = c.orders.duties.get(s.player.faction or "")  # 守勢行動的標題寫陣營自己的名字（巡哨、傳道、保境安民）
         titles = {
             "explore": f"探索{here}", "socialize": f"交友・{here}", "call": f"求見・{here}", "train": f"遊歷・{here}",
-            "recruit": f"招募・{here}", "rest": f"打坐・{here}", "stand": "起身", "halt": "喊停",
+            "recruit": f"招募・{here}", "rest": f"打坐・{here}", "summons": f"應召・{here}", "stand": "起身", "halt": "喊停",
             "duty": f"{duty.name if duty else '守勢'}・{here}", "convoy": f"接下糧車・{here}",
         }
         return titles.get(arg, "提前出關")
@@ -781,7 +788,12 @@ class Game:
             return [f"你遞上名帖，準備求見{self.content.locations[self.state.player.location].name}的人物。"]
         if what.startswith("challenge:"):
             return self._challenge(what.partition(":")[2])
+        promotion = ranks.summons_event(self.state, self.content)
+        if what == "summons":
+            return self._present(self.content.events[promotion])
         self.state.player.stamina -= cost[what]
+        if promotion is not None and what in ("explore", "socialize"):  # 在召見的地點探索、交友：端出晉升奇遇（計畫 T5）
+            return self._present(self.content.events[promotion])
         if what == "explore":
             return self._explore()
         if what == "train":
@@ -958,7 +970,6 @@ class Game:
         front = front_of(c, loc.id)
         p.stamina -= c.config.duty_stamina
         text = duty.text.replace("{地點}", loc.name)
-        self._outcome(duty.name, text)
         msgs = [text]
         goals = self._goals()
         if goals.get(front):
@@ -978,7 +989,6 @@ class Game:
             return ["（這裡沒有糧車可接。）"]
         p.convoy = Convoy(order=escort.id, grain=need, from_loc=p.location, to_loc=escort.end)
         text = f"你把 {need} 份糧草裝上車，要送到{c.locations[escort.end].name}。路上當心截糧的。"
-        self._outcome("接下糧車", text)
         return [text]
 
     def _convoy_arrives(self, loc_id: str) -> list[str]:
@@ -1903,7 +1913,8 @@ class Game:
 
     def _challenge_options(self, odds: bool) -> list[Option]:
         """挑戰本人：第一季的規則開著、自己有陣營時，這裡每一位在場的敵方大勢人物一個選項（體力照遊歷；odds 時寫勝算，
-        難度跟著聲威走）。剛被你打敗、閉門不見的那幾位按不下去、寫明原因。散人沒有；同陣營的人不打。"""
+        難度跟著聲威走）。剛被你打敗、閉門不見的那幾位，以及戰線空著的人物（人物表標了 challenge_off_front 的何進除外），
+        按不下去、寫明原因；求見、交友照常。散人沒有；同陣營的人不打。"""
         s, c = self.state, self.content
         p = s.player
         if p.faction is None or not season_one(c, s.world):
@@ -1915,7 +1926,9 @@ class Game:
             if fig.faction == p.faction:
                 continue
             option_id = f"act:challenge:{fid}"
-            if self._snubbed(fid):
+            if figures.state_of(s, c, fid).front is None and not fig.challenge_off_front:
+                opts.append(Option(id=option_id, label=f"挑戰{fig.name}（{OFF_FRONT_NOTE}）", enabled=False))
+            elif self._snubbed(fid):
                 opts.append(Option(id=option_id, label=f"挑戰{fig.name}（{SNUB_NOTE}）", enabled=False))
             else:
                 opts.append(self._cost_option(option_id, f"挑戰{fig.name}", cost, note=self.challenge_odds(fid) if odds else ""))
@@ -2351,6 +2364,7 @@ class Game:
         try:
             msgs = self._depart(route, mode)
             msgs += self._hear_after_stamina(stamina)
+            msgs += ranks.check_summons(s, c)  # 疾行送到糧車也記貢獻（計畫 T5）
             journal.add_entry(s, self._draft.entry(s.world.time, msgs))
         finally:
             self._draft = None
@@ -2557,12 +2571,15 @@ class Game:
 
     # 名冊第一列是本人（PLAYER）：本人永遠出戰，加入、移出都只回一句話，隊伍裡不會多出一個 "player"
     SELF_IN_TEAM = "本人一直都在隊伍裡，不用加入，也不能移出。"
+    FOLLOWER_IN_TEAM = "部下一直跟著你出戰，不用加入，也不能移出。"  # 計畫 T5
 
     def add_to_team(self, companion_id: str) -> list[str]:
         if self._preparing():
             return self._log(["（賽季籌備中，等待管理者開季。）"])
         if companion_id == PLAYER:
             return self._log([self.SELF_IN_TEAM])
+        if companion_id.startswith(team.FOLLOWER_KEY):
+            return self._log([self.FOLLOWER_IN_TEAM])
         return self._log(team.add_to_team(self.state, companion_id))
 
     def remove_from_team(self, companion_id: str) -> list[str]:
@@ -2570,6 +2587,8 @@ class Game:
             return self._log(["（賽季籌備中，等待管理者開季。）"])
         if companion_id == PLAYER:
             return self._log([self.SELF_IN_TEAM])
+        if companion_id.startswith(team.FOLLOWER_KEY):
+            return self._log([self.FOLLOWER_IN_TEAM])
         return self._log(team.remove_from_team(self.state, companion_id))
 
     # ── 門下頁面：武學說明 ──────────────────────────────────
@@ -2876,7 +2895,7 @@ class Game:
                           "hp": int(mate_now), "hp_max": int(mate_cap)})
         data = {
             "name": p.name,
-            "affiliation": "・".join(name for name in (sect, faction) if name) or "散人",
+            "affiliation": "・".join(name for name in (sect, faction, ranks.title(c, s)) if name) or "散人",
             "anonymous": p.anonymous,
             "level": p.member.level,
             "location": c.locations[p.location].name,

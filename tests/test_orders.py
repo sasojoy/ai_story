@@ -418,6 +418,7 @@ def test_duty_pushes_the_front_and_counts_for_defend(on):
     assert game.state.player.stamina == 140
     assert game.state.player.contrib == 10  # 推 1 點記 10 貢獻（T3）
     assert game.state.journal[0].title == "傳道・長社"
+    assert game.state.journal[0].lines[0] == msgs[0]  # 那句敘事寫進「剛剛」與紀錄（FB-043：以前被當成結果標記藏起來）
 
 
 def test_haoqiang_duty_pushes_geju_only_in_chaos(on):
@@ -467,6 +468,7 @@ def test_convoy_needs_four_grain_and_says_why(on):
     top = on.materials["man_3"].name
     assert option.enabled and option.label == f"接下糧車（送到宛城・交出糧草 4 份：{top} ×1）"  # 會用掉哪一個寫出來（審查 M6）
     game.choose("act:convoy")
+    assert game.state.journal[0].lines == ["你把 4 份糧草裝上車，要送到宛城。路上當心截糧的。"]  # FB-043
     assert game.state.player.materials.get("man_3", 0) == 0
     assert game.state.player.convoy == Convoy(order=game.state.world.orders[-1].id, grain=4, from_loc="xinye", to_loc="wan_city")
     again = next(o for o in game.options() if o.id == "act:convoy")  # 一次押一車：按不下去，寫明手上那一車（T6 審查 I3）

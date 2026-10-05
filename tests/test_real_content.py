@@ -564,6 +564,14 @@ def test_real_endings_valid(content):
     assert s1[4].text == "下曲陽破了，可冀州的山裡仍有黃旗。"
     for ending in s1[:3]:  # 決定性勝利第 10 週起才收（企劃者 2026-10-05）：提示不能說「當場收場」卻讓人空等五週（T9 審查 I1）
         assert f"第 {content.config.decisive_from_week} 週起" in ending.hint, ending.hint
+    assert [e.hint for e in s1] == [  # 濃縮版內容表第七節（2026-10-05 審過）：一律照狀態列的「態勢」講、三方對稱
+        "第 10 週起，黃巾的態勢一到 85，這一季當場收場。",
+        "第 10 週起，官軍的態勢一到 85，這一季當場收場。",
+        "第 10 週起，豪強的態勢一到 85，這一季當場收場。",
+        "到了季末，黃巾的態勢最高。",
+        "到了季末，官軍的態勢最高。",
+        "到了季末，豪強的態勢最高。",
+    ]
     beta = [e for e in content.scenario.endings if not e.season_one]
     assert beta[-1].id == "default"
     finale = next(e for e in content.timetable if e.kind == "finale")
