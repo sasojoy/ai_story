@@ -249,10 +249,11 @@ def from_legacy_log(log: list[str]) -> list[JournalEntry]:
     return entries
 
 
-def card_leftovers(entry: JournalEntry, notes: list[str], shown: list[str]) -> tuple[list[str], list[str]]:
-    """打了仗的那一則裡，戰鬥卡片沒寫到的敘事與數值變化（例如同一次行動完成的新手引導與它的獎勵）。
-    notes 是卡片那一場的敘事（BattleRecord.notes），shown 是卡片上的獲得與損失；「遇上【X】」由場景顯示，不算。"""
-    lines = [line for line in entry.lines if line not in notes and not _MARKER.match(line)]
+def card_leftovers(entry: JournalEntry, told: list[str], shown: list[str]) -> tuple[list[str], list[str]]:
+    """打了仗的那一則裡，戰鬥卡片沒寫到的敘事與數值變化（例如戰鬥掉出來的破境丹、同時發生的江湖大事）。
+    told 是卡片已經講過的話、用那一則寫的原文（battlelog.told_lines：結果裡的敘事與掉落的素材），shown 是卡片上的
+    獲得與損失；「遇上【X】」由場景顯示，不算。"""
+    lines = [line for line in entry.lines if line not in told and not _MARKER.match(line)]
     return lines, subtract_changes(entry.changes, shown)
 
 

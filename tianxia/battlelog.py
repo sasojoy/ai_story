@@ -9,7 +9,7 @@ import random
 import re
 from collections.abc import Callable
 
-from . import calendar, front_lines, team
+from . import calendar, front_lines, materials, team
 from . import rounds as rounds_mod  # state 也有一個 Fighter（戰報的陣容），這裡用別名免得混淆
 from .encounter import EncounterResult, describe_result
 from .models import Content, Squad
@@ -130,6 +130,12 @@ def gains_list(record: BattleRecord) -> list[str]:
 
 def gains_text(record: BattleRecord) -> str:
     return "　".join(gains_list(record)) or "無"
+
+
+def told_lines(record: BattleRecord) -> list[str]:
+    """這一場的戰鬥卡片已經講過的話，用江湖紀錄裡那一則寫的原文：結果裡的敘事，加上掉落的素材
+    （卡片的獲得與損失寫「精鐵砂 ×1」，同一次行動的訊息寫「獲得 精鐵砂 ×1」，是同一件事）。卡片底下的補充不重複這些。"""
+    return [*record.notes, *(materials.grant_line(item) for item in record.materials)]
 
 
 def story_text(record: BattleRecord) -> str:
