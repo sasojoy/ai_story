@@ -8,7 +8,7 @@ import pytest
 
 from conftest import FixedRandom, at, install_season_one, walk_to
 from tianxia import (
-    atlas, battle_instance, battlelog, calendar, companion_agent, fight_llm, flavor, front_lines, guide, library, rules, skillview,
+    atlas, battle_instance, calendar, companion_agent, fight_llm, flavor, front_lines, guide, library, rules, skillview,
 )
 from tianxia.characters import open_characters
 from tianxia.content import load_content
@@ -3254,6 +3254,8 @@ def test_a_fight_not_won_at_zero_blood_does_not_say_the_blows_were_dodged(game, 
 def test_a_fight_at_zero_blood_shows_no_zero_blood_change(game, tier):
     """已經沒氣血的人打輸，這一場掉的氣血是 0：戰報的獲得與損失、江湖紀錄的數值變化都不寫「氣血 -0」（零的變化是雜訊，
     手機上還多佔一格）；內傷照樣累積、照樣寫。"""
+    from tianxia import battlelog  # 區域 import：不動檔頭那一行（跟別的分支各自往同一行加東西會合併衝突）
+
     walk_to(game, "lake")
     game.state.player.member.neili = 0.0
     with _forced(tier):
