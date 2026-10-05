@@ -599,7 +599,7 @@ class Game:
             note += "・或與自己人操練"
         option = self._cost_option("act:train", "遊歷", cost, note=note)
         pick = self._train_pick(loc)
-        if pick is not None and self.is_big(pick):
+        if pick is not None and not self._drills_with(pick) and self.is_big(pick):
             option.wait = BIG_FIGHT_WAIT
         return option
 
@@ -699,10 +699,9 @@ class Game:
 
     def is_big(self, squad: Squad) -> bool:
         """大場面：對手標了頭目、是大勢人物本人（figures 的 squad），或難度到 big_fight_difficulty（武學與成長設計 8.3）。
-        自己陣營的操練不算（不打架）。"""
+        只看對手本身：遊歷遇上自己陣營的隊伍是操練、不打架，那是遊歷那一條路自己擋（_fight_squad、_train_option）；
+        劇情戰從來不操練（_event_battle 不看陣營），黃巾的人打黃巾的頭目照樣是大場面（Task 2 審查修正 1）。"""
         c = self.content
-        if self._drills_with(squad):
-            return False
         own = {fig.squad for fig in c.figures.values()}
         return squad.boss or squad.id in own or squad.difficulty >= c.config.big_fight_difficulty
 
@@ -723,7 +722,8 @@ class Game:
         s, c = self.state, self.content
         kind, _, arg = option_id.partition(":")
         if option_id == "act:train":
-            return self._train_pick(c.locations[s.player.location])
+            pick = self._train_pick(c.locations[s.player.location])
+            return None if pick is None or self._drills_with(pick) else pick  # 遇上自己人是操練，不打架
         if option_id.startswith("act:challenge:"):
             fid = option_id.removeprefix("act:challenge:")
             return figures.squad_of(s, c, fid) if fid in c.figures else None  # 難度照他此刻的聲威（T4）

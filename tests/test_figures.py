@@ -656,6 +656,17 @@ def test_a_challenge_plays_out_rounds_that_add_up_to_the_toll(on, world):
     assert told > 0 and sum(int(n) for line in record.rounds for n in re.findall(r"你氣血 -(\d+)", line)) == told
 
 
+def test_a_boss_event_of_your_own_faction_is_still_a_big_fight(real, world):
+    """劇情戰從來不是操練（_event_battle 不看陣營）：黃巾的人在黃巾別部營寨碰上「波才」事件，拔劍打的翻江龍（難度 150）
+    雖然是黃巾的隊伍，照樣是大場面——按鈕寫「兩人對峙……」、有送模型的單子（Task 2 審查：以前被操練的例外擋掉，從不判讀）。"""
+    game = _player(real, world, "黃甲", "huang", "huangjin_camp")
+    assert real.squads["fanjianglong"].faction == "huang" and real.squads["fanjianglong"].difficulty == 150
+    game.state.pending_event = "kou_boss"
+    assert _option(game, "choice:0").wait == "兩人對峙……" and _option(game, "choice:1").wait == ""
+    request = game.fight_request("choice:0")
+    assert request is not None and request.squad_id == "fanjianglong" and request.event == "kou_boss"
+
+
 def test_a_challenge_is_judged_with_the_whole_lineup_against_the_prestige_difficulty(on, world):
     """挑戰本人一律是大場面（武學與成長設計 8.3）：按鈕寫「兩人對峙……」；送模型的單子列出整個陣容（本人兩門功夫、部下也上陣，
     計畫三 G7）與照聲威算的難度；判讀的優勢換成判定差距的平移交給 team.fight，難度照舊。"""

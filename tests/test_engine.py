@@ -3410,7 +3410,8 @@ def test_the_fight_request_and_its_recheck_never_tick_the_battle(game):
 
 
 def test_no_model_and_drills_are_never_judged(game):
-    """沒有模型（伺服器假人的 client 是 None）不問；自己陣營的隊伍是操練、不是大場面，按鈕也不寫「兩人對峙」。"""
+    """沒有模型（伺服器假人的 client 是 None）不問；遊歷遇上自己陣營的隊伍是操練、不打架，不判讀，按鈕也不寫「兩人對峙」。
+    操練只是遊歷的事：同一路人馬在劇情戰裡照樣開打，仍是大場面（Task 2 審查修正 1）。"""
     _boss_at_the_lake(game)
     client, game.client = game.client, None
     assert game.fight_request("act:train") is None
@@ -3418,6 +3419,9 @@ def test_no_model_and_drills_are_never_judged(game):
     game.content.squads["boss"].faction = game.state.player.faction = "kou"
     assert game.fight_request("act:train") is None
     assert next(o for o in game.options() if o.id == "act:train").wait == ""
+    game.state.pending_event = "duel"  # 應戰翻江龍：劇情戰不操練
+    assert next(o for o in game.options() if o.id == "choice:0").wait == "兩人對峙……"
+    assert game.fight_request("choice:0").squad_id == "boss"
 
 
 def test_only_the_big_event_fight_tells_the_page_to_wait_and_free_words_are_no_fight(game):
