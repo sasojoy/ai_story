@@ -57,9 +57,9 @@
     tab: "jianghu",
     nowOpen: null, // 江湖頁「剛剛」展開的那一則（記內容本身）；換成新的一則就收回（A4）
     roundsOpen: null, // 江湖頁戰鬥卡片「過程」展開的那一場（戰報流水號）；換成新的一場就收回（計畫三 G6）
-    boardOpen: null, // 江湖頁公告卡展開著的那一週（週次）；收起或換週就不再對得上（FB-039）
+    peekOpen: null, // 江湖頁那一排小標（態勢｜大事｜主線）展開著的那一塊：{ id, week }；點同一個收起，換週就不再對得上（FB-039、正式版辛）
+    boardSeen: null, // 這個名號看過的本週大事：{ owner, week, count }；記憶體裡一份，localStorage 另存一份（見 boardSeen）
     ordersShut: null, // 江湖頁「本週軍令」收起來的那一週；換週就重新展開（計畫 T6）
-    stanceOpen: null, // 江湖頁態勢卡展開著的那一週（週次）；收起或換週就不再對得上，同公告卡（正式版辛）
     sceneOpen: false, // 在路上時場景那段說明展開著嗎（預設只露兩行，FB-055）；下了路就清掉
     hintOpen: false, // 在路上時狀態列的 💡 提示展開著嗎（預設只露一行，FB-060）；下了路就清掉
     guideRoad: null, // 在路上時說書人的框展開著的那一句（內容本身）；路上預設收成一行，下了路就清掉（FB-055）
@@ -501,9 +501,6 @@
   const ODDS_TONE = { "穩勝": "good", "有把握": "good", "零風險": "good", "五五波": "even", "難分勝負": "even", "凶險": "bad", "必敗": "bad" };
   // 選單上有「打坐」就是平常閒著的時候：用行動列。事件、對話、路上、決戰的選項每次都不一樣，照舊排成一列按鈕
   const idleMenu = (m) => m.options.some((o) => o.id === "act:rest");
-  // 態勢卡排在哪（正式版辛）：只有平常閒著（行動列）時排在最上面；在路上與事件、對話、決戰、求見、投靠確認的選單是一疊按鈕，
-  // 卡排到選項底下，不把選項擠出第一屏（FB-055）
-  const stanceBelowMenu = (m) => !!m.on_road || !idleMenu(m);
   const inkCell = (key, name, sub, icon, attrs, cls, note = "") => `<button class="act-ink${cls}" data-key="${key}" ${attrs}>
       <svg class="ink-icon" viewBox="0 0 24 24" aria-hidden="true">${icon}</svg><b>${esc(name)}</b><small>${esc(sub)}</small>${
       note ? `<small class="ink-note ${ODDS_TONE[note] || ""}">${esc(note)}</small>` : ""}</button>`;
@@ -565,7 +562,7 @@
     return (strong || box.content).textContent.trim();
   }
 
-  // 第一季濃縮版的「本週軍令」（計畫 T6；伺服器只送自己陣營的，散人沒有）：預設展開，收起來的狀態照週次記住（同公告卡）
+  // 第一季濃縮版的「本週軍令」（計畫 T6；伺服器只送自己陣營的，散人沒有）：預設展開，收起來的狀態照週次記住
   function ordersHtml(list, week, convoy) {
     const done = list.filter((o) => o.done).length;
     const cart = convoy ? `<div class="order-cart">🛒 ${esc(convoy)}</div>` : "";  // 押著的糧車（那一道沒了也照樣寫）
@@ -581,29 +578,107 @@
       <summary>📜 本週軍令（${list.length}${done ? `，已達成 ${done}` : ""}）</summary><div class="fold-body">${cart}${rows}</div></details>`;
   }
 
-  // 三方態勢的三條（結算卡與江湖頁的態勢卡共用）：各用自己陣營的顏色、底色中性（T9 審查 M3）
+  // 三方態勢的三條（結算卡與江湖頁態勢小標的面板共用）：各用自己陣營的顏色、底色中性（T9 審查 M3）
   function stanceBars(rows, label) {
     return `<div class="fronts" role="group" aria-label="${label}">${rows.map((x) => `
       <div class="front"><div class="front-head"><span>${esc(x.name)}</span><b>${x.value}</b></div>
         <div class="front-bar stance side-${esc(x.side)}" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${x.value}" aria-label="${esc(x.name)}"><i style="width:${pct(x.value, 100)}%"></i></div></div>`).join("")}</div>`;
   }
 
-  // 江湖頁最上面的態勢卡（正式版辛，企劃者 2026-10-06；PM 量過 375×812 展開的卡有 173px，改成一行的摺疊，同公告卡的樣子）：
-  // 收起時一行「三方態勢　官軍 55・黃巾 45・豪強 10」（三個數字各用陣營的顏色，名稱與數字都來自 status.stances）；
-  // 點開才有三條、收季規則一行、怎麼算的一行小字。門檻與週次由伺服器寫在 stance_rule 裡（從結局與設定算，前端不寫死 85、10）。
-  // 展開與否記在 S.stanceOpen（鍵是週次，toggle 監聽見下面，跟公告卡一樣只存在這一頁，不碰 localStorage）：
-  // 輪詢重畫不會把它關掉，換週就回到收起。休季不畫（結算卡已經有最終態勢）；開關關著時 status 沒有 stances，也不畫
-  function stanceCardHtml(s) {
-    if (!s || !s.stances) return "";
+  // ── 江湖頁最上面的一排小標：態勢｜大事｜主線（正式版辛，PM 2026-10-06）──
+  // 以前是三張各 44px 的摺疊卡疊在「剛剛」上面（連縫約 170px），打完一仗整排行動就被擠出第一屏。現在是一排 44px 的小標：
+  // 點哪一個，它的內容就在這一排正下面攤開；同一時間只開一個，再點一次收起，點別的就換過去。內容跟以前摺疊卡裡的一樣
+  // （態勢：三條、收季規則、怎麼算的；大事：本週的公告；主線：主線與目標）。
+  // 每個小標都可以沒有：沒有態勢（開關關著，或休季由結算卡取代）、沒有大事、主線是空的就不畫那一個，三個都沒有整排不畫。
+  // 計畫 guide-1（還沒併進來）之後會在序章把大事與主線一個一個藏起來（shown("board")／shown("quest")）：
+  // peekParts 回傳的清單裡把那一塊換成 null 就行，peekHtml 會略過 null，其他不用動。
+  // 展開哪一個記在 S.peekOpen（{ id, week }，帶著週次：換週就收回；輪詢重畫整頁也不會把開著的關掉）。
+  // 「大事」小標上有一個點：這一週有還沒打開看過的大事。看過的記在 S.boardSeen（名號、週次、則數），另存一份在 localStorage
+  // 當這個瀏覽器的方便（讀寫都包 try/catch，存不了就只記在這一頁）；換週沒有人看過，點又亮起來。
+  const PEEK_SEEN_KEY = "tx-board-seen";
+  const peekWeek = (m) => (m.status && m.status.calendar ? m.status.calendar.week : 0);
+
+  // 這個名號看過的大事：先看記憶體，沒有（或是別的名號留下的）再讀 localStorage；讀不到、格式不對都當沒看過
+  function boardSeen(m) {
+    const owner = m.status && m.status.name ? m.status.name : "";
+    if (S.boardSeen && S.boardSeen.owner === owner) return S.boardSeen;
+    let seen = { owner, week: -1, count: 0 };
+    try {
+      const got = String(localStorage.getItem(`${PEEK_SEEN_KEY}:${owner}`) || "").match(/^(\d+):(\d+)$/);
+      if (got) seen = { owner, week: Number(got[1]), count: Number(got[2]) };
+    } catch (e) { /* 讀不到就當沒看過 */ }
+    S.boardSeen = seen;
+    return seen;
+  }
+
+  function markBoardSeen(m) {
+    const owner = m.status && m.status.name ? m.status.name : "";
+    const seen = { owner, week: peekWeek(m), count: (m.bulletin || []).length };
+    S.boardSeen = seen;
+    try { localStorage.setItem(`${PEEK_SEEN_KEY}:${owner}`, `${seen.week}:${seen.count}`); } catch (e) { /* 存不了就只在這一頁有效 */ }
+  }
+
+  function boardUnseen(m, week) {
+    const seen = boardSeen(m);
+    return seen.week !== week || seen.count < m.bulletin.length;
+  }
+
+  // 三塊的小標與面板：{ id, label（給讀的人聽的整句）, chip（小標裡的字）, flag（要不要亮點）, panel（點開的內容） }；沒有就是 null
+  function stancePeek(m) {
+    const s = m.status;
+    if (m.season_result || !s || !s.stances) return null; // 休季：結算卡上有最終態勢；開關關著：status 沒有 stances
     const rows = STANCE_NAMES.map(([side, name]) => ({ side, name, value: s.stances[side] }));
-    const week = s.calendar ? s.calendar.week : 0;
-    const nums = rows.map((x) => `${esc(x.name)} <b class="side-${esc(x.side)}">${x.value}</b>`).join("・");
     const n = s.stance_notes || {};
     const how = [n.sum ? `官軍、黃巾：${esc(n.sum)}` : "", n.haoqiang ? `豪強：${esc(n.haoqiang)}` : ""].filter(Boolean).join("；");
-    return `<details class="fold stances" data-week="${week}" ${S.stanceOpen === week ? "open" : ""}>
-      <summary><span class="stances-head">三方態勢</span><span class="stances-nums">${nums}</span></summary>
-      <div class="fold-body">${stanceBars(rows, "三方態勢")}${
-      s.stance_rule ? `<p class="stance-rule">${esc(s.stance_rule)}</p>` : ""}${how ? `<p class="stance-how">${how}</p>` : ""}</div></details>`;
+    return {
+      id: "stance",
+      label: `三方態勢：${rows.map((x) => `${x.name} ${x.value}`).join("、")}`,
+      chip: `<span class="peek-name">態勢</span><span class="peek-nums">${rows.map((x) => `<b class="side-${esc(x.side)}">${x.value}</b>`).join("·")}</span>`,
+      panel: `${stanceBars(rows, "三方態勢")}${s.stance_rule ? `<p class="stance-rule">${esc(s.stance_rule)}</p>` : ""}${how ? `<p class="stance-how">${how}</p>` : ""}`,
+    };
+  }
+
+  function boardPeek(m, week) {
+    if (!m.bulletin || !m.bulletin.length) return null;
+    return {
+      id: "board",
+      label: `本週江湖大事 ${m.bulletin.length} 則`,
+      chip: `<span class="peek-name">大事</span><b class="peek-count">${m.bulletin.length}</b><span class="peek-titles">${esc(m.bulletin.map(bulletinTitle).join("、"))}</span>`,
+      flag: boardUnseen(m, week),
+      panel: m.bulletin.map((b) => `<div class="bulletin-item">${b}</div>`).join(""),
+    };
+  }
+
+  // 第一季把 beta 的主線關掉、其他也都沒有東西時，quest 是空的：這一塊不畫（計畫 T8）
+  function questPeek(m) {
+    return m.quest && m.quest.trim() ? { id: "quest", label: "主線與目標", chip: '<span class="peek-name">主線</span>', panel: m.quest } : null;
+  }
+
+  const peekParts = (m) => [stancePeek(m), boardPeek(m, peekWeek(m)), questPeek(m)];
+
+  function peekHtml(parts, week) {
+    const list = parts.filter(Boolean);
+    if (!list.length) return "";
+    const open = S.peekOpen && S.peekOpen.week === week ? list.find((p) => p.id === S.peekOpen.id) : null;
+    const row = list.map((p) => {
+      const on = p === open, dot = p.flag && !on; // 開著的時候就是正在看，不亮點
+      return `<button class="peek-chip ${p.id}${on ? " on" : ""}" data-act="peek" data-id="${p.id}" aria-expanded="${on}" aria-label="${esc(p.label)}${dot ? "，有還沒看過的" : ""}">${p.chip}${dot ? '<i class="peek-dot" aria-hidden="true"></i>' : ""}</button>`;
+    }).join("");
+    return `<div class="peek" id="peek"><div class="peek-row" role="group" aria-label="態勢、大事與主線">${row}</div>${open ? `<div class="peek-panel ${open.id}">${open.panel}</div>` : ""}</div>`;
+  }
+
+  const peekBlock = (m) => peekHtml(peekParts(m), peekWeek(m));
+
+  // 點小標：原地換掉這一塊（不重畫整頁：重畫會讓「剛剛」再播一次浮現動畫），焦點還給同一顆小標
+  function peekTap(id) {
+    const m = S.main, week = peekWeek(m);
+    const was = S.peekOpen && S.peekOpen.week === week ? S.peekOpen.id : null;
+    S.peekOpen = was === id ? null : { id, week };
+    if (was === "board" || id === "board") markBoardSeen(m); // 打開或離開「大事」都算看過：開著的時候又來的新事，離開時一併算
+    const box = document.getElementById("peek");
+    if (box) box.outerHTML = peekBlock(m);
+    const chip = document.querySelector(`.peek-chip[data-id="${id}"]`);
+    if (chip) chip.focus();
   }
 
   // 第一季的結算卡（休季才有，計畫 T9）：結局與季末公告、最終態勢與三條戰況；十二件大事與各陣營出力前五收在摺疊裡
@@ -630,7 +705,7 @@
   const FRONT_ENDS = frontEnds(false);
 
   // 態勢那一行（FB-065）：官軍、黃巾是幾條戰況合起來的，豪強是割據（有戰線在亂局就漸長）。說明由伺服器給（status.stance_notes），
-  // 跟見聞→大勢的割據說明同一句，前端不自己數條數。狀態列展開時用它（江湖頁的三條在最上面的態勢卡，正式版辛）
+  // 跟見聞→大勢的割據說明同一句，前端不自己數條數。狀態列展開時用它（江湖頁的三條在最上面那一排小標的態勢面板裡，正式版辛）
   function stancesHtml(stances, notes) {
     const n = notes || {};
     const side = (id) => `${STANCE_NAMES.find(([key]) => key === id)[1]} ${stances[id]}`;
@@ -640,7 +715,7 @@
 
   // 第一季濃縮版的三條戰況（伺服器有送 fronts 才畫）：0 是官軍穩控、100 是黃巾控制，條上黃的那一截是黃巾佔的。
   // 條上淺色的一段是亂局帶（band＝status.chaos_band，兩端含在內；豪強趁亂割據的戰況區間），戰況落在裡面的圖卡標「亂局」（f.chaos）。
-  // 三方態勢在江湖頁最上面的態勢卡（正式版辛），不在這一排底下重複
+  // 三方態勢在江湖頁最上面那一排小標的態勢面板裡（正式版辛），不在這一排底下重複
   function frontsHtml(fronts, band) {
     const shade = band ? `<span class="chaos-band" aria-hidden="true" title="亂局帶" style="left:${pct(band.low, 100)}%;width:${pct(band.high - band.low, 100)}%"></span>` : "";
     return `<div class="fronts" role="group" aria-label="戰況：0 官軍穩控，100 黃巾控制">${fronts.map((f) => `
@@ -674,7 +749,7 @@
     const m = S.main;
     // 「剛剛」（A4）：預設只露出開頭幾行，太長的（例如新角色的開場故事）收著、點「展開全文」看完，不在卡片裡捲。
     // 展開記在 S.nowOpen（記的是那一則本身），換成新的一則就自動收回；其實放得下的話 afterPage() 會拿掉收合。
-    // 畫的是 m.now：最新一則只是公告卡上已經有全文的大事時，伺服器改給再前面那一則（FB-046）；江湖紀錄頁照舊用 m.latest
+    // 畫的是 m.now：最新一則只是本週大事（小標點開的面板）上已經有全文的大事時，伺服器改給再前面那一則（FB-046）；江湖紀錄頁照舊用 m.latest
     const expanded = S.nowOpen === m.now;
     const [text, chips] = !m.card && m.now ? splitChips(m.now) : ["", ""];
     const now = m.card
@@ -738,37 +813,23 @@
       : `<section class="card scene">${m.scene}</section>`;
     const tail = `<div class="mini" data-act="tab" data-tab="map" role="button" aria-label="展開輿圖">${m.minimap}</div>
       <button class="linkish" data-act="news" data-news="journal">看江湖紀錄 ›</button>`;
-    // 第一季把 beta 的主線關掉、其他也都沒有東西時，quest 是空的：這一塊不畫，由本週大事卡與倒數撐著（計畫 T8）
-    const quest = m.quest && m.quest.trim()
-      ? `<details class="fold quest"><summary>📜 主線與目標</summary><div class="fold-body">${m.quest}</div></details>`
-      : "";
-    // 公告卡（第一季）：這一週已經發生的大事，新的在前；排在最上面、「剛剛」之前。沒有就不畫。
-    // 預設縮成一行「📣 本週江湖大事（2）：標題、標題」（放不下截斷加「…」），點了才展開全文（FB-039）：兩件大事的全文
-    // 加上戰鬥卡片，會把整排行動擠到分頁列底下。展開與否記在 S.boardOpen（鍵是週次，toggle 監聽見下面），
-    // 輪詢重畫不會把它關掉，換週就回到收起
-    const week = m.status && m.status.calendar ? m.status.calendar.week : 0;
-    const board = m.bulletin && m.bulletin.length
-      ? `<details class="fold bulletin" data-week="${week}" ${S.boardOpen === week ? "open" : ""}>
-          <summary><span class="bulletin-head">📣 本週江湖大事（${m.bulletin.length}）</span><span class="bulletin-titles">${esc(m.bulletin.map(bulletinTitle).join("、"))}</span></summary>
-          <div class="fold-body">${m.bulletin.map((b) => `<div class="bulletin-item">${b}</div>`).join("")}</div></details>`
-      : "";
-    // 三條戰況排在行動列下面、小地圖上面，不擠掉第一屏的公告卡、「剛剛」、場景與行動列
+    // 態勢｜大事｜主線 收成一排小標（正式版辛）：排在最上面、「剛剛」之前，不管是哪一種選單；在路上才排到選項底下（FB-055）。
+    // 三張摺疊卡疊起來有 170px，打完一仗整排行動就被擠出第一屏；一排只有 44px。公告的展開、已看過都是小標自己記（見 peekHtml）
+    const week = peekWeek(m);
+    const peek = peekBlock(m);
+    // 三條戰況排在行動列下面、小地圖上面，不擠掉第一屏的「剛剛」、場景與行動列
     const fronts = m.fronts ? frontsHtml(m.fronts, m.status && m.status.chaos_band) : "";
     const resultCard = m.season_result ? resultHtml(m.season_result) : "";  // 休季的結算卡排在最上面（計畫 T9）
-    // 態勢卡（正式版辛）：平常閒著時排在最上面、公告卡之前；在路上與事件、對話、決戰等一疊按鈕的選單（idleMenu 以外）
-    // 跟公告卡一樣排到選項底下（FB-055）；休季由結算卡取代
-    const stanceCard = m.season_result ? "" : stanceCardHtml(m.status);
-    const lowCard = stanceBelowMenu(m) ? stanceCard : "", topCard = stanceBelowMenu(m) ? "" : stanceCard;
-    // 本週軍令排在行動列（與路上捷徑）下面、三條戰況上面：不擠掉第一屏的公告、「剛剛」、場景與行動列（計畫 T6）
+    // 本週軍令排在行動列（與路上捷徑）下面、三條戰況上面：不擠掉第一屏的「剛剛」、場景與行動列（計畫 T6）
     const orderCard = m.orders || m.convoy ? ordersHtml(m.orders || [], week, m.convoy) : "";
     // 劇情文字在上、行動在下（企劃者 2026-10-04）。行動列只有一排，375×812 上「剛剛」、場景與整排行動都在第一屏。
     // 路上的三個捷徑（links）緊接在場景（「也可以打開輿圖改去別處，或去修練、煉製」那一段）底下、選項上面：
     // 排在路上的五六顆選項底下時落在第一屏外，要捲才看得到（FB-048）。說書人的話緊貼在行動上方（引導重做設計 8.1）
     const guide = guideHtml(m.guide, m.on_road);
-    // 在路上（FB-055）：路上的五個選項要全在第一屏（375×812），所以態勢卡、公告、主線與說書人的框都排在選項底下——
+    // 在路上（FB-055）：路上的五個選項要全在第一屏（375×812），所以那一排小標與說書人的框都排在選項底下——
     // 不是這一刻要按的；捷徑還是緊接在場景底下（FB-048）
-    if (m.on_road) return `${resultCard}${now}${scene}${links}${free}${menu}${guide}${lowCard}${board}${quest}${orderCard}${fronts}${tail}`;
-    return `${resultCard}${topCard}${board}${quest}${now}${scene}${links}${guide}${free}${menu}${lowCard}${orderCard}${fronts}${tail}`;
+    if (m.on_road) return `${resultCard}${now}${scene}${links}${free}${menu}${guide}${peek}${orderCard}${fronts}${tail}`;
+    return `${resultCard}${peek}${now}${scene}${links}${guide}${free}${menu}${orderCard}${fronts}${tail}`;
   }
 
   // ── 修練 ──
@@ -1595,6 +1656,7 @@
         case "guide-open": setGuideShut(null); S.guideRoad = S.main.guide && S.main.guide.text; renderPage(); break;
         case "guide-more": S.guideFull = S.guideFull === (S.main.guide && S.main.guide.text) ? null : S.main.guide && S.main.guide.text; renderPage(); break;
         case "scene-more": S.sceneOpen = !S.sceneOpen; renderPage(); break;
+        case "peek": peekTap(el.dataset.id); break; // 江湖頁最上面那一排小標：只換那一塊，「剛剛」不會重播
         case "hint-more": S.hintOpen = !S.hintOpen; renderTop(); break; // 狀態列只重畫它自己（江湖頁不動，「剛剛」不會重播）
         case "guide-ack": await doMain("guide_ack"); break;
         case "allocate": await doMain("allocate", { stat: el.dataset.stat }); break; // 升級的屬性點加到一項（狀態列展開後的「＋臂力」）
@@ -1969,13 +2031,11 @@
   setInterval(poll, POLL_MS);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) poll(); });
 
-  // 公告卡的展開與否（FB-039）：toggle 不冒泡，用捕獲階段接。記的是週次：換週之後新畫的卡週次對不上，自然收起；
-  // 重畫（輪詢、換分頁回來）時照 S.boardOpen 補回 open，那一下補出來的 toggle 記下的還是同一週，不會繞圈
+  // 軍令卡的展開與否（計畫 T6）：toggle 不冒泡，用捕獲階段接。記的是週次：換週之後新畫的卡週次對不上，自然重新展開；
+  // 重畫（輪詢、換分頁回來）時照 S.ordersShut 補回，那一下補出來的 toggle 記下的還是同一週，不會繞圈
   document.addEventListener("toggle", (ev) => {
     const box = ev.target;
-    if (box instanceof Element && box.matches("details.bulletin")) S.boardOpen = box.open ? Number(box.dataset.week) : null;
     if (box instanceof Element && box.matches("details.orders")) S.ordersShut = box.open ? null : Number(box.dataset.week);
-    if (box instanceof Element && box.matches("details.stances")) S.stanceOpen = box.open ? Number(box.dataset.week) : null;
   }, true);
 
   // 視窗大小變了（轉向、拉視窗）：輿圖開著就重新夾住、套用；原本是整張就維持整張（applyMapView）

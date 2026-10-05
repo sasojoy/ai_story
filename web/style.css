@@ -228,9 +228,6 @@ details.fold > summary::after { content: "▾"; margin-left: auto; color: var(--
 details.fold:not([open]) > summary::after { transform: rotate(-90deg); }
 details.fold[open] > summary { border-radius: var(--radius) var(--radius) 0 0; }
 details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border-radius: 0 0 var(--radius) var(--radius); padding: 10px 14px; background: var(--card); }
-.quest summary { font-weight: 500; font-size: 14px; padding: 7px 14px; }
-.quest .fold-body { font-size: 14px; max-height: 50vh; overflow: auto; }
-.quest h3 { font-size: 15px; margin-top: 0; }
 
 .msg { border-left: 3px solid var(--accent); background: var(--accent-soft); border-radius: 8px; padding: 8px 12px; margin-bottom: 12px; font-size: 14px; animation: rise 0.25s ease-out; }
 .msg:empty { display: none; }
@@ -291,14 +288,7 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .battle-card p.rounds-tale { margin: 1px 0 5px; font-size: 14px; line-height: 1.45; }
 .battle-card p.rounds-tale:not(.open) { display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 @keyframes tx-round-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
-/* 公告卡（第一季，計畫 T2）：這一週已經發生的江湖大事，排在江湖頁最上面。
-   預設縮成一行（FB-039）：「📣 本週江湖大事（2）：標題、標題」，放不下的標題截斷加「…」；兩件大事的全文加上戰鬥卡片，
-   會把整排行動擠到分頁列底下。點了才展開全文，一則一段、新的在前；用 details.fold 的外觀。
-   選擇器要寫成 details.fold.bulletin：details.fold > summary 的權重比 .bulletin > summary 高，只寫後者會被蓋掉 */
-details.fold.bulletin > summary { border-color: var(--gold); font-size: 14px; padding: 8px 14px; min-height: 44px; box-sizing: border-box; }
-details.fold.bulletin > .fold-body { border-color: var(--gold); max-height: 50vh; overflow: auto; }
-.bulletin-head { flex: none; color: var(--gold); white-space: nowrap; }
-.bulletin-titles { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 400; color: var(--ink-2); }
+/* 本週江湖大事（第一季，計畫 T2）：江湖頁最上面那一排小標「大事」點開的面板（見 .peek-panel），一則一段、新的在前 */
 .bulletin-item { font-size: 14px; line-height: 1.65; }
 .bulletin-item + .bulletin-item { border-top: 1px dashed var(--line); margin-top: 8px; padding-top: 8px; }
 .bulletin-item p { margin: 0 0 4px; }
@@ -359,20 +349,40 @@ details.fold.bulletin > .fold-body { border-color: var(--gold); max-height: 50vh
 .front-bar.side-guan > i { background: var(--kuai); }
 .front-bar.side-huang > i { background: var(--gold); }
 .front-bar.side-haoqiang > i { background: var(--rou); }
-/* 江湖頁最上面的態勢卡（正式版辛；PM 2026-10-06 改成一行的摺疊）：用 details.fold 的外觀、收起時跟公告卡一樣高（44px），
-   一行「三方態勢　官軍 55・黃巾 45・豪強 10」，三個數字各用陣營的顏色；點開才有三條（跟結算卡共用）、收季規則與怎麼算的。
-   選擇器寫成 details.fold.stances，理由同 details.fold.bulletin（權重要贏過 details.fold > summary） */
-details.fold.stances > summary { font-size: 14px; padding: 8px 14px; min-height: 44px; box-sizing: border-box; }
-.stances-head { flex: none; color: var(--ink-2); white-space: nowrap; }
-.stances-nums { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 400; }
-.stances-nums b { font-weight: 700; font-variant-numeric: tabular-nums; }
-.stances-nums .side-guan { color: var(--kuai); }
-.stances-nums .side-huang { color: var(--gold); }
-.stances-nums .side-haoqiang { color: var(--rou); }
-details.fold.stances > .fold-body > .fronts { margin-bottom: 8px; }
-details.fold.stances > .fold-body > :last-child { margin-bottom: 0; }
+/* 江湖頁最上面的一排小標「態勢｜大事｜主線」（正式版辛，PM 2026-10-06）：三張各 44px 的摺疊卡疊起來有 170px，打完一仗整排行動
+   就被擠出第一屏；一排 44px。每顆至少 44px 高；點哪一顆，它的內容在這一排正下面攤開（.peek-panel），同一時間只開一個。
+   一行放得下三顆：375 寬約 330px 可用、320 寬約 270px。窄的時候先讓的是大事的標題文字（預設不畫，≥420px 才露），
+   再窄（≤340px）連小箭頭也不畫；態勢的數字永遠不縮、不截（nowrap），實在放不下整排折行，也不截字。
+   類別名稱獨一無二：.chip／.chips 是別處（人物、線索）在用的 */
+.peek { margin-bottom: 12px; }
+.peek-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.peek-chip { flex: 1 1 auto; min-height: 44px; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; gap: 4px; padding: 6px 8px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); color: var(--ink); font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; }
+.peek-chip::after { content: "▾"; font-size: 12px; font-weight: 400; color: var(--ink-2); transform: rotate(-90deg); transition: transform 0.2s; }
+.peek-chip.board { border-color: var(--gold); }
+.peek-chip.on { background: var(--card-2); }
+.peek-chip.on::after { transform: none; }
+.peek-name { color: var(--ink-2); }
+.peek-nums b { font-weight: 700; font-variant-numeric: tabular-nums; }
+.peek-nums .side-guan { color: var(--kuai); }
+.peek-nums .side-huang { color: var(--gold); }
+.peek-nums .side-haoqiang { color: var(--rou); }
+.peek-count { color: var(--gold); font-variant-numeric: tabular-nums; }
+.peek-titles { display: none; }
+.peek-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--gang); }
+.peek-panel { margin-top: 6px; padding: 10px 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); max-height: 50vh; overflow: auto; }
+.peek-panel.board { border-color: var(--gold); }
+.peek-panel.quest { font-size: 14px; }
+.peek-panel.quest h3 { font-size: 15px; margin-top: 0; }
+.peek-panel > .fronts { margin-bottom: 8px; }
+.peek-panel > :last-child { margin-bottom: 0; }
 .stance-rule { margin: 0; font-size: 12px; line-height: 1.5; color: var(--ink); }
 .stance-how { margin: 2px 0 0; font-size: 11px; line-height: 1.5; color: var(--ink-2); }
+@media (min-width: 420px) {
+  .peek-titles { display: block; flex: 0 1 auto; min-width: 0; max-width: 9em; overflow: hidden; text-overflow: ellipsis; font-weight: 400; color: var(--ink-2); }
+}
+@media (max-width: 340px) {
+  .peek-chip::after { display: none; }
+}
 /* 第一季的本週軍令（計畫 T6） */
 .orders .order { padding: 8px 0; border-top: 1px solid var(--line); }
 .orders .order:first-child { border-top: 0; padding-top: 0; }
