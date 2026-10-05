@@ -357,9 +357,10 @@ class Game:
             rate *= 2
         if w.time <= cfg.newbie_days * DAY:
             rate *= 2
-        team.regen_neili(self.content, p.member, rate, team.con_of(self.state, PLAYER))
+        team.regen_neili(self.content, p.member, rate, team.con_of(self.state, self.content, self.world, PLAYER))
         for cid in p.team:
-            self.world.update_companion(cid, lambda progress: team.regen_neili(self.content, progress, rate))
+            con = team.con_of(self.state, self.content, self.world, cid)  # 同伴回到他自己的上限（人物資質設計 14.3）
+            self.world.update_companion(cid, lambda progress, con=con: team.regen_neili(self.content, progress, rate, con))
         msgs: list[str] = []
         if p.resting_since is not None and p.stamina >= cfg.stamina_max:
             msgs += self._stand_up(full=True)
@@ -1528,14 +1529,17 @@ class Game:
     def _battle_power(self) -> float:
         """玩家自己目前的武學威力快照，加入戰鬥時存一份進 BattleParticipant.power，
         之後戰鬥結算的威力抵銷只讀這份快照，不會、也不能臨時去查任何人的角色資料
-        （見 battle_instance.py::BattleParticipant 的欄位註解）。快照吃本人的加成（臂力、根骨，武學與成長設計 8.4）。"""
+        （見 battle_instance.py::BattleParticipant 的欄位註解）。快照吃本人的加成（臂力、根骨，武學與成長設計 8.4）。
+        同伴不進決戰（人物資質設計 14.5），這裡照舊只算本人。"""
         arts = team.team_arts(self.state, self.content, self.world)
         return encounter.member_power(
             self.state.player.member, arts, boost=team.player_boost(self.state, self.content, self.world),
         )
 
     def _battle_neili_cap(self) -> float:
-        _, cap = team.member_neili(self.content, self.state.player.member, team.con_of(self.state, PLAYER))
+        _, cap = team.member_neili(
+            self.content, self.state.player.member, team.con_of(self.state, self.content, self.world, PLAYER),
+        )
         return cap
 
     def _battle_status(self, tick: bool = True) -> tuple[battle_instance.BattleInstance, BattleDef] | None:
@@ -2231,7 +2235,9 @@ class Game:
 
     def _player_hp(self) -> float:
         """本人此刻的氣血（上限吃根骨：con_of 認 key，所以傳 PLAYER，不傳 Member）。"""
-        return team.member_neili(self.content, self.state.player.member, team.con_of(self.state, PLAYER))[0]
+        return team.member_neili(
+            self.content, self.state.player.member, team.con_of(self.state, self.content, self.world, PLAYER),
+        )[0]
 
     def _take_toll(self, tier: str, *, wild: bool = False) -> tuple[list[str], int]:
         """照結果扣這一場的氣血（team.take_encounter_toll），回傳（訊息, 本人真的掉了多少氣血）。掉的量緊貼著扣氣血的
@@ -2768,7 +2774,7 @@ class Game:
         s, c = self.state, self.content
         squad = c.squads[choice.combat]
         judged = self._judged(squad)  # 打頭目這種大場面：有鎖外的判讀就用（武學與成長設計 8.3）
-        result = self._fight_with(squad, judged)
+        result = self._fight_with(squad, judged, dodge=False)  # 劇情戰的勝敗是人寫好的：不閃（最終審查 I1）
         record = battlelog.new_record(s, c, self.world, squad, result, "event", event.title)
         self._narrate(record, result, judged)
         # 回合照開打時的陣容與身法演，所以要在發獎勵、套效果之前：效果可能加身法、教武學、給同伴或部下，
@@ -3528,11 +3534,11 @@ class Game:
         names = c.config.stat_names
         sect = c.sects[p.sect].name if p.sect else None
         faction = next((f.name for f in c.scenario.factions if f.id == p.faction), None)
-        now, cap = team.member_neili(c, p.member, team.con_of(s, PLAYER))
+        now, cap = team.member_neili(c, p.member, team.con_of(s, c, self.world, PLAYER))
         mates = []
         for cid in p.team:
             progress = self.world.get_companion(cid)
-            mate_now, mate_cap = team.member_neili(c, progress)
+            mate_now, mate_cap = team.member_neili(c, progress, team.con_of(s, c, self.world, cid))
             mates.append({"name": c.characters[cid].name, "level": progress.level,
                           "hp": round(mate_now), "hp_max": round(mate_cap)})
         data = {

@@ -11,7 +11,8 @@ from tianxia import encounter, team
 from tianxia.content import load_content
 from tianxia.engine import Game
 from tianxia.martial_arts import generate_from_name
-from tianxia.state import PLAYER
+from tianxia.sqlite_world import open_world
+from tianxia.state import PLAYER, Member
 
 LOW_ONLY = {"下品": 100, "中品": 0, "上品": 0, "絕學": 0}
 CONTENT_DIR = Path(__file__).parent.parent / "content"
@@ -300,14 +301,25 @@ def test_a_companions_level_ups_give_the_player_no_points(state, content, world)
 # ── 四屬性的加成（武學與成長設計 6.1；計畫二 Task 2）──────────────────────────────
 
 
-def test_strength_and_root_feed_the_players_boost_only(state, content, world):
-    state.player.stats["str"], state.player.stats["con"] = 15, 10
+def test_strength_and_root_feed_everyones_boost(state, content, world):
+    """人物資質設計 14.3：本人照舊；同伴吃他自己的臂力（武學）、根骨（內功），不吃你的共鳴。"""
+    state.player.stats["str"], state.player.stats["con"], state.player.stats["good"] = 15, 10, 40
     boost = team.player_boost(state, content, world)
     assert boost.outer == pytest.approx(0.3) and boost.inner == pytest.approx(0.15)
-    state.player.team = [next(cid for cid, ch in content.characters.items() if ch.kind == "recruitable")]
-    boosts = team.team_boosts(state, content, world)
-    assert len(boosts) == 2 and boosts[0].outer > 0
-    assert (boosts[1].outer, boosts[1].inner, boosts[1].factor) == (0.0, 0.0, 1.0)  # 同伴不吃玩家的加成
+    world.update_companion("mate", lambda p: setattr(p, "level", 11))  # 韓鐵：臂力 6＋0.3×10＝9、根骨 9
+    state.player.team = ["mate"]
+    mate = team.team_boosts(state, content, world)[1]
+    assert (mate.outer, mate.inner, mate.factor) == (pytest.approx(0.12), pytest.approx(0.12), 1.0)  # 只有一門：不算搭配
+
+
+def test_a_companions_own_pair_of_arts_is_matched_too(state, content, world):
+    """同伴的天分就是他那一路武學（14.1）：他自己的內功與武學相剋也打折。掌法屬剛、粗淺吐納屬柔。"""
+    def arm(progress):
+        progress.wugong_id, progress.neigong_id = "palm", "basic_breath"
+
+    world.update_companion("mate", arm)
+    state.player.team = ["mate"]
+    assert team.team_boosts(state, content, world)[1].factor == pytest.approx(1 - content.config.pairing_penalty)
 
 
 def test_root_raises_the_hp_cap_without_refilling(state, content, world):
@@ -315,15 +327,18 @@ def test_root_raises_the_hp_cap_without_refilling(state, content, world):
     member.neili = 100.0
     base_cap = team.neili_cap(content, member.level)
     state.player.stats["con"] = 15
-    now, cap = team.member_neili(content, member, team.con_of(state, PLAYER))
+    now, cap = team.member_neili(content, member, team.con_of(state, content, world, PLAYER))
     assert cap == pytest.approx(base_cap * 1.3) and now == 100.0
 
 
-def test_a_companions_hp_ignores_the_players_root(state, content, world):
+def test_a_companions_hp_follows_his_own_root(state, content, world):
+    """Review Focus 2：同伴的氣血上限照他自己的根骨（韓鐵第 1 級根骨 6，+3%）；本人的根骨不影響他；目前氣血不被補滿。"""
     state.player.stats["con"] = 15
+    world.update_companion("mate", lambda p: setattr(p, "neili", 100.0))
     mate = world.get_companion("mate")
-    assert team.con_of(state, "mate") == team.BASE_STAT
-    assert team.member_neili(content, mate, team.con_of(state, "mate"))[1] == team.neili_cap(content, mate.level)
+    assert team.con_of(state, content, world, "mate") == 6
+    now, cap = team.member_neili(content, mate, team.con_of(state, content, world, "mate"))
+    assert cap == round(team.neili_cap(content, mate.level) * 1.03) == 330 and now == 100.0  # 上限四捨五入成整數
 
 
 def test_body_lightness_and_root_soften_a_fights_toll(state, content, world):
@@ -354,8 +369,9 @@ def _power_seen(call) -> float:
     return seen[0]
 
 
-def test_a_fight_gives_the_boost_to_the_player_and_not_to_the_companion(state, content, world):
-    """計畫二 G12：帶著同伴打一場，總威力＝吃加成的本人＋不吃加成的同伴（打一場與勝算估計一樣）。"""
+def test_a_fight_gives_each_of_them_their_own_boost(state, content, world):
+    """計畫二 G12、人物資質設計 14.3：帶著同伴打一場，總威力＝吃本人加成的本人＋吃他自己臂力、根骨的同伴
+    （韓鐵第 1 級臂力 6、根骨 6：各 +3%）；打一場與勝算估計一樣。"""
     state.player.member.wugong_id, state.player.member.neigong_id = "basic_fist", "basic_breath"
     world.update_companion("mate", lambda p: setattr(p, "wugong_id", "palm"))
     state.player.team = ["mate"]
@@ -364,14 +380,16 @@ def test_a_fight_gives_the_boost_to_the_player_and_not_to_the_companion(state, c
     arts = team.team_arts(state, content, world)
     expected = (
         encounter.member_power(state.player.member, arts, squad.attribute, boost=encounter.Boost(outer=0.3, inner=0.15))
-        + encounter.member_power(world.get_companion("mate"), arts, squad.attribute)
+        + encounter.member_power(
+            world.get_companion("mate"), arts, squad.attribute, boost=encounter.Boost(outer=0.03, inner=0.03),
+        )
     )
     assert _power_seen(lambda: team.fight(state, content, world, "thug", random.Random(0))) == pytest.approx(expected)
     assert _power_seen(lambda: team.estimate(state, content, world, "thug")) == pytest.approx(expected)
 
 
-def test_followers_still_fight_beside_a_boosted_player_without_the_boost():
-    """計畫二 G1／F17：加成的清單跟陣容一樣長，部下照樣上陣、照樣算進勝算，只是不吃本人的加成。"""
+def test_followers_fight_beside_the_player_with_their_own_strength():
+    """計畫二 G1／F17：加成的清單跟陣容一樣長，部下照樣上陣、照樣算進勝算，吃自己模板的臂力（14.3）。"""
     real = load_content(CONTENT_DIR)
     real.config.auto_open_first_season = True
     real.config.season_one, real.config.season_days, real.config.server_max_players = True, 2.5, 2
@@ -383,11 +401,107 @@ def test_followers_still_fight_beside_a_boosted_player_without_the_boost():
     attribute = real.squads[squad_id].attribute
     arts = team.team_arts(s, real, game.world)
     player = encounter.member_power(s.player.member, arts, attribute, boost=encounter.Boost(outer=0.3))
-    followers = [encounter.member_power(f, arts, attribute) for f in team.follower_units(s, real)]
+    rows = team.follower_rows(s, real)
+    followers = [
+        encounter.member_power(unit, arts, attribute, boost=team.follower_boost(real, follower))
+        for unit, (_, follower) in zip(team.follower_units(s, real), rows, strict=True)
+    ]
     assert player > 0 and len(followers) == 2 and all(power > 0 for power in followers)
     assert len(team.team_boosts(s, real, game.world)) == 3
     seen = _power_seen(lambda: team.estimate(s, real, game.world, squad_id))
     assert seen == pytest.approx(player + sum(followers))
+
+
+def test_a_weak_follower_hits_a_little_softer_but_never_below_the_floor():
+    """Review Focus 1：屬性比 5 低是負加成（弩手鄉勇臂力 4：−3%），再低也不會讓威力變成負的或 0。"""
+    real = load_content(CONTENT_DIR)
+    assert team.follower_boost(real, real.followers["follower_guan_crossbow"]).outer == pytest.approx(-0.03)
+    weak = real.followers["follower_guan_crossbow"].model_copy(update={"stats": {"str": -100}})
+    boost = team.follower_boost(real, weak)
+    unit = Member(wugong_id=weak.wugong, wugong_level=weak.wugong_level)
+    arts = {weak.wugong: team.resolve_art(weak.wugong, real, open_world())}
+    assert encounter.member_power(unit, arts, boost=boost) > 0
+
+
+def test_boosts_line_up_with_companions_and_followers():
+    """Review Focus 5：帶同伴又帶部下，加成一人一份、順序同陣容：本人、同伴、部下。"""
+    real = load_content(CONTENT_DIR)
+    real.config.auto_open_first_season = True
+    real.config.season_one, real.config.season_days, real.config.server_max_players = True, 2.5, 2
+    game = Game.new(real, "甲", rng=random.Random(0))
+    s = game.state
+    first, second = "guanyu", "zhangfei"  # 真實內容的人物都是 locked；算加成只要他們在隊伍名單上
+    s.player.team = [first, second]
+    s.player.followers = ["follower_huang_strongman"]  # 太平力士：臂力 7（+6%）
+    boosts = team.team_boosts(s, real, game.world)
+    assert len(boosts) == 4 == len(team.team_participants(s, game.world)) + len(team.follower_units(s, real))
+    assert team.mate_boost(s, real, game.world, first) != team.mate_boost(s, real, game.world, second)  # 兩人不同，對調才看得出來
+    assert boosts[1] == team.mate_boost(s, real, game.world, first)
+    assert boosts[2] == team.mate_boost(s, real, game.world, second)
+    assert boosts[3].outer == pytest.approx(0.06) and boosts[3].inner == 0.0 and boosts[3].factor == 1.0
+
+
+def test_a_companions_root_is_read_through_con_of(state, content, world, monkeypatch):
+    """根骨只從 con_of 讀（Task 1 審查）：同伴的內功加成與一場的內傷、上限也跟著它走，不另外去翻 member_stats。"""
+    monkeypatch.setattr(team, "con_of", lambda *_: 15.0)
+    content.config.encounter_neili_loss = {"落敗": 0.3}
+    state.player.team = ["mate"]
+    assert team.mate_boost(state, content, world, "mate").inner == pytest.approx(0.3)
+    team.take_encounter_toll(state, content, world, "落敗")
+    loss = team.neili_cap(content, 1, 15) * 0.3  # 韓鐵第 1 級身法 5：不減；上限照根骨 15
+    assert world.get_companion("mate").injury == pytest.approx(loss * content.config.injury_share * (1 - 0.3))
+
+
+def test_dodge_chance_follows_the_players_body(state, content):
+    for agi, chance in ((15, 0.2), (8, 0.06), (5, 0.0), (2, 0.0)):
+        state.player.stats["agi"] = agi
+        assert team.dodge_chance(state, content) == pytest.approx(chance)
+
+
+def test_a_dodged_fight_is_settled_as_a_draw(state, content, world):
+    """Review Focus 4：打翻江龍（難度 200）必敗；身法讓閃避必中時，結果就是僵持，之後的扣氣血、獎懲、回合都照僵持。"""
+    content.config.dodge_per_point = 0.1
+    state.player.stats["agi"] = 15
+    result = team.fight(state, content, world, "boss", random.Random(0))
+    assert (result.tier, result.dodged) == ("僵持", True)
+
+
+def test_a_fight_without_a_dodge_chance_draws_the_same_randomness(state, content, world):
+    """Review Focus 3：身法 5（機會 0）的人打一場，用掉的亂數跟直接單次判定一樣，落敗也不多擲。"""
+    ours, theirs = random.Random(7), random.Random(7)
+    result = team.fight(state, content, world, "boss", ours)  # 難度 200，必敗
+    assert result.tier == "落敗" and not result.dodged
+    assert result == encounter.resolve_encounter(result.our_power, result.difficulty, theirs)
+    assert ours.getstate() == theirs.getstate()
+
+
+def test_a_fight_with_the_dodge_turned_off_never_rolls_it(state, content, world):
+    """最終審查 I1：dodge=False（劇情戰）就是閃避必中的人也不閃、也不多擲那一次亂數。"""
+    content.config.dodge_per_point = 0.1
+    state.player.stats["agi"] = 15  # 閃避機會 100%
+    ours, theirs = random.Random(7), random.Random(7)
+    result = team.fight(state, content, world, "boss", ours, dodge=False)  # 難度 200，必敗
+    assert result.tier == "落敗" and not result.dodged
+    assert result == encounter.resolve_encounter(result.our_power, result.difficulty, theirs)
+    assert ours.getstate() == theirs.getstate()
+
+
+def test_the_odds_label_ignores_the_dodge(state, content, world):
+    """勝算是贏的機會；閃避只把落敗變僵持、不增加贏，所以按鈕上的勝算不含閃避（14.4）。"""
+    before = team.estimate(state, content, world, "boss")
+    content.config.dodge_per_point = 0.1
+    state.player.stats["agi"] = 15
+    assert team.estimate(state, content, world, "boss") == before
+
+
+def test_a_companions_toll_uses_his_own_body_and_root(state, content, world):
+    """同伴扣的那一份照他自己的身法、根骨（14.3）：韓鐵第 11 級身法 7（−6%）、根骨 9（內傷 −12%、上限 +12%）。"""
+    content.config.encounter_neili_loss = {"落敗": 0.3}
+    state.player.team = ["mate"]
+    world.update_companion("mate", lambda p: setattr(p, "level", 11))
+    team.take_encounter_toll(state, content, world, "落敗")
+    loss = team.neili_cap(content, 11, 9) * 0.3 * (1 - 0.06)
+    assert world.get_companion("mate").injury == pytest.approx(loss * content.config.injury_share * (1 - 0.12))
 
 
 def test_a_practice_injury_starts_from_the_rooted_hp(state, content, world):
@@ -404,12 +518,12 @@ def test_a_practice_injury_starts_from_the_rooted_hp(state, content, world):
 
 
 def test_the_players_root_follows_the_key_not_the_member_object(state, content, world):
-    """con_of 認的是名冊的 key，不是物件本身：拿玩家 Member 的複本照樣吃本人的根骨，同伴照基準。"""
+    """con_of 認的是名冊的 key，不是物件本身：拿玩家 Member 的複本照樣吃本人的根骨，同伴照他自己的根骨。"""
     state.player.stats["con"] = 15
     copy = state.player.member.model_copy(deep=True)
-    assert team.con_of(state, PLAYER) == 15
-    assert team.member_neili(content, copy, team.con_of(state, PLAYER))[1] == 416
-    assert team.con_of(state, "mate") == team.BASE_STAT
+    assert team.con_of(state, content, world, PLAYER) == 15
+    assert team.member_neili(content, copy, team.con_of(state, content, world, PLAYER))[1] == 416
+    assert team.con_of(state, content, world, "mate") == 6
 
 
 def test_the_players_root_is_read_in_one_place(state, content, world, monkeypatch):
@@ -516,8 +630,9 @@ def test_both_arts_resonate_each_on_its_own_name(state, content, world):
     assert team.player_boost(state, content, world).factor == pytest.approx(1.1 * 1.2)
 
 
-def test_a_fight_gives_the_pairing_and_resonance_to_the_player_only(state, content, world):
-    """計畫二 G12：帶著同伴打一場，總威力＝乘了 1.44 的本人＋沒乘的同伴（打一場與勝算估計一樣）。"""
+def test_a_fight_gives_the_resonance_to_the_player_only(state, content, world):
+    """計畫二 G12、人物資質設計 14.3：帶著同伴打一場，總威力＝乘了 1.44（搭配×共鳴）的本人＋只吃自己屬性、
+    沒有共鳴的同伴（打一場與勝算估計一樣）。"""
     wugong = _register(world, "清風拳", "武學", "柔", "正")
     state.player.member.wugong_id, state.player.member.neigong_id = wugong.id, "basic_breath"
     world.update_companion("mate", lambda p: setattr(p, "wugong_id", "palm"))
@@ -526,7 +641,9 @@ def test_a_fight_gives_the_pairing_and_resonance_to_the_player_only(state, conte
     squad = content.squads["thug"]
     arts = team.team_arts(state, content, world)
     plain = encounter.member_power(state.player.member, arts, squad.attribute, boost=encounter.Boost())
-    mate = encounter.member_power(world.get_companion("mate"), arts, squad.attribute)
+    mate = encounter.member_power(
+        world.get_companion("mate"), arts, squad.attribute, boost=encounter.Boost(outer=0.03, inner=0.03),
+    )
     expected = plain * 1.2 * 1.2 + mate
     assert plain > 0 and mate > 0 and expected > plain + mate
     assert _power_seen(lambda: team.fight(state, content, world, "thug", random.Random(0))) == pytest.approx(expected)
@@ -549,7 +666,11 @@ def test_followers_fight_beside_a_resonating_player_without_the_factor():
     attribute = real.squads[squad_id].attribute
     arts = team.team_arts(s, real, game.world)
     plain = encounter.member_power(s.player.member, arts, attribute, boost=encounter.Boost())
-    followers = [encounter.member_power(f, arts, attribute) for f in team.follower_units(s, real)]
+    rows = team.follower_rows(s, real)
+    followers = [  # 部下吃自己的臂力（矛手 +3%、弩手 −3%），但不吃搭配與共鳴
+        encounter.member_power(unit, arts, attribute, boost=team.follower_boost(real, follower))
+        for unit, (_, follower) in zip(team.follower_units(s, real), rows, strict=True)
+    ]
     assert plain > 0 and len(followers) == 2 and all(power > 0 for power in followers)
     boosts = team.team_boosts(s, real, game.world)
     assert [b.factor for b in boosts] == [pytest.approx(1.2 * 1.2), 1.0, 1.0]

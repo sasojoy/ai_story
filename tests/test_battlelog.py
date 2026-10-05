@@ -287,3 +287,13 @@ def test_an_old_record_without_rounds_loads_and_shows_no_rounds():
     loaded = BattleRecord.model_validate(old)
     assert loaded.rounds == []
     assert "**過程**" not in battlelog.card_text(loaded) and "**過程**" not in battlelog.detail_text(loaded)
+
+
+def test_a_dodged_loss_says_so_on_the_battle_card(state, content, world):
+    from tianxia.encounter import EncounterResult
+
+    result = EncounterResult(tier="僵持", margin=-50.0, our_power=1.0, difficulty=60.0, dodged=True)
+    record = battlelog.new_record(state, content, world, content.squads["thug"], result, "train")
+    assert record.tier == "僵持" and record.notes == [battlelog.DODGE_NOTE]
+    plain = result.model_copy(update={"dodged": False})
+    assert battlelog.new_record(state, content, world, content.squads["thug"], plain, "train").notes == []

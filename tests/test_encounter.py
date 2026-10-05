@@ -154,3 +154,36 @@ def test_a_shift_of_p_points_moves_the_win_line_by_p_points_of_luck():
         shift = advantage_shift(100, advantage)
         need = 15 - shift  # 運氣至少要這麼多才是險勝以上
         assert (half - need) / (2 * half) == pytest.approx(0.25 + advantage / 100)
+
+
+def _result(tier):
+    return encounter.EncounterResult(tier=tier, margin=-50.0, our_power=10.0, difficulty=60.0)
+
+
+def test_a_dodge_turns_only_a_loss_into_a_draw():
+    """人物資質設計 14.4：只有落敗會被閃成僵持；別的結果原封不動。"""
+    dodged = encounter.dodge(_result("落敗"), 1.0, random.Random(0))
+    assert (dodged.tier, dodged.dodged) == ("僵持", True)
+    for tier in ("大勝", "險勝", "僵持"):
+        assert encounter.dodge(_result(tier), 1.0, random.Random(0)) == _result(tier)
+    assert encounter.dodge(_result("落敗"), 0.0, random.Random(0)) == _result("落敗")
+
+
+def test_dodge_draws_from_the_rng_only_on_a_loss_with_a_chance():
+    """Review Focus 3：沒落敗、或機會是 0，不碰亂數——同一個種子的整季模擬不會因為這一條整個變樣。"""
+    rng = random.Random(0)
+    state = rng.getstate()
+    encounter.dodge(_result("險勝"), 1.0, rng)
+    encounter.dodge(_result("落敗"), 0.0, rng)
+    assert rng.getstate() == state
+    encounter.dodge(_result("落敗"), 0.5, rng)
+    assert rng.getstate() != state
+
+
+def test_a_missed_dodge_roll_leaves_the_loss_alone():
+    """最終審查 M2：擲到的數大於等於機會就沒閃中，還是落敗、dodged 是 False（剛好等於機會也算沒中，擲到比機會小才中）。"""
+    for roll in (0.9, 0.5):
+        missed = encounter.dodge(_result("落敗"), 0.5, FixedRandom(roll))
+        assert missed == _result("落敗") and not missed.dodged
+    hit = encounter.dodge(_result("落敗"), 0.5, FixedRandom(0.49))
+    assert (hit.tier, hit.dodged) == ("僵持", True)

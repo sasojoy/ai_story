@@ -23,8 +23,8 @@ ODDS = ((90, "穩勝"), (65, "有把握"), (35, "五五波"), (10, "凶險"))  #
 
 
 COMBAT_STATS = ("str", "agi", "con", "wis", "lore")  # 五屬性：升級給點、狀態列、＋鈕、事件檢定都照這份與這個順序；
-# 玩家本人的前四項另外各管一件戰力（武學與成長設計 6.1）：臂力管外功、根骨管內功與氣血、身法管損耗、悟性管修練與悟意境；
-# 第五項博聞管武學與意境的持有上限（6.3），不進戰力
+# 前四項另外各管一件戰力（武學與成長設計 6.1；同伴、部下也吃，人物資質設計 14.3）：臂力管外功、根骨管內功與氣血、身法管損耗、
+# 悟性管修練與悟意境（悟性只有本人用）；第五項博聞管武學與意境的持有上限（6.3），不進戰力
 LORE = "lore"
 BASE_STAT = 5  # 屬性的基準：開局都是 5，比它多才有加成（武學與成長設計 6.1、6.3）
 
@@ -41,11 +41,13 @@ def stat_factor(content: Content, value: float) -> float:
     return max(encounter.BOOST_FLOOR, 1 + stat_bonus(content, value))
 
 
-def con_of(state: GameState, key: str) -> float:
-    """名冊上這個人（key：PLAYER 或同伴的 id）的根骨。本人的根骨只從這裡讀（氣血四個函式的 con、內功的加成、
-    一場的內傷）；同伴一律是基準，不吃屬性加成（計畫二「實作決定」：同伴的平衡在氣血設計 §1.4 調過，不連帶動）。
+def con_of(state: GameState, content: Content, world: WorldStateStore, key: str) -> float:
+    """名冊上這個人（key：PLAYER 或同伴的 id）的根骨，只從這裡讀：氣血四個函式的 con、內功的加成、一場的內傷。
+    本人照存檔；同伴照 member_stats（內容的起始值加每級成長，人物資質設計 14.2；原本一律是基準）。
     認 key 不認物件：拿到玩家 Member 的複本也照樣是本人。"""
-    return float(state.player.stats.get("con", BASE_STAT)) if key == PLAYER else BASE_STAT
+    if key == PLAYER:
+        return float(state.player.stats.get("con", BASE_STAT))
+    return member_stats(state, content, world, key)["con"]
 
 
 def member_name(state: GameState, content: Content, key: str) -> str:
@@ -153,7 +155,8 @@ def follower_units(state: GameState, content: Content) -> list[Member]:
 def _fighters(
     state: GameState, content: Content, world: WorldStateStore,
 ) -> tuple[list, list[float], list[encounter.Boost]]:
-    """打一場的陣容、各自的氣血係數與加成：本人、出戰的同伴，再加上部下（滿血、不吃本人的加成）。
+    """打一場的陣容、各自的氣血係數與加成：本人、出戰的同伴，再加上部下（滿血）。
+    每個人的加成吃他自己的屬性（本人、同伴、部下各一份，見 team_boosts），不吃別人的。
     三份一樣長（encounter.team_power 會檢查），部下才不會被默默漏掉（F17）。"""
     followers = follower_units(state, content)
     return (
@@ -289,7 +292,7 @@ def practice(
     setattr(member, level_slot, level + 1)
     msgs = [f"【{name}】精進至第{level + 1}成。", f"心得 -{price}"]
     if rng.random() < cfg.practice_injury_chance:
-        now, _cap = member_neili(content, member, con_of(state, PLAYER))
+        now, _cap = member_neili(content, member, con_of(state, content, world, PLAYER))
         member.injury += cfg.practice_injury_amount
         member.neili = max(0.0, now - cfg.practice_injury_amount)
         msgs.append(f"這一番苦練傷了氣血，氣血 -{cfg.practice_injury_amount:.0f}（累積內傷，需要療傷才能回到滿血）。")
@@ -299,7 +302,7 @@ def practice(
 def neili_cap(content: Content, level: int, con: float = BASE_STAT) -> float:
     """氣血上限：基礎＋每級加成，再乘上根骨的加成（武學與成長設計 6.1：上限 ×（1＋3%×（根骨−5））），
     四捨五入成整數——每個呼叫端拿到的、狀態列與角色卡寫出來的都是同一個數（根骨 6：329.6 → 330）。
-    con 是根骨，只有玩家本人傳（con_of）；同伴照預設的基準，上限跟以前一樣。"""
+    con 是根骨，從 con_of 讀（本人照存檔、同伴照他自己的，人物資質設計 14.3）；不傳就是基準。"""
     cfg = content.config
     return float(round((cfg.neili_base + level * cfg.neili_per_level) * stat_factor(content, con)))
 
@@ -308,14 +311,14 @@ MIN_CEILING_RATIO = 0.1  # 內傷再重，能回到的氣血上蓋也不低於�
 
 
 def neili_ceiling(content: Content, member, con: float = BASE_STAT) -> float:
-    """內傷之後氣血自己能回到哪裡（上限 − 內傷，但不低於上限的一成）。con 是根骨，只有玩家本人傳。"""
+    """內傷之後氣血自己能回到哪裡（上限 − 內傷，但不低於上限的一成）。con 是根骨，從 con_of 讀。"""
     cap = neili_cap(content, member.level, con)
     return max(cap * MIN_CEILING_RATIO, cap - getattr(member, "injury", 0.0))
 
 
 def member_neili(content: Content, member, con: float = BASE_STAT) -> tuple[float, float]:
     """回傳（目前氣血, 上限）。member 可以是玩家的 Member 或同伴的 CompanionProgress。
-    con 是根骨，只有玩家本人傳（con_of）。
+    con 是根骨，從 con_of 讀。
 
     `neili is None` 代表「回滿了」——有內傷時的「滿」是上蓋（上限 − 內傷），不是上限本身。
     所以根骨變高時：沒滿血的人目前氣血不變、上限變大；本來就滿的人照舊是滿的（跟升級一樣）。
@@ -390,7 +393,7 @@ def add_team_exp(state: GameState, content: Content, world: WorldStateStore, amo
 
 
 def regen_neili(content: Content, member, fraction: float, con: float = BASE_STAT) -> None:
-    """氣血隨時間回復——只回到上蓋（上限 − 內傷），內傷那部分要療傷才清得掉。con 是根骨，只有玩家本人傳。"""
+    """氣血隨時間回復——只回到上蓋（上限 − 內傷），內傷那部分要療傷才清得掉。con 是根骨，從 con_of 讀。"""
     if member.neili is None:
         return
     cap = neili_cap(content, member.level, con)
@@ -406,7 +409,7 @@ def regen_neili(content: Content, member, fraction: float, con: float = BASE_STA
 def team_conditions(state: GameState, content: Content, world: WorldStateStore) -> list[float]:
     """本隊每個人的氣血狀態係數，順序跟 team_participants 一致（氣血設計 §1.1：帶傷出手較弱）。"""
     return [
-        encounter.condition_of(*member_neili(content, member, con_of(state, key)))
+        encounter.condition_of(*member_neili(content, member, con_of(state, content, world, key)))
         for key, member in zip(team_keys(state), team_participants(state, world), strict=True)
     ]
 
@@ -442,16 +445,43 @@ def player_boost(state: GameState, content: Content, world: WorldStateStore) -> 
     neigong = player_art(state, content, world, member.neigong_id)
     return encounter.Boost(
         outer=stat_bonus(content, stats.get("str", BASE_STAT)),
-        inner=stat_bonus(content, con_of(state, PLAYER)),
+        inner=stat_bonus(content, con_of(state, content, world, PLAYER)),
         factor=pairing(content, wugong, neigong) * resonance(state, content, wugong) * resonance(state, content, neigong),
     )
 
 
+def mate_boost(state: GameState, content: Content, world: WorldStateStore, key: str) -> encounter.Boost:
+    """同伴的加成（人物資質設計 14.3）：吃跟本人同一套——他自己的臂力管他的武學、根骨管他的內功，再乘上他自己那兩門的
+    內外搭配（同伴的天分就是他那一路武學）。正邪共鳴看的是你的善名惡名、功效只算本人，所以同伴不吃。"""
+    progress = world.get_companion(key)
+    wugong = resolve_art(progress.wugong_id, content, world)
+    neigong = resolve_art(progress.neigong_id, content, world)
+    return encounter.Boost(
+        outer=stat_bonus(content, member_stats(state, content, world, key)["str"]),
+        inner=stat_bonus(content, con_of(state, content, world, key)),  # 根骨只從 con_of 讀
+        factor=pairing(content, wugong, neigong),
+    )
+
+
+def follower_boost(content: Content, follower: FollowerDef) -> encounter.Boost:
+    """部下的加成（人物資質設計 14.3）：只有一門武學，吃模板的臂力；沒有內功、不算搭配與共鳴。部下以前完全沒有加成。"""
+    return encounter.Boost(outer=stat_bonus(content, follower.stats.get("str", BASE_STAT)))
+
+
 def team_boosts(state: GameState, content: Content, world: WorldStateStore) -> list[encounter.Boost]:
-    """跟 _fighters 的陣容一一對應：本人有加成；出戰的同伴與部下沒有（計畫二「實作決定」），但一個都不能少——
-    少一個 encounter.team_power 就會報錯，而不是默默漏算部下（F17、計畫二 G1）。"""
-    others = len(state.player.team) + len(follower_units(state, content))
-    return [player_boost(state, content, world)] + [encounter.Boost() for _ in range(others)]
+    """跟陣容一一對應（本人、出戰的同伴、部下），一個都不能少——少一個 encounter.team_power 就會報錯，
+    而不是默默漏算（F17、計畫二 G1）。同伴、部下吃自己的屬性（人物資質設計 14.3；原本是空的加成）。"""
+    return (
+        [player_boost(state, content, world)]
+        + [mate_boost(state, content, world, key) for key in state.player.team]
+        + [follower_boost(content, follower) for _, follower in follower_rows(state, content)]
+    )
+
+
+def dodge_chance(state: GameState, content: Content) -> float:
+    """本人的身法讓落敗有機會閃成僵持（人物資質設計 14.4）：比 5 每多一點 dodge_per_point，夾在 0～1；同伴不另外算。"""
+    agi = float(state.player.stats.get("agi", BASE_STAT))
+    return min(1.0, max(0.0, (agi - BASE_STAT) * content.config.dodge_per_point))
 
 
 def take_encounter_toll(
@@ -467,7 +497,7 @@ def take_encounter_toll(
     內傷是扣掉的量的固定幾成，所以照同一個比例變少。遊歷與劇情戰不帶這個旗標，一點都不變。
 
     玩家本人的身法讓一場少掉一點氣血（閃得開）、根骨讓其中變成內傷的少一點（武學與成長設計 6.1）；
-    同伴照舊，不吃本人的屬性。
+    同伴照他自己的身法、根骨（人物資質設計 14.3）。
     """
     cfg = content.config
     fraction = cfg.encounter_neili_loss.get(tier, 0.0) * (cfg.wild_neili_loss_factor if wild else 1.0)
@@ -479,14 +509,18 @@ def take_encounter_toll(
         if key == PLAYER:
             lost, hurt = _apply_toll(
                 content, state.player.member, fraction,
-                agi=stats.get("agi", BASE_STAT), con=con_of(state, PLAYER),
+                agi=stats.get("agi", BASE_STAT), con=con_of(state, content, world, PLAYER),
             )
             if round(lost) > 0:  # 本來就見底、一滴都沒得扣時不寫「氣血 -0」（零的變化是雜訊）；內傷照樣寫
                 msgs.append(f"氣血 -{lost:.0f}")  # 照既有慣例寫變化量（跟「銀兩 -5」「心得 +12」同一串）
             if hurt >= 1:
                 msgs.append(f"內傷 +{hurt:.0f}")
         else:
-            world.update_companion(key, lambda progress: _apply_toll(content, progress, fraction))
+            agi = member_stats(state, content, world, key)["agi"]
+            con = con_of(state, content, world, key)  # 根骨只從 con_of 讀
+            world.update_companion(
+                key, lambda progress, agi=agi, con=con: _apply_toll(content, progress, fraction, agi=agi, con=con),
+            )
     return msgs
 
 
@@ -494,7 +528,7 @@ def _apply_toll(
     content: Content, member, fraction: float, agi: float = BASE_STAT, con: float = BASE_STAT,
 ) -> tuple[float, float]:
     """扣一場的氣血，回傳（實際掉了多少氣血, 其中變成內傷的量）。身法減一場的損耗、根骨減其中變成內傷的
-    比例，各 ×（1−3%×（屬性−5）），夾在 0 以上；氣血上限也照根骨算。同伴不傳 agi、con，跟以前一樣。"""
+    比例，各 ×（1−3%×（屬性−5）），夾在 0 以上；氣血上限也照根骨算。同伴傳他自己的（人物資質設計 14.3）。"""
     now, cap = member_neili(content, member, con)
     loss = cap * fraction * max(0.0, 1 - stat_bonus(content, agi))
     hurt = loss * content.config.injury_share * max(0.0, 1 - stat_bonus(content, con))
@@ -506,14 +540,19 @@ def _apply_toll(
 
 def fight(
     state: GameState, content: Content, world: WorldStateStore, squad_id: str, rng: random.Random,
-    *, difficulty: float | None = None, shift: float = 0.0,
+    *, difficulty: float | None = None, shift: float = 0.0, dodge: bool = True,
 ) -> encounter.EncounterResult:
     """difficulty 給了就取代隊伍的難度（挑戰大勢人物本人：難度跟著聲威走，見 figures.difficulty）。
-    shift 是大場面判讀的優勢換算成的判定差距平移（encounter.advantage_shift，武學與成長設計 8.3）；平常是 0。"""
+    shift 是大場面判讀的優勢換算成的判定差距平移（encounter.advantage_shift，武學與成長設計 8.3）；平常是 0。
+    結果定了（優勢平移也算進去）之後，本人的身法才有機會把落敗閃成僵持（dodge_chance，人物資質設計 14.4）；
+    dodge=False 不擲閃避、也不動那一次亂數——劇情戰的勝敗是人寫好的（僵持也算敗），閃了只會自相矛盾（最終審查 I1）。"""
     squad = content.squads[squad_id]
     arts = team_arts(state, content, world)
     power = encounter.team_power(*_with_attribute(_fighters(state, content, world), arts, squad.attribute))
-    return encounter.resolve_encounter(power, squad.difficulty if difficulty is None else difficulty, rng, shift=shift)
+    result = encounter.resolve_encounter(power, squad.difficulty if difficulty is None else difficulty, rng, shift=shift)
+    if not dodge:
+        return result
+    return encounter.dodge(result, dodge_chance(state, content), rng)  # 先平移、結果定了才閃（14.4）；勝算（estimate）不含
 
 
 def odds_word(power: float, squad: Squad, rng_seed: int = ESTIMATE_SEED) -> str:
@@ -539,7 +578,7 @@ def _odds_text(wins: int, draws: int, runs: int) -> str:
 def estimate(
     state: GameState, content: Content, world: WorldStateStore, squad_id: str, *, difficulty: float | None = None,
 ) -> str:
-    """勝算的文字；difficulty 同 fight。"""
+    """勝算的文字；difficulty 同 fight。不含身法閃避：勝算是贏的機會（人物資質設計 14.4）。"""
     squad = content.squads[squad_id]
     if difficulty is not None:
         squad = squad.model_copy(update={"difficulty": difficulty})

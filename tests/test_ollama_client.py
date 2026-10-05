@@ -1,6 +1,10 @@
 """OllamaClient 送給 Ollama 的參數（2026-10-03 實測換 gemma4:26b：要關掉思考、拿掉重複懲罰、拉長常駐時間）。"""
+import pytest
+from pydantic import BaseModel
+
+from tianxia.battle_instance import SuccessRateJudgment
 from tianxia.engine import Game
-from tianxia.ollama_client import OllamaClient
+from tianxia.ollama_client import OllamaClient, _ensure_required_present
 
 
 def test_defaults_keep_the_old_payload_and_send_no_think_field():
@@ -34,3 +38,31 @@ def test_the_game_builds_its_client_from_the_config(content):
     assert payload["model"] == "gemma4:26b"
     assert payload["think"] is False and payload["keep_alive"] == "12h"
     assert payload["options"]["repeat_penalty"] == 1.0
+
+
+# ── 截斷檢查（required_fields）：falsy 不等於缺欄位 ──────────────────────
+
+
+def test_a_success_rate_of_zero_is_a_real_answer_not_a_truncation():
+    """防灌水的提示詞要模型對「我必定成功」這類寫法給 0~10，實測 gemma4:26b 就是回 0
+    （done_reason=stop、JSON 完整）。以前用 `not data.get(...)` 判斷，0 會被當成截斷丟掉，
+    重試再拿到 0 再丟一次，最後退回保底 40——比正常評出來的低分還高。"""
+    _ensure_required_present({"success_rate": 0, "reasoning": "在對遊戲下指令"}, SuccessRateJudgment, ["success_rate"])
+
+
+def test_a_missing_or_empty_field_still_counts_as_truncated():
+    for data in ({}, {"success_rate": None}, {"reasoning": "只有理由"}):
+        with pytest.raises(ValueError, match="success_rate"):
+            _ensure_required_present(data, SuccessRateJudgment, ["success_rate"])
+
+
+def test_an_empty_list_or_string_still_counts_as_truncated():
+    """原本的用意（ai_story 的 options 坑）要留著：有 default_factory 的欄位空著就是截斷。"""
+    class Reply(BaseModel):
+        options: list[str] = []
+        name: str = ""
+
+    for field in ("options", "name"):
+        with pytest.raises(ValueError, match=field):
+            _ensure_required_present({"options": [], "name": ""}, Reply, [field])
+    _ensure_required_present({"options": ["甲"], "name": "鑄韌拳"}, Reply, ["options", "name"])
