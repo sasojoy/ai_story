@@ -8,10 +8,11 @@ from __future__ import annotations
 
 import random
 from pathlib import Path
+from unittest import mock
 
 import pytest
 
-from tianxia import opportunities
+from tianxia import calendar, figures, opportunities, rules
 from tianxia.content import ContentError, load_content, validate
 from tianxia.engine import Game
 from tianxia.models import OppDef
@@ -51,6 +52,13 @@ def test_defaults_so_old_saves_load():
     p = PlayerState(name="甲", location="x", stats={}, stamina=0)
     assert (p.opp_done, p.opp_counts, p.opp_items, p.opp_fronts, p.opp_clues, p.opp_tried, p.rank2_days) == (
         [], {}, {}, {}, [], {}, {})
+
+
+def test_new_fields_survive_a_save_and_load():
+    p = PlayerState(name="甲", location="x", stats={}, stamina=0, opp_done=["a"], opp_counts={"b": 1}, opp_items={"c": "信"},
+                    opp_fronts={"c": "yingru"}, opp_clues=["d"], opp_tried={"e": 3}, rank2_days={12: 2})
+    again = PlayerState.model_validate_json(p.model_dump_json())  # JSON 的鍵都是字串：曆日要換回整數
+    assert again.rank2_days == {12: 2} and again == p
 
 
 def test_real_opportunities_valid(real):
@@ -191,3 +199,224 @@ def test_defection_clears_opportunities(on):
     game.state.player.opp_done = ["guan_zhujun"]
     defection.defect(game.state, on, next(f for f in on.scenario.factions if f.id == "huang"))
     assert game.state.player.opp_done == []
+
+
+# ── Task 3：第 2 階行動與三種累積型 ─────────────────────────────────
+
+
+def _always(ok=True):
+    """檢定一定過（或一定不過）：換掉 rules.check_chance，引擎與 opportunities 呼叫的 roll_check 都讀它。"""
+    return mock.patch.object(rules, "check_chance", return_value=1.0 if ok else 0.0)
+
+
+class _Roll(random.Random):
+    """random() 永遠回傳固定值，讓流民的機率可以預測。"""
+
+    def __init__(self, value):
+        super().__init__(0)
+        self.value = value
+
+    def random(self):
+        return self.value
+
+
+def test_rank2_action_needs_rank_two_and_a_front(on):
+    game = _game(on, faction="guan", at="changshe", rank=1)
+    assert "act:rank2" not in _ids(game)
+    game.state.player.rank = 2
+    option = next(o for o in game.options(odds=False) if o.id == "act:rank2")
+    assert option.label == "招降黃巾散兵（體力 15）"
+    game.state.player.location = "luoyang_palace"  # 洛陽沒有戰線
+    assert "act:rank2" not in _ids(game)
+
+
+def test_rank2_action_is_each_factions_own(on):
+    huang = _game(on, faction="huang", at="julu_altar", rank=2)
+    assert next(o for o in huang.options(odds=False) if o.id == "act:rank2").label == "施符水收人心（體力 15）"
+    assert "act:rank2" not in _ids(_game(on, faction="haoqiang", at="cao_manor", rank=2))  # 豪強這一版沒有第 2 階行動
+    assert "act:rank2" not in _ids(_game(on, at="changshe", rank=2))  # 散人沒有
+
+
+def test_rank2_costs_stamina_and_is_greyed_without_it(on):
+    game = _game(on, faction="guan", at="changshe", rank=2)
+    p = game.state.player
+    p.stamina = 20
+    with _always(True):
+        game.choose("act:rank2")
+    assert p.stamina == 5
+    option = next(o for o in game.options(odds=False) if o.id == "act:rank2")
+    assert not option.enabled
+
+
+def test_rank2_success_pushes_and_counts_toward_deserters(on):
+    game = _game(on, faction="guan", at="changshe", rank=2)
+    game.state.player.stamina = 100
+    with _always(True):
+        first = game.choose("act:rank2")
+        assert first[0].startswith("你在長社放出話去")
+        second = game.choose("act:rank2")
+    p = game.state.player
+    assert p.opp_items == {"guan_deserter": "知道運糧小道的降卒"} and p.opp_fronts == {"guan_deserter": "yingru"}
+    assert any(m.startswith("第 2 個降卒是") and "的舊部" in m for m in second)  # 10 換算成 2
+
+
+def test_rank2_success_pushes_the_local_front_towards_its_own_side(on):
+    guan = _game(on, faction="guan", at="changshe", rank=2)
+    before = rules.trend_value(guan.state, on, "yingru")
+    with _always(True):
+        guan.choose("act:rank2")
+    assert rules.trend_value(guan.state, on, "yingru") == before - 3  # rank2_push 3，往官軍偏
+    huang = _game(on, faction="huang", at="julu_altar", rank=2)
+    before = rules.trend_value(huang.state, on, "jizhou")
+    with _always(True):
+        huang.choose("act:rank2")
+    assert rules.trend_value(huang.state, on, "jizhou") == before + 3  # 往黃巾偏
+
+
+def test_rank2_failure_counts_a_try_but_not_a_deserter(on):
+    game = _game(on, faction="guan", at="changshe", rank=2)
+    before = rules.trend_value(game.state, on, "yingru")
+    with _always(False):
+        msgs = game.choose("act:rank2")
+    assert msgs[0].startswith("你在長社喊了半天") and game.state.player.opp_counts == {}
+    assert sum(game.state.player.rank2_days.values()) == 1
+    assert rules.trend_value(game.state, on, "yingru") == before  # 失敗不推戰線
+
+
+def test_rank2_daily_limit_resets_next_day(on):
+    game = _game(on, faction="guan", at="changshe", rank=2)
+    game.state.player.stamina = 100
+    with _always(False):
+        for _ in range(3):
+            game.choose("act:rank2")
+    option = next(o for o in game.options(odds=False) if o.id == "act:rank2")
+    assert not option.enabled and "今天已經做滿 3 次" in option.label
+    w = game.state.world
+    w.time += calendar.DAY / calendar.cal_scale(on, w)  # 隔一個曆日
+    assert next(o for o in game.options(odds=False) if o.id == "act:rank2").enabled
+
+
+def test_rank2_not_offered_when_the_switch_is_off(real):
+    game = _game(real, faction="guan", at="changshe", rank=2)
+    assert not any(i.startswith(("act:rank2", "opp:")) for i in _ids(game))
+
+
+def test_deserter_count_is_the_baseline_amount_for_a_big_server(on):
+    on.config.server_max_players = 1000  # 不換算：要 10 個降卒
+    game = _game(on, faction="guan", at="changshe", rank=2)
+    p = game.state.player
+    with _always(True):
+        for _ in range(9):
+            p.stamina, p.rank2_days = 100, {}  # 每天只能做 3 次：這個測試不測限次，每回清掉
+            game.choose("act:rank2")
+        assert p.opp_items == {} and p.opp_counts == {"guan_deserter": 9}
+        p.stamina, p.rank2_days = 100, {}
+        msgs = game.choose("act:rank2")
+    assert any(m.startswith("第 10 個降卒是") for m in msgs) and p.opp_items
+
+
+def test_no_more_counting_while_holding_the_item(on):
+    game = _game(on, faction="guan", at="changshe", rank=2)
+    p = game.state.player
+    p.opp_counts, p.opp_items, p.opp_fronts = {"guan_deserter": 2}, {"guan_deserter": "降卒"}, {"guan_deserter": "yingru"}
+    p.stamina = 100
+    with _always(True):
+        game.choose("act:rank2")
+    assert p.opp_counts == {"guan_deserter": 2}
+
+
+def test_deliver_goes_to_whoever_commands_now(on):
+    game = _game(on, faction="guan", at="changshe", rank=2)
+    p = game.state.player
+    p.opp_items, p.opp_fronts = {"guan_deserter": "知道運糧小道的降卒"}, {"guan_deserter": "yingru"}
+    option = next(o for o in game.options(odds=False) if o.id == "opp:deliver:guan_deserter")
+    assert option.label == "把降卒帶給皇甫嵩"  # 潁川此刻的官軍主將
+    game.state.world.figures["huangfusong"] = figures.state_of(game.state, on, "huangfusong").model_copy(update={"status": "retired"})
+    option = next(o for o in game.options(odds=False) if o.id == "opp:deliver:guan_deserter")
+    assert option.label == "把降卒帶給朱儁"  # 主將換人：交給接手的人
+    for fid in ("huangfusong", "zhujun"):  # 潁川一個官軍人物都沒有：交給那條戰線上的官軍投靠點
+        game.state.world.figures[fid] = figures.state_of(game.state, on, fid).model_copy(update={"status": "retired"})
+    option = next(o for o in game.options(odds=False) if o.id == "opp:deliver:guan_deserter")
+    assert option.label == "把降卒帶給官軍的主將"
+    before = rules.trend_value(game.state, on, "yingru")
+    msgs = game.choose("opp:deliver:guan_deserter")
+    assert msgs[-1] == "（機緣「降卒的消息」完成。）" and p.opp_items == {}
+    assert rules.trend_value(game.state, on, "yingru") == before - 1  # 往官軍偏 1
+
+
+def test_deliver_needs_the_commander_to_be_there(on):
+    game = _game(on, faction="guan", at="changshe", rank=2)
+    p = game.state.player
+    p.opp_items, p.opp_fronts = {"guan_deserter": "降卒"}, {"guan_deserter": "yingru"}
+    here = figures.state_of(game.state, on, "huangfusong")
+    game.state.world.figures["huangfusong"] = here.model_copy(update={"location": "luoyang_road"})  # 主將還在，卻不在這裡
+    assert "opp:deliver:guan_deserter" not in _ids(game)
+    p.location = "luoyang_road"
+    assert "opp:deliver:guan_deserter" in _ids(game)
+
+
+def test_deliver_only_for_the_front_the_deserter_came_from(on):
+    game = _game(on, faction="guan", at="wan_city", rank=2)  # 南陽的官軍大營
+    p = game.state.player
+    p.opp_items, p.opp_fronts = {"guan_deserter": "降卒"}, {"guan_deserter": "yingru"}
+    assert "opp:deliver:guan_deserter" not in _ids(game)  # 降卒是潁川的，要帶去潁川的主將那裡
+
+
+def test_talisman_delivered_at_any_huang_base(on):
+    game = _game(on, faction="huang", at="julu_altar", rank=2)
+    p = game.state.player
+    p.opp_items, p.opp_fronts = {"huang_talisman": "信眾名冊"}, {"huang_talisman": "nanyang"}
+    before = rules.trend_value(game.state, on, "jizhou")
+    msgs = game.choose("opp:deliver:huang_talisman")
+    assert msgs[-1] == "（機緣「符水救人」完成。）"
+    assert rules.trend_value(game.state, on, "jizhou") == before + 1  # 交到哪個據點，就推那裡的戰線
+
+
+def test_talisman_not_deliverable_off_base(on):
+    game = _game(on, faction="huang", at="guangzong", rank=2)
+    game.state.player.opp_items = {"huang_talisman": "信眾名冊"}
+    assert "opp:deliver:huang_talisman" not in _ids(game)
+
+
+def test_refugees_roll_after_duty(on):
+    game = _game(on, faction="haoqiang", at="cao_manor")
+    game.state.player.stamina = 100
+    _opp(on, "hao_refugees").accumulate.chance = 1.0  # 每次都遇到流民
+    game.choose("act:duty")
+    msgs = game.choose("act:duty")
+    assert any(m.startswith("第 2 批流民裡有個老人說") for m in msgs)
+    assert game.state.player.opp_items == {"hao_refugees": "佃戶名冊"}
+    before = rules.trend_value(game.state, on, "geju")
+    game.choose("opp:deliver:hao_refugees")
+    assert rules.trend_value(game.state, on, "geju") == before + 1
+
+
+def test_refugees_come_with_their_chance(on):
+    game = _game(on, faction="haoqiang", at="cao_manor")
+    p = game.state.player
+    p.stamina = 100
+    game.rng = _Roll(0.9)  # 機緣文件的 30%：0.9 遇不到
+    assert not any("流民" in m for m in game.choose("act:duty"))
+    assert p.opp_counts == {}
+    game.rng = _Roll(0.1)
+    assert any(m.startswith("一群逃難的流民跟在你身後") and "曹氏莊院" in m for m in game.choose("act:duty"))
+    assert p.opp_counts == {"hao_refugees": 1}
+
+
+def test_other_factions_dont_meet_refugees(on):
+    game = _game(on, faction="guan", at="changshe")
+    game.state.player.stamina = 100
+    _opp(on, "hao_refugees").accumulate.chance = 1.0
+    game.choose("act:duty")
+    assert game.state.player.opp_counts == {}
+
+
+def test_opportunity_entries_are_titled(on):
+    game = _game(on, faction="guan", at="changshe", rank=2)
+    game.state.player.stamina = 100
+    with _always(False):
+        game.choose("act:rank2")
+    assert game.state.journal[0].title == "招降黃巾散兵・長社"
+    game.state.player.opp_items, game.state.player.opp_fronts = {"guan_deserter": "降卒"}, {"guan_deserter": "yingru"}
+    game.choose("opp:deliver:guan_deserter")
+    assert game.state.journal[0].title == "機緣・降卒的消息"

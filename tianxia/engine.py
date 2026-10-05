@@ -514,6 +514,8 @@ class Game:
         for target in self._defect_targets():  # 叛投（計畫甲）：別的陣營的投靠點、一季一次、不在沒打完的決戰的參戰名單上
             opts.append(Option(id=f"defect:{target.id}", label=f"叛投{target.name}"))
         opts += self._order_options(loc)  # 軍令（計畫 T6）：守勢行動、接糧車；開關關著、散人沒有
+        opts += self._rank2_options(loc)  # 第 2 階行動（正式版乙一）
+        opts += opportunities.place_options(s, c, loc.id)  # 機緣：交東西、天時地利（正式版乙一）
         opts += foreshadow.final_options(s, c, loc.id)  # 伏筆的最後一步（計畫 T7）：做得了的人在那個地點才有
         opts.append(Option(id="act:rest", label="打坐（坐下來回體力，隨時可以起身）"))
         return opts
@@ -860,6 +862,8 @@ class Game:
                 msgs = self._road(arg)
             elif kind == "learn":
                 msgs = library.learn(self.state, self.content, arg)
+            elif kind == "opp":
+                msgs = opportunities.act(self.state, self.content, self.world, arg, self.rng)
             elif kind == "fs":
                 msgs = self._foreshadow(arg)
             else:
@@ -975,14 +979,18 @@ class Game:
             if what == "back":
                 return atlas.journey_title(c, self._back_way().path)  # 折返：跟「前往」同一個標題，抵達時才併得進同一則
             return ROAD_TASKS[what][0]
+        if kind == "opp":
+            return opportunities.title(s, c, arg)
         if kind == "act" and arg.startswith("challenge:"):
             return f"挑戰・{figures.name_of(c, arg.partition(':')[2])}"
         here = c.locations[s.player.location].name
         duty = c.orders.duties.get(s.player.faction or "")  # 守勢行動的標題寫陣營自己的名字（巡哨、傳道、保境安民）
+        action2 = opportunities.rank2_action(s, c)  # 第 2 階行動的標題也寫它自己的名字（招降黃巾散兵、施符水收人心）
         titles = {
             "explore": f"探索{here}", "socialize": f"交友・{here}", "call": f"求見・{here}", "train": f"遊歷・{here}",
             "recruit": f"招募・{here}", "rest": f"打坐・{here}", "summons": f"應召・{here}", "stand": "起身", "halt": "喊停",
             "duty": f"{duty.name if duty else '守勢'}・{here}", "convoy": f"接下糧車・{here}",
+            "rank2": f"{action2.name if action2 else '第二階行動'}・{here}",
         }
         return titles.get(arg, "提前出關")
 
@@ -1061,6 +1069,8 @@ class Game:
             return self._rest()
         if what == "duty":
             return self._duty()
+        if what == "rank2":
+            return self._rank2()
         if what == "convoy":
             return self._take_convoy()
         if what == "call":
@@ -1255,6 +1265,34 @@ class Game:
                 opts.append(Option(id="act:convoy", label=f"接下糧車（送到{dest}・交出糧草 {need} 份：{used}）"))
         return opts
 
+    def _rank2_options(self, loc: Location) -> list[Option]:
+        """第 2 階行動（設計 5.5；正式版乙一）：第 2 階以上、在有戰線的地方；今天做滿了就變灰、寫明。"""
+        s, c = self.state, self.content
+        action = opportunities.rank2_action(s, c)
+        if action is None or front_of(c, loc.id) is None:
+            return []
+        if opportunities.rank2_left(s, c) <= 0:
+            return [Option(id="act:rank2", enabled=False, label=f"{action.name}（今天已經做滿 {c.config.rank2_daily} 次）")]
+        return [self._cost_option("act:rank2", action.name, c.config.rank2_stamina)]
+
+    def _rank2(self) -> list[str]:
+        """做一次第 2 階行動：扣體力、記今天一次；過檢定才成功——成功往己方推所在戰線 rank2_push 點（push_trend），
+        再替累積型的機緣記一次。軍令的記功是計畫戊的事。"""
+        s, c = self.state, self.content
+        p = s.player
+        action = opportunities.rank2_action(s, c)
+        loc = c.locations[p.location]
+        front = front_of(c, loc.id)
+        p.stamina -= c.config.rank2_stamina
+        opportunities.count_rank2(s, c)
+        if not roll_check(action.check, s, c, self.world, self.rng):
+            return [action.fail.replace("{地點}", loc.name)]
+        msgs = [action.ok.replace("{地點}", loc.name)]
+        goal = self._goals().get(front)
+        if goal:
+            msgs += self.push_trend(front, goal * c.config.rank2_push, source="rank2")
+        return msgs + opportunities.after_success(s, c, "rank2", loc.id, self.rng)
+
     def _order_credit(self, **kw) -> list[str]:
         """替自己記一次軍令（orders.credit）；真的記到了就推新手引導的「完成一次軍令的個人部分」（計畫 T6 Task 8）。"""
         s, c = self.state, self.content
@@ -1280,6 +1318,7 @@ class Game:
             msgs += self.push_trend(front, goals[front], source="duty")
         elif goals.get(GEJU) and in_chaos(s, c, front):
             msgs += self.push_trend(GEJU, 1, source="duty")
+        msgs += opportunities.after_success(s, c, "duty", loc.id, self.rng)  # 收容流民（正式版乙一）
         return msgs + self._order_credit(kind="duty", front=front)
 
     def _take_convoy(self) -> list[str]:
