@@ -122,7 +122,9 @@ def siege_places(content: Content, faction: str, front: str) -> list[str]:
 
 
 def _issuable(state: GameState, content: Content, t: OrderTemplate, front: str, week: int) -> bool:
-    """這種軍令這週在這條戰線發不發得出來（濃縮版內容表 3.1「什麼時候發」）；攻城另外要那條戰線打得到敵方隊伍。"""
+    """這種軍令這週在這條戰線發不發得出來（濃縮版內容表 3.1「什麼時候發」）；攻城另外要那條戰線打得到敵方隊伍。
+    例外：第 1 週（OPENING_WEEK）、這條戰線在 when.opening_fronts 裡就直接發，front_min／front_max、event_within_weeks、
+    losing_by 都不看（FB-054，新手第一週要有一道走得到的軍令）；攻城的「打得到敵方隊伍」照舊先看。"""
     if t.kind == "siege" and not siege_places(content, t.side, front):
         return False
     if week == OPENING_WEEK and front in t.when.opening_fronts:  # 開局週：這條戰線不看局勢（FB-054）

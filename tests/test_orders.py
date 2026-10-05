@@ -704,10 +704,13 @@ def test_a_new_guan_recruit_finishes_a_week_one_order_without_leaving_yingru(on)
     assert game.state.player.tutorial_step == 8  # 引導的「做完一次軍令」也跟著過
 
 
+@pytest.mark.parametrize("yingru", [40, 50])
 @pytest.mark.parametrize("faction", ["guan", "huang"])
-def test_both_sides_get_a_yingru_defend_in_week_one(on, faction):
-    """FB-054 的對稱：黃巾（潁川 40，吃緊 60）本來就有守城・潁川汝南，官軍補上之後兩邊第 1 週都有一道不必出遠門的軍令。"""
+def test_both_sides_get_a_yingru_defend_in_week_one(on, faction, yingru):
+    """FB-054 的對稱：兩邊第 1 週都有一道不必出遠門的守城・潁川汝南，不看戰況。40 是開局的數字（黃巾吃緊 60，剛好踩在邊界）；
+    50 時黃巾的 losing_by 條件不成立，靠 opening_fronts 照發，不靠邊界。"""
     game = _game(on, faction=faction)
+    _fronts(game, yingru, 35, 55)
     _at_week(game, 1)
     orders.issue(game.state, on, 1, random.Random(0))
     assert ("defend", "yingru") in _kinds(game, faction)
@@ -716,9 +719,11 @@ def test_both_sides_get_a_yingru_defend_in_week_one(on, faction):
 def test_the_opening_defend_is_only_for_week_one(on):
     """開局週只放寬第 1 週：之後官軍照舊要戰況吃緊（≥ 60）或敵方上週攻下才守城。"""
     game = _game(on)
+    _fronts(game, 50, 35, 55)  # 黃巾在 50 也不吃緊（要 ≤ 40）：第 2 週兩邊都不守潁川汝南
     _at_week(game, 2)
     orders.issue(game.state, on, 2, random.Random(0))
     assert ("defend", "yingru") not in _kinds(game, "guan")
+    assert ("defend", "yingru") not in _kinds(game, "huang")
 
 
 def test_switch_off_no_week_one_defend_for_guan(real):

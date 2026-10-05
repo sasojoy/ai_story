@@ -1119,13 +1119,15 @@ PersonalKind = Literal["win", "duty", "convoy", "challenge"]  # 遊歷打贏、�
 
 
 class OrderWhen(_Strict):
-    """什麼時候發（濃縮版內容表 3.1）；寫了的每一項都要成立（or_enemy_siege 只放寬 losing_by）。
+    """什麼時候發（濃縮版內容表 3.1）；寫了的每一項都要成立（or_enemy_siege 只放寬 losing_by；opening_fronts 在第 1 週是例外，
+    見下，不看其他條件）。
     front_min／front_max：那條戰線的戰況在這個區間（含兩端）；打擊是看目標人物所在戰線。
     losing_by：戰線偏向對方超過多少（官軍：戰況 ≥ 50＋n；黃巾：≤ 50－n）。
     or_enemy_siege：或者敵方上週在這條戰線達成了攻城（守城）。
     event_within_weeks：這條戰線的下一件時刻表大事在幾週內（季曆）。
-    opening_fronts：第 1 週（開局週）這幾條戰線不看局勢也發：開局的戰況官軍都不吃緊，守城發不出來，新手第一週就沒有一道
-    走得到的軍令（FB-054）；只在第 1 週放寬，之後照舊看局勢。
+    opening_fronts：第 1 週（開局週）這幾條戰線不看局勢也發，其他條件（front_min／front_max、losing_by、event_within_weeks）
+    一概略過：開局的戰況官軍都不吃緊，守城發不出來，新手第一週就沒有一道走得到的軍令（FB-054）；黃巾的守城也寫上，
+    不靠 100－40 剛好踩在 60 的邊界。只在第 1 週有效，之後照舊看局勢。
     always：每週固定一道（豪強的打擊）。"""
 
     front_min: int | None = None
