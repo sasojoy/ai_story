@@ -3610,11 +3610,19 @@ class Game:
         entries = self.state.journal
         return journal.card_html(entries[0], self.stamp, self._chip) if entries else ""
 
+    def journal_top_html(self) -> str:
+        """江湖紀錄頁的第一則（伺服器的 latest，底下接 journal_html(1, …)）：最新一則就是「剛剛」那張戰鬥卡片那一場時，
+        放卡片沒寫到的補充（照舊）；其他時候畫最新一則——包括「剛剛」越過的那則配點（_now_start），它在江湖紀錄裡照樣列在最前面。"""
+        if self.shows_battle_card() and self._now_start() == 0:
+            return self.battle_extra_html()
+        return self.latest_entry_html()
+
     def now_entry_html(self) -> str:
         """江湖頁「剛剛」那一則（FB-046）：最新一則；最新的幾則若只是時刻表大事的公告（_deliver_big_events 補的），
         而且每一件的全文江湖頁的卡片上已經有了（_news_on_cards），就往前找第一則不是的——同一段公告不在「剛剛」
         再寫一次，剛做完的事也不會因為一件大事發生就被擠掉。江湖紀錄頁照舊從最新一則列起（latest_entry_html）。
         一次補好幾件時每一行是「季曆時間　公告全文」。
+        配點那一則也越過（計畫二最終審查 M1，見 _now_start）；越過之後什麼都不剩（只有配點）時才放它，不讓「剛剛」空著。
         籌備中不放（FB-049）：那時最新一則是開場那一則，寫著「賽季開始」、叫人先去探索，選單卻只有「等待管理者開季」。"""
         if self._preparing():
             return ""
@@ -3626,21 +3634,29 @@ class Game:
                 line in shown or line.partition("　")[2] in shown for line in story
             )
 
-        entry = next((e for e in self.state.journal if not repeated(e)), None)
+        fresh = [e for e in self.state.journal if not repeated(e)]
+        entry = next((e for e in fresh if e.title != journal.ALLOCATE), fresh[0] if fresh else None)
         return journal.card_html(entry, self.stamp, self._chip) if entry is not None else ""
 
     def journal_html(self, start: int = 1, limit: int = 5, heading: str = "", empty: str = "") -> str:
         return journal.rows_html(self.state.journal[start:start + limit], heading, empty, self.stamp, self._chip)
 
+    def _now_start(self) -> int:
+        """「剛剛」從江湖紀錄的第幾則看起：最新的幾則若是配點就越過（計畫二最終審查 M1）。配點是點名號展開、在狀態列上按的，
+        跟 journal.add_guide 一樣不換「剛剛」——升級那一仗打完照著「你有 N 點屬性可以分配」去配點，那一場的戰鬥卡片
+        不會因此不見。全都是配點時從最新一則看起。江湖紀錄頁照舊從最新一則列起（journal_top_html／journal_html）。"""
+        return next((i for i, e in enumerate(self.state.journal) if e.title != journal.ALLOCATE), 0)
+
     def shows_battle_card(self) -> bool:
-        s = self.state
-        return self.battle_card_id() is not None and bool(s.journal) and s.journal[0].battle_id == s.battle_card
+        s, i = self.state, self._now_start()
+        return self.battle_card_id() is not None and len(s.journal) > i and s.journal[i].battle_id == s.battle_card
 
     def battle_extra_html(self) -> str:
+        """「剛剛」那張戰鬥卡片底下的補充：那一場那一則裡卡片沒寫到的（越過最新的配點，跟 shows_battle_card 看同一則）。"""
         if not self.shows_battle_card():
             return ""
         record = battlelog.find(self.state, self.state.battle_card)
-        entry = self.state.journal[0]
+        entry = self.state.journal[self._now_start()]
         lines, changes = journal.card_leftovers(entry, record.notes, battlelog.gains_list(record))
         return journal.extra_html(lines, changes, self._chip, str(entry.time))
 

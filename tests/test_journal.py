@@ -581,6 +581,67 @@ def test_battle_card_extra_skips_card_notes_and_event_markers(game):
     assert game.battle_extra_html() == ""  # 沒有顯示戰鬥卡片時沒有補充
 
 
+# ── 配點不換「剛剛」（計畫二最終審查 M1）──────────────────────
+
+
+def _level_up_fight(game) -> int:
+    """湖邊遊歷打贏一場、升到第 2 級（多 1 點屬性）：「剛剛」放這一場的戰鬥卡片。回傳那一場戰報的 id。"""
+    game.state.player.tutorial_step = 1  # 跳過第一步，不混進引導
+    _give_player_a_winning_wugong(game)
+    game.rng = FixedRandom(0.99)
+    game.state.player.member.exp = 90
+    walk_to(game, "lake")
+    game.choose("act:train")
+    assert game.state.player.stat_points == 1 and game.shows_battle_card()
+    return game.state.battles[0].id
+
+
+def test_spending_a_point_keeps_the_level_up_fight_in_now(game):
+    """升級那一仗打完，照著「你有 N 點屬性可以分配（點名號展開）」去配點：配點是狀態列上的動作，跟 journal.add_guide
+    一樣不換「剛剛」——那一場的戰鬥卡片與卡片底下的補充照舊；「配點」那一則照樣寫進江湖紀錄、從最新一則列起。"""
+    fight = _level_up_fight(game)
+    fought, extra = latest(game).title, game.battle_extra_html()
+    game.allocate_stat("str")
+    assert latest(game).title == journal.ALLOCATE and "臂力 +1" in game.latest_entry_html()
+    assert game.shows_battle_card() and game.battle_card_id() == fight
+    assert game.battle_extra_html() == extra  # 補充看的是那一場那一則，不是配點那一則
+    now = game.now_entry_html()
+    assert fought in now and "臂力 +1" not in now
+
+
+def test_the_home_page_keeps_the_fight_card_after_a_point_is_spent(game):
+    """伺服器送給江湖頁的那一份：「剛剛」（card／now）照舊是那一場；江湖紀錄頁（latest＋journal）配點在最前面、那一場接在後面。"""
+    import server
+
+    fight = _level_up_fight(game)
+    fought = latest(game).title
+    game.allocate_stat("agi")
+    view = server.main_view(game)
+    assert view["card"] is not None and view["card_id"] == fight
+    assert "身法 +1" not in view["now"]
+    assert "身法 +1" in view["latest"] and fought in view["journal"]
+
+
+def test_a_point_spent_after_a_quiet_action_leaves_that_action_in_now(game):
+    """前面沒有打仗：「剛剛」放配點之前的那一則（不是空的），江湖紀錄照舊從配點列起。"""
+    walk_to(game, "lake")
+    before = latest(game).title
+    game.state.player.stat_points = 1
+    game.allocate_stat("con")
+    assert not game.shows_battle_card() and game.battle_extra_html() == ""
+    now = game.now_entry_html()
+    assert before in now and "根骨 +1" not in now
+    assert "根骨 +1" in game.latest_entry_html()
+
+
+def test_now_is_not_empty_when_the_journal_holds_only_points(game):
+    game.state.journal.clear()
+    game.state.player.stat_points = 1
+    game.allocate_stat("wis")
+    assert [e.title for e in game.state.journal] == [journal.ALLOCATE]
+    assert "悟性 +1" in game.now_entry_html()  # 只有配點那一則時就放它，「剛剛」不空著
+
+
 def test_new_season_starts_a_fresh_journal(game):
     game.content.config.admins = [game.state.player.name]
     walk_to(game, "lake")

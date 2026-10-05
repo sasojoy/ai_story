@@ -1187,8 +1187,10 @@
 
   function applyMain(main) {
     const before = S.main ? S.main.status : null;
+    // 見聞的紅點只為新的一場亮：配點之後「剛剛」照舊是升級那一場的卡片（計畫二最終審查 M1），看過戰報再配點不再亮一次
+    const fresh = main.card && (!S.main || S.main.card_id !== main.card_id);
     setMain(main);
-    if (main.card) S.unseen = true;
+    if (fresh) S.unseen = true;
     render();
     const top = document.getElementById("top");
     if (before && top && (before.hp !== main.status.hp || before.stamina !== main.status.stamina || before.silver !== main.status.silver || before.xinde !== main.status.xinde)) {

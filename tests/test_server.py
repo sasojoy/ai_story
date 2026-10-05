@@ -793,6 +793,14 @@ def test_the_points_hint_stays_out_of_the_ellipsized_name_span():
     assert rule is not None and "flex: none" in rule.group(1)
 
 
+def test_the_news_dot_lights_only_for_a_new_fight_card():
+    """配點之後「剛剛」照舊是升級那一場的卡片（計畫二最終審查 M1）：看過那一場的戰報再配點，見聞的紅點不能再亮一次——
+    applyMain 比的是卡片是不是新的一場（card_id），不是「有沒有卡片」。"""
+    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    body = js[js.index("function applyMain"):js.index("async function choose")]
+    assert "main.card_id" in body and "if (main.card) S.unseen = true" not in body
+
+
 def test_the_practice_and_furnace_pages_only_read_and_call_what_the_server_has(game):
     """Task 12：修練頁、煉製頁（web/app.js）讀的欄位都要在 menxia_view 裡、叫的動作都要在 MENXIA_ACTIONS 裡；
     舊煉製的端點、欄位、說法不再出現。網頁沒有測試框架，這條擋住「改了伺服器忘了改網頁」。"""

@@ -323,7 +323,7 @@ def main_view(game: Game) -> dict:
     card = game.battle_card() if game.shows_battle_card() else None
     status, quest, scene = game.status_data(), md(game.quest_text()), md(game.scene_text())
     options = game.options()  # 照原本的順序：狀態、主線、場景先讀，選單（會推進全服戰鬥）最後
-    latest = game.battle_extra_html() if card is not None else game.latest_entry_html()
+    latest = game.journal_top_html()
     view = {
         "status": status,
         "quest": quest,
@@ -334,16 +334,16 @@ def main_view(game: Game) -> dict:
         "on_road": any(o.id == "act:on_road" for o in options),
         "free_text": game.battle_free_text_prompt(),
         "event_free_text": game.event_free_text_prompt(),  # 眼前事件的隨口應對：選單上那一顆按下去叫出輸入框
-        # 「剛剛」：這次行動打了仗就放戰鬥卡片，卡片沒寫到的補充放在 latest；沒打仗時 latest 是最新一則紀錄
+        # 「剛剛」：這次行動打了仗就放戰鬥卡片，卡片沒寫到的補充放在 now；之後配了點也一樣（配點不換「剛剛」，計畫二最終審查 M1）
         "card": md(card) if card is not None else None,
         "card_id": game.battle_card_id() if card is not None else None,
-        # 江湖紀錄頁是 latest＋journal＋older 接起來的，從最新一則列起
+        # 江湖紀錄頁是 latest＋journal＋older 接起來的，從最新一則列起（最新一則就是卡片那一場時，latest 是卡片的補充）
         "latest": latest,
         "journal": game.journal_html(1, RECENT_ROWS),
         "older": game.journal_html(1 + RECENT_ROWS, OLDER_ROWS),
         # 江湖頁的「剛剛」：跟 latest 一樣，只是最新的幾則若只是公告卡（休季是結算卡）上已經有全文的大事，
-        # 改放再前面那一則，同一段公告不寫兩次（FB-046）
-        "now": latest if card is not None else game.now_entry_html(),
+        # 改放再前面那一則，同一段公告不寫兩次（FB-046）；最新的配點也越過，卡片與補充看的都是那一場那一則
+        "now": game.battle_extra_html() if card is not None else game.now_entry_html(),
         "minimap": game.minimap_svg(),
         "bulletin": [md(text) for text in game.bulletin()],  # 江湖頁最上面的公告卡：這一週的大事；開關關著是空的
         "trends": md(game.trends_text()),
