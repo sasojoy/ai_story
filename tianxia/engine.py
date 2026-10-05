@@ -779,9 +779,13 @@ class Game:
         return fight.judgment
 
     def _fight_with(self, squad: Squad, judged: fight_llm.Judgment | None, **kw) -> encounter.EncounterResult:
-        """打一場單次判定（kw 照傳給 team.fight，挑戰本人的 difficulty）：有判讀就把優勢（已夾在 ±big_fight_swing 個百分點）
-        換成判定差距的平移（encounter.advantage_shift，照這一場真的用的難度算）；沒有是 0。"""
-        shift = encounter.advantage_shift(squad.difficulty, judged.advantage) if judged is not None else 0.0
+        """打一場單次判定（kw 照傳給 team.fight，挑戰本人的 difficulty）：有判讀就把優勢換成判定差距的平移
+        （encounter.advantage_shift，照這一場真的用的難度算）；沒有是 0。優勢在這裡再夾一次 ±big_fight_swing 個百分點：
+        fight_llm.judge 夾過了，但判讀不一定都經過它（之後的模型佇列也會交判讀進來），模型不能直接決定勝負（Task 2 審查修正 4）。"""
+        shift = 0.0
+        if judged is not None:
+            swing = self.content.config.big_fight_swing
+            shift = encounter.advantage_shift(squad.difficulty, max(-swing, min(swing, judged.advantage)))
         return team.fight(self.state, self.content, self.world, squad.id, self.rng, shift=shift, **kw)
 
     @staticmethod

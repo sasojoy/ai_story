@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import copy
+import re
 
 from pydantic import BaseModel
 
@@ -75,9 +76,18 @@ def _messages(request: FightRequest, swing: int) -> list[dict[str, str]]:
     ]
 
 
+SENTENCE_END = re.compile(r"[。！？][」』”）]*")  # 一句話的結尾，連同緊跟著的收尾引號、括號
+
+
 def _account(text) -> str:
-    """一版過程：轉成繁體（模型常夾簡體字）、拿掉換行與空白收成一段（卡片上「過程」底下就是一段話）、最多 TEXT_MAX 個字。"""
-    return zh.to_traditional("".join(str(text or "").split()))[:TEXT_MAX]
+    """一版過程：轉成繁體（模型常夾簡體字）、拿掉換行與空白收成一段（卡片上「過程」底下就是一段話）、最多 TEXT_MAX 個字。
+    太長就退回 TEXT_MAX 以內最後一句話的結尾（「。！？」，後面緊跟的收尾引號一起留），不從句子中間斷；沒有句號才硬切。"""
+    text = zh.to_traditional("".join(str(text or "").split()))
+    if len(text) <= TEXT_MAX:
+        return text
+    cut = text[:TEXT_MAX]
+    ends = [m.end() for m in SENTENCE_END.finditer(cut)]
+    return cut[:ends[-1]] if ends else cut
 
 
 def judge(

@@ -3444,6 +3444,23 @@ def _pick(game, battle_seq: int) -> str:
     return game._train_pick(game.content.locations[game.state.player.location]).id
 
 
+def test_the_engine_clamps_the_advantage_itself(game):
+    """引擎自己也把優勢夾在 ±big_fight_swing：判讀不一定都經過 fight_llm.judge（之後的模型佇列也會交判讀進來），
+    優勢 99 只當 15 用（Task 2 審查修正 4）。"""
+    from tianxia import encounter, team
+
+    _boss_at_the_lake(game)
+    request = game.fight_request("act:train")
+    wild = fight_llm.Judgment(advantage=99, winning="贏", losing="輸")
+    with mock.patch.object(team, "fight", wraps=team.fight) as fight:
+        game.choose("act:train", fight=_judged(request, wild))
+    assert fight.call_args.kwargs["shift"] == pytest.approx(encounter.advantage_shift(200, 15))
+    game._fight = _judged(game.fight_request("act:train"), wild.model_copy(update={"advantage": -99}))
+    with mock.patch.object(team, "fight", wraps=team.fight) as fight:
+        game._squad_encounter("boss")
+    assert fight.call_args.kwargs["shift"] == pytest.approx(encounter.advantage_shift(200, -15))
+
+
 def test_a_judgment_is_used_once_and_never_by_a_foe_met_while_exploring(game):
     """判讀只用在它那一場（計畫三 G8）：同一次行動再打一場同一路不會再吃一次；探索撞上的野外對手是當下擲出來的，不問模型、
     也不吃判讀（設計 8.3 只算遊歷、劇情戰與挑戰本人）。"""

@@ -50,6 +50,16 @@ def test_the_accounts_come_back_traditional_one_paragraph_and_short():
     assert got.winning == "這一招說時遲那時快" and len(got.losing) == fight_llm.TEXT_MAX
 
 
+def test_a_long_account_is_cut_at_the_end_of_a_sentence():
+    """太長的過程不從句子中間斷：退回 TEXT_MAX 以內最後一個「。！？」（後面緊跟的收尾引號一起留）；沒有句號才硬切。"""
+    sentence = "敵勢如潮，你連退數步。"  # 11 字：18 句是 198 字，第 19 句會被 200 字切在中間
+    got = fight_llm.judge(_client(fight_llm.Judgment(winning=sentence * 20, losing="他喝道：「再來！」" * 30)), REQUEST, 15)
+    assert got.winning == sentence * 18
+    assert got.losing.endswith("！」") and len(got.losing) <= fight_llm.TEXT_MAX and got.losing.count("「") == got.losing.count("」")
+    short = fight_llm.judge(_client(fight_llm.Judgment(winning="一刀劈下", losing="退")), REQUEST, 15)
+    assert (short.winning, short.losing) == ("一刀劈下", "退")  # 不長就不動（沒有句號也照留）
+
+
 def _post_replying(content: str, sent: list):
     def post(url, json=None, timeout=None):
         sent.append(timeout)
