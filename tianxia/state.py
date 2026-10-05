@@ -115,6 +115,9 @@ class PlayerState(BaseModel):
     art_levels: dict[str, int] = Field(default_factory=dict)  # 每門學過的功法各自的熟練度；改練時存進來／取出來
 
     seen_events: set[str] = Field(default_factory=set)
+    # 防重複（events.pick_event）：池子（「地點:行動」或「*:行動」）→ 這一輪看過的事件 id，照看到的先後；輪完清空。
+    # 舊存檔沒這欄就是每個池子都還沒看過；角色每季重來，所以每季自然清空
+    event_rounds: dict[str, list[str]] = Field(default_factory=dict)
     mark_days: dict[str, int] = Field(default_factory=dict)  # 地方痕跡：這個人上次替這個痕跡算進一次是第幾天（一天只算一次；角色每季重來，跟著清空）
     anonymous: bool = False
     busy_until: float | None = None  # 閉關結束的遊戲時間

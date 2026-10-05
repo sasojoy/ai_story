@@ -98,11 +98,15 @@ def check_condition(cond: Condition, state: GameState, content: Content | None =
     return True
 
 
+def check_gap(check: Check, state: GameState, content: Content, world: WorldStateStore) -> float:
+    """出手者的屬性減難度（成功率與選項底下的心聲都看它）。"""
+    key = team.check_actor(state, content, world, check)
+    return team.check_value(state, content, world, key, check.stat) - check.difficulty
+
+
 def check_chance(check: Check, state: GameState, content: Content, world: WorldStateStore) -> float:
     """出手者的屬性每高於難度 1 點，成功率 +10%；範圍 5%～95%。"""
-    key = team.check_actor(state, content, world, check)
-    value = team.check_value(state, content, world, key, check.stat)
-    return min(0.95, max(0.05, 0.5 + (value - check.difficulty) * 0.1))
+    return min(0.95, max(0.05, 0.5 + check_gap(check, state, content, world) * 0.1))
 
 
 def roll_check(check: Check, state: GameState, content: Content, world: WorldStateStore, rng: random.Random) -> bool:
