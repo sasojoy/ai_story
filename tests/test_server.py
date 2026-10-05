@@ -810,10 +810,13 @@ def test_the_allocate_buttons_say_what_each_stat_does():
 
 def test_the_news_dot_lights_only_for_a_new_fight_card():
     """配點之後「剛剛」照舊是升級那一場的卡片（計畫二最終審查 M1）：看過那一場的戰報再配點，見聞的紅點不能再亮一次——
-    applyMain 比的是卡片是不是新的一場（card_id），不是「有沒有卡片」。"""
+    比的是卡片是不是新的一場（card_id），不是「有沒有卡片」。比在 setMain：動作回來的與輪詢拿到的都走它，
+    決戰收場的卡片常常是輪詢（sync）補送的，那一場也要亮。"""
     js = (server.WEB / "app.js").read_text(encoding="utf-8")
-    body = js[js.index("function applyMain"):js.index("async function choose")]
-    assert "main.card_id" in body and "if (main.card) S.unseen = true" not in body
+    set_main = js[js.index("function setMain"):js.index("// ── 整體 ──")]
+    assert "main.card_id" in set_main and "S.unseen = true" in set_main
+    apply_main = js[js.index("function applyMain"):js.index("async function choose")]
+    assert "S.unseen = true" not in apply_main
 
 
 def test_the_practice_and_furnace_pages_only_read_and_call_what_the_server_has(game):

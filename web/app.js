@@ -183,6 +183,9 @@
 
   function setMain(main) {
     if (main.event_free_text == null) S.answering = false; // 事件過去了，輸入框跟著收起
+    // 見聞的紅點只為新的一場亮（比 card_id）：配點之後「剛剛」照舊是升級那一場的卡片，看過戰報再配點不再亮一次（計畫二最終審查 M1）；
+    // 放在這裡是因為動作回來的與輪詢拿到的都走 setMain——決戰收場的卡片常常是輪詢（sync）補送的。登入那一份不亮（S.main 還沒有）
+    if (main.card && S.main && S.main.card_id !== main.card_id) S.unseen = true;
     const key = JSON.stringify(main);
     const changed = key !== S.mainKey;
     S.main = main;
@@ -1196,10 +1199,7 @@
 
   function applyMain(main) {
     const before = S.main ? S.main.status : null;
-    // 見聞的紅點只為新的一場亮：配點之後「剛剛」照舊是升級那一場的卡片（計畫二最終審查 M1），看過戰報再配點不再亮一次
-    const fresh = main.card && (!S.main || S.main.card_id !== main.card_id);
-    setMain(main);
-    if (fresh) S.unseen = true;
+    setMain(main); // 見聞的紅點在 setMain 裡判斷（新的一場才亮）
     render();
     const top = document.getElementById("top");
     if (before && top && (before.hp !== main.status.hp || before.stamina !== main.status.stamina || before.silver !== main.status.silver || before.xinde !== main.status.xinde)) {
