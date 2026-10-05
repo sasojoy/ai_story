@@ -588,7 +588,10 @@ def test_two_tutorial_steps_after_joining_only_in_season_one(on):
     game.choose("faction:guan")
     msgs = game.choose("faction:confirm")
     assert game.state.player.tutorial_step == 7  # 投靠完成「看一眼本週軍令」那一步
-    assert any("軍令上寫什麼，就照著做一次" in m for m in msgs)  # 接著出現下一步的說明
+    # 下一步的說明在對話框，不在「剛剛」（引導重做設計 8.1.3；畫面批次審查 I2）
+    assert not any("軍令上寫什麼" in m or "引導完成" in m for m in msgs)
+    assert "✔ 引導完成" in game.state.player.guide_done and game.guide_box()["text"].startswith("軍令上寫什麼，就照著做一次")
+    assert not any("引導完成" in line for line in game.state.journal[0].lines)
     _order(game, "siege", "guan", front="yingru")
     with _win():
         game.choose("act:train")

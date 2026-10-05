@@ -353,7 +353,7 @@
     { key: "social", ids: ["act:socialize", "act:call"], name: "交友", none: "沒有人", icon: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>' },
   ];
   const MOVE_ICON = '<path d="M13 3l-3 7h5l-4 11 8-10h-5z"/>';
-  const SHORT_SUB = { "act:rest": "回體力", "act:call": "不花體力" };  // 求見只是打開名單（FB-044：以前又寫一次「求見」）
+  const SHORT_SUB = { "act:rest": "回體力", "act:call": "挑一位" };  // 求見先打開名單挑人（FB-044：以前又寫一次「求見」；挑了人才花體力）
   // 勝算的顏色（FB-044）：遊歷的小字第二行照風險上色
   const ODDS_TONE = { "穩勝": "good", "有把握": "good", "零風險": "good", "五五波": "even", "難分勝負": "even", "凶險": "bad", "必敗": "bad" };
   // 選單上有「打坐」就是平常閒著的時候：用行動列。事件、對話、路上、決戰的選項每次都不一樣，照舊排成一列按鈕
@@ -374,9 +374,10 @@
       // 最後一小句（例：挑戰本人打贏之後「剛吃了敗仗，閉門不見」只寫「閉門不見」，T4）
       const sub = o.enabled ? (SHORT_SUB[o.id] || detail.replace(/^體力 (\d+).*$/, "體力 $1"))
         : (detail && !detail.startsWith("體力") ? detail.split("，").pop() : "體力不夠");
-      // 體力之後還有說明（遊歷的「體力 10・2 路對手・必敗」）：最後一段是勝算，另起一行寫出來（FB-044；對手數放不下就不寫）
+      // 體力之後還有說明（遊歷的「體力 10・2 路對手・必敗」）：挑出勝算那一段另起一行（FB-044；對手數放不下就不寫）。
+      // 不一定是最後一段：有自己人也有敵人的地方後面還接「・或與自己人操練」（畫面批次審查 C1）
       const parts = detail.split("・");
-      const note = o.enabled && parts.length > 1 && /^體力 \d+/.test(parts[0]) ? parts[parts.length - 1] : "";
+      const note = o.enabled && /^體力 \d+/.test(parts[0]) ? (parts.find((x) => x in ODDS_TONE) || "") : "";
       return inkCell(d.key, name, sub, d.icon, o.enabled ? `data-act="choose" data-id="${esc(o.id)}"` : "disabled", o.enabled ? "" : " off", note);
     });
     const moves = m.options.filter((o) => followsMode(o.id));
@@ -471,7 +472,9 @@
       ? '<span class="ok">✔ 完成</span>' : `<span class="reward">${esc(d)}</span>`).join("")}</div>` : "";
     const btn = g.end ? '<button class="btn small" data-act="guide-ack">知道了</button>'
       : '<button class="linkish" data-act="guide-shut">收起</button>';
-    return `<section class="card guide" aria-label="${esc(g.speaker)}的話"><div class="guide-head"><b>${esc(g.speaker)}</b>${btn}</div>${done}<p class="guide-text">${esc(g.text)}</p></section>`;
+    // 長的那幾步（軍令兩步一百多字）先露三行、點了看全文，不把行動與選項擠出第一屏（畫面批次審查 I3）
+    const full = S.guideFull === g.text;
+    return `<section class="card guide" aria-label="${esc(g.speaker)}的話"><div class="guide-head"><b>${esc(g.speaker)}</b>${btn}</div>${done}<p class="guide-text${full ? "" : " clamp"}" data-act="guide-more" role="button" tabindex="0" aria-expanded="${full}">${esc(g.text)}</p></section>`;
   }
 
   function pageJianghu() {
@@ -1240,6 +1243,7 @@
         case "sheet-close": S.sheet = false; render(); break;
         case "guide-shut": setGuideShut(S.main.guide && S.main.guide.text); renderPage(); break;
         case "guide-open": setGuideShut(null); renderPage(); break;
+        case "guide-more": S.guideFull = S.guideFull === (S.main.guide && S.main.guide.text) ? null : S.main.guide && S.main.guide.text; renderPage(); break;
         case "guide-ack": await doMain("guide_ack"); break;
         case "do": S.sheet = false; await doMain(el.dataset.op); break;
         case "admin": {

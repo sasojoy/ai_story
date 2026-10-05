@@ -156,6 +156,7 @@ class Game:
         # 做完或略過（skip_tutorial 也是設成步數）：看不分季的那幾步；第一季多的兩步排在後面，回鍋的人接著做（計畫 T6）
         if old.player.tutorial_step >= base_step_count(self.content):
             fresh.player.tutorial_step = old.player.tutorial_step
+            fresh.player.guide_skipped = old.player.guide_skipped  # 略過的人換季也不畫對話框（畫面批次審查 I4）
         ratio = self.content.config.affinity_carry_ratio
         fresh.player.affinities = {key: int(value * ratio) for key, value in old.player.affinities.items()}
         fresh.player.relationship_notes = old.player.relationship_notes
@@ -798,6 +799,8 @@ class Game:
         s, c, p = self.state, self.content, self.state.player
         t = c.tutorial
         todo = tutorial_steps(s, c)
+        if p.guide_skipped:  # 略過的人不再畫框，換季、第一季多出的步驟也一樣（8.1.4；畫面批次審查 I4）
+            return None
         if p.tutorial_step < len(todo):
             return {"speaker": t.speaker, "text": todo[p.tutorial_step].text, "done": list(p.guide_done), "end": False}
         if p.guide_outro and t.outro:
@@ -1241,7 +1244,7 @@ class Game:
             # 投靠這一刻就推一次新手引導：第一季「投靠、看一眼本週軍令」那一步只看陣營（計畫 T6）；beta 照舊等下一個行動
             msgs = [f"你投靠了{faction.name}。"]
             if season_one(self.content, self.state.world):
-                msgs += note_action(self.state, self.content, self.world, "join")
+                msgs += self._guide(note_action(self.state, self.content, self.world, "join"))  # 走對話框（畫面批次審查 I2）
             return msgs
         faction = self._faction(arg)
         p.pending_faction = faction.id
@@ -2708,6 +2711,7 @@ class Game:
             return []
         self.state.player.tutorial_step = steps
         self.state.player.guide_done, self.state.player.guide_outro = [], False  # 略過後對話框不再出現（8.1.4）
+        self.state.player.guide_skipped = True
         self._write("新手引導", [], tag="已略過")
         return self._log(["（已略過新手引導。）"])
 
