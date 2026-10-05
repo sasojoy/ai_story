@@ -266,7 +266,10 @@ class Game:
             journal.add_entry(self.state, news, merge=True)
         self._deliver_big_events()  # 這一季的時刻表大事人人有份：沒看過的補上，推進的人也走這一條（FB-038）
         self._deliver_battle_results()  # 下線時收場的決戰，回來第一次同步就補上（休季、籌備中也一樣，FB-027）
-        return self._log(msgs + arrived)
+        summons = ranks.check_summons(self.state, self.content)  # 行動之外記到的貢獻（抵達、別人觸發的結算）：同步時補發召見（計畫 T5）
+        if summons:
+            self._write("召見", summons)
+        return self._log(msgs + arrived + summons)
 
     def advance(self, seconds: float) -> list[str]:
         """玩家主動「等待」固定一段遊戲時間（快轉按鈕）：進行中時，直接在 self.state.world
@@ -388,6 +391,8 @@ class Game:
             # 內傷的代價——不顯示勝算的話，玩家會在開局連輸三場、氣血見底才知道自己不該打。
             opts.append(self._train_option(loc, cost["train"], odds))
         opts += self._challenge_options(odds)  # 挑戰本人（T4）：第一季、有陣營、這裡站著敵方的大勢人物時才有
+        if ranks.summons_event(s, c) is not None:
+            opts.append(Option(id="act:summons", label="應召"))  # 晉升奇遇（計畫 T5）：人在召見的地點才有，不花體力
         people = self._figures_here()
         if has_events_here(c, loc, "socialize") or 0 < len(people) < AUDIENCE_HALL_FIGURES:
             # 兩位以上大勢人物的地點，交友只走福緣與地點事件、從不開口對話（見 _socialize_figure），
@@ -642,6 +647,7 @@ class Game:
             if kind == "call" and arg != "back":
                 msgs += note_action(self.state, self.content, self.world, "socialize")  # 指名求見算一次交友（新手引導、任務）
             msgs += check_thresholds(self.state, self.content, self.world, self.client, now=self.now)
+            msgs += ranks.check_summons(self.state, self.content)  # 貢獻跨過門檻就發召見（計畫 T5）
             journal.add_entry(self.state, self._draft.entry(self.state.world.time, msgs))
         finally:
             self._draft = None
@@ -743,7 +749,7 @@ class Game:
         duty = c.orders.duties.get(s.player.faction or "")  # 守勢行動的標題寫陣營自己的名字（巡哨、傳道、保境安民）
         titles = {
             "explore": f"探索{here}", "socialize": f"交友・{here}", "call": f"求見・{here}", "train": f"遊歷・{here}",
-            "recruit": f"招募・{here}", "rest": f"打坐・{here}", "stand": "起身", "halt": "喊停",
+            "recruit": f"招募・{here}", "rest": f"打坐・{here}", "summons": f"應召・{here}", "stand": "起身", "halt": "喊停",
             "duty": f"{duty.name if duty else '守勢'}・{here}", "convoy": f"接下糧車・{here}",
         }
         return titles.get(arg, "提前出關")
@@ -782,7 +788,12 @@ class Game:
             return [f"你遞上名帖，準備求見{self.content.locations[self.state.player.location].name}的人物。"]
         if what.startswith("challenge:"):
             return self._challenge(what.partition(":")[2])
+        promotion = ranks.summons_event(self.state, self.content)
+        if what == "summons":
+            return self._present(self.content.events[promotion])
         self.state.player.stamina -= cost[what]
+        if promotion is not None and what in ("explore", "socialize"):  # 在召見的地點探索、交友：端出晉升奇遇（計畫 T5）
+            return self._present(self.content.events[promotion])
         if what == "explore":
             return self._explore()
         if what == "train":
@@ -2353,6 +2364,7 @@ class Game:
         try:
             msgs = self._depart(route, mode)
             msgs += self._hear_after_stamina(stamina)
+            msgs += ranks.check_summons(s, c)  # 疾行送到糧車也記貢獻（計畫 T5）
             journal.add_entry(s, self._draft.entry(s.world.time, msgs))
         finally:
             self._draft = None

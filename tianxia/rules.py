@@ -447,6 +447,17 @@ def apply_effect(
     if effect.stamina:
         p.stamina = min(content.config.stamina_max, max(0.0, p.stamina + effect.stamina))
         msgs.append(f"體力 {'+' if effect.stamina > 0 else ''}{effect.stamina}")
+    for character_id, delta in effect.affinity.items():  # 情誼（計畫 T5）：夾在 0～100，訊息寫實際動了多少，沒動就不寫
+        before = p.affinities.get(character_id, 0)
+        p.affinities[character_id] = max(0, min(100, before + delta))
+        if p.affinities[character_id] != before:
+            msgs.append(f"{content.characters[character_id].name}情誼 {p.affinities[character_id] - before:+d}")
+    if effect.promote is not None or effect.followers:  # 晉升奇遇（計畫 T5）：開關關著時 ranks 什麼都不做
+        from . import ranks  # noqa: PLC0415  ranks → rules：在函式裡 import，避免循環
+
+        if effect.promote is not None:
+            msgs += ranks.promote(state, content, effect.promote)
+        msgs += ranks.add_followers(state, content, effect.followers)
     p.flags |= set(effect.flags_add)
     p.flags -= set(effect.flags_remove)
     for skill_id in effect.learn_skills:
