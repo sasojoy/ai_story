@@ -350,7 +350,7 @@ class Game:
             rate *= 2
         if w.time <= cfg.newbie_days * DAY:
             rate *= 2
-        team.regen_neili(self.content, p.member, rate)
+        team.regen_neili(self.content, p.member, rate, team.con_of(self.state, p.member))
         for cid in p.team:
             self.world.update_companion(cid, lambda progress: team.regen_neili(self.content, progress, rate))
         msgs: list[str] = []
@@ -1014,7 +1014,9 @@ class Game:
         branches = [b for b in EXPLORE_BRANCHES if mix.get(b, 0) > 0 and self._explore_can(b, loc)]
         if not branches:
             return ["你四處走走，一無所獲。"]
-        branch = self.rng.choices(branches, weights=[mix[b] for b in branches])[0]
+        # 悟性：落在「悟意境」那一支的比重 ×（1＋3%×（悟性−5））；另外兩支不動（武學與成長設計 6.1）
+        wis = max(0.1, 1 + team.stat_bonus(c, s.player.stats.get("wis", team.BASE_STAT)))
+        branch = self.rng.choices(branches, weights=[mix[b] * (wis if b == "insight" else 1) for b in branches])[0]
         if branch == "insight":
             found = insights.roll_explore(loc, c, self.rng)
             return [f"你在{loc.name}靜下心來，看了好一陣。"] + insights.learn(s, c, self.world, found)
@@ -1400,12 +1402,15 @@ class Game:
     def _battle_power(self) -> float:
         """玩家自己目前的武學威力快照，加入戰鬥時存一份進 BattleParticipant.power，
         之後戰鬥結算的威力抵銷只讀這份快照，不會、也不能臨時去查任何人的角色資料
-        （見 battle_instance.py::BattleParticipant 的欄位註解）。"""
+        （見 battle_instance.py::BattleParticipant 的欄位註解）。快照吃本人的加成（臂力、根骨，武學與成長設計 8.4）。"""
         arts = team.team_arts(self.state, self.content, self.world)
-        return encounter.member_power(self.state.player.member, arts)
+        return encounter.member_power(
+            self.state.player.member, arts, boost=team.player_boost(self.state, self.content, self.world),
+        )
 
     def _battle_neili_cap(self) -> float:
-        _, cap = team.member_neili(self.content, self.state.player.member)
+        member = self.state.player.member
+        _, cap = team.member_neili(self.content, member, team.con_of(self.state, member))
         return cap
 
     def _battle_status(self, tick: bool = True) -> tuple[battle_instance.BattleInstance, BattleDef] | None:
@@ -3354,7 +3359,7 @@ class Game:
         names = c.config.stat_names
         sect = c.sects[p.sect].name if p.sect else None
         faction = next((f.name for f in c.scenario.factions if f.id == p.faction), None)
-        now, cap = team.member_neili(c, p.member)
+        now, cap = team.member_neili(c, p.member, team.con_of(s, p.member))
         mates = []
         for cid in p.team:
             progress = self.world.get_companion(cid)

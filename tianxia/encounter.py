@@ -77,22 +77,38 @@ class EncounterResult(BaseModel):
     difficulty: float
 
 
+class Boost(BaseModel):
+    """一個人在這一場的加成（武學與成長設計 5.1、6.1、7.4）。由呼叫端算好傳進來，這個模組只算數字。"""
+
+    outer: float = 0.0  # 武學（外功）威力加幾成：臂力
+    inner: float = 0.0  # 內功威力加幾成：根骨
+    factor: float = 1.0  # 整個人的乘數：內外搭配 × 正邪共鳴（計畫二 Task 3）
+
+
+BOOST_FLOOR = 0.1  # 1 + 加成再低也夾在這裡：屬性被扣到很低時威力變小，但不會變成負的
+
+
 def member_power(
     member: HasMartialArts, arts: dict[str, MartialArt], opponent_attribute: str | None = None,
-    condition: float = 1.0,
+    condition: float = 1.0, boost: Boost | None = None,
 ) -> float:
     """這個人目前貢獻的威力：沒學武學就是 0（內功沒有武學可以加成，貢獻也是 0）。
 
     `condition` 是氣血狀態係數（見 condition_of）：帶傷上陣的人出手比較弱。呼叫端算好傳進來，
     因為氣血上限要讀 content 的設定，而這個模組刻意只處理數字、不碰內容模型。
+    `boost` 是這個人的加成（只有玩家本人有，見 team.player_boost）：outer 乘在武學的威力上、
+    inner 乘在內功的威力上（所以只放大內功那一項加成，不是整個人）、factor 乘在整個人上。
     """
     if not member.wugong_id or member.wugong_id not in arts:
         return 0.0
+    boost = boost or Boost()
     wugong = arts[member.wugong_id]
-    power = power_at(wugong, member.wugong_level)
+    power = power_at(wugong, member.wugong_level) * max(BOOST_FLOOR, 1 + boost.outer)
     if member.neigong_id and member.neigong_id in arts:
         neigong = arts[member.neigong_id]
-        power *= 1 + power_at(neigong, member.neigong_level) / NEIGONG_BONUS_DIVISOR
+        inner = power_at(neigong, member.neigong_level) * max(BOOST_FLOOR, 1 + boost.inner)
+        power *= 1 + inner / NEIGONG_BONUS_DIVISOR
+    power *= boost.factor
     if opponent_attribute and counters(wugong.attribute, opponent_attribute):
         power *= COUNTER_BONUS
     return power * condition
@@ -100,12 +116,17 @@ def member_power(
 
 def team_power(
     members: list[HasMartialArts], arts: dict[str, MartialArt], opponent_attribute: str | None = None,
-    conditions: list[float] | None = None,
+    conditions: list[float] | None = None, boosts: list[Boost | None] | None = None,
 ) -> float:
-    """隊伍總威力。`conditions` 是跟 members 一一對應的氣血狀態係數，省略時當作全員滿血。"""
+    """隊伍總威力。`conditions`（氣血狀態係數）與 `boosts`（加成）都跟 members 一一對應，省略時當作
+    全員滿血、沒有加成。長度對不上就報錯（strict）：默默少算一個人正是部下曾經消失的方式（計畫二 G1）。"""
     if conditions is None:
         conditions = [1.0] * len(members)
-    return sum(member_power(m, arts, opponent_attribute, c) for m, c in zip(members, conditions))
+    if boosts is None:
+        boosts = [None] * len(members)
+    return sum(
+        member_power(m, arts, opponent_attribute, c, b) for m, c, b in zip(members, conditions, boosts, strict=True)
+    )
 
 
 def resolve_encounter(our_power: float, difficulty: float, rng: Random) -> EncounterResult:

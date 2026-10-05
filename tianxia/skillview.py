@@ -86,7 +86,7 @@ def art_rows(state: GameState, content: Content, world: WorldStateStore) -> list
         if problem is None:
             target = next_quality(art.quality)
             failures = p.art_mastery.get(art_id, 0)
-            note = f"{cultivation.chance(content, target, failures)}% 晉為{target}・體力 {content.config.cultivate_stamina}"
+            note = f"{cultivation.odds_for(state, content, target, failures)}% 晉為{target}・體力 {content.config.cultivate_stamina}"
             legend = _legend_choice(state, content, target, failures)
         else:
             note = problem
@@ -115,7 +115,7 @@ def _legend_choice(state: GameState, content: Content, target: str, failures: in
         "count": count,
         "bonus": boost,
         "label": f"服下{cfg.legend_item_name}（+{boost}%，剩 {count} 枚）",
-        "note": f"{cultivation.chance(content, target, failures, boost)}% 晉為{target}"
+        "note": f"{cultivation.odds_for(state, content, target, failures, boost)}% 晉為{target}"
                 f"（含{cfg.legend_item_name} +{boost}%）・體力 {cfg.cultivate_stamina}",
     }
 
@@ -191,7 +191,7 @@ def member_card(state: GameState, content: Content, world: WorldStateStore, key:
         member = world.get_companion(key)
         name = content.characters[key].name
     own = state if key == PLAYER else None  # 玩家那一列顯示自己修練到的品質；同伴照全服登記的
-    now, cap = team.member_neili(content, member)
+    now, cap = team.member_neili(content, member, team.con_of(state, member))  # 本人的上限吃根骨，同伴照基準
     lines = [
         f"### {name}",
         f"第 {member.level} 級　氣血 {now:.0f}/{cap:.0f}",

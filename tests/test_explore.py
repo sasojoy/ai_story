@@ -8,6 +8,7 @@ from __future__ import annotations
 import random
 from collections import Counter
 from pathlib import Path
+from unittest import mock
 
 import pytest
 
@@ -121,6 +122,23 @@ def test_nothing_happens_only_when_no_branch_can(game):
     _lake(game, enemies=(), with_event=False)
     _only(game, insight=0, wild=35, event=25)
     assert _explore_many(game, 20) == Counter(nothing=20)
+
+
+def test_insight_weighs_the_insight_branch(game):
+    """悟性：探索時落在「悟意境」那一支的比重乘上（1＋3%×（悟性－5）），另外兩支不動（武學與成長設計 6.1）。"""
+    lake = _lake(game)
+    game.state.player.stats["wis"] = 15
+    seen = {}
+
+    def choices(population, weights):
+        seen.update(zip(population, weights))
+        return [population[0]]
+
+    with mock.patch.object(game.rng, "choices", side_effect=choices):
+        game._explore()
+    mix = game.content.config.explore_mix_of(lake.tags).weights
+    assert seen["insight"] == pytest.approx(mix["insight"] * 1.3)
+    assert (seen["wild"], seen["event"]) == (mix["wild"], mix["event"])
 
 
 # ── 奇遇判定先於三選一 ───────────────────────────────────

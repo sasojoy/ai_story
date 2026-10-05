@@ -3,10 +3,11 @@ from __future__ import annotations
 
 import random
 from pathlib import Path
+from unittest import mock
 
 import pytest
 
-from tianxia import team
+from tianxia import encounter, team
 from tianxia.content import load_content
 from tianxia.engine import Game
 from tianxia.martial_arts import generate_from_name
@@ -286,3 +287,106 @@ def test_a_companions_level_ups_give_the_player_no_points(state, content, world)
     assert team.member_stats(state, content, world, "mate")["str"] == pytest.approx(
         mate.stats["str"] + mate.growth["str"]
     )
+
+
+# ── 四屬性的加成（武學與成長設計 6.1；計畫二 Task 2）──────────────────────────────
+
+
+def test_strength_and_root_feed_the_players_boost_only(state, content, world):
+    state.player.stats["str"], state.player.stats["con"] = 15, 10
+    boost = team.player_boost(state, content, world)
+    assert boost.outer == pytest.approx(0.3) and boost.inner == pytest.approx(0.15)
+    state.player.team = [next(cid for cid, ch in content.characters.items() if ch.kind == "recruitable")]
+    boosts = team.team_boosts(state, content, world)
+    assert len(boosts) == 2 and boosts[0].outer > 0
+    assert (boosts[1].outer, boosts[1].inner, boosts[1].factor) == (0.0, 0.0, 1.0)  # 同伴不吃玩家的加成
+
+
+def test_root_raises_the_hp_cap_without_refilling(state, content, world):
+    member = state.player.member
+    member.neili = 100.0
+    base_cap = team.neili_cap(content, member.level)
+    state.player.stats["con"] = 15
+    now, cap = team.member_neili(content, member, team.con_of(state, member))
+    assert cap == pytest.approx(base_cap * 1.3) and now == 100.0
+
+
+def test_a_companions_hp_ignores_the_players_root(state, content, world):
+    state.player.stats["con"] = 15
+    mate = world.get_companion("mate")
+    assert team.con_of(state, mate) == team.BASE_STAT
+    assert team.member_neili(content, mate, team.con_of(state, mate))[1] == team.neili_cap(content, mate.level)
+
+
+def test_body_lightness_and_root_soften_a_fights_toll(state, content, world):
+    content.config.encounter_neili_loss = {"落敗": 0.3}
+    plain = state.model_copy(deep=True)
+    team.take_encounter_toll(plain, content, world, "落敗")
+    state.player.stats["agi"], state.player.stats["con"] = 15, 15
+    team.take_encounter_toll(state, content, world, "落敗")
+    cap_plain = team.neili_cap(content, 1)
+    lost_plain = cap_plain - team.member_neili(content, plain.player.member)[0]
+    cap = team.neili_cap(content, 1, 15)
+    lost = cap - team.member_neili(content, state.player.member, 15)[0]
+    assert lost / cap == pytest.approx(lost_plain / cap_plain * 0.7, rel=0.05)
+    assert state.player.member.injury < plain.player.member.injury
+
+
+def _power_seen(call) -> float:
+    """call() 裡第一次單次判定收到的我方威力（遊歷與勝算估計都經過 encounter.resolve_encounter）。"""
+    seen: list[float] = []
+    resolve = encounter.resolve_encounter
+
+    def spy(power, difficulty, rng):
+        seen.append(power)
+        return resolve(power, difficulty, rng)
+
+    with mock.patch.object(encounter, "resolve_encounter", side_effect=spy):
+        call()
+    return seen[0]
+
+
+def test_a_fight_gives_the_boost_to_the_player_and_not_to_the_companion(state, content, world):
+    """計畫二 G12：帶著同伴打一場，總威力＝吃加成的本人＋不吃加成的同伴（打一場與勝算估計一樣）。"""
+    state.player.member.wugong_id, state.player.member.neigong_id = "basic_fist", "basic_breath"
+    world.update_companion("mate", lambda p: setattr(p, "wugong_id", "palm"))
+    state.player.team = ["mate"]
+    state.player.stats["str"], state.player.stats["con"] = 15, 10
+    squad = content.squads["thug"]
+    arts = team.team_arts(state, content, world)
+    expected = (
+        encounter.member_power(state.player.member, arts, squad.attribute, boost=encounter.Boost(outer=0.3, inner=0.15))
+        + encounter.member_power(world.get_companion("mate"), arts, squad.attribute)
+    )
+    assert _power_seen(lambda: team.fight(state, content, world, "thug", random.Random(0))) == pytest.approx(expected)
+    assert _power_seen(lambda: team.estimate(state, content, world, "thug")) == pytest.approx(expected)
+
+
+def test_followers_still_fight_beside_a_boosted_player_without_the_boost():
+    """計畫二 G1／F17：加成的清單跟陣容一樣長，部下照樣上陣、照樣算進勝算，只是不吃本人的加成。"""
+    real = load_content(CONTENT_DIR)
+    real.config.auto_open_first_season = True
+    real.config.season_one, real.config.season_days, real.config.server_max_players = True, 2.5, 2
+    game = Game.new(real, "甲", rng=random.Random(0))
+    s = game.state
+    s.player.followers = ["follower_guan_spear", "follower_guan_crossbow"]
+    s.player.stats["str"] = 15
+    squad_id = next(iter(real.squads))
+    attribute = real.squads[squad_id].attribute
+    arts = team.team_arts(s, real, game.world)
+    player = encounter.member_power(s.player.member, arts, attribute, boost=encounter.Boost(outer=0.3))
+    followers = [encounter.member_power(f, arts, attribute) for f in team.follower_units(s, real)]
+    assert player > 0 and len(followers) == 2 and all(power > 0 for power in followers)
+    assert len(team.team_boosts(s, real, game.world)) == 3
+    seen = _power_seen(lambda: team.estimate(s, real, game.world, squad_id))
+    assert seen == pytest.approx(player + sum(followers))
+
+
+def test_a_practice_injury_starts_from_the_rooted_hp(state, content, world):
+    """練功受傷從（吃了根骨的）目前氣血扣起：滿血 416 的人受傷 N 點剩 416 − N，不是先掉回 320。"""
+    content.config.practice_injury_chance = 1.0
+    state.player.stats["con"], state.player.stats["xinde"] = 15, 1000
+    state.player.member.wugong_id = "basic_fist"
+    team.practice(state, content, world, "武學", random.Random(0))
+    member, hurt = state.player.member, content.config.practice_injury_amount
+    assert team.member_neili(content, member, 15) == pytest.approx((416 - hurt, 416))

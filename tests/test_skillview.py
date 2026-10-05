@@ -17,6 +17,13 @@ def test_member_card_before_learning_anything(state, content, world):
     )
 
 
+def test_the_players_card_reads_the_hp_cap_with_root_and_a_companions_does_not(state, content, world):
+    """根骨 15：本人的氣血上限 320 × 1.3 ＝ 416；同伴不吃本人的屬性。"""
+    state.player.stats["con"] = 15
+    assert "第 1 級　氣血 416/416" in skillview.member_card(state, content, world, "player")
+    assert "氣血 320/320" in skillview.member_card(state, content, world, "mate")
+
+
 def test_member_card_after_learning_a_historical_skill(state, content, world):
     rules.learn_skill(state, content, "fist")
     card = skillview.member_card(state, content, world, "player")
@@ -511,6 +518,17 @@ def test_the_row_offers_the_pill_only_on_the_peerless_step_and_only_when_one_is_
         state.player.art_quality["旋風腿"] = step
         assert _cultivate_row(state, content, world)["legend"] is None, step
         assert "破境丹" not in _cultivate_row(state, content, world)["note"]
+
+
+def test_the_row_and_the_pill_note_follow_the_players_insight(state, content, world):
+    """計畫二 G2：頁面上寫的就是擲的——悟性 15 時中品那一步 20% × 1.3 ＝ 26%，絕學那一步 4% × 1.3 ≈ 5%、加丹 20%。"""
+    _wind_kick(world, state)
+    state.player.stats["wis"] = 15
+    assert _cultivate_row(state, content, world)["note"] == "26% 晉為中品・體力 10"
+    state.player.art_quality["旋風腿"], state.player.legend_items = "上品", 1
+    row = _cultivate_row(state, content, world)
+    assert row["note"] == "5% 晉為絕學・體力 10"
+    assert row["legend"]["note"] == "20% 晉為絕學（含破境丹 +15%）・體力 10"
 
 
 def test_a_refused_row_has_no_pill_choice(state, content, world):

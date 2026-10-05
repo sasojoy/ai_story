@@ -5541,3 +5541,40 @@ def test_the_last_point_does_not_say_there_are_zero_left(game):
     game.state.player.stat_points = 2
     assert game.allocate_stat("str") == ["臂力 +1（還有 1 點可以分配）"]
     assert game.allocate_stat("agi") == ["身法 +1"]  # 最後一點：不寫「還有 0 點」
+
+
+# ── 四屬性的加成接進氣血與決戰（武學與成長設計 6.1；計畫二 Task 2）──────────────────────
+
+
+def test_a_point_of_root_raises_the_hp_cap_but_not_the_hp(game):
+    """計畫二 G7：配一點根骨，氣血上限多 3%，目前氣血不變（沒滿血時分子不動、分母變大）。"""
+    from tianxia import team
+    p = game.state.player
+    p.stat_points, p.member.neili = 1, 100.0
+    base = team.neili_cap(game.content, p.member.level)
+    before = game.status_data()
+    game.allocate_stat("con")
+    after = game.status_data()
+    assert before["hp"] == after["hp"] == 100
+    assert (before["hp_max"], after["hp_max"]) == (int(base), int(base * 1.03))
+    assert game._battle_neili_cap() == pytest.approx(base * 1.03)  # 決戰帶進去的氣血上限也吃根骨
+
+
+def test_hp_comes_back_by_the_rooted_cap(content):
+    """氣血隨時間回復照（吃了根骨的）上限算：同樣過一段時間，根骨 15 回得多三成。"""
+    games = [Game.new(content, name, rng=random.Random(0)) for name in ("甲", "乙")]
+    games[1].state.player.stats["con"] = 15
+    for game in games:
+        game.state.player.member.neili = 0.0
+        game._advance_player_local(HOUR / 10)
+    plain, rooted = (game.state.player.member.neili for game in games)
+    assert plain > 0 and rooted == pytest.approx(plain * 1.3)
+
+
+def test_the_showdown_power_snapshot_carries_the_players_boost(game):
+    """決戰加入時存的威力快照也吃本人的加成（武學與成長設計 8.4）。"""
+    p = game.state.player
+    p.member.wugong_id = "basic_fist"
+    plain = game._battle_power()
+    p.stats["str"] = 15
+    assert plain > 0 and game._battle_power() == pytest.approx(plain * 1.3)

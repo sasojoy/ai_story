@@ -786,7 +786,6 @@ class Config(_Strict):
     vision_fame: int = 10  # 名望達到這個值，視野 +1
     max_log: int = 200
     neili_base: float = 300
-    neili_per_con: float = 40
     neili_per_level: float = 20
     neili_regen_hours: float = 2  # 氣血從零回滿所需時間
     newbie_days: float = 3  # 每季前幾天氣血回復加倍

@@ -57,6 +57,37 @@ def test_the_climb_to_a_peerless_art_stops_at_half_and_a_pill_adds_on_top_of_the
     assert cultivation.chance(content, "中品", 100) == 100  # 沒寫上限的那一階（上限預設 100）照舊必成
 
 
+def test_insight_raises_the_odds_but_never_past_certain(content):
+    assert cultivation.chance(content, "中品", 0, wis=15) == 26
+    assert cultivation.chance(content, "中品", 8, wis=15) == 100
+
+
+def test_insight_stays_under_the_peerless_cap_and_the_pill_sits_on_top(content):
+    """計畫二 G2：悟性乘在累積的機率上、仍受 50% 的上限；破境丹加在上限之上。"""
+    assert cultivation.chance(content, "絕學", 0, wis=15) == 5  # 4 × 1.3 = 5.2
+    assert cultivation.chance(content, "絕學", 12, wis=15) == 50  # 40 × 1.3 = 52 → 上限 50
+    assert cultivation.chance(content, "絕學", 100, 15, wis=15) == 65
+
+
+def test_low_insight_lowers_the_odds_but_a_sure_try_stays_sure(content):
+    assert cultivation.chance(content, "中品", 0, wis=3) == 19  # 20 × 0.94 = 18.8
+    assert cultivation.chance(content, "中品", 8, wis=3) == 100  # 寫明的那一次照樣必成
+    assert cultivation.chance(content, "上品", 15, wis=1) == 100
+
+
+def test_the_roll_and_the_next_chance_follow_the_players_insight(kicker, content, world):
+    """擲的與寫的是同一個數字（odds_for）：悟性 15 時 25 點的骰子過得了 26% 的關，失敗時寫的下一次也乘上悟性。"""
+    kicker.player.stats["wis"] = 15
+    assert cultivation.odds_for(kicker, content, "中品", 0) == 26
+    assert "晉為中品" in cultivation.cultivate(kicker, content, world, "旋風腿", Fixed(0.25))[0]
+    kicker.player.art_quality["旋風腿"] = "下品"
+    kicker.player.art_mastery.pop("旋風腿", None)
+    kicker.player.stats["wis"] = 5
+    assert "還差一點火候" in cultivation.cultivate(kicker, content, world, "旋風腿", Fixed(0.25))[0]  # 25 ≥ 20
+    kicker.player.stats["wis"] = 15
+    assert "下一次約 52%" in cultivation.cultivate(kicker, content, world, "旋風腿", LOSE)[0]  # 熟練度 2：(20 + 2 × 10) × 1.3
+
+
 def test_a_target_with_no_cap_entry_climbs_to_a_hundred_as_before(content):
     content.config.cultivate_cap = {}
     assert cultivation.chance(content, "絕學", 32) == 100 and cultivation.chance(content, "絕學", 100) == 100
