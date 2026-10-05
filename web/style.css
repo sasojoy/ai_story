@@ -259,6 +259,16 @@ details.fold.bulletin > .fold-body { border-color: var(--gold); max-height: 50vh
 .front-head b { font-variant-numeric: tabular-nums; }
 .front-bar { height: 6px; margin-top: 4px; border-radius: 3px; background: var(--kuai); overflow: hidden; }
 .front-bar > i { display: block; height: 100%; background: var(--gold); transition: width 0.4s ease; }
+/* 戰況條兩端的陣營（FB-041）與下面那一行態勢（S1） */
+.front-ends { display: flex; justify-content: space-between; margin-top: 2px; font-size: 10px; line-height: 1.2; font-weight: 700; }
+.front-ends .huang { color: var(--gold); }
+.front-ends .guan { color: var(--kuai); }
+.stances-line { margin: -6px 0 12px; font-size: 12px; color: var(--ink-2); }
+/* 結算卡的最終態勢：三條各用自己陣營的顏色（T9 審查 M3） */
+.front-bar.stance { background: var(--card-2); }
+.front-bar.side-guan > i { background: var(--kuai); }
+.front-bar.side-huang > i { background: var(--gold); }
+.front-bar.side-haoqiang > i { background: var(--rou); }
 /* 第一季的本週軍令（計畫 T6） */
 .orders .order { padding: 8px 0; border-top: 1px solid var(--line); }
 .orders .order:first-child { border-top: 0; padding-top: 0; }
