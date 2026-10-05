@@ -113,7 +113,7 @@ def _result_line(record: BattleRecord) -> str:
 
 
 def gains_list(record: BattleRecord) -> list[str]:
-    """獲得與損失的每一項，例如 ["經驗 +15（每人）", "心得 +12", "銀兩 +10", "精鐵砂 ×1", "臂力 +1"]。"""
+    """獲得與損失的每一項，例如 ["經驗 +15（每人）", "心得 +12", "銀兩 +10", "精鐵砂 ×1", "氣血 -48"]。"""
     parts = []
     if record.exp:
         parts.append(f"經驗 +{record.exp}（每人）")

@@ -748,6 +748,82 @@ def test_the_old_craft_endpoints_are_gone(client):
     assert client.post("/api/craft_line", json={"materials": []}).status_code == 404
 
 
+def test_allocate_through_the_main_actions(client):
+    _player(client)
+    game = server.game_for("沈青衫")
+    game.state.player.stat_points = 1
+    open_characters().save(game.state)
+    r = client.post("/api/do/allocate", json={"stat": "con"}).json()
+    assert r["main"]["status"]["stat_points"] == 0
+    assert open_characters().load("沈青衫").player.stats["con"] == 6
+    stat_names = server.CONTENT.config.stat_names
+    assert [(name, key) for name, _, key in r["main"]["status"]["attrs"]] == [
+        (stat_names[key], key) for key in ("str", "agi", "con", "wis")
+    ]  # 網頁的配點鈕送的鍵就是這個鍵，要跟 Config.stat_names 對得上
+
+
+def test_a_refused_allocation_through_the_server_only_says_why(client):
+    _player(client)
+    r = client.post("/api/do/allocate", json={"stat": "con"}).json()
+    assert "沒有可以分配" in r["message"]
+    r = client.post("/api/do/allocate", json={}).json()  # 客戶端沒帶 stat：也只是一句話，不是 500
+    assert "沒有這項" in r["message"]
+
+
+def test_the_allocate_buttons_call_what_the_server_has():
+    """網頁沒有測試框架：配點鈕（web/app.js）叫的動作與送的欄位要在伺服器的 MAIN_ACTIONS 與狀態資料裡。"""
+    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    assert 'doMain("allocate", { stat:' in js
+    assert "allocate" in server.MAIN_ACTIONS
+    data = Game.new(server.CONTENT, "測試").status_data()
+    for field in re.findall(r"\bs\.(stat_points|stat_cap)\b", js):
+        assert field in data
+
+
+def test_the_points_hint_stays_out_of_the_ellipsized_name_span():
+    """收起來的狀態列，名號那一行是單行、超出就「…」：「可配 N 點」寫在那個 <span> 裡（尤其是最後面）會先被長長的「門派・陣營」
+    擠掉，玩家看不到有點可配（＋鈕要展開才有）。所以它自己一個不縮的元素（flex: none），放在那個 <span> 外面。"""
+    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    css = (server.WEB / "style.css").read_text(encoding="utf-8")
+    start = js.index('<div class="who-name">')
+    line = js[start:js.index("\n", start)]
+    assert line.index("</span>") < line.index("可配") < line.index("more-ico")  # 在名號那個 <span> 後面、展開箭頭前面
+    assert 'class="pts"' in line
+    rule = re.search(r"\.who-name \.pts \{([^}]*)\}", css)
+    assert rule is not None and "flex: none" in rule.group(1)
+
+
+def test_the_allocate_buttons_say_what_each_stat_does():
+    """M2：＋鈕底下那一行（四項各管什麼）跟＋鈕畫在同一個條件裡——有點可配才出現；用的是伺服器送的 stat_uses 與
+    stat_uses_note，網頁不寫死屬性的用途。"""
+    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    start = js.index('data-act="allocate"')
+    line = js[js.rindex("\n", 0, start):js.index("\n", start)]
+    assert line.strip().startswith("${s.stat_points ?") and "statUsesHtml(s)" in line
+    helper = js[js.index("function statUsesHtml"):]
+    helper = helper[:helper.index("\n  }\n")]
+    assert "s.stat_uses" in helper and "s.stat_uses_note" in helper
+    data = Game.new(server.CONTENT, "測試").status_data()
+    for field in re.findall(r"\bs\.(stat_uses\w*)\b", js):
+        assert field in data
+
+
+def test_the_news_dot_lights_only_for_a_new_fight_card():
+    """配點之後「剛剛」照舊是升級那一場的卡片（計畫二最終審查 M1）：看過那一場的戰報再配點，見聞的紅點不能再亮一次——
+    比的是卡片是不是新的一場（card_id），不是「有沒有卡片」。比在 setMain：動作回來的與輪詢拿到的都走它，
+    決戰收場的卡片常常是輪詢（sync）補送的，那一場也要亮。"""
+    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    set_main = js[js.index("function setMain"):js.index("// ── 整體 ──")]
+    assert "main.card_id" in set_main and "S.unseen = true" in set_main
+    apply_main = js[js.index("function applyMain"):js.index("async function choose")]
+    assert "S.unseen = true" not in apply_main
+    # 輪詢只重畫狀態列與頁面、不重畫分頁列：亮的當下要把紅點補進見聞那一顆（不然要等下一次整頁重畫才看得到）
+    assert "paintNewsDot()" in set_main
+    paint = js[js.index("function paintNewsDot"):]
+    paint = paint[:paint.index("\n  }\n")]
+    assert 'data-tab="news"' in paint and 'class="dot"' in paint
+
+
 def test_the_practice_and_furnace_pages_only_read_and_call_what_the_server_has(game):
     """Task 12：修練頁、煉製頁（web/app.js）讀的欄位都要在 menxia_view 裡、叫的動作都要在 MENXIA_ACTIONS 裡；
     舊煉製的端點、欄位、說法不再出現。網頁沒有測試框架，這條擋住「改了伺服器忘了改網頁」。"""
@@ -1078,6 +1154,8 @@ def test_after_the_pause_the_next_hold_asks_again_and_a_new_failure_trips_it_aga
     trip, close, trip_again, close_again = capsys.readouterr().out.splitlines()  # 打開、關上各印一行
     assert trip == trip_again and close == close_again and trip != close
     assert all(f"{server.MODEL_BREAKER_SECONDS} 秒" in line for line in (trip, close))
+    # 這一行在叫模型之前印（讀主畫面也算一次拿鎖），模型還掛著時緊接著就是再打開的那一行：只說下一次再試，不說已經恢復（PM 2026-10-05）
+    assert close == f"鎖內的模型呼叫暫停滿 {server.MODEL_BREAKER_SECONDS} 秒，下一次再試模型。"
 
 
 def test_a_successful_in_lock_call_does_not_trip_it(game, monkeypatch, breaker_clock, capsys):

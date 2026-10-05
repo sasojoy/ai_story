@@ -17,6 +17,13 @@ def test_member_card_before_learning_anything(state, content, world):
     )
 
 
+def test_the_players_card_reads_the_hp_cap_with_root_and_a_companions_does_not(state, content, world):
+    """根骨 15：本人的氣血上限 320 × 1.3 ＝ 416；同伴不吃本人的屬性。"""
+    state.player.stats["con"] = 15
+    assert "第 1 級　氣血 416/416" in skillview.member_card(state, content, world, "player")
+    assert "氣血 320/320" in skillview.member_card(state, content, world, "mate")
+
+
 def test_member_card_after_learning_a_historical_skill(state, content, world):
     rules.learn_skill(state, content, "fist")
     card = skillview.member_card(state, content, world, "player")
@@ -513,6 +520,17 @@ def test_the_row_offers_the_pill_only_on_the_peerless_step_and_only_when_one_is_
         assert "破境丹" not in _cultivate_row(state, content, world)["note"]
 
 
+def test_the_row_and_the_pill_note_follow_the_players_insight(state, content, world):
+    """計畫二 G2：頁面上寫的就是擲的——悟性 15 時中品那一步 20% × 1.3 ＝ 26%，絕學那一步 4% × 1.3 ≈ 5%、加丹 20%。"""
+    _wind_kick(world, state)
+    state.player.stats["wis"] = 15
+    assert _cultivate_row(state, content, world)["note"] == "26% 晉為中品・體力 10"
+    state.player.art_quality["旋風腿"], state.player.legend_items = "上品", 1
+    row = _cultivate_row(state, content, world)
+    assert row["note"] == "5% 晉為絕學・體力 10"
+    assert row["legend"]["note"] == "20% 晉為絕學（含破境丹 +15%）・體力 10"
+
+
 def test_a_refused_row_has_no_pill_choice(state, content, world):
     _wind_kick(world, state, "上品")
     state.player.legend_items = 1
@@ -613,3 +631,74 @@ def test_practice_hint_does_not_send_you_to_merge_when_the_stamina_is_short(stat
     state.player.stamina = 0
     state.player.member.wugong_id, state.player.member.wugong_level = "basic_fist", 10
     assert "煉製" in skillview.practice_hint(state, content)  # 有武學：合成不花體力
+
+
+# ── 計畫二 Task 3：本人卡寫出威力加成 ──────────────────────────────────────────────
+
+
+def test_the_players_card_spells_out_the_boosts(state, content, world):
+    state.player.member.wugong_id = "basic_fist"
+    state.player.member.neigong_id = "basic_breath"  # 實配柔：不相剋也不同屬性
+    state.player.stats["str"] = 9
+    card = skillview.member_card(state, content, world, "player")
+    assert "武學 +12%（臂力）" in card and "內外搭配" not in card
+
+
+def test_the_boost_line_reads_stats_pairing_and_resonance(state, content, world):
+    wugong = generate_from_name("清風拳", "武學", "清風拳", attribute="柔").model_copy(update={"lean": "正"})
+    assert world.claim_skill_name(wugong)
+    state.player.member.wugong_id, state.player.member.neigong_id = wugong.id, "basic_breath"  # 柔配柔
+    state.player.stats.update({"str": 9, "con": 7, "good": 40})
+    assert skillview.boost_line(state, content, world) == (
+        "威力加成：武學 +12%（臂力）・內功 +6%（根骨）・內外搭配 +20%・【清風拳】共鳴 +20%"
+    )
+    assert skillview.boost_line(state, content, world) in skillview.member_card(state, content, world, "player")
+
+
+def test_the_boost_line_shows_a_penalty_for_a_countering_pair(state, content, world):
+    wugong = generate_from_name("鐵拳", "武學", "鐵拳", attribute="剛")
+    assert world.claim_skill_name(wugong)
+    state.player.member.wugong_id, state.player.member.neigong_id = wugong.id, "basic_breath"  # 剛克柔
+    assert skillview.boost_line(state, content, world) == "威力加成：內外搭配 -20%"
+
+
+def test_the_boost_line_is_absent_when_nothing_boosts(state, content, world):
+    assert skillview.boost_line(state, content, world) == ""
+    assert "威力加成" not in skillview.member_card(state, content, world, "player")
+
+
+def test_a_stat_is_named_by_the_art_it_boosts_and_an_empty_slot_leaves_it_out(state, content, world):
+    """臂力乘的是武學那一項、根骨乘的是內功那一項（設計 6.1）：卡上寫它加成的那一門，那一欄沒有功法就不寫。"""
+    state.player.stats.update({"str": 9, "con": 9})
+    assert skillview.boost_line(state, content, world) == ""  # 兩欄都空：什麼都沒得加成
+    state.player.member.wugong_id = "basic_fist"
+    assert skillview.boost_line(state, content, world) == "威力加成：武學 +12%（臂力）"  # 沒有內功：不寫根骨
+    state.player.member.wugong_id, state.player.member.neigong_id = None, "basic_breath"
+    assert skillview.boost_line(state, content, world) == "威力加成：內功 +12%（根骨）"  # 沒有武學：不寫臂力
+    state.player.member.wugong_id = "basic_fist"
+    assert skillview.boost_line(state, content, world) == "威力加成：武學 +12%（臂力）・內功 +12%（根骨）"
+
+
+def test_a_stat_below_the_base_shows_a_negative_percentage(state, content, world):
+    state.player.member.wugong_id, state.player.member.neigong_id = "basic_fist", "basic_breath"
+    state.player.stats.update({"str": 3, "con": 4})
+    assert skillview.boost_line(state, content, world) == "威力加成：武學 -6%（臂力）・內功 -3%（根骨）"
+
+
+def test_only_the_players_card_carries_the_boost_line(state, content, world):
+    """加成只算本人（計畫二）：同伴的卡不寫、也不會吃到本人的臂力與共鳴。"""
+    state.player.member.wugong_id = "basic_fist"
+    state.player.stats.update({"str": 15, "con": 15, "good": 40})
+    assert "威力加成" in skillview.member_card(state, content, world, "player")
+    assert "威力加成" not in skillview.member_card(state, content, world, "mate")
+
+
+def test_a_small_name_shows_its_half_points_instead_of_rounding_to_nothing(state, content, world):
+    """共鳴是名聲 ÷ 2 %：善名 1 是 +0.5%、善名 15 是 +7.5%，不寫成「+0%」或湊整成 +8%。"""
+    wugong = generate_from_name("清風拳", "武學", "清風拳", attribute="剛").model_copy(update={"lean": "正"})
+    assert world.claim_skill_name(wugong)
+    state.player.member.wugong_id = wugong.id
+    state.player.stats["good"] = 1
+    assert skillview.boost_line(state, content, world) == "威力加成：【清風拳】共鳴 +0.5%"
+    state.player.stats["good"] = 15
+    assert skillview.boost_line(state, content, world) == "威力加成：【清風拳】共鳴 +7.5%"

@@ -183,11 +183,24 @@
 
   function setMain(main) {
     if (main.event_free_text == null) S.answering = false; // 事件過去了，輸入框跟著收起
+    // 見聞的紅點只為新的一場亮（比 card_id）：配點之後「剛剛」照舊是升級那一場的卡片，看過戰報再配點不再亮一次（計畫二最終審查 M1）；
+    // 放在這裡是因為動作回來的與輪詢拿到的都走 setMain——決戰收場的卡片常常是輪詢（sync）補送的。登入那一份不亮（S.main 還沒有）
+    if (main.card && S.main && S.main.card_id !== main.card_id) {
+      S.unseen = true;
+      paintNewsDot();
+    }
     const key = JSON.stringify(main);
     const changed = key !== S.mainKey;
     S.main = main;
     S.mainKey = key;
     return changed;
+  }
+
+  // 分頁列上見聞那一顆補上紅點：分頁列只在整頁重畫（render）時畫，輪詢只重畫狀態列與頁面，
+  // 所以紅點亮起的當下就地補一顆（已經有、或正在看見聞時不補）
+  function paintNewsDot() {
+    const tab = document.querySelector('.tabs .tab[data-tab="news"]');
+    if (tab && S.unseen && S.tab !== "news" && !tab.querySelector(".dot")) tab.insertAdjacentHTML("beforeend", '<i class="dot"></i>');
   }
 
   // ── 整體 ──
@@ -228,7 +241,7 @@
     return `
       <div class="top-row">
         <div class="who" data-act="toggle-more" role="button" tabindex="0" aria-expanded="${S.showMore}">
-          <div class="who-name"><span>${esc(s.name)}<small>${esc(s.affiliation)}${s.anonymous ? "・匿名" : ""}・第${s.level}級</small></span><i class="more-ico" aria-hidden="true">${S.showMore ? "▴" : "▾"}</i></div>
+          <div class="who-name"><span>${esc(s.name)}<small>${esc(s.affiliation)}${s.anonymous ? "・匿名" : ""}・第${s.level}級</small></span>${s.stat_points ? `<b class="pts">可配 ${s.stat_points} 點</b>` : ""}<i class="more-ico" aria-hidden="true">${S.showMore ? "▴" : "▾"}</i></div>
           <div class="where">📍 ${esc(s.location)}　${s.calendar
             ? esc(s.calendar.text)
             : `第 ${s.day} 天 ${esc(s.clock)}<small>／共 ${dayCount(s.season_days)} 天</small>`}${s.resting != null ? "　🧘 打坐中" : ""}</div>
@@ -248,10 +261,20 @@
       </div>
       ${S.showMore ? `<div class="more-stats">
         ${s.minor.map(([k, v]) => `${esc(k)} ${v}`).join("　")}　｜　${s.attrs.map(([k, v]) => `${esc(k)} ${v}`).join("　")}
+        ${s.stat_points ? `<div class="row">${s.attrs.map(([k, v, key]) => `<button class="btn small" data-act="allocate" data-stat="${esc(key)}" ${v >= s.stat_cap ? "disabled" : ""}>＋${esc(k)}</button>`).join("")}</div>${statUsesHtml(s)}` : ""}
         ${team ? `<br>${team}` : ""}
         ${s.stances ? stancesHtml(s.stances, s.stance_notes) : ""}
       </div>` : ""}
       ${hintHtml(s)}`;
+  }
+
+  // ＋鈕底下一行：四項各管什麼（計畫二最終審查 M2）。點數配了收不回來，按之前要讀得到；文字是引擎給的（status.stat_uses），
+  // 一項一個 inline-block：手機上整項一起換行，不會把「根骨：內功威力…」從中間折斷，也不會撐出橫向捲動
+  function statUsesHtml(s) {
+    if (!s.stat_uses) return "";
+    const items = s.stat_uses.map(([k, use]) => `<span>${esc(k)}：${esc(use)}</span>`);
+    if (s.stat_uses_note) items.push(`<span>${esc(s.stat_uses_note)}</span>`);
+    return `<div class="stat-uses">${items.join("")}</div>`;
   }
 
   // 💡 心得提示：兩行長，在路上又有路程那一行時，會把路上最底下的「走法」擠到分頁列底下（FB-060）。
@@ -1186,8 +1209,7 @@
 
   function applyMain(main) {
     const before = S.main ? S.main.status : null;
-    setMain(main);
-    if (main.card) S.unseen = true;
+    setMain(main); // 見聞的紅點在 setMain 裡判斷（新的一場才亮）
     render();
     const top = document.getElementById("top");
     if (before && top && (before.hp !== main.status.hp || before.stamina !== main.status.stamina || before.silver !== main.status.silver || before.xinde !== main.status.xinde)) {
@@ -1386,6 +1408,7 @@
         case "scene-more": S.sceneOpen = !S.sceneOpen; renderPage(); break;
         case "hint-more": S.hintOpen = !S.hintOpen; renderTop(); break; // 狀態列只重畫它自己（江湖頁不動，「剛剛」不會重播）
         case "guide-ack": await doMain("guide_ack"); break;
+        case "allocate": await doMain("allocate", { stat: el.dataset.stat }); break; // 升級的屬性點加到一項（狀態列展開後的「＋臂力」）
         case "do": S.sheet = false; await doMain(el.dataset.op); break;
         case "admin": {
           const op = el.dataset.op;

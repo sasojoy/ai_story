@@ -21,12 +21,26 @@ from .state import GameState
 from .world_state import WorldStateStore
 
 
-def chance(content: Content, target_quality: str, failures: int, boost: int = 0) -> int:
-    """升到 target_quality 的機率（%）：第一次的機率＋每失敗一次加的量，最多到這一階的上限（Config.cultivate_cap，
-    沒寫的那一階是 100）；再加上 boost（破境丹，見 boost_for），總和最多 100。"""
+def chance(
+    content: Content, target_quality: str, failures: int, boost: int = 0, *, wis: float = team.BASE_STAT,
+) -> int:
+    """升到 target_quality 的機率（%）：第一次的機率＋每失敗一次加的量，乘上悟性的加成（×（1＋3%×（悟性−5）），
+    武學與成長設計 6.1），最多到這一階的上限（Config.cultivate_cap，沒寫的那一階是 100）；再加上 boost
+    （破境丹，見 boost_for），總和最多 100。悟性在上限之內、丹在上限之上（計畫二 G2）：上限是企劃者訂的天花板，
+    丹才是越過它的那一招。寫明會必成的那一次（沒乘悟性就到 100、這一階也沒有上限）悟性再低照樣必成。"""
     first, step = content.config.cultivate_odds[target_quality]
     cap = content.config.cultivate_cap.get(target_quality, 100)
-    return min(100, min(cap, first + step * failures) + boost)
+    raw = first + step * failures
+    if raw >= 100 and cap >= 100:
+        base = 100
+    else:
+        base = min(cap, round(raw * team.stat_factor(content, wis)))
+    return min(100, base + boost)
+
+
+def odds_for(state: GameState, content: Content, target_quality: str, failures: int, boost: int = 0) -> int:
+    """這個玩家這一次的機率：chance 帶上自己的悟性。擲骰、「下一次約 N%」與修練頁寫的都用它，頁面上寫的就是實際擲的。"""
+    return chance(content, target_quality, failures, boost, wis=state.player.stats.get("wis", team.BASE_STAT))
 
 
 def boost_for(state: GameState, content: Content, target_quality: str, use_legend: bool = False) -> int:
@@ -90,7 +104,7 @@ def cultivate(
             msgs.append(f"{pill}只在衝擊絕學時用得上，這一回沒服。")
         else:
             msgs.append(f"你身上已經沒有{pill}了，這一回沒服。")
-    if rng.random() * 100 < chance(content, target, failures, boost):
+    if rng.random() * 100 < odds_for(state, content, target, failures, boost):
         p.art_quality[art_id] = target
         p.art_mastery.pop(art_id, None)
         msgs += [f"【{art.name}】修練有成，從{quality}晉為{target}！", tired]
@@ -103,7 +117,7 @@ def cultivate(
         hint = f"，服下{pill}可再 +{content.config.legend_item_bonus}%"
     msgs += [
         f"【{art.name}】修練了一回，還差一點火候（熟練度 {failures + 1}，"
-        f"下一次約 {chance(content, target, failures + 1)}% 的機會晉為{target}{hint}）。",
+        f"下一次約 {odds_for(state, content, target, failures + 1)}% 的機會晉為{target}{hint}）。",
         tired,
     ]
     return msgs

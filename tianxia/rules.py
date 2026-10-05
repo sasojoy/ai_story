@@ -627,9 +627,19 @@ def apply_effect(
     msgs: list[str] = []
     if effect.text:
         msgs.append(fill_marks(effect.text, state))
-    for key, delta in effect.stats.items():
-        p.stats[key] = max(0, p.stats.get(key, 0) + delta)
-        msgs.append(f"{names.get(key, key)} {'+' if delta >= 0 else ''}{delta}")
+    for key, delta in effect.stats.items():  # 照實際動了多少寫、沒動就不寫（跟下面的情誼一樣）
+        before = p.stats.get(key, 0)
+        after = max(0, before + delta)
+        capped = key in team.COMBAT_STATS and delta > 0 and after > content.config.stat_cap
+        if capped:  # 四屬性每項最高 stat_cap（武學與成長設計 6.2）；已經超過的舊存檔不往下拉，只是不再加
+            after = max(before, content.config.stat_cap)
+        p.stats[key] = after
+        if after != before:
+            msgs.append(f"{names.get(key, key)} {after - before:+d}")
+        if capped:  # 被上限夾掉了，玩家要知道是到頂、不是事件沒效果
+            msgs.append(f"（{names.get(key, key)}已到頂 {content.config.stat_cap}）")
+    if any(key in ("good", "evil") for key in effect.stats):
+        msgs += insights.grant_by_name(state, content, world)  # 善名、惡名到門檻悟得浩然、血煞（只悟一次）
     for material_id, count in effect.materials.items():
         line = materials.grant(state, content, material_id, count)
         if line:

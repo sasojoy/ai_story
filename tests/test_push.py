@@ -26,7 +26,6 @@ def s1(content):
         FactionDef(id="haoqiang", name="地方豪強"),
     ]
     content.config.train_event_chance = 0.0
-    content.config.train_stat_chance = 0.0
     return content
 
 

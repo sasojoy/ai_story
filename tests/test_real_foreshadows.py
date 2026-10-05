@@ -775,7 +775,6 @@ def test_guanyin_on_a_real_win_against_the_guan_squad(fs_content, world, monkeyp
     """黃巾在冀州（盧植營，那裡的對手是官軍）遊歷打贏，30% 得 1 官銀；落敗不算。"""
     c = fs_content
     monkeypatch.setattr(c.config, "train_event_chance", 0.0)
-    monkeypatch.setattr(c.config, "train_stat_chance", 0.0)
     monkeypatch.setattr(team, "fight", lambda *a, **k: EncounterResult(tier="大勝", margin=50, our_power=60, difficulty=1))
     huang = fs_game(c, world, "乙", "huang", "luzhi_camp", rng=FixedRandom(0.0), time=cal(c, 7))  # 盧植那件大事還沒到
     huang.choose("act:train")

@@ -13,6 +13,23 @@ from .state import PLAYER, GameState
 from .world_state import WorldStateStore
 
 
+# 四屬性各管什麼（武學與成長設計 6.1）：狀態列＋鈕底下那一行（計畫二最終審查 M2）。點數配了收不回來（6.2），身法、悟性
+# 又看不到立即的變化，所以按之前要讀得到。名字照 Config.stat_names（見 stat_uses），這裡只寫用途；只寫玩家本人身上的事
+STAT_USES = {
+    "str": "武學威力",
+    "agi": "打完一場少損氣血",
+    "con": "內功威力・氣血上限・少受內傷",
+    "wis": "修練機率・探索悟得意境・閉關心得",
+}
+STAT_CHECK_NOTE = "事件的檢定也看這四項。"  # 事件檢定、隨口應對照舊讀四屬性（設計 6.1）
+
+
+def stat_uses(content: Content) -> list[tuple[str, str]]:
+    """四屬性的（名字, 用途），順序同 team.COMBAT_STATS——也就是狀態列 attrs、＋鈕的順序。"""
+    names = content.config.stat_names
+    return [(names.get(key, key), STAT_USES[key]) for key in team.COMBAT_STATS]
+
+
 def rules_line(content: Content) -> str:
     return "身上一門內功、一門武學：花心得練成，用意境修練衝品質；武學也能在「煉製」融意境衍生新武學。"
 
@@ -86,7 +103,7 @@ def art_rows(state: GameState, content: Content, world: WorldStateStore) -> list
         if problem is None:
             target = next_quality(art.quality)
             failures = p.art_mastery.get(art_id, 0)
-            note = f"{cultivation.chance(content, target, failures)}% 晉為{target}・體力 {content.config.cultivate_stamina}"
+            note = f"{cultivation.odds_for(state, content, target, failures)}% 晉為{target}・體力 {content.config.cultivate_stamina}"
             legend = _legend_choice(state, content, target, failures)
         else:
             note = problem
@@ -115,7 +132,7 @@ def _legend_choice(state: GameState, content: Content, target: str, failures: in
         "count": count,
         "bonus": boost,
         "label": f"服下{cfg.legend_item_name}（+{boost}%，剩 {count} 枚）",
-        "note": f"{cultivation.chance(content, target, failures, boost)}% 晉為{target}"
+        "note": f"{cultivation.odds_for(state, content, target, failures, boost)}% 晉為{target}"
                 f"（含{cfg.legend_item_name} +{boost}%）・體力 {cfg.cultivate_stamina}",
     }
 
@@ -191,14 +208,45 @@ def member_card(state: GameState, content: Content, world: WorldStateStore, key:
         member = world.get_companion(key)
         name = content.characters[key].name
     own = state if key == PLAYER else None  # 玩家那一列顯示自己修練到的品質；同伴照全服登記的
-    now, cap = team.member_neili(content, member)
+    now, cap = team.member_neili(content, member, team.con_of(state, key))  # 本人的上限吃根骨，同伴照基準
     lines = [
         f"### {name}",
         f"第 {member.level} 級　氣血 {now:.0f}/{cap:.0f}",
         f"內功　{_art_label(content, world, member.neigong_id, member.neigong_level, own)}",
         f"武學　{_art_label(content, world, member.wugong_id, member.wugong_level, own)}",
     ]
+    if key == PLAYER and (boosts := boost_line(state, content, world)):  # 加成只算本人，同伴的卡不寫
+        lines.append(boosts)
     return "\n".join(lines)
+
+
+def _pct(ratio: float) -> str:
+    """加成寫成帶正負號的百分比，最多一位小數、整數就不寫「.0」：共鳴是名聲 ÷ 2 %，+0.5%、+7.5% 照實寫，不湊整。"""
+    return f"{ratio:+.1%}".replace(".0%", "%")
+
+
+def boost_line(state: GameState, content: Content, world: WorldStateStore) -> str:
+    """本人卡上的一行：這時候威力吃到哪些加成，有才寫、都沒有就是空字串。
+
+    臂力乘的是武學（外功）那一項、根骨乘的是內功那一項（設計 6.1），內功那一項還要再被縮小才進總威力，
+    所以寫成「武學 +12%（臂力）」「內功 +6%（根骨）」，說清楚加成的是哪一門；那一欄沒有功法就不寫。
+    其後是內外搭配與各門功法的正邪共鳴。"""
+    member, stats = state.player.member, state.player.stats
+    wugong = team.player_art(state, content, world, member.wugong_id)
+    neigong = team.player_art(state, content, world, member.neigong_id)
+    parts = []
+    for art, word, key, stat_name in ((wugong, "武學", "str", "臂力"), (neigong, "內功", "con", "根骨")):
+        bonus = team.stat_bonus(content, stats.get(key, team.BASE_STAT))
+        if art is not None and bonus:
+            parts.append(f"{word} {_pct(bonus)}（{stat_name}）")
+    pair = team.pairing(content, wugong, neigong)
+    if pair != 1:
+        parts.append(f"內外搭配 {_pct(pair - 1)}")
+    for art in (wugong, neigong):
+        echo = team.resonance(state, content, art)
+        if echo != 1:
+            parts.append(f"【{art.name}】共鳴 {_pct(echo - 1)}")
+    return "威力加成：" + "・".join(parts) if parts else ""
 
 
 def library(state: GameState, content: Content, world: WorldStateStore) -> list[tuple[str, str]]:

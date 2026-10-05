@@ -363,6 +363,16 @@ def test_explore_presents_event_and_resolves_check(game):
     assert "（成功）" in game.state.log
 
 
+def test_an_event_choice_that_lifts_the_name_to_the_threshold_grants_the_insight(game):
+    """走真的事件選項（Game.choose → apply_effect）：善名 14 +2 到門檻，悟得浩然，寫進江湖紀錄。"""
+    game.state.pending_event = "drunk"
+    game.state.player.stats["good"] = 14
+    game.rng = FixedRandom(0.0)  # 檢定必定成功：逼問，善名 +2
+    game.choose("choice:0")
+    assert game.state.player.insights == ["haoran"]
+    assert any("浩然" in m for m in game.state.log)
+
+
 def test_self_check_shows_one_bracketed_line_and_takes_the_fail_branch(game):
     game.state.pending_event = "insight"
     assert [o.label for o in game.options()] == ["運氣衝關（根骨 5：咬咬牙，你應該撐得住。）"]
@@ -462,16 +472,14 @@ def test_train_loss_costs_a_tenth_of_the_silver(game):
     assert game.state.player.stats["silver"] == 45
 
 
-def test_train_win_stat_bonus_is_recorded_as_a_change_not_a_note(game):
+def test_train_win_records_the_trend_as_a_note(game):
     rules.learn_skill(game.state, game.content, "fist")
-    game.content.config.train_stat_chance = 1.0
     game.content.config.train_event_chance = 1.0
     walk_to(game, "lake")
     game.rng = FixedRandom(0.3)
     game.choose("act:train")
     record = game.state.battles[0]
     assert record.tier in ("大勝", "險勝")
-    assert record.changes and record.changes[0].split(" ")[1] == "+1"
     assert record.notes == ["（寇亂 -1）"]  # 湖邊 train_trend kou:-1
 
 
@@ -5461,3 +5469,148 @@ def test_the_season_start_entry_of_a_mid_season_character_has_the_season_time(co
     newcomer = Game.new(content, "新來的", rng=random.Random(2), world=world)
     [entry] = [e for e in newcomer.state.journal if e.tag == "賽季開始"]
     assert entry.time == world.get_season().time > 0
+
+
+# ── 配點（武學與成長設計 6.2）──────────────────────────────────────────────
+
+
+def test_allocating_a_point_raises_the_stat(game):
+    game.state.player.stat_points = 2
+    game.allocate_stat("agi")
+    assert game.state.player.stats["agi"] == 6 and game.state.player.stat_points == 1
+
+
+def test_allocation_stops_at_the_cap_and_without_points(game):
+    p = game.state.player
+    p.stat_points = 1
+    p.stats["wis"] = 15
+    assert "到頂" in game.allocate_stat("wis")[0]
+    assert p.stat_points == 1  # 到頂的那一點沒扣
+    p.stat_points = 0
+    assert "沒有可以分配" in game.allocate_stat("str")[0]
+    assert "沒有這項" in game.allocate_stat("silver")[0]
+    assert p.stats["str"] == 5 and p.stats["silver"] == 50
+
+
+def test_a_refused_allocation_writes_no_journal_entry(game):
+    """被拒絕（沒有點、到頂、沒這項）只回一句話，不留紀錄（武學與成長計畫 F12）。"""
+    p = game.state.player
+    before = list(game.state.journal)
+    game.allocate_stat("str")  # 沒有點
+    p.stat_points, p.stats["wis"] = 1, 15
+    game.allocate_stat("wis")  # 到頂
+    game.allocate_stat("silver")  # 沒這項
+    assert game.state.journal == before
+
+
+def test_allocating_writes_one_merged_journal_entry(game):
+    """連按幾次（玩家、假人都一樣）併成一則「配點」，數值變化加總。"""
+    game.state.player.stat_points = 3
+    game.allocate_stat("str")
+    game.allocate_stat("str")
+    game.allocate_stat("agi")
+    heads = [e for e in game.state.journal if e.title == "配點"]
+    assert len(heads) == 1 and game.state.journal[0] is heads[0]
+    assert heads[0].changes == ["臂力 +2", "身法 +1"]
+
+
+def test_allocation_waits_for_the_season_to_open(content, world):
+    content.config.auto_open_first_season = False
+    game = Game.new(content, "甲", rng=random.Random(1), world=world)
+    game.state.player.stat_points = 1
+    assert game.allocate_stat("str") == ["（賽季籌備中，等待管理者開季。）"]
+    assert game.state.player.stat_points == 1 and game.state.player.stats["str"] == 5
+
+
+def test_the_status_carries_the_points_to_allocate(game):
+    game.state.player.stat_points = 3
+    data = game.status_data()
+    assert data["stat_points"] == 3 and data["stat_cap"] == 15
+    assert data["attrs"][0] == ("臂力", 5, "str")
+    assert [k for _, _, k in data["attrs"]] == ["str", "agi", "con", "wis"]
+
+
+def test_the_status_says_what_each_stat_does(game):
+    """配點鈕底下那一行（計畫二最終審查 M2）：點數配了收不回來（設計 6.2），按之前要看得到四項各管什麼（照設計 6.1）。
+    名字照 Config.stat_names、順序跟 attrs 一樣，再加一句事件的檢定也看這四項；文字由引擎給，網頁不寫死。"""
+    names = game.content.config.stat_names
+    names["agi"] = "輕功"  # 改了名字，那一行跟著改
+    data = game.status_data()
+    assert [name for name, _ in data["stat_uses"]] == [name for name, _, _ in data["attrs"]] == [
+        names[k] for k in ("str", "agi", "con", "wis")
+    ]
+    uses = dict(data["stat_uses"])
+    assert "武學" in uses[names["str"]]  # 臂力：武學（外功）的威力
+    assert "氣血" in uses["輕功"]  # 身法：打完一場少掉一點氣血
+    assert all(word in uses[names["con"]] for word in ("內功", "氣血上限", "內傷"))  # 根骨：內功、氣血上限、少受內傷
+    assert all(word in uses[names["wis"]] for word in ("修練", "意境", "閉關"))  # 悟性：修練升品、探索悟意境、閉關心得
+    assert "檢定" in data["stat_uses_note"]
+
+
+def test_the_status_text_still_reads_the_attrs_with_their_keys(game):
+    assert "臂力 5　身法 5　根骨 5　悟性 5" in game.status_text()
+
+
+def test_a_win_no_longer_gives_a_random_stat_point(game):
+    """打贏不再有「隨機 +1 屬性」的機會（武學與成長設計 6.2：屬性只靠升級給的點）。"""
+    rules.learn_skill(game.state, game.content, "fist")
+    game.content.config.train_event_chance = 0.0
+    walk_to(game, "lake")
+    game.rng = FixedRandom(0.0)  # 以前這個值一定中那一個 +1
+    before = {k: game.state.player.stats[k] for k in ("str", "agi", "con", "wis")}
+    game.choose("act:train")
+    assert game.state.battles[0].tier in ("大勝", "險勝")
+    assert {k: game.state.player.stats[k] for k in before} == before
+    assert not any(c.split(" ")[0] in ("臂力", "身法", "根骨", "悟性") for c in game.state.battles[0].changes)
+
+
+def test_the_last_point_does_not_say_there_are_zero_left(game):
+    game.state.player.stat_points = 2
+    assert game.allocate_stat("str") == ["臂力 +1（還有 1 點可以分配）"]
+    assert game.allocate_stat("agi") == ["身法 +1"]  # 最後一點：不寫「還有 0 點」
+
+
+# ── 四屬性的加成接進氣血與決戰（武學與成長設計 6.1；計畫二 Task 2）──────────────────────
+
+
+def test_a_point_of_root_raises_the_hp_cap_but_not_the_hp(game):
+    """計畫二 G7：配一點根骨，氣血上限多 3%，目前氣血不變（沒滿血時分子不動、分母變大）。"""
+    from tianxia import team
+    p = game.state.player
+    p.stat_points, p.member.neili = 1, 100.0
+    base = team.neili_cap(game.content, p.member.level)
+    before = game.status_data()
+    game.allocate_stat("con")
+    after = game.status_data()
+    assert before["hp"] == after["hp"] == 100
+    assert (before["hp_max"], after["hp_max"]) == (base, round(base * 1.03))  # 320 → 330（329.6 四捨五入）
+    assert game._battle_neili_cap() == round(base * 1.03)  # 決戰帶進去的氣血上限也吃根骨
+
+
+def test_hp_comes_back_by_the_rooted_cap(content):
+    """氣血隨時間回復照（吃了根骨的）上限算：同樣過一段時間，根骨 15 回得多三成。"""
+    games = [Game.new(content, name, rng=random.Random(0)) for name in ("甲", "乙")]
+    games[1].state.player.stats["con"] = 15
+    for game in games:
+        game.state.player.member.neili = 0.0
+        game._advance_player_local(HOUR / 10)
+    plain, rooted = (game.state.player.member.neili for game in games)
+    assert plain > 0 and rooted == pytest.approx(plain * 1.3)
+
+
+def test_the_showdown_power_snapshot_carries_the_players_boost(game):
+    """決戰加入時存的威力快照也吃本人的加成（武學與成長設計 8.4）。"""
+    p = game.state.player
+    p.member.wugong_id = "basic_fist"
+    plain = game._battle_power()
+    p.stats["str"] = 15
+    assert plain > 0 and game._battle_power() == pytest.approx(plain * 1.3)
+
+
+def test_the_status_bar_and_the_card_show_the_same_hp_at_root_6(game):
+    """計畫二 Task 2 修正第一輪：根骨 6 的上限 329.6、目前氣血 100.6，狀態列與名冊的角色卡寫出同一組數字。"""
+    p = game.state.player
+    p.stats["con"], p.member.neili = 6, 100.6
+    data = game.status_data()
+    assert (data["hp"], data["hp_max"]) == (101, 330)
+    assert f"氣血 {data['hp']}/{data['hp_max']}" in game.member_card("player")

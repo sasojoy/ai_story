@@ -1,7 +1,10 @@
 import random
 
+import pytest
+
 from tianxia import encounter
 from tianxia.encounter import (
+    Boost,
     EncounterResult,
     describe_result,
     member_power,
@@ -67,6 +70,37 @@ def test_team_power_sums_all_members_and_skips_empty_ones():
     team = [Member(wugong_id="id", wugong_level=10), Member(), Member(wugong_id="id", wugong_level=5)]
     total = team_power(team, arts)
     assert total == member_power(team[0], arts) + member_power(team[2], arts)
+
+
+def test_a_boost_raises_the_outer_and_inner_arts(state, content, world):
+    """臂力乘在武學（外功）上、根骨乘在內功上，factor 乘在整個人上（武學與成長設計 6.1）。"""
+    from tianxia import team
+    state.player.member.wugong_id = "basic_fist"
+    state.player.member.neigong_id = "basic_breath"
+    arts = team.team_arts(state, content, world)
+    plain = member_power(state.player.member, arts)
+    outer = member_power(state.player.member, arts, boost=Boost(outer=0.3))
+    inner = member_power(state.player.member, arts, boost=Boost(inner=0.3))
+    assert outer == pytest.approx(plain * 1.3)
+    assert plain < inner < outer  # 內功只是放大倍數裡的一項，加三成不會讓整體多三成
+    assert member_power(state.player.member, arts, boost=Boost(factor=1.2)) == pytest.approx(plain * 1.2)
+
+
+def test_a_boost_never_turns_power_negative():
+    """加成再負（屬性被事件扣到很低），1 + 加成也夾在 0.1 以上。"""
+    art = historical_art("id", "測試武學", "武學", "陽")
+    member = Member(wugong_id="id", wugong_level=10)
+    assert member_power(member, {"id": art}, boost=Boost(outer=-5.0)) == pytest.approx(art.top_power * 0.1)
+
+
+def test_team_power_refuses_lists_of_different_lengths():
+    """氣血係數、加成跟陣容要一樣長：少一個就默默少算一個人（部下就是這樣掉的，計畫二 G1）。"""
+    art = historical_art("id", "測試武學", "武學", "陽")
+    members = [Member(wugong_id="id", wugong_level=10)] * 3
+    with pytest.raises(ValueError):
+        team_power(members, {"id": art}, conditions=[1.0, 1.0])
+    with pytest.raises(ValueError):
+        team_power(members, {"id": art}, boosts=[Boost(), Boost()])
 
 
 def test_resolve_encounter_tiers_by_margin_without_luck():

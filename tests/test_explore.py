@@ -8,6 +8,7 @@ from __future__ import annotations
 import random
 from collections import Counter
 from pathlib import Path
+from unittest import mock
 
 import pytest
 
@@ -121,6 +122,23 @@ def test_nothing_happens_only_when_no_branch_can(game):
     _lake(game, enemies=(), with_event=False)
     _only(game, insight=0, wild=35, event=25)
     assert _explore_many(game, 20) == Counter(nothing=20)
+
+
+def test_insight_weighs_the_insight_branch(game):
+    """悟性：探索時落在「悟意境」那一支的比重乘上（1＋3%×（悟性－5）），另外兩支不動（武學與成長設計 6.1）。"""
+    lake = _lake(game)
+    game.state.player.stats["wis"] = 15
+    seen = {}
+
+    def choices(population, weights):
+        seen.update(zip(population, weights))
+        return [population[0]]
+
+    with mock.patch.object(game.rng, "choices", side_effect=choices):
+        game._explore()
+    mix = game.content.config.explore_mix_of(lake.tags).weights
+    assert seen["insight"] == pytest.approx(mix["insight"] * 1.3)
+    assert (seen["wild"], seen["event"]) == (mix["wild"], mix["event"])
 
 
 # ── 奇遇判定先於三選一 ───────────────────────────────────
@@ -259,16 +277,14 @@ def test_a_wild_win_pays_like_training_but_leaves_the_trend_and_no_post_fight_ev
     rules.learn_skill(game.state, content, "fist")
     content.events["chain_a"].actions = ["train"]  # 遊歷打完會接的戰後事件
     content.config.train_event_chance = 1.0
-    content.config.train_stat_chance = 1.0
     _lake(game, with_event=False)
     _only(game, insight=0, wild=1, event=0)
     game.rng = FixedRandom(0.99)
-    msgs = game.choose("act:explore")
+    game.choose("act:explore")
     assert len(game.state.battles) == 1  # 戰報照常有一筆
     record = game.state.battles[0]
     assert record.tier in team.WIN_TIERS and record.opponent == "水寇小隊"
     assert (record.exp, record.xinde, record.silver) == (20, 10, 5)  # 獎勵照常
-    assert any(line.endswith("+1") and line[:2] in ("臂力", "身法", "根骨") for line in msgs)  # 屬性機會照常
     assert game.state.world.trends["kou"] == 30  # 不推大勢（湖邊 train_trend kou:-1）
     assert game.state.pending_event is None  # 不接戰後事件
     game.choose("act:train")  # 對照：遊歷會推大勢、會接戰後事件

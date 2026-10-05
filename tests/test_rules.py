@@ -71,11 +71,15 @@ def test_a_companions_level_growth_does_not_help_a_check(state, content, world):
     assert check_chance(Check(stat="agi", difficulty=5), state, content, world) == 0.5
 
 
-def test_your_own_level_growth_counts(state, content, world):
-    state.player.member.level = 2  # 本人身法 5 + 0.3
+def test_your_own_allocated_points_count_and_level_alone_does_not(state, content, world):
+    """計畫二 Task 1 起本人不再每級自動長屬性，只看存檔裡的數字（升級給的點自己配）。"""
+    state.player.member.level = 2
     outlook = check_outlook(Check(stat="agi", difficulty=5), state, content, world)
-    assert outlook.stat_value == pytest.approx(5.3)
-    assert outlook.chance == pytest.approx(0.53)
+    assert outlook.stat_value == pytest.approx(5.0)
+    state.player.stats["agi"] = 6  # 配了一點身法
+    outlook = check_outlook(Check(stat="agi", difficulty=5), state, content, world)
+    assert outlook.stat_value == pytest.approx(6.0)
+    assert outlook.chance == pytest.approx(0.6)
 
 
 def test_practice_adds_one_point_per_ten_infamy_up_to_the_cap(state, content, world):
@@ -438,3 +442,72 @@ def test_a_prior_meeting_still_opens_the_door_whatever_the_bar(state, content):
     assert not can_meet(state, content, cid)
     state.player.flags.add(f"結識:{cid}")
     assert can_meet(state, content, cid)
+
+
+# ── 四屬性每項最高 stat_cap（武學與成長設計 6.2）──────────────────────────────
+
+
+def test_an_event_cannot_push_a_stat_past_the_cap(state, content, world):
+    state.player.stats["str"] = 14
+    msgs = apply_effect(Effect(stats={"str": 3}), state, content, world)
+    assert state.player.stats["str"] == 15
+    assert "臂力 +1" in msgs  # 照實際加了多少寫
+    assert "（臂力已到頂 15）" in msgs  # 被上限夾掉了，玩家要知道是到頂
+
+
+def test_an_event_at_the_cap_writes_no_plus_line_and_one_cap_line(state, content, world):
+    state.player.stats["str"] = 15
+    msgs = apply_effect(Effect(stats={"str": 1}), state, content, world)
+    assert state.player.stats["str"] == 15
+    assert not any(m.startswith("臂力 ") for m in msgs)  # 沒動就不寫「臂力 +0」（江湖紀錄也會丟掉零）
+    assert msgs.count("（臂力已到頂 15）") == 1
+
+
+def test_a_stat_that_reaches_the_cap_exactly_says_nothing_about_it(state, content, world):
+    state.player.stats["wis"] = 14
+    msgs = apply_effect(Effect(stats={"wis": 1}), state, content, world)
+    assert state.player.stats["wis"] == 15 and "悟性 +1" in msgs
+    assert not any("到頂" in m for m in msgs)  # 沒有被夾掉，不提
+
+
+def test_a_stat_below_the_cap_is_written_in_full(state, content, world):
+    msgs = apply_effect(Effect(stats={"con": 2}), state, content, world)
+    assert state.player.stats["con"] == 7 and msgs == ["根骨 +2"]
+
+
+def test_only_the_four_combat_stats_have_a_cap(state, content, world):
+    """銀兩、善名這些沒有上限（stat_cap 只管臂力、身法、根骨、悟性）。"""
+    state.player.stats["silver"] = 500
+    msgs = apply_effect(Effect(stats={"silver": 40}), state, content, world)
+    assert state.player.stats["silver"] == 540 and msgs == ["銀兩 +40"]
+
+
+def test_a_floor_clamp_writes_what_really_moved_and_nothing_when_nothing_did(state, content, world):
+    """下限（不低於 0）夾住時也照實際動了多少寫，一點都沒動就不寫（不會冒出「惡名 +0」）。"""
+    state.player.stats["evil"] = 1
+    assert apply_effect(Effect(stats={"evil": -3}), state, content, world) == ["惡名 -1"]
+    assert state.player.stats["evil"] == 0
+    assert apply_effect(Effect(stats={"evil": -3}), state, content, world) == []
+
+
+# ── 名聲到門檻悟得浩然、血煞（武學與成長設計 7.2）──────────────────────────────
+
+
+def test_an_event_that_crosses_the_threshold_grants_the_insight(state, content, world):
+    state.player.stats["evil"] = 13
+    msgs = apply_effect(Effect(stats={"evil": 2}), state, content, world)
+    assert "xuesha" in state.player.insights and any("血煞" in m for m in msgs)
+    assert msgs.index("惡名 +2") < next(i for i, m in enumerate(msgs) if "血煞" in m)  # 先寫名聲，再寫悟得
+
+
+def test_an_event_that_stays_under_the_threshold_grants_nothing(state, content, world):
+    state.player.stats["good"] = 12
+    msgs = apply_effect(Effect(stats={"good": 2}), state, content, world)
+    assert state.player.insights == [] and msgs == ["善名 +2"]
+
+
+def test_an_effect_with_no_name_in_it_does_not_look_at_the_names(state, content, world):
+    state.player.stats["good"] = 40  # 例如舊存檔：名聲早就過了門檻、但這則效果跟名聲無關
+    assert apply_effect(Effect(stats={"silver": 5}), state, content, world) == ["銀兩 +5"]
+    assert state.player.insights == []
+

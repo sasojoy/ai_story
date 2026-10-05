@@ -350,7 +350,7 @@ class Game:
             rate *= 2
         if w.time <= cfg.newbie_days * DAY:
             rate *= 2
-        team.regen_neili(self.content, p.member, rate)
+        team.regen_neili(self.content, p.member, rate, team.con_of(self.state, PLAYER))
         for cid in p.team:
             self.world.update_companion(cid, lambda progress: team.regen_neili(self.content, progress, rate))
         msgs: list[str] = []
@@ -1014,7 +1014,9 @@ class Game:
         branches = [b for b in EXPLORE_BRANCHES if mix.get(b, 0) > 0 and self._explore_can(b, loc)]
         if not branches:
             return ["你四處走走，一無所獲。"]
-        branch = self.rng.choices(branches, weights=[mix[b] for b in branches])[0]
+        # 悟性：落在「悟意境」那一支的比重 ×（1＋3%×（悟性−5））；另外兩支不動（武學與成長設計 6.1）
+        wis = team.stat_factor(c, s.player.stats.get("wis", team.BASE_STAT))
+        branch = self.rng.choices(branches, weights=[mix[b] * (wis if b == "insight" else 1) for b in branches])[0]
         if branch == "insight":
             found = insights.roll_explore(loc, c, self.rng)
             return [f"你在{loc.name}靜下心來，看了好一陣。"] + insights.learn(s, c, self.world, found)
@@ -1400,12 +1402,14 @@ class Game:
     def _battle_power(self) -> float:
         """玩家自己目前的武學威力快照，加入戰鬥時存一份進 BattleParticipant.power，
         之後戰鬥結算的威力抵銷只讀這份快照，不會、也不能臨時去查任何人的角色資料
-        （見 battle_instance.py::BattleParticipant 的欄位註解）。"""
+        （見 battle_instance.py::BattleParticipant 的欄位註解）。快照吃本人的加成（臂力、根骨，武學與成長設計 8.4）。"""
         arts = team.team_arts(self.state, self.content, self.world)
-        return encounter.member_power(self.state.player.member, arts)
+        return encounter.member_power(
+            self.state.player.member, arts, boost=team.player_boost(self.state, self.content, self.world),
+        )
 
     def _battle_neili_cap(self) -> float:
-        _, cap = team.member_neili(self.content, self.state.player.member)
+        _, cap = team.member_neili(self.content, self.state.player.member, team.con_of(self.state, PLAYER))
         return cap
 
     def _battle_status(self, tick: bool = True) -> tuple[battle_instance.BattleInstance, BattleDef] | None:
@@ -2020,10 +2024,10 @@ class Game:
         return [head, text] + foreshadow.hear_from_event(self.state, self.content, event.id, self.world)  # 片段事件（計畫 T7）
 
     def _squad_encounter(self, squad_id: str, wild: bool = False) -> list[str]:
-        """遭遇一支敵方隊伍：單次判定，勝得對手獎勵與屬性機會，落敗失落一成銀兩；自己陣營的隊伍改成操練（見 _drill）。
+        """遭遇一支敵方隊伍：單次判定，勝得對手獎勵，落敗失落一成銀兩；自己陣營的隊伍改成操練（見 _drill）。
 
         wild：探索時撞上的野怪（探索三選一設計 4.2）——扣氣血打折（`wild_neili_loss_factor`，內傷照比例）、
-        打贏**不推大勢**（遊歷推大勢的量已經讓黃巾早早稱霸，探索不能再加碼）；獎勵、掉落、屬性機會、落敗的
+        打贏**不推大勢**（遊歷推大勢的量已經讓黃巾早早稱霸，探索不能再加碼）；獎勵、掉落、落敗的
         一成銀兩都照常。戰後事件本來就只在 _train 裡接，野怪不走那裡。遊歷不帶這個旗標，一點都不變。"""
         s, c = self.state, self.content
         p = s.player
@@ -2038,10 +2042,6 @@ class Game:
             rewards = self._battle_rewards(squad, record)
             msgs += rewards
             extra: list[str] = []
-            if self.rng.random() < c.config.train_stat_chance:
-                key = self.rng.choice(["str", "agi", "con"])
-                p.stats[key] += 1
-                extra.append(f"{c.config.stat_names[key]} +1")
             if not wild:
                 for trend_id, delta in self.train_trend_push(loc.id).items():  # 換算過的線，照舊交給 T3 的 push_trend
                     extra += self.push_trend(trend_id, delta, source="train")
@@ -2070,7 +2070,7 @@ class Game:
 
     def _drill(self, squad: Squad) -> list[str]:
         """在自己陣營的地方遊歷：不打自己人，一起操軍擺陣（企劃者 2026-10-02 決定）。不會輸、不扣氣血；
-        給經驗與心得、有機會加屬性；不給銀兩、不掉素材（不搶自己人）；地點的大勢推動往自己陣營有利的方向推。"""
+        給經驗與心得；不給銀兩、不掉素材（不搶自己人）；地點的大勢推動往自己陣營有利的方向推。"""
         s, c = self.state, self.content
         p = s.player
         loc = c.locations[p.location]
@@ -2087,10 +2087,6 @@ class Game:
         msgs += team.add_team_exp(s, c, self.world, squad.exp)  # 本人與帶著的同伴都拿（FB-002）
         if self._draft is not None and squad.exp > 0:
             self._draft.changes.append(f"經驗 +{squad.exp}（每人）")
-        if self.rng.random() < c.config.train_stat_chance:
-            key = self.rng.choice(["str", "agi", "con"])
-            p.stats[key] += 1
-            msgs.append(f"{c.config.stat_names[key]} +1")
         for trend_id, delta in self.train_trend_push(loc.id).items():
             msgs += self.push_trend(trend_id, delta, source="drill")
         return msgs
@@ -2802,6 +2798,29 @@ class Game:
         self._menxia_entry(msgs[0] if msgs else "療傷", xinde)
         return msgs
 
+    def allocate_stat(self, stat: str) -> list[str]:
+        """把升級得到的屬性點分配到一項（武學與成長設計 6.2）：每項最高 stat_cap，這個版本不能洗點。
+        配成了才寫江湖紀錄，連按幾次（玩家、假人都一樣）併成一則「配點」；被拒絕（沒有點、到頂、沒這項屬性）
+        只回一句話，不留紀錄（武學與成長計畫 F12）。"""
+        if self._preparing():
+            return self._log(["（賽季籌備中，等待管理者開季。）"])
+        p, cfg = self.state.player, self.content.config
+        name = cfg.stat_names.get(stat, stat)
+        if stat not in team.COMBAT_STATS:
+            return self._log(["（沒有這項屬性。）"])
+        if p.stat_points <= 0:
+            return self._log(["沒有可以分配的屬性點，升級才會有。"])
+        if p.stats.get(stat, 0) >= cfg.stat_cap:
+            return self._log([f"{name}已經到頂（{cfg.stat_cap}）。"])
+        p.stat_points -= 1
+        p.stats[stat] = p.stats.get(stat, 0) + 1
+        journal.add_entry(
+            self.state, JournalEntry(time=self.state.world.time, title=journal.ALLOCATE, changes=[f"{name} +1"]),
+            merge=True,
+        )
+        left = f"（還有 {p.stat_points} 點可以分配）" if p.stat_points else ""  # 最後一點不寫「還有 0 點」
+        return self._log([f"{name} +1{left}"])
+
     def _xinde(self) -> int:
         return self.state.player.stats.get("xinde", 0)
 
@@ -3339,13 +3358,13 @@ class Game:
         names = c.config.stat_names
         sect = c.sects[p.sect].name if p.sect else None
         faction = next((f.name for f in c.scenario.factions if f.id == p.faction), None)
-        now, cap = team.member_neili(c, p.member)
+        now, cap = team.member_neili(c, p.member, team.con_of(s, PLAYER))
         mates = []
         for cid in p.team:
             progress = self.world.get_companion(cid)
             mate_now, mate_cap = team.member_neili(c, progress)
             mates.append({"name": c.characters[cid].name, "level": progress.level,
-                          "hp": int(mate_now), "hp_max": int(mate_cap)})
+                          "hp": round(mate_now), "hp_max": round(mate_cap)})
         data = {
             "name": p.name,
             "affiliation": "・".join(name for name in (sect, faction, ranks.title(c, s)) if name) or "散人",
@@ -3357,13 +3376,18 @@ class Game:
             "season_days": season_length_days(w, c),  # 這一季蓋章的季長（舊季照它自己的章，不跟著設定變）
             "stamina": int(p.stamina),
             "stamina_max": c.config.stamina_max,
-            "hp": int(now),
-            "hp_max": int(cap),
+            "hp": round(now),  # 跟角色卡（skillview.member_card 的 {:.0f}）同一種進位：兩邊寫出來的數字一樣
+            "hp_max": round(cap),
             "injury": int(p.member.injury),
             "silver": p.stats.get("silver", 0),
             "xinde": p.stats.get("xinde", 0),
             "minor": [(names[k], p.stats.get(k, 0)) for k in ("fame", "good", "evil")],
-            "attrs": [(names[k], p.stats[k]) for k in ("str", "agi", "con", "wis")],
+            "attrs": [(names[k], p.stats[k], k) for k in team.COMBAT_STATS],  # 第三項是鍵：配點鈕送它（allocate_stat）
+            "stat_points": p.stat_points,
+            "stat_cap": c.config.stat_cap,
+            # ＋鈕底下那一行：四項各管什麼、事件檢定也看它們（計畫二最終審查 M2）；網頁只在有點可配時畫
+            "stat_uses": skillview.stat_uses(c),
+            "stat_uses_note": skillview.STAT_CHECK_NOTE,
             "hint": skillview.practice_hint(s, c),  # 心得擱著沒用、又還有功夫沒練滿時才有
             "team": mates,
             "busy_hours": None if p.busy_until is None else round((p.busy_until - w.time) / HOUR / c.config.time_scale, 1),  # 現實小時
@@ -3521,7 +3545,7 @@ class Game:
         if d["injury"] >= 1:
             vitals += f"　🩹 內傷 {d['injury']}"
         minor = "　".join(f"{k} {v}" for k, v in d["minor"])
-        attrs = "　".join(f"{k} {v}" for k, v in d["attrs"])
+        attrs = "　".join(f"{k} {v}" for k, v, _ in d["attrs"])
         lines = [
             f"### {d['name']}　·　{d['affiliation']}" + ("（匿名行走）" if d["anonymous"] else "")
             + f"　第{d['level']}級",
@@ -3589,11 +3613,19 @@ class Game:
         entries = self.state.journal
         return journal.card_html(entries[0], self.stamp, self._chip) if entries else ""
 
+    def journal_top_html(self) -> str:
+        """江湖紀錄頁的第一則（伺服器的 latest，底下接 journal_html(1, …)）：最新一則就是「剛剛」那張戰鬥卡片那一場時，
+        放卡片沒寫到的補充（照舊）；其他時候畫最新一則——包括「剛剛」越過的那則配點（_now_start），它在江湖紀錄裡照樣列在最前面。"""
+        if self.shows_battle_card() and self._now_start() == 0:
+            return self.battle_extra_html()
+        return self.latest_entry_html()
+
     def now_entry_html(self) -> str:
         """江湖頁「剛剛」那一則（FB-046）：最新一則；最新的幾則若只是時刻表大事的公告（_deliver_big_events 補的），
         而且每一件的全文江湖頁的卡片上已經有了（_news_on_cards），就往前找第一則不是的——同一段公告不在「剛剛」
         再寫一次，剛做完的事也不會因為一件大事發生就被擠掉。江湖紀錄頁照舊從最新一則列起（latest_entry_html）。
         一次補好幾件時每一行是「季曆時間　公告全文」。
+        配點那一則也越過（計畫二最終審查 M1，見 _now_start）；越過之後什麼都不剩（只有配點）時才放它，不讓「剛剛」空著。
         籌備中不放（FB-049）：那時最新一則是開場那一則，寫著「賽季開始」、叫人先去探索，選單卻只有「等待管理者開季」。"""
         if self._preparing():
             return ""
@@ -3605,21 +3637,29 @@ class Game:
                 line in shown or line.partition("　")[2] in shown for line in story
             )
 
-        entry = next((e for e in self.state.journal if not repeated(e)), None)
+        fresh = [e for e in self.state.journal if not repeated(e)]
+        entry = next((e for e in fresh if e.title != journal.ALLOCATE), fresh[0] if fresh else None)
         return journal.card_html(entry, self.stamp, self._chip) if entry is not None else ""
 
     def journal_html(self, start: int = 1, limit: int = 5, heading: str = "", empty: str = "") -> str:
         return journal.rows_html(self.state.journal[start:start + limit], heading, empty, self.stamp, self._chip)
 
+    def _now_start(self) -> int:
+        """「剛剛」從江湖紀錄的第幾則看起：最新的幾則若是配點就越過（計畫二最終審查 M1）。配點是點名號展開、在狀態列上按的，
+        跟 journal.add_guide 一樣不換「剛剛」——升級那一仗打完照著「你有 N 點屬性可以分配」去配點，那一場的戰鬥卡片
+        不會因此不見。全都是配點時從最新一則看起。江湖紀錄頁照舊從最新一則列起（journal_top_html／journal_html）。"""
+        return next((i for i, e in enumerate(self.state.journal) if e.title != journal.ALLOCATE), 0)
+
     def shows_battle_card(self) -> bool:
-        s = self.state
-        return self.battle_card_id() is not None and bool(s.journal) and s.journal[0].battle_id == s.battle_card
+        s, i = self.state, self._now_start()
+        return self.battle_card_id() is not None and len(s.journal) > i and s.journal[i].battle_id == s.battle_card
 
     def battle_extra_html(self) -> str:
+        """「剛剛」那張戰鬥卡片底下的補充：那一場那一則裡卡片沒寫到的（越過最新的配點，跟 shows_battle_card 看同一則）。"""
         if not self.shows_battle_card():
             return ""
         record = battlelog.find(self.state, self.state.battle_card)
-        entry = self.state.journal[0]
+        entry = self.state.journal[self._now_start()]
         lines, changes = journal.card_leftovers(entry, record.notes, battlelog.gains_list(record))
         return journal.extra_html(lines, changes, self._chip, str(entry.time))
 

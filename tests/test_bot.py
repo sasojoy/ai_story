@@ -302,3 +302,42 @@ def test_the_bot_joins_a_muster_before_doing_anything_else(content, game):
     options = [o for o in game.options(odds=False) if o.enabled]
     picks = {pick(game, options, random.Random(seed)) for seed in range(20)}
     assert len(picks - {"battle:join:huang"}) >= 2  # 已經加入：照常在平常的選項裡隨機挑，不是每一步都換邊
+
+
+def test_the_bot_spends_its_stat_points(game):
+    game.state.player.stat_points = 3
+    bot.allocate_points(game, random.Random(0))
+    p = game.state.player
+    assert p.stat_points == 0 and sum(p.stats[k] for k in ("str", "agi", "con", "wis")) == 23
+
+
+def test_the_bot_leaves_capped_stats_alone_and_stops_when_all_are_capped(game):
+    p = game.state.player
+    p.stat_points = 4
+    p.stats.update({"str": 15, "agi": 15, "con": 15, "wis": 14})
+    bot.allocate_points(game, random.Random(0))
+    assert p.stats["wis"] == 15 and p.stat_points == 3  # 只有悟性還能加；全到頂後剩下的點留著
+    assert (p.stats["str"], p.stats["agi"], p.stats["con"]) == (15, 15, 15)
+
+
+def test_the_bot_does_nothing_without_points(game):
+    before = dict(game.state.player.stats)
+    bot.allocate_points(game, random.Random(0))
+    assert game.state.player.stats == before and game.state.player.stat_points == 0
+
+
+def test_the_bot_does_not_spin_when_the_game_refuses_every_allocation(content, world):
+    """賽季籌備中 Game.allocate_stat 一律拒絕、點數不會少：迴圈要有界、馬上回來（它在全服寫入鎖裡跑，空轉會凍住伺服器）。"""
+    content.config.auto_open_first_season = False
+    game = Game.new(content, "甲", rng=random.Random(1), world=world)
+    game.state.player.stat_points = 1
+    real, calls = game.allocate_stat, []
+
+    def counted(stat):
+        calls.append(stat)
+        assert len(calls) <= 3, "allocate_points keeps calling a refusing allocate_stat"
+        return real(stat)
+
+    game.allocate_stat = counted
+    bot.allocate_points(game, random.Random(0))
+    assert len(calls) == 1 and game.state.player.stat_points == 1  # 試了一次、被拒絕就停；那一點還在

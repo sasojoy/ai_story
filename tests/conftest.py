@@ -81,7 +81,6 @@ def game(content):
     from tianxia.engine import Game
 
     content.config.train_event_chance = 0.0
-    content.config.train_stat_chance = 0.0
     return Game.new(content, "沈浪", rng=random.Random(0))
 
 
@@ -255,7 +254,7 @@ FORESHADOW_FIXTURE = Path(__file__).parent / "fixtures" / "foreshadow"
 
 def install_foreshadows(content):
     """第一季內容（install_season_one）加上伏筆要的東西，最後整份跑一次 content.validate：
-    - 三個陣營 guan（小鎮投靠）、huang（湖邊投靠）、haoqiang；遊歷不接戰後事件、不加屬性；
+    - 三個陣營 guan（小鎮投靠）、huang（湖邊投靠）、haoqiang；遊歷不接戰後事件；
     - 戰線 yingru、nanyang、jizhou 也當大區（地圖右上角的小三角，不蓋到任何地點），各自的 front 就是自己，時刻表與伏筆的
       戰線檢查才認得；
     - 南區的「渡口」（port，連小鎮），加上時刻表會用到的盧植營、宛城；
@@ -271,7 +270,6 @@ def install_foreshadows(content):
 
     install_season_one(content)
     content.config.train_event_chance = 0.0
-    content.config.train_stat_chance = 0.0
     content.scenario.factions = [
         FactionDef(id="guan", name="官軍", join_at=["town"]),
         FactionDef(id="huang", name="黃巾", join_at=["lake"]),

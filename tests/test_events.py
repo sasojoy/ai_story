@@ -108,9 +108,12 @@ def test_check_label_never_names_a_companion_or_shows_the_odds(state, content, w
         assert word not in label
 
 
-def test_check_label_shows_a_fractional_stat_the_way_the_roll_reads_it(state, content, world):
-    state.player.member.level = 3  # 臂力 5 + 0.3 × 2
-    assert choice_label(content.events["drunk"].choices[0], state, content, world).startswith("逼問（臂力 5.6：")
+def test_check_label_shows_the_stat_the_roll_reads_points_not_level(state, content, world):
+    """計畫二 Task 1 起本人不再每級自動長屬性：等級高了括號裡的數字不變，配了點才變。"""
+    state.player.member.level = 3
+    assert choice_label(content.events["drunk"].choices[0], state, content, world).startswith("逼問（臂力 5：")
+    state.player.stats["str"] = 6
+    assert choice_label(content.events["drunk"].choices[0], state, content, world).startswith("逼問（臂力 6：")
 
 
 def test_practice_folds_into_the_bracket_with_the_bonus_it_adds(state, content, world):

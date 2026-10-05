@@ -93,6 +93,8 @@ ul { padding-left: 1.3em; margin: 0.4em 0; }
 /* 名號長、又有門派・陣營・頭銜時，收著會被省略號吃掉頭銜；點名號展開就整行折下來看得到（計畫 T5） */
 .who[aria-expanded="true"] .who-name > span { white-space: normal; }
 /* 點名號展開更多數值的提示（畫面流程 S1），名號再長也不會被省略號吃掉 */
+/* 升級的屬性點：自己一個不縮的元素（flex: none）、放在會「…」的名號 <span> 外面——長長的「門派・陣營」只擠名號，擠不掉這一句 */
+.who-name .pts { flex: none; font: 600 12px var(--sans); color: var(--gold); }
 .who-name .more-ico { flex: none; font: 400 11px var(--sans); color: var(--ink-2); }
 .where { font-size: 12px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .where small { font-size: 10.5px; }
@@ -123,6 +125,10 @@ ul { padding-left: 1.3em; margin: 0.4em 0; }
 .num em { font-style: normal; font-weight: 400; color: var(--ink-2); font-size: 11px; margin-right: 2px; }
 .more-stats { font-size: 12px; color: var(--ink-2); margin-top: 6px; line-height: 1.7; }
 .more-stats .hint { color: var(--gold); }
+.more-stats .row { margin-top: 6px; } /* 升級的屬性點：每項屬性一顆「＋臂力」（狀態列展開後才出現） */
+/* ＋鈕底下那一行（四項各管什麼）：比面板再小一號；一項一個 inline-block，整項一起換行，太長時在項裡面折，不撐寬 */
+.more-stats .stat-uses { margin-top: 4px; font-size: 11px; line-height: 1.5; }
+.more-stats .stat-uses span { display: inline-block; max-width: 100%; margin-right: 0.8em; }
 /* 在路上的 💡 提示收成一行（FB-060）：是按鈕，點了展開全文；樣子跟平常的提示一樣 */
 .more-stats .road-hint { display: block; width: 100%; margin: 0; padding: 0; border: 0; background: none; font: inherit; line-height: inherit; text-align: left; cursor: pointer; }
 .more-stats .road-hint.clamp { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

@@ -37,6 +37,21 @@ def can_practise(game: Game, kind: str) -> bool:
     return team.can_practise(game.state, game.content, kind)
 
 
+def allocate_points(game: Game, rng: random.Random) -> None:
+    """升級得到的屬性點隨機分掉（還沒到頂的那幾項裡挑）。走 Game.allocate_stat——真人按按鈕的同一條路。
+    迴圈有界：它在全服寫入鎖裡跑，空轉會凍住伺服器。最多試「手上有幾點」次；全到頂、或 allocate_stat
+    拒絕了（賽季籌備中等，點數沒少）就停，剩下的點留著。"""
+    p, cap = game.state.player, game.content.config.stat_cap
+    for _ in range(p.stat_points):
+        open_stats = [k for k in team.COMBAT_STATS if p.stats.get(k, 0) < cap]
+        if not open_stats:
+            return
+        before = p.stat_points
+        game.allocate_stat(rng.choice(open_stats))
+        if p.stat_points >= before:  # 被拒絕：再試也一樣
+            return
+
+
 def spend_xinde(game: Game, rng: random.Random) -> None:
     """有內傷先療傷；接著身上兩門各練一成——付得起才練（練成花心得，開局就有基礎武學，沒有空欄位要自創了）。
     不追求最優策略，只求機器人不會把心得放著不用，也不會一直去撞「心得不足」。"""
@@ -174,6 +189,7 @@ def play_season(
         if choice is not None:
             game.choose(choice)
             if step % SPEND_XINDE_EVERY == 0:
+                allocate_points(game, rng)
                 spend_xinde(game, rng)
                 forge_and_cultivate(game, rng)
         if choice is None or step % 4 == 0:

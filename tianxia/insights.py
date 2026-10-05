@@ -47,6 +47,23 @@ def learn(state: GameState, content: Content, world: WorldStateStore, insight_id
     return [f"你悟得了「{insight.name}」的意境（屬{insight.attribute}）！"]
 
 
+def grant_by_name(state: GameState, content: Content, world: WorldStateStore) -> list[str]:
+    """名聲第一次到門檻就悟得對應的意境（浩然、血煞，武學與成長設計 7.2）。給過就記旗標 `悟得:<id>`：
+    之後熔掉也不會再給（不然熔了又拿、拿了又熔可以刷心得）。旗標跟著角色走，換季跟角色一起重來。"""
+    p = state.player
+    msgs: list[str] = []
+    for d in content.insights.values():
+        if d.grant is None:
+            continue
+        flag = f"悟得:{d.id}"
+        if flag in p.flags or p.stats.get(d.grant.stat, 0) < d.grant.at:
+            continue
+        p.flags.add(flag)
+        msgs.append(f"你心有所感，胸中多了一股{d.name}之氣。")
+        msgs += learn(state, content, world, d.id)
+    return msgs
+
+
 def explore_pool(loc: Location, content: Content) -> list[str]:
     """在這裡探索悟得到的意境：地點寫了 insights 就是那幾個；沒寫的給靠探索悟的基本意境（內容不必每個地點都填）。
     靠名聲才悟得的（浩然、血煞）永遠不在這裡。"""

@@ -1,4 +1,4 @@
-from tianxia import insights
+from tianxia import insights, library
 from tianxia.martial_arts import Insight
 
 
@@ -76,3 +76,57 @@ def test_lean_passes_through_and_cancels():
     assert insights.merged_lean(evil, evil) == "邪"
     assert insights.merged_lean(good, evil) == "無"
     assert insights.merged_lean(plain, plain) == "無"
+
+
+# ── 名聲到門檻悟得浩然、血煞（武學與成長設計 7.2）──────────────────────────────
+
+
+def test_good_name_at_the_threshold_grants_haoran_once(state, content, world):
+    state.player.stats["good"] = 15
+    state.player.stats["xinde"] = 0
+    msgs = insights.grant_by_name(state, content, world)
+    assert state.player.insights == ["haoran"] and any("浩然" in m for m in msgs)
+    library.melt_insight(state, content, world, "haoran")  # 真的熔掉（熔意境那條路），不是直接清單子
+    assert state.player.insights == []
+    assert state.player.stats["xinde"] == content.config.melt_insight_xinde  # 熔了就是那一份心得
+    assert insights.grant_by_name(state, content, world) == []  # 善名還在門檻上，也不再給：不然熔了又拿可以刷心得
+    assert state.player.insights == []
+    assert state.player.stats["xinde"] == content.config.melt_insight_xinde
+
+
+def test_below_the_threshold_nothing_happens(state, content, world):
+    state.player.stats["evil"] = 14
+    assert insights.grant_by_name(state, content, world) == []
+    assert state.player.insights == []
+
+
+def test_each_name_grants_only_its_own_insight(state, content, world):
+    state.player.stats["evil"] = 15
+    msgs = insights.grant_by_name(state, content, world)
+    assert state.player.insights == ["xuesha"] and any("血煞" in m for m in msgs)
+    assert not any("浩然" in m for m in msgs)
+
+
+def test_both_names_at_the_threshold_grant_both(state, content, world):
+    state.player.stats["good"] = state.player.stats["evil"] = 20
+    insights.grant_by_name(state, content, world)
+    assert sorted(state.player.insights) == ["haoran", "xuesha"]
+
+
+def test_the_grant_is_remembered_with_a_flag_so_a_second_call_adds_nothing(state, content, world):
+    state.player.stats["good"] = 15
+    insights.grant_by_name(state, content, world)
+    assert "悟得:haoran" in state.player.flags
+    assert insights.grant_by_name(state, content, world) == []
+    assert state.player.insights == ["haoran"]
+
+
+def test_an_insight_already_known_turns_into_xinde_but_is_still_counted_as_granted(state, content, world):
+    state.player.insights = ["haoran"]  # 例如別條路已經悟過
+    state.player.stats["good"] = 15
+    state.player.stats["xinde"] = 0
+    msgs = insights.grant_by_name(state, content, world)
+    assert state.player.insights == ["haoran"] and state.player.stats["xinde"] == content.config.duplicate_insight_xinde
+    assert insights.grant_by_name(state, content, world) == []  # 旗標記下了，不會每次加名聲都再化一次心得
+    assert state.player.stats["xinde"] == content.config.duplicate_insight_xinde and msgs
+
