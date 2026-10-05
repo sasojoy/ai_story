@@ -12,6 +12,7 @@
 """
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass, field
 
 from .martial_arts import MartialArt
@@ -93,6 +94,40 @@ def amount(content: Content, lo: Loadout, hook: str) -> float:
 def has(lo: Loadout, hook: str) -> bool:
     """身上有沒有這個掛點的功效（一般的層數大於 0，或特別功效）。"""
     return lo.layers.get(hook, 0.0) > 0 or hook in lo.specials
+
+
+def inherit_fuse(base: MartialArt, attribute: str) -> list[str]:
+    """武學＋意境（13.3）：新武學的屬性（意境的）排第一；底的功效整串往後推，最多留 2 個，擠掉最舊的。
+    只傳一般功效，特別功效不傳給後代（13.4）。"""
+    return [attribute] + traits_of(base)[: MAX_TRAITS - 1]
+
+
+def inherit_blend(a: MartialArt, b: MartialArt, attribute: str) -> list[str]:
+    """武學＋武學（13.3）：新武學的屬性排第一；兩門各傳一個下來——各自屬性的那個功效，照 id 排序（不分先後）。"""
+    first, second = sorted((a, b), key=lambda art: art.id)
+    return [attribute, first.attribute, second.attribute]
+
+
+def roll_special(content: Content, key: str, tianji: int) -> str | None:
+    """長出新武學時擲特別功效（13.4）：配方加這一季天機的雜湊，同一個配方同一季永遠一樣；只從共用清單（pool）挑，
+    機會是 Config.special_trait_chance。沒有清單或沒擲中是 None。"""
+    pool = sorted(t.id for t in content.traits.special if t.pool)
+    digest = hashlib.sha256(f"{tianji}|{key}|special".encode("utf-8")).digest()
+    roll = int.from_bytes(digest[:8], "big") / 2**64
+    if not pool or roll >= content.config.special_trait_chance:
+        return None
+    return pool[digest[8] % len(pool)]
+
+
+def naming_note(content: Content, trait_list: list[str], special_id: str | None) -> str:
+    """取名的提示裡那一行（13.1：取名時看得到功效，名字要配得上）：只寫功效的名字，不寫數字。
+    內容沒有功效就是空字串（提示照舊）。"""
+    if not content.traits.general:
+        return ""
+    names = [general(content, attribute).name for attribute in trait_list]
+    sp = special(content, special_id)
+    tail = f"，還帶著罕見的「{sp.name}」" if sp is not None else ""
+    return f"這門武學的功效是：{'、'.join(names)}{tail}。名字要配得上它的功效。\n"
 
 
 def _value(hook: str, number: float) -> str:
