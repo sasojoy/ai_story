@@ -642,6 +642,7 @@ class FactionDef(_Strict):
     join_at: list[str] = Field(default_factory=list)
     sects: list[str] = Field(default_factory=list)
     goals: dict[str, int] = Field(default_factory=dict)  # 大勢線 id → 1 推高／-1 壓低；伺服器假人照這個行動
+    defect_text: str = ""  # 叛投到這個陣營那一刻的一句敘事（計畫甲；content/scenario.json 的三句是初稿，待 joy 潤，joy 會走自己的 PR）
 
 
 class SeasonOneOff(_Strict):
