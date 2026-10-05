@@ -365,14 +365,20 @@
   function actionBar(m) {
     const byId = Object.fromEntries(m.options.map((o) => [o.id, o]));
     const used = new Set();
+    // 這裡只有一位大勢人物、沒有交友事件、他又見不到（名望不夠、閉門不見、今天談滿）、福緣也沒到時，引擎不給交友
+    // （只會花體力換同一句打發，Game._brush_off），選單上只剩直接列的「求見某某」（設計 9.1）：社交那一格改放它。
+    // 交友或求見名單（兩位以上）在選單上時照舊，這顆收在摺疊裡
+    const loneCall = m.options.find((o) => o.id.startsWith("call:") && o.id !== "call:back");
     const cells = ACT_CELLS.map((d) => {
-      const o = d.ids.map((id) => byId[id]).find(Boolean);
+      const o = d.ids.map((id) => byId[id]).find(Boolean) || (d.key === "social" ? loneCall : undefined);
       if (!o) return inkCell(d.key, d.name, d.none, d.icon, "disabled", " off");
       used.add(o.id);
-      const [name, detail] = optParts(o);
+      const lone = o.id.startsWith("call:");
+      const [label, detail] = optParts(o);
+      const name = lone ? "求見" : label;  // 格子窄：名字寫「求見」，人物的名字放在下面一行
       // 按不下去的原因：標籤括號裡寫的是體力就是「體力不夠」，寫別的就照寫；整句太長、格子裝不下（約 60 px、不換行）時只留
       // 最後一小句（例：挑戰本人打贏之後「剛吃了敗仗，閉門不見」只寫「閉門不見」，T4）
-      const sub = o.enabled ? (SHORT_SUB[o.id] || detail.replace(/^體力 (\d+).*$/, "體力 $1"))
+      const sub = o.enabled ? (lone ? label.replace(/^求見/, "") : (SHORT_SUB[o.id] || detail.replace(/^體力 (\d+).*$/, "體力 $1")))
         : (detail && !detail.startsWith("體力") ? detail.split("，").pop() : "體力不夠");
       // 體力之後還有說明（遊歷的「體力 10・2 路對手・必敗」）：挑出勝算那一段另起一行（FB-044；對手數放不下就不寫）。
       // 不一定是最後一段：有自己人也有敵人的地方後面還接「・或與自己人操練」（畫面批次審查 C1）

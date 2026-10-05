@@ -89,7 +89,8 @@ def pick(game: Game, options: list[Option], rng: random.Random) -> str | None:
     跟著變少，一整季要跑完所需的步數暴增到頂到 max_steps 才停，拖垮整個測試套件）。
     act:halt（喊停）同理：機器人只走單站、它不會出現，萬一出現了也不能讓它成為「有選項可選」。
     路上的選項（road: 開頭：折返、路上小事）也一樣排除：機器人不改道、不折返、不做路上小事（路上設計第六節），
-    而折返在路上永遠按得下去，不排除的話「在路上沒事可做就推進時間」這個訊號會失效。"""
+    而折返在路上永遠按得下去，不排除的話「在路上沒事可做就推進時間」這個訊號會失效。
+    名望不夠的求見（call:<人物>）同理：求見一直都在、按下去只是被打發（武學與成長設計 9.1），機器人不白按。"""
     s = game.state
     battle = game.world.get_battle()
     if battle is not None and s.player.name not in battle.participants:
@@ -105,6 +106,11 @@ def pick(game: Game, options: list[Option], rng: random.Random) -> str | None:
             if option.id.startswith("choice:") and choices[int(option.id.partition(":")[2])].effect.recruit:
                 return option.id
     options = [o for o in options if o.id not in ("act:rest", "act:halt") and not o.id.startswith("road:")]
+    # 會被打發的求見（名望不夠）永遠按得下去，不排除的話「沒事可做就推進時間」的訊號會失效（同 act:rest）
+    options = [
+        o for o in options
+        if not (o.id.startswith("call:") and o.id != "call:back" and not game.can_meet_figure(o.id.partition(":")[2]))
+    ]
     return rng.choice(options).id if options else None
 
 

@@ -170,6 +170,26 @@ def test_every_figure_opts_into_deep_dialogue(content):
     assert all(ch.deep_interaction for ch in content.characters.values())
 
 
+def test_every_figure_has_three_brush_off_lines(content):
+    """設計 9.1、內容表《打發話與回合句型》第一節：每位名將三句他自己口吻的打發話，不寫數字（名望與階級的落差由程式接在後面）。"""
+    for cid, ch in content.characters.items():
+        assert len(ch.brush_off) == 3 and len(set(ch.brush_off)) == 3, cid
+        for line in ch.brush_off:
+            assert line.strip() and len(line) <= 40 and not re.search(r"\d", line), (cid, line)
+
+
+def test_a_newcomer_calling_on_a_figure_hears_one_of_his_own_lines_and_the_fame_gap(content):
+    game = Game.new(content, "試玩者", rng=random.Random(1))
+    game.world.open_season(game.content, now=0.0)
+    game.state.player.location = content.characters["luzhi"].talk_at
+    stamina = game.state.player.stamina
+    (line,) = game.choose("call:luzhi")
+    spoken, _, hint = line.rpartition("（")
+    assert spoken in content.characters["luzhi"].brush_off
+    assert hint == f"名望還差 {content.characters['luzhi'].audience_fame - game.state.player.stats.get('fame', 0)}）"
+    assert game.state.player.stamina == stamina and game.state.player.pending_companion is None
+
+
 def test_lu_bei_faction_all_gather_at_zhuo_county(content):
     zhuo_faction = {cid for cid, ch in content.characters.items() if ch.talk_at == "zhuo_county"}
     assert zhuo_faction == {"liubei", "guanyu", "zhangfei"}

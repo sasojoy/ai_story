@@ -172,6 +172,24 @@ def test_character_missing_combat_stat_rejected(tmp_path):
         load_content(root)
 
 
+def test_a_character_may_have_up_to_three_brush_off_lines(tmp_path):
+    root = copy_fixture(tmp_path)
+    edit_json(root / "characters.json", lambda d: d[0].update(brush_off=["一。", "二。", "三。"]))
+    assert load_content(root).characters["mate"].brush_off == ["一。", "二。", "三。"]
+
+
+def test_more_than_three_brush_off_lines_rejected(tmp_path):
+    root = copy_fixture(tmp_path)
+    edit_json(root / "characters.json", lambda d: d[0].update(brush_off=["一。", "二。", "三。", "四。"]))
+    with pytest.raises(ContentError, match="mate.*brush_off 最多三句"):
+        load_content(root)
+
+
+def test_brush_off_defaults_to_nothing_and_the_rank_discount_to_five(content):
+    assert content.characters["mate"].brush_off == []
+    assert content.config.audience_rank_discount == 5
+
+
 def test_map_and_scenario_places_loaded(content):
     assert [(r.id, r.trends) for r in content.map.regions] == [("north", ["kou"]), ("south", ["bao"])]
     s = content.scenario

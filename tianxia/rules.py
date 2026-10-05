@@ -18,12 +18,26 @@ def display_name(state: GameState) -> str:
     return "某位少俠" if state.player.anonymous else state.player.name
 
 
-def can_meet(state: GameState, content: Content, companion_id: str) -> bool:
-    """見得到這位大勢人物：名望到了他的求見門檻（CharacterDef.audience_fame），或是透過他的「結識」事件認識過
-    （企劃者 2026-10-02 決定）。引擎的求見與交友對話、伏筆的對話片段（名望不夠的人改從行動偷聽，foreshadow.hear_after_action）
-    都用這一個判斷，不要在別處再寫一份。"""
+def audience_bar(state: GameState, content: Content, companion_id: str) -> int:
+    """這位人物此刻對你的求見門檻（武學與成長設計 9.1）：名望門檻（CharacterDef.audience_fame），投靠了他的陣營的人
+    每**升一階**（晉升過幾次）抵 audience_rank_discount 點；投靠了但還沒晉升過的人一點都不抵。散人、敵對陣營，
+    以及不在大勢人物表上的人物只看名望。最低 0。
+    存檔裡的階：0＝投靠了還沒晉升過（ranks.rank_of 算第 1 階），第一次晉升後是 2，所以晉升過幾次＝max(階, 1) - 1。
+    這裡自己算、不呼叫 ranks.rank_of：ranks 會 import rules，反過來 import 就循環了。"""
+    bar = content.characters[companion_id].audience_fame
+    figure = next((f for f in content.figures.values() if f.character == companion_id), None)
     p = state.player
-    return f"結識:{companion_id}" in p.flags or p.stats.get("fame", 0) >= content.characters[companion_id].audience_fame
+    if figure is not None and p.faction is not None and p.faction == figure.faction:
+        bar -= (max(p.rank, 1) - 1) * content.config.audience_rank_discount
+    return max(0, bar)
+
+
+def can_meet(state: GameState, content: Content, companion_id: str) -> bool:
+    """見得到這位大勢人物：名望到了他的求見門檻（audience_bar：名望，同陣營的階級可以抵一段），或是透過他的「結識」
+    事件認識過（企劃者 2026-10-02 決定）。引擎的求見與交友對話、伏筆的對話片段（名望不夠的人改從行動偷聽，
+    foreshadow.hear_after_action）都用這一個判斷，不要在別處再寫一份。"""
+    p = state.player
+    return f"結識:{companion_id}" in p.flags or p.stats.get("fame", 0) >= audience_bar(state, content, companion_id)
 
 
 def current_day(state: GameState) -> int:
