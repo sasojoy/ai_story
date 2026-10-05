@@ -25,6 +25,7 @@ def has_events_here(content: Content, location: Location, action: str) -> bool:
 
 
 EventPool = Literal["rare", "common"]
+MIN_DECAY_FACTOR = 1e-9  # event_weight 的看過遞減乘數下限（約 decay 0.5 看過 30 次之後就不再往下）
 
 
 def is_rare(event: Event) -> bool:
@@ -61,15 +62,25 @@ def event_candidates(
     return candidates
 
 
+def event_weight(event: Event, state: GameState, content: Content) -> float:
+    """抽選權重：事件自己的權重 × 奇遇倍率（奇遇才乘）× event_repeat_decay ^ 這個玩家這一季看過幾次。
+    看過的事件下次更少出現（週末試玩項目 B）；decay 設 1.0 時乘的是 1.0，浮點數跟舊的純權重抽法逐位相同。
+    遞減有下限 MIN_DECAY_FACTOR：機器人整季亂逛可以把同一則事件看上千次，0.5 ^ 1100 在浮點數裡是 0.0，
+    只剩那一則候選時總權重為 0 會讓 random.choices 丟 ValueError。"""
+    config = content.config
+    weight = event.weight * (config.qiyu_weight_multiplier if event.qiyu else 1.0)
+    return weight * max(config.event_repeat_decay ** state.player.event_seen.get(event.id, 0), MIN_DECAY_FACTOR)
+
+
 def pick_event(
     state: GameState, content: Content, action: str, rng: random.Random, pool: EventPool | None = None,
 ) -> Event | None:
-    """照權重抽一則（奇遇的權重乘上 qiyu_weight_multiplier）；沒有合格的就是 None。pool 見 event_candidates。"""
+    """照權重抽一則（權重怎麼算見 event_weight：奇遇乘 qiyu_weight_multiplier、看過幾次就乘幾次 event_repeat_decay）；
+    沒有合格的就是 None。pool 見 event_candidates。"""
     candidates = event_candidates(state, content, action, pool)
     if not candidates:
         return None
-    multiplier = content.config.qiyu_weight_multiplier
-    weights = [event.weight * (multiplier if event.qiyu else 1.0) for event in candidates]
+    weights = [event_weight(event, state, content) for event in candidates]
     return rng.choices(candidates, weights=weights)[0]
 
 
