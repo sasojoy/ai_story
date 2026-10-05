@@ -378,3 +378,16 @@ def test_a_bot_never_calls_on_a_figure_but_can_always_back_out(content, game):
     assert [o.id for o in options] == ["call:mate", "call:scholar", "call:back"]
     assert [bot_policy.score(game, o, profile) for o in options] == [None, None, 0.0]
     assert bot_policy.pick(game, options, profile, random.Random(0)) == "call:back"
+
+
+def test_a_bot_never_knocks_on_the_single_audience_button_even_though_it_always_works(content, game):
+    """名望不夠的求見按得下去（會被打發，武學與成長設計 9.1）：假人不求見任何人物，單人地點直接列的那顆也不給分。"""
+    _install_factions(content)
+    ch = content.characters["mate"]
+    ch.deep_interaction, ch.audience_fame = True, 99
+    profile = _profile("guan")
+    options = [o for o in game.options(odds=False) if o.enabled]
+    assert "call:mate" in [o.id for o in options]
+    assert bot_policy.score(game, next(o for o in options if o.id == "call:mate"), profile) is None
+    for seed in range(30):
+        assert bot_policy.pick(game, options, profile, random.Random(seed)) != "call:mate"

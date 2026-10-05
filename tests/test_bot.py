@@ -148,8 +148,27 @@ def test_the_bot_backs_out_of_an_audience_list_it_cannot_use(content, game):
         content.characters[cid].audience_fame = 99
     game.choose("act:call")
     options = [o for o in game.options(odds=False) if o.enabled]
-    assert [o.id for o in options] == ["call:back"]
-    assert pick(game, options, random.Random(0)) == "call:back"
+    assert [o.id for o in options] == ["call:mate", "call:scholar", "call:back"]  # 名望不夠的求見也按得下去（會被打發）
+    assert pick(game, options, random.Random(0)) == "call:back"  # 但機器人不挑，只剩「返回」可選
+
+
+def test_the_bot_does_not_knock_on_a_door_that_will_not_open(content, game):
+    """名望不夠的求見永遠按得下去（會被打發）：機器人不挑，不然「沒事可做就推進時間」的訊號會失效（同 act:rest）。"""
+    ch = content.characters["mate"]
+    ch.deep_interaction, ch.audience_fame = True, 30
+    options = [o for o in game.options(odds=False) if o.enabled]
+    assert "call:mate" in [o.id for o in options]  # 按得下去
+    for seed in range(50):
+        assert pick(game, options, random.Random(seed)) != "call:mate"
+
+
+def test_the_bot_still_may_call_on_a_figure_it_can_meet(content, game):
+    """見得到的人物不排除（跟以前一樣隨機挑到才求見）。"""
+    ch = content.characters["mate"]
+    ch.deep_interaction, ch.audience_fame = True, 30
+    game.state.player.stats["fame"] = 30
+    options = [o for o in game.options(odds=False) if o.enabled]
+    assert any(pick(game, options, random.Random(seed)) == "call:mate" for seed in range(200))
 
 
 def test_the_bot_joins_a_muster_before_doing_anything_else(content, game):

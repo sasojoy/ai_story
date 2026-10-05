@@ -126,10 +126,12 @@ def test_issue_week_one_by_the_rules(on):
     game = _game(on)
     _at_week(game, 1)
     assert orders.issue(game.state, on, 1, random.Random(0)) == []
-    # 官軍：沒有戰線 ≥ 60（不守）；南陽截糧、護糧（優先 2）；攻城挑最吃緊的冀州（55）
-    assert _kinds(game, "guan") == [("escort", "nanyang"), ("intercept", "nanyang"), ("siege", "jizhou")]
-    # 黃巾：南陽 35、潁川 40 都 ≤ 40，守城兩道（南陽比較吃緊排前面），再加南陽截糧
-    assert _kinds(game, "huang") == [("defend", "nanyang"), ("defend", "yingru"), ("intercept", "nanyang")]
+    # 官軍：沒有戰線 ≥ 60（不吃緊），但第 1 週守城在潁川汝南照發（FB-054，開局週：opening_fronts）；其餘兩格：一格留給進攻
+    # （第 1 週是奇數週，偏好攻城：冀州 55 最吃緊）、一格給優先序 2 的南陽截糧（截糧排在護糧前面；FB-061 之前三格是守城、截糧、護糧）
+    assert _kinds(game, "guan") == [("defend", "yingru"), ("intercept", "nanyang"), ("siege", "jizhou")]
+    # 黃巾：南陽 35、潁川 40 都 ≤ 40，守城兩道（南陽比較吃緊排前面）；第三格留給攻城（只有南陽打得到官軍隊伍），
+    # 原本的南陽截糧讓給它（FB-061 之前是守城兩道加南陽截糧）
+    assert _kinds(game, "huang") == [("defend", "nanyang"), ("defend", "yingru"), ("siege", "nanyang")]
     # 豪強：一道打擊，三條戰線都在亂局，挑聲威最低的張曼成（50）
     assert _kinds(game, "haoqiang") == [("strike", "zhangmancheng")]
     assert all(o.quota == 4 and o.week == 1 for o in game.state.world.orders)
@@ -157,7 +159,11 @@ def test_issue_fills_slots(on):
     by_id = {(o.faction, o.template): o for o in game.state.world.orders}
     assert by_id[("guan", "intercept")].location == "nanyang_wilds"
     assert by_id[("guan", "intercept")].text == "探得黃巾的糧道經過南陽郊野，本週截斷它。"
-    escort = by_id[("guan", "escort")]
+    # 官軍第 1 週（奇數週）輪到截糧、護糧排不進去（FB-061）：護糧看偶數週，南陽最吃緊的那一週（每條戰線兩週內都有大事）
+    with mock.patch.object(orders, "_event_within", return_value=object()):
+        _fronts(game, 40, 55, 50)
+        escort = next(o for o in _week_orders(game, "guan", 2) if o.template == "escort")
+    assert escort.front == "nanyang"
     assert (escort.start, escort.end, escort.location) == ("xinye", "wan_city", "xinye")
     assert escort.text == "一批軍糧要從新野送到宛城，各營派人沿途護送。"
     assert by_id[("haoqiang", "strike")].text == "家主吩咐：張曼成擋了咱們的路。"
@@ -168,11 +174,11 @@ def test_issue_with_no_commander_uses_fallback(on):
     """RF3：那條戰線己方沒有主將時，{主將} 寫泛稱；黃巾的號令跟著張角、張寶退場換人。"""
     game = _game(on)
     _fronts(game, 50, 50, 50)
-    _at_week(game, 1)  # 第 1 週：南陽截糧、護糧之外還有一道攻城（第 5 週會被三條戰線的截糧護糧佔滿）
+    _at_week(game, 1)  # 第 1 週：南陽截糧、護糧之外還有一道守城（開局週，FB-054；第 5 週會被三條戰線的截糧護糧佔滿）
     with mock.patch("tianxia.figures.commander", return_value=None):
         orders.issue(game.state, on, 1, random.Random(0))
-    sieges = [o for o in game.state.world.orders if o.template == "siege" and o.faction == "guan"]
-    assert sieges and all(o.text.startswith("營中傳令：") for o in sieges)
+    stated = [o for o in game.state.world.orders if o.template in ("siege", "defend") and o.faction == "guan"]
+    assert stated and all(o.text.startswith("營中傳令：") for o in stated)  # 兩種官軍軍令的文字都以 {主將} 開頭
     template = next(t for t in on.orders.templates if t.kind == "siege" and t.side == "huang")
     order = Order(id="x", template="siege", faction="huang", week=5, front="yingru", quota=4, text="")
     assert orders.fill(game.state, on, order, template.text).startswith("大賢良師有令：")
@@ -679,6 +685,72 @@ def test_new_player_can_join_and_finish_an_order_in_week_one(on):
     assert game.state.player.tutorial_step == 8
 
 
+def test_a_new_guan_recruit_finishes_a_week_one_order_without_leaving_yingru(on):
+    """FB-054：官軍第 1 週的軍令不能全在南陽、冀州（開局戰況潁川 40，官軍不吃緊，守城原本發不出來）。
+    官軍的守城寫了開局週（opening_fronts），第 1 週在潁川汝南也發；新角色照引導在長社投靠、不離開潁川，
+    巡哨一次就替這道記一次，跟黃巾在營寨傳道一次同一個難度。"""
+    game = _game(on, at="yingchuan")
+    game.state.player.tutorial_step = 6
+    game.advance(200)  # 第 1 週發令
+    game.state.player.stamina = 150
+    game.travel("changshe", "dash")
+    game.choose("faction:guan")
+    game.choose("faction:confirm")
+    assert orders.week_of(game.state, on) == 1
+    defend = next(o for o in orders.current(game.state, on, "guan") if o.template == "defend")
+    assert orders.title(on, defend) == "守城・潁川汝南"
+    assert defend.id in [card["id"] for card in game.orders_view()]  # 軍令卡上看得到
+    here = game.state.player.location
+    assert rules.front_of(on, here) == defend.front  # 人在長社，已經站在那條戰線上，不必動
+    msgs = game.choose("act:duty")
+    assert game.state.player.location == here
+    assert defend.progress.get("甲") == 1
+    assert any("守城・潁川汝南" in m for m in msgs)
+    assert game.state.player.tutorial_step == 8  # 引導的「做完一次軍令」也跟著過
+
+
+@pytest.mark.parametrize("yingru", [40, 50])
+@pytest.mark.parametrize("faction", ["guan", "huang"])
+def test_both_sides_get_a_yingru_defend_in_week_one(on, faction, yingru):
+    """FB-054 的對稱：兩邊第 1 週都有一道不必出遠門的守城・潁川汝南，不看戰況。40 是開局的數字（黃巾吃緊 60，剛好踩在邊界）；
+    50 時黃巾的 losing_by 條件不成立，靠 opening_fronts 照發，不靠邊界。"""
+    game = _game(on, faction=faction)
+    _fronts(game, yingru, 35, 55)
+    _at_week(game, 1)
+    orders.issue(game.state, on, 1, random.Random(0))
+    assert ("defend", "yingru") in _kinds(game, faction)
+
+
+def test_the_opening_defend_is_only_for_week_one(on):
+    """開局週只放寬第 1 週：之後官軍照舊要戰況吃緊（≥ 60）或敵方上週攻下才守城。"""
+    game = _game(on)
+    _fronts(game, 50, 35, 55)  # 黃巾在 50 也不吃緊（要 ≤ 40）：第 2 週兩邊都不守潁川汝南
+    _at_week(game, 2)
+    orders.issue(game.state, on, 2, random.Random(0))
+    assert ("defend", "yingru") not in _kinds(game, "guan")
+    assert ("defend", "yingru") not in _kinds(game, "huang")
+
+
+def test_switch_off_no_week_one_defend_for_guan(real):
+    """開關關著：官軍第 1 週也沒有軍令、沒有「巡哨」（開局週只在第一季規則開著時有效，關著跟 beta 一樣）。"""
+    game = _game(real, faction="guan", at="changshe")
+    game.advance(200)
+    assert game.state.world.orders == []
+    assert orders.current(game.state, real, "guan") == []
+    assert "act:duty" not in [o.id for o in game.options()]
+
+
+def test_opening_fronts_must_be_real_fronts(real):
+    """內容檢查：開局週的戰線要是真的戰線，寫錯在載入當下報錯。"""
+    from tianxia.content import ContentError, validate
+
+    template = next(t for t in real.orders.templates if t.kind == "defend" and t.side == "guan")
+    assert template.when.opening_fronts == ["yingru"]
+    template.when.opening_fronts = ["nowhere"]
+    with pytest.raises(ContentError, match="nowhere"):
+        validate(real)
+
+
 # ── 審查修正 ───────────────────────────────────────────────
 
 
@@ -752,3 +824,146 @@ def test_cart_button_names_the_materials_it_uses(on):
     assert label == f"接下糧車（送到宛城・交出糧草 4 份：{low} ×3、{top} ×1）"
     game.choose("act:convoy")
     assert game.state.player.materials.get("man_1", 0) == 0 and game.state.player.materials.get("man_3", 0) == 0
+
+
+# ── FB-061：每週留一格給進攻的軍令（攻城、打擊） ─────────────────────────────
+
+OFFENSE = ("siege", "strike")
+
+
+@pytest.fixture
+def crowded(on):
+    """三條戰線都在 50、而且每條兩週內都有大事：截糧、護糧到處發得出來，沒有留格的話三格全被優先序 1～2 佔滿。"""
+    with mock.patch.object(orders, "_event_within", return_value=object()):
+        game = _game(on)
+        _fronts(game, 50, 50, 50)
+        yield game
+
+
+def _week_orders(game, faction, week):
+    """這一週發令之後，這個陣營拿到的軍令（照發出的順序）。"""
+    game.state.world.orders = []
+    _at_week(game, week)
+    orders.issue(game.state, game.content, week, random.Random(0))
+    return [o for o in game.state.world.orders if o.faction == faction]
+
+
+@pytest.mark.parametrize("faction", ["guan", "huang"])
+@pytest.mark.parametrize("week", [3, 5, 7, 9])
+def test_odd_weeks_reserve_one_slot_for_a_siege(crowded, faction, week):
+    got = _week_orders(crowded, faction, week)
+    kinds = [o.template for o in got]
+    assert len(got) == 3 and kinds.count("siege") == 1 and "strike" not in kinds
+
+
+@pytest.mark.parametrize("faction", ["guan", "huang"])
+@pytest.mark.parametrize("week", [2, 4, 6, 8])
+def test_even_weeks_reserve_one_slot_for_a_strike(crowded, faction, week):
+    got = _week_orders(crowded, faction, week)
+    kinds = [o.template for o in got]
+    assert len(got) == 3 and kinds.count("strike") == 1 and "siege" not in kinds
+
+
+def test_the_other_two_slots_keep_their_priority_order(crowded):
+    """留一格之後，其餘兩格跟沒留一樣：就是把進攻那一道拿掉之後，優先序最前面的兩道。"""
+    for week in (3, 4):
+        for faction in ("guan", "huang"):
+            with_offense = _week_orders(crowded, faction, week)
+            rest = [(o.template, o.front, o.location, o.start) for o in with_offense if o.template not in OFFENSE]
+            with mock.patch.object(orders, "strike_target", return_value=None), \
+                    mock.patch.object(orders, "siege_places", return_value=[]):
+                plain = [(o.template, o.front, o.location, o.start) for o in _week_orders(crowded, faction, week)]
+            assert len(rest) == 2 and rest == plain[:2]
+
+
+@pytest.mark.parametrize("faction", ["guan", "huang"])
+def test_a_missing_strike_target_falls_back_to_a_siege(crowded, faction):
+    """偶數週偏好打擊；沒有打擊的對象就改發攻城。"""
+    with mock.patch.object(orders, "strike_target", return_value=None):
+        kinds = [o.template for o in _week_orders(crowded, faction, 4)]
+    assert len(kinds) == 3 and kinds.count("siege") == 1 and "strike" not in kinds
+
+
+@pytest.mark.parametrize("faction", ["guan", "huang"])
+def test_a_missing_siege_target_falls_back_to_a_strike(crowded, faction):
+    """奇數週偏好攻城；沒有打得到敵方隊伍的戰線就改發打擊。"""
+    with mock.patch.object(orders, "siege_places", return_value=[]):
+        kinds = [o.template for o in _week_orders(crowded, faction, 3)]
+    assert len(kinds) == 3 and kinds.count("strike") == 1 and "siege" not in kinds
+
+
+@pytest.mark.parametrize("week", [3, 4])
+@pytest.mark.parametrize("faction", ["guan", "huang"])
+def test_with_no_offense_at_all_the_slot_goes_back_to_priority(crowded, faction, week):
+    """兩種進攻都沒有對象：那一格照原本的優先序給下一道，三格還是滿的。"""
+    with mock.patch.object(orders, "strike_target", return_value=None), \
+            mock.patch.object(orders, "siege_places", return_value=[]):
+        got = _week_orders(crowded, faction, week)
+    assert len(got) == 3 and not any(o.template in OFFENSE for o in got)
+    assert {o.template for o in got} <= {"defend", "intercept", "escort"}
+
+
+@pytest.fixture
+def pressed(on):
+    """兩邊都有一道守城（官軍冀州 60、黃巾南陽 40 吃緊），而且每條戰線兩週內都有大事：守城之外只剩一格優先序 2，
+    截糧、護糧都發得出來（留一格給進攻之後，這就是 FB-061 審查找到的情形）。"""
+    with mock.patch.object(orders, "_event_within", return_value=object()):
+        game = _game(on)
+        _fronts(game, 45, 40, 60)
+        yield game
+
+
+@pytest.mark.parametrize("faction", ["guan", "huang"])
+@pytest.mark.parametrize("week, supply", [(3, "intercept"), (5, "intercept"), (4, "escort"), (6, "escort")])
+def test_the_supply_slot_alternates_between_intercept_and_escort(pressed, faction, week, supply):
+    """守城、進攻之外只剩一格優先序 2 時，截糧與護糧輪流：奇數週截糧、偶數週護糧（不然同優先序的平手永遠是截糧贏，護糧一道都發不出）。"""
+    got = _week_orders(pressed, faction, week)
+    kinds = [o.template for o in got]
+    assert kinds.count("defend") >= 1 and sum(k in OFFENSE for k in kinds) == 1
+    supplies = [k for k in kinds if k in ("intercept", "escort")]
+    assert supplies == [supply]
+
+
+def test_the_supply_alternation_only_breaks_ties_within_one_priority(pressed):
+    """輪流只動優先序 2 裡面的次序：守城（優先序 1）照舊排在前面，進攻那一道照舊排在後面。"""
+    for week in (3, 4):
+        kinds = [o.template for o in _week_orders(pressed, "guan", week)]
+        assert kinds[0] == "defend" and kinds[-1] in OFFENSE
+
+
+def test_week_one_composition_with_the_offense(on):
+    """第 1 週（奇數，偏好攻城）：開局的守城・潁川汝南照發。官軍 ＝ 守城・潁川汝南、一道截糧、攻城・冀州（冀州 55 最吃緊的攻城戰線）；
+    黃巾 ＝ 兩道守城（南陽 65、潁川汝南 60 都吃緊）、攻城・南陽（潁川汝南沒有官軍隊伍，攻不了）。"""
+    game = _game(on)
+    guan = _week_orders(game, "guan", 1)
+    assert [(o.template, o.front) for o in guan] == [("defend", "yingru"), ("intercept", "nanyang"), ("siege", "jizhou")]
+    huang = _week_orders(game, "huang", 1)
+    assert [(o.template, o.front) for o in huang] == [("defend", "nanyang"), ("defend", "yingru"), ("siege", "nanyang")]
+    assert sum(o.template in ("intercept", "escort") for o in guan) == 1
+
+
+def test_haoqiang_keeps_its_single_strike_every_week(on):
+    """豪強只有一種模板（打擊），每週最多一道：留格不能讓它多發、少發或重複發，奇偶週都一樣。"""
+    game = _game(on)
+    for week in range(1, 9):
+        got = _week_orders(game, "haoqiang", week)
+        assert [o.template for o in got] == ["strike"], week
+        assert got[0].figure == orders.strike_target(game.state, on, next(
+            t for t in on.orders.templates if t.side == "haoqiang"))
+
+
+def test_a_one_slot_week_keeps_plain_priority(crowded):
+    """每週只有一格時沒有「其中一格」可留：照優先序，不讓進攻的軍令把守城、截糧、護糧全擠掉。"""
+    crowded.content.config.orders_per_week = 1
+    for week in (3, 4):
+        kinds = [o.template for o in _week_orders(crowded, "guan", week)]
+        assert len(kinds) == 1 and kinds[0] not in OFFENSE
+
+
+def test_switch_off_no_orders_in_any_week(real):
+    """開關關著：軍令只在第一季存在，每一週發令都什麼都不做（包括偏好的進攻軍令）。"""
+    game = _game(real, faction="guan")
+    for week in range(1, 5):
+        _at_week(game, week)
+        assert orders.issue(game.state, real, week, random.Random(0)) == []
+        assert game.state.world.orders == []

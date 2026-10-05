@@ -36,6 +36,7 @@
   ];
   // 照「走法」切換的選項：「前往」與路上的「折返」（路上設計 3.2）。切換鈕緊貼在第一個這種選項上面（A4／W6）
   const followsMode = (id) => id.startsWith("move:") || id.startsWith("road:back");
+  const ROAD_TASKS = /^road:(think|ask|survey|gather)$/; // 路上的四樣小事（engine.ROAD_TASKS），排成 2×2（FB-055）
   // 路上的江湖頁多三個捷徑（路上設計 3.3）：是頁面切換，不是引擎的行動
   const ROAD_LINKS = [
     { tab: "map", name: "打開輿圖改去別處" },
@@ -56,6 +57,9 @@
     nowOpen: null, // 江湖頁「剛剛」展開的那一則（記內容本身）；換成新的一則就收回（A4）
     boardOpen: null, // 江湖頁公告卡展開著的那一週（週次）；收起或換週就不再對得上（FB-039）
     ordersShut: null, // 江湖頁「本週軍令」收起來的那一週；換週就重新展開（計畫 T6）
+    sceneOpen: false, // 在路上時場景那段說明展開著嗎（預設只露兩行，FB-055）；下了路就清掉
+    hintOpen: false, // 在路上時狀態列的 💡 提示展開著嗎（預設只露一行，FB-060）；下了路就清掉
+    guideRoad: null, // 在路上時說書人的框展開著的那一句（內容本身）；路上預設收成一行，下了路就清掉（FB-055）
     busy: false,
     menxia: null,
     message: "",
@@ -89,12 +93,13 @@
   const pct = (a, b) => (b > 0 ? Math.max(0, Math.min(100, (a / b) * 100)) : 0);
   // 本季天數：整數不帶小數點（14.0 → 14），不是整數照原樣（14.5）
   const dayCount = (n) => String(Number(n));
-  // 第一季的季曆（計畫 T2）：狀態列寫「第 3 週・週二 21:40」，旁邊是下一件大事的倒數（現實時間）
+  // 第一季的季曆（計畫 T2）：狀態列寫「第 3 週・週二 21:40」，旁邊是下一件大事的倒數（現實時間）。
+  // 兩種時間的寫法固定（FB-062）：季曆時刻一律「第N週・週X HH:MM」，倒數一律標「現實」（季曆跑得比現實快，不標玩家會算不出來）
   const WEEKDAYS = "一二三四五六日";
   const countdown = (sec) => {
     const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60);
     if (sec < 60) return "就在眼前";
-    return h > 0 ? `約 ${h} 小時 ${m} 分後` : `約 ${m} 分後`;
+    return h > 0 ? `現實約 ${h} 小時 ${m} 分後` : `現實約 ${m} 分後`;
   };
   // 江湖頁畫的東西有沒有變：狀態列（時鐘、季曆每次輪詢都在走）另外重畫，不讓「剛剛」一直重播浮現
   const pageKey = (m) => JSON.stringify({ ...m, status: null });
@@ -208,6 +213,14 @@
   function topHtml() {
     const s = S.main.status;
     const team = s.team.map((m) => `🧍 ${esc(m.name)} 第${m.level}級 氣血 ${m.hp}/${m.hp_max}`).join("　");
+    // 名號、所在底下的小字行（下一件、閉關、路程）：排在整列底下、整個寬度都能用，不跟右上角的設定鈕擠一邊。
+    // 兩種時間的寫法固定（FB-062）：下一件是「季曆時刻（現實倒數）」，路程只寫現實倒數。這兩行比原本長，擠在一邊會折成四行，
+    // 在路上時把路上最底下的「走法」擠到分頁列底下（FB-060）
+    const subs = [
+      s.calendar && s.next_event ? `下一件：${esc(s.next_event.title)}${s.next_event.at ? `・${esc(s.next_event.at)}` : ""}（${countdown(s.next_event.in_seconds)}）` : "",
+      s.busy_hours != null ? `🧘 閉關中，現實約 ${s.busy_hours} 小時後出關` : "",
+      s.journey != null ? `🐎 ${esc(s.journey)}` : "",
+    ].filter(Boolean).map((t) => `<div class="where sub">${t}</div>`).join("");
     return `
       <div class="top-row">
         <div class="who" data-act="toggle-more" role="button" tabindex="0" aria-expanded="${S.showMore}">
@@ -215,12 +228,10 @@
           <div class="where">📍 ${esc(s.location)}　${s.calendar
             ? `第 ${s.calendar.week} 週・週${WEEKDAYS[s.calendar.weekday]} ${esc(s.calendar.clock)}`
             : `第 ${s.day} 天 ${esc(s.clock)}<small>／共 ${dayCount(s.season_days)} 天</small>`}${s.resting != null ? "　🧘 打坐中" : ""}</div>
-          ${s.calendar && s.next_event ? `<div class="where sub">下一件：${esc(s.next_event.title)}，${countdown(s.next_event.in_seconds)}</div>` : ""}
-          ${s.busy_hours != null ? `<div class="where sub">🧘 閉關中，約 ${s.busy_hours} 小時後出關</div>` : ""}
-          ${s.journey != null ? `<div class="where sub">🐎 ${esc(s.journey)}</div>` : ""}
         </div>
         <button class="icon-btn" data-act="sheet" aria-label="設定">⚙</button>
       </div>
+      ${subs}
       <div class="vitals">
         <div class="bar stam" title="體力"><i style="width:${pct(s.stamina, s.stamina_max)}%"></i><span>體力 ${s.stamina}/${s.stamina_max}</span></div>
         <div class="bar hp" title="氣血"><i style="width:${pct(s.hp, s.hp_max)}%"></i>${s.injury >= 1
@@ -236,7 +247,16 @@
         ${team ? `<br>${team}` : ""}
         ${s.stances ? `<br>態勢　${STANCE_NAMES.map(([id, name]) => `${name} ${s.stances[id]}`).join("・")}` : ""}
       </div>` : ""}
-      ${s.hint ? `<div class="more-stats"><span class="hint">${esc(s.hint)}</span></div>` : ""}`;
+      ${hintHtml(s)}`;
+  }
+
+  // 💡 心得提示：兩行長，在路上又有路程那一行時，會把路上最底下的「走法」擠到分頁列底下（FB-060）。
+  // 所以在路上收成一行（放不下的加「…」），點了展開看全文；下了路就清掉、照舊整段顯示
+  function hintHtml(s) {
+    if (s.journey == null) S.hintOpen = false;
+    if (!s.hint) return "";
+    if (s.journey == null) return `<div class="more-stats"><span class="hint">${esc(s.hint)}</span></div>`;
+    return `<div class="more-stats"><button class="hint road-hint${S.hintOpen ? "" : " clamp"}" data-act="hint-more" aria-expanded="${S.hintOpen}">${esc(s.hint)}</button></div>`;
   }
 
   function renderPage() {
@@ -365,14 +385,20 @@
   function actionBar(m) {
     const byId = Object.fromEntries(m.options.map((o) => [o.id, o]));
     const used = new Set();
+    // 這裡只有一位大勢人物、沒有交友事件、他又見不到（名望不夠、閉門不見、今天談滿）、福緣也沒到時，引擎不給交友
+    // （只會花體力換同一句打發，Game._brush_off），選單上只剩直接列的「求見某某」（設計 9.1）：社交那一格改放它。
+    // 交友或求見名單（兩位以上）在選單上時照舊，這顆收在摺疊裡
+    const loneCall = m.options.find((o) => o.id.startsWith("call:") && o.id !== "call:back");
     const cells = ACT_CELLS.map((d) => {
-      const o = d.ids.map((id) => byId[id]).find(Boolean);
+      const o = d.ids.map((id) => byId[id]).find(Boolean) || (d.key === "social" ? loneCall : undefined);
       if (!o) return inkCell(d.key, d.name, d.none, d.icon, "disabled", " off");
       used.add(o.id);
-      const [name, detail] = optParts(o);
+      const lone = o.id.startsWith("call:");
+      const [label, detail] = optParts(o);
+      const name = lone ? "求見" : label;  // 格子窄：名字寫「求見」，人物的名字放在下面一行
       // 按不下去的原因：標籤括號裡寫的是體力就是「體力不夠」，寫別的就照寫；整句太長、格子裝不下（約 60 px、不換行）時只留
       // 最後一小句（例：挑戰本人打贏之後「剛吃了敗仗，閉門不見」只寫「閉門不見」，T4）
-      const sub = o.enabled ? (SHORT_SUB[o.id] || detail.replace(/^體力 (\d+).*$/, "體力 $1"))
+      const sub = o.enabled ? (lone ? label.replace(/^求見/, "") : (SHORT_SUB[o.id] || detail.replace(/^體力 (\d+).*$/, "體力 $1")))
         : (detail && !detail.startsWith("體力") ? detail.split("，").pop() : "體力不夠");
       // 體力之後還有說明（遊歷的「體力 10・2 路對手・必敗」）：挑出勝算那一段另起一行（FB-044；對手數放不下就不寫）。
       // 不一定是最後一段：有自己人也有敵人的地方後面還接「・或與自己人操練」（畫面批次審查 C1）
@@ -459,13 +485,15 @@
 
   // 說書人的對話框（引導重做設計 8.1、6.2）：行動列（或事件的選項）上方，框上寫說話的人（之後換成師父、引薦人）。
   // 做完一步先列「✔ 完成」與獎勵，再接下一步的話。可以收起成一行；記的是收起的那一句，換了下一句就自己展開。
-  // 結語有「知道了」，按了就不再出現
+  // 結語有「知道了」，按了就不再出現。在路上預設收成一行（FB-055）：框、走法與路上的五個選項擠不進第一屏，折返被分頁列蓋住；
+  // 路上展開的記在 S.guideRoad（記的是那一句，下了路就清掉），輪詢重畫不會把它收回去
   const GUIDE_KEY = "tx-guide-shut";
   function guideShut() { try { return localStorage.getItem(GUIDE_KEY); } catch (e) { return null; } }
   function setGuideShut(text) { try { if (text) localStorage.setItem(GUIDE_KEY, text); else localStorage.removeItem(GUIDE_KEY); } catch (e) { /* 存不了就只在這一頁有效 */ } }
-  function guideHtml(g) {
+  function guideHtml(g, onRoad) {
+    if (!onRoad) S.guideRoad = null; // 沒有框的時候也要清（FB-055）
     if (!g) return "";
-    if (!g.end && guideShut() === g.text) {
+    if (!g.end && (guideShut() === g.text || (onRoad && S.guideRoad !== g.text))) {
       return `<button class="guide-line" data-act="guide-open" aria-label="展開${esc(g.speaker)}的話"><b>${esc(g.speaker)}</b>：${esc(g.text)}</button>`;
     }
     const done = g.done.length ? `<div class="guide-done">${g.done.map((d) => d.startsWith("✔")
@@ -487,7 +515,7 @@
     const now = m.card
       ? `<div class="card battle-card">${m.card}${m.now || ""}
            ${m.card_id != null ? `<button class="linkish" data-act="report" data-id="${m.card_id}">看完整戰報 ›</button>` : ""}</div>`
-      : m.now ? `<div class="now ${expanded ? "open" : "clamp"}"><div class="now-text">${text}<button class="linkish now-more" data-act="now-more" aria-expanded="${expanded}">${nowMore(expanded)}</button></div>${chips}</div>` : "";
+      : m.now ? `<div class="now ${expanded ? "open" : "clamp"}${m.on_road ? " road" : ""}"><div class="now-text">${text}<button class="linkish now-more" data-act="now-more" aria-expanded="${expanded}">${nowMore(expanded)}</button></div>${chips}</div>` : "";
     const free = m.free_text != null
       ? `<form class="free" id="free-form"><input class="input" name="text" maxlength="20" placeholder="${esc(m.free_text || "輸入你想做的事（20字內）")}"><button class="btn primary small" type="submit">送出</button></form>`
       : "";
@@ -505,13 +533,45 @@
           <button class="${S.moveMode === x.id ? "on" : ""}" data-act="move-mode" data-mode="${x.id}" aria-pressed="${S.moveMode === x.id}">${x.name}</button>`).join("")}
         </div>`
       : "";
+    // 在路上，走法排在整排選項底下（FB-055）：路上的五個選項要全在第一屏，走法那一列（54 px）排在前面會把最後一個擠到分頁列底下
+    const modesLast = m.on_road;
+    // 路上的四樣小事排成 2×2（FB-055）：四樣小事共兩列，狀態列多一行提示，最後一顆也不會掉到分頁列底下
+    // （折返、喊停見下面 FB-060）。標籤「名（補充）」拆成兩行：名字一行、補充小字一行
+    const isTask = (o) => m.on_road && ROAD_TASKS.test(o.id);
+    const firstTask = opts.findIndex(isTask);
+    const lastTask = opts.length - 1 - [...opts].reverse().findIndex(isTask);
+    const taskButton = (o, name, note) => {
+      if (name === undefined) [, name, note] = o.label.match(/^(.*?)（(.*)）$/) || [null, o.label, ""];
+      return `<button class="btn task" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}><span class="t-name">${esc(name)}</span>${note ? `<span class="t-note">${esc(note)}</span>` : ""}</button>`;
+    };
+    // 多段路的「折返」與「喊停」併成一列兩格（FB-060）：各佔一整列的話，再加上狀態列的心得提示，最底下的「走法」會落到分頁列底下。
+    // 只有兩個都在時才併；標籤照伺服器給的字拆成「名字／補充小字」：「折返 潁川郡（陽翟）（趕路約 2 分鐘・體力 4）」
+    // →「↩ 折返 潁川郡（陽翟）」「趕路約 2 分鐘・體力 4」，「喊停（到洛陽官道就停下）」→「喊停」「到洛陽官道就停下」
+    // （地名放名字那一行：補充放地名的話，趕路、疾行的字多、會折成兩行，整列又長高 16 px）
+    const isWay = (o) => m.on_road && (o.id.startsWith("road:back") || o.id === "act:halt");
+    const paired = opts.filter(isWay).length === 2;
+    const firstWay = opts.findIndex(isWay);
+    const lastWay = opts.length - 1 - [...opts].reverse().findIndex(isWay);
+    const wayButton = (o) => {
+      if (o.id === "act:halt") { // 「到潁川郡（陽翟）就停下」在窄的那一格折成兩行：換成同一個意思的短說法
+        const [, name, note] = o.label.match(/^(.*?)（(.*)）$/) || [null, o.label, ""];
+        return taskButton(o, name, note.replace(/^到(.*)就停下$/, "停在$1"));
+      }
+      const [, dest, note] = o.label.match(/^折返\s*(.*?)（([^（）]*)）$/) || [null, o.label.replace(/^折返\s*/, ""), ""];
+      return taskButton(o, `↩ 折返 ${dest}`.trim(), note);
+    };
     const menu = idleMenu(m) ? actionBar(m) : `<div class="options">${opts.map((o, i) => o.id === FREE_TEXT_OPTION && S.answering && o.enabled ? `
-        <form class="free answer" id="answer-form"><input class="input" name="text" maxlength="20" placeholder="${esc(o.label)}（20字內）" aria-label="${esc(o.label)}"><button class="btn primary small" type="submit">說出口</button></form>` : `${i === firstMove ? modes : ""}
+        <form class="free answer" id="answer-form"><input class="input" name="text" maxlength="20" placeholder="${esc(o.label)}（20字內）" aria-label="${esc(o.label)}"><button class="btn primary small" type="submit">說出口</button></form>` : isTask(o) ? `${i === firstTask ? '<div class="road-tasks">' : ""}${taskButton(o)}${i === lastTask ? "</div>" : ""}` : paired && isWay(o) ? `${i === firstWay ? '<div class="road-tasks road-ways">' : ""}${wayButton(o)}${i === lastWay ? "</div>" : ""}` : `${i === firstMove && !modesLast ? modes : ""}
         <button class="btn ${followsMode(o.id) ? "go" : ""}" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}>
           <span class="k">${o.id.startsWith("move:") ? "→" : o.id.startsWith("road:back") ? "↩" : i + 1}</span><span>${esc(o.label)}</span>
-        </button>`).join("")}
+        </button>`).join("")}${modesLast ? modes : ""}
       </div>`;
-    const scene = `<section class="card scene">${m.scene}</section>`;
+    // 在路上，那段固定的說明只露兩行、點了看全文（FB-055）：剛按完路上小事時「剛剛」的結果卡會長高，狀態列又有提示的話，
+    // 最後一排小事會掉到分頁列底下；說明的內容路上的選項與捷徑本來就寫著。展開記在 S.sceneOpen，下了路就清掉
+    if (!m.on_road) S.sceneOpen = false;
+    const scene = m.on_road
+      ? `<section class="card scene road${S.sceneOpen ? "" : " clamp"}" data-act="scene-more" role="button" tabindex="0" aria-expanded="${!!S.sceneOpen}">${m.scene}</section>`
+      : `<section class="card scene">${m.scene}</section>`;
     const tail = `<div class="mini" data-act="tab" data-tab="map" role="button" aria-label="展開輿圖">${m.minimap}</div>
       <button class="linkish" data-act="news" data-news="journal">看江湖紀錄 ›</button>`;
     // 第一季把 beta 的主線關掉、其他也都沒有東西時，quest 是空的：這一塊不畫，由本週大事卡與倒數撐著（計畫 T8）
@@ -536,7 +596,10 @@
     // 劇情文字在上、行動在下（企劃者 2026-10-04）。行動列只有一排，375×812 上「剛剛」、場景與整排行動都在第一屏。
     // 路上的三個捷徑（links）緊接在場景（「也可以打開輿圖改去別處，或去修練、煉製」那一段）底下、選項上面：
     // 排在路上的五六顆選項底下時落在第一屏外，要捲才看得到（FB-048）。說書人的話緊貼在行動上方（引導重做設計 8.1）
-    const guide = guideHtml(m.guide);
+    const guide = guideHtml(m.guide, m.on_road);
+    // 在路上（FB-055）：路上的五個選項要全在第一屏（375×812），所以公告、主線與說書人的框都排在選項底下——它們都是收著的一行，
+    // 不是這一刻要按的；捷徑還是緊接在場景底下（FB-048）
+    if (m.on_road) return `${resultCard}${now}${scene}${links}${free}${menu}${guide}${board}${quest}${orderCard}${fronts}${tail}`;
     return `${resultCard}${board}${quest}${now}${scene}${links}${guide}${free}${menu}${orderCard}${fronts}${tail}`;
   }
 
@@ -897,7 +960,7 @@
             <h4>管理者工具（只有你看得到）</h4>
             <p class="muted">每一項按了都會先問一次才送出；做完會關掉設定、回到江湖頁。</p>
             <div class="row seasons"><button class="btn" data-act="admin" data-op="open_season">開季</button><button class="btn warn" data-act="admin" data-op="end_season">⚠ 立刻收季</button><button class="btn warn" data-act="admin" data-op="next_season">⚠ 開啟下一季</button></div>
-            <p class="muted">時間快轉（全服一起快轉，只在測試時用）</p>
+            <p class="muted">時間快轉（全服一起快轉，只在測試時用；小時是現實小時，季曆會跳得更多）</p>
             <div class="row">${[1, 8, 24].map((h) => `<button class="btn small" data-act="admin" data-op="fast_forward" data-hours="${h}">+${h} 小時</button>`).join("")}</div>
             ${a ? `
               <p class="muted">觸發（人少、大勢推不到門檻時用；效果跟自然發生一樣）</p>
@@ -925,11 +988,11 @@
   }
   function timetableHtml(a) {
     return `
-      <p class="muted">時刻表（三場大戲與季末可以排時間；時間到了自動開集結，季末就是收季）</p>
+      <p class="muted">時刻表（三場大戲與季末可以排時間，時間欄是現實時間；時間到了自動開集結，季末就是收季）</p>
       <div class="tt-list">${a.timetable.map((r) => `
         <div class="tt-row">
           <div class="tt-head"><span class="tt-name">${esc(r.label)}</span><span class="tt-state">${esc(r.result ? `${r.state_text}・${r.result}` : r.state_text)}</span></div>
-          ${r.schedulable ? `<div class="row"><input class="input" type="datetime-local" id="tt-at-${esc(r.id)}" value="${localInput(r.at_real)}" aria-label="${esc(r.label)}的時間"><button class="btn small" data-act="admin" data-op="schedule" data-id="${esc(r.id)}">排定</button></div>` : ""}
+          ${r.schedulable ? `<div class="tt-real">現實時間（這台裝置的當地時間）</div><div class="row"><input class="input" type="datetime-local" id="tt-at-${esc(r.id)}" value="${localInput(r.at_real)}" aria-label="${esc(r.label)}的時間"><button class="btn small" data-act="admin" data-op="schedule" data-id="${esc(r.id)}">排定</button></div>` : ""}
         </div>`).join("")}</div>
       <div class="row"><button class="btn" data-act="admin" data-op="jump_next">跳到下一件大事</button></div>`;
   }
@@ -966,12 +1029,12 @@
       // 照 SqliteWorldStore.next_season 實際做的事寫（只在休季有效）
       next_season: [`開啟下一季（休季才有效）：新的一季立刻開始，同伴全部重獲自由、自創武學名字釋出、煉製配方清空、天機 +1，沒打完的決戰清掉。${
         S.admin && S.admin.next_has_timetable ? "記得排三場大戲與季末的時間（預設在第 6、9、11 週中、第 12 週末）。" : ""}確定？`, "確定開啟下一季"],  // FB-050
-      fast_forward: [`時間快轉 ${body.hours} 小時（全服一起），確定？`, `快轉 ${body.hours} 小時`],
+      fast_forward: [`時間快轉現實 ${body.hours} 小時的份（全服一起，季曆會跳得更多），確定？`, `快轉 ${body.hours} 小時`],
       start_battle: [`立刻開戰「${picked("ad-battle")}」：全服一起進入集結，確定？`, "確定開戰"],
       fire: [`觸發「${picked("ad-fire")}」：效果跟自然發生一樣，全服都受影響，確定？`, "確定觸發"],
       push_trend: [`推動大勢「${picked("ad-trend")}」${amount}：全服一起，確定？`, "確定推動"],
       // 時刻表與救場（計畫 T10）
-      schedule: [`把「${body.title}」排在 ${body.when}：時間到了自動開集結（季末就是收季），確定？`, "確定排定"],
+      schedule: [`把「${body.title}」排在現實 ${body.when}：時間到了自動開集結（季末就是收季），確定？`, "確定排定"],
       jump_next: ["跳到下一件大事：全服的季時間一起往前推，到了的大事立刻結算（決戰直接開集結），確定？", "確定跳過去"],
       set_trend: [`把「${picked("ad-front")}」定成 ${body.value}：全服一起，推過門檻照常觸發，確定？`, "確定定戰況"],
       resolve_event: [`定下「${picked("ad-result")}」：照時刻表結算、全服公告，之後不再擲骰，確定？`, "確定定結果"],
@@ -1235,9 +1298,11 @@
           if (S.main.admin) { S.admin = await api("/api/admin"); render(); } // 每次打開都重抓：時刻表與可以定的結果會變
           break;
         case "sheet-close": S.sheet = false; render(); break;
-        case "guide-shut": setGuideShut(S.main.guide && S.main.guide.text); renderPage(); break;
-        case "guide-open": setGuideShut(null); renderPage(); break;
+        case "guide-shut": setGuideShut(S.main.guide && S.main.guide.text); S.guideRoad = null; renderPage(); break;
+        case "guide-open": setGuideShut(null); S.guideRoad = S.main.guide && S.main.guide.text; renderPage(); break;
         case "guide-more": S.guideFull = S.guideFull === (S.main.guide && S.main.guide.text) ? null : S.main.guide && S.main.guide.text; renderPage(); break;
+        case "scene-more": S.sceneOpen = !S.sceneOpen; renderPage(); break;
+        case "hint-more": S.hintOpen = !S.hintOpen; renderTop(); break; // 狀態列只重畫它自己（江湖頁不動，「剛剛」不會重播）
         case "guide-ack": await doMain("guide_ack"); break;
         case "do": S.sheet = false; await doMain(el.dataset.op); break;
         case "admin": {

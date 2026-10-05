@@ -112,7 +112,9 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
     if kind == "talk":
         return 0.0 if arg == "leave" else None
     if kind == "call":
-        return 0.0 if arg == "back" else None  # 假人不求見大勢人物（不呼叫模型）；萬一停在求見選單上，只會按返回
+        # 假人不求見大勢人物（不呼叫模型）；名望不夠的求見永遠按得下去（只是被打發，武學與成長設計 9.1），更不能給分；
+        # 萬一停在求見選單上，只會按返回
+        return 0.0 if arg == "back" else None
     if kind == "move":
         base = HOME_MOVE_SCORE if arg == _front_hop(game, profile) or arg in _home(game, profile) else AWAY_MOVE_SCORE
         order_hop = ORDER_MOVE_SCORE if arg.partition(":")[0] == _order_hop(game) else 0.0  # 往軍令要去的地方（計畫 T6）

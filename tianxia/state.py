@@ -120,6 +120,7 @@ class PlayerState(BaseModel):
     naming: str | None = None  # 第一個修到絕學、等著取正式名字的功法 id
 
     seen_events: set[str] = Field(default_factory=set)
+    event_seen: dict[str, int] = Field(default_factory=dict)  # 事件 id -> 這一季看過幾次（Game._present 每端出一次記一次；抽事件時權重按次數遞減，見 events.event_weight）
     mark_days: dict[str, int] = Field(default_factory=dict)  # 地方痕跡：這個人上次替這個痕跡算進一次是第幾天（一天只算一次；角色每季重來，跟著清空）
     anonymous: bool = False
     busy_until: float | None = None  # 閉關結束的遊戲時間

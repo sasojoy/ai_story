@@ -134,6 +134,15 @@ class Check(_Strict):
     by: Literal["team", "self"] = "team"  # team：隊伍派屬性最高的人出手；self：只看本人
 
 
+class CheckLines(_Strict):
+    """檢定選項上的「心裡話」（content/check_lines.json，週末試玩 A）。成功率分五段（見 tianxia/check_lines.py 的
+    BUCKETS：80+、60-79、40-59、20-39、0-19）；generic 每一段都要有，by_stat 是各屬性（str／agi／con／wis…）自己的
+    說法，可以只寫其中幾段，沒寫的那段退回 generic。一段可以寫好幾句，同一個選項永遠挑同一句。"""
+
+    generic: dict[str, list[str]]
+    by_stat: dict[str, dict[str, list[str]]] = Field(default_factory=dict)
+
+
 class Choice(_Strict):
     text: str
     condition: Condition = Field(default_factory=Condition)
@@ -355,6 +364,7 @@ class CharacterDef(_Strict):
     talk_at: str | None = None  # kind=locked 的龍頭人物在哪個地點可以深度對話（不可招募，見上一輪「還要改進」5）
     affinity_tag_deltas: dict[str, int] | None = None  # 覆寫 companion_agent.AFFINITY_TAG_DELTAS 的個別項目；None／缺的 tag 用預設值
     audience_fame: int = 0  # 求見門檻：名望要到多少才見得到他（透過他的「結識」劇情事件認識的人不受限制）
+    brush_off: list[str] = Field(default_factory=list)  # 名望不夠時打發人的話（他自己的口吻，最多三句，武學與成長設計 9.1）
 
 
 class Squad(_Strict):
@@ -726,6 +736,7 @@ class Config(_Strict):
     train_stat_chance: float = 0.3
     train_event_chance: float = 0.3
     qiyu_weight_multiplier: float = 1.5
+    event_repeat_decay: float = Field(default=0.5, gt=0, le=1)  # 看過的事件下次更少出現：抽選權重 × 這個數 ^ 這個玩家這一季看過幾次（1.0＝不遞減）
     starter_skills: list[str] = Field(default_factory=list)
     start_stats: dict[str, int] = Field(
         default_factory=lambda: {
@@ -810,6 +821,7 @@ class Config(_Strict):
     rank4_seat_ratio: float = 0.008  # 每陣營第四階席次＝上限 × 這個比例（四捨五入，最少 1 席）
     talk_stamina: int = 2  # 跟大勢人物對話，每一輪扣的體力
     talk_turns_per_day: int = 3  # 同一位大勢人物，每個遊戲日最多聊幾輪（只算玩家選的 talk:N）
+    audience_rank_discount: int = 5  # 投靠了名將的陣營，每升一階抵掉幾點求見門檻（武學與成長設計 9.1）【預設】
     # ── 伺服器假人（伺服器假人設計第四、六節）──
     bots_min_per_faction: int = 5  # 每個陣營（真人＋假人）至少幾人，不足由假人程式補
     bot_strength: float = 0.6  # 假人挑最高分選項的機率（0＝全隨機，1＝永遠挑最高分）；積極 +0.2、懶散 -0.2
@@ -1165,11 +1177,15 @@ PersonalKind = Literal["win", "duty", "convoy", "challenge"]  # 遊歷打贏、�
 
 
 class OrderWhen(_Strict):
-    """什麼時候發（濃縮版內容表 3.1）；寫了的每一項都要成立（or_enemy_siege 只放寬 losing_by）。
+    """什麼時候發（濃縮版內容表 3.1）；寫了的每一項都要成立（or_enemy_siege 只放寬 losing_by；opening_fronts 在第 1 週是例外，
+    見下，不看其他條件）。
     front_min／front_max：那條戰線的戰況在這個區間（含兩端）；打擊是看目標人物所在戰線。
     losing_by：戰線偏向對方超過多少（官軍：戰況 ≥ 50＋n；黃巾：≤ 50－n）。
     or_enemy_siege：或者敵方上週在這條戰線達成了攻城（守城）。
     event_within_weeks：這條戰線的下一件時刻表大事在幾週內（季曆）。
+    opening_fronts：第 1 週（開局週）這幾條戰線不看局勢也發，其他條件（front_min／front_max、losing_by、event_within_weeks）
+    一概略過：開局的戰況官軍都不吃緊，守城發不出來，新手第一週就沒有一道走得到的軍令（FB-054）；黃巾的守城也寫上，
+    不靠 100－40 剛好踩在 60 的邊界。只在第 1 週有效，之後照舊看局勢。
     always：每週固定一道（豪強的打擊）。"""
 
     front_min: int | None = None
@@ -1177,6 +1193,7 @@ class OrderWhen(_Strict):
     losing_by: int | None = None
     or_enemy_siege: bool = False
     event_within_weeks: float | None = None
+    opening_fronts: list[str] = Field(default_factory=list)
     always: bool = False
 
 
@@ -1275,6 +1292,7 @@ class Content(_Strict):
     insights: dict[str, InsightDef] = Field(default_factory=dict)  # 意境（content/insights.json，武學與成長設計附錄 A）
     materials: dict[str, Material]
     craft_names: CraftNames
+    check_lines: CheckLines  # 檢定選項上的心裡話（content/check_lines.json）
     banned_names: list[str]  # 合成、合併命名的禁用詞（原創原則：不用金庸等作品的專有名詞）
     sects: dict[str, Sect]
     characters: dict[str, CharacterDef]

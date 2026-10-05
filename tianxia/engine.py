@@ -27,7 +27,7 @@ from .models import (
 )
 from .ollama_client import OllamaClient
 from .rules import (
-    GEJU, HUANGJIN, add_rumor, apply_effect, can_hear, can_meet, change_trend, check_who, current_day, display_name, fill_marks, free_text_rate,
+    GEJU, HUANGJIN, add_rumor, apply_effect, audience_bar, can_hear, can_meet, change_trend, check_who, current_day, display_name, fill_marks, free_text_rate,
     front_ids, front_of, in_chaos,
     is_revealed, pushable, rate_words, recompute_trends, resolve_goals, resolve_trend, resolve_trends, roll_check,
     season_one, season_one_off, stances, trend_name, trend_shown, trend_value, world_trend_value,
@@ -350,7 +350,10 @@ class Game:
             return [Option(id="season:resting", label="休季中，等待管理者開啟下一季", enabled=False)]
         if s.pending_event:
             event = c.events[s.pending_event]
-            opts = [Option(id=f"choice:{i}", label=self._choice_label(ch, odds)) for i, ch in visible_choices(event, s, c)]
+            opts = [
+                Option(id=f"choice:{i}", label=self._choice_label(ch, odds, f"{event.id}#{i}"))
+                for i, ch in visible_choices(event, s, c)
+            ]
             if event.free_text is not None:
                 opts.append(Option(id=FREE_TEXT_OPTION, label=event.free_text.prompt))
             return opts
@@ -399,10 +402,27 @@ class Game:
         if ranks.summons_event(s, c) is not None:
             opts.append(Option(id="act:summons", label="應召"))  # 晉升奇遇（計畫 T5）：人在召見的地點才有，不花體力
         people = self._figures_here()
-        if has_events_here(c, loc, "socialize") or 0 < len(people) < AUDIENCE_HALL_FIGURES:
+        # 只有一位大勢人物、沒有交友事件、他又見不到（名望不夠、閉門不見、今天談滿）、福緣也沒到、也不在召見的地點：
+        # 交友只會花 5 點體力換同一句打發，所以不給，這條路只剩不花體力的求見（下面）
+        only_the_door = len(people) == 1 and ranks.summons_event(s, c) is None and self.socialize_is_futile()
+        if (has_events_here(c, loc, "socialize") or 0 < len(people) < AUDIENCE_HALL_FIGURES) and not only_the_door:
             # 兩位以上大勢人物的地點，交友只走福緣與地點事件、從不開口對話（見 _socialize_figure），
             # 所以只在有交友事件時才給；人物改由下面的「求見」指名
             opts.append(self._socialize_option(people, cost["socialize"]))
+        if len(people) == 1:  # 只有一位：直接求見他，一直按得下去（武學與成長設計 9.1）
+            cid = people[0]
+            ch = c.characters[cid]
+            if self._snubbed_character(cid):
+                opts.append(Option(id=f"call:{cid}", label=f"求見{ch.name}（{SNUB_NOTE}）", enabled=False))
+            elif not self._can_meet(cid):
+                opts.append(Option(id=f"call:{cid}", label=f"求見{ch.name}（名望還差 {self._fame_gap(cid)}）"))  # 按下去走打發，見 _brush_off
+            elif self._talks_left(cid) == 0:  # 求見一直都在：談滿了也留著、灰掉，說法跟求見名單一樣
+                opts.append(Option(
+                    id=f"call:{cid}", enabled=False,
+                    label=f"求見{ch.name}（今天已經談滿 {c.config.talk_turns_per_day} 輪，明天再來）",
+                ))
+            else:
+                opts.append(self._cost_option(f"call:{cid}", f"求見{ch.name}", cost["socialize"]))
         if len(people) >= AUDIENCE_HALL_FIGURES:
             opts.append(Option(id="act:call", label="求見"))  # 只是打開第二層選單，不花體力（見 _audience_options）
         target = self._recruit_target()
@@ -538,11 +558,12 @@ class Game:
         hardest = max(squads, key=lambda s: s.difficulty)
         return f"{who}・{self.odds(hardest.id)}"
 
-    def _choice_label(self, choice: Choice, odds: bool) -> str:
+    def _choice_label(self, choice: Choice, odds: bool, key: str) -> str:
+        """key 是檢定心裡話的種子（事件 id＋選項序號，見 events.choice_label）。"""
         if choice.combat and odds:
             squad = self.content.squads[choice.combat]
             return f"{choice.text}（對手：{squad.name}・{self.odds(squad.id)}）"
-        return choice_label(choice, self.state, self.content, self.world)
+        return choice_label(choice, self.state, self.content, self.world, key)
 
     def odds(self, squad_id: str) -> str:
         return team.estimate(self.state, self.content, self.world, squad_id)
@@ -559,8 +580,8 @@ class Game:
         - `talk:N`：N 是上一輪提供的選項、手上有對話、選項沒停用；`talk:leave` 不生成。
         - `act:socialize`：選項沒停用、福緣還沒到（福緣先發，見 _act）、這裡只有一位大勢人物而且見得到
           （兩位以上的地點交友不開口，見 _socialize_figure）；玩家這一步固定是 GENERIC_OPENING。
-        - `call:<人物>`：求見選單上按得下去的那位人物（選項沒停用＝見得到、今天還沒談滿、體力夠）；
-          玩家這一步固定是 GENERIC_OPENING。`call:back` 不生成。
+        - `call:<人物>`：求見選單上按得下去、而且見得到（名望或階級夠、或結識過）的那位人物（今天還沒談滿、體力夠）；
+          名望不夠的求見也按得下去，但那是被打發、不生成。玩家這一步固定是 GENERIC_OPENING。`call:back` 不生成。
         其他選項都不呼叫對話模型。
         只讀：選單用 tick=False 取，不推進戰鬥（推進可能結算一回合並呼叫 LLM 潤色，而且備料與
         進鎖重驗各會呼叫這個方法一次；一次請求的那一次推進留給 choose() 開頭）。"""
@@ -584,6 +605,8 @@ class Game:
                 return None
             player_action = companion_agent.GENERIC_OPENING
         elif kind == "call" and arg != "back":
+            if not self._can_meet(arg):
+                return None  # 門檻不夠：被打發，不叫模型（見 _call、_brush_off）
             companion_id, player_action = arg, companion_agent.GENERIC_OPENING
         else:
             return None
@@ -871,7 +894,7 @@ class Game:
         companion_id = self._socialize_figure()
         if companion_id is not None:
             return self._open_dialogue(companion_id, prepared)
-        return self._encounter("socialize", self._no_audience_line())
+        return self._encounter("socialize", self._no_audience_line)  # 惰性：抽到事件就不挑打發話、不白花亂數
 
     def _foreshadow(self, arg: str) -> list[str]:
         """伏筆的最後一步（計畫 T7）：fs:<鏈> 看題（沒有題的直接做）、fs:<鏈>:<選項> 答題、fs:leave 作罷。"""
@@ -895,10 +918,13 @@ class Game:
     def _call(self, arg: str, prepared: companion_agent.PreparedTurn | None = None) -> list[str]:
         """求見選單上的選擇：「返回」收起選單；選了一位人物就跟他開口對話，跟交友碰上人物時一模一樣——
         花交友的體力、生成不出對話就退回（見 _open_dialogue）。福緣不在這裡發：指名求見就是要見這個人
-        （福緣照舊由交友先發，或到期自己送上門，見 _advance_player_local）。"""
+        （福緣照舊由交友先發，或到期自己送上門，見 _advance_player_local）。
+        門檻不夠（名望與階級都不到、也沒結識過）就被打發：不花體力、不叫模型，見 _brush_off。"""
         self.state.player.picking_audience = False
         if arg == "back":
             return ["你收回名帖，暫且不求見了。"]
+        if not self._can_meet(arg):
+            return self._brush_off(arg)
         self.state.player.stamina -= self.content.config.action_cost["socialize"]
         return self._open_dialogue(arg, prepared)
 
@@ -1117,6 +1143,35 @@ class Game:
         判斷在 rules.can_meet，伏筆的偷聽也用它。"""
         return can_meet(self.state, self.content, companion_id)
 
+    def can_meet_figure(self, companion_id: str) -> bool:
+        """見得到這位人物嗎（名望與陣營階級、或結識過）；機器人用來避開會被打發的求見。"""
+        return self._can_meet(companion_id)
+
+    def _fame_gap(self, companion_id: str) -> int:
+        """離這位人物的求見門檻還差多少名望（門檻已含同陣營的階級折抵，見 rules.audience_bar）；見得到時不會拿來用。"""
+        return audience_bar(self.state, self.content, companion_id) - self.state.player.stats.get("fame", 0)
+
+    def _brush_off(self, companion_id: str) -> list[str]:
+        """門檻不夠時被打發（武學與成長設計 9.1）：他自己口吻的一句（內容沒寫就用通用的），附上還差多少。
+        後面只在「第一季的規則開著（才有晉升）、真的有下一階可升、而且升一階抵掉的點數補得上差距」時才提在他那個陣營再升一階。
+        不叫模型、不花體力、不加情誼。"""
+        s, c = self.state, self.content
+        ch = c.characters[companion_id]
+        line = self.rng.choice(ch.brush_off) if ch.brush_off else f"{ch.name}連見都不見你，門口的人把你請了出去。"
+        short = self._fame_gap(companion_id)
+        figure = next((f for f in c.figures.values() if f.character == companion_id), None)
+        hint = f"名望還差 {short}"
+        p = s.player
+        if (
+            season_one(c, s.world)  # 規則沒開（beta 那一季）沒有人晉升
+            and figure is not None and p.faction == figure.faction
+            and short <= c.config.audience_rank_discount  # 再升一階抵掉的點數補得上這個差距
+            and ranks.promotion_for(c, p.faction, ranks.rank_of(s) + 1) is not None  # 而且真的有下一階可升
+        ):
+            faction = next((f.name for f in c.scenario.factions if f.id == figure.faction), figure.faction)
+            hint += f"，或在{faction}再升一階"
+        return [f"{line}（{hint}）"]
+
     def _talks_used(self, companion_id: str) -> int:
         """今天（遊戲日，跟福緣用同一個算法）已經跟這位人物聊了幾輪；紀錄是前幾天的就當沒聊過。"""
         record = self.state.player.talks_today.get(companion_id)
@@ -1153,8 +1208,9 @@ class Game:
         return self._deep_interaction_target()
 
     def _audience_options(self) -> list[Option]:
-        """求見的第二層選單：這裡每一位大勢人物一個選項，最後是永遠按得下去的「返回」。名望不夠（也沒結識過）、
-        或今天已經跟他談滿的人按不下去並寫明原因；每天的輪數上限是每位人物各算各的（talk_turns_per_day）。"""
+        """求見的第二層選單：這裡每一位大勢人物一個選項，最後是永遠按得下去的「返回」。名望不夠（也沒結識過）的人
+        也按得下去，只是會被打發（見 _brush_off）；今天已經跟他談滿、或剛吃了敗仗閉門不見的人按不下去並寫明原因；
+        每天的輪數上限是每位人物各算各的（talk_turns_per_day）。"""
         c = self.content
         cost = c.config.action_cost["socialize"]
         per_day = c.config.talk_turns_per_day
@@ -1166,7 +1222,7 @@ class Game:
             if self._snubbed_character(companion_id):
                 opts.append(Option(id=option_id, label=f"{ch.name}（{SNUB_NOTE}）", enabled=False))
             elif not self._can_meet(companion_id):
-                opts.append(Option(id=option_id, label=f"{ch.name}（名望 {ch.audience_fame} 以上才見得到）", enabled=False))
+                opts.append(Option(id=option_id, label=f"{ch.name}（名望還差 {self._fame_gap(companion_id)}）"))  # 按下去走打發，見 _brush_off
             elif left == 0:
                 opts.append(Option(id=option_id, label=f"{ch.name}（今天已經談滿 {per_day} 輪，明天再來）", enabled=False))
             else:
@@ -1178,7 +1234,7 @@ class Game:
         """求見畫面的說明（場景上的那一段）：挑一位拜會；每位人物每天最多談幾輪，各算各的。"""
         here = self.content.locations[self.state.player.location].name
         per_day = self.content.config.talk_turns_per_day
-        return f"{here}有好幾位人物，挑一位求見。每位人物每天最多談 {per_day} 輪，各算各的；名望不夠的見不到，談滿的明天再來。"
+        return f"{here}有好幾位人物，挑一位求見。每位人物每天最多談 {per_day} 輪，各算各的；名望不夠的會被打發，談滿的明天再來。"
 
     def _no_audience_line(self) -> str:
         """交友時見不到這裡的大勢人物時的說明；這裡沒有大勢人物就是原本的「此地無人可訪」；
@@ -1190,7 +1246,7 @@ class Game:
             if self._snubbed_character(companion_id):
                 return f"{ch.name}{SNUB_NOTE}。"
             if not self._can_meet(companion_id):
-                return f"你想求見{ch.name}，但人微言輕，被擋在門外（名望 {ch.audience_fame} 以上才見得到）。"
+                return self._brush_off(companion_id)[0]  # 交友時遇上見不到的人物，用求見同一套打發的話
             if self._talks_left(companion_id) == 0:
                 return f"{ch.name}今日事忙，改日再來拜會吧。"
         return "此地無人可訪，你只好悻悻離去。"
@@ -1684,13 +1740,13 @@ class Game:
             remaining = max(0, int(battle.muster_deadline_real - self.now))
             left = f"{remaining // 60} 分 {remaining % 60} 秒"
             if watching:
-                return f"{header}\n\n集結中，還剩 {left}。{watch_line}"
+                return f"{header}\n\n集結中，還剩現實 {left}。{watch_line}"
             me = battle.participants.get(self.state.player.name)
             if me is not None:
                 side = next((f.name for f in definition.factions if f.id == me.faction), me.faction)
                 leaving = "；走出這一區就不算在場" if definition.region is not None else ""
-                return f"{header}\n\n你已加入【{side}】，集結還剩 {left}。集結結束就開打，在那之前照常行動{leaving}。"
-            return f"{header}\n\n集結中，還剩 {left}。選擇陣營加入；集結期間照常行動。"
+                return f"{header}\n\n你已加入【{side}】，集結還剩現實 {left}。集結結束就開打，在那之前照常行動{leaving}。"
+            return f"{header}\n\n集結中，還剩現實 {left}。選擇陣營加入；集結期間照常行動。"
         act = battle_instance.current_act(battle, definition)
         # 第幾回合／一共幾回合（戰鬥系統設計 3.2）：讓人知道還要打多久；收場的決戰不會走到這裡
         count = f"（第 {battle.round_number + 1}／{battle_instance.total_rounds(definition)} 回合）"
@@ -1861,17 +1917,21 @@ class Game:
         journal.add_entry(s, Draft(f"結識【{c.characters[cid].name}】", "福緣").entry(s.world.time, msgs))
         return msgs
 
-    def _encounter(self, action: str, nothing: str) -> list[str]:
-        """交友沒碰上人物時：抽一則事件，沒有就是 nothing（探索另有三選一，見 _explore）。"""
+    def _encounter(self, action: str, nothing: str | Callable[[], str]) -> list[str]:
+        """交友沒碰上人物時：抽一則事件，沒有就是 nothing（探索另有三選一，見 _explore）。
+        nothing 可以是函式：真的用到才呼叫（打發話要挑一句，不該在抽到事件時白花一次亂數）。"""
         event = pick_event(self.state, self.content, action, self.rng)
         if event:
             return self._present(event)
-        return [nothing]
+        return [nothing() if callable(nothing) else nothing]
 
     def _present(self, event: Event) -> list[str]:
         is_repeat = event.id in self.state.player.seen_events
         self.state.pending_event = event.id
         self.state.player.seen_events.add(event.id)
+        # 每真的端出一次記一次（探索、交友、遊歷、召見、next_event 串接都走這裡）；抽事件時按次數壓低權重（events.event_weight）
+        seen = self.state.player.event_seen
+        seen[event.id] = seen.get(event.id, 0) + 1
         head = f"✦ 奇遇：{event.title}" if event.qiyu else f"【{event.title}】"
         text = fill_marks(event.text, self.state)
         if is_repeat:
@@ -2286,10 +2346,9 @@ class Game:
                 self._draft.changes.append(f"體力 -{cost}")
         if mode == "dash" or at_once:
             return self._arrivals()
-        arrive = s.player.journey.arrive_at[-1]
-        left = atlas.whole_minutes((arrive - s.world.time) / 60)
+        left = self._real_minutes(s.player.journey.arrive_at[-1] - s.world.time)
         verb = "改道" if rerouting else "動身"
-        msg = f"你{verb}{atlas.MODES[mode]}前往{c.locations[route.path[-1]].name}，{self.stamp(arrive)} 抵達（約 {left} 分鐘後）。"
+        msg = f"你{verb}{atlas.MODES[mode]}前往{c.locations[route.path[-1]].name}，現實約 {left} 分鐘後抵達。"  # 只寫現實的倒數（FB-062）
         self._hide(msg)  # 場景會顯示「在路上」，紀錄只留標題與走法
         self._sync_battle_presence()
         return [msg]
@@ -2393,16 +2452,18 @@ class Game:
         self._count_road_reward("sight", day)
         return [sight.text] + apply_effect(sight.effect, s, c, self.world, push=self.push_trend)
 
+    def _real_minutes(self, world_seconds: float) -> int:
+        """世界時鐘的一段秒數，換成給玩家看的「現實」整分鐘（至少 1 分，.5 進位）：世界秒 ÷ time_scale ＝ 現實秒（FB-062）。"""
+        return atlas.whole_minutes(max(0.0, world_seconds) / self.content.config.time_scale / 60)
+
     def _journey_line(self) -> str:
-        """在路上的那一句（狀態列）：「往寶洞（步行），第1天 00:08 抵達，還要約 8 分鐘；下一站湖邊」。"""
+        """在路上的那一句（狀態列）：「往寶洞（步行），現實約 8 分鐘後抵達；下一站湖邊」。
+        只寫現實的倒數，不寫抵達的季曆時刻（FB-062）：季曆跑得比現實快，「第8週・週五 12:19 抵達」配上「還要約 1 分鐘」
+        兩種時間混在一行，玩家算不出來；季曆時刻已經在狀態列上一行。"""
         s, c = self.state, self.content
         j = s.player.journey
-        end = j.arrive_at[j.last]
-        left = atlas.whole_minutes(max(0.0, end - s.world.time) / 60)
-        line = (
-            f"往{c.locations[j.path[j.last]].name}（{atlas.MODES[j.mode]}），"
-            f"{self.stamp(end)} 抵達，還要約 {left} 分鐘"
-        )
+        left = self._real_minutes(j.arrive_at[j.last] - s.world.time)
+        line = f"往{c.locations[j.path[j.last]].name}（{atlas.MODES[j.mode]}），現實約 {left} 分鐘後抵達"
         if j.reached < j.last:
             line += f"；下一站{c.locations[j.path[j.reached]].name}"
         return line
@@ -2513,7 +2574,8 @@ class Game:
         self.state.battle_card = None
         p.busy_until = self.state.world.time + hours * HOUR
         p.seclusion_start = self.state.world.time
-        msgs = [f"你閉關靜修，預計 {hours} 小時後出關；閉關期間氣血回復加倍。"]
+        real_hours = hours / self.content.config.time_scale  # 閉關的小時是世界時鐘的小時；寫給玩家看的是現實小時（FB-062）
+        msgs = [f"你閉關靜修，預計現實 {real_hours:g} 小時後出關；閉關期間氣血回復加倍。"]
         self._write("閉關", msgs, tag=f"{hours} 小時")
         return self._log(msgs)
 
@@ -3163,7 +3225,7 @@ class Game:
             "attrs": [(names[k], p.stats[k]) for k in ("str", "agi", "con", "wis")],
             "hint": skillview.practice_hint(s, c),  # 心得擱著沒用、又還有功夫沒練滿時才有
             "team": mates,
-            "busy_hours": None if p.busy_until is None else round((p.busy_until - w.time) / HOUR, 1),
+            "busy_hours": None if p.busy_until is None else round((p.busy_until - w.time) / HOUR / c.config.time_scale, 1),  # 現實小時
             "resting": None if p.resting_since is None else c.config.rest_regen_multiplier,  # 打坐時體力回復的倍數
             "journey": None if p.journey is None else self._journey_line(),
             **self._calendar_status(),  # 第一季：季曆與下一件大事的倒數；開關關著時沒有這兩欄
@@ -3176,7 +3238,7 @@ class Game:
         return data
 
     def _calendar_status(self) -> dict:
-        """狀態列的季曆（第 N 週、週幾、幾點）與下一件大事的倒數。倒數是現實秒：(大事時刻 − 世界秒) ÷ time_scale。"""
+        """狀態列的季曆（第 N 週、週幾、幾點）與下一件大事：季曆時刻 at，加上倒數 in_seconds。倒數是現實秒：(大事時刻 − 世界秒) ÷ time_scale。"""
         w, c = self.state.world, self.content
         if not calendar.season_one_on(w, c):
             return {}
@@ -3190,6 +3252,7 @@ class Game:
             },
             "next_event": None if upcoming is None else {
                 "title": upcoming.title,
+                "at": self.stamp(timetable.when(self.state, c, upcoming)),  # 季曆時刻「第9週・週四 20:44」，畫面寫在倒數前面（FB-062）
                 "in_seconds": round((timetable.when(self.state, c, upcoming) - w.time) / c.config.time_scale),
             },
         }
@@ -3324,7 +3387,7 @@ class Game:
         for mate in d["team"]:  # 只有真的帶了同伴才列隊伍，一個人時不佔版面
             lines.append(f"🧍 {mate['name']}　第{mate['level']}級　氣血 {mate['hp']}/{mate['hp_max']}")
         if d["busy_hours"] is not None:
-            lines.append(f"🧘 閉關中，約 {d['busy_hours']:.1f} 小時後出關")
+            lines.append(f"🧘 閉關中，現實約 {d['busy_hours']:.1f} 小時後出關")
         if d["resting"] is not None:
             lines.append(f"🧘 打坐中：體力回復是平常的 {d['resting']:g} 倍，隨時可以起身")
         if d["journey"] is not None:

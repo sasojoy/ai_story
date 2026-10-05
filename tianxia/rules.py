@@ -4,7 +4,7 @@ from __future__ import annotations
 import random
 import re
 from collections.abc import Callable
-from typing import Literal
+from typing import Literal, NamedTuple
 
 from . import calendar, insights, library, materials, roster, team  # 與 roster 互相 import：只能引入整個模組、呼叫時才取屬性，不能 from .roster import …
 from .martial_arts import content_art
@@ -19,12 +19,26 @@ def display_name(state: GameState) -> str:
     return "某位少俠" if state.player.anonymous else state.player.name
 
 
-def can_meet(state: GameState, content: Content, companion_id: str) -> bool:
-    """見得到這位大勢人物：名望到了他的求見門檻（CharacterDef.audience_fame），或是透過他的「結識」事件認識過
-    （企劃者 2026-10-02 決定）。引擎的求見與交友對話、伏筆的對話片段（名望不夠的人改從行動偷聽，foreshadow.hear_after_action）
-    都用這一個判斷，不要在別處再寫一份。"""
+def audience_bar(state: GameState, content: Content, companion_id: str) -> int:
+    """這位人物此刻對你的求見門檻（武學與成長設計 9.1）：名望門檻（CharacterDef.audience_fame），投靠了他的陣營的人
+    每**升一階**（晉升過幾次）抵 audience_rank_discount 點；投靠了但還沒晉升過的人一點都不抵。散人、敵對陣營，
+    以及不在大勢人物表上的人物只看名望。最低 0。
+    存檔裡的階：0＝投靠了還沒晉升過（ranks.rank_of 算第 1 階），第一次晉升後是 2，所以晉升過幾次＝max(階, 1) - 1。
+    這裡自己算、不呼叫 ranks.rank_of：ranks 會 import rules，反過來 import 就循環了。"""
+    bar = content.characters[companion_id].audience_fame
+    figure = next((f for f in content.figures.values() if f.character == companion_id), None)
     p = state.player
-    return f"結識:{companion_id}" in p.flags or p.stats.get("fame", 0) >= content.characters[companion_id].audience_fame
+    if figure is not None and p.faction is not None and p.faction == figure.faction:
+        bar -= (max(p.rank, 1) - 1) * content.config.audience_rank_discount
+    return max(0, bar)
+
+
+def can_meet(state: GameState, content: Content, companion_id: str) -> bool:
+    """見得到這位大勢人物：名望到了他的求見門檻（audience_bar：名望，同陣營的階級可以抵一段），或是透過他的「結識」
+    事件認識過（企劃者 2026-10-02 決定）。引擎的求見與交友對話、伏筆的對話片段（名望不夠的人改從行動偷聽，
+    foreshadow.hear_after_action）都用這一個判斷，不要在別處再寫一份。"""
+    p = state.player
+    return f"結識:{companion_id}" in p.flags or p.stats.get("fame", 0) >= audience_bar(state, content, companion_id)
 
 
 def current_day(state: GameState) -> int:
@@ -99,11 +113,25 @@ def check_condition(cond: Condition, state: GameState, content: Content | None =
     return True
 
 
+class CheckOutlook(NamedTuple):
+    """一次檢定的勝算：誰出手（門下 key）、他這項屬性現在的數值、成功率（0～1）。"""
+
+    actor: str
+    value: float
+    chance: float
+
+
+def check_outlook(check: Check, state: GameState, content: Content, world: WorldStateStore) -> CheckOutlook:
+    """出手者的屬性每高於難度 1 點，成功率 +10%；範圍 5%～95%。
+    擲骰（roll_check）與選項標籤上的出手者、屬性數值、心裡話（events.choice_label）都出自這一個函式，
+    所以標籤講的和實際擲出來的不會對不起來。"""
+    actor = team.check_actor(state, content, world, check)
+    value = team.check_value(state, content, world, actor, check.stat)
+    return CheckOutlook(actor, value, min(0.95, max(0.05, 0.5 + (value - check.difficulty) * 0.1)))
+
+
 def check_chance(check: Check, state: GameState, content: Content, world: WorldStateStore) -> float:
-    """出手者的屬性每高於難度 1 點，成功率 +10%；範圍 5%～95%。"""
-    key = team.check_actor(state, content, world, check)
-    value = team.check_value(state, content, world, key, check.stat)
-    return min(0.95, max(0.05, 0.5 + (value - check.difficulty) * 0.1))
+    return check_outlook(check, state, content, world).chance
 
 
 def roll_check(check: Check, state: GameState, content: Content, world: WorldStateStore, rng: random.Random) -> bool:
