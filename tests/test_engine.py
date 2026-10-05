@@ -5660,7 +5660,7 @@ def test_the_status_carries_the_points_to_allocate(game):
 
 def test_the_status_says_what_each_stat_does(game):
     """配點鈕底下那一行（計畫二最終審查 M2）：點數配了收不回來（設計 6.2），按之前要看得到五項各管什麼（照設計 6.1、6.3）。
-    名字照 Config.stat_names、順序跟 attrs 一樣，再加一句事件的檢定也看這五項；文字由引擎給，網頁不寫死。"""
+    名字照 Config.stat_names、順序跟 attrs 一樣，再加一句事件的檢定看哪幾項；文字由引擎給，網頁不寫死。"""
     names = game.content.config.stat_names
     names["agi"] = "輕功"  # 改了名字，那一行跟著改
     data = game.status_data()
@@ -5673,7 +5673,19 @@ def test_the_status_says_what_each_stat_does(game):
     assert all(word in uses[names["con"]] for word in ("內功", "氣血上限", "內傷"))  # 根骨：內功、氣血上限、少受內傷
     assert all(word in uses[names["wis"]] for word in ("修練", "意境", "閉關"))  # 悟性：修練升品、探索悟意境、閉關心得
     assert "持有" in uses[names["lore"]]  # 博聞：武學與意境的持有上限（設計 6.3）
-    assert "檢定" in data["stat_uses_note"] and "五項" in data["stat_uses_note"]
+    assert data["stat_uses_note"] == "事件的檢定看前四項。"  # 還沒有事件檢定博聞（PM 2026-10-05），見下一個測試
+
+
+def test_the_stat_note_says_four_until_an_event_checks_lore():
+    """「事件的檢定看前四項」是因為正式內容還沒有任何事件檢定（或隨口應對看）博聞。joy 加了第一個之後這條會失敗：
+    把 skillview.STAT_CHECK_NOTE 改回「事件的檢定也看這五項。」、這條跟著改（PM 2026-10-05）。"""
+    from tianxia import skillview
+
+    real = load_content(ROOT / "content")
+    stats = {ch.check.stat for e in real.events.values() for ch in e.choices if ch.check is not None}
+    stats |= {e.free_text.stat for e in real.events.values() if e.free_text is not None}
+    assert stats and "lore" not in stats
+    assert skillview.STAT_CHECK_NOTE == "事件的檢定看前四項。"
 
 
 def test_lore_is_the_fifth_stat_and_is_named_in_one_place(game):
