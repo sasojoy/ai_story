@@ -668,7 +668,7 @@
       ${naming}
       <div class="card">
         <div class="seg">${KINDS.map((k) => `<button class="${S.kind === k ? "on" : ""}" data-act="kind" data-kind="${k}">${k}</button>`).join("")}</div>
-        <div class="row">
+        <div class="row practice-actions">
           <button class="btn ${train ? "" : "primary"}" data-act="mx" data-op="practice" ${train ? "disabled" : ""}>${train || `練成${esc(S.kind)}（心得 ${cur.price}）`}</button>
           <button class="btn" data-act="mx" data-op="heal" ${s.injury >= 1 ? "" : "disabled"}>療傷</button>
         </div>

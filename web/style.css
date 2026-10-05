@@ -350,6 +350,11 @@ details.fold.bulletin > .fold-body { border-color: var(--gold); max-height: 50vh
    改成照字寬分配（width: auto、flex: 1 1 auto）、橫向內距縮到 8px：三顆自然寬 48＋93＋48 = 189px，一排還有 108px 餘裕。
    只管這一排（.art-actions），不動全站的 .btn */
 .art-body .art-actions > .btn { width: auto; flex: 1 1 auto; white-space: nowrap; padding: 10px 8px; }
+/* 「練成武學（心得 1）」與「療傷」那一排（FB-070）：不折行。375px 手機卡片裡一排可用 375-32-2-28 = 313px，原本兩顆等寬各 152px、
+   扣掉邊框 2 與內距 28 只剩 122px，「練成武學（心得 1）」（約 132px，粗體再寬一點）放不下而折成「練成武學（心得」／「1）」。
+   跟上面那一排同一個做法：照字寬分配、橫向內距縮到 8px，兩顆自然寬約 151＋48 = 199px，一排還有一百多 px 餘裕。
+   只管這一排（.practice-actions），不動全站的 .btn */
+.practice-actions > .btn { width: auto; flex: 1 1 auto; white-space: nowrap; padding: 10px 8px; }
 /* 「服下破境丹」勾選框：預設不勾，整列都是觸控目標（至少 44px 高）；放在修練鈕那一排上面，不擠進按鈕列 */
 .art-body .legend { display: flex; align-items: center; gap: 10px; min-height: 44px; margin-top: 8px; font-size: 14px; cursor: pointer; }
 .art-body .legend input { width: 20px; height: 20px; flex: none; margin: 0; accent-color: var(--accent); }

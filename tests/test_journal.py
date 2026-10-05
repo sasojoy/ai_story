@@ -1,5 +1,7 @@
 """江湖紀錄：每次行動寫成一則 JournalEntry（engine），舊存檔的 log 轉成紀錄，以及「剛剛」卡片與紀錄列的 HTML。"""
 import json
+import re
+from html import escape
 
 from conftest import FixedRandom, walk_to
 
@@ -434,6 +436,60 @@ def test_menxia_entries_that_finish_no_guide_step_render_as_before(game):
     assert journal._lines(entry.lines) in game.latest_entry_html()  # 兩次動作的敘事照舊一行一行畫出來
 
 
+# FB-070 (c)：同一種連續的門下動作併成一則時，結果標記是最新那次的那句話、敘事是每一次照順序（journal._story），
+# 所以標記又是敘事的最後一行。「剛剛」卡片以前標記畫一次、敘事再畫一次：做了兩次看起來像三次。
+
+
+def shown(card: str) -> list[str]:
+    """「剛剛」卡片上畫出來的每一句，照畫的順序：標題旁的結果標記（有的話），再來是底下的敘事。"""
+    return re.findall(r'<span class="tx-tag">(.*?)</span>', card) + re.findall(r'<div class="tx-line[^"]*">(.*?)</div>', card)
+
+
+def test_twice_practising_reads_as_two_lines_on_the_just_now_card(game):
+    _train(game)
+    first = latest(game).tag
+    game.practice("武學")
+    second = latest(game).tag
+    assert first != second
+    assert shown(game.now_entry_html()) == [escape(first), escape(second)]
+    assert "心得 -3" in game.now_entry_html()  # 第 1 成升第 2 成 1 點、第 2 成升第 3 成 2 點：加總照舊
+
+
+def test_twice_forging_reads_as_two_lines_on_the_just_now_card(game):
+    """合成接著合併（同一則「煉製」）：兩行，照順序，各一次；心得、體力照舊加總。"""
+    from unittest import mock
+
+    from tianxia import naming
+
+    game.state.player.member.wugong_id = "fist"
+    game.state.player.insights = ["feng", "huo"]
+    game.state.player.stats["xinde"] = 100
+    with mock.patch.object(game.client, "chat_structured", return_value=naming.NameReply(name="鐵腕勁", description="一句話。")):
+        game.forge("fist", ["feng"])
+    fused = latest(game).tag
+    with mock.patch.object(game.client, "chat_structured", side_effect=RuntimeError):
+        game.forge(None, ["feng", "huo"])
+    merged = latest(game).tag
+    assert (fused, latest(game).title) == ("合成【鐵腕勁】", "煉製") and merged.startswith("合併「")
+    assert shown(game.now_entry_html()) == [escape(fused), escape(merged)]
+    assert f"體力 -{game.content.config.merge_stamina}" in game.now_entry_html()
+
+
+def test_twice_melting_reads_as_two_lines_on_the_just_now_card(game):
+    game.state.player.insights = ["feng", "huo"]
+    first = game.melt_insight("feng")[0]
+    second = game.melt_insight("huo")[0]
+    assert latest(game).title == "修練" and latest(game).tag == second
+    assert shown(game.now_entry_html()) == [escape(first), escape(second)]
+
+
+def test_a_single_menxia_action_still_reads_as_one_tag(game):
+    """只做一次：照舊只有標題旁的結果標記（沒有敘事），跟以前一樣。"""
+    _train(game)
+    assert shown(game.now_entry_html()) == [escape(latest(game).tag)]
+    assert 'class="tx-tag"' in game.now_entry_html()
+
+
 def test_menxia_changes_are_written_but_failures_are_not(game):
     assert game.forge("fist", ["feng"])  # 沒有武學也沒有意境：被擋下
     assert len(game.state.journal) == 1
@@ -652,6 +708,17 @@ def test_card_html_shows_time_title_tag_lines_and_coloured_changes():
                  '<span class="tx-chg tx-up">銀兩 +10</span>', '<span class="tx-chg tx-down">體力 -3</span>'):
         assert part in html
     assert html.index("剛剛") < html.index("探索揚州城") < html.index("✔ 引導完成") < html.index("銀兩 +10")
+
+
+def test_card_html_draws_a_merged_entry_once_per_action_in_order():
+    """FB-070 (c)：標記是敘事的最後一行（併成一則的門下動作）時，標記不另寫在標題旁、敘事照順序畫：N 次就是 N 行。
+    一樣的一句話做了兩次（例如兩次療傷）也還是兩行；只有一行、或標記不在敘事最後的，照舊（FB-029 只看第一行）。"""
+    first, second = "【鎮風手】修練有成，從下品晉為中品！", "【鎮風手】修練了一回，還差一點火候（熟練度 1）。"
+    html = journal.card_html(entry(title="修練", tag=second, lines=[first, second], changes=["體力 -20"]))
+    assert shown(html) == [first, second] and '<span class="tx-chg tx-down">體力 -20</span>' in html
+    assert shown(journal.card_html(entry(title="修練", tag=first, lines=[first, first], changes=[]))) == [first, first]
+    assert shown(journal.card_html(entry(title="修練", tag=first, lines=[first], changes=[]))) == [first]  # FB-029
+    assert shown(journal.card_html(entry())) == ["遇上【酒樓鬥毆】", "✔ 引導完成"]  # 標記不在敘事裡：照舊
 
 
 def test_card_html_for_a_legacy_entry_does_not_claim_just_now():

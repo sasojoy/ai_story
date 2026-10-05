@@ -150,17 +150,63 @@ def _reload(game: Game) -> None:
 MOVE_MODE: contextvars.ContextVar[str] = contextvars.ContextVar("move_mode", default="walk")
 
 
+# ── 鎖內模型呼叫的全服斷路器（PM 2026-10-05）──
+# 鎖內每一步模型呼叫最多等 Config.in_lock_model_timeout（15 秒），一次拿鎖期間只容忍一次失敗（Game._quick_client）。可是模型
+# 掛了的時候，每個玩家的下一個動作都還是要在行動鎖裡等一次逾時，全服跟著等。所以任何一次拿鎖裡有鎖內的模型呼叫失敗或逾時，
+# 就把全服的斷路器打開 MODEL_BREAKER_SECONDS 秒：這段時間每一次拿鎖（不分玩家）一開始額度就用完，鎖內直接用固定文字、
+# 不碰網路；時間到之後的第一次拿鎖照常叫模型，又失敗就再打開。只管鎖內：鎖外的取名、對話、隨口應對的評分照舊叫模型。
+# 只在 server.py（PM：不進 Config）；假人程式（run_bots.py）的 client 是 None，本來就不叫模型。
+MODEL_BREAKER_SECONDS = 180
+_monotonic = time.monotonic  # 斷路器的時鐘（引擎不讀時鐘，伺服器可以）；測試換掉它，不必真的等
+_BREAKER_LOCK = threading.Lock()  # 「到期了就關上、印一行」是先讀再寫：兩個請求同時進來也只關一次、只印一行
+_breaker_until: float | None = None  # 斷路器開到什麼時候（_monotonic 的秒數）；None＝關著
+
+
+def _model_paused() -> bool:
+    """這一次拿鎖時斷路器還開著嗎？已經到期的話先關上（印一行），這一次照常叫模型。"""
+    global _breaker_until
+    with _BREAKER_LOCK:
+        if _breaker_until is None:
+            return False
+        if _monotonic() < _breaker_until:
+            return True
+        _breaker_until = None
+    print(f"鎖內的模型呼叫暫停滿 {MODEL_BREAKER_SECONDS} 秒，恢復叫模型。", flush=True)
+    return False
+
+
+def _pause_model() -> None:
+    """有一次鎖內的模型呼叫失敗或逾時：打開斷路器 MODEL_BREAKER_SECONDS 秒（已經開著的不延長、不再印）。
+    印的那一行不寫是誰的動作（也就看不出是不是假人）。"""
+    global _breaker_until
+    with _BREAKER_LOCK:
+        now = _monotonic()
+        if _breaker_until is not None and now < _breaker_until:
+            return
+        _breaker_until = now + MODEL_BREAKER_SECONDS
+    print(f"鎖內的模型呼叫失敗或逾時：接下來 {MODEL_BREAKER_SECONDS} 秒全服鎖內不叫模型，改用固定文字。", flush=True)
+
+
 @contextlib.contextmanager
 def _locked(game: Game):
     """拿行動鎖，並先重讀角色（見 _reload）。這支程式裡每一個要用 game.state 的地方都從這裡進鎖
     （act、look、prepare_dialogue），不另外呼叫 game.world.action_lock()：資料庫是唯一的真實來源，
     GAMES 裡的 Game 只是這一個動作的工作副本。FastAPI 的同步端點跑在執行緒池裡，同一個角色的兩個請求
-    可能同時進來；行動鎖是 BEGIN IMMEDIATE，不同執行緒就一個一個來，重讀與動作不會交錯。"""
+    可能同時進來；行動鎖是 BEGIN IMMEDIATE，不同執行緒就一個一個來，重讀與動作不會交錯。
+    鎖內的模型呼叫歸全服的斷路器管（見 MODEL_BREAKER_SECONDS）：開著時這一次拿鎖一開始額度就用完；這一次拿鎖
+    （動作出錯也算）有鎖內的模型呼叫失敗，就打開它。"""
     with game.world.action_lock():
         game.reset_model_budget()  # 新的一次拿鎖：鎖內的模型呼叫重新有額度（一次拿鎖期間只容忍一次失敗，見 Game._quick_client）
+        paused = _model_paused()
+        if paused:
+            game._model_budget.gave_up = True  # 斷路器開著：額度一開始就用完（直接碰 Game 的私有欄位，PM 同意只在這裡這樣做）
         _reload(game)
         game.set_move_mode(MOVE_MODE.get())  # 這次請求選的走法（見 MOVE_MODE）：之後的選單與 choose() 都照它
-        yield
+        try:
+            yield
+        finally:
+            if not paused and game._model_budget.gave_up:  # 這一次拿鎖裡鎖內的模型呼叫失敗了（私有欄位，同上）
+                _pause_model()
 
 
 def act(game: Game, action) -> list[str] | None:

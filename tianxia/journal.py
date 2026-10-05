@@ -268,9 +268,11 @@ def _when(time: float, when: Callable[[float], str]) -> str:
     return "舊紀錄" if time < 0 else when(time)
 
 
-def _heading(entry: JournalEntry) -> str:
-    tag = f'<span class="tx-tag">{_esc(entry.tag)}</span>' if entry.tag else ""
-    return f'<span class="tx-title">{_esc(entry.title)}</span>{tag}'
+def _heading(entry: JournalEntry, tag: str | None = None) -> str:
+    """標題與旁邊的結果標記；tag 沒給就用這一則的標記（給空字串＝不寫標記）。"""
+    tag = entry.tag if tag is None else tag
+    shown = f'<span class="tx-tag">{_esc(tag)}</span>' if tag else ""
+    return f'<span class="tx-title">{_esc(entry.title)}</span>{shown}'
 
 
 _NEW_THING = re.compile(
@@ -304,6 +306,18 @@ def _body(entry: JournalEntry) -> list[str]:
     return lines[1:] if lines and entry.tag and lines[0] == entry.tag else lines
 
 
+def _card_story(entry: JournalEntry) -> tuple[str, list[str]]:
+    """「剛剛」卡片標題旁的結果標記與底下的敘事，每一句只畫一次（FB-070）。
+    同一種連續的門下動作併成一則時（add_entry 的 merge），標記是最新那次的那句話、敘事是每一次照順序（_story），
+    所以標記又是敘事的最後一行：以前標記寫一次、敘事再列一遍，修練兩次看起來像三次。這時標記不另寫，敘事照順序畫，
+    N 次就是 N 行（數值變化本來就加總好了）。其他照 _body（FB-029：只有一行、跟標記一字不差的不再畫）。
+    只管卡片：江湖紀錄的一列摘要要靠標記看出最近一次的結果，點開才看全部（_row 照舊）。"""
+    lines = entry.lines
+    if len(lines) > 1 and entry.tag and lines[-1] == entry.tag:
+        return "", lines
+    return entry.tag, _body(entry)
+
+
 ChipFn = Callable[[str, str], tuple[str, int] | None]
 """數值標籤的換法（FB-064）：(紀錄裡存的一項變化, seed) → (畫面上的字, 對看的人是好事 1／壞事 −1／無關 0)，不是它管的變化回 None。
 戰況變化（front_lines.mark）紀錄裡存的是機器可讀的寫法，要由 engine 照內容與看的人的陣營換成一句話；顏色因此在畫的那一刻才定。"""
@@ -335,9 +349,10 @@ def card_html(entry: JournalEntry, when_text: Callable[[float], str] = clock_tex
     when_text 是時間的寫法：第一季由 engine 給季曆（calendar.stamp_text），不給時照舊「第N天 HH:MM」。
     chip：戰況變化的換法（見 ChipFn）。"""
     when = "舊紀錄" if entry.time < 0 else f"剛剛　{when_text(entry.time)}"
+    tag, story = _card_story(entry)
     return (
-        f'<div class="tx-now"><div class="tx-when">{when}</div><div class="tx-head">{_heading(entry)}</div>'
-        f'{_lines(_body(entry))}{_chips(entry.changes, "div", chip, _seed(entry))}</div>'
+        f'<div class="tx-now"><div class="tx-when">{when}</div><div class="tx-head">{_heading(entry, tag)}</div>'
+        f'{_lines(story)}{_chips(entry.changes, "div", chip, _seed(entry))}</div>'
     )
 
 
