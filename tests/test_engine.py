@@ -3729,7 +3729,7 @@ def test_training_with_your_own_factions_squad_is_a_drill(content, game):
     assert any("操軍擺陣" in m for m in msgs)
     assert game.state.battles == []
     assert game.state.player.stats["silver"] == silver
-    assert game.state.player.stats["xinde"] == xinde + content.squads["thug"].reward_xinde
+    assert game.state.player.stats["xinde"] == xinde + int(content.squads["thug"].reward_xinde * 0.3 + 0.5)
     assert game.state.player.member.exp > 0 or game.state.player.member.level > 1
     assert game.state.player.materials == {}
     assert game.state.world.trends["kou"] == 31
@@ -3769,6 +3769,7 @@ def test_train_trend_push_previews_the_push_for_your_faction(content, game):
 
 def test_a_drill_is_journaled_as_a_drill_without_a_battle_card(content, game):
     _training_factions(content)
+    content.config.drill_reward_share = 1.0
     content.squads["thug"].faction = "huang"
     game.state.player.faction = "huang"
     walk_to(game, "lake")
@@ -4808,6 +4809,7 @@ def test_a_won_training_fight_gives_every_fighter_the_exp(content, game):
 
 def test_a_drill_gives_every_fighter_the_exp_too(content, game):
     _training_factions(content)
+    content.config.drill_reward_share = 1.0
     content.squads["thug"].faction = "huang"
     game.state.player.faction = "huang"
     _companion_on_the_team(game, exp=90)
@@ -4817,6 +4819,20 @@ def test_a_drill_gives_every_fighter_the_exp_too(content, game):
     assert game.world.get_companion("mate").level == 2
     assert "韓鐵升到第 2 級！" in msgs
     assert "韓鐵升到第 2 級！" in game.state.journal[0].lines
+
+
+def test_a_drill_pays_three_tenths_of_the_squad(content, game):
+    """戰鬥系統第八節：沒風險就拿得少，心得、經驗只給對手的三成（四捨五入）。"""
+    _training_factions(content)
+    squad = content.squads["thug"]
+    squad.faction, squad.reward_xinde, squad.exp = "huang", 35, 40
+    game.state.player.faction = "huang"
+    walk_to(game, "lake")
+    xinde = game.state.player.stats.get("xinde", 0)
+    msgs = game.choose("act:train")
+    assert game.state.player.stats["xinde"] == xinde + 11  # 35 × 0.3 ＝ 10.5 → 11
+    assert "心得 +11" in msgs
+    assert any("經驗 +12" in c for c in game.state.journal[0].changes)  # 40 × 0.3
 
 
 # ── 指名求見（兩位以上大勢人物的地點，企劃者 2026-10-03 決定）──────────

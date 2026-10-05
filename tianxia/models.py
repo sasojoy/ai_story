@@ -738,6 +738,7 @@ class Config(_Strict):
     action_cost: dict[str, int] = Field(
         default_factory=lambda: {"explore": 10, "train": 10, "socialize": 5}
     )
+    drill_reward_share: float = Field(default=0.3, ge=0, le=1)  # 跟自己人操練只給對手獎勵的幾成（戰鬥系統第八節：沒風險就拿得少）
     time_scale: float = 1.0
     season_days: float = DEFAULT_SEASON_DAYS
     # 第一季濃縮版的規則（預設關，beta 那一季照舊）：季曆、時刻表、三條戰線都掛在這個開關後面。
