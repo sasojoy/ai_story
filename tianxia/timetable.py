@@ -287,3 +287,49 @@ def _chronicle(
     if named.side in event.locked_chronicle:
         return fill_slots(state, content, event, event.locked_chronicle[named.side]).replace("{name}", shown(named))
     return f"{plain}（{shown(named)}改寫）" if plain else plain
+
+
+# ── 管理者（計畫 T10）─────────────────────────────────────
+
+
+FINALE_KEY = "finale"  # WorldState.schedule 裡季末的鍵（三場決戰用大事 id）
+
+
+def schedulable(content: Content) -> list[TimetableEvent]:
+    """管理者能排時間的大事：三場決戰與季末，照時刻表的順序。"""
+    return [e for e in content.timetable if e.kind in NOT_BY_SEASON_HOUR]
+
+
+def schedule_key(event: TimetableEvent) -> str:
+    return FINALE_KEY if event.kind == "finale" else event.id
+
+
+def result_keys(state: GameState, content: Content, event: TimetableEvent) -> list[str]:
+    """管理者此刻能替這件大事定的結果鍵（不含版本）：有版本的（宛城、秦頡）要等 version_from 那件結算了才知道是哪一版，
+    之前是空的；季末沒有（收季另外按）。"""
+    if event.kind == "finale":
+        return []
+    if event.version_from is None:
+        return list(event.outcomes)
+    if event.version_from not in state.world.timeline:
+        return []
+    prefix = f"{_version(state, event)}:"
+    return [key[len(prefix):] for key in event.outcomes if key.startswith(prefix)]
+
+
+def status_rows(state: GameState, content: Content) -> list[dict]:
+    """設定頁「時刻表」的每一列：id、週次、標題、種類、世界秒、狀態（done 已結算／running 決戰開過集結還沒收場／
+    due 時間到了還沒結算／later 還沒到）、結果鍵（含版本）、能不能排時間（決戰與季末，還沒結算也還沒開過）。"""
+    w = state.world
+    rows = []
+    for event in content.timetable:
+        at = when(state, content, event)
+        done = w.timeline.get(event.id)
+        opened = event.id in w.showdowns_opened
+        status = "done" if done else "running" if opened else "due" if at <= w.time + calendar.EPS_SECONDS else "later"
+        rows.append({
+            "id": event.id, "week": event.week, "title": event.title, "kind": event.kind, "when": at, "state": status,
+            "result": done.key if done else None,
+            "schedulable": event.kind in NOT_BY_SEASON_HOUR and done is None and not opened,
+        })
+    return rows

@@ -668,6 +668,7 @@ def validate(c: Content) -> None:
         known(where, eff.stats, STATS, "屬性")
         known(where, eff.learn_skills, c.skills, "武學")
         known(where, eff.materials, c.materials, "素材")
+        known(where, eff.affinity, c.characters, "人物")
         known(where, eff.trend, trend_ids | {FRONT_KEY}, "大勢線")
         front_needs_total(where, eff.trend)
         not_derived(where, eff.trend)

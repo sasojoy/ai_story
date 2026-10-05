@@ -572,6 +572,29 @@ def test_challenge_only_for_enemy_faction_at_location(on, world):
     assert {"act:challenge:huangfusong", "act:challenge:zhujun"} <= set(ids(_player(on, world, "豪戊", "haoqiang", "changshe")))
 
 
+def test_figures_off_the_front_refuse_challenges_but_still_meet(on, world, real):
+    """戰線空著的人物不接受挑戰（PM 2026-10-05 定 (A)）：黃巾在孟津渡看得到「挑戰董卓」但按不下去、寫明原因，交友照常；
+    官軍在南陽黃巾營，趙弘（沒戰線）同樣按不下去，張曼成照打；何進（人物表標了 challenge_off_front）沒有戰線也照打；
+    重挫退出戰線的波才也不受挑戰。開關關著照舊沒有挑戰。"""
+    off_front = "沒在戰線上領兵，不受挑戰"
+    huang = _player(on, world, "黃甲", "huang", "mengjin_ford")
+    assert (_option(huang, "act:challenge:dongzhuo").enabled, _option(huang, "act:challenge:dongzhuo").label) == (
+        False, f"挑戰董卓（{off_front}）")
+    assert _option(huang, "act:socialize") is not None
+    guan = _player(on, world, "官乙", "guan", "nanyang_huangjin_camp")
+    assert (_option(guan, "act:challenge:zhaohong").enabled, _option(guan, "act:challenge:zhaohong").label) == (
+        False, f"挑戰趙弘（{off_front}）")
+    assert _option(guan, "act:challenge:zhangmancheng").enabled
+    assert real.figures["hejin"].challenge_off_front and not real.figures["dongzhuo"].challenge_off_front
+    assert _option(_player(on, world, "黃丙", "huang", "dajiangjun_fu"), "act:challenge:hejin").enabled
+    guan.state.player.location = "huangjin_camp"
+    assert _option(guan, "act:challenge:bocai").enabled
+    figures.apply(guan.state, on, "bocai", FigureChange(fate="重挫", location="huangjin_camp"))
+    assert not _option(guan, "act:challenge:bocai").enabled
+    on.config.season_one = False
+    assert _option(_player(on, world, "黃戊", "huang", "mengjin_ford"), "act:challenge:dongzhuo") is None
+
+
 def test_win_routs_the_figure_and_snubs_the_winner(on, world):
     """打贏波才：他敗走，聲威 −5（陣營只有一人在推）、跟他的情誼 −5、記 50 貢獻、戰報記一筆「挑戰波才」；兩個現實小時內
     他的交友、挑戰對打贏的人都按不下去、寫「剛吃了敗仗，閉門不見」，別人照常；時間一過又見得到。"""

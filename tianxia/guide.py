@@ -1,6 +1,7 @@
 """新手引導、個人目標與任務區塊：讓玩家知道這一季在發生什麼、下一步該做什麼。"""
 from __future__ import annotations
 
+from . import ranks
 from .models import Content, TutorialStep
 from .rules import apply_effect, check_condition, season_one, season_one_off
 from .state import GameState
@@ -101,6 +102,9 @@ def quest_text(state: GameState, content: Content) -> str:
         parts.append("**個人目標**\n\n" + "\n".join(
             f"- {'☑' if check_condition(m.condition, state) else '☐'} {m.text}" for m in milestones
         ))
+    summons = ranks.summons_line(state, content)  # 還沒去的召見（計畫 T5）：照此刻出面的人寫
+    if summons:
+        parts.append(f"**召見**：{summons}")
     hint = next_hint(state, content)
     if hint:
         parts.append(f"**下一步**：{hint}")

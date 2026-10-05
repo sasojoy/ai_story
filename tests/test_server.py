@@ -144,7 +144,7 @@ def test_admin_choices_leave_out_the_beta_battle_and_thresholds_in_season_one(ga
     assert "huangjin_showdown" in listed("battles") and "huangjin_60" in listed("events")
     monkeypatch.setattr(server.CONTENT.config, "season_one", True)
     game.world.mutate_season(lambda season: setattr(season, "season_one", True))
-    assert listed("battles") == ["changshe_fire", "wancheng_jia", "guangzong"]  # 三場大戲，宛城只列這一季該開的那一版
+    assert listed("battles") == ["changshe_fire", "guangzong"]  # 三場大戲；宛城要等第 3 週結算才知道開哪一版，先不列（PM 2026-10-05）
     assert not {"huangjin_50", "huangjin_60", "huangjin_80", "huangjin_10"} & set(listed("events"))
     assert {"yuxi_50", "yuxi_100"} <= set(listed("events"))
 

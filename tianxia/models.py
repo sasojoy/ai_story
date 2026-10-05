@@ -915,6 +915,7 @@ class FigureDef(_Strict):
     squad: str  # 挑戰本人時的對手（squads.json）；難度是聲威 100 時的值
     active_from_week: int = Field(default=1, ge=1)  # 第幾週起才推（官軍三將與孫堅是第 2 週「朝廷出兵」之後）
     start_status: Literal["active", "away"] = "active"  # 輕量接位者開季時還沒出場，接手時才出現
+    challenge_off_front: bool = False  # 沒有戰線也能挑戰（何進）；其他人戰線空著時不受挑戰（PM 2026-10-05 定）
 
 
 class TimetableOutcome(_Strict):
