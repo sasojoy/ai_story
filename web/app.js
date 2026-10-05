@@ -600,7 +600,7 @@
     return `
       <div class="msg" id="mx-msg">${S.message}</div>
       ${furnaceSvg([name(S.craftSel[0]), name(S.craftSel[1])], ready)}
-      <div class="card" id="craft-line">${S.craftLine || x.craft_line}</div>
+      <div class="card" id="craft-line">${S.craftLine || x.forge_line}</div>
       <div class="act-row"><button class="btn primary" id="forge" data-act="forge" ${ready ? "" : "disabled"}>開爐煉製</button></div>
       <div class="label">素材 <small class="muted">點一樣放進爐裡</small></div>
       ${left.length ? `<div class="chips">${left.map((m) => `
@@ -1519,7 +1519,7 @@
   // 不比整份，是因為本人卡上的氣血一直在回，整份 menxia 幾乎每分鐘都不一樣，煉製頁根本沒畫那張卡
   const MENXIA_SHOWN = {
     practice: ["rules", "slot_cards", "arts", "player_card", "roster", "person", "person_card", "on_team"],
-    craft: ["materials", "clue_items", "per_craft", "bag", "craft_line", "xinde"],
+    craft: ["materials", "clue_items", "per_craft", "bag", "forge_line", "xinde"],
   };
 
   // 重畫這一頁但保留玩家正在做的事（輪詢、閉關被拒時用）：填到一半的欄位（閉關時數）、

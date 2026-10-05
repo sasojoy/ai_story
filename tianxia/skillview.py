@@ -4,7 +4,8 @@
 """
 from __future__ import annotations
 
-from . import craft, materials, team
+from . import fusion, insights, materials, team
+from .library import held_count, holding_cap  # 不 import 整個 library 模組：這個檔案自己有一個叫 library() 的函式
 from .martial_arts import MAX_LEVEL, MartialArt, power_at
 from .models import Content
 from .state import PLAYER, GameState
@@ -18,8 +19,8 @@ def rules_line(content: Content) -> str:
 def practice_hint(state: GameState, content: Content) -> str | None:
     """主畫面的提示：心得擱到 `xinde_hint_threshold` 以上、而且確實有事可做時才回傳一句話。
 
-    心得的去處（武學與成長設計第四節）：練成（身上這一門還沒第十成、付得起下一成）與合成（手上有意境）。
-    兩樣都做不了就閉嘴，免得變成嘮叨。休季時什麼都不能做，也不提示（FB-047）。
+    心得的去處（武學與成長設計第四節）：練成（身上這一門還沒第十成、付得起下一成）與合成（手上有意境、
+    持有沒滿、付得起一次，見 fusion.can_forge）。兩樣都做不了就閉嘴，免得變成嘮叨。休季時什麼都不能做，也不提示（FB-047）。
     去處照底部分頁的名字寫「修練」「煉製」（舊的門下頁已經拆成這兩頁，FB-047）。
     """
     xinde = state.player.stats.get("xinde", 0)
@@ -37,32 +38,38 @@ def practice_hint(state: GameState, content: Content) -> str | None:
     parts = []
     if todo:
         parts.append(f"去「修練」練成{'、'.join(todo)}")
-    if state.player.insights:
+    if fusion.can_forge(state, content):  # 手上有意境、持有沒滿、付得起一次合成或合併才提；光有意境不算
         parts.append("去「煉製」拿意境合成新武學")
     if not parts:
         return None
     return f"💡 你已攢下 {xinde} 點心得。{'，或'.join(parts)}。"
 
 
-def craft_line(
-    state: GameState, content: Content, material_ids: list[str],
-    world: WorldStateStore | None = None,
+def forge_line(
+    state: GameState, content: Content, world: WorldStateStore, art_id: str | None, insight_ids: list[str],
 ) -> str:
-    """門下煉製那一塊的說明：成本、目前心得，或者為什麼還不能開爐。"""
-    xinde = state.player.stats.get("xinde", 0)
-    if len(material_ids) != craft.MATERIALS_PER_CRAFT:
-        return (
-            f"**煉製**　選 {craft.MATERIALS_PER_CRAFT} 樣素材煉成一門功法。凡品配方不花心得；"
-            f"用到靈品、天品要花心得（遊歷打贏、操練、閉關都能得到）。目前心得 {xinde}。"
+    """煉製頁的說明：放了什麼、會做哪一種、花多少心得，或者為什麼還不能開爐。"""
+    cfg, xinde = content.config, state.player.stats.get("xinde", 0)
+    count = f"武學與意境 {held_count(state)}/{holding_cap(content, state.player.member.level)}"
+    if art_id and len(insight_ids) == 1:
+        base = team.player_art(state, content, world, art_id)
+        insight = insights.resolve(insight_ids[0], content, world)
+        if base is None or insight is None:
+            return "（選了不存在的東西。）"
+        head = (
+            f"**合成**　【{base.name}】＋「{insight.name}」→ 一門新{base.kind}"
+            f"（屬{insight.attribute}，品質跟【{base.name}】一樣是{base.quality}），"
+            f"花 {cfg.fuse_xinde} 點心得（你有 {xinde} 點）。"
         )
-    price = craft.cost(content, material_ids)
-    names = "＋".join(content.materials[mid].name for mid in material_ids if mid in content.materials)
-    problem = craft.can_craft(state, content, material_ids, world)
-    # 種類開爐才揭曉（craft.result_kind），這裡刻意不說是內功還是武學
-    if price == 0:
-        head = f"**煉製**　{names} → 一門功法（開爐才知道是內功還是武學），凡品配方不花心得。"
+        problem = fusion.fuse_problem(state, content, world, art_id, insight_ids[0])
+    elif not art_id and len(insight_ids) == 2:
+        a, b = (insights.resolve(i, content, world) for i in insight_ids)
+        if a is None or b is None:
+            return "（選了不存在的東西。）"
+        head = f"**合併**　「{a.name}」＋「{b.name}」→ 一個新的意境，花 {cfg.merge_xinde} 點心得（你有 {xinde} 點）。"
+        problem = fusion.merge_problem(state, content, world, *insight_ids)
     else:
-        head = f"**煉製**　{names} → 一門功法（開爐才知道是內功還是武學），花 {price} 點心得（你有 {xinde} 點）。"
+        return f"**煉製**　放一門武學和一個意境，衍生出一門新武學（底留著）；或放兩個意境，合出新的意境。{count}。"
     return head if problem is None else f"{head}\n⚠ {problem}"
 
 
@@ -82,11 +89,11 @@ def art_library(state: GameState, content: Content, world: WorldStateStore) -> l
 
 
 def bag_text(state: GameState, content: Content) -> str:
-    """門下頁的「煉製素材」那一塊：背包內容，階高的排前面（素材是煉製的材料，見 craft.py）。"""
+    """背包：隨身帶著的材料（糧草、伏筆要用），階高的排前面。"""
     items = materials.bag_contents(state, content)
     if not items:
-        return "**煉製素材**　還沒撿到任何素材——打贏對手、沿路採集，或在奇遇裡拿到。"
-    lines = ["**煉製素材**　煉製功法的材料，分凡品、靈品、天品三階。"]
+        return "**背包**　還沒有東西——打贏對手、沿路採集，或在奇遇裡拿到。"
+    lines = ["**背包**　隨身帶著的材料，分凡品、靈品、天品三階。"]
     lines += [
         f"- {m.name} ×{n}　{materials.tier_label(m)}・屬{m.attribute}　{m.description}"
         for m, n in items

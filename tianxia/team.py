@@ -158,8 +158,8 @@ def remove_from_team(state: GameState, companion_id: str) -> list[str]:
 def switch_art(state: GameState, content: Content, world: WorldStateStore, art_id: str) -> list[str]:
     """改練：把功法庫裡的一門換上身，被換下來的回庫，兩邊的熟練度**各自保留**。
 
-    煉製（craft.py）會讓同一個人擁有超過一門內功／武學，但每人同時只能練一門（設計文件
-    六.4），所以需要這個動作——在這之前整個 team.py 連散功都沒有，煉出絕學卻裝不上去。
+    合成（fusion.py）、學藝會讓同一個人擁有超過一門內功／武學，但每人同時只能練一門（設計文件
+    六.4），所以需要這個動作——在這之前整個 team.py 連散功都沒有，拿到好功法卻裝不上去。
     熟練度存在 `PlayerState.art_levels`（換下來時寫進去、換上去時取出來），所以換回來不用
     重練；舊存檔沒有這個欄位時，庫裡的功法一律從第一成算起。
     """

@@ -11,14 +11,13 @@ from __future__ import annotations
 import random
 from collections.abc import Callable
 
-from . import craft, materials, team
+from . import team
 from .engine import FREE_TEXT_OPTION, Game, Option
 from .models import Content
 from .world_state import WorldStateStore
 
 HALF_HOUR = 1800
-SPEND_XINDE_EVERY = 5  # 每幾步檢查一次要不要拿心得去練功/療傷/煉製
-CRAFT_TRIES = 4  # 煉製時最多試幾組素材組合（第一組是階最高的，其餘隨機）
+SPEND_XINDE_EVERY = 5  # 每幾步檢查一次要不要拿心得去練功/療傷
 FORESHADOW_OPTIONS = ("fs:", "talk:clue:")  # 伏筆的最後一步、對話的片段選項：機器人不做伏筆
 
 
@@ -48,29 +47,6 @@ def spend_xinde(game: Game, rng: random.Random) -> None:
     for kind in ("內功", "武學"):
         if can_practise(game, kind):
             game.practice(kind)
-
-
-def craft_and_keep_the_best(game: Game, rng: random.Random) -> None:
-    """素材夠、心得夠就煉一爐，煉出更好的就改練上去。
-
-    刻意挑**階最高的兩樣**素材（而不是隨機挑）：那才會踩到「素材的階位移品質分佈」那條路，
-    不然量出來的永遠是最低階的結果。機器人會煉製很重要——不然整季模擬完全碰不到煉製，
-    煉製的平衡也就量不到（這是第二刀留下的待辦）。
-    """
-    held: list[str] = []
-    for material, count in materials.bag_contents(game.state, game.content):
-        held += [material.id] * count
-    if len(held) < craft.MATERIALS_PER_CRAFT:
-        return
-    # 先試階最高的那一組，被擋下（素材不夠／心得不夠／這門功法已經有了）就換幾組試試。
-    # 不換的話一旦撞到「已經煉過」的配方，機器人會從此再也不煉製，整季模擬就測不到煉製了。
-    candidates = [held[: craft.MATERIALS_PER_CRAFT]]
-    candidates += [[rng.choice(held), rng.choice(held)] for _ in range(CRAFT_TRIES - 1)]
-    for pair in candidates:
-        if craft.can_craft(game.state, game.content, pair, game.world) is None:
-            game.craft(pair)
-            _switch_to_the_strongest(game)
-            return
 
 
 def _switch_to_the_strongest(game: Game) -> None:
@@ -138,7 +114,6 @@ def play_season(
             game.choose(choice)
             if step % SPEND_XINDE_EVERY == 0:
                 spend_xinde(game, rng)
-                craft_and_keep_the_best(game, rng)
         if choice is None or step % 4 == 0:
             game.advance(HALF_HOUR)
         if observe is not None:

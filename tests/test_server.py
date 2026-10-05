@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 
 import server
 from conftest import at, season_one_events
-from tianxia import atlas, battle_instance, calendar, companion_agent, craft, database
+from tianxia import atlas, battle_instance, calendar, companion_agent, database, fusion, naming
 from tianxia.accounts import NAME_TAKEN
 from tianxia.characters import open_characters
 from tianxia.engine import Game
@@ -174,7 +174,7 @@ def test_menxia_view_falls_back_to_no_person_for_an_unknown_one(game):
     view = server.look(game, lambda g: server.menxia_view(g, "沒這個人"))
     assert view["person"] is None and view["person_card"] is None
     assert view["roster"][0]["key"] == "player"
-    assert view["per_craft"] == 2
+    assert "forge_line" in view and "per_craft" not in view and "craft_line" not in view
 
 
 def _clue_items(game):
@@ -666,61 +666,72 @@ def test_roster_pick_and_team_toggle_ignore_people_you_do_not_have(client):
     assert out.status_code == 400 and out.json() == {"error": "名冊裡沒有這個人。"}
 
 
-def test_craft_line_previews_without_crafting(client):
+def test_forge_line_previews_without_forging(client):
     _player(client)
     game = server.game_for("沈青衫")
-    mid = next(iter(server.CONTENT.materials))
-    game.state.player.materials = {mid: 2}
+    game.state.player.insights = ["feng"]
+    game.state.player.stats["xinde"] = 100
     open_characters().save(game.state)  # 資料庫是唯一的真實來源：進鎖先重讀，只改記憶體的話下一個請求就看不到
-    out = client.post("/api/craft_line", json={"materials": [mid, mid], "kind": "武學"}).json()
-    assert "煉製" in out["line"]
-    assert game.state.player.materials == {mid: 2}
-    assert open_characters().load("沈青衫").player.materials == {mid: 2}
+    out = client.post("/api/forge_line", json={"art": "jichu_quanjiao", "insights": ["feng"]}).json()
+    assert "合成" in out["line"] and "【基礎拳腳】＋「風」" in out["line"]
+    out = client.post("/api/forge_line", json={}).json()  # 什麼都沒放：只說怎麼放
+    assert "放一門武學和一個意境" in out["line"]
+    saved = open_characters().load("沈青衫").player
+    assert saved.arts == [] and saved.insights == ["feng"] and saved.stats["xinde"] == 100
     view = client.get("/api/menxia").json()
-    assert view["materials"][0]["id"] == mid and view["materials"][0]["count"] == 2
+    assert "放一門武學和一個意境" in view["forge_line"] and "craft_line" not in view and "per_craft" not in view
 
 
-def _a_player_with_a_material(client, count, xinde=100):
-    """新角色，背包裡某一種要花心得的（靈品）素材 ×count；存進資料庫（進鎖會重讀）。回傳素材 id。"""
+def test_the_old_craft_endpoints_are_gone(client):
+    _player(client)
+    assert "craft" not in server.MENXIA_ACTIONS and "forge" in server.MENXIA_ACTIONS
+    assert client.post("/api/menxia/craft", json={"materials": ["gang_1", "gang_1"]}).status_code == 404
+    assert client.post("/api/craft_line", json={"materials": []}).status_code == 404
+
+
+def _a_player_with_insights(client, insights=("feng", "huo"), xinde=100):
+    """新角色（開局送的兩門基礎武學在身上），悟得 insights、心得 xinde；存進資料庫（進鎖會重讀）。"""
     _player(client)
     game = server.game_for("沈青衫")
-    mid = next(m.id for m in server.CONTENT.materials.values() if m.tier == 2)
-    assert game.craft_cost([mid, mid]) > 0  # 要花心得，下面「心得有沒有被扣」才說明得了事情
-    assert game.state.player.member.wugong_id == "jichu_quanjiao" and game.state.player.arts == []  # 開局送的那一門
-    game.state.player.materials = {mid: count}
+    game.state.player.insights = list(insights)
     game.state.player.stats["xinde"] = xinde
     open_characters().save(game.state)
-    return mid
 
 
-def test_the_forge_takes_the_same_material_twice_when_there_are_two(client):
-    """FB-005：煉製可以重複丟同一樣素材（網頁版的素材格子本來就允許）；伺服器這一端也要收，兩樣都從背包扣。
-    不連模型：conftest 把 chat_structured 假成連不上，首次發現的配方走退路字表取名。"""
-    mid = _a_player_with_a_material(client, 2)
-    price = server.game_for("沈青衫").craft_cost([mid, mid])
-    out = client.post("/api/menxia/craft", json={"materials": [mid, mid]})
-    assert out.status_code == 200
+def test_the_forge_fuses_an_art_with_an_insight(client):
+    """合成：武學＋意境，花 5 點心得，新武學進功法庫、底留著。不連模型：conftest 把 chat_structured 假成連不上，
+    首次發現的配方走退路字表取名。"""
+    _a_player_with_insights(client)
+    out = client.post("/api/menxia/forge", json={"art": "jichu_quanjiao", "insights": ["feng"]})
+    assert out.status_code == 200 and "衍生出" in out.json()["message"]
     saved = open_characters().load("沈青衫").player
-    assert saved.materials.get(mid, 0) == 0
-    assert saved.stats["xinde"] == 100 - price
-    material = server.CONTENT.materials[mid]
-    kind = craft.result_kind(material, material, open_world().read().tianji)  # 開爐才揭曉的種類
-    key = craft.recipe_key([mid, mid], kind)
+    key = fusion.fuse_key("jichu_quanjiao", "feng")
     art = open_world().lookup_recipe(key)
-    slot = saved.member.wugong_id if kind == "武學" else saved.member.neigong_id
-    assert art is not None and art.kind == kind and art.id in saved.arts  # 欄位上已經有開局送的那一門：煉出來的進功法庫
-    assert slot in ("jichu_quanjiao", "jichu_tuna")
-    assert art.name == craft.fallback_name(server.CONTENT, key, kind)  # 沒問模型
+    assert art is not None and art.id in saved.arts and art.kind == "武學" and art.attribute == "快"
+    assert art.name == naming.fallback_name(server.CONTENT, key, "武學")  # 沒問模型
+    assert saved.member.wugong_id == "jichu_quanjiao"  # 底留著
+    assert saved.stats["xinde"] == 95
+    assert saved.insights == ["feng", "huo"]  # 意境不會用掉
 
 
-def test_the_forge_does_not_craft_the_same_material_twice_with_only_one(client):
-    mid = _a_player_with_a_material(client, 1)
-    out = client.post("/api/menxia/craft", json={"materials": [mid, mid], "kind": "武學"})
-    assert out.status_code == 200 and "不夠" in out.json()["message"]
+def test_the_forge_merges_two_insights(client):
+    _a_player_with_insights(client)
+    out = client.post("/api/menxia/forge", json={"insights": ["feng", "huo"]})
+    assert out.status_code == 200 and "交融" in out.json()["message"]
     saved = open_characters().load("沈青衫").player
-    assert saved.materials == {mid: 1}
-    assert saved.stats["xinde"] == 100
-    assert saved.member.wugong_id == "jichu_quanjiao" and saved.arts == []
+    merged = open_world().lookup_insight_recipe(fusion.merge_key("feng", "huo"))
+    assert merged is not None and merged.attribute == "陽" and saved.insights == ["feng", "huo", merged.id]
+    assert saved.stats["xinde"] == 95
+
+
+def test_the_forge_refuses_what_it_cannot_do_and_charges_nothing(client):
+    _a_player_with_insights(client, insights=("feng",), xinde=2)
+    for body in ({"art": "jichu_quanjiao", "insights": ["feng"]}, {"insights": ["feng", "feng"]},
+                 {"art": "jichu_quanjiao", "insights": ["huo"]}, {"art": "jichu_quanjiao", "insights": []}):
+        out = client.post("/api/menxia/forge", json=body)
+        assert out.status_code == 200 and out.json()["message"], body
+    saved = open_characters().load("沈青衫").player
+    assert saved.arts == [] and saved.insights == ["feng"] and saved.stats["xinde"] == 2
 
 
 # ── 功法卡（FB-006）與功法庫先看卡再改練（QA L4）────────────────

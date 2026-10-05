@@ -1004,10 +1004,10 @@ def test_nothing_personal_can_be_done_while_preparing(content, world):
     assert game.seclude(4) == ["你現在無法閉關。"]
     assert game.state.player.busy_until is None
     assert game.state.player.member.wugong_id is None
-    game.state.player.materials = {"gang_1": 2}
+    game.state.player.insights = ["feng"]
     game.state.player.stats["xinde"] = 500
-    assert game.craft(["gang_1", "gang_1"]) == waiting
-    assert game.state.player.materials == {"gang_1": 2}
+    assert game.forge(None, ["feng", "feng"]) == waiting
+    assert game.state.player.insights == ["feng"] and game.state.player.stats["xinde"] == 500
     assert game.switch_art("驚雷掌") == waiting
 
 

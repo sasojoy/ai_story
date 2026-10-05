@@ -22,6 +22,7 @@ from .models import (
     FollowerDef, Foreshadows, InsightDef, Location, OrdersContent, PromotionDef,
     MapLayout, Material, RoadSight, Scenario, Sect, SimRumor, SkillDef, Squad, TimetableEvent, Tutorial,
 )
+from .naming import name_problem
 from .zh import to_traditional
 
 ROAD_SIGHTS_PER_SPOT = 2  # 路上見聞：每一種路、每一個大區的組合至少要有幾則可挑（路上設計第五節）
@@ -820,16 +821,15 @@ def validate(c: Content) -> None:
         + "、".join(f"{c.materials[mid].name}（{mid}）" for mid in unreachable),
     )
 
-    # 煉製的決定性組名字表（LLM 不可用時的退路）：不能是空的，而且組出來的每一個名字都得
-    # 通過命名過濾——這條退路一定會被走到（整季模擬把 LLM mock 掉），組出壞名字會永久登記。
-    from .craft import name_problem  # noqa: PLC0415  延後 import，避免 content <-> craft 互相依賴
-
+    # 合成、合併的決定性組名字表（模型不可用時的退路）：不能是空的，而且組出來的每一個名字都得
+    # 通過命名過濾——這條退路一定會被走到（整季模擬把模型 mock 掉），組出壞名字會永久登記。
     names = c.craft_names
     need(bool(names.prefixes), "craft_names.prefixes 不能是空的")
     need(bool(names.wugong), "craft_names.wugong 不能是空的")
     need(bool(names.neigong), "craft_names.neigong 不能是空的")
+    need(bool(names.insight), "craft_names.insight 不能是空的")
     for prefix in names.prefixes:
-        for suffix in [*names.wugong, *names.neigong]:
+        for suffix in [*names.wugong, *names.neigong, *names.insight]:
             reason = name_problem(prefix + suffix, c)
             need(reason is None, f"craft_names 組出的名字「{prefix + suffix}」過不了命名過濾：{reason}")
     for word in c.banned_names:

@@ -39,6 +39,8 @@ def store_art(state: GameState, art: MartialArt, quality: str | None = None) -> 
     """新拿到的武學放哪：對應的欄位空著就配上身（第一成），否則進功法庫。quality 是玩家這一份的品質
     （跟全服登記的不一樣時才記）。這裡不看上限：該不該擋住由呼叫端決定（合成、學藝擋，奇遇給的、買來的不擋）。"""
     p = state.player
+    if art.id in owned_arts(state):  # 已經有了（配在身上或在庫裡）：不重複收，也不動它的品質與熟練度
+        return []
     if quality is not None and quality != art.quality:
         p.art_quality[art.id] = quality
     slot = "neigong_id" if art.kind == "內功" else "wugong_id"

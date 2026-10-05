@@ -43,7 +43,6 @@ from tianxia import companion_agent, event_llm, foreshadow, materials, rules, se
 from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, AccountStore, normalize
 from tianxia.content import PROFILE_ENV, load_content, profile_line
 from tianxia.characters import open_characters
-from tianxia.craft import MATERIALS_PER_CRAFT
 from tianxia.database import default_path, open_database
 from tianxia.engine import Game
 from tianxia.models import FREE_TEXT_MAX
@@ -288,7 +287,7 @@ def main_view(game: Game) -> dict:
 
 
 def menxia_view(game: Game, person: str | None = None) -> dict:
-    """修練與煉製兩頁的資料（同一份：心得、名冊、素材、功法庫都兩邊用得到）。person 是名冊裡點的人。"""
+    """修練與煉製兩頁的資料（同一份：心得、名冊、背包、功法庫都兩邊用得到）。person 是名冊裡點的人。"""
     lines = game.roster_lines()
     if person not in {key for _, key in lines}:
         person = None
@@ -316,7 +315,6 @@ def menxia_view(game: Game, person: str | None = None) -> dict:
         "clue_items": [
             {"id": item.id, "name": item.name, "count": n} for item, n in foreshadow.held_items(game.state, game.content)
         ],
-        "per_craft": MATERIALS_PER_CRAFT,
         # 功法卡（FB-006）：身上兩門各一張，還沒學的那一門是一句「你還沒有內功。」；
         # 功法庫通常只有幾門，卡一起送，點開不必再打一次 API（QA L4：先看卡再改練）
         "slot_cards": [
@@ -325,7 +323,7 @@ def menxia_view(game: Game, person: str | None = None) -> dict:
             for k in KINDS
         ],
         "arts": [{"label": label, "id": aid, "card": md(game.art_detail(aid))} for label, aid in game.art_library()],
-        "craft_line": md(game.craft_line([])),
+        "forge_line": md(game.forge_line(None, [])),
     }
 
 
@@ -719,7 +717,7 @@ def api_do(op: str, request: Request, body: dict = Body(default={})):
 MENXIA_ACTIONS = {
     "practice": lambda g, b: g.practice(str(b.get("kind") or KINDS[0])),
     "heal": lambda g, b: g.heal(),
-    "craft": lambda g, b: g.craft([str(m) for m in b.get("materials") or []]),  # 內功／武學開爐才揭曉，body 的 kind 不看
+    "forge": lambda g, b: g.forge(b.get("art") or None, [str(i) for i in b.get("insights") or []]),  # 一武學＋一意境＝合成，兩意境＝合併
     "switch": lambda g, b: g.switch_art(str(b.get("art") or "")),
     "join": lambda g, b: g.add_to_team(str(b.get("person") or "")),
     "leave": lambda g, b: g.remove_from_team(str(b.get("person") or "")),
@@ -754,12 +752,13 @@ def api_menxia_do(op: str, request: Request, body: dict = Body(default={})):
     }
 
 
-@app.post("/api/craft_line")
-def api_craft_line(request: Request, body: dict = Body(default={})):
-    """選了素材、換了種類就更新成本說明（不算行動、不存檔）。"""
+@app.post("/api/forge_line")
+def api_forge_line(request: Request, body: dict = Body(default={})):
+    """煉製頁選了東西就更新說明（不算行動、不存檔）。"""
     game = _game(request)
-    materials = [str(m) for m in body.get("materials") or []]
-    return {"line": look(game, lambda g: md(g.craft_line(materials)))}
+    art = body.get("art") or None
+    picked = [str(i) for i in body.get("insights") or []]
+    return {"line": look(game, lambda g: md(g.forge_line(art, picked)))}
 
 
 @app.get("/api/reports")

@@ -6,6 +6,7 @@ import pytest
 from pydantic import ValidationError
 
 from conftest import FIXTURE
+from tianxia import naming
 from tianxia.content import ContentError, load_content, profile_line, validate
 from tianxia.models import (
     BattleAct, BattleActionEffect, BattleDef, BattleFaction, BattleOption, BattleOutcome, Condition, Config, FactionDef,
@@ -1374,3 +1375,19 @@ def test_real_content_has_seventeen_basic_arts_and_every_location_an_insight():
     basics = [s for s in real.skills.values() if s.quality == "下品"]
     assert len(basics) == 17
     assert all(loc.insights for loc in real.locations.values())
+
+
+def test_every_insight_fallback_name_passes_the_filter(content):
+    for prefix in content.craft_names.prefixes:
+        for suffix in content.craft_names.insight:
+            assert naming.name_problem(prefix + suffix, content) is None
+
+
+def test_validate_checks_the_insight_fallback_names_too(content):
+    content.craft_names.insight = ["龍"]  # 「某某龍」之中有一個會撞上禁用詞時要在載入當下報錯
+    content.banned_names = [content.craft_names.prefixes[0] + "龍"]
+    with pytest.raises(ContentError, match="craft_names 組出的名字"):
+        validate(content)
+    content.craft_names.insight = []
+    with pytest.raises(ContentError, match="craft_names.insight 不能是空的"):
+        validate(content)

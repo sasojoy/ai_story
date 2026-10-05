@@ -1,4 +1,5 @@
-"""煉製素材的掉落與背包（無限煉製第一刀，見 docs/superpowers/specs/2026-10-01-無限煉製-design.md §三、§四）。
+"""素材的掉落與背包（無限煉製第一刀，見 docs/superpowers/specs/2026-10-01-無限煉製-design.md §三、§四）。
+素材不再拿去煉製（武學與成長計畫一 Task 8：煉製改成武學＋意境的合成，見 fusion.py）；現在的用途是糧草（押糧車）與伏筆。
 
 純規則：只處理素材 id 與數量，不產生畫面文字（文字歸 `skillview.py`／呼叫端的訊息串）。
 素材本身是 `content/materials.json` 的內容（`models.Material`：一個屬性 × 一個階）。
@@ -49,7 +50,7 @@ def grant(state: GameState, content: Content, material_id: str, count: int = 1) 
 
 
 def take(state: GameState, material_id: str, count: int = 1) -> bool:
-    """從背包扣掉；不夠就什麼都不動、回傳 False（煉製要用，先放在這裡一起管）。"""
+    """從背包扣掉；不夠就什麼都不動、回傳 False。"""
     bag = state.player.materials
     if count <= 0 or bag.get(material_id, 0) < count:
         return False

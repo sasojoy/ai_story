@@ -20,14 +20,13 @@
 ### 校準（用已知答案驗指標，不是用指標去下結論）
 
 指標本身要先能把「我們已經知道哪個版本比較無聊」排對順序，否則調出來的參數只是在迎合直覺。
-這裡用**行為重現**的方式造出三個已經修掉的缺陷（而不是 checkout 舊 commit——那些版本連
+這裡用**行為重現**的方式造出兩個已經修掉的缺陷（而不是 checkout 舊 commit——那些版本連
 煉製模組都還不存在，同一支腳本跑不起來）：
 
 | 旗標 | 重現哪個歷史狀態 |
 |---|---|
 | `--no-craft --no-train` | 0716d8b 之前：沒有煉製、也沒有遊歷 |
 | `--no-train` | 239bdf8 之前：有煉製，但遭遇戰一季只有 3 場（遊歷與探索三選一的野怪都關掉） |
-| `--allow-recraft` | 2b05b47 之前：47% 的爐在重煉已知配方 |
 | （無旗標） | 現在 |
 
 執行：
@@ -53,7 +52,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")  # 不包的話印 ✔ 會噴 cp950
 
-from tianxia import bot, companion_agent, craft, database, materials  # noqa: E402
+from tianxia import bot, companion_agent, database, materials  # noqa: E402
 from tianxia.content import load_content  # noqa: E402
 from tianxia.engine import Game  # noqa: E402
 from tianxia.ollama_client import OllamaClient  # noqa: E402
@@ -269,7 +268,7 @@ def _without_wild(content):
     return mock.patch.object(content.config, "explore_mix", no_wild)
 
 
-def _play(content, seed: int, db_path: Path, *, no_craft=False, no_train=False, allow_recraft=False) -> FunLog:
+def _play(content, seed: int, db_path: Path, *, no_craft=False, no_train=False) -> FunLog:
     log = FunLog()
     rng = random.Random(seed)
     store = open_world(db_path)
@@ -279,11 +278,6 @@ def _play(content, seed: int, db_path: Path, *, no_craft=False, no_train=False, 
     store.open_season(content, 0.0)
     game.state.world = store.get_season()
     first_crafts: set[str] = set()
-
-    real_can_craft = craft.can_craft
-
-    def lenient_can_craft(state, cnt, ids, world=None):
-        return real_can_craft(state, cnt, ids, None)  # 重現舊行為：不檢查「這門你已經有了」
 
     for step in range(MAX_STEPS):
         if game.state.world.ended:
@@ -299,38 +293,6 @@ def _play(content, seed: int, db_path: Path, *, no_craft=False, no_train=False, 
             observe_step(game, log, before, choice, before_events)
             if step % SPEND_XINDE_EVERY == 0:
                 bot.spend_xinde(game, rng)
-                if not no_craft:
-                    known = game.world.recipe_keys()
-                    had_arts = {game.state.player.member.neigong_id, game.state.player.member.wugong_id}
-                    had_arts |= set(game.state.player.arts)
-                    before_spend = (sum(game.state.player.materials.values()),
-                                    game.state.player.stats.get("xinde", 0))
-                    if allow_recraft:
-                        # 連 CRAFT_TRIES 一起退回 1：舊版沒有「被擋就換一組」的重試迴圈，
-                        # 那個迴圈跟「擋重煉」是同一個 commit（2b05b47）加的。只關掉檢查、
-                        # 留著重試，機器人照樣會自己換到一組沒煉過的，白燒根本不會發生——
-                        # 校準的 ③ 跟 ④ 一模一樣就是這個原因，不是指標看不見。
-                        with mock.patch.object(craft, "can_craft", lenient_can_craft), \
-                             mock.patch.object(bot, "CRAFT_TRIES", 1):
-                            bot.craft_and_keep_the_best(game, rng)
-                    else:
-                        bot.craft_and_keep_the_best(game, rng)
-                    for key in game.world.recipe_keys() - known:
-                        first_crafts.add(key)
-                    now_arts = {game.state.player.member.neigong_id, game.state.player.member.wugong_id}
-                    now_arts |= set(game.state.player.arts)
-                    after_spend = (sum(game.state.player.materials.values()),
-                                   game.state.player.stats.get("xinde", 0))
-                    if after_spend != before_spend:  # 真的開了一爐
-                        log.crafts += 1
-                        log.chance("配方首創")  # 開爐＝煉製這條管道的一次機會
-                        log.chance("配方查表")
-                        if not (now_arts - had_arts):  # 卻沒有換到任何新功法
-                            log.wasted += 1
-                            log.channel_penalty["配方首創"] += WASTE_PENALTY / 2
-                            log.channel_penalty["配方查表"] += WASTE_PENALTY / 2
-                            log.channel_bad["配方首創"] += 1
-                            log.channel_bad["配方查表"] += 1
         if choice is None or step % 4 == 0:
             game.advance(HALF_HOUR)
 
@@ -403,8 +365,7 @@ def main() -> None:
     ap.add_argument("--no-craft", action="store_true")
     ap.add_argument("--no-train", action="store_true",
                     help="不打遭遇戰：不選遊歷，探索三選一的野怪那一支也關掉（重現一季只有 3 場戰鬥的狀態）")
-    ap.add_argument("--allow-recraft", action="store_true")
-    ap.add_argument("--calibrate", action="store_true", help="跑四個已知狀態，驗指標排序對不對")
+    ap.add_argument("--calibrate", action="store_true", help="跑三個已知狀態，驗指標排序對不對")
     args = ap.parse_args()
 
     content = load_content(ROOT / "content")
@@ -414,26 +375,24 @@ def main() -> None:
              mock.patch.object(OllamaClient, "chat_text", lambda self, m, **k: ""):
             if not args.calibrate:
                 logs = [
-                    play(content, s, tmp / f"w{s}", no_craft=args.no_craft, no_train=args.no_train,
-                         allow_recraft=args.allow_recraft)
+                    play(content, s, tmp / f"w{s}", no_craft=args.no_craft, no_train=args.no_train)
                     for s in args.seeds
                 ]
-                report("現在的版本" if not (args.no_craft or args.no_train or args.allow_recraft) else "指定旗標",
+                report("現在的版本" if not (args.no_craft or args.no_train) else "指定旗標",
                        logs, content)
                 return
 
             cases = [
                 ("① 沒有煉製也沒有遊歷（0716d8b 之前）", {"no_craft": True, "no_train": True}),
                 ("② 有煉製但遭遇戰一季 3 場（239bdf8 之前）", {"no_train": True}),
-                ("③ 會重煉已知配方、47% 白燒（2b05b47 之前）", {"allow_recraft": True}),
-                ("④ 現在", {}),
+                ("③ 現在", {}),
             ]
             results, all_logs = [], []
             for i, (label, flags) in enumerate(cases):
                 logs = [play(content, s, tmp / f"c{i}s{s}", **flags) for s in args.seeds]
                 all_logs.append(logs)
                 results.append((label, report(label, logs, content)))
-            print(f"\n{'=' * 72}\n校準結果（期望是 ① < ② < ③ < ④）")
+            print(f"\n{'=' * 72}\n校準結果（期望是 ① < ② < ③）")
             for label, score in results:
                 print(f"  {score:+8.1f}　{label}")
             # 判準刻意只要求「現在要贏過每一個已知缺陷」，不要求三個缺陷狀態之間也排對：

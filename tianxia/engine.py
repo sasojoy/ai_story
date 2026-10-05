@@ -13,8 +13,8 @@ from collections.abc import Callable
 from pydantic import BaseModel
 
 from . import (
-    atlas, battle_instance, battlelog, calendar, companion_agent, craft, encounter, event_llm, figures, flavor, foreshadow,
-    insights, journal, library, materials, orders, push, ranks, roster, skillview, team, timetable,
+    atlas, battle_instance, battlelog, calendar, companion_agent, encounter, event_llm, figures, flavor, foreshadow,
+    fusion, insights, journal, library, materials, orders, push, ranks, roster, skillview, team, timetable,
 )
 from .events import choice_label, event_candidates, has_events_here, pick_event, visible_choices
 from .guide import base_step_count, note_action, quest_text, tutorial_active, tutorial_intro
@@ -2532,34 +2532,28 @@ class Game:
             journal.add_entry(self.state, JournalEntry(time=end_time, title="出關", tag=tag, changes=[change]))
         return [msg]
 
-    def craft(self, material_ids: list[str]) -> list[str]:
-        """煉製：兩樣素材煉成一門功法，花心得（見 tianxia/craft.py）；內功還是武學開爐才揭曉。
-
-        LLM 只在「全服第一次煉出這個配方」時被呼叫一次，而且只負責取名字；配方命中就是純
-        查表。呼叫在這裡而不是在 `craft.py` 裡拿 client，是為了跟其他門下動作一樣由 Game
-        統一處理江湖紀錄。
-        """
+    def forge(self, art_id: str | None, insight_ids: list[str]) -> list[str]:
+        """煉製頁的開爐：一門武學＋一個意境＝合成，兩個意境（可以是同一個）＝合併（見 fusion.py）。
+        首次出現的配方要等模型取名（在行動裡叫，跟舊的煉製一樣；移出鎖外是線上架構第 2 期的事）；
+        江湖紀錄的標題照煉製頁寫「煉製」（FB-047），做成了才寫，被拒絕只回一句話。"""
         if self._preparing():
             return self._log(["（賽季籌備中，等待管理者開季。）"])
         xinde = self._xinde()
-        art, msgs = craft.craft(self.state, self.content, self.world, self.client, material_ids)
+        if art_id and len(insight_ids) == 1:
+            art, msgs = fusion.fuse(self.state, self.content, self.world, self.client, art_id, insight_ids[0])
+            tag = f"合成【{art.name}】" if art is not None else None
+        elif not art_id and len(insight_ids) == 2:
+            insight, msgs = fusion.merge(self.state, self.content, self.world, self.client, *insight_ids)
+            tag = f"合併「{insight.name}」" if insight is not None else None
+        else:
+            return self._log(["放一門武學和一個意境（合成），或兩個意境（合併）。"])
         out = self._log(msgs)
-        if art is not None:
-            out += self._menxia_entry(f"煉製【{art.name}】", xinde, guide=True, title=journal.CRAFT)
+        if tag is not None:
+            out += self._menxia_entry(tag, xinde, guide=True, title=journal.CRAFT)
         return out
 
-    def craft_cost(self, material_ids: list[str]) -> int:
-        return craft.cost(self.content, material_ids)
-
-    def craft_line(self, material_ids: list[str]) -> str:
-        return skillview.craft_line(self.state, self.content, material_ids, self.world)
-
-    def material_choices(self) -> list[tuple[str, str]]:
-        """煉製選單的素材選項：（顯示文字, 素材 id），階高的排前面。"""
-        return [
-            (f"{m.name}（{materials.tier_label(m)}・屬{m.attribute}）×{n}", m.id)
-            for m, n in materials.bag_contents(self.state, self.content)
-        ]
+    def forge_line(self, art_id: str | None, insight_ids: list[str]) -> str:
+        return skillview.forge_line(self.state, self.content, self.world, art_id, insight_ids)
 
     def art_library(self) -> list[tuple[str, str]]:
         return skillview.art_library(self.state, self.content, self.world)

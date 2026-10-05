@@ -68,6 +68,16 @@ def test_store_art_does_not_stack_the_same_art_twice(state, world):
     assert state.player.arts == ["旋風腿"]
 
 
+def test_store_art_does_not_add_an_art_that_is_already_worn(state, world):
+    """Task 6 審查的小毛病：已經配在身上的武學再收一次，會在功法庫裡多出一份，改練時被換下來又疊一份。"""
+    art = _fused(world, "旋風腿")
+    state.player.member.wugong_id = "旋風腿"
+    state.player.member.wugong_level = 4
+    assert library.store_art(state, art, "中品") == []
+    assert state.player.arts == [] and state.player.member.wugong_level == 4
+    assert state.player.art_quality == {}  # 已經有的那一份，品質也不被覆寫
+
+
 def test_learning_a_basic_art_costs_silver(state, content):
     state.player.location = "lake"
     state.player.stats["silver"] = 30

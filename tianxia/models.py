@@ -79,7 +79,7 @@ class Effect(_Strict):
     leave_sect: bool = False
     next_event: str | None = None
     recruit: str | None = None  # 結識某人（同伴 id）：入門；已入門時改給心得（見 roster.recruit）
-    materials: dict[str, int] = Field(default_factory=dict)  # 給煉製素材（素材 id -> 數量）；手寫劇情是天品素材的主要來源
+    materials: dict[str, int] = Field(default_factory=dict)  # 給素材（素材 id -> 數量）；手寫劇情是天品素材的主要來源
     insights: list[str] = Field(default_factory=list)  # 悟得的意境 id（奇遇給的，武學與成長設計 3.2.2）；只能是靠探索悟的基本意境
     # 在地方上留下痕跡（「地點 id:痕跡名」→ 1～3，只能加）：全服共用、每季清空；同一個人對同一個痕跡一天只算一次
     marks: dict[str, int] = Field(default_factory=dict)
@@ -93,9 +93,8 @@ class Effect(_Strict):
 
 
 class Material(_Strict):
-    """煉製用的素材：一個屬性 × 一個階（見 docs/superpowers/specs/2026-10-01-無限煉製-design.md §三）。
-
-    階只影響「煉出來的東西有多好」（素材的階位移品質的機率分佈），不影響屬性。
+    """素材：一個屬性 × 一個階（見 docs/superpowers/specs/2026-10-01-無限煉製-design.md §三）。
+    不再拿去煉製（Task 8），現在是糧草（慢屬性的算糧）與伏筆用的。
     """
 
     id: str
@@ -106,7 +105,7 @@ class Material(_Strict):
 
 
 class CraftNames(_Strict):
-    """煉製時 LLM 不可用（或產出的名字過不了過濾）的決定性組名字表，見無限煉製設計 §5.6。
+    """合成、合併時模型不可用（或產出的名字過不了過濾）的決定性組名字表，見無限煉製設計 §5.6、武學與成長設計 3.6。
 
     用配方鍵的雜湊挑 prefix × suffix，所以同一個配方永遠組出同一個名字——離線也能玩，
     而且 `tests/test_real_content.py` 整季模擬（LLM 被 mock）走的就是這條路。
@@ -115,6 +114,7 @@ class CraftNames(_Strict):
     prefixes: list[str]
     wugong: list[str]  # 武學的字尾
     neigong: list[str]  # 內功的字尾
+    insight: list[str] = Field(default_factory=lambda: ["意", "勢", "韻", "境"])  # 意境的退路字尾（武學與成長設計 3.2）
 
 
 class Drop(_Strict):
@@ -751,7 +751,6 @@ class Config(_Strict):
     neili_regen_hours: float = 2  # 氣血從零回滿所需時間
     newbie_days: float = 3  # 每季前幾天氣血回復加倍
     seclusion_xinde_per_hour: int = 15
-    xinde_cost_factor: int = 20  # 舊構想欄位，沒有任何地方讀它；練成的價錢看 practice_xinde_per_level（武學與成長設計 4.2）
     xinde_hint_threshold: int = 50  # 心得擱到這個量、而且還有功夫沒練滿時，主畫面提示玩家去門下練功
     # ── 探索三選一（探索三選一設計）──
     # 這裡有還能遇上的奇遇（一次性或奇遇事件）時，探索先滾這個機率，中了就是奇遇、不走三選一。
@@ -761,8 +760,6 @@ class Config(_Strict):
     rare_explore_chance: float = Field(default=0.025, ge=0, le=1)
     explore_mix: list[ExploreMix] = Field(default_factory=_default_explore_mix)  # 地點類型 -> 悟意境／野怪／事件的比例
     wild_neili_loss_factor: float = Field(default=0.5, ge=0, le=1)  # 探索撞上的野怪扣氣血是遊歷的幾倍（內傷照同一個比例）
-    craft_xinde_base: int = 5  # 煉製成本 = base × 素材數 + per_tier × 階總和（見無限煉製設計 §5.5）
-    craft_xinde_per_tier: int = 3
     level_exp: int = 10  # 第 n 級升 n+1 級需要 level_exp × n
     # 原本是 100，但實測一季打 19~26 場只升到第 2~3 級（升到第 10 級要 4500 經驗），
     # 而氣血設計 §1.4 的平衡量測點在第 5／10／15 級——連第 5 級都到不了。降到 10 之後
@@ -1278,7 +1275,7 @@ class Content(_Strict):
     insights: dict[str, InsightDef] = Field(default_factory=dict)  # 意境（content/insights.json，武學與成長設計附錄 A）
     materials: dict[str, Material]
     craft_names: CraftNames
-    banned_names: list[str]  # 煉製命名的禁用詞（原創原則：不用金庸等作品的專有名詞）
+    banned_names: list[str]  # 合成、合併命名的禁用詞（原創原則：不用金庸等作品的專有名詞）
     sects: dict[str, Sect]
     characters: dict[str, CharacterDef]
     squads: dict[str, Squad]

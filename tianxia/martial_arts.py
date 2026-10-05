@@ -36,7 +36,7 @@ class MartialArt(BaseModel):
     base_power: float
     top_power: float
     # "historical"（本命武學，內容手寫）、"basic"（基礎武學，內容手寫）、"fused"（合成）；
-    # 舊資料還有 "created"（玩家取名自創）與 "crafted"（煉製，craft.py 設的）
+    # 舊資料還有 "created"（玩家取名自創）與 "crafted"（舊的素材煉製，已經沒有了）
     origin: str = "created"
     creator: str | None = None  # 合成首創者；舊的自創、煉製功法照舊；內容武學為 None
     note: str = ""  # 模型寫的一句話描述（只有語意、沒有數字）；自創與本命武學是空的
@@ -95,8 +95,8 @@ def generate_from_name(
     - tianji：這一季的天機（見 world_state.SharedWorldState.tianji），同一季內同名同結果，
       換季後重新洗牌。
 
-    `weights` 與 `attribute` 是給煉製用的（見 tianxia/craft.py，無限煉製設計 §5.3、§5.4）：
-    煉製要讓「素材的階位移品質的機率分佈」、「屬性由素材決定」，但擲骰仍然來自名字的雜湊。
+    `weights` 與 `attribute` 是給合成用的（見 tianxia/fusion.py，武學與成長設計 3.4）：
+    合成要讓「品質固定下品」、「屬性由融入的意境決定」，但擲骰仍然來自名字的雜湊。
     兩個都不傳時行為跟以前**完全一樣**（取名自創那條路徑的結果不受影響，有測試保護）。
     `weights` 的鍵要照 QUALITIES 的順序排（_weighted_pick 走的是累積分佈，順序有意義）。
     """

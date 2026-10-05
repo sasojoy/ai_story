@@ -95,12 +95,19 @@ def test_a_new_insight_or_art_line_gets_the_shine():
     for line in (
         "你悟得了「風」的意境（屬快）！",
         "你學會了【長拳】（武學・下品・屬剛）。",
-        "你以【長拳】融入「風」，衍生出一門武學【追風拳】",
+        "你以【長拳】融入「風」，衍生出一門武學【追風拳】（下品・屬快）！\n一句話說明。\n這是江湖上第一次有人合出這一門——從此它就叫這個名字。",
+        "「風」與「火」在你心中交融，化成「燎原」（屬陽）！\n這是江湖上第一次有人悟出這個意境。",
         "【長拳】修練有成，從下品晉為中品！",
     ):
         assert journal._line_class(line) == "tx-line tx-new", line
-    assert journal._line_class("你又悟到一次「風」，這份體會化成了心得。") == "tx-line"
-    assert journal._line_class("你在湖邊靜下心來，看了好一陣。") == "tx-line"
+    for line in (
+        "你又悟到一次「風」，這份體會化成了心得。",
+        "你在湖邊靜下心來，看了好一陣。",
+        "路邊有獵戶設的套索，套住的山雞早被什麼東西叼走了，只剩一地毛。你學會了那個結的打法。",  # 路上見聞，不是新功法
+        "老獵戶說他悟得了一個道理。",
+        "心得 -5",
+    ):
+        assert journal._line_class(line) == "tx-line", line
 
 
 def test_explore_that_meets_an_event_tags_it_and_drops_the_intro(game):
@@ -317,44 +324,46 @@ def test_practicing_that_finishes_a_guide_step_writes_it_into_the_journal(game):
     assert f"銀兩 +{GUIDE_REWARD}" in entry.guide and f"銀兩 +{GUIDE_REWARD}" not in entry.changes
 
 
-def test_crafting_that_finishes_a_guide_step_writes_it_into_the_journal(game):
+def test_forging_that_finishes_a_guide_step_writes_it_into_the_journal(game):
     from unittest import mock
 
-    from tianxia import craft, materials
+    from tianxia import naming
     from tianxia.models import TutorialGoal
-    from tianxia.ollama_client import OllamaClient
 
-    materials.grant(game.state, game.content, "gang_1", 2)
-    _guide_waits_for(game, TutorialGoal(has_wugong=True))
-    naming = lambda self, messages, response_model, **kw: craft.CraftedName(name="鐵腕勁", description="一句話。")
-    with mock.patch.object(OllamaClient, "chat_structured", naming), \
-         mock.patch.object(craft, "result_kind", lambda a, b, tianji: "武學"):  # 這一步等的是武學
-        msgs = game.craft(["gang_1", "gang_1"])
-    assert "✔ 引導完成" not in msgs and "✔ 引導完成" in game.state.player.guide_done  # 煉製結果也不夾引導（8.1.3）
+    game.state.player.member.wugong_id = "fist"
+    game.state.player.insights = ["feng"]
+    game.state.player.stats["xinde"] = 100
+    _guide_waits_for(game, TutorialGoal(action="practice"))
+    reply = naming.NameReply(name="鐵腕勁", description="一句話。")
+    with mock.patch.object(game.client, "chat_structured", return_value=reply):
+        msgs = game.forge("fist", ["feng"])
+    assert "✔ 引導完成" not in msgs and "✔ 引導完成" in game.state.player.guide_done  # 合成結果也不夾引導（8.1.3）
     entry = latest(game)
-    assert entry.title == "煉製" and "煉製" in entry.tag
+    assert entry.title == "煉製" and entry.tag == "合成【鐵腕勁】"
     assert entry.guide[0] == "✔ 引導完成" and entry.guide[-1] == f"【{_speaker(game)}】出城。"
     assert f"銀兩 +{GUIDE_REWARD}" in entry.guide and f"銀兩 +{GUIDE_REWARD}" not in entry.changes
 
 
-def test_practice_and_crafting_are_titled_after_their_tabs(game):
-    """FB-047：江湖紀錄照動作寫「修練」（鍛鍊、療傷、改練）與「煉製」，不再寫「門下」；
+def test_practice_and_forging_are_titled_after_their_tabs(game):
+    """FB-047：江湖紀錄照動作寫「修練」（鍛鍊、療傷、改練）與「煉製」（合成、合併），不再寫「門下」；
     煉製不併進前面那則鍛鍊。"""
     from unittest import mock
 
-    from tianxia import craft, materials
-    from tianxia.ollama_client import OllamaClient
+    from tianxia import naming
 
     _train(game)
     game.practice("武學")
     assert latest(game).title == "修練" and len([e for e in game.state.journal if e.title == "修練"]) == 1
-    materials.grant(game.state, game.content, "gang_1", 2)
-    naming = lambda self, messages, response_model, **kw: craft.CraftedName(name="鐵腕勁", description="一句話。")
-    with mock.patch.object(OllamaClient, "chat_structured", naming), \
-         mock.patch.object(craft, "result_kind", lambda a, b, tianji: "內功"):
-        game.craft(["gang_1", "gang_1"])
+    game.state.player.insights = ["feng", "huo"]
+    reply = naming.NameReply(name="鐵腕勁", description="一句話。")
+    with mock.patch.object(game.client, "chat_structured", return_value=reply):
+        game.forge("fist", ["feng"])
     assert [e.title for e in game.state.journal[:2]] == ["煉製", "修練"]
-    assert "煉製【鐵腕勁】" == latest(game).tag
+    assert "合成【鐵腕勁】" == latest(game).tag
+    with mock.patch.object(game.client, "chat_structured", side_effect=RuntimeError):
+        game.forge(None, ["feng", "huo"])
+    assert [e.title for e in game.state.journal[:2]] == ["煉製", "修練"]  # 合併也標「煉製」，併進同一則
+    assert latest(game).tag.startswith("合併「")
     assert not any(e.title == "門下" for e in game.state.journal)
 
 
@@ -426,13 +435,13 @@ def test_menxia_entries_that_finish_no_guide_step_render_as_before(game):
 
 
 def test_menxia_changes_are_written_but_failures_are_not(game):
-    assert game.craft(["gang_1", "gang_1"])  # 背包是空的：被擋下
+    assert game.forge("fist", ["feng"])  # 沒有武學也沒有意境：被擋下
     assert len(game.state.journal) == 1
     _train(game)
     entry = latest(game)
     assert entry.title == "修練"
     assert "精進至第2成" in entry.tag
-    msgs = game.craft(["gang_1", "gang_1"])
+    msgs = game.forge("fist", ["feng"])  # 身上有武學了，可是還沒悟到這個意境：還是被擋下
     assert msgs and len(game.state.journal) == 2  # 失敗不會再寫一則新紀錄
     assert any(msgs[0] in line for line in game.state.log)  # 失敗訊息仍留在 log
 

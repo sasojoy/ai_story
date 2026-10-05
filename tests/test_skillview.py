@@ -168,6 +168,31 @@ def test_practice_hint_points_at_the_furnace_when_holding_an_insight(state, cont
     assert "煉製" in skillview.practice_hint(state, content)
 
 
+def test_practice_hint_only_mentions_the_furnace_when_a_forge_is_possible_and_affordable(state, content):
+    """Task 5 審查留下的：光是手上有意境不算，要持有沒滿、付得起一次合成或合併才提煉製。"""
+    state.player.member.wugong_id = "basic_fist"
+    state.player.member.wugong_level = 10  # 練成那一半不會出聲，只看煉製那一半
+    state.player.insights = ["feng"]
+    state.player.stats["xinde"] = 60
+    assert "煉製" in skillview.practice_hint(state, content)
+    content.config.fuse_xinde = content.config.merge_xinde = 999  # 付不起
+    assert skillview.practice_hint(state, content) is None
+    content.config.fuse_xinde = content.config.merge_xinde = 5
+    content.config.holding_cap_base = 2  # 持有滿了（一門武學加一個意境）
+    assert skillview.practice_hint(state, content) is None
+
+
+def test_practice_hint_needs_an_art_to_fuse_but_not_to_merge(state, content):
+    state.player.insights = ["feng"]
+    state.player.stats["xinde"] = 60
+    content.config.fuse_xinde, content.config.merge_xinde = 5, 999
+    assert skillview.practice_hint(state, content) is None  # 沒有武學：合成不了，合併付不起
+    state.player.member.wugong_id, state.player.member.wugong_level = "basic_fist", 10
+    assert "煉製" in skillview.practice_hint(state, content)  # 有了武學，合成付得起
+    content.config.fuse_xinde, content.config.merge_xinde = 999, 5
+    assert "煉製" in skillview.practice_hint(state, content)  # 合併付得起（自己跟自己也能合）
+
+
 def test_practice_hint_calls_the_pages_by_their_tab_names(state, content):
     """FB-047：門下頁拆成「修練」「煉製」兩個分頁之後，提示照分頁的名字寫，不再寫「門下」。"""
     state.player.member.wugong_id = "basic_fist"
@@ -212,14 +237,21 @@ def test_practice_hint_goes_away_once_everything_is_at_the_tenth_level(state, co
     assert skillview.practice_hint(state, content) is None
 
 
-# ── 煉製素材（門下頁的背包）────────────────────────────────
+# ── 背包（素材不再拿去煉製，企劃者的用語：任何文字都不能叫玩家拿素材去爐裡）──────────────
 
 
-def test_bag_text_when_empty_says_where_materials_come_from(state, content):
-    """探索改悟意境之後不再撿素材（武學與成長計畫一 Task 7）：提示不能再叫玩家去探索找素材。"""
+def test_bag_text_when_empty_says_where_things_come_from(state, content):
+    """探索改悟意境之後不再撿素材（武學與成長計畫一 Task 7）：提示不能再叫玩家去探索找素材；
+    素材也不再煉製（Task 8），標題與說明都不能提煉製、爐。"""
     text = skillview.bag_text(state, content)
-    assert text.startswith("**煉製素材**")
-    assert "打贏對手" in text and "探索" not in text
+    assert text.startswith("**背包**")
+    assert "打贏對手" in text and "探索" not in text and "煉" not in text and "爐" not in text
+
+
+def test_bag_text_never_mentions_the_furnace(state, content):
+    state.player.materials = {"gang_1": 1}
+    text = skillview.bag_text(state, content)
+    assert text.startswith("**背包**") and "煉" not in text and "爐" not in text
 
 
 def test_bag_text_lists_what_you_hold_high_tier_first(state, content):
@@ -232,38 +264,45 @@ def test_bag_text_lists_what_you_hold_high_tier_first(state, content):
 # ── 煉製那一塊的說明與功法庫 ────────────────────────────────
 
 
-def test_craft_line_asks_for_two_materials_first(state, content):
-    line = skillview.craft_line(state, content, [])
-    assert "選 2 樣素材" in line and "目前心得 0" in line
-    assert "凡品配方不花心得" in line and "閉關" in line  # 告訴玩家心得從哪裡來
+def test_forge_line_asks_for_an_art_and_an_insight_first(state, content, world):
+    line = skillview.forge_line(state, content, world, None, [])
+    assert "放一門武學和一個意境" in line and "放兩個意境" in line and "素材" not in line
+    assert "武學與意境 0/50" in line
 
 
-def test_craft_line_shows_the_cost_and_what_you_have(state, content):
-    from tianxia import materials
-
-    materials.grant(state, content, "gang_3", 2)
+def test_forge_line_shows_a_fuse(state, content, world):
+    state.player.member.wugong_id = "basic_fist"
+    state.player.insights = ["feng"]
     state.player.stats["xinde"] = 100
-    line = skillview.craft_line(state, content, ["gang_3", "gang_3"])
-    assert "隕鐵膽＋隕鐵膽 → 一門功法" in line and "開爐才知道" in line and "你有 100 點" in line
-    assert "⚠" not in line
+    line = skillview.forge_line(state, content, world, "basic_fist", ["feng"])
+    assert "**合成**" in line and "【粗淺拳腳】＋「風」→ 一門新武學" in line and "屬快" in line
+    assert "品質跟【粗淺拳腳】一樣是下品" in line and "花 5 點心得（你有 100 點）" in line and "⚠" not in line
 
 
-def test_craft_line_says_a_common_recipe_is_free(state, content):
-    from tianxia import materials
-
-    materials.grant(state, content, "gang_1", 2)
-    line = skillview.craft_line(state, content, ["gang_1", "gang_1"])
-    assert "精鐵砂＋精鐵砂 → 一門功法" in line and "不花心得" in line
-    assert "⚠" not in line
+def test_forge_line_shows_a_merge(state, content, world):
+    state.player.insights = ["feng", "huo"]
+    state.player.stats["xinde"] = 100
+    line = skillview.forge_line(state, content, world, None, ["feng", "huo"])
+    assert "**合併**" in line and "「風」＋「火」→ 一個新的意境" in line and "花 5 點心得" in line and "⚠" not in line
 
 
-def test_craft_line_explains_why_it_cannot_be_done(state, content):
-    from tianxia import materials
-
-    materials.grant(state, content, "gang_3", 2)
+def test_forge_line_explains_why_it_cannot_be_done(state, content, world):
+    state.player.member.wugong_id = "basic_fist"
+    state.player.insights = ["feng"]
     state.player.stats["xinde"] = 0
-    line = skillview.craft_line(state, content, ["gang_3", "gang_3"])
-    assert "⚠" in line and "心得不足" in line
+    assert "⚠ 心得不足" in skillview.forge_line(state, content, world, "basic_fist", ["feng"])
+    assert "⚠ 心得不足" in skillview.forge_line(state, content, world, None, ["feng", "feng"])
+    assert "⚠ 你還沒悟到" in skillview.forge_line(state, content, world, "basic_fist", ["huo"])
+
+
+def test_forge_line_survives_something_that_does_not_exist(state, content, world):
+    assert "不存在" in skillview.forge_line(state, content, world, "ghost", ["feng"])
+    assert "不存在" in skillview.forge_line(state, content, world, None, ["feng", "ghost"])
+
+
+def test_forge_line_never_sends_you_to_the_furnace_with_materials(state, content, world):
+    for art_id, picked in ((None, []), ("basic_fist", ["feng"]), (None, ["feng", "huo"])):
+        assert "素材" not in skillview.forge_line(state, content, world, art_id, picked)
 
 
 def test_the_art_library_is_empty_at_first(state, content, world):
