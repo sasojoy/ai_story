@@ -106,7 +106,7 @@ def overlap(a, b) -> bool:
 
 
 def place(svg: str, loc_id: str) -> str:
-    """大地圖上一個地點的記號（<g data-loc> 那一組；圖例裡也有全彩的圖示，所以要只看這一組）。"""
+    """大地圖上一個地點的記號（<g data-loc> 那一組）。"""
     return re.search(rf'<g data-loc="{loc_id}"[^>]*>(.*?)</g>', svg)[1]
 
 
@@ -133,10 +133,22 @@ def test_label_flips_left_near_right_edge(state, content):
     assert 'text-anchor="end"' in render_map(state, content)
 
 
-def test_legend_sits_at_the_bottom_inside_the_frame(state, content):
-    """圖例在左下角、外框裡面那條線之內，不蓋住外框（外框的內線在 10，圖例從 14 開始）。"""
-    svg = render_map(state, content)
-    assert f'<rect x="14" y="{content.map.height - 14 - 46}"' in svg
+def test_the_legend_is_not_drawn_into_the_svg(state, content):
+    """圖例畫在圖裡會跟著平移、縮放，放大時就看不見；現在由網頁疊在地圖框角落（legend_data），SVG 裡一個圖例的字都沒有。"""
+    content.map.width = 900  # 夾具的地圖太窄：從前連整行圖例都擺不下
+    for layer in LEGEND_LAYERS:
+        svg = render_map(state, content, layer, odds={"thug": "穩勝"}.get)
+        assert "scale(0.7)" not in svg and 'fill-opacity="0.92"' not in svg  # 圖例的圖示縮成七成、圖例框是 0.92 不透明的紙色方框
+        assert all(f">{text}<" not in svg for _, text in LEGEND_ICONS)
+        assert all(line not in svg for line in (LEGEND_STATES, LEGEND_RING, LEGEND_STRIKE, *LEGEND_LAYERS.values()))
+
+
+def test_names_may_use_the_corner_the_legend_used_to_take(state, content):
+    """左下角那一條（夾具的地圖 400×200：原本圖例佔 x 14～386、y 140～186）不再留給圖例：貼在那裡的地點，名字照常擺在
+    偏好的第一個位置（右邊）；從前它得躲到那一條的外面去。"""
+    add_place(content, "corner", "角落", 60, 165, "town")
+    box = label_box(render_map(state, content, "routes"), "corner")
+    assert 140 <= box[1] and box[3] <= 186 and box[0] > 60  # 整個名字都在原本圖例那一條裡面，在記號右邊
 
 
 def test_view_states_are_full_faded_ghost_and_dot(state, content):
@@ -164,16 +176,6 @@ def test_current_place_has_a_red_ring_and_a_red_flag_that_names_avoid(state, con
     assert not overlap(label_box(render_map(state, content), "lake"), (109, 65, 126, 91))
 
 
-def test_legend_shows_the_six_icons_and_how_views_are_drawn(state, content):
-    content.map.width = 900  # 夾具的地圖太窄，擺不下整行圖例
-    svg = render_map(state, content)
-    assert svg.count("scale(0.7)") == 6
-    assert all(f">{text}<" in svg for text in ("城鎮", "寺院書院", "營寨", "渡口", "山林", "野外"))
-    states = re.search(rf'<text x="(\d+)" y="\d+" font-size="12" fill="#5F5E5A">{LEGEND_STATES}</text>', svg)
-    box = re.search(r'<rect x="14" y="\d+" width="([\d.]+)"', svg)
-    assert int(states[1]) + text_width(LEGEND_STATES, 12) <= 14 + float(box[1])  # 圖例框裝得下第一行
-
-
 def test_places_keep_their_tap_circle_first_for_phones(state, content):
     svg = render_map(state, content)  # web/style.css 靠「[data-loc] 底下第一層、fill-opacity="0" 的圓」放大點擊範圍
     assert '<g data-loc="lake" style="cursor:pointer"><circle cx="200" cy="100" r="16" fill="#000000" fill-opacity="0"/>' in svg
@@ -198,13 +200,6 @@ def test_enemies_layer_tints_remembered_places_too(state, content):
 # ── 大地圖的圖層 ─────────────────────────────────────
 
 
-def test_every_layer_has_its_own_legend(state, content):
-    for layer, line in LEGEND_LAYERS.items():
-        svg = render_map(state, content, layer, odds={"thug": "穩勝"}.get)
-        assert line in svg and "外圈：綠安全／橙危險／紅兇險" in svg and LEGEND_STATES in svg
-        assert all(other not in svg for other in LEGEND_LAYERS.values() if other != line)
-
-
 def test_situation_legend_says_what_a_flagged_leader_is():
     assert "⚑ 龍頭人物（會自己行動的江湖人物）常出沒" in LEGEND_LAYERS["situation"]
 
@@ -224,13 +219,13 @@ def test_enemies_layer_colours_by_danger_and_names_the_worst_foe(state, content)
     assert "最險：水寇小隊 穩勝" in svg
     disc = mix("#BA7517", "#F4EFDF", 0.5)  # 湖邊危險 2：圓盤是橙色往圓盤原色淡一半
     assert f'r="13" fill="{disc}" stroke="#BA7517"' in svg and 'r="13" fill="#F4EFDF" stroke="#BA7517"' not in svg
-    bare = render_map(state, content, "enemies").replace(LEGEND_LAYERS["enemies"], "")
+    bare = render_map(state, content, "enemies")
     assert "最險" not in bare  # 沒給 odds：不寫、也不算
 
 
 def test_story_layer_marks_goals_and_recent_news(state, content):
     svg = render_map(state, content, "story")
-    assert "★ 湖邊 ⚔" in svg and "✦" not in svg.replace(LEGEND_LAYERS["story"], "")
+    assert "★ 湖邊 ⚔" in svg and "✦" not in svg
     state.world.rumors.append(Rumor(time=0, text="小鎮出事了。", location="town"))
     assert "✦ 小鎮（你）" in render_map(state, content, "story")
 
@@ -262,7 +257,7 @@ def test_unknown_places_show_only_outline_and_question_mark(state, content):
     content.locations["lake"].important = True
     state.world.rumors.append(Rumor(time=0, text="湖邊出事了。", location="lake"))
     for layer in LEGEND_LAYERS:
-        svg = render_map(state, content, layer, odds=no_odds).replace(LEGEND_LAYERS[layer], "")
+        svg = render_map(state, content, layer, odds=no_odds)
         assert "湖邊？" in svg
         assert all(mark not in svg for mark in ("★", "✦", "⚑", "最險", "5 體力", "湖邊 ⚔"))
 

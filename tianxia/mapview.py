@@ -50,7 +50,6 @@ TREND_TINT = 0.6  # 大勢 100 時，大區顏色往紅色靠六成
 TREND_TEXT = "#A32D2D"
 LEGEND_ICONS = [("town", "城鎮"), ("roof", "寺院書院"), ("camp", "營寨"), ("ferry", "渡口"), ("peak", "山林"), ("flag", "野外")]
 LEGEND_STATES = "全彩：看得見　淡色：去過／摸清　灰：未知　紅旗：所在地"
-LEGEND_TEXT = "#5F5E5A"
 LEGEND_RING = "外圈：綠安全／橙危險／紅兇險　⚔ 可遊歷"
 LEGEND_STRIKE = f"{atlas.STRIKE_MARK} 本週軍令要打擊的人物（還沒摸清時標在大區）"  # 局勢層：有標記時多一行（FB-072）
 LEGEND_LAYERS = {
@@ -67,9 +66,6 @@ MINI_ARROWS = 4  # 視窗邊緣最多標幾個方向
 ARROW_SIZE = 13  # 視窗邊緣方向的字級
 ARROW_SLIDE = 6  # 方向擠不下時，沿著邊緣滑開一次滑多遠
 ARROW_SLIDES = 20  # 往每一邊最多滑幾次（40 個地點的地圖，兩站外同方向的地點常常擠在同一邊）
-LEGEND_X = mapart.FRAME_INSIDE  # 圖例框的左緣：在外框裡面
-LEGEND_HEIGHT = 46
-LEGEND_EXTRA = 18  # 圖例多一行說明（局勢層的打擊記號）時，框多高：第三行的基線在第二行下面這麼遠
 YOU_SIZE = 7  # 路上的「你」：圓點的半徑（路上設計 3.4）
 YOU_FILL = "#D85A30"
 Point = tuple[float, float]
@@ -224,54 +220,6 @@ def legend_data(state: GameState, content: Content, layer: str = "situation") ->
         "layer": LEGEND_LAYERS.get(layer, ""),
         "strike": LEGEND_STRIKE if strike_places or strike_regions else "",
     }
-
-
-def _legend_line(layer: str) -> str:
-    return f"{LEGEND_RING}　{LEGEND_LAYERS[layer]}"
-
-
-def _legend_xs() -> list[int]:
-    """圖例第一行：六個小圖示各自的中心 x，最後再多一個：視野狀態那段字從哪裡寫起。"""
-    xs = [LEGEND_X + 14]
-    for _, text in LEGEND_ICONS:
-        xs.append(xs[-1] + 26 + round(text_width(text, 12)))
-    xs[-1] += 6
-    return xs
-
-
-def _legend_width(width: int, layer: str, extra: str = "") -> float:
-    """圖例框的寬：裝得下兩行字（第一行的圖示與視野狀態、第二行的外圈與圖層說明），有第三行（extra）時也裝得下它，
-    但不超出地圖。"""
-    first = _legend_xs()[-1] - LEGEND_X + text_width(LEGEND_STATES, 12) + 10
-    third = text_width(extra, 12) + 24 if extra else 0
-    return min(width - 2 * LEGEND_X, max(400, first, text_width(_legend_line(layer), 12) + 24, third))
-
-
-def _legend_height(extra: str = "") -> int:
-    """圖例框的高：兩行，有第三行（extra：局勢層的打擊記號說明，一行放不下第二行又加上它）時多一行。"""
-    return LEGEND_HEIGHT + (LEGEND_EXTRA if extra else 0)
-
-
-def _legend(top: int, width: int, layer: str, extra: str = "") -> str:
-    """圖例：第一行是六種地點圖示（縮成七成）與視野狀態的畫法，第二行是外圈與這一層的說明；extra 不空時（局勢層有
-    打擊記號）再加第三行說明那個記號。"""
-    box = _legend_width(width, layer, extra)
-    parts = [
-        f'<rect x="{LEGEND_X}" y="{top}" width="{box:g}" height="{_legend_height(extra)}" rx="6" fill="{mapart.DISC}" '
-        'fill-opacity="0.92" stroke="#B9AD8E" stroke-width="1"/>'
-    ]
-    xs, cy = _legend_xs(), top + 13
-    for (kind, text), x in zip(LEGEND_ICONS, xs):
-        icon = mapart.icon(kind, x, cy, "full")
-        parts.append(f'<g transform="translate({x},{cy}) scale(0.7) translate({-x},{-cy})">{icon}</g>')
-        parts.append(f'<text x="{x + 10}" y="{top + 17}" font-size="12" fill="{LEGEND_TEXT}">{text}</text>')
-    parts.append(f'<text x="{xs[-1]}" y="{top + 17}" font-size="12" fill="{LEGEND_TEXT}">{LEGEND_STATES}</text>')
-    parts.append(f'<text x="{LEGEND_X + 6}" y="{top + 38}" font-size="12" fill="{LEGEND_TEXT}">{escape(_legend_line(layer))}</text>')
-    if extra:
-        parts.append(
-            f'<text x="{LEGEND_X + 6}" y="{top + 38 + LEGEND_EXTRA}" font-size="12" fill="{LEGEND_TEXT}">{escape(extra)}</text>'
-        )
-    return "".join(parts)
 
 
 def _layer_marks(
@@ -551,24 +499,21 @@ def render_map(
     大地圖照原尺寸畫在可捲動的框裡（地圖上的遠近就是真正的路程，縮到欄寬字會太小；見地圖擴充與移動設計）。
     敵情層要傳 odds（Game.odds）才會寫出「最險」；其餘圖層不用、也不會算勝算。
     局勢層另外標本週打擊軍令的目標（atlas.strike_marks，FB-072）：所在摸清了，地名前加 ◎；沒摸清就加在它所屬的大區名稱前，
-    不標那個沒摸清的地點。有標時圖例多一行說明（小地圖沒有）。
+    不標那個沒摸清的地點。圖例不畫在圖裡（legend_data 另外給網頁，疊在地圖框角落）；小地圖也沒有。
 
     底下是紙色，大區、河、山頭與樹、雙線外框、大區名稱與大勢、河名、路依序畫上去（輿圖美術設計）：外框蓋在山頭上面、
     所有字下面，字的底色蓋得住框線；map.json 寫了 compass 才畫指北針。
-    地點名字（連同底下的小字）擺在不壓到大區名稱、大勢、河名、山名、指北針、地點記號（含所在地與選定的圓圈）、
-    圖例與其他名字，也不出界的地方：所在地先擺，每個名字依序試右、左、左下、右下，擠不下再試其他位置
+    地點名字（連同底下的小字）擺在不壓到大區名稱、大勢、河名、山名、指北針、地點記號（含所在地與選定的圓圈）
+    與其他名字，也不出界的地方：所在地先擺，每個名字依序試右、左、左下、右下，擠不下再試其他位置
     （見 _label_spots、_place_labels）。選定地點的名字擺在選定圓圈外面。"""
     m = content.map
     bg = m.background
     views = atlas.views(state, content)
-    # 局勢層：本週打擊軍令的目標（FB-072）——所在摸清了標在地點名字前，沒摸清標在它所屬的大區名稱前；有標才在圖例多寫一行
+    # 局勢層：本週打擊軍令的目標（FB-072）——所在摸清了標在地點名字前，沒摸清標在它所屬的大區名稱前（圖例那一行見 legend_data）
     strike_places, strike_regions = atlas.strike_marks(state, content) if layer == "situation" else (set(), set())
-    legend_extra = LEGEND_STRIKE if strike_places or strike_regions else ""
     prefixes, notes, discs = _layer_marks(state, content, layer, views, odds, strike_places)
     spot = atlas.road_spot(state, content)
     you = _you(content, spot) if spot is not None else None  # 在路上：「你」畫在兩站之間（路上設計 3.4）
-    legend_height = _legend_height(legend_extra)
-    legend_top = m.height - mapart.FRAME_INSIDE - legend_height  # 圖例在外框裡面，不蓋住外框
     out = [
         # max-width:100% 是必要的：少了它，這個 div 會被裡面整張地圖寬的 SVG 撐開、整塊溢出版面，
         # 於是 overflow:auto 永遠不會啟動——畫面上就是「地圖超出邊界、卡住看不了」（手機實測）。
@@ -612,9 +557,6 @@ def render_map(
     if you is not None:
         out.append(_you_mark(content, spot, you, taken))
     out += _terrain_names(m, taken)
-    taken.append((
-        (LEGEND_X, legend_top, LEGEND_X + _legend_width(m.width, layer, legend_extra), legend_top + legend_height), TEXT_WEIGHT,
-    ))
     here = state.player.location
     placed = []  # （地點, 狀態, 幾行字）：所在地排第一個
     for loc in sorted(content.locations.values(), key=lambda loc: loc.id != here):
@@ -640,7 +582,6 @@ def render_map(
     if you is not None:
         x, y, anchor = spots[-1]
         out.append(_text(x, y, f"你{you[2]}", LABEL_SIZE, TEXT_DARK, bg, anchor, bold=True))
-    out.append(_legend(legend_top, m.width, layer, legend_extra))
     out.append("</svg></div>")
     return "".join(out)
 

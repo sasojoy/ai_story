@@ -12,7 +12,7 @@ from unittest import mock
 
 import pytest
 
-from tianxia import atlas, calendar, figures, front_lines, mapart, mapview, orders, rules, team, timetable
+from tianxia import atlas, calendar, figures, front_lines, mapview, orders, rules, team, timetable
 from tianxia.content import load_content
 from tianxia.encounter import EncounterResult
 from tianxia.engine import Game
@@ -1180,20 +1180,11 @@ def test_strike_legend_line_follows_the_mark_whether_it_sits_on_the_place_or_onl
     assert mapview.legend_data(game.state, on, "situation")["strike"] == ""
 
 
-def test_situation_legend_explains_the_mark_only_when_it_is_drawn_and_it_fits(on):
+def test_the_strike_line_is_not_drawn_into_the_svg(on):
+    """打擊記號那一行說明跟其他圖例一樣由網頁疊（legend_data 的 strike）；圖上只有 ◎ 本身。"""
     game, _ = _strike_game(on, "haoqiang", "zhangmancheng")
-    marked = mapview.render_map(game.state, on, "situation")
-    assert mapview.LEGEND_STRIKE in marked
-    assert mapview.LEGEND_STRIKE not in mapview.render_map(game.state, on, "enemies")
-    assert mapview.LEGEND_STRIKE not in mapview.render_map(_game(on, faction="guan").state, on, "situation")
-    box = re.search(r'<rect x="14" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)" rx="6"', marked)
-    top, width, height = (float(g) for g in box.groups())
-    assert top + height <= on.map.height - mapart.FRAME_INSIDE  # 圖例框還在外框裡面
-    for line in (mapview.LEGEND_STRIKE, mapview._legend_line("situation")):  # 每一行都裝得進框裡
-        text = re.search(rf'<text x="([\d.]+)" y="([\d.]+)" font-size="12" fill="#5F5E5A">{re.escape(line)}</text>', marked)
-        assert float(text[1]) + mapview.text_width(line, 12) <= 14 + width
-        assert top < float(text[2]) <= top + height
-    assert width <= on.map.width - 2 * 14
+    svg = mapview.render_map(game.state, on, "situation")
+    assert atlas.STRIKE_MARK in svg and mapview.LEGEND_STRIKE not in svg
 
 
 def test_marked_region_label_takes_the_box_of_the_text_actually_drawn(on):

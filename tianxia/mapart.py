@@ -365,7 +365,7 @@ def _hill(x: float, y: float, w: float, h: float) -> str:
 
 FRAME = "#A08A5E"  # 外框與指北針
 FRAME_OUTER, FRAME_INNER = 5, 10  # 雙線外框：外線、內線離紙邊多遠
-FRAME_INSIDE = 14  # 外框裡面：擺出來的字、圖例從這裡開始，不壓到內線
+FRAME_INSIDE = 14  # 外框裡面：擺出來的字從這裡開始，不壓到內線
 BANNER = "#C0392B"  # 紅旗（所在地）與指北針的北端
 COMPASS_RADIUS = 22  # 指北針的圓
 COMPASS_NEEDLE = 30  # 指針從中心往上下各伸多長
