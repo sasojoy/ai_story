@@ -96,8 +96,10 @@ ul { padding-left: 1.3em; margin: 0.4em 0; }
 .who-name .more-ico { flex: none; font: 400 11px var(--sans); color: var(--ink-2); }
 .where { font-size: 12px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .where small { font-size: 10.5px; }
-/* 狀態列底下的小字行：閉關剩幾小時、在路上那一句（比較長，手機上可以折成兩行，不要把抵達時間省略掉） */
-.where.sub { white-space: normal; font-size: 11px; line-height: 1.45; }
+/* 狀態列底下的小字行：下一件、閉關剩幾小時、在路上那一句（比較長，手機上可以折成兩行，不要把倒數省略掉）。
+   會折行的行不能留著 .where 的 overflow／省略號：行尾的全形括號尾端會被瀏覽器收掉半格，剛好塞滿一行時
+   scrollWidth 仍比寬度多幾 px，省略號就把最後一個字蓋掉（FB-062） */
+.where.sub { white-space: normal; font-size: 11px; line-height: 1.45; overflow: visible; text-overflow: clip; }
 .icon-btn {
   flex: none; width: 40px; height: 40px; border-radius: 12px; border: 1px solid var(--line);
   background: var(--card); display: grid; place-items: center; cursor: pointer; font-size: 18px;
@@ -527,7 +529,8 @@ details.fold.bulletin > .fold-body { border-color: var(--gold); max-height: 50vh
 .tt-row { border: 1px solid var(--line); border-radius: 10px; padding: 6px 8px; }
 .tt-head { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; }
 .tt-state { color: var(--ink-2); white-space: nowrap; }
-.tt-row .row { margin-top: 4px; }
+.tt-real { margin-top: 4px; font-size: 11px; color: var(--ink-2); } /* 時間欄是現實時間，不是季曆（FB-062）；寫在欄位上面，不佔欄位的寬 */
+.tt-row .row { margin-top: 2px; }
 .tt-row input[type="datetime-local"] { flex: 1; min-width: 0; }
 .tt-row .row > .btn { flex: none; }  /* 「排定」照字寬，日期與時刻才放得下 */
 

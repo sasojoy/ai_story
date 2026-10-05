@@ -672,6 +672,14 @@ def test_seclusion_grants_xinde(game):
     assert game.state.player.stats["xinde"] == 75  # 4 小時 × 15 × (1 + 5/20)
 
 
+def test_seclusion_countdown_says_real_hours(content, game):
+    """FB-062：出關的倒數標「現實」，而且照現實小時算（世界時鐘 ÷ time_scale）：time_scale 2 時，世界 4 小時＝現實 2 小時。"""
+    content.config.time_scale = 2.0
+    assert game.seclude(4) == ["你閉關靜修，預計現實 2 小時後出關；閉關期間氣血回復加倍。"]
+    assert game.status_data()["busy_hours"] == 2.0
+    assert "🧘 閉關中，現實約 2.0 小時後出關" in game.status_text()
+
+
 def test_break_seclusion_early(game):
     game.seclude(4)
     game.advance(HOUR)
@@ -1188,14 +1196,33 @@ def test_on_the_road_you_can_turn_back_but_not_do_what_needs_a_place(game):
     assert game.travel_refusal("lake") is None  # 路上設計 3.1：在路上也能安排前往（改道）
 
 
-def test_the_status_bar_shows_the_arrival_time_and_the_scene_does_not_repeat_it(game):
-    """FB-046：抵達時間只寫在狀態列（每一頁都看得到）；場景只寫「在路上」與路上能做什麼，不再寫一次。"""
+def test_the_status_bar_shows_the_arrival_countdown_and_the_scene_does_not_repeat_it(game):
+    """FB-046：抵達的倒數只寫在狀態列（每一頁都看得到）；場景只寫「在路上」與路上能做什麼，不再寫一次。
+    FB-062：只寫現實的倒數，不寫抵達的時刻——季曆跑得比現實快，兩種時間混在一行會讓人算不出來。"""
     game.choose("move:lake")
-    assert "🧭 在路上：往湖邊（步行），第1天 00:03 抵達，還要約 3 分鐘" in game.status_text()
-    assert game.status_data()["journey"] == "往湖邊（步行），第1天 00:03 抵達，還要約 3 分鐘"
+    assert "🧭 在路上：往湖邊（步行），現實約 3 分鐘後抵達" in game.status_text()
+    assert game.status_data()["journey"] == "往湖邊（步行），現實約 3 分鐘後抵達"
     scene = game.scene_text()
     assert scene.startswith("**在路上**") and "到了會自己抵達" in scene
-    assert "抵達，還要約" not in scene and "第1天 00:03" not in scene
+    assert "現實約" not in scene and "第1天 00:03" not in scene
+
+
+def test_the_journey_line_counts_real_minutes_even_when_the_world_clock_runs_faster(content, game):
+    """FB-062：世界時鐘的一段秒數 ÷ time_scale ＝ 現實秒；狀態列的「現實約 N 分鐘」照現實算，後面的站名照舊。"""
+    content.config.time_scale = 3.0  # 世界時鐘每現實秒走 3 秒：湖邊 3 分鐘的路程（世界秒）只要現實 1 分鐘
+    game.choose("move:lake")
+    assert game.status_data()["journey"] == "往湖邊（步行），現實約 1 分鐘後抵達"
+
+
+def test_the_journey_line_names_the_next_station_on_a_multi_leg_trip(game):
+    """FB-062：多段的路，倒數算到最後一站，後面接「；下一站某某」。"""
+    game.state.world.flags.add("cave_open")
+    msgs = game.travel("cave", "walk")
+    line = game.status_data()["journey"]
+    assert line.startswith("往寶洞（步行），現實約 ") and "分鐘後抵達；下一站湖邊" in line
+    assert "第" not in line  # 沒有季曆時刻
+    depart = next(m for m in msgs if "前往寶洞" in m)  # 出發的那一句也一樣只寫現實的倒數
+    assert "現實約 " in depart and "分鐘後抵達" in depart and "第" not in depart
 
 
 def test_every_station_on_the_way_fires_the_arrival_rules(game):
@@ -1451,7 +1478,7 @@ def test_a_fighter_who_joined_sees_it_on_the_button_and_in_the_scene(content, ga
         assert opts["battle:join:huang"] == ("加入【黃巾】", True)  # 不分陣營的劇本：集結時還能換邊
         assert opts["act:explore"][1] and "move:lake" in opts
         scene = game.scene_text()
-        assert "你已加入【官軍】，集結還剩 7 分 55 秒" in scene and "選擇陣營" not in scene
+        assert "你已加入【官軍】，集結還剩現實 7 分 55 秒" in scene and "選擇陣營" not in scene
         assert game.choose("battle:join:guan") == ["（此刻無法這麼做。）"]
 
 
@@ -4463,24 +4490,25 @@ def test_an_unstamped_season_is_not_cut_short_by_the_weekend_profile(content, wo
 
 
 def test_status_shows_calendar_and_next_event(content, world):
-    """狀態列的季曆與下一件大事的倒數（真實秒）；決戰照排定的時間算。舊的 day／clock／season_days 照舊在。"""
+    """狀態列的季曆與下一件大事：季曆時刻 at（第N週・週X HH:MM）加上倒數（真實秒，FB-062）；決戰照排定的時間算。
+    舊的 day／clock／season_days 照舊在。"""
     install_season_one(content)
     game = Game.new(content, "沈浪", rng=random.Random(0), world=world)
     d = game.status_data()
     assert d["calendar"] == {"week": 1, "weekday": 0, "clock": "00:00", "weeks": 12}
-    assert d["next_event"] == {"title": "張曼成攻殺南陽太守", "in_seconds": 36000}  # 起義就在此刻；下一件在第 3 週
+    assert d["next_event"] == {"title": "張曼成攻殺南陽太守", "at": "第3週・週一 00:00", "in_seconds": 36000}  # 起義就在此刻；下一件在第 3 週
     assert (d["day"], d["clock"], d["season_days"]) == (1, "00:00", 2.5)
 
     tuesday = calendar.week_start(3, content) + (DAY + 21 * HOUR + 40 * 60) / 33.6
     game.advance(tuesday)
     d = game.status_data()
     assert d["calendar"] == {"week": 3, "weekday": 1, "clock": "21:40", "weeks": 12}
-    assert d["next_event"] == {"title": "波才大敗朱儁", "in_seconds": round(calendar.week_start(4, content) - tuesday)}
+    assert d["next_event"] == {"title": "波才大敗朱儁", "at": "第4週・週一 00:00", "in_seconds": round(calendar.week_start(4, content) - tuesday)}
     assert "第 3 週・週二 21:40" in game.status_text()
 
     game.advance(calendar.week_start(5, content) - tuesday)
     showdown = game.state.world.schedule["changshe_fire"]
-    assert game.status_data()["next_event"] == {"title": "長社火攻", "in_seconds": round(showdown - game.state.world.time)}
+    assert game.status_data()["next_event"] == {"title": "長社火攻", "at": calendar.stamp_text(showdown, content, game.state.world), "in_seconds": round(showdown - game.state.world.time)}
     content.config.time_scale = 2  # 1 時等於現實 2 秒：倒數是現實秒
     assert game.status_data()["next_event"]["in_seconds"] == round((showdown - game.state.world.time) / 2)
 

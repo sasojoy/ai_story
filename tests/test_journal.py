@@ -186,7 +186,7 @@ def test_seclusion_start_and_finish(game):
     game.seclude(4)
     entry = latest(game)
     assert (entry.title, entry.tag) == ("閉關", "4 小時")
-    assert entry.lines == ["你閉關靜修，預計 4 小時後出關；閉關期間氣血回復加倍。"]
+    assert entry.lines == ["你閉關靜修，預計現實 4 小時後出關；閉關期間氣血回復加倍。"]
     game.advance(4 * HOUR)
     entry = latest(game)
     assert (entry.title, entry.tag, entry.lines, entry.changes) == ("出關", "4.0 小時", [], ["心得 +75"])

@@ -1728,13 +1728,13 @@ class Game:
             remaining = max(0, int(battle.muster_deadline_real - self.now))
             left = f"{remaining // 60} 分 {remaining % 60} 秒"
             if watching:
-                return f"{header}\n\n集結中，還剩 {left}。{watch_line}"
+                return f"{header}\n\n集結中，還剩現實 {left}。{watch_line}"
             me = battle.participants.get(self.state.player.name)
             if me is not None:
                 side = next((f.name for f in definition.factions if f.id == me.faction), me.faction)
                 leaving = "；走出這一區就不算在場" if definition.region is not None else ""
-                return f"{header}\n\n你已加入【{side}】，集結還剩 {left}。集結結束就開打，在那之前照常行動{leaving}。"
-            return f"{header}\n\n集結中，還剩 {left}。選擇陣營加入；集結期間照常行動。"
+                return f"{header}\n\n你已加入【{side}】，集結還剩現實 {left}。集結結束就開打，在那之前照常行動{leaving}。"
+            return f"{header}\n\n集結中，還剩現實 {left}。選擇陣營加入；集結期間照常行動。"
         act = battle_instance.current_act(battle, definition)
         # 第幾回合／一共幾回合（戰鬥系統設計 3.2）：讓人知道還要打多久；收場的決戰不會走到這裡
         count = f"（第 {battle.round_number + 1}／{battle_instance.total_rounds(definition)} 回合）"
@@ -2331,10 +2331,9 @@ class Game:
                 self._draft.changes.append(f"體力 -{cost}")
         if mode == "dash" or at_once:
             return self._arrivals()
-        arrive = s.player.journey.arrive_at[-1]
-        left = atlas.whole_minutes((arrive - s.world.time) / 60)
+        left = self._real_minutes(s.player.journey.arrive_at[-1] - s.world.time)
         verb = "改道" if rerouting else "動身"
-        msg = f"你{verb}{atlas.MODES[mode]}前往{c.locations[route.path[-1]].name}，{self.stamp(arrive)} 抵達（約 {left} 分鐘後）。"
+        msg = f"你{verb}{atlas.MODES[mode]}前往{c.locations[route.path[-1]].name}，現實約 {left} 分鐘後抵達。"  # 只寫現實的倒數（FB-062）
         self._hide(msg)  # 場景會顯示「在路上」，紀錄只留標題與走法
         self._sync_battle_presence()
         return [msg]
@@ -2438,16 +2437,18 @@ class Game:
         self._count_road_reward("sight", day)
         return [sight.text] + apply_effect(sight.effect, s, c, self.world, push=self.push_trend)
 
+    def _real_minutes(self, world_seconds: float) -> int:
+        """世界時鐘的一段秒數，換成給玩家看的「現實」整分鐘（至少 1 分，.5 進位）：世界秒 ÷ time_scale ＝ 現實秒（FB-062）。"""
+        return atlas.whole_minutes(max(0.0, world_seconds) / self.content.config.time_scale / 60)
+
     def _journey_line(self) -> str:
-        """在路上的那一句（狀態列）：「往寶洞（步行），第1天 00:08 抵達，還要約 8 分鐘；下一站湖邊」。"""
+        """在路上的那一句（狀態列）：「往寶洞（步行），現實約 8 分鐘後抵達；下一站湖邊」。
+        只寫現實的倒數，不寫抵達的季曆時刻（FB-062）：季曆跑得比現實快，「第8週・週五 12:19 抵達」配上「還要約 1 分鐘」
+        兩種時間混在一行，玩家算不出來；季曆時刻已經在狀態列上一行。"""
         s, c = self.state, self.content
         j = s.player.journey
-        end = j.arrive_at[j.last]
-        left = atlas.whole_minutes(max(0.0, end - s.world.time) / 60)
-        line = (
-            f"往{c.locations[j.path[j.last]].name}（{atlas.MODES[j.mode]}），"
-            f"{self.stamp(end)} 抵達，還要約 {left} 分鐘"
-        )
+        left = self._real_minutes(j.arrive_at[j.last] - s.world.time)
+        line = f"往{c.locations[j.path[j.last]].name}（{atlas.MODES[j.mode]}），現實約 {left} 分鐘後抵達"
         if j.reached < j.last:
             line += f"；下一站{c.locations[j.path[j.reached]].name}"
         return line
@@ -2558,7 +2559,8 @@ class Game:
         self.state.battle_card = None
         p.busy_until = self.state.world.time + hours * HOUR
         p.seclusion_start = self.state.world.time
-        msgs = [f"你閉關靜修，預計 {hours} 小時後出關；閉關期間氣血回復加倍。"]
+        real_hours = hours / self.content.config.time_scale  # 閉關的小時是世界時鐘的小時；寫給玩家看的是現實小時（FB-062）
+        msgs = [f"你閉關靜修，預計現實 {real_hours:g} 小時後出關；閉關期間氣血回復加倍。"]
         self._write("閉關", msgs, tag=f"{hours} 小時")
         return self._log(msgs)
 
@@ -3198,7 +3200,7 @@ class Game:
             "attrs": [(names[k], p.stats[k]) for k in ("str", "agi", "con", "wis")],
             "hint": skillview.practice_hint(s, c),  # 心得擱著沒用、又還有功夫沒練滿時才有
             "team": mates,
-            "busy_hours": None if p.busy_until is None else round((p.busy_until - w.time) / HOUR, 1),
+            "busy_hours": None if p.busy_until is None else round((p.busy_until - w.time) / HOUR / c.config.time_scale, 1),  # 現實小時
             "resting": None if p.resting_since is None else c.config.rest_regen_multiplier,  # 打坐時體力回復的倍數
             "journey": None if p.journey is None else self._journey_line(),
             **self._calendar_status(),  # 第一季：季曆與下一件大事的倒數；開關關著時沒有這兩欄
@@ -3211,7 +3213,7 @@ class Game:
         return data
 
     def _calendar_status(self) -> dict:
-        """狀態列的季曆（第 N 週、週幾、幾點）與下一件大事的倒數。倒數是現實秒：(大事時刻 − 世界秒) ÷ time_scale。"""
+        """狀態列的季曆（第 N 週、週幾、幾點）與下一件大事：季曆時刻 at，加上倒數 in_seconds。倒數是現實秒：(大事時刻 − 世界秒) ÷ time_scale。"""
         w, c = self.state.world, self.content
         if not calendar.season_one_on(w, c):
             return {}
@@ -3225,6 +3227,7 @@ class Game:
             },
             "next_event": None if upcoming is None else {
                 "title": upcoming.title,
+                "at": self.stamp(timetable.when(self.state, c, upcoming)),  # 季曆時刻「第9週・週四 20:44」，畫面寫在倒數前面（FB-062）
                 "in_seconds": round((timetable.when(self.state, c, upcoming) - w.time) / c.config.time_scale),
             },
         }
@@ -3359,7 +3362,7 @@ class Game:
         for mate in d["team"]:  # 只有真的帶了同伴才列隊伍，一個人時不佔版面
             lines.append(f"🧍 {mate['name']}　第{mate['level']}級　氣血 {mate['hp']}/{mate['hp_max']}")
         if d["busy_hours"] is not None:
-            lines.append(f"🧘 閉關中，約 {d['busy_hours']:.1f} 小時後出關")
+            lines.append(f"🧘 閉關中，現實約 {d['busy_hours']:.1f} 小時後出關")
         if d["resting"] is not None:
             lines.append(f"🧘 打坐中：體力回復是平常的 {d['resting']:g} 倍，隨時可以起身")
         if d["journey"] is not None:
