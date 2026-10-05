@@ -499,6 +499,9 @@
   const ODDS_TONE = { "穩勝": "good", "有把握": "good", "零風險": "good", "五五波": "even", "難分勝負": "even", "凶險": "bad", "必敗": "bad" };
   // 選單上有「打坐」就是平常閒著的時候：用行動列。事件、對話、路上、決戰的選項每次都不一樣，照舊排成一列按鈕
   const idleMenu = (m) => m.options.some((o) => o.id === "act:rest");
+  // 態勢卡排在哪（正式版辛）：只有平常閒著（行動列）時排在最上面；在路上與事件、對話、決戰、求見、投靠確認的選單是一疊按鈕，
+  // 卡排到選項底下，不把選項擠出第一屏（FB-055）
+  const stanceBelowMenu = (m) => !!m.on_road || !idleMenu(m);
   const inkCell = (key, name, sub, icon, attrs, cls, note = "") => `<button class="act-ink${cls}" data-key="${key}" ${attrs}>
       <svg class="ink-icon" viewBox="0 0 24 24" aria-hidden="true">${icon}</svg><b>${esc(name)}</b><small>${esc(sub)}</small>${
       note ? `<small class="ink-note ${ODDS_TONE[note] || ""}">${esc(note)}</small>` : ""}</button>`;
@@ -750,8 +753,10 @@
     // 三條戰況排在行動列下面、小地圖上面，不擠掉第一屏的公告卡、「剛剛」、場景與行動列
     const fronts = m.fronts ? frontsHtml(m.fronts, m.status && m.status.chaos_band) : "";
     const resultCard = m.season_result ? resultHtml(m.season_result) : "";  // 休季的結算卡排在最上面（計畫 T9）
-    // 態勢卡（正式版辛）：平常排在最上面、公告卡之前；休季由結算卡取代；在路上跟公告卡一樣排到選項底下（FB-055）
+    // 態勢卡（正式版辛）：平常閒著時排在最上面、公告卡之前；在路上與事件、對話、決戰等一疊按鈕的選單（idleMenu 以外）
+    // 跟公告卡一樣排到選項底下（FB-055）；休季由結算卡取代
     const stanceCard = m.season_result ? "" : stanceCardHtml(m.status);
+    const lowCard = stanceBelowMenu(m) ? stanceCard : "", topCard = stanceBelowMenu(m) ? "" : stanceCard;
     // 本週軍令排在行動列（與路上捷徑）下面、三條戰況上面：不擠掉第一屏的公告、「剛剛」、場景與行動列（計畫 T6）
     const orderCard = m.orders || m.convoy ? ordersHtml(m.orders || [], week, m.convoy) : "";
     // 劇情文字在上、行動在下（企劃者 2026-10-04）。行動列只有一排，375×812 上「剛剛」、場景與整排行動都在第一屏。
@@ -760,8 +765,8 @@
     const guide = guideHtml(m.guide, m.on_road);
     // 在路上（FB-055）：路上的五個選項要全在第一屏（375×812），所以態勢卡、公告、主線與說書人的框都排在選項底下——
     // 不是這一刻要按的；捷徑還是緊接在場景底下（FB-048）
-    if (m.on_road) return `${resultCard}${now}${scene}${links}${free}${menu}${guide}${stanceCard}${board}${quest}${orderCard}${fronts}${tail}`;
-    return `${resultCard}${stanceCard}${board}${quest}${now}${scene}${links}${guide}${free}${menu}${orderCard}${fronts}${tail}`;
+    if (m.on_road) return `${resultCard}${now}${scene}${links}${free}${menu}${guide}${lowCard}${board}${quest}${orderCard}${fronts}${tail}`;
+    return `${resultCard}${topCard}${board}${quest}${now}${scene}${links}${guide}${free}${menu}${lowCard}${orderCard}${fronts}${tail}`;
   }
 
   // ── 修練 ──

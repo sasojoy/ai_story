@@ -1,6 +1,7 @@
 """江湖頁最上面的態勢卡（正式版辛；PM 2026-10-06 改成收起的一行）：web/app.js 沒有建置步驟、也沒有前端測試框架，
 這裡把畫態勢卡的 stanceBars／stanceCardHtml 從原始碼切出來交給 node 跑，檢查出來的 HTML 結構：
-收起時那一行寫了三方的名稱與數字，規則與怎麼算的兩行在摺疊裡面。沒有 node 就略過。"""
+收起時那一行寫了三方的名稱與數字，規則與怎麼算的兩行在摺疊裡面；另外檢查卡排在哪（只有平常閒著時排最上面，
+在路上與事件、對話、決戰等一疊按鈕的選單排在選項底下）。沒有 node 就略過。"""
 from __future__ import annotations
 
 import json
@@ -34,6 +35,27 @@ const prelude = [grab(/const esc = .*;/), grab(/const pct = .*;/), grab(/const S
 const make = new Function("S", prelude + "\n" + src.slice(a, b) + "\nreturn stanceCardHtml;");
 process.stdout.write(JSON.stringify(make(input.S)(input.status)));
 """
+
+
+PLACE_DRIVER = r"""
+const fs = require("fs");
+const input = JSON.parse(fs.readFileSync(0, "utf8"));
+const src = fs.readFileSync(input.app, "utf8");
+const grab = (re) => { const m = src.match(re); if (!m) throw new Error("app.js 裡找不到 " + re); return m[0]; };
+const below = new Function(grab(/const idleMenu = .*;/) + "\n" + grab(/const stanceBelowMenu = .*;/) + "\nreturn stanceBelowMenu;")();
+process.stdout.write(JSON.stringify(input.menus.map((m) => below(m))));
+"""
+
+
+def below_menu(*menus) -> list[bool]:
+    """app.js 的 stanceBelowMenu(m)：每一個選單（{on_road, options}）的態勢卡是不是排在選項底下。"""
+    done = subprocess.run(
+        [NODE, "-e", PLACE_DRIVER],
+        input=json.dumps({"app": str(ROOT / "web" / "app.js"), "menus": list(menus)}),
+        capture_output=True, text=True, encoding="utf-8", timeout=60,
+    )
+    assert done.returncode == 0, done.stderr
+    return json.loads(done.stdout)
 
 
 def render(status, state=None) -> str:
@@ -131,3 +153,36 @@ def test_names_in_the_notes_are_escaped(on):
     status["stance_notes"] = {"sum": "<b>x</b>", "haoqiang": ""}
     _tag, _summary, body = _parts(render(status))
     assert "<b>x</b>" not in body and "&lt;b&gt;x&lt;/b&gt;" in body
+
+
+# ── 排在哪：平常閒著（行動列）排最上面，其他的選單（一疊按鈕）排在選項底下 ──────────
+
+
+def _menu(*ids, on_road=False):
+    return {"on_road": on_road, "options": [{"id": i, "label": i, "enabled": True} for i in ids]}
+
+
+def test_the_card_tops_the_page_only_for_the_idle_menu():
+    idle = _menu("act:explore", "act:train", "act:rest", "act:call", "move:luoyang")
+    event = _menu("choice:0", "choice:1", "choice:free")
+    dialogue = _menu("talk:0", "talk:1", "talk:leave")
+    battle = _menu("battle:guan", "battle:huang")
+    audience = _menu("call:luzhi", "call:cancel")
+    faction = _menu("faction:confirm", "faction:cancel")
+    assert below_menu(idle, event, dialogue, battle, audience, faction) == [False, True, True, True, True, True]
+
+
+def test_the_card_is_below_the_options_on_the_road():
+    assert below_menu(_menu("road:back", "road:wait", on_road=True)) == [True]
+    assert below_menu(_menu("act:rest", on_road=True)) == [True]  # 就算選單上剛好有打坐，在路上照舊排在底下
+
+
+def test_page_jianghu_orders_the_card_by_that_rule():
+    """版面順序的標記檢查：pageJianghu 兩個 return 用同一條 stanceBelowMenu(m) 決定卡排哪裡。"""
+    src = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
+    page = src[src.index("function pageJianghu"): src.index("// ── 修練 ──")]
+    assert "stanceBelowMenu(m)" in page
+    road = re.search(r"if \(m\.on_road\) return `([^`]*)`;", page).group(1)
+    idle = re.search(r"\n\s*return `(\$\{resultCard\}[^`]*)`;", page).group(1)
+    assert "${topCard}" not in road and road.index("${menu}") < road.index("${lowCard}")
+    assert idle.index("${topCard}") < idle.index("${now}") and idle.index("${menu}") < idle.index("${lowCard}")
