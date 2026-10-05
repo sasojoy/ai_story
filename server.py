@@ -193,7 +193,11 @@ def _pause_model() -> None:
 @contextlib.contextmanager
 def _model_guard(game: Game):
     """已經拿到行動鎖之後：這一次拿鎖的鎖內模型額度重新開始；全服斷路器開著時一開始就用完；這一次拿鎖裡（動作出錯也算）
-    有鎖內的模型呼叫失敗，就打開斷路器（見 MODEL_BREAKER_SECONDS）。玩家請求（_locked）與排程（world_step）共用這一套。"""
+    有鎖內的模型呼叫失敗，就打開斷路器（見 MODEL_BREAKER_SECONDS）。玩家請求（_locked）與排程（world_step）共用這一套。
+    一定寫成 `with game.world.action_lock(), _model_guard(game)`：沒拿著鎖就用它直接丟 RuntimeError（審查 M1），
+    順序寫反不會悄悄在鎖外歸零額度。用 RuntimeError 不用 assert：python -O 也照樣擋。"""
+    if not game.world.db.writing():
+        raise RuntimeError("_model_guard 要在拿到行動鎖之後用：with game.world.action_lock(), _model_guard(game)")
     game.reset_model_budget()  # 新的一次拿鎖：鎖內的模型呼叫重新有額度（一次拿鎖期間只容忍一次失敗，見 Game._quick_client）
     paused = _model_paused()
     if paused:
@@ -235,19 +239,28 @@ def look(game: Game, view):
         return view(game)
 
 
-WORLD_GAME: Game | None = None  # 排程用的那一份沒有玩家的 Game（Game.for_world）；只有排程執行緒用，第一次用到時才建
+# 排程用的那一份沒有玩家的 Game（Game.for_world）。只有排程執行緒（start_scheduler，只從 main() 開、只開一條）用它，
+# 請求的處理從不呼叫 world_step；在 world_step 裡、第一次用到時才建，建不起來就跟這一下的其他錯誤一樣由排程迴圈印出來、下一下再建
+WORLD_GAME: Game | None = None
 
 
-def world_step(now: float) -> list[str]:
-    """伺服器排程的一下（線上架構設計第四節）：拿行動鎖（跟玩家請求同一把、等到拿到為止），推全服的事到 now
-    （Game.world_tick）。鎖內的模型呼叫照玩家請求那一套額度與斷路器（_model_guard）。出錯時交易整筆撤回、鎖放掉，
-    例外丟給呼叫端（排程迴圈印出來、下一輪照跑）。"""
+def world_step(clock: Callable[[], float] = time.time) -> list[str]:
+    """伺服器排程的一下（線上架構設計第四節）：拿行動鎖（跟玩家請求同一把、等到拿到為止），推全服的事到現在
+    （Game.world_tick）。鎖內的模型呼叫照玩家請求那一套額度與斷路器（_model_guard）。
+    現在時間在拿到鎖之後才讀（clock()，跟 act() 一樣）：等鎖等得再久，這一下開的集結、回合的期限也不會因此變短。
+    clock 是牆上的時鐘（time.time）：共用賽季的 season_last_real 與決戰的期限存的都是它，不能用 monotonic。
+    出錯時交易整筆撤回、鎖放掉，記憶體裡那份做到一半的空殼也丟掉（下一下從資料庫重建，跟 _reload 同一個道理），
+    例外丟給呼叫端（排程迴圈印出來、下一輪照跑）。回傳的訊息不要逐下印出來：裡面可能有參戰者的名號。"""
     global WORLD_GAME
     if WORLD_GAME is None:
         WORLD_GAME = Game.for_world(CONTENT, open_world())
     game = WORLD_GAME
-    with game.world.action_lock(), _model_guard(game):
-        return game.world_tick(now)
+    try:
+        with game.world.action_lock(), _model_guard(game):
+            return game.world_tick(clock())
+    except BaseException:
+        WORLD_GAME = None
+        raise
 
 
 def prepare_dialogue(game: Game, option_id: str) -> companion_agent.PreparedTurn | None:

@@ -1464,11 +1464,23 @@ def test_world_step_pushes_the_season_under_the_action_lock(monkeypatch):
         return real_lock(self, timeout)
 
     monkeypatch.setattr(SqliteWorldStore, "action_lock", spy_lock)
-    server.world_step(1000.0)
+    server.world_step(lambda: 1000.0)
     before = open_world().get_season().time
-    server.world_step(1300.0)
+    server.world_step(lambda: 1300.0)
     assert open_world().get_season().time == pytest.approx(before + 300 * server.CONTENT.config.time_scale)
     assert held and all(t is None for t in held)  # 跟玩家請求一樣等到拿到為止
+
+
+def test_world_step_reads_the_clock_inside_the_action_lock():
+    """排程那一下的現在時間在拿到行動鎖之後才讀（跟 act() 一樣）：等鎖等了多久，這一下開的集結、回合的期限都不會因此變短。"""
+    seen = []
+
+    def clock():
+        seen.append(database.open_database().writing())
+        return 1000.0
+
+    server.world_step(clock)
+    assert seen == [True]
 
 
 def test_world_step_respects_the_model_breaker(monkeypatch, breaker_clock):
@@ -1476,15 +1488,35 @@ def test_world_step_respects_the_model_breaker(monkeypatch, breaker_clock):
     seen = []
     monkeypatch.setattr(Game, "world_tick", lambda self, now: seen.append(self._model_budget.gave_up) or [])
     server._pause_model()
-    server.world_step(1000.0)
+    server.world_step(lambda: 1000.0)
     assert seen == [True]
+
+
+def test_the_model_guard_refuses_to_run_without_the_action_lock(game):
+    """_model_guard 假設已經拿到行動鎖（審查 M1）：沒拿鎖就用它直接丟 RuntimeError，不會悄悄在鎖外歸零額度、查斷路器。
+    所以把順序寫反（with _model_guard(g), action_lock()）的呼叫端一進來就會壞。"""
+    with pytest.raises(RuntimeError, match="行動鎖"), server._model_guard(game):
+        pass
+    with game.world.action_lock(), server._model_guard(game):
+        pass
+
+
+def test_every_lock_hold_resets_the_model_budget_while_holding_the_lock(game, monkeypatch):
+    """玩家請求（act、look）與排程（world_step）都是先拿到行動鎖、才歸零鎖內的模型額度。"""
+    seen = []
+    real = Game.reset_model_budget
+    monkeypatch.setattr(Game, "reset_model_budget", lambda self: seen.append(self.world.db.writing()) or real(self))
+    server.act(game, lambda g: None)
+    server.look(game, lambda g: None)
+    server.world_step(lambda: 1000.0)
+    assert seen == [True, True, True]
 
 
 def test_a_failed_in_lock_call_in_a_world_step_trips_the_breaker_for_everyone(game, monkeypatch, breaker_clock, capsys):
     """排程那一下鎖內的模型呼叫失敗：跟玩家請求一樣打開全服的斷路器、印同一行，下一個玩家的拿鎖一開始額度就用完。"""
     sent = _model_down(monkeypatch)
     monkeypatch.setattr(Game, "world_tick", lambda self, now: _ask_the_model_in_the_lock(self) or [])
-    server.world_step(1000.0)
+    server.world_step(lambda: 1000.0)
     assert len(sent) == 1
     assert server.look(game, lambda g: (g._model_budget.gave_up, g._quick_client())) == (True, None)
     assert len(sent) == 1
@@ -1508,8 +1540,9 @@ def _lock_is_free() -> bool:
 
 
 def test_a_failed_world_step_rolls_back_and_releases_the_lock(monkeypatch):
-    """排程那一下出錯：這一下推的整筆撤回、鎖放掉、例外丟給呼叫端；下一下照常推（Review Focus 2 的伺服器這一半）。"""
-    server.world_step(1000.0)  # 第一下只記下時鐘
+    """排程那一下出錯：這一下推的整筆撤回、鎖放掉、例外丟給呼叫端；記憶體裡那份做到一半的空殼也不留，下一下從資料庫重建、
+    照常推（Review Focus 2 的伺服器這一半）。"""
+    server.world_step(lambda: 1000.0)  # 第一下只記下時鐘
     before = open_world().get_season().time
     real_tick = Game.world_tick
 
@@ -1519,12 +1552,32 @@ def test_a_failed_world_step_rolls_back_and_releases_the_lock(monkeypatch):
 
     monkeypatch.setattr(Game, "world_tick", tick_then_fail)
     with pytest.raises(RuntimeError, match="這一下壞了"):
-        server.world_step(1300.0)
+        server.world_step(lambda: 1300.0)
     assert open_world().get_season().time == pytest.approx(before)  # 推過的那一段撤回了
     assert _lock_is_free()
+    assert server.WORLD_GAME is None
     monkeypatch.setattr(Game, "world_tick", real_tick)
-    server.world_step(1300.0)
+    server.world_step(lambda: 1300.0)
     assert open_world().get_season().time == pytest.approx(before + 300 * server.CONTENT.config.time_scale)
+
+
+def test_a_world_step_that_cannot_build_its_game_raises_and_tries_again_next_time(monkeypatch):
+    """建那一份沒有玩家的 Game 就失敗（例如資料庫一時打不開）：例外丟給呼叫端（排程迴圈印出來），下一下重新建。"""
+    real = Game.for_world
+    calls = []
+
+    def flaky(content, world, rng=None):
+        calls.append(1)
+        if len(calls) == 1:
+            raise OSError("資料庫打不開")
+        return real(content, world, rng)
+
+    monkeypatch.setattr(Game, "for_world", staticmethod(flaky))
+    with pytest.raises(OSError):
+        server.world_step(lambda: 1000.0)
+    assert server.WORLD_GAME is None
+    server.world_step(lambda: 1000.0)
+    assert server.WORLD_GAME is not None and len(calls) == 2
 
 
 def test_a_recipe_registered_between_the_two_trips_gives_the_registered_art():
