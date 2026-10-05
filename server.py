@@ -380,20 +380,24 @@ def queue_line(config) -> str:
     )
 
 
-def model_call(game: Game, job, *, fallback):
+def model_call(game: Game, job, *, fallback, left: float | None = None):
     """行動鎖外叫模型一律走這裡：佇列開著就用這個角色的名號排隊（真人先、假人有上限、一人一件、排太久拿 fallback，
     見 llm_queue.LlmQueue），關著就直接叫。呼叫端不能握著行動鎖：排隊最久要等 llm_queue_wait_seconds 秒，握著鎖等就是全服一起等；
     在鎖裡被叫到直接丟 RuntimeError（跟 _model_guard 一樣，用 RuntimeError 不用 assert：python -O 也照樣擋），開關開著關著都一樣。
-    鎖內的小呼叫走 Game._quick_client、不進佇列。佇列只認名號；是不是假人只決定排序與上限，不改任何玩家看得到的字。"""
+    鎖內的小呼叫走 Game._quick_client、不進佇列。佇列只認名號；是不是假人只決定排序與上限，不改任何玩家看得到的字。
+    left 是呼叫端那一件的總預算還剩幾秒（有總預算的四種呼叫都給）：排隊最久只等 min(llm_queue_wait_seconds, left)，
+    一個請求不會排過自己的總預算（審查 M1）；剩下 0 秒就是 0：位子正好空著照常進場（job 自己發現預算用完、不叫模型），
+    要排的話馬上拿退路。沒給（None）就只受 llm_queue_wait_seconds 管。"""
     if game.world.db.writing():
         raise RuntimeError("model_call 要在行動鎖外用：鎖內的小呼叫走 Game._quick_client，不排隊")
     queue = QUEUE
     if queue is None:
         return job()
     p = game.state.player
-    return queue.run(
-        p.name.casefold(), job, fallback=fallback, bot=p.bot is not None, wait=game.content.config.llm_queue_wait_seconds,
-    )
+    wait = game.content.config.llm_queue_wait_seconds
+    if left is not None:
+        wait = max(0.0, min(wait, left))
+    return queue.run(p.name.casefold(), job, fallback=fallback, bot=p.bot is not None, wait=wait)
 
 
 def within_budget(client, left: float):
@@ -437,7 +441,7 @@ def prepare_dialogue(game: Game, option_id: str) -> companion_agent.PreparedTurn
             return cancelled  # 等鎖、排隊把整份預算用完了：不叫模型，這一輪取消（跟模型叫不動一樣）
         return companion_agent.prepare_turn(client, request)
 
-    return model_call(game, generate, fallback=cancelled)
+    return model_call(game, generate, fallback=cancelled, left=total - (_monotonic() - started))
 
 
 def may_generate_dialogue(option_id: str) -> bool:
@@ -481,7 +485,8 @@ def prepare_fight(game: Game, option_id: str) -> list[str] | fight_llm.PreparedF
         budget = max(0.0, config.big_fight_budget_seconds - (_monotonic() - started))
         return fight_llm.judge(game.client, request, config.big_fight_swing, budget)
 
-    return fight_llm.PreparedFight(request=request, judgment=model_call(game, ask, fallback=None))
+    judgment = model_call(game, ask, fallback=None, left=config.big_fight_budget_seconds - (_monotonic() - started))
+    return fight_llm.PreparedFight(request=request, judgment=judgment)
 
 
 def choose(game: Game, option_id: str) -> list[str] | None:
@@ -528,7 +533,7 @@ def prepare_forge(
         # 角色名號的查詢是唯讀的快照、不拿行動鎖（FB-069：模型取到角色的名號就再取一次；C 段進鎖還會再擋一次）
         return naming.generate(game.client, game.content, request, budget=budget, person=game.world.is_character_name)
 
-    return model_call(game, name_it, fallback=NO_NAME)
+    return model_call(game, name_it, fallback=NO_NAME, left=total - (_monotonic() - started))
 
 
 def forge(game: Game, art_id: str | None, insight_ids: list[str], other_art: str | None = None) -> list[str] | None:
@@ -568,7 +573,9 @@ def answer_event(game: Game, text: str) -> list[str] | None:
             return event_llm.DEFAULT_FREE_TEXT_SUCCESS_RATE  # 等鎖、排隊把整份預算用完了：不叫模型，保底值
         return event_llm.assess_event_success_rate(client, event, request.text)
 
-    rate = model_call(game, score, fallback=event_llm.DEFAULT_FREE_TEXT_SUCCESS_RATE)
+    rate = model_call(
+        game, score, fallback=event_llm.DEFAULT_FREE_TEXT_SUCCESS_RATE, left=total - (_monotonic() - started),
+    )
     msgs = act(game, lambda g: g.answer_event(request, rate))
     outcome = game.last_gamble
     if outcome is not None:  # D（鎖外）擲骰之後請模型潤色一兩句，E（鎖內）插回那一則紀錄；失敗、預算用完就只留結果文字
@@ -578,7 +585,7 @@ def answer_event(game: Game, text: str) -> list[str] | None:
                 return None  # 評分、等鎖、排隊把整份預算用完了：不叫模型，不插句子
             return event_llm.narrate_event_gamble(client, event, outcome.text, outcome.success, outcome.effect_text)
 
-        narration = model_call(game, narrate, fallback=None)
+        narration = model_call(game, narrate, fallback=None, left=total - (_monotonic() - started))
         if narration:
             act(game, lambda g: g.add_gamble_narration(outcome, narration))
     return msgs

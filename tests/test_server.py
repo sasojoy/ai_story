@@ -4250,6 +4250,66 @@ def test_a_queue_that_will_not_take_the_job_gives_each_site_its_old_fallback(sit
         assert GAMBLE_NARRATION not in game.state.journal[0].lines
 
 
+class _PassQueue:
+    """記下每一件要排多久（wait），然後照常叫 job。"""
+
+    def __init__(self):
+        self.waits = []
+
+    def run(self, owner, job, *, fallback, bot=False, wait=30.0):
+        self.waits.append(wait)
+        return job()
+
+
+def test_model_call_caps_the_queue_wait_by_what_is_left_of_the_budget(game, monkeypatch):
+    """審查 M1：排隊最久只等 min(llm_queue_wait_seconds, 這一件預算還剩的秒數)，不再固定等 20 秒。"""
+    queue = _PassQueue()
+    monkeypatch.setattr(server, "QUEUE", queue)
+    config = server.CONTENT.config
+    for left in (7.5, 100, 0, -3, None):
+        server.model_call(game, lambda: "好", fallback="退路", left=left)
+    assert queue.waits == [7.5, config.llm_queue_wait_seconds, 0.0, 0.0, config.llm_queue_wait_seconds]
+
+
+def test_a_request_never_queues_past_its_budget(game, monkeypatch):
+    """排隊的位子被佔滿、這一件的預算只剩 0.2 秒：0.2 秒左右就拿退路回來，不是等 20 秒（真的佇列、真的時間）。"""
+    queue = llm_queue.LlmQueue(slots=1, bot_cap=1)
+    monkeypatch.setattr(server, "QUEUE", queue)
+    started, release = threading.Event(), threading.Event()
+
+    def hold():
+        started.set()
+        release.wait(5)
+
+    holder = threading.Thread(target=lambda: queue.run("佔著的人", hold, fallback=None))
+    holder.start()
+    assert started.wait(2)
+    begun = time.monotonic()
+    assert server.model_call(game, lambda: pytest.fail("不該輪到"), fallback="退路", left=0.2) == "退路"
+    assert 0.15 < time.monotonic() - begun < 2.0 < server.CONTENT.config.llm_queue_wait_seconds
+    assert queue.position("測試") is None  # 票讓出來了
+    release.set()
+    holder.join(2)
+
+
+@pytest.mark.parametrize("site", SITES)
+def test_each_site_waits_in_the_queue_no_longer_than_its_budget_has_left(site, monkeypatch, breaker_clock):
+    """備料那一段（含等行動鎖）花了 50 秒：預算 60 秒只剩 10 秒，這一件排隊最久也只等 10 秒；潤色是同一份預算的第二次排隊，
+    評分與擲骰進鎖之後又過了 50 秒，它一秒都不等（0）。其他四個呼叫點只排一次。"""
+    real_sync = Game.sync
+
+    def slow_sync(self, now):
+        breaker_clock[0] += 50
+        return real_sync(self, now)
+
+    monkeypatch.setattr(Game, "sync", slow_sync)
+    queue = _PassQueue()
+    monkeypatch.setattr(server, "QUEUE", queue)
+    game, run, seen = _ready(site, monkeypatch)
+    run()
+    assert queue.waits == ([10.0, 0.0] if site in ("score", "narrate") else [10.0])
+
+
 def test_model_call_never_runs_while_the_action_lock_is_held(game, monkeypatch):
     """鎖外的模型呼叫才排隊：握著行動鎖等模型佇列，全服玩家與假人都跟著等。model_call 在鎖裡被叫到就直接丟 RuntimeError
     （跟 _model_guard 一樣的做法），開關開著關著都一樣——一個還沒打開的佇列也不該被當成可以在鎖裡叫模型的理由。"""
