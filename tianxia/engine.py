@@ -13,8 +13,8 @@ from collections.abc import Callable
 from pydantic import BaseModel
 
 from . import (
-    atlas, battle_instance, battlelog, calendar, companion_agent, encounter, event_llm, figures, flavor, foreshadow,
-    fusion, insights, journal, library, materials, orders, push, ranks, roster, skillview, team, timetable,
+    atlas, battle_instance, battlelog, calendar, companion_agent, cultivation, encounter, event_llm, figures, flavor,
+    foreshadow, fusion, insights, journal, library, materials, orders, push, ranks, roster, skillview, team, timetable,
 )
 from .events import choice_label, event_candidates, has_events_here, pick_event, visible_choices
 from .guide import base_step_count, note_action, quest_text, tutorial_active, tutorial_intro
@@ -2616,6 +2616,31 @@ class Game:
 
     def forge_line(self, art_id: str | None, insight_ids: list[str]) -> str:
         return skillview.forge_line(self.state, self.content, self.world, art_id, insight_ids)
+
+    def cultivate(self, art_id: str) -> list[str]:
+        """修練：武學＋它融的意境，衝下一品（見 cultivation.py）。花體力。真的擲了骰（成功或失敗）才寫江湖紀錄；
+        被拒絕（意境熔掉了、沒融過意境、已經絕學、體力不足、沒有這門武學）只回一句話（武學與成長計畫 F12）。"""
+        if self._preparing():
+            return self._log(["（賽季籌備中，等待管理者開季。）"])
+        problem = cultivation.cultivate_problem(self.state, self.content, self.world, art_id)
+        if problem is not None:
+            return self._log([problem])
+        xinde = self._xinde()
+        msgs = self._log(cultivation.cultivate(self.state, self.content, self.world, art_id, self.rng))
+        self._menxia_entry(msgs[0], xinde)
+        return msgs
+
+    def name_mastered(self, name: str) -> list[str]:
+        """替第一個練成絕學的武學取正式名字；定成了才寫江湖紀錄，江湖史寫進共用賽季所以要存回
+        （名字不合格、被用掉、沒有等著取名的武學都只回一句話）。"""
+        if self._preparing():
+            return self._log(["（賽季籌備中，等待管理者開季。）"])
+        xinde, pending = self._xinde(), self.state.player.naming
+        msgs = self._log(cultivation.name_mastered(self.state, self.content, self.world, name))
+        if pending is not None and self.state.player.naming is None:
+            self._menxia_entry(msgs[0], xinde)
+            self._save_season()
+        return msgs
 
     def art_library(self) -> list[tuple[str, str]]:
         return skillview.art_library(self.state, self.content, self.world)

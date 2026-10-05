@@ -1,0 +1,309 @@
+import random
+
+import pytest
+
+from tianxia import cultivation, fusion, journal, library, skillview, team
+from tianxia.martial_arts import Insight, generate_from_name
+from tianxia.state import new_game_state
+
+LOW = {"下品": 100.0, "中品": 0.0, "上品": 0.0, "絕學": 0.0}
+
+
+class Fixed(random.Random):
+    """random() 永遠回傳固定值（同 conftest.FixedRandom）。"""
+
+    def __init__(self, value):
+        super().__init__(0)
+        self.value = value
+
+    def random(self):
+        return self.value
+
+
+WIN, LOSE = Fixed(0.0), Fixed(0.999)
+
+
+def kicker_art():
+    return generate_from_name("旋風腿", "武學", "旋風腿", weights=LOW, attribute="快").model_copy(
+        update={"origin": "fused", "insight": "feng", "base": "basic_fist"},
+    )
+
+
+def equip(state, art_id="旋風腿", insight="feng"):
+    state.player.arts = [art_id]
+    state.player.insights = [insight]
+    state.player.stamina = 150
+    return state
+
+
+@pytest.fixture
+def kicker(state, world):
+    world.claim_skill_name(kicker_art())
+    return equip(state)
+
+
+def test_chance_climbs_with_each_failure_to_a_sure_thing(content):
+    assert [cultivation.chance(content, "中品", n) for n in (0, 1, 8)] == [20, 30, 100]
+    assert cultivation.chance(content, "絕學", 32) == 100
+
+
+def test_a_success_raises_only_this_players_quality(kicker, content, world):
+    msgs = cultivation.cultivate(kicker, content, world, "旋風腿", WIN)
+    assert kicker.player.art_quality["旋風腿"] == "中品"
+    assert world.get_skill("旋風腿").quality == "下品"
+    assert kicker.player.stamina == 140 and "中品" in msgs[0]
+
+
+def test_a_failure_adds_mastery_and_the_next_try_is_likelier(kicker, content, world):
+    msgs = cultivation.cultivate(kicker, content, world, "旋風腿", LOSE)
+    assert kicker.player.art_mastery["旋風腿"] == 1 and "30%" in msgs[0]
+    cultivation.cultivate(kicker, content, world, "旋風腿", WIN)
+    assert "旋風腿" not in kicker.player.art_mastery  # 升品之後歸零
+
+
+def test_the_level_does_not_change_on_a_quality_rise(kicker, content, world):
+    kicker.player.art_levels["旋風腿"] = 7
+    cultivation.cultivate(kicker, content, world, "旋風腿", WIN)
+    assert kicker.player.art_levels["旋風腿"] == 7
+
+
+def test_a_worn_art_can_be_cultivated_too(state, content, world):
+    """修練不看功法在庫裡還是配在身上（兩處都算擁有）；配在身上的成也不動。"""
+    art = kicker_art()
+    world.claim_skill_name(art)
+    state.player.member.wugong_id, state.player.member.wugong_level = "旋風腿", 4
+    equip(state)
+    state.player.arts = []
+    cultivation.cultivate(state, content, world, "旋風腿", WIN)
+    assert state.player.art_quality["旋風腿"] == "中品" and state.player.member.wugong_level == 4
+
+
+@pytest.mark.parametrize(("change", "reason"), [
+    (lambda s: s.player.insights.clear(), "已經把它熔掉了"),
+    (lambda s: setattr(s.player, "stamina", 5), "體力不足"),
+    (lambda s: s.player.art_quality.update({"旋風腿": "絕學"}), "修無可修"),
+    (lambda s: s.player.arts.clear(), "你沒有這門武學"),
+])
+def test_cultivation_explains_why_it_is_refused(kicker, content, world, change, reason):
+    change(kicker)
+    assert reason in cultivation.cultivate_problem(kicker, content, world, "旋風腿")
+
+
+def test_a_basic_art_cannot_be_cultivated(state, content, world):
+    state.player.member.wugong_id = "basic_fist"
+    assert "沒有融過意境" in cultivation.cultivate_problem(state, content, world, "basic_fist")
+
+
+def test_a_refused_cultivation_costs_and_changes_nothing(kicker, content, world):
+    kicker.player.stamina = 5
+    assert "體力不足" in cultivation.cultivate(kicker, content, world, "旋風腿", WIN)[0]
+    assert kicker.player.stamina == 5 and kicker.player.art_quality == {} and kicker.player.art_mastery == {}
+
+
+def test_a_melted_insight_says_so_by_name_and_does_not_cultivate(kicker, content, world):
+    """審查重點 2：用來融的意境熔掉了：不崩潰、不悄悄修練（體力不扣、品質與熟練度不動），照實說出是哪個意境。"""
+    kicker.player.insights = []
+    msgs = cultivation.cultivate(kicker, content, world, "旋風腿", WIN)
+    assert msgs == ["修練要用「風」，你已經把它熔掉了。"]
+    assert kicker.player.stamina == 150 and kicker.player.art_quality == {} and kicker.player.art_mastery == {}
+
+
+def test_a_melted_insight_nobody_can_look_up_still_does_not_crash(state, content, world):
+    art = kicker_art().model_copy(update={"id": "怪腿", "name": "怪腿", "insight": "已經不存在的意境"})
+    world.claim_skill_name(art)
+    equip(state, "怪腿", "feng")
+    msgs = cultivation.cultivate(state, content, world, "怪腿", WIN)
+    assert "已經不存在的意境" in msgs[0] and "熔掉" in msgs[0] and state.player.stamina == 150
+
+
+def test_the_first_to_reach_peerless_names_it_for_everyone(kicker, content, world):
+    kicker.player.art_quality["旋風腿"] = "上品"
+    msgs = cultivation.cultivate(kicker, content, world, "旋風腿", WIN)
+    assert kicker.player.naming == "旋風腿" and any("取一個正式的名字" in m for m in msgs)
+    cultivation.name_mastered(kicker, content, world, "風神腿")
+    assert world.get_skill("旋風腿").name == "風神腿" and kicker.player.naming is None
+    assert any("風神腿" in r.text for r in kicker.world.chronicle)
+
+
+def test_the_chronicle_line_names_the_old_name_and_the_new_one(kicker, content, world):
+    """F14：每一件各寫一行（換季那一行是另外一份總結，T10）。"""
+    kicker.player.art_quality["旋風腿"] = "上品"
+    cultivation.cultivate(kicker, content, world, "旋風腿", WIN)
+    cultivation.name_mastered(kicker, content, world, "風神腿")
+    assert [r.text for r in kicker.world.chronicle] == ["沈浪把【旋風腿】練成絕學，為之定名【風神腿】。"]
+
+
+def test_the_second_to_reach_peerless_does_not_name_it(kicker, content, world):
+    world.claim_master("旋風腿", "甲")
+    kicker.player.art_quality["旋風腿"] = "上品"
+    msgs = cultivation.cultivate(kicker, content, world, "旋風腿", WIN)
+    assert kicker.player.naming is None and any("甲" in m for m in msgs)
+
+
+def test_two_players_reaching_peerless_together_only_the_first_names_it(kicker, content, world):
+    """兩個人這一刻都把同一門武學練成絕學：claim_master 是原子的，只有先登記的拿到取名權；
+    後到的沒有 naming，也取不了名（沒有等著他取名的武學），全服的名字只被改一次。"""
+    kicker.player.art_quality["旋風腿"] = "上品"
+    other = equip(new_game_state(content, "乙"))
+    other.player.art_quality["旋風腿"] = "上品"
+    cultivation.cultivate(kicker, content, world, "旋風腿", WIN)
+    msgs = cultivation.cultivate(other, content, world, "旋風腿", WIN)
+    assert kicker.player.naming == "旋風腿" and other.player.naming is None
+    assert any("沈浪" in m for m in msgs) and world.master_of("旋風腿") == "沈浪"
+    assert cultivation.name_mastered(other, content, world, "裂地腿") == ["（沒有等著你取名的武學。）"]
+    assert world.get_skill("旋風腿").name == "旋風腿"  # 後到的沒改成
+    cultivation.name_mastered(kicker, content, world, "風神腿")
+    assert world.get_skill("旋風腿").name == "風神腿"
+    assert cultivation.name_mastered(kicker, content, world, "另一個名") == ["（沒有等著你取名的武學。）"]  # 一門只取一次
+
+
+def test_the_last_step_to_peerless_waits_until_the_pending_naming_is_done(kicker, content, world):
+    """取名的權利一人一次只留一門（PlayerState.naming）：還有一門練成了絕學沒定名時，不能再衝第二門的絕學——
+    不然第二門成了、第一門的取名權被蓋掉，那門就永遠沒有人替它定名。別的品質照樣能修。"""
+    world.claim_skill_name(generate_from_name("裂石拳", "武學", "裂石拳"))
+    kicker.player.naming = "裂石拳"
+    kicker.player.art_quality["旋風腿"] = "上品"
+    assert "【裂石拳】還沒定名" in cultivation.cultivate(kicker, content, world, "旋風腿", WIN)[0]
+    assert kicker.player.stamina == 150 and kicker.player.art_quality["旋風腿"] == "上品" and kicker.player.naming == "裂石拳"
+    kicker.player.art_quality["旋風腿"] = "中品"
+    assert cultivation.cultivate_problem(kicker, content, world, "旋風腿") is None
+
+
+def test_a_bad_or_taken_name_is_refused(kicker, content, world):
+    kicker.player.naming = "旋風腿"
+    world.claim_master("旋風腿", kicker.player.name)
+    assert "長度" in cultivation.name_mastered(kicker, content, world, "風")[0]
+    world.claim_skill_name(generate_from_name("裂石拳", "武學", "裂石拳"))
+    assert "有人用了" in cultivation.name_mastered(kicker, content, world, "裂石拳")[0]
+    assert kicker.player.naming == "旋風腿"
+
+
+def test_a_name_used_by_an_alias_or_an_insight_is_refused(kicker, content, world):
+    """全服不能重名：別門武學改過的新名字、合併出來的意境名字，跟內容裡的意境名字（過濾那一關）一樣都不行。"""
+    kicker.player.naming = "旋風腿"
+    world.claim_skill_name(generate_from_name("裂石拳", "武學", "裂石拳"))
+    assert world.rename_skill("裂石拳", "碎石拳")
+    world.claim_insight_recipe("合|feng+huo", Insight(id="燎原", name="燎原", attribute="陽", creator="乙"))
+    assert "有人用了" in cultivation.name_mastered(kicker, content, world, "碎石拳")[0]
+    assert "有人用了" in cultivation.name_mastered(kicker, content, world, "燎原")[0]
+    assert "意境同名" in cultivation.name_mastered(kicker, content, world, "浩然")[0]  # 內容裡的意境
+    assert kicker.player.naming == "旋風腿" and world.get_skill("旋風腿").name == "旋風腿"
+
+
+def test_a_name_is_cleaned_before_it_is_checked(kicker, content, world):
+    kicker.player.naming = "旋風腿"
+    cultivation.name_mastered(kicker, content, world, "《風神腿》")
+    assert world.get_skill("旋風腿").name == "風神腿"
+
+
+def test_naming_an_art_that_has_gone_missing_says_so_and_changes_nothing(state, content, world):
+    state.player.naming = "不存在的功法"
+    assert "找不到" in cultivation.name_mastered(state, content, world, "風神腿")[0]
+    assert state.player.naming == "不存在的功法" and state.world.chronicle == []
+
+
+def test_after_a_rename_the_name_shows_everywhere_and_the_id_still_keys(state, content, world):
+    """Task 1 的提醒：改名之後 id 跟顯示的名字不一樣。顯示的地方都要寫新名字（功法庫、功法卡、已經有了的訊息），
+    認東西的地方都要照 id（擁有、品質、熟練度、登記）。"""
+    world.claim_recipe(fusion.fuse_key("basic_fist", "feng"), kicker_art())  # 這個配方的功法就是旋風腿
+    equip(state)
+    state.player.member.wugong_id = "basic_fist"
+    state.player.stats["xinde"] = 50
+    state.player.art_quality["旋風腿"] = "上品"
+    cultivation.cultivate(state, content, world, "旋風腿", WIN)
+    cultivation.name_mastered(state, content, world, "風神腿")
+    # 顯示：新名字
+    assert team.resolve_art("旋風腿", content, world).name == "風神腿"
+    assert team.player_art(state, content, world, "旋風腿").name == "風神腿"
+    assert [label for label, _ in skillview.art_library(state, content, world)] == ["武學　風神腿（絕學・屬快）第1成"]
+    assert "【風神腿】" in fusion.fuse_problem(state, content, world, "basic_fist", "feng")  # 「已經有了」認 id、說新名字
+    # 認東西：還是 id
+    assert "旋風腿" in library.owned_arts(state) and state.player.art_quality == {"旋風腿": "絕學"}
+    assert world.get_skill("旋風腿") is not None and world.get_skill("風神腿") is None
+    assert "修無可修" in cultivation.cultivate_problem(state, content, world, "旋風腿")
+
+
+def test_the_new_name_cannot_be_taken_by_anyone_else_afterwards(kicker, content, world):
+    kicker.player.naming = "旋風腿"
+    cultivation.name_mastered(kicker, content, world, "風神腿")
+    assert world.is_skill_name_taken("風神腿")
+    assert not world.claim_skill_name(generate_from_name("風神腿", "武學", "風神腿"))
+
+
+def test_the_upgrade_line_gets_the_new_thing_shine_and_a_failed_try_does_not(kicker, content, world):
+    won = cultivation.cultivate(kicker, content, world, "旋風腿", WIN)[0]
+    assert won.startswith("【旋風腿】修練有成，從下品晉為中品") and journal._line_class(won) == "tx-line tx-new"
+    lost = cultivation.cultivate(kicker, content, world, "旋風腿", LOSE)[0]
+    assert journal._line_class(lost) == "tx-line"
+
+
+# ── 引擎：修練與定名寫不寫江湖紀錄（F12：真的有事發生才寫）──────────────────
+
+
+@pytest.fixture
+def adept(game):
+    """一個配好了旋風腿（庫裡）、意境與體力都夠的角色。擲骰預設全贏，要輸的測試自己換 game.rng。"""
+    game.world.claim_skill_name(kicker_art())
+    equip(game.state)
+    game.rng = WIN
+    return game
+
+
+def test_cultivating_writes_one_journal_entry_with_the_xinde_untouched(adept):
+    msgs = adept.cultivate("旋風腿")
+    entry = adept.state.journal[0]
+    assert "中品" in msgs[0] and entry.title == "修練" and entry.tag == msgs[0] and entry.changes == []
+    assert adept.state.player.art_quality["旋風腿"] == "中品"
+
+
+def test_a_failed_roll_is_something_that_happened_and_is_written(adept):
+    adept.rng = LOSE
+    msgs = adept.cultivate("旋風腿")
+    assert "還差一點火候" in msgs[0] and adept.state.journal[0].tag == msgs[0]
+
+
+@pytest.mark.parametrize("break_it", [
+    lambda p: p.insights.clear(),                      # 意境熔掉了
+    lambda p: setattr(p, "arts", []),                  # 沒有這門武學
+    lambda p: setattr(p, "stamina", 5),                # 體力不足
+    lambda p: p.art_quality.update({"旋風腿": "絕學"}),  # 已經是絕學
+])
+def test_a_refused_cultivation_writes_no_journal_entry(adept, break_it):
+    break_it(adept.state.player)
+    before = list(adept.state.journal)
+    msgs = adept.cultivate("旋風腿")
+    assert len(msgs) == 1 and adept.state.journal == before
+    assert any(msgs[0] in line for line in adept.state.log)  # 話還是照樣留在 log
+
+
+def test_a_basic_art_is_refused_without_a_journal_entry(adept):
+    adept.state.player.member.wugong_id = "basic_fist"
+    before = list(adept.state.journal)
+    assert "沒有融過意境" in adept.cultivate("basic_fist")[0] and adept.state.journal == before
+
+
+def test_naming_writes_the_chronicle_the_journal_and_saves_the_season(adept):
+    adept.state.player.art_quality["旋風腿"] = "上品"
+    adept.cultivate("旋風腿")
+    assert adept.state.player.naming == "旋風腿"
+    msgs = adept.name_mastered("風神腿")
+    assert "風神腿" in msgs[0] and adept.state.journal[0].tag == msgs[0]
+    assert [r.text for r in adept.world.get_season().chronicle][-1] == "沈浪把【旋風腿】練成絕學，為之定名【風神腿】。"  # 存回共用賽季了
+
+
+def test_a_refused_naming_writes_no_journal_entry(adept):
+    before = list(adept.state.journal)
+    assert adept.name_mastered("風神腿") == ["（沒有等著你取名的武學。）"]  # 沒有等著取名的武學
+    adept.state.player.naming = "旋風腿"
+    assert "長度" in adept.name_mastered("風")[0]                              # 名字不合格
+    adept.world.claim_skill_name(generate_from_name("裂石拳", "武學", "裂石拳"))
+    assert "有人用了" in adept.name_mastered("裂石拳")[0]                       # 名字被用掉了
+    assert adept.state.journal == before and adept.state.player.naming == "旋風腿"
+
+
+def test_cultivating_and_naming_wait_while_the_season_is_preparing(adept):
+    from unittest import mock
+
+    with mock.patch.object(adept.world, "season_phase", return_value="preparing"):
+        assert "籌備中" in adept.cultivate("旋風腿")[0] and "籌備中" in adept.name_mastered("風神腿")[0]
+    assert adept.state.player.stamina == 150 and adept.state.player.art_quality == {}
