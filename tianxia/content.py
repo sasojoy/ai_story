@@ -1224,6 +1224,8 @@ def validate(c: Content) -> None:
         known(f"陣營 {faction.id}", faction.goals, trend_ids, "大勢線")
         not_derived(f"陣營 {faction.id}", faction.goals, "goals ")
         need(all(d in (-1, 1) for d in faction.goals.values()), f"陣營 {faction.id}：goals 的方向只能是 1 或 -1")
+        need(to_traditional(faction.defect_text) == faction.defect_text,
+             f"陣營 {faction.id}：defect_text 只能用繁體中文（「{faction.defect_text[:12]}」）")
 
     showdown_events = {e.id: e for e in c.timetable if e.kind == "showdown"}
     showdown_battles: dict[tuple[str, str | None], str] = {}  # （時刻表決戰, 版本）→ 第一筆寫它的戰鬥

@@ -377,7 +377,7 @@ def _hill(x: float, y: float, w: float, h: float) -> str:
 
 FRAME = "#A08A5E"  # 外框與指北針
 FRAME_OUTER, FRAME_INNER = 5, 10  # 雙線外框：外線、內線離紙邊多遠
-FRAME_INSIDE = 14  # 外框裡面：擺出來的字、圖例從這裡開始，不壓到內線
+FRAME_INSIDE = 14  # 外框裡面：擺出來的字從這裡開始，不壓到內線
 BANNER = "#C0392B"  # 紅旗（所在地）與指北針的北端
 COMPASS_RADIUS = 22  # 指北針的圓
 COMPASS_NEEDLE = 30  # 指針從中心往上下各伸多長
@@ -465,6 +465,18 @@ def icon(kind: str, x: int, y: int, look: str) -> str:
         return _fill(f"M{x - 10},{y + 7} L{x - 1},{y - 9} L{x + 10},{y + 7} Z", main) + shade
     pole = f'<path d="M{x - 4},{y + 8} V{y - 9}" stroke="{second}" stroke-width="1.8"/>'
     return pole + _fill(f"M{x - 4},{y - 9} L{x + 8},{y - 5} L{x - 4},{y - 1} Z", main)
+
+
+ICON_BOX = (-12, -11, 24, 20)  # 單獨畫一個圖示的畫布（左、上、寬、高）：圖示中心在 (0, 0)；最寬的渡口與屋簷左右各 11，最高的渡口帆在上方 10，最低的船底在下方 8
+
+
+def icon_svg(kind: str, look: str = "full") -> str:
+    """單獨一個地點圖示（輿圖圖例用）：自成一張很小的 SVG，畫法就是地圖上的 icon()，不加圓盤與外圈；旁邊的字由網頁寫。"""
+    left, top, width, height = ICON_BOX
+    return (
+        f'<svg class="tx-icon" viewBox="{left} {top} {width} {height}" width="{width}" height="{height}" '
+        f'xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">{icon(kind, 0, 0, look)}</svg>'
+    )
 
 
 def banner(x: int, y: int) -> str:
