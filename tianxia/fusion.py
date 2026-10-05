@@ -12,6 +12,8 @@
 合併：意境＋意境（可以是同一個）→ 新意境，兩個都留著；屬性與正邪照 insights 的規則。合併要花體力（Config.merge_stamina）、
 合成不花——合併→熔掉→再合併每一圈淨賺心得，企劃者 2026-10-05 的裁示是不擋、讓每一圈都付一次體力。
 配方全服共享：第一個合出來的人等模型取名（叫不動就走退路字表），之後查表、不用等。
+伺服器上的取名在行動鎖外（最終審查 Critical 1）：forge_request（A，鎖內）→ naming.generate（B，鎖外）→
+fuse／merge(proposed=...)（C，鎖內，整個重驗再登記、收費）。沒給 proposed 才在這裡叫模型（整季機器人、腳本、測試）。
 「已經有了」一律照功法的 id 認（改名之後顯示的名字跟 id 不一樣）。
 """
 from __future__ import annotations
@@ -60,22 +62,21 @@ def can_forge(state: GameState, content: Content) -> bool:
 
 
 def fuse_problem(state: GameState, content: Content, world: WorldStateStore, art_id: str, insight_id: str) -> str | None:
-    """不能合成的原因；None＝可以。合出來的那一門你已經有了也不准（合成的意義是拿到你還沒有的武學）。"""
+    """不能合成的原因；None＝可以。合出來的那一門你已經有了也不准（合成的意義是拿到你還沒有的武學）。
+    「你已經有了」排在花費與持有上限之前：同一爐連按兩下、開兩個分頁時，第二下在 C 段重驗看見的真正變化是
+    「已經有了」，不是第一下花掉之後才不夠的心得、或剛好被第一下填滿的持有（企劃者 2026-10-05：不能重複扣）。"""
     if art_id not in library.owned_arts(state):
         return "你沒有這門武學。"
     if insight_id not in state.player.insights:
         return "你還沒悟到這個意境。"
     if team.player_art(state, content, world, art_id) is None or insights.resolve(insight_id, content, world) is None:
         return "找不到它的資料。"  # 存檔裡記著、內容與全服登記裡都沒有（失效的引用）
-    if library.full(state, content):
-        return _full_line(state, content)
-    problem = _xinde_line(state, content.config.fuse_xinde, "合成")
-    if problem is not None:
-        return problem
     known = world.lookup_recipe(fuse_key(art_id, insight_id))
     if known is not None and known.id in library.owned_arts(state):
         return f"這一爐合出來還是【{known.name}】，你已經有了——換一個意境吧。"
-    return None
+    if library.full(state, content):
+        return _full_line(state, content)
+    return _xinde_line(state, content.config.fuse_xinde, "合成")
 
 
 def _fuse_messages(base: MartialArt, insight: Insight) -> list[dict[str, str]]:
@@ -91,11 +92,61 @@ def _fuse_messages(base: MartialArt, insight: Insight) -> list[dict[str, str]]:
     ]
 
 
+def forge_request(
+    state: GameState, content: Content, world: WorldStateStore, art_id: str | None, insight_ids: list[str],
+) -> naming.NamingRequest | None:
+    """A 段（行動鎖內、很快；Game.forge_request 的本體）：這一爐要不要模型取名？要就開一張單子給 B 段（naming.generate）。
+    不要的時候回 None：放的不是一門武學＋一個意境、也不是兩個意境；這一爐會被拒絕（拒絕的話留給 C 段照常回）；
+    配方這一季已經有人登記（查表就好）。只讀，不改任何東西。"""
+    if art_id and len(insight_ids) == 1:
+        insight_id = insight_ids[0]
+        if fuse_problem(state, content, world, art_id, insight_id) is not None:
+            return None
+        key = fuse_key(art_id, insight_id)
+        if world.lookup_recipe(key) is not None:
+            return None
+        base = team.player_art(state, content, world, art_id)
+        return naming.NamingRequest("fuse", key, base.kind, _fuse_messages(base, insights.resolve(insight_id, content, world)))
+    if not art_id and len(insight_ids) == 2:
+        a, b = insight_ids
+        if merge_problem(state, content, world, a, b) is not None:
+            return None
+        key = merge_key(a, b)
+        if world.lookup_insight_recipe(key) is not None:
+            return None
+        return naming.NamingRequest(
+            "merge", key, "意境", _merge_messages(insights.resolve(a, content, world), insights.resolve(b, content, world)),
+        )
+    return None
+
+
+def _named(
+    client: OllamaClient | None, content: Content, messages: list[dict[str, str]], proposed: tuple[str | None, str] | None,
+) -> tuple[str | None, str]:
+    """首次合出來的配方要的名字與說明。proposed 是鎖外先取好的（server：A 鎖內備料、B 鎖外取名，這裡是 C）：
+    再過一次完整的過濾（naming.recheck），鎖裡不叫模型——(None, "") 也一樣，直接走退路字表。
+    沒給 proposed（整季機器人、腳本、測試直接呼叫 Game.forge）才照舊在這裡叫模型。"""
+    if proposed is not None:
+        return naming.recheck(content, proposed)
+    return naming.propose(client, content, messages)
+
+
+def _candidates(content: Content, key: str, kind: str, tianji: int, name: str | None):
+    """登記時依序試的名字：先試模型取的（有的話），再試退路字表——種子是配方鍵＋這一季的天機、鹽從 0 起，
+    所以一個配方換到的退路名字只看它自己，不看誰先到（兩個配方同時拿到同一個模型名字時，後到的那一個每次都換成同一個）。"""
+    if name is not None:
+        yield name
+    for salt in range(naming.CLAIM_ATTEMPTS):
+        yield naming.fallback_name(content, key, kind, salt=salt, tianji=tianji)
+
+
 def fuse(
     state: GameState, content: Content, world: WorldStateStore, client: OllamaClient | None,
-    art_id: str, insight_id: str,
+    art_id: str, insight_id: str, proposed: tuple[str | None, str] | None = None,
 ) -> tuple[MartialArt | None, list[str]]:
-    """武學＋意境 → 新武學，回傳（新武學, 訊息）；不能合成時回 (None, [原因])。"""
+    """武學＋意境 → 新武學，回傳（新武學, 訊息）；不能合成時回 (None, [原因])，什麼都不收、不登記。
+    proposed：鎖外先取好的（名字, 說明），見 _named。進來先整個重驗（A 段之後狀態可能變了：意境熔掉、心得花掉、
+    配方被別人或自己的另一個請求登記了），再登記、收費。"""
     problem = fuse_problem(state, content, world, art_id, insight_id)
     if problem is not None:
         return None, [problem]
@@ -105,20 +156,20 @@ def fuse(
     art = world.lookup_recipe(key)
     first = False
     if art is None:
-        name, note = naming.propose(client, content, _fuse_messages(base, insight))
+        name, note = _named(client, content, _fuse_messages(base, insight), proposed)
         tianji = world.read().tianji
-        for attempt in range(naming.CLAIM_ATTEMPTS):
-            if name is None:
-                name = naming.fallback_name(content, key, base.kind, salt=attempt)
-            candidate = generate_from_name(name, base.kind, name, tianji, weights=LOW_ONLY, attribute=insight.attribute)
+        for candidate_name in _candidates(content, key, base.kind, tianji, name):
+            candidate = generate_from_name(
+                candidate_name, base.kind, candidate_name, tianji, weights=LOW_ONLY, attribute=insight.attribute,
+            )
             candidate = candidate.model_copy(update={
-                "origin": "fused", "creator": state.player.name, "creator_shown": display_name(state), "note": note,
+                "origin": "fused", "creator": state.player.name, "creator_shown": display_name(state),
+                "note": note if candidate_name == name else "",  # 說明是模型替它那個名字寫的；換成退路名字就不帶
                 "insight": insight.id, "base": art_id, "lean": insight.lean,
             })
             art, first = world.claim_recipe(key, candidate)  # 同時有人先登記了：拿到的是人家登記的那一門
             if art is not None:
-                break
-            name, note = None, ""  # 名字被占用：換一個決定性的名字再試
+                break  # 名字被占用（claim 回 None）就換下一個名字再試
         if art is None:
             return None, ["爐火熄了，這一次什麼也沒合成（名字都被用掉了，再試一次）。"]
     if art.id in library.owned_arts(state):  # 先被別人登記的那一門，剛好是你已經有的：不收錢、不重複收
@@ -143,12 +194,15 @@ def _fuse_line(base: MartialArt, insight: Insight, art: MartialArt, first: bool)
 
 
 def merge_problem(state: GameState, content: Content, world: WorldStateStore, a: str, b: str) -> str | None:
-    """不能合併的原因；None＝可以。合出來的意境你已經悟得了也不准。"""
+    """不能合併的原因；None＝可以。合出來的意境你已經悟得了也不准；跟 fuse_problem 一樣排在花費與持有上限之前。"""
     held = state.player.insights
     if a not in held or b not in held:
         return "兩個意境都要是你悟得的。"
     if insights.resolve(a, content, world) is None or insights.resolve(b, content, world) is None:
         return "找不到它的資料。"
+    known = world.lookup_insight_recipe(merge_key(a, b))
+    if known is not None and known.id in held:
+        return f"這兩個合起來還是「{known.name}」，你已經悟得了。"
     if library.full(state, content):
         return _full_line(state, content)
     problem = _xinde_line(state, content.config.merge_xinde, "合併")
@@ -156,9 +210,6 @@ def merge_problem(state: GameState, content: Content, world: WorldStateStore, a:
         return problem
     if state.player.stamina < content.config.merge_stamina:  # 合併要花體力，合成不用（企劃者 2026-10-05）
         return f"體力不足：合併一次要 {content.config.merge_stamina}。"
-    known = world.lookup_insight_recipe(merge_key(a, b))
-    if known is not None and known.id in held:
-        return f"這兩個合起來還是「{known.name}」，你已經悟得了。"
     return None
 
 
@@ -177,8 +228,10 @@ def _merge_messages(a: Insight, b: Insight) -> list[dict[str, str]]:
 
 def merge(
     state: GameState, content: Content, world: WorldStateStore, client: OllamaClient | None, a: str, b: str,
+    proposed: tuple[str | None, str] | None = None,
 ) -> tuple[Insight | None, list[str]]:
-    """意境＋意境 → 新意境，回傳（新意境, 訊息）；不能合併時回 (None, [原因])。"""
+    """意境＋意境 → 新意境，回傳（新意境, 訊息）；不能合併時回 (None, [原因])，什麼都不收、不登記。
+    proposed 與重驗同 fuse。"""
     problem = merge_problem(state, content, world, a, b)
     if problem is not None:
         return None, [problem]
@@ -187,19 +240,17 @@ def merge(
     result = world.lookup_insight_recipe(key)
     first = False
     if result is None:
-        name, note = naming.propose(client, content, _merge_messages(ia, ib))
-        for attempt in range(naming.CLAIM_ATTEMPTS):
-            if name is None:
-                name = naming.fallback_name(content, key, "意境", salt=attempt)
+        name, note = _named(client, content, _merge_messages(ia, ib), proposed)
+        tianji = world.read().tianji
+        for candidate_name in _candidates(content, key, "意境", tianji, name):
             candidate = Insight(
-                id=name, name=name, attribute=insights.merged_attribute(ia, ib, name),
+                id=candidate_name, name=candidate_name, attribute=insights.merged_attribute(ia, ib, candidate_name),
                 lean=insights.merged_lean(ia, ib), creator=state.player.name, creator_shown=display_name(state),
-                note=note, parents=sorted([a, b]),
+                note=note if candidate_name == name else "", parents=sorted([a, b]),
             )
             result, first = world.claim_insight_recipe(key, candidate)
             if result is not None:
                 break
-            name, note = None, ""
         if result is None:
             return None, ["兩股意念始終融不到一塊（名字都被用掉了，再試一次）。"]
     if result.id in state.player.insights:  # 先被別人登記的那一個，剛好是你已經悟得的：不收錢、不重複

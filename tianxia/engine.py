@@ -14,8 +14,8 @@ from pydantic import BaseModel
 
 from . import (
     atlas, battle_instance, battlelog, calendar, companion_agent, cultivation, encounter, event_llm, figures, flavor,
-    foreshadow, front_lines, fusion, insights, journal, library, materials, orders, push, ranks, roster, skillview, team,
-    timetable,
+    foreshadow, front_lines, fusion, insights, journal, library, materials, naming, orders, push, ranks, roster, skillview,
+    team, timetable,
 )
 from .events import choice_label, event_candidates, has_events_here, pick_event, visible_choices
 from .guide import base_step_count, note_action, quest_text, step_text, tutorial_active, tutorial_intro
@@ -2643,19 +2643,35 @@ class Game:
             journal.add_entry(self.state, JournalEntry(time=end_time, title="出關", tag=tag, changes=[change]))
         return [msg]
 
-    def forge(self, art_id: str | None, insight_ids: list[str]) -> list[str]:
+    def forge_request(self, art_id: str | None, insight_ids: list[str]) -> naming.NamingRequest | None:
+        """開爐首次取名的 A 段（呼叫端在行動鎖內、很快地呼叫；server.prepare_forge）：這一爐要不要模型取名？
+        要就回送模型的單子（naming.NamingRequest），由呼叫端在鎖外交給 naming.generate（B 段），再進鎖把結果交給
+        forge(..., proposed=...)（C 段）。不要的時候是 None：這個角色不叫模型（client 是 None，伺服器假人）、
+        賽季籌備中、這一爐會被拒絕、配方已經有人登記。只讀、不改狀態——跟 dialogue_request 同一個做法。"""
+        if self.client is None or self._preparing():
+            return None
+        return fusion.forge_request(self.state, self.content, self.world, art_id, insight_ids)
+
+    def forge(
+        self, art_id: str | None, insight_ids: list[str], proposed: tuple[str | None, str] | None = None,
+    ) -> list[str]:
         """煉製頁的開爐：一門武學＋一個意境＝合成，兩個意境（可以是同一個）＝合併（見 fusion.py）。
-        首次出現的配方要等模型取名（在行動裡叫，跟舊的煉製一樣；移出鎖外是線上架構第 2 期的事）；
-        江湖紀錄的標題照煉製頁寫「煉製」（FB-047），做成了才寫，被拒絕只回一句話。合併要花體力（Config.merge_stamina）、
+        proposed 是鎖外先取好的（名字, 說明）（C 段，見 forge_request）：這裡整個重驗（A 段之後意境可能熔掉、心得或體力
+        可能花掉、配方可能被別人或同一個人的另一個請求登記了），名字再過一次過濾、登記時原子判斷重名，過不了走退路字表；
+        給了 proposed 就不會在這裡叫模型（伺服器一律給，不需要模型時是 (None, "")）。沒給（整季機器人、腳本、測試）
+        首次出現的配方照舊在這裡叫模型。
+        江湖紀錄的標題照煉製頁寫「煉製」（FB-047），做成了才寫，被拒絕只回一句話、什麼都不收。合併要花體力（Config.merge_stamina）、
         合成不花：花了的體力跟心得一起寫在這一則的數值變化上（企劃者 2026-10-05）。"""
         if self._preparing():
             return self._log(["（賽季籌備中，等待管理者開季。）"])
-        xinde, stamina =self._xinde(), self.state.player.stamina
+        xinde, stamina = self._xinde(), self.state.player.stamina
         if art_id and len(insight_ids) == 1:
-            art, msgs = fusion.fuse(self.state, self.content, self.world, self.client, art_id, insight_ids[0])
+            art, msgs = fusion.fuse(
+                self.state, self.content, self.world, self.client, art_id, insight_ids[0], proposed=proposed,
+            )
             tag = f"合成【{art.name}】" if art is not None else None
         elif not art_id and len(insight_ids) == 2:
-            insight, msgs = fusion.merge(self.state, self.content, self.world, self.client, *insight_ids)
+            insight, msgs = fusion.merge(self.state, self.content, self.world, self.client, *insight_ids, proposed=proposed)
             tag = f"合併「{insight.name}」" if insight is not None else None
         else:
             return self._log(["放一門武學和一個意境（合成），或兩個意境（合併）。"])

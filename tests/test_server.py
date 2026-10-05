@@ -17,6 +17,7 @@ from tianxia.characters import open_characters
 from tianxia.engine import Game
 from tianxia.journal import WORLD_NEWS
 from tianxia.martial_arts import MartialArt
+from tianxia.ollama_client import OllamaClient
 from tianxia.sqlite_world import SqliteWorldStore, open_world
 from tianxia.state import BotProfile
 
@@ -831,6 +832,175 @@ def test_forge_line_warns_about_an_insight_you_have_not_learned(client):
     _player(client)
     line = client.post("/api/forge_line", json={"art": "jichu_quanjiao", "insights": ["feng"]}).json()["line"]
     assert "還沒悟到" in line
+
+
+# ── 開爐的首次取名在行動鎖外（最終審查 Critical 1）：A 鎖內備料 → B 鎖外取名（有預算）→ C 鎖內重驗、登記、收費 ──
+
+FIST_FENG = fusion.fuse_key("jichu_quanjiao", "feng")
+
+
+def _forger(name="沈青衫", insights=("feng", "huo"), xinde=100) -> Game:
+    """伺服器上這個角色唯一的那份 Game（server.game_for），悟得 insights、心得 xinde，存進資料庫（進鎖會重讀）。"""
+    game = server.game_for(name)
+    game.state.player.insights = list(insights)
+    game.state.player.stats["xinde"] = xinde
+    open_characters().save(game.state)
+    return game
+
+
+def _model(reply):
+    """假的模型：reply(self, messages) 回名字（字串）。self 是那一次呼叫用的 OllamaClient（有預算時是複本）。"""
+    def chat_structured(self, messages, response_model, **kwargs):
+        return naming.NameReply(name=reply(self, messages), description="一句話。")
+
+    return mock.patch.object(OllamaClient, "chat_structured", chat_structured)
+
+
+def _nobody_holds_the_lock(game):
+    assert not game.world.db.writing()  # 這個執行緒沒拿著寫入交易
+    probe = sqlite3.connect(game.world.db.path, timeout=0)
+    try:
+        probe.execute("BEGIN IMMEDIATE")  # 別的程式（假人、別的玩家）也拿得到寫入權
+        probe.execute("ROLLBACK")
+    finally:
+        probe.close()
+
+
+def _crafts(name):
+    """這個角色江湖紀錄裡「煉製」的那幾則（同一種連續的會併成一則，所以比內容，不只比則數）。"""
+    return [e.model_dump() for e in open_characters().load(name).journal if e.title == "煉製"]
+
+
+def test_a_new_recipe_is_named_outside_the_action_lock(lock_events):
+    game = _forger()
+    lock_events.clear()
+
+    def reply(client, messages):
+        lock_events.append("generate")
+        _nobody_holds_the_lock(game)
+        return "旋風腿"
+
+    with _model(reply):
+        msgs = server.forge(game, "jichu_quanjiao", ["feng"])
+    assert lock_events == ["enter", "exit", "generate", "enter", "exit"]  # 鎖內備料 → 鎖外取名 → 鎖內登記
+    assert open_world().lookup_recipe(FIST_FENG).name == "旋風腿"
+    assert any("第一次" in m for m in msgs)
+
+
+def test_the_forge_endpoint_never_asks_the_model_while_holding_the_lock(client):
+    _a_player_with_insights(client)
+    game = server.game_for("沈青衫")
+    asked = []
+
+    def reply(model, messages):
+        _nobody_holds_the_lock(game)
+        asked.append(model.timeout)
+        return "旋風腿"
+
+    with _model(reply):
+        out = client.post("/api/menxia/forge", json={"art": "jichu_quanjiao", "insights": ["feng"]})
+    assert out.status_code == 200 and "旋風腿" in out.json()["message"]
+    # 預算 60 秒（扣掉 A 段等鎖的時間）；chat_structured 一次最多送兩趟，所以一趟最多一半。原本那個 client 不動
+    assert len(asked) == 1 and 25 < asked[0] <= server.CONTENT.config.naming_budget_seconds / 2
+    assert game.client.timeout == server.CONTENT.config.ollama_timeout
+
+
+def test_when_the_first_trip_saw_no_need_for_the_model_the_lock_never_asks_it(monkeypatch):
+    """A 段說不必叫模型（那一刻會被拒絕、配方有了、沒有 client），C 段進鎖時卻做得成（中間狀態變了）：
+    鎖裡也不叫模型，直接用退路字表——伺服器永遠不走「鎖裡取名」那條路。"""
+    game = _forger()
+    monkeypatch.setattr(Game, "forge_request", lambda self, art_id, insight_ids: None)
+    asked = []
+    with _model(lambda model, messages: asked.append(1) or "旋風腿"):
+        server.forge(game, "jichu_quanjiao", ["feng"])
+    assert asked == []
+    assert open_world().lookup_recipe(FIST_FENG).name == naming.fallback_name(server.CONTENT, FIST_FENG, "武學")
+
+
+def test_a_recipe_registered_between_the_two_trips_gives_the_registered_art():
+    """乙備料、取名的時候，甲把同一個配方合出來登記了：乙進鎖時拿到的是甲登記的那一門（照常付心得），
+    乙的模型取的名字不登記，全服只有一筆。"""
+    first, second = _forger("甲"), _forger("乙")
+    with _model(lambda model, messages: "疾風腿"):
+        proposed = server.prepare_forge(second, "jichu_quanjiao", ["feng"])  # 乙的 A、B
+    assert proposed == ("疾風腿", "一句話。")
+    with _model(lambda model, messages: "旋風腿"):
+        server.forge(first, "jichu_quanjiao", ["feng"])  # 甲從頭到尾
+    msgs = server.act(second, lambda g: g.forge("jichu_quanjiao", ["feng"], proposed=proposed))  # 乙的 C
+    world = open_world()
+    art = world.lookup_recipe(FIST_FENG)
+    assert art.name == "旋風腿" and world.recipe_keys() == {FIST_FENG} and not world.is_skill_name_taken("疾風腿")
+    saved = open_characters().load("乙").player
+    assert art.id in saved.arts and saved.stats["xinde"] == 95
+    assert any("由甲首創" in m for m in msgs)
+
+
+@pytest.mark.parametrize(("art", "picked", "refusal"), [
+    ("jichu_quanjiao", ["feng"], "你已經有了"),
+    (None, ["feng", "huo"], "你已經悟得了"),
+])
+def test_the_same_forge_sent_twice_while_naming_is_charged_once(art, picked, refusal):
+    """企劃者 2026-10-05（不能重複扣）：同一個人連按兩下、重新整理再按、開兩個分頁，兩個請求都在配方登記之前
+    走完 A（都叫了模型）。C 段只有一個成功：第二個重驗時看見配方有了、東西已經在你身上，回「你已經有了／悟得了」，
+    什麼都不收——不扣心得、不扣體力、不寫江湖紀錄；全服只登記一筆。"""
+    game = _forger()
+    names = iter(["旋風腿", "疾風腿"])
+    with _model(lambda model, messages: next(names)):
+        one = server.prepare_forge(game, art, picked)
+        two = server.prepare_forge(game, art, picked)
+    assert (one[0], two[0]) == ("旋風腿", "疾風腿")  # 兩趟都在配方登記之前：各叫了一次模型
+    before = open_characters().load("沈青衫").player
+    first = server.act(game, lambda g: g.forge(art, picked, proposed=one))
+    after_one = open_characters().load("沈青衫").player
+    crafts = _crafts("沈青衫")
+    second = server.act(game, lambda g: g.forge(art, picked, proposed=two))
+    after_two = open_characters().load("沈青衫").player
+    assert not any(refusal in m for m in first) and len(second) == 1 and refusal in second[0]
+    assert after_one.stats["xinde"] == after_two.stats["xinde"] == before.stats["xinde"] - 5
+    assert after_two.stamina == pytest.approx(after_one.stamina, abs=0.01)  # 體力照現實時間回（sync），只差一點點
+    assert (after_one.arts, after_one.insights) == (after_two.arts, after_two.insights)
+    assert _crafts("沈青衫") == crafts  # 第二下沒有寫紀錄
+    world = open_world()
+    assert not world.is_skill_name_taken("疾風腿")
+    if art:
+        assert world.recipe_keys() == {FIST_FENG} and len(after_two.arts) == 1
+    else:
+        assert world.lookup_insight_recipe(fusion.merge_key("feng", "huo")).name == "旋風腿"
+        assert after_two.insights == ["feng", "huo", "旋風腿"]
+        assert after_two.stamina == pytest.approx(before.stamina - 10, abs=0.01)  # 只扣一次合併的體力
+
+
+def test_a_second_tab_that_spends_the_xinde_while_naming_leaves_the_first_forge_refused_and_free():
+    """Infra 第 2 點：B 段在鎖外等模型的時候，同一個角色在另一個分頁把同一份心得花在另一爐；C 段進鎖重驗，
+    心得不夠了就整個不做：不登記配方、不扣東西、不寫紀錄，告訴玩家變了什麼。"""
+    game = _forger(xinde=5)
+    depth = []
+
+    def reply(model, messages):
+        if not depth:
+            depth.append(1)
+            server.forge(game, "jichu_quanjiao", ["huo"])  # 另一個分頁：完整的一爐（它自己的取名是下面那一句）
+            return "旋風腿"
+        return "烈火拳"
+
+    with _model(reply):
+        msgs = server.forge(game, "jichu_quanjiao", ["feng"])
+    saved = open_characters().load("沈青衫").player
+    fire = open_world().lookup_recipe(fusion.fuse_key("jichu_quanjiao", "huo"))
+    assert fire.name == "烈火拳" and saved.arts == [fire.id] and saved.stats["xinde"] == 0
+    assert any("心得不足" in m for m in msgs)
+    assert open_world().lookup_recipe(FIST_FENG) is None and not open_world().is_skill_name_taken("旋風腿")
+    assert len(_crafts("沈青衫")) == 1 and "烈火拳" in _crafts("沈青衫")[0]["tag"]
+
+
+def test_the_page_never_polls_twice_at_once():
+    """最終審查 Critical 1：取名要等的時候伺服器的執行緒還在跑；輪詢若不等上一次回來就再打一次 /api/main，
+    卡住的請求會越疊越多、把執行緒池用光。poll() 有一個「還在等」的旗子，上一次沒回來就不打。"""
+    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    body = _js_function(js, "async function poll(")
+    assert "pollInFlight" in body and "finally" in body and "pollInFlight = false" in body
+    assert body.index("pollInFlight") < body.index('api("/api/main")')
+    assert "S.busy" in body and "document.hidden" in body  # 原本的守門照舊
 
 
 def test_menxia_view_lists_owned_arts_insights_and_holdings(client):

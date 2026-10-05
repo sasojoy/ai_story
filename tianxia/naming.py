@@ -1,8 +1,17 @@
 """取名（從 craft.py 搬來，武學與成長設計 3.4、3.6）：模型只給名字和一句說明，一個數字都不碰；
-過濾在登記之前跑（名字會永久進全服的登記表）；叫不動或取壞了就走決定性的退路字表。"""
+過濾在登記之前跑（名字會永久進全服的登記表）；叫不動或取壞了就走決定性的退路字表。
+
+開爐的首次取名分三段（最終審查 Critical 1，照人物對話 server.prepare_dialogue 的做法）：
+  A（行動鎖內、很快）fusion.forge_request／Game.forge_request 開一張 NamingRequest；
+  B（鎖外、很慢）generate：只拿單子與模型，不碰狀態、不拿鎖（之後線上架構第 2 期的模型佇列只換掉這一段）；
+  C（鎖內、很快）Game.forge(..., proposed=...)：recheck 再過一次過濾，登記、收費。
+這個模組不讀時鐘（引擎不讀時鐘）：B 段的總時間用 budget（秒）管——每一次呼叫給模型的 timeout 照給出去的扣，
+給出去的加起來不超過 budget；預算由呼叫端（server.py）算好傳進來。"""
 from __future__ import annotations
 
+import copy
 import hashlib
+from dataclasses import dataclass
 
 from pydantic import BaseModel
 
@@ -13,6 +22,20 @@ from .ollama_client import OllamaClient
 NAME_MIN_CHARS, NAME_MAX_CHARS = 2, 6
 NAME_ATTEMPTS = 3  # 模型最多試幾次（第一次 + 兩次重生成）；全部失敗就走決定性組名
 CLAIM_ATTEMPTS = 4  # 名字被占用時，用決定性組名換名字再試幾次
+# OllamaClient.chat_structured 一次呼叫最多送兩趟（第一次＋格式不對、逾時時的重問），兩趟都用同一個 timeout
+POSTS_PER_CALL = 2
+MIN_POST_SECONDS = 1.0  # 有預算時，一趟分不到這麼多秒就不叫了（叫了也等不到）
+
+
+@dataclass(frozen=True)
+class NamingRequest:
+    """A 段（行動鎖內、很快）開的單子：這一爐要模型取名時，B 段需要的全部東西。拿著它就能在鎖外叫模型，不必再碰遊戲狀態。
+    kind 是 "fuse"（武學＋意境）或 "merge"（意境＋意境）；key 是配方鍵；name_kind 是退路字表的種類（內功、武學、意境）。"""
+
+    kind: str
+    key: str
+    name_kind: str
+    messages: list[dict[str, str]]
 
 SYSTEM_PROMPT = (
     "你是武俠小說裡替武功與意境取名的人。你只負責取名字、寫一句話的說明，"
@@ -60,14 +83,31 @@ def name_problem(name: str, content: Content) -> str | None:
     return None
 
 
-def propose(client: OllamaClient | None, content: Content, messages: list[dict[str, str]]) -> tuple[str | None, str]:
-    """請模型命名，回傳（通過過濾的名字, 一句說明）；連不上、取壞了都回 (None, "")，呼叫端走退路字表。
-    client 是 None（伺服器假人，bot_runner 會把 game.client 設成 None）時不叫模型。"""
+def propose(
+    client: OllamaClient | None, content: Content, messages: list[dict[str, str]], budget: float | None = None,
+) -> tuple[str | None, str]:
+    """請模型命名，回傳（通過過濾的名字, 一句說明）；連不上、取壞了、預算用完都回 (None, "")，呼叫端走退路字表。
+    client 是 None（伺服器假人，bot_runner 會把 game.client 設成 None）時不叫模型。
+
+    budget（秒）：整段取名最多花多久（server.py 從 Config.naming_budget_seconds 算好傳進來；沒給就照 client 自己的
+    timeout，整季機器人、腳本、測試直接呼叫時是這樣）。不讀時鐘，照給出去的 timeout 扣：每一次呼叫拿 client 的複本、
+    timeout 設成 min(client.timeout, 剩下的 ÷ POSTS_PER_CALL)，連重問那一趟都用完也不超過剩下的；
+    分不到 MIN_POST_SECONDS 就不叫了。原本那個 client 不動（同一個角色的別的請求可能正在用它）。"""
     if client is None:
         return None, ""
+    left = budget
+    own = getattr(client, "timeout", None)
     for _ in range(NAME_ATTEMPTS):
+        caller = client
+        if left is not None:
+            per_post = min(float(own) if isinstance(own, (int, float)) else left, left / POSTS_PER_CALL)
+            if per_post < MIN_POST_SECONDS:
+                return None, ""
+            caller = copy.copy(client)
+            caller.timeout = per_post
+            left -= per_post * POSTS_PER_CALL
         try:
-            reply = client.chat_structured(messages, NameReply, required_fields=["name"])
+            reply = caller.chat_structured(messages, NameReply, required_fields=["name"])
         except Exception:  # noqa: BLE001  連不上、404、逾時——一律當作這次沒取到名字
             return None, ""
         if reply is None:
@@ -78,10 +118,34 @@ def propose(client: OllamaClient | None, content: Content, messages: list[dict[s
     return None, ""
 
 
-def fallback_name(content: Content, key: str, kind: str, salt: int = 0) -> str:
+def generate(
+    client: OllamaClient | None, content: Content, request: NamingRequest, budget: float | None = None,
+) -> tuple[str | None, str]:
+    """B 段（鎖外、很慢）：拿 A 段開的單子請模型取名，回傳（名字, 說明）；取不到是 (None, "")。
+    只拿單子、模型與內容（過濾要用），不碰任何遊戲狀態、不拿行動鎖——可以單獨呼叫，也可以整段換成模型佇列。"""
+    return propose(client, content, request.messages, budget=budget)
+
+
+def recheck(content: Content, proposed: tuple[str | None, str]) -> tuple[str | None, str]:
+    """C 段（鎖內）登記之前，把鎖外拿到的名字再過一次完整的過濾：整理包裝、轉繁體（含異體字表）、長度與字、禁用詞、
+    跟素材／人物／內容武學／意境同名。過不了就是 (None, "")，呼叫端走退路字表。全服重名不在這裡查：登記時
+    （world.claim_recipe／claim_insight_recipe 的 _name_taken）在同一筆交易裡原子判斷，同時有兩個配方拿到同一個名字也只有一個登記得上。"""
+    name, note = proposed
+    if name is None:
+        return None, ""
+    name = clean_name(name)
+    if name_problem(name, content) is not None:
+        return None, ""
+    return name, zh.to_traditional((note or "").strip())
+
+
+def fallback_name(content: Content, key: str, kind: str, salt: int = 0, tianji: int = 0) -> str:
     """決定性組名：同一個配方永遠組出同一個名字，離線也能玩、全服也一致。kind 是「內功」「武學」「意境」。
+    種子是配方鍵＋這一季的天機（天機 0 照舊只用配方鍵，跟 martial_arts.generate_from_name 同一個規矩），
+    所以名字只看配方與這一季，不看誰先到；同一個配方每季組出不同的名字。
     `tests/test_real_content.py` 的整季模擬把模型 mock 掉，走的就是這條路。"""
     names = content.craft_names
     suffixes = {"內功": names.neigong, "武學": names.wugong, "意境": names.insight}[kind]
-    digest = hashlib.sha256(f"{key}#{salt}".encode()).digest()
+    seed = key if tianji == 0 else f"{tianji}|{key}"
+    digest = hashlib.sha256(f"{seed}#{salt}".encode()).digest()
     return names.prefixes[digest[0] % len(names.prefixes)] + suffixes[digest[1] % len(suffixes)]

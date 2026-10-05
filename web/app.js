@@ -1618,8 +1618,12 @@
   });
 
   // ── 計時器：體力、氣血跟著時間走；別人推動的大勢也會進來 ──
+  // 上一次輪詢還沒回來就不再打（最終審查 Critical 1）：伺服器忙著的時候（等行動鎖、別人開爐取名），
+  // 卡住的 /api/main 不能每 10 秒再疊一個，把伺服器的執行緒池用光
+  let pollInFlight = false;
   async function poll() {
-    if (S.stage !== "game" || S.busy || document.hidden) return;
+    if (pollInFlight || S.stage !== "game" || S.busy || document.hidden) return;
+    pollInFlight = true;
     const was = S.main;
     try {
       const mode = S.moveMode;
@@ -1630,7 +1634,7 @@
       if (!setMain(main)) return;
       renderTop();
       if (!typing()) await refreshPage(was);
-    } catch (e) { /* api() 提示過；下一輪再試 */ }
+    } catch (e) { /* api() 提示過；下一輪再試 */ } finally { pollInFlight = false; }
   }
 
   // 輪詢拿到有變的 main 之後，照目前的分頁補上（QA L1）。江湖、見聞從 S.main 畫；修練、煉製、輿圖重抓自己那一份。

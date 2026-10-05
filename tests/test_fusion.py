@@ -394,6 +394,114 @@ def test_two_players_racing_for_a_new_merge_end_up_with_one_registered_insight(r
     assert other.player.stats["xinde"] == 95
 
 
+# ── 首次取名移到行動鎖外（最終審查 Critical 1）：A 鎖內備料 → B 鎖外取名 → C 鎖內重驗、登記、收費 ──────────
+
+
+def test_forge_request_hands_out_a_naming_slip_only_when_the_model_is_needed(ready, content, world):
+    """A 段只讀：會被拒絕、配方已經登記過、放的不是一武學一意境或兩個意境，都不必叫模型（回 None）。"""
+    before = ready.model_dump_json()
+    fuse = fusion.forge_request(ready, content, world, "basic_fist", ["feng"])
+    assert (fuse.kind, fuse.key, fuse.name_kind) == ("fuse", fusion.fuse_key("basic_fist", "feng"), "武學")
+    assert fuse.messages == fusion._fuse_messages(team.player_art(ready, content, world, "basic_fist"),
+                                                  fusion.insights.resolve("feng", content, world))
+    merge = fusion.forge_request(ready, content, world, None, ["huo", "feng"])
+    assert (merge.kind, merge.key, merge.name_kind) == ("merge", fusion.merge_key("huo", "feng"), "意境")
+    assert ready.model_dump_json() == before  # 什麼都沒動
+    assert fusion.forge_request(ready, content, world, "basic_breath", ["feng"]) is None  # 會被拒絕
+    assert fusion.forge_request(ready, content, world, "basic_fist", ["feng", "huo"]) is None  # 形狀不對
+    assert fusion.forge_request(ready, content, world, None, ["feng"]) is None
+    fusion.fuse(other_player(content), content, world, named("旋風腿"), "basic_fist", "feng")
+    assert fusion.forge_request(ready, content, world, "basic_fist", ["feng"]) is None  # 別人登記過了：查表就好
+
+
+def test_a_proposed_name_is_used_without_asking_the_model(ready, content, world):
+    art, msgs = fusion.fuse(ready, content, world, must_not_ask(), "basic_fist", "feng", proposed=("「旋風腿」", "腿影如風。"))
+    assert (art.name, art.note) == ("旋風腿", "腿影如風。") and "第一次" in msgs[0]
+    insight, _ = fusion.merge(ready, content, world, must_not_ask(), "huo", "feng", proposed=("燎原", "野火燒原。"))
+    assert (insight.name, insight.note) == ("燎原", "野火燒原。")
+
+
+def test_no_proposed_name_falls_back_to_the_word_table_without_asking_the_model(ready, content, world):
+    """C 段拿到 (None, "")（B 段叫不動、逾時、取壞了，或 A 段說不必叫）：鎖裡不叫模型，直接走退路字表。"""
+    art, _ = fusion.fuse(ready, content, world, must_not_ask(), "basic_fist", "feng", proposed=(None, ""))
+    assert art.name == naming.fallback_name(content, fusion.fuse_key("basic_fist", "feng"), "武學", salt=0)
+    assert art.note == ""
+    bad, _ = fusion.fuse(ready, content, world, must_not_ask(), "basic_fist", "huo", proposed=("九陰真經", "說明"))
+    assert bad.name == naming.fallback_name(content, fusion.fuse_key("basic_fist", "huo"), "武學", salt=0)
+
+
+def _brew_two_recipes_that_got_the_same_model_name(content, world, order):
+    """同一個玩家、兩個不同的配方（底＋風、底＋火），模型碰巧給了同一個名字；照 order 的順序登記。"""
+    state = new_game_state(content, "沈浪")
+    state.player.member.wugong_id, state.player.insights, state.player.stats["xinde"] = "basic_fist", ["feng", "huo"], 100
+    for insight in order:
+        fusion.fuse(state, content, world, must_not_ask(), "basic_fist", insight, proposed=("旋風腿", "一句話。"))
+    return {insight: world.lookup_recipe(fusion.fuse_key("basic_fist", insight)).name for insight in order}
+
+
+def test_two_recipes_given_the_same_model_name_get_a_fallback_that_does_not_depend_on_who_came_first(content, tmp_path):
+    """Infra 第 3 點：兩個不同的配方同時拿到同一個模型名字。先登記的拿到它；後到的換成退路字表的名字——
+    種子是它自己的配方鍵＋這一季的天機、鹽從 0 起，所以換個順序再跑一次，後到的那一個拿到的退路名字一樣是它自己的那一個。"""
+    from tianxia.sqlite_world import open_world
+
+    names = {}
+    for order in (("feng", "huo"), ("huo", "feng")):
+        world = open_world(tmp_path / f"{order[0]}.db")
+        world.mutate(lambda shared: setattr(shared, "tianji", 3))
+        names[order] = _brew_two_recipes_that_got_the_same_model_name(content, world, order)
+    fallback = {i: naming.fallback_name(content, fusion.fuse_key("basic_fist", i), "武學", tianji=3) for i in ("feng", "huo")}
+    assert names[("feng", "huo")] == {"feng": "旋風腿", "huo": fallback["huo"]}
+    assert names[("huo", "feng")] == {"huo": "旋風腿", "feng": fallback["feng"]}
+    assert fallback["huo"] != naming.fallback_name(content, fusion.fuse_key("basic_fist", "huo"), "武學")  # 天機有算進去
+
+
+def test_already_having_it_is_reported_before_what_it_would_cost(ready, content, world):
+    """同一個人連按兩下（或開兩個分頁）：第二下在 C 段重驗時，告訴他真正變了的事——你已經有了——
+    而不是第一下花掉之後才不夠的心得、體力或滿了的持有。"""
+    fusion.fuse(ready, content, world, named("旋風腿"), "basic_fist", "feng")
+    fusion.merge(ready, content, world, named("燎原"), "huo", "feng")
+    ready.player.stats["xinde"], ready.player.stamina = 0, 0
+    assert "已經有了" in fusion.fuse_problem(ready, content, world, "basic_fist", "feng")
+    assert "已經悟得" in fusion.merge_problem(ready, content, world, "feng", "huo")
+
+
+def test_the_three_steps_run_without_a_server(game):
+    """設計者 2026-10-05「假人也叫 AI 取名」：之後 bot_runner 不經過 HTTP 也要走同樣的三段。這裡只拿 Game 與它的全服儲存：
+    A 在行動鎖裡（Game.forge_request）→ B 在鎖外（naming.generate）→ C 再進行動鎖（Game.forge(..., proposed=...)）。"""
+    p = game.state.player
+    p.member.wugong_id, p.insights, p.stats["xinde"] = "basic_fist", ["feng"], 100
+    world = game.world
+    with world.action_lock():
+        request = game.forge_request("basic_fist", ["feng"])
+    assert request is not None and request.kind == "fuse"
+    model = mock.Mock(timeout=120)
+
+    def reply(messages, response_model, **kwargs):
+        assert not world.db.writing()  # B 段沒拿著寫入交易
+        return naming.NameReply(name="旋風腿", description="腿影如風。")
+
+    model.chat_structured.side_effect = reply
+    proposed = naming.generate(model, game.content, request, budget=game.content.config.naming_budget_seconds)
+    assert proposed == ("旋風腿", "腿影如風。")
+    with world.action_lock():
+        msgs = game.forge("basic_fist", ["feng"], proposed=proposed)
+    assert "旋風腿" in p.arts and p.stats["xinde"] == 95 and "第一次" in msgs[0]
+    assert world.lookup_recipe(fusion.fuse_key("basic_fist", "feng")).note == "腿影如風。"
+
+
+def test_forge_request_on_the_game_needs_a_model_client(game):
+    p = game.state.player
+    p.member.wugong_id, p.insights, p.stats["xinde"] = "basic_fist", ["feng"], 100
+    assert game.forge_request("basic_fist", ["feng"]) is not None
+    game.client = None  # 伺服器假人（bot_runner 把 client 設成 None）：不叫模型，C 段走退路字表
+    assert game.forge_request("basic_fist", ["feng"]) is None
+
+
+def test_the_naming_budget_fits_under_the_tunnels_cut(content):
+    """trycloudflare 約 100 秒就切斷一個請求；取名的預算 60 秒，留下 A、C 兩段等行動鎖的餘裕（控制者 2026-10-05）。"""
+    assert content.config.naming_budget_seconds == 60
+
+
 # ── 合併要花體力（企劃者 2026-10-05：「意境合併要花體力，這樣的話她要拿心得就給他拿」）──────────
 # 合併→熔掉→再合併，每一圈淨賺 5 點心得（merge_xinde 5、melt_insight_xinde 10）；企劃者的裁示不是擋重合、也不是
 # 動熔的價，而是讓合併花體力：要賺就照著賺，只是每一圈都要花一次修練那麼多的體力。合成（武學＋意境）維持不花體力。

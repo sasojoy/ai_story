@@ -11,6 +11,8 @@
   重讀角色（`_locked`）：同一個帳號開兩個分頁、換手機再登入，看到的都是最新存好的那一份，
   動作中途出錯撤回時，做到一半的改動也不會被下一個請求存回去（線上架構設計 5.1）。
 - 人物對話照舊在行動鎖外生成（`prepare_dialogue`），模型的 9~10 秒不會卡住全服。
+- 開爐的首次取名也在行動鎖外（`prepare_forge`／`forge`），整段有時間預算（`Config.naming_budget_seconds`），
+  用完走退路字表，請求在 trycloudflare 切斷之前結束。
 
 執行：`.venv/Scripts/python.exe server.py`（http://127.0.0.1:7861，預設只聽這台電腦）。要讓外面的手機連進來，
 加 `--share`：會用 cloudflared 開一個臨時的公開網址（要先裝 cloudflared，見 CLAUDE.md）；
@@ -39,7 +41,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from markdown_it import MarkdownIt
 
-from tianxia import companion_agent, event_llm, foreshadow, rules, server_bots, team, timetable
+from tianxia import companion_agent, event_llm, foreshadow, naming, rules, server_bots, team, timetable
 from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, AccountStore, normalize
 from tianxia.content import PROFILE_ENV, load_content, profile_line
 from tianxia.characters import open_characters
@@ -207,6 +209,39 @@ def choose(game: Game, option_id: str) -> list[str] | None:
     if may_generate_dialogue(option_id):
         prepared = prepare_dialogue(game, option_id)
     return act(game, lambda g: g.choose(option_id, prepared=prepared))
+
+
+NO_NAME: tuple[str | None, str] = (None, "")  # 開爐的 B 段沒取到名字（或不必取）：C 段直接走退路字表、不在鎖裡叫模型
+
+
+def prepare_forge(game: Game, art_id: str | None, insight_ids: list[str]) -> tuple[str | None, str]:
+    """開爐的首次取名在行動鎖外（最終審查 Critical 1）。首次合出來的配方要等模型取名，以前整段包在行動鎖裡：
+    一次最多叫三次、每次最多等 OllamaClient.timeout（120 秒），全服玩家與假人程式都得跟著等，試玩走的 trycloudflare
+    也會在約 100 秒切斷請求。跟 prepare_dialogue 一樣分三段：
+      A（鎖內、很快）同步時間，問引擎這一爐要不要模型取名（Game.forge_request），要就拿到單子；同步的結果要存起來，
+        不然 C 段進鎖重讀就把它丟了；
+      B（鎖外、很慢）naming.generate：預算是 Config.naming_budget_seconds 扣掉 A 段（含等鎖）花掉的時間，
+        引擎不讀時鐘，所以時間在這裡量；用完就回 (None, "")，C 段走退路字表；
+      C（鎖內、很快）由呼叫端把結果交給 Game.forge(..., proposed=...)，引擎整個重驗再登記、收費。
+    這裡做 A 與 B，回傳 B 的結果（名字, 說明）；不必叫模型時是 NO_NAME。假人程式之後要合成，照樣能不經過 HTTP
+    走這三段（Game.forge_request 在 action_lock 裡、naming.generate 在鎖外、Game.forge(proposed=...) 再進鎖）。"""
+    started = time.monotonic()
+    with _locked(game):
+        game.sync(time.time())
+        request = game.forge_request(art_id, insight_ids)
+        open_characters().save(game.state)
+    if request is None:
+        return NO_NAME
+    budget = max(0.0, game.content.config.naming_budget_seconds - (time.monotonic() - started))
+    return naming.generate(game.client, game.content, request, budget=budget)
+
+
+def forge(game: Game, art_id: str | None, insight_ids: list[str]) -> list[str] | None:
+    """開爐：A、B 在 prepare_forge，C 進鎖交給 Game.forge。proposed 一定給（不必叫模型時是 NO_NAME），
+    所以伺服器上的開爐永遠不會在鎖裡叫模型。同一爐連按兩下、重新整理再按、開兩個分頁：兩個請求可能都走完 A、B，
+    C 段重驗時第二個會看見配方有了、東西已經在你身上，什麼都不收（企劃者 2026-10-05：不能重複扣）。"""
+    proposed = prepare_forge(game, art_id, insight_ids)
+    return act(game, lambda g: g.forge(art_id, insight_ids, proposed=proposed))
 
 
 def answer_event(game: Game, text: str) -> list[str] | None:
@@ -730,7 +765,9 @@ def forge_args(body: dict) -> tuple[str | None, list[str]]:
 MENXIA_ACTIONS = {
     "practice": lambda g, b: g.practice(str(b.get("kind") or KINDS[0])),
     "heal": lambda g, b: g.heal(),
-    "forge": lambda g, b: g.forge(*forge_args(b)),  # 一武學＋一意境＝合成，兩意境＝合併
+    # 一武學＋一意境＝合成，兩意境＝合併。端點走 forge()（A 鎖內備料 → B 鎖外取名 → C 鎖內登記），不走這一條；
+    # 這裡也帶 NO_NAME，就算有人直接拿它在鎖裡呼叫，也不會叫模型
+    "forge": lambda g, b: g.forge(*forge_args(b), proposed=NO_NAME),
     "switch": lambda g, b: g.switch_art(str(b.get("art") or "")),
     # 用融的意境修練一次，衝下一品；use_legend 是勾了「服下破境丹」。只認真正的布林 true：字串、數字都不算勾
     "cultivate": lambda g, b: g.cultivate(str(b.get("art") or ""), use_legend=b.get("use_legend") is True),
@@ -763,7 +800,8 @@ def api_menxia_do(op: str, request: Request, body: dict = Body(default={})):
             raise GameError("名冊裡沒有這個人。")  # 交易整筆撤回（連同進鎖時的同步）；下一個請求重讀再算一次
         return MENXIA_ACTIONS[op](g, body)
 
-    msgs = act(game, run)
+    # 開爐：首次合出來的配方要模型取名，在行動鎖外取（見 prepare_forge）；其他動作照舊一把鎖做完
+    msgs = forge(game, *forge_args(body)) if op == "forge" else act(game, run)
     return {
         "menxia": look(game, lambda g: menxia_view(g, person)),
         "main": look(game, main_view),

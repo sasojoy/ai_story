@@ -689,6 +689,10 @@ class Config(_Strict):
     ollama_url: str = "http://localhost:11434"  # companion_agent.py 深度對話用；連不上時那輪對話取消
     ollama_model: str = "qwen2.5:14b"
     ollama_timeout: int = 120
+    # 開爐首次取名（鎖外的 B 段）整段最多花幾秒（最終審查 Critical 1）：server.py 讀它、扣掉 A 段等鎖的時間，傳給
+    # naming.generate 的 budget；用完就走退路字表。試玩走 trycloudflare，一個請求約 100 秒就被切斷，60 秒留下 A、C 兩段
+    # 等行動鎖的餘裕（控制者 2026-10-05 從 75 改成 60）
+    naming_budget_seconds: int = Field(default=60, ge=0)
     # 2026-10-03 實測（gemma4:26b）：有思考模式的模型要關掉思考，不然每輪多等好幾秒；None 表示不送這個欄位
     ollama_think: bool | None = None
     ollama_keep_alive: str = "30m"  # 模型閒置多久後卸載；大模型重新載入要十幾秒
