@@ -81,19 +81,20 @@ def merge_key(a: str, b: str) -> str:
     return "+".join(sorted((a, b)))
 
 
-def merged_attribute(a: Insight, b: Insight, name: str) -> str:
-    """合併出來的意境屬於什麼屬性（設計 3.2.1）：同屬性就是那個；剛快、柔慢、快柔、剛慢照 PAIR_ATTRIBUTES；
-    其他組合從兩個來源裡挑一個，由新名字的雜湊決定（同名同結果，跟參數順序無關）。"""
+def merged_attribute(a, b, seed: str) -> str:
+    """合出來的屬性（設計 3.2.1）：同屬性就是那個；剛快、柔慢、快柔、剛慢照 PAIR_ATTRIBUTES；其他組合從兩個來源裡挑一個，
+    由配方種子（f"{天機}|{配方鍵}"）的雜湊決定（設計 12.6：原本用新名字，改成配方，才能在取名之前知道屬性、
+    找合到舊的候選）。跟參數順序無關。a、b 只要有 id 與 attribute：意境合併、武學＋武學（12.3）共用。"""
     if a.attribute == b.attribute:
         return a.attribute
     pair = PAIR_ATTRIBUTES.get(frozenset({a.attribute, b.attribute}))
     if pair is not None:
         return pair
-    first, second = sorted((a, b), key=lambda insight: insight.id)
-    return (first, second)[hashlib.sha256(name.encode("utf-8")).digest()[0] % 2].attribute
+    first, second = sorted((a, b), key=lambda thing: thing.id)
+    return (first, second)[hashlib.sha256(seed.encode("utf-8")).digest()[0] % 2].attribute
 
 
-def merged_lean(a: Insight, b: Insight) -> str:
-    """正邪跟著傳（設計 7.3）：正＋無＝正、邪＋無＝邪、同向不變；正＋邪互相抵銷成無。"""
+def merged_lean(a, b) -> str:
+    """正邪跟著傳（設計 7.3）：正＋無＝正、邪＋無＝邪、同向不變；正＋邪互相抵銷成無。意境與武學共用（12.3）。"""
     leans = {a.lean, b.lean} - {"無"}
     return leans.pop() if len(leans) == 1 else "無"

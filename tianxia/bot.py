@@ -20,8 +20,10 @@ HALF_HOUR = 1800
 SPEND_XINDE_EVERY = 5  # 每幾步檢查一次要不要拿心得去練功/療傷
 FORESHADOW_OPTIONS = ("fs:", "talk:clue:")  # 伏筆的最後一步、對話的片段選項：機器人不做伏筆
 
-FORGE_TRIES = 4  # 合成、合併各試幾組（被擋下就換一組）
+FORGE_TRIES = 4  # 武學＋意境、武學＋武學、意境＋意境各試幾組（被擋下就換一組）
 MERGE_SHARE = 0.3  # 手上有兩個以上意境時，這麼多的機會改做合併
+FORGE_RESERVE = 20  # 三種合成都花體力（武學與成長設計 12.1）：體力留這麼多給探索與遊歷，多出來的才拿去合成
+BLEND_SHARE = 0.3  # 沒做合併、手上有兩門以上武學時，這麼多的機會改做武學＋武學（沒有意境可合成時一定做）
 CULTIVATE_RESERVE = 60  # 體力留這麼多給探索與遊歷，多出來的才拿去修練
 
 
@@ -63,9 +65,12 @@ def spend_xinde(game: Game, rng: random.Random) -> None:
 
 
 def forge_and_cultivate(game: Game, rng: random.Random) -> None:
-    """機器人的武學：等著定名的先定名；滿了先熔最弱的；有意境就合成（偶爾合併）；改練更強的；
-    體力有餘就修練一次。機器人會用到這套玩法很重要——不然整季模擬碰不到合成與修練，量出來的平衡沒有意義
-    （CLAUDE.md「第三層」的教訓）。"""
+    """機器人的武學：等著定名的先定名；滿了先熔最弱的；體力有餘就合成（武學＋意境為主，偶爾合併、偶爾武學＋武學）；
+    改練更強的；體力再有餘就修練一次。機器人會用到這套玩法很重要——不然整季模擬碰不到合成與修練，量出來的平衡沒有意義
+    （CLAUDE.md「第三層」的教訓）。
+    亂數的用法：MERGE_SHARE 那一擲只在手上有兩個以上意境時才擲，BLEND_SHARE 那一擲只在武學＋意境與武學＋武學都能做時才擲，
+    所以只有一門武學、一個意境的機器人，亂數的用法跟以前一模一樣——前提是體力有到 FORGE_RESERVE：低於保留量就整段不合成、
+    一次亂數也不擲（保留量是武學＋武學那一刀才加的，以前機器人想合就合）。"""
     state, content, world = game.state, game.content, game.world
     p = state.player
     if p.naming is not None:
@@ -73,12 +78,19 @@ def forge_and_cultivate(game: Game, rng: random.Random) -> None:
     if library.full(state, content):
         _melt_the_weakest(game)
     arts = library.owned_arts(state)
-    if p.insights and arts:
+    can_fuse, can_blend = bool(p.insights and arts), len(arts) >= 2
+    if (can_fuse or can_blend) and p.stamina >= FORGE_RESERVE:
         if len(p.insights) >= 2 and rng.random() < MERGE_SHARE:
             for _ in range(FORGE_TRIES):
                 a, b = rng.choice(p.insights), rng.choice(p.insights)
                 if fusion.merge_problem(state, content, world, a, b) is None:
                     game.forge(None, [a, b])
+                    break
+        elif can_blend and (not can_fuse or rng.random() < BLEND_SHARE):
+            for _ in range(FORGE_TRIES):
+                a, b = rng.sample(arts, 2)
+                if fusion.blend_problem(state, content, world, a, b) is None:
+                    game.forge(a, [], other_art=b)
                     break
         else:
             for _ in range(FORGE_TRIES):

@@ -1,12 +1,12 @@
 import pytest
 
-from tianxia import library, rules, skillview
+from tianxia import fusion, library, rules, skillview, team
 from tianxia.martial_arts import MartialArt, generate_from_name, historical_art, power_at
 
 
 def test_rules_line():
     assert skillview.rules_line(None) == (
-        "身上一門內功、一門武學：花心得練成，用意境修練衝品質；武學也能在「煉製」融意境衍生新武學。"
+        "身上一門內功、一門武學：花心得練成，用意境修練衝品質；武學也能在「煉製」融意境衍生新武學，或兩門武學合成一門新的。"
     )
 
 
@@ -323,7 +323,7 @@ def test_forge_line_shows_a_fuse(state, content, world):
     state.player.stats["xinde"] = 100
     line = skillview.forge_line(state, content, world, "basic_fist", ["feng"])
     assert "**合成**" in line and "【粗淺拳腳】＋「風」→ 一門新武學" in line and "屬快" in line
-    assert "從下品起修" in line and "花 5 點心得（你有 100 點）" in line and "⚠" not in line
+    assert "從下品起修" in line and "花 5 點心得、5 點體力（你有 100 點心得）" in line and "⚠" not in line
 
 
 @pytest.mark.parametrize("quality", ["下品", "中品", "上品", "絕學"])
@@ -335,7 +335,7 @@ def test_forge_line_says_the_new_art_starts_at_the_lowest_quality_whatever_the_b
     state.player.stats["xinde"] = 100
     line = skillview.forge_line(state, content, world, "basic_fist", ["feng"])
     assert "從下品起修" in line and "屬快" in line and "一樣是" not in line
-    assert "花 5 點心得（你有 100 點）" in line and "⚠" not in line
+    assert "花 5 點心得、5 點體力（你有 100 點心得）" in line and "⚠" not in line
 
 
 def test_forge_line_shows_a_merge(state, content, world):
@@ -355,8 +355,30 @@ def test_forge_line_explains_why_it_cannot_be_done(state, content, world):
 
 
 def test_forge_line_survives_something_that_does_not_exist(state, content, world):
+    """存檔裡記著、內容與登記裡都沒有的（失效的引用）：說「不存在」；你根本沒有的，見下面那條。"""
+    state.player.arts = ["ghost", "ghost2"]
+    state.player.insights = ["feng", "ghost"]
     assert "不存在" in skillview.forge_line(state, content, world, "ghost", ["feng"])
     assert "不存在" in skillview.forge_line(state, content, world, None, ["feng", "ghost"])
+    assert "不存在" in skillview.forge_line(state, content, world, "ghost", [], other_art="ghost2")
+
+
+def test_forge_line_says_nothing_about_an_art_or_insight_you_do_not_have(state, content, world):
+    """沒有的東西（內容裡的龍頭本命武學、還沒悟到的意境）只回拒絕那一句：不寫名字、屬性，不能拿預覽來探。"""
+    state.player.member.wugong_id = "basic_fist"
+    state.player.arts = ["lake_kick"]
+    state.player.insights = ["feng", "huo"]
+    state.player.stats["xinde"] = 100
+    probes = (
+        (skillview.forge_line(state, content, world, "sky", ["feng"]), "你沒有這門武學"),  # 武學＋意境：武學不是你的
+        (skillview.forge_line(state, content, world, "basic_fist", ["shui"]), "你還沒悟到"),  # 意境不是你的
+        (skillview.forge_line(state, content, world, "basic_fist", [], other_art="sky"), "兩門都要是你會的武學"),
+        (skillview.forge_line(state, content, world, "sky", [], other_art="basic_fist"), "兩門都要是你會的武學"),
+        (skillview.forge_line(state, content, world, None, ["feng", "shui"]), "兩個意境都要是你悟得的"),
+    )
+    for line, reason in probes:
+        assert reason in line and line.startswith("⚠"), line
+        assert "天外劍" not in line and "水" not in line and "屬" not in line and "→" not in line, line
 
 
 def test_forge_line_never_sends_you_to_the_furnace_with_materials(state, content, world):
@@ -604,15 +626,15 @@ def test_an_art_card_shows_an_anonymous_first_fuser_as_a_nameless_hero():
     assert card.split("\n")[3] == "來源：合成（某位少俠 首創）　意境：「風」" and "沈浪" not in card
 
 
-def test_forge_line_tells_a_merge_costs_stamina_but_a_fuse_does_not(state, content, world):
-    """企劃者 2026-10-05：合併要花體力；合成不花，說明裡就不提體力。"""
+def test_forge_line_tells_both_a_merge_and_a_fuse_cost_stamina(state, content, world):
+    """設計 12.1：三種合成都花體力。"""
     state.player.member.wugong_id = "basic_fist"
     state.player.insights = ["feng", "huo"]
     state.player.stats["xinde"] = 100
     merge = skillview.forge_line(state, content, world, None, ["feng", "huo"])
     assert "花 5 點心得、5 點體力" in merge and "⚠" not in merge
     fuse = skillview.forge_line(state, content, world, "basic_fist", ["feng"])
-    assert "體力" not in fuse
+    assert f"{content.config.fuse_stamina} 點體力" in fuse
 
 
 def test_forge_line_warns_when_the_stamina_is_short_for_a_merge(state, content, world):
@@ -622,7 +644,8 @@ def test_forge_line_warns_when_the_stamina_is_short_for_a_merge(state, content, 
     state.player.stamina = content.config.merge_stamina - 1
     merge = skillview.forge_line(state, content, world, None, ["feng", "huo"])
     assert "花 5 點心得、5 點體力" in merge and "⚠ 體力不足：合併一次要 5。" in merge
-    assert "⚠" not in skillview.forge_line(state, content, world, "basic_fist", ["feng"])  # 合成不花體力：照樣開得了爐
+    fuse = skillview.forge_line(state, content, world, "basic_fist", ["feng"])
+    assert "⚠ 體力不足：合成一次要" in fuse  # 合成也花體力了（設計 12.1）
 
 
 def test_practice_hint_does_not_send_you_to_merge_when_the_stamina_is_short(state, content):
@@ -633,9 +656,11 @@ def test_practice_hint_does_not_send_you_to_merge_when_the_stamina_is_short(stat
     assert skillview.practice_hint(state, content) is None
     state.player.stamina = content.config.merge_stamina
     assert "煉製" in skillview.practice_hint(state, content)
-    state.player.stamina = 0
     state.player.member.wugong_id, state.player.member.wugong_level = "basic_fist", 10
-    assert "煉製" in skillview.practice_hint(state, content)  # 有武學：合成不花體力
+    state.player.stamina = content.config.fuse_stamina - 1
+    assert skillview.practice_hint(state, content) is None  # 合成也要體力（設計 12.1）
+    state.player.stamina = content.config.fuse_stamina
+    assert "煉製" in skillview.practice_hint(state, content)
 
 
 # ── 計畫二 Task 3：本人卡寫出威力加成 ──────────────────────────────────────────────
@@ -707,3 +732,63 @@ def test_a_small_name_shows_its_half_points_instead_of_rounding_to_nothing(state
     assert skillview.boost_line(state, content, world) == "威力加成：【清風拳】共鳴 +0.5%"
     state.player.stats["good"] = 15
     assert skillview.boost_line(state, content, world) == "威力加成：【清風拳】共鳴 +7.5%"
+
+
+# ── 武學＋武學（武學與成長設計 12.3）────────────────────────────────
+
+
+def test_forge_line_shows_a_blend(state, content, world):
+    state.player.member.wugong_id = "basic_fist"
+    state.player.arts = ["lake_kick"]
+    state.player.stats["xinde"] = 100
+    line = skillview.forge_line(state, content, world, "basic_fist", [], other_art="lake_kick")
+    seed = fusion.recipe_seed(world, fusion.blend_key("basic_fist", "lake_kick"))[1]
+    shape = fusion.blend_shape(
+        team.resolve_art("basic_fist", content, world), team.resolve_art("lake_kick", content, world), seed,
+    )
+    assert "**合成**" in line and f"→ 一門新{shape.kind}（屬{shape.attribute}，從下品起修）" in line
+    assert "花 5 點心得、5 點體力（你有 100 點心得）" in line and "⚠" not in line
+    assert "⚠ 要放兩門不同的武學。" in skillview.forge_line(state, content, world, "basic_fist", [], other_art="basic_fist")
+
+
+def test_forge_line_when_idle_mentions_two_arts(state, content, world):
+    line = skillview.forge_line(state, content, world, None, [])
+    assert "放兩門武學" in line and "放一門武學和一個意境" in line and "放兩個意境" in line
+
+
+def test_art_rows_name_the_parents_of_a_blended_art(state, content, world):
+    state.player.member.wugong_id = "basic_fist"
+    state.player.arts = ["lake_kick"]
+    state.player.stats["xinde"] = 100
+    art, _ = fusion.blend(state, content, world, None, "basic_fist", "lake_kick")  # 沒有模型：退路字表取名
+    rows = {row["id"]: row for row in skillview.art_rows(state, content, world)}
+    assert "由【粗淺拳腳】與【湖邊腿法】衍生" in rows[art.id]["card"]
+    assert "衍生" not in rows["basic_fist"]["card"] and "衍生" not in rows["lake_kick"]["card"]
+
+
+def test_the_worn_slot_card_of_a_blended_art_names_both_parents(state, content, world):
+    """身上那一欄的功法卡（detail）也寫「由…衍生」，不只清單裡的（art_rows）；穿的不是合成的就不寫。"""
+    state.player.member.wugong_id = "basic_fist"
+    state.player.arts = ["lake_kick"]
+    state.player.stats["xinde"] = 100
+    art, _ = fusion.blend(state, content, world, None, "basic_fist", "lake_kick")
+    assert "衍生" not in skillview.detail(state, content, world, "武學")  # 還穿著粗淺拳腳
+    team.switch_art(state, content, world, art.id)
+    assert art.kind == "武學" and "由【粗淺拳腳】與【湖邊腿法】衍生" in skillview.detail(state, content, world, "武學")
+
+
+def test_parent_names_skip_a_source_that_is_gone_and_are_empty_for_other_arts(content, world):
+    fist = team.resolve_art("basic_fist", content, world)
+    assert skillview.parent_names(fist, content, world) == []
+    art = generate_from_name("踏浪拳", "武學", "踏浪拳").model_copy(
+        update={"origin": "fused", "parents": ["basic_fist", "ghost"]},
+    )
+    assert skillview.parent_names(art, content, world) == ["粗淺拳腳"]  # 找不到的那門不寫，card 只認剛好兩個
+
+
+def test_the_card_of_a_blended_art_names_both_parents():
+    art = generate_from_name("烈風腿", "武學", "烈風腿").model_copy(
+        update={"origin": "fused", "creator": "甲", "parents": ["a", "b"]},
+    )
+    card = skillview.art_card(art, 1, None, ["旋風腿", "烈火拳"])
+    assert card.split("\n")[3] == "來源：合成（甲 首創）　由【旋風腿】與【烈火拳】衍生"

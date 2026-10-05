@@ -1015,6 +1015,15 @@ def test_art_detail_of_an_art_that_is_not_yours_is_not_found(game):
     assert game.art_detail("ghost") == "（找不到這門功法。）"
 
 
+def test_art_detail_of_a_blended_art_names_both_parents(game):
+    p = game.state.player
+    p.member.wugong_id, p.member.neigong_id, p.stats["xinde"] = "basic_fist", "basic_breath", 100
+    game.forge("basic_fist", [], proposed=(None, ""), other_art="basic_breath")  # 不叫模型：退路字表取名
+    (made,) = p.arts
+    assert "由【粗淺吐納】與【粗淺拳腳】衍生" in game.art_detail(made)  # 來源照 id 排序（basic_breath 在 basic_fist 前）
+    assert "衍生" not in game.art_detail("basic_fist")
+
+
 def test_heal(game):
     assert game.heal() == ["氣血無恙，不用療傷。"]
     member = game.state.player.member
