@@ -47,6 +47,7 @@ def human_turn(game: Game, rng: random.Random) -> None:
     if choice:
         game.choose(choice)
     if rng.random() < 0.2:
+        bot.allocate_points(game, rng)  # 升級的屬性點（武學與成長設計 6.2）；假人在 bot_policy.look_after 裡配
         bot.spend_xinde(game, rng)
 
 
