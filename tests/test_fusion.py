@@ -695,7 +695,7 @@ def test_landing_on_an_art_you_already_have_is_free_and_remembered(ready, conten
     landing_on(content)
     xinde, stamina = ready.player.stats["xinde"], ready.player.stamina
     art, msgs = fusion.fuse(ready, content, world, must_not_ask(), "lake_kick", "feng")
-    assert art is None and msgs == ["這一爐合出來還是【旋風腿】，你已經有了——換一個意境吧。"]
+    assert art is None and msgs == ["這一爐合出來還是【旋風腿】，你已經有了——換一組試試吧。"]
     assert (ready.player.stats["xinde"], ready.player.stamina) == (xinde, stamina)
     assert world.lookup_recipe(fusion.fuse_key("lake_kick", "feng")).id == made.id  # 配方照樣記下來
     assert "你已經有了" in fusion.fuse_problem(ready, content, world, "lake_kick", "feng")  # 下一次按之前就知道
@@ -723,7 +723,7 @@ def test_landing_on_the_base_itself_is_free_and_stays_that_way(ready, content, w
     landing_on(content)
     xinde, stamina = ready.player.stats["xinde"], ready.player.stamina
     art, msgs = fusion.fuse(ready, content, world, must_not_ask(), "旋風腿", "feng")
-    assert art is None and msgs == ["這一爐合出來還是【旋風腿】，你已經有了——換一個意境吧。"]
+    assert art is None and msgs == ["這一爐合出來還是【旋風腿】，你已經有了——換一組試試吧。"]
     assert (ready.player.stats["xinde"], ready.player.stamina) == (xinde, stamina)
     key = fusion.fuse_key("旋風腿", "feng")
     assert world.lookup_recipe(key).id == made.id
@@ -1177,6 +1177,38 @@ def test_blend_parents_are_sorted_whatever_the_order_you_put_them_in(ready, cont
     assert art.parents == ["basic_fist", "lake_kick"]
     assert world.get_skill(art.id).parents == ["basic_fist", "lake_kick"]  # 登記的那一筆也是
     assert skillview.parent_names(art, content, world) == ["粗淺拳腳", "湖邊腿法"]  # 功法卡的先後照 id 排，不看你怎麼放
+
+
+ART_ORDER = [("basic_fist", "lake_kick"), ("lake_kick", "basic_fist")]
+
+
+@pytest.mark.parametrize(("a", "b"), ART_ORDER)
+def test_the_blend_sentence_names_the_two_arts_in_the_order_of_the_art_card(ready, content, world, a, b):
+    """FB-073：回話寫「你把【甲】與【乙】合而為一」、功法卡寫「由【甲】與【乙】衍生」，兩邊的先後要一樣——照 id 排
+    （MartialArt.parents），不看玩家怎麼放。"""
+    ready.player.arts = ["lake_kick"]
+    art, msgs = fusion.blend(ready, content, world, named("踏浪拳"), a, b)
+    first, second = skillview.parent_names(art, content, world)
+    assert (first, second) == ("粗淺拳腳", "湖邊腿法")
+    assert msgs[0].startswith(f"你把【{first}】與【{second}】合而為一，衍生出一門")
+    assert f"由【{first}】與【{second}】衍生" in skillview.art_card(art, 1, parent_names=[first, second])
+
+
+@pytest.mark.parametrize(("a", "b"), ART_ORDER)
+def test_a_landed_blend_sentence_follows_the_same_order(ready, content, world, a, b):
+    ready.player.arts = ["lake_kick"]
+    key = fusion.blend_key("basic_fist", "lake_kick")
+    shape = fusion.blend_shape(
+        base_art("basic_fist", content, world), base_art("lake_kick", content, world), fusion.recipe_seed(world, key)[1],
+    )
+    known = generate_from_name("候選拳", shape.kind, "候選拳").model_copy(update={
+        "origin": "fused", "attribute": shape.attribute, "lean": shape.lean, "creator": "乙",
+    })
+    world.claim_recipe("融|測試", known)
+    landing_on(content)
+    art, msgs = fusion.blend(ready, content, world, must_not_ask(), a, b)
+    assert art.id == "候選拳"
+    assert msgs[0].startswith("你把【粗淺拳腳】與【湖邊腿法】合而為一，合出來的竟是一門已有的")
 
 
 def test_a_blend_is_refused_when_the_holdings_are_full(ready, content, world):
