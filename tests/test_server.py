@@ -1193,10 +1193,13 @@ def test_the_forge_blends_two_arts(client):
 
 def test_forge_line_previews_a_blend(client):
     _a_player_with_insights(client)
+    before = open_characters().load("沈青衫").player
     out = client.post("/api/forge_line", json={"art": "jichu_quanjiao", "other_art": "jichu_tuna"}).json()
     assert "【基礎拳腳】＋【基礎吐納】" in out["line"] and "從下品起修" in out["line"]
     saved = open_characters().load("沈青衫").player
-    assert saved.arts == []  # 只是預覽
+    assert saved.arts == []  # 只是預覽：什麼都沒收、沒登記
+    assert (saved.stats["xinde"], saved.stamina) == (before.stats["xinde"], before.stamina)
+    assert open_world().lookup_recipe(fusion.blend_key("jichu_quanjiao", "jichu_tuna")) is None
 
 
 def test_a_blended_art_that_is_worn_names_its_parents_on_the_slot_card(client):
@@ -1347,7 +1350,7 @@ def test_the_blend_endpoint_asks_the_model_outside_the_lock_and_once(client):
 
 
 def test_a_blend_that_lands_on_a_known_art_asks_the_model_to_pick_outside_the_lock(monkeypatch):
-    """合到舊的、候選兩個以上：B 段請模型從清單挑一個名字（鎖外、只問一次、不重問清單外的名字之外的格式），C 段進鎖登記、收一次錢。"""
+    """合到舊的、候選兩個以上：B 段在鎖外請模型從清單裡挑一個名字（只問一次），C 段進鎖登記那一門、收一次錢。"""
     game = _forger()
     world = open_world()
     key = fusion.blend_key("jichu_quanjiao", "jichu_tuna")

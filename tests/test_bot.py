@@ -76,6 +76,10 @@ class Fixed(random.Random):
 
     def __init__(self, value):
         super().__init__(0)
+        # random() 不會回 1.0 以上；rng.choice 又靠 random() < 1 才跳得出迴圈：Fixed(1.0) 以上會讓它永遠轉下去。
+        # 常數被改到逼近 1（例如 BLEND_SHARE + 0.01 越過 1.0）時要讓測試失敗，不是卡住整個測試套件
+        if not 0.0 <= value < 1.0:
+            raise ValueError(f"Fixed 的值要在 [0, 1) 裡：{value}")
         self.value = value
 
     def random(self):
@@ -159,12 +163,30 @@ def test_the_bot_fuses_when_the_blend_chance_does_not_come_up(content, world):
     assert art.parents == [] and art.base in ("basic_breath", "basic_fist") and art.insight == "feng"
 
 
+def test_the_forge_reserve_is_more_than_a_forge_costs(content):
+    """低於保留量的測試才有意義：少一點的體力要還付得起一爐，被擋下的才是保留量、不是體力不夠。"""
+    assert bot.FORGE_RESERVE - 1 >= content.config.fuse_stamina
+    assert bot.FORGE_RESERVE - 1 >= content.config.merge_stamina
+
+
 def test_the_bot_does_not_forge_below_the_forge_reserve(content, world):
     game = armed(content, world)
     game.state.player.stamina = bot.FORGE_RESERVE - 1
     bot.forge_and_cultivate(game, random.Random(0))
     assert library.owned_arts(game.state) == ["basic_fist"]
     assert game.state.player.stamina == bot.FORGE_RESERVE - 1
+
+
+def test_the_bot_does_not_blend_below_the_forge_reserve(content, world):
+    """兩門武學、沒有意境：只剩武學＋武學這一條路，低於保留量也一樣不合（保留量擋的是三種合成，不只合成）。"""
+    game = armed(content, world)
+    game.state.player.member.neigong_id = "basic_breath"
+    game.state.player.insights = []
+    game.state.player.stamina = bot.FORGE_RESERVE - 1
+    bot.forge_and_cultivate(game, random.Random(0))
+    assert len(library.owned_arts(game.state)) == 2
+    assert not any(key.startswith(fusion.BLEND_PREFIX) for key in world.recipe_keys())
+    assert game.state.player.stamina == bot.FORGE_RESERVE - 1 and game.state.player.stats["xinde"] == 100
 
 
 def test_the_bot_forges_with_exactly_the_forge_reserve(content, world):
