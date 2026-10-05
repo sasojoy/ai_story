@@ -3385,6 +3385,9 @@ class Game:
             "attrs": [(names[k], p.stats[k], k) for k in team.COMBAT_STATS],  # 第三項是鍵：配點鈕送它（allocate_stat）
             "stat_points": p.stat_points,
             "stat_cap": c.config.stat_cap,
+            # ＋鈕底下那一行：四項各管什麼、事件檢定也看它們（計畫二最終審查 M2）；網頁只在有點可配時畫
+            "stat_uses": skillview.stat_uses(c),
+            "stat_uses_note": skillview.STAT_CHECK_NOTE,
             "hint": skillview.practice_hint(s, c),  # 心得擱著沒用、又還有功夫沒練滿時才有
             "team": mates,
             "busy_hours": None if p.busy_until is None else round((p.busy_until - w.time) / HOUR / c.config.time_scale, 1),  # 現實小時

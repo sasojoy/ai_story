@@ -793,6 +793,21 @@ def test_the_points_hint_stays_out_of_the_ellipsized_name_span():
     assert rule is not None and "flex: none" in rule.group(1)
 
 
+def test_the_allocate_buttons_say_what_each_stat_does():
+    """M2：＋鈕底下那一行（四項各管什麼）跟＋鈕畫在同一個條件裡——有點可配才出現；用的是伺服器送的 stat_uses 與
+    stat_uses_note，網頁不寫死屬性的用途。"""
+    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    start = js.index('data-act="allocate"')
+    line = js[js.rindex("\n", 0, start):js.index("\n", start)]
+    assert line.strip().startswith("${s.stat_points ?") and "statUsesHtml(s)" in line
+    helper = js[js.index("function statUsesHtml"):]
+    helper = helper[:helper.index("\n  }\n")]
+    assert "s.stat_uses" in helper and "s.stat_uses_note" in helper
+    data = Game.new(server.CONTENT, "測試").status_data()
+    for field in re.findall(r"\bs\.(stat_uses\w*)\b", js):
+        assert field in data
+
+
 def test_the_news_dot_lights_only_for_a_new_fight_card():
     """配點之後「剛剛」照舊是升級那一場的卡片（計畫二最終審查 M1）：看過那一場的戰報再配點，見聞的紅點不能再亮一次——
     applyMain 比的是卡片是不是新的一場（card_id），不是「有沒有卡片」。"""

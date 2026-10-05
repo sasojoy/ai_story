@@ -248,11 +248,20 @@
       </div>
       ${S.showMore ? `<div class="more-stats">
         ${s.minor.map(([k, v]) => `${esc(k)} ${v}`).join("　")}　｜　${s.attrs.map(([k, v]) => `${esc(k)} ${v}`).join("　")}
-        ${s.stat_points ? `<div class="row">${s.attrs.map(([k, v, key]) => `<button class="btn small" data-act="allocate" data-stat="${esc(key)}" ${v >= s.stat_cap ? "disabled" : ""}>＋${esc(k)}</button>`).join("")}</div>` : ""}
+        ${s.stat_points ? `<div class="row">${s.attrs.map(([k, v, key]) => `<button class="btn small" data-act="allocate" data-stat="${esc(key)}" ${v >= s.stat_cap ? "disabled" : ""}>＋${esc(k)}</button>`).join("")}</div>${statUsesHtml(s)}` : ""}
         ${team ? `<br>${team}` : ""}
         ${s.stances ? stancesHtml(s.stances, s.stance_notes) : ""}
       </div>` : ""}
       ${hintHtml(s)}`;
+  }
+
+  // ＋鈕底下一行：四項各管什麼（計畫二最終審查 M2）。點數配了收不回來，按之前要讀得到；文字是引擎給的（status.stat_uses），
+  // 一項一個 inline-block：手機上整項一起換行，不會把「根骨：內功威力…」從中間折斷，也不會撐出橫向捲動
+  function statUsesHtml(s) {
+    if (!s.stat_uses) return "";
+    const items = s.stat_uses.map(([k, use]) => `<span>${esc(k)}：${esc(use)}</span>`);
+    if (s.stat_uses_note) items.push(`<span>${esc(s.stat_uses_note)}</span>`);
+    return `<div class="stat-uses">${items.join("")}</div>`;
   }
 
   // 💡 心得提示：兩行長，在路上又有路程那一行時，會把路上最底下的「走法」擠到分頁列底下（FB-060）。

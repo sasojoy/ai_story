@@ -13,6 +13,23 @@ from .state import PLAYER, GameState
 from .world_state import WorldStateStore
 
 
+# 四屬性各管什麼（武學與成長設計 6.1）：狀態列＋鈕底下那一行（計畫二最終審查 M2）。點數配了收不回來（6.2），身法、悟性
+# 又看不到立即的變化，所以按之前要讀得到。名字照 Config.stat_names（見 stat_uses），這裡只寫用途；只寫玩家本人身上的事
+STAT_USES = {
+    "str": "武學威力",
+    "agi": "打完一場少損氣血",
+    "con": "內功威力・氣血上限・少受內傷",
+    "wis": "修練機率・探索悟得意境・閉關心得",
+}
+STAT_CHECK_NOTE = "事件的檢定也看這四項。"  # 事件檢定、隨口應對照舊讀四屬性（設計 6.1）
+
+
+def stat_uses(content: Content) -> list[tuple[str, str]]:
+    """四屬性的（名字, 用途），順序同 team.COMBAT_STATS——也就是狀態列 attrs、＋鈕的順序。"""
+    names = content.config.stat_names
+    return [(names.get(key, key), STAT_USES[key]) for key in team.COMBAT_STATS]
+
+
 def rules_line(content: Content) -> str:
     return "身上一門內功、一門武學：花心得練成，用意境修練衝品質；武學也能在「煉製」融意境衍生新武學。"
 

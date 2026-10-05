@@ -5530,6 +5530,23 @@ def test_the_status_carries_the_points_to_allocate(game):
     assert [k for _, _, k in data["attrs"]] == ["str", "agi", "con", "wis"]
 
 
+def test_the_status_says_what_each_stat_does(game):
+    """配點鈕底下那一行（計畫二最終審查 M2）：點數配了收不回來（設計 6.2），按之前要看得到四項各管什麼（照設計 6.1）。
+    名字照 Config.stat_names、順序跟 attrs 一樣，再加一句事件的檢定也看這四項；文字由引擎給，網頁不寫死。"""
+    names = game.content.config.stat_names
+    names["agi"] = "輕功"  # 改了名字，那一行跟著改
+    data = game.status_data()
+    assert [name for name, _ in data["stat_uses"]] == [name for name, _, _ in data["attrs"]] == [
+        names[k] for k in ("str", "agi", "con", "wis")
+    ]
+    uses = dict(data["stat_uses"])
+    assert "武學" in uses[names["str"]]  # 臂力：武學（外功）的威力
+    assert "氣血" in uses["輕功"]  # 身法：打完一場少掉一點氣血
+    assert all(word in uses[names["con"]] for word in ("內功", "氣血上限", "內傷"))  # 根骨：內功、氣血上限、少受內傷
+    assert all(word in uses[names["wis"]] for word in ("修練", "意境", "閉關"))  # 悟性：修練升品、探索悟意境、閉關心得
+    assert "檢定" in data["stat_uses_note"]
+
+
 def test_the_status_text_still_reads_the_attrs_with_their_keys(game):
     assert "臂力 5　身法 5　根骨 5　悟性 5" in game.status_text()
 
