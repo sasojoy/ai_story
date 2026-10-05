@@ -282,7 +282,7 @@ class SkillDef(_Strict):
 
     只定義「本命武學」（歷史人物的固定武學，情誼滿門檻習得）——自創功法完全是玩家取名
     當下即時生成、存進共用世界狀態（見 martial_arts.py／world_state.py），不進這份內容檔。
-    本命武學的品質固定是絕學（見 martial_arts.historical_art），這裡不必也不該填品質。
+    本命武學的品質是絕學（見 martial_arts.historical_art）；部下用的通用武學另外標品質（企劃者 2026-10-05 定上品，計畫 T5）。
     """
 
     id: str
@@ -290,6 +290,7 @@ class SkillDef(_Strict):
     kind: MartialKind
     attribute: Attribute
     desc: str = ""
+    quality: Literal["下品", "中品", "上品", "絕學"] = "絕學"
 
 
 class Sect(_Strict):
