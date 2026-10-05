@@ -15,6 +15,11 @@
   用完走退路字表，請求在 trycloudflare 切斷之前結束。
 - 大場面（挑戰大勢人物本人、打頭目）的判讀也在行動鎖外（`prepare_fight`），預算是 `Config.big_fight_budget_seconds`；
   一般的仗不問模型，備料與動作在同一次拿鎖裡做完。
+- 對話生成與隨口應對的評分也有總預算（`Config.dialogue_budget_seconds`、`free_text_budget_seconds`），跟開爐、大場面一樣
+  從備料那一段開始算、扣掉等鎖與排隊的時間。
+- 鎖外的五個模型呼叫（對話生成、大場面判讀、開爐取名、隨口應對的評分與潤色）一律走 `model_call`：開關
+  `Config.llm_queue_slots`（預設 0＝關）打開時先排隊（`llm_queue.py`：真人先、假人有上限、一人一件、排太久拿退路），
+  關著就直接叫。鎖內的小呼叫（`Game._quick_client`）與排程不進佇列。
 
 執行：`.venv/Scripts/python.exe server.py`（http://127.0.0.1:7861，預設只聽這台電腦）。要讓外面的手機連進來，
 加 `--share`：會用 cloudflared 開一個臨時的公開網址（要先裝 cloudflared，見 CLAUDE.md）；
@@ -25,6 +30,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import contextvars
+import copy
 import hashlib
 import os
 import re
@@ -45,6 +51,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from markdown_it import MarkdownIt
 
+from llm_queue import LlmQueue
 from tianxia import companion_agent, event_llm, fight_llm, foreshadow, naming, rules, server_bots, team, timetable
 from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, AccountStore, normalize
 from tianxia.content import PROFILE_ENV, load_content, profile_line
@@ -354,21 +361,82 @@ def start_scheduler(interval: float) -> threading.Thread | None:
         return SCHEDULER_THREAD
 
 
+# ── 鎖外的模型呼叫（線上架構設計 5.2：LLM 佇列）──
+# 五件事：對話生成、大場面判讀、開爐取名、隨口應對的評分與潤色，都是三段式的 B 段，一律走 model_call。
+# 開關是 Config.llm_queue_slots（預設 0＝關）：關著 QUEUE 是 None，model_call 就是直接叫；main() 照設定建佇列。
+QUEUE: LlmQueue | None = None
+
+
+def make_queue(config) -> LlmQueue | None:
+    return LlmQueue(config.llm_queue_slots, config.llm_queue_bot_cap) if config.llm_queue_slots > 0 else None
+
+
+def queue_line(config) -> str:
+    if config.llm_queue_slots <= 0:
+        return "模型佇列：關（鎖外的模型呼叫照舊直接叫）"
+    return (
+        f"模型佇列：同時 {config.llm_queue_slots} 件，假人最多 {config.llm_queue_bot_cap} 件，"
+        f"排超過 {config.llm_queue_wait_seconds:g} 秒就用退路"
+    )
+
+
+def model_call(game: Game, job, *, fallback):
+    """行動鎖外叫模型一律走這裡：佇列開著就用這個角色的名號排隊（真人先、假人有上限、一人一件、排太久拿 fallback，
+    見 llm_queue.LlmQueue），關著就直接叫。呼叫端不能握著行動鎖：排隊最久要等 llm_queue_wait_seconds 秒，握著鎖等就是全服一起等；
+    在鎖裡被叫到直接丟 RuntimeError（跟 _model_guard 一樣，用 RuntimeError 不用 assert：python -O 也照樣擋），開關開著關著都一樣。
+    鎖內的小呼叫走 Game._quick_client、不進佇列。佇列只認名號；是不是假人只決定排序與上限，不改任何玩家看得到的字。"""
+    if game.world.db.writing():
+        raise RuntimeError("model_call 要在行動鎖外用：鎖內的小呼叫走 Game._quick_client，不排隊")
+    queue = QUEUE
+    if queue is None:
+        return job()
+    p = game.state.player
+    return queue.run(
+        p.name.casefold(), job, fallback=fallback, bot=p.bot is not None, wait=game.content.config.llm_queue_wait_seconds,
+    )
+
+
+def within_budget(client, left: float):
+    """鎖外一趟模型呼叫要用的 client：原本那個的複本，逾時設成 min(原本的逾時, 剩下的秒數 ÷ 2)。chat_structured 一次最多送兩趟
+    （第一趟加重問），所以整段不會超過剩下的秒數；跟 naming.propose、fight_llm.judge 同一套分法。剩下的不夠一趟
+    （naming.MIN_POST_SECONDS）回 None＝不叫了；沒有 client（None）還是 None。原本那個 client 不動（同一個角色別的請求可能正在用它）。"""
+    if client is None:
+        return None
+    own = getattr(client, "timeout", None)
+    per_post = min(float(own) if isinstance(own, (int, float)) else left, left / naming.POSTS_PER_CALL)
+    if per_post < naming.MIN_POST_SECONDS:
+        return None
+    capped = copy.copy(client)
+    capped.timeout = per_post
+    return capped
+
+
 def prepare_dialogue(game: Game, option_id: str) -> companion_agent.PreparedTurn | None:
     """對話選項在行動鎖外生成（企劃者 2026-10-03 核准的過渡做法，正解是線上架構第二階段的 LLM 佇列）。
     模型一輪要 9~10 秒，整段包在鎖裡的話全服玩家與假人程式都得跟著等。分三段：
       A（鎖內、很快）同步時間，問引擎這個選項現在會不會生成對話，會就拿到送模型的單子；同步的結果（共用賽季的推進
         已經寫進資料庫、江湖大事寫進這個角色的江湖紀錄）要存起來，不然 C 段進鎖重讀就把它丟了；
-      B（鎖外、很慢）呼叫模型，失敗時單子裡的 turn 是 None；
+      B（鎖外、很慢）呼叫模型（model_call：佇列開著要排隊），失敗、太慢、排太久時單子裡的 turn 是 None；預算是
+        Config.dialogue_budget_seconds 扣掉 A 段（含等鎖）與排隊花掉的時間，引擎不讀時鐘，所以時間在這裡量（見 within_budget）；
       C（鎖內、很快）由呼叫端把結果交給 Game.choose(prepared=...)，引擎進鎖後重新核對再套用。
     這裡做 A 與 B，不會生成對話的選項（包含 talk:leave）回傳 None，由呼叫端走一般的 act()。"""
+    started = _monotonic()
     with _locked(game):
         game.sync(time.time())
         request = game.dialogue_request(option_id)
         open_characters().save(game.state)
     if request is None:
         return None
-    return companion_agent.prepare_turn(game.client, request)
+    cancelled = companion_agent.PreparedTurn(request.option_id, request.companion_id, request.player_action, None)
+    total = game.content.config.dialogue_budget_seconds
+
+    def generate():
+        client = within_budget(game.client, total - (_monotonic() - started))
+        if client is None and game.client is not None:
+            return cancelled  # 等鎖、排隊把整份預算用完了：不叫模型，這一輪取消（跟模型叫不動一樣）
+        return companion_agent.prepare_turn(client, request)
+
+    return model_call(game, generate, fallback=cancelled)
 
 
 def may_generate_dialogue(option_id: str) -> bool:
@@ -392,13 +460,13 @@ def prepare_fight(game: Game, option_id: str) -> list[str] | fight_llm.PreparedF
       A（鎖內、很快）同步時間，問引擎這個選項是不是大場面（Game.fight_request）。**不是**（一般的仗、自己陣營的操練、
         按不下去、這個角色不叫模型）就在同一次拿鎖裡直接做完、存檔，回傳那個動作的訊息（list）——遊歷與事件選項天天在按，
         一般的仗不能每一下都多搶一次行動鎖（計畫三 G14）。是大場面就拿到單子、存檔（不然 C 段進鎖重讀就把同步的結果丟了）；
-      B（鎖外、很慢）fight_llm.judge：預算是 Config.big_fight_budget_seconds 扣掉 A 段（含等鎖）花掉的時間，引擎不讀時鐘，
-        所以時間在這裡量；回傳 PreparedFight（備料的單子加判讀），叫不動、太慢時判讀是 None——單子照樣帶著，等判讀的時候
-        這個選項沒了（人被另一個分頁帶走），C 段才說得出是哪一仗沒打成；
+      B（鎖外、很慢）fight_llm.judge（model_call：佇列開著要排隊）：預算是 Config.big_fight_budget_seconds 扣掉 A 段（含等鎖）
+        與排隊花掉的時間，引擎不讀時鐘，所以時間在這裡量，輪到了才算；回傳 PreparedFight（備料的單子加判讀），叫不動、
+        太慢、排太久時判讀是 None——單子照樣帶著，等判讀的時候這個選項沒了（人被另一個分頁帶走），C 段才說得出是哪一仗沒打成；
       C 由呼叫端交給 Game.choose(fight=...)，引擎進鎖後重驗再套用（判讀是 None 也照樣打，優勢 0；選項已經不在就不打，
         回一句 FIGHT_LEFT／FIGHT_CHANGED，見 api_choose）。
     鎖內任何一步都不叫模型；鎖外這一段不歸鎖內的模型上限與斷路器管（跟對話、開爐取名一樣）。"""
-    started = time.monotonic()
+    started = _monotonic()
     with _locked(game):
         game.sync(time.time())
         request = game.fight_request(option_id)
@@ -406,9 +474,13 @@ def prepare_fight(game: Game, option_id: str) -> list[str] | fight_llm.PreparedF
         open_characters().save(game.state)
     if request is None:
         return done
-    budget = max(0.0, game.content.config.big_fight_budget_seconds - (time.monotonic() - started))
-    judgment = fight_llm.judge(game.client, request, game.content.config.big_fight_swing, budget)
-    return fight_llm.PreparedFight(request=request, judgment=judgment)
+    config = game.content.config
+
+    def ask():
+        budget = max(0.0, config.big_fight_budget_seconds - (_monotonic() - started))
+        return fight_llm.judge(game.client, request, config.big_fight_swing, budget)
+
+    return fight_llm.PreparedFight(request=request, judgment=model_call(game, ask, fallback=None))
 
 
 def choose(game: Game, option_id: str) -> list[str] | None:
@@ -435,22 +507,27 @@ def prepare_forge(
     也會在約 100 秒切斷請求。跟 prepare_dialogue 一樣分三段：
       A（鎖內、很快）同步時間，問引擎這一爐要不要模型取名或挑（Game.forge_request），要就拿到單子；同步的結果要存起來，
         不然 C 段進鎖重讀就把它丟了；
-      B（鎖外、很慢）naming.generate：預算是 Config.naming_budget_seconds 扣掉 A 段（含等鎖）花掉的時間，
-        引擎不讀時鐘，所以時間在這裡量；用完就回 (None, "")，C 段走退路字表（挑的話改由規則挑）；
+      B（鎖外、很慢）naming.generate（model_call：佇列開著要排隊）：預算是 Config.naming_budget_seconds 扣掉 A 段（含等鎖）
+        與排隊花掉的時間，引擎不讀時鐘，所以時間在這裡量，輪到了才算；用完、排太久就回 (None, "")，C 段走退路字表（挑的話改由規則挑）；
       C（鎖內、很快）由呼叫端把結果交給 Game.forge(..., proposed=...)，引擎整個重驗再登記、收費。
     這裡做 A 與 B，回傳 B 的結果（名字, 說明）；不必叫模型時是 NO_NAME。假人程式之後要合成，照樣能不經過 HTTP
     走這三段（Game.forge_request 在 action_lock 裡、naming.generate 在鎖外、Game.forge(proposed=...) 再進鎖）。
     other_art 有、insight_ids 空的是武學＋武學。"""
-    started = time.monotonic()
+    started = _monotonic()
     with _locked(game):
         game.sync(time.time())
         request = game.forge_request(art_id, insight_ids, other_art=other_art)
         open_characters().save(game.state)
     if request is None:
         return NO_NAME
-    budget = max(0.0, game.content.config.naming_budget_seconds - (time.monotonic() - started))
-    # 角色名號的查詢是唯讀的快照、不拿行動鎖（FB-069：模型取到角色的名號就再取一次；C 段進鎖還會再擋一次）
-    return naming.generate(game.client, game.content, request, budget=budget, person=game.world.is_character_name)
+    total = game.content.config.naming_budget_seconds
+
+    def name_it():
+        budget = max(0.0, total - (_monotonic() - started))
+        # 角色名號的查詢是唯讀的快照、不拿行動鎖（FB-069：模型取到角色的名號就再取一次；C 段進鎖還會再擋一次）
+        return naming.generate(game.client, game.content, request, budget=budget, person=game.world.is_character_name)
+
+    return model_call(game, name_it, fallback=NO_NAME)
 
 
 def forge(game: Game, art_id: str | None, insight_ids: list[str], other_art: str | None = None) -> list[str] | None:
@@ -464,9 +541,12 @@ def forge(game: Game, art_id: str | None, insight_ids: list[str], other_art: str
 def answer_event(game: Game, text: str) -> list[str] | None:
     """事件的隨口應對（探索的多人與 LLM 玩法 §8.1），跟 prepare_dialogue 一樣分三段：
       A（鎖內、很快）同步時間，問引擎這句話現在能不能送；能就拿到單子（事件 id＋這句話），同步的結果照樣存起來；
-      B（鎖外、很慢）請模型評這個做法的成功率，失敗一律 40；
+      B（鎖外、很慢）請模型評這個做法的成功率（model_call：佇列開著要排隊），失敗、太慢、排太久一律 40；預算是
+        Config.free_text_budget_seconds 扣掉 A 段（含等鎖）與排隊花掉的時間（見 within_budget）；
       C（鎖內、很快）Game.answer_event 重驗還停在同一則事件、同一句話，才擲骰套用（對不上就不套用）；
-      D、E 擲骰之後在鎖外請模型潤色一兩句，再進鎖插回那一則江湖紀錄（Game.add_gamble_narration）。"""
+      D、E 擲骰之後在鎖外請模型潤色一兩句（model_call：同一個人這時沒有別件在排，照常再排一次），再進鎖插回那一則江湖紀錄
+        （Game.add_gamble_narration）。潤色是一趟、不重問，逾時是 client 自己的 ollama_timeout，不另外給總預算；排太久就不潤色。"""
+    started = _monotonic()
     with _locked(game):
         game.sync(time.time())
         request = game.free_text_request(text)
@@ -474,11 +554,23 @@ def answer_event(game: Game, text: str) -> list[str] | None:
     if request is None:
         raise GameError(f"寫一句 1～{FREE_TEXT_MAX} 字的做法；眼前的事已經過去的話，就不必再寫了。")
     event = CONTENT.events[request.event_id]
-    rate = event_llm.assess_event_success_rate(game.client, event, request.text)
+    total = game.content.config.free_text_budget_seconds
+
+    def score():
+        client = within_budget(game.client, total - (_monotonic() - started))
+        if client is None and game.client is not None:
+            return event_llm.DEFAULT_FREE_TEXT_SUCCESS_RATE  # 等鎖、排隊把整份預算用完了：不叫模型，保底值
+        return event_llm.assess_event_success_rate(client, event, request.text)
+
+    rate = model_call(game, score, fallback=event_llm.DEFAULT_FREE_TEXT_SUCCESS_RATE)
     msgs = act(game, lambda g: g.answer_event(request, rate))
     outcome = game.last_gamble
     if outcome is not None:  # D（鎖外）擲骰之後請模型潤色一兩句，E（鎖內）插回那一則紀錄；失敗就只留結果文字
-        narration = event_llm.narrate_event_gamble(game.client, event, outcome.text, outcome.success, outcome.effect_text)
+        narration = model_call(
+            game,
+            lambda: event_llm.narrate_event_gamble(game.client, event, outcome.text, outcome.success, outcome.effect_text),
+            fallback=None,
+        )
         if narration:
             act(game, lambda g: g.add_gamble_narration(outcome, narration))
     return msgs
@@ -1166,6 +1258,7 @@ def start_tunnel(port: int) -> threading.Thread | None:
 def main(argv: list[str] | None = None) -> None:
     import uvicorn
 
+    global QUEUE
     parser = argparse.ArgumentParser(description="天下大勢網頁伺服器")
     parser.add_argument("--port", type=int, default=PORT)
     parser.add_argument("--share", action="store_true", help="用 cloudflared 開一個臨時的公開網址")
@@ -1179,6 +1272,8 @@ def main(argv: list[str] | None = None) -> None:
     print(f"天下大勢：http://127.0.0.1:{args.port}", flush=True)
     print(f"資料庫：{default_path().resolve()}", flush=True)  # 跟 run_bots.py 要是同一個檔；TIANXIA_DB 設錯時一眼看得出來
     print(profile_line(CONTENT, PROFILE), flush=True)  # TIANXIA_PROFILE 也是：兩個程式要用同一份設定
+    QUEUE = make_queue(CONTENT.config)  # 開關關著是 None：鎖外的模型呼叫照舊直接叫
+    print(queue_line(CONTENT.config), flush=True)
     interval = CONTENT.config.world_tick_seconds
     print(scheduler_line(interval), flush=True)
     start_scheduler(interval)

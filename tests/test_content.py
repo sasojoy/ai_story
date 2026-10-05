@@ -1153,6 +1153,38 @@ def test_world_tick_seconds_is_off_or_at_least_a_second():
         Config(world_tick_seconds=0.5)
 
 
+# ── LLM 佇列與鎖外模型呼叫的時間預算（線上架構第 2 期計畫）──────────────
+
+
+def test_llm_queue_is_off_by_default():
+    """LLM 佇列預設關（線上架構第 2 期計畫）：0＝不建佇列，鎖外的模型呼叫照舊直接叫。content/config.json 與玩家用的設定
+    （weekend 等）都不打開；要在哪一份打開由 PM 驗收之後決定，到時改這個測試、寫明是哪一份。"""
+    config = load_content(CONTENT_DIR).config
+    assert (config.llm_queue_slots, config.llm_queue_bot_cap, config.llm_queue_wait_seconds) == (0, 1, 20)
+    for path in sorted((CONTENT_DIR / "profiles").glob("*.json")):
+        assert load_content(CONTENT_DIR, profile=path.stem).config.llm_queue_slots == 0, path.stem
+
+
+@pytest.mark.parametrize("field", ["llm_queue_slots", "llm_queue_bot_cap", "llm_queue_wait_seconds"])
+def test_llm_queue_settings_cannot_be_negative(field):
+    with pytest.raises(ValidationError, match="greater than or equal to 0"):
+        Config(**{field: -1})
+
+
+def test_every_model_call_outside_the_lock_has_a_total_budget():
+    """鎖外四種模型呼叫（開爐取名、大場面判讀、對話生成、隨口應對評分）各有一份總預算，預設都是 60 秒：試玩走 trycloudflare，
+    一個請求約 100 秒就被切斷，60 秒留下 A、C 兩段等行動鎖與排模型佇列的餘裕。"""
+    config = load_content(CONTENT_DIR).config
+    assert (
+        config.naming_budget_seconds, config.big_fight_budget_seconds,
+        config.dialogue_budget_seconds, config.free_text_budget_seconds,
+    ) == (60, 60, 60, 60)
+    with pytest.raises(ValidationError, match="greater than or equal to 0"):
+        Config(dialogue_budget_seconds=-1)
+    with pytest.raises(ValidationError, match="greater than or equal to 0"):
+        Config(free_text_budget_seconds=-1)
+
+
 # ── 時刻表（content/timetable.json，計畫 T2）──────────────────────────
 
 

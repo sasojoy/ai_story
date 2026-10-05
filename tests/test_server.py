@@ -13,6 +13,7 @@ from unittest import mock
 import pytest
 from fastapi.testclient import TestClient
 
+import llm_queue
 import server
 from conftest import at, season_one_events
 from tianxia import atlas, battle_instance, calendar, companion_agent, database, fight_llm, fusion, naming, team
@@ -65,11 +66,13 @@ def fresh_server_memory():
     for store in (server.LOGIN_FAILURES, server.SESSIONS, server.GAMES):
         store.clear()
     server.WORLD_GAME = None
+    server.QUEUE = None  # 模型佇列也是模組狀態：每個測試從關著開始（Config.llm_queue_slots 預設 0）
     yield
     _stop_scheduler()
     for store in (server.LOGIN_FAILURES, server.SESSIONS, server.GAMES):
         store.clear()
     server.WORLD_GAME = None
+    server.QUEUE = None
 
 
 @pytest.fixture(autouse=True)
@@ -2872,9 +2875,10 @@ def test_a_dialogue_option_generates_outside_the_action_lock(game, lock_events):
     assert game.state.player.pending_companion == "luzhi"
 
 
-def test_the_dialogue_prepared_outside_the_lock_keeps_the_full_client(game):
-    """鎖內的模型呼叫有 15 秒的上限（Config.in_lock_model_timeout），鎖外的備料不受它管：拿的是 game.client 本身，
-    逾時照 Config.ollama_timeout——一輪對話本來就要九、十秒，不能被短複本的 15 秒誤傷。"""
+def test_the_dialogue_prepared_outside_the_lock_gets_its_budget_not_the_in_lock_limit(game, breaker_clock):
+    """鎖內的模型呼叫有 15 秒的上限（Config.in_lock_model_timeout），鎖外的備料不受它管：一輪對話本來就要九、十秒，不能被短複本
+    的 15 秒誤傷。鎖外有自己的總預算（Config.dialogue_budget_seconds，PM 2026-10-06）：拿的是 game.client 的複本，一趟的逾時是
+    預算的一半（chat_structured 一次最多送兩趟，整段不超過預算）；原本那個 client 不動。"""
     _stand_by_a_figure(game)
     seen = []
 
@@ -2885,8 +2889,9 @@ def test_the_dialogue_prepared_outside_the_lock_keeps_the_full_client(game):
     with mock.patch.object(companion_agent, "generate_turn", side_effect=generate):
         server.choose(game, "act:socialize")
     config = server.CONTENT.config
-    assert len(seen) == 1 and seen[0] is game.client
-    assert seen[0].timeout == config.ollama_timeout > config.in_lock_model_timeout
+    assert len(seen) == 1 and seen[0] is not game.client
+    assert seen[0].timeout == config.dialogue_budget_seconds / 2 > config.in_lock_model_timeout
+    assert game.client.timeout == config.ollama_timeout and game.client.retry is True
 
 
 def test_the_generated_turn_is_applied_and_saved(game, save_dir):
@@ -3629,8 +3634,9 @@ def test_answering_asks_the_model_outside_the_lock(game, at_a_gamble, lock_event
     assert view["event_free_text"] is None
 
 
-def test_the_free_text_assessment_and_narration_keep_the_full_client(game, at_a_gamble):
-    """隨口應對的評分與潤色都在鎖外：拿 game.client 本身（Config.ollama_timeout），不是鎖內那個 15 秒的短複本。"""
+def test_the_free_text_assessment_gets_its_budget_and_the_narration_keeps_the_full_client(game, at_a_gamble, breaker_clock):
+    """隨口應對的評分與潤色都在鎖外，不是鎖內那個 15 秒的短複本：評分有自己的總預算（Config.free_text_budget_seconds，PM 2026-10-06），
+    拿 game.client 的複本、一趟的逾時是預算的一半；潤色是一趟、不重問，照舊拿 game.client 本身（Config.ollama_timeout）。"""
     seen = []
 
     def assess(client, event, text):
@@ -3645,9 +3651,12 @@ def test_the_free_text_assessment_and_narration_keep_the_full_client(game, at_a_
     with mock.patch.object(server.event_llm, "assess_event_success_rate", side_effect=assess), \
             mock.patch.object(server.event_llm, "narrate_event_gamble", side_effect=narrate):
         server.answer_event(game, "大喊官兵來了")
+    config = server.CONTENT.config
     assert [kind for kind, _ in seen] == ["assess", "narrate"]
-    assert all(client is game.client for _, client in seen)
-    assert game.client.timeout == server.CONTENT.config.ollama_timeout > server.CONTENT.config.in_lock_model_timeout
+    (_, scored), (_, narrated) = seen
+    assert scored is not game.client and scored.timeout == config.free_text_budget_seconds / 2 > config.in_lock_model_timeout
+    assert narrated is game.client
+    assert game.client.timeout == config.ollama_timeout > config.in_lock_model_timeout
 
 
 def test_answering_does_nothing_when_the_event_was_dealt_with_meanwhile(game, at_a_gamble):
@@ -3882,3 +3891,393 @@ def test_fb069_the_forge_never_names_a_recipe_after_a_character(lock_events):
     name = open_world().lookup_recipe(FIST_FENG).name
     assert name != "驗收新武" and naming.name_problem(name, server.CONTENT) is None
     assert server.forge(game, "jichu_quanjiao", ["huo"]) is not None  # 一般的名字照常
+
+
+# ── 模型佇列（線上架構第 2 期，llm_queue.py）：鎖外的五個模型呼叫都走 server.model_call ───────────────
+# 五件事：對話生成（prepare_dialogue）、大場面判讀（prepare_fight）、開爐取名（prepare_forge）、隨口應對的評分與潤色
+# （answer_event 的 B、D 段）。開關是 Config.llm_queue_slots（預設 0＝關，server.QUEUE 是 None，照舊直接叫）。
+
+
+class _FullQueue:
+    """排不進去的佇列：每一件都直接拿退路、不叫 job（輪不到超時、同一個人已經有一件、假人滿了，結果都一樣）。"""
+
+    def __init__(self):
+        self.calls = []
+
+    def run(self, owner, job, *, fallback, bot=False, wait=30.0):
+        self.calls.append((owner, bot, wait))
+        return fallback
+
+
+def _slow_queue(monkeypatch, breaker_clock, seconds):
+    """每一件都排了 seconds 秒才輪到（撥 server._monotonic，不真的等），輪到了照常叫 job。回傳每一件的名號紀錄。"""
+    owners = []
+    queue = llm_queue.LlmQueue(slots=1, bot_cap=1)
+
+    def run(owner, job, *, fallback, bot=False, wait=30.0):
+        owners.append(owner)
+        breaker_clock[0] += seconds
+        return job()
+
+    monkeypatch.setattr(queue, "run", run)
+    monkeypatch.setattr(server, "QUEUE", queue)
+    return owners
+
+
+def test_model_call_without_a_queue_calls_directly(game):
+    """開關關著：直接叫，跟現在一樣（Review Focus 5）。"""
+    assert server.QUEUE is None
+    assert server.model_call(game, lambda: "模型的話", fallback="退路") == "模型的話"
+
+
+def test_model_call_queues_under_the_character_and_flags_bots(game, monkeypatch):
+    seen = {}
+
+    def fake_run(owner, job, *, fallback, bot=False, wait=30.0):
+        seen.update(owner=owner, bot=bot, wait=wait)
+        return job()
+
+    queue = llm_queue.LlmQueue(slots=1, bot_cap=1)
+    monkeypatch.setattr(queue, "run", fake_run)
+    monkeypatch.setattr(server, "QUEUE", queue)
+    assert server.model_call(game, lambda: "好", fallback="退路") == "好"
+    assert seen == {"owner": "測試", "bot": False, "wait": server.CONTENT.config.llm_queue_wait_seconds}
+    game.state.player.bot = BotProfile(personality="積極", seed=1)  # 假人的存檔
+    server.model_call(game, lambda: "好", fallback="退路")
+    assert seen["bot"] is True
+
+
+def test_a_second_request_from_the_same_player_gets_the_fallback(game, monkeypatch):
+    """同一個角色兩個分頁同時送：第二件拿退路，不叫第二次模型（Review Focus 1）。"""
+    queue = llm_queue.LlmQueue(slots=2, bot_cap=1)
+    monkeypatch.setattr(server, "QUEUE", queue)
+    started, release = threading.Event(), threading.Event()
+
+    def slow():
+        started.set()
+        release.wait(5)
+        return "第一件"
+
+    first = threading.Thread(target=lambda: server.model_call(game, slow, fallback="退路"))
+    first.start()
+    assert started.wait(2)
+    assert server.model_call(game, lambda: "第二件", fallback="退路") == "退路"
+    release.set()
+    first.join(2)
+
+
+def test_the_queue_key_ignores_the_case_of_the_name(monkeypatch):
+    """「Rayal」與「rayal」是同一個人（名號比對不分大小寫）：用大小寫換名字，也不能多拿一件。"""
+    queue = llm_queue.LlmQueue(slots=2, bot_cap=1)
+    monkeypatch.setattr(server, "QUEUE", queue)
+    upper, lower = Game.new(server.CONTENT, "Rayal"), Game.new(server.CONTENT, "rayal")
+    started, release = threading.Event(), threading.Event()
+
+    def slow():
+        started.set()
+        release.wait(5)
+        return "第一件"
+
+    first = threading.Thread(target=lambda: server.model_call(upper, slow, fallback="退路"))
+    first.start()
+    assert started.wait(2)
+    assert server.model_call(lower, lambda: "第二件", fallback="退路") == "退路"
+    release.set()
+    first.join(2)
+
+
+def test_forge_budget_counts_the_time_spent_in_the_queue(game, monkeypatch, breaker_clock):
+    """開爐首次取名：交給模型的預算從 A 段算起，扣掉排隊等掉的時間（Review Focus 4）。"""
+    queue = llm_queue.LlmQueue(slots=1, bot_cap=1)
+
+    def queued(owner, job, *, fallback, bot=False, wait=30.0):
+        breaker_clock[0] += 45  # 排了 45 秒才輪到
+        return job()
+
+    monkeypatch.setattr(queue, "run", queued)
+    monkeypatch.setattr(server, "QUEUE", queue)
+    monkeypatch.setattr(Game, "forge_request", lambda self, art, insights, **kwargs: "單子")
+    budgets = []
+    monkeypatch.setattr(
+        server.naming, "generate",
+        lambda client, content, request, *, budget, person: budgets.append(budget) or ("名字", "說明"),
+    )
+    assert server.prepare_forge(game, None, []) == ("名字", "說明")
+    assert budgets == [pytest.approx(server.CONTENT.config.naming_budget_seconds - 45)]
+
+
+def test_the_big_fight_budget_counts_the_time_spent_in_the_queue(game, monkeypatch, breaker_clock):
+    """大場面判讀：跟開爐取名一樣，預算從 A 段算起、扣掉排隊的時間；排太久預算就是 0（judge 分不到一趟就不叫）。"""
+    game.state.pending_event = "kou_boss"
+    budgets = []
+
+    def judge(client, request, swing, budget=None):
+        budgets.append(budget)
+        return FIGHT_JUDGMENT
+
+    for waited in (45, 75):
+        _slow_queue(monkeypatch, breaker_clock, waited)
+        with mock.patch.object(server.fight_llm, "judge", side_effect=judge):
+            fight = server.prepare_fight(game, "choice:0")
+        assert isinstance(fight, fight_llm.PreparedFight) and fight.judgment == FIGHT_JUDGMENT
+    assert budgets == [pytest.approx(server.CONTENT.config.big_fight_budget_seconds - 45), 0.0]
+
+
+def test_the_dialogue_budget_counts_the_time_spent_in_the_queue(game, monkeypatch, breaker_clock):
+    """對話生成跟開爐、大場面一樣有總預算（Config.dialogue_budget_seconds，PM 2026-10-06）：從 A 段算起、扣掉排隊的時間，
+    交給模型的是複本，逾時是剩下的一半（chat_structured 一次最多送兩趟）；原本那個 client 不動。"""
+    _stand_by_a_figure(game)
+    _slow_queue(monkeypatch, breaker_clock, 45)
+    seen = []
+
+    def generate(client, messages):
+        seen.append(client)
+        return DIALOGUE_TURN
+
+    monkeypatch.setattr(companion_agent, "generate_turn", generate)
+    prepared = server.prepare_dialogue(game, "act:socialize")
+    config = server.CONTENT.config
+    assert prepared.turn is DIALOGUE_TURN
+    assert len(seen) == 1 and seen[0] is not game.client
+    assert seen[0].timeout == pytest.approx((config.dialogue_budget_seconds - 45) / 2)
+    assert game.client.timeout == config.ollama_timeout
+
+
+def test_a_dialogue_that_waited_out_its_budget_is_cancelled_without_asking_the_model(game, monkeypatch, breaker_clock):
+    _stand_by_a_figure(game)
+    _slow_queue(monkeypatch, breaker_clock, server.CONTENT.config.dialogue_budget_seconds + 1)
+    monkeypatch.setattr(companion_agent, "generate_turn", lambda *args: pytest.fail("預算用完了，不該叫模型"))
+    prepared = server.prepare_dialogue(game, "act:socialize")
+    assert prepared.turn is None and (prepared.option_id, prepared.companion_id) == ("act:socialize", "luzhi")
+
+
+def test_the_free_text_budget_counts_the_time_spent_in_the_queue(game, at_a_gamble, monkeypatch, breaker_clock):
+    """隨口應對的評分也有總預算（Config.free_text_budget_seconds）：扣掉排隊的時間；排太久就不叫、直接是保底的 40。"""
+    rates, timeouts = [], []
+    real = Game.answer_event
+    monkeypatch.setattr(
+        Game, "answer_event", lambda self, request, llm_rate=None: rates.append(llm_rate) or real(self, request, llm_rate),
+    )
+
+    def assess(client, event, text):
+        timeouts.append(client.timeout)
+        return 85
+
+    for waited in (45, 61):
+        _slow_queue(monkeypatch, breaker_clock, waited)
+        game.state.pending_event = at_a_gamble.id
+        open_characters().save(game.state)
+        with mock.patch.object(server.event_llm, "assess_event_success_rate", side_effect=assess):
+            server.answer_event(game, "大喊官兵來了")
+    assert timeouts == [pytest.approx((server.CONTENT.config.free_text_budget_seconds - 45) / 2)]  # 第二次排太久，沒叫
+    assert rates == [85, server.event_llm.DEFAULT_FREE_TEXT_SUCCESS_RATE]
+    assert game.client.timeout == server.CONTENT.config.ollama_timeout
+
+
+# 五個呼叫點：dialogue 對話生成、fight 大場面判讀、forge 開爐取名、score 隨口應對評分、narrate 隨口應對潤色
+# （最後兩個是同一個請求 server.answer_event 的 B、D 段）。
+SITES = ["dialogue", "fight", "forge", "score", "narrate"]
+GAMBLE_NARRATION = "你扯開嗓子一喊。"
+
+
+def _ready(site, monkeypatch):
+    """讓一個角色站在 site 那一件鎖外模型呼叫會被叫到的地方，模型換成假的（記下每一次拿到的 client 與預算、回固定的結果）。
+    回傳（這個角色的 Game、做那件事的函式、模型被叫到的紀錄 [dict]）。"""
+    seen = []
+    if site == "dialogue":
+        game = Game.new(server.CONTENT, "測試")
+        _stand_by_a_figure(game)
+
+        def generate(client, messages):
+            seen.append({"kind": "dialogue", "client": client})
+            return DIALOGUE_TURN
+
+        monkeypatch.setattr(companion_agent, "generate_turn", generate)
+        return game, lambda: server.choose(game, "act:socialize"), seen
+    if site == "fight":
+        game = Game.new(server.CONTENT, "測試")
+        game.state.pending_event = "kou_boss"
+
+        def judge(client, request, swing, budget=None):
+            seen.append({"kind": "fight", "client": client, "budget": budget})
+            return FIGHT_JUDGMENT
+
+        monkeypatch.setattr(server.fight_llm, "judge", judge)
+        return game, lambda: server.choose(game, "choice:0"), seen
+    if site == "forge":
+        game = _forger()
+
+        def generate(client, content, request, *, budget, person):
+            seen.append({"kind": "forge", "client": client, "budget": budget})
+            return "旋風腿", "一句話。"
+
+        monkeypatch.setattr(server.naming, "generate", generate)
+        return game, lambda: server.forge(game, "jichu_quanjiao", ["feng"]), seen
+    from tianxia.models import Effect, FreeTextChoice
+
+    game = Game.new(server.CONTENT, "測試")
+    game.rng = random.Random(0)
+    event = next(iter(server.CONTENT.events.values()))
+    monkeypatch.setattr(event, "free_text", FreeTextChoice(
+        prompt="自己想辦法……", stat="str", effect=Effect(text="成了。"), fail_effect=Effect(text="砸了。"),
+    ))
+    game.state.pending_event = event.id
+    open_characters().save(game.state)
+    real = Game.answer_event
+
+    def answer(self, request, llm_rate=None):
+        seen.append({"kind": "rate", "rate": llm_rate})
+        return real(self, request, llm_rate)
+
+    def assess(client, event, text):
+        seen.append({"kind": "score", "client": client})
+        return 85
+
+    def narrate(client, event, text, success, effect_text):
+        seen.append({"kind": "narrate", "client": client})
+        return GAMBLE_NARRATION
+
+    monkeypatch.setattr(Game, "answer_event", answer)
+    monkeypatch.setattr(server.event_llm, "assess_event_success_rate", assess)
+    monkeypatch.setattr(server.event_llm, "narrate_event_gamble", narrate)
+    return game, lambda: server.answer_event(game, "大喊官兵來了"), seen
+
+
+def _asked(seen, kind):
+    return [s for s in seen if s["kind"] == kind]
+
+
+@pytest.mark.parametrize("site", SITES)
+def test_with_the_queue_off_each_site_asks_the_model_directly(site, monkeypatch, breaker_clock):
+    """開關關著（llm_queue_slots = 0）：沒有佇列，五個呼叫點直接叫模型。拿到的 client 與預算照現在的樣子：開爐、大場面、潤色拿
+    game.client 本身（預算在 naming／fight_llm 裡再分）；對話與隨口應對的評分是 PM 2026-10-06 加的總預算，拿預算複本（逾時是
+    預算的一半、原本那個 client 不動）。"""
+    assert server.QUEUE is None
+    monkeypatch.setattr(llm_queue.LlmQueue, "run", lambda *args, **kwargs: pytest.fail("開關關著，不該碰佇列"))
+    game, run, seen = _ready(site, monkeypatch)
+    run()
+    config = server.CONTENT.config
+    if site == "dialogue":
+        [asked] = _asked(seen, "dialogue")
+        assert asked["client"] is not game.client and asked["client"].timeout == config.dialogue_budget_seconds / 2
+        assert game.state.player.pending_companion == "luzhi"
+    elif site == "fight":
+        [asked] = _asked(seen, "fight")
+        assert asked["client"] is game.client and asked["budget"] == config.big_fight_budget_seconds
+        assert game.state.battles[0].narration in (FIGHT_JUDGMENT.winning, FIGHT_JUDGMENT.losing)
+    elif site == "forge":
+        [asked] = _asked(seen, "forge")
+        assert asked["client"] is game.client and asked["budget"] == config.naming_budget_seconds
+        assert open_world().lookup_recipe(FIST_FENG).name == "旋風腿"
+    elif site == "score":
+        [asked] = _asked(seen, "score")
+        assert asked["client"] is not game.client and asked["client"].timeout == config.free_text_budget_seconds / 2
+        assert _asked(seen, "rate") == [{"kind": "rate", "rate": 85}]
+    else:
+        [asked] = _asked(seen, "narrate")
+        assert asked["client"] is game.client
+        assert game.state.journal[0].lines[1] == GAMBLE_NARRATION
+    assert game.client.timeout == config.ollama_timeout and game.client.retry is True
+
+
+@pytest.mark.parametrize("site", SITES)
+def test_a_queue_that_will_not_take_the_job_gives_each_site_its_old_fallback(site, monkeypatch):
+    """佇列開著、這一件拿到退路（輪不到超時、同一個人已經有一件、假人滿了）：模型一次都沒叫，結果跟現在模型叫不動時一模一樣
+    ——對話取消（不扣體力）、大場面照打（優勢 0）、開爐走退路字表、隨口應對評分 40、潤色不插句子。"""
+    queue = _FullQueue()
+    monkeypatch.setattr(server, "QUEUE", queue)
+    game, run, seen = _ready(site, monkeypatch)
+    stamina = game.state.player.stamina
+    run()
+    config = server.CONTENT.config
+    assert [_asked(seen, k) for k in ("dialogue", "fight", "forge", "score", "narrate")] == [[]] * 5
+    owner = game.state.player.name.casefold()
+    assert queue.calls == [(owner, False, config.llm_queue_wait_seconds)] * (2 if site in ("score", "narrate") else 1)
+    if site == "dialogue":
+        assert game.state.player.pending_companion is None and game.state.player.stamina == stamina
+        assert game.state.journal[0].lines == ["盧植似乎無心多談，你只好先行告辭。"]
+    elif site == "fight":
+        record = game.state.battles[0]
+        assert record.opponent == "波才" and record.narration == "" and record.rounds
+    elif site == "forge":
+        assert open_world().lookup_recipe(FIST_FENG).name == naming.fallback_name(server.CONTENT, FIST_FENG, "武學")
+    elif site == "score":
+        assert _asked(seen, "rate") == [{"kind": "rate", "rate": server.event_llm.DEFAULT_FREE_TEXT_SUCCESS_RATE}]
+    else:
+        assert GAMBLE_NARRATION not in game.state.journal[0].lines
+
+
+def test_model_call_never_runs_while_the_action_lock_is_held(game, monkeypatch):
+    """鎖外的模型呼叫才排隊：握著行動鎖等模型佇列，全服玩家與假人都跟著等。model_call 在鎖裡被叫到就直接丟 RuntimeError
+    （跟 _model_guard 一樣的做法），開關開著關著都一樣——一個還沒打開的佇列也不該被當成可以在鎖裡叫模型的理由。"""
+    real = llm_queue.LlmQueue(slots=1, bot_cap=1)
+    for queue in (None, real):
+        monkeypatch.setattr(server, "QUEUE", queue)
+        with game.world.action_lock():
+            with pytest.raises(RuntimeError, match="行動鎖"):
+                server.model_call(game, lambda: pytest.fail("不該叫"), fallback="退路")
+        assert server.model_call(game, lambda: "放掉鎖之後就行", fallback="退路") == "放掉鎖之後就行"
+    assert real.snapshot() == {"running": 0, "waiting": 0, "bots_waiting": 0}
+
+
+def test_only_the_out_of_lock_steps_enter_the_model_queue():
+    """靜態檢查：server.py 裡只有鎖外的四個函式（對話備料、大場面備料、開爐備料、隨口應對）呼叫 model_call；請求的鎖內段落（act、look、
+    _locked）與排程（world_step）都不碰它。tianxia/（引擎，鎖內的 _quick_client 在那裡）沒有人 import llm_queue
+    （Config 的三個開關欄位 llm_queue_* 是設定，不算）。"""
+    assert _users_in_server("model_call") == {"prepare_dialogue", "prepare_fight", "prepare_forge", "answer_event"}
+    assert _users_in_server("QUEUE") == {None, "model_call", "main"}  # 宣告、讀、main() 建佇列
+    importers = [
+        p.name for p in (server.ROOT / "tianxia").glob("*.py")
+        if re.search(r"^\s*(import|from)\s+llm_queue\b", p.read_text(encoding="utf-8"), re.M)
+    ]
+    assert importers == []
+
+
+def test_in_lock_model_calls_and_the_scheduler_never_wait_in_the_queue(game, monkeypatch):
+    """鎖內的小呼叫（Game._quick_client）與排程（world_step）照現在的 15 秒上限與斷路器，不進佇列：佇列開著也一樣。"""
+    queue = _FullQueue()
+    monkeypatch.setattr(server, "QUEUE", queue)
+    sent = []
+    monkeypatch.setattr(OllamaClient, "chat_text", lambda self, messages, **kwargs: sent.append(self.timeout) or "好")
+    server.act(game, _ask_the_model_in_the_lock)
+    assert sent == [server.CONTENT.config.in_lock_model_timeout]  # 鎖內真的叫了模型（短逾時的複本）
+    server.world_step()
+    assert queue.calls == []
+
+
+def test_the_forge_endpoint_goes_through_a_real_queue(client, monkeypatch):
+    """佇列開著、端對端（HTTP → 開爐 → 排隊 → 模型取名 → 登記）：名字是模型取的，做完佇列是空的。"""
+    queue = llm_queue.LlmQueue(slots=1, bot_cap=1)
+    monkeypatch.setattr(server, "QUEUE", queue)
+    _a_player_with_insights(client)
+    asked = []
+    with _model(lambda model, messages: asked.append(queue.snapshot()) or "旋風腿"):
+        out = client.post("/api/menxia/forge", json={"art": "jichu_quanjiao", "insights": ["feng"]})
+    assert out.status_code == 200 and "旋風腿" in out.json()["message"]
+    assert asked == [{"running": 1, "waiting": 0, "bots_waiting": 0}]  # 模型叫的時候，這一件正在佇列裡跑
+    assert queue.snapshot() == {"running": 0, "waiting": 0, "bots_waiting": 0}
+
+
+def test_make_queue_and_the_startup_line_follow_the_switch(monkeypatch):
+    config = server.CONTENT.config
+    assert server.make_queue(config) is None and "模型佇列：關" in server.queue_line(config)
+    monkeypatch.setattr(config, "llm_queue_slots", 2)
+    monkeypatch.setattr(config, "llm_queue_bot_cap", 1)
+    monkeypatch.setattr(config, "llm_queue_wait_seconds", 20)
+    queue = server.make_queue(config)
+    assert (queue.slots, queue.bot_cap) == (2, 1)
+    assert server.queue_line(config) == "模型佇列：同時 2 件，假人最多 1 件，排超過 20 秒就用退路"
+
+
+def test_main_builds_the_queue_only_when_switched_on(capsys, monkeypatch):
+    """啟動時在設定那一行後面印佇列開了沒有；關著（預設）不建佇列，開著就建一個（Config 三個欄位）。"""
+    import uvicorn
+
+    monkeypatch.setattr(uvicorn, "run", lambda *args, **kwargs: None)
+    server.main([])
+    assert "模型佇列：關（鎖外的模型呼叫照舊直接叫）" in capsys.readouterr().out
+    assert server.QUEUE is None
+    monkeypatch.setattr(server.CONTENT.config, "llm_queue_slots", 2)
+    server.main([])
+    assert "模型佇列：同時 2 件" in capsys.readouterr().out
+    assert isinstance(server.QUEUE, llm_queue.LlmQueue) and server.QUEUE.slots == 2
