@@ -1893,3 +1893,22 @@ def test_guide_ack_closes_the_outro(client):
     assert client.get("/api/main").json()["guide"]["end"] is True
     client.post("/api/do/guide_ack", json={})
     assert client.get("/api/main").json()["guide"] is None
+
+
+def test_timetable_finale_row_shows_the_ending_title(client, monkeypatch):
+    """FB-051：收季之後，時刻表季末那一列寫結局的標題（豪強坐大），不是結局 id。"""
+    game = _season_one_admin(client, monkeypatch)
+    client.post("/api/do/end_season", json={})
+    rows = client.get("/api/admin").json()["timetable"]
+    finale = next(r for r in rows if r["id"] == "xiaquyang")
+    ending = game.world.get_season().ending_id
+    title = next(e.title for e in server.CONTENT.scenario.endings if e.id == ending)
+    assert finale["result"] == title and ending not in finale["result"]
+
+
+def test_admin_choices_say_whether_the_next_season_has_a_timetable(client, monkeypatch):
+    """FB-050：「開啟下一季」的問句要提醒排時間——下一季會照第一季的規則開（開關開著）時，/api/admin 說一聲。"""
+    _admin(client, monkeypatch)
+    assert client.get("/api/admin").json()["next_has_timetable"] is False
+    monkeypatch.setattr(server.CONTENT.config, "season_one", True)
+    assert client.get("/api/admin").json()["next_has_timetable"] is True

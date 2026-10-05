@@ -371,6 +371,8 @@ def admin_choices(game: Game) -> dict:
         # 照開關：關著時不列第一季才有的線；開著時不列黃巾聲勢（由三條戰線合成，不能直接推）
         "trends": [{"label": t.name, "id": t.id} for t in CONTENT.scenario.trends if rules.pushable(CONTENT, world, t.id)],
         **timetable_choices(game),
+        # 下一季會照第一季的規則開（開關開著）：「開啟下一季」的問句也提醒排三場大戲與季末的時間（FB-050）
+        "next_has_timetable": bool(CONTENT.config.season_one),
     }
 
 
@@ -385,6 +387,11 @@ def _result_label(key: str) -> str:
         if key.startswith(prefix):
             return side + key[len(prefix):]
     return key
+
+
+def _ending_title(ending_id: str) -> str:
+    """季末那一列的結果：時間軸記的是結局 id（world._finale），寫結局的標題（FB-051）。"""
+    return next((e.title for e in CONTENT.scenario.endings if e.id == ending_id), ending_id)
 
 
 def _done_label(key: str) -> str:
@@ -409,7 +416,8 @@ def timetable_choices(game: Game) -> dict:
         rows.append({
             "id": row["id"], "label": f"第{row['week']}週　{row['title']}",
             "state": row["state"], "state_text": TIMETABLE_STATES[row["state"]],
-            "result": _done_label(row["result"]) if row["result"] else None,
+            "result": (_ending_title(row["result"]) if row["kind"] == "finale" else _done_label(row["result"]))
+            if row["result"] else None,
             "schedulable": row["schedulable"],
             "at_real": now + (row["when"] - world.time) / CONTENT.config.time_scale if row["schedulable"] else None,
         })
