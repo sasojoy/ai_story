@@ -1124,6 +1124,8 @@ class OrderWhen(_Strict):
     losing_by：戰線偏向對方超過多少（官軍：戰況 ≥ 50＋n；黃巾：≤ 50－n）。
     or_enemy_siege：或者敵方上週在這條戰線達成了攻城（守城）。
     event_within_weeks：這條戰線的下一件時刻表大事在幾週內（季曆）。
+    opening_fronts：第 1 週（開局週）這幾條戰線不看局勢也發：開局的戰況官軍都不吃緊，守城發不出來，新手第一週就沒有一道
+    走得到的軍令（FB-054）；只在第 1 週放寬，之後照舊看局勢。
     always：每週固定一道（豪強的打擊）。"""
 
     front_min: int | None = None
@@ -1131,6 +1133,7 @@ class OrderWhen(_Strict):
     losing_by: int | None = None
     or_enemy_siege: bool = False
     event_within_weeks: float | None = None
+    opening_fronts: list[str] = Field(default_factory=list)
     always: bool = False
 
 
