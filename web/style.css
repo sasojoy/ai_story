@@ -333,6 +333,17 @@ details.fold.bulletin > .fold-body { border-color: var(--gold); max-height: 50vh
 .list .art-body > :first-child { margin-top: 0; }
 .list .art-body .btn { border: 1px solid var(--accent); margin-top: 10px; }
 .list .art-body .btn::after { content: none; }
+/* 「服下破境丹」勾選框：預設不勾，整列都是觸控目標（至少 44px 高）；放在修練鈕那一排上面，不擠進按鈕列 */
+.art-body .legend { display: flex; align-items: center; gap: 10px; min-height: 44px; margin-top: 8px; font-size: 14px; cursor: pointer; }
+.art-body .legend input { width: 20px; height: 20px; flex: none; margin: 0; accent-color: var(--accent); }
+/* 修練頁的意境：一列一個，左邊名字、屬性與模型寫的一句話，右邊「化成心得」 */
+.insights { display: grid; gap: 8px; margin-bottom: 12px; }
+.insight { display: flex; align-items: center; justify-content: space-between; gap: 10px; border: 1px solid var(--line); background: var(--card); border-radius: 12px; padding: 8px 10px; }
+.insight > div { min-width: 0; overflow-wrap: anywhere; }
+.insight b { font-weight: 600; font-size: 14px; }
+.insight small { margin-left: 6px; color: var(--ink-2); font-size: 12px; }
+.insight p { margin: 2px 0 0; color: var(--ink-2); font-size: 12px; }
+.insight .btn { flex: none; }
 
 /* ── 煉製 ── */
 .chips { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; margin-bottom: 12px; }
@@ -343,12 +354,12 @@ details.fold.bulletin > .fold-body { border-color: var(--gold); max-height: 50vh
 .chip.r3 { border-color: var(--gold); background: color-mix(in srgb, var(--gold) 10%, var(--card)); }
 .chip.used { opacity: 0.4; }
 .chip .n { float: right; font-size: 12px; color: var(--ink-2); }
-/* 煉製頁素材旁的「伏筆物品」：只列名字與數量，不能點，比素材的格子矮、排得密，手機上不把開爐擠出第一屏 */
+/* 煉製頁武學與意境旁的「伏筆物品」：只列名字與數量，不能點，比武學的格子矮、排得密，手機上不把開爐擠出第一屏 */
 .chips.clues { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 6px; }
 .clue { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; border: 1px dashed var(--line); background: var(--card); border-radius: 10px; padding: 5px 10px; font-size: 13px; }
 .clue b { font-weight: 600; }
 .clue span { color: var(--ink-2); font-size: 12px; }
-/* 煉製頁的「開爐煉製」與輿圖的步行／趕路／疾行排在內容裡、不黏在底部（FB-048）：黏著時會蓋住底下的字 */
+/* 煉製頁的「開爐」與輿圖的步行／趕路／疾行排在內容裡、不黏在底部（FB-048）：黏著時會蓋住底下的字 */
 .act-row { margin-bottom: 12px; }
 .travel-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 10px 0 12px; }
 .travel-row .btn:first-child { grid-column: 1 / -1; }
@@ -453,7 +464,7 @@ details.fold.bulletin > .fold-body { border-color: var(--gold); max-height: 50vh
   .page { padding-top: 16px; }
 }
 
-/* ── 太極火爐（煉製頁）：外圈火舌明滅，太極在爐裡慢慢轉，左右兩格放素材；開爐等結果時整座爐子晃動 ── */
+/* ── 太極火爐（煉製頁）：外圈火舌明滅，太極在爐裡慢慢轉，左右兩格放武學與意境；開爐等結果時整座爐子晃動 ── */
 .furnace-wrap { width: 100%; max-width: 250px; margin: 4px auto 10px; aspect-ratio: 1; }
 .wheel { width: 100%; height: 100%; display: block; overflow: visible; touch-action: manipulation; -webkit-user-select: none; user-select: none; }
 .wheel text { text-anchor: middle; dominant-baseline: central; pointer-events: none; }

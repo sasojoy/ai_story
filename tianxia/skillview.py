@@ -130,21 +130,6 @@ def insight_rows(state: GameState, content: Content, world: WorldStateStore) -> 
     return rows
 
 
-def art_library(state: GameState, content: Content, world: WorldStateStore) -> list[tuple[str, str]]:
-    """功法庫（煉出來但沒配上身的）：（顯示文字, 功法 id），給「改練」的選單用。
-
-    跟底下的 `library()` 不是同一件事：那個列的是「目前配在身上、可以鍛鍊的」兩門。
-    """
-    out = []
-    for art_id in state.player.arts:
-        art = team.player_art(state, content, world, art_id)
-        if art is None:
-            continue
-        level = state.player.art_levels.get(art_id, 1)
-        out.append((f"{art.kind}　{art.name}（{art.quality}・屬{art.attribute}）第{level}成", art_id))
-    return out
-
-
 def bag_text(state: GameState, content: Content) -> str:
     """背包：隨身帶著的材料（糧草、伏筆要用），階高的排前面。"""
     items = materials.bag_contents(state, content)
@@ -157,6 +142,8 @@ def bag_text(state: GameState, content: Content) -> str:
         for m, n in items
     ]
     if pills > 0:  # 傳奇道具破境丹（企劃者 2026-10-05）：不是材料，列在最後
+        if items:  # 材料那行標題寫「材料，分三階」：丹接在底下會被當成材料，另起小標題（空行隔開，標題才不會併進上一項）
+            lines += ["", "**傳奇道具**"]
         lines.append(f"- {content.config.legend_item_name} ×{pills}　{content.config.legend_item_note}")
     return "\n".join(lines)
 

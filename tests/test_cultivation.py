@@ -397,7 +397,8 @@ def test_after_a_rename_the_name_shows_everywhere_and_the_id_still_keys(state, c
     # 顯示：新名字
     assert team.resolve_art("旋風腿", content, world).name == "風神腿"
     assert team.player_art(state, content, world, "旋風腿").name == "風神腿"
-    assert [label for label, _ in skillview.art_library(state, content, world)] == ["武學　風神腿（絕學・屬快）第1成"]
+    (row,) = [r for r in skillview.art_rows(state, content, world) if r["id"] == "旋風腿"]
+    assert (row["name"], row["quality"], row["attribute"], row["level"]) == ("風神腿", "絕學", "快", 1)
     assert "【風神腿】" in fusion.fuse_problem(state, content, world, "basic_fist", "feng")  # 「已經有了」認 id、說新名字
     # 認東西：還是 id
     assert "旋風腿" in library.owned_arts(state) and state.player.art_quality == {"旋風腿": "絕學"}

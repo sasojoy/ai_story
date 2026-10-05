@@ -2681,9 +2681,6 @@ class Game:
             self._save_season()
         return msgs
 
-    def art_library(self) -> list[tuple[str, str]]:
-        return skillview.art_library(self.state, self.content, self.world)
-
     def switch_art(self, art_id: str) -> list[str]:
         """改練：把功法庫裡的一門換上身（見 team.switch_art）。"""
         if self._preparing():

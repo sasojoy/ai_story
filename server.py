@@ -39,7 +39,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from markdown_it import MarkdownIt
 
-from tianxia import companion_agent, event_llm, foreshadow, materials, rules, server_bots, team, timetable
+from tianxia import companion_agent, event_llm, foreshadow, rules, server_bots, team, timetable
 from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, AccountStore, normalize
 from tianxia.content import PROFILE_ENV, load_content, profile_line
 from tianxia.characters import open_characters
@@ -289,6 +289,7 @@ def main_view(game: Game) -> dict:
 def menxia_view(game: Game, person: str | None = None) -> dict:
     """修練與煉製兩頁的資料（同一份：心得、名冊、背包、功法庫都兩邊用得到）。person 是名冊裡點的人。"""
     lines = game.roster_lines()
+    person = None if person is None else str(person)  # 客戶端寫的：JSON 清單之類不能拿去查集合（unhashable → 500）
     if person not in {key for _, key in lines}:
         person = None
     member = game.state.player.member
@@ -307,11 +308,7 @@ def menxia_view(game: Game, person: str | None = None) -> dict:
         "person_card": md(game.member_card(person)) if person else None,
         "on_team": person is not None and person in game.state.player.team,
         "bag": md(game.bag_text()),
-        "materials": [
-            {"id": m.id, "name": m.name, "tier": materials.tier_label(m), "rank": m.tier, "attribute": m.attribute, "count": n}
-            for m, n in materials.bag_contents(game.state, game.content)
-        ],
-        # 素材旁的「伏筆物品」：開關開著、這一季蓋了章、手上有才有東西，沒有就是空的（畫面整塊不出現）。只有名字與數量
+        # 背包旁的「伏筆物品」：開關開著、這一季蓋了章、手上有才有東西，沒有就是空的（畫面整塊不出現）。只有名字與數量
         "clue_items": [
             {"id": item.id, "name": item.name, "count": n} for item, n in foreshadow.held_items(game.state, game.content)
         ],
@@ -324,7 +321,6 @@ def menxia_view(game: Game, person: str | None = None) -> dict:
              "price": team.practice_price(game.content, level[k]) if learned[k] and level[k] < team.MAX_LEVEL else None}
             for k in KINDS
         ],
-        "arts": [{"label": label, "id": aid, "card": md(game.art_detail(aid))} for label, aid in game.art_library()],
         "forge_line": md(game.forge_line(None, [])),
         # 武學與成長（修練頁、煉製頁）：持有數與上限、每門武學一列（身上的在前）、悟得的意境、等著取名的那一門
         "holdings": game.holdings(),
@@ -756,6 +752,7 @@ def api_menxia_do(op: str, request: Request, body: dict = Body(default={})):
         raise HTTPException(404)
     game = _game(request)
     person = body.get("person")
+    person = None if person is None else str(person)  # 客戶端寫的：清單之類不是字串的，下面查名冊會丟 TypeError
 
     def run(g: Game):
         # 名冊（誰是你的人）是全服狀態，換季、假人程式都會改：跟動作在同一把鎖裡核對，引擎才能假設那個人在名冊上

@@ -264,11 +264,20 @@ def test_bag_text_lists_the_legend_item_and_is_not_empty_because_of_it(state, co
     assert "煉" not in text and "爐" not in text and "素材" not in text  # PM 用語：不叫人拿東西去爐裡
 
 
-def test_bag_text_lists_materials_and_the_legend_item_together(state, content):
+def test_the_legend_item_gets_its_own_heading_so_it_is_not_read_as_a_material(state, content):
+    """材料那行標題寫「隨身帶著的材料，分凡品、靈品、天品三階」：破境丹不是材料，要有自己的小標題（空行隔開，
+    不然 markdown 會把標題當成上一項的接續行）。"""
     state.player.materials = {"gang_1": 2}
     state.player.legend_items = 2
     lines = skillview.bag_text(state, content).splitlines()
-    assert lines[1].startswith("- 精鐵砂 ×2") and lines[2] == PILL_LINE
+    assert lines[0].startswith("**背包**") and "材料" in lines[0]
+    assert lines[1].startswith("- 精鐵砂 ×2")
+    assert lines[2:] == ["", "**傳奇道具**", PILL_LINE]
+
+
+def test_the_legend_item_alone_sits_under_a_header_that_does_not_call_it_a_material(state, content):
+    state.player.legend_items = 2
+    assert skillview.bag_text(state, content).splitlines() == ["**背包**　隨身帶著的東西。", PILL_LINE]
 
 
 def test_bag_text_says_it_is_empty_only_when_there_is_nothing_at_all(state, content):
@@ -329,18 +338,6 @@ def test_forge_line_never_sends_you_to_the_furnace_with_materials(state, content
         assert "素材" not in skillview.forge_line(state, content, world, art_id, picked)
 
 
-def test_the_art_library_is_empty_at_first(state, content, world):
-    assert skillview.art_library(state, content, world) == []
-
-
-def test_the_art_library_lists_each_art_with_its_own_level(state, content, world):
-    art = _whirlwind(world)
-    state.player.arts.append(art.id)
-    state.player.art_levels[art.id] = 4
-    label, art_id = skillview.art_library(state, content, world)[0]
-    assert art_id == art.id and "第4成" in label and "武學" in label
-
-
 def test_the_level_bar_reads_at_a_glance():
     """手機上「第4成」要讀過才知道練到哪，十格條一眼就看得出還剩多少可練。"""
     assert skillview.level_bar(0) == "○" * 10
@@ -372,12 +369,17 @@ def test_the_players_card_library_and_detail_show_the_players_own_quality(state,
     assert f"第一成 {28 * art.base_power / 8:.1f}" in text  # 威力也照自己的品質（上品區間，保留這門的微調）
 
 
-def test_the_art_library_shows_the_players_own_quality(state, content, world):
+def test_the_art_rows_show_the_players_own_quality_and_level(state, content, world):
     art = _whirlwind(world)
     state.player.arts = ["旋風腿"]
-    assert skillview.art_library(state, content, world) == [(f"武學　旋風腿（下品・屬{art.attribute}）第1成", "旋風腿")]
+    state.player.art_levels["旋風腿"] = 4
+
+    def stored():
+        return next(r for r in skillview.art_rows(state, content, world) if r["id"] == "旋風腿")
+
+    assert (stored()["quality"], stored()["attribute"], stored()["level"]) == ("下品", art.attribute, 4)
     state.player.art_quality["旋風腿"] = "中品"
-    assert skillview.art_library(state, content, world) == [(f"武學　旋風腿（中品・屬{art.attribute}）第1成", "旋風腿")]
+    assert stored()["quality"] == "中品" and "中品" in stored()["card"]
 
 
 def test_a_companions_card_ignores_the_players_own_quality(state, content, world):

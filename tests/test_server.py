@@ -175,6 +175,19 @@ def test_menxia_view_falls_back_to_no_person_for_an_unknown_one(game):
     assert view["person"] is None and view["person_card"] is None
     assert view["roster"][0]["key"] == "player"
     assert "forge_line" in view and "per_craft" not in view and "craft_line" not in view
+    assert "materials" not in view and "arts" not in view  # 煉製頁不再列素材、修練頁不再從舊功法庫畫（改畫 owned_arts）
+
+
+def test_a_json_list_person_is_treated_as_nobody_not_a_500(client, game):
+    """名冊裡點的人是客戶端寫的：JSON 清單、數字之類不是字串的東西，一律當作沒點到人（以前 `in {…}` 會丟 TypeError → 500）。"""
+    for odd in (["follower:x"], [], 7, {"k": "v"}):
+        view = server.look(game, lambda g, odd=odd: server.menxia_view(g, odd))
+        assert view["person"] is None and view["person_card"] is None
+    _player(client)
+    out = client.post("/api/menxia/heal", json={"person": ["follower:x"]})
+    assert out.status_code == 200 and out.json()["menxia"]["person"] is None
+    out = client.post("/api/menxia/join", json={"person": ["nobody"]})
+    assert out.status_code == 400 and out.json() == {"error": "名冊裡沒有這個人。"}
 
 
 def _clue_items(game):
@@ -689,6 +702,24 @@ def test_the_old_craft_endpoints_are_gone(client):
     assert client.post("/api/craft_line", json={"materials": []}).status_code == 404
 
 
+def test_the_practice_and_furnace_pages_only_read_and_call_what_the_server_has(game):
+    """Task 12：修練頁、煉製頁（web/app.js）讀的欄位都要在 menxia_view 裡、叫的動作都要在 MENXIA_ACTIONS 裡；
+    舊煉製的端點、欄位、說法不再出現。網頁沒有測試框架，這條擋住「改了伺服器忘了改網頁」。"""
+    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    pages = js[js.index("function pagePractice"):js.index("// ── 輿圖 ──")]
+    keys = set(server.look(game, server.menxia_view))
+    assert {"owned_arts", "insights", "holdings", "naming", "slot_cards", "forge_line", "bag"} <= keys
+    assert set(re.findall(r"\bx\.(\w+)", pages)) <= keys
+    shown = js[js.index("const MENXIA_SHOWN"):]
+    shown = shown[:shown.index("};")]
+    assert set(re.findall(r'"(\w+)"', shown)) - {"practice", "craft"} <= keys  # 輪詢比對的欄位也都送得到
+    called = set(re.findall(r'\bmx\("(\w+)"', js)) | set(re.findall(r"/api/menxia/(\w+)", js)) | set(re.findall(r'data-act="mx" data-op="(\w+)"', js))
+    assert {"practice", "heal", "forge", "switch", "cultivate", "melt", "melt_insight", "name"} <= called
+    assert called <= set(server.MENXIA_ACTIONS), called - set(server.MENXIA_ACTIONS)
+    for gone in ("/api/craft_line", "/api/menxia/craft", "per_craft", "x.materials", "x.arts", "craftSel", "放入素材", "素材說明"):
+        assert gone not in js, gone
+
+
 def _a_player_with_insights(client, insights=("feng", "huo"), xinde=100):
     """新角色（開局送的兩門基礎武學在身上），悟得 insights、心得 xinde；存進資料庫（進鎖會重讀）。"""
     _player(client)
@@ -986,8 +1017,7 @@ def _library_art(name: str, note: str) -> MartialArt:
 
 def test_a_library_art_comes_with_its_card_and_note(client):
     _a_player_with_library_arts(client, _library_art("沉柳纏勁", "以柔勁纏住兵刃，<b>借力</b>卸力。"))
-    (item,) = client.get("/api/menxia").json()["arts"]
-    assert item["id"] == "沉柳纏勁"
+    (item,) = [r for r in client.get("/api/menxia").json()["owned_arts"] if r["id"] == "沉柳纏勁"]
     assert "【沉柳纏勁】" in item["card"] and "第1成" in item["card"]
     assert "以柔勁纏住兵刃，&lt;b&gt;借力&lt;/b&gt;卸力。" in item["card"]  # 模型寫的說明句也一律跳脫
 
@@ -995,7 +1025,7 @@ def test_a_library_art_comes_with_its_card_and_note(client):
 def test_a_library_art_without_a_note_leaves_no_blank_line(client):
     """退路字表取名的功法沒有說明句：整行省略，不出現 None、不留空的 <br> 行（FB-006 驗收）。"""
     _a_player_with_library_arts(client, _library_art("鐵柳纏勁", ""))
-    card = client.get("/api/menxia").json()["arts"][0]["card"]
+    card = next(r for r in client.get("/api/menxia").json()["owned_arts"] if r["id"] == "鐵柳纏勁")["card"]
     assert "None" not in card
     assert "<br />\n<br />" not in card and "<br />\n</p>" not in card
     assert card.rstrip().endswith("來源：自創（沈浪 所創）</p>")
