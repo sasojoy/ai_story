@@ -4,10 +4,10 @@ from __future__ import annotations
 import random
 from typing import Literal
 
-from . import foreshadow
+from . import foreshadow, team
 from .models import Choice, Content, Event, Location
-from .rules import check_condition, check_who, season_one_off
-from .state import GameState
+from .rules import check_chance, check_condition, check_gap, check_who, rate_words, season_one_off
+from .state import PLAYER, GameState
 from .world_state import WorldStateStore
 
 
@@ -108,7 +108,27 @@ def visible_choices(event: Event, state: GameState, content: Content | None = No
 
 
 def choice_label(choice: Choice, state: GameState, content: Content, world: WorldStateStore) -> str:
-    """有檢定的選項寫出由誰出手（不寫成功率）；其餘照原文。"""
-    if choice.check:
-        return f"{choice.text}（{check_who(choice.check, state, content, world)}）"
-    return choice.text
+    """有檢定的選項寫出看哪一項屬性與成算（企劃者 2026-10-05：玩家要知道為什麼有時拉得開、有時拉不開），
+    同伴出手時前面寫是誰、本人檢定寫「本人」（同伴幫不上忙）；其餘照原文。"""
+    check = choice.check
+    if check is None:
+        return choice.text
+    stat = content.config.stat_names.get(check.stat, check.stat)
+    rate = rate_words(round(check_chance(check, state, content, world) * 100))
+    who = check_who(check, state, content, world)
+    parts = [stat, rate] if who == "本人出手" else [who, stat, rate]
+    return f"{choice.text}（{'・'.join(parts)}）"
+
+
+def choice_hint(choice: Choice, state: GameState, content: Content, world: WorldStateStore) -> str:
+    """有檢定的選項底下那一句人物心聲（content/check_voice.json，依屬性減難度分檔）；沒有檢定或沒寫心聲是空字串。"""
+    check = choice.check
+    bands = content.check_voice.bands
+    if check is None or not bands:
+        return ""
+    gap = check_gap(check, state, content, world)
+    band = next((b for b in bands if gap >= b.min_gap), bands[-1])
+    line = band.lines.get(check.stat) or band.lines.get("default", "")
+    key = team.check_actor(state, content, world, check)
+    who = "你" if key == PLAYER else team.member_name(state, content, key)
+    return line.replace("{who}", who)
