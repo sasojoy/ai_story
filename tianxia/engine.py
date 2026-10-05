@@ -15,8 +15,8 @@ from pydantic import BaseModel
 
 from . import (
     atlas, battle_instance, battlelog, calendar, companion_agent, cultivation, defection, encounter, event_llm, fight_llm,
-    figures, flavor, foreshadow, front_lines, fusion, insights, journal, library, materials, naming, orders, push, ranks,
-    roster, rounds, skillview, team, timetable,
+    figures, flavor, foreshadow, front_lines, fusion, insights, journal, library, materials, naming, opportunities, orders,
+    push, ranks, roster, rounds, skillview, team, timetable,
 )
 from . import events as event_rules  # note_round 走模組屬性（測試要能換掉它，確認只有 _present 會叫）
 from .events import (
@@ -421,6 +421,7 @@ class Game:
             talk_cost = c.config.talk_stamina
             opts = [self._cost_option(f"talk:{i}", text, talk_cost) for i, text in enumerate(dialogue_options)]
             opts += foreshadow.talk_options(s, c, s.player.pending_companion)  # 伏筆的片段：固定文字、不花體力（計畫 T7）
+            opts += opportunities.talk_options(s, c, s.player.pending_companion)  # 機緣的話題（正式版乙一）：不花體力
             opts.append(Option(id="talk:leave", label="告辭"))
             return opts
         if s.player.pending_faction:
@@ -1498,6 +1499,9 @@ class Game:
         if arg.startswith("clue:"):  # 伏筆的片段：固定文字，不經模型、不扣體力、不算對話輪數（計畫 T7）
             chain_id, _, index = arg.removeprefix("clue:").rpartition(":")
             heard = foreshadow.hear_talk(self.state, self.content, companion_id, chain_id, int(index), self.world)
+            return heard or ["（此刻無法這麼做。）"]
+        if arg.startswith("opp:"):  # 機緣的話題：固定文字，不經模型、不扣體力、不算對話輪數（正式版乙一）
+            heard = opportunities.hear_topic(self.state, self.content, companion_id, arg.removeprefix("opp:"))
             return heard or ["（此刻無法這麼做。）"]
         try:
             msgs = companion_agent.continue_dialogue(
