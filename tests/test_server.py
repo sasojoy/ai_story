@@ -868,6 +868,30 @@ def test_a_refused_name_keeps_what_the_player_typed_and_the_pill_tick_does_not_o
     assert "S.legendTick = {}" in _js_function(js, "async function goTab(")  # 回到修練頁時，破境丹的勾是真的沒勾
 
 
+def test_the_fight_card_shows_the_first_round_until_the_player_opens_the_rest():
+    """計畫三 Task 1、G6（暫定，等 PM／企劃者拍板）：「剛剛」的戰鬥卡片上「過程」只露第一回合、按「展開過程」才攤開，
+    其餘回合一回合一回合浮現；第一屏要留給剛剛、場景與整排行動（企劃者 2026-10-04）。戰報頁照樣整段列出。
+    網頁認的是伺服器把「**過程**」轉成的那段 HTML：兩邊對不上的話卡片會整段攤開、把行動擠出第一屏，這條擋住。"""
+    from tianxia import battlelog
+    from tianxia.state import BattleRecord, Fighter
+
+    record = BattleRecord(
+        id=1, time=0, location="湖邊", kind="train", opponent="水寇", ours=[Fighter(name="沈浪", level=1)], tier="大勝",
+        our_power=50, difficulty=10, rounds=["第1回合　甲。", "第2回合　乙。", "第3回合　丙。"],
+    )
+    html = server.md(battlelog.card_text(record))
+    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    css = (server.WEB / "style.css").read_text(encoding="utf-8")
+    mark = re.search(r'const ROUNDS_MARK = "([^"]*)";', js)
+    assert mark is not None and mark.group(1).replace("\\n", "\n") in html and html.count("<ul>") == 1
+    assert "roundsFold(m.card, m.card_id)" in _js_function(js, "function pageJianghu(")
+    assert "roundsFold" not in _js_function(js, "function pageNews(")  # 戰報頁整段列出
+    assert 'case "rounds-more"' in js and "S.roundsOpen = open ? S.main.card_id : null" in js
+    hidden = re.search(r"\.battle-card ul\.rounds:not\(\.open\) > li:not\(:first-child\) \{([^}]*)\}", css)
+    assert hidden is not None and "display: none" in hidden.group(1)
+    assert re.search(r"\.battle-card ul\.rounds > li:nth-child\(2\) \{ animation-delay: [\d.]+s; \}", css)
+
+
 def test_the_three_art_buttons_stay_on_one_line_at_phone_width():
     """修練／改練這一門／熔煉在 375px 手機寬度：頁邊 16、清單邊框 1、卡內邊 14（兩側）、三顆之間兩個 8px 的縫，一排可用 375-32-2-28-16=297px。
     原本三顆等寬各 99px，扣掉邊框 2 與內距 28，「改練這一門」（5 字 × 15px = 75px）只剩 69px 放不下而折行。

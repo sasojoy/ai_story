@@ -56,6 +56,7 @@
     mainKey: "",
     tab: "jianghu",
     nowOpen: null, // 江湖頁「剛剛」展開的那一則（記內容本身）；換成新的一則就收回（A4）
+    roundsOpen: null, // 江湖頁戰鬥卡片「過程」展開的那一場（戰報流水號）；換成新的一場就收回（計畫三 G6）
     boardOpen: null, // 江湖頁公告卡展開著的那一週（週次）；收起或換週就不再對得上（FB-039）
     ordersShut: null, // 江湖頁「本週軍令」收起來的那一週；換週就重新展開（計畫 T6）
     sceneOpen: false, // 在路上時場景那段說明展開著嗎（預設只露兩行，FB-055）；下了路就清掉
@@ -339,6 +340,21 @@
 
   // ── 江湖 ──
   const nowMore = (open) => (open ? "收起 ▴" : "展開全文 ▾");
+  const roundsMore = (open) => (open ? "收起過程 ▴" : "展開過程 ▾");
+
+  // 戰鬥卡片的「過程」（計畫三 Task 1、G6 暫定）：「剛剛」那張只露第一回合，按「展開過程」才攤開（其餘回合一回合一回合浮現，
+  // style.css 的 .rounds），第一屏要留給剛剛、場景與整排行動（企劃者 2026-10-04）；按鈕放在「過程」那一行的右邊，不多佔一行。
+  // 戰報頁照樣整段列出，不經過這裡。認的是伺服器把「**過程**」轉成的那段 HTML（server.md）；認不出來就整段照原樣
+  // （tests/test_server.py 擋住兩邊對不上）。展開記在 S.roundsOpen（記的是那一場的流水號），換成新的一場就自動收回
+  const ROUNDS_MARK = "<p><strong>過程</strong></p>\n<ul>";
+  function roundsFold(card, id) {
+    const at = card.indexOf(ROUNDS_MARK);
+    if (at < 0) return card;
+    const open = S.roundsOpen === id;
+    const more = `<button class="linkish rounds-more" data-act="rounds-more" aria-expanded="${open}">${roundsMore(open)}</button>`;
+    return card.slice(0, at) + `<p class="rounds-head"><strong>過程</strong>${more}</p>\n<ul class="rounds${open ? " open" : ""}">`
+      + card.slice(at + ROUNDS_MARK.length);
+  }
 
   // 「剛剛」那一則拆成敘事與數值變化（氣血 -96、黃巾聲勢 -2…，journal.card_html 放在 .tx-now 最後）：
   // 收合只收敘事，數值變化排在收合範圍外面，收著也看得到（W6 review Minor 2）
@@ -557,7 +573,7 @@
     const expanded = S.nowOpen === m.now;
     const [text, chips] = !m.card && m.now ? splitChips(m.now) : ["", ""];
     const now = m.card
-      ? `<div class="card battle-card">${m.card}${m.now || ""}
+      ? `<div class="card battle-card">${roundsFold(m.card, m.card_id)}${m.now || ""}
            ${m.card_id != null ? `<button class="linkish" data-act="report" data-id="${m.card_id}">看完整戰報 ›</button>` : ""}</div>`
       : m.now ? `<div class="now ${expanded ? "open" : "clamp"}${m.on_road ? " road" : ""}"><div class="now-text">${text}<button class="linkish now-more" data-act="now-more" aria-expanded="${expanded}">${nowMore(expanded)}</button></div>${chips}</div>` : "";
     const free = m.free_text != null
@@ -1393,6 +1409,16 @@
           box.classList.toggle("open", open);
           box.classList.toggle("clamp", !open);
           el.textContent = nowMore(open);
+          el.setAttribute("aria-expanded", String(open));
+          break;
+        }
+        case "rounds-more": {
+          // 同上，原地展開／收起；展開時其餘回合照 style.css 的延遲一回合一回合浮現
+          const list = el.closest(".battle-card").querySelector("ul.rounds");
+          const open = !list.classList.contains("open");
+          S.roundsOpen = open ? S.main.card_id : null;
+          list.classList.toggle("open", open);
+          el.textContent = roundsMore(open);
           el.setAttribute("aria-expanded", String(open));
           break;
         }
