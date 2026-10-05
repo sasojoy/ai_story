@@ -3,7 +3,7 @@ import pytest
 from tianxia.models import Check, Condition, Effect, FigureDef
 from tianxia.rules import (
     add_world_flags, apply_effect, audience_bar, can_meet, check_chance, check_condition, check_who, current_day,
-    learn_skill,
+    learn_skill, practice_line,
 )
 from tianxia.team import check_actor
 
@@ -78,6 +78,38 @@ def test_team_check_counts_level_growth(state, content, world):
     world.update_companion("mate", lambda p: setattr(p, "level", 2))  # 韓鐵身法 5 + 0.2
     assert check_actor(state, content, world, check) == "mate"
     assert check_chance(check, state, content, world) == pytest.approx(0.52)
+
+
+def test_practice_adds_one_point_per_ten_infamy_up_to_the_cap(state, content, world):
+    check = Check(stat="agi", difficulty=5, by="self", practice="evil")
+    for evil, chance in ((0, 0.5), (9, 0.5), (10, 0.6), (25, 0.7), (30, 0.8), (99, 0.8), (-20, 0.5)):
+        state.player.stats["evil"] = evil
+        assert check_chance(check, state, content, world) == pytest.approx(chance), evil
+
+
+def test_without_practice_infamy_does_not_help(state, content, world):
+    state.player.stats["evil"] = 30
+    assert check_chance(Check(stat="agi", difficulty=5, by="self"), state, content, world) == 0.5
+
+
+def test_practice_counts_when_choosing_who_acts(state, content, world):
+    state.player.team.append("mate")  # 本人臂力 5、韓鐵 6
+    state.player.stats["evil"] = 20  # 本人 5 + 2 熟練 > 韓鐵 6
+    check = Check(stat="str", difficulty=5, practice="evil")
+    assert check_actor(state, content, world, check) == "player"
+    assert check_chance(check, state, content, world) == pytest.approx(0.7)
+    state.player.stats["evil"] = 0  # 沒有熟練就照舊派韓鐵，而且他不吃本人的惡名
+    assert check_actor(state, content, world, check) == "mate"
+    assert check_chance(check, state, content, world) == pytest.approx(0.6)
+
+
+def test_practice_line_only_when_the_bonus_applies(state, content, world):
+    check = Check(stat="agi", difficulty=5, by="self", practice="evil")
+    state.player.stats["evil"] = 5
+    assert practice_line(check, state, content, world) == ""
+    state.player.stats["evil"] = 10
+    assert practice_line(check, state, content, world) == "這種事你幹得多了。"
+    assert practice_line(Check(stat="agi", difficulty=5, by="self"), state, content, world) == ""
 
 
 def test_self_check_is_always_the_player(state, content, world):

@@ -126,9 +126,11 @@ class CheckOutlook(NamedTuple):
 def check_outlook(check: Check, state: GameState, content: Content, world: WorldStateStore) -> CheckOutlook:
     """出手者的屬性每高於難度 1 點，成功率 +10%；範圍 5%～95%。
     擲骰（roll_check）與選項標籤上的出手者、屬性數值、心裡話（events.choice_label）都出自這一個函式，
-    所以標籤講的和實際擲出來的不會對不起來。"""
+    所以標籤講的和實際擲出來的不會對不起來。本人出手時數值含熟練加成（Check.practice，joy #15）。"""
     actor = team.check_actor(state, content, world, check)
     value = team.check_value(state, content, world, actor, check.stat)
+    if actor == PLAYER:
+        value += team.practice_bonus(state, content, check)
     return CheckOutlook(actor, value, min(0.95, max(0.05, 0.5 + (value - check.difficulty) * 0.1)))
 
 
@@ -139,6 +141,14 @@ def check_gap(check: Check, state: GameState, content: Content, world: WorldStat
 
 def check_chance(check: Check, state: GameState, content: Content, world: WorldStateStore) -> float:
     return check_outlook(check, state, content, world).chance
+
+
+def practice_line(check: Check, state: GameState, content: Content, world: WorldStateStore) -> str:
+    """吃到熟練加成時，選項底下可以補的一句心聲（例如「這種事你幹得多了。」）；沒吃到是空字串。"""
+    if team.check_actor(state, content, world, check) != PLAYER or team.practice_bonus(state, content, check) <= 0:
+        return ""
+    rule = content.config.practice_bonus[check.practice]
+    return rule.line.replace("{who}", "你")
 
 
 def roll_check(check: Check, state: GameState, content: Content, world: WorldStateStore, rng: random.Random) -> bool:

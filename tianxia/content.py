@@ -739,6 +739,9 @@ def validate(c: Content) -> None:
         for key in keys:
             need(key in valid, f"{where}：未知的{kind} {key}")
 
+    for kind in c.config.practice_bonus:  # 熟練加成看的是本人的名聲（善名、惡名、名望……），不是戰鬥屬性
+        need(kind in STATS and kind not in ("str", "agi", "con", "wis"), f"config.practice_bonus 的 {kind} 不是名聲類的屬性")
+
     faction_ids = [f.id for f in c.scenario.factions]
     item_ids = [item.id for item in c.foreshadows.items]
     counters_written: dict[str, str] = {}  # 伏筆計數 → 第一個寫它的地方（效果的 fs_counters）
@@ -970,6 +973,8 @@ def validate(c: Content) -> None:
                 known(cw, [ch.combat], c.squads, "敵方隊伍")
             if ch.check:
                 known(cw, [ch.check.stat], STATS, "屬性")
+                if ch.check.practice:
+                    known(cw, [ch.check.practice], c.config.practice_bonus, "熟練（config.practice_bonus）")
         read_marks_in(where, ev.text)
         if ev.free_text is not None:
             check_free_text(where, ev)

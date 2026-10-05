@@ -16,6 +16,7 @@
   "time_scale": 1.0,
   "season_days": 14,
   "season_one": false,
+  "practice_bonus": {"evil": {"per": 10, "cap": 3, "line": "這種事{who}幹得多了。"}},
   "train_stat_chance": 0.3,
   "train_event_chance": 0.3,
   "qiyu_weight_multiplier": 1.5,

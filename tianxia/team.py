@@ -47,7 +47,18 @@ def check_actor(state: GameState, content: Content, world: WorldStateStore, chec
     if check.by == "self" or check.stat not in COMBAT_STATS:
         return PLAYER
     keys = team_keys(state)
-    return max(keys, key=lambda k: member_stats(state, content, world, k)[check.stat])
+    bonus = practice_bonus(state, content, check)  # 本人的熟練也算進去：本人加上熟練比同伴強，就該本人出手
+    return max(keys, key=lambda k: member_stats(state, content, world, k)[check.stat] + (bonus if k == PLAYER else 0))
+
+
+def practice_bonus(state: GameState, content: Content, check) -> int:
+    """本人做這件事的熟練加成（Check.practice，例如惡名）：名聲每 per 點 +1，最多 +cap；沒寫 practice 是 0。
+    check 也可能是隨口應對（FreeTextChoice），它沒有 practice。"""
+    kind = getattr(check, "practice", None)
+    rule = content.config.practice_bonus.get(kind) if kind else None
+    if rule is None:
+        return 0
+    return min(rule.cap, max(0, int(state.player.stats.get(kind, 0))) // rule.per)
 
 
 def check_value(state: GameState, content: Content, world: WorldStateStore, key: str, stat: str) -> float:

@@ -2008,9 +2008,6 @@ class Game:
         is_repeat = event.id in self.state.player.seen_events
         self.state.pending_event = event.id
         self.state.player.seen_events.add(event.id)
-        # 每真的端出一次記一次（探索、交友、遊歷、召見、next_event 串接都走這裡）；抽事件時按次數壓低權重（events.event_weight）
-        seen = self.state.player.event_seen
-        seen[event.id] = seen.get(event.id, 0) + 1
         head = f"✦ 奇遇：{event.title}" if event.qiyu else f"【{event.title}】"
         text = fill_marks(event.text, self.state)
         if is_repeat:

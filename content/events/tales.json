@@ -38,7 +38,7 @@
         "text": "站起來替救棚的人說句話",
         "check": {
           "stat": "wis",
-          "difficulty": 6,
+          "difficulty": 4,
           "by": "self"
         },
         "effect": {
@@ -59,7 +59,7 @@
         "text": "陪說書人喝幾碗，套他段子的來歷",
         "check": {
           "stat": "con",
-          "difficulty": 6,
+          "difficulty": 4,
           "by": "self"
         },
         "effect": {
@@ -113,7 +113,7 @@
         "text": "湊過去聽兩個小吏怎麼說",
         "check": {
           "stat": "agi",
-          "difficulty": 5
+          "difficulty": 3
         },
         "effect": {
           "text": "你裝作等人，挨在牆邊聽了個大概：郡守怕得罪書院的名士，也怕洛陽來人查問，只好先壓著。",
@@ -132,7 +132,7 @@
         "text": "找個書院出身的士人，問他怎麼看",
         "check": {
           "stat": "wis",
-          "difficulty": 6,
+          "difficulty": 4,
           "by": "self"
         },
         "effect": {
@@ -196,7 +196,7 @@
         "text": "跟領頭的車夫掰腕子，贏了請他講仔細",
         "check": {
           "stat": "str",
-          "difficulty": 6
+          "difficulty": 4
         },
         "effect": {
           "text": "你把車夫的手腕按在案上，他哈哈大笑，把官道上哪幾個人靠得住、哪幾個靠不住一一說給你聽。",
@@ -249,7 +249,7 @@
         "text": "替漁戶們算一算，交米和砍繩哪個划算",
         "check": {
           "stat": "wis",
-          "difficulty": 6,
+          "difficulty": 4,
           "by": "self"
         },
         "effect": {
@@ -270,7 +270,7 @@
         "text": "幫漁戶把剛收的網扛回縣城",
         "check": {
           "stat": "con",
-          "difficulty": 5,
+          "difficulty": 3,
           "by": "self"
         },
         "effect": {
@@ -323,7 +323,7 @@
         "text": "替不識字的少年讀他收到的回信",
         "check": {
           "stat": "wis",
-          "difficulty": 5,
+          "difficulty": 3,
           "by": "self"
         },
         "effect": {
@@ -344,7 +344,7 @@
         "text": "跟少年們拚酒，替代筆的人爭個面子",
         "check": {
           "stat": "con",
-          "difficulty": 6,
+          "difficulty": 4,
           "by": "self"
         },
         "effect": {
@@ -398,7 +398,7 @@
         "text": "在人群裡問他：收留佃農的那些人，也算豪強嗎",
         "check": {
           "stat": "wis",
-          "difficulty": 7,
+          "difficulty": 6,
           "by": "self"
         },
         "effect": {
@@ -422,7 +422,7 @@
         "text": "幫道徒把糧車推進城，聽他私下怎麼說",
         "check": {
           "stat": "str",
-          "difficulty": 6
+          "difficulty": 5
         },
         "effect": {
           "text": "糧車進了城，道徒擦著汗說，塢堡裡的佃農其實有不少是他們的人，只等時機。你把這話記下了。",
@@ -483,7 +483,7 @@
         "text": "替布商盤算，換條路北上划不划算",
         "check": {
           "stat": "wis",
-          "difficulty": 6
+          "difficulty": 4
         },
         "effect": {
           "text": "你說走孟津雖然遠，卻少一道卡。布商想了想，說回去就跟夥伴商量，臨走塞給你幾個錢。",
@@ -536,7 +536,7 @@
         "text": "順著話頭，說涼州兵在京畿也太跋扈",
         "check": {
           "stat": "wis",
-          "difficulty": 7,
+          "difficulty": 5,
           "by": "self"
         },
         "effect": {
@@ -556,7 +556,7 @@
         "text": "陪那位士人喝到散席，聽他私下說",
         "check": {
           "stat": "con",
-          "difficulty": 6,
+          "difficulty": 4,
           "by": "self"
         },
         "effect": {

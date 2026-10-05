@@ -262,7 +262,7 @@ def test_a_real_stat_line_shows_up_in_the_label_and_an_unknown_stat_falls_back_t
 
 
 def test_the_old_bow_shows_a_twenty_to_thirty_nine_line_to_a_fresh_character():
-    """去拉牆上那張老弓：臂力 5 對難度 7，成功率三成，落在 20–39 那一段。"""
+    """去拉牆上那張老弓：臂力 5 對難度 5（joy #14 照地點危險度重訂難度），成功率五成，落在 40–59 那一段。"""
     from tianxia.sqlite_world import open_world
     from tianxia.state import new_game_state
 
@@ -271,9 +271,9 @@ def test_the_old_bow_shows_a_twenty_to_thirty_nine_line_to_a_fresh_character():
     world = open_world()
     event = content.events["yc_ac_archery"]
     index, bow = next((i, c) for i, c in enumerate(event.choices) if "老弓" in c.text)
-    assert (bow.check.stat, bow.check.difficulty) == ("str", 7)
+    assert (bow.check.stat, bow.check.difficulty) == ("str", 5)
     label = choice_label(bow, state, content, world, key=f"{event.id}#{index}")
-    pool = content.check_lines.by_stat.get("str", {}).get("20-39") or content.check_lines.generic["20-39"]
+    pool = content.check_lines.by_stat.get("str", {}).get("40-59") or content.check_lines.generic["40-59"]
     assert any(label == f"{bow.text}（本人・臂力 5：{line}）" for line in pool), label
 
 
