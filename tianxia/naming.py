@@ -30,13 +30,16 @@ MIN_POST_SECONDS = 1.0  # 有預算時，一趟分不到這麼多秒就不叫了
 
 @dataclass(frozen=True)
 class NamingRequest:
-    """A 段（行動鎖內、很快）開的單子：這一爐要模型取名時，B 段需要的全部東西。拿著它就能在鎖外叫模型，不必再碰遊戲狀態。
-    kind 是 "fuse"（武學＋意境）或 "merge"（意境＋意境）；key 是配方鍵；name_kind 是退路字表的種類（內功、武學、意境）。"""
+    """A 段（行動鎖內、很快）開的單子：這一爐要模型取名或挑一個時，B 段需要的全部東西。拿著它就能在鎖外叫模型，不必再碰遊戲狀態。
+    kind 是 "fuse"（武學＋意境）、"merge"（意境＋意境）或 "blend"（武學＋武學）；key 是配方鍵；name_kind 是退路字表的種類（內功、武學、意境）。
+    choices 不是空的：這一爐合到舊的（武學與成長設計 12.2），模型只能從這幾個名字裡挑一個（naming.pick），不取新名字。"""
 
     kind: str
     key: str
     name_kind: str
     messages: list[dict[str, str]]
+    choices: tuple[str, ...] = ()
+
 
 SYSTEM_PROMPT = (
     "你是武俠小說裡替武功與意境取名的人。你只負責取名字、寫一句話的說明，"
@@ -92,24 +95,18 @@ def name_problem(name: str, content: Content, person: PersonCheck | None = None)
     return None
 
 
-def propose(
-    client: OllamaClient | None, content: Content, messages: list[dict[str, str]], budget: float | None = None,
-    person: PersonCheck | None = None,
+def _ask(
+    client: OllamaClient | None, messages: list[dict[str, str]],
+    accept: Callable[[NameReply], tuple[str, str] | None], budget: float | None,
 ) -> tuple[str | None, str]:
-    """請模型命名，回傳（通過過濾的名字, 一句說明）；連不上、取壞了、預算用完都回 (None, "")，呼叫端走退路字表。
-    client 是 None（伺服器假人，bot_runner 會把 game.client 設成 None）時不叫模型。
-
-    budget（秒）：整段取名最多花多久（server.py 從 Config.naming_budget_seconds 算好傳進來；沒給就照 client 自己的
-    timeout，整季機器人、腳本、測試直接呼叫時是這樣）。不讀時鐘，照給出去的 timeout 扣：每一次呼叫拿 client 的複本、
-    timeout 設成 min(client.timeout, 剩下的 ÷ POSTS_PER_CALL)，連重問那一趟都用完也不超過剩下的；
-    分不到 MIN_POST_SECONDS 就不叫了。原本那個 client 不動（同一個角色的別的請求可能正在用它）。
-    person：角色名號的查詢（見 name_problem）；模型取到角色的名號跟取壞了一樣，再請它取一次。"""
+    """叫模型、照預算扣時間，最多 NAME_ATTEMPTS 次（行動鎖內的複本只一次，見下）；accept 收下這一次的回覆就回它的結果，
+    不收就再問一次。client 是 None、連不上、回 None、預算用完都回 (None, "")。預算的扣法見 propose。"""
     if client is None:
         return None, ""
     left = budget
     own = getattr(client, "timeout", None)
     # 行動鎖內的複本（retry 是 False，Game._quick_client）只試一次：鎖內任何一步模型呼叫最多佔住鎖 in_lock_model_timeout 秒，
-    # 取壞了就直接走退路字表；鎖外的取名（有預算）照舊最多 NAME_ATTEMPTS 次、每次最多兩趟
+    # 取壞了就直接走退路；鎖外（有預算）照舊最多 NAME_ATTEMPTS 次、每次最多兩趟
     attempts = 1 if getattr(client, "retry", True) is False else NAME_ATTEMPTS
     for _ in range(attempts):
         caller = client
@@ -122,23 +119,63 @@ def propose(
             left -= per_post * POSTS_PER_CALL
         try:
             reply = caller.chat_structured(messages, NameReply, required_fields=["name"])
-        except Exception:  # noqa: BLE001  連不上、404、逾時——一律當作這次沒取到名字
+        except Exception:  # noqa: BLE001  連不上、404、逾時——一律當作這次沒拿到
             return None, ""
         if reply is None:
             return None, ""
-        name = clean_name(reply.name)
-        if name_problem(name, content, person) is None:
-            return name, zh.to_traditional((reply.description or "").strip())
+        got = accept(reply)
+        if got is not None:
+            return got
     return None, ""
+
+
+def propose(
+    client: OllamaClient | None, content: Content, messages: list[dict[str, str]], budget: float | None = None,
+    person: PersonCheck | None = None,
+) -> tuple[str | None, str]:
+    """請模型命名，回傳（通過過濾的名字, 一句說明）；連不上、取壞了、預算用完都回 (None, "")，呼叫端走退路字表。
+    client 是 None（伺服器假人，bot_runner 會把 game.client 設成 None）時不叫模型。
+
+    budget（秒）：整段取名最多花多久（server.py 從 Config.naming_budget_seconds 算好傳進來；沒給就照 client 自己的
+    timeout，整季機器人、腳本、測試直接呼叫時是這樣）。不讀時鐘，照給出去的 timeout 扣：每一次呼叫拿 client 的複本、
+    timeout 設成 min(client.timeout, 剩下的 ÷ POSTS_PER_CALL)，連重問那一趟都用完也不超過剩下的；
+    分不到 MIN_POST_SECONDS 就不叫了。原本那個 client 不動（同一個角色的別的請求可能正在用它）。
+    person：角色名號的查詢（見 name_problem）；模型取到角色的名號跟取壞了一樣，再請它取一次。"""
+
+    def accept(reply: NameReply) -> tuple[str, str] | None:
+        name = clean_name(reply.name)
+        if name_problem(name, content, person) is not None:
+            return None
+        return name, zh.to_traditional((reply.description or "").strip())
+
+    return _ask(client, messages, accept, budget)
+
+
+def pick(
+    client: OllamaClient | None, messages: list[dict[str, str]], choices: tuple[str, ...], budget: float | None = None,
+) -> tuple[str | None, str]:
+    """合到舊的（武學與成長設計 12.2）：請模型從 choices 挑一個，回 (那個名字, "")；挑不到是 (None, "")，呼叫端改由規則挑
+    （landing.choose）。回覆照取名的方式整理（括號、繁簡）再比對，清單外的名字不收、再問一次。不碰數字。
+    不過命名過濾、也不擋角色名號（FB-069）：這裡不產生新名字，清單裡都是這一季已經登記、當時過了過濾的名字，
+    挑到哪一個那一門都還是那個名字；擋了只會改由規則挑另一門，名字一樣不會變。"""
+    allowed = set(choices)
+
+    def accept(reply: NameReply) -> tuple[str, str] | None:
+        name = clean_name(reply.name)
+        return (name, "") if name in allowed else None
+
+    return _ask(client, messages, accept, budget)
 
 
 def generate(
     client: OllamaClient | None, content: Content, request: NamingRequest, budget: float | None = None,
     person: PersonCheck | None = None,
 ) -> tuple[str | None, str]:
-    """B 段（鎖外、很慢）：拿 A 段開的單子請模型取名，回傳（名字, 說明）；取不到是 (None, "")。
-    只拿單子、模型與內容（過濾要用），不碰任何遊戲狀態、不拿行動鎖——可以單獨呼叫，也可以整段換成模型佇列。
-    person 是角色名號的查詢（server 給 world.is_character_name：唯讀的快照，不拿行動鎖）。"""
+    """B 段（鎖外、很慢）：拿 A 段開的單子請模型取名（或從清單挑一個，request.choices 不是空的時），回傳（名字, 說明）；
+    取不到是 (None, "")。只拿單子、模型與內容（過濾要用），不碰任何遊戲狀態、不拿行動鎖——可以單獨呼叫，也可以整段換成模型佇列。
+    person 是角色名號的查詢（server 給 world.is_character_name：唯讀的快照，不拿行動鎖），只用在取新名字。"""
+    if request.choices:
+        return pick(client, request.messages, request.choices, budget=budget)
     return propose(client, content, request.messages, budget=budget, person=person)
 
 
