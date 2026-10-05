@@ -989,7 +989,8 @@ def test_the_fight_card_shows_the_first_round_until_the_player_opens_the_rest():
     css = (server.WEB / "style.css").read_text(encoding="utf-8")
     mark = re.search(r'const ROUNDS_MARK = "([^"]*)";', js)
     assert mark is not None and mark.group(1).replace("\\n", "\n") in html and html.count("<ul>") == 1
-    assert "roundsFold(m.card, m.card_id)" in _js_function(js, "function pageJianghu(")
+    assert "fightCard(m.card, m.card_id)" in _js_function(js, "function pageJianghu(")
+    assert "roundsFold(card, id)" in _js_function(js, "function fightCard(")
     assert "roundsFold" not in _js_function(js, "function pageNews(")  # 戰報頁整段列出
     assert 'case "rounds-more"' in js and "S.roundsOpen = open ? S.main.card_id : null" in js
     hidden = re.search(r"\.battle-card ul\.rounds:not\(\.open\) > li:not\(:first-child\) \{([^}]*)\}", css)
@@ -1014,9 +1015,28 @@ def test_the_fight_card_head_is_one_heading_and_one_paragraph():
     )
 
 
-def test_the_report_link_ends_the_last_paragraph_of_the_fight_card():
-    """「看完整戰報 ›」接在卡片最後一段（「結果　…　得失　…」）的句尾，不另佔一行（戰鬥卡片壓縮）。網頁認的是伺服器的 HTML 一律以
-    </p> 收尾（卡片最後一塊永遠是「結果／得失」那一段）；認不出來時照舊放在卡片最後。這條擋住兩邊對不上。"""
+def _app_functions_in_node(js: str, script: str) -> str:
+    """把 app.js 裡幾個不碰畫面的函式（戰鬥卡片的折疊、看完整戰報、數字行）拿出來在 node 裡跑，回傳 script 印出的東西；
+    網頁沒有測試框架，這是唯一真的執行過它們的地方。這台沒裝 node 就略過（行為由下面的標記測試擋住兩邊對不上）。"""
+    import shutil
+    import subprocess
+
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("沒有裝 node")
+    consts = [re.search(rf"(?m)^  const {name} = .*;$", js).group(0) for name in ("ROUNDS_MARK", "TALE_MARK", "ROUND_BITS", "reportLink")]
+    funcs = [_js_function(js, f"function {name}(") + "\n  }" for name in ("roundsFold", "withReportLink", "fightCard", "compactRound")]
+    prelude = 'const S = { roundsOpen: null };\nconst roundsMore = (open) => (open ? "收起過程 ▴" : "展開過程 ▾");\n'
+    done = subprocess.run([node, "-"], input=(prelude + "\n".join(consts + funcs) + "\n" + script).encode("utf-8"),
+                          capture_output=True, timeout=60)
+    assert done.returncode == 0, done.stderr.decode("utf-8", "replace")
+    return done.stdout.decode("utf-8")
+
+
+def test_the_report_link_sits_in_the_process_head_row_of_the_fight_card():
+    """「看完整戰報 ›」放在「過程 … 展開過程 ▾」那一行的中間（戰鬥卡片壓縮第二輪，PM 2026-10-05），不再接在「結果／得失」句尾
+    多撐一行；沒有「過程」那一行的卡片（全服決戰、舊戰報）照舊接在最後一段的句尾。網頁認的是伺服器的 HTML 一律以 </p> 收尾
+    （卡片最後一塊永遠是「結果／得失」那一段）與「過程」那一段的 ROUNDS_MARK／TALE_MARK；這條擋住兩邊對不上。"""
     from tianxia import battlelog
     from tianxia.state import BattleRecord, Fighter
 
@@ -1029,17 +1049,147 @@ def test_the_report_link_ends_the_last_paragraph_of_the_fight_card():
         )
         html = server.md(battlelog.card_text(record))
         assert html.endswith("</p>\n") and "<strong>得失</strong>" in html.rsplit("<p>", 1)[1]
+    fold = _js_function(js, "function roundsFold(")
+    assert '<p class="rounds-head"><strong>過程</strong>${id == null ? "" : reportLink(id)}${more}</p>' in fold  # 連結在過程與展開鈕之間
+    assert 'data-act="report"' in js[js.index("const reportLink"):js.index("function roundsFold(")]
     link = _js_function(js, "function withReportLink(")
-    assert 'card.lastIndexOf("</p>")' in link and "reportLink(id)" in link
+    assert 'card.lastIndexOf("</p>")' in link and "reportLink(id)" in link  # 沒有過程那一行時的退路
+    card = _js_function(js, "function fightCard(")
+    assert "roundsFold(card, id)" in card and "withReportLink(card, id)" in card and "folded !== card" in card
     jianghu = _js_function(js, "function pageJianghu(")
-    assert "withReportLink(roundsFold(m.card, m.card_id), m.card_id)" in jianghu
-    assert 'data-act="report"' not in jianghu  # 不再另放一顆
+    assert "fightCard(m.card, m.card_id)" in jianghu and 'data-act="report"' not in jianghu  # 不再另放一顆
     assert re.search(r"\.battle-card \.report-link \{[^}]*display: inline-block", css)
+    # 在「過程」那一行裡不撐高那一行：上下 padding 8px、上下 margin -8px（點擊範圍約 38px 高），展開鈕一樣
+    head_link = re.search(r"(?m)^\.battle-card \.rounds-head \.report-link \{([^}]*)\}", css)
+    assert head_link is not None and "margin: -8px 0" in head_link.group(1)
+    assert "padding: 8px 4px" in re.search(r"(?m)^\.battle-card \.report-link \{([^}]*)\}", css).group(1)
+    more = re.search(r"(?m)^\.battle-card \.rounds-more \{([^}]*)\}", css).group(1)
+    assert "padding: 8px 2px" in more and "margin: -8px 0" in more and "white-space: nowrap" in more
+
+
+def test_fight_card_puts_the_report_link_in_the_head_row_or_ends_the_last_paragraph():
+    """在 node 裡真的跑 fightCard：有「過程」的卡片（回合清單與大場面一段話兩種）連結只在 .rounds-head 裡、一顆，位置在「過程」
+    與展開鈕之間，展開與收著都一樣；沒有「過程」的卡片（全服決戰）接在最後一段的句尾、也是一顆。"""
+    import json
+
+    from tianxia import battlelog
+    from tianxia.state import BattleRecord, Fighter
+
+    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    base = dict(
+        id=7, time=0, location="湖邊", kind="event", opponent="水寇", ours=[Fighter(name="沈浪", level=1)], tier="大勝",
+        our_power=50, difficulty=10, notes=["你贏了。"], changes=["銀兩 +5"],
+    )
+    cards = {
+        "list": server.md(battlelog.card_text(BattleRecord(**base, rounds=["第1回合　甲。", "第2回合　乙。"]))),
+        "tale": server.md(battlelog.card_text(BattleRecord(**base, rounds=["第1回合　甲。"], narration="波才刀勢沉猛，你左支右絀。"))),
+        "showdown": server.md(battlelog.card_text(BattleRecord(**{**base, "kind": "showdown"}, side="官軍"))),
+    }
+    script = f"""
+    const cards = {json.dumps(cards, ensure_ascii=False)};
+    const out = {{}};
+    for (const [name, card] of Object.entries(cards)) {{
+      S.roundsOpen = null; const shut = fightCard(card, 7);
+      S.roundsOpen = 7; const open = fightCard(card, 7);
+      out[name] = {{ shut, open, none: fightCard(card, null) }};
+    }}
+    console.log(JSON.stringify(out));
+    """
+    out = json.loads(_app_functions_in_node(js, script))
+    link = '<button class="linkish report-link" data-act="report" data-id="7">看完整戰報 ›</button>'
+    for name in ("list", "tale"):
+        for state in ("shut", "open"):
+            html = out[name][state]
+            assert html.count("看完整戰報") == 1, (name, state)
+            head = re.search(r'<p class="rounds-head">(.*?)</p>', html).group(1)
+            assert head.startswith("<strong>過程</strong>" + link + '<button class="linkish rounds-more"'), (name, state, head)
+            assert "看完整戰報" not in html.rsplit("<p>", 1)[1]  # 結果／得失那一段不再多一個
+        assert ' open' in out[name]["open"] and ' open' not in out[name]["shut"]
+        assert "看完整戰報" not in out[name]["none"] and "rounds-head" in out[name]["none"]  # 沒有流水號就不放連結
+    assert "rounds-head" not in out["showdown"]["shut"]
+    last = out["showdown"]["shut"].rsplit("<p>", 1)[1]
+    assert out["showdown"]["shut"].count("看完整戰報") == 1 and link + "</p>" in last and "<strong>大勢</strong>" in last
+    assert out["showdown"]["none"] == cards["showdown"]  # 沒有流水號：連結也不放
+
+
+def test_the_folded_first_round_is_two_lines_or_a_numbers_only_line():
+    """收著的「過程」第一回合最多兩行、不藏任何數字（戰鬥卡片壓縮第二輪，PM 2026-10-05）：畫好之後量（fitFirstRound，不靠字數），
+    放不進兩行又拼得出數字行就整句省略、只留「第1回合　你氣血 -13，對手氣勢 -10……」；認不出來就回 null、整句照常顯示。
+    網頁沒有測試框架：樣式與量法用標記擋住，數字行怎麼拼在 node 裡真的跑（沒裝 node 就略過那一段）。"""
+    import json
+
+    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    css = (server.WEB / "style.css").read_text(encoding="utf-8")
+    fit = _js_function(js, "function fitFirstRound(")
+    assert 'querySelector(".battle-card ul.rounds")' in fit and "first.offsetHeight <= 2 * lineHeight + 1" in fit
+    assert "compactRound(" in fit and "if (short == null) return;" in fit  # 拼不出數字行就整句照常顯示
+    assert 'list.classList.remove("tight")' in fit and 'list.classList.add("tight")' in fit
+    assert "fitFirstRound();" in _js_function(js, "function afterPage(")
+    assert "fitFirstRound();" in js[js.index('window.addEventListener("resize"'):js.index("const onPhoneChange")]  # 轉向、拉視窗之後重量
+    for selector, shown in ((".battle-card ul.rounds .r-short", "none"), (".battle-card ul.rounds.tight:not(.open) .r-full", "none"),
+                            (".battle-card ul.rounds.tight:not(.open) .r-short", "inline")):
+        found = re.search(r"(?m)^" + re.escape(selector) + r" \{([^}]*)\}", css)
+        assert found is not None and f"display: {shown}" in found.group(1), selector  # 展開（.open）時一律露整句
+    cases = {
+        # 對手先出手：照句子裡出現的先後
+        "第1回合　黃巾散兵掄起兵刃猛砸過來，你氣血 -13；驗收卡片以【基礎拳腳】守中帶攻，步步紮實地逼過去，對手氣勢 -10。":
+            "第1回合　你氣血 -13，對手氣勢 -10……",
+        "第2回合　沈浪以【旋風腿】身形一晃，搶到側面出手，對手氣勢 -18；山賊掄起兵刃猛砸過來，你氣血 -102。":
+            "第2回合　對手氣勢 -18，你氣血 -102……",
+        # 沒打中的沒有數字，照寫「被對方架開」「被你閃開了」
+        "第3回合　山賊掄起兵刃，被你閃開了；沈浪出拳，被對方架開。": "第3回合　被你閃開了，被對方架開……",
+        # 劇情戰不扣氣血：對手出手沒有結尾
+        "第1回合　山賊掄起兵刃；沈浪出拳，對手氣勢 -12。": "第1回合　對手氣勢 -12……",
+        "  第4回合　甲，你氣血 -5；乙，對手氣勢 -34。\n": "第4回合　你氣血 -5，對手氣勢 -34……",
+        # 認不出來：整句照常顯示（null），寧可多一行也不藏數字
+        "第1回合　甲，你氣血 -13，連擊 ×2；乙，對手氣勢 -10。": None,  # 多了一個沒見過的數字
+        "第1回合　甲，你氣血 -13；乙，對手氣勢 -10，士氣 -5。": None,
+        "第1回合　劍客7掄起兵刃，你氣血 -4。": None,  # 名字裡的數字也分不出來，一律不縮
+        "甲，你氣血 -13；乙，對手氣勢 -10。": None,  # 沒有「第N回合」
+        "第1回合　甲乙丙，一路纏鬥。": None,  # 一個結尾也找不到
+        "": None,
+    }
+    script = f"const cases = {json.dumps(list(cases), ensure_ascii=False)}; console.log(JSON.stringify(cases.map(compactRound)));"
+    assert json.loads(_app_functions_in_node(js, script)) == list(cases.values())
+
+
+def test_the_numbers_only_line_keeps_every_number_the_round_wrote(content):
+    """真的由 battlelog.round_lines 寫出來的回合（每一種結果、先後手、有沒有扣氣血、有沒有武學），拿去跑 compactRound：
+    拼得出來的數字行裡 -N 的數字與順序都跟原句一模一樣，一個都不能少。"""
+    import json
+
+    from tianxia import battlelog, rounds
+
+    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    foe = rounds.Foe(name="山賊", attribute="剛", agility=9.0)
+    lines = []
+    for ours, theirs in ((0, 0), (0, 24), (18, 0), (7, None), (0, None)):  # 沒打中的兩種寫法，play 很少剛好擲出 0，手排幾回合
+        for first in ("ours", "theirs"):
+            beats = [rounds.Beat(side="ours", actor="沈浪", art="旋風腿", attribute="快", amount=ours),
+                     rounds.Beat(side="theirs", actor="山賊", art=None, attribute="剛", amount=theirs)]
+            lines += battlelog.round_lines(content, [rounds.Round(number=2, beats=beats if first == "ours" else beats[::-1])], random.Random(0))
+    for seed in range(15):
+        rng = random.Random(seed)
+        for tier in rounds.ROUNDS:
+            for fighters in ([rounds.Fighter(name="沈浪", art="旋風腿", attribute="快"), rounds.Fighter(name="蘇晴", art=None, attribute=None)],
+                             [rounds.Fighter(name="沈浪", art=None, attribute=None)]):
+                for hp_lost in (None, 0, 37, 480):
+                    for our_agility in (3.0, 30.0):
+                        played = rounds.play(tier, fighters, foe, our_agility, hp_lost, rng)
+                        lines += battlelog.round_lines(content, played, rng)
+    assert len(lines) > 1000 and any("，被你閃開了" in line for line in lines) and any("，被對方架開" in line for line in lines)
+    script = f"const lines = {json.dumps(lines, ensure_ascii=False)}; console.log(JSON.stringify(lines.map(compactRound)));"
+    shorts = json.loads(_app_functions_in_node(js, script))
+    for line, short in zip(lines, shorts, strict=True):
+        assert short is not None, line  # 名字裡沒有數字，句子的每一種寫法都拼得出來
+        assert re.findall(r"-\d+", short) == re.findall(r"-\d+", line), (line, short)
+        assert short.startswith(line[:line.index("回合") + 2]) and short.endswith("……") and len(short) < len(line)
 
 
 def test_the_fight_card_spacing_is_tight_and_only_for_the_fight_card():
     """戰鬥卡片壓縮：打完一場要在第一屏直接按下一顆行動。段距、標題與行高收緊，但只動「剛剛」那張戰鬥卡片
-    （.battle-card 只用在它身上，別張卡片與狀態列、行動列一個字不動），字級不縮到比 .order-text 的 13px 還小。"""
+    （.battle-card 只用在它身上，別張卡片與狀態列、行動列一個字不動），字級不縮到比 .order-text 的 13px 還小。
+    行高第二輪（PM 2026-10-05）：內文與過程、補充一律 1.45，標題以外沒有低於 1.4 的。"""
     css = (server.WEB / "style.css").read_text(encoding="utf-8")
     js = (server.WEB / "app.js").read_text(encoding="utf-8")
     assert re.findall(r'class="[^"]*battle-card[^"]*"', js) == ['class="card battle-card"']  # 只有「剛剛」那張戰鬥卡片用這個 class
@@ -1049,14 +1199,18 @@ def test_the_fight_card_spacing_is_tight_and_only_for_the_fight_card():
         assert found is not None, selector
         return found.group(1)
 
-    assert re.search(r"padding: [0-9]px [0-9]+px", rule(".battle-card")) and "line-height: 1.55" in rule(".battle-card")
+    assert re.search(r"padding: [0-9]px [0-9]+px", rule(".battle-card")) and "line-height: 1.45;" in rule(".battle-card")
     assert "margin: 3px 0" in rule(".battle-card p")
     assert "font-size: 16px" in rule(".battle-card h3") and "margin: 0 0 1px" in rule(".battle-card h3")
     assert "margin: 1px 0 5px" in rule(".battle-card ul.rounds") and "margin: 1px 0 5px" in rule(".battle-card p.rounds-tale")
-    # 這張卡片的規則一律寫在 .battle-card 底下，字級沒有比 13px 小的
+    for selector in (".battle-card ul.rounds", ".battle-card p.rounds-tale", ".battle-card .tx-extra"):
+        assert "line-height: 1.45;" in rule(selector), selector
+    # 這張卡片的規則一律寫在 .battle-card 底下，字級沒有比 13px 小的，行高除了單行的標題都不低於 1.4
     for selectors, body in re.findall(r"(?m)^([^{}\n@/]*\.battle-card[^{}\n]*) \{([^}]*)\}", css):
         assert all(s.strip().startswith(".battle-card") for s in selectors.split(",")), selectors
         assert all(float(px) >= 13 for px in re.findall(r"font-size: ([\d.]+)px", body)), selectors
+        if selectors.strip() != ".battle-card h3":
+            assert all(float(n) >= 1.4 for n in re.findall(r"line-height: ([\d.]+)", body)), selectors
 
 
 def test_the_big_fight_account_is_folded_behind_the_same_button():
