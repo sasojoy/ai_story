@@ -3,13 +3,14 @@
 用 SQLite 內建的線上備份（sqlite3.Connection.backup）：拿到的一定是同一個時間點的一致內容。
 一定要一步複製完（不給 pages）：資料庫是 WAL 模式，一步讀完是一個讀取快照，不擋寫入的人，也不會被寫入打斷；
 分很多步複製的話，步與步之間只要有人寫入，備份就從頭來，資料庫一大、寫入一頻繁就永遠做不完（實測 41MB、每秒三百多筆，十二秒沒完）。
-做出來的檔改成 DELETE 日誌模式，是一個自足的 .db，不帶 -wal／-shm，雲端硬碟同步不會只同步到一半。
+做出來的檔改成 DELETE 日誌模式，是一個自足的 .db，不帶 -wal／-shm，複製或之後放進雲端硬碟的同步資料夾，都不會只同步到一半。
 先寫成 .partial、驗過（integrity_check、結構版本、幾張表的列數）才換上正式檔名；驗不過改名成 .bad 留著查。
 
 刻意不用 tianxia.database.open_database 打開來源：它會照 MIGRATIONS 升級結構，不能替線上那個檔升級。
 
 手動：.venv/Scripts/python.exe scripts/backup_db.py --dest <資料夾>          （資料庫照 TIANXIA_DB，沒設是 saves/tianxia.db）
-每天：.venv/Scripts/python.exe scripts/backup_db.py --dest <雲端資料夾> --tag daily --prune
+每天：.venv/Scripts/python.exe scripts/backup_db.py --dest <本機資料夾> --tag daily --prune
+（現在備份放本機資料夾；之後要上雲，--dest 改成雲端硬碟的同步資料夾就好，腳本不用動）
 """
 from __future__ import annotations
 
@@ -79,6 +80,8 @@ def backup(src: Path, dest_dir: Path, *, tag: str, now: dt.datetime) -> Path:
 def verify(path: Path) -> dict[str, int]:
     """備份檔驗得過：integrity_check 是 ok、結構版本是這版程式認得的、數得出幾張表的列數。回傳版本與列數。"""
     path = Path(path)
+    if not path.is_file():
+        raise BackupError(f"找不到備份檔：{path}")
     try:
         conn = sqlite3.connect(path.absolute().as_uri() + "?mode=ro", uri=True)  # as_uri 會跳脫 # 與 %：資料夾名字帶這些字不會驗到別的檔
     except sqlite3.Error as e:
@@ -146,7 +149,7 @@ def describe(report: dict[str, int]) -> str:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="備份遊戲資料庫（伺服器開著也可以）")
     parser.add_argument("--db", default=None, help="要備份的資料庫（預設：環境變數 TIANXIA_DB，沒設是 saves/tianxia.db）")
-    parser.add_argument("--dest", required=True, help="備份放哪個資料夾（每天的備份放雲端硬碟的同步資料夾）")
+    parser.add_argument("--dest", required=True, help="備份放哪個資料夾（本機的資料夾；之後要上雲就填雲端硬碟的同步資料夾）")
     parser.add_argument("--tag", choices=TAGS, default="manual", help="manual（預設，永遠留著）或 daily（照保留規則刪舊）")
     parser.add_argument("--prune", action="store_true", help="做完之後照保留規則刪掉舊的每日備份（只能搭 --tag daily）")
     args = parser.parse_args(argv)
@@ -162,7 +165,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.prune:
         try:
             removed = prune(Path(args.dest), dt.datetime.now())
-        except OSError as e:  # 雲端硬碟正在同步時舊檔可能刪不掉：新的備份已經做好，明天再刪，但要讓排程看得出這次不完全成功
+        except OSError as e:  # 舊檔被別的程式開著（以後放雲端同步資料夾時，正在同步也一樣）刪不掉：新的備份已經做好，明天再刪，但要讓排程看得出這次不完全成功
             print(f"刪舊備份失敗（今天這份備份已經做好）：{e}", file=sys.stderr)
             return 1
         print(f"刪掉 {len(removed)} 份舊的每日備份")

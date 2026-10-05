@@ -12,10 +12,11 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import backup_db  # noqa: E402
+import restore_db  # noqa: E402
 
 from tianxia.characters import CharacterStore  # noqa: E402
 from tianxia.content import load_content  # noqa: E402
-from tianxia.database import SCHEMA_VERSION, open_database  # noqa: E402
+from tianxia.database import SCHEMA_VERSION, close_all, open_database  # noqa: E402
 from tianxia.state import new_game_state  # noqa: E402
 
 NOW = dt.datetime(2026, 10, 6, 5, 0, 0)
@@ -35,17 +36,17 @@ def _live_db(tmp_path: Path, names=("甲", "乙")) -> Path:
 
 def test_backup_makes_a_verified_self_contained_copy(tmp_path):
     src = _live_db(tmp_path)
-    out = backup_db.backup(src, tmp_path / "cloud", tag="manual", now=NOW)
-    assert out == tmp_path / "cloud" / "tianxia-manual-20261006-050000.db"
-    assert not (tmp_path / "cloud" / "tianxia-manual-20261006-050000.db-wal").exists()
+    out = backup_db.backup(src, tmp_path / "backups", tag="manual", now=NOW)
+    assert out == tmp_path / "backups" / "tianxia-manual-20261006-050000.db"
+    assert not (tmp_path / "backups" / "tianxia-manual-20261006-050000.db-wal").exists()
     conn = sqlite3.connect(out)
     try:
-        assert conn.execute("PRAGMA journal_mode").fetchone()[0] == "delete"  # 自足的單一檔，雲端同步不會只到一半
+        assert conn.execute("PRAGMA journal_mode").fetchone()[0] == "delete"  # 自足的單一檔，之後放雲端同步資料夾也不會只同步到一半
     finally:
         conn.close()
     report = backup_db.verify(out)
     assert report["version"] == SCHEMA_VERSION and report["characters"] == 2
-    assert not list((tmp_path / "cloud").glob("*.partial"))
+    assert not list((tmp_path / "backups").glob("*.partial"))
 
 
 def test_backup_while_someone_keeps_writing(tmp_path):
@@ -66,7 +67,7 @@ def test_backup_while_someone_keeps_writing(tmp_path):
     thread = threading.Thread(target=writer)
     thread.start()
     try:
-        out = backup_db.backup(src, tmp_path / "cloud", tag="manual", now=NOW)
+        out = backup_db.backup(src, tmp_path / "backups", tag="manual", now=NOW)
     finally:
         stop.set()
         thread.join()
@@ -102,7 +103,7 @@ def test_backup_of_a_big_database_finishes_while_writes_never_stop(tmp_path):
     thread.start()
     try:
         time.sleep(0.2)  # 讓寫入先跑起來
-        out = backup_db.backup(src, tmp_path / "cloud", tag="manual", now=NOW)
+        out = backup_db.backup(src, tmp_path / "backups", tag="manual", now=NOW)
         took = time.monotonic() - started
     finally:
         stop.set()
@@ -112,7 +113,7 @@ def test_backup_of_a_big_database_finishes_while_writes_never_stop(tmp_path):
 
 
 def test_backup_into_a_folder_that_cannot_be_written(tmp_path):
-    """目的地是一個檔、不是資料夾（雲端資料夾設錯）：清楚的錯，不留 .partial（Review Focus 2）。"""
+    """目的地是一個檔、不是資料夾（備份資料夾設錯）：清楚的錯，不留 .partial（Review Focus 2）。"""
     src = _live_db(tmp_path)
     blocked = tmp_path / "not_a_folder"
     blocked.write_text("x", encoding="utf-8")
@@ -123,7 +124,7 @@ def test_backup_into_a_folder_that_cannot_be_written(tmp_path):
 
 def test_backup_of_a_missing_database(tmp_path):
     with pytest.raises(backup_db.BackupError, match="找不到資料庫"):
-        backup_db.backup(tmp_path / "nope.db", tmp_path / "cloud", tag="manual", now=NOW)
+        backup_db.backup(tmp_path / "nope.db", tmp_path / "backups", tag="manual", now=NOW)
 
 
 def test_verify_rejects_a_newer_schema_and_garbage(tmp_path):
@@ -141,9 +142,9 @@ def test_verify_rejects_a_newer_schema_and_garbage(tmp_path):
 
 
 def test_backup_into_a_folder_with_url_special_characters(tmp_path):
-    """資料夾名字帶 # 或 %（雲端資料夾名字不一定乾淨）：照樣備份、驗得過，不能驗到別的檔上。"""
+    """資料夾名字帶 # 或 %（資料夾名字不一定乾淨）：照樣備份、驗得過，不能驗到別的檔上。"""
     src = _live_db(tmp_path)
-    for name in ("雲端#備份", "100%41備份", "my backup"):
+    for name in ("備份#1", "100%41備份", "my backup"):
         out = backup_db.backup(src, tmp_path / name, tag="manual", now=NOW)
         assert out.parent.name == name
         assert backup_db.verify(out)["characters"] == 2
@@ -152,10 +153,10 @@ def test_backup_into_a_folder_with_url_special_characters(tmp_path):
 
 def test_main_manual_backup_prints_where_and_returns_zero(tmp_path, capsys):
     src = _live_db(tmp_path)
-    assert backup_db.main(["--db", str(src), "--dest", str(tmp_path / "cloud")]) == 0
+    assert backup_db.main(["--db", str(src), "--dest", str(tmp_path / "backups")]) == 0
     out = capsys.readouterr().out
     assert "tianxia-manual-" in out and "角色 2" in out
-    assert backup_db.main(["--db", str(tmp_path / "nope.db"), "--dest", str(tmp_path / "cloud")]) == 1
+    assert backup_db.main(["--db", str(tmp_path / "nope.db"), "--dest", str(tmp_path / "backups")]) == 1
 
 
 def _touch_daily(folder: Path, when: dt.datetime) -> Path:
@@ -166,7 +167,7 @@ def _touch_daily(folder: Path, when: dt.datetime) -> Path:
 
 def test_prune_keeps_fourteen_days_and_eight_weeks(tmp_path):
     """設計 8.5：最近 14 個日曆日每天留最新的一份，加上最近 8 個 ISO 週每週留最新的一份；其他每日備份刪掉。"""
-    folder = tmp_path / "cloud"
+    folder = tmp_path / "backups"
     folder.mkdir()
     stamps = [NOW.replace(minute=m) - dt.timedelta(days=d) for d in range(80) for m in (0, 30)]  # 80 天、每天兩份
     paths = {when: _touch_daily(folder, when) for when in stamps}
@@ -186,7 +187,7 @@ def test_prune_keeps_fourteen_days_and_eight_weeks(tmp_path):
 
 def test_prune_never_touches_manual_or_foreign_files(tmp_path):
     """手動備份、.partial、.bad、別人放的檔：一個都不碰（Review Focus 5）。"""
-    folder = tmp_path / "cloud"
+    folder = tmp_path / "backups"
     folder.mkdir()
     old = NOW - dt.timedelta(days=400)
     keep = [
@@ -205,11 +206,13 @@ def test_prune_never_touches_manual_or_foreign_files(tmp_path):
 
 def test_main_daily_prunes_only_with_the_flag(tmp_path, capsys):
     src = _live_db(tmp_path)
-    folder = tmp_path / "cloud"
+    folder = tmp_path / "backups"
     folder.mkdir()
     stale = _touch_daily(folder, NOW - dt.timedelta(days=400))
     assert backup_db.main(["--db", str(src), "--dest", str(folder), "--tag", "daily"]) == 0
     assert stale.exists()  # 沒給 --prune 不刪
+    for first_run in set(folder.glob("tianxia-daily-*.db")) - {stale}:
+        first_run.unlink()  # 兩次執行落在同一天時，保留規則本來就會刪掉前一份：先拿掉，才只數得到那份過期的
     assert backup_db.main(["--db", str(src), "--dest", str(folder), "--tag", "daily", "--prune"]) == 0
     assert not stale.exists()
     assert "刪掉 1 份舊的每日備份" in capsys.readouterr().out
@@ -219,9 +222,9 @@ def test_main_daily_prunes_only_with_the_flag(tmp_path, capsys):
 
 
 def test_main_prune_that_cannot_delete_says_so_and_fails(tmp_path, capsys, monkeypatch):
-    """雲端硬碟正在同步、舊檔刪不掉：新的備份已經做好，但要用白話講出刪舊失敗、結束碼不是 0（工作排程器才看得出來）。"""
+    """舊檔被別的程式開著（以後放雲端同步資料夾，正在同步也一樣）刪不掉：新的備份已經做好，但要用白話講出刪舊失敗、結束碼不是 0（工作排程器才看得出來）。"""
     src = _live_db(tmp_path)
-    folder = tmp_path / "cloud"
+    folder = tmp_path / "backups"
     folder.mkdir()
     stale = _touch_daily(folder, NOW - dt.timedelta(days=400))
 
@@ -235,3 +238,81 @@ def test_main_prune_that_cannot_delete_says_so_and_fails(tmp_path, capsys, monke
     assert "tianxia-daily-" in captured.out  # 備份本身是做好了的
     assert "刪舊備份失敗" in captured.err
     assert stale.exists()
+
+
+def test_restore_puts_the_backup_back_and_keeps_the_old_file(tmp_path):
+    src = _live_db(tmp_path, names=("甲", "乙"))
+    out = backup_db.backup(src, tmp_path / "backups", tag="manual", now=NOW)
+    close_all()  # 模擬伺服器停掉
+    db = open_database(src)  # 備份之後又玩了一段：多存一個角色
+    CharacterStore(db).save(new_game_state(load_content(FIXTURE), "丙"))
+    close_all()
+    aside = restore_db.restore(out, src, now=NOW)
+    assert aside is not None and aside.exists() and aside.name.startswith("tianxia.db.pre-restore-")
+    assert backup_db.verify(src)["characters"] == 2  # 回到備份那一刻
+    assert backup_db.verify(aside)["characters"] == 3  # 還原前的檔留著
+
+
+def test_restore_moves_a_leftover_wal_with_the_old_file(tmp_path):
+    """當機留下的 -wal 屬於舊檔：要跟著舊檔移走，不然 SQLite 會把它套進還原回來的檔（Review Focus 3）。"""
+    src = _live_db(tmp_path)
+    out = backup_db.backup(src, tmp_path / "backups", tag="manual", now=NOW)
+    close_all()
+    wal = src.with_name(src.name + "-wal")
+    wal.write_bytes(b"leftover")
+    aside = restore_db.restore(out, src, now=NOW)
+    assert not wal.exists()
+    assert aside.with_name(aside.name + "-wal").read_bytes() == b"leftover"
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="開著的檔改不了名是 Windows 的行為")
+def test_restore_refuses_while_the_database_is_open(tmp_path):
+    """伺服器開著（檔案被打開）時不還原（Review Focus 3）。"""
+    src = _live_db(tmp_path)
+    out = backup_db.backup(src, tmp_path / "backups", tag="manual", now=NOW)
+    holder = sqlite3.connect(src)
+    try:
+        holder.execute("SELECT COUNT(*) FROM characters").fetchone()
+        with pytest.raises(backup_db.BackupError, match="停掉伺服器"):
+            restore_db.restore(out, src, now=NOW)
+    finally:
+        holder.close()
+    assert backup_db.verify(src)["characters"] == 2  # 原檔沒被動到
+    assert list(src.parent.glob("tianxia.db.*")) == []  # 也沒留下半途的檔或搬走的舊檔（-wal／-shm 是 tianxia.db- 開頭，不算）
+
+
+def test_restore_refuses_a_bad_backup(tmp_path):
+    src = _live_db(tmp_path)
+    close_all()
+    junk = tmp_path / "junk.db"
+    junk.write_bytes(b"this is not sqlite" * 100)
+    with pytest.raises(backup_db.BackupError):
+        restore_db.restore(junk, src, now=NOW)
+    assert backup_db.verify(src)["characters"] == 2
+
+
+def test_restore_that_cannot_copy_leaves_the_database_alone(tmp_path, monkeypatch):
+    """磁碟滿了、複製到一半失敗：現在的資料庫一個字都沒動，也不留下半份檔。"""
+    src = _live_db(tmp_path)
+    out = backup_db.backup(src, tmp_path / "backups", tag="manual", now=NOW)
+    close_all()
+
+    def disk_full(*args, **kwargs):
+        raise OSError("磁碟已滿")
+
+    monkeypatch.setattr(restore_db.shutil, "copyfile", disk_full)
+    with pytest.raises(backup_db.BackupError, match="複製"):
+        restore_db.restore(out, src, now=NOW)
+    assert backup_db.verify(src)["characters"] == 2
+    assert [p.name for p in src.parent.iterdir() if not p.name.startswith("tianxia.db")] == []  # 沒有半份檔
+    assert list(src.parent.glob("tianxia.db.*")) == []  # 也沒有搬走的舊檔：根本沒動到它
+
+
+def test_restore_main(tmp_path, capsys):
+    src = _live_db(tmp_path)
+    out = backup_db.backup(src, tmp_path / "backups", tag="manual", now=NOW)
+    close_all()
+    assert restore_db.main([str(out), "--db", str(src)]) == 0
+    assert "已還原" in capsys.readouterr().out
+    assert restore_db.main([str(tmp_path / "nope.db"), "--db", str(src)]) == 1
+    assert "找不到備份檔" in capsys.readouterr().err
