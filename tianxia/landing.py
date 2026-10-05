@@ -23,8 +23,9 @@ T = TypeVar("T", MartialArt, Insight)
 
 
 def _unit(seed: str) -> float:
-    """0 到 1（不含 1）之間、只看 seed 的數：同一個配方同一季永遠一樣。"""
-    return int.from_bytes(hashlib.sha256(seed.encode("utf-8")).digest()[:8], "big") / 2**64
+    """0 到 1（含 0、不含 1）之間、只看 seed 的數：同一個配方同一季永遠一樣。
+    取 53 位（浮點數的有效位數）：64 位的整數除以 2**64，最大那幾個值會被四捨五入成剛好 1.0。"""
+    return (int.from_bytes(hashlib.sha256(seed.encode("utf-8")).digest()[:8], "big") >> 11) / 2**53
 
 
 def chance(content: Content, candidates: int) -> float:
@@ -38,13 +39,14 @@ def lands(content: Content, key: str, tianji: int, candidates: int) -> bool:
 
 
 def rule_pick(candidates: list[T], key: str, tianji: int) -> T:
-    """規則挑一個：只看配方、天機與候選的 id，跟清單順序無關。"""
+    """規則挑一個：只看配方、天機與候選的 id，跟清單順序無關。candidates 不可以是空的（呼叫端先用 lands 確認至少有一個）。"""
     ordered = sorted(candidates, key=lambda c: c.id)
-    return ordered[int(_unit(f"{tianji}|{key}|pick") * len(ordered))]
+    return ordered[min(len(ordered) - 1, int(_unit(f"{tianji}|{key}|pick") * len(ordered)))]
 
 
 def choose(candidates: list[T], key: str, tianji: int, picked_name: str | None) -> T:
-    """模型挑的名字對得上某個候選就用它，否則（沒挑、挑了清單外的、C 段時候選變了）改由規則挑。"""
+    """模型挑的名字對得上某個候選就用它，否則（沒挑、挑了清單外的、C 段時候選變了）改由規則挑。
+    candidates 不可以是空的（同 rule_pick）：呼叫端只在 lands 說要合到舊的、也就是至少有一個候選時才呼叫。"""
     for candidate in candidates:
         if picked_name is not None and candidate.name == picked_name:
             return candidate
