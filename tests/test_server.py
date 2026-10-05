@@ -1123,6 +1123,8 @@ def test_after_the_pause_the_next_hold_asks_again_and_a_new_failure_trips_it_aga
     trip, close, trip_again, close_again = capsys.readouterr().out.splitlines()  # 打開、關上各印一行
     assert trip == trip_again and close == close_again and trip != close
     assert all(f"{server.MODEL_BREAKER_SECONDS} 秒" in line for line in (trip, close))
+    # 這一行在叫模型之前印（讀主畫面也算一次拿鎖），模型還掛著時緊接著就是再打開的那一行：只說下一次再試，不說已經恢復（PM 2026-10-05）
+    assert close == f"鎖內的模型呼叫暫停滿 {server.MODEL_BREAKER_SECONDS} 秒，下一次再試模型。"
 
 
 def test_a_successful_in_lock_call_does_not_trip_it(game, monkeypatch, breaker_clock, capsys):

@@ -171,7 +171,7 @@ def _model_paused() -> bool:
         if _monotonic() < _breaker_until:
             return True
         _breaker_until = None
-    print(f"鎖內的模型呼叫暫停滿 {MODEL_BREAKER_SECONDS} 秒，恢復叫模型。", flush=True)
+    print(f"鎖內的模型呼叫暫停滿 {MODEL_BREAKER_SECONDS} 秒，下一次再試模型。", flush=True)
     return False
 
 
