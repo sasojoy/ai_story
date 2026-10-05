@@ -508,7 +508,7 @@
     const now = m.card
       ? `<div class="card battle-card">${m.card}${m.now || ""}
            ${m.card_id != null ? `<button class="linkish" data-act="report" data-id="${m.card_id}">看完整戰報 ›</button>` : ""}</div>`
-      : m.now ? `<div class="now ${expanded ? "open" : "clamp"}"><div class="now-text">${text}<button class="linkish now-more" data-act="now-more" aria-expanded="${expanded}">${nowMore(expanded)}</button></div>${chips}</div>` : "";
+      : m.now ? `<div class="now ${expanded ? "open" : "clamp"}${m.on_road ? " road" : ""}"><div class="now-text">${text}<button class="linkish now-more" data-act="now-more" aria-expanded="${expanded}">${nowMore(expanded)}</button></div>${chips}</div>` : "";
     const free = m.free_text != null
       ? `<form class="free" id="free-form"><input class="input" name="text" maxlength="20" placeholder="${esc(m.free_text || "輸入你想做的事（20字內）")}"><button class="btn primary small" type="submit">送出</button></form>`
       : "";
@@ -546,7 +546,10 @@
     const firstWay = opts.findIndex(isWay);
     const lastWay = opts.length - 1 - [...opts].reverse().findIndex(isWay);
     const wayButton = (o) => {
-      if (o.id === "act:halt") return taskButton(o);
+      if (o.id === "act:halt") { // 「到潁川郡（陽翟）就停下」在窄的那一格折成兩行：換成同一個意思的短說法
+        const [, name, note] = o.label.match(/^(.*?)（(.*)）$/) || [null, o.label, ""];
+        return taskButton(o, name, note.replace(/^到(.*)就停下$/, "停在$1"));
+      }
       const [, dest, note] = o.label.match(/^折返\s*(.*?)（([^（）]*)）$/) || [null, o.label.replace(/^折返\s*/, ""), ""];
       return taskButton(o, `↩ 折返 ${dest}`.trim(), note);
     };
