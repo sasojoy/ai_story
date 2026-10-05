@@ -3111,16 +3111,19 @@ class Game:
 
     def convoy_line(self) -> str | None:
         """押著的糧車要送去哪（江湖頁軍令卡上的一行；T6 審查 I3）：那一道軍令已經達成或換週清掉了也照樣寫，
-        送到了照樣記捐獻與貢獻。沒有押車時是 None。"""
+        送到了照樣記捐獻與貢獻。沒有押車、或這一季已經收了（休季，FB-045）時是 None。"""
         convoy = self.state.player.convoy
-        if convoy is None:
+        if convoy is None or self.state.world.ended:
             return None
         return f"你押著一車糧（{convoy.grain} 份），要送到{self.content.locations[convoy.to_loc].name}。"
 
     def orders_view(self) -> list[dict]:
         """江湖頁的「本週軍令」卡（計畫 T6）：自己陣營這週的軍令，只給自己陣營看；散人、開關關著是空的。
-        截止是下週一 00:00（最後一週寫成季末那一刻，calendar.point 會夾住）。"""
+        截止是下週一 00:00（最後一週寫成季末那一刻，calendar.point 會夾住）。休季時也是空的（FB-045）：
+        收季那一週的軍令截止已經過了，休季什麼都不能做，結算畫面底下不該還有一張叫人去做事的卡。"""
         s, c = self.state, self.content
+        if s.world.ended:
+            return []
         name = s.player.name
         views = []
         for o in orders.current(s, c, s.player.faction):

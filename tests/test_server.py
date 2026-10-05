@@ -1745,6 +1745,25 @@ def test_main_view_shows_the_cart_being_carried(game, monkeypatch):
     assert "convoy" not in server.main_view(game)
 
 
+def test_resting_season_sends_no_orders_and_no_cart(game, monkeypatch):
+    """FB-045：收季之後（休季）江湖頁不再有本週軍令卡，也不再寫押糧那一行：收季那一週的軍令截止已經過了。"""
+    from tianxia.state import Convoy
+
+    _season_one_now(game, monkeypatch)
+    monkeypatch.setattr(server.CONTENT.config, "admins", ["測試"])
+    game.sync(game.now)  # 拉回蓋了第一季章的那一份季
+    game.state.player.faction = "guan"
+    game.advance(700)  # 跨過第一個曆時交界：第 1 週發令
+    game.state.player.convoy = Convoy(order="x", grain=4, from_loc="xinye", to_loc="wan_city")
+    view = server.main_view(game)
+    assert view["orders"] and view["convoy"]
+    game.admin_end_season(now=game.now)
+    assert game.state.world.ended
+    view = server.main_view(game)
+    assert "orders" not in view and "convoy" not in view
+    assert game.orders_view() == [] and game.convoy_line() is None
+
+
 # ── 管理者：時刻表與救場（計畫 T10）────────────────────────
 
 
