@@ -957,3 +957,11 @@ def test_early_end_at_ninety_or_ten(showdown):
     for trend, phase in ((86, "ended"), (85, "active"), (14, "ended"), (15, "active")):  # beta 那場：起點 50
         guan, huang = ("guan_aggressive", "huang_safe") if trend > 50 else ("guan_safe", "huang_aggressive")
         assert played(50, trend, guan, huang).phase == phase, trend
+
+
+def test_narrate_round_decodes_byte_tokens_the_model_left_in(definition):
+    """FB-075：長社火攻第一回合出現「旌旗仍<0xE5><0xB7><0x93>然屹立」，決戰場景列最近五段、玩家看得到。"""
+    instance = _active_battle(definition)
+    client = mock.Mock()
+    client.chat_text.return_value = "火光中，旌旗仍<0xE5><0xB7><0x8D>然屹立。"
+    assert bi.narrate_round(client, definition, instance, ["甲選了穩紮穩打。"]) == "火光中，旌旗仍巍然屹立。"
