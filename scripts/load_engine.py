@@ -31,6 +31,7 @@ import random
 import sys
 import tempfile
 import time
+import traceback
 import tracemalloc
 from collections.abc import Iterator
 from pathlib import Path
@@ -45,6 +46,26 @@ SKIP_PREFIXES = ("talk:", "call:", "act:socialize", "act:challenge:", "choice:fr
 ENV_KEYS = ("TIANXIA_DB", "TIANXIA_PROFILE")  # run() 會動的環境變數
 NO_MODEL_URL = "http://127.0.0.1:1"  # 沒人聽的埠：真的有地方漏叫了模型，也只會連線失敗，碰不到真的 Ollama（11434）
 AFTER_END_ACTIONS = 3  # 收季之後再讓幾個角色做動作，確認伺服器還能回應
+PROTECTED_DIRS = ("saves", ".local", "tianxia-play")  # 正式資料、本機設定、試玩伺服器的資料夾：壓測的資料庫不能放在底下
+
+
+def check_workdir(workdir: Path) -> Path:
+    """壓測的暫存資料庫只能放在全新的、不是正式或試玩資料的地方：路徑上不能有 saves、.local、tianxia-play
+    這幾層，資料夾裡也不能已經有 tianxia.db。有問題就丟 ValueError（什麼都還沒建、沒動環境變數）。"""
+    resolved = Path(workdir).resolve()
+    for part in resolved.parts:
+        if part.casefold() in PROTECTED_DIRS:
+            raise ValueError(f"壓測的資料庫不能放在 {part} 底下（那裡是正式或試玩的資料）：{resolved}")
+    if (resolved / "tianxia.db").exists():
+        raise ValueError(f"這個資料夾裡已經有 tianxia.db（正式或試玩的資料庫），壓測不能用：{resolved}")
+    return resolved
+
+
+def _note_error(errors: dict[str, int], samples: dict[str, str], exc: BaseException) -> None:
+    """記一次出錯：次數照例外的類型算，每個類型另外留第一次的完整追蹤（只有次數的話，兩萬個動作之後看不出是什麼壞了）。"""
+    name = type(exc).__name__
+    errors[name] = errors.get(name, 0) + 1
+    samples.setdefault(name, "".join(traceback.format_exception(exc))[-1500:])
 
 
 def _import_server(db_path: Path):
@@ -135,7 +156,9 @@ def run(
     characters: int, actions: int, seed: int, workdir: Path, end_season: bool,
     polls_per_action: int = 0, trace_memory: bool = True,
 ) -> dict:
-    db_path = Path(workdir) / "load.db"
+    if characters < 1:
+        raise ValueError("characters 至少要 1 個角色：沒有角色就沒有人可以做動作")
+    db_path = check_workdir(workdir) / "load.db"  # 先擋：什麼都還沒建、沒動環境變數
     env_before = {key: os.environ.get(key) for key in ENV_KEYS}  # _import_server 會動這兩個，跑完要原樣放回去
     server = _import_server(db_path)
     config = server.CONTENT.config
@@ -150,6 +173,7 @@ def run(
     poll_locked: list[float] = []
     poll_total: list[float] = []
     errors: dict[str, int] = {}
+    error_samples: dict[str, str] = {}
     stopped, end_seconds, end_ok, after_ok, elapsed = False, None, None, None, None
     started = time.perf_counter()
     if trace_memory:
@@ -182,7 +206,7 @@ def run(
                 try:
                     held = one_action(server, game, rng)
                 except Exception as exc:  # noqa: BLE001  一個動作出錯記下來、不毀掉整輪
-                    errors[type(exc).__name__] = errors.get(type(exc).__name__, 0) + 1
+                    _note_error(errors, error_samples, exc)
                 else:
                     locked.append(held)
                     total.append(time.perf_counter() - t0)
@@ -192,12 +216,12 @@ def run(
                     try:
                         held = one_poll(server, game)
                     except Exception as exc:  # noqa: BLE001
-                        errors[type(exc).__name__] = errors.get(type(exc).__name__, 0) + 1
+                        _note_error(errors, error_samples, exc)
                     else:
                         poll_locked.append(held)
                         poll_total.append(time.perf_counter() - t0)
             elapsed = max(time.perf_counter() - started, 1e-9)
-            if end_season and characters:
+            if end_season:
                 config.admins = [names[0]]
                 admin = player(names[0])
                 t0 = time.perf_counter()
@@ -209,7 +233,7 @@ def run(
                     try:
                         one_action(server, player(rng.choice(names)), rng)
                     except Exception as exc:  # noqa: BLE001
-                        errors[type(exc).__name__] = errors.get(type(exc).__name__, 0) + 1
+                        _note_error(errors, error_samples, exc)
                         after_ok = False
         except KeyboardInterrupt:
             stopped = True
@@ -222,7 +246,7 @@ def run(
             "poll_locked": poll_locked, "poll_total": poll_total, "polls_per_action": polls_per_action,
             "rate": len(locked) / elapsed, "lock_busy": (sum(locked) + sum(poll_locked)) / elapsed,
             "db_mb": _file_mb(db_path), "peak_mb": None if peak is None else peak / 1e6,
-            "peak_ws_mb": _peak_working_set_mb(), "errors": errors,
+            "peak_ws_mb": _peak_working_set_mb(), "errors": errors, "error_samples": error_samples,
             "end_season_seconds": end_seconds, "end_season_ok": end_ok, "after_end_season_ok": after_ok,
             "stopped_early": stopped,
         }
@@ -252,6 +276,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--workdir", default=None, help="暫存資料庫放哪（預設開一個新的暫存資料夾）")
     parser.add_argument("--out", default=None, help="結果 JSON 寫到哪")
     args = parser.parse_args(argv)
+    if args.characters < 1 or args.actions < 0 or args.polls_per_action < 0:
+        print("--characters 至少要 1，--actions 與 --polls-per-action 不能是負的", file=sys.stderr)
+        return 2
+    if args.workdir:
+        try:
+            check_workdir(Path(args.workdir))  # 先擋，再建資料夾
+        except ValueError as exc:
+            print(exc, file=sys.stderr)
+            return 2
     workdir = Path(args.workdir or tempfile.mkdtemp(prefix="tianxia-load-"))
     workdir.mkdir(parents=True, exist_ok=True)
     report = run(
@@ -265,14 +298,17 @@ def main(argv: list[str] | None = None) -> int:
         print(load_common.summarize("畫面請求握鎖時間（兩次行動鎖合計）", report["poll_locked"], 0))
     memory = "" if report["peak_mb"] is None else f"；Python 記憶體尖峰 {report['peak_mb']:.1f} MB（tracemalloc）"
     ws = "" if report["peak_ws_mb"] is None else f"；整個程序記憶體尖峰 {report['peak_ws_mb']:.0f} MB"
-    print(f"每秒 {report['rate']:.1f} 個動作；行動鎖忙了 {report['lock_busy'] * 100:.0f}%；"
-          f"資料庫 {report['db_mb']:.1f} MB{memory}{ws}")
+    mixed = "（連同穿插的畫面請求一起算時間，不是只做動作的上限）" if report["polls_per_action"] else ""
+    print(f"每秒 {report['rate']:.1f} 個動作{mixed}；行動鎖忙了 {report['lock_busy'] * 100:.0f}%；"
+          f"資料庫 {report['db_mb']:.1f} MB（含還沒併回去的 WAL，可能比併回之後大）{memory}{ws}")
     if report["errors"]:
         print(f"動作出錯：{report['errors']}")
+        for name, sample in report["error_samples"].items():  # 每種例外第一次的追蹤（完整的在 --out 的 JSON 裡）
+            print(f"  {name}：{sample.strip().splitlines()[-1]}")
     if report["end_season_seconds"] is not None:
         done = "" if report["end_season_ok"] else "（沒有真的收成：賽季不在進行中）"
-        print(f"{args.characters} 個角色時收季花了 {report['end_season_seconds']:.2f} 秒{done}；"
-              f"收季之後{'還能照常回應' if report['after_end_season_ok'] else '有動作出錯'}")
+        after = {True: "還能照常回應", False: "有動作出錯", None: "還沒確認完就被打斷了"}[report["after_end_season_ok"]]
+        print(f"{args.characters} 個角色時收季花了 {report['end_season_seconds']:.2f} 秒{done}；收季之後{after}")
     if report["stopped_early"]:
         print("（中途停下來了：上面是到停下來為止的結果）")
     if args.out:

@@ -28,7 +28,10 @@ class _Server(ThreadingHTTPServer):
 
 
 def serve(port: int, delay: tuple[float, float], status: int = 503) -> ThreadingHTTPServer:
-    """開在 127.0.0.1:port 的背景執行緒（port 給 0 就由系統挑一個，看 server_address[1]）；shutdown() 關。"""
+    """開在 127.0.0.1:port 的背景執行緒（port 給 0 就由系統挑一個，看 server_address[1]）；shutdown() 關。
+    RESERVED_PORTS（真的 Ollama、別人的程式、試玩伺服器）一律拒絕：守衛放在這裡，不只在命令列。"""
+    if port in RESERVED_PORTS:
+        raise ValueError(f"埠 {port} 是{RESERVED_PORTS[port]}在用的，不能開在這裡")
     low, high = delay
 
     class Handler(BaseHTTPRequestHandler):

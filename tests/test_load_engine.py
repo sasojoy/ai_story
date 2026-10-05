@@ -2,6 +2,7 @@
 import contextlib
 import os
 import sys
+import tracemalloc
 from pathlib import Path
 
 import pytest
@@ -18,6 +19,11 @@ def test_small_run_reports_every_number(tmp_path):
     assert report["rate"] > 0 and report["db_mb"] > 0 and report["peak_mb"] > 0
     assert report["end_season_seconds"] is not None  # 季末結算量到了（Review Focus 4）
     assert report["stopped_early"] is False
+    # 壓測的角色是真人帳號的路徑：不碰 PlayerState.bot，也就不會有任何一個角色被存成假人
+    from tianxia.characters import open_characters  # noqa: PLC0415
+
+    store = open_characters(tmp_path / "load.db")
+    assert len(store.names()) == 5 and store.all(bots_only=True) == []
 
 
 def test_lock_timer_counts_only_outermost_transactions_and_cleans_up(tmp_path):
@@ -178,6 +184,7 @@ def test_ctrl_c_still_reports(tmp_path, monkeypatch):
     report = load_engine.run(characters=3, actions=50, seed=1, workdir=tmp_path, end_season=False)
     assert report["stopped_early"] is True and len(report["locked"]) == 9
     assert report["end_season_seconds"] is None
+    assert not tracemalloc.is_tracing()  # 中斷也要把 tracemalloc 關掉：它會讓之後的 Python 慢上四成
 
 
 def test_an_action_that_blows_up_is_counted_and_the_run_goes_on(tmp_path, monkeypatch):
@@ -195,6 +202,62 @@ def test_an_action_that_blows_up_is_counted_and_the_run_goes_on(tmp_path, monkey
     report = load_engine.run(characters=3, actions=20, seed=1, workdir=tmp_path, end_season=False)
     assert report["errors"] == {"ValueError": 1}
     assert len(report["locked"]) == 19 and report["stopped_early"] is False
+    # 只留一個類型的次數，兩萬個動作之後看不出是什麼壞了：每種例外留下第一次的完整追蹤
+    assert "ValueError: 壞掉了" in report["error_samples"]["ValueError"]
+    assert "Traceback" in report["error_samples"]["ValueError"]
+
+
+def test_a_blown_up_poll_is_counted_too(tmp_path, monkeypatch):
+    """畫面請求出錯也一樣記成錯誤、照常跑完（兩個地方都有 try，各自釘住）。"""
+    real = load_engine.one_poll
+    calls = {"n": 0}
+
+    def flaky(*args, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == 2:
+            raise KeyError("壞了的畫面")
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(load_engine, "one_poll", flaky)
+    report = load_engine.run(characters=3, actions=5, seed=1, workdir=tmp_path, end_season=False, polls_per_action=2)
+    assert report["errors"] == {"KeyError": 1} and len(report["poll_locked"]) == 9
+    assert "壞了的畫面" in report["error_samples"]["KeyError"]
+
+
+@pytest.mark.parametrize("name", ["saves", ".local", "tianxia-play"])
+def test_workdir_cannot_be_where_real_game_data_lives(tmp_path, name):
+    """--workdir 指到 saves/、.local/、試玩資料夾底下會在那裡留下壓測的資料庫：run 一開頭就拒絕，什麼都不建、不動。"""
+    target = tmp_path / name / "load"
+    before = os.environ.get("TIANXIA_DB")
+    with pytest.raises(ValueError):
+        load_engine.run(characters=2, actions=2, seed=1, workdir=target, end_season=False)
+    assert not target.exists() and os.environ.get("TIANXIA_DB") == before
+
+
+def test_workdir_cannot_hold_a_real_game_database(tmp_path):
+    """資料夾裡已經有 tianxia.db（正式或試玩的資料庫）也不行，不管資料夾叫什麼名字。"""
+    (tmp_path / "tianxia.db").write_bytes(b"")
+    with pytest.raises(ValueError):
+        load_engine.run(characters=2, actions=2, seed=1, workdir=tmp_path, end_season=False)
+
+
+def test_a_run_needs_at_least_one_character(tmp_path):
+    """沒有角色就沒有人可以做動作：講清楚，不是在 rng.choice 丟一個看不懂的 IndexError。"""
+    with pytest.raises(ValueError, match="角色"):
+        load_engine.run(characters=0, actions=5, seed=1, workdir=tmp_path, end_season=False)
+    assert load_engine.main(["--characters", "0", "--workdir", str(tmp_path)]) == 2
+
+
+def test_the_printed_summary_says_what_its_numbers_include(tmp_path, capsys):
+    """資料庫大小含沒併回去的 WAL；穿插畫面請求時，每秒動作數是連同那些請求一起算時間的：標在輸出上，免得被當成純動作的上限。"""
+    assert load_engine.main([
+        "--characters", "3", "--actions", "4", "--polls-per-action", "1", "--no-tracemalloc", "--workdir", str(tmp_path),
+    ]) == 0
+    out = capsys.readouterr().out
+    assert "WAL" in out and "穿插的畫面請求" in out and "握鎖時間" in out
+    capsys.readouterr()
+    assert load_engine.main(["--characters", "3", "--actions", "4", "--workdir", str(tmp_path / "plain")]) == 0
+    assert "穿插的畫面請求" not in capsys.readouterr().out
 
 
 def test_poll_requests_between_actions_are_measured_separately(tmp_path):
@@ -231,6 +294,7 @@ def test_run_puts_back_everything_it_touched(tmp_path, monkeypatch, profile):
     assert os.environ.get("TIANXIA_DB") == sentinel_db
     assert os.environ.get("TIANXIA_PROFILE") == profile
     assert not any(key.startswith("壓測") for key in server.GAMES)
+    assert not tracemalloc.is_tracing()  # tracemalloc 會讓之後的 Python 慢上四成，跑完一定要關
 
 
 def test_the_dead_model_address_is_nobodys_port():

@@ -74,6 +74,18 @@ def test_fake_ollama_does_not_share_a_port_with_another_program():
         first.server_close()
 
 
+def test_serve_itself_refuses_reserved_ports(monkeypatch):
+    """守衛放在 serve 裡，不只在命令列：別的程式（Task 3 的測試、之後的腳本）呼叫 serve 也開不到那些埠。
+    伺服器類別換成一碰就失敗的：守衛壞掉時測試直接失敗，不會真的綁到那些埠。"""
+    def must_not_bind(*args, **kwargs):
+        raise AssertionError("不該開伺服器")
+
+    monkeypatch.setattr(fake_ollama, "_Server", must_not_bind)
+    for port in (11434, 11999, 7861):
+        with pytest.raises(ValueError):
+            fake_ollama.serve(port, delay=(0.0, 0.0))
+
+
 def test_fake_ollama_refuses_ports_that_belong_to_someone_else(monkeypatch):
     """命令列不能開在真的 Ollama（11434）、別人用的 11999 或試玩伺服器（7861）的埠上。
     serve 換成一碰就失敗的：守衛壞掉時測試直接失敗，不會真的綁到那些埠、也不會卡住。"""
