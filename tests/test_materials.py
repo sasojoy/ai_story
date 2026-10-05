@@ -25,6 +25,13 @@ def test_grant_adds_to_the_bag_and_says_so(state, content):
     assert state.player.materials == {"gang_1": 3}
 
 
+def test_the_grant_line_is_the_item_text_with_the_grant_prefix(state, content):
+    """戰報的獲得與損失寫「精鐵砂 ×2」、訊息寫「獲得 精鐵砂 ×2」：兩邊用同一個寫法，卡片底下的補充才認得出是同一件事。"""
+    assert materials.item_text(content, "gang_1", 2) == "精鐵砂 ×2"
+    assert materials.grant_line("精鐵砂 ×2") == "獲得 精鐵砂 ×2" == materials.grant(state, content, "gang_1", 2)
+    assert "獲得 精鐵砂 ×2".removeprefix(materials.GRANT_PREFIX) == materials.item_text(content, "gang_1", 2)
+
+
 def test_grant_ignores_unknown_materials_and_nonpositive_counts(state, content):
     assert materials.grant(state, content, "ghost") is None
     assert materials.grant(state, content, "gang_1", 0) is None

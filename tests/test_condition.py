@@ -118,6 +118,14 @@ def test_a_fight_costs_blood_and_leaves_some_of_it_as_injury(state, content, wor
     assert msgs[0] == f"氣血 -{expected_loss:.0f}" and msgs[1].startswith("內傷 +")
 
 
+def test_a_fight_at_zero_blood_writes_no_zero_blood_line_but_still_the_injury(state, content, world):
+    """一滴氣血都沒得扣（本來就見底）時不寫「氣血 -0」；內傷是照上限算的，照樣累積、照樣寫。"""
+    state.player.member.neili = 0.0
+    msgs = team.take_encounter_toll(state, content, world, "落敗")
+    assert msgs and msgs[0].startswith("內傷 +") and not any(m.startswith("氣血") for m in msgs)
+    assert state.player.member.injury > 0
+
+
 def test_winning_big_costs_much_less_than_losing(state, content, world):
     from copy import deepcopy
 

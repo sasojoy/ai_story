@@ -40,13 +40,26 @@ def by_tier(content: Content, tier: int, attribute: str | None = None) -> list[M
     return [m for m in same_tier if m.attribute == attribute] or same_tier
 
 
+GRANT_PREFIX = "獲得 "
+
+
+def item_text(content: Content, material_id: str, count: int = 1) -> str:
+    """一筆素材的寫法，例如「精鐵砂 ×1」：戰報的獲得與損失寫的就是它，訊息「獲得 精鐵砂 ×1」是它前面加 GRANT_PREFIX。"""
+    return f"{content.materials[material_id].name} ×{count}"
+
+
+def grant_line(item: str) -> str:
+    """item_text 寫成給紀錄與訊息串的那一句：「精鐵砂 ×1」→「獲得 精鐵砂 ×1」。"""
+    return GRANT_PREFIX + item
+
+
 def grant(state: GameState, content: Content, material_id: str, count: int = 1) -> str | None:
     """放進背包，回傳一句「獲得 精鐵砂 ×1」；未知的素材 id 或數量 <= 0 時什麼都不做。"""
     if count <= 0 or material_id not in content.materials:
         return None
     bag = state.player.materials
     bag[material_id] = bag.get(material_id, 0) + count
-    return f"獲得 {content.materials[material_id].name} ×{count}"
+    return grant_line(item_text(content, material_id, count))
 
 
 def take(state: GameState, material_id: str, count: int = 1) -> bool:
