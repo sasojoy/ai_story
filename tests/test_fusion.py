@@ -75,18 +75,19 @@ def test_fusing_on_a_peerless_base_gives_a_lowest_quality_copy_with_the_lowest_p
 
 
 def test_fusing_over_and_over_and_melting_the_copy_never_makes_xinde(ready, content, world):
-    """金錢迴圈關上了：絕學的底，合一爐（花心得）、立刻熔掉剛合出來的複本，每一輪心得只減不增。"""
+    """金錢迴圈關上了：絕學的底，合一爐（花心得）、立刻熔掉剛合出來的複本，每一輪心得只減不增。
+    FB-068 起熔掉有基本值（melt_min_refund 4），但比合成的 5 少：每一輪淨虧 1。"""
     ready.player.art_quality["basic_fist"] = "絕學"
     ready.player.insights = ["feng", "huo", "shui"]
-    price = content.config.fuse_xinde
+    price, floor = content.config.fuse_xinde, content.config.melt_min_refund
     xinde = ready.player.stats["xinde"]
     for name, insight in [("旋風腿", "feng"), ("烈火拳", "huo"), ("驚濤掌", "shui")]:
         art, _ = fusion.fuse(ready, content, world, named(name), "basic_fist", insight)
         assert ready.player.stats["xinde"] == xinde - price
         library.melt_art(ready, content, world, art.id)
-        assert ready.player.stats["xinde"] == xinde - price  # 熔掉一毛不退（下品、第一成）
-        xinde -= price
-    assert ready.player.stats["xinde"] == 100 - 3 * price
+        assert ready.player.stats["xinde"] == xinde - price + floor  # 下品、第一成：只退基本值
+        xinde -= price - floor
+    assert ready.player.stats["xinde"] == 100 - 3 * (price - floor) == 97
 
 
 def test_a_second_player_gets_the_same_art_without_the_model(ready, content, world):
@@ -288,11 +289,11 @@ def test_the_engine_forge_is_titled_after_the_craft_tab_and_only_written_when_so
 
 def test_the_engine_fuse_then_melt_loop_on_a_peerless_base_only_ever_costs_xinde(game):
     """Task 13 的整季機器人踩到的洞（企劃者 2026-10-05 關掉）：走真的 Game.forge／Game.melt_art，
-    絕學的底每一輪「合成、熔掉複本」心得 100 → 95 → 90 → 85，不再 100 → 135 → 170。"""
+    絕學的底每一輪「合成、熔掉複本」心得只減不增，不再 100 → 135 → 170。FB-068 起熔掉退基本值 4、合成花 5：
+    100 → 99 → 98 → 97。"""
     p = game.state.player
     p.member.wugong_id, p.art_quality["basic_fist"] = "basic_fist", "絕學"
     p.insights, p.stats["xinde"] = ["feng", "huo", "shui"], 100
-    price = game.content.config.fuse_xinde
     seen = [p.stats["xinde"]]
     with mock.patch.object(game.client, "chat_structured", side_effect=RuntimeError):
         for insight in ("feng", "huo", "shui"):
@@ -300,7 +301,23 @@ def test_the_engine_fuse_then_melt_loop_on_a_peerless_base_only_ever_costs_xinde
             (new,) = p.arts
             game.melt_art(new)
             seen.append(p.stats["xinde"])
-    assert p.arts == [] and seen == [100 - price * n for n in range(4)]
+    assert p.arts == [] and seen == [100, 99, 98, 97]
+
+
+def test_fb068_fuse_then_melt_through_the_game_nets_minus_one_and_the_page_promised_it(game):
+    """FB-068：合成花 5 心得，熔掉剛合出來的（下品、第一成）退基本值 4——一圈淨虧 1，沒有迴圈；
+    修練頁的「退回心得 N」就是真的退的那個數。"""
+    p = game.state.player
+    p.member.wugong_id, p.insights, p.stats["xinde"] = "basic_fist", ["feng"], 100
+    with mock.patch.object(game.client, "chat_structured", side_effect=RuntimeError):
+        game.forge("basic_fist", ["feng"])
+    (new,) = p.arts
+    assert p.stats["xinde"] == 95
+    (row,) = [r for r in game.art_rows() if r["id"] == new]
+    assert row["melt"] == {"ok": True, "note": "退回心得 4"}
+    msgs = game.melt_art(new)
+    assert p.stats["xinde"] == 99 and msgs[-1] == "心得 +4"
+    assert "心得 +4" in game.state.journal[0].changes
 
 
 # ── 設計 3.4、4.2 的規定，一條一條釘住 ───────────────────────────────
