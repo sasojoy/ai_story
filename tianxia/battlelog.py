@@ -176,29 +176,45 @@ def _rounds_block(record: BattleRecord) -> list[str]:
     return ["**過程**\n" + "\n".join(f"- {line}" for line in record.rounds)]
 
 
-def _story_block(record: BattleRecord) -> list[str]:
+def _story_part(record: BattleRecord) -> str:
     story = story_text(record)
-    return [f"**結果**　{story}"] if story else []
+    return f"**結果**　{story}" if story else ""
+
+
+def _gains_part(record: BattleRecord, label: str) -> str:
+    """得失那一句（label 是它的標籤：戰報頁寫「獲得與損失」、卡片寫「得失」）。全服決戰沒有經驗、銀兩這些得失，只有大勢的
+    增減，標籤固定寫「大勢」；上一季打的那一場，大勢的增減寫在結果的敘事裡（標了第幾季），沒有這一句（空字串）。"""
+    if record.kind == "showdown":
+        return f"**大勢**　{'　'.join(record.changes)}" if record.changes else ""
+    return f"**{label}**　{gains_text(record)}"
+
+
+def _story_block(record: BattleRecord) -> list[str]:
+    story = _story_part(record)
+    return [story] if story else []
 
 
 def _gains_block(record: BattleRecord) -> list[str]:
-    """獲得與損失那一行。全服決戰沒有經驗、銀兩這些得失，只有大勢的增減，寫成「大勢」那一行；上一季打的那一場，
-    大勢的增減寫在結果的敘事裡（標了第幾季），沒有這一行。"""
-    if record.kind == "showdown":
-        return [f"**大勢**　{'　'.join(record.changes)}"] if record.changes else []
-    return [f"**獲得與損失**　{gains_text(record)}"]
+    gains = _gains_part(record, "獲得與損失")
+    return [gains] if gains else []
+
+
+def _outcome_block(record: BattleRecord) -> list[str]:
+    """卡片的最後一段：結果與得失併成同一段，「**結果**　敘事　**得失**　數值」（手機上少一段的間距）；沒有敘事就只有得失。"""
+    outcome = "　".join(part for part in (_story_part(record), _gains_part(record, "得失")) if part)
+    return [outcome] if outcome else []
 
 
 def card_text(record: BattleRecord, when: Callable[[float], str] = clock_text) -> str:
-    """場景裡的戰鬥卡片（Markdown）：標題、時間與類型、結果、（過程）、（劇情結果）、獲得與損失。when 是時間的寫法（見 list_label）。
-    過程整段都在；「剛剛」那張卡片只露第一回合、點了才攤開，是網頁的事（web/app.js 的 roundsFold）。"""
+    """場景裡的戰鬥卡片（Markdown）：標題、時間與類型、結果、（過程）、（劇情結果）與得失併成一段。when 是時間的寫法（見 list_label）。
+    過程整段都在；「剛剛」那張卡片只露第一回合、點了才攤開，是網頁的事（web/app.js 的 roundsFold）。
+    戰報頁（detail_text）的結果與獲得與損失照舊各一段，只有場景裡這張卡片併成一段。"""
     return "\n\n".join([
         _title(record),
         _when(record, when),
         _result_line(record),
         *_rounds_block(record),
-        *_story_block(record),
-        *_gains_block(record),
+        *_outcome_block(record),
     ])
 
 

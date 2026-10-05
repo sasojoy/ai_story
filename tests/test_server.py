@@ -1026,8 +1026,8 @@ def test_the_big_fight_account_is_folded_behind_the_same_button():
 
 
 def test_a_hostile_big_fight_account_renders_as_one_plain_paragraph_on_the_card():
-    """模型寫的過程走伺服器的 Markdown 轉換：連結、圖片、程式碼區塊、引言都不能出現，「結果」「獲得與損失」不能被吞進
-    程式碼區塊，網頁認的 TALE_MARK 要對得上（Final review Minor 1）。"""
+    """模型寫的過程走伺服器的 Markdown 轉換：連結、圖片、程式碼區塊、引言都不能出現，「結果」「得失」不能被吞進
+    程式碼區塊（卡片上它們併成一段「結果／得失」），網頁認的 TALE_MARK 要對得上（Final review Minor 1）。"""
     from tianxia import battlelog, fight_llm
     from tianxia.state import BattleRecord, Fighter
 
@@ -1047,8 +1047,8 @@ def test_a_hostile_big_fight_account_renders_as_one_plain_paragraph_on_the_card(
         for tag in ("<img", "<a ", "<pre", "<code", "<blockquote", "<h1", "<h2", "<hr", "<ul", "<ol", "<em"):
             assert tag not in html, (text, tag, html)
         assert (mark in html) == bool(record.narration), (text, html)
-        for heading in ("結果", "獲得與損失"):
-            assert f"<p><strong>{heading}</strong>" in html, (text, html)  # 沒被吞進任何區塊
+        # 結果與得失併成同一段（卡片上少一段的間距），沒被吞進任何區塊
+        assert "<p><strong>結果</strong>　波才抱拳認輸。　<strong>得失</strong>　" in html, (text, html)
 
 
 def test_the_three_art_buttons_stay_on_one_line_at_phone_width():

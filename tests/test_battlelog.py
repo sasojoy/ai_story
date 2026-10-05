@@ -104,8 +104,9 @@ def test_card_text_omits_the_result_line_when_there_is_no_story():
     card = battlelog.card_text(record())
     assert "**結果**" not in card
     assert card == (
-        "### ⚔ 湖邊・對陣 劫道山賊\n\n第2天 08:30　遊歷\n\n**大勝**　我方威力 40　對手難度 5\n\n**獲得與損失**　無"
+        "### ⚔ 湖邊・對陣 劫道山賊\n\n第2天 08:30　遊歷\n\n**大勝**　我方威力 40　對手難度 5\n\n**得失**　無"
     )
+    assert battlelog.detail_text(record()).endswith("\n\n**獲得與損失**　無")  # 戰報頁照舊兩個詞、各自一段
 
 
 def test_card_text_puts_story_before_gains_and_hides_rumor():
@@ -114,9 +115,13 @@ def test_card_text_puts_story_before_gains_and_hides_rumor():
         changes=["名望 +3"], exp=25, xinde=20, silver=15,
     )
     card = battlelog.card_text(rec)
-    assert "**結果**　你率眾闖進倉庫，殺得水寇四散奔逃！" in card
     assert "【江湖傳聞】" not in card
-    assert card.index("**結果**") < card.index("**獲得與損失**")
+    assert card.endswith(
+        "\n\n**結果**　你率眾闖進倉庫，殺得水寇四散奔逃！　**得失**　經驗 +25（每人）　心得 +20　銀兩 +15　名望 +3"
+    )  # 結果與得失併成同一段：手機上少一段的間距
+    assert "**獲得與損失**" not in card
+    detail = battlelog.detail_text(rec)  # 戰報頁照舊：結果一段、獲得與損失一段
+    assert "\n\n**結果**　你率眾闖進倉庫，殺得水寇四散奔逃！\n\n**獲得與損失**　經驗 +25（每人）　心得 +20　銀兩 +15　名望 +3" in detail
 
 
 def test_detail_text_includes_the_lineup_and_battle_number():
@@ -167,7 +172,7 @@ def test_a_showdown_report_shows_the_side_and_the_trends_instead_of_power_and_di
     card = battlelog.card_text(rec)
     assert card == (
         "### ⚔ 潁汝・對陣 黃巾軍\n\n第2天 08:30　決戰：黃巾決戰\n\n**官軍大勝**　你站在官軍\n\n"
-        "**結果**　官軍士氣如虹。　你出手 3 回合\n\n**大勢**　黃巾聲勢 -35"
+        "**結果**　官軍士氣如虹。　你出手 3 回合　**大勢**　黃巾聲勢 -35"
     )
     detail = battlelog.detail_text(rec)
     assert detail == (
@@ -271,9 +276,9 @@ def test_a_foe_with_no_attribute_and_a_bare_fighter_use_the_fallback_lines(conte
 
 def test_the_card_and_the_report_show_the_rounds_after_the_result_line():
     rec = record(rounds=["第1回合　甲。", "第2回合　乙。"], notes=["你贏了。"])
-    for text in (battlelog.card_text(rec), battlelog.detail_text(rec)):
+    for text, gains in ((battlelog.card_text(rec), "**得失**"), (battlelog.detail_text(rec), "**獲得與損失**")):
         assert "**過程**\n- 第1回合　甲。\n- 第2回合　乙。" in text
-        assert text.index("對手難度") < text.index("**過程**") < text.index("**結果**") < text.index("**獲得與損失**")
+        assert text.index("對手難度") < text.index("**過程**") < text.index("**結果**") < text.index(gains)
 
 
 def test_an_old_record_without_rounds_loads_and_shows_no_rounds():
