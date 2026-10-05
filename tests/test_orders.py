@@ -575,7 +575,7 @@ def test_orders_view_shows_own_side_with_deadline(on):
     assert [v["title"] for v in view] == [orders.title(on, o) for o in orders.current(game.state, on, "guan")]
     first = view[0]
     assert (first["mine"], first["progress"], first["quota"], first["done"]) == (0, 0, 4, False)
-    assert first["deadline"] == "第2週・週一 00:00"
+    assert first["deadline"] == "第 2 週・週一 00:00"
     assert _game(on, "丙").orders_view() == []  # 散人
 
 

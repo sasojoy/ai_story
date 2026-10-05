@@ -18,6 +18,9 @@
     "important": true,
     "tags": [
       "城鎮"
+    ],
+    "insights": [
+      "huo"
     ]
   },
   {
@@ -37,6 +40,9 @@
     "materials": [
       "rou_1",
       "man_1"
+    ],
+    "insights": [
+      "shui"
     ]
   },
   {
@@ -60,6 +66,9 @@
     "materials": [
       "gang_1",
       "kuai_1"
+    ],
+    "insights": [
+      "feng"
     ]
   },
   {
@@ -94,6 +103,10 @@
     "materials": [
       "gang_2",
       "gang_1"
+    ],
+    "insights": [
+      "huo",
+      "feng"
     ]
   },
   {
@@ -125,6 +138,9 @@
     "materials": [
       "kuai_1",
       "gang_1"
+    ],
+    "insights": [
+      "feng"
     ]
   },
   {
@@ -151,6 +167,9 @@
     "important": true,
     "tags": [
       "城鎮"
+    ],
+    "insights": [
+      "huo"
     ]
   },
   {
@@ -173,6 +192,9 @@
     "materials": [
       "man_1",
       "rou_1"
+    ],
+    "insights": [
+      "shan"
     ]
   },
   {
@@ -193,6 +215,9 @@
     "important": true,
     "tags": [
       "官署"
+    ],
+    "insights": [
+      "huo"
     ]
   },
   {
@@ -207,6 +232,9 @@
     "important": true,
     "tags": [
       "官署"
+    ],
+    "insights": [
+      "huo"
     ]
   },
   {
@@ -230,6 +258,10 @@
     "materials": [
       "man_2",
       "kuai_1"
+    ],
+    "insights": [
+      "shan",
+      "feng"
     ]
   },
   {
@@ -257,6 +289,10 @@
     "materials": [
       "kuai_1",
       "gang_1"
+    ],
+    "insights": [
+      "shui",
+      "feng"
     ]
   },
   {
@@ -286,6 +322,10 @@
     "materials": [
       "kuai_1",
       "rou_1"
+    ],
+    "insights": [
+      "feng",
+      "huo"
     ]
   },
   {
@@ -313,6 +353,9 @@
     "materials": [
       "gang_2",
       "man_1"
+    ],
+    "insights": [
+      "huo"
     ]
   },
   {
@@ -338,6 +381,9 @@
     "materials": [
       "rou_1",
       "man_1"
+    ],
+    "insights": [
+      "shui"
     ]
   },
   {
@@ -352,6 +398,9 @@
     "y": 1195,
     "tags": [
       "城鎮"
+    ],
+    "insights": [
+      "huo"
     ]
   },
   {
@@ -382,6 +431,10 @@
     "materials": [
       "kuai_1",
       "gang_1"
+    ],
+    "insights": [
+      "feng",
+      "shan"
     ]
   },
   {
@@ -398,6 +451,9 @@
     "important": true,
     "tags": [
       "城鎮"
+    ],
+    "insights": [
+      "huo"
     ]
   },
   {
@@ -412,6 +468,9 @@
     "y": 1235,
     "tags": [
       "城鎮"
+    ],
+    "insights": [
+      "huo"
     ]
   },
   {
@@ -437,6 +496,10 @@
     "materials": [
       "man_1",
       "gang_1"
+    ],
+    "insights": [
+      "feng",
+      "shan"
     ]
   },
   {
@@ -462,6 +525,9 @@
     "materials": [
       "rou_1",
       "kuai_1"
+    ],
+    "insights": [
+      "shan"
     ]
   },
   {
@@ -477,6 +543,9 @@
     "important": true,
     "tags": [
       "書院"
+    ],
+    "insights": [
+      "huo"
     ]
   },
   {
@@ -506,6 +575,10 @@
     "materials": [
       "man_2",
       "rou_2"
+    ],
+    "insights": [
+      "shan",
+      "shui"
     ]
   },
   {
@@ -529,6 +602,9 @@
     "materials": [
       "man_2",
       "kuai_2"
+    ],
+    "insights": [
+      "shan"
     ]
   },
   {
@@ -551,6 +627,9 @@
     "materials": [
       "gang_1",
       "rou_1"
+    ],
+    "insights": [
+      "huo"
     ]
   },
   {
@@ -569,6 +648,9 @@
     "important": true,
     "tags": [
       "城鎮"
+    ],
+    "insights": [
+      "huo"
     ]
   },
   {
@@ -583,6 +665,9 @@
     "important": true,
     "tags": [
       "莊院"
+    ],
+    "insights": [
+      "huo"
     ]
   },
   {
@@ -613,6 +698,9 @@
     "materials": [
       "man_1",
       "kuai_1"
+    ],
+    "insights": [
+      "feng"
     ]
   },
   {
@@ -638,6 +726,10 @@
     "materials": [
       "gang_2",
       "kuai_2"
+    ],
+    "insights": [
+      "huo",
+      "shan"
     ]
   },
   {
@@ -666,6 +758,9 @@
     "important": true,
     "tags": [
       "城鎮"
+    ],
+    "insights": [
+      "huo"
     ]
   },
   {
@@ -688,6 +783,9 @@
     "materials": [
       "gang_1",
       "kuai_1"
+    ],
+    "insights": [
+      "huo"
     ]
   },
   {
@@ -705,6 +803,9 @@
     ],
     "materials": [
       "rou_1"
+    ],
+    "insights": [
+      "feng"
     ]
   },
   {
@@ -723,6 +824,9 @@
     ],
     "enemies": [
       "yiyong"
+    ],
+    "insights": [
+      "huo"
     ]
   },
   {
@@ -753,6 +857,10 @@
     "materials": [
       "rou_1",
       "man_1"
+    ],
+    "insights": [
+      "shui",
+      "feng"
     ]
   },
   {
@@ -782,6 +890,10 @@
     "materials": [
       "kuai_1",
       "man_2"
+    ],
+    "insights": [
+      "shan",
+      "huo"
     ]
   },
   {
@@ -817,6 +929,9 @@
     },
     "materials": [
       "rou_2"
+    ],
+    "insights": [
+      "huo"
     ]
   },
   {
@@ -849,6 +964,10 @@
     "materials": [
       "gang_2",
       "kuai_2"
+    ],
+    "insights": [
+      "huo",
+      "shui"
     ]
   },
   {
@@ -878,6 +997,9 @@
     },
     "materials": [
       "gang_1"
+    ],
+    "insights": [
+      "huo"
     ]
   },
   {
@@ -908,6 +1030,10 @@
     "materials": [
       "man_1",
       "gang_1"
+    ],
+    "insights": [
+      "huo",
+      "feng"
     ]
   },
   {
@@ -930,6 +1056,9 @@
     ],
     "materials": [
       "man_1"
+    ],
+    "insights": [
+      "shan"
     ]
   },
   {
@@ -970,6 +1099,10 @@
     "materials": [
       "rou_1",
       "kuai_1"
+    ],
+    "insights": [
+      "shui",
+      "feng"
     ]
   }
 ]

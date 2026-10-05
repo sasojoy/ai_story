@@ -9,5 +9,8 @@
   {"id": "needle", "name": "飛針", "kind": "武學", "attribute": "虛"},
   {"id": "wave", "name": "浪濤劍", "kind": "武學", "attribute": "柔"},
   {"id": "sky", "name": "天外劍", "kind": "武學", "attribute": "快"},
-  {"id": "calm", "name": "靜心訣", "kind": "內功", "attribute": "虛"}
+  {"id": "calm", "name": "靜心訣", "kind": "內功", "attribute": "虛"},
+  {"id": "basic_breath", "name": "粗淺吐納", "kind": "內功", "attribute": "柔", "quality": "下品"},
+  {"id": "basic_fist", "name": "粗淺拳腳", "kind": "武學", "attribute": "實", "quality": "下品"},
+  {"id": "lake_kick", "name": "湖邊腿法", "kind": "武學", "attribute": "快", "quality": "下品", "learn": {"at": "lake", "silver": 10}}
 ]

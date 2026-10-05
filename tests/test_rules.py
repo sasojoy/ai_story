@@ -161,11 +161,44 @@ def test_learn_skill_starts_at_first_level(state, content):
     assert learn_skill(state, content, "fist") == []
 
 
-def test_learn_skill_does_not_overwrite_an_existing_wugong(state, content):
+def test_learn_skill_puts_a_second_art_in_the_library(state, content):
+    """事件教的武學（追風步、混元一氣）：欄位已經有東西時不覆蓋、也不消失，進功法庫（武學與成長計畫 F2、設計附錄 B.1）。"""
     learn_skill(state, content, "fist")
     msgs = learn_skill(state, content, "sword")
-    assert state.player.member.wugong_id == "fist"  # 原本那門先到，後來的沒學成
-    assert "先無緣習得" in msgs[0]
+    assert state.player.member.wugong_id == "fist"  # 原本那門先到，不被蓋掉
+    assert state.player.arts == ["sword"]
+    assert "流雲劍" in msgs[0] and "功法庫" in msgs[-1]
+    assert learn_skill(state, content, "sword") == [] and state.player.arts == ["sword"]  # 已經有了就不再收一次
+
+
+def test_skill_conditions_see_arts_in_the_library_too(state, content):
+    """事件教的武學在欄位滿了時進功法庫（F2）：skills_none／skills_all 要看所有擁有的武學（身上＋功法庫），
+    不然「還沒學過才出現」的付費課程，學完收進功法庫之後還會一直回來、再收一次錢（最終審查 Important 1）。"""
+    learn_skill(state, content, "fist")
+    learn_skill(state, content, "sword")
+    assert state.player.arts == ["sword"]  # 在功法庫，不在身上
+    assert not check_condition(Condition(skills_none=["sword"]), state)
+    assert check_condition(Condition(skills_all=["sword", "fist"]), state)
+
+
+def test_learn_skill_ignores_the_holding_cap(state, content):
+    """付了錢、或是奇遇給的，不能因為滿了就憑空消失（跟悟意境一樣不受上限擋）。"""
+    content.config.holding_cap_base = 1
+    learn_skill(state, content, "fist")
+    learn_skill(state, content, "sword")
+    assert state.player.arts == ["sword"]
+
+
+def test_an_effect_can_grant_an_insight(state, content, world):
+    msgs = apply_effect(Effect(insights=["feng"]), state, content, world)
+    assert state.player.insights == ["feng"] and any("悟得" in m for m in msgs)
+
+
+def test_an_effect_that_grants_a_known_insight_again_gives_xinde(state, content, world):
+    state.player.insights = ["feng"]
+    state.player.stats["xinde"] = 0
+    msgs = apply_effect(Effect(insights=["feng"]), state, content, world)
+    assert state.player.insights == ["feng"] and state.player.stats["xinde"] == 10 and "心得 +10" in msgs
 
 
 def test_current_day(state):

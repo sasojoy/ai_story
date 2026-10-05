@@ -1,6 +1,8 @@
 import random
 
+from tianxia import bot, library
 from tianxia.bot import pick, play_season, spend_xinde, wants_heal
+from tianxia.engine import Game
 from tianxia.models import (
     BattleAct, BattleActionEffect, BattleDef, BattleFaction, BattleOption, BattleOutcome,
 )
@@ -17,14 +19,48 @@ def test_wants_heal_only_with_internal_injury(game):
     assert wants_heal(game)
 
 
-def test_spend_xinde_first_creates_then_practices_each_slot(game):
+def test_spend_xinde_practices_each_worn_art_one_level(content):
+    content.config.starter_skills = ["basic_breath", "basic_fist"]
+    game = Game.new(content, "新人", rng=random.Random(0))
     rng = random.Random(0)
     member = game.state.player.member
-    spend_xinde(game, rng)
-    assert member.neigong_id is not None and member.wugong_id is not None
     assert (member.neigong_level, member.wugong_level) == (1, 1)
+    game.state.player.stats["xinde"] = 100  # 練成要花心得
     spend_xinde(game, rng)
     assert (member.neigong_level, member.wugong_level) == (2, 2)
+    spend_xinde(game, rng)
+    assert (member.neigong_level, member.wugong_level) == (3, 3)
+    assert game.state.player.stats["xinde"] == 100 - 2 * (1 + 2)  # 兩門各花 1、再各花 2
+
+
+def test_spend_xinde_only_practises_what_it_can_afford(content):
+    content.config.starter_skills = ["basic_breath", "basic_fist"]
+    game = Game.new(content, "新人", rng=random.Random(0))
+    member = game.state.player.member
+    member.neigong_level, member.wugong_level = 3, 5  # 下一成要 3、5 點
+    game.state.player.stats["xinde"] = 4
+    spend_xinde(game, random.Random(0))
+    assert (member.neigong_level, member.wugong_level) == (4, 5)  # 武學付不起：留著，不去撞「心得不足」
+    assert game.state.player.stats["xinde"] == 1
+    spend_xinde(game, random.Random(0))
+    assert (member.neigong_level, member.wugong_level) == (4, 5)  # 剩 1 點，兩門都付不起
+
+
+def test_spend_xinde_leaves_a_maxed_art_alone(content):
+    content.config.starter_skills = ["basic_breath", "basic_fist"]
+    game = Game.new(content, "新人", rng=random.Random(0))
+    game.state.player.member.wugong_level = 10
+    game.state.player.stats["xinde"] = 100
+    spend_xinde(game, random.Random(0))
+    assert game.state.player.member.wugong_level == 10
+    assert game.state.player.stats["xinde"] == 99  # 只有內功練了一成（第 1 成升第 2 成花 1 點）
+
+
+def test_spend_xinde_leaves_an_empty_slot_empty(game):
+    """沒有開局送的功夫時（fixture 的設定）也不會去自創：空著的欄位就是空著。"""
+    spend_xinde(game, random.Random(0))
+    member = game.state.player.member
+    assert member.neigong_id is None and member.wugong_id is None
 
 
 def test_spend_xinde_heals_first_when_neili_is_low(game):
@@ -33,6 +69,116 @@ def test_spend_xinde_heals_first_when_neili_is_low(game):
     game.state.player.stats["silver"] = 999
     spend_xinde(game, random.Random(0))
     assert game.state.player.member.injury == 0.0 and game.state.player.member.neili is None
+
+
+class Fixed(random.Random):
+    """random() 永遠回傳固定值（同 conftest.FixedRandom）：讓機器人「偶爾合併」那個機會必中或必不中。"""
+
+    def __init__(self, value):
+        super().__init__(0)
+        self.value = value
+
+    def random(self):
+        return self.value
+
+
+def armed(content, world, **stats):
+    """一個有一門武學、一個意境、心得與體力都夠的機器人。"""
+    game = Game.new(content, "機器人", rng=random.Random(0), world=world)
+    p = game.state.player
+    p.member.wugong_id = "basic_fist"
+    p.insights = ["feng"]
+    p.stats["xinde"] = 100
+    p.stamina = 150
+    for key, value in stats.items():
+        p.stats[key] = value
+    return game
+
+
+def test_the_bot_fuses_cultivates_and_melts_when_full(content, world):
+    game = Game.new(content, "機器人", rng=random.Random(0), world=world)
+    p = game.state.player
+    p.member.wugong_id = "basic_fist"
+    p.insights = ["feng"]
+    p.stats["xinde"] = 100
+    p.stamina = 150
+    bot.forge_and_cultivate(game, random.Random(0))
+    fused = [a for a in library.owned_arts(game.state) if a != "basic_fist"]
+    assert len(fused) == 1
+    assert p.art_quality.get(fused[0]) == "中品" or p.art_mastery.get(fused[0]) == 1  # 也修練了一次
+    p.insights = []  # 沒有意境可合成：這一輪只會熔，不會又合成回來
+    content.config.holding_cap_base = library.held_count(game.state)  # 正好滿了
+    bot.forge_and_cultivate(game, random.Random(0))
+    assert library.held_count(game.state) == content.config.holding_cap_base - 1  # 滿了先熔一門
+
+
+def test_the_bot_sometimes_merges_two_insights_instead(content, world):
+    """手上有兩個以上意境時，一部分機會改做合併（兩個意境→新意境，兩個都留著）。"""
+    game = armed(content, world)
+    game.state.player.insights = ["feng", "huo"]
+    before = set(game.state.player.insights)
+    bot.forge_and_cultivate(game, Fixed(0.0))
+    assert before < set(game.state.player.insights) and len(game.state.player.insights) == 3
+    assert library.owned_arts(game.state) == ["basic_fist"]  # 這一輪做的是合併，沒有合成
+
+
+def test_the_bot_fuses_when_the_merge_chance_does_not_come_up(content, world):
+    game = armed(content, world)
+    game.state.player.insights = ["feng", "huo"]
+    bot.forge_and_cultivate(game, Fixed(0.99))
+    assert len(game.state.player.insights) == 2 and len(library.owned_arts(game.state)) == 2
+
+
+def test_the_bot_names_the_art_it_mastered_with_a_fallback_name(content, world):
+    """練成絕學的第一人要自己取名：機器人不叫模型，走退路字表（取出來的名字過得了命名過濾）。"""
+    game = armed(content, world)
+    game.forge("basic_fist", ["feng"])
+    game.state.player.stats["xinde"] = 0
+    art_id = next(a for a in library.owned_arts(game.state) if a != "basic_fist")
+    world.claim_master(art_id, game.state.player.name)
+    game.state.player.naming = art_id
+    bot.forge_and_cultivate(game, random.Random(0))
+    assert game.state.player.naming is None
+    assert world.get_skill(art_id).name != art_id  # 全服的這門改了名
+
+
+def test_the_bot_keeps_its_stamina_for_the_road_below_the_reserve(content, world):
+    game = armed(content, world)
+    game.state.player.stamina = bot.CULTIVATE_RESERVE - 1
+    bot.forge_and_cultivate(game, random.Random(0))
+    assert game.state.player.stamina == bot.CULTIVATE_RESERVE - 1  # 沒有修練（合成不花體力）
+    assert not game.state.player.art_mastery and not game.state.player.art_quality
+
+
+def ready_to_climb(content, world, quality):
+    """已經融過意境、品質是 quality、手上有一枚破境丹的機器人；心得歸零，所以這一輪只會修練、不會再合成。"""
+    game = armed(content, world)
+    game.forge("basic_fist", ["feng"])
+    p = game.state.player
+    art_id = next(a for a in library.owned_arts(game.state) if a != "basic_fist")
+    p.art_quality[art_id] = quality
+    p.stats["xinde"] = 0
+    p.stamina = 150
+    p.legend_items = 1
+    return game, art_id
+
+
+def test_the_bot_takes_a_pill_when_it_goes_for_a_peerless_art(content, world):
+    """破境丹（企劃者：玩家自己決定哪一次衝絕學要服）：機器人手上有、而且這一次衝的是絕學就服。"""
+    game, art_id = ready_to_climb(content, world, "上品")
+    bot.forge_and_cultivate(game, random.Random(0))
+    assert game.state.player.legend_items == 0
+    assert game.state.player.stamina < 150  # 真的修練了
+
+
+def test_the_bot_keeps_its_pill_for_the_peerless_step(content, world):
+    """下品→中品、中品→上品用不上丹：不傳 use_legend，丹留著、也不會多一句「這一回沒服」。"""
+    for quality in ("下品", "中品"):
+        game, art_id = ready_to_climb(content, world, quality)
+        bot.forge_and_cultivate(game, random.Random(0))
+        assert game.state.player.legend_items == 1
+        assert game.state.player.stamina < 150  # 真的修練了
+        assert not any("沒服" in line for line in game.state.log)
 
 
 def test_pick_accepts_whoever_the_event_wants_to_recruit(game):

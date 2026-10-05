@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import hashlib
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 QUALITIES = ("下品", "中品", "上品", "絕學")
 ATTRIBUTES = ("陰", "陽", "剛", "柔", "快", "慢", "虛", "實")
@@ -35,10 +35,38 @@ class MartialArt(BaseModel):
     attribute: str  # ATTRIBUTES 其中之一
     base_power: float
     top_power: float
-    # "historical"（本命武學，內容手寫）、"created"（玩家取名自創）或 "crafted"（煉製，craft.py 設的）
+    # "historical"（本命武學，內容手寫）、"basic"（基礎武學，內容手寫）、"fused"（合成）；
+    # 舊資料還有 "created"（玩家取名自創）與 "crafted"（舊的素材煉製，已經沒有了）
     origin: str = "created"
-    creator: str | None = None  # 自創功法的取名者、煉製功法的首創者（玩家名號），本命武學為 None
-    note: str = ""  # 煉製時由 LLM 寫的一句話描述（只有語意、沒有數字）；自創與本命武學是空的
+    creator: str | None = None  # 合成首創者的名號（身分，誰是首創者照它認）；舊的自創、煉製功法照舊；內容武學為 None
+    # 首創者寫給別人看的名號：登記當下照匿名行走的規矩定（rules.display_name，匿名是「某位少俠」）；
+    # 功法卡、後到的人那一句、換季的江湖史都寫這個（shown_creator）。舊資料沒有，照 creator
+    creator_shown: str | None = None
+    # 全服第一個把它練成絕學的人寫給別人看的名號（world.claim_master 登記時一起寫進來）；身分記在 masters 表
+    master_shown: str | None = None
+    note: str = ""  # 模型寫的一句話描述（只有語意、沒有數字）；自創與本命武學是空的
+    insight: str | None = None  # 最後融的意境 id（武學與成長設計 3.4）；修練要用它
+    base: str | None = None  # 合成的底（功法 id）
+    lean: str = "無"  # 正、邪、無：跟著最後融的意境（設計 7.3）
+
+
+class Insight(BaseModel):
+    """一個意境（武學與成長設計 3.2）。基本意境（風火水山、浩然、血煞）寫在 content/insights.json；
+    合併出來的存在全服（world.get_insight），名字就是 id。只有語意，沒有數字。"""
+
+    id: str
+    name: str
+    attribute: str  # ATTRIBUTES 其中之一
+    lean: str = "無"  # 正、邪、無（設計 7.3）
+    creator: str | None = None  # 合併出來的：第一個合出來的人的名號（身分）；基本意境是 None
+    creator_shown: str | None = None  # 首悟者寫給別人看的名號（登記當下照匿名的規矩定，見 MartialArt.creator_shown）
+    note: str = ""  # 模型寫的一句說明；基本意境是內容的 desc
+    parents: list[str] = Field(default_factory=list)  # 合併出來的：兩個來源的 id（排序過）
+
+
+def shown_creator(thing: MartialArt | Insight) -> str | None:
+    """首創者寫給別人看的名號：登記當下定的那一個（匿名行走的人是「某位少俠」）；舊資料沒記，照名號。"""
+    return thing.creator_shown or thing.creator
 
 
 def power_at(art: MartialArt, level: int) -> float:
@@ -78,8 +106,8 @@ def generate_from_name(
     - tianji：這一季的天機（見 world_state.SharedWorldState.tianji），同一季內同名同結果，
       換季後重新洗牌。
 
-    `weights` 與 `attribute` 是給煉製用的（見 tianxia/craft.py，無限煉製設計 §5.3、§5.4）：
-    煉製要讓「素材的階位移品質的機率分佈」、「屬性由素材決定」，但擲骰仍然來自名字的雜湊。
+    `weights` 與 `attribute` 是給合成用的（見 tianxia/fusion.py，武學與成長設計 3.4）：
+    合成要讓「品質固定下品」、「屬性由融入的意境決定」，但擲骰仍然來自名字的雜湊。
     兩個都不傳時行為跟以前**完全一樣**（取名自創那條路徑的結果不受影響，有測試保護）。
     `weights` 的鍵要照 QUALITIES 的順序排（_weighted_pick 走的是累積分佈，順序有意義）。
     """
@@ -111,6 +139,37 @@ def historical_art(skill_id: str, name: str, kind: str, attribute: str, quality:
         top_power=QUALITY_TOP_POWER[quality],
         origin="historical",
     )
+
+
+def content_art(skill_id: str, name: str, kind: str, attribute: str, quality: str) -> MartialArt:
+    """內容手寫的武學：下品是基礎武學（武學與成長設計附錄 B，origin "basic"）；
+    其他品質照舊走 historical_art（本命武學的絕學、部下用的上品武學，來源標本命，不算基礎武學）。
+    威力照品質的區間、不加微調。"""
+    if quality != "下品":
+        return historical_art(skill_id, name, kind, attribute, quality)
+    return MartialArt(
+        id=skill_id, name=name, kind=kind, quality=quality, attribute=attribute,
+        base_power=QUALITY_BASE_POWER[quality], top_power=QUALITY_TOP_POWER[quality], origin="basic",
+    )
+
+
+def with_quality(art: MartialArt, quality: str) -> MartialArt:
+    """同一門武學換一個品質（修練是各練各的，設計 3.5）：威力照新品質的區間，保留這門武學原本那一點微調。
+    品質一樣就原封不動回傳。"""
+    if quality == art.quality:
+        return art
+    scale = art.base_power / QUALITY_BASE_POWER[art.quality]
+    return art.model_copy(update={
+        "quality": quality,
+        "base_power": round(QUALITY_BASE_POWER[quality] * scale, 1),
+        "top_power": round(QUALITY_TOP_POWER[quality] * scale, 1),
+    })
+
+
+def next_quality(quality: str) -> str | None:
+    """修練的下一品；絕學是頂，回 None。"""
+    i = QUALITIES.index(quality)
+    return QUALITIES[i + 1] if i + 1 < len(QUALITIES) else None
 
 
 # 屬性相剋：陰陽剛柔快慢虛實，比照 tianxia 設計文件（design.md §六）原本構想的「內功陰陽剛柔、

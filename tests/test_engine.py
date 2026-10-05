@@ -1,14 +1,17 @@
 import random
+import re
 import time
+from pathlib import Path
 from unittest import mock
 
 import pytest
 
 from conftest import FixedRandom, at, install_season_one, walk_to
-from tianxia import atlas, battle_instance, calendar, companion_agent, flavor, front_lines, guide, rules, skillview
+from tianxia import atlas, battle_instance, calendar, companion_agent, flavor, front_lines, guide, library, rules, skillview
 from tianxia.characters import open_characters
+from tianxia.content import load_content
 from tianxia.engine import Game, Option
-from tianxia.martial_arts import MartialArt
+from tianxia.martial_arts import Insight, MartialArt, generate_from_name
 from tianxia.models import FigureDef, Location, PromotionDef
 from tianxia.models import ExploreMix
 from tianxia.state import BotProfile, FigureState, GameState, Journey, Rumor, new_game_state
@@ -17,6 +20,7 @@ from tianxia.world_state import season_length_days
 
 HOUR = 3600
 DAY = 86400
+ROOT = Path(__file__).resolve().parent.parent
 
 
 def ids(game):
@@ -31,6 +35,182 @@ def test_new_game(game):
     assert p.location == "town" and p.stamina == 150
     assert p.team == [] and p.member.level == 1
     assert "測試開始。" in game.state.log
+
+
+def test_a_new_character_starts_with_the_starter_arts(content, world):
+    content.config.starter_skills = ["basic_breath", "basic_fist"]
+    game = Game.new(content, "新人", rng=random.Random(0), world=world)
+    member = game.state.player.member
+    assert (member.neigong_id, member.neigong_level) == ("basic_breath", 1)
+    assert (member.wugong_id, member.wugong_level) == ("basic_fist", 1)
+
+
+def test_a_new_season_character_starts_with_the_starter_arts_again(content, world):
+    """每季重來的角色也從那兩門第一成開始（_reset_player_for_new_season 走同一個 new_game_state）。"""
+    content.config.starter_skills = ["basic_breath", "basic_fist"]
+    game = Game.new(content, "新人", rng=random.Random(0), world=world)
+    game.state.player.member.wugong_id, game.state.player.member.wugong_level = "fist", 7
+    game._reset_player_for_new_season(game.state.player.season_number + 1)
+    member = game.state.player.member
+    assert (member.neigong_id, member.neigong_level) == ("basic_breath", 1)
+    assert (member.wugong_id, member.wugong_level) == ("basic_fist", 1)
+
+
+def test_there_is_no_self_created_art_any_more(game):
+    """行為上也沒有（審查 F18）：就算兩個欄位都空著、手上心得銀兩都有，選單也不給自創，硬送自創的選項 id 只會被擋回；
+    伺服器那一側的拒絕在 tests/test_server.py。"""
+    member = game.state.player.member
+    member.neigong_id = member.wugong_id = None
+    game.state.player.stats.update(xinde=500, silver=500)
+    listed = game.options()
+    assert not any("create" in o.id or "自創" in o.label for o in listed)
+    arts_before = library.owned_arts(game.state)
+    for option_id in ("act:create", "act:create_skill", "create", "act:craft"):
+        assert game.choose(option_id) == ["（此刻無法這麼做。）"]
+    assert library.owned_arts(game.state) == arts_before == []
+    assert (member.neigong_id, member.wugong_id) == (None, None)
+
+
+def test_the_menxia_pages_get_their_rows_from_the_game_facade(game):
+    """修練與煉製兩頁的資料都從 Game 這個門面拿（伺服器不直接碰 skillview）。"""
+    game.state.player.member.wugong_id = "basic_fist"
+    game.state.player.arts = ["lake_kick"]
+    game.state.player.insights = ["feng"]
+    assert game.holdings() == {"count": 3, "cap": library.holding_cap(game.content, 1)}
+    assert [r["id"] for r in game.art_rows()] == ["basic_fist", "lake_kick"]
+    assert [r["id"] for r in game.insight_rows()] == ["feng"]
+    assert game.naming_row() is None
+    game.state.player.naming = "lake_kick"
+    assert game.naming_row() == {"id": "lake_kick", "name": "湖邊腿法"}
+    game.state.player.naming = "ghost"
+    assert game.naming_row() is None  # 找不到那門武學：沒有東西可以取名
+
+
+def test_real_content_starts_with_enough_xinde_for_the_first_level():
+    """Review Focus 第 5 條：新角色照新手引導按「練成」，第一成一定練得起。"""
+    real = load_content(ROOT / "content")
+    first = [real.skills[s] for s in real.config.starter_skills]
+    assert len(first) == 2
+    assert real.config.start_stats["xinde"] >= 2 * real.config.practice_xinde_per_level  # 兩門各練一成
+
+
+# ── 讀檔清理（武學與成長計畫 T10）──────────────────────────
+
+
+def _reload(game, content, world):
+    return Game(content, game.state, rng=random.Random(0), world=world).state.player
+
+
+def _a_fused_art(world, name="旋風腿"):
+    """全服登記一門合成的武學（修練、定名都要它存在於全服）。"""
+    art = generate_from_name(name, "武學", name).model_copy(update={"origin": "fused", "insight": "feng", "creator": "舊檔"})
+    assert world.claim_skill_name(art)
+    return art
+
+
+def test_loading_drops_insights_and_records_that_no_longer_point_anywhere(content, world):
+    game = Game.new(content, "舊檔", rng=random.Random(0), world=world)
+    p = game.state.player
+    p.member.neigong_id = "basic_breath"
+    p.member.wugong_id = "basic_fist"
+    p.insights = ["feng", "feng", "不存在的意境"]
+    p.art_quality = {"basic_fist": "中品", "早就熔掉的": "上品", "basic_breath": "怪品"}  # 怪品：不是四個品質之一
+    p.art_mastery = {"basic_fist": 2, "早就熔掉的": 3, "basic_breath": 0}
+    p.naming = "basic_fist"  # 不是全服第一個練成的人
+    q = _reload(game, content, world)
+    assert q.insights == ["feng"]
+    assert q.art_quality == {"basic_fist": "中品"}
+    assert q.art_mastery == {"basic_fist": 2}
+    assert q.naming is None
+
+
+def test_loading_keeps_world_made_insights_that_still_exist(content, world):
+    """全服合併出來的意境（world.get_insight）找得到就留著，換季或內容改版後找不到才丟。"""
+    game = Game.new(content, "舊檔", rng=random.Random(0), world=world)
+    assert world.claim_insight_recipe("合|feng+huo", Insight(id="燎原", name="燎原", attribute="陽", creator="乙"))[1]
+    game.state.player.insights = ["燎原", "huo", "已經散掉的意境"]
+    assert _reload(game, content, world).insights == ["燎原", "huo"]
+
+
+def test_loading_keeps_a_naming_right_the_player_really_holds(content, world):
+    """等著取名的那一門是自己第一個練成的、又還擁有它：讀檔後取名權還在（清理不能一律清掉）。"""
+    game = Game.new(content, "舊檔", rng=random.Random(0), world=world)
+    art = _a_fused_art(world)
+    assert world.claim_master(art.id, "舊檔")
+    p = game.state.player
+    p.arts, p.naming = [art.id], art.id
+    assert _reload(game, content, world).naming == art.id
+
+
+def test_loading_drops_a_naming_right_someone_else_holds_or_the_art_is_gone(content, world):
+    game = Game.new(content, "舊檔", rng=random.Random(0), world=world)
+    art = _a_fused_art(world)
+    p = game.state.player
+    assert world.claim_master(art.id, "別人")  # 第一個練成的是別人：換季、讀到舊檔都可能對不上
+    p.arts, p.naming = [art.id], art.id
+    assert _reload(game, content, world).naming is None
+    other = _a_fused_art(world, "回風掌")
+    assert world.claim_master(other.id, "舊檔")
+    p.arts, p.naming = [], other.id  # 取名權是自己的，可是那門武學已經不在手上
+    assert _reload(game, content, world).naming is None
+
+
+def test_a_worn_id_that_is_only_an_insight_name_or_an_alias_is_not_an_art(content, world):
+    """is_skill_name_taken 連改過的名字與意境名都算，不能拿來判斷「這門武學存在」：身上的 id 對不到真的武學就丟掉。"""
+    game = Game.new(content, "舊檔", rng=random.Random(0), world=world)
+    art = _a_fused_art(world)
+    assert world.rename_skill(art.id, "風神腿")
+    assert world.claim_insight_recipe("合|feng+huo", Insight(id="燎原", name="燎原", attribute="陽", creator="乙"))[1]
+    member = game.state.player.member
+    member.neigong_id, member.wugong_id = "燎原", "風神腿"  # 一個是意境名、一個是別名，都沒有這個 id 的武學
+    after = _reload(game, content, world).member
+    assert after.neigong_id is None and after.wugong_id is None
+    member.wugong_id = art.id  # 真的存在的合成武學：留著
+    assert _reload(game, content, world).member.wugong_id == art.id
+
+
+def test_loading_fills_an_empty_slot_with_the_matching_starter_art(content, world):
+    """新規則下欄位不會空（開局送兩門、身上的熔不掉）；改版前存的角色欄位空著、又不能再自創，讀檔時補回開局那門。"""
+    content.config.starter_skills = ["basic_breath", "basic_fist"]
+    game = Game.new(content, "舊檔", rng=random.Random(0), world=world)
+    member = game.state.player.member
+    member.neigong_id = member.wugong_id = None
+    member.neigong_level = member.wugong_level = 7  # 舊的熟練度不帶：新的一門從第一成起
+    after = _reload(game, content, world).member
+    assert (after.neigong_id, after.neigong_level) == ("basic_breath", 1)
+    assert (after.wugong_id, after.wugong_level) == ("basic_fist", 1)
+
+
+def test_loading_moves_a_starter_from_the_library_into_the_empty_slot_keeping_its_level(content, world):
+    content.config.starter_skills = ["basic_breath", "basic_fist"]
+    game = Game.new(content, "舊檔", rng=random.Random(0), world=world)
+    p = game.state.player
+    p.member.wugong_id = None
+    p.arts, p.art_levels = ["basic_fist"], {"basic_fist": 6}
+    after = _reload(game, content, world)
+    assert (after.member.wugong_id, after.member.wugong_level) == ("basic_fist", 6)
+    assert "basic_fist" not in after.arts
+    assert library.owned_arts(game.state).count("basic_fist") == 1
+
+
+def test_loading_leaves_a_filled_slot_alone(content, world):
+    content.config.starter_skills = ["basic_breath", "basic_fist"]
+    game = Game.new(content, "舊檔", rng=random.Random(0), world=world)
+    p = game.state.player
+    p.member.wugong_id, p.member.wugong_level = "fist", 4
+    p.arts, p.art_levels = ["basic_fist"], {"basic_fist": 6}  # 開局那門收在庫裡也不動它
+    after = _reload(game, content, world)
+    assert (after.member.wugong_id, after.member.wugong_level) == ("fist", 4)
+    assert after.arts == ["basic_fist"] and after.art_levels == {"basic_fist": 6}
+    assert (after.member.neigong_id, after.member.neigong_level) == ("basic_breath", 1)
+
+
+def test_loading_leaves_an_empty_slot_empty_when_the_content_has_no_starter_arts(content, world):
+    assert content.config.starter_skills == []
+    game = Game.new(content, "舊檔", rng=random.Random(0), world=world)
+    game.state.player.member.neigong_id = game.state.player.member.wugong_id = None
+    after = _reload(game, content, world).member
+    assert after.neigong_id is None and after.wugong_id is None
 
 
 def test_town_options(game):
@@ -481,29 +661,137 @@ def test_presenting_a_repeated_event_appends_the_flavor_sentence(game):
 # ── 練功、療傷 ───────────────────────────────────────────
 
 
-def test_create_skill_and_practice(game):
-    msgs = game.create_skill("龍吟九霄", "武學")
-    assert msgs == ["你自創了一門武學【龍吟九霄】（中品，屬陰）！"]
-    assert game.state.player.member.wugong_id == "龍吟九霄"
+def _wear(game, wugong: str | None = None, neigong: str | None = None):
+    """直接把內容裡的武學配到身上（第一成）：自創已經作廢，測試要「先有一門功夫」就這樣借。"""
+    member = game.state.player.member
+    if wugong:
+        member.wugong_id, member.wugong_level = wugong, 1
+    if neigong:
+        member.neigong_id, member.neigong_level = neigong, 1
+
+
+def test_practice_writes_one_merged_journal_entry(game):
+    _wear(game, wugong="fist")
+    game.state.player.stats["xinde"] = 10
+    msgs = game.practice("武學")
+    assert msgs == ["【長拳】精進至第2成。", "心得 -1"]  # 第 1 成升第 2 成花 1 點心得
+    assert game.state.player.member.wugong_level == 2
     entry = game.state.journal[0]
     assert entry.title == "修練" and entry.tag == msgs[0]
     game.practice("武學")
-    assert game.state.player.member.wugong_level == 2
+    assert game.state.player.member.wugong_level == 3
+    assert game.state.player.stats["xinde"] == 7  # 再花 2 點
     assert game.state.journal[0].title == "修練"  # 併進同一則
+
+
+def test_a_failed_practice_does_not_finish_the_tutorial_step(game):
+    game.state.player.member.wugong_id = "basic_fist"
+    game.state.player.stats["xinde"] = 0
+    with mock.patch("tianxia.engine.note_action", return_value=[]) as noted:
+        game.practice("武學")
+    noted.assert_not_called()
+
+
+def test_a_real_practice_still_reaches_the_tutorial_hook(game):
+    game.state.player.member.wugong_id = "basic_fist"
+    game.state.player.stats["xinde"] = 5
+    with mock.patch("tianxia.engine.note_action", return_value=[]) as noted:
+        game.practice("武學")
+    noted.assert_called_once()
+    assert noted.call_args.args[-1] == "practice"
+
+
+def test_practicing_without_enough_xinde_says_how_much_is_missing(game):
+    _wear(game, wugong="fist")
+    game.state.player.member.wugong_level = 4
+    game.state.player.stats["xinde"] = 1
+    msgs = game.practice("武學")
+    assert game.state.player.member.wugong_level == 4 and game.state.player.stats["xinde"] == 1
+    assert "要 4 點心得，你只有 1 點" in msgs[0] and "還差 3 點" in msgs[0]
+
+
+def test_a_refused_practice_writes_no_journal_entry(game):
+    """練不成（還沒學、心得不足）只回一句話，不留一則「修練」紀錄（武學與成長計畫 F12）。"""
+    game.state.player.stats["xinde"] = 0
+    before = list(game.state.journal)
+    game.state.player.member.wugong_id = None
+    game.practice("武學")  # 還沒學
+    game.state.player.member.wugong_id, game.state.player.member.wugong_level = "fist", 4
+    msgs = game.practice("武學")  # 心得不足
+    assert "心得不足" in msgs[0]
+    assert game.state.journal == before
+
+
+def test_learning_shows_up_on_the_menu_and_costs_no_stamina(game):
+    walk_to(game, "lake")
+    game.state.player.stats["silver"] = 30
+    stamina = game.state.player.stamina
+    option = next(o for o in game.options() if o.id == "learn:lake_kick")
+    assert option.enabled and "銀兩 10" in option.label
+    game.choose("learn:lake_kick")
+    assert "lake_kick" in library.owned_arts(game.state)
+    assert game.state.player.stamina == stamina
+
+
+def test_a_lesson_you_cannot_afford_is_listed_but_greyed_out(game):
+    walk_to(game, "lake")
+    game.state.player.stats["silver"] = 3
+    option = next(o for o in game.options() if o.id == "learn:lake_kick")
+    assert not option.enabled and "學費 10 兩" in option.label
+    assert "（此刻無法這麼做。）" in game.choose("learn:lake_kick")
+
+
+def test_learning_is_written_to_the_journal_and_the_lesson_leaves_the_menu(game):
+    walk_to(game, "lake")
+    game.state.player.stats["silver"] = 30
+    game.choose("learn:lake_kick")
+    entry = game.state.journal[0]
+    assert entry.title == "學藝・湖邊腿法" and "銀兩 -10" in entry.changes
+    assert "learn:lake_kick" not in ids(game)
+
+
+def test_melting_a_library_art_writes_one_journal_entry(game):
+    player = game.state.player
+    player.arts, player.art_levels["lake_kick"], player.stats["xinde"] = ["lake_kick"], 5, 0
+    msgs = game.melt_art("lake_kick")
+    assert "熔成了心得" in msgs[0] and player.arts == [] and player.stats["xinde"] == 8
+    entry = game.state.journal[0]
+    assert entry.title == "修練" and entry.tag == msgs[0] and "心得 +8" in entry.changes
+
+
+def test_melting_an_art_worth_no_xinde_still_counts_as_something_that_happened(game):
+    game.state.player.arts = ["lake_kick"]  # 第一成、下品：退 0 心得，但這門武學確實沒了
+    game.melt_art("lake_kick")
+    assert game.state.player.arts == [] and game.state.journal[0].tag.startswith("你把【湖邊腿法】")
+
+
+def test_a_refused_melt_writes_no_journal_entry(game):
+    game.state.player.member.wugong_id = "basic_fist"
+    before = list(game.state.journal)
+    assert "先改練" in game.melt_art("basic_fist")[0]  # 身上正在練的
+    assert "沒有" in game.melt_art("lake_kick")[0]  # 功法庫裡沒有
+    assert "沒有" in game.melt_insight("feng")[0]  # 沒有這個意境
+    assert game.state.journal == before
+
+
+def test_melting_an_insight_writes_one_journal_entry(game):
+    game.state.player.insights, game.state.player.stats["xinde"] = ["feng"], 0
+    msgs = game.melt_insight("feng")
+    assert "化成了心得" in msgs[0] and game.state.player.insights == []
+    entry = game.state.journal[0]
+    assert entry.title == "修練" and "心得 +10" in entry.changes
 
 
 def _practice_step_game(game, worn: dict[str, int]):
     """把引導換成「第 1 步＝鍛鍊」（fixture 的引導沒有這一步，照 _install_* 的慣例直接裝進內容），
-    身上先配好 worn（種類 → 熟練度）。回傳（引導步驟的獎勵銀兩）。
-
-    先自創再換引導：自創本身也會記一次 practice 動作，引導還在別的步驟時不會被它推進。
-    """
+    身上先配好 worn（種類 → 熟練度），並給足心得（練成要花心得，這裡驗的是引導不是價錢）。回傳（引導步驟的獎勵銀兩）。"""
     from tianxia.models import Effect, TutorialGoal, TutorialStep
 
-    for i, (kind, level) in enumerate(worn.items()):
-        game.create_skill(f"測試{kind}{i}", kind)
+    for kind, level in worn.items():
+        _wear(game, **{"neigong" if kind == "內功" else "wugong": "breath" if kind == "內功" else "fist"})
         slot = "neigong" if kind == "內功" else "wugong"
         setattr(game.state.player.member, f"{slot}_level", level)
+    game.state.player.stats["xinde"] = 100
     reward = 10
     game.content.tutorial.steps = [
         TutorialStep(
@@ -551,6 +839,21 @@ def test_the_practice_tutorial_step_counts_a_maxed_art_and_says_so(game):
     assert game.state.player.tutorial_step == 1
 
 
+def test_a_practice_that_cannot_be_afforded_does_not_finish_the_step(game):
+    """練成花心得：心得不夠就沒練成，引導那一步不能算完成（也不發獎勵）。"""
+    reward = _practice_step_game(game, {"武學": 1})
+    game.state.player.stats["xinde"] = 0
+    silver = game.state.player.stats["silver"]
+    msgs = game.practice("武學")
+    assert "心得不足" in msgs[0] and game.state.player.member.wugong_level == 1
+    assert game.state.player.tutorial_step == 0 and game.state.player.guide_done == []
+    assert game.state.player.stats["silver"] == silver
+    game.state.player.stats["xinde"] = 1  # 湊到第 1 成升第 2 成的價錢，再練就算了
+    game.practice("武學")
+    assert game.state.player.tutorial_step == 1
+    assert game.state.player.stats["silver"] == silver + reward
+
+
 def test_practicing_with_nothing_learned_says_so_without_finishing_the_step(game):
     """FB-007 原本的現場：畫面寫「你還沒學武學」，緊接著卻是「✔ 引導完成」。"""
     _practice_step_game(game, {})
@@ -558,12 +861,13 @@ def test_practicing_with_nothing_learned_says_so_without_finishing_the_step(game
 
 
 def _wugong_step_game(game, worn: dict[str, int]):
-    """把引導換成「看地圖 → 身上要有一門武學（has_wugong）→ 出城」，跟正式內容的 t2_map → t4_practice 同一個
-    順序；身上先配好 worn（種類 → 熟練度），引導停在看地圖那一步。回傳 has_wugong 那一步的獎勵銀兩。"""
+    """把引導換成「看地圖 → 身上要有一門武學（has_wugong）→ 出城」；身上先配好 worn（種類 → 熟練度），引導停在
+    看地圖那一步。回傳 has_wugong 那一步的獎勵銀兩。正式內容的 t4_practice 已經改成看「練功」這個動作
+    （開局就送了武學，has_wugong 一開始就成立，教不到練成），這裡留著測 has_wugong 這種條件本身。"""
     from tianxia.models import Effect, TutorialGoal, TutorialStep
 
-    for i, (kind, level) in enumerate(worn.items()):
-        game.create_skill(f"測試{kind}{i}", kind)
+    for kind, level in worn.items():
+        _wear(game, **{"neigong" if kind == "內功" else "wugong": "breath" if kind == "內功" else "fist"})
         setattr(game.state.player.member, f"{'neigong' if kind == '內功' else 'wugong'}_level", level)
     reward = 10
     game.content.tutorial.steps = [
@@ -590,36 +894,29 @@ def test_a_maxed_wugong_finishes_the_practice_step_as_soon_as_it_comes_up(game):
     assert game.guide_box()["text"] == "出城。"
 
 
-def test_only_a_neigong_never_finishes_the_wugong_step_until_a_wugong_is_created(game):
-    """只有內功時：鍛鍊內功、看地圖、練空著的武學都不算；自創一門武學才算（W5 的規則在這裡有洞：練內功也算）。"""
+def test_only_a_neigong_never_finishes_the_wugong_step_until_a_wugong_is_worn(game):
+    """只有內功時：鍛鍊內功、看地圖、練空著的武學都不算；身上有了一門武學再練才算（W5 的規則在這裡有洞：練內功也算）。"""
     _wugong_step_game(game, {"內功": 10})
     game.view_map()
     assert game.state.player.tutorial_step == 1
     for act in (lambda: game.practice("內功"), lambda: game.practice("武學"), game.view_map):
         act()
         assert game.state.player.tutorial_step == 1 and game.state.player.guide_done == []
-    game.create_skill("回風掌", "武學")
+    _wear(game, wugong="fist")
+    game.state.player.stats["xinde"] = 5  # 練成要花心得
+    game.practice("武學")
     assert "✔ 引導完成" in game.state.player.guide_done
     assert game.state.player.tutorial_step == 2
 
 
-def test_create_skill_rejects_a_taken_name(game):
-    game.create_skill("龍吟九霄", "武學")
-    other = Game(game.content, GameState(player=game.state.player.model_copy(), world=game.state.world), world=game.world)
-    other.state.player.member.wugong_id = None
-    msgs = other.create_skill("龍吟九霄", "內功")
-    assert "已經有人取走了" in msgs[0]
-
-
 def test_art_detail_of_a_worn_art_uses_the_slots_level(game):
     """FB-006：功法卡。配在身上的那一門，熟練度看身上那一欄（內功、武學各一欄）。"""
-    game.create_skill("龍吟九霄", "武學")
-    game.create_skill("太虛吐納", "內功")
+    _wear(game, wugong="fist", neigong="breath")
     game.state.player.member.wugong_level = 5
     game.state.player.member.neigong_level = 7
-    wugong = game.art_detail("龍吟九霄")
-    assert wugong.startswith("【龍吟九霄】") and "\n第5成 " in wugong
-    assert "\n第7成 " in game.art_detail("太虛吐納")
+    wugong = game.art_detail("fist")
+    assert wugong.startswith("【長拳】") and "\n第5成 " in wugong
+    assert "\n第7成 " in game.art_detail("breath")
 
 
 def test_art_detail_of_a_library_art_uses_its_own_kept_level(game):
@@ -635,6 +932,28 @@ def test_art_detail_of_a_library_art_uses_its_own_kept_level(game):
     card = game.art_detail(stored.id)
     assert card == skillview.art_card(stored, 4)
     assert card.endswith("以柔勁纏住兵刃，借力卸力。")
+
+
+def test_art_detail_shows_the_players_own_quality(game):
+    """武學與成長 Task 3：功法卡寫玩家自己那一份的品質與威力，全服登記的那一筆不動。"""
+    registered = MartialArt(
+        id="沉柳纏勁", name="沉柳纏勁", kind="武學", quality="中品", attribute="柔",
+        base_power=16.0, top_power=44.0, creator="沈浪",
+    )
+    assert game.world.claim_skill_name(registered)
+    game.state.player.member.wugong_id = registered.id
+    game.state.player.art_quality[registered.id] = "絕學"
+    card = game.art_detail(registered.id)
+    assert card.startswith("【沉柳纏勁】絕學・屬柔")
+    assert game.world.get_skill(registered.id).quality == "中品"
+
+
+def test_art_detail_shows_the_players_own_quality_of_a_basic_art(game):
+    """開局送的基礎武學也一樣：功法卡寫玩家自己那一份的品質，內容裡那一筆不動。"""
+    game.state.player.member.wugong_id = "basic_fist"
+    game.state.player.art_quality["basic_fist"] = "上品"
+    assert game.art_detail("basic_fist").startswith("【粗淺拳腳】上品・屬實")
+    assert game.content.skills["basic_fist"].quality == "下品"
 
 
 def test_art_detail_of_an_art_that_is_not_yours_is_not_found(game):
@@ -831,7 +1150,6 @@ def test_nothing_personal_can_be_done_while_preparing(content, world):
     content.config.auto_open_first_season = False
     game = Game.new(content, "甲", rng=random.Random(1), world=world)
     waiting = ["（賽季籌備中，等待管理者開季。）"]
-    assert game.create_skill("驚雷掌", "武學") == waiting
     assert game.practice("武學") == waiting
     assert game.heal() == waiting
     assert game.add_to_team("mate") == waiting
@@ -839,10 +1157,10 @@ def test_nothing_personal_can_be_done_while_preparing(content, world):
     assert game.seclude(4) == ["你現在無法閉關。"]
     assert game.state.player.busy_until is None
     assert game.state.player.member.wugong_id is None
-    game.state.player.materials = {"gang_1": 2}
+    game.state.player.insights = ["feng"]
     game.state.player.stats["xinde"] = 500
-    assert game.craft(["gang_1", "gang_1"]) == waiting
-    assert game.state.player.materials == {"gang_1": 2}
+    assert game.forge(None, ["feng", "feng"]) == waiting
+    assert game.state.player.insights == ["feng"] and game.state.player.stats["xinde"] == 500
     assert game.switch_art("驚雷掌") == waiting
 
 
@@ -1099,10 +1417,11 @@ def test_texts_render(game):
 def test_status_text_shows_the_practice_hint_only_when_xinde_is_idle(game):
     assert "心得" in game.status_text() and "💡" not in game.status_text()
     game.state.player.stats["xinde"] = game.content.config.xinde_hint_threshold
-    assert "💡" in game.status_text() and "鍛鍊內功、武學" in game.status_text()
+    assert "💡" not in game.status_text()  # 兩欄都空著：沒有哪一門可以練
+    _wear(game, wugong="fist", neigong="breath")
+    assert "💡" in game.status_text() and "練成內功、武學" in game.status_text()
     game.state.player.member.wugong_level = game.state.player.member.neigong_level = 10
-    game.state.player.member.wugong_id = game.state.player.member.neigong_id = "fist"
-    assert "💡" not in game.status_text()  # 沒東西可練、也湊不出一爐素材
+    assert "💡" not in game.status_text()  # 沒東西可練、手上也沒有意境可合成
 
 
 def test_visited_and_map(game):
@@ -2747,19 +3066,19 @@ def test_a_hard_fought_loss_drops_nothing(game):
     assert game.state.player.materials == {}
 
 
-def test_exploring_a_quiet_place_can_still_turn_up_a_material(game):
+def test_exploring_a_quiet_place_can_still_turn_up_an_insight(game):
     game.state.player.location = "cave"  # fixture 的山洞沒有任何事件也沒有敵人
     game.content.locations["cave"].materials = ["gang_3"]
     game.rng = FixedRandom(0.0)
     msgs = game.choose("act:explore")  # 訊息串後面還會接新手引導的進度
-    assert "你在寶洞翻找了一陣。" in msgs and "獲得 隕鐵膽 ×1" in msgs
-    assert game.state.player.materials == {"gang_3": 1}
+    assert "你在寶洞靜下心來，看了好一陣。" in msgs and "你悟得了「山」的意境（屬慢）！" in msgs
+    assert game.state.player.insights == ["shan"] and game.state.player.materials == {}  # 探索不再撿素材
 
 
 def test_exploring_and_finding_nothing_still_says_so(game):
-    """探索三選一：三支都做不了才是一無所獲——山洞沒有敵人、沒有事件，再把素材那一支的比例設成 0。"""
+    """探索三選一：三支都做不了才是一無所獲——山洞沒有敵人、沒有事件，再把悟意境那一支的比例設成 0。"""
     game.state.player.location = "cave"
-    game.content.config.explore_mix = [ExploreMix(kind="wild", tags=[], weights={"material": 0, "wild": 35, "event": 25})]
+    game.content.config.explore_mix = [ExploreMix(kind="wild", tags=[], weights={"insight": 0, "wild": 35, "event": 25})]
     game.rng = FixedRandom(0.99)
     msgs = game.choose("act:explore")
     assert msgs[0] == "你四處走走，一無所獲。"
@@ -4479,7 +4798,7 @@ def test_old_season_not_replayed_when_switch_turns_on(content, world):
     assert list(world.get_season().timeline) == ["uprising"]  # 新的一季才照季曆跑
     assert admin.status_data()["calendar"]["week"] == 1
     past, current = admin.chronicle_text().split("### 第 1 季")[::-1][:2]  # 本季的時間寫季曆，上一季照舊寫天數
-    assert "第1週・週一 00:00　張角率三十六方同時起義。" in current and "第6天　賽季落幕" in past
+    assert "第 1 週・週一 00:00　張角率三十六方同時起義。" in current and "第6天　賽季落幕" in past
 
 
 def test_an_unstamped_season_is_not_cut_short_by_the_weekend_profile(content, world):
@@ -4507,15 +4826,15 @@ def test_status_shows_calendar_and_next_event(content, world):
     install_season_one(content)
     game = Game.new(content, "沈浪", rng=random.Random(0), world=world)
     d = game.status_data()
-    assert d["calendar"] == {"week": 1, "weekday": 0, "clock": "00:00", "weeks": 12}
-    assert d["next_event"] == {"title": "張曼成攻殺南陽太守", "at": "第3週・週一 00:00", "in_seconds": 36000}  # 起義就在此刻；下一件在第 3 週
+    assert d["calendar"] == {"week": 1, "weekday": 0, "clock": "00:00", "weeks": 12, "text": "第 1 週・週一 00:00"}
+    assert d["next_event"] == {"title": "張曼成攻殺南陽太守", "at": "第 3 週・週一 00:00", "in_seconds": 36000}  # 起義就在此刻；下一件在第 3 週
     assert (d["day"], d["clock"], d["season_days"]) == (1, "00:00", 2.5)
 
     tuesday = calendar.week_start(3, content) + (DAY + 21 * HOUR + 40 * 60) / 33.6
     game.advance(tuesday)
     d = game.status_data()
-    assert d["calendar"] == {"week": 3, "weekday": 1, "clock": "21:40", "weeks": 12}
-    assert d["next_event"] == {"title": "波才大敗朱儁", "at": "第4週・週一 00:00", "in_seconds": round(calendar.week_start(4, content) - tuesday)}
+    assert d["calendar"] == {"week": 3, "weekday": 1, "clock": "21:40", "weeks": 12, "text": "第 3 週・週二 21:40"}
+    assert d["next_event"] == {"title": "波才大敗朱儁", "at": "第 4 週・週一 00:00", "in_seconds": round(calendar.week_start(4, content) - tuesday)}
     assert "第 3 週・週二 21:40" in game.status_text()
 
     game.advance(calendar.week_start(5, content) - tuesday)
@@ -4523,6 +4842,20 @@ def test_status_shows_calendar_and_next_event(content, world):
     assert game.status_data()["next_event"] == {"title": "長社火攻", "at": calendar.stamp_text(showdown, content, game.state.world), "in_seconds": round(showdown - game.state.world.time)}
     content.config.time_scale = 2  # 1 時等於現實 2 秒：倒數是現實秒
     assert game.status_data()["next_event"]["in_seconds"] == round((showdown - game.state.world.time) / 2)
+
+
+def test_next_event_time_is_written_like_the_status_bars_second_line(content, world):
+    """每一處季曆時刻都是同一種寫法「第 N 週・週X HH:MM」（N 前後有空格，PM 定）：下一件的 at 等到那一刻真的到了，
+    就跟狀態列第二行（日期那一行）寫的一字不差；江湖史、江湖紀錄、傳聞也一樣。"""
+    install_season_one(content)
+    game = Game.new(content, "沈浪", rng=random.Random(0), world=world)
+    d = game.status_data()
+    at = d["next_event"]["at"]
+    assert re.fullmatch(r"第 \d+ 週・週[一二三四五六日] \d\d:\d\d", at)
+    game.advance(d["next_event"]["in_seconds"] * content.config.time_scale)  # 等到下一件的那一刻
+    assert game.status_data()["calendar"]["text"] == at
+    assert at in game.status_text()
+    assert f"{at}　" in game.chronicle_text()  # 那一件大事寫進江湖史，時刻的寫法跟狀態列一樣
 
 
 def test_open_season_restamps_with_current_profile(content, world):
@@ -4560,8 +4893,8 @@ def test_week_one_is_settled_the_moment_a_stamped_season_opens(content, world):
     season = world.get_season()
     assert season.time == 0 and list(season.timeline) == ["uprising"] and season.timeline["uprising"].time == 0
     assert season.hooked_week == 1
-    assert "第1週・週一 00:00　三十六方同日起事。" in admin.rumors_text()
-    assert "第1週・週一 00:00　張角率三十六方同時起義。" in admin.chronicle_text()
+    assert "第 1 週・週一 00:00　三十六方同日起事。" in admin.rumors_text()
+    assert "第 1 週・週一 00:00　張角率三十六方同時起義。" in admin.chronicle_text()
     assert [b.split("**")[1] for b in admin.bulletin()] == ["三十六方起義"]
     assert admin.status_data()["next_event"]["title"] == "張曼成攻殺南陽太守"  # 第一件已經結算，倒數指向下一件
 
@@ -4574,7 +4907,7 @@ def test_week_one_is_settled_the_moment_a_stamped_season_opens(content, world):
     admin.admin_next_season(now=300.0)  # 新的一季：開季那一刻照樣結算
     season = world.get_season()
     assert season.time == 0 and list(season.timeline) == ["uprising"] and season.hooked_week == 1
-    assert "第1週・週一 00:00　張角率三十六方同時起義。" in admin.chronicle_text().split("### 第 1 季")[0]
+    assert "第 1 週・週一 00:00　張角率三十六方同時起義。" in admin.chronicle_text().split("### 第 1 季")[0]
 
 
 def test_opening_a_season_with_the_switch_off_settles_nothing(content, world):
@@ -4617,7 +4950,7 @@ def test_everyone_gets_the_seasons_big_events_not_just_whoever_advanced_the_cloc
 
     zi.sync(5.0)
     assert len(_big_event_entries(zi)) == 1 and _big_event_entries(zi)[0].lines == expected
-    assert [line.split("　")[0] for line in expected] == ["第1週・週一 01:00", "第3週・週一 00:00", "第4週・週一 00:00"]
+    assert [line.split("　")[0] for line in expected] == ["第 1 週・週一 01:00", "第 3 週・週一 00:00", "第 4 週・週一 00:00"]
     zi.sync(10.0)
     admin.sync(10.0)
     assert len(_big_event_entries(zi)) == 1 and len(_big_event_entries(admin)) == 1  # 再同步不重複
@@ -4676,7 +5009,7 @@ def test_the_big_event_settled_at_the_opening_reaches_everyone_too(content, worl
     for game in (admin, zi):
         (entry,) = _big_event_entries(game)
         assert (entry.tag, entry.time) == ("三十六方同日起事。", 0)
-    assert "剛剛　第1週・週一 00:00" in zi.latest_entry_html()
+    assert "剛剛　第 1 週・週一 00:00" in zi.latest_entry_html()
 
 
 def test_skipped_big_events_are_not_delivered(content, world):
@@ -4735,11 +5068,11 @@ def test_timestamps_read_like_the_calendar_when_the_season_is_season_one(content
     game = Game.new(content, "沈浪", rng=random.Random(0), world=world)
     game.sync(0.0)
     game.sync(calendar.cal_hour_seconds(content))  # 第 1 週週一 01:00：三十六方起義
-    assert "剛剛　第1週・週一 01:00" in game.latest_entry_html()
-    assert "第1週・週一 01:00　張角率三十六方同時起義。" in game.chronicle_text()
-    assert "第1週・週一 01:00　三十六方同日起事。" in game.rumors_text()
-    assert "第1週・週一 00:00" in game.journal_html(1, 5)  # 開季那一則
-    assert "第1週・週一 01:00" in atlas.header_text(game.state, content)
+    assert "剛剛　第 1 週・週一 01:00" in game.latest_entry_html()
+    assert "第 1 週・週一 01:00　張角率三十六方同時起義。" in game.chronicle_text()
+    assert "第 1 週・週一 01:00　三十六方同日起事。" in game.rumors_text()
+    assert "第 1 週・週一 00:00" in game.journal_html(1, 5)  # 開季那一則
+    assert "第 1 週・週一 01:00" in atlas.header_text(game.state, content)
 
 
 def test_timestamps_are_unchanged_with_the_switch_off(game):

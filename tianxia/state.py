@@ -112,7 +112,13 @@ class PlayerState(BaseModel):
     # ── 煉製素材（無限煉製第一刀，見 tianxia/materials.py）──
     materials: dict[str, int] = Field(default_factory=dict)  # 素材 id -> 數量；舊存檔沒這欄就是空背包
     arts: list[str] = Field(default_factory=list)  # 功法庫：煉出來但沒配上身的功法 id
-    art_levels: dict[str, int] = Field(default_factory=dict)  # 每門學過的功法各自的熟練度；改練時存進來／取出來
+    art_levels: dict[str, int] = Field(default_factory=dict)  # 每門學過的功法各自的「成」；改練時存進來／取出來
+    # ── 武學與成長（設計第三、四節）──
+    insights: list[str] = Field(default_factory=list)  # 悟得的意境 id，照悟得的先後
+    art_quality: dict[str, str] = Field(default_factory=dict)  # 功法 id → 自己那一份的品質（沒記＝全服登記的品質）
+    art_mastery: dict[str, int] = Field(default_factory=dict)  # 功法 id → 修練往下一品失敗了幾次（熟練度）
+    naming: str | None = None  # 第一個修到絕學、等著取正式名字的功法 id
+    legend_items: int = 0  # 破境丹（Config.legend_item_name）的數量：探索撿到，玩家在修練頁勾了、衝絕學那一次才服一枚；角色每季重來
 
     seen_events: set[str] = Field(default_factory=set)
     event_seen: dict[str, int] = Field(default_factory=dict)  # 事件 id -> 這一季看過幾次（Game._present 每端出一次記一次；抽事件時權重按次數遞減，見 events.event_weight）
@@ -356,7 +362,10 @@ class GameState(BaseModel):
 def new_game_state(content: Content, name: str) -> GameState:
     """同伴全服唯一（設計文件四.4），開局不再自動塞給玩家任何一位——每個新玩家都是孤身
     一人起步，招募是要在遊戲裡真的去搶的行動，不是開局贈品（不然「唯一」第一時間就矛盾：
-    每個新玩家都自動擁有同一位歷史人物是不可能的）。"""
+    每個新玩家都自動擁有同一位歷史人物是不可能的）。
+
+    開局送 `Config.starter_skills` 的兩門基礎武學（第一成），新角色與每季重來的角色都一樣
+    （武學與成長設計 3.3；自創武學已經作廢，沒有空欄位要自己取名）。"""
     from .rules import seed_trends  # rules → state：在函式裡 import，避免循環
 
     cfg = content.config
@@ -368,6 +377,9 @@ def new_game_state(content: Content, name: str) -> GameState:
         tutorial_step=0,
         member=Member(),
     )
+    for skill_id in cfg.starter_skills:  # 開局送的基礎內功、基礎武學（武學與成長設計 3.3）
+        slot = "neigong_id" if content.skills[skill_id].kind == "內功" else "wugong_id"
+        setattr(player.member, slot, skill_id)
     world = WorldState(storyline=content.scenario.storylines[0].id)
     seed_trends(world, content)
     return GameState(player=player, world=world)

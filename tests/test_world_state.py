@@ -9,7 +9,7 @@ import pytest
 from tianxia import database
 from tianxia.battle_instance import BattleRoundRecord
 from tianxia.database import Database
-from tianxia.martial_arts import generate_from_name
+from tianxia.martial_arts import Insight, generate_from_name
 from tianxia.sqlite_world import SqliteWorldStore, open_world
 from tianxia.state import Rumor
 
@@ -576,7 +576,76 @@ def test_next_season_writes_last_seasons_first_crafts_into_its_chronicle(store, 
     store.mutate_season(lambda season: setattr(season, "ended", True))
     assert store.next_season(content, now=1.0)
     [(number, entries)] = store.chronicle_before(2)
-    assert number == 1 and entries[-1].text == "第 1 季煉製首創 1 門：【玄雷式】沈浪"
+    assert number == 1 and entries[-1].text == "第 1 季合成首創 1 門：【玄雷式】沈浪"
+
+
+def test_next_season_writes_the_seasons_firsts_into_its_chronicle(store, content):
+    content.config.auto_open_first_season = True
+    store.seed_first_season(content)
+    store.claim_recipe("融|basic_fist+feng", generate_from_name("旋風腿", "武學", "旋風腿").model_copy(update={"creator": "甲"}))
+    store.claim_insight_recipe("合|feng+huo", Insight(id="燎原", name="燎原", attribute="陽", creator="乙"))
+    store.claim_master("旋風腿", "甲")
+    store.rename_skill("旋風腿", "風神腿")
+    store.mutate_season(lambda season: setattr(season, "ended", True))
+    store.next_season(content, now=1.0)
+    texts = [r.text for _, rumors in store.chronicle_before(2) for r in rumors]
+    assert any("合成首創" in t and "【風神腿】甲" in t for t in texts)
+    assert any("首悟意境" in t and "「燎原」乙" in t for t in texts)
+    assert any("練成絕學" in t and "【風神腿】甲" in t for t in texts)
+
+
+def test_the_seasons_firsts_are_one_line_each_in_a_fixed_order(store, content):
+    """合成首創、首悟意境、練成絕學各一行，順序固定；每行寫件數與全部名字，用現在顯示的名字（改過名寫新名）。"""
+    content.config.auto_open_first_season = True
+    store.seed_first_season(content)
+    store.claim_recipe("融|a", generate_from_name("旋風腿", "武學", "旋風腿").model_copy(update={"creator": "甲"}))
+    store.claim_recipe("融|b", generate_from_name("回風掌", "武學", "回風掌").model_copy(update={"creator": None}))
+    store.claim_insight_recipe("合|feng+huo", Insight(id="燎原", name="燎原", attribute="陽", creator="乙"))
+    store.claim_insight_recipe("合|huo+shui", Insight(id="蒸騰", name="蒸騰", attribute="陰", creator="丙"))
+    store.claim_master("旋風腿", "甲")
+    store.rename_skill("旋風腿", "風神腿")
+    store.mutate_season(lambda season: setattr(season, "ended", True))
+    assert store.next_season(content, now=1.0)
+    [(number, entries)] = store.chronicle_before(2)
+    assert number == 1 and [e.text for e in entries] == [
+        "第 1 季合成首創 2 門：【風神腿】甲、【回風掌】無名氏",
+        "第 1 季首悟意境 2 個：「燎原」乙、「蒸騰」丙",
+        "第 1 季練成絕學 1 門：【風神腿】甲",
+    ]
+
+
+def test_the_seasons_firsts_use_the_name_shown_when_it_was_claimed(store, content):
+    """匿名行走（最終審查 Important 2）：首創者、第一個練成絕學的人在資料表裡照舊記名號（身分：取名權、首創者都照它認），
+    寫給別人看的名號在登記當下一起記下（creator_shown、claim_master 的 shown），江湖史照它寫；改名之後也留著。"""
+    content.config.auto_open_first_season = True
+    store.seed_first_season(content)
+    art = generate_from_name("旋風腿", "武學", "旋風腿").model_copy(update={"creator": "甲", "creator_shown": "某位少俠"})
+    store.claim_recipe("融|a", art)
+    store.claim_insight_recipe(
+        "合|feng+huo", Insight(id="燎原", name="燎原", attribute="陽", creator="乙", creator_shown="某位少俠"),
+    )
+    assert store.claim_master("旋風腿", "甲", shown="某位少俠")
+    assert store.master_of("旋風腿") == "甲" and store.get_skill("旋風腿").master_shown == "某位少俠"
+    store.rename_skill("旋風腿", "風神腿")
+    assert store.get_skill("旋風腿").master_shown == "某位少俠"
+    store.mutate_season(lambda season: setattr(season, "ended", True))
+    assert store.next_season(content, now=1.0)
+    [(_, entries)] = store.chronicle_before(2)
+    assert [e.text for e in entries] == [
+        "第 1 季合成首創 1 門：【風神腿】某位少俠",
+        "第 1 季首悟意境 1 個：「燎原」某位少俠",
+        "第 1 季練成絕學 1 門：【風神腿】某位少俠",
+    ]
+
+
+def test_a_firsts_category_nobody_reached_writes_no_line(store, content):
+    content.config.auto_open_first_season = True
+    store.seed_first_season(content)
+    store.claim_insight_recipe("合|feng+huo", Insight(id="燎原", name="燎原", attribute="陽", creator="乙"))
+    store.mutate_season(lambda season: setattr(season, "ended", True))
+    assert store.next_season(content, now=1.0)
+    [(_, entries)] = store.chronicle_before(2)
+    assert [e.text for e in entries] == ["第 1 季首悟意境 1 個：「燎原」乙"]
 
 
 def test_a_season_without_first_crafts_adds_no_chronicle_entry(store, content):
@@ -599,6 +668,62 @@ def test_recipe_keys_lists_only_this_seasons_recipes(store, content):
     assert store.recipe_keys() == set()  # 新的一季重新發現
     with store.db.snapshot() as conn:  # 上一季的那一列還在
         assert conn.execute("SELECT COUNT(*) AS n FROM recipes WHERE season = 1").fetchone()["n"] == 1
+
+
+# ── 改名、合併出來的意境、第一個練成絕學的人 ───────────────────
+
+
+def test_rename_skill_keeps_the_id_and_takes_the_new_name(store):
+    store.claim_skill_name(generate_from_name("旋風腿", "武學", "旋風腿"))
+    assert store.rename_skill("旋風腿", "風神腿") is True
+    art = store.get_skill("旋風腿")  # id 不變，身上、功法庫照舊指得到
+    assert art.id == "旋風腿" and art.name == "風神腿"
+    assert store.is_skill_name_taken("風神腿") is True  # 新名字也算占用
+    assert store.is_skill_name_taken("旋風腿") is True
+    assert store.claim_skill_name(generate_from_name("風神腿", "武學", "風神腿")) is False
+
+
+def test_rename_skill_refuses_a_taken_name(store):
+    store.claim_skill_name(generate_from_name("旋風腿", "武學", "旋風腿"))
+    store.claim_skill_name(generate_from_name("裂石拳", "武學", "裂石拳"))
+    assert store.rename_skill("旋風腿", "裂石拳") is False
+    assert store.get_skill("旋風腿").name == "旋風腿"
+
+
+def test_insight_recipe_is_shared_after_the_first_claim(store):
+    first = Insight(id="燎原", name="燎原", attribute="陽", creator="甲", parents=["feng", "huo"])
+    assert store.claim_insight_recipe("feng+huo", first) == (first, True)
+    other = Insight(id="炎風", name="炎風", attribute="陽", creator="乙", parents=["feng", "huo"])
+    got, first_time = store.claim_insight_recipe("feng+huo", other)
+    assert first_time is False and got.name == "燎原" and got.creator == "甲"
+    assert store.lookup_insight_recipe("feng+huo").name == "燎原"
+    assert store.get_insight("燎原").attribute == "陽"
+    assert store.get_insight("炎風") is None
+
+
+def test_an_insight_cannot_take_a_skill_name(store):
+    store.claim_skill_name(generate_from_name("燎原", "武學", "燎原"))
+    got, first_time = store.claim_insight_recipe("feng+huo", Insight(id="燎原", name="燎原", attribute="陽"))
+    assert (got, first_time) == (None, False)
+    assert store.is_skill_name_taken("燎原") is True
+
+
+def test_only_the_first_master_is_recorded(store):
+    assert store.master_of("旋風腿") is None
+    assert store.claim_master("旋風腿", "甲") is True
+    assert store.claim_master("旋風腿", "乙") is False
+    assert store.master_of("旋風腿") == "甲"
+
+
+def test_insights_and_masters_start_empty_next_season(store, content):
+    content.config.auto_open_first_season = True
+    store.seed_first_season(content)
+    store.claim_insight_recipe("feng+huo", Insight(id="燎原", name="燎原", attribute="陽"))
+    store.claim_master("旋風腿", "甲")
+    store.mutate_season(lambda season: setattr(season, "ended", True))
+    store.next_season(content, now=1.0)
+    assert store.lookup_insight_recipe("feng+huo") is None
+    assert store.master_of("旋風腿") is None
 
 
 # ── 全服決戰與回合紀錄 ─────────────────────────────────────

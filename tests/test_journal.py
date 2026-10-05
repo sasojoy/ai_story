@@ -16,8 +16,21 @@ def latest(game):
     return game.state.journal[0]
 
 
+def _train(game, kind="武學"):
+    """在修練頁鍛鍊一成：先把內容裡的一門功夫配到身上（第一成），再按「鍛鍊」——江湖紀錄多一則「修練」。
+    自創已經作廢，開局送的功夫也不在 fixture 的設定裡，所以測試直接配一門。"""
+    member = game.state.player.member
+    if kind == "內功":
+        if member.neigong_id is None:
+            member.neigong_id, member.neigong_level = "breath", 1
+    elif member.wugong_id is None:
+        member.wugong_id, member.wugong_level = "fist", 1
+    game.state.player.stats["xinde"] = max(game.state.player.stats.get("xinde", 0), 100)  # 練成要花心得
+    return game.practice(kind)
+
+
 def _explore_only(game, branch):
-    """探索三選一：讓探索一定走某一支（"event"／"wild"／"material"）。這些測試看的是事件或戰鬥寫成的紀錄，
+    """探索三選一：讓探索一定走某一支（"event"／"wild"／"insight"）。這些測試看的是事件或戰鬥寫成的紀錄，
     不是探索抽到哪一支；不指定的話就要靠亂數剛好落在那一支的比例裡。"""
     game.content.config.explore_mix = [ExploreMix(kind="wild", tags=[], weights={branch: 1})]
 
@@ -45,7 +58,7 @@ def test_move_entry_drops_the_location_description(game):
 
 def test_an_arrival_after_other_entries_gets_its_own_entry(game):
     game.choose("move:lake")
-    game.create_skill("測試長拳", "武學")  # 路上在門下練功：紀錄多了一則
+    _train(game)  # 路上在門下練功：紀錄多了一則
     game.advance(game.state.player.journey.arrive_at[-1] - game.state.world.time)
     assert [(e.title, e.tag) for e in game.state.journal[:3]] == [
         ("前往 湖邊", "抵達"), ("修練", game.state.journal[1].tag), ("前往 湖邊", "步行約 3 分鐘"),
@@ -56,7 +69,7 @@ def test_a_trip_finished_after_a_station_entry_is_tagged_as_arrived(game):
     game.state.world.flags.add("cave_open")
     game.state.player.tutorial_step = 1  # 「去湖邊」：中途抵達湖邊時有引導訊息
     game.travel("cave", "walk")
-    game.create_skill("測試長拳", "武學")  # 路上在門下練功：出發那則不再是最新的
+    _train(game)  # 路上在門下練功：出發那則不再是最新的
     journey = game.state.player.journey
     game.advance(journey.arrive_at[0] - game.state.world.time)  # 走到湖邊：另起一則「途中」
     assert (latest(game).title, latest(game).tag) == ("前往 寶洞（途經 湖邊）", "途中")
@@ -77,6 +90,26 @@ def test_move_entry_keeps_guide_messages(game):
     assert (entry.lines, entry.guide) == ([], ["✔ 引導完成", "【說書人】看看地圖。"])
 
 
+def test_a_new_insight_or_art_line_gets_the_shine():
+    """「拿到新東西」那一行掃過一道光：悟得意境、學會基礎武學、合成出新武學、修練晉品都算；重複悟到只是化成心得，不算。"""
+    for line in (
+        "你悟得了「風」的意境（屬快）！",
+        "你學會了【長拳】（武學・下品・屬剛）。",
+        "你以【長拳】融入「風」，衍生出一門武學【追風拳】（下品・屬快）！\n一句話說明。\n這是江湖上第一次有人合出這一門——從此它就叫這個名字。",
+        "「風」與「火」在你心中交融，化成「燎原」（屬陽）！\n這是江湖上第一次有人悟出這個意境。",
+        "【長拳】修練有成，從下品晉為中品！",
+    ):
+        assert journal._line_class(line) == "tx-line tx-new", line
+    for line in (
+        "你又悟到一次「風」，這份體會化成了心得。",
+        "你在湖邊靜下心來，看了好一陣。",
+        "路邊有獵戶設的套索，套住的山雞早被什麼東西叼走了，只剩一地毛。你學會了那個結的打法。",  # 路上見聞，不是新功法
+        "老獵戶說他悟得了一個道理。",
+        "心得 -5",
+    ):
+        assert journal._line_class(line) == "tx-line", line
+
+
 def test_explore_that_meets_an_event_tags_it_and_drops_the_intro(game):
     _explore_only(game, "event")
     game.choose("act:explore")
@@ -92,7 +125,7 @@ def test_explore_that_finds_nothing(game):
     walk_to(game, "lake")
     game.state.player.seen_events.add("scroll")  # 湖邊唯一的探索事件只出現一次
     game.content.locations["lake"].enemies = []  # 探索三選一：三支都做不了才是一無所獲
-    game.content.config.explore_mix = [ExploreMix(kind="wild", tags=[], weights={"material": 0, "wild": 35, "event": 25})]
+    game.content.config.explore_mix = [ExploreMix(kind="wild", tags=[], weights={"insight": 0, "wild": 35, "event": 25})]
     game.choose("act:explore")
     entry = latest(game)
     assert (entry.title, entry.tag, entry.lines) == ("探索湖邊", "", ["你四處走走，一無所獲。"])
@@ -111,8 +144,8 @@ def test_socialize_entry(game):
 
 
 def _give_player_a_winning_wugong(game):
-    """讓玩家確定打得過 thug（難度 5）：自創一門威力夠高的武學。"""
-    game.create_skill("測試長拳", "武學")
+    """讓玩家確定打得過 thug（難度 5）：配上一門內容裡的武學。"""
+    game.state.player.member.wugong_id, game.state.player.member.wugong_level = "fist", 1
 
 
 def test_train_entry_carries_the_battle_summary_and_gains(game):
@@ -264,25 +297,25 @@ def _speaker(game):
     return game.content.tutorial.speaker
 
 
-def test_creating_a_skill_that_finishes_a_guide_step_writes_it_into_the_journal(game):
+def test_a_first_practice_that_finishes_a_has_wugong_step_writes_it_into_the_journal(game):
     from tianxia.models import TutorialGoal
 
     _guide_waits_for(game, TutorialGoal(has_wugong=True))
-    msgs = game.create_skill("測試長拳", "武學")
+    msgs = _train(game)
     assert "✔ 引導完成" not in msgs and "✔ 引導完成" in game.state.player.guide_done  # 走對話框（引導重做設計 8.1.3）
     entry = latest(game)
-    assert entry.title == "修練" and "自創了一門武學" in entry.tag
+    assert entry.title == "修練" and "精進至第2成" in entry.tag
     assert entry.guide == [  # 跟 choose() 那條路同一種寫法
         "✔ 引導完成", f"銀兩 +{GUIDE_REWARD}", f"心得 +{GUIDE_XINDE}", f"【{_speaker(game)}】出城。"]
-    assert entry.changes == []  # 獎勵只在 guide，心得沒有算兩次
+    assert entry.changes == ["心得 -1"]  # 練成花的 1 點心得記在 changes；引導的獎勵只在 guide，沒有算兩次
     assert game.state.player.tutorial_step == 1
 
 
 def test_practicing_that_finishes_a_guide_step_writes_it_into_the_journal(game):
     from tianxia.models import TutorialGoal
 
-    game.create_skill("測試長拳", "武學")
-    game.state.player.member.wugong_level = 3
+    game.state.player.member.wugong_id, game.state.player.member.wugong_level = "fist", 3
+    game.state.player.stats["xinde"] = 10  # 第 3 成升第 4 成花 3 點
     _guide_waits_for(game, TutorialGoal(action="practice"))
     game.practice("武學")
     entry = latest(game)
@@ -291,44 +324,46 @@ def test_practicing_that_finishes_a_guide_step_writes_it_into_the_journal(game):
     assert f"銀兩 +{GUIDE_REWARD}" in entry.guide and f"銀兩 +{GUIDE_REWARD}" not in entry.changes
 
 
-def test_crafting_that_finishes_a_guide_step_writes_it_into_the_journal(game):
+def test_forging_that_finishes_a_guide_step_writes_it_into_the_journal(game):
     from unittest import mock
 
-    from tianxia import craft, materials
+    from tianxia import naming
     from tianxia.models import TutorialGoal
-    from tianxia.ollama_client import OllamaClient
 
-    materials.grant(game.state, game.content, "gang_1", 2)
-    _guide_waits_for(game, TutorialGoal(has_wugong=True))
-    naming = lambda self, messages, response_model, **kw: craft.CraftedName(name="鐵腕勁", description="一句話。")
-    with mock.patch.object(OllamaClient, "chat_structured", naming), \
-         mock.patch.object(craft, "result_kind", lambda a, b, tianji: "武學"):  # 這一步等的是武學
-        msgs = game.craft(["gang_1", "gang_1"])
-    assert "✔ 引導完成" not in msgs and "✔ 引導完成" in game.state.player.guide_done  # 煉製結果也不夾引導（8.1.3）
+    game.state.player.member.wugong_id = "fist"
+    game.state.player.insights = ["feng"]
+    game.state.player.stats["xinde"] = 100
+    _guide_waits_for(game, TutorialGoal(action="practice"))
+    reply = naming.NameReply(name="鐵腕勁", description="一句話。")
+    with mock.patch.object(game.client, "chat_structured", return_value=reply):
+        msgs = game.forge("fist", ["feng"])
+    assert "✔ 引導完成" not in msgs and "✔ 引導完成" in game.state.player.guide_done  # 合成結果也不夾引導（8.1.3）
     entry = latest(game)
-    assert entry.title == "煉製" and "煉製" in entry.tag
+    assert entry.title == "煉製" and entry.tag == "合成【鐵腕勁】"
     assert entry.guide[0] == "✔ 引導完成" and entry.guide[-1] == f"【{_speaker(game)}】出城。"
     assert f"銀兩 +{GUIDE_REWARD}" in entry.guide and f"銀兩 +{GUIDE_REWARD}" not in entry.changes
 
 
-def test_practice_and_crafting_are_titled_after_their_tabs(game):
-    """FB-047：江湖紀錄照動作寫「修練」（自創、鍛鍊、療傷、改練）與「煉製」，不再寫「門下」；
-    煉製不併進前面那則自創。"""
+def test_practice_and_forging_are_titled_after_their_tabs(game):
+    """FB-047：江湖紀錄照動作寫「修練」（鍛鍊、療傷、改練）與「煉製」（合成、合併），不再寫「門下」；
+    煉製不併進前面那則鍛鍊。"""
     from unittest import mock
 
-    from tianxia import craft, materials
-    from tianxia.ollama_client import OllamaClient
+    from tianxia import naming
 
-    game.create_skill("測試長拳", "武學")
+    _train(game)
     game.practice("武學")
     assert latest(game).title == "修練" and len([e for e in game.state.journal if e.title == "修練"]) == 1
-    materials.grant(game.state, game.content, "gang_1", 2)
-    naming = lambda self, messages, response_model, **kw: craft.CraftedName(name="鐵腕勁", description="一句話。")
-    with mock.patch.object(OllamaClient, "chat_structured", naming), \
-         mock.patch.object(craft, "result_kind", lambda a, b, tianji: "內功"):
-        game.craft(["gang_1", "gang_1"])
+    game.state.player.insights = ["feng", "huo"]
+    reply = naming.NameReply(name="鐵腕勁", description="一句話。")
+    with mock.patch.object(game.client, "chat_structured", return_value=reply):
+        game.forge("fist", ["feng"])
     assert [e.title for e in game.state.journal[:2]] == ["煉製", "修練"]
-    assert "煉製【鐵腕勁】" == latest(game).tag
+    assert "合成【鐵腕勁】" == latest(game).tag
+    with mock.patch.object(game.client, "chat_structured", side_effect=RuntimeError):
+        game.forge(None, ["feng", "huo"])
+    assert [e.title for e in game.state.journal[:2]] == ["煉製", "修練"]  # 合併也標「煉製」，併進同一則
+    assert latest(game).tag.startswith("合併「")
     assert not any(e.title == "門下" for e in game.state.journal)
 
 
@@ -336,10 +371,10 @@ def test_the_guide_lines_do_not_swallow_the_menxia_story_when_entries_merge(game
     """連續的門下動作併成一則：每次動作的那句話都還在、照順序；引導的那幾行併在 guide。"""
     from tianxia.models import TutorialGoal
 
-    game.create_skill("測試內功", "內功")
+    _train(game, "內功")
     first_tag = latest(game).tag
     _guide_waits_for(game, TutorialGoal(has_wugong=True))
-    game.create_skill("測試長拳", "武學")
+    _train(game)
     second_tag = latest(game).tag
     game.practice("武學")
     entries = [e for e in game.state.journal if e.title == "修練"]
@@ -353,10 +388,10 @@ def test_menxia_without_finishing_a_guide_step_writes_exactly_what_it_used_to(ga
     from tianxia.models import TutorialGoal
 
     _guide_waits_for(game, TutorialGoal(action="view_map"))  # 修練頁做的事不會完成這一步
-    game.create_skill("測試長拳", "武學")
+    _train(game)
     entry = latest(game)
-    assert entry.title == "修練" and "自創了一門武學" in entry.tag
-    assert entry.lines == [] and entry.changes == []
+    assert entry.title == "修練" and "精進至第2成" in entry.tag
+    assert entry.lines == [] and entry.changes == ["心得 -1"]  # 沒有引導、也沒有別的敘事，只有練成花掉的心得
     assert game.state.player.tutorial_step == 0
     game.state.player.tutorial_step = len(game.content.tutorial.steps)  # 引導已走完：同一回事
     game.practice("武學")
@@ -373,7 +408,7 @@ def test_a_menxia_action_that_finishes_a_guide_step_shows_its_sentence_once(game
     from tianxia.models import TutorialGoal
 
     _guide_waits_for(game, TutorialGoal(has_wugong=True))
-    game.create_skill("測試長拳", "武學")
+    _train(game)
     said = latest(game).tag
     assert game.latest_entry_html().count(html.escape(said)) == 1
     assert "✔ 引導完成" not in game.latest_entry_html()  # 「剛剛」不夾引導（引導重做設計 8.1.3）
@@ -391,7 +426,7 @@ def test_menxia_entries_that_finish_no_guide_step_render_as_before(game):
     from tianxia.models import TutorialGoal
 
     _guide_waits_for(game, TutorialGoal(action="view_map"))
-    game.create_skill("測試長拳", "武學")
+    _train(game)
     assert 'class="tx-line' not in game.latest_entry_html()  # 只有結果標記，沒有敘事
     game.practice("武學")
     entry = latest(game)
@@ -400,19 +435,19 @@ def test_menxia_entries_that_finish_no_guide_step_render_as_before(game):
 
 
 def test_menxia_changes_are_written_but_failures_are_not(game):
-    assert game.create_skill("", "武學") == ["得先取個名字。"]
+    assert game.forge("fist", ["feng"])  # 沒有武學也沒有意境：被擋下
     assert len(game.state.journal) == 1
-    game.create_skill("測試長拳", "武學")
+    _train(game)
     entry = latest(game)
     assert entry.title == "修練"
-    assert "自創了一門武學" in entry.tag
-    assert game.create_skill("另一門", "武學") == ["你已經有一門武學了，同時只能練一門。"]
-    assert len(game.state.journal) == 2  # 失敗不會再寫一則新紀錄
-    assert any("你已經有一門武學了" in line for line in game.state.log)  # 失敗訊息仍留在 log
+    assert "精進至第2成" in entry.tag
+    msgs = game.forge("fist", ["feng"])  # 身上有武學了，可是還沒悟到這個意境：還是被擋下
+    assert msgs and len(game.state.journal) == 2  # 失敗不會再寫一則新紀錄
+    assert any(msgs[0] in line for line in game.state.log)  # 失敗訊息仍留在 log
 
 
 def test_menxia_entries_merge_only_when_nothing_else_happened_in_between(game):
-    game.create_skill("測試長拳", "武學")
+    _train(game)
     game.state.world.time = 600
     walk_to(game, "lake")
     game.practice("武學")

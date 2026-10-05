@@ -21,9 +21,10 @@ from .front_lines import BAND_KEYS, GEJU_KEYS
 from .materials import TIER_NAMES
 from .models import (
     FRONT_KEY, ROADS, STATS, BattleDef, CharacterDef, Condition, Config, Content, CraftNames, Effect, Event, FigureDef,
-    CheckLines, FollowerDef, Foreshadows, FrontLines, Location, OrdersContent, PromotionDef,
+    CheckLines, FollowerDef, Foreshadows, FrontLines, InsightDef, Location, OrdersContent, PromotionDef,
     MapLayout, Material, RoadSight, Scenario, Sect, SimRumor, SkillDef, Squad, TimetableEvent, Tutorial,
 )
+from .naming import name_problem
 from .zh import to_traditional
 
 ROAD_SIGHTS_PER_SPOT = 2  # 路上見聞：每一種路、每一個大區的組合至少要有幾則可挑（路上設計第五節）
@@ -62,6 +63,7 @@ def load_content(root: Path, profile: str | None = None) -> Content:
         scenario=Scenario(**_read(root / "scenario.json")),
         locations=_index(Location, _read(root / "locations.json")),
         skills=_index(SkillDef, _read(root / "skills.json")),
+        insights=_index(InsightDef, _read(root / "insights.json")),
         materials=_index(Material, _read(root / "materials.json")),
         craft_names=CraftNames(**_read(root / "craft_names.json")),
         check_lines=_check_lines(root / "check_lines.json"),
@@ -206,14 +208,24 @@ def _index(model, items: list[dict]) -> dict:
 
 
 def _material_sources(c: Content) -> set[str]:
-    """所有拿得到的素材 id：地點撿、對手掉（含依難度的預設表）、事件給。"""
+    """所有拿得到的素材 id：路邊採集、對手掉（含依難度的預設表）、事件與路上見聞給。
+
+    探索不再撿素材（武學與成長計畫一：探索改悟意境），地點能給素材的只剩路邊採集（Game._road_gather）：
+    採到的永遠是一階，屬性看這段路兩頭的地點寫了哪些素材（只看屬性，不看寫的是幾階），兩頭都沒寫就隨機一階。
+    所以地點寫了二、三階素材，那一階並不會因此拿得到。"""
     from .materials import _default_rolls, by_tier  # noqa: PLC0415  延後 import，避免循環依賴
 
     reachable: set[str] = set()
+    first_tier = by_tier(c, 1)
     for loc in c.locations.values():
-        reachable |= set(loc.materials)
-        if not loc.materials and loc.tags:
-            reachable |= {m.id for m in by_tier(c, 1)}  # 沒填 materials 的地點給隨機一階素材
+        for conn in loc.connections:  # 路都是雙向的（載入時檢查過）：每一條路從兩頭各看一次，結果一樣
+            kinds = {
+                c.materials[mid].attribute
+                for end in (loc, c.locations.get(str(conn)))
+                if end is not None for mid in end.materials if mid in c.materials
+            }
+            picked = [m.id for m in first_tier if m.attribute in kinds]  # 跟 Game._road_gather 一樣：挑不到就退回全部一階
+            reachable |= set(picked or [m.id for m in first_tier])
     for squad in c.squads.values():
         if squad.drops:
             reachable |= {d.material for d in squad.drops}
@@ -787,6 +799,10 @@ def validate(c: Content) -> None:
         known(where, eff.stats, STATS, "屬性")
         known(where, eff.learn_skills, c.skills, "武學")
         known(where, eff.materials, c.materials, "素材")
+        known(where, eff.insights, c.insights, "意境")
+        for insight_id in eff.insights:
+            if insight_id in c.insights and c.insights[insight_id].grant is not None:
+                need(False, f"{where}：{c.insights[insight_id].name}只能靠名聲悟得，事件不能給")
         known(where, eff.affinity, c.characters, "人物")
         known(where, eff.trend, trend_ids | {FRONT_KEY}, "大勢線")
         front_needs_total(where, eff.trend)
@@ -820,6 +836,11 @@ def validate(c: Content) -> None:
         need(
             sum(ft.effect.materials.values()) <= best_materials,
             f"{fw}：素材 {sum(ft.effect.materials.values())} 個比檢定選項最多的 {best_materials} 個還多",
+        )
+        best_insights = max(len(eff.insights) for eff in rivals)
+        need(
+            len(ft.effect.insights) <= best_insights,
+            f"{fw}：意境 {len(ft.effect.insights)} 個比檢定選項最多的 {best_insights} 個還多",
         )
         for label, eff in (("effect", ft.effect), ("fail_effect", ft.fail_effect)):
             banned = [
@@ -897,16 +918,15 @@ def validate(c: Content) -> None:
         + "、".join(f"{c.materials[mid].name}（{mid}）" for mid in unreachable),
     )
 
-    # 煉製的決定性組名字表（LLM 不可用時的退路）：不能是空的，而且組出來的每一個名字都得
-    # 通過命名過濾——這條退路一定會被走到（整季模擬把 LLM mock 掉），組出壞名字會永久登記。
-    from .craft import name_problem  # noqa: PLC0415  延後 import，避免 content <-> craft 互相依賴
-
+    # 合成、合併的決定性組名字表（模型不可用時的退路）：不能是空的，而且組出來的每一個名字都得
+    # 通過命名過濾——這條退路一定會被走到（整季模擬把模型 mock 掉），組出壞名字會永久登記。
     names = c.craft_names
     need(bool(names.prefixes), "craft_names.prefixes 不能是空的")
     need(bool(names.wugong), "craft_names.wugong 不能是空的")
     need(bool(names.neigong), "craft_names.neigong 不能是空的")
+    need(bool(names.insight), "craft_names.insight 不能是空的")
     for prefix in names.prefixes:
-        for suffix in [*names.wugong, *names.neigong]:
+        for suffix in [*names.wugong, *names.neigong, *names.insight]:
             reason = name_problem(prefix + suffix, c)
             need(reason is None, f"craft_names 組出的名字「{prefix + suffix}」過不了命名過濾：{reason}")
     for word in c.banned_names:
@@ -1206,6 +1226,33 @@ def validate(c: Content) -> None:
         known(where, step.done_when.locations, c.locations, "地點")
         check_condition(where, step.done_when.condition)
         check_effect(where, step.reward)
+
+    # ── 意境與基礎武學（武學與成長設計附錄 A～C）──
+    for insight in c.insights.values():
+        need(insight.grant is None or insight.lean != "無", f"意境 {insight.id}：靠名聲悟得的意境要有正邪")
+    for loc in c.locations.values():
+        known(f"地點 {loc.id}", loc.insights, c.insights, "意境")
+        for insight_id in loc.insights:
+            if insight_id in c.insights and c.insights[insight_id].grant is not None:
+                need(False, f"地點 {loc.id}：{c.insights[insight_id].name}只能靠名聲悟得，不能放在地點上")
+    for skill in c.skills.values():
+        if skill.learn is None:
+            continue
+        where = f"武學 {skill.id}"
+        need(skill.quality != "絕學", f"{where}：絕學（本命武學）不能在各地學")
+        known(where, [skill.learn.at], c.locations, "地點")
+        if skill.learn.faction:
+            known(where, [skill.learn.faction], faction_ids, "陣營")
+        if skill.learn.sect:
+            known(where, [skill.learn.sect], c.sects, "門派")
+    starters = c.config.starter_skills
+    known("config.starter_skills", starters, c.skills, "武學")
+    if starters and all(s in c.skills for s in starters):
+        need(
+            sorted(c.skills[s].kind for s in starters) == ["內功", "武學"],
+            "config.starter_skills 要剛好一門內功、一門武學",
+        )
+        need(all(c.skills[s].quality == "下品" for s in starters), "config.starter_skills 要是下品的基礎武學")
 
     for ch in c.characters.values():
         where = f"人物 {ch.id}"

@@ -11,12 +11,13 @@ from fastapi.testclient import TestClient
 
 import server
 from conftest import at, season_one_events
-from tianxia import atlas, battle_instance, calendar, companion_agent, craft, database
+from tianxia import atlas, battle_instance, calendar, companion_agent, database, fusion, naming
 from tianxia.accounts import NAME_TAKEN
 from tianxia.characters import open_characters
 from tianxia.engine import Game
 from tianxia.journal import WORLD_NEWS
 from tianxia.martial_arts import MartialArt
+from tianxia.ollama_client import OllamaClient
 from tianxia.sqlite_world import SqliteWorldStore, open_world
 from tianxia.state import BotProfile
 
@@ -174,7 +175,20 @@ def test_menxia_view_falls_back_to_no_person_for_an_unknown_one(game):
     view = server.look(game, lambda g: server.menxia_view(g, "沒這個人"))
     assert view["person"] is None and view["person_card"] is None
     assert view["roster"][0]["key"] == "player"
-    assert view["per_craft"] == 2
+    assert "forge_line" in view and "per_craft" not in view and "craft_line" not in view
+    assert "materials" not in view and "arts" not in view  # 煉製頁不再列素材、修練頁不再從舊功法庫畫（改畫 owned_arts）
+
+
+def test_a_json_list_person_is_treated_as_nobody_not_a_500(client, game):
+    """名冊裡點的人是客戶端寫的：JSON 清單、數字之類不是字串的東西，一律當作沒點到人（以前 `in {…}` 會丟 TypeError → 500）。"""
+    for odd in (["follower:x"], [], 7, {"k": "v"}):
+        view = server.look(game, lambda g, odd=odd: server.menxia_view(g, odd))
+        assert view["person"] is None and view["person_card"] is None
+    _player(client)
+    out = client.post("/api/menxia/heal", json={"person": ["follower:x"]})
+    assert out.status_code == 200 and out.json()["menxia"]["person"] is None
+    out = client.post("/api/menxia/join", json={"person": ["nobody"]})
+    assert out.status_code == 400 and out.json() == {"error": "名冊裡沒有這個人。"}
 
 
 def _clue_items(game):
@@ -430,7 +444,7 @@ def test_the_sync_done_while_preparing_a_dialogue_is_saved(game):
 def test_a_game_that_was_never_saved_keeps_its_in_memory_character(game):
     """剛建好、還沒存過的角色資料庫裡沒有：重讀不能把它換成空的。"""
     assert not open_characters().exists("測試")
-    assert server.look(game, server.menxia_view)["xinde"] == 0
+    assert server.look(game, server.menxia_view)["xinde"] == server.CONTENT.config.start_stats["xinde"]
     assert game.state.player.name == "測試"
 
 
@@ -619,17 +633,44 @@ def test_an_unknown_action_is_not_found(client):
     assert client.post("/api/menxia/nonsense", json={}).status_code == 404
 
 
-def test_menxia_create_practice_and_heal(client, monkeypatch):
+def test_menxia_practice_and_heal(client, monkeypatch):
     monkeypatch.setattr(server.CONTENT.config, "practice_injury_chance", 0.0)
     _player(client)
-    out = client.post("/api/menxia/create", json={"kind": "武學", "name": "流雲手"}).json()
-    assert "流雲手" in out["message"]
-    assert "流雲手" in out["menxia"]["player_card"]
     out = client.post("/api/menxia/practice", json={"kind": "武學"}).json()
-    assert "第2成" in out["message"]
+    assert "基礎拳腳" in out["message"] and "第2成" in out["message"]  # 開局送的那一門
+    assert "基礎拳腳" in out["menxia"]["player_card"]
     out = client.post("/api/menxia/heal", json={}).json()
     assert out["message"]
     assert out["main"]["status"]["name"] == "沈青衫"
+
+
+def test_menxia_practice_costs_xinde_and_says_how_much_is_missing(client, monkeypatch):
+    """練成花心得：第 1 成升第 2 成 1 點、第 2 成升第 3 成 2 點；不夠時直接說還差多少，等級與心得都不動。"""
+    monkeypatch.setattr(server.CONTENT.config, "practice_injury_chance", 0.0)
+    _player(client)
+    game = server.game_for("沈青衫")
+    game.state.player.stats["xinde"] = 1
+    open_characters().save(game.state)
+    out = client.post("/api/menxia/practice", json={"kind": "武學"}).json()
+    assert "第2成" in out["message"]
+    assert open_characters().load("沈青衫").player.stats["xinde"] == 0
+    out = client.post("/api/menxia/practice", json={"kind": "武學"}).json()  # 第 2 成升第 3 成要 2 點，只剩 0 點
+    assert "要 2 點心得，你只有 0 點" in out["message"] and "還差 2 點" in out["message"]
+    saved = open_characters().load("沈青衫").player
+    assert saved.member.wugong_level == 2 and saved.stats["xinde"] == 0
+
+
+def test_self_creating_an_art_is_gone_for_good(client):
+    """自創已經作廢（武學與成長設計 3.8）：伺服器不收這個動作，選單與修練頁也不提供，身上的功夫不變。"""
+    _player(client)
+    assert "create" not in server.MENXIA_ACTIONS
+    out = client.post("/api/menxia/create", json={"kind": "武學", "name": "流雲手"})
+    assert out.status_code == 404
+    member = open_characters().load("沈青衫").player.member
+    assert (member.neigong_id, member.wugong_id) == ("jichu_tuna", "jichu_quanjiao")
+    options = client.get("/api/main").json()["options"]
+    assert not any("create" in o["id"] for o in options)
+    assert "create-skill" not in (server.ROOT / "web" / "app.js").read_text(encoding="utf-8")
 
 
 def test_roster_pick_and_team_toggle_ignore_people_you_do_not_have(client):
@@ -639,77 +680,522 @@ def test_roster_pick_and_team_toggle_ignore_people_you_do_not_have(client):
     assert out.status_code == 400 and out.json() == {"error": "名冊裡沒有這個人。"}
 
 
-def test_craft_line_previews_without_crafting(client):
+def test_forge_line_previews_without_forging(client):
     _player(client)
     game = server.game_for("沈青衫")
-    mid = next(iter(server.CONTENT.materials))
-    game.state.player.materials = {mid: 2}
+    game.state.player.insights = ["feng"]
+    game.state.player.stats["xinde"] = 100
     open_characters().save(game.state)  # 資料庫是唯一的真實來源：進鎖先重讀，只改記憶體的話下一個請求就看不到
-    out = client.post("/api/craft_line", json={"materials": [mid, mid], "kind": "武學"}).json()
-    assert "煉製" in out["line"]
-    assert game.state.player.materials == {mid: 2}
-    assert open_characters().load("沈青衫").player.materials == {mid: 2}
+    out = client.post("/api/forge_line", json={"art": "jichu_quanjiao", "insights": ["feng"]}).json()
+    assert "合成" in out["line"] and "【基礎拳腳】＋「風」" in out["line"]
+    out = client.post("/api/forge_line", json={}).json()  # 什麼都沒放：只說怎麼放
+    assert "放一門武學和一個意境" in out["line"]
+    saved = open_characters().load("沈青衫").player
+    assert saved.arts == [] and saved.insights == ["feng"] and saved.stats["xinde"] == 100
     view = client.get("/api/menxia").json()
-    assert view["materials"][0]["id"] == mid and view["materials"][0]["count"] == 2
+    assert "放一門武學和一個意境" in view["forge_line"] and "craft_line" not in view and "per_craft" not in view
 
 
-def _a_player_with_a_material(client, count, xinde=100):
-    """新角色，背包裡某一種要花心得的（靈品）素材 ×count；存進資料庫（進鎖會重讀）。回傳素材 id。"""
+def test_the_old_craft_endpoints_are_gone(client):
+    _player(client)
+    assert "craft" not in server.MENXIA_ACTIONS and "forge" in server.MENXIA_ACTIONS
+    assert client.post("/api/menxia/craft", json={"materials": ["gang_1", "gang_1"]}).status_code == 404
+    assert client.post("/api/craft_line", json={"materials": []}).status_code == 404
+
+
+def test_the_practice_and_furnace_pages_only_read_and_call_what_the_server_has(game):
+    """Task 12：修練頁、煉製頁（web/app.js）讀的欄位都要在 menxia_view 裡、叫的動作都要在 MENXIA_ACTIONS 裡；
+    舊煉製的端點、欄位、說法不再出現。網頁沒有測試框架，這條擋住「改了伺服器忘了改網頁」。"""
+    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    pages = js[js.index("function pagePractice"):js.index("// ── 輿圖 ──")]
+    keys = set(server.look(game, server.menxia_view))
+    assert {"owned_arts", "insights", "holdings", "naming", "slot_cards", "forge_line", "bag"} <= keys
+    assert set(re.findall(r"\bx\.(\w+)", pages)) <= keys
+    shown = js[js.index("const MENXIA_SHOWN"):]
+    shown = shown[:shown.index("};")]
+    assert set(re.findall(r'"(\w+)"', shown)) - {"practice", "craft"} <= keys  # 輪詢比對的欄位也都送得到
+    called = set(re.findall(r'\bmx\("(\w+)"', js)) | set(re.findall(r"/api/menxia/(\w+)", js)) | set(re.findall(r'data-act="mx" data-op="(\w+)"', js))
+    assert {"practice", "heal", "forge", "switch", "cultivate", "melt", "melt_insight", "name"} <= called
+    assert called <= set(server.MENXIA_ACTIONS), called - set(server.MENXIA_ACTIONS)
+    for gone in ("/api/craft_line", "/api/menxia/craft", "per_craft", "x.materials", "x.arts", "craftSel", "放入素材", "素材說明"):
+        assert gone not in js, gone
+
+
+def _js_function(js: str, header: str) -> str:
+    """app.js 裡 IIFE 內的一個函式本體：從標頭（例如 "async function mx("）到下一個縮兩格的收尾 "\\n  }\\n"。"""
+    start = js.index(header)
+    return js[start:js.index("\n  }\n", start)]
+
+
+def test_the_pages_trim_the_furnace_whenever_the_menxia_data_is_replaced():
+    """修練頁熔掉爐裡放著的東西、再回煉製頁：S.forgeSel 還留著那個 id，爐子看起來是空的、開爐卻亮著（forgeReady 照 id 數）。
+    只有輪詢的 refreshPage 會補，所以每個換掉 S.menxia 的地方都要自己修剪（mx、loadMenxia）。網頁沒有測試框架，這裡擋住漏改。"""
+    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    for header in ("async function mx(", "async function loadMenxia("):
+        body = _js_function(js, header)
+        assert "S.menxia = " in body and "trimPot()" in body, header
+        assert body.index("trimPot()") > body.index("S.menxia = "), header  # 換上新資料之後才修剪
+    trim = _js_function(js, "function trimPot(")
+    assert "trimForgeSel()" in trim and 'S.forgeLine = ""' in trim and "updateForgeLine()" in trim
+
+
+def test_a_refused_name_keeps_what_the_player_typed_and_the_pill_tick_does_not_outlive_the_tab():
+    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    submit = js[js.index('form.id === "name-art"'):]
+    submit = submit[:submit.index('form.id === "seclude"')]
+    assert 'await mx("name"' in submit and "again.value = data.name" in submit  # 被拒（表單還在）把字放回去
+    assert "S.legendTick = {}" in _js_function(js, "async function goTab(")  # 回到修練頁時，破境丹的勾是真的沒勾
+
+
+def test_the_three_art_buttons_stay_on_one_line_at_phone_width():
+    """修練／改練這一門／熔煉在 375px 手機寬度：頁邊 16、清單邊框 1、卡內邊 14（兩側）、三顆之間兩個 8px 的縫，一排可用 375-32-2-28-16=297px。
+    原本三顆等寬各 99px，扣掉邊框 2 與內距 28，「改練這一門」（5 字 × 15px = 75px）只剩 69px 放不下而折行。
+    改成照字寬分配（flex: 1 1 auto、width: auto）、不折行、橫向內距縮到 8px：三顆自然寬 48＋93＋48 = 189px，一排有 108px 的餘裕。"""
+    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    css = (server.WEB / "style.css").read_text(encoding="utf-8")
+    assert 'class="row art-actions"' in js[js.index("const artRow"):js.index("const insightRow")]
+    rule = re.search(r"\.art-body \.art-actions > \.btn \{([^}]*)\}", css)
+    assert rule is not None, "要有只管開啟的武學那一排按鈕的 class，不動全站的 .btn"
+    body = rule.group(1)
+    assert "white-space: nowrap" in body and "width: auto" in body and "flex: 1 1 auto" in body
+    assert re.search(r"padding:\s*10px 8px", body)
+
+
+def _a_player_with_insights(client, insights=("feng", "huo"), xinde=100):
+    """新角色（開局送的兩門基礎武學在身上），悟得 insights、心得 xinde；存進資料庫（進鎖會重讀）。"""
     _player(client)
     game = server.game_for("沈青衫")
-    mid = next(m.id for m in server.CONTENT.materials.values() if m.tier == 2)
-    assert game.craft_cost([mid, mid]) > 0  # 要花心得，下面「心得有沒有被扣」才說明得了事情
-    assert game.state.player.member.wugong_id is None and game.state.player.arts == []
-    game.state.player.materials = {mid: count}
+    game.state.player.insights = list(insights)
     game.state.player.stats["xinde"] = xinde
     open_characters().save(game.state)
-    return mid
 
 
-def test_the_forge_takes_the_same_material_twice_when_there_are_two(client):
-    """FB-005：煉製可以重複丟同一樣素材（網頁版的素材格子本來就允許）；伺服器這一端也要收，兩樣都從背包扣。
-    不連模型：conftest 把 chat_structured 假成連不上，首次發現的配方走退路字表取名。"""
-    mid = _a_player_with_a_material(client, 2)
-    price = server.game_for("沈青衫").craft_cost([mid, mid])
-    out = client.post("/api/menxia/craft", json={"materials": [mid, mid]})
-    assert out.status_code == 200
+def test_the_forge_fuses_an_art_with_an_insight(client):
+    """合成：武學＋意境，花 5 點心得，新武學進功法庫、底留著。不連模型：conftest 把 chat_structured 假成連不上，
+    首次發現的配方走退路字表取名。"""
+    _a_player_with_insights(client)
+    out = client.post("/api/menxia/forge", json={"art": "jichu_quanjiao", "insights": ["feng"]})
+    assert out.status_code == 200 and "衍生出" in out.json()["message"]
     saved = open_characters().load("沈青衫").player
-    assert saved.materials.get(mid, 0) == 0
-    assert saved.stats["xinde"] == 100 - price
-    material = server.CONTENT.materials[mid]
-    kind = craft.result_kind(material, material, open_world().read().tianji)  # 開爐才揭曉的種類
-    key = craft.recipe_key([mid, mid], kind)
+    key = fusion.fuse_key("jichu_quanjiao", "feng")
     art = open_world().lookup_recipe(key)
-    slot = saved.member.wugong_id if kind == "武學" else saved.member.neigong_id
-    assert art is not None and art.kind == kind and slot == art.id  # 欄位本來是空的，煉出來的直接配上身
-    assert art.name == craft.fallback_name(server.CONTENT, key, kind)  # 沒問模型
+    assert art is not None and art.id in saved.arts and art.kind == "武學" and art.attribute == "快"
+    assert art.name == naming.fallback_name(server.CONTENT, key, "武學")  # 沒問模型
+    assert saved.member.wugong_id == "jichu_quanjiao"  # 底留著
+    assert saved.stats["xinde"] == 95
+    assert saved.insights == ["feng", "huo"]  # 意境不會用掉
 
 
-def test_the_forge_does_not_craft_the_same_material_twice_with_only_one(client):
-    mid = _a_player_with_a_material(client, 1)
-    out = client.post("/api/menxia/craft", json={"materials": [mid, mid], "kind": "武學"})
-    assert out.status_code == 200 and "不夠" in out.json()["message"]
+def test_the_forge_merges_two_insights(client):
+    _a_player_with_insights(client)
+    out = client.post("/api/menxia/forge", json={"insights": ["feng", "huo"]})
+    assert out.status_code == 200 and "交融" in out.json()["message"]
     saved = open_characters().load("沈青衫").player
-    assert saved.materials == {mid: 1}
-    assert saved.stats["xinde"] == 100
-    assert saved.member.wugong_id is None and saved.arts == []
+    merged = open_world().lookup_insight_recipe(fusion.merge_key("feng", "huo"))
+    assert merged is not None and merged.attribute == "陽" and saved.insights == ["feng", "huo", merged.id]
+    assert saved.stats["xinde"] == 95
+
+
+def test_the_forge_refuses_what_it_cannot_do_and_charges_nothing(client):
+    _a_player_with_insights(client, insights=("feng",), xinde=2)
+    for body in ({"art": "jichu_quanjiao", "insights": ["feng"]}, {"insights": ["feng", "feng"]},
+                 {"art": "jichu_quanjiao", "insights": ["huo"]}, {"art": "jichu_quanjiao", "insights": []}):
+        out = client.post("/api/menxia/forge", json=body)
+        assert out.status_code == 200 and out.json()["message"], body
+    saved = open_characters().load("沈青衫").player
+    assert saved.arts == [] and saved.insights == ["feng"] and saved.stats["xinde"] == 2
+
+
+def test_the_forge_endpoints_survive_oddly_shaped_bodies(client):
+    """body 是玩家（或亂送的客戶端）寫的：art 不是字串、insights 不是清單都不能打出 500，也不能動到任何東西。"""
+    _a_player_with_insights(client)
+    bodies = (
+        {"art": ["jichu_quanjiao"], "insights": ["feng"]},
+        {"art": {"id": "jichu_quanjiao"}, "insights": ["feng"]},
+        {"art": 5, "insights": ["feng"]},
+        {"art": "jichu_quanjiao", "insights": "feng"},
+        {"art": "jichu_quanjiao", "insights": {"feng": 1}},
+        {"art": None, "insights": 7},
+        {"insights": [["feng"], {"x": 1}]},
+        {},
+    )
+    for body in bodies:
+        line = client.post("/api/forge_line", json=body)
+        assert line.status_code == 200 and isinstance(line.json()["line"], str), body
+        out = client.post("/api/menxia/forge", json=body)
+        assert out.status_code == 200 and out.json()["message"], body
+    saved = open_characters().load("沈青衫").player
+    assert saved.arts == [] and saved.insights == ["feng", "huo"] and saved.stats["xinde"] == 100
+
+
+def test_forge_line_warns_about_an_insight_you_have_not_learned(client):
+    _player(client)
+    line = client.post("/api/forge_line", json={"art": "jichu_quanjiao", "insights": ["feng"]}).json()["line"]
+    assert "還沒悟到" in line
+
+
+# ── 開爐的首次取名在行動鎖外（最終審查 Critical 1）：A 鎖內備料 → B 鎖外取名（有預算）→ C 鎖內重驗、登記、收費 ──
+
+FIST_FENG = fusion.fuse_key("jichu_quanjiao", "feng")
+
+
+def _forger(name="沈青衫", insights=("feng", "huo"), xinde=100) -> Game:
+    """伺服器上這個角色唯一的那份 Game（server.game_for），悟得 insights、心得 xinde，存進資料庫（進鎖會重讀）。"""
+    game = server.game_for(name)
+    game.state.player.insights = list(insights)
+    game.state.player.stats["xinde"] = xinde
+    open_characters().save(game.state)
+    return game
+
+
+def _model(reply):
+    """假的模型：reply(self, messages) 回名字（字串）。self 是那一次呼叫用的 OllamaClient（有預算時是複本）。"""
+    def chat_structured(self, messages, response_model, **kwargs):
+        return naming.NameReply(name=reply(self, messages), description="一句話。")
+
+    return mock.patch.object(OllamaClient, "chat_structured", chat_structured)
+
+
+def _nobody_holds_the_lock(game):
+    assert not game.world.db.writing()  # 這個執行緒沒拿著寫入交易
+    probe = sqlite3.connect(game.world.db.path, timeout=0)
+    try:
+        probe.execute("BEGIN IMMEDIATE")  # 別的程式（假人、別的玩家）也拿得到寫入權
+        probe.execute("ROLLBACK")
+    finally:
+        probe.close()
+
+
+def _crafts(name):
+    """這個角色江湖紀錄裡「煉製」的那幾則（同一種連續的會併成一則，所以比內容，不只比則數）。"""
+    return [e.model_dump() for e in open_characters().load(name).journal if e.title == "煉製"]
+
+
+def test_a_new_recipe_is_named_outside_the_action_lock(lock_events):
+    game = _forger()
+    lock_events.clear()
+
+    def reply(client, messages):
+        lock_events.append("generate")
+        _nobody_holds_the_lock(game)
+        return "旋風腿"
+
+    with _model(reply):
+        msgs = server.forge(game, "jichu_quanjiao", ["feng"])
+    assert lock_events == ["enter", "exit", "generate", "enter", "exit"]  # 鎖內備料 → 鎖外取名 → 鎖內登記
+    assert open_world().lookup_recipe(FIST_FENG).name == "旋風腿"
+    assert any("第一次" in m for m in msgs)
+
+
+def test_the_forge_endpoint_never_asks_the_model_while_holding_the_lock(client):
+    _a_player_with_insights(client)
+    game = server.game_for("沈青衫")
+    asked = []
+
+    def reply(model, messages):
+        _nobody_holds_the_lock(game)
+        asked.append(model.timeout)
+        return "旋風腿"
+
+    with _model(reply):
+        out = client.post("/api/menxia/forge", json={"art": "jichu_quanjiao", "insights": ["feng"]})
+    assert out.status_code == 200 and "旋風腿" in out.json()["message"]
+    # 預算 60 秒（扣掉 A 段等鎖的時間）；chat_structured 一次最多送兩趟，所以一趟最多一半。原本那個 client 不動
+    assert len(asked) == 1 and 25 < asked[0] <= server.CONTENT.config.naming_budget_seconds / 2
+    assert game.client.timeout == server.CONTENT.config.ollama_timeout
+
+
+def test_when_the_first_trip_saw_no_need_for_the_model_the_lock_never_asks_it(monkeypatch):
+    """A 段說不必叫模型（那一刻會被拒絕、配方有了、沒有 client），C 段進鎖時卻做得成（中間狀態變了）：
+    鎖裡也不叫模型，直接用退路字表——伺服器永遠不走「鎖裡取名」那條路。"""
+    game = _forger()
+    monkeypatch.setattr(Game, "forge_request", lambda self, art_id, insight_ids: None)
+    asked = []
+    with _model(lambda model, messages: asked.append(1) or "旋風腿"):
+        server.forge(game, "jichu_quanjiao", ["feng"])
+    assert asked == []
+    assert open_world().lookup_recipe(FIST_FENG).name == naming.fallback_name(server.CONTENT, FIST_FENG, "武學")
+
+
+def test_a_recipe_registered_between_the_two_trips_gives_the_registered_art():
+    """乙備料、取名的時候，甲把同一個配方合出來登記了：乙進鎖時拿到的是甲登記的那一門（照常付心得），
+    乙的模型取的名字不登記，全服只有一筆。"""
+    first, second = _forger("甲"), _forger("乙")
+    with _model(lambda model, messages: "疾風腿"):
+        proposed = server.prepare_forge(second, "jichu_quanjiao", ["feng"])  # 乙的 A、B
+    assert proposed == ("疾風腿", "一句話。")
+    with _model(lambda model, messages: "旋風腿"):
+        server.forge(first, "jichu_quanjiao", ["feng"])  # 甲從頭到尾
+    msgs = server.act(second, lambda g: g.forge("jichu_quanjiao", ["feng"], proposed=proposed))  # 乙的 C
+    world = open_world()
+    art = world.lookup_recipe(FIST_FENG)
+    assert art.name == "旋風腿" and world.recipe_keys() == {FIST_FENG} and not world.is_skill_name_taken("疾風腿")
+    saved = open_characters().load("乙").player
+    assert art.id in saved.arts and saved.stats["xinde"] == 95
+    assert any("由甲首創" in m for m in msgs)
+
+
+@pytest.mark.parametrize(("art", "picked", "refusal"), [
+    ("jichu_quanjiao", ["feng"], "你已經有了"),
+    (None, ["feng", "huo"], "你已經悟得了"),
+])
+def test_the_same_forge_sent_twice_while_naming_is_charged_once(art, picked, refusal):
+    """企劃者 2026-10-05（不能重複扣）：同一個人連按兩下、重新整理再按、開兩個分頁，兩個請求都在配方登記之前
+    走完 A（都叫了模型）。C 段只有一個成功：第二個重驗時看見配方有了、東西已經在你身上，回「你已經有了／悟得了」，
+    什麼都不收——不扣心得、不扣體力、不寫江湖紀錄；全服只登記一筆。"""
+    game = _forger()
+    names = iter(["旋風腿", "疾風腿"])
+    with _model(lambda model, messages: next(names)):
+        one = server.prepare_forge(game, art, picked)
+        two = server.prepare_forge(game, art, picked)
+    assert (one[0], two[0]) == ("旋風腿", "疾風腿")  # 兩趟都在配方登記之前：各叫了一次模型
+    before = open_characters().load("沈青衫").player
+    first = server.act(game, lambda g: g.forge(art, picked, proposed=one))
+    after_one = open_characters().load("沈青衫").player
+    crafts = _crafts("沈青衫")
+    second = server.act(game, lambda g: g.forge(art, picked, proposed=two))
+    after_two = open_characters().load("沈青衫").player
+    assert not any(refusal in m for m in first) and len(second) == 1 and refusal in second[0]
+    assert after_one.stats["xinde"] == after_two.stats["xinde"] == before.stats["xinde"] - 5
+    assert after_two.stamina == pytest.approx(after_one.stamina, abs=0.01)  # 體力照現實時間回（sync），只差一點點
+    assert (after_one.arts, after_one.insights) == (after_two.arts, after_two.insights)
+    assert _crafts("沈青衫") == crafts  # 第二下沒有寫紀錄
+    world = open_world()
+    assert not world.is_skill_name_taken("疾風腿")
+    if art:
+        assert world.recipe_keys() == {FIST_FENG} and len(after_two.arts) == 1
+    else:
+        assert world.lookup_insight_recipe(fusion.merge_key("feng", "huo")).name == "旋風腿"
+        assert after_two.insights == ["feng", "huo", "旋風腿"]
+        assert after_two.stamina == pytest.approx(before.stamina - 10, abs=0.01)  # 只扣一次合併的體力
+
+
+def test_a_second_tab_that_spends_the_xinde_while_naming_leaves_the_first_forge_refused_and_free():
+    """Infra 第 2 點：B 段在鎖外等模型的時候，同一個角色在另一個分頁把同一份心得花在另一爐；C 段進鎖重驗，
+    心得不夠了就整個不做：不登記配方、不扣東西、不寫紀錄，告訴玩家變了什麼。"""
+    game = _forger(xinde=5)
+    depth = []
+
+    def reply(model, messages):
+        if not depth:
+            depth.append(1)
+            server.forge(game, "jichu_quanjiao", ["huo"])  # 另一個分頁：完整的一爐（它自己的取名是下面那一句）
+            return "旋風腿"
+        return "烈火拳"
+
+    with _model(reply):
+        msgs = server.forge(game, "jichu_quanjiao", ["feng"])
+    saved = open_characters().load("沈青衫").player
+    fire = open_world().lookup_recipe(fusion.fuse_key("jichu_quanjiao", "huo"))
+    assert fire.name == "烈火拳" and saved.arts == [fire.id] and saved.stats["xinde"] == 0
+    assert any("心得不足" in m for m in msgs)
+    assert open_world().lookup_recipe(FIST_FENG) is None and not open_world().is_skill_name_taken("旋風腿")
+    assert len(_crafts("沈青衫")) == 1 and "烈火拳" in _crafts("沈青衫")[0]["tag"]
+
+
+def test_the_furnace_button_stays_disabled_with_the_wait_line_while_naming():
+    """企劃者 2026-10-05：等取名的時候「開爐」鈕關著、寫著爐火正旺，同一個分頁按不了第二下（busy）；
+    重新整理之後頁面重畫、按鈕照常能按——伺服器不留任何等待中的狀態，重複扣由 C 段的重驗擋（見上面幾條）。"""
+    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    body = _js_function(js, "async function forge(")
+    assert "await busy(" in body and "btn.disabled = true" in body and 'btn.textContent = "爐火正旺…"' in body
+    assert "取名要花上一分鐘，請稍候" in body
+    assert body.index("btn.disabled = true") < body.index('api("/api/menxia/forge"')
+
+
+def test_the_page_never_polls_twice_at_once():
+    """最終審查 Critical 1：取名要等的時候伺服器的執行緒還在跑；輪詢若不等上一次回來就再打一次 /api/main，
+    卡住的請求會越疊越多、把執行緒池用光。poll() 有一個「還在等」的旗子，上一次沒回來就不打。"""
+    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    body = _js_function(js, "async function poll(")
+    assert "pollInFlight" in body and "finally" in body and "pollInFlight = false" in body
+    assert body.index("pollInFlight") < body.index('api("/api/main")')
+    assert "S.busy" in body and "document.hidden" in body  # 原本的守門照舊
+
+
+def test_menxia_view_lists_owned_arts_insights_and_holdings(client):
+    _player(client)
+    game = server.game_for("沈青衫")
+    game.state.player.insights = ["feng"]
+    open_characters().save(game.state)
+    view = client.get("/api/menxia").json()
+    assert view["holdings"] == {"count": 3, "cap": 50}
+    assert [row["name"] for row in view["owned_arts"]] == ["基礎吐納", "基礎拳腳"]
+    assert view["insights"][0]["name"] == "風" and view["naming"] is None
+    assert view["slot_cards"][0]["price"] == 1
+
+
+def test_menxia_view_rows_carry_what_the_pages_need(client):
+    """每門武學一列：身上的在前、功法卡已轉成 HTML、修練與熔煉按不按得下去與為什麼；意境一列一個。"""
+    _a_player_with_insights(client)
+    view = client.get("/api/menxia").json()
+    breath, fist = view["owned_arts"]
+    assert (breath["worn"], fist["worn"], breath["kind"], fist["kind"]) == (True, True, "內功", "武學")
+    assert breath["level"] == 1 and breath["insight"] is None and breath["card"].startswith("<")
+    assert breath["cultivate"]["ok"] is False and "沒有融過意境" in breath["cultivate"]["note"]
+    assert breath["melt"]["ok"] is False
+    assert [(i["id"], i["name"], i["melt"]) for i in view["insights"]] == [("feng", "風", 10), ("huo", "火", 10)]
+
+
+def test_slot_prices_are_none_when_empty_or_at_the_tenth_level(client, monkeypatch):
+    monkeypatch.setattr(server.CONTENT.config, "starter_skills", [])  # 沒有開局送的武學：讀檔才不會把空著的欄位補回來
+    _player(client)
+    game = server.game_for("沈青衫")
+    game.state.player.member.wugong_id, game.state.player.member.wugong_level = "jichu_quanjiao", 10
+    game.state.player.member.neigong_id = None
+    open_characters().save(game.state)
+    cards = {c["kind"]: c for c in client.get("/api/menxia").json()["slot_cards"]}
+    assert cards["武學"]["price"] is None and cards["內功"]["price"] is None  # 第十成、還沒學
+    game.state.player.member.wugong_level = 9
+    open_characters().save(game.state)
+    cards = {c["kind"]: c for c in client.get("/api/menxia").json()["slot_cards"]}
+    assert cards["武學"]["price"] == 9
+
+
+def test_forge_cultivate_and_melt_through_the_endpoints(client):
+    _a_player_with_insights(client)
+    r = client.post("/api/menxia/forge", json={"art": "jichu_quanjiao", "insights": ["feng"]}).json()
+    assert "衍生出" in r["message"]
+    new = r["menxia"]["owned_arts"][-1]
+    assert new["insight"] == "風" and new["cultivate"]["ok"] and new["worn"] is False
+    r = client.post("/api/menxia/cultivate", json={"art": new["id"]}).json()
+    assert "修練" in r["message"]
+    assert open_characters().load("沈青衫").player.stamina < server.CONTENT.config.stamina_max  # 花了體力
+    r = client.post("/api/menxia/melt", json={"art": new["id"]}).json()
+    assert "熔成了心得" in r["message"]
+    assert all(row["id"] != new["id"] for row in r["menxia"]["owned_arts"])
+
+
+def _a_peerless_candidate(client, pills=2):
+    """一門融過意境、已經是上品的武學（下一步是絕學）、手上有 pills 枚破境丹、體力夠。回傳（功法 id，Game）。"""
+    _a_player_with_insights(client)
+    r = client.post("/api/menxia/forge", json={"art": "jichu_quanjiao", "insights": ["feng"]}).json()
+    art_id = r["menxia"]["owned_arts"][-1]["id"]
+    game = server.game_for("沈青衫")
+    game.state.player.art_quality[art_id] = "上品"
+    game.state.player.legend_items = pills
+    game.state.player.stamina = server.CONTENT.config.stamina_max
+    open_characters().save(game.state)
+    return art_id, game
+
+
+def test_the_pill_is_taken_only_when_the_request_ticks_it_with_a_real_true(client):
+    """勾了才服：use_legend 只認布林 true。累積了 8 次失敗之後，基本機率 28%、服丹 43%：擲 30%，不服輸、服了贏。"""
+    from conftest import FixedRandom
+
+    art_id, game = _a_peerless_candidate(client)
+    game.rng = FixedRandom(0.99)
+    for odd in (False, None, "true", 1, "yes", [True], {"a": 1}):  # 沒勾，或不是真正的 true：丹留著
+        body = {"art": art_id} if odd is None else {"art": art_id, "use_legend": odd}
+        out = client.post("/api/menxia/cultivate", json=body).json()
+        assert "還差一點火候" in out["message"] and "你服下" not in out["message"], odd
+    game.rng = FixedRandom(0.30)
+    out = client.post("/api/menxia/cultivate", json={"art": art_id}).json()  # 第 8 次失敗之後的基本機率 25%：輸
+    assert "還差一點火候" in out["message"]
+    saved = open_characters().load("沈青衫").player
+    assert saved.legend_items == 2 and saved.art_quality[art_id] == "上品" and saved.art_mastery[art_id] == 8
+    out = client.post("/api/menxia/cultivate", json={"art": art_id, "use_legend": True}).json()  # 同一個 30：28% + 15% 贏
+    assert "你服下一枚【破境丹】" in out["message"] and "晉為絕學" in out["message"]
+    saved = open_characters().load("沈青衫").player
+    assert saved.legend_items == 1 and saved.art_quality[art_id] == "絕學"
+
+
+def test_a_stale_page_ticking_a_pill_you_no_longer_hold_still_cultivates(client):
+    from conftest import FixedRandom
+
+    art_id, game = _a_peerless_candidate(client, pills=0)
+    game.rng = FixedRandom(0.10)
+    out = client.post("/api/menxia/cultivate", json={"art": art_id, "use_legend": True})
+    assert out.status_code == 200 and "你身上已經沒有破境丹了，這一回沒服。" in out.json()["message"]
+    saved = open_characters().load("沈青衫").player
+    assert saved.legend_items == 0 and saved.art_mastery[art_id] == 1 and saved.stamina < server.CONTENT.config.stamina_max
+
+
+def test_the_practice_page_offers_the_pill_for_the_peerless_step(client):
+    art_id, _ = _a_peerless_candidate(client)
+    row = next(r for r in client.get("/api/menxia").json()["owned_arts"] if r["id"] == art_id)
+    assert row["cultivate"]["note"] == "4% 晉為絕學・體力 10"
+    assert row["cultivate"]["legend"]["label"] == "服下破境丹（+15%，剩 2 枚）"
+    assert row["cultivate"]["legend"]["note"] == "19% 晉為絕學（含破境丹 +15%）・體力 10"
+    breath = client.get("/api/menxia").json()["owned_arts"][0]
+    assert breath["cultivate"]["ok"] is False and breath["cultivate"]["legend"] is None
+
+
+def test_melting_an_insight_through_the_endpoint(client):
+    _a_player_with_insights(client, xinde=0)
+    r = client.post("/api/menxia/melt_insight", json={"insight": "feng"}).json()
+    assert "化成了心得" in r["message"] and [i["id"] for i in r["menxia"]["insights"]] == ["huo"]
+    saved = open_characters().load("沈青衫").player
+    assert saved.insights == ["huo"] and saved.stats["xinde"] == 10
+    r = client.post("/api/menxia/melt_insight", json={"insight": "feng"}).json()  # 已經沒有了
+    assert "沒有這個意境" in r["message"]
+
+
+def test_the_naming_row_and_the_name_action(client):
+    """練成絕學的第一人：修練頁有等著取名的一列；定了名，那一列消失、武學的名字全服一起改。"""
+    _a_player_with_insights(client)
+    r = client.post("/api/menxia/forge", json={"art": "jichu_quanjiao", "insights": ["feng"]}).json()
+    art_id = r["menxia"]["owned_arts"][-1]["id"]
+    game = server.game_for("沈青衫")
+    game.state.player.naming = art_id
+    game.state.player.art_quality[art_id] = "絕學"
+    open_characters().save(game.state)
+    assert open_world().claim_master(art_id, "沈青衫")
+    view = client.get("/api/menxia").json()
+    assert view["naming"] == {"id": art_id, "name": view["owned_arts"][-1]["name"]}
+    assert view["owned_arts"][-1]["melt"]["ok"] is False and "先替它定名" in view["owned_arts"][-1]["melt"]["note"]
+    r = client.post("/api/menxia/name", json={"name": "旋風不歸腿"}).json()
+    assert "旋風不歸腿" in r["message"] and r["menxia"]["naming"] is None
+    assert r["menxia"]["owned_arts"][-1]["name"] == "旋風不歸腿"
+    assert open_characters().load("沈青衫").player.naming is None
+
+
+def test_a_bad_name_leaves_the_naming_right_in_place(client):
+    _a_player_with_insights(client)
+    r = client.post("/api/menxia/forge", json={"art": "jichu_quanjiao", "insights": ["feng"]}).json()
+    art_id = r["menxia"]["owned_arts"][-1]["id"]
+    game = server.game_for("沈青衫")
+    game.state.player.naming = art_id
+    open_characters().save(game.state)
+    assert open_world().claim_master(art_id, "沈青衫")
+    r = client.post("/api/menxia/name", json={"name": "a"}).json()
+    assert "不行" in r["message"] and r["menxia"]["naming"]["id"] == art_id
+
+
+def test_the_new_menxia_actions_survive_oddly_shaped_bodies(client):
+    """cultivate／melt／melt_insight／name 的 body 是客戶端寫的：什麼形狀都只會得到一句話，不會 500，也不會動到東西。"""
+    _a_player_with_insights(client)
+    bodies = ({}, {"art": 5}, {"art": ["jichu_quanjiao"]}, {"art": None}, {"insight": {"a": 1}}, {"insight": 7},
+              {"name": 5}, {"name": ["旋風腿"]}, {"name": None})
+    for op in ("cultivate", "melt", "melt_insight", "name"):
+        for body in bodies:
+            out = client.post(f"/api/menxia/{op}", json=body)
+            assert out.status_code == 200 and out.json()["message"], (op, body)
+    saved = open_characters().load("沈青衫").player
+    assert (saved.member.neigong_id, saved.member.wugong_id) == ("jichu_tuna", "jichu_quanjiao")
+    assert saved.insights == ["feng", "huo"] and saved.stats["xinde"] == 100 and saved.arts == []
 
 
 # ── 功法卡（FB-006）與功法庫先看卡再改練（QA L4）────────────────
 
 
-def test_the_practice_page_gets_a_card_for_each_worn_art(client):
+def test_the_practice_page_gets_a_card_for_each_worn_art(client, monkeypatch):
     _player(client)
-    client.post("/api/menxia/create", json={"kind": "武學", "name": "流雲手"})
     cards = client.get("/api/menxia").json()["slot_cards"]
     assert [c["kind"] for c in cards] == list(server.KINDS)
     wugong, neigong = cards
-    assert "流雲手" in wugong["card"] and "第一成" in wugong["card"]  # 第一成／第十成那一行是功法卡才有的
+    assert "基礎拳腳" in wugong["card"] and "第一成" in wugong["card"]  # 第一成／第十成那一行是功法卡才有的
+    assert "基礎吐納" in neigong["card"]
+    game = server.game_for("沈青衫")
+    monkeypatch.setattr(server.CONTENT.config, "starter_skills", [])  # 沒有開局送的武學：讀檔才不會把空著的欄位補回來
+    game.state.player.member.neigong_id = None  # 內容改版之後欄位空著的舊角色：卡片照舊說沒有
+    open_characters().save(game.state)
+    neigong = client.get("/api/menxia").json()["slot_cards"][1]
     assert "你還沒有內功。" in neigong["card"]
 
 
 def test_the_slot_cards_say_whether_each_slot_holds_an_art_and_its_level(client, monkeypatch):
-    """C4／C5：修練頁照目前那一門有沒有功法、練到第幾成，決定自創欄收不收、鍛鍊鈕亮不亮。
+    """C5：修練頁照目前那一門有沒有功法、練到第幾成，決定鍛鍊鈕亮不亮。
     全程走 API：動作端點會存檔，每次進鎖都從資料庫重讀角色，所以讀到的是存好的那一份。"""
     monkeypatch.setattr(server.CONTENT.config, "practice_injury_chance", 0.0)
 
@@ -717,8 +1203,12 @@ def test_the_slot_cards_say_whether_each_slot_holds_an_art_and_its_level(client,
         return [(c["kind"], c["learned"], c["level"], c["maxed"]) for c in cards]
 
     _player(client)
-    assert slots(client.get("/api/menxia").json()["slot_cards"]) == [("武學", False, 0, False), ("內功", False, 0, False)]
-    client.post("/api/menxia/create", json={"kind": "武學", "name": "流雲手"})
+    assert slots(client.get("/api/menxia").json()["slot_cards"]) == [("武學", True, 1, False), ("內功", True, 1, False)]
+    game = server.game_for("沈青衫")
+    monkeypatch.setattr(server.CONTENT.config, "starter_skills", [])  # 沒有開局送的武學：讀檔才不會把空著的欄位補回來
+    game.state.player.member.neigong_id = None  # 欄位空著（內容改版之後的舊角色）：沒學過、第 0 成
+    game.state.player.stats["xinde"] = 100  # 練成花心得：第 1 成升到第十成共 45 點，開局的 20 點不夠
+    open_characters().save(game.state)
     out = client.post("/api/menxia/practice", json={"kind": "武學"}).json()
     assert slots(out["menxia"]["slot_cards"]) == [("武學", True, 2, False), ("內功", False, 0, False)]
     assert slots(client.get("/api/menxia").json()["slot_cards"]) == [("武學", True, 2, False), ("內功", False, 0, False)]
@@ -747,8 +1237,7 @@ def _library_art(name: str, note: str) -> MartialArt:
 
 def test_a_library_art_comes_with_its_card_and_note(client):
     _a_player_with_library_arts(client, _library_art("沉柳纏勁", "以柔勁纏住兵刃，<b>借力</b>卸力。"))
-    (item,) = client.get("/api/menxia").json()["arts"]
-    assert item["id"] == "沉柳纏勁"
+    (item,) = [r for r in client.get("/api/menxia").json()["owned_arts"] if r["id"] == "沉柳纏勁"]
     assert "【沉柳纏勁】" in item["card"] and "第1成" in item["card"]
     assert "以柔勁纏住兵刃，&lt;b&gt;借力&lt;/b&gt;卸力。" in item["card"]  # 模型寫的說明句也一律跳脫
 
@@ -756,7 +1245,7 @@ def test_a_library_art_comes_with_its_card_and_note(client):
 def test_a_library_art_without_a_note_leaves_no_blank_line(client):
     """退路字表取名的功法沒有說明句：整行省略，不出現 None、不留空的 <br> 行（FB-006 驗收）。"""
     _a_player_with_library_arts(client, _library_art("鐵柳纏勁", ""))
-    card = client.get("/api/menxia").json()["arts"][0]["card"]
+    card = next(r for r in client.get("/api/menxia").json()["owned_arts"] if r["id"] == "鐵柳纏勁")["card"]
     assert "None" not in card
     assert "<br />\n<br />" not in card and "<br />\n</p>" not in card
     assert card.rstrip().endswith("來源：自創（沈浪 所創）</p>")
@@ -1064,9 +1553,9 @@ def test_preparing_has_no_now_card_and_no_countdown(tmp_path, monkeypatch):
     server.act(fresh, lambda g: server.ADMIN_ACTIONS["open_season"](g, {}))
     view = server.main_view(fresh)
     assert view["now"] and view["status"]["next_event"] is not None and view["guide"] is not None
-    # FB-062：下一件寫季曆時刻加現實倒數，畫面（web/app.js）把兩個拼成「宛城之戰・第9週・週四 20:44（現實約 4 小時 32 分後）」
+    # FB-062：下一件寫季曆時刻加現實倒數，畫面（web/app.js）把兩個拼成「宛城之戰・第 9 週・週四 20:44（現實約 4 小時 32 分後）」
     next_event = view["status"]["next_event"]
-    assert re.fullmatch(r"第\d+週・週[一二三四五六日] \d\d:\d\d", next_event["at"]) and next_event["in_seconds"] >= 0
+    assert re.fullmatch(r"第 \d+ 週・週[一二三四五六日] \d\d:\d\d", next_event["at"]) and next_event["in_seconds"] >= 0
     server.act(fresh, lambda g: server.ADMIN_ACTIONS["end_season"](g, {}))
     assert server.main_view(fresh)["guide"] is None  # 休季也一樣
 
@@ -1707,7 +2196,7 @@ def test_on_the_road_the_page_offers_the_road_tasks(client):
     main = client.get("/api/main").json()
     think = next(o for o in main["options"] if o["id"] == "road:think")
     assert think["enabled"] is False and think["label"] == "邊走邊想（想過了，到下一站再說）"
-    assert main["status"]["xinde"] == server.CONTENT.config.road_think_xinde
+    assert main["status"]["xinde"] == server.CONTENT.config.start_stats["xinde"] + server.CONTENT.config.road_think_xinde
 
 
 # ── 隨口應對（探索的多人與 LLM 玩法 §8.1）────────────────────

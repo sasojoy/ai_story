@@ -33,14 +33,6 @@ FAMOUS_NAMES = frozenset((  # 三國名人：上面的字庫組得出其中一�
     "蔡邕 大喬 小喬 孫尚香 甄宓 關平 關興 張苞 馬岱 嚴顏 王平 廖化 糜竺 糜芳 簡雍 孫乾 徐庶 陳登 臧霸 張繡 "
     "劉禪 曹丕 曹植 曹叡 蔣琬 費禕 董允"
 ).split())
-SKILL_PREFIXES = (
-    "青松", "流雲", "斷岳", "驚鴻", "寒江", "落霞", "孤鴻", "飛雪", "長風", "破陣", "蒼龍", "赤霄", "玄冰", "烈陽",
-    "歸元", "太初", "迴瀾", "碧濤", "鐵騎", "長虹", "紫電", "鎮山", "穿雲", "摧城", "追月", "奔雷", "鳴鏑", "照膽",
-)
-SKILL_SUFFIXES = {
-    "內功": ("訣", "功", "心經", "真氣", "吐納法"),
-    "武學": ("拳", "掌", "劍法", "刀法", "槍法", "腿法", "戟法"),
-}
 
 
 @dataclass(frozen=True)
@@ -80,11 +72,6 @@ def make_name(rng: random.Random, taken: set[str]) -> str:
         if name not in taken and name not in FAMOUS_NAMES:
             return name
     raise RuntimeError("名號字庫用完了")
-
-
-def make_skill_name(rng: random.Random, kind: str) -> str:
-    """假人自創功法的名字：看起來跟真人取的一樣（不能是「內功123」這種一看就是程式取的名字）。"""
-    return rng.choice(SKILL_PREFIXES) + rng.choice(SKILL_SUFFIXES[kind])
 
 
 def schedule(profile: BotProfile) -> list[tuple[int, int]]:

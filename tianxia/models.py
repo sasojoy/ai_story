@@ -14,6 +14,8 @@ TravelMode = Literal["walk", "hurry", "dash"]  # 步行／趕路／疾行（地�
 CompanionKind = Literal["locked", "recruitable"]
 MartialKind = Literal["內功", "武學"]
 Attribute = Literal["陰", "陽", "剛", "柔", "快", "慢", "虛", "實"]  # 見 tianxia/martial_arts.py
+Quality = Literal["下品", "中品", "上品", "絕學"]  # 見 tianxia/martial_arts.py 的 QUALITIES
+Lean = Literal["正", "邪", "無"]  # 武學與成長設計 7.3
 
 
 class _Strict(BaseModel):
@@ -77,7 +79,8 @@ class Effect(_Strict):
     leave_sect: bool = False
     next_event: str | None = None
     recruit: str | None = None  # 結識某人（同伴 id）：入門；已入門時改給心得（見 roster.recruit）
-    materials: dict[str, int] = Field(default_factory=dict)  # 給煉製素材（素材 id -> 數量）；手寫劇情是天品素材的主要來源
+    materials: dict[str, int] = Field(default_factory=dict)  # 給素材（素材 id -> 數量）；手寫劇情是天品素材的主要來源
+    insights: list[str] = Field(default_factory=list)  # 悟得的意境 id（奇遇給的，武學與成長設計 3.2.2）；只能是靠探索悟的基本意境
     # 在地方上留下痕跡（「地點 id:痕跡名」→ 1～3，只能加）：全服共用、每季清空；同一個人對同一個痕跡一天只算一次
     marks: dict[str, int] = Field(default_factory=dict)
     # 伏筆（計畫 T7）的準備事件用；第一季開關關著時兩個都不發生（不給也不寫任何字）
@@ -90,9 +93,8 @@ class Effect(_Strict):
 
 
 class Material(_Strict):
-    """煉製用的素材：一個屬性 × 一個階（見 docs/superpowers/specs/2026-10-01-無限煉製-design.md §三）。
-
-    階只影響「煉出來的東西有多好」（素材的階位移品質的機率分佈），不影響屬性。
+    """素材：一個屬性 × 一個階（見 docs/superpowers/specs/2026-10-01-無限煉製-design.md §三）。
+    不再拿去煉製（Task 8），現在是糧草（慢屬性的算糧）與伏筆用的。
     """
 
     id: str
@@ -103,7 +105,7 @@ class Material(_Strict):
 
 
 class CraftNames(_Strict):
-    """煉製時 LLM 不可用（或產出的名字過不了過濾）的決定性組名字表，見無限煉製設計 §5.6。
+    """合成、合併時模型不可用（或產出的名字過不了過濾）的決定性組名字表，見無限煉製設計 §5.6、武學與成長設計 3.6。
 
     用配方鍵的雜湊挑 prefix × suffix，所以同一個配方永遠組出同一個名字——離線也能玩，
     而且 `tests/test_real_content.py` 整季模擬（LLM 被 mock）走的就是這條路。
@@ -112,6 +114,7 @@ class CraftNames(_Strict):
     prefixes: list[str]
     wugong: list[str]  # 武學的字尾
     neigong: list[str]  # 內功的字尾
+    insight: list[str] = Field(default_factory=lambda: ["意", "勢", "韻", "境"])  # 意境的退路字尾（武學與成長設計 3.2）
 
 
 class Drop(_Strict):
@@ -272,7 +275,8 @@ class Location(_Strict):
     important: bool = False
     enemies: list[str] = Field(default_factory=list)
     train_trend: dict[str, int] = Field(default_factory=dict)  # 遊歷打贏／操練推大勢的量；正負是散人的方向，有陣營目標的人照自己的目標推（Game._train_push）
-    materials: list[str] = Field(default_factory=list)  # 在這裡探索可能撿到的素材；留空則給隨機的一階素材
+    materials: list[str] = Field(default_factory=list)  # 路邊採集（兩頭的地點）出什麼屬性的素材：採到的是那些屬性的一階；探索不再撿素材（探索改悟意境，見 insights）
+    insights: list[str] = Field(default_factory=list)  # 探索「悟意境」那一支悟得到的意境 id（武學與成長設計附錄 C）
     unlock_flag: str | None = None  # 設定後，需該世界旗標成立才能前往
 
     def describe(self, world_flags: set[str]) -> str:
@@ -300,12 +304,21 @@ class RoadSight(_Strict):
     effect: Effect = Field(default_factory=Effect)
 
 
-class SkillDef(_Strict):
-    """武學/內功的內容定義（sanguo-companions 合併重寫，取代 battle.py 時代的 Skill/SkillEffect）。
+class LearnRule(_Strict):
+    """基礎武學在哪裡學、誰肯教（武學與成長設計附錄 B）：武館與江湖人看名望、收銀兩；
+    陣營營地只教投靠了那個陣營的人；門派只教那個門派的弟子。"""
 
-    只定義「本命武學」（歷史人物的固定武學，情誼滿門檻習得）——自創功法完全是玩家取名
-    當下即時生成、存進共用世界狀態（見 martial_arts.py／world_state.py），不進這份內容檔。
-    本命武學的品質是絕學（見 martial_arts.historical_art）；部下用的通用武學另外標品質（企劃者 2026-10-05 定上品，計畫 T5）。
+    at: str  # 地點 id
+    fame: int = 0
+    silver: int = 0
+    faction: str | None = None
+    sect: str | None = None
+
+
+class SkillDef(_Strict):
+    """內容手寫的武學/內功：本命武學（歷史人物的固定武學，品質是絕學，見 martial_arts.historical_art）、
+    部下用的通用武學（企劃者 2026-10-05 定上品，計畫 T5）與基礎武學（下品，開局送或在各地學，
+    武學與成長設計附錄 B）。合成出來的武學不進這份內容檔，存在全服（world.get_skill）。
     """
 
     id: str
@@ -313,7 +326,27 @@ class SkillDef(_Strict):
     kind: MartialKind
     attribute: Attribute
     desc: str = ""
-    quality: Literal["下品", "中品", "上品", "絕學"] = "絕學"
+    quality: Quality = "絕學"
+    learn: LearnRule | None = None  # 在各地學得到的基礎武學才填；開局送的看 Config.starter_skills
+
+
+class InsightGrant(_Strict):
+    """靠名聲悟得的意境（浩然、血煞，設計 7.2）：這項名聲第一次到門檻就悟得。"""
+
+    stat: Literal["good", "evil"]
+    at: int
+
+
+class InsightDef(_Strict):
+    """內容手寫的意境（武學與成長設計附錄 A）：四個基本意境靠探索悟得；浩然、血煞靠名聲。
+    合併出來的意境不在這裡，存在全服（world.get_insight）。"""
+
+    id: str
+    name: str
+    attribute: Attribute
+    lean: Lean = "無"
+    desc: str = ""
+    grant: InsightGrant | None = None
 
 
 class Sect(_Strict):
@@ -593,8 +626,8 @@ class Scenario(_Strict):
     season_one_off: SeasonOneOff = Field(default_factory=SeasonOneOff)  # 第一季不觸發的 beta 門檻、主線、決戰、事件
 
 
-ExploreBranch = Literal["material", "wild", "event"]
-EXPLORE_BRANCHES: tuple[ExploreBranch, ...] = ("material", "wild", "event")  # 探索三選一的三支：素材、野怪、事件
+ExploreBranch = Literal["insight", "wild", "event"]
+EXPLORE_BRANCHES: tuple[ExploreBranch, ...] = ("insight", "wild", "event")  # 探索三選一的三支：悟意境、野怪、事件
 
 
 class ExploreMix(_Strict):
@@ -619,12 +652,12 @@ class ExploreMix(_Strict):
 
 def _default_explore_mix() -> list[ExploreMix]:
     return [
-        ExploreMix(kind="camp", tags=["營寨", "祭壇", "塢堡"], weights={"material": 15, "wild": 35, "event": 50}),
+        ExploreMix(kind="camp", tags=["營寨", "祭壇", "塢堡"], weights={"insight": 15, "wild": 35, "event": 50}),
         ExploreMix(
             kind="town", tags=["城鎮", "官署", "城池", "寺院", "書院", "莊院", "里巷", "結社"],
-            weights={"material": 15, "wild": 0, "event": 85},
+            weights={"insight": 15, "wild": 0, "event": 85},
         ),
-        ExploreMix(kind="wild", tags=[], weights={"material": 40, "wild": 35, "event": 25}),
+        ExploreMix(kind="wild", tags=[], weights={"insight": 40, "wild": 35, "event": 25}),
     ]
 
 
@@ -656,6 +689,10 @@ class Config(_Strict):
     ollama_url: str = "http://localhost:11434"  # companion_agent.py 深度對話用；連不上時那輪對話取消
     ollama_model: str = "qwen2.5:14b"
     ollama_timeout: int = 120
+    # 開爐首次取名（鎖外的 B 段）整段最多花幾秒（最終審查 Critical 1）：server.py 讀它、扣掉 A 段等鎖的時間，傳給
+    # naming.generate 的 budget；用完就走退路字表。試玩走 trycloudflare，一個請求約 100 秒就被切斷，60 秒留下 A、C 兩段
+    # 等行動鎖的餘裕（控制者 2026-10-05 從 75 改成 60）
+    naming_budget_seconds: int = Field(default=60, ge=0)
     # 2026-10-03 實測（gemma4:26b）：有思考模式的模型要關掉思考，不然每輪多等好幾秒；None 表示不送這個欄位
     ollama_think: bool | None = None
     ollama_keep_alive: str = "30m"  # 模型閒置多久後卸載；大模型重新載入要十幾秒
@@ -743,7 +780,6 @@ class Config(_Strict):
     neili_regen_hours: float = 2  # 氣血從零回滿所需時間
     newbie_days: float = 3  # 每季前幾天氣血回復加倍
     seclusion_xinde_per_hour: int = 15
-    xinde_cost_factor: int = 20  # 第 n 成升到 n+1 成需要 factor × n（構想欄位，目前練功免費、沒有任何地方讀它）
     xinde_hint_threshold: int = 50  # 心得擱到這個量、而且還有功夫沒練滿時，主畫面提示玩家去門下練功
     # ── 探索三選一（探索三選一設計）──
     # 這裡有還能遇上的奇遇（一次性或奇遇事件）時，探索先滾這個機率，中了就是奇遇、不走三選一。
@@ -751,10 +787,8 @@ class Config(_Strict):
     # 隨機機器人 120 季（p＝0.025 時）的中位數 E＝26.5，p ≤ 1 − 0.5^(1/26.5) ≈ 0.0258，取 0.025。
     # 設好之後量到：每人每季碰到奇遇那一步 0.58 次，至少一次的約四成六。正式內容的值寫在 content/config.json。
     rare_explore_chance: float = Field(default=0.025, ge=0, le=1)
-    explore_mix: list[ExploreMix] = Field(default_factory=_default_explore_mix)  # 地點類型 -> 素材／野怪／事件的比例
+    explore_mix: list[ExploreMix] = Field(default_factory=_default_explore_mix)  # 地點類型 -> 悟意境／野怪／事件的比例
     wild_neili_loss_factor: float = Field(default=0.5, ge=0, le=1)  # 探索撞上的野怪扣氣血是遊歷的幾倍（內傷照同一個比例）
-    craft_xinde_base: int = 5  # 煉製成本 = base × 素材數 + per_tier × 階總和（見無限煉製設計 §5.5）
-    craft_xinde_per_tier: int = 3
     level_exp: int = 10  # 第 n 級升 n+1 級需要 level_exp × n
     # 原本是 100，但實測一季打 19~26 場只升到第 2~3 級（升到第 10 級要 4500 經驗），
     # 而氣血設計 §1.4 的平衡量測點在第 5／10／15 級——連第 5 級都到不了。降到 10 之後
@@ -769,6 +803,38 @@ class Config(_Strict):
     injury_share: float = 0.2  # 損失的氣血有幾成變成內傷（其餘是輕傷，自己會回）
     practice_injury_amount: float = 15.0  # 受傷時扣的氣血（累積為內傷，需療傷才能回到滿上限）
     heal_neili_per_silver: float = 2.0  # 療傷：每幾點內傷算一兩銀子（氣血設計 §二：預設每 2 點 1 兩，無條件進位）
+    # ── 武學與成長（設計第四節；全部【預設】，整季模擬校準見計畫一 Task 14）──
+    practice_xinde_per_level: int = 1  # 練成：第 N 成升 N+1 成花 N × 這個數的心得
+    fuse_xinde: int = 5  # 合成（武學＋意境）一次
+    merge_xinde: int = 5  # 合併（意境＋意境）一次
+    # 企劃者 2026-10-05：合併要花體力（跟修練一次一樣），合成（武學＋意境）不花。合併→熔掉（melt_insight_xinde）→再合併
+    # 每一圈淨賺心得，決定不擋重合、也不動熔的價，而是讓每一圈都付一次體力：「意境合併要花體力，這樣的話她要拿心得就給他拿」
+    merge_stamina: int = 10
+    cultivate_stamina: int = 10  # 修練一次的體力
+    # 修練升到這一品：第一次的機率、每失敗一次加多少（%）（設計 3.5）。中品、上品加到 100 就必成；
+    # 絕學沒有保底：累積的機率最多到 cultivate_cap（企劃者 2026-10-05），剩下靠破境丹
+    cultivate_odds: dict[str, tuple[int, int]] = Field(
+        default_factory=lambda: {"中品": (20, 10), "上品": (10, 6), "絕學": (4, 3)}
+    )
+    # 企劃者 2026-10-05：絕學沒有保底，靠破境丹提升。累積機率的上限（%）：沒寫的那一階上限是 100（照舊必成）；
+    # 破境丹是探索偶爾撿到的傳奇道具，玩家在修練頁勾了、而且這一次衝的是絕學，才服下一枚：那一次多 legend_item_bonus%，
+    # 成不成都用掉（不勾就不服；被拒絕的修練不擲骰、丹也不動）
+    cultivate_cap: dict[str, int] = Field(default_factory=lambda: {"絕學": 50})
+    legend_item_name: str = "破境丹"
+    legend_item_note: str = "衝擊絕學時可以服下，那一次的機會多幾分。"
+    legend_item_bonus: int = 15
+    explore_legend_chance: float = Field(default=0.02, ge=0, le=1)  # 每按一次探索（不論走哪一支）撿到一枚的機率
+    melt_refund_ratio: float = Field(default=0.8, ge=0, le=1)  # 熔一門武學退回練成花的心得的幾成
+    # 熔煉的品質加給，只算玩家自己修練上去的那幾階（企劃者 2026-10-05）：領的是「現在的品質」減去「登記時的品質」的差
+    # （library.melt_refund）。合成的武學登記在下品，修練到上品領 15；內容直接給的絕學（本命武學）登記就是絕學，沒有加給
+    melt_quality_bonus: dict[str, int] = Field(
+        default_factory=lambda: {"下品": 0, "中品": 5, "上品": 15, "絕學": 40}
+    )
+    melt_insight_xinde: int = 10  # 熔一個意境換的心得
+    duplicate_insight_xinde: int = 10  # 已經會的意境又悟到一次換的心得
+    holding_cap_base: int = 50  # 武學與意境合計最多幾個
+    holding_cap_levels: int = 5  # 每升幾級……
+    holding_cap_step: int = 5  # ……多幾格
     # ── 同伴招募（sanguo-companions 合併重寫，取代舊的收徒/招賢，見設計文件四.4）──
     recruit_stamina: int = 15  # 嘗試招募一次的體力
     recruit_base_chance: float = 0.35  # 基礎成功率，情誼會再往上加（見 roster.py）
@@ -1255,11 +1321,12 @@ class Content(_Strict):
     locations: dict[str, Location]
     events: dict[str, Event]
     skills: dict[str, SkillDef]
+    insights: dict[str, InsightDef] = Field(default_factory=dict)  # 意境（content/insights.json，武學與成長設計附錄 A）
     materials: dict[str, Material]
     craft_names: CraftNames
     check_lines: CheckLines  # 檢定選項上的心裡話（content/check_lines.json）
     front_lines: FrontLines  # 戰況變化的說法（content/front_lines.json，FB-064）
-    banned_names: list[str]  # 煉製命名的禁用詞（原創原則：不用金庸等作品的專有名詞）
+    banned_names: list[str]  # 合成、合併命名的禁用詞（原創原則：不用金庸等作品的專有名詞）
     sects: dict[str, Sect]
     characters: dict[str, CharacterDef]
     squads: dict[str, Squad]

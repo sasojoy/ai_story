@@ -7,15 +7,21 @@ from pathlib import Path
 
 import pytest
 
-from tianxia import database
+from tianxia import accounts, database
+from tianxia.accounts import AccountStore
+from tianxia.characters import open_characters
 from tianxia.database import SCHEMA_VERSION, Database, open_database
+from tianxia.sqlite_world import open_world
+from tianxia.state import new_game_state
 
 ROOT = Path(__file__).resolve().parent.parent
 
-TABLES = {
+V1_TABLES = {
     "world", "seasons", "rumors", "rumor_heard", "chronicle", "skills", "recipes", "faction_rolls",
     "battles", "battle_rounds", "characters", "character_backups", "accounts", "logins",
 }
+V2_TABLES = {"skill_aliases", "insights", "insight_recipes", "masters"}
+TABLES = V1_TABLES | V2_TABLES
 
 
 def _count(db: Database, table: str) -> int:
@@ -29,6 +35,162 @@ def test_a_new_file_gets_every_table(tmp_path):
         names = {row["name"] for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
         assert conn.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
     assert TABLES <= names
+
+
+def _make_version_one_file(path):
+    """照第 1 版的結構（SCHEMA_V1）建一個檔，user_version 設 1：就是目前試玩伺服器上那一份的樣子。"""
+    conn = sqlite3.connect(path)
+    for statement in database.SCHEMA_V1:
+        conn.execute(statement)
+    conn.execute("PRAGMA user_version = 1")
+    return conn
+
+
+def _dump(path, tables):
+    """每張表的全部內容（照 rowid 排），拿來比升級前後有沒有東西不見或被改。"""
+    conn = sqlite3.connect(path)
+    try:
+        return {t: conn.execute(f"SELECT * FROM {t} ORDER BY rowid").fetchall() for t in sorted(tables)}
+    finally:
+        conn.close()
+
+
+def test_the_version_one_schema_is_exactly_the_old_tables(tmp_path):
+    """SCHEMA_V1 是第 1 版的樣子，不能再改：改了，上面「第 1 版的檔」的測試就不是在測真的舊檔。"""
+    conn = _make_version_one_file(tmp_path / "v1.db")
+    names = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+    conn.close()
+    assert names == V1_TABLES
+
+
+def test_a_version_one_file_is_upgraded_in_place(tmp_path):
+    """第 1 版的檔（試玩伺服器上那一份）打開時就地加上新表，舊資料不動。"""
+    path = tmp_path / "old.db"
+    conn = sqlite3.connect(path)
+    for statement in database.SCHEMA_V1:
+        conn.execute(statement)
+    conn.execute("INSERT INTO world (id, data) VALUES (1, '{}')")
+    conn.execute("PRAGMA user_version = 1")
+    conn.commit()
+    conn.close()
+    db = Database(path)
+    with db.snapshot() as c:
+        assert c.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
+        names = {row["name"] for row in c.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+        assert c.execute("SELECT data FROM world WHERE id = 1").fetchone()["data"] == "{}"
+    assert {"skill_aliases", "insights", "insight_recipes", "masters"} <= names
+    db.close()
+
+
+def test_upgrading_a_populated_version_one_file_loses_nothing(tmp_path, content):
+    """試玩伺服器的檔是第 1 版、裡面有帳號、角色、江湖史：換版時就地升到第 2 版，
+    每張舊表的每一列都原封不動，帳號還登入得進去、角色還讀得回來、江湖史還看得到，新表在而且是空的。"""
+    path = tmp_path / "live.db"
+    salt = bytes(range(16))
+    state = new_game_state(content, "沈浪")
+    conn = _make_version_one_file(path)
+    conn.execute("INSERT INTO accounts (id, character, character_key, created) VALUES (1, '沈浪', '沈浪', 100.0)")
+    conn.execute(
+        "INSERT INTO logins (provider, subject, account_id, display, salt, hash) VALUES ('password', 'shenlang', 1, "
+        "'ShenLang', ?, ?)",
+        (salt.hex(), accounts.hash_password("sesame88", salt)),
+    )
+    conn.execute("INSERT INTO accounts (id, created) VALUES (2, 200.0)")  # 註冊了、還沒建角色
+    conn.execute(
+        "INSERT INTO logins (provider, subject, account_id, display, salt, hash) VALUES ('password', 'nobody', 2, "
+        "'NoBody', ?, ?)",
+        (salt.hex(), accounts.hash_password("sesame99", salt)),
+    )
+    conn.execute(
+        "INSERT INTO characters (key, name, is_bot, faction, data) VALUES ('沈浪', '沈浪', 0, NULL, ?)",
+        (state.model_dump_json(),),
+    )
+    conn.execute("INSERT INTO characters (key, name, is_bot, faction, data) VALUES ('壞檔', '壞檔', 0, NULL, '{不是 json')")
+    conn.execute("INSERT INTO character_backups (key, data) VALUES ('舊的', '{}')")
+    conn.execute("INSERT INTO world (id, data) VALUES (1, '{\"season_number\": 2, \"tianji\": 1}')")
+    conn.execute("INSERT INTO seasons (number, data) VALUES (2, '{}')")
+    conn.executemany(
+        "INSERT INTO chronicle (season, time, location, text) VALUES (?, ?, ?, ?)",
+        [(1, 10.0, "洛陽", "第一季：黃巾起事。"), (1, 20.0, None, "第一季：天下大亂。"), (2, 5.0, "許昌", "第二季開張。")],
+    )
+    conn.execute(
+        "INSERT INTO rumors (season, time, layer, faction, region, location, character, named, text) "
+        "VALUES (2, 6.0, 'local', NULL, NULL, '許昌', '沈浪', 1, '許昌有人練功。')"
+    )
+    conn.execute("INSERT INTO rumor_heard (character, rumor_id) VALUES ('沈浪', 1)")
+    conn.execute("INSERT INTO skills (season, name, creator, data) VALUES (2, '旋風腿', '沈浪', '{}')")
+    conn.execute("INSERT INTO recipes (season, key, skill_name, creator) VALUES (2, 'k', '旋風腿', '沈浪')")
+    conn.execute("INSERT INTO faction_rolls (season, character, faction) VALUES (2, '沈浪', 'huangjin')")
+    conn.commit()
+    conn.close()
+    before = _dump(path, V1_TABLES)
+
+    db = open_database(path)  # 升級就在開檔的時候
+
+    assert _dump(path, V1_TABLES) == before  # 舊表原封不動（含 rowid 順序、流水號）
+    with db.snapshot() as c:
+        assert c.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION == 2
+        names = {row["name"] for row in c.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+    assert names == TABLES
+    assert all(_count(db, table) == 0 for table in V2_TABLES)
+    # 真正的存取層讀得回來
+    store = AccountStore(db)
+    assert store.authenticate("shenlang", "sesame88").character == "沈浪"
+    assert store.owner_of("沈浪") == "shenlang"
+    assert store.get("nobody").character is None
+    characters = open_characters(path)
+    assert characters.names() == {"沈浪", "壞檔"}
+    assert characters.load("沈浪").model_dump_json() == state.model_dump_json()  # world 只在記憶體，不進存檔
+    assert [e.text for e in open_world(path).get_season().chronicle] == ["第二季開張。"]
+    assert [e.text for e in open_world(path).chronicle_before(2)[0][1]] == ["第一季：黃巾起事。", "第一季：天下大亂。"]
+    assert open_world(path).read().tianji == 1
+    # 升完的檔再打開不會再升一次、也不會掉資料
+    database.close_all()
+    again = open_database(path)
+    assert _dump(path, V1_TABLES) == before
+    with again.snapshot() as c:
+        assert c.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
+
+
+def test_a_migrated_file_takes_writes_to_the_new_tables(tmp_path):
+    """升級出來的檔，新表真的能用（跟新檔一樣）。"""
+    path = tmp_path / "old.db"
+    conn = _make_version_one_file(path)
+    conn.commit()
+    conn.close()
+    store = open_world(path)
+    assert store.claim_master("旋風腿", "甲") is True
+    assert store.master_of("旋風腿") == "甲"
+
+
+def test_a_failed_migration_leaves_the_old_file_as_it_was(tmp_path, monkeypatch):
+    """升級是一筆交易：中途出錯整個撤回，檔還是第 1 版、沒有半張新表，下次還能再試。"""
+    path = tmp_path / "old.db"
+    conn = _make_version_one_file(path)
+    conn.execute("INSERT INTO world (id, data) VALUES (1, '{}')")
+    conn.commit()
+    conn.close()
+    with monkeypatch.context() as patched:
+        patched.setitem(database.MIGRATIONS, 1, database.SCHEMA_V2_TABLES[:2] + ("CREATE TABLE oops (",))
+        with pytest.raises(sqlite3.OperationalError):
+            Database(path)
+    conn = sqlite3.connect(path)
+    names = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+    version = conn.execute("PRAGMA user_version").fetchone()[0]
+    conn.close()
+    assert names == V1_TABLES and version == 1
+    assert Database(path).path == path  # 修好之後再開，照樣升得上去
+
+
+def test_a_version_with_no_migration_path_is_refused(tmp_path, monkeypatch):
+    """比目前版本舊、卻沒有遷移步驟接得上的檔不亂猜：直接擋下。"""
+    path = tmp_path / "old.db"
+    conn = _make_version_one_file(path)
+    conn.commit()
+    conn.close()
+    monkeypatch.delitem(database.MIGRATIONS, 1)
+    with pytest.raises(RuntimeError, match="第 1 版"):
+        Database(path)
 
 
 def test_every_connection_syncs_to_disk_on_each_commit(tmp_path):

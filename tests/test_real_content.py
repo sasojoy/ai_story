@@ -16,7 +16,7 @@ from unittest import mock
 
 import pytest
 
-from tianxia import companion_agent, roster
+from tianxia import companion_agent, roster, team
 from tianxia.atlas import region_of
 from tianxia.bot import play_season
 from tianxia.content import load_content
@@ -237,31 +237,117 @@ def test_bot_plays_a_full_season(content, seed, tmp_path):
     assert len(game.state.player.seen_events) >= 3
 
 
-def test_bot_grows_its_arts_with_xinde(content, tmp_path):
+def test_the_bot_learns_insights_fuses_and_cultivates(content, tmp_path):
     from tianxia.sqlite_world import open_world
 
-    game = play_season(content, 1, world=open_world(tmp_path / "world.db"))
+    game = play_season(content, 1, world=open_world(tmp_path / "arts.db"))
+    p = game.state.player
+    assert p.insights, "整季都沒悟到意境：探索的悟意境那一支沒接上"
+    assert game.world.recipe_keys(), "整季都沒合成過"
+    assert p.art_quality or p.art_mastery, "整季都沒修練過"
+    assert p.member.wugong_level > 1 or p.member.neigong_level > 1, "整季都沒練成過"
+
+
+def test_a_new_character_starts_with_the_two_starter_arts_at_level_one(content):
+    game = Game.new(content, "測試俠客", rng=random.Random(0))
     member = game.state.player.member
-    assert member.neigong_level > 1 or member.wugong_level > 1
+    assert (member.neigong_id, member.neigong_level) == ("jichu_tuna", 1)
+    assert (member.wugong_id, member.wugong_level) == ("jichu_quanjiao", 1)
+    assert game.state.player.stats["xinde"] == content.config.start_stats["xinde"]
+
+
+def test_the_practice_step_waits_for_a_real_practice_not_for_having_an_art(content):
+    """審查裁示 F1：開局就有兩門基礎武學，t4 若看「有沒有武學」一開始就成立，教不到練成；要看「練功」這個動作。"""
+    from tianxia import guide
+
+    game = Game.new(content, "測試俠客", rng=random.Random(0))
+    todo = guide.steps(game.state, content)
+    index = [step.id for step in todo].index("t4_practice")
+    assert todo[index].done_when.action == "practice" and not todo[index].done_when.has_wugong
+    game.state.player.tutorial_step = index
+    game.view_map()
+    assert game.state.player.tutorial_step == index  # 帶著功夫、看過地圖，還不算
+    game.practice("武學")
+    assert game.state.player.tutorial_step == index + 1
+    assert "✔ 引導完成" in game.state.player.guide_done
+
+
+def test_a_new_character_can_afford_the_first_practices_the_tutorial_asks_for(content):
+    """練成花心得（武學與成長 4.2）：開局 20 點心得，第 1 成升第 2 成只花 1 點，照引導去練一次練得起；
+    心得見底時，訊息直接說差多少，新手才知道要去賺。"""
+    game = Game.new(content, "測試俠客", rng=random.Random(0))
+    member = game.state.player.member
+    start = game.state.player.stats["xinde"]
+    assert start >= team.practice_price(content, 1)
+    msgs = game.practice("武學")
+    assert member.wugong_level == 2 and "心得 -1" in msgs
+    assert game.state.player.stats["xinde"] == start - 1
+    game.state.player.stats["xinde"] = 0
+    msgs = game.practice("武學")
+    assert member.wugong_level == 2
+    assert "要 2 點心得，你只有 0 點" in msgs[0] and "還差 2 點" in msgs[0]
+
+
+def test_event_taught_arts_still_reach_a_character_whose_slots_are_full(content):
+    """審查裁示 F2：開局兩個欄位都被基礎武學佔了，事件教的追風步、混元一氣不能因此學不到——進功法庫，附錄 B.1 說它們照舊拿得到。"""
+    from tianxia import library
+    from tianxia.models import Effect
+    from tianxia.rules import apply_effect
+
+    game = Game.new(content, "測試俠客", rng=random.Random(0))
+    worn = (game.state.player.member.neigong_id, game.state.player.member.wugong_id)
+    assert None not in worn
+    for skill_id in ("zhuifeng", "hunyuan"):
+        assert any(skill_id in (e.model_dump_json()) for e in content.events.values())  # 內容裡真的有事件教它
+        msgs = apply_effect(Effect(learn_skills=[skill_id]), game.state, content, game.world)
+        assert any("功法庫" in m for m in msgs), msgs
+    assert {"zhuifeng", "hunyuan"} <= set(game.state.player.arts)
+    assert (game.state.player.member.neigong_id, game.state.player.member.wugong_id) == worn
+    assert {"zhuifeng", "hunyuan"} <= set(library.owned_arts(game.state))
+
+
+def test_the_escort_lesson_stops_coming_back_once_the_art_is_in_the_library(content):
+    """最終審查 Important 1：潁川「汝南鏢局」（交友、可重複）只在還不會追風步時出現，付 40 兩學。開局兩個欄位都是基礎武學，
+    學到的追風步進功法庫；條件只看身上兩欄的話，這則會一直回來、第二次付錢什麼都學不到（100 → 60 → 20 兩）。"""
+    from tianxia.rules import apply_effect, check_condition
+
+    game = Game.new(content, "測試俠客", rng=random.Random(0))
+    event = content.events["escort_teacher"]
+    assert not event.once and "yingchuan" in event.locations and "socialize" in event.actions
+    assert check_condition(event.condition, game.state, content)
+    lesson = next(c for c in event.choices if "zhuifeng" in c.effect.learn_skills)
+    apply_effect(lesson.effect, game.state, content, game.world)
+    assert "zhuifeng" in game.state.player.arts  # 欄位滿了，收進功法庫
+    assert not check_condition(event.condition, game.state, content)
+    waterfall = next(c for c in content.events["waterfall"].choices if c.condition.skills_none == ["zhuifeng"])
+    assert not check_condition(waterfall.condition, game.state, content)  # 瀑布怪客的偷學也不再出現
 
 
 # ── 戰鬥難度曲線 ──────────────────────────────────────────
 
 
-def _win_rate(content, squad_id: str, wugong_id: str | None = None, runs: int = 40) -> float:
+def _win_rate(content, squad_id: str, wugong_id: str | None = None, runs: int = 40, bare: bool = False) -> float:
+    """新角色（開局就帶著 starter_skills 的兩門基礎武學）對 squad_id 的勝率；bare 先把兩門都清掉，wugong_id 換掉武學那一門。"""
     wins = 0
     for seed in range(runs):
         game = Game.new(content, "測試俠客", rng=random.Random(seed))
+        if bare:
+            game.state.player.member.neigong_id = game.state.player.member.wugong_id = None
         if wugong_id:
             game.state.player.member.wugong_id = wugong_id
         wins += fight(game.state, content, game.world, squad_id, random.Random(seed)).tier in ("大勝", "險勝")
     return wins / runs
 
 
-def test_a_freshly_started_hero_with_no_martial_art_cannot_win_any_fight(content):
-    """設計文件六.3：威力全靠武學，新手一開局手無寸鐵（沒有任何預設武學）——這跟舊版
-    「開局自動配一門長拳」不同，是刻意的設計，練功／招募同伴才是變強的路。"""
-    assert _win_rate(content, "dipi") == 0.0
+def test_a_hero_with_no_martial_art_at_all_cannot_win_any_fight(content):
+    """設計文件六.3：威力全靠武學，沒有武學的人誰都打不贏（開局送的兩門基礎武學清掉才是這個情況）。"""
+    assert _win_rate(content, "dipi", bare=True) == 0.0
+
+
+def test_a_freshly_started_hero_with_only_the_starter_arts_wins_sometimes_but_not_reliably(content):
+    """審查裁示 F3：開局就有兩門基礎武學，對地痞流氓有得打但不穩（量過約四成）；練上去、換更強的功夫才是變強的路。"""
+    rate = _win_rate(content, "dipi")
+    assert 0 < rate < 0.9
 
 
 def test_a_hero_with_a_signature_skill_beats_stray_bandits(content):
@@ -356,9 +442,12 @@ def test_current_place_marks_stay_clear_of_names_from_any_location(content, laye
     left, top, right, bottom = BANNER_BOX
     red_ring, select_ring, disc = CURRENT_RING + 1, NODE_SIZE["current"] + 11.5, NODE_SIZE["visible"] + 1
     disc_overlaps = 0
+    # 敵情層「最險」那行字的長短跟著誰最難對付走：這個測試量的是版面，所以勝算固定成全部必敗（開局送武學之前，
+    # 新角色看到的就是這樣）；開局帶著基礎武學時最險的換成官軍巡騎、字更長，北邙山那行會壓到白馬寺的紅旗（版面的老毛病）
+    odds = (lambda squad_id: "必敗") if layer == "enemies" else None
     for loc in content.locations.values():
         game.state.player.location = loc.id
-        svg = render_map(game.state, content, layer, loc.id, game.odds if layer == "enemies" else None)
+        svg = render_map(game.state, content, layer, loc.id, odds)
         for text, box, owner in _placed_texts(svg):
             assert not _overlaps(box, (loc.x + left, loc.y + top, loc.x + right, loc.y + bottom)), (loc.id, text, "紅旗")
             assert not _touches_circle(box, loc.x, loc.y, red_ring), (loc.id, text, "紅圈")

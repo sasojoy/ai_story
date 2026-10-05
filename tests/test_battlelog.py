@@ -207,6 +207,6 @@ def test_report_list_and_detail_take_the_calendar_stamp():
     record = BattleRecord(id=3, time=3900, location="湖邊", kind="train", opponent="水寇", ours=[Fighter(name="沈浪", level=1)],
                           tier="大勝", our_power=50, difficulty=10)
     assert "第1天 01:05" in battlelog.list_label(record) and "第1天 01:05" in battlelog.detail_text(record)
-    stamp = lambda t: "第1週・週一 01:05"  # noqa: E731
-    assert battlelog.list_label(record, stamp) == "大勝　第3場　第1週・週一 01:05　湖邊　vs 水寇"
-    assert "第1週・週一 01:05　遊歷" in battlelog.detail_text(record, stamp)
+    stamp = lambda t: "第 1 週・週一 01:05"  # noqa: E731
+    assert battlelog.list_label(record, stamp) == "大勝　第3場　第 1 週・週一 01:05　湖邊　vs 水寇"
+    assert "第 1 週・週一 01:05　遊歷" in battlelog.detail_text(record, stamp)

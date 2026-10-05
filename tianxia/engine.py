@@ -2,7 +2,7 @@
 
 sanguo-companions 合併大幅重寫：拿掉 battle.py 的 3v3 全自動戰鬥、多隊派遣、招賢抽卡、
 收徒系統，改成單次判定遭遇（encounter.py）、單一隊伍（最多 4 位同伴）、唯一同伴的
-招募（roster.py）、練功兩種模式（team.py：自創功法／鍛鍊）。
+招募（roster.py）、練功（team.py：鍛鍊；開局送兩門基礎武學，自創武學已作廢）。
 """
 from __future__ import annotations
 
@@ -13,14 +13,16 @@ from collections.abc import Callable
 from pydantic import BaseModel
 
 from . import (
-    atlas, battle_instance, battlelog, calendar, companion_agent, craft, encounter, event_llm, figures, flavor, foreshadow,
-    front_lines, journal, materials, orders, push, ranks, roster, skillview, team, timetable,
+    atlas, battle_instance, battlelog, calendar, companion_agent, cultivation, encounter, event_llm, figures, flavor,
+    foreshadow, front_lines, fusion, insights, journal, library, materials, naming, orders, push, ranks, roster, skillview,
+    team, timetable,
 )
 from .events import choice_label, event_candidates, has_events_here, pick_event, visible_choices
 from .guide import base_step_count, note_action, quest_text, step_text, tutorial_active, tutorial_intro
 from .guide import steps as tutorial_steps
 from .journal import LOG_BREAK, Draft
 from .mapview import render_map, render_minimap
+from .martial_arts import QUALITIES
 from .models import (
     EXPLORE_BRANCHES, FREE_TEXT_MAX, BattleDef, Choice, Content, Effect, Event, ExploreBranch, Location, RoadKind, Squad,
     Threshold, TimetableEvent, TravelMode, WorldEvent,
@@ -147,7 +149,8 @@ class Game:
         （整份保留）；好感度則只帶一成（Config.affinity_carry_ratio、無條件捨去，
         80→8、5→0：第一季設計第十四節，下一季最多從 10 起步，交情要重新經營）。
         新手引導：做完或略過的人照舊不再出現；還沒做完的人跟著新角色從起始步重來——
-        新角色沒有武學，接著上一季做到一半的下一步（例如出城遊歷）會把他推進必敗的路（FB-034）。
+        新角色只剩開局那兩門第一成的基礎武學，接著上一季做到一半的下一步（例如出城遊歷）會把他推進
+        打不過的路（FB-034）。
         world 欄位這裡不用管，呼叫端（_reconcile_season）緊接著就會把它指向共用賽季。
         之後新增的 PlayerState 欄位預設就跟著新角色重來；要跨季保留的才加進下面這份清單。"""
         old = self.state
@@ -201,10 +204,18 @@ class Game:
         p.leg_actions &= set(ROAD_TASKS)
         p.recent_sights = [sight_id for sight_id in p.recent_sights if sight_id in c.road_sights]
         p.team = [k for k in p.team if k in c.characters][: team.MAX_TEAM_COMPANIONS]
-        if p.member.neigong_id and p.member.neigong_id not in c.skills and not self.world.is_skill_name_taken(p.member.neigong_id):
+        # 身上的武學要真的有這一門：is_skill_name_taken 連改過的名字、意境名都算，不能拿來判斷「武學存在」，要用 get_skill
+        if p.member.neigong_id and p.member.neigong_id not in c.skills and self.world.get_skill(p.member.neigong_id) is None:
             p.member.neigong_id = None
-        if p.member.wugong_id and p.member.wugong_id not in c.skills and not self.world.is_skill_name_taken(p.member.wugong_id):
+        if p.member.wugong_id and p.member.wugong_id not in c.skills and self.world.get_skill(p.member.wugong_id) is None:
             p.member.wugong_id = None
+        # 武學欄不會空（開局送兩門、身上的熔不掉，也不能再自創）。改版前存的角色欄位空著，讀檔時補回開局那一門；
+        # 它已經在功法庫裡就拿出來配上，熟練度沿用庫裡記的，否則從第一成起（沒有 starter_skills 的內容什麼都不做）
+        for starter in c.config.starter_skills:
+            slot = "neigong" if c.skills[starter].kind == "內功" else "wugong"
+            if getattr(p.member, f"{slot}_id") is None:
+                setattr(p.member, f"{slot}_id", starter)
+                setattr(p.member, f"{slot}_level", p.art_levels.get(starter, 1) if starter in p.arts else 1)
         # 功法庫與素材：內容檔改版（或換季）後可能指到不存在的東西
         equipped = {p.member.neigong_id, p.member.wugong_id}
         seen: set[str] = set()
@@ -214,6 +225,14 @@ class Game:
         ]
         p.art_levels = {k: v for k, v in p.art_levels.items() if team.resolve_art(k, c, self.world) is not None}
         p.materials = {k: v for k, v in p.materials.items() if k in c.materials and v > 0}
+        # 武學與成長（設計第三、四節）：意境去重、去掉找不到的；品質、熟練度只留還擁有的武學；
+        # 等著取名的那一門要真的是自己第一個練成的（換季、熔掉、內容改版後都可能對不上）
+        p.insights = [i for i in dict.fromkeys(p.insights) if insights.resolve(i, c, self.world) is not None]
+        owned = set(library.owned_arts(s))
+        p.art_quality = {k: v for k, v in p.art_quality.items() if k in owned and v in QUALITIES}
+        p.art_mastery = {k: v for k, v in p.art_mastery.items() if k in owned and v > 0}
+        if p.naming is not None and (p.naming not in owned or self.world.master_of(p.naming) != p.name):
+            p.naming = None
         chains = {ch.id for ch in c.foreshadows.chains}  # 伏筆：內容改版後拿掉的鏈與物品
         items = {item.id for item in c.foreshadows.items}
         p.clue_items = {k: v for k, v in p.clue_items.items() if k in items and v > 0}
@@ -437,6 +456,9 @@ class Game:
             if dest.unlock_flag and dest.unlock_flag not in s.world.flags:
                 continue
             opts.append(self._move_option(loc.id, dest_id))
+        for skill, problem in library.lessons_here(s, c):  # 拜師學藝（武學與成長設計附錄 B）：不花體力
+            note = library.lesson_note(skill) if problem is None else problem
+            opts.append(Option(id=f"learn:{skill.id}", label=f"學{skill.name}（{note}）", enabled=problem is None))
         if s.player.faction is None:
             for faction in c.scenario.factions:
                 if s.player.location in faction.join_at:
@@ -665,6 +687,8 @@ class Game:
                 msgs = self._call(arg, prepared)
             elif kind == "road":
                 msgs = self._road(arg)
+            elif kind == "learn":
+                msgs = library.learn(self.state, self.content, arg)
             elif kind == "fs":
                 msgs = self._foreshadow(arg)
             else:
@@ -763,6 +787,8 @@ class Game:
             return f"交談・{character.name}"
         if kind == "call":
             return "收回名帖" if arg == "back" else f"求見・{c.characters[arg].name}"
+        if kind == "learn":
+            return f"學藝・{c.skills[arg].name}"
         if kind == "fs":
             here = c.locations[s.player.location].name
             return "作罷" if arg == "leave" else f"{foreshadow.trip_label(s, c, arg.partition(':')[0])}・{here}"
@@ -937,13 +963,27 @@ class Game:
         """探索三選一（FB-013，docs/superpowers/specs/2026-10-03-探索三選一-design.md）。
 
         1. 奇遇判定最優先：這裡有還能遇上的一次性或奇遇事件時，先滾 `rare_explore_chance`，中了就是它。
-        2. 沒中就照地點類型（`Config.explore_mix`）的比例抽素材、野怪、事件三支之一；做不了的那一支
+        2. 沒中就照地點類型（`Config.explore_mix`）的比例抽悟意境、野怪、事件三支之一；做不了的那一支
            （沒有會打的對手、沒有可重複的事件）從候選裡拿掉，用剩下的比例重抽——等於把它的比例按比例分給另外兩支。
         3. 三支都做不了才是一無所獲。
+        4. 不論走哪一支，結束後再擲一次有沒有撿到破境丹（`_legend_find`）。
 
         以前是「先滾三成素材，再一定撞到一個事件」：40 個地點有 38 個探索 100% 跳事件，荒郊野外跟
         城裡的手感一樣（QA 量過）。奇遇事件只走第 1 步、不進事件那一支，所以一直是稀有的。
         """
+        return self._explore_outcome() + self._legend_find()
+
+    def _legend_find(self) -> list[str]:
+        """探索不論走哪一支，結束後擲一次有沒有撿到破境丹（企劃者 2026-10-05：到處探索都有約 2% 的機會）。
+        機率是 0 就不擲骰（先判斷機率，亂數序列一個都不動：測試內容把它設成 0，既有的固定種子序列才不會位移）。
+        兩行：「獲得」開頭的敘事（江湖紀錄給它掃光，journal._NEW_THING）與「破境丹 +1」（寫進紀錄的數值變化）。"""
+        cfg = self.content.config
+        if cfg.explore_legend_chance <= 0 or self.rng.random() >= cfg.explore_legend_chance:
+            return []
+        self.state.player.legend_items += 1
+        return [f"獲得 【{cfg.legend_item_name}】一枚——{cfg.legend_item_note}", f"{cfg.legend_item_name} +1"]
+
+    def _explore_outcome(self) -> list[str]:
         s, c = self.state, self.content
         loc = c.locations[s.player.location]
         if event_candidates(s, c, "explore", "rare") and self.rng.random() < c.config.rare_explore_chance:
@@ -953,9 +993,9 @@ class Game:
         if not branches:
             return ["你四處走走，一無所獲。"]
         branch = self.rng.choices(branches, weights=[mix[b] for b in branches])[0]
-        if branch == "material":
-            found = materials.roll_explore_drop(loc, c, self.rng)
-            return [f"你在{loc.name}翻找了一陣。", materials.grant(s, c, found)]
+        if branch == "insight":
+            found = insights.roll_explore(loc, c, self.rng)
+            return [f"你在{loc.name}靜下心來，看了好一陣。"] + insights.learn(s, c, self.world, found)
         if branch == "wild":
             squad = min(self._wild_foes(loc), key=lambda foe: foe.difficulty)  # 同分取這裡列的第一路
             return [f"你在{loc.name}走著，{squad.name}突然殺出！"] + self._squad_encounter(squad.id, wild=True)
@@ -963,8 +1003,8 @@ class Game:
 
     def _explore_can(self, branch: ExploreBranch, loc: Location) -> bool:
         """探索三選一的這一支在這裡做不做得了。"""
-        if branch == "material":
-            return bool(materials.explore_pool(loc, self.content))
+        if branch == "insight":
+            return bool(insights.explore_pool(loc, self.content))
         if branch == "wild":
             return bool(self._wild_foes(loc))
         return bool(event_candidates(self.state, self.content, "explore", "common"))
@@ -2467,7 +2507,7 @@ class Game:
 
     def _journey_line(self) -> str:
         """在路上的那一句（狀態列）：「往寶洞（步行），現實約 8 分鐘後抵達；下一站湖邊」。
-        只寫現實的倒數，不寫抵達的季曆時刻（FB-062）：季曆跑得比現實快，「第8週・週五 12:19 抵達」配上「還要約 1 分鐘」
+        只寫現實的倒數，不寫抵達的季曆時刻（FB-062）：季曆跑得比現實快，「第 8 週・週五 12:19 抵達」配上「還要約 1 分鐘」
         兩種時間混在一行，玩家算不出來；季曆時刻已經在狀態列上一行。"""
         s, c = self.state, self.content
         j = s.player.journey
@@ -2603,48 +2643,81 @@ class Game:
             journal.add_entry(self.state, JournalEntry(time=end_time, title="出關", tag=tag, changes=[change]))
         return [msg]
 
-    def create_skill(self, name: str, kind: str) -> list[str]:
-        """自創功法：取名決定屬性/威力/成長性，全服不能重名（設計文件六.2）。"""
+    def forge_request(self, art_id: str | None, insight_ids: list[str]) -> naming.NamingRequest | None:
+        """開爐首次取名的 A 段（呼叫端在行動鎖內、很快地呼叫；server.prepare_forge）：這一爐要不要模型取名？
+        要就回送模型的單子（naming.NamingRequest），由呼叫端在鎖外交給 naming.generate（B 段），再進鎖把結果交給
+        forge(..., proposed=...)（C 段）。不要的時候是 None：這個角色不叫模型（client 是 None，伺服器假人）、
+        賽季籌備中、這一爐會被拒絕、配方已經有人登記。只讀、不改狀態——跟 dialogue_request 同一個做法。"""
+        if self.client is None or self._preparing():
+            return None
+        return fusion.forge_request(self.state, self.content, self.world, art_id, insight_ids)
+
+    def forge(
+        self, art_id: str | None, insight_ids: list[str], proposed: tuple[str | None, str] | None = None,
+    ) -> list[str]:
+        """煉製頁的開爐：一門武學＋一個意境＝合成，兩個意境（可以是同一個）＝合併（見 fusion.py）。
+        proposed 是鎖外先取好的（名字, 說明）（C 段，見 forge_request）：這裡整個重驗（A 段之後意境可能熔掉、心得或體力
+        可能花掉、配方可能被別人或同一個人的另一個請求登記了），名字再過一次過濾、登記時原子判斷重名，過不了走退路字表；
+        給了 proposed 就不會在這裡叫模型（伺服器一律給，不需要模型時是 (None, "")）。沒給（整季機器人、腳本、測試）
+        首次出現的配方照舊在這裡叫模型。
+        江湖紀錄的標題照煉製頁寫「煉製」（FB-047），做成了才寫，被拒絕只回一句話、什麼都不收。合併要花體力（Config.merge_stamina）、
+        合成不花：花了的體力跟心得一起寫在這一則的數值變化上（企劃者 2026-10-05）。"""
         if self._preparing():
             return self._log(["（賽季籌備中，等待管理者開季。）"])
-        xinde = self._xinde()
-        art, msg = team.create_skill(self.state, self.content, self.world, name, kind)
-        msgs = self._log([msg])
-        if art is not None:
-            msgs += self._menxia_entry(msg, xinde, guide=True)
-        return msgs
-
-    def craft(self, material_ids: list[str]) -> list[str]:
-        """煉製：兩樣素材煉成一門功法，花心得（見 tianxia/craft.py）；內功還是武學開爐才揭曉。
-
-        LLM 只在「全服第一次煉出這個配方」時被呼叫一次，而且只負責取名字；配方命中就是純
-        查表。呼叫在這裡而不是在 `craft.py` 裡拿 client，是為了跟其他門下動作一樣由 Game
-        統一處理江湖紀錄。
-        """
-        if self._preparing():
-            return self._log(["（賽季籌備中，等待管理者開季。）"])
-        xinde = self._xinde()
-        art, msgs = craft.craft(self.state, self.content, self.world, self.client, material_ids)
+        xinde, stamina = self._xinde(), self.state.player.stamina
+        if art_id and len(insight_ids) == 1:
+            art, msgs = fusion.fuse(
+                self.state, self.content, self.world, self.client, art_id, insight_ids[0], proposed=proposed,
+            )
+            tag = f"合成【{art.name}】" if art is not None else None
+        elif not art_id and len(insight_ids) == 2:
+            insight, msgs = fusion.merge(self.state, self.content, self.world, self.client, *insight_ids, proposed=proposed)
+            tag = f"合併「{insight.name}」" if insight is not None else None
+        else:
+            return self._log(["放一門武學和一個意境（合成），或兩個意境（合併）。"])
         out = self._log(msgs)
-        if art is not None:
-            out += self._menxia_entry(f"煉製【{art.name}】", xinde, guide=True, title=journal.CRAFT)
+        if tag is not None:
+            spent = round(stamina - self.state.player.stamina)  # 合併花體力、合成不花：數值變化寫在紀錄上，跟修練一樣
+            out += self._menxia_entry(
+                tag, xinde, guide=True, title=journal.CRAFT, extra=[f"體力 -{spent}"] if spent > 0 else None,
+            )
         return out
 
-    def craft_cost(self, material_ids: list[str]) -> int:
-        return craft.cost(self.content, material_ids)
+    def forge_line(self, art_id: str | None, insight_ids: list[str]) -> str:
+        return skillview.forge_line(self.state, self.content, self.world, art_id, insight_ids)
 
-    def craft_line(self, material_ids: list[str]) -> str:
-        return skillview.craft_line(self.state, self.content, material_ids, self.world)
+    def cultivate(self, art_id: str, use_legend: bool = False) -> list[str]:
+        """修練：武學＋它融的意境，衝下一品（見 cultivation.py）。花體力。真的擲了骰（成功或失敗）才寫江湖紀錄；
+        被拒絕（意境熔掉了、沒融過意境、已經絕學、體力不足、沒有這門武學）只回一句話（武學與成長計畫 F12）。
+        use_legend：玩家勾了「服下破境丹」；真的服了才在紀錄裡寫「破境丹 -1」（丹沒了、下一步不是絕學都照一般的機率擲）。"""
+        if self._preparing():
+            return self._log(["（賽季籌備中，等待管理者開季。）"])
+        problem = cultivation.cultivate_problem(self.state, self.content, self.world, art_id)
+        if problem is not None:
+            return self._log([problem])
+        xinde, stamina, pills = self._xinde(), self.state.player.stamina, self.state.player.legend_items
+        msgs = self._log(cultivation.cultivate(self.state, self.content, self.world, art_id, self.rng, use_legend))
+        spent = round(stamina - self.state.player.stamina)  # 輸了也花了體力：數值變化寫在紀錄上，跟別的行動一樣
+        taken = pills - self.state.player.legend_items
+        extra = ([f"體力 -{spent}"] if spent > 0 else []) + (
+            [f"{self.content.config.legend_item_name} -{taken}"] if taken > 0 else []
+        )
+        # 結果標記是擲骰的結果（「【X】修練…」，一定以【開頭）；前面服丹、沒服的提示與後面定名的話都不是
+        tag = next((m for m in msgs if m.startswith("【")), msgs[0])
+        self._menxia_entry(tag, xinde, extra=extra or None)
+        return msgs
 
-    def material_choices(self) -> list[tuple[str, str]]:
-        """煉製選單的素材選項：（顯示文字, 素材 id），階高的排前面。"""
-        return [
-            (f"{m.name}（{materials.tier_label(m)}・屬{m.attribute}）×{n}", m.id)
-            for m, n in materials.bag_contents(self.state, self.content)
-        ]
-
-    def art_library(self) -> list[tuple[str, str]]:
-        return skillview.art_library(self.state, self.content, self.world)
+    def name_mastered(self, name: str) -> list[str]:
+        """替第一個練成絕學的武學取正式名字；定成了才寫江湖紀錄，江湖史寫進共用賽季所以要存回
+        （名字不合格、被用掉、沒有等著取名的武學都只回一句話）。"""
+        if self._preparing():
+            return self._log(["（賽季籌備中，等待管理者開季。）"])
+        xinde, pending = self._xinde(), self.state.player.naming
+        msgs = self._log(cultivation.name_mastered(self.state, self.content, self.world, name))
+        if pending is not None and self.state.player.naming is None:
+            self._menxia_entry(msgs[0], xinde)
+            self._save_season()
+        return msgs
 
     def switch_art(self, art_id: str) -> list[str]:
         """改練：把功法庫裡的一門換上身（見 team.switch_art）。"""
@@ -2655,16 +2728,43 @@ class Game:
         self._menxia_entry(msgs[-1] if msgs else "改練", xinde)
         return msgs
 
+    def melt_art(self, art_id: str) -> list[str]:
+        """熔煉：功法庫裡的一門熔成心得（見 library.melt_art）；身上正在練的不能熔。熔成了才寫江湖紀錄，
+        被拒絕（身上正在練的、庫裡沒有）只回一句話（武學與成長計畫 F12）。"""
+        if self._preparing():
+            return self._log(["（賽季籌備中，等待管理者開季。）"])
+        xinde, held = self._xinde(), library.held_count(self.state)
+        msgs = self._log(library.melt_art(self.state, self.content, self.world, art_id))
+        if library.held_count(self.state) < held:  # 看有沒有真的少一門，不看心得：下品第一成的武學熔了只退 0 點
+            self._menxia_entry(msgs[0], xinde)
+        return msgs
+
+    def melt_insight(self, insight_id: str) -> list[str]:
+        """把一個意境化成心得（見 library.melt_insight）；同 melt_art，熔成了才寫江湖紀錄。"""
+        if self._preparing():
+            return self._log(["（賽季籌備中，等待管理者開季。）"])
+        xinde, held = self._xinde(), library.held_count(self.state)
+        msgs = self._log(library.melt_insight(self.state, self.content, self.world, insight_id))
+        if library.held_count(self.state) < held:
+            self._menxia_entry(msgs[0], xinde)
+        return msgs
+
     def practice(self, kind: str) -> list[str]:
-        """鍛鍊：目前已學會的內功或武學加深一成，累積受傷風險。"""
+        """練成：身上這一門加深一成，花心得、累積受傷風險（見 team.practice）。"""
         if self._preparing():
             return self._log(["（賽季籌備中，等待管理者開季。）"])
         xinde = self._xinde()
-        # FB-007：引導那一步要的是「你有一門功夫了」，所以看練之前那一欄有沒有功法——沒學過就練不到、不算；
-        # 已經第十成（練無可練）也算（可能在走到這一步前就自創、煉製到滿了，只認「真的加一成」會永遠卡住）。
-        has_art = getattr(self.state.player.member, "neigong_id" if kind == "內功" else "wugong_id") is not None
+        member = self.state.player.member
+        level_slot = "neigong_level" if kind == "內功" else "wugong_level"
+        has_art = getattr(member, "neigong_id" if kind == "內功" else "wugong_id") is not None
+        before = getattr(member, level_slot)
         msgs = self._log(team.practice(self.state, self.content, self.world, kind, self.rng))
-        return msgs + self._menxia_entry(msgs[0] if msgs else "練功", xinde, guide=has_art)
+        # FB-007：引導那一步要的是「真的練了一成」：沒學過就練不到、心得不夠沒練成，都不算；
+        # 已經第十成（練無可練）也算（可能在走到這一步前就練滿了，只認「真的加一成」會永遠卡住）。
+        counted = has_art and (getattr(member, level_slot) > before or before >= team.MAX_LEVEL)
+        if not counted:  # 練不成（還沒學、心得不足）：什麼都沒變，只回那一句話，不寫「修練」紀錄（武學與成長計畫 F12）
+            return msgs
+        return msgs + self._menxia_entry(msgs[0], xinde, guide=True)
 
     def heal(self) -> list[str]:
         if self._preparing():
@@ -2677,15 +2777,18 @@ class Game:
     def _xinde(self) -> int:
         return self.state.player.stats.get("xinde", 0)
 
-    def _menxia_entry(self, tag: str, xinde_before: int, guide: bool = False, title: str = journal.PRACTICE) -> list[str]:
+    def _menxia_entry(
+        self, tag: str, xinde_before: int, guide: bool = False, title: str = journal.PRACTICE,
+        extra: list[str] | None = None,
+    ) -> list[str]:
         """修練頁、煉製頁的動作寫進江湖紀錄（同一種連續的併成一則）。標題照底部分頁的名字：煉製寫「煉製」，
-        自創、鍛鍊、療傷、改練寫「修練」（FB-047；以前都寫「門下」，煉製會併進前面那則自創、鍛鍊）。
+        鍛鍊、療傷、改練寫「修練」（FB-047；以前都寫「門下」，煉製會併進前面那則鍛鍊）。
 
-        guide=True：這個動作算一次「練功」（自創、煉製、鍛鍊），順便看新手引導有沒有完成（FB-024）。完成了，
+        guide=True：這個動作算一次「練功」（煉製、鍛鍊），順便看新手引導有沒有完成（FB-024）。完成了，
         note_action 回來的「✔ 引導完成」、獎勵與說書人的下一步記在這一則的 guide（江湖紀錄看得到），給對話框
         （guide_done），不進修練、煉製頁的訊息與「剛剛」（引導重做設計 8.1.3）。回傳一律是空串列。"""
         delta = self._xinde() - xinde_before
-        changes = [f"心得 {delta:+d}"] if delta else []
+        changes = ([f"心得 {delta:+d}"] if delta else []) + (extra or [])  # extra：心得以外的數值變化（修練花的體力）
         self.state.player.guide_done = []
         notes = note_action(self.state, self.content, self.world, "practice") if guide else []
         self._note_guide(notes)  # 引導的訊息記在這一則的 guide、給對話框，不進修練頁的訊息（引導重做設計 8.1.3）
@@ -2738,16 +2841,8 @@ class Game:
         """這個角色擁有的一門功法的功法卡（FB-006；功法庫先看卡再改練）。熟練度：配在身上的看身上
         那一欄，功法庫裡的看換下來時存的 art_levels（沒存過從第一成算，跟 team.switch_art 一致）。
         不是自己的、或內容與共用世界裡都找不到時回一句話。"""
-        member = self.state.player.member
-        if art_id == member.neigong_id:
-            level = member.neigong_level
-        elif art_id == member.wugong_id:
-            level = member.wugong_level
-        elif art_id in self.state.player.arts:
-            level = self.state.player.art_levels.get(art_id, 1)
-        else:
-            return "（找不到這門功法。）"
-        art = team.resolve_art(art_id, self.content, self.world)
+        level = library.level_of(self.state, art_id)
+        art = None if level is None else team.player_art(self.state, self.content, self.world, art_id)
         return "（找不到這門功法。）" if art is None else skillview.art_card(art, level)
 
     def member_card(self, key: str) -> str:
@@ -2758,6 +2853,25 @@ class Game:
 
     def bag_text(self) -> str:
         return skillview.bag_text(self.state, self.content)
+
+    def holdings(self) -> dict:
+        """武學與意境的持有數與上限（武學與成長設計 4.5）。"""
+        return {
+            "count": library.held_count(self.state),
+            "cap": library.holding_cap(self.content, self.state.player.member.level),
+        }
+
+    def art_rows(self) -> list[dict]:
+        return skillview.art_rows(self.state, self.content, self.world)
+
+    def insight_rows(self) -> list[dict]:
+        return skillview.insight_rows(self.state, self.content, self.world)
+
+    def naming_row(self) -> dict | None:
+        """等著自己取正式名字的那一門（第一個練成絕學）；沒有是 None。"""
+        art_id = self.state.player.naming
+        art = team.resolve_art(art_id, self.content, self.world) if art_id else None
+        return None if art is None else {"id": art_id, "name": art.name}
 
     # ── 戰鬥紀錄 ──────────────────────────────────────────
 
@@ -3247,11 +3361,11 @@ class Game:
         return {
             "calendar": {
                 "week": at.week, "weekday": at.weekday, "clock": f"{at.hour:02d}:{at.minute:02d}",
-                "weeks": c.config.season_weeks,
+                "weeks": c.config.season_weeks, "text": calendar.point_text(at),  # 畫面第二行直接用這一句，不自己拼
             },
             "next_event": None if upcoming is None else {
                 "title": upcoming.title,
-                "at": self.stamp(timetable.when(self.state, c, upcoming)),  # 季曆時刻「第9週・週四 20:44」，畫面寫在倒數前面（FB-062）
+                "at": self.stamp(timetable.when(self.state, c, upcoming)),  # 季曆時刻「第 9 週・週四 20:44」，畫面寫在倒數前面（FB-062）
                 "in_seconds": round((timetable.when(self.state, c, upcoming) - w.time) / c.config.time_scale),
             },
         }
@@ -3356,7 +3470,7 @@ class Game:
         cal = d.get("calendar")
         if cal is None:
             return f"第 {d['day']} 天 {d['clock']}（本季共 {d['season_days']:g} 天）"
-        return f"第 {cal['week']} 週・週{calendar.WEEKDAYS[cal['weekday']]} {cal['clock']}"
+        return cal["text"]
 
     def status_text(self) -> str:
         d = self.status_data()

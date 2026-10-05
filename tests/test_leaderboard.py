@@ -74,3 +74,20 @@ def test_format_lines_shows_ranked_entries_with_quality_and_power():
     board = {"武學": [("強者", "九陰白骨爪", "絕學", 50.0)], "內功": []}
     lines = leaderboard.format_lines(board)
     assert "　1. 強者・【九陰白骨爪】（絕學，威力 50.0）" in lines
+
+
+def test_the_board_shows_each_players_own_quality_and_power(content, world):
+    """審查裁示 F11：榜上是玩家自己修練到的品質與威力，不是全服登記的那一份。"""
+    from tianxia import martial_arts
+
+    art = generate_from_name("旋風腿", "武學", "旋風腿", weights={"下品": 100, "中品": 0, "上品": 0, "絕學": 0})
+    world.claim_skill_name(art)
+    plain = _player(content, "平凡", wugong_id="旋風腿", wugong_level=5)
+    trained = _player(content, "苦修", wugong_id="旋風腿", wugong_level=5)
+    trained.player.art_quality["旋風腿"] = "上品"
+    open_characters().save(plain)
+    open_characters().save(trained)
+    rows = {row[0]: row for row in leaderboard.compute_leaderboard(content, world)["武學"]}
+    assert rows["平凡"][2] == "下品" and rows["苦修"][2] == "上品"
+    assert rows["平凡"][3] == martial_arts.power_at(art, 5)
+    assert rows["苦修"][3] == martial_arts.power_at(martial_arts.with_quality(art, "上品"), 5) > rows["平凡"][3]

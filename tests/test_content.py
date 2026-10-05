@@ -1,15 +1,19 @@
 import json
 import shutil
+from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
 
 from conftest import FIXTURE
+from tianxia import naming
 from tianxia.content import ContentError, load_content, profile_line, validate
 from tianxia.models import (
     BattleAct, BattleActionEffect, BattleDef, BattleFaction, BattleOption, BattleOutcome, Condition, Config, FactionDef,
     Threshold, Trend,
 )
+
+ROOT = Path(__file__).resolve().parent.parent
 
 
 def copy_fixture(tmp_path):
@@ -670,10 +674,40 @@ def test_a_material_only_an_event_gives_is_still_reachable(tmp_path):
     load_content(root)  # 不該再報錯
 
 
-def test_a_material_only_a_location_offers_is_still_reachable(tmp_path):
+def test_a_higher_tier_material_a_location_lists_is_not_reachable_from_it(tmp_path):
+    """探索不再撿素材（武學與成長計畫一）：地點寫的素材只決定路邊採集出什麼屬性，採到的永遠是那個屬性的一階。
+    所以地點寫了天品，天品也不會因此拿得到。"""
     root = copy_fixture(tmp_path)
     _strand_the_top_tier(root)
     edit_json(root / "locations.json", lambda d: d[0].update(materials=["gang_3"]))
+    with pytest.raises(ContentError, match="隕鐵膽"):
+        load_content(root)
+
+
+def _every_place_lists_only_gang(root):
+    """每個地點都只寫剛；快屬性的一階素材原本還有一則路上見聞給，這裡拿掉，路邊採集就成了唯一的可能。"""
+    edit_json(root / "locations.json", lambda d: [loc.update(materials=["gang_1"]) for loc in d])
+    edit_json(root / "road_sights.json", lambda d: [s.get("effect", {}).pop("materials", None) for s in d])
+
+
+def test_a_first_tier_material_no_road_can_give_is_rejected(tmp_path):
+    """路邊採集只出兩頭地點寫的屬性：每個地點都只寫剛，快屬性的一階素材就沒有任何管道。"""
+    root = copy_fixture(tmp_path)
+    _every_place_lists_only_gang(root)
+    with pytest.raises(ContentError, match="驚羽"):
+        load_content(root)
+
+
+def test_a_first_tier_material_a_road_between_listed_places_can_give_is_reachable(tmp_path):
+    root = copy_fixture(tmp_path)
+    _every_place_lists_only_gang(root)
+    edit_json(root / "locations.json", lambda d: d[0].update(materials=["kuai_1"]))  # 小鎮出快：小鎮到湖邊的路採得到
+    load_content(root)
+
+
+def test_a_road_between_two_unlisted_places_can_give_any_first_tier_material(tmp_path):
+    root = copy_fixture(tmp_path)
+    edit_json(root / "locations.json", lambda d: [loc.pop("materials", None) for loc in d])
     load_content(root)
 
 
@@ -1297,3 +1331,81 @@ def test_promotion_handoff_needs_its_scene_and_summons(tmp_path):
     edit_json(root / "promotions.json", lambda d: d[0].update(summons_handoff=None))
     with pytest.raises(ContentError, match="接手"):
         load_content(root)
+
+
+# ── 意境與基礎武學（武學與成長設計附錄 A～C）─────────────────
+
+
+def test_insights_are_loaded(content):
+    assert content.insights["feng"].attribute == "快"
+    assert content.insights["haoran"].grant.stat == "good"
+
+
+def test_a_location_insight_must_exist(content):
+    content.locations["lake"].insights.append("nope")
+    with pytest.raises(ContentError, match="未知的意境 nope"):
+        validate(content)
+
+
+def test_a_location_cannot_hand_out_a_name_earned_insight(content):
+    content.locations["lake"].insights.append("haoran")
+    with pytest.raises(ContentError, match="浩然.*只能靠名聲"):
+        validate(content)
+
+
+def test_an_effect_cannot_give_a_name_earned_insight(content):
+    content.events["drunk"].choices[0].effect.insights = ["haoran"]
+    with pytest.raises(ContentError, match="浩然.*只能靠名聲"):
+        validate(content)
+
+
+def test_an_effect_cannot_give_an_unknown_insight(content):
+    content.events["drunk"].choices[0].effect.insights = ["nope"]
+    with pytest.raises(ContentError, match="未知的意境 nope"):
+        validate(content)
+
+
+def test_an_effect_can_give_a_basic_insight(content):
+    content.events["drunk"].choices[0].effect.insights = ["feng"]
+    validate(content)
+
+
+def test_a_basic_art_must_be_taught_somewhere_that_exists(content):
+    content.skills["lake_kick"].learn.at = "nowhere"
+    with pytest.raises(ContentError, match="未知的地點 nowhere"):
+        validate(content)
+
+
+def test_a_historical_art_is_not_taught(content):
+    content.skills["fist"].learn = content.skills["lake_kick"].learn
+    with pytest.raises(ContentError, match="絕學.*不能在各地學"):
+        validate(content)
+
+
+def test_starter_skills_are_one_inner_and_one_outer_art(content):
+    content.config.starter_skills = ["basic_fist", "lake_kick"]
+    with pytest.raises(ContentError, match="starter_skills"):
+        validate(content)
+
+
+def test_real_content_has_seventeen_basic_arts_and_every_location_an_insight():
+    real = load_content(ROOT / "content")
+    basics = [s for s in real.skills.values() if s.quality == "下品"]
+    assert len(basics) == 17
+    assert all(loc.insights for loc in real.locations.values())
+
+
+def test_every_insight_fallback_name_passes_the_filter(content):
+    for prefix in content.craft_names.prefixes:
+        for suffix in content.craft_names.insight:
+            assert naming.name_problem(prefix + suffix, content) is None
+
+
+def test_validate_checks_the_insight_fallback_names_too(content):
+    content.craft_names.insight = ["龍"]  # 「某某龍」之中有一個會撞上禁用詞時要在載入當下報錯
+    content.banned_names = [content.craft_names.prefixes[0] + "龍"]
+    with pytest.raises(ContentError, match="craft_names 組出的名字"):
+        validate(content)
+    content.craft_names.insight = []
+    with pytest.raises(ContentError, match="craft_names.insight 不能是空的"):
+        validate(content)

@@ -1,5 +1,5 @@
 """門下與隊伍（sanguo-companions 合併大幅重寫）：玩家與最多 4 個已招募同伴的單一隊伍，
-每人最多一門內功、一門武學，練功（自創／鍛鍊）與心得升級，串接 encounter.py 的單次判定。
+每人最多一門內功、一門武學，練功（鍛鍊）與心得升級，串接 encounter.py 的單次判定。
 
 同伴不再是玩家存檔裡的副本——他們全服唯一，等級/武學是共用資料（world_state.py 的
 CompanionProgress），這裡的函式凡是要讀寫同伴進度都要帶一個 WorldStateStore 參數。
@@ -10,7 +10,7 @@ import math
 import random
 
 from . import calendar, encounter
-from .martial_arts import MAX_LEVEL, MartialArt, generate_from_name, historical_art
+from .martial_arts import MAX_LEVEL, MartialArt, content_art, with_quality
 from .models import Content, FollowerDef, Squad
 from .state import PLAYER, MAX_TEAM_COMPANIONS, GameState, Member
 from .world_state import CompanionProgress, WorldStateStore
@@ -62,26 +62,41 @@ def team_keys(state: GameState) -> list[str]:
 
 
 def resolve_art(skill_id: str | None, content: Content, world: WorldStateStore) -> MartialArt | None:
-    """skill_id 可能指向內容裡的本命武學（歷史人物固定武學）或玩家自創、存在共用世界狀態
-    裡的武學（見設計文件六.2；自創功法的 id 就是它的名字，兩邊用同一個 dict 鍵）。"""
+    """skill_id 指向內容裡的武學（本命武學、基礎武學）或全服登記的武學（合成、舊的自創與煉製）。
+    回傳的是全服共享的那一份；玩家自己那一份的品質見 player_art。"""
     if skill_id is None:
         return None
     if skill_id in content.skills:
         s = content.skills[skill_id]
-        return historical_art(skill_id, s.name, s.kind, s.attribute, s.quality)
+        return content_art(skill_id, s.name, s.kind, s.attribute, s.quality)
     return world.get_skill(skill_id)
 
 
+def art_quality(state: GameState, art: MartialArt) -> str:
+    """玩家手上這一份是什麼品質：修練過就照自己的，沒修練過照全服登記的。"""
+    return state.player.art_quality.get(art.id, art.quality)
+
+
+def player_art(state: GameState, content: Content, world: WorldStateStore, skill_id: str | None) -> MartialArt | None:
+    """玩家自己那一份：品質與威力照自己修練到的品質。"""
+    art = resolve_art(skill_id, content, world)
+    return None if art is None else with_quality(art, art_quality(state, art))
+
+
 def team_arts(state: GameState, content: Content, world: WorldStateStore) -> dict[str, MartialArt]:
-    """本隊每個人的內功/武學（含部下），蒐集成一份 id -> MartialArt 給 encounter.py 用。"""
+    """本隊每個人的內功/武學（含部下），蒐集成一份 id -> MartialArt 給 encounter.py 用。
+    玩家的兩門照自己修練到的品質（player_art）；同伴、部下只有內容武學，照內容的品質。"""
     arts: dict[str, MartialArt] = {}
-    ids = {state.player.member.neigong_id, state.player.member.wugong_id}
-    ids |= {unit.wugong_id for unit in follower_units(state, content)}
+    for skill_id in (state.player.member.neigong_id, state.player.member.wugong_id):
+        art = player_art(state, content, world, skill_id)
+        if art:
+            arts[skill_id] = art
+    others = {unit.wugong_id for unit in follower_units(state, content)}
     shared = world.read()
     for key in state.player.team:
         progress = shared.companions.get(key, CompanionProgress())
-        ids |= {progress.neigong_id, progress.wugong_id}
-    for skill_id in ids:
+        others |= {progress.neigong_id, progress.wugong_id}
+    for skill_id in others:
         if skill_id and skill_id not in arts:
             art = resolve_art(skill_id, content, world)
             if art:
@@ -137,44 +152,21 @@ def remove_from_team(state: GameState, companion_id: str) -> list[str]:
     return []
 
 
-# ── 練功：自創功法／鍛鍊（設計文件六.2）──────────────────────
-
-
-def create_skill(
-    state: GameState, content: Content, world: WorldStateStore, name: str, kind: str,
-) -> tuple[MartialArt | None, str]:
-    """自創功法：名字即配方（martial_arts.generate_from_name），全服不能重名。成功時把
-    新武學配進玩家對應的欄位（如果那一欄還空著）並回傳 (art, 訊息)；名字被占用或欄位已經
-    有人時回傳 (None, 原因)。"""
-    name = name.strip()
-    if not name:
-        return None, "得先取個名字。"
-    member = state.player.member
-    slot = "neigong_id" if kind == "內功" else "wugong_id"
-    if getattr(member, slot) is not None:
-        return None, f"你已經有一門{kind}了，同時只能練一門。"
-    if world.is_skill_name_taken(name) or name in content.skills:
-        return None, f"【{name}】這個名字已經有人取走了，換一個吧。"
-    art = generate_from_name(name, kind, name, world.read().tianji)
-    if not world.claim_skill_name(art):
-        return None, f"【{name}】這個名字已經有人取走了，換一個吧。"
-    setattr(member, slot, art.id)
-    setattr(member, slot.replace("_id", "_level"), 1)
-    return art, f"你自創了一門{kind}【{name}】（{art.quality}，屬{art.attribute}）！"
+# ── 練功：改練／鍛鍊（設計文件六.2；自創武學已作廢，見武學與成長設計 3.8）──────────────────────
 
 
 def switch_art(state: GameState, content: Content, world: WorldStateStore, art_id: str) -> list[str]:
     """改練：把功法庫裡的一門換上身，被換下來的回庫，兩邊的熟練度**各自保留**。
 
-    煉製（craft.py）會讓同一個人擁有超過一門內功／武學，但每人同時只能練一門（設計文件
-    六.4），所以需要這個動作——在這之前整個 team.py 連散功都沒有，煉出絕學卻裝不上去。
+    合成（fusion.py）、學藝會讓同一個人擁有超過一門內功／武學，但每人同時只能練一門（設計文件
+    六.4），所以需要這個動作——在這之前整個 team.py 連散功都沒有，拿到好功法卻裝不上去。
     熟練度存在 `PlayerState.art_levels`（換下來時寫進去、換上去時取出來），所以換回來不用
     重練；舊存檔沒有這個欄位時，庫裡的功法一律從第一成算起。
     """
     p = state.player
     if art_id not in p.arts:
         return ["你的功法庫裡沒有這一門。"]
-    art = resolve_art(art_id, content, world)
+    art = player_art(state, content, world, art_id)
     if art is None:
         return ["（找不到這門功法的資料。）"]
     member = p.member
@@ -195,10 +187,28 @@ def switch_art(state: GameState, content: Content, world: WorldStateStore, art_i
     return msgs
 
 
+def practice_price(content: Content, level: int) -> int:
+    """練成的價錢：第 level 成升 level+1 成要幾點心得（武學與成長設計 4.2）。只看第幾成、不看品質：
+    升品時成不變，品質越高越貴的話，玩家會先趁下品把成練滿再修練，價錢就被繞過去。"""
+    return content.config.practice_xinde_per_level * level
+
+
+def can_practise(state: GameState, content: Content, kind: str) -> bool:
+    """身上這一欄有武學、還沒第十成、而且付得起下一成的心得（練成花心得，設計 4.2）。
+    機器人要不要練（bot.can_practise）與主畫面的提示（skillview.practice_hint）共用這一個條件。"""
+    member = state.player.member
+    slot, level_slot = ("neigong_id", "neigong_level") if kind == "內功" else ("wugong_id", "wugong_level")
+    level = getattr(member, level_slot)
+    return (
+        getattr(member, slot) is not None and level < MAX_LEVEL
+        and state.player.stats.get("xinde", 0) >= practice_price(content, level)
+    )
+
+
 def practice(
     state: GameState, content: Content, world: WorldStateStore, kind: str, rng: random.Random,
 ) -> list[str]:
-    """鍛鍊：目前已學會的內功或武學加深一成，累積受傷風險（設計文件六.2）。"""
+    """練成：身上這一門加深一成，花心得（設計 4.2），累積受傷風險（設計文件六.2）。"""
     cfg, member = content.config, state.player.member
     slot = "neigong_id" if kind == "內功" else "wugong_id"
     level_slot = slot.replace("_id", "_level")
@@ -206,12 +216,20 @@ def practice(
     if skill_id is None:
         return [f"你還沒學{kind}，沒東西可以練。"]
     level = getattr(member, level_slot)
-    art = resolve_art(skill_id, content, world)
+    art = player_art(state, content, world, skill_id)
     name = art.name if art else skill_id
     if level >= MAX_LEVEL:
         return [f"【{name}】已經練到第十成，練無可練。"]
+    price = practice_price(content, level)
+    xinde = state.player.stats.get("xinde", 0)
+    if xinde < price:
+        return [
+            f"心得不足：【{name}】從第{level}成練到第{level + 1}成要 {price} 點心得，"
+            f"你只有 {xinde} 點，還差 {price - xinde} 點。"
+        ]
+    state.player.stats["xinde"] = xinde - price
     setattr(member, level_slot, level + 1)
-    msgs = [f"【{name}】精進至第{level + 1}成。"]
+    msgs = [f"【{name}】精進至第{level + 1}成。", f"心得 -{price}"]
     if rng.random() < cfg.practice_injury_chance:
         now, _cap = member_neili(content, member)
         member.injury += cfg.practice_injury_amount
