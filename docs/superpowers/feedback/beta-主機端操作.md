@@ -50,6 +50,88 @@ $env:TIANXIA_DB = "C:\Ray\tianxia-play\tianxia.db"
 - 伺服器重開後**每個人都要重新登入一次**。帳號、角色、進度都還在。
 - 有網址的人都能進來註冊，所以網址只私下給，不要貼在公開的地方。
 
+## 換成自己的網域（Cloudflare 具名 Tunnel）
+
+封測要用固定的網址：LINE、Google 登入只認事先登記好的網址；trycloudflare 每次重開都換，不能用（線上架構帳號計畫開頭的清單第 1、2 項）。下面是企劃者自己做一次的步驟。指令裡的 `tianxia-game.com` 換成你買的網域，`tianxia` 是隧道的名字，照用就好。
+
+> 這台電腦已經裝好 cloudflared（2026.9.3），下面的指令都是它內建說明裡有的。哪一步出了沒寫到的訊息，截圖給 PM。
+
+**一、買網域，交給 Cloudflare 管**
+
+1. 登入 Cloudflare 的網站，左邊「網域註冊」→「註冊網域」，搜尋想要的名字，照畫面付款。在 Cloudflare 買的網域，DNS 自動就在 Cloudflare，不用另外設。
+2. 已經在別家買了網域：在 Cloudflare 按「新增網站」加進來，照畫面把那家的名稱伺服器（nameserver）改成 Cloudflare 給的兩個。改好之後可能要等幾小時才生效。
+
+**二、讓這台電腦登入 Cloudflare、建隧道**（一次就好）
+
+開一個 PowerShell 視窗：
+
+```powershell
+cloudflared tunnel login
+```
+
+- 瀏覽器會打開 Cloudflare 的授權頁，選你的網域、按「授權」。
+- 回到視窗，看到檔案寫進 `C:\Users\<你>\.cloudflared\cert.pem` 就好。這個檔是你的 Cloudflare 憑證，**不要給任何人、不要放進 git 或貼在對話裡**。
+
+```powershell
+cloudflared tunnel create tianxia
+```
+
+- 會印出一串隧道編號（UUID），並在同一個資料夾寫一個 `<UUID>.json`。這也是密鑰，同樣不外流。
+
+```powershell
+cloudflared tunnel route dns tianxia tianxia-game.com
+```
+
+- 在 Cloudflare 的 DNS 加一筆紀錄，讓 `tianxia-game.com` 指到這條隧道。
+- 想用子網域（例如 `play.tianxia-game.com`），就把最後那一段換成子網域。
+
+**三、平常怎麼開**
+
+伺服器照平常開，**不要加 `--share`**（`--share` 是開臨時網址的）：
+
+```powershell
+cd C:\Ray\專案\天下大勢
+$env:TIANXIA_DB = "C:\Ray\tianxia-play\tianxia.db"
+.venv\Scripts\python.exe -u server.py --port 7861
+```
+
+另開一個視窗開隧道：
+
+```powershell
+cloudflared tunnel run --url http://127.0.0.1:7861 tianxia
+```
+
+- 看到幾行「Registered tunnel connection」就通了，手機打開 `https://tianxia-game.com` 試試。
+- 這個網址重開也不會變，所以 LINE、Google 的回傳網址都填它：
+  - `https://tianxia-game.com/auth/line/callback`
+  - `https://tianxia-game.com/auth/google/callback`
+- 帳號計畫的 `.local/oauth.json` 裡，`base_url` 也寫 `https://tianxia-game.com`。
+- 要停：在隧道視窗按 Ctrl+C。伺服器那個視窗照舊。
+
+**四、（選擇性）讓隧道開機自己跑**
+
+先用第三步的視窗方式跑順，再考慮這一步。要用系統管理員身分開 PowerShell。
+
+1. 在 `C:\Users\<你>\.cloudflared\` 建一個 `config.yml`，內容如下：
+   - `<UUID>` 換成第二步印出來的那一串；
+   - 檔案路徑寫完整。
+
+   ```yaml
+   tunnel: <UUID>
+   credentials-file: C:\Windows\System32\config\systemprofile\.cloudflared\<UUID>.json
+   ingress:
+     - hostname: tianxia-game.com
+       service: http://127.0.0.1:7861
+     - service: http_status:404
+   ```
+
+2. 系統服務是用系統帳號跑的，讀不到你自己資料夾的檔。所以要把 `config.yml` 與 `<UUID>.json` 兩個檔，複製到 `C:\Windows\System32\config\systemprofile\.cloudflared\`；資料夾沒有就建一個。
+3. 在系統管理員的 PowerShell 打 `cloudflared service install`。
+4. 到「服務」程式找 Cloudflared，確認是「執行中」、啟動類型是「自動」。
+5. 服務起不來時：先 `cloudflared service uninstall`，回到第三步的視窗方式，截圖給 PM。
+
+伺服器本身要不要也開機自動跑，是部署那一期的事；在那之前，伺服器照舊用視窗開。
+
 ## 怎麼停
 
 在兩個視窗各按一次 **Ctrl+C**。伺服器和 cloudflared 會一起關掉，不會留下東西。直接關掉視窗也可以。
