@@ -446,7 +446,33 @@ def test_every_chip_is_at_least_44px_tall_and_the_row_never_cuts_a_number():
     # 最窄（≤340px）連小箭頭也不畫；大事的標題不在小標裡（428～440px 會折行），所以沒有依螢幕寬度顯示它的規則
     assert re.search(r"@media \(max-width: 340px\) \{[^}]*\.peek-chip::after \{[^}]*display: none", css, re.S)
     assert not re.search(r"\.peek-nums \{[^}]*overflow: hidden", css)  # 態勢的數字不能被截
-    assert "peek-titles" not in css and not re.search(r"@media \(min-width: 4\d\dpx\)", css)
+    assert "peek-titles" not in css
+    # 小標不依螢幕寬度多畫東西：任何 @media (min-width: …) 區塊裡都不能有 .peek 的規則（別的元素愛開什麼斷點都行）
+    wide = [query for query, body in _media_blocks(css) if re.search(r"\(min-width:", query) and re.search(r"\.peek", body)]
+    assert wide == [], wide
+
+
+def _media_blocks(css: str) -> list[tuple[str, str]]:
+    """樣式表裡每一個 @media 區塊：(條件, 區塊裡的文字)。一路數大括號找到對得上的那個收尾，區塊裡的規則本身也有大括號，
+    用 [^}]* 會在第一條內層規則就停下。"""
+    blocks, at = [], 0
+    while (start := css.find("@media", at)) != -1:
+        open_at = css.index("{", start)
+        depth, i = 1, open_at + 1
+        while depth:
+            depth += {"{": 1, "}": -1}.get(css[i], 0)
+            i += 1
+        blocks.append((css[start + len("@media"):open_at].strip(), css[open_at + 1:i - 1]))
+        at = i
+    return blocks
+
+
+def test_the_media_block_walker_reads_nested_rules_to_the_matching_brace():
+    css = "@media (min-width: 420px) { .a { x: 1; } .peek-chip { y: 2; } } @media (max-width: 340px) { .b { z: 3; } } .c { w: 4; }"
+    assert _media_blocks(css) == [
+        ("(min-width: 420px)", " .a { x: 1; } .peek-chip { y: 2; } "), ("(max-width: 340px)", " .b { z: 3; } "),
+    ]
+    assert _media_blocks(".only { a: b; }") == []
 
 
 def test_the_old_folds_and_their_helpers_are_gone():
