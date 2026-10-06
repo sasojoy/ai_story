@@ -120,3 +120,34 @@ def test_the_companion_measure_script_removes_its_temp_folder(tmp_path):
     env = {**os.environ, "TEMP": str(tmp_path), "TMP": str(tmp_path), "TMPDIR": str(tmp_path)}
     subprocess.run([sys.executable, "-c", code], check=True, env=env, cwd=ROOT)
     assert list(tmp_path.glob("measure_companions_*")) == []
+
+
+def test_the_third_party_measure_script_plays_a_whole_battle_and_stays_within_the_cap():
+    """決戰改版 5：量測腳本只量不改；一場打完回傳的是割據推動（0 到 third_cap），同一個種子結果一樣，沒有豪強就是 0。
+    小人數跑一場就好（整個量測要幾秒）。"""
+    measure = _load("measure_third_party")
+    content = measure.load_content(ROOT / "content")
+    definition = content.battles["changshe_fire"].model_copy(update={"trend_start": 50})
+    tuning = content.config.battle
+    pushes = [measure.run(definition, tuning, 6, 6, 4, seed) for seed in range(3)]
+    assert all(isinstance(p, int) and 0 <= p <= tuning.third_cap for p in pushes)
+    assert pushes == [measure.run(definition, tuning, 6, 6, 4, seed) for seed in range(3)]
+    assert measure.run(definition, tuning, 6, 6, 0, 0) == 0
+
+
+def test_the_server_bot_simulation_can_pause_the_season_clock(content, tmp_path, monkeypatch):
+    """--pause-at：模擬中途讓賽季時鐘停一段——停著的時候「真人」照樣刷新（同步）、假人程式照樣巡，季的時間一秒都不動、
+    假人一個動作都沒做；繼續之後照常跑到收季。測試內容的季壓到幾分鐘（time_scale 400），「真人」整天在線。"""
+    sim = _load("sim_server_bots")
+    monkeypatch.setattr(sim, "HUMAN_HOURS", range(24))
+    content.config.time_scale = 400.0
+    resumed, real = [], sim.resume_season_clock  # 「繼續」走 world.resume_season_clock（三步的順序只寫在那一個地方）
+    # 跟正式的一樣在行動鎖裡做（伺服器的 act、主機端腳本都是）：記下呼叫的當下有沒有拿著寫入權
+    monkeypatch.setattr(
+        sim, "resume_season_clock", lambda world, *a, **k: resumed.append(world.db.writing()) or real(world, *a, **k),
+    )
+    result = sim.run_season(content, tmp_path, seed=0, tick=60.0, pause=(0.05, 0.1))
+    assert resumed == [True]
+    assert result["pause"]["at_day"] is not None
+    assert result["pause"]["season_moved"] == 0.0 and result["pause"]["bot_moves"] == 0
+    assert result["ended"] and isinstance(result["late_joiners"], int)

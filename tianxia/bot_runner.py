@@ -22,7 +22,7 @@ import traceback
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from . import bot_policy, naming, server_bots
+from . import battle_instance, bot_policy, naming, server_bots
 from .characters import CharacterStore, open_characters
 from .engine import Game
 from .models import Content
@@ -75,7 +75,7 @@ class BotRunner:
 
     def tick(self) -> TickReport:
         report = TickReport()
-        if self.world.season_phase() != "running":
+        if self.world.season_phase() != "running" or self.world.paused_at() is not None:  # 籌備、休季、暫停中都不出手
             return report
         now = self.clock()
         try:
@@ -135,7 +135,7 @@ class BotRunner:
         slot 是這一輪的取名名額：要取名的爐或定名開成單子放進 slot.job，由呼叫端在鎖外做完（見 _name_and_apply）。"""
         state = self.characters.load(name)
         shared = self.world.read()
-        if state is None or shared.season_phase() != "running":
+        if state is None or shared.season_phase() != "running" or shared.paused_at is not None:
             return False
         profile = state.player.bot
         if profile is None or not server_bots.active(profile, shared.season_number):
@@ -201,7 +201,7 @@ class BotRunner:
         )
 
     def _battle_sides(self) -> tuple[float, set[str], set[str]] | None:
-        """進行中的全服戰鬥：（這場的識別值＝集結截止時間, 交戰陣營, 已經出局的參戰者名號）；
+        """進行中的全服戰鬥：（這場的識別值＝集結截止時間, 能站的陣營＝兩軍加第三方, 已經出局的參戰者名號）；
         沒有或已經結束回傳 None。"""
         battle = self.world.get_battle()
         if battle is None or battle.phase == "ended":
@@ -210,10 +210,13 @@ class BotRunner:
         if definition is None:
             return None
         out = {p.name for p in battle.participants.values() if p.eliminated}
-        return battle.muster_deadline_real, {f.id for f in definition.factions}, out
+        return battle.muster_deadline_real, set(battle_instance.sides(definition)), out  # 兩軍加第三方：豪強的假人也擲趕來參戰
 
     def _fill(self, now: float, report: TickReport) -> None:
-        """補人；補成一個就記一個進 report.added（中途出錯時，已經補成的仍算數）。"""
+        """補人；補成一個就記一個進 report.added（中途出錯時，已經補成的仍算數）。
+        tick 開頭看過暫停了，但等這把行動鎖的時候管理者的暫停可能先寫進去：拿到鎖之後再看一次，暫停中不補人。"""
+        if self.world.read().paused_at is not None:  # 欄位，不是方法（world.paused_at() 才是方法）
+            return
         cfg = self.content.config
         season = self.world.get_season_number()
         bots = self.characters.all(bots_only=True)

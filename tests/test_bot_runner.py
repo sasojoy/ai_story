@@ -12,8 +12,8 @@ from tianxia.bot_runner import BotRunner
 from tianxia.characters import open_characters
 from tianxia.engine import Game
 from tianxia.models import (
-    BattleAct, BattleActionEffect, BattleDef, BattleFaction, BattleOption, BattleOutcome,
-    FactionDef,
+    BattleAct, BattleDef, BattleFaction, BattleOption, BattleOutcome,
+    FactionDef, ThirdParty,
 )
 from tianxia.database import Database
 from tianxia.sqlite_world import SqliteWorldStore, open_world
@@ -33,13 +33,10 @@ def _install(content):
         acts=[
             BattleAct(
                 id="a1", title="初探", text="雙方試探。", goal="推動戰局",
-                options=[BattleOption(text="穩紮穩打", tag="safe"), BattleOption(text="全力進攻", tag="aggressive")],
+                options=[BattleOption(text=f"{s}{m}", tag=f"{s}_{c}", faction=s, move=m)
+                         for s in ("guan", "huang") for m, c in (("強攻", "strong"), ("固守", "hold"), ("奇襲", "raid"))],
             ),
         ],
-        action_tags={
-            "safe": BattleActionEffect(trend_delta=1, neili_damage=5),
-            "aggressive": BattleActionEffect(trend_delta=5, neili_damage=20),
-        },
         outcomes=[BattleOutcome(faction="guan", title="官軍大勝", text="官軍獲勝。")],
         muster_seconds=600, round_seconds=120,
     )
@@ -443,6 +440,31 @@ def test_a_bot_that_turned_up_for_a_battle_goes_offline_once_it_is_eliminated(
     assert _tick_cleanly(runner).online == 1  # 出局的那一位不再上線，沒出局的還在
     world.mutate_battle(lambda b: setattr(b, "phase", "ended"))
     assert _tick_cleanly(runner).online == 0  # 戰鬥結束，大家都回到自己的作息
+
+
+def test_a_warlord_bot_turns_up_for_a_battle_with_a_third_side_like_the_armies_do(
+    runner, world, content, clock, monkeypatch,
+):
+    """決戰改版 5（假人的對等）：能站的每一方都算（兩軍加第三方），豪強的假人也擲「趕來參戰」；
+    沒有第三方的決戰照舊只有兩軍的假人趕來。看不出誰是假人：兩邊的假人行為要一樣。"""
+    monkeypatch.setattr(server_bots, "is_online", lambda profile, now: False)  # 都不在作息時段
+    monkeypatch.setattr(server_bots, "attends_battle", lambda profile, key: True)  # 但都擲中趕來參戰
+    monkeypatch.setattr(bot_policy, "take_turn", lambda game, profile, rng: None)  # 只看誰算在線
+    content.scenario.factions.append(FactionDef(id="haoqiang", name="地方豪強", join_at=["town"]))
+    content.config.bots_min_per_faction = 1
+    content.config.bot_tick_seconds = 1000
+    assert runner.tick().online == 0
+    characters = open_characters()
+    for state in characters.all(bots_only=True):  # 三個陣營各一位假人，都已投靠
+        state.player.faction = state.player.bot.faction
+        characters.save(state)
+    assert sorted(s.player.faction for s in _bots()) == ["guan", "haoqiang", "huang"]
+    world.start_battle(content.battles["t1"], clock[0])
+    assert runner.tick().online == 2  # 這一場只有兩軍：豪強的假人不趕來
+    world.clear_battle()
+    content.battles["t1"].third = ThirdParty(faction="haoqiang", trend="kou")
+    world.start_battle(content.battles["t1"], clock[0])
+    assert runner.tick().online == 3  # 有第三方：豪強的假人也趕來
 
 
 def test_run_bots_keeps_going_after_a_bad_tick_and_prints_no_names(monkeypatch, capsys, caplog):
@@ -881,3 +903,32 @@ def test_run_bots_prints_how_many_names_it_asked_for_and_never_a_name(monkeypatc
     monkeypatch.setattr(BotRunner, "tick", lambda self: bot_runner.TickReport(online=3, named=2))
     run_bots.main(ticks=1)
     assert "取名 2" in capsys.readouterr().out
+
+
+def test_bots_sit_out_a_paused_season(runner, world, clock, content, monkeypatch):
+    """賽季時鐘暫停（線上架構 8.3）：假人程式這一輪什麼都不做——不補人、不出手、不推時鐘；繼續之後照常補人。"""
+    monkeypatch.setattr(server_bots, "is_online", lambda profile, now: True)
+    assert runner.tick().added == 2  # 兩個陣營各補一位
+    name = _bots()[0].player.name
+    season_time = world.get_season().time
+    world.pause_clock(clock[0])
+    clock[0] += content.config.bot_fill_seconds
+    report = runner.tick()
+    assert (report.online, report.acted, report.added) == (0, 0, 0)
+    assert len(_bots()) == 2
+    assert runner._take_turn(name, clock[0]) is False
+    assert world.get_season().time == season_time
+    world.resume_clock(content, clock[0])
+    assert runner.tick().added == 2
+
+
+def test_a_pause_that_commits_while_the_bot_waited_for_the_fill_lock_adds_no_bots(runner, world, clock, content):
+    """tick 一開頭看到的是沒暫停，之後等補人的行動鎖等到管理者的暫停先寫進去：拿到鎖之後 _fill 自己再看一次，
+    不補人（不然暫停中還會多出兩位假人）。直接呼叫 _fill 就是「拿到鎖之後」那一刻。"""
+    world.pause_clock(clock[0])
+    report = bot_runner.TickReport()
+    runner._fill(clock[0], report)
+    assert report.added == 0 and _bots() == []
+    world.resume_clock(content, clock[0])
+    runner._fill(clock[0], report)
+    assert report.added == 2  # 繼續之後照常補

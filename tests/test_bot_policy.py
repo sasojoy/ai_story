@@ -4,13 +4,15 @@ import pytest
 
 from conftest import walk_to
 from test_bot import armed
+from test_engine import _open_three_move_battle, _warlord_in_battle
 from tianxia import battle_instance, bot, bot_policy, fusion, library, naming, team
 from tianxia.engine import Option
 from tianxia.models import (
-    BattleAct, BattleActionEffect, BattleDef, BattleFaction, BattleOption, BattleOutcome, Effect,
-    FactionDef, Location,
+    MOVES, BattleAct, BattleDef, BattleFaction, BattleOption, BattleOutcome, Effect, FactionDef, Location,
 )
 from tianxia.state import BotProfile
+
+CODES = {"強攻": "strong", "固守": "hold", "奇襲": "raid"}
 
 
 def _install_factions(content):
@@ -27,13 +29,12 @@ def _install_battle(content):
         acts=[
             BattleAct(
                 id="a1", title="初探", text="雙方試探。", goal="推動戰局",
-                options=[BattleOption(text="穩紮穩打", tag="safe"), BattleOption(text="全力進攻", tag="aggressive")],
+                options=[
+                    BattleOption(text=f"{side}{move}", tag=f"{side}_{CODES[move]}", faction=side, move=move)
+                    for side in ("guan", "huang") for move in MOVES
+                ],
             ),
         ],
-        action_tags={
-            "safe": BattleActionEffect(trend_delta=1, neili_damage=5),
-            "aggressive": BattleActionEffect(trend_delta=5, neili_damage=20),
-        },
         outcomes=[BattleOutcome(faction="guan", title="官軍大勝", text="官軍獲勝。")],
         muster_seconds=600, round_seconds=120,
     )
@@ -117,31 +118,154 @@ def test_a_bot_joins_its_own_side_of_a_battle_as_an_ordinary_fighter(content, ga
     assert fighter.faction == "guan" and not fighter.is_bot
 
 
-def _active_battle_with(game, definition, faction):
+def _active_battle_with(game, definition, faction, scores=None):
+    """假人站 faction 這一邊、已經開打；scores 是它加入時快照的每招份量（沒給＝舊資料，每招 0）。"""
     game.state.player.faction = faction
     game.world.start_battle(definition, now=game.now - definition.muster_seconds - 1)  # 集結早就截止：下一次刷新就開打
     name = game.state.player.name
-    game.world.mutate_battle(lambda b: battle_instance.join_faction(b, name, faction, neili_cap=100.0))
+    game.world.mutate_battle(
+        lambda b: battle_instance.join_faction(b, name, faction, neili_cap=300.0, scores=scores)
+    )
     other = "huang" if faction == "guan" else "guan"
-    game.world.mutate_battle(lambda b: battle_instance.join_faction(b, "對手", other, neili_cap=100.0))
+    game.world.mutate_battle(lambda b: battle_instance.join_faction(b, "對手", other, neili_cap=300.0))
 
 
-def test_at_full_strength_a_bot_picks_the_tactic_that_pushes_its_side(content, game):
+def test_at_full_strength_a_bot_picks_the_move_it_is_best_at(content, game):
+    """三招之後假人照自己每招的份量挑（決戰改版 1）：強攻 90、固守 60、奇襲 40，扣血又不大 → 強攻。"""
     _install_factions(content)
     definition = _install_battle(content)
     content.config.bot_strength = 1.0
-    _active_battle_with(game, definition, "guan")  # 官軍是第一方：戰局往上推對官軍有利
+    _active_battle_with(game, definition, "guan", scores={"強攻": 90.0, "固守": 60.0, "奇襲": 40.0})
     bot_policy.take_turn(game, _profile("guan"), random.Random(0))
-    assert game.world.get_battle().round.pending_actions[game.state.player.name] == "aggressive"
+    assert game.world.get_battle().round.pending_actions[game.state.player.name] == "guan_strong"
 
 
-def test_at_full_strength_the_other_side_holds_the_line(content, game):
+def test_at_full_strength_a_bot_without_a_snapshot_holds_the_line(content, game):
+    """沒有快照的假人（舊資料）份量全 0，只剩扣血的差別：損耗最低的固守。"""
     _install_factions(content)
     definition = _install_battle(content)
     content.config.bot_strength = 1.0
     _active_battle_with(game, definition, "huang")
-    bot_policy.take_turn(game, _profile("huang"), random.Random(0))
-    assert game.world.get_battle().round.pending_actions[game.state.player.name] == "safe"
+    name = game.state.player.name
+    for seed in range(12):  # 不是碰巧：換十二顆亂數種子都是固守
+        game.world.mutate_battle(lambda b: b.round.pending_actions.clear())
+        bot_policy.take_turn(game, _profile("huang"), random.Random(seed))
+        assert game.world.get_battle().round.pending_actions[name] == "huang_hold"
+
+
+def test_a_bot_scores_its_best_move_highest(game):
+    battle, definition = _open_three_move_battle(game)
+    name = game.state.player.name
+    game.world.mutate_battle(lambda b: b.participants[name].scores.update({"強攻": 30.0, "固守": 30.0, "奇襲": 90.0}))
+    faction = game.world.get_battle().participants[name].faction
+    scores = {m: bot_policy._battle_score(game, f"act:{faction}_{c}") for m, c in CODES.items()}
+    assert max(scores, key=scores.get) == "奇襲"
+
+
+def test_a_warlord_bot_grabs_when_healthy_and_keeps_when_hurt(game):
+    """決戰改版 5：豪強的兩招也照份量與扣血打分數——血多就搶地盤，血少就保存實力。"""
+    _warlord_in_battle(game)
+    name = game.state.player.name
+    game.world.mutate_battle(lambda b: b.participants[name].scores.update({m: 100.0 for m in MOVES}))  # 不看開局武學的屬性
+    assert bot_policy._battle_score(game, "act:third_grab") > bot_policy._battle_score(game, "act:third_keep")
+    game.world.mutate_battle(lambda b: setattr(b.participants[name], "neili", 40.0))
+    assert bot_policy._battle_score(game, "act:third_keep") > bot_policy._battle_score(game, "act:third_grab")
+
+
+def test_a_warlord_bots_scores_follow_the_tuning_numbers(game):
+    """份量在扣血之前算、保存實力只算一半：搶地盤 100×1.0÷100 − 35÷氣血，保存實力 100×0.5÷100 − 10÷氣血。"""
+    _warlord_in_battle(game)
+    name = game.state.player.name
+    game.world.mutate_battle(lambda b: (
+        b.participants[name].scores.update({m: 100.0 for m in MOVES}),
+        setattr(b.participants[name], "neili_cap", 100.0), setattr(b.participants[name], "neili", 100.0),
+    ))
+    assert abs(bot_policy._battle_score(game, "act:third_grab") - (1.0 - 0.35)) < 1e-9
+    assert abs(bot_policy._battle_score(game, "act:third_keep") - (0.5 - 0.1)) < 1e-9
+
+
+def test_a_warlord_bot_scores_each_move_with_its_own_share_and_its_hurt_condition(game):
+    """搶地盤用奇襲的份量、保存實力用固守的份量（一半），都乘氣血狀態：奇襲 90、固守 30、氣血剩一半（狀態 0.75）。
+    份量全一樣、滿血的測試分不出份量拿錯招或沒乘狀態。"""
+    _warlord_in_battle(game)
+    name = game.state.player.name
+    game.world.mutate_battle(lambda b: (
+        b.participants[name].scores.update({"強攻": 10.0, "固守": 30.0, "奇襲": 90.0}),
+        setattr(b.participants[name], "neili_cap", 100.0), setattr(b.participants[name], "neili", 50.0),
+    ))
+    assert abs(bot_policy._battle_score(game, "act:third_grab") - (90 * 0.75 / 100 - 35 / 50)) < 1e-9  # 0.675 − 0.7
+    assert abs(bot_policy._battle_score(game, "act:third_keep") - (30 * 0.75 * 0.5 / 100 - 10 / 50)) < 1e-9  # 0.1125 − 0.2
+
+
+def test_a_warlord_bots_grab_cost_is_its_own_tuning_number_not_the_raids(game):
+    """搶地盤的扣血是 third_grab_damage、保存實力是 third_keep_damage，不是奇襲與固守的損耗（預設值剛好相同，所以改成不一樣來測）。"""
+    _warlord_in_battle(game)
+    tuning = game.content.config.battle
+    tuning.third_grab_damage, tuning.third_keep_damage = 50.0, 20.0
+    assert tuning.damage["奇襲"] == 35.0 and tuning.damage["固守"] == 15.0
+    name = game.state.player.name
+    game.world.mutate_battle(lambda b: (
+        b.participants[name].scores.update({"奇襲": 100.0, "固守": 100.0}),
+        setattr(b.participants[name], "neili_cap", 100.0), setattr(b.participants[name], "neili", 100.0),
+    ))
+    assert abs(bot_policy._battle_score(game, "act:third_grab") - (1.0 - 50 / 100)) < 1e-9
+    assert abs(bot_policy._battle_score(game, "act:third_keep") - (0.5 - 20 / 100)) < 1e-9
+
+
+def test_a_warlord_bot_takes_a_turn_in_the_battle_and_picks_one_of_its_two_moves(content, game):
+    content.config.bot_strength = 1.0
+    _warlord_in_battle(game)
+    name = game.state.player.name
+    game.world.mutate_battle(lambda b: b.participants[name].scores.update({m: 100.0 for m in MOVES}))
+    bot_policy.take_turn(game, _profile("haoqiang"), random.Random(0))
+    after = game.world.get_battle()  # 場上只有它一個人：出完招這一回合就結算了
+    assert after.round_number == 1 and after.participants[name].last_result == "趁亂搶地盤"  # 滿血：搶地盤
+
+
+def test_an_army_bot_never_scores_the_warlords_moves(game):
+    """兩招只在豪強自己的選單上；官軍的人拿到那個 tag（不會發生）也不打分數。"""
+    battle, definition = _open_three_move_battle(game)
+    assert bot_policy._battle_score(game, f"act:{battle_instance.THIRD_GRAB}") == 0.0
+
+
+def test_a_bot_that_is_nearly_down_prefers_the_cheaper_move(game):
+    """扣血相對剩下的氣血越重、扣分越多：同樣的份量，血少的時候不再挑最傷的強攻。"""
+    battle, definition = _open_three_move_battle(game)
+    name = game.state.player.name
+    game.world.mutate_battle(lambda b: b.participants[name].scores.update({"強攻": 90.0, "固守": 60.0, "奇襲": 40.0}))
+    faction = game.world.get_battle().participants[name].faction
+
+    def best():
+        scores = {m: bot_policy._battle_score(game, f"act:{faction}_{c}") for m, c in CODES.items()}
+        return max(scores, key=scores.get)
+
+    game.world.mutate_battle(lambda b: setattr(b.participants[name], "neili", 300.0))
+    assert best() == "強攻"
+    game.world.mutate_battle(lambda b: setattr(b.participants[name], "neili", 40.0))
+    assert best() == "固守"
+
+
+def test_the_bots_scores_count_how_worn_down_it_is(game):
+    """份量乘氣血狀態（0.5＋0.5×剩的÷上限）：剩一半氣血時，強攻的 100 分只剩 75。少了這個係數，這裡會挑強攻。"""
+    battle, definition = _open_three_move_battle(game)
+    name = game.state.player.name
+    game.world.mutate_battle(lambda b: (
+        b.participants[name].scores.update({"強攻": 100.0, "固守": 0.0, "奇襲": 0.0}),
+        setattr(b.participants[name], "neili_cap", 100.0), setattr(b.participants[name], "neili", 50.0),
+    ))
+    faction = game.world.get_battle().participants[name].faction
+    scores = {m: bot_policy._battle_score(game, f"act:{faction}_{c}") for m, c in CODES.items()}
+    # 乘氣血狀態 0.75：強攻 1.0 × 0.75 − 60/50 ＝ −0.45，固守 0 − 15/50 ＝ −0.3 → 固守；少了這個係數，強攻是 1.0 − 1.2 ＝ −0.2 → 強攻
+    assert abs(scores["強攻"] + 0.45) < 1e-9 and abs(scores["固守"] + 0.3) < 1e-9
+    assert max(scores, key=scores.get) == "固守"
+
+
+def test_a_bot_scores_nothing_for_a_choice_that_is_not_a_move(game):
+    """沒有招的選項（放手一搏、查無此選項）一律 0，不當機；加入戰局還是照舊的高分。"""
+    battle, definition = _open_three_move_battle(game)
+    assert bot_policy._battle_score(game, "act:no_such_tag") == 0.0
+    assert bot_policy._battle_score(game, "join:guan") == bot_policy.JOIN_BATTLE_SCORE
+    assert bot_policy._battle_score(game, "spectate") is None
 
 
 def test_look_after_practices_the_worn_arts_and_never_creates_one(content, game):

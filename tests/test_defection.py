@@ -391,7 +391,7 @@ def test_enlisted_cannot_defect_to_haoqiang_during_the_muster(on):
     assert "defect:haoqiang" not in _ids(game)
     _no_defect(game)
     _go_active(on, game)
-    assert [i for i in _ids(game) if i.startswith("battle:act:")] == ["battle:act:guan_safe", "battle:act:guan_aggressive"]
+    assert [i for i in _ids(game) if i.startswith("battle:act:")] == ["battle:act:guan_strong", "battle:act:guan_hold", "battle:act:guan_raid"]
 
 
 def test_enlisted_cannot_defect_after_leaving_the_region_in_the_active_phase(on):

@@ -151,7 +151,7 @@ def test_recent_news_keeps_the_last_three_days(state, content):
     rumors.append(Rumor(time=3 * DAY, text="沒有地點"))
     rumors.append(Rumor(time=4 * DAY, text="剛剛", location="lake"))
     state.world.time = 4.5 * DAY
-    assert [r.text for r in recent_news(state, "lake")] == ["剛剛", "三天內"]
+    assert [r.text for r in recent_news(state, content, "lake")] == ["剛剛", "三天內"]
 
 
 # ── 敵情 ──────────────────────────────────────────────
