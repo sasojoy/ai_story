@@ -97,6 +97,8 @@
     ordersSeen: false, // 入伍段第一步的 view_orders 送過了嗎（軍令卡真的在畫面上才送，見 watchOrders）；登入、登出清掉
     ordersObs: null, // 盯著軍令卡的 IntersectionObserver（整頁重畫就換一個）
     ordersTimer: null, // 軍令卡進畫面之後的計時（ORDERS_SEEN_MS）；離開畫面就取消
+    ordersVisible: false, // 觀察者最後一次說的：軍令卡（扣掉頂上與底下兩條固定的）至少一半在畫面上嗎
+    ordersRetried: false, // 送不出去、已經補過一次重試了嗎（不連著試）
     pushLive: false, // 伺服器推送連著嗎（見「伺服器推送」那一段）：連著時平常 60 秒才輪詢，沒連就每 10 秒
   };
 
@@ -427,8 +429,11 @@
   // 一畫出來就送的話，引薦人那段話還沒讀就被換成下一步。所以等卡片至少一半進了畫面、停留 ORDERS_SEEN_MS，才送一次 view_orders；
   // 捲走了就重新計時。整頁重畫（輪詢內容一變就會）把 IntersectionObserver 重掛到新的那張卡片上，已經在跑的計時不因為重畫重來。
   // 瀏覽器沒有 IntersectionObserver 時退回「畫出來之後 ORDERS_SEEN_MS」；分頁在背景時計時走完不送、過一輪再看。
-  // 送出去的記在 S.ordersSeen（不重送）；送不出去就還回去，下一次重畫再試；這一步過了就清掉，下一季輪到它再送。
+  // 「在畫面上」不含被固定的兩條蓋住的部分：觀察的範圍扣掉頂上的狀態列（#top）與底部的分頁列（.tabs）的高度；設定抽屜開著時不看。
+  // 送出去的記在 S.ordersSeen（不重送）；送不出去就還回去，隔 ORDERS_RETRY_MS 再試一次（api 每次失敗都跳提示，不連著試；
+  // 再失敗就等下一次重畫或捲動）；這一步過了就清掉，下一季輪到它再送。
   const ORDERS_SEEN_MS = 1500;
+  const ORDERS_RETRY_MS = 5000;
   function stopOrdersTimer() {
     clearTimeout(S.ordersTimer);
     S.ordersTimer = null;
@@ -438,14 +443,20 @@
     S.ordersObs = null;
     stopOrdersTimer();
     S.ordersSeen = false;
+    S.ordersVisible = false;
+    S.ordersRetried = false;
   }
   function sendOrdersSeen() {
     S.ordersTimer = null;
     const g = S.main && S.main.guide;
     if (!g || g.key !== "r2_briefing" || S.ordersSeen) return;
+    if (S.ordersObs && !S.ordersVisible) return; // 計時走完時觀察者說卡片已經不在畫面上了：不送
     if (document.hidden) { S.ordersTimer = setTimeout(sendOrdersSeen, ORDERS_SEEN_MS); return; }
     S.ordersSeen = true;
-    api("/api/do/view_orders", {}).then((r) => applyMain(r.main)).catch(() => { S.ordersSeen = false; });
+    api("/api/do/view_orders", {}).then((r) => { S.ordersRetried = false; applyMain(r.main); }).catch(() => {
+      S.ordersSeen = false;
+      if (!S.ordersRetried && S.ordersTimer == null) { S.ordersRetried = true; S.ordersTimer = setTimeout(sendOrdersSeen, ORDERS_RETRY_MS); }
+    });
   }
   function watchOrders() {
     if (S.ordersObs) S.ordersObs.disconnect(); // 整頁重畫換了卡片：舊的 observer 看的是已經不在頁面上的那一張
@@ -453,15 +464,19 @@
     const g = S.main && S.main.guide;
     const first = !!g && g.key === "r2_briefing";
     if (!first) S.ordersSeen = false;
-    const card = first && !S.ordersSeen && S.tab === "jianghu" ? document.querySelector("details.orders") : null;
+    const card = first && !S.ordersSeen && !S.sheet && S.tab === "jianghu" ? document.querySelector("details.orders") : null;
     if (!card) { stopOrdersTimer(); return; }
     const arm = () => { if (S.ordersTimer == null) S.ordersTimer = setTimeout(sendOrdersSeen, ORDERS_SEEN_MS); };
     if (typeof IntersectionObserver === "undefined") { arm(); return; }
-    S.ordersObs = new IntersectionObserver((entries) => {
+    const inset = (sel) => { const bar = document.querySelector(sel); const px = bar ? Math.ceil(bar.getBoundingClientRect().height) : 0; return px ? `-${px}px` : "0px"; };
+    const obs = new IntersectionObserver((entries) => {
+      if (S.ordersObs !== obs) return; // 已經換掉的觀察者晚到的回報（disconnect 不會清掉排好的）：不管
       const e = entries[entries.length - 1];
-      if (e.isIntersecting && e.intersectionRatio >= 0.5) arm(); else stopOrdersTimer();
-    }, { threshold: 0.5 });
-    S.ordersObs.observe(card);
+      S.ordersVisible = !!e.isIntersecting && e.intersectionRatio >= 0.5;
+      if (S.ordersVisible) arm(); else stopOrdersTimer();
+    }, { threshold: 0.5, rootMargin: `${inset("#top")} 0px ${inset(".tabs")} 0px` });
+    S.ordersObs = obs;
+    obs.observe(card);
   }
 
   function afterPage() {
@@ -951,8 +966,9 @@
     const btn = g.end ? '<button class="btn small" data-act="guide-ack">知道了</button>'
       : '<button class="linkish" data-act="guide-shut">收起</button>';
     // 長的那幾步（軍令兩步一百多字）先露三行、點了看全文，不把行動與選項擠出第一屏（畫面批次審查 I3）
-    // 序章裡師父的話不切（設計 6.2「話不會被切掉」，T7 審查 I1）：不收成三行；段落照 \n\n 排（樣式表 pre-line）
-    const full = !!pro() || S.guideFull === g.text;
+    // 序章裡師父的話不切（設計 6.2「話不會被切掉」，T7 審查 I1）：不收成三行；段落照 \n\n 排（樣式表 pre-line）。
+    // 入伍段引薦人的話也一樣（設計 6.2 寫的就是「序章與入伍段」）：伺服器給 full，不收；兩段以上的那一步另外給 paged（照上面的分頁）
+    const full = !!pro() || !!g.full || S.guideFull === g.text;
     const pages = guidePages(g), page = guidePage(g);
     const scene = g.scene && page === 0 ? `<p class="guide-scene">${esc(g.scene)}</p>` : ""; // 序章的旁白（「斷眉來了……」）排在話的前面（分頁的步驟只在第一頁）
     const next = page < pages.length - 1 ? '<button class="linkish guide-next" data-act="guide-next">下一段 ▸</button>' : "";

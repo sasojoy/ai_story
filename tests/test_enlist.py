@@ -337,6 +337,28 @@ def test_the_recruiter_box_collapses_while_an_event_is_pending(enlisting):
     assert game.guide_box()["end"] and game.guide_box()["pending"] is False
 
 
+def test_every_enlistment_box_says_it_is_never_cut_and_only_the_two_paragraph_step_is_paged(enlisting):
+    """G2-W1（設計 6.2 對序章與入伍段：「話不會被切掉」）：引薦人的每個框都帶 full（網頁不套 FB-076 的三行收合）；入營＋看戰局兩段的第一步
+    另外帶 paged（網頁照空一行分頁、一次一段，指示在最後一頁，跟師父的出師那一步同一個做法）。只有這兩個鍵：說書人的框不動。"""
+    game = _joined(enlisting)
+    box = game.guide_box()
+    assert box["full"] is True and box["paged"] is True and box["text"].count("\n\n") == 1
+    game.view_orders()
+    box = game.guide_box()
+    assert box["full"] is True and "paged" not in box  # 第二步只有一句
+    event = next(iter(enlisting.events.values()))
+    game.state.pending_event = event.id
+    box = game.guide_box()  # 事件待處理：換成「先把眼前的…了結」（一行），網頁照舊預設收成一行；仍然不切
+    assert box["pending"] is True and box["full"] is True and "paged" not in box
+    game.state.pending_event = None
+    game.state.player.enlist_step, game.state.player.enlist_end = 2, True
+    box = game.guide_box()
+    assert box["end"] is True and box["full"] is True and "paged" not in box
+    narrator = _game(enlisting, at="changshe")
+    narrator.state.player.tutorial_step = 1
+    assert "full" not in narrator.guide_box() and "paged" not in narrator.guide_box()
+
+
 def test_the_recruiters_hint_has_no_doubled_name(enlisting):
     """F9：lines 不帶名字——「下一步」寫「（老石）看看本週軍令」，不是「（老石）老石：…」。"""
     game = _joined(enlisting)

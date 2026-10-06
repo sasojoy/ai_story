@@ -12,6 +12,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.test_orders import on, real  # noqa: F401（fixture：真內容、第一季開著）
+
 NODE = shutil.which("node")
 APP = Path(__file__).parent.parent / "web" / "app.js"
 DRIVER = r"""
@@ -23,7 +25,7 @@ const b = src.indexOf("\n  }\n", src.indexOf("\n  function watchOrders(")) + 4;
 if (a < 0 || b < 4) throw new Error("app.js 裡找不到入伍段的那一段（ORDERS_SEEN_MS … watchOrders）");
 
 // 假環境：虛擬時鐘的計時器、記下來的 IntersectionObserver、記下來的 api／applyMain 呼叫
-const env = { now: 0, timers: new Map(), nextId: 1, observers: [], calls: [], applied: [], card: { id: "card" }, hidden: false, apiFail: false };
+const env = { now: 0, timers: new Map(), nextId: 1, observers: [], calls: [], applied: [], card: { id: "card" }, hidden: false, apiFail: false, topH: 110, tabsH: 56 };
 const fakeSetTimeout = (fn, ms) => { const id = env.nextId++; env.timers.set(id, { at: env.now + ms, fn }); return id; };
 const fakeClearTimeout = (id) => { env.timers.delete(id); };
 env.tick = (ms) => {
@@ -46,24 +48,101 @@ class FakeObserver {
 env.live = () => env.observers.filter((o) => o.live);
 const documentFake = {
   get hidden() { return env.hidden; },
-  querySelector: (sel) => (sel === "details.orders" ? env.card : null),
+  // 固定的兩條：頂上的狀態列（#top，sticky）與底部分頁列（.tabs，fixed）；它們蓋住的部分不算「在畫面上」
+  querySelector: (sel) => (sel === "details.orders" ? env.card
+    : sel === "#top" ? { getBoundingClientRect: () => ({ height: env.topH }) }
+    : sel === ".tabs" ? { getBoundingClientRect: () => ({ height: env.tabsH }) } : null),
 };
 const api = (path, body) => {
   env.calls.push([path, body]);
   return env.apiFail ? Promise.reject(new Error("離線")) : Promise.resolve({ main: { from: "view_orders" } });
 };
 const applyMain = (m) => { env.applied.push(m); };
-const S = { tab: "jianghu", main: { guide: { key: "r2_briefing", end: false }, orders: [{ id: "o" }] }, ordersSeen: false, ordersObs: null, ordersTimer: null, ordersOn: false };
+const S = { tab: "jianghu", sheet: false, main: { guide: { key: "r2_briefing", end: false }, orders: [{ id: "o" }] }, ordersSeen: false, ordersObs: null, ordersTimer: null, ordersVisible: false, ordersRetried: false };
 const useObserver = input.noObserver ? undefined : FakeObserver;
 const H = new Function(
   "S", "document", "IntersectionObserver", "setTimeout", "clearTimeout", "api", "applyMain",
-  src.slice(a, b) + "\nreturn { watchOrders, resetOrdersWatch, ORDERS_SEEN_MS };",
+  src.slice(a, b) + "\nreturn { watchOrders, resetOrdersWatch, ORDERS_SEEN_MS, ORDERS_RETRY_MS };",
 )(S, documentFake, useObserver, fakeSetTimeout, fakeClearTimeout, api, applyMain);
 const tick = async (ms) => { env.tick(ms); await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); };
 Promise.resolve(new Function("H", "S", "env", "tick", "return (async () => {" + input.script + "})()")(H, S, env, tick)).then((out) => {
   process.stdout.write(JSON.stringify(out === undefined ? null : out));
 });
 """
+
+
+GUIDE_DRIVER = r"""
+const fs = require("fs");
+const input = JSON.parse(fs.readFileSync(0, "utf8"));
+const src = fs.readFileSync(input.app, "utf8").replace(/\r\n/g, "\n");
+const a = src.indexOf("\n  const GUIDE_KEY");
+const b = src.indexOf("\n  }\n", src.indexOf("\n  function guideHtml(")) + 4;
+if (a < 0 || b < 4) throw new Error("app.js 裡找不到說書人的那一段");
+const store = {};
+globalThis.localStorage = { getItem: (k) => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); }, removeItem: (k) => { delete store[k]; } };
+const S = { guideRoad: null, guideFull: null, guidePage: null };
+const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+const pro = () => null; // 序章之外
+const H = new Function("S", "esc", "pro", src.slice(a, b) + "\nreturn { guideHtml, nextGuidePage, openGuide };")(S, esc, pro);
+process.stdout.write(JSON.stringify(new Function("H", "S", "boxes", input.script)(H, S, input.boxes)));
+"""
+
+
+def run_guide_js(script, boxes):
+    if NODE is None:
+        pytest.skip("沒有 node")
+    done = subprocess.run(
+        [NODE, "-e", GUIDE_DRIVER], input=json.dumps({"app": str(APP), "script": script, "boxes": boxes}),
+        capture_output=True, text=True, encoding="utf-8", timeout=60,
+    )
+    assert done.returncode == 0, done.stderr
+    return json.loads(done.stdout)
+
+
+def _real_boxes(on):
+    """真內容、真的引擎：長社投靠官軍之後入伍段三個框（r2、r3、結尾）與一個事件待處理的 r2。"""
+    from tests.test_enlist import _joined
+    from tests.test_orders import _order, _win
+
+    game = _joined(on)
+    boxes = {"r2": game.guide_box()}
+    game.state.pending_event = next(iter(on.events))
+    boxes["pending"] = game.guide_box()
+    game.state.pending_event = None
+    game.view_orders()
+    boxes["r3"] = game.guide_box()
+    _order(game, "siege", "guan", front="yingru")
+    with _win():
+        game.choose("act:train")
+    boxes["end"] = game.guide_box()
+    return boxes
+
+
+def test_the_recruiters_box_is_never_clamped_and_the_first_step_is_paged_by_paragraph(on):
+    """G2-W1（設計 6.2「話不會被切掉」）：序章之外，說書人的框長話收成三行（FB-076）；入伍段的框不收：r2 一次一段、按「下一段 ▸」，
+    指示（「…在『江湖』頁行動列底下，自己挑一道」）在最後一頁；r3 與結尾整段都在。真的引擎給的框、真的 app.js 畫。"""
+    from tianxia import enlist  # noqa: F401（fixture 先把入伍段內容放好）
+
+    boxes = _real_boxes(on)
+    got = run_guide_js("""
+      const html = (g) => H.guideHtml(g, false);
+      const r2 = boxes.r2, first = html(r2);
+      H.nextGuidePage(r2);
+      const second = html(r2);
+      const long = { speaker: "說書人", key: "s2", scene: "", text: "長".repeat(120), line: "", done: [], end: false, pending: false };
+      return {
+        first, second, r3: html(boxes.r3), end: html(boxes.end),
+        narrator: html(long),                              // 一般的長話：照舊收成三行
+        pendingShut: html(boxes.pending).includes("guide-line"),   // 事件待處理：預設收成一行，不動
+      };
+    """, boxes)
+    assert "clamp" not in got["first"] and "clamp" not in got["second"] and "clamp" not in got["r3"] and "clamp" not in got["end"]
+    assert "一個跛腳的老兵" in got["first"] and "下一段 ▸" in got["first"] and "上頭每週發幾道軍令" not in got["first"]
+    assert "上頭每週發幾道軍令，在『江湖』頁行動列底下，自己挑一道。" in got["second"] and "下一段" not in got["second"]
+    assert "一個跛腳的老兵" not in got["second"]  # 一次一段
+    assert "挑一道軍令，出一次力" in got["r3"] and "知道了" in got["end"] and "你剛剛那一下，也算在裡頭。" in got["end"]
+    assert "guide-text clamp" in got["narrator"]  # FB-076：不是入伍段的框不動
+    assert got["pendingShut"] is True
 
 
 def run_js(script, no_observer=False):
@@ -176,9 +255,7 @@ def test_it_is_sent_once_and_a_failed_send_may_be_tried_again():
       await tick(1500);
       const failed = { calls: env.calls.length, seen: S.ordersSeen };   // 送不出去：不算看過
       env.apiFail = false;
-      H.watchOrders();
-      env.live()[0].show(1);
-      await tick(1500);
+      await tick(H.ORDERS_RETRY_MS);                                    // 過一陣子自己再送一次（細節見重試的那個測試）
       const sent = { calls: env.calls.length, seen: S.ordersSeen };
       H.watchOrders();                                                  // 看過了：不再開 observer、不再送
       const again = env.live().length;
@@ -199,6 +276,148 @@ def test_moving_on_to_another_step_clears_the_seen_flag_for_the_next_time():
       return { reset, watching: env.live().length };
     """)
     assert got == {"reset": False, "watching": 1}
+
+
+def test_the_fixed_bars_do_not_count_as_screen():
+    """卡片躲在底部分頁列（或頂上的狀態列）後面不算在畫面上：觀察的範圍扣掉這兩條的高度；設定抽屜開著時整個不看。"""
+    got = run_js("""
+      H.watchOrders();
+      const margin = env.live()[0].opts.rootMargin;
+      S.sheet = true;                                     // 設定抽屜蓋在上面
+      H.watchOrders();
+      const sheet = env.live().length;
+      S.sheet = false;
+      env.topH = 0; env.tabsH = 0;                         // 兩條都沒有（還沒畫、狀態列藏著）：不扣
+      H.watchOrders();
+      return { margin, sheet, bare: env.live()[0].opts.rootMargin };
+    """)
+    assert got == {"margin": "-110px 0px -56px 0px", "sheet": 0, "bare": "0px 0px 0px 0px"}
+
+
+def test_opening_the_settings_sheet_mid_countdown_cancels_the_wait():
+    got = run_js("""
+      H.watchOrders();
+      env.live()[0].show(1);
+      await tick(1000);
+      S.sheet = true;
+      H.watchOrders();                                    // 抽屜一開整頁重畫
+      await tick(5000);
+      return env.calls.length;
+    """)
+    assert got == 0
+
+
+def test_a_late_callback_from_a_replaced_observer_is_ignored():
+    """disconnect 不會清掉已經排好的回報：舊觀察者晚到的回報不能替已經換掉的卡片開始或取消計時。"""
+    got = run_js("""
+      H.watchOrders();
+      const old = env.live()[0];
+      H.watchOrders();                                    // 重畫：換了一個觀察者
+      env.live()[0].show(0);                              // 新的說：不在畫面上
+      old.show(1);                                        // 舊的晚到一個「在畫面上」
+      await tick(5000);
+      const stale = env.calls.length;
+      env.live()[0].show(1);                              // 新的說在畫面上、計時開始
+      old.show(0);                                        // 舊的晚到一個「離開了」：不能取消它
+      await tick(1500);
+      return { stale, calls: env.calls.length };
+    """)
+    assert got == {"stale": 0, "calls": 1}
+
+
+def test_a_failed_send_is_tried_once_more_after_a_few_seconds_and_not_forever():
+    got = run_js("""
+      env.apiFail = true;
+      H.watchOrders();
+      env.live()[0].show(1);
+      await tick(1500);
+      const first = env.calls.length;
+      await tick(H.ORDERS_RETRY_MS - 1);
+      const early = env.calls.length;
+      await tick(1);                                      // 一次重試（不等重畫）
+      const second = env.calls.length;
+      await tick(120000);                                 // 又失敗了：api 每次失敗都跳提示，不連著試；等下一次重畫或捲動
+      const later = env.calls.length;
+      env.apiFail = false;
+      H.watchOrders();
+      env.live()[0].show(1);
+      await tick(1500);
+      return { first, early, second, later, healed: env.calls.length, seen: S.ordersSeen, ms: H.ORDERS_RETRY_MS };
+    """)
+    assert got["ms"] >= 3000 and got["ms"] <= 10000
+    assert (got["first"], got["early"], got["second"], got["later"], got["healed"], got["seen"]) == (1, 1, 2, 2, 3, True)
+
+
+def test_the_retry_does_not_send_once_the_card_is_gone_or_the_step_has_moved_on():
+    got = run_js("""
+      env.apiFail = true;
+      H.watchOrders();
+      env.live()[0].show(1);
+      await tick(1500);                                   // 失敗，重試在 ORDERS_RETRY_MS 之後
+      env.card = null;
+      H.watchOrders();                                    // 卡片不見了：計時收掉
+      await tick(60000);
+      return env.calls.length;
+    """)
+    assert got == 1
+
+
+def test_switching_tab_or_losing_the_card_mid_countdown_cancels_the_wait():
+    got = run_js("""
+      H.watchOrders();
+      env.live()[0].show(1);
+      await tick(1000);
+      S.tab = "practice";                                 // 切到修練頁：軍令卡在江湖頁，看不到了
+      H.watchOrders();
+      await tick(5000);
+      const tab = env.calls.length;
+      S.tab = "jianghu";
+      H.watchOrders();
+      env.live()[0].show(1);
+      await tick(1000);
+      env.card = null;                                    // 卡片被拿掉了（這一週還沒發令）
+      H.watchOrders();
+      await tick(5000);
+      return { tab, card: env.calls.length };
+    """)
+    assert got == {"tab": 0, "card": 0}
+
+
+def test_the_timer_does_not_send_if_the_observer_last_said_the_card_is_off_screen():
+    """白箱：計時走完的那一刻，觀察者最後一次的說法是「不在畫面上」就不送（正常路徑離開畫面時計時早就收掉了，這是多一道保險）。"""
+    got = run_js("""
+      H.watchOrders();
+      env.live()[0].show(1);
+      S.ordersVisible = false;
+      await tick(1500);
+      return env.calls.length;
+    """)
+    assert got == 0
+
+
+def test_the_next_page_button_leaves_no_gap_above_it():
+    """375×812 量過（長社投靠官軍、剛剛卡片是「投靠官軍」）：入伍段第一步第一頁，「下一段 ▸」上面留 4px 的話行動列下緣是 757，碰到
+    分頁列（756）；不留是 753。這是量出來的數字，改樣式表時要重量。"""
+    css = (APP.parent / "style.css").read_text(encoding="utf-8")
+    rule = next(line for line in css.splitlines() if line.startswith(".guide-next {"))
+    assert "margin: 0 0 0 auto" in rule
+
+
+def test_the_timer_rechecks_the_box_and_the_seen_flag_when_it_fires():
+    got = run_js("""
+      H.watchOrders();
+      env.live()[0].show(1);
+      S.main.guide = null;                                // 計時還沒走完框就沒了（略過）：不送
+      await tick(1500);
+      const gone = env.calls.length;
+      S.main.guide = { key: "r2_briefing", end: false };
+      H.watchOrders();
+      env.live()[0].show(1);
+      S.ordersSeen = true;                                // 別的地方已經送了：不重送
+      await tick(1500);
+      return { gone, seen: env.calls.length };
+    """)
+    assert got == {"gone": 0, "seen": 0}
 
 
 def test_a_hidden_tab_does_not_count_and_resetting_stops_everything():

@@ -99,7 +99,10 @@ def box(state: GameState, content: Content) -> dict | None:
     """入伍段的對話框：進行中是這一步的話（第一步前面接入營那一段）；剛走完是結尾、等「知道了」。其他是 None。
     key 是這一步的 id（結尾是 "enlist_end"），跟說書人的框同一個欄位（FB-076：網頁記收起記的是它）；
     眼前有事件還沒了結時話換成「先把眼前的「…」了結」、pending 標 True、收起來那一行送空字串（跟說書人的框一樣，FB-063／FB-076，
-    網頁預設把這一句收成一行）；結尾永遠是 False。"""
+    網頁預設把這一句收成一行）；結尾永遠是 False。
+    full：引薦人的話不被切掉（設計 6.2 對序章與入伍段：「話不會被切掉」）——網頁不套說書人那種長話收成三行（FB-076）；每個框都帶。
+    paged：入營＋看戰局那種兩段以上的步驟，網頁照空一行分頁、一次一段（跟師父的出師那一步同一個做法，指示在最後一頁），不然兩段放下去
+    行動列就被擠到分頁列底下（375×812 量過）；只有分頁的才帶這個鍵（跟說書人的框一樣）。"""
     from .guide import pending_line
 
     who = recruiter(state, content)
@@ -109,15 +112,18 @@ def box(state: GameState, content: Content) -> dict | None:
     if active(state, content):
         i = p.enlist_step
         blocked = pending_line(state, content)
-        text = "\n\n".join(_texts(who, i))
-        return {
-            "speaker": who.name, "key": _steps(content)[i].id, "scene": "", "text": blocked or text,
+        paragraphs = _texts(who, i)
+        box = {
+            "speaker": who.name, "key": _steps(content)[i].id, "scene": "", "text": blocked or "\n\n".join(paragraphs),
             "line": "" if blocked else (who.lines[i] if i < len(who.lines) else ""),
-            "done": list(p.guide_done), "end": False, "pending": blocked is not None,
+            "done": list(p.guide_done), "end": False, "pending": blocked is not None, "full": True,
         }
+        if len(paragraphs) > 1 and blocked is None:
+            box["paged"] = True
+        return box
     if p.enlist_end:
         return {
             "speaker": who.name, "key": "enlist_end", "scene": "", "text": who.done, "line": "", "done": list(p.guide_done),
-            "end": True, "pending": False,
+            "end": True, "pending": False, "full": True,
         }
     return None
