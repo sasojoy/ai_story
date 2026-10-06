@@ -45,7 +45,7 @@ from .sqlite_world import open_world
 from .state import PLAYER, BattleRecord, Convoy, GameState, JournalEntry, Journey, Rumor, WorldState, new_game_state
 from .world import (
     _season_vehicle, advance_world_state, check_thresholds, end_season, fire_by_id, open_showdown, open_waiting_showdown,
-    settle_season_start, showdown_battle, showdown_key, sim_tick, start_pending_battle,
+    resume_season_clock, settle_season_start, showdown_battle, showdown_key, sim_tick, start_pending_battle,
 )
 from .world_state import WorldStateStore, season_length_days
 
@@ -84,6 +84,17 @@ class TollFacts:
 LOW_HP_RATIO = 0.3  # 開打前氣血剩上限的三成以下（含）算「氣血見底」：厚的那一句「氣血見底，……硬撐」（battlelog.LOW_HP_MARKS）才挑得到
 FREE_TEXT_OPTION = "choice:free"  # 事件的「隨口應對」：按下去只是叫出輸入框，真正送出走 free_text_request／answer_event
 BIG_FIGHT_WAIT = "兩人對峙……"  # 大場面按下去、等模型判讀時按鈕上的字（武學與成長設計 8.3）
+# 賽季時鐘暫停（線上架構設計第四節、8.3）：選單上那一顆灰的，伺服器擋動作也回這一句（server._refuse_while_paused）。待 S1／joy 潤
+PAUSED_TEXT = "賽季暫停中（停機維護）：這段時間不能行動，畫面照常可看"
+PAUSE_LINE = (  # 待 S1／joy 潤
+    "賽季時鐘停了：季的時間不走、決戰不推，全服暫時不能行動，畫面照常可看；"
+    "排好的決戰繼續之後照原本的時間開。做完記得按「繼續」。"
+)
+RESUME_LINE = (  # 待 S1／joy 潤
+    "賽季時鐘接著走了（停了 {minutes} 分鐘）：這一段不算進賽季，季末往後延一樣長；"
+    "排好的決戰照原本的時間開，時間在暫停裡過了的現在就開始集結。"
+)
+PAUSED_REFUSAL = "（賽季時鐘暫停中，先按「繼續」。）"  # 暫停中的管理者動作；待 S1／joy 潤
 # 等模型判讀的時候選項沒了（另一個分頁把人帶走、事件被了結、體力花光）：這一仗不打，回這一句話代替一句看不出所以然的「無法這麼做」
 FIGHT_LEFT = "你離開了，這一仗沒打成。"
 FIGHT_CHANGED = "情勢變了，這一仗沒打成。"
@@ -373,6 +384,8 @@ class Game:
         籌備中、休季時共用賽季不動，只推進玩家自己的部分。推進途中跨過開戰門檻的戰鬥，
         存回之後才開（見 world.start_pending_battle），再拉回最新的共用賽季。在路上時，同 sync 補算
         抵達時間已經到了的站（見 _arrivals）。"""
+        if self.world.paused_at() is not None:  # 管理者的快轉：時鐘停著時不推，先按「繼續」
+            return self._log(["（賽季時鐘暫停中，不能快轉；先按「繼續」。）"])  # 待 S1／joy 潤
         self._stamp_join()  # 同 sync：推進之前先記下加入的那一刻（沒同步過就直接快轉的測試與整季機器人）
         msgs: list[str] = []
         if self.world.season_phase() == "running":
@@ -427,6 +440,8 @@ class Game:
         """tick 照 _battle_status 的規則往下傳：預設 True，這個呼叫順便把全服戰鬥追趕到現實時間；
         只想讀選單、不該推進戰鬥的呼叫端（dialogue_request）傳 False——一次請求只能推進一次。"""
         battle_status = self._battle_status(tick=tick)
+        if self.world.paused_at() is not None:  # 賽季時鐘暫停（線上架構 8.3「擋住所有動作」）：選單只剩一顆灰的
+            return [Option(id="season:paused", label=PAUSED_TEXT, enabled=False)]
         if battle_status is not None and not self._watching_battle(*battle_status):
             battle, definition = battle_status
             if battle.phase == "muster":
@@ -1730,7 +1745,7 @@ class Game:
         definition = self.content.battles.get(raw.battle_id)
         if definition is None:
             return None
-        if not tick:
+        if not tick or self.world.paused_at() is not None:  # 暫停中只讀：集結截止、回合逾時、補位、結算都等繼續之後
             return None if raw.phase == "ended" else (raw, definition)
         was_ended = raw.phase == "ended"
         battle, _ = self._run_battle_tick(definition)
@@ -2113,7 +2128,8 @@ class Game:
         watching = self._watching_battle(battle, definition)
         watch_line = self._watch_line(battle, definition)
         if battle.phase == "muster":
-            remaining = max(0, int(battle.muster_deadline_real - self.now))
+            paused = self.world.paused_at()  # 暫停中集結不倒數：停在按下暫停那一刻剩下的
+            remaining = max(0, int(battle.muster_deadline_real - (self.now if paused is None else paused)))
             left = f"{remaining // 60} 分 {remaining % 60} 秒"
             if watching:
                 return f"{header}\n\n集結中，還剩現實 {left}。{watch_line}"
@@ -2190,6 +2206,8 @@ class Game:
         負責先追趕一次，不然集結剛好逾時的那一刻送出的行動會在 submit_action() 裡被
         「battle.phase 還是 muster」悄悄吃掉（見那次遇到的真實 bug）。
         成功率的評分在行動鎖內（server.py 的 battle_text 走 act），所以用 _quick_client 的短逾時複本；評不到就是保底值。"""
+        if self.world.paused_at() is not None:  # 不走 choose()：暫停中自己擋，不然送出去會把這一回合結算掉
+            return [f"（{PAUSED_TEXT}。）"]
         status = self._battle_status()
         if status is None:
             return ["（此刻無法這麼做。）"]
@@ -3475,6 +3493,8 @@ class Game:
             return self._log(["（只有管理者能收季。）"])
         if self.world.season_phase() != "running":
             return self._log(["（賽季不在進行中，沒有可以收的。）"])
+        if self.world.paused_at() is not None:
+            return self._log([PAUSED_REFUSAL])
         msgs: list[str] = []
         self.world.mutate_season(
             lambda s: msgs.extend(end_season(_season_vehicle(self.content, s), self.content, self.world))
@@ -3507,12 +3527,47 @@ class Game:
         self._reconcile_season()
         return self._log([f"══ 第 {self.world.get_season_number()} 季開始 ══"] + self._settle_season_start())
 
+    def admin_pause_clock(self, now: float) -> list[str]:
+        """管理者暫停賽季時鐘（線上架構設計第四節、8.3：公告停機時賽季時鐘暫停，季末跟著往後延）：只在進行中有效。
+        暫停中季的時間不走、決戰不推、玩家不能行動、假人不出手、不能快轉，別的管理者動作也先擋著；畫面照常可看。
+        停機前按，開回來按「繼續」（主機端也可以用 scripts/season_clock.py）。"""
+        if not self.is_admin():
+            return self._log(["（只有管理者能暫停賽季。）"])  # 待 S1／joy 潤
+        if self.world.season_phase() != "running":
+            return self._log(["（賽季不在進行中，沒有時鐘可以停。）"])  # 待 S1／joy 潤
+        if not self.world.pause_clock(now):
+            return self._log(["（賽季時鐘已經停著了。）"])  # 待 S1／joy 潤
+        self._write("暫停賽季", [PAUSE_LINE], tag="管理者")
+        return self._log([PAUSE_LINE])
+
+    def admin_resume_clock(self, now: float) -> list[str]:
+        """管理者讓賽季時鐘繼續走：停的這一段不算進賽季、季末往後延，進行中的決戰剩下的時間不變；排好、還沒開的決戰照原本的
+        現實時間開（企劃者 2026-10-06 定 B3），原本的時間落在暫停裡的這一刻就開集結（B11；另一場還在打就排隊）。
+        繼續、補算、開集結三步都在 world.resume_season_clock（順序只寫在那一個地方，主機端腳本與模擬也走它）；
+        這裡把回傳的訊息（繼續的那一行、補算的、集結號角）寫進管理者自己的江湖紀錄。"""
+        if not self.is_admin():
+            return self._log(["（只有管理者能讓賽季繼續。）"])  # 待 S1／joy 潤
+        msgs = resume_season_clock(self.world, self.content, now, self.rng, RESUME_LINE)
+        if msgs is None:
+            return self._log(["（賽季時鐘沒有暫停。）"])  # 待 S1／joy 潤
+        self.state.world = self.world.get_season()
+        self._deliver_big_events()  # 補算結算的大事，管理者自己的江湖紀錄馬上補上（別人下次同步補）
+        self._write("繼續賽季", self._without_timetable(msgs), tag="管理者")
+        return self._log(msgs)
+
+    def paused_minutes(self) -> int | None:
+        """賽季時鐘停了幾分鐘（照 Game.now）；沒有暫停是 None。江湖頁與設定頁用（server.main_view 的 paused）。"""
+        at = self.world.paused_at()
+        return None if at is None else int(max(0.0, self.now - at) // 60)
+
     def _admin_refusal(self, action: str) -> list[str] | None:
         """管理者觸發的共同檢查：不是管理者、或賽季沒有在進行，回傳要顯示的拒絕訊息；可以做就回傳 None。"""
         if not self.is_admin():
             return [f"（只有管理者能{action}。）"]
         if self.world.season_phase() != "running":
             return ["（賽季沒有在進行，無法觸發。）"]
+        if self.world.paused_at() is not None:  # 開戰、觸發、推動、排時間、跳到下一件、救場：都等「繼續」之後
+            return [PAUSED_REFUSAL]
         return None
 
     def admin_battles(self) -> list[BattleDef]:

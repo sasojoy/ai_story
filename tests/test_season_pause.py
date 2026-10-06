@@ -4,8 +4,10 @@ import random
 
 import pytest
 
-from conftest import install_season_one, install_showdowns
+from conftest import at, install_season_one, install_showdowns
+from test_engine import _install_battle_def, _settle_without_fighters, _showdown_game, _to_showdown
 from tianxia import calendar, database
+from tianxia.engine import Game
 from tianxia.models import BattleAct, BattleActionEffect, BattleDef, BattleFaction, BattleOption, BattleOutcome
 from tianxia.sqlite_world import open_world
 from tianxia.state import TimelineResult
@@ -339,11 +341,9 @@ def test_a_showdown_that_is_already_waiting_open_or_settled_is_left_alone(conten
 
 
 def test_the_scheduler_tick_does_not_move_a_paused_season(store, content):
-    """預檢 F1：伺服器排程（Game.world_tick）暫停中什麼都不推——季的時間不走、再久也不收季；繼續之後從停的那一刻接著走。
+    """伺服器排程（Game.world_tick）暫停中什麼都不推——季的時間不走、再久也不收季；繼續之後從停的那一刻接著走。
     排程走的就是 catch_up_season 這個關口（暫停中不推、對時點不動）。打到一半的決戰在排程那一路的逾時看的是另一個關口
-    （Game._battle_status），它的暫停檢查與測試在 Task 3。"""
-    from tianxia.engine import Game  # 區域 import：Task 3 會改上面的 import 區塊
-
+    （Game._battle_status），見下面 test_the_scheduler_tick_waits_out_the_pause。"""
     ticker = Game.for_world(content, store, rng=random.Random(0))
     ticker.world_tick(1000.0)  # 記下時鐘
     ticker.world_tick(1600.0)
@@ -372,3 +372,254 @@ def test_a_season_that_opens_or_turns_over_starts_unpaused(content):
     store.mutate(lambda s: setattr(s, "paused_at", 456.0))
     assert store.next_season(content, 2000.0)
     assert store.paused_at() is None and store.season_phase() == "running"
+
+
+# ── Task 3：引擎（選單、決戰、快轉、管理者）────────────────────────
+
+
+def test_the_admin_pauses_and_resumes_the_season_clock(content, world):
+    """管理者按「暫停」：選單只剩一顆灰的、玩家什麼都做不了、季的時間不走、不能快轉，其他管理者動作也先擋著；
+    按「繼續」：停的那兩個鐘頭不算進賽季。不是管理者的按不動。"""
+    content.config.admins = ["掌門"]
+    boss = Game.new(content, "掌門", rng=random.Random(0), world=world)
+    other = Game.new(content, "路人", rng=random.Random(1), world=world)
+    boss.sync(1000.0)
+    assert "只有管理者" in other.admin_pause_clock(1000.0)[0]
+    assert "賽季時鐘停了" in boss.admin_pause_clock(1000.0)[0]
+    assert world.paused_at() == 1000.0
+    assert "已經停著" in boss.admin_pause_clock(1100.0)[0]
+    boss.sync(1000.0 + 7200)
+    assert world.get_season().time == 0.0 and boss.paused_minutes() == 120
+    assert [o.id for o in other.options()] == ["season:paused"]
+    assert other.choose("act:explore") == ["（此刻無法這麼做。）"]
+    assert "暫停中" in boss.advance(3600)[0]
+    assert "暫停中" in boss.admin_push_trend("kou", 5)[0]
+    assert "暫停中" in boss.admin_end_season(1000.0 + 7200)[0]
+    assert world.season_phase() == "running" and world.get_season().time == 0.0
+    assert "只有管理者" in other.admin_resume_clock(1000.0 + 7200)[0]
+    assert "停了 120 分鐘" in boss.admin_resume_clock(1000.0 + 7200)[0]
+    assert world.paused_at() is None and boss.paused_minutes() is None
+    assert "沒有暫停" in boss.admin_resume_clock(1000.0 + 7300)[0]
+    boss.sync(1000.0 + 7200 + 60)
+    assert world.get_season().time == pytest.approx(60 * content.config.time_scale)
+    titles = [e.title for e in boss.state.journal]
+    assert "暫停賽季" in titles and "繼續賽季" in titles
+
+
+def test_the_muster_countdown_stands_still_while_paused(content, game):
+    """暫停中集結不倒數：畫面上剩下的時間停在按下暫停那一刻（截止 1600、1100 暫停：剩 500 秒）。"""
+    definition = _install_battle_def(content)
+    game.world.start_battle(definition, now=1000.0)
+    game.world.pause_clock(1100.0)
+    with at(game, 5000.0):
+        assert "還剩現實 8 分 20 秒" in game.scene_text()
+
+
+def test_a_running_showdown_round_waits_out_the_pause_and_keeps_its_remaining_time(content, world):
+    """長社打到第一回合一半（120 秒過了 60 秒）時暫停十個鐘頭：這段時間每次刷新（options 的 tick）都不逾時、不代選；
+    繼續之後還剩 60 秒——59 秒時還沒逾時，61 秒時逾時、系統代選、結算這一回合。"""
+    game = _showdown_game(content, world)
+    _to_showdown(game, "changshe_fire")
+    with at(game, game.now):
+        game.choose("battle:join:guan")
+    deadline = world.get_battle().muster_deadline_real
+    with at(game, deadline):
+        game.options()  # 集結截止：開打，這一回合從 deadline 起算
+    battle = world.get_battle()
+    assert battle.phase == "active" and battle.round.opened_real == deadline
+    paused = deadline + 60
+    assert world.pause_clock(paused)
+    for now in (paused + 600, paused + 10 * 3600):
+        with at(game, now):
+            assert [o.id for o in game.options()] == ["season:paused"]
+    battle = world.get_battle()
+    assert battle.phase == "active" and battle.round_number == 0 and battle.round.pending_actions == {}
+    resumed = paused + 10 * 3600
+    world.resume_clock(content, resumed)
+    assert world.get_battle().round.opened_real == deadline + 10 * 3600
+    with at(game, resumed + 59):
+        game.options()
+    assert world.get_battle().round_number == 0
+    with at(game, resumed + 61):
+        game.options()
+    assert world.get_battle().round_number == 1
+
+
+def _real_time(game, key: str) -> float:
+    """排在 schedule[key] 的那一刻是哪個現實時間（照這個 Game 剛同步過的季時間與 now 換算）。"""
+    season = game.world.get_season()
+    return game.now + (season.schedule[key] - season.time) / game.content.config.time_scale
+
+
+def test_scheduled_showdowns_keep_their_real_time_across_a_three_hour_pause(content, world):
+    """企劃者 2026-10-06 定 B3：長社前四個鐘頭暫停三個鐘頭，繼續之後長社照原本的現實時間開（前一秒還沒開、後一秒開集結）；
+    季末往後延「跳過的長度」（三個鐘頭照整個曆時往下取整，差不到一個曆時）。"""
+    game = _showdown_game(content, world)
+    content.config.admins = ["沈浪"]
+    game.sync(5000.0)
+    changshe, finale = _real_time(game, "changshe_fire"), _real_time(game, "finale")
+    paused = changshe - 4 * 3600
+    game.sync(paused)
+    assert "賽季時鐘停了" in game.admin_pause_clock(paused)[0]
+    resumed = paused + 3 * 3600
+    assert "停了 180 分鐘" in game.admin_resume_clock(resumed)[0]
+    assert world.get_battle() is None
+    game.sync(resumed + 1)
+    grid = calendar.cal_hour_seconds(content, world.get_season()) / content.config.time_scale
+    assert _real_time(game, "changshe_fire") == pytest.approx(changshe)
+    assert 3 * 3600 - grid < _real_time(game, "finale") - finale <= 3 * 3600 + 1e-6
+    game.sync(changshe - 1)
+    assert world.get_battle() is None
+    game.sync(changshe + 1)
+    battle = world.get_battle()
+    assert (battle.battle_id, battle.phase) == ("changshe_fire", "muster")
+    assert battle.muster_deadline_real == pytest.approx(changshe + 1 + content.battles["changshe_fire"].muster_seconds)
+
+
+def test_a_showdown_inside_the_pause_opens_at_resume_and_everything_fires_once(content, world):
+    """長社排定前十分鐘（季時間）暫停十二個現實鐘頭——長社原本的時間、第 7 週大事原本的時間都落在暫停裡。
+    暫停中每次同步、刷新都什麼都沒發生；管理者按「繼續」那一刻長社就開集結（B11，集結截止從那一刻算），
+    沒人參戰照前線起點判；第 7 週的盧植圍廣宗跟著季往後延、照常結算——每件都只一次。"""
+    game = _showdown_game(content, world)
+    content.config.admins = ["沈浪"]
+    scale = content.config.time_scale
+    schedule = world.get_season().schedule["changshe_fire"]
+    week7 = calendar.week_start(7, content, world.get_season())
+    start = 5000.0
+    game.sync(start)  # 記下時鐘
+    paused = start + (schedule - 600) / scale
+    game.sync(paused)
+    assert world.get_season().time == pytest.approx(schedule - 600)
+    game.admin_pause_clock(paused)
+    resumed = paused + 12 * 3600
+    for now in (paused + 3600, paused + 6 * 3600, resumed):
+        game.sync(now)
+        assert [o.id for o in game.options()] == ["season:paused"]
+    season = world.get_season()
+    assert season.time == pytest.approx(schedule - 600)
+    assert world.get_battle() is None and season.showdowns_opened == {}
+    assert "changshe_fire" not in season.timeline and "luzhi_siege" not in season.timeline
+    msgs = game.admin_resume_clock(resumed)
+    assert any("集結號角" in m for m in msgs)
+    battle = world.get_battle()
+    assert (battle.battle_id, battle.phase) == ("changshe_fire", "muster")
+    assert battle.muster_deadline_real == pytest.approx(resumed + content.battles["changshe_fire"].muster_seconds)
+    assert world.get_season().showdowns_opened == {"changshe_fire": "changshe_fire"}
+    _settle_without_fighters(game, content.battles["changshe_fire"])
+    game.sync(resumed + 1)
+    later = game.now + (week7 - world.get_season().time) / scale + 60
+    game.sync(later)
+    game.sync(later + 60)
+    season = world.get_season()
+    assert {"changshe_fire", "luzhi_siege"} <= set(season.timeline)
+    assert [b.battle_id for _, b in world.ended_battles()] == ["changshe_fire"]
+    chronicle = [r.text for r in season.chronicle]
+    assert chronicle.count("波才敗走陽翟。") == 1  # 長社：沒人參戰、起點 55 → 官軍險勝
+    assert sum(chronicle.count(t) for t in ("盧植圍張角於廣宗。", "盧植圍廣宗不成。")) == 1
+
+
+# ── 排程推決戰、「繼續」的順序與集結號角（引擎這一半）────────────────────────────
+
+
+def test_the_scheduler_tick_waits_out_the_pause(content, world):
+    """伺服器排程（Game.world_tick，沒有人在線）暫停中也不推決戰：集結截止不關、回合不逾時、季不動也不收；
+    繼續之後剩下的時間跟暫停前一樣——集結還剩 100 秒、回合還剩 60 秒（補算與決戰兩個關口，見 Task 2、3）。"""
+    game = _showdown_game(content, world)
+    _to_showdown(game, "changshe_fire")
+    with at(game, 0.0):
+        game.choose("battle:join:guan")
+    ticker = Game.for_world(content, world, rng=random.Random(1))
+    battle = world.get_battle()
+    deadline = battle.muster_deadline_real
+    assert battle.phase == "muster"
+    season_time = world.get_season().time
+    assert world.pause_clock(deadline - 100)  # 集結截止前 100 秒暫停
+    resumed = deadline + 3 * 86400
+    for now in (deadline + 1, resumed):
+        ticker.world_tick(now)
+        assert world.get_battle().phase == "muster"
+        assert not world.get_season().ended and world.get_season().time == season_time
+    assert world.resume_clock(content, resumed) == resumed - (deadline - 100)
+    ticker.world_tick(resumed + 99)
+    assert world.get_battle().phase == "muster"
+    ticker.world_tick(resumed + 101)
+    assert world.get_battle().phase == "active" and world.get_battle().round_number == 0
+    opened = world.get_battle().round.opened_real
+    assert world.pause_clock(opened + 60)  # 這一回合過了 60 秒暫停
+    ticker.world_tick(opened + 60 + 36000)
+    assert (world.get_battle().phase, world.get_battle().round_number) == ("active", 0)
+    assert world.resume_clock(content, opened + 60 + 36000) == 36000
+    ticker.world_tick(opened + 36000 + 119)
+    assert world.get_battle().round_number == 0
+    ticker.world_tick(opened + 36000 + 121)
+    assert world.get_battle().round_number == 1
+
+
+def _paused_across_changshe(content, world) -> tuple[Game, float]:
+    """管理者在長社前十分鐘（季時間）暫停、停十二個現實鐘頭：長社原本的時間落在暫停裡。回傳（管理者, 準備按「繼續」的現實時間）。"""
+    game = _showdown_game(content, world)
+    content.config.admins = ["沈浪"]
+    start = 5000.0
+    game.sync(start)
+    paused = start + (world.get_season().schedule["changshe_fire"] - 600) / content.config.time_scale
+    game.sync(paused)
+    game.admin_pause_clock(paused)
+    return game, paused + 12 * 3600
+
+
+def test_resume_hands_the_muster_call_to_the_admin_when_the_catch_up_opens_the_showdown(content, world, monkeypatch):
+    """「繼續」的順序（resume_season_clock：resume_clock → catch_up_season → start_pending_battle）：繼續之後還有不到一個曆時的零頭要補算，
+    長社就是補算那一路（advance_season 結尾的 start_pending_battle）開的，集結號角在 catch_up_season 的回傳裡——
+    admin_resume_clock 要把兩邊的訊息都接上，不然那一句會丟掉；它也要進管理者自己的江湖紀錄。"""
+    game, resumed = _paused_across_changshe(content, world)
+    real, caught = world.catch_up_season, []
+    monkeypatch.setattr(world, "catch_up_season", lambda *a, **k: caught.append(real(*a, **k)) or caught[-1])
+    msgs = game.admin_resume_clock(resumed)
+    assert len(_muster_lines(caught[0])) == 1  # 開集結的是補算那一路
+    assert len(_muster_lines(msgs)) == 1 and "賽季時鐘接著走了" in msgs[0]
+    entry = next(e for e in game.state.journal if e.title == "繼續賽季")
+    assert len(_muster_lines(entry.lines)) == 1
+    assert world.get_battle().battle_id == "changshe_fire"
+
+
+def test_resume_hands_the_muster_call_to_the_admin_when_nothing_is_left_to_catch_up(content, world, monkeypatch):
+    """同一條的另一邊：繼續那一刻沒有零頭要補算（補算什麼都不做、回 []），長社由緊接著的 start_pending_battle 開，
+    集結號角在它的回傳裡——一樣要接上、一樣只一句。"""
+    game, resumed = _paused_across_changshe(content, world)
+    monkeypatch.setattr(world, "catch_up_season", lambda *a, **k: [])
+    msgs = game.admin_resume_clock(resumed)
+    assert len(_muster_lines(msgs)) == 1
+    assert world.get_battle().battle_id == "changshe_fire" and world.get_season().showdowns_waiting == []
+    assert len(_muster_lines(next(e for e in game.state.journal if e.title == "繼續賽季").lines)) == 1
+
+
+def test_resume_settles_the_events_before_the_showdown_after_an_uncaught_span(content, world):
+    """暫停前有一大段沒人補算（沒開排程、半夜沒人同步），裡面的一般大事（第 4 週的波才）繼續當下才推。
+    管理者按「繼續」：先補算，波才先結算，長社才開集結——不是長社先開、波才還在時間軸外面。"""
+    install_season_one(content)
+    install_showdowns(content)
+    store = open_world()
+    store.seed_first_season(content)
+    content.config.admins = ["沈浪"]
+    game = Game.new(content, "沈浪", rng=random.Random(0), world=store)
+    game.now = 0.0
+    store.catch_up_season(content, 0.0, random.Random(0))  # 記下時鐘，之後直到暫停都沒人補算
+    paused = (store.get_season().schedule["changshe_fire"] - 600) / content.config.time_scale
+    assert store.pause_clock(paused)  # 主機端那樣直接暫停：0～paused 沒補算
+    msgs = game.admin_resume_clock(paused + 40 * 3600)
+    assert len(_muster_lines(msgs)) == 1
+    season = store.get_season()
+    assert "bocai" in season.timeline and "changshe_fire" not in season.timeline
+    assert (store.get_battle().battle_id, store.get_battle().phase) == ("changshe_fire", "muster")
+
+
+def test_the_admin_resume_goes_through_the_one_resume_helper(content, world, monkeypatch):
+    """每一條「繼續」的路都走 world.resume_season_clock（三步的順序只寫在那一個地方）：管理者的按鈕也是。"""
+    game, resumed = _paused_across_changshe(content, world)
+    calls = []
+    from tianxia import engine
+
+    real = engine.resume_season_clock
+    monkeypatch.setattr("tianxia.engine.resume_season_clock", lambda *a, **k: calls.append(a) or real(*a, **k))
+    game.admin_resume_clock(resumed)
+    assert len(calls) == 1

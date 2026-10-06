@@ -73,8 +73,9 @@ class SharedWorldState(BaseModel):
     season_last_real: float | None = None
     season_opened: bool = False  # 這一季管理者開季了沒；False＝籌備中（見 season_phase）
     # 賽季時鐘暫停（線上架構設計第四節、8.3「公告停機時賽季時鐘暫停，季末跟著往後延」）：按「暫停」的現實時間；None＝沒有暫停。
-    # 暫停中補算（catch_up_season）不推季的時間、對時點也不動；按「繼續」時對時點往後挪停的長度（resume_clock），
-    # 進行中的決戰期限與排好的決戰也跟著挪，所以停的這一段不算進賽季。舊資料沒有這一欄＝沒有暫停
+    # 暫停中補算（catch_up_season）不推季的時間、對時點也不動；引擎（Game）不推決戰、選單只剩一顆灰的、不能快轉，
+    # 管理者的動作只留「繼續」；按「繼續」時對時點往後挪停的長度（resume_clock），進行中的決戰期限與排好的決戰也跟著挪，
+    # 所以停的這一段不算進賽季。舊資料沒有這一欄＝沒有暫停
     paused_at: float | None = None
     tianji: int = 0  # 天機：每次換季 +1，自創武學「名字 → 數值」的配方跟著換（跨季不滾雪球第三條）
 
