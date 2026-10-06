@@ -99,9 +99,17 @@ def _roads(content) -> dict[frozenset, str]:
     """每條路一次：{frozenset({a, b}): 路的種類}。connections 的每一項都是 Connection（str 的子類別，字串本身是目的地），路的種類讀 .road。"""
     roads = {}
     for loc in content.locations.values():
+        if loc.prologue_only:  # 草廬（序章專用）的那條路另外在 test_the_mentors_hut_is_a_short_walk_from_yingchuan 看
+            continue
         for c in loc.connections:
-            roads[frozenset({loc.id, str(c)})] = getattr(c, "road", "路")
+            if not content.locations[str(c)].prologue_only:
+                roads[frozenset({loc.id, str(c)})] = getattr(c, "road", "路")
     return roads
+
+
+def _ordinary(content) -> set[str]:
+    """地圖上平常看得到的地點：序章專用的草廬（只有師父那裡的新人去得了）不算。"""
+    return {loc_id for loc_id, loc in content.locations.items() if not loc.prologue_only}
 
 
 def _minutes(content, pair: frozenset, road: str) -> float:
@@ -132,11 +140,20 @@ def _shortest(content, src: str, dst: str) -> float:
 
 
 def test_the_map_has_forty_locations_in_five_regions(content):
-    assert set(content.locations) == set().union(*REGIONS.values())
+    assert _ordinary(content) == set().union(*REGIONS.values())
     assert NEW_LOCATIONS <= set(content.locations)
     assert {r.id for r in content.map.regions} == set(REGIONS)
-    for loc_id in content.locations:
+    for loc_id in _ordinary(content):
         assert region_of(content, loc_id).id == _region(loc_id), loc_id
+
+
+def test_the_mentors_hut_is_a_short_walk_from_yingchuan(content):
+    """序章的草廬：只連潁川、步行兩三分鐘，落在潁川那一區；平常的地點清單裡沒有它。"""
+    (hut,) = [loc for loc in content.locations.values() if loc.prologue_only]
+    assert hut.id == content.tutorial.location == "mentor_hut"
+    assert [str(c) for c in hut.connections] == ["yingchuan"] and "mentor_hut" in content.locations["yingchuan"].connections
+    assert 2.0 <= leg_minutes(content, "mentor_hut", "yingchuan") <= 3.5
+    assert region_of(content, "mentor_hut").id == "yingru"
 
 
 def test_every_region_is_connected_and_has_a_loop(content):
@@ -156,7 +173,7 @@ def test_cutting_any_cross_region_road_keeps_the_map_connected(content):
     roads = _roads(content)
     for pair in CROSS_ROADS:
         rest = {p: r for p, r in roads.items() if p != pair}
-        assert _connected(set(content.locations), rest), sorted(pair)
+        assert _connected(_ordinary(content), rest), sorted(pair)
 
 
 def test_cross_region_roads_take_the_planned_minutes(content):

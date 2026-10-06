@@ -70,22 +70,37 @@ def goal_met(state: GameState, content: Content, world: WorldStateStore, goal: T
     return check_condition(goal.condition, state)
 
 
+class HutReward(str):
+    """序章步驟的獎勵那一行（出師的盤纏）：不進對話框，當這次行動的結果寫進「剛剛」（Game._guide 認這個型別，T7 審查 M4）。"""
+
+
 def note_action(state: GameState, content: Content, world: WorldStateStore, action: str) -> list[str]:
     """玩家做完一個行動後呼叫：符合目前引導步驟就推進一步並發獎勵（序章的步驟另外給武學），接著立刻檢查
-    下一步是否也已經達成（例如旗標早就成立），一路完成到不再符合為止。下一步的話是空的（序章第一步）就不說。"""
+    下一步是否也已經達成（例如旗標早就成立），一路完成到不再符合為止。下一步的話是空的（序章第一步）就不說。
+    序章的步驟（設計 3.1「不再每步跳「✔ 引導完成…」」）不寫「✔ 引導完成」，獎勵是 HutReward（是這次行動的結果，不是對話框的一列）；
+    體力補滿的那一項寫「體力回滿」，不是「體力 +150」（實際補的看走之前剩多少）。"""
     t = content.tutorial
     todo = steps(state, content)
     msgs: list[str] = []
+    completed = False
     while tutorial_active(state, content) and _step_done(
         state, content, world, todo[state.player.tutorial_step], action
     ):
         step = todo[state.player.tutorial_step]
+        in_hut = prologue.has(content) and state.player.tutorial_step < t.prologue_steps
         state.player.tutorial_step += 1
-        msgs.append("✔ 引導完成")
-        msgs += apply_effect(step.reward, state, content, world)
+        completed = True
+        if not in_hut:
+            msgs.append("✔ 引導完成")
+        reward = apply_effect(step.reward, state, content, world)
+        if in_hut:
+            refill = step.reward.stamina >= content.config.stamina_max
+            msgs += [HutReward("體力回滿" if refill and m.startswith("體力 +") else m) for m in reward]
+        else:
+            msgs += reward
         if step.give_art is not None:
             msgs += prologue.give_art(state, content, world, step.give_art)
-    if msgs:  # 引導這一次有完成的步驟
+    if completed:  # 引導這一次有完成的步驟（序章的步驟可以沒有任何一行訊息，所以看 completed，不看 msgs）
         if tutorial_active(state, content):
             nxt = todo[state.player.tutorial_step]
             if nxt.text:

@@ -255,8 +255,8 @@ def test_first_step_has_no_box_and_choosing_moves_on(fresh):
     assert fresh.guide_box() is None  # 序章的事件端出來時，畫面就是那則事件
     _walk(fresh, "choice:0")  # 拜師
     box = fresh.guide_box()
-    assert box["speaker"] == "師父" and box["text"] == "去看修練頁。" and box["line"] == "師父：看修練頁"
-    assert box["scene"] == "" and box["done"] == ["✔ 引導完成"] and box["end"] is False
+    assert box["speaker"] == "師父" and box["text"] == "去看修練頁。" and box["line"] == "看修練頁"
+    assert box["scene"] == "" and box["done"] == [] and box["end"] is False
     assert fresh.prologue_view() == {
         "reveal": ["tab:jianghu", "tab:practice", "xinde"], "glow": ["tab:practice"], "skip": False,
     }
@@ -293,7 +293,7 @@ def test_view_tab_does_not_change_the_latest_card(fresh):
     latest = fresh.state.journal[0]
     assert len(fresh.state.journal) == entries
     assert (latest.title, latest.lines, latest.changes) == (before.title, before.lines, before.changes)  # 「剛剛」沒換
-    assert latest.guide[-2:] == ["✔ 引導完成", "【師父】去探索。"]  # 引導的那幾行接在最新一則的 guide
+    assert latest.guide[-1:] == ["【師父】去探索。"] and "✔ 引導完成" not in latest.guide  # 引導的下一步接在最新一則的 guide（序章不寫「✔」）
 
 
 def test_the_reveal_accumulates_over_the_steps(fresh):
@@ -302,7 +302,7 @@ def test_the_reveal_accumulates_over_the_steps(fresh):
     fresh.state.player.tutorial_step = 3  # 第 4 步：去合成（reveal 只寫了 tab:craft）
     view = fresh.prologue_view()
     assert view["reveal"] == ["act:explore", "stamina", "tab:craft", "tab:jianghu", "tab:practice", "xinde"]
-    assert view["glow"] == ["tab:craft", "forge"]
+    assert view["glow"] == ["tab:craft", "pick:art", "pick:insight", "forge"]
     fresh.state.player.tutorial_step = 6  # 第 7 步：打坐（reveal 只寫了 act:rest）
     assert prologue.view(fresh.state, fresh.content)["reveal"] == [
         "act:explore", "act:rest", "stamina", "tab:craft", "tab:jianghu", "tab:practice", "xinde",
@@ -327,11 +327,11 @@ def test_each_step_can_have_its_own_speaker(fresh, prologue_content):
     _walk(fresh, "choice:0", "choice:0")  # 完成第 1 步，輪到旁人說第 2 步
     box = fresh.guide_box()
     assert box["speaker"] == "旁人" and box["text"] == "去看修練頁。"
-    assert box["done"] == ["✔ 引導完成"]  # 「【旁人】去看修練頁。」不在裡面
+    assert box["done"] == []  # 「【旁人】去看修練頁。」不在裡面
     assert fresh.state.journal[0].guide[-1] == "【旁人】去看修練頁。"  # 江湖紀錄照舊寫那一行
     fresh.view_tab("practice")  # 完成第 2 步，輪到預設的師父
     box = fresh.guide_box()
-    assert box["speaker"] == "師父" and box["done"] == ["✔ 引導完成"]
+    assert box["speaker"] == "師父" and box["done"] == []
 
 
 def test_the_fused_goals_need_a_fused_art(fresh):
@@ -368,7 +368,7 @@ def test_the_level_goal_needs_the_level(fresh):
     s.player.member.wugong_level = 2
     assert guide.note_action(s, c, fresh.world, "practice") == [] and s.player.tutorial_step == 4
     s.player.member.wugong_level = 3
-    assert "✔ 引導完成" in guide.note_action(s, c, fresh.world, "practice") and s.player.tutorial_step == 5
+    assert guide.note_action(s, c, fresh.world, "practice")[0].startswith("【師父】") and s.player.tutorial_step == 5
 
 
 def test_the_quality_goal_needs_a_promotion_not_just_the_level(fresh):
@@ -381,7 +381,7 @@ def test_the_quality_goal_needs_a_promotion_not_just_the_level(fresh):
     s.player.tutorial_step = 5
     assert guide.note_action(s, c, fresh.world, "cultivate") == [] and s.player.tutorial_step == 5
     s.player.art_quality[art_id] = "中品"  # 升了品
-    assert "✔ 引導完成" in guide.note_action(s, c, fresh.world, "cultivate") and s.player.tutorial_step == 6
+    assert guide.note_action(s, c, fresh.world, "cultivate")[0].startswith("【師父】") and s.player.tutorial_step == 6
 
 
 def test_finishing_a_step_gives_its_art(fresh):
@@ -393,7 +393,7 @@ def test_finishing_a_step_gives_its_art(fresh):
     msgs = guide.note_action(s, c, fresh.world, "train")
     assert s.player.tutorial_step == 8
     assert library.level_of(s, "junk") == 5
-    assert "✔ 引導完成" in msgs and any("蠻牛拳" in m for m in msgs)
+    assert "✔ 引導完成" not in msgs and any("蠻牛拳" in m for m in msgs)
 
 
 def test_the_box_and_the_next_step_line_name_the_fused_art(fresh):
@@ -421,7 +421,7 @@ def test_a_step_without_words_writes_no_blank_speaker_line(fresh, prologue_conte
     fresh.state.pending_event = "p_ambush"
     _walk(fresh, "choice:0", "choice:0")
     assert fresh.state.player.tutorial_step == 1
-    assert fresh.state.journal[0].guide == ["✔ 引導完成"]
+    assert fresh.state.journal[0].guide == []
     assert fresh.guide_box() is None
 
 
@@ -439,7 +439,7 @@ def test_allocating_a_point_finishes_its_step(fresh):
     fresh.state.player.tutorial_step, fresh.state.player.stat_points = 8, 1
     fresh.allocate_stat("str")
     assert fresh.state.player.tutorial_step == 9
-    assert fresh.state.journal[0].guide[-2:] == ["✔ 引導完成", "【師父】把蠻牛拳熔了。"]
+    assert fresh.state.journal[0].guide[-1:] == ["【師父】把蠻牛拳熔了。"] and "✔ 引導完成" not in fresh.state.journal[0].guide
 
 
 def test_melting_finishes_its_step(fresh, prologue_content):
@@ -651,6 +651,270 @@ def test_the_practice_buttons_follow_the_script(fresh):
     assert all(c["blocked"] is None for c in server.menxia_view(outside)["slot_cards"])
 
 
+def test_the_first_screen_is_the_ambush_not_the_season_intro(fresh, prologue_content, world):
+    """T6 review M8：「剛剛」那張卡在序章第一屏放的是賽季開場那一則，疊在遇險的上面，第一屏就不只有遇險與選項了。
+    草廬裡不放它；選了之後的結果照常放。那一則還在江湖紀錄裡，序章走完之後它就是紀錄裡的一則。"""
+    import server
+
+    assert fresh.state.journal and fresh.state.journal[0].tag == "賽季開始"  # 紀錄裡還在
+    assert fresh.now_entry_html() == "" and server.main_view(fresh)["now"] == ""
+    _walk(fresh, "choice:0")
+    assert fresh.now_entry_html() == ""  # 拜師的事件在眼前：整張卡不放（T7 審查 I2、I3）
+    _walk(fresh, "choice:0")
+    assert "好徒兒。" in fresh.now_entry_html()  # 事件了結之後，選了的結果照常放
+    next_season(prologue_content, world, fresh)  # 換季重回草廬：換季重來寫的那一則開場也不放
+    assert fresh.state.player.location == "hut" and fresh.now_entry_html() == ""
+
+
+def _world_entries(game):
+    """江湖上別人的事：江湖大事（季曆一過一個交界、新來的人第一次同步就補進來）、你不在的時候、賽季開場；都最新的在最上面。"""
+    from tianxia import journal
+    from tianxia.state import JournalEntry
+
+    time = game.state.world.time
+    for entry in (
+        JournalEntry(time=time, title=journal.WORLD_NEWS, tag="共 4 件", lines=["第 4 週・週一 00:00　甲子年二月，三十六方同日起事。"]),
+        JournalEntry(time=time, title=journal.AWAY, tag="三天", lines=["你不在的時候，江湖上發生了幾件事。"]),
+    ):
+        journal.add_entry(game.state, entry)
+
+
+def test_the_now_card_in_the_hut_never_shows_world_news(fresh):
+    """T7 審查 I2、I3：草廬裡「剛剛」只放自己這一步的結果，不放江湖大事、你不在的時候、賽季開場（紀錄裡照舊都有）；
+    晚加入的第一季新人頭一次同步就被補了「江湖大事」，不能疊在遇險的畫面上面。"""
+    _walk(fresh, "choice:0", "choice:0")  # 遇險、拜師：自己的結果（拜師那一則）
+    own = fresh.now_entry_html()
+    assert "好徒兒" in own  # 拜師的結果（fixture 的 effect 文字是「好徒兒。」）
+    _world_entries(fresh)
+    shown = fresh.now_entry_html()
+    assert shown == own  # 世界上的事排在最上面也不頂掉它
+    assert "江湖大事" not in shown and "你不在的時候" not in shown and "賽季開始" not in shown
+    assert any(e.title == "江湖大事" for e in fresh.state.journal) and any("賽季開始" == e.tag for e in fresh.state.journal)  # 紀錄裡照舊有
+
+
+def test_the_now_card_in_the_hut_is_empty_when_only_world_news_is_left(fresh):
+    """第一屏（遇險）：紀錄裡只有賽季開場與補來的江湖大事——什麼都不放，不是放別人的事。"""
+    _world_entries(fresh)
+    assert fresh.now_entry_html() == ""
+    import server
+
+    assert server.main_view(fresh)["now"] == ""
+    fresh.state.pending_event = None  # 事件了結了、紀錄裡還是只有別人的事（賽季開場也在其中）：照樣什麼都不放
+    assert any(e.tag == "賽季開始" for e in fresh.state.journal) and fresh.now_entry_html() == ""
+
+
+def test_the_now_card_is_hidden_while_a_hut_event_is_on_screen(fresh):
+    """四景（或拜師）的事件在眼前時整張卡不放：它重複事件標題「遇上【…】」，還把選項擠到分頁列底下。事件了結之後照放。"""
+    _walk(fresh, "choice:0")  # 擋下之後接拜師事件：事件在眼前
+    assert fresh.state.pending_event and fresh.now_entry_html() == ""
+    fresh.choose("choice:0")
+    assert fresh.state.pending_event is None and fresh.now_entry_html() != ""
+    fresh.view_tab("practice")
+    fresh.choose("act:explore")  # 探索端出四景
+    assert fresh.state.pending_event == "p_insight" and fresh.now_entry_html() == ""
+
+
+def test_the_season_intro_is_still_the_card_for_everyone_outside_the_hut(prologue_content, world):
+    bot = Game.new(prologue_content, "路人", rng=random.Random(0), world=world)
+    assert "賽季開始" in bot.now_entry_html()
+
+
+def test_the_guide_box_says_when_a_step_is_paged(fresh, prologue_content):
+    """分頁的步驟（TutorialStep.paged）：guide_box 多一個 paged: True，網頁照 \\n\\n 切頁；別的步驟沒有這個鍵（既有的整份比對不變）。"""
+    prologue_content.tutorial.steps[1].paged = True
+    prologue_content.tutorial.steps[1].text = "第一段。\n\n第二段，去看修練頁。"
+    _walk(fresh, "choice:0", "choice:0")
+    box = fresh.guide_box()
+    assert box["paged"] is True and box["text"].count("\n\n") == 1
+    fresh.view_tab("practice")
+    assert "paged" not in fresh.guide_box()
+
+
+def test_only_the_art_the_master_names_is_the_switch_target(fresh):
+    """步驟 5 的改練（W-A）：伺服器說哪一列是師父點名的那一門——換上之前只有合成出來的那一列要發光，換上之後沒有一列發光
+    （不然被換下來的基礎拳腳會變成新的改練目標，邀人換回去）。不加新的拒絕：這只管發光。序章外的列沒有 glow 這個鍵。"""
+    _to_step(fresh, 4)
+    named = _fused(fresh)
+    rows = {row["id"]: row for row in fresh.art_rows()}
+    assert [art_id for art_id, row in rows.items() if "switch" in row["glow"]] == [named]
+    fresh.switch_art(named)
+    assert fresh.state.player.tutorial_step == 4  # 還在第 5 步：換上不算完成
+    assert all("switch" not in row["glow"] for row in fresh.art_rows())
+    assert any(row["id"] == "basic_fist" for row in fresh.art_rows())  # 被換下來的在功法庫裡
+    assert fresh.switch_art("basic_fist") and fresh.state.player.member.wugong_id == "basic_fist"  # 沒有新的拒絕：想換回去還是換得了
+    outside = Game.new(fresh.content, "路人", rng=random.Random(0), world=fresh.world)
+    assert all("glow" not in row for row in outside.art_rows())
+
+
+def test_the_server_names_which_row_each_other_glow_belongs_to(fresh):
+    """修練的那一列（步驟 6）與熔煉的那一列（步驟 10）也由伺服器說：只有按得下去的那一門有那個鍵。"""
+    _to_step(fresh, 5)
+    named = _fused(fresh)
+    assert [r["id"] for r in fresh.art_rows() if "cultivate" in r["glow"]] == [named]
+    _to_step(fresh, 9)
+    assert [r["id"] for r in fresh.art_rows() if "melt" in r["glow"]] == ["junk"]
+    assert all("switch" not in r["glow"] for r in fresh.art_rows())  # 步驟 10 不叫人改練
+
+
+def test_the_forge_pick_lists_name_what_to_put_in_the_furnace(fresh):
+    """步驟 4（煉製頁）：師父點名的底（基礎拳腳）與剛悟到的意境，在挑選清單裡由伺服器標出來（pick:art、pick:insight），
+    網頁照它讓兩樣發光、直到放進爐子；別的武學、別的步驟都沒有。"""
+    _to_step(fresh, 3)
+    rows = fresh.art_rows()
+    assert [r["id"] for r in rows if "pick:art" in r["glow"]] == ["basic_fist"]
+    assert [i["id"] for i in fresh.insight_rows() if "pick:insight" in i["glow"]] == fresh.state.player.insights
+    _to_step(fresh, 4)
+    assert not any("pick:art" in r["glow"] for r in fresh.art_rows())
+    assert not any("pick:insight" in i["glow"] for i in fresh.insight_rows())
+    outside = Game.new(fresh.content, "路人", rng=random.Random(0), world=fresh.world)
+    outside.state.player.insights.append("feng")
+    assert all("glow" not in i for i in outside.insight_rows())
+
+
+def test_the_preview_says_a_preset_recipe_is_the_masters_way(fresh):
+    """W-E：師門配方的預覽不寫「沒人合過」（結果會說這是師門傳下來的路數）；別的配方照舊。"""
+    _to_step(fresh, 3)
+    line = fresh.forge_line("basic_fist", ["feng"])
+    assert "師門傳下來" in line and "沒人合過" not in line
+    outside = Game.new(fresh.content, "路人", rng=random.Random(0), world=fresh.world)
+    outside.state.player.insights.append("feng")
+    assert "沒人合過" in outside.forge_line("basic_breath", ["feng"]) and "師門" not in outside.forge_line("basic_breath", ["feng"])
+    fresh.forge("basic_fist", ["feng"])  # 做出來之後別人看到的是「會合出【穿林腿】」
+    other = Game.new(fresh.content, "老手", rng=random.Random(0), world=fresh.world)
+    other.state.player.insights.append("feng")
+    assert "會合出【穿林腿】" in other.forge_line("basic_fist", ["feng"])
+
+
+def test_the_hut_steps_show_no_done_chip(fresh):
+    """T7 審查 M3（設計 3.1「不再每步跳「✔ 引導完成…」」）：草廬每一步做完，對話框上沒有「✔ 完成」那一列（獎勵就是劇情本身）；
+    紀錄（journal.guide）裡也不寫那一句。序章外照舊（第一季的軍令兩步，test_orders）。"""
+    for step in range(10):
+        _to_step(fresh, step + 1)
+        assert fresh.state.player.guide_done == [] or all("✔" not in line for line in fresh.state.player.guide_done), step
+        box = fresh.guide_box()
+        assert box is None or "✔ 引導完成" not in box["done"], step
+    assert all("✔ 引導完成" not in line for entry in fresh.state.journal for line in entry.guide)
+
+
+def test_the_farewell_reward_is_a_result_of_the_walk_not_a_box_line(prologue_root, tmp_path):
+    """T7 審查 M4：出師的盤纏（銀兩 +30、體力補滿）寫在抵達潁川那一則「剛剛」裡，beta 與第一季一樣；不留在對話框的 done 裡
+    （beta 的框抵達後就沒了，第一季的框是下一步的話，那一列會寫成別的意思）；體力那一項寫「體力回滿」，不是「體力 +150」。
+    第一季要在開季那一刻就開著才蓋得到章（rules.season_one），所以兩種季各用自己的資料庫、先設好開關再建角色（T7 審查 N4）。"""
+    import json
+    import re
+
+    from tianxia import guide
+    from tianxia.sqlite_world import open_world
+
+    path = prologue_root / "tutorial.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["steps"].append({"id": "t7", "text": "去投靠。", "season_one": True, "done_when": {"action": "order"}})
+    path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    seasons = {}
+    for label, on in (("beta", False), ("season one", True)):
+        content = load_content(prologue_root)
+        content.config.season_one = on
+        world = open_world(tmp_path / f"{on}.db")
+        game = Game.new(content, f"沈浪{label}", rng=random.Random(0), world=world, prologue=True)
+        assert (guide.steps(game.state, content)[-1].id == "t7") is on, label  # 第一季真的開著：t7 在步驟裡
+        _to_step(game, 10)
+        game.state.player.stamina = 12.0
+        game.choose("move:town")
+        game.advance(game.state.player.journey.arrive_at[-1] - game.state.world.time)
+        entry = game.state.journal[0]
+        assert "銀兩 +30" in entry.changes and "體力回滿" in entry.lines, label
+        assert entry.lines.index("草廬已經看不見了。") < entry.lines.index("體力回滿"), label  # 先是景，再是盤纏
+        assert "體力 +150" not in "".join(entry.changes + entry.lines + game.state.player.guide_done), label
+        assert game.state.player.guide_done == [], label
+        # 玩家看到的整張卡（文字與數值變化的小標）：拿掉「剛剛　時間」那一行（第一季寫季曆、beta 寫第幾天，本來就不同）之後兩種季一字不差
+        card = re.sub(r'<div class="tx-when">.*?</div>', "", game.now_entry_html())
+        assert "草廬已經看不見了。" in card and "體力回滿" in card and "銀兩 +30" in card and "體力 +150" not in card, label
+        assert "tx-up" in card, label  # 銀兩 +30 是綠色的增加小標
+        seasons[label] = (entry.title, entry.tag, entry.lines, entry.changes, card)
+        assert entry.guide == [f"【師父】{'去投靠。' if on else '去闖吧。'}"], label  # 引導那幾行（下一步的話）本來就不同，不在卡上，也不含盤纏
+    assert seasons["beta"] == seasons["season one"]  # 兩種季寫得一樣：標題、結果標記、敘事、數值變化、整張卡
+
+
+def test_a_late_step_outside_the_hut_still_shows_its_chip_and_reward(prologue_root, world):
+    """序章之外的步驟（第一季的軍令兩步）照舊：「✔ 引導完成」與獎勵在對話框上。"""
+    import json
+
+    path = prologue_root / "tutorial.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["steps"].append({"id": "t7", "text": "去探索。", "season_one": True, "done_when": {"action": "explore"},
+                          "reward": {"stats": {"silver": 10}}})
+    path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    content = load_content(prologue_root)
+    content.config.season_one = True
+    game = Game.new(content, "沈浪", rng=random.Random(0), world=world)  # 站在潁川、序章走過
+    msgs = game.choose("act:explore")
+    assert game.state.player.guide_done == ["✔ 引導完成", "銀兩 +10"] and "銀兩 +10" not in msgs
+
+
+def test_a_hut_step_can_write_its_own_result_line(fresh):
+    """T7 審查 M1：10.3 的三句「…之後（場景）」（合成、修練、熔煉）寫在步驟的 after 上，草廬裡這一步的結果就用它，不用引擎的一般那句：
+    {意境}、{武學}、{心得} 換成這一次真的合出來的、修練的、退回的。合成那一句後面接武學自己的說明，不再接「這是師門傳下來的路數。」
+    （師父的下一句 p5 開頭寫的是同一件事）。"""
+    from tianxia import journal
+
+    _to_step(fresh, 3)
+    fused = fresh.forge("basic_fist", ["feng"])
+    assert fused[0] == "你把粗淺拳腳融進風之意境，練出了一門新武學——【穿林腿】。\n腿隨風走。"
+    assert "師門傳下來" not in "\n".join(fused) and "心得 -5" in fused
+    assert journal._line_class(fused[0]) == "tx-line tx-new"  # 拿到新東西那一行照樣掃光
+    _to_step(fresh, 5)
+    cultivated = fresh.cultivate(_fused(fresh))
+    assert cultivated[0] == "這一遍修練，你忽然摸到了門道——【穿林腿】從下品升到了中品！"
+    assert journal._line_class(cultivated[0]) == "tx-line tx-new"
+    _to_step(fresh, 9)
+    melted = fresh.melt_art("junk")
+    assert melted[0] == "你把蠻牛拳熔了，換回 8 點心得。" and "心得 +8" in melted
+    outside = Game.new(fresh.content, "路人", rng=random.Random(0))
+    outside.state.player.insights.append("feng")
+    outside.state.player.stats["xinde"] = 20
+    assert "你以【粗淺拳腳】融入「風」" in outside.forge("basic_fist", ["feng"], proposed=("旋風腿", ""))[0]  # 序章外照舊
+
+
+def test_the_sight_is_said_once_in_the_card(fresh):
+    """T7 審查 M1：四景的事件文字已經說了「你悟到了「風之意境」」，引擎的「你悟得了「風」的意境（屬快）！」是同一件事：草廬裡紀錄只留前一句。"""
+    from tianxia import journal
+
+    fresh.content.events["p_insight"].choices[0].effect.text = "你盯著松林看了不知多久，心裡忽然一動——你悟到了「風之意境」。"
+    _to_step(fresh, 2)
+    fresh.choose("act:explore")
+    msgs = fresh.choose("choice:0")
+    lines = fresh.state.journal[0].lines
+    assert any("你悟到了「風之意境」" in line for line in lines) and not any(line.startswith("你悟得了「") for line in lines)
+    assert journal._line_class(next(line for line in lines if "你悟到了" in line)) == "tx-line tx-new"
+    assert any(m.startswith("你悟得了「") for m in msgs)  # 回給呼叫端的訊息照舊（只是紀錄不重複）
+
+
+def test_the_hut_refuses_seclusion(fresh):
+    """T6 review M4：閉關在草廬裡不是師父教的，也會把心得賺過劇本備好的帳（20 → 170）。擋下、不寫紀錄，跟別的拒絕一樣。"""
+    _to_step(fresh, 3)
+    p = fresh.state.player
+    xinde, entries = p.stats["xinde"], len(fresh.state.journal)
+    assert fresh.seclusion_refusal() and "師父" in fresh.seclusion_refusal()
+    msgs = fresh.seclude(8)
+    assert msgs == [fresh.seclusion_refusal()]
+    assert p.busy_until is None and p.stats["xinde"] == xinde and len(fresh.state.journal) == entries
+    outside = Game.new(fresh.content, "路人", rng=random.Random(0))
+    assert outside.seclusion_refusal() is None
+    outside.seclude(1)
+    assert outside.state.player.busy_until is not None  # 序章外照舊閉得了
+
+
+def test_the_hut_greys_the_insight_melt_with_the_same_reason_the_action_gives(fresh):
+    """T6 review M7：化成心得在草廬裡永遠被擋；按鈕要跟動作的拒絕同一個判斷，灰掉、寫原因，不是亮著按了才說。"""
+    _to_step(fresh, 3)
+    rows = fresh.insight_rows()
+    assert rows and all(row["blocked"] and "師父" in row["blocked"] for row in rows)
+    assert fresh.melt_insight(rows[0]["id"]) == [rows[0]["blocked"]]
+    outside = Game.new(fresh.content, "路人", rng=random.Random(0))
+    outside.state.player.insights.append("feng")
+    assert [row["blocked"] for row in outside.insight_rows()] == [None]
+
+
 def test_a_scripted_fight_never_waits_for_the_model(fresh, monkeypatch):
     """review-t4-5 M7：斷眉若寫成頭目、或難度到大場面的門檻，平常按下去要等模型判讀；雪恥那一場勝負是寫好的，不叫模型、不排佇列，
     連手上有一張備好的判讀也不拿來用（_judged 不被問）。"""
@@ -701,6 +965,24 @@ def test_the_hut_gives_no_road_sight_and_the_farewell_line_comes_once(fresh):
     assert "\n".join(msgs).count("草廬已經看不見了。") == 1
     assert not prologue.active(fresh.state, fresh.content)
     assert all(not o.id.startswith("move:hut") for o in fresh.options())
+
+
+@pytest.mark.parametrize("mode", ["walk", "hurry", "dash"])
+def test_leaving_the_hut_fills_the_stamina_whatever_the_way(fresh, mode):
+    """出師那一步的獎勵是人走出草廬時唯一能補體力的地方（略過的人由 finish 補）：不管怎麼走、走之前剩多少，抵達潁川都是滿的，
+    跟略過序章的人一樣。"""
+    _to_step(fresh, 10)
+    fresh.state.player.stamina = 40.0  # 趕路、疾行要花體力：夠付、又離滿很遠
+    fresh.set_move_mode(mode)
+    fresh.choose("move:town" if mode == "walk" else f"move:town:{mode}")
+    assert fresh.state.player.stamina < fresh.content.config.stamina_max or fresh.state.player.journey is None
+    if fresh.state.player.journey is not None:
+        fresh.advance(fresh.state.player.journey.arrive_at[-1] - fresh.state.world.time)
+    p = fresh.state.player
+    assert p.location == "town" and p.stamina == fresh.content.config.stamina_max
+    skipper = Game.new(fresh.content, "略過", rng=random.Random(0), world=fresh.world, prologue=True)
+    skipper.skip_tutorial()
+    assert skipper.state.player.stamina == p.stamina
 
 
 def test_the_farewell_line_is_only_for_leaving_the_hut(prologue_content):
@@ -803,6 +1085,14 @@ def test_prologue_recap_reads_the_whole_prologue(prologue_content, content, worl
     assert text.index("斷眉來了。") < text.index("跟他打。")  # 旁白排在話的前面
     assert "{武學}" not in text and "把【新武學】換上，練到第三成。" in text
     assert Game.new(content, "路人", world=world).prologue_recap() == ""  # 測試內容沒有序章
+
+
+def test_the_recap_includes_the_masters_reply_and_the_four_sights(prologue_content, world):
+    """T7 審查 M5：重看序章不跳過拜師之後師父那一段（拜師的結果文字）與四景（事件的引子加四個悟到的句子）。"""
+    text = Game.new(prologue_content, "沈浪", world=world).prologue_recap()
+    assert text.index("想學嗎？") < text.index("好徒兒。") < text.index("去看修練頁。")  # 拜師的結果在師父第一步的話之前
+    assert text.index("去探索。") < text.index("挑一處。") < text.index("風。") < text.index("山。") < text.index("水。") < text.index("火。")
+    assert text.index("火。") < text.index("去合成。")  # 四景排在探索那一步之後、合成那一步之前
 
 
 def test_the_recap_does_not_depend_on_where_you_are(fresh):

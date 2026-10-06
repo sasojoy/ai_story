@@ -309,6 +309,7 @@ def test_a_skipper_from_before_the_enlist_content_never_gets_the_recruiters_hint
     「入伍段進行中、第一步」——不然他一投靠，「主線與目標」就永遠寫著「（老石）看看本週軍令」。"""
     saved, enlisting.tutorial.enlist = enlisting.tutorial.enlist, None
     game = _game(enlisting, at="changshe")
+    game.state.player.tutorial_step = 1  # 新角色一開局已經站在序章之後（Game.new 不走草廬）；這裡要一個引導還沒走完的人
     assert game.skip_tutorial() and game.state.player.guide_skipped and game.state.player.enlist_step == 0
     enlisting.tutorial.enlist = saved  # 之後入伍段內容上線
     game.choose("faction:guan")
@@ -471,6 +472,7 @@ def test_skipping_clears_an_ending_that_was_waiting(enlisting):
     """入伍段在引導還沒走完時就走完了（結尾等著、框上是說書人）：這時按「略過」，結尾也一起收掉。"""
     game = _game(enlisting, at="changshe")
     p = game.state.player
+    p.tutorial_step = 1  # 引導還沒走完（Game.new 的新角色已經在序章之後）
     p.enlist_step, p.enlist_end = 2, True
     assert game.skip_tutorial()
     assert not p.enlist_end and p.enlist_step == 2 and game.guide_box() is None
@@ -609,7 +611,8 @@ def test_the_where_to_join_line_waits_for_the_tutorial_and_season_one(enlisting)
     """主線與目標那一行（設計 4.1、6.3）：出師之後才有、寫在「下一步」前面；還在引導裡不寫；開關關著（beta 季）也不寫；
     drifter_line 是空的就不寫。"""
     game = _game(enlisting)
-    assert "想投靠的話……" not in game.quest_text()  # 引導還沒走完
+    game.state.player.tutorial_step = 1  # 引導還沒走完（Game.new 的新角色已經在序章之後）
+    assert "想投靠的話……" not in game.quest_text()
     game.state.player.tutorial_step = len(guide.steps(game.state, enlisting))
     game.state.player.stamina = enlisting.config.stamina_max  # 讓「下一步」有一句（體力將滿）
     text = game.quest_text()

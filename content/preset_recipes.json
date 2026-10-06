@@ -1,0 +1,26 @@
+[
+  {
+    "base": "jichu_quanjiao",
+    "insight": "feng",
+    "name": "穿林腿",
+    "note": "腿隨風走，一觸即收，像風穿過松林，聲音還沒到人已經走了。"
+  },
+  {
+    "base": "jichu_quanjiao",
+    "insight": "shan",
+    "name": "坐山拳",
+    "note": "下盤紮得像石崖生了根，任你先打，等你力盡再一拳還回去。"
+  },
+  {
+    "base": "jichu_quanjiao",
+    "insight": "shui",
+    "name": "回瀾手",
+    "note": "碰到硬的就繞，繞過去再匯回來，把對方的力道原樣送回去。"
+  },
+  {
+    "base": "jichu_quanjiao",
+    "insight": "huo",
+    "name": "烈爐拳",
+    "note": "拳勢一起就不收，一拳比一拳重，像鐵錘一下下砸在鐵砧上。"
+  }
+]

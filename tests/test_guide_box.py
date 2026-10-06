@@ -156,14 +156,15 @@ def test_skipping_hides_the_box(game):
 
 
 def test_skipping_stays_skipped_into_the_next_season():
-    """畫面批次審查 I4：beta 那一季略過新手引導（停在第 6 步），換成第一季（8 步，多了軍令兩步）之後也不再出現對話框；
-    步驟照 T6 的規則記著（做完照樣推進），只是不畫框。沒略過、做完六步的人照 T6 接著做，框照常出現。"""
+    """畫面批次審查 I4：beta 那一季略過新手引導（停在不分季的最後一步之後），換成第一季（13 步，多了軍令兩步）之後也不再出現對話框；
+    步驟照 T6 的規則記著（做完照樣推進），只是不畫框。沒略過、做完序章十一步的人照 T6 接著做，框照常出現。"""
     import random
     from pathlib import Path
 
     from tianxia.characters import open_characters
     from tianxia.content import load_content
     from tianxia.engine import Game
+    from tianxia.guide import base_step_count
     from tianxia.sqlite_world import open_world
 
     root = Path(__file__).parent.parent / "content"
@@ -171,9 +172,11 @@ def test_skipping_stays_skipped_into_the_next_season():
     beta.config.auto_open_first_season, beta.config.admins = True, ["管"]
     chars = open_characters()
     admin = Game.new(beta, "管", rng=random.Random(1))
-    skipper, finisher = Game.new(beta, "略過的", rng=random.Random(2)), Game.new(beta, "做完的", rng=random.Random(3))
+    # 略過的人是在草廬裡按了「略過序章」的真人（走完序章、站在起點的人再按略過什麼都不做：引導已經做完了）
+    skipper, finisher = Game.new(beta, "略過的", rng=random.Random(2), prologue=True), Game.new(beta, "做完的", rng=random.Random(3))
     skipper.skip_tutorial()
-    finisher.state.player.tutorial_step = 6
+    base = base_step_count(beta)  # 不分季的步數（序章十一步）：第一季的軍令兩步排在它們後面
+    finisher.state.player.tutorial_step = base
     for game in (admin, skipper, finisher):
         chars.save(game.state)
     admin.admin_end_season(now=100.0)
@@ -184,9 +187,9 @@ def test_skipping_stays_skipped_into_the_next_season():
     games = {name: Game(on, chars.load(name), rng=random.Random(4), world=open_world()) for name in ("略過的", "做完的")}
     for game in games.values():
         game.sync(300.0)
-        assert game.state.player.tutorial_step == 6
+        assert game.state.player.tutorial_step == base
     assert games["略過的"].guide_box() is None
-    assert games["做完的"].guide_box()["text"] == on.tutorial.steps[6].text
+    assert games["做完的"].guide_box()["text"] == on.tutorial.steps[base].text
 
 
 # ── 網頁：收起記的是 key（FB-076）。把 web/app.js 裡說書人那一段切出來在 node 裡跑；沒有 node 就略過 ─────────────
@@ -208,7 +211,8 @@ const S = { guideRoad: null, guideFull: null };
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 // guideKey 是網頁拿來認「這一步」的函式；沒有它（舊版）就退回認句子，好讓舊版在這裡是斷言失敗、不是找不到函式
 // openGuide、shutGuide 是「展開」「收起」兩顆鈕做的事（點擊的 switch 只是呼叫它們）；沒有它們（舊版）就是 null
-const H = new Function("S", "esc", src.slice(a, b) + "\nreturn { guideHtml, guideShut, setGuideShut, guideKey: typeof guideKey === 'function' ? guideKey : (g) => g.text, openGuide: typeof openGuide === 'function' ? openGuide : null, shutGuide: typeof shutGuide === 'function' ? shutGuide : null };")(S, esc);
+const pro = () => null; // guideHtml 問序章（pro()）：這裡的框不在序章裡
+const H = new Function("S", "esc", "pro", src.slice(a, b) + "\nreturn { guideHtml, guideShut, setGuideShut, guideKey: typeof guideKey === 'function' ? guideKey : (g) => g.text, openGuide: typeof openGuide === 'function' ? openGuide : null, shutGuide: typeof shutGuide === 'function' ? shutGuide : null };")(S, esc, pro);
 const box = (key, text, end = false, pending = false, done = []) => ({ speaker: "說書人", key, text, done, end, pending });
 const shown = (g, onRoad = false) => { const html = H.guideHtml(g, onRoad); return html.includes('class="guide-line"') ? "line" : html.includes("card guide") ? "card" : html ? "?" : ""; };
 const out = new Function("H", "S", "box", "shown", input.script)(H, S, box, shown);

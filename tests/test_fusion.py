@@ -1636,6 +1636,20 @@ def test_preset_recipe_never_lands_on_an_old_art(prologue_content, world):
     assert other.name == "穿林腿"
 
 
+def test_a_recipe_that_lands_on_a_preset_art_names_the_master_not_a_stranger(prologue_content, world):
+    """T6 review M9：老手的另一個配方合到了一門師門功夫上：沒有首創者可寫，不能寫「由不知名的前人首創」，寫師門傳下來的。
+    合併進去的句子（武學＋意境與武學＋武學）都一樣。"""
+    preset, _ = fusion.fuse(a_newcomer(prologue_content), prologue_content, world, must_not_ask(), "basic_fist", "feng")
+    assert preset.preset
+    prologue_content.config.land_chance_per_candidate = prologue_content.config.land_chance_cap = 1.0
+    veteran = new_game_state(prologue_content, "老手")
+    veteran.player.arts, veteran.player.insights, veteran.player.stats["xinde"] = ["lake_kick"], ["feng"], 100
+    art, msgs = fusion.fuse(veteran, prologue_content, world, must_not_ask(), "lake_kick", "feng")  # 同是快・武學・無：只有師門那一個候選
+    assert art.id == preset.id
+    assert "合出來的竟是一門已有的武學【穿林腿】" in msgs[0]
+    assert "師門傳下來" in msgs[0] and "不知名" not in msgs[0] and "首創" not in msgs[0]
+
+
 def test_a_taken_preset_name_falls_back_instead_of_failing(prologue_content, world):
     """名字被別的配方先登記走了：師門配方照舊登記，改走退路字表的名字（不卡住新人）。"""
     from tianxia.martial_arts import generate_from_name

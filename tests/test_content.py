@@ -1713,7 +1713,8 @@ def test_starter_skills_are_one_inner_and_one_outer_art(content):
 
 def test_real_content_has_seventeen_basic_arts_and_every_location_an_insight():
     real = load_content(ROOT / "content")
-    basics = [s for s in real.skills.values() if s.quality == "下品"]
+    # 蠻牛拳是序章專用的雜學（斷眉掉出來、師父叫你熔掉），不是附錄 B 的基礎武學
+    basics = [s for s in real.skills.values() if s.quality == "下品" and s.id != "manniu_quan"]
     assert len(basics) == 17
     assert all(loc.insights for loc in real.locations.values())
 
@@ -2067,6 +2068,51 @@ def test_a_sight_that_only_a_failed_check_grants_is_checked_too(prologue_root):
         load_content(prologue_root)
 
 
+def test_a_sight_in_the_opening_chain_needs_a_preset_too(prologue_root):
+    """T6 review M6：遇險、拜師那一串事件給的意境，新人也拿得到、也能拿去合成：沒有配方就要等模型。"""
+    def gift(events):
+        ambush = next(e for e in events if e["id"] == "p_ambush")
+        ambush["choices"][0]["effect"]["insights"] = ["xuesha"]
+
+    edit_json(prologue_root / "events" / "prologue.json", gift)
+    with pytest.raises(ContentError, match=r"\['xuesha'\].*basic_fist.*師門配方"):
+        load_content(prologue_root)
+
+
+def test_a_sight_a_step_reward_hands_over_needs_a_preset_too(prologue_root):
+    edit_json(prologue_root / "tutorial.json", lambda t: t["steps"][1].update({"reward": {"insights": ["xuesha"]}}))
+    with pytest.raises(ContentError, match=r"\['xuesha'\].*basic_fist.*師門配方"):
+        load_content(prologue_root)
+
+
+@pytest.mark.parametrize("key", ["tab:pratice", 'act:explore"]', "all", "hp ", ""])
+def test_prologue_glow_must_be_a_key_the_page_knows(prologue_root, key):
+    """T6 review M5：寫錯的發光鍵悄悄什麼都不亮；帶引號或括號的更會讓網頁的選擇器丟例外、把整頁的畫面打斷。"""
+    edit_json(prologue_root / "tutorial.json", lambda t: t["steps"][2].update({"glow": ["act:explore", key]}))
+    with pytest.raises(ContentError, match="glow 不認得"):
+        load_content(prologue_root)
+
+
+def test_prologue_glow_takes_the_buttons_inside_the_pages(prologue_root):
+    keys = ["forge", "practice", "switch", "cultivate", "melt", "allocate", "stats", "tab:craft", "act:move"]
+    edit_json(prologue_root / "tutorial.json", lambda t: t["steps"][2].update({"glow": keys}))
+    assert load_content(prologue_root).tutorial.steps[2].glow == keys
+
+
+def test_every_glow_key_the_page_draws_is_one_the_content_may_name():
+    """網頁上寫死的 data-glow（序章的 glow 對得上的就是這些）都要在 models.GLOW_KEYS 裡：加了新的發光鈕卻忘了登記，
+    內容就沒辦法叫它發光。樣板裡帶 ${…} 的（act:${key}、tab:${id}）另外由 REVEAL_KEYS 管。"""
+    import re
+    from pathlib import Path
+
+    from tianxia import models
+
+    source = (Path(models.__file__).parent.parent / "web" / "app.js").read_text(encoding="utf-8")
+    literal = set(re.findall(r'data-glow="([a-z:_]+)"', source))
+    assert literal and literal <= models.GLOW_KEYS, sorted(literal - models.GLOW_KEYS)
+    assert {"pick:art", "pick:insight", "switch", "cultivate", "melt"} <= literal  # 煉製頁挑選清單與修練頁各列的鍵（伺服器說哪一列）也認得到
+
+
 def test_prologue_reveal_takes_the_chip_row_keys(prologue_root):
     """江湖頁最上面那一排小標有三塊：態勢、大事（board）、主線（quest）；每一塊各有自己的 reveal 鍵。"""
     edit_json(prologue_root / "tutorial.json", lambda t: t["steps"][2]["reveal"].extend(["board", "quest", "stances"]))
@@ -2086,6 +2132,56 @@ def test_the_last_prologue_step_must_let_the_player_walk_out(prologue_root):
     """出師那一步的 allow 沒有 move:，選單與輿圖都不給走，新人永遠出不了草廬。"""
     edit_json(prologue_root / "tutorial.json", lambda t: t["steps"][10].update(allow=["act:rest"]))
     with pytest.raises(ContentError, match="走不出草廬"):
+        load_content(prologue_root)
+
+
+@pytest.mark.parametrize("field, text, match", [
+    ("after", "你融了{意竟}，練出了【{武學}】。", "意竟"),  # 打錯的字：會原樣出現在畫面上
+    ("after", "你把蠻牛拳熔了，換回 {點數} 點心得。", "點數"),
+    ("text", "把【{武器}】換上。", "武器"),  # 步驟的話只認 {武學}
+    ("line", "先把【{武器}】改練上身", "武器"),
+    ("scene", "{意境}之景。", "意境"),  # 旁白沒有意境可換
+])
+def test_the_placeholders_in_a_step_are_known_ones(prologue_root, field, text, match):
+    """T7 審查 N6：步驟的話、旁白、收起來那一行只認 {武學}，結果那一句（after）認 {意境}、{武學}、{心得}；打錯的字載入時就報，
+    不會當成字面的花括號出現在玩家畫面上。"""
+    edit_json(prologue_root / "tutorial.json", lambda t: t["steps"][3].update({field: text}))
+    with pytest.raises(ContentError, match=match):
+        load_content(prologue_root)
+
+
+def test_the_known_placeholders_load(prologue_root):
+    edit_json(prologue_root / "tutorial.json", lambda t: t["steps"][3].update(
+        {"after": "你把拳腳融進{意境}之意境，練出了【{武學}】，退回 {心得} 點。", "line": "把【{武學}】放進爐裡", "scene": "{武學}的故事。"},
+    ))
+    assert "{心得}" in load_content(prologue_root).tutorial.steps[3].after
+
+
+def test_a_paged_step_needs_paragraphs_and_a_place_in_the_prologue(prologue_root):
+    """T7 審查 I1（分頁）：師父的話分頁照段落（\\n\\n）切，只有一段的步驟分不了頁；分頁是序章才有的欄位。"""
+    edit_json(prologue_root / "tutorial.json", lambda t: t["steps"][3].update(paged=True))  # 「去合成。」只有一段
+    with pytest.raises(ContentError, match="paged.*兩段"):
+        load_content(prologue_root)
+
+    def two_paragraphs(t):
+        t["steps"][3].update(paged=True, text="先說這一段。\n\n再說這一段，要你合成。")
+
+    edit_json(prologue_root / "tutorial.json", two_paragraphs)
+    assert load_content(prologue_root).tutorial.steps[3].paged
+
+    def after_the_prologue(t):
+        t["steps"].append({"id": "p12", "text": "甲。\n\n乙。", "paged": True, "done_when": {"action": "explore"}})
+
+    edit_json(prologue_root / "tutorial.json", after_the_prologue)
+    with pytest.raises(ContentError, match="序章才有的欄位"):
+        load_content(prologue_root)
+
+
+def test_the_farewell_reward_must_fill_the_stamina(prologue_root):
+    """略過序章的人體力補滿（prologue.finish）；走出草廬的人只有出師那一步的獎勵能補。獎勵給不滿，兩種人離開時的體力就不一樣
+    （一個看得出走過序章沒有）。"""
+    edit_json(prologue_root / "tutorial.json", lambda t: t["steps"][10]["reward"].update(stamina=100))
+    with pytest.raises(ContentError, match="體力補滿"):
         load_content(prologue_root)
 
 
