@@ -3057,12 +3057,23 @@ def test_open_season_only_works_for_admins(tmp_path, monkeypatch):
     assert fresh.world.season_phase() == "running"
 
 
+def _a_guide_step_after_the_hut(monkeypatch):
+    """序章十一步之後沒有別的引導步驟了（第一季的軍令兩步由入伍段取代，新手引導計畫二）：幾個測試要量的是「有一個草廬之外、有話要說的步驟時
+    對話框怎麼畫」，就在這份內容的引導最後接一步（站在序章之後的人才會遇到）。回傳那一步。"""
+    from tianxia.models import TutorialGoal, TutorialStep
+
+    step = TutorialStep(id="t_walk", text="出去走走。", done_when=TutorialGoal(action="explore"))
+    monkeypatch.setattr(server.CONTENT.tutorial, "steps", [*server.CONTENT.tutorial.steps, step])
+    return step
+
+
 def test_preparing_has_no_now_card_and_no_countdown(tmp_path, monkeypatch):
     """FB-049：籌備中時鐘沒走、什麼都不能做：江湖頁不畫「剛剛」（開場那一則寫「賽季開始」、叫人先去探索），
     狀態列不倒數下一件大事；江湖紀錄頁照樣列得到開場那一則。開季之後照常。"""
     monkeypatch.setattr(server.CONTENT.config, "auto_open_first_season", False)
     monkeypatch.setattr(server.CONTENT.config, "season_one", True)
     monkeypatch.setattr(server.CONTENT.config, "admins", ["路人"])
+    _a_guide_step_after_the_hut(monkeypatch)
     fresh = Game.new(server.CONTENT, "路人", world=open_world(tmp_path / "world.db"))
     assert fresh.world.season_phase() == "preparing"
     view = server.main_view(fresh)
@@ -4181,10 +4192,7 @@ def test_a_fight_then_an_event_sends_a_short_now_card_and_a_stable_guide_key(cli
     from tianxia import journal
 
     monkeypatch.setattr(server.CONTENT.config, "train_event_chance", 1.0)  # 打完一定接戰後的事件
-    # 草廬的序章走完之後，beta 沒有引導的步驟了（只有第一季才多出軍令兩步）：要有一個序章之外、有話要說的步驟，
-    # 就把第一個軍令步驟當成不分季的（對話框在草廬裡遇到事件時整個不畫，見 Game.guide_box；這個測試量的是草廬之外的收起規則）
-    first_step = server.CONTENT.tutorial.steps[server.CONTENT.tutorial.prologue_steps]
-    monkeypatch.setattr(first_step, "season_one", False)
+    first_step = _a_guide_step_after_the_hut(monkeypatch)  # 對話框在草廬裡遇到事件時整個不畫（見 Game.guide_box）；這個測試量的是草廬之外的收起規則
     _player(client)
     game = server.game_for("沈青衫")
     server.act(game, lambda g: setattr(g.state.player, "location", "yingchuan_wilds"))

@@ -94,6 +94,9 @@
     prologueKey: "", // 上一次整頁重畫時序章亮起來的東西（見 prologueKey、renderTop）
     recap: undefined, // 設定頁「重看序章」的文字：undefined＝還沒問過伺服器，""＝沒有序章；同一次載入只問一次（loadRecap）
     recapOpen: false,
+    ordersSeen: false, // 入伍段第一步的 view_orders 送過了嗎（軍令卡真的在畫面上才送，見 watchOrders）；登入、登出清掉
+    ordersObs: null, // 盯著軍令卡的 IntersectionObserver（整頁重畫就換一個）
+    ordersTimer: null, // 軍令卡進畫面之後的計時（ORDERS_SEEN_MS）；離開畫面就取消
     pushLive: false, // 伺服器推送連著嗎（見「伺服器推送」那一段）：連著時平常 60 秒才輪詢，沒連就每 10 秒
   };
 
@@ -188,6 +191,7 @@
   }
 
   function enter(data) {
+    resetOrdersWatch(); // 換了帳號、角色：入伍段第一步的看過與計時都重來
     S.moveMode = "walk"; // 登入、重新登入、建角的畫面都是伺服器照步行排的（_entry 不看走法），切換鈕跟著回到步行
     if (data.stage === "game") {
       S.stage = "game";
@@ -418,7 +422,50 @@
     el.setAttribute("aria-expanded", String(open));
   }
 
+  // ── 入伍段第一步（新手引導計畫二，preflight F5）：軍令卡真的在畫面上才算看過 ──
+  // 框是引薦人的第一步（key 是 r2_briefing；伺服器要等序章走完、引薦人的框輪到了才送這個 key）時，軍令卡在行動列底下。手機上第一屏放不下它，
+  // 一畫出來就送的話，引薦人那段話還沒讀就被換成下一步。所以等卡片至少一半進了畫面、停留 ORDERS_SEEN_MS，才送一次 view_orders；
+  // 捲走了就重新計時。整頁重畫（輪詢內容一變就會）把 IntersectionObserver 重掛到新的那張卡片上，已經在跑的計時不因為重畫重來。
+  // 瀏覽器沒有 IntersectionObserver 時退回「畫出來之後 ORDERS_SEEN_MS」；分頁在背景時計時走完不送、過一輪再看。
+  // 送出去的記在 S.ordersSeen（不重送）；送不出去就還回去，下一次重畫再試；這一步過了就清掉，下一季輪到它再送。
+  const ORDERS_SEEN_MS = 1500;
+  function stopOrdersTimer() {
+    clearTimeout(S.ordersTimer);
+    S.ordersTimer = null;
+  }
+  function resetOrdersWatch() { // 登入、換角色、登出
+    if (S.ordersObs) S.ordersObs.disconnect();
+    S.ordersObs = null;
+    stopOrdersTimer();
+    S.ordersSeen = false;
+  }
+  function sendOrdersSeen() {
+    S.ordersTimer = null;
+    const g = S.main && S.main.guide;
+    if (!g || g.key !== "r2_briefing" || S.ordersSeen) return;
+    if (document.hidden) { S.ordersTimer = setTimeout(sendOrdersSeen, ORDERS_SEEN_MS); return; }
+    S.ordersSeen = true;
+    api("/api/do/view_orders", {}).then((r) => applyMain(r.main)).catch(() => { S.ordersSeen = false; });
+  }
+  function watchOrders() {
+    if (S.ordersObs) S.ordersObs.disconnect(); // 整頁重畫換了卡片：舊的 observer 看的是已經不在頁面上的那一張
+    S.ordersObs = null;
+    const g = S.main && S.main.guide;
+    const first = !!g && g.key === "r2_briefing";
+    if (!first) S.ordersSeen = false;
+    const card = first && !S.ordersSeen && S.tab === "jianghu" ? document.querySelector("details.orders") : null;
+    if (!card) { stopOrdersTimer(); return; }
+    const arm = () => { if (S.ordersTimer == null) S.ordersTimer = setTimeout(sendOrdersSeen, ORDERS_SEEN_MS); };
+    if (typeof IntersectionObserver === "undefined") { arm(); return; }
+    S.ordersObs = new IntersectionObserver((entries) => {
+      const e = entries[entries.length - 1];
+      if (e.isIntersecting && e.intersectionRatio >= 0.5) arm(); else stopOrdersTimer();
+    }, { threshold: 0.5 });
+    S.ordersObs.observe(card);
+  }
+
   function afterPage() {
+    watchOrders(); // 入伍段第一步：軍令卡在畫面上才算看過（離開江湖頁、框不是第一步時它自己收掉）
     if (S.tab === "jianghu") {
       // 「剛剛」收著卻其實放得下：拿掉底下的淡出與「展開全文」（A4）
       const now = document.querySelector(".now.clamp");
@@ -1975,7 +2022,7 @@
           break;
         }
         case "ask-no": closeAsk(); break;
-        case "logout": closeEvents(); await api("/api/logout", {}); S.sheet = false; S.stage = "gate"; S.main = null; render(); break;
+        case "logout": closeEvents(); await api("/api/logout", {}); resetOrdersWatch(); S.sheet = false; S.stage = "gate"; S.main = null; render(); break;
         case "kind": S.kind = el.dataset.kind; renderPage(); break;
         case "mx": await mx(el.dataset.op); break;
         case "person":

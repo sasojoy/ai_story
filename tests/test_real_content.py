@@ -164,10 +164,11 @@ def test_every_way_through_the_real_hut_reaches_yingchuan_with_a_preset_art(cont
     assert game.state.player.location == "yingchuan" and game.state.player.tutorial_step == content.tutorial.prologue_steps
 
 
-@pytest.mark.parametrize("old_step, new_step", [(0, 11), (3, 11), (6, 11), (7, 12)])
+@pytest.mark.parametrize("old_step, new_step", [(0, 11), (3, 11), (6, 11), (7, 11), (8, 11)])
 def test_a_save_from_before_the_prologue_is_never_sent_to_the_real_hut(content, world, old_step, new_step):
     """換版當下已經有的角色（舊引導八步：t1～t6、第一季的 t7、t8）：讀檔後不管走到哪一步都站在原地、不進草廬；步數換算成新的
-    （不分季的舊六步當作走過序章，t7、t8 接在序章後面）。"""
+    （不分季的舊六步當作走過序章）。舊的 t7、t8 已經由入伍段取代（新手引導計畫二），指到它們的步數夾在最後一步（序章十一步做完）：
+    換版當下已經投靠的不走入伍段，還沒投靠的投靠時才開始（tests/test_enlist.py）。"""
     from tianxia.state import ONBOARDING_VERSION
 
     game = Game.new(content, "老手", rng=random.Random(0), world=world)
@@ -314,6 +315,33 @@ def test_the_real_prologue_walks_to_yingchuan(content, world):
     assert p.location == "yingchuan" and p.tutorial_step == content.tutorial.prologue_steps == 11
     assert p.stats["silver"] == silver + 30 and p.stamina == content.config.stamina_max
     assert "mentor_hut" not in atlas.visible_locations(game.state, content)
+
+
+def test_the_real_enlistment_has_three_recruiters_and_the_drifter_line_names_every_join_place(content):
+    """入伍段（新手引導計畫二，設計 10.4、10.6）：三位引薦人都在、每位的收起來那一行有兩行（不帶名字）、營地武學與陣營的投靠地點
+    跟內容對得上、「主線與目標」散人那一行列了劇本每個陣營每一個投靠地點的名字；舊的軍令兩步（t7、t8）沒有了，hut 之後沒有引導步驟。"""
+    e = content.tutorial.enlist
+    assert e is not None and [s.id for s in e.steps] == ["r2_briefing", "r3_first_order"]
+    assert [s.done_when.action for s in e.steps] == ["view_orders", "order"]
+    assert set(e.recruiters) == {f.id for f in content.scenario.factions}
+    assert {k: v.name for k, v in e.recruiters.items()} == {"guan": "老石", "huang": "青禾", "haoqiang": "季伯平"}
+    for who in e.recruiters.values():
+        assert who.intro and who.briefing and who.order_hint and who.done and who.rejoin
+        assert len(who.lines) == len(e.steps) == 2 and all(who.lines)
+        assert not any(line.startswith(who.name) for line in who.lines)  # 框上的名字另外寫（F9）
+        assert who.order_hint == who.lines[1] and who.lines[0] == "看看「本週軍令」"
+        assert "{" not in "".join([who.intro, who.briefing, who.order_hint, who.done, who.rejoin, *who.lines])  # 沒有留下的預留位
+    skills = {skill.name for skill in content.skills.values()}  # 引薦人說的營地武學，內容裡真的有（N13）
+    for faction_id, names in {
+        "guan": ("行伍刀法", "行伍練氣"), "huang": ("黃天刀法", "符水掌", "太平導引"), "haoqiang": ("塢堡樁功",),
+    }.items():
+        for name in names:
+            assert name in skills and name in e.recruiters[faction_id].intro
+    for faction in content.scenario.factions:
+        for place in faction.join_at:
+            assert content.locations[place].name in e.drifter_line
+    assert not any(step.season_one for step in content.tutorial.steps)
+    assert content.tutorial.steps[-1].id == "p11_farewell"  # 師父的話之後沒有別的引導步驟：投靠由「主線」那一行與引薦人帶
 
 
 def test_every_battle_is_fought_in_the_region_where_it_starts(content):

@@ -12,7 +12,7 @@ from unittest import mock
 
 import pytest
 
-from tianxia import atlas, calendar, figures, front_lines, mapview, orders, rules, team, timetable
+from tianxia import atlas, calendar, enlist, figures, front_lines, mapview, orders, rules, team, timetable
 from tianxia.content import load_content
 from tianxia.encounter import EncounterResult
 from tianxia.engine import Game
@@ -40,7 +40,7 @@ def on(real):
     return real
 
 
-BASE = 11  # 不分季的引導步數（序章十一步）；第一季的軍令兩步（t7_orders、t8_order_done）排在它們後面，是第 BASE、BASE + 1 步
+BASE = 11  # 引導的步數（序章十一步；第一季的軍令兩步已經由入伍段取代，新手引導計畫二）：做完它們就是「引導做完」
 
 
 def _game(content, name="甲", faction=None, at=None, world=None):
@@ -582,38 +582,67 @@ def test_orders_view_shows_own_side_with_deadline(on):
     assert _game(on, "丙").orders_view() == []  # 散人
 
 
-# ── Task 8：新手引導多兩步（只在第一季）────────────────────────
+# ── Task 8：投靠之後的入伍段（取代舊的兩個引導步驟，新手引導計畫二）────────────────────────
 
 
-def test_two_tutorial_steps_after_joining_only_in_season_one(on):
+def test_enlistment_after_joining_only_in_season_one(on):
+    """用真實內容走一遍入伍段：投靠 → 框是老石、第一段是入營＋看戰局 → 軍令卡出現（view_orders）→ 框換成「挑一道軍令」→
+    攻城軍令打贏一場 → 框是老石的結尾 → 「知道了」收起。開關關著（beta 季）投靠不開始。"""
     from tianxia import guide
 
     game = _game(on, at="changshe")
     off = load_content(CONTENT_DIR)  # 同一份存檔，開關關著的內容
-    assert len(guide.steps(game.state, off)) == BASE  # 開關關著：只有序章十一步
-    steps = guide.steps(game.state, on)
-    assert [s.id for s in steps][-2:] == ["t7_orders", "t8_order_done"]
-    assert steps[-2].text.startswith("如今天下分成了三邊")  # 濃縮版內容表 3.4（S1 審過）
+    assert len(guide.steps(game.state, off)) == len(guide.steps(game.state, on)) == BASE  # 軍令兩步沒有了：兩種季都只有序章十一步
     game.state.player.tutorial_step = BASE  # 序章十一步做完了
     game.choose("faction:guan")
     msgs = game.choose("faction:confirm")
-    assert game.state.player.tutorial_step == BASE + 1  # 投靠完成「看一眼本週軍令」那一步
-    # 下一步的說明在對話框，不在「剛剛」（引導重做設計 8.1.3；畫面批次審查 I2）
-    assert not any("軍令上寫什麼" in m or "引導完成" in m for m in msgs)
-    assert "✔ 引導完成" in game.state.player.guide_done and game.guide_box()["text"].startswith("軍令上寫什麼，就照著做一次")
-    assert not any("引導完成" in line for line in game.state.journal[0].lines)
+    assert game.state.player.enlist_step == 0 and game.state.player.tutorial_step == BASE
+    box = game.guide_box()
+    assert box["speaker"] == "老石" and box["key"] == "r2_briefing" and box["text"].startswith("一個跛腳的老兵")
+    assert "看這三條線" in box["text"] and "挑一道" in box["text"]  # 入營＋看戰局
+    assert box["line"] == "看看「本週軍令」"  # 收起來那一行不帶名字（框上的名字另外寫）
+    assert not any("老兵" in m or "引導完成" in m for m in msgs)  # 引薦人的話在對話框，不在「剛剛」
+    game.view_orders()
+    box = game.guide_box()
+    assert box["key"] == "r3_first_order" and box["text"] == "挑一道軍令，出一次力" and box["done"] == ["✔ 引導完成"]
     _order(game, "siege", "guan", front="yingru")
     with _win():
         game.choose("act:train")
-    assert game.state.player.tutorial_step == BASE + 2 and not guide.tutorial_active(game.state, on)
+    assert enlist.done(game.state, on) and game.state.player.tutorial_step == BASE
+    box = game.guide_box()
+    assert box["end"] and box["speaker"] == "老石" and box["text"].startswith("「做得乾淨。」")
+    game.guide_ack()
+    assert game.guide_box() is None
+    # 開關關著：不開始
+    beta = _game(off, at="changshe")
+    beta.state.player.tutorial_step = BASE
+    beta.choose("faction:guan")
+    beta.choose("faction:confirm")
+    assert beta.state.player.faction == "guan" and beta.state.player.enlist_step is None and beta.guide_box() is None
 
 
-def test_a_returning_player_who_finished_the_base_steps_keeps_going(on):
-    """換季重來時，做完不分季的序章十一步就算做完引導（FB-034 照舊不重來）；第一季多的兩步接著做。"""
+def test_after_the_farewell_a_drifter_is_told_where_to_join_and_nothing_nags(on):
+    """師父出師那一步（p11）說完三邊在哪裡之後沒有別的引導步驟、沒有結語、沒有框；散人不被催，「主線與目標」靜靜留一行投靠地點
+    （設計 4.1、6.3）。投靠了之後那一行就沒有了。"""
+    game = _game(on, at="yingchuan")
+    assert game.state.player.tutorial_step == BASE and game.guide_box() is None
+    text = game.quest_text()
+    assert "**投靠**：想投靠的話——" in text
+    for faction in on.scenario.factions:
+        for place in faction.join_at:
+            assert on.locations[place].name in text
+    game.state.player.location = "changshe"
+    game.choose("faction:guan")
+    game.choose("faction:confirm")
+    assert "**投靠**" not in game.quest_text() and game.quest_text().count("（老石）") == 1  # 下一步改寫引薦人交代的事
+
+
+def test_a_returning_player_who_finished_the_tutorial_keeps_going(on):
+    """換季重來時，做完序章十一步就算做完引導（FB-034 照舊不重來）；第一季不再多出軍令兩步（入伍段另外記）。"""
     game = _game(on)
     game.state.player.tutorial_step = BASE
     game._reset_player_for_new_season(2)
-    assert game.state.player.tutorial_step == BASE
+    assert game.state.player.tutorial_step == BASE and game.guide_box() is None
 
 
 # ── Task 9：假人照軍令出力、第一週走完一道軍令 ─────────────────────
@@ -673,6 +702,7 @@ def test_new_player_can_join_and_finish_an_order_in_week_one(on):
     game.choose("faction:guan")
     game.choose("faction:confirm")
     assert len(game.orders_view()) == 3
+    game.view_orders()  # 網頁在軍令卡真的出現在畫面上時送（入伍段第一步：看戰局）
     target = next(o for o in orders.current(game.state, on, "guan") if o.template in ("intercept", "siege"))
     place = target.location if target.template == "intercept" else next(
         loc for loc in on.locations if rules.front_of(on, loc) == target.front and on.locations[loc].enemies
@@ -686,7 +716,7 @@ def test_new_player_can_join_and_finish_an_order_in_week_one(on):
             game.choose("act:train")
     assert target.progress.get("甲") == 1
     assert orders.week_of(game.state, on) == 1
-    assert game.state.player.tutorial_step == BASE + 2
+    assert enlist.done(game.state, on) and game.state.player.tutorial_step == BASE  # 入伍段的「第一道軍令」也跟著過
 
 
 def test_a_new_guan_recruit_finishes_a_week_one_order_without_leaving_yingru(on):
@@ -701,6 +731,7 @@ def test_a_new_guan_recruit_finishes_a_week_one_order_without_leaving_yingru(on)
     game.choose("faction:guan")
     game.choose("faction:confirm")
     assert orders.week_of(game.state, on) == 1
+    game.view_orders()  # 入伍段第一步：軍令卡出現在畫面上
     defend = next(o for o in orders.current(game.state, on, "guan") if o.template == "defend")
     assert orders.title(on, defend) == "守城・潁川汝南"
     assert defend.id in [card["id"] for card in game.orders_view()]  # 軍令卡上看得到
@@ -710,7 +741,7 @@ def test_a_new_guan_recruit_finishes_a_week_one_order_without_leaving_yingru(on)
     assert game.state.player.location == here
     assert defend.progress.get("甲") == 1
     assert any("守城・潁川汝南" in m for m in msgs)
-    assert game.state.player.tutorial_step == BASE + 2  # 引導的「做完一次軍令」也跟著過
+    assert enlist.done(game.state, on) and game.state.player.tutorial_step == BASE  # 入伍段的「第一道軍令」也跟著過
 
 
 @pytest.mark.parametrize("yingru", [40, 50])
