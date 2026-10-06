@@ -241,7 +241,7 @@ class PlayerState(BaseModel):
     summons: Summons | None = None  # 還沒去的召見
     followers: list[str] = Field(default_factory=list)  # 部下（followers.json 的模板 id）
     qualified: bool = False  # 第 4 階的資格（候缺，正式版丙一）：rank 停在 3、頭銜寫「…（…候缺）」；上任與席次是計畫丁的事
-    hinted: list[int] = Field(default_factory=list)  # 說過「只缺一個機會」那一句的階（每階一次）
+    rank_hinted: list[int] = Field(default_factory=list)  # 說過「只缺一個機會」那一句的階（每階一次；跟新手引導的 hints_seen 無關）
 
     # ── 大勢人物（計畫 T4、軍令文件 4.5）：剛被你打敗的人物 id → 到哪個「現實」時間（秒，Game.now）之前不見你、也不跟你交手。
     # 看現實時間、不看賽季時鐘（管理者快轉不會讓他提早見你）；角色每季重來，跟著清空 ──

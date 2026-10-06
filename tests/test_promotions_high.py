@@ -52,7 +52,7 @@ def _without_rank3(real):
 
 def test_defaults_so_old_saves_load():
     p = PlayerState(name="甲", location="x", stats={}, stamina=0)
-    assert (p.qualified, p.hinted) == (False, [])
+    assert (p.qualified, p.rank_hinted) == (False, [])
     s = Summons(rank=2, location="x")
     assert (s.leg, s.prev, s.event) == (0, None, None)
     assert (Config().rank3_contrib, Config().rank4_contrib) == (900, 1800)
@@ -65,15 +65,15 @@ def test_old_save_json_without_the_new_fields_loads():
     """舊存檔的 JSON 沒有新欄位：照預設載入（characters.data 存的就是這種 JSON）。"""
     p = PlayerState.model_validate({"name": "甲", "location": "x", "stats": {}, "stamina": 0,
                                     "summons": {"rank": 2, "location": "x", "figure": "huangfusong", "since": 3.0}})
-    assert (p.qualified, p.hinted) == (False, [])
+    assert (p.qualified, p.rank_hinted) == (False, [])
     assert (p.summons.leg, p.summons.prev, p.summons.event) == (0, None, None)
 
 
 def test_new_fields_survive_a_save_round_trip():
-    p = PlayerState(name="甲", location="x", stats={}, stamina=0, qualified=True, hinted=[3, 4],
+    p = PlayerState(name="甲", location="x", stats={}, stamina=0, qualified=True, rank_hinted=[3, 4],
                     summons=Summons(rank=3, location="x", leg=1, prev="promo_guan_3_memorial", event="promo_guan_3_palace"))
     again = PlayerState.model_validate_json(p.model_dump_json())
-    assert (again.qualified, again.hinted) == (True, [3, 4])
+    assert (again.qualified, again.rank_hinted) == (True, [3, 4])
     assert (again.summons.leg, again.summons.prev, again.summons.event) == (1, "promo_guan_3_memorial", "promo_guan_3_palace")
 
 
