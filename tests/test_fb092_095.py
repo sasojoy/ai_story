@@ -389,6 +389,62 @@ def test_fb093_the_glow_lands_on_the_defence_button_in_the_page(on):
     assert not re.search(r'<details class="fold here" open>', run(quiet, "return H.actionBar(m);"))
 
 
+# FB-W1（走查 375×812）：第一道軍令那一步發光的鈕在「此地還能做」摺疊裡，底邊 802、在分頁列（756）底下，框上卻沒有「在下面 ↓」——
+# 以前只有序章的框有（pro()）。任何帶 glow 的框（入伍段）發光的東西沒整個露在第一屏裡，都要有；提示框不發光，沒有目標就沒有。
+_CUE = """
+  const inserted = [];
+  T.qs[".card.guide .guide-head"] = { firstElementChild: { insertAdjacentHTML: (pos, html) => inserted.push([pos, html]) }, querySelector: () => null };
+  T.qs[".tabs"] = { getBoundingClientRect: () => ({ top: 756 }) };
+  const at = (top, bottom, via = "cue") => {
+    T.qs["#page .glow"] = { getBoundingClientRect: () => ({ top, bottom }) };
+    inserted.length = 0;
+    if (via === "cue") H.guideCue(); else { T.el(["act:duty"]); H.applyGlow(); }
+    return inserted.length;
+  };
+  %s"""
+
+
+@pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
+def test_fbw1_an_enlistment_box_points_below_when_its_glowing_button_is_cut_off(on):
+    m = _enlist_main(on)
+    assert m["guide"]["glow"] == ["act:duty"]
+    script = _CUE % """return {
+      below: at(740, 802), peeking: at(747, 813), onScreen: at(500, 560), touching: at(696, 756),
+      viaApplyGlow: at(740, 802, "glow"), html: (at(740, 802), inserted[0]),
+      none: (delete T.qs["#page .glow"], inserted.length = 0, H.guideCue(), inserted.length) };"""
+    out = run(m, script)
+    assert out["below"] == 1 and out["peeking"] == 1 and out["viaApplyGlow"] == 1  # 底邊在分頁列（756）底下：要有
+    assert out["onScreen"] == 0 and out["touching"] == 0 and out["none"] == 0  # 整個看得到、或沒有發光的東西：不要
+    assert out["html"][0] == "afterend" and 'data-act="guide-below"' in out["html"][1] and "在下面 ↓" in out["html"][1]
+
+
+@pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
+def test_fbw1_a_box_without_a_glow_never_gets_the_cue(on):
+    """提示框、沒有 glow 的入伍框：頁面上就算有別的東西在發光，也不是它們指的。"""
+    m = _enlist_main(on)
+    quiet = {**m, "guide": {k: v for k, v in m["guide"].items() if k != "glow"}}
+    out = run(quiet, _CUE % "return { below: at(740, 802), viaApplyGlow: at(740, 802, 'glow') };")
+    assert out == {"below": 0, "viaApplyGlow": 0}
+    hint = {**m, "guide": {"key": "h_lose", "speaker": "想起師父說過", "text": "…", "line": "…", "hint": True, "full": True}}
+    assert run(hint, _CUE % "return at(740, 802);") == 0
+    assert run({**m, "guide": None}, _CUE % "return at(740, 802);") == 0  # 沒有框就沒有地方放
+
+
+@pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
+def test_fbw1_the_cue_for_an_enlistment_box_is_worked_out_again_on_resize(on):
+    m = _enlist_main(on)
+    script = """return (async () => {
+      const inserted = [];
+      T.qs[".card.guide .guide-head"] = { firstElementChild: { insertAdjacentHTML: (pos, html) => inserted.push(html) }, querySelector: () => null };
+      T.qs[".tabs"] = { getBoundingClientRect: () => ({ top: 756 }) };
+      T.qs["#page .glow"] = { getBoundingClientRect: () => ({ top: 740, bottom: 802 }) };
+      (T.listeners.resize || []).forEach((fn) => fn());
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      return inserted.length;
+    })();"""
+    assert run(m, script) == 1
+
+
 def test_fb093_the_step_glows_the_sides_defence_button(on):
     from tianxia.content import ContentError, validate
 
