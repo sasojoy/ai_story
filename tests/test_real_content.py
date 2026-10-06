@@ -614,6 +614,7 @@ def test_the_fortune_turns_into_a_gift_when_nobody_can_be_recruited(content, tmp
 # ── 完整跑一季（機器人）──────────────────────────────────
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("seed", [1, 2, 3])
 def test_bot_plays_a_full_season(content, seed, tmp_path):
     from tianxia.sqlite_world import open_world
@@ -624,6 +625,7 @@ def test_bot_plays_a_full_season(content, seed, tmp_path):
     assert len(game.state.player.seen_events) >= 3
 
 
+@pytest.mark.slow
 def test_the_bot_learns_insights_fuses_and_cultivates(content, tmp_path):
     from tianxia.sqlite_world import open_world
 
@@ -942,6 +944,7 @@ def test_world_map_labels_never_collide_or_leave_the_canvas_at_the_start(content
 DISC_OVERLAPS = {"situation": 0, "enemies": 1, "story": 0, "routes": 1}
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("layer", list(DISC_OVERLAPS))
 def test_current_place_marks_stay_clear_of_names_from_any_location(content, layer):
     """所在地的紅旗、紅圈與選定的圓圈上面不會有字（名字、小字、山名）；別的地點的圓盤也盡量不被名字壓到。"""
@@ -1690,6 +1693,7 @@ def test_qinjie_no_longer_names_the_heir():
         assert "趙弘" not in o.text + o.chronicle and "推趙弘為帥" not in o.text
 
 
+@pytest.mark.slow
 def test_every_person_slot_resolves_whoever_is_left():
     """真實時刻表每一格（季末除外）都結算得了：人物都在時寫名字；人物全都不在時寫泛稱、@人物 的效果略過、不丟例外。
     兩種情形都沒有沒填的欄位留在公告、傳聞與江湖史裡。"""
@@ -1988,6 +1992,7 @@ def test_real_showdowns_start_from_the_opening_fronts():
     assert starts == {"changshe_fire": 55, "wancheng": 58, "guangzong": 48}
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("season_one", [False, True])
 def test_every_idle_menu_id_is_one_the_prologue_allow_list_knows(content, tmp_path, season_one):
     """序章每一步的 allow 只准寫閒著的選單真的做得出來的 id（models.allow_known）。整季隨機玩，每一個閒著的選單（有「打坐」；

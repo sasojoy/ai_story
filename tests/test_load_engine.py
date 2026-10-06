@@ -12,6 +12,8 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import load_engine  # noqa: E402
 
+pytestmark = pytest.mark.slow  # 跑整個腳本：合併前的整套才跑（pytest -m "slow or not slow"）
+
 
 def test_small_run_reports_every_number(tmp_path):
     report = load_engine.run(characters=5, actions=40, seed=1, workdir=tmp_path, end_season=True)
