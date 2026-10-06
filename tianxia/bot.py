@@ -75,11 +75,14 @@ class ForgePlan(NamedTuple):
 
 
 def pick_forge(
-    game: Game, rng: random.Random, merge_share: float = MERGE_SHARE, blend_share: float = BLEND_SHARE,
+    game: Game, rng: random.Random, merge_share: float | None = None, blend_share: float | None = None,
 ) -> ForgePlan | None:
     """挑一爐（整季機器人與伺服器假人共用）：體力低於 FORGE_RESERVE、或什麼都合不了就是 None。只挑、不開爐，什麼都不改。
     亂數的擲法跟原本寫在 forge_and_cultivate 裡的一模一樣（見那邊的說明），整季機器人的結果不變。
-    兩個份額是引數（伺服器假人的武學＋武學份額比較低）；預設值是定義這個函式當下的常數。"""
+    兩個份額是引數（伺服器假人的武學＋武學份額比較低）；沒給就在呼叫的當下讀模組常數 MERGE_SHARE、BLEND_SHARE
+    （不是定義時綁死：量平衡的腳本改這兩個常數要有效）。"""
+    merge_share = MERGE_SHARE if merge_share is None else merge_share
+    blend_share = BLEND_SHARE if blend_share is None else blend_share
     state, content, world = game.state, game.content, game.world
     p = state.player
     arts = library.owned_arts(state)

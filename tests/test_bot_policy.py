@@ -637,6 +637,79 @@ def test_apply_job_still_forges_a_pick_when_the_model_picked_nothing(content, wo
     assert len(library.owned_arts(game.state)) == 2
 
 
+def test_a_turn_holding_a_mastery_naming_job_does_nothing_else(content, world, arts_only, monkeypatch):
+    """絕學定名開成單子（MasterJob）之後，這一輪到此為止：不學藝、不熔、不合、不改練、不修練，也不做主要行動
+    （不然體力可能花掉，C 段開不成；第二件取名也不會在同一輪開出來）。"""
+    _install_factions(content)  # 有陣營：主要行動要是還在做，假人會動身去投靠點
+    monkeypatch.setattr(bot_policy, "PRACTICE_CHANCE", 0.0)
+    game = _waiting_to_name(content, world)
+    p = game.state.player
+    p.stats["silver"] = 100
+    seen = (p.stamina, p.stats["xinde"], p.location, list(p.arts), len(game.state.journal), p.naming)
+    slot = bot_policy.NamingSlot(open=True)
+    msgs = bot_policy.take_turn(game, _profile("guan"), random.Random(0), slot)
+    assert isinstance(slot.job, bot_policy.MasterJob) and slot.skipped == 0  # 沒有第二件被開出來、也沒被算成輪不到
+    assert msgs == [] and p.journey is None
+    assert (p.stamina, p.stats["xinde"], p.location, list(p.arts), len(game.state.journal), p.naming) == seen
+
+
+class Rolls(random.Random):
+    """random() 照給的順序回傳（用完就一直回最後一個）；choice／sample 照常用種子 0（它們不靠 random()）。"""
+
+    def __init__(self, *values):
+        super().__init__(0)
+        self.values = list(values)
+
+    def random(self):
+        return self.values.pop(0) if len(self.values) > 1 else self.values[0]
+
+
+def _first_job(game, rng):
+    slot = bot_policy.NamingSlot(open=True)
+    bot_policy.tend_arts(game, rng, slot)
+    return slot.job
+
+
+def _holding_two_arts_and_an_insight(content, world):
+    game = armed(content, world)
+    game.client = None
+    game.state.player.member.neigong_id = "basic_breath"  # 兩門武學＋一個意境：武學＋意境、武學＋武學都做得出來
+    return game
+
+
+def test_a_bot_holding_an_insight_splits_between_fusing_and_blending_by_the_server_share(
+    content, world, arts_only, monkeypatch,
+):
+    """SERVER_BLEND_SHARE（0.15，比整季機器人的 BLEND_SHARE 0.3 低）真的拿來分：手上有意境時，武學＋武學的擲骰過 0.15 才算。
+    第一擲是合成的機會（FORGE_CHANCE），第二擲才是這個份額。"""
+    game = _holding_two_arts_and_an_insight(content, world)
+    assert bot_policy.SERVER_BLEND_SHARE < bot.BLEND_SHARE
+    assert _first_job(game, Rolls(0.5, 0.20)).request.kind == "fuse"  # 0.20 在整季機器人的份額裡是武學＋武學，在假人的不是
+    assert _first_job(game, Rolls(0.5, 0.10)).request.kind == "blend"
+    monkeypatch.setattr(bot_policy, "SERVER_BLEND_SHARE", 0.25)  # 份額是呼叫的當下才讀的
+    assert _first_job(game, Rolls(0.5, 0.20)).request.kind == "blend"
+    assert _first_job(game, Rolls(0.5, 0.30)).request.kind == "fuse"
+
+
+def test_the_server_share_decides_how_many_of_many_picks_are_blends(content, world, arts_only):
+    game = _holding_two_arts_and_an_insight(content, world)
+    rng = random.Random(7)
+    kinds = [_first_job(game, rng).request.kind for _ in range(400)]
+    share = kinds.count("blend") / len(kinds)
+    assert set(kinds) == {"fuse", "blend"}
+    assert 0.10 <= share <= 0.20, share  # 0.15 上下；整季機器人的 0.3 會落在這個區間外
+
+
+def test_a_bot_with_no_insight_always_blends_whatever_the_share(content, world, arts_only, monkeypatch):
+    """記錄一個已知的事：沒有意境時只剩武學＋武學這一條路，份額不擲、擋不到它。正式內容開局送兩門武學、沒有意境，
+    所以真的假人一開始每一爐都是武學＋武學，直到拿到第一個意境（見整季模擬的量測）。"""
+    monkeypatch.setattr(bot_policy, "SERVER_BLEND_SHARE", 0.0)
+    game = _holding_two_arts_and_an_insight(content, world)
+    game.state.player.insights = []
+    rng = random.Random(3)
+    assert {_first_job(game, rng).request.kind for _ in range(40)} == {"blend"}
+
+
 def test_apply_job_for_a_mastery_that_is_no_longer_pending_does_nothing(content, world):
     """取名的時候那個等著定名的已經變了（定過了、或換了一門）：不定、不收，下次再來。"""
     game = _waiting_to_name(content, world)

@@ -470,6 +470,82 @@ def test_pick_forge_rolls_the_same_numbers_the_inline_pick_did(content, world, h
     assert rng.random() == next_random
 
 
+def _every_try_rejected(content, world, monkeypatch, branch):
+    """四種挑法各一個：手上的東西讓那一條路的每一組都被擋下（FORGE_TRIES 組全部 *_problem 不是 None），
+    其他兩條路的 *_problem 都不擋——要是被擋下之後掉到下一條路去，就會挑出一爐來。
+    回傳（game、這一條路該消耗的亂數＝照原本寫在 forge_and_cultivate 裡的擲法逐字重現的參考擲法）。"""
+    game = armed(content, world)
+    p = game.state.player
+    arts = None
+    if branch in ("blend after the roll", "blend only"):
+        p.member.neigong_id = "basic_breath"
+        p.insights = ["feng"] if branch == "blend after the roll" else []
+    elif branch == "merge":
+        p.insights = ["feng", "huo"]
+    arts = library.owned_arts(game.state)
+    insights = list(p.insights)
+
+    def reference(ref):  # 種子 1 的第一擲是 0.134：小於 MERGE_SHARE 與 BLEND_SHARE，所以那一擲「中」，走這一條路
+        if branch == "merge":
+            assert ref.random() < bot.MERGE_SHARE
+            for _ in range(bot.FORGE_TRIES):
+                ref.choice(insights), ref.choice(insights)
+        elif branch == "blend after the roll":
+            assert ref.random() < bot.BLEND_SHARE
+            for _ in range(bot.FORGE_TRIES):
+                ref.sample(arts, 2)
+        elif branch == "blend only":  # 沒有意境：不擲，直接走武學＋武學
+            for _ in range(bot.FORGE_TRIES):
+                ref.sample(arts, 2)
+        else:  # fuse：只有一門武學、一個意境，不擲
+            for _ in range(bot.FORGE_TRIES):
+                ref.choice(arts), ref.choice(insights)
+
+    problem = {
+        "merge": "merge_problem", "blend after the roll": "blend_problem", "blend only": "blend_problem",
+        "fuse": "fuse_problem",
+    }[branch]
+    monkeypatch.setattr(fusion, problem, lambda *args, **kwargs: "被擋下")
+    return game, reference
+
+
+@pytest.mark.parametrize("branch", ["merge", "blend after the roll", "blend only", "fuse"])
+def test_a_forge_pick_whose_every_try_is_rejected_stops_there_and_draws_the_same_numbers(
+    content, world, monkeypatch, branch,
+):
+    """挑出來的那一條路每一組都被擋下：這一輪不合（None），不會掉到下一條路去找別的合；亂數也只消耗那一條路的 FORGE_TRIES 組
+    （原本寫在 forge_and_cultivate 裡的擲法：被擋下之後整段結束）。釘住「被擋下」這條路——前面 29 組釘的都是挑得出來的。"""
+    game, reference = _every_try_rejected(content, world, monkeypatch, branch)
+    rng, ref = random.Random(1), random.Random(1)
+    assert bot.pick_forge(game, rng) is None
+    reference(ref)
+    assert rng.getstate() == ref.getstate()
+
+
+def test_forge_and_cultivate_does_not_forge_when_every_try_is_rejected(content, world, monkeypatch):
+    game, _ = _every_try_rejected(content, world, monkeypatch, "merge")
+    with mock.patch.object(Game, "forge", return_value=[]) as forge:
+        bot.forge_and_cultivate(game, random.Random(1))
+    forge.assert_not_called()
+
+
+def test_pick_forge_reads_the_shares_when_it_is_called(content, world, monkeypatch):
+    """份額在呼叫的當下才讀模組常數：改 bot.MERGE_SHARE／BLEND_SHARE（量平衡的腳本會這樣掃）要有效，不是定義函式時就綁死。"""
+    game = armed(content, world)
+    game.state.player.insights = ["feng", "huo"]
+    monkeypatch.setattr(bot, "MERGE_SHARE", 0.0)  # 擲不出合併：只剩武學＋意境
+    assert bot.pick_forge(game, Fixed(0.5)).art_id == "basic_fist"
+    monkeypatch.setattr(bot, "MERGE_SHARE", 0.9)  # 0.5 < 0.9：合併
+    assert bot.pick_forge(game, Fixed(0.5)).art_id is None
+    game.state.player.member.neigong_id = "basic_breath"
+    monkeypatch.setattr(bot, "MERGE_SHARE", 0.0)
+    monkeypatch.setattr(bot, "BLEND_SHARE", 0.0)
+    assert bot.pick_forge(game, Fixed(0.5)).other_art is None
+    monkeypatch.setattr(bot, "BLEND_SHARE", 0.9)
+    assert bot.pick_forge(game, Fixed(0.5)).other_art is not None
+    assert bot.pick_forge(game, Fixed(0.5), blend_share=0.0).other_art is None  # 明確給的份額照舊優先
+
+
 def test_forge_and_cultivate_forges_what_pick_forge_picked(content, world):
     """forge_and_cultivate 裡挑完就開：同一顆種子，開的那一爐就是 pick_forge 挑的那一爐。"""
     game = armed(content, world)
