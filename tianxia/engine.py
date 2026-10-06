@@ -374,11 +374,22 @@ class Game:
         self._deliver_big_events()  # 這一季的時刻表大事人人有份：沒看過的補上，推進的人也走這一條（FB-038）
         self._backfill_battle_scores()  # 場上沒有份量快照的自己（上線前就在決戰裡）：補上；排程的 world_tick 不走這裡
         self._deliver_battle_results()  # 下線時收場的決戰，回來第一次同步就補上（休季、籌備中也一樣，FB-027）
+        settled = self._settle_plots()  # 不在線時收場的密謀，回來第一次同步就結算（正式版乙二）
+        if settled:
+            self._write("密謀", settled)
+            self._save_season()  # 逾期的密謀在這裡改成作罷，那是共用賽季的一份
         summons = ranks.check_summons(self.state, self.content)  # 行動之外記到的貢獻（抵達、別人觸發的結算）：同步時補發召見（計畫 T5）
         if summons:
             self._write("召見", summons)
         self._deliver_away(away_from)  # 最後寫：江湖頁的「剛剛」先放這一份摘要（要跟別的計畫合併時，這一行維持在 return 的前一句）
-        return self._log(msgs + arrived + summons)
+        return self._log(msgs + arrived + settled + summons)
+
+    def _settle_plots(self) -> list[str]:
+        """集體密謀的結算（正式版乙二；opportunities.settle）：賽季時鐘暫停中不結算。暫停時畫面照常可看、計時器的同步照常走
+        （sync 不經 _refuse_while_paused），動作被擋；結算會記貢獻、完成機緣，那是動作的結果，所以也等繼續之後的第一次同步。"""
+        if self.world.paused_at() is not None:
+            return []
+        return opportunities.settle(self.state, self.content)
 
     def _deliver_away(self, away_from: float | None) -> None:
         """「你不在的時候」（傳聞分層設計第八節）：上次同步到這一次隔了 Config.away_hours 個「現實」小時以上（PM 2026-10-06：
@@ -956,6 +967,7 @@ class Game:
             if kind == "call" and arg != "back":
                 msgs += self._guide(note_action(self.state, self.content, self.world, "socialize"))  # 指名求見算一次交友
             msgs += check_thresholds(self.state, self.content, self.world, self._quick_client(), now=self.now)
+            msgs += self._settle_plots()  # 參與過的密謀收場了：各自結算一次（正式版乙二）
             msgs += ranks.check_summons(self.state, self.content)  # 貢獻跨過門檻就發召見（計畫 T5）
             journal.add_entry(self.state, self._draft.entry(self.state.world.time, msgs))
         finally:
@@ -1215,7 +1227,7 @@ class Game:
         region_id = region.id if region is not None else None
         msgs = foreshadow.hear_after_action(s, c, region_id, self.rng, self.world) if foreshadow.active(s, c) else []
         if opportunities.active(s, c):  # 天時地利型機緣的線索（正式版乙一）
-            msgs += opportunities.hear_clues(s, c, region_id, self.rng)
+            msgs += opportunities.hear_clues(s, c, region_id, self.rng, world=self.world)  # 內鬼的特徵要讀本季天機
         return msgs
 
     def _call(self, arg: str, prepared: companion_agent.PreparedTurn | None = None) -> list[str]:
@@ -2487,6 +2499,7 @@ class Game:
                 extra += self._order_credit(  # 軍令（計畫 T6）：攻城看戰線與敵方陣營，截糧看地點與運糧隊
                     kind="win", location=loc.id, front=front_of(c, loc.id), squad=squad.id, squad_faction=squad.faction,
                 )
+                extra += opportunities.on_win(s, c, front_of(c, loc.id), squad.faction)  # 三路並進（正式版乙二）
             changes, notes = battlelog.split_changes(extra, for_record=True)
             record.changes += changes
             record.notes += notes

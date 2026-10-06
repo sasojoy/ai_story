@@ -79,6 +79,8 @@ def prompt(state: GameState, content: Content, target: FactionDef, counts_text: 
         lost.append(f"{len(p.followers)} 名部下全部離隊")
     if p.convoy is not None:
         lost.append("押著的糧車作廢、交出去的糧草不退")
+    if opportunities.in_plot(state):  # 乙二：響應或牽頭、還沒收場也沒領的集體密謀（句子待 joy 潤）
+        lost.append("響應的密謀作廢（你做的那幾處也不算）")
     sect = _sect_left(p, old, content)
     if sect is not None:  # 離開門派之後這一季拜不回去（叛出旗標，content/events/sects.json 的 flags_none）
         lost.append(f"離開{sect.name}、這一季拜不回去")
@@ -115,6 +117,7 @@ def defect(state: GameState, content: Content, target: FactionDef) -> list[str]:
         p.sect = None
         msgs.append(f"你也就此離開了{sect.name}。")
     clear_progress(p)
+    opportunities.leave_plots(state)  # 還開著的集體密謀退出，做過的那幾處不再算（乙二；企劃者 2026-10-06 裁決）；全服的那一份在 state.world
     p.faction, p.defected = target.id, True
     names = w.active_pushers.get(old.id)
     if names is not None:  # 舊陣營的人數緩衝不再算他；新陣營等他下次推大勢才算（Game.push_trend）

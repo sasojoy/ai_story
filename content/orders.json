@@ -133,5 +133,10 @@
     {"figure": "zhangbao", "text": "地公將軍有令"},
     {"figure": null, "text": "人公將軍有令"}
   ],
-  "convoy_squads": {"guan": "guan_grain_convoy", "huang": "huang_grain_convoy"}
+  "convoy_squads": {"guan": "guan_grain_convoy", "huang": "huang_grain_convoy"},
+  "petition": {
+    "guan": {"label": "請命"},
+    "huang": {"label": "請示渠帥"},
+    "haoqiang": {"label": "聽家主吩咐", "characters": ["liubei", "guanyu", "zhangfei", "caocao", "yuanshao", "taoqian"]}
+  }
 }
