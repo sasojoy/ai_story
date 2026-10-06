@@ -70,6 +70,7 @@
     person: null,
     kind: "武學",
     artOpen: null, // 修練頁武學清單裡點開的那一門（id）；切分頁、改練成功之後收起
+    artNote: null, // 修練（衝品質）的結果：{ id, html }，寫在那一門卡片的按鈕底下（W7）；點別的卡片、切分頁、做別的動作就清掉
     legendTick: {}, // 修練頁每一門武學「服下破境丹」勾了沒（id → true）；預設不勾，輪詢重畫不會悄悄取消，修練送出之後清掉
     forgeSel: [], // 爐裡放的：{type: "art" | "ins", id}，最多兩樣、武學最多兩門（武學＋意境、武學＋武學＝合成，兩個意境＝合併）
     wheelSel: null, // 江湖頁行動列展開的那一格（目前只有 move）
@@ -1006,6 +1007,7 @@
             ${a.worn ? "" : `<button class="btn" data-act="switch" data-glow="switch" data-id="${esc(a.id)}">改練這一門</button>`}
             <button class="btn" data-act="melt" data-glow="melt" data-id="${esc(a.id)}" data-name="${esc(a.name)}" ${a.melt.ok ? "" : "disabled"}>熔煉</button>
           </div>
+          ${S.artNote && S.artNote.id === a.id ? `<div class="msg art-result">${S.artNote.html}</div>` : ""}
           <p class="muted">修練：<span class="cnote">${esc(ticked ? lg.note : a.cultivate.note)}</span>　熔煉：${esc(a.melt.note)}</p></div>` : ""}`;
     };
     // 意境：悟到的、合併得來的。說明（note）是模型寫的一句話，一律當文字跳脫，不是 HTML
@@ -1588,6 +1590,7 @@
     S.tab = tab;
     S.message = "";
     S.artOpen = null;
+    S.artNote = null;
     S.legendTick = {}; // 破境丹的勾也一起收：回到修練頁時它是真的沒勾（預設不勾）
     S.mapNotice = "";
     if (tab === "news") S.unseen = false;
@@ -1723,16 +1726,31 @@
     if (S.tab === "jianghu") renderPage();
   }
 
+  // 修練（cultivate）不捲回頁首（W7）：反覆修練時，那一門的卡片留著、頁面留在原地，結果寫在那一門卡片裡、按鈕的底下（S.artNote），
+  // 頁首的訊息照舊也有。重畫整頁會讓頁首的訊息與卡片的高度變動、把按鈕推走，所以重畫前記下「修練」鈕在螢幕上的位置，
+  // 畫完捲回去補差——玩家的拇指底下永遠還是那顆鈕。例外：這一次練成了絕學、要定名——定名的表單在頁首，照舊捲上去；
+  // 改練、熔煉、練成、療傷會改變清單的結構，也照舊回頁首。
+  function cultivateTop(id) {
+    const btn = [...document.querySelectorAll('[data-act="cultivate"]')].find((el) => el.dataset.id === id);
+    return btn ? btn.getBoundingClientRect().top : null;
+  }
+
   async function mx(op, extra = {}) {
     await busy(async () => {
+      const stay = op === "cultivate" && !!extra.art;
+      const was = S.menxia, mark = stay ? cultivateTop(extra.art) : null;
       const r = await api(`/api/menxia/${op}`, { person: S.person, kind: S.kind, ...extra });
       S.menxia = r.menxia;
       trimPot(); // 熔掉的若正放在爐裡，回煉製頁時不能還留著
       S.message = r.message;
+      S.artNote = stay ? { id: extra.art, html: r.message } : null;
       setMain(r.main);
       renderTop();
       renderPage();
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      const needsName = !!(r.menxia && r.menxia.naming) && !(was && was.naming);
+      const now = stay && !needsName && mark !== null ? cultivateTop(extra.art) : null;
+      if (now === null) window.scrollTo({ top: 0, behavior: "smooth" });
+      else if (now !== mark) window.scrollBy({ top: now - mark, left: 0, behavior: "instant" });
     });
   }
 
@@ -1919,7 +1937,7 @@
           if (S.menxia !== was) { S.artOpen = null; if (S.tab === "practice") renderPage(); }
           break;
         }
-        case "art": S.artOpen = S.artOpen === el.dataset.id ? null : el.dataset.id; renderPage(); break;
+        case "art": S.artOpen = S.artOpen === el.dataset.id ? null : el.dataset.id; S.artNote = null; renderPage(); break;
         case "cultivate": {
           // 勾的是畫面上看到的那一份：這一門現在真有「服下破境丹」可勾才算（伺服器也只認真正的布林 true）。
           // 送出就把勾清掉（mx 回來重畫時已經是沒勾的）；還在忙或請求失敗（mx 沒換上伺服器回來的那一份 menxia）就把勾還回去
@@ -2167,7 +2185,7 @@
       if (S.stage !== "game" || S.tab !== tab || S.busy || S.menxia !== was || typing()) return;
       S.menxia = x;
       const trimmed = trimForgeSel();
-      if (S.artOpen && !x.owned_arts.some((a) => a.id === S.artOpen)) S.artOpen = null; // 那一門已經不在了（熔掉）
+      if (S.artOpen && !x.owned_arts.some((a) => a.id === S.artOpen)) { S.artOpen = null; S.artNote = null; } // 那一門已經不在了（熔掉）
       for (const id of Object.keys(S.legendTick)) { // 丹用完了、或那一門已經不是衝絕學這一步：勾跟著作廢
         const row = x.owned_arts.find((a) => a.id === id);
         if (!row || !row.cultivate.legend) delete S.legendTick[id];
