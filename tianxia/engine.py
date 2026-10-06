@@ -34,8 +34,8 @@ from .models import (
 )
 from .ollama_client import ModelBudget, OllamaClient, quick_client
 from .rules import (
-    GEJU, HUANGJIN, add_rumor, apply_effect, audience_bar, can_hear, can_meet, change_trend, check_result_line, current_day,
-    display_name, fill_marks, free_text_rate,
+    GEJU, HUANGJIN, add_rumor, apply_effect, audible, audience_bar, can_hear, can_meet, change_trend, check_result_line,
+    current_day, display_name, ears_of, fill_marks, free_text_rate,
     can_draw_side_change, chaos_fronts, chaos_note, front_chip, front_ids, front_of, front_text, humanize, in_chaos,
     is_revealed, pushable, rate_words, recompute_trends, resolve_goals, resolve_trend, resolve_trends, roll_check,
     season_one, season_one_off, stance_rule_note, stance_sum_note, stances, trend_name, trend_shown, trend_value,
@@ -4037,9 +4037,10 @@ class Game:
         return "\n\n".join(parts) or "（江湖暫時風平浪靜。）"
 
     def rumors_text(self, limit: int = 30) -> str:
-        """見聞頁的傳聞：陣營軍情只給那個陣營、個人線索只給那個人（跟沿途打聽同一個規則，見 _road_ask；計畫 T6）。
-        開關關著時沒有這兩種傳聞，畫面一樣。"""
-        heard = [r for r in self.state.world.rumors if can_hear(r, self.state)]
+        """見聞頁的傳聞（一條清單，main_view 的 rumors）：只列聽得到的（rules.audible——陣營軍情只給那個陣營、個人線索只給
+        那個人；第一季的地方傳聞只給此刻人在那個大區的人、只留傳聞板上最近幾天的）。開關關著時跟以前一樣。"""
+        ears = ears_of(self.state, self.content)
+        heard = [r for r in self.state.world.rumors if audible(r, ears)]
         return _timeline(heard[-limit:][::-1], self._day_stamp) or "（尚無傳聞。）"
 
     def chronicle_text(self) -> str:
