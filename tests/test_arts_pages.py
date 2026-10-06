@@ -96,6 +96,16 @@ def page(name: str, x: dict, **S) -> str:
     return run(f"S.menxia = {json.dumps(x)}; return H.{name}();", S=S)
 
 
+# ── W5：修練頁的武學清單叫「功法庫」 ───────────────────────────────────
+
+
+def test_the_practice_pages_list_of_arts_is_titled_the_art_library_with_its_count():
+    html = page("pagePractice", menxia(holdings={"count": 7, "cap": 56}))
+    assert re.search(r'<div class="label">功法庫 <small class="muted">武學與意境 7/56</small></div>', html)
+    assert '<div class="label">武學 <small' not in html  # 舊的標題（跟煉製頁的「武學」挑選區同名）不在了
+    assert "湖邊腿法" in html.split("功法庫")[1]  # 清單就在這個標題底下
+
+
 # ── W2：屬性有什麼用，收在一個摺起來的說明裡 ───────────────────────────
 
 

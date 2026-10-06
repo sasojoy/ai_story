@@ -413,6 +413,40 @@ def test_the_new_art_starts_at_the_first_level_when_it_goes_straight_onto_an_emp
     assert ready.player.arts == ["basic_fist"] and any("第一成" in m for m in msgs)
 
 
+SWITCH_HINT = "到「修練」的功法庫把它改練上身。"  # W5：待 joy 潤
+
+
+def test_a_forged_art_that_goes_into_the_library_says_where_to_switch_to_it(ready, content, world):
+    """W5：結果說「收進功法庫」，卻沒人告訴玩家功法庫在哪、怎麼穿上——最後多一句指路。"""
+    art, msgs = fusion.fuse(ready, content, world, named("旋風腿"), "basic_fist", "feng")
+    assert art.id in ready.player.arts
+    assert msgs[-1] == SWITCH_HINT and msgs[-2] == "【旋風腿】收進功法庫。"
+    assert library.SWITCH_HINT == SWITCH_HINT  # 句子只有一個出處
+
+
+def test_a_blended_art_that_goes_into_the_library_says_it_too(ready, content, world):
+    ready.player.member.neigong_id = "basic_breath"
+    art, msgs = fusion.blend(ready, content, world, named("渾元手"), "basic_fist", "basic_breath")
+    assert art.id in ready.player.arts and msgs[-1] == SWITCH_HINT
+
+
+def test_a_forged_art_that_is_worn_at_once_gets_no_switch_hint(ready, content, world):
+    """武學欄空著：新武學直接上身，不在功法庫裡，也就沒有「去功法庫改練」這句。"""
+    ready.player.member.wugong_id, ready.player.member.wugong_level = None, 0
+    ready.player.arts = ["basic_fist"]
+    art, msgs = fusion.fuse(ready, content, world, named("旋風腿"), "basic_fist", "feng")
+    assert ready.player.member.wugong_id == art.id
+    assert all(SWITCH_HINT not in m and "功法庫" not in m for m in msgs)
+
+
+def test_a_merge_and_other_ways_of_storing_an_art_get_no_switch_hint(ready, content, world):
+    """意境合併沒有放進功法庫；學藝、事件教的武學收進功法庫也不是「煉製」的結果，不加這句（只有合成、合成兩門才加）。"""
+    _, msgs = fusion.merge(ready, content, world, named("燎原"), "huo", "feng")
+    assert all(SWITCH_HINT not in m for m in msgs)
+    stored = library.store_art(ready, generate_from_name("甲乙丙", "武學", "甲乙丙", 0))
+    assert stored == ["【甲乙丙】收進功法庫。"]
+
+
 def test_two_players_racing_for_a_new_merge_end_up_with_one_registered_insight(ready, content, world):
     """合併版的審查重點 3：兩個人都看見「這個配方還沒人合過」、各自請模型取了名字，登記只有第一個算數；
     第二個拿到第一個登記的那一個意境（同名、同屬性），全服只有一筆。"""

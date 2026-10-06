@@ -57,6 +57,16 @@ def full(state: GameState, content: Content) -> bool:
     return held_count(state) >= cap_of(state, content)
 
 
+SWITCH_HINT = "到「修練」的功法庫把它改練上身。"  # 合成的結果最後一句（W5）：「收進功法庫」之後告訴玩家功法庫在哪、怎麼穿上；待 joy 潤
+
+
+def store_forged(state: GameState, art: MartialArt) -> list[str]:
+    """合成出來的新武學放哪（fusion.fuse、fusion.blend）：同 store_art；進了功法庫（沒有直接上身）的，再多一句指路——
+    結果說「收進功法庫」，修練頁的清單也叫「功法庫」，這句把兩邊接起來。學藝、事件教的武學不走這裡，不加這句。"""
+    stored = store_art(state, art)
+    return stored + [SWITCH_HINT] if stored and art.id in state.player.arts else stored
+
+
 def store_art(state: GameState, art: MartialArt, quality: str | None = None) -> list[str]:
     """新拿到的武學放哪：對應的欄位空著就配上身（第一成），否則進功法庫。quality 是玩家這一份的品質
     （跟全服登記的不一樣時才記；現在沒有呼叫端給它——合成也從登記的下品起修）。

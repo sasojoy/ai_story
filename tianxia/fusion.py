@@ -380,7 +380,7 @@ def fuse(
         state, cfg.fuse_xinde, cfg.fuse_stamina,
     )
     msgs += _special_rumor(state, content, art, first)
-    return art, msgs + library.store_art(state, art)
+    return art, msgs + library.store_forged(state, art)
 
 
 def _fuse_line(
@@ -561,4 +561,4 @@ def blend(
     )
     msgs = [head + _arrival(art, first, landed)] + _charge(state, cfg.fuse_xinde, cfg.fuse_stamina)
     msgs += _special_rumor(state, content, art, first)
-    return art, msgs + library.store_art(state, art)
+    return art, msgs + library.store_forged(state, art)

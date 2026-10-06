@@ -1035,7 +1035,7 @@
           <button class="btn small" type="submit">開始閉關</button>
         </div>
       </form>
-      <div class="label">武學 <small class="muted">武學與意境 ${x.holdings.count}/${x.holdings.cap}</small></div>
+      <div class="label">功法庫 <small class="muted">武學與意境 ${x.holdings.count}/${x.holdings.cap}</small></div>
       ${x.owned_arts.length ? `<div class="list">${x.owned_arts.map(artRow).join("")}</div>` : '<p class="muted">你身上還沒有任何武學。</p>'}
       <div class="label">意境</div>
       ${x.insights.length ? `<div class="insights">${x.insights.map(insightRow).join("")}</div>`
