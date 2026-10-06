@@ -36,6 +36,19 @@ def test_register_stores_a_salted_hash_not_the_password(store):
     assert len(bytes.fromhex(login["salt"])) == 16 and len(bytes.fromhex(login["hash"])) == 32
 
 
+def test_the_production_scrypt_parameters_are_pinned():
+    """正式的 scrypt 參數與雜湊（測試整併第 4 區）：tests/test_server.py 為了快把參數換成最便宜的一組（那裡測的不是密碼），
+    這個檔照舊用正式參數，這一條把參數本身釘住——帳號只存鹽與雜湊、不存參數，改了參數，已經設好的密碼就全部對不上。"""
+    import hashlib
+
+    from tianxia import accounts
+
+    assert accounts.SCRYPT_PARAMS == {"n": 2 ** 14, "r": 8, "p": 1, "dklen": 32}
+    salt = bytes(range(16))
+    expected = hashlib.scrypt("秘密 pw".encode("utf-8"), salt=salt, n=2 ** 14, r=8, p=1, dklen=32).hex()
+    assert accounts.hash_password("秘密 pw", salt) == expected
+
+
 def test_the_same_password_gets_a_different_salt(store):
     store.register("alpha", "same-pw")
     store.register("beta", "same-pw")

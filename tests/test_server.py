@@ -107,6 +107,16 @@ def model_breaker_closed(monkeypatch):
     monkeypatch.setattr(server, "_breaker_until", None, raising=False)
 
 
+@pytest.fixture(autouse=True)
+def cheap_password_hashing(monkeypatch):
+    """這個檔測的是伺服器，不是密碼：scrypt 換成最便宜的一組參數（一次約 40 毫秒變成幾微秒；測試整併第 4 區）。
+    雜湊與比對都在呼叫的當下讀 accounts.SCRYPT_PARAMS，所以註冊、登入、改密碼照舊走同一條路；
+    正式的參數與雜湊在 tests/test_accounts.py 測、也釘在那裡。正式程式不動。"""
+    from tianxia import accounts
+
+    monkeypatch.setattr(accounts, "SCRYPT_PARAMS", {"n": 2, "r": 1, "p": 1, "dklen": 32})
+
+
 @pytest.fixture
 def breaker_clock(monkeypatch):
     """斷路器的時鐘（server._monotonic）換成撥得動的：clock[0] 是現在的秒數，測試不必真的等 180 秒。"""
