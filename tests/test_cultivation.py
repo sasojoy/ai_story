@@ -361,7 +361,7 @@ def test_a_melted_insight_says_so_by_name_and_does_not_cultivate(kicker, content
     """審查重點 2：用來融的意境熔掉了：不崩潰、不悄悄修練（體力不扣、品質與熟練度不動），照實說出是哪個意境。"""
     kicker.player.insights = []
     msgs = cultivation.cultivate(kicker, content, world, "旋風腿", WIN)
-    assert msgs == ["修練要用「風」，你已經把它熔掉了。"]
+    assert msgs == ["修練要用「風」（或別的屬快的意境），你已經把它熔掉了。"]
     assert kicker.player.stamina == 150 and kicker.player.art_quality == {} and kicker.player.art_mastery == {}
 
 

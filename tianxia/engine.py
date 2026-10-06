@@ -16,9 +16,9 @@ from dataclasses import dataclass
 from pydantic import BaseModel
 
 from . import (
-    atlas, battle_instance, battlelog, calendar, companion_agent, cultivation, defection, encounter, event_llm, fight_llm,
+    atlas, battle_instance, battlelog, calendar, companion_agent, cultivation, defection, encounter, enlist, event_llm, fight_llm,
     figures, flavor, foreshadow, front_lines, fusion, insights, journal, library, materials, naming, opportunities, orders,
-    push, ranks, roster, rounds, skillview, team, timetable, traits,
+    push, ranks, roster, rounds, sensing, skillview, team, timetable, traits,
 )
 from . import events as event_rules  # note_round 走模組屬性（測試要能換掉它，確認只有 _present 會叫）
 from . import prologue as prologue_rules  # Game.new 有個參數也叫 prologue，所以模組在這裡一律叫 prologue_rules
@@ -32,14 +32,14 @@ from .guide import speakers as guide_speakers
 from .guide import steps as tutorial_steps
 from .journal import LOG_BREAK, Draft
 from .mapview import legend_data, render_map, render_minimap
-from .martial_arts import QUALITIES
+from .martial_arts import QUALITIES, is_renamed
 from .models import (
     EXPLORE_BRANCHES, FREE_TEXT_MAX, MOVES, BattleDef, Choice, Content, Effect, Event, ExploreBranch, FactionDef, Location,
     RoadKind, Squad, Threshold, TimetableEvent, TravelMode, TutorialStep, WorldEvent,
 )
 from .ollama_client import ModelBudget, OllamaClient, quick_client
 from .rules import (
-    GEJU, HUANGJIN, add_rumor, apply_effect, audible, audience_bar, can_meet, change_trend, check_result_line, current_day,
+    GEJU, HUANGJIN, add_marks, add_rumor, apply_effect, audible, audience_bar, can_meet, change_trend, check_result_line, current_day,
     ears_of, fill_marks, free_text_rate, here_regions,
     can_draw_side_change, chaos_fronts, chaos_note, front_chip, front_ids, front_of, front_text, humanize, in_chaos,
     is_revealed, pushable, rate_words, recompute_trends, resolve_goals, resolve_trend, resolve_trends, roll_check,
@@ -86,6 +86,15 @@ class TollFacts:
     wounded: bool = False  # 開打前氣血就低於上限（厚才有用：它把氣血係數的下限拉高，滿血時沒有東西可拉；內傷讓「滿血」的上蓋低於上限，也算）
     low_hp: bool = False  # 開打前氣血低到「見底」（剩 LOW_HP_RATIO 以下，含）：厚那句「氣血見底」才挑得到
     healed: tuple[str, ...] = ()  # 真的回了血（有一行「氣血 +N」）的功效掛點：win_heal（吸取）、heal_after（回春）；劇情戰不回血
+    # 下面三個是功效演出句後面括號裡的數字（FB-084）：跟戰報上的「氣血 -N」「氣血 +N」「內傷 +N」是同一批算的
+    saved: int = 0  # 化勁這一場少扣的氣血（team.toll_saved）
+    spared: int = 0  # 不動這一場免掉的內傷（team.toll_saved）
+    gained: tuple[tuple[str, int], ...] = ()  # 回血的功效掛點 → 回了多少氣血（「氣血 +N」那一行的 N），順序同 healed
+
+
+def _points(lines: list[str]) -> int:
+    """heal_fraction 回的「氣血 +N」那一行的 N：功效演出句的括號（FB-084）寫的跟戰報上那一行是同一個數，不另外算一份。"""
+    return next((int(m.removeprefix("氣血 +")) for m in lines if m.startswith("氣血 +")), 0)
 
 
 LOW_HP_RATIO = 0.3  # 開打前氣血剩上限的三成以下（含）算「氣血見底」：厚的那一句「氣血見底，……硬撐」（battlelog.LOW_HP_MARKS）才挑得到
@@ -244,11 +253,17 @@ class Game:
                 return False
             self.choose(self.rng.choice(good).id)
             return True
+        if p.sensing is not None:  # 草廬的有所感：做法都選得對；不畫，順其自然落回那個基本意境（假人不叫模型）
+            if p.sensing.stage == "choose":
+                self.choose(f"{sensing.PREFIX}{self.rng.randrange(len(sensing.current(s, c)[1].methods))}")
+            else:
+                self.choose(sensing.LET_GO)
+            return True
         fused = prologue_rules.fused_arts(s, c, self.world)
         if goal.action == "view_tab":
             tab = next((flag.removeprefix("看過:") for flag in goal.condition.flags_all if flag.startswith("看過:")), "")
             self.view_tab(tab)
-        elif step.explore_event is not None:
+        elif step.explore_event is not None or step.explore_scene is not None:
             self.choose("act:explore")
         elif goal.fused:
             if not p.insights or step.fuse_base is None:
@@ -299,7 +314,7 @@ class Game:
         （Config.affinity_carry_ratio、無條件捨去，80→8、5→0：第一季設計第十四節，下一季最多從 10 起步，交情要重新經營）。
         新手引導：做完或略過的人照舊不再出現；還沒做完的人跟著新角色從起始步重來——
         新角色只剩開局那兩門第一成的基礎武學，接著上一季做到一半的下一步（例如出城遊歷）會把他推進
-        打不過的路（FB-034）。
+        打不過的路（FB-034）。入伍段（新手引導計畫二）同理：走完（或略過）的人帶到下一季、再投靠不重走；沒走完的下一季投靠時從頭走。
         world 欄位這裡不用管，呼叫端（_reconcile_season）緊接著就會把它指向共用賽季。
         之後新增的 PlayerState 欄位預設就跟著新角色重來；要跨季保留的才加進下面這份清單。"""
         old = self.state
@@ -317,6 +332,8 @@ class Game:
             else:
                 # 序章走完了、後面的步驟還沒做完（或是假人、腳本）：從序章之後的起始步重來，不再回草廬
                 fresh.player.tutorial_step = self.content.tutorial.prologue_steps
+        if enlist.done(old, self.content):
+            fresh.player.enlist_step = old.player.enlist_step  # 入伍段只走一次（設計 7.1）；沒走完的下一季投靠時從頭走
         ratio = self.content.config.affinity_carry_ratio
         fresh.player.affinities = {key: int(value * ratio) for key, value in old.player.affinities.items()}
         # 上一季的交情另外留著（這一季的關係從頭寫），好感度只剩一成時提示才不會說「親如兄弟」（正式版辛）；
@@ -338,6 +355,8 @@ class Game:
 
     def _drop_stale_references(self) -> None:
         """內容檔改版後，舊存檔可能引用已刪除的事件、地點、武學或人物；丟掉這些引用以免當機。"""
+        # 入伍段上線之前就投靠了的老手蓋成走完（設計 7.2）：要在換季之前，換季會把陣營清掉、之後就認不出他是老手
+        enlist.mark_veteran(self.state, self.content)
         self._reconcile_season()
         s, c = self.state, self.content
         p = s.player
@@ -345,6 +364,7 @@ class Game:
             p.stats.setdefault(key, c.config.start_stats.get(key, team.BASE_STAT))
         if s.pending_event and s.pending_event not in c.events:
             s.pending_event = None
+        sensing.drop_stale(s, c)  # 有所感的場景被拿掉、人不在那裡了：作廢（悟意境設計第零節）
         if p.pending_companion and p.pending_companion not in c.characters:
             p.pending_companion = None
         if p.pending_faction and p.pending_faction not in {f.id for f in c.scenario.factions}:
@@ -391,10 +411,12 @@ class Game:
         p.materials = {k: v for k, v in p.materials.items() if k in c.materials and v > 0}
         # 武學與成長（設計第三、四節）：意境去重、去掉找不到的；品質、熟練度只留還擁有的武學；
         # 等著取名的那一門要真的是自己第一個練成的（換季、熔掉、內容改版後都可能對不上）
-        p.insights = [i for i in dict.fromkeys(p.insights) if insights.resolve(i, c, self.world) is not None]
+        p.insights = [i for i in dict.fromkeys(p.insights) if insights.resolve(i, c, self.world, s) is not None]
+        p.own_insights = {k: v for k, v in p.own_insights.items() if k in p.insights}  # 熔掉的私有意境本體跟著拿掉
         owned = set(library.owned_arts(s))
         p.art_quality = {k: v for k, v in p.art_quality.items() if k in owned and v in QUALITIES}
         p.art_mastery = {k: v for k, v in p.art_mastery.items() if k in owned and v > 0}
+        p.art_rolled = {k: v for k, v in p.art_rolled.items() if k in owned and v in QUALITIES}
         if p.naming is not None and (p.naming not in owned or self.world.master_of(p.naming) != p.name):
             p.naming = None
         chains = {ch.id for ch in c.foreshadows.chains}  # 伏筆：內容改版後拿掉的鏈與物品
@@ -486,6 +508,7 @@ class Game:
         self._deliver_big_events()  # 這一季的時刻表大事人人有份：沒看過的補上，推進的人也走這一條（FB-038）
         self._backfill_battle_scores()  # 場上沒有份量快照的自己（上線前就在決戰裡）：補上；排程的 world_tick 不走這裡
         self._deliver_battle_results()  # 下線時收場的決戰，回來第一次同步就補上（休季、籌備中也一樣，FB-027）
+        self._deliver_renames()  # 手上的絕學被人定了名：下一次同步補一則紀錄（FB-083）
         settled = self._settle_plots()  # 不在線時收場的密謀，回來第一次同步就結算（正式版乙二）
         if settled:
             self._write("密謀", settled)
@@ -620,6 +643,10 @@ class Game:
             if event.free_text is not None:
                 opts.append(Option(id=FREE_TEXT_OPTION, label=event.free_text.prompt))
             return opts
+        if s.player.sensing is not None:  # 有所感（悟意境設計第零節）：卡上的做法，或感悟狀態的「畫下來／順其自然」
+            menu = sensing.menu(s, c)
+            if menu:
+                return [Option(id=option_id, label=label) for option_id, label in menu]
         if s.player.pending_companion:
             dialogue_options, _ = s.player.last_offered_dialogue.get(s.player.pending_companion, [[], []])
             talk_cost = c.config.talk_stamina
@@ -1041,6 +1068,7 @@ class Game:
         option = {o.id: o for o in self.options(odds=False)}.get(option_id)
         if option is None or not option.enabled:
             return self._log([self._fight_gone(fight) if fight is not None else "（此刻無法這麼做。）"])
+        faction_before = self.state.player.faction  # 這一下才投靠的人才開始入伍段（見 _begin_enlistment）
         self.state.battle_card = None
         self.state.player.guide_done = []  # 對話框上一次完成的那幾行，下一次行動就清掉
         kind, _, arg = option_id.partition(":")
@@ -1048,6 +1076,8 @@ class Game:
             return self._log(self._battle_choose(arg))
         if option_id == FREE_TEXT_OPTION:
             return self._log([f"（寫下你的做法，{FREE_TEXT_MAX} 字以內。）"])  # 選項本身只叫出輸入框，不消耗事件
+        if option_id == sensing.DRAW:
+            return self._log(["（在畫布上一筆畫下心中的形。）"])  # 只叫出畫布；畫完送出走 sense_request／sense_draw
         prepared = self._checked_prepared(option_id, prepared) if kind in ("act", "talk", "call") else None
         self._fight = self._checked_fight(option_id, fight)
         self._draft = Draft(self._action_title(kind, arg))
@@ -1073,8 +1103,11 @@ class Game:
                 msgs = opportunities.act(self.state, self.content, self.world, arg, self.rng)
             elif kind == "fs":
                 msgs = self._foreshadow(arg)
+            elif kind == "sense":
+                msgs = self._sense(arg)
             else:
                 msgs = self._choose(int(arg))
+            self._begin_enlistment(faction_before)  # 投靠（或拜入陣營名下的門派）那一下：入伍段開始，同一下不算完成任何一步
             msgs += self._hear_after_stamina(stamina)
             if kind == "choice":  # 選了事件的選項：序章的遇險、拜師、四景（新手引導計畫一）
                 msgs += self._guide(note_action(self.state, self.content, self.world, "choice"))
@@ -1119,6 +1152,7 @@ class Game:
         if llm_rate is None:
             llm_rate = event_llm.assess_event_success_rate(self._quick_client(), event, request.text)
         self.state.battle_card = None
+        faction_before = s.player.faction
         self._draft = Draft(f"{event.title}・隨口應對")
         try:
             s.pending_event = None
@@ -1129,6 +1163,7 @@ class Game:
             self._outcome(tag, line)
             effect = choice.effect if success else choice.fail_effect
             msgs += self._apply(effect)
+            self._begin_enlistment(faction_before)  # 隨口應對的結果也可能拜入門派
             msgs += check_thresholds(s, c, self.world, self._quick_client(), now=self.now)
             journal.add_entry(s, self._draft.entry(s.world.time, msgs))
             self.last_gamble = FreeTextOutcome(
@@ -1155,6 +1190,67 @@ class Game:
         lines.insert(0 if said is None else said + 1, narration)
         journal_entries[0] = entry.model_copy(update={"lines": lines})
 
+    # ── 有所感（悟意境設計第零節）────────────────────────────────
+
+    def _sense(self, arg: str) -> list[str]:
+        """有所感選單上的選擇：做法（數字）或「順其自然」（不畫了，落回做法那個基本意境）。「畫下來」在 choose 開頭就回了。"""
+        s, c = self.state, self.content
+        if arg == "let":
+            req = sensing.request(s, c, self.world, None)
+            return [req] if isinstance(req, str) else self._sense_apply(req, None)
+        got = sensing.current(s, c)
+        prologue = got is not None and got[1].prologue
+        rng = prologue_rules.SureRandom() if prologue else self.rng  # 序章草廬：必中（悟意境設計第七節）
+        return sensing.choose(s, c, int(arg), rng) if arg.isdecimal() else ["（此刻無法這麼做。）"]
+
+    def sense_request(self, points: list | None, png: str = "") -> sensing.SenseRequest | str:
+        """畫完那一筆的 A 段（server.py 在行動鎖內、很快地呼叫）：還在感悟狀態才開單；讀不出那一筆回一句話（字串）。
+        只讀、不改狀態。單子的 needs_name 是 True 才要在鎖外叫模型看圖取名（insight_llm.name）。"""
+        if self._preparing():
+            return "（賽季籌備中，等待管理者開季。）"
+        return sensing.request(self.state, self.content, self.world, points, png)
+
+    def sense_draw(self, req: sensing.SenseRequest, proposed: tuple[str | None, str] | None = None) -> list[str]:
+        """畫完那一筆的 C 段（鎖內）：重驗還是同一次感悟、同一筆讀出同一個屬性才套用（sensing.finish）。proposed 是鎖外取好的
+        （名字, 說明）；沒給（整季機器人、腳本、測試）而且要取名，就在這裡用 _quick_client 只看文字特徵問一次，取不到走退路字表。
+        悟成才寫江湖紀錄（標題「有所感・場景」，附上畫的那一筆）；對不上只回一句話。"""
+        s, c = self.state, self.content
+        got = sensing.current(s, c)
+        if got is None or got[0].stage != "draw" or got[0].serial != req.serial:
+            return self._log([sensing.STALE])
+        self.state.battle_card = None
+        self.state.player.guide_done = []
+        self._draft = Draft(f"有所感・{got[1].title}")
+        self._draft.glyph = list(req.points)
+        try:
+            msgs = self._sense_apply(req, proposed)
+            journal.add_entry(s, self._draft.entry(s.world.time, msgs))
+        finally:
+            self._draft = None
+        self._save_season()
+        return self._log(msgs)
+
+    def _sense_apply(self, req: sensing.SenseRequest, proposed: tuple[str | None, str] | None) -> list[str]:
+        """畫完（或順其自然）之後真的悟：sensing.finish 改狀態；悟成就在這一處留一筆痕跡（一人一天只算一次）、序章那一段加旗標、
+        記新手引導；悟到自己的新意境而且名字是模型取的，記全服的首悟紀錄（0.2b 第 5 點：第一個在這裡這樣悟到的人）。
+        名字走退路字表的不記：伺服器假人不叫模型，記了就會露出「首悟者的名字都是字表風格」（同 2026-10-05 合成首創的決定）。"""
+        s, c = self.state, self.content
+        got = sensing.current(s, c)
+        scene = got[1] if got is not None else None
+        client = self._quick_client() if proposed is None else None
+        msgs, own, by_model = sensing.finish(s, c, self.world, req, proposed, client)
+        if msgs == [sensing.STALE]:
+            return msgs
+        add_marks({sensing.mark_key(req.location): 1}, s)
+        if scene is not None and scene.flags_add:
+            s.player.flags.update(scene.flags_add)
+        if own is not None and by_model and self.world.claim_insight_first(
+            sensing.first_key(req), own.name, s.player.name, c.locations[req.location].name, s.world.time,
+        ):
+            msgs.append(f"江湖上還沒有人在{c.locations[req.location].name}這樣悟過——你是第一個。")
+        msgs += self._guide(note_action(s, c, self.world, "sense"))
+        return msgs
+
     def _action_title(self, kind: str, arg: str) -> str:
         s, c = self.state, self.content
         if kind == "faction":
@@ -1179,6 +1275,9 @@ class Game:
             return f"交談・{character.name}"
         if kind == "call":
             return "收回名帖" if arg == "back" else f"求見・{c.characters[arg].name}"
+        if kind == "sense":
+            scene = c.insight_scenes.get(s.player.sensing.scene) if s.player.sensing else None
+            return f"有所感・{scene.title}" if scene else "有所感"
         if kind == "learn":
             return f"學藝・{c.skills[arg].name}"
         if kind == "fs":
@@ -1218,15 +1317,33 @@ class Game:
         journal.add_entry(self.state, draft.entry(self.state.world.time, msgs))
 
     def _note_guide(self, notes: list[str]) -> None:
-        """新手引導這次完成了（note_action 回傳的那幾行）：「✔ 引導完成」與獎勵記在 guide_done 給對話框；走完最後一步、
-        有結語時對話框改顯示結語，等按「知道了」（引導重做設計 8.1）。"""
+        """新手引導這次完成了（note_action 回傳的那幾行）：「✔ 引導完成」與獎勵記在 guide_done 給對話框。走完最後一步、
+        有結語時對話框改顯示結語、等按「知道了」（引導重做設計 8.1）：那個旗標（guide_outro）由 note_action 在這一次真的走完最後一步時設——
+        入伍段（新手引導計畫二）也會讓 notes 不是空的，不能再一有 notes 就把已經按掉的結語叫回來。"""
         if not notes:
             return
         heads = tuple(f"【{name}】" for name in guide_speakers(self.content))  # 每一步可以是不同的人說（新手引導計畫一）
+        shown = [n for n in notes if not n.startswith(heads)]
+        if shown:  # 只有引薦人的話（入伍段的 ✔ 在它的框不是框上那一個時不回傳）：框上原本的完成列不動
+            self.state.player.guide_done = shown
+
+    def _begin_enlistment(self, faction_before: str | None) -> None:
+        """這一下才投靠的人開始入伍段（新手引導計畫二，設計 4.1）：動作之前還沒有陣營、現在有了（投靠，或拜入陣營名下的門派）。
+        已經有陣營的人不開始——換版當下就投靠了的舊存檔不走入伍段（設計 7.2）、叛投也不重來（preflight F1，所以也不需要存檔遷移）。
+        框換成引薦人：剛投靠這一下不算完成任何一步（Review Focus 1）——框上若還是說書人的步驟或結語，它們的「✔」照舊留著。"""
+        if faction_before is not None or not enlist.begin_if_joined(self.state, self.content):
+            return
         p = self.state.player
-        p.guide_done = [n for n in notes if not n.startswith(heads)]
-        if not tutorial_active(self.state, self.content) and self.content.tutorial.outro:
-            p.guide_outro = True
+        if not tutorial_active(self.state, self.content) and not p.guide_outro:
+            p.guide_done = []
+        self._journal_guide(enlist.told(self.state, self.content))  # 引薦人迎你進營的話，記在這一則（設計 6.2）；不進「剛剛」、不進完成列
+
+    def _journal_guide(self, notes: list[str]) -> None:
+        """引導的話記進江湖紀錄：在行動裡記進這一則的 guide；不在行動裡（例如打開輿圖）時接在最新一則的 guide。"""
+        if self._draft is not None:
+            self._draft.guide += notes
+        else:
+            journal.add_guide(self.state, notes)
 
     def _guide(self, notes: list[str]) -> list[str]:
         """新手引導的訊息不接進這次行動的訊息（「剛剛」只放行動的結果，引導重做設計 8.1.3）：記進這一則江湖紀錄的 guide、
@@ -1235,10 +1352,7 @@ class Game:
         notes = [n for n in notes if not isinstance(n, HutReward)]
         if notes:
             self._note_guide(notes)
-            if self._draft is not None:
-                self._draft.guide += notes
-            else:
-                journal.add_guide(self.state, notes)
+            self._journal_guide(notes)
         if rewards and self._draft is None:  # 不在行動裡完成的（打開修練頁之類）：接在最新一則的引導後面
             journal.add_guide(self.state, rewards)
             return []
@@ -1263,8 +1377,8 @@ class Game:
             return None
         if p.tutorial_step < len(todo):
             step = todo[p.tutorial_step]
-            if not step.text or (prologue_rules.active(s, c) and s.pending_event):
-                return None  # 序章第一步（還沒遇到師父）、序章的事件端出來的時候：畫面就是那則事件（新手引導計畫一）
+            if not step.text or (prologue_rules.active(s, c) and (s.pending_event or s.player.sensing is not None)):
+                return None  # 序章第一步（還沒遇到師父）、序章的事件或草廬四景的有所感端出來的時候：畫面就是那一張（新手引導計畫一）
             def fill(text: str) -> str:  # 序章的話裡的 {武學}：換成合成出來的那一門
                 return prologue_rules.fill(text, s, c, self.world)
 
@@ -1284,12 +1398,17 @@ class Game:
                 "speaker": t.speaker, "key": "outro", "scene": "", "text": t.outro, "line": "", "done": list(p.guide_done), "end": True,
                 "pending": False,
             }
-        return None
+        return enlist.box(s, c)  # 引導與結語都過去了：入伍段（新手引導計畫二）。順序固定是 步驟 → 結語 → 入伍段，「知道了」只收框上那一個
 
     def guide_ack(self) -> list[str]:
-        """結語按「知道了」：對話框不再出現。"""
-        self.state.player.guide_outro = False
-        self.state.player.guide_done = []
+        """結語（或入伍段的結尾）按「知道了」：對話框不再出現。只收框上看得到的那一個：結語還沒按、入伍段已經走完時，按下去是結語，
+        入伍段的結尾留到下一個框（guide_box 的順序是步驟 → 結語 → 入伍段，F8）；引導的步驟還在框上時沒有「知道了」可按，什麼都不收。"""
+        p = self.state.player
+        if p.guide_outro:
+            p.guide_outro = False
+        elif not tutorial_active(self.state, self.content):
+            p.enlist_end = False
+        p.guide_done = []
         return []
 
     # ── 行動 ──────────────────────────────────────────────
@@ -1432,6 +1551,9 @@ class Game:
         sight = prologue_rules.explore_event(s, c)
         if sight is not None:  # 序章第 3 步：草廬四景四選一（新手引導設計 3.2），不抽奇遇、不分三支
             return self._present(c.events[sight], "explore")
+        scene = prologue_rules.explore_scene(s, c)
+        if scene is not None:  # 序章第 3 步的有所感版（悟意境設計第七節）：草廬四景就是四個做法，都對、必中
+            return sensing.start(s, c, c.insight_scenes[scene], self.rng)
         if event_candidates(s, c, "explore", "rare") and self.rng.random() < c.config.rare_explore_chance:
             return self._present(pick_event(s, c, "explore", self.rng, "rare"), "explore")
         mix = c.config.explore_mix_of(loc.tags).weights
@@ -1442,7 +1564,9 @@ class Game:
         wis = team.stat_factor(c, s.player.stats.get("wis", team.BASE_STAT))
         branch = self.rng.choices(branches, weights=[mix[b] * (wis if b == "insight" else 1) for b in branches])[0]
         if branch == "insight":
-            found = insights.roll_explore(loc, c, self.rng)
+            if sensing.can_sense(s, c, loc):  # 有場景：有所感，要選做法、畫一筆才悟得到（悟意境設計第零節）
+                return sensing.start(s, c, sensing.pick_scene(loc, c, self.rng), self.rng)
+            found = insights.roll_explore(loc, c, self.rng)  # 沒有場景的內容（測試內容）照舊直接悟
             return [f"你在{loc.name}靜下心來，看了好一陣。"] + insights.learn(s, c, self.world, found)
         if branch == "wild":
             squad = min(self._wild_foes(loc), key=lambda foe: foe.difficulty)  # 同分取這裡列的第一路
@@ -1452,6 +1576,8 @@ class Game:
     def _explore_can(self, branch: ExploreBranch, loc: Location) -> bool:
         """探索三選一的這一支在這裡做不做得了。"""
         if branch == "insight":
+            if sensing.missed_today(self.state, loc):
+                return False  # 今天在這裡選錯過做法：這裡今天悟不出什麼（Q2）
             return bool(insights.explore_gives(loc, self.content))  # 輿圖詳情欄「這裡能悟」用同一個判斷（W3）
         if branch == "wild":
             return bool(self._wild_foes(loc))
@@ -2197,6 +2323,39 @@ class Game:
             entry = JournalEntry(time=last.time, title=journal.WORLD_NEWS, tag=f"共 {len(fresh)} 件", lines=lines)
         journal.add_entry(self.state, entry)
 
+    def _deliver_renames(self) -> None:
+        """手上（身上或功法庫）的武學被全服第一個練成絕學的人定了正式的名字，每個人下一次同步補一則江湖紀錄（FB-083）：
+        「你手上的【舊名】已由{名號}定名為【新名】。」——絕學定名改的是全服的顯示名字，別人手上那一門也跟著改，不通知的話
+        玩家只會看到武學莫名其妙換了名字。一次補到好幾門就合成一則（比照 _deliver_big_events）。
+
+        做法同 _deliver_battle_results：資料庫（全服登記的武學）才是真實來源，改名那一下不去動別人的角色，每個人自己的 Game
+        同步時自己補。誰通知過記在自己的 PlayerState.renames_told（武學 id），所以一個人一次改名只通知一次：自己定的名、
+        拿到的時候就已經是定過名的（library.store_art）一開始就記成通知過。舊名就是登記時的 id（絕學定名只改顯示的名字，id 不動）。
+        名號照登記時記下的那一個（MartialArt.master_shown，沒有就照 masters 表的名號），不另外去查；全服第一個練成的人寫的
+        一律是他的名號，匿名行走的人在登記當下記成「某位少俠」，照寫。內容手寫的武學（本命、基礎）不會被改名，也就不會在這裡出現。"""
+        p = self.state.player
+        held = [a for a in library.owned_arts(self.state) if a not in p.renames_told and a not in self.content.skills]
+        if not held:
+            return
+        renamed = self.world.renamed_skill_ids()  # 一次查完這一季改過名的；沒有就不必一門一門去查
+        lines = []
+        for art_id in held:
+            art = self.world.get_skill(art_id) if art_id in renamed else None
+            if art is None or not is_renamed(art):
+                continue
+            p.renames_told.append(art_id)
+            namer = art.master_shown or self.world.master_of(art_id)
+            if namer is None or self.world.master_of(art_id) == p.name:  # 自己定的名（舊存檔沒記到）：定名那一句已經說過了
+                continue
+            lines.append(f"你手上的【{art.id}】已由{namer}定名為【{art.name}】。")
+        if len(lines) == 1:
+            entry = JournalEntry(time=self.state.world.time, title=journal.RENAMED, tag=lines[0])
+        elif lines:
+            entry = JournalEntry(time=self.state.world.time, title=journal.RENAMED, tag=f"共 {len(lines)} 則", lines=lines)
+        else:
+            return
+        journal.add_entry(self.state, entry)
+
     def _deliver_battle_results(self) -> None:
         """收場的全服決戰補送到自己手上（FB-027）：自己的名號在參戰名單上（含下線的、中途倒下的；觀戰的不在名單上）、
         還沒補過的，每一場寫一則江湖紀錄、加一筆戰報。
@@ -2737,23 +2896,28 @@ class Game:
         事實（TollFacts）是 _play_rounds 寫功效的演出句用的：開打前氣血是不是低於上限（厚），哪幾個回血的功效真的回了血
         （沒回到 1 點、沒有「氣血 +N」那一行就不算）。"""
         before, cap = self._player_hp_and_cap()
+        saved, spared = team.toll_saved(self.state, self.content, self.world, tier, wild=wild)  # 扣之前量：化勁、不動這一場改了多少
         toll = team.take_encounter_toll(self.state, self.content, self.world, tier, wild=wild)
         hp_lost = round(before - self._player_hp())  # 回血之前量：回合裡寫的扣血不受吸取與回春影響
         lo = traits.loadout(self.state, self.content, self.world)
         healed: list[str] = []
+        gained: list[tuple[str, int]] = []
         if tier in team.WIN_TIERS and traits.has(lo, "win_heal"):  # 吸取（13.2）
             heal = team.heal_fraction(self.state, self.content, self.world, traits.amount(self.content, lo, "win_heal"))
             toll += heal
             if heal:
                 healed.append("win_heal")
+                gained.append(("win_heal", _points(heal)))
         heal_after = lo.specials.get("heal_after")  # 回春（13.4）：不論勝負
         if heal_after is not None:
             heal = team.heal_fraction(self.state, self.content, self.world, heal_after.amount)
             toll += heal
             if heal:
                 healed.append("heal_after")
+                gained.append(("heal_after", _points(heal)))
         return toll, hp_lost, TollFacts(
             wounded=before < cap, low_hp=before <= LOW_HP_RATIO * cap, healed=tuple(healed),
+            saved=saved, spared=spared, gained=tuple(gained),
         )
 
     def _play_rounds(
@@ -2797,29 +2961,37 @@ class Game:
         另外寫進 notes。"""
         names = {t.hook: t.name for t in self.content.traits.general}
 
-        def say(name: str, low_hp: bool = True) -> str:
-            return self._trait_say(lo, name, squad, rng, low_hp=low_hp)
+        def say(name: str, low_hp: bool = True, note: str = "") -> str:
+            """演出句；note 是這一場改了多少（FB-084，「（少扣了 12 點氣血）」），沒有數字可寫的功效不給。"""
+            return self._trait_say(lo, name, squad, rng, low_hp=low_hp) + note
 
+        gained = dict(facts.gained)
         won = record.tier in team.WIN_TIERS
         before = [say(names[h]) for h in ("big_win", "luck_narrow", "difficulty_cut", "luck_widen") if lo.layers.get(h)]
         before += [say(lo.specials[h].name) for h in ("double_luck", "power_from_difficulty") if h in lo.specials]
         after: list[str] = []
         if hp_lost and lo.layers.get("toll_cut"):
-            after.append(say(names["toll_cut"]))
+            after.append(say(names["toll_cut"], note=f"（少扣了 {facts.saved} 點氣血）" if facts.saved > 0 else ""))
         if lo.layers.get("condition_floor") and facts.wounded:
             after.append(say(names["condition_floor"], low_hp=facts.low_hp))
         if hp_lost and "no_injury" in lo.specials:
-            after.append(say(lo.specials["no_injury"].name))
+            after.append(say(lo.specials["no_injury"].name, note=f"（免了 {facts.spared} 點內傷）" if facts.spared > 0 else ""))
         if won and lo.layers.get("win_reward") and (squad.exp or squad.reward_xinde):  # 乘勝：對手有東西可以多給
-            after.append(say(names["win_reward"]))
+            more = traits.amount(self.content, lo, "win_reward")  # 跟 _battle_rewards 同一個乘法、同一個四捨五入
+            extra = [
+                f"{round(base * (1 + more)) - base} 點{what}" for base, what in ((squad.reward_xinde, "心得"), (squad.exp, "經驗"))
+                if round(base * (1 + more)) > base
+            ]
+            after.append(say(names["win_reward"], note=f"（多得 {'、'.join(extra)}）" if extra else ""))
         if "win_heal" in facts.healed:  # 吸取：真的回了血
-            after.append(say(names["win_heal"]))
+            after.append(say(names["win_heal"], note=f"（回了 {gained['win_heal']} 點氣血）" if gained.get("win_heal") else ""))
         if won and "win_xinde" in lo.specials:  # 悟招
-            after.append(say(lo.specials["win_xinde"].name))
+            after.append(say(lo.specials["win_xinde"].name, note=f"（多得 {int(lo.specials['win_xinde'].amount)} 點心得）"))
         if "heal_after" in facts.healed:  # 回春
-            after.append(say(lo.specials["heal_after"].name))
+            after.append(say(lo.specials["heal_after"].name, note=f"（回了 {gained['heal_after']} 點氣血）" if gained.get("heal_after") else ""))
         if record.kind == "train" and "train_stamina" in lo.specials:  # 輕身：只在遊歷
-            after.append(say(lo.specials["train_stamina"].name))
+            saved = self.content.config.action_cost["train"] - self._action_costs()["train"]  # 按鈕上寫的與真的扣的少了多少
+            after.append(say(lo.specials["train_stamina"].name, note=f"（少花了 {saved} 點體力）" if saved > 0 else ""))
         return before, after
 
     # ── 挑戰大勢人物本人（計畫 T4、軍令文件 4.5）─────────────
@@ -3407,6 +3579,7 @@ class Game:
             not self._preparing() and not s.world.ended and s.pending_event is None and s.player.busy_until is None
             and s.player.resting_since is None and s.player.journey is None and not s.player.picking_audience
             and s.player.fs_asking is None  # 伏筆的最後一步正在答題：跟事件待處理一樣，先答完或作罷
+            and s.player.sensing is None  # 有所感、還沒了結：跟事件待處理一樣
         )
 
     def seclusion_refusal(self) -> str | None:
@@ -3480,14 +3653,16 @@ class Game:
         if refusal is not None:
             return self._log([refusal])
         xinde, stamina = self._xinde(), self.state.player.stamina
+        # 新武學自己那一份的品質照機率擲（Config.fuse_quality_odds）；序章那一爐照劇本固定下品，不擲
+        rng = None if prologue_rules.fuse_base(self.state, self.content) is not None else self.rng
         if art_id and other_art and not insight_ids:
             art, msgs = fusion.blend(
-                self.state, self.content, self.world, self._quick_client(), art_id, other_art, proposed=proposed,
+                self.state, self.content, self.world, self._quick_client(), art_id, other_art, proposed=proposed, rng=rng,
             )
             tag = f"合成【{art.name}】" if art is not None else None
         elif art_id and not other_art and len(insight_ids) == 1:
             art, msgs = fusion.fuse(
-                self.state, self.content, self.world, self._quick_client(), art_id, insight_ids[0], proposed=proposed,
+                self.state, self.content, self.world, self._quick_client(), art_id, insight_ids[0], proposed=proposed, rng=rng,
             )
             tag = f"合成【{art.name}】" if art is not None else None
             if art is not None:  # 草廬這一步寫了結果那一句（設計 10.3「合成之後」）就用它，後面接武學自己的說明（T7 審查 M1）
@@ -3567,7 +3742,9 @@ class Game:
             return self._log(["（賽季籌備中，等待管理者開季。）"])
         xinde = self._xinde()
         msgs = self._log(team.switch_art(self.state, self.content, self.world, art_id))
-        self._menxia_entry(msgs[-1] if msgs else "改練", xinde)
+        # 江湖紀錄的標記是「你改練【…】」那一句；換上後內外搭配變了時最後多一句（FB-088），不拿它當標記
+        tag = next((m for m in reversed(msgs) if m.startswith("你改練")), msgs[-1] if msgs else "改練")
+        self._menxia_entry(tag, xinde)
         return msgs
 
     def melt_art(self, art_id: str) -> list[str]:
@@ -3578,14 +3755,15 @@ class Game:
         xinde, held = self._xinde(), library.held_count(self.state)
         only = prologue_rules.melt_only(self.state, self.content)  # 序章只准熔師父說的那一門（None＝不限）
         msgs = library.melt_art(self.state, self.content, self.world, art_id, only=only)
-        if library.held_count(self.state) < held:  # 草廬這一步寫了結果那一句（設計 10.3「熔了之後」）就用它（T7 審查 M1）
-            line = prologue_rules.after_line(self.state, self.content, 心得=self._xinde() - xinde)
+        if library.held_count(self.state) < held:  # 看有沒有真的少一門，不看心得：下品第一成的武學熔了只退 0 點
+            line = prologue_rules.after_line(self.state, self.content, 心得=self._xinde() - xinde)  # 草廬這一步寫了結果那一句（設計 10.3「熔了之後」）就用它（T7 審查 M1）
             if line is not None:
                 msgs[0] = line
-        msgs = self._log(msgs)
-        if library.held_count(self.state) < held:  # 看有沒有真的少一門，不看心得：下品第一成的武學熔了只退 0 點
+            relearn = skillview.relearn_note(self.state, self.content, art_id)  # 基礎武學熔了還能重學：結果最後一句指路（FB-081）
+            msgs = self._log(msgs + [relearn] if relearn else msgs)
             self._menxia_entry(msgs[0], xinde, guide=True, action="melt")  # 序章第 10 步（新手引導計畫一）
-        return msgs
+            return msgs
+        return self._log(msgs)
 
     def melt_insight(self, insight_id: str) -> list[str]:
         """把一個意境化成心得（見 library.melt_insight）；同 melt_art，熔成了才寫江湖紀錄。"""
@@ -3767,6 +3945,10 @@ class Game:
     def insight_rows(self) -> list[dict]:
         return skillview.insight_rows(self.state, self.content, self.world)
 
+    def heal_button(self) -> dict:
+        """修練頁療傷鈕按不按得下去與不能按的原因（FB-082，見 skillview.heal_button）。"""
+        return skillview.heal_button(self.state, self.content)
+
     def naming_row(self) -> dict | None:
         """等著自己取正式名字的那一門（第一個練成絕學）；沒有是 None。"""
         art_id = self.state.player.naming
@@ -3807,8 +3989,9 @@ class Game:
 
     def skip_tutorial(self) -> list[str]:
         steps = len(tutorial_steps(self.state, self.content))
-        if self.state.player.tutorial_step >= steps:
-            return []
+        if (self.state.player.tutorial_step >= steps and not enlist.active(self.state, self.content)
+                and not enlist.waiting(self.state, self.content)):
+            return []  # 引導走完了、入伍段也沒在進行、也不會再開始（beta 季、內容沒有入伍段、早就走完、略過過）：沒有什麼好略過的
         # 在序章裡略過：站到起點、拿出師的盤纏（設計 7.3）；序章外略過照舊
         purse = prologue_rules.finish(
             self.state, self.content, self.world, purse=prologue_rules.active(self.state, self.content),
@@ -3816,8 +3999,14 @@ class Game:
         self.state.player.tutorial_step = steps
         self.state.player.guide_done, self.state.player.guide_outro = [], False  # 略過後對話框不再出現（8.1.4）
         self.state.player.guide_skipped = True
+        enlist.skip(self.state, self.content)  # 入伍段也略過（設計 7.3），之後投靠不開始
         self._write("新手引導", purse, tag="已略過")
         return self._log(["（已略過新手引導。）"] + purse)
+
+    def view_orders(self) -> list[str]:
+        """軍令卡出現在畫面上（網頁在入伍段第一步、卡片真的進了畫面才送，F5）：看入伍段這一步有沒有完成；不寫紀錄、不換「剛剛」。"""
+        self._guide(note_action(self.state, self.content, self.world, "view_orders"))
+        return []
 
     def view_map(self) -> list[str]:
         self.state.player.flags.add("看過地圖")
@@ -3864,6 +4053,9 @@ class Game:
             sights = events.get(step.explore_event) if step.explore_event else None
             if sights is not None:  # 探索那一步之後：四景的引子與每一景悟到的那一句
                 parts.append("\n\n".join([f"**{sights.title}**\n\n{sights.text}"] + [ch.effect.text for ch in sights.choices if ch.effect.text]))
+            scene = self.content.insight_scenes.get(step.explore_scene) if step.explore_scene else None
+            if scene is not None:  # 草廬四景是有所感的場景：場景的引子與卡上的每一個做法（悟到的句子是引擎照屬性寫的，不寫死）
+                parts.append("\n\n".join([f"**{scene.title}**\n\n{scene.text}"] + [m.text for m in scene.methods]))
         if t.leave_text:
             parts.append(t.leave_text)
         return "\n\n---\n\n".join(parts)
@@ -4270,6 +4462,9 @@ class Game:
         if s.pending_event:
             event = c.events[s.pending_event]
             return f"**{event.title}**\n\n{fill_marks(event.text, s)}"
+        sense_card = sensing.scene_text(s, c) if s.player.sensing is not None else ""
+        if sense_card:
+            return sense_card
         if s.player.pending_companion:
             character = c.characters[s.player.pending_companion]
             history = s.player.dialogue_history.get(s.player.pending_companion, [])
@@ -4591,8 +4786,8 @@ class Game:
         if self._preparing():
             return ""
         hut = prologue_rules.active(self.state, self.content)
-        if hut and self.state.pending_event is not None:
-            return ""
+        if hut and (self.state.pending_event is not None or self.state.player.sensing is not None):
+            return ""  # 草廬的事件或草廬四景的有所感（做法、畫下來）在眼前：整張卡不放
         shown = self._news_on_cards()
 
         def repeated(entry: JournalEntry) -> bool:

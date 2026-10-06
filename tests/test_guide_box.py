@@ -156,8 +156,9 @@ def test_skipping_hides_the_box(game):
 
 
 def test_skipping_stays_skipped_into_the_next_season():
-    """畫面批次審查 I4：beta 那一季略過新手引導（停在不分季的最後一步之後），換成第一季（13 步，多了軍令兩步）之後也不再出現對話框；
-    步驟照 T6 的規則記著（做完照樣推進），只是不畫框。沒略過、做完序章十一步的人照 T6 接著做，框照常出現。"""
+    """畫面批次審查 I4：beta 那一季略過新手引導，換成第一季之後也不再出現對話框（第一季的軍令兩步已經由入伍段取代，新手引導計畫二：
+    引導的步驟兩種季一樣多）。略過的人入伍段也算走完（設計 7.3），帶到下一季；沒略過、做完序章十一步的人換季後沒有框
+    （沒有第一季才有的步驟了），入伍段等他投靠才開始。"""
     import random
     from pathlib import Path
 
@@ -175,7 +176,8 @@ def test_skipping_stays_skipped_into_the_next_season():
     # 略過的人是在草廬裡按了「略過序章」的真人（走完序章、站在起點的人再按略過什麼都不做：引導已經做完了）
     skipper, finisher = Game.new(beta, "略過的", rng=random.Random(2), prologue=True), Game.new(beta, "做完的", rng=random.Random(3))
     skipper.skip_tutorial()
-    base = base_step_count(beta)  # 不分季的步數（序章十一步）：第一季的軍令兩步排在它們後面
+    base = base_step_count(beta)  # 序章十一步；第一季也只有這些
+    assert len(beta.tutorial.steps) == base
     finisher.state.player.tutorial_step = base
     for game in (admin, skipper, finisher):
         chars.save(game.state)
@@ -189,7 +191,16 @@ def test_skipping_stays_skipped_into_the_next_season():
         game.sync(300.0)
         assert game.state.player.tutorial_step == base
     assert games["略過的"].guide_box() is None
-    assert games["做完的"].guide_box()["text"] == on.tutorial.steps[base].text
+    assert games["做完的"].guide_box() is None  # 沒有第一季才有的步驟了
+    assert games["略過的"].state.player.guide_skipped and not games["做完的"].state.player.guide_skipped  # 略過照帶
+    assert games["略過的"].state.player.enlist_step == len(on.tutorial.enlist.steps)  # 略過的人入伍段算走完，換季照帶
+    assert games["做完的"].state.player.enlist_step is None  # 還沒投靠：投靠時才開始
+    for game in games.values():  # 兩個人到長社投靠：略過的沒有框、沒略過的由引薦人帶（框只在投靠之後才分得出兩個人）
+        game.state.player.location = "changshe"
+        game.choose("faction:guan")
+        game.choose("faction:confirm")
+    assert games["略過的"].guide_box() is None
+    assert games["做完的"].guide_box()["speaker"] == "老石"
 
 
 # ── 網頁：收起記的是 key（FB-076）。把 web/app.js 裡說書人那一段切出來在 node 裡跑；沒有 node 就略過 ─────────────

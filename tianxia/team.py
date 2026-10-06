@@ -234,6 +234,7 @@ def switch_art(state: GameState, content: Content, world: WorldStateStore, art_i
     slot = "neigong_id" if art.kind == "內功" else "wugong_id"
     level_slot = slot.replace("_id", "_level")
     current_id = getattr(member, slot)
+    pair_before = _worn_pairing(state, content, world)
     msgs = []
     if current_id is not None:
         p.art_levels[current_id] = getattr(member, level_slot)
@@ -245,7 +246,34 @@ def switch_art(state: GameState, content: Content, world: WorldStateStore, art_i
     setattr(member, slot, art_id)
     setattr(member, level_slot, level)
     msgs.append(f"你改練【{art.name}】（{art.quality}・屬{art.attribute}），目前第{level}成。")
+    pair_after = _worn_pairing(state, content, world)
+    if pair_after != pair_before:  # 換上之後內外搭配變了（同屬加成、相剋打折、或不再有）：多一句，數字是引擎的 pairing（FB-088）
+        still, word, pct = _pairing_words(pair_before, pair_after)
+        msgs.append(
+            f"你的內功與武學現在{word}，整體威力 {pct}。" if still else f"你的內功與武學不再{word}，整體威力不再 {pct}。"
+        )
     return msgs
+
+
+def _worn_pairing(state: GameState, content: Content, world: WorldStateStore, swap: MartialArt | None = None) -> float:
+    """身上這兩門現在的內外搭配（pairing）；swap 給了，就當作那一門換上身（同種類的那一欄換成它）再算。少一門是 1。"""
+    member = state.player.member
+    wugong, neigong = player_art(state, content, world, member.wugong_id), player_art(state, content, world, member.neigong_id)
+    if swap is not None:
+        wugong, neigong = (wugong, swap) if swap.kind == "內功" else (swap, neigong)
+    return pairing(content, wugong, neigong)
+
+
+def _signed_pct(ratio: float) -> str:
+    """搭配的百分比，帶正負號（減號用 −）：同屬 +20%、相剋 −20%；整數不寫「.0」。跟 skillview 的 _pct 同一個寫法。"""
+    return f"{ratio:+.1%}".replace(".0%", "%").replace("-", "−")
+
+
+def _pairing_words(before: float, after: float) -> tuple[bool, str, str]:
+    """（搭配還在不在, 同屬或相剋, 百分比）：換上後還有搭配就說換上後的樣子（−20% 換成 +20% 寫「同屬 +20%」，跟門下卡的
+    「內外搭配」同一個數）；換上後沒有了，就說原本的那一個不再有（「不再相剋、不再 −20%」）。"""
+    shown = after if after != 1 else before
+    return after != 1, "同屬" if shown > 1 else "相剋", _signed_pct(shown - 1)
 
 
 # 新武學跟身上那門比的那一句（W6；待 joy 潤）：「比身上的【甲】：威力 −0.3（第一成）、多了〔先手〕、少了〔厚〕」
@@ -293,7 +321,14 @@ def compare_with_worn(state: GameState, content: Content, world: WorldStateStore
         parts.append(COMPARE_MORE.format(names="".join(f"〔{n}〕" for n in more)))
     if less:
         parts.append(COMPARE_LESS.format(names="".join(f"〔{n}〕" for n in less)))
-    return "、".join(parts)
+    line = "、".join(parts)
+    # 換上後內外搭配變不變（FB-088；待 joy 潤）：跟另一種那門比，同屬加成、相剋打折、或原本的沒有了；沒變就不多說
+    now, then = _worn_pairing(state, content, world), _worn_pairing(state, content, world, swap=mine)
+    if now != then:
+        still, word, pct = _pairing_words(now, then)
+        other = "武學" if art.kind == "內功" else "內功"
+        line += f"；換上後跟{other}{word}，整體 {pct}" if still else f"；換上後跟{other}不再{word}，整體不再 {pct}"
+    return line
 
 
 def practice_price(content: Content, level: int) -> int:
@@ -388,13 +423,22 @@ def heal_cost(content: Content, member) -> int:
     return math.ceil(injury / max(1.0, content.config.heal_neili_per_silver))
 
 
-def heal(state: GameState, content: Content, member) -> list[str]:
+def heal_problem(state: GameState, content: Content, member) -> str | None:
+    """療傷做不了的原因；None＝可以。heal 與修練頁的療傷鈕（skillview.heal_button）走同一個判斷，鈕上寫的跟按下去回的是同一句。"""
     cost = heal_cost(content, member)
     if cost <= 0:
-        return ["氣血無恙，不用療傷。"]
+        return "氣血無恙，不用療傷。"
+    if state.player.stats.get("silver", 0) < cost:
+        return f"銀兩不足：療傷需要 {cost} 兩。"
+    return None
+
+
+def heal(state: GameState, content: Content, member) -> list[str]:
+    problem = heal_problem(state, content, member)
+    if problem is not None:
+        return [problem]
+    cost = heal_cost(content, member)
     p = state.player
-    if p.stats.get("silver", 0) < cost:
-        return [f"銀兩不足：療傷需要 {cost} 兩。"]
     p.stats["silver"] -= cost
     healed = member.injury
     member.injury = 0.0
@@ -633,6 +677,32 @@ def take_encounter_toll(
                 key, lambda progress, agi=agi, con=con: _apply_toll(content, progress, fraction, agi=agi, con=con),
             )
     return msgs
+
+
+def toll_saved(
+    state: GameState, content: Content, world: WorldStateStore, tier: str, *, wild: bool = False,
+) -> tuple[int, int]:
+    """（化勁少扣的氣血, 不動免掉的內傷）（FB-084）：這一場本人真的扣的，跟拿掉那一個功效照一般算的差。
+    各自只拿掉它自己那一個（化勁看氣血、不動看內傷），所以兩個數字不互相混。只讀、不動狀態：在 take_encounter_toll 之前呼叫，
+    量的是還沒扣的那一刻；用本人的複本照 _apply_toll 同一套算，四捨五入跟「氣血 -N」「內傷 +N」的寫法一樣，
+    所以「少扣了 N」加上畫面上的「氣血 -M」剛好是沒有化勁時的 N+M。沒有這兩個功效、或這個結果不扣氣血，是 (0, 0)。"""
+    cfg = content.config
+    fraction = cfg.encounter_neili_loss.get(tier, 0.0) * (cfg.wild_neili_loss_factor if wild else 1.0)
+    lo = traits.loadout(state, content, world)
+    cut, still = traits.amount(content, lo, "toll_cut"), "no_injury" in lo.specials
+    if fraction <= 0 or (cut <= 0 and not still):
+        return 0, 0
+    agi, con = state.player.stats.get("agi", BASE_STAT), con_of(state, content, world, PLAYER)
+
+    def toll(cut_: float, injury: float) -> tuple[float, float]:
+        return _apply_toll(
+            content, state.player.member.model_copy(), fraction * (1 - cut_), agi=agi, con=con, injury=injury,
+        )
+
+    real_lost, real_hurt = toll(cut, 0.0 if still else 1.0)
+    saved = round(toll(0.0, 0.0 if still else 1.0)[0]) - round(real_lost) if cut > 0 else 0
+    spared = round(toll(cut, 1.0)[1]) - round(real_hurt) if still else 0
+    return max(0, saved), max(0, spared)
 
 
 def _apply_toll(

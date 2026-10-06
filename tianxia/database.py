@@ -178,9 +178,23 @@ SCHEMA_V2_TABLES: tuple[str, ...] = (
     )""",
 )
 
-SCHEMA: tuple[str, ...] = SCHEMA_V1 + SCHEMA_V2_TABLES  # 新檔一次建好
-MIGRATIONS: dict[int, tuple[str, ...]] = {1: SCHEMA_V2_TABLES}  # 第 n 版 → 第 n+1 版要跑的句子
-SCHEMA_VERSION = 2
+# 第 3 版（悟意境設計 0.2b）：感悟悟出來的意境是私有的（存在角色自己的存檔），全服只記「這一季誰第一個在哪裡、用什麼做法、
+# 畫出什麼屬性悟到」——key 是「地點|做法屬性|畫出的屬性」，名字是首悟那人的意境名，寫進江湖史。照季分，換季不刪。
+SCHEMA_V3_TABLES: tuple[str, ...] = (
+    """CREATE TABLE insight_firsts (
+        season INTEGER NOT NULL,
+        key TEXT NOT NULL,
+        name TEXT NOT NULL,
+        creator TEXT,
+        place TEXT NOT NULL,
+        time REAL NOT NULL DEFAULT 0,
+        PRIMARY KEY (season, key)
+    )""",
+)
+
+SCHEMA: tuple[str, ...] = SCHEMA_V1 + SCHEMA_V2_TABLES + SCHEMA_V3_TABLES  # 新檔一次建好
+MIGRATIONS: dict[int, tuple[str, ...]] = {1: SCHEMA_V2_TABLES, 2: SCHEMA_V3_TABLES}  # 第 n 版 → 第 n+1 版要跑的句子
+SCHEMA_VERSION = 3
 
 
 def default_path() -> Path:

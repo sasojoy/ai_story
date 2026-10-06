@@ -25,7 +25,7 @@ from .materials import TIER_NAMES
 from .models import (
     FRONT_KEY, GLOW_KEYS, MOVES, REVEAL_KEYS, ROADS, STATS, Attribute, BattleDef, CharacterDef, CheckVoice, CombatLines, Condition, Config,
     Content, CraftNames, Effect, Event, FigureDef, FollowerDef, Foreshadows, FrontLines, InsightDef, Location, OppDef,
-    OrdersContent, PresetRecipe, PromotionDef, MapLayout, Material, RoadSight, Scenario, Sect, SimRumor, SkillDef, Squad,
+    InsightScene, OrdersContent, PresetRecipe, PromotionDef, MapLayout, Material, RoadSight, Scenario, Sect, SimRumor, SkillDef, Squad,
     TimetableEvent, TraitBook, Tutorial, allow_known,
 )
 from .martial_arts import ATTRIBUTES, QUALITIES
@@ -96,6 +96,8 @@ def load_content(root: Path, profile: str | None = None) -> Content:
         preset_recipes=[_build(PresetRecipe, raw) for raw in _read(root / "preset_recipes.json")]
         if (root / "preset_recipes.json").exists() else [],
         figures=_index(FigureDef, _read(root / "figures.json")) if (root / "figures.json").exists() else {},
+        insight_scenes=_index(InsightScene, _read(root / "insight_scenes.json"))
+        if (root / "insight_scenes.json").exists() else {},
         events=events,
         map=MapLayout(**_read(root / "map.json")),
         tutorial=Tutorial(**_read(root / "tutorial.json")),
@@ -329,6 +331,54 @@ def _material_sources(c: Content) -> set[str]:
 
 
 NUMBER_IN_TEXT = re.compile(r"[0-9０-９%％]")  # 心裡話不能攤出成功率（也不能寫難度）
+
+
+def check_insight_scenes(c: Content, need) -> None:
+    """有所感的場景（content/insight_scenes.json，悟意境設計 3.1、4.1）。沒有這個檔就不檢查（探索照舊直接悟）。
+    - 每段三到四個做法、屬性各不相同；hints 要是它自己做法裡有的屬性；locations 要是存在的地點、tags 要至少對得上一個地點。
+    - 用得到這段場景的每一個地點：至少一個做法是選得對的（做法屬性在這裡悟得到的意境裡），hints 也要指得到這裡悟得到的
+      （寫了 hints 才查；通用場景可以不寫）——河邊的場景用在只悟得到火的地方，看懂場景的人反而選錯。
+    - 探索悟得到意境的每一個地點（序章的草廬除外）都要有場景：不然那裡落在悟意境那一支時沒有卡可出。
+    - 文字只能用繁體中文、不能寫數字或百分比（不攤成算，Q4）。"""
+    from .insights import explore_gives, pool_attributes, scenes_for  # noqa: PLC0415  insights → state → models，延後免得循環
+
+    scenes = c.insight_scenes
+    if not scenes:
+        return
+    all_tags = {tag for loc in c.locations.values() for tag in loc.tags}
+
+    def check_text(where: str, text: str) -> None:
+        need(bool(text.strip()), f"{where}：有空白的句子")
+        need(to_traditional(text) == text, f"{where}：文字只能用繁體中文（「{text[:12]}」）")
+        need(not NUMBER_IN_TEXT.search(text), f"{where}：不能寫數字或百分比（「{text[:12]}」）")
+
+    for scene in scenes.values():
+        where = f"有所感 {scene.id}"
+        attrs = [m.attribute for m in scene.methods]
+        need(3 <= len(attrs) <= 4, f"{where}：做法要三到四個（現在 {len(attrs)} 個）")
+        need(len(set(attrs)) == len(attrs), f"{where}：做法的屬性不能重複 {attrs}")
+        need(set(scene.hints) <= set(attrs), f"{where}：hints {scene.hints} 要是它自己做法裡有的屬性")
+        for loc_id in scene.locations:
+            need(loc_id in c.locations, f"{where}：未知的地點 {loc_id}")
+        for tag in scene.tags:
+            need(tag in all_tags, f"{where}：沒有任何地點有標籤「{tag}」")
+        for text, label in [(scene.title, "標題"), (scene.text.replace("{痕跡}", ""), "場景"), *((m.text, "做法") for m in scene.methods)]:
+            check_text(f"{where}的{label}", text)
+        need(not scene.prologue or not (scene.tags or scene.locations), f"{where}：序章的場景只給草廬用，不寫 tags、locations")
+        need(scene.prologue or not scene.flags_add, f"{where}：flags_add 只給序章的場景用")
+    if all(scene.prologue for scene in scenes.values()):
+        return  # 只有序章草廬那一段：草廬外探索照舊直接悟，不要求每處都有場景
+    hut = c.tutorial.location
+    for loc in c.locations.values():
+        if not explore_gives(loc, c) or loc.prologue_only or loc.id == hut:
+            continue
+        options = scenes_for(loc, c)
+        need(bool(options), f"地點 {loc.id}：探索悟得到意境，卻沒有一段有所感的場景（insight_scenes.json 的 locations、tags 或通用場景）")
+        pool = pool_attributes(loc, c)
+        for scene in options:
+            where = f"有所感 {scene.id}（用在 {loc.id}）"
+            need(any(m.attribute in pool for m in scene.methods), f"{where}：沒有一個做法選得對（這裡悟得到的屬性 {sorted(pool)}）")
+            need(not scene.hints or bool(set(scene.hints) & pool), f"{where}：線索 {scene.hints} 指不到這裡悟得到的 {sorted(pool)}")
 
 
 def check_check_voice(c: Content, need) -> None:
@@ -1024,6 +1074,18 @@ def validate(c: Content) -> None:
         for key in keys:
             need(key in valid, f"{where}：未知的{kind} {key}")
 
+    odds = c.config.fuse_quality_odds  # 合成擲品質：只擲得到下品～上品（絕學要修練），權重不能是負的、也不能全是 0
+    need(
+        set(odds) <= {"下品", "中品", "上品"} and all(w >= 0 for w in odds.values()) and sum(odds.values()) > 0,
+        "config.fuse_quality_odds 只能寫下品、中品、上品，權重不能是負的、也不能全是 0",
+    )
+    fq = c.config.fuse_quality  # 照搭配推機率：上品、下品的範圍要排得下中品（兩頭都推到底時中品也不會是負的）
+    need(
+        0 <= fq.up_range[0] <= fq.up_range[1] and 0 <= fq.low_range[0] <= fq.low_range[1]
+        and fq.up_range[1] + fq.low_range[0] <= 100 and fq.up_range[0] + fq.low_range[1] <= 100
+        and all(len(pair) == 2 for pair in fq.lines.values()),
+        "config.fuse_quality 的上品、下品範圍排不下中品（或說明那一句不是「加分、扣分」兩種寫法）",
+    )
     for kind in c.config.practice_bonus:  # 熟練加成看的是本人的名聲（善名、惡名、名望……），不是戰鬥屬性
         need(kind in STATS and kind not in ("str", "agi", "con", "wis", "lore"), f"config.practice_bonus 的 {kind} 不是名聲類的屬性")
 
@@ -1234,6 +1296,7 @@ def validate(c: Content) -> None:
     for word in c.banned_names:
         need(bool(word.strip()), "banned_names 裡有空字串")
     check_check_voice(c, need)
+    check_insight_scenes(c, need)
     check_front_lines(c, need)
     check_combat_lines(c, need)
     check_traits(c, need)
@@ -1553,8 +1616,21 @@ def validate(c: Content) -> None:
     for step in c.tutorial.steps:
         where = f"新手引導 {step.id}"
         known(where, step.done_when.locations, c.locations, "地點")
+        known(where, step.survey, c.locations, "地點")
         check_condition(where, step.done_when.condition)
         check_effect(where, step.reward)
+    enlist = c.tutorial.enlist  # 入伍段（新手引導計畫二）：引薦人要對得上劇本的陣營、每位每一步都有收起來那一行
+    if enlist is not None:
+        for step in enlist.steps:
+            where = f"入伍段 {step.id}"
+            known(where, step.done_when.locations, c.locations, "地點")
+            check_condition(where, step.done_when.condition)
+        for faction_id, who in enlist.recruiters.items():
+            need(faction_id in faction_ids, f"入伍段：引薦人 {who.name} 的陣營 {faction_id} 不是劇本的陣營")
+            need(
+                len(who.lines) == len(enlist.steps),
+                f"入伍段：引薦人 {who.name}（{faction_id}）的 lines 要有 {len(enlist.steps)} 行（每一步一行），現在是 {len(who.lines)} 行",
+            )
 
     # ── 序章（新手引導計畫一）──
     t = c.tutorial
@@ -1605,6 +1681,15 @@ def validate(c: Content) -> None:
             "引擎新加的行動要先補進那裡）",
         )
         need(step.explore_event is None or step.explore_event in c.events, f"{where}：explore_event {step.explore_event} 不存在")
+        if step.explore_scene is not None:
+            scene = c.insight_scenes.get(step.explore_scene)
+            need(scene is not None and scene.prologue, f"{where}：explore_scene {step.explore_scene} 要是 insight_scenes.json 裡 prologue 的場景")
+            need(step.explore_event is None, f"{where}：explore_event 與 explore_scene 只能寫一個")
+            hut_loc = c.locations.get(t.location) if t.location else None
+            if scene is not None and hut_loc is not None:
+                from .insights import pool_attributes  # noqa: PLC0415
+                wrong = sorted({m.attribute for m in scene.methods} - pool_attributes(hut_loc, c))
+                need(not wrong, f"{where}：序章的有所感每個做法都要選得對，{wrong} 在草廬悟不到")
         known(where, step.enemies, c.squads, "對手")
         need(step.force_tier is None or step.force_tier in encounter.TIERS, f"{where}：force_tier {step.force_tier} 不是判定結果")
         for art in (step.fuse_base, step.melt_only, step.give_art.id if step.give_art else None):
@@ -1614,6 +1699,12 @@ def validate(c: Content) -> None:
     sights: set[str] = set()
     for step in t.steps[: t.prologue_steps]:
         sights.update(step.reward.insights)
+    hut_place = c.locations.get(t.location) if t.location else None
+    for step in t.steps[: t.prologue_steps]:  # 有所感的草廬：每個做法悟到的就是草廬裡那個屬性的基本意境
+        scene = c.insight_scenes.get(step.explore_scene or "")
+        if scene is not None and hut_place is not None:
+            from .insights import base_of  # noqa: PLC0415
+            sights.update(i for i in (base_of(m.attribute, hut_place, c) for m in scene.methods) if i)
     todo = ([t.start_event] if t.start_event else []) + [s.explore_event for s in t.steps[: t.prologue_steps] if s.explore_event]
     seen_events: set[str] = set()
     while todo:

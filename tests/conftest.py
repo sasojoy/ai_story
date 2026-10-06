@@ -75,7 +75,7 @@ def prologue_root(tmp_path):
     要改內容再載入的測試（驗證）用這個；只要載入好的內容用 prologue_content。"""
     root = tmp_path / "prologue_content"
     shutil.copytree(FIXTURE, root)
-    for name in ("tutorial.json", "preset_recipes.json"):
+    for name in ("tutorial.json", "preset_recipes.json", "insight_scenes.json"):
         shutil.copy(PROLOGUE / name, root / name)
     shutil.copy(PROLOGUE / "events.json", root / "events" / "prologue.json")
 

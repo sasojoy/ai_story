@@ -94,6 +94,23 @@ def test_practice_cannot_be_lore(tmp_path):
         load_content(root)
 
 
+@pytest.mark.parametrize("odds", [{"絕學": 10}, {"下品": -1, "中品": 2}, {"下品": 0}])
+def test_bad_fuse_quality_odds_rejected(tmp_path, odds):
+    root = copy_fixture(tmp_path)
+    edit_json(root / "config.json", lambda d: d.update(fuse_quality_odds=odds))
+    with pytest.raises(ContentError, match="fuse_quality_odds"):
+        load_content(root)
+
+
+@pytest.mark.parametrize("rule", [{"up_range": [5, 60], "low_range": [50, 80]}, {"lines": {"quality": ["底子厚實"]}}])
+def test_bad_fuse_quality_rule_rejected(tmp_path, rule):
+    """上品、下品的範圍排不下中品，或說明那一句少了扣分時的寫法：載入時就擋。"""
+    root = copy_fixture(tmp_path)
+    edit_json(root / "config.json", lambda d: d.update(fuse_quality=rule))
+    with pytest.raises(ContentError, match="fuse_quality"):
+        load_content(root)
+
+
 def test_last_ending_must_be_unconditional(tmp_path):
     root = copy_fixture(tmp_path)
     edit_json(root / "scenario.json", lambda d: d["endings"].pop())
@@ -1713,8 +1730,7 @@ def test_starter_skills_are_one_inner_and_one_outer_art(content):
 
 def test_real_content_has_seventeen_basic_arts_and_every_location_an_insight():
     real = load_content(ROOT / "content")
-    # 蠻牛拳是序章專用的雜學（斷眉掉出來、師父叫你熔掉），不是附錄 B 的基礎武學
-    basics = [s for s in real.skills.values() if s.quality == "下品" and s.id != "manniu_quan"]
+    basics = [s for s in real.skills.values() if s.quality == "下品" and s.id != "manniu_quan"]  # 蠻牛拳是序章專用的雜學
     assert len(basics) == 17
     assert all(loc.insights for loc in real.locations.values())
 
@@ -2043,8 +2059,44 @@ def test_a_recipe_on_the_wrong_base_does_not_cover_the_sight(prologue_root):
         load_content(prologue_root)
 
 
+P_INSIGHT = {"id": "p_insight", "title": "四景", "text": "挑一處。", "actions": [], "choices": [
+    {"text": "松林", "effect": {"text": "風。", "insights": ["feng"], "flags_add": ["序章:悟"]}},
+    {"text": "石崖", "effect": {"text": "山。", "insights": ["shan"], "flags_add": ["序章:悟"]}},
+    {"text": "溪水", "effect": {"text": "水。", "insights": ["shui"], "flags_add": ["序章:悟"]}},
+    {"text": "爐火", "effect": {"text": "火。", "insights": ["huo"], "flags_add": ["序章:悟"]}},
+]}
+
+
+def _sights_as_event(prologue_root):
+    """序章第 3 步改回舊的寫法：四景是一則事件（explore_event），不是有所感的場景。兩種寫法內容都還認得。"""
+    edit_json(prologue_root / "events" / "prologue.json", lambda events: events.append(json.loads(json.dumps(P_INSIGHT))))
+
+    def step(t):
+        t["steps"][2].pop("explore_scene")
+        t["steps"][2]["explore_event"] = "p_insight"
+        t["steps"][2]["done_when"]["action"] = "choice"
+
+    edit_json(prologue_root / "tutorial.json", step)
+
+
+def test_the_four_sights_can_still_be_an_event(prologue_root):
+    _sights_as_event(prologue_root)
+    assert load_content(prologue_root).tutorial.steps[2].explore_event == "p_insight"
+
+
+def test_a_prologue_scene_whose_method_the_hut_cannot_give_is_refused(prologue_root):
+    def narrow(locs):
+        next(loc for loc in locs if loc["id"] == "hut")["insights"] = ["feng", "shan", "shui"]  # 草廬悟不到火（剛）
+
+    edit_json(prologue_root / "locations.json", narrow)
+    with pytest.raises(ContentError, match=r"序章的有所感每個做法都要選得對"):
+        load_content(prologue_root)
+
+
 def test_a_sight_that_chains_on_is_checked_too(prologue_root):
     """四景選了之後接下去的事件（next_event）悟到的意境也算。"""
+    _sights_as_event(prologue_root)
+
     def chain(events):
         sight = next(e for e in events if e["id"] == "p_insight")
         sight["choices"][0]["effect"]["next_event"] = "p_more"
@@ -2058,6 +2110,8 @@ def test_a_sight_that_chains_on_is_checked_too(prologue_root):
 
 def test_a_sight_that_only_a_failed_check_grants_is_checked_too(prologue_root):
     """檢定失敗才給的意境（fail_effect）也是新人會拿到的：沒有配方的話那個新人的合成一樣要等模型。"""
+    _sights_as_event(prologue_root)
+
     def gamble(events):
         sight = next(e for e in events if e["id"] == "p_insight")
         sight["choices"][0]["check"] = {"stat": "str", "difficulty": 5}

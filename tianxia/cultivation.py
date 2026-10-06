@@ -70,11 +70,15 @@ def cultivate_problem(state: GameState, content: Content, world: WorldStateStore
     art = team.resolve_art(art_id, content, world)
     if art is None or art_id not in library.owned_arts(state):
         return "你沒有這門武學。"
-    if art.insight is None:
+    if art.insight is None and art.insight_attr is None:
         return "這門武學沒有融過意境，沒辦法修練——先拿它去「煉製」融一個意境。"
-    if art.insight not in state.player.insights:
-        insight = insights.resolve(art.insight, content, world)
-        return f"修練要用「{insight.name if insight else art.insight}」，你已經把它熔掉了。"
+    if insights.for_cultivation(state, content, world, art) is None:
+        attribute = insights.art_attribute(art, content, world, state)
+        if art.insight is None:  # 融的是私有意境（全服只記屬性）
+            return f"修練要用一個屬{attribute}的意境，你手上一個都沒有。"
+        insight = insights.resolve(art.insight, content, world, state)
+        other = f"（或別的屬{attribute}的意境）" if attribute else ""
+        return f"修練要用「{insight.name if insight else art.insight}」{other}，你已經把它熔掉了。"
     target = next_quality(team.art_quality(state, art))
     if target is None:
         return "已經是絕學，修無可修。"
@@ -187,5 +191,7 @@ def name_mastered(state: GameState, content: Content, world: WorldStateStore, na
     if name != old.name and not world.rename_skill(art_id, name):
         return [f"【{name}】已經有人用了，換一個吧。"]
     state.player.naming = None
+    if art_id not in state.player.renames_told:  # 自己定的名：定名那一句已經說了，下次同步不必再通知自己（FB-083）
+        state.player.renames_told.append(art_id)
     add_chronicle(state, f"{state.player.name}把【{old.name}】練成絕學，為之定名【{name}】。")  # 江湖史一律寫名號（傳聞分層第七節）
     return [f"從今以後，江湖上這門武學就叫【{name}】。"]

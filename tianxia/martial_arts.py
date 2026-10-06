@@ -49,6 +49,9 @@ class MartialArt(BaseModel):
     master_shown: str | None = None
     note: str = ""  # 模型寫的一句話描述（只有語意、沒有數字）；自創與本命武學是空的
     insight: str | None = None  # 最後融的意境 id（武學與成長設計 3.4）；修練要用它
+    # 融的那個意境的屬性（悟意境設計 0.2b 第 6 點）：私有的意境（畫圖悟來的，id 只有悟的人自己有）不寫進全服共享的功法，
+    # 只記屬性——修練時手上有 insight 那一個就用它，沒有就用手上任何一個同屬性的。舊資料是 None，照 insight 去查它的屬性
+    insight_attr: str | None = None
     base: str | None = None  # 合成的底（功法 id）
     parents: list[str] = Field(default_factory=list)  # 武學＋武學：兩門來源的 id（排序過，武學與成長設計 12.3）；其他是空的
     lean: str = "無"  # 正、邪、無：跟著最後融的意境（設計 7.3）
@@ -68,6 +71,17 @@ class Insight(BaseModel):
     creator_shown: str | None = None  # 首悟者寫給別人看的名號：名號（見 MartialArt.creator_shown；這一版之前匿名記下的「某位少俠」照舊）
     note: str = ""  # 模型寫的一句說明；基本意境是內容的 desc
     parents: list[str] = Field(default_factory=list)  # 合併出來的：兩個來源的 id（排序過）
+    # ── 私有的意境（畫圖悟來的、或拿私有的去合併出來的；悟意境設計 0.2b）：存在悟的人自己的存檔（PlayerState.own_insights），
+    # id 是「悟:流水號」，名字不要求全服唯一。下面三項只有它們才有 ──
+    place: str = ""  # 在哪悟的（地點的名字）；合併出來的是空的
+    glyph: list[list[int]] = Field(default_factory=list)  # 畫的那一筆（0～100 的點位，簡化過），修練頁畫縮圖
+    glyph_note: str = ""  # 規則讀到的那一筆（例：「一筆畫成、圓轉不斷、畫得很慢」）
+
+
+def is_renamed(art: MartialArt) -> bool:
+    """這門全服登記的武學已經被定了正式的名字（FB-083）：登記時 id 就是名字，絕學定名只改顯示的名字、id 不動，所以兩個不一樣就是改過。
+    內容手寫的（本命、基礎）id 本來就不是名字，不算。"""
+    return art.origin not in ("historical", "basic") and art.name != art.id
 
 
 def shown_creator(thing: MartialArt | Insight) -> str | None:

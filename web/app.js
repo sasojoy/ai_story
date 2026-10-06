@@ -30,6 +30,7 @@
   // 江湖頁「前往」的走法（跟 atlas.MODES 同一份）。選的走法只放在 S.moveMode：不寫進 localStorage、cookie，
   // 重新整理頁面就回到步行；每個請求都帶著它（見 api()），伺服器照它排選單上的「前往」
   const FREE_TEXT_OPTION = "choice:free"; // 事件的隨口應對（engine.FREE_TEXT_OPTION）
+  const SENSE_DRAW = "sense:draw"; // 有所感進了感悟狀態：「把心中的形畫下來」叫出畫布（sensing.DRAW），畫好送 /api/sense
   const MOVE_MODES = [
     { id: "walk", name: "步行" },
     { id: "hurry", name: "趕路" },
@@ -70,10 +71,18 @@
     person: null,
     kind: "武學",
     artOpen: null, // 修練頁武學清單裡點開的那一門（id）；切分頁、改練成功之後收起
+    artInfo: null, // 修練頁哪一門攤開了「詳情」（完整的功法卡）
+    libFilter: null, // 修練頁功法庫的篩選：all／武學／內功／ready（可修練）；武學多時才出現。null＝還沒讀過這個瀏覽器記的（libFilter()，FB-085）
+    libAll: false, // 功法庫列完了沒（武學多時先只列 LIB_PAGE 門）
+    insOpen: null, // 修練頁點開的那一個意境（攤開說明與「化成心得」）
     artNote: null, // 修練（衝品質）的結果：{ id, html }，寫在那一門卡片的按鈕底下（W7）；點別的卡片、切分頁、做別的動作就清掉
     legendTick: {}, // 修練頁每一門武學「服下破境丹」勾了沒（id → true）；預設不勾，輪詢重畫不會悄悄取消，修練送出之後清掉
     forgeSel: [], // 爐裡放的：{type: "art" | "ins", id}，最多兩樣、武學最多兩門（武學＋意境、武學＋武學＝合成，兩個意境＝合併）
     wheelSel: null, // 江湖頁行動列展開的那一格（目前只有 move）
+    sensing: false, // 有所感：畫布叫出來了沒（按了「把心中的形畫下來」）；感悟狀態結束（選單上沒有 SENSE_DRAW）就收起
+    sensePts: [], // 畫布上那一筆的點位 [[x, y, 毫秒], …]（畫布座標 0～256）；輪詢重畫頁面之後照它補畫回去
+    senseNote: "", // 畫布底下那一行：規則讀到的這一筆（/api/sense_read）
+    stroking: false, // 手指正按在畫布上：輪詢不重畫（重畫會換掉畫布、手指底下的那一筆就斷了）
     forgeLine: "",
     map: null,
     layer: "situation",
@@ -94,6 +103,11 @@
     prologueKey: "", // 上一次整頁重畫時序章亮起來的東西（見 prologueKey、renderTop）
     recap: undefined, // 設定頁「重看序章」的文字：undefined＝還沒問過伺服器，""＝沒有序章；同一次載入只問一次（loadRecap）
     recapOpen: false,
+    ordersSeen: false, // 入伍段第一步的 view_orders 送過了嗎（軍令卡真的在畫面上才送，見 watchOrders）；登入、登出清掉
+    ordersObs: null, // 盯著軍令卡的 IntersectionObserver（整頁重畫就換一個）
+    ordersTimer: null, // 軍令卡進畫面之後的計時（ORDERS_SEEN_MS）；離開畫面就取消
+    ordersVisible: false, // 觀察者最後一次說的：軍令卡（扣掉頂上與底下兩條固定的）至少一半在畫面上嗎
+    ordersRetried: false, // 送不出去、已經補過一次重試了嗎（不連著試）
     pushLive: false, // 伺服器推送連著嗎（見「伺服器推送」那一段）：連著時平常 60 秒才輪詢，沒連就每 10 秒
   };
 
@@ -124,8 +138,8 @@
   const pageKey = (m) => JSON.stringify({ ...m, status: null });
   // 焦點在輸入框、下拉選單：玩家正在填東西，輪詢不動畫面
   // 勾選框不算：勾完它還留著焦點，要是算打字，輪詢會一直等到玩家點別處才補畫（修練頁的「服下破境丹」）
-  const typing = () => !!document.activeElement && ["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement.tagName)
-    && document.activeElement.type !== "checkbox";
+  const typing = () => S.stroking || (!!document.activeElement && ["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement.tagName)
+    && document.activeElement.type !== "checkbox");
 
   // 表單的結果訊息（QA L3）：寫在表單裡那一行，留到下一次送出；錯誤醒目、成功用一般文字色
   function formMsg(form, text, ok = false) {
@@ -188,6 +202,7 @@
   }
 
   function enter(data) {
+    resetOrdersWatch(); // 換了帳號、角色：入伍段第一步的看過與計時都重來
     S.moveMode = "walk"; // 登入、重新登入、建角的畫面都是伺服器照步行排的（_entry 不看走法），切換鈕跟著回到步行
     if (data.stage === "game") {
       S.stage = "game";
@@ -203,6 +218,7 @@
 
   function setMain(main) {
     if (main.event_free_text == null) S.answering = false; // 事件過去了，輸入框跟著收起
+    if (S.sensing && !(main.options || []).some((o) => o.id === SENSE_DRAW)) closeSense(); // 感悟狀態過去了（悟成、作廢），畫布跟著收起
     // 見聞的紅點只為新的一場亮（比 card_id）：配點之後「剛剛」照舊是升級那一場的卡片，看過戰報再配點不再亮一次（計畫二最終審查 M1）；
     // 放在這裡是因為動作回來的與輪詢拿到的都走 setMain——決戰收場的卡片常常是輪詢（sync）補送的。登入那一份不亮（S.main 還沒有）
     if (main.card && S.main && S.main.card_id !== main.card_id) {
@@ -377,7 +393,9 @@
     guideCue();
   }
 
-  // 要按的東西在第一屏之外（修練頁的改練那一列在 y≈1300）時，師父的框上多一個小小的「在下面 ↓」，點了捲到那裡（T7 審查 M7）。
+  // 要按的東西沒有整個露在第一屏裡（修練頁的改練那一列在 y≈1300，或只露出幾 px 被分頁列蓋住）時，師父的框上多一個小小的
+  // 「在下面 ↓」，點了捲到那裡（T7 審查 M7）。整個看得到＝它的底邊在分頁列的頂邊或以上（以前看頂邊離分頁列 8px 以上就算看得到：
+  // 步驟 4 煉製頁的挑選清單在 747～813、分頁列 756，只露 9px，玩家看不到、也沒有提示）。
   // 只看頁面裡（#page）第一個發光的東西：分頁列與狀態列的鈕永遠在畫面上。只在序章；每次畫完頁面重算（applyGlow 呼叫），
   // 視窗大小變了（轉向、拉視窗）也重算（resize 的去抖，見檔案最後那個 resize 監聽，T7 走查 W-F）；捲動不重算
   function guideCue() {
@@ -389,7 +407,7 @@
     if (!target) return;
     const bar = document.querySelector(".tabs");
     const limit = bar ? bar.getBoundingClientRect().top : window.innerHeight;
-    if (target.getBoundingClientRect().top < limit - 8) return; // 要按的東西已經在第一屏裡
+    if (target.getBoundingClientRect().bottom <= limit) return; // 要按的東西整個都在第一屏裡
     head.firstElementChild.insertAdjacentHTML("afterend", '<button class="linkish guide-below" data-act="guide-below">在下面 ↓</button>');
   }
   function scrollToGuideTarget() {
@@ -418,13 +436,70 @@
     el.setAttribute("aria-expanded", String(open));
   }
 
+  // ── 入伍段第一步（新手引導計畫二，preflight F5）：軍令卡真的在畫面上才算看過 ──
+  // 框是引薦人的第一步（key 是 r2_briefing；伺服器要等序章走完、引薦人的框輪到了才送這個 key）時，軍令卡在行動列底下。手機上第一屏放不下它，
+  // 一畫出來就送的話，引薦人那段話還沒讀就被換成下一步。所以等卡片至少一半進了畫面、停留 ORDERS_SEEN_MS，才送一次 view_orders；
+  // 捲走了就重新計時。整頁重畫（輪詢內容一變就會）把 IntersectionObserver 重掛到新的那張卡片上，已經在跑的計時不因為重畫重來。
+  // 瀏覽器沒有 IntersectionObserver 時退回「畫出來之後 ORDERS_SEEN_MS」；分頁在背景時計時走完不送、過一輪再看。
+  // 「在畫面上」不含被固定的兩條蓋住的部分：觀察的範圍扣掉頂上的狀態列（#top）與底部的分頁列（.tabs）的高度；設定抽屜開著時不看。
+  // 送出去的記在 S.ordersSeen（不重送）；送不出去就還回去，隔 ORDERS_RETRY_MS 再試一次（api 每次失敗都跳提示，不連著試；
+  // 再失敗就等下一次重畫或捲動）；這一步過了就清掉，下一季輪到它再送。
+  const ORDERS_SEEN_MS = 1500;
+  const ORDERS_RETRY_MS = 5000;
+  function stopOrdersTimer() {
+    clearTimeout(S.ordersTimer);
+    S.ordersTimer = null;
+  }
+  function resetOrdersWatch() { // 登入、換角色、登出
+    if (S.ordersObs) S.ordersObs.disconnect();
+    S.ordersObs = null;
+    stopOrdersTimer();
+    S.ordersSeen = false;
+    S.ordersVisible = false;
+    S.ordersRetried = false;
+  }
+  function sendOrdersSeen() {
+    S.ordersTimer = null;
+    const g = S.main && S.main.guide;
+    if (!g || g.key !== "r2_briefing" || S.ordersSeen) return;
+    if (S.ordersObs && !S.ordersVisible) return; // 計時走完時觀察者說卡片已經不在畫面上了：不送
+    if (document.hidden) { S.ordersTimer = setTimeout(sendOrdersSeen, ORDERS_SEEN_MS); return; }
+    S.ordersSeen = true;
+    api("/api/do/view_orders", {}).then((r) => { S.ordersRetried = false; applyMain(r.main); }).catch(() => {
+      S.ordersSeen = false;
+      if (!S.ordersRetried && S.ordersTimer == null) { S.ordersRetried = true; S.ordersTimer = setTimeout(sendOrdersSeen, ORDERS_RETRY_MS); }
+    });
+  }
+  function watchOrders() {
+    if (S.ordersObs) S.ordersObs.disconnect(); // 整頁重畫換了卡片：舊的 observer 看的是已經不在頁面上的那一張
+    S.ordersObs = null;
+    const g = S.main && S.main.guide;
+    const first = !!g && g.key === "r2_briefing";
+    if (!first) S.ordersSeen = false;
+    const card = first && !S.ordersSeen && !S.sheet && S.tab === "jianghu" ? document.querySelector("details.orders") : null;
+    if (!card) { stopOrdersTimer(); return; }
+    const arm = () => { if (S.ordersTimer == null) S.ordersTimer = setTimeout(sendOrdersSeen, ORDERS_SEEN_MS); };
+    if (typeof IntersectionObserver === "undefined") { arm(); return; }
+    const inset = (sel) => { const bar = document.querySelector(sel); const px = bar ? Math.ceil(bar.getBoundingClientRect().height) : 0; return px ? `-${px}px` : "0px"; };
+    const obs = new IntersectionObserver((entries) => {
+      if (S.ordersObs !== obs) return; // 已經換掉的觀察者晚到的回報（disconnect 不會清掉排好的）：不管
+      const e = entries[entries.length - 1];
+      S.ordersVisible = !!e.isIntersecting && e.intersectionRatio >= 0.5;
+      if (S.ordersVisible) arm(); else stopOrdersTimer();
+    }, { threshold: 0.5, rootMargin: `${inset("#top")} 0px ${inset(".tabs")} 0px` });
+    S.ordersObs = obs;
+    obs.observe(card);
+  }
+
   function afterPage() {
+    watchOrders(); // 入伍段第一步：軍令卡在畫面上才算看過（離開江湖頁、框不是第一步時它自己收掉）
     if (S.tab === "jianghu") {
       // 「剛剛」收著卻其實放得下：拿掉底下的淡出與「展開全文」（A4）
       const now = document.querySelector(".now.clamp");
       const body = now && now.querySelector(".tx-now");
       if (body && body.scrollHeight <= body.clientHeight + 1) now.classList.replace("clamp", "fits");
       fitFirstRound(); // 戰鬥卡片收著的第一回合最多兩行，放不下就只留數字（PM 2026-10-05）
+      sensePadReady(); // 有所感的畫布：接上手指、補畫已經畫好的那一筆
       decorateHearsay(); // 戰鬥卡片底下聽來的那一句收成一行（FB-074）
     }
     if (S.tab === "map") mapReady();
@@ -638,7 +713,7 @@
   // 選單上有「打坐」就是平常閒著的時候：用行動列。事件、對話、路上、決戰的選項每次都不一樣，照舊排成一列按鈕
   // 序章裡閒著時選單只留這一步要的（打坐常常不在）：沒有事件的選項、不在路上，也當閒著的行動列來畫，沒亮的格子不畫（F12）
   // 籌備中、休季、暫停（season:）與閉關中（act:break）的選單只有一顆通知：那顆要畫成看得見的按鈕，不能掉進行動列的摺疊裡（M2）
-  const NOTICE_MENU = /^(choice:|season:|act:break$)/;
+  const NOTICE_MENU = /^(choice:|sense:|season:|act:break$)/;
   const idleMenu = (m) => m.options.some((o) => o.id === "act:rest") || (!!m.prologue && !m.on_road && !m.options.some((o) => NOTICE_MENU.test(o.id)));
   const inkCell = (key, name, sub, icon, attrs, cls, note = "") => `<button class="act-ink${cls}" data-key="${key}" data-glow="act:${key}" ${attrs}>
       <svg class="ink-icon" viewBox="0 0 24 24" aria-hidden="true">${icon}</svg><b>${esc(name)}</b><small>${esc(sub)}</small>${
@@ -904,8 +979,9 @@
     const btn = g.end ? '<button class="btn small" data-act="guide-ack">知道了</button>'
       : '<button class="linkish" data-act="guide-shut">收起</button>';
     // 長的那幾步（軍令兩步一百多字）先露三行、點了看全文，不把行動與選項擠出第一屏（畫面批次審查 I3）
-    // 序章裡師父的話不切（設計 6.2「話不會被切掉」，T7 審查 I1）：不收成三行；段落照 \n\n 排（樣式表 pre-line）
-    const full = !!pro() || S.guideFull === g.text;
+    // 序章裡師父的話不切（設計 6.2「話不會被切掉」，T7 審查 I1）：不收成三行；段落照 \n\n 排（樣式表 pre-line）。
+    // 入伍段引薦人的話也一樣（設計 6.2 寫的就是「序章與入伍段」）：伺服器給 full，不收；兩段以上的那一步另外給 paged（照上面的分頁）
+    const full = !!pro() || !!g.full || S.guideFull === g.text;
     const pages = guidePages(g), page = guidePage(g);
     const scene = g.scene && page === 0 ? `<p class="guide-scene">${esc(g.scene)}</p>` : ""; // 序章的旁白（「斷眉來了……」）排在話的前面（分頁的步驟只在第一頁）
     const next = page < pages.length - 1 ? '<button class="linkish guide-next" data-act="guide-next">下一段 ▸</button>' : "";
@@ -966,7 +1042,7 @@
       const [, dest, note] = o.label.match(/^折返\s*(.*?)（([^（）]*)）$/) || [null, o.label.replace(/^折返\s*/, ""), ""];
       return taskButton(o, `↩ 折返 ${dest}`.trim(), note);
     };
-    const menu = idleMenu(m) ? actionBar(m) : `<div class="options">${opts.map((o, i) => o.id === FREE_TEXT_OPTION && S.answering && o.enabled ? `
+    const menu = idleMenu(m) ? actionBar(m) : `<div class="options">${opts.map((o, i) => S.sensing && o.id === SENSE_DRAW ? sensePadHtml() : o.id === FREE_TEXT_OPTION && S.answering && o.enabled ? `
         <form class="free answer" id="answer-form"><input class="input" name="text" maxlength="20" placeholder="${esc(o.label)}（20字內）" aria-label="${esc(o.label)}"><button class="btn primary small" type="submit">說出口</button></form>` : isTask(o) ? `${i === firstTask ? '<div class="road-tasks">' : ""}${taskButton(o)}${i === lastTask ? "</div>" : ""}` : paired && isWay(o) ? `${i === firstWay ? '<div class="road-tasks road-ways">' : ""}${wayButton(o)}${i === lastWay ? "</div>" : ""}` : `${i === firstMove && !modesLast ? modes : ""}
         <button class="btn ${followsMode(o.id) ? "go" : ""}" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}>
           <span class="k">${o.id.startsWith("move:") ? "→" : o.id.startsWith("road:back") ? "↩" : i + 1}</span>${optLabelHtml(o)}
@@ -1009,89 +1085,223 @@
   // 序章裡師父的話也放在修練頁、煉製頁最上面（序章的第 4～6、9、10 步在這兩頁做，不用切回江湖頁看要做什麼）；序章外不畫
   const proGuide = () => (pro() ? guideHtml(S.main.guide, false) : "");
 
-  // 屬性有什麼用（W2）：修練、煉製兩頁各摺一行，收著只多一行小字。說明的字是伺服器照程式的規則寫的（skillview.attribute_line），
+  // 武學屬性有什麼用（W2、FB-089：標題冠上「武學」，跟升級配點的「屬性」分開）：修練、煉製兩頁各摺一行，收著只多一行小字。說明的字是伺服器照程式的規則寫的（skillview.attribute_line），
   // 這裡只放進去；標題那四個字待 joy 潤。伺服器沒給（舊版）就不畫。
-  const attrNoteHtml = (x) => (x.attribute_note ? `<details class="attr-note"><summary>屬性有什麼用</summary><p>${esc(x.attribute_note)}</p></details>` : "");
+  const attrNoteHtml = (x) => (x.attribute_note ? `<details class="attr-note"><summary>武學屬性有什麼用</summary><p>${esc(x.attribute_note)}</p></details>` : "");
+
+  // 熔煉的問句（W9、FB-081）：整句由伺服器寫好、放在按鈕的 data-confirm（library.melt_confirm：有心得就寫退回多少，沒有就直說
+  // 只空出一格；基礎武學再接一句去哪裡重學，只說一次）。伺服器沒給（舊版）才用這句老問題
+  const meltAskText = (el) => el.dataset.confirm || `把【${el.dataset.name}】熔成心得？熔掉就沒了。`;
+
+  // 熔煉與意境化成心得都先問一次，用頁面自己的確認層（ask，管理者工具用的那一個；FB-085）：以前是瀏覽器內建的確認框，
+  // 跟其他按鈕不一樣、手機上還會被擋掉。按「熔掉」才送，取消或點旁邊暗處什麼都不送
+  function askMelt(el) {
+    ask(meltAskText(el), "熔掉", () => mx("melt", { art: el.dataset.id }));
+  }
+  function askMeltInsight(el) {
+    ask(`把「${el.dataset.name}」化成心得？靠它的武學從此不能修練。`, "化成心得", () => mx("melt_insight", { insight: el.dataset.id }));
+  }
+
+  // 功法清單的篩選（FB-085）：煉製頁一排四顆（全部／內功／武學／意境）；修練頁用卷軸卡自己的庫篩選（libFilter，也記在 localStorage）。
+  // 選擇記在這個瀏覽器的 localStorage（存不了就只在這一頁有效，讀不到就當沒選過）。
+  // 排序是伺服器排好的（skillview.art_rows：身上的先，再品質、成、名字），兩頁畫的是同一份，這裡只決定哪些要畫
+  const ART_FILTERS = ["全部", "內功", "武學", "意境"];
+  const filterKey = (page) => `tx-arts-filter-${page}`;
+  function artFilter(page) {
+    // 序章的煉製頁（第 4 步要放進爐子的基礎拳腳與剛悟到的意境）一律全列：瀏覽器記著的是上一個角色的篩選，不能把師父點名的藏起來
+    if (page === "craft" && pro()) return "全部";
+    S.artFilter = S.artFilter || {};
+    if (!(page in S.artFilter)) {
+      let saved = null;
+      try { saved = localStorage.getItem(filterKey(page)); } catch (e) { /* 讀不到就當沒選過 */ }
+      S.artFilter[page] = ART_FILTERS.includes(saved) ? saved : "全部";
+    }
+    return S.artFilter[page];
+  }
+  function setArtFilter(page, value) {
+    if (!ART_FILTERS.includes(value)) return;
+    S.artFilter = S.artFilter || {};
+    S.artFilter[page] = value;
+    try { localStorage.setItem(filterKey(page), value); } catch (e) { /* 存不了就只在這一頁有效 */ }
+  }
+  // 這一頁現在的篩選下，這一門武學要不要畫（選「意境」時武學一門都不畫）。煉製頁的意境一律畫：它是拿一門武學配一個意境的地方，
+  // 「內功」「武學」篩選不把意境整排藏起來（沒有提示會讓人以為意境不見了）；修練頁的庫另有卷軸卡的篩選（libFilter）
+  function showArts(page, art) {
+    const f = artFilter(page);
+    return f === "全部" || f === art.kind;
+  }
+  // 四顆小鈕排一行，併在煉製頁「功法」那一行標籤裡（第一屏不多一行）
+  function filterChips(page) {
+    if (page === "craft" && pro()) return ""; // 序章裡沒有篩選可選（artFilter 一律全列），不畫鈕
+    const now = artFilter(page);
+    return `<span class="fchips" role="group" aria-label="篩選">${ART_FILTERS.map((f) => `<button type="button" class="fchip${f === now ? " on" : ""}" data-act="art-filter" data-page="${page}" data-filter="${f}" aria-pressed="${f === now}">${f}</button>`).join("")}</span>`;
+  }
 
   // ── 修練 ──
+  // 卷軸卡版（企劃者 2026-10-06「先用捲軸卡」）：身上的兩門各一張卡，練成、修練直接在卡上按；
+  // 功法庫一門一列，點開才攤成同一張卡的內容。武學多（上限 50 門）時庫可以篩選，先只列 LIB_PAGE 門，其餘按「再列 N 門」
+  const QUALITY_SEAL = { 下品: ["下", "q1"], 中品: ["中", "q2"], 上品: ["上", "q3"], 絕學: ["絕", "q4"] };
+  const LIB_PAGE = 8;
+  const LIB_FILTERS = [["all", "全部"], ["武學", "武學"], ["內功", "內功"], ["ready", "可修練"]];
+  const seal = (q, big = false) => {
+    const [ch, cls] = QUALITY_SEAL[q] || ["？", "q1"];
+    return `<span class="qseal ${cls}${big ? " big" : ""}">${ch}</span>`;
+  };
+  // 合成品質的機率條：伺服器在這一門帶了 forge_odds（[{quality, pct}]，配手上最好的那個意境 forge_with 算的）才畫；沒帶就不畫，不寫死數字
+  const forgeOdds = (a) => (Array.isArray(a.forge_odds) && a.forge_odds.length ? `<div class="odds"><span>${a.forge_with ? `配「${esc(a.forge_with)}」煉製會出` : "拿去煉製會出"}</span>${a.forge_odds
+    .map((o) => `<b class="${(QUALITY_SEAL[o.quality] || [, "q1"])[1]}" style="flex-grow:${Math.max(1, Number(o.pct) || 0)}">${esc(String(o.quality).slice(0, 1))} ${Number(o.pct) || 0}%</b>`).join("")}</div>` : "");
+
+  // 功法卡、人物卡（伺服器的 Markdown）裡的十成進度「●●●○○○○○○○」換成跟卷軸卡同一種格子（企劃者 10/6：不要圈圈）。
+  // 只換剛好十個圈的那一串，換成的是固定的標記，不帶任何伺服器的字
+  const tenCells = (html) => String(html || "").replace(/[●○]{10}/g, (run) =>
+    `<span class="ten mini" role="img" aria-label="第${[...run].filter((c) => c === "●").length}成">${[...run].map((c) => `<i${c === "●" ? ' class="on"' : ""}></i>`).join("")}</span>`);
+
+  // 療傷鈕（FB-082，卷軸卡的兩行版）：「療傷」加一行內傷與價錢。按不按得下去由伺服器說（x.heal：沒有內傷、銀兩不夠都灰掉，原因放在
+  // title 與 aria-label）；價錢是 x.heal_cost（team.heal_cost），網頁不自己算。伺服器沒給 heal（舊版）就照內傷數畫
+  function healButton(x, injury) {
+    const h = x.heal, hurt = injury >= 1, cost = x.heal_cost || 0;
+    const sub = !hurt ? "沒有內傷" : `內傷 ${Math.round(injury)}・銀 ${cost}${h && !h.ok ? " 不夠" : ""}`;
+    const why = h && h.why ? ` title="${esc(h.why)}" aria-label="療傷：${esc(h.why)}"` : "";
+    return `<button class="btn" data-act="mx" data-op="heal" ${(h ? h.ok : hurt) ? "" : "disabled"}${why}>療傷<small>${esc(sub)}</small></button>`;
+  }
+
+  // 庫的篩選記在這個瀏覽器的 localStorage（FB-085）：重新整理、換頁回來還是上次選的；存不了就只在這一頁有效，讀不到就當沒選過
+  const LIB_FILTER_KEY = "tx-arts-filter-practice";
+  function libFilter() {
+    if (!LIB_FILTERS.some(([f]) => f === S.libFilter)) {
+      let saved = null;
+      try { saved = localStorage.getItem(LIB_FILTER_KEY); } catch (e) { /* 讀不到就當沒選過 */ }
+      S.libFilter = LIB_FILTERS.some(([f]) => f === saved) ? saved : "all";
+    }
+    return S.libFilter;
+  }
+  function setLibFilter(value) {
+    if (!LIB_FILTERS.some(([f]) => f === value)) return;
+    S.libFilter = value;
+    S.libAll = false; // 換一類，「再列 N 門」從頭算
+    try { localStorage.setItem(LIB_FILTER_KEY, value); } catch (e) { /* 存不了就只在這一頁有效 */ }
+  }
+
   function pagePractice() {
     const x = S.menxia;
     if (!x) return '<p class="muted">載入中…</p>';
     const s = S.main.status;
-    // 身上的功法卡（FB-006）：目前切到的那一門放前面。卡片畫 owned_arts 的那一份（融過意境的寫著「意境」），
-    // 對不上（身上那欄空著）才用 slot_cards 的那一句；練成鈕亮不亮與價錢仍看 slot_cards
-    const slots = x.slot_cards.filter((c) => c.kind === S.kind).concat(x.slot_cards.filter((c) => c.kind !== S.kind));
-    const wornCard = (c) => { const a = x.owned_arts.find((r) => r.worn && r.kind === c.kind); return a ? a.card : c.card; };
-    // 目前這一門有沒有功法、練滿了沒（伺服器照 team.MAX_LEVEL 說）：沒有或練滿就不能練成（C5）
-    const cur = x.slot_cards.find((c) => c.kind === S.kind) || { learned: false, level: 0, maxed: false, price: null };
-    // 序章裡沒叫你練功的步驟，鈕灰掉、寫師父的話（blocked 是伺服器照 Game.practice 同一個判斷給的）
-    const train = cur.blocked ? esc(cur.blocked) : !cur.learned ? `還沒有${esc(S.kind)}` : cur.maxed ? "已練到第十成" : "";
+    // 第一個練成絕學的人：替它取正式的名字（武學與成長設計 3.6）。名字是玩家打的，伺服器會驗；表單的字跳脫
+    const naming = x.naming ? `<form class="naming" id="name-art">
+        <small>你練成了絕學</small>
+        <p>你是江湖上第一個把【${esc(x.naming.name)}】練成絕學的人，替它取一個正式的名字（2～6 個字，全服不能重名）。</p>
+        <div class="row"><input class="input" name="name" maxlength="6" placeholder="正式的名字"><button class="btn primary small" type="submit">定名</button></div>
+      </form>` : "";
+    // 卡的本體（身上的卡、庫裡點開的那一列共用）：十成的格子、第幾成、兩顆大鈕、破境丹、機率條、改練／熔煉／詳情。
+    // slot 是這一門那一欄的 slot_cards（只有身上的才有）：練成鈕亮不亮、價錢、序章的原因都看它
+    const body = (a, slot) => {
+      const lg = a.cultivate.legend, ticked = !!(lg && S.legendTick[a.id]);
+      const level = Math.max(0, Math.min(10, a.level | 0));
+      // 序章指路（T7 走查 W-A）：卡裡哪幾顆鈕發光由伺服器說（a.glow，只有序章裡才有；art_rows 照序章的拒絕算過），網頁不猜。
+      // data-glow 的鍵寫成字面（test_content 掃 app.js 對照 models.GLOW_KEYS，內容才叫得動它們）
+      const has = (key) => (a.glow || []).includes(key);
+      let first;
+      if (slot) {
+        const why = slot.blocked ? esc(slot.blocked) : slot.maxed ? "已到第十成" : "";
+        first = `<button class="btn ${why ? "" : "primary"}" data-act="mx" data-op="practice" data-glow="practice" data-kind="${esc(a.kind)}" ${why ? "disabled" : ""}>${
+          why || `練成第${level + 1}成<small>心得 ${slot.price}</small>`}${slot.maxed && !slot.blocked ? "<small>練滿了</small>" : ""}</button>`;
+      } else {
+        first = `<button class="btn" data-act="switch"${has("switch") ? ' data-glow="switch"' : ""} data-id="${esc(a.id)}">改練這一門<small>換上身，熟練度各自保留</small></button>`;
+      }
+      // 修練：按得下去時寫機率；按不下去時寫原因（伺服器的那一句）。不寫下一品是哪一品（企劃者 2026-10-06）
+      const hot = a.cultivate.ok && !(slot && !slot.maxed && !slot.blocked); // 練成還能按時，練成是主鈕
+      const cult = `<button class="btn ${a.cultivate.ok && hot ? "primary" : ""}" data-act="cultivate"${has("cultivate") ? ' data-glow="cultivate"' : ""} data-id="${esc(a.id)}" ${a.cultivate.ok ? "" : "disabled"}>${
+        "修練"}<small class="cnote">${esc(ticked ? lg.note : a.cultivate.note)}</small></button>`;
+      const info = S.artInfo === a.id;
+      // 功法庫的卡：跟身上同一種那門的比較（W6）直接寫在鈕的上面，改練之前看得到，不必先點「詳情」；點開詳情時功法卡裡也有，這裡就不重複
+      const compare = !slot && a.compare && !info ? `<p class="cmp">${esc(a.compare)}</p>` : "";
+      return `<div class="ten">${Array.from({ length: 10 }, (_, k) => `<i${k < level ? ' class="on"' : ""}></i>`).join("")}</div>
+        <div class="lvline"><b>第${level}成</b><span>${esc(a.kind)}・屬${esc(a.attribute)}${a.insight ? `・意境「${esc(a.insight)}」` : ""}</span></div>
+        ${compare}
+        <div class="acts">${first}${cult}</div>
+        ${S.artNote && S.artNote.id === a.id ? `<div class="msg art-result">${S.artNote.html}</div>` : ""}
+        ${lg ? `<label class="legend"><input type="checkbox" data-legend="${esc(a.id)}" ${ticked ? "checked" : ""}><span>${esc(lg.label)}</span></label>` : ""}
+        ${forgeOdds(a)}
+        <div class="more">
+          ${a.melt.ok ? "" : `<span class="why">${esc(a.melt.note)}</span>`}
+          <button class="linkish" data-act="melt"${has("melt") ? ' data-glow="melt"' : ""} data-id="${esc(a.id)}" data-name="${esc(a.name)}" data-confirm="${esc(a.melt.confirm)}" ${a.melt.ok ? "" : "disabled"} title="${esc(a.melt.note)}">熔煉${a.melt.ok ? `（${/^退回/.test(a.melt.note) ? esc(a.melt.note.replace(/^退回/, "")) : "只空出一格"}）` : ""}</button>
+          <button class="linkish" data-act="art-info" data-id="${esc(a.id)}" aria-expanded="${info}">詳情 ${info ? "▴" : "›"}</button>
+        </div>
+        ${info ? `<div class="art-card">${tenCells(a.card)}</div>` : ""}`;
+    };
+    // 身上的兩門：目前這一門那一欄若空著，畫一張只有那一句的卡（slot_cards 的 card）
+    const worn = KINDS.map((k) => {
+      const slot = x.slot_cards.find((c) => c.kind === k) || { learned: false };
+      const a = x.owned_arts.find((r) => r.worn && r.kind === k);
+      if (!a) return `<div class="acard empty">${slot.card || `你還沒有${esc(k)}。`}</div>`;
+      return `<div class="acard ${(QUALITY_SEAL[a.quality] || [, "q1"])[1]}">
+        <div class="hd">${seal(a.quality, true)}<div><h3>${esc(a.name)}</h3><div class="sub">${esc(a.quality)}</div></div><span class="worn">身上</span></div>
+        ${body(a, slot)}</div>`;
+    }).join("");
+    // 功法庫：身上以外的。篩選（全部／武學／內功／可修練）與「再列 N 門」只是看的方式，記在 S，輪詢重畫不會跳回去
+    // 排序是伺服器排好的（FB-085：身上的先，再品質、成、名字），這裡照順序列；選哪一類記在 localStorage（libFilter）
+    const lib = x.owned_arts.filter((a) => !a.worn);
+    const pass = (a, f) => f === "all" || (f === "ready" ? a.cultivate.ok : a.kind === f);
+    // 篩選鈕只在庫超過 LIB_PAGE 門時才畫（chips）：沒畫鈕就不套記著的篩選——不然庫縮到 8 門以下、或換了新角色（序章的草廬庫只有一兩門），
+    // 記在瀏覽器裡的篩選會把武學藏起來、又沒有鈕可以改回來（review-ap3 I1）
+    const filter = lib.length > LIB_PAGE ? libFilter() : "all";
+    // 展開著的那一門永遠留在清單裡：照「可修練」篩選時，最後一次修練把它修到不能再修（體力不夠、練成絕學）就不合篩選了，
+    // 它的結果卻還寫在卡裡、頁面也不該跳走（W7）
+    const picked = lib.filter((a) => pass(a, filter) || a.id === S.artOpen);
+    const showAll = S.libAll || picked.length <= LIB_PAGE + 2; // 只多一兩門就直接列完，不必多按一次
+    const first = picked.slice(0, LIB_PAGE);
+    const openArt = picked.find((a) => a.id === S.artOpen);
+    const rows = showAll ? picked : openArt && !first.includes(openArt) ? [...first, openArt] : first; // 展開著的那一門排在第 8 門之後時也要看得到
+    // 序章指路：收著的這一列發光，要按的是它裡面的改練、修練、熔煉（要先點開它）。哪一列、哪幾個鍵由伺服器說（a.glow，只有序章裡才有；
+    // art_rows 照序章的拒絕算過：改練只有師父點名的那一門、修練、熔煉只有按得下去的），網頁不猜（T7 走查 W-A）
+    const libRow = (a) => {
+      const todo = ["switch", "cultivate", "melt"].filter((key) => (a.glow || []).includes(key)).join(" ");
+      const open = S.artOpen === a.id;
+      return `<button class="art libr ${open ? "on" : ""}" data-act="art" data-id="${esc(a.id)}"${todo && !open ? ` data-glow="${todo}"` : ""}>${seal(a.quality)}<span class="txt"><b>${esc(a.name)}</b><small>${esc(a.kind)}・屬${esc(a.attribute)}・第${a.level}成${a.insight ? `・「${esc(a.insight)}」` : ""}</small></span></button>
+        ${open ? `<div class="art-body ${(QUALITY_SEAL[a.quality] || [, "q1"])[1]}">${body(a, null)}</div>` : ""}`;
+    };
+    const chips = lib.length > LIB_PAGE ? `<div class="lib-filter">${LIB_FILTERS.map(([f, label]) => {
+      const n = lib.filter((a) => pass(a, f)).length;
+      return `<button class="${filter === f ? "on" : ""}" data-act="lib-filter" data-filter="${f}">${label} ${n}</button>`;
+    }).join("")}</div>` : "";
+    // 意境：一顆一顆的籤，點一下攤開模型寫的那句說明與「化成心得」
+    const insOpen = x.insights.find((i) => i.id === S.insOpen);
+    const insChips = x.insights.map((i) => `<button class="${S.insOpen === i.id ? "on" : ""}" data-act="ins-open" data-id="${esc(i.id)}">${i.own ? glyphSvg(i.glyph, "glyph-mini") : ""}「${esc(i.name)}」<small>屬${esc(i.attribute)}${i.lean !== "無" ? `・${esc(i.lean)}` : ""}</small></button>`).join("");
     // 名冊只有本人一列（還沒有同伴）時跟上面的本人卡重複，不畫（C6）
     const mates = x.roster.length > 1;
-    // 第一個練成絕學的人：替它取正式的名字（武學與成長設計 3.6）。名字是玩家打的，伺服器會驗；表單的字跳脫
-    const naming = x.naming ? `<form class="card" id="name-art">
-        <p>你是江湖上第一個把【${esc(x.naming.name)}】練成絕學的人，替它取一個正式的名字（2～6 個字，全服不能重名）。</p>
-        <div class="row"><input class="input" name="name" maxlength="6" placeholder="正式的名字" style="flex:2"><button class="btn primary" type="submit">定名</button></div>
-      </form>` : "";
-    // 武學清單的一列：點開有功法卡、修練（體力）、改練、熔煉。「服下破境丹」只在下一步是絕學、手上又有丹時才有，預設不勾；
-    // 勾了機率那一行換成伺服器算好的句子（legend.note），不另外問伺服器
-    const artRow = (a) => {
-      const lg = a.cultivate.legend, ticked = !!(lg && S.legendTick[a.id]);
-      // 序章指路：收著的這一列發光，要按的是它裡面的改練、修練、熔煉（要先點開它）。哪一列、哪幾個鍵由伺服器說（a.glow，只有序章裡才有；
-      // art_rows 照序章的拒絕算過：改練只有師父點名的那一門、換上之後沒有一列，修練、熔煉只有按得下去的），網頁不猜（T7 走查 W-A）
-      const has = (key) => (a.glow || []).includes(key);
-      const todo = ["switch", "cultivate", "melt"].filter(has).join(" ");
-      return `
-        <button class="art ${S.artOpen === a.id ? "on" : ""}" data-act="art" data-id="${esc(a.id)}"${todo && S.artOpen !== a.id ? ` data-glow="${todo}"` : ""}>${a.worn ? "◆ " : ""}${esc(a.kind)}　${esc(a.name)}（${esc(a.quality)}・屬${esc(a.attribute)}）第${a.level}成${a.insight ? `・意境「${esc(a.insight)}」` : ""}</button>
-        ${S.artOpen === a.id ? `<div class="art-body">${a.card}
-          ${lg ? `<label class="legend"><input type="checkbox" data-legend="${esc(a.id)}" ${ticked ? "checked" : ""}><span>${esc(lg.label)}</span></label>` : ""}
-          <div class="row art-actions">
-            <button class="btn ${a.cultivate.ok ? "primary" : ""}" data-act="cultivate"${has("cultivate") ? ' data-glow="cultivate"' : ""} data-id="${esc(a.id)}" ${a.cultivate.ok ? "" : "disabled"}>修練</button>
-            ${a.worn ? "" : `<button class="btn" data-act="switch"${has("switch") ? ' data-glow="switch"' : ""} data-id="${esc(a.id)}">改練這一門</button>`}
-            <button class="btn" data-act="melt"${has("melt") ? ' data-glow="melt"' : ""} data-id="${esc(a.id)}" data-name="${esc(a.name)}" data-confirm="${esc(a.melt.confirm)}" ${a.melt.ok ? "" : "disabled"}>熔煉</button>
-          </div>
-          ${S.artNote && S.artNote.id === a.id ? `<div class="msg art-result">${S.artNote.html}</div>` : ""}
-          <p class="muted">修練：<span class="cnote">${esc(ticked ? lg.note : a.cultivate.note)}</span>　熔煉：${esc(a.melt.note)}</p></div>` : ""}`;
-    };
-    // 意境：悟到的、合併得來的。說明（note）是模型寫的一句話，一律當文字跳脫，不是 HTML
-    const insightRow = (i) => `
-        <div class="insight"><div><b>「${esc(i.name)}」</b><small>屬${esc(i.attribute)}${i.lean !== "無" ? `・${esc(i.lean)}` : ""}</small>${i.note ? `<p>${esc(i.note)}</p>` : ""}</div>
-          <button class="btn small" data-act="melt-insight" data-id="${esc(i.id)}" data-name="${esc(i.name)}" ${i.blocked ? "disabled" : ""}>化成心得 ${i.melt}</button>${i.blocked ? `<small class="muted">${esc(i.blocked)}</small>` : ""}</div>`;
     return `
       ${proGuide()}
       <div class="msg" id="mx-msg">${S.message}</div>
       ${naming}
-      <div class="card">
-        <div class="seg">${KINDS.map((k) => `<button class="${S.kind === k ? "on" : ""}" data-act="kind" data-kind="${k}">${k}</button>`).join("")}</div>
-        <div class="row practice-actions">
-          <button class="btn ${train ? "" : "primary"}" data-act="mx" data-op="practice" data-glow="practice" ${train ? "disabled" : ""}>${train || `練成${esc(S.kind)}（心得 ${cur.price}）`}</button>
-          <button class="btn" data-act="mx" data-op="heal" ${s.injury >= 1 ? "" : "disabled"}>療傷</button>
-        </div>
-        <p class="muted">${x.rules.replace(/<\/?p>/g, "")}</p>
-        ${attrNoteHtml(x)}
+      <div class="tune">
+        ${healButton(x, s.injury)}
+        <form id="seclude" class="seclude">
+          <button class="btn" type="submit" ${x.seclude_blocked ? "disabled" : ""}>閉關<small>得心得，氣血回復加倍</small></button>
+          <select class="input" name="hours" aria-label="閉關幾小時">${[1, 2, 4, 6, 8, 12].map((h) => `<option value="${h}" ${h === 8 ? "selected" : ""}>${h} 小時</option>`).join("")}</select>
+        </form>
       </div>
-      <div class="label">身上的功法</div>
-      ${slots.map((c) => `<div class="card">${wornCard(c)}</div>`).join("")}
-      <div class="label">閉關</div>
-      <form class="card" id="seclude">
-        <p class="muted">閉關可以得到心得，期間氣血回復加倍；閉關中不能做別的事。</p>
-        <div class="row">
-          <select class="input" name="hours">${[1, 2, 4, 6, 8, 12].map((h) => `<option value="${h}" ${h === 8 ? "selected" : ""}>${h} 小時</option>`).join("")}</select>
-          <button class="btn small" type="submit" ${x.seclude_blocked ? "disabled" : ""}>開始閉關</button>
-        </div>${x.seclude_blocked ? `<p class="muted">${esc(x.seclude_blocked)}</p>` : ""}
-      </form>
+      ${x.seclude_blocked ? `<p class="muted">${esc(x.seclude_blocked)}</p>` : ""}
+      ${attrNoteHtml(x)}
+      <div class="label">身上的兩門</div>
+      ${worn}
       <div class="label">功法庫 <small class="muted">武學與意境 ${x.holdings.count}/${x.holdings.cap}</small></div>
-      ${x.owned_arts.length ? `<div class="list">${x.owned_arts.map(artRow).join("")}</div>` : '<p class="muted">你身上還沒有任何武學。</p>'}
+      ${chips}
+      ${lib.length ? (picked.length ? `<div class="lib">${rows.map(libRow).join("")}</div>` : '<p class="muted">這一類沒有功法。</p>')
+        : '<p class="muted">功法庫是空的。合成出來的武學、學來的武學會放在這裡。</p>'}
+      ${showAll ? "" : `<button class="btn ghost lib-more" data-act="lib-all">再列 ${picked.length - LIB_PAGE} 門</button>`}
       <div class="label">意境</div>
-      ${x.insights.length ? `<div class="insights">${x.insights.map(insightRow).join("")}</div>`
+      ${x.insights.length ? `<div class="ins">${insChips}</div>
+        ${insOpen ? `<div class="insight"><div>${insOpen.own ? glyphSvg(insOpen.glyph, "glyph-big") : ""}<b>「${esc(insOpen.name)}」</b>${insOpen.note ? `<p>${esc(insOpen.note)}</p>` : ""}${insOpen.own ? `<p class="glyph-from">悟於${esc(insOpen.place || "某處")}${insOpen.glyph_note ? `・${esc(insOpen.glyph_note)}` : ""}・只屬於你</p>` : ""}</div>
+          <button class="btn small" data-act="melt-insight" data-id="${esc(insOpen.id)}" data-name="${esc(insOpen.name)}" ${insOpen.blocked ? "disabled" : ""}>化成心得 ${insOpen.melt}</button>${insOpen.blocked ? `<small class="muted">${esc(insOpen.blocked)}</small>` : ""}</div>` : ""}`
         : '<p class="muted">還沒悟到任何意境。去探索，荒郊野外最容易有所領悟。</p>'}
       <div class="label">門下</div>
-      <details class="fold" open><summary>本人</summary><div class="fold-body">${x.player_card}</div></details>
+      <details class="fold" open><summary>本人</summary><div class="fold-body">${tenCells(x.player_card)}</div></details>
       ${mates ? `<div class="list">${x.roster.map((r) => `<button class="${x.person === r.key ? "on" : ""}" data-act="person" data-key="${esc(r.key)}">${esc(r.label)}</button>`).join("")}</div>` : ""}
-      ${mates && x.person ? `<div class="card">${x.person_card}
+      ${mates && x.person ? `<div class="card">${tenCells(x.person_card)}
         ${x.person === "player" ? '<p class="muted">本人一直都在隊伍裡。</p>' // 本人不能加入、移出（引擎也會擋）
           : x.person.startsWith("follower:") ? "" // 部下（計畫 T5）也不能加入、移出；角色卡已經寫了
-          : `<button class="btn ${x.on_team ? "" : "primary"}" data-act="mx" data-op="${x.on_team ? "leave" : "join"}">${x.on_team ? "移出隊伍" : "加入隊伍"}</button>`}</div>` : ""}`;
+          : `<button class="btn ${x.on_team ? "" : "primary"}" data-act="mx" data-op="${x.on_team ? "leave" : "join"}">${x.on_team ? "移出隊伍" : "加入隊伍"}</button>`}</div>` : ""}
+      <details class="fold"><summary>修練的規矩</summary><div class="fold-body">${x.rules}</div></details>`;
   }
 
   // ── 煉製 ──
@@ -1134,6 +1344,7 @@
       return i && { name: i.name, sub: `意境・${i.attribute}`, rank: 2 };
     };
     const inPot = (id) => S.forgeSel.some((p) => p.type === "art" && p.id === id);
+    const shownArts = x.owned_arts.filter((a) => showArts("craft", a)); // 順序是伺服器排好的，跟修練頁一樣
     const ready = forgeReady();
     // 「開爐」緊接在說明那一行下面、不黏在底部（FB-048）：黏著時會蓋住底下的清單、開爐後那一行字與「背包」
     return `
@@ -1143,10 +1354,10 @@
       <div class="card" id="forge-line">${S.forgeLine || x.forge_line}</div>
       <div class="act-row"><button class="btn primary" id="forge" data-act="forge" data-glow="forge" ${ready ? "" : "disabled"}>開爐</button></div>
       ${attrNoteHtml(x)}
-      <div class="label">武學 <small class="muted">一門配一個意境，或兩門一起放</small></div>
-      <div class="chips">${x.owned_arts.map((a) => `
+      <div class="label">功法${filterChips("craft")}</div>
+      ${artFilter("craft") === "意境" ? "" : `<div class="chips">${shownArts.map((a) => `
         <button class="chip r${QUALITY_RANK[a.quality] || 1} ${inPot(a.id) ? "used" : ""}" data-act="pick" data-type="art"${(a.glow || []).includes("pick:art") && !inPot(a.id) ? ' data-glow="pick:art"' : ""} data-id="${esc(a.id)}" ${inPot(a.id) ? "disabled" : ""}>
-          <b>${esc(a.name)}</b><small>${esc(a.quality)}・屬${esc(a.attribute)}</small></button>`).join("")}</div>
+          <b>${esc(a.name)}</b><small>${esc(a.quality)}・屬${esc(a.attribute)}</small></button>`).join("")}</div>`}
       <div class="label">意境 <small class="muted">同一個也能放兩次</small></div>
       ${x.insights.length ? `<div class="chips">${x.insights.map((i) => `
         <button class="chip r2" data-act="pick" data-type="ins"${(i.glow || []).includes("pick:insight") && !S.forgeSel.some((p) => p.type === "ins" && p.id === i.id) ? ' data-glow="pick:insight"' : ""} data-id="${esc(i.id)}">
@@ -1633,6 +1844,7 @@
     S.tab = tab;
     S.message = "";
     S.artOpen = null;
+    S.artInfo = null; S.insOpen = null; S.libAll = false; // 攤開的詳情、意境、列完的庫也收起（篩選留著）
     S.artNote = null;
     S.legendTick = {}; // 破境丹的勾也一起收：回到修練頁時它是真的沒勾（預設不勾）
     S.mapNotice = "";
@@ -1694,7 +1906,141 @@
     }
   }
 
+  // 感悟悟來的意境畫的那一筆（0～100 的點位）畫成小 SVG（同 journal.glyph_svg）
+  function glyphSvg(points, cls) {
+    const pts = (points || []).filter((p) => Array.isArray(p) && p.length >= 2);
+    if (pts.length < 2) return "";
+    const path = pts.map(([x, y]) => `${Number(x) | 0},${Number(y) | 0}`).join(" ");
+    return `<svg class="${cls}" viewBox="-8 -8 116 116" aria-hidden="true"><polyline points="${path}" fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  }
+
+  // ── 有所感的畫布（悟意境設計 0.2 第 3、4 步）──
+  // 一筆畫到底：手指按下去開始一筆（之前畫的清掉），離開畫布就算畫完；不滿意清掉重畫。畫完問伺服器規則讀到什麼（/api/sense_read，
+  // 跟送出時讀的是同一套 glyph.read），寫在畫布底下。送出帶點位與一張小 PNG（只轉交給模型看圖，不存）
+  const SENSE_SIZE = 256;
+  function sensePadHtml() {
+    const ready = S.sensePts.length > 1;
+    return `<div class="sense-pad" id="sense-pad">
+        <div class="sense-hint">此刻心中有一個形——用手指一筆畫下來。</div>
+        <canvas class="sense-canvas" id="sense-canvas" width="${SENSE_SIZE}" height="${SENSE_SIZE}" aria-label="畫布：一筆畫到底"></canvas>
+        <div class="sense-note" id="sense-note">${esc(S.senseNote || (ready ? "" : "手指離開畫布，就算畫完。"))}</div>
+        <div class="sense-acts">
+          <button class="btn small" data-act="sense-clear" ${ready ? "" : "disabled"}>清掉重畫</button>
+          <button class="btn primary small" data-act="sense-send" ${ready ? "" : "disabled"}>就是這個形</button>
+        </div>
+      </div>`;
+  }
+
+  function closeSense() {
+    S.sensing = false;
+    S.sensePts = [];
+    S.senseNote = "";
+    S.stroking = false;
+  }
+
+  function senseInk(ctx) {
+    ctx.clearRect(0, 0, SENSE_SIZE, SENSE_SIZE);
+    ctx.lineWidth = 7;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue("--ink").trim() || "#222";
+    const pts = S.sensePts;
+    if (pts.length < 2) return;
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    for (const [x, y] of pts.slice(1)) ctx.lineTo(x, y);
+    ctx.stroke();
+  }
+
+  function sensePadReady() {
+    const canvas = document.getElementById("sense-canvas");
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    senseInk(ctx);
+    let t0 = 0;
+    const at = (ev) => {
+      const r = canvas.getBoundingClientRect();
+      return [
+        Math.round(((ev.clientX - r.left) / r.width) * SENSE_SIZE),
+        Math.round(((ev.clientY - r.top) / r.height) * SENSE_SIZE),
+        Math.round(performance.now() - t0),
+      ];
+    };
+    canvas.addEventListener("pointerdown", (ev) => {
+      if (S.busy) return;
+      ev.preventDefault();
+      canvas.setPointerCapture(ev.pointerId);
+      t0 = performance.now();
+      S.stroking = true;
+      S.sensePts = [at(ev)];
+      S.senseNote = "";
+      senseInk(ctx);
+    });
+    canvas.addEventListener("pointermove", (ev) => {
+      if (!S.stroking) return;
+      ev.preventDefault();
+      if (S.sensePts.length < 600) S.sensePts.push(at(ev)); // 跟 glyph.MAX_POINTS 一樣多
+      senseInk(ctx);
+    });
+    const end = async () => {
+      if (!S.stroking) return;
+      S.stroking = false;
+      const pad = document.getElementById("sense-pad");
+      const ready = S.sensePts.length > 1;
+      if (pad) pad.querySelectorAll('[data-act="sense-clear"], [data-act="sense-send"]').forEach((b) => { b.disabled = !ready; });
+      const pts = S.sensePts;
+      try {
+        const r = await api("/api/sense_read", { points: pts });
+        if (S.sensePts !== pts) return; // 等回應時又畫了一筆
+        S.senseNote = r.note ? `這一筆：${r.note}` : (r.problem || "");
+      } catch (e) { S.senseNote = ""; }
+      const note = document.getElementById("sense-note");
+      if (note) note.textContent = S.senseNote;
+    };
+    canvas.addEventListener("pointerup", end);
+    canvas.addEventListener("pointercancel", end);
+  }
+
+  async function senseSend() {
+    const canvas = document.getElementById("sense-canvas");
+    const pad = document.getElementById("sense-pad");
+    if (!canvas || S.sensePts.length < 2) return;
+    // 小 PNG：白底黑線（模型看圖用），跟畫面上的顏色無關
+    const small = document.createElement("canvas");
+    small.width = small.height = SENSE_SIZE;
+    const sx = small.getContext("2d");
+    sx.fillStyle = "#fff";
+    sx.fillRect(0, 0, SENSE_SIZE, SENSE_SIZE);
+    sx.lineWidth = 7;
+    sx.lineCap = sx.lineJoin = "round";
+    sx.strokeStyle = "#000";
+    sx.beginPath();
+    S.sensePts.forEach(([x, y], i) => (i ? sx.lineTo(x, y) : sx.moveTo(x, y)));
+    sx.stroke();
+    const png = small.toDataURL("image/png").split(",")[1] || "";
+    await busy(async () => {
+      pad.classList.add("brewing"); // 等模型取名：整塊畫布微微晃（同煉製的爐子）
+      pad.querySelectorAll("button").forEach((b) => { b.disabled = true; });
+      const send = pad.querySelector('[data-act="sense-send"]');
+      send.textContent = "心念漸凝……";
+      const stop = watchQueue(send, "心念漸凝……");
+      try {
+        const r = await api("/api/sense", { points: S.sensePts, png });
+        closeSense();
+        applyMain(r.main);
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      } finally { stop(); }
+    });
+    if (document.querySelector("#sense-pad.brewing")) renderPage(); // 失敗了（伺服器擋下來、連不上）：畫布還原，那一筆留著
+  }
+
   async function choose(btn, id) {
+    if (id === SENSE_DRAW) { // 有所感：先叫出畫布、送暖機（模型閒置後第一次看圖要一二十秒，畫的這幾秒剛好用來載入），畫好再送
+      S.sensing = true;
+      renderPage();
+      api("/api/sense_warm", {}).catch(() => {});
+      return;
+    }
     if (id === FREE_TEXT_OPTION) { // 隨口應對：先叫出輸入框，寫好再送（見 answer）
       S.answering = true;
       renderPage();
@@ -1902,6 +2248,8 @@
         case "gate": S.gateMode = el.dataset.mode; renderGate(); break;
         case "tab": await goTab(el.dataset.tab); break;
         case "choose": await choose(el, el.dataset.id); break;
+        case "sense-clear": S.sensePts = []; S.senseNote = ""; renderPage(); break;
+        case "sense-send": await senseSend(); break;
         case "move-mode": await setMoveMode(el.dataset.mode); break;
         case "toggle-more": toggleMore(); break;
         case "now-more": {
@@ -1975,9 +2323,13 @@
           break;
         }
         case "ask-no": closeAsk(); break;
-        case "logout": closeEvents(); await api("/api/logout", {}); S.sheet = false; S.stage = "gate"; S.main = null; render(); break;
+        case "logout": closeEvents(); await api("/api/logout", {}); resetOrdersWatch(); S.sheet = false; S.stage = "gate"; S.main = null; render(); break;
         case "kind": S.kind = el.dataset.kind; renderPage(); break;
-        case "mx": await mx(el.dataset.op); break;
+        case "mx": if (el.dataset.kind) S.kind = el.dataset.kind; await mx(el.dataset.op); break; // 卷軸卡上的練成鈕帶著是哪一欄
+        case "art-info": S.artInfo = S.artInfo === el.dataset.id ? null : el.dataset.id; renderPage(); break;
+        case "lib-filter": setLibFilter(el.dataset.filter); renderPage(); break;
+        case "lib-all": S.libAll = true; renderPage(); break;
+        case "ins-open": S.insOpen = S.insOpen === el.dataset.id ? null : el.dataset.id; renderPage(); break;
         case "person":
           S.person = S.person === el.dataset.key ? null : el.dataset.key;
           await loadMenxia();
@@ -2002,13 +2354,9 @@
           if (ticked && S.menxia === was) S.legendTick[id] = true;
           break;
         }
-        case "melt":
-          // 確認框問什麼由伺服器寫好（melt.confirm：退 0 心得時照實說只空出一格）；沒給（舊版伺服器）就問老問題
-          if (confirm(el.dataset.confirm || `把【${el.dataset.name}】熔成心得？熔掉就沒了。`)) await mx("melt", { art: el.dataset.id });
-          break;
-        case "melt-insight":
-          if (confirm(`把「${el.dataset.name}」化成心得？靠它的武學從此不能修練。`)) await mx("melt_insight", { insight: el.dataset.id });
-          break;
+        case "melt": askMelt(el); break;
+        case "melt-insight": askMeltInsight(el); break;
+        case "art-filter": setArtFilter(el.dataset.page, el.dataset.filter); renderPage(); break;
         case "pick": pick(el.dataset.type, el.dataset.id); break;
         case "unslot": if (S.busy) break; S.forgeSel.splice(Number(el.dataset.i), 1); renderPage(); updateForgeLine(); break;
         case "forge": await forge(); break;
@@ -2062,7 +2410,7 @@
     const row = (S.menxia?.owned_arts || []).find((a) => a.id === id);
     if (!row || !row.cultivate.legend) return;
     if (box.checked) S.legendTick[id] = true; else delete S.legendTick[id];
-    const note = box.closest(".art-body")?.querySelector(".cnote");
+    const note = box.closest(".acard, .art-body")?.querySelector(".cnote");
     if (note) note.textContent = box.checked ? row.cultivate.legend.note : row.cultivate.note;
   }
 
@@ -2277,7 +2625,7 @@
   // 修練、煉製兩頁各自畫了 menxia 的哪幾欄（照 pagePractice／pageCraft）：輪詢只在這幾欄變了才重畫。
   // 不比整份，是因為本人卡上的氣血一直在回，整份 menxia 幾乎每分鐘都不一樣，煉製頁根本沒畫那張卡
   const MENXIA_SHOWN = {
-    practice: ["rules", "slot_cards", "owned_arts", "insights", "holdings", "naming", "player_card", "roster", "person", "person_card", "on_team"],
+    practice: ["rules", "heal_cost", "slot_cards", "owned_arts", "insights", "holdings", "naming", "player_card", "roster", "person", "person_card", "on_team", "heal"],  // heal：療傷鈕能不能按（銀兩夠不夠、內傷）變了就要重畫
     craft: ["owned_arts", "insights", "holdings", "clue_items", "bag", "forge_line", "xinde"],
   };
 

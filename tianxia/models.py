@@ -168,6 +168,40 @@ class PracticeBonus(_Strict):
     line: str = ""  # 吃到加成時併進選項括號裡的那一句（events.choice_label），{who} 換成「你」
 
 
+class FuseQuality(_Strict):
+    """合成品質的機率怎麼跟著這一爐的搭配走（企劃者 2026-10-06：「每個武學搭配不同的意境或是其他的東西都應該要有
+    不同的機率吧，這是一整套系統，不要套死固數值」）。fusion.quality_odds 把這一爐的組成加成一個「造化分」，
+    從 Config.fuse_quality_odds（普通搭配的平均）往上或往下推：上品每分 +up_per_point、下品每分 −low_per_point，
+    中品是剩下的。上品夾在 up_range、下品夾在 low_range，所以沒有必出、也沒有必不出的組合。"""
+
+    up_per_point: float = Field(default=0.5, ge=0)
+    low_per_point: float = Field(default=1.0, ge=0)
+    up_range: tuple[float, float] = (5, 45)  # 上品最少、最多幾 %
+    low_range: tuple[float, float] = (15, 80)  # 下品最少、最多幾 %
+    # 底（武學＋武學時是兩門的平均）自己那一份的品質：好的底比較容易合出好品質（回應企劃者「中品的底合出下品，那我幹嘛合成」）
+    base_quality: dict[str, float] = Field(
+        default_factory=lambda: {"下品": -5, "中品": 5, "上品": 12, "絕學": 20},
+    )
+    level_center: int = 5  # 底練到第幾成算「普通」
+    level_point: float = Field(default=1.5, ge=0)  # 比 level_center 每多（少）一成加（扣）幾分
+    # 意境的來歷：內容寫好的基本意境 0；善名惡名悟來的（有正邪）；合併出來的；自己首悟的再加 own
+    insight_lean: float = 4
+    insight_merged: float = 6
+    insight_own: float = 4
+    same_attribute: float = 8  # 底與意境（或兩門武學）同屬性
+    counter_attribute: float = -10  # 相剋的一對
+    wis_weight: float = Field(default=0.5, ge=0)  # 悟性：stat_factor 多出來的百分點 × 這個（跟修練同一套 stat_factor）
+    shown_from: float = Field(default=3, ge=0)  # 說明那一句只寫分數絕對值到這麼多的因素，最多兩個
+    # 說明那一句的寫法：因素 → [加分時, 扣分時]（語氣照企劃者「不要那麼直白」，不寫成攻略）
+    lines: dict[str, list[str]] = Field(default_factory=lambda: {
+        "quality": ["底子厚實", "底子尚淺"],
+        "level": ["火候已足", "火候還淺"],
+        "insight": ["意境來歷不凡", ""],
+        "attribute": ["兩股氣息相投", "兩股氣息相衝"],
+        "wis": ["你心思靈透", "你心思還不夠靈透"],
+    })
+
+
 class FrontLines(_Strict):
     """戰況變化的說法（content/front_lines.json，FB-064）。第一季規則開著時，推動戰線的那一行寫成一句話：
     「{戰線}：{陣營}{句子}」，例「潁川汝南：官軍步步進逼」，不寫數字。句子分三段（tianxia/front_lines.py 的 BANDS：
@@ -406,6 +440,34 @@ class InsightDef(_Strict):
     grant: InsightGrant | None = None
 
 
+SenseAttribute = Literal["剛", "柔", "快", "慢"]  # 有所感的做法、畫出來的那一筆只分這四種（基本意境的屬性）
+
+
+class SenseMethod(_Strict):
+    """有所感那張卡上的一個做法（悟意境設計 3.1）：做這件事是在體會哪一種屬性。"""
+
+    attribute: SenseAttribute
+    text: str  # 選項上那一行（例：「順著水流走一段，看它怎麼繞開石頭」）
+
+
+class InsightScene(_Strict):
+    """有所感的一段場景（悟意境設計第零節、3.1；content/insight_scenes.json）。探索落在「悟意境」那一支時，
+    照地點挑一段：寫了 locations 的先用（那幾處專用）；沒有就用 tags 跟地點標籤有交集的；再沒有才用 tags、locations 都空的通用場景。
+    選的做法屬性在這個地點悟得到的意境裡（insights.explore_gives）才算選對（第四節）。"""
+
+    id: str
+    title: str  # 卡片的標題（例：「水繞石」）；卡上寫成「有所感・{title}」
+    text: str  # 場景；可以寫 {痕跡}，換成在這一處悟成過的模糊人數（「還沒有人」「幾個人」…，悟意境設計第五節）
+    tags: list[str] = Field(default_factory=list)  # 適用的地點標籤（河畔、山林…）；跟地點的 tags 有交集就算
+    locations: list[str] = Field(default_factory=list)  # 指定的地點 id；寫了就是那幾處專用，優先於 tags
+    # 場景的線索指向哪幾種屬性（劇情寫的時候自己標）：用得到這段場景的每一個地點，悟得到的意境裡至少要有一個是這幾種之一
+    # （content.validate 擋「河邊的場景用在只悟得到火的地方」）。通用場景可以不寫
+    hints: list[SenseAttribute] = Field(default_factory=list)
+    methods: list[SenseMethod]  # 三到四個做法，屬性各不相同；卡上的順序每次洗牌
+    flags_add: list[str] = Field(default_factory=list)  # 悟成時加的旗標（序章草廬那一段用，例「序章:悟」）
+    prologue: bool = False  # 序章草廬用：只在 TutorialStep.explore_scene 指到時出現，做法都算對、必中，畫完落回做法那個意境
+
+
 class Sect(_Strict):
     id: str
     name: str
@@ -623,7 +685,8 @@ class TutorialGoal(_Strict):
     # 修練、打坐、遊歷、配點、熔煉
     action: Literal[
         "explore", "socialize", "move", "view_map", "recruit", "practice", "order",
-        "choice", "view_tab", "cultivate", "rest", "train", "allocate", "melt",
+        "choice", "view_tab", "cultivate", "rest", "train", "allocate", "melt", "sense",
+        "view_orders",  # 入伍段（新手引導計畫二）：軍令卡出現在畫面上
     ] | None = None
     locations: list[str] = Field(default_factory=list)
     condition: Condition = Field(default_factory=Condition)
@@ -689,6 +752,7 @@ class TutorialStep(_Strict):
     glow: list[str] = Field(default_factory=list)  # 這一步要發光的鈕（網頁的 data-glow，見計畫 Task 6）
     allow: list[str] = Field(default_factory=list)  # 在草廬閒著時選單只留這些（前綴比對，例："act:explore"、"move:"）
     explore_event: str | None = None  # 在草廬探索時一定端出這則事件（四景四選一）
+    explore_scene: str | None = None  # 在草廬探索時一定端出這段有所感（InsightScene，prologue 要是 true；跟 explore_event 二選一）
     enemies: list[str] = Field(default_factory=list)  # 這一步草廬的對手（遊歷才出現）
     force_tier: str | None = None  # 這一步的遊歷結果照寫好的（雪恥：險勝）
     sure_cultivate: bool = False  # 這一步的修練一定升品
@@ -702,6 +766,9 @@ class TutorialStep(_Strict):
     # 這一步的動作做成之後，結果那一句（設計 10.3 的「…之後（場景）」）：草廬裡合成、修練、熔煉成功時用它取代引擎的一般那句。
     # {意境}、{武學}、{心得} 換成這一次真的合出來的／修練的／退回的（prologue.after_line）
     after: str = ""
+    # 這一步真的做完（走出草廬的出師那一步）時，把這些地點記成摸清了（PlayerState.surveyed）：師父的話講到的地方，輿圖上就有名字、點得開，
+    # 不用先自己走過去。寫在內容裡、載入時檢查地點 id；略過序章的人不做這一步，什麼都沒有（guide.note_action）
+    survey: list[str] = Field(default_factory=list)
 
 
 class PresetRecipe(_Strict):
@@ -714,10 +781,34 @@ class PresetRecipe(_Strict):
     note: str = ""
 
 
+class Recruiter(_Strict):
+    """入伍段（新手引導計畫二，設計第四節）一個陣營的引薦人：框上的名字與他說的話。"""
+
+    name: str  # 老石、青禾、季伯平
+    intro: str  # 入營（r1）：投靠的當下，排在第一步的話前面
+    briefing: str  # 看戰局（r2）
+    order_hint: str  # 第一道軍令（r3）還沒做時，框裡那一句
+    done: str  # 第一道軍令做完，引薦人的結尾（按「知道了」收起）
+    lines: list[str] = Field(default_factory=list)  # 每一步收起後那一行，照 Enlist.steps 的順序；不帶名字（框上的名字另外寫）
+    rejoin: str = ""  # 第二季起再投靠時打的招呼（新手引導計畫三用）
+
+
+class EnlistStep(_Strict):
+    id: str
+    done_when: TutorialGoal
+
+
+class Enlist(_Strict):
+    steps: list[EnlistStep] = Field(default_factory=list)
+    recruiters: dict[str, Recruiter] = Field(default_factory=dict)  # 陣營 id → 引薦人
+    drifter_line: str = ""  # 「主線與目標」裡散人那一行：三邊各在哪裡收人（設計 6.3）
+
+
 class Tutorial(_Strict):
     speaker: str = "老說書人"
     steps: list[TutorialStep] = Field(default_factory=list)
     outro: str = ""
+    enlist: Enlist | None = None  # 入伍段（新手引導計畫二）；第一季才開始
     # ── 序章（新手引導計畫一）：location 是 None 就沒有序章，下面三個都不看 ──
     location: str | None = None  # 草廬（Location.prologue_only）
     prologue_steps: int = 0  # 前幾步是序章（都在草廬）；走完就出師
@@ -1097,6 +1188,12 @@ class Config(_Strict):
     merge_stamina: int = 5
     # 武學與成長設計 12.1：三種合成同一套價錢——武學＋意境、武學＋武學也收體力
     fuse_stamina: int = Field(default=5, ge=0)
+    # 合成出新武學（武學＋意境、武學＋武學）時，每個人自己那一份的品質機率，「普通搭配」的平均（企劃者 2026-10-06：
+    # 「不要直接顯示合成出來確定的品級，用機率，下品50%，中品30%，上品20%」）；權重，不必加起來是 100。
+    # 序章那一爐照劇本固定下品。擲到的品質算「登記時就有」，熔的時候不給加給（library.melt_value）
+    fuse_quality_odds: dict[str, float] = Field(default_factory=lambda: {"下品": 50, "中品": 30, "上品": 20})
+    # 上面那組是「普通搭配」的平均；每一爐照它的組成往上或往下推（企劃者 2026-10-06，fusion.quality_odds）
+    fuse_quality: FuseQuality = Field(default_factory=FuseQuality)
     # 12.2 合到舊的：一個組合第一次被合時，候選每有一個，機會加這麼多，最多到 land_chance_cap（企劃者定九成）；0 就永遠長新的
     land_chance_per_candidate: float = Field(default=0.05, ge=0, le=1)
     land_chance_cap: float = Field(default=0.9, ge=0, le=1)
@@ -1132,6 +1229,14 @@ class Config(_Strict):
     )
     melt_insight_xinde: int = 10  # 熔一個意境換的心得
     duplicate_insight_xinde: int = 10  # 已經會的意境又悟到一次換的心得
+    # ── 悟意境（悟意境設計第零、四、五節；企劃者 2026-10-06 定）──
+    sense_rate: int = 70  # 有所感選對做法之後，進入感悟狀態的成功率（%）
+    sense_rate_per_wis: int = 3  # 悟性比基準 5 每多一點 +3%（少一點 −3%）
+    sense_rate_range: tuple[int, int] = (40, 95)  # 夾在這之間（痕跡的加成另外加在上面，見 sense_marks_bonus）
+    sense_miss_xinde: int = 3  # 選對了但沒擲中：「差一點就抓到了」給的心得
+    sense_marks_bonus: int = 3  # 這一處悟成過的人每多一檔模糊人數（一兩個人、幾個人、十來個人），成功率 +3%……
+    sense_marks_cap: int = 9  # ……最多 +9%
+    sense_budget_seconds: float = 45.0  # 畫完之後等模型看圖取名的預算（秒，扣掉等鎖的時間；看圖熱機約 4 秒，冷啟動 19～28 秒）
     holding_cap_base: int = 50  # 武學與意境合計最多幾個
     holding_cap_levels: int = 5  # 每升幾級……
     holding_cap_step: int = 3  # ……多幾格（企劃者 2026-10-05 從 5 改成 3，另加博聞，設計 6.3）
@@ -1864,6 +1969,8 @@ class Content(_Strict):
     events: dict[str, Event]
     skills: dict[str, SkillDef]
     insights: dict[str, InsightDef] = Field(default_factory=dict)  # 意境（content/insights.json，武學與成長設計附錄 A）
+    insight_scenes: dict[str, InsightScene] = Field(default_factory=dict)  # 有所感的場景（content/insight_scenes.json）；沒有這個檔就是空的，探索悟意境照舊直接悟
+
     traits: TraitBook = Field(default_factory=TraitBook)  # 功效（content/traits.json，13.2、13.4）；沒有這個檔就是沒有功效
     trait_lines: dict[str, list[str]] = Field(default_factory=dict)  # 功效的演出句（content/trait_lines.json，S1）：功效名 → 句子
     materials: dict[str, Material]

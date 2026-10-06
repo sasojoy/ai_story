@@ -8,9 +8,17 @@ import hashlib
 import random
 
 from .martial_arts import Insight
-from .models import Content, Location
+from .models import Content, InsightScene, Location
 from .state import GameState
 from .world_state import WorldStateStore
+
+SENSE_ATTRIBUTES = ("剛", "柔", "快", "慢")  # 有所感的做法與畫出來的那一筆只分這四種（基本意境風火水山的屬性）
+OWN_PREFIX = "悟:"  # 私有意境的 id 開頭（悟意境設計 0.2b）：「悟:3」是這個人自己第 3 個；內容與全服的意境 id 都不會這樣開頭
+
+
+def is_own(insight_id: str | None) -> bool:
+    """這個意境 id 是不是某個人私有的（畫圖悟來的、或拿私有的合併出來的）。"""
+    return bool(insight_id) and insight_id.startswith(OWN_PREFIX)
 
 # 第一層合併長出另外四個屬性（設計 3.2.1）。照屬性寫、不照意境 id：基本意境火、風、水、山的屬性剛好是
 # 剛、快、柔、慢，程式就不必綁死內容的 id。
@@ -22,20 +30,47 @@ PAIR_ATTRIBUTES: dict[frozenset[str], str] = {
 }
 
 
-def resolve(insight_id: str | None, content: Content, world: WorldStateStore) -> Insight | None:
-    """基本意境（content/insights.json）或全服合併出來的意境；都找不到是 None。"""
+def resolve(
+    insight_id: str | None, content: Content, world: WorldStateStore, state: GameState | None = None,
+) -> Insight | None:
+    """查一個意境：內容寫死的 → 這個玩家自己的（state 給了才查，悟意境設計 0.2b）→ 全服合併出來的；都找不到是 None。
+    私有的 id 只在悟的人自己的存檔裡：沒給 state（或給的是別人的）就找不到。"""
     if insight_id is None:
         return None
     d = content.insights.get(insight_id)
     if d is not None:
         return Insight(id=d.id, name=d.name, attribute=d.attribute, lean=d.lean, note=d.desc)
+    if is_own(insight_id):
+        return state.player.own_insights.get(insight_id) if state is not None else None
     return world.get_insight(insight_id)
+
+
+def art_attribute(art, content: Content, world: WorldStateStore, state: GameState | None = None) -> str | None:
+    """這門武學修練要的意境屬性：記了 insight_attr 的照它；舊的（悟意境之前登記的）照它融的那個意境查；都沒有是 None。"""
+    if getattr(art, "insight_attr", None):
+        return art.insight_attr
+    found = resolve(art.insight, content, world, state) if art.insight else None
+    return found.attribute if found is not None else None
+
+
+def for_cultivation(state: GameState, content: Content, world: WorldStateStore, art) -> Insight | None:
+    """修練這門武學拿哪一個意境（悟意境設計 0.2b）：它融的那一個還在手上就是它；不然（融的是私有意境——全服登記不記私有的 id，
+    或者那一個已經熔掉）拿手上同屬性的一個：先挑自己悟的、再照悟到的先後。沒有融過意境、手上也沒有同屬性的是 None。"""
+    held = state.player.insights
+    if art.insight and art.insight in held:
+        return resolve(art.insight, content, world, state)
+    attribute = art_attribute(art, content, world, state)
+    if attribute is None:
+        return None
+    found = [i for i in (resolve(x, content, world, state) for x in held) if i is not None and i.attribute == attribute]
+    found.sort(key=lambda i: not is_own(i.id))
+    return found[0] if found else None
 
 
 def learn(state: GameState, content: Content, world: WorldStateStore, insight_id: str | None) -> list[str]:
     """悟得一個意境（探索、奇遇、名聲）。已經會的化成心得（設計 3.2.2）。上限不擋：超過上限的人照樣悟得，
     只是在熔回上限以內之前不能合成、合併（設計 4.5）。"""
-    insight = resolve(insight_id, content, world)
+    insight = resolve(insight_id, content, world, state)
     if insight is None:
         return []
     p = state.player
@@ -78,6 +113,27 @@ def explore_gives(loc: Location, content: Content) -> list[str]:
     if content.config.explore_mix_of(loc.tags).weights.get("insight", 0) <= 0:
         return []
     return explore_pool(loc, content)
+
+
+def scenes_for(loc: Location, content: Content) -> list[InsightScene]:
+    """這一處有所感時挑得到的場景（序章的不算）：寫了這個地點的那幾段；沒有就是標籤對得上的；再沒有就是通用的（tags、locations 都空）。"""
+    scenes = [scene for scene in content.insight_scenes.values() if not scene.prologue]
+    tags = set(loc.tags)
+    return (
+        [scene for scene in scenes if loc.id in scene.locations]
+        or [scene for scene in scenes if not scene.locations and tags & set(scene.tags)]
+        or [scene for scene in scenes if not scene.locations and not scene.tags]
+    )
+
+
+def pool_attributes(loc: Location, content: Content) -> set[str]:
+    """這一處悟得到的意境的屬性：做法的屬性在這裡面就是選對（悟意境設計 4.1，地點的池子就是答案）。"""
+    return {content.insights[i].attribute for i in explore_pool(loc, content)}
+
+
+def base_of(attribute: str, loc: Location, content: Content) -> str | None:
+    """這一處悟得到、屬性是 attribute 的那個基本意境（畫出來結合的屬性剛好是這裡的，就是悟到它）；沒有是 None。"""
+    return next((i for i in explore_pool(loc, content) if content.insights[i].attribute == attribute), None)
 
 
 def roll_explore(loc: Location, content: Content, rng: random.Random) -> str | None:

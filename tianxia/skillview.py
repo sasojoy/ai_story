@@ -4,10 +4,10 @@
 """
 from __future__ import annotations
 
-from . import cultivation, encounter, fusion, insights, martial_arts, materials, prologue, team, traits
+from . import atlas, cultivation, encounter, fusion, insights, martial_arts, materials, prologue, team, traits
 # 不 import 整個 library 模組：這個檔案自己有一個叫 library() 的函式
-from .library import cap_of, held_count, level_of, melt_confirm, melt_note, melt_problem, melt_value, owned_arts
-from .martial_arts import MAX_LEVEL, MartialArt, next_quality, power_at, shown_creator
+from .library import TOWN_TAG, cap_of, held_count, level_of, melt_confirm, melt_note, melt_problem, melt_value, owned_arts
+from .martial_arts import MAX_LEVEL, QUALITIES, Insight, MartialArt, next_quality, power_at, shown_creator
 from .models import Content
 from .state import PLAYER, GameState
 from .world_state import WorldStateStore
@@ -38,6 +38,7 @@ def rules_line(content: Content) -> str:
     return "身上一門內功、一門武學：花心得練成，用意境修練衝品質；武學也能在「煉製」融意境衍生新武學，或兩門武學合成一門新的。"
 
 
+ARTS_ATTRIBUTES = "剛柔快慢陰陽虛實"  # 武學的八個屬性，寫給玩家看的順序（FB-089）；跟升級配點的五項（臂力身法根骨悟性博聞）是兩回事
 ATTRIBUTE_ORDER = "陰陽剛柔快慢虛實"  # 相剋的一對怎麼排字（設計 6.1 的順序）：「陰陽」「剛柔」，不寫成「陽陰」
 
 
@@ -53,9 +54,11 @@ def attribute_line(content: Content) -> str:
         if pair not in pairs:
             pairs.append(pair)
     penalty = _pct(-cfg.pairing_penalty).replace("-", "−")  # 減號用 −，跟加號並排好讀
+    # FB-089：「屬性」有兩個意思（升級配的五項、武學的剛柔快慢陰陽虛實），這一句講的是後者，開頭先把名字寫全；
+    # 八個字的順序是企劃者定的「剛柔快慢陰陽虛實」（ARTS_ATTRIBUTES，測試擋它跟 martial_arts.ATTRIBUTES 是同一組字）
     return (
-        f"內功與武學同屬性，威力 {_pct(cfg.pairing_bonus)}；兩門相剋（{'、'.join(pairs)}）威力 {penalty}；"
-        f"武學克住對手的屬性，威力 ×{encounter.COUNTER_BONUS:g}。"
+        f"武學的屬性（{ARTS_ATTRIBUTES}）：內功與武學同屬，威力 {_pct(cfg.pairing_bonus)}；"
+        f"兩門相剋（{'、'.join(pairs)}）威力 {penalty}；武學克住對手的屬性，威力 ×{encounter.COUNTER_BONUS:g}。"
     )
 
 
@@ -94,6 +97,24 @@ def _known_recipe(state: GameState, content: Content, world: WorldStateStore, ke
     return f"\n會合出【{known.name}】。{traits.card_line(content, known)}"
 
 
+def _known_insight_recipe(state: GameState, world: WorldStateStore, key: str) -> str:
+    """意境＋意境的配方有沒有人合過（跟 _known_recipe 同一套說法，FB-082）：已知的寫「會合出「X」（屬…）」，沒人合過的寫「沒人合過」；
+    合出來的那一個你已經悟得了就不寫（下面的 ⚠ 本來就會說「你已經悟得了」）。只在兩個都是你悟得的時候才會呼叫。（待 joy 潤）"""
+    known = world.lookup_insight_recipe(key)
+    if known is None:
+        return "\n沒人合過。"
+    if known.id in state.player.insights:
+        return ""
+    return f"\n會合出「{known.name}」（屬{known.attribute}）。"
+
+
+def _quality_note(state: GameState, content: Content, odds: fusion.QualityOdds) -> str:
+    """合成前寫這一爐算出來的品質機率與一句原因、不寫確定的品級（企劃者 2026-10-06）；序章那一爐照劇本是下品。"""
+    if prologue.fuse_base(state, content) is not None:
+        return "從下品起修"
+    return f"品質看造化：{fusion.quality_odds_text(odds)}"
+
+
 # 爐裡只放了一樣東西時，煉製頁的說明那一行（W4）；句子待 joy 潤
 FORGE_ONE_ART = "再放一個意境，或另一門武學。"
 FORGE_ONE_INSIGHT = "再放一門武學，或另一個意境。"
@@ -119,8 +140,9 @@ def forge_line(
         if a is None or b is None:
             return "（選了不存在的東西。）"
         shape = fusion.blend_shape(a, b, fusion.recipe_seed(world, fusion.blend_key(art_id, other_art))[1])
+        odds = fusion.blend_odds(state, content, art_id, a, other_art, b)
         head = (
-            f"**合成**　【{a.name}】＋【{b.name}】→ 一門新{shape.kind}（屬{shape.attribute}，從下品起修），"
+            f"**合成**　【{a.name}】＋【{b.name}】→ 一門新{shape.kind}（屬{shape.attribute}，{_quality_note(state, content, odds)}），"
             f"花 {cfg.fuse_xinde} 點心得、{cfg.fuse_stamina} 點體力（你有 {xinde} 點心得）。"
         )
         head += _known_recipe(state, content, world, fusion.blend_key(art_id, other_art))
@@ -129,29 +151,32 @@ def forge_line(
         if art_id not in owned or insight_ids[0] not in held:
             return f"⚠ {fusion.fuse_problem(state, content, world, art_id, insight_ids[0])}"
         base = team.player_art(state, content, world, art_id)
-        insight = insights.resolve(insight_ids[0], content, world)
+        insight = insights.resolve(insight_ids[0], content, world, state)
         if base is None or insight is None:
             return "（選了不存在的東西。）"
+        odds = fusion.fuse_odds(state, content, art_id, base, insight)
         head = (
             f"**合成**　【{base.name}】＋「{insight.name}」→ 一門新{base.kind}"
-            f"（屬{insight.attribute}，從下品起修），"
+            f"（屬{insight.attribute}，{_quality_note(state, content, odds)}），"
             f"花 {cfg.fuse_xinde} 點心得、{cfg.fuse_stamina} 點體力（你有 {xinde} 點心得）。"
         )
         head += _known_recipe(
-            state, content, world, fusion.fuse_key(art_id, insight_ids[0]),
+            state, content, world, fusion.fuse_key(art_id, insight_ids[0], insight.attribute),
             preset=fusion.preset_for(content, art_id, insight_ids[0]) is not None,
         )
         problem = fusion.fuse_problem(state, content, world, art_id, insight_ids[0])
     elif not art_id and not other_art and len(insight_ids) == 2:
         if any(i not in held for i in insight_ids):
             return f"⚠ {fusion.merge_problem(state, content, world, *insight_ids)}"
-        a, b = (insights.resolve(i, content, world) for i in insight_ids)
+        a, b = (insights.resolve(i, content, world, state) for i in insight_ids)
         if a is None or b is None:
             return "（選了不存在的東西。）"
+        attribute, _ = fusion.merge_shape(world, a, b)  # 跟 fusion.merge 真的登記的同一個函式算的（FB-082）
         head = (  # 三種合成都花體力（設計 12.1）：不夠的話下面的 ⚠ 會說
-            f"**合併**　「{a.name}」＋「{b.name}」→ 一個新的意境，"
+            f"**合併**　「{a.name}」＋「{b.name}」→ 一個新的意境（屬{attribute}），"
             f"花 {cfg.merge_xinde} 點心得、{cfg.merge_stamina} 點體力（你有 {xinde} 點心得）。"
         )
+        head += _known_insight_recipe(state, world, fusion.merge_key(*insight_ids))
         problem = fusion.merge_problem(state, content, world, *insight_ids)
     elif bool(art_id) != bool(insight_ids) and not other_art and len(insight_ids) <= 1:
         # 爐裡只有一樣（W4）：說還缺什麼，不再是放什麼都一樣的總說明。不點名——不是你的武學也一樣回這一句，預覽探不出東西
@@ -162,6 +187,47 @@ def forge_line(
             f"或放兩個意境，合出新的意境。{count}。"
         )
     return head if problem is None else f"{head}\n⚠ {problem}"
+
+
+def heal_button(state: GameState, content: Content) -> dict:
+    """修練頁「療傷」鈕要的資料（FB-082）：ok 是按不按得下去，why 是按不下去的原因（跟 team.heal 回的是同一句）。
+    鈕上的字（內傷與價錢）是卷軸卡自己寫的：內傷讀狀態列、價錢讀 menxia 的 heal_cost（team.heal_cost，每 2 點內傷 1 兩，
+    真的收的就是這個數），所以這裡不送字（review-ap3 M4）。內傷不到 1 點狀態列不寫（int），鈕也不亮。"""
+    member = state.player.member
+    if int(member.injury) < 1:
+        return {"ok": False, "why": "氣血無恙，不用療傷。"}
+    problem = team.heal_problem(state, content, member)
+    return {"ok": problem is None, "why": problem}
+
+
+def _nearest_town(state: GameState, content: Content) -> tuple[str | None, bool]:
+    """（離玩家最近的城鎮名字, 玩家人就在城鎮裡）：路程照 atlas.routes（只走摸清的路）；一座都走不到時名字是 None。"""
+    towns = {loc_id for loc_id, loc in content.locations.items() if TOWN_TAG in loc.tags}
+    here = state.player.location
+    if here in towns:
+        return content.locations[here].name, True
+    reachable = [(route.minutes, loc_id) for loc_id, route in atlas.routes(state, content).items() if loc_id in towns]
+    return (content.locations[min(reachable)[1]].name if reachable else None), False
+
+
+def relearn_note(state: GameState, content: Content, art_id: str) -> str | None:
+    """熔掉這一門之後怎麼拿回來（FB-081）：開局送的基礎武學在任何城鎮免費重學（library._taught_here）、各地教的基礎武學
+    回教它的那個地方、花原價學；合成出來的與內容直接給的絕學沒有重學的地方，是 None。寫給玩家看的一句話——
+    連「江湖頁『此地還能做』」都寫上：「學…」的選項不在行動列、收在那個摺疊裡（待 joy 潤）。"""
+    skill = content.skills.get(art_id)
+    if skill is None:
+        return None
+    find = f"在江湖頁「此地還能做」找「學{skill.name}」。"
+    if art_id in content.config.starter_skills:
+        name, here = _nearest_town(state, content)
+        if here:
+            return f"熔了還能免費重學：這裡就是城鎮，到江湖頁「此地還能做」找「學{skill.name}」。"
+        near = f"（離你最近的是{name}）" if name else ""
+        return f"熔了還能免費重學：到任何城鎮{near}，{find}"
+    if skill.learn is not None:
+        fee = f"學費 {skill.learn.silver} 兩" if skill.learn.silver else "免費"
+        return f"熔了想拿回來，到{content.locations[skill.learn.at].name}再學一次（{fee}），{find}"
+    return None
 
 
 def art_rows(state: GameState, content: Content, world: WorldStateStore) -> list[dict]:
@@ -175,7 +241,9 @@ def art_rows(state: GameState, content: Content, world: WorldStateStore) -> list
         if art is None:
             continue
         level = level_of(state, art_id)
-        insight = insights.resolve(art.insight, content, world) if art.insight else None
+        insight = insights.for_cultivation(state, content, world, art) or (
+            insights.resolve(art.insight, content, world, state) if art.insight else None
+        )
         insight_name = insight.name if insight else None
         problem = prologue.cultivate_problem(state, content) or cultivation.cultivate_problem(state, content, world, art_id)
         legend = None
@@ -188,25 +256,55 @@ def art_rows(state: GameState, content: Content, world: WorldStateStore) -> list
             note = problem
         stuck = melt_problem(state, art_id, art.name, only=prologue.melt_only(state, content))  # 跟 library.melt_art 同一個判斷
         value = melt_value(state, content, world, art_id) if stuck is None else 0
+        worn = art_id in (member.neigong_id, member.wugong_id)
+        relearn = None if worn else relearn_note(state, content, art_id)  # 熔了怎麼拿回來（FB-081）：身上正在練的不能熔，不寫
+        forge = _best_forge(state, content, world, art_id, art)
+        compare = team.compare_with_worn(state, content, world, art)  # 跟身上同一種那門比的一句（W6、FB-088）；身上那門自己是空字串
         row = {
             "id": art_id, "name": art.name, "kind": art.kind, "quality": art.quality, "attribute": art.attribute,
-            "level": level, "worn": art_id in (member.neigong_id, member.wugong_id), "insight": insight_name,
-            "card": art_card(
-                art, level, insight_name, parent_names(art, content, world), traits.card_line(content, art),
-                team.compare_with_worn(state, content, world, art),  # 身上那門自己是空字串（W6）
-            ),
+            "level": level, "worn": worn, "insight": insight_name,
+            "card": art_card(art, level, insight_name, parent_names(art, content, world), traits.card_line(content, art), compare),
+            "compare": compare,  # 卷軸卡直接把它寫在功法庫那張卡的鈕上面（改練之前看得到）；點開「詳情」時功法卡裡也有
             "cultivate": {"ok": problem is None, "note": note, "legend": legend},
             "melt": {
                 "ok": stuck is None,
                 "note": stuck if stuck is not None else melt_note(value),
-                # 熔煉鈕按下去的確認框問什麼（W9）：退 0 心得時照實說只空出一格；熔不掉的沒有確認框
-                "confirm": melt_confirm(content, art.name, art_id, value) if stuck is None else "",
+                # 熔煉鈕按下去的確認框問什麼：整句在這裡寫好（W9 的直話＋FB-081 的去哪裡重學，見 library.melt_confirm）；熔不掉的沒有
+                "confirm": melt_confirm(art.name, value, relearn) if stuck is None else "",
             },
+            "relearn": relearn,  # 合成的、內容直接給的絕學沒有重學的地方，是 None
         }
+        if forge is not None:
+            # 卷軸卡的合成機率條：拿手上的意境裡上品機率最高的那一個算（forge_with 是它的名字）；序章、沒有意境不給
+            row["forge_odds"] = [{"quality": q, "pct": round(w)} for q, w in forge[1].odds.items()]
+            row["forge_with"] = forge[0].name
         if hut:  # 序章：這一列在這一步可以發光的鍵由伺服器說（T7 走查 W-A、W-B）；序章外沒有這個鍵
             row["glow"] = prologue.art_glow(state, content, world, art_id, cultivate_ok=problem is None, melt_ok=stuck is None)
         rows.append(row)
+    # 功法庫多了要找得到（FB-085）：身上的在前，再照品質（絕學＞上品＞中品＞下品，自己那一份）、成多的先、最後比名字；
+    # 修練頁與煉製頁畫的是同一份，所以兩頁的順序一樣
+    rows.sort(key=lambda r: (not r["worn"], -QUALITIES.index(r["quality"]), -(r["level"] or 0), r["name"]))
     return rows
+
+
+def _best_forge(
+    state: GameState, content: Content, world: WorldStateStore, art_id: str, art: MartialArt,
+) -> tuple[Insight, fusion.QualityOdds] | None:
+    """這一門配手上哪一個意境合成最好：上品機率最高（同分看下品少），機率照 fusion.fuse_odds（跟開爐實際擲的同一套）。
+    合出來的那一門你已經有了的組合不算（那一爐開不了）。序章照劇本合、沒有可用的意境就是 None。"""
+    if prologue.fuse_base(state, content) is not None:
+        return None
+    owned, best = set(owned_arts(state)), None
+    for insight_id in state.player.insights:
+        insight = insights.resolve(insight_id, content, world, state)
+        known = world.lookup_recipe(fusion.fuse_key(art_id, insight_id, insight.attribute if insight else None))
+        if insight is None or (known is not None and known.id in owned):
+            continue
+        odds = fusion.fuse_odds(state, content, art_id, art, insight)
+        rank = (odds.odds["上品"], -odds.odds["下品"])
+        if best is None or rank > best[0]:
+            best = (rank, insight, odds)
+    return None if best is None else (best[1], best[2])
 
 
 def _legend_choice(state: GameState, content: Content, target: str, failures: int) -> dict | None:
@@ -230,11 +328,14 @@ def insight_rows(state: GameState, content: Content, world: WorldStateStore) -> 
     rows = []
     blocked = prologue.melt_insight_problem(state, content)  # 序章裡不熔意境（跟 Game.melt_insight 的拒絕同一個判斷）；平常是 None
     for insight_id in state.player.insights:
-        insight = insights.resolve(insight_id, content, world)
+        insight = insights.resolve(insight_id, content, world, state)
         if insight is not None:
             row = {
                 "id": insight_id, "name": insight.name, "attribute": insight.attribute, "lean": insight.lean,
                 "note": insight.note, "melt": content.config.melt_insight_xinde, "blocked": blocked,
+                # 感悟悟來的私有意境（悟意境設計 0.2b）：在哪裡悟的、畫的那一筆（修練頁畫小縮圖）
+                "own": insights.is_own(insight_id), "place": insight.place, "glyph": insight.glyph,
+                "glyph_note": insight.glyph_note,
             }
             if blocked is not None:  # 在序章裡（跟上面的拒絕同一個條件）：煉製頁這一步要放進爐子的意境發光（T7 走查 W-B）
                 row["glow"] = prologue.insight_glow(state, content)

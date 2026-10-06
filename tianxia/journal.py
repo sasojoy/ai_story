@@ -24,6 +24,7 @@ PRACTICE = "修練"
 CRAFT = "煉製"
 ALLOCATE = "配點"  # 升級的屬性點分配到屬性上（武學與成長設計 6.2）；連按幾次併成一則
 WORLD_NEWS = "江湖大事"  # 時間流逝時發生的江湖大事那一則的標題；連續的會併成一則
+RENAMED = "絕學定名"  # 手上的武學被人定了正式的名字（FB-083，Game._deliver_renames；待 joy 潤）
 AWAY = "你不在的時候"  # 離線一陣子再上線時的那一則摘要（傳聞分層設計第八節，Game._deliver_away；待 joy 潤）
 SEASON_START = "賽季開始"  # 開場那一則（標題是劇本名）的標籤：Game.new 與換季重來都寫它
 GUIDE_ONLY = "新手引導"  # 沒有紀錄可接時，只放引導那幾行的那一則（add_guide）的標題
@@ -141,6 +142,7 @@ class Draft:
     rewrites: list[tuple[str, str | None]] = field(default_factory=list)  # (訊息, 紀錄裡改寫成的文字；None＝不寫)
     changes: list[str] = field(default_factory=list)  # 訊息裡沒有、另外補上的數值變化（例如經驗）
     guide: list[str] = field(default_factory=list)  # 這次行動順便完成的新手引導（記進 JournalEntry.guide，不進敘事）
+    glyph: list[list[int]] = field(default_factory=list)  # 有所感畫的那一筆（JournalEntry.glyph，紀錄裡畫縮圖）
 
     def hide(self, msg: str) -> None:
         self.rewrites.append((msg, None))
@@ -168,7 +170,7 @@ class Draft:
         changes, lines = split_changes(kept)
         return JournalEntry(
             time=time, title=self.title, tag=self.tag, lines=lines, changes=combine_changes(self.changes + changes),
-            battle_id=self.battle_id, guide=list(self.guide),
+            battle_id=self.battle_id, guide=list(self.guide), glyph=list(self.glyph),
         )
 
 
@@ -196,6 +198,7 @@ def _merged(head: JournalEntry, entry: JournalEntry, lines: list[str], battle_id
     return JournalEntry(
         time=entry.time, title=entry.title, tag=entry.tag or head.tag, lines=lines,
         changes=combine_changes(head.changes + entry.changes), battle_id=battle_id, guide=head.guide + entry.guide,
+        glyph=entry.glyph or head.glyph,
     )
 
 
@@ -336,6 +339,19 @@ def _body(entry: JournalEntry) -> list[str]:
     return lines[1:] if lines and entry.tag and lines[0] == entry.tag else lines
 
 
+def glyph_svg(points: list[list[int]], css: str = "tx-glyph") -> str:
+    """有所感畫的那一筆（0～100 的點位）畫成一張小 SVG；沒有點就是空字串。點是引擎讀過、取樣過的整數，不必跳脫。"""
+    pts = [p for p in points if isinstance(p, (list, tuple)) and len(p) >= 2]
+    if len(pts) < 2:
+        return ""
+    path = " ".join(f"{int(x)},{int(y)}" for x, y, *_ in pts)
+    return (
+        f'<svg class="{css}" viewBox="-8 -8 116 116" aria-hidden="true">'
+        f'<polyline points="{path}" fill="none" stroke="currentColor" stroke-width="6" '
+        'stroke-linecap="round" stroke-linejoin="round"/></svg>'
+    )
+
+
 def _card_story(entry: JournalEntry) -> tuple[str, list[str]]:
     """「剛剛」卡片標題旁的結果標記與底下的敘事，每一句只畫一次（FB-070）。
     同一種連續的門下動作併成一則時（add_entry 的 merge），標記是最新那次的那句話、敘事是每一次照順序（_story），
@@ -382,7 +398,7 @@ def card_html(entry: JournalEntry, when_text: Callable[[float], str] = clock_tex
     tag, story = _card_story(entry)
     return (
         f'<div class="tx-now"><div class="tx-when">{when}</div><div class="tx-head">{_heading(entry, tag)}</div>'
-        f'{_lines(story)}{_chips(entry.changes, "div", chip, _seed(entry))}</div>'
+        f'{glyph_svg(entry.glyph)}{_lines(story)}{_chips(entry.changes, "div", chip, _seed(entry))}</div>'
     )
 
 
@@ -406,7 +422,7 @@ def _row(entry: JournalEntry, when: Callable[[float], str], chip: ChipFn | None 
         return f'<div class="tx-row"><div class="tx-sum">{head}</div></div>'
     return (
         f'<details class="tx-row"><summary class="tx-sum">{head}</summary>'
-        f'<div class="tx-body">{_lines(body)}</div></details>'
+        f'<div class="tx-body">{glyph_svg(entry.glyph)}{_lines(body)}</div></details>'
     )
 
 
@@ -466,4 +482,5 @@ details[open] > summary.tx-sum .tx-main::after { content: "▾"; }
 .tx-time { flex: 0 0 6.5em; font-size: 12px; opacity: 0.7; white-space: nowrap; padding-top: 2px; }
 .tx-main { flex: 1; min-width: 0; }
 .tx-empty { font-size: 13px; opacity: 0.7; }
+.tx-glyph { float: right; width: 44px; height: 44px; margin: 0 0 4px 8px; opacity: 0.8; }
 """

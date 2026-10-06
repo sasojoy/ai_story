@@ -5,6 +5,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from .martial_arts import Insight
 from .models import Content, TravelMode
 
 PLAYER = "player"  # 沿用舊名，指玩家本人；同伴不再用 key 存在 PlayerState 裡（見下）
@@ -83,7 +84,20 @@ class Summons(BaseModel):
     since: float = 0.0
 
 
-ONBOARDING_VERSION = 2  # 新手引導的版本：2＝有序章的新引導（新手引導計畫一）。比它小的是舊存檔，讀檔時當作走過序章（設計 7.2）
+ONBOARDING_VERSION = 3  # 新手引導的版本：2＝有序章的新引導（新手引導計畫一）、3＝再加入伍段（計畫二）。比 2 小的是舊存檔，讀檔時當作走過序章（設計 7.2）；
+# 比 3 小而且已經有陣營的，是入伍段上線之前就投靠的老手，讀檔時蓋成入伍段走完（enlist.mark_veteran，設計 7.2）
+
+
+class Sensing(BaseModel):
+    """有所感（悟意境設計第零節）：探索落在悟意境那一支、這一處有場景時，存一份待決的感悟，直到悟成或落空。
+    stage 是 "choose"（卡上三四個做法、還沒選）或 "draw"（選對又擲中，進了感悟狀態、等著畫那一筆）。"""
+
+    location: str  # 在哪裡有所感（地點 id）；人不在這裡了（被帶走、內容改版）就作廢
+    scene: str  # InsightScene id
+    order: list[int]  # 卡上做法的順序（洗過牌）：第 i 個選項是 scene.methods[order[i]]
+    stage: Literal["choose", "draw"] = "choose"
+    method: str | None = None  # 選了的做法的屬性（剛柔快慢），進了感悟狀態才有
+    serial: int = 0  # 這一次感悟的流水號（PlayerState.sense_serial）：鎖外看圖取名回來，C 段照它認是不是同一次
 
 
 class PlayerState(BaseModel):
@@ -125,9 +139,18 @@ class PlayerState(BaseModel):
     art_levels: dict[str, int] = Field(default_factory=dict)  # 每門學過的功法各自的「成」；改練時存進來／取出來
     # ── 武學與成長（設計第三、四節）──
     insights: list[str] = Field(default_factory=list)  # 悟得的意境 id，照悟得的先後
+    # ── 悟意境（悟意境設計第零節、0.2b；舊存檔沒這幾欄就是空的）──
+    sensing: Sensing | None = None  # 有所感、還沒了結的那一次
+    sense_serial: int = 0  # 有所感的流水號（每次有所感 +1）
+    sense_misses: dict[str, int] = Field(default_factory=dict)  # 地點 id → 選錯做法是第幾天：那一天這裡探索不再落在悟意境
+    # 私有的意境（畫圖悟來的，或拿私有的合併出來的）：id「悟:流水號」→ 本體；id 同時也記在 insights（學會了哪些）裡
+    own_insights: dict[str, Insight] = Field(default_factory=dict)
+    own_serial: int = 0  # 私有意境的流水號
     stat_points: int = 0  # 升級得到、還沒分配的屬性點（武學與成長設計 6.2）
     art_quality: dict[str, str] = Field(default_factory=dict)  # 功法 id → 自己那一份的品質（沒記＝全服登記的品質）
     art_mastery: dict[str, int] = Field(default_factory=dict)  # 功法 id → 修練往下一品失敗了幾次（熟練度）
+    # 功法 id → 合成時擲到的品質（Config.fuse_quality_odds）：熔的時候當成「登記時就有」，只有修練上去的幾階才有加給
+    art_rolled: dict[str, str] = Field(default_factory=dict)
     naming: str | None = None  # 第一個修到絕學、等著取正式名字的功法 id
     legend_items: int = 0  # 破境丹（Config.legend_item_name）的數量：探索撿到，玩家在修練頁勾了、衝絕學那一次才服一枚；角色每季重來
 
@@ -156,6 +179,8 @@ class PlayerState(BaseModel):
     guide_skipped: bool = False  # 按過「略過新手引導」：之後（含換季、第一季多出的步驟）都不畫對話框；步驟照樣記著
     guide_outro: bool = False  # 引導剛走完、結語還沒按「知道了」（對話框顯示結語）；略過的、早就做完的是 False
     onboarding: int = 0  # 這個角色的引導是照哪一版記的（ONBOARDING_VERSION）；舊存檔沒有這個欄位＝0
+    enlist_step: int | None = None  # 入伍段（新手引導計畫二）：None＝還沒開始；等於步數＝走完
+    enlist_end: bool = False  # 入伍段剛走完、引薦人的結尾還沒按「知道了」
     visited: set[str] = Field(default_factory=set)  # 去過的地點
     fortune: bool = False  # 本季的新立門戶福緣已經發生（或已經改送賀禮）
     # 新手福利（氣血回復加倍、新立門戶福緣）從哪一刻起算（第一季設計第十四節「從自己加入的那天起算」）：這個角色進這一季時的
@@ -175,6 +200,9 @@ class PlayerState(BaseModel):
     # 這一季已經補進江湖紀錄的時刻表大事 id（FB-038，見 Game._deliver_big_events）。大事 id 每季都一樣，
     # 所以這份每季重來：換季時新角色自然是空的（跟 battle_results_seen 不同，不跨季保留）
     events_seen: list[str] = Field(default_factory=list)
+    # 已經通知過（或不必通知）的絕學定名（FB-083，Game._deliver_renames）：武學 id。自己定的、拿到時就已經是定過名的、
+    # 通知過的都記在這裡，同一門只通知一次。武學跟著季走，所以這份也每季重來
+    renames_told: list[str] = Field(default_factory=list)
 
     # ── 推力與貢獻帳（計畫 T3、第一季設計第七節）；角色每季重來，跟著新角色清空 ──
     contrib: int = 0  # 本季替目前陣營推大勢記下的貢獻（散人不記）
@@ -421,6 +449,7 @@ class JournalEntry(BaseModel):
     # 這次行動順便完成的新手引導（「✔ 引導完成」、獎勵、說書人的下一步）：江湖紀錄的列表照舊畫，「剛剛」卡片不畫——
     # 說書人的話改在行動列上方的對話框（引導重做設計 8.1）
     guide: list[str] = Field(default_factory=list)
+    glyph: list[list[int]] = Field(default_factory=list)  # 有所感畫的那一筆（0～100 的點位）：紀錄裡畫一張小縮圖；舊紀錄沒有
 
 
 class GameState(BaseModel):
