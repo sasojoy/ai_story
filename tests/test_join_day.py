@@ -109,3 +109,17 @@ def test_with_the_switch_off_the_perks_still_follow_the_season_clock(content, wo
     assert not rules.season_one(content, s.world) and s.player.joined_at > 0
     assert not roster.newbie(s, content)  # 從季初算：已經過了 1 天
     assert roster.fortune_due(s, content)  # 季的第 2 天
+
+
+def test_the_perks_count_with_the_length_the_season_was_stamped_with(content, world):
+    """世界的天數看季曆，季曆照這一季開季時蓋的章（calendar.cal_scale(content, season)）算：開季之後設定的季長換了，
+    這一季的新手福利照舊，不會跟著新設定走（週末設定開開關關、換季之間改季長都不能讓跑著的那一季亂掉）。"""
+    install_season_one(content)
+    late = _late_joiner(content, world)
+    s = late.state
+    s.world.time = s.player.joined_at + 100.0
+    before = roster.since_join(s, content)
+    assert before == pytest.approx(100.0 * calendar.cal_scale(content, s.world))
+    content.config.season_days = 10.0  # 開季之後設定換了
+    assert roster.since_join(s, content) == before
+    assert roster.newbie(s, content) and not roster.fortune_due(s, content)

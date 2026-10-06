@@ -863,7 +863,7 @@ class Config(_Strict):
     neili_base: float = 300
     neili_per_level: float = 20
     neili_regen_hours: float = 2  # 氣血從零回滿所需時間
-    newbie_days: float = 3  # 每季前幾天氣血回復加倍
+    newbie_days: float = 3  # 每季前幾天氣血回復加倍（第一季：從自己加入那一刻起的季曆天，見 roster.since_join；beta 那一季：季的第幾天）
     seclusion_xinde_per_hour: int = 15
     xinde_hint_threshold: int = 50  # 心得擱到這個量、而且還有功夫沒練滿時，主畫面提示玩家去門下練功
     # ── 探索三選一（探索三選一設計）──
@@ -954,6 +954,7 @@ class Config(_Strict):
     duel_chance_on_fail: float = 0.4  # 招募失敗時，額外觸發對方要求決鬥的機率
     duel_fail_silver_loss: int = 15  # 決鬥吃虧：賠的銀兩（原本只有「你惹上了一場決鬥」的文字，沒有任何實際代價）
     recruit_consolation_xinde: int = 30  # 劇情事件想結識的人已經被別人招走時，改給的心得
+    # 新立門戶福緣的兩個天數：第一季是從自己加入那一刻起算的季曆天（roster.since_join），beta 那一季是季的第幾天
     fortune_day_min: int = 2  # 新立門戶福緣：第幾天起交友必定先觸發
     fortune_day_max: int = 7  # 新立門戶福緣：第幾天結束還沒發生就直接送上門
     # ── 賽季生命週期（第一季設計第十四節）──

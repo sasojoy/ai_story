@@ -72,9 +72,9 @@ class SharedWorldState(BaseModel):
     season_number: int = 1
     season_last_real: float | None = None
     season_opened: bool = False  # 這一季管理者開季了沒；False＝籌備中（見 season_phase）
-    # 賽季時鐘暫停（線上架構設計第四節、8.3「公告停機時賽季時鐘暫停，季末跟著往後延」）：管理者按「暫停」的現實時間；
-    # None＝沒有暫停。暫停中補算不推季的時間（對時點也不動）、引擎不推決戰、玩家不能行動、假人不出手；按「繼續」時對時點與
-    # 決戰的現實期限一起往後挪停的長度（resume_clock），所以停的這一段不算進賽季。舊資料沒有這一欄＝沒有暫停
+    # 賽季時鐘暫停（線上架構設計第四節、8.3「公告停機時賽季時鐘暫停，季末跟著往後延」）：按「暫停」的現實時間；None＝沒有暫停。
+    # 暫停中補算（catch_up_season）不推季的時間、對時點也不動；按「繼續」時對時點往後挪停的長度（resume_clock），
+    # 進行中的決戰期限與排好的決戰也跟著挪，所以停的這一段不算進賽季。舊資料沒有這一欄＝沒有暫停
     paused_at: float | None = None
     tianji: int = 0  # 天機：每次換季 +1，自創武學「名字 → 數值」的配方跟著換（跨季不滾雪球第三條）
 
@@ -315,9 +315,8 @@ class WorldStateStore(Protocol):
         跟著往後延。還沒收場的決戰，集結截止或這一回合開放的時間往後挪停的長度（battle_instance.shift_deadlines），
         剩下的時間跟暫停前一樣。排好、還沒開的決戰照原本的現實時間開（企劃者 2026-10-06 定 B3，world.keep_showdowns_on_time）；
         原本的時間落在暫停裡的記進 showdowns_waiting（B11）。
-        呼叫端緊接著的順序是（預檢 F2）：先 catch_up_season（暫停前還沒補算的那一段，裡面的一般大事要先結算；排在這一刻的決戰
-        在它們後面，補算完就開集結），再 world.start_pending_battle（補算沒有推進時開那一場）。省掉補算的話，決戰會在
-        它前面的一般大事還沒結算時就開成。"""
+        繼續之後緊接著還要補算、開集結（不補算的話，決戰會在它前面的一般大事還沒結算時就開成）：呼叫端不要自己接這幾步，
+        一律走 world.resume_season_clock。"""
         ...
 
     # ── 投靠名冊 ──

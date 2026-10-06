@@ -583,7 +583,7 @@ def keep_showdowns_on_time(season: WorldState, content: Content, skipped: float,
     一般大事時再往後挪一個曆時（timetable.clear_of_events）；也不挪到原本排在它前面、還沒結算的一般大事之前，最早排在那件之後
     一個曆時（B13：時刻表的先後不能亂，例如宛城要等第 3 週的結果定版本；停機很久才會碰到）。原本的時間落在暫停裡的（挪完已經不晚於 season_now，也就是繼續
     那一刻的季時間）改排在 season_now、記進 showdowns_waiting：呼叫端緊接著補算、再呼叫 start_pending_battle 就開集結（B11，
-    補算的理由見 WorldStateStore.resume_clock）；
+    見 resume_season_clock）；
     另一場還在打就排隊等它收場（照現在的規則）。已經開過、已經收場、已經在排隊的不動。開關關著或舊季什麼都不做。
     只改傳進來的 season（WorldStateStore.resume_clock 在它的 mutate 裡呼叫），不碰 store。"""
     if not calendar.season_one_on(season, content):
@@ -618,6 +618,24 @@ def start_pending_battle(world: WorldStateStore, content: Content, now: float) -
     if season.showdowns_waiting:
         msgs += open_waiting_showdown(world, content, now)
     return msgs
+
+
+def resume_season_clock(
+    world: WorldStateStore, content: Content, now: float, rng: random.Random, resume_line: str,
+) -> list[str] | None:
+    """讓賽季時鐘繼續走，每一條「繼續」的路都走這一個（管理者的按鈕 Game.admin_resume_clock、主機端 scripts/season_clock.py、
+    假人模擬）：三步一定照這個順序，不要各自再寫一遍——
+    1. resume_clock：停的這一段不算進賽季；排好、還沒開的決戰往前挪，原本的時間落在暫停裡的記進排隊；
+    2. catch_up_season：暫停前還沒補算的那一段（主機端直接暫停、或沒開排程時停在補算之前）裡面的一般大事先結算，不然排在這一刻的
+       決戰會在它前面的大事還沒結算時就開成（時刻表的先後不能亂）；補算有推進時，排隊的決戰就在它的結尾開集結；
+    3. start_pending_battle：補算沒有推進時（繼續的那一刻剛好落在曆時交界上、沒有零頭）由它開那一場。
+    回傳 [resume_line（{minutes} 換成停了幾分鐘）] ＋ 補算的訊息 ＋ 開集結的訊息：集結號角那一行可能出在 2 或 3，
+    兩邊都要接上，少一邊那一句就丟了。賽季時鐘沒有暫停回 None。呼叫端要拿著行動鎖（一筆交易做完），now 是現實時間。"""
+    span = world.resume_clock(content, now)
+    if span is None:
+        return None
+    caught = list(world.catch_up_season(content, now, rng))
+    return [resume_line.format(minutes=int(span // 60))] + caught + start_pending_battle(world, content, now)
 
 
 def _start_threshold_battle(world: WorldStateStore, content: Content, now: float) -> list[str]:
