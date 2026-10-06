@@ -4,9 +4,9 @@
 """
 from __future__ import annotations
 
-from . import cultivation, fusion, insights, materials, prologue, team, traits
+from . import cultivation, encounter, fusion, insights, martial_arts, materials, prologue, team, traits
 # 不 import 整個 library 模組：這個檔案自己有一個叫 library() 的函式
-from .library import cap_of, held_count, level_of, melt_problem, melt_value, owned_arts
+from .library import cap_of, held_count, level_of, melt_confirm, melt_note, melt_problem, melt_value, owned_arts
 from .martial_arts import MAX_LEVEL, Insight, MartialArt, next_quality, power_at, shown_creator
 from .models import Content
 from .state import PLAYER, GameState
@@ -36,6 +36,27 @@ def stat_uses(content: Content) -> list[tuple[str, str]]:
 
 def rules_line(content: Content) -> str:
     return "身上一門內功、一門武學：花心得練成，用意境修練衝品質；武學也能在「煉製」融意境衍生新武學，或兩門武學合成一門新的。"
+
+
+ATTRIBUTE_ORDER = "陰陽剛柔快慢虛實"  # 相剋的一對怎麼排字（設計 6.1 的順序）：「陰陽」「剛柔」，不寫成「陽陰」
+
+
+def attribute_line(content: Content) -> str:
+    """修練頁與煉製頁各摺一行的「屬性有什麼用」（W2）。屬性的規則有三條：內功與武學同屬性整個人威力加成（team.pairing，
+    Config.pairing_bonus）、兩門是相剋的一對打折（Config.pairing_penalty，哪幾對看 martial_arts.ATTRIBUTE_COUNTERS）、
+    武學克住對手的屬性時乘 encounter.COUNTER_BONUS。這裡一個數字都不自己寫，全部讀那幾處，改了規則這一句跟著變。
+    句子待 joy 潤。"""
+    cfg = content.config
+    pairs: list[str] = []
+    for attacker, defender in martial_arts.ATTRIBUTE_COUNTERS.items():  # 表是雙向的（陽克陰、陰克陽）：每一對只寫一次
+        pair = "".join(sorted((attacker, defender), key=ATTRIBUTE_ORDER.find))
+        if pair not in pairs:
+            pairs.append(pair)
+    penalty = _pct(-cfg.pairing_penalty).replace("-", "−")  # 減號用 −，跟加號並排好讀
+    return (
+        f"內功與武學同屬性，威力 {_pct(cfg.pairing_bonus)}；兩門相剋（{'、'.join(pairs)}）威力 {penalty}；"
+        f"武學克住對手的屬性，威力 ×{encounter.COUNTER_BONUS:g}。"
+    )
 
 
 def practice_hint(state: GameState, content: Content) -> str | None:
@@ -76,6 +97,11 @@ def _quality_note(state: GameState, content: Content, odds: fusion.QualityOdds) 
     if prologue.fuse_base(state, content) is not None:
         return "從下品起修"
     return f"品質看造化：{fusion.quality_odds_text(odds)}"
+
+
+# 爐裡只放了一樣東西時，煉製頁的說明那一行（W4）；句子待 joy 潤
+FORGE_ONE_ART = "再放一個意境，或另一門武學。"
+FORGE_ONE_INSIGHT = "再放一門武學，或另一個意境。"
 
 
 def forge_line(
@@ -131,6 +157,9 @@ def forge_line(
             f"花 {cfg.merge_xinde} 點心得、{cfg.merge_stamina} 點體力（你有 {xinde} 點心得）。"
         )
         problem = fusion.merge_problem(state, content, world, *insight_ids)
+    elif bool(art_id) != bool(insight_ids) and not other_art and len(insight_ids) <= 1:
+        # 爐裡只有一樣（W4）：說還缺什麼，不再是放什麼都一樣的總說明。不點名——不是你的武學也一樣回這一句，預覽探不出東西
+        return f"**煉製**　{FORGE_ONE_ART if art_id else FORGE_ONE_INSIGHT}{count}。"
     else:
         return (
             "**煉製**　放一門武學和一個意境，衍生出一門新武學（底留著）；放兩門武學，合出一門新的；"
@@ -156,20 +185,26 @@ def art_rows(state: GameState, content: Content, world: WorldStateStore) -> list
         if problem is None:
             target = next_quality(art.quality)
             failures = p.art_mastery.get(art_id, 0)
-            note = f"{cultivation.odds_for(state, content, target, failures)}% 晉為{target}・體力 {content.config.cultivate_stamina}"
+            note = f"{cultivation.odds_note(cultivation.odds_for(state, content, target, failures), target)}・體力 {content.config.cultivate_stamina}"
             legend = _legend_choice(state, content, target, failures)
         else:
             note = problem
         stuck = melt_problem(state, art_id, art.name, only=prologue.melt_only(state, content))  # 跟 library.melt_art 同一個判斷
+        value = melt_value(state, content, world, art_id) if stuck is None else 0
         forge = _best_forge(state, content, world, art_id, art)
         rows.append({
             "id": art_id, "name": art.name, "kind": art.kind, "quality": art.quality, "attribute": art.attribute,
             "level": level, "worn": art_id in (member.neigong_id, member.wugong_id), "insight": insight_name,
-            "card": art_card(art, level, insight_name, parent_names(art, content, world), traits.card_line(content, art)),
+            "card": art_card(
+                art, level, insight_name, parent_names(art, content, world), traits.card_line(content, art),
+                team.compare_with_worn(state, content, world, art),  # 身上那門自己是空字串（W6）
+            ),
             "cultivate": {"ok": problem is None, "note": note, "legend": legend},
             "melt": {
                 "ok": stuck is None,
-                "note": stuck if stuck is not None else f"退回心得 {melt_value(state, content, world, art_id)}",
+                "note": stuck if stuck is not None else melt_note(value),
+                # 熔煉鈕按下去的確認框問什麼（W9）：退 0 心得時照實說只空出一格；熔不掉的沒有確認框
+                "confirm": melt_confirm(content, art.name, art_id, value) if stuck is None else "",
             },
         } | ({} if forge is None else {
             # 卷軸卡的合成機率條：拿手上的意境裡上品機率最高的那一個算（forge_with 是它的名字）；序章、沒有意境不給
@@ -360,12 +395,30 @@ def parent_names(art: MartialArt, content: Content, world: WorldStateStore) -> l
     return [parent.name for parent in parents if parent is not None]
 
 
+def power_line(art: MartialArt, level: int) -> str:
+    """功法卡的威力那一行（W1：威力只寫這一行，不再另起一行寫第一成、第十成）：目前這一成與它的威力，括號裡是下一成與第十成的威力。
+    第九成的下一成就是第十成，只寫一個數字；已經第十成沒有下一成。數字都是 martial_arts.power_at 算的，這裡只排版。"""
+    head = f"第{level}成 {level_bar(level)}，威力 {power_at(art, level):.1f}"
+    if level >= MAX_LEVEL:
+        return head + POWER_MAXED
+    top = f"{power_at(art, MAX_LEVEL):.1f}"
+    if level == MAX_LEVEL - 1:
+        return head + POWER_NEXT_IS_TOP.format(top=top)
+    return head + POWER_NEXT.format(next=f"{power_at(art, level + 1):.1f}", top=top)
+
+
+# 威力那一行括號裡的句子（待 joy 潤）
+POWER_NEXT = "（下一成 {next}・第十成 {top}）"
+POWER_NEXT_IS_TOP = "（下一成即第十成 {top}）"
+POWER_MAXED = "（已達第十成）"
+
+
 def art_card(
     art: MartialArt, level: int, insight_name: str | None = None, parent_names: list[str] | None = None,
-    trait_line: str = "",
+    trait_line: str = "", compare_line: str = "",
 ) -> str:
-    """一門功法的功法卡（無限煉製設計 §8；FB-006）：名字・品質・屬性（有傾向再加正邪）、目前熟練度與威力、
-    第一成／第十成的威力、來源與融的意境，最後是模型寫的那句說明。
+    """一門功法的功法卡（無限煉製設計 §8；FB-006）：名字・品質・屬性（有傾向再加正邪）、目前熟練度與威力
+    （連同下一成與第十成的威力，W1 併成一行）、來源與融的意境，最後是模型寫的那句說明。
 
     來源（FB-017、武學與成長設計 3.4）：合成（origin == "fused"）寫「合成（某某 首創）」，某某是第一個合出這個配方的人
     寫給別人看的名號（shown_creator：名號；這一版之前匿名行走的人記下的是「某位少俠」，照舊）；
@@ -374,10 +427,11 @@ def art_card(
     parent_names 是武學＋武學的兩門來源的名字（設計 12.3），有兩個才寫「由【甲】與【乙】衍生」。
     trait_line 是功效那一行（traits.card_line，設計 13.6：這一門自己的功效，數字照這一份的品質算），有字時接在來源那一行之後；
     三處呼叫端（art_rows、detail、Game.art_detail）都要給，不給（內容沒有功效、舊的呼叫）就沒有這一行。
+    compare_line 是跟身上同一種那門比的一句（W6，team.compare_with_worn）：只有功法庫裡的功法才給，身上那門自己的卡不比；
+    有字時接在功效那一行之後、說明句之前。
     說明句只有真的有字時才有那一行：退路字表取名的功法、自創與本命武學都沒有說明，
     這時整行省略——不留空行、不出現 None（QA 寫進 FB-006 的驗收）。
     """
-    nxt = "已達第十成" if level >= MAX_LEVEL else f"{power_at(art, level + 1):.1f}"
     creator = shown_creator(art)  # 寫給別人看的名號：名號（首創一律具名，傳聞分層第七節）；這一版之前匿名記下的「某位少俠」照舊
     if art.preset:  # 師門配方（新手引導）：沒有首創者
         source = "師門傳下來的功夫"
@@ -393,14 +447,15 @@ def art_card(
         source = "本命武學"
     lines = [
         f"【{art.name}】{art.quality}・屬{art.attribute}" + (f"・{art.lean}派" if art.lean != "無" else ""),
-        f"第{level}成 {level_bar(level)}，威力 {power_at(art, level):.1f}（下一成：{nxt}）",
-        f"第一成 {power_at(art, 1):.1f}　第十成 {power_at(art, MAX_LEVEL):.1f}",
+        power_line(art, level),
         f"來源：{source}"
         + (f"　由【{parent_names[0]}】與【{parent_names[1]}】衍生" if parent_names and len(parent_names) == 2 else "")
         + (f"　意境：「{insight_name}」" if insight_name else ""),
     ]
     if trait_line:
         lines.append(trait_line)
+    if compare_line:
+        lines.append(compare_line)
     note = art.note.strip()
     if note:
         lines.append(note)

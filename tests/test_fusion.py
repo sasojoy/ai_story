@@ -458,7 +458,7 @@ def test_fb068_fuse_then_melt_through_the_game_nets_minus_one_and_the_page_promi
     (new,) = p.arts
     assert p.stats["xinde"] == 95
     (row,) = [r for r in game.art_rows() if r["id"] == new]
-    assert row["melt"] == {"ok": True, "note": "退回心得 4"}
+    assert row["melt"]["ok"] and row["melt"]["note"] == "退回心得 4"
     msgs = game.melt_art(new)
     assert p.stats["xinde"] == 99 and msgs[-1] == "心得 +4"
     assert "心得 +4" in game.state.journal[0].changes
@@ -539,6 +539,64 @@ def test_the_new_art_starts_at_the_first_level_when_it_goes_straight_onto_an_emp
     art, msgs = fusion.fuse(ready, content, world, named("旋風腿"), "basic_fist", "feng")
     assert (ready.player.member.wugong_id, ready.player.member.wugong_level) == (art.id, 1)
     assert ready.player.arts == ["basic_fist"] and any("第一成" in m for m in msgs)
+
+
+SWITCH_HINT = "到「修練」的功法庫把它改練上身。"  # W5：待 joy 潤
+
+
+def test_a_forged_art_that_goes_into_the_library_says_where_to_switch_to_it(ready, content, world):
+    """W5：結果說「收進功法庫」，卻沒人告訴玩家功法庫在哪、怎麼穿上——最後多一句指路。"""
+    art, msgs = fusion.fuse(ready, content, world, named("旋風腿"), "basic_fist", "feng")
+    assert art.id in ready.player.arts
+    assert msgs[-1] == SWITCH_HINT and msgs[-3] == "【旋風腿】收進功法庫。"  # 中間是跟身上那門的比較（W6，見下面）
+    assert library.SWITCH_HINT == SWITCH_HINT  # 句子只有一個出處
+
+
+def test_the_forge_result_compares_the_new_art_with_the_worn_one_before_the_switch_hint(ready, content, world):
+    """W6：合成的結果，收進功法庫之後、指路那句之前，多一句跟身上同一種那門的比較（第一成對第一成）；數字就是 team.compare_with_worn 的。"""
+    art, msgs = fusion.fuse(ready, content, world, named("旋風腿"), "basic_fist", "feng")
+    note = team.compare_with_worn(ready, content, world, art)
+    assert note.startswith("比身上的【粗淺拳腳】：威力 ") and "（第一成）" in note
+    assert msgs[-3:] == ["【旋風腿】收進功法庫。", note, SWITCH_HINT]
+
+
+def test_the_forge_result_has_no_comparison_when_the_art_is_worn_at_once_or_it_is_a_merge(ready, content, world):
+    ready.player.member.wugong_id, ready.player.member.wugong_level = None, 0
+    ready.player.arts = ["basic_fist"]
+    art, msgs = fusion.fuse(ready, content, world, named("旋風腿"), "basic_fist", "feng")
+    assert ready.player.member.wugong_id == art.id and all("比身上的" not in m for m in msgs)  # 直接上身：沒有東西可比
+    _, merged = fusion.merge(ready, content, world, named("燎原"), "huo", "feng")
+    assert all("比身上的" not in m for m in merged)
+
+
+def test_a_blended_art_is_compared_with_the_slot_of_its_own_kind(ready, content, world):
+    ready.player.member.neigong_id = "basic_breath"
+    art, msgs = fusion.blend(ready, content, world, named("渾元手"), "basic_fist", "basic_breath")
+    worn_name = "粗淺拳腳" if art.kind == "武學" else "粗淺吐納"
+    assert msgs[-2].startswith(f"比身上的【{worn_name}】：威力 ") and msgs[-1] == SWITCH_HINT
+
+
+def test_a_blended_art_that_goes_into_the_library_says_it_too(ready, content, world):
+    ready.player.member.neigong_id = "basic_breath"
+    art, msgs = fusion.blend(ready, content, world, named("渾元手"), "basic_fist", "basic_breath")
+    assert art.id in ready.player.arts and msgs[-1] == SWITCH_HINT
+
+
+def test_a_forged_art_that_is_worn_at_once_gets_no_switch_hint(ready, content, world):
+    """武學欄空著：新武學直接上身，不在功法庫裡，也就沒有「去功法庫改練」這句。"""
+    ready.player.member.wugong_id, ready.player.member.wugong_level = None, 0
+    ready.player.arts = ["basic_fist"]
+    art, msgs = fusion.fuse(ready, content, world, named("旋風腿"), "basic_fist", "feng")
+    assert ready.player.member.wugong_id == art.id
+    assert all(SWITCH_HINT not in m and "功法庫" not in m for m in msgs)
+
+
+def test_a_merge_and_other_ways_of_storing_an_art_get_no_switch_hint(ready, content, world):
+    """意境合併沒有放進功法庫；學藝、事件教的武學收進功法庫也不是「煉製」的結果，不加這句（只有合成、合成兩門才加）。"""
+    _, msgs = fusion.merge(ready, content, world, named("燎原"), "huo", "feng")
+    assert all(SWITCH_HINT not in m for m in msgs)
+    stored = library.store_art(ready, generate_from_name("甲乙丙", "武學", "甲乙丙", 0))
+    assert stored == ["【甲乙丙】收進功法庫。"]
 
 
 def test_two_players_racing_for_a_new_merge_end_up_with_one_registered_insight(ready, content, world):

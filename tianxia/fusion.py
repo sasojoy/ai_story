@@ -468,7 +468,20 @@ def fuse(
         state, cfg.fuse_xinde, cfg.fuse_stamina,
     )
     msgs += _special_rumor(state, content, art, first)
-    return art, msgs + library.store_art(state, art, quality)
+    return art, msgs + _store_forged(state, content, world, art, quality)
+
+
+def _store_forged(
+    state: GameState, content: Content, world: WorldStateStore, art: MartialArt, quality: str | None = None,
+) -> list[str]:
+    """合成出來的新武學放哪（fuse、blend 共用）：同 library.store_art（quality 是擲到的自己那一份品質）；進了功法庫（沒有直接上身）的，再接兩句——
+    跟身上同一種那門的比較（W6，team.compare_with_worn；沒東西可比就沒有這一句），與一句指路（W5）：結果說「收進功法庫」，
+    修練頁的清單也叫「功法庫」，最後這句把兩邊接起來，所以排在最後。學藝、事件教的武學不走這裡。"""
+    stored = library.store_art(state, art, quality)
+    if not stored or art.id not in state.player.arts:
+        return stored
+    note = team.compare_with_worn(state, content, world, art)
+    return stored + ([note] if note else []) + [library.SWITCH_HINT]
 
 
 def _fuse_line(
@@ -654,4 +667,4 @@ def blend(
     )
     msgs = [head + _arrival(art, first, landed)] + _charge(state, cfg.fuse_xinde, cfg.fuse_stamina)
     msgs += _special_rumor(state, content, art, first)
-    return art, msgs + library.store_art(state, art, quality)
+    return art, msgs + _store_forged(state, content, world, art, quality)

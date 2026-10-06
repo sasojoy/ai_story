@@ -57,6 +57,9 @@ def full(state: GameState, content: Content) -> bool:
     return held_count(state) >= cap_of(state, content)
 
 
+SWITCH_HINT = "到「修練」的功法庫把它改練上身。"  # 合成的結果最後一句（W5，fusion._store_forged 用）：「收進功法庫」之後告訴玩家功法庫在哪、怎麼穿上；待 joy 潤
+
+
 def store_art(state: GameState, art: MartialArt, quality: str | None = None) -> list[str]:
     """新拿到的武學放哪：對應的欄位空著就配上身（第一成），否則進功法庫。quality 是玩家這一份的品質
     （合成擲出來的，Config.fuse_quality_odds）：跟全服登記的不一樣時記成自己那一份的品質，也記成「擲到的」
@@ -188,6 +191,23 @@ def melt_value(state: GameState, content: Content, world: WorldStateStore, art_i
     )
 
 
+MELT_NO_XINDE = "沒有心得，只空出一格"  # 熔煉那一行與確認框用：退 0 心得的熔煉其實只是空出一格（W9，待 joy 潤）
+
+
+def melt_note(value: int) -> str:
+    """功法卡那一行「熔煉：…」：熔了退多少心得；退 0 時直說沒有心得、只空出一格（熔掉仍空出一格，所以照樣准熔，不騙人說退了什麼）。"""
+    return f"退回心得 {value}" if value > 0 else MELT_NO_XINDE
+
+
+def melt_confirm(content: Content, name: str, art_id: str, value: int) -> str:
+    """熔煉鈕按下去的確認框。退 0 心得時照實說（W9，待 joy 潤）；開局送的基礎武學在城鎮免費重學（_taught_here），
+    所以只有它們才多這一句——別的武學不免費，不能這樣寫。"""
+    if value > 0:
+        return f"把【{name}】熔成心得？熔掉就沒了。"
+    again = "（基礎武學在城鎮可以免費重學）" if art_id in content.config.starter_skills else ""
+    return f"把【{name}】熔掉？這門熔了沒有心得，只空出一格{again}。"
+
+
 def melt_art(
     state: GameState, content: Content, world: WorldStateStore, art_id: str, only: str | None = None,
 ) -> list[str]:
@@ -201,7 +221,10 @@ def melt_art(
     for record in (p.art_levels, p.art_quality, p.art_mastery, p.art_rolled):
         record.pop(art_id, None)
     p.stats["xinde"] = p.stats.get("xinde", 0) + refund
-    return [f"你把【{art.name if art else art_id}】熔成了心得。", f"心得 +{refund}"]
+    name = art.name if art else art_id
+    if refund <= 0:  # 退 0 心得（第一成的內容武學）：不寫「熔成了心得。心得 +0」，只說空出一格（W9，待 joy 潤）
+        return [f"你把【{name}】熔掉了，空出一格。"]
+    return [f"你把【{name}】熔成了心得。", f"心得 +{refund}"]
 
 
 def melt_insight(state: GameState, content: Content, world: WorldStateStore, insight_id: str) -> list[str]:

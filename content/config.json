@@ -27,6 +27,8 @@
     {"kind": "wild", "tags": [], "weights": {"insight": 40, "wild": 35, "event": 25}}
   ],
   "wild_neili_loss_factor": 0.5,
+  "cultivate_odds": {"中品": [40, 20], "上品": [10, 6], "絕學": [4, 3]},
+  "cultivate_sure_by": {"中品": 3},
   "cultivate_cap": {"絕學": 50},
   "legend_item_bonus": 15,
   "explore_legend_chance": 0.02,
