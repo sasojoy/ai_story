@@ -326,12 +326,30 @@ def parent_names(art: MartialArt, content: Content, world: WorldStateStore) -> l
     return [parent.name for parent in parents if parent is not None]
 
 
+def power_line(art: MartialArt, level: int) -> str:
+    """功法卡的威力那一行（W1：威力只寫這一行，不再另起一行寫第一成、第十成）：目前這一成與它的威力，括號裡是下一成與第十成的威力。
+    第九成的下一成就是第十成，只寫一個數字；已經第十成沒有下一成。數字都是 martial_arts.power_at 算的，這裡只排版。"""
+    head = f"第{level}成 {level_bar(level)}，威力 {power_at(art, level):.1f}"
+    if level >= MAX_LEVEL:
+        return head + POWER_MAXED
+    top = f"{power_at(art, MAX_LEVEL):.1f}"
+    if level == MAX_LEVEL - 1:
+        return head + POWER_NEXT_IS_TOP.format(top=top)
+    return head + POWER_NEXT.format(next=f"{power_at(art, level + 1):.1f}", top=top)
+
+
+# 威力那一行括號裡的句子（待 joy 潤）
+POWER_NEXT = "（下一成 {next}・第十成 {top}）"
+POWER_NEXT_IS_TOP = "（下一成即第十成 {top}）"
+POWER_MAXED = "（已達第十成）"
+
+
 def art_card(
     art: MartialArt, level: int, insight_name: str | None = None, parent_names: list[str] | None = None,
     trait_line: str = "",
 ) -> str:
-    """一門功法的功法卡（無限煉製設計 §8；FB-006）：名字・品質・屬性（有傾向再加正邪）、目前熟練度與威力、
-    第一成／第十成的威力、來源與融的意境，最後是模型寫的那句說明。
+    """一門功法的功法卡（無限煉製設計 §8；FB-006）：名字・品質・屬性（有傾向再加正邪）、目前熟練度與威力
+    （連同下一成與第十成的威力，W1 併成一行）、來源與融的意境，最後是模型寫的那句說明。
 
     來源（FB-017、武學與成長設計 3.4）：合成（origin == "fused"）寫「合成（某某 首創）」，某某是第一個合出這個配方的人
     寫給別人看的名號（shown_creator：名號；這一版之前匿名行走的人記下的是「某位少俠」，照舊）；
@@ -343,7 +361,6 @@ def art_card(
     說明句只有真的有字時才有那一行：退路字表取名的功法、自創與本命武學都沒有說明，
     這時整行省略——不留空行、不出現 None（QA 寫進 FB-006 的驗收）。
     """
-    nxt = "已達第十成" if level >= MAX_LEVEL else f"{power_at(art, level + 1):.1f}"
     creator = shown_creator(art)  # 寫給別人看的名號：名號（首創一律具名，傳聞分層第七節）；這一版之前匿名記下的「某位少俠」照舊
     if art.preset:  # 師門配方（新手引導）：沒有首創者
         source = "師門傳下來的功夫"
@@ -359,8 +376,7 @@ def art_card(
         source = "本命武學"
     lines = [
         f"【{art.name}】{art.quality}・屬{art.attribute}" + (f"・{art.lean}派" if art.lean != "無" else ""),
-        f"第{level}成 {level_bar(level)}，威力 {power_at(art, level):.1f}（下一成：{nxt}）",
-        f"第一成 {power_at(art, 1):.1f}　第十成 {power_at(art, MAX_LEVEL):.1f}",
+        power_line(art, level),
         f"來源：{source}"
         + (f"　由【{parent_names[0]}】與【{parent_names[1]}】衍生" if parent_names and len(parent_names) == 2 else "")
         + (f"　意境：「{insight_name}」" if insight_name else ""),

@@ -2655,7 +2655,7 @@ def test_the_practice_page_gets_a_card_for_each_worn_art(client, monkeypatch):
     cards = client.get("/api/menxia").json()["slot_cards"]
     assert [c["kind"] for c in cards] == list(server.KINDS)
     wugong, neigong = cards
-    assert "基礎拳腳" in wugong["card"] and "第一成" in wugong["card"]  # 第一成／第十成那一行是功法卡才有的
+    assert "基礎拳腳" in wugong["card"] and "第十成" in wugong["card"]  # 現在這一成、下一成與第十成的威力那一行是功法卡才有的（W1）
     assert "基礎吐納" in neigong["card"]
     game = server.game_for("沈青衫")
     monkeypatch.setattr(server.CONTENT.config, "starter_skills", [])  # 沒有開局送的武學：讀檔才不會把空著的欄位補回來

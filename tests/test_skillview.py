@@ -59,8 +59,7 @@ def test_detail_of_a_historical_skill(state, content, world):
     # 計畫六 Task 4：來源之後多一行功效（長拳屬剛、絕學 ×3：破甲 4%×3＝12%）
     assert text == (
         "【長拳】絕學・屬剛\n"
-        "第1成 ●○○○○○○○○○，威力 50.0（下一成：57.8）\n"
-        "第一成 50.0　第十成 120.0\n"
+        "第1成 ●○○○○○○○○○，威力 50.0（下一成 57.8・第十成 120.0）\n"  # W1：威力只寫一行
         "來源：本命武學\n"
         "功效：〔破甲〕對手強度當作低 12%"
     )
@@ -103,14 +102,14 @@ def test_an_art_card_ends_with_the_models_note():
     lines = card.split("\n")
     assert lines[0] == "【沉柳纏勁】上品・屬柔"
     assert lines[1].startswith("第3成 ●●●○○○○○○○，威力 ")
-    assert lines[3] == "來源：煉製（沈浪 首創）"
+    assert lines[2] == "來源：煉製（沈浪 首創）"
     assert lines[-1] == "以柔勁纏住兵刃，借力卸力。"
 
 
 def test_an_art_card_says_where_the_art_came_from():
     """FB-017：煉出來的寫「煉製（首創者 首創）」，取名自創的寫「自創（取名者 所創）」，其他是本命武學。"""
     def source(art: MartialArt) -> str:
-        return skillview.art_card(art, 1).split("\n")[3]
+        return skillview.art_card(art, 1).split("\n")[2]
 
     crafted = _crafted("")
     assert source(crafted) == "來源：煉製（沈浪 首創）"
@@ -130,12 +129,22 @@ def test_an_art_card_without_a_note_drops_the_whole_line():
         assert len(card.split("\n")) == len(with_note.split("\n")) - 1
 
 
-def test_an_art_card_shows_the_first_and_tenth_level_power():
+def test_an_art_card_says_the_power_on_one_line_with_the_next_level_and_the_tenth():
+    """W1：威力只在一行裡說——現在這一成、下一成、第十成；不再另起一行寫「第一成 …　第十成 …」。"""
     art = _crafted("")
     card = skillview.art_card(art, 3)
-    assert f"第一成 {power_at(art, 1):.1f}　第十成 {power_at(art, 10):.1f}" in card.split("\n")
-    assert f"威力 {power_at(art, 3):.1f}（下一成：{power_at(art, 4):.1f}）" in card
-    assert "（下一成：已達第十成）" in skillview.art_card(art, 10)
+    assert f"第3成 ●●●○○○○○○○，威力 {power_at(art, 3):.1f}（下一成 {power_at(art, 4):.1f}・第十成 {power_at(art, 10):.1f}）" in card.split("\n")
+    assert "第一成" not in card and "　第十成" not in card  # 舊的那一行不在了
+    assert sum(line.count("威力") for line in card.split("\n")) == 1  # 威力整張卡只出現一次（功效那一行說的是別的）
+
+
+def test_an_art_card_at_the_ninth_and_tenth_level_does_not_repeat_itself():
+    """第九成的下一成就是第十成，不寫兩個一樣的數字；第十成沒有下一成。"""
+    art = _crafted("")
+    ninth = skillview.art_card(art, 9).split("\n")[1]
+    assert ninth.endswith(f"威力 {power_at(art, 9):.1f}（下一成即第十成 {power_at(art, 10):.1f}）")  # 待 joy 潤
+    tenth = skillview.art_card(art, 10).split("\n")[1]
+    assert tenth.endswith(f"威力 {power_at(art, 10):.1f}（已達第十成）")  # 待 joy 潤
 
 
 # ── 練功提示（練成花心得：心得的去處是練成與合成）──────────────
@@ -417,7 +426,7 @@ def test_the_players_card_library_and_detail_show_the_players_own_quality(state,
     assert skillview.library(state, content, world)[0][0].startswith(f"武學　{label}")
     text = skillview.detail(state, content, world, "武學")
     assert text.startswith(f"【旋風腿】上品・屬{art.attribute}")
-    assert f"第一成 {28 * art.base_power / 8:.1f}" in text  # 威力也照自己的品質（上品區間，保留這門的微調）
+    assert f"第1成 ●○○○○○○○○○，威力 {28 * art.base_power / 8:.1f}（" in text  # 威力也照自己的品質（上品區間，保留這門的微調）
 
 
 def test_the_art_rows_show_the_players_own_quality_and_level(state, content, world):
@@ -612,10 +621,10 @@ def test_an_art_card_names_fused_and_basic_sources_and_the_insight():
     card = skillview.art_card(fused, 2, "風")
     lines = card.split("\n")
     assert lines[0] == "【旋風腿】下品・屬快・正派"
-    assert lines[3] == "來源：合成（沈浪 首創）　意境：「風」"
-    assert skillview.art_card(fused.model_copy(update={"creator": None}), 2).split("\n")[3] == "來源：合成"
+    assert lines[2] == "來源：合成（沈浪 首創）　意境：「風」"
+    assert skillview.art_card(fused.model_copy(update={"creator": None}), 2).split("\n")[2] == "來源：合成"
     basic = fused.model_copy(update={"origin": "basic", "lean": "無"})
-    assert skillview.art_card(basic, 1).split("\n")[3] == "來源：基礎武學"
+    assert skillview.art_card(basic, 1).split("\n")[2] == "來源：基礎武學"
     assert skillview.art_card(basic, 1).split("\n")[0] == "【旋風腿】下品・屬快"  # 沒有傾向就不寫「無派」
 
 
@@ -626,7 +635,7 @@ def test_an_art_card_shows_an_anonymous_first_fuser_as_a_nameless_hero():
         origin="fused", creator="沈浪", creator_shown="某位少俠", insight="feng",
     )
     card = skillview.art_card(fused, 2, "風")
-    assert card.split("\n")[3] == "來源：合成（某位少俠 首創）　意境：「風」" and "沈浪" not in card
+    assert card.split("\n")[2] == "來源：合成（某位少俠 首創）　意境：「風」" and "沈浪" not in card
 
 
 def test_forge_line_tells_both_a_merge_and_a_fuse_cost_stamina(state, content, world):
@@ -794,7 +803,7 @@ def test_the_card_of_a_blended_art_names_both_parents():
         update={"origin": "fused", "creator": "甲", "parents": ["a", "b"]},
     )
     card = skillview.art_card(art, 1, None, ["旋風腿", "烈火拳"])
-    assert card.split("\n")[3] == "來源：合成（甲 首創）　由【旋風腿】與【烈火拳】衍生"
+    assert card.split("\n")[2] == "來源：合成（甲 首創）　由【旋風腿】與【烈火拳】衍生"
 
 
 # ── 武學的功效（武學與成長設計 13.6；計畫六 Task 4）：功法卡一行功效、爐子寫已知配方的功效 ──────────────
@@ -811,15 +820,15 @@ def test_the_art_card_lists_its_traits(state, content, world):
 def test_the_trait_line_sits_after_the_source_and_before_the_note(content):
     art = _crafted("以柔勁纏住兵刃，借力卸力。").model_copy(update={"origin": "fused"})
     lines = skillview.art_card(art, 3, None, None, traits.card_line(content, art)).split("\n")
-    assert lines[3].startswith("來源：") and lines[4].startswith("功效：〔化勁〕") and lines[-1] == "以柔勁纏住兵刃，借力卸力。"
-    assert len(lines) == 6  # 名字、成數、威力、來源、功效、說明
+    assert lines[2].startswith("來源：") and lines[3].startswith("功效：〔化勁〕") and lines[-1] == "以柔勁纏住兵刃，借力卸力。"
+    assert len(lines) == 5  # 名字、成數與威力、來源、功效、說明
 
 
 def test_a_card_without_a_trait_line_is_exactly_as_before():
     """沒給功效那一行（舊呼叫、內容沒有功效）：功法卡一個字不變，不留空行。"""
     art = _crafted("以柔勁纏住兵刃，借力卸力。")
     assert skillview.art_card(art, 3) == skillview.art_card(art, 3, None, None, "")
-    assert len(skillview.art_card(art, 3).split("\n")) == 5
+    assert len(skillview.art_card(art, 3).split("\n")) == 4  # 名字、成數與威力、來源、說明
 
 
 def test_the_worn_slot_cards_carry_the_traits_too(state, content, world):
