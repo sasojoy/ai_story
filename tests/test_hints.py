@@ -1127,3 +1127,147 @@ def test_defecting_drops_the_old_sides_queued_hints_and_keeps_the_mentors(game):
     p.faction = None  # 散人沒有舊陣營：什麼都不丟
     defection.clear_progress(p)
     assert [n.id for n in p.hint_queue] == ["h_merge", "h_x"]
+
+
+# ── Task 3：再投靠的招呼（設計 7.1、10.6；話寫在 tutorial.json 入伍段的 rejoin）──────────────────────
+# 用真內容、第一季的規則打開；提示表清空（真的提示表另有測試，招呼不靠它）。
+
+JOIN_POINTS = {"guan": ("changshe", "老石"), "huang": ("huangjin_camp", "青禾"), "haoqiang": ("zhuo_militia_hall", "季伯平")}
+
+
+def _rejoiner(content, faction, **kwargs):
+    """上一季入伍段走完的人，這一季又是散人、站在那一邊的投靠點：他一投靠就是「再投靠」。"""
+    content.hints = Hints()
+    game = _real_game(content, at=JOIN_POINTS[faction][0], **kwargs)
+    p = game.state.player
+    p.tutorial_step = len(guide.steps(game.state, content))
+    p.enlist_step = len(content.tutorial.enlist.steps)
+    assert p.faction is None
+    return game
+
+
+def _join(game, faction):
+    game.choose(f"faction:{faction}")
+    game.choose("faction:confirm")
+    assert game.state.player.faction == faction
+
+
+@pytest.mark.parametrize("faction", ["guan", "huang", "haoqiang"])
+def test_rejoining_greets_in_the_recruiters_own_voice(on, faction):
+    game = _rejoiner(on, faction)
+    who = on.tutorial.enlist.recruiters[faction]
+    _join(game, faction)
+    box = game.guide_box()
+    assert (box["speaker"], box["text"], box["key"], box["end"], box["hint"]) == (who.name, who.rejoin, "s_rejoin", True, True)
+    assert box["speaker"] == JOIN_POINTS[faction][1] and who.rejoin  # 三位引薦人各說各的
+    assert f"【{who.name}】{who.rejoin}" in _journal_guides(game)  # 說過的話記進江湖紀錄（設計 6.2）
+    assert game.state.player.hint_queue[0].by == faction  # 叛投時作廢
+    assert game.state.player.enlist_step == len(on.tutorial.enlist.steps)  # 入伍段不重走
+    game.guide_ack()
+    assert game.guide_box() is None and game.state.player.hint_queue == []
+    assert "s_rejoin" not in game.state.player.hints_seen  # 每季都要打招呼，不記成說過
+
+
+def test_the_greeting_comes_every_season(on):
+    game = _rejoiner(on, "guan")
+    _join(game, "guan")
+    game.guide_ack()
+    game._reset_player_for_new_season(3)
+    p = game.state.player
+    assert p.faction is None and p.enlist_step == len(on.tutorial.enlist.steps) and not p.guide_skipped
+    p.location = "changshe"
+    _join(game, "guan")
+    assert game.guide_box()["key"] == "s_rejoin"
+
+
+def test_the_first_join_is_the_enlistment_not_a_greeting(on):
+    game = _rejoiner(on, "guan")
+    game.state.player.enlist_step = None
+    _join(game, "guan")
+    assert game.state.player.enlist_step == 0
+    assert game.state.player.hint_queue == [] and game.guide_box()["key"] == "r2_briefing"
+
+
+def test_someone_who_skipped_the_guide_gets_no_greeting(on):
+    game = _rejoiner(on, "guan")
+    game.state.player.guide_skipped = True  # 略過新手引導：序章與入伍段都算走完（enlist.skip），之後的季帶著這個旗
+    _join(game, "guan")
+    assert game.state.player.hint_queue == [] and game.guide_box() is None
+
+
+def test_no_greeting_for_bots_or_with_hints_off(on):
+    off = _rejoiner(on, "guan")
+    off.set_hints_off(True)
+    _join(off, "guan")
+    bot = _rejoiner(on, "guan", name="假人")
+    bot.state.player.bot = BotProfile(personality="普通", seed=1)
+    _join(bot, "guan")
+    assert off.state.player.hint_queue == [] and bot.state.player.hint_queue == []
+
+
+def test_defecting_is_not_a_rejoin(on):
+    """叛投：投靠之前已經有陣營，不打招呼。"""
+    game = _rejoiner(on, "guan")
+    game.state.player.faction = "guan"
+    game.state.player.location = "huangjin_camp"
+    game.choose("defect:huang")
+    game.choose("defect:confirm")
+    assert game.state.player.faction == "huang" and game.state.player.hint_queue == []
+
+
+def test_a_greeting_is_dropped_when_you_defect_before_reading_it(on):
+    game = _rejoiner(on, "guan")
+    _join(game, "guan")
+    assert [n.id for n in game.state.player.hint_queue] == ["s_rejoin"]
+    game.state.player.location = "huangjin_camp"
+    game.choose("defect:huang")
+    game.choose("defect:confirm")
+    assert game.state.player.faction == "huang" and game.state.player.hint_queue == []  # 老石的招呼隨舊陣營作廢
+
+
+def test_the_greeting_is_not_held_back_by_an_unread_state_hint(on):
+    """招呼是事件型的，當場排：不被排著的狀態提示擋住（限速只管狀態提示彼此）。"""
+    game = _rejoiner(on, "guan")
+    on.hints = Hints(hints=[HintDef(id="h_merge", by="mentor", text="「合。」")])
+    game.state.player.insights = ["feng", "huo"]
+    game._check_hints()
+    assert [n.id for n in game.state.player.hint_queue] == ["h_merge"]
+    _join(game, "guan")
+    assert [n.id for n in game.state.player.hint_queue] == ["h_merge", "s_rejoin"]
+
+
+def test_a_free_text_answer_that_joins_a_sect_also_greets(on):
+    """隨口應對（answer_event）拜入陣營名下的門派：同選項一樣，入伍段早就走完的人收到招呼。"""
+    from conftest import FixedRandom
+    from tianxia.models import Choice, Event
+
+    game = _rejoiner(on, "haoqiang")
+    game.state.player.location = "cao_manor"
+    event = Event(
+        id="t_join_free", title="結社", text="莊裡的人問你要不要入夥。", actions=[],
+        choices=[Choice(text="再想想", effect=Effect(text="你沒有表態。"))], free_text=FreeTextChoice(
+            prompt="自己想辦法……", stat="str", by="self", effect=Effect(join_sect="cao_manor"), fail_effect=Effect(text="沒成。"),
+        ),
+    )
+    on.events[event.id] = event
+    game._present(event)
+    game.rng = FixedRandom(0.0)
+    game.answer_event(game.free_text_request("我願意替莊裡跑腿"), 90)
+    assert game.state.player.faction == "haoqiang"
+    box = game.guide_box()
+    assert (box["speaker"], box["key"]) == ("季伯平", "s_rejoin")
+
+
+def test_queue_note_follows_the_same_gates_as_the_queue(game):
+    from tianxia import hints
+
+    note = HintNote(id="s_rejoin", speaker="老石", text="「又是你。」", by="guan")
+    assert hints.queue_note(game.state, note) is True
+    assert hints.queue_note(game.state, note) is False  # 同一條已經排著
+    game.state.player.hint_queue = []
+    game.state.player.hints_off = True
+    assert hints.queue_note(game.state, note) is False
+    game.state.player.hints_off = False
+    game.state.player.bot = BotProfile(personality="普通", seed=1)
+    assert hints.queue_note(game.state, note) is False
+    assert game.state.player.hint_queue == []

@@ -1134,6 +1134,7 @@ class Game:
             else:
                 msgs = self._choose(int(arg))
             self._begin_enlistment(faction_before)  # 投靠（或拜入陣營名下的門派）那一下：入伍段開始，同一下不算完成任何一步
+            self._greet_rejoin(faction_before)  # 入伍段早就走完的人再投靠：引薦人打個招呼（新手引導計畫三）
             msgs += self._hear_after_stamina(stamina)
             if kind == "choice":  # 選了事件的選項：序章的遇險、拜師、四景（新手引導計畫一）
                 msgs += self._guide(note_action(self.state, self.content, self.world, "choice"))
@@ -1191,6 +1192,7 @@ class Game:
             effect = choice.effect if success else choice.fail_effect
             msgs += self._apply(effect)
             self._begin_enlistment(faction_before)  # 隨口應對的結果也可能拜入門派
+            self._greet_rejoin(faction_before)  # 同樣：入伍段早就走完的人拜入門派，引薦人打個招呼（新手引導計畫三）
             msgs += check_thresholds(s, c, self.world, self._quick_client(), now=self.now)
             self._check_hints()  # 隨口應對了結了事件：同選項一樣，碰到的新玩法排一條、排著的上框（新手引導計畫三）
             journal.add_entry(s, self._draft.entry(s.world.time, msgs))
@@ -1365,6 +1367,18 @@ class Game:
         if not tutorial_active(self.state, self.content) and not p.guide_outro:
             p.guide_done = []
         self._journal_guide(enlist.told(self.state, self.content))  # 引薦人迎你進營的話，記在這一則（設計 6.2）；不進「剛剛」、不進完成列
+
+    def _greet_rejoin(self, faction_before: str | None) -> None:
+        """第二季起再投靠：入伍段早就走完（所以不重走），引薦人只打個招呼（設計 7.1、10.6；話寫在 tutorial.json 入伍段的 rejoin）。
+        這一下才從散人變成有陣營（叛投不算，faction_before 不是 None）、入伍段走完、沒略過引導、不是假人、沒關提示才有——
+        第一次投靠走的是入伍段；略過的人沒有要誰帶，跟開季那一句（s_return）一樣不打招呼。走提示的佇列（hints.queue_note）：
+        同樣上框、按「知道了」收起、記進江湖紀錄；每季都要說，所以不記進 hints_seen；by 記哪一邊，叛投時作廢。事件型的，當場排。"""
+        p = self.state.player
+        if faction_before is not None or p.faction is None or p.guide_skipped or not enlist.done(self.state, self.content):
+            return
+        who = enlist.recruiter(self.state, self.content)
+        if who is not None and who.rejoin:
+            hint_rules.queue_note(self.state, HintNote(id="s_rejoin", speaker=who.name, text=who.rejoin, by=p.faction))
 
     def _journal_guide(self, notes: list[str]) -> None:
         """引導的話記進江湖紀錄：在行動裡記進這一則的 guide；不在行動裡（例如打開輿圖）時接在最新一則的 guide。"""

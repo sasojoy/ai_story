@@ -50,18 +50,25 @@ def note_for(state: GameState, content: Content, hint_id: str) -> HintNote | Non
     return None
 
 
+def queue_note(state: GameState, note: HintNote) -> bool:
+    """把一條已經寫好的話排進佇列（提示表以外的：再投靠的招呼）：關了提示、假人不排；同一條已經排著就不再排。排進去回 True。
+    這裡不記說過：上框的那一刻才記（show），而且不在提示表裡的（每季都要說的）不記進 hints_seen。"""
+    p = state.player
+    if p.hints_off or p.bot or any(n.id == note.id for n in p.hint_queue):
+        return False
+    p.hint_queue.append(note)
+    return True
+
+
 def queue(state: GameState, content: Content, hint_ids: Iterable[str]) -> None:
     """把還沒說過、也還沒排著的排進去（照給的順序）。關了提示、假人都不排；說不了的不排（之後還有機會說）。
     這裡不記說過：提示上框的那一刻才記（show）。"""
-    p = state.player
-    if p.hints_off or p.bot:
-        return
     for hint_id in hint_ids:
-        if hint_id in p.hints_seen or any(n.id == hint_id for n in p.hint_queue):
+        if hint_id in state.player.hints_seen:
             continue
         note = note_for(state, content, hint_id)
         if note is not None:
-            p.hint_queue.append(note)
+            queue_note(state, note)
 
 
 def show(state: GameState, content: Content, note: HintNote) -> bool:

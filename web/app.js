@@ -1700,8 +1700,8 @@
         <div class="stack">
           <button class="btn" data-act="do" data-op="skip_tutorial">略過新手引導</button>
           ${S.recap ? `<button class="btn" data-act="recap" aria-expanded="${!!S.recapOpen}">重看序章</button>` : ""}
+          <label class="toggle"><input type="checkbox" id="hints-off" ${s.hints_off ? "checked" : ""}> 不再提示（碰到新玩法時的小提醒）</label>
         </div>
-        <label class="toggle"><input type="checkbox" id="hints-off" ${s.hints_off ? "checked" : ""}> 不再提示（碰到新玩法時的小提醒）</label>
         ${S.recap && S.recapOpen ? `<div class="recap card">${S.recap}</div>` : ""}
         <details class="fold"><summary>修改密碼</summary><form class="fold-body" id="pw-form">
           <label class="field"><span>舊密碼</span><input class="input" type="password" name="old" autocomplete="current-password"></label>

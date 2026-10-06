@@ -186,8 +186,15 @@ def test_skipping_stays_skipped_into_the_next_season():
     for game in games.values():
         game.sync(300.0)
         assert game.state.player.tutorial_step == base
-    assert games["略過的"].guide_box() is None
-    assert games["做完的"].guide_box() is None  # 沒有第一季才有的步驟了
+    # 沒有引導的步驟、沒有結語了。只剩碰到才說（新手引導計畫三）：開季一同步就補上這一季已經揭曉的大事，所以兩個人都聽到那一條（略過的人
+    # 照樣有提示）；做完的人另外多開季師父送行那一句，略過的人沒有要誰帶、師父不送
+    assert [n.id for n in games["做完的"].state.player.hint_queue][:1] == ["s_return"]
+    assert games["做完的"].guide_box()["key"] == "s_return" and games["做完的"].guide_box()["end"] is True
+    assert "s_return" not in [n.id for n in games["略過的"].state.player.hint_queue]
+    assert games["略過的"].guide_box()["hint"] is True  # 說書人與入伍段的框沒有，只有提示
+    for game in games.values():
+        game.set_hints_off(True)  # 之後看的是引導與入伍段的框：提示排著的清掉、不再排
+        assert game.guide_box() is None
     assert games["略過的"].state.player.guide_skipped and not games["做完的"].state.player.guide_skipped  # 略過照帶
     assert games["略過的"].state.player.enlist_step == len(on.tutorial.enlist.steps)  # 略過的人入伍段算走完，換季照帶
     assert games["做完的"].state.player.enlist_step is None  # 還沒投靠：投靠時才開始
