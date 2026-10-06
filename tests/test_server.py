@@ -1705,7 +1705,7 @@ def test_forge_line_previews_a_blend(client):
     _a_player_with_insights(client)
     before = open_characters().load("沈青衫").player
     out = client.post("/api/forge_line", json={"art": "jichu_quanjiao", "other_art": "jichu_tuna"}).json()
-    assert "【基礎拳腳】＋【基礎吐納】" in out["line"] and "從下品起修" in out["line"]
+    assert "【基礎拳腳】＋【基礎吐納】" in out["line"] and "品質看造化" in out["line"]
     saved = open_characters().load("沈青衫").player
     assert saved.arts == []  # 只是預覽：什麼都沒收、沒登記
     assert (saved.stats["xinde"], saved.stamina) == (before.stats["xinde"], before.stamina)

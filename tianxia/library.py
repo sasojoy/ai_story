@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from . import insights, team
-from .martial_arts import MartialArt, content_art
+from .martial_arts import QUALITIES, MartialArt, content_art
 from .models import Content, SkillDef
 from .state import GameState
 from .world_state import WorldStateStore
@@ -59,13 +59,15 @@ def full(state: GameState, content: Content) -> bool:
 
 def store_art(state: GameState, art: MartialArt, quality: str | None = None) -> list[str]:
     """新拿到的武學放哪：對應的欄位空著就配上身（第一成），否則進功法庫。quality 是玩家這一份的品質
-    （跟全服登記的不一樣時才記；現在沒有呼叫端給它——合成也從登記的下品起修）。
+    （合成擲出來的，Config.fuse_quality_odds）：跟全服登記的不一樣時記成自己那一份的品質，也記成「擲到的」
+    （art_rolled），熔的時候那幾階不給加給。
     這裡不看上限：該不該擋住由呼叫端決定（合成、學藝擋，奇遇給的、買來的不擋）。"""
     p = state.player
     if art.id in owned_arts(state):  # 已經有了（配在身上或在庫裡）：不重複收，也不動它的品質與熟練度
         return []
     if quality is not None and quality != art.quality:
         p.art_quality[art.id] = quality
+        p.art_rolled[art.id] = quality
     slot = "neigong_id" if art.kind == "內功" else "wugong_id"
     if getattr(p.member, slot) is None:
         setattr(p.member, slot, art.id)
@@ -177,9 +179,12 @@ def melt_value(state: GameState, content: Content, world: WorldStateStore, art_i
     mine = team.player_art(state, content, world, art_id)
     registered = team.resolve_art(art_id, content, world)
     minimum = 0 if art_id in content.skills else content.config.melt_min_refund
+    start = registered.quality if registered else "下品"
+    rolled = state.player.art_rolled.get(art_id)  # 合成時擲到的品質也算「登記時就有」：合到上品馬上熔掉不能賺加給
+    if rolled in QUALITIES and QUALITIES.index(rolled) > QUALITIES.index(start):
+        start = rolled
     return melt_refund(
-        content, state.player.art_levels.get(art_id, 1),
-        mine.quality if mine else "下品", registered.quality if registered else "下品", minimum,
+        content, state.player.art_levels.get(art_id, 1), mine.quality if mine else "下品", start, minimum,
     )
 
 
@@ -193,7 +198,7 @@ def melt_art(
         return [problem]
     refund = melt_value(state, content, world, art_id)
     p.arts.remove(art_id)
-    for record in (p.art_levels, p.art_quality, p.art_mastery):
+    for record in (p.art_levels, p.art_quality, p.art_mastery, p.art_rolled):
         record.pop(art_id, None)
     p.stats["xinde"] = p.stats.get("xinde", 0) + refund
     return [f"你把【{art.name if art else art_id}】熔成了心得。", f"心得 +{refund}"]

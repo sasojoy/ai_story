@@ -1081,6 +1081,10 @@ class Config(_Strict):
     merge_stamina: int = 5
     # 武學與成長設計 12.1：三種合成同一套價錢——武學＋意境、武學＋武學也收體力
     fuse_stamina: int = Field(default=5, ge=0)
+    # 合成出新武學（武學＋意境、武學＋武學）時，每個人自己那一份的品質照這個機率擲（企劃者 2026-10-06：
+    # 「不要直接顯示合成出來確定的品級，用機率，下品50%，中品30%，上品20%」）；權重，不必加起來是 100。
+    # 序章那一爐照劇本固定下品。擲到的品質算「登記時就有」，熔的時候不給加給（library.melt_value）
+    fuse_quality_odds: dict[str, float] = Field(default_factory=lambda: {"下品": 50, "中品": 30, "上品": 20})
     # 12.2 合到舊的：一個組合第一次被合時，候選每有一個，機會加這麼多，最多到 land_chance_cap（企劃者定九成）；0 就永遠長新的
     land_chance_per_candidate: float = Field(default=0.05, ge=0, le=1)
     land_chance_cap: float = Field(default=0.9, ge=0, le=1)

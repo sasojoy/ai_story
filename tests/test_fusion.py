@@ -69,6 +69,52 @@ def test_a_fused_art_always_starts_at_the_lowest_quality_whatever_the_base_is(re
     assert "（下品・屬" in msgs[0] and "中品" not in msgs[0]
 
 
+class Fixed:
+    """rng.choices 永遠挑 pick 那一個（擲品質用）。"""
+
+    def __init__(self, pick):
+        self.pick, self.weights = pick, None
+
+    def choices(self, population, weights):
+        self.weights = dict(zip(population, weights))
+        return [self.pick]
+
+
+@pytest.mark.parametrize("quality", ["下品", "中品", "上品"])
+def test_a_fused_art_rolls_its_own_quality(ready, content, world, quality):
+    """企劃者 2026-10-06：合出來的武學自己那一份的品質照機率擲（下品 50、中品 30、上品 20）；全服登記的照舊是下品，
+    結果句寫擲到的品質，修練從擲到的那一品接著往上。"""
+    rng = Fixed(quality)
+    art, msgs = fusion.fuse(ready, content, world, named("旋風腿"), "basic_fist", "feng", rng=rng)
+    assert rng.weights == {"下品": 50, "中品": 30, "上品": 20}
+    assert world.get_skill(art.id).quality == "下品"
+    assert team.art_quality(ready, art) == quality
+    assert f"（{quality}・屬" in msgs[0]
+    if quality == "下品":
+        assert art.id not in ready.player.art_quality and art.id not in ready.player.art_rolled
+    else:
+        assert ready.player.art_quality[art.id] == ready.player.art_rolled[art.id] == quality
+
+
+def test_a_blended_art_rolls_its_own_quality_too(ready, content, world):
+    ready.player.arts = ["lake_kick"]
+    art, msgs = fusion.blend(ready, content, world, named("湖風拳"), "basic_fist", "lake_kick", rng=Fixed("上品"))
+    assert team.art_quality(ready, art) == "上品" and "（上品・屬" in msgs[0]
+
+
+def test_following_a_known_recipe_rolls_for_your_own_copy(ready, content, world):
+    """照著別人合過的配方合（或合到舊的），拿到的是你還沒有的一門：一樣擲自己那一份。"""
+    fusion.fuse(other_player(content), content, world, named("旋風腿"), "basic_fist", "feng", rng=Fixed("下品"))
+    art, msgs = fusion.fuse(ready, content, world, must_not_ask(), "basic_fist", "feng", rng=Fixed("中品"))
+    assert team.art_quality(ready, art) == "中品" and "（中品・屬" in msgs[0]
+
+
+def test_quality_odds_text_writes_the_odds_not_a_grade(content):
+    assert fusion.quality_odds_text(content) == "下品 50%、中品 30%、上品 20%"
+    content.config.fuse_quality_odds = {"下品": 1, "中品": 1}
+    assert fusion.quality_odds_text(content) == "下品 50%、中品 50%"
+
+
 def test_fusing_on_a_peerless_base_gives_a_lowest_quality_copy_with_the_lowest_power(ready, content, world):
     """設計 3.4 的舊寫法會讓絕學的底合出絕學的複本，馬上熔掉就賺 40 心得（金錢迴圈）。"""
     ready.player.art_quality["basic_fist"] = "絕學"

@@ -326,18 +326,18 @@ def test_forge_line_shows_a_fuse(state, content, world):
     state.player.stats["xinde"] = 100
     line = skillview.forge_line(state, content, world, "basic_fist", ["feng"])
     assert "**合成**" in line and "【粗淺拳腳】＋「風」→ 一門新武學" in line and "屬快" in line
-    assert "從下品起修" in line and "花 5 點心得、5 點體力（你有 100 點心得）" in line and "⚠" not in line
+    assert "品質看造化：下品 50%、中品 30%、上品 20%" in line and "花 5 點心得、5 點體力（你有 100 點心得）" in line and "⚠" not in line
 
 
 @pytest.mark.parametrize("quality", ["下品", "中品", "上品", "絕學"])
 def test_forge_line_says_the_new_art_starts_at_the_lowest_quality_whatever_the_base_is(state, content, world, quality):
-    """企劃者 2026-10-05：合出來的武學一律從下品起修，底是絕學也一樣；說明不能再寫「品質跟底一樣」。"""
+    """企劃者 2026-10-05：合出來的武學一律品質看造化：下品 50%、中品 30%、上品 20%，底是絕學也一樣；說明不能再寫「品質跟底一樣」。"""
     state.player.member.wugong_id = "basic_fist"
     state.player.art_quality["basic_fist"] = quality
     state.player.insights = ["feng"]
     state.player.stats["xinde"] = 100
     line = skillview.forge_line(state, content, world, "basic_fist", ["feng"])
-    assert "從下品起修" in line and "屬快" in line and "一樣是" not in line
+    assert "品質看造化：下品 50%、中品 30%、上品 20%" in line and "屬快" in line and "一樣是" not in line
     assert "花 5 點心得、5 點體力（你有 100 點心得）" in line and "⚠" not in line
 
 
@@ -749,7 +749,7 @@ def test_forge_line_shows_a_blend(state, content, world):
     shape = fusion.blend_shape(
         team.resolve_art("basic_fist", content, world), team.resolve_art("lake_kick", content, world), seed,
     )
-    assert "**合成**" in line and f"→ 一門新{shape.kind}（屬{shape.attribute}，從下品起修）" in line
+    assert "**合成**" in line and f"→ 一門新{shape.kind}（屬{shape.attribute}，品質看造化：下品 50%、中品 30%、上品 20%）" in line
     assert "花 5 點心得、5 點體力（你有 100 點心得）" in line and "⚠" not in line
     assert "⚠ 要放兩門不同的武學。" in skillview.forge_line(state, content, world, "basic_fist", [], other_art="basic_fist")
 

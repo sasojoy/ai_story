@@ -94,6 +94,14 @@ def test_practice_cannot_be_lore(tmp_path):
         load_content(root)
 
 
+@pytest.mark.parametrize("odds", [{"絕學": 10}, {"下品": -1, "中品": 2}, {"下品": 0}])
+def test_bad_fuse_quality_odds_rejected(tmp_path, odds):
+    root = copy_fixture(tmp_path)
+    edit_json(root / "config.json", lambda d: d.update(fuse_quality_odds=odds))
+    with pytest.raises(ContentError, match="fuse_quality_odds"):
+        load_content(root)
+
+
 def test_last_ending_must_be_unconditional(tmp_path):
     root = copy_fixture(tmp_path)
     edit_json(root / "scenario.json", lambda d: d["endings"].pop())

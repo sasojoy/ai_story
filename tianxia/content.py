@@ -1023,6 +1023,11 @@ def validate(c: Content) -> None:
         for key in keys:
             need(key in valid, f"{where}：未知的{kind} {key}")
 
+    odds = c.config.fuse_quality_odds  # 合成擲品質：只擲得到下品～上品（絕學要修練），權重不能是負的、也不能全是 0
+    need(
+        set(odds) <= {"下品", "中品", "上品"} and all(w >= 0 for w in odds.values()) and sum(odds.values()) > 0,
+        "config.fuse_quality_odds 只能寫下品、中品、上品，權重不能是負的、也不能全是 0",
+    )
     for kind in c.config.practice_bonus:  # 熟練加成看的是本人的名聲（善名、惡名、名望……），不是戰鬥屬性
         need(kind in STATS and kind not in ("str", "agi", "con", "wis", "lore"), f"config.practice_bonus 的 {kind} 不是名聲類的屬性")
 

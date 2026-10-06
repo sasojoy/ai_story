@@ -5,10 +5,11 @@
 | 模型 | 只取名字＋一句說明，一個數字都不碰 |
 | 引擎 | 配方、屬性、正邪、品質、成本、全服登記 |
 
-合成：武學＋意境 → 新武學，底留著；種類跟著底；屬性與正邪跟著意境；品質一律從下品起修、從第一成開始
-（全服登記的那一筆是下品，玩家拿到的那一份也是，不繼承底的品質——企劃者 2026-10-05 改了設計 3.4：
+合成：武學＋意境 → 新武學，底留著；種類跟著底；屬性與正邪跟著意境；從第一成開始。全服登記的那一筆是下品；
+玩家拿到的那一份照 Config.fuse_quality_odds 擲（企劃者 2026-10-06，下品五成、中品三成、上品兩成；序章那一爐固定下品），
+擲到的那幾階熔的時候不給加給（library.melt_value）。不繼承底的品質——企劃者 2026-10-05 改了設計 3.4：
 絕學的底合出絕學的複本、馬上熔掉就賺 40 心得，是個無本的金錢迴圈；底的好壞只留在底身上，
-新武學靠修練一階一階往上爬，熔的時候才領得到那幾階的加給，見 library.melt_refund）。
+新武學靠修練一階一階往上爬，熔的時候才領得到那幾階的加給，見 library.melt_refund。
 合併：意境＋意境（可以是同一個）→ 新意境，兩個都留著；屬性與正邪照 insights 的規則。合併要花體力（Config.merge_stamina）——
 合併→熔掉→再合併每一圈淨賺心得，企劃者 2026-10-05 的裁示是不擋、讓每一圈都付一次體力。
 武學＋武學（設計 12.3）：兩門都留著，新武學的種類、屬性、正邪、記的意境都由兩門與配方決定（blend_shape），兩門來源記在
@@ -25,6 +26,7 @@ fuse／merge(proposed=...)（C，鎖內，整個重驗再登記、收費）。�
 from __future__ import annotations
 
 import hashlib
+import random
 from dataclasses import dataclass
 
 from . import insights, landing, library, naming, team, traits
@@ -37,7 +39,23 @@ from .world_state import WorldStateStore
 
 FUSE_PREFIX = "融|"
 MERGE_PREFIX = "合|"
-LOW_ONLY = {"下品": 100.0, "中品": 0.0, "上品": 0.0, "絕學": 0.0}
+LOW_ONLY = {"下品": 100.0, "中品": 0.0, "上品": 0.0, "絕學": 0.0}  # 全服登記的那一份一律是下品
+
+
+def roll_quality(content: Content, rng: random.Random | None) -> str:
+    """合成出新武學時，自己那一份的品質（企劃者 2026-10-06，Config.fuse_quality_odds）。rng 是 None 時不擲、
+    照劇本是下品（序章那一爐、直接呼叫的腳本與測試）。"""
+    odds = content.config.fuse_quality_odds
+    if rng is None or not odds:
+        return "下品"
+    return rng.choices(list(odds), weights=list(odds.values()))[0]
+
+
+def quality_odds_text(content: Content) -> str:
+    """合成前的說明寫機率，不寫確定的品級：「下品 50%、中品 30%、上品 20%」。"""
+    odds = content.config.fuse_quality_odds
+    total = sum(odds.values()) or 1
+    return "、".join(f"{q} {round(w * 100 / total)}%" for q, w in odds.items() if w > 0)
 
 
 def fuse_key(art_id: str, insight_id: str) -> str:
@@ -324,7 +342,7 @@ def _fuse_what(base: MartialArt, insight: Insight) -> str:
 
 def fuse(
     state: GameState, content: Content, world: WorldStateStore, client: OllamaClient | None,
-    art_id: str, insight_id: str, proposed: tuple[str | None, str] | None = None,
+    art_id: str, insight_id: str, proposed: tuple[str | None, str] | None = None, rng: random.Random | None = None,
 ) -> tuple[MartialArt | None, list[str]]:
     """武學＋意境 → 新武學（或合到一門已知的），回傳（那一門, 訊息）；不能合成時回 (None, [原因])，什麼都不收、不登記新的武學。
     合到你已經有的那一門也是 (None, [原因])、也不收錢，但配方照樣記下來（link_recipe；下一次按之前 fuse_problem 就知道）。
@@ -375,19 +393,24 @@ def fuse(
     if art.id in library.owned_arts(state):  # 合到的、先被別人登記的，剛好是你已經有的：不收錢、不重複收
         return None, [f"這一爐合出來還是【{art.name}】，你已經有了——換一組試試吧。"]
     cfg = content.config
-    # 新武學一律從登記的品質（下品）起修，不看底現在是什麼品質：store_art 不帶 quality，就不會記一筆個人品質
-    msgs = [_fuse_line(base, insight, art, first, landed, preset=preset is not None)] + _charge(
+    # 新武學自己那一份的品質照機率擲（不看底現在是什麼品質；序章 rng 是 None，固定下品），從擲到的那一品接著修
+    quality = roll_quality(content, rng)
+    msgs = [_fuse_line(base, insight, art, first, landed, preset=preset is not None, quality=quality)] + _charge(
         state, cfg.fuse_xinde, cfg.fuse_stamina,
     )
     msgs += _special_rumor(state, content, art, first)
-    return art, msgs + library.store_art(state, art)
+    return art, msgs + library.store_art(state, art, quality)
 
 
 def _fuse_line(
     base: MartialArt, insight: Insight, art: MartialArt, first: bool, landed: bool = False, preset: bool = False,
+    quality: str | None = None,
 ) -> str:
     verb = "合出來的竟是一門已有的" if landed else "衍生出一門"
-    head = f"你以【{base.name}】融入「{insight.name}」，{verb}{art.kind}【{art.name}】（{art.quality}・屬{art.attribute}）！"
+    head = (
+        f"你以【{base.name}】融入「{insight.name}」，{verb}{art.kind}【{art.name}】"
+        f"（{quality or art.quality}・屬{art.attribute}）！"
+    )
     if preset:  # 師門配方：每個新人合的都是師門傳下來的同一門，不寫成「由先到的那個新人首創」
         return head + (f"\n{art.note}" if art.note else "") + "\n這是師門傳下來的路數。"
     return head + _arrival(art, first, landed)
@@ -513,7 +536,7 @@ def _blend_what(a: MartialArt, b: MartialArt) -> str:
 
 def blend(
     state: GameState, content: Content, world: WorldStateStore, client: OllamaClient | None,
-    a: str, b: str, proposed: tuple[str | None, str] | None = None,
+    a: str, b: str, proposed: tuple[str | None, str] | None = None, rng: random.Random | None = None,
 ) -> tuple[MartialArt | None, list[str]]:
     """武學＋武學 → 新武學（或合到一門已知的），兩門都留著（設計 12.3）；不能合時回 (None, [原因])，什麼都不收、不登記新的武學。
     合到你已經有的那一門（放進爐裡的那兩門也算）也是 (None, [原因])、也不收錢，但配方照樣記下來。
@@ -553,12 +576,13 @@ def blend(
     if art.id in library.owned_arts(state):  # 合到的、先被別人登記的，剛好是你已經有的：不收錢、不重複收
         return None, [f"這兩門合出來還是【{art.name}】，你已經有了——換一門吧。"]
     cfg = content.config
+    quality = roll_quality(content, rng)  # 同 fuse：自己那一份的品質照機率擲
     verb = "合出來的竟是一門已有的" if landed else "衍生出一門"
     lead, follow = (art_a, art_b) if a <= b else (art_b, art_a)  # 照 id 排，跟 parents、功法卡的「由【甲】與【乙】衍生」同一個先後（FB-073）
     head = (
         f"你把【{lead.name}】與【{follow.name}】合而為一，{verb}{art.kind}【{art.name}】"
-        f"（{art.quality}・屬{art.attribute}）！"
+        f"（{quality}・屬{art.attribute}）！"
     )
     msgs = [head + _arrival(art, first, landed)] + _charge(state, cfg.fuse_xinde, cfg.fuse_stamina)
     msgs += _special_rumor(state, content, art, first)
-    return art, msgs + library.store_art(state, art)
+    return art, msgs + library.store_art(state, art, quality)
