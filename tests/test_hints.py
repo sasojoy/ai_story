@@ -529,6 +529,7 @@ def test_a_failed_refinement_triggers_refine_fail(game):
 
 
 def test_a_lost_fight_triggers_lose_but_a_win_or_a_lost_showdown_does_not(game):
+    """（落敗；僵持也算，見下一個測試。）"""
     game.skip_tutorial()
     for record in (_lost_fight(tier="大勝"), _lost_fight(kind="showdown")):
         game.state.battles = [record]
@@ -540,6 +541,47 @@ def test_a_lost_fight_triggers_lose_but_a_win_or_a_lost_showdown_does_not(game):
         game._check_hints()
         assert _key(game) == "h_lose", kind
         game.guide_ack()
+
+
+@pytest.mark.parametrize("kind", ["train", "wild", "event"])
+def test_the_first_fight_you_did_not_win_triggers_lose_even_when_it_is_only_a_draw(game, kind):
+    """h_lose 是「第一場沒打贏的仗」：僵持與落敗都算（FB-095 旁的規劃者決定；以前只有落敗，被閃成僵持的人師父不開口）。"""
+    game.skip_tutorial()
+    game.state.battles = [_lost_fight(kind=kind, tier="險勝")]  # 險勝是贏
+    game._check_hints()
+    assert game.guide_box() is None
+    game.state.battles = [_lost_fight(kind=kind, tier="僵持")]
+    game._check_hints()
+    assert _key(game) == "h_lose" and "h_lose" in game.state.player.hints_seen
+
+
+def test_a_real_draw_from_a_dodge_in_a_travelling_fight_brings_the_mentor(on):
+    """整條路：真的遊歷、結果被身法閃成僵持（team.fight 寫死），行動做完師父就開口。"""
+    from unittest import mock
+
+    from tianxia import team
+    from tianxia.encounter import EncounterResult
+    from tests.test_orders import _game as _fresh
+
+    game = _fresh(on, at="huangjin_camp")
+    game.skip_tutorial()
+    assert game.guide_box() is None
+    draw = EncounterResult(tier="僵持", margin=-10, our_power=10, difficulty=60)
+    with mock.patch.object(team, "fight", return_value=draw):
+        game.choose("act:train")
+    assert game.state.battles[-1].tier == "僵持"
+    assert _key(game) == "h_lose"
+
+
+def test_a_draw_after_a_win_still_counts_and_a_second_non_win_is_not_said_again(game):
+    game.skip_tutorial()
+    game.state.battles = [_lost_fight(tier="大勝"), _lost_fight(tier="僵持")]
+    game._check_hints()
+    assert _key(game) == "h_lose"
+    game.guide_ack()
+    game.state.battles.append(_lost_fight(tier="落敗"))  # 第二場沒打贏的：只說一次
+    game._check_hints()
+    assert game.guide_box() is None and _queued(game) == []
 
 
 def test_an_injury_triggers_injury(game):

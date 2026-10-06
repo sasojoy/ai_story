@@ -1497,7 +1497,7 @@ class Game:
             self._surface_hint()
 
     def _hint_triggers(self, only: set[str] | None = None) -> list[str]:
-        """此刻成立的碰到才說（設計 5.2）：看的都是角色現在的狀態（修練失敗留下熟練度、戰報裡有一場落敗、路上見聞真的發生過……），
+        """此刻成立的碰到才說（設計 5.2）：看的都是角色現在的狀態（修練失敗留下熟練度、戰報裡有一場沒打贏的、路上見聞真的發生過……），
         「第一次」由 hints_seen 管。順序照設計的表：師父的在前、引薦人的在後。h_snubbed（被名將打發）與 h_mandate（玉璽碎片的秘密
         揭開）不看狀態，是事件發生時自己叫 _hint，不在這裡。only 給了就只算裡面的條：_check_hints 只算書裡有、還沒說過、也還沒排著的，
         其餘每次行動與每次同步都是白算一遍（決戰要讀資料庫、大勢人物要算此刻的所在）。"""
@@ -1516,7 +1516,8 @@ class Game:
                 on.append("h_clash")
         if want("h_refine_fail") and any(v > 0 for v in p.art_mastery.values()):  # 修練失敗才會累積熟練度，成功就歸零
             on.append("h_refine_fail")
-        if want("h_lose") and any(r.tier == "落敗" for r in s.battles if r.kind in ("train", "wild", "event")):
+        # 第一場沒打贏的仗：僵持與落敗都算（以前只算落敗：身法閃成僵持的人師父不開口）；決戰與挑戰本人不在這三種裡
+        if want("h_lose") and any(r.tier not in team.WIN_TIERS for r in s.battles if r.kind in ("train", "wild", "event")):
             on.append("h_lose")
         if want("h_injury") and p.member.injury > 0:
             on.append("h_injury")
