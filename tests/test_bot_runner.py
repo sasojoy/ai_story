@@ -516,10 +516,22 @@ def lock_events(monkeypatch):
     return events
 
 
-def _namer(world, events, name="凌風拳"):
+def _check_b_call(world, content, budget, person):
+    """B 段叫 naming.generate 的方式：一件最多 bot_naming_budget_seconds 秒（planner 的「一件最多 30 秒」；漏了 budget，
+    模型慢的時候一次取名就照 ollama_timeout 的 120 秒、兩趟、最多三次佔著顯卡，整輪假人都被拖住），
+    角色名號的查詢是這個世界的 is_character_name（模型取到江湖上角色的名號就再取一次）。這兩個引數的預設值是 None，
+    假的 generate 照 naming.generate 的簽名收，漏帶的話預設值會把它藏起來——所以在這裡明確比對。"""
+    assert budget == content.config.bot_naming_budget_seconds
+    assert person == world.is_character_name
+
+
+def _namer(world, events, name="凌風拳", fail=False):
     def generate(client, content, request, budget=None, person=None):
         events.append("name")
         assert not world.db.writing()  # 這個執行緒沒拿著寫入交易
+        _check_b_call(world, content, budget, person)
+        if fail:  # 模型叫不動：取不到名字
+            return None, ""
         return (request.choices[0], "") if request.choices else (name, "一句話。")
     return generate
 
@@ -585,6 +597,7 @@ def test_a_recipe_claimed_while_the_bot_waited_is_not_charged_twice(runner, worl
     _armed_bots(runner, content, clock, monkeypatch)
 
     def generate(client, content_, request, budget=None, person=None):
+        _check_b_call(world, content_, budget, person)
         player = armed(content, world, name="真人")
         player.forge("basic_fist", ["feng"], proposed=("先到拳", "一句話。"))
         return ("後到拳", "一句話。")
@@ -617,9 +630,10 @@ def test_a_bot_names_its_mastered_art_outside_the_lock(runner, world, content, c
     victim = _master_ready(runner, content, world, clock, monkeypatch)
     monkeypatch.setattr(naming, "generate", _namer(world, lock_events, name="破雲拳"))
     lock_events.clear()
-    runner.tick()
+    report = runner.tick()
     at = lock_events.index("name")
     assert lock_events[at - 1] == "exit" and lock_events[at + 1] == "enter"
+    assert report.named == 1 and report.failed == 0
     assert open_characters().load(victim).player.naming is None
     assert any("為之定名【破雲拳】" in r.text for r in world.get_season().chronicle)
 
@@ -629,7 +643,7 @@ def test_a_failed_naming_does_not_claim_the_recipe_with_a_table_name(runner, wor
     真人在模型掛掉時會走字表，但真人本來就什麼名字都有，假人一個接一個都是字表風格就不一樣。沒收費、下次再來。"""
     runner.client = object()
     _armed_bots(runner, content, clock, monkeypatch)
-    monkeypatch.setattr(naming, "generate", lambda client, content_, request, budget=None, person=None: (None, ""))
+    monkeypatch.setattr(naming, "generate", _namer(world, [], fail=True))
     report = runner.tick()
     assert report.named == 1 and report.failed == 0
     assert world.lookup_recipe(fusion.fuse_key("basic_fist", "feng")) is None
@@ -639,11 +653,11 @@ def test_a_failed_naming_does_not_claim_the_recipe_with_a_table_name(runner, wor
     assert world.lookup_recipe(fusion.fuse_key("basic_fist", "feng")) is None
 
 
-def test_a_failed_naming_goes_through_for_a_pick_but_not_for_a_new_name(runner, content, clock, monkeypatch):
+def test_a_failed_naming_goes_through_for_a_pick_but_not_for_a_new_name(runner, world, content, clock, monkeypatch):
     """取名失敗跳過 C 段只針對「沒有候選的取名單」：挑一個的單（choices 不空）沒挑到，C 段照常跑，由規則挑，不產生新名字。"""
     runner.client = object()
     _armed_bots(runner, content, clock, monkeypatch)
-    monkeypatch.setattr(naming, "generate", lambda client, content_, request, budget=None, person=None: (None, ""))
+    monkeypatch.setattr(naming, "generate", _namer(world, [], fail=True))
     applied = []
     monkeypatch.setattr(bot_policy, "apply_job", lambda game, job, proposed: applied.append(job) or [])
     name = _bots()[0].player.name
@@ -662,8 +676,8 @@ def test_a_failed_mastery_naming_still_names_with_a_different_word_list_name(
 ):
     """絕學定名不一樣：模型叫不動也要定（沿用原名江湖史同一個名字出現兩次，看得出是假人），用字表另組、一定跟原名不同。"""
     victim = _master_ready(runner, content, world, clock, monkeypatch)
-    monkeypatch.setattr(naming, "generate", lambda client, content_, request, budget=None, person=None: (None, ""))
-    runner.tick()
+    monkeypatch.setattr(naming, "generate", _namer(world, [], fail=True))
+    assert runner.tick().failed == 0
     assert open_characters().load(victim).player.naming is None
     lines = [r.text for r in world.get_season().chronicle if "練成絕學，為之定名【" in r.text]
     assert len(lines) == 1 and "為之定名【凌風拳】" not in lines[0]
@@ -678,6 +692,7 @@ def test_a_bot_that_lost_the_lock_after_naming_drops_the_name(runner, world, con
     held = []
 
     def generate(client, content_, request, budget=None, person=None):
+        _check_b_call(world, content_, budget, person)
         transaction = holder.transaction()
         transaction.__enter__()  # 取名的時候（鎖外），真人接著拿了行動鎖
         held.append(transaction)
@@ -701,12 +716,63 @@ def test_a_season_that_ended_while_the_bot_waited_for_a_name_applies_nothing(run
     _armed_bots(runner, content, clock, monkeypatch)
 
     def generate(client, content_, request, budget=None, person=None):
+        _check_b_call(world, content_, budget, person)
         world.mutate_season(lambda season: setattr(season, "ended", True))  # 取名的時候季結束了
         return ("凌風拳", "一句話。")
 
     monkeypatch.setattr(naming, "generate", generate)
     report = runner.tick()
     assert report.named == 1  # 名字確實請過了（不是根本沒開單）
+    assert world.lookup_recipe(fusion.fuse_key("basic_fist", "feng")) is None
+
+
+def test_the_apply_step_syncs_the_bot_first_so_a_season_that_ran_out_meanwhile_is_seen(
+    runner, world, content, clock, monkeypatch,
+):
+    """C 段重讀角色之後先 game.sync：取名花的時間讓季走到了季末，補算會把季收掉，那一爐就不開、不收費。
+    沒有 sync，重讀的角色身上掛的是空的賽季（不是這一季）：看不出季已經完了、照樣開爐，還會把一份空的賽季寫回全服。"""
+    runner.client = object()
+    _armed_bots(runner, content, clock, monkeypatch)
+    trends = []
+
+    def generate(client, content_, request, budget=None, person=None):
+        _check_b_call(world, content_, budget, person)
+        world.mutate_season(lambda season: setattr(season, "time", content.config.season_days * 86400 - 30))
+        trends.append(dict(world.get_season().trends))
+        clock[0] += 3600  # 取名花了一小時：C 段拿到鎖補算的時候，季就走過季末了
+        return ("凌風拳", "一句話。")
+
+    monkeypatch.setattr(naming, "generate", generate)
+    report = runner.tick()
+    assert report.named == 1 and report.failed == 0
+    assert world.get_season().ended  # 補算把它收了
+    assert trends[0] and set(world.get_season().trends) == set(trends[0])  # 全服的賽季沒被空的賽季蓋掉（補算本來就會動數字）
+    assert world.lookup_recipe(fusion.fuse_key("basic_fist", "feng")) is None
+    bot_state = next(s for s in _bots() if s.player.insights == ["feng"])
+    assert library.owned_arts(bot_state) == ["basic_fist"] and bot_state.player.stats["xinde"] == 100
+
+
+def test_a_bot_retired_by_a_new_season_while_waiting_for_a_name_is_left_alone(
+    runner, world, content, clock, monkeypatch,
+):
+    """取名的時候管理者開了下一季：第 1 季的假人都算退隱，C 段不能把它補算進新的一季、存成這一季的角色
+    （它會帶著新的賽季號出現在榜單上，直到被叫醒）。存檔一個位元都不動、什麼都沒開。"""
+    runner.client = object()
+    _armed_bots(runner, content, clock, monkeypatch)
+    snapshots = []
+
+    def generate(client, content_, request, budget=None, person=None):
+        _check_b_call(world, content_, budget, person)
+        world.mutate_season(lambda season: setattr(season, "ended", True))
+        assert world.next_season(content, now=clock[0])
+        clock[0] += 120  # 取名花了一點時間：C 段要是還去補算、存檔，角色的 last_real 就變了
+        snapshots.append(_saves_snapshot())
+        return ("凌風拳", "一句話。")
+
+    monkeypatch.setattr(naming, "generate", generate)
+    report = runner.tick()
+    assert report.named == 1 and report.failed == 0
+    assert _saves_snapshot() == snapshots[0]
     assert world.lookup_recipe(fusion.fuse_key("basic_fist", "feng")) is None
 
 
