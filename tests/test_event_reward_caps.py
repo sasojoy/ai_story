@@ -1,7 +1,8 @@
 """補寫事件的獎勵上限：三份補寫的事件池共用這一個檢查（以前三個檔各寫一份）。
 - 探索補寫：content/events/explore_<大區>.json（tests/test_explore_variety.py）；
 - 城鎮交友補寫：content/events/social_<大區>.json（tests/test_socialize_variety.py）；
-- 四個新大區的探索事件：content/events/<大區>.json（tests/test_events_new_regions.py）。
+- 新大區的探索事件：content/events/<大區>.json（tests/test_events_new_regions.py）。大地圖上的大區（content/map.json）有自己
+  事件檔的都算，不寫死是哪幾個：多一個大區的事件檔，它的上限照樣有人查。
 每個選項結果（effect、fail_effect 各自）都要在上限之內；各池子的上限照原本各檔寫的，不全一樣（POOLS）。
 選項幾個、檢定的屬性與難度、要不要 fail_effect、傳聞幾則這些結構上的檢查留在各自的檔案。"""
 from __future__ import annotations
@@ -11,10 +12,12 @@ from pathlib import Path
 
 import pytest
 
-from tianxia.content import load_content
+from conftest import real_content
 
 CONTENT_DIR = Path(__file__).parent.parent / "content"
 EVENTS = CONTENT_DIR / "events"
+MAP_REGIONS = [region["id"] for region in json.loads((CONTENT_DIR / "map.json").read_text(encoding="utf-8"))["regions"]]
+REGION_FILES = [EVENTS / f"{region}.json" for region in MAP_REGIONS if (EVENTS / f"{region}.json").exists()]
 ATTRS = ("str", "agi", "con", "wis")
 BASE_KEYS = {"silver", "good", "evil", "fame", *ATTRS}
 ADDED = ("flags_add", "world_flags_add", "next_event", "recruit", "join_sect")  # 補寫的事件不能接劇情、不能招人、不能入門派
@@ -28,7 +31,7 @@ POOLS = {
     "social": ([*sorted(EVENTS.glob("social_*.json"))], {
         "xinde": 12, "trend": False, "materials": False, "banned": (*ADDED, "learn_skills", "marks"), "free_text": True,
     }),
-    "region": ([EVENTS / f"{r}.json" for r in ("youzhou", "jizhou", "luoyang", "nanyang")], {
+    "region": (REGION_FILES, {
         "xinde": None, "trend": True, "materials": True, "banned": ADDED, "free_text": False,
     }),
 }
@@ -37,7 +40,17 @@ CASES = [(pool, path) for pool, (paths, _) in POOLS.items() for path in paths]
 
 @pytest.fixture(scope="module")
 def content():
-    return load_content(CONTENT_DIR)
+    return real_content()
+
+
+def test_the_region_pool_is_every_map_region_with_its_own_event_file(content):
+    """大區的池子照內容推出來（大地圖上有 content/events/<大區>.json 的大區）：現在是四個；每一個在
+    test_events_new_regions 的 REGIONS 也都有一列（地點與事件數的結構檢查），兩邊不會一邊有、一邊沒有。"""
+    from tests.test_events_new_regions import REGION_IDS
+
+    with_files = [region.id for region in content.map.regions if (EVENTS / f"{region.id}.json").exists()]
+    assert [path.stem for path in REGION_FILES] == with_files
+    assert len(with_files) >= 4 and set(with_files) == set(REGION_IDS)
 
 
 @pytest.mark.parametrize(("pool", "path"), CASES, ids=[f"{pool}-{path.stem}" for pool, path in CASES])
