@@ -270,18 +270,18 @@ def test_heal_button_shows_the_price_and_matches_what_healing_really_charges(con
     from tianxia import team
 
     member, p = state.player.member, state.player
-    assert skillview.heal_button(state, content) == {
-        "label": "療傷（沒有內傷）", "ok": False, "why": "氣血無恙，不用療傷。",
-    }
+    # 卷軸卡的療傷鈕自己寫字（內傷與 heal_cost）；伺服器只說按不按得下去與原因，不再送 label（review-ap3 M4：沒有人讀它）
+    assert skillview.heal_button(state, content) == {"ok": False, "why": "氣血無恙，不用療傷。"}
     member.injury, p.stats["silver"] = 35.0, 100
-    assert skillview.heal_button(state, content) == {"label": "療傷（要 18 兩）", "ok": True, "why": None}  # 每 2 點內傷 1 兩，進位
+    assert skillview.heal_button(state, content) == {"ok": True, "why": None}
+    assert team.heal_cost(content, member) == 18  # 每 2 點內傷 1 兩，進位：頁面上寫的價錢是 server 的 heal_cost
     team.heal(state, content, member)
-    assert p.stats["silver"] == 100 - 18 and member.injury == 0  # 按鈕寫的價錢就是真的收的價錢
+    assert p.stats["silver"] == 100 - 18 and member.injury == 0  # 寫的價錢就是真的收的價錢
 
 
 def test_heal_button_is_greyed_out_with_the_reason_when_the_silver_is_short(content, state):
     state.player.member.injury, state.player.stats["silver"] = 35.0, 5
-    assert skillview.heal_button(state, content) == {"label": "療傷（要 18 兩）", "ok": False, "why": "銀兩不足：療傷需要 18 兩。"}
+    assert skillview.heal_button(state, content) == {"ok": False, "why": "銀兩不足：療傷需要 18 兩。"}
     from tianxia import team
 
     assert team.heal(state, content, state.player.member) == ["銀兩不足：療傷需要 18 兩。"]  # 按下去（舊版畫面）回的是同一句
@@ -297,12 +297,12 @@ def test_the_menxia_view_carries_the_heal_button(real):
     import server
 
     game = _real_game(real)
-    assert server.menxia_view(game)["heal"]["label"] == "療傷（沒有內傷）"
+    assert server.menxia_view(game)["heal"] == {"ok": False, "why": "氣血無恙，不用療傷。"} and server.menxia_view(game)["heal_cost"] == 0
     game.state.player.member.injury, game.state.player.stats["silver"] = 20.0, 50
-    assert server.menxia_view(game)["heal"] == {"label": "療傷（要 10 兩）", "ok": True, "why": None}
+    assert server.menxia_view(game)["heal"] == {"ok": True, "why": None} and server.menxia_view(game)["heal_cost"] == 10
     game.state.player.stats["silver"] = 4
     view = server.menxia_view(game)["heal"]
-    assert view["label"] == "療傷（要 10 兩）" and not view["ok"] and "銀兩不足" in view["why"]
+    assert not view["ok"] and "銀兩不足" in view["why"] and "label" not in view
     game.heal()  # 錢不夠：不收、不寫紀錄，內傷還在
     assert game.state.player.member.injury == 20.0 and game.state.player.stats["silver"] == 4
 
@@ -535,7 +535,7 @@ def _menxia(**over):
         "slot_cards": [{"kind": k, "card": f"<p>{k}卡</p>", "learned": True, "level": 1, "maxed": False, "blocked": None, "price": 1} for k in ("武學", "內功")],
         "owned_arts": [], "insights": [], "roster": [{"label": "本人", "key": "player"}], "person": None, "person_card": None,
         "on_team": False, "rules": "<p>規則。</p>", "holdings": {"count": 0, "cap": 50}, "player_card": "<p>本人</p>", "naming": None,
-        "heal_cost": 18, "heal": {"label": "療傷（要 18 兩）", "ok": True, "why": None},
+        "heal_cost": 18, "heal": {"ok": True, "why": None},
     }
     return {**base, **over}
 
@@ -767,9 +767,9 @@ def _heal_button(x, injury, **kw):
 def test_the_heal_button_says_the_wound_and_the_price_and_is_greyed_out_when_it_cannot_be_pressed():
     ok = _heal_button(_menxia(heal_cost=12), 23)
     assert ">療傷<small>內傷 23・銀 12</small>" in ok and "disabled" not in ok
-    none = _heal_button(_menxia(heal_cost=0, heal={"label": "療傷（沒有內傷）", "ok": False, "why": "氣血無恙，不用療傷。"}), 0)
+    none = _heal_button(_menxia(heal_cost=0, heal={"ok": False, "why": "氣血無恙，不用療傷。"}), 0)
     assert ">療傷<small>沒有內傷</small>" in none and "disabled" in none
-    poor = _heal_button(_menxia(heal_cost=12, heal={"label": "療傷（要 12 兩）", "ok": False, "why": "銀兩不足：療傷需要 12 兩。"}), 23)
+    poor = _heal_button(_menxia(heal_cost=12, heal={"ok": False, "why": "銀兩不足：療傷需要 12 兩。"}), 23)
     assert "內傷 23・銀 12 不夠" in poor and "disabled" in poor and 'title="銀兩不足：療傷需要 12 兩。"' in poor
 
 

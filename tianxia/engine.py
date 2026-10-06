@@ -3830,7 +3830,7 @@ class Game:
         return skillview.insight_rows(self.state, self.content, self.world)
 
     def heal_button(self) -> dict:
-        """修練頁療傷鈕的字與按不按得下去（FB-082，見 skillview.heal_button）。"""
+        """修練頁療傷鈕按不按得下去與不能按的原因（FB-082，見 skillview.heal_button）。"""
         return skillview.heal_button(self.state, self.content)
 
     def naming_row(self) -> dict | None:

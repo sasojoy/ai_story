@@ -40,6 +40,12 @@ def _layers(shadow: str) -> list[str]:
     return parts + [cur.strip()]
 
 
+def test_the_dead_filter_row_rule_is_gone():
+    """修練頁的庫改用卷軸卡自己的篩選（.lib-filter）之後，.filter-row 沒有任何地方用到（review-ap3 M4）。"""
+    assert not any(".filter-row" in sel for sel, _ in _rules(CSS))
+    assert ".filter-row" not in (ROOT / "web" / "app.js").read_text(encoding="utf-8")
+
+
 # ── M1：灰掉的熔煉寫原因，不多佔一排 ──────────────────────────────
 
 

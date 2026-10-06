@@ -190,18 +190,14 @@ def forge_line(
 
 
 def heal_button(state: GameState, content: Content) -> dict:
-    """修練頁「療傷」鈕要的資料（FB-082）：label 寫價錢（按鈕只有一行、手機上跟「練成」鈕並排，所以字要短），ok 是按不按得下去，
-    why 是按不下去的原因（跟 team.heal 回的是同一句）。價錢照 team.heal_cost，每 2 點內傷 1 兩——真的收的就是這個數。
-    內傷不到 1 點狀態列不寫（int），鈕也不亮。"""
+    """修練頁「療傷」鈕要的資料（FB-082）：ok 是按不按得下去，why 是按不下去的原因（跟 team.heal 回的是同一句）。
+    鈕上的字（內傷與價錢）是卷軸卡自己寫的：內傷讀狀態列、價錢讀 menxia 的 heal_cost（team.heal_cost，每 2 點內傷 1 兩，
+    真的收的就是這個數），所以這裡不送字（review-ap3 M4）。內傷不到 1 點狀態列不寫（int），鈕也不亮。"""
     member = state.player.member
     if int(member.injury) < 1:
-        return {"label": "療傷（沒有內傷）", "ok": False, "why": "氣血無恙，不用療傷。"}
-    cost = team.heal_cost(content, member)
-    label = f"療傷（要 {cost} 兩）"  # 有價錢的時候一律這個寫法（錢夠不夠只差在按不按得下去），省得兩種說法並存
+        return {"ok": False, "why": "氣血無恙，不用療傷。"}
     problem = team.heal_problem(state, content, member)
-    if problem is not None:
-        return {"label": label, "ok": False, "why": problem}
-    return {"label": label, "ok": True, "why": None}
+    return {"ok": problem is None, "why": problem}
 
 
 def _nearest_town(state: GameState, content: Content) -> tuple[str | None, bool]:
