@@ -446,7 +446,6 @@ def test_cultivating_finishes_the_quality_step(fresh):
     assert fresh.state.player.tutorial_step == 6
 
 
-@pytest.mark.skip(reason="師門配方（Task 5）才有穿林腿這個名字")
 def test_box_fills_in_the_fused_art(fresh):
     _to_step(fresh, 4)  # 合成完、換上之前：松林的風，師門配方叫穿林腿
     assert fresh.guide_box()["text"] == "把【穿林腿】換上，練到第三成。"
