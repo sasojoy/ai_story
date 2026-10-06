@@ -226,6 +226,17 @@ class WorldStateStore(Protocol):
 
     def master_of(self, skill_name: str) -> str | None: ...
 
+    # ── 感悟的首悟紀錄（悟意境設計 0.2b）──
+    def claim_insight_first(self, key: str, name: str, creator: str, place: str, time: float = 0.0) -> bool:
+        """這一季第一個在這裡、用這個做法、畫出這個屬性悟到的人：key 是「地點|做法屬性|畫出的屬性」（sensing.first_key）。
+        還沒有人就記下（名字、名號、地名）、回 True；已經有人回 False（原子判斷，不看誰先送出模型請求）。
+        記的是紀錄、不是定義：意境本身存在悟到的人自己的存檔裡，後面的人照樣自己悟、自己取名。換季寫進那一季的江湖史。"""
+        ...
+
+    def insight_first(self, key: str) -> tuple[str, str] | None:
+        """這一季這個鍵的首悟紀錄：（意境名, 名號）；沒有人悟過是 None。"""
+        ...
+
     # ── 同伴性情漂移 ──
     def record_companion_tag(self, companion_id: str, tag: str) -> None: ...
 

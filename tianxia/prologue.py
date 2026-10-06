@@ -147,6 +147,12 @@ def explore_event(state: GameState, content: Content) -> str | None:
     return current.explore_event if current is not None else None
 
 
+def explore_scene(state: GameState, content: Content) -> str | None:
+    """這一步在草廬探索，一定端出哪段有所感（InsightScene，四景四個做法都對、必中，畫完落回做法那個意境）。"""
+    current = step(state, content)
+    return current.explore_scene if current is not None else None
+
+
 def enemies(state: GameState, content: Content) -> list[str]:
     """這一步草廬的對手（遊歷才出現：雪恥那一步才有斷眉）；序章裡別的步驟是空的。"""
     current = step(state, content)

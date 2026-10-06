@@ -215,6 +215,20 @@ class OllamaClient:
             logger.warning(f"Ollama 連線檢查失敗: {e}")
             return False
 
+    def warm(self, seconds: float = 2.0) -> bool:
+        """叫 Ollama 把模型載起來（/api/generate 只帶 model 與 keep_alive，不產生任何字），不等它載完：
+        逾時（模型還在載）也算送到了。悟意境的畫布一出現就送（insight_llm.warm）。連不上回 False。"""
+        try:
+            requests.post(
+                f"{self.base_url}/api/generate", json={"model": self.model, "keep_alive": self.keep_alive}, timeout=seconds,
+            )
+        except requests.Timeout:
+            return True
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"Ollama 暖機失敗: {e}")
+            return False
+        return True
+
     def _build_payload(
         self, messages: list[dict[str, str]], temperature: float, num_predict: int = 1024,
         json_schema: dict[str, Any] | None = None,

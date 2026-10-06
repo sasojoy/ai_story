@@ -443,6 +443,7 @@ class JournalEntry(BaseModel):
     # 這次行動順便完成的新手引導（「✔ 引導完成」、獎勵、說書人的下一步）：江湖紀錄的列表照舊畫，「剛剛」卡片不畫——
     # 說書人的話改在行動列上方的對話框（引導重做設計 8.1）
     guide: list[str] = Field(default_factory=list)
+    glyph: list[list[int]] = Field(default_factory=list)  # 有所感畫的那一筆（0～100 的點位）：紀錄裡畫一張小縮圖；舊紀錄沒有
 
 
 class GameState(BaseModel):
