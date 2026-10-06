@@ -709,7 +709,8 @@ REVEAL_KEYS = frozenset({
 # 序章每一步 glow 可以寫的鍵（網頁的 data-glow，見 web/app.js 的 applyGlow）：亮得起來的元件加上修練頁、煉製頁裡的幾顆鈕。
 # 「all」是全部亮齊的意思，沒有東西可發光，不收。寫錯的鍵悄悄什麼都不亮，帶引號或括號的還會讓 applyGlow 的選擇器丟例外
 # pick:art、pick:insight 是煉製頁挑選清單裡這一步要放進爐子的那門武學與意境（Game.art_rows／insight_rows 的 glow 標出來）
-GLOW_KEYS = (REVEAL_KEYS - {"all"}) | frozenset({"forge", "practice", "switch", "cultivate", "melt", "allocate", "pick:art", "pick:insight"})
+# act:duty 是入伍段第一道軍令那一步發光的鈕：自己陣營的守勢行動（EnlistStep.glow，在「此地還能做」裡，FB-093）
+GLOW_KEYS = (REVEAL_KEYS - {"all"}) | frozenset({"forge", "practice", "switch", "cultivate", "melt", "allocate", "pick:art", "pick:insight", "act:duty"})
 
 
 # 序章每一步 allow 可以寫的選單 id（TutorialStep.allow 是前綴比對，見 prologue.allowed）：照 Game._everyday_options 與它叫的
@@ -796,12 +797,19 @@ class Recruiter(_Strict):
 class EnlistStep(_Strict):
     id: str
     done_when: TutorialGoal
+    # 這一步框在畫面上時，要發光的鈕（GLOW_KEYS，跟序章的 glow 同一套）：第一道軍令那一步發光「act:duty」，也就是自己陣營的守勢行動
+    # （巡哨、傳道、保境安民）；網頁只加在畫面上真的有、按得下去的那顆（FB-093）
+    glow: list[str] = Field(default_factory=list)
 
 
 class Enlist(_Strict):
     steps: list[EnlistStep] = Field(default_factory=list)
     recruiters: dict[str, Recruiter] = Field(default_factory=dict)  # 陣營 id → 引薦人
     drifter_line: str = ""  # 「主線與目標」裡散人那一行：三邊各在哪裡收人（設計 6.3）
+    # 第一道軍令那一步（done_when 是 order）框上多的一句（FB-093）：{做法} 換成「你腳下這裡這週的軍令做得了的行動」（巡哨、遊歷……，
+    # orders.doable_here）；一個都做不了時用 how_none。兩句三位引薦人共用（待 joy 潤）
+    how_here: str = ""
+    how_none: str = ""
 
 
 class Tutorial(_Strict):
@@ -1769,6 +1777,9 @@ class OrdersContent(_Strict):
     templates: list[OrderTemplate] = Field(default_factory=list)
     slots: dict[str, dict[str, OrderSlots]] = Field(default_factory=dict)  # 戰線 id → 陣營 id → 插槽
     duties: dict[str, Duty] = Field(default_factory=dict)  # 陣營 id → 守勢行動
+    # 軍令卡上「做法」那一行（FB-093），照種類（攻城、守城、截糧、護糧；打擊那一行是算出來的，atlas.strike_how）。插槽同發布文字，
+    # 另外 {守勢}＝那個陣營的守勢行動名字（duties）、{糧草}＝接糧車要交的份數
+    how: dict[str, str] = Field(default_factory=dict)
     rank2: dict[str, Rank2Action] = Field(default_factory=dict)  # 陣營 id → 第 2 階行動（正式版乙一）
     commander_fallback: dict[str, str] = Field(default_factory=dict)  # 陣營 id → 沒有主將時 {主將} 寫的泛稱
     callers: list[OrderCaller] = Field(default_factory=list)  # {號令}

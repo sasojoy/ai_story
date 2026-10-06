@@ -385,7 +385,14 @@
   function applyGlow() {
     document.querySelectorAll(".glow, .lit").forEach((el) => el.classList.remove("glow", "lit"));
     const p = pro();
-    if (!p) { litBefore = null; litKeys = []; return; }
+    if (!p) {
+      litBefore = null;
+      litKeys = [];
+      // 序章之外，對話框也可以叫某顆鈕發光（入伍段第一道軍令那一步，FB-093）：框上帶的 glow，畫面上有的、按得下去的才加；不閃、沒有「在下面」
+      const keys = (S.main && S.main.guide && S.main.guide.glow) || [];
+      keys.forEach((key) => document.querySelectorAll(`[data-glow~="${key}"]:not([disabled])`).forEach((el) => el.classList.add("glow")));
+      return;
+    }
     const fresh = litBefore ? p.reveal.filter((k) => !litBefore.includes(k)) : [];
     litBefore = p.reveal.slice();
     if (fresh.length) {
@@ -762,10 +769,13 @@
           <button class="${S.moveMode === x.id ? "on" : ""}" data-act="move-mode" data-mode="${x.id}" aria-pressed="${S.moveMode === x.id}">${x.name}</button>`).join("")}</div>
         <div class="options">${moves.map((o) => `<button class="btn go" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}>
           <span class="k">→</span><span>${esc(o.label)}</span></button>`).join("")}</div></div>`;
-    // 其他只在此地才有的行動（招募、投靠、多出來的求見）收在摺疊裡，不佔行動列的高度
+    // 其他只在此地才有的行動（招募、投靠、多出來的求見）收在摺疊裡，不佔行動列的高度。
+    // 入伍段第一道軍令那一步（伺服器在框上帶 glow，FB-093）要按的守勢行動（巡哨、傳道、保境安民）就在這裡面：那一步摺疊先打開、
+    // 那顆發光（data-glow 寫成字面，test_content 掃它對照 models.GLOW_KEYS）；其他時候照舊收著
     const extras = m.options.filter((o) => !used.has(o.id));
-    const here = extras.length ? `<details class="fold here"><summary>此地還能做 ${extras.length} 件事</summary><div class="fold-body options">${extras.map((o) => `
-        <button class="btn" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}><span>${esc(o.label)}</span></button>`).join("")}</div></details>` : "";
+    const glowDuty = !!(m.guide && (m.guide.glow || []).includes("act:duty")) && extras.some((o) => o.id === "act:duty");
+    const here = extras.length ? `<details class="fold here"${glowDuty ? " open" : ""}><summary>此地還能做 ${extras.length} 件事</summary><div class="fold-body options">${extras.map((o) => `
+        <button class="btn" data-act="choose" data-id="${esc(o.id)}"${o.id === "act:duty" ? ' data-glow="act:duty"' : ""} ${o.enabled ? "" : "disabled"}><span>${esc(o.label)}</span></button>`).join("")}</div></details>` : "";
     const drawn = cells.filter(Boolean); // 序章裡沒亮的格子是空字串；一格都沒有、也沒有「此地還能做」時整條不畫
     return `${drawn.length ? `<div class="act-bar" role="group" aria-label="行動">${drawn.join("")}</div>` : ""}${moveCard}${here}`;
   }

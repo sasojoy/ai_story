@@ -601,7 +601,8 @@ def test_enlistment_after_joining_only_in_season_one(on):
     assert not any("老兵" in m or "引導完成" in m for m in msgs)  # 引薦人的話在對話框，不在「剛剛」
     game.view_orders()
     box = game.guide_box()
-    assert box["key"] == "r3_first_order" and box["text"] == "挑一道軍令，出一次力" and box["done"] == ["✔ 引導完成"]
+    assert box["key"] == "r3_first_order" and box["text"].startswith("挑一道軍令，出一次力。") and box["done"] == ["✔ 引導完成"]
+    assert box["glow"] == ["act:duty"] and box["line"] == "挑一道軍令，出一次力"  # 框上多了一句怎麼做、發光的是巡哨（FB-093）；收起來那一行不動
     _order(game, "siege", "guan", front="yingru")
     with _win():
         game.choose("act:train")
@@ -1082,16 +1083,17 @@ def test_a_target_off_the_front_but_challengeable_still_gets_the_place(on):
     assert card["how"] == _how("何進", "他現在在洛陽一帶，那裡你還沒摸清")
 
 
-def test_only_open_strike_cards_carry_how(on):
-    """沒達成的打擊才有「怎麼打」；達成了、別種軍令都沒有這個鍵。"""
+def test_only_open_cards_carry_how(on):
+    """沒達成的軍令才有「做法」：打擊是怎麼打（FB-072）、其他種類是這一種怎麼做（FB-093）；達成了的都沒有這個鍵。"""
     game = _game(on, faction="guan")
     strike = _order(game, "strike", "guan", front="yingru", figure="bocai")
-    _order(game, "siege", "guan", front="yingru")
-    _order(game, "defend", "guan", front="yingru")
+    siege = _order(game, "siege", "guan", front="yingru")
+    defend = _order(game, "defend", "guan", front="yingru")
     cards = {card["id"]: card for card in game.orders_view()}
-    assert len(cards) == 3 and "how" in cards[strike.id]
-    assert [c["id"] for c in cards.values() if "how" in c] == [strike.id]
-    strike.done = True
+    assert len(cards) == 3 and all(card.get("how") for card in cards.values())
+    assert cards[strike.id]["how"] != cards[siege.id]["how"] != cards[defend.id]["how"]
+    for order in (strike, siege, defend):
+        order.done = True
     assert all("how" not in card for card in game.orders_view())
 
 

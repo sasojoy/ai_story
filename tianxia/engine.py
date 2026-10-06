@@ -4773,7 +4773,8 @@ class Game:
         """江湖頁的「本週軍令」卡（計畫 T6）：自己陣營這週的軍令，只給自己陣營看；散人、開關關著是空的。
         截止是下週一 00:00（最後一週寫成季末那一刻，calendar.point 會夾住）。休季時也是空的（FB-045）：
         收季那一週的軍令截止已經過了，休季什麼都不能做，結算畫面底下不該還有一張叫人去做事的卡。
-        沒達成的打擊軍令多一個 how：怎麼打、他在哪（atlas.strike_how，FB-072）；其他軍令與打完的打擊沒有這個鍵。"""
+        沒達成的軍令多一個 how：打擊是怎麼打、他在哪（atlas.strike_how，FB-072），其他種類是這一種怎麼做（orders.how，FB-093）；
+        打完的軍令沒有這個鍵。"""
         s, c = self.state, self.content
         if s.world.ended:
             return []
@@ -4787,7 +4788,9 @@ class Game:
                 "deadline": self.stamp(calendar.week_start(o.week + 1, c, s.world)),
             }
             if o.template == "strike" and not o.done and o.figure is not None:
-                view["how"] = atlas.strike_how(s, c, o)  # 怎麼打、他在哪（FB-072）；其他軍令與打完的打擊沒有這個鍵
+                view["how"] = atlas.strike_how(s, c, o)  # 怎麼打、他在哪（FB-072）
+            elif not o.done and (how := orders.how(s, c, o)):
+                view["how"] = how  # 其他種類的做法（FB-093，orders.json 的 how）；打完的軍令沒有這個鍵
             views.append(view)
         return views
 

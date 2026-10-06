@@ -2,6 +2,7 @@
 不佔 tutorial_step：記在 PlayerState.enlist_step（None＝還沒開始）。只在第一季開始（beta 季沒有軍令）。"""
 from __future__ import annotations
 
+from . import orders
 from .models import Content, Recruiter
 from .rules import season_one
 from .state import GameState
@@ -112,6 +113,16 @@ def note(state: GameState, content: Content, world: WorldStateStore, action: str
     return msgs + (told(state, content) if msgs else [])
 
 
+def how_here(state: GameState, content: Content) -> str:
+    """第一道軍令那一步框上多的一句（FB-093）：你腳下這裡這週的軍令做得了的行動（orders.doable_here）；一個都做不了寫 how_none。
+    內容沒寫這兩句（Enlist.how_here）就是空字串，框跟以前一樣。"""
+    e = content.tutorial.enlist
+    if e is None or not e.how_here:
+        return ""
+    names = orders.doable_here(state, content, state.player.faction, state.player.location)
+    return e.how_here.replace("{做法}", "、".join(names)) if names else e.how_none
+
+
 def box(state: GameState, content: Content) -> dict | None:
     """入伍段的對話框：進行中是這一步的話（第一步前面接入營那一段）；剛走完是結尾、等「知道了」。其他是 None。
     key 是這一步的 id（結尾是 "enlist_end"），跟說書人的框同一個欄位（FB-076：網頁記收起記的是它）；
@@ -128,13 +139,19 @@ def box(state: GameState, content: Content) -> dict | None:
     p = state.player
     if active(state, content):
         i = p.enlist_step
+        step = _steps(content)[i]
         blocked = pending_line(state, content)
         paragraphs = _texts(who, i)
+        sentence = how_here(state, content) if step.done_when.action == "order" else ""
+        if sentence:  # 第一道軍令那一步：框上多一句，指出你腳下這裡做得了什麼（FB-093）；接在同一段後面，不分頁
+            paragraphs[-1] = paragraphs[-1].rstrip("。") + "。" + sentence
         box = {
-            "speaker": who.name, "key": _steps(content)[i].id, "scene": "", "text": blocked or "\n\n".join(paragraphs),
+            "speaker": who.name, "key": step.id, "scene": "", "text": blocked or "\n\n".join(paragraphs),
             "line": "" if blocked else (who.lines[i] if i < len(who.lines) else ""),
             "done": list(p.guide_done), "end": False, "pending": blocked is not None, "full": True,
         }
+        if step.glow:  # 這一步要按的鈕發光（FB-093）；網頁只亮畫面上真的有、按得下去的那顆
+            box["glow"] = list(step.glow)
         if len(paragraphs) > 1 and blocked is None:
             box["paged"] = True
         return box
