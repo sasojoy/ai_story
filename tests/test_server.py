@@ -2563,7 +2563,10 @@ def test_slot_prices_are_none_when_empty_or_at_the_tenth_level(client, monkeypat
     assert cards["武學"]["price"] == 9
 
 
-def test_forge_cultivate_and_melt_through_the_endpoints(client):
+def test_forge_cultivate_and_melt_through_the_endpoints(client, monkeypatch):
+    # 合成會擲品質，擲到上品時這一次修練有幾 % 的機會直接成了絕學，那一門就等著定名、熔不掉（亂數沒固定，量過約兩百次
+    # 有一次讓這個測試失敗）。這裡只看三個端點接不接得上，所以把絕學的機會關成 0
+    monkeypatch.setitem(server.CONTENT.config.cultivate_cap, "絕學", 0)
     _a_player_with_insights(client)
     r = client.post("/api/menxia/forge", json={"art": "jichu_quanjiao", "insights": ["feng"]}).json()
     assert "衍生出" in r["message"]
