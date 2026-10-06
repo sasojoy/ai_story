@@ -2314,6 +2314,52 @@ def test_the_third_party_never_shows_up_as_the_armies_foe_in_the_reports(content
     assert game.state.journal[0].tag == "你站在官軍" and warlord.state.journal[0].tag == "你站在地方豪強"
 
 
+def test_the_armies_never_hear_what_the_warlords_picked(content, game):
+    """豪強這一回合選了搶地盤還是保存實力，官軍與黃巾不該知道：那一句不進場景的記錄、不進結算後的回覆、不進給模型的判定
+    （模型寫的敘事會進場景），只留在回合紀錄裡。"""
+    definition = _three_round_showdown(content)
+    definition.third = ThirdParty(faction="haoqiang", trend=content.scenario.trends[0].id)
+    definition.rounds_per_act = 6  # 打兩回合不收場
+    game.state.player.faction = "guan"
+    warlord = _fighter(content, game, "丙", "haoqiang")
+    game.world.start_battle(definition, now=0.0)
+    with at(game, 0.0), at(warlord, 0.0):
+        game.choose("battle:join:guan")
+        warlord.choose("battle:join:haoqiang")
+    start = definition.muster_seconds + 1
+    told = []  # 兩個回合裡，官軍看得到的所有字
+    client = mock.Mock()
+    client.chat_text.return_value = "戰場上煙塵四起。"
+    with mock.patch.object(Game, "_quick_client", return_value=client), at(game, start), at(warlord, start):  # 第 1 回合：有模型
+        told += game.choose("battle:act:guan_hold")
+        told += warlord.choose("battle:act:third_grab")
+    assert game.world.get_battle().round_number == 1
+    prompts = [call.args[0][1]["content"] for call in client.chat_text.call_args_list]
+    assert any("（戰局 " in p for p in prompts)  # 抓到的真的是決戰回合的判定
+    assert not any("趁亂搶地盤" in p or "保存實力" in p for p in prompts)
+    with at(game, start + 1), at(warlord, start + 1):  # 第 2 回合：沒有模型，潤色退回系統訊息本身
+        told += game.choose("battle:act:guan_hold")
+        told += warlord.choose("battle:act:third_keep")
+    battle = game.world.get_battle()
+    assert battle.round_number == 2 and battle.phase == "active"
+    told += battle.narrative_log + [game._battle_scene_text(battle, definition)]
+    assert not any("趁亂搶地盤" in line or "保存實力" in line for line in told)
+    records = game.world.battle_rounds(battle.record_id)  # 回合紀錄（戰報底稿）才留著
+    assert [r.messages[-1] for r in records] == ["趁亂搶地盤 1 人、保存實力 0 人。", "趁亂搶地盤 0 人、保存實力 1 人。"]
+
+
+def test_only_warlords_left_in_the_field_end_the_battle_with_the_configured_cap(content, game):
+    """場上只剩豪強、回合逾時：照保底收場（兩軍沒人，Review Focus 3），累積的收穫照 Config.battle 的 third_cap 換成推動
+    （收場那一步要把引擎手上的 tuning 傳進去，不是用預設的 10）。"""
+    content.config.battle.third_cap = 4
+    battle, definition = _warlord_in_battle(game)
+    game.world.mutate_battle(lambda b: setattr(b, "third_gain", 5000.0))
+    game.now = definition.round_seconds + 1
+    ended, msgs = game._run_battle_tick(definition)
+    assert ended.phase == "ended" and ended.third_push == 4
+    assert "兩軍相持之際，地方上有人趁亂坐大。" in msgs
+
+
 def test_a_battle_with_no_fighters_ends_with_its_fallback_outcome_once_the_round_times_out(content, game):
     _install_factions(content)
     definition = _install_battle_def(content)

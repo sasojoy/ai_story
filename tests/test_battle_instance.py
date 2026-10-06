@@ -1459,3 +1459,155 @@ def test_a_late_third_party_keeps_its_strength_when_timed_out(with_third):
 
 def test_stalemate_is_one_at_the_centre_and_zero_at_the_ends():
     assert bi.stalemate(50) == 1.0 and bi.stalemate(75) == 0.5 and bi.stalemate(0) == 0.0 and bi.stalemate(100) == 0.0
+
+
+def _three_way(definition, people, trend=50, neili=None, before=0, with_msgs=False):
+    """people：[(名號, 陣營, 出什麼)]，出什麼是三招之一、THIRD_GRAB 或 THIRD_KEEP。每個人每招的份量都是 100。
+    before：結算前已經打了幾回合。結算一回合，回傳這一場（with_msgs 時另外回傳 resolve_round 給大家看的那幾句）。"""
+    battle = bi.start_muster(definition, now=0)
+    for name, side, _ in people:
+        bi.join_faction(battle, name, side, neili_cap=1000, scores={m: 100.0 for m in MOVES})
+    bi.close_muster(battle, definition, random.Random(0), now=0)
+    battle.trend, battle.round_number = trend, before
+    for name, value in (neili or {}).items():
+        battle.participants[name].neili = value
+    for name, side, what in people:
+        bi.submit_action(battle, name, what if what in (bi.THIRD_GRAB, bi.THIRD_KEEP) else f"{side}_{CODES[what]}")
+    msgs = bi.resolve_round(battle, definition, random.Random(0), now=1, tuning=BattleTuning())
+    return (battle, msgs) if with_msgs else battle
+
+
+ARMIES = [("甲", "guan", "強攻"), ("乙", "huang", "強攻")]  # 兩邊一樣：推 0，戰局停在原地
+
+
+def test_the_third_party_never_moves_the_trend(with_third, three):
+    """Review Focus 1：同一回合加上第三方，戰局與兩軍的出招比例都不變。"""
+    plain = _three_way(three, [("甲", "guan", "強攻"), ("乙", "huang", "固守")])
+    mixed = _three_way(with_third, [("甲", "guan", "強攻"), ("乙", "huang", "固守"), ("丙", "hao", bi.THIRD_GRAB)])
+    assert mixed.trend == plain.trend and mixed.last_mix == plain.last_mix
+    assert "hao" not in mixed.last_mix
+
+
+def test_grabbing_uses_the_raid_share_and_costs_thirty_five(with_third):
+    battle = _three_way(with_third, ARMIES + [("丙", "hao", bi.THIRD_GRAB)])
+    assert battle.third_gain == pytest.approx(100.0)  # 100 ÷ √1 × 膠著 1
+    assert battle.participants["丙"].neili == 1000 - 35
+    assert battle.participants["丙"].last_result == "趁亂搶地盤"
+    assert battle.participants["丙"].acted_rounds == 1  # 數一次：主迴圈要跳過第三方，不然豪強被數兩次
+    assert any("趁亂搶地盤 1 人" in m for m in battle.rounds[-1].messages)
+
+
+def test_keeping_strength_counts_half_and_costs_ten(with_third):
+    battle = _three_way(with_third, ARMIES + [("丙", "hao", bi.THIRD_KEEP)])
+    assert battle.third_gain == pytest.approx(50.0)
+    assert battle.participants["丙"].neili == 1000 - 10
+    assert battle.participants["丙"].last_result == "保存實力"
+
+
+def test_more_warlords_gain_by_the_square_root(with_third):
+    battle = _three_way(with_third, ARMIES + [("丙", "hao", bi.THIRD_GRAB), ("丁", "hao", bi.THIRD_GRAB)])
+    assert battle.third_gain == pytest.approx(200 / math.sqrt(2))
+
+
+def test_a_lopsided_battle_gives_less(with_third):
+    battle = _three_way(with_third, ARMIES + [("丙", "hao", bi.THIRD_GRAB)], trend=75)
+    assert battle.third_gain == pytest.approx(50.0)  # 膠著 0.5
+
+
+def test_no_armies_no_gain(with_third):
+    """Review Focus 3：這一回合兩軍沒有人出手，就沒有亂可趁。"""
+    battle = _three_way(with_third, [("丙", "hao", bi.THIRD_GRAB)])
+    assert battle.third_gain == 0.0
+
+
+def test_the_push_is_settled_when_the_battle_ends(with_third):
+    """three 一幕九回合：已經打了 8 回合，這一回合打完就收場。之前累積 250，這回合再 100 → 3.5 → 4。"""
+    battle = bi.start_muster(with_third, now=0)
+    for name, side, _ in ARMIES + [("丙", "hao", bi.THIRD_GRAB)]:
+        bi.join_faction(battle, name, side, neili_cap=1000, scores={m: 100.0 for m in MOVES})
+    bi.close_muster(battle, with_third, random.Random(0), now=0)
+    battle.round_number, battle.third_gain = 8, 250.0
+    for name, side, what in ARMIES + [("丙", "hao", bi.THIRD_GRAB)]:
+        bi.submit_action(battle, name, what if what == bi.THIRD_GRAB else f"{side}_{CODES[what]}")
+    msgs = bi.resolve_round(battle, with_third, random.Random(0), now=1, tuning=BattleTuning())
+    assert battle.phase == "ended" and battle.third_push == 4
+    assert msgs[-1] == "兩軍相持之際，地方上有人趁亂坐大。"  # 收場那一句只在真的推了割據時出現，不寫數字
+
+
+def test_a_battle_that_gave_the_warlords_nothing_says_nothing_about_them(with_third, three):
+    battle = bi.start_muster(with_third, now=0)
+    assert bi.settle_third(battle, with_third, BattleTuning()) == [] and battle.third_push == 0
+    battle = bi.start_muster(three, now=0)
+    battle.third_gain = 5000.0
+    assert bi.settle_third(battle, three, BattleTuning()) == [] and battle.third_push == 0  # 沒有第三方的決戰不推
+
+
+def test_the_push_rounds_half_up_and_is_capped_at_ten(with_third):
+    """Review Focus 2。÷100 後四捨五入（0.5 進位，不是銀行家進位）；一場最多 third_cap。"""
+    battle = bi.start_muster(with_third, now=0)
+    for gain, push in ((49.9, 0), (50.0, 1), (150.0, 2), (250.0, 3), (1049.0, 10), (5000.0, 10)):
+        battle.third_gain = gain
+        bi.settle_third(battle, with_third, BattleTuning())
+        assert battle.third_push == push, gain
+
+
+def test_only_the_third_party_left_ends_the_battle(with_third):
+    """Review Focus 3：場上只剩第三方，回合一逾時就照保底收場。"""
+    battle = bi.start_muster(with_third, now=0)
+    bi.join_faction(battle, "丙", "hao", neili_cap=1000)
+    bi.close_muster(battle, with_third, random.Random(0), now=0)
+    msgs = bi.end_without_fighters(battle, with_third, now=with_third.round_seconds + 1)
+    assert msgs and battle.phase == "ended"
+
+
+def test_the_armies_all_fallen_leaves_the_warlords_no_battle_to_profit_from(with_third):
+    """兩軍的人全倒下了、豪強還站著：照樣是「沒人能打」，逾時收場，之前累積的收穫換成推動。"""
+    battle = bi.start_muster(with_third, now=0)
+    for name, side in (("甲", "guan"), ("乙", "huang"), ("丙", "hao")):
+        bi.join_faction(battle, name, side, neili_cap=1000)
+    bi.close_muster(battle, with_third, random.Random(0), now=0)
+    battle.participants["甲"].eliminated = battle.participants["乙"].eliminated = True
+    battle.third_gain = 250.0
+    assert bi.end_without_fighters(battle, with_third, now=1) == []  # 回合還沒逾時
+    msgs = bi.end_without_fighters(battle, with_third, now=with_third.round_seconds + 1, tuning=BattleTuning())
+    assert battle.phase == "ended" and battle.third_push == 3
+    assert "兩軍相持之際，地方上有人趁亂坐大。" in msgs
+
+
+def test_the_armies_still_standing_keep_the_battle_going_whatever_the_warlords_do(with_third):
+    battle = bi.start_muster(with_third, now=0)
+    for name, side in (("甲", "guan"), ("丙", "hao")):
+        bi.join_faction(battle, name, side, neili_cap=1000)
+    bi.close_muster(battle, with_third, random.Random(0), now=0)
+    battle.participants["丙"].eliminated = True
+    assert bi.end_without_fighters(battle, with_third, now=with_third.round_seconds + 1) == []
+    assert battle.phase == "active"
+
+
+def test_a_warlord_can_fall(with_third):
+    battle = _three_way(with_third, ARMIES + [("丙", "hao", bi.THIRD_GRAB)], neili={"丙": 30})
+    assert battle.participants["丙"].eliminated and battle.participants["丙"].fell_round == 1
+    assert battle.third_gain == pytest.approx(51.5)  # 份量在扣血之前算、倒下也算他出過手：氣血 30／1000 的狀態是 0.515
+
+
+def test_a_timed_out_warlord_keeps_its_strength_and_is_not_counted_as_acting(with_third):
+    battle = bi.start_muster(with_third, now=0)
+    for name, side, _ in ARMIES + [("丙", "hao", bi.THIRD_GRAB)]:
+        bi.join_faction(battle, name, side, neili_cap=1000, scores={m: 100.0 for m in MOVES})
+    bi.close_muster(battle, with_third, random.Random(0), now=0)
+    for name, side, what in ARMIES:
+        bi.submit_action(battle, name, f"{side}_{CODES[what]}")
+    bi.fill_timed_out_actions(battle, with_third)  # 豪強逾時：代出保存實力
+    bi.resolve_round(battle, with_third, random.Random(0), now=1, tuning=BattleTuning())
+    warlord = battle.participants["丙"]
+    assert warlord.neili == 1000 - 10 and warlord.acted_rounds == 0
+    assert battle.third_gain == pytest.approx(50.0)
+
+
+def test_what_the_warlords_picked_stays_out_of_what_everyone_is_told(with_third):
+    """兩軍與場景不該知道豪強選了搶地盤還是保存實力：那一句只寫進回合紀錄（battle_rounds 只寫不讀回，玩家看不到），
+    resolve_round 回傳給大家看的訊息（會進場景的記錄與給模型的判定）裡沒有。"""
+    battle, msgs = _three_way(with_third, ARMIES + [("丙", "hao", bi.THIRD_GRAB), ("丁", "hao", bi.THIRD_KEEP)], with_msgs=True)
+    assert not any("趁亂搶地盤" in m or "保存實力" in m for m in msgs)
+    assert "趁亂搶地盤 1 人、保存實力 1 人。" in battle.rounds[-1].messages
+    assert not any("趁亂搶地盤" in line or "保存實力" in line for line in battle.narrative_log)

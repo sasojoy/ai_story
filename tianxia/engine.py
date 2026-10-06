@@ -1808,7 +1808,7 @@ class Game:
                 tag = battle_instance.bot_choose_action(battle, definition, p.name, self.rng, tuning=tuning)
                 if tag:
                     battle_instance.submit_action(battle, p.name, tag)
-        ended = battle_instance.end_without_fighters(battle, definition, now)  # 沒人能打、回合逾時：用保底結果收場
+        ended = battle_instance.end_without_fighters(battle, definition, now, tuning=tuning)  # 兩軍沒人能打、回合逾時：用保底結果收場
         if ended:
             battle.end_time = self.state.world.time  # 收場時的賽季時間：參戰者的戰報用（FB-027）
             return ended
