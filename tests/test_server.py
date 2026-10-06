@@ -2481,7 +2481,7 @@ def test_the_furnace_button_stays_disabled_with_the_wait_line_while_naming():
     js = (server.WEB / "app.js").read_text(encoding="utf-8")
     body = _js_function(js, "async function forge(")
     assert "await busy(" in body and "btn.disabled = true" in body and 'btn.textContent = "爐火正旺…"' in body
-    assert "取名要花上一分鐘，請稍候" in body
+    assert "S.message = FORGE_WAIT;" in body and "要等它取名，請稍候" in js  # 等的時候寫的字（W10：不誇大成「一分鐘」）
     assert body.index("btn.disabled = true") < body.index('api("/api/menxia/forge"')
 
 
@@ -5421,6 +5421,7 @@ def test_a_refused_forge_does_not_leave_the_waiting_message_on_the_craft_page():
     js = (server.WEB / "app.js").read_text(encoding="utf-8")
     parts = [
         re.search(r"(?m)^  const esc = .*;$", js).group(0),
+        re.search(r"(?m)^  const FORGE_WAIT = .*;$", js).group(0),
         re.search(r"(?ms)^  const failText = .*?\);$", js).group(0),
         _js_function(js, "function watchQueue(") + "\n  }",
         _js_function(js, "async function busy(") + "\n  }",

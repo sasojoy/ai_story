@@ -1777,6 +1777,9 @@
     } catch (e) { /* 提示過 */ }
   }
 
+  // 開爐等結果的時候頁面上方寫的那一句（W10，待 joy 潤）：取名實際約 3～5 秒，不把等待說成好幾十秒，免得人以為壞了
+  const FORGE_WAIT = "爐火正旺。若這是江湖上第一次合出來，要等它取名，請稍候。";
+
   async function forge() {
     const btn = document.getElementById("forge");
     await busy(async () => {
@@ -1786,7 +1789,7 @@
       // 等結果的這段時間（首次發現的配方要等模型取名）整座爐子晃動、火舌竄高、太極快轉
       document.querySelector(".furnace .w-furnace")?.classList.add("forging");
       document.querySelector(".furnace .w-taichi")?.classList.add("hot");
-      S.message = "爐火正旺。若這是江湖上第一次合出來，取名要花上一分鐘，請稍候。";
+      S.message = FORGE_WAIT;
       document.getElementById("mx-msg").textContent = S.message;
       const stop = watchQueue(btn, "爐火正旺…");
       try {

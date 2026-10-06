@@ -44,7 +44,7 @@ const parts = [
   ...["forgeBody", "forgeReady", "pagePractice", "pageCraft", ...input.fns].map(fn),
   `const guideHtml = () => "", furnaceSvg = () => '<div class="furnace"></div>', proGuide = () => "";`,
   input.stubs || "",
-  "return { " + ["pagePractice", "pageCraft", ...input.fns].join(", ") + " };",
+  "return { " + ["pagePractice", "pageCraft", ...input.fns, ...input.consts].join(", ") + " };",
 ];
 const H = new Function("S", "calls", parts.join("\n"))(S, calls);
 H.S = S; H.calls = calls; H.scrolls = scrolls; H.dom = dom;
@@ -159,6 +159,16 @@ def test_switching_and_melting_still_scroll_to_the_top_and_clear_the_card_note()
         out = press(op, extra, moved_by=60)
         assert out["scrolls"] == [["to", {"top": 0, "behavior": "smooth"}]], op  # 列表結構變了：照舊回頁首
         assert out["note"] is None, op
+
+
+# ── W10：開爐等結果的那一句不誇大等多久 ─────────────────────────────────
+
+
+def test_the_forge_wait_text_does_not_promise_a_minute():
+    """取名實際約 3～5 秒（模型關著走字表更快），「要花上一分鐘」會讓人以為壞了。句子待 joy 潤。"""
+    wait = run("return H.FORGE_WAIT;", consts=["FORGE_WAIT"], stubs="")
+    assert wait == "爐火正旺。若這是江湖上第一次合出來，要等它取名，請稍候。"
+    assert "一分鐘" not in (ROOT / "web" / "app.js").read_text(encoding="utf-8")
 
 
 # ── W9：熔煉的確認框問什麼，由伺服器寫好、放在按鈕上 ─────────────────────────
