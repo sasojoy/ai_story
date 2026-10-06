@@ -143,7 +143,7 @@ def art_rows(state: GameState, content: Content, world: WorldStateStore) -> list
         insight = insights.resolve(art.insight, content, world) if art.insight else None
         insight_name = insight.name if insight else None
         problem = prologue.cultivate_problem(state, content) or cultivation.cultivate_problem(state, content, world, art_id)
-        legend = None
+        legend, target = None, None
         if problem is None:
             target = next_quality(art.quality)
             failures = p.art_mastery.get(art_id, 0)
@@ -156,7 +156,7 @@ def art_rows(state: GameState, content: Content, world: WorldStateStore) -> list
             "id": art_id, "name": art.name, "kind": art.kind, "quality": art.quality, "attribute": art.attribute,
             "level": level, "worn": art_id in (member.neigong_id, member.wugong_id), "insight": insight_name,
             "card": art_card(art, level, insight_name, parent_names(art, content, world), traits.card_line(content, art)),
-            "cultivate": {"ok": problem is None, "note": note, "legend": legend},
+            "cultivate": {"ok": problem is None, "note": note, "legend": legend, "to": target},  # to：下一品（修練鈕寫「修練 → 上品」）
             "melt": {
                 "ok": stuck is None,
                 "note": stuck if stuck is not None else f"退回心得 {melt_value(state, content, world, art_id)}",
