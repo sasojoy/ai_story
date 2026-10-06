@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import io
+import os
 import random
 import sys
 from pathlib import Path
@@ -59,7 +60,12 @@ def test_the_server_bot_measurement_runs_on_a_temporary_database(tmp_path, monke
     """量伺服器假人那一段：用暫存資料庫、不碰 saves/；印出新手起手的份量與三招各出幾成。"""
     m = _load()
     content = load_content(ROOT / "content")
-    monkeypatch.setattr(m.tempfile, "mkdtemp", lambda prefix="": str(tmp_path))
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+    monkeypatch.setattr(m.tempfile, "tempdir", str(scratch))  # 暫存資料夾都開在這裡，才看得出有沒有留下來
+    before = os.environ.get("TIANXIA_DB")
     m.measure_server_bots(content, samples=30)
     out = capsys.readouterr().out
     assert "新手起手的份量" in out and "固守" in out and "隨機武學的假人" in out
+    assert list(scratch.iterdir()) == []  # 量完不留暫存資料夾（每跑一次留一個，日積月累）
+    assert os.environ.get("TIANXIA_DB") == before  # 環境變數也還原

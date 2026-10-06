@@ -108,7 +108,7 @@ def _css_rule(selector):
 
 def test_the_last_round_paragraph_is_small_muted_and_tight():
     """13px、淡色、行距 1.5 以內、上下各 2px、沒有瀏覽器預設的引用縮排與邊線：375px 上這一段（兩行對面比例加一行自己的結果）
-    約 58px，不是兩段 15.5px 的 95px。"""
+    約 65px（含上面一段的間距），不是兩段 15.5px 的 95px。"""
     rule = _css_rule(".scene blockquote")
     assert rule["font-size"] == "13px" and rule["color"] == "var(--ink-2)"
     assert float(rule["line-height"]) <= 1.5

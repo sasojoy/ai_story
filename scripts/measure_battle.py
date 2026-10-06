@@ -93,15 +93,17 @@ def measure_server_bots(content, samples: int = 2000) -> None:
     from tianxia import database
 
     previous = os.environ.get(database.ENV_VAR)
-    os.environ[database.ENV_VAR] = str(Path(tempfile.mkdtemp(prefix="sd1_measure_")) / "measure.db")
-    try:
-        _measure_server_bots(content, samples)
-    finally:
-        database.close_all()
-        if previous is None:
-            os.environ.pop(database.ENV_VAR, None)
-        else:
-            os.environ[database.ENV_VAR] = previous
+    # 暫存資料夾量完就刪（連線先關掉，Windows 才刪得掉）；不留下一個又一個 tianxia_measure_xxxx
+    with tempfile.TemporaryDirectory(prefix="tianxia_measure_", ignore_cleanup_errors=True) as tmp:
+        os.environ[database.ENV_VAR] = str(Path(tmp) / "measure.db")
+        try:
+            _measure_server_bots(content, samples)
+        finally:
+            database.close_all()
+            if previous is None:
+                os.environ.pop(database.ENV_VAR, None)
+            else:
+                os.environ[database.ENV_VAR] = previous
 
 
 def _measure_server_bots(content, samples: int) -> None:
