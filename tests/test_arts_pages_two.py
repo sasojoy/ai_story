@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from tianxia import fusion, library, skillview
+from tianxia import fusion, journal, library, skillview
 from tianxia.content import load_content
 from tianxia.engine import Game
 from tianxia.martial_arts import generate_from_name
@@ -272,6 +272,170 @@ def test_the_menxia_view_carries_the_heal_button(real):
     assert view["label"] == "療傷（要 10 兩）" and not view["ok"] and "銀兩不足" in view["why"]
     game.heal()  # 錢不夠：不收、不寫紀錄，內傷還在
     assert game.state.player.member.injury == 20.0 and game.state.player.stats["silver"] == 4
+
+
+# ── FB-083：絕學被定名，手上有那一門的人下次同步補一則紀錄 ─────────────────
+
+
+def _two_players(content, world, names=("甲", "乙")):
+    """同一個全服狀態上的幾個玩家（每個人各自一個 Game，跟伺服器裡一人一份一樣）。"""
+    from tianxia.engine import Game
+
+    return [Game.new(content, name, world=world) for name in names]
+
+
+def _registered_art(world, name, kind="武學"):
+    art = generate_from_name(name, kind, name, weights={"下品": 100.0, "中品": 0.0, "上品": 0.0, "絕學": 0.0}).model_copy(
+        update={"origin": "fused", "creator": "甲", "creator_shown": "甲"},
+    )
+    assert world.claim_skill_name(art)
+    return art
+
+
+def _name_it(master, art, new_name, shown=None):
+    """甲是第一個練成絕學的人、替它定名：走真的 Game.name_mastered。"""
+    assert master.world.claim_master(art.id, master.state.player.name, shown)
+    master.state.player.arts = [art.id]
+    master.state.player.naming = art.id
+    return master.name_mastered(new_name)
+
+
+def _notices(game):
+    return [e for e in game.state.journal if e.title == journal.RENAMED]
+
+
+def test_a_holder_is_told_once_on_the_next_sync_who_named_it_and_what_it_is_called_now(content, world):
+    master, holder, stranger = _two_players(content, world, ("甲", "乙", "丙"))
+    art = _registered_art(world, "疾風重拳")
+    library.store_art(holder.state, art)  # 乙手上有它（功法庫）
+    msgs = _name_it(master, art, "追風破陣拳")
+    assert msgs == ["從今以後，江湖上這門武學就叫【追風破陣拳】。"]
+    holder.sync(1000.0)
+    (entry,) = _notices(holder)
+    assert entry.tag == "你手上的【疾風重拳】已由甲定名為【追風破陣拳】。"
+    holder.sync(1010.0)
+    holder.sync(5000.0)
+    assert len(_notices(holder)) == 1  # 一個人一次改名只通知一次
+    stranger.sync(1000.0)
+    assert _notices(stranger) == []  # 手上沒有那一門的人不吵
+
+
+def test_the_namer_is_not_told_about_his_own_naming(content, world):
+    master, _ = _two_players(content, world)
+    art = _registered_art(world, "疾風重拳")
+    _name_it(master, art, "追風破陣拳")
+    master.sync(1000.0)
+    assert _notices(master) == []
+
+
+def test_keeping_the_old_name_is_not_a_rename_and_tells_nobody(content, world):
+    master, holder = _two_players(content, world)
+    art = _registered_art(world, "疾風重拳")
+    library.store_art(holder.state, art)
+    _name_it(master, art, "疾風重拳")  # 沿用原名也算定名，名字沒變
+    holder.sync(1000.0)
+    assert _notices(holder) == []
+
+
+def test_someone_who_got_the_art_after_it_was_named_already_saw_the_new_name_and_is_not_told(content, world):
+    master, late = _two_players(content, world)
+    art = _registered_art(world, "疾風重拳")
+    _name_it(master, art, "追風破陣拳")
+    renamed = world.get_skill(art.id)
+    assert renamed.name == "追風破陣拳" and renamed.id == "疾風重拳"
+    library.store_art(late.state, renamed)  # 晚來的拿到的就是新名
+    late.sync(1000.0)
+    assert _notices(late) == []
+
+
+def test_a_forge_that_lands_on_a_named_art_does_not_tell_the_forger_either(content, world):
+    """真的走合成：甲先合出來、定名；乙後來合同一組，從配方表拿到的已經是定過名的那門。"""
+    from tianxia import fusion
+    from tianxia.state import new_game_state
+
+    master, late = _two_players(content, world)
+    for game in (master, late):
+        game.state.player.insights = ["feng"]
+        game.state.player.stats["xinde"] = 50
+        game.state.player.member.wugong_id = "basic_fist"
+    made, _ = fusion.fuse(master.state, content, world, _named("旋風腿"), "basic_fist", "feng")
+    assert made.id == "旋風腿"
+    _name_it(master, made, "旋風不歸腿")
+    got, _ = fusion.fuse(late.state, content, world, _named("不會用到"), "basic_fist", "feng")
+    assert got.id == "旋風腿" and "旋風腿" in late.state.player.arts
+    late.sync(1000.0)
+    assert _notices(late) == [] and new_game_state is not None
+
+
+def test_two_namings_between_syncs_are_one_entry_with_a_line_each(content, world):
+    first, second, holder = _two_players(content, world, ("甲", "乙", "丙"))
+    a, b = _registered_art(world, "疾風重拳"), _registered_art(world, "沉雷掌")
+    library.store_art(holder.state, a)
+    library.store_art(holder.state, b)
+    _name_it(first, a, "追風破陣拳")
+    _name_it(second, b, "震嶽轟雷掌")
+    holder.sync(1000.0)
+    (entry,) = _notices(holder)
+    assert entry.tag == "共 2 則" and entry.lines == [
+        "你手上的【疾風重拳】已由甲定名為【追風破陣拳】。", "你手上的【沉雷掌】已由乙定名為【震嶽轟雷掌】。",
+    ]
+
+
+def test_the_namer_is_written_the_way_it_was_recorded(content, world):
+    """登記時記下的 master_shown 怎麼寫就怎麼寫（匿名行走的人是「某位少俠」），不另外去查名號。"""
+    master, holder = _two_players(content, world)
+    art = _registered_art(world, "疾風重拳")
+    library.store_art(holder.state, art)
+    _name_it(master, art, "追風破陣拳", shown="某位少俠")
+    holder.sync(1000.0)
+    assert _notices(holder)[0].tag == "你手上的【疾風重拳】已由某位少俠定名為【追風破陣拳】。"
+
+
+def test_a_worn_art_counts_as_held_and_a_melted_one_does_not(content, world):
+    master, worn, melted = _two_players(content, world, ("甲", "乙", "丙"))
+    art = _registered_art(world, "疾風重拳")
+    worn.state.player.member.wugong_id = art.id
+    melted.state.player.member.wugong_id = "basic_fist"  # 欄位有人佔著，新的才會進功法庫
+    library.store_art(melted.state, art)
+    assert library.melt_art(melted.state, content, world, art.id)[0].startswith("你把【疾風重拳】熔成了心得")
+    _name_it(master, art, "追風破陣拳")
+    worn.sync(1000.0)
+    melted.sync(1000.0)
+    assert len(_notices(worn)) == 1 and _notices(melted) == []
+
+
+def test_the_record_is_a_player_field_and_the_schema_version_did_not_move(content):
+    from tianxia import database
+    from tianxia.state import PlayerState, new_game_state
+
+    assert database.SCHEMA_VERSION == 2
+    data = new_game_state(content, "舊檔").player.model_dump()
+    assert data.pop("renames_told") == []
+    assert PlayerState.model_validate(data).renames_told == []  # 沒有這個欄位的舊存檔照樣讀得進來
+
+
+def test_a_sync_with_nothing_renamed_does_not_look_arts_up_one_by_one(content, world):
+    """同步每 10 秒一次、每個玩家都有：改過名的 id 一次查完，沒有就一門武學都不必另外去查。"""
+    from unittest import mock
+
+    _, holder = _two_players(content, world)
+    for name in ("疾風重拳", "沉雷掌", "斷水刀"):
+        library.store_art(holder.state, _registered_art(world, name))
+    assert world.renamed_skill_ids() == set()
+    with mock.patch.object(type(world), "get_skill", side_effect=AssertionError("不該一門一門查")):
+        holder.sync(1000.0)
+    assert holder.state.player.renames_told == []  # 沒改過名的不記：之後被改了名還是通知得到
+
+
+def test_a_new_season_starts_with_an_empty_record(content, world):
+    master, holder = _two_players(content, world)
+    art = _registered_art(world, "疾風重拳")
+    library.store_art(holder.state, art)
+    _name_it(master, art, "追風破陣拳")
+    holder.sync(1000.0)
+    assert holder.state.player.renames_told == ["疾風重拳"]
+    holder._reset_player_for_new_season(2)  # 武學跟著季走，通知的記錄也跟著新角色重來
+    assert holder.state.player.renames_told == []
 
 
 # ── FB-085：功法庫多了要找得到——排序、篩選、不用瀏覽器的 confirm() ───────────

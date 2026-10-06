@@ -175,6 +175,9 @@ class PlayerState(BaseModel):
     # 這一季已經補進江湖紀錄的時刻表大事 id（FB-038，見 Game._deliver_big_events）。大事 id 每季都一樣，
     # 所以這份每季重來：換季時新角色自然是空的（跟 battle_results_seen 不同，不跨季保留）
     events_seen: list[str] = Field(default_factory=list)
+    # 已經通知過（或不必通知）的絕學定名（FB-083，Game._deliver_renames）：武學 id。自己定的、拿到時就已經是定過名的、
+    # 通知過的都記在這裡，同一門只通知一次。武學跟著季走，所以這份也每季重來
+    renames_told: list[str] = Field(default_factory=list)
 
     # ── 推力與貢獻帳（計畫 T3、第一季設計第七節）；角色每季重來，跟著新角色清空 ──
     contrib: int = 0  # 本季替目前陣營推大勢記下的貢獻（散人不記）

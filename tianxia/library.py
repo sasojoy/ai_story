@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from . import insights, team
-from .martial_arts import MartialArt, content_art
+from .martial_arts import MartialArt, content_art, is_renamed
 from .models import Content, SkillDef
 from .state import GameState
 from .world_state import WorldStateStore
@@ -64,6 +64,8 @@ def store_art(state: GameState, art: MartialArt, quality: str | None = None) -> 
     p = state.player
     if art.id in owned_arts(state):  # 已經有了（配在身上或在庫裡）：不重複收，也不動它的品質與熟練度
         return []
+    if is_renamed(art) and art.id not in p.renames_told:  # 拿到時就已經是定過名的：看到的就是新名，之後不必通知「改名了」（FB-083）
+        p.renames_told.append(art.id)
     if quality is not None and quality != art.quality:
         p.art_quality[art.id] = quality
     slot = "neigong_id" if art.kind == "內功" else "wugong_id"

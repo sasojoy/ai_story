@@ -70,6 +70,12 @@ class Insight(BaseModel):
     parents: list[str] = Field(default_factory=list)  # 合併出來的：兩個來源的 id（排序過）
 
 
+def is_renamed(art: MartialArt) -> bool:
+    """這門全服登記的武學已經被定了正式的名字（FB-083）：登記時 id 就是名字，絕學定名只改顯示的名字、id 不動，所以兩個不一樣就是改過。
+    內容手寫的（本命、基礎）id 本來就不是名字，不算。"""
+    return art.origin not in ("historical", "basic") and art.name != art.id
+
+
 def shown_creator(thing: MartialArt | Insight) -> str | None:
     """首創者寫給別人看的名號：登記當下記下的那一個（現在一律是名號；這一版之前匿名行走的人記成「某位少俠」，照舊）；舊資料沒記，照名號。"""
     return thing.creator_shown or thing.creator

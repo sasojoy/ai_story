@@ -32,7 +32,7 @@ from .guide import speakers as guide_speakers
 from .guide import steps as tutorial_steps
 from .journal import LOG_BREAK, Draft
 from .mapview import legend_data, render_map, render_minimap
-from .martial_arts import QUALITIES
+from .martial_arts import QUALITIES, is_renamed
 from .models import (
     EXPLORE_BRANCHES, FREE_TEXT_MAX, MOVES, BattleDef, Choice, Content, Effect, Event, ExploreBranch, FactionDef, Location,
     RoadKind, Squad, Threshold, TimetableEvent, TravelMode, TutorialStep, WorldEvent,
@@ -494,6 +494,7 @@ class Game:
         self._deliver_big_events()  # 這一季的時刻表大事人人有份：沒看過的補上，推進的人也走這一條（FB-038）
         self._backfill_battle_scores()  # 場上沒有份量快照的自己（上線前就在決戰裡）：補上；排程的 world_tick 不走這裡
         self._deliver_battle_results()  # 下線時收場的決戰，回來第一次同步就補上（休季、籌備中也一樣，FB-027）
+        self._deliver_renames()  # 手上的絕學被人定了名：下一次同步補一則紀錄（FB-083）
         settled = self._settle_plots()  # 不在線時收場的密謀，回來第一次同步就結算（正式版乙二）
         if settled:
             self._write("密謀", settled)
@@ -2184,6 +2185,39 @@ class Game:
         else:
             lines = [f"{self.stamp(r.time)}　{r.text}" for _, _, r in fresh]
             entry = JournalEntry(time=last.time, title=journal.WORLD_NEWS, tag=f"共 {len(fresh)} 件", lines=lines)
+        journal.add_entry(self.state, entry)
+
+    def _deliver_renames(self) -> None:
+        """手上（身上或功法庫）的武學被全服第一個練成絕學的人定了正式的名字，每個人下一次同步補一則江湖紀錄（FB-083）：
+        「你手上的【舊名】已由{名號}定名為【新名】。」——絕學定名改的是全服的顯示名字，別人手上那一門也跟著改，不通知的話
+        玩家只會看到武學莫名其妙換了名字。一次補到好幾門就合成一則（比照 _deliver_big_events）。
+
+        做法同 _deliver_battle_results：資料庫（全服登記的武學）才是真實來源，改名那一下不去動別人的角色，每個人自己的 Game
+        同步時自己補。誰通知過記在自己的 PlayerState.renames_told（武學 id），所以一個人一次改名只通知一次：自己定的名、
+        拿到的時候就已經是定過名的（library.store_art）一開始就記成通知過。舊名就是登記時的 id（絕學定名只改顯示的名字，id 不動）。
+        名號照登記時記下的那一個（MartialArt.master_shown，沒有就照 masters 表的名號），不另外去查；全服第一個練成的人寫的
+        一律是他的名號，匿名行走的人在登記當下記成「某位少俠」，照寫。內容手寫的武學（本命、基礎）不會被改名，也就不會在這裡出現。"""
+        p = self.state.player
+        held = [a for a in library.owned_arts(self.state) if a not in p.renames_told and a not in self.content.skills]
+        if not held:
+            return
+        renamed = self.world.renamed_skill_ids()  # 一次查完這一季改過名的；沒有就不必一門一門去查
+        lines = []
+        for art_id in held:
+            art = self.world.get_skill(art_id) if art_id in renamed else None
+            if art is None or not is_renamed(art):
+                continue
+            p.renames_told.append(art_id)
+            namer = art.master_shown or self.world.master_of(art_id)
+            if namer is None or self.world.master_of(art_id) == p.name:  # 自己定的名（舊存檔沒記到）：定名那一句已經說過了
+                continue
+            lines.append(f"你手上的【{art.id}】已由{namer}定名為【{art.name}】。")
+        if len(lines) == 1:
+            entry = JournalEntry(time=self.state.world.time, title=journal.RENAMED, tag=lines[0])
+        elif lines:
+            entry = JournalEntry(time=self.state.world.time, title=journal.RENAMED, tag=f"共 {len(lines)} 則", lines=lines)
+        else:
+            return
         journal.add_entry(self.state, entry)
 
     def _deliver_battle_results(self) -> None:
