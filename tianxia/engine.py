@@ -140,14 +140,15 @@ class Game:
         點綴句、決戰自訂行動的評分、鎖內才備料的對話與記憶整理、鎖內才取名的開爐）；逾時或失敗各處本來就退回固定的文字。
         引擎不讀時鐘，上限靠 HTTP 的逾時（見 ollama_client.quick_client）。
         一次拿鎖期間只容忍一次失敗：有一次鎖內的模型呼叫逾時或失敗之後（_model_budget.gave_up），這裡回 None，同一次行動裡
-        後面的鎖內呼叫都不叫模型、直接用固定文字。旗子由 server._locked 每次拿到鎖先歸零（reset_model_budget）；直接用 Game 的
-        測試與腳本（沒有鎖）自己決定什麼時候歸零。self.client 本身不動，鎖外的路徑（server.py 的對話備料、開爐取名、隨口應對的
-        評分與潤色，都拿 game.client）照舊用它自己的逾時與重問。沒有 client（伺服器假人，bot_runner 把 game.client 設成
-        None）就回 None，這些地方一個模型都不會叫。"""
+        後面的鎖內呼叫都不叫模型、直接用固定文字。旗子由 server._locked 與 bot_runner._bot_game 每次拿到鎖先歸零（reset_model_budget）；
+        直接用 Game 的測試與腳本（沒有鎖）自己決定什麼時候歸零。self.client 本身不動，鎖外的路徑（server.py 的對話備料、開爐取名、
+        隨口應對的評分與潤色，都拿 game.client）照舊用它自己的逾時與重問。沒有 client（伺服器假人鎖內的 Game：bot_runner 把
+        game.client 設成 None）就回 None，這些地方一個模型都不會叫。假人程式替首創配方與絕學定名取名是鎖外的另一條路：
+        用 bot_runner 自己的 client 叫 naming.generate（_name_and_apply），不經過這裡。"""
         return quick_client(self.client, self.content.config.in_lock_model_timeout, self._model_budget)
 
     def reset_model_budget(self) -> None:
-        """新的一次拿鎖：鎖內的模型呼叫重新有額度（見 _quick_client）。server._locked 每次拿到行動鎖先呼叫。"""
+        """新的一次拿鎖：鎖內的模型呼叫重新有額度（見 _quick_client）。server._locked 與 bot_runner._bot_game 每次拿到行動鎖先呼叫。"""
         self._model_budget.gave_up = False
 
     @classmethod
@@ -3086,13 +3087,14 @@ class Game:
     def forge_request(
         self, art_id: str | None, insight_ids: list[str], other_art: str | None = None, named_outside: bool = False,
     ) -> naming.NamingRequest | None:
-        """開爐首次取名或挑選的 A 段（呼叫端在行動鎖內、很快地呼叫；server.prepare_forge）：這一爐要不要模型？
+        """開爐首次取名或挑選的 A 段（呼叫端在行動鎖內、很快地呼叫；server.prepare_forge、bot_policy.tend_arts）：這一爐要不要模型？
         要就回送模型的單子（naming.NamingRequest），由呼叫端在鎖外交給 naming.generate（B 段），再進鎖把結果交給
         forge(..., proposed=...)（C 段）。單子有兩種：沒人合過、長新的 → 取名（choices 是空的）；合到舊的、候選兩個以上
-        → 從候選挑一個（choices 是候選的名字，見 fusion.forge_request）。不要的時候是 None：這個角色不叫模型
-        （client 是 None，伺服器假人）、賽季籌備中、這一爐會被拒絕、配方已經有人登記、合到舊的而且只有一個候選。
-        只讀、不改狀態——跟 dialogue_request 同一個做法。other_art 有、insight_ids 空的是武學＋武學。
-        named_outside：呼叫端會在鎖外自己叫模型（伺服器假人程式，它的 Game 沒有 client），照樣開單。"""
+        → 從候選挑一個（choices 是候選的名字，見 fusion.forge_request）。不要的時候是 None：這個 Game 沒有 client
+        （例如伺服器假人鎖內的 Game）而且呼叫端不會自己叫模型、賽季籌備中、這一爐會被拒絕、配方已經有人登記、合到舊的而且
+        只有一個候選。只讀、不改狀態——跟 dialogue_request 同一個做法。other_art 有、insight_ids 空的是武學＋武學。
+        named_outside：呼叫端會在鎖外自己叫模型（伺服器假人程式：它的 Game 沒有 client，B 段用 bot_runner 自己的 client
+        叫 naming.generate），照樣開單。"""
         if (self.client is None and not named_outside) or self._preparing():
             return None
         return fusion.forge_request(self.state, self.content, self.world, art_id, insight_ids, other_art=other_art)
@@ -3104,7 +3106,7 @@ class Game:
         """煉製頁的開爐：一門武學＋一個意境、兩門武學＝合成，兩個意境（可以是同一個）＝合併（見 fusion.py）。
         proposed 是鎖外先取好的（名字, 說明）（C 段，見 forge_request）：這裡整個重驗（A 段之後意境可能熔掉、心得或體力
         可能花掉、配方可能被別人或同一個人的另一個請求登記了），名字再過一次過濾、登記時原子判斷重名，過不了走退路字表；
-        給了 proposed 就不會在這裡叫模型（伺服器一律給，不需要模型時是 (None, "")）。沒給（整季機器人、腳本、測試）
+        給了 proposed 就不會在這裡叫模型（伺服器與假人程式一律給，不需要模型時是 (None, "")）。沒給（整季機器人、腳本、測試）
         首次出現的配方照舊在這裡叫模型，那是在行動鎖內，所以用 _quick_client 的短逾時複本，取不到名字就走退路字表。
         江湖紀錄的標題照煉製頁寫「煉製」（FB-047），做成了才寫，被拒絕只回一句話、什麼都不收。
         三種合成都花心得與體力（設計 12.1）：花了的體力跟心得一起寫在這一則的數值變化上。"""

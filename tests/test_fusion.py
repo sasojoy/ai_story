@@ -529,7 +529,7 @@ def test_forge_request_on_the_game_needs_a_model_client(game):
     p = game.state.player
     p.member.wugong_id, p.insights, p.stats["xinde"] = "basic_fist", ["feng"], 100
     assert game.forge_request("basic_fist", ["feng"]) is not None
-    game.client = None  # 伺服器假人（bot_runner 把 client 設成 None）：不叫模型，C 段走退路字表
+    game.client = None  # 沒有 client（伺服器假人鎖內的 Game 就是這樣）：預設不開單；假人程式在鎖外自己叫模型，給 named_outside=True 才開
     assert game.forge_request("basic_fist", ["feng"]) is None
 
 
@@ -1168,7 +1168,7 @@ def test_the_three_steps_run_for_a_blend_too(game):
     assert world.lookup_recipe(fusion.blend_key("basic_fist", "basic_breath")).note == "一吐一納，拳隨氣走。"
     assert game.forge_request("basic_fist", [], other_art="basic_breath") is None  # 配方登記了：不必再問
     assert game.forge_request("basic_fist", [], other_art=made) is not None  # 另一組還沒人合過
-    game.client = None  # 伺服器假人（bot_runner 把 client 設成 None）：不叫模型，C 段走退路字表
+    game.client = None  # 沒有 client（伺服器假人鎖內的 Game 就是這樣）：預設不開單；假人程式在鎖外自己叫模型，給 named_outside=True 才開
     assert game.forge_request("basic_fist", [], other_art=made) is None
 
 

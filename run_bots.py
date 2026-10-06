@@ -2,7 +2,8 @@
 
 執行：.venv/Scripts/python.exe run_bots.py（Ctrl+C 結束）
 
-主控台只印數字（在線、行動、補人），不印名號——連開伺服器的人也看不出誰是假人。
+主控台只印數字（在線、行動、補人、等鎖跳過、出錯、取名），不印名號——連開伺服器的人也看不出誰是假人。
+模型：假人鎖內的 Game 沒有 client；首創配方與絕學定名的取名在鎖外、用這支程式自己的 client（bot_runner._name_and_apply）。
 """
 from __future__ import annotations
 

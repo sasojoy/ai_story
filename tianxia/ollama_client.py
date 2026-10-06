@@ -127,7 +127,7 @@ class ModelGaveUp(RuntimeError):
 
 class ModelBudget:
     """行動鎖內的模型「額度」：一次拿鎖的期間，只要有一次模型呼叫逾時或失敗，gave_up 就設起來，之後鎖內的模型呼叫一律不送
-    （引擎不讀時鐘，靠這面旗子就夠）。由 Game 持有，server._locked 每次拿到鎖先歸零（Game.reset_model_budget）。"""
+    （引擎不讀時鐘，靠這面旗子就夠）。由 Game 持有，server._locked 與 bot_runner._bot_game 每次拿到鎖先歸零（Game.reset_model_budget）。"""
 
     def __init__(self) -> None:
         self.gave_up = False

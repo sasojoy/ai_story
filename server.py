@@ -160,7 +160,8 @@ MOVE_MODE: contextvars.ContextVar[str] = contextvars.ContextVar("move_mode", def
 # 掛了的時候，每個玩家的下一個動作都還是要在行動鎖裡等一次逾時，全服跟著等。所以任何一次拿鎖裡有鎖內的模型呼叫失敗或逾時，
 # 就把全服的斷路器打開 MODEL_BREAKER_SECONDS 秒：這段時間每一次拿鎖（不分玩家）一開始額度就用完，鎖內直接用固定文字、
 # 不碰網路；時間到之後的第一次拿鎖照常叫模型，又失敗就再打開。只管鎖內：鎖外的取名、對話、隨口應對的評分照舊叫模型。
-# 只在 server.py（PM：不進 Config）；假人程式（run_bots.py）的 client 是 None，本來就不叫模型。
+# 只在 server.py（PM：不進 Config）；假人程式（run_bots.py）鎖內的 Game 沒有 client，用不到它。假人替首創配方與絕學定名取名是
+# 在鎖外、用它自己的 client（bot_runner._name_and_apply，一次一件、至少隔 bot_naming_gap_seconds），在另一個程式裡，這個斷路器管不到。
 MODEL_BREAKER_SECONDS = 180
 _monotonic = time.monotonic  # 斷路器的時鐘（引擎不讀時鐘，伺服器可以）；測試換掉它，不必真的等
 _BREAKER_LOCK = threading.Lock()  # 「到期了就關上、印一行」是先讀再寫：兩個請求同時進來也只關一次、只印一行
@@ -438,8 +439,10 @@ def prepare_forge(
       B（鎖外、很慢）naming.generate：預算是 Config.naming_budget_seconds 扣掉 A 段（含等鎖）花掉的時間，
         引擎不讀時鐘，所以時間在這裡量；用完就回 (None, "")，C 段走退路字表（挑的話改由規則挑）；
       C（鎖內、很快）由呼叫端把結果交給 Game.forge(..., proposed=...)，引擎整個重驗再登記、收費。
-    這裡做 A 與 B，回傳 B 的結果（名字, 說明）；不必叫模型時是 NO_NAME。假人程式之後要合成，照樣能不經過 HTTP
-    走這三段（Game.forge_request 在 action_lock 裡、naming.generate 在鎖外、Game.forge(proposed=...) 再進鎖）。
+    這裡做 A 與 B，回傳 B 的結果（名字, 說明）；不必叫模型時是 NO_NAME。假人程式（bot_runner._name_and_apply）不經過 HTTP，
+    照樣走這三段：A 是 Game.forge_request(named_outside=True) 在 action_lock 裡，B 是它自己的 client 在鎖外叫 naming.generate
+    （預算 Config.bot_naming_budget_seconds，一次一件、至少隔 bot_naming_gap_seconds），C 是 bot_policy.apply_job 再進鎖交給
+    Game.forge(proposed=...)；絕學定名也是同一條路（Game.mastery_request、Game.name_mastered）。
     other_art 有、insight_ids 空的是武學＋武學。"""
     started = time.monotonic()
     with _locked(game):
