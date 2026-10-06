@@ -228,9 +228,6 @@ details.fold > summary::after { content: "▾"; margin-left: auto; color: var(--
 details.fold:not([open]) > summary::after { transform: rotate(-90deg); }
 details.fold[open] > summary { border-radius: var(--radius) var(--radius) 0 0; }
 details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border-radius: 0 0 var(--radius) var(--radius); padding: 10px 14px; background: var(--card); }
-.quest summary { font-weight: 500; font-size: 14px; padding: 7px 14px; }
-.quest .fold-body { font-size: 14px; max-height: 50vh; overflow: auto; }
-.quest h3 { font-size: 15px; margin-top: 0; }
 
 .msg { border-left: 3px solid var(--accent); background: var(--accent-soft); border-radius: 8px; padding: 8px 12px; margin-bottom: 12px; font-size: 14px; animation: rise 0.25s ease-out; }
 .msg:empty { display: none; }
@@ -264,6 +261,12 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .battle-card h3 { margin: 0 0 1px; font-size: 16px; line-height: 1.3; }
 .battle-card p { margin: 3px 0; }
 .battle-card .tx-extra { margin: 3px 0 0; padding: 0 10px; line-height: 1.45; }
+/* 戰鬥卡片底下聽來的那一句「你聽到一件事：…」（FB-074；伺服器標 tx-hearsay，app.js 的 decorateHearsay 讓它能點）：
+   常有兩三行高、多撐 46～66px，收成一行、放不下加「…」，點了看全文。點擊範圍上下各多 7px、用負的 margin 吃回去，不多撐那一行。
+   只寫上下的 padding，不用簡寫：Reduce Motion 時 journal 的 .tx-new 靠 padding-left 8px 讓字離左邊那條金條遠一點，
+   簡寫（權重比它高）會把左邊歸零、條就壓在第一個字上 */
+.battle-card .tx-extra .tx-hearsay { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; padding-top: 7px; padding-bottom: 7px; margin: -5px 0; }
+.battle-card .tx-extra .tx-hearsay.open { white-space: normal; overflow: visible; text-overflow: clip; }
 /* 「看完整戰報 ›」在「過程」那一行的中間（app.js 的 roundsFold）：不撐高那一行，點擊範圍上下各多 8px（約 38px 高）。
    沒有「過程」那一行的卡片（全服決戰、舊戰報）才接在卡片最後一段的句尾（withReportLink）：行內、不撐高那一行；
    放不下時整顆換到下一行（inline-block） */
@@ -276,7 +279,10 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .battle-card .rounds-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 0; }
 .battle-card .rounds-more { flex: none; padding: 8px 2px; margin: -8px 0; white-space: nowrap; }
 .battle-card ul.rounds { margin: 1px 0 5px; padding-left: 1.2em; font-size: 14px; line-height: 1.45; }
-.battle-card ul.rounds:not(.open) > li:not(:first-child) { display: none; }
+/* 收著時露出第一個「不是功效句」的 li（功效的演出句以〔開頭，app.js 的 foldTraitItems 標成 .trait；沒有功效句的卡片就是第一個 li，跟以前一樣）：
+   功效句整個藏起來，第一回合照舊帶頭（Task 4 審查 I-1）。展開（.open）與戰報頁照引擎寫的順序全部列出 */
+.battle-card ul.rounds:not(.open) > li.trait { display: none; }
+.battle-card ul.rounds:not(.open) > li:not(.trait) ~ li:not(.trait) { display: none; }
 /* 收著的第一回合最多兩行（PM 2026-10-05）：app.js 的 fitFirstRound 量過、放不進兩行又拼得出數字行時，整句（.r-full）省略、
    換成只有數字的那一行（.r-short，「第1回合　你氣血 -13，對手氣勢 -10……」）；展開時一律是整句 */
 .battle-card ul.rounds .r-short { display: none; }
@@ -287,18 +293,25 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .battle-card ul.rounds > li:nth-child(3) { animation-delay: 0.5s; }
 .battle-card ul.rounds > li:nth-child(4) { animation-delay: 0.75s; }
 .battle-card ul.rounds > li:nth-child(5) { animation-delay: 1s; }
+/* 功效的句子加進去之後過程可以有十幾行（前 3＋回合 5＋後 8）：每一個位置都有延遲、一路遞增，後面的一定比前面的晚浮現
+   （延遲只寫到第 5 個時，第 6 個以後會比第 2～5 個先出來）；第 13 個以後一起在最後。減少動態時整站的動畫都關掉（prefers-reduced-motion） */
+.battle-card ul.rounds > li:nth-child(6) { animation-delay: 1.25s; }
+.battle-card ul.rounds > li:nth-child(7) { animation-delay: 1.5s; }
+.battle-card ul.rounds > li:nth-child(8) { animation-delay: 1.75s; }
+.battle-card ul.rounds > li:nth-child(9) { animation-delay: 2s; }
+.battle-card ul.rounds > li:nth-child(10) { animation-delay: 2.25s; }
+.battle-card ul.rounds > li:nth-child(11) { animation-delay: 2.5s; }
+.battle-card ul.rounds > li:nth-child(12) { animation-delay: 2.75s; }
+.battle-card ul.rounds > li:nth-child(n+13) { animation-delay: 3s; }
+/* 收著時看得到的只有第一個「不是功效句」的 li（上面藏起來的功效句佔著 nth-child 的位置，第一回合因此會晚 0.25～0.75 秒才浮現，
+   最終審查 M2）：收著時它們的延遲都是 0（權重比上面的 nth-child 高）；展開（.open）之後這條不管，照位置遞增 */
+.battle-card ul.rounds:not(.open) > li:not(.trait) { animation-delay: 0s; }
 /* 大場面模型寫的過程是一段話（最多 200 字、手機上約十行）：收著只露前兩行，「展開過程」攤開（PM 2026-10-05，計畫三 Task 2 審查修正 2） */
 .battle-card p.rounds-tale { margin: 1px 0 5px; font-size: 14px; line-height: 1.45; }
 .battle-card p.rounds-tale:not(.open) { display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.battle-card p.rounds-tale:not(.open) .trait { display: none; } /* 功效的句子收著時藏起來，兩行的截斷看到的是模型的話（app.js 的 foldTraitText） */
 @keyframes tx-round-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
-/* 公告卡（第一季，計畫 T2）：這一週已經發生的江湖大事，排在江湖頁最上面。
-   預設縮成一行（FB-039）：「📣 本週江湖大事（2）：標題、標題」，放不下的標題截斷加「…」；兩件大事的全文加上戰鬥卡片，
-   會把整排行動擠到分頁列底下。點了才展開全文，一則一段、新的在前；用 details.fold 的外觀。
-   選擇器要寫成 details.fold.bulletin：details.fold > summary 的權重比 .bulletin > summary 高，只寫後者會被蓋掉 */
-details.fold.bulletin > summary { border-color: var(--gold); font-size: 14px; padding: 8px 14px; min-height: 44px; box-sizing: border-box; }
-details.fold.bulletin > .fold-body { border-color: var(--gold); max-height: 50vh; overflow: auto; }
-.bulletin-head { flex: none; color: var(--gold); white-space: nowrap; }
-.bulletin-titles { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 400; color: var(--ink-2); }
+/* 本週江湖大事（第一季，計畫 T2）：江湖頁最上面那一排小標「大事」點開的面板（見 .peek-panel），一則一段、新的在前 */
 .bulletin-item { font-size: 14px; line-height: 1.65; }
 .bulletin-item + .bulletin-item { border-top: 1px dashed var(--line); margin-top: 8px; padding-top: 8px; }
 .bulletin-item p { margin: 0 0 4px; }
@@ -359,6 +372,37 @@ details.fold.bulletin > .fold-body { border-color: var(--gold); max-height: 50vh
 .front-bar.side-guan > i { background: var(--kuai); }
 .front-bar.side-huang > i { background: var(--gold); }
 .front-bar.side-haoqiang > i { background: var(--rou); }
+/* 江湖頁最上面的一排小標「態勢｜大事｜主線」（正式版辛，PM 2026-10-06）：三張各 44px 的摺疊卡疊起來有 170px，打完一仗整排行動
+   就被擠出第一屏；一排 44px。每顆至少 44px 高；點哪一顆，它的內容在這一排正下面攤開（.peek-panel），同一時間只開一個。
+   一行放得下三顆：375 寬約 330px 可用、320 寬約 270px。大事的小標一律只有「大事 N」加一個點、不寫標題（寫了，428～440px 的手機
+   一行放不下、整排折成兩行，點掉亮點又跳回一行）；最窄（≤340px）連小箭頭也不畫；態勢的數字永遠不縮、不截（nowrap），
+   實在放不下整排折行，也不截字。
+   類別名稱獨一無二：.chip／.chips 是別處（人物、線索）在用的 */
+.peek { margin-bottom: 12px; }
+.peek-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.peek-chip { flex: 1 1 auto; min-height: 44px; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; gap: 4px; padding: 6px 8px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); color: var(--ink); font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; }
+.peek-chip::after { content: "▾"; font-size: 12px; font-weight: 400; color: var(--ink-2); transform: rotate(-90deg); transition: transform 0.2s; }
+.peek-chip.board { border-color: var(--gold); }
+.peek-chip.on { background: var(--card-2); }
+.peek-chip.on::after { transform: none; }
+.peek-name { color: var(--ink-2); }
+.peek-nums b { font-weight: 700; font-variant-numeric: tabular-nums; }
+.peek-nums .side-guan { color: var(--kuai); }
+.peek-nums .side-huang { color: var(--gold); }
+.peek-nums .side-haoqiang { color: var(--rou); }
+.peek-count { color: var(--gold); font-variant-numeric: tabular-nums; }
+.peek-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--gang); }
+.peek-panel { margin-top: 6px; padding: 10px 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); max-height: 50vh; overflow: auto; }
+.peek-panel.board { border-color: var(--gold); }
+.peek-panel.quest { font-size: 14px; }
+.peek-panel.quest h3 { font-size: 15px; margin-top: 0; }
+.peek-panel > .fronts { margin-bottom: 8px; }
+.peek-panel > :last-child { margin-bottom: 0; }
+.stance-rule { margin: 0; font-size: 12px; line-height: 1.5; color: var(--ink); }
+.stance-how { margin: 2px 0 0; font-size: 11px; line-height: 1.5; color: var(--ink-2); }
+@media (max-width: 340px) {
+  .peek-chip::after { display: none; }
+}
 /* 第一季的本週軍令（計畫 T6） */
 .orders .order { padding: 8px 0; border-top: 1px solid var(--line); }
 .orders .order:first-child { border-top: 0; padding-top: 0; }

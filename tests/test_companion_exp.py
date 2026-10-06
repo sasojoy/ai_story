@@ -34,6 +34,30 @@ def test_level_messages_come_in_team_order(state, content, world):
     ]
 
 
+def test_grant_team_exp_also_reports_who_reached_which_level(state, content, world):
+    """戰報要畫一行簡短的「升到第 N 級」（FB-074）：誰升到第幾級是結構化的資料，不從句子裡讀；句子照舊（下面是同一批）。"""
+    state.player.team += ["mate", "scholar"]
+    state.player.member.exp = 90
+    world.update_companion("scholar", lambda progress: setattr(progress, "exp", 95))
+    msgs, ups = team.grant_team_exp(state, content, world, 10)
+    assert msgs == ["沈浪升到第 2 級！", "你有 1 點屬性可以分配（點名號展開）。", "書生升到第 2 級！"]
+    assert (ups.you, ups.points, ups.mates, ups.lines) == (2, 1, [("書生", 2)], msgs)
+
+
+def test_several_levels_in_one_fight_report_the_final_level_and_all_the_points(state, content, world):
+    state.player.team.append("mate")
+    world.update_companion("mate", lambda progress: setattr(progress, "exp", 0))
+    state.player.stat_points = 2  # 之前還沒配的也算在「目前可配」裡（句子寫的也是總數）
+    msgs, ups = team.grant_team_exp(state, content, world, 350)  # 夾具每級要 100×級：100、200 → 升兩級
+    assert state.player.member.level == 3 and world.get_companion("mate").level == 3
+    assert (ups.you, ups.points, ups.mates) == (3, 4, [("韓鐵", 3)])
+    assert msgs.count("沈浪升到第 2 級！") == 1 and msgs.count("沈浪升到第 3 級！") == 1  # 句子還是一級一句
+
+
+def test_no_levelups_means_none(state, content, world):
+    assert team.grant_team_exp(state, content, world, 10) == ([], None)
+
+
 def test_a_companions_blood_cap_grows_with_the_level(state, content, world):
     state.player.team.append("mate")
     world.update_companion("mate", lambda progress: setattr(progress, "neili", 150.0))

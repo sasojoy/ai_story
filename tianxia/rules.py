@@ -447,6 +447,49 @@ def stances(state: GameState, content: Content) -> dict[str, int]:
     return {"guan": 100 - huangjin, "huang": huangjin, "haoqiang": trend_value(state, content, GEJU)}
 
 
+_STANCE_SIDES = ("guan", "huang", "haoqiang")
+_STANCE_NAMES = {"guan": "官軍", "huang": "黃巾", "haoqiang": "豪強"}  # 態勢卡上三方的叫法（web/app.js 的 STANCE_NAMES 同一份；陣營本身叫黃巾軍、地方豪強）
+_STANCE_COMPLEMENT = {"guan": "huang", "huang": "guan"}  # 官軍＝100－黃巾：兩邊互為補數；豪強沒有另一方可換
+
+
+def stance_rule_note(state: GameState, content: Content) -> str:
+    """態勢卡底下那一句收季規則（第一季設計 4.4；正式版辛）：門檻從第一季結局算，不寫死。
+    每一個決定性結局（有 stance_min／stance_max 的）換成「哪一方到幾分」：stance_min 的那一方到那個值；stance_max 的黃巾 ≤ 15
+    就是官軍 ≥ 85（官軍與黃巾互為補數）。同一方有幾個門檻取最小的。三方都有、數字也一樣（這一季都是 85）才寫「哪一方的態勢一到 85」；
+    數字不一樣或只有幾方有門檻，就照每一方寫自己的（「官軍一到 85、黃巾一到 85、豪強一到 90」）；換不出「哪一方到幾分」的
+    （豪強的 stance_max，或兩個條件合成一種的結局）就寫一句不帶數字的話，不報算不出來的數字。
+    第 decisive_from_week 週以前寫「第 N 週起」，之後不寫。沒有決定性結局時是空字串。"""
+    reach: dict[str, int] = {}  # 一方 → 它到幾分就收季
+    decisive, unclear = False, False
+    for e in content.scenario.endings:
+        if not e.season_one or not (e.stance_min or e.stance_max):
+            continue
+        decisive = True
+        if len(e.stance_min) + len(e.stance_max) != 1:  # 兩個條件合成一種：不是「哪一方到幾分」
+            unclear = True
+            continue
+        for side, bar in e.stance_min.items():
+            reach[side] = min(reach.get(side, 100), bar)
+        for side, bar in e.stance_max.items():
+            other = _STANCE_COMPLEMENT.get(side)
+            if other is None:  # 豪強 ≤ 幾分：換不出另一方到幾分
+                unclear = True
+            else:
+                reach[other] = min(reach.get(other, 100), 100 - bar)
+    if not decisive:
+        return ""
+    ending = "這一季當場收場；否則到季末比高低。"
+    if unclear or not reach:
+        rule = f"哪一方的態勢到了決勝的門檻，{ending}"
+    elif set(reach) == set(_STANCE_SIDES) and len(set(reach.values())) == 1:
+        rule = f"哪一方的態勢一到 {min(reach.values())}，{ending}"
+    else:
+        rule = "、".join(f"{_STANCE_NAMES[side]}一到 {reach[side]}" for side in _STANCE_SIDES if side in reach) + f"，{ending}"
+    week = calendar.point(state.world.time, content, state.world).week
+    start = content.config.decisive_from_week
+    return f"第 {start} 週起，{rule}" if week < start else rule
+
+
 def geju_rise_factor(content: Content, players: int | None) -> float:
     """割據漲速的人數係數（企劃者 2026-10-05，測試階段「依據人數等比例調整」）：min(1, players ÷ geju_full_players)。
     players 是這一季投靠了陣營的人數（投靠名冊，真人與假人一樣算）；沒人投靠就是 0（割據不漲），湊滿 geju_full_players 人

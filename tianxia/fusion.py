@@ -27,11 +27,11 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass
 
-from . import insights, landing, library, naming, team
+from . import insights, landing, library, naming, team, traits
 from .martial_arts import Insight, MartialArt, generate_from_name, shown_creator
 from .models import Content
 from .ollama_client import OllamaClient
-from .rules import display_name
+from .rules import add_rumor, display_name
 from .state import GameState
 from .world_state import WorldStateStore
 
@@ -161,6 +161,26 @@ def _arrival(art: MartialArt, first: bool, landed: bool) -> str:
     return tail + (f"\n這一門由{by}首創。" if landed else f"\n這一門由{by}首創，你照著合出了同一門。")
 
 
+def _special_and_note(content: Content, new_traits: list[str], key: str, tianji: int) -> tuple[str | None, str]:
+    """新武學的特別功效（配方加這一季的天機擲，13.4）與取名提示那一行（寫著它的一般功效 new_traits 與特別功效）。
+    一般功效是來路定的，由呼叫端先算好（traits.inherit_fuse／inherit_blend）。A 段開單、C 段登記與取名都走這一個——
+    同一個配方、同一季的天機，算出來一樣，單子上的提示才跟登記的那一門對得上。"""
+    special_id = traits.roll_special(content, key, tianji)
+    return special_id, traits.naming_note(content, new_traits, special_id)
+
+
+def _special_rumor(state: GameState, content: Content, art: MartialArt, first: bool) -> list[str]:
+    """第一次合出帶特別功效的武學：江湖上傳一句（13.4，不寫配方），也回給玩家看。後來照著合的人不再傳。
+    這是世界層的傳聞：具名（named=True），寫真正的名號、不照匿名行走改成「某位少俠」（企劃者定：只有地方傳聞才有不具名這回事）。
+    首創者那一門武學自己的 creator_shown 照舊（匿名的人合出來的，功法卡上還是「某位少俠」），這裡不動它。"""
+    special = traits.special(content, art.special) if first else None
+    if special is None:
+        return []
+    line = f"江湖上傳開了：{state.player.name}合出一門帶〔{special.name}〕的【{art.name}】。"
+    add_rumor(state, line, state.player.location, content=content, named=True)
+    return [line]
+
+
 def can_forge(state: GameState, content: Content) -> bool:
     """現在有沒有可能拿意境開爐：持有沒滿、有意境，而且付得起一次武學＋意境（還要有武學）或一次合併（設計 12.1：
     兩種都花心得與體力）。只看結構、不查全服配方表（那要打資料庫；狀態列每次輪詢都會算這個），所以「合出來的你已經有了」
@@ -193,7 +213,8 @@ def fuse_problem(state: GameState, content: Content, world: WorldStateStore, art
     return problem if problem is not None else _stamina_line(state, content.config.fuse_stamina, "合成")
 
 
-def _fuse_messages(base: MartialArt, insight: Insight) -> list[dict[str, str]]:
+def _fuse_messages(base: MartialArt, insight: Insight, *, note: str = "") -> list[dict[str, str]]:
+    """note 是 traits.naming_note 那一行（新武學的功效，取名要配得上它）；沒有功效的內容傳空的，提示跟以前一樣。"""
     base_note = f"——{base.note}" if base.note else ""
     insight_note = f"——{insight.note}" if insight.note else ""
     return [
@@ -201,7 +222,7 @@ def _fuse_messages(base: MartialArt, insight: Insight) -> list[dict[str, str]]:
         {"role": "user", "content": (
             f"底：一門{base.kind}【{base.name}】（屬{base.attribute}）{base_note}\n"
             f"融入的意境：「{insight.name}」（屬{insight.attribute}）{insight_note}\n"
-            f"兩者結合，從底衍生出一門新的{base.kind}；名字要看得出是從底變出來的。\n\n{naming.FORMAT_RULES}"
+            f"兩者結合，從底衍生出一門新的{base.kind}；名字要看得出是從底變出來的。\n{note}\n{naming.FORMAT_RULES}"
         )},
     ]
 
@@ -228,7 +249,8 @@ def forge_request(
         candidates = landing.art_candidates(world, shape.kind, shape.attribute, shape.lean)
         if landing.lands(content, key, tianji, len(candidates)):
             return _pick_request("blend", key, shape.kind, _pick_messages(_blend_what(art_a, art_b), candidates), candidates)
-        return naming.NamingRequest("blend", key, shape.kind, _blend_messages(art_a, art_b, shape.kind))
+        _, trait_note = _special_and_note(content, traits.inherit_blend(art_a, art_b, shape.attribute), key, tianji)
+        return naming.NamingRequest("blend", key, shape.kind, _blend_messages(art_a, art_b, shape.kind, note=trait_note))
     if art_id and not other_art and len(insight_ids) == 1:
         insight_id = insight_ids[0]
         if fuse_problem(state, content, world, art_id, insight_id) is not None:
@@ -242,7 +264,8 @@ def forge_request(
         candidates = landing.art_candidates(world, base.kind, insight.attribute, insight.lean)
         if landing.lands(content, key, tianji, len(candidates)):
             return _pick_request("fuse", key, base.kind, _pick_messages(_fuse_what(base, insight), candidates), candidates)
-        return naming.NamingRequest("fuse", key, base.kind, _fuse_messages(base, insight))
+        _, trait_note = _special_and_note(content, traits.inherit_fuse(base, insight.attribute), key, tianji)
+        return naming.NamingRequest("fuse", key, base.kind, _fuse_messages(base, insight, note=trait_note))
     if not art_id and not other_art and len(insight_ids) == 2:
         a, b = insight_ids
         if merge_problem(state, content, world, a, b) is not None:
@@ -312,7 +335,10 @@ def fuse(
             name = _picked(client, proposed, _pick_messages(_fuse_what(base, insight), candidates), candidates)
             art, landed = world.link_recipe(key, landing.choose(candidates, key, tianji, name).id, state.player.name)
         else:
-            name, note = _named(client, content, world, _fuse_messages(base, insight), proposed)
+            # 功效（13.3、13.4）：長新武學才定——一般功效照來路、特別功效照配方擲；取名之前就算好，提示才寫得出來
+            new_traits = traits.inherit_fuse(base, insight.attribute)
+            special_id, trait_note = _special_and_note(content, new_traits, key, tianji)
+            name, note = _named(client, content, world, _fuse_messages(base, insight, note=trait_note), proposed)
             for candidate_name in _candidates(content, world, key, base.kind, tianji, name):
                 candidate = generate_from_name(
                     candidate_name, base.kind, candidate_name, tianji, weights=LOW_ONLY, attribute=insight.attribute,
@@ -321,6 +347,7 @@ def fuse(
                     "origin": "fused", "creator": state.player.name, "creator_shown": display_name(state),
                     "note": note if candidate_name == name else "",  # 說明是模型替它那個名字寫的；換成退路名字就不帶
                     "insight": insight.id, "base": art_id, "lean": insight.lean,
+                    "traits": new_traits, "special": special_id,
                 })
                 art, first = world.claim_recipe(key, candidate)  # 同時有人先登記了：拿到的是人家登記的那一門
                 if art is not None:
@@ -332,6 +359,7 @@ def fuse(
     cfg = content.config
     # 新武學一律從登記的品質（下品）起修，不看底現在是什麼品質：store_art 不帶 quality，就不會記一筆個人品質
     msgs = [_fuse_line(base, insight, art, first, landed)] + _charge(state, cfg.fuse_xinde, cfg.fuse_stamina)
+    msgs += _special_rumor(state, content, art, first)
     return art, msgs + library.store_art(state, art)
 
 
@@ -441,7 +469,8 @@ def blend_problem(state: GameState, content: Content, world: WorldStateStore, a:
     return problem if problem is not None else _stamina_line(state, content.config.fuse_stamina, "合成")
 
 
-def _blend_messages(a: MartialArt, b: MartialArt, kind: str) -> list[dict[str, str]]:
+def _blend_messages(a: MartialArt, b: MartialArt, kind: str, *, note: str = "") -> list[dict[str, str]]:
+    """note 同 _fuse_messages：新武學的功效那一行。"""
     a_note = f"——{a.note}" if a.note else ""
     b_note = f"——{b.note}" if b.note else ""
     return [
@@ -449,7 +478,7 @@ def _blend_messages(a: MartialArt, b: MartialArt, kind: str) -> list[dict[str, s
         {"role": "user", "content": (
             f"第一門：{a.kind}【{a.name}】（屬{a.attribute}）{a_note}\n"
             f"第二門：{b.kind}【{b.name}】（屬{b.attribute}）{b_note}\n"
-            f"兩門合而為一，衍生出一門新的{kind}；名字要看得出是兩門合起來的。\n\n{naming.FORMAT_RULES}"
+            f"兩門合而為一，衍生出一門新的{kind}；名字要看得出是兩門合起來的。\n{note}\n{naming.FORMAT_RULES}"
         )},
     ]
 
@@ -479,7 +508,9 @@ def blend(
             name = _picked(client, proposed, _pick_messages(_blend_what(art_a, art_b), candidates), candidates)
             art, landed = world.link_recipe(key, landing.choose(candidates, key, tianji, name).id, state.player.name)
         else:
-            name, note = _named(client, content, world, _blend_messages(art_a, art_b, shape.kind), proposed)
+            new_traits = traits.inherit_blend(art_a, art_b, shape.attribute)  # 功效同 fuse：來路與配方定，取名之前算好
+            special_id, trait_note = _special_and_note(content, new_traits, key, tianji)
+            name, note = _named(client, content, world, _blend_messages(art_a, art_b, shape.kind, note=trait_note), proposed)
             for candidate_name in _candidates(content, world, key, shape.kind, tianji, name):
                 candidate = generate_from_name(
                     candidate_name, shape.kind, candidate_name, tianji, weights=LOW_ONLY, attribute=shape.attribute,
@@ -488,6 +519,7 @@ def blend(
                     "origin": "fused", "creator": state.player.name, "creator_shown": display_name(state),
                     "note": note if candidate_name == name else "",
                     "insight": shape.insight, "base": None, "parents": sorted([a, b]), "lean": shape.lean,
+                    "traits": new_traits, "special": special_id,
                 })
                 art, first = world.claim_recipe(key, candidate)
                 if art is not None:
@@ -504,4 +536,5 @@ def blend(
         f"（{art.quality}・屬{art.attribute}）！"
     )
     msgs = [head + _arrival(art, first, landed)] + _charge(state, cfg.fuse_xinde, cfg.fuse_stamina)
+    msgs += _special_rumor(state, content, art, first)
     return art, msgs + library.store_art(state, art)

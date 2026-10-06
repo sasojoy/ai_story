@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import math
 import re
+import string
 from pathlib import Path
 from typing import get_args
 
@@ -21,9 +22,11 @@ from .front_lines import BAND_KEYS, GEJU_KEYS
 from .materials import TIER_NAMES
 from .models import (
     FRONT_KEY, ROADS, STATS, Attribute, BattleDef, CharacterDef, CheckVoice, CombatLines, Condition, Config, Content,
-    CraftNames, Effect, Event, FigureDef, FollowerDef, Foreshadows, FrontLines, InsightDef, Location, OrdersContent,
-    PromotionDef, MapLayout, Material, RoadSight, Scenario, Sect, SimRumor, SkillDef, Squad, TimetableEvent, Tutorial,
+    CraftNames, Effect, Event, FigureDef, FollowerDef, Foreshadows, FrontLines, InsightDef, Location, OppDef, OrdersContent,
+    PromotionDef, MapLayout, Material, RoadSight, Scenario, Sect, SimRumor, SkillDef, Squad, TimetableEvent, TraitBook,
+    Tutorial,
 )
+from .martial_arts import ATTRIBUTES, QUALITIES
 from .naming import name_problem
 from .zh import to_traditional
 
@@ -64,6 +67,8 @@ def load_content(root: Path, profile: str | None = None) -> Content:
         locations=_index(Location, _read(root / "locations.json")),
         skills=_index(SkillDef, _read(root / "skills.json")),
         insights=_index(InsightDef, _read(root / "insights.json")),
+        traits=_traits(root / "traits.json"),
+        trait_lines=_trait_lines(root / "trait_lines.json"),
         materials=_index(Material, _read(root / "materials.json")),
         craft_names=CraftNames(**_read(root / "craft_names.json")),
         combat_lines=_combat_lines(root / "combat_lines.json"),
@@ -81,6 +86,8 @@ def load_content(root: Path, profile: str | None = None) -> Content:
         orders=_orders(root / "orders.json"),
         promotions=[_build(PromotionDef, raw) for raw in _read(root / "promotions.json")]
         if (root / "promotions.json").exists() else [],
+        opportunities=[_build(OppDef, raw) for raw in _read(root / "opportunities.json")]
+        if (root / "opportunities.json").exists() else [],
         followers={raw["id"]: _build(FollowerDef, raw) for raw in _read(root / "followers.json")}
         if (root / "followers.json").exists() else {},
         figures=_index(FigureDef, _read(root / "figures.json")) if (root / "figures.json").exists() else {},
@@ -219,6 +226,36 @@ def _combat_lines(path: Path) -> CombatLines:
         raise ContentError(f"combat_lines.json：不是合法的 JSON：{e}") from e
     except (ValidationError, TypeError) as e:
         raise ContentError(f"combat_lines.json：{e}") from e
+
+
+def _traits(path: Path) -> TraitBook:
+    """content/traits.json（武學的功效，武學與成長設計 13.2、13.4）：選填——沒有這個檔就是沒有功效；有的話，
+    不是合法的 JSON、欄位或掛點寫錯都改報 ContentError 並指出是這個檔（跟 combat_lines.json 一樣）。"""
+    if not path.exists():
+        return TraitBook()
+    try:
+        return TraitBook.model_validate(_read(path))
+    except json.JSONDecodeError as e:
+        raise ContentError(f"traits.json：不是合法的 JSON：{e}") from e
+    except ValidationError as e:
+        raise ContentError(f"traits.json：{e}") from e
+
+
+def _trait_lines(path: Path) -> dict[str, list[str]]:
+    """content/trait_lines.json（功效的演出句，S1 寫的；形狀是 {功效名: [句子, ...]}）：選填；寫壞了報 ContentError 並指出是這個檔。
+    句子的內容（佔位、繁體、不寫數字）由 check_traits 查。"""
+    if not path.exists():
+        return {}
+    try:
+        raw = _read(path)
+    except json.JSONDecodeError as e:
+        raise ContentError(f"trait_lines.json：不是合法的 JSON：{e}") from e
+    shaped = isinstance(raw, dict) and all(
+        isinstance(lines, list) and all(isinstance(line, str) for line in lines) for lines in raw.values()
+    )
+    if not shaped:
+        raise ContentError("trait_lines.json：要寫成 {功效名: [句子, ...]}，每個功效一串句子")
+    return raw
 
 
 def _front_lines(path: Path) -> FrontLines:
@@ -371,6 +408,77 @@ def check_combat_lines(c: Content, need) -> None:
             need(to_traditional(text) == text, f"{where}：文字只能用繁體中文（「{text[:12]}」）")
             need(not NUMBER_IN_TEXT.search(text), f"{where}：不能寫數字或百分比，回合的數字由引擎接在後面（「{text[:12]}」）")
             need("【" not in text and "】" not in text, f"{where}：不能寫【】，武學名由引擎加上（「{text[:12]}」）")
+
+
+TRAIT_LINE_SLOTS = {"who", "art", "foe"}  # 演出句的三個佔位（S1：出手的人、帶功效的那一門、對手）
+
+
+def _placeholder_problem(line: str) -> str | None:
+    """演出句的佔位有沒有問題；沒問題是 None。之後 trait_line 用 str.format(who=…, art=…, foe=…) 把句子套上去，
+    所以每一個佔位都要是乾淨的 {who}、{art}、{foe}（不接格式、不接轉換、不取屬性或索引），大括號要成對、不能有空的 {}；
+    載入時沒擋下的話，會在戰鬥打到一半才丟 ValueError、KeyError、AttributeError。
+    連續的 {{ 與 }} 在 str.format 裡是寫出一個大括號的跳脫，但演出句裡不會有人真的要大括號，多半是寫壞了的佔位，一律擋下。"""
+    if "{{" in line or "}}" in line:
+        return "不能有連續的 {{ 或 }}（演出句裡用不到大括號本身，佔位只能是 {who}、{art}、{foe}）"
+    try:
+        parsed = list(string.Formatter().parse(line))
+    except ValueError as e:  # 大括號沒有成對（{who搶先、多出來的 }）
+        return f"佔位的大括號沒有成對（{e}）"
+    for _, field, spec, conversion in parsed:
+        if field is None:  # 句子尾巴那一段純文字
+            continue
+        if field not in TRAIT_LINE_SLOTS or spec or conversion is not None:
+            written = "{" + field + (f"!{conversion}" if conversion else "") + (f":{spec}" if spec else "") + "}"
+            return f"用了不認得的佔位 {written}（只能是 {{who}}、{{art}}、{{foe}}，後面不能接格式或屬性）"
+    return None
+
+
+def check_traits(c: Content, need) -> None:
+    """武學的功效（content/traits.json、trait_lines.json，武學與成長設計 13.2、13.4、13.5）：一般功效一個屬性一個、八個都要有，
+    名字不重複；特別功效的 id 不重複；掛點不重複（Loadout 與 traits.amount 都是照掛點找，兩個掛同一點會悄悄只剩一個，
+    含 pool 是 false 的獨特功效）；武學（SkillDef.special）指的特別功效要存在，不在共用清單（pool 是 false）的只能給一門；
+    每個功效都有演出句、演出句的鍵都是功效名（鍵拼錯的永遠挑不到）。每一句都不能是空的、只用繁體中文、不能寫數字或百分比
+    （功效幾層、多少由規則算，句子只寫打法），佔位只能是乾淨的 {who}、{art}、{foe}（_placeholder_problem）。品質的強度倍數
+    （Config.trait_quality_multiplier）四個品質都要寫，少一個那一品的功效強度會悄悄變成 ×1。
+    這份內容選填：兩個檔都沒有就是沒有功效。"""
+    book = c.traits
+    specials = {t.id: t for t in book.special}
+    for quality in QUALITIES:
+        need(
+            quality in c.config.trait_quality_multiplier,
+            f"config.trait_quality_multiplier 缺少品質 {quality}（沒寫的那一品，功效強度會悄悄變成 ×1）",
+        )
+    if book.general or book.special:
+        need(sorted(t.attribute for t in book.general) == sorted(ATTRIBUTES), "content/traits.json：一般功效要一個屬性一個，八個都要有")
+        names = [t.name for t in book.general] + [t.name for t in book.special]
+        need(len(names) == len(set(names)), "content/traits.json：功效的名字不能重複")
+        need(len(specials) == len(book.special), "content/traits.json：特別功效的 id 不能重複")
+        general_hooks = [t.hook for t in book.general]
+        need(len(general_hooks) == len(set(general_hooks)), "content/traits.json：一般功效的掛點不能重複")
+        by_hook: dict[str, str] = {}
+        for t in book.special:
+            first = by_hook.setdefault(t.hook, t.id)
+            need(first == t.id, f"content/traits.json：特別功效 {first} 與 {t.id} 掛在同一個掛點 {t.hook}，身上只會留下一個")
+    owners: dict[str, list[str]] = {}
+    for skill in c.skills.values():
+        if skill.special is not None:
+            need(skill.special in specials, f"武學 {skill.id}：特別功效 {skill.special} 不存在")
+            owners.setdefault(skill.special, []).append(skill.id)
+    for sid, skills in owners.items():
+        if sid in specials and not specials[sid].pool:
+            need(len(skills) == 1, f"特別功效 {sid} 不在共用清單裡，只能給一門（現在是 {'、'.join(skills)}）")
+    names = {t.name for t in book.general} | {t.name for t in book.special}
+    for name in sorted(names):
+        need(bool(c.trait_lines.get(name)), f"content/trait_lines.json：功效 {name} 沒有演出句")
+    for name, lines in c.trait_lines.items():
+        where = f"content/trait_lines.json：{name}"
+        need(name in names, f"{where} 不是 content/traits.json 裡的功效（鍵拼錯的句子永遠不會被挑到）")
+        for line in lines:
+            problem = _placeholder_problem(line)
+            need(problem is None, f"{where} 的句子「{line[:12]}」{problem}")
+            need(bool(line.strip()), f"{where}：有空白的句子")
+            need(to_traditional(line) == line, f"{where}：文字只能用繁體中文（「{line[:12]}」）")
+            need(not NUMBER_IN_TEXT.search(line), f"{where}：不能寫數字或百分比，功效的數字由規則算、句子只寫打法（「{line[:12]}」）")
 
 
 def check_timetable(c: Content, need, known, front_ids: list[str], trend_ids: set[str]) -> None:
@@ -609,6 +717,49 @@ def check_promotions(c: Content, need, known) -> None:
             side = promo_events.get(event.id)
             need(all(c.followers[f].faction == side for f in choice.effect.followers if f in c.followers),
                  f"{where}：給的部下要是 {side} 的")
+
+
+def check_opportunities(c: Content, need, known, front_ids: list[str]) -> None:
+    """機緣（content/opportunities.json、orders.json 的 rank2，正式版乙一）：id 不重複；陣營存在；kind 對應的那一塊要寫、
+    別的不能寫；人物、地點、大區、戰線存在；累積型的來源行動（第 2 階行動、守勢行動）自己陣營要有；有東西要送的天時地利型
+    要寫送的選項與送到的那一句；文字只能繁體。front_ids 是 validate 的那一份戰線清單。"""
+    ids = [o.id for o in c.opportunities]
+    need(len(set(ids)) == len(ids), "opportunities.json：機緣 id 重複")
+    factions = {f.id for f in c.scenario.factions}
+    regions = {r.id for r in c.map.regions}
+    for o in c.opportunities:
+        where = f"機緣 {o.id}"
+        need(o.faction in factions, f"{where}：沒有陣營 {o.faction}")
+        blocks = {"bond": o.bond, "accumulate": o.accumulate, "timing": o.timing}
+        need(blocks[o.kind] is not None, f"{where}：kind 是 {o.kind}，要寫 {o.kind} 那一塊")
+        need(all(v is None for k, v in blocks.items() if k != o.kind), f"{where}：只能寫 {o.kind} 那一塊")
+        texts = [o.name]
+        if o.bond is not None:
+            known(where, [o.bond.character], c.characters, "人物")
+            texts += [o.bond.topic, o.bond.text]
+        if o.accumulate is not None:
+            a = o.accumulate
+            need(a.source != "rank2" or o.faction in c.orders.rank2, f"{where}：來源是第 2 階行動，這個陣營卻沒有（orders.json 的 rank2）")
+            need(a.source != "duty" or o.faction in c.orders.duties, f"{where}：來源是守勢行動，這個陣營卻沒有（orders.json 的 duties）")
+            texts += [a.tick, a.milestone, a.item, a.label, a.done]
+        if o.timing is not None:
+            t = o.timing
+            known(where, t.at + [h.at for h in t.hosts], c.locations, "地點")
+            known(where, [h.figure for h in t.hosts], c.figures, "人物")
+            need(all(r in regions for r in t.clue_regions), f"{where}：clue_regions 有不存在的大區")
+            need(t.deliver_front is None or t.deliver_front in front_ids, f"{where}：deliver_front {t.deliver_front} 不是戰線")
+            need(t.when != "night" or bool(t.at), f"{where}：夜裡要寫地點")
+            need(t.when != "dawn" or bool(t.hosts), f"{where}：黎明要寫主持人")
+            need((t.item is None) == (t.deliver_front is None), f"{where}：item 與 deliver_front 要一起寫")
+            need(t.item is None or bool(t.deliver_label.strip()), f"{where}：有 item 就要寫 deliver_label（交東西的選項）")
+            need(t.item is None or bool(t.done.strip()), f"{where}：有 item 就要寫 done（交到那一刻的敘事）")
+            texts += [t.clue, t.label, t.ok, t.fail, t.deliver_label, t.done] + ([t.item] if t.item else [])
+        for text in texts:
+            need(to_traditional(text) == text, f"{where}：文字只能用繁體中文（「{text[:12]}」）")
+    for faction_id, action in c.orders.rank2.items():
+        need(faction_id in factions, f"orders.json rank2：沒有陣營 {faction_id}")
+        for text in (action.name, action.ok, action.fail):
+            need(to_traditional(text) == text, f"orders.json rank2.{faction_id}：文字只能用繁體中文（「{text[:12]}」）")
 
 
 def check_foreshadows(
@@ -1011,6 +1162,7 @@ def validate(c: Content) -> None:
     check_check_voice(c, need)
     check_front_lines(c, need)
     check_combat_lines(c, need)
+    check_traits(c, need)
     # 沒寫 drops 的對手走 materials.py 依難度的預設掉落表，所以每一階都得有素材可挑。
     for tier in sorted(TIER_NAMES):
         need(
@@ -1377,6 +1529,7 @@ def validate(c: Content) -> None:
     check_foreshadows(c, need, known, region_ids, front_ids, counters_written)
     check_orders(c, need, known, front_ids)
     check_promotions(c, need, known)
+    check_opportunities(c, need, known, front_ids)
 
     for key, where in sorted(marks_written.items()):
         need(key in marks_read, f"{where}：痕跡 {key} 寫了卻沒有任何條件或文字讀它")

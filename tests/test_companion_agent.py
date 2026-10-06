@@ -254,3 +254,127 @@ def test_prepare_turn_logs_which_companion_failed(content, state, world, caplog)
             caplog.at_level("WARNING", logger="tianxia.companion_agent"):
         companion_agent.prepare_turn(mock.Mock(), request)
     assert any("mate" in r.getMessage() and "連不上" in r.getMessage() for r in caplog.records)
+
+
+# ── 上一季的交情（第一季設計第十四節；正式版辛）─────────────────
+
+
+def test_the_prompt_carries_last_seasons_bond_separately(content, state, world):
+    state.player.past_notes = {"mate": "曾在潁川並肩殺敵"}
+    state.player.affinities = {"mate": 8}
+    prompt = companion_agent.build_system_prompt(content.characters["mate"], state, content, world, "mate")
+    assert "【上一季】你們以前的交情：曾在潁川並肩殺敵。" in prompt
+    assert "交情淡了" in prompt and "先前" in prompt and "上回" in prompt
+    assert "目前好感度 8" in prompt and "你與玩家目前的關係現況：還沒交談過" in prompt
+
+
+def test_the_past_line_does_not_double_the_full_stop(content, state, world):
+    """關係筆記通常自己就以句號結尾（模型寫的、退路那句都是）：【上一季】那句不再補一個。"""
+    state.player.past_notes = {"mate": "曾在潁川並肩殺敵。"}
+    prompt = companion_agent.build_system_prompt(content.characters["mate"], state, content, world, "mate")
+    assert "你們以前的交情：曾在潁川並肩殺敵。你仍記得" in prompt
+
+
+def test_the_past_section_tells_the_model_not_to_say_season(content, state, world):
+    """「季」是遊戲的說法，不是漢末的人會講的話：【上一季】那一段叫模型提舊事時說先前、上回，別把這一季、上一季帶進對白。
+    那一段自己的敘述（給模型看的）也不再寫「這一季」。"""
+    state.player.past_notes = {"mate": "曾在潁川並肩殺敵"}
+    prompt = companion_agent.build_system_prompt(content.characters["mate"], state, content, world, "mate")
+    section = next(line for line in prompt.splitlines() if line.startswith("【上一季】"))
+    assert "「先前」" in section and "「上回」" in section
+    assert "不要說「這一季」「上一季」" in section
+    assert section.count("這一季") == 1 and section.count("上一季") == 2  # 只剩那句禁令裡的各一次（標題那個「上一季」另算）
+
+
+def test_the_prompt_never_says_season_to_the_model(content, state, world):
+    """「季」是遊戲的說法：沒有【上一季】那一段的提示（第一季的玩家、沒聊過的人物）裡，連「這一季」「上一季」都不出現，
+    模型就沒有字可以學去講進對白；有那一段時，這兩個詞只出現在「不要說」的那一句裡。"""
+    prompt = companion_agent.build_system_prompt(content.characters["mate"], state, content, world, "mate")
+    assert "這一季" not in prompt and "上一季" not in prompt and "關係現況：還沒交談過" in prompt
+    state.player.past_notes = {"mate": "曾在潁川並肩殺敵"}
+    section = next(line for line in companion_agent.build_system_prompt(
+        content.characters["mate"], state, content, world, "mate").splitlines() if line.startswith("【上一季】"))
+    assert "不要說「這一季」「上一季」" in section
+
+
+def test_no_past_section_without_past_notes(content, state, world):
+    prompt = companion_agent.build_system_prompt(content.characters["mate"], state, content, world, "mate")
+    assert "【上一季】" not in prompt
+    state.player.past_notes = {"friend": "別人的舊事"}  # 別的人物有、這一位沒有：照樣不冒出空的段落
+    prompt = companion_agent.build_system_prompt(content.characters["mate"], state, content, world, "mate")
+    assert "【上一季】" not in prompt
+
+
+def test_this_seasons_note_is_what_the_relationship_line_shows(content, state, world):
+    state.player.past_notes = {"mate": "舊交"}
+    state.player.relationship_notes = {"mate": "新結識的酒友"}
+    prompt = companion_agent.build_system_prompt(content.characters["mate"], state, content, world, "mate")
+    assert "你與玩家目前的關係現況：新結識的酒友" in prompt
+    assert "【上一季】你們以前的交情：舊交。" in prompt
+
+
+def test_the_model_only_sees_this_seasons_dialogue(content, state, world):
+    old = [{"role": "user", "content": f"舊話{i}"} for i in range(5)]
+    state.player.dialogue_history = {"mate": old + [{"role": "user", "content": "新話"}]}
+    state.player.history_start = {"mate": 5}
+    messages = companion_agent._build_messages(  # noqa: SLF001
+        content.characters["mate"], state, content, world, "mate", "拱手",
+    )
+    said = [m["content"] for m in messages if m["role"] != "system"]
+    assert said[0] == "新話" and not any(s.startswith("舊話") for s in said)
+
+
+def test_trimming_the_history_moves_the_season_start_with_it(content, state, world):
+    """對話紀錄只留最近 MAX_HISTORY_MESSAGES 則：前面被丟掉時，這一季從第幾則開始也要跟著往前挪，
+    不然停在原來的數字會指到這一季的對話之後，模型就什麼都看不到了。"""
+    old = [{"role": "user", "content": f"舊話{i}"} for i in range(companion_agent.MAX_HISTORY_MESSAGES)]
+    state.player.dialogue_history = {"mate": old}
+    state.player.history_start = {"mate": len(old)}  # 整份都是上一季的
+    turn = companion_agent.CompanionTurn(narrative="他點了點頭。", options=["a", "b"], option_tags=["尋常寒暄", "尋常寒暄"])
+    companion_agent._record_turn(state, "mate", "拱手", turn)  # noqa: SLF001
+    assert len(state.player.dialogue_history["mate"]) == companion_agent.MAX_HISTORY_MESSAGES
+    assert state.player.history_start["mate"] == companion_agent.MAX_HISTORY_MESSAGES - 2
+    messages = companion_agent._build_messages(  # noqa: SLF001
+        content.characters["mate"], state, content, world, "mate", "再拱手",
+    )
+    said = [m["content"] for m in messages if m["role"] != "system"]
+    assert said[:2] == ["拱手", "他點了點頭。"] and not any(s.startswith("舊話") for s in said)
+
+
+def test_consolidation_only_reads_this_seasons_dialogue(content, state, world):
+    """每隔幾輪的記憶梳理也只讀這一季的對話：不然上一季的事會被寫進「這一季的關係」。"""
+    p = state.player
+    p.dialogue_history = {"mate": [{"role": "user", "content": "上一季的話"}, {"role": "user", "content": "這一季的話"}]}
+    p.history_start = {"mate": 1}
+    p.turns_since_consolidation = {"mate": companion_agent.MEMORY_CONSOLIDATION_INTERVAL}
+    client = mock.Mock()
+    client.chat_structured.return_value = companion_agent.MemoryConsolidation(
+        relationship_summary="這一季的交情", new_milestones=["一件事"],
+    )
+    companion_agent._maybe_consolidate_memory(client, state, content.characters["mate"], "mate")  # noqa: SLF001
+    sent = client.chat_structured.call_args.args[0][1]["content"]
+    assert "這一季的話" in sent and "上一季的話" not in sent
+    assert p.relationship_notes["mate"] == "這一季的交情"
+
+
+def test_memory_consolidation_stores_a_cleaned_note(content, state):
+    """FB-075 延伸：記憶整理的那句關係現況會餵回之後的對話，位元組碼與簡體字不能一路帶下去。"""
+    p = state.player
+    p.turns_since_consolidation["mate"] = companion_agent.MEMORY_CONSOLIDATION_INTERVAL
+    p.dialogue_history["mate"] = [{"role": "user", "content": "你好"}, {"role": "assistant", "content": "他點了點頭。"}]
+    client = mock.Mock()
+    client.chat_structured.return_value = companion_agent.MemoryConsolidation(
+        relationship_summary="他对你<0xE5><0xB7><0x8D>然敬重", new_milestones=["初次見面"])
+    companion_agent._maybe_consolidate_memory(client, state, content.characters["mate"], "mate")
+    assert p.relationship_notes["mate"] == "他對你巍然敬重"
+
+
+def test_drift_synthesis_stores_a_cleaned_note(content, world):
+    """FB-075 延伸：全服的性情漂移也餵回模型，同樣先清掉位元組碼、轉成繁體。"""
+    ch = content.characters["mate"]
+    for _ in range(companion_agent.DRIFT_SYNTHESIS_INTERVAL):
+        world.record_companion_tag("mate", "雪中送炭")
+    client = mock.Mock()
+    client.chat_structured.return_value = DriftSynthesis(drift_note="他待人越来越<0xE5><0xB7><0x8D>然大方。")
+    companion_agent._maybe_synthesize_drift(client, ch, "mate", world)
+    assert world.get_companion_drift_note("mate") == "他待人越來越巍然大方。"

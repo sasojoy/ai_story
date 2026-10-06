@@ -3,6 +3,7 @@ import random
 from tianxia import bot, fusion, library
 from tianxia.bot import pick, play_season, spend_xinde, wants_heal
 from tianxia.engine import Game
+from tianxia.martial_arts import generate_from_name
 from tianxia.models import (
     BattleAct, BattleActionEffect, BattleDef, BattleFaction, BattleOption, BattleOutcome,
 )
@@ -97,6 +98,106 @@ def armed(content, world, **stats):
     for key, value in stats.items():
         p.stats[key] = value
     return game
+
+
+def _two_arts(world, *, plain_top=30.0, rich_top=29.0, rich_traits=("剛", "剛", "剛"), rich_special=None, quality="下品"):
+    """素拳（只有自己屬性的一個功效）與繁拳（多幾層功效、威力少一點）：都登記到全服。"""
+    plain = generate_from_name("素拳", "武學", "素拳", attribute="剛").model_copy(
+        update={"origin": "fused", "quality": quality, "base_power": 10.0, "top_power": plain_top, "traits": ["剛"]},
+    )
+    rich = plain.model_copy(update={
+        "id": "繁拳", "name": "繁拳", "top_power": rich_top, "traits": list(rich_traits), "special": rich_special,
+    })
+    for art in (plain, rich):
+        world.claim_skill_name(art)
+    return plain, rich
+
+
+def _wear_and_switch(game, plain, rich, quality="下品"):
+    p = game.state.player
+    p.member.wugong_id, p.arts = plain.id, [rich.id]
+    for art_id in (plain.id, rich.id):
+        p.art_quality[art_id] = quality
+    bot._switch_to_the_strongest(game)
+    return p.member.wugong_id
+
+
+def test_the_bot_weighs_traits_when_it_picks_what_to_wear(content, world):
+    """設計 13.7：機器人選身上那門要看功效，不然整季模擬量不出功效的價值。威力差一點、功效多兩層的那一門贏。"""
+    game = armed(content, world)
+    plain, rich = _two_arts(world)
+    assert _wear_and_switch(game, plain, rich) == rich.id
+
+
+def test_a_much_stronger_art_still_beats_a_trait_rich_one(content, world):
+    """功效只是加成（每層 5%）：威力差很多的那一門照樣贏。"""
+    game = armed(content, world)
+    plain, rich = _two_arts(world, plain_top=60.0, rich_top=29.0)
+    assert _wear_and_switch(game, plain, rich) == plain.id
+
+
+def test_a_special_counts_as_one_more_layer_and_quality_scales_the_layers(content, world):
+    """特別功效算一層；品質越高每一層越值（跟遊戲裡的倍數同一份：Config.trait_quality_multiplier）。"""
+    plain, rich = _two_arts(world, rich_top=29.0, rich_traits=("剛",), rich_special="lianhuan")
+    # 29 × (1 + 0.05 × 2) = 31.9 > 30 × 1.05 = 31.5：特別功效那一層讓威力少一點的贏
+    assert bot._worth(content, rich) > bot._worth(content, plain)
+    ordinary = rich.model_copy(update={"special": None})
+    assert bot._worth(content, ordinary) < bot._worth(content, plain)
+    gold = plain.model_copy(update={"quality": "上品"})
+    assert bot._worth(content, gold) == plain.top_power * (1 + bot.TRAIT_WEIGHT * 2)  # 上品 ×2 層
+
+
+def test_the_bot_stays_put_on_equal_worth_and_without_traits_in_the_content(content, world):
+    """沒有功效的內容（舊內容）：只看威力，跟以前一樣；一樣值錢的不換。"""
+    plain, rich = _two_arts(world)
+    content.traits.general.clear()
+    content.traits.special.clear()
+    assert bot._worth(content, plain) == plain.top_power and bot._worth(content, rich) == rich.top_power
+    game = armed(content, world)
+    assert _wear_and_switch(game, plain, rich) == plain.id  # 30 > 29：照第十成威力選
+    twin = plain.model_copy(update={"id": "雙生拳", "name": "雙生拳"})
+    world.claim_skill_name(twin)
+    game2 = armed(content, world)
+    p = game2.state.player
+    p.member.wugong_id, p.arts = plain.id, [twin.id]
+    bot._switch_to_the_strongest(game2)
+    assert p.member.wugong_id == plain.id
+
+
+def test_the_bot_weighs_the_traits_of_the_inner_art_too(content, world):
+    """內功一樣：功效多的那門內功換上身（照種類各挑各的）。"""
+    game = armed(content, world)
+    plain = generate_from_name("素功", "內功", "素功", attribute="柔").model_copy(
+        update={"origin": "fused", "quality": "下品", "base_power": 10.0, "top_power": 30.0, "traits": ["柔"]},
+    )
+    rich = plain.model_copy(update={"id": "繁功", "name": "繁功", "top_power": 29.0, "traits": ["柔", "柔", "柔"]})
+    for art in (plain, rich):
+        world.claim_skill_name(art)
+    p = game.state.player
+    p.member.neigong_id, p.arts = plain.id, [rich.id]
+    for art_id in (plain.id, rich.id):
+        p.art_quality[art_id] = "下品"
+    bot._switch_to_the_strongest(game)
+    assert p.member.neigong_id == rich.id and p.member.wugong_id == "basic_fist"
+
+
+def test_the_trait_measure_script_still_runs():
+    """scripts/measure_traits.py（計畫六 Task 5，只量不擋）：另開一個行程跑單一功效的兩段（少量場數、不跑整季），退出碼 0、
+    每一個功效都有一行——引擎改了名字它就會壞，這條抓得到（整季那一段由 sim 跑，太慢不放進測試）。"""
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent
+    done = subprocess.run(
+        [sys.executable, "scripts/measure_traits.py", "--no-season", "--runs", "20"],
+        cwd=root, capture_output=True, timeout=300,
+    )
+    out = done.stdout.decode("utf-8", "replace")
+    assert done.returncode == 0, done.stderr.decode("utf-8", "replace")[-2000:]
+    for name in ("先手", "穩", "破甲", "化勁", "乘勝", "吸取", "險", "厚", "連環", "不動", "護命", "悟招", "借力", "回春", "輕身"):
+        assert f"〔{name}〕" in out, name
+    assert "一、單一功效" in out and "三、勢均力敵的仗" in out
 
 
 def test_the_bot_fuses_cultivates_and_melts_when_full(content, world):

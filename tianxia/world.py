@@ -300,7 +300,7 @@ def season_end_time(season: WorldState, content: Content) -> float:
 
 def _finale(state: GameState, content: Content, ending: Ending, early: bool) -> str:
     """季末公告（時刻表結算第 12 週）：開頭（季中就收季時是 early_preface）＋結局句＋退場人物的後話（董卓兵敗）。
-    寫進時間軸（key 是結局 id；公告卡與 _deliver_big_events 照舊補給每個人）、天下大事傳聞與江湖史一行。
+    寫進時間軸（key 是結局 id；本週大事面板與 _deliver_big_events 照舊補給每個人）、天下大事傳聞與江湖史一行。
     沒有季末大事、或已經寫過時回空字串。"""
     w = state.world
     event = next((e for e in content.timetable if e.kind == "finale"), None)
@@ -501,7 +501,7 @@ def season_hour(state: GameState, content: Content, rng: random.Random, players:
 
 def settle_season_start(season: WorldState, content: Content, rng: random.Random) -> list[str]:
     """開季那一刻（世界秒 0）結算第 1 週週一 00:00 的事（FB-040）：只跑 season_events（週初掛鉤＋到了的大事），
-    不跑每曆時的事。不補這一下，要等到第一個曆時交界（約 1 分 47 秒）第一件大事才出現，公告卡那時還是空的。
+    不跑每曆時的事。不補這一下，要等到第一個曆時交界（約 1 分 47 秒）第一件大事才出現，本週大事那時還是空的。
     開關關著、這一季開季時沒開（舊季）、或已經跑過（hooked_week 不是 0：週初掛鉤從沒跑過才是還沒開季結算）時什麼都不做，
     所以重複呼叫也安全。呼叫端在開季之後、不在任何 mutate 裡（見 Game._settle_season_start）。"""
     if not calendar.season_one_on(season, content) or season.hooked_week != 0 or season.ended:

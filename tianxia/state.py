@@ -100,6 +100,11 @@ class PlayerState(BaseModel):
     team: list[str] = Field(default_factory=list)  # 目前帶在身邊出戰的同伴 id，最多 MAX_TEAM_COMPANIONS 人
     affinities: dict[str, int] = Field(default_factory=dict)  # 人物 id -> 0~100 好感度，跟有沒有招到他無關
     relationship_notes: dict[str, str] = Field(default_factory=dict)  # 人物 id -> 一句話關係現況
+    # 上一季的交情（第一季設計第十四節；正式版辛）：人物 id → 最近一次有聊過的那一季的關係筆記。換季時把
+    # relationship_notes 搬過來（這一季的從頭寫），沒聊過的人物保留更早的那一句。只給模型當背景，畫面不顯示
+    past_notes: dict[str, str] = Field(default_factory=dict)
+    # 人物 id → dialogue_history 裡這一季的對話從第幾則開始（換季時記下當時的長度）；模型只看這一季的對話
+    history_start: dict[str, int] = Field(default_factory=dict)
 
     # ── 深度對話（companion_agent.py，見設計文件四.3）── 這些是「這個玩家跟這位人物」的
     # 私有對話狀態，不是全服共用的（性情漂移才是全服共用，見 world_state.py）。
@@ -187,6 +192,15 @@ class PlayerState(BaseModel):
     fs_cooldown_until: dict[str, float] = Field(default_factory=dict)  # 鏈 id → 答錯之後要等到哪個世界秒才能再做
     fs_asking: str | None = None  # 正在答最後一步的題的那條鏈；None＝沒在答（選單照常）
     fs_asked: int = 0  # 答到第幾題（0＝question，1 起是 then 的追問）
+
+    # ── 機緣（正式版乙一、機緣文件）；角色每季重來，叛投時 opportunities.clear 清掉 ──
+    opp_done: list[str] = Field(default_factory=list)  # 完成的機緣 id
+    opp_counts: dict[str, int] = Field(default_factory=dict)  # 累積型：機緣 id → 記了幾次
+    opp_items: dict[str, str] = Field(default_factory=dict)  # 機緣 id → 拿到、還沒交的東西（名字）
+    opp_fronts: dict[str, str] = Field(default_factory=dict)  # 機緣 id → 那件東西要送去哪條戰線
+    opp_clues: list[str] = Field(default_factory=list)  # 聽過線索的機緣 id
+    opp_tried: dict[str, int] = Field(default_factory=dict)  # 天時地利型：失敗那一回的時段鍵；同一回不能再試
+    rank2_days: dict[int, int] = Field(default_factory=dict)  # 曆日 → 那天做了幾次第 2 階行動；只留今天
 
 
 RumorLayer = Literal["world", "faction", "local", "personal"]  # 天下大事／陣營軍情／地方傳聞／個人線索（傳聞分層設計第二節）
@@ -314,6 +328,16 @@ class Fighter(BaseModel):
     level: int
 
 
+class LevelUps(BaseModel):
+    """一場打完升級的人（FB-074）：「剛剛」的戰鬥卡片拿它畫一行簡短的「升到第 N 級」（battlelog.levelup_line），
+    戰報頁與江湖紀錄照舊寫完整的句子。誰升到第幾級是結構化存下來的，不從句子的字裡讀回來。"""
+
+    you: int | None = None  # 本人最後升到第幾級；本人沒升級是 None
+    points: int = 0  # 本人升級之後還沒配的屬性點總數（那一刻的；畫卡片時改用現在的，見 levelup_line）
+    mates: list[tuple[str, int]] = Field(default_factory=list)  # 升級的同伴（名字，最後升到第幾級），照隊伍順序
+    lines: list[str] = Field(default_factory=list)  # 這一場寫進 notes 的升級句子原文（卡片不再重複，戰報頁照舊寫）
+
+
 class BattleRecord(BaseModel):
     """一場遭遇/劇情戰的紀錄（sanguo-companions 合併重寫：單次判定，取代舊的逐回合戰報，
     見 tianxia/encounter.py）。kind 是 showdown 的是全服決戰補送給參戰者的那一筆（FB-027）：沒有我方威力與
@@ -340,6 +364,12 @@ class BattleRecord(BaseModel):
     # 大場面模型寫的過程（武學與成長設計 8.3）：照結果挑佔上風或落下風那一版；有就取代範本句子的回合（rounds 照樣算好）。
     # 叫 narration 不叫 story：battlelog 的 story_text／_story_block 已經是「結果」那一段（計畫三 G11）
     narration: str = ""
+    guarded: bool = False  # 護命把落敗改判成僵持（武學與成長設計 13.4）；那一句演出寫在 notes 裡（跟 DODGE_NOTE 一樣，結果那一段）
+    # 功效的演出句（13.6，content/trait_lines.json）：一句一行、前面標〔功效名〕，只在功效真的改到結果時才有（engine.Game._trait_lines）。
+    # 放在「過程」裡回合（或大場面模型那一段）的前與後
+    trait_before: list[str] = Field(default_factory=list)  # 開打前：先手、穩、破甲、險、連環、借力
+    trait_after: list[str] = Field(default_factory=list)  # 受傷、結果出來、戰鬥外：化勁、厚、不動、乘勝、吸取、悟招、回春、輕身
+    levelups: LevelUps | None = None  # 這一場有人升級才有（FB-074）；舊戰報沒有，卡片照 notes 原文
 
 
 class JournalEntry(BaseModel):
