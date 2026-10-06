@@ -3647,11 +3647,7 @@ class Game:
         s, c = self.state, self.content
         cal_hour = calendar.cal_hour_seconds(c, s.world)
         mark = math.ceil((at - calendar.EPS_SECONDS) / cal_hour) * cal_hour
-        regular = [e for e in timetable._pending(s, c) if e.kind not in timetable.NOT_BY_SEASON_HOUR]  # noqa: SLF001
-        avoided = None
-        while hit := next((e for e in regular if abs(mark - timetable.when(s, c, e)) < calendar.EPS_SECONDS), None):
-            avoided, mark = avoided or hit.title, mark + cal_hour
-        return mark, avoided
+        return timetable.clear_of_events(s, c, mark)
 
     def admin_jump_next(self, now: float) -> list[str]:
         """跳到下一件大事：推進到最早那一件還沒結算的大事的時間（決戰是排定的集結開始；開過集結的不算），取整到下一個

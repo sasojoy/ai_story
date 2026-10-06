@@ -563,6 +563,53 @@ def advance_world_state(
     return msgs
 
 
+# ── 賽季時鐘暫停後繼續（線上架構設計第四節、8.3；企劃者 2026-10-06 定 B3）──────────
+
+
+def pause_skip(season: WorldState, content: Content, span: float) -> float:
+    """賽季時鐘停了 span 個現實秒，繼續時賽季要跳過幾個現實秒（WorldStateStore.resume_clock 把對時點往後挪這麼多）。
+    第一季（有季曆、有排好的決戰）照整個曆時往下取整：曆時的交界在現實時間上不動，排好的決戰才能分秒不差地照原本的現實時間開
+    （季的事只在曆時交界把時間到了的決戰記下來）；不足一個曆時的零頭算進賽季（週末那季最多現實 1 分 47 秒）。
+    其他（beta 那一季）照 span 一秒不差。"""
+    if not calendar.season_one_on(season, content):
+        return span
+    grid = calendar.cal_hour_seconds(content, season) / content.config.time_scale
+    return math.floor(span / grid + EPS_CAL_HOURS) * grid
+
+
+def keep_showdowns_on_time(season: WorldState, content: Content, skipped: float, season_now: float) -> None:
+    """賽季時鐘繼續之後，排好、還沒開的決戰照原本的現實時間開（企劃者 2026-10-06 定 B3）：賽季跳過了 skipped 個現實秒，
+    這些決戰的排定（世界秒）就往前挪 skipped × time_scale——季末與一般的大事不挪，跟著往後延。挪到剛好碰上一件還沒結算的
+    一般大事時再往後挪一個曆時（timetable.clear_of_events）；也不挪到原本排在它前面、還沒結算的一般大事之前，最早排在那件之後
+    一個曆時（B13：時刻表的先後不能亂，例如宛城要等第 3 週的結果定版本；停機很久才會碰到）。原本的時間落在暫停裡的（挪完已經不晚於 season_now，也就是繼續
+    那一刻的季時間）改排在 season_now、記進 showdowns_waiting：呼叫端緊接著補算、再呼叫 start_pending_battle 就開集結（B11，
+    補算的理由見 WorldStateStore.resume_clock）；
+    另一場還在打就排隊等它收場（照現在的規則）。已經開過、已經收場、已經在排隊的不動。開關關著或舊季什麼都不做。
+    只改傳進來的 season（WorldStateStore.resume_clock 在它的 mutate 裡呼叫），不碰 store。"""
+    if not calendar.season_one_on(season, content):
+        return
+    vehicle = _season_vehicle(content, season)
+    shift = skipped * content.config.time_scale
+    cal_hour = calendar.cal_hour_seconds(content, season)
+    regular = [e for e in timetable._pending(vehicle, content) if e.kind not in timetable.NOT_BY_SEASON_HOUR]  # noqa: SLF001
+    for event in content.timetable:
+        if event.kind != "showdown" or event.id in season.timeline or event.id in season.showdowns_opened:
+            continue
+        if event.id in season.showdowns_waiting:
+            continue
+        was = timetable.when(vehicle, content, event)
+        at = was - shift
+        earlier = [timetable.when(vehicle, content, e) for e in regular if timetable.when(vehicle, content, e) < was]
+        if earlier and at <= max(earlier) + calendar.EPS_SECONDS:  # 不跑到原本排在它前面、還沒結算的一般大事之前（B13）
+            at = max(earlier) + cal_hour
+        if at <= season_now + calendar.EPS_SECONDS:
+            season.schedule[event.id] = season_now
+            if showdown_battle(vehicle, content, event) is not None:
+                season.showdowns_waiting.append(event.id)
+            continue
+        season.schedule[event.id], _ = timetable.clear_of_events(vehicle, content, at)
+
+
 def start_pending_battle(world: WorldStateStore, content: Content, now: float) -> list[str]:
     """背景推進跨過開戰門檻時只在賽季上記下要開哪一場（見 _fire），時間到了的時刻表決戰也只記號（見 season_events）；
     呼叫端的 mutate_season 結束之後呼叫這裡（mutate 不能巢狀），真的開戰並清掉記號。沒有待開的戰鬥就什麼都不寫。"""

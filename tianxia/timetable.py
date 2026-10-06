@@ -334,6 +334,18 @@ def schedulable(content: Content) -> list[TimetableEvent]:
     return [e for e in content.timetable if e.kind in NOT_BY_SEASON_HOUR]
 
 
+def clear_of_events(state: GameState, content: Content, mark: float) -> tuple[float, str | None]:
+    """決戰的時間（曆時交界上）剛好碰上一件還沒結算的一般大事，就往後挪一個曆時，直到沒碰上（T10 審查 I1：同一刻那件大事
+    先結算，排在它前面、還沒開成的決戰會照起點判掉，見 world.settle_waiting_showdowns）。回傳（挪好的時間, 第一次碰上的那件的標題）。
+    管理者排時間（Game._showdown_mark）與賽季時鐘繼續後把決戰往前挪（world.keep_showdowns_on_time）共用。"""
+    cal_hour = calendar.cal_hour_seconds(content, state.world)
+    regular = [e for e in _pending(state, content) if e.kind not in NOT_BY_SEASON_HOUR]
+    avoided = None
+    while hit := next((e for e in regular if abs(mark - when(state, content, e)) < calendar.EPS_SECONDS), None):
+        avoided, mark = avoided or hit.title, mark + cal_hour
+    return mark, avoided
+
+
 def schedule_key(event: TimetableEvent) -> str:
     return FINALE_KEY if event.kind == "finale" else event.id
 
