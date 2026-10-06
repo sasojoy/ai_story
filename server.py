@@ -245,16 +245,20 @@ def act_look(game: Game, action, view) -> tuple[list[str] | None, object]:
     """act 加 look 在同一把行動鎖裡做完：同步時間 → 動作 → 存檔 → 畫面。回傳 (動作的訊息, 畫面)。
     以前輪詢是 act(無事) 再 look(main_view)，各拿一次鎖、各重讀一次角色，每個在線的人每 10 秒就拿兩次（壓測 2026-10-06）。
     跟兩步的結果一樣：存檔在畫面之前，所以畫面建構時才做的事（決戰追趕、收場補的紀錄）跟 look 一樣不存、下一次同步再補；
-    動作丟例外時整筆撤回、不看畫面（act 的規矩）。畫面丟例外時，同步與存檔照舊留著（兩步時 act 那一把鎖早就放了）：
-    先記下例外、讓鎖正常放掉（COMMIT），再丟出去。"""
+    動作丟例外時整筆撤回、不看畫面（act 的規矩）。
+    畫面丟例外時，同步與存檔照舊留著（兩步時 act 那一把鎖早就放了），畫面自己寫的撤回（兩步時 look 那一把鎖整筆撤回）：
+    畫面建構不是唯讀，options() 會把全服決戰追趕到現在（標成收場、套結果）。所以畫面包在 savepoint 裡，丟例外時只撤回
+    這一段的寫入；例外先記下、讓鎖正常放掉（COMMIT 同步與存檔），再原樣丟出去。不撤回的話，決戰已經標成收場而結果沒套上，
+    下一次輪詢看到「早就收場了」就不再套，那場決戰的結果整個服永遠丟了。"""
     failure: Exception | None = None
     with _locked(game):
         game.sync(time.time())
         msgs = action(game)
         open_characters().save(game.state)
         try:
-            shown = view(game)
-        except Exception as exc:  # 見上：先讓鎖放掉，再原樣丟出去
+            with game.world.db.savepoint():
+                shown = view(game)
+        except Exception as exc:  # 見上：畫面自己的寫入已經撤回，先讓鎖放掉，再丟出去
             failure = exc
     if failure is not None:
         raise failure

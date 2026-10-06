@@ -4116,7 +4116,8 @@ def test_the_page_load_takes_the_action_lock_once_too(client, lock_events):
 
 
 POLL_T0 = 1_800_000_000.0
-POLL_SCENES = ["idle", "event", "muster", "showdown", "resting"]
+POLL_SCENES = ["idle", "event", "muster", "showdown", "resting", "road", "road_arrives"]
+POLL_OFFLINE = {"road": 60}  # 其他都離線三小時；到潁川水邊的路要走 182 秒，離線 60 秒時還在路上（走一半）
 
 
 def _poll_scene(client, monkeypatch, scene):
@@ -4136,6 +4137,9 @@ def _poll_scene(client, monkeypatch, scene):
     elif scene == "resting":
         monkeypatch.setattr(server.CONTENT.config, "admins", ["沈青衫"])
         server.act(game, lambda g: g.admin_end_season(POLL_T0))
+    elif scene in ("road", "road_arrives"):
+        server.act(game, lambda g: g.travel("yingshui", "walk"))  # 出發了；輪詢時還在路上，或同步補算時抵達
+        assert game.state.player.journey is not None
 
 
 def _everything_after(poll):
@@ -4169,13 +4173,15 @@ def test_one_lock_poll_answers_and_leaves_exactly_what_the_two_step_poll_did(sce
         with mock.patch("server.time.time", return_value=POLL_T0):
             _poll_scene(client, monkeypatch, scene)
         game = server.game_for("沈青衫")
-        with mock.patch("server.time.time", return_value=POLL_T0 + 3 * 3600):  # 離線三小時：同步有東西可補
+        with mock.patch("server.time.time", return_value=POLL_T0 + POLL_OFFLINE.get(scene, 3 * 3600)):  # 離線三小時：同步有東西可補
             if label == "two_step":
                 answers[label] = _everything_after(lambda: _two_step_poll(game))
             else:
                 answers[label] = _everything_after(lambda: client.get("/api/main").json())
         database.close_all()
     assert answers["one_lock"] == answers["two_step"]
+    if scene in ("road", "road_arrives"):  # 路上的兩幕真的是路上、與抵達（不是兩個一樣的畫面）
+        assert ('"act:on_road"' in answers["one_lock"]["view"]) == (scene == "road")
 
 
 def test_a_view_that_breaks_still_leaves_the_catch_up_saved(client, monkeypatch):
@@ -4187,6 +4193,42 @@ def test_a_view_that_breaks_still_leaves_the_catch_up_saved(client, monkeypatch)
         with pytest.raises(ZeroDivisionError):
             client.get("/api/main")
     assert open_characters().load("沈青衫").last_real == before + 5000
+
+
+def test_a_view_that_breaks_rolls_back_what_the_view_itself_wrote(client, monkeypatch):
+    """畫面建構不是唯讀：options() 會把全服決戰追趕到現在（寫共用狀態）。舊的兩步裡畫面壞掉時，畫面那把鎖整筆撤回；
+    一把鎖之後只能撤回畫面寫的那一段（savepoint），補算與存檔照舊留著。
+    情境：沒人參戰的決戰，最後一回合逾時，由這次輪詢收場；套用結果時壞一次。壞掉那次，決戰要還是「進行中」
+    （收場的標記跟著撤回），下一次輪詢才會重新收場、把結果套上——不然標記已經是「收場」，結果永遠套不上。"""
+    definition = server.CONTENT.battles["huangjin_showdown"]
+    with mock.patch("server.time.time", return_value=POLL_T0):  # 時間從頭釘住：季的時鐘也從 POLL_T0 起算，不會被補算到收季
+        _player(client)
+        open_world().start_battle(definition, now=POLL_T0)
+        client.get("/api/main")
+    deadline = open_world().get_battle().muster_deadline_real
+    with mock.patch("server.time.time", return_value=deadline):
+        client.get("/api/main")  # 集結截止，沒人參戰：開打
+    assert open_world().get_battle().phase == "active"
+    chronicle_before = len(open_world().get_season().chronicle)
+    applied = []
+    real = Game._apply_battle_outcome
+
+    def breaks_once(self, battle):
+        applied.append(battle.phase)
+        if len(applied) == 1:
+            raise RuntimeError("套用結果時壞了")
+        return real(self, battle)
+
+    monkeypatch.setattr(Game, "_apply_battle_outcome", breaks_once)
+    with mock.patch("server.time.time", return_value=deadline + definition.round_seconds):
+        with pytest.raises(RuntimeError, match="套用結果時壞了"):
+            client.get("/api/main")
+        assert open_world().get_battle().phase == "active"  # 畫面寫的「收場」撤回了
+        assert open_characters().load("沈青衫").last_real == deadline + definition.round_seconds  # 補算與存檔照舊留著
+        client.get("/api/main")
+    assert applied == ["ended", "ended"]  # 第二次輪詢重新收場、重新套用
+    assert open_world().get_battle().phase == "ended"
+    assert len(open_world().get_season().chronicle) == chronicle_before + 1  # 保底結果寫了一則江湖史
 
 
 def test_a_poll_for_an_account_without_a_character_is_still_refused(client):
