@@ -394,6 +394,7 @@ class Game:
         owned = set(library.owned_arts(s))
         p.art_quality = {k: v for k, v in p.art_quality.items() if k in owned and v in QUALITIES}
         p.art_mastery = {k: v for k, v in p.art_mastery.items() if k in owned and v > 0}
+        p.art_rolled = {k: v for k, v in p.art_rolled.items() if k in owned and v in QUALITIES}
         if p.naming is not None and (p.naming not in owned or self.world.master_of(p.naming) != p.name):
             p.naming = None
         chains = {ch.id for ch in c.foreshadows.chains}  # 伏筆：內容改版後拿掉的鏈與物品
@@ -1443,7 +1444,7 @@ class Game:
     def _explore_can(self, branch: ExploreBranch, loc: Location) -> bool:
         """探索三選一的這一支在這裡做不做得了。"""
         if branch == "insight":
-            return bool(insights.explore_pool(loc, self.content))
+            return bool(insights.explore_gives(loc, self.content))  # 輿圖詳情欄「這裡能悟」用同一個判斷（W3）
         if branch == "wild":
             return bool(self._wild_foes(loc))
         return bool(event_candidates(self.state, self.content, "explore", "common"))
@@ -3460,14 +3461,16 @@ class Game:
         if refusal is not None:
             return self._log([refusal])
         xinde, stamina = self._xinde(), self.state.player.stamina
+        # 新武學自己那一份的品質照機率擲（Config.fuse_quality_odds）；序章那一爐照劇本固定下品，不擲
+        rng = None if prologue_rules.fuse_base(self.state, self.content) is not None else self.rng
         if art_id and other_art and not insight_ids:
             art, msgs = fusion.blend(
-                self.state, self.content, self.world, self._quick_client(), art_id, other_art, proposed=proposed,
+                self.state, self.content, self.world, self._quick_client(), art_id, other_art, proposed=proposed, rng=rng,
             )
             tag = f"合成【{art.name}】" if art is not None else None
         elif art_id and not other_art and len(insight_ids) == 1:
             art, msgs = fusion.fuse(
-                self.state, self.content, self.world, self._quick_client(), art_id, insight_ids[0], proposed=proposed,
+                self.state, self.content, self.world, self._quick_client(), art_id, insight_ids[0], proposed=proposed, rng=rng,
             )
             tag = f"合成【{art.name}】" if art is not None else None
         elif not art_id and not other_art and len(insight_ids) == 2:
@@ -3699,6 +3702,7 @@ class Game:
         return skillview.art_card(
             art, level, parent_names=skillview.parent_names(art, self.content, self.world),
             trait_line=traits.card_line(self.content, art),
+            compare_line=team.compare_with_worn(self.state, self.content, self.world, art),  # W6
         )
 
     def member_card(self, key: str) -> str:
@@ -3706,6 +3710,10 @@ class Game:
 
     def menxia_rules(self) -> str:
         return skillview.rules_line(self.content)
+
+    def attribute_note(self) -> str:
+        """修練頁與煉製頁摺起來的「屬性有什麼用」那一句（W2）。"""
+        return skillview.attribute_line(self.content)
 
     def bag_text(self) -> str:
         return skillview.bag_text(self.state, self.content)

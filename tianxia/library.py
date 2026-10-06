@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from . import insights, team
-from .martial_arts import MartialArt, content_art
+from .martial_arts import QUALITIES, MartialArt, content_art
 from .models import Content, SkillDef
 from .state import GameState
 from .world_state import WorldStateStore
@@ -57,15 +57,20 @@ def full(state: GameState, content: Content) -> bool:
     return held_count(state) >= cap_of(state, content)
 
 
+SWITCH_HINT = "到「修練」的功法庫把它改練上身。"  # 合成的結果最後一句（W5，fusion._store_forged 用）：「收進功法庫」之後告訴玩家功法庫在哪、怎麼穿上；待 joy 潤
+
+
 def store_art(state: GameState, art: MartialArt, quality: str | None = None) -> list[str]:
     """新拿到的武學放哪：對應的欄位空著就配上身（第一成），否則進功法庫。quality 是玩家這一份的品質
-    （跟全服登記的不一樣時才記；現在沒有呼叫端給它——合成也從登記的下品起修）。
+    （合成擲出來的，Config.fuse_quality_odds）：跟全服登記的不一樣時記成自己那一份的品質，也記成「擲到的」
+    （art_rolled），熔的時候那幾階不給加給。
     這裡不看上限：該不該擋住由呼叫端決定（合成、學藝擋，奇遇給的、買來的不擋）。"""
     p = state.player
     if art.id in owned_arts(state):  # 已經有了（配在身上或在庫裡）：不重複收，也不動它的品質與熟練度
         return []
     if quality is not None and quality != art.quality:
         p.art_quality[art.id] = quality
+        p.art_rolled[art.id] = quality
     slot = "neigong_id" if art.kind == "內功" else "wugong_id"
     if getattr(p.member, slot) is None:
         setattr(p.member, slot, art.id)
@@ -177,10 +182,30 @@ def melt_value(state: GameState, content: Content, world: WorldStateStore, art_i
     mine = team.player_art(state, content, world, art_id)
     registered = team.resolve_art(art_id, content, world)
     minimum = 0 if art_id in content.skills else content.config.melt_min_refund
+    start = registered.quality if registered else "下品"
+    rolled = state.player.art_rolled.get(art_id)  # 合成時擲到的品質也算「登記時就有」：合到上品馬上熔掉不能賺加給
+    if rolled in QUALITIES and QUALITIES.index(rolled) > QUALITIES.index(start):
+        start = rolled
     return melt_refund(
-        content, state.player.art_levels.get(art_id, 1),
-        mine.quality if mine else "下品", registered.quality if registered else "下品", minimum,
+        content, state.player.art_levels.get(art_id, 1), mine.quality if mine else "下品", start, minimum,
     )
+
+
+MELT_NO_XINDE = "沒有心得，只空出一格"  # 熔煉那一行與確認框用：退 0 心得的熔煉其實只是空出一格（W9，待 joy 潤）
+
+
+def melt_note(value: int) -> str:
+    """功法卡那一行「熔煉：…」：熔了退多少心得；退 0 時直說沒有心得、只空出一格（熔掉仍空出一格，所以照樣准熔，不騙人說退了什麼）。"""
+    return f"退回心得 {value}" if value > 0 else MELT_NO_XINDE
+
+
+def melt_confirm(content: Content, name: str, art_id: str, value: int) -> str:
+    """熔煉鈕按下去的確認框。退 0 心得時照實說（W9，待 joy 潤）；開局送的基礎武學在城鎮免費重學（_taught_here），
+    所以只有它們才多這一句——別的武學不免費，不能這樣寫。"""
+    if value > 0:
+        return f"把【{name}】熔成心得？熔掉就沒了。"
+    again = "（基礎武學在城鎮可以免費重學）" if art_id in content.config.starter_skills else ""
+    return f"把【{name}】熔掉？這門熔了沒有心得，只空出一格{again}。"
 
 
 def melt_art(
@@ -193,10 +218,13 @@ def melt_art(
         return [problem]
     refund = melt_value(state, content, world, art_id)
     p.arts.remove(art_id)
-    for record in (p.art_levels, p.art_quality, p.art_mastery):
+    for record in (p.art_levels, p.art_quality, p.art_mastery, p.art_rolled):
         record.pop(art_id, None)
     p.stats["xinde"] = p.stats.get("xinde", 0) + refund
-    return [f"你把【{art.name if art else art_id}】熔成了心得。", f"心得 +{refund}"]
+    name = art.name if art else art_id
+    if refund <= 0:  # 退 0 心得（第一成的內容武學）：不寫「熔成了心得。心得 +0」，只說空出一格（W9，待 joy 潤）
+        return [f"你把【{name}】熔掉了，空出一格。"]
+    return [f"你把【{name}】熔成了心得。", f"心得 +{refund}"]
 
 
 def melt_insight(state: GameState, content: Content, world: WorldStateStore, insight_id: str) -> list[str]:

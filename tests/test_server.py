@@ -17,7 +17,9 @@ import llm_queue
 import server
 import server_push
 from conftest import at, season_one_events
-from tianxia import atlas, battle_instance, calendar, companion_agent, database, fight_llm, fusion, naming, sqlite_world, team
+from tianxia import (
+    atlas, battle_instance, calendar, companion_agent, database, fight_llm, fusion, insights, naming, skillview, sqlite_world, team,
+)
 from tianxia.accounts import NAME_TAKEN
 from tianxia.characters import open_characters
 from tianxia.engine import Game
@@ -782,6 +784,18 @@ def test_roster_pick_and_team_toggle_ignore_people_you_do_not_have(client):
     assert client.get("/api/menxia?person=nobody").json()["person"] is None
     out = client.post("/api/menxia/join", json={"person": "nobody"})
     assert out.status_code == 400 and out.json() == {"error": "名冊裡沒有這個人。"}
+
+
+def test_forge_line_endpoint_says_what_one_lone_item_is_missing(client):
+    """W4：煉製頁放了一樣東西就問一次 /api/forge_line，字的唯一出處是 skillview.forge_line。"""
+    _player(client)
+    game = server.game_for("沈青衫")
+    game.state.player.insights = ["feng"]
+    open_characters().save(game.state)
+    art = client.post("/api/forge_line", json={"art": "jichu_quanjiao"}).json()["line"]
+    assert "再放一個意境，或另一門武學。" in art
+    insight = client.post("/api/forge_line", json={"insights": ["feng"]}).json()["line"]
+    assert "再放一門武學，或另一個意境。" in insight
 
 
 def test_forge_line_previews_without_forging(client):
@@ -1711,7 +1725,7 @@ def test_forge_line_previews_a_blend(client):
     _a_player_with_insights(client)
     before = open_characters().load("沈青衫").player
     out = client.post("/api/forge_line", json={"art": "jichu_quanjiao", "other_art": "jichu_tuna"}).json()
-    assert "【基礎拳腳】＋【基礎吐納】" in out["line"] and "從下品起修" in out["line"]
+    assert "【基礎拳腳】＋【基礎吐納】" in out["line"] and "品質看造化" in out["line"]
     saved = open_characters().load("沈青衫").player
     assert saved.arts == []  # 只是預覽：什麼都沒收、沒登記
     assert (saved.stats["xinde"], saved.stamina) == (before.stats["xinde"], before.stamina)
@@ -2475,7 +2489,7 @@ def test_the_furnace_button_stays_disabled_with_the_wait_line_while_naming():
     js = (server.WEB / "app.js").read_text(encoding="utf-8")
     body = _js_function(js, "async function forge(")
     assert "await busy(" in body and "btn.disabled = true" in body and 'btn.textContent = "爐火正旺…"' in body
-    assert "取名要花上一分鐘，請稍候" in body
+    assert "S.message = FORGE_WAIT;" in body and "要等它取名，請稍候" in js  # 等的時候寫的字（W10：不誇大成「一分鐘」）
     assert body.index("btn.disabled = true") < body.index('api("/api/menxia/forge"')
 
 
@@ -2661,7 +2675,7 @@ def test_the_practice_page_gets_a_card_for_each_worn_art(client, monkeypatch):
     cards = client.get("/api/menxia").json()["slot_cards"]
     assert [c["kind"] for c in cards] == list(server.KINDS)
     wugong, neigong = cards
-    assert "基礎拳腳" in wugong["card"] and "第一成" in wugong["card"]  # 第一成／第十成那一行是功法卡才有的
+    assert "基礎拳腳" in wugong["card"] and "第十成" in wugong["card"]  # 現在這一成、下一成與第十成的威力那一行是功法卡才有的（W1）
     assert "基礎吐納" in neigong["card"]
     game = server.game_for("沈青衫")
     monkeypatch.setattr(server.CONTENT.config, "starter_skills", [])  # 沒有開局送的武學：讀檔才不會把空著的欄位補回來
@@ -2669,6 +2683,14 @@ def test_the_practice_page_gets_a_card_for_each_worn_art(client, monkeypatch):
     open_characters().save(game.state)
     neigong = client.get("/api/menxia").json()["slot_cards"][1]
     assert "你還沒有內功。" in neigong["card"]
+
+
+def test_the_menxia_payload_carries_the_attribute_note_both_pages_fold_away(client):
+    """W2：修練頁與煉製頁各摺一行「屬性有什麼用」，字由 skillview.attribute_line 照程式的規則寫，網頁只放進去。"""
+    _player(client)
+    note = client.get("/api/menxia").json()["attribute_note"]
+    assert note == skillview.attribute_line(server.CONTENT)
+    assert "×1.3" in note and "剛柔" in note
 
 
 def test_the_slot_cards_say_whether_each_slot_holds_an_art_and_its_level(client, monkeypatch):
@@ -2726,7 +2748,9 @@ def test_a_library_art_without_a_note_leaves_no_blank_line(client):
     assert "None" not in card
     assert "<br />\n<br />" not in card and "<br />\n</p>" not in card
     # 計畫六 Task 4：來源之後多一行功效（鐵柳纏勁屬柔、上品：化勁 10%×2）；沒有說明句時它就是最後一行
-    assert card.rstrip().endswith("來源：自創（沈浪 所創）<br />\n功效：〔化勁〕一場少扣 20% 氣血</p>")
+    # W6：功法庫裡的功法再多一行跟身上同一種那門的比較，沒有說明句時它是最後一行（本人身上那門自己的卡沒有）
+    assert "來源：自創（沈浪 所創）<br />\n功效：〔化勁〕一場少扣 20% 氣血<br />\n比身上的【基礎拳腳】：威力 " in card
+    assert card.rstrip().endswith("（第一成）、多了〔化勁〕、少了〔厚〕</p>")
 
 
 def test_travel_sets_off_or_stays_on_the_map_and_says_why(client):
@@ -3813,6 +3837,15 @@ def test_the_map_arranges_travel_while_on_the_road(client):
     out = client.post("/api/travel", json={"place": start}).json()
     assert out["arrived"] is True
     assert game.state.player.journey is None and game.state.player.location == start
+
+
+def test_the_map_detail_says_which_insights_a_scouted_place_teaches(client):
+    """W3：輿圖點一個摸清的地點，詳情欄多一行「這裡能悟：…」，名字就是探索那裡悟得到的。"""
+    _player(client)
+    start = server.game_for("沈青衫").state.player.location
+    detail = client.get(f"/api/map?place={start}").json()["detail"]
+    names = "、".join(server.CONTENT.insights[i].name for i in insights.explore_gives(server.CONTENT.locations[start], server.CONTENT))
+    assert f"這裡能悟：{names}" in detail
 
 
 def test_on_the_road_the_page_offers_the_road_tasks(client):
@@ -5407,6 +5440,7 @@ def test_a_refused_forge_does_not_leave_the_waiting_message_on_the_craft_page():
     js = (server.WEB / "app.js").read_text(encoding="utf-8")
     parts = [
         re.search(r"(?m)^  const esc = .*;$", js).group(0),
+        re.search(r"(?m)^  const FORGE_WAIT = .*;$", js).group(0),
         re.search(r"(?ms)^  const failText = .*?\);$", js).group(0),
         _js_function(js, "function watchQueue(") + "\n  }",
         _js_function(js, "async function busy(") + "\n  }",

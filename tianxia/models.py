@@ -168,6 +168,40 @@ class PracticeBonus(_Strict):
     line: str = ""  # 吃到加成時併進選項括號裡的那一句（events.choice_label），{who} 換成「你」
 
 
+class FuseQuality(_Strict):
+    """合成品質的機率怎麼跟著這一爐的搭配走（企劃者 2026-10-06：「每個武學搭配不同的意境或是其他的東西都應該要有
+    不同的機率吧，這是一整套系統，不要套死固數值」）。fusion.quality_odds 把這一爐的組成加成一個「造化分」，
+    從 Config.fuse_quality_odds（普通搭配的平均）往上或往下推：上品每分 +up_per_point、下品每分 −low_per_point，
+    中品是剩下的。上品夾在 up_range、下品夾在 low_range，所以沒有必出、也沒有必不出的組合。"""
+
+    up_per_point: float = Field(default=0.5, ge=0)
+    low_per_point: float = Field(default=1.0, ge=0)
+    up_range: tuple[float, float] = (5, 45)  # 上品最少、最多幾 %
+    low_range: tuple[float, float] = (15, 80)  # 下品最少、最多幾 %
+    # 底（武學＋武學時是兩門的平均）自己那一份的品質：好的底比較容易合出好品質（回應企劃者「中品的底合出下品，那我幹嘛合成」）
+    base_quality: dict[str, float] = Field(
+        default_factory=lambda: {"下品": -5, "中品": 5, "上品": 12, "絕學": 20},
+    )
+    level_center: int = 5  # 底練到第幾成算「普通」
+    level_point: float = Field(default=1.5, ge=0)  # 比 level_center 每多（少）一成加（扣）幾分
+    # 意境的來歷：內容寫好的基本意境 0；善名惡名悟來的（有正邪）；合併出來的；自己首悟的再加 own
+    insight_lean: float = 4
+    insight_merged: float = 6
+    insight_own: float = 4
+    same_attribute: float = 8  # 底與意境（或兩門武學）同屬性
+    counter_attribute: float = -10  # 相剋的一對
+    wis_weight: float = Field(default=0.5, ge=0)  # 悟性：stat_factor 多出來的百分點 × 這個（跟修練同一套 stat_factor）
+    shown_from: float = Field(default=3, ge=0)  # 說明那一句只寫分數絕對值到這麼多的因素，最多兩個
+    # 說明那一句的寫法：因素 → [加分時, 扣分時]（語氣照企劃者「不要那麼直白」，不寫成攻略）
+    lines: dict[str, list[str]] = Field(default_factory=lambda: {
+        "quality": ["底子厚實", "底子尚淺"],
+        "level": ["火候已足", "火候還淺"],
+        "insight": ["意境來歷不凡", ""],
+        "attribute": ["兩股氣息相投", "兩股氣息相衝"],
+        "wis": ["你心思靈透", "你心思還不夠靈透"],
+    })
+
+
 class FrontLines(_Strict):
     """戰況變化的說法（content/front_lines.json，FB-064）。第一季規則開著時，推動戰線的那一行寫成一句話：
     「{戰線}：{陣營}{句子}」，例「潁川汝南：官軍步步進逼」，不寫數字。句子分三段（tianxia/front_lines.py 的 BANDS：
@@ -1015,6 +1049,11 @@ class Config(_Strict):
     rank2_push: int = Field(default=3, ge=0)  # 成功往己方推所在戰線幾點（走 Game.push_trend：緩衝、上限、貢獻）
     opp_showdown_days: float = Field(default=1.0, gt=0)  # 「戰後的地」：決戰結算之後幾個曆日內
     opp_wild_tags: list[str] = Field(default_factory=lambda: ["野外", "河畔", "山林", "渡口", "官道"])  # 「戰後的地」算野外的地點標籤
+    # 機緣的時間窗口（天時地利型的夜裡、黎明、戰後的地，與乙二集體密謀的期限 plot_days）每個至少開幾個「現實」分鐘（企劃者 2026-10-06「照比例調整」）。
+    # 季壓得越緊，同樣的曆時占的現實時間越短（週末設定 cal_scale 33.6：一個黎明只有 3.6 分鐘），所以窗口不夠長的才放寬，
+    # 放寬後的窗口＝這個分鐘數 × cal_scale 個曆分，也就是跟壓縮成正比；本來就夠長的（整季 14 天：黎明現實 20 分鐘）一個字不動。
+    # 0＝不放寬。只管機緣的窗口，calendar.is_night（伏筆、事件條件）不受影響。算法見 opportunities.windows
+    opp_window_min_minutes: float = Field(default=10, ge=0)
     # ── 集體密謀（正式版乙二；【預設】，企劃者 2026-10-06 同意）──
     plot_days: float = Field(default=1.0, gt=0)  # 發起之後幾個曆日內要湊齊，過了作罷（預設 1 曆日＝24 曆時）
     plot_contrib: int = Field(default=30, ge=0)  # 密謀成了，沒有第 3 階資格（或這種機緣已經完成）的參與者記幾點貢獻
@@ -1082,15 +1121,27 @@ class Config(_Strict):
     merge_stamina: int = 5
     # 武學與成長設計 12.1：三種合成同一套價錢——武學＋意境、武學＋武學也收體力
     fuse_stamina: int = Field(default=5, ge=0)
+    # 合成出新武學（武學＋意境、武學＋武學）時，每個人自己那一份的品質機率，「普通搭配」的平均（企劃者 2026-10-06：
+    # 「不要直接顯示合成出來確定的品級，用機率，下品50%，中品30%，上品20%」）；權重，不必加起來是 100。
+    # 序章那一爐照劇本固定下品。擲到的品質算「登記時就有」，熔的時候不給加給（library.melt_value）
+    fuse_quality_odds: dict[str, float] = Field(default_factory=lambda: {"下品": 50, "中品": 30, "上品": 20})
+    # 上面那組是「普通搭配」的平均；每一爐照它的組成往上或往下推（企劃者 2026-10-06，fusion.quality_odds）
+    fuse_quality: FuseQuality = Field(default_factory=FuseQuality)
     # 12.2 合到舊的：一個組合第一次被合時，候選每有一個，機會加這麼多，最多到 land_chance_cap（企劃者定九成）；0 就永遠長新的
     land_chance_per_candidate: float = Field(default=0.05, ge=0, le=1)
     land_chance_cap: float = Field(default=0.9, ge=0, le=1)
     cultivate_stamina: int = 10  # 修練一次的體力
     # 修練升到這一品：第一次的機率、每失敗一次加多少（%）（設計 3.5）。中品、上品加到 100 就必成；
     # 絕學沒有保底：累積的機率最多到 cultivate_cap（企劃者 2026-10-05），剩下靠破境丹
+    # 企劃者 2026-10-06（W8）：第一階（下品→中品）放寬成 40% 起、每失敗一次 +20%、第三次必成（見 cultivate_sure_by）。理由：試玩
+    # 走一遍，連續四次（40 體力）還是下品，第一次玩一個 session 可能什麼都沒得到；第一階是新手第一次感覺到「修練有用」的地方，
+    # 要夠快。中品→上品（10%、+6）、上品→絕學（4%、+3）一個數字都沒動
     cultivate_odds: dict[str, tuple[int, int]] = Field(
-        default_factory=lambda: {"中品": (20, 10), "上品": (10, 6), "絕學": (4, 3)}
+        default_factory=lambda: {"中品": (40, 20), "上品": (10, 6), "絕學": (4, 3)}
     )
+    # 第幾次修練必成（W8）：寫了的那一階，第 N 次（失敗 N−1 次之後）機會直接是 100%——蓋過悟性的乘數與 cultivate_cap。
+    # 沒寫的那一階照舊：機會加到 100% 才必成（上品第 16 次），絕學沒有保底。預設只有第一階寫了，第三次必成
+    cultivate_sure_by: dict[str, int] = Field(default_factory=lambda: {"中品": 3})
     # 企劃者 2026-10-05：絕學沒有保底，靠破境丹提升。累積機率的上限（%）：沒寫的那一階上限是 100（照舊必成）；
     # 破境丹是探索偶爾撿到的傳奇道具，玩家在修練頁勾了、而且這一次衝的是絕學，才服下一枚：那一次多 legend_item_bonus%，
     # 成不成都用掉（不勾就不服；被拒絕的修練不擲骰、丹也不動）

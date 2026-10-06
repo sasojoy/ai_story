@@ -74,6 +74,7 @@
     libFilter: "all", // 修練頁功法庫的篩選：all／武學／內功／ready（可修練）；武學多時才出現
     libAll: false, // 功法庫列完了沒（武學多時先只列 LIB_PAGE 門）
     insOpen: null, // 修練頁點開的那一個意境（攤開說明與「化成心得」）
+    artNote: null, // 修練（衝品質）的結果：{ id, html }，寫在那一門卡片的按鈕底下（W7）；點別的卡片、切分頁、做別的動作就清掉
     legendTick: {}, // 修練頁每一門武學「服下破境丹」勾了沒（id → true）；預設不勾，輪詢重畫不會悄悄取消，修練送出之後清掉
     forgeSel: [], // 爐裡放的：{type: "art" | "ins", id}，最多兩樣、武學最多兩門（武學＋意境、武學＋武學＝合成，兩個意境＝合併）
     wheelSel: null, // 江湖頁行動列展開的那一格（目前只有 move）
@@ -971,6 +972,10 @@
   // 序章裡師父的話也放在修練頁、煉製頁最上面（序章的第 4～6、9、10 步在這兩頁做，不用切回江湖頁看要做什麼）；序章外不畫
   const proGuide = () => (pro() ? guideHtml(S.main.guide, false) : "");
 
+  // 屬性有什麼用（W2）：修練、煉製兩頁各摺一行，收著只多一行小字。說明的字是伺服器照程式的規則寫的（skillview.attribute_line），
+  // 這裡只放進去；標題那四個字待 joy 潤。伺服器沒給（舊版）就不畫。
+  const attrNoteHtml = (x) => (x.attribute_note ? `<details class="attr-note"><summary>屬性有什麼用</summary><p>${esc(x.attribute_note)}</p></details>` : "");
+
   // ── 修練 ──
   // 卷軸卡版（企劃者 2026-10-06「先用捲軸卡」）：身上的兩門各一張卡，練成、修練直接在卡上按；
   // 功法庫一門一列，點開才攤成同一張卡的內容。武學多（上限 50 門）時庫可以篩選，先只列 LIB_PAGE 門，其餘按「再列 N 門」
@@ -981,8 +986,8 @@
     const [ch, cls] = QUALITY_SEAL[q] || ["？", "q1"];
     return `<span class="qseal ${cls}${big ? " big" : ""}">${ch}</span>`;
   };
-  // 合成品質的機率條：伺服器在這一門帶了 forge_odds（[{quality, pct}]，照這一門的搭配算的）才畫；沒帶就不畫，不寫死數字
-  const forgeOdds = (a) => (Array.isArray(a.forge_odds) && a.forge_odds.length ? `<div class="odds"><span>拿去煉製會出</span>${a.forge_odds
+  // 合成品質的機率條：伺服器在這一門帶了 forge_odds（[{quality, pct}]，配手上最好的那個意境 forge_with 算的）才畫；沒帶就不畫，不寫死數字
+  const forgeOdds = (a) => (Array.isArray(a.forge_odds) && a.forge_odds.length ? `<div class="odds"><span>${a.forge_with ? `配「${esc(a.forge_with)}」煉製會出` : "拿去煉製會出"}</span>${a.forge_odds
     .map((o) => `<b class="${(QUALITY_SEAL[o.quality] || [, "q1"])[1]}" style="flex-grow:${Math.max(1, Number(o.pct) || 0)}">${esc(String(o.quality).slice(0, 1))} ${Number(o.pct) || 0}%</b>`).join("")}</div>` : "");
 
   // 功法卡、人物卡（伺服器的 Markdown）裡的十成進度「●●●○○○○○○○」換成跟卷軸卡同一種格子（企劃者 10/6：不要圈圈）。
@@ -1021,10 +1026,11 @@
       return `<div class="ten">${Array.from({ length: 10 }, (_, k) => `<i${k < level ? ' class="on"' : ""}></i>`).join("")}</div>
         <div class="lvline"><b>第${level}成</b><span>${esc(a.kind)}・屬${esc(a.attribute)}${a.insight ? `・意境「${esc(a.insight)}」` : ""}</span></div>
         <div class="acts">${first}${cult}</div>
+        ${S.artNote && S.artNote.id === a.id ? `<div class="msg art-result">${S.artNote.html}</div>` : ""}
         ${lg ? `<label class="legend"><input type="checkbox" data-legend="${esc(a.id)}" ${ticked ? "checked" : ""}><span>${esc(lg.label)}</span></label>` : ""}
         ${forgeOdds(a)}
         <div class="more">
-          <button class="linkish" data-act="melt" data-glow="melt" data-id="${esc(a.id)}" data-name="${esc(a.name)}" ${a.melt.ok ? "" : "disabled"} title="${esc(a.melt.note)}">熔煉${a.melt.ok ? `（${esc(a.melt.note.replace(/^退回/, ""))}）` : ""}</button>
+          <button class="linkish" data-act="melt" data-glow="melt" data-id="${esc(a.id)}" data-name="${esc(a.name)}" data-confirm="${esc(a.melt.confirm)}" ${a.melt.ok ? "" : "disabled"} title="${esc(a.melt.note)}">熔煉${a.melt.ok ? `（${/^退回/.test(a.melt.note) ? esc(a.melt.note.replace(/^退回/, "")) : "只空出一格"}）` : ""}</button>
           <button class="linkish" data-act="art-info" data-id="${esc(a.id)}" aria-expanded="${info}">詳情 ${info ? "▴" : "›"}</button>
         </div>
         ${info ? `<div class="art-card">${tenCells(a.card)}</div>` : ""}`;
@@ -1073,6 +1079,7 @@
           <select class="input" name="hours" aria-label="閉關幾小時">${[1, 2, 4, 6, 8, 12].map((h) => `<option value="${h}" ${h === 8 ? "selected" : ""}>${h} 小時</option>`).join("")}</select>
         </form>
       </div>
+      ${attrNoteHtml(x)}
       <div class="label">身上的兩門</div>
       ${worn}
       <div class="label">功法庫 <small class="muted">武學與意境 ${x.holdings.count}/${x.holdings.cap}</small></div>
@@ -1143,6 +1150,7 @@
       ${furnaceSvg([slotOf(S.forgeSel[0]), slotOf(S.forgeSel[1])], ready)}
       <div class="card" id="forge-line">${S.forgeLine || x.forge_line}</div>
       <div class="act-row"><button class="btn primary" id="forge" data-act="forge" data-glow="forge" ${ready ? "" : "disabled"}>開爐</button></div>
+      ${attrNoteHtml(x)}
       <div class="label">武學 <small class="muted">一門配一個意境，或兩門一起放</small></div>
       <div class="chips">${x.owned_arts.map((a) => `
         <button class="chip r${QUALITY_RANK[a.quality] || 1} ${inPot(a.id) ? "used" : ""}" data-act="pick" data-type="art" data-id="${esc(a.id)}" ${inPot(a.id) ? "disabled" : ""}>
@@ -1634,6 +1642,7 @@
     S.message = "";
     S.artOpen = null;
     S.artInfo = null; S.insOpen = null; S.libAll = false; // 攤開的詳情、意境、列完的庫也收起（篩選留著）
+    S.artNote = null;
     S.legendTick = {}; // 破境丹的勾也一起收：回到修練頁時它是真的沒勾（預設不勾）
     S.mapNotice = "";
     if (tab === "news") S.unseen = false;
@@ -1769,16 +1778,35 @@
     if (S.tab === "jianghu") renderPage();
   }
 
+  // 修練（cultivate）不捲回頁首（W7）：反覆修練時，那一門的卡片留著、頁面留在原地，結果寫在那一門卡片裡、按鈕的底下（S.artNote），
+  // 頁首的訊息照舊也有。重畫整頁會讓頁首的訊息與卡片的高度變動、把按鈕推走，所以重畫前記下「修練」鈕在螢幕上的位置，
+  // 畫完捲回去補差——玩家的拇指底下永遠還是那顆鈕。例外：這一次練成了絕學、要定名——定名的表單在頁首，照舊捲上去；
+  // 這一次做完了引導的一步（師父的下一句在頁首），也捲上去；改練、熔煉、練成、療傷會改變清單的結構，也照舊回頁首。
+  function cultivateTop(id) {
+    const btn = [...document.querySelectorAll('[data-act="cultivate"]')].find((el) => el.dataset.id === id);
+    return btn ? btn.getBoundingClientRect().top : null;
+  }
+
   async function mx(op, extra = {}) {
     await busy(async () => {
+      const stay = op === "cultivate" && !!extra.art;
+      const was = S.menxia, mark = stay ? cultivateTop(extra.art) : null;
+      const step = guideKey(S.main && S.main.guide);
       const r = await api(`/api/menxia/${op}`, { person: S.person, kind: S.kind, ...extra });
       S.menxia = r.menxia;
       trimPot(); // 熔掉的若正放在爐裡，回煉製頁時不能還留著
       S.message = r.message;
+      S.artNote = stay ? { id: extra.art, html: r.message } : null;
       setMain(r.main);
       renderTop();
       renderPage();
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      const needsName = !!(r.menxia && r.menxia.naming) && !(was && was.naming);
+      // 這一次修練做完了引導的一步（說書人的 key 換了、或框沒了）：師父的下一句在修練頁最上面（序章 p6→p7 「按打坐歇一歇」），
+      // 不捲上去玩家看不到。比的是步驟，不特別認序章，所以以後任何被修練做完的引導步驟都一樣
+      const guideMoved = guideKey(r.main && r.main.guide) !== step;
+      const now = stay && !needsName && !guideMoved && mark !== null ? cultivateTop(extra.art) : null;
+      if (now === null) window.scrollTo({ top: 0, behavior: "smooth" });
+      else if (now !== mark) window.scrollBy({ top: now - mark, left: 0, behavior: "instant" });
     });
   }
 
@@ -1805,6 +1833,9 @@
     } catch (e) { /* 提示過 */ }
   }
 
+  // 開爐等結果的時候頁面上方寫的那一句（W10，待 joy 潤）：取名實際約 3～5 秒，不把等待說成好幾十秒，免得人以為壞了
+  const FORGE_WAIT = "爐火正旺。若這是江湖上第一次合出來，要等它取名，請稍候。";
+
   async function forge() {
     const btn = document.getElementById("forge");
     await busy(async () => {
@@ -1814,7 +1845,7 @@
       // 等結果的這段時間（首次發現的配方要等模型取名）整座爐子晃動、火舌竄高、太極快轉
       document.querySelector(".furnace .w-furnace")?.classList.add("forging");
       document.querySelector(".furnace .w-taichi")?.classList.add("hot");
-      S.message = "爐火正旺。若這是江湖上第一次合出來，取名要花上一分鐘，請稍候。";
+      S.message = FORGE_WAIT;
       document.getElementById("mx-msg").textContent = S.message;
       const stop = watchQueue(btn, "爐火正旺…");
       try {
@@ -1969,7 +2000,7 @@
           if (S.menxia !== was) { S.artOpen = null; if (S.tab === "practice") renderPage(); }
           break;
         }
-        case "art": S.artOpen = S.artOpen === el.dataset.id ? null : el.dataset.id; renderPage(); break;
+        case "art": S.artOpen = S.artOpen === el.dataset.id ? null : el.dataset.id; S.artNote = null; renderPage(); break;
         case "cultivate": {
           // 勾的是畫面上看到的那一份：這一門現在真有「服下破境丹」可勾才算（伺服器也只認真正的布林 true）。
           // 送出就把勾清掉（mx 回來重畫時已經是沒勾的）；還在忙或請求失敗（mx 沒換上伺服器回來的那一份 menxia）就把勾還回去
@@ -1983,7 +2014,8 @@
           break;
         }
         case "melt":
-          if (confirm(`把【${el.dataset.name}】熔成心得？熔掉就沒了。`)) await mx("melt", { art: el.dataset.id });
+          // 確認框問什麼由伺服器寫好（melt.confirm：退 0 心得時照實說只空出一格）；沒給（舊版伺服器）就問老問題
+          if (confirm(el.dataset.confirm || `把【${el.dataset.name}】熔成心得？熔掉就沒了。`)) await mx("melt", { art: el.dataset.id });
           break;
         case "melt-insight":
           if (confirm(`把「${el.dataset.name}」化成心得？靠它的武學從此不能修練。`)) await mx("melt_insight", { insight: el.dataset.id });
@@ -2217,7 +2249,7 @@
       if (S.stage !== "game" || S.tab !== tab || S.busy || S.menxia !== was || typing()) return;
       S.menxia = x;
       const trimmed = trimForgeSel();
-      if (S.artOpen && !x.owned_arts.some((a) => a.id === S.artOpen)) S.artOpen = null; // 那一門已經不在了（熔掉）
+      if (S.artOpen && !x.owned_arts.some((a) => a.id === S.artOpen)) { S.artOpen = null; S.artNote = null; } // 那一門已經不在了（熔掉）
       for (const id of Object.keys(S.legendTick)) { // 丹用完了、或那一門已經不是衝絕學這一步：勾跟著作廢
         const row = x.owned_arts.find((a) => a.id === id);
         if (!row || !row.cultivate.legend) delete S.legendTick[id];

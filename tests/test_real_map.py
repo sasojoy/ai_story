@@ -47,6 +47,50 @@ def content():
     return load_content(CONTENT_DIR)
 
 
+def _detail(content, state, loc_id: str) -> str:
+    from tianxia.atlas import detail_text
+
+    return detail_text(state, content, loc_id, lambda squad_id: "穩勝")
+
+
+def test_the_map_detail_of_a_scouted_wild_place_lists_the_insight_exploring_teaches(content):
+    """W3，真實內容：潁川郊野寫的是風——摸清了詳情欄就寫「這裡能悟：風」，沒摸清的地點什麼也不露。"""
+    from tianxia import insights
+
+    state = new_game_state(content, "甲")
+    state.player.location = "yingchuan"
+    assert "yingchuan_wilds" not in state.player.visited
+    far = _detail(content, state, "zhuo_county")  # 隔了好幾個大區、視野之外的涿郡
+    assert far == "### ？\n\n尚未摸清" or "這裡能悟" not in far
+    state.player.visited.add("yingchuan_wilds")
+    near = _detail(content, state, "yingchuan_wilds")
+    assert "**意境**　這裡能悟：風\n" in near
+    for loc_id in ("changshe", "nanyang_wilds", "deep_mountain"):  # 兩個以上的，頓號隔開、順序照內容
+        state.player.visited.add(loc_id)
+        names = [content.insights[i].name for i in insights.explore_gives(content.locations[loc_id], content)]
+        assert len(names) >= 2 and f"這裡能悟：{'、'.join(names)}" in _detail(content, state, loc_id)
+
+
+def test_every_scouted_real_place_lists_exactly_what_exploring_there_can_teach(content):
+    from tianxia import insights
+    from tianxia.atlas import is_known
+
+    state = new_game_state(content, "甲")
+    listed = 0
+    for loc in content.locations.values():
+        if loc.prologue_only:
+            continue
+        state.player.visited.add(loc.id)
+        text = _detail(content, state, loc.id)
+        if not is_known(state, content, loc.id):  # 還沒開放的地點（南華觀等）：去過也不算摸清，什麼都不露
+            assert "這裡能悟" not in text, loc.id
+            continue
+        names = [content.insights[i].name for i in insights.explore_gives(loc, content)]
+        assert (f"這裡能悟：{'、'.join(names)}" in text) if names else ("這裡能悟" not in text), loc.id
+        listed += bool(names)
+    assert listed >= 30  # 正式內容的地點幾乎都有得悟：不是「全都沒寫」的空轉
+
+
 def _region(loc_id: str) -> str:
     return next(r for r, members in REGIONS.items() if loc_id in members)
 

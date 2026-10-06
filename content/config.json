@@ -16,6 +16,7 @@
   "time_scale": 1.0,
   "season_days": 14,
   "season_one": false,
+  "fuse_quality_odds": {"下品": 50, "中品": 30, "上品": 20},
   "practice_bonus": {"evil": {"per": 10, "cap": 3, "line": "這種事{who}幹得多了。"}},
   "train_event_chance": 0.3,
   "qiyu_weight_multiplier": 1.5,
@@ -26,6 +27,8 @@
     {"kind": "wild", "tags": [], "weights": {"insight": 40, "wild": 35, "event": 25}}
   ],
   "wild_neili_loss_factor": 0.5,
+  "cultivate_odds": {"中品": [40, 20], "上品": [10, 6], "絕學": [4, 3]},
+  "cultivate_sure_by": {"中品": 3},
   "cultivate_cap": {"絕學": 50},
   "legend_item_bonus": 15,
   "explore_legend_chance": 0.02,

@@ -359,6 +359,18 @@ def _wear_a_fused_art(game) -> str:
     return _fused(game)
 
 
+def test_the_prologue_fusion_is_always_the_lowest_quality(fresh):
+    """序章那一爐照劇本固定下品第一成，不擲品質（企劃者 2026-10-06 改成合成擲品質，序章除外）；
+    說明也照劇本寫「從下品起修」，不寫機率。"""
+    fresh.state.player.insights, fresh.state.player.tutorial_step = ["feng"], 3
+    fresh.state.pending_event = None
+    assert "從下品起修" in fresh.forge_line("basic_fist", ["feng"])
+    fresh.rng.choices = lambda *a, **k: ["上品"]  # 萬一擲了就是上品
+    fresh.forge("basic_fist", ["feng"])
+    art = _fused(fresh)
+    assert art not in fresh.state.player.art_quality and art not in fresh.state.player.art_rolled
+
+
 def test_the_level_goal_needs_the_level(fresh):
     from tianxia import guide
 

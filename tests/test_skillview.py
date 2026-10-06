@@ -1,6 +1,6 @@
 import pytest
 
-from tianxia import fusion, library, rules, skillview, team, traits
+from tianxia import fusion, insights, library, rules, skillview, team, traits
 from tianxia.martial_arts import MartialArt, generate_from_name, historical_art, power_at
 from tianxia.state import new_game_state
 
@@ -9,6 +9,25 @@ def test_rules_line():
     assert skillview.rules_line(None) == (
         "身上一門內功、一門武學：花心得練成，用意境修練衝品質；武學也能在「煉製」融意境衍生新武學，或兩門武學合成一門新的。"
     )
+
+
+def test_the_attribute_note_says_what_the_code_does(content):
+    """W2：屬性的說明一句話——同屬性、相剋、克對手三條，數字與哪幾對相剋都讀自程式（team.pairing 的設定、
+    martial_arts.ATTRIBUTE_COUNTERS、encounter.COUNTER_BONUS），不另外寫死一份。句子待 joy 潤。"""
+    assert skillview.attribute_line(content) == (
+        "內功與武學同屬性，威力 +20%；兩門相剋（陰陽、剛柔、快慢、虛實）威力 −20%；武學克住對手的屬性，威力 ×1.3。"
+    )
+
+
+def test_the_attribute_note_follows_the_numbers_it_reads(content, monkeypatch):
+    from tianxia import encounter, martial_arts
+
+    content.config.pairing_bonus, content.config.pairing_penalty = 0.35, 0.1
+    monkeypatch.setattr(encounter, "COUNTER_BONUS", 1.5)
+    monkeypatch.setattr(martial_arts, "ATTRIBUTE_COUNTERS", {"剛": "柔", "柔": "剛"})
+    note = skillview.attribute_line(content)
+    assert "威力 +35%" in note and "威力 −10%" in note and "威力 ×1.5" in note
+    assert "（剛柔）" in note and "陰陽" not in note  # 相剋的一對照表列，每一對只寫一次
 
 
 def test_member_card_before_learning_anything(state, content, world):
@@ -59,8 +78,7 @@ def test_detail_of_a_historical_skill(state, content, world):
     # 計畫六 Task 4：來源之後多一行功效（長拳屬剛、絕學 ×3：破甲 4%×3＝12%）
     assert text == (
         "【長拳】絕學・屬剛\n"
-        "第1成 ●○○○○○○○○○，威力 50.0（下一成：57.8）\n"
-        "第一成 50.0　第十成 120.0\n"
+        "第1成 ●○○○○○○○○○，威力 50.0（下一成 57.8・第十成 120.0）\n"  # W1：威力只寫一行
         "來源：本命武學\n"
         "功效：〔破甲〕對手強度當作低 12%"
     )
@@ -103,14 +121,14 @@ def test_an_art_card_ends_with_the_models_note():
     lines = card.split("\n")
     assert lines[0] == "【沉柳纏勁】上品・屬柔"
     assert lines[1].startswith("第3成 ●●●○○○○○○○，威力 ")
-    assert lines[3] == "來源：煉製（沈浪 首創）"
+    assert lines[2] == "來源：煉製（沈浪 首創）"
     assert lines[-1] == "以柔勁纏住兵刃，借力卸力。"
 
 
 def test_an_art_card_says_where_the_art_came_from():
     """FB-017：煉出來的寫「煉製（首創者 首創）」，取名自創的寫「自創（取名者 所創）」，其他是本命武學。"""
     def source(art: MartialArt) -> str:
-        return skillview.art_card(art, 1).split("\n")[3]
+        return skillview.art_card(art, 1).split("\n")[2]
 
     crafted = _crafted("")
     assert source(crafted) == "來源：煉製（沈浪 首創）"
@@ -130,12 +148,22 @@ def test_an_art_card_without_a_note_drops_the_whole_line():
         assert len(card.split("\n")) == len(with_note.split("\n")) - 1
 
 
-def test_an_art_card_shows_the_first_and_tenth_level_power():
+def test_an_art_card_says_the_power_on_one_line_with_the_next_level_and_the_tenth():
+    """W1：威力只在一行裡說——現在這一成、下一成、第十成；不再另起一行寫「第一成 …　第十成 …」。"""
     art = _crafted("")
     card = skillview.art_card(art, 3)
-    assert f"第一成 {power_at(art, 1):.1f}　第十成 {power_at(art, 10):.1f}" in card.split("\n")
-    assert f"威力 {power_at(art, 3):.1f}（下一成：{power_at(art, 4):.1f}）" in card
-    assert "（下一成：已達第十成）" in skillview.art_card(art, 10)
+    assert f"第3成 ●●●○○○○○○○，威力 {power_at(art, 3):.1f}（下一成 {power_at(art, 4):.1f}・第十成 {power_at(art, 10):.1f}）" in card.split("\n")
+    assert "第一成" not in card and "　第十成" not in card  # 舊的那一行不在了
+    assert sum(line.count("威力") for line in card.split("\n")) == 1  # 威力整張卡只出現一次（功效那一行說的是別的）
+
+
+def test_an_art_card_at_the_ninth_and_tenth_level_does_not_repeat_itself():
+    """第九成的下一成就是第十成，不寫兩個一樣的數字；第十成沒有下一成。"""
+    art = _crafted("")
+    ninth = skillview.art_card(art, 9).split("\n")[1]
+    assert ninth.endswith(f"威力 {power_at(art, 9):.1f}（下一成即第十成 {power_at(art, 10):.1f}）")  # 待 joy 潤
+    tenth = skillview.art_card(art, 10).split("\n")[1]
+    assert tenth.endswith(f"威力 {power_at(art, 10):.1f}（已達第十成）")  # 待 joy 潤
 
 
 # ── 練功提示（練成花心得：心得的去處是練成與合成）──────────────
@@ -315,6 +343,34 @@ def test_forge_line_asks_for_an_art_and_an_insight_first(state, content, world):
     assert "武學與意境 0/50" in line
 
 
+def test_forge_line_with_one_art_in_the_furnace_says_what_is_missing(state, content, world):
+    """W4：爐裡只放了一門武學——說還缺什麼（一個意境，或另一門武學），不再是放什麼都一樣的總說明。句子待 joy 潤。"""
+    state.player.member.wugong_id = "basic_fist"
+    line = skillview.forge_line(state, content, world, "basic_fist", [])
+    assert "再放一個意境，或另一門武學。" in line and "武學與意境 1/50" in line
+    assert "放兩個意境" not in line  # 總說明那一長句不重複
+    assert "基礎拳腳" not in line and "粗淺拳腳" not in line  # 不點名：放的東西爐子上已經畫了
+
+
+def test_forge_line_with_one_insight_in_the_furnace_says_what_is_missing(state, content, world):
+    state.player.insights = ["feng"]
+    line = skillview.forge_line(state, content, world, None, ["feng"])
+    assert "再放一門武學，或另一個意境。" in line and "武學與意境 1/50" in line
+    assert "放兩個意境" not in line
+
+
+def test_forge_line_one_item_hint_leaks_nothing_about_an_art_you_do_not_have(state, content, world):
+    """預覽不能拿來探：放的不是你的武學，提示也只有「再放…」，不寫名字、屬性。"""
+    line = skillview.forge_line(state, content, world, "caocao_wugong", [])
+    assert "再放一個意境，或另一門武學。" in line and "挾風槍法" not in line and "屬快" not in line
+
+
+def test_forge_line_without_one_clear_item_keeps_the_general_text(state, content, world):
+    """什麼都沒放、或放的形狀不是「單獨一樣」（例如只有第二格）：還是總說明。"""
+    assert "放一門武學和一個意境" in skillview.forge_line(state, content, world, None, [])
+    assert "放一門武學和一個意境" in skillview.forge_line(state, content, world, None, [], other_art="basic_fist")
+
+
 def test_forge_line_counts_against_the_cap_that_lore_widens(state, content, world):
     state.player.stats["lore"] = 8  # 比基準多 3 點：多 6 格
     assert "武學與意境 0/56" in skillview.forge_line(state, content, world, None, [])
@@ -326,19 +382,23 @@ def test_forge_line_shows_a_fuse(state, content, world):
     state.player.stats["xinde"] = 100
     line = skillview.forge_line(state, content, world, "basic_fist", ["feng"])
     assert "**合成**" in line and "【粗淺拳腳】＋「風」→ 一門新武學" in line and "屬快" in line
-    assert "從下品起修" in line and "花 5 點心得、5 點體力（你有 100 點心得）" in line and "⚠" not in line
+    # 第一成的下品底、基本意境：比普通搭配差一些，原因照分數大小寫兩個
+    assert "品質看造化：下品 61%、中品 25%、上品 14%（火候還淺、底子尚淺）" in line
+    assert "花 5 點心得、5 點體力（你有 100 點心得）" in line and "⚠" not in line
 
 
-@pytest.mark.parametrize("quality", ["下品", "中品", "上品", "絕學"])
-def test_forge_line_says_the_new_art_starts_at_the_lowest_quality_whatever_the_base_is(state, content, world, quality):
-    """企劃者 2026-10-05：合出來的武學一律從下品起修，底是絕學也一樣；說明不能再寫「品質跟底一樣」。"""
+def test_forge_line_writes_this_pairings_odds_and_a_better_base_shows(state, content, world):
+    """企劃者 2026-10-06：每一爐照搭配算自己的機率，說明寫這一爐的三個機率；底越好上品越容易，說明不寫「品質跟底一樣」。"""
     state.player.member.wugong_id = "basic_fist"
-    state.player.art_quality["basic_fist"] = quality
     state.player.insights = ["feng"]
     state.player.stats["xinde"] = 100
-    line = skillview.forge_line(state, content, world, "basic_fist", ["feng"])
-    assert "從下品起修" in line and "屬快" in line and "一樣是" not in line
-    assert "花 5 點心得、5 點體力（你有 100 點心得）" in line and "⚠" not in line
+    lines = {}
+    for quality in ("下品", "中品", "上品", "絕學"):
+        state.player.art_quality["basic_fist"] = quality
+        lines[quality] = skillview.forge_line(state, content, world, "basic_fist", ["feng"])
+        assert "屬快" in lines[quality] and "一樣是" not in lines[quality] and "⚠" not in lines[quality]
+    assert "上品 14%" in lines["下品"] and "上品 20%" in lines["中品"] and "上品 23%" in lines["上品"] and "上品 27%" in lines["絕學"]
+    assert "底子厚實" in lines["絕學"]
 
 
 def test_forge_line_shows_a_merge(state, content, world):
@@ -417,7 +477,7 @@ def test_the_players_card_library_and_detail_show_the_players_own_quality(state,
     assert skillview.library(state, content, world)[0][0].startswith(f"武學　{label}")
     text = skillview.detail(state, content, world, "武學")
     assert text.startswith(f"【旋風腿】上品・屬{art.attribute}")
-    assert f"第一成 {28 * art.base_power / 8:.1f}" in text  # 威力也照自己的品質（上品區間，保留這門的微調）
+    assert f"第1成 ●○○○○○○○○○，威力 {28 * art.base_power / 8:.1f}（" in text  # 威力也照自己的品質（上品區間，保留這門的微調）
 
 
 def test_the_art_rows_show_the_players_own_quality_and_level(state, content, world):
@@ -449,8 +509,21 @@ def test_art_rows_list_worn_arts_first_with_what_can_be_done(state, content, wor
     rows = skillview.art_rows(state, content, world)
     assert [r["id"] for r in rows] == ["basic_fist", "lake_kick"]
     assert rows[0]["worn"] and not rows[0]["melt"]["ok"]
-    assert rows[1]["melt"]["ok"] and "退回心得" in rows[1]["melt"]["note"]
+    assert rows[1]["melt"]["ok"] and rows[1]["melt"]["note"] == "沒有心得，只空出一格"  # 第一成的湖邊腿法熔了退 0（W9）
     assert not rows[0]["cultivate"]["ok"] and "沒有融過意境" in rows[0]["cultivate"]["note"]
+
+
+def test_art_rows_carry_the_melt_confirm_the_button_asks(state, content, world):
+    """W9：確認框問什麼由伺服器寫好（library.melt_confirm）放在每一列的 melt.confirm，網頁照放。"""
+    content.config.starter_skills = ["basic_fist"]
+    state.player.member.wugong_id = "lake_kick"
+    state.player.arts = ["basic_fist", "旋風腿"]
+    _whirlwind(world)
+    rows = {r["id"]: r for r in skillview.art_rows(state, content, world)}
+    assert rows["basic_fist"]["melt"]["confirm"] == "把【粗淺拳腳】熔掉？這門熔了沒有心得，只空出一格（基礎武學在城鎮可以免費重學）。"
+    assert rows["旋風腿"]["melt"]["confirm"] == "把【旋風腿】熔成心得？熔掉就沒了。"  # 合成的有基本值，不是 0
+    assert rows["旋風腿"]["melt"]["note"].startswith("退回心得 ")
+    assert rows["lake_kick"]["melt"]["confirm"] == ""  # 身上正在練的不能熔：沒有確認框要問
 
 
 def _refund_the_row_promises(state, content, world, art_id):
@@ -502,12 +575,18 @@ def test_art_rows_of_an_art_with_an_insight_say_the_odds_and_the_cost(state, con
     assert world.claim_skill_name(art)
     state.player.arts = ["旋風腿"]
     state.player.insights = ["feng"]
-    state.player.art_mastery["旋風腿"] = 2
+    state.player.art_mastery["旋風腿"] = 1
     (row,) = skillview.art_rows(state, content, world)
     first, step = content.config.cultivate_odds["中品"]
     assert row["insight"] == "風" and row["cultivate"]["ok"]
-    assert row["cultivate"]["note"] == f"{first + 2 * step}% 晉為中品・體力 {content.config.cultivate_stamina}"
+    assert row["cultivate"]["note"] == f"{first + 1 * step}% 晉為中品・體力 {content.config.cultivate_stamina}"  # W8：40、60 之後
     assert "意境：「風」" in row["card"] and "合成" in row["card"]
+    state.player.art_mastery["旋風腿"] = 2  # 第三次：必成，卡片寫「一定」，不寫「100%」
+    (row,) = skillview.art_rows(state, content, world)
+    assert row["cultivate"]["note"] == f"一定晉為中品・體力 {content.config.cultivate_stamina}"
+    state.player.art_mastery["旋風腿"] = 0
+    (row,) = skillview.art_rows(state, content, world)
+    assert row["cultivate"]["note"] == f"40% 晉為中品・體力 {content.config.cultivate_stamina}"
     state.player.insights = []  # 意境熔掉了：修練的按鈕講原因，不再說機率
     assert not skillview.art_rows(state, content, world)[0]["cultivate"]["ok"]
 
@@ -551,10 +630,10 @@ def test_the_row_offers_the_pill_only_on_the_peerless_step_and_only_when_one_is_
 
 
 def test_the_row_and_the_pill_note_follow_the_players_insight(state, content, world):
-    """計畫二 G2：頁面上寫的就是擲的——悟性 15 時中品那一步 20% × 1.3 ＝ 26%，絕學那一步 4% × 1.3 ≈ 5%、加丹 20%。"""
+    """計畫二 G2：頁面上寫的就是擲的——悟性 15 時中品那一步 40% × 1.3 ＝ 52%（W8），絕學那一步 4% × 1.3 ≈ 5%、加丹 20%。"""
     _wind_kick(world, state)
     state.player.stats["wis"] = 15
-    assert _cultivate_row(state, content, world)["note"] == "26% 晉為中品・體力 10"
+    assert _cultivate_row(state, content, world)["note"] == "52% 晉為中品・體力 10"
     state.player.art_quality["旋風腿"], state.player.legend_items = "上品", 1
     row = _cultivate_row(state, content, world)
     assert row["note"] == "5% 晉為絕學・體力 10"
@@ -612,10 +691,10 @@ def test_an_art_card_names_fused_and_basic_sources_and_the_insight():
     card = skillview.art_card(fused, 2, "風")
     lines = card.split("\n")
     assert lines[0] == "【旋風腿】下品・屬快・正派"
-    assert lines[3] == "來源：合成（沈浪 首創）　意境：「風」"
-    assert skillview.art_card(fused.model_copy(update={"creator": None}), 2).split("\n")[3] == "來源：合成"
+    assert lines[2] == "來源：合成（沈浪 首創）　意境：「風」"
+    assert skillview.art_card(fused.model_copy(update={"creator": None}), 2).split("\n")[2] == "來源：合成"
     basic = fused.model_copy(update={"origin": "basic", "lean": "無"})
-    assert skillview.art_card(basic, 1).split("\n")[3] == "來源：基礎武學"
+    assert skillview.art_card(basic, 1).split("\n")[2] == "來源：基礎武學"
     assert skillview.art_card(basic, 1).split("\n")[0] == "【旋風腿】下品・屬快"  # 沒有傾向就不寫「無派」
 
 
@@ -626,7 +705,7 @@ def test_an_art_card_shows_an_anonymous_first_fuser_as_a_nameless_hero():
         origin="fused", creator="沈浪", creator_shown="某位少俠", insight="feng",
     )
     card = skillview.art_card(fused, 2, "風")
-    assert card.split("\n")[3] == "來源：合成（某位少俠 首創）　意境：「風」" and "沈浪" not in card
+    assert card.split("\n")[2] == "來源：合成（某位少俠 首創）　意境：「風」" and "沈浪" not in card
 
 
 def test_forge_line_tells_both_a_merge_and_a_fuse_cost_stamina(state, content, world):
@@ -749,7 +828,7 @@ def test_forge_line_shows_a_blend(state, content, world):
     shape = fusion.blend_shape(
         team.resolve_art("basic_fist", content, world), team.resolve_art("lake_kick", content, world), seed,
     )
-    assert "**合成**" in line and f"→ 一門新{shape.kind}（屬{shape.attribute}，從下品起修）" in line
+    assert "**合成**" in line and f"→ 一門新{shape.kind}（屬{shape.attribute}，品質看造化：下品 " in line
     assert "花 5 點心得、5 點體力（你有 100 點心得）" in line and "⚠" not in line
     assert "⚠ 要放兩門不同的武學。" in skillview.forge_line(state, content, world, "basic_fist", [], other_art="basic_fist")
 
@@ -794,7 +873,7 @@ def test_the_card_of_a_blended_art_names_both_parents():
         update={"origin": "fused", "creator": "甲", "parents": ["a", "b"]},
     )
     card = skillview.art_card(art, 1, None, ["旋風腿", "烈火拳"])
-    assert card.split("\n")[3] == "來源：合成（甲 首創）　由【旋風腿】與【烈火拳】衍生"
+    assert card.split("\n")[2] == "來源：合成（甲 首創）　由【旋風腿】與【烈火拳】衍生"
 
 
 # ── 武學的功效（武學與成長設計 13.6；計畫六 Task 4）：功法卡一行功效、爐子寫已知配方的功效 ──────────────
@@ -811,15 +890,15 @@ def test_the_art_card_lists_its_traits(state, content, world):
 def test_the_trait_line_sits_after_the_source_and_before_the_note(content):
     art = _crafted("以柔勁纏住兵刃，借力卸力。").model_copy(update={"origin": "fused"})
     lines = skillview.art_card(art, 3, None, None, traits.card_line(content, art)).split("\n")
-    assert lines[3].startswith("來源：") and lines[4].startswith("功效：〔化勁〕") and lines[-1] == "以柔勁纏住兵刃，借力卸力。"
-    assert len(lines) == 6  # 名字、成數、威力、來源、功效、說明
+    assert lines[2].startswith("來源：") and lines[3].startswith("功效：〔化勁〕") and lines[-1] == "以柔勁纏住兵刃，借力卸力。"
+    assert len(lines) == 5  # 名字、成數與威力、來源、功效、說明
 
 
 def test_a_card_without_a_trait_line_is_exactly_as_before():
     """沒給功效那一行（舊呼叫、內容沒有功效）：功法卡一個字不變，不留空行。"""
     art = _crafted("以柔勁纏住兵刃，借力卸力。")
     assert skillview.art_card(art, 3) == skillview.art_card(art, 3, None, None, "")
-    assert len(skillview.art_card(art, 3).split("\n")) == 5
+    assert len(skillview.art_card(art, 3).split("\n")) == 4  # 名字、成數與威力、來源、說明
 
 
 def test_the_worn_slot_cards_carry_the_traits_too(state, content, world):
@@ -890,3 +969,113 @@ def test_the_furnace_does_not_peek_at_a_recipe_for_things_you_do_not_hold(state,
     state.player.member.wugong_id = "basic_fist"  # 沒有風這個意境
     line = skillview.forge_line(state, content, world, "basic_fist", ["feng"])
     assert line.startswith("⚠") and "會合出" not in line and "功效" not in line
+
+
+# ── W6：新武學跟身上同一種的那一門比 ─────────────────────────────────
+# 比的是「第一成對第一成」：新合出來的從第一成起，身上那門可能已經練到第七成，拿現在的威力比，新的永遠像退步；
+# 同在第一成比的才是兩門功夫本身的差別（品質、微調）與功效。數字一律是 martial_arts.power_at 照自己那一份的品質算的。
+
+
+def _registered(world, name, attribute, kind="武學", **over):
+    """一門下品、指定屬性的全服登記功法。"""
+    art = generate_from_name(name, kind, name, weights={"下品": 100, "中品": 0, "上品": 0, "絕學": 0}, attribute=attribute)
+    art = art.model_copy(update=over)
+    assert world.claim_skill_name(art)
+    return art
+
+
+def _signed(number: float) -> str:
+    return f"{number:+.1f}".replace("-", "−")
+
+
+def test_the_compare_line_sets_the_new_art_against_the_worn_one_at_the_first_level(state, content, world):
+    art = _registered(world, "旋風腿", "快")
+    state.player.member.wugong_id, state.player.arts = "basic_fist", [art.id]
+    worn = team.player_art(state, content, world, "basic_fist")
+    diff = power_at(art, 1) - power_at(worn, 1)
+    assert round(diff, 1) != 0  # 微調讓兩門不一樣強；下面「一樣強」另外測
+    assert team.compare_with_worn(state, content, world, art) == (
+        f"比身上的【粗淺拳腳】：威力 {_signed(diff)}（第一成）、多了〔先手〕、少了〔厚〕"
+    )
+
+
+def test_the_compare_line_only_names_what_differs(state, content, world):
+    """功效只列「有沒有」：新的多出來的、少掉的；兩邊一樣的不寫。威力一樣就說一樣，不寫 +0.0。"""
+    state.player.member.wugong_id = "basic_fist"
+    twin = _registered(world, "拳腳二式", "實", base_power=8.0, top_power=24.0)
+    worn = team.player_art(state, content, world, "basic_fist")
+    assert (power_at(twin, 1), power_at(worn, 1)) == (8.0, 8.0)
+    assert team.compare_with_worn(state, content, world, twin) == "比身上的【粗淺拳腳】：威力相同（第一成）"
+    stacked = _registered(world, "拳腳三式", "快", base_power=8.0, top_power=24.0, traits=["快", "實"])
+    assert team.compare_with_worn(state, content, world, stacked) == "比身上的【粗淺拳腳】：威力相同（第一成）、多了〔先手〕"
+    plain = _registered(world, "拳腳四式", "柔", base_power=8.0, top_power=24.0, traits=["柔", "實"], special="lianhuan")
+    assert team.compare_with_worn(state, content, world, plain) == (
+        "比身上的【粗淺拳腳】：威力相同（第一成）、多了〔化勁〕〔連環〕"
+    )
+
+
+def test_the_compare_line_uses_the_players_own_quality_for_both_arts(state, content, world):
+    """數字照自己那一份的品質算（跟功法卡寫的威力同一個來源）：身上那門修練到中品，它的第一成威力就是中品的那一檔。"""
+    art = _registered(world, "旋風腿", "快")
+    state.player.member.wugong_id, state.player.arts = "basic_fist", [art.id]
+    state.player.art_quality["basic_fist"] = "中品"
+    worn = team.player_art(state, content, world, "basic_fist")
+    assert worn.quality == "中品" and power_at(worn, 1) > 8
+    expected = _signed(power_at(art, 1) - power_at(worn, 1))
+    assert f"威力 {expected}（第一成）" in team.compare_with_worn(state, content, world, art)
+
+
+def test_the_compare_line_matches_the_kind_of_slot_and_is_silent_without_one(state, content, world):
+    art = _registered(world, "旋風腿", "快")
+    inner = _registered(world, "回風吐納", "快", kind="內功")
+    state.player.arts = [art.id, inner.id]
+    assert team.compare_with_worn(state, content, world, art) == ""  # 武學欄空著：新的直接上身，沒有東西可比
+    state.player.member.neigong_id = "basic_breath"
+    assert team.compare_with_worn(state, content, world, art) == ""  # 內功欄有東西、武學欄還是空的：武學不跟內功比
+    assert team.compare_with_worn(state, content, world, inner).startswith("比身上的【粗淺吐納】：威力 ")
+    state.player.member.wugong_id = "basic_fist"
+    assert team.compare_with_worn(state, content, world, art).startswith("比身上的【粗淺拳腳】：威力 ")
+    assert team.compare_with_worn(state, content, world, team.player_art(state, content, world, "basic_fist")) == ""  # 身上的那門自己
+
+
+def test_the_practice_page_cards_compare_library_arts_with_the_worn_one_but_not_the_worn_one(state, content, world):
+    art = _registered(world, "旋風腿", "快")
+    state.player.member.wugong_id, state.player.arts = "basic_fist", [art.id]
+    rows = {r["id"]: r for r in skillview.art_rows(state, content, world)}
+    note = team.compare_with_worn(state, content, world, art)
+    assert note and note in rows[art.id]["card"].split("\n")
+    assert "比身上的" not in rows["basic_fist"]["card"]  # 身上那門自己的卡不比
+    lines = rows[art.id]["card"].split("\n")
+    assert lines.index(note) > next(i for i, line in enumerate(lines) if line.startswith("功效："))  # 功效那一行之後
+    assert skillview.detail(state, content, world, "武學").count("比身上的") == 0
+
+
+def test_a_card_without_a_compare_line_is_exactly_as_before():
+    art = _crafted("以柔勁纏住兵刃，借力卸力。")
+    assert skillview.art_card(art, 3, compare_line="") == skillview.art_card(art, 3)
+    with_line = skillview.art_card(art, 3, compare_line="比身上的【甲】：威力 +1.0（第一成）").split("\n")
+    assert with_line[-2] == "比身上的【甲】：威力 +1.0（第一成）" and with_line[-1] == "以柔勁纏住兵刃，借力卸力。"  # 說明句還是最後一行
+
+
+def test_art_rows_carry_the_best_forge_odds_for_the_scroll_card(state, content, world):
+    """卷軸卡的合成機率條（PR #21）：每一門拿手上上品機率最高的意境算，跟開爐實際擲的同一套（fusion.fuse_odds）。
+    粗淺拳腳屬實：風（快）不相干、浩然（陽）有正邪、來歷加分；沒有意境就不給。"""
+    state.player.member.wugong_id = "basic_fist"
+    row = next(r for r in skillview.art_rows(state, content, world) if r["id"] == "basic_fist")
+    assert "forge_odds" not in row and "forge_with" not in row
+    state.player.insights = ["feng", "haoran"]  # 浩然有正邪，來歷加分
+    row = next(r for r in skillview.art_rows(state, content, world) if r["id"] == "basic_fist")
+    base = team.player_art(state, content, world, "basic_fist")
+    odds = fusion.fuse_odds(state, content, "basic_fist", base, insights.resolve("haoran", content, world)).odds
+    assert row["forge_with"] == "浩然"
+    assert row["forge_odds"] == [{"quality": q, "pct": round(odds[q])} for q in ("下品", "中品", "上品")]
+    assert sum(item["pct"] for item in row["forge_odds"]) == 100
+
+
+def test_art_rows_skip_an_insight_whose_result_you_already_have(state, content, world):
+    state.player.member.wugong_id = "basic_fist"
+    state.player.insights = ["haoran"]
+    state.player.stats["xinde"] = 100
+    fusion.fuse(state, content, world, None, "basic_fist", "haoran")
+    row = next(r for r in skillview.art_rows(state, content, world) if r["id"] == "basic_fist")
+    assert "forge_odds" not in row
