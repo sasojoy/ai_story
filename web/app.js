@@ -985,6 +985,11 @@
   const forgeOdds = (a) => (Array.isArray(a.forge_odds) && a.forge_odds.length ? `<div class="odds"><span>拿去煉製會出</span>${a.forge_odds
     .map((o) => `<b class="${(QUALITY_SEAL[o.quality] || [, "q1"])[1]}" style="flex-grow:${Math.max(1, Number(o.pct) || 0)}">${esc(String(o.quality).slice(0, 1))} ${Number(o.pct) || 0}%</b>`).join("")}</div>` : "");
 
+  // 功法卡、人物卡（伺服器的 Markdown）裡的十成進度「●●●○○○○○○○」換成跟卷軸卡同一種格子（企劃者 10/6：不要圈圈）。
+  // 只換剛好十個圈的那一串，換成的是固定的標記，不帶任何伺服器的字
+  const tenCells = (html) => String(html || "").replace(/[●○]{10}/g, (run) =>
+    `<span class="ten mini" role="img" aria-label="第${[...run].filter((c) => c === "●").length}成">${[...run].map((c) => `<i${c === "●" ? ' class="on"' : ""}></i>`).join("")}</span>`);
+
   function pagePractice() {
     const x = S.menxia;
     if (!x) return '<p class="muted">載入中…</p>';
@@ -1011,7 +1016,7 @@
       // 修練：按得下去時寫「修練 → 上品」與機率；按不下去時寫原因（伺服器的那一句）
       const hot = a.cultivate.ok && !(slot && !slot.maxed && !slot.blocked); // 練成還能按時，練成是主鈕
       const cult = `<button class="btn ${a.cultivate.ok && hot ? "primary" : ""}" data-act="cultivate" data-glow="cultivate" data-id="${esc(a.id)}" ${a.cultivate.ok ? "" : "disabled"}>${
-        a.cultivate.ok && a.cultivate.to ? `修練 → ${esc(a.cultivate.to)}` : "修練"}<small class="cnote">${esc(ticked ? lg.note : a.cultivate.note)}</small></button>`;
+        "修練"}<small class="cnote">${esc(ticked ? lg.note : a.cultivate.note)}</small></button>`;
       const info = S.artInfo === a.id;
       return `<div class="ten">${Array.from({ length: 10 }, (_, k) => `<i${k < level ? ' class="on"' : ""}></i>`).join("")}</div>
         <div class="lvline"><b>第${level}成</b><span>${esc(a.kind)}・屬${esc(a.attribute)}${a.insight ? `・意境「${esc(a.insight)}」` : ""}</span></div>
@@ -1022,7 +1027,7 @@
           <button class="linkish" data-act="melt" data-glow="melt" data-id="${esc(a.id)}" data-name="${esc(a.name)}" ${a.melt.ok ? "" : "disabled"} title="${esc(a.melt.note)}">熔煉${a.melt.ok ? `（${esc(a.melt.note.replace(/^退回/, ""))}）` : ""}</button>
           <button class="linkish" data-act="art-info" data-id="${esc(a.id)}" aria-expanded="${info}">詳情 ${info ? "▴" : "›"}</button>
         </div>
-        ${info ? `<div class="art-card">${a.card}</div>` : ""}`;
+        ${info ? `<div class="art-card">${tenCells(a.card)}</div>` : ""}`;
     };
     // 身上的兩門：目前這一門那一欄若空著，畫一張只有那一句的卡（slot_cards 的 card）
     const worn = KINDS.map((k) => {
@@ -1030,7 +1035,7 @@
       const a = x.owned_arts.find((r) => r.worn && r.kind === k);
       if (!a) return `<div class="acard empty">${slot.card || `你還沒有${esc(k)}。`}</div>`;
       return `<div class="acard ${(QUALITY_SEAL[a.quality] || [, "q1"])[1]}">
-        <div class="hd">${seal(a.quality, true)}<div><h3>${esc(a.name)}</h3><div class="sub">${esc(a.quality)}${a.cultivate.ok && a.cultivate.to ? `　下一品：${esc(a.cultivate.to)}` : ""}</div></div><span class="worn">身上</span></div>
+        <div class="hd">${seal(a.quality, true)}<div><h3>${esc(a.name)}</h3><div class="sub">${esc(a.quality)}</div></div><span class="worn">身上</span></div>
         ${body(a, slot)}</div>`;
     }).join("");
     // 功法庫：身上以外的。篩選（全部／武學／內功／可修練）與「再列 N 門」只是看的方式，記在 S，輪詢重畫不會跳回去
@@ -1081,9 +1086,9 @@
           <button class="btn small" data-act="melt-insight" data-id="${esc(insOpen.id)}" data-name="${esc(insOpen.name)}">化成心得 ${insOpen.melt}</button></div>` : ""}`
         : '<p class="muted">還沒悟到任何意境。去探索，荒郊野外最容易有所領悟。</p>'}
       <div class="label">門下</div>
-      <details class="fold" open><summary>本人</summary><div class="fold-body">${x.player_card}</div></details>
+      <details class="fold" open><summary>本人</summary><div class="fold-body">${tenCells(x.player_card)}</div></details>
       ${mates ? `<div class="list">${x.roster.map((r) => `<button class="${x.person === r.key ? "on" : ""}" data-act="person" data-key="${esc(r.key)}">${esc(r.label)}</button>`).join("")}</div>` : ""}
-      ${mates && x.person ? `<div class="card">${x.person_card}
+      ${mates && x.person ? `<div class="card">${tenCells(x.person_card)}
         ${x.person === "player" ? '<p class="muted">本人一直都在隊伍裡。</p>' // 本人不能加入、移出（引擎也會擋）
           : x.person.startsWith("follower:") ? "" // 部下（計畫 T5）也不能加入、移出；角色卡已經寫了
           : `<button class="btn ${x.on_team ? "" : "primary"}" data-act="mx" data-op="${x.on_team ? "leave" : "join"}">${x.on_team ? "移出隊伍" : "加入隊伍"}</button>`}</div>` : ""}

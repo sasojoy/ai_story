@@ -552,3 +552,11 @@ def test_a_big_library_can_be_filtered_and_shows_a_page_at_a_time(prologue_conte
     assert "再列" not in every and every.count('class="art libr') >= 30
     inner = _scroll_page(prologue_content, arts=30, S={"libFilter": "內功", "libAll": True})
     assert all("內功・" in row for row in re.findall(r'class="art libr[^>]*>.*?</button>', inner))
+
+
+def test_the_cards_draw_the_ten_levels_as_cells_not_circles(prologue_content):
+    """企劃者 10/6：功法卡、人物卡裡的十成不要圈圈，跟卷軸卡同一種格子；修練鈕也不寫「→ 下一品」。"""
+    page = _scroll_page(prologue_content, S={"artInfo": "basic_fist"})
+    assert "●" not in page and "○" not in page
+    assert 'class="ten mini" role="img" aria-label="第1成"' in page
+    assert "→" not in page and "下一品" not in page
