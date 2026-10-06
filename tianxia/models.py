@@ -774,7 +774,20 @@ class Config(_Strict):
     action_cost: dict[str, int] = Field(
         default_factory=lambda: {"explore": 10, "train": 10, "socialize": 5}
     )
+    drill_reward_share: float = Field(default=0.3, ge=0, le=1)  # 跟自己人操練只給對手獎勵的幾成（戰鬥系統第八節：沒風險就拿得少）
     time_scale: float = 1.0
+    # 伺服器自己的排程（線上架構設計第四節）：每幾秒推一次全服的事（世界時間、時刻表、開決戰、決戰逾時、季末）；
+    # 0＝關（預設），世界照舊等有人連線才推。設計的預設是 10；由設定檔或 content/profiles 打開（打開哪一份由 PM 驗收後決定）
+    world_tick_seconds: float = Field(default=0, ge=0)
+
+    @field_validator("world_tick_seconds")
+    @classmethod
+    def _tick_off_or_at_least_a_second(cls, seconds: float) -> float:
+        """0 是關；開著至少 1 秒：每一下是一筆寫入交易（含 fsync），0.1 秒就是每秒十筆（最終審查 M5）。"""
+        if 0 < seconds < 1:
+            raise ValueError("world_tick_seconds 是 0（關）或至少 1 秒")
+        return seconds
+
     season_days: float = DEFAULT_SEASON_DAYS
     # 第一季濃縮版的規則（預設關，beta 那一季照舊）：季曆、時刻表、三條戰線都掛在這個開關後面。
     # 做到一半的 main 也會換上試玩伺服器，開關關著才不會把正在跑的那一季弄壞；
@@ -816,6 +829,12 @@ class Config(_Strict):
     convoy_grain: int = Field(default=4, ge=1)  # 接一車糧要交出幾份糧草（軍令文件 3.4：份量 ≥ 4）
     duty_stamina: int = Field(default=10, ge=0)  # 第 1 階守勢行動（巡哨、傳道、保境安民）的體力
     rank2_contrib: int = Field(default=300, ge=0)  # 升第 2 階的貢獻門檻（計畫 T5、第五節：推 30 點大勢）
+    # ── 機緣與第 2 階行動（正式版乙一；全部【預設】，企劃者 2026-10-06 同意）──
+    rank2_stamina: int = Field(default=15, ge=0)  # 第 2 階行動（招降黃巾散兵、施符水收人心）的體力
+    rank2_daily: int = Field(default=3, ge=0)  # 每曆日最多做幾次（不論成敗都算一次）
+    rank2_push: int = Field(default=3, ge=0)  # 成功往己方推所在戰線幾點（走 Game.push_trend：緩衝、上限、貢獻）
+    opp_showdown_days: float = Field(default=1.0, gt=0)  # 「戰後的地」：決戰結算之後幾個曆日內
+    opp_wild_tags: list[str] = Field(default_factory=lambda: ["野外", "河畔", "山林", "渡口", "官道"])  # 「戰後的地」算野外的地點標籤
     # ── 伏筆（計畫 T7、伏筆文件 2.8）──
     # 需求量照 server_max_players 換算：人數上限「未滿」第一個數時用第二個數當係數，照順序找第一個符合的；
     # 都不符合（1000 人以上）就是 1。片段的機率反過來除以它（foreshadow.scale、foreshadow.need）
@@ -1362,6 +1381,17 @@ class Duty(_Strict):
     text: str
 
 
+class Rank2Action(_Strict):
+    """第 2 階行動（第一季設計 5.5；正式版乙一）：官軍「招降黃巾散兵」、黃巾「施符水收人心」。在有戰線的地方做，
+    每曆日限次（Config.rank2_daily），過檢定才算成功；成功往己方推所在戰線 Config.rank2_push 點。
+    content/orders.json 的 rank2 兩筆是新寫的初稿，待 joy 潤（JSON 沒有註解，標記記在這裡；內容改動走 joy 的 PR）。"""
+
+    name: str
+    check: Check
+    ok: str  # 成功的敘事（{地點}）
+    fail: str  # 失敗的敘事（{地點}）
+
+
 class OrderCaller(_Strict):
     """黃巾發令的人（{號令}）：照順序第一個沒退場的（figure 是 None 的那一筆是最後的退路）。"""
 
@@ -1375,6 +1405,7 @@ class OrdersContent(_Strict):
     templates: list[OrderTemplate] = Field(default_factory=list)
     slots: dict[str, dict[str, OrderSlots]] = Field(default_factory=dict)  # 戰線 id → 陣營 id → 插槽
     duties: dict[str, Duty] = Field(default_factory=dict)  # 陣營 id → 守勢行動
+    rank2: dict[str, Rank2Action] = Field(default_factory=dict)  # 陣營 id → 第 2 階行動（正式版乙一）
     commander_fallback: dict[str, str] = Field(default_factory=dict)  # 陣營 id → 沒有主將時 {主將} 寫的泛稱
     callers: list[OrderCaller] = Field(default_factory=list)  # {號令}
     convoy_squads: dict[str, str] = Field(default_factory=dict)  # 陣營 id → 自己的運糧隊（截糧打的是對方的）
@@ -1395,6 +1426,73 @@ class PromotionDef(_Strict):
     summons_text: str
     summons_handoff: str | None = None
     closing: str
+
+
+class OppBond(_Strict):
+    """情誼型：跟 character 的情誼到 affinity（基準量，照 foreshadow.need 換算），對話選單多一個話題 topic，問了就完成。"""
+
+    character: str
+    affinity: int = Field(ge=0)
+    topic: str
+    text: str  # 他說的話（含一句敘事）
+
+
+class OppHost(_Strict):
+    """天時地利型的主持人：figure 此刻在 at、在場（figures.present_at）才算數。"""
+
+    figure: str
+    at: str
+
+
+class OppAccumulate(_Strict):
+    """累積型：source 的行動成功時（流民是守勢行動之後擲 chance）記一次，湊滿 count（基準量）拿到 item，
+    交到 deliver（那條戰線己方主將所在，或己方據點）就完成；完成時推 trend 點（戰線往己方，豪強推割據）。"""
+
+    source: Literal["rank2", "duty"]
+    count: int = Field(gt=0)
+    chance: float = Field(default=1.0, gt=0, le=1)
+    tick: str = ""  # 每記一次寫的一句（{地點}）；rank2 的成功句已經在 Rank2Action，這裡留空
+    milestone: str  # 湊滿那一刻（{n}＝換算後的次數、{渠帥}＝那條戰線黃巾的主將或「黃巾渠帥」）
+    item: str  # 拿到、要交的東西
+    deliver: Literal["front_commander", "nearest_base"]
+    label: str  # 交付選項（{主將}）
+    done: str  # 交付那一刻的敘事（{主將}）
+    trend: int = 1
+
+
+class OppTiming(_Strict):
+    """天時地利型：when 的時段、在對的地點，花 stamina、過 check。ok 之後有 item 的要再送給 deliver_front 那條戰線
+    己方主將；沒有 item 的 ok 就是完成。失敗：夜裡、黎明要等下一回；決戰之後在時限內可以再試。"""
+
+    when: Literal["night", "dawn", "after_showdown"]
+    at: list[str] = Field(default_factory=list)  # night 的地點
+    hosts: list[OppHost] = Field(default_factory=list)  # dawn：照順序第一位在場的主持
+    clue: str
+    clue_regions: list[str] = Field(default_factory=list)  # 空＝哪個大區都聽得到
+    label: str  # 選項（{人物}＝主持人）
+    stamina: int = Field(default=10, ge=0)
+    check: Check
+    ok: str  # （{人物}）
+    fail: str  # （{人物}）
+    item: str | None = None
+    deliver_front: str | None = None
+    deliver_label: str = ""  # （{主將}）
+    done: str = ""  # 送到那一刻（{主將}）
+
+
+class OppDef(_Strict):
+    """一種機緣（機緣文件；正式版乙一只有 bond、accumulate、timing 三類，乙二再加）。
+    content/opportunities.json 裡機緣文件寫好的句子照原文，新寫的句子（乙一計畫內容表二標「新寫」的）是初稿，
+    待 joy 潤（JSON 沒有註解，標記記在這裡；內容改動走 joy 的 PR）。"""
+
+    id: str
+    name: str
+    faction: str
+    rank: Literal[3, 4]
+    kind: Literal["bond", "accumulate", "timing"]
+    bond: OppBond | None = None
+    accumulate: OppAccumulate | None = None
+    timing: OppTiming | None = None
 
 
 class FollowerDef(_Strict):
@@ -1448,6 +1546,7 @@ class Content(_Strict):
     foreshadows: Foreshadows = Field(default_factory=Foreshadows)  # 關鍵伏筆（content/foreshadows.json，計畫 T7）
     orders: OrdersContent = Field(default_factory=OrdersContent)  # 陣營軍令（content/orders.json，計畫 T6）
     promotions: list[PromotionDef] = Field(default_factory=list)  # 晉升（content/promotions.json，計畫 T5）
+    opportunities: list[OppDef] = Field(default_factory=list)  # 機緣（content/opportunities.json，正式版乙一）
     followers: dict[str, FollowerDef] = Field(default_factory=dict)  # 部下模板（content/followers.json，計畫 T5）
     map: MapLayout
     tutorial: Tutorial

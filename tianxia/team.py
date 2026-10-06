@@ -12,7 +12,7 @@ import random
 from . import calendar, encounter, rounds, traits
 from .martial_arts import MAX_LEVEL, MartialArt, content_art, counters, with_quality
 from .models import Content, FollowerDef, Squad
-from .state import PLAYER, MAX_TEAM_COMPANIONS, GameState, Member
+from .state import PLAYER, MAX_TEAM_COMPANIONS, GameState, LevelUps, Member
 from .world_state import CompanionProgress, WorldStateStore
 
 ESTIMATE_RUNS = 40
@@ -369,27 +369,46 @@ def add_exp(content: Content, member, amount: int, name: str) -> list[str]:
     return msgs
 
 
-def add_team_exp(state: GameState, content: Content, world: WorldStateStore, amount: int) -> list[str]:
-    """本隊每個人（本人與帶著出戰的同伴）各得 amount 經驗，照同一套 add_exp 規則升級；回傳升級訊息，
-    本人在前、同伴照隊伍順序（試玩回饋 FB-002：戰報一直寫「經驗 +N（每人）」，以前只有本人真的拿到）。
+def grant_team_exp(
+    state: GameState, content: Content, world: WorldStateStore, amount: int,
+) -> tuple[list[str], LevelUps | None]:
+    """本隊每個人（本人與帶著出戰的同伴）各得 amount 經驗，照同一套 add_exp 規則升級；回傳（升級訊息, 誰升到第幾級）。
+    訊息本人在前、同伴照隊伍順序（試玩回饋 FB-002：戰報一直寫「經驗 +N（每人）」，以前只有本人真的拿到）。
+    誰升到第幾級另外結構化地回（LevelUps，FB-074）：戰鬥卡片拿它畫一行簡短的，訊息照舊一句一級、給戰報頁與江湖紀錄；
+    沒有人升級是 None。
 
     同伴的等級與經驗存在全服共用的 CompanionProgress（world.update_companion 當場寫回共用世界，
     跟著那一筆交易存檔），所以換頁、重新登入都還在；換季時跟其他同伴進度一起清空。氣血上限
     （neili_cap：基礎＋每級加成，本人再乘上根骨）由等級算出來，升級就跟著變高（氣血設計 A1：等級只買氣血上限）；
     目前氣血不變，不順便回血。"""
     p = state.player
+    ups = LevelUps()
     before = p.member.level
     msgs = add_exp(content, p.member, amount, p.name)
     gained = p.member.level - before
     if gained > 0:  # 升級給屬性點（武學與成長設計 6.2）：一次升好幾級就給好幾點，只給本人
         p.stat_points += gained * content.config.stat_points_per_level
         msgs.append(f"你有 {p.stat_points} 點屬性可以分配（點名號展開）。")
+        ups.you, ups.points = p.member.level, p.stat_points
     for companion_id in state.player.team:
         name = content.characters[companion_id].name
         levels: list[str] = []
-        world.update_companion(companion_id, lambda progress: levels.extend(add_exp(content, progress, amount, name)))
+
+        def gain(progress, name=name, levels=levels) -> None:
+            was = progress.level
+            levels.extend(add_exp(content, progress, amount, name))
+            if progress.level > was:
+                ups.mates.append((name, progress.level))
+
+        world.update_companion(companion_id, gain)
         msgs += levels
-    return msgs
+    ups.lines = list(msgs)
+    return msgs, (ups if msgs else None)
+
+
+def add_team_exp(state: GameState, content: Content, world: WorldStateStore, amount: int) -> list[str]:
+    """同 grant_team_exp，只回升級訊息（操練等不畫戰鬥卡片的地方用）。"""
+    return grant_team_exp(state, content, world, amount)[0]
 
 
 def regen_neili(content: Content, member, fraction: float, con: float = BASE_STAT) -> None:

@@ -1266,10 +1266,65 @@ def test_season_roll_resets_the_character(content, world):
     assert p.member.wugong_id is None and p.materials == {}
     assert p.stats == fresh.stats  # 銀兩、心得回到新角色的值
     assert p.affinities == {"mate": 8, "friend": 0}  # 80→8、5→0
-    assert p.relationship_notes == {"mate": "並肩作戰過的朋友"}
-    assert p.dialogue_history == {"mate": [{"role": "user", "content": "久仰"}]}
+    assert p.relationship_notes == {}  # 這一季的關係從頭寫
+    assert p.past_notes == {"mate": "並肩作戰過的朋友"}  # 上一季的交情另外留著，交給模型當背景
+    assert p.dialogue_history == {"mate": [{"role": "user", "content": "久仰"}]}  # 對話紀錄照舊保留
+    assert p.history_start == {"mate": 1}  # 這一季的對話從第 2 則開始
     assert p.tutorial_step == fresh.tutorial_step  # 2 還沒做完（共 3 步）：換季是新角色，引導從頭來（FB-034）
     assert "賽季落幕" in player.chronicle_text()
+
+
+def test_past_notes_survive_a_quiet_season(content, world):
+    """上一季沒聊、上上季聊過的人物：上上季的交情留著，不被清掉。"""
+    content.config.admins = ["管理者"]
+    admin = Game.new(content, "管理者", rng=random.Random(1), world=world)
+    player = Game.new(content, "玩家", rng=random.Random(2), world=world)
+    player.state.player.relationship_notes = {"mate": "第一季的舊識"}
+    for t in (100.0, 400.0):  # 兩次換季，第二季一句都沒聊
+        player.sync(t)
+        admin.admin_end_season(now=t + 100.0)
+        admin.admin_next_season(now=t + 200.0)
+    player.sync(800.0)
+    assert player.state.player.season_number == 3
+    assert player.state.player.past_notes == {"mate": "第一季的舊識"}
+
+
+def test_the_status_carries_the_season_number(content, world):
+    """網頁用它記「這個名號看過哪一季哪一週的大事」：週次每一季都從 1 起，不帶季就分不出上一季的第 1 週與這一季的第 1 週。"""
+    content.config.admins = ["管理者"]
+    admin = Game.new(content, "管理者", rng=random.Random(1), world=world)
+    player = Game.new(content, "玩家", rng=random.Random(2), world=world)
+    assert player.status_data()["season"] == 1
+    player.sync(100.0)
+    admin.admin_end_season(now=200.0)
+    admin.admin_next_season(now=300.0)
+    player.sync(400.0)
+    assert player.status_data()["season"] == 2
+
+
+def test_each_season_marks_where_its_own_dialogue_begins(content, world):
+    """對話紀錄跨季保留：每次換季記下當時的長度，模型只看這之後的；第二次換季往後挪到第二季的尾巴。"""
+    content.config.admins = ["管理者"]
+    admin = Game.new(content, "管理者", rng=random.Random(1), world=world)
+    player = Game.new(content, "玩家", rng=random.Random(2), world=world)
+    said = lambda text: {"role": "user", "content": text}  # noqa: E731
+    player.state.player.dialogue_history = {"mate": [said("第一季")]}
+    player.state.player.relationship_notes = {"mate": "第一季的關係"}
+    player.sync(100.0)
+    admin.admin_end_season(now=200.0)
+    admin.admin_next_season(now=300.0)
+    player.sync(400.0)
+    p = player.state.player
+    assert p.history_start == {"mate": 1}
+    p.dialogue_history["mate"] += [said("第二季一"), said("第二季二")]
+    p.relationship_notes = {"mate": "第二季的關係"}
+    admin.admin_end_season(now=500.0)
+    admin.admin_next_season(now=600.0)
+    player.sync(700.0)
+    p = player.state.player
+    assert p.history_start == {"mate": 3}
+    assert p.past_notes == {"mate": "第二季的關係"}  # 最近一次聊過的那一季蓋過更早的
+    assert p.relationship_notes == {}
 
 
 def _roll_one_season(content, world, tutorial_step=None, skip=False):
@@ -3730,7 +3785,7 @@ def test_training_with_your_own_factions_squad_is_a_drill(content, game):
     assert any("操軍擺陣" in m for m in msgs)
     assert game.state.battles == []
     assert game.state.player.stats["silver"] == silver
-    assert game.state.player.stats["xinde"] == xinde + content.squads["thug"].reward_xinde
+    assert game.state.player.stats["xinde"] == xinde + int(content.squads["thug"].reward_xinde * 0.3 + 0.5)
     assert game.state.player.member.exp > 0 or game.state.player.member.level > 1
     assert game.state.player.materials == {}
     assert game.state.world.trends["kou"] == 31
@@ -3770,6 +3825,7 @@ def test_train_trend_push_previews_the_push_for_your_faction(content, game):
 
 def test_a_drill_is_journaled_as_a_drill_without_a_battle_card(content, game):
     _training_factions(content)
+    content.config.drill_reward_share = 1.0
     content.squads["thug"].faction = "huang"
     game.state.player.faction = "huang"
     walk_to(game, "lake")
@@ -4807,8 +4863,32 @@ def test_a_won_training_fight_gives_every_fighter_the_exp(content, game):
     assert "🧍 韓鐵　第2級" in game.status_text()
 
 
+def test_the_fight_card_puts_every_level_up_on_one_line(content, game):
+    """FB-074：升級的句子（本人一句一級、配點提示、每位同伴各一句）在「剛剛」的戰鬥卡片上收成一行，戰報頁與江湖紀錄照舊；
+    點數跟狀態列同一個數（配了就少）。"""
+    rules.learn_skill(game.state, game.content, "fist")
+    _companion_on_the_team(game, exp=90)
+    game.state.player.member.exp = 90
+    walk_to(game, "lake")
+    game.rng = FixedRandom(0.99)
+    game.choose("act:train")
+    record = game.state.battles[0]
+    assert (record.levelups.you, record.levelups.points, record.levelups.mates) == (2, 1, [("韓鐵", 2)])
+    card = game.battle_card()
+    assert "升到第 2 級（可配 1 點）・韓鐵升到第 2 級　**得失**" in card  # 在結果的最後、得失的前面（前面可能有別的敘事，例如大勢的變動）
+    assert card.count("升到第") == 2 and "升到第 2 級！" not in card and "屬性可以分配" not in card
+    detail = game.battle_detail(record.id)  # 戰報頁：完整的句子
+    assert "沈浪升到第 2 級！" in detail and "你有 1 點屬性可以分配（點名號展開）。" in detail and "韓鐵升到第 2 級！" in detail
+    assert "沈浪升到第 2 級！" in game.state.journal[0].lines and "韓鐵升到第 2 級！" in game.state.journal[0].lines  # 江湖紀錄也是
+    assert game.battle_extra_html() == ""  # 卡片底下的補充不重複句子
+    game.allocate_stat("str")
+    card = game.battle_card()
+    assert "升到第 2 級・韓鐵升到第 2 級　**得失**" in card and "可配" not in card
+
+
 def test_a_drill_gives_every_fighter_the_exp_too(content, game):
     _training_factions(content)
+    content.config.drill_reward_share = 1.0
     content.squads["thug"].faction = "huang"
     game.state.player.faction = "huang"
     _companion_on_the_team(game, exp=90)
@@ -4818,6 +4898,20 @@ def test_a_drill_gives_every_fighter_the_exp_too(content, game):
     assert game.world.get_companion("mate").level == 2
     assert "韓鐵升到第 2 級！" in msgs
     assert "韓鐵升到第 2 級！" in game.state.journal[0].lines
+
+
+def test_a_drill_pays_three_tenths_of_the_squad(content, game):
+    """戰鬥系統第八節：沒風險就拿得少，心得、經驗只給對手的三成（四捨五入）。"""
+    _training_factions(content)
+    squad = content.squads["thug"]
+    squad.faction, squad.reward_xinde, squad.exp = "huang", 35, 40
+    game.state.player.faction = "huang"
+    walk_to(game, "lake")
+    xinde = game.state.player.stats.get("xinde", 0)
+    msgs = game.choose("act:train")
+    assert game.state.player.stats["xinde"] == xinde + 11  # 35 × 0.3 ＝ 10.5 → 11
+    assert "心得 +11" in msgs
+    assert any("經驗 +12" in c for c in game.state.journal[0].changes)  # 40 × 0.3
 
 
 # ── 指名求見（兩位以上大勢人物的地點，企劃者 2026-10-03 決定）──────────
@@ -5418,7 +5512,7 @@ def test_open_season_restamps_with_current_profile(content, world):
 
 def test_week_one_is_settled_the_moment_a_stamped_season_opens(content, world):
     """FB-040：開季那一刻（世界秒 0）就結算第 1 週週一 00:00 的大事，不必等到第一個曆時交界：時間軸、傳聞、江湖史、
-    公告卡都在，狀態列的下一件是第 2 週那件；再推進一個曆時不會重複結算。下一季開出來也一樣。"""
+    本週大事都在，狀態列的下一件是第 2 週那件；再推進一個曆時不會重複結算。下一季開出來也一樣。"""
     install_season_one(content)
     content.config.admins = ["管理者"]
     content.config.auto_open_first_season = False
@@ -5589,7 +5683,7 @@ def test_big_events_start_over_with_the_new_season(content, world):
 
 
 def test_skipped_events_stay_off_the_bulletin(content, world):
-    """張曼成已經退場：第 7 週秦頡那件記成跳過，公告卡只有同一週的盧植圍廣宗。"""
+    """張曼成已經退場：第 7 週秦頡那件記成跳過，本週大事只有同一週的盧植圍廣宗。"""
     install_season_one(content)
     game = Game.new(content, "沈浪", rng=random.Random(0), world=world)
     game.state.world.figures["zhangmancheng"] = FigureState(status="retired")
@@ -6193,6 +6287,7 @@ def test_the_status_bar_and_the_card_show_the_same_hp_at_root_6(game):
     assert f"氣血 {data['hp']}/{data['hp_max']}" in game.member_card("player")
 
 
+
 # ── 武學的功效（武學與成長設計 13.2、13.4；計畫六 Task 3）：獎勵、打完回氣血、遊歷的體力 ──────────────
 
 
@@ -6732,3 +6827,69 @@ def test_a_story_battle_takes_no_blood_so_nothing_is_healed(game):
     game.choose("choice:0")
     assert game.state.player.member.neili == 100.0
     assert not any(c.startswith("氣血") for c in game.state.battles[0].changes)
+
+
+# ── 伺服器自己的排程（線上架構設計第四節）：沒有玩家的 Game 推全服的事 ──────────────
+
+
+def test_world_tick_advances_the_shared_season_once(content, game):
+    """排程推過之後玩家再同步，同一段現實時間不會推兩次（Review Focus 1）。"""
+    ticker = Game.for_world(content, game.world, rng=random.Random(0))
+    ticker.world_tick(5000.0)  # 第一下只記下時鐘
+    before = game.world.get_season().time
+    ticker.world_tick(5600.0)
+    after = game.world.get_season().time
+    assert after == pytest.approx(before + 600 * content.config.time_scale)
+    game.sync(5600.0)
+    assert game.world.get_season().time == pytest.approx(after)
+
+
+def test_world_tick_closes_muster_and_times_out_rounds_with_nobody_online(content, game):
+    """沒人在線：集結截止自動分配、回合逾時代選、全員到齊就結算、收場套結果（以前都要有人刷新畫面）。"""
+    definition = _install_battle_def(content)  # 集結 600 秒、回合 120 秒、一幕一回合
+    game.world.start_battle(definition, now=1000.0)
+    with at(game, 1000.0):
+        game.choose("battle:join:guan")
+    open_characters().save(game.state)  # 沈浪下線
+    ticker = Game.for_world(content, game.world, rng=random.Random(3))
+    ticker.world_tick(1000.0 + 601)
+    assert game.world.get_battle().phase == "active"
+    ticker.world_tick(1000.0 + 601 + 121)  # 回合逾時：系統代選、結算；一幕一回合就收場
+    (_, done), = game.world.ended_battles()
+    assert not done.unfinished and done.outcome_title == "官軍大勝"
+    back = Game(content, open_characters().load("沈浪"), rng=random.Random(4), world=game.world)
+    back.sync(1000.0 + 800)
+    assert any("測試決戰" in e.title for e in back.state.journal)  # 參戰者回來補到戰報（W13）
+
+
+def test_world_tick_shelves_a_battle_after_the_season_ended(content, game):
+    """季已經結束、決戰還在打、沒人在線：排程那一下照 FB-035 收兵（Review Focus 3）。"""
+    definition = _install_battle_def(content)
+    game.world.start_battle(definition, now=1000.0)
+    with at(game, 1000.0):
+        game.choose("battle:join:guan")
+    open_characters().save(game.state)
+    game.world.mutate_season(lambda s: (setattr(s, "ended", True), setattr(s, "ending_title", "天下太平")))
+    Game.for_world(content, game.world, rng=random.Random(3)).world_tick(1100.0)
+    assert game.world.get_battle() is None
+    (_, shelved), = game.world.ended_battles()
+    assert shelved.unfinished
+
+
+def test_world_tick_opens_and_settles_a_scheduled_showdown_with_nobody_online(content, world):
+    """第一季：排定的時間一到，排程那一下就開集結（不用等誰刷新）；沒人參戰，集結截止再一回合逾時，照前線起點判、
+    寫進時間軸（Review Focus 4 的排程版）。"""
+    _showdown_game(content, world)  # 裝好第一季內容、決戰與陣營，種好季；之後完全不用這個玩家
+    ticker = Game.for_world(content, world, rng=random.Random(5))
+    ticker.world_tick(0.0)  # 記下時鐘
+    season = world.get_season()
+    until_open = (season.schedule["changshe_fire"] - season.time) / content.config.time_scale
+    ticker.world_tick(until_open + 1.0)
+    battle = world.get_battle()
+    assert (battle.battle_id, battle.phase) == ("changshe_fire", "muster")
+    definition = content.battles["changshe_fire"]
+    t = battle.muster_deadline_real + 1.0
+    ticker.world_tick(t)
+    ticker.world_tick(t + definition.round_seconds + 1.0)
+    assert "changshe_fire" in world.get_season().timeline
+

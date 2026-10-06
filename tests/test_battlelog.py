@@ -124,6 +124,55 @@ def test_card_text_puts_story_before_gains_and_hides_rumor():
     assert "\n\n**結果**　你率眾闖進倉庫，殺得水寇四散奔逃！\n\n**獲得與損失**　經驗 +25（每人）　心得 +20　銀兩 +15　名望 +3" in detail
 
 
+# ── 升級那一行（FB-074）：卡片上收成一行，戰報頁照舊寫完整的句子 ─────────────────
+
+
+def _ups(**kw):
+    from tianxia.state import LevelUps
+
+    return LevelUps(**kw)
+
+
+def test_the_levelup_line_collapses_levels_and_groups_companions_by_level():
+    line = battlelog.levelup_line
+    assert line(_ups(you=5, points=4)) == "升到第 5 級（可配 4 點）"  # 本人：最後的等級加上現在還沒配的點數
+    assert line(_ups(you=5, points=0)) == "升到第 5 級"  # 配完了就不寫「可配 0 點」
+    assert line(_ups(mates=[("關羽", 4), ("張飛", 4), ("劉備", 4)])) == "關羽、張飛、劉備升到第 4 級"  # 同一級的併在一起
+    assert line(_ups(mates=[("關羽", 4), ("張飛", 3)])) == "關羽升到第 4 級、張飛升到第 3 級"  # 不同級的各寫各的
+    assert line(_ups(mates=[("關羽", 4), ("張飛", 3), ("劉備", 4)])) == "關羽、劉備升到第 4 級、張飛升到第 3 級"  # 照第一次出現的順序分組
+    assert line(_ups(you=11, points=3, mates=[("關羽", 4), ("張飛", 4), ("劉備", 4)])) == "升到第 11 級（可配 3 點）・關羽、張飛、劉備升到第 4 級"
+    assert line(_ups(you=11, points=3), points=1) == "升到第 11 級（可配 1 點）"  # 畫的那一刻照現在的點數（狀態列寫幾點就是幾點）
+
+
+def test_the_card_shows_one_levelup_line_and_the_report_keeps_the_sentences():
+    lines = ["沈浪升到第 10 級！", "沈浪升到第 11 級！", "你有 3 點屬性可以分配（點名號展開）。", "關羽升到第 4 級！", "張飛升到第 4 級！"]
+    rec = record(
+        notes=["你率眾闖進倉庫。", *lines, "【江湖傳聞】測試俠客大破水寇！"], exp=25,
+        levelups=_ups(you=11, points=3, mates=[("關羽", 4), ("張飛", 4)], lines=lines),
+    )
+    card = battlelog.card_text(rec)
+    assert card.endswith("\n\n**結果**　你率眾闖進倉庫。　升到第 11 級（可配 3 點）・關羽、張飛升到第 4 級　**得失**　經驗 +25（每人）")
+    assert "升到第 10 級" not in card and "！" not in card and "屬性可以分配" not in card and "【江湖傳聞】" not in card
+    detail = battlelog.detail_text(rec)  # 戰報頁：完整的句子照舊（它們也還在江湖紀錄裡）
+    assert "**結果**　你率眾闖進倉庫。　沈浪升到第 10 級！　沈浪升到第 11 級！　你有 3 點屬性可以分配（點名號展開）。　關羽升到第 4 級！" in detail
+    assert battlelog.told_lines(rec)[1:6] == lines  # 卡片底下的補充不重複這些句子（它們算講過了）
+    assert "升到第 11 級（可配 1 點）" in battlelog.card_text(rec, points=1)
+
+
+def test_a_record_without_levelups_reads_exactly_as_before():
+    """沒有升級、或舊戰報（沒有 levelups 欄位）：卡片還是照 notes 原文，一個字不動。"""
+    rec = record(notes=["沈浪升到第 2 級！", "你有 1 點屬性可以分配（點名號展開）。"])
+    assert rec.levelups is None
+    assert "**結果**　沈浪升到第 2 級！　你有 1 點屬性可以分配（點名號展開）。" in battlelog.card_text(rec)
+    loaded = BattleRecord.model_validate_json(rec.model_dump_json())
+    assert loaded == rec
+    old = rec.model_dump()
+    old.pop("levelups")
+    assert BattleRecord.model_validate(old).levelups is None
+    with_ups = record(notes=["沈浪升到第 2 級！"], levelups=_ups(you=2, points=1, lines=["沈浪升到第 2 級！"]))
+    assert BattleRecord.model_validate_json(with_ups.model_dump_json()) == with_ups
+
+
 def test_detail_text_includes_the_lineup_and_battle_number():
     rec = record()
     detail = battlelog.detail_text(rec)

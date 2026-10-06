@@ -22,7 +22,7 @@ from .front_lines import BAND_KEYS, GEJU_KEYS
 from .materials import TIER_NAMES
 from .models import (
     FRONT_KEY, ROADS, STATS, Attribute, BattleDef, CharacterDef, CheckVoice, CombatLines, Condition, Config, Content,
-    CraftNames, Effect, Event, FigureDef, FollowerDef, Foreshadows, FrontLines, InsightDef, Location, OrdersContent,
+    CraftNames, Effect, Event, FigureDef, FollowerDef, Foreshadows, FrontLines, InsightDef, Location, OppDef, OrdersContent,
     PromotionDef, MapLayout, Material, RoadSight, Scenario, Sect, SimRumor, SkillDef, Squad, TimetableEvent, TraitBook,
     Tutorial,
 )
@@ -86,6 +86,8 @@ def load_content(root: Path, profile: str | None = None) -> Content:
         orders=_orders(root / "orders.json"),
         promotions=[_build(PromotionDef, raw) for raw in _read(root / "promotions.json")]
         if (root / "promotions.json").exists() else [],
+        opportunities=[_build(OppDef, raw) for raw in _read(root / "opportunities.json")]
+        if (root / "opportunities.json").exists() else [],
         followers={raw["id"]: _build(FollowerDef, raw) for raw in _read(root / "followers.json")}
         if (root / "followers.json").exists() else {},
         figures=_index(FigureDef, _read(root / "figures.json")) if (root / "figures.json").exists() else {},
@@ -715,6 +717,49 @@ def check_promotions(c: Content, need, known) -> None:
             side = promo_events.get(event.id)
             need(all(c.followers[f].faction == side for f in choice.effect.followers if f in c.followers),
                  f"{where}：給的部下要是 {side} 的")
+
+
+def check_opportunities(c: Content, need, known, front_ids: list[str]) -> None:
+    """機緣（content/opportunities.json、orders.json 的 rank2，正式版乙一）：id 不重複；陣營存在；kind 對應的那一塊要寫、
+    別的不能寫；人物、地點、大區、戰線存在；累積型的來源行動（第 2 階行動、守勢行動）自己陣營要有；有東西要送的天時地利型
+    要寫送的選項與送到的那一句；文字只能繁體。front_ids 是 validate 的那一份戰線清單。"""
+    ids = [o.id for o in c.opportunities]
+    need(len(set(ids)) == len(ids), "opportunities.json：機緣 id 重複")
+    factions = {f.id for f in c.scenario.factions}
+    regions = {r.id for r in c.map.regions}
+    for o in c.opportunities:
+        where = f"機緣 {o.id}"
+        need(o.faction in factions, f"{where}：沒有陣營 {o.faction}")
+        blocks = {"bond": o.bond, "accumulate": o.accumulate, "timing": o.timing}
+        need(blocks[o.kind] is not None, f"{where}：kind 是 {o.kind}，要寫 {o.kind} 那一塊")
+        need(all(v is None for k, v in blocks.items() if k != o.kind), f"{where}：只能寫 {o.kind} 那一塊")
+        texts = [o.name]
+        if o.bond is not None:
+            known(where, [o.bond.character], c.characters, "人物")
+            texts += [o.bond.topic, o.bond.text]
+        if o.accumulate is not None:
+            a = o.accumulate
+            need(a.source != "rank2" or o.faction in c.orders.rank2, f"{where}：來源是第 2 階行動，這個陣營卻沒有（orders.json 的 rank2）")
+            need(a.source != "duty" or o.faction in c.orders.duties, f"{where}：來源是守勢行動，這個陣營卻沒有（orders.json 的 duties）")
+            texts += [a.tick, a.milestone, a.item, a.label, a.done]
+        if o.timing is not None:
+            t = o.timing
+            known(where, t.at + [h.at for h in t.hosts], c.locations, "地點")
+            known(where, [h.figure for h in t.hosts], c.figures, "人物")
+            need(all(r in regions for r in t.clue_regions), f"{where}：clue_regions 有不存在的大區")
+            need(t.deliver_front is None or t.deliver_front in front_ids, f"{where}：deliver_front {t.deliver_front} 不是戰線")
+            need(t.when != "night" or bool(t.at), f"{where}：夜裡要寫地點")
+            need(t.when != "dawn" or bool(t.hosts), f"{where}：黎明要寫主持人")
+            need((t.item is None) == (t.deliver_front is None), f"{where}：item 與 deliver_front 要一起寫")
+            need(t.item is None or bool(t.deliver_label.strip()), f"{where}：有 item 就要寫 deliver_label（交東西的選項）")
+            need(t.item is None or bool(t.done.strip()), f"{where}：有 item 就要寫 done（交到那一刻的敘事）")
+            texts += [t.clue, t.label, t.ok, t.fail, t.deliver_label, t.done] + ([t.item] if t.item else [])
+        for text in texts:
+            need(to_traditional(text) == text, f"{where}：文字只能用繁體中文（「{text[:12]}」）")
+    for faction_id, action in c.orders.rank2.items():
+        need(faction_id in factions, f"orders.json rank2：沒有陣營 {faction_id}")
+        for text in (action.name, action.ok, action.fail):
+            need(to_traditional(text) == text, f"orders.json rank2.{faction_id}：文字只能用繁體中文（「{text[:12]}」）")
 
 
 def check_foreshadows(
@@ -1484,6 +1529,7 @@ def validate(c: Content) -> None:
     check_foreshadows(c, need, known, region_ids, front_ids, counters_written)
     check_orders(c, need, known, front_ids)
     check_promotions(c, need, known)
+    check_opportunities(c, need, known, front_ids)
 
     for key, where in sorted(marks_written.items()):
         need(key in marks_read, f"{where}：痕跡 {key} 寫了卻沒有任何條件或文字讀它")
