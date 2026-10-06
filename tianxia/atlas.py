@@ -23,7 +23,7 @@ from .world import current_act, sim_active, storyline_off
 DAY = 86400
 KNOWN = ("current", "visible", "remembered")  # 摸清的地點
 LAYERS = {"situation": "局勢", "enemies": "敵情", "story": "劇情", "routes": "路線"}
-NEWS_DAYS = 3  # 劇情層的 ✦：最近幾天的大事與傳聞（第一季是季曆天，rules.recent_seconds）
+NEWS_DAYS = 3  # 圖例那一句（mapview.LEGEND_LAYERS，靜態字）寫的天數＝Config.rumor_board_days 的預設；✦ 與詳情欄真正用的是 news_days(content)
 LEADER_NEWS = 2  # 詳情欄每位龍頭人物最多列幾則最近提到他的傳聞
 LEADER_WHO = "江湖上的龍頭人物，會自己行動，左右江湖大勢"
 LEADER_QUIET = "眼下沒有動靜"
@@ -315,10 +315,16 @@ def goal_places(state: GameState, content: Content) -> list[str]:
     return [] if storyline_off(state, content) else list(current_act(state, content).places)
 
 
+def news_days(content: Content) -> float:
+    """劇情層 ✦ 與詳情欄的「最近幾天」：跟大區的傳聞板同一個旋鈕（Config.rumor_board_days；第一季是季曆天），
+    所以本區地方傳聞的 ✦ 不會比那則傳聞在板上活得久，天下大事的 ✦ 也跟著同一個長度收。"""
+    return content.config.rumor_board_days
+
+
 def _heard_news(state: GameState, content: Content) -> list[Rumor]:
-    """最近 NEWS_DAYS 天（第一季是季曆天）、有發生地、而且聽得到的大事與傳聞（rules.audible），最新的在前：劇情層的 ✦
+    """最近 news_days 天（第一季是季曆天）、有發生地、而且聽得到的大事與傳聞（rules.audible），最新的在前：劇情層的 ✦
     與詳情欄都看這一份（傳聞分層設計第九節「只標你聽得到的」）。"""
-    since = state.world.time - recent_seconds(NEWS_DAYS, content, state.world)
+    since = state.world.time - recent_seconds(news_days(content), content, state.world)
     ears = ears_of(state, content)
     return [r for r in reversed(state.world.rumors) if r.location is not None and r.time >= since and audible(r, ears)]
 
@@ -329,7 +335,7 @@ def news_places(state: GameState, content: Content) -> set[str]:
 
 
 def recent_news(state: GameState, content: Content, loc_id: str) -> list[Rumor]:
-    """這個地點最近 NEWS_DAYS 天、聽得到的大事與傳聞，最新的在前。不檢查視野：呼叫端要先用 is_known 把關。"""
+    """這個地點最近 news_days 天、聽得到的大事與傳聞，最新的在前。不檢查視野：呼叫端要先用 is_known 把關。"""
     return [r for r in _heard_news(state, content) if r.location == loc_id]
 
 
@@ -667,9 +673,9 @@ def detail_text(state: GameState, content: Content, loc_id: str, odds: Odds) -> 
         story.append(f"★ 這一幕主線的目標：{act.goal}" if loc_id in act.places else "不是這一幕主線的目標")
     news = recent_news(state, content, loc_id)
     if news:
-        story.append(f"✦ 最近 {NEWS_DAYS} 天的大事與傳聞：\n" + "\n".join(f"- {stamp_text(r.time, content, state.world)}　{r.text}" for r in news))
+        story.append(f"✦ 最近 {news_days(content):g} 天的大事與傳聞：\n" + "\n".join(f"- {stamp_text(r.time, content, state.world)}　{r.text}" for r in news))
     else:
-        story.append(f"最近 {NEWS_DAYS} 天沒有大事或傳聞")
+        story.append(f"最近 {news_days(content):g} 天沒有大事或傳聞")
     parts.append("**劇情**　" + "\n\n".join(story))
 
     route = way_to(state, content, loc_id)  # 在路上時是改道的走法

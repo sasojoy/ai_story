@@ -274,3 +274,22 @@ def test_with_the_switch_off_the_map_marks_like_before(real):
     game.state.world.time = 2 * 86400
     assert atlas.news_places(game.state, real) == {"wan_city"}
     assert "✦" in _story_marks(game).get("wan_city", "")
+
+
+@pytest.mark.parametrize("days", [1, 5])
+def test_the_star_window_is_the_board_length_so_a_local_star_never_outlives_its_rumor(on, days):
+    """✦ 的「最近幾天」跟傳聞板同一個旋鈕（Config.rumor_board_days），不再是另一個寫死的 3：
+    板子留 1 天時天下大事的 ✦ 也 1 天就收；板子留 5 天時本區的 ✦ 跟著留 5 天（以前 3 天就先消了）。"""
+    on.config.rumor_board_days = days
+    game = _game(on, at="yingchuan")
+    day = _day(game)
+    game.state.world.time = 10 * day
+    edge = (10 - days) * day  # 板上最舊的那一刻
+    _rumor(game, "長社剛出的事。", "changshe", time=edge + 1)  # 本區、還在板上
+    _rumor(game, "潁川更早的事。", "yingchuan", time=edge - 1)  # 本區、剛撤板
+    _rumor(game, "鉅鹿剛出的大事。", "julu_altar", layer="world", time=edge + 1)
+    _rumor(game, "盧植營更早的大事。", "luzhi_camp", layer="world", time=edge - 1)  # 天下大事，也過了 ✦ 的天數
+    assert atlas.news_places(game.state, on) == {"changshe", "julu_altar"}
+    game.state.player.visited.add("luzhi_camp")
+    odds = lambda squad: "穩勝"  # noqa: E731
+    assert f"最近 {days} 天沒有大事或傳聞" in atlas.detail_text(game.state, on, "luzhi_camp", odds)
