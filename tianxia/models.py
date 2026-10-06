@@ -743,6 +743,10 @@ class BattleTuning(_Strict):
     push_max: float = 10.0  # 一回合最多推多少
     damage: dict[Move, float] = Field(default_factory=lambda: {"強攻": 60.0, "奇襲": 35.0, "固守": 15.0})
     strong_mitigation_cap: float = 0.6  # 強攻的損耗，自己的武學威力最多抵銷這麼多（同原本的猛攻）
+    third_grab_damage: float = 35.0  # 第三方「趁亂搶地盤」扣的氣血（同奇襲的損耗，戰鬥系統第六節；獨立的欄位：調奇襲不連動）
+    third_keep_damage: float = 10.0  # 第三方「保存實力」扣的氣血
+    third_keep_share: float = 0.5  # 「保存實力」的份量與收穫算幾成（固守的份量乘它）
+    third_cap: int = 10  # 一場最多推第三方的大勢線幾點
 
     @field_validator("affinity", mode="before")
     @classmethod
@@ -1117,6 +1121,16 @@ class FreeTextGamble(_Strict):
     failure_neili_per_risk: float = 3.0  # 失敗時，風險每 1 點再加多少氣血損耗
 
 
+class ThirdParty(_Strict):
+    """決戰的第三方（戰鬥系統第六節）：自成一方，不推這一場的戰局，只推自己那條大勢線；兩軍打得越膠著，收穫越多。
+    第一季是地方豪強推豪強割據。兩招的名字可以改，份量與扣血看 BattleTuning 的 third_*。"""
+
+    faction: str  # 劇本的陣營 id，不能是這一場交戰的兩軍之一
+    trend: str  # 收場時推的大勢線（不能是衍生線）
+    grab: str = "趁亂搶地盤"  # 用奇襲的份量；名字出自戰鬥系統第六節（待 joy 潤）
+    keep: str = "保存實力"  # 用固守的份量，收穫算一半；名字出自戰鬥系統第六節（待 joy 潤）
+
+
 class BattleDef(_Strict):
     """全服共用的即時多人戰鬥骨架（例如「黃巾決戰」）：集結選陣營→逐幕逐回合（框架給
     選項是每邊每幕強攻／固守／奇襲三招，照 Config.battle 的算法推動戰局/扣氣血；每幕固定幾回合）→打完最後一回合、
@@ -1151,6 +1165,7 @@ class BattleDef(_Strict):
     version: str | None = None  # 那件大事分版本時（宛城甲、乙）這一筆是哪一版；到時間照 version_from 的結果開對的那一筆
     defender: Literal["guan", "huang"] | None = None  # 守方：戰局剛好停在 50 算守方守住（戰鬥系統 4.2）
     front: str | None = None  # 起點讀哪條戰線（戰線 id）：集結開始時讀一次戰況 v，起點＝50 ＋（50 − v）÷ 2（戰鬥系統 5.3）
+    third: ThirdParty | None = None  # 第三方（戰鬥系統第六節）；沒有就是只有兩軍
 
 
 FigureFate = Literal["退場", "重創", "重挫", "聲威大減", "受挫", "下獄", "到任"]  # 用詞照時刻表結算文件第一節

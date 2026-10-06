@@ -1,3 +1,4 @@
+import math
 import random
 from math import isclose
 from unittest import mock
@@ -8,7 +9,7 @@ from conftest import FixedRandom
 from tianxia import battle_instance as bi
 from tianxia.models import (
     MOVES, BattleAct, BattleDef, BattleFaction, BattleOption, BattleOutcome, BattleTuning,
-    FreeTextGamble,
+    FreeTextGamble, ThirdParty,
 )
 
 
@@ -1389,3 +1390,72 @@ def test_narrate_round_decodes_byte_tokens_the_model_left_in(definition):
     client = mock.Mock()
     client.chat_text.return_value = "火光中，旌旗仍<0xE5><0xB7><0x8D>然屹立。"
     assert bi.narrate_round(client, definition, instance, ["甲選了穩紮穩打。"]) == "火光中，旌旗仍巍然屹立。"
+
+
+# ── 決戰改版 5：地方豪強第三方（戰鬥系統第六節）──────────────────────────
+
+
+@pytest.fixture
+def with_third(three) -> BattleDef:
+    """three 加上第三方「hao」（推 geju）。"""
+    return three.model_copy(update={"third": ThirdParty(faction="hao", trend="geju")})
+
+
+def test_sides_include_the_third_party(with_third, three):
+    assert bi.sides(with_third) == ["guan", "huang", "hao"]
+    assert bi.sides(three) == ["guan", "huang"]
+
+
+def test_the_third_party_gets_its_own_two_moves(with_third):
+    battle = bi.start_muster(with_third, now=0)
+    bi.join_faction(battle, "丙", "hao", neili_cap=1000, scores={m: 100.0 for m in MOVES})
+    bi.close_muster(battle, with_third, random.Random(0), now=0)
+    options = bi.options_for(battle, with_third, "丙")
+    assert [(o.tag, o.text, o.move) for o in options] == [
+        (bi.THIRD_GRAB, "趁亂搶地盤", "奇襲"), (bi.THIRD_KEEP, "保存實力", "固守"),
+    ]
+
+
+def test_the_armies_never_get_the_third_partys_moves(with_third):
+    battle = bi.start_muster(with_third, now=0)
+    bi.join_faction(battle, "甲", "guan", neili_cap=1000)
+    bi.close_muster(battle, with_third, random.Random(0), now=0)
+    assert {o.tag for o in bi.options_for(battle, with_third, "甲")} == {"guan_strong", "guan_hold", "guan_raid"}
+    assert not bi.is_third(with_third, battle.participants["甲"])
+
+
+def test_the_third_party_stays_itself_at_muster_and_late(with_third):
+    """Review Focus 4。"""
+    battle = bi.start_muster(with_third, now=0)
+    bi.join_faction(battle, "丙", "hao", neili_cap=1000)
+    bi.close_muster(battle, with_third, random.Random(0), now=0)
+    assert battle.participants["丙"].faction == "hao"
+    bi.auto_assign_latecomer(battle, with_third, "丁", 1000, random.Random(0), faction="hao")
+    bi.auto_assign_latecomer(battle, with_third, "戊", 1000, random.Random(0))
+    assert battle.participants["丁"].faction == "hao"
+    assert battle.participants["戊"].faction in ("guan", "huang")  # 沒指定的照舊只補兩軍
+
+
+def test_nobody_is_pushed_into_the_third_party_when_the_muster_closes_or_a_latecomer_arrives(with_third):
+    """Review Focus 4 的鏡像：沒選邊（陣營不認得）的人退回亂數分配，只分到兩軍，不會被分去第三方；
+    晚到的人沒指定陣營時，人數的平衡也只看兩軍。"""
+    battle = bi.start_muster(with_third, now=0)
+    for i in range(40):
+        bi.join_faction(battle, f"散{i}", "nobody", neili_cap=1000)
+    bi.close_muster(battle, with_third, random.Random(0), now=0)
+    assert {p.faction for p in battle.participants.values()} <= {"guan", "huang"}
+    for i in range(40):
+        bi.auto_assign_latecomer(battle, with_third, f"遲{i}", 1000, random.Random(i))
+    assert all(p.faction in ("guan", "huang") for p in battle.participants.values())
+
+
+def test_a_late_third_party_keeps_its_strength_when_timed_out(with_third):
+    battle = bi.start_muster(with_third, now=0)
+    bi.join_faction(battle, "丙", "hao", neili_cap=1000)
+    bi.close_muster(battle, with_third, random.Random(0), now=0)
+    bi.fill_timed_out_actions(battle, with_third)
+    assert battle.round.pending_actions["丙"] == bi.THIRD_KEEP and "丙" in battle.round.auto_picked
+
+
+def test_stalemate_is_one_at_the_centre_and_zero_at_the_ends():
+    assert bi.stalemate(50) == 1.0 and bi.stalemate(75) == 0.5 and bi.stalemate(0) == 0.0 and bi.stalemate(100) == 0.0

@@ -15,7 +15,7 @@ from tianxia.characters import open_characters
 from tianxia.content import load_content
 from tianxia.engine import Game, Option
 from tianxia.martial_arts import Insight, MartialArt, generate_from_name
-from tianxia.models import Effect, FigureDef, Location, PromotionDef
+from tianxia.models import Effect, FigureDef, Location, PromotionDef, ThirdParty
 from tianxia.models import ExploreMix
 from tianxia.state import BotProfile, FigureState, GameState, Journey, Rumor, new_game_state
 from tianxia.sqlite_world import open_world
@@ -2193,6 +2193,125 @@ def test_with_factions_a_latecomer_joins_their_own_side(content, game):
         game._battle_status()
         game.choose("battle:join_late")
     assert game.world.get_battle().participants["沈浪"].faction == "huang"
+
+
+# ── 決戰改版 5：地方豪強第三方（戰鬥系統第六節）──────────────────────────
+
+
+def _as_warlord(game):
+    """本人是地方豪強；那一場三招決戰掛上豪強這個第三方（推第一條大勢線）。"""
+    _install_factions(game.content)
+    game.state.player.faction = "haoqiang"
+    definition = _install_three_move_battle(game.content)
+    definition.third = ThirdParty(faction="haoqiang", trend=game.content.scenario.trends[0].id)
+    return definition
+
+
+def _warlord_in_battle(game):
+    """豪強本人加入、集結撥到過去、開打；回傳 (這一場, 定義)。"""
+    definition = _as_warlord(game)
+    game.content.config.admins = [game.state.player.name]
+    game.now = 0.0
+    game.admin_start_battle(definition.id, now=0.0)
+    game._battle_choose("join:haoqiang")
+    game.world.mutate_battle(lambda b: setattr(b, "muster_deadline_real", -1.0))
+    game._run_battle_tick(definition)
+    return game.world.get_battle(), definition
+
+
+def test_a_warlord_can_join_a_battle_with_a_third_party(game):
+    definition = _as_warlord(game)
+    game.content.config.admins = [game.state.player.name]
+    game.now = 0.0
+    game.admin_start_battle(definition.id, now=0.0)
+    battle = game.world.get_battle()
+    assert not game._off_side(definition)
+    ids = [o.id for o in game._battle_options(battle, definition)]
+    assert ids == ["battle:join:haoqiang"]
+    game._battle_choose("join:haoqiang")
+    assert game.world.get_battle().participants[game.state.player.name].faction == "haoqiang"
+    assert game.state.journal[0].title == "三招決戰・加入地方豪強"  # 加入寫的是這一方的名字（劇本陣營的名字）
+    assert "你已加入【地方豪強】" in game._battle_scene_text(game.world.get_battle(), definition)
+
+
+def test_a_warlord_only_watches_a_battle_without_a_third_party(game):
+    definition = _as_warlord(game)
+    definition.third = None
+    assert game._off_side(definition)
+
+
+def test_without_factions_nobody_is_off_side(game):
+    """劇本不分陣營時沒有「陣營不在場」這回事（_off_side 的 factions 前提）：沒有第三方的決戰照舊人人能加入。"""
+    definition = _install_three_move_battle(game.content)
+    assert not game.content.scenario.factions and not game._off_side(definition)
+
+
+def test_a_warlord_only_sees_and_joins_its_own_side(game):
+    """豪強的集結按鈕只有自己這一方；官軍的人看到的也只有自己這一方，看不到豪強。"""
+    definition = _as_warlord(game)
+    game.content.config.admins = [game.state.player.name]
+    game.now = 0.0
+    game.admin_start_battle(definition.id, now=0.0)
+    assert game._battle_choose("join:guan") == ["（你只能站在自己陣營這一邊。）"]
+    assert game.world.get_battle().participants == {}
+    game.state.player.faction = "guan"
+    assert [o.id for o in game._battle_options(game.world.get_battle(), definition)] == ["battle:join:guan"]
+
+
+def test_a_warlord_sees_the_two_moves_with_scores(game):
+    battle, definition = _warlord_in_battle(game)
+    me = battle.participants[game.state.player.name]
+    labels = [o.label for o in game._battle_options(battle, definition)]
+    grab = round(me.scores["奇襲"] * battle_instance.condition(me))
+    keep = round(me.scores["固守"] * battle_instance.condition(me) * 0.5)
+    assert labels[:2] == [f"趁亂搶地盤（奇襲・{grab} 分）", f"保存實力（固守・{keep} 分）"]
+    assert len(labels) == 2  # 沒有作戰方針、也沒有放手一搏
+
+
+def test_the_warlords_scene_shows_both_armies_last_round_and_how_stalemated_it_is(game):
+    """豪強看到兩軍各自上一回合的比例，加一行膠著程度（照公開的戰局算）；那幾行跟「你上一回合」併在同一段小字引用裡。"""
+    battle, definition = _warlord_in_battle(game)
+    battle.last_mix = {"guan": {"強攻": 1.0, "固守": 0.0, "奇襲": 0.0}, "huang": {"強攻": 0.2, "固守": 0.5, "奇襲": 0.3}}
+    battle.trend = 75
+    battle.participants[game.state.player.name].last_result = "趁亂搶地盤"
+    text = game._battle_scene_text(battle, definition)
+    assert (
+        "> 官軍上一回合：強攻 100%・固守 0%・奇襲 0%\n> 黃巾上一回合：強攻 20%・固守 50%・奇襲 30%\n"
+        "> 兩軍相持：膠著 5 成（越膠著，你趁亂收穫越多）\n> 你上一回合：趁亂搶地盤"
+    ) in text
+    assert "對面上一回合" not in text and "亂局" not in text  # 亂局是第一季戰線的說法，別撞名
+
+
+def test_the_armies_scene_has_no_third_party_lines(game):
+    battle, definition = _open_three_move_battle(game)
+    definition.third = ThirdParty(faction="haoqiang", trend=game.content.scenario.trends[0].id)
+    battle.last_mix = {"guan": {"強攻": 1.0, "固守": 0.0, "奇襲": 0.0}, "huang": {"強攻": 0.2, "固守": 0.5, "奇襲": 0.3}}
+    text = game._battle_scene_text(battle, definition)
+    assert "對面上一回合（黃巾）" in text and "膠著" not in text and "兩軍相持" not in text
+
+
+def test_the_third_party_never_shows_up_as_the_armies_foe_in_the_reports(content, game):
+    """每個參戰者的戰報：官軍的人對手寫黃巾（不寫豪強）；豪強站「地方豪強」、對手是兩軍。"""
+    definition = _three_round_showdown(content)
+    definition.third = ThirdParty(faction="haoqiang", trend=content.scenario.trends[0].id)
+    game.state.player.faction = "guan"
+    warlord = _fighter(content, game, "丙", "haoqiang")
+    game.world.start_battle(definition, now=0.0)
+    with at(game, 0.0), at(warlord, 0.0):
+        game.choose("battle:join:guan")
+        warlord.choose("battle:join:haoqiang")
+    start = definition.muster_seconds + 1
+    for i in range(3):
+        with at(game, start + i), at(warlord, start + i):
+            game.choose("battle:act:guan_hold")
+            warlord.choose("battle:act:third_keep")
+    assert game.world.get_battle().phase == "ended"
+    game.sync(start + 10)
+    warlord.sync(start + 10)
+    mine, theirs = game.state.battles[0], warlord.state.battles[0]
+    assert (mine.opponent, mine.side) == ("黃巾", "官軍")
+    assert (theirs.opponent, theirs.side) == ("官軍、黃巾", "地方豪強")
+    assert game.state.journal[0].tag == "你站在官軍" and warlord.state.journal[0].tag == "你站在地方豪強"
 
 
 def test_a_battle_with_no_fighters_ends_with_its_fallback_outcome_once_the_round_times_out(content, game):

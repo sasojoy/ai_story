@@ -1410,6 +1410,13 @@ def validate(c: Content) -> None:
         need(len(set(battle_sides)) == len(battle_sides), f"{where}：陣營 id 重複")
         if scenario_faction_ids:
             known(where, battle_sides, scenario_faction_ids, "陣營")
+        if battle.third is not None:  # 第三方（決戰改版 5）：自成一方，推自己的大勢線；不能是衍生線（推了會被重算蓋回去）
+            need(
+                battle.third.faction in scenario_faction_ids and battle.third.faction not in battle_sides,
+                f"{where}：第三方 {battle.third.faction} 要是劇本的陣營，而且不是交戰的兩軍",
+            )
+            need(battle.third.trend in trend_ids, f"{where}：第三方推的大勢線 {battle.third.trend} 不存在")
+            not_derived(where, [battle.third.trend], "第三方 ")
         if battle.region is not None:
             known(where, [battle.region], region_ids, "大區")
         need(

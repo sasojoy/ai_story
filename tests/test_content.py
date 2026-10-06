@@ -10,7 +10,7 @@ from tianxia import naming
 from tianxia.content import ContentError, load_content, profile_line, validate
 from tianxia.models import (
     MOVES, BattleAct, BattleDef, BattleFaction, BattleOption, BattleOutcome, Condition, Config, FactionDef, SpecialTrait,
-    Threshold, Trend,
+    ThirdParty, Threshold, Trend,
 )
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -606,6 +606,40 @@ def test_lead_texts_must_name_a_side_of_the_battle(content):
     content.battles["t1"] = battle = _battle({})
     battle.acts[0].text_by_lead["nobody"] = "某一方佔了上風。"
     with pytest.raises(ContentError, match="text_by_lead"):
+        validate(content)
+
+
+def test_a_third_party_must_be_another_scenario_faction_and_push_a_real_trend(content):
+    """決戰改版 5：第三方要是劇本的陣營、不能是交戰的兩軍之一；推的大勢線要存在。"""
+    content.battles["t1"] = battle = _battle({})
+    battle.third = ThirdParty(faction=battle.factions[0].id, trend=content.scenario.trends[0].id)
+    with pytest.raises(ContentError, match="第三方"):
+        validate(content)
+    battle.third = ThirdParty(faction="沒有這個陣營", trend=content.scenario.trends[0].id)
+    with pytest.raises(ContentError, match="第三方"):
+        validate(content)
+    content.scenario.factions = [FactionDef(id=f, name=f) for f in ("guan", "huang", "hao")]
+    battle.third = ThirdParty(faction="hao", trend="沒有這條線")
+    with pytest.raises(ContentError, match="第三方推的大勢線 沒有這條線 不存在"):
+        validate(content)
+
+
+def test_a_third_party_that_is_a_scenario_faction_pushing_a_real_trend_is_valid(content):
+    content.scenario.factions = [FactionDef(id=f, name=f) for f in ("guan", "huang", "hao")]
+    content.battles["t1"] = battle = _battle({})
+    battle.third = ThirdParty(faction="hao", trend=content.scenario.trends[0].id)
+    validate(content)
+
+
+def test_a_third_party_cannot_push_a_derived_trend(content):
+    """衍生線（黃巾聲勢）推了會被下一次重算蓋回去：跟決戰結果的 trend_delta 一樣擋掉，要推就推它的來源線。"""
+    content = _with_fronts(content)
+    content.scenario.factions = [FactionDef(id=f, name=f) for f in ("guan", "huang", "hao")]
+    content.battles["t1"] = battle = _battle({})
+    battle.third = ThirdParty(faction="hao", trend="east")
+    validate(content)
+    battle.third = ThirdParty(faction="hao", trend="total")
+    with pytest.raises(ContentError, match="第三方 不能推衍生線 total"):
         validate(content)
 
 

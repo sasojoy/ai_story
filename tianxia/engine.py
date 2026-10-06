@@ -2000,10 +2000,11 @@ class Game:
         季終收兵的決戰（unfinished，FB-035）沒有結果：只寫一則江湖紀錄交代一聲，不加戰報、不放「剛剛」的戰鬥卡片。"""
         c, s = self.content, self.state
         definition = c.battles.get(battle.battle_id)
-        sides = {f.id: f.name for f in definition.factions} if definition is not None else {}
+        sides = self._sides(definition) if definition is not None else {}  # 自己站哪一方：兩軍加第三方（地方豪強）
+        armies = {f.id: f.name for f in definition.factions} if definition is not None else {}
         name = definition.name if definition is not None else battle.battle_id
-        side = sides.get(me.faction, me.faction)
-        foes = "、".join(n for fid, n in sides.items() if fid != me.faction) or "敵軍"
+        side = sides.get(me.faction, me.faction)  # 待 joy 潤：第三方的那一則寫成「你站在地方豪強」（劇本陣營的名字）
+        foes = "、".join(n for fid, n in armies.items() if fid != me.faction) or "敵軍"  # 對手只算兩軍：兩軍打不到豪強
         where = self._battle_region_name(definition) if definition is not None and definition.region else name
         outcome = battle.outcome_title or "收場"
         label = "" if earlier is None else f"第 {earlier} 季・"
@@ -2049,7 +2050,7 @@ class Game:
 
     def _watching_battle(self, battle: battle_instance.BattleInstance, definition: BattleDef) -> bool:
         """這個人此刻打不了這場仗、只能在一旁看（options() 照常給平常的選項，場景上仍看得到戰場）：
-        - 劇本分陣營時，自己的陣營不是交戰的任何一方，而且還在集結、或已經開打但他不在場上；
+        - 劇本分陣營時，自己的陣營不是這場決戰能站的任何一方（兩軍或第三方），而且還在集結、或已經開打但他不在場上；
         - 參戰者離開了決戰的大區（人在區外，或這一趟路正要走出大區；區內站與站之間走動不算）：這回合不出手，
           照常遊玩，回來才回到戰場；
         - 還沒參戰的人不在決戰的大區、或在路上（地圖擴充設計第六節：人要在現場才能加入）。
@@ -2062,9 +2063,18 @@ class Game:
             return me.away
         return not self._at_battle(definition)
 
+    def _sides(self, definition: BattleDef) -> dict[str, str]:
+        """這場決戰能站的每一方（id → 名字）：交戰的兩軍，加上第三方（戰鬥系統第六節；名字照劇本的陣營）。"""
+        names = {f.id: f.name for f in definition.factions}
+        if definition.third is not None:
+            names[definition.third.faction] = next(
+                (f.name for f in self.content.scenario.factions if f.id == definition.third.faction), definition.third.faction,
+            )
+        return names
+
     def _off_side(self, definition: BattleDef) -> bool:
-        """劇本分陣營、而自己的陣營（散人沒有）不是這場決戰交戰的任何一方。"""
-        return bool(self.content.scenario.factions) and self.state.player.faction not in {f.id for f in definition.factions}
+        """劇本分陣營、而自己的陣營（散人沒有）不是這場決戰能站的任何一方（兩軍或第三方）。"""
+        return bool(self.content.scenario.factions) and self.state.player.faction not in self._sides(definition)
 
     def _at_battle(self, definition: BattleDef) -> bool:
         """人在這場決戰的大區、而且不在路上，才算到了戰場（地圖擴充設計第六節）；決戰不限地點時只看在不在路上。
@@ -2148,8 +2158,8 @@ class Game:
                 return f"{header}\n\n集結中，還剩現實 {left}。{watch_line}"
             me = battle.participants.get(self.state.player.name)
             if me is not None:
-                side = next((f.name for f in definition.factions if f.id == me.faction), me.faction)
-                leaving = "；走出這一區就不算在場" if definition.region is not None else ""
+                side = self._sides(definition).get(me.faction, me.faction)
+                leaving ="；走出這一區就不算在場" if definition.region is not None else ""
                 return f"{header}\n\n你已加入【{side}】，集結還剩現實 {left}。集結結束就開打，在那之前照常行動{leaving}。"
             return f"{header}\n\n集結中，還剩現實 {left}。選擇陣營加入；集結期間照常行動。"
         act = battle_instance.current_act(battle, definition)
@@ -2159,11 +2169,19 @@ class Game:
         p = battle.participants.get(self.state.player.name)
         if p is not None:
             last = []  # 上一回合的兩句併成一段 markdown 引用（「> 」、段內換行）：網頁在 .scene blockquote 底下縮成小字、淡色
-            enemy = next((f for f in definition.factions if f.id != p.faction), None)
-            seen = battle.last_mix.get(enemy.id) if enemy is not None else None
-            if seen:  # 這回合的比例要到結算才揭曉，畫面只寫上一回合（設計 3.4）
-                parts = "・".join(f"{m} {round(seen[m] * 100)}%" for m in MOVES)
-                last.append(f"> 對面上一回合（{enemy.name}）：{parts}")
+            if battle_instance.is_third(definition, p):  # 第三方：兩軍各一行，再加膠著程度（戰鬥系統第六節；全是公開的戰局）
+                for f in definition.factions:
+                    seen = battle.last_mix.get(f.id)
+                    if seen:
+                        last.append(f"> {f.name}上一回合：" + "・".join(f"{m} {round(seen[m] * 100)}%" for m in MOVES))
+                # 說「膠著」、不說「亂局」：亂局是第一季戰線（戰況 35～65）的說法，撞名會讓人以為是同一件事
+                last.append(f"> 兩軍相持：膠著 {round(battle_instance.stalemate(battle.trend) * 10)} 成（越膠著，你趁亂收穫越多）")  # 待 joy 潤
+            else:
+                enemy = next((f for f in definition.factions if f.id != p.faction), None)
+                seen = battle.last_mix.get(enemy.id) if enemy is not None else None
+                if seen:  # 這回合的比例要到結算才揭曉，畫面只寫上一回合（設計 3.4）
+                    parts = "・".join(f"{m} {round(seen[m] * 100)}%" for m in MOVES)
+                    last.append(f"> 對面上一回合（{enemy.name}）：{parts}")
             if p.last_result:
                 last.append(f"> 你上一回合：{p.last_result}")
             if last:
@@ -2178,14 +2196,15 @@ class Game:
         """打得了這場仗的人的戰鬥選項（只能觀戰的人不會走到這裡，見 _watching_battle）。"""
         name = self.state.player.name
         p = battle.participants.get(name)
+        tuning = self.content.config.battle
         if battle.phase == "muster":
-            sides = definition.factions
-            if self.content.scenario.factions:  # 劇本分陣營：只能站在自己陣營那邊
-                sides = [f for f in definition.factions if f.id == self.state.player.faction]
+            sides = list(self._sides(definition).items())  # 兩軍加第三方（id, 名字）
+            if self.content.scenario.factions:  # 劇本分陣營：只能站在自己陣營那邊（第三方的人只看到自己那一方）
+                sides = [(fid, fname) for fid, fname in sides if fid == self.state.player.faction]
             return [  # 已經加入的那一邊換成灰的「已加入」；不分陣營的劇本集結時還能換到另一邊
-                Option(id=f"battle:join:{f.id}", label=f"已加入【{f.name}】", enabled=False)
-                if p is not None and p.faction == f.id else Option(id=f"battle:join:{f.id}", label=f"加入【{f.name}】")
-                for f in sides
+                Option(id=f"battle:join:{fid}", label=f"已加入【{fname}】", enabled=False)
+                if p is not None and p.faction == fid else Option(id=f"battle:join:{fid}", label=f"加入【{fname}】")
+                for fid, fname in sides
             ]
         if p is None:
             return [Option(id="battle:join_late", label="加入戰局")]
@@ -2199,7 +2218,9 @@ class Game:
                 continue
             label = o.text
             if o.move is not None and p.scores:  # 三招：寫招與這個人現在的份量（設計 3.4：按鈕上直接寫）
-                label = f"{o.text}（{o.move}・{round(p.scores.get(o.move, 0.0) * battle_instance.condition(p))} 分）"
+                share = tuning.third_keep_share if o.tag == battle_instance.THIRD_KEEP else 1.0  # 第三方「保存實力」只算一半
+                score = round(p.scores.get(o.move, 0.0) * battle_instance.condition(p) * share)
+                label = f"{o.text}（{o.move}・{score} 分）"
             elif o.move is not None:  # 還沒有份量快照（上線前就在場上、下一次同步才補）：不寫「0 分」，那是假的
                 label = f"{o.text}（{o.move}）"
             out.append(Option(id=f"battle:act:{o.tag}", label=label))
@@ -2281,7 +2302,8 @@ class Game:
                 )
             )
             msgs = stood + ["你加入了這場戰局。"]
-            side = next((f.name for f in definition.factions if f.id == rest), rest)
+            side = self._sides(definition).get(rest, rest)
+            # 待 joy 潤：「…・加入地方豪強」是用劇本陣營的名字組出來的（兩軍照舊「…・加入官軍」）
             self._write(f"{definition.name}・{'改選' if changing_sides else '加入'}{side}", msgs)  # 加入與改選各留一則（FB-030）
             return msgs
         if kind == "join_late":

@@ -33,6 +33,9 @@ Phase = Literal["muster", "active", "ended"]
 UNFINISHED_TITLE = "未分勝負"  # 季終收兵的決戰：結果標題與江湖紀錄標題的尾巴（FB-035）
 UNFINISHED_TEXT = "季終了，這場決戰沒打完就各自收兵，不算勝負。"
 
+THIRD_GRAB = "third_grab"  # 第三方的兩招（戰鬥系統第六節）：不在幕的選項裡，由 third_options 給
+THIRD_KEEP = "third_keep"
+
 CENTER = 50  # 戰局的中線：提前收場看偏離它多少（戰鬥系統 5.3），時刻表決戰的勝負也以它為界（4.1、4.2）
 BIG_WIN_MARGIN = 15  # 時刻表決戰：戰局偏離中線達到這麼多是大勝，否則險勝（戰鬥系統 4.1【預設】）
 
@@ -135,6 +138,31 @@ def start_from_front(front_value: int) -> int:
     return int(CENTER + (CENTER - front_value) / 2 + 0.5)
 
 
+def sides(definition: BattleDef) -> list[str]:
+    """這場決戰能站的每一方：交戰的兩軍，加上第三方（有的話，戰鬥系統第六節）。"""
+    ids = [f.id for f in definition.factions]
+    return ids + [definition.third.faction] if definition.third is not None else ids
+
+
+def is_third(definition: BattleDef, p: BattleParticipant) -> bool:
+    """這個人站在第三方（地方豪強）那一邊：不推戰局、不進兩軍的出招比例，結算見 _third_round。"""
+    return definition.third is not None and p.faction == definition.third.faction
+
+
+def third_options(definition: BattleDef) -> list[BattleOption]:
+    """第三方的兩招：趁亂搶地盤（奇襲的份量）、保存實力（固守的份量，收穫一半）。不看幕的選項。"""
+    third = definition.third
+    return [
+        BattleOption(text=third.grab, tag=THIRD_GRAB, faction=third.faction, move="奇襲"),
+        BattleOption(text=third.keep, tag=THIRD_KEEP, faction=third.faction, move="固守"),
+    ]
+
+
+def stalemate(trend: int) -> float:
+    """膠著程度（戰鬥系統第六節）：戰局停在 50 是 1，偏到 0 或 100 是 0。"""
+    return max(0.0, 1 - abs(trend - CENTER) / CENTER)
+
+
 def move_scores(tuning: BattleTuning, power: float, outer: str | None, inner: str | None) -> dict[str, float]:
     """這個人每一招的份量（還沒乘氣血狀態，戰鬥系統 3.4）：實力 × 適性 ÷ 100。
     實力 ＝ min(100, 40 ＋ 0.4 × min(威力, 150))；適性 ＝ 75 ± 武學（招式）屬性 15 ± 內功屬性 10，夾在 50～100。
@@ -170,10 +198,11 @@ def close_muster(instance: BattleInstance, definition: BattleDef, rng: random.Ra
     隨機分配」，呼叫端自己決定要不要把從沒選過的在線玩家也塞進 participants。"""
     if instance.phase != "muster":
         return
-    faction_ids = [f.id for f in definition.factions]
+    armies = [f.id for f in definition.factions]  # 沒選邊的只分到兩軍，不會被分去第三方
+    standing = sides(definition)
     for p in instance.participants.values():
-        if p.faction not in faction_ids:
-            p.faction = rng.choice(faction_ids)
+        if p.faction not in standing:
+            p.faction = rng.choice(armies)
     instance.phase = "active"
     instance.round = BattleRound(opened_real=now)
     instance.narrative_log.append(f"【{definition.name}】集結完畢，戰鬥開始！")
@@ -183,11 +212,11 @@ def auto_assign_latecomer(
     instance: BattleInstance, definition: BattleDef, name: str, neili_cap: float, rng: random.Random,
     power: float = 0.0, is_bot: bool = False, faction: str | None = None, scores: dict[str, float] | None = None,
 ) -> None:
-    """集結期結束後才出現的人（包含機器人）：有指定陣營（劇本分陣營時的玩家）就站自己那邊，
-    否則塞進人數較少的一方，維持陣營平衡。scores 同 join_faction。"""
-    faction_ids = [f.id for f in definition.factions]
-    if faction not in faction_ids:
-        counts = {fid: sum(1 for p in instance.participants.values() if p.faction == fid) for fid in faction_ids}
+    """集結期結束後才出現的人（包含機器人）：有指定陣營（劇本分陣營時的玩家；第三方的人也站自己那一方）就站自己那邊，
+    否則塞進兩軍裡人數較少的一方，維持陣營平衡（不會補去第三方）。scores 同 join_faction。"""
+    if faction not in sides(definition):
+        armies = [f.id for f in definition.factions]
+        counts = {fid: sum(1 for p in instance.participants.values() if p.faction == fid) for fid in armies}
         faction = min(counts, key=lambda fid: (counts[fid], rng.random()))
     instance.participants[name] = BattleParticipant(
         name=name, faction=faction, neili=neili_cap, neili_cap=neili_cap, power=power, is_bot=is_bot,
@@ -232,10 +261,13 @@ def total_rounds(definition: BattleDef) -> int:
 
 
 def options_for(instance: BattleInstance, definition: BattleDef, name: str) -> list[BattleOption]:
-    """這個人這回合能選的選項：框架給的選項，依陣營篩選（faction=None 的選項雙方都能選）。"""
+    """這個人這回合能選的選項：框架給的選項，依陣營篩選（faction=None 的選項雙方都能選）；第三方固定是他們自己的兩招，
+    不看幕的選項（third_options）。"""
     p = instance.participants.get(name)
     if p is None:
         return []
+    if is_third(definition, p):
+        return third_options(definition)
     act = current_act(instance, definition)
     return [o for o in act.options if o.faction in (None, p.faction)]
 
@@ -312,9 +344,14 @@ def safest_option_tag(
 def fill_timed_out_actions(instance: BattleInstance, definition: BattleDef, tuning: BattleTuning | None = None) -> None:
     """逾時：還沒送出行動的在場者（沒倒下、沒離開大區），系統代選他自己陣營最保守的固定選項（三招時是固守）；
     這一幕他沒有固定選項（驗過的內容每邊每幕都有三招，走不到這裡）就跳過他。
-    代選的人記進 round.auto_picked：這一回合不算他自己出手（FB-027）。"""
+    代選的人記進 round.auto_picked：這一回合不算他自己出手（FB-027）。
+    第三方（戰鬥系統第六節）沒有作戰方針與 AI 代挑：先於一切判斷，逾時一律代出「保存實力」。"""
     for p in _active_participants(instance):
         if p.name not in instance.round.pending_actions:
+            if is_third(definition, p):
+                instance.round.pending_actions[p.name] = THIRD_KEEP
+                instance.round.auto_picked.append(p.name)
+                continue
             tag = safest_option_tag(instance, definition, p.name, tuning)
             if tag is None:
                 continue
