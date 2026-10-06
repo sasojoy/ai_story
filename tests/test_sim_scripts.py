@@ -58,6 +58,58 @@ def test_the_server_bot_simulation_humans_spend_their_stat_points(game):
     assert _spent(game)
 
 
+def test_the_server_bot_simulation_reports_forging(monkeypatch):
+    sim = _load("sim_server_bots")
+    tally = sim.ForgeTally()
+    tally.forged["武學＋意境"] += 1
+    tally.new += 1
+    report = tally.report(libraries=[3, 30])
+    assert report["開爐"] == {"武學＋意境": 1} and report["首創"] == 1
+    assert report["庫存最多"] == 30 and report["最多可配對"] == 435
+
+
+def test_the_forge_tally_reports_the_share_that_landed_on_old_recipes_and_the_blend_share():
+    sim = _load("sim_server_bots")
+    tally = sim.ForgeTally()
+    assert tally.report(libraries=[])["合到舊的比例"] == 0.0 and tally.report(libraries=[])["庫存最多"] == 0
+    tally.new, tally.landed = 3, 1
+    tally.forged.update({"武學＋武學": 3, "武學＋意境": 1})
+    report = tally.report(libraries=[2])
+    assert report["合到舊的比例"] == 0.25 and report["武學＋武學佔"] == 0.75
+
+
+def test_the_server_bot_simulation_counts_its_forging_in_a_short_season(tmp_path, monkeypatch):
+    """整條接線：假人程式用假的取名（不叫模型），一小段時間內 forge 那一欄有東西、各項數字對得上。
+    不驗平衡，只驗量測有接上（開爐的種類、首創、模型呼叫數、輪不到取名都記得到）。"""
+    from tianxia import database
+    from tianxia.content import load_content
+
+    sim = _load("sim_server_bots")
+    monkeypatch.setattr(sim, "MAX_REAL_DAYS", 1)
+    content = load_content(ROOT / "content")
+    content.config.time_scale, content.config.bot_tick_seconds = 6.0, 60.0
+    try:
+        result = sim.run_season(content, tmp_path, seed=1, tick=60.0)
+    finally:
+        database.close_all()
+    forge = result["forge"]
+    assert set(forge["開爐"]) <= set(sim.FORGE_KINDS.values())
+    assert sum(forge["開爐"].values()) > 0 and forge["首創"] > 0
+    assert forge["取名呼叫"] + forge["挑選呼叫"] + forge["定名呼叫"] > 0
+    assert forge["庫存最多"] >= 2 and forge["最多可配對"] == forge["庫存最多"] * (forge["庫存最多"] - 1) // 2
+
+
+def test_the_server_bot_simulation_can_ask_a_real_model(monkeypatch):
+    """--real-model 傳給 run_season（預設是假的取名：只數次數、不連模型）。"""
+    sim = _load("sim_server_bots")
+    seen = []
+    monkeypatch.setattr(sim, "run_season", lambda content, workdir, seed, tick, real_model=False: seen.append(real_model) or {})
+    for flags in ([], ["--real-model"]):
+        monkeypatch.setattr(sys, "argv", ["sim_server_bots.py", "--seasons", "1", *flags])
+        sim.main()
+    assert seen == [False, True]
+
+
 def test_the_companion_measure_script_removes_its_temp_folder(tmp_path):
     """最終審查 M4：量測腳本在暫存目錄開一堆資料庫檔，結束時要清掉，不能每跑一次留一個 measure_companions_* 資料夾。
     只匯入、開一個資料庫就結束（不跑整個量測，太慢），然後看暫存目錄還在不在。"""
