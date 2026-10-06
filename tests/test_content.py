@@ -1110,6 +1110,15 @@ def test_the_profile_line_says_what_the_profile_turns_on():
     )
 
 
+def test_no_profile_overrides_the_time_scale_or_the_season_weeks():
+    """主機端 season_clock.py resume 拿開季時蓋的章（第一季規則開／關、季長）當設定檔的指紋，對得上才繼續
+    （scripts/season_clock.py::_profile_mismatch）。time_scale 與 season_weeks 沒有蓋在季上，蓋章看不出它們——所以設定檔
+    不准改這兩項；哪天真的要改，先讓季蓋章記下它們、並把主機端的檢查補上，再放寬這一條。"""
+    for path in sorted((CONTENT_DIR / "profiles").glob("*.json")):
+        overridden = json.loads(path.read_text(encoding="utf-8"))
+        assert not {"time_scale", "season_weeks"} & set(overridden), path.name
+
+
 # 可以打開伺服器排程的設定：只有壓測用的（壓測計畫 Task 4 的 content/profiles/loadtest.json 寫 10）。其他設定（試玩的
 # weekend 等）一律關著，直到 PM 驗收之後決定在哪一份打開——到時改 test_world_tick_is_off_by_default，寫明是哪一份、為什麼
 LOAD_TEST_PROFILES = frozenset({"loadtest"})

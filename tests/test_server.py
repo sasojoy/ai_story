@@ -4145,6 +4145,15 @@ def test_the_pause_buttons_call_what_the_server_has():
     assert "paused" in server.main_view(Game.new(server.CONTENT, "測試"))
 
 
+def test_the_resume_confirmation_does_not_promise_that_every_pause_is_taken_off():
+    """「▶ 繼續」的確認問句照 world.resume_skip_text 說：整個季曆鐘頭才扣，停不到一個季曆鐘頭的話什麼都不扣、季末不動
+    （B12）——不能一律說「不算進賽季、季末往後延一樣長」。"""
+    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    line = next(row for row in js.splitlines() if row.strip().startswith("resume_clock: ["))
+    assert "整個季曆鐘頭" in line and "不到一個季曆鐘頭" in line and "季末不動" in line
+    assert "停的這一段不算進賽季，季末往後延一樣長" not in line
+
+
 def test_world_step_does_not_move_a_paused_season():
     """伺服器排程的一下（world_step）暫停中什麼都不推——過了三個季長也不收季；繼續之後從停的那一刻接著走。
     打到一半的決戰那一路見 tests/test_season_pause.py::test_the_scheduler_tick_waits_out_the_pause。"""

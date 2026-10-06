@@ -41,7 +41,8 @@ def _profile_mismatch(season, content: Content) -> str | None:
         # 待 S1／joy 潤
         return (
             f"這一季開季時的設定（{stamped}）跟這次讀的（{loaded}）不同，不繼續，時鐘還停著。"
-            "用跟伺服器同一份設定（--profile 或 TIANXIA_PROFILE）再跑一次。"
+            "先確認 --profile 或 TIANXIA_PROFILE 跟伺服器開的一樣；已經一樣的話（開季之後設定改過），"
+            "改在遊戲裡用管理者工具的「▶ 繼續」。"
         )
     return None
 

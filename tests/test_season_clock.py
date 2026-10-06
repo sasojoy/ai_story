@@ -121,7 +121,8 @@ def test_resume_with_a_profile_that_does_not_match_the_season_is_refused(tmp_pat
         setattr(content.config, field, wrong)
         assert season_clock.main(["resume", "--db", str(path)], clock=lambda: resumed, content=content) == 1
         out = capsys.readouterr().out
-        assert "跟伺服器同一份設定" in out and "接著走了" not in out
+        # 說清楚怎麼辦：先對一下 --profile／TIANXIA_PROFILE；已經一樣（開季之後設定改過）就改用遊戲裡管理者工具的「▶ 繼續」
+        assert "--profile" in out and "▶ 繼續" in out and "接著走了" not in out
         assert open_world(path).paused_at() == paused and open_world(path).get_battle() is None  # 還停著、什麼都沒動
         setattr(content.config, field, right)
     assert season_clock.main(["resume", "--db", str(path)], clock=lambda: resumed, content=content) == 0
