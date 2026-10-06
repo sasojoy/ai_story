@@ -5,6 +5,7 @@
 沒有序章的內容（tutorial.location 是 None，例如測試內容）這裡每個函式都是「什麼都不做」。"""
 from __future__ import annotations
 
+import random
 from typing import TYPE_CHECKING
 
 from .martial_arts import MartialArt
@@ -112,6 +113,103 @@ def can_travel(state: GameState, content: Content) -> bool:
     """輿圖的安排前往：序章裡只有出師那一步（allow 有 move:）走得了。"""
     current = step(state, content)
     return current is None or any(prefix.startswith("move:") for prefix in current.allow)
+
+
+# ── 序章裡安排好的結果（每一步的特別規則，TutorialStep 的欄位）：都只在序章裡有，不在序章回「不管」的值 ──
+
+
+class SureRandom(random.Random):
+    """random() 永遠是 0：修練擲骰一定中（序章第 6 步，設計 3.2：第一次修練一定升品）。"""
+
+    def random(self) -> float:
+        return 0.0
+
+
+def explore_event(state: GameState, content: Content) -> str | None:
+    """這一步在草廬探索，一定端出哪則事件（四景四選一）。"""
+    current = step(state, content)
+    return current.explore_event if current is not None else None
+
+
+def enemies(state: GameState, content: Content) -> list[str]:
+    """這一步草廬的對手（遊歷才出現：雪恥那一步才有斷眉）；序章裡別的步驟是空的。"""
+    current = step(state, content)
+    return list(current.enemies) if current is not None else []
+
+
+def fight_tier(state: GameState, content: Content) -> str | None:
+    """這一步的遊歷結果照寫好的（雪恥：險勝）；沒有就是 None（照平常擲）。"""
+    current = step(state, content)
+    return current.force_tier if current is not None else None
+
+
+def instant_rest(state: GameState, content: Content) -> str:
+    """非空：這一步的打坐一坐就回滿（說這一句）；空字串是照平常的打坐。"""
+    current = step(state, content)
+    return current.instant_rest if current is not None else ""
+
+
+def sure_rng(state: GameState, content: Content) -> random.Random | None:
+    """這一步的修練一定升品：回一個永遠擲中的亂數；其他時候是 None（用遊戲自己的亂數）。"""
+    current = step(state, content)
+    return SureRandom() if current is not None and current.sure_cultivate else None
+
+
+def melt_only(state: GameState, content: Content) -> str | None:
+    """序章裡只准熔哪一門；序章裡別的步驟一門都不准熔（回空字串）；不在序章是 None（不限）。"""
+    current = step(state, content)
+    if current is None:
+        return None
+    return current.melt_only or ""
+
+
+def fuse_base(state: GameState, content: Content) -> str | None:
+    """序章裡合成只准拿哪一門當底；序章裡別的步驟不准合成（回空字串）；不在序章是 None（不限）。"""
+    current = step(state, content)
+    if current is None:
+        return None
+    return current.fuse_base or ""
+
+
+# 不照劇本走的動作：序章裡亂按不會收到東西、也不會把後面的步驟卡死（準備好的心得、體力是照劇本算的）。
+# 回傳擋下的原因（要寫給玩家看的一句話）；None＝可以做（含不在序章）。跟 melt_only 一樣，動作的拒絕與修練頁、煉製頁的按鈕走同一個判斷。
+
+
+def fuse_problem(
+    state: GameState, content: Content, art_id: str | None, insight_ids: list[str], other_art: str | None = None,
+) -> str | None:
+    """序章裡開爐：只准在合成那一步、拿師父說的那一門融一個意境；別的（別的底、兩門武學、合併、別的步驟）都擋。"""
+    base = fuse_base(state, content)
+    if base is None:
+        return None
+    if not base:
+        return "師父這一步沒叫你合成。"
+    if art_id != base or other_art or len(insight_ids) != 1:
+        return f"師父要你拿【{content.skills[base].name}】融一個意境。"
+    return None
+
+
+def practice_problem(state: GameState, content: Content, world: WorldStateStore, kind: str) -> str | None:
+    """序章裡練成：只在「練到第幾成」那一步（done_when.fused_level）、練身上換上的那一門合成出來的武學；
+    心得是照劇本備的，花在基本功上就練不到第三成。"""
+    current = step(state, content)
+    if current is None:
+        return None
+    if not current.done_when.fused_level:
+        return "師父這一步沒叫你練功。"
+    member = state.player.member
+    worn = member.neigong_id if kind == "內功" else member.wugong_id
+    if worn is None or worn not in {art.id for art in fused_arts(state, content, world)}:
+        return "師父要你練新得的那一門，先把它換上。"
+    return None
+
+
+def cultivate_problem(state: GameState, content: Content) -> str | None:
+    """序章裡修練：只在安排好一定升品的那一步（sure_cultivate）；體力是照劇本備的。"""
+    current = step(state, content)
+    if current is None or current.sure_cultivate:
+        return None
+    return "師父這一步沒叫你修練。"
 
 
 def fused_arts(state: GameState, content: Content, world: WorldStateStore) -> list[MartialArt]:

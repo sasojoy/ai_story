@@ -4,7 +4,7 @@
 """
 from __future__ import annotations
 
-from . import cultivation, fusion, insights, materials, team, traits
+from . import cultivation, fusion, insights, materials, prologue, team, traits
 # 不 import 整個 library 模組：這個檔案自己有一個叫 library() 的函式
 from .library import cap_of, held_count, level_of, melt_problem, melt_value, owned_arts
 from .martial_arts import MAX_LEVEL, MartialArt, next_quality, power_at, shown_creator
@@ -76,6 +76,9 @@ def forge_line(
     other_art: str | None = None,
 ) -> str:
     """煉製頁的說明：放了什麼、會做哪一種、花多少心得，或者為什麼還不能開爐。other_art 有、insight_ids 空的是武學＋武學。"""
+    refusal = prologue.fuse_problem(state, content, art_id, insight_ids, other_art)  # 序章裡只准照劇本合成（跟 Game.forge 同一個判斷）
+    if refusal is not None:
+        return f"⚠ {refusal}"
     cfg, xinde = content.config, state.player.stats.get("xinde", 0)
     count = f"武學與意境 {held_count(state)}/{cap_of(state, content)}"
     owned, held = owned_arts(state), state.player.insights
@@ -139,7 +142,7 @@ def art_rows(state: GameState, content: Content, world: WorldStateStore) -> list
         level = level_of(state, art_id)
         insight = insights.resolve(art.insight, content, world) if art.insight else None
         insight_name = insight.name if insight else None
-        problem = cultivation.cultivate_problem(state, content, world, art_id)
+        problem = prologue.cultivate_problem(state, content) or cultivation.cultivate_problem(state, content, world, art_id)
         legend = None
         if problem is None:
             target = next_quality(art.quality)
@@ -148,7 +151,7 @@ def art_rows(state: GameState, content: Content, world: WorldStateStore) -> list
             legend = _legend_choice(state, content, target, failures)
         else:
             note = problem
-        stuck = melt_problem(state, art_id, art.name)  # 跟 library.melt_art 同一個判斷
+        stuck = melt_problem(state, art_id, art.name, only=prologue.melt_only(state, content))  # 跟 library.melt_art 同一個判斷
         rows.append({
             "id": art_id, "name": art.name, "kind": art.kind, "quality": art.quality, "attribute": art.attribute,
             "level": level, "worn": art_id in (member.neigong_id, member.wugong_id), "insight": insight_name,

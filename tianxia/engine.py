@@ -681,7 +681,7 @@ class Game:
         foes = [squad for squad in squads if not self._drills_with(squad)]
         if not foes:
             return self._cost_option("act:train", "操練", cost, note="零風險")
-        note = self._train_note(foes, odds)
+        note = self._train_note(foes, odds and prologue_rules.fight_tier(self.state, self.content) is None)  # 序章的勝負寫好了，不標勝算
         if len(foes) < len(squads):
             note += "・或與自己人操練"
         option = self._cost_option("act:train", "遊歷", cost, note=note)
@@ -1205,9 +1205,10 @@ class Game:
         """每次花體力的行動之後抽一次伏筆片段（計畫 T7）：選單的每一個行動（choose）與輿圖的安排前往（travel）都經過這裡，
         體力比行動前少了才抽（探索、遊歷、交友、求見、對話、招募、趕路、疾行；打坐、步行、生成不出對話退回體力的都不算）。
         抽的是行動後所在地點的大區；沒有伏筆在跑（開關關著、沒有鏈）就什麼都不做。
-        伏筆先抽、天時地利型機緣的線索（正式版乙一）後抽：伏筆的擲骰順序不變。"""
+        伏筆先抽、天時地利型機緣的線索（正式版乙一）後抽：伏筆的擲骰順序不變。
+        序章（新手引導計畫一）在草廬裡什麼都不抽：那是真實世界的事。"""
         s, c = self.state, self.content
-        if s.player.stamina >= before:
+        if s.player.stamina >= before or prologue_rules.active(s, c):
             return []
         region = atlas.region_of(c, s.player.location)
         region_id = region.id if region is not None else None
@@ -1252,6 +1253,8 @@ class Game:
         以前是「先滾三成素材，再一定撞到一個事件」：40 個地點有 38 個探索 100% 跳事件，荒郊野外跟
         城裡的手感一樣（QA 量過）。奇遇事件只走第 1 步、不進事件那一支，所以一直是稀有的。
         """
+        if prologue_rules.active(self.state, self.content):
+            return self._explore_outcome()  # 序章裡不撿破境丹（新手引導計畫一）
         return self._explore_outcome() + self._legend_find()
 
     def _legend_find(self) -> list[str]:
@@ -1267,6 +1270,9 @@ class Game:
     def _explore_outcome(self) -> list[str]:
         s, c = self.state, self.content
         loc = c.locations[s.player.location]
+        sight = prologue_rules.explore_event(s, c)
+        if sight is not None:  # 序章第 3 步：草廬四景四選一（新手引導設計 3.2），不抽奇遇、不分三支
+            return self._present(c.events[sight], "explore")
         if event_candidates(s, c, "explore", "rare") and self.rng.random() < c.config.rare_explore_chance:
             return self._present(pick_event(s, c, "explore", self.rng, "rare"), "explore")
         mix = c.config.explore_mix_of(loc.tags).weights
@@ -1317,6 +1323,8 @@ class Game:
         else:
             squad = self.content.squads[self.rng.choice(self._train_squad_ids(loc))]
         msgs = self._squad_encounter(squad.id)
+        if prologue_rules.active(self.state, self.content):
+            return msgs  # 序章裡打完不接戰後事件（新手引導計畫一）
         if self._drills_with(squad):
             return msgs  # 操練沒有打架，不接「一番苦戰之後」這類戰後事件（試玩回饋 FB-001）
         if self.rng.random() < self.content.config.train_event_chance:
@@ -1327,7 +1335,10 @@ class Game:
 
     def _train_squad_ids(self, loc: Location) -> list[str]:
         """遊歷可能遇上的對手：地點的敵人，加上軍令帶來的（截糧時那一帶的敵方運糧隊，計畫 T6）。
-        開關關著、沒有截糧軍令時就是 loc.enemies 本身，亂數的抽法跟以前一樣。"""
+        開關關著、沒有截糧軍令時就是 loc.enemies 本身，亂數的抽法跟以前一樣。
+        序章（新手引導計畫一）：只有這一步寫的對手（雪恥那一步才有斷眉），草廬自己沒有敵人。"""
+        if prologue_rules.active(self.state, self.content):
+            return prologue_rules.enemies(self.state, self.content)
         extra = orders.extra_enemies(self.state, self.content, loc.id, self.state.player.faction)
         return loc.enemies + [sid for sid in extra if sid not in loc.enemies] if extra else loc.enemies
 
@@ -1457,6 +1468,10 @@ class Game:
         回復由 _advance_player_local 照經過的時間算，不碰共用賽季時鐘。原本按一下立刻補一個時辰的回復、
         又不延後自然回復，連按就能無限回體力。選單上永遠有這個選項、不受體力門檻限制——實機 playtest
         發現過體力歸零後整排按鈕都按不下去、新玩家卡死的情況。"""
+        line = prologue_rules.instant_rest(self.state, self.content)
+        if line:  # 序章第 7 步：一坐就回滿，不用等（新手引導設計 3.1）
+            self.state.player.stamina = float(self.content.config.stamina_max)
+            return [line]
         self.state.player.resting_since = self.state.world.time
         multiplier = self.content.config.rest_regen_multiplier
         return [f"你就地坐下打坐，體力回復是平常的 {multiplier:g} 倍；隨時可以起身。"]
@@ -2368,7 +2383,7 @@ class Game:
         if self._drills_with(squad):
             return self._drill(squad)
         judged = None if wild else self._judged(squad)
-        result = self._fight_with(squad, judged)
+        result = self._fight_with(squad, judged, tier=prologue_rules.fight_tier(s, c))  # 序章雪恥那一場：結果照寫好的
         record = battlelog.new_record(s, c, self.world, squad, result, "wild" if wild else "train")
         self._narrate(record, result, judged)
         msgs: list[str] = []
@@ -2376,7 +2391,7 @@ class Game:
             rewards = self._battle_rewards(squad, record)
             msgs += rewards
             extra: list[str] = []
-            if not wild:
+            if not wild and not prologue_rules.active(s, c):  # 序章打贏不推大勢、不抽伏筆、不記軍令
                 for trend_id, delta in self.train_trend_push(loc.id).items():  # 換算過的線，照舊交給 T3 的 push_trend
                     extra += self.push_trend(trend_id, delta, source="train")
                 region = atlas.region_of(c, p.location)  # 官銀（伏筆，濃縮版內容表 4.0）：只有遊歷打贏才擲
@@ -2744,11 +2759,12 @@ class Game:
             p.stats["xinde"] = p.stats.get("xinde", 0) + xinde
             record.xinde = xinde
             msgs.append(f"心得 +{xinde}")
-        for material_id, count in materials.roll_squad_drops(squad, self.content, self.rng):
-            line = materials.grant(self.state, self.content, material_id, count)
-            if line:
-                record.materials.append(line.removeprefix(materials.GRANT_PREFIX))
-                msgs.append(line)
+        if not prologue_rules.active(self.state, self.content):  # 序章不掉素材（新手引導計畫一）
+            for material_id, count in materials.roll_squad_drops(squad, self.content, self.rng):
+                line = materials.grant(self.state, self.content, material_id, count)
+                if line:
+                    record.materials.append(line.removeprefix(materials.GRANT_PREFIX))
+                    msgs.append(line)
         exp = round(squad.exp * more)  # 經驗本來就是每人拿一樣多（FB-002），乘勝整隊一起乘
         record.exp = exp
         levels, record.levelups = team.grant_team_exp(self.state, self.content, self.world, exp)  # 每人都拿（FB-002）
@@ -2915,7 +2931,7 @@ class Game:
                 if new_leg:
                     s.player.leg_actions = set()
                 msgs += self._arrive(stop, final=j.reached > j.last, client=client)
-                if new_leg:
+                if new_leg and not c.locations[came_from].prologue_only:  # 出師那段路不抽路上見聞
                     msgs += self._road_sight(c.locations[came_from].road_to(stop), stop, when)
             done = j.reached > j.last or s.world.ended
             if done:
@@ -2940,6 +2956,7 @@ class Game:
         s, c = self.state, self.content
         dest = c.locations[loc_id]
         is_revisit = loc_id in s.player.visited
+        before = s.player.tutorial_step
         s.player.location = loc_id
         s.player.visited.add(loc_id)
         text = self.location_text()
@@ -2948,10 +2965,14 @@ class Game:
             if flourish:
                 text = f"{text}\n\n{flourish}"
         self._hide(text)
-        return (  # 糧車到了終點（路過也算）先交糧，再照原本的新手引導與門檻（計畫 T6）
+        msgs = (  # 糧車到了終點（路過也算）先交糧，再照原本的新手引導與門檻（計畫 T6）
             [text] + self._convoy_arrives(loc_id) + self._guide(note_action(s, c, self.world, "move"))
             + check_thresholds(s, c, self.world, client, now=self.now)
         )
+        t = c.tutorial
+        if t.location is not None and before < t.prologue_steps <= s.player.tutorial_step and t.leave_text:
+            msgs.append(t.leave_text)  # 出師、抵達起點：「剛剛」接一句草廬已經看不見了（新手引導設計 10.3）
+        return msgs
 
     def _road_sight(self, road: RoadKind, loc_id: str, when: float | None = None) -> list[str]:
         """路上見聞（路上設計第五節）：抵達一站時有 road_sight_chance 的機會，從符合這段路的種類、剛抵達那一站所在大區的
@@ -3141,6 +3162,8 @@ class Game:
         只讀、不改狀態——跟 dialogue_request 同一個做法。other_art 有、insight_ids 空的是武學＋武學。"""
         if self.client is None or self._preparing():
             return None
+        if prologue_rules.fuse_problem(self.state, self.content, art_id, insight_ids, other_art) is not None:
+            return None  # 序章裡會被擋下的一爐：不開取名的單子（forge 照常回那句話）
         return fusion.forge_request(self.state, self.content, self.world, art_id, insight_ids, other_art=other_art)
 
     def forge(
@@ -3156,6 +3179,9 @@ class Game:
         三種合成都花心得與體力（設計 12.1）：花了的體力跟心得一起寫在這一則的數值變化上。"""
         if self._preparing():
             return self._log(["（賽季籌備中，等待管理者開季。）"])
+        refusal = prologue_rules.fuse_problem(self.state, self.content, art_id, insight_ids, other_art)  # 序章只准照劇本合成
+        if refusal is not None:
+            return self._log([refusal])
         xinde, stamina = self._xinde(), self.state.player.stamina
         if art_id and other_art and not insight_ids:
             art, msgs = fusion.blend(
@@ -3191,11 +3217,14 @@ class Game:
         use_legend：玩家勾了「服下破境丹」；真的服了才在紀錄裡寫「破境丹 -1」（丹沒了、下一步不是絕學都照一般的機率擲）。"""
         if self._preparing():
             return self._log(["（賽季籌備中，等待管理者開季。）"])
-        problem = cultivation.cultivate_problem(self.state, self.content, self.world, art_id)
+        problem = prologue_rules.cultivate_problem(self.state, self.content) or cultivation.cultivate_problem(
+            self.state, self.content, self.world, art_id,
+        )
         if problem is not None:
             return self._log([problem])
         xinde, stamina, pills = self._xinde(), self.state.player.stamina, self.state.player.legend_items
-        msgs = self._log(cultivation.cultivate(self.state, self.content, self.world, art_id, self.rng, use_legend))
+        rng = prologue_rules.sure_rng(self.state, self.content) or self.rng  # 序章第 6 步：第一次修練一定升品
+        msgs = self._log(cultivation.cultivate(self.state, self.content, self.world, art_id, rng, use_legend))
         spent = round(stamina - self.state.player.stamina)  # 輸了也花了體力：數值變化寫在紀錄上，跟別的行動一樣
         taken = pills - self.state.player.legend_items
         extra = ([f"體力 -{spent}"] if spent > 0 else []) + (
@@ -3233,7 +3262,8 @@ class Game:
         if self._preparing():
             return self._log(["（賽季籌備中，等待管理者開季。）"])
         xinde, held = self._xinde(), library.held_count(self.state)
-        msgs = self._log(library.melt_art(self.state, self.content, self.world, art_id))
+        only = prologue_rules.melt_only(self.state, self.content)  # 序章只准熔師父說的那一門（None＝不限）
+        msgs = self._log(library.melt_art(self.state, self.content, self.world, art_id, only=only))
         if library.held_count(self.state) < held:  # 看有沒有真的少一門，不看心得：下品第一成的武學熔了只退 0 點
             self._menxia_entry(msgs[0], xinde, guide=True, action="melt")  # 序章第 10 步（新手引導計畫一）
         return msgs
@@ -3242,6 +3272,8 @@ class Game:
         """把一個意境化成心得（見 library.melt_insight）；同 melt_art，熔成了才寫江湖紀錄。"""
         if self._preparing():
             return self._log(["（賽季籌備中，等待管理者開季。）"])
+        if prologue_rules.active(self.state, self.content):
+            return self._log(["師父沒叫你熔意境。"])  # 序章的意境是合成要用的，熔了後面就走不下去
         xinde, held = self._xinde(), library.held_count(self.state)
         msgs = self._log(library.melt_insight(self.state, self.content, self.world, insight_id))
         if library.held_count(self.state) < held:
@@ -3252,12 +3284,17 @@ class Game:
         """練成：身上這一門加深一成，花心得、累積受傷風險（見 team.practice）。"""
         if self._preparing():
             return self._log(["（賽季籌備中，等待管理者開季。）"])
+        refusal = prologue_rules.practice_problem(self.state, self.content, self.world, kind)  # 序章只准練新得的那一門
+        if refusal is not None:
+            return self._log([refusal])
         xinde = self._xinde()
         member = self.state.player.member
         level_slot = "neigong_level" if kind == "內功" else "wugong_level"
         has_art = getattr(member, "neigong_id" if kind == "內功" else "wugong_id") is not None
         before = getattr(member, level_slot)
-        msgs = self._log(team.practice(self.state, self.content, self.world, kind, self.rng))
+        msgs = self._log(team.practice(
+            self.state, self.content, self.world, kind, self.rng, safe=prologue_rules.active(self.state, self.content),
+        ))
         # FB-007：引導那一步要的是「真的練了一成」：沒學過就練不到、心得不夠沒練成，都不算；
         # 已經第十成（練無可練）也算（可能在走到這一步前就練滿了，只認「真的加一成」會永遠卡住）。
         counted = has_art and (getattr(member, level_slot) > before or before >= team.MAX_LEVEL)

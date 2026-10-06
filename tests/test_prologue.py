@@ -207,15 +207,19 @@ def _walk(game, *option_ids):
 
 
 def _to_step(game, n: int) -> None:
-    """照正常的玩法把序章走到第 n 步開頭（0 起算）：遇險、拜師、看修練頁、探索選松林、合成、換上並練到第三成……
-    （只寫到第 5 步：後面的要等序章的探索、合成、遊歷安排好結果才走得過，第 4 個 task 接著補。）
-    每一輪都要真的前進一步：卡住就當場失敗，不要無窮迴圈。"""
+    """照正常的玩法把序章走到第 n 步開頭（0 起算）：遇險、拜師、看修練頁、探索選松林、合成、換上並練到第三成、修練、打坐、
+    雪恥一戰、配點、熔雜學。每一輪都要真的前進一步：卡住就當場失敗，不要無窮迴圈。"""
     script = [
         lambda g: _walk(g, "choice:0", "choice:0"),  # 0 → 1
         lambda g: g.view_tab("practice"),  # 1 → 2
         lambda g: _walk(g, "act:explore", "choice:0"),  # 2 → 3：松林，悟到風
         lambda g: g.forge("basic_fist", ["feng"]),  # 3 → 4：穿林腿
         lambda g: (g.switch_art(_fused(g)), g.practice("武學"), g.practice("武學")),  # 4 → 5：換上、練到第三成
+        lambda g: g.cultivate(_fused(g)),  # 5 → 6：一定升中品
+        lambda g: _walk(g, "act:rest"),  # 6 → 7：體力見底，一坐就回滿
+        lambda g: _walk(g, "act:train"),  # 7 → 8：險勝斷眉，掉出一門雜學
+        lambda g: g.allocate_stat("str"),  # 8 → 9：升到第 2 級的那一點
+        lambda g: g.melt_art("junk"),  # 9 → 10：熔掉雜學
     ]
     while game.state.player.tutorial_step < n:
         before = game.state.player.tutorial_step
@@ -320,7 +324,7 @@ def test_the_fused_goals_need_a_fused_art(fresh):
     steps = fresh.content.tutorial.steps
     s, c = fresh.state, fresh.content
     assert not guide._step_done(s, c, fresh.world, steps[3], "x")  # 還沒合成
-    s.player.insights = ["feng"]
+    s.player.insights, s.player.tutorial_step = ["feng"], 3  # 序章只准在合成那一步開爐
     fresh.forge("basic_fist", ["feng"])
     assert prologue.fused_arts(s, c, fresh.world) and guide._step_done(s, c, fresh.world, steps[3], "x")
     assert not guide._step_done(s, c, fresh.world, steps[4], "x")  # 還在庫裡、第一成
@@ -331,7 +335,7 @@ def test_the_fused_goals_need_a_fused_art(fresh):
 
 def _wear_a_fused_art(game) -> str:
     """合成一門、換上身（第一成、下品）：序章第 5、6 步的起點。回傳那一門的 id。"""
-    game.state.player.insights = ["feng"]
+    game.state.player.insights, game.state.player.tutorial_step = ["feng"], 3  # 序章只准在合成那一步開爐
     game.state.pending_event = None  # 開場的遇險不用演
     game.forge("basic_fist", ["feng"])
     game.switch_art(_fused(game))
@@ -434,20 +438,18 @@ def test_melting_finishes_its_step(fresh, prologue_content):
 def test_cultivating_finishes_the_quality_step(fresh):
     from conftest import FixedRandom
 
-    fresh.state.player.insights = ["feng"]
-    fresh.forge("basic_fist", ["feng"])
-    fresh.switch_art(_fused(fresh))
+    art_id = _wear_a_fused_art(fresh)
     fresh.state.player.tutorial_step = 5
-    fresh.rng = FixedRandom(0.0)  # 一定升品
-    fresh.cultivate(_fused(fresh))
-    assert prologue.fused_arts(fresh.state, fresh.content, fresh.world)[0].quality == "中品"
+    fresh.rng = FixedRandom(0.99)  # 平常的擲骰一定落空；序章這一步的修練不看它（prologue.sure_rng）
+    fresh.cultivate(art_id)
+    assert fresh.state.player.art_quality[art_id] == "中品"
     assert fresh.state.player.tutorial_step == 6
 
 
-@pytest.mark.skip(reason="序章的探索與合成要 task 4、5 才安排好（四景、師門配方）")
+@pytest.mark.skip(reason="師門配方（Task 5）才有穿林腿這個名字")
 def test_box_fills_in_the_fused_art(fresh):
-    _to_step(fresh, 4)  # 合成完、換上之前
-    assert "【穿林腿】" in fresh.guide_box()["text"]
+    _to_step(fresh, 4)  # 合成完、換上之前：松林的風，師門配方叫穿林腿
+    assert fresh.guide_box()["text"] == "把【穿林腿】換上，練到第三成。"
 
 
 def test_fill_leaves_text_alone_until_something_is_fused(fresh, prologue_content):
@@ -473,3 +475,254 @@ def test_the_view_tab_action_reaches_the_game(fresh):
     assert fresh.state.player.tutorial_step == 2
     server.MAIN_ACTIONS["view_tab"](fresh, {})  # 沒帶分頁：什麼都不做
     assert fresh.state.player.tutorial_step == 2
+
+
+# ── 序章裡安排好的結果（計畫一 Task 4）──────────────────────
+
+def test_exploring_in_the_hut_always_offers_the_four_sights(fresh):
+    _to_step(fresh, 2)
+    fresh.choose("act:explore")
+    assert fresh.state.pending_event == "p_insight"
+    fresh.choose("choice:2")  # 溪水
+    assert fresh.state.player.insights == ["shui"]
+    assert fresh.state.player.tutorial_step == 3
+
+
+def test_exploring_in_the_hut_never_finds_a_legend_pill(fresh):
+    fresh.content.config.explore_legend_chance = 1.0  # 平常每次探索都撿得到
+    _to_step(fresh, 2)
+    fresh.choose("act:explore")
+    assert fresh.state.player.legend_items == 0
+
+
+def test_only_the_step_actions_are_on_the_menu(fresh):
+    _to_step(fresh, 2)
+    assert [o.id for o in fresh.options()] == ["act:explore"]
+    _to_step(fresh, 6)
+    assert [o.id for o in fresh.options()] == ["act:rest"]
+
+
+def test_the_hut_never_rolls_for_story_fragments_after_a_costly_action(fresh, monkeypatch):
+    """伏筆與機緣的線索是真實世界的事：草廬裡花了體力也不抽（_hear_after_stamina）。"""
+    from tianxia import foreshadow, opportunities
+
+    heard = []
+    monkeypatch.setattr(foreshadow, "active", lambda s, c: True)
+    monkeypatch.setattr(foreshadow, "hear_after_action", lambda *a, **k: heard.append("fs") or ["伏筆"])
+    monkeypatch.setattr(opportunities, "active", lambda s, c: True)
+    monkeypatch.setattr(opportunities, "hear_clues", lambda *a, **k: heard.append("opp") or ["線索"])
+    _to_step(fresh, 2)
+    fresh.choose("act:explore")
+    assert heard == []
+
+
+def test_prologue_practice_never_injures(fresh):
+    _to_step(fresh, 4)
+    fresh.content.config.practice_injury_chance = 1.0
+    fresh.switch_art(_fused(fresh))
+    fresh.practice("武學")
+    assert fresh.state.player.member.injury == 0
+    assert fresh.state.player.member.wugong_level == 2  # 真的練了一成
+
+
+def test_safe_practice_does_not_even_roll_for_an_injury(prologue_content, world):
+    """team.practice 的 safe：不傷人、也不擲那一次亂數（既有的亂數序列只在序章裡少一次）。"""
+    from tianxia import team
+    from tianxia.state import new_game_state
+
+    class NoRoll(random.Random):
+        def random(self):
+            raise AssertionError("安全的練功不該擲受傷")
+
+    prologue_content.config.practice_injury_chance = 1.0
+    state = new_game_state(prologue_content, "甲")
+    team.practice(state, prologue_content, world, "武學", NoRoll(), safe=True)
+    assert state.player.member.injury == 0 and state.player.member.wugong_level == 2
+    hurt = new_game_state(prologue_content, "乙")
+    team.practice(hurt, prologue_content, world, "武學", random.Random(0))
+    assert hurt.player.member.injury > 0  # 不安全的照舊會傷
+
+
+def test_sure_cultivate_only_once(fresh):
+    from conftest import FixedRandom
+
+    _to_step(fresh, 5)
+    art = _fused(fresh)
+    fresh.rng = FixedRandom(0.99)  # 平常的擲骰一定落空
+    fresh.cultivate(art)
+    assert fresh.state.player.art_quality[art] == "中品"
+    assert fresh.state.player.tutorial_step == 6
+    assert prologue.sure_rng(fresh.state, fresh.content) is None  # 下一步不再保證
+    stamina = fresh.state.player.stamina
+    assert "師父" in fresh.cultivate(art)[0] and fresh.state.player.stamina == stamina  # 序章裡下一步沒叫你修練：擋下、不花體力
+    outside = Game.new(fresh.content, "路人", rng=random.Random(0))
+    assert prologue.sure_rng(outside.state, outside.content) is None  # 序章外沒有任何保證
+
+
+def test_rest_refills_at_once(fresh):
+    _to_step(fresh, 6)
+    assert fresh.state.player.stamina == 0
+    msgs = fresh.choose("act:rest")
+    assert fresh.state.player.stamina == fresh.content.config.stamina_max
+    assert fresh.state.player.resting_since is None
+    assert "你坐下，又有了力氣。" in msgs
+    assert fresh.state.player.tutorial_step == 7
+
+
+def test_rest_outside_the_prologue_still_waits(prologue_content):
+    outside = Game.new(prologue_content, "路人", rng=random.Random(0))
+    outside.state.player.stamina = 0
+    outside.choose("act:rest")
+    assert outside.state.player.resting_since is not None and outside.state.player.stamina == 0
+
+
+def test_revenge_is_a_narrow_win_with_nothing_extra(fresh, monkeypatch):
+    from tianxia import foreshadow
+    from tianxia.models import Choice, Drop, Effect, Event
+
+    content = fresh.content
+    content.squads["duanmei"].difficulty = 90  # 本來新手打不贏：險勝是寫好的，不是擲出來的
+    content.squads["duanmei"].drops = [Drop(material="gang_1", chance=1.0)]  # 平常打贏一定掉
+    content.locations["hut"].train_trend = {"kou": 3}  # 平常打贏會推大勢
+    content.config.train_event_chance = 1.0  # 平常打完會接戰後事件
+    content.events["afterglow"] = Event(
+        id="afterglow", title="餘韻", text="打鬥剛歇。", actions=["train"], choices=[Choice(text="嗯", effect=Effect(text="嗯。"))],
+    )
+    touched = []
+    monkeypatch.setattr(foreshadow, "after_win", lambda *a, **k: touched.append("伏筆") or [])
+    monkeypatch.setattr(fresh, "push_trend", lambda *a, **k: touched.append("大勢") or [])
+    monkeypatch.setattr(fresh, "_order_credit", lambda **k: touched.append("軍令") or [])
+    _to_step(fresh, 7)
+    assert [o.id for o in fresh.options()] == ["act:train"]
+    fresh.choose("act:train")
+    assert fresh.state.battles[0].tier == "險勝"  # 戰報最新的在最前面（battlelog.add_record）
+    assert fresh.state.pending_event is None  # 沒有接戰後事件
+    assert fresh.state.player.materials == {}  # 不掉素材
+    assert touched == []  # 不推大勢、不抽伏筆、不記軍令
+    p = fresh.state.player
+    assert p.tutorial_step == 8 and p.stat_points == 1  # 升到第 2 級
+    assert "junk" in p.arts and p.art_levels["junk"] == 5
+
+
+def test_the_revenge_button_promises_no_odds(fresh):
+    """雪恥那一場的勝負是寫好的：按鈕不寫勝算（算出來可能是「凶險」，跟安排好的險勝對不上）；序章外的遊歷照舊寫。"""
+    words = ("穩勝", "有把握", "五五波", "難分勝負", "凶險", "必敗")
+    fresh.content.squads["duanmei"].difficulty = 90
+    _to_step(fresh, 7)
+    label = next(o.label for o in fresh.options(odds=True) if o.id == "act:train")
+    assert "斷眉" in label and not any(word in label for word in words)
+    outside = Game.new(fresh.content, "路人", rng=random.Random(0))
+    outside.state.player.location = "lake"
+    label = next(o.label for o in outside.options(odds=True) if o.id == "act:train")
+    assert any(word in label for word in words)
+
+
+def test_the_scripted_tier_comes_before_the_life_guard(prologue_content, world, monkeypatch):
+    """team.fight 的 tier：護命（no_loss）會把落敗改判僵持、並標 guarded；寫好的結果在它之前，所以不被它動、也不標 guarded。"""
+    from conftest import FixedRandom
+    from tianxia import team, traits
+    from tianxia.state import new_game_state
+
+    state = new_game_state(prologue_content, "甲")
+    monkeypatch.setattr(traits, "loadout", lambda *a: traits.Loadout(specials={"no_loss": object()}))
+    natural = team.fight(state, prologue_content, world, "boss", FixedRandom(0.5))
+    assert natural.tier == "僵持" and natural.guarded  # 難度 200 的對手本來會落敗：護命接住
+    scripted = team.fight(state, prologue_content, world, "boss", FixedRandom(0.5), tier="險勝")
+    assert scripted.tier == "險勝" and not scripted.guarded
+
+
+def test_the_hut_gives_no_road_sight_and_the_farewell_line_comes_once(fresh):
+    fresh.content.config.road_sight_chance = 1.0  # 平常每一段新的路都看得到見聞
+    _to_step(fresh, 10)
+    silver = fresh.state.player.stats["silver"]
+    fresh.choose("move:town")
+    msgs = fresh.advance(fresh.state.player.journey.arrive_at[-1] - fresh.state.world.time)
+    p = fresh.state.player
+    assert p.location == "town" and p.tutorial_step == 11
+    assert p.recent_sights == []  # 出師那段路不抽路上見聞
+    assert p.stats["silver"] == silver + 30 and p.stamina == fresh.content.config.stamina_max
+    assert "\n".join(msgs).count("草廬已經看不見了。") == 1
+    assert not prologue.active(fresh.state, fresh.content)
+    assert all(not o.id.startswith("move:hut") for o in fresh.options())
+
+
+def test_the_farewell_line_is_only_for_leaving_the_hut(prologue_content):
+    bot = Game.new(prologue_content, "路人", rng=random.Random(0))  # 不走序章的人：到哪都不會有那一句
+    bot.choose("move:lake")
+    msgs = bot.advance(bot.state.player.journey.arrive_at[-1] - bot.state.world.time)
+    assert "草廬已經看不見了。" not in "\n".join(msgs)
+
+
+def test_prologue_refuses_off_script_moves(fresh):
+    _to_step(fresh, 3)
+    before, level = fresh.state.player.stats["xinde"], fresh.state.player.member.wugong_level
+    fresh.forge("basic_breath", ["feng"])  # 拿別的底合成：擋下、不收心得
+    fresh.forge(None, ["feng", "feng"])  # 合併：序章裡也擋
+    fresh.forge("basic_fist", [], other_art="basic_breath")  # 兩門武學合成：也擋
+    assert fresh.state.player.stats["xinde"] == before and fresh.state.player.tutorial_step == 3
+    fresh.melt_insight("feng")
+    assert fresh.state.player.insights == ["feng"]  # 序章裡不熔意境
+    fresh.practice("武學")  # 這一步沒叫你練功（F11）：不花心得
+    fresh.cultivate("basic_fist")  # 這一步沒叫你修練：不花體力
+    assert fresh.state.player.stats["xinde"] == before and fresh.state.player.member.wugong_level == level
+    _to_step(fresh, 4)
+    cost = fresh.state.player.stats["xinde"]
+    fresh.practice("武學")  # 練功那一步，但身上還是基本功：要練的是新得的那一門（F11）
+    fresh.practice("內功")
+    assert fresh.state.player.stats["xinde"] == cost and fresh.state.player.member.wugong_level == level
+    _to_step(fresh, 9)
+    fresh.melt_art("basic_fist")
+    assert "basic_fist" in fresh.state.player.arts  # 只准熔雜學
+    fresh.melt_art("junk")
+    assert "junk" not in fresh.state.player.arts and fresh.state.player.tutorial_step == 10
+
+
+def test_the_forge_does_not_ask_the_model_for_a_move_the_hut_refuses(fresh):
+    _to_step(fresh, 3)
+    assert fresh.forge_request("basic_breath", ["feng"]) is None  # 擋下的合成不開取名的單子
+    assert fresh.forge_request(None, ["feng", "feng"]) is None
+    line = fresh.forge_line("basic_breath", ["feng"])
+    assert line.startswith("⚠") and "師父" in line
+
+
+def test_melt_and_cultivate_buttons_follow_the_script(fresh):
+    """修練頁的按鈕與動作的拒絕走同一個判斷（skillview.art_rows）：序章裡不能熔的、不能修練的，按鈕按不下去、寫原因。"""
+    _to_step(fresh, 9)
+    rows = {row["id"]: row for row in fresh.art_rows()}
+    assert rows["junk"]["melt"]["ok"] and "退回心得" in rows["junk"]["melt"]["note"]
+    assert not rows["basic_fist"]["melt"]["ok"] and "師父" in rows["basic_fist"]["melt"]["note"]
+    assert not any(row["cultivate"]["ok"] for row in rows.values())  # 第 10 步沒叫你修練
+    outside = Game.new(fresh.content, "路人", rng=random.Random(0))
+    assert "師父" not in "".join(row["melt"]["note"] for row in outside.art_rows())
+
+
+def test_library_melt_only_limits_what_can_be_melted(prologue_content, world):
+    from tianxia import library
+    from tianxia.models import GiveArt
+    from tianxia.state import new_game_state
+
+    state = new_game_state(prologue_content, "甲")
+    prologue.give_art(state, prologue_content, world, GiveArt(id="junk", level=1))
+    state.player.arts.append("basic_breath")  # 隨便另一門庫裡的
+    assert library.melt_problem(state, "junk") is None  # 沒限制（序章外）
+    assert library.melt_problem(state, "junk", only="junk") is None
+    assert "師父" in library.melt_problem(state, "basic_breath", only="junk")
+    assert "師父" in library.melt_problem(state, "junk", only="")  # 空字串：這一步一門都不准熔
+
+
+def test_cannot_leave_the_hut_before_farewell(fresh):
+    _to_step(fresh, 9)
+    assert fresh.travel_refusal("town", "walk") is not None
+    _to_step(fresh, 10)
+    assert fresh.travel_refusal("town", "walk") is None
+
+
+def test_the_forge_step_takes_only_the_masters_base_and_one_insight(fresh):
+    """第 4 步的合成：一門基本功（fuse_base）加一個意境，別的組合都擋；擋下的原因寫給玩家看。"""
+    _to_step(fresh, 3)
+    for args in (("basic_breath", ["feng"]), (None, ["feng", "feng"])):
+        assert "師父" in fresh.forge(*args)[0]
+    assert "師父" in fresh.forge("basic_fist", [], other_art="basic_breath")[0]
+    assert "師父" in fresh.forge("basic_fist", ["feng", "shan"])[0]
+    _to_step(fresh, 6)
+    assert "師父" in fresh.forge("basic_fist", ["feng"])[0]  # 合成那一步過了：不再准開爐
