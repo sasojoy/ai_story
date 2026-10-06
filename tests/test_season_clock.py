@@ -89,7 +89,7 @@ def test_the_muster_call_is_printed_when_the_catch_up_has_nothing_to_advance(tmp
 
 
 def test_host_resume_after_an_uncaught_span_keeps_the_order(tmp_path, content, capsys):
-    """預檢 F2：主機端直接暫停（暫停前有一大段沒人補算，裡面有第 4 週的波才），停四十個鐘頭：繼續時先補算、波才先結算，
+    """主機端直接暫停（暫停前有一大段沒人補算，裡面有第 4 週的波才），停四十個鐘頭：繼續時先補算、波才先結算，
     長社才開集結——不是長社先開、波才還在時間軸外面（省掉補算就會這樣）。"""
     path, paused = _paused_before_changshe(tmp_path, content, caught_up=False)
     capsys.readouterr()
