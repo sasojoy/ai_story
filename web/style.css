@@ -780,7 +780,7 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
   background: color-mix(in srgb, var(--gold) 7%, var(--card)); }
 .guide-head { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--gold); }
 .guide-head .linkish { font-size: 12px; }
-.guide-text { margin: 2px 0 0; font-size: 14px; line-height: 1.6; cursor: pointer; }
+.guide-text { margin: 2px 0 0; font-size: 14px; line-height: 1.6; cursor: pointer; white-space: pre-line; } /* 師父出師那一步的話分三段（內容用空行分段） */
 .guide-text.clamp { display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .guide-done { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; font-size: 12px; }
 .guide-done .ok { color: var(--ok); font-weight: 700; }

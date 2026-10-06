@@ -1730,7 +1730,7 @@ def test_starter_skills_are_one_inner_and_one_outer_art(content):
 
 def test_real_content_has_seventeen_basic_arts_and_every_location_an_insight():
     real = load_content(ROOT / "content")
-    basics = [s for s in real.skills.values() if s.quality == "下品"]
+    basics = [s for s in real.skills.values() if s.quality == "下品" and s.id != "manniu_quan"]  # 蠻牛拳是序章專用的雜學
     assert len(basics) == 17
     assert all(loc.insights for loc in real.locations.values())
 

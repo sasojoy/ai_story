@@ -171,9 +171,11 @@ def test_skipping_stays_skipped_into_the_next_season():
     beta.config.auto_open_first_season, beta.config.admins = True, ["管"]
     chars = open_characters()
     admin = Game.new(beta, "管", rng=random.Random(1))
-    skipper, finisher = Game.new(beta, "略過的", rng=random.Random(2)), Game.new(beta, "做完的", rng=random.Random(3))
+    skipper = Game.new(beta, "略過的", rng=random.Random(2), prologue=True)  # 網頁上建的角色，在草廬略過
+    finisher = Game.new(beta, "做完的", rng=random.Random(3))
     skipper.skip_tutorial()
-    finisher.state.player.tutorial_step = 6
+    base = beta.tutorial.prologue_steps  # 不分季的步驟（序章十一步）；第一季那兩步接在後面
+    finisher.state.player.tutorial_step = base
     for game in (admin, skipper, finisher):
         chars.save(game.state)
     admin.admin_end_season(now=100.0)
@@ -184,9 +186,9 @@ def test_skipping_stays_skipped_into_the_next_season():
     games = {name: Game(on, chars.load(name), rng=random.Random(4), world=open_world()) for name in ("略過的", "做完的")}
     for game in games.values():
         game.sync(300.0)
-        assert game.state.player.tutorial_step == 6
+        assert game.state.player.tutorial_step == base
     assert games["略過的"].guide_box() is None
-    assert games["做完的"].guide_box()["text"] == on.tutorial.steps[6].text
+    assert games["做完的"].guide_box()["text"] == on.tutorial.steps[base].text
 
 
 # ── 網頁：收起記的是 key（FB-076）。把 web/app.js 裡說書人那一段切出來在 node 裡跑；沒有 node 就略過 ─────────────

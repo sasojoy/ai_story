@@ -361,5 +361,13 @@
       "sect": "yingchuan_academy"
     },
     "desc": "書院士子佩劍防身的劍法，綿長而有禮。"
+  },
+  {
+    "id": "manniu_quan",
+    "name": "蠻牛拳",
+    "kind": "武學",
+    "attribute": "剛",
+    "quality": "下品",
+    "desc": "斷眉東拼西湊的拳路，全憑一身蠻力；譜上卻密密麻麻記滿了他挨打換來的心得。"
   }
 ]

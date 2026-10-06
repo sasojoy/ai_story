@@ -22,6 +22,11 @@ def content():
     return load_content(CONTENT_DIR)
 
 
+def _places(content):
+    """探索得到事件的地點：序章的草廬（Location.prologue_only）不算，那裡的探索是師父安排好的草廬四景。"""
+    return [loc_id for loc_id, loc in content.locations.items() if not loc.prologue_only]
+
+
 def _always_available(content, loc_id):
     """沒有條件、不是一次性的探索事件：任何玩家在這裡探索都可能抽到。"""
     location = content.locations[loc_id]
@@ -34,7 +39,7 @@ def _always_available(content, loc_id):
 
 def test_every_location_has_at_least_four_explore_events_and_three_of_its_own(content):
     thin = {}
-    for loc_id in content.locations:
+    for loc_id in _places(content):
         events = _always_available(content, loc_id)
         own = [e for e in events if loc_id in e.locations]
         if len(events) < 4 or len(own) < 3:
@@ -44,7 +49,7 @@ def test_every_location_has_at_least_four_explore_events_and_three_of_its_own(co
 
 def test_every_location_offers_checks_on_at_least_three_different_stats(content):
     narrow = {}
-    for loc_id in content.locations:
+    for loc_id in _places(content):
         stats = {c.check.stat for e in _always_available(content, loc_id) for c in e.choices if c.check}
         if len(stats) < 3:
             narrow[loc_id] = stats
@@ -89,7 +94,7 @@ def test_every_location_has_one_free_text_explore_event(content):
     """隨口應對每個地點先開 1 則（探索的多人與 LLM 玩法設計第五節）。"""
     counts = {
         loc_id: sum(1 for e in _always_available(content, loc_id) if e.free_text and loc_id in e.locations)
-        for loc_id in content.locations
+        for loc_id in _places(content)
     }
     assert all(n == 1 for n in counts.values()), counts
 

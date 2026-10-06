@@ -445,5 +445,5 @@ def test_a_zero_chance_draws_no_random_number_so_seeded_runs_do_not_shift(game):
 def test_the_real_places_split_into_the_designed_kinds():
     """規格第三節的地點數：營寨 6、城鎮 17、荒野 17。"""
     content = load_content(Path(__file__).parent.parent / "content")
-    kinds = Counter(content.config.explore_mix_of(loc.tags).kind for loc in content.locations.values())
+    kinds = Counter(content.config.explore_mix_of(loc.tags).kind for loc in content.locations.values() if not loc.prologue_only)
     assert kinds == Counter(camp=6, town=17, wild=17)
