@@ -2155,13 +2155,16 @@ class Game:
         lines = [header, f"【{act.title}】{count}{battle_instance.act_text(battle, definition)}"] + battle.narrative_log[-5:]
         p = battle.participants.get(self.state.player.name)
         if p is not None:
+            last = []  # 上一回合的兩句併成一段（段內換行）：網頁把這一段縮成小字、淡色（web/style.css 的 .scene p.b-last）
             enemy = next((f for f in definition.factions if f.id != p.faction), None)
             seen = battle.last_mix.get(enemy.id) if enemy is not None else None
             if seen:  # 這回合的比例要到結算才揭曉，畫面只寫上一回合（設計 3.4）
                 parts = "・".join(f"{m} {round(seen[m] * 100)}%" for m in MOVES)
-                lines.append(f"對面上一回合（{enemy.name}）：{parts}")
+                last.append(f"對面上一回合（{enemy.name}）：{parts}")
             if p.last_result:
-                lines.append(f"你上一回合：{p.last_result}")
+                last.append(f"你上一回合：{p.last_result}")
+            if last:
+                lines.append("\n".join(last))
         if p is not None and p.eliminated:
             lines.append("（你已經倒下，只能在一旁觀戰。）")
         elif watching:  # 倒下的人不會再出手，不必再說「回到大區就能再出手」

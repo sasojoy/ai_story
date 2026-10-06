@@ -1853,6 +1853,8 @@ def test_the_scene_says_what_the_other_side_did_last_round(game):
     enemy = "黃巾" if battle.participants[game.state.player.name].faction == "guan" else "官軍"
     assert "對面上一回合" in text and "你上一回合：固守（剋制 ×1.3）" in text and enemy in text
     assert f"對面上一回合（{enemy}）：強攻 20%・固守 50%・奇襲 30%" in text  # 對面的比例，不是自己這邊的
+    # 兩句是同一段（段內換行，不是兩段）：網頁把這一段縮成小字、淡色，少佔一個段落間距的高度
+    assert f"對面上一回合（{enemy}）：強攻 20%・固守 50%・奇襲 30%\n你上一回合：固守（剋制 ×1.3）" in text
 
 
 def test_the_scene_has_no_last_round_lines_before_anything_was_resolved(game):
@@ -1868,6 +1870,7 @@ def test_the_scene_does_not_say_what_the_other_side_did_when_nobody_on_it_played
     battle.participants[game.state.player.name].last_result = "固守（剋制 ×1.0）"
     text = game._battle_scene_text(battle, definition)
     assert "對面上一回合" not in text and "你上一回合：固守（剋制 ×1.0）" in text
+    assert "\n\n你上一回合：固守（剋制 ×1.0）" in text  # 單獨一段
 
 
 def test_the_scene_reads_the_act_text_of_whoever_leads(game):
