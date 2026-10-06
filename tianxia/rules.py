@@ -439,11 +439,6 @@ def recompute_trends(world: WorldState, content: Content) -> None:
             world.trends[trend.id] = _weighted(world, content, trend)
 
 
-def recompute_derived(state: GameState, content: Content) -> None:
-    """同 recompute_trends，對這個角色看到的那一份賽季。"""
-    recompute_trends(state.world, content)
-
-
 def is_revealed(world: WorldState, content: Content, trend_id: str) -> bool:
     """這條線浮現了沒：記在 revealed 裡，或者本來就是公開的線（內容改版前開的那一季沒記到新加的公開線，照樣算浮現）。"""
     if trend_id in world.revealed:

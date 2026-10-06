@@ -11,17 +11,6 @@ def test_nobody_owns_anyone_at_the_start(state, world):
     assert roster.owned_companions(world, "沈浪") == []
 
 
-def test_recruitable_here_lists_the_free_recruitable_characters_at_a_location(content, world):
-    assert roster.recruitable_here(content, world, "town") == ["mate", "pupil", "scholar"]
-    assert roster.recruitable_here(content, world, "lake") == ["friend", "hero"]
-    assert roster.recruitable_here(content, world, "cave") == ["captain"]
-
-
-def test_recruitable_here_excludes_someone_already_taken(content, world):
-    world.try_recruit("mate", "李四")
-    assert roster.recruitable_here(content, world, "town") == ["pupil", "scholar"]
-
-
 # ── 成功率 ──────────────────────────────────────────────
 
 

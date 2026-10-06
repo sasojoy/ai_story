@@ -17,7 +17,7 @@ from unittest import mock
 import pytest
 
 from conftest import real_content
-from tianxia import companion_agent, fusion, roster, team
+from tianxia import companion_agent, fusion, team
 from tianxia.atlas import region_of
 from tianxia.bot import play_season
 from tianxia.content import load_content
@@ -587,11 +587,9 @@ def test_lu_bei_faction_all_gather_at_zhuo_county(content):
 
 
 def test_nobody_is_recruitable_anywhere(content):
-    from tianxia.sqlite_world import open_world
-
-    world = open_world()  # 預設的資料庫是測試用的暫存檔，裡面什麼都還沒有：.read() 回傳空狀態
-    for loc_id in content.locations:
-        assert roster.recruitable_here(content, world, loc_id) == [], loc_id
+    """正式內容沒有哪個地點可以招募人：沒有人物標成 kind=recruitable 又寫了招募地點。"""
+    recruitable = {cid: ch.recruit_at for cid, ch in content.characters.items() if ch.kind == "recruitable"}
+    assert [cid for cid, at in recruitable.items() if at in content.locations] == []
 
 
 def test_meeting_events_mark_the_acquaintance_instead_of_handing_out_companions(content):

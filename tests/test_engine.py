@@ -552,14 +552,19 @@ def test_no_recruit_option_when_nobody_is_free_here(game):
     assert game.choose("act:recruit") == ["（此刻無法這麼做。）"]
 
 
+def _members(game):
+    """出戰的人（名字, key）：本人永遠在第一位，接著是隊伍裡的同伴。"""
+    return [(team.member_name(game.state, game.content, key), key) for key in team.team_keys(game.state)]
+
+
 def test_add_and_remove_from_team(game):
     game.rng = FixedRandom(0.1)
     game.choose("act:recruit")
-    assert game.team_members() == [("沈浪", "player"), ("韓鐵", "mate")]
+    assert _members(game) == [("沈浪", "player"), ("韓鐵", "mate")]
     game.remove_from_team("mate")
-    assert game.team_members() == [("沈浪", "player")]
+    assert _members(game) == [("沈浪", "player")]
     game.add_to_team("mate")
-    assert game.team_members() == [("沈浪", "player"), ("韓鐵", "mate")]
+    assert _members(game) == [("沈浪", "player"), ("韓鐵", "mate")]
 
 
 def test_you_yourself_are_never_added_to_or_removed_from_the_team(game):
@@ -570,7 +575,7 @@ def test_you_yourself_are_never_added_to_or_removed_from_the_team(game):
         msgs = act("player")
         assert msgs == ["本人一直都在隊伍裡，不用加入，也不能移出。"]
         assert game.state.player.team == ["mate"]
-        assert game.team_members() == [("沈浪", "player"), ("韓鐵", "mate")]
+        assert _members(game) == [("沈浪", "player"), ("韓鐵", "mate")]
 
 
 def test_owned_companions_and_roster_lines(game):

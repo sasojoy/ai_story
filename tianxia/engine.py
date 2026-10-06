@@ -52,7 +52,7 @@ from .state import (
 )
 from .world import (
     _season_vehicle, advance_world_state, check_thresholds, end_season, fire_by_id, open_showdown, open_waiting_showdown,
-    resume_season_clock, settle_season_start, showdown_battle, showdown_key, sim_tick, start_pending_battle,
+    resume_season_clock, settle_season_start, showdown_battle, showdown_key, start_pending_battle,
 )
 from .world_state import WorldStateStore, season_length_days
 
@@ -3866,9 +3866,6 @@ class Game:
 
     # ── 門下與隊伍 ────────────────────────────────────────
 
-    def team_members(self) -> list[tuple[str, str]]:
-        return [(team.member_name(self.state, self.content, key), key) for key in team.team_keys(self.state)]
-
     def roster_lines(self) -> list[tuple[str, str]]:
         return roster.roster_lines(self.state, self.content, self.world)
 
@@ -3898,9 +3895,6 @@ class Game:
         return self._log(team.remove_from_team(self.state, companion_id))
 
     # ── 門下頁面：武學說明 ──────────────────────────────────
-
-    def skill_library(self) -> list[tuple[str, str]]:
-        return skillview.library(self.state, self.content, self.world)
 
     def skill_detail(self, kind: str) -> str:
         return skillview.detail(self.state, self.content, self.world, kind)

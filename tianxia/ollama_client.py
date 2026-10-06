@@ -207,14 +207,6 @@ class OllamaClient:
             presence_penalty=cfg.ollama_presence_penalty, frequency_penalty=cfg.ollama_frequency_penalty,
         )
 
-    def check_health(self) -> bool:
-        try:
-            res = requests.get(f"{self.base_url}/api/tags", timeout=5)
-            return res.status_code == 200
-        except Exception as e:
-            logger.warning(f"Ollama 連線檢查失敗: {e}")
-            return False
-
     def warm(self, seconds: float = 2.0) -> bool:
         """叫 Ollama 把模型載起來（/api/generate 只帶 model 與 keep_alive，不產生任何字），不等它載完：
         逾時（模型還在載）也算送到了。悟意境的畫布一出現就送（insight_llm.warm）。連不上回 False。"""
