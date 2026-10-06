@@ -188,6 +188,13 @@ def test_fingerprint_sees_the_other_public_parts_of_the_world():
     assert server_push.world_fingerprint(2, "resting", _season(), None) != base  # 休季
 
 
+def test_fingerprint_sees_the_season_clock_pause():
+    """暫停賽季時鐘，每個人的選單都變成一顆灰的：算（有沒有暫停；停了幾分鐘不算，見 server 的 paused_at 測試）。"""
+    base = _fp(_season())
+    assert server_push.world_fingerprint(2, "running", _season(), None, paused=True) != base
+    assert server_push.world_fingerprint(2, "running", _season(), None, paused=False) == base
+
+
 def test_fingerprint_sees_a_battle_move_on_visibly():
     """決戰的階段、回合、戰局變了，每個人的畫面都不一樣：要算。"""
     base = _fp(_season(), BattleInstance(battle_id="changshe_fire"))

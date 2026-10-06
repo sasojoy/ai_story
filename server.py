@@ -424,7 +424,7 @@ def current_fingerprint() -> str:
     shared, rumor_id, chronicle_count = open_world().fingerprint_parts()
     return server_push.world_fingerprint(
         shared.season_number, shared.season_phase(), shared.season, shared.active_battle,
-        rumor_id=rumor_id, chronicle_count=chronicle_count,
+        rumor_id=rumor_id, chronicle_count=chronicle_count, paused=shared.paused_at is not None,
     )
 
 

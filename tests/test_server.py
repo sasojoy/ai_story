@@ -5451,11 +5451,33 @@ def test_the_fingerprint_ignores_the_clock_the_schedule_and_who_acts(client):
     assert server.current_fingerprint() != with_battle
 
 
+def test_pausing_and_resuming_the_season_clock_change_the_fingerprint():
+    """暫停賽季時鐘，全服每個人的選單都變成一顆灰的；繼續又變回來：這是大家都看得到的變化，開著的分頁要被叫醒（不然停機前
+    最久要等慢速輪詢 60 秒，繼續之後每個人還對著一顆灰的按鈕等一分鐘）。算的是「有沒有暫停」，不是停了幾分鐘：
+    暫停中畫面上的分鐘數每分鐘都在變，不能因此每分鐘叫醒一次全服。"""
+    world = open_world()
+    world.seed_first_season(server.CONTENT)
+    if world.season_phase() == "preparing":
+        world.open_season(server.CONTENT, 1000.0)
+    before = server.current_fingerprint()
+    assert world.pause_clock(1000.0)
+    paused = server.current_fingerprint()
+    assert paused != before
+    world.mutate(lambda st: setattr(st, "paused_at", 99999.0))  # 停了更久：分鐘數變了，畫面上「停著」這件事沒變
+    assert server.current_fingerprint() == paused
+    assert world.resume_clock(server.CONTENT, 5000.0) is not None
+    resumed = server.current_fingerprint()
+    assert resumed != paused and resumed == before
+
+
 def _three_read_fingerprint() -> str:
     """推送看守原本的讀法：三次各自的快照，還把這一季每一則傳聞與江湖史讀回來數。新的讀法（一次快照加 MAX／COUNT）要跟它一樣。"""
     world = open_world()
     shared = world.read()
-    return server_push.world_fingerprint(shared.season_number, shared.season_phase(), world.get_season(), world.get_battle())
+    return server_push.world_fingerprint(
+        shared.season_number, shared.season_phase(), world.get_season(), world.get_battle(),
+        paused=shared.paused_at is not None,
+    )
 
 
 def test_the_one_snapshot_fingerprint_is_the_old_three_read_one_on_every_state():
