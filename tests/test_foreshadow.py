@@ -687,7 +687,7 @@ def test_tianji_answers_stable_within_season(fs, world):
     assert foreshadow.tianji_answer(0, "wind") == PINNED_WIND_0
     assert foreshadow.tianji_answer(3, "disguise") == PINNED_DISGUISE_3
     with pytest.raises(KeyError):
-        foreshadow.tianji_answer(0, "mole")
+        foreshadow.tianji_answer(0, "ghost")  # 不認得的 key（mole 乙二起是廣宗的內鬼，認得了）
     game = player(fs, world, "甲", "guan", "port")
     game.state.player.fragments = {"fs_jail_guan": [0]}  # 南區另一則先聽過：只剩靈台那一則
     heard = foreshadow.hear_after_action(game.state, fs, "south", FixedRandom(0.0), world)
@@ -935,7 +935,7 @@ def test_missing_or_empty_foreshadows_file_is_empty(tmp_path):
     (lambda c: setattr(c.fragments[2], "stand_in", "nobody2"), "人物 nobody2"),
     (lambda c: c.final.requires.clue_items.update({"fs_magic": 1}), "伏筆物品 fs_magic"),
     (lambda c: setattr(c.final, "answer", "中"), "答案 中"),
-    (lambda c: setattr(c.final, "answer", "tianji:mole"), "天機 mole"),
+    (lambda c: setattr(c.final, "answer", "tianji:ghost"), "天機 ghost"),
     (lambda c: c.final.options.pop(), "天機 wind 的選項"),
     (lambda c: setattr(c.final.wrong, "lose_items", ["fs_magic"]), "伏筆物品 fs_magic"),
     (lambda c: setattr(c.invalid_if, "figure_out", "nobody3"), "人物 nobody3"),

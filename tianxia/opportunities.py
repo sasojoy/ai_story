@@ -42,8 +42,10 @@ def done_for_rank(state: GameState, content: Content, rank: int) -> bool:
 
 def clear(p: PlayerState) -> None:
     """叛投時清掉機緣的一切（機緣文件第一節：換季、叛投清掉）。換季不用叫：角色每季重來。
-    rank2_days 不清：那是每人每曆日第 2 階行動的限次，不屬於哪個陣營的進度，叛投不能拿來重置它。"""
+    rank2_days 不清：那是每人每曆日第 2 階行動的限次，不屬於哪個陣營的進度，叛投不能拿來重置它。
+    乙二：拼圖拿到的東西與靠山一起清；opp_settled 不清（結算過的集體密謀不會因為叛投再結算一次）。"""
     p.opp_done, p.opp_counts, p.opp_items, p.opp_fronts, p.opp_clues, p.opp_tried = [], {}, {}, {}, [], {}
+    p.opp_pieces, p.patron = {}, None
 
 
 def _complete(state: GameState, opp: OppDef) -> list[str]:

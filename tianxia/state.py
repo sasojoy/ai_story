@@ -201,6 +201,10 @@ class PlayerState(BaseModel):
     opp_clues: list[str] = Field(default_factory=list)  # 聽過線索的機緣 id
     opp_tried: dict[str, int] = Field(default_factory=dict)  # 天時地利型：失敗那一回的時段鍵；同一回不能再試
     rank2_days: dict[int, int] = Field(default_factory=dict)  # 曆日 → 那天做了幾次第 2 階行動；只留今天
+    # ── 機緣・乙二（拼圖、推理與集體密謀）；同樣每季重來、叛投時 opportunities.clear 清掉（opp_settled 例外，見 clear）──
+    opp_pieces: dict[str, list[str]] = Field(default_factory=dict)  # 拼圖型：機緣 id → 已經拿到的東西的 key
+    patron: str | None = None  # 靠山（晉升奇遇 4.2）：yuan、cao、self；計畫丙升第 3 階時寫入，叛投清掉
+    opp_settled: list[int] = Field(default_factory=list)  # 結算過的集體密謀 id（只結算一次；換季跟著新角色清空）
 
 
 RumorLayer = Literal["world", "faction", "local", "personal"]  # 天下大事／陣營軍情／地方傳聞／個人線索（傳聞分層設計第二節）
@@ -228,6 +232,20 @@ class TimelineResult(BaseModel):
     locked_by: str | None = None  # 鎖定者的名號（江湖史、結算畫面的稱號依據）；沒人鎖定是 None
     losers: list[str] = Field(default_factory=list)  # 搶輸的人
     text: str = ""  # 公告全文（不含「【江湖大事】」）；跳過的是空的
+
+
+class Plot(BaseModel):
+    """一場集體密謀（機緣文件 1.1；正式版乙二）：全服共用，參與者各自回來時才結算（opportunities.settle）。"""
+
+    id: int
+    opp: str  # 機緣 id
+    faction: str
+    leader: str  # 發起人的名號
+    shown: str  # 發起人的顯示名（匿名是「某位少俠」）
+    members: list[str] = Field(default_factory=list)
+    parts: dict[str, str] = Field(default_factory=dict)  # 那一處的 key → 誰做的
+    deadline: float  # 世界秒
+    status: Literal["open", "done", "failed"] = "open"
 
 
 class Lock(BaseModel):
@@ -316,6 +334,7 @@ class WorldState(BaseModel):
     showdowns_opened: dict[str, str] = Field(default_factory=dict)  # 開過集結的決戰 id → 開的那一筆 BattleDef；開過就不再開
     figures: dict[str, FigureState] = Field(default_factory=dict)  # 大勢人物 id → 聲威、狀態、所在（T4 開季時種）
     orders: list[Order] = Field(default_factory=list)  # 陣營軍令（計畫 T6）：這一週的，加上之前達成的
+    plots: list[Plot] = Field(default_factory=list)  # 集體密謀（正式版乙二）：發起的、做完的、作罷的都留著到季末（id 從 1 起）
     # 升第 2 階的每日彙整（計畫 T5）：「陣營:曆日」→ 顯示名；過了那個曆日由季的事發成一則陣營軍情（傳聞只能新增，不能改）
     promoted_today: dict[str, list[str]] = Field(default_factory=dict)
     # ── 推力規則（計畫 T3）──

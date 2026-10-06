@@ -29,10 +29,12 @@ from .world_state import WorldStateStore
 DAY = 86400
 BASE_FRAGMENT_CHANCE = 0.05  # 每次花體力的行動，在所在的大區聽到一則片段的機率（1000 人以上那一檔；伏筆文件 2.2）
 GUANYIN = "guanyin"  # 官銀的計數鍵（PlayerState.fs_counters）
-# 天機（伏筆文件 2.9）：同一個天機、同一個 key 永遠同一個答案。廣宗的內鬼（mole）這一版先不用
+# 天機（伏筆文件 2.9）：同一個天機、同一個 key 永遠同一個答案。廣宗的內鬼（mole）是黃巾第 4 階機緣「營中的內鬼」
+# （正式版乙二，opportunities 的推理型）用的，伏筆的鏈沒有用它
 TIANJI: dict[str, tuple[str, ...]] = {
     "wind": ("東", "南", "西", "北"),
     "disguise": ("鹽車", "棺木", "香客", "商隊"),
+    "mole": ("clerk", "priest", "strongman"),  # 廣宗的內鬼（伏筆文件 2.9；黃巾第 4 階機緣「營中的內鬼」）
 }
 TIANJI_SLOTS = {"{風向}": "wind", "{偽裝}": "disguise"}  # 文字裡的插槽
 OVERHEARD = "聽說{name}說過："  # 名望不夠求見不到的人，對話片段從行動偷聽到時，原文前面加的這一句（內容表 4.0）

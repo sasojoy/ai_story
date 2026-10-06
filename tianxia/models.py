@@ -799,6 +799,9 @@ class Config(_Strict):
     rank2_push: int = Field(default=3, ge=0)  # 成功往己方推所在戰線幾點（走 Game.push_trend：緩衝、上限、貢獻）
     opp_showdown_days: float = Field(default=1.0, gt=0)  # 「戰後的地」：決戰結算之後幾個曆日內
     opp_wild_tags: list[str] = Field(default_factory=lambda: ["野外", "河畔", "山林", "渡口", "官道"])  # 「戰後的地」算野外的地點標籤
+    # ── 集體密謀（正式版乙二；【預設】，企劃者 2026-10-06 同意）──
+    plot_days: float = Field(default=1.0, gt=0)  # 發起之後幾個曆日內要湊齊，過了作罷（預設 1 曆日＝24 曆時）
+    plot_contrib: int = Field(default=30, ge=0)  # 密謀成了，沒有第 3 階資格（或這種機緣已經完成）的參與者記幾點貢獻
     # ── 伏筆（計畫 T7、伏筆文件 2.8）──
     # 需求量照 server_max_players 換算：人數上限「未滿」第一個數時用第二個數當係數，照順序找第一個符合的；
     # 都不符合（1000 人以上）就是 1。片段的機率反過來除以它（foreshadow.scale、foreshadow.need）
@@ -1368,6 +1371,7 @@ class OrdersContent(_Strict):
     commander_fallback: dict[str, str] = Field(default_factory=dict)  # 陣營 id → 沒有主將時 {主將} 寫的泛稱
     callers: list[OrderCaller] = Field(default_factory=list)  # {號令}
     convoy_squads: dict[str, str] = Field(default_factory=dict)  # 陣營 id → 自己的運糧隊（截糧打的是對方的）
+    petition: dict[str, Petition] = Field(default_factory=dict)  # 陣營 id → 請命的說法（正式版乙二；計畫己再加機密軍令）
 
 
 class PromotionDef(_Strict):
@@ -1439,19 +1443,131 @@ class OppTiming(_Strict):
     done: str = ""  # 送到那一刻（{主將}）
 
 
+class OppPiece(_Strict):
+    """拼圖型的一樣東西（機緣文件 2.2 D、4.2 D）。拿法三選一：
+    ask：跟 front 那條戰線己方的將領聊話題 topic（情誼到 affinity，基準量）；原本要問的是 figure，他不在那條戰線就問
+         那時的主將；lines 是各人給的那一句（人物 id → 句子；"*" 是沒列到的人）。
+    silver：在 at 付 silver 兩。check：在 at 花 stamina、過 check。"""
+
+    key: str
+    name: str
+    how: Literal["ask", "silver", "check"]
+    front: str | None = None
+    figure: str | None = None
+    affinity: int = Field(default=0, ge=0)
+    topic: str = ""
+    lines: dict[str, str] = Field(default_factory=dict)
+    at: str | None = None
+    silver: int = Field(default=0, ge=0)
+    stamina: int = Field(default=10, ge=0)
+    check: Check | None = None
+    label: str = ""  # silver／check 的選項
+    ok: str = ""
+    fail: str = ""
+
+
+class OppPatron(_Strict):
+    """豪強的靠山（晉升奇遇 4.2）：誰、在哪裡收、收下時說什麼。"""
+
+    character: str
+    at: str
+    done: str
+
+
+class OppPresent(_Strict):
+    """湊齊之後交給誰。官軍：固定地點 at，figure 在場就是他，不在寫 stand_in；豪強：patrons（靠山 → 收的人）。"""
+
+    at: str | None = None
+    figure: str | None = None
+    stand_in: str = ""
+    patrons: dict[str, OppPatron] = Field(default_factory=dict)
+    label: str  # （{人物}）
+    done: str = ""  # 官軍用（{人物}）；豪強用各靠山的 done
+
+
+class OppPuzzle(_Strict):
+    pieces: list[OppPiece]
+    present: OppPresent
+
+
+class OppSuspect(_Strict):
+    id: str
+    name: str
+    traits: list[str]
+
+
+class OppTrait(_Strict):
+    key: str
+    region: str
+    text: str
+
+
+class OppDeduce(_Strict):
+    """推理型（機緣文件 3.2 D）：嫌疑人由本季天機決定（foreshadow.tianji_answer(天機, tianji)）；片段只透露那個人的特徵，
+    在各自的大區、以伏筆片段的機率聽到。最後一步在 askers 第一位在場的人物那裡指認；指錯了他的情誼 wrong_affinity、
+    當天不能再指。"""
+
+    tianji: str
+    suspects: list[OppSuspect]
+    traits: list[OppTrait]
+    askers: list[OppHost]
+    label: str  # （{人物}、{嫌疑人}）
+    right: str  # （{人物}）
+    wrong: str  # （{人物}、{嫌疑人}）
+    wrong_affinity: int = -10
+    trend: dict[str, int] = Field(default_factory=dict)  # 指對了推的線（例：{"jizhou": 1}）
+
+
+class OppPart(_Strict):
+    """集體密謀的一處：front（打贏一場對敵方的遊歷）或 at（在那個地點過檢定）。name 給陣營軍情的「還缺……」用。"""
+
+    key: str
+    name: str
+    front: str | None = None
+    at: str | None = None
+
+
+class OppPlot(_Strict):
+    """集體密謀型（機緣文件 1.1）：how＝win（各處是打贏）或 check（各處是在地點過檢定）。need_parts 沒寫＝每一處都要。"""
+
+    how: Literal["win", "check"]
+    parts: list[OppPart]
+    need_parts: int | None = None
+    headcount: int = Field(default=3, gt=0)  # 基準量
+    check: Check | None = None
+    stamina: int = Field(default=10, ge=0)
+    part_label: str = ""  # check 類的選項（{地點}）
+    part_ok: str = ""  # （{地點}）
+    part_fail: str = ""  # （{地點}）
+    start_text: str  # 陣營軍情（{name}、{缺}）
+    done_text: str  # 第 3 階以上的成員收到的那一句
+    helper_text: str  # 其他參與者收到的那一句（接著記貢獻）
+    fail_text: str  # 期限到了
+
+
+class Petition(_Strict):
+    """「請命」的說法（機緣文件 1.1、軍令文件 5.1）：label 是畫面上的動作名；characters 給沒有大勢人物的陣營（豪強）。"""
+
+    label: str
+    characters: list[str] = Field(default_factory=list)
+
+
 class OppDef(_Strict):
-    """一種機緣（機緣文件；正式版乙一只有 bond、accumulate、timing 三類，乙二再加）。
-    content/opportunities.json 裡機緣文件寫好的句子照原文，新寫的句子（乙一計畫內容表二標「新寫」的）是初稿，
+    """一種機緣（機緣文件；正式版乙一有 bond、accumulate、timing 三類，乙二加 puzzle、deduce、plot 三類，都是第 4 階）。
+    content/opportunities.json 裡機緣文件寫好的句子照原文，新寫的句子（乙一、乙二計畫內容表標「新寫」的）是初稿，
     待 joy 潤（JSON 沒有註解，標記記在這裡；內容改動走 joy 的 PR）。"""
 
     id: str
     name: str
     faction: str
     rank: Literal[3, 4]
-    kind: Literal["bond", "accumulate", "timing"]
+    kind: Literal["bond", "accumulate", "timing", "puzzle", "deduce", "plot"]
     bond: OppBond | None = None
     accumulate: OppAccumulate | None = None
     timing: OppTiming | None = None
+    puzzle: OppPuzzle | None = None
+    deduce: OppDeduce | None = None
+    plot: OppPlot | None = None
 
 
 class FollowerDef(_Strict):

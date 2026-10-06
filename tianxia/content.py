@@ -616,7 +616,11 @@ def check_promotions(c: Content, need, known) -> None:
 def check_opportunities(c: Content, need, known, front_ids: list[str]) -> None:
     """機緣（content/opportunities.json、orders.json 的 rank2，正式版乙一）：id 不重複；陣營存在；kind 對應的那一塊要寫、
     別的不能寫；人物、地點、大區、戰線存在；累積型的來源行動（第 2 階行動、守勢行動）自己陣營要有；有東西要送的天時地利型
-    要寫送的選項與送到的那一句；文字只能繁體。front_ids 是 validate 的那一份戰線清單。"""
+    要寫送的選項與送到的那一句；文字只能繁體。front_ids 是 validate 的那一份戰線清單。
+    乙二：拼圖型（拿法寫全、東西與處的 key 不重複、官軍交給誰與豪強的靠山）、推理型（天機存在、嫌疑人剛好是那個天機的候選、
+    每個嫌疑人的特徵都有片段）、集體密謀型（每一處寫 front 或 at、跟 how 一致、need_parts 不超過處數）；請命的陣營與人物存在。"""
+    from . import foreshadow  # noqa: PLC0415  延後 import：foreshadow 讀 content 的模型，不能在載入時就互相 import
+
     ids = [o.id for o in c.opportunities]
     need(len(set(ids)) == len(ids), "opportunities.json：機緣 id 重複")
     factions = {f.id for f in c.scenario.factions}
@@ -624,7 +628,8 @@ def check_opportunities(c: Content, need, known, front_ids: list[str]) -> None:
     for o in c.opportunities:
         where = f"機緣 {o.id}"
         need(o.faction in factions, f"{where}：沒有陣營 {o.faction}")
-        blocks = {"bond": o.bond, "accumulate": o.accumulate, "timing": o.timing}
+        blocks = {"bond": o.bond, "accumulate": o.accumulate, "timing": o.timing,
+                  "puzzle": o.puzzle, "deduce": o.deduce, "plot": o.plot}
         need(blocks[o.kind] is not None, f"{where}：kind 是 {o.kind}，要寫 {o.kind} 那一塊")
         need(all(v is None for k, v in blocks.items() if k != o.kind), f"{where}：只能寫 {o.kind} 那一塊")
         texts = [o.name]
@@ -648,12 +653,65 @@ def check_opportunities(c: Content, need, known, front_ids: list[str]) -> None:
             need(t.item is None or bool(t.deliver_label.strip()), f"{where}：有 item 就要寫 deliver_label（交東西的選項）")
             need(t.item is None or bool(t.done.strip()), f"{where}：有 item 就要寫 done（交到那一刻的敘事）")
             texts += [t.clue, t.label, t.ok, t.fail, t.deliver_label, t.done] + ([t.item] if t.item else [])
+        if o.puzzle is not None:
+            keys = [piece.key for piece in o.puzzle.pieces]
+            need(bool(keys), f"{where}：拼圖至少要有一樣東西")
+            need(len(set(keys)) == len(keys), f"{where}：東西 key 重複")
+            for piece in o.puzzle.pieces:
+                need(piece.how != "ask" or (piece.front is not None and piece.figure is not None and piece.topic),
+                     f"{where}：{piece.key} 是 ask，要寫 front、figure、topic")
+                need(piece.how != "ask" or "*" in piece.lines, f"{where}：{piece.key} 的 lines 要有 \"*\"（沒列到的人說的那一句）")
+                need(piece.how == "ask" or piece.at is not None, f"{where}：{piece.key} 要寫 at")
+                need(piece.how != "check" or piece.check is not None, f"{where}：{piece.key} 是 check，要寫 check")
+                known(where, [piece.front] if piece.front else [], front_ids, "戰線")
+                known(where, [piece.at] if piece.at else [], c.locations, "地點")
+                known(where, [k for k in piece.lines if k != "*"] + ([piece.figure] if piece.figure else []), c.figures, "人物")
+                texts += [piece.name, piece.topic, piece.label, piece.ok, piece.fail] + list(piece.lines.values())
+            pr = o.puzzle.present
+            need(pr.at is not None or bool(pr.patrons), f"{where}：交給誰要寫 at 或 patrons")
+            need(pr.at is None or pr.figure is not None, f"{where}：官軍的交付要寫 figure")
+            known(where, [pr.at] if pr.at else [], c.locations, "地點")
+            known(where, [pr.figure] if pr.figure else [], c.figures, "人物")
+            known(where, [x.character for x in pr.patrons.values()], c.characters, "人物")
+            known(where, [x.at for x in pr.patrons.values()], c.locations, "地點")
+            texts += [pr.stand_in, pr.label, pr.done] + [x.done for x in pr.patrons.values()]
+        if o.deduce is not None:
+            d = o.deduce
+            need(d.tianji in foreshadow.TIANJI, f"{where}：天機 {d.tianji} 不存在")
+            need({s.id for s in d.suspects} == set(foreshadow.TIANJI.get(d.tianji, ())),
+                 f"{where}：嫌疑人要跟天機 {d.tianji} 的候選一樣")
+            keys = {t.key for t in d.traits}
+            need(all(set(s.traits) <= keys for s in d.suspects), f"{where}：嫌疑人有沒寫片段的特徵")
+            need(all(t.region in regions for t in d.traits), f"{where}：特徵有不存在的大區")
+            need(bool(d.askers), f"{where}：至少要有一位指認的人")
+            known(where, [h.figure for h in d.askers], c.figures, "人物")
+            known(where, [h.at for h in d.askers], c.locations, "地點")
+            known(where, list(d.trend), front_ids, "戰線")
+            texts += [d.label, d.right, d.wrong] + [s.name for s in d.suspects] + [t.text for t in d.traits]
+        if o.plot is not None:
+            pl = o.plot
+            keys = [x.key for x in pl.parts]
+            need(bool(keys), f"{where}：集體密謀至少要有一處")
+            need(len(set(keys)) == len(keys), f"{where}：各處的 key 重複")
+            need(pl.how != "check" or pl.check is not None, f"{where}：check 類要寫 check")
+            need(all((x.front is None) != (x.at is None) for x in pl.parts), f"{where}：每一處寫 front 或 at 其中一個")
+            need(pl.how != "win" or all(x.front is not None for x in pl.parts), f"{where}：win 類每一處都要寫 front")
+            need(pl.how != "check" or all(x.at is not None for x in pl.parts), f"{where}：check 類每一處都要寫 at")
+            known(where, [x.front for x in pl.parts if x.front], front_ids, "戰線")
+            need(pl.need_parts is None or 0 < pl.need_parts <= len(pl.parts), f"{where}：need_parts 超出處數")
+            known(where, [x.at for x in pl.parts if x.at], c.locations, "地點")
+            texts += [pl.part_label, pl.part_ok, pl.part_fail, pl.start_text, pl.done_text, pl.helper_text,
+                      pl.fail_text] + [x.name for x in pl.parts]
         for text in texts:
             need(to_traditional(text) == text, f"{where}：文字只能用繁體中文（「{text[:12]}」）")
     for faction_id, action in c.orders.rank2.items():
         need(faction_id in factions, f"orders.json rank2：沒有陣營 {faction_id}")
         for text in (action.name, action.ok, action.fail):
             need(to_traditional(text) == text, f"orders.json rank2.{faction_id}：文字只能用繁體中文（「{text[:12]}」）")
+    for faction_id, petition in c.orders.petition.items():
+        need(faction_id in factions, f"orders.json petition：沒有陣營 {faction_id}")
+        known(f"orders.json petition.{faction_id}", petition.characters, c.characters, "人物")
+        need(to_traditional(petition.label) == petition.label, f"orders.json petition.{faction_id}：文字只能用繁體中文（「{petition.label[:12]}」）")
 
 
 def check_foreshadows(
