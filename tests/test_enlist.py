@@ -1,11 +1,28 @@
 """入伍段（新手引導計畫二）：第一次投靠時由引薦人帶三步。用真實內容、打開第一季開關（照 tests/test_orders.py）。"""
 import pytest
 
-from tests.test_orders import _game, _order, _win, on, real  # noqa: F401（fixture）
+from conftest import real_content
+from tests.test_orders import _game, _order, _win
 from tianxia import enlist, guide
 from tianxia.state import ONBOARDING_VERSION
 from tianxia.content import ContentError, validate
 from tianxia.models import Enlist, EnlistStep, Recruiter, TutorialGoal
+
+
+@pytest.fixture
+def real():
+    """真實內容，開關關著（照 tests/test_orders.py 的 real）。"""
+    c = real_content()
+    c.config.auto_open_first_season = True
+    c.config.train_event_chance = 0.0
+    return c
+
+
+@pytest.fixture
+def on(real):
+    """同一份真實內容，照週末設定打開：開關、季長 2.5 天、人數上限 2（照 tests/test_orders.py 的 on）。"""
+    real.config.season_one, real.config.season_days, real.config.server_max_players = True, 2.5, 2
+    return real
 
 
 @pytest.fixture

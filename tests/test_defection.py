@@ -4,22 +4,20 @@
 from __future__ import annotations
 
 import random
-from pathlib import Path
 
 import pytest
 
+from conftest import real_content
 from tianxia import battle_instance, bot, bot_policy, defection
-from tianxia.content import ContentError, load_content, validate
+from tianxia.content import ContentError, validate
 from tianxia.engine import Game
 from tianxia.models import FactionDef
 from tianxia.state import BotProfile, Convoy, PlayerState, Summons
 
-CONTENT_DIR = Path(__file__).parent.parent / "content"
-
 
 @pytest.fixture
 def real():
-    c = load_content(CONTENT_DIR)
+    c = real_content()
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0
     return c

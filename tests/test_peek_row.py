@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from tianxia.content import load_content
+from conftest import real_content
 from tianxia.engine import Game
 
 ROOT = Path(__file__).parent.parent
@@ -86,7 +86,7 @@ def run(m, script="return H.peekBlock(m);", *, S=None, storage="memory", stored=
 
 @pytest.fixture
 def on():
-    c = load_content(ROOT / "content")
+    c = real_content()
     c.config.auto_open_first_season = True
     c.config.season_one, c.config.season_days, c.config.server_max_players = True, 2.5, 2
     return c

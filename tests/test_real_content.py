@@ -16,6 +16,7 @@ from unittest import mock
 
 import pytest
 
+from conftest import real_content
 from tianxia import companion_agent, fusion, roster, team
 from tianxia.atlas import region_of
 from tianxia.bot import play_season
@@ -1583,7 +1584,7 @@ def _real_s1():
     from tianxia.state import GameState, PlayerState
     from tianxia.world_state import fresh_season
 
-    c = load_content(CONTENT_DIR, profile="weekend")
+    c = real_content("weekend")
     state = GameState(player=PlayerState(name="", location=c.scenario.start_location, stats={}, stamina=0),
                       world=fresh_season(c))
     return c, state

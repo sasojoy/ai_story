@@ -1,5 +1,7 @@
 import contextlib
 import json
+import os
+import pickle
 import random
 import shutil
 from pathlib import Path
@@ -9,6 +11,48 @@ import pytest
 from tianxia.content import load_content
 
 FIXTURE = Path(__file__).parent / "fixtures" / "content"
+REAL_CONTENT = Path(__file__).parent.parent / "content"
+
+
+# ── 內容快取（測試整併第 1 區）────────────────────────────────────────
+# 載入一份內容要 parse＋validate（正式內容約 0.1 秒），以前用到它的測試每個各載一次。現在每份內容在一個工作階段
+# 只完整載入、驗證一次（母本），每個測試拿母本的 pickle 複本：測試怎麼改自己那一份都碰不到母本，也漏不到別的測試。
+# 直接測載入的測試（設定覆寫檔、test_real_content_loads、改了內容再 validate 的）照舊直接呼叫 load_content。
+
+_MASTERS: dict[tuple, tuple[object, bytes]] = {}  # 快取的鍵 → （母本, 母本的 pickle 位元組；複本都從這份位元組做）
+
+
+def _content_key(root, profile) -> tuple:
+    """快取的鍵：哪個資料夾、哪份設定覆寫檔，再加上 load_content 會併進管理者名單的兩樣（content._with_local_admins）：
+    這台機器的 `.local/admins.txt`（路徑與內容）與環境變數 `TIANXIA_ADMINS`。動了這兩樣的測試拿到的是另一份母本。"""
+    from tianxia import content as content_mod
+
+    admins_file = Path(content_mod.ADMINS_FILE)
+    local = admins_file.read_text(encoding="utf-8") if admins_file.exists() else None
+    return str(Path(root).resolve()), profile, str(admins_file), local, os.environ.get("TIANXIA_ADMINS")
+
+
+def cached_content(root, profile=None):
+    """root 的內容（profile 是設定覆寫檔）：這個工作階段第一次要的時候完整載入、驗證一次當母本，每次都給一份新的複本。"""
+    key = _content_key(root, profile)
+    if key not in _MASTERS:
+        master = load_content(root, profile)
+        _MASTERS[key] = (master, pickle.dumps(master, pickle.HIGHEST_PROTOCOL))
+    return pickle.loads(_MASTERS[key][1])
+
+
+def real_content(profile=None):
+    """正式內容（content/）的複本；profile 是設定覆寫檔（例如 "weekend"）。"""
+    return cached_content(REAL_CONTENT, profile)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def content_masters_stay_unchanged():
+    """工作階段結束時，每份母本重新 pickle 一次，位元組要跟發第一份複本時一模一樣：沒有任何測試改到母本。"""
+    yield
+    changed = [key[:2] for key, (master, blob) in _MASTERS.items()
+               if pickle.dumps(master, pickle.HIGHEST_PROTOCOL) != blob]
+    assert not changed, f"內容快取的母本被改過：{changed}"
 
 
 class FixedRandom(random.Random):

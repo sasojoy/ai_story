@@ -1,8 +1,8 @@
 """第一季濃縮版 T6：陣營軍令、最小糧草、第 1 階守勢行動（計畫 2026-10-05-T6-軍令）。
 
-規則與引擎的測試用真實內容（content/）：要驗的就是真實的插槽、戰線與大勢人物。每個測試自己載一份，
-開關在測試裡才打開，不會漏到別的測試。開關開著的季是「蓋了章」的：auto_open_first_season 開出來的季
-照當下的 Config 蓋章（world_state.stamp_season）。"""
+規則與引擎的測試用真實內容（content/）：要驗的就是真實的插槽、戰線與大勢人物。每個測試拿自己的一份
+（conftest.real_content 的複本），開關在測試裡才打開，不會漏到別的測試。開關開著的季是「蓋了章」的：
+auto_open_first_season 開出來的季照當下的 Config 蓋章（world_state.stamp_season）。"""
 from __future__ import annotations
 
 import random
@@ -12,6 +12,7 @@ from unittest import mock
 
 import pytest
 
+from conftest import real_content
 from tianxia import atlas, calendar, enlist, figures, front_lines, mapview, orders, rules, team, timetable
 from tianxia.content import load_content
 from tianxia.encounter import EncounterResult
@@ -25,7 +26,7 @@ CONTENT_DIR = Path(__file__).parent.parent / "content"
 @pytest.fixture
 def real():
     """真實內容，開關關著（beta 那一季的樣子）。"""
-    c = load_content(CONTENT_DIR)
+    c = real_content()
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0
     return c

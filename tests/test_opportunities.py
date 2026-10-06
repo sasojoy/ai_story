@@ -7,23 +7,21 @@ content/opportunities.json 與 content/orders.json 的 rank2 裡新寫的句子�
 from __future__ import annotations
 
 import random
-from pathlib import Path
 from unittest import mock
 
 import pytest
 
+from conftest import real_content
 from tianxia import bot, bot_policy, calendar, figures, opportunities, push, rules, timetable
-from tianxia.content import ContentError, load_content, validate
+from tianxia.content import ContentError, validate
 from tianxia.engine import Game
 from tianxia.models import Condition, OppDef
 from tianxia.state import BotProfile, PlayerState, TimelineResult
 
-CONTENT_DIR = Path(__file__).parent.parent / "content"
-
 
 @pytest.fixture
 def real():
-    c = load_content(CONTENT_DIR)
+    c = real_content()
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0
     return c
