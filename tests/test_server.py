@@ -784,6 +784,18 @@ def test_roster_pick_and_team_toggle_ignore_people_you_do_not_have(client):
     assert out.status_code == 400 and out.json() == {"error": "名冊裡沒有這個人。"}
 
 
+def test_forge_line_endpoint_says_what_one_lone_item_is_missing(client):
+    """W4：煉製頁放了一樣東西就問一次 /api/forge_line，字的唯一出處是 skillview.forge_line。"""
+    _player(client)
+    game = server.game_for("沈青衫")
+    game.state.player.insights = ["feng"]
+    open_characters().save(game.state)
+    art = client.post("/api/forge_line", json={"art": "jichu_quanjiao"}).json()["line"]
+    assert "再放一個意境，或另一門武學。" in art
+    insight = client.post("/api/forge_line", json={"insights": ["feng"]}).json()["line"]
+    assert "再放一門武學，或另一個意境。" in insight
+
+
 def test_forge_line_previews_without_forging(client):
     _player(client)
     game = server.game_for("沈青衫")

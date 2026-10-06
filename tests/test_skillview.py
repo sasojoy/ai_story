@@ -343,6 +343,34 @@ def test_forge_line_asks_for_an_art_and_an_insight_first(state, content, world):
     assert "武學與意境 0/50" in line
 
 
+def test_forge_line_with_one_art_in_the_furnace_says_what_is_missing(state, content, world):
+    """W4：爐裡只放了一門武學——說還缺什麼（一個意境，或另一門武學），不再是放什麼都一樣的總說明。句子待 joy 潤。"""
+    state.player.member.wugong_id = "basic_fist"
+    line = skillview.forge_line(state, content, world, "basic_fist", [])
+    assert "再放一個意境，或另一門武學。" in line and "武學與意境 1/50" in line
+    assert "放兩個意境" not in line  # 總說明那一長句不重複
+    assert "基礎拳腳" not in line and "粗淺拳腳" not in line  # 不點名：放的東西爐子上已經畫了
+
+
+def test_forge_line_with_one_insight_in_the_furnace_says_what_is_missing(state, content, world):
+    state.player.insights = ["feng"]
+    line = skillview.forge_line(state, content, world, None, ["feng"])
+    assert "再放一門武學，或另一個意境。" in line and "武學與意境 1/50" in line
+    assert "放兩個意境" not in line
+
+
+def test_forge_line_one_item_hint_leaks_nothing_about_an_art_you_do_not_have(state, content, world):
+    """預覽不能拿來探：放的不是你的武學，提示也只有「再放…」，不寫名字、屬性。"""
+    line = skillview.forge_line(state, content, world, "caocao_wugong", [])
+    assert "再放一個意境，或另一門武學。" in line and "挾風槍法" not in line and "屬快" not in line
+
+
+def test_forge_line_without_one_clear_item_keeps_the_general_text(state, content, world):
+    """什麼都沒放、或放的形狀不是「單獨一樣」（例如只有第二格）：還是總說明。"""
+    assert "放一門武學和一個意境" in skillview.forge_line(state, content, world, None, [])
+    assert "放一門武學和一個意境" in skillview.forge_line(state, content, world, None, [], other_art="basic_fist")
+
+
 def test_forge_line_counts_against_the_cap_that_lore_widens(state, content, world):
     state.player.stats["lore"] = 8  # 比基準多 3 點：多 6 格
     assert "武學與意境 0/56" in skillview.forge_line(state, content, world, None, [])

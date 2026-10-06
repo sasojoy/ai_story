@@ -92,6 +92,11 @@ def _known_recipe(state: GameState, content: Content, world: WorldStateStore, ke
     return f"\n會合出【{known.name}】。{traits.card_line(content, known)}"
 
 
+# 爐裡只放了一樣東西時，煉製頁的說明那一行（W4）；句子待 joy 潤
+FORGE_ONE_ART = "再放一個意境，或另一門武學。"
+FORGE_ONE_INSIGHT = "再放一門武學，或另一個意境。"
+
+
 def forge_line(
     state: GameState, content: Content, world: WorldStateStore, art_id: str | None, insight_ids: list[str],
     other_art: str | None = None,
@@ -143,6 +148,9 @@ def forge_line(
             f"花 {cfg.merge_xinde} 點心得、{cfg.merge_stamina} 點體力（你有 {xinde} 點心得）。"
         )
         problem = fusion.merge_problem(state, content, world, *insight_ids)
+    elif bool(art_id) != bool(insight_ids) and not other_art and len(insight_ids) <= 1:
+        # 爐裡只有一樣（W4）：說還缺什麼，不再是放什麼都一樣的總說明。不點名——不是你的武學也一樣回這一句，預覽探不出東西
+        return f"**煉製**　{FORGE_ONE_ART if art_id else FORGE_ONE_INSIGHT}{count}。"
     else:
         return (
             "**煉製**　放一門武學和一個意境，衍生出一門新武學（底留著）；放兩門武學，合出一門新的；"
