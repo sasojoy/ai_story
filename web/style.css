@@ -792,6 +792,10 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .glow { box-shadow: 0 0 0 2px var(--gold), 0 0 12px 2px color-mix(in srgb, var(--gold) 55%, transparent); animation: tx-glow 1.6s ease-in-out infinite; }
 .lit { animation: tx-lit 0.9s ease-out 1; }
 @keyframes tx-glow { 50% { box-shadow: 0 0 0 2px var(--gold), 0 0 4px 0 color-mix(in srgb, var(--gold) 20%, transparent); } }
+/* 功法庫收著的那一列（序章指它「改練」「熔煉」）：.lib 要 overflow: hidden（卷軸卡的圓角），列又貼滿左右兩邊，往外長的金邊整個被裁掉、
+   看不見。這一列的金邊改成往裡長（inset），一樣的顏色與呼吸，只是畫在列的裡面；卡裡的鈕有邊距，照舊往外長 */
+.lib button.libr.glow { box-shadow: inset 0 0 0 2px var(--gold), inset 0 0 12px 2px color-mix(in srgb, var(--gold) 55%, transparent); animation-name: tx-glow-in; }
+@keyframes tx-glow-in { 50% { box-shadow: inset 0 0 0 2px var(--gold), inset 0 0 4px 0 color-mix(in srgb, var(--gold) 20%, transparent); } }
 @keyframes tx-lit { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 .guide-scene { margin: 4px 0 0; font-size: 13px; line-height: 1.6; color: var(--ink-2); font-style: italic; }
 .skip-prologue { display: block; margin: 8px auto 0; font-size: 13px; color: var(--ink-2); }
@@ -800,4 +804,7 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .who.static .more-ico { display: none; } /* 序章裡屬性還沒亮：名號不是按鈕，不畫展開的小箭頭 */
 .recap { margin-top: 10px; font-size: 13px; line-height: 1.7; max-height: 50vh; overflow-y: auto; }
 .recap hr { border: 0; border-top: 1px solid var(--line); margin: 10px 0; }
-@media (prefers-reduced-motion: reduce) { .glow, .lit { animation: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .glow, .lit { animation: none; }
+  .lib button.libr.glow { animation: none; } /* 上面那條的 animation-name 比 .glow 的選擇器重，要自己關；金邊還在，只是不呼吸 */
+}
