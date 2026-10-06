@@ -238,6 +238,18 @@ def melt_insight_problem(state: GameState, content: Content) -> str | None:
     return "師父沒叫你熔意境。" if active(state, content) else None
 
 
+def after_line(state: GameState, content: Content, **names: str | int) -> str | None:
+    """這一步的動作做成之後的結果那一句（TutorialStep.after，設計 10.3 的「…之後（場景）」）：{意境}、{武學}、{心得} 換成
+    names 給的（意境、武學、心得）；沒有序章、不在序章裡、這一步沒寫就是 None（用引擎的一般那句）。"""
+    current = step(state, content)
+    if current is None or not current.after:
+        return None
+    text = current.after
+    for key, value in names.items():
+        text = text.replace("{" + key + "}", str(value))
+    return text
+
+
 def fused_arts(state: GameState, content: Content, world: WorldStateStore) -> list[MartialArt]:
     """身上與功法庫裡合成出來的武學（自己那一份，品質照自己修到的），照擁有的順序。"""
     from . import library, team  # team、library 都 import 很多東西，放在函式裡避免循環

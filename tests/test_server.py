@@ -4167,8 +4167,8 @@ def test_main_view_sends_the_guide_box_and_skipping_hides_it(client, real_hut):
     guide = client.get("/api/main").json()["guide"]
     assert guide == {
         "speaker": tutorial.speaker, "key": tutorial.steps[1].id, "scene": "", "text": tutorial.steps[1].text,
-        "line": tutorial.steps[1].line, "done": ["✔ 引導完成"], "end": False, "pending": False,
-    }  # 拜了師，第 1 步完成（done 是剛完成的那一行）；key 是這一步的 id：網頁記收起記它；pending 標這一句是不是「先把眼前的「…」了結」，網頁預設把它收成一行（FB-076）
+        "line": tutorial.steps[1].line, "done": [], "end": False, "pending": False,
+    }  # 序章的步驟做完不寫「✔ 引導完成」（設計 3.1），done 是空的；key 是這一步的 id：網頁記收起記它；pending 標這一句是不是「先把眼前的「…」了結」，網頁預設把它收成一行（FB-076）
     client.post("/api/do/skip_tutorial", json={})
     assert client.get("/api/main").json()["guide"] is None
 

@@ -371,6 +371,26 @@
     }
     p.glow.forEach((key) => document.querySelectorAll(`[data-glow~="${key}"]:not([disabled])`).forEach((el) => el.classList.add("glow")));
     litKeys.forEach((key) => document.querySelectorAll(`[data-glow~="${key}"]`).forEach((el) => el.classList.add("lit")));
+    guideCue();
+  }
+
+  // 要按的東西在第一屏之外（修練頁的改練那一列在 y≈1300）時，師父的框上多一個小小的「在下面 ↓」，點了捲到那裡（T7 審查 M7）。
+  // 只看頁面裡（#page）第一個發光的東西：分頁列與狀態列的鈕永遠在畫面上。只在序章；每次畫完頁面重算，捲動不重算
+  function guideCue() {
+    const head = document.querySelector(".card.guide .guide-head");
+    if (!head) return;
+    const old = head.querySelector(".guide-below");
+    if (old) old.remove();
+    const target = pro() && document.querySelector("#page .glow");
+    if (!target) return;
+    const bar = document.querySelector(".tabs");
+    const limit = bar ? bar.getBoundingClientRect().top : window.innerHeight;
+    if (target.getBoundingClientRect().top < limit - 8) return; // 要按的東西已經在第一屏裡
+    head.firstElementChild.insertAdjacentHTML("afterend", '<button class="linkish guide-below" data-act="guide-below">在下面 ↓</button>');
+  }
+  function scrollToGuideTarget() {
+    const target = document.querySelector("#page .glow");
+    if (target) target.scrollIntoView({ block: "center", behavior: "smooth" });
   }
 
   // 戰鬥卡片底下伏筆聽來的那一句（FB-074）：常有兩三行高、多撐 46～66px，新角色前七場遊歷有三場看到。
@@ -856,6 +876,11 @@
   // 換成下一個事件的句子就又收著，了結之後清掉）；只有這一句，新的一步照舊展開
   function shutGuide(g) { setGuideShut(guideKey(g)); S.guideRoad = null; }
   function openGuide(g) { setGuideShut(null); S.guideRoad = g && g.text; }
+  // 分頁的步驟（伺服器標 paged，T7 審查 I1）：師父的話照 \n\n 切成幾頁，一次一頁、按「下一段 ▸」往下，最後一頁帶著要做的事；
+  // 每一頁都是整段，不切。記的是（哪一步, 第幾頁），換到下一步自己回到第一頁
+  const guidePages = (g) => (g.paged ? g.text.split(/\n{2,}/) : [g.text]);
+  const guidePage = (g) => (S.guidePage && S.guidePage.key === guideKey(g) ? Math.min(S.guidePage.n, guidePages(g).length - 1) : 0);
+  function nextGuidePage(g) { S.guidePage = { key: guideKey(g), n: Math.min(guidePage(g) + 1, guidePages(g).length - 1) }; }
   // 但框上還有「✔ 引導完成」與獎勵（done）要讓玩家看到時不收：「剛剛」卡片依設計不放引導，收成一行那一列就沒地方看了
   // （新角色的第一次探索常常做完第一步又留下事件）；那時照舊展開。FB-076 量的那一場（遊歷打完接事件）done 是空的
   function guideHtml(g, onRoad) {
@@ -872,9 +897,12 @@
     const btn = g.end ? '<button class="btn small" data-act="guide-ack">知道了</button>'
       : '<button class="linkish" data-act="guide-shut">收起</button>';
     // 長的那幾步（軍令兩步一百多字）先露三行、點了看全文，不把行動與選項擠出第一屏（畫面批次審查 I3）
-    const full = S.guideFull === g.text;
-    const scene = g.scene ? `<p class="guide-scene">${esc(g.scene)}</p>` : ""; // 序章的旁白（「斷眉來了……」）排在話的前面
-    return `<section class="card guide" aria-label="${esc(g.speaker)}的話"><div class="guide-head"><b>${esc(g.speaker)}</b>${btn}</div>${done}${scene}<p class="guide-text${full ? "" : " clamp"}" data-act="guide-more" role="button" tabindex="0" aria-expanded="${full}">${esc(g.text)}</p></section>`;
+    // 序章裡師父的話不切（設計 6.2「話不會被切掉」，T7 審查 I1）：不收成三行；段落照 \n\n 排（樣式表 pre-line）
+    const full = !!pro() || S.guideFull === g.text;
+    const pages = guidePages(g), page = guidePage(g);
+    const scene = g.scene && page === 0 ? `<p class="guide-scene">${esc(g.scene)}</p>` : ""; // 序章的旁白（「斷眉來了……」）排在話的前面（分頁的步驟只在第一頁）
+    const next = page < pages.length - 1 ? '<button class="linkish guide-next" data-act="guide-next">下一段 ▸</button>' : "";
+    return `<section class="card guide" aria-label="${esc(g.speaker)}的話"><div class="guide-head"><b>${esc(g.speaker)}</b>${btn}</div>${done}${scene}<p class="guide-text${full ? "" : " clamp"}" data-act="guide-more" role="button" tabindex="0" aria-expanded="${full}">${esc(pages[page])}</p>${next}</section>`;
   }
 
   function pageJianghu() {
@@ -940,9 +968,12 @@
     // 在路上，那段固定的說明只露兩行、點了看全文（FB-055）：剛按完路上小事時「剛剛」的結果卡會長高，狀態列又有提示的話，
     // 最後一排小事會掉到分頁列底下；說明的內容路上的選項與捷徑本來就寫著。展開記在 S.sceneOpen，下了路就清掉
     if (!m.on_road) S.sceneOpen = false;
-    const scene = m.on_road
-      ? `<section class="card scene road${S.sceneOpen ? "" : " clamp"}" data-act="scene-more" role="button" tabindex="0" aria-expanded="${!!S.sceneOpen}">${m.scene}</section>`
-      : `<section class="card scene">${m.scene}</section>`;
+    // 序章：師父在說話（框顯示著）、眼前又沒有事件時，草廬那張地點描寫卡不畫——它是靜態的，而師父的整段話要用這塊地方（T7 審查 I1）
+    const masterTalks = !!pro() && !!m.guide && !m.options.some((o) => o.id.startsWith("choice:"));
+    const scene = masterTalks ? ""
+      : m.on_road
+        ? `<section class="card scene road${S.sceneOpen ? "" : " clamp"}" data-act="scene-more" role="button" tabindex="0" aria-expanded="${!!S.sceneOpen}">${m.scene}</section>`
+        : `<section class="card scene">${m.scene}</section>`;
     // 序章：小地圖與江湖紀錄的連結要等「輿圖、見聞」亮了才畫（shown("minimap")）
     const tail = shown("minimap") ? `<div class="mini" data-act="tab" data-tab="map" role="button" aria-label="展開輿圖">${m.minimap}</div>
       <button class="linkish" data-act="news" data-news="journal">看江湖紀錄 ›</button>` : "";
@@ -1899,6 +1930,8 @@
         case "peek": peekTap(el.dataset.id); break; // 江湖頁最上面那一排小標：只換那一塊，「剛剛」不會重播
         case "hear-more": hearToggle(el); break; // 戰鬥卡片底下聽來的那一句：原地展開／收起，不重畫
         case "hint-more": S.hintOpen = !S.hintOpen; renderTop(); break; // 狀態列只重畫它自己（江湖頁不動，「剛剛」不會重播）
+        case "guide-next": nextGuidePage(S.main.guide); renderPage(); break;
+        case "guide-below": scrollToGuideTarget(); break;
         case "guide-ack": await doMain("guide_ack"); break;
         case "allocate": await doMain("allocate", { stat: el.dataset.stat }); break; // 升級的屬性點加到一項（狀態列展開後的「＋臂力」）
         case "do": S.sheet = false; await doMain(el.dataset.op); break;

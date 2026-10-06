@@ -695,6 +695,12 @@ class TutorialStep(_Strict):
     fuse_base: str | None = None  # 這一步的合成只准拿這一門當底
     melt_only: str | None = None  # 這一步只准熔這一門
     give_art: GiveArt | None = None  # 完成這一步時給的武學
+    # 師父的話太長、一次放不下時分頁（T7 審查 I1）：網頁照 \n\n 切成幾頁、一頁一頁按「下一段 ▸」，最後一頁是要做的事；話整段都在、不切。
+    # 只有 reveal 之後這一步的行動列落到分頁列底下才用得到（量測見 Task 7 報告）；至少要有兩段
+    paged: bool = False
+    # 這一步的動作做成之後，結果那一句（設計 10.3 的「…之後（場景）」）：草廬裡合成、修練、熔煉成功時用它取代引擎的一般那句。
+    # {意境}、{武學}、{心得} 換成這一次真的合出來的／修練的／退回的（prologue.after_line）
+    after: str = ""
 
 
 class PresetRecipe(_Strict):

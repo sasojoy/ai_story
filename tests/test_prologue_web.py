@@ -30,7 +30,7 @@ let src = fs.readFileSync(input.app, "utf8").replace(/\r\n/g, "\n"); // Windows 
 const end = src.lastIndexOf("\n})();");
 if (end < 0) throw new Error("app.js 的最後不是 })();");
 src = src.slice(0, end) + `
-  globalThis.__H = { S, pro, shown, prologueKey, topHtml, tabsHtml, idleMenu, actionBar, guideHtml, pageJianghu, pagePractice,
+  globalThis.__H = { S, pro, shown, prologueKey, topHtml, tabsHtml, idleMenu, actionBar, guideHtml, nextGuidePage, guideCue, scrollToGuideTarget, pageJianghu, pagePractice,
     pageCraft, peekBlock, sheetHtml, applyGlow, renderTop, render, goTab };
 ` + src.slice(end);
 
@@ -66,9 +66,10 @@ const matchOne = (e, sel) => {
   if (!m) throw new Error("假 DOM 不認得的選擇器：" + sel);
   return e.glow.includes(m[1]) && !(m[2] && e.disabled);
 };
+const qs = {}; // 測試可以放假元素：document.querySelector(選擇器) 回 qs[選擇器]
 const document = {
   getElementById: (id) => (["app", "toast", "page", "top", "peek"].includes(id) ? mk(id) : null),
-  querySelector: () => null,
+  querySelector: (sel) => qs[sel] || null,
   querySelectorAll: (sel) => fake.list.filter((e) => sel.split(", ").some((one) => matchOne(e, one))),
   addEventListener() {}, activeElement: null, hidden: false,
   // splitChips 把「剛剛」丟進 <template> 拆出數值變化那一排：假的 template 原樣吐回去、沒有那一排
@@ -89,7 +90,7 @@ H.S.main = input.m;
 H.S.menxia = input.menxia || null;
 Object.assign(H.S, input.S || {});
 // script 可以是 async（回傳 Promise）：等它做完再印
-Promise.resolve(new Function("H", "m", "T", input.script)(H, input.m, { els, fake, el, calls })).then((out) => {
+Promise.resolve(new Function("H", "m", "T", input.script)(H, input.m, { els, fake, el, calls, qs })).then((out) => {
   process.stdout.write(JSON.stringify(out === undefined ? null : out));
 });
 """
@@ -475,6 +476,123 @@ def test_the_practice_button_is_greyed_with_the_masters_reason(hut):
     x = server.menxia_view(hut)
     page = run(server.main_view(hut), "return H.pagePractice();", menxia=x)  # 換上了：武學那一欄練得下去
     assert re.search(r'data-op="practice" data-glow="practice" >練成武學（心得', page)
+
+
+LONG_WORDS = "這一段師父的話很長很長，" * 8 + "\n\n" + "最後一段才是要你做的事：按底下的鈕。"
+
+
+def test_the_masters_words_are_never_cut_in_the_hut(hut):
+    """T7 審查 I1（設計 6.2「話不會被切掉」）：序章裡師父的框不收成三行；序章外照舊三行、點了看全文。"""
+    m = main_at(hut, 4)
+    guide = {**m["guide"], "text": LONG_WORDS}
+    html = run({**m, "guide": guide}, "return H.guideHtml(m.guide, false);")
+    assert 'class="guide-text"' in html and "clamp" not in html and "按底下的鈕" in html
+    outside = run({**m, "prologue": None, "guide": guide}, "return H.guideHtml(m.guide, false);")
+    assert 'class="guide-text clamp"' in outside
+
+
+def test_the_masters_paragraphs_keep_their_breaks():
+    """話裡的 \\n\\n 是段落（p4、p5、p7、p9、p11）：預設的空白處理會把它折成一個空格，要 pre-line。靜態檢查樣式表。"""
+    css = (ROOT / "web" / "style.css").read_text(encoding="utf-8")
+    rule = re.search(r"^\.guide-text \{([^}]*)\}", css, re.M)
+    assert rule and "white-space: pre-line" in rule.group(1)
+
+
+def test_the_huts_place_card_is_not_drawn_while_the_master_talks(hut, newcomer):
+    """T7 審查 I1：草廬那張地點描寫卡是靜態的，師父的框顯示著的時候不畫它（給師父的整段話讓出地方）；事件在眼前時場景就是事件，照畫；
+    沒有框的時候（例如籌備中）也照畫；序章外照畫。"""
+    m = main_at(hut, 5)
+    assert m["guide"] and not any(o["id"].startswith("choice:") for o in m["options"])
+    page = run(m, "return H.pageJianghu();")
+    assert 'class="card guide"' in page and 'class="card scene"' not in page
+    assert 'class="card scene"' in run({**m, "guide": None}, "return H.pageJianghu();")
+    assert 'class="card scene"' in run({**m, "prologue": None}, "return H.pageJianghu();")
+    event = main_at(newcomer(), 0)
+    assert 'class="card scene"' in run(event, "return H.pageJianghu();")  # 遇險的事件
+
+
+PAGED = "第一段，先說天下三邊。\n\n第二段，再說使命。\n\n最後一段：打開輿圖。"
+
+
+def test_a_paged_master_box_shows_one_paragraph_at_a_time_and_never_cuts_one(hut):
+    """T7 審查 I1（d）、（e）：話太長、要做的事會落到分頁列底下的步驟（paged）照空一行分頁：先露第一段與「下一段 ▸」，
+    最後一頁沒有鈕、帶著要做的事；旁白只在第一頁；每一段都是整段，不切。"""
+    m = main_at(hut, 4)
+    guide = {**m["guide"], "text": PAGED, "paged": True, "scene": "他放下酒葫蘆。"}
+    out = run({**m, "guide": guide}, """
+      const html = [H.guideHtml(m.guide, false)];
+      H.nextGuidePage(m.guide); html.push(H.guideHtml(m.guide, false));
+      H.nextGuidePage(m.guide); html.push(H.guideHtml(m.guide, false));
+      H.nextGuidePage(m.guide); html.push(H.guideHtml(m.guide, false));  // 最後一頁再按：不超過
+      return html;""")
+    first, second, last, again = out
+    assert "第一段，先說天下三邊。" in first and "第二段" not in first and "他放下酒葫蘆" in first and "下一段 ▸" in first
+    assert "第二段，再說使命。" in second and "第一段" not in second and "他放下酒葫蘆" not in second and "下一段 ▸" in second
+    assert "最後一段：打開輿圖。" in last and "下一段" not in last and again == last
+    assert all("clamp" not in html for html in out)
+
+
+def test_a_paged_step_starts_over_on_its_first_page_and_an_unpaged_one_is_one_block(hut):
+    m = main_at(hut, 4)
+    guide = {**m["guide"], "text": PAGED, "paged": True}
+    out = run({**m, "guide": guide}, """
+      H.nextGuidePage(m.guide); H.nextGuidePage(m.guide);
+      const other = { ...m.guide, key: "別的一步" };
+      return [H.guideHtml(other, false), H.guideHtml({ ...m.guide, paged: false }, false)];""")
+    assert "第一段，先說天下三邊。" in out[0] and "第二段" not in out[0]  # 換了一步：回到第一頁
+    assert all(part in out[1] for part in ("第一段", "第二段", "最後一段")) and "下一段" not in out[1]
+
+
+def test_the_cue_points_at_a_target_below_the_fold_and_only_then(hut):
+    """T7 審查 M7：要按的東西在第一屏之外（修練頁的改練那一列在 y≈1300）時，師父的框上有「在下面 ↓」；它在第一屏裡、或不在序章就沒有。"""
+    m = main_at(hut, 4)
+    script = """
+      const inserted = [];
+      const head = { firstElementChild: { insertAdjacentHTML: (pos, html) => inserted.push([pos, html]) }, querySelector: () => null };
+      T.qs[".card.guide .guide-head"] = head;
+      T.qs[".tabs"] = { getBoundingClientRect: () => ({ top: 756 }) };
+      const at = (top) => { T.qs["#page .glow"] = { getBoundingClientRect: () => ({ top }) }; inserted.length = 0; H.guideCue(); return inserted.length; };
+      return { below: at(1300), onScreen: at(400), justUnderTheBar: at(760), none: (delete T.qs["#page .glow"], inserted.length = 0, H.guideCue(), inserted.length), html: (at(1300), inserted[0]) };"""
+    out = run(m, script)
+    assert out["below"] == 1 and out["onScreen"] == 0 and out["justUnderTheBar"] == 1 and out["none"] == 0
+    assert out["html"][0] == "afterend" and 'data-act="guide-below"' in out["html"][1] and "在下面 ↓" in out["html"][1]
+    outside = run({**m, "prologue": None}, script)
+    assert outside["below"] == 0  # 序章外沒有這個提示
+
+
+def test_the_cue_takes_the_page_to_the_target(hut):
+    m = main_at(hut, 4)
+    out = run(m, """
+      const calls = [];
+      T.qs["#page .glow"] = { scrollIntoView: (opts) => calls.push(opts) };
+      H.scrollToGuideTarget();
+      delete T.qs["#page .glow"]; H.scrollToGuideTarget();  // 目標不在了：什麼都不做
+      return calls;""")
+    assert len(out) == 1 and out[0]["block"] == "center"
+
+
+def test_step_five_points_at_a_row_under_the_arts_library_title(hut):
+    """步驟 5 師父說「先到功法庫把它『改練』上身」：修練頁真的有叫「功法庫」的標題，發光的那一列（改練）在它底下（arts-polish-1）。"""
+    m, x = pages_at(hut, 4)
+    page = run(m, "return H.pagePractice();", menxia=x)
+    assert page.index("功法庫") < page.index('data-glow="switch"')
+
+
+def test_the_click_handlers_for_the_two_new_box_buttons_are_wired():
+    """「下一段 ▸」與「在下面 ↓」是事件代理的 data-act：少接一個，鈕就按不動。"""
+    source = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
+    assert 'case "guide-next": nextGuidePage(S.main.guide); renderPage(); break;' in source
+    assert 'case "guide-below": scrollToGuideTarget(); break;' in source
+
+
+def test_the_four_sights_screen_has_no_now_card_and_its_choices_fit(hut):
+    """T7 審查 I2、W1：四景的事件在眼前時沒有「剛剛」卡（它重複事件標題）；四個選項都畫出來。高度由 375×812 的量測腳本看（見報告）。"""
+    _to_step(hut, 2)
+    hut.choose("act:explore")
+    m = server.main_view(hut)
+    assert hut.state.pending_event == "p_insight" and m["now"] == ""
+    page = run(m, "return H.pageJianghu();")
+    assert 'class="now' not in page and page.count('data-act="choose"') == 4
 
 
 def test_the_seclusion_form_and_the_insight_melt_are_greyed_in_the_hut(hut):

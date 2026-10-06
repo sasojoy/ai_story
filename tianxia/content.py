@@ -1586,8 +1586,9 @@ def validate(c: Content) -> None:
         where = f"新手引導 {step.id}"
         special = (step.scene or step.line or step.reveal or step.glow or step.allow or step.explore_event or step.enemies
                    or step.force_tier or step.sure_cultivate or step.instant_rest or step.fuse_base or step.melt_only
-                   or step.give_art)
+                   or step.give_art or step.paged or step.after)
         need(not special or i < t.prologue_steps, f"{where}：序章才有的欄位只能寫在前 {t.prologue_steps} 步")
+        need(not step.paged or "\n\n" in step.text, f"{where}：paged 的話要有兩段以上（照空一行切頁）")
         bad = [k for k in step.reveal if k not in REVEAL_KEYS]
         need(not bad, f"{where}：reveal 不認得 {bad}")
         bad = [k for k in step.glow if k not in GLOW_KEYS]

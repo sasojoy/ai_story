@@ -25,7 +25,9 @@ CRAFT = "煉製"
 ALLOCATE = "配點"  # 升級的屬性點分配到屬性上（武學與成長設計 6.2）；連按幾次併成一則
 WORLD_NEWS = "江湖大事"  # 時間流逝時發生的江湖大事那一則的標題；連續的會併成一則
 AWAY = "你不在的時候"  # 離線一陣子再上線時的那一則摘要（傳聞分層設計第八節，Game._deliver_away；待 joy 潤）
-NEWS_PREFIXES = ("【江湖大事】", "【主線】", "【主線改寫】")  # world.py 寫出的大勢門檻、世界事件、主線變化
+SEASON_START = "賽季開始"  # 開場那一則（標題是劇本名）的標籤：Game.new 與換季重來都寫它
+GUIDE_ONLY = "新手引導"  # 沒有紀錄可接時，只放引導那幾行的那一則（add_guide）的標題
+NEWS_PREFIXES =("【江湖大事】", "【主線】", "【主線改寫】")  # world.py 寫出的大勢門檻、世界事件、主線變化
 
 # 數值變化：「標籤 正負號數字（附註）」，例如「銀兩 -5」「經驗 +15（每人）」
 _CHANGE = re.compile(r"^(\S+) ([+-])(\d+(?:\.\d+)?)(（[^）]*）)?$")
@@ -208,13 +210,19 @@ def add_entry(state: GameState, entry: JournalEntry, merge: bool = False) -> Non
     del state.journal[MAX_ENTRIES:]
 
 
+def is_world_entry(entry: JournalEntry) -> bool:
+    """不是這個人自己做的事：江湖大事、你不在的時候、賽季開場、只有引導幾行的那一則。草廬裡的「剛剛」不放這些
+    （Game.now_entry_html）：新人一進來就被補了第一季已經發生的大事，它們不是新人這一步的結果，還會把選項擠出第一屏。"""
+    return entry.title in (WORLD_NEWS, AWAY, GUIDE_ONLY) or entry.tag == SEASON_START
+
+
 def add_guide(state: GameState, notes: list[str]) -> None:
     """不在行動裡完成的新手引導（例：打開輿圖）：接在最新一則的 guide 後面，不另起一則（「剛剛」不換）；還沒有紀錄時另起一則。"""
     if state.journal:
         head = state.journal[0]
         state.journal[0] = head.model_copy(update={"guide": head.guide + notes})
     else:
-        add_entry(state, JournalEntry(time=state.world.time, title="新手引導", guide=list(notes)))
+        add_entry(state, JournalEntry(time=state.world.time, title=GUIDE_ONLY, guide=list(notes)))
 
 
 def add_arrival(state: GameState, entry: JournalEntry, done: bool) -> None:
@@ -290,6 +298,8 @@ _NEW_THING = re.compile(
     r"|^你把【[^】]+】與【[^】]+】合而為一，(?:衍生出一門|合出來的竟是一門已有的)"
     r"|^「[^」]+」與「[^」]+」在你心中交融，化成(?:的竟是已有的)?「"
     r"|^【[^】]+】修練有成，從"
+    # 序章（content 寫的結果句，設計 10.3）取代了上面幾句的那幾行：悟到意境（事件的結果文字）、合成出新武學、修練晉品（TutorialStep.after）
+    r"|你悟到了「[^」]+之意境」|練出了一門新武學——【|摸到了門道——【"
 )
 # 「拿到新東西」的那一行：掃過一道光。玩家一次行動常常吐出五六行訊息，而其中真正值得注意的
 # 就是這一行（新素材、新功法、新意境、伏筆的線索片段）——好玩度量表量的也正是這件事。

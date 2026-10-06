@@ -2134,6 +2134,26 @@ def test_the_last_prologue_step_must_let_the_player_walk_out(prologue_root):
         load_content(prologue_root)
 
 
+def test_a_paged_step_needs_paragraphs_and_a_place_in_the_prologue(prologue_root):
+    """T7 審查 I1（分頁）：師父的話分頁照段落（\\n\\n）切，只有一段的步驟分不了頁；分頁是序章才有的欄位。"""
+    edit_json(prologue_root / "tutorial.json", lambda t: t["steps"][3].update(paged=True))  # 「去合成。」只有一段
+    with pytest.raises(ContentError, match="paged.*兩段"):
+        load_content(prologue_root)
+
+    def two_paragraphs(t):
+        t["steps"][3].update(paged=True, text="先說這一段。\n\n再說這一段，要你合成。")
+
+    edit_json(prologue_root / "tutorial.json", two_paragraphs)
+    assert load_content(prologue_root).tutorial.steps[3].paged
+
+    def after_the_prologue(t):
+        t["steps"].append({"id": "p12", "text": "甲。\n\n乙。", "paged": True, "done_when": {"action": "explore"}})
+
+    edit_json(prologue_root / "tutorial.json", after_the_prologue)
+    with pytest.raises(ContentError, match="序章才有的欄位"):
+        load_content(prologue_root)
+
+
 def test_the_farewell_reward_must_fill_the_stamina(prologue_root):
     """略過序章的人體力補滿（prologue.finish）；走出草廬的人只有出師那一步的獎勵能補。獎勵給不滿，兩種人離開時的體力就不一樣
     （一個看得出走過序章沒有）。"""

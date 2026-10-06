@@ -26,7 +26,7 @@ from . import rumor_view  # 傳聞分層的畫面：見聞頁的四層、你不�
 from .events import (
     choice_label, event_candidates, has_events_here, pick_event, visible_choices,
 )
-from .guide import base_step_count, note_action, pending_line, quest_text, step_text, tutorial_active, tutorial_intro
+from .guide import HutReward, base_step_count, note_action, pending_line, quest_text, step_text, tutorial_active, tutorial_intro
 from .guide import speaker_of as guide_speaker_of
 from .guide import speakers as guide_speakers
 from .guide import steps as tutorial_steps
@@ -89,7 +89,7 @@ class TollFacts:
 
 
 LOW_HP_RATIO = 0.3  # 開打前氣血剩上限的三成以下（含）算「氣血見底」：厚的那一句「氣血見底，……硬撐」（battlelog.LOW_HP_MARKS）才挑得到
-SEASON_START_TAG = "賽季開始"  # 開場那一則江湖紀錄的標籤（Game.new 與換季重來都寫它）；草廬裡的「剛剛」不放這一則（now_entry_html）
+
 FREE_TEXT_OPTION = "choice:free"  # 事件的「隨口應對」：按下去只是叫出輸入框，真正送出走 free_text_request／answer_event
 BIG_FIGHT_WAIT = "兩人對峙……"  # 大場面按下去、等模型判讀時按鈕上的字（武學與成長設計 8.3）
 # 賽季時鐘暫停（線上架構設計第四節、8.3）：選單上那一顆灰的，伺服器擋動作也回這一句（server._refuse_while_paused）。待 S1／joy 潤
@@ -198,7 +198,7 @@ class Game:
             + tutorial_intro(content)
         )
         if not game.state.journal:  # 第二季起建的角色：__init__ 的換季重來已經寫了開場那一則，不再寫一次（FB-052）
-            game._write(content.scenario.name, [content.scenario.intro], tag=SEASON_START_TAG, guide=tutorial_intro(content))
+            game._write(content.scenario.name, [content.scenario.intro], tag=journal.SEASON_START, guide=tutorial_intro(content))
         return game
 
     GRADUATE_TRIES = 12  # _graduate 每一步最多試幾次；照著走卻一直前進不了（內容改版、賽季籌備中）就放棄、直接出師
@@ -333,7 +333,7 @@ class Game:
         self.state.world = self.world.get_season()  # 開場那一則記此刻的季時間（FB-052：以前記成新存檔的 0）
         self.state.player.visited.add(self.state.player.location)
         self._write(
-            self.content.scenario.name, [self.content.scenario.intro], tag=SEASON_START_TAG, guide=tutorial_intro(self.content),
+            self.content.scenario.name, [self.content.scenario.intro], tag=journal.SEASON_START, guide=tutorial_intro(self.content),
         )
 
     def _drop_stale_references(self) -> None:
@@ -1231,13 +1231,18 @@ class Game:
     def _guide(self, notes: list[str]) -> list[str]:
         """新手引導的訊息不接進這次行動的訊息（「剛剛」只放行動的結果，引導重做設計 8.1.3）：記進這一則江湖紀錄的 guide、
         給對話框；不在行動裡（例如打開輿圖）時接在最新一則的 guide。回傳空串列，呼叫端照舊 `msgs += …`。"""
+        rewards = [str(n) for n in notes if isinstance(n, HutReward)]  # 序章的獎勵：是這次行動的結果，不是對話框的一列
+        notes = [n for n in notes if not isinstance(n, HutReward)]
         if notes:
             self._note_guide(notes)
             if self._draft is not None:
                 self._draft.guide += notes
             else:
                 journal.add_guide(self.state, notes)
-        return []
+        if rewards and self._draft is None:  # 不在行動裡完成的（打開修練頁之類）：接在最新一則的引導後面
+            journal.add_guide(self.state, rewards)
+            return []
+        return rewards
 
     def guide_box(self) -> dict | None:
         """行動列上方的對話框（引導重做設計 8.1、6.2）：引導還沒做完是目前這一步的話；剛走完、結語還沒按「知道了」是結語；
@@ -1265,12 +1270,15 @@ class Game:
 
             # 眼前有事件還沒了結時是 guide.pending_line，不推這一步；了結後原樣回來（FB-063；「下一步」也用同一句）
             pending = pending_line(s, c) is not None
-            return {
+            box = {
                 "speaker": guide_speaker_of(c, step), "key": step.id, "scene": fill(step.scene), "text": fill(step_text(s, c)),
                 # 收起來那一行（網頁用 line || text）：待處理時話已經換成「先把眼前的「…」了結」，這一步自己的短提示不能留著
                 # ——收著的框寫著短提示、跟事件擋著路互相矛盾（序章之外的步驟也可能有 line；序章自己在事件出現時整個框不畫，見上）
                 "line": "" if pending else fill(step.line), "done": list(p.guide_done), "end": False, "pending": pending,
             }
+            if step.paged:  # 話太長的序章步驟：網頁照空一行切成幾頁（只有分頁的步驟才帶這個鍵）
+                box["paged"] = True
+            return box
         if p.guide_outro and t.outro:
             return {
                 "speaker": t.speaker, "key": "outro", "scene": "", "text": t.outro, "line": "", "done": list(p.guide_done), "end": True,
@@ -3219,14 +3227,14 @@ class Game:
             if flourish:
                 text = f"{text}\n\n{flourish}"
         self._hide(text)
-        msgs = (  # 糧車到了終點（路過也算）先交糧，再照原本的新手引導與門檻（計畫 T6）
-            [text] + self._convoy_arrives(loc_id) + self._guide(note_action(s, c, self.world, "move"))
-            + check_thresholds(s, c, self.world, client, now=self.now)
-        )
+        # 糧車到了終點（路過也算）先交糧，再照原本的新手引導與門檻（計畫 T6）；呼叫的先後不能換
+        convoy = self._convoy_arrives(loc_id)
+        guide = self._guide(note_action(s, c, self.world, "move"))  # 出師的盤纏（序章步驟的獎勵）是這一趟路的結果，回在這裡
+        thresholds = check_thresholds(s, c, self.world, client, now=self.now)
         t = c.tutorial
-        if t.location is not None and before < t.prologue_steps <= s.player.tutorial_step and t.leave_text:
-            msgs.append(t.leave_text)  # 出師、抵達起點：「剛剛」接一句草廬已經看不見了（新手引導設計 10.3）
-        return msgs
+        left = [t.leave_text] if t.location is not None and before < t.prologue_steps <= s.player.tutorial_step and t.leave_text else []
+        # 出師、抵達起點：「剛剛」先接一句草廬已經看不見了（新手引導設計 10.3），再寫盤纏（T7 審查 M4）
+        return [text] + convoy + left + guide + thresholds
 
     def _road_sight(self, road: RoadKind, loc_id: str, when: float | None = None) -> list[str]:
         """路上見聞（路上設計第五節）：抵達一站時有 road_sight_chance 的機會，從符合這段路的種類、剛抵達那一站所在大區的
@@ -3357,6 +3365,10 @@ class Game:
 
     def _apply(self, effect: Effect) -> list[str]:
         msgs = apply_effect(effect, self.state, self.content, self.world, push=self.push_trend)
+        if effect.text and prologue_rules.active(self.state, self.content):
+            for msg in msgs:  # 草廬四景的結果文字已經寫了「你悟到了「…之意境」」，引擎的「你悟得了「…」的意境」是同一件事：紀錄只留前一句
+                if msg.startswith("你悟得了「"):
+                    self._hide(msg)
         if effect.next_event:
             msgs += self._present(self.content.events[effect.next_event])
         return msgs
@@ -3478,6 +3490,11 @@ class Game:
                 self.state, self.content, self.world, self._quick_client(), art_id, insight_ids[0], proposed=proposed,
             )
             tag = f"合成【{art.name}】" if art is not None else None
+            if art is not None:  # 草廬這一步寫了結果那一句（設計 10.3「合成之後」）就用它，後面接武學自己的說明（T7 審查 M1）
+                insight = insights.resolve(insight_ids[0], self.content, self.world)
+                line = prologue_rules.after_line(self.state, self.content, 意境=insight.name if insight else "", 武學=art.name)
+                if line is not None:
+                    msgs[0] = line + (f"\n{art.note}" if art.note else "")
         elif not art_id and not other_art and len(insight_ids) == 2:
             insight, msgs = fusion.merge(self.state, self.content, self.world, self._quick_client(), *insight_ids, proposed=proposed)
             tag = f"合併「{insight.name}」" if insight is not None else None
@@ -3509,7 +3526,7 @@ class Game:
             return self._log([problem])
         xinde, stamina, pills = self._xinde(), self.state.player.stamina, self.state.player.legend_items
         rng = prologue_rules.sure_rng(self.state, self.content) or self.rng  # 序章第 6 步：第一次修練一定升品
-        msgs = self._log(cultivation.cultivate(self.state, self.content, self.world, art_id, rng, use_legend))
+        msgs = cultivation.cultivate(self.state, self.content, self.world, art_id, rng, use_legend)
         spent = round(stamina - self.state.player.stamina)  # 輸了也花了體力：數值變化寫在紀錄上，跟別的行動一樣
         taken = pills - self.state.player.legend_items
         extra = ([f"體力 -{spent}"] if spent > 0 else []) + (
@@ -3517,6 +3534,12 @@ class Game:
         )
         # 結果標記是擲骰的結果（「【X】修練…」，一定以【開頭）；前面服丹、沒服的提示與後面定名的話都不是
         tag = next((m for m in msgs if m.startswith("【")), msgs[0])
+        won = next((i for i, m in enumerate(msgs) if "修練有成，從" in m), None)
+        art = team.resolve_art(art_id, self.content, self.world)
+        line = prologue_rules.after_line(self.state, self.content, 武學=art.name if art else "") if won is not None else None
+        if line is not None:  # 草廬這一步寫了結果那一句（設計 10.3「修練之後」）：它就是結果標記，也是敘事那一句（T7 審查 M1）
+            msgs[won] = tag = line
+        msgs = self._log(msgs)
         self._menxia_entry(tag, xinde, guide=True, action="cultivate", extra=extra or None)
         return msgs
 
@@ -3554,7 +3577,12 @@ class Game:
             return self._log(["（賽季籌備中，等待管理者開季。）"])
         xinde, held = self._xinde(), library.held_count(self.state)
         only = prologue_rules.melt_only(self.state, self.content)  # 序章只准熔師父說的那一門（None＝不限）
-        msgs = self._log(library.melt_art(self.state, self.content, self.world, art_id, only=only))
+        msgs = library.melt_art(self.state, self.content, self.world, art_id, only=only)
+        if library.held_count(self.state) < held:  # 草廬這一步寫了結果那一句（設計 10.3「熔了之後」）就用它（T7 審查 M1）
+            line = prologue_rules.after_line(self.state, self.content, 心得=self._xinde() - xinde)
+            if line is not None:
+                msgs[0] = line
+        msgs = self._log(msgs)
         if library.held_count(self.state) < held:  # 看有沒有真的少一門，不看心得：下品第一成的武學熔了只退 0 點
             self._menxia_entry(msgs[0], xinde, guide=True, action="melt")  # 序章第 10 步（新手引導計畫一）
         return msgs
@@ -3649,6 +3677,8 @@ class Game:
         changes = ([f"心得 {delta:+d}"] if delta else []) + (extra or [])  # extra：心得以外的數值變化（修練花的體力）
         self.state.player.guide_done = []
         notes = note_action(self.state, self.content, self.world, action) if guide else []
+        changes += [str(n) for n in notes if isinstance(n, HutReward)]  # 序章步驟的獎勵是這次動作的結果（T7 審查 M4）
+        notes = [n for n in notes if not isinstance(n, HutReward)]
         self._note_guide(notes)  # 引導的訊息記在這一則的 guide、給對話框，不進修練頁的訊息（引導重做設計 8.1.3）
         entry = JournalEntry(
             time=self.state.world.time, title=title, tag=tag, lines=list(lines or []), changes=changes, guide=notes,
@@ -3822,11 +3852,18 @@ class Game:
             seen.add(event_id)
             event = events[event_id]
             parts.append(f"**{event.title}**\n\n{event.text}")
-            event_id = next((ch.effect.next_event for ch in event.choices if ch.effect.next_event), None)
+            # 走下去的那個選項（有接下一則的、沒有就第一個）的結果文字：遇險的下場、師父收徒之後那一段（T7 審查 M5）
+            choice = next((ch for ch in event.choices if ch.effect.next_event), event.choices[0])
+            if choice.effect.text:
+                parts.append(choice.effect.text)
+            event_id = choice.effect.next_event
         for step in t.steps[: t.prologue_steps]:
             text = "\n\n".join(x for x in (step.scene, step.text) if x)
             if text:
                 parts.append(text.replace("{武學}", "新武學"))
+            sights = events.get(step.explore_event) if step.explore_event else None
+            if sights is not None:  # 探索那一步之後：四景的引子與每一景悟到的那一句
+                parts.append("\n\n".join([f"**{sights.title}**\n\n{sights.text}"] + [ch.effect.text for ch in sights.choices if ch.effect.text]))
         if t.leave_text:
             parts.append(t.leave_text)
         return "\n\n---\n\n".join(parts)
@@ -4548,8 +4585,13 @@ class Game:
         再寫一次，剛做完的事也不會因為一件大事發生就被擠掉。江湖紀錄頁照舊從最新一則列起（latest_entry_html）。
         一次補好幾件時每一行是「季曆時間　公告全文」。
         配點那一則也越過（計畫二最終審查 M1，見 _now_start）；越過之後什麼都不剩（只有配點）時才放它，不讓「剛剛」空著。
-        籌備中不放（FB-049）：那時最新一則是開場那一則，寫著「賽季開始」、叫人先去探索，選單卻只有「等待管理者開季」。"""
+        籌備中不放（FB-049）：那時最新一則是開場那一則，寫著「賽季開始」、叫人先去探索，選單卻只有「等待管理者開季」。
+        草廬裡（序章，T7 審查 I2、I3）只放自己做的事的結果：江湖大事、你不在的時候、賽季開場（journal.is_world_entry）都不放，
+        草廬的事件在眼前時整張卡不放（它只是重複事件的標題，還把選項擠到分頁列底下）。紀錄裡照舊都有。"""
         if self._preparing():
+            return ""
+        hut = prologue_rules.active(self.state, self.content)
+        if hut and self.state.pending_event is not None:
             return ""
         shown = self._news_on_cards()
 
@@ -4559,8 +4601,7 @@ class Game:
                 line in shown or line.partition("　")[2] in shown for line in story
             )
 
-        hut = prologue_rules.active(self.state, self.content)  # 草廬裡不放賽季開場那一則：序章第一屏只有遇險的畫面與選項（T6 審查 M8）
-        fresh = [e for e in self.state.journal if not repeated(e) and not (hut and e.tag == SEASON_START_TAG)]
+        fresh = [e for e in self.state.journal if not repeated(e) and not (hut and journal.is_world_entry(e))]
         entry = next((e for e in fresh if e.title != journal.ALLOCATE), fresh[0] if fresh else None)
         return journal.card_html(entry, self.stamp, self._chip) if entry is not None else ""
 

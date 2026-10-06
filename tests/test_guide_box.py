@@ -211,7 +211,8 @@ const S = { guideRoad: null, guideFull: null };
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 // guideKey 是網頁拿來認「這一步」的函式；沒有它（舊版）就退回認句子，好讓舊版在這裡是斷言失敗、不是找不到函式
 // openGuide、shutGuide 是「展開」「收起」兩顆鈕做的事（點擊的 switch 只是呼叫它們）；沒有它們（舊版）就是 null
-const H = new Function("S", "esc", src.slice(a, b) + "\nreturn { guideHtml, guideShut, setGuideShut, guideKey: typeof guideKey === 'function' ? guideKey : (g) => g.text, openGuide: typeof openGuide === 'function' ? openGuide : null, shutGuide: typeof shutGuide === 'function' ? shutGuide : null };")(S, esc);
+const pro = () => null; // guideHtml 問序章（pro()）：這裡的框不在序章裡
+const H = new Function("S", "esc", "pro", src.slice(a, b) + "\nreturn { guideHtml, guideShut, setGuideShut, guideKey: typeof guideKey === 'function' ? guideKey : (g) => g.text, openGuide: typeof openGuide === 'function' ? openGuide : null, shutGuide: typeof shutGuide === 'function' ? shutGuide : null };")(S, esc, pro);
 const box = (key, text, end = false, pending = false, done = []) => ({ speaker: "說書人", key, text, done, end, pending });
 const shown = (g, onRoad = false) => { const html = H.guideHtml(g, onRoad); return html.includes('class="guide-line"') ? "line" : html.includes("card guide") ? "card" : html ? "?" : ""; };
 const out = new Function("H", "S", "box", "shown", input.script)(H, S, box, shown);
