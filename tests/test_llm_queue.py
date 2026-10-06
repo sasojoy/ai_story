@@ -189,16 +189,36 @@ def test_a_waiter_that_dies_while_waiting_does_not_leave_its_ticket_behind():
 def test_a_free_slot_wakes_the_next_waiter_even_if_the_first_waiter_woke_late():
     """審查 I1：兩個位子、兩件一起做完，甲乙在排。乙先搶到條件鎖、發現甲才是頭、回去睡；甲搶到之後進場，位子還空著一個——
     甲進場時沒有再叫醒大家的話，乙要一路睡到自己的期限（或甲做完）才會輪到。把甲醒來重新拿鎖的時間拖 50 毫秒，這個交錯就每次都發生；
-    乙應該在甲進場之後馬上開始，不是等到期限。"""
+    乙應該在甲進場之後馬上開始，不是等到期限。
+    拖的做法只靠 threading.Condition 公開的行為：條件變數可以用自己給的鎖（只要有 acquire／release），醒來的人會用那把鎖的
+    acquire 重新拿鎖。所以這裡給它一把會在「甲醒來重新拿鎖」時多睡 50 毫秒的鎖，不碰 CPython 內部的方法；
+    拖慢真的發生過（delayed）也一併檢查，萬一哪天 Condition 不這樣拿鎖，測試是大聲失敗、不是悄悄放過。"""
+    class LateLock:
+        def __init__(self):
+            self._lock, self.armed, self.delayed = threading.Lock(), False, 0
+
+        def acquire(self, blocking=True, timeout=-1):
+            if blocking and self.armed and threading.current_thread().name == "甲":
+                self.delayed += 1
+                time.sleep(0.05)
+            return self._lock.acquire(blocking, timeout)
+
+        def release(self):
+            self._lock.release()
+
+        def locked(self):  # threading.Lock 公開的三個方法（acquire、release、locked）都有，Condition 才收這把鎖
+            return self._lock.locked()
+
+        def __enter__(self):
+            self.acquire()
+            return self
+
+        def __exit__(self, *exc):
+            self.release()
+
     queue = llm_queue.LlmQueue(slots=2, bot_cap=1)
-    restore = queue._cond._acquire_restore  # Condition 建構時把鎖的這個方法複製到實例上：包實例的，不包類別的
-
-    def late_for_a(state):
-        if threading.current_thread().name == "甲":
-            time.sleep(0.05)
-        return restore(state)
-
-    queue._cond._acquire_restore = late_for_a
+    late = LateLock()
+    queue._cond = threading.Condition(late)  # 換掉佇列自己的條件變數：只有這個測試需要拖慢誰
     go = threading.Event()
     running = [threading.Event(), threading.Event()]
 
@@ -224,9 +244,11 @@ def test_a_free_slot_wakes_the_next_waiter_even_if_the_first_waiter_woke_late():
     second.start()
     assert _wait_until(lambda: queue.snapshot()["waiting"] == 2)
     released_at = time.monotonic()
+    late.armed = True  # 從現在起，甲醒來重新拿鎖要慢 50 毫秒
     go.set()
     assert b_started.wait(1.5), "乙一路睡到自己的期限才輪到：位子空著、甲進場之後沒有叫醒它"
     assert time.monotonic() - released_at < 0.5
+    assert late.delayed >= 1, "沒有拖慢到甲：這個測試沒有重現它要擋的交錯"
     a_release.set()
     for thread in (*holders, first, second):
         thread.join(2)

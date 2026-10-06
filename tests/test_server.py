@@ -4543,6 +4543,30 @@ def test_a_waiting_player_counts_the_runners_and_humans_ahead_but_not_the_bots_b
     assert client.get("/api/queue").json() == {"ahead": None}
 
 
+def test_the_queue_endpoint_finds_a_mixed_case_name_under_the_key_the_queue_uses(client, monkeypatch):
+    """審查 M-4：佇列的鍵是名號的 casefold（model_call），/api/queue 也要用同一個鍵問。中文名號 casefold 什麼都沒變，
+    所以要用有大小寫的名號：「ShenQing」排進去之後，問的人是「ShenQing」、鍵是「shenqing」。問錯鍵就永遠是 null。
+    （管理者的名號「Rayal」是保留的、玩家取不到，所以用別的名號；管理者角色走的是同一條路。）"""
+    assert _player(client, login="shen_01", name="ShenQing")["stage"] == "game"
+    queue = llm_queue.LlmQueue(slots=1, bot_cap=1)
+    monkeypatch.setattr(server, "QUEUE", queue)
+    started, release = threading.Event(), threading.Event()
+
+    def hold():
+        started.set()
+        release.wait(5)
+
+    me = server.game_for("ShenQing")
+    thread = threading.Thread(target=lambda: server.model_call(me, hold, fallback=None))
+    thread.start()
+    assert started.wait(2)
+    assert queue.position("shenqing") == 0  # 佇列裡的鍵是小寫的
+    assert client.get("/api/queue").json() == {"ahead": 0}  # 這一件正在跑；問成 position("ShenQing") 會是 None
+    release.set()
+    thread.join(2)
+    assert client.get("/api/queue").json() == {"ahead": None}
+
+
 def _wait_for(predicate, seconds=2.0):
     end = time.monotonic() + seconds
     while time.monotonic() < end:

@@ -757,7 +757,7 @@ def admin_choices(game: Game) -> dict:
         **timetable_choices(game),
         # 下一季會照第一季的規則開（開關開著）：「開啟下一季」的問句也提醒排三場大戲與季末的時間（FB-050）
         "next_has_timetable": bool(CONTENT.config.season_one),
-        # 模型佇列的總數（正在跑幾件、真人在排幾件、假人在排幾件）；不列名號，也看不出誰是假人。開關關著是 None
+        # 模型佇列的總數（正在跑幾件、在排幾件，真人與假人算在一起，不分開數）；不列名號，也看不出有沒有假人（審查 M4）。開關關著是 None
         "llm_queue": None if QUEUE is None else QUEUE.snapshot(),
     }
 
