@@ -2,7 +2,7 @@ from unittest import mock
 
 import pytest
 
-from tianxia import database, fusion, insights, landing, library, naming, skillview, team
+from tianxia import database, fusion, insights, landing, library, naming, skillview, team, traits
 from tianxia.martial_arts import Insight, generate_from_name, power_at
 from tianxia.sqlite_world import open_world
 from tianxia.state import new_game_state
@@ -435,8 +435,11 @@ def test_forge_request_hands_out_a_naming_slip_only_when_the_model_is_needed(rea
     before = ready.model_dump_json()
     fuse = fusion.forge_request(ready, content, world, "basic_fist", ["feng"])
     assert (fuse.kind, fuse.key, fuse.name_kind) == ("fuse", fusion.fuse_key("basic_fist", "feng"), "武學")
-    assert fuse.messages == fusion._fuse_messages(team.player_art(ready, content, world, "basic_fist"),
-                                                  fusion.insights.resolve("feng", content, world))
+    base, feng = team.player_art(ready, content, world, "basic_fist"), fusion.insights.resolve("feng", content, world)
+    note = traits.naming_note(
+        content, traits.inherit_fuse(base, feng.attribute), traits.roll_special(content, fuse.key, world.read().tianji),
+    )
+    assert fuse.messages == fusion._fuse_messages(base, feng, note=note)
     merge = fusion.forge_request(ready, content, world, None, ["huo", "feng"])
     assert (merge.kind, merge.key, merge.name_kind) == ("merge", fusion.merge_key("huo", "feng"), "意境")
     assert ready.model_dump_json() == before  # 什麼都沒動
@@ -1309,3 +1312,181 @@ def test_blend_shape_keeps_the_insight_of_the_one_parent_that_matches_the_result
         assert fusion.blend_shape(fist, kick, f"0|兼|{i}") == shape  # 不分先後
         seen.add(shape.attribute)
     assert seen == {"快", "實"}  # 兩邊都出現過，上面的判斷才不是巧合
+
+
+# ── 武學的功效（武學與成長設計 13.3、13.4；計畫六 Task 2）：合成照來路帶一般功效、偶爾擲出特別功效 ──────────────
+
+
+def test_a_fused_art_carries_its_lineage_traits(ready, content, world):
+    art, _ = fusion.fuse(ready, content, world, named("旋風腿"), "basic_fist", "feng")
+    assert art.traits == ["快", "實"]  # 風的屬性在前，粗淺拳腳（實）傳下來
+    assert world.get_skill(art.id).traits == ["快", "實"]  # 登記在全服的那一份也帶著
+    again, _ = fusion.fuse(ready, content, world, named("烈風腿"), art.id, "huo")
+    assert again.traits == ["剛", "快", "實"]
+
+
+def test_a_fused_art_keeps_its_traits_when_the_model_is_down(ready, content, world):
+    """取名走退路字表也一樣：功效是規則算的，跟名字哪來的無關。"""
+    art, _ = fusion.fuse(ready, content, world, model_down(), "basic_fist", "feng")
+    assert art.traits == ["快", "實"]
+
+
+def test_a_blended_art_carries_both_parents_own_traits(ready, content, world):
+    ready.player.arts = ["lake_kick"]
+    art, _ = fusion.blend(ready, content, world, named("踏浪拳"), "basic_fist", "lake_kick")
+    assert art.traits[0] == art.attribute and sorted(art.traits[1:]) == ["實", "快"]
+    assert world.get_skill(art.id).traits == art.traits
+
+
+def test_a_new_art_may_roll_a_special(ready, content, world):
+    content.config.special_trait_chance = 1.0
+    art, _ = fusion.fuse(ready, content, world, named("旋風腿"), "basic_fist", "feng")
+    assert art.special in {t.id for t in content.traits.special if t.pool}
+    assert world.get_skill(art.id).special == art.special
+
+
+def test_a_blended_art_may_roll_a_special_too(ready, content, world):
+    content.config.special_trait_chance = 1.0
+    ready.player.arts = ["lake_kick"]
+    art, _ = fusion.blend(ready, content, world, named("踏浪拳"), "basic_fist", "lake_kick")
+    assert art.special in {t.id for t in content.traits.special if t.pool}
+
+
+def test_no_special_when_the_chance_is_zero(ready, content, world):
+    content.config.special_trait_chance = 0.0
+    art, msgs = fusion.fuse(ready, content, world, named("旋風腿"), "basic_fist", "feng")
+    assert art.special is None and not any("江湖上傳開了" in m for m in msgs)
+    assert ready.world.rumors == []
+
+
+def test_the_special_does_not_pass_down_to_the_next_art(ready, content, world):
+    """設計 13.4：拿它當底、或跟別的武學合，傳下去的只有一般功效；新武學照自己的配方擲。"""
+    content.config.special_trait_chance = 1.0
+    base, _ = fusion.fuse(ready, content, world, named("旋風腿"), "basic_fist", "feng")
+    assert base.special is not None
+    content.config.special_trait_chance = 0.0
+    child, _ = fusion.fuse(ready, content, world, named("烈風腿"), base.id, "huo")
+    assert child.special is None and child.traits == ["剛", "快", "實"]
+    ready.player.arts.append("lake_kick")
+    twin, _ = fusion.blend(ready, content, world, named("踏浪拳"), base.id, "lake_kick")
+    assert twin.special is None
+
+
+def test_the_same_recipe_in_the_same_season_always_rolls_the_same_special(content, world):
+    """擲的是配方加這一季的天機：再合一次（別人、或重來）同一個配方同一個結果。"""
+    content.config.special_trait_chance = 0.5
+    tianji = world.read().tianji
+    keys = [fusion.fuse_key("basic_fist", insight) for insight in ("feng", "huo", "shui", "shan", "haoran", "xuesha")]
+    first = [traits.roll_special(content, key, tianji) for key in keys]
+    assert first == [traits.roll_special(content, key, tianji) for key in keys]
+
+
+def test_landing_keeps_the_known_arts_traits(ready, content, world):
+    """Review Focus 5：合到舊的那一門維持原本的功效與特別功效，不重算、不重擲。"""
+    content.config.special_trait_chance = 1.0  # 乙合的那一門帶特別功效
+    other = other_player(content)
+    made, _ = fusion.fuse(other, content, world, named("旋風腿"), "basic_fist", "feng")
+    assert made.special is not None
+    landing_on(content)
+    content.config.special_trait_chance = 0.0  # 重擲的話這一次就會變成沒有
+    ready.player.arts = ["lake_kick"]  # 重算功效的話是【快、快】
+    art, msgs = fusion.fuse(ready, content, world, must_not_ask(), "lake_kick", "feng")
+    assert art.id == made.id and art.traits == made.traits == ["快", "實"] and art.special == made.special
+    assert not any("江湖上傳開了" in m for m in msgs)  # 不是第一次合出來
+
+
+def test_a_recipe_hit_does_not_recompute_the_traits(ready, content, world):
+    content.config.special_trait_chance = 1.0
+    made, _ = fusion.fuse(other_player(content), content, world, named("旋風腿"), "basic_fist", "feng")
+    content.config.special_trait_chance = 0.0
+    art, msgs = fusion.fuse(ready, content, world, must_not_ask(), "basic_fist", "feng")
+    assert art.id == made.id and art.special == made.special and art.traits == made.traits
+    assert not any("江湖上傳開了" in m for m in msgs)
+
+
+def test_the_naming_prompt_shows_the_traits(ready, content, world):
+    client = named("旋風腿")
+    fusion.fuse(ready, content, world, client, "basic_fist", "feng")
+    asked = client.chat_structured.call_args.args[0][-1]["content"]
+    assert "先手" in asked and "厚" in asked
+    assert asked.index("先手") < asked.index(naming.FORMAT_RULES)  # 提示寫在格式規則前面
+
+
+def test_the_blend_naming_prompt_shows_the_traits_and_the_special(ready, content, world):
+    content.config.special_trait_chance = 1.0
+    ready.player.arts = ["lake_kick"]
+    client = named("踏浪拳")
+    art, _ = fusion.blend(ready, content, world, client, "basic_fist", "lake_kick")
+    asked = client.chat_structured.call_args.args[0][-1]["content"]
+    assert "厚" in asked and "先手" in asked and traits.special(content, art.special).name in asked
+
+
+def test_the_naming_slip_is_exactly_the_prompt_the_fuse_sends(ready, content, world):
+    """A 段開的單子、B 段送出去的、C 段（沒給 proposed 時）自己送的是同一份提示：同一個配方、同一季的天機，
+    功效與特別功效算出來一樣（取名提示寫著功效，兩段對不上就會替另一門武學取名）。"""
+    content.config.special_trait_chance = 0.5
+    ready.player.insights = ["feng", "huo", "shui", "shan"]
+    for insight, name in (("feng", "旋風腿"), ("huo", "烈火掌"), ("shui", "流水拳"), ("shan", "鎮山拳")):
+        request = fusion.forge_request(ready, content, world, "basic_fist", [insight])
+        client = named(name)
+        fusion.fuse(ready, content, world, client, "basic_fist", insight)
+        assert request.messages == client.chat_structured.call_args.args[0], insight
+
+
+def test_the_blend_naming_slip_is_exactly_the_prompt_the_blend_sends(ready, content, world):
+    content.config.special_trait_chance = 1.0
+    ready.player.arts = ["lake_kick"]
+    request = fusion.forge_request(ready, content, world, "basic_fist", [], other_art="lake_kick")
+    client = named("踏浪拳")
+    fusion.blend(ready, content, world, client, "basic_fist", "lake_kick")
+    assert request.messages == client.chat_structured.call_args.args[0]
+
+
+def test_the_first_art_with_a_special_is_a_rumor_in_the_world(ready, content, world):
+    """設計 13.4：第一次合出帶特別功效的武學，江湖上傳一句（不寫配方）；之後照著合的人不再傳。"""
+    content.config.special_trait_chance = 1.0
+    art, msgs = fusion.fuse(ready, content, world, named("旋風腿"), "basic_fist", "feng")
+    special = traits.special(content, art.special)
+    line = f"江湖上傳開了：沈浪合出一門帶〔{special.name}〕的【旋風腿】。"
+    assert line in msgs
+    (rumor,) = ready.world.rumors
+    assert rumor.text == line and rumor.layer == "world" and rumor.named is True
+    assert rumor.location == ready.player.location
+    assert "basic_fist" not in line and "feng" not in line  # 不寫配方
+    again, again_msgs = fusion.fuse(other_player(content), content, world, must_not_ask(), "basic_fist", "feng")
+    assert again.id == art.id and not any("江湖上傳開了" in m for m in again_msgs)
+
+
+def test_the_special_rumor_names_the_maker_even_when_walking_anonymously(ready, content, world):
+    content.config.special_trait_chance = 1.0
+    ready.player.anonymous = True
+    ready.player.arts = ["lake_kick"]
+    art, msgs = fusion.blend(ready, content, world, named("踏浪拳"), "basic_fist", "lake_kick")
+    special = traits.special(content, art.special)
+    line = f"江湖上傳開了：沈浪合出一門帶〔{special.name}〕的【踏浪拳】。"
+    assert line in msgs and "某位少俠" not in line
+    (rumor,) = ready.world.rumors
+    # 世界層的傳聞一律具名、寫真正的名號（只有地方傳聞才有不具名）；匿名行走的人也一樣
+    assert rumor.text == line and rumor.named is True and rumor.layer == "world"
+    assert art.creator_shown == "某位少俠"  # 首創者那一門自己寫的名號照匿名的規矩，這裡不動
+
+
+def test_a_special_rumor_survives_the_engine_save(game):
+    """F3：Game.forge 做成了就把共用賽季存回去——傳聞放在 state.world.rumors，不存的話下一次 sync 就被資料庫的賽季蓋掉。"""
+    game.content.config.special_trait_chance = 1.0
+    p = game.state.player
+    p.member.wugong_id, p.insights, p.stats["xinde"] = "basic_fist", ["feng"], 100
+    with mock.patch.object(game.client, "chat_structured", side_effect=RuntimeError):
+        game.forge("basic_fist", ["feng"])
+    (new,) = p.arts
+    art = game.world.get_skill(new)
+    special = traits.special(game.content, art.special)
+    stored = [r.text for r in game.world.get_season().rumors]
+    assert f"江湖上傳開了：沈浪合出一門帶〔{special.name}〕的【{art.name}】。" in stored
+
+
+def test_a_rejected_forge_saves_no_rumor(game):
+    game.content.config.special_trait_chance = 1.0
+    game.state.player.insights = ["feng"]
+    game.forge("basic_fist", ["feng"])  # 手上沒有那門武學：被拒絕
+    assert not any("江湖上傳開了" in r.text for r in game.world.get_season().rumors)

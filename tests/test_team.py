@@ -7,7 +7,7 @@ from unittest import mock
 
 import pytest
 
-from tianxia import encounter, team
+from tianxia import encounter, team, traits
 from tianxia.content import load_content
 from tianxia.engine import Game
 from tianxia.martial_arts import generate_from_name
@@ -360,9 +360,9 @@ def _power_seen(call) -> float:
     seen: list[float] = []
     resolve = encounter.resolve_encounter
 
-    def spy(power, difficulty, rng, shift=0.0):
+    def spy(power, difficulty, rng, shift=0.0, mods=None):
         seen.append(power)
-        return resolve(power, difficulty, rng, shift=shift)
+        return resolve(power, difficulty, rng, shift=shift, mods=mods)
 
     with mock.patch.object(encounter, "resolve_encounter", side_effect=spy):
         call()
@@ -716,3 +716,299 @@ def test_a_full_team_says_so_in_chinese_only(state):
     msgs = team.add_to_team(state, "one_more")
     assert msgs and "一位夥伴" in msgs[0]
     assert not any(ch.isascii() and ch.isalpha() for ch in msgs[0])
+
+
+# ── 武學的功效（武學與成長設計 13.2、13.4；計畫六 Task 3）：換算成遭遇戰的數字 ──────────────
+
+
+def _trait_art(world, name, attribute, trait_list, special=None, kind="武學"):
+    art = generate_from_name(name, kind, name, attribute=attribute).model_copy(
+        update={"origin": "fused", "traits": trait_list, "special": special},
+    )
+    world.claim_skill_name(art)
+    return art
+
+
+def _wear(state, world, *arts, quality="下品"):
+    for art in arts:
+        slot = "neigong_id" if art.kind == "內功" else "wugong_id"
+        setattr(state.player.member, slot, art.id)
+        state.player.art_quality[art.id] = quality
+
+
+class _CountingRandom(random.Random):
+    """數 random() 被叫了幾次：uniform（運氣）與閃避都是一次 random()。"""
+
+    def __init__(self, seed):
+        super().__init__(seed)
+        self.draws = 0
+
+    def random(self):
+        self.draws += 1
+        return super().random()
+
+
+def test_stacked_traits_stop_at_their_caps(state, content, world):
+    """Review Focus 2：兩門絕學、三格都是同一個功效＝18 層，數字停在上限。"""
+    outer = _trait_art(world, "全快拳", "快", ["快", "快", "快"])
+    inner = _trait_art(world, "全快功", "快", ["快", "快", "快"], kind="內功")
+    _wear(state, world, outer, inner, quality="絕學")
+    mods = team.trait_mods(content, traits.loadout(state, content, world))
+    assert mods.big_win_cut == pytest.approx(0.2)
+
+
+def test_every_general_trait_stops_at_its_cap_and_nothing_goes_negative(state, content, world):
+    """八個一般功效各疊 18 層：每個數字停在上限，運氣的倍數、門檻、扣氣血的比例都不會變成負的。"""
+    for attribute in ("快", "慢", "剛", "柔", "陽", "陰", "虛", "實"):
+        outer = _trait_art(world, f"{attribute}拳", attribute, [attribute] * 3)
+        inner = _trait_art(world, f"{attribute}功", attribute, [attribute] * 3, kind="內功")
+        _wear(state, world, outer, inner, quality="絕學")
+        lo = traits.loadout(state, content, world)
+        for trait in content.traits.general:
+            if trait.attribute == attribute:
+                assert traits.amount(content, lo, trait.hook) == pytest.approx(trait.cap)
+        mods = team.trait_mods(content, lo)
+        assert mods.luck_scale >= 0 and 0 <= mods.big_win_cut <= 0.2 and 0 <= mods.difficulty_cut <= 0.2
+
+
+def test_steady_and_risky_cancel_out(state, content, world):
+    """Review Focus 3：穩與險都疊到上限，運氣的起伏回到原樣，不會變成負的。"""
+    outer = _trait_art(world, "穩拳", "慢", ["慢", "慢", "慢"])
+    inner = _trait_art(world, "險功", "虛", ["虛", "虛", "虛"], kind="內功")
+    _wear(state, world, outer, inner, quality="絕學")
+    assert team.trait_mods(content, traits.loadout(state, content, world)).luck_scale == pytest.approx(1.0)
+
+
+def test_steady_alone_narrows_the_luck_and_risky_alone_widens_it(state, content, world):
+    steady = _trait_art(world, "穩拳", "慢", ["慢", "慢", "慢"])
+    _wear(state, world, steady)  # 下品三層：穩 45%
+    assert team.trait_mods(content, traits.loadout(state, content, world)).luck_scale == pytest.approx(0.55)
+    risky = _trait_art(world, "險拳", "虛", ["虛", "虛"])
+    _wear(state, world, risky)  # 下品兩層：險 30%
+    assert team.trait_mods(content, traits.loadout(state, content, world)).luck_scale == pytest.approx(1.3)
+
+
+def test_the_special_mods_come_from_the_specials(state, content, world):
+    art = _trait_art(world, "借力拳", "剛", ["剛"], special="jieli")
+    _wear(state, world, art)
+    mods = team.trait_mods(content, traits.loadout(state, content, world))
+    assert mods.power_add == pytest.approx(0.05) and not mods.double_luck
+    art = _trait_art(world, "連環拳", "剛", ["剛"], special="lianhuan")
+    _wear(state, world, art)
+    mods = team.trait_mods(content, traits.loadout(state, content, world))
+    assert mods.double_luck and mods.power_add == 0.0
+
+
+def test_no_traits_means_the_same_roll_as_before(state, content, world):
+    """Review Focus 1：沒有武學的人換算出來是空的 Mods——encounter 那一條測試證明空的 Mods 跟以前一模一樣；
+    帶了武學、但沒有連環的人，一場仗也只擲一次運氣。"""
+    state.player.member.wugong_id = state.player.member.neigong_id = None
+    assert team.trait_mods(content, traits.loadout(state, content, world)) == encounter.Mods()
+    state.player.member.wugong_id = "basic_fist"  # 屬實：只有【厚】，不碰運氣
+    assert not team.trait_mods(content, traits.loadout(state, content, world)).double_luck
+
+
+def test_a_starter_who_never_double_rolls_draws_exactly_what_a_plain_fight_draws(state, content, world):
+    """F12：開局的基礎武學帶【厚】【化勁】，但這兩個都不碰運氣、也不碰閃避——沒有連環的人，一場仗用掉的亂數
+    （次數與整個亂數狀態）跟沒有功效時一模一樣：打得贏的一場擲一次運氣；必敗的一場擲一次運氣，加上閃避那一次。"""
+    state.player.member.wugong_id, state.player.member.neigong_id = "basic_fist", "basic_breath"
+    assert traits.loadout(state, content, world).layers  # 確實帶著功效
+    for seed in range(12):
+        for squad_id, agi in (("thug", 5), ("boss", 5), ("boss", 15)):
+            state.player.stats["agi"] = agi
+            ours, theirs = _CountingRandom(seed), _CountingRandom(seed)
+            result = team.fight(state, content, world, squad_id, ours)
+            plain = encounter.resolve_encounter(result.our_power, result.difficulty, theirs)
+            plain = encounter.dodge(plain, team.dodge_chance(state, content), theirs)
+            assert result == plain, (seed, squad_id, agi)
+            assert ours.draws == theirs.draws and ours.getstate() == theirs.getstate()
+    # 數字本身釘住：沒有閃避機會的人一場一次；必敗而有閃避機會的一場兩次（運氣＋閃避）
+    state.player.stats["agi"] = 5
+    for squad_id in ("thug", "boss"):
+        rng = _CountingRandom(3)
+        team.fight(state, content, world, squad_id, rng)
+        assert rng.draws == 1, squad_id
+    state.player.stats["agi"] = 15
+    rng = _CountingRandom(3)
+    assert team.fight(state, content, world, "boss", rng).tier in ("落敗", "僵持") and rng.draws == 2
+
+
+def test_double_luck_is_the_only_trait_that_rolls_the_luck_twice(state, content, world):
+    state.player.stats["agi"] = 5  # 沒有閃避
+    art = _trait_art(world, "連環拳", "剛", ["剛"], special="lianhuan")
+    _wear(state, world, art)
+    rng = _CountingRandom(1)
+    team.fight(state, content, world, "thug", rng)
+    assert rng.draws == 2
+
+
+def test_guard_turns_a_loss_into_a_draw_before_any_dodge(state, content, world):
+    """護命（13.4）：落敗一律改判僵持，蓋過身法閃避，也就不擲閃避的亂數。"""
+    art = _trait_art(world, "護身拳", "實", ["實"], special="huming")
+    _wear(state, world, art)
+    state.player.stats["agi"] = 15
+    rng = random.Random(0)
+    result = team.fight(state, content, world, "boss", rng)
+    assert (result.tier, result.guarded, result.dodged) == ("僵持", True, False)
+
+
+def test_guard_is_checked_before_the_dodge_and_leaves_the_dodge_roll_unspent(state, content, world):
+    """閃避必中（身法 15、每點 10%）也是護命先收：guarded 而不是 dodged；亂數只用掉運氣那一次，沒有擲閃避。"""
+    content.config.dodge_per_point = 0.1
+    state.player.stats["agi"] = 15
+    art = _trait_art(world, "護身拳", "實", ["實"], special="huming")
+    _wear(state, world, art)
+    rng = _CountingRandom(7)
+    result = team.fight(state, content, world, "boss", rng)  # 難度 200，必敗
+    assert (result.tier, result.guarded, result.dodged) == ("僵持", True, False) and rng.draws == 1
+
+
+def test_guard_does_nothing_in_a_story_battle_that_turns_the_dodge_off(state, content, world):
+    """F1：劇情戰（dodge=False）僵持也算敗，護命改判成僵持只會自相矛盾；跟閃避一樣不動，也不多擲亂數。"""
+    art = _trait_art(world, "護身拳", "實", ["實"], special="huming")
+    _wear(state, world, art)
+    ours, theirs = _CountingRandom(7), _CountingRandom(7)
+    result = team.fight(state, content, world, "boss", ours, dodge=False)
+    assert result.tier == "落敗" and not result.guarded and not result.dodged
+    assert result == encounter.resolve_encounter(result.our_power, result.difficulty, theirs)
+    assert ours.draws == theirs.draws == 1
+
+
+def test_guard_leaves_a_win_alone(state, content, world):
+    art = _trait_art(world, "護身拳", "實", ["實"], special="huming")
+    _wear(state, world, art)
+    result = team.fight(state, content, world, "thug", random.Random(0), difficulty=1)  # 難度 1，一定贏
+    assert result.tier in team.WIN_TIERS and not result.guarded
+
+
+def test_a_fight_passes_the_traits_to_the_judgement(state, content, world):
+    """打一場把功效換算成的 Mods 交給單次判定：破甲（下品一層 4%）。"""
+    art = _trait_art(world, "破甲拳", "剛", ["剛"])
+    _wear(state, world, art)
+    seen = []
+    resolve = encounter.resolve_encounter
+
+    def spy(power, difficulty, rng, shift=0.0, mods=None):
+        seen.append(mods)
+        return resolve(power, difficulty, rng, shift=shift, mods=mods)
+
+    with mock.patch.object(encounter, "resolve_encounter", side_effect=spy):
+        team.fight(state, content, world, "thug", random.Random(0))
+    assert seen[0].difficulty_cut == pytest.approx(0.04)
+
+
+def test_soft_and_still_cut_the_toll_and_the_injury(state, content, world):
+    content.config.encounter_neili_loss = {"落敗": 0.3}
+    plain = state.model_copy(deep=True)
+    team.take_encounter_toll(plain, content, world, "落敗")
+    art = _trait_art(world, "化勁掌", "柔", ["柔", "柔", "柔"], special="budong")
+    _wear(state, world, art)  # 下品三層：化勁 30%
+    team.take_encounter_toll(state, content, world, "落敗")
+    cap = team.member_neili(content, state.player.member, team.con_of(state, content, world, PLAYER))[1]
+    lost = cap - state.player.member.neili
+    plain_lost = cap - plain.player.member.neili
+    assert lost == pytest.approx(plain_lost * 0.7) and state.player.member.injury == 0
+
+
+def test_soft_alone_cuts_the_injury_with_the_toll(state, content, world):
+    """化勁少扣的氣血，變成內傷的那一部分也跟著少（內傷是損失的固定幾成）。"""
+    content.config.encounter_neili_loss = {"落敗": 0.3}
+    plain = state.model_copy(deep=True)
+    team.take_encounter_toll(plain, content, world, "落敗")
+    art = _trait_art(world, "化勁掌", "柔", ["柔", "柔", "柔"])
+    _wear(state, world, art)
+    team.take_encounter_toll(state, content, world, "落敗")
+    assert state.player.member.injury == pytest.approx(plain.player.member.injury * 0.7)
+
+
+def test_still_cuts_only_the_injury_not_the_hp(state, content, world):
+    content.config.encounter_neili_loss = {"落敗": 0.3}
+    plain = state.model_copy(deep=True)
+    team.take_encounter_toll(plain, content, world, "落敗")
+    art = _trait_art(world, "不動拳", "剛", ["剛"], special="budong")
+    _wear(state, world, art)
+    msgs = team.take_encounter_toll(state, content, world, "落敗")
+    assert state.player.member.injury == 0 and not any(m.startswith("內傷") for m in msgs)
+    assert state.player.member.neili == pytest.approx(plain.player.member.neili)
+
+
+def test_the_toll_cut_only_touches_the_player_not_the_companions(state, content, world):
+    content.config.encounter_neili_loss = {"落敗": 0.3}
+    state.player.team = ["mate"]
+    plain = state.model_copy(deep=True)
+    team.take_encounter_toll(plain, content, world, "落敗")
+    mate_plain = world.get_companion("mate").injury
+    world.update_companion("mate", lambda p: setattr(p, "injury", 0.0))
+    art = _trait_art(world, "化勁掌", "柔", ["柔", "柔", "柔"])
+    _wear(state, world, art)
+    team.take_encounter_toll(state, content, world, "落敗")
+    assert world.get_companion("mate").injury == pytest.approx(mate_plain)
+
+
+def test_thick_raises_the_players_wounded_floor(state, content, world):
+    art = _trait_art(world, "厚土拳", "實", ["實", "實", "實"])
+    _wear(state, world, art)
+    state.player.member.neili = 0.0
+    assert team.team_conditions(state, content, world)[0] == pytest.approx(encounter.CONDITION_FLOOR + 0.15)
+
+
+def test_thick_does_not_change_a_healthy_or_a_companions_condition(state, content, world):
+    art = _trait_art(world, "厚土拳", "實", ["實", "實", "實"])
+    _wear(state, world, art)
+    state.player.team = ["mate"]
+    world.update_companion("mate", lambda p: setattr(p, "neili", 0.0))
+    state.player.member.neili = None  # 滿血
+    own, mate = team.team_conditions(state, content, world)
+    assert own == 1.0 and mate == pytest.approx(encounter.CONDITION_FLOOR)
+
+
+def test_the_odds_include_roll_traits_but_not_the_guard(state, content, world):
+    """勝算含會改到贏的機會的功效（破甲），不含護命（只把落敗變僵持）。"""
+    art = _trait_art(world, "破甲拳", "剛", ["剛"])
+    _wear(state, world, art)
+    seen = []
+    resolve = encounter.resolve_encounter
+
+    def spy(power, difficulty, rng, shift=0.0, mods=None):
+        seen.append(mods)
+        return resolve(power, difficulty, rng, shift=shift, mods=mods)
+
+    with mock.patch.object(encounter, "resolve_encounter", side_effect=spy):
+        team.estimate(state, content, world, "thug")
+    assert seen and all(m is not None and m.difficulty_cut == pytest.approx(0.04) for m in seen)
+
+    # 同一門武學換上護命（登記成另一個名字，威力與功效都不變）：每一個難度的勝算都不變，必敗的不會變成「難分勝負」
+    guarded = art.model_copy(update={"id": "護身破甲拳", "name": "護身破甲拳", "special": "huming"})
+    world.claim_skill_name(guarded)
+    words = {d: team.estimate(state, content, world, "thug", difficulty=d) for d in range(0, 60, 3)}
+    _wear(state, world, guarded)
+    assert {d: team.estimate(state, content, world, "thug", difficulty=d) for d in words} == words
+    assert team.estimate(state, content, world, "boss") == "必敗"  # 護命若算進勝算，這裡會變成「難分勝負」
+    assert len(set(words.values())) > 2  # 掃過的難度橫跨幾種說法，上面的比較才不是同一個字比到底
+
+
+def test_heal_fraction_heals_up_to_the_ceiling_and_says_how_much(state, content, world):
+    content.config.encounter_neili_loss = {"落敗": 0.3}
+    team.take_encounter_toll(state, content, world, "落敗")  # 掉氣血、累積內傷
+    member = state.player.member
+    con = team.con_of(state, content, world, PLAYER)
+    now, cap = team.member_neili(content, member, con)
+    msgs = team.heal_fraction(state, content, world, 0.02)
+    after, _ = team.member_neili(content, member, con)
+    assert after == pytest.approx(now + cap * 0.02) and msgs == [f"氣血 +{cap * 0.02:.0f}"]
+
+
+def test_heal_fraction_stops_at_the_ceiling_and_leaves_full_as_none(state, content, world):
+    """回到天花板（上限 − 內傷）就是「滿」：記成 None（member_neili 的約定），升級、根骨變高時才跟著滿；補不到 1 點不寫。"""
+    member = state.player.member
+    member.injury = 50.0
+    con = team.con_of(state, content, world, PLAYER)
+    ceiling = team.neili_ceiling(content, member, con)
+    member.neili = ceiling - 3.0
+    msgs = team.heal_fraction(state, content, world, 0.5)
+    assert member.neili is None and msgs == ["氣血 +3"]
+    assert team.heal_fraction(state, content, world, 0.5) == []  # 已經滿了：什麼都不寫
+    assert member.neili is None
+    member.neili = ceiling - 5.0
+    assert team.heal_fraction(state, content, world, 0.4 / 320) == []  # 回了 0.4 點：回不到 1 點不寫
+    assert member.neili == pytest.approx(ceiling - 4.6)  # 但氣血照樣回了
