@@ -678,16 +678,22 @@ class Milestone(_Strict):
     condition: Condition
 
 
+GoalAction = Literal[
+    "explore", "socialize", "move", "view_map", "recruit", "practice", "order",
+    "choice", "view_tab", "cultivate", "rest", "train", "allocate", "melt", "sense",
+    "view_orders",  # 入伍段（新手引導計畫二）：軍令卡出現在畫面上
+    "duty",  # 做了一次自己陣營的守勢行動（巡哨、傳道、保境安民），不管有沒有替軍令記到（FB-094）
+]
+
+
 class TutorialGoal(_Strict):
     """每一項都要符合才算完成；空的（或 False 的）欄位不檢查。"""
 
     # order：替軍令記到一次（計畫 T6）。choice～melt：序章（新手引導計畫一）那幾步要的動作：選了事件的選項、打開修練／煉製頁、
     # 修練、打坐、遊歷、配點、熔煉
-    action: Literal[
-        "explore", "socialize", "move", "view_map", "recruit", "practice", "order",
-        "choice", "view_tab", "cultivate", "rest", "train", "allocate", "melt", "sense",
-        "view_orders",  # 入伍段（新手引導計畫二）：軍令卡出現在畫面上
-    ] | None = None
+    action: GoalAction | None = None
+    # action 以外，做了這幾個動作之一也算（FB-094：第一道軍令那一步，替軍令記到一次「或」做一次守勢行動）；action 沒寫就不用
+    or_actions: list[GoalAction] = Field(default_factory=list)
     locations: list[str] = Field(default_factory=list)
     condition: Condition = Field(default_factory=Condition)
     has_wugong: bool = False  # 身上要有一門武學才算（沒有武學威力是 0，出城只有挨打的份）

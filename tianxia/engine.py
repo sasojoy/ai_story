@@ -541,6 +541,7 @@ class Game:
         summons = ranks.check_summons(self.state, self.content)  # 行動之外記到的貢獻（抵達、別人觸發的結算）：同步時補發召見（計畫 T5）
         if summons:
             self._write("召見", summons)
+        self._guide(enlist.expire(self.state, self.content))  # 第一道軍令一週還沒做完：引薦人照樣說結語（FB-094）；說的話記進江湖紀錄
         self._check_hints()  # 抵達、大事揭曉、決戰集結這些不靠行動的改變，加上籌備中、休季之後第一次同步、換季後的開季那一句：新的排一條、輪到的上框（新手引導計畫三；只改 guide，不另起一則）
         self._deliver_away(away_from)  # 最後寫：江湖頁的「剛剛」先放這一份摘要（要跟別的計畫合併時，這一行維持在 return 的前一句）
         return self._log(msgs + arrived + settled + summons)
@@ -1887,7 +1888,9 @@ class Game:
         elif goals.get(GEJU) and in_chaos(s, c, front):
             msgs += self.push_trend(GEJU, 1, source="duty")
         msgs += opportunities.after_success(s, c, "duty", loc.id, self.rng)  # 收容流民（正式版乙一）
-        return msgs + self._order_credit(kind="duty", front=front)
+        msgs += self._order_credit(kind="duty", front=front)
+        # 入伍段第一道軍令那一步也認「做了一次守勢行動」（FB-094：豪強第一週沒有做得到的軍令）；軍令的記功照舊只看上面那一行
+        return msgs + self._guide(note_action(s, c, self.world, "duty"))
 
     def _take_convoy(self) -> list[str]:
         """接下糧車（護糧，軍令文件 3.4）：交出 convoy_grain 份糧草（從低階的慢屬性素材用起，多的不找），記下要送到哪裡。

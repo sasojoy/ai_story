@@ -193,6 +193,9 @@ class PlayerState(BaseModel):
     onboarding: int = 0  # 這個角色的引導是照哪一版記的（ONBOARDING_VERSION）；舊存檔沒有這個欄位＝0
     enlist_step: int | None = None  # 入伍段（新手引導計畫二）：None＝還沒開始；等於步數＝走完
     enlist_end: bool = False  # 入伍段剛走完、引薦人的結尾還沒按「知道了」
+    # 入伍段目前這一步是從世界時間（秒，季裡的時鐘，不是電腦時鐘）的哪一刻開始的（FB-094）：最後一步（第一道軍令）一週（季曆）
+    # 還沒做完，引薦人照樣說結語、入伍段關起來（enlist.expire）。這一版之前存的角色沒有，None＝下一次檢查才從那一刻算起
+    enlist_since: float | None = None
     # ── 碰到才說（新手引導計畫三）──
     hints_seen: set[str] = Field(default_factory=set)  # 說過（上過框）的提示 id；換季保留，整個遊戲每一條只說一次
     hint_queue: list[HintNote] = Field(default_factory=list)  # 排著還沒按「知道了」的提示，對話框一次一條；換季不帶

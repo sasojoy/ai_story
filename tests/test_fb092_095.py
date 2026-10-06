@@ -147,6 +147,128 @@ def test_fb093_the_ending_no_longer_recites_every_kind(on):
         assert "陣營" in who.done  # 「陣營 幾／幾」是什麼意思還講：那是卡片上的另一件事
 
 
+# ── FB-094：豪強入伍第 2 步這一週做不到 ─────────────────────────────────
+# 第一道軍令那一步放寬：替軍令記到一次，或做一次自己陣營的守勢行動（巡哨、傳道、保境安民）都算；軍令本身（怎麼發、怎麼記）不動。
+# 一週（季曆）之後還沒做完，引薦人照樣說結語、入伍段關起來。
+
+
+def _finished(game, on):
+    assert enlist_done(game.state, on) and game.state.player.enlist_end
+    box = game.guide_box()
+    assert box["key"] == "enlist_end" and box["end"]
+    return box
+
+
+def enlist_done(state, content):
+    from tianxia import enlist
+
+    return enlist.done(state, content)
+
+
+def test_fb094_a_magnate_finishes_enlistment_in_week_one_by_keeping_the_peace(on):
+    """豪強第一週只有一道「打擊」軍令（難度 98 的大勢人物，新角色打不贏）：在自己的地盤做「保境安民」就算第一道。"""
+    game = _enlisted(on, "haoqiang", place="cao_manor")
+    p = game.state.player
+    assert not enlist_done(game.state, on) and DUTY["haoqiang"] in game.guide_box()["text"]  # 框上指的就是這一個
+    before = [list(o.progress.values()) for o in game.state.world.orders]
+    game.choose("act:duty")
+    box = _finished(game, on)
+    assert box["speaker"] == "季伯平" and box["text"] == on.tutorial.enlist.recruiters["haoqiang"].done
+    assert [list(o.progress.values()) for o in game.state.world.orders] == before  # 軍令的記功沒動：他一道軍令也沒做
+    game.guide_ack()
+    assert game.guide_box() is None and not p.enlist_end
+
+
+@pytest.mark.parametrize("with_defend_order", [True, False])
+def test_fb094_the_imperial_side_finishes_by_patrolling_with_or_without_a_defence_order(on, with_defend_order):
+    game = _enlisted(on, "guan")
+    if with_defend_order:
+        order = _order(game, "defend", "guan", front=front_of(on, "changshe"), quota=900)
+    game.choose("act:duty")
+    _finished(game, on)
+    if with_defend_order:
+        assert order.progress == {game.state.player.name: 1}  # 有守城軍令時，這一下照舊替它記了一次（軍令不動）
+
+
+def test_fb094_an_order_credit_still_finishes_the_step_as_before(on):
+    from tests.test_orders import _win
+
+    game = _enlisted(on, "guan")
+    _order(game, "siege", "guan", front=front_of(on, "changshe"))
+    with _win():
+        game.choose("act:train")
+    _finished(game, on)
+
+
+def test_fb094_other_actions_do_not_finish_it(on):
+    game = _enlisted(on, "guan")
+    game.choose("act:rest")
+    assert not enlist_done(game.state, on)
+
+
+def test_fb094_the_box_names_the_defence_action_even_without_a_defence_order(on):
+    """豪強這一週沒有守城軍令：框上說你腳下做得了的仍是保境安民（它現在也算數）。"""
+    game = _enlisted(on, "haoqiang", place="cao_manor")
+    assert not any(o.template == "defend" for o in game.state.world.orders)
+    assert DUTY["haoqiang"] in game.guide_box()["text"]
+
+
+def test_fb094_the_magnates_ending_says_what_the_peace_is_for(on):
+    done = on.tutorial.enlist.recruiters["haoqiang"].done
+    assert "保境安民是守自家地盤" in done and "家主吩咐的大事" in done and "夠格" in done
+    assert "不守城" not in done and "牆在自己家裡" not in done  # 舊的說法（不攻城也不守城）跟現在對不上
+
+
+def test_fb094_a_week_later_the_recruiter_says_the_ending_anyway(on):
+    """一週（季曆）之後第一道軍令還沒做完：引薦人照樣說結語、入伍段關起來。從那一步開始算起，不看電腦時鐘（世界時間）。"""
+    from tianxia import calendar
+
+    game = _enlisted(on, "haoqiang", place="cao_manor")
+    week = calendar.WEEK / calendar.cal_scale(on, game.state.world)
+    game.advance(week - 60)
+    game.sync(1.0)
+    assert not enlist_done(game.state, on)  # 還差一分鐘
+    assert game.guide_box()["key"] == "r3_first_order"
+    game.advance(120)
+    game.sync(2.0)
+    box = _finished(game, on)
+    assert box["speaker"] == "季伯平" and box["text"] == on.tutorial.enlist.recruiters["haoqiang"].done
+    assert any(line.startswith("【季伯平】") and "保境安民" in line for e in game.state.journal for line in e.guide)  # 說的話記進江湖紀錄
+    game.guide_ack()
+    game.sync(3.0)
+    assert game.guide_box() is None  # 關了就是關了：不會再開
+
+
+def test_fb094_the_week_counts_from_when_the_step_started_not_from_joining(on):
+    from tianxia import calendar
+
+    game = _enlisted(on, "guan")
+    week = calendar.WEEK / calendar.cal_scale(on, game.state.world)
+    p = game.state.player
+    assert p.enlist_since == game.state.world.time  # 看過軍令卡、第一道軍令那一步開始的那一刻
+    started = p.enlist_since
+    game.advance(week * 0.6)
+    game.sync(1.0)
+    assert p.enlist_since == started and not enlist_done(game.state, on)
+
+
+def test_fb094_the_fallback_only_touches_the_order_step_and_old_saves_start_their_week_when_loaded(on):
+    from tianxia import calendar, enlist
+
+    game = _game(on, at="changshe")
+    game.state.player.tutorial_step = len(guide.steps(game.state, on))
+    game.set_hints_off(True)
+    game.choose("faction:guan")
+    game.choose("faction:confirm")
+    week = calendar.WEEK / calendar.cal_scale(on, game.state.world)
+    game.advance(week * 3)
+    game.sync(1.0)
+    assert game.guide_box()["key"] == "r2_briefing" and game.state.player.enlist_step == 0  # 看軍令卡那一步不被收掉
+    game.view_orders()
+    game.state.player.enlist_since = None  # 這一版之前存的角色：沒有記下那一步什麼時候開始
+    assert enlist.expire(game.state, on) == [] and game.state.player.enlist_since == game.state.world.time  # 從現在算起的一週
+
+
 def _enlist_main(on, faction="guan"):
     game = _enlisted(on, faction)
     _order(game, "defend", faction, front=front_of(on, JOIN_AT[faction]))

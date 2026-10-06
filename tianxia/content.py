@@ -1638,6 +1638,7 @@ def validate(c: Content) -> None:
             where = f"入伍段 {step.id}"
             known(where, step.done_when.locations, c.locations, "地點")
             check_condition(where, step.done_when.condition)
+            need(not step.done_when.or_actions or step.done_when.action, f"{where}：or_actions 要跟 action 一起寫（action 是主要的那一個）")
             bad = [key for key in step.glow if key not in GLOW_KEYS]
             need(not bad, f"{where}：glow 不認得 {bad}（要是 models.GLOW_KEYS 裡的鍵）")
         # 第一道軍令那一步框上多的一句（FB-093）：{做法} 要寫在 how_here 裡；兩句要嘛都寫、要嘛都不寫
