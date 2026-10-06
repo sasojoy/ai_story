@@ -1,7 +1,8 @@
 import pytest
 
-from tianxia import fusion, library, rules, skillview, team
+from tianxia import fusion, library, rules, skillview, team, traits
 from tianxia.martial_arts import MartialArt, generate_from_name, historical_art, power_at
+from tianxia.state import new_game_state
 
 
 def test_rules_line():
@@ -54,12 +55,14 @@ def test_detail_before_learning_says_so(state, content, world):
 def test_detail_of_a_historical_skill(state, content, world):
     rules.learn_skill(state, content, "fist")
     text = skillview.detail(state, content, world, "武學")
-    # FB-006：detail 改用功法卡，多了十格條、第一成／第十成兩個數字；本命武學沒有說明句，那一行整行省略
+    # FB-006：detail 改用功法卡，多了十格條、第一成／第十成兩個數字；本命武學沒有說明句，那一行整行省略。
+    # 計畫六 Task 4：來源之後多一行功效（長拳屬剛、絕學 ×3：破甲 4%×3＝12%）
     assert text == (
         "【長拳】絕學・屬剛\n"
         "第1成 ●○○○○○○○○○，威力 50.0（下一成：57.8）\n"
         "第一成 50.0　第十成 120.0\n"
-        "來源：本命武學"
+        "來源：本命武學\n"
+        "功效：〔破甲〕對手強度當作低 12%"
     )
 
 
@@ -792,3 +795,98 @@ def test_the_card_of_a_blended_art_names_both_parents():
     )
     card = skillview.art_card(art, 1, None, ["旋風腿", "烈火拳"])
     assert card.split("\n")[3] == "來源：合成（甲 首創）　由【旋風腿】與【烈火拳】衍生"
+
+
+# ── 武學的功效（武學與成長設計 13.6；計畫六 Task 4）：功法卡一行功效、爐子寫已知配方的功效 ──────────────
+
+
+def test_the_art_card_lists_its_traits(state, content, world):
+    art = generate_from_name("裂石拳", "武學", "裂石拳", attribute="剛").model_copy(
+        update={"origin": "fused", "traits": ["剛", "快"], "special": "lianhuan"},
+    )
+    card = skillview.art_card(art, 1, None, None, traits.card_line(content, art))
+    assert "功效：〔破甲〕" in card and "〔先手〕" in card and "〔連環〕" in card
+
+
+def test_the_trait_line_sits_after_the_source_and_before_the_note(content):
+    art = _crafted("以柔勁纏住兵刃，借力卸力。").model_copy(update={"origin": "fused"})
+    lines = skillview.art_card(art, 3, None, None, traits.card_line(content, art)).split("\n")
+    assert lines[3].startswith("來源：") and lines[4].startswith("功效：〔化勁〕") and lines[-1] == "以柔勁纏住兵刃，借力卸力。"
+    assert len(lines) == 6  # 名字、成數、威力、來源、功效、說明
+
+
+def test_a_card_without_a_trait_line_is_exactly_as_before():
+    """沒給功效那一行（舊呼叫、內容沒有功效）：功法卡一個字不變，不留空行。"""
+    art = _crafted("以柔勁纏住兵刃，借力卸力。")
+    assert skillview.art_card(art, 3) == skillview.art_card(art, 3, None, None, "")
+    assert len(skillview.art_card(art, 3).split("\n")) == 5
+
+
+def test_the_worn_slot_cards_carry_the_traits_too(state, content, world):
+    """F9：身上那一欄的功法卡（detail，網頁的 slot_cards）也有功效那一行，跟修練頁的清單（art_rows）一樣。"""
+    state.player.member.wugong_id = "basic_fist"
+    text = skillview.detail(state, content, world, "武學")
+    assert "\n功效：〔厚〕帶傷時出手的下限高 5%" in text  # 基礎武學下品：一層、×1
+
+
+def test_the_card_in_the_practice_list_follows_the_players_own_quality(state, content, world):
+    """數字跟品質一起變：同一門武學修練到上品，功效的數字乘 2。"""
+    state.player.member.wugong_id = "basic_fist"
+    (row,) = [r for r in skillview.art_rows(state, content, world) if r["id"] == "basic_fist"]
+    assert "功效：〔厚〕帶傷時出手的下限高 5%" in row["card"]
+    state.player.art_quality["basic_fist"] = "上品"
+    (row,) = [r for r in skillview.art_rows(state, content, world) if r["id"] == "basic_fist"]
+    assert "功效：〔厚〕帶傷時出手的下限高 10%" in row["card"]
+
+
+def test_the_card_of_a_fused_art_lists_every_trait_and_the_special(state, content, world):
+    art = generate_from_name("裂石拳", "武學", "裂石拳", attribute="剛").model_copy(
+        update={"origin": "fused", "traits": ["剛", "快", "剛"], "special": "wuzhao"},
+    )
+    world.claim_skill_name(art)
+    state.player.arts = [art.id]
+    (row,) = [r for r in skillview.art_rows(state, content, world) if r["id"] == art.id]
+    assert "〔破甲〕對手強度當作低 " in row["card"] and "〔先手〕" in row["card"] and "〔悟招〕打贏多拿 5 心得" in row["card"]
+
+
+def test_the_furnace_shows_what_a_known_recipe_gives(state, content, world):
+    """13.6：已知的配方說出合出來那一門與它的功效；沒人合過的寫「沒人合過」。"""
+    state.player.member.wugong_id, state.player.insights = "basic_fist", ["feng"]
+    state.player.stats["xinde"] = 100
+    assert "沒人合過" in skillview.forge_line(state, content, world, "basic_fist", ["feng"])
+    other = new_game_state(content, "乙")
+    other.player.member.wugong_id, other.player.insights, other.player.stats["xinde"] = "basic_fist", ["feng"], 100
+    made, _ = fusion.fuse(other, content, world, None, "basic_fist", "feng")
+    line = skillview.forge_line(state, content, world, "basic_fist", ["feng"])
+    assert f"會合出【{made.name}】" in line and "功效：〔先手〕" in line
+
+
+def test_the_furnace_shows_a_known_blend_too_and_says_nothing_for_an_unknown_one(state, content, world):
+    state.player.member.wugong_id, state.player.arts = "basic_fist", ["lake_kick"]
+    state.player.stats["xinde"] = 100
+    assert "沒人合過" in skillview.forge_line(state, content, world, "basic_fist", [], other_art="lake_kick")
+    other = new_game_state(content, "乙")
+    other.player.member.wugong_id, other.player.arts, other.player.stats["xinde"] = "basic_fist", ["lake_kick"], 100
+    made, _ = fusion.blend(other, content, world, None, "basic_fist", "lake_kick")
+    line = skillview.forge_line(state, content, world, "basic_fist", [], other_art="lake_kick")
+    assert f"會合出【{made.name}】" in line and traits.card_line(content, made) in line and "沒人合過" not in line
+
+
+def test_the_furnace_does_not_repeat_itself_for_an_art_you_already_have(state, content, world):
+    """合出來的那一門你已經有了：下面的 ⚠ 本來就會說，不再寫「會合出」。"""
+    state.player.member.wugong_id, state.player.insights = "basic_fist", ["feng"]
+    state.player.stats["xinde"] = 100
+    made, _ = fusion.fuse(state, content, world, None, "basic_fist", "feng")
+    line = skillview.forge_line(state, content, world, "basic_fist", ["feng"])
+    assert "你已經有了" in line and "會合出" not in line and "沒人合過" not in line
+    assert made.id in state.player.arts
+
+
+def test_the_furnace_does_not_peek_at_a_recipe_for_things_you_do_not_hold(state, content, world):
+    """預覽不能拿來探：不是你的武學、還沒悟到的意境，一律先拒絕，不會透露別人合出了什麼（F8 沿用既有的把關）。"""
+    other = new_game_state(content, "乙")
+    other.player.member.wugong_id, other.player.insights, other.player.stats["xinde"] = "basic_fist", ["feng"], 100
+    fusion.fuse(other, content, world, None, "basic_fist", "feng")
+    state.player.member.wugong_id = "basic_fist"  # 沒有風這個意境
+    line = skillview.forge_line(state, content, world, "basic_fist", ["feng"])
+    assert line.startswith("⚠") and "會合出" not in line and "功效" not in line

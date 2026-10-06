@@ -642,6 +642,22 @@ def test_win_routs_the_figure_and_snubs_the_winner(on, world):
     assert _option(winner, "act:challenge:bocai").enabled and winner.socialize_starts_dialogue()
 
 
+def test_light_body_saves_stamina_on_a_challenge_too(on, world):
+    """輕身（武學與成長設計 13.4）：遊歷少花體力，挑戰本人花的是遊歷的體力，所以按鈕與真的扣的都少花。"""
+    from tianxia.martial_arts import generate_from_name
+
+    game = _player(on, world, "官甲", "guan", "huangjin_camp")
+    art = generate_from_name("輕身腿", "武學", "輕身腿", attribute="快").model_copy(update={"origin": "fused", "special": "qingshen"})
+    world.claim_skill_name(art)
+    game.state.player.member.wugong_id = art.id
+    base = on.config.action_cost["train"]
+    assert _option(game, "act:challenge:bocai").label.startswith(f"挑戰波才（體力 {base - 2}・")
+    stamina = game.state.player.stamina
+    with _fight():
+        game.choose("act:challenge:bocai")
+    assert game.state.player.stamina == stamina - (base - 2)
+
+
 def test_a_challenge_plays_out_rounds_that_add_up_to_the_toll(on, world):
     """挑戰本人也演回合（計畫三 Task 1）：對手是照聲威的那一份（難度 120，身法 5＋120÷20＝11，比你快、先出手），
     回合裡的「你氣血 -N」加起來等於戰報那一筆（根骨 10，上限吃根骨）。"""
