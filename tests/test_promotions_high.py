@@ -44,7 +44,14 @@ def _without_rank3(real):
     """拿掉真的官軍第 3 階與它兩段的事件（Task 3 之後才有，Task 1 時什麼都沒拿掉）：測試要自己寫一筆官軍第 3 階，
     不然同一階寫了兩筆、而且那兩則事件寫了 promote／followers 卻沒有晉升認它們，會多出跟測試無關的錯誤。"""
     real.promotions = [p for p in real.promotions if not (p.faction == "guan" and p.rank == 3)]
-    for gone in ("promo_guan_3_palace", "promo_guan_3_hejin"):
+    for gone in ("promo_guan_3_memorial", "promo_guan_3_gift", "promo_guan_3_palace", "promo_guan_3_hejin"):
+        real.events.pop(gone, None)  # 第一段（寫 summons_next）與最後一段（寫 promote／followers）的四則：沒有晉升認它們就過不了檢查
+
+
+def _without_rank4(real):
+    """拿掉真的官軍第 4 階與它的兩則事件（Task 3 之後才有，同 _without_rank3）。"""
+    real.promotions = [p for p in real.promotions if not (p.faction == "guan" and p.rank == 4)]
+    for gone in ("promo_guan_4", "promo_guan_4_late"):
         real.events.pop(gone, None)
 
 
@@ -98,6 +105,21 @@ def test_rank_three_needs_legs(real):
     _without_rank3(real)
     real.promotions.append(PromotionDef(faction="guan", rank=3, closing="x"))
     with pytest.raises(ContentError, match="legs"):
+        validate(real)
+
+
+def test_rank_four_needs_legs_too(real):
+    _without_rank4(real)
+    real.promotions.append(PromotionDef(faction="guan", rank=4, closing="x"))
+    with pytest.raises(ContentError, match="第 4 階要寫 legs"):
+        validate(real)
+
+
+def test_a_rank_two_location_must_exist(real):
+    """第 2 階的 location 還是照舊查（第 3、4 階的 location 空著、不查；第 2 階空著由上一個測試擋）。"""
+    real.promotions = [p.model_copy(update={"location": "nowhere"}) if (p.faction == "guan" and p.rank == 2) else p
+                       for p in real.promotions]
+    with pytest.raises(ContentError, match="未知的地點 nowhere"):
         validate(real)
 
 
