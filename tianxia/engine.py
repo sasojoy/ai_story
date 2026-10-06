@@ -3707,6 +3707,10 @@ class Game:
     def menxia_rules(self) -> str:
         return skillview.rules_line(self.content)
 
+    def attribute_note(self) -> str:
+        """修練頁與煉製頁摺起來的「屬性有什麼用」那一句（W2）。"""
+        return skillview.attribute_line(self.content)
+
     def bag_text(self) -> str:
         return skillview.bag_text(self.state, self.content)
 

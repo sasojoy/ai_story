@@ -221,6 +221,14 @@ ul { padding-left: 1.3em; margin: 0.4em 0; }
 .list button.on { background: var(--accent-soft); }
 .list button::after { content: "›"; margin-left: auto; color: var(--ink-2); }
 
+/* 修練頁、煉製頁的「屬性有什麼用」（W2）：收著只多一行小字，不用框，免得第一屏多出一整張卡 */
+details.attr-note { font-size: 13px; color: var(--ink-2); margin: 4px 0 12px; }
+.card > details.attr-note { margin-bottom: 0; }
+details.attr-note > summary { list-style: none; cursor: pointer; padding: 2px 0; line-height: 1.5; }
+details.attr-note > summary::-webkit-details-marker { display: none; }
+details.attr-note > summary::after { content: " ▾"; }
+details.attr-note:not([open]) > summary::after { content: " ▸"; }
+details.attr-note > p { margin: 2px 0 0; }
 details.fold { margin-bottom: 12px; }
 details.fold > summary { list-style: none; cursor: pointer; padding: 10px 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); display: flex; align-items: center; gap: 8px; font-weight: 600; }
 details.fold > summary::-webkit-details-marker { display: none; }

@@ -11,6 +11,25 @@ def test_rules_line():
     )
 
 
+def test_the_attribute_note_says_what_the_code_does(content):
+    """W2：屬性的說明一句話——同屬性、相剋、克對手三條，數字與哪幾對相剋都讀自程式（team.pairing 的設定、
+    martial_arts.ATTRIBUTE_COUNTERS、encounter.COUNTER_BONUS），不另外寫死一份。句子待 joy 潤。"""
+    assert skillview.attribute_line(content) == (
+        "內功與武學同屬性，威力 +20%；兩門相剋（陰陽、剛柔、快慢、虛實）威力 −20%；武學克住對手的屬性，威力 ×1.3。"
+    )
+
+
+def test_the_attribute_note_follows_the_numbers_it_reads(content, monkeypatch):
+    from tianxia import encounter, martial_arts
+
+    content.config.pairing_bonus, content.config.pairing_penalty = 0.35, 0.1
+    monkeypatch.setattr(encounter, "COUNTER_BONUS", 1.5)
+    monkeypatch.setattr(martial_arts, "ATTRIBUTE_COUNTERS", {"剛": "柔", "柔": "剛"})
+    note = skillview.attribute_line(content)
+    assert "威力 +35%" in note and "威力 −10%" in note and "威力 ×1.5" in note
+    assert "（剛柔）" in note and "陰陽" not in note  # 相剋的一對照表列，每一對只寫一次
+
+
 def test_member_card_before_learning_anything(state, content, world):
     card = skillview.member_card(state, content, world, "player")
     assert card == (

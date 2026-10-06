@@ -967,6 +967,10 @@
   // 序章裡師父的話也放在修練頁、煉製頁最上面（序章的第 4～6、9、10 步在這兩頁做，不用切回江湖頁看要做什麼）；序章外不畫
   const proGuide = () => (pro() ? guideHtml(S.main.guide, false) : "");
 
+  // 屬性有什麼用（W2）：修練、煉製兩頁各摺一行，收著只多一行小字。說明的字是伺服器照程式的規則寫的（skillview.attribute_line），
+  // 這裡只放進去；標題那四個字待 joy 潤。伺服器沒給（舊版）就不畫。
+  const attrNoteHtml = (x) => (x.attribute_note ? `<details class="attr-note"><summary>屬性有什麼用</summary><p>${esc(x.attribute_note)}</p></details>` : "");
+
   // ── 修練 ──
   function pagePractice() {
     const x = S.menxia;
@@ -1019,6 +1023,7 @@
           <button class="btn" data-act="mx" data-op="heal" ${s.injury >= 1 ? "" : "disabled"}>療傷</button>
         </div>
         <p class="muted">${x.rules.replace(/<\/?p>/g, "")}</p>
+        ${attrNoteHtml(x)}
       </div>
       <div class="label">身上的功法</div>
       ${slots.map((c) => `<div class="card">${wornCard(c)}</div>`).join("")}
@@ -1092,6 +1097,7 @@
       ${furnaceSvg([slotOf(S.forgeSel[0]), slotOf(S.forgeSel[1])], ready)}
       <div class="card" id="forge-line">${S.forgeLine || x.forge_line}</div>
       <div class="act-row"><button class="btn primary" id="forge" data-act="forge" data-glow="forge" ${ready ? "" : "disabled"}>開爐</button></div>
+      ${attrNoteHtml(x)}
       <div class="label">武學 <small class="muted">一門配一個意境，或兩門一起放</small></div>
       <div class="chips">${x.owned_arts.map((a) => `
         <button class="chip r${QUALITY_RANK[a.quality] || 1} ${inPot(a.id) ? "used" : ""}" data-act="pick" data-type="art" data-id="${esc(a.id)}" ${inPot(a.id) ? "disabled" : ""}>

@@ -17,7 +17,7 @@ import llm_queue
 import server
 import server_push
 from conftest import at, season_one_events
-from tianxia import atlas, battle_instance, calendar, companion_agent, database, fight_llm, fusion, naming, sqlite_world, team
+from tianxia import atlas, battle_instance, calendar, companion_agent, database, fight_llm, fusion, naming, skillview, sqlite_world, team
 from tianxia.accounts import NAME_TAKEN
 from tianxia.characters import open_characters
 from tianxia.engine import Game
@@ -2663,6 +2663,14 @@ def test_the_practice_page_gets_a_card_for_each_worn_art(client, monkeypatch):
     open_characters().save(game.state)
     neigong = client.get("/api/menxia").json()["slot_cards"][1]
     assert "你還沒有內功。" in neigong["card"]
+
+
+def test_the_menxia_payload_carries_the_attribute_note_both_pages_fold_away(client):
+    """W2：修練頁與煉製頁各摺一行「屬性有什麼用」，字由 skillview.attribute_line 照程式的規則寫，網頁只放進去。"""
+    _player(client)
+    note = client.get("/api/menxia").json()["attribute_note"]
+    assert note == skillview.attribute_line(server.CONTENT)
+    assert "×1.3" in note and "剛柔" in note
 
 
 def test_the_slot_cards_say_whether_each_slot_holds_an_art_and_its_level(client, monkeypatch):

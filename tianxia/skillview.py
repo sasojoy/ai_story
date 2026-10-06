@@ -4,7 +4,7 @@
 """
 from __future__ import annotations
 
-from . import cultivation, fusion, insights, materials, prologue, team, traits
+from . import cultivation, encounter, fusion, insights, martial_arts, materials, prologue, team, traits
 # 不 import 整個 library 模組：這個檔案自己有一個叫 library() 的函式
 from .library import cap_of, held_count, level_of, melt_problem, melt_value, owned_arts
 from .martial_arts import MAX_LEVEL, MartialArt, next_quality, power_at, shown_creator
@@ -36,6 +36,27 @@ def stat_uses(content: Content) -> list[tuple[str, str]]:
 
 def rules_line(content: Content) -> str:
     return "身上一門內功、一門武學：花心得練成，用意境修練衝品質；武學也能在「煉製」融意境衍生新武學，或兩門武學合成一門新的。"
+
+
+ATTRIBUTE_ORDER = "陰陽剛柔快慢虛實"  # 相剋的一對怎麼排字（設計 6.1 的順序）：「陰陽」「剛柔」，不寫成「陽陰」
+
+
+def attribute_line(content: Content) -> str:
+    """修練頁與煉製頁各摺一行的「屬性有什麼用」（W2）。屬性的規則有三條：內功與武學同屬性整個人威力加成（team.pairing，
+    Config.pairing_bonus）、兩門是相剋的一對打折（Config.pairing_penalty，哪幾對看 martial_arts.ATTRIBUTE_COUNTERS）、
+    武學克住對手的屬性時乘 encounter.COUNTER_BONUS。這裡一個數字都不自己寫，全部讀那幾處，改了規則這一句跟著變。
+    句子待 joy 潤。"""
+    cfg = content.config
+    pairs: list[str] = []
+    for attacker, defender in martial_arts.ATTRIBUTE_COUNTERS.items():  # 表是雙向的（陽克陰、陰克陽）：每一對只寫一次
+        pair = "".join(sorted((attacker, defender), key=ATTRIBUTE_ORDER.find))
+        if pair not in pairs:
+            pairs.append(pair)
+    penalty = _pct(-cfg.pairing_penalty).replace("-", "−")  # 減號用 −，跟加號並排好讀
+    return (
+        f"內功與武學同屬性，威力 {_pct(cfg.pairing_bonus)}；兩門相剋（{'、'.join(pairs)}）威力 {penalty}；"
+        f"武學克住對手的屬性，威力 ×{encounter.COUNTER_BONUS:g}。"
+    )
 
 
 def practice_hint(state: GameState, content: Content) -> str | None:
