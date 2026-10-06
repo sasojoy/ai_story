@@ -99,6 +99,20 @@ def test_the_box_key_is_the_step_not_the_sentence(game):
     assert game.guide_box()["pending"] is False  # 結語照舊：事件擋不了它
 
 
+def test_a_pending_event_blanks_the_steps_short_line_so_the_collapsed_box_shows_the_pending_sentence(game, monkeypatch):
+    """FB-076：序章之外的步驟也可能寫了收起來那一行（TutorialStep.line，例：「師父：回『江湖』按『探索』」）。事件待處理時框上的話換成
+    「先把眼前的「…」了結」，收起來那一行也得跟著換——不然收著的框寫著這一步的短提示、跟事件擋著路互相矛盾。所以待處理時 line 送空字串
+    （網頁收起來那一行是 `line || text`），了結之後原樣回來。序章自己在事件出現時整個框都不畫（tests/test_prologue.py），不歸這裡。"""
+    monkeypatch.setattr(game.content.tutorial.steps[1], "line", "說書人：去湖邊")
+    game.state.player.tutorial_step = 1
+    assert game.guide_box()["line"] == "說書人：去湖邊" and game.guide_box()["text"] == STEP_TWO
+    game.state.pending_event = "drunk"
+    box = game.guide_box()
+    assert box["pending"] is True and box["text"] == pending_line("醉漢") and box["line"] == ""
+    game.state.pending_event = None
+    assert game.guide_box() == _box(STEP_TWO) | {"line": "說書人：去湖邊"}
+
+
 def test_a_chained_event_names_the_step_that_is_pending_now_in_the_box(game):
     """next_event 接下去的下一段：框上寫現在待處理的那一則。"""
     game._present(game.content.events["chain_a"])
@@ -268,6 +282,17 @@ def test_a_pending_sentence_with_something_to_acknowledge_opens_as_before():
       return out;
     """)
     assert got == {"open": "card", "showsDone": True, "emptyDone": "line", "afterShut": "line"}
+
+
+def test_the_collapsed_line_is_the_steps_short_line_unless_an_event_is_pending():
+    """收起來那一行是 `line || text`：一般的一步用它自己的短提示；事件待處理時伺服器把 line 送空，那一行就是「先把眼前的…了結」。"""
+    got = run_js("""
+      const step = { ...box("s2", "去湖邊。"), line: "說書人：去湖邊" };
+      H.setGuideShut("s2");
+      const pending = { ...box("s2", "先把眼前的「掉落的書信」了結", false, true), line: "" };
+      return { step: H.guideHtml(step, false).includes("說書人</b>：說書人：去湖邊"), pending: H.guideHtml(pending, false).includes("說書人</b>：先把眼前的「掉落的書信」了結") };
+    """)
+    assert got == {"step": True, "pending": True}
 
 
 def test_a_player_can_expand_the_pending_sentence_and_it_stays_open_for_that_sentence_only():

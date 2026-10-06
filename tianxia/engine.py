@@ -1263,9 +1263,12 @@ class Game:
                 return prologue_rules.fill(text, s, c, self.world)
 
             # 眼前有事件還沒了結時是 guide.pending_line，不推這一步；了結後原樣回來（FB-063；「下一步」也用同一句）
+            pending = pending_line(s, c) is not None
             return {
                 "speaker": guide_speaker_of(c, step), "key": step.id, "scene": fill(step.scene), "text": fill(step_text(s, c)),
-                "line": fill(step.line), "done": list(p.guide_done), "end": False, "pending": pending_line(s, c) is not None,
+                # 收起來那一行（網頁用 line || text）：待處理時話已經換成「先把眼前的「…」了結」，這一步自己的短提示不能留著
+                # ——收著的框寫著短提示、跟事件擋著路互相矛盾（序章之外的步驟也可能有 line；序章自己在事件出現時整個框不畫，見上）
+                "line": "" if pending else fill(step.line), "done": list(p.guide_done), "end": False, "pending": pending,
             }
         if p.guide_outro and t.outro:
             return {
