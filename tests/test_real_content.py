@@ -665,7 +665,65 @@ def test_the_lines_that_followed_the_game_say_what_the_game_does(content):
     assert "不下場" not in showdown["haoqiang"]
     third = next(b.third for b in content.battles.values() if b.third is not None)
     assert third.grab in showdown["haoqiang"] and third.keep in showdown["haoqiang"]  # 豪強兩招的名字照決戰的設定
-    assert PLACEHOLDER_LINES == {("h_cap", "text"), ("h_showdown", "guan"), ("h_showdown", "huang"), ("h_showdown", "haoqiang")}
+    assert all(_hint_cells(content).get(key) for key in PLACEHOLDER_LINES)  # 標成待潤的四句真的在書裡（上一版這裡拿它跟自己的字面比，永遠成立）
+
+
+def _hint_cells(content):
+    """提示書裡每一句話，鍵是（提示 id, 誰說的）：師父的 "text"、陣營的 "guan"／"huang"／"haoqiang"、散人的 "drifter"。"""
+    cells = {}
+    for hint in content.hints.hints:
+        if hint.text:
+            cells[(hint.id, "text")] = hint.text
+        cells.update({(hint.id, voice): text for voice, text in hint.texts.items()})
+        if hint.drifter:
+            cells[(hint.id, "drifter")] = hint.drifter
+    return cells
+
+
+# 設計 10.5 的原文，每一句各釘一小段（逐字、挑最能代表那一句的地方）：有人潤字、改壞標點、換了陣營的口氣，這裡會看到。
+# 沒有釘的只有 PLACEHOLDER_LINES 那四句（改成現在的事實，待 joy 潤；它們的事實由上一個測試管）。
+HINT_PINS = {
+    ("h_merge", "text"): "到『煉製』把兩個意境合在一起試試",
+    ("h_clash", "text"): "同一路的，威力多兩成；剛配柔、快配慢這種冤家，打起來互相扯後腿，少兩成",
+    ("h_refine_fail", "text"): "沒成也不白修，下一回機會就大一點",
+    ("h_lose", "text"): "打不過就回去練，江湖上沒人笑你，送了命才有人笑",
+    ("h_injury", "text"): "內傷可不會，它一直壓著你的氣血",
+    ("h_basic_art", "text"): "同一個意境融進不同的底，長出來的功夫就不一樣",
+    ("h_snubbed", "text"): "投了他那一邊、升了階，也算有了門路",
+    ("h_recruit", "text"): "交情越深，人家越肯跟你走",
+    ("h_free_text", "text"): "自己寫一句打算怎麼做，說得通，成算就高",
+    ("h_road", "text"): "邊走邊打聽、邊走邊想，改了主意就折返",
+    ("h_spectator", "text"): "散人有散人的自在，可這一仗輪不到你出手",
+    ("h_mandate", "text"): "等哪天天下人都搶紅了眼，你就知道了",
+    ("h_foreshadow", "guan"): "最後一步下去，那件大事就照咱們的意思落地，別人要到揭曉那天才知道",
+    ("h_foreshadow", "huang"): "片段一塊一塊湊齊，該備的備好，最後一步做下去，大事的結果就暗中定了",
+    ("h_foreshadow", "haoqiang"): "別聲張，揭曉那天再收帳",
+    ("h_foreshadow", "drifter"): "湊齊了、準備好了，最後一步下去，那件大事怎麼收場，就由你在暗中定了",
+    ("h_event_reveal", "guan"): "看三條線誰佔上風，也看有沒有人暗中把它鎖定了",
+    ("h_event_reveal", "huang"): "戰況是大家一刀一槍打出來的，可也有人早就在暗地裡把它定死了",
+    ("h_event_reveal", "haoqiang"): "要是有人早一步在暗中下了注，就照他的意思收場",
+    ("h_event_reveal", "drifter"): "結果不是老天擲骰子。看戰況，也看有沒有人在暗地裡動過手腳",
+    ("h_promotion", "guan"): "在營裡出夠了力，就會被召見、往上升一階",
+    ("h_promotion", "huang"): "替黃天出夠了力，就會被召見、升一階",
+    ("h_promotion", "haoqiang"): "出了力就有回報，被召見、升一階",
+    ("h_figure", "guan"): "軍令要你打擊他，就是這個意思",
+    ("h_figure", "huang"): "一條戰線的勝負都繫在他身上",
+    ("h_figure", "haoqiang"): "要是當面輸了一場，也得先收攤避一避",
+    ("h_figure", "drifter"): "那位就是能左右整條戰線的人物",
+}
+
+
+def test_every_hint_line_taken_from_the_design_keeps_its_pinned_sentence(content):
+    """提示書的三十一句：二十七句是設計 10.5 的原文（各釘一段），四句是待 joy 潤的（PLACEHOLDER_LINES）；兩邊合起來正好是書裡的每一句，
+    以後多寫一句沒釘也沒標待潤的，這裡會叫。開季那一句（10.6）整句釘。"""
+    cells = _hint_cells(content)
+    assert len(cells) == 31 and not set(HINT_PINS) & PLACEHOLDER_LINES
+    assert set(cells) == set(HINT_PINS) | PLACEHOLDER_LINES
+    for key, sentence in HINT_PINS.items():
+        assert sentence in cells[key], key
+    assert content.hints.season_return == "「又是一年亂世。徒兒，去吧——記得替為師帶壺好酒回來。」"
+    # 師父說的「兩成」要跟規則是同一個數（h_clash）
+    assert content.config.pairing_bonus == content.config.pairing_penalty == 0.2
 
 
 def test_the_rejoin_greetings_live_in_the_enlistment_block_only(content):
