@@ -1,17 +1,18 @@
 """伺服器假人的行為（伺服器假人設計第七節）：照陣營目標替選項打分數，強度旋鈕決定多常挑最高分。
 
-只透過 engine.Game 的公開行動（choose／practice／heal）做事，跟真人按按鈕走同一條
-路；不接 LLM（呼叫端把 game.client 設成 None）。全服戰鬥裡假人是一般參戰者，每回合從固定戰法裡挑，
-不寫自由文字。
+只透過 engine.Game 的公開行動（choose／practice／heal／forge／cultivate…）做事，跟真人按按鈕走同一條
+路；不接 LLM（呼叫端把 game.client 設成 None）；例外是首創配方的取名與絕學定名，在鎖外由 bot_runner 做
+（見 tend_arts、apply_job）。全服戰鬥裡假人是一般參戰者，每回合從固定戰法裡挑，不寫自由文字。
 """
 from __future__ import annotations
 
 import random
+from dataclasses import dataclass
 
-from . import atlas, orders, rules, server_bots
+from . import atlas, battle_instance, bot, cultivation, library, naming, orders, rules, server_bots, team
 from .bot import allocate_points, can_practise, wants_heal
 from .engine import FREE_TEXT_OPTION, Game, Option
-from .models import Content, Effect, FactionDef
+from .models import Content, Effect, FactionDef, SkillDef
 from .state import BotProfile
 
 REWARD_STATS = ("str", "agi", "con", "wis", "silver", "fame", "xinde")  # 博聞不在內：它只靠升級的點數增加，事件不給
@@ -36,59 +37,228 @@ SUMMONS_SCORE = 50.0
 SUMMONS_MOVE_SCORE = 15.0
 STRIKE_ODDS = CHALLENGE_ODDS + ("五五波",)  # 有打擊軍令點名這位人物時，五五波也去打
 PRACTICE_CHANCE = 0.2  # 每次行動順便練成一門的機率（付得起心得才練，見 look_after；不是每次行動都練）
+FORGE_CHANCE = 0.25  # 每一輪合成一爐的機會（有東西可合、體力有餘時才擲）【預設】
+SERVER_BLEND_SHARE = 0.15  # 武學＋武學的份額：比整季機器人低，持有 30 門就有 435 對、每一對都是首創要叫模型【預設】
+CULTIVATE_CHANCE = 0.2  # 每一輪修練一次的機會（體力有 bot.CULTIVATE_RESERVE、有東西可修時才擲）【預設】
+LEARN_ROOM = 3  # 學藝之後，功法庫至少還留幾格給合成
+LEARN_SILVER_RESERVE = 30  # 付完學費至少留幾兩（療傷用）
+MASTER_TRIES = 5  # 定名時模型的名字用不了，字表最多另組幾個
+NO_NAME: tuple[str | None, str] = (None, "")  # 開爐的 C 段不必取名：鎖內一定不叫模型（同 server.NO_NAME）
 
 
-def take_turn(game: Game, profile: BotProfile, rng: random.Random) -> list[str]:
-    """做一個動作（外加不受強度影響的照顧動作）；沒有能做的事（例如體力不夠）就什麼都不做，回傳空清單。
-    在路上的假人這一輪跳過，連照顧動作都不做（地圖擴充設計 3.4）。"""
+@dataclass(frozen=True)
+class ForgeJob:
+    """要請模型取名（或挑一個）的一爐：A 段在鎖內開的單，交給 bot_runner 在鎖外取名、再拿鎖開爐。"""
+
+    art_id: str | None
+    insight_ids: tuple[str, ...]
+    other_art: str | None
+    request: naming.NamingRequest
+
+
+@dataclass(frozen=True)
+class MasterJob:
+    """要請模型另取新名字的絕學定名（企劃者 2026-10-06：不沿用原名）：A 段在鎖內開的單，交給 bot_runner。"""
+
+    art_id: str
+    request: naming.NamingRequest
+
+
+@dataclass
+class NamingSlot:
+    """這一輪這個假人能不能把一件取名交給模型（首創的爐或絕學定名；bot_runner 給：一次一件、兩件之間要隔一段時間）。
+    open 時開成單子放進 job；不 open 時那一爐不開、那個名先不定，skipped 加一（只是數字，主控台只印總數）。"""
+
+    open: bool = False
+    job: ForgeJob | MasterJob | None = None
+    skipped: int = 0
+
+
+def take_turn(game: Game, profile: BotProfile, rng: random.Random, slot: NamingSlot | None = None) -> list[str]:
+    """做一個動作（外加不受強度影響的照顧動作、武學的事）；沒有能做的事（例如體力不夠）就什麼都不做，回傳空清單。
+    在路上的假人這一輪跳過，連照顧動作都不做（地圖擴充設計 3.4）。
+    slot 是這一輪的取名名額（見 NamingSlot）：武學的事開出要取名的單時放進 slot.job，這一輪就只做到那裡。"""
     game.options(odds=False)  # 每一輪先替全服戰鬥追趕一次時間（集結截止、回合逾時），跟真人的畫面刷新一樣；在路上、趕路的假人也不例外
     if game.state.player.journey is not None:
         return []
     look_after(game, rng)
+    msgs = tend_arts(game, rng, slot)
+    if slot is not None and slot.job is not None:
+        return msgs  # 這一輪在爐前等名字，不做別的（不然體力可能花掉，C 段開不成）
     s = game.state
     if s.player.pending_companion:
-        return game.choose("talk:leave")
+        return msgs + game.choose("talk:leave")
     rally = _toward_battle(game)
     if rally is not None:
-        return rally
+        return msgs + rally
     options = [  # road: 開頭的是路上的選項：假人不改道、不做路上小事（路上設計 3.5）
         o for o in game.options(odds=False, tick=False)
         if o.enabled and o.id not in ("act:rest", "act:halt", FREE_TEXT_OPTION)
         and not o.id.startswith(("road:", "defect:"))  # 叛投：假人不換陣營（計畫甲）
     ]
     if not options:
-        return []
+        return msgs
     ids = [o.id for o in options]
     battle = game.world.get_battle()
     if battle is not None and s.player.name not in battle.participants:
         join = next((i for i in ids if i.startswith("battle:join")), None)
         if join is not None:  # 集結時選單照常有別的事可做（FB-009）；假人一看到加入就加入，不交給強度旋鈕碰運氣
-            return game.choose(join)
+            return msgs + game.choose(join)
     elif battle is not None and battle.phase == "muster":
         # 已經參戰：不換邊（不分陣營的劇本集結時還看得到另一邊的加入），也不走出決戰的大區
         options = [o for o in _staying_for_the_battle(game, battle.battle_id, options) if not o.id.startswith("battle:join")]
         if not options:
-            return []
+            return msgs
         ids = [o.id for o in options]
     if s.player.faction is None and profile.faction is not None and not s.pending_event \
             and not any(i.startswith("battle:") for i in ids):
         step = _toward_faction(game, profile.faction, ids)
         if step is not None:
-            return game.choose(step)
+            return msgs + game.choose(step)
     choice = pick(game, options, profile, rng)
-    return game.choose(choice) if choice else []
+    return msgs + game.choose(choice) if choice else msgs
 
 
 def look_after(game: Game, rng: random.Random) -> None:
     """照顧動作（不受強度旋鈕影響）：升級的屬性點先配掉（只走 Game.allocate_stat，跟真人一樣）；有內傷先療傷；身上的兩門（開局送的基礎武學）偶爾練成一成，付得起心得才練。
-    伺服器假人這一版不合成、不合併：首次合成會用退路字表的名字搶下首創（假人不叫模型），等觀察過真人再說
-    （武學與成長計畫一 Task 13）。整季模擬的機器人（bot.py）才合成，它只在測試與量平衡時跑、用自己的資料庫。"""
+    合成、修練、學藝、改練、熔煉、定名在 tend_arts。"""
     allocate_points(game, rng)
     if wants_heal(game):
         game.heal()
     for kind in ("內功", "武學"):
         if can_practise(game, kind) and rng.random() < PRACTICE_CHANCE:
             game.practice(kind)
+
+
+def tend_arts(game: Game, rng: random.Random, slot: NamingSlot | None = None) -> list[str]:
+    """假人的武學（修練頁與煉製頁上的事），每一輪主要行動之前做；只走 Game 的公開行動，跟真人按按鈕一樣：
+    1. 練成絕學、輪到自己定名：請模型另取新名字（企劃者 2026-10-06：不沿用原名），輪得到就開單交給假人程式、這一輪到此為止；
+       輪不到先不定（見 _master）；
+    2. 這裡教、自己同一種還沒有這個屬性的，學一門（見 _learn_here）；
+    3. 庫滿了熔最弱的一門；
+    4. 有東西可合、體力有餘時，FORGE_CHANCE 的機會合一爐（挑法同整季機器人，武學＋武學的份額低一點；
+       首創的要叫模型，見 _forge）；
+    5. 功法庫裡有更強的就改練；
+    6. 體力有餘、有東西可修時，CULTIVATE_CHANCE 的機會修練一次（衝絕學、手上有破境丹就服）。
+    亂數只在真的有事可做時才擲（有東西可合才擲合成的機會、有東西可修才擲修練的機會）：什麼武學都沒有的假人一次都不擲。
+    注意：正式內容開局送兩門基礎武學，所以真的假人從第一輪起就有東西可合、每一輪都擲一次合成的機會
+    （假人程式共用的亂數順序因此跟加這個之前不一樣）。"""
+    state, content, world = game.state, game.content, game.world
+    p = state.player
+    msgs: list[str] = []
+    if p.naming is not None:
+        _master(game, slot)
+        if slot is not None and slot.job is not None:
+            return msgs  # 這個名在等模型：別的等定完名再說
+    msgs += _learn_here(game)
+    if library.full(state, content):
+        bot.melt_the_weakest(game)
+    arts = library.owned_arts(state)
+    forgeable = bool(p.insights and arts) or len(arts) >= 2
+    if forgeable and p.stamina >= bot.FORGE_RESERVE and rng.random() < FORGE_CHANCE:
+        plan = bot.pick_forge(game, rng, blend_share=SERVER_BLEND_SHARE)
+        if plan is not None:
+            msgs += _forge(game, plan, slot)
+            if slot is not None and slot.job is not None:
+                return msgs  # 這一爐在等名字：改練與修練等開完爐再說
+    bot.switch_to_the_strongest(game)
+    if p.stamina >= bot.CULTIVATE_RESERVE:
+        ready = [a for a in library.owned_arts(state) if cultivation.cultivate_problem(state, content, world, a) is None]
+        if ready and rng.random() < CULTIVATE_CHANCE:
+            msgs += game.cultivate(ready[0], use_legend=bot.takes_the_pill(game, ready[0]))
+    return msgs
+
+
+def _learn_here(game: Game) -> list[str]:
+    """學藝（武學與成長設計附錄 B）：這裡教、學得了、自己同一種（內功／武學）還沒有這個屬性的，學一門。
+    付完學費要留 LEARN_SILVER_RESERVE 兩（免費的不看），庫裡至少留 LEARN_ROOM 格給合成。走選單上的「學〇〇」。
+    多數地方沒有人教：先看有沒有學得了的，有才建選單。"""
+    state, content, world = game.state, game.content, game.world
+    if library.cap_of(state, content) - library.held_count(state) < LEARN_ROOM:
+        return []
+    lessons = [skill for skill, problem in library.lessons_here(state, content) if problem is None]
+    if not lessons:
+        return []
+    have = {
+        (art.kind, art.attribute)
+        for art in (team.player_art(state, content, world, a) for a in library.owned_arts(state)) if art is not None
+    }
+    silver = state.player.stats.get("silver", 0)
+    wanted = [
+        skill for skill in lessons
+        if (skill.kind, skill.attribute) not in have and not _too_dear(skill, silver)
+    ]
+    if not wanted:
+        return []
+    enabled = {o.id for o in game.options(odds=False, tick=False) if o.enabled}
+    for skill in wanted:
+        if f"learn:{skill.id}" in enabled:
+            return game.choose(f"learn:{skill.id}")
+    return []
+
+
+def _too_dear(skill: SkillDef, silver: int) -> bool:
+    """學費付完剩不到 LEARN_SILVER_RESERVE 兩（免費的不看）。"""
+    fee = skill.learn.silver if skill.learn is not None else 0
+    return bool(fee) and silver - fee < LEARN_SILVER_RESERVE
+
+
+def _forge(game: Game, plan: bot.ForgePlan, slot: NamingSlot | None) -> list[str]:
+    """開一爐。要模型取名（或挑）的：輪得到就開單交給假人程式（B、C 段在 bot_runner），輪不到這一爐不開——
+    用字表的名字搶下首創，名字的樣子看得出是假人（企劃者 2026-10-05）。不必叫模型的（配方有了、只有一個候選）照開，
+    給 NO_NAME，鎖內一定不叫模型。"""
+    insight_ids = list(plan.insight_ids)
+    request = game.forge_request(plan.art_id, insight_ids, other_art=plan.other_art, named_outside=True)
+    if request is None:
+        return game.forge(plan.art_id, insight_ids, proposed=NO_NAME, other_art=plan.other_art)
+    if slot is not None and slot.open and slot.job is None:
+        slot.job = ForgeJob(plan.art_id, plan.insight_ids, plan.other_art, request)
+    elif slot is not None:
+        slot.skipped += 1
+    return []
+
+
+def _master(game: Game, slot: NamingSlot | None) -> None:
+    """絕學定名的 A 段：輪得到就開單交給假人程式；輪不到先不定（不沿用原名：江湖史那一行同一個名字出現兩次，
+    真人那一步是自己填的，看得出是假人；企劃者 2026-10-06）。"""
+    request = game.mastery_request()
+    if request is None:
+        return
+    if slot is not None and slot.open and slot.job is None:
+        slot.job = MasterJob(game.state.player.naming, request)
+    elif slot is not None:
+        slot.skipped += 1
+
+
+def apply_job(game: Game, job: ForgeJob | MasterJob, proposed: tuple[str | None, str]) -> list[str]:
+    """C 段（bot_runner 在鎖內、重讀角色之後呼叫）：
+    - 首創的爐：交給 Game.forge(proposed=...) 整個重驗再登記（等名字的時候配方被別人登記了，照查到的給、不收第二次）。
+      取新名字的單（沒有候選）要是沒有過得了過濾的名字（模型沒取到、或這時重驗過不了），這一爐不開、不收費：
+      Game.forge 會走字表名字搶下首創，那正是看得出是假人的樣子（真人在模型掛掉時走字表，假人不行）。
+      挑一個的單（有候選）沒挑到照常開，由規則挑，不產生新名字；
+    - 絕學定名：還輪到這一門才定。模型的名字先過一次完整的過濾（naming.recheck），跟原名一樣、過不了、或定的時候
+      被用掉了，就用退路字表另組（salt 從 0 起），最多 MASTER_TRIES 個，一定跟原名不同。都定不成就留著，下次再來。"""
+    state, content, world = game.state, game.content, game.world
+    if isinstance(job, ForgeJob):
+        if not job.request.choices and naming.recheck(content, proposed, world.is_character_name)[0] is None:
+            return []  # 取新名字的那一爐沒有名字可用：不開，不用字表名字搶下首創（見下面的說明）
+        return game.forge(job.art_id, list(job.insight_ids), proposed=proposed, other_art=job.other_art)
+    if state.player.naming != job.art_id:
+        return []
+    old = team.resolve_art(job.art_id, content, world)
+    if old is None:
+        return []
+    name, _ = naming.recheck(content, proposed, world.is_character_name)
+    candidates = ([name] if name else []) + [
+        naming.fallback_name(content, f"定名|{job.art_id}", old.kind, salt=i) for i in range(MASTER_TRIES)
+    ]
+    for candidate in candidates:
+        if candidate == old.name:
+            continue
+        msgs = game.name_mastered(candidate)
+        if state.player.naming is None:
+            return msgs
+    return []
 
 
 def pick(game: Game, options: list[Option], profile: BotProfile, rng: random.Random) -> str | None:
@@ -231,8 +401,10 @@ def _toward_faction(game: Game, faction_id: str, ids: list[str]) -> str | None:
 
 
 def _battle_score(game: Game, arg: str) -> float | None:
-    """集結或遲到時加入（一定站自己陣營那邊，引擎只給這個選項）；交戰中照戰法對自己這邊的推力打分數，
-    同推力時氣血損耗少的優先。"""
+    """集結或晚到時加入（一定站自己陣營那邊，引擎只給這個選項）；交戰中照自己每招的份量（乘這一場的氣血狀態）打分數，
+    扣血相對剩下的氣血越重扣分越多（決戰改版一）；豪強的兩招同理（決戰改版五）：趁亂搶地盤用奇襲的份量、扣 35，保存實力用
+    固守的份量的一半、扣 10，所以血多時搶地盤、血少了保存實力。沒有招的選項一律 0。
+    沒有快照（份量全 0）時只剩扣血的差別，損耗最低的固守（豪強是保存實力）分數最高。"""
     kind, _, tag = arg.partition(":")
     if kind in ("join", "join_late"):
         return JOIN_BATTLE_SCORE
@@ -240,12 +412,22 @@ def _battle_score(game: Game, arg: str) -> float | None:
         return None
     battle = game.world.get_battle()
     definition = game.content.battles[battle.battle_id]
-    effect = definition.action_tags.get(tag)
-    if effect is None:
-        return 0.0
     me = battle.participants.get(game.state.player.name)
-    direction = 1 if me is not None and me.faction == definition.factions[0].id else -1
-    return direction * effect.trend_delta - effect.neili_damage / 100
+    if me is None:
+        return 0.0
+    tuning = game.content.config.battle
+    hp = max(me.neili, 1.0)
+    if tag in (battle_instance.THIRD_GRAB, battle_instance.THIRD_KEEP):  # 豪強的兩招：只有站第三方的人才有（官軍黃巾的選單上沒有）
+        if not battle_instance.is_third(definition, me):
+            return 0.0
+        grab = tag == battle_instance.THIRD_GRAB
+        move = "奇襲" if grab else "固守"
+        gain = me.scores.get(move, 0.0) * battle_instance.condition(me) * (1.0 if grab else tuning.third_keep_share)
+        return gain / 100 - (tuning.third_grab_damage if grab else tuning.third_keep_damage) / hp
+    option = battle_instance.option_of(definition, battle.act_index, me.faction, tag)
+    if option is None or option.move is None:  # 放手一搏等沒有招的：假人不選（free_text 本來就排除）
+        return 0.0
+    return me.scores.get(option.move, 0.0) * battle_instance.condition(me) / 100 - tuning.damage[option.move] / hp
 
 
 def _faction(game: Game, faction_id: str) -> FactionDef:

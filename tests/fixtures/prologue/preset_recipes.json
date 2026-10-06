@@ -1,0 +1,6 @@
+[
+  {"base": "basic_fist", "insight": "feng", "name": "穿林腿", "note": "腿隨風走。"},
+  {"base": "basic_fist", "insight": "shan", "name": "坐山拳", "note": "紮穩下盤。"},
+  {"base": "basic_fist", "insight": "shui", "name": "回瀾手", "note": "繞過去再回來。"},
+  {"base": "basic_fist", "insight": "huo", "name": "烈爐拳", "note": "一拳比一拳重。"}
+]

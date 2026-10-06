@@ -9,8 +9,8 @@ from conftest import FIXTURE
 from tianxia import naming
 from tianxia.content import ContentError, load_content, profile_line, validate
 from tianxia.models import (
-    BattleAct, BattleActionEffect, BattleDef, BattleFaction, BattleOption, BattleOutcome, Condition, Config, FactionDef,
-    Threshold, Trend,
+    MOVES, BattleAct, BattleDef, BattleFaction, BattleOption, BattleOutcome, BattleTuning, Condition, Config, FactionDef,
+    SpecialTrait, ThirdParty, Threshold, Trend,
 )
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -429,6 +429,14 @@ def test_roster_content_errors_name_the_culprit(tmp_path, filename, edit, messag
 
 # ── 全服即時多人戰鬥內容 ──────────────────────────────────
 
+def three_moves(*sides) -> list[dict]:
+    """每一邊的三招（強攻、固守、奇襲，決戰改版一）：固定選項都要寫 move 與陣營，每幕每邊剛好三個。"""
+    return [
+        {"text": f"{side}{move}", "tag": f"{side}_{code}", "faction": side, "move": move}
+        for side in sides for move, code in (("強攻", "strong"), ("固守", "hold"), ("奇襲", "raid"))
+    ]
+
+
 MINIMAL_BATTLE = {
     "id": "b1", "name": "測試決戰",
     "region": "north",
@@ -436,10 +444,9 @@ MINIMAL_BATTLE = {
     "acts": [
         {
             "id": "a1", "title": "開戰", "text": "開戰了。", "goal": "打贏",
-            "options": [{"text": "進攻", "tag": "go"}],
+            "options": three_moves("a", "b"),
         }
     ],
-    "action_tags": {"go": {"trend_delta": 1, "neili_damage": 5}},
     "outcomes": [{"faction": "a", "title": "甲方勝", "text": "甲方贏了。"}],
 }
 
@@ -508,13 +515,81 @@ def test_season_one_off_ids_are_checked(tmp_path, kind, ghost, message):
         load_content(root)
 
 
-def test_battle_option_with_unknown_tag_rejected(tmp_path):
+def test_battle_options_of_one_side_cannot_share_a_tag(tmp_path):
+    """tag 是選項在這一幕的名字（出招、逾時代選、假人打分數都用它找選項）：同一邊兩個選項同名，第二個永遠選不到。"""
     root = copy_fixture(tmp_path)
     battle = json.loads(json.dumps(MINIMAL_BATTLE))
-    battle["acts"][0]["options"][0]["tag"] = "ghost"
+    battle["acts"][0]["options"][1]["tag"] = battle["acts"][0]["options"][0]["tag"]
     write_battles_json(root, [battle])
-    with pytest.raises(ContentError, match="ghost"):
+    with pytest.raises(ContentError, match="a_strong.*重複"):
         load_content(root)
+
+
+def test_a_battle_no_longer_needs_its_tags_in_action_tags(tmp_path):
+    """三招之後固定招看 move，tag 隨便取（只要這一邊這一幕不重複）；action_tags 不再是必填的查表。"""
+    root = copy_fixture(tmp_path)
+    battle = json.loads(json.dumps(MINIMAL_BATTLE))
+    for option in battle["acts"][0]["options"]:
+        option["tag"] = "ghost_" + option["tag"]
+    write_battles_json(root, [battle])
+    assert "b1" in load_content(root).battles
+
+
+def test_each_battle_act_offers_each_side_the_three_moves():
+    """戰鬥系統 3.4：每一幕、每一邊剛好強攻、固守、奇襲各一個固定選項（讀真實內容再改壞一個）。"""
+    real = load_content(ROOT / "content")
+    battle = real.battles["changshe_fire"]
+    fixed = [o for o in battle.acts[0].options if not o.free_text and o.faction == "guan"]
+    assert sorted(o.move for o in fixed) == sorted(MOVES)
+    fixed[0].move = fixed[1].move  # 兩個選項同一招、少了一招
+    with pytest.raises(ContentError, match="三招"):
+        validate(real)
+
+
+@pytest.mark.parametrize("drop", ["強攻", "固守", "奇襲"])
+def test_a_side_missing_one_of_the_three_moves_is_rejected(tmp_path, drop):
+    root = copy_fixture(tmp_path)
+    battle = json.loads(json.dumps(MINIMAL_BATTLE))
+    battle["acts"][0]["options"] = [o for o in battle["acts"][0]["options"] if not (o["faction"] == "b" and o["move"] == drop)]
+    write_battles_json(root, [battle])
+    with pytest.raises(ContentError, match="b 要剛好有三招"):
+        load_content(root)
+
+
+def test_a_side_with_a_fourth_fixed_option_is_rejected(tmp_path):
+    root = copy_fixture(tmp_path)
+    battle = json.loads(json.dumps(MINIMAL_BATTLE))
+    battle["acts"][0]["options"].append({"text": "再來一招", "tag": "a_extra", "faction": "a", "move": "強攻"})
+    write_battles_json(root, [battle])
+    with pytest.raises(ContentError, match="a 要剛好有三招"):
+        load_content(root)
+
+
+def test_a_fixed_battle_option_must_name_its_move():
+    real = load_content(ROOT / "content")
+    option = next(o for o in real.battles["guangzong"].acts[0].options if not o.free_text)
+    option.move = None
+    with pytest.raises(ContentError, match="move"):
+        validate(real)
+
+
+def test_a_fixed_battle_option_must_name_its_side(tmp_path):
+    """兩邊都能選的固定選項（faction 不寫）不行：每一邊的三招要各自數，也各自有自己的字。"""
+    root = copy_fixture(tmp_path)
+    battle = json.loads(json.dumps(MINIMAL_BATTLE))
+    del battle["acts"][0]["options"][0]["faction"]
+    write_battles_json(root, [battle])
+    with pytest.raises(ContentError, match="move 與陣營"):
+        load_content(root)
+
+
+def test_the_free_text_option_needs_no_move_and_is_not_counted_as_a_move(tmp_path):
+    root = copy_fixture(tmp_path)
+    battle = json.loads(json.dumps(MINIMAL_BATTLE))
+    battle["acts"][0]["options"].append({"text": "放手一搏", "tag": "a_reckless", "faction": "a", "free_text": True})
+    battle["free_text_gamble"] = {}
+    write_battles_json(root, [battle])
+    assert "b1" in load_content(root).battles
 
 
 def test_battle_option_restricted_to_an_unknown_faction_rejected(tmp_path):
@@ -524,6 +599,112 @@ def test_battle_option_restricted_to_an_unknown_faction_rejected(tmp_path):
     write_battles_json(root, [battle])
     with pytest.raises(ContentError, match="ghost"):
         load_content(root)
+
+
+def test_lead_texts_must_name_a_side_of_the_battle(content):
+    """決戰改版 1：幕文字照誰佔上風換版本（戰鬥系統 3.2），鍵是這場的陣營 id，寫錯陣營在載入時就報。"""
+    content.battles["t1"] = battle = _battle({})
+    battle.acts[0].text_by_lead["nobody"] = "某一方佔了上風。"
+    with pytest.raises(ContentError, match="text_by_lead"):
+        validate(content)
+
+
+def test_a_third_party_must_be_another_scenario_faction_and_push_a_real_trend(content):
+    """決戰改版 5：第三方要是劇本的陣營、不能是交戰的兩軍之一；推的大勢線要存在。"""
+    content.battles["t1"] = battle = _battle({})
+    battle.third = ThirdParty(faction=battle.factions[0].id, trend=content.scenario.trends[0].id)
+    with pytest.raises(ContentError, match="第三方"):
+        validate(content)
+    battle.third = ThirdParty(faction="沒有這個陣營", trend=content.scenario.trends[0].id)
+    with pytest.raises(ContentError, match="第三方"):
+        validate(content)
+    content.scenario.factions = [FactionDef(id=f, name=f) for f in ("guan", "huang", "hao")]
+    battle.third = ThirdParty(faction="hao", trend="沒有這條線")
+    with pytest.raises(ContentError, match="第三方推的大勢線 沒有這條線 不存在"):
+        validate(content)
+
+
+def test_a_third_party_cannot_be_one_of_the_two_armies(content):
+    """劇本有這三個陣營，所以「要是劇本的陣營」那一條過得了，只剩「不是交戰的兩軍」擋得住（上面那個測試的第一個斷言是劇本沒有
+    陣營時跑的，會被前一條先擋掉，看不出這一條有沒有在）。"""
+    content.scenario.factions = [FactionDef(id=f, name=f) for f in ("guan", "huang", "hao")]
+    content.battles["t1"] = battle = _battle({})
+    for army in ("guan", "huang"):
+        battle.third = ThirdParty(faction=army, trend=content.scenario.trends[0].id)
+        with pytest.raises(ContentError, match=f"第三方 {army} 要是劇本的陣營，而且不是交戰的兩軍"):
+            validate(content)
+
+
+def test_a_third_party_that_is_a_scenario_faction_pushing_a_real_trend_is_valid(content):
+    content.scenario.factions = [FactionDef(id=f, name=f) for f in ("guan", "huang", "hao")]
+    content.battles["t1"] = battle = _battle({})
+    battle.third = ThirdParty(faction="hao", trend=content.scenario.trends[0].id)
+    validate(content)
+
+
+def test_a_third_party_cannot_push_a_derived_trend(content):
+    """衍生線（黃巾聲勢）推了會被下一次重算蓋回去：跟決戰結果的 trend_delta 一樣擋掉，要推就推它的來源線。"""
+    content = _with_fronts(content)
+    content.scenario.factions = [FactionDef(id=f, name=f) for f in ("guan", "huang", "hao")]
+    content.battles["t1"] = battle = _battle({})
+    battle.third = ThirdParty(faction="hao", trend="east")
+    validate(content)
+    battle.third = ThirdParty(faction="hao", trend="total")
+    with pytest.raises(ContentError, match="第三方 不能推衍生線 total"):
+        validate(content)
+
+
+@pytest.mark.parametrize("field, bad", [
+    ("third_grab_damage", 0), ("third_grab_damage", -35), ("third_keep_damage", 0), ("third_keep_damage", -1),
+    ("third_keep_share", -0.1), ("third_keep_share", 1.5), ("third_cap", -1),
+])
+def test_a_bad_third_party_number_in_the_battle_tuning_is_refused(field, bad):
+    """決戰改版 5：第三方的四個數字寫壞了（扣血寫成 0 或負的、保存實力的折數超出 0～1、上限是負的）在載入設定時就擋下，
+    不是讓豪強變成扣不了血、收穫倒扣、或把割據往下推。"""
+    with pytest.raises(ValidationError, match=field):
+        BattleTuning(**{field: bad})
+
+
+def test_the_third_party_numbers_may_sit_on_their_edges():
+    """折數 0（保存實力不算收穫）與 1（跟搶地盤一樣）、上限 0（豪強不推割據）都是合法的調法。"""
+    BattleTuning(third_keep_share=0.0, third_cap=0)
+    BattleTuning(third_keep_share=1.0, third_cap=100)
+
+
+def test_a_bad_third_party_number_in_config_json_stops_the_load(tmp_path):
+    root = copy_fixture(tmp_path)
+    edit_json(root / "config.json", lambda d: d.update(battle={"third_keep_share": 2}))
+    with pytest.raises(ValidationError, match="third_keep_share"):
+        load_content(root)
+
+
+def test_a_bad_battle_tuning_in_config_json_stops_the_load(tmp_path):
+    """測完在 config.json 的 battle 裡改數字寫壞了：伺服器開機（載入內容）就停下，不是等到決戰結算。"""
+    root = copy_fixture(tmp_path)
+    edit_json(root / "config.json", lambda d: d.update(battle={"damage": {"強攻": 70}}))
+    with pytest.raises(ValidationError, match="damage"):
+        load_content(root)
+    root = copy_fixture(tmp_path / "ok")
+    edit_json(root / "config.json", lambda d: d.update(battle={"push_max": 8, "damage": {"強攻": 70, "固守": 10, "奇襲": 40}}))
+    tuning = load_content(root).config.battle
+    assert tuning.push_max == 8 and tuning.damage == {"強攻": 70.0, "固守": 10.0, "奇襲": 40.0}
+
+
+def test_an_unknown_attribute_in_the_affinity_table_stops_the_load(tmp_path):
+    """審查 m3：對應表裡寫了不存在的屬性（打錯字的行永遠不會被用到）：載入設定時就報。"""
+    root = copy_fixture(tmp_path)
+    edit_json(root / "config.json", lambda d: d.update(battle={"affinity": {"木": ["強攻", "固守"]}}))
+    with pytest.raises(ContentError, match="affinity.*木"):
+        load_content(root)
+    root = copy_fixture(tmp_path / "ok")
+    edit_json(root / "config.json", lambda d: d.update(battle={"affinity": {"陽": ["奇襲", "固守"]}}))
+    assert load_content(root).config.battle.affinity["陽"] == ("奇襲", "固守")
+
+
+def test_lead_texts_naming_both_sides_validate(content):
+    content.battles["t1"] = battle = _battle({})
+    battle.acts[0].text_by_lead.update({"guan": "官軍佔了上風。", "huang": "黃巾佔了上風。"})
+    validate(content)
 
 
 def _two_act_battle() -> dict:
@@ -901,8 +1082,7 @@ def _battle(trend_delta):
         id="t1", name="測試決戰", region="north",
         factions=[BattleFaction(id="guan", name="官軍"), BattleFaction(id="huang", name="黃巾")],
         acts=[BattleAct(id="a1", title="初探", text="雙方試探。", goal="推動戰局",
-                        options=[BattleOption(text="穩紮穩打", tag="safe")])],
-        action_tags={"safe": BattleActionEffect(trend_delta=1, neili_damage=5)},
+                        options=[BattleOption.model_validate(o) for o in three_moves("guan", "huang")])],
         outcomes=[BattleOutcome(faction="guan", title="官軍大勝", text="官軍獲勝。", trend_delta=trend_delta)],
         muster_seconds=600, round_seconds=120,
     )
@@ -1110,6 +1290,15 @@ def test_the_profile_line_says_what_the_profile_turns_on():
     )
 
 
+def test_no_profile_overrides_the_time_scale_or_the_season_weeks():
+    """主機端 season_clock.py resume 拿開季時蓋的章（第一季規則開／關、季長）當設定檔的指紋，對得上才繼續
+    （scripts/season_clock.py::_profile_mismatch）。time_scale 與 season_weeks 沒有蓋在季上，蓋章看不出它們——所以設定檔
+    不准改這兩項；哪天真的要改，先讓季蓋章記下它們、並把主機端的檢查補上，再放寬這一條。"""
+    for path in sorted((CONTENT_DIR / "profiles").glob("*.json")):
+        overridden = json.loads(path.read_text(encoding="utf-8"))
+        assert not {"time_scale", "season_weeks"} & set(overridden), path.name
+
+
 # 可以打開伺服器排程的設定：只有壓測用的（壓測計畫 Task 4 的 content/profiles/loadtest.json 寫 10）。其他設定（試玩的
 # weekend 等）一律關著，直到 PM 驗收之後決定在哪一份打開——到時改 test_world_tick_is_off_by_default，寫明是哪一份、為什麼
 LOAD_TEST_PROFILES = frozenset({"loadtest"})
@@ -1151,6 +1340,69 @@ def test_world_tick_seconds_is_off_or_at_least_a_second():
     assert Config(world_tick_seconds=1).world_tick_seconds == 1
     with pytest.raises(ValidationError, match="至少 1 秒"):
         Config(world_tick_seconds=0.5)
+
+
+# ── LLM 佇列與鎖外模型呼叫的時間預算（線上架構第 2 期計畫）──────────────
+
+
+def test_llm_queue_is_off_by_default():
+    """LLM 佇列預設關（線上架構第 2 期計畫）：0＝不建佇列，鎖外的模型呼叫照舊直接叫。content/config.json 與玩家用的設定
+    （weekend 等）都不打開；要在哪一份打開由 PM 驗收之後決定，到時改這個測試、寫明是哪一份。"""
+    config = load_content(CONTENT_DIR).config
+    assert (config.llm_queue_slots, config.llm_queue_bot_cap, config.llm_queue_wait_seconds) == (0, 1, 20)
+    for path in sorted((CONTENT_DIR / "profiles").glob("*.json")):
+        assert load_content(CONTENT_DIR, profile=path.stem).config.llm_queue_slots == 0, path.stem
+
+
+@pytest.mark.parametrize("field", ["llm_queue_slots", "llm_queue_bot_cap", "llm_queue_wait_seconds"])
+def test_llm_queue_settings_cannot_be_negative(field):
+    with pytest.raises(ValidationError, match="greater than or equal to 0"):
+        Config(**{field: -1})
+
+
+def test_the_queue_wait_has_an_upper_bound():
+    """審查 M5：排隊最久等多久要有上限。請求在 trycloudflare 約 100 秒就被切斷，排 120 秒以上沒有意義；太大的數字（超過
+    threading.TIMEOUT_MAX，約 430 萬秒）還會讓每一次要排的呼叫在 Condition.wait 丟 OverflowError。"""
+    assert Config(llm_queue_wait_seconds=120).llm_queue_wait_seconds == 120
+    assert Config(llm_queue_wait_seconds=0).llm_queue_wait_seconds == 0
+    for too_long in (120.5, 5_000_000):
+        with pytest.raises(ValidationError, match="less than or equal to 120"):
+            Config(llm_queue_wait_seconds=too_long)
+
+
+def test_every_model_call_outside_the_lock_has_a_total_budget():
+    """鎖外四種模型呼叫（開爐取名、大場面判讀、對話生成、隨口應對評分）各有一份總預算，預設都是 60 秒：試玩走 trycloudflare，
+    一個請求約 100 秒就被切斷，60 秒留下 A、C 兩段等行動鎖與排模型佇列的餘裕。"""
+    config = load_content(CONTENT_DIR).config
+    assert (
+        config.naming_budget_seconds, config.big_fight_budget_seconds,
+        config.dialogue_budget_seconds, config.free_text_budget_seconds,
+    ) == (60, 60, 60, 60)
+    with pytest.raises(ValidationError, match="greater than or equal to 0"):
+        Config(dialogue_budget_seconds=-1)
+    with pytest.raises(ValidationError, match="greater than or equal to 0"):
+        Config(free_text_budget_seconds=-1)
+
+
+# ── 伺服器推送（線上架構推送計畫）──────────────────────────────────────
+
+
+def test_push_is_off_by_default():
+    """伺服器推送預設關（線上架構推送計畫）：前端照舊每 10 秒輪詢，/api/events 是 404。content/config.json 與玩家用的設定
+    （weekend 等）都不打開；要在哪一份打開由 PM 驗收之後決定，到時改這個測試、寫明是哪一份。"""
+    config = load_content(CONTENT_DIR).config
+    assert (config.push_events, config.push_watch_seconds, config.push_world_min_seconds) == (False, 5, 10)
+    for path in sorted((CONTENT_DIR / "profiles").glob("*.json")):
+        assert load_content(CONTENT_DIR, profile=path.stem).config.push_events is False, path.stem
+
+
+def test_push_timings_must_make_sense():
+    """看守每 0 秒看一次是空轉；兩次「世界變了」的間隔不能是負的（0＝不壓）。"""
+    with pytest.raises(ValidationError, match="greater than 0"):
+        Config(push_watch_seconds=0)
+    with pytest.raises(ValidationError, match="greater than or equal to 0"):
+        Config(push_world_min_seconds=-1)
+    assert Config(push_world_min_seconds=0).push_world_min_seconds == 0
 
 
 # ── 時刻表（content/timetable.json，計畫 T2）──────────────────────────
@@ -1244,6 +1496,7 @@ def _showdown_battle(**fields) -> dict:
         defender="huang", timetable_event="siege", version="甲", front="south",
     )
     battle["outcomes"][0]["faction"] = "guan"
+    battle["acts"][0]["options"] = three_moves("guan", "huang")
     battle.update(fields)
     return battle
 
@@ -1697,3 +1950,378 @@ def test_the_free_text_and_bot_reward_lists_leave_lore_out():
 
     assert "lore" not in content.FREE_TEXT_REWARDS and "lore" not in bot_policy.REWARD_STATS
     assert {"str", "agi", "con", "wis"} <= set(content.FREE_TEXT_REWARDS)  # 另外四項不動
+
+
+# ── 序章（新手引導計畫一）────────────────────────────────
+
+def test_prologue_content_loads(prologue_content):
+    t = prologue_content.tutorial
+    assert t.location == "hut"
+    assert t.prologue_steps == 11
+    assert prologue_content.locations["hut"].prologue_only
+    assert [r.name for r in prologue_content.preset_recipes] == ["穿林腿", "坐山拳", "回瀾手", "烈爐拳"]
+    assert t.steps[7].force_tier == "險勝" and t.steps[7].give_art.level == 5
+
+
+def test_fixture_content_has_no_prologue(content):
+    assert content.tutorial.location is None and content.tutorial.prologue_steps == 0
+    assert content.preset_recipes == []
+
+
+@pytest.mark.parametrize("patch, message", [
+    (lambda t: t.update(location="lake"), "序章的地點"),  # lake 不是 prologue_only
+    (lambda t: t.update(prologue_steps=12), "prologue_steps"),
+    (lambda t: t["steps"][2].update(explore_event="nope"), "nope"),
+    (lambda t: t["steps"][7].update(force_tier="大敗"), "大敗"),
+    (lambda t: t["steps"][1].update(reveal=["tab:nowhere"]), "tab:nowhere"),
+    (lambda t: t["steps"][9].update(melt_only="nope"), "nope"),
+])
+def test_prologue_validation(prologue_root, patch, message):
+    edit_json(prologue_root / "tutorial.json", patch)
+    with pytest.raises(ContentError, match=message):
+        load_content(prologue_root)
+
+
+def test_prologue_only_location_needs_a_prologue(tmp_path):
+    root = copy_fixture(tmp_path)
+
+    def mark_cave(locs):
+        locs[2]["prologue_only"] = True  # cave
+
+    edit_json(root / "locations.json", mark_cave)
+    with pytest.raises(ContentError, match="prologue_only"):
+        load_content(root)
+
+
+def test_preset_recipe_names_are_checked(prologue_root):
+    def clash(data):
+        data[1]["name"] = data[0]["name"]
+
+    edit_json(prologue_root / "preset_recipes.json", clash)
+    with pytest.raises(ContentError, match="師門配方"):
+        load_content(prologue_root)
+
+
+def test_the_hut_connects_only_to_the_start(prologue_root):
+    """草廬只能連到起點：連到別處，出師走出去就不是潁川了（validate 的 hut.connections 檢查）。"""
+    def reach_the_lake(locs):
+        next(loc for loc in locs if loc["id"] == "hut")["connections"] = ["town", "lake"]
+
+    edit_json(prologue_root / "locations.json", reach_the_lake)
+    with pytest.raises(ContentError, match="只能連到起點"):
+        load_content(prologue_root)
+
+
+@pytest.mark.parametrize("entry", ["act:explor", "act:", "explore", "talk:leave", "talk:opp:x"])
+def test_prologue_allow_entries_must_be_menu_ids(prologue_root, entry):
+    """allow 是前綴比對：拼錯的前綴會把那一步的選單清空，卡死新人。talk: 開頭的是對話選單的，閒著的選單沒有。"""
+    edit_json(prologue_root / "tutorial.json", lambda t: t["steps"][2]["allow"].append(entry))
+    with pytest.raises(ContentError, match="allow 不是選單上的行動") as caught:
+        load_content(prologue_root)
+    assert "models.ALLOW_FIXED" in str(caught.value) and "ALLOW_FAMILIES" in str(caught.value)  # 內容作者知道去哪補
+
+
+def test_every_sight_in_the_hut_has_a_preset_recipe(prologue_root):
+    """review-t4-5 M4：草廬悟得到的每個意境，合成那一步的底都要有師門配方；少了的那個新人的合成就要等模型。"""
+    def drop_fire(recipes):
+        recipes[:] = [r for r in recipes if r["insight"] != "huo"]
+
+    edit_json(prologue_root / "preset_recipes.json", drop_fire)
+    with pytest.raises(ContentError, match=r"\['huo'\].*basic_fist.*師門配方"):
+        load_content(prologue_root)
+
+
+
+def test_a_recipe_on_the_wrong_base_does_not_cover_the_sight(prologue_root):
+    """配方有、但底不是合成那一步指定的那一門：那個景還是沒有配方。"""
+    def wrong_base(recipes):
+        next(r for r in recipes if r["insight"] == "shui")["base"] = "basic_breath"
+
+    edit_json(prologue_root / "preset_recipes.json", wrong_base)
+    with pytest.raises(ContentError, match=r"\['shui'\].*basic_fist.*師門配方"):
+        load_content(prologue_root)
+
+
+def test_a_sight_that_chains_on_is_checked_too(prologue_root):
+    """四景選了之後接下去的事件（next_event）悟到的意境也算。"""
+    def chain(events):
+        sight = next(e for e in events if e["id"] == "p_insight")
+        sight["choices"][0]["effect"]["next_event"] = "p_more"
+        events.append({"id": "p_more", "title": "再看", "text": "再看一眼。", "actions": [], "choices": [
+            {"text": "好", "effect": {"text": "嗯。", "insights": ["xuesha"]}}]})
+
+    edit_json(prologue_root / "events" / "prologue.json", chain)
+    with pytest.raises(ContentError, match=r"\['xuesha'\]"):
+        load_content(prologue_root)
+
+
+def test_a_sight_that_only_a_failed_check_grants_is_checked_too(prologue_root):
+    """檢定失敗才給的意境（fail_effect）也是新人會拿到的：沒有配方的話那個新人的合成一樣要等模型。"""
+    def gamble(events):
+        sight = next(e for e in events if e["id"] == "p_insight")
+        sight["choices"][0]["check"] = {"stat": "str", "difficulty": 5}
+        sight["choices"][0]["fail_effect"] = {"text": "摔了一跤。", "insights": ["xuesha"]}
+
+    edit_json(prologue_root / "events" / "prologue.json", gamble)
+    with pytest.raises(ContentError, match=r"\['xuesha'\]"):
+        load_content(prologue_root)
+
+
+def test_prologue_reveal_takes_the_chip_row_keys(prologue_root):
+    """江湖頁最上面那一排小標有三塊：態勢、大事（board）、主線（quest）；每一塊各有自己的 reveal 鍵。"""
+    edit_json(prologue_root / "tutorial.json", lambda t: t["steps"][2]["reveal"].extend(["board", "quest", "stances"]))
+    assert {"board", "quest", "stances"} <= set(load_content(prologue_root).tutorial.steps[2].reveal)
+
+
+def test_prologue_allow_takes_every_kind_of_menu_id(prologue_root):
+    more = [
+        "act:challenge:x", "call:x", "move:town:hurry", "learn:x", "faction:x", "defect:x", "fs:x", "act:duty",
+        "act:rank2", "opp:deliver:x", "opp:try:x", "act:socialize",
+    ]
+    edit_json(prologue_root / "tutorial.json", lambda t: t["steps"][2]["allow"].extend(more))
+    assert load_content(prologue_root).tutorial.steps[2].allow[-1] == "act:socialize"
+
+
+def test_the_last_prologue_step_must_let_the_player_walk_out(prologue_root):
+    """出師那一步的 allow 沒有 move:，選單與輿圖都不給走，新人永遠出不了草廬。"""
+    edit_json(prologue_root / "tutorial.json", lambda t: t["steps"][10].update(allow=["act:rest"]))
+    with pytest.raises(ContentError, match="走不出草廬"):
+        load_content(prologue_root)
+
+
+def test_new_characters_get_the_current_onboarding_version(content, prologue_content):
+    from tianxia.state import ONBOARDING_VERSION, PlayerState, new_game_state
+
+    assert new_game_state(prologue_content, "甲").player.onboarding == ONBOARDING_VERSION
+    # 沒有序章的內容不蓋章：新引導的步數編號是序章之後才算數的（preflight F6），先蓋章會讓之後上線的舊存檔跳過換算
+    assert new_game_state(content, "甲").player.onboarding == 0
+    assert PlayerState(name="乙", location="town", stats={}, stamina=0).onboarding == 0  # 舊存檔讀進來沒有這個欄位
+
+
+# ── 戰後事件的條件 fight_tiers（這次行動打的那一場的結果）────────────────
+
+
+def test_validate_accepts_fight_tiers_on_a_train_event(content):
+    content.events["chain_a"].condition = Condition(fight_tiers=["大勝", "險勝"])  # 夾具裡唯一掛在遊歷上的事件
+    validate(content)
+    content.events["chain_a"].condition = Condition(any_of=[Condition(fight_tiers=["落敗"])])  # any_of 裡面也一樣
+    validate(content)
+
+
+def test_validate_rejects_an_unknown_fight_tier(content):
+    content.events["chain_a"].condition = Condition(fight_tiers=["大勝", "大捷"])
+    with pytest.raises(ContentError, match="事件 chain_a：未知的戰鬥結果 大捷"):
+        validate(content)
+
+
+@pytest.mark.parametrize("actions", [["explore", "train"], ["train", "socialize"], []])
+def test_validate_rejects_fight_tiers_on_an_event_that_is_not_only_a_train_event(content, actions):
+    """遊歷以外的行動抽到它時沒有剛打完的那一場（探索三選一是互斥的支線、交友沒有戰鬥；只靠串接來的更沒有），
+    寫了只會在那些行動上悄悄永遠不成立：actions 要剛好是 ["train"]。"""
+    content.events["chain_a"].actions = actions
+    content.events["chain_a"].condition = Condition(fight_tiers=["大勝"])
+    with pytest.raises(ContentError, match="事件 chain_a：fight_tiers 只能寫在遊歷"):
+        validate(content)
+
+
+def test_validate_rejects_fight_tiers_where_no_fight_has_just_ended(content):
+    """只有遊歷打完才會接事件：別的行動抽的事件、選項與結局的條件寫了它，永遠不成立。"""
+    content.events["drunk"].condition = Condition(fight_tiers=["大勝"])  # 探索抽的
+    with pytest.raises(ContentError, match="事件 drunk：fight_tiers 只能寫在遊歷"):
+        validate(content)
+    content.events["drunk"].condition = Condition()
+    content.events["drunk"].choices[0].condition = Condition(fight_tiers=["大勝"])  # 選項的條件也不行
+    with pytest.raises(ContentError, match="事件 drunk 選項0：fight_tiers 只能寫在遊歷"):
+        validate(content)
+    content.events["drunk"].choices[0].condition = Condition()
+    content.scenario.endings[0].condition = Condition(fight_tiers=["大勝"])
+    with pytest.raises(ContentError, match="fight_tiers 只能寫在遊歷"):
+        validate(content)
+
+
+# ── traits.json、trait_lines.json：武學的功效（武學與成長設計 13.2、13.4；計畫六 Task 1）──
+
+
+def _with_a_unique_special(content, skill_id):
+    """名將本命絕學的獨特特別功效（13.5）：pool 是 false，只給一門。它佔用「回春」的掛點（兩個特別功效不能共用掛點），
+    所以先把共用的回春換掉，剩下的清單與演出句才一致。"""
+    content.traits.special = [s for s in content.traits.special if s.id != "huichun"]
+    del content.trait_lines["回春"]
+    content.traits.special.append(SpecialTrait(
+        id="only", name="獨門", hook="heal_after", amount=0.03, pool=False, desc="打完回氣血上限的 {value}",
+    ))
+    content.trait_lines["獨門"] = ["{who}使出獨門絕技。"]
+    content.skills[skill_id].special = "only"
+
+
+def test_traits_must_cover_each_attribute_once(content):
+    content.traits.general.pop()
+    with pytest.raises(ContentError, match="功效"):
+        validate(content)
+
+
+def test_a_trait_name_cannot_repeat(content):
+    content.traits.special[1].name = content.traits.special[0].name
+    with pytest.raises(ContentError, match="名字不能重複"):
+        validate(content)
+
+
+def test_a_special_id_cannot_repeat(content):
+    content.traits.special[1].id = content.traits.special[0].id
+    with pytest.raises(ContentError, match="id 不能重複"):
+        validate(content)
+
+
+def test_two_specials_cannot_share_a_hook(content):
+    """Loadout.specials 照掛點記：兩個特別功效掛同一個點，身上只會留第一個、另一個悄悄失效（含 pool: false 的獨特功效）。"""
+    content.traits.special[1].hook = content.traits.special[0].hook
+    with pytest.raises(ContentError, match="掛點"):
+        validate(content)
+
+
+def test_a_skill_special_must_exist_and_a_unique_one_belongs_to_one_skill(content):
+    first, second = list(content.skills)[:2]
+    content.skills[first].special = "沒有這個"
+    with pytest.raises(ContentError, match="特別功效"):
+        validate(content)
+    _with_a_unique_special(content, first)
+    validate(content)  # 一門武學帶獨特功效：沒問題
+    content.skills[second].special = "only"
+    with pytest.raises(ContentError, match="只能給一門"):
+        validate(content)
+
+
+def test_every_trait_needs_lines(content):
+    del content.trait_lines["穩"]
+    with pytest.raises(ContentError, match="穩 沒有演出句"):
+        validate(content)
+
+
+def test_every_trait_has_lines_with_known_placeholders_only(content):
+    content.trait_lines["先手"] = ["{who}在{place}搶先出手。"]
+    with pytest.raises(ContentError, match="佔位"):
+        validate(content)
+
+
+@pytest.mark.parametrize(("line", "complaint"), [
+    ("连出数招", "繁體"),
+    ("{who}連出 3 招", "數字"),
+    ("{who}連出３招", "數字"),
+    ("{who}勝率過半%", "數字"),
+    ("   ", "空白"),
+])
+def test_a_trait_line_must_be_traditional_digit_free_and_not_blank(content, line, complaint):
+    content.trait_lines["先手"].append(line)
+    with pytest.raises(ContentError, match=complaint):
+        validate(content)
+
+
+@pytest.mark.parametrize("line", [
+    "{who搶先出手。",  # 大括號沒有成對
+    "{who}搶先出手}。",  # 多出來的右括號
+    "{}搶先出手。",  # 空的佔位
+    "{who!r}搶先出手。",  # 後面接轉換
+    "{who:>5}搶先出手。",  # 後面接格式
+    "{who.name}搶先出手。",  # 取屬性
+    "{who[0]}搶先出手。",  # 取索引
+    "{{who}}搶先出手。",  # 跳脫的大括號：format 之後會變成字面的 {who}，絕不是想要的
+    "{who}搶先出手{{。",
+    "{who}搶先出手}}。",
+])
+def test_a_malformed_placeholder_is_a_content_error_naming_the_file_and_the_trait(content, line):
+    """演出句之後會被 str.format(who=…, art=…, foe=…) 套上去（計畫六 Task 4）：載入時就要確定每個佔位都是乾淨的 who、art、foe，
+    不然戰鬥打到一半才丟 ValueError／KeyError／AttributeError。"""
+    content.trait_lines["先手"].append(line)
+    with pytest.raises(ContentError, match=r"trait_lines\.json：先手.*佔位"):
+        validate(content)
+
+
+def test_every_line_of_the_real_trait_lines_formats_with_the_three_placeholders():
+    """正式的 45 句真的能 format：載入時的檢查跟之後的用法對得上。"""
+    content = load_content(ROOT / "content")
+    for name, lines in content.trait_lines.items():
+        for line in lines:
+            line.format(who="沈浪", art="粗淺拳腳", foe="黃巾散兵")
+
+
+def test_general_trait_hooks_must_be_unique(content):
+    """traits.amount 與 Loadout.layers 都照掛點找：兩個一般功效掛同一個點，其中一個永遠算不到。"""
+    content.traits.general[1].hook = content.traits.general[0].hook
+    with pytest.raises(ContentError, match="一般功效的掛點不能重複"):
+        validate(content)
+
+
+def test_a_skill_special_must_exist_even_when_the_content_has_no_traits(content):
+    first = list(content.skills)[0]
+    content.traits.general.clear()
+    content.traits.special.clear()
+    content.trait_lines.clear()
+    validate(content)  # 沒有功效、也沒有武學指到特別功效：照常
+    content.skills[first].special = "lianhuan"
+    with pytest.raises(ContentError, match=f"武學 {first}：特別功效 lianhuan 不存在"):
+        validate(content)
+
+
+def test_the_quality_multiplier_needs_all_four_qualities(content):
+    """少寫一個品質，那一品的功效強度會悄悄變成 ×1：要在載入時擋下。"""
+    validate(content)
+    del content.config.trait_quality_multiplier["上品"]
+    with pytest.raises(ContentError, match="trait_quality_multiplier.*上品"):
+        validate(content)
+
+
+def test_a_trait_line_may_use_brackets_and_chinese_numerals(content):
+    content.trait_lines["先手"].append("【{art}】一步一步逼上前去，{foe}連退。")
+    validate(content)
+
+
+def test_a_trait_lines_key_must_be_a_trait_name(content):
+    """鍵拼錯（例：先首）的句子永遠不會被挑到，載入時就擋下。"""
+    content.trait_lines["先首"] = ["{who}搶先出手。"]
+    with pytest.raises(ContentError, match="先首"):
+        validate(content)
+
+
+def test_a_malformed_traits_file_is_a_content_error_that_names_the_file(tmp_path):
+    root = copy_fixture(tmp_path / "a")
+    (root / "traits.json").write_text('{"general": [', encoding="utf-8")
+    with pytest.raises(ContentError, match="traits.json"):
+        load_content(root)
+    root = copy_fixture(tmp_path / "b")
+    edit_json(root / "traits.json", lambda d: d["general"][0].update(hook="沒有這個掛點"))
+    with pytest.raises(ContentError, match="traits.json"):
+        load_content(root)
+    root = copy_fixture(tmp_path / "c")
+    (root / "trait_lines.json").write_text('["不是物件"]', encoding="utf-8")
+    with pytest.raises(ContentError, match="trait_lines.json"):
+        load_content(root)
+
+
+def test_content_without_traits_still_loads(tmp_path):
+    """功效是選填的內容：沒有這兩個檔（舊的內容、別的測試夾具）就是沒有功效，載入照常。"""
+    root = copy_fixture(tmp_path)
+    (root / "traits.json").unlink()
+    (root / "trait_lines.json").unlink()
+    content = load_content(root)
+    assert content.traits.general == [] and content.trait_lines == {}
+
+
+def test_the_real_traits_are_the_designed_table():
+    """正式的功效照設計 13.2、13.4（八個一般、七個特別，數字都是預設）；演出句是 S1 的 45 句（每個功效三句）。"""
+    content = load_content(ROOT / "content")
+    book = content.traits
+    assert [t.name for t in book.general] == ["先手", "穩", "破甲", "化勁", "乘勝", "吸取", "險", "厚"]
+    assert [t.name for t in book.special] == ["連環", "不動", "護命", "悟招", "借力", "回春", "輕身"]
+    assert all(t.pool for t in book.special)
+    assert sorted(content.trait_lines) == sorted(t.name for t in [*book.general, *book.special])
+    assert all(len(lines) == 3 for lines in content.trait_lines.values())
+    assert content.config.special_trait_chance == 0.05
+    assert content.config.trait_quality_multiplier == {"下品": 1.0, "中品": 1.5, "上品": 2.0, "絕學": 3.0}
+
+
+def test_the_fixture_traits_are_the_real_ones():
+    """測試夾具的功效與演出句跟正式內容一樣（直接複製），數字跟著正式內容走。"""
+    for name in ("traits.json", "trait_lines.json"):
+        assert json.loads((FIXTURE / name).read_text(encoding="utf-8")) == json.loads(
+            (ROOT / "content" / name).read_text(encoding="utf-8")
+        )

@@ -26,6 +26,35 @@ def test_think_keep_alive_and_penalties_are_configurable():
     assert payload["options"]["frequency_penalty"] == 0.0
 
 
+def _configured(content):
+    """八個參數都設成跟 OllamaClient 的預設、也跟彼此不同的值（預設是 localhost、qwen2.5:14b、120、None、30m、1.18、0.3、0.3）：
+    漏帶任何一個，client 就會悄悄變回預設。回傳預期的欄位值。"""
+    cfg = content.config
+    cfg.ollama_url, cfg.ollama_model, cfg.ollama_timeout = "http://gpu-box:11434", "gemma4:26b", 77
+    cfg.ollama_think, cfg.ollama_keep_alive = False, "12h"
+    cfg.ollama_repeat_penalty, cfg.ollama_presence_penalty, cfg.ollama_frequency_penalty = 1.0, 0.0, 0.1
+    return {
+        "base_url": "http://gpu-box:11434", "model": "gemma4:26b", "timeout": 77, "think": False, "keep_alive": "12h",
+        "repeat_penalty": 1.0, "presence_penalty": 0.0, "frequency_penalty": 0.1,
+    }
+
+
+def test_a_client_from_the_config_carries_every_configured_parameter(content):
+    """OllamaClient.from_config（假人程式用）：照預期的值逐一比，不是跟另一個也走同一個函式的 client 比。"""
+    expected = _configured(content)
+    made = OllamaClient.from_config(content.config)
+    assert {field: getattr(made, field) for field in expected} == expected
+    payload = made._build_payload([{"role": "user", "content": "hi"}], 0.8)
+    assert payload["options"]["presence_penalty"] == 0.0 and payload["options"]["frequency_penalty"] == 0.1
+
+
+def test_the_games_client_carries_every_configured_parameter_too(content):
+    """Game 與假人程式用同一套參數：Game 的 client 也照同樣預期的值，一個不少。"""
+    expected = _configured(content)
+    client = Game.new(content, "測試").client
+    assert {field: getattr(client, field) for field in expected} == expected
+
+
 def test_the_game_builds_its_client_from_the_config(content):
     cfg = content.config
     cfg.ollama_model = "gemma4:26b"

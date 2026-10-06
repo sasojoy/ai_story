@@ -22,17 +22,19 @@ from .journal import fragment_line
 from .models import (
     Check, Content, FsAsk, FsChain, FsFinal, FsFragment, FsItem, FsRequires, FsStep, FsWrong, Squad,
 )
-from .rules import can_meet, check_chance, check_result_line, display_name
+from .rules import can_meet, check_chance, check_result_line
 from .state import GameState, Lock
 from .world_state import WorldStateStore
 
 DAY = 86400
 BASE_FRAGMENT_CHANCE = 0.05  # 每次花體力的行動，在所在的大區聽到一則片段的機率（1000 人以上那一檔；伏筆文件 2.2）
 GUANYIN = "guanyin"  # 官銀的計數鍵（PlayerState.fs_counters）
-# 天機（伏筆文件 2.9）：同一個天機、同一個 key 永遠同一個答案。廣宗的內鬼（mole）這一版先不用
+# 天機（伏筆文件 2.9）：同一個天機、同一個 key 永遠同一個答案。廣宗的內鬼（mole）是黃巾第 4 階機緣「營中的內鬼」
+# （正式版乙二，opportunities 的推理型）用的，伏筆的鏈沒有用它
 TIANJI: dict[str, tuple[str, ...]] = {
     "wind": ("東", "南", "西", "北"),
     "disguise": ("鹽車", "棺木", "香客", "商隊"),
+    "mole": ("clerk", "priest", "strongman"),  # 廣宗的內鬼（伏筆文件 2.9；黃巾第 4 階機緣「營中的內鬼」）
 }
 TIANJI_SLOTS = {"{風向}": "wind", "{偽裝}": "disguise"}  # 文字裡的插槽
 OVERHEARD = "聽說{name}說過："  # 名望不夠求見不到的人，對話片段從行動偷聽到時，原文前面加的這一句（內容表 4.0）
@@ -263,6 +265,18 @@ def hear_from_event(state: GameState, content: Content, event_id: str, world: Wo
                 _mark_heard(state, c.id, i)
                 lines.append(fragment_line(_fragment_text(state, content, c, f, world)))
     return lines
+
+
+def heard_texts(state: GameState, content: Content, world: WorldStateStore | None = None) -> list[str]:
+    """聽過的線索片段（見聞頁的「個人線索」，傳聞分層設計第六節）：照鏈與片段的順序，文字照片段的寫法填好天機與出面的人
+    （偷聽到的不再加「聽說誰說過」）。只有自己看得到；伏筆沒在跑（開關關著、沒有鏈）時是空的。"""
+    if not active(state, content):
+        return []
+    heard = state.player.fragments
+    return [
+        _fragment_text(state, content, c, c.fragments[i], world)
+        for c in content.foreshadows.chains for i in sorted(heard.get(c.id, [])) if 0 <= i < len(c.fragments)
+    ]
 
 
 def _speaker(state: GameState, f: FsFragment) -> str | None:
@@ -604,13 +618,14 @@ def _succeed(
 
 def _complete(state: GameState, content: Content, c: FsChain, now: float) -> None:
     """整條完成：記做完、記貢獻（先完成、搶輸、同陣營後到都照記）；官軍、黃巾寫鎖定（已經有人就進搶輸的名單），
-    其他陣營寫第三方。不發任何傳聞、不推大勢（伏筆文件 2.4）。"""
+    其他陣營寫第三方。不發任何傳聞、不推大勢（伏筆文件 2.4）。
+    公告與江湖史一律寫名號（傳聞分層第七節：改寫歷史的事，留名本身就是獎勵），所以不再記 Lock.shown、third_party_shown；
+    這一版之前匿名記下的照舊（timetable.shown 讀得到）。"""
     p, w = state.player, state.world
     p.fs_done.append(c.id)
     push.add_contribution(p, calendar.point(now, content, w).week, content.config.foreshadow_contrib)
-    shown = display_name(state) if p.anonymous else None  # 匿名的人在公告與江湖史上是「某位少俠」；真名照記（T9 的稱號）
     if c.side in LOCK_SIDES:
-        lock = Lock(side=c.side, name=p.name, time=now, shown=shown)
+        lock = Lock(side=c.side, name=p.name, time=now)
         if c.event not in w.locks:
             w.locks[c.event] = lock
         else:
@@ -619,8 +634,6 @@ def _complete(state: GameState, content: Content, c: FsChain, now: float) -> Non
         names = w.third_party.setdefault(c.event, [])
         if p.name not in names:
             names.append(p.name)
-            if shown is not None:
-                w.third_party_shown.setdefault(c.event, {})[p.name] = shown
 
 
 # ── 官銀 ─────────────────────────────────────────────────

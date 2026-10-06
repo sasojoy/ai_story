@@ -279,7 +279,10 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .battle-card .rounds-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 0; }
 .battle-card .rounds-more { flex: none; padding: 8px 2px; margin: -8px 0; white-space: nowrap; }
 .battle-card ul.rounds { margin: 1px 0 5px; padding-left: 1.2em; font-size: 14px; line-height: 1.45; }
-.battle-card ul.rounds:not(.open) > li:not(:first-child) { display: none; }
+/* 收著時露出第一個「不是功效句」的 li（功效的演出句以〔開頭，app.js 的 foldTraitItems 標成 .trait；沒有功效句的卡片就是第一個 li，跟以前一樣）：
+   功效句整個藏起來，第一回合照舊帶頭（Task 4 審查 I-1）。展開（.open）與戰報頁照引擎寫的順序全部列出 */
+.battle-card ul.rounds:not(.open) > li.trait { display: none; }
+.battle-card ul.rounds:not(.open) > li:not(.trait) ~ li:not(.trait) { display: none; }
 /* 收著的第一回合最多兩行（PM 2026-10-05）：app.js 的 fitFirstRound 量過、放不進兩行又拼得出數字行時，整句（.r-full）省略、
    換成只有數字的那一行（.r-short，「第1回合　你氣血 -13，對手氣勢 -10……」）；展開時一律是整句 */
 .battle-card ul.rounds .r-short { display: none; }
@@ -290,9 +293,23 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .battle-card ul.rounds > li:nth-child(3) { animation-delay: 0.5s; }
 .battle-card ul.rounds > li:nth-child(4) { animation-delay: 0.75s; }
 .battle-card ul.rounds > li:nth-child(5) { animation-delay: 1s; }
+/* 功效的句子加進去之後過程可以有十幾行（前 3＋回合 5＋後 8）：每一個位置都有延遲、一路遞增，後面的一定比前面的晚浮現
+   （延遲只寫到第 5 個時，第 6 個以後會比第 2～5 個先出來）；第 13 個以後一起在最後。減少動態時整站的動畫都關掉（prefers-reduced-motion） */
+.battle-card ul.rounds > li:nth-child(6) { animation-delay: 1.25s; }
+.battle-card ul.rounds > li:nth-child(7) { animation-delay: 1.5s; }
+.battle-card ul.rounds > li:nth-child(8) { animation-delay: 1.75s; }
+.battle-card ul.rounds > li:nth-child(9) { animation-delay: 2s; }
+.battle-card ul.rounds > li:nth-child(10) { animation-delay: 2.25s; }
+.battle-card ul.rounds > li:nth-child(11) { animation-delay: 2.5s; }
+.battle-card ul.rounds > li:nth-child(12) { animation-delay: 2.75s; }
+.battle-card ul.rounds > li:nth-child(n+13) { animation-delay: 3s; }
+/* 收著時看得到的只有第一個「不是功效句」的 li（上面藏起來的功效句佔著 nth-child 的位置，第一回合因此會晚 0.25～0.75 秒才浮現，
+   最終審查 M2）：收著時它們的延遲都是 0（權重比上面的 nth-child 高）；展開（.open）之後這條不管，照位置遞增 */
+.battle-card ul.rounds:not(.open) > li:not(.trait) { animation-delay: 0s; }
 /* 大場面模型寫的過程是一段話（最多 200 字、手機上約十行）：收著只露前兩行，「展開過程」攤開（PM 2026-10-05，計畫三 Task 2 審查修正 2） */
 .battle-card p.rounds-tale { margin: 1px 0 5px; font-size: 14px; line-height: 1.45; }
 .battle-card p.rounds-tale:not(.open) { display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.battle-card p.rounds-tale:not(.open) .trait { display: none; } /* 功效的句子收著時藏起來，兩行的截斷看到的是模型的話（app.js 的 foldTraitText） */
 @keyframes tx-round-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 /* 本週江湖大事（第一季，計畫 T2）：江湖頁最上面那一排小標「大事」點開的面板（見 .peek-panel），一則一段、新的在前 */
 .bulletin-item { font-size: 14px; line-height: 1.65; }
@@ -304,10 +321,17 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .card.scene.road { padding: 8px 12px; font-size: 14px; line-height: 1.55; cursor: pointer; }
 .card.scene.road.clamp > p:not(:first-child) { display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; } /* 在路上：整段話小一號，路上的五個選項才全在第一屏（FB-055） */
 .scene h2, .scene h3 { font-size: 18px; }
+/* 決戰：對面上一回合的出招比例與自己的結果（引擎寫成一段 markdown 引用「> 」，伺服器轉成 blockquote）：小字、淡色、行距緊、
+   沒有瀏覽器預設的縮排與邊線，375px 上約 65px（含上面一段的間距；15.5px 兩段是 95px） */
+.scene blockquote { margin: 2px 0; padding: 0; border: 0; font-size: 13px; line-height: 1.5; color: var(--ink-2); }
+.scene blockquote p { margin: 0; }
 .options { display: grid; gap: 8px; margin-bottom: 12px; }
 .options .btn { justify-content: flex-start; text-align: left; }
 .options .btn .k { flex: none; width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center; background: var(--card-2); font-size: 12px; color: var(--ink-2); }
 .options .btn.go .k { background: var(--accent); color: #fff; }
+/* 決戰三招的按鈕：名字在左（佔剩下的寬度），招與分數在右邊一小行不換行，十一、十二個字的名字也不會把按鈕折成兩行 */
+.options .btn .b-name { flex: 1 1 auto; min-width: 0; }
+.options .btn .b-move { flex: none; margin-left: auto; font-size: 12px; color: var(--ink-2); white-space: nowrap; }
 .move-mode { margin-bottom: 8px; } /* 走法切換：一列、緊貼在第一個「前往」上面（排在選項之間，A4） */
 .options > .move-mode { margin: 4px 0 0; }
 /* 在路上：四樣小事排成 2×2，名字一行、補充小字一行（FB-055）；折返與喊停照舊一整列 */
@@ -690,3 +714,17 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
   text-overflow: ellipsis; border: 1px dashed color-mix(in srgb, var(--gold) 60%, var(--line)); border-radius: 10px;
   background: var(--card); color: var(--ink); font: inherit; font-size: 13px; cursor: pointer; }
 .guide-line b { color: var(--gold); }
+
+/* 序章（新手引導計畫一）：要按的鈕發光；新亮起來的元件閃一閃。減少動態時只留靜態的金邊 */
+.glow { box-shadow: 0 0 0 2px var(--gold), 0 0 12px 2px color-mix(in srgb, var(--gold) 55%, transparent); animation: tx-glow 1.6s ease-in-out infinite; }
+.lit { animation: tx-lit 0.9s ease-out 1; }
+@keyframes tx-glow { 50% { box-shadow: 0 0 0 2px var(--gold), 0 0 4px 0 color-mix(in srgb, var(--gold) 20%, transparent); } }
+@keyframes tx-lit { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.guide-scene { margin: 4px 0 0; font-size: 13px; line-height: 1.6; color: var(--ink-2); font-style: italic; }
+.skip-prologue { display: block; margin: 8px auto 0; font-size: 13px; color: var(--ink-2); }
+.top[hidden] { display: none; }
+.who.static { cursor: default; }
+.who.static .more-ico { display: none; } /* 序章裡屬性還沒亮：名號不是按鈕，不畫展開的小箭頭 */
+.recap { margin-top: 10px; font-size: 13px; line-height: 1.7; max-height: 50vh; overflow-y: auto; }
+.recap hr { border: 0; border-top: 1px solid var(--line); margin: 10px 0; }
+@media (prefers-reduced-motion: reduce) { .glow, .lit { animation: none; } }

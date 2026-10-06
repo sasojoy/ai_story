@@ -9,11 +9,14 @@ from __future__ import annotations
 
 import random
 from collections.abc import Callable
+from typing import NamedTuple
 
-from . import cultivation, fusion, library, naming, team
+from . import cultivation, fusion, library, naming, team, traits
+from . import prologue as prologue_rules
 from .engine import FREE_TEXT_OPTION, Game, Option
-from .martial_arts import next_quality
+from .martial_arts import MartialArt, next_quality
 from .models import Content
+from .sqlite_world import open_world
 from .world_state import WorldStateStore
 
 HALF_HOUR = 1800
@@ -25,6 +28,7 @@ MERGE_SHARE = 0.3  # 手上有兩個以上意境時，這麼多的機會改做�
 FORGE_RESERVE = 20  # 三種合成都花體力（武學與成長設計 12.1）：體力留這麼多給探索與遊歷，多出來的才拿去合成
 BLEND_SHARE = 0.3  # 沒做合併、手上有兩門以上武學時，這麼多的機會改做武學＋武學（沒有意境可合成時一定做）
 CULTIVATE_RESERVE = 60  # 體力留這麼多給探索與遊歷，多出來的才拿去修練
+TRAIT_WEIGHT = 0.05  # 機器人選身上那門時，每一層功效（乘過品質）、每個特別功效算多少比例的威力（武學與成長設計 13.7）
 
 
 def wants_heal(game: Game) -> bool:
@@ -64,6 +68,48 @@ def spend_xinde(game: Game, rng: random.Random) -> None:
             game.practice(kind)
 
 
+class ForgePlan(NamedTuple):
+    """挑好的一爐（還沒開）：武學＋意境是 (武學, (意境,), None)、武學＋武學是 (第一門, (), 第二門)、意境＋意境是 (None, (甲, 乙), None)。"""
+
+    art_id: str | None
+    insight_ids: tuple[str, ...]
+    other_art: str | None
+
+
+def pick_forge(
+    game: Game, rng: random.Random, merge_share: float | None = None, blend_share: float | None = None,
+) -> ForgePlan | None:
+    """挑一爐（整季機器人與伺服器假人共用）：體力低於 FORGE_RESERVE、或什麼都合不了就是 None。只挑、不開爐，什麼都不改。
+    亂數的擲法跟原本寫在 forge_and_cultivate 裡的一模一樣（見那邊的說明），整季機器人的結果不變。
+    兩個份額是引數（伺服器假人的武學＋武學份額比較低）；沒給就在呼叫的當下讀模組常數 MERGE_SHARE、BLEND_SHARE
+    （不是定義時綁死：量平衡的腳本改這兩個常數要有效）。"""
+    merge_share = MERGE_SHARE if merge_share is None else merge_share
+    blend_share = BLEND_SHARE if blend_share is None else blend_share
+    state, content, world = game.state, game.content, game.world
+    p = state.player
+    arts = library.owned_arts(state)
+    can_fuse, can_blend = bool(p.insights and arts), len(arts) >= 2
+    if not (can_fuse or can_blend) or p.stamina < FORGE_RESERVE:
+        return None
+    if len(p.insights) >= 2 and rng.random() < merge_share:
+        for _ in range(FORGE_TRIES):
+            a, b = rng.choice(p.insights), rng.choice(p.insights)
+            if fusion.merge_problem(state, content, world, a, b) is None:
+                return ForgePlan(None, (a, b), None)
+        return None
+    if can_blend and (not can_fuse or rng.random() < blend_share):
+        for _ in range(FORGE_TRIES):
+            a, b = rng.sample(arts, 2)
+            if fusion.blend_problem(state, content, world, a, b) is None:
+                return ForgePlan(a, (), b)
+        return None
+    for _ in range(FORGE_TRIES):
+        art_id, insight_id = rng.choice(arts), rng.choice(p.insights)
+        if fusion.fuse_problem(state, content, world, art_id, insight_id) is None:
+            return ForgePlan(art_id, (insight_id,), None)
+    return None
+
+
 def forge_and_cultivate(game: Game, rng: random.Random) -> None:
     """機器人的武學：等著定名的先定名；滿了先熔最弱的；體力有餘就合成（武學＋意境為主，偶爾合併、偶爾武學＋武學）；
     改練更強的；體力再有餘就修練一次。機器人會用到這套玩法很重要——不然整季模擬碰不到合成與修練，量出來的平衡沒有意義
@@ -76,37 +122,19 @@ def forge_and_cultivate(game: Game, rng: random.Random) -> None:
     if p.naming is not None:
         game.name_mastered(naming.fallback_name(content, f"定名|{p.naming}", "武學", salt=rng.randint(0, 99)))
     if library.full(state, content):
-        _melt_the_weakest(game)
-    arts = library.owned_arts(state)
-    can_fuse, can_blend = bool(p.insights and arts), len(arts) >= 2
-    if (can_fuse or can_blend) and p.stamina >= FORGE_RESERVE:
-        if len(p.insights) >= 2 and rng.random() < MERGE_SHARE:
-            for _ in range(FORGE_TRIES):
-                a, b = rng.choice(p.insights), rng.choice(p.insights)
-                if fusion.merge_problem(state, content, world, a, b) is None:
-                    game.forge(None, [a, b])
-                    break
-        elif can_blend and (not can_fuse or rng.random() < BLEND_SHARE):
-            for _ in range(FORGE_TRIES):
-                a, b = rng.sample(arts, 2)
-                if fusion.blend_problem(state, content, world, a, b) is None:
-                    game.forge(a, [], other_art=b)
-                    break
-        else:
-            for _ in range(FORGE_TRIES):
-                art_id, insight_id = rng.choice(arts), rng.choice(p.insights)
-                if fusion.fuse_problem(state, content, world, art_id, insight_id) is None:
-                    game.forge(art_id, [insight_id])
-                    break
-    _switch_to_the_strongest(game)
+        melt_the_weakest(game)
+    plan = pick_forge(game, rng)
+    if plan is not None:
+        game.forge(plan.art_id, list(plan.insight_ids), other_art=plan.other_art)
+    switch_to_the_strongest(game)
     if p.stamina >= CULTIVATE_RESERVE:
         for art_id in library.owned_arts(state):
             if cultivation.cultivate_problem(state, content, world, art_id) is None:
-                game.cultivate(art_id, use_legend=_goes_for_a_peerless_art_with_a_pill(game, art_id))
+                game.cultivate(art_id, use_legend=takes_the_pill(game, art_id))
                 break
 
 
-def _goes_for_a_peerless_art_with_a_pill(game: Game, art_id: str) -> bool:
+def takes_the_pill(game: Game, art_id: str) -> bool:
     """這一次衝的是絕學、手上又有破境丹：服（企劃者：丹由玩家自己決定哪一次服，機器人有就服）。
     只在這一步傳 use_legend：別的步驟用不上丹，傳了只會多一句「這一回沒服」。要不要算丹由 cultivation.boost_for 決定。"""
     state, content, world = game.state, game.content, game.world
@@ -115,7 +143,7 @@ def _goes_for_a_peerless_art_with_a_pill(game: Game, art_id: str) -> bool:
     return target is not None and cultivation.boost_for(state, content, target, use_legend=True) > 0
 
 
-def _melt_the_weakest(game: Game) -> None:
+def melt_the_weakest(game: Game) -> None:
     """滿了：熔掉功法庫裡第十成威力最低的一門；庫是空的就化掉一個沒有武學靠它修練的意境。"""
     state, content, world = game.state, game.content, game.world
     spare = [(team.player_art(state, content, world, a), a) for a in state.player.arts]
@@ -132,8 +160,17 @@ def _melt_the_weakest(game: Game) -> None:
         game.melt_insight(loose[0])
 
 
-def _switch_to_the_strongest(game: Game) -> None:
-    """功法庫裡有比身上這門強的（同一種、照自己修練到的品質算第十成威力）就改練上去。"""
+def _worth(content: Content, art: MartialArt) -> float:
+    """機器人眼中這門武學的價值：第十成威力，加上功效（設計 13.7：不看功效就量不出功效的價值）。每一層一般功效（乘過這一份的
+    品質倍數，跟遊戲裡算層數同一份 traits.multiplier）、每個特別功效，各加 TRAIT_WEIGHT 的威力。內容沒有功效就只看威力。"""
+    if not content.traits.general:
+        return art.top_power
+    layers = len(traits.traits_of(art)) * traits.multiplier(content, art.quality) + (1 if art.special else 0)
+    return art.top_power * (1 + TRAIT_WEIGHT * layers)
+
+
+def switch_to_the_strongest(game: Game) -> None:
+    """功法庫裡有比身上這門值錢的（同一種、照自己修練到的品質算第十成威力，再加上功效，設計 13.7）就改練上去。"""
     state, content, world = game.state, game.content, game.world
     for art_id in list(state.player.arts):
         art = team.player_art(state, content, world, art_id)
@@ -141,7 +178,7 @@ def _switch_to_the_strongest(game: Game) -> None:
             continue
         slot = "neigong_id" if art.kind == "內功" else "wugong_id"
         current = team.player_art(state, content, world, getattr(state.player.member, slot))
-        if current is None or art.top_power > current.top_power:
+        if current is None or _worth(content, art) > _worth(content, current):
             game.switch_art(art_id)
 
 
@@ -188,7 +225,14 @@ def play_season(
     """玩完一季：隨機挑選項、遇到結識一定接受、每隔幾步把攢下的心得拿去練成、合成與修練。
     observe 不是 None 時，開始玩之前呼叫一次（開季的樣子），之後每一步之後都呼叫一次
     （模擬器用來記錄名冊與交手的時間點）。"""
-    game = Game.new(content, f"機器人{seed}", rng=random.Random(seed), world=world)
+    if prologue_rules.has(content):
+        # 內容有序章：機器人走序章（graduated，離開起點時跟走完草廬的真人一樣），要在開了季的世界走，籌備中什麼都不能做。
+        # 沒有序章的內容（正式內容現在就是）沒有這一段，整季跟以前一模一樣。
+        world = world or open_world()
+        if not world.get_season().storyline:
+            world.seed_first_season(content)
+        world.open_season(content, now=now)
+    game = Game.new(content, f"機器人{seed}", rng=random.Random(seed), world=world, graduated=True)
     game.now = now  # 賽季開幕與之後開的決戰用同一個時鐘
     game.world.open_season(game.content, now=now)  # 模擬時機器人自己就是管理者：籌備中就直接開季，已經開了則什麼都不做
     rng = random.Random(seed)

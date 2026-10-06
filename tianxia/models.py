@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, GetCoreSchemaHandler, field_validator
+from pydantic import BaseModel, ConfigDict, Field, GetCoreSchemaHandler, field_validator, model_validator
 from pydantic_core import core_schema
 
 STATS = ("str", "agi", "con", "wis", "lore", "silver", "good", "evil", "fame", "xinde")
@@ -16,6 +16,13 @@ MartialKind = Literal["內功", "武學"]
 Attribute = Literal["陰", "陽", "剛", "柔", "快", "慢", "虛", "實"]  # 見 tianxia/martial_arts.py
 Quality = Literal["下品", "中品", "上品", "絕學"]  # 見 tianxia/martial_arts.py 的 QUALITIES
 Lean = Literal["正", "邪", "無"]  # 武學與成長設計 7.3
+TRAIT_HOOKS = (  # 一般功效掛在遭遇戰的哪一步（武學與成長設計 13.2）；程式照這幾個實作
+    "big_win", "luck_narrow", "difficulty_cut", "toll_cut", "win_reward", "win_heal", "luck_widen", "condition_floor",
+)
+SPECIAL_HOOKS = (  # 特別功效的掛點（13.4）：一個掛點只能有一個特別功效（身上的特別功效照掛點記，validate 擋共用）。
+    # 這 7 個掛點現在都被初版的 7 個特別功效佔了，所以新的特別功效要嘛換掉掛同一點的那一個、要嘛加新的掛點（要寫程式）
+    "double_luck", "no_injury", "no_loss", "win_xinde", "power_from_difficulty", "heal_after", "train_stamina",
+)
 
 
 class _Strict(BaseModel):
@@ -55,6 +62,9 @@ class Condition(_Strict):
     week_min: int | None = None  # calendar.point(...).week 至少／至多第幾週
     week_max: int | None = None
     clue_items: dict[str, int] = Field(default_factory=dict)  # 伏筆專用物品至少幾個（原數字，不照伺服器規模換算）
+    # 戰後事件用：這次行動打的那一場（戰鬥卡片 state.battle_card 指著的那筆）的結果（大勝／險勝／僵持／落敗）在清單裡才成立；
+    # 這次行動沒打架（卡片已清掉）一律不成立。文字假設打贏了的戰後事件寫 ["大勝", "險勝"]。載入時只准寫在 actions 剛好是 ["train"] 的事件的條件上
+    fight_tiers: list[str] = Field(default_factory=list)
     any_of: list[Condition] = Field(default_factory=list)  # 非空時，至少一個子條件成立
 
 
@@ -73,8 +83,8 @@ class Effect(_Strict):
     learn_skills: list[str] = Field(default_factory=list)
     trend: dict[str, int] = Field(default_factory=dict)
     world_flags_add: list[str] = Field(default_factory=list)
-    rumor: str = ""  # {name} 會換成玩家名號（匿名時為「某位少俠」）
-    chronicle: str = ""  # 寫入江湖史，同樣支援 {name}
+    rumor: str = ""  # 地方傳聞；{name} 會換成玩家名號（匿名時為「某位少俠」）
+    chronicle: str = ""  # 寫入江湖史，同樣支援 {name}，但一律寫名號（江湖史不能匿名，傳聞分層設計第七節）
     join_sect: str | None = None
     leave_sect: bool = False
     next_event: str | None = None
@@ -293,6 +303,9 @@ class Location(_Strict):
     materials: list[str] = Field(default_factory=list)  # 路邊採集（兩頭的地點）出什麼屬性的素材：採到的是那些屬性的一階；探索不再撿素材（探索改悟意境，見 insights）
     insights: list[str] = Field(default_factory=list)  # 探索「悟意境」那一支悟得到的意境 id（武學與成長設計附錄 C）
     unlock_flag: str | None = None  # 設定後，需該世界旗標成立才能前往
+    # 序章（新手引導計畫一）的草廬：只有站在這裡的人看得到、到得了（atlas.is_unlocked）；序章走完離開後誰都回不去。
+    # 一份內容最多一個，而且就是 Tutorial.location（content.validate）
+    prologue_only: bool = False
 
     def describe(self, world_flags: set[str]) -> str:
         """此刻的描寫：desc_when 裡第一個旗標成立的那一版，都不成立時是 description。"""
@@ -343,6 +356,35 @@ class SkillDef(_Strict):
     desc: str = ""
     quality: Quality = "絕學"
     learn: LearnRule | None = None  # 在各地學得到的基礎武學才填；開局送的看 Config.starter_skills
+    special: str | None = None  # 名將本命絕學的獨特特別功效（content/traits.json 裡 pool 是 false 的那一個，13.5）
+
+
+class GeneralTrait(_Strict):
+    """一般功效（content/traits.json，13.2）：一個屬性一個。每層 per_layer、疊加到 cap 為止；desc 的 {value} 換成數字。"""
+
+    attribute: Attribute
+    name: str
+    hook: Literal[TRAIT_HOOKS]
+    per_layer: float = Field(ge=0)
+    cap: float = Field(ge=0)
+    desc: str
+
+
+class SpecialTrait(_Strict):
+    """特別功效（13.4、13.5）：不分品質、強度固定（amount）。pool 是 false 的只屬於一門內容武學（名將本命絕學），
+    合成擲不到。"""
+
+    id: str
+    name: str
+    hook: Literal[SPECIAL_HOOKS]
+    amount: float = Field(ge=0)
+    pool: bool = True
+    desc: str
+
+
+class TraitBook(_Strict):
+    general: list[GeneralTrait] = Field(default_factory=list)
+    special: list[SpecialTrait] = Field(default_factory=list)
 
 
 class InsightGrant(_Strict):
@@ -577,24 +619,100 @@ class Milestone(_Strict):
 class TutorialGoal(_Strict):
     """每一項都要符合才算完成；空的（或 False 的）欄位不檢查。"""
 
-    action: Literal["explore", "socialize", "move", "view_map", "recruit", "practice", "order"] | None = None  # order：替軍令記到一次（計畫 T6）
+    # order：替軍令記到一次（計畫 T6）。choice～melt：序章（新手引導計畫一）那幾步要的動作：選了事件的選項、打開修練／煉製頁、
+    # 修練、打坐、遊歷、配點、熔煉
+    action: Literal[
+        "explore", "socialize", "move", "view_map", "recruit", "practice", "order",
+        "choice", "view_tab", "cultivate", "rest", "train", "allocate", "melt",
+    ] | None = None
     locations: list[str] = Field(default_factory=list)
     condition: Condition = Field(default_factory=Condition)
     has_wugong: bool = False  # 身上要有一門武學才算（沒有武學威力是 0，出城只有挨打的份）
+    # 序章：有一門合成出來的武學（fused）、它至少第幾成（fused_level）、至少什麼品質（fused_quality，看自己那一份）
+    fused: bool = False
+    fused_level: int = 0
+    fused_quality: Quality | None = None
+
+
+# 序章每一步 reveal 可以寫的畫面元件（網頁照它藏／亮，見 web/app.js 的 pro()）；content.validate 擋拼錯的
+REVEAL_KEYS = frozenset({
+    "all",  # 全部亮齊（出師那一步）
+    "stamina", "hp", "silver", "xinde", "stats",  # 狀態列：體力、氣血、銀兩、心得、點名號展開屬性與配點
+    "tab:jianghu", "tab:practice", "tab:craft", "tab:map", "tab:news",  # 底下的分頁
+    "act:explore", "act:train", "act:rest", "act:social", "act:move",  # 江湖頁行動列的五格
+    "board", "quest", "fronts", "orders", "minimap",  # 江湖頁的公告卡、主線與目標、戰況、軍令卡、小地圖
+    "stances",  # 江湖頁最上面那一排小標裡的「態勢」（第一季才有）；跟公告卡（board）一起亮，見 Task 6 的 shown("stances")
+})
+
+
+# 序章每一步 allow 可以寫的選單 id（TutorialStep.allow 是前綴比對，見 prologue.allowed）：照 Game._everyday_options 與它叫的
+# 幾個函式真的做得出來的 id 列。固定的整串寫在 ALLOW_FIXED；帶參數的（尾巴是地點、人物、武學的 id）只列到冒號，在 ALLOW_FAMILIES，
+# allow 可以寫到整個家族（"move:"）或家族加上 id（"move:town"）。兩道檢查，都不是萬全的：
+#   tests/test_prologue.py::test_the_allow_lists_only_name_ids_the_code_really_makes 只查「這裡列的每一筆都真的出現在原始碼」（不憑空多寫）；
+#   tests/test_real_content.py::test_every_idle_menu_id_is_one_the_prologue_allow_list_knows 整季隨機玩、對照每個閒著的選單，
+#   查「引擎做得出來的有沒有漏列」，但只看得到那一季玩到的 id。引擎多了閒著選單的行動，記得手動補進這兩個。
+ALLOW_FIXED = frozenset({
+    "act:explore", "act:train", "act:socialize", "act:rest", "act:summons", "act:call", "act:recruit", "act:duty", "act:convoy",
+    "act:rank2",  # 第 2 階守勢行動（正式版乙一）
+})
+# opp: 是機緣的交東西與天時地利（opp:deliver:<id>、opp:try:<id>，正式版乙一）；對話選單的 talk:opp: 不是閒著的選單，不列
+ALLOW_FAMILIES = ("act:challenge:", "call:", "move:", "learn:", "faction:", "defect:", "opp:", "fs:")
+
+
+def allow_known(entry: str) -> bool:
+    """TutorialStep.allow 的一筆是不是選單上真的有的行動（content.validate 擋拼錯的：拼錯的前綴整步會把選單清空）。"""
+    return entry in ALLOW_FIXED or any(entry.startswith(family) for family in ALLOW_FAMILIES)
+
+
+class GiveArt(_Strict):
+    """序章完成某一步時給的一門內容武學與成數（雪恥之後掉出來的雜學：第五成，熔了才退得回心得）。"""
+
+    id: str
+    level: int = Field(default=1, ge=1, le=10)
 
 
 class TutorialStep(_Strict):
     id: str
-    text: str
+    text: str  # 對話框裡說的話；空字串＝這一步沒有對話框（序章第一步：還沒遇到師父）
     done_when: TutorialGoal
     reward: Effect = Field(default_factory=Effect)
     season_one: bool = False  # 只在第一季濃縮版才有的步驟（開關開著、這一季也蓋了章，計畫 T6）；一律排在最後（content.validate）
+    speaker: str | None = None  # 框上寫的人；None＝Tutorial.speaker
+    # ── 序章（新手引導計畫一，設計第三、六節）：只寫在前 Tutorial.prologue_steps 步（content.validate）──
+    scene: str = ""  # 旁白，對話框裡排在話的前面
+    line: str = ""  # 對話框收起後那一行（例：「師父：回『江湖』按『探索』」）；空的＝用 text
+    reveal: list[str] = Field(default_factory=list)  # 這一步起畫面上亮起來的元件（REVEAL_KEYS）；前面幾步亮的照舊亮著
+    glow: list[str] = Field(default_factory=list)  # 這一步要發光的鈕（網頁的 data-glow，見計畫 Task 6）
+    allow: list[str] = Field(default_factory=list)  # 在草廬閒著時選單只留這些（前綴比對，例："act:explore"、"move:"）
+    explore_event: str | None = None  # 在草廬探索時一定端出這則事件（四景四選一）
+    enemies: list[str] = Field(default_factory=list)  # 這一步草廬的對手（遊歷才出現）
+    force_tier: str | None = None  # 這一步的遊歷結果照寫好的（雪恥：險勝）
+    sure_cultivate: bool = False  # 這一步的修練一定升品
+    instant_rest: str = ""  # 非空：這一步的打坐一坐就回滿，說這一句
+    fuse_base: str | None = None  # 這一步的合成只准拿這一門當底
+    melt_only: str | None = None  # 這一步只准熔這一門
+    give_art: GiveArt | None = None  # 完成這一步時給的武學
+
+
+class PresetRecipe(_Strict):
+    """師門配方（content/preset_recipes.json，新手引導設計 3.3）：這個底融這個意境，名字與說明由內容寫好，
+    第一個合出來的人不等模型（fusion.fuse）。每季配方清空，下一季照樣用它，所以不用每季重放。"""
+
+    base: str  # 內容武學 id
+    insight: str  # 基本意境 id
+    name: str
+    note: str = ""
 
 
 class Tutorial(_Strict):
     speaker: str = "老說書人"
     steps: list[TutorialStep] = Field(default_factory=list)
     outro: str = ""
+    # ── 序章（新手引導計畫一）：location 是 None 就沒有序章，下面三個都不看 ──
+    location: str | None = None  # 草廬（Location.prologue_only）
+    prologue_steps: int = 0  # 前幾步是序章（都在草廬）；走完就出師
+    start_event: str | None = None  # 新角色一進來就端出的事件（遇險）
+    leave_text: str = ""  # 走完序章、抵達起點時接在抵達那一則（「剛剛」）的一句
 
 
 class FactionDef(_Strict):
@@ -682,6 +800,75 @@ def _default_explore_mix() -> list[ExploreMix]:
 # 不是「現在載入的設定」：週末設定的 2.5 天只管有蓋章的新季。
 DEFAULT_SEASON_DAYS = 14
 
+MOVES = ("強攻", "固守", "奇襲")  # 全服決戰的三招（戰鬥系統設計 3.4）
+BEATS = {"固守": "強攻", "強攻": "奇襲", "奇襲": "固守"}  # 鍵剋值：固守剋強攻、強攻剋奇襲、奇襲剋固守
+Move = Literal["強攻", "固守", "奇襲"]
+DEFAULT_AFFINITY: dict[str, tuple[Move, Move]] = {  # 屬性 →（擅長, 不擅長），戰鬥系統設計 3.4【預設】
+    "剛": ("強攻", "奇襲"), "實": ("強攻", "奇襲"), "陽": ("強攻", "固守"),
+    "柔": ("固守", "強攻"), "陰": ("固守", "強攻"), "慢": ("固守", "奇襲"),
+    "快": ("奇襲", "固守"), "虛": ("奇襲", "強攻"),
+}
+
+
+class BattleTuning(_Strict):
+    """全服決戰的三招與推力（戰鬥系統設計 3.4）。全部【預設】：企劃者 2026-10-06「照預設做、測完再調」。
+    放在 Config 前面：Config.battle 的預設工廠要在 Config 類別建起來時就找得到它。"""
+
+    power_base: float = 40.0  # 實力 ＝ power_base ＋ power_per × min(威力, power_cap)，最多 100
+    power_per: float = 0.4
+    power_cap: float = 150.0
+    affinity_base: float = 75.0  # 適性：基準，武學屬性擅長／不擅長 ±affinity_outer，內功 ±affinity_inner，夾在 50～100
+    affinity_outer: float = 15.0
+    affinity_inner: float = 10.0
+    affinity: dict[str, tuple[Move, Move]] = Field(default_factory=lambda: dict(DEFAULT_AFFINITY))  # 屬性 →（擅長, 不擅長）
+    counter: float = 0.5  # 剋制係數 ＝ 1 ＋ counter × 對面被你剋的比例 － counter × 對面剋你的比例
+    push_max: float = 10.0  # 一回合最多推多少
+    damage: dict[Move, float] = Field(default_factory=lambda: {"強攻": 60.0, "奇襲": 35.0, "固守": 15.0})
+    strong_mitigation_cap: float = 0.6  # 強攻的損耗，自己的武學威力最多抵銷這麼多（同原本的猛攻）
+    third_grab_damage: float = 35.0  # 第三方「趁亂搶地盤」扣的氣血（同奇襲的損耗，戰鬥系統第六節；獨立的欄位：調奇襲不連動）
+    third_keep_damage: float = 10.0  # 第三方「保存實力」扣的氣血
+    third_keep_share: float = 0.5  # 「保存實力」的份量與收穫算幾成（固守的份量乘它）
+    third_cap: int = 10  # 一場最多推第三方的大勢線幾點
+
+    @field_validator("affinity", mode="before")
+    @classmethod
+    def _merge_with_the_default_table(cls, given: Any) -> Any:
+        """config.json 的 battle.affinity 只寫幾個屬性時，沒寫的屬性照預設表：不會整張表被換掉、其他屬性悄悄變成沒有
+        擅長也沒有不擅長（那樣「要當哪種兵」的取捨就不見了，也沒有任何錯誤提醒）。認不得的屬性名由 content.validate 擋。"""
+        if not isinstance(given, dict):
+            return given
+        return {**DEFAULT_AFFINITY, **given}
+
+    @model_validator(mode="after")
+    def _numbers_that_keep_the_resolution_working(self) -> BattleTuning:
+        """企劃者測完要調數字：寫壞的值在載入設定時就擋下（伺服器開不起來、改的人馬上看到），不是等第一場決戰的第一回合
+        才在行動鎖裡丟 KeyError、把整場卡住。三招的損耗要寫齊、每個屬性的擅長與不擅長是兩招不同的招、威力與推力的數字要大於 0；
+        適性的加減、剋制係數、強攻的抵銷可以是 0（＝不起作用），剋制係數與抵銷不超過 1。
+        第三方（決戰改版 5）：兩種扣血大於 0，保存實力的折數在 0～1，一場的上限不能是負的（0 是豪強不推）。"""
+        if set(self.damage) != set(MOVES):
+            raise ValueError(f"damage 三招（{'、'.join(MOVES)}）都要寫，現在是 {'、'.join(self.damage) or '空的'}")
+        for move, amount in self.damage.items():
+            if amount <= 0:
+                raise ValueError(f"damage 的 {move} 要大於 0（現在是 {amount}）")
+        for attribute, (good, bad) in self.affinity.items():
+            if good == bad:
+                raise ValueError(f"affinity 的 {attribute}：擅長與不擅長不能是同一招（{good}）")
+        for name in ("power_base", "power_per", "power_cap", "affinity_base", "push_max"):
+            if getattr(self, name) <= 0:
+                raise ValueError(f"{name} 要大於 0（現在是 {getattr(self, name)}）")
+        for name in ("affinity_outer", "affinity_inner"):
+            if getattr(self, name) < 0:
+                raise ValueError(f"{name} 不能是負的（現在是 {getattr(self, name)}）")
+        for name in ("counter", "strong_mitigation_cap", "third_keep_share"):
+            if not 0 <= getattr(self, name) <= 1:
+                raise ValueError(f"{name} 要在 0～1 之間（現在是 {getattr(self, name)}）")
+        for name in ("third_grab_damage", "third_keep_damage"):  # 第三方的扣血：寫成 0 或負的，豪強就扣不了血、永遠倒不下
+            if getattr(self, name) <= 0:
+                raise ValueError(f"{name} 要大於 0（現在是 {getattr(self, name)}）")
+        if self.third_cap < 0:  # 負的上限會把割據往下推；0 是合法的（豪強不推）
+            raise ValueError(f"third_cap 不能是負的（現在是 {self.third_cap}）")
+        return self
+
 
 class Config(_Strict):
     stamina_max: int = 150
@@ -703,6 +890,13 @@ class Config(_Strict):
     # 路上小事（路上設計第四節）：收入要明顯低於在站上做事，不然一直趕路會變成最賺的玩法
     road_think_xinde: int = Field(default=3, ge=0)  # 邊走邊想：心得（一次遊歷大約 12～20）
     road_rumor_pool: int = Field(default=5, ge=1)  # 沿途打聽：從這一帶最近幾則傳聞裡挑一則
+    # 傳聞分層（傳聞分層設計第三、八節；第一季的規則開著時才用，計畫 2026-10-06 傳聞分層一）
+    # 大區的傳聞板留最近幾天（季曆天，跟著 weekend 設定縮）；輿圖 ✦ 與詳情欄的「最近幾天」也用這一個（atlas.news_days）
+    rumor_board_days: float = Field(default=3, gt=0)
+    away_hours: float = Field(default=1, gt=0)  # 「你不在的時候」：離線超過幾個「現實」小時，再上線先看一份摘要（PM 2026-10-06）
+    # 那一份摘要最多幾行（含放不下時最後那一行「另有 N 則」；天下大事、陣營軍情的要點、所在大區，照這個順序）。
+    # 8：第一屏放得下（最終審查 I1：週末一晚離開 15～17 行幾乎都是過期的軍令）
+    away_max: int = Field(default=8, ge=1)
     road_gather_chance: float = Field(default=0.4, ge=0, le=1)  # 路邊採集：撿到一樣一階素材的機率
     road_sight_chance: float = Field(default=0.3, ge=0, le=1)  # 路上見聞：每抵達一站有幾成機會看見一則（路上設計第五節）
     road_sight_recent: int = Field(default=5, ge=0)  # 路上見聞：最近看過的幾則先排除，池子不夠才重複
@@ -728,6 +922,20 @@ class Config(_Strict):
     big_fight_difficulty: float = 100  # 難度到這裡就算大場面【預設】
     big_fight_swing: int = Field(default=15, ge=0)  # 模型判讀最多把勝算推多少個百分點【預設】
     big_fight_budget_seconds: int = Field(default=60, ge=0)
+    # 人物對話的生成（鎖外的 B 段）與隨口應對的評分、潤色也各有一份總預算（PM 2026-10-06，跟開爐取名、大場面同一套；評分與潤色
+    # 共用 free_text_budget_seconds，潤色用評分剩下的，控制者 2026-10-06）：server.py 從 A 段開始量、扣掉等行動鎖與排模型佇列的
+    # 時間，剩下的一半當那一趟模型呼叫的逾時（chat_structured 一次最多送兩趟）；用完就走原本的退路（對話取消、評分 40、潤色不插句子）。
+    # 以前這幾件只有 ollama_timeout（120 秒），重問一次最壞要 240 秒
+    dialogue_budget_seconds: int = Field(default=60, ge=0)
+    free_text_budget_seconds: int = Field(default=60, ge=0)
+    # LLM 佇列（線上架構設計 5.2，第 2 期）：行動鎖外的模型呼叫先排隊（server.model_call）。llm_queue_slots＝顯卡同時處理幾件，
+    # 0＝不建佇列（預設；照舊直接叫）；假人在排加在跑最多 llm_queue_bot_cap 件；排超過 llm_queue_wait_seconds 秒就拿退路、
+    # 不叫模型（每個人同時最多一件，第二件被擋下來、不拿退路：評分、開爐、大場面回一句話、什麼都不套用，對話取消、潤色不插句子）。
+    # 排隊等掉的時間算在上面四份總預算裡，而且排隊最久只等「那一件預算還剩的秒數」（server.model_call）。上限 120 秒：請求在
+    # trycloudflare 約 100 秒就被切斷；太大的數字還會讓 Condition.wait 丟 OverflowError（threading.TIMEOUT_MAX）
+    llm_queue_slots: int = Field(default=0, ge=0)
+    llm_queue_bot_cap: int = Field(default=1, ge=0)
+    llm_queue_wait_seconds: float = Field(default=20, ge=0, le=120)
     # 2026-10-03 實測（gemma4:26b）：有思考模式的模型要關掉思考，不然每輪多等好幾秒；None 表示不送這個欄位
     ollama_think: bool | None = None
     ollama_keep_alive: str = "30m"  # 模型閒置多久後卸載；大模型重新載入要十幾秒
@@ -751,6 +959,13 @@ class Config(_Strict):
         if 0 < seconds < 1:
             raise ValueError("world_tick_seconds 是 0（關）或至少 1 秒")
         return seconds
+
+    # 伺服器主動推送（線上架構設計 5.3；用 SSE，server_push.py）：push_events 開著時，分頁開一條 /api/events，有變化才刷新、
+    # 平常 60 秒才問一次；關著（預設）/api/events 是 404，分頁照舊每 10 秒輪詢。看守每 push_watch_seconds 秒比一次「公開的
+    # 世界指紋」，兩次「世界變了」的通知至少隔 push_world_min_seconds 秒（也是各分頁收到之後重抓畫面要攤開的秒數）
+    push_events: bool = False
+    push_watch_seconds: float = Field(default=5, gt=0)
+    push_world_min_seconds: float = Field(default=10, ge=0)
 
     season_days: float = DEFAULT_SEASON_DAYS
     # 第一季濃縮版的規則（預設關，beta 那一季照舊）：季曆、時刻表、三條戰線都掛在這個開關後面。
@@ -804,6 +1019,9 @@ class Config(_Strict):
     # 放寬後的窗口＝這個分鐘數 × cal_scale 個曆分，也就是跟壓縮成正比；本來就夠長的（整季 14 天：黎明現實 20 分鐘）一個字不動。
     # 0＝不放寬。只管機緣的窗口，calendar.is_night（伏筆、事件條件）不受影響。算法見 opportunities.windows
     opp_window_min_minutes: float = Field(default=10, ge=0)
+    # ── 集體密謀（正式版乙二；【預設】，企劃者 2026-10-06 同意）──
+    plot_days: float = Field(default=1.0, gt=0)  # 發起之後幾個曆日內要湊齊，過了作罷（預設 1 曆日＝24 曆時）
+    plot_contrib: int = Field(default=30, ge=0)  # 密謀成了，沒有第 3 階資格（或這種機緣已經完成）的參與者記幾點貢獻
     # ── 伏筆（計畫 T7、伏筆文件 2.8）──
     # 需求量照 server_max_players 換算：人數上限「未滿」第一個數時用第二個數當係數，照順序找第一個符合的；
     # 都不符合（1000 人以上）就是 1。片段的機率反過來除以它（foreshadow.scale、foreshadow.need）
@@ -832,7 +1050,7 @@ class Config(_Strict):
     neili_base: float = 300
     neili_per_level: float = 20
     neili_regen_hours: float = 2  # 氣血從零回滿所需時間
-    newbie_days: float = 3  # 每季前幾天氣血回復加倍
+    newbie_days: float = 3  # 每季前幾天氣血回復加倍（第一季：從自己加入那一刻起的季曆天，見 roster.since_join；beta 那一季：季的第幾天）
     seclusion_xinde_per_hour: int = 15
     xinde_hint_threshold: int = 50  # 心得擱到這個量、而且還有功夫沒練滿時，主畫面提示玩家去門下練功
     # ── 探索三選一（探索三選一設計）──
@@ -911,6 +1129,11 @@ class Config(_Strict):
     pairing_penalty: float = 0.2  # 內功與武學是相剋的一對，整個人威力 −幾成（再大也只到 encounter.BOOST_FLOOR）
     resonance_per_point: float = 0.005  # 正派武學每一點善名（邪派每一點惡名）+幾成（設計 7.4：名聲 ÷ 2 %）
     resonance_cap: float = 0.2  # 共鳴最多 +幾成
+    # ── 武學的功效（武學與成長設計第十三節；【預設】，校準只改內容與這兩項）──
+    trait_quality_multiplier: dict[str, float] = Field(  # 功效的強度跟著品質（13.1）
+        default_factory=lambda: {"下品": 1.0, "中品": 1.5, "上品": 2.0, "絕學": 3.0}
+    )
+    special_trait_chance: float = Field(default=0.05, ge=0, le=1)  # 新武學帶特別功效的機會（13.4）
     # ── 同伴招募（sanguo-companions 合併重寫，取代舊的收徒/招賢，見設計文件四.4）──
     recruit_stamina: int = 15  # 嘗試招募一次的體力
     recruit_base_chance: float = 0.35  # 基礎成功率，情誼會再往上加（見 roster.py）
@@ -918,6 +1141,7 @@ class Config(_Strict):
     duel_chance_on_fail: float = 0.4  # 招募失敗時，額外觸發對方要求決鬥的機率
     duel_fail_silver_loss: int = 15  # 決鬥吃虧：賠的銀兩（原本只有「你惹上了一場決鬥」的文字，沒有任何實際代價）
     recruit_consolation_xinde: int = 30  # 劇情事件想結識的人已經被別人招走時，改給的心得
+    # 新立門戶福緣的兩個天數：第一季是從自己加入那一刻起算的季曆天（roster.since_join），beta 那一季是季的第幾天
     fortune_day_min: int = 2  # 新立門戶福緣：第幾天起交友必定先觸發
     fortune_day_max: int = 7  # 新立門戶福緣：第幾天結束還沒發生就直接送上門
     # ── 賽季生命週期（第一季設計第十四節）──
@@ -935,6 +1159,11 @@ class Config(_Strict):
     bot_strength: float = 0.6  # 假人挑最高分選項的機率（0＝全隨機，1＝永遠挑最高分）；積極 +0.2、懶散 -0.2
     bot_tick_seconds: float = 20  # 假人程式多久巡一輪（現實秒數）
     bot_fill_seconds: float = 3600  # 同一個陣營兩次補人至少隔幾秒（現實時間），看起來像玩家陸續湧入
+    bot_naming: bool = True  # 假人首創的配方與絕學定名也請模型取名（企劃者 2026-10-05、10-06）；關掉時假人不開要取名的爐、也不定名
+    bot_naming_gap_seconds: float = 120  # 假人兩次請模型取名至少隔幾秒（現實時間；PM 10/5：一次一件，不搶真人的顯卡）
+    bot_naming_budget_seconds: float = 30  # 假人一次取名最多花幾秒；取不到：首創的那一爐不開（不用字表名字搶首創），絕學定名改用字表另組
+    # ── 全服決戰的三招與推力（戰鬥系統設計 3.4；全部【預設】）──
+    battle: BattleTuning = Field(default_factory=BattleTuning)
 
     @field_validator("explore_mix")
     @classmethod
@@ -961,9 +1190,8 @@ class BattleFaction(_Strict):
 
 
 class BattleActionEffect(_Strict):
-    """一個行動分類（tag）選了之後的確定性效果——跟全專案一貫的原則一樣（好感度 tag
-    查表、同伴反應強度覆寫），戰局推動跟氣血損耗都是這裡查表決定，LLM 只管潤色敘事，
-    不負責算任何數字。"""
+    """舊的行動分類（tag）查表的一列：決戰改版一之後固定招走三招（Config.battle），結算不再讀它；
+    留著只是讓還帶 action_tags 的舊內容檔照樣讀得進來（內容裡寫 {}）。"""
 
     trend_delta: int = 0  # 推動戰局 trend 的量（正負方向看 BattleDef 怎麼定義雙方）
     neili_damage: float = 0  # 這個行動的基礎氣血損耗
@@ -972,12 +1200,13 @@ class BattleActionEffect(_Strict):
 
 class BattleOption(_Strict):
     text: str  # free_text=True 時這是提示語（顯示在輸入框旁），不是按鈕文字
-    tag: str  # 對照 BattleDef.action_tags 的 key——即使是 free_text，機制效果還是查這張表，
-    # 不會因為玩家打了什麼字而改變數值（跟全專案一貫原則一樣：不信任 LLM 自己算數字）；
-    # 玩家自己打的字只會被餵給 LLM 當敘事潤色的素材（見 battle_instance.py::resolve_round）。
-    faction: str | None = None  # 限定某一方才能選；None＝雙方都能選
+    tag: str  # 這個選項在這一幕、這一邊的名字：出招、逾時代選、假人打分數都用它找選項（內容檢查要求同一邊同一幕不重複）。
+    # 玩家自己打的字不會改變任何數值（不信任 LLM 自己算數字），只會被餵給 LLM 當敘事潤色的素材
+    # （見 battle_instance.py::resolve_round）；放手一搏的推動與損耗走 FreeTextGamble 的公式。
+    faction: str | None = None  # 限定某一方才能選；None＝雙方都能選（固定的三招一定要寫自己這一邊）
     free_text: bool = False  # True 時這個「選項」不是按鈕，是一個最多 20 字的自訂行動輸入框
     # （設計討論：「魯莽」這類選項本來就該是玩家自己想出的招，不是從固定清單挑一個）
+    move: Move | None = None  # 固定招是三招的哪一招（戰鬥系統設計 3.4）；放手一搏（free_text）不填
 
 
 class BattleAct(_Strict):
@@ -989,6 +1218,7 @@ class BattleAct(_Strict):
     text: str
     goal: str
     options: list[BattleOption] = Field(min_length=1)
+    text_by_lead: dict[str, str] = Field(default_factory=dict)  # 陣營 id → 那一邊佔上風時的幕文字（3.2）；戰局剛好 50 或沒寫用 text
 
 
 class BattleOutcome(_Strict):
@@ -1019,16 +1249,25 @@ class FreeTextGamble(_Strict):
     failure_neili_per_risk: float = 3.0  # 失敗時，風險每 1 點再加多少氣血損耗
 
 
+class ThirdParty(_Strict):
+    """決戰的第三方（戰鬥系統第六節）：自成一方，不推這一場的戰局，只推自己那條大勢線；兩軍打得越膠著，收穫越多。
+    第一季是地方豪強推豪強割據。兩招的名字可以改，份量與扣血看 BattleTuning 的 third_*。"""
+
+    faction: str  # 劇本的陣營 id，不能是這一場交戰的兩軍之一
+    trend: str  # 收場時推的大勢線（不能是衍生線）
+    grab: str = "趁亂搶地盤"  # 用奇襲的份量；名字出自戰鬥系統第六節（待 joy 潤）
+    keep: str = "保存實力"  # 用固守的份量，收穫算一半；名字出自戰鬥系統第六節（待 joy 潤）
+
+
 class BattleDef(_Strict):
     """全服共用的即時多人戰鬥骨架（例如「黃巾決戰」）：集結選陣營→逐幕逐回合（框架給
-    選項，查表推動戰局/扣氣血；每幕固定幾回合）→打完最後一回合、或戰局一面倒時，看戰局
-    數值判定最終勝負。不是自由發展的 LLM 劇情，
+    選項是每邊每幕強攻／固守／奇襲三招，照 Config.battle 的算法推動戰局/扣氣血；每幕固定幾回合）→打完最後一回合、
+    或戰局一面倒時，看戰局數值判定最終勝負。不是自由發展的 LLM 劇情，
     是固定骨架裡的有限變因（設計討論：「有一個基本框架，玩家可以根據自身影響一些要素，
     但是大框架還是會進行下去」）。
 
     factions 的第一個是戰局 trend 的正向方（trend 越高對他們越有利，越低對第二個陣營
-    越有利）——固定選項靠 action_tags 自己決定方向；free_text 的賭局型行動（見
-    FreeTextGamble）沒有個別的 tag 效果可以決定方向，統一照這個順序推算。"""
+    越有利）——三招的推力與 free_text 的賭局型行動（見 FreeTextGamble）都照這個順序決定方向。"""
 
     id: str
     name: str
@@ -1042,7 +1281,8 @@ class BattleDef(_Strict):
     # 整場 rounds_per_act × 幕數 回合，最後一回合結算完看戰局定結果
     decisive_margin: int = Field(default=40, ge=1)  # 戰局偏離中線 50 到這麼多（|trend − 50| ≥ 這個值，battle_instance.CENTER）
     # 就當回合收場、不再換幕（壓倒性提前收場：40 時是 90／10；看中線、不看這一場的起點，戰鬥系統 5.3）
-    action_tags: dict[str, BattleActionEffect]
+    action_tags: dict[str, BattleActionEffect] = Field(default_factory=dict)  # 已退役的舊固定招查表（穩守／猛攻）：
+    # 三招之後固定招看 BattleOption.move 與 Config.battle，結算不再讀這張表；內容寫 {}，留著只是讓舊的內容檔讀得進來
     free_text_gamble: FreeTextGamble | None = None  # 有 free_text 選項時必填
     outcomes: list[BattleOutcome] = Field(min_length=1)  # 時刻表決戰只留一筆保底：實際的結果與效果走時刻表
     muster_seconds: float = 600  # 集結期：開放選陣營的時間，逾時系統自動分配
@@ -1053,6 +1293,7 @@ class BattleDef(_Strict):
     version: str | None = None  # 那件大事分版本時（宛城甲、乙）這一筆是哪一版；到時間照 version_from 的結果開對的那一筆
     defender: Literal["guan", "huang"] | None = None  # 守方：戰局剛好停在 50 算守方守住（戰鬥系統 4.2）
     front: str | None = None  # 起點讀哪條戰線（戰線 id）：集結開始時讀一次戰況 v，起點＝50 ＋（50 − v）÷ 2（戰鬥系統 5.3）
+    third: ThirdParty | None = None  # 第三方（戰鬥系統第六節）；沒有就是只有兩軍
 
 
 FigureFate = Literal["退場", "重創", "重挫", "聲威大減", "受挫", "下獄", "到任"]  # 用詞照時刻表結算文件第一節
@@ -1373,6 +1614,7 @@ class OrdersContent(_Strict):
     commander_fallback: dict[str, str] = Field(default_factory=dict)  # 陣營 id → 沒有主將時 {主將} 寫的泛稱
     callers: list[OrderCaller] = Field(default_factory=list)  # {號令}
     convoy_squads: dict[str, str] = Field(default_factory=dict)  # 陣營 id → 自己的運糧隊（截糧打的是對方的）
+    petition: dict[str, Petition] = Field(default_factory=dict)  # 陣營 id → 請命的說法（正式版乙二；計畫己再加機密軍令）
 
 
 class PromotionDef(_Strict):
@@ -1444,19 +1686,131 @@ class OppTiming(_Strict):
     done: str = ""  # 送到那一刻（{主將}）
 
 
+class OppPiece(_Strict):
+    """拼圖型的一樣東西（機緣文件 2.2 D、4.2 D）。拿法三選一：
+    ask：跟 front 那條戰線己方的將領聊話題 topic（情誼到 affinity，基準量）；原本要問的是 figure，他不在那條戰線就問
+         那時的主將；lines 是各人給的那一句（人物 id → 句子；"*" 是沒列到的人）。
+    silver：在 at 付 silver 兩。check：在 at 花 stamina、過 check。"""
+
+    key: str
+    name: str
+    how: Literal["ask", "silver", "check"]
+    front: str | None = None
+    figure: str | None = None
+    affinity: int = Field(default=0, ge=0)
+    topic: str = ""
+    lines: dict[str, str] = Field(default_factory=dict)
+    at: str | None = None
+    silver: int = Field(default=0, ge=0)
+    stamina: int = Field(default=10, ge=0)
+    check: Check | None = None
+    label: str = ""  # silver／check 的選項
+    ok: str = ""
+    fail: str = ""
+
+
+class OppPatron(_Strict):
+    """豪強的靠山（晉升奇遇 4.2）：誰、在哪裡收、收下時說什麼。"""
+
+    character: str
+    at: str
+    done: str
+
+
+class OppPresent(_Strict):
+    """湊齊之後交給誰。官軍：固定地點 at，figure 在場就是他，不在寫 stand_in；豪強：patrons（靠山 → 收的人）。"""
+
+    at: str | None = None
+    figure: str | None = None
+    stand_in: str = ""
+    patrons: dict[str, OppPatron] = Field(default_factory=dict)
+    label: str  # （{人物}）
+    done: str = ""  # 官軍用（{人物}）；豪強用各靠山的 done
+
+
+class OppPuzzle(_Strict):
+    pieces: list[OppPiece]
+    present: OppPresent
+
+
+class OppSuspect(_Strict):
+    id: str
+    name: str
+    traits: list[str]
+
+
+class OppTrait(_Strict):
+    key: str
+    region: str
+    text: str
+
+
+class OppDeduce(_Strict):
+    """推理型（機緣文件 3.2 D）：嫌疑人由本季天機決定（foreshadow.tianji_answer(天機, tianji)）；片段只透露那個人的特徵，
+    在各自的大區、以伏筆片段的機率聽到。最後一步在 askers 第一位在場的人物那裡指認；指錯了他的情誼 wrong_affinity、
+    當天不能再指。"""
+
+    tianji: str
+    suspects: list[OppSuspect]
+    traits: list[OppTrait]
+    askers: list[OppHost]
+    label: str  # （{人物}、{嫌疑人}）
+    right: str  # （{人物}）
+    wrong: str  # （{人物}、{嫌疑人}）
+    wrong_affinity: int = -10
+    trend: dict[str, int] = Field(default_factory=dict)  # 指對了推的大勢線（戰線或割據；衍生線不行）（例：{"jizhou": 1}）
+
+
+class OppPart(_Strict):
+    """集體密謀的一處：front（打贏一場對敵方的遊歷）或 at（在那個地點過檢定）。name 給陣營軍情的「還缺……」用。"""
+
+    key: str
+    name: str
+    front: str | None = None
+    at: str | None = None
+
+
+class OppPlot(_Strict):
+    """集體密謀型（機緣文件 1.1）：how＝win（各處是打贏）或 check（各處是在地點過檢定）。need_parts 沒寫＝每一處都要。"""
+
+    how: Literal["win", "check"]
+    parts: list[OppPart]
+    need_parts: int | None = None
+    headcount: int = Field(default=3, gt=0)  # 基準量
+    check: Check | None = None
+    stamina: int = Field(default=10, ge=0)
+    part_label: str = ""  # check 類的選項（{地點}）
+    part_ok: str = ""  # （{地點}）
+    part_fail: str = ""  # （{地點}）
+    start_text: str  # 陣營軍情（{name}、{缺}）
+    done_text: str  # 第 3 階以上的成員收到的那一句
+    helper_text: str  # 其他參與者收到的那一句（接著記貢獻）
+    fail_text: str  # 期限到了
+
+
+class Petition(_Strict):
+    """「請命」的說法（機緣文件 1.1、軍令文件 5.1）：label 是畫面上的動作名；characters 給沒有大勢人物的陣營（豪強）。"""
+
+    label: str
+    characters: list[str] = Field(default_factory=list)
+
+
 class OppDef(_Strict):
-    """一種機緣（機緣文件；正式版乙一只有 bond、accumulate、timing 三類，乙二再加）。
-    content/opportunities.json 裡機緣文件寫好的句子照原文，新寫的句子（乙一計畫內容表二標「新寫」的）是初稿，
+    """一種機緣（機緣文件；正式版乙一有 bond、accumulate、timing 三類，乙二加 puzzle、deduce、plot 三類，都是第 4 階）。
+    content/opportunities.json 裡機緣文件寫好的句子照原文，新寫的句子（乙一、乙二計畫內容表標「新寫」的）是初稿，
     待 joy 潤（JSON 沒有註解，標記記在這裡；內容改動走 joy 的 PR）。"""
 
     id: str
     name: str
     faction: str
     rank: Literal[3, 4]
-    kind: Literal["bond", "accumulate", "timing"]
+    kind: Literal["bond", "accumulate", "timing", "puzzle", "deduce", "plot"]
     bond: OppBond | None = None
     accumulate: OppAccumulate | None = None
     timing: OppTiming | None = None
+    puzzle: OppPuzzle | None = None
+    deduce: OppDeduce | None = None
+    plot: OppPlot | None = None
 
 
 class FollowerDef(_Strict):
@@ -1493,6 +1847,8 @@ class Content(_Strict):
     events: dict[str, Event]
     skills: dict[str, SkillDef]
     insights: dict[str, InsightDef] = Field(default_factory=dict)  # 意境（content/insights.json，武學與成長設計附錄 A）
+    traits: TraitBook = Field(default_factory=TraitBook)  # 功效（content/traits.json，13.2、13.4）；沒有這個檔就是沒有功效
+    trait_lines: dict[str, list[str]] = Field(default_factory=dict)  # 功效的演出句（content/trait_lines.json，S1）：功效名 → 句子
     materials: dict[str, Material]
     craft_names: CraftNames
     combat_lines: CombatLines  # 回合演出的句型（content/combat_lines.json，武學與成長設計 8.2）
@@ -1510,6 +1866,7 @@ class Content(_Strict):
     promotions: list[PromotionDef] = Field(default_factory=list)  # 晉升（content/promotions.json，計畫 T5）
     opportunities: list[OppDef] = Field(default_factory=list)  # 機緣（content/opportunities.json，正式版乙一）
     followers: dict[str, FollowerDef] = Field(default_factory=dict)  # 部下模板（content/followers.json，計畫 T5）
+    preset_recipes: list[PresetRecipe] = Field(default_factory=list)  # 師門配方（新手引導計畫一）；沒有這個檔就是空的
     map: MapLayout
     tutorial: Tutorial
     check_voice: CheckVoice = Field(default_factory=CheckVoice)  # 檢定選項括號裡的那一句（content/check_voice.json，載入時必備）

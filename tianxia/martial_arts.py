@@ -39,9 +39,12 @@ class MartialArt(BaseModel):
     # 舊資料還有 "created"（玩家取名自創）與 "crafted"（舊的素材煉製，已經沒有了）
     origin: str = "created"
     creator: str | None = None  # 合成首創者的名號（身分，誰是首創者照它認）；舊的自創、煉製功法照舊；內容武學為 None
-    # 首創者寫給別人看的名號：登記當下照匿名行走的規矩定（rules.display_name，匿名是「某位少俠」）；
+    # 首創者寫給別人看的名號：名號（江湖史一律具名，傳聞分層第七節）；這一版之前匿名行走的人記的是「某位少俠」，照舊；
     # 功法卡、後到的人那一句、換季的江湖史都寫這個（shown_creator）。舊資料沒有，照 creator
     creator_shown: str | None = None
+    # 師門配方（content/preset_recipes.json，新手引導）的功夫：寫好的、傳下來的，沒有首創者——功法卡寫「師門傳下來的功夫」，
+    # 換季的江湖史「合成首創」不列（sqlite_world._season_firsts_lines）
+    preset: bool = False
     # 全服第一個把它練成絕學的人寫給別人看的名號（world.claim_master 登記時一起寫進來）；身分記在 masters 表
     master_shown: str | None = None
     note: str = ""  # 模型寫的一句話描述（只有語意、沒有數字）；自創與本命武學是空的
@@ -49,6 +52,8 @@ class MartialArt(BaseModel):
     base: str | None = None  # 合成的底（功法 id）
     parents: list[str] = Field(default_factory=list)  # 武學＋武學：兩門來源的 id（排序過，武學與成長設計 12.3）；其他是空的
     lean: str = "無"  # 正、邪、無：跟著最後融的意境（設計 7.3）
+    traits: list[str] = Field(default_factory=list)  # 一般功效：屬性的清單，第一個是自己的、後面是傳下來的（13.3）；空的＝只有自己屬性
+    special: str | None = None  # 特別功效的 id（13.4）；不傳給後代
 
 
 class Insight(BaseModel):
@@ -60,13 +65,13 @@ class Insight(BaseModel):
     attribute: str  # ATTRIBUTES 其中之一
     lean: str = "無"  # 正、邪、無（設計 7.3）
     creator: str | None = None  # 合併出來的：第一個合出來的人的名號（身分）；基本意境是 None
-    creator_shown: str | None = None  # 首悟者寫給別人看的名號（登記當下照匿名的規矩定，見 MartialArt.creator_shown）
+    creator_shown: str | None = None  # 首悟者寫給別人看的名號：名號（見 MartialArt.creator_shown；這一版之前匿名記下的「某位少俠」照舊）
     note: str = ""  # 模型寫的一句說明；基本意境是內容的 desc
     parents: list[str] = Field(default_factory=list)  # 合併出來的：兩個來源的 id（排序過）
 
 
 def shown_creator(thing: MartialArt | Insight) -> str | None:
-    """首創者寫給別人看的名號：登記當下定的那一個（匿名行走的人是「某位少俠」）；舊資料沒記，照名號。"""
+    """首創者寫給別人看的名號：登記當下記下的那一個（現在一律是名號；這一版之前匿名行走的人記成「某位少俠」，照舊）；舊資料沒記，照名號。"""
     return thing.creator_shown or thing.creator
 
 
@@ -142,15 +147,19 @@ def historical_art(skill_id: str, name: str, kind: str, attribute: str, quality:
     )
 
 
-def content_art(skill_id: str, name: str, kind: str, attribute: str, quality: str) -> MartialArt:
+def content_art(
+    skill_id: str, name: str, kind: str, attribute: str, quality: str, special: str | None = None,
+) -> MartialArt:
     """內容手寫的武學：下品是基礎武學（武學與成長設計附錄 B，origin "basic"）；
     其他品質照舊走 historical_art（本命武學的絕學、部下用的上品武學，來源標本命，不算基礎武學）。
-    威力照品質的區間、不加微調。"""
+    威力照品質的區間、不加微調。special 是內容指給它的獨特特別功效（13.5，SkillDef.special），沒寫就沒有；
+    一般功效不用寫，內容的武學只有自己屬性那一個（13.3，MartialArt.traits 留空）。"""
     if quality != "下品":
-        return historical_art(skill_id, name, kind, attribute, quality)
+        return historical_art(skill_id, name, kind, attribute, quality).model_copy(update={"special": special})
     return MartialArt(
         id=skill_id, name=name, kind=kind, quality=quality, attribute=attribute,
         base_power=QUALITY_BASE_POWER[quality], top_power=QUALITY_TOP_POWER[quality], origin="basic",
+        special=special,
     )
 
 

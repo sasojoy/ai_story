@@ -2,8 +2,15 @@ import pytest
 from pydantic import ValidationError
 
 from tianxia.models import (
-    EXPLORE_BRANCHES, Choice, Config, Connection, Event, InsightDef, InsightGrant, LearnRule, Location, SkillDef,
+    BEATS, EXPLORE_BRANCHES, MOVES, BattleAct, BattleDef, BattleFaction, BattleOption, BattleOutcome, BattleTuning,
+    Choice, Config, Connection, Event, InsightDef, InsightGrant, LearnRule, Location, SkillDef,
 )
+
+# 戰鬥系統設計 3.4 的對應表（擅長, 不擅長）：預設值要跟它一個字一個字對得上
+SPEC_AFFINITY = {
+    "剛": ("強攻", "奇襲"), "實": ("強攻", "奇襲"), "陽": ("強攻", "固守"), "柔": ("固守", "強攻"),
+    "陰": ("固守", "強攻"), "慢": ("固守", "奇襲"), "快": ("奇襲", "固守"), "虛": ("奇襲", "強攻"),
+}
 
 
 def test_event_requires_at_least_one_choice():
@@ -157,3 +164,107 @@ def test_an_insight_may_be_earned_by_name():
 
 def test_a_location_starts_with_no_insights():
     assert Location(id="a", name="A", description="d", connections=[], x=0, y=0).insights == []
+
+
+# ── 全服決戰的三招與推力（決戰改版 1，戰鬥系統設計 3.4）──────────────────
+
+
+def test_battle_tuning_defaults_are_the_designs():
+    """戰鬥系統設計 3.4【預設】。"""
+    t = Config().battle
+    assert (t.power_base, t.power_per, t.power_cap) == (40.0, 0.4, 150.0)
+    assert (t.affinity_base, t.affinity_outer, t.affinity_inner) == (75.0, 15.0, 10.0)
+    assert (t.counter, t.push_max) == (0.5, 10.0)
+    assert t.damage == {"強攻": 60.0, "奇襲": 35.0, "固守": 15.0} and t.strong_mitigation_cap == 0.6
+    assert t.affinity["剛"] == ("強攻", "奇襲") and t.affinity["快"] == ("奇襲", "固守")
+    assert set(t.affinity) == {"剛", "實", "陽", "柔", "陰", "慢", "快", "虛"}
+
+
+def test_each_move_beats_exactly_one_other():
+    assert BEATS == {"固守": "強攻", "強攻": "奇襲", "奇襲": "固守"}
+    assert sorted(BEATS) == sorted(MOVES) == sorted(BEATS.values())
+
+
+def test_every_affinity_names_two_different_moves():
+    """每個屬性擅長一招、不擅長另一招，不會同一招又擅長又不擅長。"""
+    for attribute, (good, bad) in Config().battle.affinity.items():
+        assert good in MOVES and bad in MOVES and good != bad, attribute
+
+
+def test_the_default_affinity_table_is_the_designs_row_by_row():
+    """八個屬性一列一列對設計 3.4 的表（不只剛與快：陽、陰、慢、虛一個也不能被改反）。"""
+    assert Config().battle.affinity == SPEC_AFFINITY
+
+
+@pytest.mark.parametrize("override", [
+    {"damage": {"強攻": 70.0}},  # 少寫兩招：結算時 tuning.damage[move] 會 KeyError
+    {"damage": {"強攻": 60.0, "固守": 15.0}},
+    {"damage": {"強攻": 60.0, "固守": 15.0, "奇襲": 35.0, "亂招": 5.0}},  # 多一招
+    {"damage": {"強攻": 60.0, "固守": 0.0, "奇襲": 35.0}},  # 零與負的損耗
+    {"damage": {"強攻": 60.0, "固守": 15.0, "奇襲": -35.0}},
+    {"affinity": {"剛": ("強攻", "強攻")}},  # 擅長與不擅長同一招
+    {"affinity": {"剛": ("強攻", "亂招")}},
+    {"power_base": 0}, {"power_base": -1}, {"power_per": 0}, {"power_per": -0.4}, {"power_cap": 0}, {"power_cap": -150},
+    {"affinity_base": 0}, {"affinity_outer": -15}, {"affinity_inner": -10}, {"push_max": 0}, {"push_max": -5},
+    {"counter": -0.5}, {"counter": 3.0}, {"strong_mitigation_cap": -0.1}, {"strong_mitigation_cap": 1.5},
+])
+def test_a_tuning_that_would_break_the_resolution_is_rejected_when_it_loads(override):
+    """企劃者測完要調數字：寫壞的值在載入設定時就被擋下，不是等第一場決戰的第一回合才在行動鎖裡丟 KeyError、把整場卡住。"""
+    with pytest.raises(ValidationError):
+        BattleTuning(**override)
+    with pytest.raises(ValidationError):
+        Config(battle=override)  # 從 config.json 的 "battle" 讀進來走的是這一條
+
+
+@pytest.mark.parametrize("override", [
+    {"damage": {"強攻": 70.0, "固守": 10.0, "奇襲": 40.0}},
+    {"counter": 0.0}, {"counter": 1.0}, {"affinity_outer": 0.0}, {"affinity_inner": 0.0}, {"strong_mitigation_cap": 0.0},
+    {"push_max": 20},
+])
+def test_a_sensible_tuning_override_is_accepted(override):
+    tuning = Config(battle=override).battle
+    for name, value in override.items():
+        assert getattr(tuning, name) == value
+
+
+def test_a_fixed_option_may_name_its_move_and_a_gamble_does_not():
+    assert BattleOption(text="強攻", tag="x", move="強攻").move == "強攻"
+    assert BattleOption(text="放手一搏", tag="x", free_text=True).move is None
+    with pytest.raises(ValidationError):
+        BattleOption(text="亂招", tag="x", move="亂來")
+
+
+def test_an_act_has_no_lead_texts_unless_it_writes_them():
+    act = BattleAct(id="a", title="t", text="x", goal="g", options=[BattleOption(text="o", tag="x")])
+    assert act.text_by_lead == {}
+    # 兩幕的字典各自一份，改一幕不會動到另一幕
+    other = BattleAct(id="b", title="t", text="x", goal="g", options=[BattleOption(text="o", tag="x")])
+    act.text_by_lead["guan"] = "官軍佔上風。"
+    assert other.text_by_lead == {}
+
+
+def test_a_battle_may_leave_its_action_tags_out():
+    """三招之後固定招看 BattleOption.move；action_tags 只剩放手一搏找不到成功率時的退路，可以省略。"""
+    battle = BattleDef(
+        id="t", name="測試", factions=[BattleFaction(id="a", name="甲"), BattleFaction(id="b", name="乙")],
+        acts=[BattleAct(id="a1", title="t", text="x", goal="g", options=[BattleOption(text="o", tag="x")])],
+        outcomes=[BattleOutcome(faction="a", title="甲勝", text="甲勝。")],
+    )
+    assert battle.action_tags == {}
+
+
+def test_a_partial_affinity_override_changes_only_the_rows_it_names():
+    """審查 m3：config.json 的 battle.affinity 只寫一個屬性，其餘七個照預設表——不會整張表被換掉、
+    其他屬性悄悄變成沒有擅長也沒有不擅長。"""
+    t = Config(battle={"affinity": {"陽": ["奇襲", "固守"]}}).battle
+    assert t.affinity["陽"] == ("奇襲", "固守")
+    assert {k: v for k, v in t.affinity.items() if k != "陽"} == {k: v for k, v in SPEC_AFFINITY.items() if k != "陽"}
+    assert set(t.affinity) == set(SPEC_AFFINITY)
+    assert BattleTuning().affinity == SPEC_AFFINITY  # 沒寫覆寫就是預設表，而且各個 Config 的那一份互不相干
+    BattleTuning().affinity["剛"] = ("奇襲", "強攻")
+    assert BattleTuning().affinity["剛"] == ("強攻", "奇襲")
+
+
+def test_a_bad_row_inside_a_partial_affinity_override_is_still_rejected():
+    with pytest.raises(ValidationError):
+        Config(battle={"affinity": {"陽": ["強攻", "強攻"]}})

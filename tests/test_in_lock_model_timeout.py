@@ -128,10 +128,12 @@ def _a_round_narration(game):
         )
     with at(game, definition.muster_seconds + 1):
         game._battle_status()
-        game.choose("battle:act:safe")
+        game.world.mutate_battle(lambda b: setattr(b.participants["機器人"], "neili", 1.0))  # 這一回合倒下：有一句系統訊息可退回
+        game.choose("battle:act:guan_hold")
     battle = game.world.get_battle()
     rounds = game.world.battle_rounds(battle.record_id)
-    assert rounds and rounds[-1].narration  # 潤色失敗就用系統判定的訊息本身，戰鬥不會卡住
+    # 潤色失敗就用系統判定的訊息本身（不含每回合那一行出招比例，那只留在回合紀錄），戰鬥不會卡住
+    assert rounds and "氣血耗盡" in rounds[-1].narration and "（戰局 " not in rounds[-1].narration
 
 
 def _a_custom_battle_action(game):

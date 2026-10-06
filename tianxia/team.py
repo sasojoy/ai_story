@@ -9,7 +9,7 @@ from __future__ import annotations
 import math
 import random
 
-from . import calendar, encounter, rounds
+from . import calendar, encounter, rounds, traits
 from .martial_arts import MAX_LEVEL, MartialArt, content_art, counters, with_quality
 from .models import Content, FollowerDef, Squad
 from .state import PLAYER, MAX_TEAM_COMPANIONS, GameState, LevelUps, Member
@@ -92,7 +92,7 @@ def resolve_art(skill_id: str | None, content: Content, world: WorldStateStore) 
         return None
     if skill_id in content.skills:
         s = content.skills[skill_id]
-        return content_art(skill_id, s.name, s.kind, s.attribute, s.quality)
+        return content_art(skill_id, s.name, s.kind, s.attribute, s.quality, special=s.special)
     return world.get_skill(skill_id)
 
 
@@ -267,9 +267,10 @@ def can_practise(state: GameState, content: Content, kind: str) -> bool:
 
 
 def practice(
-    state: GameState, content: Content, world: WorldStateStore, kind: str, rng: random.Random,
+    state: GameState, content: Content, world: WorldStateStore, kind: str, rng: random.Random, safe: bool = False,
 ) -> list[str]:
-    """練成：身上這一門加深一成，花心得（設計 4.2），累積受傷風險（設計文件六.2）。"""
+    """練成：身上這一門加深一成，花心得（設計 4.2），累積受傷風險（設計文件六.2）。
+    safe：序章裡的練功不受傷（新手引導計畫一），連受傷那一次亂數也不擲；序章外的亂數序列一個都沒動。"""
     cfg, member = content.config, state.player.member
     slot = "neigong_id" if kind == "內功" else "wugong_id"
     level_slot = slot.replace("_id", "_level")
@@ -291,7 +292,7 @@ def practice(
     state.player.stats["xinde"] = xinde - price
     setattr(member, level_slot, level + 1)
     msgs = [f"【{name}】精進至第{level + 1}成。", f"心得 -{price}"]
-    if rng.random() < cfg.practice_injury_chance:
+    if not safe and rng.random() < cfg.practice_injury_chance:
         now, _cap = member_neili(content, member, con_of(state, content, world, PLAYER))
         member.injury += cfg.practice_injury_amount
         member.neili = max(0.0, now - cfg.practice_injury_amount)
@@ -422,15 +423,56 @@ def regen_neili(content: Content, member, fraction: float, con: float = BASE_STA
         member.neili = None
 
 
+def heal_fraction(state: GameState, content: Content, world: WorldStateStore, fraction: float) -> list[str]:
+    """本人回氣血上限的 fraction（吸取、回春，武學與成長設計 13.2、13.4）；回到天花板（上限 − 內傷）為止，內傷照舊要療傷
+    才清得掉。回到天花板就是「滿」，記成 None（member_neili 的約定：之後升級、根骨變高，滿的人照舊是滿的）。
+    回傳「氣血 +N」，回不到 1 點不寫（氣血照樣回了）。"""
+    member = state.player.member
+    con = con_of(state, content, world, PLAYER)
+    now, cap = member_neili(content, member, con)
+    ceiling = neili_ceiling(content, member, con)
+    after = min(ceiling, now + cap * fraction)
+    member.neili = None if after >= ceiling else after
+    gained = after - now
+    return [f"氣血 +{gained:.0f}"] if gained >= 1 else []
+
+
 # ── 遭遇/劇情戰：串接 encounter.py 的單次判定 ───────────────
 
 
 def team_conditions(state: GameState, content: Content, world: WorldStateStore) -> list[float]:
-    """本隊每個人的氣血狀態係數，順序跟 team_participants 一致（氣血設計 §1.1：帶傷出手較弱）。"""
+    """本隊每個人的氣血狀態係數，順序跟 team_participants 一致（氣血設計 §1.1：帶傷出手較弱）。
+    本人身上帶【厚】時，見底的下限高一點（武學與成長設計 13.2）；同伴照舊。"""
+    floor = encounter.CONDITION_FLOOR + traits.amount(content, traits.loadout(state, content, world), "condition_floor")
     return [
-        encounter.condition_of(*member_neili(content, member, con_of(state, content, world, key)))
+        encounter.condition_of(
+            *member_neili(content, member, con_of(state, content, world, key)),
+            floor=floor if key == PLAYER else encounter.CONDITION_FLOOR,
+        )
         for key, member in zip(team_keys(state), team_participants(state, world), strict=True)
     ]
+
+
+def trait_mods(content: Content, lo: traits.Loadout) -> encounter.Mods:
+    """本人身上的功效換成遭遇戰的數字（武學與成長設計 13.2、13.4）。沒有功效的人是空的 Mods（單次判定跟以前一模一樣）。
+
+    特別功效目前照「掛點」記在 Loadout.specials（一個掛點一個，content.check_traits 擋共用）。名將本命絕學（13.5）的獨特
+    特別功效進來時，若要改成照 id 記，下面每一處「按掛點讀」都要跟著改——全部的清單（讀的是 lo.specials 的鍵或值）：
+    - traits.py：loadout（寫入，同一個掛點只留第一個）、has（`hook in lo.specials`）。
+    - team.py：trait_mods（`.get("power_from_difficulty")`、`"double_luck" in`）、fight（`"no_loss" in`）、
+      take_encounter_toll（`"no_injury" in`）。
+    - engine.py：_battle_rewards（`.get("win_xinde")`）、_take_toll（`.get("heal_after")`）、_action_costs（`.get("train_stamina")`）、
+      _play_rounds（`.get("no_loss")`）、_trait_lines（`double_luck`、`power_from_difficulty`、`no_injury`、`win_xinde`、
+      `heal_after`、`train_stamina` 各一處 `in` 或 `[...]`）。
+    - 一般功效不在這裡：它們照屬性記層數、數字由 traits.amount 讀。"""
+    borrow = lo.specials.get("power_from_difficulty")
+    return encounter.Mods(
+        luck_scale=1 - traits.amount(content, lo, "luck_narrow") + traits.amount(content, lo, "luck_widen"),
+        big_win_cut=traits.amount(content, lo, "big_win"),
+        difficulty_cut=traits.amount(content, lo, "difficulty_cut"),
+        power_add=borrow.amount if borrow is not None else 0.0,
+        double_luck="double_luck" in lo.specials,
+    )
 
 
 def pairing(content: Content, wugong: MartialArt | None, neigong: MartialArt | None) -> float:
@@ -526,9 +568,11 @@ def take_encounter_toll(
     msgs = []
     for key in team_keys(state):
         if key == PLAYER:
+            lo = traits.loadout(state, content, world)
             lost, hurt = _apply_toll(
-                content, state.player.member, fraction,
+                content, state.player.member, fraction * (1 - traits.amount(content, lo, "toll_cut")),  # 化勁（13.2）
                 agi=stats.get("agi", BASE_STAT), con=con_of(state, content, world, PLAYER),
+                injury=0.0 if "no_injury" in lo.specials else 1.0,  # 不動：不受內傷（13.4）
             )
             if round(lost) > 0:  # 本來就見底、一滴都沒得扣時不寫「氣血 -0」（零的變化是雜訊）；內傷照樣寫
                 msgs.append(f"氣血 -{lost:.0f}")  # 照既有慣例寫變化量（跟「銀兩 -5」「心得 +12」同一串）
@@ -544,13 +588,14 @@ def take_encounter_toll(
 
 
 def _apply_toll(
-    content: Content, member, fraction: float, agi: float = BASE_STAT, con: float = BASE_STAT,
+    content: Content, member, fraction: float, agi: float = BASE_STAT, con: float = BASE_STAT, injury: float = 1.0,
 ) -> tuple[float, float]:
     """扣一場的氣血，回傳（實際掉了多少氣血, 其中變成內傷的量）。身法減一場的損耗、根骨減其中變成內傷的
-    比例，各 ×（1−3%×（屬性−5）），夾在 0 以上；氣血上限也照根骨算。同伴傳他自己的（人物資質設計 14.3）。"""
+    比例，各 ×（1−3%×（屬性−5）），夾在 0 以上；氣血上限也照根骨算。同伴傳他自己的（人物資質設計 14.3）。
+    injury 是變成內傷的倍數（預設 1；本人帶【不動】時是 0，扣的氣血全算輕傷，武學與成長設計 13.4）。"""
     now, cap = member_neili(content, member, con)
     loss = cap * fraction * max(0.0, 1 - stat_bonus(content, agi))
-    hurt = loss * content.config.injury_share * max(0.0, 1 - stat_bonus(content, con))
+    hurt = loss * content.config.injury_share * max(0.0, 1 - stat_bonus(content, con)) * injury
     member.injury += hurt
     member.neili = max(0.0, now - loss)
     after, _ = member_neili(content, member, con)
@@ -559,27 +604,38 @@ def _apply_toll(
 
 def fight(
     state: GameState, content: Content, world: WorldStateStore, squad_id: str, rng: random.Random,
-    *, difficulty: float | None = None, shift: float = 0.0, dodge: bool = True,
+    *, difficulty: float | None = None, shift: float = 0.0, dodge: bool = True, tier: str | None = None,
 ) -> encounter.EncounterResult:
     """difficulty 給了就取代隊伍的難度（挑戰大勢人物本人：難度跟著聲威走，見 figures.difficulty）。
-    shift 是大場面判讀的優勢換算成的判定差距平移（encounter.advantage_shift，武學與成長設計 8.3）；平常是 0。
+    tier 給了（序章雪恥那一場，新手引導計畫一）結果就照寫好的：數字照舊算、功效照舊折進去，判定出來之後只把結果換掉；
+    換在護命與閃避之前，所以那兩樣都不動它（也就不會標 guarded）。
+    shift 是大場面判讀的優勢換算成的判定差距平移（encounter.advantage_shift，武學與成長設計 8.3，照沒有功效的運氣範圍算）；
+    平常是 0。本人的功效改了運氣範圍時，resolve_encounter 會把它等比例縮放，同一個優勢推的百分點不變（Task 3 審查 I1）。
     結果定了（優勢平移也算進去）之後，本人的身法才有機會把落敗閃成僵持（dodge_chance，人物資質設計 14.4）；
     dodge=False 不擲閃避、也不動那一次亂數——劇情戰的勝敗是人寫好的（僵持也算敗），閃了只會自相矛盾（最終審查 I1）。"""
     squad = content.squads[squad_id]
     arts = team_arts(state, content, world)
     power = encounter.team_power(*_with_attribute(_fighters(state, content, world), arts, squad.attribute))
-    result = encounter.resolve_encounter(power, squad.difficulty if difficulty is None else difficulty, rng, shift=shift)
+    lo = traits.loadout(state, content, world)
+    result = encounter.resolve_encounter(
+        power, squad.difficulty if difficulty is None else difficulty, rng, shift=shift, mods=trait_mods(content, lo),
+    )
+    if tier is not None:
+        return result.model_copy(update={"tier": tier})
     if not dodge:
         return result
+    if result.tier == encounter.FALLBACK_TIER and "no_loss" in lo.specials:  # 護命（13.4）：落敗改判僵持，蓋過閃避、也就不擲閃避
+        return result.model_copy(update={"tier": "僵持", "guarded": True})
     return encounter.dodge(result, dodge_chance(state, content), rng)  # 先平移、結果定了才閃（14.4）；勝算（estimate）不含
 
 
-def odds_word(power: float, squad: Squad, rng_seed: int = ESTIMATE_SEED) -> str:
-    """依固定種子模擬 ESTIMATE_RUNS 場的結果分佈換算勝算文字（大勝/險勝算勝、僵持算平手）。"""
+def odds_word(power: float, squad: Squad, rng_seed: int = ESTIMATE_SEED, mods: encounter.Mods | None = None) -> str:
+    """依固定種子模擬 ESTIMATE_RUNS 場的結果分佈換算勝算文字（大勝/險勝算勝、僵持算平手）。mods 是本人的功效換算
+    （trait_mods）：每一場都照它擲。"""
     rng = random.Random(rng_seed)
     wins = draws = 0
     for _ in range(ESTIMATE_RUNS):
-        result = encounter.resolve_encounter(power, squad.difficulty, rng)
+        result = encounter.resolve_encounter(power, squad.difficulty, rng, mods=mods)
         wins += result.tier in WIN_TIERS
         draws += result.tier in DRAW_TIERS
     return _odds_text(wins, draws, ESTIMATE_RUNS)
@@ -597,13 +653,14 @@ def _odds_text(wins: int, draws: int, runs: int) -> str:
 def estimate(
     state: GameState, content: Content, world: WorldStateStore, squad_id: str, *, difficulty: float | None = None,
 ) -> str:
-    """勝算的文字；difficulty 同 fight。不含身法閃避：勝算是贏的機會（人物資質設計 14.4）。"""
+    """勝算的文字；difficulty 同 fight。含會改到贏的機會的功效（破甲、先手、穩、險、借力、連環、厚），不含護命與閃避：
+    勝算是贏的機會，那兩個只把落敗變成僵持（人物資質設計 14.4、武學與成長設計 13.4）。"""
     squad = content.squads[squad_id]
     if difficulty is not None:
         squad = squad.model_copy(update={"difficulty": difficulty})
     arts = team_arts(state, content, world)
     power = encounter.team_power(*_with_attribute(_fighters(state, content, world), arts, squad.attribute))
-    return odds_word(power, squad)
+    return odds_word(power, squad, mods=trait_mods(content, traits.loadout(state, content, world)))
 
 
 def _with_attribute(

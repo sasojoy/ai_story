@@ -4,7 +4,7 @@
 """
 from __future__ import annotations
 
-from . import cultivation, fusion, insights, materials, team
+from . import cultivation, fusion, insights, materials, prologue, team, traits
 # 不 import 整個 library 模組：這個檔案自己有一個叫 library() 的函式
 from .library import cap_of, held_count, level_of, melt_problem, melt_value, owned_arts
 from .martial_arts import MAX_LEVEL, MartialArt, next_quality, power_at, shown_creator
@@ -59,11 +59,26 @@ def practice_hint(state: GameState, content: Content) -> str | None:
     return f"💡 你已攢下 {xinde} 點心得。{'，或'.join(parts)}。"
 
 
+def _known_recipe(state: GameState, content: Content, world: WorldStateStore, key: str) -> str:
+    """爐子上那一組武學的配方有沒有人合過（武學與成長設計 13.6）：已知的寫「會合出【X】」與它的功效，沒人合過的寫「沒人合過」，
+    不預告會長出什麼。合出來的那一門你已經有了就不寫（下面的 ⚠ 本來就會說「你已經有了」）。只在放進爐裡的都是你的東西時才會
+    呼叫（forge_line 先擋下了不是你的），所以不會拿它探別人合出了什麼。"""
+    known = world.lookup_recipe(key)
+    if known is None:
+        return "\n沒人合過。"
+    if known.id in owned_arts(state):
+        return ""
+    return f"\n會合出【{known.name}】。{traits.card_line(content, known)}"
+
+
 def forge_line(
     state: GameState, content: Content, world: WorldStateStore, art_id: str | None, insight_ids: list[str],
     other_art: str | None = None,
 ) -> str:
     """煉製頁的說明：放了什麼、會做哪一種、花多少心得，或者為什麼還不能開爐。other_art 有、insight_ids 空的是武學＋武學。"""
+    refusal = prologue.fuse_problem(state, content, art_id, insight_ids, other_art)  # 序章裡只准照劇本合成（跟 Game.forge 同一個判斷）
+    if refusal is not None:
+        return f"⚠ {refusal}"
     cfg, xinde = content.config, state.player.stats.get("xinde", 0)
     count = f"武學與意境 {held_count(state)}/{cap_of(state, content)}"
     owned, held = owned_arts(state), state.player.insights
@@ -80,6 +95,7 @@ def forge_line(
             f"**合成**　【{a.name}】＋【{b.name}】→ 一門新{shape.kind}（屬{shape.attribute}，從下品起修），"
             f"花 {cfg.fuse_xinde} 點心得、{cfg.fuse_stamina} 點體力（你有 {xinde} 點心得）。"
         )
+        head += _known_recipe(state, content, world, fusion.blend_key(art_id, other_art))
         problem = fusion.blend_problem(state, content, world, art_id, other_art)
     elif art_id and not other_art and len(insight_ids) == 1:
         if art_id not in owned or insight_ids[0] not in held:
@@ -93,6 +109,7 @@ def forge_line(
             f"（屬{insight.attribute}，從下品起修），"
             f"花 {cfg.fuse_xinde} 點心得、{cfg.fuse_stamina} 點體力（你有 {xinde} 點心得）。"
         )
+        head += _known_recipe(state, content, world, fusion.fuse_key(art_id, insight_ids[0]))
         problem = fusion.fuse_problem(state, content, world, art_id, insight_ids[0])
     elif not art_id and not other_art and len(insight_ids) == 2:
         if any(i not in held for i in insight_ids):
@@ -125,7 +142,7 @@ def art_rows(state: GameState, content: Content, world: WorldStateStore) -> list
         level = level_of(state, art_id)
         insight = insights.resolve(art.insight, content, world) if art.insight else None
         insight_name = insight.name if insight else None
-        problem = cultivation.cultivate_problem(state, content, world, art_id)
+        problem = prologue.cultivate_problem(state, content) or cultivation.cultivate_problem(state, content, world, art_id)
         legend = None
         if problem is None:
             target = next_quality(art.quality)
@@ -134,11 +151,11 @@ def art_rows(state: GameState, content: Content, world: WorldStateStore) -> list
             legend = _legend_choice(state, content, target, failures)
         else:
             note = problem
-        stuck = melt_problem(state, art_id, art.name)  # 跟 library.melt_art 同一個判斷
+        stuck = melt_problem(state, art_id, art.name, only=prologue.melt_only(state, content))  # 跟 library.melt_art 同一個判斷
         rows.append({
             "id": art_id, "name": art.name, "kind": art.kind, "quality": art.quality, "attribute": art.attribute,
             "level": level, "worn": art_id in (member.neigong_id, member.wugong_id), "insight": insight_name,
-            "card": art_card(art, level, insight_name, parent_names(art, content, world)),
+            "card": art_card(art, level, insight_name, parent_names(art, content, world), traits.card_line(content, art)),
             "cultivate": {"ok": problem is None, "note": note, "legend": legend},
             "melt": {
                 "ok": stuck is None,
@@ -299,7 +316,7 @@ def detail(state: GameState, content: Content, world: WorldStateStore, kind: str
     art = team.player_art(state, content, world, skill_id)
     if art is None:
         return f"（找不到武學資料：{skill_id}）"
-    return art_card(art, level, parent_names=parent_names(art, content, world))
+    return art_card(art, level, parent_names=parent_names(art, content, world), trait_line=traits.card_line(content, art))
 
 
 def parent_names(art: MartialArt, content: Content, world: WorldStateStore) -> list[str]:
@@ -311,21 +328,26 @@ def parent_names(art: MartialArt, content: Content, world: WorldStateStore) -> l
 
 def art_card(
     art: MartialArt, level: int, insight_name: str | None = None, parent_names: list[str] | None = None,
+    trait_line: str = "",
 ) -> str:
     """一門功法的功法卡（無限煉製設計 §8；FB-006）：名字・品質・屬性（有傾向再加正邪）、目前熟練度與威力、
     第一成／第十成的威力、來源與融的意境，最後是模型寫的那句說明。
 
     來源（FB-017、武學與成長設計 3.4）：合成（origin == "fused"）寫「合成（某某 首創）」，某某是第一個合出這個配方的人
-    寫給別人看的名號（shown_creator：登記當下匿名行走的寫「某位少俠」）；
+    寫給別人看的名號（shown_creator：名號；這一版之前匿名行走的人記下的是「某位少俠」，照舊）；
     基礎武學（"basic"）寫「基礎武學」；舊資料的煉製（"crafted"）寫「煉製（某某 首創）」、取名自創（"created"）寫
     「自創（某某 所創）」；其他是本命武學。insight_name 是這門武學融的意境的名字（沒融過就不給、不寫）。
     parent_names 是武學＋武學的兩門來源的名字（設計 12.3），有兩個才寫「由【甲】與【乙】衍生」。
+    trait_line 是功效那一行（traits.card_line，設計 13.6：這一門自己的功效，數字照這一份的品質算），有字時接在來源那一行之後；
+    三處呼叫端（art_rows、detail、Game.art_detail）都要給，不給（內容沒有功效、舊的呼叫）就沒有這一行。
     說明句只有真的有字時才有那一行：退路字表取名的功法、自創與本命武學都沒有說明，
     這時整行省略——不留空行、不出現 None（QA 寫進 FB-006 的驗收）。
     """
     nxt = "已達第十成" if level >= MAX_LEVEL else f"{power_at(art, level + 1):.1f}"
-    creator = shown_creator(art)  # 寫給別人看的名號：匿名行走的首創者是「某位少俠」（最終審查 Important 2）
-    if art.origin == "fused":
+    creator = shown_creator(art)  # 寫給別人看的名號：名號（首創一律具名，傳聞分層第七節）；這一版之前匿名記下的「某位少俠」照舊
+    if art.preset:  # 師門配方（新手引導）：沒有首創者
+        source = "師門傳下來的功夫"
+    elif art.origin == "fused":
         source = "合成" + (f"（{creator} 首創）" if creator else "")
     elif art.origin == "basic":
         source = "基礎武學"
@@ -343,6 +365,8 @@ def art_card(
         + (f"　由【{parent_names[0]}】與【{parent_names[1]}】衍生" if parent_names and len(parent_names) == 2 else "")
         + (f"　意境：「{insight_name}」" if insight_name else ""),
     ]
+    if trait_line:
+        lines.append(trait_line)
     note = art.note.strip()
     if note:
         lines.append(note)

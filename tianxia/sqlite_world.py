@@ -22,7 +22,7 @@ from contextlib import AbstractContextManager
 from pathlib import Path
 from sqlite3 import Connection, Row
 
-from .battle_instance import BattleInstance, BattleRoundRecord, start_muster
+from .battle_instance import BattleInstance, BattleRoundRecord, shift_deadlines, start_muster
 from .characters import name_key
 from .database import Database, open_database
 from .martial_arts import Insight, MartialArt
@@ -400,6 +400,20 @@ class SqliteWorldStore:
     def get_season_number(self) -> int:
         return self.read().season_number
 
+    def fingerprint_parts(self) -> tuple[SharedWorldState, int, int]:
+        """推送的看守（server.current_fingerprint）每幾秒讀一次用：同一個唯讀快照裡讀出（全服狀態，這一季最大的天下大事傳聞
+        流水號，這一季江湖史的則數）。全服狀態照 read()（含目前的決戰，賽季裡的傳聞與江湖史是空的）；傳聞與江湖史不讀回
+        每一列，讓資料庫數（MAX、COUNT）：一季的列數隨人數長大，整份讀回來五萬列要 244 毫秒（審查 m2）。
+        一個快照＝三樣是同一個時刻的：分開讀的話，中間有人寫（決戰收場、套結果）就會讀到一半舊一半新的狀態。"""
+        with self.db.snapshot() as conn:
+            state = self._load(conn)
+            number = state.season_number
+            rumor = conn.execute(
+                "SELECT MAX(id) FROM rumors WHERE season = ? AND layer = 'world'", (number,),
+            ).fetchone()[0]
+            chronicle = conn.execute("SELECT COUNT(*) FROM chronicle WHERE season = ?", (number,)).fetchone()[0]
+        return state, rumor or 0, chronicle
+
     def mutate_season(self, fn: Callable[[WorldState], None]) -> WorldState:
         return self.mutate(lambda state: fn(state.season)).season
 
@@ -427,6 +441,7 @@ class SqliteWorldStore:
             stamp_season(state.season, content)  # 種下之後設定可能換過（例如重開時才設 weekend）
             state.season_opened = True
             state.season_last_real = now
+            state.paused_at = None  # 新開的季時鐘是走著的：暫停不會漏進來
             result["ok"] = True
 
         self.mutate(_apply)
@@ -446,6 +461,7 @@ class SqliteWorldStore:
             state.season_number += 1
             state.season_opened = True
             state.season_last_real = now
+            state.paused_at = None  # 暫停不會漏進下一季
             state.companions = {}  # 跨季不滾雪球第二條：同伴全部重獲自由、等級武學歸零
             state.tianji += 1  # 第三條：天機 +1；武學命名、煉製配方、投靠名冊照季分開存，新的一季自然是空的
             state.active_battle = None  # 上一季沒打完（或打完沒清掉）的戰鬥不帶進新的一季
@@ -454,12 +470,15 @@ class SqliteWorldStore:
 
     def catch_up_season(self, content: Content, now: float, rng: random.Random) -> list[str]:
         """整段在同一筆交易裡：對時鐘與推進賽季一起成功或一起撤回。實際「推進 N 秒會發生什麼事」在
-        world.py::advance_season（world.py 會 import 這個模組的介面，只能在函式裡 import 它）。"""
+        world.py::advance_season（world.py 會 import 這個模組的介面，只能在函式裡 import 它）。
+        賽季時鐘暫停中（paused_at）什麼都不做：不推進、對時點也不動（繼續時一起往後挪，見 resume_clock）。"""
         from . import world as world_module
 
         result = {"elapsed": 0.0}
 
         def _apply(state: SharedWorldState) -> None:
+            if state.paused_at is not None:  # 賽季時鐘暫停中：不推、對時點也不動（繼續時一起往後挪，見 resume_clock）
+                return
             last = state.season_last_real
             state.season_last_real = now if last is None else max(last, now)
             if last is None or state.season_phase() != "running":
@@ -471,6 +490,47 @@ class SqliteWorldStore:
             if result["elapsed"] <= 0:
                 return []
             return world_module.advance_season(self, content, result["elapsed"], rng, now)
+
+    # ── 賽季時鐘暫停 ──────────────────────────────────────
+
+    def paused_at(self) -> float | None:
+        with self.db.snapshot() as conn:
+            row = conn.execute("SELECT json_extract(data, '$.paused_at') AS at FROM world WHERE id = 1").fetchone()
+        return None if row is None or row["at"] is None else float(row["at"])
+
+    def pause_clock(self, now: float) -> bool:
+        result = {"ok": False}
+
+        def _apply(state: SharedWorldState) -> None:
+            if state.paused_at is not None or state.season_phase() != "running":
+                return
+            state.paused_at = now
+            result["ok"] = True
+
+        self.mutate(_apply)
+        return result["ok"]
+
+    def resume_clock(self, content: Content, now: float) -> float | None:
+        from . import world as world_module  # world → world_state：在函式裡 import，同 catch_up_season
+
+        result: dict[str, float | None] = {"span": None}
+
+        def _apply(state: SharedWorldState) -> None:
+            if state.paused_at is None:
+                return
+            span = max(0.0, now - state.paused_at)
+            state.paused_at = None
+            if state.season_last_real is not None:
+                skipped = world_module.pause_skip(state.season, content, span)
+                state.season_last_real += skipped
+                season_now = state.season.time + max(0.0, now - state.season_last_real) * content.config.time_scale
+                world_module.keep_showdowns_on_time(state.season, content, skipped, season_now)
+            if state.active_battle is not None:
+                shift_deadlines(state.active_battle, span)
+            result["span"] = span
+
+        self.mutate(_apply)
+        return result["span"]
 
     # ── 投靠名冊 ──────────────────────────────────────────
 
@@ -620,7 +680,7 @@ def _insight_recipe(conn: Connection, season: int, key: str) -> Insight | None:
 def _season_firsts_lines(conn: Connection, season: int) -> list[str]:
     """這一季的首創，寫成江湖史（跨季保留，武學與成長設計 3.10）：合成首創、首悟意境、練成絕學。
     武學照現在顯示的名字（練成絕學改過名的寫新名）；沒有的那一類不寫。
-    人名寫登記當下記下的「寫給別人看的名號」（匿名行走的人是「某位少俠」，最終審查 Important 2）：
+    人名寫登記當下記下的「寫給別人看的名號」（現在一律是名號；這一版之前匿名行走的人記成「某位少俠」，照舊）：
     功法、意境的 creator_shown，武學的 master_shown；舊資料沒記的照資料表裡的名號。
     （舊季的煉製配方也在 recipes 表裡，照樣列在「合成首創」，不用分。）
     合到舊的會讓好幾個配方指向同一門（設計 12.2）：一門只列一次，寫首創的那一列。"""
@@ -629,6 +689,7 @@ def _season_firsts_lines(conn: Connection, season: int) -> list[str]:
         "SELECT json_extract(s.data, '$.name') AS name, "
         "COALESCE(json_extract(s.data, '$.creator_shown'), r.creator) AS creator, MIN(r.rowid) AS first FROM recipes r "
         "JOIN skills s ON s.season = r.season AND s.name = r.skill_name WHERE r.season = ? "
+        "AND COALESCE(json_extract(s.data, '$.preset'), 0) = 0 "  # 師門配方（新手引導）沒有首創者：不列、不算進件數
         "GROUP BY r.skill_name ORDER BY first",
         (season,),
     ).fetchall()

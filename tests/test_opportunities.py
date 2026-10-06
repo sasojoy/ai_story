@@ -62,12 +62,12 @@ def test_new_fields_survive_a_save_and_load():
 
 
 def test_real_opportunities_valid(real):
-    by_id = {o.id: o for o in real.opportunities}
+    by_id = {o.id: o for o in real.opportunities if o.rank == 3}  # 第 4 階的六種是乙二加的（test_opportunities_two）
     assert set(by_id) == {
         "guan_zhujun", "guan_courier", "guan_deserter", "huang_zhangliang", "huang_dawn", "huang_talisman",
         "hao_taoqian", "hao_aftermath", "hao_refugees",
     }
-    assert all(o.rank == 3 for o in real.opportunities)
+    assert all(o.kind in ("bond", "timing", "accumulate") for o in by_id.values())
     assert set(real.orders.rank2) == {"guan", "huang"}
     assert real.orders.rank2["guan"].name == "招降黃巾散兵"
 

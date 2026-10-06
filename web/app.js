@@ -90,6 +90,10 @@
     unseen: false,
     offline: false,
     moveMode: "walk",
+    prologueKey: "", // 上一次整頁重畫時序章亮起來的東西（見 prologueKey、renderTop）
+    recap: undefined, // 設定頁「重看序章」的文字：undefined＝還沒問過伺服器，""＝沒有序章；同一次載入只問一次（loadRecap）
+    recapOpen: false,
+    pushLive: false, // 伺服器推送連著嗎（見「伺服器推送」那一段）：連著時平常 60 秒才輪詢，沒連就每 10 秒
   };
 
   const $app = document.getElementById("app");
@@ -98,6 +102,13 @@
   // ── 工具 ──
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const pct = (a, b) => (b > 0 ? Math.max(0, Math.min(100, (a / b) * 100)) : 0);
+
+  // 序章（新手引導計畫一）：伺服器送 m.prologue = {reveal, glow, skip}；不在序章是 null，畫面照平常畫。
+  // shown(key)：這個元件亮了沒（reveal 有它、或 "all" 全亮）。glow 列的鈕加 .glow，新亮起來的加 .lit（見 applyGlow）。
+  // prologueKey：亮起來的東西變了沒——變了就整頁重畫（分頁列、狀態列只在整頁重畫時才換，見 renderTop）
+  const pro = () => (S.main && S.main.prologue) || null;
+  const shown = (key) => { const p = pro(); return !p || p.reveal.includes("all") || p.reveal.includes(key); };
+  const prologueKey = () => { const p = pro(); return p ? p.reveal.join(",") : ""; };
   // 本季天數：整數不帶小數點（14.0 → 14），不是整數照原樣（14.5）
   const dayCount = (n) => String(Number(n));
   // 第一季的季曆（計畫 T2）：狀態列寫「第 3 週・週二 21:40」，旁邊是下一件大事的倒數（現實時間）。
@@ -180,8 +191,11 @@
     if (data.stage === "game") {
       S.stage = "game";
       setMain(data.main);
+      closeEvents(); // 重新連：現在這個登入的連線（上一個帳號的、登入失效前的，不能留著）
+      connectEvents(); // main.push 是 true 才真的連（預設關：不開 EventSource）
     } else {
       S.stage = data.stage === "create" ? "create" : "gate";
+      closeEvents();
     }
     render();
   }
@@ -198,6 +212,7 @@
     const changed = key !== S.mainKey;
     S.main = main;
     S.mainKey = key;
+    lastPoll = Date.now(); // 剛拿到一份新的畫面（輪詢的、動作回來的都走這裡）：連著推送時，下一次慢速輪詢從這一刻起算
     return changed;
   }
 
@@ -214,26 +229,46 @@
     if (S.stage === "gate") return renderGate();
     if (S.stage === "create") return renderCreate();
     if (S.stage !== "game") return;
+    if (S.tab !== "jianghu" && !shown(`tab:${S.tab}`)) S.tab = "jianghu"; // 序章重來（換季）：藏起來的分頁不能還停在那一頁
+    S.prologueKey = prologueKey();
+    const top = topHtml();
     $app.innerHTML = `
       <div class="shell">
-        <header class="top" id="top">${topHtml()}</header>
+        <header class="top" id="top"${top ? "" : " hidden"}>${top}</header>
         <main class="page" id="page"></main>
       </div>
-      <nav class="tabs"><div class="tabs-inner">${TABS.map((t) => `
-        <button class="tab ${S.tab === t.id ? "on" : ""}" data-act="tab" data-tab="${t.id}">
-          <span class="ico">${t.ico}</span>${t.name}${t.id === "news" && S.unseen && S.tab !== "news" ? '<i class="dot"></i>' : ""}
-        </button>`).join("")}</div></nav>
+      ${tabsHtml()}
       ${S.sheet ? sheetHtml() : ""}`;
     renderPage();
   }
 
+  // 底部分頁列：序章裡只畫亮起來的分頁（格數跟著變，不是固定五格），一個都沒有就整列不畫。data-glow 給序章指路（applyGlow）
+  function tabsHtml() {
+    const list = TABS.filter((t) => shown(`tab:${t.id}`));
+    if (!list.length) return "";
+    return `<nav class="tabs"><div class="tabs-inner" style="grid-template-columns:repeat(${list.length}, 1fr)">${list.map((t) => `
+        <button class="tab ${S.tab === t.id ? "on" : ""}" data-act="tab" data-tab="${t.id}" data-glow="tab:${t.id}">
+          <span class="ico">${t.ico}</span>${t.name}${t.id === "news" && S.unseen && S.tab !== "news" ? '<i class="dot"></i>' : ""}
+        </button>`).join("")}</div></nav>`;
+  }
+
   function renderTop() {
+    if (S.prologueKey !== prologueKey()) { render(); return; } // 序章亮起了新的東西：分頁列與狀態列要一起換（render 會畫好發光）
     const el = document.getElementById("top");
-    if (el) el.innerHTML = topHtml();
+    if (!el) return;
+    const html = topHtml();
+    el.innerHTML = html;
+    el.hidden = !html;
+    applyGlow();
   }
 
   function topHtml() {
     const s = S.main.status;
+    // 序章（新手引導計畫一）：狀態列的五樣（體力、氣血、銀兩、心得、點名號展開的屬性）一樣都還沒亮，整條不畫（#top 跟著 hidden）；
+    // 有一樣亮了，名號那一行照畫，底下各個數字各看自己的鍵。序章裡所在只寫地名：日期、下一件、心得提示都是真實世界的事
+    if (!["stamina", "hp", "silver", "xinde", "stats"].some(shown)) return "";
+    const inPro = !!pro();
+    if (!shown("stats")) S.showMore = false; // 屬性沒亮就點不開（序章重來、換季時也不會停在展開的樣子）
     const team = s.team.map((m) => `🧍 ${esc(m.name)} 第${m.level}級 氣血 ${m.hp}/${m.hp_max}`).join("　");
     // 名號、所在底下的小字行（下一件、閉關、路程）：排在整列底下、整個寬度都能用，不跟右上角的設定鈕擠一邊。
     // 兩種時間的寫法固定（FB-062）：下一件是「季曆時刻（現實倒數）」，路程只寫現實倒數。這兩行比原本長，擠在一邊會折成四行，
@@ -243,34 +278,40 @@
       s.busy_hours != null ? `🧘 閉關中，現實約 ${s.busy_hours} 小時後出關` : "",
       s.journey != null ? `🐎 ${esc(s.journey)}` : "",
     ].filter(Boolean).map((t) => `<div class="where sub">${t}</div>`).join("");
+    const where = inPro ? `📍 ${esc(s.location)}` : `📍 ${esc(s.location)}　${s.calendar
+      ? esc(s.calendar.text)
+      : `第 ${s.day} 天 ${esc(s.clock)}<small>／共 ${dayCount(s.season_days)} 天</small>`}${s.resting != null ? "　🧘 打坐中" : ""}`;
+    const vitals = [
+      shown("stamina") ? `<div class="bar stam" title="體力" data-glow="stamina"><i style="width:${pct(s.stamina, s.stamina_max)}%"></i><span>體力 ${s.stamina}/${s.stamina_max}</span></div>` : "",
+      shown("hp") ? `<div class="bar hp" title="氣血" data-glow="hp"><i style="width:${pct(s.hp, s.hp_max)}%"></i>${s.injury >= 1
+        // 內傷（FB-049）：斜紋是上限裡被內傷佔掉、回不來的那一截（寬＝內傷÷上限，回滿時紅條剛好接到它）；
+        // 「傷 N」靠右另寫在斜紋那一頭，不再接在「氣血 N/M」後面跨過紅條的交界
+        ? `<b style="width:${pct(s.injury, s.hp_max)}%"></b>` : ""}<span>氣血 ${s.hp}/${s.hp_max}</span>${s.injury >= 1
+        ? `<span class="inj">傷 ${s.injury}</span>` : ""}</div>` : "",
+      shown("silver") ? `<div class="num" data-glow="silver"><em>銀</em>${s.silver}</div>` : "",
+      shown("xinde") ? `<div class="num" data-glow="xinde"><em>心得</em>${s.xinde}</div>` : "",
+    ].join("");
+    // 點名號展開屬性：序章裡「屬性」那一步才點得開（data-glow="stats" 指路）；沒亮就不是按鈕
+    const who = shown("stats")
+      ? `<div class="who" data-act="toggle-more" role="button" tabindex="0" aria-expanded="${S.showMore}" data-glow="stats">`
+      : '<div class="who static">';
     return `
       <div class="top-row">
-        <div class="who" data-act="toggle-more" role="button" tabindex="0" aria-expanded="${S.showMore}">
+        ${who}
           ${whoNameHtml(s)}
-          <div class="where">📍 ${esc(s.location)}　${s.calendar
-            ? esc(s.calendar.text)
-            : `第 ${s.day} 天 ${esc(s.clock)}<small>／共 ${dayCount(s.season_days)} 天</small>`}${s.resting != null ? "　🧘 打坐中" : ""}</div>
+          <div class="where">${where}</div>
         </div>
         <button class="icon-btn" data-act="sheet" aria-label="設定">⚙</button>
       </div>
-      ${subs}
-      <div class="vitals">
-        <div class="bar stam" title="體力"><i style="width:${pct(s.stamina, s.stamina_max)}%"></i><span>體力 ${s.stamina}/${s.stamina_max}</span></div>
-        <div class="bar hp" title="氣血"><i style="width:${pct(s.hp, s.hp_max)}%"></i>${s.injury >= 1
-          // 內傷（FB-049）：斜紋是上限裡被內傷佔掉、回不來的那一截（寬＝內傷÷上限，回滿時紅條剛好接到它）；
-          // 「傷 N」靠右另寫在斜紋那一頭，不再接在「氣血 N/M」後面跨過紅條的交界
-          ? `<b style="width:${pct(s.injury, s.hp_max)}%"></b>` : ""}<span>氣血 ${s.hp}/${s.hp_max}</span>${s.injury >= 1
-          ? `<span class="inj">傷 ${s.injury}</span>` : ""}</div>
-        <div class="num"><em>銀</em>${s.silver}</div>
-        <div class="num"><em>心得</em>${s.xinde}</div>
-      </div>
+      ${inPro ? "" : subs}
+      ${vitals ? `<div class="vitals">${vitals}</div>` : ""}
       ${S.showMore ? `<div class="more-stats">
         ${s.minor.map(([k, v]) => `${esc(k)} ${v}`).join("　")}　｜　${s.attrs.map(([k, v]) => `${esc(k)} ${v}`).join("　")}
-        ${s.stat_points ? `<div class="pts-label"><b class="pts">可配 ${s.stat_points} 點</b></div><div class="row alloc">${s.attrs.map(([k, v, key]) => `<button class="btn small" data-act="allocate" data-stat="${esc(key)}" ${v >= s.stat_cap ? "disabled" : ""}>＋${esc(k)}</button>`).join("")}</div>${statUsesHtml(s)}` : ""}
+        ${s.stat_points ? `<div class="pts-label"><b class="pts">可配 ${s.stat_points} 點</b></div><div class="row alloc">${s.attrs.map(([k, v, key]) => `<button class="btn small" data-act="allocate" data-stat="${esc(key)}" data-glow="allocate" ${v >= s.stat_cap ? "disabled" : ""}>＋${esc(k)}</button>`).join("")}</div>${statUsesHtml(s)}` : ""}
         ${team ? `<br>${team}` : ""}
-        ${s.stances ? stancesHtml(s.stances, s.stance_notes) : ""}
+        ${s.stances && shown("stances") ? stancesHtml(s.stances, s.stance_notes) : ""}
       </div>` : ""}
-      ${hintHtml(s)}`;
+      ${inPro ? "" : hintHtml(s)}`;
   }
 
   // 狀態列的名號那一塊（FB-071）。收起來是一行：名號、頭銜（小字，放不下加「…」）、可配 N 點、▾——「可配」放在會省略的 <span>
@@ -309,6 +350,26 @@
     const fn = { jianghu: pageJianghu, practice: pagePractice, craft: pageCraft, map: pageMap, news: pageNews }[S.tab];
     page.innerHTML = fn();
     afterPage();
+    applyGlow();
+  }
+
+  // 序章的發光與閃一閃（新手引導計畫一）：m.prologue.glow 列的鍵，對到的鈕加 .glow（按得下去的才加，灰的不發光）；這一步新亮起來的
+  // 元件（reveal 比上一次畫的多出來的）加 .lit 閃一下，一秒內重畫也還在。data-glow 寫的是鍵，可以寫好幾個（空白隔開，例：收著的
+  // 武學列「改練 修練 熔煉」）。不在序章什麼都不加。每次畫完頁面、狀態列都呼叫，前一次的先清掉
+  let litBefore = null, litKeys = [], litTimer = 0;
+  function applyGlow() {
+    document.querySelectorAll(".glow, .lit").forEach((el) => el.classList.remove("glow", "lit"));
+    const p = pro();
+    if (!p) { litBefore = null; litKeys = []; return; }
+    const fresh = litBefore ? p.reveal.filter((k) => !litBefore.includes(k)) : [];
+    litBefore = p.reveal.slice();
+    if (fresh.length) {
+      litKeys = fresh;
+      clearTimeout(litTimer);
+      litTimer = setTimeout(() => { litKeys = []; }, 1000);
+    }
+    p.glow.forEach((key) => document.querySelectorAll(`[data-glow~="${key}"]:not([disabled])`).forEach((el) => el.classList.add("glow")));
+    litKeys.forEach((key) => document.querySelectorAll(`[data-glow~="${key}"]`).forEach((el) => el.classList.add("lit")));
   }
 
   // 戰鬥卡片底下伏筆聽來的那一句（FB-074）：常有兩三行高、多撐 46～66px，新角色前七場遊歷有三場看到。
@@ -392,14 +453,37 @@
   // 「看完整戰報 ›」放在「過程」那一行的中間（PM 2026-10-05，戰鬥卡片壓縮第二輪）：那一行中間本來就是空的，不再接在「結果／得失」
   // 句尾多撐一行。點擊範圍上下各多 8px、不撐高那一行（style.css 的 .rounds-head .report-link）
   const reportLink = (id) => `<button class="linkish report-link" data-act="report" data-id="${id}">看完整戰報 ›</button>`;
+  // 功效的演出句（計畫六 Task 4，引擎的 battlelog.trait_line）一律以「〔功效名〕」開頭：收著的卡片先把它們藏起來，第一回合照舊帶頭
+  // （Task 4 審查 I-1：不然功效句頂掉第一回合的數字行，多佔一行、也藏了第一回合的數字）；展開之後照引擎寫的順序全部列出，戰報頁不經過這裡。
+  // 認的是行首的〔（引擎擁有這段文字，tests/test_server.py 擋住兩邊對不上）；整段都是功效句（沒有回合）時不藏，免得收著的過程是空的
+  const TRAIT_LEAD = "〔";
+  function foldTraitItems(rest) {
+    const end = rest.indexOf("</ul>");
+    const list = end < 0 ? rest : rest.slice(0, end);
+    const items = list.match(/<li>[\s\S]*?<\/li>/g) || [];
+    if (!items.some((li) => !li.startsWith(`<li>${TRAIT_LEAD}`))) return rest;
+    return list.split(`<li>${TRAIT_LEAD}`).join(`<li class="trait">${TRAIT_LEAD}`) + (end < 0 ? "" : rest.slice(end));
+  }
+  // 大場面的一段話：每一行以 <br /> 分開，功效句連同它後面的換行包進 <span class="trait">（收著時整個藏起來，兩行的截斷就看到模型的話）
+  function foldTraitText(rest) {
+    const end = rest.indexOf("</p>");
+    const lines = (end < 0 ? rest : rest.slice(0, end)).split("<br />\n");
+    if (lines.every((line) => line.startsWith(TRAIT_LEAD))) return rest;
+    const last = lines.length - 1;
+    const marked = lines.map((line, i) => {
+      const text = i < last ? `${line}<br />\n` : line;
+      return line.startsWith(TRAIT_LEAD) ? `<span class="trait">${text}</span>` : text;
+    });
+    return marked.join("") + (end < 0 ? "" : rest.slice(end));
+  }
   function roundsFold(card, id) {
     const open = S.roundsOpen === id;
     const more = `<button class="linkish rounds-more" data-act="rounds-more" aria-expanded="${open}">${roundsMore(open)}</button>`;
     const head = `<p class="rounds-head"><strong>過程</strong>${id == null ? "" : reportLink(id)}${more}</p>\n`;
     let at = card.indexOf(ROUNDS_MARK);
-    if (at >= 0) return card.slice(0, at) + head + `<ul class="rounds${open ? " open" : ""}">` + card.slice(at + ROUNDS_MARK.length);
+    if (at >= 0) return card.slice(0, at) + head + `<ul class="rounds${open ? " open" : ""}">` + foldTraitItems(card.slice(at + ROUNDS_MARK.length));
     at = card.indexOf(TALE_MARK);
-    if (at >= 0) return card.slice(0, at) + head + `<p class="rounds-tale${open ? " open" : ""}">` + card.slice(at + TALE_MARK.length);
+    if (at >= 0) return card.slice(0, at) + head + `<p class="rounds-tale${open ? " open" : ""}">` + foldTraitText(card.slice(at + TALE_MARK.length));
     return card;
   }
 
@@ -436,7 +520,7 @@
   // 每次都先拿掉 .tight 再量，轉向、拉視窗之後重量也一樣
   function fitFirstRound() {
     const list = document.querySelector(".battle-card ul.rounds");
-    const first = list && list.firstElementChild;
+    const first = list && list.querySelector(":scope > li:not(.trait)"); // 收著時露出的那一個：功效句藏起來，第一回合帶頭（foldTraitItems）
     if (!first) return;
     list.classList.remove("tight");
     let full = first.querySelector(":scope > .r-full");
@@ -511,6 +595,10 @@
   // ── 江湖頁的行動列（企劃者 2026-10-04：輪盤太大，改成一排五顆，樣式是她給的「水墨氣勁」）──
   // 選項標籤「探索（體力 5・…）」拆成名字與括號裡的說明
   const optParts = (o) => { const m = /^(.*?)（(.*)）$/.exec(o.label); return m ? [m[1], m[2]] : [o.label, ""]; };
+  // 決戰三招的按鈕（決戰改版一）：引擎給「選項名（強攻・82 分）」，招與分數拆到按鈕右邊的小字、名字佔剩下的寬度——
+  // 375px 上一顆按鈕的字只有約 285px，括號整句接在名字後面的話，十一、十二個字的名字會把一顆按鈕折成兩行（多 20px）
+  const BATTLE_MOVE_LABEL = /^(.*)（((?:強攻|固守|奇襲)・\d+ 分)）$/;
+  const optLabelHtml = (o) => { const m = o.id.startsWith("battle:act:") ? BATTLE_MOVE_LABEL.exec(o.label) : null; return m ? `<span class="b-name">${esc(m[1])}</span><span class="b-move">${esc(m[2])}</span>` : `<span>${esc(o.label)}</span>`; };
   // 前四顆對到選單上哪一顆、沒有時寫什麼；第五顆是移動（點了在下面展開走法與目的地）
   const ACT_CELLS = [
     { key: "explore", ids: ["act:explore"], name: "探索", none: "不能探索", icon: '<circle cx="12" cy="12" r="9"/><path d="M12 3v3m0 12v3M3 12h3m12 0h3M15 9l-4 2-2 4 4-2z"/>' },
@@ -523,8 +611,9 @@
   // 勝算的顏色（FB-044）：遊歷的小字第二行照風險上色
   const ODDS_TONE = { "穩勝": "good", "有把握": "good", "零風險": "good", "五五波": "even", "難分勝負": "even", "凶險": "bad", "必敗": "bad" };
   // 選單上有「打坐」就是平常閒著的時候：用行動列。事件、對話、路上、決戰的選項每次都不一樣，照舊排成一列按鈕
-  const idleMenu = (m) => m.options.some((o) => o.id === "act:rest");
-  const inkCell = (key, name, sub, icon, attrs, cls, note = "") => `<button class="act-ink${cls}" data-key="${key}" ${attrs}>
+  // 序章裡閒著時選單只留這一步要的（打坐常常不在）：沒有事件的選項、不在路上，也當閒著的行動列來畫，沒亮的格子不畫（F12）
+  const idleMenu = (m) => m.options.some((o) => o.id === "act:rest") || (!!m.prologue && !m.on_road && !m.options.some((o) => o.id.startsWith("choice:")));
+  const inkCell = (key, name, sub, icon, attrs, cls, note = "") => `<button class="act-ink${cls}" data-key="${key}" data-glow="act:${key}" ${attrs}>
       <svg class="ink-icon" viewBox="0 0 24 24" aria-hidden="true">${icon}</svg><b>${esc(name)}</b><small>${esc(sub)}</small>${
       note ? `<small class="ink-note ${ODDS_TONE[note] || ""}">${esc(note)}</small>` : ""}</button>`;
 
@@ -535,10 +624,13 @@
     // （只會花體力換同一句打發，Game._brush_off），選單上只剩直接列的「求見某某」（設計 9.1）：社交那一格改放它。
     // 交友或求見名單（兩位以上）在選單上時照舊，這顆收在摺疊裡
     const loneCall = m.options.find((o) => o.id.startsWith("call:") && o.id !== "call:back");
+    // 序章（新手引導計畫一）：還沒亮的格子不畫（act:explore、act:train、act:rest、act:social、act:move）；
+    // 不畫的格子對到的選項照樣記成用過，不會掉進「此地還能做」那個摺疊裡
     const cells = ACT_CELLS.map((d) => {
       const o = d.ids.map((id) => byId[id]).find(Boolean) || (d.key === "social" ? loneCall : undefined);
+      if (o) used.add(o.id);
+      if (!shown(`act:${d.key}`)) return "";
       if (!o) return inkCell(d.key, d.name, d.none, d.icon, "disabled", " off");
-      used.add(o.id);
       const lone = o.id.startsWith("call:");
       const [label, detail] = optParts(o);
       const name = lone ? "求見" : label;  // 格子窄：名字寫「求見」，人物的名字放在下面一行
@@ -555,9 +647,11 @@
     const moves = m.options.filter((o) => followsMode(o.id));
     moves.forEach((o) => used.add(o.id));
     const open = S.wheelSel === "move";
-    cells.push(inkCell("move", "移動", moves.length ? `${moves.length} 條路` : "沒有路", MOVE_ICON,
-      moves.length ? `data-act="wheel" data-key="move" aria-expanded="${open}"` : "disabled", (open ? " on" : "") + (moves.length ? "" : " off")));
-    const moveCard = !open ? "" : `<div class="card act-move"><div class="seg move-mode" role="group" aria-label="走法">${MOVE_MODES.map((x) => `
+    if (shown("act:move")) {
+      cells.push(inkCell("move", "移動", moves.length ? `${moves.length} 條路` : "沒有路", MOVE_ICON,
+        moves.length ? `data-act="wheel" data-key="move" aria-expanded="${open}"` : "disabled", (open ? " on" : "") + (moves.length ? "" : " off")));
+    }
+    const moveCard = !open || !shown("act:move") ? "" : `<div class="card act-move"><div class="seg move-mode" role="group" aria-label="走法">${MOVE_MODES.map((x) => `
           <button class="${S.moveMode === x.id ? "on" : ""}" data-act="move-mode" data-mode="${x.id}" aria-pressed="${S.moveMode === x.id}">${x.name}</button>`).join("")}</div>
         <div class="options">${moves.map((o) => `<button class="btn go" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}>
           <span class="k">→</span><span>${esc(o.label)}</span></button>`).join("")}</div></div>`;
@@ -565,7 +659,8 @@
     const extras = m.options.filter((o) => !used.has(o.id));
     const here = extras.length ? `<details class="fold here"><summary>此地還能做 ${extras.length} 件事</summary><div class="fold-body options">${extras.map((o) => `
         <button class="btn" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}><span>${esc(o.label)}</span></button>`).join("")}</div></details>` : "";
-    return `<div class="act-bar" role="group" aria-label="行動">${cells.join("")}</div>${moveCard}${here}`;
+    const drawn = cells.filter(Boolean); // 序章裡沒亮的格子是空字串；一格都沒有、也沒有「此地還能做」時整條不畫
+    return `${drawn.length ? `<div class="act-bar" role="group" aria-label="行動">${drawn.join("")}</div>` : ""}${moveCard}${here}`;
   }
 
   // 展開移動之後，把走法與目的地那張卡捲到剛好露出來（W18 的作法搬過來：狀態列有心得提示時整頁往下推，
@@ -605,8 +700,8 @@
   // 點哪一個，它的內容就在這一排正下面攤開；同一時間只開一個，再點一次收起，點別的就換過去。內容跟以前摺疊卡裡的一樣
   // （態勢：三條、收季規則、怎麼算的；大事：本週的公告，標題與內文都在面板裡；主線：主線與目標）。
   // 每個小標都可以沒有：沒有態勢（開關關著，或休季由結算卡取代）、沒有大事、主線是空的就不畫那一個，三個都沒有整排不畫。
-  // 計畫 guide-1（還沒併進來）之後會在序章把大事與主線一個一個藏起來（shown("board")／shown("quest")）：
-  // peekParts 回傳的清單裡把那一塊換成 null 就行，peekHtml 會略過 null，其他不用動。
+  // 序章（新手引導計畫一）把三塊一個一個藏起來（shown("stances")／shown("board")／shown("quest")，態勢跟大事一起亮）：
+  // peekParts 回傳的清單裡把那一塊換成 null，peekHtml 會略過 null，三塊都藏著整排不畫。
   // 展開哪一個記在 S.peekOpen（{ id, week }，帶著週次：換週就收回；輪詢重畫整頁也不會把開著的關掉）。
   // 「大事」小標上有一個點：這一週有還沒打開看過的大事。看過的記在 S.boardSeen（名號、季、週次、則數），另存一份在 localStorage
   // 當這個瀏覽器的方便（讀寫都包 try/catch，存不了就只記在這一頁）；換週沒有人看過，點又亮起來。週次每一季都從 1 起，
@@ -673,7 +768,7 @@
     return m.quest && m.quest.trim() ? { id: "quest", label: "主線與目標", chip: '<span class="peek-name">主線</span>', panel: m.quest } : null;
   }
 
-  const peekParts = (m) => [stancePeek(m), boardPeek(m, peekWeek(m)), questPeek(m)];
+  const peekParts = (m) => [shown("stances") ? stancePeek(m) : null, shown("board") ? boardPeek(m, peekWeek(m)) : null, shown("quest") ? questPeek(m) : null];
 
   function peekHtml(parts, week) {
     const list = parts.filter(Boolean);
@@ -753,7 +848,9 @@
     if (!onRoad) S.guideRoad = null; // 沒有框的時候也要清（FB-055）
     if (!g) return "";
     if (!g.end && (guideShut() === g.text || (onRoad && S.guideRoad !== g.text))) {
-      return `<button class="guide-line" data-act="guide-open" aria-label="展開${esc(g.speaker)}的話"><b>${esc(g.speaker)}</b>：${esc(g.text)}</button>`;
+      // 收起來那一行：序章的步驟自己寫了短的一行（g.line，例：「師父：回『江湖』按『探索』」）就用它，不然是這一句話；
+      // 記著收起的仍是 g.text（guideShut），換了下一句自己展開
+      return `<button class="guide-line" data-act="guide-open" aria-label="展開${esc(g.speaker)}的話"><b>${esc(g.speaker)}</b>：${esc(g.line || g.text)}</button>`;
     }
     const done = g.done.length ? `<div class="guide-done">${g.done.map((d) => d.startsWith("✔")
       ? '<span class="ok">✔ 完成</span>' : `<span class="reward">${esc(d)}</span>`).join("")}</div>` : "";
@@ -761,7 +858,8 @@
       : '<button class="linkish" data-act="guide-shut">收起</button>';
     // 長的那幾步（軍令兩步一百多字）先露三行、點了看全文，不把行動與選項擠出第一屏（畫面批次審查 I3）
     const full = S.guideFull === g.text;
-    return `<section class="card guide" aria-label="${esc(g.speaker)}的話"><div class="guide-head"><b>${esc(g.speaker)}</b>${btn}</div>${done}<p class="guide-text${full ? "" : " clamp"}" data-act="guide-more" role="button" tabindex="0" aria-expanded="${full}">${esc(g.text)}</p></section>`;
+    const scene = g.scene ? `<p class="guide-scene">${esc(g.scene)}</p>` : ""; // 序章的旁白（「斷眉來了……」）排在話的前面
+    return `<section class="card guide" aria-label="${esc(g.speaker)}的話"><div class="guide-head"><b>${esc(g.speaker)}</b>${btn}</div>${done}${scene}<p class="guide-text${full ? "" : " clamp"}" data-act="guide-more" role="button" tabindex="0" aria-expanded="${full}">${esc(g.text)}</p></section>`;
   }
 
   function pageJianghu() {
@@ -821,7 +919,7 @@
     const menu = idleMenu(m) ? actionBar(m) : `<div class="options">${opts.map((o, i) => o.id === FREE_TEXT_OPTION && S.answering && o.enabled ? `
         <form class="free answer" id="answer-form"><input class="input" name="text" maxlength="20" placeholder="${esc(o.label)}（20字內）" aria-label="${esc(o.label)}"><button class="btn primary small" type="submit">說出口</button></form>` : isTask(o) ? `${i === firstTask ? '<div class="road-tasks">' : ""}${taskButton(o)}${i === lastTask ? "</div>" : ""}` : paired && isWay(o) ? `${i === firstWay ? '<div class="road-tasks road-ways">' : ""}${wayButton(o)}${i === lastWay ? "</div>" : ""}` : `${i === firstMove && !modesLast ? modes : ""}
         <button class="btn ${followsMode(o.id) ? "go" : ""}" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}>
-          <span class="k">${o.id.startsWith("move:") ? "→" : o.id.startsWith("road:back") ? "↩" : i + 1}</span><span>${esc(o.label)}</span>
+          <span class="k">${o.id.startsWith("move:") ? "→" : o.id.startsWith("road:back") ? "↩" : i + 1}</span>${optLabelHtml(o)}
         </button>`).join("")}${modesLast ? modes : ""}
       </div>`;
     // 在路上，那段固定的說明只露兩行、點了看全文（FB-055）：剛按完路上小事時「剛剛」的結果卡會長高，狀態列又有提示的話，
@@ -830,17 +928,20 @@
     const scene = m.on_road
       ? `<section class="card scene road${S.sceneOpen ? "" : " clamp"}" data-act="scene-more" role="button" tabindex="0" aria-expanded="${!!S.sceneOpen}">${m.scene}</section>`
       : `<section class="card scene">${m.scene}</section>`;
-    const tail = `<div class="mini" data-act="tab" data-tab="map" role="button" aria-label="展開輿圖">${m.minimap}</div>
-      <button class="linkish" data-act="news" data-news="journal">看江湖紀錄 ›</button>`;
+    // 序章：小地圖與江湖紀錄的連結要等「輿圖、見聞」亮了才畫（shown("minimap")）
+    const tail = shown("minimap") ? `<div class="mini" data-act="tab" data-tab="map" role="button" aria-label="展開輿圖">${m.minimap}</div>
+      <button class="linkish" data-act="news" data-news="journal">看江湖紀錄 ›</button>` : "";
     // 態勢｜大事｜主線 收成一排小標（正式版辛）：排在最上面、「剛剛」之前，不管是哪一種選單；在路上才排到選項底下（FB-055）。
     // 三張摺疊卡疊起來有 170px，打完一仗整排行動就被擠出第一屏；一排只有 44px。公告的展開、已看過都是小標自己記（見 peekHtml）
     const week = peekWeek(m);
     const peek = peekBlock(m);
     // 三條戰況排在行動列下面、小地圖上面，不擠掉第一屏的「剛剛」、場景與行動列
-    const fronts = m.fronts ? frontsHtml(m.fronts, m.status && m.status.chaos_band) : "";
+    const fronts = m.fronts && shown("fronts") ? frontsHtml(m.fronts, m.status && m.status.chaos_band) : "";
     const resultCard = m.season_result ? resultHtml(m.season_result) : "";  // 休季的結算卡排在最上面（計畫 T9）
     // 本週軍令排在行動列（與路上捷徑）下面、三條戰況上面：不擠掉第一屏的「剛剛」、場景與行動列（計畫 T6）
-    const orderCard = m.orders || m.convoy ? ordersHtml(m.orders || [], week, m.convoy) : "";
+    const orderCard = (m.orders || m.convoy) && shown("orders") ? ordersHtml(m.orders || [], week, m.convoy) : "";
+    // 序章第一步（還沒遇到師父）：選項底下一行「略過序章」，不想走序章的人直接站到起點（設計 7.3）
+    const skip = pro() && pro().skip ? '<button class="linkish skip-prologue" data-act="do" data-op="skip_tutorial">略過序章</button>' : "";
     // 劇情文字在上、行動在下（企劃者 2026-10-04）。行動列只有一排，375×812 上「剛剛」、場景與整排行動都在第一屏。
     // 路上的三個捷徑（links）緊接在場景（「也可以打開輿圖改去別處，或去修練、煉製」那一段）底下、選項上面：
     // 排在路上的五六顆選項底下時落在第一屏外，要捲才看得到（FB-048）。說書人的話緊貼在行動上方（引導重做設計 8.1）
@@ -848,8 +949,11 @@
     // 在路上（FB-055）：路上的五個選項要全在第一屏（375×812），所以那一排小標與說書人的框都排在選項底下——
     // 不是這一刻要按的；捷徑還是緊接在場景底下（FB-048）
     if (m.on_road) return `${resultCard}${now}${scene}${links}${free}${menu}${guide}${peek}${orderCard}${fronts}${tail}`;
-    return `${resultCard}${peek}${now}${scene}${links}${guide}${free}${menu}${orderCard}${fronts}${tail}`;
+    return `${resultCard}${peek}${now}${scene}${links}${guide}${free}${menu}${skip}${orderCard}${fronts}${tail}`;
   }
+
+  // 序章裡師父的話也放在修練頁、煉製頁最上面（序章的第 4～6、9、10 步在這兩頁做，不用切回江湖頁看要做什麼）；序章外不畫
+  const proGuide = () => (pro() ? guideHtml(S.main.guide, false) : "");
 
   // ── 修練 ──
   function pagePractice() {
@@ -862,7 +966,8 @@
     const wornCard = (c) => { const a = x.owned_arts.find((r) => r.worn && r.kind === c.kind); return a ? a.card : c.card; };
     // 目前這一門有沒有功法、練滿了沒（伺服器照 team.MAX_LEVEL 說）：沒有或練滿就不能練成（C5）
     const cur = x.slot_cards.find((c) => c.kind === S.kind) || { learned: false, level: 0, maxed: false, price: null };
-    const train = !cur.learned ? `還沒有${esc(S.kind)}` : cur.maxed ? "已練到第十成" : "";
+    // 序章裡沒叫你練功的步驟，鈕灰掉、寫師父的話（blocked 是伺服器照 Game.practice 同一個判斷給的）
+    const train = cur.blocked ? esc(cur.blocked) : !cur.learned ? `還沒有${esc(S.kind)}` : cur.maxed ? "已練到第十成" : "";
     // 名冊只有本人一列（還沒有同伴）時跟上面的本人卡重複，不畫（C6）
     const mates = x.roster.length > 1;
     // 第一個練成絕學的人：替它取正式的名字（武學與成長設計 3.6）。名字是玩家打的，伺服器會驗；表單的字跳脫
@@ -874,14 +979,16 @@
     // 勾了機率那一行換成伺服器算好的句子（legend.note），不另外問伺服器
     const artRow = (a) => {
       const lg = a.cultivate.legend, ticked = !!(lg && S.legendTick[a.id]);
+      // 序章指路：收著的這一列發光，要按的是它裡面的改練、修練、熔煉（要先點開它）——發光的只有「這一列真的按得下去」的那幾個
+      const todo = [!a.worn ? "switch" : "", a.cultivate.ok ? "cultivate" : "", a.melt.ok ? "melt" : ""].filter(Boolean).join(" ");
       return `
-        <button class="art ${S.artOpen === a.id ? "on" : ""}" data-act="art" data-id="${esc(a.id)}">${a.worn ? "◆ " : ""}${esc(a.kind)}　${esc(a.name)}（${esc(a.quality)}・屬${esc(a.attribute)}）第${a.level}成${a.insight ? `・意境「${esc(a.insight)}」` : ""}</button>
+        <button class="art ${S.artOpen === a.id ? "on" : ""}" data-act="art" data-id="${esc(a.id)}"${todo && S.artOpen !== a.id ? ` data-glow="${todo}"` : ""}>${a.worn ? "◆ " : ""}${esc(a.kind)}　${esc(a.name)}（${esc(a.quality)}・屬${esc(a.attribute)}）第${a.level}成${a.insight ? `・意境「${esc(a.insight)}」` : ""}</button>
         ${S.artOpen === a.id ? `<div class="art-body">${a.card}
           ${lg ? `<label class="legend"><input type="checkbox" data-legend="${esc(a.id)}" ${ticked ? "checked" : ""}><span>${esc(lg.label)}</span></label>` : ""}
           <div class="row art-actions">
-            <button class="btn ${a.cultivate.ok ? "primary" : ""}" data-act="cultivate" data-id="${esc(a.id)}" ${a.cultivate.ok ? "" : "disabled"}>修練</button>
-            ${a.worn ? "" : `<button class="btn" data-act="switch" data-id="${esc(a.id)}">改練這一門</button>`}
-            <button class="btn" data-act="melt" data-id="${esc(a.id)}" data-name="${esc(a.name)}" ${a.melt.ok ? "" : "disabled"}>熔煉</button>
+            <button class="btn ${a.cultivate.ok ? "primary" : ""}" data-act="cultivate" data-glow="cultivate" data-id="${esc(a.id)}" ${a.cultivate.ok ? "" : "disabled"}>修練</button>
+            ${a.worn ? "" : `<button class="btn" data-act="switch" data-glow="switch" data-id="${esc(a.id)}">改練這一門</button>`}
+            <button class="btn" data-act="melt" data-glow="melt" data-id="${esc(a.id)}" data-name="${esc(a.name)}" ${a.melt.ok ? "" : "disabled"}>熔煉</button>
           </div>
           <p class="muted">修練：<span class="cnote">${esc(ticked ? lg.note : a.cultivate.note)}</span>　熔煉：${esc(a.melt.note)}</p></div>` : ""}`;
     };
@@ -890,12 +997,13 @@
         <div class="insight"><div><b>「${esc(i.name)}」</b><small>屬${esc(i.attribute)}${i.lean !== "無" ? `・${esc(i.lean)}` : ""}</small>${i.note ? `<p>${esc(i.note)}</p>` : ""}</div>
           <button class="btn small" data-act="melt-insight" data-id="${esc(i.id)}" data-name="${esc(i.name)}">化成心得 ${i.melt}</button></div>`;
     return `
+      ${proGuide()}
       <div class="msg" id="mx-msg">${S.message}</div>
       ${naming}
       <div class="card">
         <div class="seg">${KINDS.map((k) => `<button class="${S.kind === k ? "on" : ""}" data-act="kind" data-kind="${k}">${k}</button>`).join("")}</div>
         <div class="row practice-actions">
-          <button class="btn ${train ? "" : "primary"}" data-act="mx" data-op="practice" ${train ? "disabled" : ""}>${train || `練成${esc(S.kind)}（心得 ${cur.price}）`}</button>
+          <button class="btn ${train ? "" : "primary"}" data-act="mx" data-op="practice" data-glow="practice" ${train ? "disabled" : ""}>${train || `練成${esc(S.kind)}（心得 ${cur.price}）`}</button>
           <button class="btn" data-act="mx" data-op="heal" ${s.injury >= 1 ? "" : "disabled"}>療傷</button>
         </div>
         <p class="muted">${x.rules.replace(/<\/?p>/g, "")}</p>
@@ -967,10 +1075,11 @@
     const ready = forgeReady();
     // 「開爐」緊接在說明那一行下面、不黏在底部（FB-048）：黏著時會蓋住底下的清單、開爐後那一行字與「背包」
     return `
+      ${proGuide()}
       <div class="msg" id="mx-msg">${S.message}</div>
       ${furnaceSvg([slotOf(S.forgeSel[0]), slotOf(S.forgeSel[1])], ready)}
       <div class="card" id="forge-line">${S.forgeLine || x.forge_line}</div>
-      <div class="act-row"><button class="btn primary" id="forge" data-act="forge" ${ready ? "" : "disabled"}>開爐</button></div>
+      <div class="act-row"><button class="btn primary" id="forge" data-act="forge" data-glow="forge" ${ready ? "" : "disabled"}>開爐</button></div>
       <div class="label">武學 <small class="muted">一門配一個意境，或兩門一起放</small></div>
       <div class="chips">${x.owned_arts.map((a) => `
         <button class="chip r${QUALITY_RANK[a.quality] || 1} ${inPot(a.id) ? "used" : ""}" data-act="pick" data-type="art" data-id="${esc(a.id)}" ${inPot(a.id) ? "disabled" : ""}>
@@ -1272,6 +1381,12 @@
   }
 
   // ── 見聞 ──
+  // 第一季的傳聞分四層（傳聞分層設計第二節）：天下大事、陣營軍情、所在大區、個人線索，各一張卡。
+  // 標題是伺服器給的字（這裡跳脫），內容是伺服器轉好、跳脫過的 HTML；開關關著時沒有 rumor_layers，照舊畫一整張 rumors
+  function rumorLayersHtml(layers) {
+    return layers.map((l) => `<div class="card rumor-layer" data-layer="${esc(l.id)}"><h3>${esc(l.title)}</h3>${l.body}</div>`).join("");
+  }
+
   function pageNews() {
     const seg = `<div class="seg">${NEWS.map((n) => `<button class="${S.news === n.id ? "on" : ""}" data-act="news" data-news="${n.id}">${n.name}</button>`).join("")}</div>`;
     const m = S.main;
@@ -1283,7 +1398,7 @@
       else if (!r.list.length) body = `<div class="card">${r.detail}</div>`;
       else body = `<div class="list">${r.list.map((x) => `<button data-act="report" data-id="${x.id}">${esc(x.label)}</button>`).join("")}</div>`;
     } else if (S.news === "trends") body = `<div class="card">${m.trends}</div>`;
-    else if (S.news === "rumors") body = `<div class="card">${m.rumors}</div>`;
+    else if (S.news === "rumors") body = m.rumor_layers ? rumorLayersHtml(m.rumor_layers) : `<div class="card">${m.rumors}</div>`;
     else if (S.news === "chronicle") body = `<div class="card">${m.chronicle}</div>`;
     else body = `<div class="card">${m.latest || ""}${m.journal || ""}${m.older || ""}${!m.latest && !m.journal ? '<p class="muted">還沒有紀錄。</p>' : ""}</div>`;
     return seg + body;
@@ -1294,15 +1409,18 @@
     const s = S.main.status;
     const a = S.admin;
     const opts = (list) => list.map((x) => `<option value="${esc(x.id)}">${esc(x.label)}</option>`).join("");
+    // 「匿名行走」那一句是傳聞分層一新寫的說明（待 joy 潤）；測試只比對這一句（tests/test_rumor_layers.py）
     return `
       <div class="sheet-bg" data-act="sheet-close"></div>
       <div class="sheet" role="dialog" aria-label="設定">
         <div class="grip"></div>
         <div class="top-row"><h3 style="flex:1">設定</h3><button class="btn small ghost" data-act="sheet-close">關閉</button></div>
-        <label class="toggle"><input type="checkbox" id="anon" ${s.anonymous ? "checked" : ""}> 匿名行走（江湖傳聞中不顯示名號）</label>
+        <label class="toggle"><input type="checkbox" id="anon" ${s.anonymous ? "checked" : ""}> 匿名行走（只在地方傳聞裡不寫名號；天下大事、軍情、江湖史、排行照寫）</label>
         <div class="stack">
           <button class="btn" data-act="do" data-op="skip_tutorial">略過新手引導</button>
+          ${S.recap ? `<button class="btn" data-act="recap" aria-expanded="${!!S.recapOpen}">重看序章</button>` : ""}
         </div>
+        ${S.recap && S.recapOpen ? `<div class="recap card">${S.recap}</div>` : ""}
         <details class="fold"><summary>修改密碼</summary><form class="fold-body" id="pw-form">
           <label class="field"><span>舊密碼</span><input class="input" type="password" name="old" autocomplete="current-password"></label>
           <label class="field"><span>新密碼</span><input class="input" type="password" name="new" autocomplete="new-password"></label>
@@ -1315,10 +1433,15 @@
         ${S.main.admin ? `
           <section class="admin-zone stack" aria-label="管理者工具">
             <h4>管理者工具（只有你看得到）</h4>
+            ${a && a.llm_queue ? `<p class="muted">模型佇列：處理中 ${a.llm_queue.running}、在排 ${a.llm_queue.waiting}</p>` : ""}
             <p class="muted">每一項按了都會先問一次才送出；做完會關掉設定、回到江湖頁。</p>
             <div class="row seasons"><button class="btn" data-act="admin" data-op="open_season">開季</button><button class="btn warn" data-act="admin" data-op="end_season">⚠ 立刻收季</button><button class="btn warn" data-act="admin" data-op="next_season">⚠ 開啟下一季</button></div>
             <p class="muted">時間快轉（全服一起快轉，只在測試時用；小時是現實小時，季曆會跳得更多）</p>
             <div class="row">${[1, 8, 24].map((h) => `<button class="btn small" data-act="admin" data-op="fast_forward" data-hours="${h}">+${h} 小時</button>`).join("")}</div>
+            <p class="muted">賽季時鐘（停機維護前按「暫停」，開回來按「繼續」；暫停中全服不能行動，畫面照常可看）</p>
+            <div class="row">${S.main.paused != null
+              ? `<span class="muted">已暫停 ${S.main.paused} 分鐘</span><button class="btn" data-act="admin" data-op="resume_clock">▶ 繼續</button>`
+              : `<button class="btn warn" data-act="admin" data-op="pause_clock">⏸ 暫停賽季時鐘</button>`}</div>
             ${a ? `
               <p class="muted">觸發（人少、大勢推不到門檻時用；效果跟自然發生一樣）</p>
               <div class="row ad-row"><span class="ad-tag">決戰</span><select class="input" id="ad-battle" aria-label="決戰">${opts(a.battles)}</select><button class="btn small" data-act="admin" data-op="start_battle">立刻開戰</button></div>
@@ -1387,6 +1510,9 @@
       next_season: [`開啟下一季（休季才有效）：新的一季立刻開始，同伴全部重獲自由、武學與意境的名字全部釋出（絕學定的名也是）、合成與合併的配方清空、天機 +1，沒打完的決戰清掉。${
         S.admin && S.admin.next_has_timetable ? "記得排三場大戲與季末的時間（預設在第 6、9、11 週中、第 12 週末）。" : ""}確定？`, "確定開啟下一季"],  // FB-050
       fast_forward: [`時間快轉現實 ${body.hours} 小時的份（全服一起，季曆會跳得更多），確定？`, `快轉 ${body.hours} 小時`],
+      // 公告停機時賽季時鐘暫停（Game.admin_pause_clock／admin_resume_clock）；問句待 S1／joy 潤
+      pause_clock: ["暫停賽季時鐘（停機維護前按）：季的時間不走、決戰不推，全服暫時不能行動，畫面照常可看；做完記得按「繼續」，確定？", "確定暫停"],
+      resume_clock: ["讓賽季時鐘繼續走：停的這一段照整個季曆鐘頭往下取整，扣掉的不算進賽季、季末往後延一樣長；停不到一個季曆鐘頭的話什麼都不扣、季末不動；排好的決戰照原本的時間開，時間在暫停裡過了的馬上開始集結，確定？", "確定繼續"],  // 待 joy 潤；跟 world.resume_skip_text 說的一致
       start_battle: [`立刻開戰「${picked("ad-battle")}」：全服一起進入集結，確定？`, "確定開戰"],
       fire: [`觸發「${picked("ad-fire")}」：效果跟自然發生一樣，全服都受影響，確定？`, "確定觸發"],
       push_trend: [`推動大勢「${picked("ad-trend")}」${amount}：全服一起，確定？`, "確定推動"],
@@ -1428,6 +1554,13 @@
     if (S.tab === "map") renderPage();
   }
 
+  // 設定頁的「重看序章」：序章的文字是內容、不會變，同一次載入只問一次。沒有序章的內容回空字串，就不畫那顆鈕
+  async function loadRecap() {
+    if (S.recap !== undefined) return;
+    try { S.recap = (await api("/api/prologue")).text || ""; } catch (e) { return; } // 問不到：下次打開設定再問
+    if (S.sheet) render();
+  }
+
   async function loadReports(id) {
     S.reports = await api(`/api/reports${id != null ? `?id=${id}` : ""}`);
     if (S.tab === "news") renderPage();
@@ -1443,6 +1576,12 @@
     render();
     window.scrollTo(0, 0);
     try {
+      if ((tab === "practice" || tab === "craft") && pro()) {
+        // 序章裡打開修練、煉製頁本身就是一步（跟打開輿圖一樣先當一個動作送給伺服器）
+        const r = await api("/api/do/view_tab", { tab });
+        setMain(r.main);
+        renderTop();
+      }
       if (tab === "practice" || tab === "craft") await loadMenxia();
       if (tab === "map") {
         // 打開輿圖本身可能完成新手引導的一步，所以先當一個動作做
@@ -1459,7 +1598,25 @@
   async function busy(fn) {
     if (S.busy) return;
     S.busy = true;
-    try { await fn(); } catch (e) { /* api() 已經提示過 */ } finally { S.busy = false; }
+    try { await fn(); } catch (e) { /* api() 已經提示過 */ } finally { S.busy = false; lastAction = Date.now(); }
+  }
+
+  // 等模型的時候（對話、大場面、開爐、隨口應對）每 2 秒問一次佇列，按鈕上補「前面還有 N 件」。佇列關著時伺服器回 null，什麼都不多顯示
+  function watchQueue(el, base) {
+    let alive = true;
+    (async function loop() {
+      while (alive) {
+        await new Promise((r) => setTimeout(r, 2000));
+        if (!alive) break;
+        try {
+          const r = await fetch("/api/queue", { credentials: "same-origin" }).then((x) => x.json());
+          // 前面有人才寫；寫過之後前面沒人了（輪到自己：0；評分與潤色之間、還沒排進去：null）就還原成原本的字，
+          // 不然舊的「前面還有 N 件」會一路留到自己那一件做完。伺服器有回答（有 ahead 這個鍵）才動；問不到、回的不是答案就不動
+          if (alive && el && r && "ahead" in r) el.textContent = typeof r.ahead === "number" && r.ahead > 0 ? `${base}（前面還有 ${r.ahead} 件）` : base;
+        } catch (e) { /* 問不到就算了，按鈕照原本的字 */ }
+      }
+    })();
+    return () => { alive = false; };
   }
 
   function applyMain(main) {
@@ -1490,16 +1647,21 @@
       // 大場面（挑戰大勢人物本人、打頭目）：伺服器先在鎖外請模型判讀戰局，選項帶著要換上的字（「兩人對峙……」，server.prepare_fight）
       const opt = ((S.main && S.main.options) || []).find((o) => o.id === id);
       if (opt && opt.wait) (btn.lastElementChild || btn).textContent = opt.wait;
-      const r = await api("/api/choose", { id });
-      S.answering = false;
-      S.wheelSel = null; // 收起展開的移動
-      applyMain(r.main);
-      window.scrollTo({ top: 0, behavior: "smooth" });
-      // 決戰選項（加入、趕到、出招）伺服器會回一句 message；大場面等模型判讀的時候選項沒了（人被別的分頁帶走），
-      // 那一仗沒打成、不寫江湖紀錄，也只有這一句；一般選項的話在江湖紀錄裡，不回
-      const text = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-      // 這一送剛好結算了回合時，回話是整段回合敘事（場景裡的戰況就是同一段）：提示只放得下幾秒，截短、指去場景
-      if (text) toast(text.length > 40 ? `${text.slice(0, 40)}……（戰況見場景）` : text);
+      // 等模型的這兩種（對話、大場面）每 2 秒問一次佇列，排在後面時按鈕上補「前面還有 N 件」
+      const label = btn.lastElementChild || btn;
+      const stop = (talking || (opt && opt.wait)) ? watchQueue(label, label.textContent) : () => {};
+      try {
+        const r = await api("/api/choose", { id });
+        S.answering = false;
+        S.wheelSel = null; // 收起展開的移動
+        applyMain(r.main);
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        // 決戰選項（加入、趕到、出招）伺服器會回一句 message；大場面等模型判讀的時候選項沒了（人被別的分頁帶走），
+        // 那一仗沒打成、不寫江湖紀錄，也只有這一句；一般選項的話在江湖紀錄裡，不回
+        const text = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+        // 這一送剛好結算了回合時，回話是整段回合敘事（場景裡的戰況就是同一段）：提示只放得下幾秒，截短、指去場景
+        if (text) toast(text.length > 40 ? `${text.slice(0, 40)}……（戰況見場景）` : text);
+      } finally { stop(); }
     });
     if (document.querySelector(".options .btn.busy")) renderPage(); // 失敗了：把按鈕還原
   }
@@ -1508,13 +1670,16 @@
   async function answer(form, text) {
     await busy(async () => {
       form.querySelectorAll("input, button").forEach((el) => { el.disabled = true; });
-      form.querySelector("[type=submit]").textContent = "思量中……";
+      const submitBtn = form.querySelector("[type=submit]");
+      submitBtn.textContent = "思量中……";
+      const stop = watchQueue(submitBtn, "思量中……");
       try {
         const r = await api("/api/answer", { text });
         S.answering = false;
         applyMain(r.main);
         window.scrollTo({ top: 0, behavior: "smooth" });
       } finally {
+        stop();
         form.querySelectorAll("input, button").forEach((el) => { el.disabled = false; });
         form.querySelector("[type=submit]").textContent = "說出口";
       }
@@ -1585,13 +1750,20 @@
       document.querySelector(".furnace .w-taichi")?.classList.add("hot");
       S.message = "爐火正旺。若這是江湖上第一次合出來，取名要花上一分鐘，請稍候。";
       document.getElementById("mx-msg").textContent = S.message;
-      const r = await api("/api/menxia/forge", forgeBody());
-      S.menxia = r.menxia;
-      S.message = r.message;
-      S.forgeSel = [];
-      S.forgeLine = "";
-      setMain(r.main);
-      renderTop();
+      const stop = watchQueue(btn, "爐火正旺…");
+      try {
+        const r = await api("/api/menxia/forge", forgeBody());
+        S.menxia = r.menxia;
+        S.message = r.message;
+        S.forgeSel = [];
+        S.forgeLine = "";
+        setMain(r.main);
+        renderTop();
+      } catch (e) {
+        // 被擋下來（另一個分頁的上一爐還沒出爐：400）或連不上：等的時候寫的「爐火正旺……請稍候」不能留著，換成這一句，
+        // 爐裡放的東西不動；api() 已經用提示泡泡講過一次，頁面上方再留一份（跟閉關那一段同一個做法）
+        S.message = esc(failText(e));
+      } finally { stop(); }
     });
     renderPage();
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -1668,9 +1840,11 @@
         case "sheet":
           S.sheet = true;
           render();
+          loadRecap(); // 有序章的內容才有「重看序章」鈕；同一次載入只問一次
           if (S.main.admin) { S.admin = await api("/api/admin"); render(); } // 每次打開都重抓：時刻表與可以定的結果會變
           break;
-        case "sheet-close": S.sheet = false; render(); break;
+        case "sheet-close": S.sheet = false; S.recapOpen = false; render(); break;
+        case "recap": S.recapOpen = !S.recapOpen; render(); break;
         case "guide-shut": setGuideShut(S.main.guide && S.main.guide.text); S.guideRoad = null; renderPage(); break;
         case "guide-open": setGuideShut(null); S.guideRoad = S.main.guide && S.main.guide.text; renderPage(); break;
         case "guide-more": S.guideFull = S.guideFull === (S.main.guide && S.main.guide.text) ? null : S.main.guide && S.main.guide.text; renderPage(); break;
@@ -1711,7 +1885,7 @@
           break;
         }
         case "ask-no": closeAsk(); break;
-        case "logout": await api("/api/logout", {}); S.sheet = false; S.stage = "gate"; S.main = null; render(); break;
+        case "logout": closeEvents(); await api("/api/logout", {}); S.sheet = false; S.stage = "gate"; S.main = null; render(); break;
         case "kind": S.kind = el.dataset.kind; renderPage(); break;
         case "mx": await mx(el.dataset.op); break;
         case "person":
@@ -1937,6 +2111,7 @@
   async function poll() {
     if (pollInFlight || S.stage !== "game" || S.busy || document.hidden) return;
     pollInFlight = true;
+    lastPoll = Date.now();
     const was = S.main;
     try {
       const mode = S.moveMode;
@@ -1960,8 +2135,9 @@
     }
     if (tab === "news") {
       // 戰報子分頁畫的是 S.reports，不用重抓；其他子分頁只在它畫的那幾欄真的變了才重畫
-      const fields = { trends: ["trends"], rumors: ["rumors"], chronicle: ["chronicle"], journal: ["latest", "journal", "older"] }[S.news] || [];
-      if (fields.some((k) => old[k] !== S.main[k])) redrawPage(true);
+      const fields = { trends: ["trends"], rumors: ["rumors", "rumor_layers"], chronicle: ["chronicle"], journal: ["latest", "journal", "older"] }[S.news] || [];
+      // rumor_layers 是陣列（每次輪詢都是新的物件）：比內容不比參照，沒變就不重畫
+      if (fields.some((k) => JSON.stringify(old[k]) !== JSON.stringify(S.main[k]))) redrawPage(true);
       return;
     }
     if (tab === "practice" || tab === "craft") {
@@ -2052,8 +2228,93 @@
     S.forgeSel = keep;
     return trimmed;
   }
-  setInterval(poll, POLL_MS);
-  document.addEventListener("visibilitychange", () => { if (!document.hidden) poll(); });
+
+  // ── 伺服器推送（線上架構設計 5.3）──
+  // main.push 是 true 才用（伺服器的開關 Config.push_events，預設關）。關著的時候這一段什麼都不做，頁面跟以前一模一樣：
+  // 一個每 POLL_MS 的計時器、每一下都輪詢、不開 EventSource。開著：開一條 /api/events（SSE），伺服器只送「哪一種變了」，
+  // 頁面收到再抓 /api/main：
+  //   self＝這個角色別的分頁做了動作，馬上抓（自己這一下動作的回聲不算）；
+  //   world＝世界變了，每個分頁都會收到，所以隨機等 0～push_spread 秒再抓，全服不會同一兩秒擠進同一把行動鎖；
+  //   ping＝連線上沒事時每 15 秒一個，證明連線還活著（SSE 的註解行到不了這裡，所以伺服器把心跳寫成事件）。
+  // 連著的時候平常 SLOW_POLL_MS 才輪詢一次（時鐘、體力回復靠它，也是漏掉通知的安全網）；沒開、斷了、還沒連上就照舊每 POLL_MS 一次。
+  const SLOW_POLL_MS = 60000;
+  const BEAT_TIMEOUT_MS = 40000; // 連線上這麼久一個事件也沒有：半開的死連線（手機睡著、換網路，瀏覽器很久才發現），關掉重連
+  const RECONNECT_MS = 60000; // 連線被伺服器拒絕（502、401、404：EventSource 不再自己重連）之後，隔這麼久才再試
+  const ECHO_MS = 1500; // 動作剛做完這麼久之內收到的 self，當作這個動作自己的回聲（畫面已經是動作回來的那一份）
+  let events = null; // 目前這一條 EventSource；沒開、關了、被伺服器拒絕時是 null
+  let lastBeat = 0; // 這條連線上最後一次有消息（開了、收到任何事件）的時刻
+  let lastConnect = 0; // 上一次開連線的時刻
+  let lastPoll = 0; // 上一次開始輪詢、或拿到一份新畫面（動作回來的）的時刻；連著推送時慢速輪詢從這裡算（預檢 F3）
+  let lastAction = 0; // 上一次動作做完的時刻
+  let worldTimer = 0; // 已經排好的「世界變了」重抓
+  let pushDown = false; // 連線斷過、還沒補抓：連回來時補抓一次（斷的這段時間可能漏了通知）
+
+  function connectEvents() {
+    if (events || !window.EventSource || S.stage !== "game" || !S.main || !S.main.push || document.hidden) return;
+    lastConnect = lastBeat = Date.now();
+    const es = new EventSource("/api/events");
+    events = es;
+    es.onopen = () => {
+      lastBeat = Date.now();
+      S.pushLive = true;
+      if (pushDown) { pushDown = false; poll(); }
+    };
+    es.onerror = () => {
+      S.pushLive = false; // 輪詢回到每 10 秒（Review Focus 2）；EventSource 自己會重連，連回來再放慢
+      pushDown = true;
+      if (events === es && es.readyState === EventSource.CLOSED) events = null; // 伺服器拒絕了、不會再自己重連：pollTick 隔 RECONNECT_MS 再試
+    };
+    es.addEventListener("ping", () => { lastBeat = Date.now(); });
+    es.addEventListener("self", () => { lastBeat = Date.now(); onPushSelf(); });
+    es.addEventListener("world", () => { lastBeat = Date.now(); onPushWorld(); });
+  }
+
+  function closeEvents() {
+    if (events) events.close();
+    events = null;
+    S.pushLive = false;
+    pushDown = false;
+    clearTimeout(worldTimer);
+    worldTimer = 0;
+  }
+
+  // self：馬上抓。自己按的這一下動作，伺服器也會通知這個角色的每個分頁，包括這一個（回聲）：通常動作還沒回來就到了（busy 時 poll 不會跑），
+  // 偶爾比回應慢一點到，所以動作剛做完的 ECHO_MS 內也不抓：畫面已經是動作回來的那一份，不為一次按鍵抓兩次。
+  // 代價：這一小段時間內、別的分頁剛好也做了動作的話，這一個分頁最慢要等下一次慢速輪詢（60 秒）才跟上
+  function onPushSelf() {
+    if (S.busy || Date.now() - lastAction < ECHO_MS) return;
+    poll();
+  }
+
+  // world：每個分頁都會收到，隨機等 0～push_spread 秒再抓（伺服器的 push_world_min_seconds）；已經排了一次就不再排，它抓到的就是最新的
+  function onPushWorld() {
+    if (worldTimer) return;
+    const spread = Number(S.main && S.main.push_spread);
+    const wait = Math.random() * (Number.isFinite(spread) && spread >= 0 ? spread : 10) * 1000;
+    worldTimer = setTimeout(() => { worldTimer = 0; poll(); }, wait);
+  }
+
+  // 計時器每 POLL_MS 一下（體力、氣血跟著時間走）。推送沒開：每一下都輪詢（跟加推送以前的計時器一樣）。
+  // 推送開著：先照顧連線（約 40 秒沒消息就換一條；被拒絕之後隔一陣再試；離開遊戲就關），再看要不要輪詢：
+  // 連著時離上一次拿到畫面不到 55 秒就不問（這一下是 10 秒的倍數，所以約每 60 秒一次），沒連上就照舊每一下都問
+  function pollTick() {
+    const now = Date.now();
+    if (S.stage === "game" && S.main && S.main.push) {
+      if (events && now - lastBeat > BEAT_TIMEOUT_MS) { closeEvents(); pushDown = true; connectEvents(); }
+      else if (!events && now - lastConnect >= RECONNECT_MS) connectEvents();
+    } else if (events) closeEvents();
+    if (S.pushLive && now - lastPoll < SLOW_POLL_MS - POLL_MS / 2) return;
+    poll();
+  }
+
+  setInterval(pollTick, POLL_MS);
+  // 看不到的分頁：關掉連線（不佔一條連線，也不重抓）；看得到了：連回來、補抓一次（推送沒開時只有補抓，跟以前一樣）
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) { closeEvents(); return; }
+    connectEvents();
+    poll();
+  });
+  // ── 伺服器推送（完）──
 
   // 軍令卡的展開與否（計畫 T6）：toggle 不冒泡，用捕獲階段接。記的是週次：換週之後新畫的卡週次對不上，自然重新展開；
   // 重畫（輪詢、換分頁回來）時照 S.ordersShut 補回，那一下補出來的 toggle 記下的還是同一週，不會繞圈

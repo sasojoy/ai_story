@@ -6,6 +6,7 @@
 """
 from __future__ import annotations
 
+import math
 from random import Random
 from typing import Protocol
 
@@ -35,10 +36,11 @@ COUNTER_BONUS = 1.3
 CONDITION_FLOOR = 0.5
 
 
-def condition_of(now: float, cap: float) -> float:
+def condition_of(now: float, cap: float, floor: float = CONDITION_FLOOR) -> float:
+    """氣血狀態係數：滿血 1.0，見底 floor（預設五成；本人帶【厚】時高一點，武學與成長設計 13.2）。"""
     if cap <= 0:
         return 1.0
-    return CONDITION_FLOOR + (1 - CONDITION_FLOOR) * max(0.0, min(1.0, now / cap))
+    return floor + (1 - floor) * max(0.0, min(1.0, now / cap))
 
 # 「戰場運氣」與結果門檻都**按對手難度的比例**算，不是固定點數（2026-10-02 重新校準）。
 #
@@ -53,6 +55,7 @@ LUCK_RATIO = 0.3
 LUCK_MIN = 5.0  # 難度很低時也還是留一點變數
 TIER_RATIOS = (("大勝", 0.5), ("險勝", 0.15), ("僵持", -0.5))
 FALLBACK_TIER = "落敗"
+TIERS = tuple(name for name, _ in TIER_RATIOS) + (FALLBACK_TIER,)  # 大勝、險勝、僵持、落敗：判定結果的四個名字，由好到壞
 
 
 def luck_half(difficulty: float) -> float:
@@ -76,6 +79,18 @@ class EncounterResult(BaseModel):
     our_power: float
     difficulty: float
     dodged: bool = False  # 落敗被身法閃成僵持（人物資質設計 14.4）；tier 已經是僵持
+    guarded: bool = False  # 護命把落敗改判成僵持（武學與成長設計 13.4）；tier 已經是僵持
+
+
+class Mods(BaseModel):
+    """這一場本人身上的功效換算成的數字（武學與成長設計 13.2、13.4）。由呼叫端（team.trait_mods）算好傳進來，
+    這個模組照舊只算數字。全部是預設值時，結果與亂數用法跟沒有功效時一模一樣。"""
+
+    luck_scale: float = 1.0  # 穩縮小、險放大運氣的起伏（1 − 穩 ＋ 險）
+    big_win_cut: float = 0.0  # 先手：大勝的門檻降低（對手強度的比例）
+    difficulty_cut: float = 0.0  # 破甲：對手強度當作低這麼多（比例）
+    power_add: float = 0.0  # 借力：威力加上對手強度的這麼多（比例）
+    double_luck: bool = False  # 連環：擲兩次運氣，取好的
 
 
 class Boost(BaseModel):
@@ -136,12 +151,58 @@ def advantage_shift(difficulty: float, advantage: int) -> float:
     return advantage / 100 * 2 * luck_half(difficulty)
 
 
-def resolve_encounter(our_power: float, difficulty: float, rng: Random, shift: float = 0.0) -> EncounterResult:
-    """shift 是判定差距的平移（大場面的優勢，見 advantage_shift）；平常是 0。擲骰照舊只擲一次運氣。"""
-    half = luck_half(difficulty)
+WIN_LINE_TIER = "險勝"  # 贏（大勝、險勝）的最低一線：差距過了這一條就算贏，優勢推的「贏的機會」看的是它
+
+
+def _double_luck_shift(base: float, win_line: float, half: float, push: float) -> float:
+    """連環（兩次運氣取好的）時，把「優勢 push（贏的機會的比例，例如 0.15）」換成判定差距的平移，讓贏的機會剛好多（少）push，
+    到 0%、100% 為止。運氣在 [-half, half] 均勻：贏要運氣至少 need ＝ win_line − base；一次擲不到的機率是 u，兩次都擲不到是 u²，
+    所以贏的機會是 1 − u²。想要的機會是 1 − u'²，u' 對到的 need' ＝ 2u'·half − half，平移就是 need − need'。
+    機會已經在 0% 或 100% 而且 push 還往外推時（反解沒有唯一解，任何夠大的平移都一樣），用單次運氣那種直接的平移
+    push × 2·half，但不越過會讓機會變動的那一端——高低一級的結果（僵持、落敗）仍然跟著優勢的方向動。"""
+    need = win_line - base
+    below = min(1.0, max(0.0, (need + half) / (2 * half)))
+    wanted = min(1.0, max(0.0, 1 - below * below + push))
+    linear = push * 2 * half
+    if wanted <= 0.0:
+        return min(linear, need - half)
+    if wanted >= 1.0:
+        return max(linear, need + half)
+    # need 夾在運氣範圍裡：贏的那一線遠在範圍之外（威力 10 打難度 220、或穩贏的另一頭）時，從範圍的邊緣算起——不然平移會把差距
+    # 整個搬到想要的機會那裡（187 對單次的 19.8），落敗一口氣變成不落敗（最終審查 I-1）。範圍裡面這一夾沒有作用，誤差在 1e-15 以內
+    return max(-half, min(half, need)) - (2 * math.sqrt(1 - wanted) * half - half)
+
+
+def resolve_encounter(
+    our_power: float, difficulty: float, rng: Random, shift: float = 0.0, mods: Mods | None = None,
+) -> EncounterResult:
+    """shift 是判定差距的平移（大場面的優勢，見 advantage_shift）；平常是 0。mods 是本人的功效（13.2）：破甲讓對手
+    當作弱一點（門檻與運氣都照當作的強度算）、借力加威力、穩與險改運氣的起伏、先手降大勝門檻、連環多擲一次運氣取好的。
+    沒有連環時照舊只擲一次運氣；mods 是空的（預設）時，每一步都乘 1、減 0，結果與亂數用法跟沒有這個參數時一模一樣。
+    結果記的 difficulty 還是原來的強度（戰報照實寫），破甲只改判定。借力加的是對手真正強度的一成份（abs(difficulty) × power_add，
+    不照破甲當作的那個：對手兇猛是真的，破甲只是破開它的守勢，S1 的句子也是「對手越兇猛越借得上力」）。
+    shift 是呼叫端照「沒有功效的運氣範圍」算的（advantage_shift(difficulty, 優勢)：優勢百分點 × 運氣全幅）；功效改了運氣的範圍
+    （穩縮小、險放大、破甲讓難度當作低）之後，平移跟著等比例縮放，同一個優勢才推同樣的百分點——不然模型的 ±15 會在穩加破甲時
+    變成 ±47、險時剩 ±9.5，big_fight_swing 的夾子（模型不能決定勝負，武學與成長設計 8.3）就失效了。
+    連環取兩次運氣的好的，贏的機會是 1 − u²（u 是一次擲不到所需運氣的機率），不是均勻分佈，平移不能只是縮放：改成在機率空間裡
+    反解（_double_luck_shift），同一個優勢一樣剛好推那麼多個百分點，到 0%、100% 為止（Task 4 審查 M1）。"""
+    mods = mods or Mods()
+    effective = difficulty * (1 - mods.difficulty_cut)
+    half = luck_half(effective) * max(0.0, mods.luck_scale)
+    base = our_power + abs(difficulty) * mods.power_add - effective  # 沒有運氣與優勢時的差距
+    if mods.double_luck and shift and half > 0:
+        shift = _double_luck_shift(
+            base, dict(tier_thresholds(effective))[WIN_LINE_TIER], half, shift / (2 * luck_half(difficulty)),
+        )
+    else:
+        shift *= half / luck_half(difficulty)  # 沒有功效時是 x / x ＝ 1.0，shift 一個位元都不變
     luck = rng.uniform(-half, half)
-    margin = our_power - difficulty + luck + shift
-    for tier, threshold in tier_thresholds(difficulty):
+    if mods.double_luck:
+        luck = max(luck, rng.uniform(-half, half))
+    margin = base + luck + shift
+    for tier, threshold in tier_thresholds(effective):
+        if tier == "大勝":
+            threshold -= abs(effective) * mods.big_win_cut
         if margin >= threshold:
             return EncounterResult(tier=tier, margin=margin, our_power=our_power, difficulty=difficulty)
     return EncounterResult(tier=FALLBACK_TIER, margin=margin, our_power=our_power, difficulty=difficulty)

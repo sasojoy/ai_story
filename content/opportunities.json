@@ -44,5 +44,110 @@
                   "tick": "一群逃難的流民跟在你身後不肯走，你把他們安頓在{地點}。",
                   "milestone": "第 {n} 批流民裡有個老人說：「我們這村人都願給你種地。」",
                   "item": "佃戶名冊", "deliver": "nearest_base", "label": "把佃戶名冊交給管事",
-                  "done": "管事把名冊收進櫃裡：「有人有地，這一方就穩了。」", "trend": 1}}
+                  "done": "管事把名冊收進櫃裡：「有人有地，這一方就穩了。」", "trend": 1}},
+
+  {"id": "guan_three_plans", "name": "平亂三策", "faction": "guan", "rank": 4, "kind": "puzzle",
+   "puzzle": {
+     "pieces": [
+       {"key": "yingru", "name": "潁川之策", "how": "ask", "front": "yingru", "figure": "huangfusong", "affinity": 30, "topic": "平亂",
+        "lines": {"huangfusong": "皇甫嵩說：「賊依草，可火；賊依城，可困。」", "luzhi": "盧植說：「圍而不攻，斷其糧道。」",
+                  "dongzhuo": "董卓說：「打就打到他怕。」", "sunjian": "孫堅說：「將先登，則士死戰。」",
+                  "zhujun": "朱儁說：「賊眾烏合，先分其勢，再各個擊破。」", "*": "他想了想說：「守住糧道，賊自散。」"}},
+       {"key": "jizhou", "name": "冀州之策", "how": "ask", "front": "jizhou", "figure": "luzhi", "affinity": 30, "topic": "平亂",
+        "lines": {"huangfusong": "皇甫嵩說：「賊依草，可火；賊依城，可困。」", "luzhi": "盧植說：「圍而不攻，斷其糧道。」",
+                  "dongzhuo": "董卓說：「打就打到他怕。」", "sunjian": "孫堅說：「將先登，則士死戰。」",
+                  "zhujun": "朱儁說：「賊眾烏合，先分其勢，再各個擊破。」", "*": "他想了想說：「守住糧道，賊自散。」"}},
+       {"key": "nanyang", "name": "南陽之策", "how": "ask", "front": "nanyang", "figure": "sunjian", "affinity": 30, "topic": "平亂",
+        "lines": {"huangfusong": "皇甫嵩說：「賊依草，可火；賊依城，可困。」", "luzhi": "盧植說：「圍而不攻，斷其糧道。」",
+                  "dongzhuo": "董卓說：「打就打到他怕。」", "sunjian": "孫堅說：「將先登，則士死戰。」",
+                  "zhujun": "朱儁說：「賊眾烏合，先分其勢，再各個擊破。」", "*": "他想了想說：「守住糧道，賊自散。」"}}
+     ],
+     "present": {"at": "dajiangjun_fu", "figure": "hejin", "stand_in": "大將軍府的長史", "label": "把三策呈給{人物}",
+                 "done": "{人物}把三策翻來覆去看了幾遍，挑了聽起來最穩當的那一條：『就照這個辦。你，很好。』"}}},
+
+  {"id": "hao_land_people_name", "name": "地、人、名", "faction": "haoqiang", "rank": 4, "kind": "puzzle",
+   "puzzle": {
+     "pieces": [
+       {"key": "land", "name": "地契", "how": "silver", "at": "haozu_fort", "silver": 50,
+        "label": "向塢堡主買下荒田的地契（銀兩 50）", "ok": "塢堡主收了銀子，把一張發黃的地契推過來。"},
+       {"key": "people", "name": "戶籍", "how": "check", "at": "zhuo_militia_hall", "stamina": 10,
+        "check": {"stat": "wis", "difficulty": 7}, "label": "抄錄結社的鄉勇名冊",
+        "ok": "你一筆一筆抄完了名冊，連誰家幾口人都記上了。", "fail": "名冊太亂，你抄到一半就對不上了。改天再來。"},
+       {"key": "name", "name": "鄉望", "how": "check", "at": "cao_manor", "stamina": 10,
+        "check": {"stat": "wis", "difficulty": 7}, "label": "向三老說說怎麼保這一方",
+        "ok": "三老聽完點了點頭：『這個人說話實在。』", "fail": "三老聽了半天，搖搖頭走了。改天再來。"}
+     ],
+     "present": {"label": "把地契、戶籍與鄉望交給{人物}",
+                 "patrons": {
+                   "yuan": {"character": "yuanshao", "at": "dajiangjun_fu",
+                            "done": "袁紹看完地契、戶籍與鄉望，含笑點頭：「有地、有人、有名，足下已是一方之主了。」"},
+                   "cao": {"character": "caocao", "at": "qiao_county",
+                           "done": "曹操把三樣東西推回給你：「這些你收好。往後這一方，就靠你了。」"},
+                   "self": {"character": "liubei", "at": "loushang_village",
+                            "done": "劉備握著你的手：「有你守著這一方，百姓就有依靠了。」"}}}}},
+
+  {"id": "huang_mole", "name": "營中的內鬼", "faction": "huang", "rank": 4, "kind": "deduce",
+   "deduce": {
+     "tianji": "mole",
+     "askers": [{"figure": "zhangliang", "at": "guangzong"}, {"figure": "zhangbao", "at": "xiaquyang"},
+                {"figure": "zhangjiao", "at": "guangzong"}],
+     "label": "向{人物}指認：{嫌疑人}",
+     "right": "{人物}沉著臉聽完，揮手叫人把那人押了下去：『好眼力。這筆帳，我記著。』",
+     "wrong": "{人物}查過之後，臉色很難看：『{嫌疑人}是清白的。我的弟兄，別亂咬。』",
+     "wrong_affinity": -10, "trend": {"jizhou": 1},
+     "suspects": [
+       {"id": "clerk", "name": "管糧冊的帳房", "traits": ["literate", "stays", "right"]},
+       {"id": "priest", "name": "送藥的道士", "traits": ["literate", "out", "left"]},
+       {"id": "strongman", "name": "新來的力士", "traits": ["illiterate", "out", "right"]}
+     ],
+     "traits": [
+       {"key": "literate", "region": "luoyang", "text": "洛陽那邊截到的密信，字寫得工整。"},
+       {"key": "illiterate", "region": "luoyang", "text": "洛陽那邊截到的密信，是請人代寫的，末尾按的是手印。"},
+       {"key": "out", "region": "jizhou", "text": "守城門的說，那人這個月出城好幾回。"},
+       {"key": "stays", "region": "jizhou", "text": "守城門的說，這個月沒見過可疑的人出城，鬼就在城裡。"},
+       {"key": "left", "region": "jizhou", "text": "密信的墨跡往右拖，是左手寫的。"},
+       {"key": "right", "region": "jizhou", "text": "密信的墨跡乾乾淨淨，是右手寫的。"}
+     ]}},
+
+  {"id": "guan_three_roads", "name": "三路並進", "faction": "guan", "rank": 4, "kind": "plot",
+   "plot": {
+     "how": "win",
+     "parts": [{"key": "yingru", "name": "潁川汝南", "front": "yingru"}, {"key": "nanyang", "name": "南陽", "front": "nanyang"},
+               {"key": "jizhou", "name": "冀州", "front": "jizhou"}],
+     "headcount": 3,
+     "start_text": "{name} 發起三路並進，還缺{缺}。",
+     "done_text": "三路的捷報同時送進營中，你的名字跟著報了上去。",
+     "helper_text": "三路並進成了，你那一路也記了一功。",
+     "fail_text": "三路並進沒能在時限內湊齊，這一回作罷。"}},
+
+  {"id": "huang_jiazi", "name": "甲子", "faction": "huang", "rank": 4, "kind": "plot",
+   "plot": {
+     "how": "check",
+     "parts": [{"key": "changshe", "name": "長社", "at": "changshe"}, {"key": "wan_city", "name": "宛城", "at": "wan_city"},
+               {"key": "luoyang_palace", "name": "洛陽宮城", "at": "luoyang_palace"}, {"key": "guangzong", "name": "廣宗", "at": "guangzong"},
+               {"key": "zhuo_county", "name": "涿郡", "at": "zhuo_county"}],
+     "need_parts": 3, "headcount": 3,
+     "check": {"stat": "agi", "difficulty": 6}, "stamina": 10,
+     "part_label": "在{地點}的牆上寫下「甲子」",
+     "part_ok": "你趁巡兵換班，在{地點}的牆上用白土寫下兩個大字：甲子。",
+     "part_fail": "巡兵的腳步聲近了，你在{地點}只寫了一筆就得跑。這一處得換人，或改天再來。",
+     "start_text": "{name} 發起甲子，還缺{缺}。",
+     "done_text": "各地的牆上同時冒出「甲子」兩個字，官府嚇得連夜派人去擦。你牽的這條線，渠帥都知道了。",
+     "helper_text": "甲子的字寫成了，你那一處也算上了。",
+     "fail_text": "甲子沒能在時限內寫齊，這一回作罷。"}},
+
+  {"id": "hao_alliance", "name": "聯保", "faction": "haoqiang", "rank": 4, "kind": "plot",
+   "plot": {
+     "how": "check",
+     "parts": [{"key": "zhuo_militia_hall", "name": "鄉里結社", "at": "zhuo_militia_hall"},
+               {"key": "cao_manor", "name": "曹氏莊院", "at": "cao_manor"}, {"key": "haozu_fort", "name": "豪族塢堡", "at": "haozu_fort"}],
+     "headcount": 3,
+     "check": {"stat": "wis", "difficulty": 6}, "stamina": 10,
+     "part_label": "在{地點}說服豪族立聯保盟約",
+     "part_ok": "{地點}的幾家豪族聽完，一個接一個在盟約上畫了押。",
+     "part_fail": "{地點}的豪族推三阻四，誰也不肯先畫押。這一處得換人，或改天再來。",
+     "start_text": "{name} 發起聯保，還缺{缺}。",
+     "done_text": "三處的盟約都畫了押，幾家豪族從此守望相助。家主說，這是你牽的線。",
+     "helper_text": "聯保成了，你跑的那一處也記上了。",
+     "fail_text": "聯保沒能在時限內湊齊，這一回作罷。"}}
 ]

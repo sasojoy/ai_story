@@ -1,5 +1,7 @@
 import contextlib
+import json
 import random
+import shutil
 from pathlib import Path
 
 import pytest
@@ -62,6 +64,54 @@ def content():
     return load_content(FIXTURE)
 
 
+PROLOGUE = Path(__file__).parent / "fixtures" / "prologue"
+
+
+@pytest.fixture
+def prologue_root(tmp_path):
+    """有序章的測試內容（新手引導計畫一）放在哪個資料夾：測試內容加上草廬（hut，只連 town）、斷眉（duanmei）、
+    一門雜學（junk）、三則序章事件、四筆師門配方與十一步的序章；開局送 basic_breath、basic_fist，升級門檻照正式的 10，
+    開局心得 20（測試內容沒寫 start_stats 時心得是 0，合成與修練都付不起）。
+    要改內容再載入的測試（驗證）用這個；只要載入好的內容用 prologue_content。"""
+    root = tmp_path / "prologue_content"
+    shutil.copytree(FIXTURE, root)
+    for name in ("tutorial.json", "preset_recipes.json"):
+        shutil.copy(PROLOGUE / name, root / name)
+    shutil.copy(PROLOGUE / "events.json", root / "events" / "prologue.json")
+
+    def edit(name, change):
+        path = root / name
+        data = json.loads(path.read_text(encoding="utf-8"))
+        change(data)
+        path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+
+    def locations(locs):
+        next(loc for loc in locs if loc["id"] == "town")["connections"].append("hut")
+        locs.append({
+            "id": "hut", "name": "草廬", "description": "滿屋子酒味。", "connections": ["town"],
+            "x": 60, "y": 60, "tags": ["草廬"], "insights": ["feng", "shan", "shui", "huo"], "prologue_only": True,
+        })
+
+    edit("locations.json", locations)
+    edit("squads.json", lambda squads: squads.append(
+        {"id": "duanmei", "name": "斷眉", "difficulty": 10, "attribute": "剛", "reward_silver": 0, "reward_xinde": 0, "exp": 10}
+    ))
+    edit("skills.json", lambda skills: skills.append(
+        {"id": "junk", "name": "蠻牛拳", "kind": "武學", "attribute": "剛", "quality": "下品"}
+    ))
+    # start_stats 要寫整份（會取代預設）：測試內容沒寫時心得是 0，合成與修練都付不起，序章走不下去
+    edit("config.json", lambda cfg: cfg.update(
+        starter_skills=["basic_breath", "basic_fist"], level_exp=10,
+        start_stats={"str": 5, "agi": 5, "con": 5, "wis": 5, "lore": 5, "silver": 50, "good": 0, "evil": 0, "fame": 0, "xinde": 20},
+    ))
+    return root
+
+
+@pytest.fixture
+def prologue_content(prologue_root):
+    return load_content(prologue_root)
+
+
 @pytest.fixture
 def state(content):
     from tianxia.state import new_game_state
@@ -82,6 +132,19 @@ def game(content):
 
     content.config.train_event_chance = 0.0
     return Game.new(content, "沈浪", rng=random.Random(0))
+
+
+def next_season(content, world, *players):
+    """管理者收季再開下一季，再讓每個玩家同步一次（換季重來發生在 sync 裡）；照 test_engine._roll_one_season 的做法。"""
+    from tianxia.engine import Game
+
+    content.config.admins = ["管理者"]
+    admin = Game.new(content, "管理者", rng=random.Random(1), world=world)
+    admin.admin_end_season(now=200.0)
+    admin.admin_next_season(now=300.0)
+    for player in players:
+        player.sync(400.0)
+        assert player.state.player.season_number == 2
 
 
 def walk_to(game, dest: str) -> list[str]:
@@ -215,22 +278,15 @@ def install_season_one(content):
 
 def install_showdowns(content, region: str = "north"):
     """第一季內容（install_season_one）加上時刻表決戰的 BattleDef（計畫 T8）：長社（守方官軍、潁川）、宛城甲（守方黃巾）、
-    宛城乙（守方官軍、南陽）。都在 region 這個大區打（fixture 的小鎮在北區），一幕三回合；兩邊各有穩守（推 2）、
-    猛攻（推 6）；保底結果只有一筆（實際結果走時刻表）。回傳 {id: BattleDef}。"""
-    from tianxia.models import (
-        BattleAct, BattleActionEffect, BattleDef, BattleFaction, BattleOption, BattleOutcome,
-    )
+    宛城乙（守方官軍、南陽）。都在 region 這個大區打（fixture 的小鎮在北區），一幕三回合；兩邊各有強攻、固守、奇襲
+    （<陣營>_strong／_hold／_raid，決戰改版一）；保底結果只有一筆（實際結果走時刻表）。回傳 {id: BattleDef}。"""
+    from tianxia.models import MOVES, BattleAct, BattleDef, BattleFaction, BattleOption, BattleOutcome
 
+    codes = {"強攻": "strong", "固守": "hold", "奇襲": "raid"}
     options = [
-        BattleOption(text="穩守", tag="guan_safe", faction="guan"), BattleOption(text="猛攻", tag="guan_aggressive", faction="guan"),
-        BattleOption(text="死守", tag="huang_safe", faction="huang"), BattleOption(text="衝殺", tag="huang_aggressive", faction="huang"),
+        BattleOption(text=f"{side}{move}", tag=f"{side}_{codes[move]}", faction=side, move=move)
+        for side in ("guan", "huang") for move in MOVES
     ]
-    tags = {
-        "guan_safe": BattleActionEffect(trend_delta=2, neili_damage=5),
-        "guan_aggressive": BattleActionEffect(trend_delta=6, neili_damage=20),
-        "huang_safe": BattleActionEffect(trend_delta=-2, neili_damage=5),
-        "huang_aggressive": BattleActionEffect(trend_delta=-6, neili_damage=20),
-    }
     made = {}
     for bid, name, event, version, defender, front in (
         ("changshe_fire", "長社火攻", "changshe_fire", None, "guan", "yingru"),
@@ -241,7 +297,7 @@ def install_showdowns(content, region: str = "north"):
             id=bid, name=name, region=region, timetable_event=event, version=version, defender=defender, front=front,
             factions=[BattleFaction(id="guan", name="官軍"), BattleFaction(id="huang", name="黃巾軍")],
             acts=[BattleAct(id=f"{bid}_1", title="兩軍對陣", text="兩軍列陣。", goal="分出勝負", options=list(options))],
-            action_tags=tags, outcomes=[BattleOutcome(faction=defender, title=f"{name}戰罷", text="廝殺停了下來。")],
+            outcomes=[BattleOutcome(faction=defender, title=f"{name}戰罷", text="廝殺停了下來。")],
             muster_seconds=600, round_seconds=120,
         )
     return made
