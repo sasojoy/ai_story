@@ -221,7 +221,7 @@ def test_contribution_rankings_top_five_per_side_this_season(on, world):
     store.save(hidden.state)
     ranks = leaderboard.contribution_rankings(on, world, store)
     assert ranks["guan"] == [("人1", 120), ("人0", 50), ("人7", 4), ("人6", 3), ("人5", 2)]
-    assert ranks["huang"] == [("人2", 30), ("某位少俠", 10)]
+    assert ranks["huang"] == [("人2", 30), ("影", 10)]  # 匿名行走的人也寫名號（傳聞分層第七節：排行榜不能匿名）
     assert ranks["haoqiang"] == []  # RF5：沒人出力也有那一格
     assert all(name != "人3" for rows in ranks.values() for name, _ in rows)  # 散人不列
 

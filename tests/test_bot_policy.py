@@ -1,13 +1,18 @@
 import random
 
+import pytest
+
 from conftest import walk_to
-from tianxia import battle_instance, bot, bot_policy
+from test_bot import armed
+from test_engine import _open_three_move_battle, _warlord_in_battle
+from tianxia import battle_instance, bot, bot_policy, fusion, library, naming, team
 from tianxia.engine import Option
 from tianxia.models import (
-    BattleAct, BattleActionEffect, BattleDef, BattleFaction, BattleOption, BattleOutcome, Effect,
-    FactionDef, Location,
+    MOVES, BattleAct, BattleDef, BattleFaction, BattleOption, BattleOutcome, Effect, FactionDef, Location,
 )
 from tianxia.state import BotProfile
+
+CODES = {"強攻": "strong", "固守": "hold", "奇襲": "raid"}
 
 
 def _install_factions(content):
@@ -24,13 +29,12 @@ def _install_battle(content):
         acts=[
             BattleAct(
                 id="a1", title="初探", text="雙方試探。", goal="推動戰局",
-                options=[BattleOption(text="穩紮穩打", tag="safe"), BattleOption(text="全力進攻", tag="aggressive")],
+                options=[
+                    BattleOption(text=f"{side}{move}", tag=f"{side}_{CODES[move]}", faction=side, move=move)
+                    for side in ("guan", "huang") for move in MOVES
+                ],
             ),
         ],
-        action_tags={
-            "safe": BattleActionEffect(trend_delta=1, neili_damage=5),
-            "aggressive": BattleActionEffect(trend_delta=5, neili_damage=20),
-        },
         outcomes=[BattleOutcome(faction="guan", title="官軍大勝", text="官軍獲勝。")],
         muster_seconds=600, round_seconds=120,
     )
@@ -114,31 +118,154 @@ def test_a_bot_joins_its_own_side_of_a_battle_as_an_ordinary_fighter(content, ga
     assert fighter.faction == "guan" and not fighter.is_bot
 
 
-def _active_battle_with(game, definition, faction):
+def _active_battle_with(game, definition, faction, scores=None):
+    """假人站 faction 這一邊、已經開打；scores 是它加入時快照的每招份量（沒給＝舊資料，每招 0）。"""
     game.state.player.faction = faction
     game.world.start_battle(definition, now=game.now - definition.muster_seconds - 1)  # 集結早就截止：下一次刷新就開打
     name = game.state.player.name
-    game.world.mutate_battle(lambda b: battle_instance.join_faction(b, name, faction, neili_cap=100.0))
+    game.world.mutate_battle(
+        lambda b: battle_instance.join_faction(b, name, faction, neili_cap=300.0, scores=scores)
+    )
     other = "huang" if faction == "guan" else "guan"
-    game.world.mutate_battle(lambda b: battle_instance.join_faction(b, "對手", other, neili_cap=100.0))
+    game.world.mutate_battle(lambda b: battle_instance.join_faction(b, "對手", other, neili_cap=300.0))
 
 
-def test_at_full_strength_a_bot_picks_the_tactic_that_pushes_its_side(content, game):
+def test_at_full_strength_a_bot_picks_the_move_it_is_best_at(content, game):
+    """三招之後假人照自己每招的份量挑（決戰改版 1）：強攻 90、固守 60、奇襲 40，扣血又不大 → 強攻。"""
     _install_factions(content)
     definition = _install_battle(content)
     content.config.bot_strength = 1.0
-    _active_battle_with(game, definition, "guan")  # 官軍是第一方：戰局往上推對官軍有利
+    _active_battle_with(game, definition, "guan", scores={"強攻": 90.0, "固守": 60.0, "奇襲": 40.0})
     bot_policy.take_turn(game, _profile("guan"), random.Random(0))
-    assert game.world.get_battle().round.pending_actions[game.state.player.name] == "aggressive"
+    assert game.world.get_battle().round.pending_actions[game.state.player.name] == "guan_strong"
 
 
-def test_at_full_strength_the_other_side_holds_the_line(content, game):
+def test_at_full_strength_a_bot_without_a_snapshot_holds_the_line(content, game):
+    """沒有快照的假人（舊資料）份量全 0，只剩扣血的差別：損耗最低的固守。"""
     _install_factions(content)
     definition = _install_battle(content)
     content.config.bot_strength = 1.0
     _active_battle_with(game, definition, "huang")
-    bot_policy.take_turn(game, _profile("huang"), random.Random(0))
-    assert game.world.get_battle().round.pending_actions[game.state.player.name] == "safe"
+    name = game.state.player.name
+    for seed in range(12):  # 不是碰巧：換十二顆亂數種子都是固守
+        game.world.mutate_battle(lambda b: b.round.pending_actions.clear())
+        bot_policy.take_turn(game, _profile("huang"), random.Random(seed))
+        assert game.world.get_battle().round.pending_actions[name] == "huang_hold"
+
+
+def test_a_bot_scores_its_best_move_highest(game):
+    battle, definition = _open_three_move_battle(game)
+    name = game.state.player.name
+    game.world.mutate_battle(lambda b: b.participants[name].scores.update({"強攻": 30.0, "固守": 30.0, "奇襲": 90.0}))
+    faction = game.world.get_battle().participants[name].faction
+    scores = {m: bot_policy._battle_score(game, f"act:{faction}_{c}") for m, c in CODES.items()}
+    assert max(scores, key=scores.get) == "奇襲"
+
+
+def test_a_warlord_bot_grabs_when_healthy_and_keeps_when_hurt(game):
+    """決戰改版 5：豪強的兩招也照份量與扣血打分數——血多就搶地盤，血少就保存實力。"""
+    _warlord_in_battle(game)
+    name = game.state.player.name
+    game.world.mutate_battle(lambda b: b.participants[name].scores.update({m: 100.0 for m in MOVES}))  # 不看開局武學的屬性
+    assert bot_policy._battle_score(game, "act:third_grab") > bot_policy._battle_score(game, "act:third_keep")
+    game.world.mutate_battle(lambda b: setattr(b.participants[name], "neili", 40.0))
+    assert bot_policy._battle_score(game, "act:third_keep") > bot_policy._battle_score(game, "act:third_grab")
+
+
+def test_a_warlord_bots_scores_follow_the_tuning_numbers(game):
+    """份量在扣血之前算、保存實力只算一半：搶地盤 100×1.0÷100 − 35÷氣血，保存實力 100×0.5÷100 − 10÷氣血。"""
+    _warlord_in_battle(game)
+    name = game.state.player.name
+    game.world.mutate_battle(lambda b: (
+        b.participants[name].scores.update({m: 100.0 for m in MOVES}),
+        setattr(b.participants[name], "neili_cap", 100.0), setattr(b.participants[name], "neili", 100.0),
+    ))
+    assert abs(bot_policy._battle_score(game, "act:third_grab") - (1.0 - 0.35)) < 1e-9
+    assert abs(bot_policy._battle_score(game, "act:third_keep") - (0.5 - 0.1)) < 1e-9
+
+
+def test_a_warlord_bot_scores_each_move_with_its_own_share_and_its_hurt_condition(game):
+    """搶地盤用奇襲的份量、保存實力用固守的份量（一半），都乘氣血狀態：奇襲 90、固守 30、氣血剩一半（狀態 0.75）。
+    份量全一樣、滿血的測試分不出份量拿錯招或沒乘狀態。"""
+    _warlord_in_battle(game)
+    name = game.state.player.name
+    game.world.mutate_battle(lambda b: (
+        b.participants[name].scores.update({"強攻": 10.0, "固守": 30.0, "奇襲": 90.0}),
+        setattr(b.participants[name], "neili_cap", 100.0), setattr(b.participants[name], "neili", 50.0),
+    ))
+    assert abs(bot_policy._battle_score(game, "act:third_grab") - (90 * 0.75 / 100 - 35 / 50)) < 1e-9  # 0.675 − 0.7
+    assert abs(bot_policy._battle_score(game, "act:third_keep") - (30 * 0.75 * 0.5 / 100 - 10 / 50)) < 1e-9  # 0.1125 − 0.2
+
+
+def test_a_warlord_bots_grab_cost_is_its_own_tuning_number_not_the_raids(game):
+    """搶地盤的扣血是 third_grab_damage、保存實力是 third_keep_damage，不是奇襲與固守的損耗（預設值剛好相同，所以改成不一樣來測）。"""
+    _warlord_in_battle(game)
+    tuning = game.content.config.battle
+    tuning.third_grab_damage, tuning.third_keep_damage = 50.0, 20.0
+    assert tuning.damage["奇襲"] == 35.0 and tuning.damage["固守"] == 15.0
+    name = game.state.player.name
+    game.world.mutate_battle(lambda b: (
+        b.participants[name].scores.update({"奇襲": 100.0, "固守": 100.0}),
+        setattr(b.participants[name], "neili_cap", 100.0), setattr(b.participants[name], "neili", 100.0),
+    ))
+    assert abs(bot_policy._battle_score(game, "act:third_grab") - (1.0 - 50 / 100)) < 1e-9
+    assert abs(bot_policy._battle_score(game, "act:third_keep") - (0.5 - 20 / 100)) < 1e-9
+
+
+def test_a_warlord_bot_takes_a_turn_in_the_battle_and_picks_one_of_its_two_moves(content, game):
+    content.config.bot_strength = 1.0
+    _warlord_in_battle(game)
+    name = game.state.player.name
+    game.world.mutate_battle(lambda b: b.participants[name].scores.update({m: 100.0 for m in MOVES}))
+    bot_policy.take_turn(game, _profile("haoqiang"), random.Random(0))
+    after = game.world.get_battle()  # 場上只有它一個人：出完招這一回合就結算了
+    assert after.round_number == 1 and after.participants[name].last_result == "趁亂搶地盤"  # 滿血：搶地盤
+
+
+def test_an_army_bot_never_scores_the_warlords_moves(game):
+    """兩招只在豪強自己的選單上；官軍的人拿到那個 tag（不會發生）也不打分數。"""
+    battle, definition = _open_three_move_battle(game)
+    assert bot_policy._battle_score(game, f"act:{battle_instance.THIRD_GRAB}") == 0.0
+
+
+def test_a_bot_that_is_nearly_down_prefers_the_cheaper_move(game):
+    """扣血相對剩下的氣血越重、扣分越多：同樣的份量，血少的時候不再挑最傷的強攻。"""
+    battle, definition = _open_three_move_battle(game)
+    name = game.state.player.name
+    game.world.mutate_battle(lambda b: b.participants[name].scores.update({"強攻": 90.0, "固守": 60.0, "奇襲": 40.0}))
+    faction = game.world.get_battle().participants[name].faction
+
+    def best():
+        scores = {m: bot_policy._battle_score(game, f"act:{faction}_{c}") for m, c in CODES.items()}
+        return max(scores, key=scores.get)
+
+    game.world.mutate_battle(lambda b: setattr(b.participants[name], "neili", 300.0))
+    assert best() == "強攻"
+    game.world.mutate_battle(lambda b: setattr(b.participants[name], "neili", 40.0))
+    assert best() == "固守"
+
+
+def test_the_bots_scores_count_how_worn_down_it_is(game):
+    """份量乘氣血狀態（0.5＋0.5×剩的÷上限）：剩一半氣血時，強攻的 100 分只剩 75。少了這個係數，這裡會挑強攻。"""
+    battle, definition = _open_three_move_battle(game)
+    name = game.state.player.name
+    game.world.mutate_battle(lambda b: (
+        b.participants[name].scores.update({"強攻": 100.0, "固守": 0.0, "奇襲": 0.0}),
+        setattr(b.participants[name], "neili_cap", 100.0), setattr(b.participants[name], "neili", 50.0),
+    ))
+    faction = game.world.get_battle().participants[name].faction
+    scores = {m: bot_policy._battle_score(game, f"act:{faction}_{c}") for m, c in CODES.items()}
+    # 乘氣血狀態 0.75：強攻 1.0 × 0.75 − 60/50 ＝ −0.45，固守 0 − 15/50 ＝ −0.3 → 固守；少了這個係數，強攻是 1.0 − 1.2 ＝ −0.2 → 強攻
+    assert abs(scores["強攻"] + 0.45) < 1e-9 and abs(scores["固守"] + 0.3) < 1e-9
+    assert max(scores, key=scores.get) == "固守"
+
+
+def test_a_bot_scores_nothing_for_a_choice_that_is_not_a_move(game):
+    """沒有招的選項（放手一搏、查無此選項）一律 0，不當機；加入戰局還是照舊的高分。"""
+    battle, definition = _open_three_move_battle(game)
+    assert bot_policy._battle_score(game, "act:no_such_tag") == 0.0
+    assert bot_policy._battle_score(game, "join:guan") == bot_policy.JOIN_BATTLE_SCORE
+    assert bot_policy._battle_score(game, "spectate") is None
 
 
 def test_look_after_practices_the_worn_arts_and_never_creates_one(content, game):
@@ -400,3 +527,317 @@ def test_a_bot_never_knocks_on_the_single_audience_button_even_though_it_always_
     assert bot_policy.score(game, next(o for o in options if o.id == "call:mate"), profile) is None
     for seed in range(30):
         assert bot_policy.pick(game, options, profile, random.Random(seed)) != "call:mate"
+
+
+# ── 假人的武學（tend_arts）：學藝、合成、修練、改練、熔煉、定名 ─────────────────────
+
+
+@pytest.fixture
+def arts_only(monkeypatch):
+    """這幾個測試只看合成：每輪必合（有東西可合時），不修練。"""
+    monkeypatch.setattr(bot_policy, "FORGE_CHANCE", 1.0)
+    monkeypatch.setattr(bot_policy, "CULTIVATE_CHANCE", 0.0)
+
+
+def test_a_first_time_fusion_waits_for_the_naming_slot(content, world, arts_only):
+    """首創的爐要請模型取名：鎖內只開單交給假人程式，什麼都還沒收、還沒合。"""
+    game = armed(content, world)
+    game.client = None
+    slot = bot_policy.NamingSlot(open=True)
+    bot_policy.tend_arts(game, random.Random(0), slot)
+    assert slot.job is not None and slot.job.request.kind == "fuse"
+    assert (slot.job.art_id, slot.job.insight_ids) == ("basic_fist", ("feng",))
+    assert library.owned_arts(game.state) == ["basic_fist"] and game.state.player.stats["xinde"] == 100
+
+
+def test_no_slot_no_first_time_fusion(content, world, arts_only):
+    """Review Focus 4：輪不到取名就不開這一爐，不用字表名字搶首創。"""
+    game = armed(content, world)
+    game.client = None
+    slot = bot_policy.NamingSlot(open=False)
+    bot_policy.tend_arts(game, random.Random(0), slot)
+    assert slot.job is None and slot.skipped == 1
+    assert library.owned_arts(game.state) == ["basic_fist"]
+
+
+def test_a_known_recipe_is_forged_right_away_without_the_model(content, world, arts_only):
+    first = armed(content, world, name="先到")
+    first.forge("basic_fist", ["feng"], proposed=("凌風拳", "一句話。"))  # 先有人合過、登記了名字
+    game = armed(content, world, name="後到")
+    game.client = None
+    slot = bot_policy.NamingSlot(open=False)
+    bot_policy.tend_arts(game, random.Random(0), slot)
+    assert slot.job is None and slot.skipped == 0
+    names = [team.player_art(game.state, content, world, a).name for a in library.owned_arts(game.state)]
+    assert "凌風拳" in names
+
+
+def _waiting_to_name(content, world):
+    """合出一門「凌風拳」、練成絕學、輪到自己定名的假人（會等著定名的都是合成出來的：內容武學的名字過不了命名過濾）。"""
+    game = armed(content, world)
+    game.forge("basic_fist", ["feng"], proposed=("凌風拳", "一句話。"))
+    game.client = None
+    game.state.player.naming = next(a for a in library.owned_arts(game.state) if a != "basic_fist")
+    return game
+
+
+def _named(game, name):
+    return any(f"為之定名【{name}】" in r.text for r in game.state.world.chronicle)
+
+
+def test_a_mastered_art_waits_for_the_naming_slot(content, world, arts_only):
+    """練成絕學、輪到自己定名：不沿用原名（企劃者 2026-10-06），開單請模型另取；這一輪什麼都還沒定。"""
+    game = _waiting_to_name(content, world)
+    slot = bot_policy.NamingSlot(open=True)
+    bot_policy.tend_arts(game, random.Random(0), slot)
+    assert isinstance(slot.job, bot_policy.MasterJob) and slot.job.art_id == game.state.player.naming
+    assert slot.job.request.kind == "master"
+
+
+def test_no_slot_no_mastery_naming(content, world, arts_only):
+    """輪不到取名就先不定名（絕學一直等著，跟真人遲遲不填一樣），也不沿用原名。"""
+    game = _waiting_to_name(content, world)
+    slot = bot_policy.NamingSlot(open=False)
+    bot_policy.tend_arts(game, random.Random(0), slot)
+    assert game.state.player.naming is not None and slot.skipped >= 1 and not _named(game, "凌風拳")
+
+
+def test_apply_job_names_a_mastered_art_with_the_models_name(content, world):
+    game = _waiting_to_name(content, world)
+    job = bot_policy.MasterJob(game.state.player.naming, game.mastery_request())
+    bot_policy.apply_job(game, job, ("破雲拳", "一句話。"))
+    assert game.state.player.naming is None and _named(game, "破雲拳")
+
+
+@pytest.mark.parametrize("proposed", [("凌風拳", ""), (None, "")], ids=["取回原名", "取不到"])
+def test_a_model_name_equal_to_the_old_one_falls_back_to_the_word_list(content, world, proposed):
+    """Review Focus 6：模型取回原名、或取壞了叫不動：改用字表另組一個，一定跟原名不同。"""
+    game = _waiting_to_name(content, world)
+    job = bot_policy.MasterJob(game.state.player.naming, game.mastery_request())
+    bot_policy.apply_job(game, job, proposed)
+    assert game.state.player.naming is None and not _named(game, "凌風拳")
+    assert any("練成絕學，為之定名【" in r.text for r in game.state.world.chronicle)
+
+
+def test_bots_learn_a_lesson_with_an_attribute_they_lack(content, game):
+    walk_to(game, "lake")  # 湖邊教「湖邊腿法」（武學・快，學費 10）
+    game.state.player.stats["silver"] = 100
+    bot_policy.tend_arts(game, random.Random(0), bot_policy.NamingSlot())
+    assert "lake_kick" in library.owned_arts(game.state)
+
+
+def test_bots_keep_silver_for_healing_and_room_for_forging(content, game):
+    walk_to(game, "lake")
+    game.state.player.stats["silver"] = bot_policy.LEARN_SILVER_RESERVE + 9  # 付了 10 兩就不夠療傷
+    bot_policy.tend_arts(game, random.Random(0), bot_policy.NamingSlot())
+    assert "lake_kick" not in library.owned_arts(game.state)
+    game.state.player.stats["silver"] = 100
+    content.config.holding_cap_base = library.held_count(game.state) + bot_policy.LEARN_ROOM - 1
+    bot_policy.tend_arts(game, random.Random(0), bot_policy.NamingSlot())
+    assert "lake_kick" not in library.owned_arts(game.state)
+
+
+def test_a_turn_holding_a_naming_job_does_nothing_else(content, world, arts_only):
+    """手上有一爐在等名字：這一輪只在爐前等，不做別的（不然體力可能花掉，C 段開不成）。"""
+    game = armed(content, world)
+    game.client = None
+    stamina = game.state.player.stamina
+    slot = bot_policy.NamingSlot(open=True)
+    bot_policy.take_turn(game, _profile("guan"), random.Random(0), slot)
+    assert slot.job is not None and game.state.player.stamina == stamina
+
+
+@pytest.mark.parametrize("worn,learns", [("sky", False), ("fist", True)], ids=["同屬性不學", "沒有這個屬性才學"])
+def test_bots_do_not_learn_what_they_already_have_the_attribute_of(content, game, worn, learns):
+    """學藝的價值是多一個屬性可以合成：同一種（武學）已經有這個屬性的，不學、不佔位置。
+    身上是天外劍（武學・快）時不學湖邊腿法（武學・快）；身上是長拳（武學・剛）就學（對照組：沒有別的原因擋著）。"""
+    walk_to(game, "lake")
+    p = game.state.player
+    p.stats["silver"] = 100
+    p.member.wugong_id, p.member.wugong_level = worn, 1
+    bot_policy.tend_arts(game, random.Random(0), bot_policy.NamingSlot())
+    assert ("lake_kick" in library.owned_arts(game.state)) is learns
+    assert p.stats["silver"] == (90 if learns else 100)
+
+
+def test_a_bot_with_no_arts_and_nothing_to_do_rolls_no_random_numbers(content, game):
+    """什麼武學都沒有、也沒有東西可學的假人：tend_arts 一次亂數都不擲（假人程式共用的亂數順序跟以前一樣）。"""
+    rng = random.Random(7)
+    state = rng.getstate()
+    assert bot_policy.tend_arts(game, rng, bot_policy.NamingSlot(open=True)) == []
+    assert rng.getstate() == state
+
+
+def test_take_turn_carries_the_art_messages_in_front_of_the_main_action(content, game):
+    _install_factions(content)
+    walk_to(game, "lake")
+    game.state.player.stats["silver"] = 100
+    msgs = bot_policy.take_turn(game, _profile("guan"), random.Random(0))
+    assert any("湖邊腿法" in m for m in msgs) and "lake_kick" in library.owned_arts(game.state)
+
+
+def test_a_full_library_melts_the_weakest_before_anything_else(content, world, arts_only):
+    game = armed(content, world)
+    game.client = None
+    p = game.state.player
+    game.forge("basic_fist", ["feng"], proposed=("凌風拳", "一句話。"))
+    p.insights = []
+    held = library.held_count(game.state)
+    content.config.holding_cap_base = held  # 正好滿了
+    assert library.full(game.state, content) and p.arts
+    bot_policy.tend_arts(game, random.Random(0), bot_policy.NamingSlot(open=True))
+    assert library.held_count(game.state) == held - 1  # 熔了庫裡的一門，沒有意境可合了
+
+
+def test_a_bot_switches_to_a_stronger_art_in_the_library(content, world, arts_only):
+    from test_bot import _two_arts
+
+    game = armed(content, world)
+    plain, rich = _two_arts(world, plain_top=29.0, rich_top=60.0, rich_traits=("剛",))
+    p = game.state.player
+    p.member.wugong_id, p.arts, p.insights = plain.id, [rich.id], []
+    for art_id in (plain.id, rich.id):
+        p.art_quality[art_id] = "下品"
+    bot_policy.tend_arts(game, random.Random(0), bot_policy.NamingSlot())
+    assert p.member.wugong_id == rich.id
+
+
+def test_a_bot_cultivates_a_fused_art_when_it_has_the_stamina(content, world, monkeypatch):
+    monkeypatch.setattr(bot_policy, "FORGE_CHANCE", 0.0)
+    monkeypatch.setattr(bot_policy, "CULTIVATE_CHANCE", 1.0)
+    game = armed(content, world)
+    game.forge("basic_fist", ["feng"], proposed=("凌風拳", "一句話。"))
+    p = game.state.player
+    p.stats["xinde"], p.stamina = 0, 150
+    bot_policy.tend_arts(game, random.Random(0), bot_policy.NamingSlot())
+    assert p.stamina < 150  # 修練花體力（有融意境的武學才修得了）
+    p.stamina = bot.CULTIVATE_RESERVE - 1
+    bot_policy.tend_arts(game, random.Random(0), bot_policy.NamingSlot())
+    assert p.stamina == bot.CULTIVATE_RESERVE - 1  # 低於保留量：體力留給探索與遊歷
+
+
+def test_a_second_naming_job_in_the_same_turn_is_skipped(content, world, arts_only):
+    """一輪只交一件：名額已經有一件在等，第二件這一輪不開、也不蓋掉前一件。"""
+    game = _waiting_to_name(content, world)
+    other = bot_policy.MasterJob("別的武學", game.mastery_request())
+    slot = bot_policy.NamingSlot(open=True, job=other)
+    bot_policy.tend_arts(game, random.Random(0), slot)
+    assert slot.job is other and slot.skipped >= 1
+
+
+def test_apply_job_registers_a_first_time_recipe_with_the_models_name(content, world, arts_only):
+    game = armed(content, world)
+    game.client = None
+    slot = bot_policy.NamingSlot(open=True)
+    bot_policy.tend_arts(game, random.Random(0), slot)
+    msgs = bot_policy.apply_job(game, slot.job, ("凌風拳", "一句話。"))
+    names = [team.player_art(game.state, content, world, a).name for a in library.owned_arts(game.state)]
+    assert "凌風拳" in names and msgs
+    assert game.state.player.stats["xinde"] == 100 - content.config.fuse_xinde
+
+
+@pytest.mark.parametrize("proposed", [(None, ""), ("拳", "一句話。"), ("凌風拳！？", "")], ids=["沒取到", "太短", "過不了字元"])
+def test_apply_job_never_claims_a_first_time_recipe_with_a_name_the_filter_rejects(content, world, arts_only, proposed):
+    """F3：取名那一爐沒有拿到過得了過濾的名字（沒取到、或 C 段重驗過不了）：不開、不收費，不用字表名字搶下首創
+    （假人搶首創的名字是字表風格，看得出是假人）。"""
+    game = armed(content, world)
+    game.client = None
+    slot = bot_policy.NamingSlot(open=True)
+    bot_policy.tend_arts(game, random.Random(0), slot)
+    assert bot_policy.apply_job(game, slot.job, proposed) == []
+    assert world.lookup_recipe(slot.job.request.key) is None
+    assert library.owned_arts(game.state) == ["basic_fist"] and game.state.player.stats["xinde"] == 100
+
+
+def test_apply_job_still_forges_a_pick_when_the_model_picked_nothing(content, world, arts_only):
+    """挑一個的單（合到舊的、候選兩個以上）沒挑到：不產生新名字，C 段照常開爐，由規則挑。"""
+    first = armed(content, world, name="先到")
+    first.forge("basic_fist", ["feng"], proposed=("凌風拳", "一句話。"))
+    game = armed(content, world, name="後到")
+    game.client = None
+    request = naming.NamingRequest("fuse", fusion.fuse_key("basic_fist", "feng"), "武學", [], choices=("凌風拳", "別名拳"))
+    job = bot_policy.ForgeJob("basic_fist", ("feng",), None, request)
+    bot_policy.apply_job(game, job, (None, ""))
+    assert len(library.owned_arts(game.state)) == 2
+
+
+def test_a_turn_holding_a_mastery_naming_job_does_nothing_else(content, world, arts_only, monkeypatch):
+    """絕學定名開成單子（MasterJob）之後，這一輪到此為止：不學藝、不熔、不合、不改練、不修練，也不做主要行動
+    （不然體力可能花掉，C 段開不成；第二件取名也不會在同一輪開出來）。"""
+    _install_factions(content)  # 有陣營：主要行動要是還在做，假人會動身去投靠點
+    monkeypatch.setattr(bot_policy, "PRACTICE_CHANCE", 0.0)
+    game = _waiting_to_name(content, world)
+    p = game.state.player
+    p.stats["silver"] = 100
+    seen = (p.stamina, p.stats["xinde"], p.location, list(p.arts), len(game.state.journal), p.naming)
+    slot = bot_policy.NamingSlot(open=True)
+    msgs = bot_policy.take_turn(game, _profile("guan"), random.Random(0), slot)
+    assert isinstance(slot.job, bot_policy.MasterJob) and slot.skipped == 0  # 沒有第二件被開出來、也沒被算成輪不到
+    assert msgs == [] and p.journey is None
+    assert (p.stamina, p.stats["xinde"], p.location, list(p.arts), len(game.state.journal), p.naming) == seen
+
+
+class Rolls(random.Random):
+    """random() 照給的順序回傳（用完就一直回最後一個）；choice／sample 照常用種子 0（它們不靠 random()）。"""
+
+    def __init__(self, *values):
+        super().__init__(0)
+        self.values = list(values)
+
+    def random(self):
+        return self.values.pop(0) if len(self.values) > 1 else self.values[0]
+
+
+def _first_job(game, rng):
+    slot = bot_policy.NamingSlot(open=True)
+    bot_policy.tend_arts(game, rng, slot)
+    return slot.job
+
+
+def _holding_two_arts_and_an_insight(content, world):
+    game = armed(content, world)
+    game.client = None
+    game.state.player.member.neigong_id = "basic_breath"  # 兩門武學＋一個意境：武學＋意境、武學＋武學都做得出來
+    return game
+
+
+def test_a_bot_holding_an_insight_splits_between_fusing_and_blending_by_the_server_share(
+    content, world, arts_only, monkeypatch,
+):
+    """SERVER_BLEND_SHARE（0.15，比整季機器人的 BLEND_SHARE 0.3 低）真的拿來分：手上有意境時，武學＋武學的擲骰過 0.15 才算。
+    第一擲是合成的機會（FORGE_CHANCE），第二擲才是這個份額。"""
+    game = _holding_two_arts_and_an_insight(content, world)
+    assert bot_policy.SERVER_BLEND_SHARE < bot.BLEND_SHARE
+    assert _first_job(game, Rolls(0.5, 0.20)).request.kind == "fuse"  # 0.20 在整季機器人的份額裡是武學＋武學，在假人的不是
+    assert _first_job(game, Rolls(0.5, 0.10)).request.kind == "blend"
+    monkeypatch.setattr(bot_policy, "SERVER_BLEND_SHARE", 0.25)  # 份額是呼叫的當下才讀的
+    assert _first_job(game, Rolls(0.5, 0.20)).request.kind == "blend"
+    assert _first_job(game, Rolls(0.5, 0.30)).request.kind == "fuse"
+
+
+def test_the_server_share_decides_how_many_of_many_picks_are_blends(content, world, arts_only):
+    game = _holding_two_arts_and_an_insight(content, world)
+    rng = random.Random(7)
+    kinds = [_first_job(game, rng).request.kind for _ in range(400)]
+    share = kinds.count("blend") / len(kinds)
+    assert set(kinds) == {"fuse", "blend"}
+    assert 0.10 <= share <= 0.20, share  # 0.15 上下；整季機器人的 0.3 會落在這個區間外
+
+
+def test_a_bot_with_no_insight_always_blends_whatever_the_share(content, world, arts_only, monkeypatch):
+    """記錄一個已知的事：沒有意境時只剩武學＋武學這一條路，份額不擲、擋不到它。正式內容開局送兩門武學、沒有意境，
+    所以真的假人一開始每一爐都是武學＋武學，直到拿到第一個意境（見整季模擬的量測）。"""
+    monkeypatch.setattr(bot_policy, "SERVER_BLEND_SHARE", 0.0)
+    game = _holding_two_arts_and_an_insight(content, world)
+    game.state.player.insights = []
+    rng = random.Random(3)
+    assert {_first_job(game, rng).request.kind for _ in range(40)} == {"blend"}
+
+
+def test_apply_job_for_a_mastery_that_is_no_longer_pending_does_nothing(content, world):
+    """取名的時候那個等著定名的已經變了（定過了、或換了一門）：不定、不收，下次再來。"""
+    game = _waiting_to_name(content, world)
+    job = bot_policy.MasterJob(game.state.player.naming, game.mastery_request())
+    game.state.player.naming = None
+    assert bot_policy.apply_job(game, job, ("破雲拳", "一句話。")) == []
+    assert not _named(game, "破雲拳")

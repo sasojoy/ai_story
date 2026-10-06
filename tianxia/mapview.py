@@ -52,10 +52,11 @@ LEGEND_ICONS = [("town", "城鎮"), ("roof", "寺院書院"), ("camp", "營寨")
 LEGEND_STATES = "全彩：看得見　淡色：去過／摸清　灰：未知　紅旗：所在地"
 LEGEND_RING = "外圈：綠安全／橙危險／紅兇險　⚔ 可遊歷"
 LEGEND_STRIKE = f"{atlas.STRIKE_MARK} 本週軍令要打擊的人物（還沒摸清時標在大區）"  # 局勢層：有標記時多一行（FB-072）
+LEGEND_STORY = "★ 這一幕主線的目標　✦ 最近 {days:g} 天的大事與傳聞"  # 天數照傳聞板的長度（legend_data 照內容填）
 LEGEND_LAYERS = {
     "situation": "⚑ 龍頭人物（會自己行動的江湖人物）常出沒　大區越紅，大勢越凶",
     "enemies": "底色同外圈　最險：最難對付的對手與勝算",
-    "story": f"★ 這一幕主線的目標　✦ 最近 {atlas.NEWS_DAYS} 天的大事與傳聞",
+    "story": LEGEND_STORY.format(days=atlas.NEWS_DAYS),  # 預設的天數；真正送出去的在 legend_data
     "routes": "數字：步行要幾分鐘（走路程最短的路）　粗線：到選定地點的路",
 }
 RIVER_TEXT = "#4F7FA3"
@@ -217,7 +218,7 @@ def legend_data(state: GameState, content: Content, layer: str = "situation") ->
         "icons": [{"kind": kind, "label": text, "svg": mapart.icon_svg(kind)} for kind, text in LEGEND_ICONS],
         "states": LEGEND_STATES,
         "ring": LEGEND_RING,
-        "layer": LEGEND_LAYERS.get(layer, ""),
+        "layer": LEGEND_STORY.format(days=atlas.news_days(content)) if layer == "story" else LEGEND_LAYERS.get(layer, ""),
         "strike": LEGEND_STRIKE if strike_places or strike_regions else "",
     }
 
@@ -248,8 +249,9 @@ def _layer_marks(
                 notes[loc_id] = f"最險：{worst[0]} {worst[1]}"
     elif layer == "story":
         goals = atlas.goal_places(state, content)
+        news = atlas.news_places(state, content)  # 聽得到的才標（傳聞分層設計第九節）
         for loc_id in known:
-            marks = ("★" if loc_id in goals else "") + ("✦" if atlas.recent_news(state, loc_id) else "")
+            marks = ("★" if loc_id in goals else "") + ("✦" if loc_id in news else "")
             if marks:
                 prefixes[loc_id] = f"{marks} "
     elif layer == "routes":

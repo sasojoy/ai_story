@@ -7,6 +7,11 @@ run_bots.py 只負責每隔 bot_tick_seconds 呼叫一次 tick()。每個假人�
 補人：每個陣營（投靠名冊上的真人與假人，加上這一季已派去、還在路上的假人）不到最少人數，就補
 一個——先叫醒退隱的假人（沿用名號），沒有才新建；同一個陣營每 bot_fill_seconds 最多補一個。
 換季時所有假人自動算退隱（BotProfile.season_number 對不上），新的一季再照缺額叫醒。
+
+模型：假人在鎖內的 Game 沒有 client，鎖內一個模型都不叫。唯一的例外是首創配方的取名與絕學定名（企劃者 2026-10-05、10-06），
+走跟真人一樣的三段式：A 在鎖內開單（bot_policy.tend_arts）、B 在鎖外由這支程式自己的 client 叫 naming.generate
+（_name_and_apply；一次一件、兩件之間隔 bot_naming_gap_seconds、一件最多 bot_naming_budget_seconds）、
+C 再拿鎖交給 bot_policy.apply_job。
 """
 from __future__ import annotations
 
@@ -17,10 +22,11 @@ import traceback
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from . import bot_policy, server_bots
+from . import battle_instance, bot_policy, naming, server_bots
 from .characters import CharacterStore, open_characters
 from .engine import Game
 from .models import Content
+from .ollama_client import OllamaClient
 from .sqlite_world import open_world
 from .state import BotProfile, GameState
 from .world_state import WorldStateStore
@@ -47,12 +53,15 @@ class TickReport:
     added: int = 0
     skipped: int = 0  # 等不到行動鎖而跳過的次數
     failed: int = 0  # 出錯而跳過的假人（錯誤寫進 log）
+    named: int = 0  # 請模型取名的次數
+    naming_skipped: int = 0  # 想開首創的爐或定名、這一輪輪不到取名而作罷的次數
 
 
 class BotRunner:
     def __init__(
         self, content: Content, world: WorldStateStore | None = None, characters: CharacterStore | None = None,
         rng: random.Random | None = None, clock: Callable[[], float] = time.time,
+        client: OllamaClient | None = None,
     ):
         self.content = content
         self.world = world or open_world()
@@ -60,10 +69,13 @@ class BotRunner:
         self.rng = rng or random.Random()
         self.clock = clock
         self.last_added: dict[str, float] = {}  # 陣營 id -> 上次補人的現實時間
+        # 只在鎖外替首創的配方與絕學定名取名用（_name_and_apply）；None＝假人不開要取名的爐、也不定名
+        self.client = client
+        self.last_naming: float | None = None  # 上一次請模型取名的現實時間
 
     def tick(self) -> TickReport:
         report = TickReport()
-        if self.world.season_phase() != "running":
+        if self.world.season_phase() != "running" or self.world.paused_at() is not None:  # 籌備、休季、暫停中都不出手
             return report
         now = self.clock()
         try:
@@ -85,12 +97,16 @@ class BotRunner:
             report.online += 1
             if self.rng.random() >= server_bots.act_chance(profile, self.content.config):
                 continue
+            slot = bot_policy.NamingSlot(open=self._naming_open())
             try:
                 with self.world.action_lock(timeout=LOCK_WAIT):
                     # 拿到寫入權之後才看錶：上一個假人做完到現在，真人可能已經把共用時鐘對到更晚了
-                    acted = self._take_turn(state.player.name, self.clock())
+                    acted = self._take_turn(state.player.name, self.clock(), slot)
                 if acted:
                     report.acted += 1
+                report.naming_skipped += slot.skipped
+                if slot.job is not None:  # 這個假人有一件要取名的：放掉鎖之後在鎖外做完，才換下一個假人（一次一件）
+                    self._name_and_apply(state.player.name, slot.job, report)
             except TimeoutError:
                 report.skipped += 1
             except Exception as exc:
@@ -98,26 +114,74 @@ class BotRunner:
                 report.failed += 1
         return report
 
-    def _take_turn(self, name: str, now: float) -> bool:
+    def _naming_open(self) -> bool:
+        """這一輪輪不輪得到請模型取名：有 client、設定開著、離上一次夠久（一次一件，PM 10/5）。"""
+        cfg = self.content.config
+        if self.client is None or not cfg.bot_naming:
+            return False
+        return self.last_naming is None or self.clock() - self.last_naming >= cfg.bot_naming_gap_seconds
+
+    def _bot_game(self, state: GameState) -> Game:
+        """假人這一次拿鎖用的 Game：不接 LLM（鎖內一個模型都不叫，伺服器假人設計第三節），鎖內模型額度歸零（同 server._locked）。"""
+        game = Game(self.content, state, self.rng, self.world)
+        game.client = None
+        game.reset_model_budget()
+        return game
+
+    def _take_turn(self, name: str, now: float, slot: bot_policy.NamingSlot | None = None) -> bool:
         """在寫入交易裡做一個動作，真的出手才回傳 True。這一輪開頭查過的賽季可能已經變了（各個假人之間
         會結束交易）：季已經結束、或管理者開了下一季（這個假人就算退隱了），就什麼都不做、也不存檔；
-        自己補算時間時走到季末，存下補算的結果，但不在休季時做事。"""
+        自己補算時間時走到季末，存下補算的結果，但不在休季時做事。
+        slot 是這一輪的取名名額：要取名的爐或定名開成單子放進 slot.job，由呼叫端在鎖外做完（見 _name_and_apply）。"""
         state = self.characters.load(name)
         shared = self.world.read()
-        if state is None or shared.season_phase() != "running":
+        if state is None or shared.season_phase() != "running" or shared.paused_at is not None:
             return False
         profile = state.player.bot
         if profile is None or not server_bots.active(profile, shared.season_number):
             return False
-        game = Game(self.content, state, self.rng, self.world)
-        game.client = None  # 假人不呼叫 LLM（伺服器假人設計第三節）
+        game = self._bot_game(state)
         game.sync(now)
         if game.state.world.ended:
             self.characters.save(game.state)
             return False
-        bot_policy.take_turn(game, game.state.player.bot, self.rng)
+        bot_policy.take_turn(game, game.state.player.bot, self.rng, slot)
         self.characters.save(game.state)
         return True
+
+    def _name_and_apply(self, name: str, job: bot_policy.ForgeJob | bot_policy.MasterJob, report: TickReport) -> None:
+        """假人取名的 B、C 段：首創配方（企劃者 2026-10-05）與絕學定名（2026-10-06）都請模型取，不然名字是字表的樣子、
+        或江湖史同一個名字出現兩次，看得出是假人。B 在行動鎖外請模型取名或挑一個（這個迴圈一個一個來，所以同時只有一件）；
+        C 再拿鎖、重讀角色、交給 bot_policy.apply_job 重驗再套用。拿不到鎖就放掉這一件（名字丟掉：首創的話之後誰先合到誰取名，
+        定名的話下次再來）。
+        模型沒取到名字（連不上、逾時、取壞了）：首創的爐不開（C 段不做、不收費）——走字表名字搶下首創就是看得出是假人的樣子；
+        下一次要等 bot_naming_gap_seconds 之後。挑一個的單（有候選）沒挑到照常進 C 段，由規則挑，不產生新名字；
+        絕學定名照常進 C 段，用字表另組一個跟原名不同的（見 bot_policy.apply_job）。"""
+        cfg = self.content.config
+        self.last_naming = self.clock()
+        proposed = naming.generate(
+            self.client, self.content, job.request, budget=cfg.bot_naming_budget_seconds, person=self.world.is_character_name,
+        )
+        report.named += 1
+        if isinstance(job, bot_policy.ForgeJob) and proposed[0] is None and not job.request.choices:
+            return
+        try:
+            with self.world.action_lock(timeout=LOCK_WAIT):
+                state = self.characters.load(name)
+                shared = self.world.read()
+                # 暫停中不做事（跟 tick、_take_turn 一樣；取名的時候管理者可能按了暫停）：名字丟掉，繼續之後再取
+                if state is None or shared.season_phase() != "running" or shared.paused_at is not None:
+                    return
+                profile = state.player.bot
+                if profile is None or not server_bots.active(profile, shared.season_number):
+                    return
+                game = self._bot_game(state)
+                game.sync(self.clock())
+                if not game.state.world.ended:
+                    bot_policy.apply_job(game, job, proposed)
+                self.characters.save(game.state)
+        except TimeoutError:
+            report.skipped += 1
 
     def _online(
         self, profile: BotProfile, state: GameState, now: float,
@@ -136,7 +200,7 @@ class BotRunner:
         )
 
     def _battle_sides(self) -> tuple[float, set[str], set[str]] | None:
-        """進行中的全服戰鬥：（這場的識別值＝集結截止時間, 交戰陣營, 已經出局的參戰者名號）；
+        """進行中的全服戰鬥：（這場的識別值＝集結截止時間, 能站的陣營＝兩軍加第三方, 已經出局的參戰者名號）；
         沒有或已經結束回傳 None。"""
         battle = self.world.get_battle()
         if battle is None or battle.phase == "ended":
@@ -145,10 +209,13 @@ class BotRunner:
         if definition is None:
             return None
         out = {p.name for p in battle.participants.values() if p.eliminated}
-        return battle.muster_deadline_real, {f.id for f in definition.factions}, out
+        return battle.muster_deadline_real, set(battle_instance.sides(definition)), out  # 兩軍加第三方：豪強的假人也擲趕來參戰
 
     def _fill(self, now: float, report: TickReport) -> None:
-        """補人；補成一個就記一個進 report.added（中途出錯時，已經補成的仍算數）。"""
+        """補人；補成一個就記一個進 report.added（中途出錯時，已經補成的仍算數）。
+        tick 開頭看過暫停了，但等這把行動鎖的時候管理者的暫停可能先寫進去：拿到鎖之後再看一次，暫停中不補人。"""
+        if self.world.read().paused_at is not None:  # 欄位，不是方法（world.paused_at() 才是方法）
+            return
         cfg = self.content.config
         season = self.world.get_season_number()
         bots = self.characters.all(bots_only=True)

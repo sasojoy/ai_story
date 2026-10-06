@@ -240,15 +240,15 @@ def test_a_second_player_merges_into_the_same_insight_without_the_model(ready, c
     assert other.player.insights == ["feng", "huo", "燎原"] and "首悟" in msgs[0]
 
 
-def test_an_anonymous_first_fuser_is_stored_by_name_but_shown_as_a_nameless_hero(ready, content, world):
-    """匿名行走（最終審查 Important 2）：首創者的名號是身分（存著照舊），寫給別人看的地方——後到的人那一句、
-    功法卡（skillview）、換季的江湖史——用登記當下的匿名規矩寫「某位少俠」（rules.display_name）。"""
+def test_an_anonymous_first_fuser_is_shown_by_name(ready, content, world):
+    """匿名行走只作用在地方傳聞（傳聞分層第七節，企劃者 2026-10-06）：首創寫給別人看的地方——後到的人那一句、
+    功法卡（skillview）、換季的江湖史——一律寫名號。"""
     ready.player.anonymous = True
     art, msgs = fusion.fuse(ready, content, world, named("旋風腿"), "basic_fist", "feng")
     stored = world.get_skill(art.id)
-    assert (stored.creator, stored.creator_shown) == ("沈浪", "某位少俠")
+    assert (stored.creator, stored.creator_shown) == ("沈浪", "沈浪")
     _, msgs = fusion.fuse(other_player(content), content, world, must_not_ask(), "basic_fist", "feng")
-    assert "這一門由某位少俠首創" in msgs[0] and "沈浪" not in msgs[0]
+    assert "這一門由沈浪首創" in msgs[0] and "某位少俠" not in msgs[0]
 
 
 def test_a_named_first_fuser_is_shown_by_name(ready, content, world):
@@ -258,12 +258,12 @@ def test_a_named_first_fuser_is_shown_by_name(ready, content, world):
     assert "這一門由沈浪首創" in msgs[0]
 
 
-def test_an_anonymous_first_merger_is_shown_as_a_nameless_hero(ready, content, world):
+def test_an_anonymous_first_merger_is_shown_by_name(ready, content, world):
     ready.player.anonymous = True
     first, _ = fusion.merge(ready, content, world, named("燎原"), "huo", "feng")
-    assert (first.creator, first.creator_shown) == ("沈浪", "某位少俠")
+    assert (first.creator, first.creator_shown) == ("沈浪", "沈浪")
     _, msgs = fusion.merge(other_player(content, ("feng", "huo")), content, world, must_not_ask(), "feng", "huo")
-    assert "這個意境由某位少俠首悟" in msgs[0] and "沈浪" not in msgs[0]
+    assert "這個意境由沈浪首悟" in msgs[0] and "某位少俠" not in msgs[0]
 
 
 def test_merge_falls_back_to_the_word_table_when_the_model_is_down(ready, content, world):
@@ -529,7 +529,7 @@ def test_forge_request_on_the_game_needs_a_model_client(game):
     p = game.state.player
     p.member.wugong_id, p.insights, p.stats["xinde"] = "basic_fist", ["feng"], 100
     assert game.forge_request("basic_fist", ["feng"]) is not None
-    game.client = None  # 伺服器假人（bot_runner 把 client 設成 None）：不叫模型，C 段走退路字表
+    game.client = None  # 沒有 client（伺服器假人鎖內的 Game 就是這樣）：預設不開單；假人程式在鎖外自己叫模型，給 named_outside=True 才開
     assert game.forge_request("basic_fist", ["feng"]) is None
 
 
@@ -1168,7 +1168,7 @@ def test_the_three_steps_run_for_a_blend_too(game):
     assert world.lookup_recipe(fusion.blend_key("basic_fist", "basic_breath")).note == "一吐一納，拳隨氣走。"
     assert game.forge_request("basic_fist", [], other_art="basic_breath") is None  # 配方登記了：不必再問
     assert game.forge_request("basic_fist", [], other_art=made) is not None  # 另一組還沒人合過
-    game.client = None  # 伺服器假人（bot_runner 把 client 設成 None）：不叫模型，C 段走退路字表
+    game.client = None  # 沒有 client（伺服器假人鎖內的 Game 就是這樣）：預設不開單；假人程式在鎖外自己叫模型，給 named_outside=True 才開
     assert game.forge_request("basic_fist", [], other_art=made) is None
 
 
@@ -1451,7 +1451,7 @@ def test_the_first_art_with_a_special_is_a_rumor_in_the_world(ready, content, wo
     assert line in msgs
     (rumor,) = ready.world.rumors
     assert rumor.text == line and rumor.layer == "world" and rumor.named is True
-    assert rumor.location == ready.player.location
+    assert rumor.location is None  # 天下大事不釘在鑄功法的人此刻的位置（不然輿圖的 ✦ 會把他的行蹤送給每個陣營）
     assert "basic_fist" not in line and "feng" not in line  # 不寫配方
     again, again_msgs = fusion.fuse(other_player(content), content, world, must_not_ask(), "basic_fist", "feng")
     assert again.id == art.id and not any("江湖上傳開了" in m for m in again_msgs)
@@ -1468,7 +1468,7 @@ def test_the_special_rumor_names_the_maker_even_when_walking_anonymously(ready, 
     (rumor,) = ready.world.rumors
     # 世界層的傳聞一律具名、寫真正的名號（只有地方傳聞才有不具名）；匿名行走的人也一樣
     assert rumor.text == line and rumor.named is True and rumor.layer == "world"
-    assert art.creator_shown == "某位少俠"  # 首創者那一門自己寫的名號照匿名的規矩，這裡不動
+    assert art.creator_shown == "沈浪"  # 首創一律寫名號（傳聞分層第七節）：功法自己記的名號也不再照匿名改
 
 
 def test_a_special_rumor_survives_the_engine_save(game):

@@ -22,7 +22,7 @@ from .journal import fragment_line
 from .models import (
     Check, Content, FsAsk, FsChain, FsFinal, FsFragment, FsItem, FsRequires, FsStep, FsWrong, Squad,
 )
-from .rules import can_meet, check_chance, check_result_line, display_name
+from .rules import can_meet, check_chance, check_result_line
 from .state import GameState, Lock
 from .world_state import WorldStateStore
 
@@ -265,6 +265,18 @@ def hear_from_event(state: GameState, content: Content, event_id: str, world: Wo
                 _mark_heard(state, c.id, i)
                 lines.append(fragment_line(_fragment_text(state, content, c, f, world)))
     return lines
+
+
+def heard_texts(state: GameState, content: Content, world: WorldStateStore | None = None) -> list[str]:
+    """聽過的線索片段（見聞頁的「個人線索」，傳聞分層設計第六節）：照鏈與片段的順序，文字照片段的寫法填好天機與出面的人
+    （偷聽到的不再加「聽說誰說過」）。只有自己看得到；伏筆沒在跑（開關關著、沒有鏈）時是空的。"""
+    if not active(state, content):
+        return []
+    heard = state.player.fragments
+    return [
+        _fragment_text(state, content, c, c.fragments[i], world)
+        for c in content.foreshadows.chains for i in sorted(heard.get(c.id, [])) if 0 <= i < len(c.fragments)
+    ]
 
 
 def _speaker(state: GameState, f: FsFragment) -> str | None:
@@ -606,13 +618,14 @@ def _succeed(
 
 def _complete(state: GameState, content: Content, c: FsChain, now: float) -> None:
     """整條完成：記做完、記貢獻（先完成、搶輸、同陣營後到都照記）；官軍、黃巾寫鎖定（已經有人就進搶輸的名單），
-    其他陣營寫第三方。不發任何傳聞、不推大勢（伏筆文件 2.4）。"""
+    其他陣營寫第三方。不發任何傳聞、不推大勢（伏筆文件 2.4）。
+    公告與江湖史一律寫名號（傳聞分層第七節：改寫歷史的事，留名本身就是獎勵），所以不再記 Lock.shown、third_party_shown；
+    這一版之前匿名記下的照舊（timetable.shown 讀得到）。"""
     p, w = state.player, state.world
     p.fs_done.append(c.id)
     push.add_contribution(p, calendar.point(now, content, w).week, content.config.foreshadow_contrib)
-    shown = display_name(state) if p.anonymous else None  # 匿名的人在公告與江湖史上是「某位少俠」；真名照記（T9 的稱號）
     if c.side in LOCK_SIDES:
-        lock = Lock(side=c.side, name=p.name, time=now, shown=shown)
+        lock = Lock(side=c.side, name=p.name, time=now)
         if c.event not in w.locks:
             w.locks[c.event] = lock
         else:
@@ -621,8 +634,6 @@ def _complete(state: GameState, content: Content, c: FsChain, now: float) -> Non
         names = w.third_party.setdefault(c.event, [])
         if p.name not in names:
             names.append(p.name)
-            if shown is not None:
-                w.third_party_shown.setdefault(c.event, {})[p.name] = shown
 
 
 # ── 官銀 ─────────────────────────────────────────────────
