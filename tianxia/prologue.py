@@ -228,6 +228,66 @@ def cultivate_problem(state: GameState, content: Content) -> str | None:
     return "師父這一步沒叫你修練。"
 
 
+def seclude_problem(state: GameState, content: Content) -> str | None:
+    """序章裡不閉關：閉關是師父沒教的一條路，而且一次就能把心得賺過劇本備好的帳（20 → 170）。待 joy 潤。"""
+    return "師父沒叫你閉關。" if active(state, content) else None
+
+
+def melt_insight_problem(state: GameState, content: Content) -> str | None:
+    """序章裡不熔意境：序章的意境是合成要用的，熔了後面就走不下去。待 joy 潤。"""
+    return "師父沒叫你熔意境。" if active(state, content) else None
+
+
+def switch_target(state: GameState, content: Content, world: WorldStateStore) -> str | None:
+    """這一步要改練上身的那一門（師父話裡的 {武學}）：這一步的 glow 有 switch、合成出來的那一門還沒換上才有；換上之後沒有
+    ——被換下來的基礎拳腳不是目標，不然發光邀人換回去（T7 走查 W-A）。只管發光，不是新的拒絕。"""
+    current = step(state, content)
+    if current is None or "switch" not in current.glow:
+        return None
+    named = next(iter(fused_arts(state, content, world)), None)
+    member = state.player.member
+    if named is None or named.id in (member.neigong_id, member.wugong_id):
+        return None
+    return named.id
+
+
+def art_glow(
+    state: GameState, content: Content, world: WorldStateStore, art_id: str, *, cultivate_ok: bool, melt_ok: bool,
+) -> list[str]:
+    """修練頁、煉製頁的一列武學在這一步可以發光的鍵（網頁照 Task 6 的 glow 清單比對，只有這一步的 glow 有的才真的亮）：
+    switch＝師父點名要改練的那一門（switch_target）、cultivate／melt＝按得下去的（伺服器已經照序章的拒絕算過）、
+    pick:art＝煉製頁這一步點名的底（fuse_base）。哪一列是誰由伺服器說，網頁不猜。只在序章裡呼叫。"""
+    current = step(state, content)
+    keys: list[str] = []
+    if switch_target(state, content, world) == art_id:
+        keys.append("switch")
+    if cultivate_ok:
+        keys.append("cultivate")
+    if melt_ok:
+        keys.append("melt")
+    if current is not None and current.fuse_base == art_id:
+        keys.append("pick:art")
+    return keys
+
+
+def insight_glow(state: GameState, content: Content) -> list[str]:
+    """煉製頁這一步（有 fuse_base 的合成那一步）剛悟到的意境發光：序章的意境都是合成要用的，所以這一步手上的都標。只在序章裡呼叫。"""
+    current = step(state, content)
+    return ["pick:insight"] if current is not None and current.fuse_base else []
+
+
+def after_line(state: GameState, content: Content, **names: str | int) -> str | None:
+    """這一步的動作做成之後的結果那一句（TutorialStep.after，設計 10.3 的「…之後（場景）」）：{意境}、{武學}、{心得} 換成
+    names 給的（意境、武學、心得）；沒有序章、不在序章裡、這一步沒寫就是 None（用引擎的一般那句）。"""
+    current = step(state, content)
+    if current is None or not current.after:
+        return None
+    text = current.after
+    for key, value in names.items():
+        text = text.replace("{" + key + "}", str(value))
+    return text
+
+
 def fused_arts(state: GameState, content: Content, world: WorldStateStore) -> list[MartialArt]:
     """身上與功法庫裡合成出來的武學（自己那一份，品質照自己修到的），照擁有的順序。"""
     from . import library, team  # team、library 都 import 很多東西，放在函式裡避免循環

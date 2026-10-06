@@ -83,13 +83,15 @@ def practice_hint(state: GameState, content: Content) -> str | None:
     return f"💡 你已攢下 {xinde} 點心得。{'，或'.join(parts)}。"
 
 
-def _known_recipe(state: GameState, content: Content, world: WorldStateStore, key: str) -> str:
+def _known_recipe(state: GameState, content: Content, world: WorldStateStore, key: str, preset: bool = False) -> str:
     """爐子上那一組武學的配方有沒有人合過（武學與成長設計 13.6）：已知的寫「會合出【X】」與它的功效，沒人合過的寫「沒人合過」，
     不預告會長出什麼。合出來的那一門你已經有了就不寫（下面的 ⚠ 本來就會說「你已經有了」）。只在放進爐裡的都是你的東西時才會
-    呼叫（forge_line 先擋下了不是你的），所以不會拿它探別人合出了什麼。"""
+    呼叫（forge_line 先擋下了不是你的），所以不會拿它探別人合出了什麼。
+    preset：這一組是師門配方（fusion.preset_for）——還沒人合過時不寫「沒人合過」（結果說的是師門傳下來的路數，兩句互相矛盾，
+    T7 走查 W-E），照結果的說法寫；字句待 joy 潤。"""
     known = world.lookup_recipe(key)
     if known is None:
-        return "\n沒人合過。"
+        return "\n這是師門傳下來的路數。" if preset else "\n沒人合過。"
     if known.id in owned_arts(state):
         return ""
     return f"\n會合出【{known.name}】。{traits.card_line(content, known)}"
@@ -149,7 +151,10 @@ def forge_line(
             f"（屬{insight.attribute}，從下品起修），"
             f"花 {cfg.fuse_xinde} 點心得、{cfg.fuse_stamina} 點體力（你有 {xinde} 點心得）。"
         )
-        head += _known_recipe(state, content, world, fusion.fuse_key(art_id, insight_ids[0]))
+        head += _known_recipe(
+            state, content, world, fusion.fuse_key(art_id, insight_ids[0]),
+            preset=fusion.preset_for(content, art_id, insight_ids[0]) is not None,
+        )
         problem = fusion.fuse_problem(state, content, world, art_id, insight_ids[0])
     elif not art_id and not other_art and len(insight_ids) == 2:
         if any(i not in held for i in insight_ids):
@@ -225,6 +230,7 @@ def art_rows(state: GameState, content: Content, world: WorldStateStore) -> list
     修練與熔煉按不按得下去與為什麼。只讀狀態，不改東西。"""
     p, member = state.player, state.player.member
     rows = []
+    hut = prologue.active(state, content)
     for art_id in owned_arts(state):
         art = team.player_art(state, content, world, art_id)  # 自己那一份：品質照自己修練到的
         if art is None:
@@ -245,7 +251,7 @@ def art_rows(state: GameState, content: Content, world: WorldStateStore) -> list
         value = melt_value(state, content, world, art_id) if stuck is None else 0
         worn = art_id in (member.neigong_id, member.wugong_id)
         relearn = None if worn else relearn_note(state, content, art_id)  # 熔了怎麼拿回來（FB-081）：身上正在練的不能熔，不寫
-        rows.append({
+        row = {
             "id": art_id, "name": art.name, "kind": art.kind, "quality": art.quality, "attribute": art.attribute,
             "level": level, "worn": worn, "insight": insight_name,
             "card": art_card(
@@ -260,7 +266,10 @@ def art_rows(state: GameState, content: Content, world: WorldStateStore) -> list
                 "confirm": melt_confirm(art.name, value, relearn) if stuck is None else "",
             },
             "relearn": relearn,  # 合成的、內容直接給的絕學沒有重學的地方，是 None
-        })
+        }
+        if hut:  # 序章：這一列在這一步可以發光的鍵由伺服器說（T7 走查 W-A、W-B）；序章外沒有這個鍵
+            row["glow"] = prologue.art_glow(state, content, world, art_id, cultivate_ok=problem is None, melt_ok=stuck is None)
+        rows.append(row)
     # 功法庫多了要找得到（FB-085）：身上的在前，再照品質（絕學＞上品＞中品＞下品，自己那一份）、成多的先、最後比名字；
     # 修練頁與煉製頁畫的是同一份，所以兩頁的順序一樣
     rows.sort(key=lambda r: (not r["worn"], -QUALITIES.index(r["quality"]), -(r["level"] or 0), r["name"]))
@@ -286,13 +295,17 @@ def _legend_choice(state: GameState, content: Content, target: str, failures: in
 def insight_rows(state: GameState, content: Content, world: WorldStateStore) -> list[dict]:
     """悟得的意境，照悟得的先後。"""
     rows = []
+    blocked = prologue.melt_insight_problem(state, content)  # 序章裡不熔意境（跟 Game.melt_insight 的拒絕同一個判斷）；平常是 None
     for insight_id in state.player.insights:
         insight = insights.resolve(insight_id, content, world)
         if insight is not None:
-            rows.append({
+            row = {
                 "id": insight_id, "name": insight.name, "attribute": insight.attribute, "lean": insight.lean,
-                "note": insight.note, "melt": content.config.melt_insight_xinde,
-            })
+                "note": insight.note, "melt": content.config.melt_insight_xinde, "blocked": blocked,
+            }
+            if blocked is not None:  # 在序章裡（跟上面的拒絕同一個條件）：煉製頁這一步要放進爐子的意境發光（T7 走查 W-B）
+                row["glow"] = prologue.insight_glow(state, content)
+            rows.append(row)
     return rows
 
 

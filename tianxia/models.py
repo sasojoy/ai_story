@@ -643,6 +643,10 @@ REVEAL_KEYS = frozenset({
     "board", "quest", "fronts", "orders", "minimap",  # 江湖頁的公告卡、主線與目標、戰況、軍令卡、小地圖
     "stances",  # 江湖頁最上面那一排小標裡的「態勢」（第一季才有）；跟公告卡（board）一起亮，見 Task 6 的 shown("stances")
 })
+# 序章每一步 glow 可以寫的鍵（網頁的 data-glow，見 web/app.js 的 applyGlow）：亮得起來的元件加上修練頁、煉製頁裡的幾顆鈕。
+# 「all」是全部亮齊的意思，沒有東西可發光，不收。寫錯的鍵悄悄什麼都不亮，帶引號或括號的還會讓 applyGlow 的選擇器丟例外
+# pick:art、pick:insight 是煉製頁挑選清單裡這一步要放進爐子的那門武學與意境（Game.art_rows／insight_rows 的 glow 標出來）
+GLOW_KEYS = (REVEAL_KEYS - {"all"}) | frozenset({"forge", "practice", "switch", "cultivate", "melt", "allocate", "pick:art", "pick:insight"})
 
 
 # 序章每一步 allow 可以寫的選單 id（TutorialStep.allow 是前綴比對，見 prologue.allowed）：照 Game._everyday_options 與它叫的
@@ -692,6 +696,12 @@ class TutorialStep(_Strict):
     fuse_base: str | None = None  # 這一步的合成只准拿這一門當底
     melt_only: str | None = None  # 這一步只准熔這一門
     give_art: GiveArt | None = None  # 完成這一步時給的武學
+    # 師父的話太長、一次放不下時分頁（T7 審查 I1）：網頁照 \n\n 切成幾頁、一頁一頁按「下一段 ▸」，最後一頁是要做的事；話整段都在、不切。
+    # 只有 reveal 之後這一步的行動列落到分頁列底下才用得到（量測見 Task 7 報告）；至少要有兩段
+    paged: bool = False
+    # 這一步的動作做成之後，結果那一句（設計 10.3 的「…之後（場景）」）：草廬裡合成、修練、熔煉成功時用它取代引擎的一般那句。
+    # {意境}、{武學}、{心得} 換成這一次真的合出來的／修練的／退回的（prologue.after_line）
+    after: str = ""
 
 
 class PresetRecipe(_Strict):
