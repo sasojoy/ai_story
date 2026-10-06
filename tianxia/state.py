@@ -76,12 +76,17 @@ class Convoy(BaseModel):
 
 class Summons(BaseModel):
     """收到的召見（計畫 T5、晉升文件第一節）：沒有期限；到了 location、演完那一階的奇遇才晉升。
-    figure 是發召見那一刻出面的人（江湖紀錄寫他）；到了現場照當下再挑一次（ranks.presenter）。"""
+    figure 是發召見那一刻出面的人（江湖紀錄寫他）；到了現場照當下再挑一次（ranks.presenter）。
+    第 3、4 階（正式版丙一）的奇遇有好幾段：leg 是這一段排第幾（0 起）、prev 是上一段演完的那一則事件、event 是這一段
+    此刻要演的事件（版本照當下的時局挑，每次 check_summons 重挑）；第 2 階三個都用預設。"""
 
     rank: int
     figure: str | None = None
     location: str
     since: float = 0.0
+    leg: int = 0
+    prev: str | None = None
+    event: str | None = None
 
 
 class HintNote(BaseModel):
@@ -235,6 +240,8 @@ class PlayerState(BaseModel):
     rank: int = 0  # 晉升過的階；0 是還沒晉升過（有陣營時算第 1 階，見 ranks.rank_of）
     summons: Summons | None = None  # 還沒去的召見
     followers: list[str] = Field(default_factory=list)  # 部下（followers.json 的模板 id）
+    qualified: bool = False  # 第 4 階的資格（候缺，正式版丙一）：rank 停在 3、頭銜寫「…（…候缺）」；上任與席次是計畫丁的事
+    hinted: list[int] = Field(default_factory=list)  # 說過「只缺一個機會」那一句的階（每階一次）
 
     # ── 大勢人物（計畫 T4、軍令文件 4.5）：剛被你打敗的人物 id → 到哪個「現實」時間（秒，Game.now）之前不見你、也不跟你交手。
     # 看現實時間、不看賽季時鐘（管理者快轉不會讓他提早見你）；角色每季重來，跟著清空 ──

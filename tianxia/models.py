@@ -74,6 +74,15 @@ Condition.model_rebuild()
 FRONT_KEY = "front"  # Effect.trend／Location.train_trend 的特殊鍵：效果發生地所在大區的戰線（rules.resolve_trend）
 
 
+class EventMod(_Strict):
+    """一般伏筆（伏筆文件 4.4）：event 那件大事 side 那一方的成功率 +amount；那件大事還沒結算才算，全服合計夾在 ±0.20
+    （timetable.add_mod）。只有擲骰的大事（有 roll_side）才有意義，content.validate 擋別的。"""
+
+    event: str
+    side: Literal["guan", "huang"]
+    amount: float
+
+
 class Effect(_Strict):
     text: str = ""
     stats: dict[str, int] = Field(default_factory=dict)
@@ -100,6 +109,10 @@ class Effect(_Strict):
     promote: int | None = None  # 演完晉升到第幾階（清掉召見、接結尾那一句、記進當天的彙整）
     followers: list[str] = Field(default_factory=list)  # 給的部下（followers.json 的模板 id）
     affinity: dict[str, int] = Field(default_factory=dict)  # 人物 id → 情誼增減（夾在 0～100，訊息「皇甫嵩情誼 +10」）
+    # ── 第 3、4 階晉升（正式版丙一）：同樣只寫在晉升奇遇的選項上，各自的規則見 content.check_promotions ──
+    summons_next: str | None = None  # 寫這一則事件自己的 id：演完這一段，召見往下一段（只有最後一段以前的奇遇可以）
+    event_mods: list[EventMod] = Field(default_factory=list)  # 一般伏筆：某件擲骰大事的成功率修正（暗中的，不寫字）
+    patron: Literal["yuan", "cao", "self"] | None = None  # 豪強升第 3 階時記下的靠山（PlayerState.patron）
 
 
 class Material(_Strict):
@@ -1164,6 +1177,9 @@ class Config(_Strict):
     convoy_grain: int = Field(default=4, ge=1)  # 接一車糧要交出幾份糧草（軍令文件 3.4：份量 ≥ 4）
     duty_stamina: int = Field(default=10, ge=0)  # 第 1 階守勢行動（巡哨、傳道、保境安民）的體力
     rank2_contrib: int = Field(default=300, ge=0)  # 升第 2 階的貢獻門檻（計畫 T5、第五節：推 30 點大勢）
+    # 升第 3、4 階的貢獻門檻（正式版丙一；【預設】企劃者 2026-10-06 同意，用整季模擬調）：到了還要完成過那一階的一種機緣才發召見
+    rank3_contrib: int = Field(default=900, ge=0)
+    rank4_contrib: int = Field(default=1800, ge=0)
     # ── 機緣與第 2 階行動（正式版乙一；全部【預設】，企劃者 2026-10-06 同意）──
     rank2_stamina: int = Field(default=15, ge=0)  # 第 2 階行動（招降黃巾散兵、施符水收人心）的體力
     rank2_daily: int = Field(default=3, ge=0)  # 每曆日最多做幾次（不論成敗都算一次）
@@ -1796,21 +1812,54 @@ class OrdersContent(_Strict):
     petition: dict[str, Petition] = Field(default_factory=dict)  # 陣營 id → 請命的說法（正式版乙二；計畫己再加機密軍令）
 
 
+class PromotionCast(_Strict):
+    """一段奇遇的一個版本（晉升奇遇文件第一節「人物不在」與「時局」）：照順序第一個成立的演。
+    figure 寫了：那位人物要在場（active）；at 也寫了就要在 at，沒寫 at 就是他此刻的所在。
+    before_event：那件時刻表大事還沒結算才成立（何進的索賄在盧植下獄之前、之後各一版）。
+    flags_none：這些世界旗標都不在才成立。after：上一段演的是這一則才成立（董卓版的第二段接董卓版的第一段）。"""
+
+    event: str
+    figure: str | None = None
+    at: str | None = None
+    before_event: str | None = None
+    flags_none: list[str] = Field(default_factory=list)
+    after: str | None = None
+    summons_text: str  # 召見的話（{據點}＝地點名）
+
+
+class PromotionLeg(_Strict):
+    """晉升奇遇的一段（一個地點的戲）。location 是 cast 沒寫 at、也沒有 figure 時的地點（可寫 "nearest_base"）。"""
+
+    location: str | None = None
+    casts: list[PromotionCast]
+
+
+class PatronLine(_Strict):
+    """豪強升第 4 階時，看靠山多一句話（晉升奇遇文件 4.3）。"""
+
+    text: str
+    affinity: dict[str, int] = Field(default_factory=dict)
+
+
 class PromotionDef(_Strict):
     """一階的晉升（濃縮版內容表 2.1、2.2；計畫 T5）。figure 是出面的大勢人物（豪強的馬商不是人物，空著），不在時由
     successor 出面、演 event_handoff。location 是地點 id，或 "nearest_base"（豪強：離自己最近的投靠點）。
-    召見文字放這裡（{據點} 換成地點名）；結尾那一句（closing）接在選項的反應後面。"""
+    召見文字放這裡（{據點} 換成地點名）；結尾那一句（closing）接在選項的反應後面。
+    第 2 階照舊寫上面那幾個欄位（location、event_main、summons_text 空著會被 content.validate 擋下）；
+    第 3、4 階（正式版丙一）改寫 legs：一段一個地點、每段幾個版本（PromotionCast），patron_lines 是豪強第 4 階看靠山的那一句。"""
 
     faction: str
-    rank: int = Field(ge=2)
+    rank: int = Field(ge=2, le=4)
     figure: str | None = None
     successor: str | None = None
-    location: str
-    event_main: str
+    location: str = ""
+    event_main: str = ""
     event_handoff: str | None = None
-    summons_text: str
+    summons_text: str = ""
     summons_handoff: str | None = None
     closing: str
+    legs: list[PromotionLeg] = Field(default_factory=list)
+    patron_lines: dict[str, PatronLine] = Field(default_factory=dict)  # 靠山（yuan、cao、self）→ 那一句
 
 
 class OppBond(_Strict):

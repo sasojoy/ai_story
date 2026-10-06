@@ -756,17 +756,21 @@ def check_orders(c: Content, need, known, front_ids: list[str]) -> None:
 def check_promotions(c: Content, need, known) -> None:
     """晉升（content/promotions.json、followers.json，計畫 T5）：陣營在劇本裡、每陣營每階一筆；人物在人物表；地點存在
     （或 nearest_base）；奇遇存在；有接手的人就要有接手版的奇遇與召見；部下的陣營存在、武學在 skills.json；
-    promote／followers 只寫在晉升奇遇的選項上，給的部下是那個陣營的。"""
+    promote／followers 只寫在晉升奇遇的選項上，給的部下是那個陣營的。
+    第 2 階寫 location／event_main／summons_text，第 3、4 階寫 legs（正式版丙一）：每段有版本、版本的人物與地點存在、
+    before_event 在時刻表；各段的版本事件都算晉升奇遇。選項效果的 summons_next（只有最後一段以前的奇遇、寫自己的 id）、
+    patron（只有晉升奇遇）、event_mods（只有擲骰的時刻表大事）在這裡查。"""
     factions = {f.id for f in c.scenario.factions}
     seen: set[tuple[str, int]] = set()
     promo_events: dict[str, str] = {}
+    unfinished: set[str] = set()  # 第 3、4 階奇遇的各段裡，不是最後一段的版本事件：只有它們的選項可以寫 summons_next
     for promo in c.promotions:
         where = f"promotions.json 的 {promo.faction}／第 {promo.rank} 階"
         need(promo.faction in factions, f"{where}：陣營不在劇本裡")
         need((promo.faction, promo.rank) not in seen, f"{where}：同一個陣營的同一階寫了兩筆")
         seen.add((promo.faction, promo.rank))
         known(where, [x for x in (promo.figure, promo.successor) if x is not None], c.figures, "人物")
-        if promo.location != "nearest_base":
+        if promo.location and promo.location != "nearest_base":  # 第 3、4 階的 location 空著（地點寫在各段），空的不查
             known(where, [promo.location], c.locations, "地點")
         need(
             (promo.successor is None) == (promo.event_handoff is None) == (promo.summons_handoff is None),
@@ -775,6 +779,30 @@ def check_promotions(c: Content, need, known) -> None:
         for event_id in filter(None, (promo.event_main, promo.event_handoff)):
             known(where, [event_id], c.events, "事件")
             promo_events[event_id] = promo.faction
+        if promo.rank == 2:
+            need(bool(promo.location and promo.event_main and promo.summons_text),
+                 f"{where}：第 2 階要寫 location、event_main、summons_text")
+        else:
+            need(bool(promo.legs), f"{where}：第 {promo.rank} 階要寫 legs")
+        for i, leg in enumerate(promo.legs):
+            need(bool(leg.casts), f"{where}：第 {i + 1} 段沒有版本")
+            if leg.location and leg.location != "nearest_base":  # 段的地點有寫才查
+                known(where, [leg.location], c.locations, "地點")
+            for cast in leg.casts:
+                known(where, [cast.event], c.events, "事件")
+                promo_events[cast.event] = promo.faction  # 各段的奇遇都算晉升奇遇：最後一段的選項才寫 promote、followers，下面那條檢查要認得它
+                if i < len(promo.legs) - 1:
+                    unfinished.add(cast.event)
+                known(where, [cast.figure] if cast.figure else [], c.figures, "人物")
+                known(where, [cast.at] if cast.at else [], c.locations, "地點")
+                need(cast.figure is not None or cast.at is not None or leg.location is not None,
+                     f"{where}：第 {i + 1} 段的 {cast.event} 不知道在哪裡演")
+                need(cast.before_event is None or any(e.id == cast.before_event for e in c.timetable),
+                     f"{where}：before_event {cast.before_event} 不在時刻表")
+        for line in promo.patron_lines.values():
+            known(where, list(line.affinity), c.characters, "人物")
+    rolled = {e.id for e in c.timetable if e.roll_side is not None}  # event_mods 只對擲骰的大事有意義（timetable.add_mod）
+    timetable_ids = {e.id for e in c.timetable}
     for fid, follower in c.followers.items():
         where = f"followers.json 的 {fid}"
         need(follower.faction in factions, f"{where}：陣營不在劇本裡")
@@ -789,6 +817,22 @@ def check_promotions(c: Content, need, known) -> None:
             side = promo_events.get(event.id)
             need(all(c.followers[f].faction == side for f in choice.effect.followers if f in c.followers),
                  f"{where}：給的部下要是 {side} 的")
+    # 第 3、4 階的三種新效果（正式版丙一）：選項的 effect 與 fail_effect 都查
+    for event in c.events.values():
+        for choice in event.choices:
+            for effect in (choice.effect, choice.fail_effect):
+                where = f"事件 {event.id}"
+                if effect.summons_next is not None:
+                    if effect.summons_next != event.id:
+                        need(False, f"{where}：summons_next 要寫這一則自己的 id")
+                    else:
+                        need(event.id in unfinished, f"{where}：summons_next 只能寫在晉升奇遇的最後一段以前（最後一段演完就是晉升）")
+                if effect.patron is not None:
+                    need(event.id in promo_events, f"{where}：patron 只能寫在晉升奇遇（promotions.json 的事件）")
+                for mod in effect.event_mods:
+                    need(mod.event in timetable_ids, f"{where}：event_mods 的 {mod.event} 不在時刻表")
+                    need(mod.event not in timetable_ids or mod.event in rolled,
+                         f"{where}：event_mods 的 {mod.event} 不是擲骰的大事（固定、決戰、季末沒有成功率可改）")
 
 
 def check_opportunities(c: Content, need, known, front_ids: list[str]) -> None:
@@ -1199,7 +1243,7 @@ def validate(c: Content) -> None:
 
     def check_free_text(where: str, ev: Event) -> None:
         """隨口應對（§8.1）：賣的是好玩不是划算，獎勵不能比同一則事件裡最好的檢定選項高；
-        也不能串到下一則事件、結識人物、拜師或改旗標（那些都要靠手寫的選項）。"""
+        也不能串到下一則事件、結識人物、拜師、改旗標或晉升（那些都要靠手寫的選項）。"""
         ft, fw = ev.free_text, f"{where} 隨口應對"
         check_effect(fw, ft.effect)
         check_effect(fw, ft.fail_effect)
@@ -1225,6 +1269,9 @@ def validate(c: Content) -> None:
                 name for name, used in (
                     ("next_event", eff.next_event), ("recruit", eff.recruit), ("join_sect", eff.join_sect),
                     ("flags_add", eff.flags_add), ("world_flags_add", eff.world_flags_add),
+                    # 晉升奇遇的效果（只能寫在手寫的晉升選項上）：summons_next、event_mods、patron 是正式版丙一的
+                    ("promote", eff.promote), ("followers", eff.followers), ("summons_next", eff.summons_next),
+                    ("event_mods", eff.event_mods), ("patron", eff.patron),
                 ) if used
             ]
             need(not banned, f"{fw} {label}：不能有 {'、'.join(banned)}")
