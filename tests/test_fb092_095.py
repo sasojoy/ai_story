@@ -269,6 +269,105 @@ def test_fb094_the_fallback_only_touches_the_order_step_and_old_saves_start_thei
     assert enlist.expire(game.state, on) == [] and game.state.player.enlist_since == game.state.world.time  # 從現在算起的一週
 
 
+# ── FB-095：剛出師的新角色去黃巾別部營寨遊歷，挨了三場打 ───────────────────────────
+# 出師時師父點名三處、疾行又到得了，按鈕寫了「必敗」新玩家還是會去看看。師父多說一句；規劃者定：寫「必敗」的遊歷按下去先問一次
+# （網頁裡的 ask()，不是 confirm()）。「必敗」只在一個地方算：遊歷按鈕上的勝算那一個字，問不問就看它，不另外算一次。
+
+
+def test_fb095_the_farewell_warns_about_the_places_it_just_named(real):
+    page = _step(real, "p11_farewell").text.split("\n\n")[0]
+    named = page.index("譙縣曹家的莊院就是一處")  # 三處都點名完了
+    assert "那幾處都是人家的窩" in page[named:] and "沒投靠就別" in page[named:] and "動手" in page[named:]
+    assert page.index("跟誰、什麼時候跟") > page.index("沒投靠就別")  # 在「你自己拿主意」之前：話還是順的
+
+
+def _train(game):
+    return next(o for o in game.options() if o.id == "act:train")
+
+
+@pytest.mark.parametrize("word, asks", [("必敗", True), ("凶險", False), ("難分勝負", False), ("五五波", False), ("有把握", False), ("穩勝", False)])
+def test_fb095_only_a_losing_fight_asks_first(on, monkeypatch, word, asks):
+    """問不問看遊歷按鈕上的勝算那一個字（Game.odds，標籤用的就是它）：只有「必敗」問；其他勝算不問。"""
+    from tianxia.engine import DOOMED_ASK, Game
+
+    game = _game(on, at="huangjin_camp")  # 散人在黃巾的營寨：對手是黃巾的人
+    monkeypatch.setattr(Game, "odds", lambda self, squad_id: word)
+    option = _train(game)
+    assert word in option.label
+    assert (option.confirm == DOOMED_ASK) is asks and (option.confirm != "") is asks
+    assert DOOMED_ASK == "這一仗必敗，真的要打？"
+
+
+def test_fb095_a_real_newcomer_at_the_yellow_turban_camp_is_asked(on):
+    """真的算出來的（不是換掉 odds）：新角色威力 0，在黃巾別部營寨遊歷寫必敗，按鈕帶著問句。"""
+    game = _game(on, at="huangjin_camp")
+    game.state.player.member.wugong_id = None
+    option = _train(game)
+    assert "必敗" in option.label and option.confirm
+
+
+def test_fb095_a_drill_among_your_own_side_never_asks(on):
+    """投了黃巾的人在自己的營寨遊歷是操練、零風險：不是必敗，不問。"""
+    game = _game(on, faction="huang", at="huangjin_camp")
+    option = _train(game)
+    assert "操練" in option.label and option.confirm == ""
+
+
+def test_fb095_options_without_odds_never_ask_and_listing_them_rolls_nothing(on):
+    """假人與整季機器人（bot.pick、bot_policy）看的是不算勝算的選單：沒有問句；列出選單也不碰 game.rng（算勝算用固定種子）。"""
+    game = _game(on, at="huangjin_camp")
+    game.state.player.member.wugong_id = None
+    state = game.rng.getstate()
+    plain = {o.id: o for o in game.options(odds=False)}
+    assert plain["act:train"].confirm == "" and "必敗" not in plain["act:train"].label
+    game.options()
+    assert game.rng.getstate() == state
+    assert all(o.confirm == "" for o in game.options(odds=False))
+
+
+def test_fb095_asking_is_the_pages_job_the_server_never_refuses_or_rolls(on):
+    """問一次是網頁的事：伺服器收到 act:train 就照常打（機器人、腳本都這樣走），取消的人根本沒有送出；所以取消不花體力、不擲骰。"""
+    game = _game(on, at="huangjin_camp")
+    game.state.player.member.wugong_id = None
+    before = game.state.player.stamina
+    state = game.rng.getstate()
+    assert _train(game).confirm and game.state.player.stamina == before and game.rng.getstate() == state  # 看選單什麼都沒花
+    game.choose("act:train")
+    assert game.state.player.stamina < before and game.rng.getstate() != state  # 送出了才花、才擲
+
+
+_ASK_SCRIPT = """return (async () => {
+  const click = (act, id) => T.docListeners.click[0]({ target: { closest: () => ({ dataset: { act, id }, classList: { contains: () => false, add() {}, remove() {} } }) } });
+  T.qs['.ask [data-act="ask-no"]'] = { focus() {} };
+  const seen = [];
+  await click("choose", "act:train");
+  seen.push({ asked: T.bodyHtml.join("").includes("%(ask)s"), calls: T.calls.map((c) => c[0]) });
+  %(then)s
+  return { seen, calls: T.calls.map((c) => [c[0], c[1]]) };
+})();"""
+
+
+@pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
+def test_fb095_the_page_asks_with_its_own_dialog_then_fights_only_on_yes(on):
+    from tianxia.engine import DOOMED_ASK
+
+    game = _game(on, at="huangjin_camp")
+    game.state.player.member.wugong_id = None
+    m = server.main_view(game)
+    train = next(o for o in m["options"] if o["id"] == "act:train")
+    assert train["confirm"] == DOOMED_ASK
+    after = {"main": m, "message": ""}
+    cancel = _ASK_SCRIPT % {"ask": DOOMED_ASK, "then": 'await click("ask-no");'}
+    out = run(m, cancel, responses={"/api/choose": after})
+    assert out["seen"] == [{"asked": True, "calls": []}] and out["calls"] == []  # 問了；取消之後什麼都沒送
+    yes = _ASK_SCRIPT % {"ask": DOOMED_ASK, "then": 'await click("ask-yes");'}
+    out = run(m, yes, responses={"/api/choose": after})
+    assert out["seen"][0]["calls"] == [] and out["calls"] == [["/api/choose", {"id": "act:train"}]]  # 按確定才送
+    m_safe = {**m, "options": [{**o, "confirm": ""} if o["id"] == "act:train" else o for o in m["options"]]}
+    out = run(m_safe, _ASK_SCRIPT % {"ask": DOOMED_ASK, "then": ""}, responses={"/api/choose": {"main": m_safe, "message": ""}})
+    assert out["seen"][0]["asked"] is False and out["calls"] == [["/api/choose", {"id": "act:train"}]]  # 不必敗的：不問、直接打
+
+
 def _enlist_main(on, faction="guan"):
     game = _enlisted(on, faction)
     _order(game, "defend", faction, front=front_of(on, JOIN_AT[faction]))

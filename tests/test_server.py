@@ -4015,7 +4015,7 @@ def test_the_page_offers_the_box_and_rejects_empty_words(client, monkeypatch):
     main = client.get("/api/main").json()
     assert main["event_free_text"] == "自己想辦法……"
     # 選項只有一行，底下不另起一行（企劃者 2026-10-05）；wait 是大場面按下去等模型時換上的字，這裡不是仗、是空的
-    assert main["options"][-1] == {"id": "choice:free", "label": "自己想辦法……", "enabled": True, "wait": ""}
+    assert main["options"][-1] == {"id": "choice:free", "label": "自己想辦法……", "enabled": True, "wait": "", "confirm": ""}
     assert client.post("/api/answer", json={"text": "  "}).status_code == 400
     with mock.patch.object(server.event_llm, "assess_event_success_rate", return_value=50):
         main = client.post("/api/answer", json={"text": "大喊官兵來了"}).json()["main"]

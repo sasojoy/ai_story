@@ -63,7 +63,9 @@ const matchOne = (e, sel) => {
 const qs = {}; // 測試可以放假元素：document.querySelector(選擇器) 回 qs[選擇器]
 const listeners = {}; // window.addEventListener 登記的處理函式（照事件名）：測試可以觸發 resize
 const docListeners = {}; // document.addEventListener 登記的處理函式（照事件名）：測試可以送一次 click（見 tests/test_hints_web.py）
+const bodyHtml = []; // document.body.insertAdjacentHTML 收到的東西（ask() 的確認框、見 tests/test_fb092_095.py）
 const document = {
+  body: { insertAdjacentHTML: (pos, html) => { bodyHtml.push(html); } },
   getElementById: (id) => (["app", "toast", "page", "top", "peek"].includes(id) ? mk(id) : null),
   querySelector: (sel) => qs[sel] || null,
   querySelectorAll: (sel) => fake.list.filter((e) => sel.split(", ").some((one) => matchOne(e, one))),
@@ -86,7 +88,7 @@ H.S.main = input.m;
 H.S.menxia = input.menxia || null;
 Object.assign(H.S, input.S || {});
 // script 可以是 async（回傳 Promise）：等它做完再印
-finish(new Function("H", "m", "T", input.script)(H, input.m, { els, fake, el, calls, qs, listeners, docListeners }));
+finish(new Function("H", "m", "T", input.script)(H, input.m, { els, fake, el, calls, qs, listeners, docListeners, bodyHtml }));
 """
 
 

@@ -2052,7 +2052,14 @@
     if (document.querySelector("#sense-pad.brewing")) renderPage(); // 失敗了（伺服器擋下來、連不上）：畫布還原，那一筆留著
   }
 
-  async function choose(btn, id) {
+  async function choose(btn, id, confirmed) {
+    // 勝算寫「必敗」的遊歷（FB-095）：伺服器在選項上帶一句要問的話，先用自己的對話框問一次（跟管理者動作同一個 ask，
+    // 不用瀏覽器內建的確認框）；確定才送、取消什麼都不送（不花體力、不擲骰）。問的當下按鈕可能已經被輪詢重畫，確定時重找一次
+    const asked = ((S.main && S.main.options) || []).find((o) => o.id === id);
+    if (!confirmed && asked && asked.confirm) {
+      ask(asked.confirm, "確定", () => choose(document.querySelector(`[data-act="choose"][data-id="${CSS.escape(id)}"]`) || btn, id, true));
+      return;
+    }
     if (id === SENSE_DRAW) { // 有所感：先叫出畫布、送暖機（模型閒置後第一次看圖要一二十秒，畫的這幾秒剛好用來載入），畫好再送
       S.sensing = true;
       renderPage();
