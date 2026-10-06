@@ -1,7 +1,7 @@
 """修練（武學與成長設計 3.5、3.6）：融過意境的武學，用它融的那個意境反覆修練衝品質。
 
-每修練一次擲一次能不能升一品；失敗了熟練度 +1、下一次機會更高（Config.cultivate_odds）：下品→中品、中品→上品加到 100% 就必成，
-上品→絕學沒有保底，累積的機會最多到 Config.cultivate_cap（預設 50%），剩下靠破境丹——探索偶爾撿到的傳奇道具，
+每修練一次擲一次能不能升一品；失敗了熟練度 +1、下一次機會更高（Config.cultivate_odds）：下品→中品第三次必成（Config.cultivate_sure_by，
+W8 起 40%、+20%）、中品→上品加到 100% 就必成，上品→絕學沒有保底，累積的機會最多到 Config.cultivate_cap（預設 50%），剩下靠破境丹——探索偶爾撿到的傳奇道具，
 由玩家自己決定哪一次衝絕學要服（修練頁勾「服下破境丹」）：服的那一次多 Config.legend_item_bonus%，成不成都用掉一枚；
 被拒絕的修練（體力不足、沒有意境、還有絕學等著取名……）不擲骰，丹也不動（企劃者 2026-10-05）。
 品質是每個人各練各的（PlayerState.art_quality），熟練度記在 PlayerState.art_mastery；升品時「成」不變。
@@ -27,7 +27,11 @@ def chance(
     """升到 target_quality 的機率（%）：第一次的機率＋每失敗一次加的量，乘上悟性的加成（×（1＋3%×（悟性−5）），
     武學與成長設計 6.1），最多到這一階的上限（Config.cultivate_cap，沒寫的那一階是 100）；再加上 boost
     （破境丹，見 boost_for），總和最多 100。悟性在上限之內、丹在上限之上（計畫二 G2）：上限是企劃者訂的天花板，
-    丹才是越過它的那一招。寫明會必成的那一次（沒乘悟性就到 100、這一階也沒有上限）悟性再低照樣必成。"""
+    丹才是越過它的那一招。寫明會必成的那一次（沒乘悟性就到 100、這一階也沒有上限）悟性再低照樣必成。
+    Config.cultivate_sure_by 寫了第幾次必成的那一階（預設只有下品→中品，第 3 次），那一次起直接 100%，蓋過悟性與上限（W8）。"""
+    sure_by = content.config.cultivate_sure_by.get(target_quality)
+    if sure_by is not None and failures + 1 >= sure_by:  # 寫明第幾次必成（W8）：那一次起直接 100%，蓋過悟性與這一階的上限
+        return 100
     first, step = content.config.cultivate_odds[target_quality]
     cap = content.config.cultivate_cap.get(target_quality, 100)
     raw = first + step * failures
@@ -36,6 +40,16 @@ def chance(
     else:
         base = min(cap, round(raw * team.stat_factor(content, wis)))
     return min(100, base + boost)
+
+
+def odds_note(odds: int, target: str) -> str:
+    """修練頁卡片「修練：…」那一句裡的機率：加到 100% 就說一定（W8，待 joy 潤），不寫「100% 晉為」。"""
+    return f"{odds}% 晉為{target}" if odds < 100 else f"一定晉為{target}"
+
+
+def next_try_note(odds: int, target: str) -> str:
+    """失敗之後那句話裡的「下一次」：還不是 100% 寫「約 N% 的機會」，100% 就說「一定」（W8，待 joy 潤）。"""
+    return f"下一次約 {odds}% 的機會晉為{target}" if odds < 100 else f"下一次一定晉為{target}"
 
 
 def odds_for(state: GameState, content: Content, target_quality: str, failures: int, boost: int = 0) -> int:
@@ -117,7 +131,7 @@ def cultivate(
         hint = f"，服下{pill}可再 +{content.config.legend_item_bonus}%"
     msgs += [
         f"【{art.name}】修練了一回，還差一點火候（熟練度 {failures + 1}，"
-        f"下一次約 {odds_for(state, content, target, failures + 1)}% 的機會晉為{target}{hint}）。",
+        f"{next_try_note(odds_for(state, content, target, failures + 1), target)}{hint}）。",
         tired,
     ]
     return msgs

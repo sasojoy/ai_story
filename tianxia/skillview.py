@@ -176,7 +176,7 @@ def art_rows(state: GameState, content: Content, world: WorldStateStore) -> list
         if problem is None:
             target = next_quality(art.quality)
             failures = p.art_mastery.get(art_id, 0)
-            note = f"{cultivation.odds_for(state, content, target, failures)}% 晉為{target}・體力 {content.config.cultivate_stamina}"
+            note = f"{cultivation.odds_note(cultivation.odds_for(state, content, target, failures), target)}・體力 {content.config.cultivate_stamina}"
             legend = _legend_choice(state, content, target, failures)
         else:
             note = problem

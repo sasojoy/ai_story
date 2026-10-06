@@ -571,12 +571,18 @@ def test_art_rows_of_an_art_with_an_insight_say_the_odds_and_the_cost(state, con
     assert world.claim_skill_name(art)
     state.player.arts = ["旋風腿"]
     state.player.insights = ["feng"]
-    state.player.art_mastery["旋風腿"] = 2
+    state.player.art_mastery["旋風腿"] = 1
     (row,) = skillview.art_rows(state, content, world)
     first, step = content.config.cultivate_odds["中品"]
     assert row["insight"] == "風" and row["cultivate"]["ok"]
-    assert row["cultivate"]["note"] == f"{first + 2 * step}% 晉為中品・體力 {content.config.cultivate_stamina}"
+    assert row["cultivate"]["note"] == f"{first + 1 * step}% 晉為中品・體力 {content.config.cultivate_stamina}"  # W8：40、60 之後
     assert "意境：「風」" in row["card"] and "合成" in row["card"]
+    state.player.art_mastery["旋風腿"] = 2  # 第三次：必成，卡片寫「一定」，不寫「100%」
+    (row,) = skillview.art_rows(state, content, world)
+    assert row["cultivate"]["note"] == f"一定晉為中品・體力 {content.config.cultivate_stamina}"
+    state.player.art_mastery["旋風腿"] = 0
+    (row,) = skillview.art_rows(state, content, world)
+    assert row["cultivate"]["note"] == f"40% 晉為中品・體力 {content.config.cultivate_stamina}"
     state.player.insights = []  # 意境熔掉了：修練的按鈕講原因，不再說機率
     assert not skillview.art_rows(state, content, world)[0]["cultivate"]["ok"]
 
@@ -620,10 +626,10 @@ def test_the_row_offers_the_pill_only_on_the_peerless_step_and_only_when_one_is_
 
 
 def test_the_row_and_the_pill_note_follow_the_players_insight(state, content, world):
-    """計畫二 G2：頁面上寫的就是擲的——悟性 15 時中品那一步 20% × 1.3 ＝ 26%，絕學那一步 4% × 1.3 ≈ 5%、加丹 20%。"""
+    """計畫二 G2：頁面上寫的就是擲的——悟性 15 時中品那一步 40% × 1.3 ＝ 52%（W8），絕學那一步 4% × 1.3 ≈ 5%、加丹 20%。"""
     _wind_kick(world, state)
     state.player.stats["wis"] = 15
-    assert _cultivate_row(state, content, world)["note"] == "26% 晉為中品・體力 10"
+    assert _cultivate_row(state, content, world)["note"] == "52% 晉為中品・體力 10"
     state.player.art_quality["旋風腿"], state.player.legend_items = "上品", 1
     row = _cultivate_row(state, content, world)
     assert row["note"] == "5% 晉為絕學・體力 10"
