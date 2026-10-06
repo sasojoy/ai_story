@@ -159,6 +159,25 @@ def test_the_card_shows_one_levelup_line_and_the_report_keeps_the_sentences():
     assert "升到第 11 級（可配 1 點）" in battlelog.card_text(rec, points=1)
 
 
+def test_the_card_drops_the_levelup_line_while_an_event_waits_and_the_report_keeps_it():
+    """FB-076：打完接著冒出事件時，事件的選項要留在第一屏（375×812），卡片不畫升級那一行（結果裡別的敘事、得失照舊）；
+    戰報頁與戰報本身（record.notes、record.levelups）一個字不動。沒有事件待處理時跟以前一模一樣。"""
+    lines = ["沈浪升到第 10 級！", "你有 3 點屬性可以分配（點名號展開）。", "關羽升到第 4 級！"]
+    rec = record(
+        notes=["你率眾闖進倉庫。", *lines], exp=25,
+        levelups=_ups(you=10, points=3, mates=[("關羽", 4)], lines=lines),
+    )
+    waiting = battlelog.card_text(rec, event_waiting=True)
+    assert waiting.endswith("\n\n**結果**　你率眾闖進倉庫。　**得失**　經驗 +25（每人）")
+    assert "升到第" not in waiting and "可配" not in waiting
+    assert battlelog.card_text(rec, event_waiting=False) == battlelog.card_text(rec)
+    assert battlelog.card_text(rec).endswith("　升到第 10 級（可配 3 點）・關羽升到第 4 級　**得失**　經驗 +25（每人）")
+    assert battlelog.detail_text(rec).count("升到第") == 2 and "你有 3 點屬性可以分配" in battlelog.detail_text(rec)
+    assert rec.notes[1:] == lines and rec.levelups.you == 10  # 紀錄本身沒動
+    only = record(notes=lines, exp=25, levelups=_ups(you=10, points=3, mates=[("關羽", 4)], lines=lines))
+    assert battlelog.card_text(only, event_waiting=True).endswith("\n\n**得失**　經驗 +25（每人）")  # 只有升級時，「結果」整段不寫
+
+
 def test_a_record_without_levelups_reads_exactly_as_before():
     """沒有升級、或舊戰報（沒有 levelups 欄位）：卡片還是照 notes 原文，一個字不動。"""
     rec = record(notes=["沈浪升到第 2 級！", "你有 1 點屬性可以分配（點名號展開）。"])

@@ -1010,6 +1010,29 @@ def test_the_fight_card_extra_carries_the_hearsay_marker(game):
     assert game.battle_card_id() == fight and 'class="tx-line tx-new tx-hearsay">' + escape(heard) in extra
 
 
+def test_a_pending_event_after_the_fight_keeps_the_now_card_short(game):
+    """FB-076：遊歷打完、升了級、又聽到一件事，接著冒出事件——事件的最後一個選項被分頁列蓋住（375×812，卡片多一行傳聞 796、升級加傳聞
+    803，分頁列頂 755）。事件的選項在畫面上時，「剛剛」的戰鬥卡片不畫升級那一行與「你聽到一件事」那一行；它們還在戰報與江湖紀錄
+    那一則裡（江湖紀錄頁最上面照舊列出），事件了結（沒有待處理的事件）之後卡片照舊畫。其他的補充（掉落、同時發生的大事）不動。"""
+    game.content.config.train_event_chance = 1.0  # 打完一定接戰後的事件
+    fight = _level_up_fight(game)
+    assert game.state.pending_event is not None  # 事件選項在畫面上
+    heard = journal.fragment_line("聽說皇甫嵩說過：「兵有奇變，不在眾寡。」")
+    game.state.journal[0].lines.append(heard)  # 打完仗順便聽到一件事
+    game.state.journal[0].lines.append("獲得 精鐵砂 ×1")  # 卡片沒寫到的別的補充
+    assert game.battle_card_id() == fight and game.shows_battle_card()
+    card, extra = game.battle_card(), game.battle_extra_html(for_card=True)
+    assert "升到第" not in card and "可配" not in card  # 卡片：升級那一行不畫
+    assert "tx-hearsay" not in extra and escape(heard) not in extra  # 卡片底下：傳聞那一行不畫
+    assert "獲得 精鐵砂 ×1" in extra  # 別的補充照舊
+    assert escape(heard) in game.battle_extra_html() and escape(heard) in game.journal_top_html()  # 江湖紀錄頁最上面照舊
+    assert "沈浪升到第 2 級！" in game.battle_detail(fight)  # 戰報
+    assert "沈浪升到第 2 級！" in game.state.journal[0].lines and heard in game.state.journal[0].lines  # 江湖紀錄那一則
+    game.state.pending_event = None  # 沒有事件待處理（例如沒接事件的一場）：兩行都照舊
+    assert "升到第 2 級（可配 1 點）" in game.battle_card()
+    assert 'class="tx-line tx-new tx-hearsay">' + escape(heard) in game.battle_extra_html(for_card=True)
+
+
 def test_rows_html_one_line_per_entry_with_the_story_folded_inside():
     html = journal.rows_html([entry(), entry(title="拔出兵器迎戰", tag="擊退狼群（3 回合）", time=-1.0, lines=[])])
     assert html.count('class="tx-row"') == 2

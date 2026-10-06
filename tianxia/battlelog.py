@@ -220,16 +220,19 @@ def levelup_line(ups: LevelUps, points: int | None = None) -> str:
     return "・".join(parts)
 
 
-def _story_part(record: BattleRecord, points: int | None = None, *, compact: bool = False) -> str:
+def _story_part(
+    record: BattleRecord, points: int | None = None, *, compact: bool = False, event_waiting: bool = False,
+) -> str:
     """「結果」那一句。compact（場景裡的戰鬥卡片）時，有人升級的那幾句（record.levelups.lines）換成一行簡短的
-    （levelup_line）；其他的敘事照舊。戰報頁（不 compact）照 notes 原文，完整的句子都在。"""
+    （levelup_line）；其他的敘事照舊。戰報頁（不 compact）照 notes 原文，完整的句子都在。
+    event_waiting（compact 才有用）：打完接著有事件待處理，升級那一行也不畫（FB-076，見 card_text）。"""
     ups = record.levelups if compact else None
     if ups is None:
         story = story_text(record)
     else:
         told = set(ups.lines)
         kept = [n for n in record.notes if n not in told and not n.startswith("【江湖傳聞】")]
-        story = "　".join([*kept, levelup_line(ups, points)])
+        story = "　".join(kept if event_waiting else [*kept, levelup_line(ups, points)])
     return f"**結果**　{story}" if story else ""
 
 
@@ -251,23 +254,28 @@ def _gains_block(record: BattleRecord) -> list[str]:
     return [gains] if gains else []
 
 
-def _outcome_block(record: BattleRecord, points: int | None = None) -> list[str]:
+def _outcome_block(record: BattleRecord, points: int | None = None, event_waiting: bool = False) -> list[str]:
     """卡片的最後一段：結果與得失併成同一段，「**結果**　敘事　**得失**　數值」（手機上少一段的間距）；沒有敘事就只有得失。
-    升級收成一行（_story_part 的 compact，FB-074）。"""
-    outcome = "　".join(part for part in (_story_part(record, points, compact=True), _gains_part(record, "得失")) if part)
+    升級收成一行（_story_part 的 compact，FB-074）；有事件待處理時連這一行也不畫（FB-076）。"""
+    story = _story_part(record, points, compact=True, event_waiting=event_waiting)
+    outcome = "　".join(part for part in (story, _gains_part(record, "得失")) if part)
     return [outcome] if outcome else []
 
 
-def card_text(record: BattleRecord, when: Callable[[float], str] = clock_text, points: int | None = None) -> str:
+def card_text(
+    record: BattleRecord, when: Callable[[float], str] = clock_text, points: int | None = None, event_waiting: bool = False,
+) -> str:
     """場景裡的戰鬥卡片（Markdown）：標題、時間與類型、結果、（過程）、（劇情結果）與得失併成一段。when 是時間的寫法（見 list_label）。
     過程整段都在；「剛剛」那張卡片只露第一回合、點了才攤開，是網頁的事（web/app.js 的 roundsFold）。
     戰報頁（detail_text）的結果與獲得與損失照舊各一段，只有場景裡這張卡片併成一段。
     標題、時間與類型、結果三行同一塊（單換行：標題是 h3，底下兩行是同一個 <p>）——手機上只佔一塊的間距，不是三塊。
-    升級的幾句在卡片上收成一行（levelup_line，FB-074）；points 是現在還沒配的屬性點，畫那一行用（不給就用升級那一刻的）。"""
+    升級的幾句在卡片上收成一行（levelup_line，FB-074）；points 是現在還沒配的屬性點，畫那一行用（不給就用升級那一刻的）。
+    event_waiting：打完接著有事件待處理（選項在畫面上）時，卡片不畫那一行升級——事件的最後一個選項要留在第一屏（FB-076）；
+    升級的句子還在戰報（record.notes、detail_text）與江湖紀錄裡，狀態列照舊寫「可配 N 點」。"""
     return "\n\n".join([
         "\n".join([_title(record), _when(record, when), _result_line(record)]),
         *_rounds_block(record),
-        *_outcome_block(record, points),
+        *_outcome_block(record, points, event_waiting),
     ])
 
 
