@@ -16,6 +16,11 @@ from tianxia.models import Content
 FIXTURE = Path(__file__).parent / "fixtures" / "content"
 REAL_CONTENT = Path(__file__).parent.parent / "content"
 
+# 平行跑（pytest-xdist 的 -n）時，worker 由 execnet 開：它把 site-packages 的路徑寫進 worker 的標準輸入，這台機器上那個
+# 路徑有中文，worker 卻照 Windows 的字碼頁（cp950）讀，沒設 PYTHONIOENCODING 的 shell 一開 -n 就在啟動時 INTERNALERROR
+# （EOFError）。worker 繼承這個行程的環境變數，這個檔又在開 worker 之前載入，所以在這裡補上；已經設了的照舊。
+os.environ.setdefault("PYTHONIOENCODING", "utf-8")
+
 
 # ── 內容快取 ──────────────────────────────────────────────────────────
 # 載入一份內容要 parse＋validate（正式內容約 0.1 秒、測試內容約 0.01 秒），以前用到它的測試每個各載一次。現在每份內容
