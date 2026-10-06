@@ -122,6 +122,12 @@ def fragment_line(text: str) -> str:
     return f"{FRAGMENT_PREFIX}{text}"
 
 
+def without_fragments(lines: list[str]) -> list[str]:
+    """拿掉伏筆聽來的那幾行（只認開頭的 FRAGMENT_PREFIX）。戰鬥卡片底下的補充在事件待處理時用它把那一行讓出來（FB-076）；
+    紀錄本身（JournalEntry.lines）不動。"""
+    return [line for line in lines if not line.startswith(FRAGMENT_PREFIX)]
+
+
 @dataclass
 class Draft:
     """一次行動的紀錄草稿。engine 在行動開始時給標題，行動過程中補上結果標記、打的那一場、

@@ -26,6 +26,7 @@ PERSONAL_EMPTY = "（還沒聽到只屬於你的線索。）"
 AWAY_LINE = "〔{label}〕{when}　{text}"  # 「你不在的時候」的一行：哪一段、季曆時間、傳聞全文
 AWAY_MORE = "另有 {n} 則沒列出來，到「見聞」的傳聞翻。"  # 摘要放不下時的最後一行（待 joy 潤；算在 Config.away_max 那幾行裡）
 AWAY_TAG = "共 {n} 則"
+LOCAL_REPEAT = "（×{n}）"  # 所在大區那一段同一句傳聞出現 N 次、合成一行時接在句尾（待 joy 潤；N > 1 才寫）
 FACTION_KEYS = (orders.ISSUED, orders.DONE)  # 陣營軍情的「要點」：軍令發布與達成（議事、刺探有了再把它們的開頭加進來）
 
 
@@ -41,12 +42,36 @@ def _listing(rumors: list[Rumor], when: Callable[[float], str], empty: str) -> s
     return "\n\n".join(f"{when(r.time)}　{r.text}" for r in rows) or empty
 
 
+def _collapsed(rumors: list[Rumor]) -> list[tuple[Rumor, int]]:
+    """一模一樣的字合成一則：留在最新那一則的位置（同樣新就留排在前面的），附上一共幾則；其餘的順序不動。
+    跟「你不在的時候」的規則 (b)（_newest_only）同一條，只是這裡只在一份清單裡合，而且要數一共幾則。"""
+    newest: dict[str, int] = {}
+    count: dict[str, int] = {}
+    for i, r in enumerate(rumors):
+        count[r.text] = count.get(r.text, 0) + 1
+        at = newest.get(r.text)
+        if at is None or r.time > rumors[at].time:
+            newest[r.text] = i
+    return [(r, count[r.text]) for i, r in enumerate(rumors) if newest[r.text] == i]
+
+
+def _local_listing(rumors: list[Rumor], when: Callable[[float], str], empty: str) -> str:
+    """所在大區那一段：跟 _listing 一樣最新的在前、最多 LAYER_LIMIT 行，只是同一句傳聞（地方傳聞常常一模一樣，QA 看過同一句六次）
+    先合成一行、超過一則時句尾接 LOCAL_REPEAT（×N）；先合再截，重複的不會把別的傳聞擠出這一段。只動這一段的畫法：
+    誰聽得到哪一則（rules.audible）、世界裡的傳聞、其他三層都不變。"""
+    rows = _collapsed(rumors)[-LAYER_LIMIT:][::-1]
+    return "\n\n".join(
+        f"{when(r.time)}　{r.text}{LOCAL_REPEAT.format(n=n) if n > 1 else ''}" for r, n in rows
+    ) or empty
+
+
 def layers(
     state: GameState, content: Content, world: WorldStateStore | None, when: Callable[[float], str],
 ) -> list[dict[str, str]]:
     """見聞頁的四層（傳聞分層設計第二節）：天下大事、陣營軍情、所在大區、個人線索，各一段 {id, title, body}（body 是 Markdown）。
     陣營軍情只有自己陣營的、散人寫一句說明；所在大區只有此刻人在的大區、傳聞板上的（在路上是這段路兩頭）；個人線索是寫給
-    自己的傳聞加上聽過的伏筆片段（foreshadow.heard_texts）。when 是時間的寫法（Game._day_stamp）。"""
+    自己的傳聞加上聽過的伏筆片段（foreshadow.heard_texts）。所在大區那一段同一句傳聞合成一行、句尾接（×N）（_local_listing）；
+    其他三層照舊一則一行。when 是時間的寫法（Game._day_stamp）。"""
     ears = ears_of(state, content)
     heard = [r for r in state.world.rumors if audible(r, ears)]
 
@@ -59,7 +84,7 @@ def layers(
     return [
         {"id": "world", "title": WORLD_TITLE, "body": _listing(of("world"), when, WORLD_EMPTY)},
         {"id": "faction", "title": FACTION_TITLE, "body": faction},
-        {"id": "local", "title": title, "body": _listing(of("local"), when, LOCAL_EMPTY)},
+        {"id": "local", "title": title, "body": _local_listing(of("local"), when, LOCAL_EMPTY)},
         {"id": "personal", "title": PERSONAL_TITLE, "body": "\n\n".join(personal) or PERSONAL_EMPTY},
     ]
 
