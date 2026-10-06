@@ -112,7 +112,7 @@ def test_the_mentor_explains_travel_and_sitting_down(content):
     assert "打坐" in texts["p7_rest"]
 
 
-def _walk_the_hut(content, world, ambush="choice:0", sight="choice:0"):
+def _walk_the_hut(content, world, ambush="choice:0", sight="choice:0", luck=None):
     """真人照著序章走：遇險、拜師、看修練頁、探索悟意境、合成、換上並練到第三成、修練、打坐、雪恥、配點、熔雜學（剛走完前十步、
     還站在草廬）。回傳（遊戲，合成出來的那一門）。"""
     from tianxia import prologue
@@ -133,6 +133,10 @@ def _walk_the_hut(content, world, ambush="choice:0", sight="choice:0"):
     game.practice("武學")
     game.cultivate(art.id)
     game.choose("act:rest")
+    if luck is not None:  # 戰場運氣固定成最好（0.99）或最壞（0.0）：雪恥那一場照樣要是險勝（設計 3.2「必定險勝」）
+        from conftest import FixedRandom
+
+        game.rng = FixedRandom(luck)
     game.choose("act:train")
     game.allocate_stat("str")
     game.melt_art("manniu_quan")
@@ -174,6 +178,64 @@ def test_a_save_from_before_the_prologue_is_never_sent_to_the_real_hut(content, 
     q = again.state.player
     assert (q.tutorial_step, q.onboarding, q.location) == (new_step, ONBOARDING_VERSION, here)
     assert again.state.pending_event is None and not q.guide_skipped
+
+
+@pytest.mark.parametrize("luck", [0.0, 0.5, 0.99])
+def test_the_revenge_fight_is_always_a_narrow_win_and_the_fight_is_the_levelling_one(content, world, luck):
+    """T7 審查 M6（設計 3.2「必定險勝（四回合）；經驗剛好升到第 2 級」）：不管戰場運氣最好還是最壞，真內容的雪恥那一場都是險勝、
+    四回合、升到第 2 級。拿掉 force_tier 的話，這個種子剛好贏，本來沒有測試看得出來。"""
+    game, _ = _walk_the_hut(content, world, luck=luck)
+    record = game.state.battles[0]
+    assert (record.kind, record.tier) == ("train", "險勝") and record.opponent == "斷眉"
+    assert len(record.rounds) == 4 and record.levelups is not None and record.levelups.you == 2
+    assert game.state.player.member.level == 2
+
+
+def test_every_real_hut_step_has_a_collapsed_line_without_the_speakers_name(content):
+    """收起來那一行網頁自己在前面寫「師父：」（guideHtml）；content 的 line 再寫一次會變成「師父：師父：…」。"""
+    speaker = content.tutorial.speaker
+    lines = [(step.id, step.line) for step in content.tutorial.steps[: content.tutorial.prologue_steps] if step.line]
+    assert len(lines) == 10 and all(not line.startswith(speaker) for _, line in lines), lines
+
+
+def test_the_real_steps_say_what_10_3_says_about_the_craft_tab_and_the_pages(content):
+    """S1 的用語（2026-10-06）：分頁叫「煉製」，師父的話跟著；p11 分三頁（三邊收人、使命、盤纏與輿圖），最後一頁帶著要做的事；
+    p4、p6、p10 各有 10.3 的「…之後（場景）」。"""
+    steps = {step.id: step for step in content.tutorial.steps}
+    assert "到『煉製』那裡試試，花你 5 點心得。" in steps["p4_fuse"].text and "合成」那裡" not in steps["p4_fuse"].text
+    assert steps["p4_fuse"].line == "到「煉製」把基礎拳腳融進意境"
+    assert "功法庫" in steps["p5_level"].text and "功法庫" in steps["p10_melt"].line  # 修練頁的列表標題叫「功法庫」（arts-polish-1）
+    p11 = steps["p11_farewell"]
+    pages = p11.text.split("\n\n")
+    assert p11.paged and len(pages) == 3 and "輿圖" in pages[-1] and "天命裂了一道縫" in pages[1]
+    assert {sid for sid, step in steps.items() if step.paged} == {"p11_farewell"}
+    assert {sid for sid, step in steps.items() if step.after} == {"p4_fuse", "p6_refine", "p10_melt"}
+    for step in steps.values():
+        assert set(re.findall(r"\{([^}]+)\}", step.after)) <= {"意境", "武學", "心得"}, step.id
+
+
+def test_the_real_hut_cards_say_each_thing_once_and_the_reward_comes_with_the_walk(content, world):
+    """T7 審查 M1、M3、M4：合成、修練、熔煉的結果用 10.3 的句子（不再接一句重複的師門傳下來），四景只留事件文字那一句，
+    沒有「✔ 完成」；出師的盤纏寫在抵達潁川那一則（銀兩 +30、體力回滿）。"""
+    from tianxia import journal
+
+    game, art = _walk_the_hut(content, world, sight="choice:3")
+    entries = {e.title: e for e in game.state.journal}
+    body = "\n".join(line for e in game.state.journal for line in e.lines + [e.tag])
+    assert "你把基礎拳腳融進火之意境，練出了一門新武學——【烈爐拳】。" in body and "師門傳下來" not in body
+    assert "你盯著爐火看了不知多久，心裡忽然一動——你悟到了「火之意境」。" in body and "你悟得了「" not in body
+    assert "這一遍修練，你忽然摸到了門道——【烈爐拳】從下品升到了中品！" in body
+    assert "你把蠻牛拳熔了，換回 8 點心得。" in body
+    assert all("✔" not in line for e in game.state.journal for line in e.guide)
+    for line in ("你把基礎拳腳融進火之意境，練出了一門新武學——【烈爐拳】。", "這一遍修練，你忽然摸到了門道——【烈爐拳】從下品升到了中品！"):
+        assert journal._line_class(line) == "tx-line tx-new"
+    game.state.player.stamina = 20.0
+    game.choose("move:yingchuan")
+    game.advance(game.state.player.journey.arrive_at[-1] - game.state.world.time)
+    arrival = game.state.journal[0]
+    assert "銀兩 +30" in arrival.changes and "體力回滿" in arrival.lines and entries
+    assert arrival.lines.index(content.tutorial.leave_text) < arrival.lines.index("體力回滿")
+    assert game.state.player.stamina == content.config.stamina_max and game.state.player.guide_done == []
 
 
 def test_the_real_prologue_text_has_no_placeholder_left_over(content):
@@ -368,7 +430,7 @@ def test_the_level_step_waits_for_a_real_practice_not_for_having_the_art(content
     game.practice("武學")
     assert game.state.player.tutorial_step == index  # 帶著、換上、練到第二成，還不算
     game.practice("武學")
-    assert game.state.player.tutorial_step == index + 1 and "✔ 引導完成" in game.state.player.guide_done
+    assert game.state.player.tutorial_step == index + 1 and game.state.player.guide_done == []  # 序章的步驟沒有「✔ 引導完成」
 
 
 def test_a_new_character_can_afford_the_first_practices_the_tutorial_asks_for(content):
