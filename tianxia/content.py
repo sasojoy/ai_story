@@ -19,13 +19,14 @@ from typing import get_args
 from pydantic import BaseModel, ValidationError
 
 from . import encounter
+from . import hints as hint_rules
 from .companion_agent import DIALOGUE_TAGS
 from .encounter import FALLBACK_TIER, TIER_RATIOS
 from .front_lines import BAND_KEYS, GEJU_KEYS
 from .materials import TIER_NAMES
 from .models import (
     FRONT_KEY, GLOW_KEYS, MOVES, REVEAL_KEYS, ROADS, STATS, Attribute, BattleDef, CharacterDef, CheckVoice, CombatLines, Condition, Config,
-    Content, CraftNames, Effect, Event, FigureDef, FollowerDef, Foreshadows, FrontLines, InsightDef, Location, OppDef,
+    Content, CraftNames, Effect, Event, FigureDef, FollowerDef, Foreshadows, FrontLines, Hints, InsightDef, Location, OppDef,
     InsightScene, OrdersContent, PresetRecipe, PromotionDef, MapLayout, Material, RoadSight, Scenario, Sect, SimRumor, SkillDef, Squad,
     TimetableEvent, TraitBook, Tutorial, allow_known,
 )
@@ -102,6 +103,7 @@ def load_content(root: Path, profile: str | None = None) -> Content:
         events=events,
         map=MapLayout(**_read(root / "map.json")),
         tutorial=Tutorial(**_read(root / "tutorial.json")),
+        hints=Hints(**_read(root / "hints.json")) if (root / "hints.json").exists() else Hints(),
     )
     content.config.admins = _with_local_admins(content.config.admins)
     validate(content)
@@ -1633,6 +1635,25 @@ def validate(c: Content) -> None:
                 len(who.lines) == len(enlist.steps),
                 f"入伍段：引薦人 {who.name}（{faction_id}）的 lines 要有 {len(enlist.steps)} 行（每一步一行），現在是 {len(who.lines)} 行",
             )
+
+    # ── 碰到才說（新手引導計畫三）：id 不重複、只能是設計 5.2 的十八條（hints.KNOWN）；師父的條要有 text、引薦人的條要有 texts，
+    # texts 的鍵是劇本的陣營、每一句都不是空的；寫反了（師父的條寫 texts、引薦人的條寫 text）多半是填錯欄位，載入時就報錯 ──
+    need(bool(c.hints.head.strip()), "hints.json：head 不能是空的（師父那幾條框上寫的字）")
+    hint_ids: set[str] = set()
+    for hint in c.hints.hints:
+        where = f"hints.json：{hint.id}"
+        need(hint.id not in hint_ids, f"{where} 重複")
+        hint_ids.add(hint.id)
+        need(hint.id in hint_rules.KNOWN, f"{where} 不認得（只認設計 5.2 的十八條，見 hints.KNOWN）")
+        if hint.by == "mentor":
+            need(bool(hint.text.strip()), f"{where}：師父的提示要有 text")
+            need(not hint.texts and not hint.drifter, f"{where}：師父的提示不寫 texts、drifter（那是引薦人的提示才有的）")
+        else:
+            need(bool(hint.texts), f"{where}：引薦人的提示要有 texts（陣營 id → 那一位說的話）")
+            need(not hint.text, f"{where}：引薦人的提示不寫 text（寫在 texts 裡，散人版寫 drifter）")
+        for faction_id, line in hint.texts.items():
+            need(faction_id in faction_ids, f"{where}：texts 有不是劇本陣營的 {faction_id}")
+            need(bool(line.strip()), f"{where}：texts 的 {faction_id} 是空的")
 
     # ── 序章（新手引導計畫一）──
     t = c.tutorial

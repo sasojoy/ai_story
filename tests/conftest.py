@@ -219,6 +219,29 @@ def prologue_content(_prologue_master):
     return cached_content(_prologue_master)
 
 
+HINTS = Path(__file__).parent / "fixtures" / "hints"
+
+
+@pytest.fixture
+def hints_root(tmp_path):
+    """有「碰到才說」的測試內容（新手引導計畫三）放在哪個資料夾：測試內容加上 tests/fixtures/hints/hints.json（五條）。
+    測試內容的劇本沒有陣營、也沒有入伍段：補一個 guan（官軍，join_at 空），引薦人的名字就用陣營名「官軍」。
+    要改內容再載入的測試（驗證）用這個；只要載入好的內容用 hints_content。"""
+    root = tmp_path / "hints_content"
+    shutil.copytree(FIXTURE, root)
+    shutil.copy(HINTS / "hints.json", root / "hints.json")
+    scenario = json.loads((root / "scenario.json").read_text(encoding="utf-8"))
+    scenario["factions"] = [{"id": "guan", "name": "官軍", "join_at": []}]
+    (root / "scenario.json").write_text(json.dumps(scenario, ensure_ascii=False), encoding="utf-8")
+    return root
+
+
+@pytest.fixture
+def hints_content(hints_root):
+    """測試內容加上五條提示（沒有 hints.json 的測試內容：既有測試的對話框一個字都不變）。"""
+    return load_content(hints_root)
+
+
 @pytest.fixture
 def state(content):
     from tianxia.state import new_game_state

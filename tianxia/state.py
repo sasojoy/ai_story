@@ -84,6 +84,16 @@ class Summons(BaseModel):
     since: float = 0.0
 
 
+class HintNote(BaseModel):
+    """排著要在對話框說的一條提示（新手引導計畫三）：排進去的當下就照那時的陣營決定誰說、說什麼。
+    shown：已經上過框（記進 hints_seen 與江湖紀錄了）；提示算「說過」是上框的那一刻、不是排進佇列的那一刻（Game._surface_hint）。"""
+
+    id: str
+    speaker: str
+    text: str
+    shown: bool = False
+
+
 ONBOARDING_VERSION = 3  # 新手引導的版本：2＝有序章的新引導（新手引導計畫一）、3＝再加入伍段（計畫二）。比 2 小的是舊存檔，讀檔時當作走過序章（設計 7.2）；
 # 比 3 小而且已經有陣營的，是入伍段上線之前就投靠的老手，讀檔時蓋成入伍段走完（enlist.mark_veteran，設計 7.2）
 
@@ -181,6 +191,10 @@ class PlayerState(BaseModel):
     onboarding: int = 0  # 這個角色的引導是照哪一版記的（ONBOARDING_VERSION）；舊存檔沒有這個欄位＝0
     enlist_step: int | None = None  # 入伍段（新手引導計畫二）：None＝還沒開始；等於步數＝走完
     enlist_end: bool = False  # 入伍段剛走完、引薦人的結尾還沒按「知道了」
+    # ── 碰到才說（新手引導計畫三）──
+    hints_seen: set[str] = Field(default_factory=set)  # 說過（上過框）的提示 id；換季保留，整個遊戲每一條只說一次
+    hint_queue: list[HintNote] = Field(default_factory=list)  # 排著還沒按「知道了」的提示，對話框一次一條；換季不帶
+    hints_off: bool = False  # 設定頁的「不再提示」（跟略過新手引導分開，設計 7.3）；換季保留
     visited: set[str] = Field(default_factory=set)  # 去過的地點
     fortune: bool = False  # 本季的新立門戶福緣已經發生（或已經改送賀禮）
     # 新手福利（氣血回復加倍、新立門戶福緣）從哪一刻起算（第一季設計第十四節「從自己加入的那天起算」）：這個角色進這一季時的

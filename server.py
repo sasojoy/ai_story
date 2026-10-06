@@ -1229,6 +1229,7 @@ MAIN_ACTIONS = {
     "seclude": lambda g, b: g.seclude(_int(b.get("hours"), 8)),
     "battle_text": lambda g, b: g.submit_battle_custom_action(str(b.get("text", ""))),
     "anonymous": lambda g, b: g.set_anonymous(bool(b.get("value"))),
+    "hints_off": lambda g, b: g.set_hints_off(bool(b.get("value"))),  # 設定頁的「不再提示」（碰到才說，新手引導計畫三）
     "skip_tutorial": lambda g, b: g.skip_tutorial(),
     "view_map": lambda g, b: g.view_map(),
     "view_orders": lambda g, b: g.view_orders(),  # 入伍段第一步：軍令卡出現在畫面上（新手引導計畫二）
@@ -1236,9 +1237,9 @@ MAIN_ACTIONS = {
     "guide_ack": lambda g, b: g.guide_ack(),  # 對話框的結語按「知道了」
     "allocate": lambda g, b: g.allocate_stat(str(b.get("stat", ""))),  # 狀態列的配點鈕：升級得到的屬性點加到一項
 }
-# 賽季時鐘暫停中也照做的畫面設定（不推任何東西、不碰別人）：匿名、略過引導、打開輿圖（頁面靠它載入輿圖）、軍令卡出現（入伍段第一步，
+# 賽季時鐘暫停中也照做的畫面設定（不推任何東西、不碰別人）：匿名、不再提示、略過引導、打開輿圖（頁面靠它載入輿圖）、軍令卡出現（入伍段第一步，
 # 只動自己的引導；被擋下的話網頁已經記成「送過了」，這個工作階段不會再送）、對話框的「知道了」
-PAUSE_OK_ACTIONS = frozenset({"anonymous", "skip_tutorial", "view_map", "view_orders", "guide_ack"})
+PAUSE_OK_ACTIONS = frozenset({"anonymous", "hints_off", "skip_tutorial", "view_map", "view_orders", "guide_ack"})
 ADMIN_ACTIONS = {
     "open_season": lambda g, b: g.admin_open_season(time.time()),
     "end_season": lambda g, b: g.admin_end_season(time.time()),

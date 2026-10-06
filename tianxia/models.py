@@ -816,6 +816,25 @@ class Tutorial(_Strict):
     leave_text: str = ""  # 走完序章、抵達起點時接在抵達那一則（「剛剛」）的一句
 
 
+class HintDef(_Strict):
+    """碰到才說的一條（新手引導設計第五節）：mentor 寫成「想起師父說過」（框上的字是 Hints.head）；recruiter 由自己那一邊的引薦人說，
+    texts 是陣營 id → 那一位說的話，drifter 是散人時師父說的版本（沒有就散人不說，也不記成說過）。"""
+
+    id: str
+    by: Literal["mentor", "recruiter"]
+    text: str = ""
+    texts: dict[str, str] = Field(default_factory=dict)
+    drifter: str = ""
+
+
+class Hints(_Strict):
+    """碰到才說（content/hints.json，新手引導計畫三）：沒有這個檔就是沒有提示。"""
+
+    head: str = "想起師父說過"  # 師父那幾條框上寫的字
+    hints: list[HintDef] = Field(default_factory=list)
+    season_return: str = ""  # 第二季起開季時師父的一句（設計 7.1）；空的就沒有
+
+
 class FactionDef(_Strict):
     """一季的玩家陣營（第一季設計第五節）：在 join_at 的地點可以投靠；拜入 sects 裡的門派也算投靠這個陣營。
     goals 是這個陣營想把各條大勢線往哪推（伺服器假人照它打分數）。"""
@@ -2011,4 +2030,5 @@ class Content(_Strict):
     preset_recipes: list[PresetRecipe] = Field(default_factory=list)  # 師門配方（新手引導計畫一）；沒有這個檔就是空的
     map: MapLayout
     tutorial: Tutorial
+    hints: Hints = Field(default_factory=Hints)  # 碰到才說（content/hints.json，新手引導計畫三）；沒有這個檔就是沒有提示
     check_voice: CheckVoice = Field(default_factory=CheckVoice)  # 檢定選項括號裡的那一句（content/check_voice.json，載入時必備）

@@ -22,6 +22,7 @@ from . import (
     push, ranks, roster, rounds, sensing, skillview, team, timetable, traits,
 )
 from . import events as event_rules  # note_round 走模組屬性（測試要能換掉它，確認只有 _present 會叫）
+from . import hints as hint_rules  # 碰到才說（新手引導計畫三）；叫 hint_rules：這個檔裡有幾處區域變數也叫 hints
 from . import prologue as prologue_rules  # Game.new 有個參數也叫 prologue，所以模組在這裡一律叫 prologue_rules
 from . import rumor_view  # 傳聞分層的畫面：見聞頁的四層、你不在的時候（計畫 2026-10-06 傳聞分層一）
 from .events import (
@@ -49,7 +50,7 @@ from .rules import (
 )
 from .sqlite_world import open_world
 from .state import (
-    ONBOARDING_VERSION, PLAYER, BattleRecord, Convoy, GameState, JournalEntry, Journey, Rumor, WorldState, new_game_state,
+    ONBOARDING_VERSION, PLAYER, BattleRecord, Convoy, GameState, HintNote, JournalEntry, Journey, Rumor, WorldState, new_game_state,
 )
 from .world import (
     _season_vehicle, advance_world_state, check_thresholds, end_season, fire_by_id, open_showdown, open_waiting_showdown,
@@ -330,6 +331,7 @@ class Game:
         新手引導：做完或略過的人照舊不再出現；還沒做完的人跟著新角色從起始步重來——
         新角色只剩開局那兩門第一成的基礎武學，接著上一季做到一半的下一步（例如出城遊歷）會把他推進
         打不過的路（FB-034）。入伍段（新手引導計畫二）同理：走完（或略過）的人帶到下一季、再投靠不重走；沒走完的下一季投靠時從頭走。
+        碰到才說（計畫三）：說過的（hints_seen）與「不再提示」帶到下一季，排著還沒上框的不帶；引導走完的回鍋玩家開季多一句師父送行。
         world 欄位這裡不用管，呼叫端（_reconcile_season）緊接著就會把它指向共用賽季。
         之後新增的 PlayerState 欄位預設就跟著新角色重來；要跨季保留的才加進下面這份清單。"""
         old = self.state
@@ -338,7 +340,8 @@ class Game:
         # 做完或略過（skip_tutorial 也是設成步數）：看不分季的那幾步；第一季多的兩步排在後面，回鍋的人接著做（計畫 T6）。
         # 舊存檔先換算成新引導的步數（設計 7.2）
         step = prologue_rules.migrated_step(old.player, self.content)
-        if step >= base_step_count(self.content):
+        carried = step >= base_step_count(self.content)
+        if carried:
             fresh.player.tutorial_step = step
             fresh.player.guide_skipped = old.player.guide_skipped  # 略過的人換季也不畫對話框（畫面批次審查 I4）
         elif prologue_rules.has(self.content):
@@ -349,6 +352,13 @@ class Game:
                 fresh.player.tutorial_step = self.content.tutorial.prologue_steps
         if enlist.done(old, self.content):
             fresh.player.enlist_step = old.player.enlist_step  # 入伍段只走一次（設計 7.1）；沒走完的下一季投靠時從頭走
+        # 碰到才說（新手引導計畫三）：說過的與「不再提示」的開關帶到下一季，排著還沒上框的不帶（沒說過，下一季碰到還會說）。
+        # 引導走完（或略過）的回鍋玩家，開季時師父送你下山一句（設計 7.1）；假人、關了提示的、內容沒寫的不送
+        fresh.player.hints_seen = set(old.player.hints_seen)
+        fresh.player.hints_off = old.player.hints_off
+        book = self.content.hints
+        if carried and not old.player.bot and not old.player.hints_off and book.season_return:
+            fresh.player.hint_queue = [HintNote(id="s_return", speaker=book.head, text=book.season_return)]
         ratio = self.content.config.affinity_carry_ratio
         fresh.player.affinities = {key: int(value * ratio) for key, value in old.player.affinities.items()}
         # 上一季的交情另外留著（這一季的關係從頭寫），好感度只剩一成時提示才不會說「親如兄弟」（正式版辛）；
@@ -531,6 +541,7 @@ class Game:
         summons = ranks.check_summons(self.state, self.content)  # 行動之外記到的貢獻（抵達、別人觸發的結算）：同步時補發召見（計畫 T5）
         if summons:
             self._write("召見", summons)
+        self._surface_hint()  # 籌備中、休季之後第一次同步、換季後的開季那一句：排著的提示上框（新手引導計畫三；只改 guide，不另起一則）
         self._deliver_away(away_from)  # 最後寫：江湖頁的「剛剛」先放這一份摘要（要跟別的計畫合併時，這一行維持在 return 的前一句）
         return self._log(msgs + arrived + settled + summons)
 
@@ -1133,6 +1144,7 @@ class Game:
             msgs += check_thresholds(self.state, self.content, self.world, self._quick_client(), now=self.now)
             msgs += self._settle_plots()  # 參與過的密謀收場了：各自結算一次（正式版乙二）
             msgs += ranks.check_summons(self.state, self.content)  # 貢獻跨過門檻就發召見（計畫 T5）
+            self._surface_hint()  # 事件了結、引導或入伍段走完的這一下，排著的提示上框；記在這一則的 guide（新手引導計畫三）
             journal.add_entry(self.state, self._draft.entry(self.state.world.time, msgs))
         finally:
             self._draft = None
@@ -1180,6 +1192,7 @@ class Game:
             msgs += self._apply(effect)
             self._begin_enlistment(faction_before)  # 隨口應對的結果也可能拜入門派
             msgs += check_thresholds(s, c, self.world, self._quick_client(), now=self.now)
+            self._surface_hint()  # 隨口應對了結了事件：排著的提示上框（新手引導計畫三）
             journal.add_entry(s, self._draft.entry(s.world.time, msgs))
             self.last_gamble = FreeTextOutcome(
                 event_id=event.id, text=request.text, success=success, effect_text=fill_marks(effect.text, s),
@@ -1382,14 +1395,16 @@ class Game:
         事件的句子每遇到新事件就換一句，記句子的話收起的框每個新事件都會自己又展開。
         pending 標這一句是不是「先把眼前的「…」了結」：它只是重複底下事件卡片已經寫的話，展開時事件的最後一個選項被擠出第一屏，
         所以網頁預設把這一句收成一行（玩家沒按過「收起」也一樣；框上有要看的完成列〔done〕時不收；只有這一句，新的一步照舊展開，
-        玩家仍可點開，FB-076）。結語永遠是 False。"""
+        玩家仍可點開，FB-076）。結語永遠是 False。
+        碰到才說（新手引導計畫三）排在最後：步驟 → 結語 → 入伍段（進行中或結尾）→ 提示，一次一條（_hint_box）。略過新手引導的人
+        不畫前面那三段，但提示照樣有（設計 7.3：「不再提示」是另一個開關）。"""
         s, c, p = self.state, self.content, self.state.player
         t = c.tutorial
         todo = tutorial_steps(s, c)
-        if p.guide_skipped:  # 略過的人不再畫框，換季、第一季多出的步驟也一樣（8.1.4；畫面批次審查 I4）
-            return None
         if self._preparing() or s.world.ended:  # 籌備中、休季什麼都不能做，不叫人去探索（FB-045～052 審查 I1）
             return None
+        if p.guide_skipped:  # 略過的人不再畫引導的框，換季、第一季多出的步驟也一樣（8.1.4；畫面批次審查 I4）；提示不受影響
+            return self._hint_box()
         if p.tutorial_step < len(todo):
             step = todo[p.tutorial_step]
             if not step.text or (prologue_rules.active(s, c) and (s.pending_event or s.player.sensing is not None)):
@@ -1413,17 +1428,64 @@ class Game:
                 "speaker": t.speaker, "key": "outro", "scene": "", "text": t.outro, "line": "", "done": list(p.guide_done), "end": True,
                 "pending": False,
             }
-        return enlist.box(s, c)  # 引導與結語都過去了：入伍段（新手引導計畫二）。順序固定是 步驟 → 結語 → 入伍段，「知道了」只收框上那一個
+        # 引導與結語都過去了：入伍段（新手引導計畫二），再來是碰到才說（計畫三）。順序固定是 步驟 → 結語 → 入伍段 → 提示，「知道了」只收框上那一個
+        return enlist.box(s, c) or self._hint_box()
+
+    def _hint_box(self) -> dict | None:
+        """碰到才說的框：排著的第一條。眼前有事件還沒了結時不出（F3）：提示的框是 end 的、網頁不會收成一行，擺在事件的選項上面會把最後
+        一個選項擠出第一屏（FB-076）；它排著等，事件了結之後上框。key 是那一條的 id，pending 永遠是 False；full：話不被切掉（設計 6.2）。"""
+        p = self.state.player
+        if not p.hint_queue or self.state.pending_event is not None:
+            return None
+        note = p.hint_queue[0]
+        return {
+            "speaker": note.speaker, "key": note.id, "scene": "", "text": note.text, "line": "", "done": [], "end": True,
+            "pending": False, "full": True,
+        }
+
+    def _hint_up(self) -> HintNote | None:
+        """對話框此刻顯示的就是排著的第一條提示（前面沒有引導的步驟、結語、入伍段，也沒有事件擋著）時，那一條；不然是 None。"""
+        p = self.state.player
+        if not p.hint_queue:
+            return None
+        box = self.guide_box()
+        note = p.hint_queue[0]
+        return note if box is not None and box["end"] and box["key"] == note.id else None
+
+    def _surface_hint(self) -> None:
+        """提示上框的那一刻（第一次）才算說過：記進 hints_seen、把說的話記進江湖紀錄（設計 6.2「說過的話都記進見聞」，控制者裁示 N1、N12）。
+        排進佇列時還不算：前面有別的框、事件擋著、不再提示或換季把它清掉了，之後碰到還有機會聽到。冪等（一條只記一次），
+        所以可以放心地在每個可能讓框換成提示的地方叫：排進去之後（_hint）、按「知道了」之後（下一條上框）、行動與同步的最後（事件了結、
+        引導走完、入伍段走完）。在行動裡寫進這一則的 guide，不在行動裡（同步、按「知道了」）接在最新一則的 guide 後面。"""
+        note = self._hint_up()
+        if note is not None and hint_rules.show(self.state, self.content, note):
+            self._journal_guide([f"【{note.speaker}】{note.text}"])
+
+    def _hint(self, hint_id: str) -> None:
+        """碰到某個玩法：排一條提示（序章裡不排，序章本身在教；新手引導計畫三）。說過的、已經排著的、關了提示的、假人都不排；
+        輪得到上框就當場上框（_surface_hint）。"""
+        if not prologue_rules.active(self.state, self.content):
+            hint_rules.queue(self.state, self.content, [hint_id])
+            self._surface_hint()
+
+    def set_hints_off(self, value: bool) -> None:
+        """設定頁的「不再提示」：打開時排著的清掉（沒上過框的不算說過，關掉再打開還聽得到）；對話框的引導與入伍段不受影響。"""
+        self.state.player.hints_off = bool(value)
+        if value:
+            self.state.player.hint_queue = []
 
     def guide_ack(self) -> list[str]:
-        """結語（或入伍段的結尾）按「知道了」：對話框不再出現。只收框上看得到的那一個：結語還沒按、入伍段已經走完時，按下去是結語，
-        入伍段的結尾留到下一個框（guide_box 的順序是步驟 → 結語 → 入伍段，F8）；引導的步驟還在框上時沒有「知道了」可按，什麼都不收。"""
+        """對話框的「知道了」：只收框上看得到的那一個（順序見 guide_box）——提示就是排著的第一條（接著下一條上框）；結語還沒按、入伍段
+        已經走完時，按下去是結語，入伍段的結尾留到下一個框（F8）；引導的步驟還在框上時沒有「知道了」可按，什麼都不收。"""
         p = self.state.player
-        if p.guide_outro:
+        if self._hint_up() is not None:
+            p.hint_queue.pop(0)
+        elif p.guide_outro:
             p.guide_outro = False
         elif not tutorial_active(self.state, self.content):
             p.enlist_end = False
         p.guide_done = []
+        self._surface_hint()  # 結語、入伍段的結尾、上一條提示收掉之後，後面等著的提示輪到上框
         return []
 
     # ── 行動 ──────────────────────────────────────────────
@@ -4504,6 +4566,7 @@ class Game:
             "name": p.name,
             "affiliation": "・".join(name for name in (sect, faction, ranks.title(c, s)) if name) or "散人",
             "anonymous": p.anonymous,
+            "hints_off": p.hints_off,  # 設定頁「不再提示」的勾（新手引導計畫三）
             "level": p.member.level,
             "location": c.locations[p.location].name,
             "season": p.season_number,  # 第幾季；週次每一季都從 1 起，網頁記「看過哪一季哪一週的大事」要帶它
