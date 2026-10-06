@@ -1589,7 +1589,61 @@ def test_a_taken_preset_name_falls_back_instead_of_failing(prologue_content, wor
     assert world.lookup_recipe(fusion.fuse_key("basic_fist", "feng")).id == art.id
 
 
+def test_a_preset_name_that_is_a_characters_name_falls_back(prologue_content, world):
+    """FB-069：玩家的名號不能跟武學撞。有人把角色取名叫穿林腿，師門配方這一季改走退路字表的名字（說明不帶），不卡住新人。"""
+    from tianxia.characters import open_characters
+
+    open_characters().save(new_game_state(prologue_content, "穿林腿"))
+    assert world.is_character_name("穿林腿")
+    art, msgs = fusion.fuse(a_newcomer(prologue_content, "新人乙"), prologue_content, world, must_not_ask(), "basic_fist", "feng")
+    assert art is not None and art.preset and art.name != "穿林腿" and art.note == ""
+    assert not world.is_character_name(art.name)
+
+
 def test_models_and_players_cannot_take_a_preset_name(prologue_content):
     assert naming.name_problem("穿林腿", prologue_content) == naming.PRESET_CLASH
     assert naming.name_problem("追風腿", prologue_content) is None
     assert naming.recheck(prologue_content, ("穿林腿", "說明"))[0] is None  # 模型取了師門的名字：當作取壞了
+
+
+# ── 師門的功夫不屬於哪個新人（review-t4-5 I1）─────────────────
+
+def test_a_preset_art_credits_the_master_not_the_newcomer(prologue_content, world):
+    """師門配方是寫好的、傳下來的：第一個合出來的新人不是它的首創者，功法卡、後到的人那一句、本季的首創名單都不寫他。"""
+    from tianxia.martial_arts import shown_creator
+
+    art, msgs = fusion.fuse(a_newcomer(prologue_content, "新人甲"), prologue_content, world, must_not_ask(), "basic_fist", "feng")
+    assert art.preset and art.creator is None and shown_creator(art) is None
+    assert "新人甲" not in "\n".join(msgs)
+    card = skillview.art_card(art, 1)
+    assert "來源：師門傳下來的功夫" in card and "新人甲" not in card and "首創" not in card
+    assert world.get_skill(art.id).preset  # 登記在全服的那一份也標著
+    later, _ = fusion.fuse(a_newcomer(prologue_content, "新人乙"), prologue_content, world, must_not_ask(), "basic_fist", "feng")
+    assert later.id == art.id and "新人" not in skillview.art_card(later, 1)
+
+
+def test_presets_stay_out_of_the_seasons_firsts_and_the_chronicle(prologue_content, world):
+    """換季寫進江湖史的「合成首創」只列真的有人首創的：師門的功夫不列、也不算進「N 門」（江湖史跨季永遠留著）。"""
+    from conftest import next_season
+    from tianxia.engine import Game
+
+    game = Game.new(prologue_content, "新人甲", world=world)
+    game.state.player.insights = ["feng", "huo"]
+    game.forge("basic_fist", ["feng"])  # 師門配方：穿林腿
+    game.forge("basic_breath", ["huo"], proposed=("燎原功", "一句說明。"))  # 真的首創
+    next_season(prologue_content, world, game)
+    texts = [r.text for _, rumors in world.chronicle_before(2) for r in rumors]
+    firsts = [t for t in texts if "合成首創" in t]
+    assert len(firsts) == 1 and "1 門" in firsts[0] and "燎原功" in firsts[0] and "穿林腿" not in firsts[0]
+    assert not any("穿林腿" in t for t in texts)
+
+
+def test_a_season_of_only_presets_writes_no_firsts_line(prologue_content, world):
+    from conftest import next_season
+    from tianxia.engine import Game
+
+    game = Game.new(prologue_content, "新人甲", world=world)
+    game.state.player.insights = ["feng"]
+    game.forge("basic_fist", ["feng"])
+    next_season(prologue_content, world, game)
+    assert not any("合成首創" in r.text for _, rumors in world.chronicle_before(2) for r in rumors)

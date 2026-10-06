@@ -345,7 +345,9 @@ def art_card(
     """
     nxt = "已達第十成" if level >= MAX_LEVEL else f"{power_at(art, level + 1):.1f}"
     creator = shown_creator(art)  # 寫給別人看的名號：匿名行走的首創者是「某位少俠」（最終審查 Important 2）
-    if art.origin == "fused":
+    if art.preset:  # 師門配方（新手引導）：沒有首創者
+        source = "師門傳下來的功夫"
+    elif art.origin == "fused":
         source = "合成" + (f"（{creator} 首創）" if creator else "")
     elif art.origin == "basic":
         source = "基礎武學"

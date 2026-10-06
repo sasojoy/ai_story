@@ -349,6 +349,8 @@ def fuse(
             new_traits = traits.inherit_fuse(base, insight.attribute)
             if preset is not None:
                 special_id, name, note = None, preset.name, preset.note
+                if world.is_character_name(preset.name):  # 有人的名號就是這個名字（FB-069）：這一季改走退路字表，不寫那句說明
+                    name, note = None, ""
             else:
                 special_id, trait_note = _special_and_note(content, new_traits, key, tianji)
                 name, note = _named(client, content, world, _fuse_messages(base, insight, note=trait_note), proposed)
@@ -357,7 +359,9 @@ def fuse(
                     candidate_name, base.kind, candidate_name, tianji, weights=LOW_ONLY, attribute=insight.attribute,
                 )
                 candidate = candidate.model_copy(update={
-                    "origin": "fused", "creator": state.player.name, "creator_shown": display_name(state),
+                    # 師門配方沒有首創者（誰先合出來都一樣）：不記名號、標 preset，卡片寫師門、江湖史不列
+                    "origin": "fused", "creator": None if preset else state.player.name,
+                    "creator_shown": None if preset else display_name(state), "preset": preset is not None,
                     "note": note if candidate_name == name else "",  # 說明是模型替它那個名字寫的；換成退路名字就不帶
                     "insight": insight.id, "base": art_id, "lean": insight.lean,
                     "traits": new_traits, "special": special_id,

@@ -42,6 +42,9 @@ class MartialArt(BaseModel):
     # 首創者寫給別人看的名號：登記當下照匿名行走的規矩定（rules.display_name，匿名是「某位少俠」）；
     # 功法卡、後到的人那一句、換季的江湖史都寫這個（shown_creator）。舊資料沒有，照 creator
     creator_shown: str | None = None
+    # 師門配方（content/preset_recipes.json，新手引導）的功夫：寫好的、傳下來的，沒有首創者——功法卡寫「師門傳下來的功夫」，
+    # 換季的江湖史「合成首創」不列（sqlite_world._season_firsts_lines）
+    preset: bool = False
     # 全服第一個把它練成絕學的人寫給別人看的名號（world.claim_master 登記時一起寫進來）；身分記在 masters 表
     master_shown: str | None = None
     note: str = ""  # 模型寫的一句話描述（只有語意、沒有數字）；自創與本命武學是空的
