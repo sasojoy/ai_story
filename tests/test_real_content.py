@@ -381,7 +381,7 @@ def test_the_farewell_scouts_the_places_it_names_and_a_skipper_gets_nothing(cont
     from tianxia import atlas
 
     farewell = next(s for s in content.tutorial.steps if s.id == "p11_farewell")
-    assert farewell.survey == ["changshe", "huangjin_camp", "cao_manor"]
+    assert farewell.survey[:3] == NAMED_BY_THE_FAREWELL  # 師父點名的三個地方在前面；後面是路上的站（下面的測試釘它們為什麼在）
     assert all(word in farewell.text for word in ("長社", "別部營寨", "曹家"))  # 師父的話真的講到它們
     game = Game.new(content, "新人", rng=random.Random(0), world=world, prologue=True)
     _walk_the_hut(game)
@@ -397,24 +397,38 @@ def test_the_farewell_scouts_the_places_it_names_and_a_skipper_gets_nothing(cont
     assert not set(farewell.survey) & plain.state.player.surveyed
 
 
-# 師父講到的地方「摸清了」不等於走得到：路線只走摸清的站（atlas.routes），曹氏莊院離潁川 7 站，路上的站（汝南荒野、汝南、汝南集市、譙縣）
-# 沒摸清，疾行去還是被擋下。這是計畫者與 PM 要定的事（要不要把路上的站也記進去、或改路線的規則），這裡不替他們定：下面照實回報每一個地方
-# 現在到不到得了；到不了的標 xfail(strict=True)——答案定了、規則改了，這個測試會翻過來提醒要拿掉標記。
-UNREACHABLE_FROM_THE_HUT = {
-    "cao_manor": "路線只走摸清的站；曹氏莊院離潁川 7 站，路上的汝南荒野、汝南、汝南集市、譙縣沒摸清，疾行去被擋下（等計畫者裁示）",
-}
+# 師父講到的地方「摸清了」不等於走得到：路線只走摸清的站（atlas.routes，規則不改），曹氏莊院離潁川 7 站，路上的站（汝南荒野、汝南、汝南集市、
+# 譙縣）視野之外、沒去過，不一起摸清的話疾行去會被擋下。計畫者選的做法：出師那一步的 survey 清單把路上要走的站也寫進去（寫在內容裡），
+# 這樣師父點名的每一個地方，剛走出草廬就疾行得到。
+NAMED_BY_THE_FAREWELL = ["changshe", "huangjin_camp", "cao_manor"]
+ROUTE_STOPS = {"cao_manor": ["runan_wilds", "runan", "runan_market", "qiao_county"]}  # 潁川→潁水河畔→荒丘（視野之內）→這四站→曹氏莊院
 
 
-@pytest.mark.parametrize("place", [
-    pytest.param(place, marks=pytest.mark.xfail(strict=True, reason=UNREACHABLE_FROM_THE_HUT[place])) if place in UNREACHABLE_FROM_THE_HUT else place
-    for place in ("changshe", "huangjin_camp", "cao_manor")
-])
+@pytest.mark.parametrize("place", NAMED_BY_THE_FAREWELL)
 def test_a_new_player_leaving_the_hut_can_dash_to_each_place_the_farewell_names(content, world, place):
-    """出師摸清的三個投靠地點，剛走出草廬的新人疾行去得了嗎（回報用，不是規則）：到得了的才算「師父指的路走得通」。"""
+    """出師摸清的三個投靠地點，剛走出草廬的新人疾行去得了：用遊戲自己的路線函式、同一條「只走摸清的站」的規則（Game.travel_refusal）。
+    拿掉 survey 清單裡路上的任何一站，曹氏莊院就走不到，這個測試會掉。"""
     game = Game.new(content, "新人", rng=random.Random(0), world=world, prologue=True)
     _walk_the_real_prologue(game)
     assert game.state.player.location == "yingchuan" and place in game.state.player.surveyed
     assert game.travel_refusal(place, "dash") is None, game.travel_refusal(place, "dash")
+
+
+def test_every_stop_the_farewell_scouts_on_the_way_is_needed_and_is_on_the_route(content, world):
+    """survey 清單裡的每一站都有理由：一條路上的站（汝南荒野、汝南、汝南集市、譙縣）少了任何一站，走去曹氏莊院的最短路就斷在那裡、疾行被擋；
+    清單裡沒有多餘的站（多出來的不是路上的、不必摸清的地方）。路上的站本來就在視野之內（荒丘、潁水河畔）的不用寫。"""
+    from tianxia import atlas
+
+    farewell = next(s for s in content.tutorial.steps if s.id == "p11_farewell")
+    stops = farewell.survey[len(NAMED_BY_THE_FAREWELL):]
+    assert stops == [s for place in NAMED_BY_THE_FAREWELL for s in ROUTE_STOPS.get(place, [])]
+    for stop in stops:
+        game = Game.new(content, f"新人{stop}", rng=random.Random(0), world=world, prologue=True)
+        _walk_the_real_prologue(game)
+        assert stop in game.state.player.surveyed
+        game.state.player.surveyed.discard(stop)  # 把這一站拿掉：視野之外、沒去過，就不在摸清的站裡
+        assert stop not in atlas.known_locations(game.state, content)
+        assert game.travel_refusal("cao_manor", "dash") is not None, stop
 
 
 def test_a_survey_naming_an_unknown_place_is_rejected_when_the_content_loads(tmp_path):
