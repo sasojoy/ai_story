@@ -463,7 +463,7 @@ def test_joining_the_figures_faction_without_a_promotion_takes_nothing_off(state
     pytest.param(None, None, id="a-loner-and-no-figure-entry"),  # 散人的階級不抵（沒有陣營）；這個人物也不在大勢人物表上
     pytest.param(None, "guan", id="a-loner-before-a-figure"),
 ])
-def test_rank_in_another_faction_does_not_count(state, content, faction, figure_side):
+def test_only_rank_in_the_figures_own_faction_lowers_the_bar(state, content, faction, figure_side):
     """只有投靠那位大勢人物的陣營、晉升過的階級才抵門檻：別的陣營的階級、散人的階級都不抵，只算名望。"""
     cid = "mate"
     content.characters[cid].audience_fame = 20

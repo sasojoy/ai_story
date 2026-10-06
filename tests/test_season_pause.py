@@ -189,7 +189,7 @@ def test_a_showdown_whose_time_passed_during_the_pause_opens_at_resume(content):
     # （第 4 週週一的波才）之後一個曆時（B13）
     pytest.param(2, lambda c, s: calendar.week_start(3, c, s) + 5 * calendar.cal_hour_seconds(c, s), id="ahead-of-earlier-events"),
 ])
-def test_a_moved_showdown_steps_off_a_regular_event(content, now_week, lands_at):
+def test_a_moved_showdown_lands_just_after_the_last_earlier_regular_event(content, now_week, lands_at):
     """暫停之後決戰往前挪：挪到的時刻不能落在、也不能早於排在它前面還沒結算的一般大事；最早是那一件之後一個曆時。"""
     install_season_one(content)
     install_showdowns(content)

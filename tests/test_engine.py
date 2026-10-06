@@ -3298,7 +3298,7 @@ def test_a_fighter_walking_inside_the_region_can_still_change_sides_during_the_m
 
 
 @pytest.mark.parametrize("region, away", [("north", True), (None, False)], ids=["a-battle-in-the-north", "a-battle-with-no-region"])
-def test_a_fighter_walking_out_of_the_region_is_away_from_the_start_of_the_trip(content, game, region, away):
+def test_walking_out_of_the_battles_region_is_away_from_the_start_only_when_it_has_a_region(content, game, region, away):
     """小鎮—湖邊在北區，終點寶洞在南區：這一趟還沒走到的站有一個在區外，一出發就算離開。不限地點的決戰（region 是 None）
     沒有大區，就沒有「離開」。"""
     definition = _install_battle_def(content)
@@ -3882,7 +3882,7 @@ def test_a_post_fight_event_that_asks_for_a_win_follows_a_win(game):
 
 
 @pytest.mark.parametrize("dodged, tier", [(False, "落敗"), (True, "僵持")], ids=["loss", "draw"])
-def test_a_post_fight_event_that_asks_for_a_win_never_follows_a_loss(game, dodged, tier):
+def test_a_post_fight_event_that_asks_for_a_win_never_follows_a_loss_or_a_draw(game, dodged, tier):
     """打不贏的翻江龍：落敗之後不接只給贏家的戰後事件；落敗被身法閃成僵持也不接。"""
     _after_a_win_only(game)
     game.content.locations["lake"].enemies = ["boss"]  # 打不贏的翻江龍
@@ -5861,7 +5861,7 @@ def test_the_brush_off_says_how_far_short_you_are(content, game):
     # 規則沒開（beta 那一季）沒有晉升這回事，「再升一階」不能寫：其他條件都成立也一樣
     pytest.param(False, [2], 0, 26, None, "（名望還差 4）", id="season-one-rules-off"),
 ])
-def test_the_hint_names_the_faction_way_up_when_one_more_step_would_close_the_gap(
+def test_the_brush_off_names_the_faction_way_up_only_when_one_more_step_would_close_the_gap(
     content, game, season_one, promotions, rank, fame, discount, hint,
 ):
     cid = _stand_by_one_figure(content, game)

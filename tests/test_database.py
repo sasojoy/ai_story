@@ -223,7 +223,7 @@ def test_a_transaction_commits_on_success_and_rolls_back_on_error(tmp_path):
 
 
 @pytest.mark.parametrize("inner", ["transaction", "savepoint"])
-def test_a_nested_transaction_joins_the_outer_one(tmp_path, inner):
+def test_an_inner_transaction_or_savepoint_is_undone_with_the_outer_one(tmp_path, inner):
     """裡面那一層（巢狀的交易，或成功的 savepoint）寫的東西，外層出錯就一起撤回。"""
     db = open_database(tmp_path / "t.db")
     with pytest.raises(ZeroDivisionError):

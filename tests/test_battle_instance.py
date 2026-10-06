@@ -537,7 +537,7 @@ def test_nobody_on_a_fixed_move_on_either_side_pushes_nothing(three):
     pytest.param(lambda battle: setattr(battle.participants["乙"], "eliminated", True), id="all-down"),
     pytest.param(lambda battle: bi.set_away(battle, "乙", True), id="all-out-of-the-region"),
 ])
-def test_a_side_that_is_all_down_gets_pushed_ten(three, out):
+def test_a_side_with_nobody_left_in_the_fight_gets_pushed_ten(three, out):
     """那一邊的人全倒下、或全離開了大區：這一回合照樣結算，往對方推滿 10。"""
     battle = _two_fighters(three)
     out(battle)
