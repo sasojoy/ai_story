@@ -880,7 +880,7 @@ class Scenario(_Strict):
         return faction.name if faction is not None else default
 
 
-ExploreBranch =Literal["insight", "wild", "event"]
+ExploreBranch = Literal["insight", "wild", "event"]
 EXPLORE_BRANCHES: tuple[ExploreBranch, ...] = ("insight", "wild", "event")  # 探索三選一的三支：悟意境、野怪、事件
 
 
