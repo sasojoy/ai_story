@@ -19,7 +19,7 @@
   後面那一份），跟開爐、大場面一樣從備料那一段開始算、扣掉等鎖與排隊的時間。
 - 鎖外的五個模型呼叫（對話生成、大場面判讀、開爐取名、隨口應對的評分與潤色）一律走 `model_call`：開關
   `Config.llm_queue_slots`（預設 0＝關）打開時先排隊（`llm_queue.py`：真人先、假人有上限、排太久被擋下來；同一個人同時只有一件，
-  第二件被擋下來——評分、開爐、大場面回一句話、什麼都不套用，對話取消、潤色不插句子；排超過等候的時間還沒輪到的那一件也一樣，
+  第二件被擋下來——評分、開爐、大場面、對話回一句話、什麼都不套用（對話是 FB-077），潤色不插句子；排超過等候的時間還沒輪到的那一件也一樣，
   不給退路，PM 2026-10-06），
   關著就直接叫。鎖內的小呼叫（`Game._quick_client`）與排程不進佇列。
 - 伺服器推送（`server_push.py`，開關 `Config.push_events`，預設關）：開著時 `/api/events` 是 SSE，每個動作做完（五個動作的端點，
@@ -479,10 +479,13 @@ def queue_line(config) -> str:
 BUSY_FREE_TEXT = "上一句還在掂量，稍等。"  # 待 joy 潤
 BUSY_FORGE = "上一爐還沒出爐。"  # 待 joy 潤
 BUSY_FIGHT = "還在對峙，稍等。"  # 待 joy 潤
+BUSY_DIALOGUE = "對方還沒答話，稍等。"  # 待 joy 潤（FB-077：同一個帳號另一條連線已經在等這個人的回話）
 # 排超過 llm_queue_wait_seconds 秒還沒輪到的那一件（PM 2026-10-06）：跟重複的那一件一樣處理——退路是一個結果，沒被服務到的人沒道理
-# 拿一個結果（評分 40、首次開爐用退路字表），所以給了上面那三句之一的呼叫點（評分、開爐、大場面）也擋下來、什麼都不套用，
-# 玩家再試一次就好；只是不能寫「上一件還在……」（排太久不是因為他自己有上一件），三個呼叫點共用這一句。草稿，待 joy 潤。
-# 沒給 busy 句子的呼叫點（對話：取消那一輪、潤色：不插句子）排太久照舊拿 fallback，跟重複的那一件一樣。
+# 拿一個結果（評分 40、首次開爐用退路字表），所以給了上面那四句之一的呼叫點（評分、開爐、大場面、對話）也擋下來、什麼都不套用，
+# 玩家再試一次就好；只是不能寫「上一件還在……」（排太久不是因為他自己有上一件），四個呼叫點共用這一句。草稿，待 joy 潤。
+# 沒給 busy 句子的呼叫點（潤色：不插句子）排太久照舊拿 fallback，跟重複的那一件一樣。
+# 對話（FB-077）：同一個帳號兩條連線同時按同一個人，第二件以前拿 cancelled（取消那一輪）先進鎖，把「無心多談，你只好先行告辭」
+# 寫進紀錄、求見的選單也收掉，第一件的回話後來套不上；現在跟開爐、隨口應對、大場面一樣被擋下來、什麼都不動。
 # 模型自己失敗（輪到了、叫了、答壞或逾時或連不上）不是這個：那是 job 裡的事，照舊走 job 自己的退路。
 BUSY_QUEUE_TIMEOUT = "這會兒人多，沒輪到你，稍後再試一次。"  # 待 joy 潤
 
@@ -497,7 +500,7 @@ def model_call(game: Game, job, *, fallback, left: float | None = None, busy: st
     要排的話馬上被擋下來（QueueTimeout，見下）。沒給（None）就只受 llm_queue_wait_seconds 管。
     同一個人已經有一件在排或在跑（佇列對這一件丟 Busy，審查 M2），或排超過等候的時間還沒輪到（佇列丟 QueueTimeout，PM 2026-10-06，
     跟 Busy 一樣處理）：給了 busy（一句話）就丟 GameError、不叫 job、不套用任何東西，呼叫端不能繼續往下走——重複的那一件丟 busy
-    那句，排太久丟 BUSY_QUEUE_TIMEOUT；沒給 busy 就拿 fallback（對話：取消那一輪、潤色：不插句子，本來就無害）。
+    那句，排太久丟 BUSY_QUEUE_TIMEOUT；沒給 busy 就拿 fallback（潤色：不插句子，本來就無害）。
     佇列關著沒有這回事，照舊直接叫。假人滿了（bot_cap）是佇列直接給 fallback，不丟任何東西。"""
     if game.world.db.writing():
         raise RuntimeError("model_call 要在行動鎖外用：鎖內的小呼叫走 Game._quick_client，不排隊")
@@ -541,8 +544,12 @@ def prepare_dialogue(game: Game, option_id: str) -> companion_agent.PreparedTurn
     模型一輪要 9~10 秒，整段包在鎖裡的話全服玩家與假人程式都得跟著等。分三段：
       A（鎖內、很快）同步時間，問引擎這個選項現在會不會生成對話，會就拿到送模型的單子；同步的結果（共用賽季的推進
         已經寫進資料庫、江湖大事寫進這個角色的江湖紀錄）要存起來，不然 C 段進鎖重讀就把它丟了；
-      B（鎖外、很慢）呼叫模型（model_call：佇列開著要排隊），失敗、太慢、排太久時單子裡的 turn 是 None；預算是
+      B（鎖外、很慢）呼叫模型（model_call：佇列開著要排隊），失敗、太慢時單子裡的 turn 是 None；預算是
         Config.dialogue_budget_seconds 扣掉 A 段（含等鎖）與排隊花掉的時間，引擎不讀時鐘，所以時間在這裡量（見 within_budget）；
+        佇列開著、同一個帳號的另一條連線已經在等這個人的回話（FB-077），或排超過等候的時間還沒輪到：跟開爐、隨口應對、大場面一樣
+        被擋下來——丟 GameError（BUSY_DIALOGUE、BUSY_QUEUE_TIMEOUT）、不走 C 段、什麼都不動（不寫紀錄、求見的選單還開著、不扣體力），
+        另一條連線的那一件照常套用。以前這種情況拿 cancelled 先進鎖，當成「生成不出對話」寫一行告辭、把選單收掉，之後那一件的回話
+        重驗對不上、套用不了，兩邊都沒談成；只有假人滿了（bot_cap）佇列直接給 cancelled，照舊取消那一輪；
       C（鎖內、很快）由呼叫端把結果交給 Game.choose(prepared=...)，引擎進鎖後重新核對再套用。
     這裡做 A 與 B，不會生成對話的選項（包含 talk:leave）回傳 None，由呼叫端走一般的 act()。"""
     started = _monotonic()
@@ -561,7 +568,7 @@ def prepare_dialogue(game: Game, option_id: str) -> companion_agent.PreparedTurn
             return cancelled  # 等鎖、排隊把整份預算用完了：不叫模型，這一輪取消（跟模型叫不動一樣）
         return companion_agent.prepare_turn(client, request)
 
-    return model_call(game, generate, fallback=cancelled, left=total - (_monotonic() - started))
+    return model_call(game, generate, fallback=cancelled, left=total - (_monotonic() - started), busy=BUSY_DIALOGUE)
 
 
 def may_generate_dialogue(option_id: str) -> bool:

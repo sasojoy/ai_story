@@ -782,8 +782,8 @@ class Config(_Strict):
     free_text_budget_seconds: int = Field(default=60, ge=0)
     # LLM 佇列（線上架構設計 5.2，第 2 期）：行動鎖外的模型呼叫先排隊（server.model_call）。llm_queue_slots＝顯卡同時處理幾件，
     # 0＝不建佇列（預設；照舊直接叫）；假人在排加在跑最多 llm_queue_bot_cap 件（滿了拿退路）；排超過 llm_queue_wait_seconds 秒
-    # 還沒輪到的那一件不叫模型、被擋下來、不拿退路（PM 2026-10-06，跟第二件一樣）：評分、開爐、大場面回一句話、什麼都不套用，
-    # 對話取消、潤色不插句子（每個人同時最多一件，第二件被擋下來、不拿退路，處理一樣）。
+    # 還沒輪到的那一件不叫模型、被擋下來、不拿退路（PM 2026-10-06，跟第二件一樣）：評分、開爐、大場面、對話回一句話、什麼都不套用
+    # （對話是 FB-077），潤色不插句子（每個人同時最多一件，第二件被擋下來、不拿退路，處理一樣）。
     # 排隊等掉的時間算在上面四份總預算裡，而且排隊最久只等「那一件預算還剩的秒數」（server.model_call）。上限 120 秒：請求在
     # trycloudflare 約 100 秒就被切斷；太大的數字還會讓 Condition.wait 丟 OverflowError（threading.TIMEOUT_MAX）
     llm_queue_slots: int = Field(default=0, ge=0)

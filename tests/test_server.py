@@ -4420,8 +4420,8 @@ def test_model_call_queues_under_the_character_and_flags_bots(game, monkeypatch)
 
 def test_a_second_request_from_the_same_player_is_cancelled_or_refused_as_the_call_site_says(game, monkeypatch):
     """同一個角色兩個分頁同時送：第二件不叫第二次模型（Review Focus 1）。佇列對它丟 Busy，model_call 照呼叫端的意思：
-    沒給 busy 訊息的（對話：取消那一輪、潤色：不插句子，本來就無害）拿 fallback；給了 busy 訊息的（評分、開爐、大場面：
-    退路是一個結果，第二個分頁就能拿它挑結果）丟 GameError、一個字都不套用（審查 M2、控制者裁示）。"""
+    沒給 busy 訊息的（潤色：不插句子，本來就無害）拿 fallback；給了 busy 訊息的（評分、開爐、大場面、對話：
+    退路是一個結果，第二個分頁就能拿它挑結果）丟 GameError、一個字都不套用（審查 M2、控制者裁示；對話是 FB-077）。"""
     queue = llm_queue.LlmQueue(slots=2, bot_cap=1)
     monkeypatch.setattr(server, "QUEUE", queue)
     started, release = threading.Event(), threading.Event()
@@ -4439,6 +4439,50 @@ def test_a_second_request_from_the_same_player_is_cancelled_or_refused_as_the_ca
         server.model_call(game, lambda: pytest.fail("不該叫"), fallback="退路", busy="上一件還在掂量。")
     release.set()
     first.join(2)
+    assert queue.snapshot() == {"running": 0, "waiting": 0}
+
+
+@pytest.mark.parametrize("option", ["call:zhangliang", "act:socialize"])
+def test_two_connections_asking_the_same_person_at_once_the_second_is_refused_and_the_first_is_applied(option, monkeypatch):
+    """FB-077（佇列開著）：同一個帳號開兩條連線、同時按「求見」同一個人（交友同一條路：盧植營只有盧植一位，交友直接找他）。
+    以前第二件在 B 段被擋下來拿 cancelled，C 段進鎖當成「生成不出對話」：寫一行「…似乎無心多談，你只好先行告辭。」、把求見的選單收掉，
+    之後第一件的回話（模型花了十幾秒）套用時選單已經換了、重驗對不上，兩邊都沒談成、也沒人知道為什麼。現在跟開爐、隨口應對、大場面
+    一樣：第二件被擋下來（丟 GameError，BUSY_DIALOGUE），不寫紀錄、求見的選單還開著、不扣體力；第一件照常套用。"""
+    queue = llm_queue.LlmQueue(slots=2, bot_cap=1)
+    monkeypatch.setattr(server, "QUEUE", queue)
+    game = Game.new(server.CONTENT, "測試")
+    audience = option.startswith("call:")
+    (_stand_in_a_hall if audience else _stand_by_a_figure)(game)  # 求見要在兩位以上人物的地點（廣宗）：先打開求見名單，再指名
+    game.state.player.picking_audience = audience
+    figure = option.removeprefix("call:") if audience else "luzhi"
+    open_characters().save(game.state)
+    stamina = game.state.player.stamina
+    started, release, asked, first = threading.Event(), threading.Event(), [], {}
+
+    def generate(client, messages):
+        asked.append(1)
+        started.set()
+        release.wait(5)
+        return DIALOGUE_TURN
+
+    monkeypatch.setattr(companion_agent, "generate_turn", generate)
+    thread = threading.Thread(target=lambda: first.update(msgs=server.choose(game, option)))
+    thread.start()
+    assert started.wait(2)  # 第一件還在模型那邊
+    with pytest.raises(server.GameError, match=server.BUSY_DIALOGUE):
+        server.choose(game, option)  # 第二條連線按同一個人
+    stored = open_characters().load("測試")
+    assert (stored.player.stamina, stored.player.picking_audience, stored.player.pending_companion) == (stamina, audience, None)
+    assert not any("無心多談" in "".join(e.lines) for e in stored.journal)  # 沒有寫紀錄
+    assert option in [o.id for o in game.options()]  # 選項還在：求見的選單還開著
+    assert asked == [1]  # 模型只被叫一次（第一件的）
+    release.set()
+    thread.join(5)
+    stored = open_characters().load("測試")  # 第一件照常套用：對話開始、花了這一次的體力、求見的選單收起
+    assert stored.player.pending_companion == figure and not stored.player.picking_audience
+    assert stored.player.stamina == stamina - server.CONTENT.config.action_cost["socialize"]
+    assert "他點了點頭。" in "".join(line for entry in stored.journal for line in entry.lines)
+    assert not any("無心多談" in "".join(e.lines) for e in stored.journal)
     assert queue.snapshot() == {"running": 0, "waiting": 0}
 
 
@@ -4711,16 +4755,19 @@ class _ScriptedQueue:
 def test_a_duplicate_request_is_refused_where_the_fallback_would_let_the_second_tab_pick_the_result(site, monkeypatch):
     """審查 M2、控制者裁示：同一個玩家已經有一件在等模型，第二件（另一個分頁）不能拿退路——評分 40 是一個結果（灌水的寫法本來
     該得 0 分）、首次取名用退路字表是一個結果（整季登記）。所以隨口應對的評分、開爐、大場面都擋下來：不擲骰、不登記、不打、
-    什麼都不收，回一句短話，眼前的事還在原地。對話照舊取消那一輪（不扣體力，本來就無害）；潤色照舊不插句子。"""
+    什麼都不收，回一句短話，眼前的事還在原地。對話也是（FB-077，PM 2026-10-06）：以前第二件拿 cancelled 先進鎖，把「無心多談，你只好
+    先行告辭」寫進紀錄、求見的選單也收掉，第一件的回話後來照樣套不上；現在被擋下來、什麼都不動，第一件照常套用。潤色照舊不插句子。"""
     queue = _ScriptedQueue("run", "busy") if site == "narrate" else _ScriptedQueue("busy")
     monkeypatch.setattr(server, "QUEUE", queue)
     game, run, seen = _ready(site, monkeypatch)
     stamina = game.state.player.stamina
     if site == "dialogue":
-        run()
+        with pytest.raises(server.GameError, match=server.BUSY_DIALOGUE):
+            run()
         assert _asked(seen, "dialogue") == []
-        assert game.state.player.pending_companion is None and game.state.player.stamina == stamina
-        assert game.state.journal[0].lines == ["盧植似乎無心多談，你只好先行告辭。"]
+        stored = open_characters().load("測試")
+        assert stored.player.pending_companion is None and stored.player.stamina == stamina
+        assert not any("無心多談" in "".join(e.lines) for e in stored.journal)  # 沒有寫紀錄
     elif site == "fight":
         with pytest.raises(server.GameError, match="還在對峙，稍等。"):
             run()
@@ -4749,18 +4796,20 @@ def test_a_duplicate_request_is_refused_where_the_fallback_would_let_the_second_
 def test_a_request_that_times_out_in_the_queue_is_refused_like_a_duplicate(site, monkeypatch):
     """PM 2026-10-06：排超過 llm_queue_wait_seconds 秒還沒輪到的那一件，跟重複的那一件一樣處理——不給退路（評分 40、首次取名用
     退路字表）。沒被服務到的人拿一個結果沒有道理（灌水的寫法本來該得 0 分，退路字表的名字整季登記），再試一次就好。評分、開爐、
-    大場面：不擲骰、不登記、不打、什麼都不收，回一句短話，眼前的事還在原地；對話照舊取消那一輪（不扣體力），潤色不插句子
-    （跟重複的那一件的兩種沒給 busy 訊息的呼叫點一樣）。"""
+    大場面、對話：不擲骰、不登記、不打、不開口、什麼都不收，回一句短話，眼前的事還在原地（對話是 FB-077 之後：跟重複的那一件
+    一樣被擋下來，不再取消那一輪）；潤色不插句子（沒給 busy 訊息的呼叫點，跟重複的那一件一樣）。"""
     queue = _ScriptedQueue("run", "timeout") if site == "narrate" else _ScriptedQueue("timeout")
     monkeypatch.setattr(server, "QUEUE", queue)
     game, run, seen = _ready(site, monkeypatch)
     stamina = game.state.player.stamina
     refusal = server.BUSY_QUEUE_TIMEOUT
     if site == "dialogue":
-        run()
+        with pytest.raises(server.GameError, match=refusal):
+            run()
         assert _asked(seen, "dialogue") == []
-        assert game.state.player.pending_companion is None and game.state.player.stamina == stamina
-        assert game.state.journal[0].lines == ["盧植似乎無心多談，你只好先行告辭。"]
+        stored = open_characters().load("測試")
+        assert stored.player.pending_companion is None and stored.player.stamina == stamina
+        assert not any("無心多談" in "".join(e.lines) for e in stored.journal)
     elif site == "fight":
         with pytest.raises(server.GameError, match=refusal):
             run()
@@ -4788,9 +4837,11 @@ def test_a_request_that_times_out_in_the_queue_is_refused_like_a_duplicate(site,
 def test_the_queue_timeout_refusal_is_a_sentence_of_its_own_next_to_the_duplicate_ones():
     """排太久的那句話跟三句重複的拒絕放在一起、同樣標「待 joy 潤」；不是「上一件還在……」（排太久不是因為你自己有上一件）。"""
     source = (server.ROOT / "server.py").read_text(encoding="utf-8")
-    line = next(row for row in source.splitlines() if row.startswith("BUSY_QUEUE_TIMEOUT = "))
-    assert "待 joy 潤" in line and server.BUSY_QUEUE_TIMEOUT in line
-    assert server.BUSY_QUEUE_TIMEOUT not in (server.BUSY_FREE_TEXT, server.BUSY_FORGE, server.BUSY_FIGHT)
+    for name in ("BUSY_QUEUE_TIMEOUT", "BUSY_DIALOGUE"):  # BUSY_DIALOGUE 是 FB-077 加的第四句重複的拒絕
+        line = next(row for row in source.splitlines() if row.startswith(f"{name} = "))
+        assert "待 joy 潤" in line and getattr(server, name) in line, name
+    sentences = [server.BUSY_FREE_TEXT, server.BUSY_FORGE, server.BUSY_FIGHT, server.BUSY_DIALOGUE, server.BUSY_QUEUE_TIMEOUT]
+    assert len(set(sentences)) == 5
     assert all(word not in server.BUSY_QUEUE_TIMEOUT for word in ("上一", "還在"))
 
 
@@ -4902,6 +4953,21 @@ def test_a_queue_timeout_reaches_the_page_as_the_same_kind_of_short_message(clie
     assert answered.status_code == 400 and answered.json() == {"error": server.BUSY_QUEUE_TIMEOUT}
     assert not any(e.title.endswith("隨口應對") for e in open_characters().load("沈青衫").journal)
     assert client.get("/api/main").json()["event_free_text"] == "自己想辦法……"  # 眼前的事還在原地
+
+
+def test_a_refused_dialogue_reaches_the_page_as_a_short_message(client, monkeypatch):
+    """FB-077：重複的那一次對話被擋下來，回 400 與那一句話（前端的 api() 會跳成提示），眼前的選項還在、什麼都沒動。"""
+    monkeypatch.setattr(server, "QUEUE", _ScriptedQueue("busy"))
+    _player(client)
+    game = server.game_for("沈青衫")
+    server.act(game, lambda g: _stand_by_a_figure(g))
+    stamina = open_characters().load("沈青衫").player.stamina
+    refused = client.post("/api/choose", json={"id": "act:socialize"})
+    assert refused.status_code == 400 and refused.json() == {"error": server.BUSY_DIALOGUE}
+    stored = open_characters().load("沈青衫")
+    assert stored.player.stamina == stamina and stored.player.pending_companion is None
+    assert not any("無心多談" in "".join(e.lines) for e in stored.journal)
+    assert "act:socialize" in [o["id"] for o in client.get("/api/main").json()["options"]]
 
 
 class _PassQueue:
