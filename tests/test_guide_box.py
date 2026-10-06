@@ -106,14 +106,15 @@ def test_skipping_hides_the_box(game):
 
 
 def test_skipping_stays_skipped_into_the_next_season():
-    """畫面批次審查 I4：beta 那一季略過新手引導（停在第 6 步），換成第一季（8 步，多了軍令兩步）之後也不再出現對話框；
-    步驟照 T6 的規則記著（做完照樣推進），只是不畫框。沒略過、做完六步的人照 T6 接著做，框照常出現。"""
+    """畫面批次審查 I4：beta 那一季略過新手引導（停在不分季的最後一步之後），換成第一季（13 步，多了軍令兩步）之後也不再出現對話框；
+    步驟照 T6 的規則記著（做完照樣推進），只是不畫框。沒略過、做完序章十一步的人照 T6 接著做，框照常出現。"""
     import random
     from pathlib import Path
 
     from tianxia.characters import open_characters
     from tianxia.content import load_content
     from tianxia.engine import Game
+    from tianxia.guide import base_step_count
     from tianxia.sqlite_world import open_world
 
     root = Path(__file__).parent.parent / "content"
@@ -121,9 +122,11 @@ def test_skipping_stays_skipped_into_the_next_season():
     beta.config.auto_open_first_season, beta.config.admins = True, ["管"]
     chars = open_characters()
     admin = Game.new(beta, "管", rng=random.Random(1))
-    skipper, finisher = Game.new(beta, "略過的", rng=random.Random(2)), Game.new(beta, "做完的", rng=random.Random(3))
+    # 略過的人是在草廬裡按了「略過序章」的真人（走完序章、站在起點的人再按略過什麼都不做：引導已經做完了）
+    skipper, finisher = Game.new(beta, "略過的", rng=random.Random(2), prologue=True), Game.new(beta, "做完的", rng=random.Random(3))
     skipper.skip_tutorial()
-    finisher.state.player.tutorial_step = 6
+    base = base_step_count(beta)  # 不分季的步數（序章十一步）：第一季的軍令兩步排在它們後面
+    finisher.state.player.tutorial_step = base
     for game in (admin, skipper, finisher):
         chars.save(game.state)
     admin.admin_end_season(now=100.0)
@@ -134,9 +137,9 @@ def test_skipping_stays_skipped_into_the_next_season():
     games = {name: Game(on, chars.load(name), rng=random.Random(4), world=open_world()) for name in ("略過的", "做完的")}
     for game in games.values():
         game.sync(300.0)
-        assert game.state.player.tutorial_step == 6
+        assert game.state.player.tutorial_step == base
     assert games["略過的"].guide_box() is None
-    assert games["做完的"].guide_box()["text"] == on.tutorial.steps[6].text
+    assert games["做完的"].guide_box()["text"] == on.tutorial.steps[base].text
 
 
 def test_box_hidden_while_preparing(prologue_content, world, monkeypatch):
