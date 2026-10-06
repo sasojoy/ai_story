@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from . import foreshadow, orders
+from . import calendar, foreshadow, orders
 from .models import Content
 from .rules import Ears, audible, ears_of
 from .state import GameState, Rumor
@@ -24,7 +24,7 @@ FACTION_LONER = "散人沒有陣營軍情；投靠一方之後，這裡是只有
 LOCAL_EMPTY = "（這一帶最近沒什麼傳聞。走到別的大區，聽到的就是那裡的事。）"
 PERSONAL_EMPTY = "（還沒聽到只屬於你的線索。）"
 AWAY_LINE = "〔{label}〕{when}　{text}"  # 「你不在的時候」的一行：哪一段、季曆時間、傳聞全文
-AWAY_MORE = "另有 {n} 則沒列出來，到「見聞」的傳聞翻。"
+AWAY_MORE = "另有 {n} 則沒列出來，到「見聞」的傳聞翻。"  # 摘要放不下時的最後一行（待 joy 潤；算在 Config.away_max 那幾行裡）
 AWAY_TAG = "共 {n} 則"
 FACTION_KEYS = (orders.ISSUED, orders.DONE)  # 陣營軍情的「要點」：軍令發布與達成（議事、刺探有了再把它們的開頭加進來）
 
@@ -71,25 +71,45 @@ def away_lines(
     1. 天下大事，全部——時刻表的大事除外（Game._deliver_big_events 已經補成「江湖大事」那一則，不寫兩次）；
     2. 陣營軍情的要點（FACTION_KEYS 開頭的）；
     3. 你所在大區的地方傳聞（傳聞板上的；地方摘要是傳聞分層第二份計畫的事，有了之後放摘要）。
-    每一段照時間先後，三段照這個順序接起來，最多 Config.away_max 則：放不下時前面的段先放滿，同一段裡留最近的。
-    回傳（那幾行, 一共幾則）；有沒列出來的，最後多一行叫人去見聞翻。什麼都沒有是（[], 0）。"""
+    每一段照時間先後，三段照這個順序接起來。先去掉不用再看的（最終審查 I1：週末一週是現實 5 小時，離開一晚就是好幾週的軍令）：
+    本週軍令只留最新那一週發的（過期的不列），【軍令達成】每一則都留；一模一樣的字只留最新的一則（三段之間也一樣）。
+    再最多放 Config.away_max 行（含最後那一行）：放不下時前面的段先放滿，同一段裡留最近的。
+    回傳（那幾行, 去掉之後一共幾則）；有沒列出來的，最後多一行（AWAY_MORE）叫人去見聞翻。什麼都沒有是（[], 0）。"""
     w = state.world
     ears = ears_of(state, content)
     announced = {r.text for r in w.timeline.values() if r.text}
     fresh = [r for r in w.rumors if (since is None or r.time > since) and audible(r, ears)]
     names = {region.id: region.name for region in content.map.regions}
-    sections = [
+
+    def week(r: Rumor) -> int:
+        return calendar.point(r.time, content, w).week
+
+    key_points = [r for r in fresh if r.layer == "faction" and r.text.startswith(FACTION_KEYS)]
+    latest = max((week(r) for r in key_points if r.text.startswith(orders.ISSUED)), default=None)
+    sections = _newest_only([
         [(WORLD_TITLE, r) for r in fresh if r.layer == "world" and r.text not in announced],
-        [(FACTION_TITLE, r) for r in fresh if r.layer == "faction" and r.text.startswith(FACTION_KEYS)],
+        [(FACTION_TITLE, r) for r in key_points if not r.text.startswith(orders.ISSUED) or week(r) == latest],
         [(names.get(r.region or "", NO_REGION), r) for r in fresh if r.layer == "local"],
-    ]
-    room, rows = content.config.away_max, []
+    ])
+    total = sum(len(section) for section in sections)
+    room = content.config.away_max - (1 if total > content.config.away_max else 0)  # 放不下時最後一行留給「另有 N 則」
+    rows: list[tuple[str, Rumor]] = []
     for section in sections:
-        kept = section[len(section) - min(room, len(section)):]
+        kept = section[len(section) - min(room, len(section)):] if room > 0 else []
         rows += kept
         room -= len(kept)
-    total = sum(len(section) for section in sections)
     lines = [AWAY_LINE.format(label=label, when=when(r.time), text=r.text) for label, r in rows]
     if total > len(rows):
         lines.append(AWAY_MORE.format(n=total - len(rows)))
     return lines, total
+
+
+def _newest_only(sections: list[list[tuple[str, Rumor]]]) -> list[list[tuple[str, Rumor]]]:
+    """一模一樣的字只留最新的一則，留在它那一段原來的位置；三段之間也一樣（同樣新就留排在前面的段、前面的位置）。"""
+    best: dict[str, tuple[int, int]] = {}
+    for s, section in enumerate(sections):
+        for i, (_, r) in enumerate(section):
+            at = best.get(r.text)
+            if at is None or r.time > sections[at[0]][at[1]][1].time:
+                best[r.text] = (s, i)
+    return [[row for i, row in enumerate(section) if best[row[1].text] == (s, i)] for s, section in enumerate(sections)]

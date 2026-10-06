@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 import server
-from tianxia import atlas, foreshadow, journal, mapview, orders, ranks, rules, rumor_view, timetable
+from tianxia import atlas, calendar, foreshadow, journal, mapview, orders, ranks, rules, rumor_view, timetable
 from tianxia.content import load_content
 from tianxia.engine import Game
 from tianxia.martial_arts import Insight, shown_creator
@@ -479,28 +479,126 @@ def test_the_timetable_big_events_are_not_summarised_twice(slow, world):
     assert any(e.title == journal.WORLD_NEWS and e.tag == "三十六方同日起事。" for e in jia.state.journal)
 
 
-def test_the_summary_keeps_twenty_and_points_to_the_news_page(slow, world):
+def test_the_summary_is_capped_at_eight_lines_and_points_to_the_news_page(slow, world):
+    """I1（最終審查）：一份摘要最多 8 行（Config.away_max，含最後那一行「另有 N 則」）；放不下時留最近的，
+    天下大事先放滿，地方的就放不進來。"""
     jia = _game(slow, "甲", "guan", world=world)
     jia.sync(T0)
     _put(world, *(Rumor(time=float(i), text=f"天下事{i}。", layer="world") for i in range(1, 23)))
     _put(world, Rumor(time=30.0, text="長社事。", layer="local", region="yingru"))
     jia.sync(T0 + HOUR)
     entry = _away(jia)
-    assert entry.tag == "共 23 則"
+    assert entry.tag == "共 23 則" and len(entry.lines) == 8
     shown = [line.split("　")[1] for line in entry.lines[:-1]]
-    assert shown == [f"天下事{i}。" for i in range(3, 23)]  # 放不下時留最近的；天下大事先放滿，地方的就放不進來
+    assert shown == [f"天下事{i}。" for i in range(16, 23)]
+    assert entry.lines[-1] == "另有 16 則沒列出來，到「見聞」的傳聞翻。"
+
+
+def test_the_cap_keeps_the_sections_in_spec_order(slow, world):
+    """三段照規格的順序放：天下大事、陣營軍情的要點、所在大區；每一段裡留最近的。"""
+    jia = _game(slow, "甲", "guan", world=world)
+    jia.sync(T0)
+    _put(
+        world,
+        *(Rumor(time=1.0 + i, text=f"天下事{i}。", layer="world") for i in range(3)),
+        *(Rumor(time=10.0 + i, text=f"【軍令達成】第{i}道。出力最多：甲。", layer="faction", faction="guan") for i in range(4)),
+        *(Rumor(time=20.0 + i, text=f"長社事{i}。", layer="local", region="yingru") for i in range(3)),
+    )
+    jia.sync(T0 + HOUR)
+    entry = _away(jia)
+    assert entry.tag == "共 10 則" and len(entry.lines) == 8
+    labels = [line.split("〕")[0].lstrip("〔") for line in entry.lines[:-1]]
+    assert labels == ["天下大事"] * 3 + ["陣營軍情"] * 4  # 地方的一則都沒放進來
     assert entry.lines[-1] == "另有 3 則沒列出來，到「見聞」的傳聞翻。"
 
 
 def test_the_cap_comes_from_the_config(slow, world):
-    slow.config.away_max = 2
+    slow.config.away_max = 3
     jia = _game(slow, "甲", "guan", world=world)
     jia.sync(T0)
     _put(world, Rumor(time=1.0, text="天下事甲。", layer="world"),
          Rumor(time=2.0, text="本週軍令：守長社。", layer="faction", faction="guan"),
+         Rumor(time=2.5, text="【軍令達成】守長社。出力最多：甲。", layer="faction", faction="guan"),
          Rumor(time=3.0, text="長社事。", layer="local", region="yingru"))
     jia.sync(T0 + HOUR)
-    assert [line.split("　")[-1] for line in _away(jia).lines] == ["天下事甲。", "本週軍令：守長社。", "另有 1 則沒列出來，到「見聞」的傳聞翻。"]
+    assert [line.split("　")[-1] for line in _away(jia).lines] == [
+        "天下事甲。", "【軍令達成】守長社。出力最多：甲。", "另有 2 則沒列出來，到「見聞」的傳聞翻。",  # 放進 2 則（最後一行算在 3 行裡）
+    ]
+
+
+def test_only_this_weeks_orders_are_listed_but_every_completion_is_kept(slow, world):
+    """I1(a)：過期的本週軍令不再列，只留最新那一週發的；【軍令達成】每一則都留。"""
+    jia = _game(slow, "甲", "guan", world=world)
+    jia.sync(T0)
+    start = lambda week: calendar.week_start(week, slow, jia.state.world)  # noqa: E731
+    faction = dict(layer="faction", faction="guan")
+    _put(
+        world,
+        Rumor(time=start(2), text="本週軍令：第二週守長社。", **faction),
+        Rumor(time=start(2), text="本週軍令：第二週護糧。", **faction),
+        Rumor(time=start(2) + 50, text="【軍令達成】第二週守長社。出力最多：甲。", **faction),
+        Rumor(time=start(3), text="本週軍令：第三週守長社。", **faction),
+        Rumor(time=start(3), text="本週軍令：第三週護糧。", **faction),
+        Rumor(time=start(3) + 50, text="【軍令達成】第三週護糧。出力最多：乙。", **faction),
+    )
+    jia.sync(T0 + HOUR)
+    entry = _away(jia)
+    assert [line.split("　")[-1] for line in entry.lines] == [
+        "【軍令達成】第二週守長社。出力最多：甲。", "本週軍令：第三週守長社。", "本週軍令：第三週護糧。",
+        "【軍令達成】第三週護糧。出力最多：乙。",
+    ]
+    assert entry.tag == "共 4 則"
+
+
+def test_identical_texts_collapse_to_the_newest_one(slow, world):
+    """I1(b)：一模一樣的字只留最新的那一則，留在它那一段原來的位置；三段之間也一樣（同樣新就留排在前面的段）。"""
+    jia = _game(slow, "甲", "guan", world=world)
+    jia.sync(T0)
+    _put(
+        world,
+        Rumor(time=1.0, text="天下事甲。", layer="world"),
+        Rumor(time=2.0, text="天下事乙。", layer="world"),
+        Rumor(time=3.0, text="天下事甲。", layer="world"),  # 比第一則新：留這一則，順序在乙後面
+        Rumor(time=4.0, text="本週軍令：同一句。", layer="faction", faction="guan"),
+        Rumor(time=5.0, text="本週軍令：同一句。", layer="world"),  # 另一段、更新：留這一則，陣營軍情那一則收掉
+        Rumor(time=6.0, text="長社事。", layer="local", region="yingru"),
+    )
+    jia.sync(T0 + HOUR)
+    entry = _away(jia)
+    at = jia.stamp
+    assert entry.lines == [
+        f"〔天下大事〕{at(2.0)}　天下事乙。",
+        f"〔天下大事〕{at(3.0)}　天下事甲。",
+        f"〔天下大事〕{at(5.0)}　本週軍令：同一句。",
+        f"〔潁川汝南〕{at(6.0)}　長社事。",
+    ]
+    assert entry.tag == "共 4 則"
+
+
+def test_several_weeks_away_gets_one_short_summary_without_stale_orders(slow, world):
+    """審查 I1 的情形：週末一週是現實 5 小時，離開一晚就是好幾週的軍令。同一道軍令每週重發，摘要不能列五遍、
+    也不能列過期的：最多 8 行、沒有一模一樣的字、本週軍令只有最新那一週的。"""
+    jia = _game(slow, "甲", "guan", world=world)
+    jia.sync(T0)
+    start = lambda week: calendar.week_start(week, slow, jia.state.world)  # noqa: E731
+    orders_text = ["本週軍令：盧植傳令：冀州吃緊，各營嚴守，不得輕出。", "本週軍令：一批軍糧要從洛陽官道送到長社。",
+                   "本週軍令：孫堅傳令：張曼成是賊中的頭目，本週誰遇上他就打。"]
+    rows = []
+    for week in range(1, 6):
+        rows += [Rumor(time=start(week), text=text, layer="faction", faction="guan") for text in orders_text]
+        if week in (2, 4):
+            rows.append(Rumor(time=start(week) + 90, text=f"【軍令達成】第{week}週。出力最多：甲。", layer="faction", faction="guan"))
+    rows += [Rumor(time=start(3) + 7, text="天下事甲。", layer="world")]
+    rows += [Rumor(time=start(5) + 9, text="長社事。", layer="local", region="yingru")]
+    _put(world, *rows)
+    jia.sync(T0 + HOUR)
+    entry = _away(jia)
+    texts = [line.split("　")[-1] for line in entry.lines]
+    assert len(entry.lines) <= 8
+    assert len(set(texts)) == len(texts)  # 沒有一模一樣的字
+    weeks_of_orders = {line.split("　")[0].split("〕")[1] for line in entry.lines if "本週軍令：" in line}
+    assert weeks_of_orders == {jia.stamp(start(5))}  # 本週軍令只剩最新那一週發的
+    assert [t for t in texts if t.startswith("【軍令達成】")] == ["【軍令達成】第2週。出力最多：甲。", "【軍令達成】第4週。出力最多：甲。"]
 
 
 def test_server_bots_and_brand_new_characters_get_no_summary(slow, world):
@@ -737,3 +835,40 @@ def test_the_settings_say_where_walking_anonymously_applies():
     js = (server.WEB / "app.js").read_text(encoding="utf-8")
     assert "匿名行走（只在地方傳聞裡不寫名號；天下大事、軍情、江湖史、排行照寫）" in js
     assert "江湖傳聞中不顯示名號" not in js
+
+
+# ── 最終審查 m2：你不在的時候的兩個測試缺口 ─────────────────────────
+
+
+def test_a_rumor_your_own_action_wrote_at_the_mark_is_not_in_your_next_summary(slow, world):
+    """V1：自己這一次請求裡的行動寫的傳聞，時間就等於這一刻記下的標記；下一份摘要只算標記「之後」的（嚴格大於），
+    不會把自己剛做的事再唸給自己聽。"""
+    jia = _game(slow, "甲", "guan", world=world)
+    jia.sync(T0)
+    jia.sync(T0 + 10)
+    mark = jia.state.last_world
+    assert mark is not None and mark > 0
+    _put(world, Rumor(time=mark, text="我自己剛做的事。", layer="world"), Rumor(time=mark + 1, text="之後別人做的事。", layer="world"))
+    jia.sync(T0 + 10 + HOUR)
+    assert [line.split("　")[1] for line in _away(jia).lines] == ["之後別人做的事。"]
+
+
+def test_with_nothing_to_say_no_summary_entry_is_written_at_all(slow, world):
+    """E8：離開超過一小時、這段期間也有傳聞，但沒有一則是這個人該聽的（敵方軍情、別的大區、時刻表已經補過的大事、
+    不是要點的軍情）：整則不寫（不寫一則空的「你不在的時候」）。"""
+    jia = _game(slow, "甲", "guan", world=world)
+    jia.sync(T0)
+
+    def _settled(season):
+        season.timeline["uprising"] = TimelineResult(key="fixed", time=1.0, text="三十六方同日起事。")
+        season.rumors += [
+            Rumor(time=1.0, text="三十六方同日起事。", layer="world"),  # 時刻表大事：由江湖大事那一則補
+            Rumor(time=2.0, text="本週軍令：圍長社。", layer="faction", faction="huang"),  # 敵方的軍情
+            Rumor(time=3.0, text="宛城事。", location="wan_city", layer="local", region="nanyang"),  # 別的大區
+            Rumor(time=4.0, text="昨日升為屯長的有：乙。", layer="faction", faction="guan"),  # 自己人的，但不是要點
+        ]
+
+    world.mutate_season(_settled)
+    jia.sync(T0 + 3 * HOUR)
+    assert not any(entry.title == journal.AWAY for entry in jia.state.journal)
+    assert _away(jia) is None
