@@ -1036,6 +1036,8 @@
   const ART_FILTERS = ["全部", "內功", "武學", "意境"];
   const filterKey = (page) => `tx-arts-filter-${page}`;
   function artFilter(page) {
+    // 序章的煉製頁（第 4 步要放進爐子的基礎拳腳與剛悟到的意境）一律全列：瀏覽器記著的是上一個角色的篩選，不能把師父點名的藏起來
+    if (page === "craft" && pro()) return "全部";
     S.artFilter = S.artFilter || {};
     if (!(page in S.artFilter)) {
       let saved = null;
@@ -1058,6 +1060,7 @@
   }
   // 四顆小鈕排一行，併在煉製頁「功法」那一行標籤裡（第一屏不多一行）
   function filterChips(page) {
+    if (page === "craft" && pro()) return ""; // 序章裡沒有篩選可選（artFilter 一律全列），不畫鈕
     const now = artFilter(page);
     return `<span class="fchips" role="group" aria-label="篩選">${ART_FILTERS.map((f) => `<button type="button" class="fchip${f === now ? " on" : ""}" data-act="art-filter" data-page="${page}" data-filter="${f}" aria-pressed="${f === now}">${f}</button>`).join("")}</span>`;
   }
@@ -1166,10 +1169,16 @@
     // 排序是伺服器排好的（FB-085：身上的先，再品質、成、名字），這裡照順序列；選哪一類記在 localStorage（libFilter）
     const lib = x.owned_arts.filter((a) => !a.worn);
     const pass = (a, f) => f === "all" || (f === "ready" ? a.cultivate.ok : a.kind === f);
-    const filter = libFilter();
-    const picked = lib.filter((a) => pass(a, filter));
+    // 篩選鈕只在庫超過 LIB_PAGE 門時才畫（chips）：沒畫鈕就不套記著的篩選——不然庫縮到 8 門以下、或換了新角色（序章的草廬庫只有一兩門），
+    // 記在瀏覽器裡的篩選會把武學藏起來、又沒有鈕可以改回來（review-ap3 I1）
+    const filter = lib.length > LIB_PAGE ? libFilter() : "all";
+    // 展開著的那一門永遠留在清單裡：照「可修練」篩選時，最後一次修練把它修到不能再修（體力不夠、練成絕學）就不合篩選了，
+    // 它的結果卻還寫在卡裡、頁面也不該跳走（W7）
+    const picked = lib.filter((a) => pass(a, filter) || a.id === S.artOpen);
     const showAll = S.libAll || picked.length <= LIB_PAGE + 2; // 只多一兩門就直接列完，不必多按一次
-    const rows = showAll ? picked : picked.slice(0, LIB_PAGE);
+    const first = picked.slice(0, LIB_PAGE);
+    const openArt = picked.find((a) => a.id === S.artOpen);
+    const rows = showAll ? picked : openArt && !first.includes(openArt) ? [...first, openArt] : first; // 展開著的那一門排在第 8 門之後時也要看得到
     // 序章指路：收著的這一列發光，要按的是它裡面的改練、修練、熔煉（要先點開它）。哪一列、哪幾個鍵由伺服器說（a.glow，只有序章裡才有；
     // art_rows 照序章的拒絕算過：改練只有師父點名的那一門、修練、熔煉只有按得下去的），網頁不猜（T7 走查 W-A）
     const libRow = (a) => {

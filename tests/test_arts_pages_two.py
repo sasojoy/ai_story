@@ -608,6 +608,39 @@ def test_the_library_filter_lists_only_what_it_says_in_the_servers_order(chosen,
 
 
 @needs_node
+@pytest.mark.parametrize("stored", ["內功", "ready", "武學"])
+def test_a_remembered_filter_is_not_applied_while_its_chips_are_not_drawn(stored):
+    """review-ap3 I1：篩選鈕只在庫超過 8 門時才畫。庫縮到 8 門以下（熔掉、改練）之後，記著的篩選若還在套，武學被藏起來又沒有鈕改回來。"""
+    short = [_art("w1", "武學", "甲拳", worn=True)] + [_art(f"w{i + 2}", "武學", f"武{i}") for i in range(8)]  # 庫剛好 8 門
+    html = _practice(short, f"H.store['tx-arts-filter-practice'] = {json.dumps(stored)};")
+    assert 'class="lib-filter"' not in html and len(_library_names(html)) == 8 and "這一類沒有功法" not in html
+    long = short + [_art("w10", "武學", "武8")]  # 第 9 門：鈕出現，記著的篩選才套
+    html = _practice(long, f"H.store['tx-arts-filter-practice'] = {json.dumps(stored)};")
+    assert 'class="lib-filter"' in html and (stored == "武學") == (len(_library_names(html)) == 9)
+
+
+@needs_node
+def test_the_open_card_stays_in_the_list_even_when_it_no_longer_fits_the_filter():
+    """W7 的小邊角（review-ap3 M4）：照「可修練」篩選時，最後一次修練讓它不能再修（體力不夠、練成絕學）就不合篩選；展開著的那一門
+    留在清單裡，它卡裡的結果才看得到、頁面也不會因為鈕不見了而跳到頂。"""
+    rows = _library_of_ten()
+    rows[2] = {**rows[2], "cultivate": {"ok": False, "note": "體力不足：修練一次要 10。", "legend": None}}  # 武0 剛被修練到不能再修
+    names = _library_names(_practice(rows, "H.setLibFilter('ready'); S.artOpen = 'w2';"))
+    assert names == ["武0", "內0"]  # 展開著的武0 還在（照伺服器的順序），其他不能修練的照篩選藏起來
+    assert _library_names(_practice(rows, "H.setLibFilter('ready');")) == ["內0"]  # 沒展開的：不合就藏起來
+
+
+@needs_node
+def test_the_open_card_is_listed_even_when_it_sits_past_the_first_page():
+    rows = _library_of_ten()
+    html = _practice(rows, "S.artOpen = 'n5';")  # 十門的最後一門（第 10 個）：第一頁只列 8 門，十門 = 8 + 2 直接列完
+    assert "內3" in _library_names(html)
+    twelve = rows + [_art("w20", "武學", "武X"), _art("w21", "武學", "武Y")]  # 十二門：第一頁 8 門，按「再列 N 門」才全
+    names = _library_names(_practice(twelve, "S.artOpen = 'w21';"))
+    assert len(names) == 9 and names[-1] == "武Y"
+
+
+@needs_node
 def test_a_filter_with_nothing_in_it_says_so_instead_of_leaving_a_hole():
     rows = [_art("w1", "武學", "甲拳", worn=True)] + [_art(f"w{i + 2}", "武學", f"武{i}") for i in range(9)]  # 九門武學、沒有內功
     html = _practice(rows, "H.setLibFilter('內功');")

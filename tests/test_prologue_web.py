@@ -733,6 +733,34 @@ def test_the_first_glowing_thing_on_the_craft_page_is_the_base_art_chip(hut):
     assert tags and live[0] == "pick:art" and "forge" not in live  # 開爐灰著（不發光），頁面由上往下第一個會發光的是底（基礎拳腳）
 
 
+@pytest.mark.parametrize("stored", ["ready", "內功", "武學"])
+def test_a_filter_the_browser_remembers_from_an_earlier_character_never_hides_what_the_master_points_at(newcomer, stored):
+    """review-ap3 I1：功法庫的篩選記在瀏覽器裡，換了新角色也還在；篩選鈕卻只在庫超過 8 門時才畫。草廬裡庫只有一兩門，記著的篩選
+    把師父點名的那一列（第 5 步改練、第 10 步熔）藏起來、又沒有鈕可以改回來，新人卡住。鈕沒畫就不套篩選。"""
+    key = {"tx-arts-filter-practice": stored}
+    for step, glow in ((4, "switch"), (9, "melt")):
+        game = newcomer()
+        m, x = pages_at(game, step)
+        page = run(m, "return H.pagePractice();", menxia=x, stored=key)
+        assert "這一類沒有功法" not in page and 'class="lib-filter"' not in page  # 庫是短的：沒有鈕，也就沒有篩選
+        rows = dict(re.findall(r'data-act="art" data-id="(\w+)"( data-glow="[^"]*")?', page))
+        assert any(glow in v for v in rows.values()), (step, glow, rows)  # 發光的那一列在
+        opened = next(k for k, v in rows.items() if glow in v)
+        card = run(m, "return H.pagePractice();", menxia=x, stored=key, S={"artOpen": opened})
+        assert re.search(rf'data-act="{glow}" data-glow="{glow}"', card), (step, glow)  # 點開之後卡裡的鈕也發光
+
+
+@pytest.mark.parametrize("stored", ["內功", "意境", "武學"])
+def test_a_remembered_craft_filter_is_ignored_in_the_hut_so_the_base_art_and_the_new_insight_show(hut, stored):
+    """同一個毛病在煉製頁：第 4 步（合成）要放進爐子的基礎拳腳與剛悟到的意境，不能被上一個角色留下的篩選藏起來；序章裡也不畫篩選鈕。"""
+    m, x = pages_at(hut, 3)
+    page = run(m, "return H.pageCraft();", menxia=x, stored={"tx-arts-filter-craft": stored})
+    assert 'data-act="pick" data-type="art" data-glow="pick:art" data-id="basic_fist"' in page
+    assert 'data-glow="pick:insight"' in page and "fchips" not in page
+    plain = run({**m, "prologue": None}, "return H.pageCraft();", menxia=x, stored={"tx-arts-filter-craft": stored})
+    assert "fchips" in plain  # 序章之外照舊：篩選鈕在、記著的篩選照套（煉製頁的鈕一直都畫，改得回來）
+
+
 def test_only_the_art_the_master_names_glows_to_be_melted(hut):
     m, x = pages_at(hut, 9)  # 熔雜學那一步
     rows = dict(re.findall(r'data-act="art" data-id="(\w+)"( data-glow="[^"]*")?', run(m, "return H.pagePractice();", menxia=x)))
