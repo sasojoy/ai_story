@@ -63,7 +63,7 @@ class BotRunner:
 
     def tick(self) -> TickReport:
         report = TickReport()
-        if self.world.season_phase() != "running":
+        if self.world.season_phase() != "running" or self.world.paused_at() is not None:  # 籌備、休季、暫停中都不出手
             return report
         now = self.clock()
         try:
@@ -104,7 +104,7 @@ class BotRunner:
         自己補算時間時走到季末，存下補算的結果，但不在休季時做事。"""
         state = self.characters.load(name)
         shared = self.world.read()
-        if state is None or shared.season_phase() != "running":
+        if state is None or shared.season_phase() != "running" or shared.paused_at is not None:
             return False
         profile = state.player.bot
         if profile is None or not server_bots.active(profile, shared.season_number):

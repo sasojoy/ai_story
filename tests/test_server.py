@@ -24,6 +24,7 @@ from tianxia.martial_arts import MartialArt, generate_from_name
 from tianxia.ollama_client import OllamaClient
 from tianxia.sqlite_world import SqliteWorldStore, open_world
 from tianxia.state import BotProfile
+from tianxia.world_state import season_length_days
 
 REAL_CHAT_STRUCTURED = OllamaClient.chat_structured  # 匯入時抓：conftest 的 autouse 之後會換成「連不上」，重問的測試要真的
 
@@ -4089,3 +4090,74 @@ def test_fb069_the_forge_never_names_a_recipe_after_a_character(lock_events):
     name = open_world().lookup_recipe(FIST_FENG).name
     assert name != "驗收新武" and naming.name_problem(name, server.CONTENT) is None
     assert server.forge(game, "jichu_quanjiao", ["huo"]) is not None  # 一般的名字照常
+
+
+# ── 賽季時鐘暫停（賽季計畫 Task 4）────────────────────────────
+
+
+def test_a_paused_season_refuses_actions_but_keeps_the_pages(client):
+    """暫停中（線上架構 8.3「擋住所有動作」）：每一種動作都回同一句（走鎖外三段的也在第一段就擋）；計時器、修練頁、輿圖、
+    戰報照常看得到，打開輿圖照做（頁面靠它載入輿圖）。"""
+    _player(client)
+    game = server.game_for("沈青衫")
+    assert game.world.pause_clock(time.time())
+    main = client.get("/api/main").json()
+    assert main["paused"] == 0 and [o["id"] for o in main["options"]] == ["season:paused"]
+    refused = {"error": f"{server.PAUSED_TEXT}。"}
+    for path, body in (
+        ("/api/choose", {"id": "act:explore"}), ("/api/choose", {"id": "act:train"}),
+        ("/api/choose", {"id": "act:socialize"}), ("/api/travel", {"place": "x", "mode": "walk"}),
+        ("/api/menxia/practice", {"kind": "武學"}), ("/api/menxia/forge", {"art": "x", "insights": ["y"]}),
+        ("/api/answer", {"text": "上前勸架"}), ("/api/do/seclude", {"hours": 8}), ("/api/do/battle_text", {"text": "放火"}),
+    ):
+        out = client.post(path, json=body)
+        assert (out.status_code, out.json()) == (400, refused), path
+    for path in ("/api/menxia", "/api/map", "/api/reports"):
+        assert client.get(path).status_code == 200
+    assert client.post("/api/do/view_map", json={}).status_code == 200
+
+
+def test_the_admin_pauses_and_resumes_from_the_settings_page(client, monkeypatch):
+    _admin(client, monkeypatch)
+    game = server.game_for("掌門")
+    out = client.post("/api/do/pause_clock", json={}).json()
+    assert "賽季時鐘停了" in out["message"] and out["main"]["paused"] == 0
+    assert game.world.paused_at() is not None
+    assert "暫停中" in client.post("/api/do/fast_forward", json={"hours": 1}).json()["message"]
+    out = client.post("/api/do/resume_clock", json={}).json()
+    assert "賽季時鐘接著走了" in out["message"] and out["main"]["paused"] is None
+    assert game.world.paused_at() is None
+
+
+def test_players_cannot_pause_the_season(client):
+    _player(client)
+    for op in ("pause_clock", "resume_clock"):
+        out = client.post(f"/api/do/{op}", json={})
+        assert out.status_code == 400 and out.json() == {"error": "只有管理者能這麼做。"}
+
+
+def test_the_pause_buttons_call_what_the_server_has():
+    """網頁沒有測試框架：設定頁的「暫停／繼續」叫的動作要在 ADMIN_ACTIONS 裡、有確認問句，讀的欄位要在 main_view 裡。"""
+    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    for op in ("pause_clock", "resume_clock"):
+        assert f'data-op="{op}"' in js and f"{op}: [" in js and op in server.ADMIN_ACTIONS
+    assert "S.main.paused" in js
+    assert "paused" in server.main_view(Game.new(server.CONTENT, "測試"))
+
+
+def test_world_step_does_not_move_a_paused_season():
+    """伺服器排程的一下（world_step）暫停中什麼都不推——過了三個季長也不收季；繼續之後從停的那一刻接著走。
+    打到一半的決戰那一路見 tests/test_season_pause.py::test_the_scheduler_tick_waits_out_the_pause。"""
+    world = open_world()
+    scale = server.CONTENT.config.time_scale
+    server.world_step(lambda: 1000.0)  # 記下時鐘
+    server.world_step(lambda: 1600.0)
+    stopped = world.get_season().time
+    assert stopped == pytest.approx(600 * scale)
+    assert world.pause_clock(1600.0)
+    far = 1600.0 + 3 * season_length_days(world.get_season(), server.CONTENT) * 86400 / scale  # 過了三個季長
+    server.world_step(lambda: far)
+    assert (world.get_season().time, world.get_season().ended, world.season_phase()) == (stopped, False, "running")
+    assert world.resume_clock(server.CONTENT, far) == far - 1600.0
+    server.world_step(lambda: far + 10)
+    assert world.get_season().time == pytest.approx(stopped + 10 * scale)

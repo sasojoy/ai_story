@@ -50,7 +50,7 @@ from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, Account
 from tianxia.content import PROFILE_ENV, load_content, profile_line
 from tianxia.characters import open_characters
 from tianxia.database import default_path, open_database
-from tianxia.engine import FIGHT_GONE_LINES, FREE_TEXT_OPTION, Game
+from tianxia.engine import FIGHT_GONE_LINES, FREE_TEXT_OPTION, PAUSED_TEXT, Game
 from tianxia.models import FREE_TEXT_MAX
 from tianxia.journal import CSS as JOURNAL_CSS
 from tianxia.sqlite_world import open_world
@@ -224,12 +224,22 @@ def _locked(game: Game):
         yield
 
 
-def act(game: Game, action) -> list[str] | None:
+def _refuse_while_paused(game: Game) -> None:
+    """管理者暫停了賽季時鐘（線上架構 8.3「維護模式：擋住所有動作」）：玩家的動作一律回這一句。畫面照常可看——計時器的同步、
+    看名冊、輿圖、戰報都不經過這裡。呼叫端要拿著行動鎖、已經同步過；丟出去時整筆交易撤回。"""
+    if game.world.paused_at() is not None:
+        raise GameError(f"{PAUSED_TEXT}。")
+
+
+def act(game: Game, action, *, paused_ok: bool = False) -> list[str] | None:
     """同步時間 → 執行動作 → 存檔。開一筆寫入交易（假人程式寫同一個資料庫），計時器、按鈕與假人就一個一個來。
     進鎖先從資料庫重讀角色（見 _reload）：動作丟例外時整筆撤回，下一個動作不會把失敗的改動存回去。
-    回傳動作的訊息。動作之後一律存檔：同步寫進江湖紀錄的江湖大事，不能因為動作本身沒改東西就被下一次重讀丟掉。"""
+    回傳動作的訊息。動作之後一律存檔：同步寫進江湖紀錄的江湖大事，不能因為動作本身沒改東西就被下一次重讀丟掉。
+    賽季時鐘暫停中，只有 paused_ok 的照做（計時器的同步、管理者的動作、畫面上的設定），其他回「賽季暫停中」（_refuse_while_paused）。"""
     with _locked(game):
         game.sync(time.time())
+        if not paused_ok:
+            _refuse_while_paused(game)
         msgs = action(game)
         open_characters().save(game.state)
         return msgs
@@ -364,6 +374,7 @@ def prepare_dialogue(game: Game, option_id: str) -> companion_agent.PreparedTurn
     這裡做 A 與 B，不會生成對話的選項（包含 talk:leave）回傳 None，由呼叫端走一般的 act()。"""
     with _locked(game):
         game.sync(time.time())
+        _refuse_while_paused(game)  # 暫停中在 A 段就擋：模型一次都不叫
         request = game.dialogue_request(option_id)
         open_characters().save(game.state)
     if request is None:
@@ -401,6 +412,7 @@ def prepare_fight(game: Game, option_id: str) -> list[str] | fight_llm.PreparedF
     started = time.monotonic()
     with _locked(game):
         game.sync(time.time())
+        _refuse_while_paused(game)
         request = game.fight_request(option_id)
         done = game.choose(option_id) if request is None else None
         open_characters().save(game.state)
@@ -444,6 +456,7 @@ def prepare_forge(
     started = time.monotonic()
     with _locked(game):
         game.sync(time.time())
+        _refuse_while_paused(game)
         request = game.forge_request(art_id, insight_ids, other_art=other_art)
         open_characters().save(game.state)
     if request is None:
@@ -469,6 +482,7 @@ def answer_event(game: Game, text: str) -> list[str] | None:
       D、E 擲骰之後在鎖外請模型潤色一兩句，再進鎖插回那一則江湖紀錄（Game.add_gamble_narration）。"""
     with _locked(game):
         game.sync(time.time())
+        _refuse_while_paused(game)
         request = game.free_text_request(text)
         open_characters().save(game.state)
     if request is None:
@@ -480,7 +494,7 @@ def answer_event(game: Game, text: str) -> list[str] | None:
     if outcome is not None:  # D（鎖外）擲骰之後請模型潤色一兩句，E（鎖內）插回那一則紀錄；失敗就只留結果文字
         narration = event_llm.narrate_event_gamble(game.client, event, outcome.text, outcome.success, outcome.effect_text)
         if narration:
-            act(game, lambda g: g.add_gamble_narration(outcome, narration))
+            act(game, lambda g: g.add_gamble_narration(outcome, narration), paused_ok=True)  # 擲骰已經做完了，只是插回一兩句
     return msgs
 
 
@@ -519,6 +533,7 @@ def main_view(game: Game) -> dict:
         "rumors": md(game.rumors_text()),
         "chronicle": md(game.chronicle_text()),
         "admin": game.is_admin(),
+        "paused": game.paused_minutes(),  # 賽季時鐘停了幾分鐘；沒暫停是 None（設定頁的「暫停／繼續」）
         "guide": game.guide_box(),  # 行動列上方的說書人對話框（引導重做設計 8.1）；略過或早就做完是 None
     }
     if "fronts" in status:  # 第一季濃縮版才有：江湖頁的三條戰況（開關關著時不送，頁面照舊）
@@ -820,7 +835,7 @@ def _entry(account_key: str) -> dict:
     if account.character is None:
         return {"stage": "create"}
     game = game_for(account.character)
-    act(game, lambda g: None)
+    act(game, lambda g: None, paused_ok=True)  # 只是同步：暫停中照樣進得來、看得到
     return {"stage": "game", "main": look(game, main_view), "kinds": KINDS}
 
 
@@ -908,7 +923,7 @@ def api_logout(request: Request, response: Response):
 def api_main(request: Request):
     """計時器：同步時間、存檔、回江湖畫面（氣血、體力等數字才會跟著走）。"""
     game = _game(request)
-    act(game, lambda g: None)
+    act(game, lambda g: None, paused_ok=True)  # 只是同步：暫停中畫面照常更新（停了幾分鐘、繼續了沒）
     return look(game, main_view)
 
 
@@ -923,10 +938,15 @@ MAIN_ACTIONS = {
     "guide_ack": lambda g, b: g.guide_ack(),  # 對話框的結語按「知道了」
     "allocate": lambda g, b: g.allocate_stat(str(b.get("stat", ""))),  # 狀態列的配點鈕：升級得到的屬性點加到一項
 }
+# 賽季時鐘暫停中也照做的畫面設定（不推任何東西、不碰別人）：匿名、略過引導、打開輿圖（頁面靠它載入輿圖）、對話框的「知道了」
+PAUSE_OK_ACTIONS = frozenset({"anonymous", "skip_tutorial", "view_map", "guide_ack"})
 ADMIN_ACTIONS = {
     "open_season": lambda g, b: g.admin_open_season(time.time()),
     "end_season": lambda g, b: g.admin_end_season(time.time()),
     "next_season": lambda g, b: g.admin_next_season(time.time()),
+    # 公告停機時賽季時鐘暫停（線上架構第四節、8.3）；主機端另有 scripts/season_clock.py
+    "pause_clock": lambda g, b: g.admin_pause_clock(time.time()),
+    "resume_clock": lambda g, b: g.admin_resume_clock(time.time()),
     "fast_forward": lambda g, b: g.advance(_int(b.get("hours"), 1) * 3600),
     "start_battle": lambda g, b: g.admin_start_battle(str(b.get("id", "")), time.time()),
     "fire": lambda g, b: g.admin_fire(str(b.get("id", ""))),
@@ -968,9 +988,9 @@ def api_do(op: str, request: Request, body: dict = Body(default={})):
     if op in ADMIN_ACTIONS:
         if not game.is_admin():
             raise GameError("只有管理者能這麼做。")
-        msgs = act(game, lambda g: ADMIN_ACTIONS[op](g, body))
+        msgs = act(game, lambda g: ADMIN_ACTIONS[op](g, body), paused_ok=True)  # 暫停中要按得到「繼續」；其他的引擎自己擋
     elif op in MAIN_ACTIONS:
-        msgs = act(game, lambda g: MAIN_ACTIONS[op](g, body))
+        msgs = act(game, lambda g: MAIN_ACTIONS[op](g, body), paused_ok=op in PAUSE_OK_ACTIONS)
     else:
         raise HTTPException(404)
     return {"main": look(game, main_view), "message": joined(msgs)}
