@@ -256,7 +256,9 @@ def test_the_detail_panel_lists_only_what_you_can_hear(on):
     odds = lambda squad: "穩勝"  # noqa: E731
     assert "長社一帶有人鬧事。" in atlas.detail_text(game.state, on, "changshe", odds)
     there = atlas.detail_text(game.state, on, "wan_city", odds)
-    assert "宛城一帶" not in there and "最近 3 天沒有大事或傳聞" in there
+    assert "宛城一帶" not in there
+    assert atlas.NEWS_FAR in there and "沒有大事或傳聞" not in there  # 聽不到那一區：不替玩家斷言「沒有消息」
+    assert "最近 3 天沒有大事或傳聞" in atlas.detail_text(game.state, on, "yingchuan", odds)  # 自己這一區沒有，才是真的沒有
     assert [r.text for r in atlas.recent_news(game.state, on, "changshe")] == ["長社一帶有人鬧事。"]
 
 
@@ -290,9 +292,8 @@ def test_the_star_window_is_the_board_length_so_a_local_star_never_outlives_its_
     _rumor(game, "鉅鹿剛出的大事。", "julu_altar", layer="world", time=edge + 1)
     _rumor(game, "盧植營更早的大事。", "luzhi_camp", layer="world", time=edge - 1)  # 天下大事，也過了 ✦ 的天數
     assert atlas.news_places(game.state, on) == {"changshe", "julu_altar"}
-    game.state.player.visited.add("luzhi_camp")
     odds = lambda squad: "穩勝"  # noqa: E731
-    assert f"最近 {days} 天沒有大事或傳聞" in atlas.detail_text(game.state, on, "luzhi_camp", odds)
+    assert f"最近 {days} 天沒有大事或傳聞" in atlas.detail_text(game.state, on, "yingchuan", odds)  # 本區剛撤板：板上沒有了
 
 
 # ── Task 4：見聞頁分四層 ───────────────────────────────────
@@ -562,3 +563,96 @@ def test_a_real_season_rollover_restarts_the_summary_from_the_new_season(slow, w
     entry = _away(jia)
     assert [line.split("　")[1] for line in entry.lines] == ["新一季的事。"]
     assert jia.state.last_world == jia.state.world.time and jia.state.last_real == T0 + 10 + 2 * HOUR
+
+
+# ── 審查（Tasks 1–3）補的測試：沿途打聽的過濾、聽不到的寫法、邊角 ─────────────────
+
+
+def _pool_of_the_ask(game, monkeypatch) -> list[str]:
+    """沿途打聽時合法的那幾則（Game.rng.choice 收到的清單）：抽哪一則不看運氣，直接比清單。"""
+    seen: list[list[str]] = []
+
+    def choose(pool):
+        seen.append([r.text for r in pool])
+        return pool[-1]
+
+    monkeypatch.setattr(game.rng, "choice", choose)
+    msgs = game.choose("road:ask")
+    if not seen:  # 清單是空的：沒抽，寫一句「沒什麼新鮮事」
+        assert any("沒什麼新鮮事" in m for m in msgs), msgs
+        return []
+    assert len(seen) == 1
+    return seen[0]
+
+
+def test_asking_along_the_road_only_ever_hears_a_legal_line(on, monkeypatch):
+    """合法的只有一則：前面那一區（洛陽）板上的地方傳聞。對方陣營的軍情、寫給別人的線索、撤板的天下大事、
+    只有身後那一區才有的傳聞，都不在清單裡——拿掉 audible、拿掉板子的時間窗、只看身後那一區，都會讓這條紅。"""
+    game = _game(on, "乙", "huang", at="yingchuan")
+    day = _day(game)
+    game.state.world.time = 10 * day
+    fresh = 9 * day
+    _rumor(game, "洛陽宮裡出了事。", "luoyang_palace", time=fresh)  # 前面那一區、板上：唯一合法的
+    _rumor(game, "官軍在長社佈了暗哨。", "changshe", layer="faction", faction="guan", time=fresh)  # 對方陣營的軍情
+    game.state.world.rumors.append(Rumor(  # 寫給別人的線索，帶著這一帶的地點與大區
+        time=fresh, text="只說給丙聽的。", location="changshe", layer="personal", character="丙", region="yingru",
+    ))
+    _rumor(game, "洛陽很久以前的大事。", "luoyang_palace", layer="world", time=0.0)  # 撤板了的天下大事
+    assert _pool_of_the_ask(_on_the_road(game), monkeypatch) == ["洛陽宮裡出了事。"]
+
+
+def test_asking_along_the_road_can_pick_a_fresh_region_tagged_world_rumor(on, monkeypatch):
+    game = _game(on, "乙", "huang", at="yingchuan")
+    day = _day(game)
+    game.state.world.time = 10 * day
+    _rumor(game, "洛陽宮裡傳出天下大事。", "luoyang_palace", layer="world", time=9 * day)
+    assert _pool_of_the_ask(_on_the_road(game), monkeypatch) == ["洛陽宮裡傳出天下大事。"]
+
+
+def test_a_faction_or_personal_rumor_without_an_owner_is_heard_by_nobody(on):
+    """fail closed：寫成陣營軍情卻沒寫是哪個陣營、寫成個人線索卻沒寫是誰，沒有人聽得到（不會人人都聽見）。"""
+    orphans = [Rumor(time=0.0, text="沒寫陣營的軍情。", layer="faction"), Rumor(time=0.0, text="沒寫給誰的線索。", layer="personal")]
+    beta = load_content(CONTENT_DIR)  # on 是開關打開的那一份：另外載一份開關關著的
+    beta.config.auto_open_first_season = True
+    for content in (on, beta):  # 兩種季都一樣
+        for game in (_game(content, "甲", "guan"), _game(content, "乙", "huang"), _game(content, "丙")):
+            for rumor in orphans:
+                assert not _hears(game, rumor) and not rules.can_hear(rumor, game.state)
+
+
+def test_a_local_rumor_without_a_place_still_leaves_the_board(on):
+    """沒有大區的地方傳聞人人聽得到，但照樣只留傳聞板上的天數（不會整季掛在每個人的見聞頁上）。"""
+    game = _game(on, "甲", at="wan_city")
+    day = _day(game)
+    game.state.world.time = 10 * day
+    assert _hears(game, Rumor(time=9 * day, text="剛傳開的事。", layer="local"))
+    assert not _hears(game, Rumor(time=6 * day, text="四天前的事。", layer="local"))
+
+
+def test_the_star_window_keeps_world_days_when_the_switch_is_on_but_the_stamp_is_off(real):
+    """開關後來才打開、這一季沒蓋章：✦ 的「最近幾天」還是世界天（兩個世界天前的事還標著），不是季曆天。"""
+    game = _game(real, at="yingchuan")
+    real.config.season_one = True
+    assert not rules.season_one(real, game.state.world)
+    game.state.world.time = 10 * 86400
+    _rumor(game, "宛城一帶有人鬧事。", "wan_city", time=8 * 86400)
+    assert atlas.news_places(game.state, real) == {"wan_city"}
+
+
+def test_a_factions_local_rumor_needs_both_the_faction_and_the_region(on):
+    """陣營與大區兩個條件一起算：官軍的地方軍情，只有人在那一區的官軍聽得到。"""
+    here = _game(on, "甲", "guan", at="yingchuan")  # 官軍、人在潁川汝南
+    rumor = _rumor(here, "官軍在長社屯糧。", "changshe", layer="local", faction="guan")
+    assert _hears(here, rumor)
+    assert not _hears(_game(on, "乙", "huang", at="yingchuan"), rumor)  # 同一區的黃巾聽不到
+    assert not _hears(_game(on, "丙", "guan", at="wan_city"), rumor)  # 別的大區的官軍也聽不到
+    assert not _hears(_game(on, "丁", None, at="yingchuan"), rumor)  # 散人也聽不到
+
+
+def test_the_map_legend_follows_the_board_length(on):
+    """圖例那一句的天數跟輿圖 ✦、詳情欄、傳聞板是同一個數字（Config.rumor_board_days），不是寫死的 3。"""
+    game = _game(on)
+    assert "最近 3 天" in mapview.legend_data(game.state, on, "story")["layer"]
+    on.config.rumor_board_days = 5
+    assert "最近 5 天的大事與傳聞" in mapview.legend_data(game.state, on, "story")["layer"]
+    assert mapview.legend_data(game.state, on, "routes")["layer"] == mapview.LEGEND_LAYERS["routes"]

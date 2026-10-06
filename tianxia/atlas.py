@@ -15,15 +15,16 @@ from . import figures, orders
 from .calendar import point, stamp_text
 from .models import Content, Location, MapRegion, SimPlayer, TravelMode
 from .rules import (
-    audible, ears_of, is_revealed, pending_event_title, recent_seconds, resolve_trend, resolve_trends, season_one, trend_value,
+    audible, ears_of, here_regions, is_revealed, pending_event_title, recent_seconds, resolve_trend, resolve_trends, season_one,
+    trend_value,
 )
 from .state import GameState, Order, Rumor
 from .world import current_act, sim_active, storyline_off
 
-DAY = 86400
-KNOWN = ("current", "visible", "remembered")  # 摸清的地點
+KNOWN =("current", "visible", "remembered")  # 摸清的地點
 LAYERS = {"situation": "局勢", "enemies": "敵情", "story": "劇情", "routes": "路線"}
-NEWS_DAYS = 3  # 圖例那一句（mapview.LEGEND_LAYERS，靜態字）寫的天數＝Config.rumor_board_days 的預設；✦ 與詳情欄真正用的是 news_days(content)
+NEWS_DAYS = 3  # Config.rumor_board_days 的預設，只給 mapview.LEGEND_LAYERS 那一份預設說明用；✦、詳情欄、圖例真正用的是 news_days(content)
+NEWS_FAR = "這一帶離得遠，沒聽到什麼消息"  # 詳情欄：不在耳聞所及的大區，不替玩家斷言「沒有消息」（待 joy 潤）
 LEADER_NEWS = 2  # 詳情欄每位龍頭人物最多列幾則最近提到他的傳聞
 LEADER_WHO = "江湖上的龍頭人物，會自己行動，左右江湖大勢"
 LEADER_QUIET = "眼下沒有動靜"
@@ -337,6 +338,14 @@ def news_places(state: GameState, content: Content) -> set[str]:
 def recent_news(state: GameState, content: Content, loc_id: str) -> list[Rumor]:
     """這個地點最近 news_days 天、聽得到的大事與傳聞，最新的在前。不檢查視野：呼叫端要先用 is_known 把關。"""
     return [r for r in _heard_news(state, content) if r.location == loc_id]
+
+
+def _in_earshot(state: GameState, content: Content, loc_id: str) -> bool:
+    """這個地點的消息你聽不聽得到：第一季照此刻人在哪些大區（rules.here_regions，在路上是兩頭）；beta、地圖沒有大區都算聽得到。
+    詳情欄靠它分辨「這一帶真的沒事」與「那一區離得遠、聽不到」。"""
+    ears = ears_of(state, content)
+    region = region_of(content, loc_id)
+    return not ears.layered or region is None or region.id in here_regions(state, content)
 
 
 # ── 敵情 ──────────────────────────────────────────────
@@ -674,8 +683,10 @@ def detail_text(state: GameState, content: Content, loc_id: str, odds: Odds) -> 
     news = recent_news(state, content, loc_id)
     if news:
         story.append(f"✦ 最近 {news_days(content):g} 天的大事與傳聞：\n" + "\n".join(f"- {stamp_text(r.time, content, state.world)}　{r.text}" for r in news))
-    else:
+    elif _in_earshot(state, content, loc_id):
         story.append(f"最近 {news_days(content):g} 天沒有大事或傳聞")
+    else:
+        story.append(NEWS_FAR)
     parts.append("**劇情**　" + "\n\n".join(story))
 
     route = way_to(state, content, loc_id)  # 在路上時是改道的走法

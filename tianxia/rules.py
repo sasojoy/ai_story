@@ -276,13 +276,19 @@ def audible(rumor: Rumor, ears: Ears) -> bool:
     """這個人聽不聽得到這則傳聞（傳聞分層設計第二、三節）。見聞頁、沿途打聽、輿圖的 ✦ 與地點詳情、龍頭人物的近況、
     「你不在的時候」都照這一條，不要在別處另寫一份：
     - 陣營軍情只給那個陣營的人（散人沒有）、個人線索只給那個名號、天下大事人人都聽得到；
-    - 地方傳聞（第一季的規則開著時）只給此刻人在那個大區的人，而且只留傳聞板上最近幾天的；沒有大區的（地圖沒有大區）人人都聽得到。
+    - 地方傳聞（第一季的規則開著時）只給此刻人在那個大區的人，而且只留傳聞板上最近幾天的；沒有大區的（地圖沒有大區、發生地不明）
+      人人都聽得到，但一樣只留板上的。
+    - 陣營軍情一定要寫是哪個陣營、個人線索一定要寫是誰（layer 與欄位對不上時 fail closed：沒有人聽得到）。
     開關關著（beta）時只看陣營與名號，跟以前的 can_hear 一模一樣。"""
     if rumor.faction not in (None, ears.faction) or rumor.character not in (None, ears.name):
         return False
-    if not ears.layered or rumor.layer != "local" or rumor.region is None:
+    # fail closed：寫成陣營軍情卻沒寫是哪個陣營、寫成個人線索卻沒寫是誰，沒有人聽得到（不會因為少寫一個欄位就人人聽見）
+    if (rumor.layer == "faction" and rumor.faction is None) or (rumor.layer == "personal" and rumor.character is None):
+        return False
+    if not ears.layered or rumor.layer != "local":
         return True
-    return rumor.region in ears.regions and rumor.time >= ears.since
+    # 地方傳聞：只留板上最近幾天的；沒有大區的（地圖沒有大區、或發生地不明）沒有大區可比，人人聽得到，但一樣撤板
+    return rumor.time >= ears.since and (rumor.region is None or rumor.region in ears.regions)
 
 
 def can_hear(rumor: Rumor, state: GameState) -> bool:

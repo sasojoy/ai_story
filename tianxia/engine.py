@@ -36,7 +36,7 @@ from .models import (
 from .ollama_client import ModelBudget, OllamaClient, quick_client
 from .rules import (
     GEJU, HUANGJIN, add_rumor, apply_effect, audible, audience_bar, can_meet, change_trend, check_result_line, current_day,
-    display_name, ears_of, fill_marks, free_text_rate,
+    display_name, ears_of, fill_marks, free_text_rate, here_regions,
     can_draw_side_change, chaos_fronts, chaos_note, front_chip, front_ids, front_of, front_text, humanize, in_chaos,
     is_revealed, pushable, rate_words, recompute_trends, resolve_goals, resolve_trend, resolve_trends, roll_check,
     season_one, season_one_off, stance_rule_note, stance_sum_note, stances, trend_name, trend_shown, trend_value,
@@ -2795,9 +2795,7 @@ class Game:
         仍算做過。聽得到的才挑（rules.audible：別的陣營的軍情、寫給別人的個人線索聽不到）；第一季只挑傳聞板上的
         （最近 rumor_board_days 個季曆天，天下大事也一樣——打聽的是「這一帶最近」的事）。"""
         s, c = self.state, self.content
-        p = s.player
-        ears = ears_of(s, c)
-        regions = {region.id for loc_id in self._road_ends() if (region := atlas.region_of(c, loc_id)) is not None}
+        ears, regions = ears_of(s, c), here_regions(s, c)  # 在路上時 here_regions 就是這段路兩頭的大區（beta 的 ears.regions 是空的）
         heard = [
             r for r in s.world.rumors if r.region in regions and r.time >= ears.since and audible(r, ears)
         ][-c.config.road_rumor_pool:]
