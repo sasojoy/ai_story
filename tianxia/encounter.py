@@ -55,6 +55,7 @@ LUCK_RATIO = 0.3
 LUCK_MIN = 5.0  # 難度很低時也還是留一點變數
 TIER_RATIOS = (("大勝", 0.5), ("險勝", 0.15), ("僵持", -0.5))
 FALLBACK_TIER = "落敗"
+TIERS = tuple(name for name, _ in TIER_RATIOS) + (FALLBACK_TIER,)  # 大勝、險勝、僵持、落敗：判定結果的四個名字，由好到壞
 
 
 def luck_half(difficulty: float) -> float:

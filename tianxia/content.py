@@ -17,18 +17,19 @@ from typing import get_args
 
 from pydantic import BaseModel, ValidationError
 
+from . import encounter
 from .companion_agent import DIALOGUE_TAGS
 from .encounter import FALLBACK_TIER, TIER_RATIOS
 from .front_lines import BAND_KEYS, GEJU_KEYS
 from .materials import TIER_NAMES
 from .models import (
-    FRONT_KEY, MOVES, ROADS, STATS, Attribute, BattleDef, CharacterDef, CheckVoice, CombatLines, Condition, Config, Content,
-    CraftNames, Effect, Event, FigureDef, FollowerDef, Foreshadows, FrontLines, InsightDef, Location, OppDef, OrdersContent,
-    PromotionDef, MapLayout, Material, RoadSight, Scenario, Sect, SimRumor, SkillDef, Squad, TimetableEvent, TraitBook,
-    Tutorial,
+    FRONT_KEY, MOVES, REVEAL_KEYS, ROADS, STATS, Attribute, BattleDef, CharacterDef, CheckVoice, CombatLines, Condition, Config,
+    Content, CraftNames, Effect, Event, FigureDef, FollowerDef, Foreshadows, FrontLines, InsightDef, Location, OppDef,
+    OrdersContent, PresetRecipe, PromotionDef, MapLayout, Material, RoadSight, Scenario, Sect, SimRumor, SkillDef, Squad,
+    TimetableEvent, TraitBook, Tutorial, allow_known,
 )
 from .martial_arts import ATTRIBUTES, QUALITIES
-from .naming import name_problem
+from .naming import PRESET_CLASH, name_problem
 from .zh import to_traditional
 
 FIGHT_TIERS = {tier for tier, _ in TIER_RATIOS} | {FALLBACK_TIER}  # 一場遭遇戰的結果：條件 fight_tiers 可以寫的值
@@ -92,6 +93,8 @@ def load_content(root: Path, profile: str | None = None) -> Content:
         if (root / "opportunities.json").exists() else [],
         followers={raw["id"]: _build(FollowerDef, raw) for raw in _read(root / "followers.json")}
         if (root / "followers.json").exists() else {},
+        preset_recipes=[_build(PresetRecipe, raw) for raw in _read(root / "preset_recipes.json")]
+        if (root / "preset_recipes.json").exists() else [],
         figures=_index(FigureDef, _read(root / "figures.json")) if (root / "figures.json").exists() else {},
         events=events,
         map=MapLayout(**_read(root / "map.json")),
@@ -724,15 +727,22 @@ def check_promotions(c: Content, need, known) -> None:
 def check_opportunities(c: Content, need, known, front_ids: list[str]) -> None:
     """機緣（content/opportunities.json、orders.json 的 rank2，正式版乙一）：id 不重複；陣營存在；kind 對應的那一塊要寫、
     別的不能寫；人物、地點、大區、戰線存在；累積型的來源行動（第 2 階行動、守勢行動）自己陣營要有；有東西要送的天時地利型
-    要寫送的選項與送到的那一句；文字只能繁體。front_ids 是 validate 的那一份戰線清單。"""
+    要寫送的選項與送到的那一句；文字只能繁體。front_ids 是 validate 的那一份戰線清單。
+    乙二：拼圖型（拿法寫全、東西與處的 key 不重複、官軍交給誰與豪強的靠山）、推理型（天機存在、嫌疑人剛好是那個天機的候選、
+    每個嫌疑人的特徵都有片段）、集體密謀型（每一處寫 front 或 at、跟 how 一致、need_parts 不超過處數）；請命的陣營與人物存在。"""
+    from . import foreshadow  # noqa: PLC0415  延後 import：foreshadow 讀 content 的模型，不能在載入時就互相 import
+
     ids = [o.id for o in c.opportunities]
     need(len(set(ids)) == len(ids), "opportunities.json：機緣 id 重複")
     factions = {f.id for f in c.scenario.factions}
     regions = {r.id for r in c.map.regions}
+    trend_ids = {t.id for t in c.scenario.trends}
+    derived_ids = {t.id for t in c.scenario.trends if t.derived}  # 衍生線（開關開著時由戰線合成的黃巾聲勢）
     for o in c.opportunities:
         where = f"機緣 {o.id}"
         need(o.faction in factions, f"{where}：沒有陣營 {o.faction}")
-        blocks = {"bond": o.bond, "accumulate": o.accumulate, "timing": o.timing}
+        blocks = {"bond": o.bond, "accumulate": o.accumulate, "timing": o.timing,
+                  "puzzle": o.puzzle, "deduce": o.deduce, "plot": o.plot}
         need(blocks[o.kind] is not None, f"{where}：kind 是 {o.kind}，要寫 {o.kind} 那一塊")
         need(all(v is None for k, v in blocks.items() if k != o.kind), f"{where}：只能寫 {o.kind} 那一塊")
         texts = [o.name]
@@ -756,12 +766,66 @@ def check_opportunities(c: Content, need, known, front_ids: list[str]) -> None:
             need(t.item is None or bool(t.deliver_label.strip()), f"{where}：有 item 就要寫 deliver_label（交東西的選項）")
             need(t.item is None or bool(t.done.strip()), f"{where}：有 item 就要寫 done（交到那一刻的敘事）")
             texts += [t.clue, t.label, t.ok, t.fail, t.deliver_label, t.done] + ([t.item] if t.item else [])
+        if o.puzzle is not None:
+            keys = [piece.key for piece in o.puzzle.pieces]
+            need(bool(keys), f"{where}：拼圖至少要有一樣東西")
+            need(len(set(keys)) == len(keys), f"{where}：東西 key 重複")
+            for piece in o.puzzle.pieces:
+                need(piece.how != "ask" or (piece.front is not None and piece.figure is not None and piece.topic),
+                     f"{where}：{piece.key} 是 ask，要寫 front、figure、topic")
+                need(piece.how != "ask" or "*" in piece.lines, f"{where}：{piece.key} 的 lines 要有 \"*\"（沒列到的人說的那一句）")
+                need(piece.how == "ask" or piece.at is not None, f"{where}：{piece.key} 要寫 at")
+                need(piece.how != "check" or piece.check is not None, f"{where}：{piece.key} 是 check，要寫 check")
+                known(where, [piece.front] if piece.front else [], front_ids, "戰線")
+                known(where, [piece.at] if piece.at else [], c.locations, "地點")
+                known(where, [k for k in piece.lines if k != "*"] + ([piece.figure] if piece.figure else []), c.figures, "人物")
+                texts += [piece.name, piece.topic, piece.label, piece.ok, piece.fail] + list(piece.lines.values())
+            pr = o.puzzle.present
+            need(pr.at is not None or bool(pr.patrons), f"{where}：交給誰要寫 at 或 patrons")
+            need(pr.at is None or pr.figure is not None, f"{where}：官軍的交付要寫 figure")
+            known(where, [pr.at] if pr.at else [], c.locations, "地點")
+            known(where, [pr.figure] if pr.figure else [], c.figures, "人物")
+            known(where, [x.character for x in pr.patrons.values()], c.characters, "人物")
+            known(where, [x.at for x in pr.patrons.values()], c.locations, "地點")
+            texts += [pr.stand_in, pr.label, pr.done] + [x.done for x in pr.patrons.values()]
+        if o.deduce is not None:
+            d = o.deduce
+            need(d.tianji in foreshadow.TIANJI, f"{where}：天機 {d.tianji} 不存在")
+            need({s.id for s in d.suspects} == set(foreshadow.TIANJI.get(d.tianji, ())),
+                 f"{where}：嫌疑人要跟天機 {d.tianji} 的候選一樣")
+            keys = {t.key for t in d.traits}
+            need(all(set(s.traits) <= keys for s in d.suspects), f"{where}：嫌疑人有沒寫片段的特徵")
+            need(all(t.region in regions for t in d.traits), f"{where}：特徵有不存在的大區")
+            need(bool(d.askers), f"{where}：至少要有一位指認的人")
+            known(where, [h.figure for h in d.askers], c.figures, "人物")
+            known(where, [h.at for h in d.askers], c.locations, "地點")
+            known(where, list(d.trend), trend_ids, "大勢線")  # 指對了推哪條線（戰線或割據都行；衍生線不能直接推）
+            need(not set(d.trend) & derived_ids, f"{where}：trend 不能推衍生線（要推就推它的來源線）")
+            texts += [d.label, d.right, d.wrong] + [s.name for s in d.suspects] + [t.text for t in d.traits]
+        if o.plot is not None:
+            pl = o.plot
+            keys = [x.key for x in pl.parts]
+            need(bool(keys), f"{where}：集體密謀至少要有一處")
+            need(len(set(keys)) == len(keys), f"{where}：各處的 key 重複")
+            need(pl.how != "check" or pl.check is not None, f"{where}：check 類要寫 check")
+            need(all((x.front is None) != (x.at is None) for x in pl.parts), f"{where}：每一處寫 front 或 at 其中一個")
+            need(pl.how != "win" or all(x.front is not None for x in pl.parts), f"{where}：win 類每一處都要寫 front")
+            need(pl.how != "check" or all(x.at is not None for x in pl.parts), f"{where}：check 類每一處都要寫 at")
+            known(where, [x.front for x in pl.parts if x.front], front_ids, "戰線")
+            need(pl.need_parts is None or 0 < pl.need_parts <= len(pl.parts), f"{where}：need_parts 超出處數")
+            known(where, [x.at for x in pl.parts if x.at], c.locations, "地點")
+            texts += [pl.part_label, pl.part_ok, pl.part_fail, pl.start_text, pl.done_text, pl.helper_text,
+                      pl.fail_text] + [x.name for x in pl.parts]
         for text in texts:
             need(to_traditional(text) == text, f"{where}：文字只能用繁體中文（「{text[:12]}」）")
     for faction_id, action in c.orders.rank2.items():
         need(faction_id in factions, f"orders.json rank2：沒有陣營 {faction_id}")
         for text in (action.name, action.ok, action.fail):
             need(to_traditional(text) == text, f"orders.json rank2.{faction_id}：文字只能用繁體中文（「{text[:12]}」）")
+    for faction_id, petition in c.orders.petition.items():
+        need(faction_id in factions, f"orders.json petition：沒有陣營 {faction_id}")
+        known(f"orders.json petition.{faction_id}", petition.characters, c.characters, "人物")
+        need(to_traditional(petition.label) == petition.label, f"orders.json petition.{faction_id}：文字只能用繁體中文（「{petition.label[:12]}」）")
 
 
 def check_foreshadows(
@@ -1490,6 +1554,80 @@ def validate(c: Content) -> None:
         known(where, step.done_when.locations, c.locations, "地點")
         check_condition(where, step.done_when.condition)
         check_effect(where, step.reward)
+
+    # ── 序章（新手引導計畫一）──
+    t = c.tutorial
+    huts = [loc.id for loc in c.locations.values() if loc.prologue_only]
+    if t.location is None:
+        need(not huts, f"地點 {huts} 標了 prologue_only，但 tutorial.json 沒有序章（location）")
+        need(t.prologue_steps == 0, "tutorial.json：沒有序章（location）時 prologue_steps 要是 0")
+    else:
+        need(huts == [t.location], f"tutorial.json：序章的地點 {t.location} 要是唯一一個 prologue_only 的地點（現在是 {huts}）")
+        hut = c.locations.get(t.location)
+        need(
+            hut is not None and [getattr(x, "to", x) for x in hut.connections] == [c.scenario.start_location],
+            f"序章的地點 {t.location} 只能連到起點 {c.scenario.start_location}",
+        )
+        base = sum(1 for step in t.steps if not step.season_one)
+        need(1 <= t.prologue_steps <= base, f"tutorial.json：prologue_steps 要在 1～{base}（不分季的步數）之間")
+        need(t.start_event in c.events, f"tutorial.json：start_event {t.start_event} 不存在")
+        if 1 <= t.prologue_steps <= len(t.steps):  # 序章最後一步（出師）要放得出草廬：allow 有 move:（prologue.can_travel 看的就是它）
+            last = t.steps[t.prologue_steps - 1]
+            need(
+                any(entry.startswith("move:") for entry in last.allow),
+                f"新手引導 {last.id}：序章最後一步的 allow 要有 move:（不然走不出草廬）",
+            )
+    for i, step in enumerate(t.steps):
+        where = f"新手引導 {step.id}"
+        special = (step.scene or step.line or step.reveal or step.glow or step.allow or step.explore_event or step.enemies
+                   or step.force_tier or step.sure_cultivate or step.instant_rest or step.fuse_base or step.melt_only
+                   or step.give_art)
+        need(not special or i < t.prologue_steps, f"{where}：序章才有的欄位只能寫在前 {t.prologue_steps} 步")
+        bad = [k for k in step.reveal if k not in REVEAL_KEYS]
+        need(not bad, f"{where}：reveal 不認得 {bad}")
+        unknown = [entry for entry in step.allow if not allow_known(entry)]
+        need(
+            not unknown,
+            f"{where}：allow 不是選單上的行動 {unknown}（閒著的選單做得出來的 id 列在 models.ALLOW_FIXED／ALLOW_FAMILIES；"
+            "引擎新加的行動要先補進那裡）",
+        )
+        need(step.explore_event is None or step.explore_event in c.events, f"{where}：explore_event {step.explore_event} 不存在")
+        known(where, step.enemies, c.squads, "對手")
+        need(step.force_tier is None or step.force_tier in encounter.TIERS, f"{where}：force_tier {step.force_tier} 不是判定結果")
+        for art in (step.fuse_base, step.melt_only, step.give_art.id if step.give_art else None):
+            need(art is None or art in c.skills, f"{where}：武學 {art} 不存在")
+    # 草廬的四景悟得到的每個意境，都要有一筆師門配方接上合成那一步的底：沒有的話那個新人的合成要等模型取名、或拿到退路的名字
+    # （「合成不等模型」落空）；加了第五景、或配方的意境 id 打錯，載入時就報錯
+    sights: set[str] = set()
+    todo = [s.explore_event for s in t.steps[: t.prologue_steps] if s.explore_event]
+    seen_events: set[str] = set()
+    while todo:
+        event_id = todo.pop()
+        if event_id in seen_events or event_id not in c.events:
+            continue
+        seen_events.add(event_id)
+        for choice in c.events[event_id].choices:
+            for effect in (choice.effect, choice.fail_effect):
+                sights.update(effect.insights)
+                if effect.next_event:
+                    todo.append(effect.next_event)
+    have = {(recipe.base, recipe.insight) for recipe in c.preset_recipes}
+    for step in t.steps[: t.prologue_steps]:
+        if step.fuse_base:
+            missing = sorted(i for i in sights if (step.fuse_base, i) not in have)
+            need(not missing, f"新手引導 {step.id}：草廬悟得到的意境 {missing} 沒有以 {step.fuse_base} 為底的師門配方（preset_recipes.json）")
+    recipe_keys, recipe_names = set(), set()
+    for recipe in c.preset_recipes:
+        where = f"師門配方 {recipe.base}+{recipe.insight}"
+        need(recipe.base in c.skills, f"{where}：底 {recipe.base} 不存在")
+        recipe_insight = c.insights.get(recipe.insight)
+        need(recipe_insight is not None and recipe_insight.grant is None, f"{where}：意境 {recipe.insight} 要是探索悟得到的基本意境")
+        need((recipe.base, recipe.insight) not in recipe_keys, f"{where}：同一個底與意境寫了兩次")
+        need(recipe.name not in recipe_names, f"師門配方的名字 {recipe.name} 重複")
+        problem = name_problem(recipe.name, c)
+        need(problem in (None, PRESET_CLASH), f"{where}：名字 {recipe.name} 過不了命名過濾（{problem}）")
+        recipe_keys.add((recipe.base, recipe.insight))
+        recipe_names.add(recipe.name)
 
     # ── 意境與基礎武學（武學與成長設計附錄 A～C）──
     for insight in c.insights.values():

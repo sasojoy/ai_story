@@ -784,6 +784,8 @@ def _main_view_body(game: Game) -> dict:
         "admin": game.is_admin(),
         "paused": game.paused_minutes(),  # 賽季時鐘停了幾分鐘；沒暫停是 None（設定頁的「暫停／繼續」）
         "guide": game.guide_box(),  # 行動列上方的說書人對話框（引導重做設計 8.1）；略過或早就做完是 None
+        # 序章（新手引導計畫一）：要亮的畫面元件、要發光的鈕、略過連結；不在序章是 None，網頁照平常畫
+        "prologue": game.prologue_view(),
         # 伺服器推送（線上架構設計 5.3）：頁面照 push 決定開不開 /api/events（開著時平常 60 秒才輪詢一次、有通知才刷新），
         # push_spread 是收到「世界變了」之後各分頁重抓畫面要攤開的秒數（預檢 F3：全服同時重抓會在同一把行動鎖上排隊）
         "push": HUB is not None,
@@ -840,6 +842,8 @@ def menxia_view(game: Game, person: str | None = None) -> dict:
         "slot_cards": [
             {"kind": k, "card": md(game.skill_detail(k)), "learned": learned[k], "level": level[k],
              "maxed": level[k] >= team.MAX_LEVEL,
+             # 序章裡這一欄現在不能練的原因（Game.practice_refusal）；平常是 None。練成鈕灰掉、寫它
+             "blocked": game.practice_refusal(k),
              # 練下一成要的心得（修練頁的鈕上寫給玩家看）；還沒學或已經第十成就沒有價錢
              "price": team.practice_price(game.content, level[k]) if learned[k] and level[k] < team.MAX_LEVEL else None}
             for k in KINDS
@@ -1022,7 +1026,7 @@ def create_character(account_key: str, name: str) -> Game:
         else:
             if name_taken(name):
                 raise GameError(NAME_TAKEN)
-            game = Game.new(CONTENT, name)
+            game = Game.new(CONTENT, name, prologue=True)  # 網頁上建的新角色走序章（新手引導計畫一）；假人與腳本不走
             open_characters().save(game.state)
             store.bind_character(account_key, name)
     return game_for(name)
@@ -1198,6 +1202,7 @@ MAIN_ACTIONS = {
     "anonymous": lambda g, b: g.set_anonymous(bool(b.get("value"))),
     "skip_tutorial": lambda g, b: g.skip_tutorial(),
     "view_map": lambda g, b: g.view_map(),
+    "view_tab": lambda g, b: g.view_tab(str(b.get("tab", ""))),  # 序章裡打開修練、煉製頁（新手引導計畫一）
     "guide_ack": lambda g, b: g.guide_ack(),  # 對話框的結語按「知道了」
     "allocate": lambda g, b: g.allocate_stat(str(b.get("stat", ""))),  # 狀態列的配點鈕：升級得到的屬性點加到一項
 }
@@ -1323,6 +1328,13 @@ def api_menxia_do(op: str, request: Request, body: dict = Body(default={})):
         "main": look(game, main_view),
         "message": joined(msgs),
     }
+
+
+@app.get("/api/prologue")
+def api_prologue(request: Request):
+    """設定頁的「重看序章」：序章的事件與師父的話排成一頁（Markdown 轉成 HTML）；沒有序章的內容是空字串，網頁就不畫那顆鈕。"""
+    game = _game(request)
+    return look(game, lambda g: {"text": md(g.prologue_recap())})
 
 
 @app.post("/api/forge_line")

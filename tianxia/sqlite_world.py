@@ -689,6 +689,7 @@ def _season_firsts_lines(conn: Connection, season: int) -> list[str]:
         "SELECT json_extract(s.data, '$.name') AS name, "
         "COALESCE(json_extract(s.data, '$.creator_shown'), r.creator) AS creator, MIN(r.rowid) AS first FROM recipes r "
         "JOIN skills s ON s.season = r.season AND s.name = r.skill_name WHERE r.season = ? "
+        "AND COALESCE(json_extract(s.data, '$.preset'), 0) = 0 "  # 師門配方（新手引導）沒有首創者：不列、不算進件數
         "GROUP BY r.skill_name ORDER BY first",
         (season,),
     ).fetchall()

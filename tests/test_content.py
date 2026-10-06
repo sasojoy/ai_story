@@ -1952,6 +1952,152 @@ def test_the_free_text_and_bot_reward_lists_leave_lore_out():
     assert {"str", "agi", "con", "wis"} <= set(content.FREE_TEXT_REWARDS)  # 另外四項不動
 
 
+# ── 序章（新手引導計畫一）────────────────────────────────
+
+def test_prologue_content_loads(prologue_content):
+    t = prologue_content.tutorial
+    assert t.location == "hut"
+    assert t.prologue_steps == 11
+    assert prologue_content.locations["hut"].prologue_only
+    assert [r.name for r in prologue_content.preset_recipes] == ["穿林腿", "坐山拳", "回瀾手", "烈爐拳"]
+    assert t.steps[7].force_tier == "險勝" and t.steps[7].give_art.level == 5
+
+
+def test_fixture_content_has_no_prologue(content):
+    assert content.tutorial.location is None and content.tutorial.prologue_steps == 0
+    assert content.preset_recipes == []
+
+
+@pytest.mark.parametrize("patch, message", [
+    (lambda t: t.update(location="lake"), "序章的地點"),  # lake 不是 prologue_only
+    (lambda t: t.update(prologue_steps=12), "prologue_steps"),
+    (lambda t: t["steps"][2].update(explore_event="nope"), "nope"),
+    (lambda t: t["steps"][7].update(force_tier="大敗"), "大敗"),
+    (lambda t: t["steps"][1].update(reveal=["tab:nowhere"]), "tab:nowhere"),
+    (lambda t: t["steps"][9].update(melt_only="nope"), "nope"),
+])
+def test_prologue_validation(prologue_root, patch, message):
+    edit_json(prologue_root / "tutorial.json", patch)
+    with pytest.raises(ContentError, match=message):
+        load_content(prologue_root)
+
+
+def test_prologue_only_location_needs_a_prologue(tmp_path):
+    root = copy_fixture(tmp_path)
+
+    def mark_cave(locs):
+        locs[2]["prologue_only"] = True  # cave
+
+    edit_json(root / "locations.json", mark_cave)
+    with pytest.raises(ContentError, match="prologue_only"):
+        load_content(root)
+
+
+def test_preset_recipe_names_are_checked(prologue_root):
+    def clash(data):
+        data[1]["name"] = data[0]["name"]
+
+    edit_json(prologue_root / "preset_recipes.json", clash)
+    with pytest.raises(ContentError, match="師門配方"):
+        load_content(prologue_root)
+
+
+def test_the_hut_connects_only_to_the_start(prologue_root):
+    """草廬只能連到起點：連到別處，出師走出去就不是潁川了（validate 的 hut.connections 檢查）。"""
+    def reach_the_lake(locs):
+        next(loc for loc in locs if loc["id"] == "hut")["connections"] = ["town", "lake"]
+
+    edit_json(prologue_root / "locations.json", reach_the_lake)
+    with pytest.raises(ContentError, match="只能連到起點"):
+        load_content(prologue_root)
+
+
+@pytest.mark.parametrize("entry", ["act:explor", "act:", "explore", "talk:leave", "talk:opp:x"])
+def test_prologue_allow_entries_must_be_menu_ids(prologue_root, entry):
+    """allow 是前綴比對：拼錯的前綴會把那一步的選單清空，卡死新人。talk: 開頭的是對話選單的，閒著的選單沒有。"""
+    edit_json(prologue_root / "tutorial.json", lambda t: t["steps"][2]["allow"].append(entry))
+    with pytest.raises(ContentError, match="allow 不是選單上的行動") as caught:
+        load_content(prologue_root)
+    assert "models.ALLOW_FIXED" in str(caught.value) and "ALLOW_FAMILIES" in str(caught.value)  # 內容作者知道去哪補
+
+
+def test_every_sight_in_the_hut_has_a_preset_recipe(prologue_root):
+    """review-t4-5 M4：草廬悟得到的每個意境，合成那一步的底都要有師門配方；少了的那個新人的合成就要等模型。"""
+    def drop_fire(recipes):
+        recipes[:] = [r for r in recipes if r["insight"] != "huo"]
+
+    edit_json(prologue_root / "preset_recipes.json", drop_fire)
+    with pytest.raises(ContentError, match=r"\['huo'\].*basic_fist.*師門配方"):
+        load_content(prologue_root)
+
+
+
+def test_a_recipe_on_the_wrong_base_does_not_cover_the_sight(prologue_root):
+    """配方有、但底不是合成那一步指定的那一門：那個景還是沒有配方。"""
+    def wrong_base(recipes):
+        next(r for r in recipes if r["insight"] == "shui")["base"] = "basic_breath"
+
+    edit_json(prologue_root / "preset_recipes.json", wrong_base)
+    with pytest.raises(ContentError, match=r"\['shui'\].*basic_fist.*師門配方"):
+        load_content(prologue_root)
+
+
+def test_a_sight_that_chains_on_is_checked_too(prologue_root):
+    """四景選了之後接下去的事件（next_event）悟到的意境也算。"""
+    def chain(events):
+        sight = next(e for e in events if e["id"] == "p_insight")
+        sight["choices"][0]["effect"]["next_event"] = "p_more"
+        events.append({"id": "p_more", "title": "再看", "text": "再看一眼。", "actions": [], "choices": [
+            {"text": "好", "effect": {"text": "嗯。", "insights": ["xuesha"]}}]})
+
+    edit_json(prologue_root / "events" / "prologue.json", chain)
+    with pytest.raises(ContentError, match=r"\['xuesha'\]"):
+        load_content(prologue_root)
+
+
+def test_a_sight_that_only_a_failed_check_grants_is_checked_too(prologue_root):
+    """檢定失敗才給的意境（fail_effect）也是新人會拿到的：沒有配方的話那個新人的合成一樣要等模型。"""
+    def gamble(events):
+        sight = next(e for e in events if e["id"] == "p_insight")
+        sight["choices"][0]["check"] = {"stat": "str", "difficulty": 5}
+        sight["choices"][0]["fail_effect"] = {"text": "摔了一跤。", "insights": ["xuesha"]}
+
+    edit_json(prologue_root / "events" / "prologue.json", gamble)
+    with pytest.raises(ContentError, match=r"\['xuesha'\]"):
+        load_content(prologue_root)
+
+
+def test_prologue_reveal_takes_the_chip_row_keys(prologue_root):
+    """江湖頁最上面那一排小標有三塊：態勢、大事（board）、主線（quest）；每一塊各有自己的 reveal 鍵。"""
+    edit_json(prologue_root / "tutorial.json", lambda t: t["steps"][2]["reveal"].extend(["board", "quest", "stances"]))
+    assert {"board", "quest", "stances"} <= set(load_content(prologue_root).tutorial.steps[2].reveal)
+
+
+def test_prologue_allow_takes_every_kind_of_menu_id(prologue_root):
+    more = [
+        "act:challenge:x", "call:x", "move:town:hurry", "learn:x", "faction:x", "defect:x", "fs:x", "act:duty",
+        "act:rank2", "opp:deliver:x", "opp:try:x", "act:socialize",
+    ]
+    edit_json(prologue_root / "tutorial.json", lambda t: t["steps"][2]["allow"].extend(more))
+    assert load_content(prologue_root).tutorial.steps[2].allow[-1] == "act:socialize"
+
+
+def test_the_last_prologue_step_must_let_the_player_walk_out(prologue_root):
+    """出師那一步的 allow 沒有 move:，選單與輿圖都不給走，新人永遠出不了草廬。"""
+    edit_json(prologue_root / "tutorial.json", lambda t: t["steps"][10].update(allow=["act:rest"]))
+    with pytest.raises(ContentError, match="走不出草廬"):
+        load_content(prologue_root)
+
+
+def test_new_characters_get_the_current_onboarding_version(content, prologue_content):
+    from tianxia.state import ONBOARDING_VERSION, PlayerState, new_game_state
+
+    assert new_game_state(prologue_content, "甲").player.onboarding == ONBOARDING_VERSION
+    # 沒有序章的內容不蓋章：新引導的步數編號是序章之後才算數的（preflight F6），先蓋章會讓之後上線的舊存檔跳過換算
+    assert new_game_state(content, "甲").player.onboarding == 0
+    assert PlayerState(name="乙", location="town", stats={}, stamina=0).onboarding == 0  # 舊存檔讀進來沒有這個欄位
+
+
 # ── 戰後事件的條件 fight_tiers（這次行動打的那一場的結果）────────────────
 
 

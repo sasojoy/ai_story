@@ -12,9 +12,11 @@ from collections.abc import Callable
 from typing import NamedTuple
 
 from . import cultivation, fusion, library, naming, team, traits
+from . import prologue as prologue_rules
 from .engine import FREE_TEXT_OPTION, Game, Option
 from .martial_arts import MartialArt, next_quality
 from .models import Content
+from .sqlite_world import open_world
 from .world_state import WorldStateStore
 
 HALF_HOUR = 1800
@@ -223,7 +225,14 @@ def play_season(
     """玩完一季：隨機挑選項、遇到結識一定接受、每隔幾步把攢下的心得拿去練成、合成與修練。
     observe 不是 None 時，開始玩之前呼叫一次（開季的樣子），之後每一步之後都呼叫一次
     （模擬器用來記錄名冊與交手的時間點）。"""
-    game = Game.new(content, f"機器人{seed}", rng=random.Random(seed), world=world)
+    if prologue_rules.has(content):
+        # 內容有序章：機器人走序章（graduated，離開起點時跟走完草廬的真人一樣），要在開了季的世界走，籌備中什麼都不能做。
+        # 沒有序章的內容（正式內容現在就是）沒有這一段，整季跟以前一模一樣。
+        world = world or open_world()
+        if not world.get_season().storyline:
+            world.seed_first_season(content)
+        world.open_season(content, now=now)
+    game = Game.new(content, f"機器人{seed}", rng=random.Random(seed), world=world, graduated=True)
     game.now = now  # 賽季開幕與之後開的決戰用同一個時鐘
     game.world.open_season(game.content, now=now)  # 模擬時機器人自己就是管理者：籌備中就直接開季，已經開了則什麼都不做
     rng = random.Random(seed)

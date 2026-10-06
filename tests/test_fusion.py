@@ -1490,3 +1490,160 @@ def test_a_rejected_forge_saves_no_rumor(game):
     game.state.player.insights = ["feng"]
     game.forge("basic_fist", ["feng"])  # 手上沒有那門武學：被拒絕
     assert not any("江湖上傳開了" in r.text for r in game.world.get_season().rumors)
+
+
+# ── 師門配方（新手引導計畫一 Task 5）─────────────────────────
+
+def a_newcomer(content, name="沈浪"):
+    state = new_game_state(content, name)
+    state.player.insights = ["feng"]
+    return state
+
+
+def test_preset_for_matches_the_base_and_the_insight_both(prologue_content):
+    assert fusion.preset_for(prologue_content, "basic_fist", "feng").name == "穿林腿"
+    assert fusion.preset_for(prologue_content, "basic_fist", "huo").name == "烈爐拳"
+    assert fusion.preset_for(prologue_content, "basic_breath", "feng") is None  # 別的底
+    assert fusion.preset_for(prologue_content, "basic_fist", "haoran") is None  # 別的意境
+
+
+def test_preset_recipe_needs_no_model(prologue_content, world, monkeypatch):
+    from tianxia.engine import Game
+    from tianxia.ollama_client import OllamaClient
+
+    def asked(self, *args, **kwargs):
+        raise AskedTheModel("師門配方的名字寫好了，不該叫模型")
+
+    monkeypatch.setattr(OllamaClient, "chat_structured", asked)
+    game = Game.new(prologue_content, "沈浪", world=world)
+    game.state.player.insights = ["feng"]
+    assert game.forge_request("basic_fist", ["feng"]) is None  # 不開模型的單子
+    msgs = game.forge("basic_fist", ["feng"])  # 沒給 proposed：照舊會在鎖內叫模型，這裡不會
+    art = world.lookup_recipe(fusion.fuse_key("basic_fist", "feng"))
+    assert art.name == "穿林腿" and art.note == "腿隨風走。" and art.attribute == "快" and art.origin == "fused"
+    assert "師門傳下來的路數" in "\n".join(msgs)
+    assert art.id in game.state.player.arts  # 武學欄有基本功，新得的收進功法庫
+
+
+def test_preset_recipe_is_back_next_season(prologue_content, world):
+    from conftest import next_season
+    from tianxia.engine import Game
+
+    game = Game.new(prologue_content, "沈浪", world=world)
+    game.state.player.insights = ["feng"]
+    game.forge("basic_fist", ["feng"], proposed=(None, ""))
+    next_season(prologue_content, world, game)  # 配方每季清空（武學與成長 3.10）
+    assert world.lookup_recipe(fusion.fuse_key("basic_fist", "feng")) is None
+    game.state.player.insights = ["feng"]
+    game.forge("basic_fist", ["feng"], proposed=(None, ""))
+    assert world.lookup_recipe(fusion.fuse_key("basic_fist", "feng")).name == "穿林腿"
+
+
+def test_every_newcomer_gets_the_same_preset_art_and_the_master_line(prologue_content, world):
+    first, msgs = fusion.fuse(a_newcomer(prologue_content), prologue_content, world, must_not_ask(), "basic_fist", "feng")
+    second, again = fusion.fuse(a_newcomer(prologue_content, "乙"), prologue_content, world, must_not_ask(), "basic_fist", "feng")
+    assert second.id == first.id and second.base_power == first.base_power
+    for lines in (msgs, again):  # 後到的人也是師門傳下來的路數，不寫成「由先到的那個新人首創」
+        assert "師門傳下來的路數" in "\n".join(lines) and "首創" not in "\n".join(lines)
+
+
+def test_a_preset_art_has_the_inherited_traits_but_no_special_and_no_rumor(prologue_content, world):
+    """配方的特別功效照這一季的天機擲：師門配方不帶（不在隱蔽的草廬裡傳出「江湖上傳開了」）；一般功效照來路。"""
+    prologue_content.config.special_trait_chance = 1.0
+    state = a_newcomer(prologue_content)
+    base = team.player_art(state, prologue_content, world, "basic_fist")
+    art, _ = fusion.fuse(state, prologue_content, world, must_not_ask(), "basic_fist", "feng")
+    assert art.special is None
+    assert art.traits == traits.inherit_fuse(base, art.attribute)
+    assert not any("江湖上傳開了" in rumor.text for rumor in state.world.rumors)
+
+
+def test_preset_recipe_never_lands_on_an_old_art(prologue_content, world):
+    """合到舊的（計畫五）：師門配方不擲它，不然一個新人會拿到陌生人合出來的武學（師門傳下來的是同一門）。"""
+    from tianxia.engine import Game
+    from tianxia.martial_arts import generate_from_name
+
+    prologue_content.config.land_chance_per_candidate = 1.0
+    prologue_content.config.land_chance_cap = 1.0  # 有候選就一定合到舊的
+    for name in ("風行拳", "追電拳"):  # 兩門別人合出來的 快・武學・無：長新的就不會是它們
+        old = generate_from_name(name, "武學", name).model_copy(update={"origin": "fused", "attribute": "快", "lean": "無"})
+        world.claim_recipe(f"融|{name}", old)
+    game = Game.new(prologue_content, "沈浪", world=world)
+    game.state.player.insights = ["feng"]
+    assert game.forge_request("basic_fist", ["feng"]) is None  # 要是擲了合到舊的，這裡是「兩個候選挑一個」的單子
+    game.forge("basic_fist", ["feng"], proposed=(None, ""))
+    assert world.lookup_recipe(fusion.fuse_key("basic_fist", "feng")).name == "穿林腿"
+    assert prologue_content.config.land_chance_per_candidate == 1.0  # 其他配方照樣會合到舊的
+    other, _ = fusion.fuse(a_newcomer(prologue_content, "乙"), prologue_content, world, named("不重要"), "basic_fist", "feng")
+    assert other.name == "穿林腿"
+
+
+def test_a_taken_preset_name_falls_back_instead_of_failing(prologue_content, world):
+    """名字被別的配方先登記走了：師門配方照舊登記，改走退路字表的名字（不卡住新人）。"""
+    from tianxia.martial_arts import generate_from_name
+
+    taken = generate_from_name("穿林腿", "武學", "穿林腿").model_copy(update={"origin": "fused", "attribute": "剛"})
+    assert world.claim_recipe("融|別人的", taken)[0] is not None
+    art, _ = fusion.fuse(a_newcomer(prologue_content), prologue_content, world, must_not_ask(), "basic_fist", "feng")
+    assert art is not None and art.name != "穿林腿"
+    assert world.lookup_recipe(fusion.fuse_key("basic_fist", "feng")).id == art.id
+
+
+def test_a_preset_name_that_is_a_characters_name_falls_back(prologue_content, world):
+    """FB-069：玩家的名號不能跟武學撞。有人把角色取名叫穿林腿，師門配方這一季改走退路字表的名字（說明不帶），不卡住新人。"""
+    from tianxia.characters import open_characters
+
+    open_characters().save(new_game_state(prologue_content, "穿林腿"))
+    assert world.is_character_name("穿林腿")
+    art, msgs = fusion.fuse(a_newcomer(prologue_content, "新人乙"), prologue_content, world, must_not_ask(), "basic_fist", "feng")
+    assert art is not None and art.preset and art.name != "穿林腿" and art.note == ""
+    assert not world.is_character_name(art.name)
+
+
+def test_models_and_players_cannot_take_a_preset_name(prologue_content):
+    assert naming.name_problem("穿林腿", prologue_content) == naming.PRESET_CLASH
+    assert naming.name_problem("追風腿", prologue_content) is None
+    assert naming.recheck(prologue_content, ("穿林腿", "說明"))[0] is None  # 模型取了師門的名字：當作取壞了
+
+
+# ── 師門的功夫不屬於哪個新人（review-t4-5 I1）─────────────────
+
+def test_a_preset_art_credits_the_master_not_the_newcomer(prologue_content, world):
+    """師門配方是寫好的、傳下來的：第一個合出來的新人不是它的首創者，功法卡、後到的人那一句、本季的首創名單都不寫他。"""
+    from tianxia.martial_arts import shown_creator
+
+    art, msgs = fusion.fuse(a_newcomer(prologue_content, "新人甲"), prologue_content, world, must_not_ask(), "basic_fist", "feng")
+    assert art.preset and art.creator is None and shown_creator(art) is None
+    assert "新人甲" not in "\n".join(msgs)
+    card = skillview.art_card(art, 1)
+    assert "來源：師門傳下來的功夫" in card and "新人甲" not in card and "首創" not in card
+    assert world.get_skill(art.id).preset  # 登記在全服的那一份也標著
+    later, _ = fusion.fuse(a_newcomer(prologue_content, "新人乙"), prologue_content, world, must_not_ask(), "basic_fist", "feng")
+    assert later.id == art.id and "新人" not in skillview.art_card(later, 1)
+
+
+def test_presets_stay_out_of_the_seasons_firsts_and_the_chronicle(prologue_content, world):
+    """換季寫進江湖史的「合成首創」只列真的有人首創的：師門的功夫不列、也不算進「N 門」（江湖史跨季永遠留著）。"""
+    from conftest import next_season
+    from tianxia.engine import Game
+
+    game = Game.new(prologue_content, "新人甲", world=world)
+    game.state.player.insights = ["feng", "huo"]
+    game.forge("basic_fist", ["feng"])  # 師門配方：穿林腿
+    game.forge("basic_breath", ["huo"], proposed=("燎原功", "一句說明。"))  # 真的首創
+    next_season(prologue_content, world, game)
+    texts = [r.text for _, rumors in world.chronicle_before(2) for r in rumors]
+    firsts = [t for t in texts if "合成首創" in t]
+    assert len(firsts) == 1 and "1 門" in firsts[0] and "燎原功" in firsts[0] and "穿林腿" not in firsts[0]
+    assert not any("穿林腿" in t for t in texts)
+
+
+def test_a_season_of_only_presets_writes_no_firsts_line(prologue_content, world):
+    from conftest import next_season
+    from tianxia.engine import Game
+
+    game = Game.new(prologue_content, "新人甲", world=world)
+    game.state.player.insights = ["feng"]
+    game.forge("basic_fist", ["feng"])
+    next_season(prologue_content, world, game)
+    assert not any("合成首創" in r.text for _, rumors in world.chronicle_before(2) for r in rumors)

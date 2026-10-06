@@ -22,7 +22,8 @@ STEP_KEYS = {STEP_ONE: "s1", STEP_TWO: "s2", STEP_THREE: "s3", OUTRO: "outro"}  
 
 def _box(text, done=(), end=False, key=None, pending=False):
     return {
-        "speaker": "說書人", "key": key or STEP_KEYS[text], "text": text, "done": list(done), "end": end, "pending": pending,
+        "speaker": "說書人", "key": key or STEP_KEYS[text], "scene": "", "text": text, "line": "", "done": list(done), "end": end,
+        "pending": pending,
     }  # pending：這一句是「先把眼前的「…」了結」（網頁預設把它收成一行，FB-076）
 
 
@@ -312,3 +313,15 @@ def test_the_page_stores_the_key_when_the_player_shuts_the_box():
     assert "setGuideShut(guideKey(g))" in js[js.index("function shutGuide("):js.index("function guideHtml(")]
     assert "guideShut() === guideKey(g)" in js[js.index("function guideHtml("):]
     assert "openGuide(S.main.guide)" in next(line for line in js.splitlines() if 'case "guide-open":' in line)
+
+
+def test_box_hidden_while_preparing(prologue_content, world, monkeypatch):
+    """籌備中選單照舊只有「賽季籌備中」，序章也不例外：對話框不出現（新手引導計畫一 Review Focus 5）。"""
+    from tianxia.engine import Game
+
+    game = Game.new(prologue_content, "沈浪", world=world, prologue=True)
+    game.choose("choice:0")
+    game.choose("choice:0")
+    assert game.guide_box() is not None
+    monkeypatch.setattr(game, "_preparing", lambda: True)
+    assert game.guide_box() is None

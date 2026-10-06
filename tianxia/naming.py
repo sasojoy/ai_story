@@ -72,6 +72,7 @@ def clean_name(raw: str) -> str:
 
 PersonCheck = Callable[[str], bool]  # 這個名字是不是江湖上某個角色的名號（WorldStateStore.is_character_name）
 PERSON_CLASH = "跟江湖上的人物同名"  # 真人、假人都回這一句：看不出那個名號是不是假人（FB-069）
+PRESET_CLASH = "跟師門傳下來的武學同名"  # 師門配方（content/preset_recipes.json，新手引導計畫一）的名字：模型、玩家取的名字不能撞它（name_problem）
 
 
 def name_problem(name: str, content: Content, person: PersonCheck | None = None) -> str | None:
@@ -95,6 +96,8 @@ def name_problem(name: str, content: Content, person: PersonCheck | None = None)
         return "跟內容裡的武學同名"
     if any(name == ins.name for ins in content.insights.values()):
         return "跟意境同名"
+    if any(name == recipe.name for recipe in content.preset_recipes):
+        return PRESET_CLASH  # 師門配方的名字留給那一筆配方（新手引導計畫一）
     return None
 
 
