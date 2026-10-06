@@ -24,8 +24,8 @@ const konst = (name) => {
   if (!m) throw new Error(`app.js 裡找不到 const ${name}`);
   return m[0];
 };
-const H = new Function(["esc", "BATTLE_MOVE_LABEL", "optLabelHtml", "sceneHtml"].map(konst).join("\n") + "\nreturn { optLabelHtml, sceneHtml };")();
-process.stdout.write(JSON.stringify(input.scenes ? input.scenes.map((s) => H.sceneHtml(s)) : (input.options || []).map((o) => H.optLabelHtml(o))));
+const H = new Function(["esc", "BATTLE_MOVE_LABEL", "optLabelHtml"].map(konst).join("\n") + "\nreturn { optLabelHtml };")();
+process.stdout.write(JSON.stringify((input.options || []).map((o) => H.optLabelHtml(o))));
 """
 
 
@@ -40,10 +40,6 @@ def _node(**payload):
 
 def label_html(*options):
     return _node(options=list(options))
-
-
-def scene_html(*scenes):
-    return _node(scenes=list(scenes))
 
 
 def option(label, id="battle:act:guan_strong"):
@@ -83,30 +79,39 @@ def test_the_name_is_escaped():
 
 
 # ── 戰局那一段小字：對面上一回合與自己的結果（PM 2026-10-06：併成一段、13px、淡色）──
+# 做法：引擎把兩句寫成一段 markdown 引用（「> 」），伺服器的 markdown 轉成 <blockquote>，樣式在 .scene blockquote——
+# 不靠網頁去認字、不另外開 /api/main 的欄位；伺服器照舊跳脫原始 HTML。
 
 
-@needs_node
-def test_the_last_round_paragraph_gets_its_own_class_and_nothing_else_does():
-    both, own, other = scene_html(
-        "<p><strong>三招決戰</strong></p>\n<p>【對陣】兩軍對陣。</p>\n<p>對面上一回合（黃巾）：強攻 20%・固守 50%・奇襲 30%<br>\n你上一回合：固守（剋制 ×1.3）</p>",
-        "<p>【對陣】兩軍對陣。</p>\n<p>你上一回合：固守（剋制 ×1.0）</p>",
-        "<p>黃巾說：對面上一回合的事。</p>\n<p>【對陣】你上一回合沒有人。</p>",
-    )
-    assert both.count('<p class="b-last">') == 1 and '<p class="b-last">對面上一回合（黃巾）' in both
-    assert own.count('<p class="b-last">') == 1 and '<p class="b-last">你上一回合：固守' in own
-    assert 'b-last' not in other  # 只認一段開頭的那兩個詞，句子中間提到的不算
+def test_the_server_renders_the_last_round_lines_as_one_blockquote_paragraph():
+    import server
+
+    html = server.md("【對陣】兩軍對陣。\n\n> 對面上一回合（黃巾）：強攻 20%・固守 50%・奇襲 30%\n> 你上一回合：固守（剋制 ×1.3）")
+    assert html.count("<blockquote>") == 1 and html.count("<p>") == 2  # 場景一段、引用裡一段（兩句用 <br> 接）
+    assert html.split("<blockquote>")[1].count("<br") == 1 and html.count("</blockquote>") == 1
+    assert "<blockquote>\n<p>對面上一回合（黃巾）" in html
+
+
+def test_a_raw_html_tag_in_a_quoted_line_is_still_escaped():
+    import server
+
+    html = server.md("> 對面上一回合（<b>黃巾</b>）：強攻 100%")
+    assert "<b>" not in html and "&lt;b&gt;" in html
 
 
 def _css_rule(selector):
     css = (ROOT / "web" / "style.css").read_text(encoding="utf-8")
     found = re.search(re.escape(selector) + r"\s*\{([^}]*)\}", css)
     assert found, f"style.css 裡找不到 {selector}"
-    return dict(part.strip().split(":", 1) for part in found.group(1).split(";") if ":" in part)
+    return {k.strip(): v.strip() for k, v in (part.split(":", 1) for part in found.group(1).split(";") if ":" in part)}
 
 
 def test_the_last_round_paragraph_is_small_muted_and_tight():
-    """13px、淡色、行距 1.5 以內、上下各 2px：375px 上這一段（兩行對面比例加一行自己的結果）約 58px，不是兩段 15.5px 的 95px。"""
-    rule = {k.strip(): v.strip() for k, v in _css_rule(".scene p.b-last").items()}
+    """13px、淡色、行距 1.5 以內、上下各 2px、沒有瀏覽器預設的引用縮排與邊線：375px 上這一段（兩行對面比例加一行自己的結果）
+    約 58px，不是兩段 15.5px 的 95px。"""
+    rule = _css_rule(".scene blockquote")
     assert rule["font-size"] == "13px" and rule["color"] == "var(--ink-2)"
     assert float(rule["line-height"]) <= 1.5
-    assert rule["margin"] == "2px 0"
+    assert rule["margin"] == "2px 0" and rule["padding"] == "0" and rule["border"] == "0"
+    inner = _css_rule(".scene blockquote p")
+    assert inner["margin"] == "0"

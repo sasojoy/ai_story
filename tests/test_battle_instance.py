@@ -561,6 +561,72 @@ def test_a_side_that_is_all_gambling_gets_pushed_ten_and_the_gamble_still_counts
     assert battle.last_mix["huang"] == {} and "乙這一搏失敗了，付出了慘痛代價。" in msgs
 
 
+def test_an_empty_side_is_pushed_ten_even_when_the_side_that_is_present_has_no_force(three):
+    """設計 3.4：一邊沒有任何人在場時，另一邊每回合推滿 10——就算在場的那一邊沒有快照（份量 0、力量 0，打不出比例）。
+    打不出比例時不能因為「兩邊相加是 0」就不推。"""
+    for side, name, expected in (("guan", "甲", 60), ("huang", "乙", 40)):
+        battle = bi.start_muster(three, now=0)
+        bi.join_faction(battle, name, side, neili_cap=300)  # 沒有 scores
+        bi.close_muster(battle, three, random.Random(0), now=0)
+        bi.submit_action(battle, name, f"{side}_hold")
+        bi.resolve_round(battle, three, random.Random(0), now=1, tuning=BattleTuning())
+        assert battle.trend == expected, side
+
+
+def test_the_mix_line_stays_first_in_a_round_where_someone_falls(three):
+    """回合訊息的順序：出招比例那一行在最前面，倒下的句子接在後面。"""
+    battle = _two_fighters(three)
+    battle.participants["甲"].neili = 20  # 強攻撞上固守：60 ×（2 − 0.5）＝ 90，倒下
+    bi.submit_action(battle, "甲", "guan_strong")
+    bi.submit_action(battle, "乙", "huang_hold")
+    msgs = bi.resolve_round(battle, three, random.Random(0), now=1, tuning=BattleTuning())
+    assert msgs[0].startswith("官軍：強攻 100%") and "（戰局 " in msgs[0]
+    assert "氣血耗盡" in msgs[1] and len(msgs) == 2
+
+
+def test_the_mix_line_stays_first_when_the_act_changes(three):
+    two = three.model_copy(deep=True)
+    two.rounds_per_act = 1
+    two.acts.append(two.acts[0].model_copy(deep=True, update={"id": "a2", "title": "鏖戰", "text": "犬牙交錯。"}))
+    battle = _two_fighters(two)
+    bi.submit_action(battle, "甲", "guan_hold")
+    bi.submit_action(battle, "乙", "huang_hold")
+    msgs = bi.resolve_round(battle, two, random.Random(0), now=1, tuning=BattleTuning())
+    assert msgs[0].startswith("官軍：強攻 0%・固守 100%") and msgs[-1] == "【鏖戰】犬牙交錯。" and len(msgs) == 2
+
+
+def test_without_the_mix_line_keeps_everything_else(three):
+    """場景上的記錄不放出招比例那一行（見 Game._advance_battle_round）：有人出固定招才有那一行、而且一定是第一行。"""
+    battle = _two_fighters(three)
+    bi.submit_action(battle, "甲", "guan_hold")
+    bi.submit_action(battle, "乙", "huang_hold")
+    msgs = bi.resolve_round(battle, three, random.Random(0), now=1, tuning=BattleTuning())
+    assert len(msgs) == 1 and bi.without_mix_line(battle, msgs) == []
+    assert bi.without_mix_line(battle, ["第一句", "第二句"]) == ["第二句"]  # 這個回合有出招：丟掉第一句
+    quiet = _two_fighters(three)  # 沒人出固定招：沒有那一行，什麼都不丟
+    assert bi.resolve_round(quiet, three, random.Random(0), now=1, tuning=BattleTuning()) == []
+    assert bi.without_mix_line(quiet, ["某句"]) == ["某句"]
+
+
+def test_narrate_round_falls_back_to_the_given_text_not_the_raw_messages():
+    definition = BattleDef(
+        id="t", name="t", factions=[BattleFaction(id="a", name="甲"), BattleFaction(id="b", name="乙")],
+        acts=[BattleAct(id="a1", title="t", text="x", goal="g", options=[BattleOption(text="o", tag="x")])],
+        outcomes=[BattleOutcome(faction="a", title="甲勝", text="甲勝。")],
+    )
+    instance = bi.start_muster(definition, now=0)
+    msgs = ["官軍：固守 100%（戰局 +0）", "乙倒下了。"]
+    assert bi.narrate_round(None, definition, instance, msgs) == "\n".join(msgs)  # 沒給 fallback：照舊
+    assert bi.narrate_round(None, definition, instance, msgs, fallback=["乙倒下了。"]) == "乙倒下了。"
+    client = mock.Mock()
+    client.chat_text.side_effect = RuntimeError("連不上")
+    assert bi.narrate_round(client, definition, instance, msgs, fallback=[]) == ""
+    client = mock.Mock()
+    client.chat_text.return_value = "煙塵四起。"
+    assert bi.narrate_round(client, definition, instance, msgs, fallback=[]) == "煙塵四起。"
+    assert "（戰局 +0）" in client.chat_text.call_args.args[0][1]["content"]  # 模型看得到完整的判定
+
+
 def test_a_participant_without_scores_counts_as_zero(three):
     """Review Focus 3：上線前就加入、沒有 scores 的人：份量 0，照常扣血，不當機。"""
     battle = bi.start_muster(three, now=0)

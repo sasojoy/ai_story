@@ -176,6 +176,21 @@ def test_a_bot_that_is_nearly_down_prefers_the_cheaper_move(game):
     assert best() == "固守"
 
 
+def test_the_bots_scores_count_how_worn_down_it_is(game):
+    """份量乘氣血狀態（0.5＋0.5×剩的÷上限）：剩一半氣血時，強攻的 100 分只剩 75。少了這個係數，這裡會挑強攻。"""
+    battle, definition = _open_three_move_battle(game)
+    name = game.state.player.name
+    game.world.mutate_battle(lambda b: (
+        b.participants[name].scores.update({"強攻": 100.0, "固守": 0.0, "奇襲": 0.0}),
+        setattr(b.participants[name], "neili_cap", 100.0), setattr(b.participants[name], "neili", 50.0),
+    ))
+    faction = game.world.get_battle().participants[name].faction
+    scores = {m: bot_policy._battle_score(game, f"act:{faction}_{c}") for m, c in CODES.items()}
+    # 乘氣血狀態 0.75：強攻 1.0 × 0.75 − 60/50 ＝ −0.45，固守 0 − 15/50 ＝ −0.3 → 固守；少了這個係數，強攻是 1.0 − 1.2 ＝ −0.2 → 強攻
+    assert abs(scores["強攻"] + 0.45) < 1e-9 and abs(scores["固守"] + 0.3) < 1e-9
+    assert max(scores, key=scores.get) == "固守"
+
+
 def test_a_bot_scores_nothing_for_a_choice_that_is_not_a_move(game):
     """沒有招的選項（放手一搏、查無此選項）一律 0，不當機；加入戰局還是照舊的高分。"""
     battle, definition = _open_three_move_battle(game)

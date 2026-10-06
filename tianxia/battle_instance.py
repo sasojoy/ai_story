@@ -575,12 +575,24 @@ BATTLE_NARRATOR_PROMPT = (
 )
 
 
-def narrate_round(client: OllamaClient | None, definition: BattleDef, instance: BattleInstance, msgs: list[str]) -> str:
+def without_mix_line(instance: BattleInstance, msgs: list[str]) -> list[str]:
+    """這回合的系統訊息拿掉最前面那一行出招比例（resolve_round 在有人出固定招的回合才加那一行，而且一定放第一行；
+    判斷看 instance.last_mix：任何一邊有比例就代表有那一行）。出招比例只留在回合紀錄（戰報）與給模型的判定裡，
+    場景上的記錄（narrative_log）不放它——場景已經有「對面上一回合」那一段，每回合再留一行 53 字會讓場景每回合多約 88px。"""
+    return list(msgs[1:] if any(instance.last_mix.values()) else msgs)
+
+
+def narrate_round(
+    client: OllamaClient | None, definition: BattleDef, instance: BattleInstance, msgs: list[str],
+    fallback: list[str] | None = None,
+) -> str:
     """這回合的 LLM 潤色：給它目前幕的框架文字跟系統已經判定好的事件訊息，請它寫一段
     貼合戰場氣氛的敘事——骨架跟結果都已經是定案的了，LLM 只是把它寫得生動一點，連不上
-    或生成失敗就直接用系統訊息本身，不會讓戰鬥卡住。"""
+    或生成失敗就直接用系統訊息本身（沒給 fallback 就是整串 msgs；給了就用 fallback，呼叫端拿掉不想進場景記錄的
+    那一行出招比例，見 without_mix_line），不會讓戰鬥卡住。"""
+    plain = "\n".join(msgs if fallback is None else fallback)
     if client is None:
-        return "\n".join(msgs)
+        return plain
     act = current_act(instance, definition)
     prompt = (
         f"戰場目前的局面：【{act.title}】{act.text}\n"
@@ -594,5 +606,5 @@ def narrate_round(client: OllamaClient | None, definition: BattleDef, instance: 
             num_predict=200,
         )
     except Exception:
-        return "\n".join(msgs)
-    return zh.to_traditional(text.strip()) or "\n".join(msgs)
+        return plain
+    return zh.to_traditional(text.strip()) or plain

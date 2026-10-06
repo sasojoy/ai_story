@@ -218,7 +218,6 @@ def test_a_tuning_that_would_break_the_resolution_is_rejected_when_it_loads(over
 
 @pytest.mark.parametrize("override", [
     {"damage": {"強攻": 70.0, "固守": 10.0, "奇襲": 40.0}},
-    {"affinity": {"剛": ("固守", "奇襲")}},  # 沒列的屬性＝不加不減（move_scores 認不得的屬性當作沒學）
     {"counter": 0.0}, {"counter": 1.0}, {"affinity_outer": 0.0}, {"affinity_inner": 0.0}, {"strong_mitigation_cap": 0.0},
     {"push_max": 20},
 ])
@@ -252,3 +251,20 @@ def test_a_battle_may_leave_its_action_tags_out():
         outcomes=[BattleOutcome(faction="a", title="甲勝", text="甲勝。")],
     )
     assert battle.action_tags == {}
+
+
+def test_a_partial_affinity_override_changes_only_the_rows_it_names():
+    """審查 m3：config.json 的 battle.affinity 只寫一個屬性，其餘七個照預設表——不會整張表被換掉、
+    其他屬性悄悄變成沒有擅長也沒有不擅長。"""
+    t = Config(battle={"affinity": {"陽": ["奇襲", "固守"]}}).battle
+    assert t.affinity["陽"] == ("奇襲", "固守")
+    assert {k: v for k, v in t.affinity.items() if k != "陽"} == {k: v for k, v in SPEC_AFFINITY.items() if k != "陽"}
+    assert set(t.affinity) == set(SPEC_AFFINITY)
+    assert BattleTuning().affinity == SPEC_AFFINITY  # 沒寫覆寫就是預設表，而且各個 Config 的那一份互不相干
+    BattleTuning().affinity["剛"] = ("奇襲", "強攻")
+    assert BattleTuning().affinity["剛"] == ("強攻", "奇襲")
+
+
+def test_a_bad_row_inside_a_partial_affinity_override_is_still_rejected():
+    with pytest.raises(ValidationError):
+        Config(battle={"affinity": {"陽": ["強攻", "強攻"]}})

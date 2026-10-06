@@ -54,7 +54,7 @@ globalThis.document = {
 };
 const S = { nowOpen: null, sceneOpen: false, moveMode: "walk", answering: false, peekOpen: null, boardSeen: null, main: input.m, ...input.S };
 const parts = [
-  ...["esc", "pct", "STANCE_NAMES", "idleMenu", "BATTLE_MOVE_LABEL", "sceneHtml", "optLabelHtml", "PEEK_SEEN_KEY", "peekWeek", "peekSeason", "peekParts",
+  ...["esc", "pct", "STANCE_NAMES", "idleMenu", "BATTLE_MOVE_LABEL", "optLabelHtml", "PEEK_SEEN_KEY", "peekWeek", "peekSeason", "peekParts",
     "peekBlock"].map(konst),
   ...["stanceBars", "boardSeen", "markBoardSeen", "boardUnseen", "stancePeek", "boardPeek", "questPeek",
     "peekHtml", "peekTap", "pageJianghu"].map(fn),
@@ -419,13 +419,6 @@ def test_the_battle_menu_puts_each_moves_score_on_the_right_of_its_button(on):
     html = run(m, "return H.pageJianghu();")
     assert html.count('<span class="b-name">') == 3 and html.count('<span class="b-move">') == 3
     assert '<span class="b-move">固守・100 分</span>' in html and "（強攻・82 分）" not in html
-
-
-def test_the_battle_scene_shrinks_the_last_round_paragraph(on):
-    """真的 pageJianghu：場景裡「對面上一回合…／你上一回合…」那一段帶 b-last，別的段落照舊。"""
-    scene = "<p>【對陣】兩軍對陣。</p>\n<p>對面上一回合（黃巾）：強攻 20%・固守 50%・奇襲 30%<br>\n你上一回合：固守（剋制 ×1.3）</p>"
-    html = run(view(_status(on), options=[], scene=scene), "return H.pageJianghu();")
-    assert html.count('<p class="b-last">') == 1 and "<p>【對陣】兩軍對陣。</p>" in html
 
 
 @pytest.mark.parametrize("options, marker", [

@@ -621,6 +621,17 @@ def test_a_bad_battle_tuning_in_config_json_stops_the_load(tmp_path):
     assert tuning.push_max == 8 and tuning.damage == {"強攻": 70.0, "固守": 10.0, "奇襲": 40.0}
 
 
+def test_an_unknown_attribute_in_the_affinity_table_stops_the_load(tmp_path):
+    """審查 m3：對應表裡寫了不存在的屬性（打錯字的行永遠不會被用到）：載入設定時就報。"""
+    root = copy_fixture(tmp_path)
+    edit_json(root / "config.json", lambda d: d.update(battle={"affinity": {"木": ["強攻", "固守"]}}))
+    with pytest.raises(ContentError, match="affinity.*木"):
+        load_content(root)
+    root = copy_fixture(tmp_path / "ok")
+    edit_json(root / "config.json", lambda d: d.update(battle={"affinity": {"陽": ["奇襲", "固守"]}}))
+    assert load_content(root).config.battle.affinity["陽"] == ("奇襲", "固守")
+
+
 def test_lead_texts_naming_both_sides_validate(content):
     content.battles["t1"] = battle = _battle({})
     battle.acts[0].text_by_lead.update({"guan": "官軍佔了上風。", "huang": "黃巾佔了上風。"})

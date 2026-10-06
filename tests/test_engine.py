@@ -1849,8 +1849,8 @@ def test_the_scene_says_what_the_other_side_did_last_round(game):
     enemy = "黃巾" if battle.participants[game.state.player.name].faction == "guan" else "官軍"
     assert "對面上一回合" in text and "你上一回合：固守（剋制 ×1.3）" in text and enemy in text
     assert f"對面上一回合（{enemy}）：強攻 20%・固守 50%・奇襲 30%" in text  # 對面的比例，不是自己這邊的
-    # 兩句是同一段（段內換行，不是兩段）：網頁把這一段縮成小字、淡色，少佔一個段落間距的高度
-    assert f"對面上一回合（{enemy}）：強攻 20%・固守 50%・奇襲 30%\n你上一回合：固守（剋制 ×1.3）" in text
+    # 兩句是同一段引用（markdown 的「> 」，段內換行）：網頁在 .scene blockquote 底下把它縮成小字、淡色（見 test_battle_buttons）
+    assert f"> 對面上一回合（{enemy}）：強攻 20%・固守 50%・奇襲 30%\n> 你上一回合：固守（剋制 ×1.3）" in text
 
 
 def test_the_scene_has_no_last_round_lines_before_anything_was_resolved(game):
@@ -1866,7 +1866,61 @@ def test_the_scene_does_not_say_what_the_other_side_did_when_nobody_on_it_played
     battle.participants[game.state.player.name].last_result = "固守（剋制 ×1.0）"
     text = game._battle_scene_text(battle, definition)
     assert "對面上一回合" not in text and "你上一回合：固守（剋制 ×1.0）" in text
-    assert "\n\n你上一回合：固守（剋制 ×1.0）" in text  # 單獨一段
+    assert "\n\n> 你上一回合：固守（剋制 ×1.0）" in text  # 單獨一段引用
+
+
+def _play_rounds(game, definition, count):
+    """對面是一個沒有快照的假人（自己會出招）、氣血給足，本人每回合固守；打 count 個回合，不讓任何人倒下。"""
+    game.world.mutate_battle(lambda b: battle_instance.auto_assign_latecomer(
+        b, definition, "機", 10_000.0, random.Random(0), faction="huang", is_bot=True,
+    ))
+    name = game.state.player.name
+    game.world.mutate_battle(lambda b: (setattr(b.participants[name], "neili", 10_000.0),
+                                        setattr(b.participants[name], "neili_cap", 10_000.0)))
+    for _ in range(count):
+        game.choose("battle:act:guan_hold")
+    return game.world.get_battle()
+
+
+def test_the_round_by_round_mix_line_never_reaches_the_scene_log(game):
+    """審查 I1：沒有模型（或逾時、或在假人的 Game 裡結算）時潤色退回系統訊息本身，以前每一回合那一行出招比例
+    （官軍：強攻 x%・…（戰局 ±n））都會進場景最近五段的記錄，每段約 88px；現在它只留在回合紀錄（戰報）。
+    場景上的出招比例只寫一次：上一回合那一段引用。"""
+    battle, definition = _open_three_move_battle(game)
+    definition.rounds_per_act, definition.decisive_margin = 6, 51  # 打五回合還沒收場（戰局推到底也不算壓倒性）
+    battle = _play_rounds(game, definition, 5)
+    assert battle.phase == "active" and battle.round_number == 5
+    assert not any("（戰局 " in line or "強攻 " in line for line in battle.narrative_log)
+    records = game.world.battle_rounds(battle.record_id)
+    assert len(records) == 5 and all("（戰局 " in r.messages[0] and r.messages[0].startswith(("官軍：", "黃巾：")) for r in records)
+    scene = game._battle_scene_text(battle, definition)
+    assert scene.count("對面上一回合") == 1 and "（戰局 " not in scene  # 最新一回合的比例還在，只寫一次
+    assert scene.count("強攻 ") == 1
+
+
+def test_a_modelled_narration_still_sees_the_mix_line(game):
+    """模型寫得出來的時候，吃的是完整的系統判定（含出招比例）；只有退回系統訊息時才把那一行拿掉。"""
+    battle, definition = _open_three_move_battle(game)
+    definition.rounds_per_act = 6
+    client = mock.Mock()
+    client.chat_text.return_value = "戰場上煙塵四起。"
+    with mock.patch.object(Game, "_quick_client", return_value=client):
+        battle = _play_rounds(game, definition, 1)
+    assert battle.narrative_log[-1] == "戰場上煙塵四起。"
+    prompt = client.chat_text.call_args.args[0][1]["content"]
+    assert "（戰局 " in prompt
+
+
+def test_a_resolved_round_with_only_the_mix_line_still_tells_the_player_something(game):
+    """出招比例不放進回覆（場景上已經有一段）：這一回合沒有別的事時，送出最後一個行動的人看到一句交代，不是空的、
+    也不是「等待其他人」。"""
+    battle, definition = _open_three_move_battle(game)
+    definition.rounds_per_act = 6
+    game.world.mutate_battle(lambda b: battle_instance.auto_assign_latecomer(
+        b, definition, "機", 10_000.0, random.Random(0), faction="huang", is_bot=True,
+    ))
+    msgs = game.choose("battle:act:guan_hold")
+    assert msgs == ["這一回合結算了。"]
 
 
 def test_the_scene_reads_the_act_text_of_whoever_leads(game):
@@ -1928,12 +1982,17 @@ def test_a_backfill_never_replaces_a_snapshot_taken_at_joining(game):
 
 
 def test_a_backfill_only_touches_the_players_own_fighter(game):
+    """自己也沒有快照、旁人也沒有：自己補、旁人還是空的（要是補的人把自己的份量蓋到每個沒份量的人身上，這裡才抓得到）。"""
     battle, definition = _open_three_move_battle(game)
     game.world.mutate_battle(lambda b: battle_instance.auto_assign_latecomer(
         b, definition, "旁人", 300.0, random.Random(0), faction="huang",
     ))
+    _strip_scores(game)
+    assert game.world.get_battle().participants["旁人"].scores == {}
     game.sync(1.0)
-    assert game.world.get_battle().participants["旁人"].scores == {}  # 別人的份量只有他自己的 Game 算得出來
+    after = game.world.get_battle().participants
+    assert after[game.state.player.name].scores == game._battle_scores()
+    assert after["旁人"].scores == {}  # 別人的份量只有他自己的 Game 算得出來
 
 
 def test_the_world_ticker_never_backfills_anyones_scores(content, game):

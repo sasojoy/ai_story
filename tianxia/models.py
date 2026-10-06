@@ -721,6 +721,11 @@ DEFAULT_SEASON_DAYS = 14
 MOVES = ("強攻", "固守", "奇襲")  # 全服決戰的三招（戰鬥系統設計 3.4）
 BEATS = {"固守": "強攻", "強攻": "奇襲", "奇襲": "固守"}  # 鍵剋值：固守剋強攻、強攻剋奇襲、奇襲剋固守
 Move = Literal["強攻", "固守", "奇襲"]
+DEFAULT_AFFINITY: dict[str, tuple[Move, Move]] = {  # 屬性 →（擅長, 不擅長），戰鬥系統設計 3.4【預設】
+    "剛": ("強攻", "奇襲"), "實": ("強攻", "奇襲"), "陽": ("強攻", "固守"),
+    "柔": ("固守", "強攻"), "陰": ("固守", "強攻"), "慢": ("固守", "奇襲"),
+    "快": ("奇襲", "固守"), "虛": ("奇襲", "強攻"),
+}
 
 
 class BattleTuning(_Strict):
@@ -733,15 +738,20 @@ class BattleTuning(_Strict):
     affinity_base: float = 75.0  # 適性：基準，武學屬性擅長／不擅長 ±affinity_outer，內功 ±affinity_inner，夾在 50～100
     affinity_outer: float = 15.0
     affinity_inner: float = 10.0
-    affinity: dict[str, tuple[Move, Move]] = Field(default_factory=lambda: {  # 屬性 →（擅長, 不擅長）
-        "剛": ("強攻", "奇襲"), "實": ("強攻", "奇襲"), "陽": ("強攻", "固守"),
-        "柔": ("固守", "強攻"), "陰": ("固守", "強攻"), "慢": ("固守", "奇襲"),
-        "快": ("奇襲", "固守"), "虛": ("奇襲", "強攻"),
-    })
+    affinity: dict[str, tuple[Move, Move]] = Field(default_factory=lambda: dict(DEFAULT_AFFINITY))  # 屬性 →（擅長, 不擅長）
     counter: float = 0.5  # 剋制係數 ＝ 1 ＋ counter × 對面被你剋的比例 － counter × 對面剋你的比例
     push_max: float = 10.0  # 一回合最多推多少
     damage: dict[Move, float] = Field(default_factory=lambda: {"強攻": 60.0, "奇襲": 35.0, "固守": 15.0})
     strong_mitigation_cap: float = 0.6  # 強攻的損耗，自己的武學威力最多抵銷這麼多（同原本的猛攻）
+
+    @field_validator("affinity", mode="before")
+    @classmethod
+    def _merge_with_the_default_table(cls, given: Any) -> Any:
+        """config.json 的 battle.affinity 只寫幾個屬性時，沒寫的屬性照預設表：不會整張表被換掉、其他屬性悄悄變成沒有
+        擅長也沒有不擅長（那樣「要當哪種兵」的取捨就不見了，也沒有任何錯誤提醒）。認不得的屬性名由 content.validate 擋。"""
+        if not isinstance(given, dict):
+            return given
+        return {**DEFAULT_AFFINITY, **given}
 
     @model_validator(mode="after")
     def _numbers_that_keep_the_resolution_working(self) -> BattleTuning:

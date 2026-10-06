@@ -1819,11 +1819,14 @@ class Game:
         msgs = battle_instance.resolve_round(battle, definition, self.rng, now=now, tuning=tuning)
         if battle.phase == "ended":
             battle.end_time = self.state.world.time
-        narration = battle_instance.narrate_round(self._quick_client(), definition, battle, msgs)
+        # 每回合最前面那一行出招比例只留在回合紀錄（戰報）與給模型的判定裡：潤色退回系統訊息時（沒有模型、逾時、或在假人的
+        # Game 裡結算）不放進場景的記錄，場景上的比例只由「對面上一回合」那一段寫一次（審查 I1）
+        shown = battle_instance.without_mix_line(battle, msgs)
+        narration = battle_instance.narrate_round(self._quick_client(), definition, battle, msgs, fallback=shown)
         if narration:
             battle.narrative_log.append(narration)
             battle.rounds[-1].narration = narration  # resolve_round 剛記下這一回合
-        return [narration] if narration else msgs
+        return [narration] if narration else (shown or ["這一回合結算了。"])
 
     def _run_battle_tick(self, definition: BattleDef) -> tuple[battle_instance.BattleInstance | None, list[str]]:
         """在 mutate_battle 裡跑一次 _advance_battle_round，給被動追趕（options()/scene_text()）用。"""
@@ -2155,14 +2158,14 @@ class Game:
         lines = [header, f"【{act.title}】{count}{battle_instance.act_text(battle, definition)}"] + battle.narrative_log[-5:]
         p = battle.participants.get(self.state.player.name)
         if p is not None:
-            last = []  # 上一回合的兩句併成一段（段內換行）：網頁把這一段縮成小字、淡色（web/style.css 的 .scene p.b-last）
+            last = []  # 上一回合的兩句併成一段 markdown 引用（「> 」、段內換行）：網頁在 .scene blockquote 底下縮成小字、淡色
             enemy = next((f for f in definition.factions if f.id != p.faction), None)
             seen = battle.last_mix.get(enemy.id) if enemy is not None else None
             if seen:  # 這回合的比例要到結算才揭曉，畫面只寫上一回合（設計 3.4）
                 parts = "・".join(f"{m} {round(seen[m] * 100)}%" for m in MOVES)
-                last.append(f"對面上一回合（{enemy.name}）：{parts}")
+                last.append(f"> 對面上一回合（{enemy.name}）：{parts}")
             if p.last_result:
-                last.append(f"你上一回合：{p.last_result}")
+                last.append(f"> 你上一回合：{p.last_result}")
             if last:
                 lines.append("\n".join(last))
         if p is not None and p.eliminated:

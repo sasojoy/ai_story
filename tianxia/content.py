@@ -1402,6 +1402,8 @@ def validate(c: Content) -> None:
         need(key not in showdown_battles, f"時刻表決戰 {key[0]}{version}有兩筆戰鬥：{showdown_battles.get(key)}、{battle.id}")
         showdown_battles.setdefault(key, battle.id)
 
+    for attribute in c.config.battle.affinity:  # 三招的適性對應表（Config.battle）：打錯字的屬性名永遠用不到，載入時就報
+        need(attribute in ATTRIBUTES, f"config.battle.affinity：未知的屬性 {attribute}（武學的屬性是 {'、'.join(ATTRIBUTES)}）")
     for battle in c.battles.values():
         where = f"戰鬥 {battle.id}"
         battle_sides = [f.id for f in battle.factions]  # 不能叫 faction_ids：那是劇本陣營的名單，後面的條件檢查還要用
