@@ -1891,6 +1891,77 @@ def test_a_round_played_through_the_engine_shows_up_on_the_next_scene(game):
     assert "對面上一回合（黃巾）：" in text and "你上一回合：固守（剋制 ×" in text
 
 
+def _strip_scores(game, name=None):
+    """把這個人在戰局上的份量快照拿掉：模擬上線前就在決戰裡的人（舊資料沒有 scores）。"""
+    name = name or game.state.player.name
+    game.world.mutate_battle(lambda b: b.participants[name].scores.clear())
+    assert game.world.get_battle().participants[name].scores == {}
+
+
+def test_a_fighter_with_no_snapshot_gets_one_on_their_own_sync(game):
+    """決戰打到一半上線這一版：場上已經有、沒有份量的人，在自己下一次同步時補上（照當下的武學）；不是從排程補。"""
+    battle, definition = _open_three_move_battle(game)
+    name = game.state.player.name
+    _strip_scores(game)
+    game.sync(1.0)
+    after = game.world.get_battle().participants[name]
+    assert after.scores == game._battle_scores() and all(v > 0 for v in after.scores.values())
+
+
+def test_a_fighter_with_no_snapshot_gets_one_when_they_choose_a_move(game):
+    battle, definition = _open_three_move_battle(game)
+    name = game.state.player.name
+    _strip_scores(game)
+    game.choose("battle:act:guan_hold")
+    assert game.world.get_battle().participants[name].scores == game._battle_scores()
+
+
+def test_a_backfill_never_replaces_a_snapshot_taken_at_joining(game):
+    """已經有快照的人不補、不換：加入之後換了武學，這一場還是照加入時的份量（Task 2 的快照規則）。"""
+    battle, definition = _open_three_move_battle(game)
+    name = game.state.player.name
+    joined = dict(game.world.get_battle().participants[name].scores)
+    game.state.player.member.wugong_id = "basic_fist"  # 加入之後換了武學
+    assert game._battle_scores() != joined  # 現在算出來的已經不一樣了
+    game.sync(1.0)
+    game.choose("battle:act:guan_hold")
+    assert game.world.get_battle().participants[name].scores == joined
+
+
+def test_a_backfill_only_touches_the_players_own_fighter(game):
+    battle, definition = _open_three_move_battle(game)
+    game.world.mutate_battle(lambda b: battle_instance.auto_assign_latecomer(
+        b, definition, "旁人", 300.0, random.Random(0), faction="huang",
+    ))
+    game.sync(1.0)
+    assert game.world.get_battle().participants["旁人"].scores == {}  # 別人的份量只有他自己的 Game 算得出來
+
+
+def test_the_world_ticker_never_backfills_anyones_scores(content, game):
+    """排程的 Game 玩家是空白的，補誰的份量都會補錯：場上有人沒有快照，它照樣推回合、逾時代選，一個份量也不算。"""
+    definition = _install_three_move_battle(content)
+    game.world.start_battle(definition, now=1000.0)
+    with at(game, 1000.0):
+        game.choose("battle:join:guan")
+    _strip_scores(game)
+    open_characters().save(game.state)
+    ticker = Game.for_world(content, game.world, rng=random.Random(3))
+    with mock.patch.object(Game, "_battle_scores", side_effect=AssertionError("排程不該算份量")):
+        ticker.world_tick(1000.0 + 601)
+        ticker.world_tick(1000.0 + 601 + 121)
+    battle = game.world.get_battle()
+    assert battle.round_number == 1 and battle.participants["沈浪"].scores == {}  # 還是空的：份量 0，照常結算
+
+
+def test_a_fighter_with_no_snapshot_sees_the_move_but_not_a_misleading_zero(game):
+    """沒有快照的人按鈕上不寫「0 分」（那是假的：他的份量是還沒算，不是零）——只寫是哪一招。"""
+    battle, definition = _open_three_move_battle(game)
+    battle.participants[game.state.player.name].scores = {}
+    labels = [o.label for o in game._battle_options(battle, definition)]
+    assert labels == ["guan強攻（強攻）", "guan固守（固守）", "guan奇襲（奇襲）"]
+    assert not any("分" in label for label in labels)
+
+
 def test_the_world_ticker_plays_the_three_moves_with_nobody_online(content, game):
     """排程沒有玩家：逾時代出自己那邊的固守，三招照結算（黃巾沒人 → 官軍推滿 10），而且不替誰算份量。"""
     definition = _install_three_move_battle(content)

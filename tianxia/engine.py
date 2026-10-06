@@ -359,6 +359,7 @@ class Game:
         if news is not None:
             journal.add_entry(self.state, news, merge=True)
         self._deliver_big_events()  # 這一季的時刻表大事人人有份：沒看過的補上，推進的人也走這一條（FB-038）
+        self._backfill_battle_scores()  # 場上沒有份量快照的自己（上線前就在決戰裡）：補上；排程的 world_tick 不走這裡
         self._deliver_battle_results()  # 下線時收場的決戰，回來第一次同步就補上（休季、籌備中也一樣，FB-027）
         summons = ranks.check_summons(self.state, self.content)  # 行動之外記到的貢獻（抵達、別人觸發的結算）：同步時補發召見（計畫 T5）
         if summons:
@@ -1705,6 +1706,28 @@ class Game:
             outer.attribute if outer else None, inner.attribute if inner else None,
         )
 
+    def _backfill_battle_scores(self) -> None:
+        """自己在戰局上的份量快照是空的（決戰打到一半上線這一版：上線前就在場上的人沒有 scores），補上現在的；
+        已經有快照的人不動（加入之後換武學不影響這一場）。只在玩家自己的請求路徑呼叫（sync、_battle_choose）：
+        份量只有那個玩家自己的 Game 算得出來，排程的 Game（Game.for_world）玩家是空白的，絕不能呼叫、
+        world_tick 裡也沒有人呼叫它。倒下的人不補（用不到）。"""
+        status = self._battle_status(tick=False)
+        if status is None:
+            return
+        battle, _ = status
+        name = self.state.player.name
+        me = battle.participants.get(name)
+        if me is None or me.scores or me.eliminated:
+            return
+        scores = self._battle_scores()
+
+        def _fill(b: battle_instance.BattleInstance) -> None:
+            mine = b.participants.get(name)
+            if mine is not None and not mine.scores:  # 鎖裡再看一次：別的路徑剛補過就不蓋掉
+                mine.scores = dict(scores)
+
+        self.world.mutate_battle(_fill)
+
     def _battle_neili_cap(self) -> float:
         _, cap = team.member_neili(
             self.content, self.state.player.member, team.con_of(self.state, self.content, self.world, PLAYER),
@@ -2169,8 +2192,10 @@ class Game:
             if o.free_text:
                 continue
             label = o.text
-            if o.move is not None:  # 三招：寫招與這個人現在的份量（設計 3.4：按鈕上直接寫）
+            if o.move is not None and p.scores:  # 三招：寫招與這個人現在的份量（設計 3.4：按鈕上直接寫）
                 label = f"{o.text}（{o.move}・{round(p.scores.get(o.move, 0.0) * battle_instance.condition(p))} 分）"
+            elif o.move is not None:  # 還沒有份量快照（上線前就在場上、下一次同步才補）：不寫「0 分」，那是假的
+                label = f"{o.text}（{o.move}）"
             out.append(Option(id=f"battle:act:{o.tag}", label=label))
         return out
 
@@ -2267,6 +2292,7 @@ class Game:
             self._write(f"{definition.name}・趕到戰場", msgs)  # 趕到也留一則（FB-030）；每回合的出招不寫，太吵
             return msgs
         if kind == "act":
+            self._backfill_battle_scores()  # 還沒有份量快照的自己，出招之前先補（結算要讀）
             return self._submit_battle_action(name, definition, rest)
         return ["（此刻無法這麼做。）"]
 

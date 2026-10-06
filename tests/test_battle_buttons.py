@@ -56,9 +56,12 @@ def test_other_labels_stay_a_plain_span():
     """不是三招的選項：舊的穩守／猛攻、移動、加入戰局——一律照舊，連括號裡長得像的也不拆（只拆戰鬥出招）。"""
     htmls = label_html(
         option("穩紮穩打"), option("開門突擊（強攻・82 分）", id="move:lake"), option("加入【官軍】", id="battle:join:guan"),
-        option("甲（別的說明）"),
+        option("甲（別的說明）"), option("甲（強攻）"),  # 最後一個：還沒有份量快照的人，引擎只寫招、不寫分數
     )
-    assert htmls == ["<span>穩紮穩打</span>", "<span>開門突擊（強攻・82 分）</span>", "<span>加入【官軍】</span>", "<span>甲（別的說明）</span>"]
+    assert htmls == [
+        "<span>穩紮穩打</span>", "<span>開門突擊（強攻・82 分）</span>", "<span>加入【官軍】</span>", "<span>甲（別的說明）</span>",
+        "<span>甲（強攻）</span>",
+    ]
 
 
 def test_the_name_is_escaped():
