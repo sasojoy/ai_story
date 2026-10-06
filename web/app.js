@@ -1572,7 +1572,9 @@
         if (text) toast(text.length > 40 ? `${text.slice(0, 40)}……（戰況見場景）` : text);
       } finally { stop(); }
     });
-    if (document.querySelector(".options .btn.busy")) renderPage(); // 失敗了：把按鈕還原
+    // 失敗了（伺服器擋下來、連不上）：把按鈕還原。選單上的按鈕與閒著時行動列的格子（.act-ink：交友、求見、遊歷）都會標 busy、
+    // 換上「對方沉吟中…」「兩人對峙……」，兩種都要還原（審查 I2）
+    if (document.querySelector(".options .btn.busy, .act-ink.busy")) renderPage();
   }
 
   // 隨口應對：送出後要等模型評這個做法，首次常要好幾秒，按鈕先寫「思量中……」
