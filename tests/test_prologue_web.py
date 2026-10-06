@@ -421,12 +421,13 @@ def test_the_box_shows_the_scene_before_the_words(hut):
     assert '<p class="guide-scene">斷眉來了。</p>' in html and html.index("guide-scene") < html.index("guide-text")
 
 
-def test_a_shut_box_shows_the_short_line_and_remembers_the_text(hut):
+def test_a_shut_box_shows_the_short_line_and_remembers_the_step(hut):
+    """收起記的是步驟的 key（FB-076：網頁的 guideKey），不是那一句話；收起來那一行用 line。"""
     g = main_at(hut, 1)["guide"]  # line："師父：看修練頁"
     assert g["line"] == "師父：看修練頁"
-    html = run({"guide": g}, "return H.guideHtml(m.guide, false);", stored={"tx-guide-shut": g["text"]})
+    html = run({"guide": g}, "return H.guideHtml(m.guide, false);", stored={"tx-guide-shut": g["key"]})
     assert "師父</b>：師父：看修練頁" in html  # 收起來那一行用 line
-    longer = run({"guide": {**g, "line": ""}}, "return H.guideHtml(m.guide, false);", stored={"tx-guide-shut": g["text"]})
+    longer = run({"guide": {**g, "line": ""}}, "return H.guideHtml(m.guide, false);", stored={"tx-guide-shut": g["key"]})
     assert f"師父</b>：{g['text']}" in longer  # 沒寫 line 就是原本的話
     assert "guide-scene" not in run({"guide": {**g, "scene": ""}}, "return H.guideHtml(m.guide, false);")
 

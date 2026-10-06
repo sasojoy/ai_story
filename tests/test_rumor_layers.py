@@ -321,6 +321,67 @@ def test_the_news_page_splits_rumors_into_four_layers(on):
     assert "第 1 週・週一 00:00　鉅鹿出了大事。" in layers["world"]["body"]  # 時間照季曆寫，跟以前那一條清單一樣
 
 
+def test_identical_local_rumors_are_listed_once_with_a_count(on):
+    """見聞→傳聞「所在大區」那一段同一句傳聞出現很多次（QA 看過同一句「某位少俠…」六次）：一模一樣的字只列一次、留在最新那一則的位置
+    （跟「你不在的時候」的規則 (b) 同一條），超過一則時句尾接「（×N）」。"""
+    game = _game(on, "甲", at="yingchuan")
+    same = "某位少俠在長社一帶大破流寇。"
+    for t in (1.0, 2.0, 3.0, 4.0, 5.0, 6.0):
+        _rumor(game, same, "changshe", time=t)
+    _rumor(game, "長社一帶有人鬧事。", "changshe", time=7.0)
+    local = _layers(game)["local"]["body"]
+    at = game._day_stamp
+    assert local.split("\n\n") == [f"{at(7.0)}　長社一帶有人鬧事。", f"{at(6.0)}　{same}{rumor_view.LOCAL_REPEAT.format(n=6)}"]
+    assert local.endswith("（×6）") and local.count(same) == 1
+    assert len([r for r in game.state.world.rumors if r.text == same]) == 6  # 傳聞本身一則都沒少：只是這張卡片合成一行
+    source = (Path(rumor_view.__file__)).read_text(encoding="utf-8")
+    assert "待 joy 潤" in next(row for row in source.splitlines() if row.startswith("LOCAL_REPEAT = "))  # 新的字：標待 joy 潤
+
+
+def test_a_collapsed_local_rumor_sits_where_its_newest_copy_is_and_a_single_one_has_no_count(on):
+    game = _game(on, "甲", at="yingchuan")
+    for text, t in (("甲事。", 1.0), ("乙事。", 2.0), ("甲事。", 3.0), ("丙事。", 4.0), ("甲事。", 5.0), ("丁事。", 6.0)):
+        _rumor(game, text, "changshe", time=t)
+    at = game._day_stamp
+    assert _layers(game)["local"]["body"].split("\n\n") == [  # 新的在前；甲事留在最新那一則（第 5 秒）的位置
+        f"{at(6.0)}　丁事。", f"{at(5.0)}　甲事。（×3）", f"{at(4.0)}　丙事。", f"{at(2.0)}　乙事。",
+    ]
+
+
+def test_only_the_local_card_collapses_and_what_is_audible_does_not_change(on):
+    game = _game(on, "甲", "guan", at="yingchuan")
+    for t in (1.0, 2.0):
+        _rumor(game, "天下一樣的事。", layer="world", time=t)
+        _rumor(game, "本週軍令：一樣的話。", layer="faction", faction="guan", time=t)
+        _rumor(game, "宛城一樣的事。", "wan_city", time=t)  # 別的大區：聽不到，照舊不在這張卡片上
+        _rumor(game, "長社一樣的事。", "changshe", time=t)
+    game.state.world.rumors.append(Rumor(time=3.0, text="只說給甲聽的。", layer="personal", character="甲"))
+    game.state.world.rumors.append(Rumor(time=4.0, text="只說給甲聽的。", layer="personal", character="甲"))
+    before = [(r.time, r.text, r.layer) for r in game.state.world.rumors]
+    layers = _layers(game)
+    assert [r.text for r in game.state.world.rumors if _hears(game, r)].count("長社一樣的事。") == 2  # 聽得到的規則沒動
+    assert layers["local"]["body"].count("長社一樣的事。") == 1 and "（×2）" in layers["local"]["body"]
+    assert "宛城" not in layers["local"]["body"]
+    for other in ("world", "faction", "personal"):  # 其他三層照舊一則一行，不合併
+        assert "×" not in layers[other]["body"], other
+    assert layers["world"]["body"].count("天下一樣的事。") == 2 and layers["faction"]["body"].count("一樣的話") == 2
+    assert layers["personal"]["body"].count("只說給甲聽的。") == 2
+    assert [(r.time, r.text, r.layer) for r in game.state.world.rumors] == before  # 世界裡的傳聞一則都沒動
+
+
+def test_the_local_card_collapses_before_it_keeps_only_the_newest_thirty_lines(on):
+    """合併在前、截最近 LAYER_LIMIT 行在後：重複的句子不會把別的傳聞擠出這張卡片。"""
+    game = _game(on, "甲", at="yingchuan")
+    for i in range(1, 41):
+        _rumor(game, f"傳聞{i}。", "changshe", time=float(i))
+        if i % 2:
+            _rumor(game, "老是這一句。", "changshe", time=i + 0.5)
+    lines = _layers(game)["local"]["body"].split("\n\n")
+    assert len(lines) == rumor_view.LAYER_LIMIT
+    assert lines[0].endswith("傳聞40。") and lines[1].endswith("老是這一句。（×20）") and lines[2].endswith("傳聞39。")
+    assert lines[-1].endswith("傳聞12。")  # 29 則不重複的加上那一行重複的，一共 30 行
+
+
 def test_each_layer_says_so_when_it_is_empty(on):
     layers = _layers(_game(on, "甲", "guan"))
     assert layers["world"]["body"] == rumor_view.WORLD_EMPTY

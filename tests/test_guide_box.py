@@ -4,6 +4,12 @@
 這個小改版不看開關。"""
 from __future__ import annotations
 
+import json
+import shutil
+import subprocess
+from pathlib import Path
+
+import pytest
 from conftest import walk_to
 from tianxia import journal
 from tianxia.models import ExploreMix
@@ -11,8 +17,14 @@ from tianxia.models import ExploreMix
 STEP_ONE, STEP_TWO, STEP_THREE, OUTRO = "先探索一下。", "去湖邊。", "看看地圖。", "去闖吧。"
 
 
-def _box(text, done=(), end=False):
-    return {"speaker": "說書人", "scene": "", "text": text, "line": "", "done": list(done), "end": end}
+STEP_KEYS = {STEP_ONE: "s1", STEP_TWO: "s2", STEP_THREE: "s3", OUTRO: "outro"}  # 框上的 key：步驟的 id（結語是 outro），不看那一句話
+
+
+def _box(text, done=(), end=False, key=None, pending=False):
+    return {
+        "speaker": "說書人", "key": key or STEP_KEYS[text], "scene": "", "text": text, "line": "", "done": list(done), "end": end,
+        "pending": pending,
+    }  # pending：這一句是「先把眼前的「…」了結」（網頁預設把它收成一行，FB-076）
 
 
 def pending_line(title):
@@ -45,7 +57,7 @@ def test_finishing_a_step_goes_to_the_box_not_the_latest_card(game):
     assert entry.guide == ["✔ 引導完成", "銀兩 +5", f"【說書人】{STEP_TWO}"]
     assert "引導完成" not in journal.card_html(entry) and "銀兩 +5" not in journal.card_html(entry)
     title = game.content.events[game.state.pending_event].title
-    assert game.guide_box() == _box(pending_line(title), ["✔ 引導完成", "銀兩 +5"])  # 眼前還有事件：先了結它（FB-063）
+    assert game.guide_box() == _box(pending_line(title), ["✔ 引導完成", "銀兩 +5"], key="s2", pending=True)  # 眼前還有事件：先了結它（FB-063）；key 還是這一步的
     game.choose("choice:1")
     assert game.guide_box() == _box(STEP_TWO)
 
@@ -57,10 +69,48 @@ def test_a_pending_event_replaces_the_step_text_until_it_is_settled(game):
     for step, text in enumerate((STEP_ONE, STEP_TWO, STEP_THREE)):
         p.tutorial_step = step
         game.state.pending_event = "drunk"
-        assert game.guide_box() == _box(pending_line("醉漢"))  # 說書人還是說書人
+        assert game.guide_box() == _box(pending_line("醉漢"), key=f"s{step + 1}", pending=True)  # 說書人還是說書人，key 還是這一步的
         assert p.tutorial_step == step
         game.state.pending_event = None
         assert game.guide_box() == _box(text)
+
+
+def test_the_box_key_is_the_step_not_the_sentence(game):
+    """FB-076：網頁記「收起」記的是 key，不是那一句話：「先把眼前的「…」了結」每遇到新事件就換一句，記句子的話每個新事件都把收起的框
+    又展開（選項底到 903、分頁列頂 755）。key 是這一步的 id（結語是 outro）：同一步不管有沒有事件、事件叫什麼，都是同一個 key；
+    換到下一步才換。"""
+    p = game.state.player
+    for step, key in enumerate(("s1", "s2", "s3")):
+        p.tutorial_step = step
+        plain = game.guide_box()
+        keys = {plain["key"]}
+        assert plain["pending"] is False
+        for event in ("drunk", "chain_a"):
+            game.state.pending_event = event
+            pending = game.guide_box()
+            assert pending["text"] != plain["text"]  # 句子換了
+            assert pending["pending"] is True  # 網頁認這個旗標，不去讀句子的字
+            keys.add(pending["key"])
+        game.state.pending_event = None
+        assert keys == {key}  # key 不跟著換
+    p.tutorial_step, p.guide_outro = 3, True
+    assert game.guide_box()["key"] == "outro"
+    game.state.pending_event = "drunk"
+    assert game.guide_box()["pending"] is False  # 結語照舊：事件擋不了它
+
+
+def test_a_pending_event_blanks_the_steps_short_line_so_the_collapsed_box_shows_the_pending_sentence(game, monkeypatch):
+    """FB-076：序章之外的步驟也可能寫了收起來那一行（TutorialStep.line，例：「師父：回『江湖』按『探索』」）。事件待處理時框上的話換成
+    「先把眼前的「…」了結」，收起來那一行也得跟著換——不然收著的框寫著這一步的短提示、跟事件擋著路互相矛盾。所以待處理時 line 送空字串
+    （網頁收起來那一行是 `line || text`），了結之後原樣回來。序章自己在事件出現時整個框都不畫（tests/test_prologue.py），不歸這裡。"""
+    monkeypatch.setattr(game.content.tutorial.steps[1], "line", "說書人：去湖邊")
+    game.state.player.tutorial_step = 1
+    assert game.guide_box()["line"] == "說書人：去湖邊" and game.guide_box()["text"] == STEP_TWO
+    game.state.pending_event = "drunk"
+    box = game.guide_box()
+    assert box["pending"] is True and box["text"] == pending_line("醉漢") and box["line"] == ""
+    game.state.pending_event = None
+    assert game.guide_box() == _box(STEP_TWO) | {"line": "說書人：去湖邊"}
 
 
 def test_a_chained_event_names_the_step_that_is_pending_now_in_the_box(game):
@@ -140,6 +190,157 @@ def test_skipping_stays_skipped_into_the_next_season():
         assert game.state.player.tutorial_step == base
     assert games["略過的"].guide_box() is None
     assert games["做完的"].guide_box()["text"] == on.tutorial.steps[base].text
+
+
+# ── 網頁：收起記的是 key（FB-076）。把 web/app.js 裡說書人那一段切出來在 node 裡跑；沒有 node 就略過 ─────────────
+
+NODE = shutil.which("node")
+APP = Path(__file__).parent.parent / "web" / "app.js"
+DRIVER = r"""
+const fs = require("fs");
+const input = JSON.parse(fs.readFileSync(0, "utf8"));
+const src = fs.readFileSync(input.app, "utf8").replace(/\r\n/g, "\n");
+const a = src.indexOf("\n  const GUIDE_KEY");
+const b = src.indexOf("\n  }\n", src.indexOf("\n  function guideHtml(")) + 4;
+if (a < 0 || b < 4) throw new Error("app.js 裡找不到說書人的那一段");
+const store = {};
+globalThis.localStorage = input.broken
+  ? { getItem() { throw new Error("blocked"); }, setItem() { throw new Error("blocked"); }, removeItem() { throw new Error("blocked"); } }
+  : { getItem: (k) => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); }, removeItem: (k) => { delete store[k]; } };
+const S = { guideRoad: null, guideFull: null };
+const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+// guideKey 是網頁拿來認「這一步」的函式；沒有它（舊版）就退回認句子，好讓舊版在這裡是斷言失敗、不是找不到函式
+// openGuide、shutGuide 是「展開」「收起」兩顆鈕做的事（點擊的 switch 只是呼叫它們）；沒有它們（舊版）就是 null
+const H = new Function("S", "esc", src.slice(a, b) + "\nreturn { guideHtml, guideShut, setGuideShut, guideKey: typeof guideKey === 'function' ? guideKey : (g) => g.text, openGuide: typeof openGuide === 'function' ? openGuide : null, shutGuide: typeof shutGuide === 'function' ? shutGuide : null };")(S, esc);
+const box = (key, text, end = false, pending = false, done = []) => ({ speaker: "說書人", key, text, done, end, pending });
+const shown = (g, onRoad = false) => { const html = H.guideHtml(g, onRoad); return html.includes('class="guide-line"') ? "line" : html.includes("card guide") ? "card" : html ? "?" : ""; };
+const out = new Function("H", "S", "box", "shown", input.script)(H, S, box, shown);
+process.stdout.write(JSON.stringify(out === undefined ? null : out));
+"""
+
+
+def run_js(script, broken=False):
+    if NODE is None:
+        pytest.skip("沒有 node")
+    done = subprocess.run(
+        [NODE, "-e", DRIVER], input=json.dumps({"app": str(APP), "script": script, "broken": broken}),
+        capture_output=True, text=True, encoding="utf-8", timeout=60,
+    )
+    assert done.returncode == 0, done.stderr
+    return json.loads(done.stdout)
+
+
+def test_a_collapsed_box_stays_collapsed_when_a_pending_event_changes_the_sentence():
+    """FB-076：玩家把框收起之後，同一步的話換成「先把眼前的「…」了結」（每個新事件換一句）不能把它又展開；換到下一步才展開。
+    收起的那一下記的是 key（網頁的 guideKey），不是那一句話。"""
+    got = run_js("""
+      const step = box("s2", "去湖邊。");
+      const before = shown(step);                                   // 還沒收起：展開著
+      H.setGuideShut(H.guideKey(step));                             // 玩家按「收起」
+      return {
+        before,
+        same: shown(step),
+        pending: shown(box("s2", "先把眼前的「掉落的書信」了結", false, true)),   // 打完一仗，接著冒出事件
+        another: shown(box("s2", "先把眼前的「倒地的對手」了結", false, true)),   // 下一個事件、又換一句
+        back: shown(step),                                           // 事件了結，回到原來那一步
+        nextStep: shown(box("s3", "看看地圖。")),                    // 真的換到下一步：照舊展開
+        outro: shown(box("outro", "去闖吧。", true)),                // 結語沒有收起這回事
+      };
+    """)
+    assert got == {"before": "card", "same": "line", "pending": "line", "another": "line", "back": "line", "nextStep": "card", "outro": "card"}
+
+
+def test_the_pending_event_sentence_starts_collapsed_even_if_the_player_never_collapsed_the_box():
+    """FB-076（控制者裁示）：「先把眼前的「…」了結」只是重複底下事件卡片已經寫的話，展開時事件的選項被擠到 903 px——這一句預設收成一行，
+    不管玩家有沒有按過「收起」。只有這一句：真的新的一步照舊展開；玩家還是可以點開。"""
+    got = run_js("""
+      const pending = box("s2", "先把眼前的「掉落的書信」了結", false, true);
+      return {
+        plain: shown(box("s2", "去湖邊。")),          // 一般的一步：沒收起過就是展開的
+        pending: shown(pending),                     // 事件的句子：預設收成一行
+        nextPending: shown(box("s2", "先把眼前的「倒地的對手」了結", false, true)),  // 下一個事件、又換一句：照樣收著
+        newStep: shown(box("s3", "看看地圖。")),      // 了結之後又是新的一步：展開
+        outro: shown(box("outro", "去闖吧。", true)), // 結語：展開
+        remembered: H.guideShut(),                   // 預設收起不動玩家記的東西
+      };
+    """)
+    assert got == {"plain": "card", "pending": "line", "nextPending": "line", "newStep": "card", "outro": "card", "remembered": None}
+
+
+def test_a_pending_sentence_with_something_to_acknowledge_opens_as_before():
+    """審查 I1：新角色的第一次探索常常做完 t1_explore 又留下一個事件（量到 200 個新角色裡 163 個）：框上有「✔ 引導完成」與獎勵
+    （done）。收成一行的話那一列就看不到了（「剛剛」卡片依設計不放引導），所以 done 不是空的時候這一句照舊展開；
+    done 是空的（FB-076 量的那一場：遊歷打完接事件）才預設收著。玩家按過「收起」的照舊收著。"""
+    got = run_js("""
+      const done = ["✔ 引導完成", "銀兩 +10"];
+      const withDone = box("s2", "先把眼前的「酒樓鬥毆」了結", false, true, done);
+      const html = H.guideHtml(withDone, false);
+      const out = {
+        open: shown(withDone),
+        showsDone: html.includes("✔ 完成") && html.includes("銀兩 +10"),
+        emptyDone: shown(box("s2", "先把眼前的「酒樓鬥毆」了結", false, true, [])),
+      };
+      H.shutGuide(withDone);                       // 玩家自己收起：照舊收著，不管有沒有 done
+      out.afterShut = shown(withDone);
+      return out;
+    """)
+    assert got == {"open": "card", "showsDone": True, "emptyDone": "line", "afterShut": "line"}
+
+
+def test_the_collapsed_line_is_the_steps_short_line_unless_an_event_is_pending():
+    """收起來那一行是 `line || text`：一般的一步用它自己的短提示；事件待處理時伺服器把 line 送空，那一行就是「先把眼前的…了結」。"""
+    got = run_js("""
+      const step = { ...box("s2", "去湖邊。"), line: "說書人：去湖邊" };
+      H.setGuideShut("s2");
+      const pending = { ...box("s2", "先把眼前的「掉落的書信」了結", false, true), line: "" };
+      return { step: H.guideHtml(step, false).includes("說書人</b>：說書人：去湖邊"), pending: H.guideHtml(pending, false).includes("說書人</b>：先把眼前的「掉落的書信」了結") };
+    """)
+    assert got == {"step": True, "pending": True}
+
+
+def test_a_player_can_expand_the_pending_sentence_and_it_stays_open_for_that_sentence_only():
+    got = run_js("""
+      const first = box("s2", "先把眼前的「掉落的書信」了結", false, true);
+      const second = box("s2", "先把眼前的「倒地的對手」了結", false, true);
+      const before = shown(first);                  // 收著
+      H.openGuide(first);                           // 玩家點開
+      const opened = shown(first), redrawn = shown(first);  // 輪詢重畫不會又收起來
+      const nextEvent = shown(second);              // 換了一個事件（新的一句）：又是預設收著
+      H.openGuide(second);
+      const settled = shown(box("s2", "去湖邊。")); // 事件了結、回到原來那一步：一般的一步，展開著
+      const afterLeaving = shown(second);           // 離開之後記的展開清掉了：同一句再冒出來又收著
+      H.shutGuide(second);                          // 玩家收起（記的是這一步的 key）
+      return { before, opened, redrawn, nextEvent, settled, afterLeaving, step: shown(box("s2", "去湖邊。")), shut: H.guideShut() };
+    """)
+    assert got == {
+        "before": "line", "opened": "card", "redrawn": "card", "nextEvent": "line", "settled": "card", "afterLeaving": "line",
+        "step": "line", "shut": "s2",
+    }
+
+
+def test_expanding_a_pending_sentence_clears_the_remembered_collapse_like_any_other_step():
+    got = run_js("""
+      const pending = box("s2", "先把眼前的「掉落的書信」了結", false, true);
+      H.setGuideShut("s2");                         // 玩家先前收起過這一步
+      const shut = shown(pending);                  // 照舊收著
+      H.openGuide(pending);                         // 玩家點開：展開、同時清掉「收起」的記憶（跟一般的一步一樣）
+      return { shut, opened: shown(pending), plainAfter: shown(box("s2", "去湖邊。")), remembered: H.guideShut() };
+    """)
+    assert got == {"shut": "line", "opened": "card", "plainAfter": "card", "remembered": None}
+
+
+def test_the_road_still_collapses_the_box_by_default_and_a_blocked_storage_does_not_break_it():
+    got = run_js("""return { road: shown(box("s2", "去湖邊。"), true), open: shown(box("s2", "去湖邊。")) };""", broken=True)
+    assert got == {"road": "line", "open": "card"}  # localStorage 讀不到：只在這一頁有效，不丟例外
+
+
+def test_the_page_stores_the_key_when_the_player_shuts_the_box():
+    js = APP.read_text(encoding="utf-8")
+    shut = next(line for line in js.splitlines() if 'case "guide-shut":' in line)
+    assert "shutGuide(S.main.guide)" in shut
+    assert "setGuideShut(guideKey(g))" in js[js.index("function shutGuide("):js.index("function guideHtml(")]
+    assert "guideShut() === guideKey(g)" in js[js.index("function guideHtml("):]
+    assert "openGuide(S.main.guide)" in next(line for line in js.splitlines() if 'case "guide-open":' in line)
 
 
 def test_box_hidden_while_preparing(prologue_content, world, monkeypatch):
