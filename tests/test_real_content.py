@@ -349,6 +349,31 @@ def test_the_real_enlistment_has_three_recruiters_and_the_drifter_line_names_eve
     for faction in content.scenario.factions:
         for place in faction.join_at:
             assert content.locations[place].name in e.drifter_line
+    # 每位引薦人、每個欄位各釘一句設計 10.4／10.6 的原文（逐字）：有人潤字、改壞一句，這裡會看到
+    spec = {
+        "guan": {
+            "intro": "我姓石，管這一屯。官軍沒什麼大道理：黃巾燒村子，我們就去把火滅了。",
+            "briefing": "看這三條線：潁川汝南、南陽、冀州。越往黃巾那頭偏，就越糟。",
+            "done": "「做得乾淨。」老石點點頭，「記著：攻城，就到那條戰線遊歷，打贏對面的兵；",
+            "rejoin": "「又是你。……行，回來就好，營裡的規矩你都懂。」",
+        },
+        "huang": {
+            "intro": "我叫青禾，鄉親都喊我青禾姊。去年大旱，我們村餓死了十七口人，官府照樣來收稅。",
+            "briefing": "史書上記著的下一件大事，倒數完了就揭曉，咱們多出一分力，它就多往黃天這邊倒一分。",
+            "done": "「辛苦了！」青禾塞給你半塊餅，",
+            "rejoin": "「你回來了！黃天沒忘記你，我也沒有。」",
+        },
+        "haoqiang": {
+            "intro": "在下季伯平，替幾家塢堡奔走的管事。朝廷靠不住，黃巾更靠不住，能護住鄉親的，只有自己的牆、自己的人。",
+            "briefing": "生意人看帳，打仗看這三條線。官軍跟黃巾打得越兇，咱們越要看準時機。",
+            "done": "「好買賣。」季伯平在帳本上記了一筆，",
+            "rejoin": "「老主顧了！帳我都記著，咱們接著做買賣。」",
+        },
+    }
+    for faction_id, fields in spec.items():
+        for field, sentence in fields.items():
+            assert sentence in getattr(e.recruiters[faction_id], field), (faction_id, field)
+    assert e.drifter_line == "想投靠的話——官軍：長社、宛城、盧植營；黃巾：黃巾別部營寨、南陽黃巾營、鉅鹿道壇；豪強：鄉里結社、曹氏莊院、豪族塢堡。"
     assert not any(step.season_one for step in content.tutorial.steps)
     assert content.tutorial.steps[-1].id == "p11_farewell"  # 師父的話之後沒有別的引導步驟：投靠由「主線」那一行與引薦人帶
 

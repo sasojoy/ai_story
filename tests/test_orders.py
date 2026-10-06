@@ -835,8 +835,11 @@ def test_a_cart_whose_order_is_gone_is_still_shown_and_delivered(on):
     assert _game(on, "乙", faction="guan").convoy_line() is None
 
 
-def test_switch_off_joining_does_not_touch_the_tutorial(real):
-    """T6 審查 M4：投靠那一刻推引導是第一季才有的（t7_orders 只看陣營）；beta 照舊等下一個行動才檢查。"""
+@pytest.mark.parametrize("season_one", [False, True])
+def test_joining_does_not_move_the_tutorial_in_either_season(real, season_one):
+    """T6 審查 M4 的後續：以前投靠那一刻推引導是第一季才有的（t7_orders 只看陣營）。現在沒有任何引導步驟看陣營了（第一季的軍令兩步由
+    入伍段取代，新手引導計畫二），不管開關開著或關著，投靠都不動引導的步數（第一季另外開始入伍段，tests/test_enlist.py）。"""
+    real.config.season_one = season_one
     game = _game(real, at="changshe")
     steps = [s.id for s in real.tutorial.steps]
     game.state.player.tutorial_step = steps.index("p9_stat")

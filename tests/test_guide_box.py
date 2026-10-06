@@ -192,8 +192,15 @@ def test_skipping_stays_skipped_into_the_next_season():
         assert game.state.player.tutorial_step == base
     assert games["略過的"].guide_box() is None
     assert games["做完的"].guide_box() is None  # 沒有第一季才有的步驟了
+    assert games["略過的"].state.player.guide_skipped and not games["做完的"].state.player.guide_skipped  # 略過照帶
     assert games["略過的"].state.player.enlist_step == len(on.tutorial.enlist.steps)  # 略過的人入伍段算走完，換季照帶
     assert games["做完的"].state.player.enlist_step is None  # 還沒投靠：投靠時才開始
+    for game in games.values():  # 兩個人到長社投靠：略過的沒有框、沒略過的由引薦人帶（框只在投靠之後才分得出兩個人）
+        game.state.player.location = "changshe"
+        game.choose("faction:guan")
+        game.choose("faction:confirm")
+    assert games["略過的"].guide_box() is None
+    assert games["做完的"].guide_box()["speaker"] == "老石"
 
 
 # ── 網頁：收起記的是 key（FB-076）。把 web/app.js 裡說書人那一段切出來在 node 裡跑；沒有 node 就略過 ─────────────
