@@ -581,3 +581,15 @@ def test_fbx_the_step_two_sentence_only_names_what_can_be_pressed_now(on):
     assert not _menu(game)["act:duty"].enabled
     quiet = game.guide_box()["text"]
     assert DUTY["guan"] not in quiet and on.tutorial.enlist.how_none in quiet
+
+
+def test_fbx_the_ending_does_not_claim_a_last_action_was_counted(on):
+    """老石的結語寫過「你剛剛那一下，也算在裡頭」，可是守勢行動沒有軍令可記、或一週到了什麼都沒做就收段時，沒有什麼被記進去
+    （審查 Minor 2）。三位的結語都不說這種事。"""
+    for faction, who in on.tutorial.enlist.recruiters.items():
+        assert "剛剛" not in who.done and "也算在裡頭" not in who.done, faction
+        assert "陣營" in who.done, faction  # 卡片上「陣營 幾／幾」是什麼意思還講
+    game = _enlisted(on, "guan")
+    game.choose("act:duty")  # 這一週沒有守城軍令：巡哨替誰都沒記
+    box = _finished(game, on)
+    assert "也算在裡頭" not in box["text"]

@@ -122,7 +122,7 @@ def test_the_recruiters_box_is_never_clamped_and_the_first_step_is_paged_by_para
     assert "一個跛腳的老兵" in got["first"] and "下一段 ▸" in got["first"] and "上頭每週發幾道軍令" not in got["first"]
     assert "上頭每週發幾道軍令，在『江湖』頁行動列底下，自己挑一道。" in got["second"] and "下一段" not in got["second"]
     assert "一個跛腳的老兵" not in got["second"]  # 一次一段
-    assert "挑一道軍令，出一次力" in got["r3"] and "知道了" in got["end"] and "你剛剛那一下，也算在裡頭。" in got["end"]
+    assert "挑一道軍令，出一次力" in got["r3"] and "知道了" in got["end"] and "戰局就往咱們這邊偏一截。" in got["end"]  # 結語最後一句（不被切掉）
     assert "guide-text clamp" in got["narrator"]  # FB-076：不是入伍段的框不動
     assert got["pendingShut"] is True
 
@@ -138,7 +138,7 @@ def test_the_ending_box_is_one_unpaged_card_with_its_acknowledge_button_in_the_h
       return { html, ack: html.indexOf("guide-ack"), text: html.indexOf("guide-text"), next: html.includes("guide-next"), clamp: html.includes("clamp") };
     """, boxes)
     assert 0 < got["ack"] < got["text"] and not got["next"] and not got["clamp"]
-    assert "你剛剛那一下，也算在裡頭。" in got["html"]
+    assert "戰局就往咱們這邊偏一截。" in got["html"]  # 結語最後一句（不被切掉）
 
 
 def run_js(script, no_observer=False):
