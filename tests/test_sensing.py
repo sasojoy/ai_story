@@ -41,12 +41,35 @@ def test_each_sample_stroke_reads_as_its_attribute(attribute):
     assert glyph.read(glyph.SAMPLES[attribute]).attribute == attribute
 
 
-def test_a_slow_circle_reads_as_soft_and_says_so():
+def test_a_slow_circle_reads_as_soft_and_says_so_in_imagery():
     import math
     circle = [[50 + 40 * math.cos(i / 20 * math.tau), 50 + 40 * math.sin(i / 20 * math.tau), i * 100] for i in range(21)]
     read = glyph.read(circle)
-    assert read.attribute == "柔" and read.closed and "圓轉不斷" in read.note() and "頭尾相接" in read.note()
+    assert read.attribute == "柔" and read.closed
+    assert read.imagery()[0] == "流水般的綿柔" and "圓融自足，自成一方天地" in read.imagery()
     assert all(0 <= x <= 100 and 0 <= y <= 100 for x, y in read.points) and len(read.points) == glyph.THUMB
+
+
+GEOMETRY = ("折", "圓轉", "直線", "線條", "一筆", "畫得", "頭尾", "往上", "往下")
+
+
+@pytest.mark.parametrize("attribute", sorted(glyph.SAMPLES))
+def test_the_imagery_never_names_the_stroke_itself(attribute):
+    """企劃者 2026-10-06：玩家面前不寫筆畫的幾何（折角、快慢……）；規則讀到的是意象與質感（「熊熊烈火般的剛烈」「氣象開闊」）。"""
+    read = glyph.read(glyph.SAMPLES[attribute])
+    assert read.imagery()[0] == glyph.ATTRIBUTE_IMAGERY[attribute] and 2 <= len(read.imagery()) <= 4
+    assert not any(word in read.mood() for word in GEOMETRY), read.mood()
+
+
+def test_more_features_give_different_imagery():
+    """大小、蜿蜒、橫直、起筆收筆的緩急都讀得出來，同樣是剛也寫得不一樣。"""
+    big = glyph.read([[0, 250, 0], [125, 0, 200], [250, 250, 400]])  # 畫滿整張畫布的大折
+    small = glyph.read([[100, 110, 0], [110, 100, 200], [120, 110, 400], [130, 100, 600], [140, 110, 800]])
+    assert big.size >= glyph.BIG and "氣象開闊" in big.imagery()
+    assert small.size <= glyph.SMALL and "凝而不散" in small.imagery()
+    fast_then_slow = glyph.read([[0, 50, 0], [60, 50, 10], [120, 50, 20], [140, 50, 400], [160, 50, 800], [180, 50, 1200]])
+    assert fast_then_slow.surge == "急收緩" and "來勢洶洶而餘韻悠長" in fast_then_slow.imagery()
+    assert glyph.read([[0, 50, 0], [200, 52, 900]]).lie == "橫"
 
 
 @pytest.mark.parametrize("points", [[], [[1, 1, 0]], [[1, 1, 0], [1.5, 1.5, 10]], "x", [[1, "a", 0], [5, 5, 5]], [[1, 2]]])
@@ -72,13 +95,21 @@ class FakeClient:
         return schema(name=reply[0], description=reply[1])
 
 
-FACTS = {"place": "湖邊", "scene": "湖風", "text": "風吹過湖面。", "method": "看水", "note": "一筆畫成，圓轉不斷", "attribute": "陰"}
+FACTS = {"place": "湖邊", "scene": "湖風", "text": "風吹過湖面。", "method": "看水", "mood": "流水般的綿柔、圓融自足", "attribute": "陰"}
 
 
 def test_the_model_looks_at_the_picture_first(content):
-    client = FakeClient([("湖心月", "一圈一圈的圓轉。")])
-    assert insight_llm.name(client, content, FACTS, image="AAAA", budget=30) == ("湖心月", "一圈一圈的圓轉。", "看圖")
-    assert client.seen[0][1]["images"] == ["AAAA"] and "線條形狀" in client.seen[0][1]["content"]
+    client = FakeClient([("湖心月", "月影沉在水心，清冷而圓滿。")])
+    assert insight_llm.name(client, content, FACTS, image="AAAA", budget=30) == ("湖心月", "月影沉在水心，清冷而圓滿。", "看圖")
+    prompt = client.seen[0][1]["content"]
+    assert client.seen[0][1]["images"] == ["AAAA"] and "意象與質感" in prompt and "流水般的綿柔" in prompt
+    assert "不要描寫筆畫本身" in prompt
+
+
+def test_a_description_that_describes_the_stroke_is_dropped(content):
+    """模型還是寫了筆畫的幾何（「折了兩個硬角」）：名字照收，說明不用（sensing.finish 改用規則讀到的意象）。"""
+    client = FakeClient([("湖心月", "一筆畫成，折了兩個硬角，畫得很快。")])
+    assert insight_llm.name(client, content, FACTS, image="AAAA", budget=30) == ("湖心月", "", "看圖")
 
 
 def test_when_the_picture_fails_it_asks_with_words_only(content):
@@ -168,6 +199,15 @@ def test_a_fallback_name_is_not_recorded_as_first(lake):
     req, msgs = _own(lake, (None, ""))
     assert lake.state.player.own_insights["悟:1"].name and not any("第一個" in m for m in msgs)
     assert lake.world.insight_first(sensing.first_key(req)) is None
+    assert lake.state.player.own_insights["悟:1"].note == sensing.mood_note(req.mood) != ""
+
+
+def test_nothing_the_player_reads_names_the_stroke(lake):
+    req, msgs = _own(lake)  # 提的說明寫了「圓轉」：換成規則讀到的意象
+    note = lake.state.player.own_insights["悟:1"].note
+    assert note == sensing.mood_note(req.mood)
+    text = "".join(msgs[1:]) + note  # 第一行「你一筆畫下心中的形」是敘事，不寫那一筆長什麼樣
+    assert [w for w in insight_llm.GEOMETRY_WORDS if w in text] == [], text
 
 
 def test_a_request_goes_stale_when_the_player_leaves(lake):

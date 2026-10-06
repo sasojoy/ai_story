@@ -164,11 +164,11 @@ class SenseRequest(BaseModel):
     drawn: str  # 畫出來的屬性（順其自然＝做法的屬性）
     attribute: str  # 兩者結合出來的屬性
     base: str | None  # 剛好是這一處的基本意境就是它；None＝要悟一個自己的新意境（要取名）
-    note: str = ""  # 規則讀到的那一筆（一句話）
+    mood: str = ""  # 規則從那一筆讀到的意象（glyph.Glyph.mood；給模型當線索、模型叫不動時當說明，不寫筆畫的幾何）
     points: list[list[int]] = Field(default_factory=list)  # 畫的那一筆（縮到 0～100 的點位，存進意境畫縮圖）
     raw: list | None = None  # 原始點位：C 段重讀一次，確定跟 A 段讀到的一樣
     png: str = ""  # 畫布存的小 PNG（base64）；只轉交給模型看，不存
-    facts: dict[str, str] = Field(default_factory=dict)  # 給模型的地點、場景、做法、那一筆
+    facts: dict[str, str] = Field(default_factory=dict)  # 給模型的地點、場景、做法、那一筆的意象
 
     @property
     def needs_name(self) -> bool:
@@ -200,21 +200,21 @@ def request(
         return STALE
     s, scene, loc = got
     if points is None:
-        drawn, note, box = s.method or "", "", []
+        drawn, mood, box = s.method or "", "", []
     else:
         try:
             read = glyph.read(points)
         except glyph.GlyphError as e:
             return str(e)
-        drawn, note, box = read.attribute, read.note(), read.points
+        drawn, mood, box = read.attribute, read.mood(), read.points
     attribute, base = _outcome(state, content, world, s, scene, loc, drawn)
     method = next(m for m in scene.methods if m.attribute == s.method)
     facts = {
         "place": loc.name, "scene": scene.title, "text": scene.text.replace("{痕跡}", "").strip(),
-        "method": method.text, "note": note or "（沒有畫）", "attribute": attribute,
+        "method": method.text, "mood": mood or "（沒有畫）", "attribute": attribute,
     }
     return SenseRequest(
-        serial=s.serial, location=loc.id, method=s.method or "", drawn=drawn, attribute=attribute, base=base, note=note,
+        serial=s.serial, location=loc.id, method=s.method or "", drawn=drawn, attribute=attribute, base=base, mood=mood,
         points=box, raw=points, png=png if base is None else "", facts=facts,
     )
 
@@ -273,22 +273,29 @@ def finish(
         return [STALE], None, False
     p = state.player
     p.sensing = None
-    lead = [f"你一筆畫下心中的形——{req.note}。"] if req.note else ["你沒有去抓它，任那份感覺自己沉下來。"]
+    # 玩家面前不寫筆畫的幾何（企劃者 2026-10-06）：畫了只說畫了，那一筆給人的感覺留給意境的說明
+    lead = ["你一筆畫下心中的形。"] if req.raw is not None else ["你沒有去抓它，任那份感覺自己沉下來。"]
     if base is not None:
         return lead + insights.learn(state, content, world, base), None, False
     if proposed is None and client is not None:
         got_name, got_note, _ = insight_llm.name(client, content, req.facts, person=world.is_character_name)
         proposed = (got_name, got_note)
     name, note, by_model = own_name(state, content, world, f"{MARK}|{p.name}|{p.own_serial + 1}", proposed)
+    note = insight_llm.plain(note) or mood_note(req.mood)  # 模型沒寫、寫了筆畫的幾何、或走退路字表：說明用規則讀到的意象
     own = add_own(state, Insight(
         id="", name=name, attribute=attribute, lean="無", note=note, creator=p.name, creator_shown=p.name,
-        place=loc.name, glyph=req.points, glyph_note=req.note,
+        place=loc.name, glyph=req.points,
     ))
     msgs = lead + [f"你悟得了「{own.name}」的意境（屬{own.attribute}）！"]
     if own.note:
         msgs.append(own.note)
     msgs.append("這份領悟是你自己的，江湖上沒有第二份。")
     return msgs, own, by_model
+
+
+def mood_note(mood: str) -> str:
+    """模型給不出說明時的退路：規則讀到的意象寫成一句（「意境之中，山岳般的沉穩厚重、氣象開闊。」）；沒有意象是空字串。"""
+    return f"意境之中，{mood}。" if mood else ""
 
 
 def first_key(req: SenseRequest) -> str:
