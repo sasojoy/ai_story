@@ -345,6 +345,7 @@ class Game:
         self._reconcile_season()
         msgs = list(self.world.catch_up_season(self.content, now, self.rng))
         self.state.world = self.world.get_season()  # 剛才的追趕可能進一步推進了賽季，拉回最新的一份
+        self._stamp_join()  # 新角色、換季重來的角色：補算完賽季才記下加入的那一刻
         self._record_faction()
         if self.state.last_real is None:
             self.state.last_real = now
@@ -372,6 +373,7 @@ class Game:
         籌備中、休季時共用賽季不動，只推進玩家自己的部分。推進途中跨過開戰門檻的戰鬥，
         存回之後才開（見 world.start_pending_battle），再拉回最新的共用賽季。在路上時，同 sync 補算
         抵達時間已經到了的站（見 _arrivals）。"""
+        self._stamp_join()  # 同 sync：推進之前先記下加入的那一刻（沒同步過就直接快轉的測試與整季機器人）
         msgs: list[str] = []
         if self.world.season_phase() == "running":
             msgs += advance_world_state(self.state.world, self.content, seconds, self.rng, self.world)
@@ -386,6 +388,13 @@ class Game:
         self._deliver_big_events()
         return self._log(msgs + arrived)
 
+    def _stamp_join(self) -> None:
+        """記下這個角色加入這一季的那一刻（PlayerState.joined_at，新手福利從這裡起算，第一季設計第十四節）：
+        新角色與換季重來的角色是 None，第一次 sync（補算完賽季之後）或 advance 才蓋；蓋過就不再動。"""
+        p = self.state.player
+        if p.joined_at is None:
+            p.joined_at = self.state.world.time
+
     def _advance_player_local(self, seconds: float) -> list[str]:
         """玩家自己的部分：體力（打坐中加倍）／氣血回復、打坐回滿起身、閉關出關、新立門戶福緣——
         這些是「我」的進度，不是共用賽季的一部分，照自己經過的時間算，不受共用賽季時鐘怎麼走影響。"""
@@ -397,7 +406,7 @@ class Game:
         rate = seconds / (cfg.neili_regen_hours * HOUR)
         if p.busy_until is not None:
             rate *= 2
-        if w.time <= cfg.newbie_days * DAY:
+        if roster.newbie(self.state, self.content):  # 第一季從自己加入那天起算（roster.since_join），beta 照舊從季初
             rate *= 2
         team.regen_neili(self.content, p.member, rate, team.con_of(self.state, self.content, self.world, PLAYER))
         for cid in p.team:
