@@ -6,6 +6,7 @@ sanguo-companions 合併大幅重寫：拿掉 battle.py 的 3v3 全自動戰鬥�
 """
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import math
 import random
@@ -20,6 +21,7 @@ from . import (
     push, ranks, roster, rounds, skillview, team, timetable, traits,
 )
 from . import events as event_rules  # note_round 走模組屬性（測試要能換掉它，確認只有 _present 會叫）
+from . import rumor_view  # 傳聞分層的畫面：見聞頁的四層、你不在的時候（計畫 2026-10-06 傳聞分層一）
 from .events import (
     choice_label, event_candidates, has_events_here, pick_event, visible_choices,
 )
@@ -34,8 +36,8 @@ from .models import (
 )
 from .ollama_client import ModelBudget, OllamaClient, quick_client
 from .rules import (
-    GEJU, HUANGJIN, add_rumor, apply_effect, audience_bar, can_hear, can_meet, change_trend, check_result_line, current_day,
-    display_name, fill_marks, free_text_rate,
+    GEJU, HUANGJIN, add_rumor, apply_effect, audible, audience_bar, can_meet, change_trend, check_result_line, current_day,
+    ears_of, fill_marks, free_text_rate, here_regions,
     can_draw_side_change, chaos_fronts, chaos_note, front_chip, front_ids, front_of, front_text, humanize, in_chaos,
     is_revealed, pushable, rate_words, recompute_trends, resolve_goals, resolve_trend, resolve_trends, roll_check,
     season_one, season_one_off, stance_rule_note, stance_sum_note, stances, trend_name, trend_shown, trend_value,
@@ -45,7 +47,7 @@ from .sqlite_world import open_world
 from .state import PLAYER, BattleRecord, Convoy, GameState, JournalEntry, Journey, Rumor, WorldState, new_game_state
 from .world import (
     _season_vehicle, advance_world_state, check_thresholds, end_season, fire_by_id, open_showdown, open_waiting_showdown,
-    settle_season_start, showdown_battle, showdown_key, sim_tick, start_pending_battle,
+    resume_season_clock, settle_season_start, showdown_battle, showdown_key, sim_tick, start_pending_battle,
 )
 from .world_state import WorldStateStore, season_length_days
 
@@ -84,6 +86,17 @@ class TollFacts:
 LOW_HP_RATIO = 0.3  # 開打前氣血剩上限的三成以下（含）算「氣血見底」：厚的那一句「氣血見底，……硬撐」（battlelog.LOW_HP_MARKS）才挑得到
 FREE_TEXT_OPTION = "choice:free"  # 事件的「隨口應對」：按下去只是叫出輸入框，真正送出走 free_text_request／answer_event
 BIG_FIGHT_WAIT = "兩人對峙……"  # 大場面按下去、等模型判讀時按鈕上的字（武學與成長設計 8.3）
+# 賽季時鐘暫停（線上架構設計第四節、8.3）：選單上那一顆灰的，伺服器擋動作也回這一句（server._refuse_while_paused）。待 S1／joy 潤
+PAUSED_TEXT = "賽季暫停中（停機維護）：這段時間不能行動，畫面照常可看"
+PAUSE_LINE = (  # 待 S1／joy 潤
+    "賽季時鐘停了：季的時間不走、決戰不推，全服暫時不能行動，畫面照常可看；"
+    "排好的決戰繼續之後照原本的時間開。做完記得按「繼續」。"
+)
+RESUME_LINE = (  # 待 S1／joy 潤；{skip} 是實際扣了多少（world.resume_skip_text：停不到一個季曆鐘頭就說不另外扣）
+    "賽季時鐘接著走了（停了 {minutes} 分鐘）：{skip}；"
+    "排好的決戰照原本的時間開，時間在暫停裡過了的現在就開始集結。"
+)
+PAUSED_REFUSAL = "（賽季時鐘暫停中，先按「繼續」。）"  # 暫停中的管理者動作；待 S1／joy 潤
 # 等模型判讀的時候選項沒了（另一個分頁把人帶走、事件被了結、體力花光）：這一仗不打，回這一句話代替一句看不出所以然的「無法這麼做」
 FIGHT_LEFT = "你離開了，這一仗沒打成。"
 FIGHT_CHANGED = "情勢變了，這一仗沒打成。"
@@ -124,6 +137,7 @@ class Game:
             presence_penalty=cfg.ollama_presence_penalty, frequency_penalty=cfg.ollama_frequency_penalty,
         )  # companion_agent.py 用；連不上時那輪對話取消，這裡不用先健檢
         self._model_budget = ModelBudget()  # 鎖內的模型呼叫這一次拿鎖期間還有沒有額度（見 _quick_client）
+        self._preparing_memo: list[bool] | None = None  # 一次畫面建構裡記住的「籌備中嗎」；None＝不在範圍裡（見 phase_memo）
         self._draft: Draft | None = None  # choose() 進行中那次行動的江湖紀錄草稿
         # choose() 進行中那次行動、鎖外先判讀好的大場面（重驗過的，見 _checked_fight）；打那一場時用掉（_judged）
         self._fight: fight_llm.PreparedFight | None = None
@@ -342,9 +356,11 @@ class Game:
         （見 world_state.py::catch_up_season）。也會順便偵測共用賽季是不是已經被別人推到
         下一輪了（見 _reconcile_season）。在路上時，抵達時間已經到了的站接著一站一站抵達（見 _arrivals）。"""
         self.now = now
+        away_from = self.state.last_real  # 上次同步的現實時間，下面就換成 now（「你不在的時候」看它，見 _deliver_away）
         self._reconcile_season()
         msgs = list(self.world.catch_up_season(self.content, now, self.rng))
         self.state.world = self.world.get_season()  # 剛才的追趕可能進一步推進了賽季，拉回最新的一份
+        self._stamp_join()  # 新角色、換季重來的角色：補算完賽季才記下加入的那一刻
         self._record_faction()
         if self.state.last_real is None:
             self.state.last_real = now
@@ -364,7 +380,26 @@ class Game:
         summons = ranks.check_summons(self.state, self.content)  # 行動之外記到的貢獻（抵達、別人觸發的結算）：同步時補發召見（計畫 T5）
         if summons:
             self._write("召見", summons)
+        self._deliver_away(away_from)  # 最後寫：江湖頁的「剛剛」先放這一份摘要（要跟別的計畫合併時，這一行維持在 return 的前一句）
         return self._log(msgs + arrived + summons)
+
+    def _deliver_away(self, away_from: float | None) -> None:
+        """「你不在的時候」（傳聞分層設計第八節）：上次同步到這一次隔了 Config.away_hours 個「現實」小時以上（PM 2026-10-06：
+        這一項看現實時間；網頁開著時每 10 秒同步一次，所以這就是沒開著畫面的時間），江湖紀錄最前面放一則摘要——這段期間
+        聽得到的天下大事、陣營軍情的要點、所在大區的地方傳聞（rumor_view.away_lines，最多 away_max 則）。時刻表大事照舊由
+        _deliver_big_events 補成「江湖大事」那一則，摘要不寫第二次。什麼都沒有就不寫。
+        只在第一季的規則開著時；伺服器假人不寫（沒有人看，畫面上也不會出現）；剛建好的角色（還沒同步過）不寫。
+        不管寫不寫，都記下這一刻的賽季時間（GameState.last_world），下一次從這裡往後算。"""
+        s, c = self.state, self.content
+        since, s.last_world = s.last_world, s.world.time
+        if away_from is None or s.player.bot is not None or not season_one(c, s.world):
+            return
+        if self.now - away_from < c.config.away_hours * HOUR:
+            return
+        lines, total = rumor_view.away_lines(s, c, since, self.stamp)
+        if lines:
+            tag = rumor_view.AWAY_TAG.format(n=total)
+            journal.add_entry(s, JournalEntry(time=s.world.time, title=journal.AWAY, tag=tag, lines=lines))
 
     def advance(self, seconds: float) -> list[str]:
         """玩家主動「等待」固定一段遊戲時間（快轉按鈕）：進行中時，直接在 self.state.world
@@ -373,6 +408,9 @@ class Game:
         籌備中、休季時共用賽季不動，只推進玩家自己的部分。推進途中跨過開戰門檻的戰鬥，
         存回之後才開（見 world.start_pending_battle），再拉回最新的共用賽季。在路上時，同 sync 補算
         抵達時間已經到了的站（見 _arrivals）。"""
+        if self.world.paused_at() is not None:  # 管理者的快轉：時鐘停著時不推，先按「繼續」
+            return self._log(["（賽季時鐘暫停中，不能快轉；先按「繼續」。）"])  # 待 S1／joy 潤
+        self._stamp_join()  # 同 sync：推進之前先記下加入的那一刻（沒同步過就直接快轉的測試與整季機器人）
         msgs: list[str] = []
         if self.world.season_phase() == "running":
             msgs += advance_world_state(self.state.world, self.content, seconds, self.rng, self.world)
@@ -387,6 +425,13 @@ class Game:
         self._deliver_big_events()
         return self._log(msgs + arrived)
 
+    def _stamp_join(self) -> None:
+        """記下這個角色加入這一季的那一刻（PlayerState.joined_at，新手福利從這裡起算，第一季設計第十四節）：
+        新角色與換季重來的角色是 None，第一次 sync（補算完賽季之後）或 advance 才蓋；蓋過就不再動。"""
+        p = self.state.player
+        if p.joined_at is None:
+            p.joined_at = self.state.world.time
+
     def _advance_player_local(self, seconds: float) -> list[str]:
         """玩家自己的部分：體力（打坐中加倍）／氣血回復、打坐回滿起身、閉關出關、新立門戶福緣——
         這些是「我」的進度，不是共用賽季的一部分，照自己經過的時間算，不受共用賽季時鐘怎麼走影響。"""
@@ -398,7 +443,7 @@ class Game:
         rate = seconds / (cfg.neili_regen_hours * HOUR)
         if p.busy_until is not None:
             rate *= 2
-        if w.time <= cfg.newbie_days * DAY:
+        if roster.newbie(self.state, self.content):  # 第一季從自己加入那天起算（roster.since_join），beta 照舊從季初
             rate *= 2
         team.regen_neili(self.content, p.member, rate, team.con_of(self.state, self.content, self.world, PLAYER))
         for cid in p.team:
@@ -419,6 +464,8 @@ class Game:
         """tick 照 _battle_status 的規則往下傳：預設 True，這個呼叫順便把全服戰鬥追趕到現實時間；
         只想讀選單、不該推進戰鬥的呼叫端（dialogue_request）傳 False——一次請求只能推進一次。"""
         battle_status = self._battle_status(tick=tick)
+        if self.world.paused_at() is not None:  # 賽季時鐘暫停（線上架構 8.3「擋住所有動作」）：選單只剩一顆灰的
+            return [Option(id="season:paused", label=PAUSED_TEXT, enabled=False)]
         if battle_status is not None and not self._watching_battle(*battle_status):
             battle, definition = battle_status
             if battle.phase == "muster":
@@ -437,7 +484,7 @@ class Game:
         """平常的選單（沒有要親身參與、已經開打的決戰時；集結時接在加入的按鈕後面）：籌備或休季、事件、對話、
         投靠確認、求見名單、閉關、在路上、打坐，都不是就是在地點上能做的事。"""
         s, c = self.state, self.content
-        if self.world.season_phase() == "preparing":
+        if self._preparing():
             return [Option(id="season:preparing", label="賽季籌備中，等待管理者開季", enabled=False)]
         if s.world.ended:
             return [Option(id="season:resting", label="休季中，等待管理者開啟下一季", enabled=False)]
@@ -1345,9 +1392,10 @@ class Game:
         return msgs + opportunities.after_success(s, c, "rank2", loc.id, self.rng)
 
     def _order_credit(self, **kw) -> list[str]:
-        """替自己記一次軍令（orders.credit）；真的記到了就推新手引導的「完成一次軍令的個人部分」（計畫 T6 Task 8）。"""
+        """替自己記一次軍令（orders.credit）；真的記到了就推新手引導的「完成一次軍令的個人部分」（計畫 T6 Task 8）。
+        達成時陣營軍情列的前三名一律寫名號（傳聞分層第七節：陣營軍情一律具名），所以不給 shown。"""
         s, c = self.state, self.content
-        msgs = orders.credit(s, c, s.player.faction, s.player.name, shown=display_name(s), **kw)
+        msgs = orders.credit(s, c, s.player.faction, s.player.name, **kw)
         if msgs:
             msgs += self._guide(note_action(s, c, self.world, "order"))
         return msgs
@@ -1755,7 +1803,7 @@ class Game:
         definition = self.content.battles.get(raw.battle_id)
         if definition is None:
             return None
-        if not tick:
+        if not tick or self.world.paused_at() is not None:  # 暫停中只讀：集結截止、回合逾時、補位、結算都等繼續之後
             return None if raw.phase == "ended" else (raw, definition)
         was_ended = raw.phase == "ended"
         battle, _ = self._run_battle_tick(definition)
@@ -2142,7 +2190,8 @@ class Game:
         watching = self._watching_battle(battle, definition)
         watch_line = self._watch_line(battle, definition)
         if battle.phase == "muster":
-            remaining = max(0, int(battle.muster_deadline_real - self.now))
+            paused = self.world.paused_at()  # 暫停中集結不倒數：停在按下暫停那一刻剩下的
+            remaining = max(0, int(battle.muster_deadline_real - (self.now if paused is None else paused)))
             left = f"{remaining // 60} 分 {remaining % 60} 秒"
             if watching:
                 return f"{header}\n\n集結中，還剩現實 {left}。{watch_line}"
@@ -2237,6 +2286,8 @@ class Game:
         負責先追趕一次，不然集結剛好逾時的那一刻送出的行動會在 submit_action() 裡被
         「battle.phase 還是 muster」悄悄吃掉（見那次遇到的真實 bug）。
         成功率的評分在行動鎖內（server.py 的 battle_text 走 act），所以用 _quick_client 的短逾時複本；評不到就是保底值。"""
+        if self.world.paused_at() is not None:  # 不走 choose()：暫停中自己擋，不然送出去會把這一回合結算掉
+            return [f"（{PAUSED_TEXT}。）"]
         status = self._battle_status()
         if status is None:
             return ["（此刻無法這麼做。）"]
@@ -2833,12 +2884,12 @@ class Game:
 
     def _road_ask(self) -> list[str]:
         """沿途打聽：這段路兩頭所在大區（Rumor.region；兩頭不同區時兩區都算）最近幾則傳聞裡隨機挑一則；沒有就寫一句，
-        仍算做過。別的陣營的軍情、寫給別人的個人線索聽不到。"""
+        仍算做過。聽得到的才挑（rules.audible：別的陣營的軍情、寫給別人的個人線索聽不到）；第一季只挑傳聞板上的
+        （最近 rumor_board_days 個季曆天，天下大事也一樣——打聽的是「這一帶最近」的事）。"""
         s, c = self.state, self.content
-        p = s.player
-        regions = {region.id for loc_id in self._road_ends() if (region := atlas.region_of(c, loc_id)) is not None}
+        ears, regions = ears_of(s, c), here_regions(s, c)  # 在路上時 here_regions 就是這段路兩頭的大區（beta 的 ears.regions 是空的）
         heard = [
-            r for r in s.world.rumors if r.region in regions and can_hear(r, s)
+            r for r in s.world.rumors if r.region in regions and r.time >= ears.since and audible(r, ears)
         ][-c.config.road_rumor_pool:]
         if not heard:
             return ["你沿途問了幾個人，這一帶最近沒什麼新鮮事。"]
@@ -3107,9 +3158,31 @@ class Game:
 
     # ── 閉關、練功、療傷、設定 ────────────────────────────
 
+    @contextlib.contextmanager
+    def phase_memo(self):
+        """一次畫面建構（server.main_view）的範圍：這一段裡「賽季籌備中嗎」只向共用狀態讀一次。season_phase() 要把整份
+        全服狀態（含進行中的決戰）讀出來，而狀態列、選單、「剛剛」、說書人的對話框建一次畫面各問一次；輪詢（每個在線的人
+        每 10 秒一次）人一多就吃掉行動鎖的時間（壓測 2026-10-06）。
+        記住的只活在這個範圍裡，出了範圍（含畫面建到一半丟例外）就丟掉，所以下一個動作、下一次畫面都讀最新的：
+        籌備中只會被管理者開季、換季改掉，那兩個是動作，不會發生在一次畫面建構的中間。範圍可以巢狀，用最外層那一份。
+        只有 _preparing 讀這份記住的；動作要的階段（running、resting）照舊直接問共用狀態。"""
+        outermost = self._preparing_memo is None
+        if outermost:
+            self._preparing_memo = []  # 空的＝範圍開了、還沒讀過
+        try:
+            yield
+        finally:
+            if outermost:
+                self._preparing_memo = None
+
     def _preparing(self) -> bool:
-        """賽季籌備中（管理者還沒開季）：玩家什麼都不能做。"""
-        return self.world.season_phase() == "preparing"
+        """賽季籌備中（管理者還沒開季）：玩家什麼都不能做。在 phase_memo 的範圍裡只讀一次。"""
+        memo = self._preparing_memo
+        if memo is None:
+            return self.world.season_phase() == "preparing"
+        if not memo:
+            memo.append(self.world.season_phase() == "preparing")
+        return memo[0]
 
     def _idle(self) -> bool:
         s = self.state
@@ -3528,6 +3601,8 @@ class Game:
             return self._log(["（只有管理者能收季。）"])
         if self.world.season_phase() != "running":
             return self._log(["（賽季不在進行中，沒有可以收的。）"])
+        if self.world.paused_at() is not None:
+            return self._log([PAUSED_REFUSAL])
         msgs: list[str] = []
         self.world.mutate_season(
             lambda s: msgs.extend(end_season(_season_vehicle(self.content, s), self.content, self.world))
@@ -3560,12 +3635,47 @@ class Game:
         self._reconcile_season()
         return self._log([f"══ 第 {self.world.get_season_number()} 季開始 ══"] + self._settle_season_start())
 
+    def admin_pause_clock(self, now: float) -> list[str]:
+        """管理者暫停賽季時鐘（線上架構設計第四節、8.3：公告停機時賽季時鐘暫停，季末跟著往後延）：只在進行中有效。
+        暫停中季的時間不走、決戰不推、玩家不能行動、假人不出手、不能快轉，別的管理者動作也先擋著；畫面照常可看。
+        停機前按，開回來按「繼續」（主機端也可以用 scripts/season_clock.py）。"""
+        if not self.is_admin():
+            return self._log(["（只有管理者能暫停賽季。）"])  # 待 S1／joy 潤
+        if self.world.season_phase() != "running":
+            return self._log(["（賽季不在進行中，沒有時鐘可以停。）"])  # 待 S1／joy 潤
+        if not self.world.pause_clock(now):
+            return self._log(["（賽季時鐘已經停著了。）"])  # 待 S1／joy 潤
+        self._write("暫停賽季", [PAUSE_LINE], tag="管理者")
+        return self._log([PAUSE_LINE])
+
+    def admin_resume_clock(self, now: float) -> list[str]:
+        """管理者讓賽季時鐘繼續走：停的這一段不算進賽季、季末往後延，進行中的決戰剩下的時間不變；排好、還沒開的決戰照原本的
+        現實時間開（企劃者 2026-10-06 定 B3），原本的時間落在暫停裡的這一刻就開集結（B11；另一場還在打就排隊）。
+        繼續、補算、開集結三步都在 world.resume_season_clock（順序只寫在那一個地方，主機端腳本與模擬也走它）；
+        這裡把回傳的訊息（繼續的那一行、補算的、集結號角）寫進管理者自己的江湖紀錄。"""
+        if not self.is_admin():
+            return self._log(["（只有管理者能讓賽季繼續。）"])  # 待 S1／joy 潤
+        msgs = resume_season_clock(self.world, self.content, now, self.rng, RESUME_LINE)
+        if msgs is None:
+            return self._log(["（賽季時鐘沒有暫停。）"])  # 待 S1／joy 潤
+        self.state.world = self.world.get_season()
+        self._deliver_big_events()  # 補算結算的大事，管理者自己的江湖紀錄馬上補上（別人下次同步補）
+        self._write("繼續賽季", self._without_timetable(msgs), tag="管理者")
+        return self._log(msgs)
+
+    def paused_minutes(self) -> int | None:
+        """賽季時鐘停了幾分鐘（照 Game.now）；沒有暫停是 None。江湖頁與設定頁用（server.main_view 的 paused）。"""
+        at = self.world.paused_at()
+        return None if at is None else int(max(0.0, self.now - at) // 60)
+
     def _admin_refusal(self, action: str) -> list[str] | None:
         """管理者觸發的共同檢查：不是管理者、或賽季沒有在進行，回傳要顯示的拒絕訊息；可以做就回傳 None。"""
         if not self.is_admin():
             return [f"（只有管理者能{action}。）"]
         if self.world.season_phase() != "running":
             return ["（賽季沒有在進行，無法觸發。）"]
+        if self.world.paused_at() is not None:  # 開戰、觸發、推動、排時間、跳到下一件、救場：都等「繼續」之後
+            return [PAUSED_REFUSAL]
         return None
 
     def admin_battles(self) -> list[BattleDef]:
@@ -3700,11 +3810,7 @@ class Game:
         s, c = self.state, self.content
         cal_hour = calendar.cal_hour_seconds(c, s.world)
         mark = math.ceil((at - calendar.EPS_SECONDS) / cal_hour) * cal_hour
-        regular = [e for e in timetable._pending(s, c) if e.kind not in timetable.NOT_BY_SEASON_HOUR]  # noqa: SLF001
-        avoided = None
-        while hit := next((e for e in regular if abs(mark - timetable.when(s, c, e)) < calendar.EPS_SECONDS), None):
-            avoided, mark = avoided or hit.title, mark + cal_hour
-        return mark, avoided
+        return timetable.clear_of_events(s, c, mark)
 
     def admin_jump_next(self, now: float) -> list[str]:
         """跳到下一件大事：推進到最早那一件還沒結算的大事的時間（決戰是排定的集結開始；開過集結的不算），取整到下一個
@@ -4001,7 +4107,7 @@ class Game:
         """休季時江湖頁最上面的結算卡（計畫 T9）：結局與季末公告、最終三方態勢與三條戰況、時刻表每一件的結果（誰改寫的）、
         各陣營出力前五。只有第一季（開關開著＋這一季的章）收季之後才有；資料在收季那一刻存好（world.end_season），這裡只讀。
         時刻表那一列：結算過的是公告全文；跳過的寫「這一季沒有發生」；季提前收束、還沒輪到的寫「季已落幕，沒有發生」。
-        改寫的人寫公告上的名字（匿名的是「某位少俠」，timetable.shown），不寫真名。"""
+        改寫的人寫公告上的名字（timetable.shown：一律名號；只有這一版之前匿名鎖定的，照記下的「某位少俠」寫）。"""
         s, c = self.state, self.content
         w = s.world
         if not w.ended or not season_one(c, w):
@@ -4099,10 +4205,18 @@ class Game:
         return "\n\n".join(parts) or "（江湖暫時風平浪靜。）"
 
     def rumors_text(self, limit: int = 30) -> str:
-        """見聞頁的傳聞：陣營軍情只給那個陣營、個人線索只給那個人（跟沿途打聽同一個規則，見 _road_ask；計畫 T6）。
-        開關關著時沒有這兩種傳聞，畫面一樣。"""
-        heard = [r for r in self.state.world.rumors if can_hear(r, self.state)]
+        """見聞頁的傳聞（一條清單，main_view 的 rumors）：只列聽得到的（rules.audible——陣營軍情只給那個陣營、個人線索只給
+        那個人；第一季的地方傳聞只給此刻人在那個大區的人、只留傳聞板上最近幾天的）。開關關著時跟以前一樣。"""
+        ears = ears_of(self.state, self.content)
+        heard = [r for r in self.state.world.rumors if audible(r, ears)]
         return _timeline(heard[-limit:][::-1], self._day_stamp) or "（尚無傳聞。）"
+
+    def rumor_layers(self) -> list[dict[str, str]] | None:
+        """見聞頁的傳聞分四層（天下大事、陣營軍情、所在大區、個人線索；rumor_view.layers），每層 {id, title, body}，body 是
+        Markdown。只在第一季的規則開著時分：開關關著（或這一季開季時沒開）是 None，頁面照舊畫 rumors_text 那一條清單。"""
+        if not season_one(self.content, self.state.world):
+            return None
+        return rumor_view.layers(self.state, self.content, self.world, self._day_stamp)
 
     def chronicle_text(self) -> str:
         """江湖史：這一季在最前面，往前每一季各一段（線上架構設計 3.2：江湖史跨季保留），最後是玉璽碎片。"""

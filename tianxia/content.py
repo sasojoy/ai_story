@@ -18,6 +18,7 @@ from typing import get_args
 from pydantic import BaseModel, ValidationError
 
 from .companion_agent import DIALOGUE_TAGS
+from .encounter import FALLBACK_TIER, TIER_RATIOS
 from .front_lines import BAND_KEYS, GEJU_KEYS
 from .materials import TIER_NAMES
 from .models import (
@@ -30,6 +31,7 @@ from .martial_arts import ATTRIBUTES, QUALITIES
 from .naming import name_problem
 from .zh import to_traditional
 
+FIGHT_TIERS = {tier for tier, _ in TIER_RATIOS} | {FALLBACK_TIER}  # 一場遭遇戰的結果：條件 fight_tiers 可以寫的值
 ROAD_SIGHTS_PER_SPOT = 2  # 路上見聞：每一種路、每一個大區的組合至少要有幾則可挑（路上設計第五節）
 ROAD_SIGHT_CAPS = {"silver": 10, "xinde": 5}  # 路上見聞的小收穫上限
 TERRAIN_SIZE = (8, 40)  # 山脈、丘陵的山頭高度範圍（輿圖美術設計第四節）
@@ -989,7 +991,14 @@ def validate(c: Content) -> None:
             check_mark_key(where, key)
             marks_read.setdefault(key, where)
 
-    def check_condition(where: str, cond: Condition) -> None:
+    def check_condition(where: str, cond: Condition, after_fight: bool = False) -> None:
+        """after_fight：這個條件掛在只有遊歷會抽的事件上（actions 剛好是 ["train"]，打完才抽），fight_tiers 只有這裡有意義：
+        別的行動抽到它時沒有「剛打完的那一場」（探索三選一是互斥的支線、交友沒有戰鬥、只靠串接來的更沒有），寫了永遠不成立。"""
+        known(where, cond.fight_tiers, FIGHT_TIERS, "戰鬥結果")
+        need(
+            after_fight or not cond.fight_tiers,
+            f"{where}：fight_tiers 只能寫在遊歷會抽的事件（actions 剛好是 [\"train\"]）的條件上，別處沒有「剛打完的那一場」，永遠不成立",
+        )
         for key in [*cond.marks_min, *cond.marks_max]:
             check_mark_key(where, key)
             marks_read.setdefault(key, where)
@@ -1010,7 +1019,7 @@ def validate(c: Content) -> None:
         for week in (cond.week_min, cond.week_max):
             need(week is None or 1 <= week <= c.config.season_weeks, f"{where}：週次 {week} 不在 1～{c.config.season_weeks} 之間")
         for sub in cond.any_of:
-            check_condition(where, sub)
+            check_condition(where, sub, after_fight)
 
     def no_lore(where: str, eff: Effect) -> None:
         """博聞只靠升級的點數增加（設計 6.3；PM 2026-10-05）：任何效果的 stats 都不能有 lore，給、扣、寫 0 都不行。
@@ -1173,7 +1182,7 @@ def validate(c: Content) -> None:
     for ev in c.events.values():
         where = f"事件 {ev.id}"
         known(where, ev.locations, c.locations, "地點")
-        check_condition(where, ev.condition)
+        check_condition(where, ev.condition, after_fight=ev.actions == ["train"])
         need(
             any(ch.condition == Condition() for ch in ev.choices),
             f"{where}：至少要有一個沒有條件的選項，否則玩家可能卡住",

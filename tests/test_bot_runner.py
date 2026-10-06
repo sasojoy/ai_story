@@ -456,3 +456,32 @@ def test_run_bots_ends_cleanly_on_ctrl_c(monkeypatch, capsys):
     monkeypatch.setattr(run_bots.time, "sleep", interrupted)
     run_bots.main()  # 不給輪數：本來會一直跑；Ctrl+C 要乾淨結束，不丟例外
     assert "伺服器假人程式結束" in capsys.readouterr().out
+
+
+def test_bots_sit_out_a_paused_season(runner, world, clock, content, monkeypatch):
+    """賽季時鐘暫停（線上架構 8.3）：假人程式這一輪什麼都不做——不補人、不出手、不推時鐘；繼續之後照常補人。"""
+    monkeypatch.setattr(server_bots, "is_online", lambda profile, now: True)
+    assert runner.tick().added == 2  # 兩個陣營各補一位
+    name = _bots()[0].player.name
+    season_time = world.get_season().time
+    world.pause_clock(clock[0])
+    clock[0] += content.config.bot_fill_seconds
+    report = runner.tick()
+    assert (report.online, report.acted, report.added) == (0, 0, 0)
+    assert len(_bots()) == 2
+    assert runner._take_turn(name, clock[0]) is False
+    assert world.get_season().time == season_time
+    world.resume_clock(content, clock[0])
+    assert runner.tick().added == 2
+
+
+def test_a_pause_that_commits_while_the_bot_waited_for_the_fill_lock_adds_no_bots(runner, world, clock, content):
+    """tick 一開頭看到的是沒暫停，之後等補人的行動鎖等到管理者的暫停先寫進去：拿到鎖之後 _fill 自己再看一次，
+    不補人（不然暫停中還會多出兩位假人）。直接呼叫 _fill 就是「拿到鎖之後」那一刻。"""
+    world.pause_clock(clock[0])
+    report = bot_runner.TickReport()
+    runner._fill(clock[0], report)
+    assert report.added == 0 and _bots() == []
+    world.resume_clock(content, clock[0])
+    runner._fill(clock[0], report)
+    assert report.added == 2  # 繼續之後照常補

@@ -128,6 +128,17 @@ def start_muster(definition: BattleDef, now: float, trend_start: int | None = No
     return BattleInstance(battle_id=definition.id, trend=start, muster_deadline_real=now + definition.muster_seconds)
 
 
+def shift_deadlines(instance: BattleInstance, seconds: float) -> None:
+    """賽季時鐘暫停後繼續（WorldStateStore.resume_clock）：現實時間的期限往後挪停的長度。集結中挪集結截止，開打了挪這一回合
+    開放的時間（回合逾時照它算），剩下的時間都跟暫停前一樣；收場的不動。開打之後不碰集結截止：它也是這一場的識別值
+    （假人程式看它決定誰趕來參戰，bot_runner._battle_sides）。集結中暫停的那一場，截止一挪，識別值也跟著變：繼續之後
+    那幾個不照作息、看這個值決定要不要趕來的假人會重新抽一次——看不出來、無害。"""
+    if instance.phase == "muster":
+        instance.muster_deadline_real += seconds
+    elif instance.phase == "active":
+        instance.round.opened_real += seconds
+
+
 def start_from_front(front_value: int) -> int:
     """時刻表決戰的起點（戰鬥系統 5.3）：50 ＋（50 − 戰況）÷ 2，用 int(x + 0.5) 進位。戰況是 0 官軍穩控、100 黃巾控制，
     戰局以官軍為正向，所以翻過來再折一半：潁川 40 → 長社 55、南陽 35 → 宛城 58、冀州 55 → 廣宗 48。

@@ -334,17 +334,17 @@ def test_the_chronicle_line_names_the_old_name_and_the_new_one(kicker, content, 
     assert [r.text for r in kicker.world.chronicle] == ["沈浪把【旋風腿】練成絕學，為之定名【風神腿】。"]
 
 
-def test_an_anonymous_namer_goes_into_the_chronicle_as_a_nameless_hero(kicker, content, world):
-    """匿名行走（最終審查 Important 2）：江湖史是公開的，定名那一筆照 rules.display_name 寫。"""
+def test_an_anonymous_namer_goes_into_the_chronicle_by_name(kicker, content, world):
+    """匿名行走只作用在地方傳聞（傳聞分層第七節，企劃者 2026-10-06）：江湖史一律寫名號，定名那一筆也是。"""
     kicker.player.anonymous = True
     kicker.player.art_quality["旋風腿"] = "上品"
     cultivation.cultivate(kicker, content, world, "旋風腿", WIN)
     cultivation.name_mastered(kicker, content, world, "風神腿")
-    assert [r.text for r in kicker.world.chronicle] == ["某位少俠把【旋風腿】練成絕學，為之定名【風神腿】。"]
+    assert [r.text for r in kicker.world.chronicle] == ["沈浪把【旋風腿】練成絕學，為之定名【風神腿】。"]
 
 
-def test_the_second_to_reach_peerless_sees_an_anonymous_first_as_a_nameless_hero(kicker, content, world):
-    """第一個練成的人匿名行走：取名權照名號認（身分），後到的人看到的是「某位少俠」。"""
+def test_the_second_to_reach_peerless_sees_an_anonymous_first_by_name(kicker, content, world):
+    """第一個練成的人匿名行走：取名權照名號認（身分），後到的人看到的也是名號（江湖上的首創不能匿名）。"""
     kicker.player.anonymous = True
     kicker.player.art_quality["旋風腿"] = "上品"
     cultivation.cultivate(kicker, content, world, "旋風腿", WIN)
@@ -352,11 +352,11 @@ def test_the_second_to_reach_peerless_sees_an_anonymous_first_as_a_nameless_hero
     other = equip(new_game_state(content, "乙"))
     other.player.art_quality["旋風腿"] = "上品"
     msgs = cultivation.cultivate(other, content, world, "旋風腿", WIN)
-    assert "這門武學已由某位少俠率先練成絕學。" in msgs and not any("沈浪" in m for m in msgs)
+    assert "這門武學已由沈浪率先練成絕學。" in msgs and not any("某位少俠" in m for m in msgs)
 
 
-def test_the_season_firsts_write_an_anonymous_player_as_a_nameless_hero(state, content, world):
-    """換季寫進江湖史的首創（合成、首悟、練成絕學）：匿名行走的人寫「某位少俠」，走真的合成、合併、修練、定名。"""
+def test_the_season_firsts_write_an_anonymous_player_by_name(state, content, world):
+    """換季寫進江湖史的首創（合成、首悟、練成絕學）：匿名行走的人也寫名號，走真的合成、合併、修練、定名。"""
     from unittest import mock
 
     from tianxia import naming
@@ -378,9 +378,9 @@ def test_the_season_firsts_write_an_anonymous_player_as_a_nameless_hero(state, c
     assert world.next_season(content, now=1.0)
     [(_, entries)] = world.chronicle_before(2)
     assert [e.text for e in entries] == [
-        "第 1 季合成首創 1 門：【風神腿】某位少俠",
-        "第 1 季首悟意境 1 個：「燎原」某位少俠",
-        "第 1 季練成絕學 1 門：【風神腿】某位少俠",
+        "第 1 季合成首創 1 門：【風神腿】沈浪",
+        "第 1 季首悟意境 1 個：「燎原」沈浪",
+        "第 1 季練成絕學 1 門：【風神腿】沈浪",
     ]
 
 
