@@ -1729,7 +1729,7 @@
   // 修練（cultivate）不捲回頁首（W7）：反覆修練時，那一門的卡片留著、頁面留在原地，結果寫在那一門卡片裡、按鈕的底下（S.artNote），
   // 頁首的訊息照舊也有。重畫整頁會讓頁首的訊息與卡片的高度變動、把按鈕推走，所以重畫前記下「修練」鈕在螢幕上的位置，
   // 畫完捲回去補差——玩家的拇指底下永遠還是那顆鈕。例外：這一次練成了絕學、要定名——定名的表單在頁首，照舊捲上去；
-  // 改練、熔煉、練成、療傷會改變清單的結構，也照舊回頁首。
+  // 這一次做完了引導的一步（師父的下一句在頁首），也捲上去；改練、熔煉、練成、療傷會改變清單的結構，也照舊回頁首。
   function cultivateTop(id) {
     const btn = [...document.querySelectorAll('[data-act="cultivate"]')].find((el) => el.dataset.id === id);
     return btn ? btn.getBoundingClientRect().top : null;
@@ -1739,6 +1739,7 @@
     await busy(async () => {
       const stay = op === "cultivate" && !!extra.art;
       const was = S.menxia, mark = stay ? cultivateTop(extra.art) : null;
+      const step = guideKey(S.main && S.main.guide);
       const r = await api(`/api/menxia/${op}`, { person: S.person, kind: S.kind, ...extra });
       S.menxia = r.menxia;
       trimPot(); // 熔掉的若正放在爐裡，回煉製頁時不能還留著
@@ -1748,7 +1749,10 @@
       renderTop();
       renderPage();
       const needsName = !!(r.menxia && r.menxia.naming) && !(was && was.naming);
-      const now = stay && !needsName && mark !== null ? cultivateTop(extra.art) : null;
+      // 這一次修練做完了引導的一步（說書人的 key 換了、或框沒了）：師父的下一句在修練頁最上面（序章 p6→p7 「按打坐歇一歇」），
+      // 不捲上去玩家看不到。比的是步驟，不特別認序章，所以以後任何被修練做完的引導步驟都一樣
+      const guideMoved = guideKey(r.main && r.main.guide) !== step;
+      const now = stay && !needsName && !guideMoved && mark !== null ? cultivateTop(extra.art) : null;
       if (now === null) window.scrollTo({ top: 0, behavior: "smooth" });
       else if (now !== mark) window.scrollBy({ top: now - mark, left: 0, behavior: "instant" });
     });

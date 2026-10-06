@@ -24,6 +24,8 @@ const fn = (name) => {
   let a = src.indexOf(`\n  function ${name}(`);
   if (a < 0) a = src.indexOf(`\n  async function ${name}(`);
   if (a < 0) throw new Error(`app.js 裡找不到 function ${name}`);
+  const header = src.slice(a + 1, src.indexOf("\n", a + 1));
+  if (/\{.*\}\s*$/.test(header)) return "\n" + header; // 一行寫完的函式（例：guideKey）
   return src.slice(a, src.indexOf("\n  }\n", a) + 4);
 };
 const konst = (name) => {
@@ -107,19 +109,22 @@ const renderPage = () => { S.rendered = (S.rendered || 0) + 1; if (S.afterRender
 """
 
 
-def press(op, extra, *, reply_menxia=None, moved_by=0, art_open="lake_kick"):
+def press(op, extra, *, reply_menxia=None, moved_by=0, art_open="lake_kick", guide=(None, None), prologue=False):
     """在 node 裡按一次修練頁的鈕（mx）：伺服器回 reply_menxia，重畫之後那一門的「修練」鈕被推下去 moved_by px。
+    guide 是（按之前, 按之後）說書人那一步（{key, text} 或 None）；prologue 是按之前在不在序章。
     回 S 裡我們關心的、捲動的動作（["by", …] 是相對捲動，["to", …] 是捲到某處）。"""
+    before, after = guide
     script = f"""
       const pos = {{ v: 400 }};
       H.dom.buttons = [{{ dataset: {{ id: "lake_kick" }}, getBoundingClientRect: () => ({{ top: pos.v }}) }}];
       S.artOpen = {json.dumps(art_open)};
-      S.reply = {{ menxia: {json.dumps(reply_menxia or menxia())}, main: {{}}, message: "<p>RESULT</p>" }};
+      S.main = {{ status: {{ injury: 0 }}, guide: {json.dumps(before)}, prologue: {json.dumps({"reveal": ["all"]} if prologue else None)} }};
+      S.reply = {{ menxia: {json.dumps(reply_menxia or menxia())}, main: {{ guide: {json.dumps(after)} }}, message: "<p>RESULT</p>" }};
       S.afterRender = () => {{ pos.v += {moved_by}; }};
       await H.mx({json.dumps(op)}, {json.dumps(extra)});
       return {{ note: S.artNote || null, message: S.message, artOpen: S.artOpen, scrolls: H.scrolls, rendered: S.rendered, calls: H.calls }};
     """
-    return run(script, fns=["mx", "cultivateTop"], stubs=MX_STUBS)
+    return run(script, fns=["mx", "cultivateTop", "guideKey"], stubs=MX_STUBS)
 
 
 def test_cultivating_keeps_the_page_where_it_is_and_the_card_open():
@@ -146,6 +151,40 @@ def test_the_result_goes_into_that_arts_card_and_the_top_message_stays_too():
     assert body.index("art-actions") < body.index('class="msg art-result"><p>RESULT</p>')  # 鈕的底下：結果就在按的那顆旁邊
     other = page("pagePractice", menxia(), artOpen="lake_kick", artNote={"id": "basic_fist", "html": "<p>RESULT</p>"})
     assert "art-result" not in other  # 別門的結果不寫在這一門裡
+
+
+P6 = {"key": "p6_refine", "text": "師父：到「修練」修練【鎮風手】，衝一衝品質"}
+P7 = {"key": "p7_rest", "text": "師父：體力見底了，按「打坐」歇一歇"}
+TO_TOP = [["to", {"top": 0, "behavior": "smooth"}]]
+
+
+def test_a_cultivate_that_moves_the_guide_to_the_next_step_scrolls_to_the_top():
+    """I1：序章 p6_refine 的修練做完，師父的下一句（p7_rest）只在修練頁最上面與江湖頁看得到——不捲上去，新人就停在功法卡上看不到。
+    不只序章：比的是說書人的步驟（key），任何一個被這次修練做完的引導步驟都一樣，所以這裡沒有特別認序章的草廬。"""
+    out = press("cultivate", {"art": "lake_kick"}, moved_by=60, guide=(P6, P7), prologue=True)
+    assert out["scrolls"] == TO_TOP
+    outside = press("cultivate", {"art": "lake_kick"}, moved_by=60, guide=(P6, P7), prologue=False)
+    assert outside["scrolls"] == TO_TOP  # 序章外的引導一樣
+    assert out["note"] == {"id": "lake_kick", "html": "<p>RESULT</p>"} and out["message"] == "<p>RESULT</p>"  # 結果照舊寫在卡片裡與頁首
+
+
+def test_a_cultivate_that_finishes_the_guide_scrolls_to_the_top_too():
+    """引導在這次修練做完（說書人的框變成沒有）：框上的「✔ 完成」在頁首，也捲上去。"""
+    assert press("cultivate", {"art": "lake_kick"}, moved_by=60, guide=(P6, None))["scrolls"] == TO_TOP
+
+
+def test_a_cultivate_that_leaves_the_guide_on_the_same_step_keeps_the_position():
+    out = press("cultivate", {"art": "lake_kick"}, moved_by=60, guide=(P6, dict(P6)), prologue=True)
+    assert out["scrolls"] == [["by", {"top": 60, "left": 0, "behavior": "instant"}]]  # 步驟沒變：留在原地，只補高度的差
+    none = press("cultivate", {"art": "lake_kick"}, moved_by=0, guide=(None, None))
+    assert none["scrolls"] == []  # 沒有引導（或根本沒有說書人）：照 W7，一動也不動
+
+
+def test_the_guide_step_is_told_apart_by_its_key_and_falls_back_to_the_sentence_without_one():
+    same_key = press("cultivate", {"art": "lake_kick"}, guide=({"key": "p6", "text": "甲"}, {"key": "p6", "text": "乙"}))
+    assert same_key["scrolls"] == []  # 同一步的話換了（例：眼前有事件時換成「先了結…」）不算換步
+    old_server = press("cultivate", {"art": "lake_kick"}, guide=({"text": "甲"}, {"text": "乙"}))
+    assert old_server["scrolls"] == TO_TOP  # 舊版伺服器沒有 key：認句子（跟 app.js 的 guideKey 一樣）
 
 
 def test_a_new_mastery_that_needs_a_name_scrolls_up_to_the_naming_form():
