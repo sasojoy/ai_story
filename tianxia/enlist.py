@@ -19,8 +19,17 @@ def recruiter(state: GameState, content: Content) -> Recruiter | None:
 
 
 def active(state: GameState, content: Content) -> bool:
+    """入伍段進行中。按過「略過新手引導」的人永遠不是：略過在沒有入伍段的內容上存的 enlist_step 是 0（＝步數 0 的「走完」），
+    之後內容加了入伍段，0 不能被讀成「第一步」（不然他一投靠，主線那一欄永遠寫著引薦人的話）。"""
     step = state.player.enlist_step
-    return step is not None and step < len(_steps(content))
+    return step is not None and step < len(_steps(content)) and not state.player.guide_skipped
+
+
+def waiting(state: GameState, content: Content) -> bool:
+    """入伍段還沒開始、也還能開始：內容有入伍段、這個人還沒開始過、沒略過、這一季是第一季。Game.skip_tutorial 看它：
+    引導走完、還沒投靠的人按「略過」也不是什麼都不做（設計 7.3：略過＝序章與入伍段都略過）。"""
+    p = state.player
+    return bool(_steps(content)) and p.enlist_step is None and not p.guide_skipped and season_one(content, state.world)
 
 
 def done(state: GameState, content: Content) -> bool:
@@ -47,18 +56,43 @@ def skip(state: GameState, content: Content) -> None:
     state.player.enlist_end = False
 
 
+TICK = "✔ 引導完成"
+
+
+def _texts(who: Recruiter, i: int) -> list[str]:
+    """第 i 步框上說的話，一段一段：第一步是入營、看戰局兩段，其餘是那一步交代的一句。"""
+    return [who.intro, who.briefing] if i == 0 else [who.order_hint]
+
+
+def told(state: GameState, content: Content) -> list[str]:
+    """此刻眼前這一步（剛走完的是結尾）引薦人說的話，寫成江湖紀錄那一種「【名字】話」的行（設計 6.2：說過的話都記進見聞），
+    跟說書人的步驟一樣記在那一則的 guide。呼叫端在這一步「成為眼前這一步」的那一刻記一次：投靠開始入伍段、往下一步、走完。
+    其餘時候（框上的話只是重畫）不記。沒有在進行、也不是剛走完的是空的。"""
+    who = recruiter(state, content)
+    if who is None:
+        return []
+    if active(state, content):
+        texts = _texts(who, state.player.enlist_step)
+    elif state.player.enlist_end and done(state, content):
+        texts = [who.done]
+    else:
+        texts = []
+    return [f"【{who.name}】{text}" for text in texts]
+
+
 def note(state: GameState, content: Content, world: WorldStateStore, action: str) -> list[str]:
-    """跟 guide.note_action 同一個做法：符合這一步就往下一步，一路到不符合為止；走完設 enlist_end（框上換結尾）。"""
+    """跟 guide.note_action 同一個做法：符合這一步就往下一步，一路到不符合為止；走完設 enlist_end（框上換結尾）。
+    回傳：每完成一步一個 TICK，接著是新的這一步（或結尾）引薦人說的話（told）。"""
     from .guide import goal_met  # guide 也 import 這裡：放在函式裡避免循環
 
     msgs: list[str] = []
     todo = _steps(content)
     while active(state, content) and goal_met(state, content, world, todo[state.player.enlist_step].done_when, action):
         state.player.enlist_step += 1
-        msgs.append("✔ 引導完成")
+        msgs.append(TICK)
     if msgs and done(state, content):
         state.player.enlist_end = True
-    return msgs
+    return msgs + (told(state, content) if msgs else [])
 
 
 def box(state: GameState, content: Content) -> dict | None:
@@ -74,12 +108,12 @@ def box(state: GameState, content: Content) -> dict | None:
     p = state.player
     if active(state, content):
         i = p.enlist_step
-        waiting = pending_line(state, content)
-        text = f"{who.intro}\n\n{who.briefing}" if i == 0 else who.order_hint
+        blocked = pending_line(state, content)
+        text = "\n\n".join(_texts(who, i))
         return {
-            "speaker": who.name, "key": _steps(content)[i].id, "scene": "", "text": waiting or text,
-            "line": "" if waiting else (who.lines[i] if i < len(who.lines) else ""),
-            "done": list(p.guide_done), "end": False, "pending": waiting is not None,
+            "speaker": who.name, "key": _steps(content)[i].id, "scene": "", "text": blocked or text,
+            "line": "" if blocked else (who.lines[i] if i < len(who.lines) else ""),
+            "done": list(p.guide_done), "end": False, "pending": blocked is not None,
         }
     if p.enlist_end:
         return {

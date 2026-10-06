@@ -318,7 +318,7 @@ class Game:
                 fresh.player.tutorial_step = self.content.tutorial.prologue_steps
         if enlist.done(old, self.content):
             fresh.player.enlist_step = old.player.enlist_step  # 入伍段只走一次（設計 7.1）；沒走完的下一季投靠時從頭走
-        ratio =self.content.config.affinity_carry_ratio
+        ratio = self.content.config.affinity_carry_ratio
         fresh.player.affinities = {key: int(value * ratio) for key, value in old.player.affinities.items()}
         # 上一季的交情另外留著（這一季的關係從頭寫），好感度只剩一成時提示才不會說「親如兄弟」（正式版辛）；
         # 這一季沒聊過的人物留著更早的那一句
@@ -1229,7 +1229,9 @@ class Game:
         if not notes:
             return
         heads = tuple(f"【{name}】" for name in guide_speakers(self.content))  # 每一步可以是不同的人說（新手引導計畫一）
-        self.state.player.guide_done = [n for n in notes if not n.startswith(heads)]
+        shown = [n for n in notes if not n.startswith(heads)]
+        if shown:  # 只有引薦人的話（入伍段的 ✔ 在它的框不是框上那一個時不回傳）：框上原本的完成列不動
+            self.state.player.guide_done = shown
 
     def _begin_enlistment(self, faction_before: str | None) -> None:
         """這一下才投靠的人開始入伍段（新手引導計畫二，設計 4.1）：動作之前還沒有陣營、現在有了（投靠，或拜入陣營名下的門派）。
@@ -1240,16 +1242,21 @@ class Game:
         p = self.state.player
         if not tutorial_active(self.state, self.content) and not p.guide_outro:
             p.guide_done = []
+        self._journal_guide(enlist.told(self.state, self.content))  # 引薦人迎你進營的話，記在這一則（設計 6.2）；不進「剛剛」、不進完成列
+
+    def _journal_guide(self, notes: list[str]) -> None:
+        """引導的話記進江湖紀錄：在行動裡記進這一則的 guide；不在行動裡（例如打開輿圖）時接在最新一則的 guide。"""
+        if self._draft is not None:
+            self._draft.guide += notes
+        else:
+            journal.add_guide(self.state, notes)
 
     def _guide(self, notes: list[str]) -> list[str]:
         """新手引導的訊息不接進這次行動的訊息（「剛剛」只放行動的結果，引導重做設計 8.1.3）：記進這一則江湖紀錄的 guide、
         給對話框；不在行動裡（例如打開輿圖）時接在最新一則的 guide。回傳空串列，呼叫端照舊 `msgs += …`。"""
         if notes:
             self._note_guide(notes)
-            if self._draft is not None:
-                self._draft.guide += notes
-            else:
-                journal.add_guide(self.state, notes)
+            self._journal_guide(notes)
         return []
 
     def guide_box(self) -> dict | None:
@@ -3782,8 +3789,9 @@ class Game:
 
     def skip_tutorial(self) -> list[str]:
         steps = len(tutorial_steps(self.state, self.content))
-        if self.state.player.tutorial_step >= steps and not enlist.active(self.state, self.content):
-            return []  # 引導走完了、入伍段也沒在進行（還沒投靠、或早就走完）：沒有什麼好略過的
+        if (self.state.player.tutorial_step >= steps and not enlist.active(self.state, self.content)
+                and not enlist.waiting(self.state, self.content)):
+            return []  # 引導走完了、入伍段也沒在進行、也不會再開始（beta 季、內容沒有入伍段、早就走完、略過過）：沒有什麼好略過的
         # 在序章裡略過：站到起點、拿出師的盤纏（設計 7.3）；序章外略過照舊
         purse = prologue_rules.finish(
             self.state, self.content, self.world, purse=prologue_rules.active(self.state, self.content),

@@ -112,7 +112,7 @@ def test_the_recruiters_check_mark_waits_for_its_own_box(enlisting):
     game.view_orders()
     assert game.state.player.enlist_step == 1
     assert game.guide_box()["done"] == []  # 說書人的框上沒有別人的 ✔
-    assert game.state.journal[0].guide == []  # 江湖紀錄也不寫
+    assert not any(line.startswith("✔") for entry in game.state.journal for line in entry.guide)  # 江湖紀錄也不寫 ✔（引薦人的話照記）
 
 
 def test_finishing_enlistment_does_not_bring_back_the_outro(enlisting):
@@ -141,8 +141,8 @@ def test_a_pending_outro_is_shown_before_the_recruiter(enlisting):
     assert not game.state.player.guide_outro
 
 
-def test_acknowledging_the_enlistment_ending_leaves_a_pending_outro_alone(enlisting):
-    """反過來：入伍段走完、結尾在框上時按「知道了」只收入伍段的結尾。"""
+def test_acknowledging_the_enlistment_ending_closes_the_box(enlisting):
+    """入伍段走完、結尾在框上時按「知道了」：結尾收起，之後沒有框。"""
     game = _joined(enlisting)
     game.view_orders()
     _order(game, "siege", "guan", front="yingru")
@@ -151,6 +151,81 @@ def test_acknowledging_the_enlistment_ending_leaves_a_pending_outro_alone(enlist
     assert game.guide_box()["key"] == "enlist_end"
     game.guide_ack()
     assert game.guide_box() is None and not game.state.player.enlist_end
+
+
+def test_the_outro_and_the_enlistment_ending_are_acknowledged_one_at_a_time(enlisting):
+    """F8：結語還沒按、入伍段已經走完（兩個旗標都立著）：框是結語，按一下只收結語，框換成入伍段的結尾，再按一下才收它。"""
+    enlisting.tutorial.outro = "去闖吧。"
+    game = _joined(enlisting)
+    p = game.state.player
+    p.enlist_step, p.enlist_end, p.guide_outro = 2, True, True
+    assert game.guide_box()["key"] == "outro"
+    game.guide_ack()
+    assert not p.guide_outro and p.enlist_end and game.guide_box()["key"] == "enlist_end"
+    game.guide_ack()
+    assert not p.enlist_end and game.guide_box() is None
+
+
+def test_a_stray_acknowledge_while_a_tutorial_step_is_up_closes_nothing(enlisting):
+    """引導的步驟還在框上時沒有「知道了」可按：伺服器收到的 guide_ack（舊畫面、重送）不能把還沒輪到的入伍段結尾收掉。"""
+    game = _joined(enlisting)
+    p = game.state.player
+    p.enlist_step, p.enlist_end, p.tutorial_step = 2, True, 1
+    assert game.guide_box()["key"] == guide.steps(game.state, enlisting)[1].id
+    game.guide_ack()
+    assert p.enlist_end
+    p.tutorial_step = len(guide.steps(game.state, enlisting))  # 引導走完了：輪到入伍段的結尾
+    assert game.guide_box()["key"] == "enlist_end"
+
+
+def test_the_recruiters_check_mark_does_not_land_on_a_pending_outro(enlisting):
+    """F11：結語還沒按、入伍段的第一步在這時做完了：進度照記，可是「✔ 引導完成」不掛在結語上（結語那一步早就做完了）；
+    結語按掉之後輪到的是入伍段的下一步，完成列也是空的。"""
+    enlisting.tutorial.outro = "去闖吧。"
+    game = _joined(enlisting)
+    p = game.state.player
+    p.guide_outro = True
+    game.view_orders()
+    assert p.enlist_step == 1
+    box = game.guide_box()
+    assert box["key"] == "outro" and box["done"] == [] and p.guide_done == []
+    game.guide_ack()
+    assert game.guide_box()["key"] == "r3_first_order" and game.guide_box()["done"] == []
+
+
+def _join_is_the_last_step(content):
+    """引導的最後一步是「投靠」（舊的 t7 的樣子）：投靠那一下就把引導走完，用來看那一下的 ✔ 掛在哪一個框上。"""
+    from tianxia.models import Condition, TutorialStep
+
+    content.tutorial.steps.append(TutorialStep(
+        id="t_join", text="去投靠一邊。", done_when=TutorialGoal(condition=Condition(factions=["guan", "huang", "haoqiang"])),
+    ))
+    game = _game(content, at="changshe")
+    game.state.player.tutorial_step = len(guide.steps(game.state, content)) - 1
+    return game
+
+
+def test_a_step_the_join_finishes_does_not_leave_its_check_on_the_recruiters_box(enlisting):
+    """投靠那一下把引導的最後一步做完（沒有結語）：框換成引薦人，剛投靠這一下不算完成任何一步，說書人那一步的 ✔ 不掛在他的框上。"""
+    enlisting.tutorial.outro = ""  # 正式內容有結語；這個測試要看沒有結語的樣子
+    game = _join_is_the_last_step(enlisting)
+    game.choose("faction:guan")
+    game.choose("faction:confirm")
+    assert not guide.tutorial_active(game.state, enlisting) and game.state.player.enlist_step == 0
+    box = game.guide_box()
+    assert box["speaker"] == "老石" and box["done"] == []
+
+
+def test_a_step_the_join_finishes_keeps_its_check_on_the_outro(enlisting):
+    """同樣是投靠做完最後一步，但有結語：框是結語，說書人那一步的 ✔ 還在結語上；按掉之後才是引薦人、完成列是空的。"""
+    enlisting.tutorial.outro = "去闖吧。"
+    game = _join_is_the_last_step(enlisting)
+    game.choose("faction:guan")
+    game.choose("faction:confirm")
+    box = game.guide_box()
+    assert box["key"] == "outro" and box["done"] == ["✔ 引導完成"]
+    game.guide_ack()
+    assert game.guide_box()["speaker"] == "老石" and game.guide_box()["done"] == []
 
 
 def test_no_enlistment_outside_season_one(enlisting):
@@ -178,11 +253,70 @@ def test_skipping_during_enlistment_skips_the_rest(enlisting):
     assert game.guide_box() is None
 
 
-def test_skipping_when_there_is_nothing_left_to_skip_does_nothing(enlisting):
-    """引導與入伍段都沒有在進行（還沒投靠、引導走完）：照舊什麼都不做。"""
+def test_skipping_after_the_tutorial_but_before_joining_skips_enlistment(enlisting):
+    """設計 7.3「略過新手引導＝跳過序章與入伍段」：引導走完、還沒投靠就按「略過」，不是什麼都不發生——之後投靠也不開始入伍段。"""
     game = _game(enlisting, at="changshe")
     game.state.player.tutorial_step = len(guide.steps(game.state, enlisting))
+    assert enlist.waiting(game.state, enlisting)
+    msgs = game.skip_tutorial()
+    assert msgs and game.state.player.guide_skipped and enlist.done(game.state, enlisting)
+    assert not enlist.waiting(game.state, enlisting)
+    game.choose("faction:guan")
+    game.choose("faction:confirm")
+    assert enlist.done(game.state, enlisting) and game.guide_box() is None  # 投靠了也不開始、不畫框
+    assert "老石" not in guide.next_hint(game.state, enlisting, game.world)
+
+
+def test_skipping_with_the_outro_pending_clears_it_and_enlistment_is_skipped_too(enlisting):
+    enlisting.tutorial.outro = "去闖吧。"
+    game = _game(enlisting, at="changshe")
+    game.state.player.tutorial_step = len(guide.steps(game.state, enlisting))
+    game.state.player.guide_outro = True
+    assert game.skip_tutorial()
+    assert not game.state.player.guide_outro and game.guide_box() is None and enlist.done(game.state, enlisting)
+
+
+def test_the_second_press_of_skip_does_nothing(enlisting):
+    game = _game(enlisting, at="changshe")
+    game.state.player.tutorial_step = len(guide.steps(game.state, enlisting))
+    assert game.skip_tutorial()
+    entries = len(game.state.journal)
+    assert game.skip_tutorial() == [] and len(game.state.journal) == entries  # 沒有第二則「新手引導」紀錄
+
+
+def test_skipping_stays_a_no_op_where_there_is_nothing_to_skip(enlisting):
+    """真的沒有東西可以略過的時候照舊什麼都不做：第一季沒開（beta 季）、內容沒有入伍段（現在的正式內容）、入伍段早就走完。"""
+    def idle(game):
+        game.state.player.tutorial_step = len(guide.steps(game.state, enlisting))
+        return game
+
+    game = idle(_game(enlisting, at="changshe"))
+    enlisting.config.season_one = False  # beta 季
+    assert not enlist.waiting(game.state, enlisting)
     assert game.skip_tutorial() == [] and not game.state.player.guide_skipped
+    enlisting.config.season_one = True
+    saved, enlisting.tutorial.enlist = enlisting.tutorial.enlist, None  # 內容沒有入伍段
+    assert not enlist.waiting(game.state, enlisting)
+    assert game.skip_tutorial() == [] and not game.state.player.guide_skipped
+    enlisting.tutorial.enlist = saved
+    game.state.player.enlist_step = 2  # 走完了
+    assert not enlist.waiting(game.state, enlisting)
+    assert game.skip_tutorial() == [] and not game.state.player.guide_skipped
+
+
+def test_a_skipper_from_before_the_enlist_content_never_gets_the_recruiters_hint_or_box(enlisting):
+    """I2：內容還沒有入伍段時略過的人，`enlist.skip` 存的是 0（＝步數 0 的「走完」）；之後內容加了入伍段，0 不能被讀成
+    「入伍段進行中、第一步」——不然他一投靠，「主線與目標」就永遠寫著「（老石）看看本週軍令」。"""
+    saved, enlisting.tutorial.enlist = enlisting.tutorial.enlist, None
+    game = _game(enlisting, at="changshe")
+    assert game.skip_tutorial() and game.state.player.guide_skipped and game.state.player.enlist_step == 0
+    enlisting.tutorial.enlist = saved  # 之後入伍段內容上線
+    game.choose("faction:guan")
+    game.choose("faction:confirm")
+    assert not enlist.active(game.state, enlisting) and game.guide_box() is None
+    assert "老石" not in game.quest_text()
+    game.view_orders()
+    assert game.guide_box() is None and "老石" not in game.quest_text()
 
 
 def test_the_recruiter_box_collapses_while_an_event_is_pending(enlisting):
@@ -214,6 +348,69 @@ def test_the_recruiters_hint_has_no_doubled_name(enlisting):
     assert "老石" in guide.speakers(enlisting) and "青禾" in guide.speakers(enlisting)
 
 
+def _told(game, name="老石"):
+    """江湖紀錄（見聞）裡這位引薦人說過的話，照說的先後排：每一則 entry 的 guide 裡 `【名字】…` 的行。"""
+    return [
+        line for entry in reversed(game.state.journal) for line in entry.guide if line.startswith(f"【{name}】")
+    ]
+
+
+def test_the_recruiters_words_go_into_the_journal_once_each(enlisting):
+    """設計 6.2「說過的話都記進見聞的江湖紀錄」：引薦人的話跟說書人的一樣，記在那一則的 guide（不進「剛剛」、不進對話框的完成列）。
+    每一步的話在那一步成為眼前這一步的那一刻記一次：入營＋看戰局（投靠的那一下）、第一道軍令、結尾。"""
+    from tianxia import journal
+
+    game = _joined(enlisting)
+    assert _told(game) == ["【老石】老石迎你進營。", "【老石】看這三條線。"]
+    joined_entry = game.state.journal[0]
+    assert "老石迎你進營" not in journal.card_html(joined_entry) and "老石迎你進營" in journal.rows_html([joined_entry])
+    assert game.guide_box()["done"] == []  # 對話框的完成列只有 ✔ 與獎勵，不是引薦人的話
+    game.view_orders()
+    assert _told(game)[2:] == ["【老石】挑一道軍令。"]
+    game.view_orders()  # 再看一次：這一步沒有往前，不重複記
+    assert len(_told(game)) == 3
+    _order(game, "siege", "guan", front="yingru")
+    with _win():
+        game.choose("act:train")
+    assert _told(game)[3:] == ["【老石】做得好。"] and game.guide_box()["done"] == ["✔ 引導完成"]
+    game.guide_ack()
+    game.view_orders()
+    assert len(_told(game)) == 4  # 按「知道了」、之後的行動都不再記
+
+
+def test_a_recruiter_met_behind_the_tutorial_is_still_met_at_the_join(enlisting):
+    """引導還沒走完就投靠：引薦人迎你進營是投靠那一刻的事，江湖紀錄記在那一刻；框上等說書人那一步走完才輪到他。
+    框上沒有的 ✔ 也不會因此記進去。"""
+    game = _game(enlisting, at="changshe")
+    game.state.player.tutorial_step = 1
+    game.choose("faction:guan")
+    game.choose("faction:confirm")
+    assert _told(game) == ["【老石】老石迎你進營。", "【老石】看這三條線。"]
+    game.view_orders()
+    assert _told(game)[2:] == ["【老石】挑一道軍令。"]  # 進度照記，這一步的話也在它成為眼前這一步的那一刻記下
+    assert not any(line.startswith("✔") for entry in game.state.journal for line in entry.guide)
+
+
+def test_the_recruiters_words_do_not_wipe_the_narrators_check_rows(enlisting):
+    """說書人的框上有上一次行動完成的 ✔ 與獎勵時，入伍段在背後往前一步（只寫引薦人的話進紀錄）不能把那些完成列清掉。"""
+    game = _game(enlisting, at="changshe")
+    game.state.player.tutorial_step = 1
+    game.choose("faction:guan")
+    game.choose("faction:confirm")
+    game.state.player.guide_done = ["✔ 引導完成", "銀兩 +5"]
+    game.view_orders()
+    assert game.state.player.enlist_step == 1 and game.guide_box()["done"] == ["✔ 引導完成", "銀兩 +5"]
+
+
+def test_a_skipped_guide_writes_no_recruiter_words(enlisting):
+    game = _game(enlisting, at="changshe")
+    game.skip_tutorial()
+    game.choose("faction:guan")
+    game.choose("faction:confirm")
+    game.view_orders()
+    assert _told(game) == []
+
+
 def test_the_recruiters_words_are_not_mistaken_for_a_checkmark_row(enlisting):
     """引薦人的名字在 guide.speakers 裡：_note_guide 照它把「下一步的話」跟「✔ 與獎勵」分開。"""
     assert {"老石", "青禾", "季伯平"} <= guide.speakers(enlisting)
@@ -243,6 +440,42 @@ def test_the_content_check_wants_real_factions_and_one_line_per_step(enlisting):
         validate(enlisting)
 
 
+def test_the_content_check_looks_at_each_enlist_steps_location_and_condition(enlisting):
+    from tianxia.models import Condition
+
+    validate(enlisting)
+    step = enlisting.tutorial.enlist.steps[0]
+    step.done_when = TutorialGoal(action="view_orders", locations=["mars"])
+    with pytest.raises(ContentError, match="mars"):
+        validate(enlisting)
+    step.done_when = TutorialGoal(action="view_orders", condition=Condition(factions=["nowhere"]))
+    with pytest.raises(ContentError, match="nowhere"):
+        validate(enlisting)
+
+
+def test_begin_if_joined_needs_a_recruiter_and_an_unskipped_guide(enlisting):
+    game = _game(enlisting, faction="guan")
+    p = game.state.player
+    p.guide_skipped = True  # 略過過的人，投靠不開始
+    assert not enlist.begin_if_joined(game.state, enlisting) and p.enlist_step is None
+    p.guide_skipped = False
+    recruiters = enlisting.tutorial.enlist.recruiters
+    kept = recruiters.pop("guan")  # 這一邊沒有引薦人（內容沒寫）：沒有入伍段
+    assert not enlist.begin_if_joined(game.state, enlisting) and p.enlist_step is None
+    recruiters["guan"] = kept
+    assert enlist.begin_if_joined(game.state, enlisting) and p.enlist_step == 0
+    assert not enlist.begin_if_joined(game.state, enlisting)  # 已經開始過：不重開
+
+
+def test_skipping_clears_an_ending_that_was_waiting(enlisting):
+    """入伍段在引導還沒走完時就走完了（結尾等著、框上是說書人）：這時按「略過」，結尾也一起收掉。"""
+    game = _game(enlisting, at="changshe")
+    p = game.state.player
+    p.enlist_step, p.enlist_end = 2, True
+    assert game.skip_tutorial()
+    assert not p.enlist_end and p.enlist_step == 2 and game.guide_box() is None
+
+
 def test_view_orders_is_a_main_action_that_the_season_pause_allows():
     """F6：軍令卡出現時網頁送 view_orders；賽季時鐘暫停中它跟 view_map 一樣只動自己的引導，不能被擋下（不然 S.ordersSeen 已經設了，
     這個工作階段不會再送）。"""
@@ -268,6 +501,46 @@ def test_old_saves_with_a_faction_skip_enlistment(enlisting, world):
     assert again.state.player.enlist_step is None and again.guide_box() is None
     again.view_orders()
     assert again.state.player.enlist_step is None and not enlist.active(again.state, enlisting)
+
+
+def _free_text_event(content, effect):
+    """測試用的隨口應對事件：成功、失敗都套同一個效果（不看擲骰）。載入時的檢查不准隨口應對拜入門派，這裡直接塞進記憶體裡的內容。"""
+    from tianxia.models import Choice, Event, FreeTextChoice
+
+    event = Event(
+        id="t_free", title="攔路", text="有人攔路。", actions=[], choices=[Choice(text="走開")],
+        free_text=FreeTextChoice(prompt="自己想辦法……", stat="str", effect=effect, fail_effect=effect),
+    )
+    content.events[event.id] = event
+    return event
+
+
+def _answer(game, event, text="我上前理論"):
+    game._present(event)
+    request = game.free_text_request(text)
+    assert request is not None
+    return game.answer_event(request, llm_rate=50)
+
+
+def test_old_saves_with_a_faction_are_not_pulled_in_by_a_free_text_answer(enlisting, world):
+    """隨口應對（answer_event）也有一個開始入伍段的點：已經有陣營的人答完不會被拖進入伍段（F1 的另一半）。"""
+    from tianxia.models import Effect
+
+    game = _game(enlisting, faction="guan", world=world)
+    game.state.player.tutorial_step = len(guide.steps(game.state, enlisting))
+    _answer(game, _free_text_event(enlisting, Effect(stats={"str": 1})))
+    assert game.state.player.enlist_step is None and game.guide_box() is None
+
+
+def test_a_free_text_answer_that_joins_a_sect_starts_enlistment(enlisting, world):
+    from tianxia.models import Effect
+
+    game = _game(enlisting, at="cao_manor", world=world)
+    game.state.player.tutorial_step = len(guide.steps(game.state, enlisting))
+    _answer(game, _free_text_event(enlisting, Effect(join_sect="cao_manor")))
+    assert game.state.player.faction == "haoqiang" and game.state.player.enlist_step == 0
+    assert game.guide_box()["speaker"] == "季伯平"
+    assert "【季伯平】季伯平迎你進營。" in game.state.journal[0].guide  # 跟投靠的那一下一樣記進這一則
 
 
 def test_old_saves_without_a_faction_enlist_later(enlisting, world):

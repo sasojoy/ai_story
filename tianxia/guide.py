@@ -94,9 +94,12 @@ def note_action(state: GameState, content: Content, world: WorldStateStore, acti
             msgs.append(f"【{t.speaker}】{t.outro}")
             state.player.guide_outro = True  # 這一次走完最後一步才等「知道了」（以前在 Game._note_guide 設，那邊現在只管 guide_done）
     # 入伍段（新手引導計畫二）：不管引導走完沒有，進度都照記；框上等引導走完（連結語也按掉）才輪到它（見 Game.guide_box）。
-    # 它的「✔ 引導完成」只在它的框是框上那一個的時候才回傳：不然說書人那一步根本沒做完，框上卻掛著「✔ 完成」（F11）
+    # 它的「✔ 引導完成」只在它的框是框上那一個的時候才回傳：不然說書人那一步根本沒做完，框上卻掛著「✔ 完成」（F11）；
+    # 引薦人說的話（【名字】…，記進江湖紀錄，設計 6.2）不受影響：它不進對話框的完成列（Game._note_guide 照 speakers 擋掉）
     extra = enlist.note(state, content, world, action)
-    return msgs + (extra if not tutorial_active(state, content) and not state.player.guide_outro else [])
+    if tutorial_active(state, content) or state.player.guide_outro:
+        extra = [m for m in extra if m != enlist.TICK]
+    return msgs + extra
 
 
 def _idle(state: GameState) -> bool:
