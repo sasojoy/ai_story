@@ -12,7 +12,6 @@
 假人程式 bot_runner：Config.bot_naming_budget_seconds，也走這三段，A、C 在鎖內，B 在鎖外用它自己的 client）。"""
 from __future__ import annotations
 
-import copy
 import hashlib
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -21,7 +20,7 @@ from pydantic import BaseModel
 
 from . import zh
 from .models import Content
-from .ollama_client import OllamaClient
+from .ollama_client import OllamaClient, capped
 
 NAME_MIN_CHARS, NAME_MAX_CHARS = 2, 6
 NAME_ATTEMPTS = 3  # 模型最多試幾次（第一次 + 兩次重生成）；全部失敗就走決定性組名
@@ -29,6 +28,14 @@ CLAIM_ATTEMPTS = 4  # 名字被占用時，用決定性組名換名字再試幾�
 # OllamaClient.chat_structured 一次呼叫最多送兩趟（第一次＋格式不對、逾時時的重問），兩趟都用同一個 timeout
 POSTS_PER_CALL = 2
 MIN_POST_SECONDS = 1.0  # 有預算時，一趟分不到這麼多秒就不叫了（叫了也等不到）
+
+
+def per_post_seconds(client, left: float) -> float | None:
+    """還剩 left 秒預算時，一趟模型呼叫最多等多久：min(client 自己的逾時, left ÷ 兩趟)（chat_structured 一次最多送兩趟）；
+    分不到 MIN_POST_SECONDS 就是 None＝不叫了。naming.propose、fight_llm.judge、server.within_budget 同一套分法。"""
+    own = getattr(client, "timeout", None)
+    per_post = min(float(own) if isinstance(own, (int, float)) else left, left / POSTS_PER_CALL)
+    return None if per_post < MIN_POST_SECONDS else per_post
 
 
 @dataclass(frozen=True)
@@ -110,7 +117,6 @@ def _ask(
     if client is None:
         return None, ""
     left = budget
-    own = getattr(client, "timeout", None)
     # 行動鎖內的複本（retry 是 False，Game._quick_client）只試一次：鎖內任何一步模型呼叫最多佔住鎖 in_lock_model_timeout 秒，
     # 取壞了就直接走退路。鎖外最多 NAME_ATTEMPTS 次、每次最多兩趟，但要看預算分得完分不完：每一次先扣掉
     # min(timeout, 剩下的 ÷ 2) 的兩趟——伺服器現在的數字（naming_budget_seconds 60、ollama_timeout 120）第一次就分到
@@ -121,11 +127,10 @@ def _ask(
     for _ in range(attempts):
         caller = client
         if left is not None:
-            per_post = min(float(own) if isinstance(own, (int, float)) else left, left / POSTS_PER_CALL)
-            if per_post < MIN_POST_SECONDS:
+            per_post = per_post_seconds(client, left)
+            if per_post is None:
                 return None, ""
-            caller = copy.copy(client)
-            caller.timeout = per_post
+            caller = capped(client, per_post)
             left -= per_post * POSTS_PER_CALL
         try:
             reply = caller.chat_structured(messages, NameReply, required_fields=["name"])

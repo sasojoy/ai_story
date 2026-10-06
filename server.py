@@ -35,7 +35,6 @@ from __future__ import annotations
 import argparse
 import contextlib
 import contextvars
-import copy
 import hashlib
 import os
 import re
@@ -60,7 +59,8 @@ from starlette.concurrency import run_in_threadpool
 import server_push
 from llm_queue import Busy, LlmQueue, QueueTimeout
 from tianxia import (
-    companion_agent, event_llm, fight_llm, foreshadow, glyph, insight_llm, naming, rules, server_bots, team, timetable,
+    companion_agent, event_llm, fight_llm, foreshadow, glyph, insight_llm, naming, ollama_client, rules, server_bots, team,
+    timetable,
 )
 from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, AccountStore, normalize
 from tianxia.content import PROFILE_ENV, load_content, profile_line
@@ -545,13 +545,8 @@ def within_budget(client, left: float):
     （naming.MIN_POST_SECONDS）回 None＝不叫了；沒有 client（None）還是 None。原本那個 client 不動（同一個角色別的請求可能正在用它）。"""
     if client is None:
         return None
-    own = getattr(client, "timeout", None)
-    per_post = min(float(own) if isinstance(own, (int, float)) else left, left / naming.POSTS_PER_CALL)
-    if per_post < naming.MIN_POST_SECONDS:
-        return None
-    capped = copy.copy(client)
-    capped.timeout = per_post
-    return capped
+    per_post = naming.per_post_seconds(client, left)
+    return None if per_post is None else ollama_client.capped(client, per_post)
 
 
 def prepare_dialogue(game: Game, option_id: str) -> companion_agent.PreparedTurn | None:

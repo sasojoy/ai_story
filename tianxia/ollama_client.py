@@ -163,6 +163,18 @@ class InLockClient:
             raise
 
 
+def capped(client: Any, seconds: int | float, retry: bool | None = None) -> Any:
+    """client 的複本，HTTP 逾時最多 seconds 秒（client 自己的逾時比較短就用它的；沒有 timeout 欄位的假物件就是 seconds）；
+    retry 給了就一併設上。原本的 client 不動（同一個角色別的請求可能正在用它）。鎖內的 quick_client、鎖外照預算分的
+    naming.propose、fight_llm.judge、server.within_budget、悟意境取名的一趟都用它。"""
+    copied = copy.copy(client)
+    own = getattr(client, "timeout", None)
+    copied.timeout = min(float(own), seconds) if isinstance(own, (int, float)) else seconds
+    if retry is not None:
+        copied.retry = retry
+    return copied
+
+
 def quick_client(client: Any, seconds: int | float, budget: ModelBudget) -> Any:
     """行動鎖內叫模型用的 client（Game._quick_client）：client 的複本，HTTP 逾時最多 seconds 秒、不重問（retry=False：
     chat_structured 失敗直接丟出第一次的例外，不再多送一趟），外面包一層 InLockClient 看 budget。這樣鎖內任何一步模型呼叫
@@ -172,11 +184,7 @@ def quick_client(client: Any, seconds: int | float, budget: ModelBudget) -> Any:
     的測試與腳本也一樣給複本、設上上限。"""
     if client is None or budget.gave_up:
         return None
-    quick = copy.copy(client)
-    own = getattr(client, "timeout", None)
-    quick.timeout = min(own, seconds) if isinstance(own, (int, float)) else seconds
-    quick.retry = False
-    return InLockClient(quick, budget)
+    return InLockClient(capped(client, seconds, retry=False), budget)
 
 
 class OllamaClient:

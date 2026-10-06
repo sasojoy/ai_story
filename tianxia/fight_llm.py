@@ -8,15 +8,14 @@
 """
 from __future__ import annotations
 
-import copy
 import re
 
 from pydantic import BaseModel
 
 from . import zh
 from .martial_arts import MartialArt
-from .naming import MIN_POST_SECONDS, POSTS_PER_CALL
-from .ollama_client import OllamaClient
+from .naming import per_post_seconds
+from .ollama_client import OllamaClient, capped
 
 TEXT_MAX = 200  # 每一版過程最多幾個字
 
@@ -115,12 +114,10 @@ def judge(
         return None
     caller = client
     if budget is not None:
-        own = getattr(client, "timeout", None)
-        per_post = min(float(own) if isinstance(own, (int, float)) else budget, budget / POSTS_PER_CALL)
-        if per_post < MIN_POST_SECONDS:
+        per_post = per_post_seconds(client, budget)
+        if per_post is None:
             return None
-        caller = copy.copy(client)
-        caller.timeout = per_post
+        caller = capped(client, per_post)
     try:
         reply = caller.chat_structured(
             _messages(request, swing), Judgment, temperature=0.4, required_fields=["winning", "losing"],
