@@ -221,6 +221,14 @@ ul { padding-left: 1.3em; margin: 0.4em 0; }
 .list button.on { background: var(--accent-soft); }
 .list button::after { content: "›"; margin-left: auto; color: var(--ink-2); }
 
+/* 修練頁、煉製頁的「屬性有什麼用」（W2）：收著只多一行小字，不用框，免得第一屏多出一整張卡 */
+details.attr-note { font-size: 13px; color: var(--ink-2); margin: 4px 0 12px; }
+.card > details.attr-note { margin-bottom: 0; }
+details.attr-note > summary { list-style: none; cursor: pointer; padding: 2px 0; line-height: 1.5; }
+details.attr-note > summary::-webkit-details-marker { display: none; }
+details.attr-note > summary::after { content: " ▾"; }
+details.attr-note:not([open]) > summary::after { content: " ▸"; }
+details.attr-note > p { margin: 2px 0 0; }
 details.fold { margin-bottom: 12px; }
 details.fold > summary { list-style: none; cursor: pointer; padding: 10px 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); display: flex; align-items: center; gap: 8px; font-weight: 600; }
 details.fold > summary::-webkit-details-marker { display: none; }
@@ -462,6 +470,9 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
    只管這一排（.practice-actions），不動全站的 .btn */
 .practice-actions > .btn { width: auto; flex: 1 1 auto; white-space: nowrap; padding: 10px 8px; }
 /* 「服下破境丹」勾選框：預設不勾，整列都是觸控目標（至少 44px 高）；放在修練鈕那一排上面，不擠進按鈕列 */
+.art-body .art-result { margin: 10px 0 0; font-size: 13px; } /* 修練的結果（W7）：寫在按鈕的底下，按的那顆鈕旁邊就看得到 */
+.art-body .art-result p { margin: 0 0 4px; }
+.art-body .art-result p:last-child { margin-bottom: 0; }
 .art-body .legend { display: flex; align-items: center; gap: 10px; min-height: 44px; margin-top: 8px; font-size: 14px; cursor: pointer; }
 .art-body .legend input { width: 20px; height: 20px; flex: none; margin: 0; accent-color: var(--accent); }
 /* 修練頁的意境：一列一個，左邊名字、屬性與模型寫的一句話，右邊「化成心得」 */

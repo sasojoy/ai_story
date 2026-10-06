@@ -462,6 +462,49 @@ def test_detail_waits_for_the_hidden_trend_before_describing_a_leader(state, con
     assert "**龍頭人物**　鬼手（常出沒在此）" in text and "- 現在：每天約出手 24 次，讓寶藏上升。" in text
 
 
+def test_detail_of_a_scouted_place_says_which_insights_can_be_gained_there(state, content):
+    """W3：摸清的地點，詳情欄寫「這裡能悟：…」——名字讀自探索自己用的那個判斷（insights.explore_gives）。句子待 joy 潤。"""
+    text = detail_text(state, content, "lake", {"thug": "穩勝"}.get)
+    assert "**意境**　這裡能悟：水、風" in text  # 內容寫的順序（fixture 的湖邊是 shui、feng）
+    assert text.index("**敵情**") < text.index("**意境**") < text.index("**劇情**")
+    content.locations["lake"].insights = ["huo"]
+    assert "**意境**　這裡能悟：火\n" in detail_text(state, content, "lake", {"thug": "穩勝"}.get)
+
+
+def test_detail_says_nothing_about_insights_where_exploring_gives_none(state, content):
+    from tianxia.models import ExploreMix
+
+    content.config.explore_mix = [ExploreMix(kind="wild", tags=[], weights={"insight": 0, "event": 1})]
+    assert "這裡能悟" not in detail_text(state, content, "lake", {"thug": "穩勝"}.get)
+    content.config.explore_mix = [ExploreMix(kind="wild", tags=[], weights={"insight": 1})]
+    content.locations["lake"].insights = []  # 地點沒寫：探索給靠探索悟的四個基本意境，這裡就照實寫四個
+    assert "這裡能悟：風、火、水、山" in detail_text(state, content, "lake", {"thug": "穩勝"}.get)
+
+
+def test_an_unscouted_place_lists_no_insights(state, content):
+    content.config.vision_base = 0
+    content.locations["lake"].important = True
+    assert detail_text(state, content, "lake", no_odds) == "### 湖邊？\n\n尚未摸清"  # 沒摸清：連「這裡能悟」也不露
+    state.player.visited.add("lake")
+    assert "這裡能悟：水、風" in detail_text(state, content, "lake", {"thug": "穩勝"}.get)  # 去過了才寫
+
+
+def test_the_insights_the_map_promises_are_exactly_what_exploring_teaches(game):
+    """「這裡能悟」永遠不會說探索給不出的東西，也不漏掉探索給得出的：把探索的比例逼成只悟意境，探很多次，悟到的就是詳情欄寫的那幾個。"""
+    from tianxia.models import ExploreMix
+
+    c, p = game.content, game.state.player
+    c.config.explore_mix = [ExploreMix(kind="wild", tags=[], weights={"insight": 1})]
+    c.config.rare_explore_chance = 0.0
+    p.location = "lake"
+    text = detail_text(game.state, c, "lake", {"thug": "穩勝"}.get)
+    listed = text.split("這裡能悟：")[1].split("\n")[0].split("、")
+    for _ in range(80):
+        game._explore()
+    learned = [c.insights[i].name for i in p.insights]
+    assert sorted(learned) == sorted(listed) == ["水", "風"]
+
+
 def test_detail_of_an_unknown_place_still_says_nothing_about_leaders(state, content):
     content.config.vision_base = 0
     content.locations["lake"].important = True
