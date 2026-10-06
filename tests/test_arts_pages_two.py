@@ -272,7 +272,7 @@ def test_heal_button_shows_the_price_and_matches_what_healing_really_charges(con
         "label": "療傷（沒有內傷）", "ok": False, "why": "氣血無恙，不用療傷。",
     }
     member.injury, p.stats["silver"] = 35.0, 100
-    assert skillview.heal_button(state, content) == {"label": "療傷（銀兩 18）", "ok": True, "why": None}  # 每 2 點內傷 1 兩，進位
+    assert skillview.heal_button(state, content) == {"label": "療傷（要 18 兩）", "ok": True, "why": None}  # 每 2 點內傷 1 兩，進位
     team.heal(state, content, member)
     assert p.stats["silver"] == 100 - 18 and member.injury == 0  # 按鈕寫的價錢就是真的收的價錢
 
@@ -297,7 +297,7 @@ def test_the_menxia_view_carries_the_heal_button(real):
     game = _real_game(real)
     assert server.menxia_view(game)["heal"]["label"] == "療傷（沒有內傷）"
     game.state.player.member.injury, game.state.player.stats["silver"] = 20.0, 50
-    assert server.menxia_view(game)["heal"] == {"label": "療傷（銀兩 10）", "ok": True, "why": None}
+    assert server.menxia_view(game)["heal"] == {"label": "療傷（要 10 兩）", "ok": True, "why": None}
     game.state.player.stats["silver"] = 4
     view = server.menxia_view(game)["heal"]
     assert view["label"] == "療傷（要 10 兩）" and not view["ok"] and "銀兩不足" in view["why"]
@@ -530,7 +530,7 @@ def _menxia(**over):
         "slot_cards": [{"kind": k, "card": f"<p>{k}卡</p>", "learned": True, "level": 1, "maxed": False, "blocked": None, "price": 1} for k in ("武學", "內功")],
         "owned_arts": [], "insights": [], "roster": [{"label": "本人", "key": "player"}], "person": None, "person_card": None,
         "on_team": False, "rules": "<p>規則。</p>", "holdings": {"count": 0, "cap": 50}, "player_card": "<p>本人</p>", "naming": None,
-        "heal": {"label": "療傷（銀兩 18）", "ok": True, "why": None},
+        "heal": {"label": "療傷（要 18 兩）", "ok": True, "why": None},
     }
     return {**base, **over}
 
@@ -580,13 +580,34 @@ def _shown_names(html, which):
 
 
 @needs_node
-@pytest.mark.parametrize("which", ["practice", "craft"])
-def test_each_filter_shows_only_its_kind_on_both_pages(which):
+def test_each_filter_shows_only_its_kind_on_the_practice_page():
     everything = (["甲拳", "乙功", "丙腿", "丁訣", "戊掌"], ["風", "火"])
-    assert _shown_names(_page(which), which) == everything  # 預設全部：照伺服器排好的順序，一個不少
-    assert _shown_names(_page(which, "內功"), which) == (["乙功", "丁訣"], [])
-    assert _shown_names(_page(which, "武學"), which) == (["甲拳", "丙腿", "戊掌"], [])
-    assert _shown_names(_page(which, "意境"), which) == ([], ["風", "火"])
+    assert _shown_names(_page("practice"), "practice") == everything  # 預設全部：照伺服器排好的順序，一個不少
+    assert _shown_names(_page("practice", "內功"), "practice") == (["乙功", "丁訣"], [])
+    assert _shown_names(_page("practice", "武學"), "practice") == (["甲拳", "丙腿", "戊掌"], [])
+    assert _shown_names(_page("practice", "意境"), "practice") == ([], ["風", "火"])
+
+
+@needs_node
+def test_the_craft_page_filter_narrows_the_arts_but_never_hides_the_insights():
+    """煉製頁是拿「一門武學＋一個意境」合成的地方：記著的「內功」「武學」篩選把意境整排藏起來、又沒有任何提示，會讓人以為意境不見了
+    （review-ap2 的小毛病）。最簡單的做法是煉製頁的意境清單不理會這個篩選；「意境」那一顆則是只看意境、把武學藏起來。"""
+    both = ["風", "火"]
+    assert _shown_names(_page("craft"), "craft") == (["甲拳", "乙功", "丙腿", "丁訣", "戊掌"], both)
+    assert _shown_names(_page("craft", "內功"), "craft") == (["乙功", "丁訣"], both)
+    assert _shown_names(_page("craft", "武學"), "craft") == (["甲拳", "丙腿", "戊掌"], both)
+    assert _shown_names(_page("craft", "意境"), "craft") == ([], both)
+
+
+def test_the_practice_poll_redraws_when_the_heal_button_changes():
+    """療傷鈕的字寫價錢（內傷與銀兩決定）：輪詢只在 MENXIA_SHOWN 列的欄位變了才重畫，heal 不在裡面的話，
+    銀兩或內傷變了鈕上的價錢會一直是舊的（review-ap2 的小毛病）。煉製頁沒畫療傷鈕，不必。"""
+    src = (ROOT / "web" / "app.js").read_text(encoding="utf-8").replace("\r\n", "\n")
+    shown = {
+        page: re.findall(r'"([a-z_]+)"', fields)
+        for page, fields in re.findall(r"^\s+(practice|craft): \[(.*?)\],?(?:\s*//.*)?$", src[src.index("const MENXIA_SHOWN"):], re.M)
+    }
+    assert "heal" in shown["practice"] and "heal" not in shown["craft"]
 
 
 @needs_node
@@ -699,11 +720,11 @@ def test_the_melt_buttons_go_through_the_pages_own_layer():
 @needs_node
 def test_the_heal_button_draws_what_the_server_says_in_one_short_line():
     out = run(
-        "return [H.healButton({label:'療傷（銀兩 18）',ok:true,why:null}, true), H.healButton({label:'療傷（要 18 兩）',ok:false,why:'銀兩不足：療傷需要 18 兩。'}, true),"
+        "return [H.healButton({label:'療傷（要 18 兩）',ok:true,why:null}, true), H.healButton({label:'療傷（要 18 兩）',ok:false,why:'銀兩不足：療傷需要 18 兩。'}, true),"
         " H.healButton({label:'療傷（沒有內傷）',ok:false,why:'氣血無恙，不用療傷。'}, false), H.healButton(undefined, true), H.healButton(undefined, false)];",
         fns=["healButton"],
     )
-    assert out[0] == '<button class="btn" data-act="mx" data-op="heal" >療傷（銀兩 18）</button>'
+    assert out[0] == '<button class="btn" data-act="mx" data-op="heal" >療傷（要 18 兩）</button>'
     assert out[1].startswith('<button class="btn" data-act="mx" data-op="heal" disabled title="銀兩不足：療傷需要 18 兩。"') and ">療傷（要 18 兩）<" in out[1]
     assert "disabled" in out[2] and ">療傷（沒有內傷）<" in out[2]
     assert out[3] == '<button class="btn" data-act="mx" data-op="heal" >療傷</button>' and "disabled" in out[4]  # 舊版伺服器沒給：照舊
@@ -716,7 +737,7 @@ def test_the_practice_page_puts_the_heal_price_on_the_button_next_to_the_practic
         fns=FILTER_FNS, consts=FILTER_CONSTS, stubs=PRACTICE_STUBS,
     )
     row = re.search(r'<div class="row practice-actions">(.*?)</div>', html, re.S).group(1)
-    assert row.count("<button") == 2 and "療傷（銀兩 18）" in row and "練成武學（心得 1）" in row
+    assert row.count("<button") == 2 and "療傷（要 18 兩）" in row and "練成武學（心得 1）" in row
 
 
 @needs_node

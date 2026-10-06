@@ -1013,12 +1013,13 @@
     S.artFilter[page] = value;
     try { localStorage.setItem(filterKey(page), value); } catch (e) { /* 存不了就只在這一頁有效 */ }
   }
-  // 這一頁現在的篩選下，這一門武學要不要畫（選「意境」時武學一門都不畫）、意境要不要畫
+  // 這一頁現在的篩選下，這一門武學要不要畫（選「意境」時武學一門都不畫）、意境要不要畫（煉製頁的意境一律畫，見 showInsights）
   function showArts(page, art) {
     const f = artFilter(page);
     return f === "全部" || f === art.kind;
   }
   function showInsights(page) {
+    if (page === "craft") return true; // 煉製頁是拿一門武學配一個意境的地方：「內功」「武學」篩選不把意境整排藏起來（沒有提示會讓人以為意境不見了）
     const f = artFilter(page);
     return f === "全部" || f === "意境";
   }
@@ -2291,7 +2292,7 @@
   // 修練、煉製兩頁各自畫了 menxia 的哪幾欄（照 pagePractice／pageCraft）：輪詢只在這幾欄變了才重畫。
   // 不比整份，是因為本人卡上的氣血一直在回，整份 menxia 幾乎每分鐘都不一樣，煉製頁根本沒畫那張卡
   const MENXIA_SHOWN = {
-    practice: ["rules", "slot_cards", "owned_arts", "insights", "holdings", "naming", "player_card", "roster", "person", "person_card", "on_team"],
+    practice: ["rules", "slot_cards", "owned_arts", "insights", "holdings", "naming", "player_card", "roster", "person", "person_card", "on_team", "heal"],  // heal：療傷鈕的字寫價錢，銀兩與內傷變了就要重畫
     craft: ["owned_arts", "insights", "holdings", "clue_items", "bag", "forge_line", "xinde"],
   };
 

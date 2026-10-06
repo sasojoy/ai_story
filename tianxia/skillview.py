@@ -183,10 +183,11 @@ def heal_button(state: GameState, content: Content) -> dict:
     if int(member.injury) < 1:
         return {"label": "療傷（沒有內傷）", "ok": False, "why": "氣血無恙，不用療傷。"}
     cost = team.heal_cost(content, member)
+    label = f"療傷（要 {cost} 兩）"  # 有價錢的時候一律這個寫法（錢夠不夠只差在按不按得下去），省得兩種說法並存
     problem = team.heal_problem(state, content, member)
     if problem is not None:
-        return {"label": f"療傷（要 {cost} 兩）", "ok": False, "why": problem}
-    return {"label": f"療傷（銀兩 {cost}）", "ok": True, "why": None}
+        return {"label": label, "ok": False, "why": problem}
+    return {"label": label, "ok": True, "why": None}
 
 
 def _nearest_town(state: GameState, content: Content) -> tuple[str | None, bool]:
