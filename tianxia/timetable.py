@@ -267,7 +267,7 @@ def resolve(
         raise ValueError(f"大事 {event.id} 沒有結果 {full_key}")
     named = lock is not None and lock.side in outcome.locked_text
     losing = [x for x in w.lock_losers.get(event.id, []) if lock is not None and x.side != lock.side]
-    losers = [x.name for x in losing]  # 時間軸留真名（T9 的稱號）；公告寫顯示名（匿名的是「某位少俠」）
+    losers = [x.name for x in losing]  # 時間軸留名號（T9 的稱號）；公告寫 shown（一律名號；這一版之前匿名鎖定的是「某位少俠」）
     # 文字先填好再套效果：{官軍主將}、{人物:…} 指的是這件事發生「之前」的人（例：廣宗黃巾大勝，重挫的就是他）；
     # 人物效果落在誰身上也在這時定好——文字寫誰，效果就落在誰身上（FB-042），不因前一筆效果換了主將而改落到別人身上
     # 公告的組法（伏筆文件 3.4、5.4）：具名的一段＋這一檔的結果（含 note 與人物的後話）＋搶輸的一筆＋豪強的一筆

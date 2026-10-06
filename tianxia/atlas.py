@@ -21,7 +21,7 @@ from .rules import (
 from .state import GameState, Order, Rumor
 from .world import current_act, sim_active, storyline_off
 
-KNOWN =("current", "visible", "remembered")  # 摸清的地點
+KNOWN = ("current", "visible", "remembered")  # 摸清的地點
 LAYERS = {"situation": "局勢", "enemies": "敵情", "story": "劇情", "routes": "路線"}
 NEWS_DAYS = 3  # Config.rumor_board_days 的預設，只給 mapview.LEGEND_LAYERS 那一份預設說明用；✦、詳情欄、圖例真正用的是 news_days(content)
 NEWS_FAR = "這一帶離得遠，沒聽到什麼消息"  # 詳情欄：不在耳聞所及的大區，不替玩家斷言「沒有消息」（待 joy 潤）

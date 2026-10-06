@@ -214,7 +214,7 @@ class WorldStateStore(Protocol):
 
     def claim_master(self, skill_name: str, player: str, shown: str | None = None) -> bool:
         """這門武學這一季第一個修到絕學的人：還沒有人就記成 player、回 True；已經有人回 False（原子判斷）。
-        player 是名號（身分：取名權照它認）；shown 是寫給別人看的名號（匿名行走的人是「某位少俠」），
+        player 是名號（身分：取名權照它認）；shown 是寫給別人看的名號（引擎現在不給，一律寫名號；這一版之前匿名行走的人記成「某位少俠」），
         同一筆交易寫進那門武學的 master_shown（後到的人那一句、換季的江湖史照它寫）。"""
         ...
 

@@ -62,13 +62,13 @@ class Insight(BaseModel):
     attribute: str  # ATTRIBUTES 其中之一
     lean: str = "無"  # 正、邪、無（設計 7.3）
     creator: str | None = None  # 合併出來的：第一個合出來的人的名號（身分）；基本意境是 None
-    creator_shown: str | None = None  # 首悟者寫給別人看的名號（登記當下照匿名的規矩定，見 MartialArt.creator_shown）
+    creator_shown: str | None = None  # 首悟者寫給別人看的名號：名號（見 MartialArt.creator_shown；這一版之前匿名記下的「某位少俠」照舊）
     note: str = ""  # 模型寫的一句說明；基本意境是內容的 desc
     parents: list[str] = Field(default_factory=list)  # 合併出來的：兩個來源的 id（排序過）
 
 
 def shown_creator(thing: MartialArt | Insight) -> str | None:
-    """首創者寫給別人看的名號：登記當下定的那一個（匿名行走的人是「某位少俠」）；舊資料沒記，照名號。"""
+    """首創者寫給別人看的名號：登記當下記下的那一個（現在一律是名號；這一版之前匿名行走的人記成「某位少俠」，照舊）；舊資料沒記，照名號。"""
     return thing.creator_shown or thing.creator
 
 
