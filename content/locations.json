@@ -8,11 +8,11 @@
       "yingchuan_wilds",
       "songshan_foot",
       "yingchuan_academy",
+      "mentor_hut",
       {
         "to": "luoyang_road",
         "road": "官道"
-      },
-      "mentor_hut"
+      }
     ],
     "x": 464,
     "y": 940,
@@ -23,26 +23,6 @@
     "insights": [
       "huo"
     ]
-  },
-  {
-    "id": "mentor_hut",
-    "name": "草廬",
-    "description": "山腰上一間草廬，滿屋子酒味。門檻上蹺腳坐著一個頭髮蓬亂的老頭，腰間掛著一隻比腦袋還大的酒葫蘆。",
-    "connections": [
-      "yingchuan"
-    ],
-    "x": 500,
-    "y": 884,
-    "tags": [
-      "草廬"
-    ],
-    "insights": [
-      "feng",
-      "shan",
-      "shui",
-      "huo"
-    ],
-    "prologue_only": true
   },
   {
     "id": "yingshui",
@@ -1126,5 +1106,25 @@
       "shui",
       "feng"
     ]
+  },
+  {
+    "id": "mentor_hut",
+    "name": "草廬",
+    "description": "一間草廬，滿屋子酒味。",
+    "connections": [
+      "yingchuan"
+    ],
+    "x": 515,
+    "y": 880,
+    "tags": [
+      "草廬"
+    ],
+    "insights": [
+      "feng",
+      "shan",
+      "shui",
+      "huo"
+    ],
+    "prologue_only": true
   }
 ]

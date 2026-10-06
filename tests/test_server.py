@@ -74,26 +74,10 @@ def _no_landing(monkeypatch):
     monkeypatch.setattr(server.CONTENT.config, "land_chance_per_candidate", 0.0)
 
 
-@pytest.fixture
-def real_hut():
-    """要用真的序章（網頁上建的角色從草廬開始）的測試要這個：見 web_characters_start_in_town。"""
-
-
 @pytest.fixture(autouse=True)
-def web_characters_start_in_town(request, monkeypatch):
-    """正式內容有序章之後，網頁上建的新角色從草廬開始（server.create_character 傳 prologue=True）。這個檔案的測試測的是伺服器的各個動作，
-    要的是站在潁川、序章已經過去的角色（序章之前的樣子）：所以這裡把 prologue 旗子拿掉。序章自己的測試用 real_hut（正式內容的草廬）
-    或 prologue_content（測試內容的草廬）要回真的序章。"""
-    if "real_hut" in request.fixturenames or "prologue_content" in request.fixturenames:
-        return
-    real = Game.new.__func__
-
-    def new(cls, content, name, rng=None, world=None, prologue=False, graduated=False):
-        return real(cls, content, name, rng, world, prologue=False, graduated=graduated)
-
-    monkeypatch.setattr(Game, "new", classmethod(new))
-    # 師門配方（基礎拳腳＋風／山／水／火）是寫好的名字、不叫模型；這裡的開爐測試測的是模型取名的三段式，所以拿掉
-    # （配方本身在 test_fusion.py 與 test_prologue*.py 測）
+def _no_preset_recipes(monkeypatch):
+    """師門配方（基礎拳腳融風、山、水、火，content/preset_recipes.json）名字是寫好的、不叫模型；這裡測開爐取名的三段式，
+    拿基礎拳腳融基本意境當例子，要的是一般的配方。師門配方在 test_prologue.py、test_real_content.py 測。"""
     monkeypatch.setattr(server.CONTENT, "preset_recipes", [])
 
 
@@ -141,9 +125,14 @@ def client():
     return TestClient(server.app)
 
 
-def _player(client, login="shen_01", name="沈青衫"):
+def _player(client, login="shen_01", name="沈青衫", prologue=False):
+    """註冊、建角色。網頁上建的新角色先走序章（新手引導計畫一）；這裡的測試大多測序章之後的事，預設略過序章站到潁川
+    （prologue=True 留在草廬）。"""
     client.post("/api/register", json={"login": login, "password": "secret-pw", "again": "secret-pw"})
-    return client.post("/api/character", json={"name": name}).json()
+    out = client.post("/api/character", json={"name": name}).json()
+    if not prologue:
+        out = client.post("/api/do/skip_tutorial", json={}).json()
+    return out
 
 
 # ── 畫面資料 ────────────────────────────────────────────
@@ -4174,21 +4163,20 @@ def test_admin_schedule_jump_and_rescue_via_api(client, monkeypatch):
 # ── 引導小改版（新手引導重做設計第八節）─────────────────────────
 
 
-def test_main_view_sends_the_guide_box_and_skipping_hides_it(client, real_hut):
-    """正式內容的全新角色從草廬開始：遇險那一則還在眼前時沒有對話框；拜了師，/api/main 帶著師父第二步的話（不用點開任何東西）；
+def test_main_view_sends_the_guide_box_and_skipping_hides_it(client):
+    """全新角色走序章：遇險的事件在眼前時沒有對話框；拜師之後 /api/main 帶著師父第 2 步的話（不用點開任何東西）；
     略過新手引導後就沒有了。"""
-    main = _player(client)["main"]
+    main = _player(client, prologue=True)["main"]
+    assert main["guide"] is None  # 還沒遇到師父
+    for option in ("choice:0", "choice:0"):  # 遇險、拜師
+        main = client.post("/api/choose", json={"id": option}).json()["main"]
     tutorial = server.CONTENT.tutorial
-    assert main["guide"] is None and main["prologue"] == {"reveal": [], "glow": [], "skip": True}
-    game = server.game_for("沈青衫")
-    game.choose("choice:0")  # 遇險
-    game.choose("choice:0")  # 拜師
-    open_characters().save(game.state)
-    guide = client.get("/api/main").json()["guide"]
-    assert guide == {
-        "speaker": tutorial.speaker, "key": tutorial.steps[1].id, "scene": "", "text": tutorial.steps[1].text,
-        "line": tutorial.steps[1].line, "done": [], "end": False, "pending": False,
-    }  # 序章的步驟做完不寫「✔ 引導完成」（設計 3.1），done 是空的；key 是這一步的 id：網頁記收起記它；pending 標這一句是不是「先把眼前的「…」了結」，網頁預設把它收成一行（FB-076）
+    step = tutorial.steps[1]
+    assert main["guide"] == {
+        "speaker": tutorial.speaker, "key": step.id, "scene": "", "text": step.text, "line": step.line,
+        "done": main["guide"]["done"], "end": False, "pending": False,
+    }  # key 是這一步的 id：網頁記收起記它；pending 標這一句是不是「先把眼前的「…」了結」，網頁預設把它收成一行（FB-076）
+    assert tutorial.speaker == "師父" and step.id == "p2_apprentice"
     client.post("/api/do/skip_tutorial", json={})
     assert client.get("/api/main").json()["guide"] is None
 
@@ -4201,10 +4189,16 @@ def test_a_fight_then_an_event_sends_a_short_now_card_and_a_stable_guide_key(cli
     from tianxia import journal
 
     monkeypatch.setattr(server.CONTENT.config, "train_event_chance", 1.0)  # 打完一定接戰後的事件
-    first_step = _a_guide_step_after_the_hut(monkeypatch)  # 對話框在草廬裡遇到事件時整個不畫（見 Game.guide_box）；這個測試量的是草廬之外的收起規則
-    _player(client)
+    first_step = _a_guide_step_after_the_hut(monkeypatch)  # 序章之後沒有引導步驟了（軍令兩步由入伍段取代）：接一步測試用的
+    _player(client, prologue=True)
     game = server.game_for("沈青衫")
-    server.act(game, lambda g: setattr(g.state.player, "location", "yingchuan_wilds"))
+
+    def graduated(g):
+        g.state.player.location = "yingchuan_wilds"
+        g.state.player.tutorial_step = g.content.tutorial.prologue_steps
+        g.state.pending_event = None
+
+    server.act(game, graduated)
     assert client.get("/api/main").json()["guide"]["key"] == first_step.id
     game.rng = FixedRandom(0.99)
     assert client.post("/api/choose", json={"id": "act:train"}).status_code == 200
@@ -4231,7 +4225,7 @@ def test_a_fight_then_an_event_sends_a_short_now_card_and_a_stable_guide_key(cli
 def test_a_character_created_on_the_web_starts_in_the_hut(client, monkeypatch, prologue_content):
     """網頁上建的角色走序章（create_character 傳 prologue=True）；假人與腳本用的 Game.new 不傳，站在起點。"""
     monkeypatch.setattr(server, "CONTENT", prologue_content)
-    main = _player(client)["main"]
+    main = _player(client, prologue=True)["main"]
     player = server.game_for("沈青衫").state.player
     assert player.location == "hut" and player.tutorial_step == 0
     assert main["prologue"] == {"reveal": [], "glow": [], "skip": True}
@@ -4240,15 +4234,15 @@ def test_a_character_created_on_the_web_starts_in_the_hut(client, monkeypatch, p
 
 
 def test_the_prologue_recap_is_empty_without_a_prologue(client, monkeypatch, content):
-    """設定頁的「重看序章」：沒有序章的內容（測試夾具）是空字串，網頁就不畫那顆鈕。"""
+    """設定頁的「重看序章」：沒有序章的內容（測試內容）是空字串（網頁就不畫那顆鈕）。"""
     monkeypatch.setattr(server, "CONTENT", content)
     _player(client, "shen_02", "無序章")
     assert client.get("/api/prologue").json() == {"text": ""}
 
 
-def test_the_real_prologue_recap_reads_the_whole_prologue(client, real_hut):
+def test_the_real_prologue_recap_reads_the_whole_prologue(client):
     """正式內容的序章回顧：遇險、拜師、師父十一步的話照順序排成一頁，沒有沒換掉的佔位字。"""
-    _player(client, "shen_04", "沈青衫")
+    _player(client, "shen_04", "沈青衫", prologue=True)
     text = client.get("/api/prologue").json()["text"]
     assert text.index("潁川城外") < text.index("草廬") < text.index("去，按底下的「修練」") < text.index("這是盤纏")
     assert "{武學}" not in text and "山腰上的草廬不見了" in text
@@ -4266,10 +4260,11 @@ def test_the_prologue_recap_is_served_as_html(client, monkeypatch, prologue_cont
 
 
 def test_guide_ack_closes_the_outro(client, monkeypatch):
-    """結語的機制還在（之後引導有結語時用）：正式內容現在不寫結語（outro 是空的），這裡給一句。"""
-    monkeypatch.setattr(server.CONTENT.tutorial, "outro", "老夫能說的都說了。")
-    _player(client)
+    monkeypatch.setattr(server.CONTENT.tutorial, "outro", "去闖吧。")  # 正式內容的結語是空的（新手引導計畫三換成碰到才說）
+    _player(client, prologue=True)
     game = server.game_for("沈青衫")
+    game.state.player.location = server.CONTENT.scenario.start_location
+    game.state.pending_event = None
     game.state.player.tutorial_step = len(server.CONTENT.tutorial.steps)
     game.state.player.guide_outro = True
     open_characters().save(game.state)
@@ -5186,7 +5181,7 @@ def test_only_the_out_of_lock_steps_enter_the_model_queue():
     """靜態檢查：server.py 裡只有鎖外的四個函式（對話備料、大場面備料、開爐備料、隨口應對）呼叫 model_call；請求的鎖內段落（act、look、
     _locked）與排程（world_step）都不碰它。tianxia/（引擎，鎖內的 _quick_client 在那裡）沒有人 import llm_queue
     （Config 的三個開關欄位 llm_queue_* 是設定，不算）。"""
-    assert _users_in_server("model_call") == {"prepare_dialogue", "prepare_fight", "prepare_forge", "answer_event"}
+    assert _users_in_server("model_call") == {"prepare_dialogue", "prepare_fight", "prepare_forge", "answer_event", "sense_draw"}
     # 宣告、model_call 讀、main() 建佇列；另外兩個只看不排：/api/queue 問位置、管理者那份資料抄總數（admin_choices 在 look 的鎖裡，
     # 但 snapshot 只碰佇列自己的短鎖、不等任何一件，不算在行動鎖裡排隊）
     assert _users_in_server("QUEUE") == {None, "model_call", "main", "api_queue", "admin_choices"}
@@ -5331,7 +5326,7 @@ def test_the_queue_endpoint_finds_a_mixed_case_name_under_the_key_the_queue_uses
     """審查 M-4：佇列的鍵是名號的 casefold（model_call），/api/queue 也要用同一個鍵問。中文名號 casefold 什麼都沒變，
     所以要用有大小寫的名號：「ShenQing」排進去之後，問的人是「ShenQing」、鍵是「shenqing」。問錯鍵就永遠是 null。
     （管理者的名號「Rayal」是保留的、玩家取不到，所以用別的名號；管理者角色走的是同一條路。）"""
-    assert _player(client, login="shen_01", name="ShenQing")["stage"] == "game"
+    assert _player(client, login="shen_01", name="ShenQing", prologue=True)["stage"] == "game"
     queue = llm_queue.LlmQueue(slots=1, bot_cap=1)
     monkeypatch.setattr(server, "QUEUE", queue)
     started, release = threading.Event(), threading.Event()
@@ -5427,7 +5422,8 @@ def test_the_page_polls_the_queue_only_while_waiting_on_the_model():
     assert 'watchQueue(submitBtn, "思量中……")' in answer and "stop();" in answer.split("finally")[1]
     forge = _js_function(js, "async function forge(")
     assert 'watchQueue(btn, "爐火正旺…")' in forge and "finally { stop(); }" in forge
-    assert js.count("watchQueue(") == 4  # 定義一個、使用三個（對話與大場面是同一個選項流程）
+    assert 'watchQueue(send, "心念漸凝……")' in _js_function(js, "async function senseSend(")
+    assert js.count("watchQueue(") == 5  # 定義一個、使用四個（對話與大場面是同一個選項流程；有所感畫完送出另一個）
     sheet = _js_function(js, "function sheetHtml(")
     assert "a && a.llm_queue" in sheet and "模型佇列：處理中" in sheet
 
@@ -5645,7 +5641,7 @@ def test_the_main_view_says_whether_push_is_on_and_how_long_to_spread_the_refres
 def test_polling_and_entering_never_notify(client, told):
     """預檢 B1：輪詢（/api/main）、開頁（/api/me）、登入、註冊、建角色都會同步並存檔，但都不通知。通知一旦寫在輪詢的路上，
     同一個角色的兩個看得到的分頁就會互相叫醒、永遠停不下來（一個分頁輪詢 → 通知另一個 → 它輪詢 → 通知回來……）。"""
-    _player(client)
+    _player(client, prologue=True)  # 略過序章是一個動作（會通知），這裡只建角色
     assert client.get("/api/main").status_code == 200
     assert client.get("/api/me").json()["stage"] == "game"
     tab_b = TestClient(server.app)
@@ -5811,7 +5807,7 @@ def test_only_the_action_endpoints_tell_other_tabs():
     """預檢 B1 釘在結構上：HUB.notify 只在 _tell_tabs 裡，而 _tell_tabs 只有五個動作的端點在叫，act／look／act_look／
     poll_main／_entry 都不叫。以後誰把通知挪進共用的底層，輪詢會連帶通知，這個測試先紅。"""
     assert _function_users("notify") == {"_tell_tabs"}
-    assert _users_in_server("_tell_tabs") == {"api_choose", "api_answer", "api_do", "api_menxia_do", "api_travel"}
+    assert _users_in_server("_tell_tabs") == {"api_choose", "api_answer", "api_do", "api_menxia_do", "api_travel", "api_sense"}
 
 
 def test_current_fingerprint_follows_the_public_world():
@@ -6278,3 +6274,89 @@ def test_a_paused_season_never_asks_the_model(client, monkeypatch):
     ):
         assert client.post(path, json=body).status_code == 400, path
     assert asked == []
+
+
+# ── 有所感的畫布（悟意境設計 0.2、0.2a）────────────────────
+
+def _into_draw(game):
+    """把這個角色放進感悟狀態（選對做法、擲中了）：站到一個探索悟得到意境的地點，開一張有所感的卡。"""
+    import random as _random
+
+    from tianxia import insights, sensing
+
+    def setup(g):
+        loc = next(l for l in g.content.locations.values() if insights.explore_gives(l, g.content) and not l.prologue_only)
+        g.state.player.location = loc.id
+        scene = sensing.pick_scene(loc, g.content, _random.Random(0))
+        sensing.start(g.state, g.content, scene, _random.Random(0))
+        pool = insights.pool_attributes(loc, g.content)
+        g.state.player.sensing.stage = "draw"
+        g.state.player.sensing.method = next(m.attribute for m in scene.methods if m.attribute in pool)
+
+    server.act(game, setup)
+
+
+def _new_shape(game):
+    """一筆會悟出自己新意境（要取名）的現成筆畫；這一處每一筆都落回基本意境時是 None。"""
+    from tianxia import glyph
+
+    for points in glyph.SAMPLES.values():
+        req = game.sense_request(points)
+        if not isinstance(req, str) and req.needs_name:
+            return points
+    return None
+
+
+def test_drawing_a_new_shape_asks_the_model_outside_the_lock_with_the_picture(client):
+    _player(client)
+    game = next(iter(server.GAMES.values()))
+    _into_draw(game)
+    main = client.get("/api/main").json()
+    assert [o["id"] for o in main["options"]] == ["sense:draw", "sense:let"]
+    points = _new_shape(game)
+    assert points is not None
+    seen = {}
+
+    def fake_name(client_, content, facts, image="", budget=None, person=None):
+        seen["image"], seen["locked"] = image, game.world.db.writing()
+        return "湖心月", "一圈一圈的圓轉。", "看圖"
+
+    with mock.patch.object(server.insight_llm, "name", fake_name):
+        r = client.post("/api/sense", json={"points": points, "png": "AAAA"})
+    assert r.status_code == 200
+    assert seen == {"image": "AAAA", "locked": False}
+    assert not any(o["id"].startswith("sense:") for o in r.json()["main"]["options"])
+    own = game.state.player.own_insights
+    assert [i.name for i in own.values()] == ["湖心月"] and list(own.values())[0].glyph
+    assert game.state.journal[0].title.startswith("有所感・")
+
+
+def test_a_stroke_that_cannot_be_read_is_refused_and_keeps_the_state(client):
+    _player(client)
+    game = next(iter(server.GAMES.values()))
+    _into_draw(game)
+    r = client.post("/api/sense", json={"points": [[1, 1, 0]], "png": ""})
+    assert r.status_code == 400 and "點了一下" in r.json()["error"]
+    assert game.state.player.sensing is not None and game.state.player.sensing.stage == "draw"
+
+
+def test_sending_a_stroke_without_sensing_is_refused(client):
+    _player(client)
+    from tianxia import glyph
+
+    assert client.post("/api/sense", json={"points": glyph.SAMPLES["剛"]}).status_code == 400
+
+
+def test_the_canvas_line_reads_the_stroke_without_touching_the_game(client):
+    _player(client)
+    from tianxia import glyph
+
+    assert client.post("/api/sense_read", json={"points": glyph.SAMPLES["柔"]}).json()["note"].startswith("一筆畫成")
+    assert client.post("/api/sense_read", json={"points": "x"}).json()["problem"]
+
+
+def test_the_canvas_warms_the_model(client):
+    _player(client)
+    with mock.patch.object(server.insight_llm, "warm", return_value=True) as warm:
+        assert client.post("/api/sense_warm").json() == {"ok": True}
+    warm.assert_called_once()

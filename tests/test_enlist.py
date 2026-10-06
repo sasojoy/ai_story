@@ -672,6 +672,28 @@ def test_the_veteran_marking_leaves_everyone_else_alone(enlisting, world):
     enlisting.tutorial.enlist = saved
 
 
+def test_a_character_made_while_joys_prologue_was_live_is_neither_converted_nor_sent_back(enlisting, world):
+    """joy 的序章上線時建的角色版本章是 2（序章那一版）：還在草廬的留在草廬、步數不被換算（章 2 的步數已經是新編號）；沒投靠的讀檔後蓋成新章、
+    投靠時照常走入伍段；已經投靠的當老手蓋成走完。"""
+    import random
+
+    from tianxia.engine import Game
+
+    mid = Game.new(enlisting, "草廬裡", rng=random.Random(0), world=world, prologue=True)
+    mid.state.player.tutorial_step, mid.state.player.onboarding = 5, 2
+    again = Game(enlisting, mid.state, world=world)
+    p = again.state.player
+    assert (p.tutorial_step, p.location, p.onboarding, p.enlist_step) == (5, "mentor_hut", ONBOARDING_VERSION, None)
+    out = Game.new(enlisting, "出了草廬", rng=random.Random(0), world=world)  # 走完序章、還沒投靠
+    out.state.player.onboarding = 2
+    again = Game(enlisting, out.state, world=world)
+    assert again.state.player.enlist_step is None
+    again.state.player.location = "changshe"
+    again.choose("faction:guan")
+    again.choose("faction:confirm")
+    assert again.state.player.enlist_step == 0 and again.guide_box()["speaker"] == "老石"
+
+
 def test_a_fresh_character_walks_the_enlistment_and_is_never_marked_as_a_veteran(enlisting, world):
     """換版之後建的角色版本章就是新的：投靠時照常走；之後讀檔、換季（沒走完的重來）都不會被蓋成老手。"""
     from tianxia.engine import Game

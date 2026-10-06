@@ -8,60 +8,122 @@
     {
       "id": "p1_ambush",
       "text": "",
-      "done_when": {"action": "choice", "condition": {"flags_all": ["序章:拜師"]}}
+      "done_when": {
+        "action": "choice",
+        "condition": {
+          "flags_all": [
+            "序章:拜師"
+          ]
+        }
+      }
     },
     {
       "id": "p2_apprentice",
       "text": "去，按底下的「修練」，看看你身上帶了什麼。",
       "line": "按底下的「修練」，看看身上的兩門功夫",
-      "done_when": {"action": "view_tab", "condition": {"flags_all": ["看過:practice"]}},
-      "reveal": ["xinde", "tab:jianghu", "tab:practice"],
-      "glow": ["tab:practice"]
+      "done_when": {
+        "action": "view_tab",
+        "condition": {
+          "flags_all": [
+            "看過:practice"
+          ]
+        }
+      },
+      "reveal": [
+        "xinde",
+        "tab:jianghu",
+        "tab:practice"
+      ],
+      "glow": [
+        "tab:practice"
+      ]
     },
     {
       "id": "p3_insight",
       "text": "看見了吧？吐納是內功，拳腳是武學，身上各帶一門。可這兩門是人人都會的粗淺東西，打不過那個斷眉。要長出新功夫，得先「悟」。回「江湖」按「探索」，草廬附近有四處好景致，挑一處，看到你看懂為止。",
       "line": "回「江湖」按「探索」，挑一處景致去悟",
-      "done_when": {"action": "choice", "condition": {"flags_all": ["序章:悟"]}},
-      "reveal": ["stamina", "act:explore"],
-      "glow": ["tab:jianghu", "act:explore"],
-      "allow": ["act:explore"],
-      "explore_event": "prologue_insight"
+      "done_when": {
+        "action": "sense",
+        "condition": {
+          "flags_all": [
+            "序章:悟"
+          ]
+        }
+      },
+      "reveal": [
+        "stamina",
+        "act:explore"
+      ],
+      "glow": [
+        "tab:jianghu",
+        "act:explore"
+      ],
+      "allow": [
+        "act:explore"
+      ],
+      "explore_scene": "prologue_hut"
     },
     {
       "id": "p4_fuse",
-      "text": "喲，悟出東西來了？比為師當年快多了。為師當年看了三天，最後是喝醉了才看懂的。\n\n意境是死的，功夫是活的。把你的「基礎拳腳」跟這意境揉在一塊，就能長出一門新功夫。放心，原來那門還在，一根毛都不會少。到『煉製』那裡試試，花你 5 點心得。",
+      "text": "喲，悟出東西來了？比為師當年快多了。為師當年看了三天，最後是喝醉了才看懂的。意境是死的，功夫是活的。把你的「基礎拳腳」跟這意境揉在一塊，就能長出一門新功夫。放心，原來那門還在，一根毛都不會少。到「煉製」那裡試試，花你 5 點心得。",
       "line": "到「煉製」把基礎拳腳融進意境",
-      "done_when": {"fused": true},
-      "reveal": ["tab:craft"],
-      "glow": ["tab:craft", "pick:art", "pick:insight", "forge"],
-      "fuse_base": "jichu_quanjiao",
-      "after": "你把基礎拳腳融進{意境}之意境，練出了一門新武學——【{武學}】。"
+      "done_when": {
+        "fused": true
+      },
+      "reveal": [
+        "tab:craft"
+      ],
+      "glow": [
+        "tab:craft",
+        "pick:art",
+        "pick:insight",
+        "forge"
+      ],
+      "fuse_base": "jichu_quanjiao"
     },
     {
       "id": "p5_level",
-      "text": "這是為師這一脈傳下來的路數，你算是接上了。\n\n剛長出來的功夫嫩得很，只有第一成火候。先到功法庫把它「改練」上身，再拿心得去「練成」，練到第三成再說。心得管學：從第幾成往上練一成，就花幾點，越往上越貴。",
+      "text": "這是為師這一脈傳下來的路數，你算是接上了。剛長出來的功夫嫩得很，只有第一成火候。先到功法庫把它「改練」上身，再拿心得去「練成」，練到第三成再說。心得管學：從第幾成往上練一成，就花幾點，越往上越貴。",
       "line": "先把【{武學}】改練上身，再練到第三成",
-      "done_when": {"fused_level": 3},
-      "glow": ["tab:practice", "switch", "practice"]
+      "done_when": {
+        "fused_level": 3
+      },
+      "glow": [
+        "tab:practice",
+        "switch",
+        "practice"
+      ]
     },
     {
       "id": "p6_refine",
       "text": "成數是火候，品質是底子。你這門是下品，想讓它往上走，就得一遍一遍「修練」。這回不花心得，花體力。修不成也不白修，下一回機會就大一點。",
       "line": "到「修練」修練【{武學}】，衝一衝品質",
-      "done_when": {"fused_quality": "中品"},
-      "glow": ["tab:practice", "cultivate"],
-      "sure_cultivate": true,
-      "after": "這一遍修練，你忽然摸到了門道——【{武學}】從下品升到了中品！"
+      "done_when": {
+        "fused_quality": "中品"
+      },
+      "glow": [
+        "tab:practice",
+        "cultivate"
+      ],
+      "sure_cultivate": true
     },
     {
       "id": "p7_rest",
-      "text": "運氣不錯。別指望次次都這麼順，為師修一門上品修了半年。\n\n瞧你喘的，體力見底了吧？體力見了底，什麼都做不成。就地「打坐」歇一歇，坐著回得比走著快。",
+      "text": "運氣不錯。別指望次次都這麼順，為師修一門上品修了半年。瞧你喘的，體力見底了吧？體力見了底，什麼都做不成。就地「打坐」歇一歇，坐著回得比走著快。",
       "line": "體力見底了，按「打坐」歇一歇",
-      "done_when": {"action": "rest"},
-      "reveal": ["act:rest"],
-      "glow": ["tab:jianghu", "act:rest"],
-      "allow": ["act:rest"],
+      "done_when": {
+        "action": "rest"
+      },
+      "reveal": [
+        "act:rest"
+      ],
+      "glow": [
+        "tab:jianghu",
+        "act:rest"
+      ],
+      "allow": [
+        "act:rest"
+      ],
       "instant_rest": "你盤腿坐下，照吐納的法子慢慢呼吸。再睜開眼時，渾身又有了力氣。"
     },
     {
@@ -69,43 +131,90 @@
       "scene": "草廬外忽然一陣吵嚷。斷眉帶著三個嘍囉堵在門口：「老酒鬼！上回是你壞我好事，今天連本帶利——」師父灌了一口酒，往旁邊一讓。",
       "text": "找我？我這把老骨頭，不碰刀兵。你們找我徒兒吧。……徒兒，選單上多了一個「遊歷」。這一仗，為師看好你。",
       "line": "按「遊歷」，跟斷眉打一場",
-      "done_when": {"action": "train"},
-      "reveal": ["hp", "act:train"],
-      "glow": ["act:train"],
-      "allow": ["act:train"],
-      "enemies": ["prologue_duanmei"],
+      "done_when": {
+        "action": "train"
+      },
+      "reveal": [
+        "hp",
+        "act:train"
+      ],
+      "glow": [
+        "act:train"
+      ],
+      "allow": [
+        "act:train"
+      ],
+      "enemies": [
+        "prologue_duanmei"
+      ],
       "force_tier": "險勝",
-      "give_art": {"id": "manniu_quan", "level": 5}
+      "give_art": {
+        "id": "manniu_quan",
+        "level": 5
+      }
     },
     {
       "id": "p9_stat",
       "scene": "斷眉被你打得連退幾步，一跤坐倒，爬起來就跑，懷裡掉出一本油膩膩的冊子。",
-      "text": "好！當初把你打得爬不起來的人，今天被你打跑了。這就是功夫。\n\n打完這一場，你升了一級。每升一級，身上就多一點力氣，往哪裡長你自己挑：臂力管拳腳，根骨管內功和氣血，身法管閃躲，悟性管修練和悟意境。點你的名號就能分。",
+      "text": "好！當初把你打得爬不起來的人，今天被你打跑了。這就是功夫。打完這一場，你升了一級。每升一級，身上就多一點力氣，往哪裡長你自己挑：臂力管拳腳，根骨管內功和氣血，身法管閃躲，悟性管修練和悟意境。點你的名號就能分。",
       "line": "點名號，分配一點屬性",
-      "done_when": {"action": "allocate"},
-      "reveal": ["stats"],
-      "glow": ["stats", "allocate"]
+      "done_when": {
+        "action": "allocate"
+      },
+      "reveal": [
+        "stats"
+      ],
+      "glow": [
+        "stats",
+        "allocate"
+      ]
     },
     {
       "id": "p10_melt",
       "text": "斷眉掉的這本是什麼？「蠻牛拳」……喲，他還真練了幾年，譜上記得密密麻麻。這種東西留著佔地方，人能記住的功夫有限，武學跟意境加起來最多五十樣。用不上的就「熔」了，當初練它花的心得，能拿回八成。",
       "line": "到功法庫把【蠻牛拳】熔了",
-      "done_when": {"action": "melt"},
-      "glow": ["tab:practice", "melt"],
-      "melt_only": "manniu_quan",
-      "after": "你把蠻牛拳熔了，換回 {心得} 點心得。"
+      "done_when": {
+        "action": "melt"
+      },
+      "glow": [
+        "tab:practice",
+        "melt"
+      ],
+      "melt_only": "manniu_quan"
     },
     {
       "id": "p11_farewell",
       "scene": "師父放下酒葫蘆，難得正經。",
-      "text": "「徒兒，為師能教的都教了，剩下的得你自己去江湖上撞。外頭亂成一鍋粥，你也看見了。朝廷要派官軍來剿，長社那邊已經在收人；黃巾喊著『蒼天已死，黃天當立』，他們的別部營寨就紮在山谷裡；各地的豪強也在築塢堡、招家丁，譙縣曹家的莊院就是一處。跟誰、什麼時候跟，你自己拿主意。誰都不跟也行，當個散人，天下照樣走得。」\n\n他看著你，酒意全沒了。「還有一件事。天命裂了一道縫。我們這種人不能碰凡間的刀兵，只好從外頭找個人來，替我看著。看著什麼？現在說了你也不懂。等哪天天下人都搶紅了眼，你就知道了。」「我有個師兄愛管閒事，把不該給的東西給了不該給的人，這攤子才爛成這樣。」「哪天你在山裡的道觀，看見一面刻滿了字的石壁，記得想起我。」「對了——你讀過的那本史書，別太當真。從你落地那一刻起，它就不準了。」\n\n他塞給你一個錢袋。「這是盤纏，別拿去買酒——要買，也記得分為師一壺。去吧，打開『輿圖』，先到潁川城看看。步行不花體力，只花時間；趕路快一倍，疾行立刻到，都得拿體力去換。」",
+      "text": "徒兒，為師能教的都教了，剩下的得你自己去江湖上撞。外頭亂成一鍋粥，你也看見了。朝廷要派官軍來剿，長社那邊已經在收人；黃巾喊著「蒼天已死，黃天當立」，他們的別部營寨就紮在山谷裡；各地的豪強也在築塢堡、招家丁，譙縣曹家的莊院就是一處。跟誰、什麼時候跟，你自己拿主意。誰都不跟也行，當個散人，天下照樣走得。\n\n他看著你，酒意全沒了。「還有一件事。天命裂了一道縫。我們這種人不能碰凡間的刀兵，只好從外頭找個人來，替我看著。看著什麼？現在說了你也不懂。等哪天天下人都搶紅了眼，你就知道了。」「我有個師兄愛管閒事，把不該給的東西給了不該給的人，這攤子才爛成這樣。」「哪天你在山裡的道觀，看見一面刻滿了字的石壁，記得想起我。」「對了——你讀過的那本史書，別太當真。從你落地那一刻起，它就不準了。」\n\n他接著塞給你一個錢袋。「這是盤纏，別拿去買酒——要買，也記得分為師一壺。去吧，打開『輿圖』，先到潁川城看看。步行不花體力，只花時間；趕路快一倍，疾行立刻到，都得拿體力去換。」",
       "line": "打開「輿圖」，前往潁川",
-      "done_when": {"action": "move", "locations": ["yingchuan"]},
-      "reveal": ["all"],
-      "glow": ["act:move", "tab:map"],
-      "allow": ["move:yingchuan"],
+      "done_when": {
+        "action": "move",
+        "locations": [
+          "yingchuan"
+        ]
+      },
+      "reveal": [
+        "all"
+      ],
+      "glow": [
+        "act:move",
+        "tab:map"
+      ],
+      "allow": [
+        "move:yingchuan"
+      ],
+      "reward": {
+        "stats": {
+          "silver": 30
+        },
+        "stamina": 150
+      },
       "paged": true,
-      "reward": {"stats": {"silver": 30}, "stamina": 150}
+      "survey": [
+        "changshe",
+        "huangjin_camp",
+        "cao_manor"
+      ]
     }
   ],
   "outro": "",

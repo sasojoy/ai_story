@@ -30,7 +30,7 @@ import hashlib
 import random
 from dataclasses import dataclass
 
-from . import insights, landing, library, naming, team, traits
+from . import insights, landing, library, naming, sensing, team, traits
 from .martial_arts import ATTRIBUTE_COUNTERS, Insight, MartialArt, generate_from_name, shown_creator
 from .models import Content, PresetRecipe
 from .ollama_client import OllamaClient
@@ -127,8 +127,21 @@ def quality_odds_text(odds: QualityOdds) -> str:
     return text + (f"（{'、'.join(odds.reasons)}）" if odds.reasons else "")
 
 
-def fuse_key(art_id: str, insight_id: str) -> str:
+OWN_TOKEN = "屬:"
+
+
+def fuse_key(art_id: str, insight_id: str, attribute: str | None = None) -> str:
+    """武學＋意境的配方鍵。私有意境（感悟悟來的，insights.is_own）沒有全服的 id：照它的屬性認（悟意境設計 0.2b 第 4 點），
+    寫成「融|底+屬:柔」——誰拿自己悟的哪一個柔意境融這門底，合出來的都是全服同一門；attribute 就是那個屬性。"""
+    if insights.is_own(insight_id):
+        return f"{FUSE_PREFIX}{art_id}+{OWN_TOKEN}{attribute}"
     return f"{FUSE_PREFIX}{art_id}+{insight_id}"
+
+
+def fuse_key_for(state: GameState, content: Content, world: WorldStateStore, art_id: str, insight_id: str) -> str:
+    """fuse_key，私有意境的屬性從這個玩家自己的存檔查。查不到（失效的引用）照 id 寫——那一爐本來就會被擋下來。"""
+    insight = insights.resolve(insight_id, content, world, state)
+    return fuse_key(art_id, insight_id, insight.attribute if insight is not None else None)
 
 
 def merge_key(a: str, b: str) -> str:
@@ -152,6 +165,7 @@ class Shape:
     attribute: str
     lean: str
     insight: str | None
+    insight_attr: str | None = None  # 修練認的意境屬性（私有意境融出來的那一門 insight 是 None、只記屬性）
 
 
 def _bit(seed: str, what: str) -> int:
@@ -168,7 +182,8 @@ def blend_shape(a: MartialArt, b: MartialArt, seed: str) -> Shape:
     matching = [art for art in (first, second) if art.attribute == attribute]
     keeper = matching[0] if len(matching) == 1 else (first, second)[_bit(seed, "insight")]
     other = second if keeper is first else first
-    return Shape(kind, attribute, insights.merged_lean(first, second), keeper.insight or other.insight)
+    held = keeper if keeper.insight or keeper.insight_attr else other
+    return Shape(kind, attribute, insights.merged_lean(first, second), held.insight, held.insight_attr)
 
 
 def merge_shape(world: WorldStateStore, a: Insight, b: Insight) -> tuple[str, str]:
@@ -299,9 +314,9 @@ def fuse_problem(state: GameState, content: Content, world: WorldStateStore, art
         return "你沒有這門武學。"
     if insight_id not in state.player.insights:
         return "你還沒悟到這個意境。"
-    if team.player_art(state, content, world, art_id) is None or insights.resolve(insight_id, content, world) is None:
+    if team.player_art(state, content, world, art_id) is None or insights.resolve(insight_id, content, world, state) is None:
         return "找不到它的資料。"  # 存檔裡記著、內容與全服登記裡都沒有（失效的引用）
-    known = world.lookup_recipe(fuse_key(art_id, insight_id))
+    known = world.lookup_recipe(fuse_key_for(state, content, world, art_id, insight_id))
     if known is not None and known.id in library.owned_arts(state):
         return f"這一爐合出來還是【{known.name}】，你已經有了——換一組試試吧。"
     if library.full(state, content):
@@ -352,13 +367,13 @@ def forge_request(
         insight_id = insight_ids[0]
         if fuse_problem(state, content, world, art_id, insight_id) is not None:
             return None
-        key = fuse_key(art_id, insight_id)
+        key = fuse_key_for(state, content, world, art_id, insight_id)
         if world.lookup_recipe(key) is not None:
             return None
         if preset_for(content, art_id, insight_id) is not None:
             return None  # 師門配方：名字寫好了，不用模型（fuse 也不擲合到舊的）
         base = team.player_art(state, content, world, art_id)
-        insight = insights.resolve(insight_id, content, world)
+        insight = insights.resolve(insight_id, content, world, state)
         tianji, _ = recipe_seed(world, key)
         candidates = landing.art_candidates(world, base.kind, insight.attribute, insight.lean)
         if landing.lands(content, key, tianji, len(candidates)):
@@ -370,9 +385,11 @@ def forge_request(
         if merge_problem(state, content, world, a, b) is not None:
             return None
         key = merge_key(a, b)
+        ia, ib = insights.resolve(a, content, world, state), insights.resolve(b, content, world, state)
+        if insights.is_own(a) or insights.is_own(b):  # 有私有意境的合併：沒有配方、每次都叫模型（悟意境設計 0.2b 第 4 點）
+            return naming.NamingRequest("merge", key, "意境", _merge_messages(ia, ib))
         if world.lookup_insight_recipe(key) is not None:
             return None
-        ia, ib = insights.resolve(a, content, world), insights.resolve(b, content, world)
         tianji, seed = recipe_seed(world, key)
         candidates = landing.insight_candidates(
             world, insights.merged_attribute(ia, ib, seed), insights.merged_lean(ia, ib),
@@ -430,8 +447,9 @@ def fuse(
     if problem is not None:
         return None, [problem]
     base = team.player_art(state, content, world, art_id)
-    insight = insights.resolve(insight_id, content, world)
-    key = fuse_key(art_id, insight_id)
+    insight = insights.resolve(insight_id, content, world, state)
+    own = insights.is_own(insight_id)
+    key = fuse_key(art_id, insight_id, insight.attribute)
     preset = preset_for(content, art_id, insight_id)  # 師門配方：這一季誰先合、後合都是它，所以先算好（_fuse_line 也要看）
     art, first, landed = world.lookup_recipe(key), False, False
     if art is None:
@@ -460,7 +478,9 @@ def fuse(
                     "origin": "fused", "creator": None if preset else state.player.name,
                     "creator_shown": None if preset else state.player.name, "preset": preset is not None,
                     "note": note if candidate_name == name else "",  # 說明是模型替它那個名字寫的；換成退路名字就不帶
-                    "insight": insight.id, "base": art_id, "lean": insight.lean,
+                    # 私有意境不進全服登記（別人查不到它）：只記屬性，修練時拿手上同屬性的意境來修（悟意境設計 0.2b）
+                    "insight": None if own else insight.id, "insight_attr": insight.attribute,
+                    "base": art_id, "lean": insight.lean,
                     "traits": new_traits, "special": special_id,
                 })
                 art, first = world.claim_recipe(key, candidate)  # 同時有人先登記了：拿到的是人家登記的那一門
@@ -520,17 +540,30 @@ def merge_problem(state: GameState, content: Content, world: WorldStateStore, a:
     held = state.player.insights
     if a not in held or b not in held:
         return "兩個意境都要是你悟得的。"
-    if insights.resolve(a, content, world) is None or insights.resolve(b, content, world) is None:
+    ia, ib = insights.resolve(a, content, world, state), insights.resolve(b, content, world, state)
+    if ia is None or ib is None:
         return "找不到它的資料。"
-    known = world.lookup_insight_recipe(merge_key(a, b))
-    if known is not None and known.id in held:
-        return f"這兩個合起來還是「{known.name}」，你已經悟得了。"
+    if insights.is_own(a) or insights.is_own(b):
+        made = _own_merged(state, a, b)
+        if made is not None:
+            return f"這兩個你已經合過了，化成的「{made.name}」還在你心裡。"
+    else:
+        known = world.lookup_insight_recipe(merge_key(a, b))
+        if known is not None and known.id in held:
+            return f"這兩個合起來還是「{known.name}」，你已經悟得了。"
     if library.full(state, content):
         return _full_line(state, content)
     problem = _xinde_line(state, content.config.merge_xinde, "合併")
     if problem is not None:
         return problem
     return _stamina_line(state, content.config.merge_stamina, "合併")  # 三種合成都花體力（設計 12.1）
+
+
+def _own_merged(state: GameState, a: str, b: str) -> Insight | None:
+    """這兩個合出來、還在手上的私有意境（同一對不給一直合：每次都要叫模型，合出來的又是一個新的）。"""
+    parents = sorted([a, b])
+    p = state.player
+    return next((i for i in p.own_insights.values() if i.parents == parents and i.id in p.insights), None)
 
 
 def _merge_messages(a: Insight, b: Insight) -> list[dict[str, str]]:
@@ -560,10 +593,12 @@ def merge(
     problem = merge_problem(state, content, world, a, b)
     if problem is not None:
         return None, [problem]
-    ia, ib = insights.resolve(a, content, world), insights.resolve(b, content, world)
+    ia, ib = insights.resolve(a, content, world, state), insights.resolve(b, content, world, state)
     key = merge_key(a, b)
     tianji = recipe_seed(world, key)[0]
     attribute, lean = merge_shape(world, ia, ib)
+    if insights.is_own(a) or insights.is_own(b):
+        return _merge_own(state, content, world, client, ia, ib, attribute, lean, key, proposed)
     result, first, landed = world.lookup_insight_recipe(key), False, False
     if result is None:
         candidates = landing.insight_candidates(world, attribute, lean)
@@ -596,6 +631,28 @@ def merge(
     head += "\n這是江湖上第一次有人悟出這個意境。" if first else f"\n這個意境由{shown_creator(result) or '不知名的前人'}首悟。"
     cfg = content.config
     # 真的合成了才扣：被拒絕、名字都被用掉的都不收體力，跟心得同一個點
+    return result, [head] + _charge(state, cfg.merge_xinde, cfg.merge_stamina)
+
+
+def _merge_own(
+    state: GameState, content: Content, world: WorldStateStore, client: OllamaClient | None, ia: Insight, ib: Insight,
+    attribute: str, lean: str, key: str, proposed: tuple[str | None, str] | None,
+) -> tuple[Insight | None, list[str]]:
+    """有私有意境的合併（悟意境設計 0.2b）：合出來的也是私有的——不登記、不擲合到舊的、每次都叫模型取名
+    （proposed 是鎖外取好的；沒給才在這裡叫），名字只跟自己手上的比（sensing.own_name）。"""
+    if proposed is None:
+        proposed = _named(client, content, world, _merge_messages(ia, ib), None)
+    p = state.player
+    name, note, _ = sensing.own_name(state, content, world, f"{key}|{p.name}|{p.own_serial + 1}", proposed)
+    result = sensing.add_own(state, Insight(
+        id="", name=name, attribute=attribute, lean=lean, creator=p.name, creator_shown=p.name, note=note,
+        parents=sorted([ia.id, ib.id]), place=ia.place or ib.place,
+    ))
+    head = f"「{ia.name}」與「{ib.name}」在你心中交融，化成「{result.name}」（屬{result.attribute}）！"
+    if result.note:
+        head += f"\n{result.note}"
+    head += "\n這份領悟是你自己的，江湖上沒有第二份。"
+    cfg = content.config
     return result, [head] + _charge(state, cfg.merge_xinde, cfg.merge_stamina)
 
 
@@ -666,7 +723,7 @@ def blend(
                 candidate = candidate.model_copy(update={
                     "origin": "fused", "creator": state.player.name, "creator_shown": state.player.name,
                     "note": note if candidate_name == name else "",
-                    "insight": shape.insight, "base": None, "parents": sorted([a, b]), "lean": shape.lean,
+                    "insight": shape.insight, "insight_attr": shape.insight_attr, "base": None, "parents": sorted([a, b]), "lean": shape.lean,
                     "traits": new_traits, "special": special_id,
                 })
                 art, first = world.claim_recipe(key, candidate)

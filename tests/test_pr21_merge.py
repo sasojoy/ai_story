@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 from conftest import FixedRandom
-from tianxia import cultivation, fusion, library, prologue, skillview, team
+from tianxia import cultivation, fusion, library, prologue, sensing, skillview, team
 from tianxia.content import load_content
 from tianxia.engine import Game
 from tianxia.martial_arts import power_at
@@ -79,7 +79,10 @@ def _hut_up_to_the_fusion(real, world):
         game.choose(option)
     game.view_tab("practice")
     game.choose("act:explore")
-    game.choose("choice:0")  # 四景四選一
+    got = sensing.current(game.state, real)  # 草廬四景（有所感）：選松林聽風、順其自然
+    order = [got[1].methods[j].attribute for j in got[0].order]
+    game.choose(f"sense:{order.index('快')}")
+    game.choose(sensing.LET_GO)
     return game
 
 
@@ -107,7 +110,7 @@ def test_prologue_steps_6_and_10_one_cultivation_reaches_the_middle_grade_and_me
     game.rng = FixedRandom(0.99)  # 平常的擲骰一定落空：序章這一步的修練照劇本必成（prologue.sure_rng）
     cultivated = game.cultivate(art.id)
     assert game.state.player.art_quality[art.id] == "中品" and game.state.player.tutorial_step == 6
-    assert cultivated[0].endswith("從下品升到了中品！")
+    assert cultivated[0].endswith("從下品晉為中品！")  # joy 的版本沒有寫「…之後」的句子（TutorialStep.after），用引擎的一般那句
     assert art.id not in game.state.player.art_rolled  # 中品是修練上去的，不是合成擲到的
     game.choose("act:rest")
     game.choose("act:train")
@@ -115,7 +118,7 @@ def test_prologue_steps_6_and_10_one_cultivation_reaches_the_middle_grade_and_me
     assert game.state.player.tutorial_step == 9
     before = game.state.player.stats["xinde"]
     melted = game.melt_art("manniu_quan")
-    assert melted[0] == "你把蠻牛拳熔了，換回 8 點心得。" and "心得 +8" in melted
+    assert melted[0] == "你把【蠻牛拳】熔成了心得。" and "心得 +8" in melted  # 同上：引擎的一般那句，退回的心得是真的 8 點
     assert game.state.player.stats["xinde"] - before == 8
 
 

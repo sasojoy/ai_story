@@ -11,7 +11,8 @@
 - 自創武學（`skills`）、煉製配方（`recipes`）、投靠名冊（`faction_rolls`）一列一筆、記著第幾季：
   換季不用清空，新的一季自然是空的，上一季的留著。第 2 版再加改過的名字（`skill_aliases`）、合併出來的意境
   （`insights`、`insight_recipes`）、第一個練成絕學的人（`masters`），同樣照季分；功法、改過的名字與意境
-  共用一個名字空間（`_name_taken`）。
+  共用一個名字空間（`_name_taken`）。第 3 版加感悟的首悟紀錄（`insight_firsts`，悟意境設計 0.2b）：只是紀錄，
+  意境本身私有、存在角色存檔裡，不佔名字空間。
 - 每個會寫的方法自己是一筆交易；呼叫端已經在 action_lock() 裡時，併進那一筆（見 database.Database）。
 """
 from __future__ import annotations
@@ -326,6 +327,23 @@ class SqliteWorldStore:
                 (self._season_number(conn), skill_name),
             ).fetchone()
         return None if row is None else row["master"]
+
+    # ── 感悟的首悟紀錄 ────────────────────────────────────
+    def claim_insight_first(self, key: str, name: str, creator: str, place: str, time: float = 0.0) -> bool:
+        with self.db.transaction() as conn:
+            cursor = conn.execute(
+                "INSERT INTO insight_firsts (season, key, name, creator, place, time) VALUES (?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT DO NOTHING",
+                (self._season_number(conn), key, name, creator, place, time),
+            )
+            return cursor.rowcount == 1
+
+    def insight_first(self, key: str) -> tuple[str, str] | None:
+        with self.db.snapshot() as conn:
+            row = conn.execute(
+                "SELECT name, creator FROM insight_firsts WHERE season = ? AND key = ?", (self._season_number(conn), key),
+            ).fetchone()
+        return None if row is None else (row["name"], row["creator"] or "")
 
     # ── 同伴性情漂移 ──────────────────────────────────────
 
@@ -683,7 +701,8 @@ def _insight_recipe(conn: Connection, season: int, key: str) -> Insight | None:
 
 
 def _season_firsts_lines(conn: Connection, season: int) -> list[str]:
-    """這一季的首創，寫成江湖史（跨季保留，武學與成長設計 3.10）：合成首創、首悟意境、練成絕學。
+    """這一季的首創，寫成江湖史（跨季保留，武學與成長設計 3.10）：合成首創、首悟意境（合併出來的）、感悟首悟（悟意境設計 0.2b）、
+    練成絕學。
     武學照現在顯示的名字（練成絕學改過名的寫新名）；沒有的那一類不寫。
     人名寫登記當下記下的「寫給別人看的名號」（現在一律是名號；這一版之前匿名行走的人記成「某位少俠」，照舊）：
     功法、意境的 creator_shown，武學的 master_shown；舊資料沒記的照資料表裡的名號。
@@ -710,6 +729,12 @@ def _season_firsts_lines(conn: Connection, season: int) -> list[str]:
     if insights_rows:
         firsts = "、".join(f"「{row['insight_name']}」{row['creator'] or '無名氏'}" for row in insights_rows)
         lines.append(f"第 {season} 季首悟意境 {len(insights_rows)} 個：{firsts}")
+    sensed = conn.execute(
+        "SELECT name, creator, place FROM insight_firsts WHERE season = ? ORDER BY rowid", (season,),
+    ).fetchall()
+    if sensed:  # 心有所感、一筆畫下悟到的意境是私有的，全服只留首悟的紀錄（悟意境設計 0.2b）
+        firsts = "、".join(f"「{row['name']}」{row['creator'] or '無名氏'}（{row['place']}）" for row in sensed)
+        lines.append(f"第 {season} 季感悟首悟 {len(sensed)} 處：{firsts}")
     masters = conn.execute(
         "SELECT json_extract(s.data, '$.name') AS name, "
         "COALESCE(json_extract(s.data, '$.master_shown'), m.master) AS master FROM masters m "

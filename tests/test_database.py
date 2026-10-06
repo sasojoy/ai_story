@@ -21,7 +21,8 @@ V1_TABLES = {
     "battles", "battle_rounds", "characters", "character_backups", "accounts", "logins",
 }
 V2_TABLES = {"skill_aliases", "insights", "insight_recipes", "masters"}
-TABLES = V1_TABLES | V2_TABLES
+V3_TABLES = {"insight_firsts"}
+TABLES = V1_TABLES | V2_TABLES | V3_TABLES
 
 
 def _count(db: Database, table: str) -> int:
@@ -83,7 +84,7 @@ def test_a_version_one_file_is_upgraded_in_place(tmp_path):
 
 
 def test_upgrading_a_populated_version_one_file_loses_nothing(tmp_path, content):
-    """試玩伺服器的檔是第 1 版、裡面有帳號、角色、江湖史：換版時就地升到第 2 版，
+    """試玩伺服器的檔是第 1 版、裡面有帳號、角色、江湖史：換版時就地一版一版升到現在這一版，
     每張舊表的每一列都原封不動，帳號還登入得進去、角色還讀得回來、江湖史還看得到，新表在而且是空的。"""
     path = tmp_path / "live.db"
     salt = bytes(range(16))
@@ -129,10 +130,10 @@ def test_upgrading_a_populated_version_one_file_loses_nothing(tmp_path, content)
 
     assert _dump(path, V1_TABLES) == before  # 舊表原封不動（含 rowid 順序、流水號）
     with db.snapshot() as c:
-        assert c.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION == 2
+        assert c.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION == 3
         names = {row["name"] for row in c.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
     assert names == TABLES
-    assert all(_count(db, table) == 0 for table in V2_TABLES)
+    assert all(_count(db, table) == 0 for table in V2_TABLES | V3_TABLES)
     # 真正的存取層讀得回來
     store = AccountStore(db)
     assert store.authenticate("shenlang", "sesame88").character == "沈浪"

@@ -292,6 +292,8 @@ def test_no_cell_lit_and_nothing_extra_draws_no_bar(hut):
     (True, [], False, True),  # 序章裡沒有選項（看修練頁那一步）：照閒著的行動列畫
     (True, ["act:explore"], False, True),  # 沒有打坐，也是閒著
     (True, ["choice:0", "choice:1"], False, False),  # 事件的選項：一排按鈕
+    (True, ["sense:0", "sense:1"], False, False),  # 草廬四景的做法：一排按鈕（悟意境）
+    (True, ["sense:draw", "sense:let"], False, False),  # 感悟狀態：畫下來、順其自然
     (True, ["act:on_road", "road:back"], True, False),  # 出師那段路上：路上的選單
     (False, ["act:explore"], False, False),  # 序章外沒有打坐的選單不是閒著（對話、事件、決戰）
     (False, ["act:explore", "act:rest"], False, True),
@@ -655,13 +657,14 @@ def test_the_road_out_of_the_hut_keeps_the_road_explainer(hut):
 
 
 def test_the_four_sights_screen_has_no_now_card_and_its_choices_fit(hut):
-    """T7 審查 I2、W1：四景的事件在眼前時沒有「剛剛」卡（它重複事件標題）；四個選項都畫出來。高度由 375×812 的量測腳本看（見報告）。"""
+    """T7 審查 I2、W1：草廬四景（有所感）的卡在眼前時沒有「剛剛」卡、師父的框也不放（畫面就是那一張卡）；四個做法都畫出來。
+    高度由 375×812 的量測腳本看（見報告）。"""
     _to_step(hut, 2)
     hut.choose("act:explore")
     m = server.main_view(hut)
-    assert hut.state.pending_event == "p_insight" and m["now"] == ""
+    assert hut.state.pending_event is None and hut.state.player.sensing is not None and m["now"] == "" and m["guide"] is None
     page = run(m, "return H.pageJianghu();")
-    assert 'class="now' not in page and page.count('data-act="choose"') == 4
+    assert 'class="now' not in page and 'class="card guide' not in page and page.count('data-act="choose"') == 4
 
 
 def test_the_seclusion_form_and_the_insight_melt_are_greyed_in_the_hut(hut):

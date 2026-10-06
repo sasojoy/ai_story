@@ -151,7 +151,7 @@ def forge_line(
         if art_id not in owned or insight_ids[0] not in held:
             return f"⚠ {fusion.fuse_problem(state, content, world, art_id, insight_ids[0])}"
         base = team.player_art(state, content, world, art_id)
-        insight = insights.resolve(insight_ids[0], content, world)
+        insight = insights.resolve(insight_ids[0], content, world, state)
         if base is None or insight is None:
             return "（選了不存在的東西。）"
         odds = fusion.fuse_odds(state, content, art_id, base, insight)
@@ -161,14 +161,14 @@ def forge_line(
             f"花 {cfg.fuse_xinde} 點心得、{cfg.fuse_stamina} 點體力（你有 {xinde} 點心得）。"
         )
         head += _known_recipe(
-            state, content, world, fusion.fuse_key(art_id, insight_ids[0]),
+            state, content, world, fusion.fuse_key(art_id, insight_ids[0], insight.attribute),
             preset=fusion.preset_for(content, art_id, insight_ids[0]) is not None,
         )
         problem = fusion.fuse_problem(state, content, world, art_id, insight_ids[0])
     elif not art_id and not other_art and len(insight_ids) == 2:
         if any(i not in held for i in insight_ids):
             return f"⚠ {fusion.merge_problem(state, content, world, *insight_ids)}"
-        a, b = (insights.resolve(i, content, world) for i in insight_ids)
+        a, b = (insights.resolve(i, content, world, state) for i in insight_ids)
         if a is None or b is None:
             return "（選了不存在的東西。）"
         attribute, _ = fusion.merge_shape(world, a, b)  # 跟 fusion.merge 真的登記的同一個函式算的（FB-082）
@@ -241,7 +241,9 @@ def art_rows(state: GameState, content: Content, world: WorldStateStore) -> list
         if art is None:
             continue
         level = level_of(state, art_id)
-        insight = insights.resolve(art.insight, content, world) if art.insight else None
+        insight = insights.for_cultivation(state, content, world, art) or (
+            insights.resolve(art.insight, content, world, state) if art.insight else None
+        )
         insight_name = insight.name if insight else None
         problem = prologue.cultivate_problem(state, content) or cultivation.cultivate_problem(state, content, world, art_id)
         legend = None
@@ -294,8 +296,8 @@ def _best_forge(
         return None
     owned, best = set(owned_arts(state)), None
     for insight_id in state.player.insights:
-        insight = insights.resolve(insight_id, content, world)
-        known = world.lookup_recipe(fusion.fuse_key(art_id, insight_id))
+        insight = insights.resolve(insight_id, content, world, state)
+        known = world.lookup_recipe(fusion.fuse_key(art_id, insight_id, insight.attribute if insight else None))
         if insight is None or (known is not None and known.id in owned):
             continue
         odds = fusion.fuse_odds(state, content, art_id, art, insight)
@@ -326,11 +328,14 @@ def insight_rows(state: GameState, content: Content, world: WorldStateStore) -> 
     rows = []
     blocked = prologue.melt_insight_problem(state, content)  # 序章裡不熔意境（跟 Game.melt_insight 的拒絕同一個判斷）；平常是 None
     for insight_id in state.player.insights:
-        insight = insights.resolve(insight_id, content, world)
+        insight = insights.resolve(insight_id, content, world, state)
         if insight is not None:
             row = {
                 "id": insight_id, "name": insight.name, "attribute": insight.attribute, "lean": insight.lean,
                 "note": insight.note, "melt": content.config.melt_insight_xinde, "blocked": blocked,
+                # 感悟悟來的私有意境（悟意境設計 0.2b）：在哪裡悟的、畫的那一筆（修練頁畫小縮圖）
+                "own": insights.is_own(insight_id), "place": insight.place, "glyph": insight.glyph,
+                "glyph_note": insight.glyph_note,
             }
             if blocked is not None:  # 在序章裡（跟上面的拒絕同一個條件）：煉製頁這一步要放進爐子的意境發光（T7 走查 W-B）
                 row["glow"] = prologue.insight_glow(state, content)

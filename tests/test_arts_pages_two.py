@@ -437,11 +437,11 @@ def test_a_worn_art_counts_as_held_and_a_melted_one_does_not(content, world):
     assert len(_notices(worn)) == 1 and _notices(melted) == []
 
 
-def test_the_record_is_a_player_field_and_the_schema_version_did_not_move(content):
+def test_the_record_is_a_player_field_and_needs_no_schema_change(content):
     from tianxia import database
     from tianxia.state import PlayerState, new_game_state
 
-    assert database.SCHEMA_VERSION == 2
+    assert database.SCHEMA_VERSION == 3  # 悟意境（PR #23）升到 3；renames_told 自己是 PlayerState 的欄位，沒有升版
     data = new_game_state(content, "舊檔").player.model_dump()
     assert data.pop("renames_told") == []
     assert PlayerState.model_validate(data).renames_told == []  # 沒有這個欄位的舊存檔照樣讀得進來

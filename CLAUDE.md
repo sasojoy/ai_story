@@ -25,7 +25,7 @@
 - `run_bots.py`：伺服器假人程式的入口，每隔 `bot_tick_seconds` 呼叫一次 `BotRunner.tick()`，跟 `server.py` 同時開著、開同一個資料庫與同一份設定。
 
 **存檔與全服狀態**
-- `tianxia/database.py`：SQLite（預設 `saves/tianxia.db`，環境變數 `TIANXIA_DB` 可改；線上版與開發版各用各的）：連線、資料表、交易。一個動作＝一筆交易（`BEGIN IMMEDIATE`，出錯整個撤回），同一個執行緒可以巢狀（交易可以巢狀；`WorldStateStore.mutate` 不行，內層寫的會被外層蓋掉，直接丟 `RuntimeError`）。結構版本記在 `PRAGMA user_version`（目前第 2 版）；改結構時新增一組句子、接進 `SCHEMA`、`MIGRATIONS[舊版]` 指向它、`SCHEMA_VERSION` 加一，舊檔打開時在同一筆交易裡一版一版就地升級（中途出錯整個撤回、檔還是舊版；沒有遷移路徑就丟 `RuntimeError`）。**改結構前先跟 PM 對版本號。**
+- `tianxia/database.py`：SQLite（預設 `saves/tianxia.db`，環境變數 `TIANXIA_DB` 可改；線上版與開發版各用各的）：連線、資料表、交易。一個動作＝一筆交易（`BEGIN IMMEDIATE`，出錯整個撤回），同一個執行緒可以巢狀（交易可以巢狀；`WorldStateStore.mutate` 不行，內層寫的會被外層蓋掉，直接丟 `RuntimeError`）。結構版本記在 `PRAGMA user_version`（目前第 3 版）；改結構時新增一組句子、接進 `SCHEMA`、`MIGRATIONS[舊版]` 指向它、`SCHEMA_VERSION` 加一，舊檔打開時在同一筆交易裡一版一版就地升級（中途出錯整個撤回、檔還是舊版；沒有遷移路徑就丟 `RuntimeError`）。**改結構前先跟 PM 對版本號。**
 - `tianxia/world_state.py`：全服狀態的資料模型與存取介面 `WorldStateStore`（Protocol）；實作是 `tianxia/sqlite_world.py::SqliteWorldStore`（`open_world()`）。小的整份覆寫，會長大的（傳聞、江湖史、全服登記的武學、配方、改過的名字、合併出來的意境、第一個練成絕學的人、投靠名冊、決戰回合）一筆一筆加、照季分；換季不刪資料，江湖史跨季保留。武學、改過的名字、意境共用一個名字空間（`sqlite_world._name_taken`）；登記都是鎖內原子（`claim_recipe`、`claim_insight_recipe`、`link_recipe`、`link_insight_recipe`、`rename_skill`、`claim_master`）；`fused_arts`／`merged_insights` 是合到舊的找候選用的。
 - `tianxia/characters.py`：角色存檔（`CharacterStore`、`open_characters()`），一個角色一列，**不含賽季**（`GameState.world` 只在記憶體）；名號比對不分大小寫。
 - `tianxia/accounts.py`：帳號與密碼（`accounts`、`logins` 表），見「原則」的登入那條。

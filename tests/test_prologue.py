@@ -5,7 +5,7 @@ import random
 import pytest
 from conftest import next_season
 
-from tianxia import atlas, prologue
+from tianxia import atlas, prologue, sensing
 from tianxia.content import load_content
 from tianxia.engine import Game
 from tianxia.state import ONBOARDING_VERSION
@@ -223,13 +223,22 @@ def _walk(game, *option_ids):
         game.choose(oid)
 
 
+def _sense(game, attribute: str) -> None:
+    """草廬的有所感：照屬性挑那個做法（卡上的順序每次洗牌），再順其自然（不畫，落回那個屬性的基本意境）。"""
+    game.choose("act:explore")
+    got = sensing.current(game.state, game.content)
+    order = [got[1].methods[j].attribute for j in got[0].order]
+    game.choose(f"sense:{order.index(attribute)}")
+    game.choose(sensing.LET_GO)
+
+
 def _to_step(game, n: int) -> None:
     """照正常的玩法把序章走到第 n 步開頭（0 起算）：遇險、拜師、看修練頁、探索選松林、合成、換上並練到第三成、修練、打坐、
     雪恥一戰、配點、熔雜學。每一輪都要真的前進一步：卡住就當場失敗，不要無窮迴圈。"""
     script = [
         lambda g: _walk(g, "choice:0", "choice:0"),  # 0 → 1
         lambda g: g.view_tab("practice"),  # 1 → 2
-        lambda g: _walk(g, "act:explore", "choice:0"),  # 2 → 3：松林，悟到風
+        lambda g: _sense(g, "快"),  # 2 → 3：松林聽風，悟到風
         lambda g: g.forge("basic_fist", ["feng"]),  # 3 → 4：穿林腿
         lambda g: (g.switch_art(_fused(g)), g.practice("武學"), g.practice("武學")),  # 4 → 5：換上、練到第三成
         lambda g: g.cultivate(_fused(g)),  # 5 → 6：一定升中品
@@ -510,8 +519,11 @@ def test_the_view_tab_action_reaches_the_game(fresh):
 def test_exploring_in_the_hut_always_offers_the_four_sights(fresh):
     _to_step(fresh, 2)
     fresh.choose("act:explore")
-    assert fresh.state.pending_event == "p_insight"
-    fresh.choose("choice:2")  # 溪水
+    got = sensing.current(fresh.state, fresh.content)
+    assert got is not None and got[1].id == "hut_four" and len(fresh.options()) == 4
+    fresh.state.player.sensing = None
+    fresh.state.player.stamina = 150
+    _sense(fresh, "柔")  # 溪邊看水：每個做法都對、必中，順其自然落回水
     assert fresh.state.player.insights == ["shui"]
     assert fresh.state.player.tutorial_step == 3
 
@@ -722,8 +734,14 @@ def test_the_now_card_is_hidden_while_a_hut_event_is_on_screen(fresh):
     fresh.choose("choice:0")
     assert fresh.state.pending_event is None and fresh.now_entry_html() != ""
     fresh.view_tab("practice")
-    fresh.choose("act:explore")  # 探索端出四景
-    assert fresh.state.pending_event == "p_insight" and fresh.now_entry_html() == ""
+    fresh.choose("act:explore")  # 探索端出草廬四景（有所感）：它是一張卡，不是事件（pending_event 是空的），一樣整張「剛剛」不放
+    assert fresh.state.pending_event is None and fresh.state.player.sensing is not None
+    assert fresh.now_entry_html() == "" and fresh.guide_box() is None  # 師父的框也不放：畫面就是那一張卡
+    sensing_choice = next(o for o in fresh.options() if o.id.startswith("sense:"))
+    fresh.choose(sensing_choice.id)  # 選了做法、進了感悟狀態，還沒了結：照舊
+    assert fresh.state.player.sensing is not None and fresh.now_entry_html() == "" and fresh.guide_box() is None
+    fresh.choose(sensing.LET_GO)  # 了結之後兩張都回來
+    assert fresh.state.player.sensing is None and fresh.now_entry_html() != "" and fresh.guide_box() is not None
 
 
 def test_the_season_intro_is_still_the_card_for_everyone_outside_the_hut(prologue_content, world):
@@ -888,17 +906,20 @@ def test_a_hut_step_can_write_its_own_result_line(fresh):
 
 
 def test_the_sight_is_said_once_in_the_card(fresh):
-    """T7 審查 M1：四景的事件文字已經說了「你悟到了「風之意境」」，引擎的「你悟得了「風」的意境（屬快）！」是同一件事：草廬裡紀錄只留前一句。"""
+    """T7 審查 M1（草廬四景悟到的那句在紀錄裡只說一次）：現在四景是有所感，悟到的那一句只有引擎的「你悟得了「風」的意境（屬快）！」，
+    不會又有一句事件文字說同一件事；那一句留在紀錄、畫成「新東西」的樣子。"""
     from tianxia import journal
 
-    fresh.content.events["p_insight"].choices[0].effect.text = "你盯著松林看了不知多久，心裡忽然一動——你悟到了「風之意境」。"
     _to_step(fresh, 2)
     fresh.choose("act:explore")
-    msgs = fresh.choose("choice:0")
+    got = sensing.current(fresh.state, fresh.content)
+    order = [got[1].methods[j].attribute for j in got[0].order]
+    fresh.choose(f"sense:{order.index('快')}")
+    msgs = fresh.choose(sensing.LET_GO)
     lines = fresh.state.journal[0].lines
-    assert any("你悟到了「風之意境」" in line for line in lines) and not any(line.startswith("你悟得了「") for line in lines)
-    assert journal._line_class(next(line for line in lines if "你悟到了" in line)) == "tx-line tx-new"
-    assert any(m.startswith("你悟得了「") for m in msgs)  # 回給呼叫端的訊息照舊（只是紀錄不重複）
+    said = [line for line in lines if line.startswith("你悟得了「")]
+    assert len(said) == 1 and journal._line_class(said[0]) == "tx-line tx-new"
+    assert any(m.startswith("你悟得了「") for m in msgs)  # 回給呼叫端的訊息照舊
 
 
 def test_the_hut_refuses_seclusion(fresh):
@@ -1103,8 +1124,10 @@ def test_the_recap_includes_the_masters_reply_and_the_four_sights(prologue_conte
     """T7 審查 M5：重看序章不跳過拜師之後師父那一段（拜師的結果文字）與四景（事件的引子加四個悟到的句子）。"""
     text = Game.new(prologue_content, "沈浪", world=world).prologue_recap()
     assert text.index("想學嗎？") < text.index("好徒兒。") < text.index("去看修練頁。")  # 拜師的結果在師父第一步的話之前
-    assert text.index("去探索。") < text.index("挑一處。") < text.index("風。") < text.index("山。") < text.index("水。") < text.index("火。")
-    assert text.index("火。") < text.index("去合成。")  # 四景排在探索那一步之後、合成那一步之前
+    scene = prologue_content.insight_scenes["hut_four"]  # 草廬四景（有所感）：場景的引子與四個做法，排在探索那一步之後、合成那一步之前
+    assert text.index("去探索。") < text.index(scene.text) < min(text.index(m.text) for m in scene.methods)
+    assert max(text.index(m.text) for m in scene.methods) < text.index("去合成。")
+    assert all(m.text in text for m in scene.methods) and "{" not in text
 
 
 def test_the_recap_does_not_depend_on_where_you_are(fresh):
