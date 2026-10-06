@@ -273,10 +273,6 @@ def after_success(state: GameState, content: Content, source: str, loc_id: str, 
     return msgs
 
 
-def _faction_def(content: Content, faction_id: str):
-    return next(f for f in content.scenario.factions if f.id == faction_id)
-
-
 def _deliver_here(state: GameState, content: Content, o: OppDef, loc_id: str) -> str | None:
     """東西拿在手上、此刻在交得了的地方時，回傳 {主將} 要填的名字；交不了是 None。
     front_commander：那條戰線己方此刻的主將所在；沒有主將時是那條戰線上的己方投靠點，名字寫「官軍的主將」。
@@ -284,7 +280,7 @@ def _deliver_here(state: GameState, content: Content, o: OppDef, loc_id: str) ->
     p = state.player
     if o.id not in p.opp_items:
         return None
-    side = _faction_def(content, o.faction)
+    side = content.scenario.faction(o.faction)
     deliver = o.accumulate.deliver if o.kind == "accumulate" else "front_commander"
     if deliver == "nearest_base":
         return side.name if loc_id in side.join_at else None
@@ -715,7 +711,7 @@ def _trend_on_done(state: GameState, content: Content, o: OppDef, loc_id: str) -
     amount = o.accumulate.trend if o.kind == "accumulate" else 0
     if not amount:
         return []
-    faction = _faction_def(content, o.faction)
+    faction = content.scenario.faction(o.faction)
     geju_goal = faction.goals.get(GEJU, 0)  # 豪強：推割據；跟戰線那一支一樣是「目標 × 次數」，目標的正負照陣營
     if geju_goal:
         return change_trend(state, content, GEJU, geju_goal * amount)

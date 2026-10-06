@@ -101,7 +101,7 @@ def learn_problem(state: GameState, content: Content, skill: SkillDef) -> str | 
     rule = skill.learn
     if rule is not None:
         if rule.faction and p.faction != rule.faction:
-            name = next((f.name for f in content.scenario.factions if f.id == rule.faction), rule.faction)
+            name = content.scenario.faction_name(rule.faction, rule.faction)
             return f"只教投靠{name}的人"
         if rule.sect and p.sect != rule.sect:
             return f"只教{content.sects[rule.sect].name}的弟子"

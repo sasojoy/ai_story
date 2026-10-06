@@ -861,8 +861,17 @@ class Scenario(_Strict):
     jade_seal_flag: str | None = None  # 這個世界旗標代表玩家親手取得了這一季的玉璽碎片（設計文件九），記進跨季持久紀錄
     season_one_off: SeasonOneOff = Field(default_factory=SeasonOneOff)  # 第一季不觸發的 beta 門檻、主線、決戰、事件
 
+    def faction(self, faction_id: str | None) -> FactionDef | None:
+        """id 對得上的那個陣營（factions 裡的第一個）；沒有就是 None。"""
+        return next((f for f in self.factions if f.id == faction_id), None)
 
-ExploreBranch = Literal["insight", "wild", "event"]
+    def faction_name(self, faction_id: str | None, default: str | None = None) -> str | None:
+        """那個陣營的名字；劇本裡沒有這個陣營就是 default。"""
+        faction = self.faction(faction_id)
+        return faction.name if faction is not None else default
+
+
+ExploreBranch =Literal["insight", "wild", "event"]
 EXPLORE_BRANCHES: tuple[ExploreBranch, ...] = ("insight", "wild", "event")  # 探索三選一的三支：悟意境、野怪、事件
 
 

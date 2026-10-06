@@ -664,7 +664,7 @@ def front_text(content: Content, trend_id: str, delta: int, seed: str) -> str:
 def front_favour(content: Content, viewer: str | None, trend_id: str, delta: int) -> int:
     """這一次變動對看畫面的人（viewer＝他的陣營 id，散人是 None）是好事（1）、壞事（−1）還是無關（0）：
     他的陣營對這條線有目標（goals）時，方向一致是好事、相反是壞事；沒有目標的（散人、戰線上的豪強、割據上的官軍與黃巾）一律 0。"""
-    faction = next((f for f in content.scenario.factions if f.id == viewer), None)
+    faction = content.scenario.faction(viewer)
     goal = faction.goals.get(trend_id, 0) if faction is not None else 0
     if not goal:
         return 0

@@ -671,13 +671,13 @@ class Game:
             opts.append(Option(id="talk:leave", label="告辭"))
             return opts
         if s.player.pending_faction:
-            faction = self._faction(s.player.pending_faction)
+            faction = self.content.scenario.faction(s.player.pending_faction)
             return [
                 Option(id="faction:confirm", label=f"確定投靠{faction.name}"),
                 Option(id="faction:cancel", label="再想想"),
             ]
         if s.player.pending_defect:
-            target = self._faction(s.player.pending_defect)
+            target = self.content.scenario.faction(s.player.pending_defect)
             return [
                 Option(id="defect:confirm", label=f"確定叛投{target.name}"),
                 Option(id="defect:cancel", label="再想想"),
@@ -1270,16 +1270,16 @@ class Game:
         s, c = self.state, self.content
         if kind == "faction":
             if arg == "confirm":
-                return f"投靠{self._faction(s.player.pending_faction).name}"
+                return f"投靠{self.content.scenario.faction(s.player.pending_faction).name}"
             if arg == "cancel":
                 return "再想想"
-            return f"考慮投靠{self._faction(arg).name}"
+            return f"考慮投靠{self.content.scenario.faction(arg).name}"
         if kind == "defect":
             if arg == "confirm":
-                return f"叛投{self._faction(s.player.pending_defect).name}"
+                return f"叛投{self.content.scenario.faction(s.player.pending_defect).name}"
             if arg == "cancel":
                 return "再想想"
-            return f"考慮叛投{self._faction(arg).name}"
+            return f"考慮叛投{self.content.scenario.faction(arg).name}"
         if kind == "move":
             return f"前往 {c.locations[arg.partition(':')[0]].name}"
         if kind == "choice":
@@ -1835,7 +1835,7 @@ class Game:
             and short <= c.config.audience_rank_discount  # 再升一階抵掉的點數補得上這個差距
             and ranks.promotion_for(c, p.faction, ranks.rank_of(s) + 1) is not None  # 而且真的有下一階可升
         ):
-            faction = next((f.name for f in c.scenario.factions if f.id == figure.faction), figure.faction)
+            faction = c.scenario.faction_name(figure.faction, figure.faction)
             hint += f"，或在{faction}再升一階"
         return [f"{line}（{hint}）"]
 
@@ -1962,9 +1962,6 @@ class Game:
         msgs += self._count_talk(companion_id)
         return msgs
 
-    def _faction(self, faction_id: str):
-        return next(f for f in self.content.scenario.factions if f.id == faction_id)
-
     def _faction_step(self, arg: str) -> list[str]:
         """投靠分兩步（伺服器假人設計第八節第 3 項）：按「投靠某陣營」先出確認畫面（寫明這一季
         不能改投、三方目前各有幾人），「確定」才真的投靠，「再想想」就作罷。"""
@@ -1973,7 +1970,7 @@ class Game:
             p.pending_faction = None
             return ["你決定再想想。"]
         if arg == "confirm":
-            faction = self._faction(p.pending_faction)
+            faction = self.content.scenario.faction(p.pending_faction)
             p.pending_faction = None
             if p.location not in faction.join_at:
                 return ["（你已經不在投靠的地方了。）"]
@@ -1983,7 +1980,7 @@ class Game:
             if season_one(self.content, self.state.world):
                 msgs += self._guide(note_action(self.state, self.content, self.world, "join"))  # 走對話框（畫面批次審查 I2）
             return msgs
-        faction = self._faction(arg)
+        faction = self.content.scenario.faction(arg)
         p.pending_faction = faction.id
         prompt = self._faction_prompt(faction)
         self._hide(prompt)  # 場景已經寫著這一問（_own_scene_text），江湖紀錄那一則只留標題（FB-046）
@@ -2000,7 +1997,7 @@ class Game:
             p.pending_defect = None
             return ["你決定再想想。"]
         if arg == "confirm":
-            target = self._faction(p.pending_defect)
+            target = self.content.scenario.faction(p.pending_defect)
             p.pending_defect = None
             reason = defection.refusal(self.state, self.content, target, self.world.get_battle())
             if reason is not None:
@@ -2008,7 +2005,7 @@ class Game:
                     self._draft.title = "叛投不成"
                 return [f"（{reason}）"]
             return defection.defect(self.state, self.content, target)
-        target = self._faction(arg)
+        target = self.content.scenario.faction(arg)
         p.pending_defect = target.id
         prompt = defection.prompt(self.state, self.content, target, self.faction_counts_text())
         self._hide(prompt)  # 場景已經寫著這一問（_own_scene_text），江湖紀錄那一則只留標題（同投靠，FB-046）
@@ -2472,8 +2469,8 @@ class Game:
         """這場決戰能站的每一方（id → 名字）：交戰的兩軍，加上第三方（戰鬥系統第六節；名字照劇本的陣營）。"""
         names = {f.id: f.name for f in definition.factions}
         if definition.third is not None:
-            names[definition.third.faction] = next(
-                (f.name for f in self.content.scenario.factions if f.id == definition.third.faction), definition.third.faction,
+            names[definition.third.faction] = self.content.scenario.faction_name(
+                definition.third.faction, definition.third.faction,
             )
         return names
 
@@ -3118,7 +3115,7 @@ class Game:
 
     def _goals(self) -> dict[str, int]:
         """自己陣營的目標，照 rules.resolve_goals 換過鍵（開關關著時三條戰線都算黃巾聲勢）；散人是空的。"""
-        faction = next((f for f in self.content.scenario.factions if f.id == self.state.player.faction), None)
+        faction = self.content.scenario.faction(self.state.player.faction)
         return resolve_goals(self.content, self.state.world, faction.goals) if faction is not None else {}
 
     def train_trend_push(self, loc_id: str | None = None) -> dict[str, int]:
@@ -3184,7 +3181,7 @@ class Game:
                 msgs = change_trend(s, c, trend_id, whole)
 
         if p.faction is not None:  # 散人：照推，但不記貢獻、不進活躍名單
-            faction = next((f for f in c.scenario.factions if f.id == p.faction), None)
+            faction = c.scenario.faction(p.faction)
             goal = faction.goals.get(trend_id, 0) if faction is not None else 0
             if goal and (goal > 0) == (delta > 0):  # 替自己陣營的目標方向推；逆著推、這條線沒有目標都不記
                 gained = push.contribution(abs(delta), pushed, moved, cfg.contrib_per_push, cfg.over_cap_contrib_ratio)
@@ -4469,10 +4466,10 @@ class Game:
             last = next((m["content"] for m in reversed(history) if m.get("role") == "assistant"), "")
             return f"**{character.name}**\n\n{last}"
         if s.player.pending_faction:
-            faction = self._faction(s.player.pending_faction)
+            faction = self.content.scenario.faction(s.player.pending_faction)
             return f"**投靠{faction.name}**\n\n{self._faction_prompt(faction)}"
         if s.player.pending_defect:
-            target = self._faction(s.player.pending_defect)
+            target = self.content.scenario.faction(s.player.pending_defect)
             return f"**叛投{target.name}**\n\n{defection.prompt(s, c, target, self.faction_counts_text())}"
         if s.player.picking_audience:
             return f"**求見**\n\n{self._audience_intro()}"
@@ -4495,7 +4492,7 @@ class Game:
         p, w = s.player, s.world
         names = c.config.stat_names
         sect = c.sects[p.sect].name if p.sect else None
-        faction = next((f.name for f in c.scenario.factions if f.id == p.faction), None)
+        faction = c.scenario.faction_name(p.faction)
         now, cap = team.member_neili(c, p.member, team.con_of(s, c, self.world, PLAYER))
         mates = []
         for cid in p.team:
