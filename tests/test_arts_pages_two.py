@@ -814,6 +814,25 @@ def test_the_glow_lists_the_server_sends_decide_every_hook_on_the_cards():
 
 
 @needs_node
+def test_a_greyed_melt_says_why_in_the_card_where_a_phone_player_can_read_it():
+    """review-ap3 M1：灰掉的熔煉只把原因放在 title（手機不顯示）。原因寫在同一排（.more）的左邊空位，不多佔高度；熔得掉的不寫。"""
+    worn_why, hut_why = "身上正在練的不能熔，先改練別的。", "師父沒叫你熔這一門。"
+    rows = [
+        _art("w1", "武學", "甲拳", worn=True, melt={"ok": False, "note": worn_why, "confirm": ""}),
+        _art("w2", "武學", "乙拳", melt={"ok": False, "note": hut_why, "confirm": ""}),
+        _art("w3", "武學", "丙拳"),
+    ]
+    html = _practice(rows, "S.artOpen = 'w2';")
+    worn_card, lib = html.split('<div class="art-body')[0], html.split('<div class="art-body')[1]
+    assert f'<span class="why">{worn_why}</span>' in worn_card  # 身上那張卡
+    assert f'<span class="why">{hut_why}</span>' in lib  # 功法庫點開的那張
+    assert re.search(r'<div class="more">\s*<span class="why">', lib)  # 在同一排的最前面（左邊的空位）
+    ok = _practice(rows, "S.artOpen = 'w3';").split('<div class="art-body')[1]
+    assert 'class="why"' not in ok  # 熔得掉的：不寫
+    assert f'title="{hut_why}"' in lib  # title 照舊留著（桌面滑鼠停著看得到）
+
+
+@needs_node
 def test_the_hut_greys_out_seclusion_and_the_insight_melt_with_the_servers_reason():
     html = _practice([_art("w1", "武學", "甲拳", worn=True)], "S.insOpen = 'feng';",
                      seclude_blocked="草廬裡不能閉關。", insights=[{**_insight("feng", "風"), "blocked": "師父沒叫你熔意境。"}])

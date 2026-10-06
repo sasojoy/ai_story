@@ -40,6 +40,17 @@ def _layers(shadow: str) -> list[str]:
     return parts + [cur.strip()]
 
 
+# ── M1：灰掉的熔煉寫原因，不多佔一排 ──────────────────────────────
+
+
+def test_the_melt_reason_shares_the_row_with_the_two_links_and_wraps_inside_itself():
+    """寫在 .more 左邊的空位：flex 1 1 0（吃剩下的寬度、基準是 0，不會把整排擠到下一行）、min-width 0（字太長在自己裡面折行），
+    所以那一排不會比兩個 40px 高的連結更高。"""
+    rule = next((body for sel, body in _rules(CSS) if sel == ".more .why"), None)
+    assert rule is not None
+    assert _decl(rule, "flex") == "1 1 0" and _decl(rule, "min-width") == "0" and _decl(rule, "align-self") == "center"
+
+
 # ── AP3-W1：功法庫收著的那一列發光，要看得見 ──────────────────────────
 
 

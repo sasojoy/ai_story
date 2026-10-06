@@ -499,6 +499,8 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .more { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; margin-top: 4px; }
 .more .linkish { color: var(--ink-2); min-height: 40px; padding: 6px 8px; }
 .more .linkish:disabled { opacity: 0.45; cursor: default; }
+/* 熔煉灰掉的原因（review-ap3 M1）：手機沒有 title 可看，寫在這一排左邊的空位；吃掉剩下的寬度、自己折行，這一排不會變高 */
+.more .why { flex: 1 1 0; min-width: 0; align-self: center; text-align: left; font-size: 12px; line-height: 1.35; color: var(--ink-2); }
 .art-card { margin-top: 6px; padding: 8px 10px; border-radius: 10px; background: var(--card-2); font-size: 13px; }
 .art-card > :first-child { margin-top: 0; } .art-card > :last-child { margin-bottom: 0; }
 /* 功法庫：一門一列（品質印＋名字），點開攤成卡的內容。不放在 .list 裡（.list button 的列樣式會蓋到卡裡的鈕） */
