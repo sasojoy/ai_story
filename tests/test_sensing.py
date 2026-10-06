@@ -243,3 +243,28 @@ def test_the_season_bot_finishes_every_sensing(lake):
                 break
             bot.sense_draw(lake, rng) if choice == sensing.DRAW else lake.choose(choice)
         assert lake.state.player.sensing is None
+
+
+def test_a_server_bot_hands_a_new_shape_to_the_model_or_lands_on_the_base(lake):
+    """伺服器假人：輪得到取名名額才可能悟出自己的意境（開單交給假人程式）；輪不到就畫跟做法同屬性的一筆，落回基本意境。"""
+    from tianxia import bot_policy
+
+    _open(lake)
+    _pick(lake, "柔")
+    closed = bot_policy.NamingSlot(open=False)
+    with pytest.MonkeyPatch.context() as m:
+        m.setattr(bot, "SENSE_DRAW", 1.0)
+        bot_policy._sense(lake, random.Random(0), closed)
+    assert closed.job is None and "shui" in lake.state.player.insights and lake.state.player.own_insights == {}
+
+    lake.state.player.sense_misses = {}
+    _open(lake)
+    _pick(lake, "柔")
+    slot = bot_policy.NamingSlot(open=True)
+    with pytest.MonkeyPatch.context() as m:
+        m.setattr(bot, "SENSE_DRAW", 1.0)
+        m.setattr(bot, "sense_stroke", lambda game, rng, same=False: glyph.SAMPLES["柔" if same else "慢"])
+        bot_policy._sense(lake, random.Random(0), slot)
+    assert isinstance(slot.job, bot_policy.SenseJob) and slot.job.request.needs_name
+    bot_policy.apply_job(lake, slot.job, ("湖心月", ""))
+    assert [i.name for i in lake.state.player.own_insights.values()] == ["湖心月"]

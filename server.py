@@ -59,7 +59,9 @@ from starlette.concurrency import run_in_threadpool
 
 import server_push
 from llm_queue import Busy, LlmQueue, QueueTimeout
-from tianxia import companion_agent, event_llm, fight_llm, foreshadow, naming, rules, server_bots, team, timetable
+from tianxia import (
+    companion_agent, event_llm, fight_llm, foreshadow, glyph, insight_llm, naming, rules, server_bots, team, timetable,
+)
 from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, AccountStore, normalize
 from tianxia.content import PROFILE_ENV, load_content, profile_line
 from tianxia.characters import open_characters
@@ -491,6 +493,7 @@ def queue_line(config) -> str:
 BUSY_FREE_TEXT = "上一句還在掂量，稍等。"  # 待 joy 潤
 BUSY_FORGE = "上一爐還沒出爐。"  # 待 joy 潤
 BUSY_FIGHT = "還在對峙，稍等。"  # 待 joy 潤
+BUSY_SENSE = "心念還在凝，稍等。"  # 待 joy 潤（有所感畫完那一筆，同一個人另一條連線已經在等模型取名）
 BUSY_DIALOGUE = "對方還沒答話，稍等。"  # 待 joy 潤（FB-077：同一個帳號另一條連線已經在等這個人的回話）
 # 排超過 llm_queue_wait_seconds 秒還沒輪到的那一件（PM 2026-10-06）：跟重複的那一件一樣處理——退路是一個結果，沒被服務到的人沒道理
 # 拿一個結果（評分 40、首次開爐用退路字表），所以給了上面那四句之一的呼叫點（評分、開爐、大場面、對話）也擋下來、什麼都不套用，
@@ -693,6 +696,41 @@ def forge(game: Game, art_id: str | None, insight_ids: list[str], other_art: str
     字表的名字登記，第一件模型取的名字被丟掉）。不必叫模型的爐（配方已經有人合過）不經過佇列，兩個分頁照常都走得完。"""
     proposed = prepare_forge(game, art_id, insight_ids, other_art)
     return act(game, lambda g: g.forge(art_id, insight_ids, proposed=proposed, other_art=other_art))
+
+
+SENSE_PNG_MAX = 300_000  # 畫布存的小 PNG（base64 字數）最多收這麼多；再大就不給模型看圖，只給文字特徵（畫布 256×256，實際約一兩萬字）
+
+
+def sense_draw(game: Game, points, png: str = "") -> list[str] | None:
+    """有所感畫完那一筆（悟意境設計 0.2、0.2a），跟開爐取名一樣分三段：
+      A（鎖內、很快）同步時間，Game.sense_request 讀那一筆、開單（只讀）；讀不出來（只點了一下、格式不對）回那一句話；
+      B（鎖外、很慢）要悟一個自己的新意境才叫模型：看圖取名，取不到再只給文字特徵（insight_llm.name，model_call 排隊）；
+        預算是 Config.sense_budget_seconds 扣掉 A 段（含等鎖）與排隊花掉的時間；落回基本意境的不叫；
+      C（鎖內、很快）Game.sense_draw 重驗還是同一次感悟、同一筆讀出同一個屬性才套用，名字再過一次過濾，取不到走退路字表。
+    PNG 只轉交給模型，不存（存的是規則取樣過的點位，畫縮圖用）。"""
+    started = _monotonic()
+    image = png if isinstance(png, str) and len(png) <= SENSE_PNG_MAX else ""
+    with _locked(game):
+        game.sync(time.time())
+        _refuse_while_paused(game)
+        request = game.sense_request(points, image)
+        open_characters().save(game.state)
+    if isinstance(request, str):
+        raise GameError(request)
+    proposed = NO_NAME
+    if request.needs_name:
+        total = game.content.config.sense_budget_seconds
+
+        def name_it():
+            budget = max(0.0, total - (_monotonic() - started))
+            got = insight_llm.name(
+                game.client, game.content, request.facts, image=request.png, budget=budget,
+                person=game.world.is_character_name,
+            )
+            return got[0], got[1]
+
+        proposed = model_call(game, name_it, fallback=NO_NAME, left=total - (_monotonic() - started), busy=BUSY_SENSE)
+    return act(game, lambda g: g.sense_draw(request, proposed))
 
 
 def answer_event(game: Game, text: str) -> list[str] | None:
@@ -1338,6 +1376,32 @@ def api_prologue(request: Request):
     """設定頁的「重看序章」：序章的事件與師父的話排成一頁（Markdown 轉成 HTML）；沒有序章的內容是空字串，網頁就不畫那顆鈕。"""
     game = _game(request)
     return look(game, lambda g: {"text": md(g.prologue_recap())})
+
+
+@app.post("/api/sense")
+def api_sense(request: Request, body: dict = Body(default={})):
+    """有所感畫完那一筆：points 是 [[x, y, 毫秒], …]，png 是畫布的小圖（base64，不含 data: 開頭）。"""
+    game = _game(request)
+    msgs = sense_draw(game, body.get("points"), body.get("png") or "")
+    _tell_tabs(game)
+    return {"main": look(game, main_view), "message": joined(msgs)}
+
+
+@app.post("/api/sense_read")
+def api_sense_read(request: Request, body: dict = Body(default={})):
+    """畫布底下那一行「這一筆：…」（不算行動、不拿鎖、不碰狀態）：規則讀到的特徵，跟送出時讀的是同一套（glyph.read）。"""
+    _game(request)
+    try:
+        return {"note": glyph.read(body.get("points")).note()}
+    except glyph.GlyphError as e:
+        return {"note": "", "problem": str(e)}
+
+
+@app.post("/api/sense_warm")
+def api_sense_warm(request: Request):
+    """畫布一出現就送的暖機（悟意境設計 0.2a）：只叫 Ollama 把模型載起來、不取名、不等它載完；不拿鎖、不碰狀態。"""
+    game = _game(request)
+    return {"ok": insight_llm.warm(game.client)}
 
 
 @app.post("/api/forge_line")

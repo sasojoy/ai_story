@@ -30,6 +30,7 @@
   // 江湖頁「前往」的走法（跟 atlas.MODES 同一份）。選的走法只放在 S.moveMode：不寫進 localStorage、cookie，
   // 重新整理頁面就回到步行；每個請求都帶著它（見 api()），伺服器照它排選單上的「前往」
   const FREE_TEXT_OPTION = "choice:free"; // 事件的隨口應對（engine.FREE_TEXT_OPTION）
+  const SENSE_DRAW = "sense:draw"; // 有所感進了感悟狀態：「把心中的形畫下來」叫出畫布（sensing.DRAW），畫好送 /api/sense
   const MOVE_MODES = [
     { id: "walk", name: "步行" },
     { id: "hurry", name: "趕路" },
@@ -78,6 +79,10 @@
     legendTick: {}, // 修練頁每一門武學「服下破境丹」勾了沒（id → true）；預設不勾，輪詢重畫不會悄悄取消，修練送出之後清掉
     forgeSel: [], // 爐裡放的：{type: "art" | "ins", id}，最多兩樣、武學最多兩門（武學＋意境、武學＋武學＝合成，兩個意境＝合併）
     wheelSel: null, // 江湖頁行動列展開的那一格（目前只有 move）
+    sensing: false, // 有所感：畫布叫出來了沒（按了「把心中的形畫下來」）；感悟狀態結束（選單上沒有 SENSE_DRAW）就收起
+    sensePts: [], // 畫布上那一筆的點位 [[x, y, 毫秒], …]（畫布座標 0～256）；輪詢重畫頁面之後照它補畫回去
+    senseNote: "", // 畫布底下那一行：規則讀到的這一筆（/api/sense_read）
+    stroking: false, // 手指正按在畫布上：輪詢不重畫（重畫會換掉畫布、手指底下的那一筆就斷了）
     forgeLine: "",
     map: null,
     layer: "situation",
@@ -128,8 +133,8 @@
   const pageKey = (m) => JSON.stringify({ ...m, status: null });
   // 焦點在輸入框、下拉選單：玩家正在填東西，輪詢不動畫面
   // 勾選框不算：勾完它還留著焦點，要是算打字，輪詢會一直等到玩家點別處才補畫（修練頁的「服下破境丹」）
-  const typing = () => !!document.activeElement && ["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement.tagName)
-    && document.activeElement.type !== "checkbox";
+  const typing = () => S.stroking || (!!document.activeElement && ["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement.tagName)
+    && document.activeElement.type !== "checkbox");
 
   // 表單的結果訊息（QA L3）：寫在表單裡那一行，留到下一次送出；錯誤醒目、成功用一般文字色
   function formMsg(form, text, ok = false) {
@@ -207,6 +212,7 @@
 
   function setMain(main) {
     if (main.event_free_text == null) S.answering = false; // 事件過去了，輸入框跟著收起
+    if (!(main.options || []).some((o) => o.id === SENSE_DRAW)) closeSense(); // 感悟狀態過去了（悟成、作廢），畫布跟著收起
     // 見聞的紅點只為新的一場亮（比 card_id）：配點之後「剛剛」照舊是升級那一場的卡片，看過戰報再配點不再亮一次（計畫二最終審查 M1）；
     // 放在這裡是因為動作回來的與輪詢拿到的都走 setMain——決戰收場的卡片常常是輪詢（sync）補送的。登入那一份不亮（S.main 還沒有）
     if (main.card && S.main && S.main.card_id !== main.card_id) {
@@ -405,6 +411,7 @@
       const body = now && now.querySelector(".tx-now");
       if (body && body.scrollHeight <= body.clientHeight + 1) now.classList.replace("clamp", "fits");
       fitFirstRound(); // 戰鬥卡片收著的第一回合最多兩行，放不下就只留數字（PM 2026-10-05）
+      sensePadReady(); // 有所感的畫布：接上手指、補畫已經畫好的那一筆
       decorateHearsay(); // 戰鬥卡片底下聽來的那一句收成一行（FB-074）
     }
     if (S.tab === "map") mapReady();
@@ -933,7 +940,7 @@
       const [, dest, note] = o.label.match(/^折返\s*(.*?)（([^（）]*)）$/) || [null, o.label.replace(/^折返\s*/, ""), ""];
       return taskButton(o, `↩ 折返 ${dest}`.trim(), note);
     };
-    const menu = idleMenu(m) ? actionBar(m) : `<div class="options">${opts.map((o, i) => o.id === FREE_TEXT_OPTION && S.answering && o.enabled ? `
+    const menu = idleMenu(m) ? actionBar(m) : `<div class="options">${opts.map((o, i) => o.id === SENSE_DRAW && S.sensing ? sensePadHtml() : o.id === FREE_TEXT_OPTION && S.answering && o.enabled ? `
         <form class="free answer" id="answer-form"><input class="input" name="text" maxlength="20" placeholder="${esc(o.label)}（20字內）" aria-label="${esc(o.label)}"><button class="btn primary small" type="submit">說出口</button></form>` : isTask(o) ? `${i === firstTask ? '<div class="road-tasks">' : ""}${taskButton(o)}${i === lastTask ? "</div>" : ""}` : paired && isWay(o) ? `${i === firstWay ? '<div class="road-tasks road-ways">' : ""}${wayButton(o)}${i === lastWay ? "</div>" : ""}` : `${i === firstMove && !modesLast ? modes : ""}
         <button class="btn ${followsMode(o.id) ? "go" : ""}" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}>
           <span class="k">${o.id.startsWith("move:") ? "→" : o.id.startsWith("road:back") ? "↩" : i + 1}</span>${optLabelHtml(o)}
@@ -1064,7 +1071,7 @@
     }).join("")}</div>` : "";
     // 意境：一顆一顆的籤，點一下攤開模型寫的那句說明與「化成心得」
     const insOpen = x.insights.find((i) => i.id === S.insOpen);
-    const insChips = x.insights.map((i) => `<button class="${S.insOpen === i.id ? "on" : ""}" data-act="ins-open" data-id="${esc(i.id)}">「${esc(i.name)}」<small>屬${esc(i.attribute)}${i.lean !== "無" ? `・${esc(i.lean)}` : ""}</small></button>`).join("");
+    const insChips = x.insights.map((i) => `<button class="${S.insOpen === i.id ? "on" : ""}" data-act="ins-open" data-id="${esc(i.id)}">${i.own ? glyphSvg(i.glyph, "glyph-mini") : ""}「${esc(i.name)}」<small>屬${esc(i.attribute)}${i.lean !== "無" ? `・${esc(i.lean)}` : ""}</small></button>`).join("");
     // 名冊只有本人一列（還沒有同伴）時跟上面的本人卡重複，不畫（C6）
     const mates = x.roster.length > 1;
     const cost = x.heal_cost || 0;
@@ -1089,7 +1096,7 @@
       ${showAll ? "" : `<button class="btn ghost lib-more" data-act="lib-all">再列 ${picked.length - LIB_PAGE} 門</button>`}
       <div class="label">意境</div>
       ${x.insights.length ? `<div class="ins">${insChips}</div>
-        ${insOpen ? `<div class="insight"><div><b>「${esc(insOpen.name)}」</b>${insOpen.note ? `<p>${esc(insOpen.note)}</p>` : ""}</div>
+        ${insOpen ? `<div class="insight">${insOpen.own ? glyphSvg(insOpen.glyph, "glyph-big") : ""}<div><b>「${esc(insOpen.name)}」</b>${insOpen.note ? `<p>${esc(insOpen.note)}</p>` : ""}${insOpen.own ? `<p class="glyph-from">悟於${esc(insOpen.place || "某處")}${insOpen.glyph_note ? `・${esc(insOpen.glyph_note)}` : ""}・只屬於你</p>` : ""}</div>
           <button class="btn small" data-act="melt-insight" data-id="${esc(insOpen.id)}" data-name="${esc(insOpen.name)}">化成心得 ${insOpen.melt}</button></div>` : ""}`
         : '<p class="muted">還沒悟到任何意境。去探索，荒郊野外最容易有所領悟。</p>'}
       <div class="label">門下</div>
@@ -1703,7 +1710,142 @@
     }
   }
 
+  // 感悟悟來的意境畫的那一筆（0～100 的點位）畫成小 SVG（同 journal.glyph_svg）
+  function glyphSvg(points, cls) {
+    const pts = (points || []).filter((p) => Array.isArray(p) && p.length >= 2);
+    if (pts.length < 2) return "";
+    const path = pts.map(([x, y]) => `${Number(x) | 0},${Number(y) | 0}`).join(" ");
+    return `<svg class="${cls}" viewBox="-8 -8 116 116" aria-hidden="true"><polyline points="${path}" fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  }
+
+  // ── 有所感的畫布（悟意境設計 0.2 第 3、4 步）──
+  // 一筆畫到底：手指按下去開始一筆（之前畫的清掉），離開畫布就算畫完；不滿意清掉重畫。畫完問伺服器規則讀到什麼（/api/sense_read，
+  // 跟送出時讀的是同一套 glyph.read），寫在畫布底下。送出帶點位與一張小 PNG（只轉交給模型看圖，不存）
+  const SENSE_SIZE = 256;
+  function sensePadHtml() {
+    const ready = S.sensePts.length > 1;
+    return `<div class="sense-pad" id="sense-pad">
+        <div class="sense-hint">此刻心中有一個形——用手指一筆畫下來。</div>
+        <canvas class="sense-canvas" id="sense-canvas" width="${SENSE_SIZE}" height="${SENSE_SIZE}" aria-label="畫布：一筆畫到底"></canvas>
+        <div class="sense-note" id="sense-note">${esc(S.senseNote || (ready ? "" : "手指離開畫布，就算畫完。"))}</div>
+        <div class="sense-acts">
+          <button class="btn small" data-act="sense-clear" ${ready ? "" : "disabled"}>清掉重畫</button>
+          <button class="btn small" data-act="sense-let">不畫了，順其自然</button>
+          <button class="btn primary small" data-act="sense-send" ${ready ? "" : "disabled"}>就是這個形</button>
+        </div>
+      </div>`;
+  }
+
+  function closeSense() {
+    S.sensing = false;
+    S.sensePts = [];
+    S.senseNote = "";
+    S.stroking = false;
+  }
+
+  function senseInk(ctx) {
+    ctx.clearRect(0, 0, SENSE_SIZE, SENSE_SIZE);
+    ctx.lineWidth = 7;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue("--ink").trim() || "#222";
+    const pts = S.sensePts;
+    if (pts.length < 2) return;
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    for (const [x, y] of pts.slice(1)) ctx.lineTo(x, y);
+    ctx.stroke();
+  }
+
+  function sensePadReady() {
+    const canvas = document.getElementById("sense-canvas");
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    senseInk(ctx);
+    let t0 = 0;
+    const at = (ev) => {
+      const r = canvas.getBoundingClientRect();
+      return [
+        Math.round(((ev.clientX - r.left) / r.width) * SENSE_SIZE),
+        Math.round(((ev.clientY - r.top) / r.height) * SENSE_SIZE),
+        Math.round(performance.now() - t0),
+      ];
+    };
+    canvas.addEventListener("pointerdown", (ev) => {
+      if (S.busy) return;
+      ev.preventDefault();
+      canvas.setPointerCapture(ev.pointerId);
+      t0 = performance.now();
+      S.stroking = true;
+      S.sensePts = [at(ev)];
+      S.senseNote = "";
+      senseInk(ctx);
+    });
+    canvas.addEventListener("pointermove", (ev) => {
+      if (!S.stroking) return;
+      ev.preventDefault();
+      if (S.sensePts.length < 600) S.sensePts.push(at(ev)); // 跟 glyph.MAX_POINTS 一樣多
+      senseInk(ctx);
+    });
+    const end = async () => {
+      if (!S.stroking) return;
+      S.stroking = false;
+      const pad = document.getElementById("sense-pad");
+      const ready = S.sensePts.length > 1;
+      if (pad) pad.querySelectorAll('[data-act="sense-clear"], [data-act="sense-send"]').forEach((b) => { b.disabled = !ready; });
+      const pts = S.sensePts;
+      try {
+        const r = await api("/api/sense_read", { points: pts });
+        if (S.sensePts !== pts) return; // 等回應時又畫了一筆
+        S.senseNote = r.note ? `這一筆：${r.note}` : (r.problem || "");
+      } catch (e) { S.senseNote = ""; }
+      const note = document.getElementById("sense-note");
+      if (note) note.textContent = S.senseNote;
+    };
+    canvas.addEventListener("pointerup", end);
+    canvas.addEventListener("pointercancel", end);
+  }
+
+  async function senseSend() {
+    const canvas = document.getElementById("sense-canvas");
+    const pad = document.getElementById("sense-pad");
+    if (!canvas || S.sensePts.length < 2) return;
+    // 小 PNG：白底黑線（模型看圖用），跟畫面上的顏色無關
+    const small = document.createElement("canvas");
+    small.width = small.height = SENSE_SIZE;
+    const sx = small.getContext("2d");
+    sx.fillStyle = "#fff";
+    sx.fillRect(0, 0, SENSE_SIZE, SENSE_SIZE);
+    sx.lineWidth = 7;
+    sx.lineCap = sx.lineJoin = "round";
+    sx.strokeStyle = "#000";
+    sx.beginPath();
+    S.sensePts.forEach(([x, y], i) => (i ? sx.lineTo(x, y) : sx.moveTo(x, y)));
+    sx.stroke();
+    const png = small.toDataURL("image/png").split(",")[1] || "";
+    await busy(async () => {
+      pad.classList.add("brewing"); // 等模型取名：整塊畫布微微晃（同煉製的爐子）
+      pad.querySelectorAll("button").forEach((b) => { b.disabled = true; });
+      const send = pad.querySelector('[data-act="sense-send"]');
+      send.textContent = "心念漸凝……";
+      const stop = watchQueue(send, "心念漸凝……");
+      try {
+        const r = await api("/api/sense", { points: S.sensePts, png });
+        closeSense();
+        applyMain(r.main);
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      } finally { stop(); }
+    });
+    if (document.querySelector("#sense-pad.brewing")) renderPage(); // 失敗了（伺服器擋下來、連不上）：畫布還原，那一筆留著
+  }
+
   async function choose(btn, id) {
+    if (id === SENSE_DRAW) { // 有所感：先叫出畫布、送暖機（模型閒置後第一次看圖要一二十秒，畫的這幾秒剛好用來載入），畫好再送
+      S.sensing = true;
+      renderPage();
+      api("/api/sense_warm", {}).catch(() => {});
+      return;
+    }
     if (id === FREE_TEXT_OPTION) { // 隨口應對：先叫出輸入框，寫好再送（見 answer）
       S.answering = true;
       renderPage();
@@ -1911,6 +2053,9 @@
         case "gate": S.gateMode = el.dataset.mode; renderGate(); break;
         case "tab": await goTab(el.dataset.tab); break;
         case "choose": await choose(el, el.dataset.id); break;
+        case "sense-clear": S.sensePts = []; S.senseNote = ""; renderPage(); break;
+        case "sense-let": closeSense(); await choose(el, "sense:let"); break;
+        case "sense-send": await senseSend(); break;
         case "move-mode": await setMoveMode(el.dataset.mode); break;
         case "toggle-more": toggleMore(); break;
         case "now-more": {
