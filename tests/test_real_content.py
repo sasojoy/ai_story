@@ -71,7 +71,7 @@ def content():
 
 def test_real_content_loads():
     c = load_content(CONTENT_DIR)
-    assert 30 <= len(c.locations) <= 40
+    assert 30 <= len([loc for loc in c.locations.values() if not loc.prologue_only]) <= 40  # 序章的草廬不算
     assert {t.id for t in c.scenario.trends} == {"huangjin", "yuxi", "yingru", "nanyang", "jizhou", "geju"}
 
 
@@ -105,11 +105,110 @@ def test_the_road_sights_are_the_thirty_written_for_season_one(content):
     assert content.config.road_sight_chance == 0.3  # 三成：正式內容用預設值
 
 
-def test_the_tutorial_explains_travel_and_sitting_down(content):
+def test_the_mentor_explains_travel_and_sitting_down(content):
     texts = {step.id: step.text for step in content.tutorial.steps}
-    assert all(word in texts["t2_map"] for word in ("步行", "趕路", "疾行", "體力"))
-    assert "打坐" in texts["t3_outskirts"]
-    assert all(word in texts["t3_outskirts"] for word in ("邊走邊想", "沿途打聽", "折返"))  # 路上不是乾等（路上設計）
+    assert all(word in texts["p11_farewell"] for word in ("步行", "趕路", "疾行", "體力"))
+    assert "打坐" in texts["p7_rest"]
+
+
+def _walk_the_real_prologue(game) -> None:
+    """照正式內容把序章走完：遇險（擋在老婆婆身前）、拜師、看修練頁、草廬四景到松林聽風、合成穿林腿、改練並練到第三成、
+    修練、打坐、雪恥、配點、熔蠻牛拳，出師抵達潁川。每一步都要真的往前走。"""
+    from tianxia import prologue, sensing
+
+    content, p = game.content, game.state.player
+    game.world.open_season(content, now=0.0)
+    assert p.location == "mentor_hut" and game.state.pending_event == "prologue_ambush"
+    for option in ("choice:0", "choice:0"):  # 遇險（擋在老婆婆身前）、拜師
+        game.choose(option)
+    assert p.tutorial_step == 1
+    game.view_tab("practice")
+    game.choose("act:explore")
+    got = sensing.current(game.state, content)
+    assert got[1].id == "prologue_hut"
+    order = [got[1].methods[j].attribute for j in got[0].order]
+    game.choose(f"sense:{order.index('快')}")  # 到松林裡聽風
+    game.choose(sensing.LET_GO)
+    assert "feng" in p.insights and p.tutorial_step == 3
+    game.forge("jichu_quanjiao", ["feng"], proposed=(None, ""))
+    art = prologue.fused_arts(game.state, content, game.world)[0]
+    assert art.name == "穿林腿"
+    game.switch_art(art.id)
+    game.practice("武學")
+    game.practice("武學")
+    game.cultivate(art.id)
+    game.choose("act:rest")
+    game.choose("act:train")
+    game.allocate_stat("str")
+    game.melt_art("manniu_quan")
+    assert p.tutorial_step == 10
+    game.choose("move:yingchuan")
+    game.advance(p.journey.arrive_at[-1] - game.state.world.time)
+
+
+def test_the_real_prologue_walks_to_yingchuan(content, world):
+    """新手引導計畫一 Task 7：用正式內容把序章走一遍，出師抵達潁川：草廬從輿圖上消失，盤纏照第 11 步給。"""
+    from tianxia import atlas
+
+    game = Game.new(content, "新人", rng=random.Random(0), world=world, prologue=True)
+    p = game.state.player
+    silver = p.stats["silver"]
+    _walk_the_real_prologue(game)
+    assert p.location == "yingchuan" and p.tutorial_step == content.tutorial.prologue_steps == 11
+    assert p.stats["silver"] == silver + 30  # 序章裡銀兩只有出師的盤纏會動
+    assert "mentor_hut" not in atlas.visible_locations(game.state, content)
+    assert any(content.tutorial.leave_text in line for e in game.state.journal for line in e.lines)
+
+
+def _looks(game) -> dict:
+    """別人一眼看得到的樣子（同 test_prologue._look）：等級、兩個欄位與功法庫每一門的（品質, 第幾成）、銀兩、位置、體力、步數、內傷。"""
+    from tianxia import library
+
+    s, c, w = game.state, game.content, game.world
+    p, m = s.player, s.player.member
+
+    def art(art_id, level):
+        return None if art_id is None else (team.player_art(s, c, w, art_id).quality, level)
+
+    return {
+        "level": m.level, "wugong": art(m.wugong_id, m.wugong_level), "neigong": art(m.neigong_id, m.neigong_level),
+        "library": sorted((team.player_art(s, c, w, a).quality, library.level_of(s, a)) for a in p.arts),
+        "silver": p.stats["silver"], "location": p.location, "stamina": p.stamina, "step": p.tutorial_step,
+        "hurt": m.injury > 0,
+    }
+
+
+def test_bots_and_scripts_skip_the_real_prologue_and_look_like_graduates(content, world):
+    """新手引導計畫一的 Global Constraints：伺服器假人、整季機器人（Game.new(graduated=True)）與腳本建的角色（Game.new 預設）
+    不進草廬；假人出來的樣子跟走完正式序章的真人一樣（等級 2、一門中品第三成的師門功夫、蠻牛拳熔掉了、多了盤纏）。"""
+    from tianxia import atlas, prologue
+
+    script = Game.new(content, "腳本", rng=random.Random(0), world=world)
+    assert script.state.player.location == "yingchuan" and script.state.pending_event is None
+    assert script.state.player.tutorial_step == content.tutorial.prologue_steps
+    assert "mentor_hut" not in atlas.visible_locations(script.state, content)
+
+    human = Game.new(content, "真人", rng=random.Random(0), world=world, prologue=True)
+    _walk_the_real_prologue(human)
+    bot = Game.new(content, "假人", rng=random.Random(1), world=world, graduated=True)
+    assert _looks(bot) == _looks(human)
+    assert _looks(bot)["level"] == 2 and _looks(bot)["location"] == "yingchuan"
+    fused = prologue.fused_arts(bot.state, content, world)
+    assert fused[0].name in {"穿林腿", "坐山拳", "回瀾手", "烈爐拳"} and fused[0].quality == "中品"
+    assert "manniu_quan" not in bot.state.player.arts and not prologue.active(bot.state, content)
+
+
+def test_old_saves_count_as_past_the_real_prologue(content, world):
+    """舊存檔（onboarding 比 ONBOARDING_VERSION 小）一律當作走過序章，不會被拉回草廬；舊的第一季兩步走到哪裡就接著那裡。"""
+    from tianxia.state import ONBOARDING_VERSION
+
+    for old_step, new_step in ((3, 11), (6, 11), (7, 12)):
+        game = Game.new(content, f"老手{old_step}", rng=random.Random(0), world=world)
+        p = game.state.player
+        p.onboarding, p.tutorial_step = 0, old_step
+        again = Game(content, game.state, world=world)
+        assert again.state.player.tutorial_step == new_step and again.state.player.onboarding == ONBOARDING_VERSION
+        assert again.state.player.location == "yingchuan"
 
 
 def test_every_battle_is_fought_in_the_region_where_it_starts(content):
@@ -255,22 +354,6 @@ def test_a_new_character_starts_with_the_two_starter_arts_at_level_one(content):
     assert (member.neigong_id, member.neigong_level) == ("jichu_tuna", 1)
     assert (member.wugong_id, member.wugong_level) == ("jichu_quanjiao", 1)
     assert game.state.player.stats["xinde"] == content.config.start_stats["xinde"]
-
-
-def test_the_practice_step_waits_for_a_real_practice_not_for_having_an_art(content):
-    """審查裁示 F1：開局就有兩門基礎武學，t4 若看「有沒有武學」一開始就成立，教不到練成；要看「練功」這個動作。"""
-    from tianxia import guide
-
-    game = Game.new(content, "測試俠客", rng=random.Random(0))
-    todo = guide.steps(game.state, content)
-    index = [step.id for step in todo].index("t4_practice")
-    assert todo[index].done_when.action == "practice" and not todo[index].done_when.has_wugong
-    game.state.player.tutorial_step = index
-    game.view_map()
-    assert game.state.player.tutorial_step == index  # 帶著功夫、看過地圖，還不算
-    game.practice("武學")
-    assert game.state.player.tutorial_step == index + 1
-    assert "✔ 引導完成" in game.state.player.guide_done
 
 
 def test_a_new_character_can_afford_the_first_practices_the_tutorial_asks_for(content):

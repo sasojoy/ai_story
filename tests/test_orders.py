@@ -581,20 +581,22 @@ def test_orders_view_shows_own_side_with_deadline(on):
 
 # ── Task 8：新手引導多兩步（只在第一季）────────────────────────
 
+BASE = 11  # 不分季的步驟：序章十一步（新手引導計畫一）；第一季那兩步接在後面
+
 
 def test_two_tutorial_steps_after_joining_only_in_season_one(on):
     from tianxia import guide
 
     game = _game(on, at="changshe")
     off = load_content(CONTENT_DIR)  # 同一份存檔，開關關著的內容
-    assert len(guide.steps(game.state, off)) == 6  # 開關關著：照舊 6 步
+    assert len(guide.steps(game.state, off)) == 11  # 開關關著：序章十一步
     steps = guide.steps(game.state, on)
     assert [s.id for s in steps][-2:] == ["t7_orders", "t8_order_done"]
     assert steps[-2].text.startswith("如今天下分成了三邊")  # 濃縮版內容表 3.4（S1 審過）
-    game.state.player.tutorial_step = 6  # 前面六步做完了
+    game.state.player.tutorial_step = BASE  # 序章走完了
     game.choose("faction:guan")
     msgs = game.choose("faction:confirm")
-    assert game.state.player.tutorial_step == 7  # 投靠完成「看一眼本週軍令」那一步
+    assert game.state.player.tutorial_step == BASE + 1  # 投靠完成「看一眼本週軍令」那一步
     # 下一步的說明在對話框，不在「剛剛」（引導重做設計 8.1.3；畫面批次審查 I2）
     assert not any("軍令上寫什麼" in m or "引導完成" in m for m in msgs)
     assert "✔ 引導完成" in game.state.player.guide_done and game.guide_box()["text"].startswith("軍令上寫什麼，就照著做一次")
@@ -602,15 +604,15 @@ def test_two_tutorial_steps_after_joining_only_in_season_one(on):
     _order(game, "siege", "guan", front="yingru")
     with _win():
         game.choose("act:train")
-    assert game.state.player.tutorial_step == 8 and not guide.tutorial_active(game.state, on)
+    assert game.state.player.tutorial_step == BASE + 2 and not guide.tutorial_active(game.state, on)
 
 
 def test_a_returning_player_who_finished_the_base_steps_keeps_going(on):
-    """換季重來時，做完不分季的六步就算做完引導（FB-034 照舊不重來）；第一季多的兩步接著做。"""
+    """換季重來時，做完不分季的步驟（序章）就算做完引導（FB-034 照舊不重來）；第一季多的兩步接著做。"""
     game = _game(on)
-    game.state.player.tutorial_step = 6
+    game.state.player.tutorial_step = BASE
     game._reset_player_for_new_season(2)
-    assert game.state.player.tutorial_step == 6
+    assert game.state.player.tutorial_step == BASE
 
 
 # ── Task 9：假人照軍令出力、第一週走完一道軍令 ─────────────────────
@@ -663,7 +665,7 @@ def test_new_player_can_join_and_finish_an_order_in_week_one(on):
     """版本目標第四節第 2 條（真實內容）：新角色第 1 週內投靠官軍、看到三道軍令、完成其中一道的個人部分。
     移動用疾行（只看規則，不看路程）。"""
     game = _game(on, at="yingchuan")
-    game.state.player.tutorial_step = 6
+    game.state.player.tutorial_step = BASE
     game.advance(200)  # 跨過開季後第一個曆時交界：第 1 週發令
     game.state.player.stamina = 150
     game.travel("changshe", "dash")
@@ -683,7 +685,7 @@ def test_new_player_can_join_and_finish_an_order_in_week_one(on):
             game.choose("act:train")
     assert target.progress.get("甲") == 1
     assert orders.week_of(game.state, on) == 1
-    assert game.state.player.tutorial_step == 8
+    assert game.state.player.tutorial_step == BASE + 2
 
 
 def test_a_new_guan_recruit_finishes_a_week_one_order_without_leaving_yingru(on):
@@ -691,7 +693,7 @@ def test_a_new_guan_recruit_finishes_a_week_one_order_without_leaving_yingru(on)
     官軍的守城寫了開局週（opening_fronts），第 1 週在潁川汝南也發；新角色照引導在長社投靠、不離開潁川，
     巡哨一次就替這道記一次，跟黃巾在營寨傳道一次同一個難度。"""
     game = _game(on, at="yingchuan")
-    game.state.player.tutorial_step = 6
+    game.state.player.tutorial_step = BASE
     game.advance(200)  # 第 1 週發令
     game.state.player.stamina = 150
     game.travel("changshe", "dash")
@@ -707,7 +709,7 @@ def test_a_new_guan_recruit_finishes_a_week_one_order_without_leaving_yingru(on)
     assert game.state.player.location == here
     assert defend.progress.get("甲") == 1
     assert any("守城・潁川汝南" in m for m in msgs)
-    assert game.state.player.tutorial_step == 8  # 引導的「做完一次軍令」也跟著過
+    assert game.state.player.tutorial_step == BASE + 2  # 引導的「做完一次軍令」也跟著過
 
 
 @pytest.mark.parametrize("yingru", [40, 50])
@@ -805,11 +807,11 @@ def test_switch_off_joining_does_not_touch_the_tutorial(real):
     """T6 審查 M4：投靠那一刻推引導是第一季才有的（t7_orders 只看陣營）；beta 照舊等下一個行動才檢查。"""
     game = _game(real, at="changshe")
     steps = [s.id for s in real.tutorial.steps]
-    game.state.player.tutorial_step = steps.index("t4_practice")
+    game.state.player.tutorial_step = steps.index("p10_melt")  # beta 沒有序章外的步驟了：拿一個不看陣營的步驟來看
     game.state.player.member.wugong_id = "xingwu_qiang"  # 例如煉製來的武學：煉製不推引導
     game.choose("faction:guan")
     game.choose("faction:confirm")
-    assert game.state.player.tutorial_step == steps.index("t4_practice")
+    assert game.state.player.tutorial_step == steps.index("p10_melt")
 
 
 def test_cart_button_names_the_materials_it_uses(on):

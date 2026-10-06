@@ -624,7 +624,8 @@
   const ODDS_TONE = { "穩勝": "good", "有把握": "good", "零風險": "good", "五五波": "even", "難分勝負": "even", "凶險": "bad", "必敗": "bad" };
   // 選單上有「打坐」就是平常閒著的時候：用行動列。事件、對話、路上、決戰的選項每次都不一樣，照舊排成一列按鈕
   // 序章裡閒著時選單只留這一步要的（打坐常常不在）：沒有事件的選項、不在路上，也當閒著的行動列來畫，沒亮的格子不畫（F12）
-  const idleMenu = (m) => m.options.some((o) => o.id === "act:rest") || (!!m.prologue && !m.on_road && !m.options.some((o) => o.id.startsWith("choice:")));
+  // 序章裡事件（choice:）與草廬四景的有所感（sense:，做法、畫下來、順其自然）是一排按鈕，不是閒著的行動列
+  const idleMenu = (m) => m.options.some((o) => o.id === "act:rest") || (!!m.prologue && !m.on_road && !m.options.some((o) => /^(choice|sense):/.test(o.id)));
   const inkCell = (key, name, sub, icon, attrs, cls, note = "") => `<button class="act-ink${cls}" data-key="${key}" data-glow="act:${key}" ${attrs}>
       <svg class="ink-icon" viewBox="0 0 24 24" aria-hidden="true">${icon}</svg><b>${esc(name)}</b><small>${esc(sub)}</small>${
       note ? `<small class="ink-note ${ODDS_TONE[note] || ""}">${esc(note)}</small>` : ""}</button>`;

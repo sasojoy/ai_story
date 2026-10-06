@@ -290,6 +290,8 @@ def test_no_cell_lit_and_nothing_extra_draws_no_bar(hut):
     (True, [], False, True),  # 序章裡沒有選項（看修練頁那一步）：照閒著的行動列畫
     (True, ["act:explore"], False, True),  # 沒有打坐，也是閒著
     (True, ["choice:0", "choice:1"], False, False),  # 事件的選項：一排按鈕
+    (True, ["sense:0", "sense:1"], False, False),  # 草廬四景的做法：一排按鈕（悟意境）
+    (True, ["sense:draw", "sense:let"], False, False),  # 感悟狀態：畫下來、順其自然
     (True, ["act:on_road", "road:back"], True, False),  # 出師那段路上：路上的選單
     (False, ["act:explore"], False, False),  # 序章外沒有打坐的選單不是閒著（對話、事件、決戰）
     (False, ["act:explore", "act:rest"], False, True),

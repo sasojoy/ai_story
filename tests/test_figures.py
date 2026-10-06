@@ -547,6 +547,7 @@ def _player(content, store, name: str, faction: str | None, at: str, *, now: flo
     p = game.state.player
     p.faction, p.location = faction, at
     p.visited.add(at)
+    p.tutorial_step = len(content.tutorial.steps)  # 引導做完：投靠過的人第一次行動不會順手完成第一季那兩步、多拿引導的銀兩
     game.now = now
     return game
 
