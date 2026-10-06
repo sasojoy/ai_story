@@ -9,15 +9,25 @@ stderr／exit／exitCode、console、計時器與其他 node 的全域；結束�
 的時候），丟出沒接住的例外、沒人接的 Promise 拒絕、process.exit(非 0)、結束時 process.exitCode 不是 0 就是失敗。每個請求的
 全域是新的；harness 自己的名字（runOne、pump……）不在請求裡。harness 自己出錯時那個請求馬上失敗、帶著錯誤回來，不會等到逾時。
 
-已知跟各開一個 node 不一樣、目前的驅動程式都碰不到的地方（評審 2026-10-07，第 5 區 M1、M3、M6）：
+已知跟各開一個 node 不一樣、目前的驅動程式都碰不到的地方（評審 2026-10-07，第 5 區 M1、M3、M6、M8）：
 - node 自己的物件是常駐 node 的那一份、請求之間共用：Buffer、URL、TextEncoder 的 prototype，process.env／argv／on(...)，
   require 回來的模組（fs 以外）。改了它們，後面的請求看得到；Buffer、TextEncoder 做出來的東西在請求的 context 裡也不是
   那個 context 的 Uint8Array（instanceof 是 false）。
 - harness 看不到的非同步工作（真的 I/O：child_process、真的 fetch……）晚到的錯誤會算在當時正在跑的下一個請求頭上；
   unref() 過的計時器不再追蹤，請求結束後照樣會在舊的 context 裡跑。
 - performance 只有 now() 是這個請求自己的（mark()、timeOrigin 會丟例外）。
+- process.stdout.write(Buffer) 每一次各自解成字：一個多位元組的字拆在兩次 write 裡，會變成 U+FFFD（各開一個 node 時是
+  位元組照樣接起來）。
+- 在計時器或 Promise 裡丟出連 describe 都寫不出來、而且寫它時丟出來的還是它自己的東西（讀任何屬性都丟出它自己的
+  Proxy）：常駐的 node 整個結束，這邊馬上回報「常駐的 node 意外結束了」，下一個請求再開一個新的。在請求本身的程式裡丟的，
+  那個請求照樣馬上失敗（「webharness: （寫不出來的例外）」）。
+- _Resident.close() 不關 proc.stdout：用 python -X dev 跑時，結束會多印一行 ResourceWarning（unclosed file）。
 
 環境變數 TIANXIA_WEB_HARNESS=process：改回每個請求各開一個 node（以前的做法），拿來對照兩種跑法的結果一不一樣。
+它跟以前的指令差一點（第 5 區 M7）：有 stdin 的請求用 node -e（程式放在命令列），沒有 stdin 的（test_server 的那幾個）
+用 node -（程式從標準輸入送進去），選哪一個只看 stdin 是不是空的；兩種都用文字模式（text=True、UTF-8）讀寫，Windows 上從
+標準輸入送進去的 \n 會變成 \r\n、stdout 照通用換行讀回來（以前 test_server 是位元組進出；JS 會把樣板字串裡的 CRLF 統一成
+\n，目前的結果一樣）。
 
 驅動程式寫在各個測試檔裡（假 DOM 各檔不同）；開頭共用的幾樣在 PRELUDE：input（這個請求的 JSON）、src（app.js，換行統一成 \\n）、
 slice、fn、konst（切 app.js）、wholeApp（整支 app.js 交出要測的名字）、finish（印結果）。"""
@@ -100,7 +110,12 @@ let active = null; // 正在跑的請求：沒人接的拒絕與例外算它的
 const describe = (e) => {
   try { return String((e && e.stack) || e); } catch (_) { return Object.prototype.toString.call(e); }
 };
-const broken = (e) => ({ code: 1, stdout: "", stderr: `webharness: ${describe(e)}\n` });
+// harness 自己出錯時的回覆一定要回得出去：連 describe 都寫不出來的東西（讀任何屬性都丟出它自己的 Proxy）也一樣
+const broken = (e) => {
+  let why;
+  try { why = describe(e); } catch (_) { why = "（寫不出來的例外）"; }
+  return { code: 1, stdout: "", stderr: `webharness: ${why}\n` };
+};
 
 process.on("unhandledRejection", (reason) => { if (reason !== EXIT && active) active.fail(reason); });
 process.on("uncaughtException", (error) => { if (error !== EXIT && active) active.fail(error); });
