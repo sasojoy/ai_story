@@ -7101,12 +7101,14 @@ def test_the_models_push_in_a_big_fight_is_the_same_points_with_or_without_roll_
     game.content.squads["thug"] = game.content.squads["thug"].model_copy(update={"difficulty": difficulty})
     squad = game.content.squads["thug"]
 
+    grid = 400  # 均勻格點：勝負對運氣是一道門檻，格點最多差 1/400＝0.25%，比下面容許的 1% 小（測試整併第 3 區，原本 2000）
+
     def win_rate(judged):
         wins = 0
-        for i in range(2000):
-            game.rng = FixedRandom((i + 0.5) / 2000)
+        for i in range(grid):
+            game.rng = FixedRandom((i + 0.5) / grid)
             wins += game._fight_with(squad, judged).tier in team.WIN_TIERS
-        return wins / 2000
+        return wins / grid
 
     base = win_rate(None)
     assert base == pytest.approx(0.5, abs=0.01)
