@@ -5,7 +5,7 @@ import random
 import pytest
 from conftest import next_season
 
-from tianxia import atlas, prologue
+from tianxia import atlas, prologue, sensing
 from tianxia.content import load_content
 from tianxia.engine import Game
 from tianxia.state import ONBOARDING_VERSION
@@ -223,13 +223,22 @@ def _walk(game, *option_ids):
         game.choose(oid)
 
 
+def _sense(game, attribute: str) -> None:
+    """草廬的有所感：照屬性挑那個做法（卡上的順序每次洗牌），再順其自然（不畫，落回那個屬性的基本意境）。"""
+    game.choose("act:explore")
+    got = sensing.current(game.state, game.content)
+    order = [got[1].methods[j].attribute for j in got[0].order]
+    game.choose(f"sense:{order.index(attribute)}")
+    game.choose(sensing.LET_GO)
+
+
 def _to_step(game, n: int) -> None:
     """照正常的玩法把序章走到第 n 步開頭（0 起算）：遇險、拜師、看修練頁、探索選松林、合成、換上並練到第三成、修練、打坐、
     雪恥一戰、配點、熔雜學。每一輪都要真的前進一步：卡住就當場失敗，不要無窮迴圈。"""
     script = [
         lambda g: _walk(g, "choice:0", "choice:0"),  # 0 → 1
         lambda g: g.view_tab("practice"),  # 1 → 2
-        lambda g: _walk(g, "act:explore", "choice:0"),  # 2 → 3：松林，悟到風
+        lambda g: _sense(g, "快"),  # 2 → 3：松林聽風，悟到風
         lambda g: g.forge("basic_fist", ["feng"]),  # 3 → 4：穿林腿
         lambda g: (g.switch_art(_fused(g)), g.practice("武學"), g.practice("武學")),  # 4 → 5：換上、練到第三成
         lambda g: g.cultivate(_fused(g)),  # 5 → 6：一定升中品
@@ -510,8 +519,11 @@ def test_the_view_tab_action_reaches_the_game(fresh):
 def test_exploring_in_the_hut_always_offers_the_four_sights(fresh):
     _to_step(fresh, 2)
     fresh.choose("act:explore")
-    assert fresh.state.pending_event == "p_insight"
-    fresh.choose("choice:2")  # 溪水
+    got = sensing.current(fresh.state, fresh.content)
+    assert got is not None and got[1].id == "hut_four" and len(fresh.options()) == 4
+    fresh.state.player.sensing = None
+    fresh.state.player.stamina = 150
+    _sense(fresh, "柔")  # 溪邊看水：每個做法都對、必中，順其自然落回水
     assert fresh.state.player.insights == ["shui"]
     assert fresh.state.player.tutorial_step == 3
 

@@ -9,7 +9,7 @@ from __future__ import annotations
 import random
 from dataclasses import dataclass
 
-from . import atlas, battle_instance, bot, cultivation, library, naming, orders, rules, server_bots, team
+from . import atlas, battle_instance, bot, cultivation, library, naming, orders, rules, sensing, server_bots, team
 from .bot import allocate_points, can_practise, wants_heal
 from .engine import FREE_TEXT_OPTION, Game, Option
 from .models import Content, Effect, FactionDef, SkillDef
@@ -64,13 +64,21 @@ class MasterJob:
     request: naming.NamingRequest
 
 
+@dataclass(frozen=True)
+class SenseJob:
+    """有所感畫完那一筆、要請模型取名的私有意境（悟意境設計 0.2b 第 9 點：假人的首悟也要叫模型取名，不然首悟紀錄的名字是
+    字表的樣子）：A 段在鎖內開的單（sensing.SenseRequest），交給 bot_runner 在鎖外取名、再拿鎖交回 Game.sense_draw。"""
+
+    request: object  # sensing.SenseRequest
+
+
 @dataclass
 class NamingSlot:
     """這一輪這個假人能不能把一件取名交給模型（首創的爐或絕學定名；bot_runner 給：一次一件、兩件之間要隔一段時間）。
     open 時開成單子放進 job；不 open 時那一爐不開、那個名先不定，skipped 加一（只是數字，主控台只印總數）。"""
 
     open: bool = False
-    job: ForgeJob | MasterJob | None = None
+    job: ForgeJob | MasterJob | SenseJob | None = None
     skipped: int = 0
 
 
@@ -86,6 +94,8 @@ def take_turn(game: Game, profile: BotProfile, rng: random.Random, slot: NamingS
     if slot is not None and slot.job is not None:
         return msgs  # 這一輪在爐前等名字，不做別的（不然體力可能花掉，C 段開不成）
     s = game.state
+    if s.player.sensing is not None:
+        return msgs + _sense(game, rng, slot)
     if s.player.pending_companion:
         return msgs + game.choose("talk:leave")
     rally = _toward_battle(game)
@@ -203,6 +213,28 @@ def _too_dear(skill: SkillDef, silver: int) -> bool:
     return bool(fee) and silver - fee < LEARN_SILVER_RESERVE
 
 
+def _sense(game: Game, rng: random.Random, slot: NamingSlot | None) -> list[str]:
+    """有所感：挑做法照整季機器人（bot.sense_pick）。要畫的時候，輪得到取名名額就隨手畫一筆——要取名的開成單交給假人程式；
+    輪不到就畫一筆跟做法同屬性的（一定落回這裡的基本意境、不用取名），不拿字表名字悟出私有意境。"""
+    choice = bot.sense_pick(game, rng)
+    if choice is None:
+        return []
+    if choice != sensing.DRAW:
+        return game.choose(choice)
+    can_name = slot is not None and slot.open and slot.job is None
+    req = game.sense_request(bot.sense_stroke(game, rng, same=not can_name))
+    if isinstance(req, str):
+        return game.choose(sensing.LET_GO)
+    if req.needs_name:
+        if can_name:
+            slot.job = SenseJob(req)
+            return []
+        if slot is not None:
+            slot.skipped += 1
+        return game.choose(sensing.LET_GO)
+    return game.sense_draw(req, NO_NAME)
+
+
 def _forge(game: Game, plan: bot.ForgePlan, slot: NamingSlot | None) -> list[str]:
     """開一爐。要模型取名（或挑）的：輪得到就開單交給假人程式（B、C 段在 bot_runner），輪不到這一爐不開——
     用字表的名字搶下首創，名字的樣子看得出是假人（企劃者 2026-10-05）。不必叫模型的（配方有了、只有一個候選）照開，
@@ -230,7 +262,7 @@ def _master(game: Game, slot: NamingSlot | None) -> None:
         slot.skipped += 1
 
 
-def apply_job(game: Game, job: ForgeJob | MasterJob, proposed: tuple[str | None, str]) -> list[str]:
+def apply_job(game: Game, job: ForgeJob | MasterJob | SenseJob, proposed: tuple[str | None, str]) -> list[str]:
     """C 段（bot_runner 在鎖內、重讀角色之後呼叫）：
     - 首創的爐：交給 Game.forge(proposed=...) 整個重驗再登記（等名字的時候配方被別人登記了，照查到的給、不收第二次）。
       取新名字的單（沒有候選）要是沒有過得了過濾的名字（模型沒取到、或這時重驗過不了），這一爐不開、不收費：
@@ -239,6 +271,8 @@ def apply_job(game: Game, job: ForgeJob | MasterJob, proposed: tuple[str | None,
     - 絕學定名：還輪到這一門才定。模型的名字先過一次完整的過濾（naming.recheck），跟原名一樣、過不了、或定的時候
       被用掉了，就用退路字表另組（salt 從 0 起），最多 MASTER_TRIES 個，一定跟原名不同。都定不成就留著，下次再來。"""
     state, content, world = game.state, game.content, game.world
+    if isinstance(job, SenseJob):  # 取不到名字照樣交回：私有意境走退路字表，不記首悟（Game._sense_apply 只記模型取的）
+        return game.sense_draw(job.request, proposed)
     if isinstance(job, ForgeJob):
         if not job.request.choices and naming.recheck(content, proposed, world.is_character_name)[0] is None:
             return []  # 取新名字的那一爐沒有名字可用：不開，不用字表名字搶下首創（見下面的說明）

@@ -365,6 +365,8 @@ def check_insight_scenes(c: Content, need) -> None:
             check_text(f"{where}的{label}", text)
         need(not scene.prologue or not (scene.tags or scene.locations), f"{where}：序章的場景只給草廬用，不寫 tags、locations")
         need(scene.prologue or not scene.flags_add, f"{where}：flags_add 只給序章的場景用")
+    if all(scene.prologue for scene in scenes.values()):
+        return  # 只有序章草廬那一段：草廬外探索照舊直接悟，不要求每處都有場景
     hut = c.tutorial.location
     for loc in c.locations.values():
         if not explore_gives(loc, c) or loc.prologue_only or loc.id == hut:

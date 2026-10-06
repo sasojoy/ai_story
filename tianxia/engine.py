@@ -243,11 +243,17 @@ class Game:
                 return False
             self.choose(self.rng.choice(good).id)
             return True
+        if p.sensing is not None:  # 草廬的有所感：做法都選得對；不畫，順其自然落回那個基本意境（假人不叫模型）
+            if p.sensing.stage == "choose":
+                self.choose(f"{sensing.PREFIX}{self.rng.randrange(len(sensing.current(s, c)[1].methods))}")
+            else:
+                self.choose(sensing.LET_GO)
+            return True
         fused = prologue_rules.fused_arts(s, c, self.world)
         if goal.action == "view_tab":
             tab = next((flag.removeprefix("看過:") for flag in goal.condition.flags_all if flag.startswith("看過:")), "")
             self.view_tab(tab)
-        elif step.explore_event is not None:
+        elif step.explore_event is not None or step.explore_scene is not None:
             self.choose("act:explore")
         elif goal.fused:
             if not p.insights or step.fuse_base is None:

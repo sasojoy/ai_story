@@ -231,16 +231,16 @@ def melt_insight(state: GameState, content: Content, world: WorldStateStore, ins
     p = state.player
     if insight_id not in p.insights:
         return ["你沒有這個意境。"]
-    insight = insights.resolve(insight_id, content, world)
+    insight = insights.resolve(insight_id, content, world, state)
+    arts = [art for art in (team.resolve_art(a, content, world) for a in owned_arts(state)) if art is not None]
+    leaned = {art.id for art in arts if insights.for_cultivation(state, content, world, art) is not None}
     p.insights.remove(insight_id)
     amount = content.config.melt_insight_xinde
     p.stats["xinde"] = p.stats.get("xinde", 0) + amount
     name = insight.name if insight else insight_id
     msgs = [f"你把「{name}」的領悟化成了心得。", f"心得 +{amount}"]
-    needing = [
-        art.name for art in (team.resolve_art(a, content, world) for a in owned_arts(state))
-        if art is not None and art.insight == insight_id
-    ]
+    # 熔掉之後再也找不到修練用的意境的那幾門（手上還有同屬性的，換那一個來修，不算）
+    needing = [art.name for art in arts if art.id in leaned and insights.for_cultivation(state, content, world, art) is None]
     if needing:
         msgs.append(f"{'、'.join(f'【{n}】' for n in needing)}從此不能再修練（修練要用「{name}」）。")
     return msgs

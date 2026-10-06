@@ -45,6 +45,28 @@ def resolve(
     return world.get_insight(insight_id)
 
 
+def art_attribute(art, content: Content, world: WorldStateStore, state: GameState | None = None) -> str | None:
+    """這門武學修練要的意境屬性：記了 insight_attr 的照它；舊的（悟意境之前登記的）照它融的那個意境查；都沒有是 None。"""
+    if getattr(art, "insight_attr", None):
+        return art.insight_attr
+    found = resolve(art.insight, content, world, state) if art.insight else None
+    return found.attribute if found is not None else None
+
+
+def for_cultivation(state: GameState, content: Content, world: WorldStateStore, art) -> Insight | None:
+    """修練這門武學拿哪一個意境（悟意境設計 0.2b）：它融的那一個還在手上就是它；不然（融的是私有意境——全服登記不記私有的 id，
+    或者那一個已經熔掉）拿手上同屬性的一個：先挑自己悟的、再照悟到的先後。沒有融過意境、手上也沒有同屬性的是 None。"""
+    held = state.player.insights
+    if art.insight and art.insight in held:
+        return resolve(art.insight, content, world, state)
+    attribute = art_attribute(art, content, world, state)
+    if attribute is None:
+        return None
+    found = [i for i in (resolve(x, content, world, state) for x in held) if i is not None and i.attribute == attribute]
+    found.sort(key=lambda i: not is_own(i.id))
+    return found[0] if found else None
+
+
 def learn(state: GameState, content: Content, world: WorldStateStore, insight_id: str | None) -> list[str]:
     """悟得一個意境（探索、奇遇、名聲）。已經會的化成心得（設計 3.2.2）。上限不擋：超過上限的人照樣悟得，
     只是在熔回上限以內之前不能合成、合併（設計 4.5）。"""
