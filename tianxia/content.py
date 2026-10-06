@@ -23,7 +23,7 @@ from .encounter import FALLBACK_TIER, TIER_RATIOS
 from .front_lines import BAND_KEYS, GEJU_KEYS
 from .materials import TIER_NAMES
 from .models import (
-    FRONT_KEY, MOVES, REVEAL_KEYS, ROADS, STATS, Attribute, BattleDef, CharacterDef, CheckVoice, CombatLines, Condition, Config,
+    FRONT_KEY, GLOW_KEYS, MOVES, REVEAL_KEYS, ROADS, STATS, Attribute, BattleDef, CharacterDef, CheckVoice, CombatLines, Condition, Config,
     Content, CraftNames, Effect, Event, FigureDef, FollowerDef, Foreshadows, FrontLines, InsightDef, Location, OppDef,
     OrdersContent, PresetRecipe, PromotionDef, MapLayout, Material, RoadSight, Scenario, Sect, SimRumor, SkillDef, Squad,
     TimetableEvent, TraitBook, Tutorial, allow_known,
@@ -1585,6 +1585,8 @@ def validate(c: Content) -> None:
         need(not special or i < t.prologue_steps, f"{where}：序章才有的欄位只能寫在前 {t.prologue_steps} 步")
         bad = [k for k in step.reveal if k not in REVEAL_KEYS]
         need(not bad, f"{where}：reveal 不認得 {bad}")
+        bad = [k for k in step.glow if k not in GLOW_KEYS]
+        need(not bad, f"{where}：glow 不認得 {bad}（要是 models.GLOW_KEYS 裡的鍵）")
         unknown = [entry for entry in step.allow if not allow_known(entry)]
         need(
             not unknown,
@@ -1596,10 +1598,12 @@ def validate(c: Content) -> None:
         need(step.force_tier is None or step.force_tier in encounter.TIERS, f"{where}：force_tier {step.force_tier} 不是判定結果")
         for art in (step.fuse_base, step.melt_only, step.give_art.id if step.give_art else None):
             need(art is None or art in c.skills, f"{where}：武學 {art} 不存在")
-    # 草廬的四景悟得到的每個意境，都要有一筆師門配方接上合成那一步的底：沒有的話那個新人的合成要等模型取名、或拿到退路的名字
-    # （「合成不等模型」落空）；加了第五景、或配方的意境 id 打錯，載入時就報錯
+    # 草廬裡新人拿得到的每個意境（開場遇險、拜師那一串事件、四景、序章每一步的獎勵），都要有一筆師門配方接上合成那一步的底：
+    # 沒有的話那個新人的合成要等模型取名、或拿到退路的名字（「合成不等模型」落空）；加了第五景、或配方的意境 id 打錯，載入時就報錯
     sights: set[str] = set()
-    todo = [s.explore_event for s in t.steps[: t.prologue_steps] if s.explore_event]
+    for step in t.steps[: t.prologue_steps]:
+        sights.update(step.reward.insights)
+    todo = ([t.start_event] if t.start_event else []) + [s.explore_event for s in t.steps[: t.prologue_steps] if s.explore_event]
     seen_events: set[str] = set()
     while todo:
         event_id = todo.pop()

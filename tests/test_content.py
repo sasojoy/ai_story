@@ -2067,6 +2067,50 @@ def test_a_sight_that_only_a_failed_check_grants_is_checked_too(prologue_root):
         load_content(prologue_root)
 
 
+def test_a_sight_in_the_opening_chain_needs_a_preset_too(prologue_root):
+    """T6 review M6：遇險、拜師那一串事件給的意境，新人也拿得到、也能拿去合成：沒有配方就要等模型。"""
+    def gift(events):
+        ambush = next(e for e in events if e["id"] == "p_ambush")
+        ambush["choices"][0]["effect"]["insights"] = ["xuesha"]
+
+    edit_json(prologue_root / "events" / "prologue.json", gift)
+    with pytest.raises(ContentError, match=r"\['xuesha'\].*basic_fist.*師門配方"):
+        load_content(prologue_root)
+
+
+def test_a_sight_a_step_reward_hands_over_needs_a_preset_too(prologue_root):
+    edit_json(prologue_root / "tutorial.json", lambda t: t["steps"][1].update({"reward": {"insights": ["xuesha"]}}))
+    with pytest.raises(ContentError, match=r"\['xuesha'\].*basic_fist.*師門配方"):
+        load_content(prologue_root)
+
+
+@pytest.mark.parametrize("key", ["tab:pratice", 'act:explore"]', "all", "hp ", ""])
+def test_prologue_glow_must_be_a_key_the_page_knows(prologue_root, key):
+    """T6 review M5：寫錯的發光鍵悄悄什麼都不亮；帶引號或括號的更會讓網頁的選擇器丟例外、把整頁的畫面打斷。"""
+    edit_json(prologue_root / "tutorial.json", lambda t: t["steps"][2].update({"glow": ["act:explore", key]}))
+    with pytest.raises(ContentError, match="glow 不認得"):
+        load_content(prologue_root)
+
+
+def test_prologue_glow_takes_the_buttons_inside_the_pages(prologue_root):
+    keys = ["forge", "practice", "switch", "cultivate", "melt", "allocate", "stats", "tab:craft", "act:move"]
+    edit_json(prologue_root / "tutorial.json", lambda t: t["steps"][2].update({"glow": keys}))
+    assert load_content(prologue_root).tutorial.steps[2].glow == keys
+
+
+def test_every_glow_key_the_page_draws_is_one_the_content_may_name():
+    """網頁上寫死的 data-glow（序章的 glow 對得上的就是這些）都要在 models.GLOW_KEYS 裡：加了新的發光鈕卻忘了登記，
+    內容就沒辦法叫它發光。樣板裡帶 ${…} 的（act:${key}、tab:${id}）另外由 REVEAL_KEYS 管。"""
+    import re
+    from pathlib import Path
+
+    from tianxia import models
+
+    source = (Path(models.__file__).parent.parent / "web" / "app.js").read_text(encoding="utf-8")
+    literal = set(re.findall(r'data-glow="([a-z:_]+)"', source))
+    assert literal and literal <= models.GLOW_KEYS, sorted(literal - models.GLOW_KEYS)
+
+
 def test_prologue_reveal_takes_the_chip_row_keys(prologue_root):
     """江湖頁最上面那一排小標有三塊：態勢、大事（board）、主線（quest）；每一塊各有自己的 reveal 鍵。"""
     edit_json(prologue_root / "tutorial.json", lambda t: t["steps"][2]["reveal"].extend(["board", "quest", "stances"]))
