@@ -1,10 +1,10 @@
-"""傳聞分層的畫面（傳聞分層設計第二、十二節；計畫 2026-10-06 傳聞分層一）：見聞頁「傳聞」分成四層。
-只讀狀態與內容、只產生文字，不改任何東西；誰聽得到哪一則照 rules.audible，這裡不另寫一份規則。"""
+"""傳聞分層的畫面（傳聞分層設計第二、八、十二節；計畫 2026-10-06 傳聞分層一）：見聞頁「傳聞」分成四層、
+「你不在的時候」那一份摘要。只讀狀態與內容、只產生文字，不改任何東西；誰聽得到哪一則照 rules.audible，這裡不另寫一份規則。"""
 from __future__ import annotations
 
 from collections.abc import Callable
 
-from . import foreshadow
+from . import foreshadow, orders
 from .models import Content
 from .rules import Ears, audible, ears_of
 from .state import GameState, Rumor
@@ -23,6 +23,10 @@ FACTION_EMPTY = "（還沒有自己人的消息。）"
 FACTION_LONER = "散人沒有陣營軍情；投靠一方之後，這裡是只有自己人才知道的消息。"
 LOCAL_EMPTY = "（這一帶最近沒什麼傳聞。走到別的大區，聽到的就是那裡的事。）"
 PERSONAL_EMPTY = "（還沒聽到只屬於你的線索。）"
+AWAY_LINE = "〔{label}〕{when}　{text}"  # 「你不在的時候」的一行：哪一段、季曆時間、傳聞全文
+AWAY_MORE = "另有 {n} 則沒列出來，到「見聞」的傳聞翻。"
+AWAY_TAG = "共 {n} 則"
+FACTION_KEYS = (orders.ISSUED, orders.DONE)  # 陣營軍情的「要點」：軍令發布與達成（議事、刺探有了再把它們的開頭加進來）
 
 
 def _region_names(content: Content, ears: Ears) -> str:
@@ -58,3 +62,34 @@ def layers(
         {"id": "local", "title": title, "body": _listing(of("local"), when, LOCAL_EMPTY)},
         {"id": "personal", "title": PERSONAL_TITLE, "body": "\n\n".join(personal) or PERSONAL_EMPTY},
     ]
+
+
+def away_lines(
+    state: GameState, content: Content, since: float | None, when: Callable[[float], str],
+) -> tuple[list[str], int]:
+    """「你不在的時候」那一份（傳聞分層設計第八節）：since（世界秒；None＝這一季從頭）之後、現在聽得到的
+    1. 天下大事，全部——時刻表的大事除外（Game._deliver_big_events 已經補成「江湖大事」那一則，不寫兩次）；
+    2. 陣營軍情的要點（FACTION_KEYS 開頭的）；
+    3. 你所在大區的地方傳聞（傳聞板上的；地方摘要是傳聞分層第二份計畫的事，有了之後放摘要）。
+    每一段照時間先後，三段照這個順序接起來，最多 Config.away_max 則：放不下時前面的段先放滿，同一段裡留最近的。
+    回傳（那幾行, 一共幾則）；有沒列出來的，最後多一行叫人去見聞翻。什麼都沒有是（[], 0）。"""
+    w = state.world
+    ears = ears_of(state, content)
+    announced = {r.text for r in w.timeline.values() if r.text}
+    fresh = [r for r in w.rumors if (since is None or r.time > since) and audible(r, ears)]
+    names = {region.id: region.name for region in content.map.regions}
+    sections = [
+        [(WORLD_TITLE, r) for r in fresh if r.layer == "world" and r.text not in announced],
+        [(FACTION_TITLE, r) for r in fresh if r.layer == "faction" and r.text.startswith(FACTION_KEYS)],
+        [(names.get(r.region or "", NO_REGION), r) for r in fresh if r.layer == "local"],
+    ]
+    room, rows = content.config.away_max, []
+    for section in sections:
+        kept = section[len(section) - min(room, len(section)):]
+        rows += kept
+        room -= len(kept)
+    total = sum(len(section) for section in sections)
+    lines = [AWAY_LINE.format(label=label, when=when(r.time), text=r.text) for label, r in rows]
+    if total > len(rows):
+        lines.append(AWAY_MORE.format(n=total - len(rows)))
+    return lines, total

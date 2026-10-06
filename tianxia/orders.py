@@ -23,6 +23,7 @@ SIGN = {"guan": -1, "huang": 1}  # 往己方推：戰況 0 是官軍穩控、100
 ENEMY = {"guan": "huang", "huang": "guan"}
 TOP = 3  # 達成時陣營軍情列出前幾名（軍令文件第二節）
 ISSUED = "本週軍令："  # 發令那一則陣營軍情的開頭
+DONE = "【軍令達成】"  # 達成那一則陣營軍情的開頭（「你不在的時候」照這兩個開頭挑陣營軍情的要點）
 OPENING_WEEK = 1  # 開局週（OrderWhen.opening_fronts 只在這一週放寬）
 
 
@@ -362,7 +363,7 @@ def _complete(state: GameState, content: Content, o: Order) -> list[str]:
             msgs += figures.defeat(state, content, o.figure, -effect.figure_prestige)
     top = sorted(o.progress.items(), key=lambda item: -item[1])[:TOP]  # 同次數照先出力的順序（sorted 是穩定的）
     names = "、".join(o.shown.get(name, name) for name, _ in top)
-    news = f"【軍令達成】{fill(state, content, o, t.faction_rumor)}出力最多：{names}。"
+    news = f"{DONE}{fill(state, content, o, t.faction_rumor)}出力最多：{names}。"
     _faction_news(state, o.faction, news)
     _leak(state, content, o, fill(state, content, o, t.leak_rumor))
     return [news] + msgs

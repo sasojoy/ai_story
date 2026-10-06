@@ -398,6 +398,9 @@ class GameState(BaseModel):
     log: list[str] = Field(default_factory=list)  # 原始訊息，每次行動之間夾一個 journal.LOG_BREAK
     journal: list[JournalEntry] = Field(default_factory=list)  # 江湖紀錄，最新的在前，最多 journal.MAX_ENTRIES 則
     last_real: float | None = None  # 上次同步的現實時間（time.time()）
+    # 上次同步時的賽季時間（世界秒）：「你不在的時候」從這一刻之後算（Game._deliver_away）。None＝還沒記過（舊存檔、
+    # 換季重來的角色），那一次從這一季開頭算
+    last_world: float | None = None
 
 
 def new_game_state(content: Content, name: str) -> GameState:

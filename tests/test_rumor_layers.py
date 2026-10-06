@@ -396,3 +396,169 @@ def test_the_page_draws_the_layers_when_the_server_sends_them():
     assert "esc(l.title)" in layers and "${l.body}" in layers  # 標題跳脫；內容是伺服器跳脫過的 HTML
     refresh = _js_function(js, "async function refreshPage(")
     assert 'rumors: ["rumors", "rumor_layers"]' in refresh and "JSON.stringify(old[k])" in refresh
+
+
+# ── Task 5：你不在的時候 ───────────────────────────────────
+
+T0 = 1000.0  # 第一次同步的現實時間（秒）
+HOUR = 3600
+
+
+@pytest.fixture
+def slow(on):
+    """季的時鐘幾乎不走（現實一小時＝季的 3.6 秒）：不會冒出軍令、大事這些自己發生的傳聞，只看測試放進去的。
+    「你不在的時候」看的是現實時間，季走得再慢也照樣算離線。"""
+    on.config.time_scale = 0.001
+    return on
+
+
+def _put(world, *rumors: Rumor) -> None:
+    """往資料庫裡的這一季放幾則傳聞（別人在你離線時做的事）。"""
+    world.mutate_season(lambda season: season.rumors.extend(rumors))
+
+
+def _away(game):
+    """江湖紀錄最新那一則是「你不在的時候」就回它，否則 None。"""
+    head = game.state.journal[0] if game.state.journal else None
+    return head if head is not None and head.title == journal.AWAY else None
+
+
+def test_coming_back_after_an_hour_gets_a_summary_in_order(slow, world):
+    jia = _game(slow, "甲", "guan", world=world)
+    jia.sync(T0)
+    _put(
+        world,
+        Rumor(time=1.0, text="天下事甲。", layer="world"),
+        Rumor(time=1.5, text="本週軍令：守長社。", layer="faction", faction="guan"),
+        Rumor(time=1.6, text="昨日升為屯長的有：乙。", layer="faction", faction="guan"),  # 晉升彙整不是要點
+        Rumor(time=1.7, text="本週軍令：圍長社。", layer="faction", faction="huang"),  # 敵方的軍情聽不到
+        Rumor(time=2.0, text="長社事。", location="changshe", layer="local", region="yingru"),
+        Rumor(time=2.2, text="宛城事。", location="wan_city", layer="local", region="nanyang"),  # 別的大區
+        Rumor(time=2.5, text="天下事乙。", layer="world"),
+    )
+    jia.sync(T0 + HOUR)
+    entry = _away(jia)
+    at = jia.stamp
+    assert entry.tag == "共 4 則"
+    assert entry.lines == [
+        f"〔天下大事〕{at(1.0)}　天下事甲。",
+        f"〔天下大事〕{at(2.5)}　天下事乙。",
+        f"〔陣營軍情〕{at(1.5)}　本週軍令：守長社。",
+        f"〔潁川汝南〕{at(2.0)}　長社事。",
+    ]
+    assert journal.AWAY in jia.now_entry_html()  # 江湖頁的「剛剛」先放這一份
+
+
+def test_less_than_an_hour_away_gets_nothing_and_the_next_summary_starts_from_there(slow, world):
+    jia = _game(slow, "甲", "guan", world=world)
+    jia.sync(T0)
+    _put(world, Rumor(time=1.0, text="舊事。", layer="world"))
+    jia.sync(T0 + HOUR - 1)
+    assert _away(jia) is None
+    mark = jia.state.last_world
+    assert mark == pytest.approx((HOUR - 1) * 0.001)
+    _put(world, Rumor(time=mark + 1, text="新事。", layer="world"))
+    jia.sync(T0 + 3 * HOUR)
+    assert [line.split("　")[1] for line in _away(jia).lines] == ["新事。"]
+
+
+def test_the_timetable_big_events_are_not_summarised_twice(slow, world):
+    """時刻表的大事由 _deliver_big_events 補成「江湖大事」那一則（FB-038），摘要不再寫一次。"""
+    jia = _game(slow, "甲", "guan", world=world)
+    jia.sync(T0)
+
+    def _settled(season):
+        season.timeline["uprising"] = TimelineResult(key="fixed", time=1.0, text="三十六方同日起事。")
+        season.rumors += [Rumor(time=1.0, text="三十六方同日起事。", layer="world"),
+                          Rumor(time=2.0, text="天下事甲。", layer="world")]
+
+    world.mutate_season(_settled)
+    jia.sync(T0 + HOUR)
+    assert [line.split("　")[1] for line in _away(jia).lines] == ["天下事甲。"]
+    assert any(e.title == journal.WORLD_NEWS and e.tag == "三十六方同日起事。" for e in jia.state.journal)
+
+
+def test_the_summary_keeps_twenty_and_points_to_the_news_page(slow, world):
+    jia = _game(slow, "甲", "guan", world=world)
+    jia.sync(T0)
+    _put(world, *(Rumor(time=float(i), text=f"天下事{i}。", layer="world") for i in range(1, 23)))
+    _put(world, Rumor(time=30.0, text="長社事。", layer="local", region="yingru"))
+    jia.sync(T0 + HOUR)
+    entry = _away(jia)
+    assert entry.tag == "共 23 則"
+    shown = [line.split("　")[1] for line in entry.lines[:-1]]
+    assert shown == [f"天下事{i}。" for i in range(3, 23)]  # 放不下時留最近的；天下大事先放滿，地方的就放不進來
+    assert entry.lines[-1] == "另有 3 則沒列出來，到「見聞」的傳聞翻。"
+
+
+def test_the_cap_comes_from_the_config(slow, world):
+    slow.config.away_max = 2
+    jia = _game(slow, "甲", "guan", world=world)
+    jia.sync(T0)
+    _put(world, Rumor(time=1.0, text="天下事甲。", layer="world"),
+         Rumor(time=2.0, text="本週軍令：守長社。", layer="faction", faction="guan"),
+         Rumor(time=3.0, text="長社事。", layer="local", region="yingru"))
+    jia.sync(T0 + HOUR)
+    assert [line.split("　")[-1] for line in _away(jia).lines] == ["天下事甲。", "本週軍令：守長社。", "另有 1 則沒列出來，到「見聞」的傳聞翻。"]
+
+
+def test_server_bots_and_brand_new_characters_get_no_summary(slow, world):
+    bot = _game(slow, "甲", "guan", world=world)
+    bot.state.player.bot = BotProfile(personality="普通", seed=1, faction="guan", season_number=1)
+    bot.sync(T0)
+    _put(world, Rumor(time=1.0, text="天下事甲。", layer="world"))
+    bot.sync(T0 + 5 * HOUR)
+    assert _away(bot) is None
+    late = _game(slow, "乙", "guan", world=world)  # 第一次同步：還沒有「上次」，不算回來
+    late.sync(T0 + 6 * HOUR)
+    assert _away(late) is None
+
+
+def test_an_old_save_without_a_mark_gets_the_season_so_far(slow, world):
+    jia = _game(slow, "甲", "guan", world=world)
+    jia.sync(T0)
+    _put(world, Rumor(time=0.0, text="開季那一刻的事。", layer="world"))
+    jia.state.last_world = None  # 這個欄位加上之前存的角色
+    jia.sync(T0 + HOUR)
+    assert [line.split("　")[1] for line in _away(jia).lines] == ["開季那一刻的事。"]
+
+
+def test_fast_forwarding_the_season_is_not_being_away(slow, world):
+    """看的是現實時間：季被快轉了三天（管理者快轉），十秒後同步不算離線；季的時鐘沒怎麼走，離線一小時照樣算（上面幾條）。"""
+    jia = _game(slow, "甲", "guan", world=world)
+    jia.sync(T0)
+    jia.advance(3 * _day(jia))
+    _put(world, Rumor(time=jia.state.world.time, text="天下事甲。", layer="world"))
+    jia.sync(T0 + 10)
+    assert _away(jia) is None
+
+
+def test_with_the_switch_off_there_is_no_summary(real, world):
+    real.config.time_scale = 0.001
+    jia = _game(real, "甲", world=world)
+    jia.sync(T0)
+    _put(world, Rumor(time=1.0, text="天下事甲。", layer="world"))
+    jia.sync(T0 + 5 * HOUR)
+    assert _away(jia) is None
+
+
+def test_a_real_season_rollover_restarts_the_summary_from_the_new_season(slow, world):
+    """換季重來（走真的 next_season，不是手動把 last_world 設成 None）：角色整個重來，last_world 跟著回到「還沒記過」，
+    隔了一個多小時回來時從新的一季開頭算；上一季的傳聞不會冒進這一份，現實時間的同步點（last_real）照樣留著。"""
+    slow.config.admins = ["乙"]
+    jia, admin = _game(slow, "甲", "guan", world=world), _game(slow, "乙", "guan", world=world)
+    jia.sync(T0)
+    _put(world, Rumor(time=1.0, text="上一季的事。", layer="world"))
+    jia.advance(3 * 86400)  # 季走到尾、收季
+    assert jia.state.world.ended
+    jia.sync(T0 + 10)
+    old_mark = jia.state.last_world
+    assert old_mark is not None and old_mark > 1000 and jia.state.player.season_number == 1  # 上一季的賽季時間很大
+    admin.sync(T0 + 11)
+    admin.admin_next_season(now=T0 + 20)
+    _put(world, Rumor(time=1.0, text="新一季的事。", layer="world"))  # 新一季的時間從 0 起算：標記要是帶過來就會漏掉它
+    jia.sync(T0 + 10 + 2 * HOUR)  # 甲離線的這兩個小時，季換了
+    assert jia.state.player.season_number == 2
+    entry = _away(jia)
+    assert [line.split("　")[1] for line in entry.lines] == ["新一季的事。"]
+    assert jia.state.last_world == jia.state.world.time and jia.state.last_real == T0 + 10 + 2 * HOUR
