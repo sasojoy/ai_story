@@ -3592,7 +3592,9 @@ class Game:
             return self._log(["（賽季籌備中，等待管理者開季。）"])
         xinde = self._xinde()
         msgs = self._log(team.switch_art(self.state, self.content, self.world, art_id))
-        self._menxia_entry(msgs[-1] if msgs else "改練", xinde)
+        # 江湖紀錄的標記是「你改練【…】」那一句；換上後內外搭配變了時最後多一句（FB-088），不拿它當標記
+        tag = next((m for m in reversed(msgs) if m.startswith("你改練")), msgs[-1] if msgs else "改練")
+        self._menxia_entry(tag, xinde)
         return msgs
 
     def melt_art(self, art_id: str) -> list[str]:

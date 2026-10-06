@@ -234,6 +234,7 @@ def switch_art(state: GameState, content: Content, world: WorldStateStore, art_i
     slot = "neigong_id" if art.kind == "內功" else "wugong_id"
     level_slot = slot.replace("_id", "_level")
     current_id = getattr(member, slot)
+    pair_before = _worn_pairing(state, content, world)
     msgs = []
     if current_id is not None:
         p.art_levels[current_id] = getattr(member, level_slot)
@@ -245,7 +246,34 @@ def switch_art(state: GameState, content: Content, world: WorldStateStore, art_i
     setattr(member, slot, art_id)
     setattr(member, level_slot, level)
     msgs.append(f"你改練【{art.name}】（{art.quality}・屬{art.attribute}），目前第{level}成。")
+    pair_after = _worn_pairing(state, content, world)
+    if pair_after != pair_before:  # 換上之後內外搭配變了（同屬加成、相剋打折、或不再有）：多一句，數字是引擎的 pairing（FB-088）
+        still, word, pct = _pairing_words(pair_before, pair_after)
+        msgs.append(
+            f"你的內功與武學現在{word}，整體威力 {pct}。" if still else f"你的內功與武學不再{word}，整體威力不再 {pct}。"
+        )
     return msgs
+
+
+def _worn_pairing(state: GameState, content: Content, world: WorldStateStore, swap: MartialArt | None = None) -> float:
+    """身上這兩門現在的內外搭配（pairing）；swap 給了，就當作那一門換上身（同種類的那一欄換成它）再算。少一門是 1。"""
+    member = state.player.member
+    wugong, neigong = player_art(state, content, world, member.wugong_id), player_art(state, content, world, member.neigong_id)
+    if swap is not None:
+        wugong, neigong = (wugong, swap) if swap.kind == "內功" else (swap, neigong)
+    return pairing(content, wugong, neigong)
+
+
+def _signed_pct(ratio: float) -> str:
+    """搭配的百分比，帶正負號（減號用 −）：同屬 +20%、相剋 −20%；整數不寫「.0」。跟 skillview 的 _pct 同一個寫法。"""
+    return f"{ratio:+.1%}".replace(".0%", "%").replace("-", "−")
+
+
+def _pairing_words(before: float, after: float) -> tuple[bool, str, str]:
+    """（搭配還在不在, 同屬或相剋, 百分比）：換上後還有搭配就說換上後的樣子（−20% 換成 +20% 寫「同屬 +20%」，跟門下卡的
+    「內外搭配」同一個數）；換上後沒有了，就說原本的那一個不再有（「不再相剋、不再 −20%」）。"""
+    shown = after if after != 1 else before
+    return after != 1, "同屬" if shown > 1 else "相剋", _signed_pct(shown - 1)
 
 
 # 新武學跟身上那門比的那一句（W6；待 joy 潤）：「比身上的【甲】：威力 −0.3（第一成）、多了〔先手〕、少了〔厚〕」
@@ -293,7 +321,14 @@ def compare_with_worn(state: GameState, content: Content, world: WorldStateStore
         parts.append(COMPARE_MORE.format(names="".join(f"〔{n}〕" for n in more)))
     if less:
         parts.append(COMPARE_LESS.format(names="".join(f"〔{n}〕" for n in less)))
-    return "、".join(parts)
+    line = "、".join(parts)
+    # 換上後內外搭配變不變（FB-088；待 joy 潤）：跟另一種那門比，同屬加成、相剋打折、或原本的沒有了；沒變就不多說
+    now, then = _worn_pairing(state, content, world), _worn_pairing(state, content, world, swap=mine)
+    if now != then:
+        still, word, pct = _pairing_words(now, then)
+        other = "武學" if art.kind == "內功" else "內功"
+        line += f"；換上後跟{other}{word}，整體 {pct}" if still else f"；換上後跟{other}不再{word}，整體不再 {pct}"
+    return line
 
 
 def practice_price(content: Content, level: int) -> int:
