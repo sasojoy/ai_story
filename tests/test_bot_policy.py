@@ -1,7 +1,10 @@
 import random
 
+import pytest
+
 from conftest import walk_to
-from tianxia import battle_instance, bot, bot_policy
+from test_bot import armed
+from tianxia import battle_instance, bot, bot_policy, library, team
 from tianxia.engine import Option
 from tianxia.models import (
     BattleAct, BattleActionEffect, BattleDef, BattleFaction, BattleOption, BattleOutcome, Effect,
@@ -400,3 +403,219 @@ def test_a_bot_never_knocks_on_the_single_audience_button_even_though_it_always_
     assert bot_policy.score(game, next(o for o in options if o.id == "call:mate"), profile) is None
     for seed in range(30):
         assert bot_policy.pick(game, options, profile, random.Random(seed)) != "call:mate"
+
+
+# ── 假人的武學（tend_arts）：學藝、合成、修練、改練、熔煉、定名 ─────────────────────
+
+
+@pytest.fixture
+def arts_only(monkeypatch):
+    """這幾個測試只看合成：每輪必合（有東西可合時），不修練。"""
+    monkeypatch.setattr(bot_policy, "FORGE_CHANCE", 1.0)
+    monkeypatch.setattr(bot_policy, "CULTIVATE_CHANCE", 0.0)
+
+
+def test_a_first_time_fusion_waits_for_the_naming_slot(content, world, arts_only):
+    """首創的爐要請模型取名：鎖內只開單交給假人程式，什麼都還沒收、還沒合。"""
+    game = armed(content, world)
+    game.client = None
+    slot = bot_policy.NamingSlot(open=True)
+    bot_policy.tend_arts(game, random.Random(0), slot)
+    assert slot.job is not None and slot.job.request.kind == "fuse"
+    assert (slot.job.art_id, slot.job.insight_ids) == ("basic_fist", ("feng",))
+    assert library.owned_arts(game.state) == ["basic_fist"] and game.state.player.stats["xinde"] == 100
+
+
+def test_no_slot_no_first_time_fusion(content, world, arts_only):
+    """Review Focus 4：輪不到取名就不開這一爐，不用字表名字搶首創。"""
+    game = armed(content, world)
+    game.client = None
+    slot = bot_policy.NamingSlot(open=False)
+    bot_policy.tend_arts(game, random.Random(0), slot)
+    assert slot.job is None and slot.skipped == 1
+    assert library.owned_arts(game.state) == ["basic_fist"]
+
+
+def test_a_known_recipe_is_forged_right_away_without_the_model(content, world, arts_only):
+    first = armed(content, world, name="先到")
+    first.forge("basic_fist", ["feng"], proposed=("凌風拳", "一句話。"))  # 先有人合過、登記了名字
+    game = armed(content, world, name="後到")
+    game.client = None
+    slot = bot_policy.NamingSlot(open=False)
+    bot_policy.tend_arts(game, random.Random(0), slot)
+    assert slot.job is None and slot.skipped == 0
+    names = [team.player_art(game.state, content, world, a).name for a in library.owned_arts(game.state)]
+    assert "凌風拳" in names
+
+
+def _waiting_to_name(content, world):
+    """合出一門「凌風拳」、練成絕學、輪到自己定名的假人（會等著定名的都是合成出來的：內容武學的名字過不了命名過濾）。"""
+    game = armed(content, world)
+    game.forge("basic_fist", ["feng"], proposed=("凌風拳", "一句話。"))
+    game.client = None
+    game.state.player.naming = next(a for a in library.owned_arts(game.state) if a != "basic_fist")
+    return game
+
+
+def _named(game, name):
+    return any(f"為之定名【{name}】" in r.text for r in game.state.world.chronicle)
+
+
+def test_a_mastered_art_waits_for_the_naming_slot(content, world, arts_only):
+    """練成絕學、輪到自己定名：不沿用原名（企劃者 2026-10-06），開單請模型另取；這一輪什麼都還沒定。"""
+    game = _waiting_to_name(content, world)
+    slot = bot_policy.NamingSlot(open=True)
+    bot_policy.tend_arts(game, random.Random(0), slot)
+    assert isinstance(slot.job, bot_policy.MasterJob) and slot.job.art_id == game.state.player.naming
+    assert slot.job.request.kind == "master"
+
+
+def test_no_slot_no_mastery_naming(content, world, arts_only):
+    """輪不到取名就先不定名（絕學一直等著，跟真人遲遲不填一樣），也不沿用原名。"""
+    game = _waiting_to_name(content, world)
+    slot = bot_policy.NamingSlot(open=False)
+    bot_policy.tend_arts(game, random.Random(0), slot)
+    assert game.state.player.naming is not None and slot.skipped >= 1 and not _named(game, "凌風拳")
+
+
+def test_apply_job_names_a_mastered_art_with_the_models_name(content, world):
+    game = _waiting_to_name(content, world)
+    job = bot_policy.MasterJob(game.state.player.naming, game.mastery_request())
+    bot_policy.apply_job(game, job, ("破雲拳", "一句話。"))
+    assert game.state.player.naming is None and _named(game, "破雲拳")
+
+
+@pytest.mark.parametrize("proposed", [("凌風拳", ""), (None, "")], ids=["取回原名", "取不到"])
+def test_a_model_name_equal_to_the_old_one_falls_back_to_the_word_list(content, world, proposed):
+    """Review Focus 6：模型取回原名、或取壞了叫不動：改用字表另組一個，一定跟原名不同。"""
+    game = _waiting_to_name(content, world)
+    job = bot_policy.MasterJob(game.state.player.naming, game.mastery_request())
+    bot_policy.apply_job(game, job, proposed)
+    assert game.state.player.naming is None and not _named(game, "凌風拳")
+    assert any("練成絕學，為之定名【" in r.text for r in game.state.world.chronicle)
+
+
+def test_bots_learn_a_lesson_with_an_attribute_they_lack(content, game):
+    walk_to(game, "lake")  # 湖邊教「湖邊腿法」（武學・快，學費 10）
+    game.state.player.stats["silver"] = 100
+    bot_policy.tend_arts(game, random.Random(0), bot_policy.NamingSlot())
+    assert "lake_kick" in library.owned_arts(game.state)
+
+
+def test_bots_keep_silver_for_healing_and_room_for_forging(content, game):
+    walk_to(game, "lake")
+    game.state.player.stats["silver"] = bot_policy.LEARN_SILVER_RESERVE + 9  # 付了 10 兩就不夠療傷
+    bot_policy.tend_arts(game, random.Random(0), bot_policy.NamingSlot())
+    assert "lake_kick" not in library.owned_arts(game.state)
+    game.state.player.stats["silver"] = 100
+    content.config.holding_cap_base = library.held_count(game.state) + bot_policy.LEARN_ROOM - 1
+    bot_policy.tend_arts(game, random.Random(0), bot_policy.NamingSlot())
+    assert "lake_kick" not in library.owned_arts(game.state)
+
+
+def test_a_turn_holding_a_naming_job_does_nothing_else(content, world, arts_only):
+    """手上有一爐在等名字：這一輪只在爐前等，不做別的（不然體力可能花掉，C 段開不成）。"""
+    game = armed(content, world)
+    game.client = None
+    stamina = game.state.player.stamina
+    slot = bot_policy.NamingSlot(open=True)
+    bot_policy.take_turn(game, _profile("guan"), random.Random(0), slot)
+    assert slot.job is not None and game.state.player.stamina == stamina
+
+
+@pytest.mark.parametrize("worn,learns", [("sky", False), ("fist", True)], ids=["同屬性不學", "沒有這個屬性才學"])
+def test_bots_do_not_learn_what_they_already_have_the_attribute_of(content, game, worn, learns):
+    """學藝的價值是多一個屬性可以合成：同一種（武學）已經有這個屬性的，不學、不佔位置。
+    身上是天外劍（武學・快）時不學湖邊腿法（武學・快）；身上是長拳（武學・剛）就學（對照組：沒有別的原因擋著）。"""
+    walk_to(game, "lake")
+    p = game.state.player
+    p.stats["silver"] = 100
+    p.member.wugong_id, p.member.wugong_level = worn, 1
+    bot_policy.tend_arts(game, random.Random(0), bot_policy.NamingSlot())
+    assert ("lake_kick" in library.owned_arts(game.state)) is learns
+    assert p.stats["silver"] == (90 if learns else 100)
+
+
+def test_a_bot_with_no_arts_and_nothing_to_do_rolls_no_random_numbers(content, game):
+    """什麼武學都沒有、也沒有東西可學的假人：tend_arts 一次亂數都不擲（假人程式共用的亂數順序跟以前一樣）。"""
+    rng = random.Random(7)
+    state = rng.getstate()
+    assert bot_policy.tend_arts(game, rng, bot_policy.NamingSlot(open=True)) == []
+    assert rng.getstate() == state
+
+
+def test_take_turn_carries_the_art_messages_in_front_of_the_main_action(content, game):
+    _install_factions(content)
+    walk_to(game, "lake")
+    game.state.player.stats["silver"] = 100
+    msgs = bot_policy.take_turn(game, _profile("guan"), random.Random(0))
+    assert any("湖邊腿法" in m for m in msgs) and "lake_kick" in library.owned_arts(game.state)
+
+
+def test_a_full_library_melts_the_weakest_before_anything_else(content, world, arts_only):
+    game = armed(content, world)
+    game.client = None
+    p = game.state.player
+    game.forge("basic_fist", ["feng"], proposed=("凌風拳", "一句話。"))
+    p.insights = []
+    held = library.held_count(game.state)
+    content.config.holding_cap_base = held  # 正好滿了
+    assert library.full(game.state, content) and p.arts
+    bot_policy.tend_arts(game, random.Random(0), bot_policy.NamingSlot(open=True))
+    assert library.held_count(game.state) == held - 1  # 熔了庫裡的一門，沒有意境可合了
+
+
+def test_a_bot_switches_to_a_stronger_art_in_the_library(content, world, arts_only):
+    from test_bot import _two_arts
+
+    game = armed(content, world)
+    plain, rich = _two_arts(world, plain_top=29.0, rich_top=60.0, rich_traits=("剛",))
+    p = game.state.player
+    p.member.wugong_id, p.arts, p.insights = plain.id, [rich.id], []
+    for art_id in (plain.id, rich.id):
+        p.art_quality[art_id] = "下品"
+    bot_policy.tend_arts(game, random.Random(0), bot_policy.NamingSlot())
+    assert p.member.wugong_id == rich.id
+
+
+def test_a_bot_cultivates_a_fused_art_when_it_has_the_stamina(content, world, monkeypatch):
+    monkeypatch.setattr(bot_policy, "FORGE_CHANCE", 0.0)
+    monkeypatch.setattr(bot_policy, "CULTIVATE_CHANCE", 1.0)
+    game = armed(content, world)
+    game.forge("basic_fist", ["feng"], proposed=("凌風拳", "一句話。"))
+    p = game.state.player
+    p.stats["xinde"], p.stamina = 0, 150
+    bot_policy.tend_arts(game, random.Random(0), bot_policy.NamingSlot())
+    assert p.stamina < 150  # 修練花體力（有融意境的武學才修得了）
+    p.stamina = bot.CULTIVATE_RESERVE - 1
+    bot_policy.tend_arts(game, random.Random(0), bot_policy.NamingSlot())
+    assert p.stamina == bot.CULTIVATE_RESERVE - 1  # 低於保留量：體力留給探索與遊歷
+
+
+def test_a_second_naming_job_in_the_same_turn_is_skipped(content, world, arts_only):
+    """一輪只交一件：名額已經有一件在等，第二件這一輪不開、也不蓋掉前一件。"""
+    game = _waiting_to_name(content, world)
+    other = bot_policy.MasterJob("別的武學", game.mastery_request())
+    slot = bot_policy.NamingSlot(open=True, job=other)
+    bot_policy.tend_arts(game, random.Random(0), slot)
+    assert slot.job is other and slot.skipped >= 1
+
+
+def test_apply_job_registers_a_first_time_recipe_with_the_models_name(content, world, arts_only):
+    game = armed(content, world)
+    game.client = None
+    slot = bot_policy.NamingSlot(open=True)
+    bot_policy.tend_arts(game, random.Random(0), slot)
+    msgs = bot_policy.apply_job(game, slot.job, ("凌風拳", "一句話。"))
+    names = [team.player_art(game.state, content, world, a).name for a in library.owned_arts(game.state)]
+    assert "凌風拳" in names and msgs
+    assert game.state.player.stats["xinde"] == 100 - content.config.fuse_xinde
+
+
+def test_apply_job_for_a_mastery_that_is_no_longer_pending_does_nothing(content, world):
+    """取名的時候那個等著定名的已經變了（定過了、或換了一門）：不定、不收，下次再來。"""
+    game = _waiting_to_name(content, world)
+    job = bot_policy.MasterJob(game.state.player.naming, game.mastery_request())
+    game.state.player.naming = None
+    assert bot_policy.apply_job(game, job, ("破雲拳", "一句話。")) == []
+    assert not _named(game, "破雲拳")
