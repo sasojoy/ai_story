@@ -9,7 +9,7 @@ import random
 from pathlib import Path
 
 import pytest
-from conftest import next_season
+from conftest import FixedRandom, next_season
 from tests.test_orders import _game as _real_game  # 真內容的 real、on 是 tests/conftest.py 的 fixture（每個測試自己的一份複本）
 from tianxia import defection, guide
 from tianxia.content import ContentError, load_content
@@ -908,6 +908,74 @@ def test_sync_notices_what_changed_without_an_action(game):
     game.sync(1000.0)
     assert _key(game) == "h_event_reveal"
     assert f"【{MENTOR}】h_event_reveal 的話" in _journal_guides(game)
+
+
+# ── 有所感（悟意境設計第零節，joy 的序章四景也是它）：跟事件待處理一樣，提示排著等 ──────────────────────────
+
+
+def _feeling(game):
+    """探索落在悟意境那一支、這一處有場景：跳出一張「有所感」的卡（做法選單，卡片本身是畫面）。"""
+    from tianxia import sensing
+    from tianxia.models import InsightScene, SenseMethod
+
+    scene = InsightScene(
+        id="lake_wind", title="湖風", text="風吹過湖面，停過腳的{痕跡}。", tags=["湖畔"], hints=["柔"],
+        methods=[SenseMethod(attribute=a, text=t) for a, t in (("柔", "看水"), ("剛", "打水"), ("快", "追風"), ("慢", "靜坐"))],
+    )
+    game.content.insight_scenes = {scene.id: scene}
+    game.state.player.location = "lake"
+    sensing.start(game.state, game.content, scene, random.Random(0))
+    assert game.state.player.sensing is not None
+    return scene
+
+
+def test_a_hint_waits_while_a_feeling_is_on_the_screen(game):
+    """「有所感」的卡擺在眼前（選做法、畫一筆）時，提示的框不出：它跟事件的選項一樣佔住畫面，擺上去會把最後一個做法擠出第一屏（F3）。
+    排著、不算說過；有所感了結的那一下上框。"""
+    game.skip_tutorial()
+    _feeling(game)
+    game._hint("h_merge")
+    p = game.state.player
+    assert game.guide_box() is None and _queued(game) == ["h_merge"] and "h_merge" not in p.hints_seen
+    game.guide_ack()  # 框上沒有提示：什麼都不收
+    assert _queued(game) == ["h_merge"]
+    p.sensing = None
+    assert _key(game) == "h_merge"
+
+
+def test_a_hint_shows_when_the_feeling_is_let_go(game):
+    """選對做法、「順其自然」了結這次有所感（走 choose）：排著的提示在這一下上框、記在這一則。"""
+    game.skip_tutorial()
+    scene = _feeling(game)
+    game.rng = FixedRandom(0.0)  # 擲骰必中：進感悟狀態
+    game._hint("h_merge")
+    index = [scene.methods[j].attribute for j in game.state.player.sensing.order].index("柔")
+    game.choose(f"sense:{index}")
+    assert game.state.player.sensing is not None and game.guide_box() is None  # 還在畫的那一步：照舊等
+    game.choose("sense:let")
+    assert game.state.player.sensing is None
+    assert _key(game) == "h_merge" and "h_merge" in game.state.player.hints_seen
+    assert f"【{MENTOR}】意境可以合。" in game.state.journal[0].guide
+
+
+def test_a_hint_shows_when_the_stroke_is_drawn(game):
+    """畫完那一筆（server 的 sense_request／sense_draw，不走 choose）：悟到意境、排著的提示在這一則上框；悟到的意境本身也可能讓
+    某一條成立（第二個意境：h_merge），這時候看一遍。"""
+    from tianxia import glyph
+
+    game.skip_tutorial()
+    scene = _feeling(game)
+    game.rng = FixedRandom(0.0)
+    game.state.player.insights = ["huo"]  # 手上已經一個：這一筆再悟到一個就是兩個
+    index = [scene.methods[j].attribute for j in game.state.player.sensing.order].index("柔")
+    game.choose(f"sense:{index}")
+    req = game.sense_request(glyph.SAMPLES["柔"])
+    assert not isinstance(req, str)
+    assert game.guide_box() is None and _queued(game) == []
+    game.sense_draw(req)
+    assert game.state.player.sensing is None and len(game.state.player.insights) == 2
+    assert _key(game) == "h_merge"
+    assert f"【{MENTOR}】意境可以合。" in game.state.journal[0].guide
 
 
 # ── 什麼時候不看 ───────────────────────────────────────

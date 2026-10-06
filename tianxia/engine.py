@@ -1254,6 +1254,7 @@ class Game:
         self._draft.glyph = list(req.points)
         try:
             msgs = self._sense_apply(req, proposed)
+            self._check_hints()  # 畫完悟到意境（可能是第二個）：看一遍、排著的提示上框，記在這一則（新手引導計畫三；這條路不走 choose）
             journal.add_entry(s, self._draft.entry(s.world.time, msgs))
         finally:
             self._draft = None
@@ -1446,11 +1447,12 @@ class Game:
         return enlist.box(s, c) or self._hint_box()
 
     def _hint_box(self) -> dict | None:
-        """碰到才說的框：排著的第一條。眼前有事件還沒了結時不出（F3）：提示的框是 end 的、網頁不會收成一行，擺在事件的選項上面會把最後
+        """碰到才說的框：排著的第一條。眼前有事件或有所感還沒了結時不出（F3）：提示的框是 end 的、網頁不會收成一行，擺在事件的選項上面會把最後
         一個選項擠出第一屏（FB-076）；它排著等，事件了結之後上框。key 是那一條的 id，pending 永遠是 False；full：話不被切掉（設計 6.2）；
         hint：這是碰到才說的框（結語、入伍段的框沒有這個鍵）——網頁認它，在修練頁、煉製頁也畫（在那兩頁做的事觸發的提示不必切回江湖頁才看到）。"""
         p = self.state.player
-        if not p.hint_queue or self.state.pending_event is not None:
+        # 有所感（悟意境設計第零節）的卡也一樣：選做法、畫一筆都佔著畫面，跟事件待處理同一種等法
+        if not p.hint_queue or self.state.pending_event is not None or p.sensing is not None:
             return None
         note = p.hint_queue[0]
         return {

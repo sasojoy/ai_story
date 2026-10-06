@@ -222,24 +222,37 @@ def prologue_content(_prologue_master):
 HINTS = Path(__file__).parent / "fixtures" / "hints"
 
 
-@pytest.fixture
-def hints_root(tmp_path):
-    """有「碰到才說」的測試內容（新手引導計畫三）放在哪個資料夾：測試內容加上 tests/fixtures/hints/hints.json（五條）。
-    測試內容的劇本沒有陣營、也沒有入伍段：補一個 guan（官軍，join_at 空），引薦人的名字就用陣營名「官軍」。
-    要改內容再載入的測試（驗證）用這個；只要載入好的內容用 hints_content。"""
-    root = tmp_path / "hints_content"
+@pytest.fixture(scope="session")
+def _hints_master(tmp_path_factory):
+    """有「碰到才說」的測試內容（新手引導計畫三）的母本資料夾，每個工作階段只做一份：測試內容加上 tests/fixtures/hints/hints.json
+    （五條）。測試內容的劇本沒有陣營、也沒有入伍段：補一個 guan（官軍，join_at 空），引薦人的名字就用陣營名「官軍」。
+    跟序章母本一樣：測試不直接用它（hints_root 給自己的一份複本、hints_content 給載入好的複本），每次複製前後都檢查沒被改過。"""
+    root = tmp_path_factory.mktemp("hints") / "hints_content"
     shutil.copytree(FIXTURE, root)
     shutil.copy(HINTS / "hints.json", root / "hints.json")
     scenario = json.loads((root / "scenario.json").read_text(encoding="utf-8"))
     scenario["factions"] = [{"id": "guan", "name": "官軍", "join_at": []}]
     (root / "scenario.json").write_text(json.dumps(scenario, ensure_ascii=False), encoding="utf-8")
-    return root
+    _PROLOGUE_DIGEST[root] = _folder_digest(root)
+    yield root
+    _prologue_master_unchanged(root, "工作階段結束時")
 
 
 @pytest.fixture
-def hints_content(hints_root):
-    """測試內容加上五條提示（沒有 hints.json 的測試內容：既有測試的對話框一個字都不變）。"""
-    return load_content(hints_root)
+def hints_root(tmp_path, _hints_master):
+    """提示的測試內容（見 _hints_master）放在哪個資料夾：這個測試自己的一份複本。要改內容再載入的測試（驗證）用這個；
+    只要載入好的內容用 hints_content。"""
+    _prologue_master_unchanged(_hints_master, "這個測試開始之前")
+    root = tmp_path / "hints_content"
+    shutil.copytree(_hints_master, root)
+    yield root
+    _prologue_master_unchanged(_hints_master, "這個測試做完之後")
+
+
+@pytest.fixture
+def hints_content(_hints_master):
+    """測試內容加上五條提示（沒有 hints.json 的測試內容：既有測試的對話框一個字都不變）：這個測試自己的一份（cached_content 的複本）。"""
+    return cached_content(_hints_master)
 
 
 @pytest.fixture
