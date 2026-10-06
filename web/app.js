@@ -90,6 +90,7 @@
     unseen: false,
     offline: false,
     moveMode: "walk",
+    pushLive: false, // 伺服器推送連著嗎（見「伺服器推送」那一段）：連著時平常 60 秒才輪詢，沒連就每 10 秒
   };
 
   const $app = document.getElementById("app");
@@ -180,8 +181,11 @@
     if (data.stage === "game") {
       S.stage = "game";
       setMain(data.main);
+      closeEvents(); // 重新連：現在這個登入的連線（上一個帳號的、登入失效前的，不能留著）
+      connectEvents(); // main.push 是 true 才真的連（預設關：不開 EventSource）
     } else {
       S.stage = data.stage === "create" ? "create" : "gate";
+      closeEvents();
     }
     render();
   }
@@ -198,6 +202,7 @@
     const changed = key !== S.mainKey;
     S.main = main;
     S.mainKey = key;
+    lastPoll = Date.now(); // 剛拿到一份新的畫面（輪詢的、動作回來的都走這裡）：連著推送時，下一次慢速輪詢從這一刻起算
     return changed;
   }
 
@@ -1483,7 +1488,7 @@
   async function busy(fn) {
     if (S.busy) return;
     S.busy = true;
-    try { await fn(); } catch (e) { /* api() 已經提示過 */ } finally { S.busy = false; }
+    try { await fn(); } catch (e) { /* api() 已經提示過 */ } finally { S.busy = false; lastAction = Date.now(); }
   }
 
   // 等模型的時候（對話、大場面、開爐、隨口應對）每 2 秒問一次佇列，按鈕上補「前面還有 N 件」。佇列關著時伺服器回 null，什麼都不多顯示
@@ -1768,7 +1773,7 @@
           break;
         }
         case "ask-no": closeAsk(); break;
-        case "logout": await api("/api/logout", {}); S.sheet = false; S.stage = "gate"; S.main = null; render(); break;
+        case "logout": closeEvents(); await api("/api/logout", {}); S.sheet = false; S.stage = "gate"; S.main = null; render(); break;
         case "kind": S.kind = el.dataset.kind; renderPage(); break;
         case "mx": await mx(el.dataset.op); break;
         case "person":
@@ -1994,6 +1999,7 @@
   async function poll() {
     if (pollInFlight || S.stage !== "game" || S.busy || document.hidden) return;
     pollInFlight = true;
+    lastPoll = Date.now();
     const was = S.main;
     try {
       const mode = S.moveMode;
@@ -2109,8 +2115,93 @@
     S.forgeSel = keep;
     return trimmed;
   }
-  setInterval(poll, POLL_MS);
-  document.addEventListener("visibilitychange", () => { if (!document.hidden) poll(); });
+
+  // ── 伺服器推送（線上架構設計 5.3）──
+  // main.push 是 true 才用（伺服器的開關 Config.push_events，預設關）。關著的時候這一段什麼都不做，頁面跟以前一模一樣：
+  // 一個每 POLL_MS 的計時器、每一下都輪詢、不開 EventSource。開著：開一條 /api/events（SSE），伺服器只送「哪一種變了」，
+  // 頁面收到再抓 /api/main：
+  //   self＝這個角色別的分頁做了動作，馬上抓（自己這一下動作的回聲不算）；
+  //   world＝世界變了，每個分頁都會收到，所以隨機等 0～push_spread 秒再抓，全服不會同一兩秒擠進同一把行動鎖；
+  //   ping＝連線上沒事時每 15 秒一個，證明連線還活著（SSE 的註解行到不了這裡，所以伺服器把心跳寫成事件）。
+  // 連著的時候平常 SLOW_POLL_MS 才輪詢一次（時鐘、體力回復靠它，也是漏掉通知的安全網）；沒開、斷了、還沒連上就照舊每 POLL_MS 一次。
+  const SLOW_POLL_MS = 60000;
+  const BEAT_TIMEOUT_MS = 40000; // 連線上這麼久一個事件也沒有：半開的死連線（手機睡著、換網路，瀏覽器很久才發現），關掉重連
+  const RECONNECT_MS = 60000; // 連線被伺服器拒絕（502、401、404：EventSource 不再自己重連）之後，隔這麼久才再試
+  const ECHO_MS = 1500; // 動作剛做完這麼久之內收到的 self，當作這個動作自己的回聲（畫面已經是動作回來的那一份）
+  let events = null; // 目前這一條 EventSource；沒開、關了、被伺服器拒絕時是 null
+  let lastBeat = 0; // 這條連線上最後一次有消息（開了、收到任何事件）的時刻
+  let lastConnect = 0; // 上一次開連線的時刻
+  let lastPoll = 0; // 上一次開始輪詢、或拿到一份新畫面（動作回來的）的時刻；連著推送時慢速輪詢從這裡算（預檢 F3）
+  let lastAction = 0; // 上一次動作做完的時刻
+  let worldTimer = 0; // 已經排好的「世界變了」重抓
+  let pushDown = false; // 連線斷過、還沒補抓：連回來時補抓一次（斷的這段時間可能漏了通知）
+
+  function connectEvents() {
+    if (events || !window.EventSource || S.stage !== "game" || !S.main || !S.main.push || document.hidden) return;
+    lastConnect = lastBeat = Date.now();
+    const es = new EventSource("/api/events");
+    events = es;
+    es.onopen = () => {
+      lastBeat = Date.now();
+      S.pushLive = true;
+      if (pushDown) { pushDown = false; poll(); }
+    };
+    es.onerror = () => {
+      S.pushLive = false; // 輪詢回到每 10 秒（Review Focus 2）；EventSource 自己會重連，連回來再放慢
+      pushDown = true;
+      if (events === es && es.readyState === EventSource.CLOSED) events = null; // 伺服器拒絕了、不會再自己重連：pollTick 隔 RECONNECT_MS 再試
+    };
+    es.addEventListener("ping", () => { lastBeat = Date.now(); });
+    es.addEventListener("self", () => { lastBeat = Date.now(); onPushSelf(); });
+    es.addEventListener("world", () => { lastBeat = Date.now(); onPushWorld(); });
+  }
+
+  function closeEvents() {
+    if (events) events.close();
+    events = null;
+    S.pushLive = false;
+    pushDown = false;
+    clearTimeout(worldTimer);
+    worldTimer = 0;
+  }
+
+  // self：馬上抓。自己按的這一下動作，伺服器也會通知這個角色的每個分頁，包括這一個（回聲）：通常動作還沒回來就到了（busy 時 poll 不會跑），
+  // 偶爾比回應慢一點到，所以動作剛做完的 ECHO_MS 內也不抓：畫面已經是動作回來的那一份，不為一次按鍵抓兩次。
+  // 代價：這一小段時間內、別的分頁剛好也做了動作的話，這一個分頁最慢要等下一次慢速輪詢（60 秒）才跟上
+  function onPushSelf() {
+    if (S.busy || Date.now() - lastAction < ECHO_MS) return;
+    poll();
+  }
+
+  // world：每個分頁都會收到，隨機等 0～push_spread 秒再抓（伺服器的 push_world_min_seconds）；已經排了一次就不再排，它抓到的就是最新的
+  function onPushWorld() {
+    if (worldTimer) return;
+    const spread = Number(S.main && S.main.push_spread);
+    const wait = Math.random() * (Number.isFinite(spread) && spread >= 0 ? spread : 10) * 1000;
+    worldTimer = setTimeout(() => { worldTimer = 0; poll(); }, wait);
+  }
+
+  // 計時器每 POLL_MS 一下（體力、氣血跟著時間走）。推送沒開：每一下都輪詢（跟加推送以前的計時器一樣）。
+  // 推送開著：先照顧連線（約 40 秒沒消息就換一條；被拒絕之後隔一陣再試；離開遊戲就關），再看要不要輪詢：
+  // 連著時離上一次拿到畫面不到 55 秒就不問（這一下是 10 秒的倍數，所以約每 60 秒一次），沒連上就照舊每一下都問
+  function pollTick() {
+    const now = Date.now();
+    if (S.stage === "game" && S.main && S.main.push) {
+      if (events && now - lastBeat > BEAT_TIMEOUT_MS) { closeEvents(); pushDown = true; connectEvents(); }
+      else if (!events && now - lastConnect >= RECONNECT_MS) connectEvents();
+    } else if (events) closeEvents();
+    if (S.pushLive && now - lastPoll < SLOW_POLL_MS - POLL_MS / 2) return;
+    poll();
+  }
+
+  setInterval(pollTick, POLL_MS);
+  // 看不到的分頁：關掉連線（不佔一條連線，也不重抓）；看得到了：連回來、補抓一次（推送沒開時只有補抓，跟以前一樣）
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) { closeEvents(); return; }
+    connectEvents();
+    poll();
+  });
+  // ── 伺服器推送（完）──
 
   // 軍令卡的展開與否（計畫 T6）：toggle 不冒泡，用捕獲階段接。記的是週次：換週之後新畫的卡週次對不上，自然重新展開；
   // 重畫（輪詢、換分頁回來）時照 S.ordersShut 補回，那一下補出來的 toggle 記下的還是同一週，不會繞圈
