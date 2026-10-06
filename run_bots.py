@@ -13,6 +13,7 @@ from pathlib import Path
 from tianxia import database
 from tianxia.bot_runner import BotRunner, TickReport, log_failure
 from tianxia.content import PROFILE_ENV, load_content, profile_line
+from tianxia.ollama_client import OllamaClient
 
 ROOT = Path(__file__).parent
 
@@ -22,7 +23,9 @@ def main(ticks: int | None = None) -> None:
     某一輪出錯只記一筆（不含名號，見 bot_runner.log_failure）就繼續下一輪；Ctrl+C 乾淨結束。"""
     profile = os.environ.get(PROFILE_ENV) or None  # 跟 server.py 用同一份設定覆寫檔
     content = load_content(ROOT / "content", profile=profile)
-    runner = BotRunner(content)
+    # 假人只在鎖外替首創的配方與絕學定名請模型取名（見 bot_runner._name_and_apply）；bot_naming 關著就不給 client
+    client = OllamaClient.from_config(content.config) if content.config.bot_naming else None
+    runner = BotRunner(content, client=client)
     print(f"伺服器假人程式啟動：每 {content.config.bot_tick_seconds:g} 秒巡一輪（Ctrl+C 結束）", flush=True)
     print(f"資料庫：{database.default_path().resolve()}", flush=True)  # 跟 server.py 要是同一個檔；TIANXIA_DB 設錯時一眼看得出來
     print(profile_line(content, profile), flush=True)
@@ -34,10 +37,10 @@ def main(ticks: int | None = None) -> None:
             except Exception as exc:
                 log_failure(exc)
                 report = TickReport(failed=1)
-            if report.acted or report.added or report.skipped or report.failed:
+            if report.acted or report.added or report.skipped or report.failed or report.named:
                 print(
                     f"在線 {report.online}、行動 {report.acted}、補人 {report.added}、"
-                    f"等鎖跳過 {report.skipped}、出錯 {report.failed}",
+                    f"等鎖跳過 {report.skipped}、出錯 {report.failed}、取名 {report.named}",
                     flush=True,
                 )
             done += 1

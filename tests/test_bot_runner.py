@@ -1,10 +1,12 @@
+import contextlib
 import logging
 import random
 
 import pytest
 
 import run_bots
-from tianxia import bot_policy, bot_runner, database, server_bots
+from test_bot import armed
+from tianxia import bot_policy, bot_runner, database, fusion, library, naming, server_bots, team
 from tianxia.battle_instance import BattleParticipant
 from tianxia.bot_runner import BotRunner
 from tianxia.characters import open_characters
@@ -14,7 +16,7 @@ from tianxia.models import (
     FactionDef,
 )
 from tianxia.database import Database
-from tianxia.sqlite_world import open_world
+from tianxia.sqlite_world import SqliteWorldStore, open_world
 from tianxia.state import BotProfile
 
 START = 1_791_198_000.0  # 2026-10-05 19:00 台灣時間
@@ -65,6 +67,15 @@ def runner(content, world, clock):
 
 def _bots():
     return open_characters().all(bots_only=True)
+
+
+def _tick_cleanly(runner):
+    """跑一輪並要求沒有出錯：tick 會吞掉假人回合裡的例外（記一筆 log、算一次 failed）。拿假的 take_turn／_take_turn 換掉真的時，
+    參數數量一旦跟真的對不上（例如多了取名名額 slot）就是 TypeError——被吞掉的話，只看別的結果（沒人出手、誰算在線）的測試
+    會空過、再也抓不到假人真的出手了。所以這些測試的每一輪都要沒有出錯。"""
+    report = runner.tick()
+    assert report.failed == 0
+    return report
 
 
 def test_fill_adds_one_bot_per_faction_per_interval_up_to_the_minimum(runner, content, clock, monkeypatch):
@@ -148,10 +159,10 @@ def test_a_player_acting_between_bot_turns_does_not_make_the_season_run_faster(
     下一個假人要用自己拿到鎖之後的時間補算，不能把時鐘撥回這一輪開頭讀的時間——不然下一個
     真人會把那一段再算一次，賽季走得比現實快。"""
     monkeypatch.setattr(server_bots, "is_online", lambda profile, now: True)
-    monkeypatch.setattr(bot_policy, "take_turn", lambda game, profile, rng: None)  # 只看時鐘
+    monkeypatch.setattr(bot_policy, "take_turn", lambda game, profile, rng, slot=None: None)  # 只看時鐘
     content.config.bots_min_per_faction = 1
     content.config.bot_tick_seconds = 1000  # 在線就一定做一個動作
-    runner.tick()  # 補人
+    _tick_cleanly(runner)  # 補人
     start_real, start_time = world.read().season_last_real, world.get_season().time
 
     def ticking():  # 每看一次錶就過了 10 秒
@@ -162,15 +173,15 @@ def test_a_player_acting_between_bot_turns_does_not_make_the_season_run_faster(
     real_turn = runner._take_turn
     turns, players = [], []
 
-    def turn_then_a_player_acts(name, now):
+    def turn_then_a_player_acts(name, now, slot=None):
         turns.append(now)
-        result = real_turn(name, now)
+        result = real_turn(name, now, slot)
         players.append(ticking())
         world.catch_up_season(content, players[-1], random.Random(0))  # 這個假人做完，真人接著行動
         return result
 
     monkeypatch.setattr(runner, "_take_turn", turn_then_a_player_acts)
-    runner.tick()
+    _tick_cleanly(runner)
     end = ticking()
     world.catch_up_season(content, end, random.Random(0))  # 一輪結束後，真人又行動一次
     assert len(turns) == 2 and turns[1] > players[0]  # 第二個假人看的錶在真人行動之後
@@ -190,7 +201,9 @@ def _round_where_something_happens_mid_round(runner, content, clock, monkeypatch
     content.config.bot_tick_seconds = 1000  # 在線就一定做一個動作
     runner.tick()  # 補人
     played = []
-    monkeypatch.setattr(bot_policy, "take_turn", lambda game, profile, rng: played.append(game.state.player.name))
+    monkeypatch.setattr(
+        bot_policy, "take_turn", lambda game, profile, rng, slot=None: played.append(game.state.player.name),
+    )
     happened = []
 
     def online_and_then_it_happens(profile, now):
@@ -200,7 +213,7 @@ def _round_where_something_happens_mid_round(runner, content, clock, monkeypatch
 
     monkeypatch.setattr(server_bots, "is_online", online_and_then_it_happens)
     clock[0] += 60
-    return runner.tick(), played
+    return _tick_cleanly(runner), played
 
 
 def test_bots_stop_acting_when_the_season_ends_in_the_middle_of_a_round(
@@ -329,7 +342,7 @@ def test_a_failing_bot_turn_is_counted_and_reported_without_any_name(
     runner.tick()
     victim = _bots()[0].player.name
 
-    def boom(game, profile, rng):
+    def boom(game, profile, rng, slot=None):
         if game.state.player.name == victim:
             raise OSError(f"寫不進存檔（{victim}）")
 
@@ -406,17 +419,17 @@ def test_a_bot_that_turned_up_for_a_battle_goes_offline_once_it_is_eliminated(
 ):
     monkeypatch.setattr(server_bots, "is_online", lambda profile, now: False)  # 都不在作息時段
     monkeypatch.setattr(server_bots, "attends_battle", lambda profile, key: True)  # 但都擲中趕來參戰
-    monkeypatch.setattr(bot_policy, "take_turn", lambda game, profile, rng: None)  # 只看誰算在線
+    monkeypatch.setattr(bot_policy, "take_turn", lambda game, profile, rng, slot=None: None)  # 只看誰算在線
     content.config.bots_min_per_faction = 1
     content.config.bot_tick_seconds = 1000
-    assert runner.tick().online == 0  # 沒有戰鬥：不在作息時段就不上線
+    assert _tick_cleanly(runner).online == 0  # 沒有戰鬥：不在作息時段就不上線
     characters = open_characters()
     for state in characters.all(bots_only=True):  # 兩個假人都已投靠自己的陣營
         state.player.faction = state.player.bot.faction
         characters.save(state)
     battle = world.start_battle(content.battles["t1"], clock[0])
     assert battle.phase == "muster"
-    assert runner.tick().online == 2  # 集結中：兩邊的假人都趕來
+    assert _tick_cleanly(runner).online == 2  # 集結中：兩邊的假人都趕來
 
     bots = [(s.player.name, s.player.bot.faction) for s in _bots()]
 
@@ -427,9 +440,9 @@ def test_a_bot_that_turned_up_for_a_battle_goes_offline_once_it_is_eliminated(
             )
 
     world.mutate_battle(seat)
-    assert runner.tick().online == 1  # 出局的那一位不再上線，沒出局的還在
+    assert _tick_cleanly(runner).online == 1  # 出局的那一位不再上線，沒出局的還在
     world.mutate_battle(lambda b: setattr(b, "phase", "ended"))
-    assert runner.tick().online == 0  # 戰鬥結束，大家都回到自己的作息
+    assert _tick_cleanly(runner).online == 0  # 戰鬥結束，大家都回到自己的作息
 
 
 def test_run_bots_keeps_going_after_a_bad_tick_and_prints_no_names(monkeypatch, capsys, caplog):
@@ -459,3 +472,346 @@ def test_run_bots_ends_cleanly_on_ctrl_c(monkeypatch, capsys):
     monkeypatch.setattr(run_bots.time, "sleep", interrupted)
     run_bots.main()  # 不給輪數：本來會一直跑；Ctrl+C 要乾淨結束，不丟例外
     assert "伺服器假人程式結束" in capsys.readouterr().out
+
+
+# ── 假人在鎖外請模型取名：首創的配方與絕學定名（A 鎖內開單 → B 鎖外取名 → C 再拿鎖）────────────────────
+
+
+INSIGHTS = ("feng", "huo", "shui", "shan")  # 測試內容裡有的意境：每個假人各拿一個，配方才各不相同
+
+
+def _armed_bots(runner, content, clock, monkeypatch, count=1):
+    """補好假人，前 count 位換成有一門武學、一個意境（各不相同）、心得與體力都夠的（照 test_bot.armed），停在城裡、
+    投靠好了、沒有在路上也沒有待處理的事件，存回去；每輪必合、不修練、不練成（心得只花在合成上）。"""
+    monkeypatch.setattr(server_bots, "is_online", lambda profile, now: True)
+    monkeypatch.setattr(bot_policy, "FORGE_CHANCE", 1.0)
+    monkeypatch.setattr(bot_policy, "CULTIVATE_CHANCE", 0.0)
+    monkeypatch.setattr(bot_policy, "PRACTICE_CHANCE", 0.0)
+    content.config.bots_min_per_faction = 1
+    content.config.bot_tick_seconds = 1000  # 在線就一定做一個動作
+    runner.tick()
+    store = open_characters()
+    for i, state in enumerate(_bots()[:count]):
+        p = state.player
+        p.member.wugong_id, p.insights, p.stats["xinde"], p.stamina = "basic_fist", [INSIGHTS[i]], 100, 150
+        p.journey, p.faction, p.location = None, p.bot.faction, "town"
+        state.pending_event = None
+        store.save(state)
+    clock[0] += 60
+
+
+@pytest.fixture
+def lock_events(monkeypatch):
+    events = []
+    real = SqliteWorldStore.action_lock
+
+    @contextlib.contextmanager
+    def spy(self, timeout=None):
+        with real(self, timeout):
+            events.append("enter")
+            yield
+        events.append("exit")
+
+    monkeypatch.setattr(SqliteWorldStore, "action_lock", spy)
+    return events
+
+
+def _namer(world, events, name="凌風拳"):
+    def generate(client, content, request, budget=None, person=None):
+        events.append("name")
+        assert not world.db.writing()  # 這個執行緒沒拿著寫入交易
+        return (request.choices[0], "") if request.choices else (name, "一句話。")
+    return generate
+
+
+def test_a_bot_names_its_first_recipe_outside_the_lock(runner, world, content, clock, monkeypatch, lock_events):
+    """Review Focus 1：A 鎖內開單 → B 鎖外取名 → C 再拿鎖開爐；登記的是模型取的名字。鎖內假人的 Game 沒有 client（一個模型都不叫）。"""
+    runner.client = object()  # 有 client 就開放取名（generate 換成假的，不會真的連）
+    _armed_bots(runner, content, clock, monkeypatch)
+    monkeypatch.setattr(naming, "generate", _namer(world, lock_events))
+    clients = []
+    real_forge = Game.forge
+
+    def forge_spy(self, *args, **kwargs):
+        clients.append(self.client)
+        return real_forge(self, *args, **kwargs)
+
+    monkeypatch.setattr(Game, "forge", forge_spy)
+    lock_events.clear()
+    report = runner.tick()
+    at = lock_events.index("name")
+    assert lock_events[at - 1] == "exit" and lock_events[at + 1] == "enter"
+    assert report.named == 1 and report.failed == 0
+    assert world.lookup_recipe(fusion.fuse_key("basic_fist", "feng")).name == "凌風拳"
+    assert clients == [None]  # C 段開爐時，假人的 Game 照舊沒有 client
+
+
+def test_only_one_bot_names_per_gap(runner, world, content, clock, monkeypatch):
+    """Review Focus 2：同一輪兩個假人都想開首創的爐（配方各不相同），只有一個叫模型；隔夠了下一輪才輪到另一個。"""
+    runner.client = object()
+    _armed_bots(runner, content, clock, monkeypatch, count=2)
+    calls = []
+    monkeypatch.setattr(naming, "generate", _namer(world, calls))
+    report = runner.tick()
+    assert report.named == 1 and report.naming_skipped >= 1 and calls == ["name"]
+    runner.tick()  # 時鐘沒動：還在間隔裡，不叫模型
+    assert calls == ["name"]
+    clock[0] += content.config.bot_naming_gap_seconds
+    runner.tick()
+    assert calls == ["name", "name"]
+
+
+def test_without_a_model_client_bots_skip_first_recipes(runner, world, content, clock, monkeypatch):
+    """Review Focus 4：沒有 client（或 bot_naming 關著）就不開要取名的爐，不用字表名字搶首創。"""
+    _armed_bots(runner, content, clock, monkeypatch)
+    report = runner.tick()
+    assert report.named == 0 and report.naming_skipped >= 1
+    assert world.lookup_recipe(fusion.fuse_key("basic_fist", "feng")) is None
+
+
+def test_with_bot_naming_off_bots_skip_first_recipes_even_with_a_client(runner, world, content, clock, monkeypatch):
+    runner.client = object()
+    content.config.bot_naming = False
+    _armed_bots(runner, content, clock, monkeypatch)
+    monkeypatch.setattr(naming, "generate", _namer(world, []))
+    report = runner.tick()
+    assert report.named == 0 and report.naming_skipped >= 1
+    assert world.lookup_recipe(fusion.fuse_key("basic_fist", "feng")) is None
+
+
+def test_a_recipe_claimed_while_the_bot_waited_is_not_charged_twice(runner, world, content, clock, monkeypatch):
+    """Review Focus 3：B 段等名字的時候，一位真人先合了同一爐：C 段照查到的配方給，不收第二次，名字是真人那一爐的。"""
+    runner.client = object()
+    _armed_bots(runner, content, clock, monkeypatch)
+
+    def generate(client, content_, request, budget=None, person=None):
+        player = armed(content, world, name="真人")
+        player.forge("basic_fist", ["feng"], proposed=("先到拳", "一句話。"))
+        return ("後到拳", "一句話。")
+
+    monkeypatch.setattr(naming, "generate", generate)
+    runner.tick()
+    assert world.lookup_recipe(fusion.fuse_key("basic_fist", "feng")).name == "先到拳"
+    bot_state = next(s for s in _bots() if s.player.insights == ["feng"] and s.player.member.wugong_id == "basic_fist")
+    fused = [a for a in library.owned_arts(bot_state) if a != "basic_fist"]
+    assert len(fused) == 1 and team.resolve_art(fused[0], content, world).name == "先到拳"  # 照查到的那一門，沒有「後到拳」
+    assert bot_state.player.stats["xinde"] == 100 - content.config.fuse_xinde  # 收一次
+
+
+def _master_ready(runner, content, world, clock, monkeypatch):
+    """一位假人合出「凌風拳」、練成絕學、輪到自己定名（存回去）；回傳它的名號。"""
+    runner.client = object()
+    _armed_bots(runner, content, clock, monkeypatch)
+    state = _bots()[0]
+    game = Game(content, state, random.Random(0), world)
+    game.forge("basic_fist", ["feng"], proposed=("凌風拳", "一句話。"))
+    art_id = next(a for a in library.owned_arts(state) if a != "basic_fist")
+    assert world.claim_master(art_id, state.player.name)  # 第一個練成絕學的人：不登記的話，Game 一建好就把取名權當作過期丟掉
+    state.player.naming = art_id
+    open_characters().save(state)
+    return state.player.name
+
+
+def test_a_bot_names_its_mastered_art_outside_the_lock(runner, world, content, clock, monkeypatch, lock_events):
+    """絕學定名也走三段式（企劃者 2026-10-06）：鎖外請模型另取新名字，再拿鎖定名；江湖史寫的是新名字。"""
+    victim = _master_ready(runner, content, world, clock, monkeypatch)
+    monkeypatch.setattr(naming, "generate", _namer(world, lock_events, name="破雲拳"))
+    lock_events.clear()
+    runner.tick()
+    at = lock_events.index("name")
+    assert lock_events[at - 1] == "exit" and lock_events[at + 1] == "enter"
+    assert open_characters().load(victim).player.naming is None
+    assert any("為之定名【破雲拳】" in r.text for r in world.get_season().chronicle)
+
+
+def test_a_failed_naming_does_not_claim_the_recipe_with_a_table_name(runner, world, content, clock, monkeypatch):
+    """F3：模型叫不動（連不上、逾時、取壞了）：假人這一爐不開，不用字表名字搶下首創（那正是會被看出來的情況）——
+    真人在模型掛掉時會走字表，但真人本來就什麼名字都有，假人一個接一個都是字表風格就不一樣。沒收費、下次再來。"""
+    runner.client = object()
+    _armed_bots(runner, content, clock, monkeypatch)
+    monkeypatch.setattr(naming, "generate", lambda client, content_, request, budget=None, person=None: (None, ""))
+    report = runner.tick()
+    assert report.named == 1 and report.failed == 0
+    assert world.lookup_recipe(fusion.fuse_key("basic_fist", "feng")) is None
+    bot_state = next(s for s in _bots() if s.player.insights == ["feng"])
+    assert library.owned_arts(bot_state) == ["basic_fist"] and bot_state.player.stats["xinde"] == 100
+    runner.tick()  # 時鐘沒動：還在間隔裡，不會立刻再叫一次
+    assert world.lookup_recipe(fusion.fuse_key("basic_fist", "feng")) is None
+
+
+def test_a_failed_naming_goes_through_for_a_pick_but_not_for_a_new_name(runner, content, clock, monkeypatch):
+    """取名失敗跳過 C 段只針對「沒有候選的取名單」：挑一個的單（choices 不空）沒挑到，C 段照常跑，由規則挑，不產生新名字。"""
+    runner.client = object()
+    _armed_bots(runner, content, clock, monkeypatch)
+    monkeypatch.setattr(naming, "generate", lambda client, content_, request, budget=None, person=None: (None, ""))
+    applied = []
+    monkeypatch.setattr(bot_policy, "apply_job", lambda game, job, proposed: applied.append(job) or [])
+    name = _bots()[0].player.name
+    ask = bot_policy.ForgeJob("basic_fist", ("feng",), None, naming.NamingRequest("fuse", "k", "武學", []))
+    pick = bot_policy.ForgeJob(
+        "basic_fist", ("feng",), None, naming.NamingRequest("fuse", "k", "武學", [], choices=("甲", "乙")),
+    )
+    runner._name_and_apply(name, ask, bot_runner.TickReport())
+    assert applied == []
+    runner._name_and_apply(name, pick, bot_runner.TickReport())
+    assert applied == [pick]
+
+
+def test_a_failed_mastery_naming_still_names_with_a_different_word_list_name(
+    runner, world, content, clock, monkeypatch,
+):
+    """絕學定名不一樣：模型叫不動也要定（沿用原名江湖史同一個名字出現兩次，看得出是假人），用字表另組、一定跟原名不同。"""
+    victim = _master_ready(runner, content, world, clock, monkeypatch)
+    monkeypatch.setattr(naming, "generate", lambda client, content_, request, budget=None, person=None: (None, ""))
+    runner.tick()
+    assert open_characters().load(victim).player.naming is None
+    lines = [r.text for r in world.get_season().chronicle if "練成絕學，為之定名【" in r.text]
+    assert len(lines) == 1 and "為之定名【凌風拳】" not in lines[0]
+
+
+def test_a_bot_that_lost_the_lock_after_naming_drops_the_name(runner, world, content, clock, monkeypatch):
+    """C 段拿不到鎖（真人拿著）：放掉這一件，什麼都沒開、沒收費，算一次等鎖跳過。"""
+    runner.client = object()
+    _armed_bots(runner, content, clock, monkeypatch)
+    monkeypatch.setattr(bot_runner, "LOCK_WAIT", 0.05)
+    holder = Database(world.db.path)  # 另一組連線，像真人那邊的程式
+    held = []
+
+    def generate(client, content_, request, budget=None, person=None):
+        transaction = holder.transaction()
+        transaction.__enter__()  # 取名的時候（鎖外），真人接著拿了行動鎖
+        held.append(transaction)
+        return ("凌風拳", "一句話。")
+
+    monkeypatch.setattr(naming, "generate", generate)
+    try:
+        report = runner.tick()
+    finally:
+        for transaction in held:
+            transaction.__exit__(None, None, None)
+        holder.close()
+    assert report.named == 1 and report.skipped >= 1
+    assert world.lookup_recipe(fusion.fuse_key("basic_fist", "feng")) is None
+    bot_state = next(s for s in _bots() if s.player.insights == ["feng"])
+    assert library.owned_arts(bot_state) == ["basic_fist"] and bot_state.player.stats["xinde"] == 100
+
+
+def test_a_season_that_ended_while_the_bot_waited_for_a_name_applies_nothing(runner, world, content, clock, monkeypatch):
+    runner.client = object()
+    _armed_bots(runner, content, clock, monkeypatch)
+
+    def generate(client, content_, request, budget=None, person=None):
+        world.mutate_season(lambda season: setattr(season, "ended", True))  # 取名的時候季結束了
+        return ("凌風拳", "一句話。")
+
+    monkeypatch.setattr(naming, "generate", generate)
+    report = runner.tick()
+    assert report.named == 1  # 名字確實請過了（不是根本沒開單）
+    assert world.lookup_recipe(fusion.fuse_key("basic_fist", "feng")) is None
+
+
+def test_a_failure_while_naming_is_counted_and_leaves_no_name_behind(
+    runner, world, content, clock, monkeypatch, capsys, caplog,
+):
+    """取名那一段出錯：算一次出錯、不讓整個程式倒下，log 與主控台都看不到名號（連例外訊息裡的也不寫）。"""
+    runner.client = object()
+    _armed_bots(runner, content, clock, monkeypatch)
+    victim = next(s for s in _bots() if s.player.insights == ["feng"]).player.name
+
+    def generate(client, content_, request, budget=None, person=None):
+        raise OSError(f"連不上（{victim}）")
+
+    monkeypatch.setattr(naming, "generate", generate)
+    capsys.readouterr()
+    with caplog.at_level(logging.DEBUG):
+        report = runner.tick()
+    assert report.failed == 1 and "OSError" in caplog.text
+    assert _identity_free(victim, capsys, caplog)
+
+
+def test_a_bot_game_has_no_client_and_a_fresh_model_budget(runner, content, monkeypatch):
+    monkeypatch.setattr(server_bots, "is_online", lambda profile, now: False)
+    content.config.bots_min_per_faction = 1
+    runner.tick()
+    state = _bots()[0]
+    runner.client = object()  # 就算假人程式有 client，鎖內的 Game 也不接
+    resets = []
+    monkeypatch.setattr(Game, "reset_model_budget", lambda self: resets.append(self))
+    game = runner._bot_game(state)
+    assert game.client is None and game.rng is runner.rng and resets == [game]
+
+
+def test_the_naming_slot_opens_only_with_a_client_the_setting_and_a_quiet_gap(runner, content, clock):
+    cfg = content.config
+    assert not runner._naming_open()  # 沒有 client
+    runner.client = object()
+    assert runner._naming_open()  # 還沒請過
+    cfg.bot_naming = False
+    assert not runner._naming_open()
+    cfg.bot_naming = True
+    runner.last_naming = clock[0]
+    assert not runner._naming_open()
+    clock[0] += cfg.bot_naming_gap_seconds - 1
+    assert not runner._naming_open()
+    clock[0] += 1
+    assert runner._naming_open()
+
+
+def test_every_lock_hold_resets_the_in_lock_model_budget(runner, content, clock, monkeypatch):
+    resets = []
+    monkeypatch.setattr(Game, "reset_model_budget", lambda self: resets.append(1))
+    monkeypatch.setattr(server_bots, "is_online", lambda profile, now: True)
+    content.config.bots_min_per_faction = 1
+    content.config.bot_tick_seconds = 1000
+    runner.tick()
+    clock[0] += 60
+    report = runner.tick()
+    assert len(resets) >= report.acted
+
+
+def test_the_naming_settings_follow_the_planners_numbers(content):
+    cfg = content.config
+    assert cfg.bot_naming is True
+    assert (cfg.bot_naming_gap_seconds, cfg.bot_naming_budget_seconds) == (120, 30)
+
+
+def test_run_bots_gives_the_runner_a_model_client(monkeypatch):
+    seen = {}
+
+    class Spy(BotRunner):
+        def __init__(self, content, *args, **kwargs):
+            seen["client"] = kwargs.get("client")
+            super().__init__(content, *args, **kwargs)
+
+    monkeypatch.setattr(run_bots, "BotRunner", Spy)
+    monkeypatch.setattr(run_bots.time, "sleep", lambda s: None)
+    run_bots.main(ticks=1)
+    assert seen["client"] is not None and seen["client"].model
+
+
+def test_run_bots_gives_no_client_when_bot_naming_is_off(monkeypatch):
+    seen = {}
+    real_load = run_bots.load_content
+
+    def load(*args, **kwargs):
+        content = real_load(*args, **kwargs)
+        content.config.bot_naming = False
+        return content
+
+    class Spy(BotRunner):
+        def __init__(self, content, *args, **kwargs):
+            seen["client"] = kwargs.get("client", "missing")
+            super().__init__(content, *args, **kwargs)
+
+    monkeypatch.setattr(run_bots, "load_content", load)
+    monkeypatch.setattr(run_bots, "BotRunner", Spy)
+    monkeypatch.setattr(run_bots.time, "sleep", lambda s: None)
+    run_bots.main(ticks=1)
+    assert seen["client"] is None
+
+
+def test_run_bots_prints_how_many_names_it_asked_for_and_never_a_name(monkeypatch, capsys):
+    monkeypatch.setattr(run_bots.time, "sleep", lambda s: None)
+    monkeypatch.setattr(BotRunner, "tick", lambda self: bot_runner.TickReport(online=3, named=2))
+    run_bots.main(ticks=1)
+    assert "取名 2" in capsys.readouterr().out

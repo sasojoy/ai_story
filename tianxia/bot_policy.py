@@ -232,12 +232,17 @@ def _master(game: Game, slot: NamingSlot | None) -> None:
 
 def apply_job(game: Game, job: ForgeJob | MasterJob, proposed: tuple[str | None, str]) -> list[str]:
     """C 段（bot_runner 在鎖內、重讀角色之後呼叫）：
-    - 首創的爐：交給 Game.forge(proposed=...) 整個重驗再登記（等名字的時候配方被別人登記了，照查到的給、不收第二次）；
+    - 首創的爐：交給 Game.forge(proposed=...) 整個重驗再登記（等名字的時候配方被別人登記了，照查到的給、不收第二次）。
+      取新名字的單（沒有候選）要是沒有過得了過濾的名字（模型沒取到、或這時重驗過不了），這一爐不開、不收費：
+      Game.forge 會走字表名字搶下首創，那正是看得出是假人的樣子（真人在模型掛掉時走字表，假人不行）。
+      挑一個的單（有候選）沒挑到照常開，由規則挑，不產生新名字；
     - 絕學定名：還輪到這一門才定。模型的名字先過一次完整的過濾（naming.recheck），跟原名一樣、過不了、或定的時候
       被用掉了，就用退路字表另組（salt 從 0 起），最多 MASTER_TRIES 個，一定跟原名不同。都定不成就留著，下次再來。"""
-    if isinstance(job, ForgeJob):
-        return game.forge(job.art_id, list(job.insight_ids), proposed=proposed, other_art=job.other_art)
     state, content, world = game.state, game.content, game.world
+    if isinstance(job, ForgeJob):
+        if not job.request.choices and naming.recheck(content, proposed, world.is_character_name)[0] is None:
+            return []  # 取新名字的那一爐沒有名字可用：不開，不用字表名字搶下首創（見下面的說明）
+        return game.forge(job.art_id, list(job.insight_ids), proposed=proposed, other_art=job.other_art)
     if state.player.naming != job.art_id:
         return []
     old = team.resolve_art(job.art_id, content, world)

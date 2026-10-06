@@ -4,7 +4,7 @@ import pytest
 
 from conftest import walk_to
 from test_bot import armed
-from tianxia import battle_instance, bot, bot_policy, library, team
+from tianxia import battle_instance, bot, bot_policy, fusion, library, naming, team
 from tianxia.engine import Option
 from tianxia.models import (
     BattleAct, BattleActionEffect, BattleDef, BattleFaction, BattleOption, BattleOutcome, Effect,
@@ -610,6 +610,31 @@ def test_apply_job_registers_a_first_time_recipe_with_the_models_name(content, w
     names = [team.player_art(game.state, content, world, a).name for a in library.owned_arts(game.state)]
     assert "凌風拳" in names and msgs
     assert game.state.player.stats["xinde"] == 100 - content.config.fuse_xinde
+
+
+@pytest.mark.parametrize("proposed", [(None, ""), ("拳", "一句話。"), ("凌風拳！？", "")], ids=["沒取到", "太短", "過不了字元"])
+def test_apply_job_never_claims_a_first_time_recipe_with_a_name_the_filter_rejects(content, world, arts_only, proposed):
+    """F3：取名那一爐沒有拿到過得了過濾的名字（沒取到、或 C 段重驗過不了）：不開、不收費，不用字表名字搶下首創
+    （假人搶首創的名字是字表風格，看得出是假人）。"""
+    game = armed(content, world)
+    game.client = None
+    slot = bot_policy.NamingSlot(open=True)
+    bot_policy.tend_arts(game, random.Random(0), slot)
+    assert bot_policy.apply_job(game, slot.job, proposed) == []
+    assert world.lookup_recipe(slot.job.request.key) is None
+    assert library.owned_arts(game.state) == ["basic_fist"] and game.state.player.stats["xinde"] == 100
+
+
+def test_apply_job_still_forges_a_pick_when_the_model_picked_nothing(content, world, arts_only):
+    """挑一個的單（合到舊的、候選兩個以上）沒挑到：不產生新名字，C 段照常開爐，由規則挑。"""
+    first = armed(content, world, name="先到")
+    first.forge("basic_fist", ["feng"], proposed=("凌風拳", "一句話。"))
+    game = armed(content, world, name="後到")
+    game.client = None
+    request = naming.NamingRequest("fuse", fusion.fuse_key("basic_fist", "feng"), "武學", [], choices=("凌風拳", "別名拳"))
+    job = bot_policy.ForgeJob("basic_fist", ("feng",), None, request)
+    bot_policy.apply_job(game, job, (None, ""))
+    assert len(library.owned_arts(game.state)) == 2
 
 
 def test_apply_job_for_a_mastery_that_is_no_longer_pending_does_nothing(content, world):
