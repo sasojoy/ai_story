@@ -626,3 +626,18 @@ def test_fbx_a_method_note_is_checked_like_the_rest_of_the_card(real):
     fire.note = "（火性剛烈，跟你吐納的柔不太合）99"  # 數字
     with pytest.raises(ContentError, match="做法的提醒"):
         validate(bad)
+
+
+def test_fbx_pressing_the_duty_button_notes_the_action_exactly_once(on, monkeypatch):
+    """守勢行動算不算入伍段那一步，由 Game.choose 照每個 act: 行動記一次（or_actions）；_duty 裡不再另外記一次（審查 Minor 1：
+    多的那一行拿掉也沒有任何測試會紅）。這裡釘「一次」：之後有人又加回去會看到。"""
+    from tianxia import engine
+
+    seen = []
+    real_note = engine.note_action
+    monkeypatch.setattr(engine, "note_action", lambda s, c, w, action: (seen.append(action), real_note(s, c, w, action))[1])
+    game = _enlisted(on, "guan")
+    seen.clear()
+    game.choose("act:duty")
+    assert seen.count("duty") == 1
+    _finished(game, on)

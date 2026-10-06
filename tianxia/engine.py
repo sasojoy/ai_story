@@ -61,7 +61,7 @@ from .world_state import WorldStateStore, season_length_days
 HOUR = 3600
 DAY = 86400
 DOOMED_ASK = "這一仗必敗，真的要打？"  # 勝算寫「必敗」（team.DOOMED）的遊歷，按下去前問的那一句（FB-095；網頁的 ask()，確定才打，其他都取消）
-BULLETIN_MAX = 3  #江湖頁那排小標「大事」點開的面板最多放這一週的幾則大事（計畫 T2；以前是公告卡）
+BULLETIN_MAX = 3  # 江湖頁那排小標「大事」點開的面板最多放這一週的幾則大事（計畫 T2；以前是公告卡）
 AUDIENCE_HALL_FIGURES = 2  # 一個地點有幾位以上的大勢人物，交友就不直接找人、改按「求見」指名（企劃者 2026-10-03 決定）
 OFF_FRONT_NOTE = "沒在戰線上領兵，不受挑戰"  # 戰線空著的人物（董卓、趙弘、重挫退下的人）：挑戰按鈕寫這一句（PM 2026-10-05 定）
 SNUB_NOTE = "剛吃了敗仗，閉門不見"  # 挑戰本人打贏之後，他對打贏的人關上門（軍令文件 4.5）：求見、交友、挑戰的按鈕寫這一句
@@ -1903,9 +1903,9 @@ class Game:
         elif goals.get(GEJU) and in_chaos(s, c, front):
             msgs += self.push_trend(GEJU, 1, source="duty")
         msgs += opportunities.after_success(s, c, "duty", loc.id, self.rng)  # 收容流民（正式版乙一）
-        msgs += self._order_credit(kind="duty", front=front)
-        # 入伍段第一道軍令那一步也認「做了一次守勢行動」（FB-094：豪強第一週沒有做得到的軍令）；軍令的記功照舊只看上面那一行
-        return msgs + self._guide(note_action(s, c, self.world, "duty"))
+        # 入伍段第一道軍令那一步也認「做了一次守勢行動」（FB-094：豪強第一週沒有做得到的軍令）：那是 Game.choose 照每個 act: 行動
+        # 記一次（note_action、TutorialGoal.or_actions），這裡不再記；軍令的記功只看下面這一行
+        return msgs + self._order_credit(kind="duty", front=front)
 
     def _take_convoy(self) -> list[str]:
         """接下糧車（護糧，軍令文件 3.4）：交出 convoy_grain 份糧草（從低階的慢屬性素材用起，多的不找），記下要送到哪裡。
