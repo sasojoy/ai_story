@@ -1,13 +1,14 @@
 """全服共用的即時多人戰鬥（設計討論：集結選陣營→逐幕逐回合鎖步→打完最後一回合、或戰局一面倒時
 判定勝負；每幕固定幾回合，見戰鬥系統設計 3.2 與 resolve_round）。
 
-固定選項（穩守/猛攻）的推進/氣血損耗是查表決定的確定性結果，不信任 LLM 自己算數字；
+固定選項（強攻／固守／奇襲，三招互剋，戰鬥系統 3.4）的推力與氣血損耗是 Config.battle 的數字加上每個人加入時快照的
+份量算出來的確定性結果，不信任 LLM 自己算數字；
 自訂行動（放手一搏，見 BattleOption.free_text／FreeTextGamble）則是 LLM 評估一個成功率
 （這件事 LLM 做得到、也實測過排序穩定），系統拿這個機率真的擲骰、用寫死的公式換算
 成戰局推動/氣血損耗——玩家的奇葩操作因此真的會影響戰局（賭贏大賺、賭輸慘賠），但
 「最後是不是成功」跟「成功該加多少」都是系統的亂數/公式決定，LLM 從頭到尾不會直接
 吐出任何被拿去套用的數字，只吐一個被擲骰消費掉的機率。LLM 另外也負責在固定骨架
-（BattleDef.acts）裡，依這一回合發生的事生成一段敘事潤色，骨架本身一定會照查表/擲骰
+（BattleDef.acts）裡，依這一回合發生的事生成一段敘事潤色，骨架本身一定會照三招的算法/擲骰
 結果往下走，不會被 LLM 帶偏。
 
 這裡是純粹的資料模型跟引擎函式，不碰共用儲存的存讀鎖（那是 world_state.py::
@@ -24,7 +25,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from . import encounter, zh
-from .models import BEATS, MOVES, BattleAct, BattleActionEffect, BattleDef, BattleOption, BattleOutcome, BattleTuning
+from .models import BEATS, MOVES, BattleAct, BattleDef, BattleOption, BattleOutcome, BattleTuning
 from .ollama_client import OllamaClient
 
 Phase = Literal["muster", "active", "ended"]
@@ -68,8 +69,8 @@ class BattleRound(BaseModel):
     custom_texts: dict[str, str] = Field(default_factory=dict)  # 玩家名號 -> 自訂行動文字（free_text 選項才有）
     success_rates: dict[str, int] = Field(default_factory=dict)  # 玩家名號 -> LLM 評估的成功率（0~100，
     # free_text 選項才有；在送出的當下就評好存起來，不是結算時才問——resolve_round 不能
-    # 呼叫 LLM，見模組說明。這個欄位有值就代表這個人這回合是賭局型行動，沒有值就是走
-    # action_tags 查表的一般行動，resolve_round 靠這個區分兩條路徑）。
+    # 呼叫 LLM，見模組說明。這個欄位有值就代表這個人這回合是賭局型行動，沒有值就是出固定的三招，
+    # resolve_round 靠這個區分兩條路徑）。
     opened_real: float = 0.0  # 這回合開放選擇的時間點，逾時代選判斷用
     auto_picked: list[str] = Field(default_factory=list)  # 這回合逾時、由系統代選行動的人（fill_timed_out_actions
     # 記下）：resolve_round 不把他們這回合算成自己出手（BattleParticipant.acted_rounds）
@@ -239,6 +240,11 @@ def options_for(instance: BattleInstance, definition: BattleDef, name: str) -> l
     return [o for o in act.options if o.faction in (None, p.faction)]
 
 
+def fixed_options(instance: BattleInstance, definition: BattleDef, name: str) -> list[BattleOption]:
+    """這個人這回合能選的三招（固定選項，有 move；放手一搏不算）。"""
+    return [o for o in options_for(instance, definition, name) if not o.free_text and o.move is not None]
+
+
 def submit_action(
     instance: BattleInstance, name: str, tag: str, text: str | None = None, success_rate: int | None = None,
 ) -> None:
@@ -295,42 +301,25 @@ def safest_option_tag(
     instance: BattleInstance, definition: BattleDef, name: str, tuning: BattleTuning | None = None,
 ) -> str | None:
     """這個人這回合最保守的固定選項（氣血損耗最低：三招時就是固守；一樣低時取框架裡排前面的）。只看他自己陣營能選的，
-    所以逾時代選不會把黃巾的人代選成官軍的招、替對面推戰局。這一幕沒有他能選的固定選項就回 None。
-    沒有 move 的舊選項照 action_tags 的損耗（Task 5 換完內容就拿掉這條路）。"""
-    options = [o for o in options_for(instance, definition, name) if not o.free_text]
+    所以逾時代選不會把黃巾的人代選成官軍的招、替對面推戰局。這一幕沒有他能選的固定選項就回 None。"""
+    options = fixed_options(instance, definition, name)
     if not options:
         return None
     tuning = tuning or BattleTuning()
-
-    def cost(o: BattleOption) -> float:
-        if o.move is not None:
-            return tuning.damage[o.move]
-        return definition.action_tags.get(o.tag, BattleActionEffect()).neili_damage
-
-    return min(options, key=cost).tag
+    return min(options, key=lambda o: tuning.damage[o.move]).tag
 
 
 def fill_timed_out_actions(instance: BattleInstance, definition: BattleDef, tuning: BattleTuning | None = None) -> None:
     """逾時：還沒送出行動的在場者（沒倒下、沒離開大區），系統代選他自己陣營最保守的固定選項（三招時是固守）；
-    這一幕沒有他能選的固定選項時，退回整張 action_tags 裡氣血損耗最低的那個——回合一定要湊得齊；
-    action_tags 是空的（三招的內容）而且他也沒有固定選項，就跳過他（驗過的內容每邊每幕都有三招，走不到這裡）。
+    這一幕他沒有固定選項（驗過的內容每邊每幕都有三招，走不到這裡）就跳過他。
     代選的人記進 round.auto_picked：這一回合不算他自己出手（FB-027）。"""
-    mildest = min(definition.action_tags, key=lambda t: definition.action_tags[t].neili_damage) if definition.action_tags else None
     for p in _active_participants(instance):
         if p.name not in instance.round.pending_actions:
-            tag = safest_option_tag(instance, definition, p.name, tuning) or mildest
+            tag = safest_option_tag(instance, definition, p.name, tuning)
             if tag is None:
                 continue
             instance.round.pending_actions[p.name] = tag
             instance.round.auto_picked.append(p.name)
-
-
-def _power_mitigation(power: float | None) -> float:
-    """自身武學威力對氣血損耗的抵銷比例：威力愈高抵銷愈多，但抵銷不了全部（再強也會受傷），
-    用一個簡單、好懂的公式，不是精算平衡（之後實測覺得不合理再調）。"""
-    if not power:
-        return 0.0
-    return min(0.6, power / 200)
 
 
 def resolve_round(
@@ -340,7 +329,7 @@ def resolve_round(
     """結算一回合：固定招走三招（戰鬥系統 3.4）：每個人的力量＝份量（加入時快照的 scores，乘這一場的氣血狀態）×
     剋制係數（對面這回合出招的比例），一邊的力量＝Σ ÷ √（這一邊出固定招的人數），推力＝push_max ×（第一方 − 第二方）÷
     （兩方相加），四捨五入；一邊沒人出固定招、另一邊有就推滿，兩邊都沒有是 0。扣氣血照招的損耗 ×（2 − 剋制係數）。
-    放手一搏照舊走賭局公式、推動加在三招合成之後；沒有 move 的舊選項照 action_tags 查表（過渡，Task 5 換完內容就拿掉）。
+    放手一搏照舊走賭局公式、推動加在三招合成之後（決戰改版三再改）。
     沒有 scores（舊資料、沒走 Game 加入的人）份量算 0：照常出招、扣血、出局，只是推不動戰局。
     氣血歸零的人出局；一開頭先把所有人的 last_result 清空，只有這一回合出了固定招的人才寫上新的。
     回合數加一之後照戰鬥系統設計 3.2 決定接下來怎麼走（只有兩個時機判結果）：
@@ -375,7 +364,7 @@ def resolve_round(
         if option is not None and option.move is not None:
             moves[name] = option.move
     mixes = {side: _mix(moves, factions, side) for side in (first, second)}
-    force, counts, legacy_delta = {first: 0.0, second: 0.0}, {first: 0, second: 0}, 0
+    force, counts, gamble_delta = {first: 0.0, second: 0.0}, {first: 0, second: 0}, 0
     for name, tag in list(instance.round.pending_actions.items()):
         p = instance.participants.get(name)
         if p is None or p.eliminated:
@@ -399,7 +388,7 @@ def resolve_round(
                 delta = -round(risk * gamble.failure_trend_per_risk)
                 damage = gamble.failure_neili_base + risk * gamble.failure_neili_per_risk
                 msgs.append(f"{name}這一搏失敗了，付出了慘痛代價。")
-            legacy_delta += sign * delta
+            gamble_delta += sign * delta
         elif name in moves:
             move = moves[name]
             enemy = second if p.faction == first else first
@@ -410,16 +399,8 @@ def resolve_round(
             if move == "強攻":
                 damage *= 1 - min(tuning.strong_mitigation_cap, p.power / 200)
             p.last_result = f"{move}（剋制 ×{coef:.1f}）"
-        else:  # 過渡：還沒有 move 的舊選項照 action_tags 查表（Task 5 換完內容就拿掉）
-            effect = definition.action_tags.get(tag)
-            if effect is None:
-                continue
-            if custom_text:
-                msgs.append(f"{name}放手一搏：「{custom_text}」")
-            legacy_delta += effect.trend_delta
-            damage = effect.neili_damage
-            if effect.mitigated_by_power:
-                damage *= 1 - _power_mitigation(p.power)
+        else:  # 這個人這回合沒有三招可算（選項不在這一幕、不在交戰雙方、放手一搏卻沒有賭局設定）：不推戰局、不扣血
+            continue
         p.neili = max(0.0, p.neili - damage)
         if p.neili <= 0 and not p.eliminated:
             p.eliminated = True
@@ -441,7 +422,7 @@ def resolve_round(
             for side in (first, second) if mixes[side]
         )
         msgs.insert(0, f"{sides}（戰局 {round(push):+d}）")  # 這一行放在這一回合訊息的最前面
-    instance.trend = max(0, min(100, instance.trend + round(push) + legacy_delta))
+    instance.trend = max(0, min(100, instance.trend + round(push) + gamble_delta))
     instance.last_mix = mixes
     instance.round_number += 1
     decisive = abs(instance.trend - CENTER) >= definition.decisive_margin
@@ -536,27 +517,21 @@ BOT_BEST_MOVE_CHANCE = 0.7  # 機器人出自己份量最高的那一招的機�
 def bot_choose_action(
     instance: BattleInstance, definition: BattleDef, name: str, rng: random.Random, tuning: BattleTuning | None = None,
 ) -> str | None:
-    """機器人這回合要選什麼：選項是三招時，七成出自己份量最高的那一招、三成在三招裡隨便挑
-    （份量全一樣——例如沒有快照的舊資料全是 0——取損耗最低的固守，不是列在最前面的那一招）；
-    還沒有 move 的舊選項照風險（action_tags 查到的氣血損耗）反向加權隨機選，
-    損耗愈低愈容易被選到，但不是完全不會選有風險的——這樣測試戰鬥用機器人湊場時行為
-    會有變化，不會每次都選同一個，也不會像真的 AI 一樣聰明判斷局勢（那不是這裡的目標，
+    """機器人這回合要選什麼：七成出自己份量最高的那一招、三成在三招裡隨便挑
+    （份量全一樣——例如沒有快照的舊資料全是 0——取損耗最低的固守，不是列在最前面的那一招）——這樣測試戰鬥用機器人
+    湊場時行為會有變化，不會每次都選同一個，也不會像真的 AI 一樣聰明判斷局勢（那不是這裡的目標，
     設計討論原文：「不會全程 LLM 自由發展...大框架還是會進行下去」，機器人只是補位湊人數，
     不需要聰明）。正式營運時要用機器人增加活躍感，也是同一套函式。故意排除 free_text
     選項——機器人不會自己想出一段有意義的描述，用它只會得到一句空話，交給固定選項就好。
-    （伺服器假人不走這裡：它們是一般參戰者，照 bot_policy 挑。）"""
-    options = [o for o in options_for(instance, definition, name) if not o.free_text]
-    if not options:
+    （伺服器假人不走這裡：它們是一般參戰者，照 bot_policy 挑。）這一幕沒有三招可選就回 None。"""
+    fixed = fixed_options(instance, definition, name)
+    if not fixed:
         return None
-    fixed = [o for o in options if o.move is not None]
-    if fixed:
-        tuning = tuning or BattleTuning()
-        p = instance.participants[name]
-        if rng.random() < BOT_BEST_MOVE_CHANCE:
-            return max(fixed, key=lambda o: (p.scores.get(o.move, 0.0), -tuning.damage[o.move])).tag
-        return rng.choice(fixed).tag
-    weights = [1.0 / (definition.action_tags.get(o.tag, BattleActionEffect()).neili_damage + 1) for o in options]
-    return rng.choices(options, weights=weights, k=1)[0].tag
+    tuning = tuning or BattleTuning()
+    p = instance.participants[name]
+    if rng.random() < BOT_BEST_MOVE_CHANCE:
+        return max(fixed, key=lambda o: (p.scores.get(o.move, 0.0), -tuning.damage[o.move])).tag
+    return rng.choice(fixed).tag
 
 
 class SuccessRateJudgment(BaseModel):

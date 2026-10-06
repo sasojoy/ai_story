@@ -128,7 +128,7 @@ def _a_round_narration(game):
         )
     with at(game, definition.muster_seconds + 1):
         game._battle_status()
-        game.choose("battle:act:safe")
+        game.choose("battle:act:guan_hold")
     battle = game.world.get_battle()
     rounds = game.world.battle_rounds(battle.record_id)
     assert rounds and rounds[-1].narration  # 潤色失敗就用系統判定的訊息本身，戰鬥不會卡住

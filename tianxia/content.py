@@ -21,7 +21,7 @@ from .companion_agent import DIALOGUE_TAGS
 from .front_lines import BAND_KEYS, GEJU_KEYS
 from .materials import TIER_NAMES
 from .models import (
-    FRONT_KEY, ROADS, STATS, Attribute, BattleDef, CharacterDef, CheckVoice, CombatLines, Condition, Config, Content,
+    FRONT_KEY, MOVES, ROADS, STATS, Attribute, BattleDef, CharacterDef, CheckVoice, CombatLines, Condition, Config, Content,
     CraftNames, Effect, Event, FigureDef, FollowerDef, Foreshadows, FrontLines, InsightDef, Location, OppDef, OrdersContent,
     PromotionDef, MapLayout, Material, RoadSight, Scenario, Sect, SimRumor, SkillDef, Squad, TimetableEvent, TraitBook,
     Tutorial,
@@ -1423,10 +1423,17 @@ def validate(c: Content) -> None:
             for key in act.text_by_lead:  # 幕文字照誰佔上風換版本（戰鬥系統 3.2）：鍵要是這場的陣營
                 need(key in battle_sides, f"{aw}：text_by_lead 的鍵 {key} 不是這場的陣營")
             for option in act.options:
-                if not option.free_text:  # free_text 選項不查表，機制走 FreeTextGamble 擲骰，不需要 action_tags 裡有對應的 tag
-                    known(f"{aw} 選項「{option.text}」", [option.tag], battle.action_tags, "行動分類")
+                if not option.free_text:  # 固定選項走三招（戰鬥系統 3.4）：要寫 move 與自己這一邊；放手一搏（free_text）不填 move
+                    need(option.move is not None and option.faction in battle_sides,
+                         f"{aw} 選項「{option.text}」：固定選項要寫 move 與陣營")
                 if option.faction is not None:
                     known(f"{aw} 選項「{option.text}」", [option.faction], battle_sides, "陣營")
+            for side in battle_sides:  # 每一幕、每一邊剛好強攻、固守、奇襲各一個固定選項（沒寫 move 的已經在上面報了）
+                moves = [o.move for o in act.options if not o.free_text and o.faction == side]
+                need(sorted(map(str, moves)) == sorted(MOVES), f"{aw}：{side} 要剛好有三招（強攻、固守、奇襲）各一個固定選項")
+                tags = [o.tag for o in act.options if o.faction == side]
+                dup = next((t for t in tags if tags.count(t) > 1), None)
+                need(dup is None, f"{aw}：{side} 的選項 tag {dup} 重複（tag 是這一邊在這一幕的選項名，不能同名）")
         need(
             battle.free_text_gamble is not None or not any(o.free_text for a in battle.acts for o in a.options),
             f"{where}：有 free_text 選項，必須設定 free_text_gamble",

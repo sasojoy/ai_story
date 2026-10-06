@@ -10,7 +10,7 @@ from tianxia.bot_runner import BotRunner
 from tianxia.characters import open_characters
 from tianxia.engine import Game
 from tianxia.models import (
-    BattleAct, BattleActionEffect, BattleDef, BattleFaction, BattleOption, BattleOutcome,
+    BattleAct, BattleDef, BattleFaction, BattleOption, BattleOutcome,
     FactionDef,
 )
 from tianxia.database import Database
@@ -31,13 +31,10 @@ def _install(content):
         acts=[
             BattleAct(
                 id="a1", title="初探", text="雙方試探。", goal="推動戰局",
-                options=[BattleOption(text="穩紮穩打", tag="safe"), BattleOption(text="全力進攻", tag="aggressive")],
+                options=[BattleOption(text=f"{s}{m}", tag=f"{s}_{c}", faction=s, move=m)
+                         for s in ("guan", "huang") for m, c in (("強攻", "strong"), ("固守", "hold"), ("奇襲", "raid"))],
             ),
         ],
-        action_tags={
-            "safe": BattleActionEffect(trend_delta=1, neili_damage=5),
-            "aggressive": BattleActionEffect(trend_delta=5, neili_damage=20),
-        },
         outcomes=[BattleOutcome(faction="guan", title="官軍大勝", text="官軍獲勝。")],
         muster_seconds=600, round_seconds=120,
     )

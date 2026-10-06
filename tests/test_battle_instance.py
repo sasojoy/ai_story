@@ -7,9 +7,20 @@ import pytest
 from conftest import FixedRandom
 from tianxia import battle_instance as bi
 from tianxia.models import (
-    MOVES, BattleAct, BattleActionEffect, BattleDef, BattleFaction, BattleOption, BattleOutcome, BattleTuning,
+    MOVES, BattleAct, BattleDef, BattleFaction, BattleOption, BattleOutcome, BattleTuning,
     FreeTextGamble,
 )
+
+
+CODES = {"強攻": "strong", "固守": "hold", "奇襲": "raid"}
+
+
+def _three_moves_for(*sides) -> list[BattleOption]:
+    """每一邊的三招（決戰改版一）：<陣營>_strong／_hold／_raid，寫 move 與陣營。"""
+    return [
+        BattleOption(text=f"{side}{move}", tag=f"{side}_{CODES[move]}", faction=side, move=move)
+        for side in sides for move in MOVES
+    ]
 
 
 @pytest.fixture
@@ -20,27 +31,9 @@ def definition() -> BattleDef:
         factions=[BattleFaction(id="guan", name="官軍"), BattleFaction(id="huang", name="黃巾")],
         trend_start=50,
         acts=[
-            BattleAct(
-                id="a1", title="初探", text="雙方試探。", goal="推動戰局",
-                options=[
-                    BattleOption(text="穩紮穩打", tag="safe"),
-                    BattleOption(text="全力進攻", tag="aggressive"),
-                    BattleOption(text="單刀衝撞敵營", tag="reckless"),
-                ],
-            ),
-            BattleAct(
-                id="a2", title="決戰", text="最終決戰。", goal="決出勝負",
-                options=[
-                    BattleOption(text="穩紮穩打", tag="safe"),
-                    BattleOption(text="全力進攻", tag="aggressive"),
-                ],
-            ),
+            BattleAct(id="a1", title="初探", text="雙方試探。", goal="推動戰局", options=_three_moves_for("guan", "huang")),
+            BattleAct(id="a2", title="決戰", text="最終決戰。", goal="決出勝負", options=_three_moves_for("guan", "huang")),
         ],
-        action_tags={
-            "safe": BattleActionEffect(trend_delta=1, neili_damage=5),
-            "aggressive": BattleActionEffect(trend_delta=5, neili_damage=20, mitigated_by_power=True),
-            "reckless": BattleActionEffect(trend_delta=10, neili_damage=200),
-        },
         outcomes=[
             BattleOutcome(faction="guan", trend_min=70, title="官軍大勝", text="官軍獲勝。"),
             BattleOutcome(faction="huang", trend_max=30, title="黃巾得勝", text="黃巾獲勝。"),
@@ -53,16 +46,14 @@ def definition() -> BattleDef:
 
 @pytest.fixture
 def gamble_definition(definition) -> BattleDef:
-    """跟 definition 同一個骨架，但 reckless 選項標成 free_text、並設定了
-    free_text_gamble——給「放手一搏」賭局機制的測試用，不影響 definition 自己既有的
-    那些測試（那些是純查表路徑，兩者分開測）。"""
-    from tianxia.models import FreeTextGamble
-
+    """跟 definition 同一個骨架，但每一幕每邊多一個放手一搏（free_text）、並設定了 free_text_gamble——
+    給「放手一搏」賭局機制的測試用，不影響 definition 自己既有的那些測試（那些是三招路徑，兩者分開測）。"""
     copy = definition.model_copy(deep=True)
     for act in copy.acts:
-        for option in act.options:
-            if option.tag == "reckless":
-                option.free_text = True
+        act.options += [
+            BattleOption(text="單刀衝撞敵營", tag=f"{side}_reckless", faction=side, free_text=True)
+            for side in ("guan", "huang")
+        ]
     copy.free_text_gamble = FreeTextGamble(
         success_trend_base=5, success_trend_per_risk=0.3, success_neili_damage=10,
         failure_trend_per_risk=0.1, failure_neili_base=20, failure_neili_per_risk=3.0,
@@ -72,30 +63,18 @@ def gamble_definition(definition) -> BattleDef:
 
 @pytest.fixture
 def showdown() -> BattleDef:
-    """照正式內容的黃巾決戰縮小的骨架：三幕、兩邊各有自己的穩守／猛攻、65／35 兩條門檻加一個無門檻的
+    """照正式內容的黃巾決戰縮小的骨架：三幕、兩邊各有自己的強攻／固守／奇襲、65／35 兩條門檻加一個無門檻的
     保底。每幕幾回合、多懸殊就提前收場都用預設值（3 回合一幕、偏離 40），整場 9 回合。"""
-    options = [
-        BattleOption(text="穩守陣線", tag="guan_safe", faction="guan"),
-        BattleOption(text="率先衝鋒", tag="guan_aggressive", faction="guan"),
-        BattleOption(text="死守營寨", tag="huang_safe", faction="huang"),
-        BattleOption(text="捨命衝殺", tag="huang_aggressive", faction="huang"),
-    ]
     return BattleDef(
         id="showdown",
         name="測試決戰",
         factions=[BattleFaction(id="guan", name="官軍"), BattleFaction(id="huang", name="黃巾")],
         trend_start=50,
         acts=[
-            BattleAct(id="s1", title="兩軍對陣", text="兩軍列陣。", goal="推動戰局", options=list(options)),
-            BattleAct(id="s2", title="鏖戰正酣", text="犬牙交錯。", goal="撐過消耗", options=list(options)),
-            BattleAct(id="s3", title="決勝時刻", text="最後一擊。", goal="分出勝負", options=list(options)),
+            BattleAct(id="s1", title="兩軍對陣", text="兩軍列陣。", goal="推動戰局", options=_three_moves_for("guan", "huang")),
+            BattleAct(id="s2", title="鏖戰正酣", text="犬牙交錯。", goal="撐過消耗", options=_three_moves_for("guan", "huang")),
+            BattleAct(id="s3", title="決勝時刻", text="最後一擊。", goal="分出勝負", options=_three_moves_for("guan", "huang")),
         ],
-        action_tags={
-            "guan_safe": BattleActionEffect(trend_delta=2, neili_damage=15),
-            "guan_aggressive": BattleActionEffect(trend_delta=6, neili_damage=60),
-            "huang_safe": BattleActionEffect(trend_delta=-2, neili_damage=15),
-            "huang_aggressive": BattleActionEffect(trend_delta=-6, neili_damage=60),
-        },
         outcomes=[
             BattleOutcome(faction="guan", trend_min=65, title="官軍大勝", text="官軍獲勝。"),
             BattleOutcome(faction="huang", trend_max=35, title="黃巾得勢", text="黃巾獲勝。"),
@@ -104,12 +83,9 @@ def showdown() -> BattleDef:
     )
 
 
-CODES = {"強攻": "strong", "固守": "hold", "奇襲": "raid"}
-
-
 @pytest.fixture
 def three() -> BattleDef:
-    """三招的決戰（戰鬥系統 3.4）：一幕九回合，兩邊各三招，沒有放手一搏、沒有 action_tags。"""
+    """三招的決戰（戰鬥系統 3.4）：一幕九回合，兩邊各三招，沒有放手一搏。"""
     options = [
         BattleOption(text=f"{side}{move}", tag=f"{side}_{CODES[move]}", faction=side, move=move)
         for side in ("guan", "huang") for move in MOVES
@@ -289,8 +265,8 @@ def test_a_participant_saved_before_scores_still_loads(definition):
 
 def _active_battle(definition) -> bi.BattleInstance:
     instance = bi.start_muster(definition, now=0.0)
-    bi.join_faction(instance, "甲", "guan", neili_cap=100.0)
-    bi.join_faction(instance, "乙", "huang", neili_cap=100.0)
+    for name, side in (("甲", "guan"), ("乙", "huang")):
+        bi.join_faction(instance, name, side, neili_cap=100.0, scores={m: 100.0 for m in MOVES})
     bi.close_muster(instance, definition, random.Random(0))
     return instance
 
@@ -298,82 +274,77 @@ def _active_battle(definition) -> bi.BattleInstance:
 def test_round_is_not_complete_until_everyone_submits(definition):
     instance = _active_battle(definition)
     assert not bi.round_is_complete(instance)
-    bi.submit_action(instance, "甲", "safe")
+    bi.submit_action(instance, "甲", "guan_hold")
     assert not bi.round_is_complete(instance)
-    bi.submit_action(instance, "乙", "safe")
+    bi.submit_action(instance, "乙", "huang_hold")
     assert bi.round_is_complete(instance)
 
 
 def test_eliminated_participants_are_not_required_to_submit(definition):
     instance = _active_battle(definition)
     instance.participants["乙"].eliminated = True
-    bi.submit_action(instance, "甲", "safe")
+    bi.submit_action(instance, "甲", "guan_hold")
     assert bi.round_is_complete(instance)
 
 
 def test_submit_action_from_an_eliminated_participant_is_ignored(definition):
     instance = _active_battle(definition)
     instance.participants["甲"].eliminated = True
-    bi.submit_action(instance, "甲", "safe")
+    bi.submit_action(instance, "甲", "guan_hold")
     assert "甲" not in instance.round.pending_actions
 
 
 def test_fill_timed_out_actions_defaults_the_missing_ones(definition):
     instance = _active_battle(definition)
-    bi.submit_action(instance, "甲", "aggressive")
+    bi.submit_action(instance, "甲", "guan_strong")
     bi.fill_timed_out_actions(instance, definition)
-    assert instance.round.pending_actions == {"甲": "aggressive", "乙": "safe"}
+    assert instance.round.pending_actions == {"甲": "guan_strong", "乙": "huang_hold"}
 
 
 def test_an_away_participant_drops_this_rounds_action_and_the_round_does_not_wait(definition):
     instance = _active_battle(definition)
-    bi.submit_action(instance, "乙", "aggressive", text="衝", success_rate=40)
+    bi.submit_action(instance, "乙", "huang_strong", text="衝", success_rate=40)
     bi.set_away(instance, "乙", True)
     assert instance.participants["乙"].away
     assert "乙" not in instance.round.pending_actions and "乙" not in instance.round.custom_texts
     assert "乙" not in instance.round.success_rates
-    bi.submit_action(instance, "甲", "safe")
+    bi.submit_action(instance, "甲", "guan_hold")
     assert bi.round_is_complete(instance)
 
 
 def test_an_away_participant_cannot_submit_until_they_come_back(definition):
     instance = _active_battle(definition)
     bi.set_away(instance, "甲", True)
-    bi.submit_action(instance, "甲", "safe")
+    bi.submit_action(instance, "甲", "guan_hold")
     assert "甲" not in instance.round.pending_actions
     bi.set_away(instance, "甲", False)
-    bi.submit_action(instance, "甲", "safe")
-    assert instance.round.pending_actions["甲"] == "safe"
+    bi.submit_action(instance, "甲", "guan_hold")
+    assert instance.round.pending_actions["甲"] == "guan_hold"
 
 
 def test_timed_out_actions_skip_away_participants(definition):
     instance = _active_battle(definition)
     bi.set_away(instance, "乙", True)
     bi.fill_timed_out_actions(instance, definition)
-    assert instance.round.pending_actions == {"甲": "safe"}
+    assert instance.round.pending_actions == {"甲": "guan_hold"}
 
 
 def test_timed_out_actions_pick_each_sides_own_safest_option(definition):
-    """逾時代選只挑自己陣營能選的招：黃巾那邊不會被代選成官軍的穩守、替對面推戰局。"""
-    definition.acts[0].options = [
-        BattleOption(text="穩守陣線", tag="guan_safe", faction="guan"),
-        BattleOption(text="死守營寨", tag="huang_safe", faction="huang"),
-        BattleOption(text="全力進攻", tag="aggressive"),
-    ]
-    definition.action_tags["guan_safe"] = BattleActionEffect(trend_delta=2, neili_damage=15)
-    definition.action_tags["huang_safe"] = BattleActionEffect(trend_delta=-2, neili_damage=15)
+    """逾時代選只挑自己陣營能選的招：黃巾那邊不會被代選成官軍的固守、替對面推戰局。"""
     instance = _active_battle(definition)
     bi.fill_timed_out_actions(instance, definition)
-    assert instance.round.pending_actions == {"甲": "guan_safe", "乙": "huang_safe"}
+    assert instance.round.pending_actions == {"甲": "guan_hold", "乙": "huang_hold"}
     bi.resolve_round(instance, definition, random.Random(0))
-    assert instance.trend == 50  # 兩邊各守各的，戰局不動
+    assert instance.trend == 50  # 兩邊各守各的、份量一樣，戰局不動
+    assert instance.participants["甲"].neili == 85 and instance.participants["乙"].neili == 85  # 各扣固守的 15
 
 
-def test_timed_out_actions_fall_back_to_the_mildest_tag_when_no_fixed_option_is_offered(definition):
-    definition.acts[0].options = [BattleOption(text="放手一搏", tag="aggressive", free_text=True)]
+def test_timed_out_actions_skip_someone_who_only_has_a_free_text_option(definition):
+    """這一幕只有放手一搏（不是固定招）：逾時不替他代選（沒有三招可代選，也沒有舊的查表退路）。"""
+    definition.acts[0].options = [BattleOption(text="放手一搏", tag="guan_reckless", faction="guan", free_text=True)]
     instance = _active_battle(definition)
     bi.fill_timed_out_actions(instance, definition)
-    assert instance.round.pending_actions == {"甲": "safe", "乙": "safe"}  # 不能讓回合永遠湊不齊
+    assert instance.round.pending_actions == {} and instance.round.auto_picked == []
 
 
 def test_a_battle_everyone_has_walked_away_from_ends_with_its_fallback(definition):
@@ -395,35 +366,40 @@ def test_set_away_ignores_someone_not_in_the_battle(definition):
 
 def test_resolve_round_pushes_the_trend_and_drains_neili(definition):
     instance = _active_battle(definition)
-    bi.submit_action(instance, "甲", "safe")
-    bi.submit_action(instance, "乙", "safe")
+    bi.submit_action(instance, "甲", "guan_hold")
+    bi.submit_action(instance, "乙", "huang_hold")
     bi.resolve_round(instance, definition, random.Random(0))
-    assert instance.trend == 52  # 兩人各 +1
-    assert instance.participants["甲"].neili == 95
-    assert instance.participants["乙"].neili == 95
+    assert instance.trend == 50  # 兩邊各一人、同一招、份量一樣：互相抵銷
+    assert instance.participants["甲"].neili == 85  # 固守的損耗 15 ×（2 − 1.0）
+    assert instance.participants["乙"].neili == 85
+    instance.round.pending_actions.clear()
+    bi.submit_action(instance, "甲", "guan_raid")  # 乙這一回合沒出手：甲的一邊推滿 10
+    bi.resolve_round(instance, definition, random.Random(0))
+    assert instance.trend == 60
 
 
-def test_submit_action_records_custom_text(definition):
-    instance = _active_battle(definition)
-    bi.submit_action(instance, "甲", "reckless", text="直取波才首級")
+def test_submit_action_records_custom_text(gamble_definition):
+    instance = _active_battle(gamble_definition)
+    bi.submit_action(instance, "甲", "guan_reckless", text="直取波才首級")
     assert instance.round.custom_texts["甲"] == "直取波才首級"
-    assert instance.round.pending_actions["甲"] == "reckless"  # 機制效果還是走 tag 查表
+    assert instance.round.pending_actions["甲"] == "guan_reckless"  # 數值不看玩家打了什麼字
 
 
 def test_submit_action_without_text_leaves_custom_texts_untouched(definition):
     instance = _active_battle(definition)
-    bi.submit_action(instance, "甲", "safe")
+    bi.submit_action(instance, "甲", "guan_hold")
     assert "甲" not in instance.round.custom_texts
 
 
-def test_resolve_round_surfaces_custom_text_in_the_messages(definition):
-    """自訂文字不影響查表結果（威力/氣血照舊算），只會被包進訊息裡給 LLM 潤色用。"""
+def test_custom_text_on_a_fixed_move_changes_nothing(definition):
+    """玩家打的字只有放手一搏的訊息會寫（見 test_resolve_round_gamble_message_includes_the_assessed_success_rate）；
+    固定的三招照舊算：份量、剋制、損耗都不看文字。"""
     instance = _active_battle(definition)
-    bi.submit_action(instance, "甲", "aggressive", text="直取波才首級")
-    bi.submit_action(instance, "乙", "safe")
+    bi.submit_action(instance, "甲", "guan_strong", text="直取波才首級")
+    bi.submit_action(instance, "乙", "huang_strong")
     msgs = bi.resolve_round(instance, definition, random.Random(0))
-    assert any("直取波才首級" in m for m in msgs)
-    assert instance.participants["甲"].neili == 80  # 跟沒打字的 aggressive 扣血量一樣（100-20）
+    assert not any("直取波才首級" in m for m in msgs)
+    assert instance.participants["甲"].neili == 40  # 跟沒打字的強攻扣血量一樣（100 − 60，沒有威力抵銷）
 
 
 # ── 放手一搏：LLM 評成功率、系統擲骰、公式換算（設計討論：「我就是希望看到玩家的
@@ -432,18 +408,19 @@ def test_resolve_round_surfaces_custom_text_in_the_messages(definition):
 
 def test_resolve_round_gamble_success_pushes_trend_toward_the_actors_faction(gamble_definition):
     instance = _active_battle(gamble_definition)
-    bi.submit_action(instance, "甲", "reckless", success_rate=50)  # 甲在 guan（factions[0]，正向）
-    bi.submit_action(instance, "乙", "safe")
+    bi.submit_action(instance, "甲", "guan_reckless", success_rate=50)  # 甲在 guan（factions[0]，正向）
+    bi.submit_action(instance, "乙", "huang_hold")
     msgs = bi.resolve_round(instance, gamble_definition, FixedRandom(0.0))  # random()=0.0，永遠擲骰成功
-    assert instance.trend > 50 + 1  # guan_safe 的 乙 本來就會 +1，另外甲賭贏了應該推得更高
+    # 三招：官軍沒人出固定招（甲在賭）、黃巾有乙 → 推 −10；賭贏 5 + 50 × 0.3 ＝ +20 加在三招合成之後
+    assert instance.trend == 50 - 10 + 20
     assert any("這一搏成功了" in m for m in msgs)
     assert instance.participants["甲"].neili == 90  # 100 - success_neili_damage(10)
 
 
 def test_resolve_round_gamble_failure_pushes_trend_away_from_the_actors_faction(gamble_definition):
     instance = _active_battle(gamble_definition)
-    bi.submit_action(instance, "甲", "reckless", success_rate=80)  # risk=20，刻意選小一點避免傷害超過上限被夾到 0 看不出公式
-    bi.submit_action(instance, "乙", "safe")
+    bi.submit_action(instance, "甲", "guan_reckless", success_rate=80)  # risk=20，刻意選小一點避免傷害超過上限被夾到 0 看不出公式
+    bi.submit_action(instance, "乙", "huang_hold")
     msgs = bi.resolve_round(instance, gamble_definition, FixedRandom(0.999))  # 永遠擲骰失敗
     assert any("這一搏失敗了" in m for m in msgs)
     # risk=20：failure_neili = 20 + 20*3.0 = 80
@@ -453,23 +430,23 @@ def test_resolve_round_gamble_failure_pushes_trend_away_from_the_actors_faction(
 def test_resolve_round_gamble_direction_flips_for_the_second_faction(gamble_definition):
     """乙在 huang（factions[1]，負向）：賭贏了戰局應該往 huang 那邊推（trend 下降）。"""
     instance = _active_battle(gamble_definition)
-    bi.submit_action(instance, "甲", "safe")
-    bi.submit_action(instance, "乙", "reckless", success_rate=50)
+    bi.submit_action(instance, "甲", "guan_hold")
+    bi.submit_action(instance, "乙", "huang_reckless", success_rate=50)
     bi.resolve_round(instance, gamble_definition, FixedRandom(0.0))
-    # guan_safe 的甲 +1，huang 賭贏再往下推，trend 應該落在 51 以下
-    assert instance.trend < 51
+    # 三招：只有甲出固定招 → +10；乙賭贏往 huang 那邊再推 −20，合起來落在 40
+    assert instance.trend == 50 + 10 - 20
 
 
 def test_resolve_round_gamble_higher_risk_means_bigger_reward_and_bigger_cost(gamble_definition):
     low_risk = _active_battle(gamble_definition)
-    bi.submit_action(low_risk, "甲", "reckless", success_rate=90)  # risk=10
-    bi.submit_action(low_risk, "乙", "safe")
+    bi.submit_action(low_risk, "甲", "guan_reckless", success_rate=90)  # risk=10
+    bi.submit_action(low_risk, "乙", "huang_hold")
     bi.resolve_round(low_risk, gamble_definition, FixedRandom(0.999))  # 失敗
     low_risk_damage = 100 - low_risk.participants["甲"].neili
 
     high_risk = _active_battle(gamble_definition)
-    bi.submit_action(high_risk, "甲", "reckless", success_rate=10)  # risk=90
-    bi.submit_action(high_risk, "乙", "safe")
+    bi.submit_action(high_risk, "甲", "guan_reckless", success_rate=10)  # risk=90
+    bi.submit_action(high_risk, "乙", "huang_hold")
     bi.resolve_round(high_risk, gamble_definition, FixedRandom(0.999))  # 失敗
     high_risk_damage = 100 - high_risk.participants["甲"].neili
 
@@ -477,35 +454,31 @@ def test_resolve_round_gamble_higher_risk_means_bigger_reward_and_bigger_cost(ga
 
 
 def test_resolve_round_gamble_can_eliminate_on_a_bad_roll(gamble_definition):
-    """極端的奇葩操作（成功率評很低）賭輸了，傷害可以直接打到出局——跟固定選項的
-    reckless 一樣，是數字夠狠，不是程式特判。"""
+    """極端的奇葩操作（成功率評很低）賭輸了，傷害可以直接打到出局——是公式的數字夠狠，不是程式特判。"""
     instance = _active_battle(gamble_definition)
-    bi.submit_action(instance, "甲", "reckless", success_rate=1)  # risk=99
-    bi.submit_action(instance, "乙", "safe")
+    bi.submit_action(instance, "甲", "guan_reckless", success_rate=1)  # risk=99
+    bi.submit_action(instance, "乙", "huang_hold")
     bi.resolve_round(instance, gamble_definition, FixedRandom(0.999))  # 失敗
     assert instance.participants["甲"].eliminated
 
 
 def test_resolve_round_gamble_message_includes_the_assessed_success_rate(gamble_definition):
     instance = _active_battle(gamble_definition)
-    bi.submit_action(instance, "甲", "reckless", text="直取波才首級", success_rate=25)
-    bi.submit_action(instance, "乙", "safe")
+    bi.submit_action(instance, "甲", "guan_reckless", text="直取波才首級", success_rate=25)
+    bi.submit_action(instance, "乙", "huang_hold")
     msgs = bi.resolve_round(instance, gamble_definition, FixedRandom(0.0))
     assert any("直取波才首級" in m and "25%" in m for m in msgs)
 
 
-def test_resolve_round_without_a_gamble_config_falls_back_to_the_tag_lookup(definition):
-    """definition（沒設定 free_text_gamble）就算送出了 success_rate，也不會走賭局路徑，
-    因為場上根本沒有這套機制可以依循——退回原本 action_tags 查表那條路。用 trend 而不是
-    neili 驗證：reckless 固定 neili_damage=200 兩條路徑都會把 100 點氣血打到夾在 0（看
-    不出差異），但 trend_delta 是固定的 10，賭局公式算出來的值幾乎不可能剛好湊成同一個數，
-    足以分辨走的是哪一條路。"""
+def test_a_gamble_without_a_gamble_config_does_nothing(definition):
+    """definition（沒設定 free_text_gamble）就算送出了 success_rate，也沒有賭局可以走：這個人這回合不推戰局、不扣血，
+    也不算進三招的比例（舊的查表已經退役，沒有退路）；對面照常。"""
     instance = _active_battle(definition)
-    bi.submit_action(instance, "甲", "reckless", success_rate=50)
-    bi.submit_action(instance, "乙", "safe")
+    bi.submit_action(instance, "甲", "guan_strong", success_rate=50)
+    bi.submit_action(instance, "乙", "huang_hold")
     bi.resolve_round(instance, definition, FixedRandom(0.0))
-    assert instance.trend == 50 + 10 + 1  # reckless 固定 trend_delta=10，加上 乙 safe 的 +1
-    assert instance.participants["甲"].eliminated  # neili_damage=200 遠超過上限，夾到 0 出局
+    assert instance.trend == 40  # 官軍沒人出三招 → 黃巾推滿 10
+    assert instance.participants["甲"].neili == 100 and not instance.participants["甲"].eliminated
 
 
 # ── 三招的結算：剋制、√人數、推力（決戰改版 1 Task 3，戰鬥系統 3.4）──────────────
@@ -739,7 +712,7 @@ def test_timed_out_actions_hold_the_line(three):
 
 
 def test_timed_out_fill_with_no_fixed_option_and_no_fallback_table_skips_that_person(three):
-    """沒有 action_tags 退路表、這一幕也沒有他能選的固定選項：跳過他，不當機（驗過的內容不會走到這裡）。"""
+    """這一幕沒有他能選的固定選項（也沒有別的退路）：跳過他，不當機（驗過的內容不會走到這裡）。"""
     lonely = three.model_copy(deep=True)
     lonely.acts[0].options = [o for o in lonely.acts[0].options if o.faction == "guan"]
     battle = _two_fighters(lonely)
@@ -802,27 +775,29 @@ def test_bot_choose_action_never_selects_a_free_text_option(gamble_definition):
     instance = _active_battle(gamble_definition)
     for _ in range(50):
         tag = bi.bot_choose_action(instance, gamble_definition, "甲", random.Random())
-        assert tag != "reckless"  # 這個 definition 裡 reckless 是 free_text
+        assert tag not in ("guan_reckless", "huang_reckless")  # 這個 definition 裡 reckless 是 free_text
 
 
-def test_reckless_action_can_eliminate_a_participant_outright(definition):
-    """單刀衝撞敵營這種框架內選項本身就設定成極高氣血損耗，一回合就能把人打到出局——
-    不是程式特別判斷「這個行動很魯莽」，是內容本身的查表數字夠狠。"""
+def test_a_costly_move_can_eliminate_a_participant_outright(definition):
+    """氣血見底的人出了損耗大的強攻（還被固守剋制，×1.5），一回合就能被打到出局——
+    不是程式特別判斷「這個行動很魯莽」，是三招的損耗數字本來就狠。"""
     instance = _active_battle(definition)
-    bi.submit_action(instance, "甲", "reckless")
-    bi.submit_action(instance, "乙", "safe")
+    instance.participants["甲"].neili = 50
+    bi.submit_action(instance, "甲", "guan_strong")
+    bi.submit_action(instance, "乙", "huang_hold")
     msgs = bi.resolve_round(instance, definition, random.Random(0))
     assert instance.participants["甲"].eliminated
-    assert instance.participants["甲"].neili == 0
+    assert instance.participants["甲"].neili == 0  # 60 ×（2 − 0.5）＝ 90，遠超過 50
     assert any("氣血耗盡" in m for m in msgs)
 
 
 def test_eliminated_participant_is_excluded_from_the_next_rounds_requirement(definition):
     instance = _active_battle(definition)
-    bi.submit_action(instance, "甲", "reckless")
-    bi.submit_action(instance, "乙", "safe")
+    instance.participants["甲"].neili = 50
+    bi.submit_action(instance, "甲", "guan_strong")
+    bi.submit_action(instance, "乙", "huang_hold")
     bi.resolve_round(instance, definition, random.Random(0))
-    bi.submit_action(instance, "乙", "safe")
+    bi.submit_action(instance, "乙", "huang_hold")
     assert bi.round_is_complete(instance)  # 甲已出局，不用等他
 
 
@@ -832,32 +807,32 @@ def test_eliminated_participant_is_excluded_from_the_next_rounds_requirement(def
 def test_each_resolved_round_a_fighter_chose_for_themselves_counts_as_acting(definition):
     instance = _active_battle(definition)
     for _ in range(2):
-        bi.submit_action(instance, "甲", "safe")
-        bi.submit_action(instance, "乙", "safe")
+        bi.submit_action(instance, "甲", "guan_hold")
+        bi.submit_action(instance, "乙", "huang_hold")
         bi.resolve_round(instance, definition, random.Random(0))
     assert instance.participants["甲"].acted_rounds == 2 and instance.participants["乙"].acted_rounds == 2
 
 
 def test_a_timed_out_round_picked_by_the_system_does_not_count_as_acting(definition):
     instance = _active_battle(definition)
-    bi.submit_action(instance, "甲", "safe")
+    bi.submit_action(instance, "甲", "guan_hold")
     bi.fill_timed_out_actions(instance, definition)  # 乙沒選，系統代選
     bi.resolve_round(instance, definition, random.Random(0))
     assert instance.participants["甲"].acted_rounds == 1
     assert instance.participants["乙"].acted_rounds == 0
-    bi.submit_action(instance, "乙", "safe")  # 下一回合乙自己選了：照算
-    bi.submit_action(instance, "甲", "safe")
+    bi.submit_action(instance, "乙", "huang_hold")  # 下一回合乙自己選了：照算
+    bi.submit_action(instance, "甲", "guan_hold")
     bi.resolve_round(instance, definition, random.Random(0))
     assert instance.participants["乙"].acted_rounds == 1
 
 
 def test_a_fighter_who_falls_remembers_the_round(definition):
     instance = _active_battle(definition)
-    bi.submit_action(instance, "甲", "safe")
-    bi.submit_action(instance, "乙", "safe")
+    bi.submit_action(instance, "甲", "guan_hold")
+    bi.submit_action(instance, "乙", "huang_hold")
     bi.resolve_round(instance, definition, random.Random(0))
-    bi.submit_action(instance, "甲", "reckless")  # 氣血 95，扣 200：第 2 回合倒下
-    bi.submit_action(instance, "乙", "safe")
+    bi.submit_action(instance, "甲", "guan_strong")  # 氣血 85，被固守剋制扣 90：第 2 回合倒下
+    bi.submit_action(instance, "乙", "huang_hold")
     bi.resolve_round(instance, definition, random.Random(0))
     fallen, standing = instance.participants["甲"], instance.participants["乙"]
     assert fallen.eliminated and fallen.fell_round == 2
@@ -890,19 +865,20 @@ def test_a_battle_saved_before_unfinished_existed_is_not_unfinished(definition):
     assert bi.BattleInstance.model_validate(stored).unfinished is False
 
 
-def test_mitigated_by_power_reduces_damage_for_a_powerful_participant(definition):
+def test_power_softens_the_strong_attack_for_a_powerful_participant(definition):
     instance = _active_battle(definition)
     instance.participants["甲"].power = 100
-    bi.submit_action(instance, "甲", "aggressive")
-    bi.submit_action(instance, "乙", "aggressive")
+    bi.submit_action(instance, "甲", "guan_strong")
+    bi.submit_action(instance, "乙", "huang_strong")
     bi.resolve_round(instance, definition, random.Random(0))
-    assert instance.participants["甲"].neili > instance.participants["乙"].neili
+    assert instance.participants["甲"].neili == 70 and instance.participants["乙"].neili == 40  # 60 × 0.5 對 60
 
 
 def test_options_for_returns_only_this_participants_available_options(definition):
     instance = _active_battle(definition)
-    opts = bi.options_for(instance, definition, "甲")
-    assert {o.tag for o in opts} == {"safe", "aggressive", "reckless"}  # 本幕三個選項都沒限定陣營
+    assert {o.tag for o in bi.options_for(instance, definition, "甲")} == {"guan_strong", "guan_hold", "guan_raid"}
+    assert {o.tag for o in bi.options_for(instance, definition, "乙")} == {"huang_strong", "huang_hold", "huang_raid"}
+    assert {o.tag for o in bi.fixed_options(instance, definition, "甲")} == {"guan_strong", "guan_hold", "guan_raid"}
 
 
 def test_options_for_unknown_name_returns_nothing(definition):
@@ -911,7 +887,7 @@ def test_options_for_unknown_name_returns_nothing(definition):
 
 
 def test_options_for_excludes_options_restricted_to_the_other_faction(definition):
-    definition.acts[0].options.append(BattleOption(text="黃巾專屬：符水助陣", tag="safe", faction="huang"))
+    definition.acts[0].options.append(BattleOption(text="黃巾專屬：符水助陣", tag="huang_charm", faction="huang"))
     instance = _active_battle(definition)
     guan_tags = {o.text for o in bi.options_for(instance, definition, "甲")}  # 甲在 guan
     huang_tags = {o.text for o in bi.options_for(instance, definition, "乙")}  # 乙在 huang
@@ -932,8 +908,8 @@ def test_advancing_to_the_next_act_after_its_rounds_are_played(definition):
     instance = _active_battle(definition)
     for _ in range(definition.rounds_per_act):  # 每幕 3 回合（預設）
         assert instance.act_index == 0
-        bi.submit_action(instance, "甲", "safe")
-        bi.submit_action(instance, "乙", "safe")
+        bi.submit_action(instance, "甲", "guan_hold")
+        bi.submit_action(instance, "乙", "huang_hold")
         msgs = bi.resolve_round(instance, definition, random.Random(0))
     assert instance.act_index == 1
     assert any("決戰" in m for m in msgs)
@@ -942,8 +918,8 @@ def test_advancing_to_the_next_act_after_its_rounds_are_played(definition):
 def test_a_gauge_past_an_outcome_line_but_short_of_decisive_does_not_end_early(definition):
     instance = _active_battle(definition)
     instance.trend = 75  # 已經過了「官軍大勝」的 70，但離 90 還遠：第一回合不判結果
-    bi.submit_action(instance, "甲", "safe")
-    bi.submit_action(instance, "乙", "safe")
+    bi.submit_action(instance, "甲", "guan_hold")
+    bi.submit_action(instance, "乙", "huang_hold")
     bi.resolve_round(instance, definition, random.Random(0))
     assert instance.phase == "active" and instance.act_index == 0
 
@@ -952,8 +928,8 @@ def test_outcome_ends_the_battle_once_on_the_final_round(definition):
     instance = _active_battle(definition)
     _to_the_last_round(instance, definition)
     instance.trend = 75
-    bi.submit_action(instance, "甲", "safe")
-    bi.submit_action(instance, "乙", "safe")
+    bi.submit_action(instance, "甲", "guan_hold")
+    bi.submit_action(instance, "乙", "huang_hold")
     bi.resolve_round(instance, definition, random.Random(0))
     assert instance.phase == "ended"
     assert instance.outcome_title == "官軍大勝"
@@ -965,8 +941,8 @@ def test_outcome_copies_the_season_level_consequences_onto_the_instance(definiti
     instance = _active_battle(definition)
     _to_the_last_round(instance, definition)
     instance.trend = 75
-    bi.submit_action(instance, "甲", "safe")
-    bi.submit_action(instance, "乙", "safe")
+    bi.submit_action(instance, "甲", "guan_hold")
+    bi.submit_action(instance, "乙", "huang_hold")
     bi.resolve_round(instance, definition, random.Random(0))
     assert instance.outcome_world_flags == ["huangjin_decisive_win"]
     assert instance.outcome_trend_delta == {"huangjin": -35}
@@ -974,28 +950,28 @@ def test_outcome_copies_the_season_level_consequences_onto_the_instance(definiti
 
 def test_a_decisive_gauge_ends_the_battle_in_either_direction(definition):
     """壓倒性是雙向的：不管戰局往哪一方傾斜，偏離中線 50 達 decisive_margin（預設 40）就當回合收場，
-    不是只有某一方拉開差距才算。"""
+    不是只有某一方拉開差距才算。（兩邊各出固守、份量一樣：這一回合推 0，戰局停在原地。）"""
     low = _active_battle(definition)
-    low.trend = 8  # 8 + 1 + 1 = 10：|10-50| = 40
-    bi.submit_action(low, "甲", "safe")
-    bi.submit_action(low, "乙", "safe")
+    low.trend = 10  # |10 − 50| ＝ 40
+    bi.submit_action(low, "甲", "guan_hold")
+    bi.submit_action(low, "乙", "huang_hold")
     bi.resolve_round(low, definition, random.Random(0))
     assert low.phase == "ended" and low.outcome_title == "黃巾得勝"
 
     high = _active_battle(definition)
-    high.trend = 88  # 88 + 1 + 1 = 90
-    bi.submit_action(high, "甲", "safe")
-    bi.submit_action(high, "乙", "safe")
+    high.trend = 90
+    bi.submit_action(high, "甲", "guan_hold")
+    bi.submit_action(high, "乙", "huang_hold")
     bi.resolve_round(high, definition, random.Random(0))
     assert high.phase == "ended" and high.outcome_title == "官軍大勝"
 
 
 def test_a_gauge_short_of_the_decisive_margin_neither_ends_nor_changes_act(definition):
-    for start in (87, 11):  # 87 + 2 = 89、11 + 2 = 13：都還差一點
+    for start in (89, 11):  # 都還差一點（偏離 39）
         instance = _active_battle(definition)
         instance.trend = start
-        bi.submit_action(instance, "甲", "safe")
-        bi.submit_action(instance, "乙", "safe")
+        bi.submit_action(instance, "甲", "guan_hold")
+        bi.submit_action(instance, "乙", "huang_hold")
         bi.resolve_round(instance, definition, random.Random(0))
         assert instance.phase == "active" and instance.act_index == 0, start
 
@@ -1004,8 +980,8 @@ def test_the_fallback_outcome_with_no_bounds_catches_a_stalemate(definition):
     instance = _active_battle(definition)
     _to_the_last_round(instance, definition)
     instance.trend = 50  # 不滿足前兩個 outcome 的範圍，落到保底的「僵持」
-    bi.submit_action(instance, "甲", "safe")
-    bi.submit_action(instance, "乙", "safe")
+    bi.submit_action(instance, "甲", "guan_hold")
+    bi.submit_action(instance, "乙", "huang_hold")
     bi.resolve_round(instance, definition, random.Random(0))
     assert instance.outcome_title == "僵持"
 
@@ -1013,14 +989,14 @@ def test_the_fallback_outcome_with_no_bounds_catches_a_stalemate(definition):
 def _showdown_battle(definition: BattleDef) -> bi.BattleInstance:
     """甲站官軍、乙站黃巾；氣血給足，打滿九回合也不會有人倒下。"""
     instance = bi.start_muster(definition, now=0.0)
-    bi.join_faction(instance, "甲", "guan", neili_cap=10_000.0)
-    bi.join_faction(instance, "乙", "huang", neili_cap=10_000.0)
+    for name, side in (("甲", "guan"), ("乙", "huang")):
+        bi.join_faction(instance, name, side, neili_cap=10_000.0, scores={m: 100.0 for m in MOVES})
     bi.close_muster(instance, definition, random.Random(0))
     return instance
 
 
-def _play(instance: bi.BattleInstance, definition: BattleDef, guan="guan_safe", huang="huang_safe") -> list[str]:
-    """甲、乙各出一招並結算這一回合；預設兩邊都穩守，推力互相抵銷。"""
+def _play(instance: bi.BattleInstance, definition: BattleDef, guan="guan_hold", huang="huang_hold") -> list[str]:
+    """甲、乙各出一招並結算這一回合；預設兩邊都固守，推力互相抵銷。固守剋強攻：官軍固守對黃巾強攻推 +5，反過來 −5。"""
     bi.submit_action(instance, "甲", guan)
     bi.submit_action(instance, "乙", huang)
     return bi.resolve_round(instance, definition, random.Random(0))
@@ -1055,8 +1031,8 @@ def test_the_final_act_is_fought_for_all_its_rounds(showdown):
 
 
 @pytest.mark.parametrize("start, guan, huang, title", [
-    (86, "guan_aggressive", "huang_safe", "官軍大勝"),  # 86 + 6 - 2 = 90
-    (14, "guan_safe", "huang_aggressive", "黃巾得勢"),  # 14 + 2 - 6 = 10
+    (86, "guan_hold", "huang_strong", "官軍大勝"),  # 86 + 5 = 91
+    (14, "guan_strong", "huang_hold", "黃巾得勢"),  # 14 − 5 = 9
 ])
 def test_a_lopsided_gauge_ends_the_battle_on_that_round(showdown, start, guan, huang, title):
     instance = _showdown_battle(showdown)
@@ -1074,7 +1050,7 @@ def test_a_lopsided_gauge_on_an_act_change_round_ends_instead_of_changing_act(sh
     _play(instance, showdown)
     _play(instance, showdown)
     instance.trend = 88
-    msgs = _play(instance, showdown, "guan_aggressive", "huang_safe")  # 第 3 回合：88 + 4 = 92
+    msgs = _play(instance, showdown, "guan_hold", "huang_strong")  # 第 3 回合：88 + 5 = 93
     assert instance.phase == "ended" and instance.outcome_title == "官軍大勝"
     assert instance.act_index == 0
     assert not any(m.startswith("【") for m in msgs)
@@ -1124,7 +1100,7 @@ def test_rounds_per_act_and_decisive_margin_come_from_the_definition(showdown):
 
     lopsided = _showdown_battle(showdown)
     lopsided.trend = 66
-    _play(lopsided, showdown, "guan_aggressive", "huang_safe")  # 66 + 4 = 70：偏離 20 就收場
+    _play(lopsided, showdown, "guan_hold", "huang_strong")  # 66 + 5 = 71：偏離 20 以上就收場
     assert lopsided.phase == "ended" and lopsided.outcome_title == "官軍大勝"
 
 
@@ -1180,19 +1156,12 @@ def test_end_without_fighters_does_nothing_during_muster(definition):
 def test_bot_choose_action_returns_a_tag_from_the_available_options(definition):
     instance = _active_battle(definition)
     tag = bi.bot_choose_action(instance, definition, "甲", random.Random(0))
-    assert tag in {"safe", "aggressive", "reckless"}
+    assert tag in {"guan_strong", "guan_hold", "guan_raid"}
 
 
 def test_bot_choose_action_returns_none_for_a_non_participant(definition):
     instance = _active_battle(definition)
     assert bi.bot_choose_action(instance, definition, "幽靈", random.Random(0)) is None
-
-
-def test_bot_choose_action_prefers_lower_risk_options_on_average(definition):
-    instance = _active_battle(definition)
-    picks = [bi.bot_choose_action(instance, definition, "甲", random.Random(i)) for i in range(200)]
-    counts = {tag: picks.count(tag) for tag in ("safe", "aggressive", "reckless")}
-    assert counts["safe"] > counts["reckless"]  # safe 的氣血損耗最低，應該被選到最多次
 
 
 # ── LLM 敘事潤色（可選，失敗/無 client 就退回系統訊息）────────────
@@ -1243,12 +1212,12 @@ def test_the_free_text_judge_is_set_in_the_late_han(definition):
 
 def test_resolving_a_round_records_it(definition):
     instance = _active_battle(definition)
-    bi.submit_action(instance, "甲", "safe")
-    bi.submit_action(instance, "乙", "aggressive", text="直取波才首級")
+    bi.submit_action(instance, "甲", "guan_hold")
+    bi.submit_action(instance, "乙", "huang_strong", text="直取波才首級")
     msgs = bi.resolve_round(instance, definition, random.Random(0), now=700.0)
     [record] = instance.rounds
     assert (record.act_index, record.resolved_real, record.trend_after) == (0, 700.0, instance.trend)
-    assert record.actions == {"甲": "safe", "乙": "aggressive"}
+    assert record.actions == {"甲": "guan_hold", "乙": "huang_strong"}
     assert record.custom_texts == {"乙": "直取波才首級"}
     assert record.messages == msgs and record.id is None
 
@@ -1262,8 +1231,8 @@ def test_ending_without_fighters_records_the_closing_round(definition):
 
 def test_ending_without_fighters_counts_the_timed_out_round(definition):
     instance = _active_battle(definition)
-    bi.submit_action(instance, "甲", "safe")
-    bi.submit_action(instance, "乙", "safe")
+    bi.submit_action(instance, "甲", "guan_hold")
+    bi.submit_action(instance, "乙", "huang_hold")
     bi.resolve_round(instance, definition, random.Random(0), now=100.0)
     for p in instance.participants.values():
         p.eliminated = True
@@ -1328,24 +1297,24 @@ def test_start_muster_takes_a_trend_start(showdown):
 
 
 def test_early_end_at_ninety_or_ten(showdown):
-    """提前收場看 50（戰鬥系統 5.3）：起點 58 的一場，到 90 就收（舊規則偏離起點 40 要到 98），到 18 不收（舊規則會收），
-    到 10 才收；起點 50 的 beta 那場收場時機跟以前一樣。"""
-    def played(start: int, trend: int, guan="guan_safe", huang="huang_safe") -> bi.BattleInstance:
+    """提前收場看 50（戰鬥系統 5.3）：起點 58 的一場，到 90 就收（舊規則偏離起點 40 要到 98），到 17 不收（舊規則會收），
+    到 10 以下才收；起點 50 的 beta 那場收場時機跟以前一樣。每回合官軍固守對黃巾強攻推 +5，反過來 −5。"""
+    def played(start: int, trend: int, guan="guan_hold", huang="huang_hold") -> bi.BattleInstance:
         instance = bi.start_muster(showdown, now=0.0, trend_start=start)
-        bi.join_faction(instance, "甲", "guan", neili_cap=10_000.0)
-        bi.join_faction(instance, "乙", "huang", neili_cap=10_000.0)
+        for name, side in (("甲", "guan"), ("乙", "huang")):
+            bi.join_faction(instance, name, side, neili_cap=10_000.0, scores={m: 100.0 for m in MOVES})
         bi.close_muster(instance, showdown, random.Random(0))
         instance.trend = trend
         _play(instance, showdown, guan, huang)
         return instance
 
-    assert played(58, 86, "guan_aggressive").phase == "ended"  # 86 + 6 − 2 = 90
-    assert played(58, 85, "guan_aggressive").phase == "active"  # 89
-    assert played(58, 22, "guan_safe", "huang_aggressive").phase == "active"  # 22 + 2 − 6 = 18：舊規則會收
-    assert played(58, 14, "guan_safe", "huang_aggressive").phase == "ended"  # 10
-    for trend, phase in ((86, "ended"), (85, "active"), (14, "ended"), (15, "active")):  # beta 那場：起點 50
-        guan, huang = ("guan_aggressive", "huang_safe") if trend > 50 else ("guan_safe", "huang_aggressive")
-        assert played(50, trend, guan, huang).phase == phase, trend
+    up, down = ("guan_hold", "huang_strong"), ("guan_strong", "huang_hold")
+    assert played(58, 85, *up).phase == "ended"  # 85 + 5 = 90
+    assert played(58, 84, *up).phase == "active"  # 89
+    assert played(58, 22, *down).phase == "active"  # 22 − 5 = 17：舊規則（偏離起點 40）會收
+    assert played(58, 15, *down).phase == "ended"  # 10
+    for trend, phase in ((85, "ended"), (84, "active"), (15, "ended"), (16, "active")):  # beta 那場：起點 50
+        assert played(50, trend, *(up if trend > 50 else down)).phase == phase, trend
 
 
 def test_narrate_round_decodes_byte_tokens_the_model_left_in(definition):

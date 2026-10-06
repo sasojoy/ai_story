@@ -9,8 +9,8 @@ from conftest import FIXTURE
 from tianxia import naming
 from tianxia.content import ContentError, load_content, profile_line, validate
 from tianxia.models import (
-    BattleAct, BattleActionEffect, BattleDef, BattleFaction, BattleOption, BattleOutcome, Condition, Config, FactionDef,
-    SpecialTrait, Threshold, Trend,
+    MOVES, BattleAct, BattleDef, BattleFaction, BattleOption, BattleOutcome, Condition, Config, FactionDef, SpecialTrait,
+    Threshold, Trend,
 )
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -429,6 +429,14 @@ def test_roster_content_errors_name_the_culprit(tmp_path, filename, edit, messag
 
 # ── 全服即時多人戰鬥內容 ──────────────────────────────────
 
+def three_moves(*sides) -> list[dict]:
+    """每一邊的三招（強攻、固守、奇襲，決戰改版一）：固定選項都要寫 move 與陣營，每幕每邊剛好三個。"""
+    return [
+        {"text": f"{side}{move}", "tag": f"{side}_{code}", "faction": side, "move": move}
+        for side in sides for move, code in (("強攻", "strong"), ("固守", "hold"), ("奇襲", "raid"))
+    ]
+
+
 MINIMAL_BATTLE = {
     "id": "b1", "name": "測試決戰",
     "region": "north",
@@ -436,10 +444,9 @@ MINIMAL_BATTLE = {
     "acts": [
         {
             "id": "a1", "title": "開戰", "text": "開戰了。", "goal": "打贏",
-            "options": [{"text": "進攻", "tag": "go"}],
+            "options": three_moves("a", "b"),
         }
     ],
-    "action_tags": {"go": {"trend_delta": 1, "neili_damage": 5}},
     "outcomes": [{"faction": "a", "title": "甲方勝", "text": "甲方贏了。"}],
 }
 
@@ -508,13 +515,81 @@ def test_season_one_off_ids_are_checked(tmp_path, kind, ghost, message):
         load_content(root)
 
 
-def test_battle_option_with_unknown_tag_rejected(tmp_path):
+def test_battle_options_of_one_side_cannot_share_a_tag(tmp_path):
+    """tag 是選項在這一幕的名字（出招、逾時代選、假人打分數都用它找選項）：同一邊兩個選項同名，第二個永遠選不到。"""
     root = copy_fixture(tmp_path)
     battle = json.loads(json.dumps(MINIMAL_BATTLE))
-    battle["acts"][0]["options"][0]["tag"] = "ghost"
+    battle["acts"][0]["options"][1]["tag"] = battle["acts"][0]["options"][0]["tag"]
     write_battles_json(root, [battle])
-    with pytest.raises(ContentError, match="ghost"):
+    with pytest.raises(ContentError, match="a_strong.*重複"):
         load_content(root)
+
+
+def test_a_battle_no_longer_needs_its_tags_in_action_tags(tmp_path):
+    """三招之後固定招看 move，tag 隨便取（只要這一邊這一幕不重複）；action_tags 不再是必填的查表。"""
+    root = copy_fixture(tmp_path)
+    battle = json.loads(json.dumps(MINIMAL_BATTLE))
+    for option in battle["acts"][0]["options"]:
+        option["tag"] = "ghost_" + option["tag"]
+    write_battles_json(root, [battle])
+    assert "b1" in load_content(root).battles
+
+
+def test_each_battle_act_offers_each_side_the_three_moves():
+    """戰鬥系統 3.4：每一幕、每一邊剛好強攻、固守、奇襲各一個固定選項（讀真實內容再改壞一個）。"""
+    real = load_content(ROOT / "content")
+    battle = real.battles["changshe_fire"]
+    fixed = [o for o in battle.acts[0].options if not o.free_text and o.faction == "guan"]
+    assert sorted(o.move for o in fixed) == sorted(MOVES)
+    fixed[0].move = fixed[1].move  # 兩個選項同一招、少了一招
+    with pytest.raises(ContentError, match="三招"):
+        validate(real)
+
+
+@pytest.mark.parametrize("drop", ["強攻", "固守", "奇襲"])
+def test_a_side_missing_one_of_the_three_moves_is_rejected(tmp_path, drop):
+    root = copy_fixture(tmp_path)
+    battle = json.loads(json.dumps(MINIMAL_BATTLE))
+    battle["acts"][0]["options"] = [o for o in battle["acts"][0]["options"] if not (o["faction"] == "b" and o["move"] == drop)]
+    write_battles_json(root, [battle])
+    with pytest.raises(ContentError, match="b 要剛好有三招"):
+        load_content(root)
+
+
+def test_a_side_with_a_fourth_fixed_option_is_rejected(tmp_path):
+    root = copy_fixture(tmp_path)
+    battle = json.loads(json.dumps(MINIMAL_BATTLE))
+    battle["acts"][0]["options"].append({"text": "再來一招", "tag": "a_extra", "faction": "a", "move": "強攻"})
+    write_battles_json(root, [battle])
+    with pytest.raises(ContentError, match="a 要剛好有三招"):
+        load_content(root)
+
+
+def test_a_fixed_battle_option_must_name_its_move():
+    real = load_content(ROOT / "content")
+    option = next(o for o in real.battles["guangzong"].acts[0].options if not o.free_text)
+    option.move = None
+    with pytest.raises(ContentError, match="move"):
+        validate(real)
+
+
+def test_a_fixed_battle_option_must_name_its_side(tmp_path):
+    """兩邊都能選的固定選項（faction 不寫）不行：每一邊的三招要各自數，也各自有自己的字。"""
+    root = copy_fixture(tmp_path)
+    battle = json.loads(json.dumps(MINIMAL_BATTLE))
+    del battle["acts"][0]["options"][0]["faction"]
+    write_battles_json(root, [battle])
+    with pytest.raises(ContentError, match="move 與陣營"):
+        load_content(root)
+
+
+def test_the_free_text_option_needs_no_move_and_is_not_counted_as_a_move(tmp_path):
+    root = copy_fixture(tmp_path)
+    battle = json.loads(json.dumps(MINIMAL_BATTLE))
+    battle["acts"][0]["options"].append({"text": "放手一搏", "tag": "a_reckless", "faction": "a", "free_text": True})
+    battle["free_text_gamble"] = {}
+    write_battles_json(root, [battle])
+    assert "b1" in load_content(root).battles
 
 
 def test_battle_option_restricted_to_an_unknown_faction_rejected(tmp_path):
@@ -927,8 +1002,7 @@ def _battle(trend_delta):
         id="t1", name="測試決戰", region="north",
         factions=[BattleFaction(id="guan", name="官軍"), BattleFaction(id="huang", name="黃巾")],
         acts=[BattleAct(id="a1", title="初探", text="雙方試探。", goal="推動戰局",
-                        options=[BattleOption(text="穩紮穩打", tag="safe")])],
-        action_tags={"safe": BattleActionEffect(trend_delta=1, neili_damage=5)},
+                        options=[BattleOption.model_validate(o) for o in three_moves("guan", "huang")])],
         outcomes=[BattleOutcome(faction="guan", title="官軍大勝", text="官軍獲勝。", trend_delta=trend_delta)],
         muster_seconds=600, round_seconds=120,
     )
@@ -1270,6 +1344,7 @@ def _showdown_battle(**fields) -> dict:
         defender="huang", timetable_event="siege", version="甲", front="south",
     )
     battle["outcomes"][0]["faction"] = "guan"
+    battle["acts"][0]["options"] = three_moves("guan", "huang")
     battle.update(fields)
     return battle
 

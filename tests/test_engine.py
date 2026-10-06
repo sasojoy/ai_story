@@ -1406,7 +1406,7 @@ def test_admin_end_season_with_battle_running(content, game, under_way):
         game.choose("battle:join:guan")
     if under_way:
         with at(game, 1000.0 + 601):
-            assert ids(game) == ["battle:act:safe", "battle:act:aggressive"]  # 開打了
+            assert ids(game) == ["battle:act:guan_strong", "battle:act:guan_hold", "battle:act:guan_raid"]  # 開打了
     trends = dict(game.world.get_season().trends)
 
     game.admin_end_season(now=1000.0 + 700)
@@ -1734,24 +1734,21 @@ def test_a_rerouted_journey_whose_road_end_is_gone_is_dropped_on_load(content, g
 # ── 全服即時多人戰鬥（設計討論：集結選陣營→逐幕逐回合鎖步）──────────
 
 
+def _three_moves_options(*sides):
+    """每一邊的三招：<陣營>_strong／_hold／_raid，寫 move 與陣營（決戰改版一）。"""
+    from tianxia.models import MOVES, BattleOption
+
+    codes = {"強攻": "strong", "固守": "hold", "奇襲": "raid"}
+    return [BattleOption(text=f"{s}{m}", tag=f"{s}_{codes[m]}", faction=s, move=m) for s in sides for m in MOVES]
+
+
 def _install_battle_def(content):
-    from tianxia.models import (
-        BattleAct, BattleActionEffect, BattleDef, BattleFaction, BattleOption, BattleOutcome,
-    )
+    from tianxia.models import BattleAct, BattleDef, BattleFaction, BattleOutcome
 
     definition = BattleDef(
         id="t1", name="測試決戰",
         factions=[BattleFaction(id="guan", name="官軍"), BattleFaction(id="huang", name="黃巾")],
-        acts=[
-            BattleAct(
-                id="a1", title="初探", text="雙方試探。", goal="推動戰局",
-                options=[BattleOption(text="穩紮穩打", tag="safe"), BattleOption(text="全力進攻", tag="aggressive")],
-            ),
-        ],
-        action_tags={
-            "safe": BattleActionEffect(trend_delta=1, neili_damage=5),
-            "aggressive": BattleActionEffect(trend_delta=5, neili_damage=20),
-        },
+        acts=[BattleAct(id="a1", title="初探", text="雙方試探。", goal="推動戰局", options=_three_moves_options("guan", "huang"))],
         outcomes=[BattleOutcome(faction="guan", title="官軍大勝", text="官軍獲勝。")],
         muster_seconds=600, round_seconds=120,
         rounds_per_act=1,  # 一幕一回合：第一回合結算完就看戰局收場（保底結果沒有門檻，一定是官軍大勝）
@@ -1761,7 +1758,7 @@ def _install_battle_def(content):
 
 
 def _install_three_move_battle(content):
-    """三招的決戰（戰鬥系統 3.4）：一幕三回合，兩邊各有強攻、固守、奇襲，沒有 action_tags。"""
+    """三招的決戰（戰鬥系統 3.4）：一幕三回合，兩邊各有強攻、固守、奇襲。"""
     from tianxia.models import MOVES, BattleAct, BattleDef, BattleFaction, BattleOption, BattleOutcome
 
     codes = {"強攻": "strong", "固守": "hold", "奇襲": "raid"}
@@ -1831,18 +1828,17 @@ def test_a_wounded_fighters_button_shows_the_smaller_score(game):
     assert all(score(w) < score(f) for w, f in zip(wounded, full))
 
 
-def test_a_gamble_option_is_not_a_button_and_an_old_option_keeps_its_plain_label(content, game):
-    """放手一搏走輸入框、不是按鈕；還沒有 move 的舊選項照舊只寫選項名（過渡）。"""
-    from tianxia.models import BattleOption
-
-    definition = _install_battle_def(content)  # 舊的穩守／猛攻：沒有 move
+def test_a_gamble_option_is_not_a_button(content, game):
+    """放手一搏走輸入框、不是按鈕：按鈕只有自己這一邊的三招。"""
+    definition = _install_battle_def_with_free_text(content)
     game.world.start_battle(definition, now=1000.0)
-    game.world.mutate_battle(lambda b: battle_instance.join_faction(b, game.state.player.name, "guan", neili_cap=100.0))
-    definition.acts[0].options.append(BattleOption(text="放手一搏", tag="reckless", free_text=True))
+    with at(game, 1000.0):
+        game.choose("battle:join:guan")
     with at(game, 1000.0 + definition.muster_seconds + 1):
         game._battle_status()
         labels = [o.label for o in game._battle_options(*game._battle_status(tick=False))]
-    assert labels == ["穩紮穩打", "全力進攻"]
+    assert len(labels) == 3 and not any("放手一搏" in label for label in labels)
+    assert game.battle_free_text_prompt() is None or "放手一搏" in game.battle_free_text_prompt()
 
 
 def test_the_scene_says_what_the_other_side_did_last_round(game):
@@ -2255,8 +2251,8 @@ def test_the_battle_scene_shows_which_round_of_how_many(content, game):
     with at(game, definition.muster_seconds + 1):
         game._battle_status()  # 開打
         assert "【初探】（第 1／3 回合）雙方試探。" in game.scene_text()
-        game.world.mutate_battle(lambda b: battle_instance.submit_action(b, "乙玩家", "safe"))
-        game.choose("battle:act:safe")  # 兩人都出手了：第 1 回合結算
+        game.world.mutate_battle(lambda b: battle_instance.submit_action(b, "乙玩家", "huang_hold"))
+        game.choose("battle:act:guan_hold")  # 兩人都出手了：第 1 回合結算
         assert game.world.get_battle().round_number == 1
         assert "【初探】（第 2／3 回合）雙方試探。" in game.scene_text()
 
@@ -2267,7 +2263,7 @@ def test_the_fighting_menu_still_replaces_everything_once_the_muster_closes(cont
     with at(game, 1000.0):
         game.choose("battle:join:guan")
     with at(game, 1000.0 + 601):
-        assert ids(game) == ["battle:act:safe", "battle:act:aggressive"]
+        assert ids(game) == ["battle:act:guan_strong", "battle:act:guan_hold", "battle:act:guan_raid"]
 
 
 def test_an_unfinished_battle_is_dropped_without_its_outcome_when_the_season_ends(content, game):
@@ -2277,7 +2273,7 @@ def test_an_unfinished_battle_is_dropped_without_its_outcome_when_the_season_end
     with at(game, 1000.0):
         game.choose("battle:join:guan")
     with at(game, 1000.0 + 601):
-        assert ids(game) == ["battle:act:safe", "battle:act:aggressive"]  # 開打了
+        assert ids(game) == ["battle:act:guan_strong", "battle:act:guan_hold", "battle:act:guan_raid"]  # 開打了
     trends = dict(game.world.get_season().trends)
     game.world.mutate_season(lambda season: (setattr(season, "ended", True), setattr(season, "ending_title", "天下太平")))
     game.sync(1000.0 + 700)
@@ -2318,7 +2314,7 @@ def test_submitting_an_action_and_a_bot_auto_fills_then_the_round_resolves(conte
     after_muster = definition.muster_seconds + 1
     with at(game, after_muster):
         game._battle_status()  # 推進一次，確保集結已關閉、進入 active
-        game.choose("battle:act:safe")  # 人類送出，機器人在同一次 tick 裡自動補上，回合應該已經結算
+        game.choose("battle:act:guan_hold")  # 人類送出，機器人在同一次 tick 裡自動補上，回合應該已經結算
     battle = game.world.get_battle()
     assert battle.trend != 50  # 已經結算過，trend 被推動了
     assert battle.round.pending_actions == {}  # 回合已經重置
@@ -2337,7 +2333,7 @@ def test_the_player_whose_action_completes_the_round_sees_the_resolution_text(co
     after_muster = definition.muster_seconds + 1
     with at(game, after_muster):
         game._battle_status()
-        msgs = game.choose("battle:act:safe")
+        msgs = game.choose("battle:act:guan_hold")
     assert msgs != []
     assert any("官軍大勝" in m or "官軍獲勝" in m for m in msgs)  # _install_battle_def 的保底結果沒有數值門檻，第一回合就分出勝負
 
@@ -2353,7 +2349,7 @@ def test_waiting_for_others_returns_a_placeholder_message(content, game):
     after_muster = definition.muster_seconds + 1
     with at(game, after_muster):
         game._battle_status()
-        msgs = game.choose("battle:act:safe")
+        msgs = game.choose("battle:act:guan_hold")
     assert msgs == ["你選擇了行動，等待其他人……"]
 
 
@@ -2372,7 +2368,7 @@ def test_battle_outcome_applies_trend_delta_and_flags_to_the_shared_season(conte
     after_muster = definition.muster_seconds + 1
     with at(game, after_muster):
         game._battle_status()
-        game.choose("battle:act:safe")
+        game.choose("battle:act:guan_hold")
     season = game.world.get_season()
     assert season.trends["kou"] == max(0, before - 40)
     assert "huangjin_decisive_win" in season.flags
@@ -2460,10 +2456,10 @@ def test_a_latecomer_is_told_they_can_act_this_round_and_can(content, game):
         assert game.choose("battle:join_late") == ["你趕到了戰場，這一回合就能出手。"]
         battle = game.world.get_battle()
         assert battle_instance.options_for(battle, definition, "沈浪")
-        assert ids(game) == ["battle:act:safe", "battle:act:aggressive"]
-        game.choose("battle:act:safe")
+        assert ids(game) == ["battle:act:guan_strong", "battle:act:guan_hold", "battle:act:guan_raid"]
+        game.choose("battle:act:guan_hold")
     battle = game.world.get_battle()
-    assert battle.round_number == 0 and battle.round.pending_actions == {"沈浪": "safe"}  # 送出了、等乙玩家
+    assert battle.round_number == 0 and battle.round.pending_actions == {"沈浪": "guan_hold"}  # 送出了、等乙玩家
 
 
 # ── 決戰選項的江湖紀錄（FB-030：加入與趕到各寫一則，每回合出招不寫）──────────────
@@ -2528,7 +2524,7 @@ def test_a_rounds_action_is_not_journaled(content, game):
         game._battle_status()
         game.choose("battle:join_late")
         before = len(game.state.journal)
-        assert game.choose("battle:act:safe") == ["你選擇了行動，等待其他人……"]
+        assert game.choose("battle:act:guan_hold") == ["你選擇了行動，等待其他人……"]
     assert len(game.state.journal) == before
 
 
@@ -2578,7 +2574,7 @@ def _fight_to_the_end(game, definition, now):
             if battle.phase == "ended":
                 return now
             if game.state.player.name not in battle.round.pending_actions:
-                game.choose("battle:act:safe")
+                game.choose("battle:act:guan_hold")
         now = game.world.get_battle().round.opened_real + definition.round_seconds
 
 
@@ -2596,13 +2592,13 @@ def test_every_fighter_gets_the_showdown_in_their_journal_and_battle_reports(con
     with at(game, 0.0), at(fallen, 0.0):
         game.choose("battle:join:guan")
         fallen.choose("battle:join:huang")
-    game.world.mutate_battle(lambda b: setattr(b.participants["乙"], "neili", 8.0))  # 穩紮穩打扣 5：第 2 回合倒下
+    game.world.mutate_battle(lambda b: setattr(b.participants["乙"], "neili", 20.0))  # 固守扣 15：第 2 回合倒下
     start = definition.muster_seconds + 1
     for i in range(3):
         with at(game, start + i), at(fallen, start + i):
-            game.choose("battle:act:safe")
+            game.choose("battle:act:guan_hold")
             if i < 2:
-                fallen.choose("battle:act:safe")  # 兩人都出手了：這一回合結算
+                fallen.choose("battle:act:huang_hold")  # 兩人都出手了：這一回合結算
     assert game.world.get_battle().phase == "ended"
 
     entry = game.state.journal[0]  # 收場那一下出手的人當場就有
@@ -2641,8 +2637,8 @@ def test_an_offline_fighter_gets_the_showdown_on_the_next_sync_without_the_timed
         away.choose("battle:join:huang")
     start = definition.muster_seconds + 1
     with at(game, start), at(away, start):
-        game.choose("battle:act:safe")
-        away.choose("battle:act:safe")
+        game.choose("battle:act:guan_hold")
+        away.choose("battle:act:huang_hold")
     open_characters().save(away.state)
     end = _fight_to_the_end(game, definition, start + 1)
     assert "你出手 3 回合" in game.state.journal[0].lines
@@ -2726,8 +2722,8 @@ def _showdown_under_way(content, game):
         away.choose("battle:join:huang")
     start = definition.muster_seconds + 1
     with at(game, start), at(away, start):
-        game.choose("battle:act:safe")
-        away.choose("battle:act:safe")  # 兩人都出手了：第 1 回合結算
+        game.choose("battle:act:guan_hold")
+        away.choose("battle:act:huang_hold")  # 兩人都出手了：第 1 回合結算
     open_characters().save(away.state)
     battle = game.world.get_battle()
     assert battle.phase == "active" and battle.round_number == 1
@@ -2910,7 +2906,7 @@ def test_a_fighter_who_leaves_the_region_sits_the_rounds_out_until_back(content,
         assert battle.participants["沈浪"].away
         assert "act:explore" in ids(game) and "你離開了測試北區" in game.scene_text()
         assert game.battle_free_text_prompt() is None
-        game.world.mutate_battle(lambda b: battle_instance.submit_action(b, "乙玩家", "safe"))
+        game.world.mutate_battle(lambda b: battle_instance.submit_action(b, "乙玩家", "huang_hold"))
         assert battle_instance.round_is_complete(game.world.get_battle())  # 不等離開的人
         game.travel("lake", "dash")  # 回到北區
         assert not game.world.get_battle().participants["沈浪"].away
@@ -3088,9 +3084,7 @@ def test_rally_region_sends_a_fighter_who_left_the_region_back_unless_they_have_
 
 
 def _install_battle_def_with_free_text(content):
-    from tianxia.models import (
-        BattleAct, BattleActionEffect, BattleDef, BattleFaction, BattleOption, BattleOutcome,
-    )
+    from tianxia.models import BattleAct, BattleDef, BattleFaction, BattleOption, BattleOutcome
 
     definition = BattleDef(
         id="t2", name="測試決戰（自訂行動）",
@@ -3098,18 +3092,11 @@ def _install_battle_def_with_free_text(content):
         acts=[
             BattleAct(
                 id="a1", title="初探", text="雙方試探。", goal="推動戰局",
-                options=[
-                    BattleOption(text="穩紮穩打", tag="safe", faction="guan"),
+                options=_three_moves_options("guan") + [
                     BattleOption(text="放手一搏（20字內）", tag="reckless", faction="guan", free_text=True),
-                    BattleOption(text="死守營寨", tag="huang_safe", faction="huang"),
-                ],
+                ] + _three_moves_options("huang"),
             ),
         ],
-        action_tags={
-            "safe": BattleActionEffect(trend_delta=1, neili_damage=5),
-            "reckless": BattleActionEffect(trend_delta=10, neili_damage=50),
-            "huang_safe": BattleActionEffect(trend_delta=-1, neili_damage=5),
-        },
         outcomes=[BattleOutcome(faction="guan", title="官軍大勝", text="官軍獲勝。")],
         muster_seconds=600, round_seconds=120,
         rounds_per_act=1,  # 一幕一回合，同 _install_battle_def
@@ -3135,7 +3122,8 @@ def test_free_text_option_is_excluded_from_the_button_list(content, game):
     definition = _install_battle_def_with_free_text(content)
     after_muster = _join_and_open(content, game, definition)
     with at(game, after_muster):
-        assert [o.label for o in game.options()] == ["穩紮穩打"]  # 自訂行動不是按鈕
+        labels = [o.label for o in game.options()]
+        assert len(labels) == 3 and not any("放手一搏" in label for label in labels)  # 自訂行動不是按鈕，只有三招
 
 
 def test_battle_free_text_prompt_shows_when_available(content, game):
@@ -3160,8 +3148,8 @@ def test_battle_free_text_prompt_is_none_after_submitting(content, game):
 def test_submit_battle_custom_action_truncates_to_20_characters(content, game):
     """這場測試戰鬥只有一幕、保底結果沒有數值門檻，機器人補位後這回合會立刻結算（round
     也會跟著重置），所以改檢查 narrative_log（結算後仍然保留）而不是 round.custom_texts
-    （結算後已經清空）。"""
-    definition = _install_battle_def_with_free_text(content)
+    （結算後已經清空）。（有設定賭局的戰鬥才會把玩家打的字寫進結算訊息。）"""
+    definition = _install_battle_def_with_gamble(content)
     after_muster = _join_and_open(content, game, definition)
     long_text = "一二三四五六七八九十" * 3  # 30 字
     with at(game, after_muster):
@@ -3190,7 +3178,7 @@ def test_submit_battle_custom_action_works_even_as_the_very_first_call_after_mus
     submit_battle_custom_action() 自己沒有先追趕，battle_instance.submit_action()
     內部看到 battle.phase 還是 "muster" 會悄悄把這次送出的行動吃掉，玩家完全不知道
     自己其實白打了一輪字。"""
-    definition = _install_battle_def_with_free_text(content)
+    definition = _install_battle_def_with_gamble(content)
     game.world.start_battle(definition, now=0.0)
     with at(game, 0.0):
         game.choose("battle:join:guan")
@@ -3207,10 +3195,9 @@ def test_submit_battle_custom_action_works_even_as_the_very_first_call_after_mus
     assert any("直取波才首級" in line for line in battle.narrative_log)
 
 
-def test_custom_action_mechanics_match_the_fixed_tag_regardless_of_text(content, game):
-    """這個 fixture 沒有設定 free_text_gamble，所以就算玩家打的字會先被送去評成功率，
-    resolve_round 還是會退回 action_tags 查表那條路（見 battle_instance.py 的對應測試），
-    機制效果不會因為文字內容不同而有不同結果——有設定 free_text_gamble 的戰鬥則相反，
+def test_custom_action_without_a_gamble_config_changes_nothing(content, game):
+    """這個 fixture 沒有設定 free_text_gamble，所以就算玩家打的字會先被送去評成功率，也沒有賭局可以走：
+    這個人這回合不推戰局、不扣血（不會因為文字內容不同而有不同結果）——有設定 free_text_gamble 的戰鬥則相反，
     見 test_submit_battle_custom_action_assesses_success_rate_and_feeds_the_gamble。"""
     definition = _install_battle_def_with_free_text(content)
     after_muster = _join_and_open(content, game, definition)
@@ -3218,7 +3205,7 @@ def test_custom_action_mechanics_match_the_fixed_tag_regardless_of_text(content,
         game.submit_battle_custom_action("直取波才首級")
     battle = game.world.get_battle()
     cap = game._battle_neili_cap()  # 玩家真實的氣血上限（join 時是這樣算的，不是隨便假設的數字）
-    assert battle.participants["沈浪"].neili == cap - 50  # reckless 的 50 點損耗
+    assert battle.participants["沈浪"].neili == cap and not battle.participants["沈浪"].eliminated
 
 
 def _install_battle_def_with_gamble(content):
@@ -3248,8 +3235,8 @@ def test_submit_battle_custom_action_assesses_success_rate_and_feeds_the_gamble(
     cap = game._battle_neili_cap()
     # success_rate=20、risk=80：成功時只扣固定的 10（傷害很小，賭贏代價低），失敗時扣
     # 20+80*3=260——用的是 game.rng（真的隨機，不是 FixedRandom），究竟成功還是失敗
-    # 不好預測，但傷害一定精確落在這兩個數字其中之一，不會是固定查表的 50，證明真的
-    # 走了賭局公式（不是退回 action_tags 查表那條路）。
+    # 不好預測，但傷害一定精確落在這兩個數字其中之一，不會是別的數字，證明真的
+    # 走了賭局公式（不是固定的數字）。
     damage = cap - battle.participants["沈浪"].neili
     assert damage in (10, 260)
 
@@ -5108,7 +5095,7 @@ def test_the_round_narration_is_kept_with_the_round(content, game):
     after_muster = definition.muster_seconds + 1
     with at(game, after_muster), mock.patch.object(battle_instance, "narrate_round", return_value="一場惡戰。"):
         game._battle_status()
-        game.choose("battle:act:safe")
+        game.choose("battle:act:guan_hold")
     battle = game.world.get_battle()
     assert [r.narration for r in game.world.battle_rounds(battle.record_id)] == ["一場惡戰。"]
 
@@ -6089,7 +6076,7 @@ def test_showdown_result_feeds_timetable(content, world):
     event.outcomes["guan:大勝"].figures = {"bocai": FigureChange(fate="退場")}
     event.outcomes["guan:險勝"].figures = {"bocai": FigureChange(fate="聲威大減")}
     _to_showdown(game, "changshe_fire")
-    _play_showdown(game, "guan_aggressive")  # 55 → 61 → 67 → 73：打滿三回合，官軍大勝
+    _play_showdown(game, "guan_strong")  # 55 → 65 → 75 → 85：黃巾沒人出招，官軍每回合推滿 10，打滿三回合，官軍大勝
     season = world.get_season()
     assert season.timeline["changshe_fire"].key == "guan:大勝"
     assert season.trends["yingru"] == 40 - 15 and season.figures["bocai"].status == "retired"
@@ -6324,7 +6311,7 @@ def test_ending_once_when_battle_running(content, world):
         game.choose("battle:join:guan")
     start = game.world.get_battle().muster_deadline_real + 1
     with at(game, start):
-        game.choose("battle:act:guan_safe")  # 打到一半：還在交戰
+        game.choose("battle:act:guan_hold")  # 打到一半：還在交戰
     assert game.world.get_battle().phase == "active"
     trends = dict(game.world.get_season().trends)
 

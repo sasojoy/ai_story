@@ -5,7 +5,7 @@ from tianxia.bot import pick, play_season, spend_xinde, wants_heal
 from tianxia.engine import Game
 from tianxia.martial_arts import generate_from_name
 from tianxia.models import (
-    BattleAct, BattleActionEffect, BattleDef, BattleFaction, BattleOption, BattleOutcome,
+    BattleAct, BattleDef, BattleFaction, BattleOption, BattleOutcome,
 )
 from tianxia.sqlite_world import open_world
 
@@ -487,8 +487,8 @@ def test_the_bot_joins_a_muster_before_doing_anything_else(content, game):
         id="t1", name="測試決戰",
         factions=[BattleFaction(id="guan", name="官軍"), BattleFaction(id="huang", name="黃巾")],
         acts=[BattleAct(id="a1", title="初探", text="雙方試探。", goal="推動戰局",
-                        options=[BattleOption(text="穩紮穩打", tag="safe")])],
-        action_tags={"safe": BattleActionEffect(trend_delta=1, neili_damage=5)},
+                        options=[BattleOption(text=f"{s}{m}", tag=f"{s}_{c}", faction=s, move=m)
+                                 for s in ("guan", "huang") for m, c in (("強攻", "strong"), ("固守", "hold"), ("奇襲", "raid"))])],
         outcomes=[BattleOutcome(faction="guan", title="官軍大勝", text="官軍獲勝。")],
         muster_seconds=600, round_seconds=120,
     )

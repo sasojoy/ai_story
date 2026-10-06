@@ -1048,9 +1048,8 @@ class BattleFaction(_Strict):
 
 
 class BattleActionEffect(_Strict):
-    """一個行動分類（tag）選了之後的確定性效果——跟全專案一貫的原則一樣（好感度 tag
-    查表、同伴反應強度覆寫），戰局推動跟氣血損耗都是這裡查表決定，LLM 只管潤色敘事，
-    不負責算任何數字。"""
+    """舊的行動分類（tag）查表的一列：決戰改版一之後固定招走三招（Config.battle），結算不再讀它；
+    留著只是讓還帶 action_tags 的舊內容檔照樣讀得進來（內容裡寫 {}）。"""
 
     trend_delta: int = 0  # 推動戰局 trend 的量（正負方向看 BattleDef 怎麼定義雙方）
     neili_damage: float = 0  # 這個行動的基礎氣血損耗
@@ -1059,10 +1058,10 @@ class BattleActionEffect(_Strict):
 
 class BattleOption(_Strict):
     text: str  # free_text=True 時這是提示語（顯示在輸入框旁），不是按鈕文字
-    tag: str  # 對照 BattleDef.action_tags 的 key——即使是 free_text，機制效果還是查這張表，
-    # 不會因為玩家打了什麼字而改變數值（跟全專案一貫原則一樣：不信任 LLM 自己算數字）；
-    # 玩家自己打的字只會被餵給 LLM 當敘事潤色的素材（見 battle_instance.py::resolve_round）。
-    faction: str | None = None  # 限定某一方才能選；None＝雙方都能選
+    tag: str  # 這個選項在這一幕、這一邊的名字：出招、逾時代選、假人打分數都用它找選項（內容檢查要求同一邊同一幕不重複）。
+    # 玩家自己打的字不會改變任何數值（不信任 LLM 自己算數字），只會被餵給 LLM 當敘事潤色的素材
+    # （見 battle_instance.py::resolve_round）；放手一搏的推動與損耗走 FreeTextGamble 的公式。
+    faction: str | None = None  # 限定某一方才能選；None＝雙方都能選（固定的三招一定要寫自己這一邊）
     free_text: bool = False  # True 時這個「選項」不是按鈕，是一個最多 20 字的自訂行動輸入框
     # （設計討論：「魯莽」這類選項本來就該是玩家自己想出的招，不是從固定清單挑一個）
     move: Move | None = None  # 固定招是三招的哪一招（戰鬥系統設計 3.4）；放手一搏（free_text）不填
@@ -1110,14 +1109,13 @@ class FreeTextGamble(_Strict):
 
 class BattleDef(_Strict):
     """全服共用的即時多人戰鬥骨架（例如「黃巾決戰」）：集結選陣營→逐幕逐回合（框架給
-    選項，查表推動戰局/扣氣血；每幕固定幾回合）→打完最後一回合、或戰局一面倒時，看戰局
-    數值判定最終勝負。不是自由發展的 LLM 劇情，
+    選項是每邊每幕強攻／固守／奇襲三招，照 Config.battle 的算法推動戰局/扣氣血；每幕固定幾回合）→打完最後一回合、
+    或戰局一面倒時，看戰局數值判定最終勝負。不是自由發展的 LLM 劇情，
     是固定骨架裡的有限變因（設計討論：「有一個基本框架，玩家可以根據自身影響一些要素，
     但是大框架還是會進行下去」）。
 
     factions 的第一個是戰局 trend 的正向方（trend 越高對他們越有利，越低對第二個陣營
-    越有利）——固定選項靠 action_tags 自己決定方向；free_text 的賭局型行動（見
-    FreeTextGamble）沒有個別的 tag 效果可以決定方向，統一照這個順序推算。"""
+    越有利）——三招的推力與 free_text 的賭局型行動（見 FreeTextGamble）都照這個順序決定方向。"""
 
     id: str
     name: str
@@ -1131,8 +1129,8 @@ class BattleDef(_Strict):
     # 整場 rounds_per_act × 幕數 回合，最後一回合結算完看戰局定結果
     decisive_margin: int = Field(default=40, ge=1)  # 戰局偏離中線 50 到這麼多（|trend − 50| ≥ 這個值，battle_instance.CENTER）
     # 就當回合收場、不再換幕（壓倒性提前收場：40 時是 90／10；看中線、不看這一場的起點，戰鬥系統 5.3）
-    action_tags: dict[str, BattleActionEffect] = Field(default_factory=dict)  # 舊的固定招查表（穩守／猛攻）；三招之後
-    # 固定招看 BattleOption.move，這張表只剩放手一搏找不到成功率時的退路，可以是空的
+    action_tags: dict[str, BattleActionEffect] = Field(default_factory=dict)  # 已退役的舊固定招查表（穩守／猛攻）：
+    # 三招之後固定招看 BattleOption.move 與 Config.battle，結算不再讀這張表；內容寫 {}，留著只是讓舊的內容檔讀得進來
     free_text_gamble: FreeTextGamble | None = None  # 有 free_text 選項時必填
     outcomes: list[BattleOutcome] = Field(min_length=1)  # 時刻表決戰只留一筆保底：實際的結果與效果走時刻表
     muster_seconds: float = 600  # 集結期：開放選陣營的時間，逾時系統自動分配
