@@ -1092,7 +1092,9 @@ class Game:
     def guide_box(self) -> dict | None:
         """行動列上方的對話框（引導重做設計 8.1、6.2）：引導還沒做完是目前這一步的話；剛走完、結語還沒按「知道了」是結語；
         其他（略過、早就做完的舊角色）是 None。done 是上一次行動完成的那幾行（✔ 與獎勵）。框上寫的人是 Tutorial.speaker。
-        還有事件待處理時，這一步的話換成「先把眼前的「事件名」了結」（每一步都一樣，步驟本身不動；結語照舊）。"""
+        還有事件待處理時，這一步的話換成「先把眼前的「事件名」了結」（每一步都一樣，步驟本身不動；結語照舊）。
+        key 認的是「哪一步」（TutorialStep.id，結語是 "outro"），不看那一句話：網頁記玩家收起的那一步記的是它（FB-076）——
+        事件的句子每遇到新事件就換一句，記句子的話收起的框每個新事件都會自己又展開。"""
         s, c, p = self.state, self.content, self.state.player
         t = c.tutorial
         todo = tutorial_steps(s, c)
@@ -1102,9 +1104,11 @@ class Game:
             return None
         if p.tutorial_step < len(todo):
             # 眼前有事件還沒了結時是 guide.pending_line，不推這一步；了結後原樣回來（FB-063；「下一步」也用同一句）
-            return {"speaker": t.speaker, "text": step_text(s, c), "done": list(p.guide_done), "end": False}
+            return {
+                "speaker": t.speaker, "key": todo[p.tutorial_step].id, "text": step_text(s, c), "done": list(p.guide_done), "end": False,
+            }
         if p.guide_outro and t.outro:
-            return {"speaker": t.speaker, "text": t.outro, "done": list(p.guide_done), "end": True}
+            return {"speaker": t.speaker, "key": "outro", "text": t.outro, "done": list(p.guide_done), "end": True}
         return None
 
     def guide_ack(self) -> list[str]:
@@ -3410,8 +3414,11 @@ class Game:
 
     def battle_card(self) -> str | None:
         record = battlelog.find(self.state, self.state.battle_card)
-        # 升級那一行的「可配 N 點」照現在的點數寫（配了就少），跟狀態列同一個數（FB-074）
-        return battlelog.card_text(record, self.stamp, points=self.state.player.stat_points) if record else None
+        # 升級那一行的「可配 N 點」照現在的點數寫（配了就少），跟狀態列同一個數（FB-074）；
+        # 打完接著有事件待處理時不畫那一行（事件的選項要留在第一屏，FB-076）
+        return battlelog.card_text(
+            record, self.stamp, points=self.state.player.stat_points, event_waiting=self.state.pending_event is not None,
+        ) if record else None
 
     def battle_card_id(self) -> int | None:
         record = battlelog.find(self.state, self.state.battle_card)
@@ -4162,13 +4169,17 @@ class Game:
         s, i = self.state, self._now_start()
         return self.battle_card_id() is not None and len(s.journal) > i and s.journal[i].battle_id == s.battle_card
 
-    def battle_extra_html(self) -> str:
-        """「剛剛」那張戰鬥卡片底下的補充：那一場那一則裡卡片沒寫到的（越過最新的配點，跟 shows_battle_card 看同一則）。"""
+    def battle_extra_html(self, for_card: bool = False) -> str:
+        """「剛剛」那張戰鬥卡片底下的補充：那一場那一則裡卡片沒寫到的（越過最新的配點，跟 shows_battle_card 看同一則）。
+        for_card（江湖頁的「剛剛」用）：打完接著有事件待處理時，「你聽到一件事」那一行讓出來——事件的最後一個選項要留在第一屏
+        （FB-076）；江湖紀錄頁最上面（journal_top_html）不給，照舊列出，那一行也還在紀錄那一則裡。"""
         if not self.shows_battle_card():
             return ""
         record = battlelog.find(self.state, self.state.battle_card)
         entry = self.state.journal[self._now_start()]
         lines, changes = journal.card_leftovers(entry, battlelog.told_lines(record), battlelog.gains_list(record))
+        if for_card and self.state.pending_event is not None:
+            lines = journal.without_fragments(lines)
         return journal.extra_html(lines, changes, self._chip, str(entry.time))
 
     def _log(self, msgs: list[str]) -> list[str]:

@@ -777,10 +777,14 @@
   const GUIDE_KEY = "tx-guide-shut";
   function guideShut() { try { return localStorage.getItem(GUIDE_KEY); } catch (e) { return null; } }
   function setGuideShut(text) { try { if (text) localStorage.setItem(GUIDE_KEY, text); else localStorage.removeItem(GUIDE_KEY); } catch (e) { /* 存不了就只在這一頁有效 */ } }
+  // 收起記的是「哪一步」（伺服器給的 key：步驟的 id），不是那一句話（FB-076）：眼前有事件時框上的話換成「先把眼前的「…」了結」，
+  // 每遇到新事件就換一句；記句子的話，收起的框每個新事件都會自己又展開，事件的最後一個選項就被擠出第一屏。
+  // 換到下一步（新的 key）才照舊展開。舊版伺服器沒有 key 時退回認句子
+  function guideKey(g) { return g && (g.key || g.text); }
   function guideHtml(g, onRoad) {
     if (!onRoad) S.guideRoad = null; // 沒有框的時候也要清（FB-055）
     if (!g) return "";
-    if (!g.end && (guideShut() === g.text || (onRoad && S.guideRoad !== g.text))) {
+    if (!g.end && (guideShut() === guideKey(g) || (onRoad && S.guideRoad !== g.text))) {
       return `<button class="guide-line" data-act="guide-open" aria-label="展開${esc(g.speaker)}的話"><b>${esc(g.speaker)}</b>：${esc(g.text)}</button>`;
     }
     const done = g.done.length ? `<div class="guide-done">${g.done.map((d) => d.startsWith("✔")
@@ -1740,7 +1744,7 @@
           if (S.main.admin) { S.admin = await api("/api/admin"); render(); } // 每次打開都重抓：時刻表與可以定的結果會變
           break;
         case "sheet-close": S.sheet = false; render(); break;
-        case "guide-shut": setGuideShut(S.main.guide && S.main.guide.text); S.guideRoad = null; renderPage(); break;
+        case "guide-shut": setGuideShut(guideKey(S.main.guide)); S.guideRoad = null; renderPage(); break;
         case "guide-open": setGuideShut(null); S.guideRoad = S.main.guide && S.main.guide.text; renderPage(); break;
         case "guide-more": S.guideFull = S.guideFull === (S.main.guide && S.main.guide.text) ? null : S.main.guide && S.main.guide.text; renderPage(); break;
         case "scene-more": S.sceneOpen = !S.sceneOpen; renderPage(); break;

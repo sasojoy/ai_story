@@ -734,7 +734,7 @@ def _main_view_body(game: Game) -> dict:
         "older": game.journal_html(1 + RECENT_ROWS, OLDER_ROWS),
         # 江湖頁的「剛剛」：跟 latest 一樣，只是最新的幾則若只是本週大事（江湖頁那排小標「大事」點開的面板；休季是結算卡）上已經有全文的大事，
         # 改放再前面那一則，同一段公告不寫兩次（FB-046）；最新的配點也越過，卡片與補充看的都是那一場那一則
-        "now": game.battle_extra_html() if card is not None else game.now_entry_html(),
+        "now": game.battle_extra_html(for_card=True) if card is not None else game.now_entry_html(),
         "minimap": game.minimap_svg(),
         "bulletin": [md(text) for text in game.bulletin()],  # 江湖頁那排小標「大事」點開的本週大事（新的在前）；開關關著是空的
         "trends": md(game.trends_text()),

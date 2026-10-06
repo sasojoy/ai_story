@@ -4101,9 +4101,45 @@ def test_main_view_sends_the_guide_box_and_skipping_hides_it(client):
     """全新角色的 /api/main 帶著對話框：說書人與第一步的話（不用點開任何東西）；略過新手引導後就沒有了。"""
     main = _player(client)["main"]
     tutorial = server.CONTENT.tutorial
-    assert main["guide"] == {"speaker": tutorial.speaker, "text": tutorial.steps[0].text, "done": [], "end": False}
+    assert main["guide"] == {
+        "speaker": tutorial.speaker, "key": tutorial.steps[0].id, "text": tutorial.steps[0].text, "done": [], "end": False,
+    }  # key 是這一步的 id：網頁記收起記它（FB-076）
     client.post("/api/do/skip_tutorial", json={})
     assert client.get("/api/main").json()["guide"] is None
+
+
+def test_a_fight_then_an_event_sends_a_short_now_card_and_a_stable_guide_key(client, monkeypatch):
+    """FB-076（正式內容）：遊歷打贏、升級、聽到一件事，接著冒出事件。事件的選項在畫面上時，/api/main 的「剛剛」卡片（card）
+    沒有升級那一行、卡片底下（now）沒有「你聽到一件事」那一行，江湖紀錄頁最上面（latest）與紀錄那一則（journal）照舊有；
+    說書人的框換成「先把眼前的「…」了結」，key 還是這一步的 id。事件了結（沒有待處理的事件）之後兩行都照舊畫。"""
+    from conftest import FixedRandom
+    from tianxia import journal
+
+    monkeypatch.setattr(server.CONTENT.config, "train_event_chance", 1.0)  # 打完一定接戰後的事件
+    _player(client)
+    game = server.game_for("沈青衫")
+    server.act(game, lambda g: setattr(g.state.player, "location", "yingchuan_wilds"))
+    first_step = server.CONTENT.tutorial.steps[0]
+    assert client.get("/api/main").json()["guide"]["key"] == first_step.id
+    game.rng = FixedRandom(0.99)
+    assert client.post("/api/choose", json={"id": "act:train"}).status_code == 200
+    heard = journal.fragment_line("聽說皇甫嵩說過：「兵有奇變，不在眾寡。」")
+    server.act(game, lambda g: g.state.journal[0].lines.append(heard))  # 打完仗順便聽到一件事
+    stored = open_characters().load("沈青衫")
+    assert stored.pending_event is not None and stored.battles[0].levelups.you == 2  # 升了級，事件選項在畫面上
+    main = client.get("/api/main").json()
+    assert [o["id"] for o in main["options"]][0] == "choice:0"
+    assert main["card"] and "升到第" not in main["card"] and "可配" not in main["card"]
+    assert "你聽到一件事" not in main["now"] and "tx-hearsay" not in main["now"]
+    assert "你聽到一件事" in main["latest"]  # 江湖紀錄頁最上面照舊
+    assert main["guide"]["key"] == first_step.id and main["guide"]["text"].startswith("先把眼前的「")
+    assert "升到第 2 級！" in "\n".join(stored.journal[0].lines)  # 紀錄那一則裡升級的句子還在
+    assert heard in stored.journal[0].lines
+    report = client.get(f"/api/reports?id={main['card_id']}").json()["detail"]
+    assert "升到第 2 級！" in report and "你有 1 點屬性可以分配" in report  # 戰報頁：完整的句子照舊
+    server.act(game, lambda g: setattr(g.state, "pending_event", None))  # 沒有事件待處理：兩行都照舊
+    main = client.get("/api/main").json()
+    assert "升到第 2 級" in main["card"] and "你聽到一件事" in main["now"]
 
 
 def test_guide_ack_closes_the_outro(client):
