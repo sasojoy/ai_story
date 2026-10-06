@@ -967,6 +967,50 @@
   // 沒有的（合成的、內容直接給的）才說「熔掉就沒了」
   const meltAskText = (name, relearn) => `把【${name}】熔成心得？${relearn || "熔掉就沒了。"}`;
 
+  // 熔煉與意境化成心得都先問一次，用頁面自己的確認層（ask，管理者工具用的那一個；FB-085）：以前是瀏覽器內建的確認框，
+  // 跟其他按鈕不一樣、手機上還會被擋掉。按「熔掉」才送，取消或點旁邊暗處什麼都不送
+  function askMelt(el) {
+    ask(meltAskText(el.dataset.name, el.dataset.relearn), "熔掉", () => mx("melt", { art: el.dataset.id }));
+  }
+  function askMeltInsight(el) {
+    ask(`把「${el.dataset.name}」化成心得？靠它的武學從此不能修練。`, "化成心得", () => mx("melt_insight", { insight: el.dataset.id }));
+  }
+
+  // 功法清單的篩選（FB-085）：全部／內功／武學／意境，修練頁與煉製頁各記一個選擇，記在這個瀏覽器的 localStorage
+  // （存不了就只在這一頁有效，讀不到就當沒選過）。排序是伺服器排好的（skillview.art_rows：身上的先，再品質、成、名字），
+  // 兩頁畫的是同一份，這裡只決定哪些要畫
+  const ART_FILTERS = ["全部", "內功", "武學", "意境"];
+  const filterKey = (page) => `tx-arts-filter-${page}`;
+  function artFilter(page) {
+    S.artFilter = S.artFilter || {};
+    if (!(page in S.artFilter)) {
+      let saved = null;
+      try { saved = localStorage.getItem(filterKey(page)); } catch (e) { /* 讀不到就當沒選過 */ }
+      S.artFilter[page] = ART_FILTERS.includes(saved) ? saved : "全部";
+    }
+    return S.artFilter[page];
+  }
+  function setArtFilter(page, value) {
+    if (!ART_FILTERS.includes(value)) return;
+    S.artFilter = S.artFilter || {};
+    S.artFilter[page] = value;
+    try { localStorage.setItem(filterKey(page), value); } catch (e) { /* 存不了就只在這一頁有效 */ }
+  }
+  // 這一頁現在的篩選下，這一門武學要不要畫（選「意境」時武學一門都不畫）、意境要不要畫
+  function showArts(page, art) {
+    const f = artFilter(page);
+    return f === "全部" || f === art.kind;
+  }
+  function showInsights(page) {
+    const f = artFilter(page);
+    return f === "全部" || f === "意境";
+  }
+  // 四顆小鈕排一行；煉製頁併在「功法」那一行標籤裡（第一屏不多一行），修練頁放在清單標籤底下
+  function filterChips(page) {
+    const now = artFilter(page);
+    return `<span class="fchips" role="group" aria-label="篩選">${ART_FILTERS.map((f) => `<button type="button" class="fchip${f === now ? " on" : ""}" data-act="art-filter" data-page="${page}" data-filter="${f}" aria-pressed="${f === now}">${f}</button>`).join("")}</span>`;
+  }
+
   // ── 修練 ──
   function pagePractice() {
     const x = S.menxia;
@@ -1008,6 +1052,11 @@
     const insightRow = (i) => `
         <div class="insight"><div><b>「${esc(i.name)}」</b><small>屬${esc(i.attribute)}${i.lean !== "無" ? `・${esc(i.lean)}` : ""}</small>${i.note ? `<p>${esc(i.note)}</p>` : ""}</div>
           <button class="btn small" data-act="melt-insight" data-id="${esc(i.id)}" data-name="${esc(i.name)}">化成心得 ${i.melt}</button></div>`;
+    // 功法庫的清單（伺服器排好的順序）：照篩選畫；選「意境」時武學不畫，其他篩選下一門都沒有才說沒有
+    const shownArts = x.owned_arts.filter((a) => showArts("practice", a));
+    const artsList = artFilter("practice") === "意境" ? ""
+      : shownArts.length ? `<div class="list">${shownArts.map(artRow).join("")}</div>`
+        : `<p class="muted">${x.owned_arts.length ? "沒有符合的功法。" : "你身上還沒有任何武學。"}</p>`;
     return `
       ${proGuide()}
       <div class="msg" id="mx-msg">${S.message}</div>
@@ -1031,10 +1080,11 @@
         </div>
       </form>
       <div class="label">武學 <small class="muted">武學與意境 ${x.holdings.count}/${x.holdings.cap}</small></div>
-      ${x.owned_arts.length ? `<div class="list">${x.owned_arts.map(artRow).join("")}</div>` : '<p class="muted">你身上還沒有任何武學。</p>'}
-      <div class="label">意境</div>
+      <div class="filter-row">${filterChips("practice")}</div>
+      ${artsList}
+      ${showInsights("practice") ? `<div class="label">意境</div>
       ${x.insights.length ? `<div class="insights">${x.insights.map(insightRow).join("")}</div>`
-        : '<p class="muted">還沒悟到任何意境。去探索，荒郊野外最容易有所領悟。</p>'}
+        : '<p class="muted">還沒悟到任何意境。去探索，荒郊野外最容易有所領悟。</p>'}` : ""}
       <div class="label">門下</div>
       <details class="fold" open><summary>本人</summary><div class="fold-body">${x.player_card}</div></details>
       ${mates ? `<div class="list">${x.roster.map((r) => `<button class="${x.person === r.key ? "on" : ""}" data-act="person" data-key="${esc(r.key)}">${esc(r.label)}</button>`).join("")}</div>` : ""}
@@ -1084,6 +1134,7 @@
       return i && { name: i.name, sub: `意境・${i.attribute}`, rank: 2 };
     };
     const inPot = (id) => S.forgeSel.some((p) => p.type === "art" && p.id === id);
+    const shownArts = x.owned_arts.filter((a) => showArts("craft", a)); // 順序是伺服器排好的，跟修練頁一樣
     const ready = forgeReady();
     // 「開爐」緊接在說明那一行下面、不黏在底部（FB-048）：黏著時會蓋住底下的清單、開爐後那一行字與「背包」
     return `
@@ -1092,15 +1143,15 @@
       ${furnaceSvg([slotOf(S.forgeSel[0]), slotOf(S.forgeSel[1])], ready)}
       <div class="card" id="forge-line">${S.forgeLine || x.forge_line}</div>
       <div class="act-row"><button class="btn primary" id="forge" data-act="forge" data-glow="forge" ${ready ? "" : "disabled"}>開爐</button></div>
-      <div class="label">武學 <small class="muted">一門配一個意境，或兩門一起放</small></div>
-      <div class="chips">${x.owned_arts.map((a) => `
+      <div class="label">功法${filterChips("craft")}</div>
+      ${artFilter("craft") === "意境" ? "" : `<div class="chips">${shownArts.map((a) => `
         <button class="chip r${QUALITY_RANK[a.quality] || 1} ${inPot(a.id) ? "used" : ""}" data-act="pick" data-type="art" data-id="${esc(a.id)}" ${inPot(a.id) ? "disabled" : ""}>
-          <b>${esc(a.name)}</b><small>${esc(a.quality)}・屬${esc(a.attribute)}</small></button>`).join("")}</div>
-      <div class="label">意境 <small class="muted">同一個也能放兩次</small></div>
+          <b>${esc(a.name)}</b><small>${esc(a.quality)}・屬${esc(a.attribute)}</small></button>`).join("")}</div>`}
+      ${showInsights("craft") ? `<div class="label">意境 <small class="muted">同一個也能放兩次</small></div>
       ${x.insights.length ? `<div class="chips">${x.insights.map((i) => `
         <button class="chip r2" data-act="pick" data-type="ins" data-id="${esc(i.id)}">
           <b>${esc(i.name)}</b><small>屬${esc(i.attribute)}${i.lean !== "無" ? `・${esc(i.lean)}` : ""}</small></button>`).join("")}</div>`
-        : '<p class="muted">還沒悟到任何意境。去探索，荒郊野外最容易有所領悟。</p>'}
+        : '<p class="muted">還沒悟到任何意境。去探索，荒郊野外最容易有所領悟。</p>'}` : ""}
       ${x.clue_items?.length ? `<div class="label">伏筆物品</div>
       <div class="chips clues">${x.clue_items.map((i) => `<div class="clue"><b>${esc(i.name)}</b><span>×${i.count}</span></div>`).join("")}</div>` : ""}
       <details class="fold"><summary>背包</summary><div class="fold-body">${x.bag}</div></details>`;
@@ -1924,12 +1975,9 @@
           if (ticked && S.menxia === was) S.legendTick[id] = true;
           break;
         }
-        case "melt":
-          if (confirm(meltAskText(el.dataset.name, el.dataset.relearn))) await mx("melt", { art: el.dataset.id });
-          break;
-        case "melt-insight":
-          if (confirm(`把「${el.dataset.name}」化成心得？靠它的武學從此不能修練。`)) await mx("melt_insight", { insight: el.dataset.id });
-          break;
+        case "melt": askMelt(el); break;
+        case "melt-insight": askMeltInsight(el); break;
+        case "art-filter": setArtFilter(el.dataset.page, el.dataset.filter); renderPage(); break;
         case "pick": pick(el.dataset.type, el.dataset.id); break;
         case "unslot": if (S.busy) break; S.forgeSel.splice(Number(el.dataset.i), 1); renderPage(); updateForgeLine(); break;
         case "forge": await forge(); break;

@@ -481,6 +481,13 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .chip.r2 { border-color: color-mix(in srgb, var(--gold) 60%, var(--line)); }
 .chip.r3 { border-color: var(--gold); background: color-mix(in srgb, var(--gold) 10%, var(--card)); }
 .chip.used { opacity: 0.4; }
+/* 功法清單的篩選（FB-085）：全部／內功／武學／意境四顆小鈕排一行。煉製頁併在「功法」那行標籤裡（第一屏不多一行），
+   修練頁放在清單標籤底下（.filter-row）。畫出來的鈕只有一行字高，觸控範圍用 ::after 撐到約 40px */
+.fchips { display: inline-flex; gap: 4px; flex: none; }
+.fchip { position: relative; border: 1px solid var(--line); background: var(--card); color: var(--ink-2); border-radius: 999px; padding: 0 9px; font-size: 12px; line-height: 1.6; letter-spacing: 0; white-space: nowrap; cursor: pointer; }
+.fchip::after { content: ""; position: absolute; inset: -9px -2px; }
+.fchip.on { background: var(--accent-soft); border-color: var(--accent); color: var(--ink); font-weight: 600; }
+.filter-row { margin: 0 2px 8px; }
 .chip .n { float: right; font-size: 12px; color: var(--ink-2); }
 /* 煉製頁武學與意境旁的「伏筆物品」：只列名字與數量，不能點，比武學的格子矮、排得密，手機上不把開爐擠出第一屏 */
 .chips.clues { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 6px; }

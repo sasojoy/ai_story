@@ -274,7 +274,60 @@ def test_the_menxia_view_carries_the_heal_button(real):
     assert game.state.player.member.injury == 20.0 and game.state.player.stats["silver"] == 4
 
 
-PRACTICE_STUBS = 'const guideHtml = () => "", proGuide = () => "", attrNoteHtml = () => "";'
+# ── FB-085：功法庫多了要找得到——排序、篩選、不用瀏覽器的 confirm() ───────────
+
+
+def _library(world, state, specs):
+    """specs：[(id, 品質, 第幾成, 種類)]；全服登記的合成武學（名字就是 id），玩家自己那份的品質與成另外記。"""
+    ids = []
+    for art_id, quality, level, kind in specs:
+        art = generate_from_name(art_id, kind, art_id, weights={"下品": 100.0, "中品": 0.0, "上品": 0.0, "絕學": 0.0}).model_copy(
+            update={"origin": "fused"},
+        )
+        assert world.claim_skill_name(art)
+        state.player.art_quality[art.id] = quality
+        state.player.art_levels[art.id] = level
+        ids.append(art.id)
+    state.player.arts = ids
+
+
+def test_the_library_is_sorted_worn_first_then_quality_then_level_then_name(content, world, state):
+    state.player.member.neigong_id, state.player.member.neigong_level = "basic_breath", 3
+    state.player.member.wugong_id, state.player.member.wugong_level = "basic_fist", 3
+    _library(world, state, [
+        ("丙丙拳", "下品", 9, "武學"), ("乙乙拳", "上品", 2, "武學"), ("甲甲拳", "中品", 5, "武學"), ("丁丁功", "絕學", 1, "內功"),
+        ("戊戊拳", "中品", 7, "武學"), ("己己拳", "中品", 7, "武學"), ("庚庚拳", "下品", 9, "武學"),
+    ])
+    rows = skillview.art_rows(state, content, world)
+    assert [r["worn"] for r in rows] == [True, True] + [False] * 7  # 身上的先
+    rest = [(r["name"], r["quality"], r["level"]) for r in rows if not r["worn"]]  # 品質是玩家自己那一份（art_quality）
+    assert rest == [
+        ("丁丁功", "絕學", 1), ("乙乙拳", "上品", 2),  # 絕學 > 上品
+        ("己己拳", "中品", 7), ("戊戊拳", "中品", 7), ("甲甲拳", "中品", 5),  # 同品質：成多的先，再比名字（照字碼：己 U+5DF1 < 戊 U+620A）
+        ("丙丙拳", "下品", 9), ("庚庚拳", "下品", 9),
+    ]
+
+
+def test_the_worn_arts_follow_the_same_order_among_themselves(content, world, state):
+    state.player.member.neigong_id, state.player.member.neigong_level = "basic_breath", 2
+    state.player.member.wugong_id, state.player.member.wugong_level = "basic_fist", 5
+    state.player.art_quality["basic_breath"] = "中品"
+    rows = skillview.art_rows(state, content, world)
+    assert [r["id"] for r in rows] == ["basic_breath", "basic_fist"]  # 中品的內功排在下品的武學前面
+
+
+def test_the_same_order_reaches_the_page_data(real):
+    import server
+
+    game = _real_game(real)
+    game.state.player.arts = ["lishi_chui", "zhuifeng", "taiping_gun"]
+    game.state.player.art_levels.update({"lishi_chui": 2, "zhuifeng": 6, "taiping_gun": 4})
+    page = [r["id"] for r in server.menxia_view(game)["owned_arts"]]
+    assert page == [r["id"] for r in skillview.art_rows(game.state, game.content, game.world)]  # 兩頁畫的是同一份順序
+    assert page[:2] == ["jichu_tuna", "jichu_quanjiao"] and len(page) == 5  # 身上兩門同品質同成，照名字（吐 < 拳）
+
+
+PRACTICE_STUBS = 'const guideHtml = () => "", proGuide = () => "";'  # attrNoteHtml 不在這裡：有的話（arts-polish-1 之後）driver 自己會抓真的
 
 
 def _menxia(**over):
@@ -285,6 +338,164 @@ def _menxia(**over):
         "heal": {"label": "療傷（銀兩 18）", "ok": True, "why": None},
     }
     return {**base, **over}
+
+
+def _art(art_id, kind, name, quality="下品", level=1, worn=False):
+    return {
+        "id": art_id, "kind": kind, "name": name, "quality": quality, "attribute": "快", "level": level, "worn": worn, "insight": None,
+        "card": f"<p>{name}卡</p>", "cultivate": {"ok": False, "note": "沒有融過意境", "legend": None},
+        "melt": {"ok": not worn, "note": "退回心得 3"}, "relearn": None,
+    }
+
+
+def _insight(insight_id, name):
+    return {"id": insight_id, "name": name, "attribute": "快", "lean": "無", "note": "", "melt": 10}
+
+
+LIBRARY = [
+    _art("w1", "武學", "甲拳", "絕學", 4, worn=True), _art("n1", "內功", "乙功", "上品", 3, worn=True),
+    _art("w2", "武學", "丙腿", "中品", 2), _art("n2", "內功", "丁訣", "下品", 5), _art("w3", "武學", "戊掌", "下品", 1),
+]
+INSIGHTS = [_insight("feng", "風"), _insight("huo", "火")]
+FILTER_FNS = ["pagePractice", "pageCraft", "forgeBody", "forgeReady", "healButton", "artFilter", "setArtFilter", "filterChips", "showArts", "showInsights"]
+FILTER_CONSTS = ["ART_FILTERS", "filterKey"]
+CRAFT_STUBS = PRACTICE_STUBS + 'const furnaceSvg = () => "<svg></svg>", toast = () => {};'
+
+
+def _page(which, filter_for=None, **S):
+    """which：pagePractice 或 pageCraft；filter_for：先把這一頁的篩選設成它。回傳（html, 看得到的功法名, 看得到的意境名）。"""
+    script = (
+        (f"H.setArtFilter({json.dumps(which)}, {json.dumps(filter_for)});" if filter_for else "")
+        + f"const html = H.{'pagePractice' if which == 'practice' else 'pageCraft'}(); return html;"
+    )
+    return run(
+        script, S={"menxia": _menxia(owned_arts=LIBRARY, insights=INSIGHTS), "main": {"status": {"injury": 0}}, **S},
+        fns=FILTER_FNS, consts=FILTER_CONSTS, stubs=CRAFT_STUBS,
+    )
+
+
+def _shown_names(html, which):
+    if which == "practice":
+        arts = re.findall(r'<button class="art [^"]*" data-act="art"[^>]*>(?:◆ )?(?:武學|內功)　(\S+?)（', html)
+        insights = re.findall(r'<div class="insight"><div><b>「(.+?)」</b>', html)
+    else:
+        arts = re.findall(r'data-act="pick" data-type="art" data-id="[^"]*"[^>]*>\s*<b>(.+?)</b>', html)
+        insights = re.findall(r'data-act="pick" data-type="ins" data-id="[^"]*"[^>]*>\s*<b>(.+?)</b>', html)
+    return arts, insights
+
+
+@needs_node
+@pytest.mark.parametrize("which", ["practice", "craft"])
+def test_each_filter_shows_only_its_kind_on_both_pages(which):
+    everything = (["甲拳", "乙功", "丙腿", "丁訣", "戊掌"], ["風", "火"])
+    assert _shown_names(_page(which), which) == everything  # 預設全部：照伺服器排好的順序，一個不少
+    assert _shown_names(_page(which, "內功"), which) == (["乙功", "丁訣"], [])
+    assert _shown_names(_page(which, "武學"), which) == (["甲拳", "丙腿", "戊掌"], [])
+    assert _shown_names(_page(which, "意境"), which) == ([], ["風", "火"])
+
+
+@needs_node
+@pytest.mark.parametrize("which", ["practice", "craft"])
+def test_the_four_chips_sit_in_one_row_and_mark_the_current_one(which):
+    html = _page(which, "武學")
+    group = re.search(r'<span class="fchips"[^>]*>(.*?)</span>', html, re.S).group(1)
+    chips = re.findall(r'<button[^>]*data-filter="([^"]+)"[^>]*aria-pressed="(true|false)"', group)
+    assert chips == [("全部", "false"), ("內功", "false"), ("武學", "true"), ("意境", "false")]
+    assert html.count('class="fchips"') == 1 and f'data-page="{which}"' in group
+
+
+@needs_node
+def test_the_craft_page_filter_sits_in_the_label_row_so_the_first_screen_does_not_grow():
+    """煉製頁的第一屏：篩選鈕併進「功法」那一行標籤（跟以前的「武學」標籤同一行），不另外多一行。"""
+    html = _page("craft")
+    label = re.search(r'<div class="label[^"]*">(.*?)</div>', html[html.index('id="forge"'):], re.S).group(0)
+    assert "fchips" in label and "data-filter" in label
+
+
+@needs_node
+def test_a_filter_with_nothing_in_it_says_so_instead_of_leaving_a_hole():
+    out = run(
+        "H.setArtFilter('practice', '內功'); return H.pagePractice();",
+        S={"menxia": _menxia(owned_arts=[_art("w1", "武學", "甲拳", "下品", 1, worn=True)]), "main": {"status": {"injury": 0}}},
+        fns=FILTER_FNS, consts=FILTER_CONSTS, stubs=CRAFT_STUBS,
+    )
+    assert "沒有符合的功法" in out
+
+
+@needs_node
+def test_the_choice_is_remembered_per_page_in_local_storage():
+    out = run(
+        "H.setArtFilter('practice', '內功'); H.setArtFilter('craft', '意境');"
+        "delete H.S.artFilter;"  # 重新整理：記憶體裡的沒了，從 localStorage 讀回來
+        "return [H.artFilter('practice'), H.artFilter('craft'), H.store];",
+        fns=FILTER_FNS, consts=FILTER_CONSTS, stubs=CRAFT_STUBS,
+    )
+    assert out[:2] == ["內功", "意境"] and out[2] == {"tx-arts-filter-practice": "內功", "tx-arts-filter-craft": "意境"}
+
+
+@needs_node
+def test_a_broken_or_foreign_stored_value_falls_back_to_all():
+    out = run(
+        "H.store['tx-arts-filter-practice'] = '亂寫的'; return [H.artFilter('practice'), H.artFilter('craft')];",
+        fns=FILTER_FNS, consts=FILTER_CONSTS, stubs=CRAFT_STUBS,
+    )
+    assert out == ["全部", "全部"]
+
+
+@needs_node
+def test_a_browser_without_storage_still_filters_for_this_page_view():
+    """localStorage 取不到（私密視窗、封鎖網站資料）會丟例外：讀不到當沒選過、存不了就只在這一頁有效，畫面照樣畫。"""
+    out = run(
+        "globalThis.localStorage = { getItem() { throw new Error('blocked'); }, setItem() { throw new Error('blocked'); } };"
+        "const first = H.artFilter('practice'); H.setArtFilter('practice', '武學'); return [first, H.artFilter('practice')];",
+        fns=FILTER_FNS, consts=FILTER_CONSTS, stubs=CRAFT_STUBS,
+    )
+    assert out == ["全部", "武學"]
+
+
+@needs_node
+def test_a_filter_name_the_page_does_not_know_is_ignored():
+    out = run("H.setArtFilter('practice', '亂寫'); return H.artFilter('practice');", fns=FILTER_FNS, consts=FILTER_CONSTS, stubs=CRAFT_STUBS)
+    assert out == "全部"
+
+
+MELT_STUBS = (
+    "const ask = (text, yes, go) => calls.push({ ask: text, yes, go });"
+    "const mx = async (op, body) => { calls.push({ mx: op, body }); };"
+)
+
+
+@needs_node
+def test_melting_asks_with_the_pages_own_layer_and_only_then_melts():
+    out = run(
+        "const el = { dataset: { id: 'a1', name: '基礎拳腳', relearn: '熔了還能免費重學：到任何城鎮，在江湖頁「此地還能做」找「學基礎拳腳」。' } };"
+        "H.askMelt(el); const asked = H.calls.map((c) => ({ ask: c.ask, yes: c.yes })); const before = H.calls.filter((c) => c.mx).length;"
+        "await H.calls[0].go(); return { asked, before, after: H.calls.filter((c) => c.mx) };",
+        fns=["askMelt", "askMeltInsight"], consts=["meltAskText"], stubs=MELT_STUBS,
+    )
+    assert out["asked"] == [{"ask": "把【基礎拳腳】熔成心得？熔了還能免費重學：到任何城鎮，在江湖頁「此地還能做」找「學基礎拳腳」。", "yes": "熔掉"}]
+    assert out["before"] == 0 and out["after"] == [{"mx": "melt", "body": {"art": "a1"}}]  # 按「熔掉」之前什麼都沒送
+
+
+@needs_node
+def test_melting_an_insight_asks_the_same_way():
+    out = run(
+        "H.askMeltInsight({ dataset: { id: 'feng', name: '風' } }); await H.calls[0].go(); return H.calls;",
+        fns=["askMelt", "askMeltInsight"], consts=["meltAskText"], stubs=MELT_STUBS,
+    )
+    assert out[0]["ask"] == "把「風」化成心得？靠它的武學從此不能修練。" and out[0]["yes"] == "化成心得"
+    assert out[1] == {"mx": "melt_insight", "body": {"insight": "feng"}}
+
+
+def test_the_page_no_longer_uses_the_browsers_confirm_box():
+    src = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
+    assert not re.search(r"\bconfirm\(", src) and "window.confirm" not in src
+
+
+def test_the_melt_buttons_go_through_the_pages_own_layer():
+    src = (ROOT / "web" / "app.js").read_text(encoding="utf-8").replace("\r\n", "\n")
+    assert 'case "melt": askMelt(el); break;' in src and 'case "melt-insight": askMeltInsight(el); break;' in src
+    assert 'case "art-filter":' in src
 
 
 @needs_node
@@ -304,7 +515,7 @@ def test_the_heal_button_draws_what_the_server_says_in_one_short_line():
 def test_the_practice_page_puts_the_heal_price_on_the_button_next_to_the_practice_button():
     html = run(
         "return H.pagePractice();", S={"menxia": _menxia(), "main": {"status": {"injury": 35}}},
-        fns=["pagePractice", "healButton"], stubs=PRACTICE_STUBS,
+        fns=FILTER_FNS, consts=FILTER_CONSTS, stubs=PRACTICE_STUBS,
     )
     row = re.search(r'<div class="row practice-actions">(.*?)</div>', html, re.S).group(1)
     assert row.count("<button") == 2 and "療傷（銀兩 18）" in row and "練成武學（心得 1）" in row

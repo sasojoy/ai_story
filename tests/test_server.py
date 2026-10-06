@@ -1022,7 +1022,9 @@ def test_the_furnace_page_takes_two_arts_and_sends_the_second_one_as_other_art()
     assert "insights.length === 1" in ready and "insights.length === 2" in ready  # 武學＋意境、意境＋意境照舊
     pick = _js_function(js, "function pick(")
     assert "已經放滿了" in pick and "p.id === id" in pick  # 放滿了不再收；同一門不放兩次
-    assert "一爐只能放一門武學" not in js and "一門配一個意境，或兩門一起放" in js
+    # 「一門配一個意境，或兩門一起放」那句小字讓位給篩選鈕（FB-085：煉製頁第一屏不能多一行）；兩門一起放的說法在爐子下面那一行（forge_line）
+    assert "一爐只能放一門武學" not in js and "一門配一個意境，或兩門一起放" not in js
+    assert "放兩門武學，合出一門新的" in Game.new(server.CONTENT, "測試").forge_line(None, [])
     assert "/api/forge_line" in js and "/api/menxia/forge" in js and js.count("forgeBody()") >= 2  # 預覽與開爐送同一份 body
     assert "合併要花體力、體力隨時間回" not in js and "合成與合併都要花體力" in js  # 三種合成都花體力（設計 12.1）
     assert "放一門武學和一個意境，或兩門武學，或兩個意境。" in js  # 點爐身放不滿時的提示也說兩門武學

@@ -7,7 +7,7 @@ from __future__ import annotations
 from . import atlas, cultivation, fusion, insights, materials, prologue, team, traits
 # 不 import 整個 library 模組：這個檔案自己有一個叫 library() 的函式
 from .library import TOWN_TAG, cap_of, held_count, level_of, melt_problem, melt_value, owned_arts
-from .martial_arts import MAX_LEVEL, MartialArt, next_quality, power_at, shown_creator
+from .martial_arts import MAX_LEVEL, QUALITIES, MartialArt, next_quality, power_at, shown_creator
 from .models import Content
 from .state import PLAYER, GameState
 from .world_state import WorldStateStore
@@ -221,6 +221,9 @@ def art_rows(state: GameState, content: Content, world: WorldStateStore) -> list
             # 熔了怎麼拿回來（FB-081）：身上正在練的不能熔，不寫；合成的、內容直接給的絕學沒有重學的地方，也是 None
             "relearn": None if art_id in (member.neigong_id, member.wugong_id) else relearn_note(state, content, art_id),
         })
+    # 功法庫多了要找得到（FB-085）：身上的在前，再照品質（絕學＞上品＞中品＞下品，自己那一份）、成多的先、最後比名字；
+    # 修練頁與煉製頁畫的是同一份，所以兩頁的順序一樣
+    rows.sort(key=lambda r: (not r["worn"], -QUALITIES.index(r["quality"]), -(r["level"] or 0), r["name"]))
     return rows
 
 
